@@ -291,9 +291,9 @@ def fireball(fx, t0, where, size=1.0):
         for i in range(int(12 + 16 * size)):
             d = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-0.8, 0.9))).normalized()
             long = g.uniform(2.2, 5.5) * size * (1.0 if i % 3 else 1.5)
-            wide = long * g.uniform(0.28, 0.45)
+            wide = long * g.uniform(0.28, 0.45) * 0.62     # (long and thin; fat ones were petals)
             k = g.uniform(0.8, 1.2)
-            p = fx.puff(t, at + d * long * 0.4, vel=d * g.uniform(8, 22) * size, life=g.uniform(0.14, 0.34), r=(0.6, 1.0), col=(0.14 * k, 0.026 * k, 0.004), col2=(0.1, 0.014, 0.002), alpha=0.92,
+            p = fx.puff(t, at + d * long * 0.32, vel=d * g.uniform(8, 22) * size, life=g.uniform(0.14, 0.34), r=(0.6, 1.0), col=(0.14 * k, 0.026 * k, 0.004), col2=(0.1, 0.014, 0.002), alpha=0.92,
                         kind="tongue" if i % 2 else "lick", drag=3.0, wind=0.85, squash=(0.5 * long, 0.5 * wide, 0.5 * wide), fade_in=0.008, grow=0.5, hold=0.4, cool=1.0)
             p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
         for i in range(3):                                   # its yellow heart, for an instant

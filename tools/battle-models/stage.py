@@ -708,8 +708,10 @@ class Effects:
         return m
 
     def _flame_mat(self, hot):
-        """Flame as tongues: ragged (eaten away by noise, more toward the tip), streaked along its length, each one
-        different; deep orange, darkening to red at the tip, and with `hot` a yellow heart at the root."""
+        """Flame as tongues: fat near the root and drawn out to a thin soft tip, ragged (eaten away by noise, more
+        toward the tip), streaked along its length, each one different; deep orange, darkening to red at the tip,
+        and with `hot` a yellower heart at the root. (The art director, 2026-11-18: as plain stretched balls they
+        were "lens-shaped ovals with a line down the middle" and read as orange leaves.)"""
         m = bpy.data.materials.new("fx_tongue" if hot else "fx_lick")
         m.use_nodes = True
         nt = m.node_tree
@@ -721,7 +723,7 @@ class Effects:
         nt.links.new(tc.outputs["Object"], sep.inputs[0])
         u = _math(nt, "MULTIPLY", _math(nt, "ADD", sep.outputs[0], 1.0), 0.5, clamp=True)      # 0 at the root, 1 at the tip
         mp = nt.nodes.new("ShaderNodeMapping")
-        mp.inputs["Scale"].default_value = (0.9, 3.0, 3.0)                                    # (streaks lie along the tongue)
+        mp.inputs["Scale"].default_value = (0.7, 4.2, 4.2)                                    # (streaks lie along the tongue)
         nt.links.new(tc.outputs["Object"], mp.inputs["Vector"])
         nz = nt.nodes.new("ShaderNodeTexNoise")
         nz.noise_dimensions = "4D"
@@ -735,7 +737,21 @@ class Effects:
         lw.inputs["Blend"].default_value = 0.5
         face = _math(nt, "SUBTRACT", 1.0, lw.outputs["Facing"], clamp=True)                   # 1 looking into it, 0 at its edge
         eaten = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _math(nt, "MULTIPLY", n, 2.5), _math(nt, "ADD", 0.62 if hot else 0.8, _math(nt, "MULTIPLY", u, 0.85))), 3.2, clamp=True)
-        soft = _math(nt, "MULTIPLY", _math(nt, "POWER", face, 0.9), eaten, clamp=True)
+        # its outline: only the middle of the ball is kept as it nears the tip, so it tapers, and the streaks tear its
+        # edge. (Near the tip the ball's face turns slowly, so the edge there is soft; at its sides it is crisp.)
+        taper = _math(nt, "MULTIPLY", _math(nt, "POWER", u, 1.3), 0.92)
+        mp2 = nt.nodes.new("ShaderNodeMapping")
+        mp2.inputs["Scale"].default_value = (0.55, 1.5, 1.5)                                  # (broad notches: a tongue forks and licks)
+        nt.links.new(tc.outputs["Object"], mp2.inputs["Vector"])
+        nz2 = nt.nodes.new("ShaderNodeTexNoise")
+        nz2.noise_dimensions = "4D"
+        nz2.inputs["Scale"].default_value = 1.0
+        nz2.inputs["Detail"].default_value = 2.0
+        nt.links.new(mp2.outputs["Vector"], nz2.inputs["Vector"])
+        nt.links.new(_math(nt, "MULTIPLY", info.outputs["Random"], 37.0), nz2.inputs["W"])
+        torn = _math(nt, "ADD", _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", n, 0.5), 1.0), _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", nz2.outputs[0], 0.5), 1.1))
+        rim = _math(nt, "ADD", _math(nt, "SUBTRACT", _math(nt, "POWER", face, 0.9), taper), torn)
+        soft = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", rim, 1.6, clamp=True), eaten, clamp=True)
         # (a tongue dies by being eaten away, never by going thin all over: thin orange over a bright sky is peach)
         gone = _math(nt, "SUBTRACT", 1.0, info.outputs["Alpha"], clamp=True)
         alpha = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", soft, gone), 3.0, clamp=True)
@@ -748,7 +764,8 @@ class Effects:
             _, h_fac, h_a, h_b, heart = _mix(nt)
             h_a.default_value = (0.2, 0.066, 0.004, 1.0)
             nt.links.new(col, h_b)
-            cool = _math(nt, "ADD", _math(nt, "MULTIPLY", u, 2.3), _math(nt, "ADD", _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 1.0, face), 0.75), _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 0.5, n), 0.9)))
+            # (by how far along it is and by its streaks, not by how it faces the camera: that drew a pale line down its middle)
+            cool = _math(nt, "ADD", _math(nt, "MULTIPLY", u, 2.3), _math(nt, "ADD", 0.2, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 0.5, n), 0.9)))
             nt.links.new(_math(nt, "MULTIPLY", _math(nt, "SUBTRACT", cool, 0.12), 1.6, clamp=True), h_fac)
             col = heart
         body = nt.nodes.new("ShaderNodeEmission")
@@ -882,9 +899,9 @@ class Effects:
             if toward is not None:
                 d = (d * spread + Vector(toward)).normalized()
             ln = g.uniform(*long) * (1.0 if i % 3 else 1.4)
-            wide = ln * g.uniform(0.34, 0.5)
+            wide = ln * g.uniform(0.34, 0.5) * 0.58        # (long and thin; fat ones were petals)
             k = g.uniform(0.8, 1.2)
-            p = self.puff(t, at + d * ln * 0.42, vel=d * g.uniform(*speed), life=g.uniform(*life), r=(0.6, 1.0), col=(0.14 * k, 0.026 * k, 0.004), col2=(0.1, 0.014, 0.002),
+            p = self.puff(t, at + d * ln * 0.32, vel=d * g.uniform(*speed), life=g.uniform(*life), r=(0.6, 1.0), col=(0.14 * k, 0.026 * k, 0.004), col2=(0.1, 0.014, 0.002),
                           alpha=0.92, kind="tongue" if i % 2 else "lick", drag=3.0, wind=wind, squash=(0.5 * ln, 0.5 * wide, 0.5 * wide), fade_in=0.008, grow=0.5, hold=0.4, cool=1.0)
             p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion((1.0, 0.0, 0.0), g.uniform(0, 6.283))).to_euler()
         if heart > 0.0:
