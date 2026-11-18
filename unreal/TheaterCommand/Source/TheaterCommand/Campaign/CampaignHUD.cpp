@@ -4879,7 +4879,7 @@ namespace
 						Edge(TopLeftPiece, SNew(SBorder).BorderImage(&PaperBrush).Padding(FMargin(1.0f))
 						.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); }) // (paper is not so white by night)
 						.ColorAndOpacity_Lambda([this]() { return InkLight(); }) // (and the ink on it is darker)
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetNewsreel().bOn ? EVisibility::Collapsed : EVisibility::Visible; })
+						.Visibility_Lambda([this]() { return PlatesAway() ? EVisibility::Collapsed : EVisibility::Visible; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the plate is not the map
 						[
 							SNew(SVerticalBox)
@@ -5104,7 +5104,7 @@ namespace
 					+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(24.0f)
 					[
 						SNew(SVerticalBox)
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetNewsreel().bOn ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
+						.Visibility_Lambda([this]() { return PlatesAway() ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
 						[
 							Piece(SNew(SHorizontalBox)
@@ -5332,6 +5332,7 @@ namespace
 					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(24.0f)
 					[
 						SNew(SHorizontalBox)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bVisible ? EVisibility::Collapsed : EVisibility::Visible; })
 
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(0.0f, 0.0f, 16.0f, 0.0f)
 						[
@@ -8818,6 +8819,17 @@ namespace
 		bool HelpOpen() const
 		{
 			return (Controller.IsValid() && Controller->IsHelpShown()) || (HelpMark.IsValid() && HelpMark->IsHovered());
+		}
+
+		/**
+		 * Whether the campaign's own plates are put away: the date plate, and the top right corner with the doors, the
+		 * guide, the menu and END THE MONTH. They are while the newsreel runs, and (the UI director, 10:57 on build
+		 * 1638) while the start screen or its options page is up, opened at the start or over a campaign under way:
+		 * the map alone lies behind the card, veiled as it is.
+		 */
+		bool PlatesAway() const
+		{
+			return Controller.IsValid() && (Controller->GetNewsreel().bOn || Controller->GetOpening().bVisible);
 		}
 
 		/**
