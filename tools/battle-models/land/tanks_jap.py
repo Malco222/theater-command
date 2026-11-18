@@ -199,5 +199,5 @@ def type97(fine=True, tag="JAP"):
     v.socket("case", (x0 - 0.3, y0 - 0.7, zt + 0.3), -Y, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.18, kick=0.55, gun_low=-9.0, hatches=["hatch_commander", "hatch_driver"], mg="hull_mg",
                  traverse=14.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.8, 2.3, 0.36, 165.0))
-    v.name_place((0.3, 1.71), long=0.36, high=0.10, part="turret", writing="down", bend=0.03)       # brush-written characters (b477): on the turret's side, one under another
+    v.name_place((0.3, 1.71), long=0.36, high=0.10, part="turret", writing="down", bend=0.03, script="japanese")       # brush-written characters (b477): on the turret's side, one under another
     return v

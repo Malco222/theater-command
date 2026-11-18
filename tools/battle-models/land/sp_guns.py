@@ -55,19 +55,25 @@ class SpWorks(GunWorks):
             s["at"] = s["at"] + d
         self.pintle = self.pintle + d
 
-    def rounds(self, x0, x1, y0, y1, z0, high, r=0.055, gap=0.135, paint="brass"):
-        """Ready rounds standing nose down in a rack: a tray of plate, and the brass bases of the cases over it."""
+    def rounds(self, x0, x1, y0, y1, z0, high, r=0.055, gap=0.135, paint="brass", tray=0.55):
+        """Ready rounds standing nose down in a rack: a tray of plate, and the brass bases of the cases over it, each
+        with its rim, the groove under it and the primer in its flat base (a plain brass stub with a rounded top reads
+        as a sausage). tray: how far up the rounds the tray stands."""
         self.use("hull")
-        self.slab((x0, min(y0, y1), z0), (x1, max(y0, y1), z0 + high * 0.55), coat, 0.006)
+        self.slab((x0, min(y0, y1), z0), (x1, max(y0, y1), z0 + high * tray), coat, 0.006)
         nx, ny = max(1, int((x1 - x0 - 0.03) / gap)), max(1, int((abs(y1 - y0) - 0.03) / gap))
         n = self.n(12, 6)
         for i in range(nx):
             for j in range(ny):
                 x = x0 + (x1 - x0) * (i + 0.5) / nx
                 y = y0 + (y1 - y0) * (j + 0.5) / ny
-                self.lathe((x, y, z0 + high * 0.55), Z, [(high * 0.45, 0.0), (high * 0.45, r * 0.86), (high * 0.45 - 0.012, r), (0.0, r), (0.0, 0.0)], paint, n)
-                if self.fine:
-                    self.lathe((x, y, z0 + high), Z, [(0.002, 0.0), (0.002, r * 0.3)], "steel", 6)       # the primer
+                t = high * (1.0 - tray)
+                if not self.fine:
+                    self.lathe((x, y, z0 + high * tray), Z, [(t, 0.0), (t, r * 1.04), (0.0, r * 1.04), (0.0, 0.0)], paint, n)
+                    continue
+                self.lathe((x, y, z0 + high * tray), Z, [(t, 0.0), (t, r * 1.08), (t - 0.007, r * 1.08), (t - 0.007, r), (0.0, r), (0.0, 0.0)], paint, n)
+                self.lathe((x, y, z0 + high), Z, [(0.0008, 0.0), (0.0008, r * 0.38)], "black", 8)        # the primer's pocket, and the primer in it
+                self.lathe((x, y, z0 + high), Z, [(0.002, 0.0), (0.002, r * 0.27)], "steel", 8)
 
     # ---- plate work: what makes a thin open box read as built, not folded from card ---------------------------
     def edge_bolts(self, a, b, facing, gap=0.17, r=0.011, high=0.007):
@@ -172,17 +178,18 @@ class SpWorks(GunWorks):
         (x, y, half-length, half-width, yaw each), a shade off the floor's own colour and never a black spill.
         Each lies in a wider patch of a colour halfway to the floor's (`edge`), so the path has no hard rim."""
         self.use("hull")
-        for grow, colour, up in ((1.22, edge, 0.0), (1.0, paint, 0.003)):
+        for grow, colour, up in ((1.22, edge, 0.0), (1.0, paint, 0.0012)):
             for n, (px, py, rx, ry, yaw) in enumerate(patches):
                 c, s = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
                 p = (px * 7.3 + py * 3.1) % 6.283                                # each patch its own outline
-                plan = []
+                plan, top = [], []
                 for i in range(30):
                     a = 2.0 * math.pi * i / 30
                     k = grow * (1.0 + 0.17 * math.sin(3 * a + p) + 0.10 * math.sin(5 * a + 2.1 * p) + 0.06 * math.sin(8 * a + 0.7 * p))
-                    x, y = rx * k * math.cos(a), ry * k * math.sin(a)
-                    plan.append((px + x * c - y * s, py + x * s + y * c))
-                self.prism(plan, z, z + 0.001 + up + 0.0003 * n, colour)
+                    for into, ring in ((1.0, plan), (0.84, top)):               # the rim runs out to nothing on the floor: a step there throws a thin dark line, like a map's
+                        x, y = rx * k * into * math.cos(a), ry * k * into * math.sin(a)
+                        ring.append((px + x * c - y * s, py + x * s + y * c))
+                self.prism(plan, z, z + 0.0012 + up + 0.0002 * n, colour, top=top)
 
 
 def m4_open_hull(v, zw, zb, xf, notch, pulpit=None, driver=LEFT, step=None, tag="USA"):
@@ -403,9 +410,9 @@ def m7(fine=True, tag="USA"):
     if fine:
         v.rod((0.62, sw - 0.09, 1.72), (0.62, sw - 0.09, 1.98), 0.05, "red", 12)                       # the fire extinguisher on the wall
         v.box((0.34, 0.14, 0.24), (0.95, sw - 0.11, 1.80), "shade", 0.008)                             # the wireless
-        v.helmet((-0.45, sw - th - 0.004, 1.70), (0.0, -1.0, 0.2))                                     # helmets hung on the walls over the racks
-        v.helmet((-0.15, -(sw - th - 0.004), 1.70), (0.0, 1.0, 0.2))
-        v.helmet((-0.5, -(sw - th - 0.004), 1.70), (0.0, 1.0, 0.2))
+        v.helmet((-0.45, sw - th - 0.05, 1.70), (0.0, -1.0, 0.2))                                      # helmets hung on the walls over the racks (clear of the plate: a brim must never come through it)
+        v.helmet((-0.15, -(sw - th - 0.05), 1.70), (0.0, 1.0, 0.2))
+        v.helmet((-0.5, -(sw - th - 0.05), 1.70), (0.0, 1.0, 0.2))
     # ---- outside her: bins on the engine deck, the net rolled between them, a rolled tarpaulin and the packs on her
     #      side, the tools across her tail ---------------------------------------------------------------------------
     for s in (LEFT, RIGHT):
@@ -431,7 +438,7 @@ def m7(fine=True, tag="USA"):
                          "crew.loader": "a loader stands here, behind the breech: it is 0.73 over the floor, at his waist, and he bends to it"})
     v.tank_clips(recoil=1.0, kick=0.7, gun_low=-5.0, hatches=["hatch_driver"], traverse=6.0, idle_cue="tank_idle_sherman_loop", drive_cue="tank_sherman_drive_loop",
                  gun_cue="field_gun_fire", has_turret=False, mg="mg")
-    v.name_place({LEFT: (1.51, 1.64), RIGHT: (1.87, 1.34)}, long=0.68, high=0.12)    # her crew's name (b477): on the box's side, forward; the pulpit takes the right side's upper plate
+    v.name_place({LEFT: (1.51, 1.64), RIGHT: (1.87, 1.34)}, long=0.68, high=0.12, lines=(2, 1), high_two=0.10)    # her crew's name (b477): on the box's side, forward; the pulpit takes the right side's upper plate
     return v
 
 
@@ -471,7 +478,7 @@ def sexton(fine=True, tag="UK"):
         v.rod((0.9, sw - 0.09, 1.80), (0.9, sw - 0.09, 2.06), 0.05, "red", 12)
         v.box((0.40, 0.16, 0.26), (-0.75, -(sw - 0.12), 1.86), "shade", 0.008)                          # the wireless, at the back on the right
         for x in (-0.28, 0.04):                            # helmets hung on the right wall
-            v.helmet((x, -(sw - th - 0.004), 1.86), (0.0, 1.0, 0.2), kind="brodie")
+            v.helmet((x, -(sw - th - 0.06), 1.86), (0.0, 1.0, 0.2), kind="brodie")
         v.helmet((0.74, -1.08, zs + 0.405), kind="brodie")
     # ---- outside her: a bin each side of the engine deck, her deck piled, bedding rolled along her side, packs on
     #      the other, the tools on her tail ------------------------------------------------------------------------------
@@ -498,7 +505,7 @@ def sexton(fine=True, tag="UK"):
                   notes={"crew.gunner": "the layer kneels here on her floor, left of the breech (the point is the floor under his hips): the handwheels' handles are 0.58 and 0.70 over the floor, 0.20 and 0.42 ahead of him, the sight at his eye (his hands: grip.gunner.l, grip.gunner.r)"})
     v.tank_clips(recoil=0.5, kick=0.6, gun_low=-9.0, hatches=["hatch_driver"], traverse=4.0, idle_cue="tank_idle_sherman_loop", drive_cue="tank_sherman_drive_loop",
                  gun_cue="field_gun_fire", has_turret=False, mg=None)
-    v.name_place((1.0, 1.7), long=0.9, high=0.12)                     # her gunners' name (b477): on the box's side
+    v.name_place((1.0, 1.7), long=0.9, high=0.12, lines=(2, 1), high_two=0.10)                     # her gunners' name (b477): on the box's side
     return v
 
 
@@ -667,7 +674,7 @@ def hummel(fine=True, tag="GER"):
         v.box((0.42, 0.16, 0.28), (-0.5, -(y_at(2.0) - 0.12), 2.0), "shade", 0.008)                    # the wireless on the right wall
         v.rod((-0.3, y_at(2.2) - 0.08, 2.1), (-0.3, y_at(2.2) - 0.08, 2.36), 0.05, "red", 12)
         for x in (-1.45, -1.13):                           # helmets hung on the right wall
-            v.helmet((x, -(y_at(2.2) - th - 0.004), 2.2), (0.0, 1.0, 0.25), kind="stahl", paint="shade")
+            v.helmet((x, -(y_at(2.2) - th - 0.07), 2.2), (0.0, 1.0, 0.25), kind="stahl", paint="shade")      # (clear of the leaning plate: two brims through it were a pair of eyes outside)
         v.helmet((0.0, 1.0, zg + 0.505), kind="stahl", paint="shade")
         v.bucket((-2.75, 0.3, zg), 0.12, 0.24)
     # ---- outside her: the lamp, the tools on the guards ahead of the box, the barrel's travelling lock folded on
@@ -685,7 +692,7 @@ def hummel(fine=True, tag="GER"):
         for x in (-1.25, -0.5):                             # two spare road wheels on the left wall
             n = sn[0]
             v.wheel_disc(Vector((x, y_at(1.5), 1.5)) + n * 0.05, n, 0.235, 0.085, 0.032, bolts=6, sides=24)
-        v.cable([(0.0, -(y_at(1.9) + 0.02), 1.9), (-0.7, -(y_at(1.72) + 0.02), 1.72), (-1.4, -(y_at(1.9) + 0.02), 1.9)], 0.013)
+        v.cable([(0.1, -(y_at(1.27) + 0.02), 1.27), (-0.8, -(y_at(1.255) + 0.02), 1.255), (-1.7, -(y_at(1.27) + 0.02), 1.27)], 0.013)      # low and straight along the wall's foot (hung in a V it grinned)
     v.silencer((xr - 0.18, -0.62, 0.93), (xr - 0.18, 0.46, 0.93), 0.15, pipe=[(xr, 0.2, 1.02), (xr - 0.12, 0.2, 1.0), (xr - 0.18, 0.2, 0.96)], tail=((xr - 0.18, -0.62, 0.93), (-0.3, -1, -0.2)))
     v.socket("exhaust.1", (xr - 0.24, -0.78, 0.9), (-0.3, -1, -0.2))
     v.aerial("aerial", "hull", (-0.5, y_at(zt0) - th / 2, zt0), 2.0)
@@ -836,8 +843,8 @@ def su76(fine=True, tag="SOV"):
     v.shift(here, (0.0, gy, 0.0))
     # ---- inside her: rounds along the right wall and at the back on the left, the layer's seat, the wireless, boxes
     #      of rounds and the detachment's sacks along the left wall -------------------------------------------------
-    v.rounds(-2.3, -0.6, -1.22, -0.96, zg, 0.44, r=0.045, gap=0.105)
-    v.rounds(-2.3, -1.3, 0.96, 1.22, zg, 0.44, r=0.045, gap=0.105)
+    v.rounds(-2.3, -0.6, -1.22, -0.96, zg, 0.44, r=0.045, gap=0.105, tray=0.72)
+    v.rounds(-2.3, -1.3, 0.96, 1.22, zg, 0.44, r=0.045, gap=0.105, tray=0.72)
     # her floor between the racks and the breech: the path the loader has trodden, the empty cases he threw down
     v.trodden(((-1.35, -0.6, 0.36, 0.22, 60.0), (-1.6, 0.6, 0.36, 0.2, -45.0), (-1.15, -0.1, 0.42, 0.24, 30.0),
                (-1.25, 0.25, 0.38, 0.22, -20.0), (-1.85, -0.2, 0.3, 0.2, 10.0)), zg + 0.008)
@@ -857,8 +864,8 @@ def su76(fine=True, tag="SOV"):
         v.box((0.36, 0.14, 0.24), (-0.2, y_at(1.7) - 0.11, 1.7), "shade", 0.008)
         v.bucket((-2.28, 0.3, zg), 0.11, 0.22)
         v.helmet((-0.90, 1.04, zg + 0.405))
-        v.helmet((-0.66, -(y_at(1.8) - th - 0.004), 1.8), (0.0, 1.0, 0.25))
-        v.helmet((-0.36, -(y_at(1.8) - th - 0.004), 1.8), (0.0, 1.0, 0.25))
+        v.helmet((-0.66, -(y_at(1.8) - th - 0.07), 1.8), (0.0, 1.0, 0.25))
+        v.helmet((-0.36, -(y_at(1.8) - th - 0.07), 1.8), (0.0, 1.0, 0.25))
     v.aerial("aerial", "hull", (-0.2, y_at(zt0) - th / 2, zt0), 2.0)
     # ---- the running gear: six small wheels a side on torsion bars, three rollers, the drive at the front ------
     ty, r_w = 1.18, 0.275

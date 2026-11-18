@@ -433,5 +433,5 @@ def m10(fine=True, tag="USA"):
     v.socket("case", (x0 - 0.9, -0.3, zt + 0.1), -X, part="turret", note="where the empty case falls, on her floor")
     v.tank_clips(recoil=0.30, kick=0.9, gun_low=-10.0, hatches=["hatch_driver", "hatch_radio"], traverse=12.0,
                  idle_cue="tank_idle_sherman_loop", drive_cue="tank_sherman_drive_loop", gun_cue="tank_gun_02", blow=(-0.9, 2.8, 0.45, 170.0), mg="mg")
-    v.name_place((1.5, 1.39), long=0.9, high=0.12)                    # her crew's name (b477): on the hull's side, ahead of the star
+    v.name_place((1.5, 1.39), long=0.62, high=0.12, lines=(2, 1), high_two=0.10)                    # her crew's name (b477): on the hull's side, ahead of the star
     return v

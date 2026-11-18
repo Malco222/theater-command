@@ -40,13 +40,18 @@ MARK_MONTHS = {
 # Each army as its crews really did it: a name on the hull or the turret, the Soviet slogan on the turret in its own
 # letters, and for Germany no name but thin rings round the barrel. Armies that painted neither have no place.
 NAME_INK = {"white": "E6E2D8", "black": "141414"}
-NAME_HOW = ("Once her unit has come through three battles the game paints her crew's mark here. kind `name`: one invented word (the Soviet "
-            "slogan may be two lines) in brush-painted capitals, never a printed face: the middle of it at `at` on the plate that looks along `facing`, "
-            "the writing running along `along` with its top toward `up`, the letters `high` tall and the whole no longer than `long`; it rides `part`, "
-            "and a place is given for each side that carries one. `writing` down: the characters stand one under another, `long` the room downward. "
+NAME_HOW = ("Once her unit has come through three battles the game paints her crew's mark here. kind `name`: an invented name (four to ten letters "
+            "to a line) in brush-painted capitals, never a printed face: the middle of it at `at` on the plate that looks along `facing`, "
+            "the writing running along `along` with its top toward `up`, the letters `high` tall and the whole no longer than that place's `long`; it "
+            "rides `part`, and a place is given for each side that carries one. A name too long for one line at `high`: on two lines where the place "
+            "has `lines` 2 and the name two words (letters `high_two` tall, or `high` where that is not given), else painted smaller, but never "
+            "under `least`; a name that fits neither way is not for this tank. `writing` down: the characters stand one under another, `long` the "
+            "room downward. `script` japanese with `ready` false: no such characters are drawn yet, so paint nothing (never Latin letters on her). "
             "kind `rings`: no name, but `most` thin bands round the barrel, the first at `at` and each next one `step` on along `toward` (to the breech), "
-            "`wide` across, lying on the barrel whose radius there is `radius`; one ring, then more as she lasts. `ink`: off-white on grey, olive and "
-            "green coats, near-black on dark yellow, matt, never brighter than her national marking; it wears and scorches with her paint.")
+            "`wide` across, lying on the barrel whose radius there is `radius`; one ring, then more as she lasts. `ink`: for a name off-white on grey, "
+            "olive and green coats and near-black on dark yellow; rings off-white on every coat. Matt, never brighter than her national marking; it "
+            "wears and scorches with her paint.")
+NAME_LEAST = 0.09                                           # (the art director: never smaller than this on a hull)
 
 
 def name_ink(hexs):
@@ -170,21 +175,32 @@ class Works(Shop, Gear, Fittings):
         d.update(kw)
         return d
 
-    def name_place(self, near, long=0.9, high=0.12, part="hull", sides=(LEFT, RIGHT), lines=1, writing="across", reach=(1.3, 0.4), parts=None, bend=0.014, note=""):
+    def name_place(self, near, long=0.9, high=0.12, part="hull", sides=(LEFT, RIGHT), lines=1, writing="across", reach=(1.3, 0.4), parts=None, bend=0.014, note="",
+                   high_two=None, script=None):
         """Where her crew paints her name: a flat run of her own painted plate on the side of `part`, as near to
         `near` (x, z) as one is found, `long` by `high` (times `lines`; writing "down": `high` across and `long` down).
         Found on the mesh as she stands, so call it when she is built. The game paints the word; the file carries the place.
         reach: how far from `near` to look, along and up. parts: other parts whose plate will do as well.
         near may be {LEFT: (x, z), RIGHT: (x, z)} when her two sides are not alike.
+        lines: how many lines the place has room for. (2, 1) asks for two lines' room (their letters `high_two` tall)
+        where a place nearly as long has it, and for one line's where none has: a name over ten letters goes on two lines.
         bend: how far the plate may leave the flat under the word (a cast turret's side is never flat: the game lays
-        the letters on the skin, as it does her marking)."""
+        the letters on the skin, as it does her marking).
+        script: "japanese" says the word is in characters the brush alphabet does not have yet: the game paints nothing."""
         m = self.m
         tree, ids = self._skin()
         ok_parts = {m.part_at[p] for p in ([part] + list(parts or ()))}
         ok_paints = {m.paint_at[p] for p in m.paints if p.split(".")[0] in COATS}
         step = 0.03
         nx, nz = int(reach[0] / step), int(reach[1] / step)
-        along_len, up_len = (high * 1.25, long) if writing == "down" else (long, high * (1.25 * lines + 0.1 * (lines - 1)))
+        wants = tuple(lines) if isinstance(lines, (tuple, list)) else (lines,)
+        high_two = high_two or high
+
+        def room(n_lines):                                  # (along, up) for so many lines
+            if writing == "down":
+                return high * 1.25, long
+            return long, (high * 1.25 if n_lines == 1 else high_two * (1.25 * n_lines + 0.1 * (n_lines - 1)))
+
         places = []
         both = near
         for s in sides:
@@ -204,6 +220,7 @@ class Works(Shop, Gear, Fittings):
                 on = mk.get("part", "hull")
                 if (on == part or on in (parts or ())) and (mk.get("both") or -mk["at"][1] * s > 0):
                     taken.append((mk["at"][0], mk["at"][2], mk["radius"] + 0.06))
+
             def clear(pc, nc, half_run, half_up, fs=0.012):
                 """A closer look at a place that passed: nothing stands off the plate across it (a hand rail, a
                 hinge, a box's edge), which the coarse look can miss between its rows."""
@@ -226,29 +243,36 @@ class Works(Shop, Gear, Fittings):
                     rows.append(row)
                 return bad <= 0.006 * tot
 
-            best = None
-            for shrink in (1.0, 0.88, 0.76, 0.64, 0.52):
-                hx, hz = max(1, math.ceil(along_len * shrink / 2 / step - 0.2)), max(1, math.ceil(up_len / 2 / step - 0.2))
-                passed = []
-                for (i, j), (pc, nc) in grid.items():
-                    x, z = near[0] + i * step, near[1] + j * step
-                    if any(abs(x - tx) < hx * step + r and abs(z - tz) < hz * step + r for tx, tz, r in taken):
-                        continue
-                    flat, n, nsum = 0, 0, Vector((0, 0, 0))
-                    for a in range(-hx, hx + 1):
-                        for b in range(-hz, hz + 1):
-                            n += 1
-                            g = grid.get((i + a, j + b))
-                            if g is not None and abs((g[0] - pc).dot(nc)) < bend and g[1].dot(nc) > (0.93 if bend < 0.02 else 0.86):
-                                flat += 1
-                                nsum += g[1]
-                    if flat >= 0.97 * n:
-                        passed.append((math.hypot(i * step, 1.6 * j * step), i, j, pc, nsum.normalized()))
-                for d, _, _, pc, nc in sorted(passed, key=lambda q: q[:3]):
-                    if clear(pc, nc, along_len * shrink / 2 + 0.06, up_len / 2):          # (a hand's breadth clear at each end: no word hard against a door or a pack)
-                        best = (d, pc, nc, shrink)
-                        break
+            def search(along_len, up_len, least_shrink):
+                for shrink in (1.0, 0.88, 0.76, 0.64, 0.52):
+                    if shrink < least_shrink:
+                        return None
+                    hx, hz = max(1, math.ceil(along_len * shrink / 2 / step - 0.2)), max(1, math.ceil(up_len / 2 / step - 0.2))
+                    passed = []
+                    for (i, j), (pc, nc) in grid.items():
+                        x, z = near[0] + i * step, near[1] + j * step
+                        if any(abs(x - tx) < hx * step + r and abs(z - tz) < hz * step + r for tx, tz, r in taken):
+                            continue
+                        flat, n, nsum = 0, 0, Vector((0, 0, 0))
+                        for a in range(-hx, hx + 1):
+                            for b in range(-hz, hz + 1):
+                                n += 1
+                                g = grid.get((i + a, j + b))
+                                if g is not None and abs((g[0] - pc).dot(nc)) < bend and g[1].dot(nc) > (0.93 if bend < 0.02 else 0.86):
+                                    flat += 1
+                                    nsum += g[1]
+                        if flat >= 0.97 * n:
+                            passed.append((math.hypot(i * step, 1.6 * j * step), i, j, pc, nsum.normalized()))
+                    for d, _, _, pc, nc in sorted(passed, key=lambda q: q[:3]):
+                        if clear(pc, nc, along_len * shrink / 2 + 0.06, up_len / 2):          # (a hand's breadth clear at each end: no word hard against a door or a pack)
+                            return (d, pc, nc, shrink)
+                return None
+
+            best, got = None, wants[-1]
+            for k, n_lines in enumerate(wants):             # the roomier place first, if it is nearly as long
+                best = search(*room(n_lines), 0.0 if k == len(wants) - 1 else 0.86)
                 if best is not None:
+                    got = n_lines
                     break
             if best is None:
                 continue
@@ -257,9 +281,17 @@ class Works(Shop, Gear, Fittings):
             run = up.cross(n)
             f3 = lambda p: [round(p[0], 3), round(-p[1], 3), round(p[2], 3)]            # (the file's y is to the right)
             places.append({"side": "left" if s > 0 else "right", "at": f3(at), "facing": f3(n), "along": f3(run), "up": f3(up), "part": part,
-                           "long": round(long * shrink, 3)})
+                           "long": round(long * shrink, 3), "lines": got})
         if places:
-            self._name_file("name", high=high, lines=lines, writing=writing, places=places, **({"note": note} if note else {}))
+            more = {}
+            if any(p["lines"] > 1 for p in places) and high_two != high:
+                more["high_two"] = high_two
+            if script:
+                more.update(script=script, ready=False)
+                note = (note + " " if note else "") + "No characters for this script are drawn yet: paint nothing here until they are."
+            if note:
+                more["note"] = note
+            self._name_file("name", high=high, least=NAME_LEAST, lines=max(p["lines"] for p in places), writing=writing, places=places, **more)
         return places
 
     def kill_rings(self, part, muzzle="muzzle", most=5, wide=0.025, step=0.075, note=""):
@@ -288,6 +320,7 @@ class Works(Shop, Gear, Fittings):
         ring = {"part": part, "muzzle": muzzle, "at": f3(at - d * first), "toward": f3(-d), "radius": [round(radius(first + k * step), 4) for k in range(most)],
                 "wide": wide, "step": step, "most": most}
         d_ = self._name_file("rings", **({"note": note} if note else {}))
+        d_["ink"] = {"use": "white", **NAME_INK}             # (off-white on every coat: dark rings on a yellow barrel read as its joints)
         d_.setdefault("rings", []).append(ring)
         return ring
 
@@ -667,9 +700,11 @@ def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.45, burn=None
         if key in COATS:
             # the coat is never one colour: faded here, darker there; rain has run down it
             base = toward(base, tone(big, 0.25, (0.90, 0.90, 0.89), 0.75, (1.06, 1.06, 1.05)), 1.0, "MULTIPLY")
-            streak = _noise(nt, pos, 1.0, 3.0, 0.5, stretch=(26.0, 26.0, 1.6))
+            # (a few streaks here and there, of unlike widths: fine even ones all over a big plate read as planks)
+            streak = _noise(nt, pos, 1.0, 2.0, 0.5, stretch=(12.0, 12.0, 0.8))
+            where = _ramp(nt, _noise(nt, pos, 1.0, 1.0, 0.5, stretch=(3.1, 3.1, 0.4)), 0.47, 0.66, 0.0, 1.0)      # which stretches of plate carry them
             side_on = _ramp(nt, _math(nt, "ABSOLUTE", nsep.outputs[2]), 0.0, 0.55, 1.0, 0.0)
-            base = toward(base, tone(streak, 0.36, (0.78, 0.76, 0.72), 0.62, (1.06, 1.06, 1.05)), _math(nt, "MULTIPLY", side_on, 0.42 * wear), "MULTIPLY")
+            base = toward(base, tone(streak, 0.34, (0.80, 0.78, 0.74), 0.60, (1.03, 1.03, 1.02)), _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", side_on, where), 0.42 * wear), "MULTIPLY")
             # recesses keep their dirt: a dark wash in every corner, darker in the seams round hatches and bolts
             base = toward(base, (0.36, 0.32, 0.27), _math(nt, "MULTIPLY", nook, 0.6), "MULTIPLY")
             base = toward(base, (0.22, 0.19, 0.16), _math(nt, "MULTIPLY", crack, 0.75), "MULTIPLY")

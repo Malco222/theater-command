@@ -143,6 +143,44 @@ def russian(latin):
     return out
 
 
+LEAST = 0.09                                                # no name is painted smaller than this (metres)
+
+
+def measure(text):
+    """About how far the word runs, in letter heights (a hand makes it a few parts in a hundred more or less)."""
+    t = text.upper()
+    letters = [c for c in t if c in LETTERS]
+    return sum(LETTERS[c][0] for c in letters) + 0.30 * max(0, len(letters) - 1) + SPACE * 1.02 * t.count(" ") + (0.2 if len(letters) >= 4 else 0.0)
+
+
+def fit(text, long, high, lines=1, least=LEAST, high_two=None):
+    """How a name goes into a place `long` with letters `high`: (the letters' height, its lines), or None when it
+    does not fit and she wants a shorter name. On one line at full height if it can; a name of two words on two lines
+    where the place has room for them (letters `high_two` at most); else smaller on one line, never under `least`."""
+    need = measure(text) * 1.03
+    if need * high <= long:
+        return high, [text]
+    words = text.split()
+    if lines >= 2 and len(words) >= 2:
+        cut = min(range(1, len(words)), key=lambda k: max(measure(" ".join(words[:k])), measure(" ".join(words[k:]))))
+        rows = [" ".join(words[:cut]), " ".join(words[cut:])]
+        h = min(high_two or high, long / (max(measure(r) for r in rows) * 1.03))
+        if h >= least:
+            return h, rows
+    h = long / need
+    return (h, [text]) if h >= least - 1e-9 else None
+
+
+def _blob(c, r, rng):
+    """Where a loaded brush is lifted straight off (or set down): a small uneven round of paint."""
+    pts = []
+    for j in range(8):
+        t = 2 * math.pi * j / 8
+        rr = r * rng.uniform(0.82, 1.15)
+        pts.append((c[0] + rr * math.cos(t), c[1] + rr * math.sin(t)))
+    return [[pts[0], pts[1], pts[2], pts[3]], [pts[0], pts[3], pts[4], pts[5]], [pts[0], pts[5], pts[6], pts[7]]]
+
+
 def _ribbon(pts, width, rng):
     """A stroke as the brush leaves it: a ribbon along the points, a touch fuller where the brush is pressed down,
     thinning as it is lifted off at the end."""
@@ -159,7 +197,8 @@ def _ribbon(pts, width, rng):
         return (p[0] + (p[0] - q[0]) / d * by, p[1] + (p[1] - q[1]) / d * by)
     pts = [run_on(pts[0], pts[1], width * 0.30)] + pts + [run_on(pts[-1], pts[-2], width * 0.22)]
     n = len(pts)
-    press = rng.uniform(0.92, 1.10)
+    press = rng.uniform(0.84, 1.20)                        # no two strokes of a hand weigh the same
+    lift = rng.random()                                    # how the brush leaves: drawn away thinning, or lifted straight off (a blob stays)
     left, right = [], []
     for k, p in enumerate(pts):
         a, b = pts[max(0, k - 1)], pts[min(n - 1, k + 1)]
@@ -167,10 +206,16 @@ def _ribbon(pts, width, rng):
         d = math.hypot(tx, ty) or 1.0
         nx, ny = -ty / d, tx / d
         t = k / (n - 1)
-        w = width * press * (0.80 if k == 0 else 1.0) * (1.0 - 0.38 * max(0.0, (t - 0.78) / 0.22)) * rng.uniform(0.93, 1.07)
+        thin = (1.0 - 0.45 * max(0.0, (t - 0.74) / 0.26)) if lift > 0.45 else 1.0
+        w = width * press * (1.10 - 0.18 * t) * (0.80 if k == 0 else 1.0) * thin * rng.uniform(0.92, 1.08)     # (fullest where the loaded brush lands)
         left.append((p[0] + nx * w / 2, p[1] + ny * w / 2))
         right.append((p[0] - nx * w / 2, p[1] - ny * w / 2))
-    return [[left[k], left[k + 1], right[k + 1], right[k]] for k in range(n - 1)]
+    out = [[left[k], left[k + 1], right[k + 1], right[k]] for k in range(n - 1)]
+    if lift <= 0.45:
+        out += _blob(pts[-1], width * press * rng.uniform(0.56, 0.72), rng)
+    if rng.random() < 0.2:
+        out += _blob(pts[1], width * press * rng.uniform(0.54, 0.64), rng)
+    return out
 
 
 def word(text, seed="", brush=0.135, down=False):
@@ -180,27 +225,34 @@ def word(text, seed="", brush=0.135, down=False):
     rng = random.Random("brush:%s:%s" % (seed, text))
     quads, x = [], 0.0
     wander = rng.uniform(0.0, 6.28)
+    drift = rng.uniform(-0.03, 0.03)                        # the whole line climbs or sags a little as it goes
+    chars = [c for c in text.upper() if c == " " or c in LETTERS]
+    broad = [i for i, c in enumerate(c for c in chars if c != " ") if LETTERS[c][0] >= 0.4]
+    runs_wide = set(rng.sample(broad, min(len(broad), 1 if len(broad) < 6 else 2))) if len(broad) >= 3 else set()     # a letter or two run wide
     k = 0
-    for ch in text.upper():
+    for ch in chars:
         if ch == " ":
             x += SPACE * rng.uniform(0.9, 1.15)
             continue
-        if ch not in LETTERS:
-            continue
         wide, strokes = LETTERS[ch]
-        size = rng.uniform(0.93, 1.07)
-        lean = rng.uniform(-0.055, 0.075)
-        dy = 0.035 * math.sin(wander + 0.9 * k) + rng.uniform(-0.025, 0.025)
+        size = rng.uniform(0.90, 1.10)
+        wx = rng.uniform(1.18, 1.32) if k in runs_wide else rng.uniform(0.94, 1.08)
+        lean = rng.uniform(-0.07, 0.09)
+        dy = rng.uniform(-0.085, 0.085) + 0.03 * math.sin(wander + 0.9 * k) + (0.0 if down else drift * x)     # (the baseline steps about a tenth of a letter)
+        weight = brush * rng.uniform(0.86, 1.20)
         for st in strokes:
-            pts = [(px * size + py * size * lean, py * size + dy) for (px, py) in st]
-            for q in _ribbon(pts, brush, rng):
+            pts = [(px * size * wx + py * size * lean, py * size + dy) for (px, py) in st]
+            for q in _ribbon(pts, weight, rng):
                 if down:
-                    quads.append([(a - wide * size / 2, b - x - 1.0) for (a, b) in q])
+                    quads.append([(a - wide * size * wx / 2, b - x - 1.0) for (a, b) in q])
                 else:
                     quads.append([(a + x, b) for (a, b) in q])
-        x += (1.0 if down else wide * size) + rng.uniform(0.25, 0.35)
+        x += (1.0 if down else wide * size * wx) + rng.uniform(0.25, 0.35)
         k += 1
-    return quads, max(0.0, x - 0.30)
+    long = max(0.0, x - 0.30)
+    if not down:
+        quads = [[(a, b - drift * long / 2) for (a, b) in q] for q in quads]
+    return quads, long
 
 
 def table():
@@ -209,6 +261,12 @@ def table():
                      "Paint each stroke as a ribbon about `brush` wide that runs on a little past both ends and thins as the brush lifts off. "
                      "A hand is never even: `hand` gives how far each letter's size, lean and baseline may stray, and the gap between letters. Never a printed face.",
             "brush": 0.135, "space": SPACE,
-            "hand": {"size": [0.93, 1.07], "lean": [-0.055, 0.075], "baseline": 0.06, "gap": [0.25, 0.35], "run_on": [0.30, 0.22], "lift_off": 0.38},
+            "hand": {"size": [0.90, 1.10], "lean": [-0.07, 0.09], "baseline": 0.115, "baseline_how": "each letter steps up or down from the last, by up to this much; the whole line also climbs or sags by up to `drift` for each letter height it runs",
+                     "drift": 0.03, "gap": [0.25, 0.35], "wide": {"others": [0.94, 1.08], "one_or_two_letters": [1.18, 1.32]},
+                     "weight": {"letter": [0.86, 1.20], "stroke": [0.84, 1.20], "along": [1.10, 0.92]}, "run_on": [0.30, 0.22],
+                     "lift_off": {"thins_to": 0.55, "or_a_blob": {"share_of_strokes": 0.45, "radius": [0.56, 0.72]}, "landing_blob": {"share_of_strokes": 0.2, "radius": [0.54, 0.64]}}},
+            "fit": {"least": LEAST, "measure": "a word runs about the sum of its letters' `wide`, plus 0.30 between letters, plus `space` for each space, plus 0.2, in letter heights",
+                    "rule": "One line at the place's `high` if the word then fits its `long`. Else, where the place has `lines` 2 and the name two words, two lines "
+                            "broken between words (letters at most `high_two`). Else one line painted smaller, never under `least` metres. Else this name is not for this tank."},
             "slogans_russian": dict(SLOGANS),
             "letters": {ch: {"wide": round(w, 3), "strokes": [[[round(a, 3), round(b, 3)] for (a, b) in st] for st in strokes]} for ch, (w, strokes) in LETTERS.items()}}

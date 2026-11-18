@@ -594,6 +594,17 @@ def hanomag(fine=True, tag="GER", paint=None, fit="troops", name="Hanomag", titl
             if fine:                                                                                                             # rifles clipped upright behind the bench
                 for x in (-0.6, -1.0, -1.4):
                     v.rod((x, s * (yk - 0.09), zk + 0.06), (x, s * (yt - 0.03), zt - 0.1), 0.014, "wood", 6)
+    if troops:
+        # the tub is never empty (seen from above, bare grey walls round a bare floor read as an empty box): a ration
+        # crate and two belt boxes on the floor by the step, a water can by the stern doors, all clear of the riders'
+        # knees and the gunner's boots
+        v.use("hull")
+        v.crate((-0.085, -0.31, zfl), (0.36, 0.2, 0.16), 90.0)
+        for y in (0.2, 0.33):
+            v.box((0.2, 0.09, 0.17), (-0.07, y, zfl + 0.085), "upper2", 0.006)
+            if fine:
+                v.handle((-0.12, y, zfl + 0.171), (-0.02, y, zfl + 0.171), Z, r=0.005, reach=0.018)
+        v.jerrycan((-2.26, -0.33, zfl), 90.0, paint="upper2")
     # the driver's and his mate's seats down in the footwell, the wheel, the dash under the drivers' plate
     v.slab((xa - 0.06, -yb0 + 0.02, 1.14), (xa - 0.02, yb0 - 0.02, zb0 + 0.02), "shade", 0.006)
     if fine:

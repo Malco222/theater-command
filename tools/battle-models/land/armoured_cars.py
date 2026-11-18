@@ -451,7 +451,7 @@ def m8(fine=True, tag="USA"):
     v.socket("case", (x0 - 0.3, 0.0, zt + 0.05), -X, part="turret", note="where the empty case falls, on her floor")
     v.car_clips(recoil=0.18, kick=0.5, gun_low=-10.0, hatches=["hatch_driver", "hatch_radio"], traverse=20.0, idle_cue="lorry_idle_loop", drive_cue="lorry_drive_loop",
                 gun_cue="tank_gun_01", has_turret=False, mg="coax")
-    v.name_place((0.95, 1.3), long=0.7, high=0.10)                    # her crew's name, sometimes (b477): on the hull's side
+    v.name_place((0.95, 1.3), long=0.7, high=0.10, lines=(2, 1), high_two=0.09)                    # her crew's name, sometimes (b477): on the hull's side
     return v
 
 

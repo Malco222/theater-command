@@ -34,6 +34,7 @@ It all runs in Blender as a Python module (`bpy`), with no Blender window:
 | `ground.py` | the stage (`Battle`: the field battle's own ground and trees; `Field`: a plain meadow) and the effects (`Air`) |
 | `landmarks.py` | each nation's plain period marking, laid on the skin; a crew's name or rings too, for a proof picture (`landlook.py <Name> <out> side 14 960x540 name=WORD` or `rings=3`) |
 | `brushhand.py` | the crew's brush hand: Latin capitals (with their accents) and Russian ones as strokes, laid out unevenly as a hand does, and the Soviet slogans in Russian letters; written out for the games as `brush-alphabet.json` |
+| `names_fit.py` | which of the historian's names each tank can wear, on how many lines and how tall: writes `names-fit.json` for the games |
 | `landshow.py`, `landlook.py` | sheets, clips, quick stills |
 | `export_land.py` | `<Name>.json`, `.glb`, `.fbx` and `index-land.json` |
 | `rigid.py`, `kit.py`, `marks.py`, `stage.py` | unchanged copies from the warships' and aircraft's folder (`tools/battle-models/` on their branch) |
@@ -93,21 +94,32 @@ only says which of them the review pictures draw.
 her crew painted). Each army as its crews really did it (`/mnt/project-files/historian/tank-names-b477.md`, with
 twenty invented names to each army beside it): a name on the hull's side for American, British, French, Italian and
 Polish tanks (the Matilda's on her skirting plates, the Char B1's near the front; Italy's and Poland's small and on
-one side only), a slogan in Russian letters on the turret's side for Soviet tanks (two lines; on the casemate of the
-SU-85 and SU-76), brush characters one under another on the turret's side for Japan, and for Germany no name but
-thin rings round the barrel (Panzer IV on either gun, Tiger, Panther, StuG III; not the Hummel). The M10, M7, Sexton
-and M8 have a place too; every other vehicle has none and the file has no `name_place`. kind `name`: a place for each
-side that carries one (`at`, the plate's `facing`, the writing's `along` and `up`, the `part` it rides, the room
-`long`), the letters `high` tall, `lines`, `writing` (across or down). kind `rings`: the barrel's `part`, the first
-ring's middle `at`, `toward` the breech, `step`, `wide`, `most`, and the barrel's `radius` under each ring. `ink`
-says off-white or near-black for her coat (and for each coat she can wear). The place is found on the mesh when she
-is built (`Works.name_place`, `Works.kill_rings`): a flat run of her own painted plate clear of her national marking,
-with no hand rail, hinge or box across it. The game paints the word in the brush hand of `brush-alphabet.json`, never
-a printed face (`/mnt/project-files/art-director/battles/b477-battle-details-look.md`): letters `high` tall, or
-smaller when the word is longer than the room (`long`); a word about nine letters long fills a 0.9 m place at 12 cm.
-That file has every letter the historian's names use (French, Polish, Italian and German marks are one more dab of
-the brush) and his twenty Soviet lines in Russian letters (`slogans_russian`: his Latin spelling drops the soft sign,
-so read them from there). No Japanese characters yet: nobody has ruled the script.
+the left side only), a slogan in Russian letters on the turret's side for Soviet tanks (on the casemate of the SU-85
+and SU-76), and for Germany no name but thin rings round the barrel (Panzer IV on either gun, Tiger, Panther, StuG
+III; not the Hummel). The M10, M7, Sexton and M8 have a place too. The Type 97 has a place on her turret's side for
+characters written downward, marked `script: japanese`, `ready: false`: no such characters are drawn yet, so the game
+paints nothing there (never Latin letters on her) and the index gives her no `crew_mark`. Every other vehicle has
+none and the file has no `name_place`.
+
+kind `name`: a place for each side that carries one (`at`, the plate's `facing`, the writing's `along` and `up`, the
+`part` it rides, the room `long`, the `lines` it has room for), the letters `high` tall (`high_two` on two lines),
+`least` (9 cm: never smaller), `writing` (across or down). kind `rings`: the barrel's `part`, the first ring's middle
+`at`, `toward` the breech, `step`, `wide`, `most`, and the barrel's `radius` under each ring. `ink`: for a name
+off-white, or near-black on dark yellow (and for each coat she can wear); rings off-white on every coat. The place is
+found on the mesh when she is built (`Works.name_place`, `Works.kill_rings`): a flat run of her own painted plate
+clear of her national marking, with no hand rail, hinge or box across it or hard against its ends.
+
+How a name goes in (the art director's rule, `brushhand.fit`, and `fit` in `brush-alphabet.json`): four to ten
+letters to a line. One line at `high` if it fits the place's `long`; else two lines where the place has `lines` 2
+and the name two words; else smaller on one line, never under `least`; else that name is not for this tank.
+`names_fit.py` works it out for every tank and every one of the historian's names and writes
+`/mnt/project-files/battle-models/land/names-fit.json` (which names each tank can wear, their lines and letter
+height): choose from there. The word is painted in the brush hand of `brush-alphabet.json`, never a printed face
+(`/mnt/project-files/art-director/battles/b477-battle-details-look.md`): the baseline steps about a tenth of a
+letter, a letter or two run wide, no two strokes weigh the same, and a blob stays where the brush lifts. That file
+has every letter the historian's names use (French, Polish, Italian and German marks are one more dab of the brush)
+and his twenty Soviet lines in Russian letters (`slogans_russian`: his Latin spelling drops the soft sign, so read
+them from there).
 
 **Clips.** `idle`, `start`, `drive`, `move_off`, `stop`, `fire` (the barrel's recoil), `fire.rock` (the hull's answer,
 made for a gun trained ahead: turn it about the turret's bearing), `mg_burst`, `hull_mg_burst`, `hit`, `open_up`,

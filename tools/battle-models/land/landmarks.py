@@ -55,21 +55,20 @@ def crew_mark(model, tree, name, rings, verts, faces, cols, groups):
         return
     col = NAME_PAINT[place["ink"]["use"]]
     back = lambda p: Vector((p[0], -p[1], p[2]))            # (the file's y is to the right)
-    if place["kind"] == "name" and name:
+    if place["kind"] == "name" and name and not place.get("script"):          # (a script with no characters drawn yet: nothing is painted)
         text = name.replace("_", " ")
         if model.info.get("tag") == "SOV" and text.isascii():
             text = brushhand.russian(text)
         down = place.get("writing") == "down"
-        words = text.split()
-        if place.get("lines", 1) > 1 and len(words) > 1:    # a slogan in two lines, broken as near its middle as its words allow
-            cut = min(range(1, len(words)), key=lambda k: abs(len(" ".join(words[:k])) - len(" ".join(words[k:]))))
-            rows = [" ".join(words[:cut]), " ".join(words[cut:])]
-        else:
-            rows = [text]
         for pl in place["places"]:
             at, n, run, up = back(pl["at"]), back(pl["facing"]).normalized(), back(pl["along"]).normalized(), back(pl["up"]).normalized()
+            got = brushhand.fit(text, pl["long"], place["high"], pl.get("lines", place.get("lines", 1)), place.get("least", brushhand.LEAST), place.get("high_two"))
+            if got is None:
+                print("crew_mark: %r does not fit %s's %s side (%.2f m): she wants a shorter name" % (text, model.name, pl["side"], pl["long"]))
+                continue
+            h, rows = got
             laid = [brushhand.word(r, seed=model.name + pl["side"], down=down) for r in rows]
-            h = min([place["high"]] + [pl["long"] / max(0.5, long) for _, long in laid])
+            h = min([h] + [pl["long"] / max(0.5, long) for _, long in laid])
             for k, (quads, long) in enumerate(laid):
                 if down:
                     ox, oy = 0.0, long * h / 2

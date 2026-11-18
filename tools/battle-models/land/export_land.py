@@ -54,7 +54,7 @@ def one(name, out, kinds):
     return {"name": name, "title": m.title, "kind": m.kind, **vehicles.ABOUT.get(name, {}), "triangles": tris, "plain": plain,
             "parts": [p.name for p in m.parts if not (p.kind == "free" and p.name.startswith("track_"))], "track_links": links,
             "sockets": [s["name"] for s in m.sockets], "clips": {k: c.get("about", "") for k, c in m.clips.items()},
-            **({"crew_mark": m.info["file"]["name_place"]["kind"]} if m.info.get("file", {}).get("name_place") else {})}
+            **({"crew_mark": m.info["file"]["name_place"]["kind"]} if m.info.get("file", {}).get("name_place", {}).get("ready", bool(m.info.get("file", {}).get("name_place"))) else {})}
 
 
 def main():
