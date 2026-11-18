@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.hoisted(() => { (globalThis as { TC_DRIVE?: unknown }).TC_DRIVE = 1; });
 import { addCorps, createGame, men, relocate, setWar } from '../src/campaign/game';
-import { DRIVE, besieged, driveOut, garrison, garrisonOf, guardInField, guardMen, guardOf, guardWorth, siegeView } from '../src/campaign/siege';
+import { DRIVE, besieged, driveOut, garrison, garrisonOf, guardInField, guardMen, guardOf, guardWorth, opensTo, siegeView } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { attackOutlook, beginHuman, candidates, humanUp, orderAttack, previewAttack, stepAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -136,27 +136,50 @@ describe("ruling 232: beat the army, take the city", () => {
   });
 
   it('shows the guard on the attack card as a defender, in the odds and the ticket, known or not', () => {
+    // (A city: its guard never opens its gates at a summons, so it always stands in the field, b540.)
     const g = seat('GER');
-    const lodz = g.byName['Lodz'];
-    expect(garrisonOf(lodz)).toHaveLength(0);
-    const going = candidates(g, lodz);
-    const on = previewAttack(g, going, lodz)!;
-    expect(on.guard).toBeCloseTo(guardOf(g, lodz), 6);
-    const said = guardMen(g, lodz).toLocaleString('en-US');
+    const krakow = g.byName['Krakow'];
+    expect(garrisonOf(krakow)).toHaveLength(0);
+    const going = candidates(g, krakow);
+    const on = previewAttack(g, going, krakow)!;
+    expect(on.guard).toBeCloseTo(guardOf(g, krakow), 6);
+    const said = guardMen(g, krakow).toLocaleString('en-US');
     expect(on.lines.find((l) => l.label === 'Forces')!.value).toMatch(new RegExp(`, and the town guard of about ${said}$`));
     expect(on.lines.find((l) => l.label === 'The town')).toMatchObject({
-      value: "Lodz is held by its own guard: 1 division's worth, behind its walls",
-      effect: 'The guard fights beside the army, 40% stronger behind the walls. Win, and the town falls with the country round it',
+      value: "Krakow is held by its own guard: 2.0 divisions' worth, behind its walls",
+      effect: 'The guard fights beside the army, 70% stronger behind the walls. Win, and the town falls with the country round it',
     });
-    const look = attackOutlook(g, going, lodz)!;
+    const look = attackOutlook(g, going, krakow)!;
     expect(look.lines.find((l) => l.label === 'Forces')!.value).toMatch(new RegExp(`, and the town guard of about ${said}$`));
     // The same attack with the rule off faces the field army alone.
     DRIVE.on = false;
-    const off = previewAttack(g, going, lodz)!;
+    const off = previewAttack(g, going, krakow)!;
     expect(off.guard).toBeUndefined();
     expect(on.D).toBeGreaterThan(off.D);
     expect(on.odds).toBeLessThan(off.odds);
     expect(on.prepared).toBeCloseTo(off.prepared, 9);
+  });
+
+  it('a town whose guard would open its gates to this army sends no guard to the field, and opens at the summons after the battle (b540)', () => {
+    const g = seat('GER');
+    const lodz = g.byName['Lodz'];
+    expect(garrisonOf(lodz)).toHaveLength(0);
+    const going = candidates(g, lodz);
+    expect(opensTo(g, lodz, going)).toBe(true);
+    expect(guardInField(g, lodz, 'GER', going)).toBe(0);
+    expect(guardInField(g, lodz, 'GER')).toBeCloseTo(guardOf(g, lodz), 9);
+    const a = previewAttack(g, going, lodz)!;
+    expect(a.guard).toBeUndefined();
+    DRIVE.on = false;
+    const off = previewAttack(g, going, lodz)!;
+    DRIVE.on = true;
+    expect(a.D).toBeCloseTo(off.D, 9);
+    const rep = orderAttack(g, going, lodz)!;
+    expect(rep.guarded).toBeFalsy();
+    expect(rep.taken).toBe(true);
+    expect(rep.gates).toBe(true);
+    expect(lodz.ctrl).toBe('GER');
+    expect(besieged(g, lodz)).toBe(false);
   });
 
   it('a field attack thrown back: the guard pays its share, as a storm thrown back does, and the town stands', () => {

@@ -176,6 +176,64 @@ describe('the field first, then the garrison (b512(e))', () => {
   });
 });
 
+describe('an attacker does not shut its attackers in (b519(m))', () => {
+  /** Poland as the side that began the war, its staff's offensive against Germany on (as the Red Army's in Karelia, 1939). */
+  const attacking = (g: Game): void => {
+    delete g.flags['war:GER:POL'];
+    g.flags['war:POL:GER'] = g.turn;
+    g.flags['st:on:POL:GER'] = g.turn;
+  };
+  /** The enemy next door attacks the province: a battle there with Germany as the attacker. */
+  const struck = (g: Game, town: Region): void => { g.reports.push({ turn: g.turn, region: town.id, attNat: 'GER', defNat: 'POL' } as Game['reports'][number]); };
+
+  it('a lone corps beside an enemy it cannot hold the field against stays out while its staff is on the attack', () => {
+    const g = playing();
+    const one = field(g.byName['Warsaw'], 'POL').find((c) => c.kind === 'inf')!;
+    const town = warsaw(g, (c) => c === one);
+    door(g, town, 'strong');
+    attacking(g);
+    garrisons(g, 'POL', true);
+    expect(garrisonOf(town).length).toBe(0);
+    expect(field(town, 'POL')).toEqual([one]);
+  });
+
+  it('once the enemy next door has attacked the province, the lone corps goes in', () => {
+    const g = playing();
+    const one = field(g.byName['Warsaw'], 'POL').find((c) => c.kind === 'inf')!;
+    const town = warsaw(g, (c) => c === one);
+    door(g, town, 'strong');
+    attacking(g);
+    struck(g, town);
+    garrisons(g, 'POL', true);
+    expect(garrisonOf(town)).toContain(one);
+  });
+
+  it('the city is garrisoned as any other city, not filled to its room', () => {
+    const g = playing();
+    const town = warsaw(g, () => false);
+    const five = g.corps.filter((c) => c.nat === 'POL' && !c.dead && !c.town && c.kind === 'inf').slice(0, 5);
+    for (const c of five) { relocate(g, c, town); c.joint = undefined; }
+    door(g, town, 'strong');
+    attacking(g);
+    garrisons(g, 'POL', true);
+    // (Without the attack the five would fill the city's room: b512(e), the field cannot be held.)
+    expect(garrisonOf(town).length).toBe(SIEGE.ai.hold[townSize(g, town)]);
+    expect(garrisonOf(town).length).toBeLessThan(roomIn(g, town));
+    expect(field(town, 'POL').length).toBeGreaterThan(0);
+  });
+
+  it('a war the enemy began is not the attacker\'s: the lone corps goes in as before', () => {
+    const g = playing();
+    const one = field(g.byName['Warsaw'], 'POL').find((c) => c.kind === 'inf')!;
+    const town = warsaw(g, (c) => c === one);
+    door(g, town, 'strong');
+    // Germany declared war on Poland; a Polish counter-offensive does not make the war Poland's own.
+    g.flags['st:on:POL:GER'] = g.turn;
+    garrisons(g, 'POL', true);
+    expect(garrisonOf(town)).toContain(one);
+  });
+});
+
 describe('the peace (b512(f))', () => {
   it('a garrison put in for a war that has ended comes out with it', () => {
     const g = playing();

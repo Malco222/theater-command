@@ -173,12 +173,24 @@ function hitGuard(g: Game, r: Region, pct: number): void {
  * 0 where the rule is off, where a garrison holds the town (it is a separate fight), or where the attack is not an
  * enemy's (a relief, a sortie).
  */
-export function guardInField(g: Game, r: Region, nat: string): number {
+export function guardInField(g: Game, r: Region, nat: string, force?: Corps[]): number {
   // (Shut in by an enemy already in the field, the guard is not beside the army there: a third power that beats the
   // besiegers takes the siege over, as before.)
   if (!driveOut(g) || garrisonOf(r).length || besieged(g, r) || !atWar(g, nat, r.ctrl)) return 0;
+  // (The design director's b531: a guard that would open its gates to this army at the first summons, a town's or a
+  // village's, does not stand in the field beside the army either. It gives itself up with the field, as it gave the
+  // town up after the field before ruling 232: only a city's or a capital's guard, which never opens at a summons,
+  // fights the field battle behind its walls.)
+  if (force?.length && opensTo(g, r, force)) return 0;
   return guardOf(g, r);
 }
+
+/**
+ * True where the town's guard opens its gates to this force at the first summons, without a fight: a town's or a
+ * village's guard, against odds of SIEGE.summons or better. A city's or a capital's never does.
+ */
+export const opensTo = (g: Game, r: Region, force: Corps[]): boolean =>
+  guardOf(g, r) > 0 && !SIEGE.summonsNot.includes(townSize(g, r)) && assess(g, force, r, { town: true }).odds >= SIEGE.summons;
 
 /** A guard's size in words: "1 division's worth", "2.4 divisions' worth", and below one, "part of a division's worth" (never 0). */
 export const guardWorth = (d: number): string => d >= 0.95 && d < 1.05 ? "1 division's worth" : d >= 1.05 ? `${(Math.round(d * 10) / 10).toFixed(1)} divisions' worth` : "part of a division's worth";
@@ -646,7 +658,7 @@ export function summon(g: Game, r: Region, by: string): boolean {
   const force = besiegers(g, r);
   if (!force.length) return false;
   // A great city does not give itself up at the first summons, whatever stands outside: its guard has to be beaten.
-  if (guardOf(g, r) > 0 && (SIEGE.summonsNot.includes(townSize(g, r)) || assess(g, force, r, { town: true }).odds < SIEGE.summons)) return false;
+  if (guardOf(g, r) > 0 && !opensTo(g, r, force)) return false;
   fall(g, r, by, guardOf(g, r) > 0 ? 'gates' : 'empty');
   return true;
 }

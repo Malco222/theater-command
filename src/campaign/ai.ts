@@ -19,7 +19,7 @@ import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOp
 import { shoreAI } from './fleets';
 import { plannedStrike } from './carriers';
 import { shoreOpen, stormHeldBy } from './history';
-import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, descentAsks, doorQuay, freed, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
+import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, descentAsks, doorQuay, freed, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, onTheAttack, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { HOP_AIMS, hopShores, pacificGround } from './pacific';
 import { beyondEurope, enemyAtTheDoor, overseasOf, shoreOf, type OverseasRules } from './world';
@@ -191,8 +191,9 @@ function campaign(g: Game, nat: string): void {
  * The grand campaign: who stands in the towns. With the month's moves made, a city or a capital the enemy has
  * reached is given a garrison from the infantry standing there, as long as a corps is left in the field; a
  * fortress town gets one too. A great city of the nation's own (ruling 139: its capital, or a city with great works)
- * is filled to its room first, infantry before the rest, even if nobody is left in the field: a lone corps goes in.
- * At the start of the month a garrison with no enemy within two marches comes out.
+ * takes the corps the field can spare against the enemy next door, infantry before the rest, and where the field
+ * cannot be held it is filled to its room, a lone corps and all (b512(e)); a staff attacking the countries next door
+ * in wars it began garrisons it as any other city until one of them strikes the province (b519(m)). At the start of the month a garrison with no enemy within two marches comes out.
  */
 export function garrisons(g: Game, nat: string, post: boolean): void {
   if (!siegeRules(g)) return;
@@ -215,6 +216,14 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
     }
     return false;
   };
+  const attacking = (r: Region): boolean => {
+    const foes = [...new Set(r.nb.map((j) => ctl(g, g.regions[j])).filter((x) => atWar(g, nat, x)))];
+    if (!foes.length || !foes.every((e) => onTheAttack(g, nat, e))) return false;
+    return !foes.some((e) => {
+      const since = Math.max(g.flags[`war:${nat}:${e}`] ?? 0, g.flags[`war:${e}:${nat}`] ?? 0);
+      return g.reports.some((p) => p.region === r.id && p.attNat === e && p.turn >= since);
+    });
+  };
   for (const r of g.regions) {
     if (r.ctrl !== nat || besieged(g, r)) continue;
     const inside = garrisonOf(r).filter((c) => c.nat === nat);
@@ -222,7 +231,10 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
       if (inside.length && !near(r, 2)) for (const c of [...inside]) takeField(g, c);
       continue;
     }
-    const great = r.owner === nat && greatCity(g, r);
+    // An attacker does not shut its attackers in (b519(m)): a staff attacking every country next door, in wars it
+    // began itself, while the offensive is on, garrisons its great city as it would any other city, until one of
+    // them has attacked the province.
+    const great = r.owner === nat && greatCity(g, r) && !attacking(r);
     const want = great ? roomIn(g, r) : SIEGE.ai.hold[townSize(g, r)] ?? (r.fort ? 1 : 0);
     // (A place the staff stepped out of this month, because the ring was closing round it, is left no garrison.)
     if (inside.length >= want || !near(r, 1) || sacks.has(r.id)) continue;

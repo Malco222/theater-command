@@ -88,9 +88,13 @@ export const noCrossing = (g: Game, kind: Kind, from: number, to: number): boole
 /**
  * Whether a corps cannot go from where it stands (or from another region) into a neighbour: ground too steep, or
  * bridges down. On the far side, also a strike from a client's ground into a war the client is not in (far.ts). And
- * ground a computer staff does not go into by the book (b512(h), history.json 'restraint').
+ * ground a computer staff does not go into by the book (b512(h), history.json 'restraint'). And, for a country whose
+ * war is a declaration and not a front, any ground but its own (diplomacy.json 'stay', Turkey in 1945).
  */
-export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id) || tieBars(g, c, to, from) || halted(g, c.nat, to.name);
+export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id) || tieBars(g, c, to, from) || halted(g, c.nat, to.name) || keepsHome(g, c, to);
+
+/** True where a computer-run country whose war is only declared (diplomacy.json 'stay') would send a corps off its own ground. */
+export const keepsHome = (g: Game, c: Corps, to: Region): boolean => !!g.flags[`stay:${c.nat}`] && c.nat !== g.human && to.owner !== c.nat;
 
 /** The plain reason a corps cannot make that move, for either interface to show, or null if it can. */
 export function whyBlocked(g: Game, c: Corps, to: Region, from = c.reg): string | null {

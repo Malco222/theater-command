@@ -1246,7 +1246,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // The town's own guard stands with whoever is inside. Where nobody is inside, it fights beside the army in the field,
   // behind its walls, and the town falls with the field (ruling 232): the fortress works, where they already stand
   // against every attacker, are not counted for it twice.
-  const guarded = !town && !opts.sally && defenders.length > 0 ? guardInField(g, target, attNat) : 0;
+  const guarded = !town && !opts.sally && defenders.length > 0 ? guardInField(g, target, attNat, attackers) : 0;
   const guardWalls = guarded > 0 ? fieldWalls(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften, pAll > 0 ? 1 - pFaced / pAll : 1) : 1;
   const watch = town ? guardPower(g, target) * walls : guarded > 0 ? guardPower(g, target) * guardWalls : 0;
   if (watch > 0) { rawD += watch; cmdD += watch; D += watch; }
