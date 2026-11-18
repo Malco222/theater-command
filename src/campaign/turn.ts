@@ -2,7 +2,7 @@
 // the player does not, and the player's orders go through the same rules.
 
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
-import { airBattles, airBases, airTargets, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
+import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import {
@@ -121,6 +121,8 @@ export function beginHuman(g: Game): void {
   // And the cabinet notes what the attack card reads against the towns he could promise, the way his page now reckons it.
   noteReadings(g);
   quietNews(g);
+  // A field of his that has become crowded since last month: the month card says so once (b448).
+  crowdedNews(g);
   // Last, the desks he has handed to his staff do their month's work, each with one line of news (the grand campaign).
   staffMonth(g);
 }

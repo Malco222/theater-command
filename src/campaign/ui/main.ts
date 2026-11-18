@@ -68,7 +68,7 @@ import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import {
-  AIR, CARRIERS, MISSION, carrierRules, groupAt, moveTargets, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowding, forecastAir, isOffensive,
+  AIR, CARRIERS, MISSION, carrierRules, groupAt, moveTargets, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowdedFields, crowdedRow, crowding, forecastAir, isOffensive,
   km as airKm, overOcean, seaKm, skyOver, whyNotMoveAir, whyNotMission, type AirOrder,
 } from '../air';
 import {
@@ -2722,6 +2722,9 @@ function alertList(): Alert[] {
   // Enemy raids since the player's last month: the places hit, to visit in turn.
   const raided = ui.raidsFrom < 0 ? [] : [...new Set(g.airReports.slice(ui.raidsFrom).filter((r) => r.region >= 0 && atWar(g, r.attNat, me) && (r.defNat === me || g.regions[r.region].ctrl === me)).map((r) => r.region))];
   if (raided.length) out.push({ kind: 'raided', text: raided.length === 1 ? `Enemy aircraft raided ${g.regions[raided[0]].name}` : `Enemy aircraft raided ${raided.length} of your provinces`, regs: raided });
+  // His crowded airfields, in one row that names the worst (b448): a press opens that field's page.
+  const crowded = crowdedFields(g, me);
+  if (crowded.length) out.push({ kind: 'crowded', text: crowdedRow(g, crowded), regs: [crowded[0].region] });
   // Sieges: the player's towns shut in, and the towns his armies stand round with an assault still in hand.
   if (siegeRules(g)) {
     const sg = siegesInSight(g);
@@ -2784,7 +2787,7 @@ function alertList(): Alert[] {
     });
   }
   // What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
-  const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy', courtback: 'diplomacy' };
+  const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy', courtback: 'diplomacy', crowded: 'air' };
   return out.filter((a) => !(theirs[a.kind] && staffRunsDesk(g, theirs[a.kind])));
 }
 
@@ -2933,6 +2936,7 @@ function followAlert(kind: string): void {
   if (kind === 'debt') { openModal({ kind: 'ledger' }); return; }
   if (kind === 'tradecut' || kind === 'tradeidle') { openModal({ kind: 'trade' }); return; }
   if (kind === 'lastact') { openModal({ kind: 'lastact' }); return; }
+  if (kind === 'crowded' && a.regs?.length) { openAirfield(a.regs[0]); return; }
   if (kind === 'directive' || kind === 'cabinetfall' || kind === 'cabinetseat' || kind === 'cabinetdoubt' || kind === 'cabinethead' || kind === 'promise') { openModal({ kind: 'cabinet' }); refresh(); return; }
   if (kind.startsWith('short ') || kind.startsWith('low ')) { openModal({ kind: 'stores', nat: g.human || '' }); return; }
   if (kind === 'men') { openModal({ kind: 'ledger', nat: g.human || '' }); document.querySelector('#card #lmen')?.scrollIntoView({ block: 'start' }); return; }

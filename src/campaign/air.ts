@@ -9,7 +9,7 @@
 // lists is split into air groups of one kind, fighters or bombers, and a group flies one raid a month, planned
 // from its target and flown the moment the order is given. A historical scenario keeps the fleets as they were.
 
-import { byHand } from './depth';
+import { byHand, staffRuns } from './depth';
 import data from '../../data/campaign/air.json';
 import warData from '../../data/campaign/airwar.json';
 import namesData from '../../data/campaign/air-names.json';
@@ -19,7 +19,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp, tenthPct } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
-import { allied, atWar, headline, routineNews, thornGround, worksOf } from './game';
+import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
@@ -678,11 +678,12 @@ function splitOff(g: Game, f: AirFleet, q: number): AirFleet {
  * fewer aircraft than its groups are kept at. From a crowded field it sends groups to the nearest fields with room
  * that still reach the stretch of front they cover (failing those, the nearest with room), the group whose going is
  * just enough first, so that the field it leaves stays full; a group too big for any field with room is split, and
- * the part that has room goes. The player's groups are never moved: he is told (the tray). Returns the groups moved.
+ * the part that has room goes. The player's groups are never moved, unless he has handed the air war to his staff:
+ * he is told (crowdedRow, crowdedNews). Returns the groups moved.
  */
 export function spreadAir(g: Game, nat: string): AirFleet[] {
   const moved: AirFleet[] = [];
-  if (!airWar(g) || nat === g.human || !g.nations[nat]?.alive) return moved;
+  if (!airWar(g) || byHand(g, nat, 'air') || !g.nations[nat]?.alive) return moved;
   const land = (f: AirFleet): boolean => f.nat === nat && f.ship === undefined && f.ashore === undefined && f.base >= 0 && !!g.regions[f.base];
   const mine = g.airFleets.filter(land);
   if (!mine.length) return moved;
@@ -726,6 +727,65 @@ export function spreadAir(g: Game, nat: string): AirFleet[] {
     }
   }
   return moved;
+}
+
+/** How much of a crowded field's aircraft can fly, in words: what it serves over what is based there (the UI director's sheet for b448). */
+export function shareWords(share: number): string {
+  const steps: [number, string][] = [[0.85, 'nine in ten'], [0.7, 'three quarters'], [0.6, 'two thirds'], [0.45, 'half'], [0.3, 'a third'], [0.22, 'a quarter'], [0.15, 'a fifth'], [0.07, 'a tenth']];
+  return steps.find(([at]) => share >= at)?.[1] ?? 'hardly any';
+}
+
+/** A crowded airfield: what it serves, what is based there, and the share of that which can fly. */
+export interface CrowdedField { region: number; serves: number; based: number; share: number }
+
+/** A nation's crowded airfields, worst first: the fields its groups are on where more aircraft are based than the field serves. */
+export function crowdedFields(g: Game, nat: string | null = g.human): CrowdedField[] {
+  if (!nat || !airWar(g)) return [];
+  const bases = [...new Set(g.airFleets.filter((f) => f.nat === nat && f.ship === undefined && f.base >= 0 && !!g.regions[f.base]).map((f) => f.base))];
+  return bases
+    .map((id) => {
+      const based = g.airFleets.reduce((s, x) => s + (x.base === id && x.ship === undefined ? x.ftr + x.bmr : 0), 0);
+      const serves = fieldServes(g, id);
+      return { region: id, serves, based, share: based > 0 ? serves / based : 1 };
+    })
+    .filter((c) => c.based > c.serves)
+    .sort((a, b) => a.share - b.share || b.based - a.based || a.region - b.region);
+}
+
+const counted = (n: number): string => Math.round(n).toLocaleString('en-US');
+/** "so a third of them fly", "so only a third", never "only hardly any". */
+const soFly = (c: CrowdedField, can: string): string => {
+  const w = shareWords(c.share);
+  return `so ${c.share < 0.6 && w !== 'hardly any' ? 'only ' : ''}${w} of them ${can}`;
+};
+
+/** The tray's one row while any field of his is crowded: the worst named, and how many there are (b448; a press opens the worst). */
+export function crowdedRow(g: Game, cs: CrowdedField[]): string {
+  const w = cs[0], name = g.regions[w.region].name;
+  const tail = `it serves ${counted(w.serves)} aircraft and has ${counted(w.based)}, so ${shareWords(w.share)} of them can fly`;
+  return theWords(cs.length === 1 ? `${name}'s airfield is crowded: ${tail}` : `${cs.length} of your airfields are crowded, ${name}'s worst: ${tail}`);
+}
+
+const COUNT_HEAD = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+/**
+ * The month card's line as the player's month opens (b448): news of a field of his that has become crowded since
+ * the month before, and not again while it stays crowded. Not while his staff runs the air war: it spreads the groups.
+ */
+export function crowdedNews(g: Game): void {
+  const me = g.human;
+  if (!me || !airWar(g) || !g.nations[me]?.alive) return;
+  const pre = `crowd:${me}:`;
+  const now = staffRuns(g, me, 'air') ? [] : crowdedFields(g, me);
+  const at = new Set(now.map((c) => c.region));
+  for (const k of Object.keys(g.flags)) if (k.startsWith(pre) && !at.has(Number(k.slice(pre.length)))) delete g.flags[k];
+  const fresh = now.filter((c) => g.flags[`${pre}${c.region}`] === undefined);
+  for (const c of now) g.flags[`${pre}${c.region}`] ??= g.turn;
+  if (!fresh.length) return;
+  const w = fresh[0], name = g.regions[w.region].name;
+  const line = `serves ${counted(w.serves)} aircraft and ${counted(w.based)} are based there, ${soFly(w, 'fly')}. Move some groups to a field with room and they all fly.`;
+  const head = fresh.length === 1 ? `${name}'s airfield is crowded` : `${COUNT_HEAD[fresh.length] ?? fresh.length} airfields are crowded`;
+  const text = fresh.length === 1 ? `It ${line}` : `${name}'s is the worst: it ${line}`;
+  g.headlines.push({ turn: g.turn, week: newsWeek(g), kind: 'info', nat: me, region: w.region, head: theWords(head), text: theWords(text) });
 }
 
 /** True when a strike on this sea has something to hit: enemy ships at sea, or an enemy's trade along its coast. */
