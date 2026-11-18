@@ -1,0 +1,49 @@
+[
+ {
+  "file": "chain_lowering_wws.ogg",
+  "format": "vorbis 48000 Hz 2 ch 112 kbps",
+  "seconds": 19.8,
+  "read": [
+   0,
+   19.8
+  ],
+  "fromFilm": false,
+  "peakDb": -1.8,
+  "lufs": -12.8,
+  "loudestMomentLufs": -9.1,
+  "floorDb": -49.4,
+  "rangeDb": 31.4,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -35.1,
+   "low": -21,
+   "lowmid": -16.9,
+   "mid": -9.2,
+   "presence": -10.6,
+   "air": -1.2
+  },
+  "stereo": -0.14,
+  "talk": 0.19,
+  "events": 1,
+  "firstEvents": [
+   {
+    "at": 7.86,
+    "db": -21.1
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 7.86,
+    "db": -21.1
+   }
+  ],
+  "steady": {
+   "from": 8,
+   "to": 16,
+   "wobbleDb": 1.36
+  },
+  "flags": [
+   "LOW RATE: vorbis at 112 kbps"
+  ]
+ }
+]

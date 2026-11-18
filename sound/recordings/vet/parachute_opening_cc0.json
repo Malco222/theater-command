@@ -1,0 +1,40 @@
+[
+ {
+  "file": "parachute_opening_cc0.mka",
+  "format": "opus 48000 Hz 2 ch 79 kbps",
+  "seconds": 14.3,
+  "read": [
+   0,
+   14.3
+  ],
+  "fromFilm": false,
+  "peakDb": -4.4,
+  "lufs": -13.4,
+  "loudestMomentLufs": -10.9,
+  "floorDb": -19.7,
+  "rangeDb": 8.4,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -6.5,
+   "low": -5.2,
+   "lowmid": -4,
+   "mid": -15.6,
+   "presence": -32.6,
+   "air": -53.7
+  },
+  "stereo": 1,
+  "talk": 0.27,
+  "events": 0,
+  "firstEvents": [],
+  "loudestEvents": [],
+  "steady": {
+   "from": 0,
+   "to": 8,
+   "wobbleDb": 0.5
+  },
+  "flags": [
+   "LOW RATE: opus at 79 kbps",
+   "NOISY: the quietest moments sit at -20 dB (no clean silence between events)"
+  ]
+ }
+]

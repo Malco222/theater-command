@@ -1,0 +1,73 @@
+[
+ {
+  "file": "ship_5inch_torpedo.mka",
+  "format": "opus 48000 Hz 2 ch 95 kbps",
+  "seconds": 29.7,
+  "read": [
+   0,
+   29.7
+  ],
+  "fromFilm": false,
+  "peakDb": 0.4,
+  "lufs": -16.1,
+  "loudestMomentLufs": -8.4,
+  "floorDb": -58.1,
+  "rangeDb": 48.2,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -13.4,
+   "low": -4,
+   "lowmid": -4,
+   "mid": -10.5,
+   "presence": -16,
+   "air": -32.7
+  },
+  "stereo": 1,
+  "talk": 0.1,
+  "events": 4,
+  "firstEvents": [
+   {
+    "at": 17.69,
+    "db": -23.6
+   },
+   {
+    "at": 20.685,
+    "db": -13
+   },
+   {
+    "at": 24.815,
+    "db": -5.5
+   },
+   {
+    "at": 25.6,
+    "db": -2.3
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 25.6,
+    "db": -2.3
+   },
+   {
+    "at": 24.815,
+    "db": -5.5
+   },
+   {
+    "at": 20.685,
+    "db": -13
+   },
+   {
+    "at": 17.69,
+    "db": -23.6
+   }
+  ],
+  "steady": {
+   "from": 11.5,
+   "to": 19.5,
+   "wobbleDb": 2.27
+  },
+  "flags": [
+   "CLIPPED: 6 flat tops (50 samples at the ceiling)"
+  ]
+ }
+]

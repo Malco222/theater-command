@@ -1,0 +1,97 @@
+[
+ {
+  "file": "newsreel_fanfare_ceremonial.mp3",
+  "format": "mp3 44100 Hz 2 ch 128 kbps",
+  "seconds": 44.4,
+  "read": [
+   0,
+   44.4
+  ],
+  "fromFilm": false,
+  "peakDb": 0.1,
+  "lufs": -15,
+  "loudestMomentLufs": -9.7,
+  "floorDb": -72.6,
+  "rangeDb": 56.6,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -10.5,
+   "low": -12.7,
+   "lowmid": -7.1,
+   "mid": -2.9,
+   "presence": -9.3,
+   "air": -17.5
+  },
+  "stereo": -0.16,
+  "talk": 0.25,
+  "events": 7,
+  "firstEvents": [
+   {
+    "at": 2.78,
+    "db": -30.7
+   },
+   {
+    "at": 6.18,
+    "db": -26.3
+   },
+   {
+    "at": 6.54,
+    "db": -25.7
+   },
+   {
+    "at": 9.21,
+    "db": -20.1
+   },
+   {
+    "at": 10.73,
+    "db": -23.6
+   },
+   {
+    "at": 13.03,
+    "db": -21.3
+   },
+   {
+    "at": 25.255,
+    "db": -13
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 25.255,
+    "db": -13
+   },
+   {
+    "at": 9.21,
+    "db": -20.1
+   },
+   {
+    "at": 13.03,
+    "db": -21.3
+   },
+   {
+    "at": 10.73,
+    "db": -23.6
+   },
+   {
+    "at": 6.54,
+    "db": -25.7
+   },
+   {
+    "at": 6.18,
+    "db": -26.3
+   },
+   {
+    "at": 2.78,
+    "db": -30.7
+   }
+  ],
+  "steady": {
+   "from": 13,
+   "to": 21,
+   "wobbleDb": 1.73
+  },
+  "flags": [
+   "LOW RATE: mp3 at 128 kbps"
+  ]
+ }
+]

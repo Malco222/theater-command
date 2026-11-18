@@ -1,0 +1,49 @@
+[
+ {
+  "file": "newsreel_projector_ossa.mp3",
+  "format": "mp3 44100 Hz 2 ch 244 kbps",
+  "seconds": 20.7,
+  "read": [
+   0,
+   20.6
+  ],
+  "fromFilm": false,
+  "peakDb": -17.1,
+  "lufs": -30.7,
+  "loudestMomentLufs": -29.1,
+  "floorDb": -43.8,
+  "rangeDb": 13.1,
+  "topKhz": 18,
+  "bands": {
+   "sub": -27.3,
+   "low": -19.4,
+   "lowmid": -5.9,
+   "mid": -1.7,
+   "presence": -13.9,
+   "air": -24.7
+  },
+  "stereo": 0.91,
+  "talk": 0.28,
+  "events": 1,
+  "firstEvents": [
+   {
+    "at": 20.56,
+    "db": -37.6
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 20.56,
+    "db": -37.6
+   }
+  ],
+  "steady": {
+   "from": 11,
+   "to": 19,
+   "wobbleDb": 0.4
+  },
+  "flags": [
+   "NOISY: the quietest moments sit at -44 dB (no clean silence between events)"
+  ]
+ }
+]
