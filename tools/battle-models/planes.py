@@ -80,6 +80,33 @@ FINER = [
 
 # A battle's own machines, sculpted from numbers in the game's form (the game has no jet). `jets` is new: the pods of
 # jet engines under the wings, each (its stations, how far out), open at both ends, with no airscrew anywhere.
+# A coat that is laid by where a point is, not in patches: the numbers give `graded`, a function of a point that is
+# above nought in the second upper colour (and soft for a hand's breadth each side of nought).
+GRADED = [
+    ('    def field(p):\n        return noise.noise(', '    def field(p):\n        if s.get("graded"):\n            return s["graded"](p)\n        return noise.noise('),
+    ('        if p.x > nose_back:\n            return "nose"', '        if p.x > nose_back and not s.get("graded"):\n            return "nose"'),
+]
+
+
+def navy_blues(stations, square, fin_from, line=0.42):
+    """The US Navy's three blues over white of 1943: sea blue on top of her, intermediate blue down her sides from a
+    line above her middle and on her fin and rudder, white beneath (the under paint)."""
+    box = []
+
+    def field(p):
+        if not box:
+            box.append(game()["Body"](stations, square))
+        body = box[0]
+        x = min(max(p.x, body.back), body.front)
+        w, h, z = body.w(-x), body.h(-x), body.z(-x)
+        if abs(p.y) > w + 0.03:
+            return -1.0                                  # (her wings and tailplane)
+        if p.x < fin_from and p.z > z + h + 0.04:
+            return 1.0                                   # (her fin and rudder)
+        return (z + line * h) - p.z
+    return field
+
+
 EXTRA_PLANES = {
     "Me262": {
         "title": "Me 262A (our own model)", "year": 1944, "tech": "jets",
@@ -97,6 +124,26 @@ EXTRA_PLANES = {
                    (-1.62, -0.76, 0.25, 0.25)], 2.05)],
         "side_marks": [(-2.7, 0.33, "GER")], "wing_marks": [(4.3, -0.55, 0.45, "GER", "GER", True, True)], "code": (-1.75, 0.3),
     },
+}
+# ---- the carrier planes (Brian, 2026-11-18). Paints and first years are the art director's rulings of that day. ----
+_HELLCAT_HULL = [(4.3, -0.02, 0.04, 0.04), (4.05, -0.02, 0.16, 0.16), (4.0, -0.05, 0.6, 0.66), (3.75, -0.06, 0.69, 0.77), (2.9, -0.06, 0.7, 0.8), (1.5, -0.02, 0.67, 0.86),
+                 (-0.2, 0.04, 0.6, 0.84), (-2.2, 0.16, 0.42, 0.62), (-4.2, 0.3, 0.2, 0.38), (-5.5, 0.4, 0.07, 0.18), (-5.94, 0.43, 0.02, 0.08)]
+EXTRA_PLANES["Hellcat"] = {
+    "title": "F6F Hellcat (our own model)", "year": 1943,
+    "hull": _HELLCAT_HULL, "square": 2.2, "screw": 2.0, "blades": 3, "nose_back": 2.75, "spinner": 2, "engine": "radial", "lip": 4.0,
+    "hoods": [([(1.35, 0.84, 0.25, 0.06), (0.8, 1.08, 0.33, 0.26), (-0.2, 1.13, 0.35, 0.28), (-1.0, 1.07, 0.32, 0.22), (-1.9, 0.86, 0.2, 0.05)], (0.8, 0.3, -0.2, -1.0), False)],
+    "wing": [(0, 1.6, -1.4, -0.44, 0.47), (0.75, 1.6, -1.4, -0.44, 0.46), (1.9, 1.5, -1.36, -0.42, 0.42), (5.7, 0.86, -0.82, 0.06, 0.2), (6.25, 0.66, -0.7, 0.13, 0.13),
+             (6.47, 0.4, -0.5, 0.16, 0.07), (6.53, 0.1, -0.25, 0.17, 0.01)],
+    "tail": [(0, -4.2, -5.5, 0.52, 0.13), (2.2, -4.72, -5.45, 0.52, 0.08), (2.65, -4.95, -5.38, 0.52, 0.04), (2.8, -5.15, -5.3, 0.52, 0.01)],
+    "fin": [(0, -3.9, -5.9, 0.5, 0.14), (0, -4.55, -5.98, 1.25, 0.11), (0, -5.0, -5.98, 1.9, 0.07), (0, -5.25, -5.9, 2.2, 0.04), (0, -5.45, -5.78, 2.3, 0.01)],
+    "patch": 1.0, "graded": navy_blues(_HELLCAT_HULL, 2.2, -3.9),
+    "colours": {"upper": "2A3850", "upper2": "55708C", "under": "D9DAD3", "nose": "2A3850", "boss": "2A2B2D"},
+    "well": (1.7, 0.42, 0.42), "guns": [(2.5, 0.05, 0.3, 0.022), (2.72, 0.05, 0.22, 0.022), (2.94, 0.05, 0.14, 0.022)], "pitot": True,
+    "tailwheel": (-5.35, -0.1), "mast": (-2.1, 0.8, 1.4),
+    # (the long-range tank she nearly always flew with, under her middle)
+    "extras": [("body", ([(1.75, -1.1, 0.03, 0.03), (1.35, -1.13, 0.25, 0.23), (0.3, -1.15, 0.3, 0.27), (-0.8, -1.13, 0.23, 0.21), (-1.5, -1.09, 0.03, 0.03)], 0.0, 2.0, "under")),
+               ("rod", ((0.9, 0.0, -0.8), (0.9, 0.0, -0.95), 0.05, 0.05, "under")), ("rod", ((-0.3, 0.0, -0.8), (-0.3, 0.0, -0.95), 0.05, 0.05, "under"))],
+    "side_marks": [(-2.75, 0.34, "USA-BAR")], "wing_marks": [(4.5, 0.05, 0.5, "USA-BAR", "USA-BAR", False, False)], "code": (-3.9, 0.3),
 }
 JETS = [
     ('    boss_back = 1.0e9 if s.get("engines") else sorted(', '    boss_back = 1.0e9 if s.get("engines") or s.get("jets") else sorted('),
@@ -131,7 +178,7 @@ def game():
     if _G is None:
         path = os.path.join(HERE, "game", "build_plane.py")
         src = open(path).read().split("\ndef main():")[0]
-        for old, new in FINER + JETS:
+        for old, new in FINER + JETS + GRADED:
             if src.count(old) != 1:
                 raise ValueError("the game's sculptor has changed here: " + old)
             src = src.replace(old, new)
@@ -147,9 +194,131 @@ def names():
 
 
 # What kind of machine each is, and how many are aboard (the parachutes a lost one can leave).
-CREW = {"Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
+CREW = {"Hellcat": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
         "Stuka": 2, "Sturmovik": 2, "He111": 5, "Lancaster": 7, "B17": 10, "Bomber": 5}
 ROLE = {"Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber"}
+
+
+# ---- her record, painted on her ----------------------------------------------------------------------------
+# Brian, 2026-11-18: an ace's kills by his cockpit, a bomber's missions as rows of small yellow bombs on her nose, a
+# star over a mission she led. The file says where each mark goes (a slot: a place on her port side and the way her
+# skin faces there, in the game's axes); the game paints as many as her record in the campaign has earned, first slot
+# first. Rows are level and read from the front.
+# The art director's rulings (03:26 UTC that day): each nation's own habit, never a party emblem, no names, nose art or
+# badges, nothing copied from any real machine. A victim's mark is the plain marking of the nation that lost the
+# machine, in small (Italy a little green, white and red flag; France her roundel). Germany's fighters carry white bars
+# on the rudder instead; the Soviet Union's, small red stars under the cockpit. Bombers of Britain and America carry
+# the yellow bombs, in rows of twenty, their gunners' kills beneath; other nations' bombers carry nothing. About a hand
+# high; at most three rows on a fighter and five on a bomber.
+#   role: (rows of kills, rows of missions, marks to a row, half a kill mark, half a bomb's height)
+TALLY = {"fighter": (3, 0, 10, 0.05, 0.0), "dive bomber": (1, 2, 12, 0.05, 0.06), "attack": (1, 2, 12, 0.05, 0.06), "bomber": (2, 3, 20, 0.05, 0.06)}
+TALLY_ROW = {"He111": 16, "Bomber": 16}      # (a medium bomber's nose is shorter)
+TALLY_AT = {"He111": 4.45}                   # (her cockpit is her glass nose: her record goes on the first solid skin behind it)
+LEAD = 0.026                                 # (half the star over a mission flown as leader)
+BAR = 0.045                                  # (half the height of a white bar on a rudder)
+
+
+def habit(nation, role):
+    """How a nation's machines of this kind wear their record: the art director's ruling."""
+    if role == "fighter":
+        return {"GER": "bars", "SOV": "stars"}.get(nation, "victims")
+    return "bombs" if nation in ("UK", "USA") else "none"
+
+
+def tally_of(name, s, hull, role, G, fins):
+    """Where her record is painted: under the sill of her cockpit on the port side, running aft from her windscreen
+    (and, for a fighter Germany flies, on the port face of her rudder)."""
+    n_kill, n_miss, per_row, r_kill, r_bomb = TALLY[role]
+    per_row = TALLY_ROW.get(name, per_row)
+    hoods = s.get("hoods", [])
+    hood = G["Body"](hoods[0][0], 2.0) if hoods else None
+    nation = fitout.nation(s)
+    gap = 0.02
+
+    def side(x, z):
+        """The place on her port side at this height, and the way her skin faces there."""
+        t = max(-0.97, min(0.97, (z - hull.z(-x)) / hull.h(-x)))
+        a = math.pi - math.asin(math.copysign(abs(t) ** (1.0 / hull.power), t))
+        return hull.at(x, a), hull.out(x, a)
+
+    def sill(x):
+        """How high her skin first comes clear of her hood on that side."""
+        if hood is None or not hood.back < x < hood.front:
+            return None
+        for k in range(0, 90):
+            p = hull.at(x, math.radians(90.0 + k))
+            dy, dz = p.y / max(hood.w(-x), 1.0e-3), (p.z - hood.z(-x)) / max(hood.h(-x), 1.0e-3)
+            if dy * dy + dz * dz > 1.0:
+                return p.z
+        return None
+
+    if name in TALLY_AT or hood is None:
+        x0 = TALLY_AT.get(name, hull.front - 0.3 * (hull.front - hull.back))
+    else:
+        tall = max(r[3] for r in hoods[0][0])
+        x0 = max(r[0] for r in hoods[0][0] if r[3] >= 0.6 * tall) + 0.1          # (from the foot of her windscreen)
+    step_k = 2.0 * r_kill + gap
+    step_b = max(2.0 * 0.38 * r_bomb, 2.0 * LEAD) + 0.03                       # (a bomb is slimmer than a kill mark is wide)
+    xs_kill = [x0 - r_kill - k * step_k for k in range(per_row)]
+    xs_bomb = [x0 - 0.5 * step_b - k * step_b for k in range(per_row)]
+    reach = xs_kill + (xs_bomb if n_miss else [])
+    x_mid = 0.5 * (max(reach) + min(reach))
+    sills = [v for v in (sill(x) for x in (max(reach), x_mid, min(reach))) if v is not None]
+    top = min(sills) - 0.05 if sills else hull.z(-x_mid) + 0.62 * hull.h(-x_mid)
+    lean = 0.75 if role == "fighter" else 0.55            # (no higher than where her side still faces a man standing beside her)
+    while side(x_mid, top - r_kill)[1].z > lean:
+        top -= 0.01
+
+    def down(z, d):
+        """A height lower by this much of her skin (her side leans in toward the top)."""
+        n = side(x_mid, z)[1]
+        return z - d * math.sqrt(max(0.15, 1.0 - n.z * n.z))
+
+    def row(xs, z):
+        out = []
+        for x in xs:
+            p, n = side(x, z)
+            out.append([round(v, 3) for v in (p.x, p.y, p.z, n.x, n.y, n.z)])
+        return out
+
+    out = {"side": "port", "nation": nation, "habit": habit(nation, role) if nation != "*" else "by nation",
+           "note": "a slot is a place in the game's axes and the way the skin faces there (x, y, z, nx, ny, nz); fill each list in order"}
+    z = top
+    bombs, stars = [], []
+    for _ in range(n_miss):
+        z_star = down(z, LEAD + 0.01)
+        zc = down(z_star, LEAD + 0.012 + r_bomb)
+        if side(x_mid, zc)[1].z < -0.3:
+            break
+        stars += row(xs_bomb, z_star)
+        bombs += row(xs_bomb, zc)
+        z = down(zc, r_bomb + gap)
+    if bombs:
+        out["missions"] = {"tag": "BOMB", "radius": r_bomb, "per_row": per_row, "slots": bombs}
+        out["lead"] = {"tag": "LEAD", "radius": LEAD, "per_row": per_row, "slots": stars, "note": "slot k stands over mission k: painted if she led it"}
+    kills = []
+    for _ in range(n_kill):
+        zc = down(z, r_kill)
+        if side(x_mid, zc)[1].z < -0.3:
+            break
+        kills += row(xs_kill, zc)
+        z = down(zc, r_kill + gap)
+    if kills:
+        out["kills"] = {"tag": "KILL-<the loser's nation>, or KILL-STAR (the Soviet habit)", "radius": r_kill, "per_row": per_row, "slots": kills}
+    if role == "fighter" and nation in ("GER", "*") and len(fins) == 1:
+        fin = G["Wing"](fins[0][0], 1.0, True, fins[0][1])
+        span = fin.tip - fin.root
+        bars, u, step = [], fin.root + 0.8 * span, 2.0 * 0.3 * BAR + 0.016
+        while len(bars) < 30 and u > fin.root + 0.22 * span:
+            chord = abs(fin.trail(u) - fin.lead(u))
+            n = min(10, 30 - len(bars), int(chord * (0.95 - RUDDER[2] - 0.04) / step))
+            for k in range(n):
+                c = RUDDER[2] + 0.04 + (0.3 * BAR + k * step) / chord
+                p = fin.at(u, c, False)
+                bars.append([round(p.x, 3), round(p.y, 3), round(p.z, 3), 0.0, -1.0, 0.0])
+            u -= 2.0 * BAR + 0.025
+        out["rudder"] = {"tag": "KILL-BAR", "part": "rudder", "radius": BAR, "slots": bars, "note": "Germany's habit: a white bar a kill, on the rudder, and it turns with the rudder"}
+    return out
 
 
 def port(v):
@@ -663,10 +832,11 @@ def convert(name, fine=True):
         return w, soot
     m.weather = weather
     m.marks = G["marks_of"](s, hull)
+    m.tally = tally_of(name, s, hull, role, G, fins)
     m.info.update({"rust": "9A9C98", "soot": colours["soot"], "wear_show": 0.3,
                    "file": {"nation_paint": bool(s.get("nation_paint")), "number_ink": colours["ink"], "span": round(2.0 * half, 3),
                             "role": role, "crew": CREW.get(name, 1), "engines": len(hubs) + len(pods), "jets": len(pods), "year": s.get("year"), "tech": s.get("tech"),
-                            "clear": {"glass": 0.3, "blur": 0.07, "blur_tip": 0.3}}})
+                            "clear": {"glass": 0.3, "blur": 0.07, "blur_tip": 0.3}, "tally": m.tally}})
     f = Facts()
     f.name, f.spec, f.hull, f.wing, f.half, f.y_cut, f.x_cut, f.hubs, f.screw = name, s, hull, wing, half, y_cut, x_cut, [port(h) for h in hubs], screw
     f.role, f.crew, f.has_bombs, f.long = role, CREW.get(name, 1), has_bombs or bool(bay), hull.front - hull.back
@@ -975,5 +1145,5 @@ def bomb(fine=True):
     return m
 
 
-BUILDERS = {n: (lambda fine=True, n=n: convert(n, fine)) for n in ("Bf109", "Spitfire", "Zero", "Mustang", "Yak", "Fw190", "Me262", "Hurricane", "Warhawk", "Fighter",
+BUILDERS = {n: (lambda fine=True, n=n: convert(n, fine)) for n in ("Bf109", "Spitfire", "Zero", "Mustang", "Yak", "Fw190", "Me262", "Hurricane", "Warhawk", "Hellcat", "Fighter",
                                                                   "Stuka", "Sturmovik", "He111", "Lancaster", "B17", "Bomber")}

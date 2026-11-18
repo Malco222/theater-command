@@ -79,11 +79,11 @@ class Air:
 
 
 class Plane:
-    def __init__(self, air, name, at=(0, 0, 0), badges=True):
+    def __init__(self, air, name, at=(0, 0, 0), badges=True, record=None):
         self.air, self.name = air, name
         self.m, self.f = air.model(name)
         self.ob, self.arm = rigid.to_blender(self.m, plane_look, crease=50.0)
-        self.badges = marks.put(self.m, self.ob, self.arm) if badges else []
+        self.badges = marks.put(self.m, self.ob, self.arm, record) if badges else []      # (record: what she has done, painted on her)
         self.at, self.q, self.pose = Vector(at), Quaternion(), {}
         self.vel = Vector()                                  # (against the formation)
         self.v_air = air.speed

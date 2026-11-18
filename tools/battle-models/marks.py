@@ -1,8 +1,12 @@
-"""National markings on the aircraft, for the pictures only.
+"""National markings on the aircraft, and the record a machine wears, for the pictures only.
 
 The game paints its own markings where the model's `marks` say (a tag, a place, a size, a facing). So that a review
 picture does not show bare machines, the same list is drawn here as thin painted shapes laid on the skin: each nation's
 plain period marking, never a party emblem. Nothing here goes into the game's files.
+
+A machine's record (Brian, 2026-11-18: an ace's kills by his cockpit, a bomber's missions as small yellow bombs) is
+drawn the same way from the slots in the model's `tally`: see `record()`. The marks are our own plain shapes; nothing
+is copied from any real machine's nose.
 """
 import math
 
@@ -13,6 +17,23 @@ from mathutils.geometry import tessellate_polygon
 
 BLUE, RED, WHITE, YELLOW, BLACK = "1C2C55", "A82A26", "E6E4DA", "D9B03A", "141414"
 US_BLUE, DISC = "1B2A4A", "B0261E"
+GREEN, BOMB_YELLOW, BAR_WHITE = "2F6B3A", "D2A82E", "DAD8CE"
+
+
+def poly(points, col):
+    return [(col, list(points))]
+
+
+def bomb(col):
+    """A small bomb standing on its nose, fins up."""
+    half = [(0.0, -1.0), (0.14, -0.86), (0.26, -0.62), (0.32, -0.32), (0.32, -0.02), (0.26, 0.24), (0.15, 0.46), (0.1, 0.56)]
+    body = half + [(-x, y) for x, y in reversed(half[1:])]
+    fins = [(0.1, 0.5), (0.36, 0.74), (0.36, 1.0), (0.1, 0.84), (-0.1, 0.84), (-0.36, 1.0), (-0.36, 0.74), (-0.1, 0.5)]
+    return poly(body, col) + poly(fins, col)
+
+
+def mix(a, b, t):
+    return "".join("%02X" % round(int(a[i:i + 2], 16) * (1.0 - t) + int(b[i:i + 2], 16) * t) for i in (0, 2, 4))
 
 
 def ring(r0, r1, col, seg=32):
@@ -38,15 +59,15 @@ def rect(u0, u1, v0, v1, col, cell=0.3):
     return out
 
 
-def star(r, col, inner=0.382):
+def star(r, col, inner=0.382, points=5):
     pts = []
-    for k in range(10):
-        a = math.pi / 2 + 2 * math.pi * k / 10
+    for k in range(2 * points):
+        a = math.pi / 2 + math.pi * k / points
         rr = r if k % 2 == 0 else r * inner
         pts.append((rr * math.cos(a), rr * math.sin(a)))
     out = []
-    for k in range(10):
-        a, b = pts[k], pts[(k + 1) % 10]
+    for k in range(2 * points):
+        a, b = pts[k], pts[(k + 1) % (2 * points)]
         for j in range(3):
             t0, t1 = j / 3.0, (j + 1) / 3.0
             quad = [(a[0] * t0, a[1] * t0), (a[0] * t1, a[1] * t1), (b[0] * t1, b[1] * t1), (b[0] * t0, b[1] * t0)]
@@ -75,18 +96,91 @@ def shapes(tag):
                 rect(-1.95, -0.95, -0.24, 0.24, WHITE) + rect(0.95, 1.95, -0.24, 0.24, WHITE), star(0.98, WHITE)]
     if tag == "SOV":
         return [star(1.0, DISC)]
+    # ---- a machine's record: a victim's mark is that nation's own plain marking in small ----
+    if tag == "KILL-GER":
+        return shapes("GER")
+    if tag == "KILL-UK":
+        return shapes("UK")
+    if tag == "KILL-USA":
+        return shapes("USA")
+    if tag == "KILL-JAP":
+        return [ring(0.0, 1.0, WHITE, 20), ring(0.0, 0.84, DISC, 20)]          # (a thin white edge, or a red disc is lost on dark paint)
+    if tag == "KILL-SOV":
+        return [star(1.0, WHITE), star(0.78, DISC)]
+    if tag == "KILL-FRA":
+        return [ring(0.0, 1.0, RED, 20), ring(0.0, 0.66, WHITE, 20), ring(0.0, 0.33, BLUE, 20)]
+    if tag == "KILL-CHI":
+        return [ring(0.0, 1.0, BLUE, 20), star(0.72, WHITE, 0.6, 12)]           # (China's white sun on blue)
+    if tag == "KILL-ITA":
+        return [rect(-1.0, -0.34, -0.66, 0.66, GREEN, 1.0) + rect(-0.34, 0.34, -0.66, 0.66, WHITE, 1.0) + rect(0.34, 1.0, -0.66, 0.66, RED, 1.0)]
+    if tag == "KILL-STAR":                                                       # (the Soviet habit: a small red star a kill)
+        return [star(1.0, WHITE), star(0.8, DISC)]
+    if tag == "KILL-BAR" or tag.startswith("KILL-"):                             # (Germany's habit on the rudder; and any nation not drawn here)
+        return [rect(-0.3, 0.3, -1.0, 1.0, BAR_WHITE, 1.0)]
+    if tag == "BOMB":
+        return [bomb(BOMB_YELLOW)]
+    if tag == "LEAD":
+        return [star(1.0, BOMB_YELLOW)]
     return []
 
 
-def put(model, ob, arm):
-    """Lays the model's markings on its skin (as it stands at rest), each riding the part it is on. Returns the objects made."""
-    if not model.marks:
+def habit(nation, role):
+    """How a nation's machines of this kind wear their record (the art director's ruling of 2026-11-18)."""
+    if role == "fighter":
+        return {"GER": "bars", "SOV": "stars"}.get(nation, "victims")
+    return "bombs" if nation in ("UK", "USA") else "none"
+
+
+def record(model, rec):
+    """The marks of a machine's record, as entries like the model's own marks, from the slots in her `tally`.
+
+    rec: {"kills": [["GER", 14], ["ITA", 3]], "missions": 32, "lead": [12, 19], "nation": "UK", "habit": ...}
+    (nation is only needed for a generic machine; habit overrides the nation's own.)"""
+    t = getattr(model, "tally", None) or {}
+    if not rec or not t:
         return []
-    tree = BVHTree.FromPolygons([tuple(v) for v in model.verts], [tuple(f) for f in model.faces])
+    nation = rec.get("nation") or t.get("nation", "*")
+    how = rec.get("habit") or habit(nation, model.info["file"].get("role", "fighter"))
+    kills = [n for nat, count in rec.get("kills", []) for n in [nat] * int(count)]
+    out = []
+
+    def fill(row, tags):
+        for tag, slot in zip(tags, row["slots"]):
+            if tag:
+                out.append({"tag": tag, "at": slot[:3], "facing": slot[3:], "radius": row["radius"], "part": row.get("part"), "small": True})
+
+    if how == "bars" and "rudder" in t:
+        fill(t["rudder"], ["KILL-BAR"] * len(kills))
+    elif how == "stars" and "kills" in t:
+        fill(t["kills"], ["KILL-STAR"] * len(kills))
+    elif how in ("victims", "bombs") and "kills" in t:
+        fill(t["kills"], ["KILL-" + n for n in kills])
+    if how == "bombs" and "missions" in t:
+        flown, led = int(rec.get("missions", 0)), set(rec.get("lead", []))
+        fill(t["missions"], ["BOMB"] * flown)
+        fill(t["lead"], ["LEAD" if (k + 1) in led and k < flown else None for k in range(len(t["lead"]["slots"]))])
+    return out
+
+
+def put(model, ob, arm, rec=None):
+    """Lays the model's markings on its skin (as it stands at rest), each riding the part it is on, and her record if
+    one is given (see `record`). Returns the objects made."""
+    todo = list(model.marks or []) + record(model, rec)
+    if not todo:
+        return []
+    # (only her painted skin: a mark whose corner landed on a scribed line or a rivet stood proud there, and its lower
+    #  layer came through its upper one)
+    names = list(model.paints)
+    skin = [f for k, f in enumerate(model.faces) if names[model.fpaint[k]] in ("upper", "upper2", "under", "nose", "boss") or (k < len(model.fcoat) and model.fcoat[k])]
+    tree = BVHTree.FromPolygons([tuple(v) for v in model.verts], [tuple(f) for f in skin])
     y_cut = abs(model.parts[model.part_at["wing.port"]].pivot.y)
     x_cut = model.parts[model.part_at["tail"]].pivot.x
     verts, faces, cols, groups = [], [], [], []
-    for mk in model.marks:
+    for mk in todo:
+        if mk["tag"] == "#":
+            continue
+        small = bool(mk.get("small"))                                            # (a record mark: a hand high, matt, a little worn)
+        proud = 0.009 if small else 0.012                                        # (clear of her scribed lines and rivets)
         sides = (1.0, -1.0) if mk.get("both") else (1.0,)
         for hand in sides:
             at = Vector((mk["at"][0], -mk["at"][1] * hand, mk["at"][2]))            # (the file's y is to the right)
@@ -96,6 +190,8 @@ def put(model, ob, arm):
             u = v.cross(n)
             flip = -1.0 if (mk["tag"] == "UK-FIN" and u.x < 0) else 1.0
             part = "tail" if at.x < x_cut else ("wing.port" if at.y > y_cut else "wing.starboard" if at.y < -y_cut else "plane")
+            if mk.get("part") in model.part_at:
+                part = mk["part"]
             r = mk["radius"]
             for layer, polys in enumerate(shapes(mk["tag"])):
                 for col, poly in polys:
@@ -115,13 +211,13 @@ def put(model, ob, arm):
                             if hit[0] is not None and hit[1].dot(n) > 0.3:
                                 p = hit[0]
                             idx.append(len(verts))
-                            verts.append(p + n * (0.012 + 0.004 * layer))
+                            verts.append(p + n * (proud + (0.002 if small else 0.004) * layer))
                             groups.append(part)
                         a_, b_, c_ = verts[idx[0]], verts[idx[1]], verts[idx[2]]
                         if (b_ - a_).cross(c_ - a_).dot(n) < 0:
                             idx.reverse()
                         faces.append(idx)
-                        cols.append(col)
+                        cols.append(mix(col, "6E6A5C", 0.14) + "m" if small else col)
     if not faces:
         return []
     me = bpy.data.meshes.new(model.name + "_marks")
@@ -136,7 +232,9 @@ def put(model, ob, arm):
             b = mat.node_tree.nodes["Principled BSDF"]
             rgb = tuple(((int(c[i:i + 2], 16) / 255.0) ** 2.2) for i in (0, 2, 4))
             b.inputs["Base Color"].default_value = (*rgb, 1.0)
-            b.inputs["Roughness"].default_value = 0.6
+            b.inputs["Roughness"].default_value = 0.9 if c.endswith("m") else 0.6
+            if c.endswith("m"):
+                b.inputs["Specular IOR Level"].default_value = 0.15
         me.materials.append(mat)
     me.polygons.foreach_set("material_index", [used.index(c) for c in cols])
     me.update()

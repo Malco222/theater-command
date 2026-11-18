@@ -1,6 +1,6 @@
 """A close look at one aircraft, for judging her detail.
 
-    python airlook.py <name> <out folder> [view,view,...] [WxHxSPP] [clip=name@t ...]
+    python airlook.py <name> <out folder> [view,view,...] [WxHxSPP] [clip=name@t ...] [record=JSON] [tag=word]
 
 views:  front   from ahead and to port, a little above (the sheet's view, closer)
         hood    close on her hood and nose, from ahead and above
@@ -9,8 +9,13 @@ views:  front   from ahead and to port, a little above (the sheet's view, closer
         under   from below and ahead
         tail, waist, belly   close on a bomber's tail guns, her waist windows, her ball turret
         side    square on her port side
+        record  close on the record painted on her port side (kills, missions); rudder: on a German fighter's rudder;
+                nose: a bomber's port nose from a little further off; ace: a fighter's pilot and his score together
+record= is what she has done, e.g. record='{"kills": [["GER", 14], ["ITA", 3]], "missions": 32, "lead": [12, 19]}'
+(see marks.record); tag= is added to the pictures' names.
 A clip named after the views is laid over `fly` at the time given (bank.port@0.9, watch@2.0, flaps.down@1.5).
 """
+import json
 import os
 import sys
 
@@ -31,10 +36,12 @@ def main():
     views = sys.argv[3].split(",") if len(sys.argv) > 3 else ["front", "hood", "rear", "under"]
     w, h, spp = (int(v) for v in (sys.argv[4] if len(sys.argv) > 4 else "1280x720x12").split("x"))
     extra = [a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("clip=")]
+    rec = next((json.loads(a.split("=", 1)[1]) for a in sys.argv[5:] if a.startswith("record=")), None)
+    tag = next(("-" + a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("tag=")), "")
     os.makedirs(out, exist_ok=True)
     A = Air(clouds=12.0)
     stage.render_setup(w, h, spp)
-    p = Plane(A, name)
+    p = Plane(A, name, record=rec)
     poses = [p.play("fly", 0.6)] + [p.play(c.split("@")[0], float(c.split("@")[1])) for c in extra]
     p.put((0, 0, 0), *poses)
     A.at(0.0)
@@ -56,11 +63,24 @@ def main():
         if k in p.f.balls:
             d = sum(((b - a) for a, b in p.f.guns_of.get(k, [])), Vector()).normalized()
             shots["ball"] = (tuple(c + d * 2.6 + Vector((0.0, 0.9, 0.35))), tuple(c), 50.0)
+    t = getattr(p.m, "tally", None) or {}
+    slots = [Vector((q[0], -q[1], q[2])) for k in ("missions", "lead", "kills") for q in t.get(k, {}).get("slots", [])]
+    if slots:                                            # (her record: abeam of it and a little above, so that the rows are read)
+        mid = sum(slots, Vector()) / len(slots)
+        wide = max(q.x for q in slots) - min(q.x for q in slots)
+        d = max(2.3, wide * 1.45)
+        shots["record"] = ((mid.x + 0.12 * d, mid.y + 0.9 * d, mid.z + 0.42 * d), tuple(mid), 50.0)
+        shots["nose"] = ((mid.x + 1.6 + 0.45 * d, mid.y + 1.9 * d, mid.z + 0.8 * d), (mid.x + 0.6, mid.y, mid.z), 50.0)
+        shots["ace"] = ((mid.x + 1.9, mid.y + 3.0, mid.z + 1.5), (mid.x - 0.1, mid.y, mid.z + 0.12), 50.0)      # (the pilot and his score together)
+    bars = [Vector((q[0], -q[1], q[2])) for q in t.get("rudder", {}).get("slots", [])]
+    if bars:
+        mid = sum(bars, Vector()) / len(bars)
+        shots["rudder"] = ((mid.x - 0.7, mid.y + 2.6, mid.z + 0.7), tuple(mid), 50.0)
     for v in views:
         eye, look, lens = shots[v]
         A.cam.data.lens = lens
         kit.look_at(A.cam, eye, look)
-        path = os.path.join(out, f"{name}-{v}.png")
+        path = os.path.join(out, f"{name}-{v}{tag}.png")
         kit.still(path)
         print("made", path, flush=True)
 

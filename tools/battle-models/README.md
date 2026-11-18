@@ -122,6 +122,30 @@ She has no `prop.N` parts and no flaps; her sockets add `jet.N` (each tailpipe).
 `tech` "jets": by the art director's unit table Germany flies her only once jet fighters are researched (the rules'
 tech `jets`), and whether a battle mixes her in among the Fw 190s is the air battle builder's call.
 
+**Her record, painted on her** (Brian, 2026-11-18: an ace's kills by his cockpit, a bomber's missions as rows of
+small yellow bombs, a star over a mission she led). Each aircraft file carries a `tally`: lists of slots, each slot a
+place on her port side and the way her skin faces there (`x, y, z, nx, ny, nz`, the game's axes, like a `marks`
+entry), with the mark's `radius` (half its height) and how many stand in a row. The game paints as many marks as her
+record in the campaign has earned, first slot first; the rules keep the record (kills by the loser's nation, missions
+flown, which of them she led). Past the last slot nothing more is painted.
+
+| list | where | mark |
+| --- | --- | --- |
+| `kills` | under the port cockpit sill, running aft from the windscreen (on a bomber: beneath her bombs) | `KILL-<nation>`: the plain marking of the nation that lost the machine, in small |
+| `rudder` | the port face of the rudder (part `rudder`, so it turns with it); fighters Germany flies | `KILL-BAR`: a white bar a kill |
+| `missions` | the port side under the cockpit, rows of twenty (sixteen on a medium bomber, twelve on a two-seater) | `BOMB`: a small yellow bomb standing on its nose |
+| `lead` | slot k stands over mission k | `LEAD`: a small yellow star, painted if she led that mission |
+
+Who wears what is the art director's ruling (`habit` in the file; a generic machine says "by nation"): Germany's
+fighters wear `rudder` bars; the Soviet Union's wear a small red star a kill in the `kills` slots (`KILL-STAR`);
+every other nation's fighters wear the victims' marks there. Bombers of Britain and America wear `missions`, `lead`
+and their gunners' `kills`; other nations' bombers wear nothing (their slots are in the file all the same). A victim's
+mark is never a party emblem: Germany's is the plain cross, Japan's the red disc, Italy's a small green, white and
+red flag, France's her roundel, any other nation's the marking the game draws on its own aircraft. No names, nose art
+or badges, and nothing copied from a real machine. A mark is about a hand high, matt and a little worn: it is read
+only at the nearest camera. For the pictures `marks.record()` draws them: `airlook.py B17 <out> nose,record
+record='{"kills": [["GER", 6]], "missions": 32, "lead": [12, 19]}'`; `Plane(..., record=...)` in a clip.
+
 Paints added after the game's own: `torn` (the inside of a torn-off end), `blur` (the disc of a turning airscrew),
 and the fit-out's (`inside`, `leather`, `skin`, `suit`, `vest`, `goggles`, `exhaust`, `gunmetal`, `patch`, `lens`,
 `boot`, `rivet`, `rivet_under`, `blur_tip`, three lamps). **Draw `glass`, `blur` and `blur_tip` clear**: the file
@@ -166,7 +190,7 @@ python export.py <out> all                     # every model: .json, .glb, .fbx,
 python look.py Freighter <out> close,aft       # quick stills while building (small craft: small,smallaft)
 python show.py Battleship_UK turn <out>        # ship clips: turn, broadside, sink, capsize
 python airshow.py shot_down <out>              # aircraft clips: flypast (plane=Me262 for another machine), shot_down, ways_down
-python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, rear, over, under, side, tail, tailside, waist, belly, ball; clip=bombs_away@1.6)
+python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, rear, over, under, side, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; record=JSON)
 python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
 ```
 
