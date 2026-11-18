@@ -6,10 +6,11 @@ import { plannedStrike } from '../src/campaign/carriers';
 import { DIPLOMACY, closeDiplomacy, holds, monthlyDiplomacy, warDiplomacy } from '../src/campaign/diplomacy';
 import { FAR_LAID, lay } from '../src/campaign/far-rows';
 import { atWar, capitulate, createGame, declareWar, setWar } from '../src/campaign/game';
-import { HISTORY, shoreOpen } from '../src/campaign/history';
+import { HISTORY, setStop as setStopOff, shoreOpen } from '../src/campaign/history';
 import { frontArmys, lines, neverHis } from '../src/campaign/line';
-import { NAVY, airOver } from '../src/campaign/navy';
-import { AIR, airQuality, airUpkeep } from '../src/campaign/air';
+import { NAVY, airOver, atSea, navalUpkeep } from '../src/campaign/navy';
+import { AIR, airQuality, airRange, airUpkeep } from '../src/campaign/air';
+import { ARSENAL, smallAirMonth } from '../src/campaign/arsenal';
 import airData from '../data/campaign/air.json';
 import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind, keepersOf, keptForces, mayDemand, pacificGround, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds, skiesOn, skiesOver } from '../src/campaign/pacific';
 import { FAR_STAGE } from '../src/campaign/stage';
@@ -114,10 +115,11 @@ describe('the Pacific\'s air forces with the far side off (rulings 184 and 187)'
   it('lays no row of them, counts the air over every sea from its coasts, and keeps no group\'s record of feeding', () => {
     // air.json as it is on disk: thirty-six commands, none of Japan's, no nation row for it, no quality by date.
     expect(AIR.fleets.length).toBe(36);
-    expect(AIR.fleets.some((r) => r.nat === 'JAP' || 'moves' in r || 'ally' in r || 'arrives' in r || 'quality' in r || 'bmrRange' in r)).toBe(false);
+    expect(AIR.fleets.some((r) => r.nat === 'JAP' || 'moves' in r || 'ally' in r || 'arrives' in r || 'quality' in r || 'bmrRange' in r || 'byBook' in r || 'watch' in r || 'posted' in r)).toBe(false);
     expect(AIR.nations.JAP).toBeUndefined();
     expect(AIR.production.JAP).toBeUndefined();
     expect(AIR.decline).toBeUndefined();
+    expect([AIR.rise, AIR.jobs, AIR.works]).toEqual([undefined, undefined, undefined]);
     expect(JSON.stringify(AIR.fleets)).toBe(JSON.stringify((airData as unknown as { fleets: unknown[] }).fleets));
     const g = startOpen(createGame(3, null));
     setWar(g, 'GER', 'UK');
@@ -138,6 +140,39 @@ describe('the Pacific\'s air forces with the far side off (rulings 184 and 187)'
     g.turn = 65;
     expect(airQuality(lw, g)).toBe(AIR.nations.GER.quality);
     expect(airQuality(lw)).toBe(AIR.nations.GER.quality);
+    // A fighter reaches as its month allows whatever it is doing: no job column (ruling 187(a) is the far side's).
+    const us = g.airFleets.find((f) => f.nat === 'USA' && f.ship === undefined);
+    if (us) for (const m of ['bomb', 'town', 'ground']) expect(airRange(us, g, m)).toEqual(airRange(us, g));
+  });
+
+  it('the corrections of ruling 234\'s rider b518 are the far side\'s: aircraft from abroad come as ruling 213(d) has them, and no works feeds a pool', () => {
+    const g = startOpen(createGame(3, null));
+    const G = ARSENAL.smallAir.gifts;
+    const nz = G.findIndex((r) => r[0] === 24 && r[1] === 'NZL');
+    expect(nz).toBeGreaterThanOrEqual(0);
+    g.turn = 36;
+    smallAirMonth(g);
+    for (const nat of Object.keys(ARSENAL.smallAir.works)) expect((g.airPool[nat]?.ftr ?? 0) + (g.airPool[nat]?.bmr ?? 0), nat).toBe(0);
+    // (New Zealand is on the map only where the chart reaches it: its row waits for it otherwise, and is never thrown away.)
+    if (g.nations.NZL?.alive && !g.nations.NZL.dormant) expect(g.airFleets.some((f) => f.nat === 'NZL')).toBe(true);
+    else expect(g.flags[`gift:${nz}`]).toBeUndefined();
+  });
+});
+
+describe('the carriers of ruling 234(d) with the far side off', () => {
+  it('no fleet has a cruise or a month at sea by the record, and a country at peace keeps every fleet in harbour', () => {
+    expect(NAVY.fleets.some((r) => 'cruise' in r)).toBe(false);
+    expect((NAVY.moves ?? []).some((m) => m.sea !== undefined || m.with !== undefined)).toBe(false);
+    for (const stop of [1, 3]) {
+      const g = startOpen(createGame(3, null));
+      if (stop !== 3) setStopOff(g, stop, true);
+      expect(g.fleets.some((f) => f.cruise !== undefined)).toBe(false);
+      for (let t = 2; t <= 30; t++) {
+        g.turn = t;
+        navalUpkeep(g, 'USA');
+        for (const f of g.fleets) if (f.nat === 'USA') { expect(atSea(f), `${f.name} ${t}`).toBe(false); expect(f.cruised).toBeUndefined(); }
+      }
+    }
   });
 });
 

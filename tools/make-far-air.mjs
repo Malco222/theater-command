@@ -12,12 +12,27 @@
 //             the China front, where its main effort and the enemy's aircraft are).
 //   ally      the row's base, or one of its forward bases, is another country's ground on the first day: the
 //             command may stand on ground an ally holds (America's in Australia, New Zealand's on Fiji).
-//   arrives   its country has no production row in air.json: what the record adds to the command arrives with the
-//             date. (China, Australia, New Zealand, the Dutch.)
-//   quality   the builder's starting values, named for the tuning pass and not tuned: America's Pacific commands
-//             0.9 (paper 10, section 7), the air forces in Malaya and the Indies 0.75 (the historian).
+//   arrives   China, New Zealand and the Dutch build no aircraft: what the record adds to a command of theirs
+//             arrives with the date (ruling 234's rider b518, 7). Australia builds: 'works' below.
+//   quality   America's Pacific commands 0.9 to start (ruling 184; 'rise' below says until when), the American
+//             Volunteer Group the same (b518, 2: a row, not a country), the air forces in Malaya and the Indies
+//             0.75 (the historian).
 //   bmrRange  America's bombers in the Pacific 1,200 km (ruling 184; its nation row, shared with Europe, is left
 //             alone), and the two commands of long bombers 2,550.
+//   byBook    b518, 6: a fall in the row's figure, to nothing too, is the record's own move or a battle's work. It is
+//             taken at the stops that keep the book; at the others the command is kept at the most the record has
+//             given it so far. Every row but those whose reason lies outside the game (OUTSIDE below: the builder's
+//             list, for the historian to check) and the Soviet Union's.
+//   watch     the Soviet Far East's commands stand apart, watching Japan: at peace with it a computer staff leaves
+//             them on their fields at every stop, and at every stop what the record adds arrives and what it takes
+//             away leaves with the date, never through the pool (the aircraft that went west in December 1941 are
+//             on Europe's rows already: b518). The builder's reading, named for the design director.
+//
+// Beside the rows: 'rise' (b518, 2: America's Pacific commands read the nation's quality from January 1943 at the
+// stops that keep the book, and at the others from the day America holds Long-range fighters), 'jobs' (187(a) and
+// b518, 3: from a field beyond Europe's chart America's land fighters reach 550 km over a beach, on patrol and over a
+// sea, and 1,250 flying with the bombers on a raid from March 1944) and 'works' (b518, 7: Australia's own works keep
+// up its commands).
 //
 // Japan's nation row is rulings 184 and 187's: quality 1.0, fighters 300 km before the step (the month's own reach
 // is airwar.json's dated row, ruling 227), bombers 1,300. 'decline' is 187(b)'s table, read only at the stops of the
@@ -58,8 +73,24 @@ const RESERVE = { ftr: 250, bmr: 250, pilots: 150 };
 const USA = { quality: 0.9, bmrRange: 1200 };
 /** The commands of long bombers (ruling 184: 2,550 km, from June 1944, as their rows are dated). */
 const LONG = { 'XX Bomber Command': 2550, 'XXI Bomber Command': 2550 };
-/** The historian: the air forces in Malaya and the Indies in 1941 and 1942, about 0.75. */
-const WEAK = { 'Far East Command': 0.75, 'Army Air Arm of the Indies': 0.75 };
+/** The historian: the air forces in Malaya and the Indies in 1941 and 1942, about 0.75. b518, 2: the volunteer group is a row, not a country, and reads America's Pacific figure. */
+const WEAK = { 'Far East Command': 0.75, 'Army Air Arm of the Indies': 0.75, 'American Volunteer Group': USA.quality };
+/** b518, 2: America's 0.9 is "to start". The month is January 1943; the research is tech.json's Long-range fighters. */
+const RISE = { USA: { from: 41, tech: 'escorts' } };
+/** Ruling 187(a) as b518, 3 has it built: cover over a beach, patrol and the air over a sea 550 km; escorts on a raid 1,250 from March 1944. */
+const JOBS = { USA: { cover: 550, raid: [[55, 1250]] } };
+/** b518, 7: who builds none (their additions arrive by date), and who builds (arsenal.json smallAir.works keeps its commands up). */
+const ARRIVES = ['CHN', 'NZL', 'NED'];
+const WORKS = ['AUS'];
+/** The commands that stand apart, and the neighbour they watch (the builder's reading). */
+const WATCH = { SOV: 'JAP' };
+/**
+ * b518, 6: the withdrawals whose reason lies outside the game, taken at every stop (the builder's list, for the
+ * historian to check). The volunteer group ended on 4 July 1942 by a change of service: its men and aircraft became
+ * the 23rd Fighter Group of America's China Air Task Force, the Fourteenth's row. Every other fall on these rows is a
+ * move a staff can make or a battle's work, and at a stop that keeps no book it is theirs.
+ */
+const OUTSIDE = ['American Volunteer Group'];
 
 // ---- The source -------------------------------------------------------------------------------------------------
 
@@ -105,14 +136,22 @@ for (const r of src.fleets) {
   if (r.home) out.home = true;
   if (moves.length) out.moves = moves;
   if ([r.base, ...moves.map((m) => m[1])].some((p) => owner.get(p) !== r.nat)) out.ally = true;
-  if (r.nat !== 'JAP' && !air.production[r.nat]) out.arrives = true;
+  if (ARRIVES.includes(r.nat)) out.arrives = true;
+  if (WATCH[r.nat]) out.watch = WATCH[r.nat];
+  else if (!OUTSIDE.includes(r.name)) out.byBook = true;
   const quality = WEAK[r.name] ?? (r.nat === 'USA' ? USA.quality : undefined);
   if (quality !== undefined) out.quality = quality;
   const bmrRange = LONG[r.name] ?? (r.nat === 'USA' ? USA.bmrRange : undefined);
   if (bmrRange !== undefined) out.bmrRange = bmrRange;
   fleets.push(out);
 }
-for (const k of [...Object.keys(WEAK), ...Object.keys(LONG)]) need(fleets.some((r) => r.name === k), `the builder's readings name "${k}", which the source no longer has`);
+for (const k of [...Object.keys(WEAK), ...Object.keys(LONG), ...OUTSIDE]) need(fleets.some((r) => r.name === k), `the builder's readings name "${k}", which the source no longer has`);
+// Every country of these rows is fed somehow: its own production row (air.json's, or Japan's here), its works, or the date.
+const tech = read(path.join(ROOT, 'data/campaign/tech.json'));
+const arsenal = read(path.join(ROOT, 'data/campaign/arsenal.json'));
+for (const nat of new Set(fleets.map((r) => r.nat))) need(nat === 'JAP' || air.production[nat] || ARRIVES.includes(nat) || WORKS.includes(nat), `${nat}: no production row, no works and no arrivals`);
+for (const nat of WORKS) need(arsenal.smallAir.works[nat], `${nat}: no works in arsenal.json`);
+for (const [nat, r] of Object.entries(RISE)) need(JSON.stringify(tech).includes(`"id":"${r.tech}"`) || JSON.stringify(tech).includes(`"id": "${r.tech}"`), `${nat}: no research "${r.tech}" in tech.json`);
 
 const J = src.japan;
 sched(J.production_history, 'japan production_history', 3);
@@ -133,7 +172,7 @@ for (let i = 0; i < J.production_history.length; i++) {
 const trained = pilots.filter((r, i) => i === 0 || r[1] !== pilots[i - 1][1]);
 
 const out = {
-  _about: "The Pacific's land air groups and Japan's air industry (rulings 184 and 187), written by tools/make-far-air.mjs from the Pacific planner's pacific-air-rows.json and never by hand; the game lays it over air.json only where the far side's switch is on (src/campaign/far-rows.ts). The rows are the historian's: who, where, how many by date. The script's own marks are 'posted' (while the Pacific's book stands a computer staff leaves the command on the record's field and takes it forward by the record's moves), 'ally' (the command may stand on ground an ally holds), 'arrives' (its country has no production row: what the record adds arrives with the date), 'quality' and 'bmrRange' (this command's own, in place of its nation's: America's Pacific commands 0.9 and 1,200 km, the long bombers 2,550 km, Malaya's and the Indies' air 0.75), and it cuts Japan's production and pilots to the scale of Europe's rows (187(c)). 'moves' are the record's forward bases, [month, province]: a computer staff takes each once, while the Pacific's book stands, if its side holds the ground. 'decline' is Japan's quality by date (187(b)), read at those stops only. A command whose est comes to nothing was withdrawn: it is stood down that month. The quality figures, the production cut and the reserve are the builder's readings, named for the design director and not tuned.",
+  _about: "The Pacific's land air groups and Japan's air industry (rulings 184 and 187, with ruling 234's rider b518), written by tools/make-far-air.mjs from the Pacific planner's pacific-air-rows.json and never by hand; the game lays it over air.json only where the far side's switch is on (src/campaign/far-rows.ts). The rows are the historian's: who, where, how many by date. The script's own marks on a row are 'posted' (while the Pacific's book stands a computer staff leaves the command on the record's field and takes it forward by the record's moves), 'ally' (the command may stand on ground an ally holds), 'arrives' (China, New Zealand and the Dutch build no aircraft: what the record adds arrives with the date), 'byBook' (a fall in the row's figure, to nothing too, is the record's own move or a battle's work: taken at the stops that keep the book, and at the others the command is kept at the most the record has given it so far; a row without the mark falls at every stop), 'watch' (the Soviet Far East's commands stand apart, watching Japan: at peace with it a computer staff leaves them on their fields at every stop, and what the record adds or takes away comes and goes with the date, never through the pool), 'quality' and 'bmrRange' (this command's own, in place of its nation's: America's Pacific commands and the volunteer group 0.9 and 1,200 km, the long bombers 2,550 km, Malaya's and the Indies' air 0.75). 'moves' are the record's forward bases, [month, province]: a computer staff takes each once, while the Pacific's book stands, if its side holds the ground. Beside the rows: Japan's production and pilots cut to the scale of Europe's rows (187(c)); 'decline', Japan's quality by date (187(b)), read at the stops that keep the book only; 'rise', until when a nation's commands keep a quality of their own (America's 0.9 is to start: the nation's from the month at a stop that keeps the book, from the research at the others); 'jobs', how far a nation's land fighters reach from a field beyond Europe's chart by what they are doing (187(a): 'cover' over a beach, on patrol and over a sea; 'raid' [month, km] with the bombers against industry, railways or a town); 'works', the smaller powers whose own works (arsenal.json smallAir.works) keep up their commands. A command whose figure comes to nothing is stood down that month. Japan's production cut and reserve, the withdrawals marked as outside the game and the Soviet reading are the builder's, named for the design director and not tuned.",
   _source: { [FILE]: fs.statSync(path.join(SRC, FILE)).mtime.toISOString().slice(0, 16) + 'Z' },
   air: {
     nations: { JAP: JAPAN },
@@ -141,6 +180,9 @@ const out = {
     pilots: { perMonth: { JAP: trained } },
     reserve: { JAP: RESERVE },
     decline: { JAP: J.quality },
+    rise: RISE,
+    jobs: JOBS,
+    works: WORKS,
     fleets,
   },
 };
@@ -156,6 +198,9 @@ const text = `{
     "pilots": ${line(out.air.pilots)},
     "reserve": ${line(out.air.reserve)},
     "decline": ${line(out.air.decline)},
+    "rise": ${line(out.air.rise)},
+    "jobs": ${line(out.air.jobs)},
+    "works": ${line(out.air.works)},
     "fleets": [
 ${fleets.map((r) => `      ${line(r)}`).join(',\n')}
     ]

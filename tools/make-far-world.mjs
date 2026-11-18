@@ -201,9 +201,22 @@ const fleetNames = new Set([...fleets, ...usFleets].map((f) => `${f.nat}|${f.nam
 fleetNames.add('USA|Atlantic Fleet');
 for (const a of pacific.arrivals) need(fleetNames.has(`${a[1]}|${a[2]}`), `arrival "${a[4]}": no fleet "${a[2]}"`);
 for (const b of pacific.building) need(fleetNames.has(`${b.nat}|${b.fleet}`), `building row: no fleet "${b.fleet}"`);
-for (const m of pacific.moves) {
+// Ruling 234(d): a move with 'sea' in place of a base is the record's month at sea in a month of peace (the Pacific
+// Fleet's carriers in December 1941, at the stops that keep the book). The script's own marks beside it: 'with', the
+// great choice whose month it keeps where that month is drawn (Japan's strike south: the carriers are at sea in the
+// strike's month, whenever the draw puts it); and on the fleet's row 'cruise', [that sea, CRUISE]: at a stop that
+// keeps no book the fleet is at sea in a month of peace on that chance by the seed (the ruling's one in two).
+const CRUISE = 0.5;
+const STRIKE = 'JAP:south';
+const usMoves = pacific.moves.map((m) => (m.sea !== undefined ? { ...m, with: STRIKE } : m));
+for (const m of usMoves) {
   need(fleetNames.has(`${m.nat}|${m.fleet}`), `move "${m.words}": no fleet "${m.fleet}"`);
-  need(owner.has(m.base) && seas.has(m.home), `move "${m.words}": ${m.base} or the sea "${m.home}" is not on the chart`);
+  if (m.sea !== undefined) {
+    need(seas.has(m.sea) && m.base === undefined && m.home === undefined, `move "${m.words}": the sea "${m.sea}" is not on the chart, or the row names a base as well`);
+    const f = usFleets.find((x) => x.nat === m.nat && x.name === m.fleet);
+    need(f && !f.cruise, `move "${m.words}": "${m.fleet}" is not one of these fleets, or has two months at sea`);
+    f.cruise = [m.sea, CRUISE];
+  } else need(owner.has(m.base) && seas.has(m.home), `move "${m.words}": ${m.base} or the sea "${m.home}" is not on the chart`);
 }
 
 // ---- The men (rulings 213(b), 216(b), 218) -----------------------------------------------------------
@@ -341,7 +354,7 @@ const out = {
     fleets: usFleets.filter((f) => f.from !== undefined),
     arrivals: [...arrivals, ...pacific.arrivals].sort((a, b) => a[0] - b[0]),
     building: pacific.building,
-    moves: pacific.moves,
+    moves: usMoves,
   },
   // Japan's character as a staff (paper 14, section 8, item 13; ruled with 181 to 202): where its budget leans. Its temper
   // (ruling 202(l)) is laid by china-line.json already; the two files must say the same thing.

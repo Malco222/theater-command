@@ -8,7 +8,7 @@
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
-import { AIRWAR, airFleetsOf, airPool, airWar, airfieldsHold, carrierRules, foundAirFleet, hasAirfield } from './air';
+import { AIR, AIRWAR, airFleetsOf, airPool, airWar, airfieldsHold, carrierRules, foundAirFleet, hasAirfield } from './air';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
 import { govMul } from './government';
@@ -257,9 +257,27 @@ export function openSmallAir(g: Game): void {
 export function smallAirMonth(g: Game): void {
   if (!budgeted(g) || !airWar(g)) return;
   const S = SMALL();
+  // The far side (ruling 234's rider b518, 7): a smaller power whose own works keep up the commands the record gives
+  // it. What its works build this month, kind by kind from the month each opens, goes to its pool, with the men to fly
+  // the fighters; its commands are made up from the pool as a great power's are.
+  for (const nat of AIR.works ?? []) {
+    const n = g.nations[nat];
+    if (!n?.alive || n.dormant) continue;
+    const p = airPool(g, nat);
+    for (const wing of ['ftr', 'bmr'] as Wing[]) {
+      const from = worksFrom(nat, wing);
+      if (from === null || from > g.turn) continue;
+      const k = Math.round(worksRate(g, nat, wing));
+      p[wing] += k;
+      if (wing === 'ftr') p.pilots += k;
+    }
+  }
+  // (b518, 9, one count: a receiver whose additions arrive with the date on the record's own rows takes no row from abroad besides.)
+  const dated = new Set(AIR.fleets.filter((r) => r.arrives).map((r) => r.nat));
   S.gifts.forEach(([month, to, points, kind, givers], i) => {
     const key = `gift:${i}`;
     if (month > g.turn || g.flags[key]) return;
+    if (dated.has(to)) { g.flags[key] = 1; return; }
     const n = g.nations[to];
     // A receiver not on this map waits for it; one that has fallen loses the row.
     if (!n || n.dormant) return;

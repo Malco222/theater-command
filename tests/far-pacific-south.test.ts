@@ -14,7 +14,7 @@ import { bookMonth } from '../src/campaign/claims';
 import { DIPLOMACY, holds, monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { allied, atWar, bloc, capitulate, createGame, declareWar, startPhase } from '../src/campaign/game';
 import { HISTORY, bookExpects, onBook, setStop } from '../src/campaign/history';
-import { NAVY } from '../src/campaign/navy';
+import { NAVY, navalUpkeep } from '../src/campaign/navy';
 import { PACIFIC, demand, freezeAt, keepersOf, mayDemand, pacificOpening } from '../src/campaign/pacific';
 import { ops, startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
@@ -271,11 +271,16 @@ const december = (stop: number): Game => {
   capitulate(g, 'FRA', 'GER');
   for (const t of [22, 23, 24, 25, 27]) { g.turn = t; bookMonth(g); monthlyDiplomacy(g); if (t === 24 || t === 27) startPhase(g, 'JAP'); }
   for (const op of ops('JAP')) if (op.id !== 'south') g.flags[`st:done:JAP:${op.id}`] = 1;
-  const f = g.fleets.find((x) => x.nat === 'USA' && x.name === 'Pacific Fleet')!, sea = g.seas.findIndex((z) => z.key === 'hawaii');
-  f.base = g.byName['Pearl Harbor'].id; f.port = 'Pearl Harbor'; f.home = sea; f.zone = sea; f.station = sea; f.stance = 'port';
+  // (America's months are not played here: its fleets are put at Pearl Harbor by hand, where the record's move of May 1940 has them.)
+  const sea = g.seas.findIndex((z) => z.key === 'hawaii');
+  for (const f of g.fleets.filter((x) => x.nat === 'USA' && (x.name === 'Pacific Fleet' || x.name === 'Pacific Carrier Fleet'))) {
+    f.base = g.byName['Pearl Harbor'].id; f.port = 'Pearl Harbor'; f.home = sea; f.zone = sea; f.station = sea; f.stance = 'port';
+  }
   g.turn = 28;
   bookMonth(g);
   monthlyDiplomacy(g);
+  // America's month at sea, as the month's own order has it before Japan moves: by the book the carriers are out (ruling 234(d)).
+  navalUpkeep(g, 'USA');
   return g;
 };
 
@@ -331,11 +336,13 @@ describe("Japan's month of December 1941", () => {
     // The quays: the two divisions on Hainan, which Japan holds and does not own, have sailed.
     expect(at(g, '25th Army (5th Division)')).toBe('Singora');
     expect(at(g, '25th Army (18th Division)')).toBe('Kota Bharu');
-    expect(at(g, 'Kawaguchi Detachment (35th Brigade, of the 18th Division)')).toBe('Brunei');
-    // The lift of six is all that sails in the month.
+    // The lift of six is all that sails in the month, in the order of the ten. With Guam's garrison at the record's
+    // size (ruling 234(b): some 750 men, not a brigade) the South Seas Detachment lands in December as it did, and the
+    // sixth crossing is Wake's: the Kawaguchi Detachment waits at Cam Ranh for January's ships.
+    expect(at(g, 'South Seas Detachment')).toBe('Guam');
+    expect(at(g, 'Kawaguchi Detachment (35th Brigade, of the 18th Division)')).toBe('Cam Ranh');
     const sailed = SOUTH().landings!.filter((l) => l.to.includes(at(g, l.corps) ?? '')).length;
-    expect(sailed).toBeGreaterThanOrEqual(5);
-    expect(sailed).toBeLessThanOrEqual(6);
+    expect(sailed).toBe(6);
     // The month closes: Germany and Italy declare on America, and the news names Pearl Harbor.
     expect(g.flags['event:pearl-harbor-world']).toBe(28);
     expect(atWar(g, 'USA', 'GER')).toBe(true);

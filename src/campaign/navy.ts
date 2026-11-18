@@ -26,7 +26,7 @@ import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { hopAims, skiesOver } from './pacific';
-import { stopOf } from './history';
+import { HISTORY, bookDate, dialDraw, stopDef, stopOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
@@ -37,7 +37,16 @@ import {
 } from './types';
 
 interface ClassSpec { label: string; one: string; many: string; power: number; tough: number; escort: number; raid: number }
-export interface FleetRow { nat: string; name: string; from?: number; base: string | null; port: string; home: string; zone: string; duty: Stance; tied?: boolean; admiral?: string; ships: Partial<Ships> }
+export interface FleetRow {
+  nat: string; name: string; from?: number; base: string | null; port: string; home: string; zone: string; duty: Stance; tied?: boolean; admiral?: string; ships: Partial<Ships>;
+  /**
+   * The far side (ruling 234(d)): [sea, chance]. At a stop of the history dial that keeps no book, in a month its
+   * country is at peace, the fleet is at sea there on this chance by the war's seed and the month: a strike that
+   * opens a war finds it in harbour or does not, and nobody can read which from where a row sits. (At the stops
+   * that keep the book the record's own month at sea is a dated move with 'sea'.)
+   */
+  cruise?: [string, number];
+}
 /** A convoy route. 'base' is a fortress on the route whose own submarines and aircraft hunt the convoys while an enemy holds it. */
 interface Route { id: string; name: string; to: string; zones: string[]; share: number; tons: number; base?: { region: string; raid: number; starved: number } }
 
@@ -68,7 +77,18 @@ export const NAVY = data as unknown as {
  * the fleet's base to the province named, if its country holds the place, and only at the stops of the history dial
  * the row names (every stop where it names none). A player's fleet moves when he says.
  */
-export interface FleetMove { turn: number; nat: string; fleet: string; base: string; port: string; home: string; words: string; stops?: number[] }
+export interface FleetMove {
+  turn: number; nat: string; fleet: string; words: string; stops?: number[];
+  /** A move of base: the province, what the harbour is called, and the sea it opens on. */
+  base?: string; port?: string; home?: string;
+  /**
+   * The far side (ruling 234(d)) in place of a base: the fleet spends that month at sea in this sea, though its
+   * country is at peace, and is back at its base the month after (the Pacific Fleet's carriers in December 1941).
+   * Player's and computer's alike: at peace nobody's fleet is his to send out. 'with': the great choice whose month
+   * it keeps, 'JAP:south': at a stop where that choice's date is drawn, the move's month slides as far.
+   */
+  sea?: string; with?: string;
+}
 
 /** The grand campaign's navy: escorts bound to lanes, destroyers that hunt, guns that shell a coast. See fleets.json. */
 export const FLEETS = fleetData as unknown as {
@@ -201,6 +221,7 @@ export function addFleet(g: Game, row: FleetRow): Fleet {
     station: zoneOf(g, row.zone), duty: row.duty, tied: !!row.tied, ready: 1,
     admiral: row.admiral ? { name: row.admiral, level: 1, xp: 0 } : null, fought: 0,
   };
+  if (row.cruise) f.cruise = [row.cruise[0], row.cruise[1]];
   g.fleets.push(f);
   return f;
 }
@@ -1412,6 +1433,14 @@ export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = 
 
 // ---- The month at sea -----------------------------------------------------------------------------
 
+/** How many months a dated move has slid with the great choice it is named with ('with': nation and choice), where the stop draws that choice's date. */
+function moveSlide(g: Game, m: FleetMove): number {
+  if (!m.with) return 0;
+  const [who, op] = m.with.split(':');
+  const date = HISTORY.dates[who]?.[op], now = bookDate(g, who, op);
+  return date === undefined || now === null ? 0 : now - date;
+}
+
 /** The start of a nation's month at sea: new ships, lost bases, refits, bombers, and the convoy war. */
 export function navalUpkeep(g: Game, nat: string): void {
   const n = g.nations[nat];
@@ -1433,18 +1462,39 @@ export function navalUpkeep(g: Game, nat: string): void {
     const many = / and /.test(what) || /s$/.test(what.split(' ')[0]) || (/\bof\b/.test(what) && /s$/.test(what));
     headline(g, 'info', leaving ? `${cap(what)}.` : `${cap(what)} ${many ? 'join' : 'joins'} the ${f.name}.`, nat);
   }
+  // The far side (ruling 234(d)): the fleets that spend this month of peace at sea, and where.
+  const out = new Map<number, number>();
   for (const m of NAVY.moves ?? []) {
-    if (m.nat !== nat || m.turn !== g.turn || nat === g.human || (m.stops && !m.stops.includes(stopOf(g)))) continue;
+    if (m.nat !== nat || (m.stops && !m.stops.includes(stopOf(g)))) continue;
+    if (m.sea !== undefined) {
+      // (The record's month at sea keeps the month of the choice it is named with, where that month is drawn.)
+      const z = m.turn + moveSlide(g, m) === g.turn && !n.atWar.length ? zoneOf(g, m.sea) : -1;
+      const f = z >= 0 ? named(m.fleet) : undefined;
+      if (f) { out.set(f.id, z); headline(g, 'info', `${m.words}.`, nat); }
+      continue;
+    }
+    if (m.turn !== g.turn || nat === g.human) continue;
     const f = named(m.fleet);
-    if (f) orderedTo(g, f, m);
+    if (f && m.base !== undefined && m.port !== undefined && m.home !== undefined) orderedTo(g, f, { base: m.base, port: m.port, home: m.home, words: m.words });
+  }
+  if (!n.atWar.length && !stopDef(g).book) {
+    for (const f of fleetsOf(g, nat)) {
+      const z = f.cruise ? zoneOf(g, f.cruise[0]) : -1;
+      if (z >= 0 && dialDraw(g, 'cruise', nat, f.name, g.turn) < f.cruise![1]) out.set(f.id, z);
+    }
   }
   for (const f of fleetsOf(g, nat)) {
     if (f.base >= 0 && !allied(g, nat, g.regions[f.base].ctrl) && !newBase(g, f)) continue;
-    if (!n.atWar.length) { f.stance = 'port'; f.zone = f.home; }
+    if (!n.atWar.length) { f.stance = 'port'; f.zone = f.home; delete f.cruised; }
+    // (Back from its month at sea into a war: it is at its base, and from here its admiral's.)
+    else if (f.cruised !== undefined) { if (f.cruised < g.turn && f.stance === 'patrol') { f.stance = 'port'; f.zone = f.home; g.supplyDirty = true; } delete f.cruised; }
     if (atSea(f)) {
       airAttack(g, f);
       f.ready = f.ready > NAVY.ready.floor ? Math.max(NAVY.ready.floor, f.ready + NAVY.ready.sea) : Math.min(NAVY.ready.floor, f.ready + NAVY.ready.mend);
     } else f.ready = Math.min(1, f.ready + NAVY.ready.port);
+    // A month of peace at sea is a cruise, not a patrol: it wears nothing, and the ships are simply not in harbour.
+    const z = out.get(f.id);
+    if (z !== undefined && f.base >= 0 && shipCount(f.ships) > 0) { f.zone = z; f.stance = 'patrol'; f.cruised = g.turn; }
   }
   // The grand campaign: the destroyers hunt before the month's cargoes are counted, and thin screens pay for it.
   const sunk = seaWar(g) && n.atWar.length ? huntSubs(g, nat) : undefined;

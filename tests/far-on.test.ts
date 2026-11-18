@@ -105,7 +105,7 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
     // Japan's army in China stands on the ground Japan holds; nothing of anybody's stands on ground at war with it.
     for (const c of g.corps) expect(atWar(g, c.nat, g.regions[c.reg].ctrl), c.name).toBe(false);
     expect(g.fleets.filter((f) => f.nat === 'JAP').length).toBe(9);
-    expect(g.fleets.filter((f) => f.nat === 'USA').map((f) => f.name).sort()).toEqual(['Asiatic Fleet', 'Atlantic Fleet', 'Pacific Fleet', 'Pacific Submarine Fleet']);
+    expect(g.fleets.filter((f) => f.nat === 'USA').map((f) => f.name).sort()).toEqual(['Asiatic Fleet', 'Atlantic Fleet', 'Pacific Carrier Fleet', 'Pacific Fleet', 'Pacific Submarine Fleet']);
   });
 
   it('lands the rows by date as thin as their rows say, and never fills one past its fullest', () => {
@@ -232,12 +232,16 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
 
   it('sends ships from one fleet to another by date, never more than are there, and forms a later fleet in its month', () => {
     const g = grand();
-    const pf = fleet(g, 'USA', 'Pacific Fleet'), af = fleet(g, 'USA', 'Atlantic Fleet');
-    const before = { pb: pf.ships.bb, pc: pf.ships.cv, ab: af.ships.bb, ac: af.ships.cv };
+    // (The Pacific's carriers are a row of their own, ruling 234(d): every carrier comes and goes on it.)
+    const pf = fleet(g, 'USA', 'Pacific Fleet'), cf = fleet(g, 'USA', 'Pacific Carrier Fleet'), af = fleet(g, 'USA', 'Atlantic Fleet');
+    const before = { pb: pf.ships.bb, pc: cf.ships.cv, ab: af.ships.bb, ac: af.ships.cv };
+    expect(pf.ships.cv).toBe(0);
     g.turn = 21;
     startPhase(g, 'USA');
-    expect([pf.ships.bb, pf.ships.cv, af.ships.bb, af.ships.cv]).toEqual([before.pb - 3, before.pc - 1, before.ab + 3, before.ac + 1]);
-    expect(g.headlines.some((h) => h.text === 'The battleships Idaho, Mississippi and New Mexico and the carrier Yorktown leave for the Atlantic.')).toBe(true);
+    expect([pf.ships.bb, cf.ships.cv, af.ships.bb, af.ships.cv]).toEqual([before.pb - 3, before.pc - 1, before.ab + 3, before.ac + 1]);
+    expect(pf.ships.cv).toBe(0);
+    expect(g.headlines.some((h) => h.text === 'The battleships Idaho, Mississippi and New Mexico leave for the Atlantic.')).toBe(true);
+    expect(g.headlines.some((h) => h.text === 'The carrier Yorktown leaves for the Atlantic.')).toBe(true);
     const few = grand();
     fleet(few, 'USA', 'Pacific Fleet').ships.bb = 1;
     few.turn = 21;
