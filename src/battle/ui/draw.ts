@@ -165,12 +165,15 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
     x.fillStyle = INK; x.fillText(name, tx, ty);
   }
   if (b.ticket.place.river) {
-    // The river's name over the water, where the river crosses the middle of the field.
-    const col = Math.floor(b.field.cols * 0.18);
+    // The river's name over the water, where the river crosses the middle of the field: where it bends away from the
+    // lanes of the corps that do not cross (b464(5)), over its stretch before those that do, clear of the turn.
+    const F = b.field, B = F.bend;
+    const [s0, s1] = B ? (B.dry === 'west' ? [B.x + 250, F.w - 250] : [50, B.x - 450]) : [0, F.w];
+    const col = B ? Math.min(F.cols - 1, Math.max(0, Math.floor(Math.max(s0, Math.min(s1, F.w * 0.18)) / F.cell))) : Math.floor(F.cols * 0.18);
     let row = -1;
-    for (let r = 0; r < b.field.rows; r++) if (b.field.ground[r * b.field.cols + col] === 5) { row = r; break; }
+    for (let r = 0; r < F.rows; r++) if (F.ground[r * F.cols + col] === 5) { row = r; break; }
     if (row >= 0) {
-      const [rx, ry] = toScreen(s, col * b.field.cell, row * b.field.cell + 60);
+      const [rx, ry] = toScreen(s, col * F.cell, row * F.cell + 60);
       x.font = `italic ${Math.max(12, Math.min(18, 30 * cam.z))}px "PT Serif", Georgia, serif`;
       x.textAlign = 'left'; x.lineWidth = 3; x.strokeStyle = 'rgba(233,226,207,.75)'; x.strokeText(b.ticket.place.river, rx, ry);
       x.fillStyle = '#2c5878'; x.fillText(b.ticket.place.river, rx, ry);
@@ -204,6 +207,16 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
       x.moveTo(ex, ey); x.lineTo(ex - L * Math.cos(a) + Wd * Math.sin(a), ey - L * Math.sin(a) - Wd * Math.cos(a));
       x.lineTo(ex - L * Math.cos(a) - Wd * Math.sin(a), ey - L * Math.sin(a) + Wd * Math.cos(a)); x.closePath(); x.fill();
     } else { x.beginPath(); x.arc(ex, ey, held ? 2.8 : 2.2, 0, Math.PI * 2); x.fill(); }
+  }
+
+  // Wrecks (b477): a knocked-out tank stays where she stood to the end of the fight, drawn plainly as a small ink cross
+  // under the blocks. The look (fire, smoke) is the 3D game's.
+  if (b.wrecks.length) {
+    const r = Math.max(2, Math.min(5, 4 * s.cam.z));
+    x.strokeStyle = INK; x.lineWidth = 1.2;
+    x.beginPath();
+    for (const z of b.wrecks) { const [wx, wy] = toScreen(s, z.x, z.y); x.moveTo(wx - r, wy - r); x.lineTo(wx + r, wy + r); x.moveTo(wx + r, wy - r); x.lineTo(wx - r, wy + r); }
+    x.stroke();
   }
 
   // The blocks: the dead and the departed are not drawn.

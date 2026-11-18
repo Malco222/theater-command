@@ -70,6 +70,28 @@
 // in contact (its guns firing from far back do not count), and once the battle is over. The dispatches never name it:
 // where it falls on one of his, the event reads "Polish troops are attacking your 2nd Regiment."; no other event about
 // it is sent at all, words or sound (the UI director, b464: a sound with nothing to read looks like a fault).
+// A river the attack crosses in part (b464(5)): where some of the card's corps cross and some come on over dry ground
+// ("1 of the 2 attacking corps cross the Vistula"), the river lies only before those that cross and bends away to the
+// attacker's edge between the two; each force in the ticket that does not cross carries cross: false, and place.dryEnd
+// says which end of the field ('west' or 'east') they draw up on. Nothing new to read for the ground: it comes in
+// field.ground and field.height as always. The field opens with the UI director's words before the usual line: "XXI
+// Corps must cross the Vistula. XIX Corps comes on over dry ground." The title's "across the Vistula" stands while any
+// corps crosses.
+// A land view's zones are its wrecks (b477, Brian's pick: burning wrecks stay): { id, kind: 'wreck', x, y, r, until,
+// side, at, unit }, one for each tank a block has lost, where she stood, from battle second 'at' to the end of the
+// fight. Draw her as the model of block 'unit', knocked out (her knocked_out clip, then burn), burning at first and
+// then smoking to the end, never cut off (the art director's b477 look). Men on foot within r metres take light cover
+// in the rules already; nothing more to draw for it.
+// A tank block may also carry crew (b477, Brian's pick: tank crews name their tanks): { mark: 'name', names } or
+// { mark: 'rings', rings }, one entry per tank in the block's model order. names[i] is { name, en } or null (that tank is
+// plain); paint it from the model's entry under that name in battle-models/land/names-fit.json (its rows, in Russian
+// letters for the Soviet lines, and letter height), on the place its file's name_place gives, and only on a model whose
+// index-land.json crew_mark is 'name' (a light tank stays plain; the Type 97 waits until her file says ready). rings[i]
+// is 1 to 5 thin off-white rings on that tank's barrel (crew_mark 'rings'); no count is ever shown on screen. The
+// names fit the army's line tank already. A tank of another model (an M10, M7 or M8, or a British Sherman under her
+// 'also.UK') takes the name only where her own 'fits' lists it; with no entry she is painted plain, never with the
+// name shrunk or cut to fit (the modeller, 13:38Z).
+// The block's hover may add one line naming them (crewLine in src/battle/land/crews.ts).
 // An air group also carries extra: { n, n0, band, alt, job, per } (aircraft now and at the start, height band 0 to 2,
 // metres up, what it is doing, aircraft per model); /mnt/project-files/air-battles/3d-handoff.md says how to draw it.
 //
@@ -157,6 +179,8 @@ function unitOut(u: UnitBase): Record<string, unknown> {
     ...(drops ? { drops: { takes: drops.takes, every: drops.every } } : {}),
     // A land block's name for a card and what it belongs to under it ("11th Infantry" over "I Corps"), beside its full name.
     ...(land.short ? { short: land.short, parent: land.parent } : {}),
+    // A tank block's crews' own marks (b477): names, with their English meaning, or Germany's kill rings, per tank.
+    ...(land.crew ? { crew: land.crew } : {}),
     order: land.order ? { kind: land.order.kind, x: land.order.x, y: land.order.y, target: land.order.target ?? -1, path: land.path } : null,
     ...(extra ? { extra } : {}),
   };

@@ -141,9 +141,18 @@ export const LAND = {
    * blocks or fewer (one block a fifth of it or more), the fresh hold the army at the brink as those not yet in the
    * fight do. Larger armies hold by those not yet in the fight alone: the fresh rule there moves the field 8 points off
    * its card, and at six blocks the hills-and-works practice ground 10 (the design director, b476(1) and b480; 356
-   * campaign attacks and the nine practice grounds, 18 November).
+   * campaign attacks and the nine practice grounds, 18 November). Never a defence behind fortress works or in a fort,
+   * whose works the card prices already (b488: Verdun's three divisions behind works ran 8.6 points under their card).
    */
   fresh: { str: 0.9, upTo: 5 },
+  /**
+   * Burning wrecks stay (b477, Brian's pick): every tank a block loses leaves a wreck where it stood, to the end of the
+   * fight. Men on foot beside one take light cover, either army's, at the field's own figure for broken ground: a block
+   * takes it for the share of its tray that wrecks within its frontage, or 'beside' metres of it, can shelter (one wreck,
+   * one model's worth), never better than its ground gives already. 'r' is how far a wreck's shelter reaches, for the 3D
+   * game's mark.
+   */
+  wreck: { cover: 'rough' as Ground, beside: 10, r: 12 },
   /**
    * What a block that leaves the field still loses on the way (stragglers, wounded, guns and lorries left behind), as a
    * share of the strength it had left. A defence driven off its own ground leaves far more behind than an attack that

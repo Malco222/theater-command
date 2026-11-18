@@ -9,22 +9,31 @@ import { ONE_SHOTS, ORDER_CUES } from '../core/cues';
 import { ahead, aspectOf, bearing, clamp, dist, turn } from '../core/geometry';
 import { clampToDice, diceNow, fieldRatio, levelOf, RATIO } from '../core/result';
 import { lineUp } from '../core/select';
-import { DT, type BattleSim, type BattleView, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Side } from '../core/types';
+import { DT, type BattleSim, type BattleView, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Side, type Zone } from '../core/types';
 import { thinkFor } from './ai';
-import { buildField, coverAt, groundAt, GROUNDS, heightAt, slopeAt, type Ground, type LandField, type LandPlace } from './field';
+import { buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt, zonesOf, type Ground, type LandField, type LandPlace } from './field';
+import { crewFor } from './crews';
 import { LAND, MOTION, type Kind, type Motion } from './rules';
-import { deploy, makeBlocks, type LandUnit } from './units';
+import { bendAt, deploy, makeBlocks, type LandUnit } from './units';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 /**
  * A block's way round ground it cannot enter: how it moves, the cell it was making for, the turning points, and whether
  * the way gets there or only as near as the block can go.
  */
-interface Way { m: Motion; goal: number; pts: [number, number][]; whole: boolean }
+interface Way { m: Going; goal: number; pts: [number, number][]; whole: boolean }
+/**
+ * How a block finds its way: as its kind moves; or, foot of a corps the card brings on over dry ground, as foot that
+ * will not wade (b464(5)): sent at an enemy beyond where the river bends, it goes round the bend by dry ground, as the
+ * card counts it, never through it. Only the way it chooses: a block already in the water still wades out.
+ */
+type Going = Motion | 'ashore';
 /** River ground: a block may wade it, never stand in it (b464(5)). */
 const inRiver = (g: Ground): boolean => g === 'water' || g === 'blown';
 const live = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
 const fighting = (u: LandUnit): boolean => live(u) && u.state !== 'routing';
+/** A number from 0 to under 1 fixed by a whole number: where a wreck lies, never drawn from the battle's dice. */
+const mix = (n: number): number => { let h = n >>> 0; h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
 
 export class LandBattle implements BattleSim<LandUnit> {
   readonly domain = 'land' as const;
@@ -39,12 +48,18 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** Everything said this battle, for the after-action card. */
   readonly log: FieldEvent[] = [];
   private power: Record<Side, number>;
-  /** Each side's blocks at the start, its works not counted: an army this small holds by its fresh blocks (b480). */
-  private blocks: Record<Side, number>;
+  /**
+   * Whether a side holds at the brink by its fresh blocks: an army of LAND.fresh.upTo blocks or fewer, its works not
+   * counted (b480, b484), unless it is the defence behind fortress works or in a fort, which the card prices already
+   * (b488).
+   */
+  private freshHold: Record<Side, boolean>;
   private nextThink = 0;
   private broke: Record<Side, boolean> = { att: false, def: false };
   /** When the first blow fell between the lines (guns firing from far back do not count): null until then. */
   contactAt: number | null = null;
+  /** The tanks knocked out on the field, where each stands, to the end of the fight (b477): what the view sends as zones. */
+  wrecks: Zone[] = [];
   /** The player has been warned that their army is near breaking (ruling 226(3)). */
   private warned: Record<Side, boolean> = { att: false, def: false };
   /** Each army's bar, how near breaking it stands, as last judged: what a withdrawal after contact pays by (b474). */
@@ -60,14 +75,24 @@ export class LandBattle implements BattleSim<LandUnit> {
   constructor(ticket: FieldTicket<LandPlace>) {
     this.ticket = ticket;
     this.rng = new Rng(ticket.seed);
-    this.field = buildField(ticket.place, ticket.seed);
     // Each side's blocks share out exactly the power the card counted, so the odds on the field are the card's.
     const A = ticket.reckoning.A, D = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
     this.power = { att: A, def: D };
     const att = makeBlocks('att', ticket.att, A, 1);
     const def = makeBlocks('def', ticket.def, D, att.length + 1);
     this.units = [...att, ...def];
-    this.blocks = { att: att.filter((u) => u.kind !== 'fort').length, def: def.filter((u) => u.kind !== 'fort').length };
+    const works = ticket.place.fort >= 1 || def.some((u) => u.kind === 'fort');
+    this.freshHold = { att: att.filter((u) => u.kind !== 'fort').length <= LAND.fresh.upTo, def: !works && def.filter((u) => u.kind !== 'fort').length <= LAND.fresh.upTo };
+    // Tank crews name their tanks after their unit's third battle (b477): data only, nothing in the fight reads it.
+    for (const u of this.units) { const c = crewFor(u, ticket[u.side].forces.find((f) => f.corps === u.corps)?.battles ?? 0); if (c) u.crew = c; }
+    // Where some of the attack's corps cross the river and some come on over dry ground, the river lies only before
+    // those that cross: it bends away from the lanes of the others, at their end of the field (the design director,
+    // b464(5)). Where all cross, or there is no river, the field is as it always was.
+    // A ticket that has none crossing is read as one that has all cross: a river with no corps before it is no card's.
+    const dry = ticket.place.dryEnd ?? 'west';
+    const bend = ticket.place.river && att.some((u) => u.dry) && att.some((u) => !u.dry) ? { x: bendAt(att, zonesOf(FIELD.w, FIELD.h).att, dry), dry } : undefined;
+    if (!bend) for (const u of att) delete u.dry;
+    this.field = buildField(ticket.place, ticket.seed, bend);
     deploy(this.units, 'att', this.field);
     deploy(this.units, 'def', this.field);
     for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
@@ -86,11 +111,12 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /**
    * What a defender standing on its own ground takes of a blow: set per ground, and for a river or fortress works,
-   * so that the field counts the ground once, as the card's odds already have (ruling 226(4)).
+   * so that the field counts the ground once, as the card's odds already have (ruling 226(4)). The river's only where
+   * the block striking crossed it: one that came on over dry ground has no river drawn before it to make up for (b464(5)).
    */
-  private get holdTake(): number {
+  private holdTake(u: LandUnit): number {
     const p = this.ticket.place, H = LAND.hold;
-    return (H.take[p.terrain] ?? 0.4) * (p.river ? H.river : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1);
+    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? H.river : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1);
   }
 
   private say(e: Omit<FieldEvent, 't'>): void {
@@ -248,9 +274,12 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private ways = new Map<number, Way>();
   /** By how it moves: the cells within a few of ground it can hardly cross or not at all (a river, rock, marsh). */
-  private hardNear: Partial<Record<Motion, Uint8Array>> = {};
+  private hardNear: Partial<Record<Going, Uint8Array>> = {};
+  private going(u: LandUnit): Going { return u.dry && MOTION[u.kind] === 'foot' ? 'ashore' : MOTION[u.kind]; }
+  private ashore: Record<Ground, number> | null = null;
+  private paceOf(m: Going): Record<Ground, number> { return m === 'ashore' ? (this.ashore ??= { ...LAND.pace.foot, water: 0, blown: 0 }) : LAND.pace[m]; }
   private route(u: LandUnit, x: number, y: number): [number, number][] {
-    const m = MOTION[u.kind], f = this.field;
+    const m = this.going(u), f = this.field;
     if (m === 'fixed') return [[x, y]];
     const out = this.exit(m, u.x, u.y);
     if (out) return [...out, [x, y]];
@@ -288,8 +317,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * ground (never into water it cannot cross unless it stands in water already) to the nearest cell it can enter.
    * Nothing where it stands on ground it can enter.
    */
-  private exit(m: Motion, x: number, y: number): [number, number][] | null {
-    const f = this.field, C = f.cols, pace = LAND.pace[m], s = this.cellAt(x, y);
+  private exit(m: Going, x: number, y: number): [number, number][] | null {
+    const f = this.field, C = f.cols, pace = this.paceOf(m), s = this.cellAt(x, y);
     const go = (i: number): boolean => pace[GROUNDS[f.ground[i]]] > 0;
     if (go(s)) return null;
     const wet = (i: number): boolean => GROUNDS[f.ground[i]] === 'water' || GROUNDS[f.ground[i]] === 'blown';
@@ -323,8 +352,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * corner to corner (never across the corner of ground it cannot enter), then cut to the fewest turning points it can
    * walk straight between. Where the place cannot be reached, the way ends at the nearest cell that can, and says so.
    */
-  private findWay(m: Motion, sx: number, sy: number, x: number, y: number): { pts: [number, number][]; whole: boolean } {
-    const f = this.field, C = f.cols, n = f.ground.length, pace = LAND.pace[m];
+  private findWay(m: Going, sx: number, sy: number, x: number, y: number): { pts: [number, number][]; whole: boolean } {
+    const f = this.field, C = f.cols, n = f.ground.length, pace = this.paceOf(m);
     const top = Math.max(...Object.values(pace)), s = this.cellAt(sx, sy), g = this.cellAt(x, y), gc = g % C, gr = Math.floor(g / C);
     const go = (i: number): number => pace[GROUNDS[f.ground[i]]];
     const h = (i: number): number => {
@@ -395,7 +424,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    * every cell the line passes through after the one it starts in, not samples along it, so the line never clips the
    * corner of a water or rock cell. A line through the very corner of two cells goes from one to the other across it.
    */
-  private dry(m: Motion, x0: number, y0: number, x1: number, y1: number): boolean {
+  private dry(m: Going, x0: number, y0: number, x1: number, y1: number): boolean {
     const f = this.field, cs = f.cell;
     const cOf = (v: number): number => clamp(Math.floor(v / cs), 0, f.cols - 1), rOf = (v: number): number => clamp(Math.floor(v / cs), 0, f.rows - 1);
     let c = cOf(x0), r = rOf(y0);
@@ -403,7 +432,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const stepX = dx ? cs / Math.abs(dx) : Infinity, stepY = dy ? cs / Math.abs(dy) : Infinity;
     let tx = dx ? (sx > 0 ? (c + 1) * cs - x0 : x0 - c * cs) / Math.abs(dx) : Infinity;
     let ty = dy ? (sy > 0 ? (r + 1) * cs - y0 : y0 - r * cs) / Math.abs(dy) : Infinity;
-    const pace = LAND.pace[m];
+    const pace = this.paceOf(m);
     for (let n = Math.abs(c1 - c) + Math.abs(r1 - r); n > 0 && (c !== c1 || r !== r1); n--) {
       if (Math.abs(tx - ty) < 1e-9) { tx += stepX; ty += stepY; c += sx; r += sy; n--; }
       else if (tx < ty) { tx += stepX; c += sx; }
@@ -568,8 +597,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     const aspect = aspectOf(t.face, t.x, t.y, u.x, u.y);
     const [am, nm] = LAND.aspect[aspect];
     let take = LAND.cover[gt];
+    // Men on foot beside a wreck take light cover, either army's (b477).
+    const ws = this.wreckShare(t);
+    if (ws > 0) take = take * (1 - ws) + Math.min(take, LAND.cover[LAND.wreck.cover]) * ws;
     if (t.kind === 'arm' && LAND.tanksClose.ground.includes(gt)) take *= LAND.tanksClose.take;
-    if (t.side === 'def' && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake;
+    if (t.side === 'def' && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u);
     const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
     const dmg = p * am * take * luck * (u.side === 'att' ? this.fortune : 1 / this.fortune) * DT;
     return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect };
@@ -578,13 +610,35 @@ export class LandBattle implements BattleSim<LandUnit> {
   private suffer(t: LandUnit, dmg: number, nerveMul: number): void {
     // Damage is in power: as a share of what the block came with, it comes off its strength meter.
     const share = dmg / Math.max(1e-9, t.power0);
-    const before = t.str;
+    const before = t.str, had = t.figures;
     t.str = Math.max(0, t.str - share * t.str0);
     const lost = (before - t.str) / t.str0;
     const steady = 1 - LAND.nerve.xp * t.xp - LAND.nerve.general * this.generalOf(t.side);
     t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady));
     t.still = 0;
     t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
+    if (t.kind === 'arm') for (let k = t.figures; k < had; k++) this.wreck(t);
+  }
+
+  /**
+   * A tank knocked out: her wreck stays where she stood, within the block's frontage, to the end of the fight (b477). Where
+   * on the tray is fixed by the block and the count, never by the battle's dice, so the fight's own luck does not move.
+   */
+  private wreck(t: LandUnit): void {
+    const n = this.wrecks.filter((z) => z.unit === t.id).length;
+    const across = (mix(t.id * 977 + n * 131 + 7) - 0.5) * t.w * 0.9, along = (mix(t.id * 613 + n * 389 + 3) - 0.5) * t.d * 0.8;
+    const c = Math.cos(t.face), s = Math.sin(t.face);
+    const x = clamp(t.x + across * c + along * s, 2, this.field.w - 2), y = clamp(t.y - across * s + along * c, 2, this.field.h - 2);
+    this.wrecks.push({ id: this.wrecks.length + 1, kind: 'wreck', x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, r: LAND.wreck.r, until: this.ticket.limit, side: t.side, at: Math.round(this.t * 10) / 10, unit: t.id });
+  }
+
+  /** The share of a block on foot that wrecks shelter: one model's worth for each within its frontage or beside it (b477). */
+  private wreckShare(u: LandUnit): number {
+    if (!this.wrecks.length || MOTION[u.kind] !== 'foot') return 0;
+    const c = Math.cos(u.face), s = Math.sin(u.face), hw = u.w / 2 + LAND.wreck.beside, hd = u.d / 2 + LAND.wreck.beside;
+    let n = 0;
+    for (const z of this.wrecks) { const dx = z.x - u.x, dy = z.y - u.y; if (Math.abs(dx * c - dy * s) <= hw && Math.abs(dx * s + dy * c) <= hd) n++; }
+    return Math.min(1, n / Math.max(1, u.tray));
   }
 
   private generalOf(s: Side): number { return this.ticket[s].general?.level ?? 0; }
@@ -625,7 +679,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.state === 'routing') { to = [u.x, u.side === 'att' ? -50 : this.field.h + 50]; run = true; }
     else if (u.order?.kind === 'withdraw') {
       // Straight back to its own edge, or back round by its bridge where a river or rock lies behind it.
-      u.path = this.dry(MOTION[k], u.x, u.y, u.x, u.order.y) && !this.exit(MOTION[k], u.x, u.y) ? [[u.x, u.order.y]] : this.route(u, u.order.x, u.order.y);
+      u.path = this.dry(this.going(u), u.x, u.y, u.x, u.order.y) && !this.exit(this.going(u), u.x, u.y) ? [[u.x, u.order.y]] : this.route(u, u.order.x, u.order.y);
       to = u.path[0];
     }
     else if (u.order?.kind === 'attack') {
@@ -654,7 +708,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       // A block on the march stops when an enemy is on top of it, unless it is running or pulling out. One that can no
       // longer walk straight to its next turning point (it came at it a little to one side) looks again for its way.
       to = u.path[0];
-      if (u.order.kind === 'move' && !this.dry(MOTION[k], u.x, u.y, to[0], to[1])) { u.path = this.route(u, u.order.x, u.order.y); to = u.path[0]; }
+      if (u.order.kind === 'move' && !this.dry(this.going(u), u.x, u.y, to[0], to[1])) { u.path = this.route(u, u.order.x, u.order.y); to = u.path[0]; }
     }
     // Already at a turning point of its way: on to the next, from the point itself. At the end of its way (as near as
     // it can get): nothing to walk, so it stands, and faces as it stands.
@@ -745,11 +799,11 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /** Within LAND.queue.near metres of ground this block can hardly cross or not at all: at a bridge, a pass, a gap. */
   private narrows(u: LandUnit, x: number, y: number): boolean {
-    const m = MOTION[u.kind], f = this.field, C = f.cols, R = f.rows;
+    const m = this.going(u), f = this.field, C = f.cols, R = f.rows;
     let near = this.hardNear[m];
     if (!near) {
       near = this.hardNear[m] = new Uint8Array(C * R);
-      const n = Math.round(LAND.queue.near / f.cell), pace = LAND.pace[m];
+      const n = Math.round(LAND.queue.near / f.cell), pace = this.paceOf(m);
       for (let i = 0; i < C * R; i++) {
         if (pace[GROUNDS[f.ground[i]]] > LAND.queue.hard) continue;
         const c0 = i % C, r0 = Math.floor(i / C);
@@ -950,10 +1004,11 @@ export class LandBattle implements BattleSim<LandUnit> {
    * The share of a side's power standing in blocks that have not been in the fight (never met the enemy, and not worn
    * by a blow from afar) or, in an army of LAND.fresh.upTo blocks or fewer, that are fresh: steady, at nine tenths of
    * their strength or more, in contact or not. While more than half the army stands so, one worn block never takes it
-   * with it (ruling 226(2); the design director, b476(1) and b480).
+   * with it (ruling 226(2); the design director, b476(1) and b480). Not for a defence behind works or in a fort: the
+   * works keep its men fresh and the card prices the works already, so the field never prices them twice (b488).
    */
   private freshShare(s: Side): number {
-    const small = this.blocks[s] <= LAND.fresh.upTo;
+    const small = this.freshHold[s];
     let n = 0;
     for (const u of this.units) {
       if (u.side !== s || !fighting(u)) continue;
@@ -1126,7 +1181,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ev = this.events;
     this.events = [];
     void as; // Every block on the field is in sight: what the player knows of each is known() (b464(2)).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: [], ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, contact: this.contactAt };
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, contact: this.contactAt };
   }
 }
 

@@ -70,6 +70,15 @@ export interface ForceTicket {
   divisions?: { name: string; short: string; str: number; xp: number; men: number }[];
   /** Its share of its side's power in the reckoning, 0..1. The shares of a side add up to 1. */
   share: number;
+  /** The battles it has come through before this one, staff-settled or fought (its record): from the third, a tank unit's crews name their tanks (b477). */
+  battles?: number;
+  /**
+   * Land, an attack over a river: false where the card has this corps come on from ground with no river between it and
+   * the place ("1 of the 2 attacking corps cross the Vistula"). The card prices it attacking over dry ground at full
+   * strength, so the field draws it that ground: the river bends away from its lanes and lies only before the corps that
+   * cross (the design director, b464(5)). Absent, it crosses, as every corps of a practice card does.
+   */
+  cross?: boolean;
 }
 
 export interface SideTicket {
@@ -185,6 +194,10 @@ export interface Zone {
   /** Battle time it lasts until. */
   until: number;
   side?: Side;
+  /** Battle time it began, where that matters to how it is drawn (a wreck burns, then smokes: b477). */
+  at?: number;
+  /** The unit it came from, where it is one's (a wreck: the block whose tank it was, so it is drawn as her model). */
+  unit?: number;
 }
 
 /** Orders every domain understands. Unit ids are the field's own. */

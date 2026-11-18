@@ -3,8 +3,8 @@
 // through the rules' own attack order. The design director's rulings 217 and 217(2)(a) of 2026-11-17.
 import { describe, expect, it } from 'vitest';
 import { diceChance, runOut } from '../src/battle/core';
-import { buildField, coverAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, wornWords, type LandUnit, type PracticeGround } from '../src/battle/land';
-import { ENGINEERING } from '../src/campaign/rivers';
+import { buildField, coverAt, groundAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, wornWords, type LandUnit, type PracticeGround } from '../src/battle/land';
+import { ENGINEERING, riverBetween } from '../src/campaign/rivers';
 import { createGame, hostileUnits, type FieldBill } from '../src/campaign/game';
 import { blocked } from '../src/campaign/rivers';
 import { startOpen } from '../src/campaign/staff';
@@ -453,6 +453,97 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     expect(left).toBe(0);
   }, 60000);
 
+  /** A river practice card on which some of the attack's corps come on over dry ground, as XIX Corps at Pomorze. */
+  const partly = (s: number, dry: number[], end: 'west' | 'east', odds = 1.3) => {
+    const t = sampleTicket('plains', odds, { seed: s * 7919 + 13, humanAtt: true, river: true });
+    t.place.dryEnd = end;
+    t.att.forces = t.att.forces.map((f, i) => (dry.includes(i) ? { ...f, cross: false } : f));
+    return t;
+  };
+  /** As partly, the attack lopsided: one corps of fourteen divisions comes on over dry ground, and one division crosses. */
+  const lopsided = (s: number, end: 'west' | 'east') => {
+    const t = partly(s, [0], end);
+    t.att.forces = [{ ...t.att.forces[0], divs: 14, share: 0.9 }, { ...t.att.forces[1], divs: 1, share: 0.1 }];
+    return t;
+  };
+  const onRiver = (b: LandBattle, x: number, y: number): boolean => ['water', 'blown', 'bridge'].includes(groundAt(b.field, x, y));
+
+  it('the river lies only before the corps the card sends over it: one it brings on over dry ground meets none on its way (b464(5))', () => {
+    const cases: [() => ReturnType<typeof partly>, number[], 'west' | 'east'][] = [];
+    for (const dry of [[2], [0], [0, 2]]) for (const end of ['west', 'east'] as const) for (let s = 1; s <= 4; s++) cases.push([() => partly(s, dry, end), dry, end]);
+    // Few lanes cross: the river still lies before them, and its bridge there stands clear of where it comes round.
+    for (const end of ['west', 'east'] as const) for (let s = 1; s <= 6; s++) cases.push([() => lopsided(s, end), [0], end]);
+    for (const [make, dry, end] of cases) {
+      const b = new LandBattle(make()), f = b.field;
+      expect(f.bend?.dry).toBe(end);
+      const att = b.units.filter((u) => u.side === 'att'), dryXs = att.filter((u) => u.dry).map((u) => u.x), wetXs = att.filter((u) => !u.dry).map((u) => u.x);
+      expect(dryXs.length).toBe(dry.reduce((a, i) => a + blocksFor(make().att.forces)[i], 0));
+      // Those that do not cross draw up together at their end of the field, those that cross at the other.
+      expect(end === 'west' ? Math.max(...dryXs) < Math.min(...wetXs) : Math.min(...dryXs) > Math.max(...wetXs)).toBe(true);
+      // Straight up its lane to the defence's line: no water, no bridge, for one that does not cross; the river for one that does.
+      const meets = (x0: number, x1: number, y0: number): boolean => {
+        for (let y = y0; y <= f.zones.def[1]; y += f.cell / 2) for (let x = x0; x <= x1; x += f.cell / 2) if (onRiver(b, x, y)) return true;
+        return false;
+      };
+      for (const u of att) expect(meets(u.x - u.w / 2, u.x + u.w / 2, u.y)).toBe(!u.dry);
+      // Nobody draws up on the river, and the defence's whole line stands on its far side, the bend away to the south.
+      for (const u of b.units) expect(onRiver(b, u.x, u.y)).toBe(false);
+      for (const u of b.units.filter((v) => v.side === 'def')) expect(u.y).toBeGreaterThan(f.riverMid![Math.min(f.cols - 1, Math.floor(u.x / f.cell))] + 60);
+      // Its bridges stand only where it runs across before the lanes that cross; there is one there.
+      let there = 0;
+      for (let i = 0; i < f.ground.length; i++) {
+        if (!['bridge', 'blown'].includes(GROUNDS[f.ground[i]])) continue;
+        const x = (i % f.cols) * f.cell + f.cell / 2;
+        expect((x - f.bend!.x) * (end === 'west' ? 1 : -1)).toBeGreaterThan(LAND.mouth + 60);
+        there++;
+      }
+      expect(there).toBeGreaterThan(0);
+    }
+  });
+
+  it('no block stands in the river where only some corps cross either, and those that do not cross never wade (b464(5))', () => {
+    let wading = 0, stood = 0, left = 0, dryWet = 0, dryMet = 0, battles = 0;
+    for (let s = 1; s <= 8; s++) {
+      const b = new LandBattle(partly(s, s % 3 ? [2] : [0], s % 2 ? 'west' : 'east'));
+      b.ai.att = false; b.ai.def = true;
+      plainAttack(b);
+      const up = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
+      const wet = (u: LandUnit): boolean => ['water', 'blown'].includes(groundAt(b.field, u.x, u.y));
+      while (!b.over) {
+        b.step();
+        for (const u of b.units) if (up(u) && u.state !== 'routing' && wet(u)) { wading++; if (u.speed < 0.5) stood++; if (u.dry) dryWet++; }
+      }
+      for (const u of b.units) if (up(u) && wet(u)) left++;
+      if (b.units.some((u) => u.dry && u.met)) dryMet++;
+      battles++;
+    }
+    expect(wading).toBeGreaterThan(0);
+    expect(stood).toBe(0);
+    expect(left).toBe(0);
+    expect(dryWet).toBe(0);
+    // And they fight: over dry ground, as the card counts them.
+    expect(dryMet).toBe(battles);
+  }, 60000);
+
+  it('where every corps crosses, or none does, the river does not bend: the field and the fight are those of a card with no say (b464(5))', () => {
+    for (let s = 1; s <= 3; s++) {
+      const t = sampleTicket('plains', 1.3, { seed: s * 7919 + 13, humanAtt: true, river: true });
+      const all = { ...t, att: { ...t.att, forces: t.att.forces.map((f) => ({ ...f, cross: true })) } };
+      const none = { ...t, att: { ...t.att, forces: t.att.forces.map((f) => ({ ...f, cross: false })) } };
+      const run = (tt: typeof t) => { const b = new LandBattle(tt); b.ai.att = false; b.ai.def = true; plainAttack(b); runOut(b); return b; };
+      const [b0, b1, b2] = [run(t), run(all), run(none)];
+      expect(b0.field.bend).toBeUndefined();
+      expect(b0.field.course).toBeUndefined();
+      for (const b of [b1, b2]) {
+        expect(b.field).toEqual(b0.field);
+        expect(b.units.map((u) => [u.x, u.y, u.str, u.state])).toEqual(b0.units.map((u) => [u.x, u.y, u.str, u.state]));
+        expect(b.over).toEqual(b0.over);
+      }
+      // Where only some cross, it bends: the same seed gives another river.
+      expect(new LandBattle(partly(s, [2], 'west')).field.ground).not.toEqual(new LandBattle(t).field.ground);
+    }
+  }, 60000);
+
   it('a close battle lasts minutes from the first contact, and never breaks an army most of which has not fought (mark 2)', () => {
     const fights: number[] = [];
     for (const ground of GROUNDS7) {
@@ -553,6 +644,24 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     // All of it in contact, most of it whole: in a large army that is an attack called off, and it breaks.
     for (const u of mine) u.met = true;
     expect(b.breaking('att')).toBeGreaterThanOrEqual(1);
+  });
+  it('a small defence behind fortress works breaks as before: the card prices the works already (b488)', () => {
+    const brink = (fort: number): number => {
+      const t = sampleTicket('plains', 1.2, { seed: 99 });
+      t.def.forces = [{ ...t.def.forces.find((f) => f.kind === 'inf')!, divs: 1, share: 1 }];
+      t.place = { ...t.place, fort };
+      const b = new LandBattle(t);
+      const theirs = b.units.filter((x) => x.side === 'def' && x.kind !== 'fort');
+      expect(theirs.length).toBeLessThanOrEqual(LAND.fresh.upTo);
+      for (const u of theirs) u.met = true;
+      // A third of it worn hard, the rest whole and steady.
+      theirs[0].str = theirs[0].str0 * 0.2;
+      expect(b.wornShare('def')).toBeGreaterThan(LAND.spent.def);
+      return b.breaking('def');
+    };
+    // In the open the fresh regiments hold it at the brink (Mechili's cure); behind works of any level they do not.
+    expect(brink(0)).toBeCloseTo(0.99, 6);
+    for (const fort of [1, 2, 3]) expect(brink(fort)).toBeGreaterThanOrEqual(1);
   });
 
   // The plain attack honours the card (mark 4, after the retest): at the telling odds, where the card gives neither
@@ -707,6 +816,26 @@ describe('the hand-off with a real campaign', () => {
       if (Math.abs(c - Math.floor((0.12 * plain.w) / plain.cell)) > 1 && Math.abs(c - Math.floor((0.85 * plain.w) / plain.cell)) > 1 && plain.ground[i] !== more.ground[i]) other++;
     }
     expect(other).toBe(0);
+  });
+  it('the ticket says which corps cross the river as the card counts them: one with no river before it does not (b464(5))', () => {
+    const g = playing();
+    let partial = 0;
+    for (const r of g.regions) {
+      if (!hostileUnits(g, r, 'GER').length) continue;
+      const cs = g.corps.filter((c) => c.nat === 'GER' && !c.dead && !c.town && c.ap > 0 && r.nb.includes(c.reg) && !blocked(g, c, r, c.reg));
+      const t = cs.length ? landTicket(g, cs, r) : null;
+      if (!t) continue;
+      for (const f of t.att.forces) {
+        const from = g.corps.find((c) => c.id === f.corps)!.reg;
+        expect(f.cross === false).toBe(!!t.place.river && !riverBetween(g, from, r.id));
+      }
+      const m = /^(\d+) of the (\d+) attacking corps cross/.exec(t.lines.find((l) => l.label === 'River')?.value ?? '');
+      if (m) { expect(t.att.forces.filter((f) => f.cross !== false).length).toBe(Number(m[1])); partial++; }
+      // The end of the field those that do not cross take, where some do not (the river bends away from it).
+      expect(t.place.dryEnd !== undefined).toBe(t.att.forces.some((f) => f.cross === false) && t.att.forces.some((f) => f.cross !== false));
+    }
+    // Pomorze in the first month: XIX Corps from Farther Pomerania, XXI Corps over the Vistula from Elbing.
+    expect(partial).toBeGreaterThan(0);
   });
   it('the ticket carries the card\'s own reckoning and the province', () => {
     const g = playing();

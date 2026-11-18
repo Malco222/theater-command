@@ -40,7 +40,21 @@ export interface LandPlace {
    * down they are down here too.
    */
   crossings?: number[];
+  /**
+   * Where some of the attack's corps come on from ground with no river between them and the place (ForceTicket.cross
+   * false) and others cross: the end of the field those that do not cross take, the end on their side as the attack
+   * faces the place (b464(5)). Absent there, the west.
+   */
+  dryEnd?: 'west' | 'east';
 }
+
+/**
+ * The river bent away from the lanes of the attack's corps that do not cross it (the design director, b464(5)): it runs
+ * across the field only before the lanes of those that cross, east of x where the others draw up to the west ('west'),
+ * and at x turns to the attacker's edge and leaves the field there, between the two. The defence's whole line stays
+ * on the far side of it, and the card's dry ground is the field's.
+ */
+export interface Bend { x: number; dry: 'west' | 'east' }
 
 export interface LandField {
   /** Metres. */
@@ -70,11 +84,27 @@ export interface LandField {
    * again). Painting is unaffected.
    */
   dugInto?: Record<number, number>;
-  /** Where there is a river, the metres north of its middle line in each column: which bank a point is on. */
+  /**
+   * Where there is a river, the metres north of its middle line in each column: which bank a point is on. 0 in a column
+   * the river has bent away from (bend): the whole of it is the defence's bank.
+   */
   riverMid?: number[];
+  /** Where the river bends away from the lanes of the corps that do not cross it (b464(5)). */
+  bend?: Bend;
+  /** Where it bends, its middle line in metres, from where it comes onto the field to where it leaves at the attacker's edge. */
+  course?: [number, number][];
 }
 
 export const FIELD = { w: 3000, h: 2000, cell: 25 };
+
+/** Where each side forms up: the attacker's band along the south, the defender's along the north. */
+export const zonesOf = (w: number, h: number): LandField['zones'] => ({ att: [w * 0.12, 120, w * 0.88, 480], def: [w * 0.12, h * 0.62, w * 0.88, h * 0.9] });
+
+/**
+ * The river's bend (b464(5)), in metres: the radius it turns on; how far its run down to the attacker's edge swings
+ * either side of its line, and over what length; and how far either side of that line no attacking block draws up.
+ */
+export const BEND = { r: 180, swing: 30, wave: 520, clear: 130 };
 
 /** How each province's ground is made: relief in metres, and how much of it is each kind of cover. */
 const RECIPE: Record<Terrain, { relief: number; woods: number; fields: number; rough: number; marsh: number; rock: number }> = {
@@ -123,7 +153,7 @@ function cut(v: Float32Array, share: number): number {
   return s[Math.min(s.length - 1, Math.floor(share * s.length))];
 }
 
-export function buildField(place: LandPlace, seed: number): LandField {
+export function buildField(place: LandPlace, seed: number, bend?: Bend): LandField {
   const { w, h, cell } = FIELD;
   const cols = Math.round(w / cell), rows = Math.round(h / cell), n = cols * rows;
   const rng = new Rng(seed ^ 0x5eed);
@@ -197,19 +227,35 @@ export function buildField(place: LandPlace, seed: number): LandField {
   };
   const tx = town?.x ?? w / 2, ty = town?.y ?? h * 0.72;
   const wob = rng.range(-1, 1);
-  road((t) => [w / 2 + (tx - w / 2) * Math.min(1, t * 1.4) + Math.sin(t * 5 + wob) * 90, t * h]);
+  // The river's line, drawn from the seed here, before the roads are laid (they draw nothing from it, so every field draws
+  // what it always did): its middle in each column, metres north of the attacker's edge, and its half-width there.
+  const flow = place.river ? { base: h * (0.46 + 0.04 * rng.next()), amp: 60 + 50 * rng.next(), ph: rng.range(0, 6) } : null;
+  const midAt = (c: number): number => flow!.base + Math.sin((c / cols) * 7 + flow!.ph) * flow!.amp + Math.sin((c / cols) * 17 + flow!.ph * 2) * flow!.amp * 0.3;
+  const halfAt = (c: number): number => 28 + 10 * Math.sin(c * 0.3 + flow!.ph);
+  // Where the river bends (b464(5)): it runs straight across beyond the turn, on the side of those that cross.
+  const away = bend?.dry === 'east' ? -1 : 1, turnX = bend ? bend.x + away * BEND.r : 0;
+  const straight = (c: number): boolean => !bend || (c * cell + cell / 2 - turnX) * away >= 0;
+  if (flow && bend) {
+    // The road up the field comes up the middle of the lanes that cross, over the river by its bridge there, and only
+    // then makes for the town: it never crosses the river where it runs down to the attacker's edge. Where those lanes
+    // are few, it keeps its swing and the river's width clear of the turn, so it never runs up beside the river where it
+    // comes down, nor bridges it where it comes round.
+    const z = zonesOf(w, h).att, mid = (bend.x + (away > 0 ? z[2] : z[0])) / 2;
+    const rx = away > 0 ? Math.max(mid, turnX + 130) : Math.min(mid, turnX - 130), yr = midAt(rx / cell - 0.5) + 150, yt = h * 0.71;
+    road((t) => [rx + (tx - rx) * Math.min(1, Math.max(0, (t * h - yr) / (yt - yr))) + Math.sin(t * 5 + wob) * 60, t * h]);
+  } else road((t) => [w / 2 + (tx - w / 2) * Math.min(1, t * 1.4) + Math.sin(t * 5 + wob) * 90, t * h]);
   road((t) => [t * w, ty + Math.sin(t * 4 + wob) * 70]);
 
   // The river: across the field between the two armies, with its bridges where the roads cross it.
-  let riverMid: number[] | undefined;
-  if (place.river) {
-    const base = h * (0.46 + 0.04 * rng.next()), amp = 60 + 50 * rng.next(), ph = rng.range(0, 6);
+  let riverMid: number[] | undefined, course: [number, number][] | undefined;
+  if (flow) {
     riverMid = [];
     const over = new Set((place.crossings ?? []).map((x) => Math.min(cols - 1, Math.max(0, Math.floor((x * w) / cell)))));
     for (let c = 0; c < cols; c++) {
-      const yc = base + Math.sin((c / cols) * 7 + ph) * amp + Math.sin((c / cols) * 17 + ph * 2) * amp * 0.3;
+      const yc = midAt(c);
       riverMid.push(yc);
-      const half = 28 + 10 * Math.sin(c * 0.3 + ph);
+      if (!straight(c)) continue;
+      const half = halfAt(c);
       for (let r = 0; r < rows; r++) {
         const y = r * cell + cell / 2;
         if (Math.abs(y - yc) <= half) {
@@ -219,6 +265,54 @@ export function buildField(place: LandPlace, seed: number): LandField {
         } else if (over.has(c) && Math.abs(y - yc) <= half + 200) ground[at(c, r)] = G.road;
         else if (Math.abs(y - yc) <= half + 40 && ground[at(c, r)] === G.open && place.terrain !== 'desert') ground[at(c, r)] = G.field;
       }
+    }
+    if (bend) {
+      // Where it bends (b464(5)): from the turn it comes round toward the lanes that do not cross and runs down to the
+      // attacker's edge between the two groups of lanes, swinging a little either side of the line between them, a
+      // river and not a ruler's line. Its own bridges stay where it runs across before those that cross: none where it
+      // runs down, so nobody comes round it by the attacker's own bank.
+      const R = BEND.r, c0 = turnX / cell - 0.5, y0 = midAt(c0), slope = (midAt(c0 + 0.5) - midAt(c0 - 0.5)) / cell;
+      const tl = Math.hypot(1, slope), k = 0.55 * R, top = y0 - R;
+      const P = [[turnX, y0], [turnX - (away * k) / tl, y0 - (away * slope * k) / tl], [bend.x, top + k], [bend.x, top]];
+      const bez = (u: number, i: 0 | 1): number => (1 - u) ** 3 * P[0][i] + 3 * (1 - u) ** 2 * u * P[1][i] + 3 * (1 - u) * u ** 2 * P[2][i] + u ** 3 * P[3][i];
+      const arc: [number, number][] = Array.from({ length: 49 }, (_, i) => [bez(i / 48, 0), bez(i / 48, 1)]);
+      const sw = flow.ph > 3 ? 1 : -1, leg: [number, number][] = [];
+      for (let d = 10, y = top - d; ; d += 10, y = Math.max(-60, top - d)) {
+        leg.push([bend.x + sw * BEND.swing * Math.sin((2 * Math.PI * (top - y)) / BEND.wave) * Math.min(1, (top - y) / 150), y]);
+        if (y <= -60) break;
+      }
+      const line = [...arc, ...leg];
+      // Each point's distance along the bend from the turn, and so its half-width, going on from the straight stretch's.
+      const along = [0];
+      for (let i = 1; i < line.length; i++) along.push(along[i - 1] + Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]));
+      const arcLen = along[arc.length - 1];
+      const lo = Math.min(bend.x - away * 160, turnX + away * 60), hi = Math.max(bend.x - away * 160, turnX + away * 60);
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        const x = c * cell + cell / 2, y = r * cell + cell / 2;
+        if (x < lo || x > hi || y > y0 + 120) continue;
+        let best = Infinity, sAt = 0;
+        for (let i = 1; i < line.length; i++) {
+          const [ax, ay] = line[i - 1], [bx, by] = line[i], vx = bx - ax, vy = by - ay;
+          const q = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy || 1)));
+          const dd = Math.hypot(x - ax - q * vx, y - ay - q * vy);
+          if (dd < best) { best = dd; sAt = along[i - 1] + q * (along[i] - along[i - 1]); }
+        }
+        const half = halfAt(c0 - (away * sAt) / cell), i = at(c, r), g0 = ground[i];
+        if (g0 === G.water || g0 === G.bridge || g0 === G.blown) continue;
+        if (best <= half) {
+          ground[i] = g0 === G.road && sAt <= arcLen ? (place.bridgeDown ? G.blown : G.bridge) : G.water;
+          height[i] = Math.min(height[i], 0) - 2;
+        } else if (best <= half + 40 && g0 === G.open && place.terrain !== 'desert') ground[i] = G.field;
+      }
+      // Which bank: the bend's own line where it comes round before the lanes that cross; none at all beyond it.
+      for (let c = 0; c < cols; c++) {
+        if (straight(c)) continue;
+        const x = c * cell + cell / 2;
+        riverMid[c] = (x - bend.x) * away < 0 ? 0 : arc.reduce((m, p) => (Math.abs(p[0] - x) <= cell / 2 ? Math.max(m, p[1]) : m), top);
+      }
+      course = [];
+      for (let x = away > 0 ? w : 0; (x - turnX) * away > 0; x -= away * cell) course.push([x, midAt(x / cell - 0.5)]);
+      course.push(...line);
     }
   }
   // A road on the slant steps from cell to cell corner to corner, and where both cells beside such a step are rock, marsh
@@ -255,8 +349,9 @@ export function buildField(place: LandPlace, seed: number): LandField {
 
   return {
     w, h, cell, cols, rows, ground, height, beneath, riverMid,
-    zones: { att: [w * 0.12, 120, w * 0.88, 480], def: [w * 0.12, h * 0.62, w * 0.88, h * 0.9] },
+    zones: zonesOf(w, h),
     town,
+    ...(course ? { bend, course } : {}),
   };
 }
 

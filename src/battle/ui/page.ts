@@ -17,6 +17,7 @@ import { lineUp, unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import type { LandPlace, Terrain } from '../land/field';
 import { PRACTICE_GROUNDS, practiceBill, practiceTicket, wornWords, type PracticeGround } from '../land/sample';
+import { crewLine } from '../land/crews';
 import { LandBattle } from '../land/sim';
 import { cardKnows, pursuitLine } from '../land/ticket';
 import type { LandUnit } from '../land/units';
@@ -51,6 +52,19 @@ const facts = (bits: string[]): string => `<span class="facts"><span>${bits.map(
 const placeLine = (t: FieldTicket<LandPlace>): string => {
   const bits = [...(S.offer || t.place.river || t.place.fort ? [esc(TERRAIN_WORD[t.place.terrain])] : []), ...(t.place.river ? [`across the ${esc(t.place.river)}`] : [])];
   return bits.length ? `<span class="tc-data">${facts(bits)}</span>` : '';
+};
+/** Names in a row as a sentence lists them: "XIX Corps", "XIX Corps and XVI Corps", "I Corps, XIX Corps and XVI Corps". */
+const listed = (xs: string[]): string => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+/**
+ * Where some of the player's attacking corps cross the river and some come on over dry ground (b464(5), the river bends
+ * away from the latter), the opening dispatch says which, in the UI director's words: "XXI Corps must cross the Vistula.
+ * XIX Corps comes on over dry ground." Empty where all cross, none do, or the player defends.
+ */
+const riverWords = (t: FieldTicket<LandPlace>): string => {
+  if (!t.place.river || !t.att.human) return '';
+  const dry = t.att.forces.filter((f) => f.cross === false), wet = t.att.forces.filter((f) => f.cross !== false);
+  if (!dry.length || !wet.length) return '';
+  return `${listed(wet.map((f) => f.name))} must cross the ${t.place.river}. ${listed(dry.map((f) => f.name))} ${dry.length === 1 ? 'comes' : 'come'} on over dry ground. `;
 };
 /** "Warsaw, the capital"; "the town of Gdynia". */
 const townWords = (p: LandPlace): string => (p.townSize === 'capital' ? `${esc(p.town!)}, the capital` : `the ${p.townSize ?? 'town'} of ${esc(p.town!)}`);
@@ -239,7 +253,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
   S.asking = false; S.holding = new Set(); S.trayFrom = 0; S.tag = null; S.wasRunning = false; S.met = false; S.rushByHand = false;
   const place = t.place.town ? `before ${t.place.town}` : `in ${t.place.name}`;
-  S.dispatch = { t: 0, what: 'contact', text: `Your army stands ${place}: give your orders, then press Space to begin.` };
+  S.dispatch = { t: 0, what: 'contact', text: `${riverWords(t)}Your army stands ${place}: give your orders, then press Space to begin.` };
   S.dispatchAge = 0;
   S.resume = null;
   guard();
@@ -426,7 +440,9 @@ function updateTray(force = false): void {
       rs.className = `rstate${u.fellBack ? '' : u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
       // Its hover carries what the small battle's card says (the UI director, 3b): "16th Infantry · Strength 92 · attacking".
       const doingR = u.fellBack ? '' : b.over ? (live(u) ? 'battle over' : '') : live(u) ? doingWord(u) : '';
-      el.title = [el.querySelector('.rname')!.textContent, `Strength ${Math.round(u.str * 100)}`, word, doingR].filter(Boolean).join(' · ');
+      // A tank block's named tanks, on a line of their own (b477(6)).
+      const crew = crewLine(u.crew ?? null);
+      el.title = [el.querySelector('.rname')!.textContent, `Strength ${Math.round(u.str * 100)}`, word, doingR].filter(Boolean).join(' · ') + (crew ? `\n${crew}` : '');
       const k = u.str / Math.max(1e-6, u.str0);
       const bar = el.querySelector<HTMLElement>('.rbar b')!;
       bar.style.width = `${Math.round(Math.max(0, Math.min(1, u.str)) * 100)}%`;
