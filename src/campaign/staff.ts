@@ -34,6 +34,7 @@ import { openGovernment } from './government';
 import { openFooting } from './footing';
 import { openWeather } from './weather';
 import { openAirVersion } from './airversion';
+import { openSecretWar } from './secretwar';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, neighbourByLand, overseasOf } from './world';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, weather } from './game';
@@ -119,6 +120,7 @@ export function startOpen(g: Game, wide = true): Game {
   openFooting(g);
   openWeather(g);
   openAirVersion(g, majorsOf(g));
+  openSecretWar(g);
   openManpower(g);
   numberDivisions(g);
   // On the wider map the picture is drawn once here, so that a campaign saved on its first day comes back as it was.

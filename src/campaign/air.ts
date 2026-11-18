@@ -35,6 +35,7 @@ import { townName } from './towns';
 import { beyondEurope } from './world';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { nightGunShare, whyNotField, wrecked } from './airversion';
+import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretwar';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 
 type Sched = [number, number, number][];
@@ -1281,17 +1282,20 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   } else out.radar = radarAt(g, g.regions[target]);
   // Who comes up is comesUp()'s (ruling 225): over troops and ships any enemy fighter in reach, over the land itself the
   // groups that guard that ground, and carrier fighters only where their fleet is.
+  // A raid flown on an order the defender's agent read (ruling 135(c)): every fighter in reach meets it in full,
+  // with nothing lost for distance or for want of radar.
+  const amb = !sea && ambushAt(g, target);
   for (const f of g.airFleets) {
     if (f.ftr <= 0 || f.mission !== 'support' || !atWar(g, f.nat, nat)) continue;
     if (!comesUp(g, f, m, target, zone)) continue;
     if ((wx && grounded(g, f)) || wrecked(g, f)) continue;
     const d = sea ? kmToSea(g, f, zone) : kmTo(g, f, target);
-    let w = cover(d, reach(f, g).ftrRange) * crowding(g, f);
+    let w = (amb ? (d <= reach(f, g).ftrRange ? AMBUSH() : 0) : cover(d, reach(f, g).ftrRange)) * crowding(g, f);
     // Carrier fighters are at home over the sea, and over their own fleet its lookouts warn them: they need no radar chain.
     const deck = f.ship !== undefined;
     if (sea && !deck) w *= C.seaCover;
     if (night) w *= C.night.fighters;
-    if (!out.radar && !(deck && sea && d <= 0)) w *= AIR.radar.without;
+    if (!amb && !out.radar && !(deck && sea && d <= 0)) w *= AIR.radar.without;
     w *= unready;
     // Under cloud fewer of the defenders find the bombers.
     if (wx) w *= cloudMet(sky);
@@ -1342,6 +1346,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     value: `${[af ? planes(af, 'fighter') : '', ab ? planes(ab, 'bomber') : ''].filter(Boolean).join(' and ')} against ${df ? planes(df, 'fighter') : 'no fighters'}`,
     effect: out.D < df ? `About ${Math.round(out.D).toLocaleString('en-US')} of the defending fighters can meet the raids` : undefined,
   });
+  // (A raid flown on an order the defender's agent read: the report says so, ruling 135(c).)
+  const read = amb && out.D > 0 ? (g.intel.orders ?? []).find((o) => o.nat === nat && o.target === target && o.turn === g.turn && !o.done) : undefined;
+  if (read) out.lines.push({ label: 'Intelligence', value: `Met by fighters posted on Agent ${read.agent}'s report`, effect: 'They knew the target and the hour: every fighter in reach came up' });
   if (night) out.lines.push({ label: 'Night', value: 'Flown in darkness', effect: 'Few fighters find the bombers, and only about a third of the bombs find the target' });
   else if (af > 0) {
     const far = out.att.filter((a) => a.f.ftr > 0).sort((a, b) => a.esc - b.esc)[0];
@@ -1757,7 +1764,7 @@ export function airAI(g: Game, nat: string, ph?: PlanPhase | null): void {
   if (!n.alive || !n.atWar.length) return;
   // In the grand campaign history's air plan does not apply: the air groups patrol, and the staff plans raids of its own.
   // Ships come first: the carriers' wings, and a few of the land bombers, go for the fleets the staff has found.
-  if (g.flags.open === 1) { seaStaff(g, nat, nat === g.human ? 'land' : 'all'); raidStaff(g, nat, mine, ph); return; }
+  if (g.flags.open === 1) { flyReadOrders(g, nat, mine); seaStaff(g, nat, nat === g.human ? 'land' : 'all'); raidStaff(g, nat, mine, ph); return; }
   for (const ph of AIR.plan) {
     if (ph.nat !== nat || g.turn < ph.from || g.turn > ph.to || !atWar(g, nat, ph.against)) continue;
     for (const o of ph.orders) {
@@ -2132,6 +2139,66 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
     if (!pick.best) break;
     send(pick.best.m, pick.best.t, pick.best.fleets, flown++);
   }
+}
+
+/**
+ * Orders an agent of the player's read last month (ruling 135, behind its switch): flown before anything else the
+ * staff does, as written, if they still can be; a stolen order is never false. One that cannot be flown lapses, and
+ * the player is told why.
+ */
+function flyReadOrders(g: Game, nat: string, mine: AirFleet[]): void {
+  ordersDue(g, nat).forEach((o, k) => {
+    const t = g.regions[o.target];
+    const fleets = o.groups.map((id) => mine.find((f) => f.id === id)).filter((f): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ship === undefined && f.base === o.field && whyNotMission(g, f, o.mission, o.target) === null);
+    const why = !t || !atWar(g, nat, t.ctrl) ? "the target is no longer the enemy's" : !fleets.some((f) => f.bmr > 0) ? 'the bombers have left the field or cannot fly' : null;
+    if (why) { orderLapsed(g, o, why); return; }
+    flyingOrder(g, o.target);
+    const rep = fly(g, nat, o.mission, o.target, fleets, `:order${k}`);
+    flyingOrder(g, null);
+    if (!rep) { orderLapsed(g, o, 'the bombers could not reach it'); return; }
+    for (const f of fleets) { f.mission = o.mission; f.target = o.target; f.flew = g.turn; }
+    o.done = 'flown';
+  });
+}
+
+/**
+ * The order a computer staff would write today for the bomber groups on one of its fields (ruling 135, read by an
+ * agent): the strongest bomber group there fit to fly, with the fighters on the field by day, against the target the
+ * staff's own reckoning picks among its enemies' factories and junctions, by day or by night. Null when the staff
+ * would fly nothing from there. The same weighing as the staff's (raidStaff), for one field.
+ */
+export function fieldOrder(g: Game, nat: string, field: number): { groups: number[]; target: number; mission: 'bomb' | 'night'; bombers: number } | null {
+  if (!airWar(g)) return null;
+  const R = AIRWAR.ai.raids;
+  const B = bombingFor(g, nat);
+  const rules = B ? { ...R, ...B } : { ...R, share: R.share * raidsMul(g, nat) };
+  const you = B ? seat(g) : null;
+  const here = (f: AirFleet): boolean => f.nat === nat && f.ship === undefined && f.base === field && f.mission === 'support' && f.flew !== g.turn;
+  const lead = g.airFleets.filter((f) => here(f) && f.kind !== 'ftr' && f.bmr >= rules.least && f.ready >= R.ready).sort((a, b) => b.bmr - a.bmr || a.id - b.id)[0];
+  if (!lead) return null;
+  const escorts = g.airFleets.filter((x) => here(x) && x.kind === 'ftr' && x.ftr > 0 && x.ready >= AIRWAR.ai.escortReady);
+  const S = R.sour;
+  let best: { m: 'bomb' | 'night'; t: number; fleets: AirFleet[]; v: number } | null = null;
+  const weigh = (m: 'bomb' | 'night', r: Region, fleets: AirFleet[]): void => {
+    if (S && g.turn < (g.flags[`rso:${nat}:${m}:${r.id}`] ?? 0)) return;
+    const a = assessAir(g, fleets, m, r.id);
+    if (a.why) return;
+    const fc = forecastAir(g, a, m, r.id);
+    if (fc.bomberLoss > rules.loss || fc.success < R.success) return;
+    const railWorth = r.fac <= 0 ? rules.rail : 1;
+    const v = (fc.worth * railWorth + fc.foeLoss) * (you !== null && r.ctrl === you ? rules.focus ?? 1 : 1) - fc.ftrLoss - fc.bmrLoss;
+    if (v > R.worth && (!best || v > best.v)) best = { m, t: r.id, fleets, v };
+  };
+  const works = g.regions
+    .filter((r) => atWar(g, nat, r.ctrl) && (r.fac > 0 || railsAt(r.id).length >= 3) && whyNotMission(g, lead, 'bomb', r.id) === null)
+    .sort((a, b) => b.fac + rules.rail * railsAt(b.id).length - (a.fac + rules.rail * railsAt(a.id).length) || a.id - b.id)
+    .slice(0, R.look);
+  for (const r of works) {
+    weigh('bomb', r, [lead, ...escorts.filter((e) => whyNotMission(g, e, 'bomb', r.id) === null)]);
+    weigh('night', r, [lead]);
+  }
+  const b = best as { m: 'bomb' | 'night'; t: number; fleets: AirFleet[]; v: number } | null;
+  return b ? { groups: b.fleets.map((f) => f.id), target: b.t, mission: b.m, bombers: Math.round(b.fleets.reduce((s, f) => s + f.bmr, 0)) } : null;
 }
 
 /** What history's plan has this nation's air fleets doing this month, if anything. */

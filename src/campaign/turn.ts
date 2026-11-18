@@ -32,8 +32,8 @@ import {
   type EscortLane, type EscortPlan, type FleetCard, type SeaOption, type ShorePlan, type ShoreTarget,
 } from './fleets';
 import {
-  INTEL, SIGHT, armiesSeen, booksOf, cityReport, corpsKnown, fogOn, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
-  whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
+  INTEL, SIGHT, armiesSeen, arrest, booksOf, cityReport, corpsKnown, fogOn, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
+  whyNotArrest, whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
 } from './intel';
 import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
@@ -2074,6 +2074,18 @@ export function whyNotAgentMission(g: Game, id: number, mission: Mission): strin
 /** Gives the player's agent its work: 'watch', 'books', 'factory', 'rail', 'oil' or 'guard'. */
 export function orderAgentMission(g: Game, id: number, mission: Mission): boolean {
   return whyNotAgentMission(g, id, mission) === null && setAgentMission(g, g.human!, id, mission);
+}
+
+/** Why the player cannot arrest this uncovered enemy agent now, or null (ruling 151(c)). */
+export function whyNotArrestAgent(g: Game, id: number): string | null {
+  if (!g.human) return 'Nobody is at the controls.';
+  if (!humanUp(g)) return 'Orders are given in your own month.';
+  return whyNotArrest(g, g.human, id);
+}
+
+/** ARREST: ends an enemy agent the player's hunters uncovered (ruling 151(c)). */
+export function orderArrest(g: Game, id: number): boolean {
+  return whyNotArrestAgent(g, id) === null && arrest(g, g.human!, id);
 }
 
 /** Retires one of the player's agents, which frees a place in the service. */

@@ -119,11 +119,11 @@ describe('wrecking an airfield (ruling 151(b))', () => {
 
   it('is offered only with its switch, and says why not', () => {
     const off = scene(false);
-    expect(spyRoom(off.g).agents.find((x) => x.id === off.a.id)!.missions.map((m) => m.id)).not.toContain('airfield');
+    expect(spyRoom(off.g)!.agents.find((x) => x.id === off.a.id)!.missions.map((m) => m.id)).not.toContain('airfield');
     expect(whyNotMission(off.g, 'UK', off.a.id, 'airfield')).toBe('Not in this campaign.');
     const { g, a } = scene();
     expect(MISSIONS).toContain('airfield');
-    const offer = spyRoom(g).agents.find((x) => x.id === a.id)!.missions.find((m) => m.id === 'airfield')!;
+    const offer = spyRoom(g)!.agents.find((x) => x.id === a.id)!.missions.find((m) => m.id === 'airfield')!;
     expect(offer.label).toBe('Wreck the airfield');
     expect(offer.success).toBeCloseTo(INTEL.missions.factory.success!, 9);
     expect(offer.ok).toBe(true);
