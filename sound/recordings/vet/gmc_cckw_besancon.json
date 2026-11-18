@@ -1,0 +1,42 @@
+[
+ {
+  "file": "gmc_cckw_besancon.mka",
+  "format": "vorbis 44100 Hz 2 ch 105 kbps",
+  "seconds": 13.2,
+  "read": [
+   0,
+   13.2
+  ],
+  "fromFilm": false,
+  "peakDb": -1.2,
+  "lufs": -13.2,
+  "loudestMomentLufs": -11.4,
+  "floorDb": -18.3,
+  "rangeDb": 6.1,
+  "topKhz": 12.7,
+  "bands": {
+   "sub": -30.9,
+   "low": -2.9,
+   "lowmid": -5,
+   "mid": -11.6,
+   "presence": -14.8,
+   "air": -29.5
+  },
+  "stereo": 0.85,
+  "talk": 0.25,
+  "events": 0,
+  "firstEvents": [],
+  "loudestEvents": [],
+  "steady": {
+   "from": 0,
+   "to": 8,
+   "wobbleDb": 1.14
+  },
+  "flags": [
+   "THIN TOP: nothing above 12.7 kHz (a low-rate copy, or a dull microphone)",
+   "LOW RATE: vorbis at 105 kbps",
+   "HUM: a 60 Hz line and its octave stand out",
+   "NOISY: the quietest moments sit at -18 dB (no clean silence between events)"
+  ]
+ }
+]

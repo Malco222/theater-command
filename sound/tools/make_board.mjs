@@ -74,7 +74,7 @@ if (realDir) {
 }
 // The battle pack, stamped as "pack_" and its name (not "battle_": the first set has a battle_loop of its own), grouped by who or what makes the sound.
 const GROUPS = [['Voices', /^$/], ['Bugles and whistles', /^$/], ['The rifleman and the machine gunner', /^(rifle_shot|lmg_burst|machine_gun)/], ['Wartime guns, one for each army', /^$/], ['The soldier: feet, kit and bolt', /^$/], ['Explosions', /^(grenade|shell_|shells_|bomb_stick)/],
-  ['The tank', /^tank_/], ['The sea', /^(ship_|sea_)/], ['The air', /^(fighter|plane_|dive|flak_light)/], ['Under a fight', /./]];
+  ['The tank', /^tank_/], ['Lorries, half-tracks and the field gun', /^$/], ['The sea', /^(ship_|sea_)/], ['The air', /^(fighter|plane_|dive|flak_light)/], ['Under a fight', /./]];
 const battle = [];
 if (battleDir) {
   const list = read(path.join(battleDir, 'sound-list.json')), mp3s = Object.fromEntries(read(path.join(battleMp3, 'mp3-list.json')).map((r) => [r.name, r]));

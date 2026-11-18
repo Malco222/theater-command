@@ -38,6 +38,24 @@
    "note": "A towed howitzer crew firing: the shot, and the breech and case if they can be heard. Round four."
   },
   {
+   "id": "me262_hahnweide",
+   "for": "jet",
+   "title": "File:Messerschmitt Me-262 At Hahnweide Air Show 2011.ogv",
+   "licence": "CC BY 3.0",
+   "seconds": 150,
+   "mb": 28.5,
+   "note": "A flying Me 262 (a modern replica with jet engines) at the Hahnweide air show: the jet's run-up, take-off and passes. Round four, for the Me 262."
+  },
+  {
+   "id": "me262_ila2014",
+   "for": "jet",
+   "title": "File:ILA 2014 - Messerschmitt Me-262 Flying Display.ogv",
+   "licence": "CC BY 3.0",
+   "seconds": 207,
+   "mb": 88.2,
+   "note": "A flying Me 262 replica's display at ILA Berlin 2014. Round four, for the Me 262."
+  },
+  {
    "id": "t34_estonia_museum",
    "for": "tank",
    "title": "File:Tank T-34 Eesti Vabadusvõitluse Muuseumis.ogg",
