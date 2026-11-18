@@ -142,6 +142,34 @@
       "text": "German submarines have sunk Brazilian ships within sight of the coast, and crowds fill the streets of Rio. Brazil declares war on the Axis and joins the Allies."
     },
     {
+      "id": "bolivia-war", "from": 44, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:BOL", "war:USA,GER", "peace:BOL,GER", "openTo:BOL,allies"],
+      "enter": { "nations": ["BOL"], "align": "allies" },
+      "war": [["BOL", "GER"]],
+      "text": "Bolivia, whose tin already goes to the Allied factories, declares war on the Axis and joins the Allies."
+    },
+    {
+      "id": "colombia-war", "from": 51, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:COL", "war:USA,GER", "peace:COL,GER", "openTo:COL,allies"],
+      "enter": { "nations": ["COL"], "align": "allies" },
+      "war": [["COL", "GER"]],
+      "text": "German submarines have sunk Colombian ships in the Caribbean. Colombia declares war on Germany and joins the Allies."
+    },
+    {
+      "id": "americas-war-1945", "from": 66, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "war:USA,GER"],
+      "enter": { "nations": ["ECU", "PAR", "PER", "URU", "VEN"], "align": "allies" },
+      "war": [["ECU", "GER"], ["PAR", "GER"], ["PER", "GER"], ["URU", "GER"], ["VEN", "GER"]],
+      "text": "Ecuador, Paraguay, Peru, Uruguay and Venezuela declare war on the Axis: only a country at war by March has a seat at the founding conference of the United Nations."
+    },
+    {
+      "id": "argentina-war", "from": 67, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:ARG", "war:USA,GER", "peace:ARG,GER", "openTo:ARG,allies"],
+      "enter": { "nations": ["ARG"], "align": "allies" },
+      "war": [["ARG", "GER"]],
+      "text": "Argentina, the last of the American republics to break with the Axis, declares war on Germany and joins the Allies."
+    },
+    {
       "id": "usa-italy", "from": 28, "to": 99, "mode": "open",
       "if": ["alive:USA", "alive:ITA", "war:USA,GER", "war:ITA,UK", "peace:USA,ITA"],
       "war": [["USA", "ITA"]],

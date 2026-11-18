@@ -99,5 +99,11 @@
     { "id": "dalmatia", "nat": "ITA", "on": "YUG", "ground": ["Dalmatia"], "name": "Dalmatia", "why": "promised to Italy in 1915 and never handed over", "stop": 5 },
     { "id": "salonika", "nat": "YUG", "on": "GRE", "ground": ["Salonika"], "name": "Salonika", "why": "the port its trade goes out by", "stop": 5 },
     { "id": "kars", "nat": "SOV", "on": "TUR", "ground": ["Erzurum", "Trabzon"], "name": "Kars and the eastern provinces", "why": "Russian until 1921", "stop": 5 }
-  ]
+  ],
+  "restraint": {
+    "_about": "The book's restraints (ruling 139, the design director's b509(c) and b512(g, h)): at the stops named, a computer staff keeps to what was chosen in the real war even where its own judgement would go further. 'storm': the towns a computer staff, and any computer ally standing round them with it, rings and does not storm (it may still starve them out). 'enter': the ground a computer staff's armies do not go into, to march or to attack. A player is never held to either.",
+    "stops": [1, 2],
+    "storm": [{ "nat": "GER", "town": "Leningrad", "why": "in September 1941 Hitler chose to starve Leningrad rather than storm it" }],
+    "enter": [{ "nat": "FIN", "ground": ["Leningrad"], "why": "in 1941 Finland's army halted on the Karelian Isthmus at the frontier of 1939" }]
+  }
 }
