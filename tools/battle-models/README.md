@@ -158,6 +158,18 @@ landing: `sail` while she runs in, then `beach`, then `ramp.down`; unload; `ramp
 
 ### A carrier's deck
 
+The three carriers are told apart by their islands first. `Carrier_USA` has the tall American island (the art
+director, 2026-11-18: built low, 8 m to the bridge roof with a 12 m funnel, it "reads like a Japanese island"; the
+historian's sizes, his own reckoning from plans and photographs, scaled from a 266 m ship): four bridge levels to
+about 11 m over the flight deck with a director box and its aerial on top; a stout mast to 28 m with the big square
+air-search aerial on a platform; a big flat-sided upright funnel in the after half, its top at 17.5 m (`flat=True`
+of `Yard.funnel`); a second director at the after end and a smaller aerial on a pole by the funnel; and, the surest
+sign of all, four twin gun houses on the flight deck (`style="house"` of `Yard.turret`), two before the island and
+two abaft it, the inner of each pair on a deckhouse, firing over the outer. They are parts `sec.S1` to `sec.S4`,
+counted from forward; her port pair, `sec.P1` and `sec.P2`, stay on their sponsons under the deck's edge.
+`Carrier_JAP` keeps a small island well forward with her smoke led out over the side; `Carrier` a middling one
+with the funnel in it.
+
 A carrier's own mesh has no aircraft on it. Her part `deckpark` is empty: its pivot is the deck under the foremost
 row of her range, about a quarter of her length abaft her middle. Her file says which range stands there, by the
 battle's month:

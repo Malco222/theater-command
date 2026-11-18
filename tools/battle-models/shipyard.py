@@ -546,7 +546,7 @@ class Yard:
         dx = -high * lean
         if flat:
             plan0 = Model.round_rect(x + long * 0.5, x - long * 0.5, y - wide * 0.5, y + wide * 0.5, wide * 0.3, 3 if m.fine else 1)
-            plan1 = Model.round_rect(x + long * 0.48, x - long * 0.48, y - wide * 0.47, y + wide * 0.47, wide * 0.29, 3 if m.fine else 1)
+            plan1 = list(plan0)                                   # (upright walls: plates and platforms can be laid on them)
             n = len(plan0)
         else:
             plan0, plan1 = Model.oval(x, y, long * 0.5, wide * 0.5, n), Model.oval(x, y, long * 0.47, wide * 0.46, n)
@@ -566,8 +566,9 @@ class Yard:
                 m.rod((x + long * 0.5 - 0.1, y + hand * wide * 0.16, z), (x + long * 0.47 + dx, y + hand * wide * 0.16, z + high * 0.98), 0.12, "upper", sides=5)
                 m.rod((x - long * 0.5 + 0.1, y + hand * wide * 0.16, z), (x - long * 0.47 + dx, y + hand * wide * 0.16, z + high * 0.9), 0.1, "upper", sides=5)
             # a grating over the mouth
-            for j in range(-2, 3):
-                m.box((x + dx * (1 + cap) + j * long * 0.14, y, z + high + 0.02), (0.08, wide * 0.8 * math.sqrt(max(0.05, 1.0 - (j * 0.3) ** 2)), 0.05), "steel")
+            for j in range(-3, 4) if flat else range(-2, 3):      # (each bar reaches the mouth's rim: the mouth of a flat-sided funnel is as wide all along)
+                span = wide * 0.88 if flat else wide * 0.8 * math.sqrt(max(0.05, 1.0 - (j * 0.3) ** 2))
+                m.box((x + dx * (1 + cap) + j * long * (0.12 if flat else 0.14), y, z + high + 0.02), (0.08, span, 0.05), "steel")
         k = sum(1 for s in m.sockets if s["name"].startswith("funnel.")) + 1
         m.socket(name or f"funnel.{k}", (x + dx * (1 + cap), y, z + high + 0.3), (-0.25, 0, 1), self.half(x), "the funnel's mouth: her smoke rises here, more when she works up speed")
         self.soot_at.append((x + dx, y, z + high, long))

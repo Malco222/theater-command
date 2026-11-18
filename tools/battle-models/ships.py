@@ -926,14 +926,25 @@ def carrier(tag, fine=True, hull_hex=None):
         radar(yard, "radar.air", mx + 2.9, t1 + 17.7, 4.6, 4.3, y=yc)
         fl = 13.0 * k
         fxn = x_a + 5.6 + fl * 0.5
-        yard.funnel(fxn, t1, 17.5 - 3.0, fl, 5.4, 0.02, cap=0.06, y=yc, flat=True)
+        yard.funnel(fxn, t1, 17.5 - 3.0, fl, 5.4, 0.0, cap=0.06, y=yc, flat=True)
         yard.fire_points.append((fxn + 7.5, yc, t1))
+        if fine:              # (a wall this size left bare reads as a slab: its plates' seams, and a searchlight platform on each side)
+            m_ = yard.on(fxn)
+            plating(m_, Model.round_rect(fxn + fl * 0.5, fxn - fl * 0.5, yc - 2.7, yc + 2.7, 5.4 * 0.3, 3), t1 + 0.1, t1 + 13.4, [t1 + 2.9, t1 + 5.8, t1 + 8.7, t1 + 11.6], every=2.4, pitch=99.0)
+            for hand in (PORT, STBD):
+                py_ = yc + hand * (2.7 + 0.75)
+                m_.box((fxn + 2.2, py_, t1 + 6.6), (3.0, 1.5, 0.1), "upper")
+                for dx_ in (-1.2, 1.2):
+                    m_.rod((fxn + 2.2 + dx_, yc + hand * 2.7, t1 + 5.4), (fxn + 2.2 + dx_, py_ + hand * 0.6, t1 + 6.55), 0.06, "upper", sides=4)
+                yard.searchlight(fxn + 2.2, py_, t1 + 6.65, 0.5, (0.3, hand, 0.1))
         px_ = x_a + 5.0                                           # the smaller aerial on its pole, at the funnel's after end
         yard.on(px_).rod((px_, yc, t1 + 4.0), (px_, yc, t1 + 15.4), 0.17, "upper", rb=0.1, sides=7 if fine else 5)
         radar(yard, "radar.air.2", px_, t1 + 15.4, 2.8, 1.3, y=yc)
         # her twin gun houses on the flight deck, two before the island and two abaft it; the inner of each pair
         # stands on a round base and fires over the outer
         for n_, (gx_, up_, bearing_) in enumerate(((x_f + 11.4, 0.01, 0.0), (x_f + 4.6, 2.8, 0.0), (x_a - 4.6, 2.8, 180.0), (x_a - 11.4, 0.01, 180.0))):
+            if up_ > 1.0:     # (the inner ones stand on a deckhouse of their own, hard against the island's end)
+                yard.house(gx_ + 3.1, gx_ - 3.1, 2.35, iz, up_, r=1.1, y=yc, rail=False)
             yard.turret(f"sec.S{n_ + 1}", gx_, iz, 4.2, 2, 4.4, bearing_, 0.11, raised=up_, y=yc, style="house", rate=15.0, elev=(-5, 80), rest_elev=6.0,
                         limits=(-140, 140), floats=False)
     else:
