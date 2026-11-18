@@ -162,6 +162,8 @@ const FAR_POSTS = new Set(BUDGET.farColony.posts ?? []);
  * garrisons the rows already bring, not by a home town's division of depot troops, police and militia: a far post
  * whose garrison the historian has given (budget.json 'farColony.posts') keeps no guard beside it, so that the
  * record's figure is its whole defence, counted once; any other town there keeps the far side's one number, the tenth.
+ * One rule for every power (rider b552): Wake and Midway are forts and not posts, and take the tenth beside the fort;
+ * Japan's mandates are colonial ground, and Saipan and Truk take it too.
  */
 export const farGuard = (r: Region): number => (!farColony(r) ? 1 : FAR_POSTS.has(r.name) ? 0 : BUDGET.farColony.guard ?? 1);
 /**

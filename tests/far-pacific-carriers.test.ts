@@ -14,8 +14,9 @@ import farWorld from '../data/campaign/far-world.json';
 import { shipsInPort } from '../src/campaign/air';
 import { createGame, declareWar } from '../src/campaign/game';
 import { HISTORY, bookDate, setStop } from '../src/campaign/history';
-import { NAVY, atSea, navalUpkeep } from '../src/campaign/navy';
+import { NAVY, atSea, navalAI, navalUpkeep } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
+import { stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 
 const NAME = 'Pacific Carrier Fleet';
@@ -76,6 +77,46 @@ describe('the Pacific Fleet\'s carriers (ruling 234(d))', () => {
     g.turn = 29;
     navalUpkeep(g, 'USA');
     expect([atSea(cf), sea(g, cf), cf.cruised]).toEqual([false, 'hawaii', undefined]);
+  });
+
+  it('America\'s own month played whole leaves them at sea: its admiral, who calls every fleet home in peace, does not call these (found in the measure of ruling 234: three carriers were sunk at anchor in every war)', () => {
+    // The admiral's orders alone, after the month's upkeep.
+    const g = war(1);
+    months(g, 28);
+    const cf = fleet(g, NAME), pf = fleet(g, 'Pacific Fleet');
+    navalAI(g, 'USA');
+    expect([atSea(cf), sea(g, cf), cf.stance, cf.cruised]).toEqual([true, 'midway', 'patrol', 28]);
+    expect(atSea(pf)).toBe(false);
+    // And the whole of America's month as the computer plays it: upkeep, staff, admiral, the month's close.
+    const w = war(1);
+    months(w, 27);
+    w.turn = 28;
+    w.phase = w.order.indexOf('USA');
+    expect(stepAI(w)).toBe('USA');
+    const wc = fleet(w, NAME), wp = fleet(w, 'Pacific Fleet');
+    expect(w.nations.USA.atWar.length).toBe(0);
+    expect([atSea(wc), sea(w, wc), wc.cruised, wc.ships.cv]).toEqual([true, 'midway', 28, 3]);
+    declareWar(w, 'JAP', 'USA');
+    const there = shipsInPort(w, wp.base, 'JAP').map((f) => f.name);
+    expect(there).toContain('Pacific Fleet');
+    expect(there).not.toContain(NAME);
+    // A month of peace with no cruise: the admiral still calls every fleet home, as before.
+    const q = war(1);
+    months(q, 29);
+    const qc = fleet(q, NAME);
+    qc.stance = 'patrol';
+    navalAI(q, 'USA');
+    expect(atSea(qc)).toBe(false);
+    // Where no book is kept, the chance's month at sea stands through the admiral's orders too.
+    for (let seed = 1, seen = 0; seed <= 12 && seen < 3; seed++) {
+      const c = war(3, null, seed);
+      c.turn = 28;
+      navalUpkeep(c, 'USA');
+      const at = atSea(fleet(c, NAME));
+      navalAI(c, 'USA');
+      expect(atSea(fleet(c, NAME)), `seed ${seed}`).toBe(at);
+      if (at) seen++;
+    }
   });
 
   it('no strike, no war: the month after they lie in harbour again, as every fleet of a country at peace', () => {
