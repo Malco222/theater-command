@@ -977,8 +977,9 @@ function showAfter(): void {
   let told = '', price = '', sides = '';
   if (rep) {
     const place = rep.regionName;
-    // A capital or a city is fought in its outer streets (field.ts streetsOf): its old town holds out (the third playtester).
-    told = rep.siege ? (rep.streets ? `The battle in ${esc(t.place.town ?? place)}'s outer streets was won, but the old town holds out: ${esc(place)} is under siege.`
+    // A capital or a city is fought in its outer streets (field.ts streetsOf): the heart of the city holds out (the third
+    // playtester; the UI director's words, 19:06: not "the old town", which Washington or Sydney does not have).
+    told = rep.siege ? (rep.streets ? `The battle in ${esc(t.place.town ?? place)}'s outer streets was won, but the heart of the city holds out: ${esc(place)} is under siege.`
       : `The country round ${esc(t.place.town ?? place)} was won, but the town holds out: ${esc(place)} is under siege.`)
       : rep.gates ? `The army outside was beaten, and ${esc(t.place.town ?? place)} opened its gates. ${esc(place)} has fallen.`
         : rep.taken ? `${esc(place)} was taken.` : `The attack on ${esc(place)} was thrown back.`;
@@ -987,7 +988,7 @@ function showAfter(): void {
     const pct = (l: number, m: number): string => (m > 0 ? `, ${Math.max(1, Math.round((100 * l) / m))}% of those sent in,` : '');
     price = `It cost you ${num(aLost)} men${pct(aLost, sum(rep.attackers))} against ${num(dLost)} of theirs${rep.prisoners ? `, and ${num(rep.prisoners)} were taken prisoner` : ''}.`;
     // As the campaign's own report says it: a corps with no fate of its own fell back if its side lost.
-    const list = (us: typeof rep.attackers, won: boolean): string => us.map((u) => `<li><b>${esc(u.name)}</b> <span>${facts([`${u.divs} division${u.divs === 1 ? '' : 's'}`, `lost ${num(u.lost)}`, u.fate === '' && !won ? 'fell back' : u.fate === 'sheltered' && rep.streets ? 'fell back into the old town' : FATE[u.fate] ?? u.fate])}</span></li>`).join('');
+    const list = (us: typeof rep.attackers, won: boolean): string => us.map((u) => `<li><b>${esc(u.name)}</b> <span>${facts([`${u.divs} division${u.divs === 1 ? '' : 's'}`, u.lost > 0 ? `lost ${num(u.lost)}` : 'in reserve, lost none', u.fate === '' && !won ? 'fell back' : u.fate === 'sheltered' && rep.streets ? 'fell back into the heart of the city' : FATE[u.fate] ?? u.fate])}</span></li>`).join('');
     sides = `<div class="aside2"><div><h3 class="tc-label">${esc(A)} attack</h3><ul>${list(rep.attackers, rep.taken)}</ul></div><div><h3 class="tc-label">${esc(D)} defence</h3><ul>${list(rep.defenders, !rep.taken)}</ul></div></div>`;
   }
   const paid = rep?.paid ? `<p class="paid">${esc(rep.paid.att)}</p>` : '';
