@@ -230,9 +230,12 @@ export function bomberGuns(model: string, nat: string, w: When): Loadout {
       return box('B-17G', [chin, ...cheeks, top, ball, ...waist, tail], ['turret.13']);
     }
     case 'Lancaster':
-      // The FN5 nose and FN50 mid-upper turrets, two .303s each; the FN20 tail turret, four. The belly blind (B6, high).
-      // Rounds unchecked: about 1,000 a gun forward and above, about 2,500 in the tail.
-      return box('Lancaster I', [turret(G.browning303, ['turret.1', 'turret.2'], 1_000), turret(G.browning303, ['turret.3', 'turret.4'], 1_000), turret(G.browning303, ['turret.5', 'turret.6', 'turret.7', 'turret.8'], 2_500)]);
+      // The FN5 nose and FN50 mid-upper turrets, two .303s each; the FN20 tail turret, four. No belly gun (high): a
+      // fighter from below draws no fire. Arcs, the historian's (21:19Z, medium): the nose 95 either side, 45 down to 60
+      // up; the mid-upper all round, level to 70 up (the file cuts out the fins and wings); the tail 95 either side, 60
+      // down to 60 up, the widest field of fire in the aircraft. Rounds unchecked: about 1,000 a gun forward and above,
+      // about 2,500 in the tail.
+      return box('Lancaster I', [turret(G.browning303, ['turret.1', 'turret.2'], 1_000, about(0, 95, -45, 60)), turret(G.browning303, ['turret.3', 'turret.4'], 1_000, from(0, 360, 0, 70)), turret(G.browning303, ['turret.5', 'turret.6', 'turret.7', 'turret.8'], 2_500, about(180, 95, -60, 60))]);
   }
   return plainBomber(nat, d);
 }

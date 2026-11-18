@@ -318,3 +318,21 @@ describe('escorts doing their job (Brian, 19:38Z; ruling 237.2)', () => {
     expect(s.history().find((e) => e.what === 'air:bounce' && e.unit === top.id)).toBeDefined();
   });
 });
+
+describe('the words the player reads (the UI director, 21:19Z)', () => {
+  it('a bomber falling out, a straggler turning for home, an escort breaking away once; its return untold', () => {
+    const s = airBattle(splitEscort(3, { year: 1940, month: 8 }), { show: true }); s.ai.att = true; s.ai.def = true;
+    while (!s.over) s.step();
+    const h = s.history();
+    const out = h.filter((e) => e.what === 'air:straggle');
+    expect(out.length).toBeGreaterThan(0);
+    for (const e of out) expect(e.text).toMatch(/^(A bomber of .+ has lost an engine and|Flak has knocked out an engine on a bomber of .+, and it) is falling out of formation\.$/);
+    for (const e of h.filter((e) => e.what === 'air:limped' && e.text)) expect(e.text).toMatch(/^A damaged bomber of .+ has turned for home on its own\.$/);
+    const told = h.filter((e) => e.what === 'air:engage' && e.text);
+    expect(told.length).toBeGreaterThan(0);
+    expect(new Set(told.map((e) => e.unit)).size).toBe(told.length);
+    for (const e of told) expect(e.text).toMatch(/ broken away from .+ to take on the attackers\.$/);
+    expect(h.filter((e) => e.what === 'air:rejoin').every((e) => e.text === '')).toBe(true);
+    for (const e of h) expect(e.text).not.toMatch(/[[\]{}]/);
+  });
+});

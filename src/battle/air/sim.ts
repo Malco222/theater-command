@@ -106,6 +106,8 @@ export class AirSim implements BattleSim<AirUnit> {
   /** This tick, what each group was owed and by whom ('flak' for the guns): who shot down whom. */
   private owedBy = new Map<number, Map<number | 'flak', number>>();
   private stragId = 1;
+  /** The escort groups that have broken away from their bombers at least once (told once each). */
+  private broke = new Set<number>();
   /** The enemy group each close escort has broken off to engage, if any. */
   private chasing = new Map<number, number | null>();
 
@@ -424,8 +426,13 @@ export class AirSim implements BattleSim<AirUnit> {
     const j = u.job;
     if (j.do !== 'escort' || (!j.close && !j.top)) { this.chasing.delete(u.id); return; }
     const now = this.chasing.get(u.id) ?? null;
-    if (now !== null && was === null) this.say('air:engage', u, '', { on: now, box: j.on });
-    else if (now === null && was !== null) this.say('air:rejoin', u, '', { box: j.on });
+    // Told the first time each escort group breaks away in a battle; the scene shows the rest, and its return (the UI
+    // director, 21:19Z).
+    if (now !== null && was === null) {
+      const box = this.unit(j.on)!, first = !this.broke.has(u.id);
+      this.broke.add(u.id);
+      this.say('air:engage', u, first ? `${told(this.called(u), '{N} [has|have] broken away from')} ${subjectOf(this.called(box)).whom} to take on the attackers.` : '', { on: now, box: j.on });
+    } else if (now === null && was !== null) this.say('air:rejoin', u, '', { box: j.on });
   }
 
   private fly(u: AirUnit, dt: number): void {
@@ -704,7 +711,9 @@ export class AirSim implements BattleSim<AirUnit> {
       rate: four ? this.stragRng.range(G.four.back[0], G.four.back[1]) : G.twin.back * SKY.speed.bmr, sink: four ? G.four.sink : G.twin.sink, cover: null,
     };
     b.strag.push(s);
-    this.say('air:straggle', b, '', { id: s.id, box: b.id, eng: s.eng, prop: s.prop, why: s.why, by: s.by });
+    // The UI director's words (ui-director/words-air-battle-dispatches.md, 21:19Z): both forms end alike.
+    const text = s.why === 'flak' ? `Flak has knocked out an engine on ${this.aBomberOf(b, false)}, and it is falling out of formation.` : `${this.aBomberOf(b, true)} has lost an engine and is falling out of formation.`;
+    this.say('air:straggle', b, text, { id: s.id, box: b.id, eng: s.eng, prop: s.prop, why: s.why, by: s.by });
   }
 
   /** The aircraft a box loses next: its oldest straggler that has been seen to leave and has no escort over it; failing that, one in formation; failing that, any straggler. */
@@ -720,10 +729,19 @@ export class AirSim implements BattleSim<AirUnit> {
     return { x: b.x - Math.sin(b.face) * s.back, y: b.y - Math.cos(b.face) * s.back };
   }
 
+  /** 'A bomber of KG 2' for his own box, 'a German bomber of KG 2' for the enemy's (the UI director, 21:19Z). */
+  private aBomberOf(b: AirUnit, first: boolean, how = ''): string {
+    const t = this.ticket, own = t[b.side].human || !(t.att.human || t.def.human);
+    const what = [how, own ? '' : t[b.side].adj, 'bomber'].filter(Boolean).join(' ');
+    const a = /^[AEIOU]/i.test(what) ? 'an' : 'a';
+    return `${first ? a[0].toUpperCase() + a.slice(1) : a} ${what} of ${subjectOf(b.name).whom}`;
+  }
+
   /** A straggler that got clear of the fight and is on its way home. */
-  private limped(b: AirUnit, s: Straggler): void {
+  private limped(b: AirUnit, s: Straggler, seen = false): void {
     b.away++;
-    this.say('air:limped', b, '', { id: s.id, box: b.id, ...this.stragAt(b, s) });
+    // Told only when one is seen to get clear in the fight; those that go home with their box, or at the end, are not.
+    this.say('air:limped', b, seen ? `${this.aBomberOf(b, true, 'damaged')} has turned for home on its own.` : '', { id: s.id, box: b.id, ...this.stragAt(b, s) });
   }
 
   /**
@@ -749,7 +767,7 @@ export class AirSim implements BattleSim<AirUnit> {
       s.back += s.rate * dt;
       s.down += s.sink * dt;
       if (!done) s.back = Math.min(s.back, G.held);
-      else if (s.back > G.clear) { u.strag.splice(u.strag.indexOf(s), 1); this.limped(u, s); }
+      else if (s.back > G.clear) { u.strag.splice(u.strag.indexOf(s), 1); this.limped(u, s, true); }
     }
     const guard = this.units.find((f) => f.job.do === 'escort' && f.job.on === u.id && f.job.close && flying(f) && !away(f) && !f.contacts.length);
     u.strag.forEach((s, k) => { s.cover = k === 0 && guard ? guard.id : null; });
