@@ -100,8 +100,9 @@
 //     'howitzer' 105 mm, 'heavy' 150 or 155 mm, and 'light' for a 37 to 57 mm tank or anti-tank gun (the sheet has no
 //     row for it yet: draw it at its hand grenade row). Guns by the model the unit table draws them with in the
 //     battle's year, tanks in the year their nation's designs have reached (DesignYears; armourYear in
-//     src/campaign/tech.ts, set at TC.battleStart), so a tank's blast is the gun it is drawn with; foot, mountain and lorried infantry 'mortar', their own battalions' (they land no shells:
-//     their blows count as small arms); cavalry, engineers and fortress troops carry no cal. The mix plan's
+//     src/campaign/tech.ts, set at TC.battleStart), so a tank's blast is the gun it is drawn with; foot, mountain and
+//     lorried infantry 'mortar', their own battalions' (they land no shells: their blows count as small arms);
+//     cavalry, engineers and fortress troops carry no cal. The mix plan's
 //     impacts.bySize (sound/mix/mix.json) reads light as grenade, mortar as mortar, field as field_gun, howitzer as
 //     howitzer_105 and heavy as howitzer_150.
 //   A 'shell' event each time a gun's or a tank's blow costs a block one of its models (figures falls in the same

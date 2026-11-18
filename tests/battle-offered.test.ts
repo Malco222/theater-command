@@ -25,21 +25,27 @@ function at(terrain: Terrain, o: { river?: boolean; fort?: number; divs?: number
 }
 const list = (...kinds: PlaceKind[]) => kinds.map((kind) => ({ kind }));
 const SPLIT = "The staff settles every battle where only part of the attack must cross a river and the odds are 1.7 to 1 or less: the field cannot fight one at the card's odds.";
+const WHOLE = "The staff settles every battle where the whole attack must cross a river and the odds are 1.7 to 1 or less: the field cannot fight one at the card's odds.";
 
 describe('the safety net (b439)', () => {
-  it('lists one kind for release 1, with its measure: a river only part of the attack must cross, on a close card (b492(1), b494)', () => {
-    expect(STAFF_SETTLES).toEqual([{ kind: 'river-split-close', measured: '60 captured campaign attacks, 10 fights each, 18 November, with the river hold of b494: 15 points under the card' }]);
+  it('lists two kinds for release 1, with their measures: a river part or all of the attack must cross, on a close card (b492(1), b494)', () => {
+    expect(STAFF_SETTLES).toEqual([
+      { kind: 'river-split-close', measured: '60 captured campaign attacks, 10 fights each, 18 November, with the river hold of b494: 15 points under the card' },
+      { kind: 'river-whole-close', measured: '32 captured campaign attacks, 10 fights each, 18 November, with the river hold of b494: 13 points under the card' },
+    ]);
     expect(staffOnly(at('forest', { dry: 1 }))).toBe(SPLIT);
     expect(staffOnly(at('plains', { dry: 2, fort: 2, divs: 12 }))).toBe(SPLIT);
+    expect(staffOnly(at('forest', { river: true }))).toBe(WHOLE);
+    expect(staffOnly(at('plains', { river: true, fort: 2, divs: 12, odds: 0.5 }))).toBe(WHOLE);
   });
-  it('offers every other battle on the field: whole crossings, split crossings on easier cards, and every ground, works and size', () => {
+  it('offers every other battle on the field: river crossings on easier cards, and every ground, works and size', () => {
     for (const g of GROUNDS) {
       for (const odds of [0.5, 1.3, 1.7, 3]) {
-        // The whole attack crosses, or there is no river: offered at any odds.
-        expect(staffOnly(at(g, { river: true, fort: 2, odds }))).toBeNull();
+        // The whole attack crosses: offered on a card easier than close. No river: offered at any odds.
+        expect(staffOnly(at(g, { river: true, fort: 2, odds }))).toBe(odds > 1.7 ? null : WHOLE);
         expect(staffOnly(at(g, { odds }))).toBeNull();
         expect(staffOnly(at(g, { fort: 1, divs: 2, odds }))).toBeNull();
-        expect(staffOnly(at(g, { river: true, divs: 12, odds }))).toBeNull();
+        expect(staffOnly(at(g, { river: true, divs: 12, odds: odds + 1.5 }))).toBeNull();
       }
       // Some cross and some come on dry, on a card easier than close: offered.
       for (const odds of [1.71, 2, 2.6, 6]) for (const dry of [1, 2]) expect(staffOnly(at(g, { dry, odds }))).toBeNull();
@@ -52,7 +58,8 @@ describe('the safety net (b439)', () => {
     expect(staffOnly(t)).toBeNull();
   });
   it('sorts a battle by the defence\'s size, its ground, and a river or works where it has them', () => {
-    expect(kindsOf(at('hills', { river: true, divs: 2 }))).toEqual(['smallest', 'hills', 'river']);
+    expect(kindsOf(at('hills', { river: true, divs: 2 }))).toEqual(['smallest', 'hills', 'river', 'river-whole-close']);
+    expect(kindsOf(at('hills', { river: true, divs: 2, odds: 1.71 }))).toEqual(['smallest', 'hills', 'river']);
     expect(kindsOf(at('plains', { fort: 1, divs: 6 }))).toEqual(['middle', 'plains', 'works']);
     expect(kindsOf(at('urban', { divs: 11 }))).toEqual(['largest', 'urban']);
     expect(kindsOf(at('marsh', { dry: 1, fort: 1, divs: 6 }))).toEqual(['middle', 'marsh', 'river', 'river-split-close', 'works']);
@@ -80,9 +87,9 @@ describe('the safety net (b439)', () => {
     // A kind of the list this battle is not: offered.
     expect(staffOnly(at('plains'), list('mountain', 'river'))).toBeNull();
     // No "yet", no "for now", no "there".
-    for (const k of ['river', 'works', 'plains', 'forest', 'hills', 'mountain', 'marsh', 'urban', 'desert', 'smallest', 'middle', 'largest', 'river-split-close'] as PlaceKind[]) {
+    for (const k of ['river', 'works', 'plains', 'forest', 'hills', 'mountain', 'marsh', 'urban', 'desert', 'smallest', 'middle', 'largest', 'river-split-close', 'river-whole-close'] as PlaceKind[]) {
       const ground = (GROUNDS as string[]).includes(k) ? (k as Terrain) : 'plains';
-      const t = at(ground, { river: k === 'river', dry: k === 'river-split-close' ? 1 : 0, fort: k === 'works' ? 1 : 0, divs: k === 'smallest' ? 2 : k === 'largest' ? 11 : 5 });
+      const t = at(ground, { river: k === 'river' || k === 'river-whole-close', dry: k === 'river-split-close' ? 1 : 0, fort: k === 'works' ? 1 : 0, divs: k === 'smallest' ? 2 : k === 'largest' ? 11 : 5 });
       const said = staffOnly(t, list(k))!;
       expect(said).toMatch(/^The staff settles every battle .+: the field cannot fight one at the card's odds\.$/);
       expect(said).not.toMatch(/\byet\b|for now|\bthere\b/);
