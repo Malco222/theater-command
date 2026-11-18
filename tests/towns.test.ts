@@ -193,6 +193,21 @@ describe('the prize', () => {
     expect(p.items.some((i) => i.key === 'capital' || i.key === 'fort' || i.key === 'frees')).toBe(false);
   });
 
+  it('says ground that pays nothing pays nothing, not 0 a month (the UI director, review-1441x878 section 7)', () => {
+    // (Outside the grand campaign only factories pay: a province without one pays nothing.)
+    const g = createGame(3, 'GER');
+    const own = g.regions.find((r) => r.ctrl === 'GER' && r.owner === 'GER' && r.fac === 0)!;
+    const p = prizeOf(g, own.id, 'GER')!;
+    expect(p.kind).toBe('yours');
+    expect(p.income).toBe(0);
+    expect(p.line.startsWith(`${townName(own)} pays nothing into your treasury`)).toBe(true);
+    const ally = g.regions.find((r) => r.ctrl !== 'GER' && allied(g, 'GER', r.ctrl) && r.fac === 0)!;
+    const q = prizeOf(g, ally.id, 'GER')!;
+    expect(q.kind).toBe('ally');
+    expect(q.line).toContain('your ally, and pays nothing into its treasury');
+    expect(`${p.line} ${q.line}`).not.toMatch(/\b0 a month/);
+  });
+
   it('says what taking an enemy province would bring, and what it would cost the enemy', () => {
     const g = open('GER');
     const w = g.byName.Warsaw;

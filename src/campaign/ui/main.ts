@@ -7018,16 +7018,17 @@ function wornNote(r: BattleReport): string {
   return `<div class="note wornnote"><b>${ours ? 'The line held, but its works are worn.' : 'Thrown back, but not for nothing.'}</b> The attack took ${took} off the ${ours ? '' : "defenders' "}works at ${esc(r.regionName)}${ours ? '' : `, at the price of ${num(paid.lost)} men${paid.pct ? `, ${paid.pct}% of those sent in` : ''}`}: ${now}. ${ours ? `Your troops there ${pressedPace()} this month. A quiet month builds the works up again; another attack takes off more.` : `The defenders ${pressedPace()} this month, so the next blow meets less. Guns in the attack wear works down faster.`}</div>`;
 }
 /** What one side lost in a battle, in men and as a share of those engaged: the fight itself and whoever laid down his arms after it. */
-function lostIn(us: BattleReport['attackers'], fought: number): { lost: number; pct: number } {
+function lostIn(us: BattleReport['attackers'], fought: number): { lost: number; pct: number; all: boolean } {
   const total = us.reduce((s, u) => s + u.men, 0);
   const lost = Math.max(fought, us.reduce((s, u) => s + u.lost, 0));
-  return { lost, pct: total > 0 && lost > 0 ? Math.max(1, Math.round(100 * Math.min(1, lost / total))) : 0 };
+  return { lost, pct: total > 0 && lost > 0 ? Math.max(1, Math.round(100 * Math.min(1, lost / total))) : 0, all: total > 0 && lost >= total };
 }
 /** The price of a battle in one sentence, to whichever side reads its report. */
 function priceLine(r: BattleReport): string {
   if (r.yielded) return '';
   const a = lostIn(r.attackers, r.attLost), d = lostIn(r.defenders, r.defLost);
-  const of = (x: { lost: number; pct: number }): string => `${num(x.lost)}${x.pct ? ` (${x.pct}%)` : ''}`;
+  // (A side that lost every man reads 'all 27,989', not '27,989 (100%)': the UI director, review-1441x878 section 7.)
+  const of = (x: { lost: number; pct: number; all: boolean }): string => (x.all ? `all ${num(x.lost)}` : `${num(x.lost)}${x.pct ? ` (${x.pct}%)` : ''}`);
   if (g.human && (r.attNat === g.human || r.attackers.some((u) => u.nat === g.human))) return `It cost you ${num(a.lost)} men${a.pct ? `, ${a.pct}% of those sent in,` : ''} against ${of(d)} of theirs.`;
   if (g.human && r.defenders.some((u) => u.nat === g.human)) return `It cost the attackers ${num(a.lost)} men${a.pct ? `, ${a.pct}% of those sent in,` : ''} against ${of(d)} of yours.`;
   return `The attackers lost ${of(a)} men, the defenders ${of(d)}.`;

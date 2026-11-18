@@ -225,7 +225,8 @@ export function prizeOf(g: Game, region: number, nat: string | null = g.human): 
     let left = income - whole.reduce((a, b) => a + b, 0);
     for (const i of exact.map((_, i) => i).filter((i) => exact[i] >= 0.5).sort((a, b) => exact[b] - whole[b] - (exact[a] - whole[a]) || a - b)) { if (left <= 0) break; whole[i]++; left--; }
     const parts = named.map(([word], i) => `${word} ${whole[i] < 1 ? 'under 1' : whole[i]}`);
-    items.push({ key: 'income', label: 'Money', text: `${income} a month to ${whose}${parts.length ? ` (${parts.join(', ')})` : ''}${to !== r.owner ? '. Conquered ground pays less than it pays its own country' : ''}` });
+    // (Ground that pays nothing says so in words, not as 0 a month: the UI director, review-1441x878 section 7.)
+    items.push({ key: 'income', label: 'Money', text: `${income ? `${income} a month` : 'Nothing'} to ${whose}${parts.length ? ` (${parts.join(', ')})` : ''}${to !== r.owner ? '. Conquered ground pays less than it pays its own country' : ''}` });
   }
   if (r.fac > 0) items.push({ key: 'factory', label: 'Industry', text: `${plural(r.fac, 'factory', 'factories')}${factories < r.fac ? `, ${r.fac - factories} wrecked by bombing` : ''}${to !== r.owner ? '. Working for a conqueror they turn out less, and heavy equipment can only be built at home' : ''}` });
   if (r.oil) items.push({ key: 'oil', label: 'Oil', text: resRules(g) ? `An oilfield: ${Math.round(oil * 10) / 10} a month to ${to === nat ? 'your' : `${g.nations[to].adj}`} depots${to !== r.owner ? ', less than its owner draws' : ''}` : 'An oilfield' });
@@ -243,8 +244,8 @@ export function prizeOf(g: Game, region: number, nat: string | null = g.human): 
     r.vp > 0 && !r.overseas ? `${plural(r.vp, 'victory point')} of ${theName(owner)}'s ${vpAll}` : '',
   ].filter(Boolean);
   const tail = gains.length ? `: ${listed(gains)}` : '';
-  const line = kind === 'yours' ? `${town} pays ${income} a month into your treasury${tail}.`
-    : kind === 'ally' ? `${town} is held by ${theName(holder)}, your ally, and pays ${incomeNow} a month into its treasury${tail}.`
+  const line = kind === 'yours' ? `${town} pays ${income ? `${income} a month` : 'nothing'} into your treasury${tail}.`
+    : kind === 'ally' ? `${town} is held by ${theName(holder)}, your ally, and pays ${incomeNow ? `${incomeNow} a month` : 'nothing'} into its treasury${tail}.`
     : frees ? `Taking ${town} frees ${g.nations[frees].name} if you hold it at ${monthsEnd(g, g.nations[frees])} with no enemy corps in or next to it: ${g.nations[frees].name} returns to the war on your side and takes its capital back. ${theName(holder, true)} loses ${incomeNow} a month${tail}.`
     : kind === 'restored' ? `Taking ${town} gives it back to ${theName(owner)}, your ally, and takes ${incomeNow} a month from ${theName(holder)}${tail}.`
     : `Taking ${town} is worth ${income} a month to you and costs ${theName(holder)} ${incomeNow}${tail}.${capitalOf && atWar(g, nat, capitalOf) ? ` It is ${theName(owner)}'s capital.` : ''}`;
