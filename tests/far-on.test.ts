@@ -29,7 +29,7 @@ import { NAVY } from '../src/campaign/navy';
 import { RES, fieldOverseas, fieldYield, stores } from '../src/campaign/resources';
 import { blocked } from '../src/campaign/rivers';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { stalemates, startOpen } from '../src/campaign/staff';
+import { joinsOn, stalemates, startOpen } from '../src/campaign/staff';
 import { prizeOf, townName } from '../src/campaign/towns';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
@@ -512,5 +512,31 @@ describe('a colony on the far side (ruling 231)', () => {
     for (const r of g.regions) if (r.owner === 'UK' && r.overseas && shoreOf(r) === 0) r.ctrl = 'BEL';
     expect(touches(2, true)).toBe(true);
     expect(threatened(g, 'UK')).toBe(false);
+  });
+
+  it("is no harbour for Canada's army: the island's guard holds against the colony exception where history's dates do", () => {
+    const tripoli = (g: Game): Game['regions'][number] => g.byName['Tripoli'];
+    const g = grand();
+    expect(tripoli(g)).toMatchObject({ owner: 'ITA', overseas: true });
+    for (const [a, b] of [['UK', 'ITA'], ['CAN', 'ITA'], ['USA', 'ITA']]) if (!atWar(g, a, b)) setWar(g, a, b);
+    for (const turn of [10, 28, 40]) {
+      g.turn = turn;
+      // Britain's harbours are Canada's base at any time; an Italian colony is none of hers, and is America's as ruling 60 gave it.
+      expect(joinsOn(g, 'CAN', g.byName['Kent']), `month ${turn}`).toBe(true);
+      expect(joinsOn(g, 'CAN', tripoli(g)), `month ${turn}`).toBe(false);
+      expect(joinsOn(g, 'CAN', g.byName['Alexandria']), `month ${turn}`).toBe(false);
+      expect(joinsOn(g, 'USA', tripoli(g)), `month ${turn}`).toBe(true);
+    }
+    // From 1943 she goes on behind a British or an American army, there as anywhere on her list.
+    g.turn = 41;
+    expect(joinsOn(g, 'CAN', tripoli(g))).toBe(false);
+    expect(joinsOn(g, 'CAN', tripoli(g), 'UK')).toBe(true);
+    expect(joinsOn(g, 'CAN', g.byName['Alexandria'])).toBe(true);
+    // At the two loosest stops the staff keeps its own rules.
+    for (const stop of [4, 5]) {
+      const h = grand();
+      expect(setStop(h, stop, true)).toBe(true);
+      expect(joinsOn(h, 'CAN', tripoli(h)), `stop ${stop}`).toBe(true);
+    }
   });
 });

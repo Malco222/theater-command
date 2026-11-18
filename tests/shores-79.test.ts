@@ -16,6 +16,7 @@ import { landingWatch } from '../src/campaign/ai';
 import { addCorps, atWar, capture, createGame, declareWar, removeCorps } from '../src/campaign/game';
 import { HISTORY, setStop, stopDef } from '../src/campaign/history';
 import { loadGame, saveGame } from '../src/campaign/save';
+import { FAR_STAGE } from '../src/campaign/stage';
 import { builtUp, frontAshore, joinsOn, massing, oceanRuns, opensOn, seaFoe, startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import { type Corps, type Game, type Region } from '../src/campaign/types';
@@ -186,6 +187,11 @@ describe('Canada\'s corps are the island\'s guard', () => {
     for (const k of Object.keys(g.flags)) if (k.startsWith('st:lodged:')) delete g.flags[k];
     // Britain's own harbours are its base at any time.
     for (const name of ['Northumbria', 'Hampshire', 'Kent']) expect(joinsOn(g, 'CAN', R(g, name)), name).toBe(true);
+    // A colony overseas is open to her at any time on the older chart. With the whole world on it the island's guard
+    // holds against that too (ruling 231, 3): in December 1942 Tripoli is no harbour of hers, whoever holds it.
+    expect(joinsOn(g, 'CAN', R(g, 'Tripoli'))).toBe(!FAR_STAGE);
+    expect(joinsOn(g, 'CAN', R(g, 'Tripoli'), 'UK')).toBe(!FAR_STAGE);
+    expect(joinsOn(g, 'USA', R(g, 'Tripoli'))).toBe(true);
     // December 1942: a harbour in France in British hands with the Germans next door is Britain's front, and America's, and not yet Canada's.
     const brest = hold(g, 'Brittany', 'UK');
     expect(brest.nb.some((j) => atWar(g, 'CAN', g.regions[j].ctrl))).toBe(true);
@@ -208,9 +214,10 @@ describe('Canada\'s corps are the island\'s guard', () => {
     expect(joinsOn(g, 'CAN', brest)).toBe(true);
     removeCorps(g, c);
     expect(joinsOn(g, 'CAN', brest)).toBe(false);
-    // Ground that was never on its list stays off it, and a colony overseas is open as before.
+    // Ground that was never on its list stays off it, and a colony overseas is open as before (with the whole world on
+    // the chart, behind an ally as on any shore).
     expect(joinsOn(g, 'CAN', R(g, 'Bergen'), 'UK')).toBe(false);
-    expect(joinsOn(g, 'CAN', R(g, 'Tripoli'))).toBe(true);
+    expect(joinsOn(g, 'CAN', R(g, 'Tripoli'), FAR_STAGE ? 'UK' : undefined)).toBe(true);
   });
 
   it('at the two loosest stops Canada keeps no date, and goes only into a British or American landing that is ashore to stay (Version 83)', () => {

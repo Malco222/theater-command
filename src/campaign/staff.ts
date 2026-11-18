@@ -34,7 +34,7 @@ import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
-import { acrossOcean, attachWorld, beyondEurope, neighbourByLand, overseasOf } from './world';
+import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, overseasOf } from './world';
 import { tieWar } from './far';
 import { EASTERN, allied, assess, atWar, bloc, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, limitAttackers, lineOwners, weather } from './game';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
@@ -1367,7 +1367,8 @@ export const neighbourAcrossTheWater = (g: Game, nat: string, e: string): boolea
  * whose landing the harbour is, where it is one. A staff that waits behind its allies (Version 79, ruling 60:
  * Canada, the island's guard) goes on from its base not before 'joinFrom', and only behind one of the allies named
  * under 'behind': into that ally's landing, a harbour he holds, or one where his field corps stand in it or next to
- * it. That holds at the stops of the history dial where history's dates do.
+ * it. That holds at the stops of the history dial where history's dates do, and there, with the whole world on the
+ * chart, it holds for a colony overseas as for any other shore (ruling 231, 3).
  */
 export function joinsOn(g: Game, nat: string, r: Region, by?: string): boolean {
   const P = planned(g, nat);
@@ -1379,7 +1380,13 @@ export function joinsOn(g: Game, nat: string, r: Region, by?: string): boolean {
     if (P?.join && !P.join.includes(r.owner)) return false;
     return behindToStay(g, nat, r, W.behind ?? []);
   }
-  if (!P || r.overseas || ownShore(g, nat, r)) return true;
+  // A colony overseas is open always (ruling 60(b)1). Not to a staff that waits behind its allies, once the whole
+  // world is on the chart (ruling 231, 3): the island's guard holds against it at the stops where history's dates
+  // hold. Canada's corps cross only to Britain, and go on from it as below, not before 1943 and behind a British or
+  // an American landing. (On the older chart a colony near an enemy was a rare thing. With Italy's Horn of Africa on
+  // it there is one from June 1940, and Canada's army sailed for Tripoli and Alexandria.)
+  const guard = !!P?.behind && dated(g) && farOn(g);
+  if (!P || (r.overseas && !guard) || ownShore(g, nat, r)) return true;
   if (P.join && !P.join.includes(r.owner)) return false;
   if (!P.behind || !dated(g) || based(P, r)) return true;
   const B = P.behind;
