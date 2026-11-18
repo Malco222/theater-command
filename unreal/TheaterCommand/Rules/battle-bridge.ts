@@ -102,6 +102,8 @@ interface Session {
   /** How the campaign takes the result, once the battle is over. Called once. */
   settle: (r: FieldResult) => unknown;
   settled: unknown;
+  /** A speed chosen before the armies met: the rush is over and that speed runs (the UI director, b467, as the page). */
+  byHand?: boolean;
 }
 
 /** An air group's loop: its engines while it flies, nothing on the ground or once it is gone. */
@@ -194,13 +196,15 @@ export function battleCalls(h: BattleHooks) {
       const ses = need();
       const met = (ses.sim as Partial<LandBattle>).contactAt;
       const sp = ses.clock.speed;
-      ses.clock.rush = met === null && sp > 0 && sp < RUSH ? RUSH / sp : 1;
+      ses.clock.rush = met === null && !ses.byHand && sp > 0 && sp < RUSH ? RUSH / sp : 1;
       ses.clock.advance(ses.sim, seconds);
       return viewOut(ses, ses.sim.view(ses.me));
     },
     battleSpeed(speed: number) {
       const ses = need();
       const sp = (SPEEDS as readonly number[]).includes(speed) ? (speed as Speed) : 1;
+      // Before the armies meet, a speed chosen ends the rush at once (b467); the pause does not.
+      if (sp > 0 && (ses.sim as Partial<LandBattle>).contactAt === null) ses.byHand = true;
       ses.clock.set(sp);
       return { speed: ses.clock.speed };
     },
