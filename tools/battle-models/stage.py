@@ -264,7 +264,7 @@ class Sea:
     passes her, as a film camera keeping station on her would see it."""
 
     def __init__(self, wave=1.9, choppy=1.25, far=14000.0, cells=560, fine=2.0, tile=420, wind=12.0, heading=205.0, sun_turn=-35.0,
-                 clouds=True, foam=-1.8, haze=(2500.0, 16000.0), speed=0.0, sky_too=True, haze_mix=0.75, haze_glow=0.88):
+                 clouds=True, foam=-1.8, haze=(2500.0, 16000.0), speed=0.0, sky_too=True, haze_mix=0.75, haze_glow=0.88, back_light=1.0):
         sc = bpy.context.scene
         if sky_too:
             sky(sun_turn=sun_turn, clouds=clouds)
@@ -314,6 +314,7 @@ class Sea:
             m_.show_viewport = False                              # (only a render works the sea out, not every pose)
         self.ob, self.mod = o, mod
         self.haze_mix, self.haze_glow = haze_mix, haze_glow
+        self.back_light = back_light                              # (how much of the haze's glow lights what is over it)
         self.mat = self._material(haze)
         me.materials.append(self.mat)
         self.wakes = []
@@ -367,6 +368,13 @@ class Sea:
         em = nt.nodes.new("ShaderNodeEmission")
         em.inputs["Color"].default_value = (*HAZE, 1)
         em.inputs["Strength"].default_value = self.haze_glow
+        if self.back_light < 1.0:
+            # (the haze is as bright as the foot of the sky to look at, but the light that comes up off a sea is far
+            #  less than the light that comes down: or a white belly is as bright as the sky behind it and a wing seen
+            #  from just below vanishes into it)
+            lp = nt.nodes.new("ShaderNodeLightPath")
+            seen = _math(nt, "ADD", _math(nt, "MULTIPLY", lp.outputs["Is Camera Ray"], 1.0 - self.back_light), self.back_light)
+            nt.links.new(_math(nt, "MULTIPLY", seen, self.haze_glow), em.inputs["Strength"])
         hz = nt.nodes.new("ShaderNodeMixShader")
         nt.links.new(_math(nt, "MULTIPLY", mr.outputs["Result"], self.haze_mix), hz.inputs[0])
         nt.links.new(ms.outputs[0], hz.inputs[1])
@@ -788,7 +796,7 @@ class Clouds:
     """Broken fair-weather cloud seen from above: sheets of soft white, one a little over the other, sliding by.
     (Heaps of puffs looked like cotton wool at this size; a sheet with ragged holes reads as cloud from a height.)"""
 
-    def __init__(self, z, cover=0.36, size=120000.0, patch=3400.0, layers=3, deep=210.0, haze=(3500.0, 24000.0), seed=31):
+    def __init__(self, z, cover=0.36, size=120000.0, patch=3400.0, layers=3, deep=210.0, haze=(3500.0, 24000.0), seed=31, back_light=1.0):
         self.obs = []
         for k in range(layers):
             me = bpy.data.meshes.new("cloud")
@@ -852,7 +860,20 @@ class Clouds:
             ms = nt.nodes.new("ShaderNodeMixShader")
             nt.links.new(_math(nt, "MULTIPLY", alpha, _math(nt, "SUBTRACT", 1.0, _math(nt, "POWER", mr.outputs["Result"], 2.0))), ms.inputs[0])
             nt.links.new(clear.outputs[0], ms.inputs[1])
-            nt.links.new(mh.outputs[0], ms.inputs[2])
+            seen = mh.outputs[0]
+            if back_light < 1.0:
+                # (a sunlit sheet of cloud is as bright to look at as it is, but it lights what flies over it less:
+                #  with all of that light a white belly is as bright as the sky behind it, and a pale wing seen from
+                #  just below is lost against it)
+                lp = nt.nodes.new("ShaderNodeLightPath")
+                none = nt.nodes.new("ShaderNodeEmission")
+                none.inputs["Strength"].default_value = 0.0
+                dim = nt.nodes.new("ShaderNodeMixShader")
+                nt.links.new(_math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 1.0, lp.outputs["Is Camera Ray"]), 1.0 - back_light), dim.inputs[0])
+                nt.links.new(mh.outputs[0], dim.inputs[1])
+                nt.links.new(none.outputs[0], dim.inputs[2])
+                seen = dim.outputs[0]
+            nt.links.new(seen, ms.inputs[2])
             nt.links.new(ms.outputs[0], out.inputs["Surface"])
             me.materials.append(m)
             self.obs.append(o)

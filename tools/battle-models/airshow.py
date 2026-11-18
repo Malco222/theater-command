@@ -32,7 +32,8 @@ from rigid import smooth  # noqa: E402
 X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
 
 
-SKIN = [0.38, 0.35]                                          # (roughness and shine of a painted skin)
+SKIN = [0.6, 0.25]                                           # (roughness and shine of a painted skin: the war's paints were matt)
+BACK_LIGHT = [0.5]                                           # (how much of the light off the cloud and haze below reaches her belly)
 
 
 def plane_look(paint, mat, nt, bsdf, mix, bare=False):
@@ -43,7 +44,7 @@ def plane_look(paint, mat, nt, bsdf, mix, bare=False):
         bsdf.inputs["Roughness"].default_value = 0.6
         bsdf.inputs["Specular IOR Level"].default_value = 0.1
     if paint in ("upper", "upper2", "under", "nose", "rivet", "rivet_under"):
-        bsdf.inputs["Roughness"].default_value = SKIN[0]     # (a doped and polished skin: it takes a soft light along its curves)
+        bsdf.inputs["Roughness"].default_value = SKIN[0]     # (matt paint: it takes a soft light along its curves and mirrors nothing)
         bsdf.inputs["Specular IOR Level"].default_value = SKIN[1]
         if bare:
             bsdf.inputs["Metallic"].default_value = 0.85
@@ -61,14 +62,14 @@ class Air:
     def __init__(self, speed=95.0, alt=2600.0, sun_turn=148.0, clouds=0.36, seed=5):
         kit.fresh()
         self.speed, self.alt = speed, alt
-        self.sea = stage.Sea(wave=1.6, far=70000.0, cells=420, fine=24.0, haze=(3500.0, 55000.0), speed=speed, sky_too=False, sun_turn=sun_turn, haze_mix=1.0, haze_glow=0.8 * 1.6)
+        self.sea = stage.Sea(wave=1.6, far=70000.0, cells=420, fine=24.0, haze=(3500.0, 55000.0), speed=speed, sky_too=False, sun_turn=sun_turn, haze_mix=1.0, haze_glow=0.8 * 1.6, back_light=BACK_LIGHT[0])
         bpy.data.objects["sea"].location.z = -alt
         stage.sky(sun_elev=44.0, sun_turn=sun_turn, level=0.8, clouds=True, high=True)
         self.fx = stage.Effects(seed=seed, wind=(-speed, 0.0, 0.0))
         self.models = {}
         self.cam = kit.camera("cam", 50.0)
         self.cam.data.clip_end = 120000.0
-        self.clouds = stage.Clouds(-alt + 1150.0, cover=clouds) if clouds else None
+        self.clouds = stage.Clouds(-alt + 1150.0, cover=clouds, back_light=BACK_LIGHT[0]) if clouds else None
 
     def model(self, name):
         if name not in self.models:

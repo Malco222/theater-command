@@ -169,6 +169,10 @@ What they add to the form:
   plane in other paint. The Hellcat is deep and portly with a chin intake (`scoops`), a short hood with metal
   behind and square-cut tips; the Avenger a deep barrel with a belly that steps up to her lower gun and a squared
   fin; the Val has the rounded, elliptical wing. The plain three stay plain and borrow none of these.
+- **Matt paint, and less light from below** (`SKIN` and `BACK_LIGHT` in `airshow.py`, the pictures only). The war's
+  paints were matt: roughness 0.6, shine 0.25. And the sunlit cloud and haze under her light her belly with half
+  their brightness, or a white belly is as bright as the sky behind it and a pale wing seen from just below is lost
+  against it (a wing with dihedral shows her under paint to a camera level with her).
 - **Bare metal** (`bare` in the numbers; the file says `finish: "bare metal"`): draw her painted skin (`upper`,
   `upper2`, `under`, `nose`) as metal. The pictures use metallic 0.85, roughness 0.4.
 - The B-29 has two bomb bays. The model opens the forward one; the rear one's doors are scribed in her belly
