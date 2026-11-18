@@ -141,6 +141,11 @@ def flames(fx, where, start=0.0, end=1e9, size=1.0):
     fx.stream(where, 0.07, make, start=start, end=end)
 
 
+# A shell's flame: deep orange, no blue in it and not too bright (the picture's tone curve bleaches a bright flame to
+# peach or salmon whatever its colour), going to dull red as it dies.
+FLAME, FLAME_OLD = (0.16, 0.042, 0.0), (0.1, 0.018, 0.0)
+
+
 def shell_hit(fx, t0, at, size=1.0, earth=True, lamp=None, glare=450.0, flame=1.0, wall=None):
     """A shell bursting on a work or the ground: a wink of ragged flame, a fan of thrown earth and dust, grey-brown
     smoke. Give t0 a fiftieth of a second before a frame. `lamp` is where the burst's light stands from the burst
@@ -170,8 +175,17 @@ def shell_hit(fx, t0, at, size=1.0, earth=True, lamp=None, glare=450.0, flame=1.
                 fan = math.radians(-30.0 + 240.0 * a / (2 * math.pi))
                 d = (out * (0.25 + 0.5 * h) + along * math.cos(fan) + Z * math.sin(fan)).normalized()
                 root = p0 + out * 0.12 + along * ox * 1.3 * size + Z * oy * 0.8 * size
-                thin = 0.2 + 0.12 * h
-            p = fx.puff(t, root + d * R * 0.85, vel=d * 4.0, life=g.uniform(0.06, 0.085), r=(R * 0.8, R * 1.2), col=(0.34, 0.115, 0.02), col2=(0.28, 0.065, 0.012), alpha=1.0,
+                thin = 0.12 + 0.08 * h
+                R *= 0.9
+            elif earth:
+                # (in soft ground the flame is low and wide, spat out sideways under the earth it throws: standing
+                # tall on the grass it read as a bonfire)
+                w = 0.55 + 0.9 * h
+                d = Vector((math.cos(a) * w, math.sin(a) * w, 0.8)).normalized()
+                R *= 0.72 if i else 0.45         # (the first is the one with the white-hot heart: kept small)
+                root = p0 + Z * 0.04 + Vector((ox, oy, 0.0)) * size * 1.3
+                thin = 0.3 if i else 0.22
+            p = fx.puff(t, root + d * R * 0.85, vel=d * 4.0, life=g.uniform(0.06, 0.085), r=(R * 0.8, R * 1.2), col=FLAME, col2=FLAME_OLD, alpha=1.0,
                         kind="tongue" if i < 1 else "lick", drag=6.0, wind=0.0, squash=(1.0, thin, thin), fade_in=0.01, grow=0.4)
             p["ob"].rotation_euler = d.to_track_quat("X", "Z").to_euler()
             seen_only(p)
@@ -183,16 +197,49 @@ def shell_hit(fx, t0, at, size=1.0, earth=True, lamp=None, glare=450.0, flame=1.
                 R = g.uniform(0.16, 0.44) * size * flame
                 root = p0 + out * 0.1 + along * g.uniform(-0.45, 0.45) * size * flame + Z * g.uniform(-0.3, 0.3) * size * flame
                 thin = g.uniform(0.2, 0.38)
-                p = fx.puff(t, root + d * R * 0.85, vel=d * 5.0, life=g.uniform(0.06, 0.15), r=(R * 0.8, R * 1.25), col=(0.34, 0.115, 0.02), col2=(0.2, 0.045, 0.01), alpha=1.0,
+                p = fx.puff(t, root + d * R * 0.85, vel=d * 5.0, life=g.uniform(0.06, 0.15), r=(R * 0.8, R * 1.25), col=FLAME, col2=FLAME_OLD, alpha=1.0,
                             kind="lick", drag=6.0, wind=0.0, squash=(1.0, thin, thin), fade_in=0.01, grow=0.4)
                 p["ob"].rotation_euler = d.to_track_quat("X", "Z").to_euler()
                 seen_only(p)
             g.setstate(keep)
-        for i in range(13):      # (many small puffs kept close make one ragged knot; a few big ones, or small ones flung apart, read as balls)
-            v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.5, 1.6))).normalized() * g.uniform(1.2, 4.6) * size ** 0.5
-            c = g.uniform(0.08, 0.16)
-            fx.puff(t + 0.04, p0 + Z * 0.3, vel=v, life=g.uniform(2.6, 4.4), r=(0.32 * size, g.uniform(0.75, 1.35) * size), col=(0.2, 0.15, 0.11), col2=(c, c * 0.97, c * 0.93),
-                    alpha=g.uniform(0.45, 0.65), drag=2.8, rise=0.9, fade_in=0.04, grow=0.45, wind=0.9)
+        if earth and out is None:
+            # A shell in soft earth: a dark column taller than wide, ragged at the top, that leans with the wind and
+            # tears into uneven puffs, darker low and paler as it climbs. (It was thirteen puffs born on one spot,
+            # which hung as one soft round brown ball for a second before they spread.) The numbers the old knot
+            # drew are drawn and thrown away, and the new ones come from a die of their own, so nothing after moves.
+            for _ in range(13 * 11):
+                g.random()
+            keep = g.getstate()
+            q = random.Random(1000 + int(round(t0 * 100)))
+            # the first throw: black earth already up round the flame as it winks, half hiding it; it falls back
+            # (many, small and thrown nearly straight up, so that they stand as one spiked fountain taller than wide:
+            # sixteen bigger ones flung wide were a clump of dark balls)
+            for i in range(30):
+                a, w = q.uniform(0, 2 * math.pi), q.uniform(0.04, 0.5)
+                d = Vector((math.cos(a) * w, math.sin(a) * w, 1.0)).normalized()
+                start = p0 + Z * 0.08 + Vector((math.cos(a), math.sin(a), 0.0)) * q.uniform(0.0, 0.32) * size + d * q.uniform(0.1, 0.6) * size
+                fx.puff(t, start, vel=d * q.uniform(5.0, 9.5) * size ** 0.5, life=q.uniform(0.5, 1.0), r=(q.uniform(0.08, 0.15) * size, q.uniform(0.26, 0.42) * size),
+                        col=(0.035, 0.026, 0.018), col2=(0.15, 0.115, 0.08), alpha=q.uniform(0.75, 0.95), drag=2.4, gravity=7.0, fade_in=0.005, grow=0.6, wind=0.4, hold=0.35, cool=1.0)
+            # the column: many small puffs thrown up at all speeds (f: 0 stays at the foot, 1 reaches the top), born
+            # after the flame's lamp is out (lit young, they are cream bubbles)
+            for i in range(50):
+                f = q.random() if i < 44 else q.uniform(1.0, 1.12)          # (the last six: bumps on the top, never beads above it)
+                v = Vector((q.uniform(-1, 1) * (0.5 + 0.7 * f), q.uniform(-1, 1) * (0.5 + 0.7 * f), 0.6 + 7.2 * f)) * size ** 0.5
+                pale = min(1.0, f)
+                c0, c1 = Vector((0.13, 0.1, 0.075)), Vector((0.3, 0.27, 0.24))
+                thin = i >= 44
+                fx.puff(t + q.uniform(0.09, 0.2), p0 + Z * 0.15 + Vector((q.uniform(-0.25, 0.25), q.uniform(-0.25, 0.25), 0.0)) * size, vel=v,
+                        life=(q.uniform(1.9, 3.0) + 0.9 * pale) if not thin else q.uniform(1.0, 1.6),
+                        r=(q.uniform(0.1, 0.18) * size, (q.uniform(0.38, 0.62) + 0.3 * pale) * size if not thin else q.uniform(0.3, 0.42) * size),
+                        col=(0.07, 0.052, 0.038), col2=tuple(c0.lerp(c1, pale) * q.uniform(0.9, 1.1)), alpha=(0.7 - 0.32 * pale) * q.uniform(0.85, 1.1),
+                        drag=2.8, rise=0.25 + 0.7 * pale, fade_in=0.03, grow=0.5, wind=0.5 + 0.9 * pale + q.uniform(-0.15, 0.25), cool=1.3)
+            g.setstate(keep)
+        else:
+            for i in range(13):      # (many small puffs kept close make one ragged knot; a few big ones, or small ones flung apart, read as balls)
+                v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.5, 1.6))).normalized() * g.uniform(1.2, 4.6) * size ** 0.5
+                c = g.uniform(0.08, 0.16)
+                fx.puff(t + 0.04, p0 + Z * 0.3, vel=v, life=g.uniform(2.6, 4.4), r=(0.32 * size, g.uniform(0.75, 1.35) * size), col=(0.2, 0.15, 0.11), col2=(c, c * 0.97, c * 0.93),
+                        alpha=g.uniform(0.45, 0.65), drag=2.8, rise=0.9, fade_in=0.04, grow=0.45, wind=0.9)
         # (its light is the near ground's for one frame: the whole field must not jump)
         fx.light(t, p0 + lamp, glare * size * size, 0.08, r=0.8)
     fx.once(t0, (at, Z), flash)
@@ -203,7 +250,8 @@ def shell_hit(fx, t0, at, size=1.0, earth=True, lamp=None, glare=450.0, flame=1.
         for i in range(26):
             v = Vector((g.uniform(-1, 1) * 1.5, g.uniform(-1, 1) * 1.5, g.uniform(4.2, 8.2))) * size ** 0.5
             c = g.uniform(0.85, 1.15)
-            fx.puff(t, p0 + Z * 0.15 + Vector((g.uniform(-0.3, 0.3), g.uniform(-0.3, 0.3), 0.0)) * size, vel=v, life=g.uniform(1.0, 1.7), r=(0.16 * size, g.uniform(0.34, 0.62) * size),
+            # (born as the flame's lamp goes out: lit by it, this brown veil was a cream bubble in the flame's heart)
+            fx.puff(t + 0.085, p0 + Z * 0.15 + Vector((g.uniform(-0.3, 0.3), g.uniform(-0.3, 0.3), 0.0)) * size, vel=v, life=g.uniform(1.0, 1.7), r=(0.16 * size, g.uniform(0.34, 0.62) * size),
                     col=(0.25 * c, 0.185 * c, 0.12 * c), col2=(0.3 * c, 0.24 * c, 0.17 * c), alpha=g.uniform(0.3, 0.46), gravity=9.8, drag=0.9, fade_in=0.03, grow=0.5, wind=0.3)
     if earth:
         fx.once(t0, (at, Z), make)
