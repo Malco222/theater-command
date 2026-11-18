@@ -7183,7 +7183,9 @@ namespace
 							SAssignNew(OpeningCardBox, SBox).WidthOverride(1240.0f)
 							.HeightOverride_Lambda([this]()
 							{
-								// (876 on the frame of 1,600 by 1,000, which is 972 high; 1,254 on the frame of 1,280 by 720)
+								// (876 on a frame 972 high. Since build 1638 the frame keeps one size against the window
+								// (FrameScale), so it stands 972 high in a window of any size, and the card is laid out
+								// the same in each; only a window narrower than 4 to 3 draws it smaller, by its width.)
 								const double High = ScreenRoot.IsValid() ? ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y : 972.0;
 								// (never drawn under 0.95 of its size: past that the list is cut at its foot instead)
 								const double Room = FMath::Max(High - 32.0, 1.0);
