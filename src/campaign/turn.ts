@@ -32,8 +32,8 @@ import {
   type EscortLane, type EscortPlan, type FleetCard, type SeaOption, type ShorePlan, type ShoreTarget,
 } from './fleets';
 import {
-  INTEL, SIGHT, armiesSeen, booksOf, cityReport, corpsKnown, fogOn, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
-  whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
+  INTEL, SIGHT, armiesSeen, arrest, booksOf, cityReport, corpsKnown, fogOn, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
+  whyNotArrest, whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
 } from './intel';
 import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
@@ -64,6 +64,7 @@ import {
   appoint, cabinetBill, cabinetOff, decree, govMul, government, headAsked, headGiven, headOf, noteReadings, officeSecure, promise, promiseTargets, promiseTerms, setAside, setCabinet, setCanFall, standBy, takeBack,
   whyNotAppoint, whyNotDecree, whyNotPromise, whyNotSetAside, whyNotStandBy, whyNotTakeBack, type GovView, type PromiseTarget, type PromiseTerms,
 } from './government';
+import { footingView, orderFooting, whyNotFooting, type FootingId, type FootingView } from './footing';
 import { MANPOWER, callEarly, classGapUntil, classNow, earlyClass, earlyGap, manpower, menWords, raisable, whyNotEarly, type MenView } from './manpower';
 import { commandView, crossingWord, handOver, setDepth, setStaffCap, staffMonth, type CommandView, type CrossingWord } from './desks';
 import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from './history';
@@ -839,6 +840,26 @@ export function whyNotOrderDecree(g: Game, track: string, step: number): string 
 /** The player carries a decree, one step up for its price in political capital, or relaxes one, free. */
 export function orderDecree(g: Game, track: string, step: number): boolean {
   return g.human !== null && humanUp(g) && decree(g, g.human, track, step);
+}
+
+// ---- The nation's footing (ruling 172; the grand campaign with the lever switched on) ----------------------------
+
+/**
+ * A country's footing as both games show it: the ledger's line, the four footings as a tally with their locks, and
+ * the one move the card asks about (one step up, or back down). With no nation named, the player's own. Null with the
+ * lever switched off.
+ */
+export const footingOf = (g: Game, nat: string | null = g.human): FootingView | null => footingView(g, nat);
+
+/** Why the player cannot put his country on this footing now, or null if he can. */
+export function whyNotOrderFooting(g: Game, to: FootingId): string | null {
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  return whyNotFooting(g, g.human, to);
+}
+
+/** The player puts his country on a footing: one step up, for its price in political capital, or back down, at once and free. */
+export function orderFootingTo(g: Game, to: FootingId): boolean {
+  return g.human !== null && humanUp(g) && orderFooting(g, g.human, to);
 }
 
 /** Why the player cannot set his directive aside, or null if he can. */
@@ -2058,6 +2079,18 @@ export function whyNotAgentMission(g: Game, id: number, mission: Mission): strin
 /** Gives the player's agent its work: 'watch', 'books', 'factory', 'rail', 'oil' or 'guard'. */
 export function orderAgentMission(g: Game, id: number, mission: Mission): boolean {
   return whyNotAgentMission(g, id, mission) === null && setAgentMission(g, g.human!, id, mission);
+}
+
+/** Why the player cannot arrest this uncovered enemy agent now, or null (ruling 151(c)). */
+export function whyNotArrestAgent(g: Game, id: number): string | null {
+  if (!g.human) return 'Nobody is at the controls.';
+  if (!humanUp(g)) return 'Orders are given in your own month.';
+  return whyNotArrest(g, g.human, id);
+}
+
+/** ARREST: ends an enemy agent the player's hunters uncovered (ruling 151(c)). */
+export function orderArrest(g: Game, id: number): boolean {
+  return whyNotArrestAgent(g, id) === null && arrest(g, g.human!, id);
 }
 
 /** Retires one of the player's agents, which frees a place in the service. */

@@ -95,6 +95,27 @@ export interface Nation {
   res?: Stores;
   /** The player's government (the grand campaign): his war cabinet, his decrees, the cabinet's trust and its directive. */
   gov?: GovState;
+  /** The nation's footing (ruling 172, the grand campaign with the lever switched on): see footing.ts. */
+  foot?: Footing;
+}
+
+/**
+ * The nation's footing, where it differs from the one that comes of itself (ruling 172; footing.ts). Absent for a
+ * country that has never touched the lever: it earns exactly what it always did.
+ */
+export interface Footing {
+  /** The footing ordered above the one that comes of itself: Rearmament at peace, All-out war at war. */
+  step?: 'rearm' | 'allout';
+  /** How far the climb has come: the share of industry on war work, all of it on one shift = 1. */
+  share?: number;
+  /** The month the climb was ordered. */
+  since?: number;
+  /** No footing may be raised again before this month (a step down, by choice or for want of political capital). */
+  wait?: number;
+  /** The share of the will to fight all-out war has worn away: its own count, above what shortage takes. */
+  worn?: number;
+  /** The month the worn share first reached the amber mark in this war, so that the month card says it once. */
+  amber?: number;
 }
 
 /** A job the war cabinet, or an ally, has set the player (the grand campaign): optional, with a deadline and a reward. */
@@ -1101,7 +1122,7 @@ export interface Passing {
 }
 
 /** What an agent is doing: watching, reading a government's books, an act of sabotage, or guarding the home country. */
-export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'guard';
+export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'airfield' | 'orders' | 'guard' | 'hunt';
 
 /** A spy: a piece the player recruits, sends abroad and may lose. */
 export interface Agent {
@@ -1121,6 +1142,44 @@ export interface Agent {
   rest?: number;
   /** Quiet months of work abroad, counted toward experience. */
   months?: number;
+}
+
+/**
+ * An agent of the other side's service on the player's home ground (ruling 151(c), spy hunters): hidden until one of
+ * his hunters uncovers it, it strikes in its month unless it is arrested first or a guard stops it.
+ */
+export interface FoeAgent {
+  id: number;
+  /** The service it works for. */
+  nat: string;
+  reg: number;
+  /** What it means to strike at. */
+  kind: 'factory' | 'rail' | 'airfield';
+  /** The month it strikes. */
+  strike: number;
+  /** The month a hunter of the player's uncovered it, if one has. */
+  found?: number;
+}
+
+/**
+ * An enemy air staff's order for next month, read by the player's agent (ruling 135, spy orders): the groups on one
+ * field, the target, by day or by night. The staff flies it in its month if it still can; a stolen order is never false.
+ */
+export interface StolenOrder {
+  /** The staff whose order it is, and the field its groups fly from. */
+  nat: string;
+  field: number;
+  groups: number[];
+  target: number;
+  mission: 'bomb' | 'night';
+  bombers: number;
+  /** The month it is to be flown. */
+  turn: number;
+  /** The agent who read it, and the player's side. */
+  agent: string;
+  by: string;
+  /** Once its month has come: flown, or why it lapsed. */
+  done?: 'flown' | 'lapsed';
 }
 
 /** A line in the secret service's file: what happened, to whom, where, and whether it was good news. */
@@ -1145,6 +1204,11 @@ export interface Intel {
    * the report of his own raid, agent or troops, and the cause where it was known. One record a province.
    */
   cuts?: Record<number, { t: number; how: 'seen' | 'report'; why?: 'bombed' | 'agent' | 'saboteurs' | 'retreat' | 'hasty' | 'order' }>;
+  /** The other side's agents on the player's ground (ruling 151(c)), and the next id. */
+  foes?: FoeAgent[];
+  foeNext?: number;
+  /** Enemy air orders the player's agents have read (ruling 135). */
+  orders?: StolenOrder[];
 }
 
 export const MEN_PER_DIV = 15000;

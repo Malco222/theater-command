@@ -34,10 +34,17 @@ export const ENGINEERING = data as unknown as {
   mines: { most: number; attack: number; march: number };
   breach: { perDiv: number; most: number };
   works: { most: number };
+  named: Record<'1' | '2' | '3' | 'mines', string>;
   jobs: Record<string, JobText>;
   start: { nations: string[]; corps: number };
   ai: { most: number; reserve: number };
 };
+
+/**
+ * What a province's works are at a level, in words (ruling 145(b)): 1 "barbed wire, gun pits and an anti-tank ditch",
+ * 2 "pillboxes and dragon's teeth", 3 "a line of concrete forts". Empty for none. Words only: no rule reads them.
+ */
+export const worksName = (lv: number): string => (lv >= 1 ? ENGINEERING.named[String(Math.min(3, Math.floor(lv))) as '1' | '2' | '3'] : '');
 
 /** The rivers and crossings of the map of Europe. */
 export const RIVERS = (riverData as unknown as { rivers: River[] }).rivers;
