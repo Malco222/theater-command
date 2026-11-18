@@ -359,8 +359,8 @@ def convert(name, fine=True):
         way.z = 0.0
         way = way.normalized() if way.length > 1e-6 else X.copy()
         belly = c.z < hull.z(-c.x) - 0.3 * hull.h(-c.x)
-        if belly and name in fitout.BALL:
-            balls.add(k)                                    # (a steel ball, not a glass dome: see fitout.ball_turret)
+        if belly and name in fitout.BALL and min(radii) > 0.9 * max(radii):
+            balls.add(k)                                    # (a round one under her belly is a steel ball, not a glass dome: see fitout.ball_turret)
         m.part(f"turret.{k}.guns", f"turret.{k}", port(c), axis=tuple(way.cross(Z).normalized()), kind="turn", limits=(-85, 10) if belly else (-10, 80), note="its guns; plus lifts them")
         for i in mine:
             gun_part[i] = f"turret.{k}.guns"
