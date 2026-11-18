@@ -334,9 +334,7 @@ def m8(fine=True, tag="USA"):
                 v.hinge(c + gl * 0.17 + Y * dy + gn * 0.02 - Y * 0.05, c + gl * 0.17 + Y * dy + gn * 0.02 + Y * 0.05, 0.012)
         lamp = g_at(0.34, s * 0.52) + gn * 0.002
         v.headlamp(lamp, X, 0.07, stalk=0.1)
-        if fine:
-            for dy in (-0.09, 0.09):                           # the hoop that guards it
-                v.tube([lamp + Y * dy - X * 0.08, lamp + Y * dy - X * 0.06 + Z * 0.22, lamp + Y * dy + X * 0.1 + Z * 0.22, lamp + Y * dy + X * 0.14 - Z * 0.04], 0.008, coat, 5)
+        v.lamp_guard(lamp + Z * 0.1, 0.07, lamp, gn, Y, gl)                # the brush guard: two hoops of bar crossing over the lamp
         v.hook((2.40, s * 0.36, 0.92), X, 0.085)
         v.hook((-2.44, s * 0.40, 0.92), -X, 0.085)
     c = g_at(0.52, 0.0)
