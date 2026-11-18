@@ -117,7 +117,18 @@ def shell_hit(fx, t0, at, size=1.0, earth=True):
     """A shell bursting on a work or the ground: flash, a fan of thrown earth and dust, grey-brown smoke."""
     g = fx.rng
     at = Vector(at)
-    fx.burst(t0, (at, Z), size=0.22 * size)
+
+    def flash(t, p0, facing):
+        # (a field gun's shell, not a battleship's: a wink of flame and a knot of dark smoke that thins in seconds;
+        # the sea's burst at this size hung an orange fog over the whole picture)
+        fx.puff(t, p0 + Z * 0.3, life=0.16, r=(0.7 * size, 2.0 * size), col=(1.0, 0.82, 0.5), col2=(1.0, 0.45, 0.12), alpha=1.0, kind="glow", wind=0.0, fade_in=0.01, grow=0.4)
+        for i in range(7):
+            v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.3, 1.4))).normalized() * g.uniform(4, 11) * size ** 0.5
+            c = g.uniform(0.08, 0.16)
+            fx.puff(t + 0.04, p0 + Z * 0.3, vel=v, life=g.uniform(2.6, 4.4), r=(0.5 * size, g.uniform(1.3, 2.1) * size), col=(0.2, 0.15, 0.11), col2=(c, c * 0.97, c * 0.93),
+                    alpha=g.uniform(0.45, 0.65), drag=2.8, rise=0.9, fade_in=0.04, grow=0.45, wind=0.9)
+        fx.light(t, p0 + Z * 1.2, 2.5e4 * size * size, 0.14, r=0.5)
+    fx.once(t0, (at, Z), flash)
 
     def make(t, p0, facing):
         for i in range(16):      # thrown earth: up and out, falling back
@@ -127,7 +138,7 @@ def shell_hit(fx, t0, at, size=1.0, earth=True):
                     drag=0.5, fade_in=0.02, grow=0.4, wind=0.2, hold=0.5)
     if earth:
         fx.once(t0, (at, Z), make)
-    dust(fx, t0 + 0.05, at, size=1.3 * size, n=18, out=7.0, alpha=0.4)
+    dust(fx, t0 + 0.05, at, size=1.2 * size, n=12, out=6.0, alpha=0.24)
 
 
 class Case:
@@ -271,7 +282,7 @@ def breach(fx, cam, have):
         shell_hit(fx, t0, at, size=1.0)
     at_hit, _ = box.where("hit")
     shell_hit(fx, hit, at_hit, size=1.5, earth=False)
-    dust(fx, hit + 0.1, at_hit, size=1.6, n=22, col=(0.6, 0.6, 0.57), out=6.0, alpha=0.45)
+    dust(fx, hit + 0.1, at_hit, size=1.5, n=16, col=(0.6, 0.6, 0.57), out=5.0, alpha=0.3)
     chimney(fx, lambda: (box.where("hit")[0] + Vector((-0.4, 0, 0.5)), Vector((1, 0, 0.3))), start=hit + 0.25, size=0.9)
     chimney(fx, lambda: (box.where("smoke")[0] + Vector((0, 0, 0.6)), Z), start=hit + 0.5, size=0.5)
     flames(fx, lambda: (box.where("fire")[0] + Vector((1.2, 0, 0.2)), Z), start=hit + 0.7, size=0.8)

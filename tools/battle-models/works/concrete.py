@@ -108,22 +108,22 @@ def take_slots(m, ob, paints, part=None, smooth_=True):
     bpy.data.meshes.remove(me)
 
 
-def rubble(m, at, spread, count, seed=0, size=(0.12, 0.45), paint="concrete", flat=0.7):
-    """Broken concrete lying where it fell: lumps with broken faces."""
+def rubble(m, at, spread, count, seed=0, size=(0.12, 0.45), paint="concrete", flat=0.7, on=None):
+    """Broken concrete lying where it fell: angular lumps with broken faces, many small and a few large, each bedded on
+    the ground. `on(x, y)` gives the ground's height where a lump lies (a bank's slope); without it they lie at
+    `at`'s height. (They were lens-shaped once and lay at one height: on a slope they read as saucers in the air.)"""
     g = rnd(seed)
     at = Vector(at)
+    box = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
     for _ in range(count if m.fine else max(3, count // 3)):
-        r = g.uniform(*size)
+        r = size[0] + (size[1] - size[0]) * g.random() ** 1.8
         a, d = g.uniform(0, 6.283), spread * g.random() ** 0.7
-        c = at + Vector((math.cos(a) * d, math.sin(a) * d * 0.8, r * 0.3 * flat))
-        n = 7 if m.fine else 5
-        rings = []
-        ph = [g.uniform(0, 6.283) for _ in range(4)]
-        for j in (-1, 0, 1):
-            rr = r * (1.0 if j == 0 else 0.62)
-            rings.append([c + Vector((math.cos(2 * math.pi * k / n + ph[0]) * rr * (1 + 0.3 * math.sin(3 * k + ph[1])), math.sin(2 * math.pi * k / n + ph[0]) * rr * (1 + 0.3 * math.cos(2 * k + ph[2])),
-                                      j * r * 0.42 * flat + 0.05 * r * math.sin(k + ph[3]))) for k in range(n)])
-        m.skin(rings, paint if g.random() < 0.7 else "concrete.in", (True, True), False)
+        x, y = at.x + math.cos(a) * d, at.y + math.sin(a) * d * 0.8
+        hx, hy, hz = r, r * g.uniform(0.5, 0.95), r * g.uniform(0.32, 0.62) * flat / 0.7
+        rot = Matrix.Rotation(g.uniform(0, 6.283), 3, "Z") @ Matrix.Rotation(g.uniform(-0.4, 0.4), 3, "X") @ Matrix.Rotation(g.uniform(-0.35, 0.35), 3, "Y")
+        c = Vector((x, y, (on(x, y) if on else at.z) + hz * 0.7))
+        pts = [c + rot @ Vector((sx * hx * g.uniform(0.55, 1.0), sy * hy * g.uniform(0.55, 1.0), sz * hz * g.uniform(0.55, 1.0))) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
+        m.add(pts, box, paint if g.random() < 0.7 else "concrete.in", False, lambda q, c=c: q - c)
 
 
 def net_hooks(m, pts, out_of, paint="wire"):
@@ -302,18 +302,28 @@ def Pillbox(fine=True, nation="_default", name="Pillbox", cooling="air"):
     # ---- rubble that lies hidden until the break
     m.part("rubble", "pillbox", local(0, A + 0.2, 0, 0.3), kind="free", note="hidden (scale 0) until the front is blown in")
     m.use("rubble")
-    rubble(m, local(0, A + 1.0, 0.0, 0.42), 1.25, 34, seed=4)
+    foot = [(0.0, 0.62), (0.1, 0.6), (0.3, 0.53), (0.6, 0.4), (0.9, 0.27), (1.2, 0.17), (1.5, 0.09), (1.75, 0.04), (2.0, 0.0)]      # the bank's height by how far out from the wall
+
+    def bank_h(x, y):
+        d = max(local(0, 1, 0, 0).dot(Vector((x, y, 0.0))) - A, 0.0)
+        for (d0, h0), (d1, h1) in zip(foot, foot[1:]):
+            if d <= d1:
+                return h0 + (h1 - h0) * (d - d0) / (d1 - d0)
+        return 0.0
+    rubble(m, local(0, A + 1.0, 0.0, 0.0), 1.3, 46, seed=4, size=(0.07, 0.3), on=bank_h)
     m.use("pillbox")
 
-    q1 = Quaternion(Vector((0.08, -1, 0)).normalized(), math.radians(38.0))                 # the front falls outward on its foot
+    # the front is thrown out and falls on its face down the bank (it must come to lie ON the earth: a slab left
+    # leaning in the air reads as floating)
+    q1 = Quaternion(Vector((0.08, -1, 0)).normalized(), math.radians(108.0))
     m.clips["fire"] = gun_clip("mg")
     m.clips["idle"] = {"long": 2.0, "loop": True, "about": "Standing; the rubble hidden.", "tracks": [{"part": "rubble", "scale": [[0.0, 0.0]]}], "events": []}
     m.clips["knocked_out"] = {
         "long": 2.6, "loop": False, "after": "hold",
-        "about": "A heavy shell or a charge at the embrasure: the front face is blown out and falls on its foot, rubble is thrown down the bank, the door is blown open, smoke pours out. "
+        "about": "A heavy shell or a charge at the embrasure: the front face is blown out and falls on its face down the bank, rubble is thrown after it, the door is blown open, smoke pours out. "
                  "(At rest play `idle`, which keeps the rubble hidden.)",
-        "tracks": [{"part": "front", "rot": [[0.0, 1, 0, 0, 0], [0.25, *Quaternion().slerp(q1, 0.45)], [0.7, *Quaternion().slerp(q1, 0.9)], [0.9, *q1], [1.0, *Quaternion().slerp(q1, 0.96)], [1.15, *q1]],
-                    "move": [[0.0, 0, 0, 0], [0.25, 0.22, 0.0, 0.05], [0.7, 0.42, 0.02, -0.16], [0.9, 0.5, 0.02, -0.28]]},
+        "tracks": [{"part": "front", "rot": [[0.0, 1, 0, 0, 0], [0.2, *Quaternion().slerp(q1, 0.22)], [0.5, *Quaternion().slerp(q1, 0.62)], [0.8, *q1], [0.9, *Quaternion().slerp(q1, 0.975)], [1.0, *q1]],
+                    "move": [[0.0, 0, 0, 0], [0.2, 0.3, 0.0, 0.22], [0.5, 0.52, 0.01, 0.48], [0.8, 0.62, 0.02, 0.47]]},
                    {"part": "rubble", "scale": [[0.0, 0.0], [0.12, 0.0], [0.3, 1.0]], "move": [[0.0, -1.0, 0, 0.6], [0.12, -1.0, 0, 0.6], [0.3, -0.35, 0, 0.5], [0.75, 0.0, 0, 0.0]]},
                    {"part": "door", "turn": [[0.0, 0.0], [0.08, 0.0], [0.3, 96.0], [0.42, 82.0], [0.6, 90.0]]}],
         "events": [{"t": 0.0, "fx": "shell_burst_big", "socket": "hit", "cue": "explosion_debris"},

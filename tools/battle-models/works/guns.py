@@ -334,7 +334,7 @@ def HeavyFlak(fine=True, nation="_default", name="HeavyFlak", shield=False):
                                          {"t": 0.3, "fx": "fire", "socket": "fire", "cue": "fire_start", "cue_loop": "fire_small_loop"}]}
     weather(m, [(g["T"] + X * 4.6, 0.7, 0.85)], splash=0.3, rust=0.45)
     m.info["span"] = 5.4
-    m.info["high"] = 1.5
+    m.info["high"] = 2.4
     m.info["worn"] = [(0.0, 0.0, 4.2)]
     m.info["clear"] = [[(math.cos(math.radians(a)) * 2.0, math.sin(math.radians(a)) * 2.0) for a in range(0, 360, 20)]]
     m.info["file"] = {"controls": {"mount": "the game turns it to the target's bearing", "cradle": "the game lifts it to the target's height",
@@ -390,7 +390,7 @@ def HeavyFlakTwin(fine=True, nation="_default", name="HeavyFlakTwin"):
                                          {"t": 0.3, "fx": "fire", "socket": "fire", "cue": "fire_start", "cue_loop": "fire_small_loop"}]}
     weather(m, [(g["T"] + X * 4.6 + Y * 0.52, 0.7, 0.85), (g["T"] + X * 4.6 - Y * 0.52, 0.7, 0.85)], splash=0.3, rust=0.45)
     m.info["span"] = 6.4
-    m.info["high"] = 1.6
+    m.info["high"] = 2.7
     m.info["worn"] = [(0.0, 0.0, 4.8)]
     m.info["clear"] = [[(math.cos(math.radians(a)) * 2.6, math.sin(math.radians(a)) * 2.6) for a in range(0, 360, 20)]]
     m.info["file"] = {"controls": {"mount": "the game turns it to the target's bearing", "cradle": "the game lifts it to the target's height (both barrels lift together)",
