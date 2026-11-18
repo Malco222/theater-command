@@ -3,7 +3,7 @@
 // through the rules' own attack order. The design director's rulings 217 and 217(2)(a) of 2026-11-17.
 import { describe, expect, it } from 'vitest';
 import { diceChance, runOut } from '../src/battle/core';
-import { buildField, GROUNDS, LandBattle, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, sampleTicket, goingIn, type PracticeGround } from '../src/battle/land';
+import { buildField, coverAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, sampleTicket, goingIn, wornWords, type LandUnit, type PracticeGround } from '../src/battle/land';
 import { ENGINEERING } from '../src/campaign/rivers';
 import { createGame, hostileUnits } from '../src/campaign/game';
 import { blocked } from '../src/campaign/rivers';
@@ -52,6 +52,27 @@ describe('blocks from divisions', () => {
     expect(sum('att') / sum('def')).toBeCloseTo(1.5);
     for (const u of b.units) { expect(u.figures).toBeGreaterThan(0); expect(u.w).toBeGreaterThan(0); expect(u.act).toBe('idle'); }
   });
+  it("a regiment holds its division's frontage, with a third of its models (b418)", () => {
+    // The fortress works practice: two corps of two divisions a side of the line, cut into regiments to make six blocks.
+    const b = new LandBattle(practiceTicket(PRACTICE_GROUNDS.find((p) => p.fort)!, { seed: 3 }));
+    const regs = b.units.filter((u) => u.name.includes('Regiment'));
+    expect(regs.length).toBeGreaterThan(0);
+    for (const u of regs) {
+      expect(u.w).toBe(LAND.size[u.kind][0]);
+      expect(u.tray).toBe(Math.max(1, Math.round(LAND.figures[u.kind] / LAND.blocks.regiments)));
+      expect(u.figures0).toBeLessThanOrEqual(u.tray);
+    }
+  });
+  it('fieldworks give the cover of the ground they were dug into, never more (b418)', () => {
+    const b = new LandBattle(sampleTicket('forest', 1.3, { seed: 7, dug: true }));
+    const f = b.field, dug = Object.entries(f.dugInto ?? {});
+    expect(dug.length).toBeGreaterThan(0);
+    for (const [i, g] of dug) {
+      const k = Number(i), x = (k % f.cols) * f.cell + 1, y = Math.floor(k / f.cols) * f.cell + 1;
+      expect(GROUNDS[f.ground[k]]).toBe('works');
+      expect(coverAt(f, x, y)).toBe(GROUNDS[g]);
+    }
+  });
   it('the field opens with both armies drawn up in their own halves', () => {
     const b = new LandBattle(sampleTicket('forest', 1.2));
     for (const u of b.units) expect(u.side === 'att' ? u.y < b.field.h / 2 : u.y > b.field.h / 2).toBe(true);
@@ -80,6 +101,100 @@ describe('orders and the end', () => {
     // Side by side or one behind the other, but not on top of each other.
     const lat = Math.abs(u.x - v.x), dep = Math.abs(u.y - v.y);
     expect(lat >= (u.w + v.w) / 2 - 2 || dep >= (u.d + v.d) / 2 - 2).toBe(true);
+  });
+  it('tanks and lorries cross a river by its bridge from anywhere on their bank, however the bridge lies (b418)', () => {
+    // A lone block, sent from along its own bank or from well back, to a point across: by a march order (its way worked
+    // out once) and by an attack (worked out afresh every tick). It is across once it stands 50 m past the river's middle.
+    let tried = 0, crossed = 0;
+    const stuck: string[] = [];
+    for (let s = 1; s <= 20; s++) {
+      const b = new LandBattle(sampleTicket('plains', 1.3, { seed: s * 7919 + 13, river: true }));
+      const f = b.field, mid = f.riverMid!, at = (x: number): number => mid[Math.min(f.cols - 1, Math.floor(x / f.cell))];
+      const u = b.units.find((x) => x.side === 'att' && x.kind === 'arm')!, foe = b.units.find((x) => x.side === 'def' && x.kind !== 'art')!;
+      for (const x of b.units) if (x !== u && x !== foe) x.state = 'withdrawn';
+      for (const kind of ['arm', 'mot'] as LandUnit['kind'][]) for (const how of ['move', 'attack']) for (const sx of [300, 1500, 2700]) for (const back of [false, true]) {
+        const tx = sx < 1500 ? 2500 : 500;
+        Object.assign(u, { kind, x: sx, y: back ? 300 : at(sx) - 110, face: 0, order: null, path: [], state: 'steady' });
+        Object.assign(foe, { x: tx, y: at(tx) + 350, order: null, path: [] });
+        (b as unknown as { send(u: LandUnit, o: object): void }).send(u, how === 'move' ? { kind: 'move', x: tx, y: foe.y } : { kind: 'attack', x: tx, y: foe.y, target: foe.id });
+        let ok = false;
+        for (let i = 0; i < 5000 && !ok; i++) { (b as unknown as { move(u: LandUnit): void }).move(u); ok = u.y > at(u.x) + 50; }
+        tried++; if (ok) crossed++; else stuck.push(`seed ${s} ${kind} ${how} from ${sx}${back ? ' well back' : ''}: stands at ${u.x.toFixed(0)}, ${u.y.toFixed(0)}`);
+      }
+    }
+    expect(stuck).toEqual([]);
+    expect(crossed).toBe(tried);
+  });
+  it('tanks and lorries find their way round rock, over a road that crosses a ridge on the slant, out of rock they stand in (b418)', () => {
+    // A lone block sent from the attack's edge to a point across the river, in the hills and the mountains, wherever the
+    // ground lets it get there at all (not a pocket shut in by rock). It gets there: it never stands for good at an outcrop.
+    const stuck: string[] = [];
+    let tried = 0;
+    for (const [ground, seeds] of [['mountain', 10], ['hills', 6]] as const) for (let s = 1; s <= seeds; s++) {
+      const b = new LandBattle(sampleTicket(ground, 1.3, { seed: s * 7919 + 13, river: true }));
+      const f = b.field, mid = f.riverMid!, at = (x: number): number => mid[Math.min(f.cols - 1, Math.floor(x / f.cell))];
+      const u = b.units.find((x) => x.side === 'att' && x.kind === 'arm')!;
+      for (const x of b.units) if (x !== u) x.state = 'withdrawn';
+      for (const kind of ['arm', 'mot'] as LandUnit['kind'][]) for (const sx of [300, 1500, 2700]) {
+        const tx = sx < 1500 ? 2500 : 500, ty = at(tx) + 350, pace = LAND.pace[MOTION[kind]];
+        // Whether the ground lets it get there: side to side over ground it can enter, or out of what it stands in.
+        const C = f.cols, cellOf = (x: number, y: number): number => Math.floor(y / f.cell) * C + Math.floor(x / f.cell);
+        const go = (i: number): boolean => pace[GROUNDS[f.ground[i]]] > 0, seen = new Set([cellOf(sx, 300)]), open = [cellOf(sx, 300)];
+        while (open.length) {
+          const i = open.pop()!;
+          for (const j of [i - 1, i + 1, i - C, i + C]) {
+            if (j < 0 || j >= f.ground.length || Math.abs((j % C) - (i % C)) > 1 || seen.has(j) || (!go(j) && go(i))) continue;
+            seen.add(j); open.push(j);
+          }
+        }
+        if (!seen.has(cellOf(tx, ty)) || !go(cellOf(tx, ty))) continue;
+        Object.assign(u, { kind, x: sx, y: 300, face: 0, order: null, path: [], state: 'steady' });
+        (b as unknown as { send(u: LandUnit, o: object): void }).send(u, { kind: 'move', x: tx, y: ty });
+        for (let i = 0; i < 12000 && Math.hypot(u.x - tx, u.y - ty) > 30; i++) (b as unknown as { move(u: LandUnit): void }).move(u);
+        tried++;
+        if (Math.hypot(u.x - tx, u.y - ty) > 30) stuck.push(`${ground} seed ${s} ${kind} from ${sx}: stands at ${u.x.toFixed(0)}, ${u.y.toFixed(0)} on ${GROUNDS[f.ground[cellOf(u.x, u.y)]]}`);
+      }
+    }
+    expect(stuck).toEqual([]);
+    expect(tried).toBeGreaterThan(80);
+  });
+  it('a block falling back leaves the field by its own edge, back over its bridge where a river lies behind it (b418)', () => {
+    for (const river of [false, true]) {
+      const b = new LandBattle(sampleTicket('plains', 1.2, { river, seed: 11, humanAtt: true }));
+      b.ai.def = false;
+      const u = b.units.find((x) => x.side === 'att' && x.kind === 'arm')!;
+      for (const x of b.units) if (x !== u) x.state = 'withdrawn';
+      const go = b as unknown as { send(u: LandUnit, o: object): void; move(u: LandUnit): void };
+      if (river) {
+        const mid = b.field.riverMid!, at = (x: number): number => mid[Math.floor(x / b.field.cell)];
+        go.send(u, { kind: 'move', x: 1000, y: at(1000) + 150 });
+        for (let i = 0; i < 3000 && u.order; i++) go.move(u);
+        expect(u.y).toBeGreaterThan(at(u.x));
+      }
+      expect(b.command({ do: 'withdraw', units: [u.id] }, 'att')).toBe(true);
+      for (let i = 0; i < 4000 && u.state !== 'withdrawn'; i++) go.move(u);
+      expect(u.state).toBe('withdrawn');
+    }
+  });
+  it('a block that cannot get there goes as near as it can and stands, without looking for its way every tick (b418)', () => {
+    const b = new LandBattle(sampleTicket('plains', 1.2, { river: true, bridgeDown: true, seed: 11, humanAtt: true }));
+    b.ai.def = false;
+    const u = b.units.find((x) => x.side === 'att' && x.kind === 'arm')!;
+    for (const x of b.units) if (x !== u) x.state = 'withdrawn';
+    const mid = b.field.riverMid!, at = (x: number): number => mid[Math.floor(x / b.field.cell)];
+    const go = b as unknown as { send(u: LandUnit, o: object): void; move(u: LandUnit): void; findWay(...a: unknown[]): unknown };
+    go.send(u, { kind: 'move', x: 1500, y: at(1500) + 200 });
+    for (let i = 0; i < 1500; i++) go.move(u);
+    // At the water's edge on its own bank, its march over.
+    expect(u.y).toBeLessThan(at(u.x));
+    expect(u.order).toBeNull();
+    let looks = 0;
+    const find = go.findWay.bind(b);
+    go.findWay = (...a: unknown[]): unknown => { looks++; return find(...a); };
+    go.send(u, { kind: 'move', x: 1500, y: at(1500) + 300 });
+    for (let i = 0; i < 300; i++) go.move(u);
+    expect(looks).toBeLessThanOrEqual(2);
+    expect(u.order).toBeNull();
   });
   it('a player cannot order the other side\'s blocks', () => {
     const b = new LandBattle(sampleTicket('plains', 1.2, { humanAtt: true }));
@@ -326,6 +441,15 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
       // The attack is the same on every ground.
       expect(t.att.forces.map((f) => [f.kind, f.divs, f.str])).toEqual(practiceTicket(PRACTICE_GROUNDS[0]).att.forces.map((f) => [f.kind, f.divs, f.str]));
     }
+  });
+  it("the card names a worn defence only below 85, read as its meter reads (the UI director, b408)", () => {
+    expect(wornWords(1)).toBe('the defence at full strength');
+    expect(wornWords(0.9)).toBe('');
+    expect(wornWords(0.85)).toBe('');
+    expect(wornWords(0.85 - 1e-9)).toBe('');
+    expect(wornWords(0.84)).toBe('the defence worn to four fifths strength');
+    expect(wornWords(0.65)).toBe('the defence worn to two thirds strength');
+    expect(wornWords(0.5)).toBe('the defence worn to half strength');
   });
   it('every practice card is a contest: the staff gives it between 4 and 8 in 10 (the design director, b406)', () => {
     for (const p of PRACTICE_GROUNDS) {

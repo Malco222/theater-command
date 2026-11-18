@@ -71,6 +71,18 @@ function smoothMask(f: LandField, W: number, H: number, test: (c: number, r: num
   return big;
 }
 
+/** A painted shape blurred and cut at half, its colour kept: rounded edges that need no grid under them. */
+function blurCut(cv: HTMLCanvasElement, blur: number): HTMLCanvasElement {
+  const [out, o] = sheet(cv.width, cv.height);
+  o.filter = `blur(${blur}px)`;
+  o.drawImage(cv, 0, 0);
+  o.filter = 'none';
+  const img = o.getImageData(0, 0, cv.width, cv.height), d = img.data;
+  for (let i = 3; i < d.length; i += 4) d[i] = Math.max(0, Math.min(255, (d[i] - 112) * 8));
+  o.putImageData(img, 0, 0);
+  return out;
+}
+
 /** The field painted: the map, and the detail laid over it from the closer zooms. */
 /** The painted map, the closer zooms' detail, and the bunkers' places in field metres: the bunker sign is drawn on the
  *  screen at a fixed size, as a label is, so it never grows heavier than the town when the view comes closer. */
@@ -153,24 +165,30 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
   const isWood = (c: number, r: number): boolean => woody(c, r) || (!['road', 'water', 'bridge', 'blown', 'buildings'].includes(g(c, r))
     && c > 0 && r > 0 && c < f.cols - 1 && r < f.rows - 1 && woody(c - 1, r) && woody(c + 1, r) && woody(c, r - 1) && woody(c, r + 1));
   const woods = patches(f, isWood, 5);
+  // Each crown is nudged off its cell's middle and sized a little up or down, from a stream of its own so the rest of
+  // the ornament is where it was: the edge of a wood wanders and never follows the grid (the art director, b411 review).
+  const jit = stream(seed ^ 0x3c0d);
+  const nudge = new Float32Array(woods.length * 3);
+  for (let i = 0; i < woods.length; i++) if (woods[i]) { nudge[i * 3] = (jit() - 0.5) * 0.3; nudge[i * 3 + 1] = (jit() - 0.5) * 0.3; nudge[i * 3 + 2] = 0.9 + jit() * 0.24; }
   const canopy = (color: string, rad: number): HTMLCanvasElement => {
     const [cv, cx2] = sheet(W, H);
     cx2.fillStyle = color;
     cx2.beginPath();
     for (let i = 0; i < woods.length; i++) {
       if (!woods[i]) continue;
-      const X = px(i % f.cols) + cs / 2, Y = py(Math.floor(i / f.cols)) + cs / 2;
-      cx2.moveTo(X + rad, Y); cx2.arc(X, Y, rad, 0, Math.PI * 2);
+      const X = px(i % f.cols) + cs * (0.5 + nudge[i * 3]), Y = py(Math.floor(i / f.cols)) + cs * (0.5 + nudge[i * 3 + 1]), R = rad * nudge[i * 3 + 2];
+      cx2.moveTo(X + R, Y); cx2.arc(X, Y, R, 0, Math.PI * 2);
     }
     cx2.fill();
-    return cv;
+    // Blurred, cut at half and softened, as the marsh and the fields are.
+    return blurCut(cv, cs * 0.3);
   };
   {
     const [cv, c2] = sheet(W, H);
-    // The inner disc reaches past the corners of its cell, so the canopy is one solid shape; the outer one scallops its edge.
+    // The inner disc reaches past the corners of its cell, so the canopy is one solid shape; the outer one rims its edge.
     c2.drawImage(canopy('#a3aa7c', cs * 0.92), 0, 0);
     c2.drawImage(canopy('#bcc196', cs * 0.76), 0, 0);
-    x.globalAlpha = 0.92; x.drawImage(cv, 0, 0); x.globalAlpha = 1;
+    x.globalAlpha = 0.92; x.filter = `blur(${(cs * 0.08).toFixed(1)}px)`; x.drawImage(cv, 0, 0); x.filter = 'none'; x.globalAlpha = 1;
   }
   // The fields: furrows over a smooth patch, in the detail only (at the whole-field view their hatch is a mottle).
   {

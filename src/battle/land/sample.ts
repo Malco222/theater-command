@@ -71,6 +71,17 @@ export const PRACTICE_GROUNDS: PracticeGround[] = [
   { terrain: 'plains', river: true, def: [3, 3], guns: 2 }, { terrain: 'hills', fort: 2, def: [2, 2], guns: 0, kind: 'mot' },
 ];
 
+/**
+ * How worn a practice defence stands, against the attack's 90 in 100 (b408), in the UI director's words: the card says
+ * so, so the enemy's lower strength on the field is no surprise. Nothing from 85 to 94, where it stands about as the
+ * attack does. Read by the whole number its strength meter shows, so a strength a hair under 85 still reads as 85.
+ */
+export function wornWords(str: number): string {
+  const s = Math.round(str * 100);
+  return s >= 95 ? 'the defence at full strength' : s >= 85 ? '' : s >= 75 ? 'the defence worn to four fifths strength'
+    : s >= 60 ? 'the defence worn to two thirds strength' : 'the defence worn to half strength';
+}
+
 /** The defence on a practice ground: its two infantry corps as the ground has them, and the artillery; each corps' share of the strength as the campaign's ticket counts it (divisions by their worth in defence). */
 function defenceOn(p: PracticeGround): Corps5[] {
   const [x, xi] = p.def ?? [3, 3];

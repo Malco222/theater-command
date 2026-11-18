@@ -16,8 +16,12 @@ export const LAND = {
   speed: { inf: 6, mtn: 5.5, cav: 9, eng: 5.5, mot: 11, arm: 10, art: 4, fort: 0 } as Record<Kind, number>,
   /** Radians a second a block can turn. */
   turn: { inf: 1.1, mtn: 1.1, cav: 1.4, eng: 1.1, mot: 0.9, arm: 0.8, art: 0.5, fort: 0 } as Record<Kind, number>,
-  /** How far a block's blows carry, metres between edges. Guns fire over the line from well back. */
-  reach: { inf: 200, mtn: 200, cav: 140, eng: 140, mot: 220, arm: 380, art: 1500, fort: 300 } as Record<Kind, number>,
+  /**
+   * How far a block's blows carry, metres between edges. Guns fire over the line from well back. Tanks reach no further
+   * than lorried infantry: at 380 they stood off out of the infantry's reach and struck without reply, pricing armour
+   * again on top of the card, which counts it already (b418, b420: the desert villages ran 38 points over their card).
+   */
+  reach: { inf: 200, mtn: 200, cav: 140, eng: 140, mot: 220, arm: 220, art: 1500, fort: 300 } as Record<Kind, number>,
   /** Frontage and depth in metres. */
   size: { inf: [150, 40], mtn: [140, 40], cav: [150, 50], eng: [120, 40], mot: [140, 60], arm: [130, 60], art: [110, 50], fort: [140, 50] } as Record<Kind, [number, number]>,
   /** Models on a full-strength tray (the art director, 17 November): one fades off for each share lost. */
@@ -25,9 +29,10 @@ export const LAND = {
   /**
    * The share of a block's own power it takes off its target each second, at full strength and in the open. Slow
    * enough that a close fight runs two or three minutes from the first contact, time for three or four choices
-   * (ruling 226(2); tests/battle-land.test.ts).
+   * (ruling 226(2); tests/battle-land.test.ts). A sixth slower since tanks close to their reach (b418), which had cut
+   * the quickest fights under a minute and a half.
    */
-  rate: 0.0015,
+  rate: 0.00125,
   /** Blows struck on the march, and by a block that is wavering. */
   moving: 0.4,
   wavering: 0.7,
@@ -37,10 +42,11 @@ export const LAND = {
   aspect: { front: [1, 1], flank: [1.5, 2], rear: [2, 3] } as Record<'front' | 'flank' | 'rear', [number, number]>,
   /**
    * The damage a block takes on this ground (cover), and the speed it keeps on it, by how it moves. Fieldworks
-   * ('works', dug where a block stood dug in) give no cover: the card counts them in the defence's strength already,
-   * and the field shares out the card's own strength (ruling 217). Counted twice, the plain attack carried 23 points
-   * less often than the card said in the campaign's dug-in battles, four in five of all it fights; counted once it
-   * lands within 3 (b407, 356 campaign battles).
+   * ('works', dug where a block stood dug in) give no cover of their own: a blow on them takes the cover of the ground
+   * they were dug into (field.dugInto; 'works' here is only for works with no record). The card counts them in the
+   * defence's strength already, and the field shares out the card's own strength (ruling 217; b418: what the card
+   * prices, the field draws but never prices again). Counted twice, the plain attack carried 23 points less often than
+   * the card said in the campaign's dug-in battles, four in five of all it fights; counted once it lands within 3 (b407).
    */
   cover: { open: 1, field: 0.95, woods: 0.7, rough: 0.85, marsh: 1, water: 1.25, road: 1.05, bridge: 1.2, buildings: 0.55, rock: 0.75, bunker: 0.4, works: 1, blown: 1.25 } as Record<Ground, number>,
   pace: {
@@ -50,8 +56,12 @@ export const LAND = {
     guns: { open: 1, field: 0.9, woods: 0.4, rough: 0.5, marsh: 0.15, water: 0, road: 1.4, bridge: 1, buildings: 0.6, rock: 0, bunker: 0, works: 0.7, blown: 0 },
     fixed: { open: 0, field: 0, woods: 0, rough: 0, marsh: 0, water: 0, road: 0, bridge: 0, buildings: 0, rock: 0, bunker: 0, works: 0, blown: 0 },
   } as Record<Motion, Record<Ground, number>>,
-  /** Tanks are blind in close country and in the streets: what they strike and what they take there. */
-  tanksClose: { punch: 0.6, take: 1.3, ground: ['woods', 'buildings'] as Ground[] },
+  /**
+   * Tanks are blind in the streets: what they strike and what they take there. Not in woods: the card prices tanks in
+   * forest and on hills already (the campaign's ground rules), so the field draws them slow there but never prices them
+   * again (b418). Priced twice, the panzers at Sedan carried the Meuse 21 points less often than their card said.
+   */
+  tanksClose: { punch: 0.6, take: 1.3, ground: ['buildings'] as Ground[] },
   /** Metres a second two blocks standing in each other's ground are eased apart, and the metres enemies keep between their fronts. */
   spread: 4,
   apart: 10,
@@ -67,9 +77,14 @@ export const LAND = {
    * already gives the defence more than the campaign's odds, which count the ground already, mean it to have. 'river'
    * multiplies it where the defence stands behind a river, 'works' by the works' level: the card counts both already.
    * Level 2 sits between the telling-odds works (an infantry line that keeps a reserve back out of its bunkers) and the
-   * practice works (motorized, no reserve): each lands within a tenth of its card (b407).
+   * practice works (motorized, no reserve): each lands within a tenth of its card (b407). Re-set for b418 (tanks no
+   * longer out-reach infantry nor pay twice in woods, works give their own ground's cover, regiments hold a division's
+   * frontage, blows a sixth slower, and tanks and lorries find their way round rivers, rock and marsh: mountains held
+   * at 1.43 only because the tanks there stood for good at the first outcrop): over five sets of 160 battles a ground,
+   * every ground lands within 4 points of its card, about 2 in the attack's favour; the test's own seeds run about 5
+   * under that.
    */
-  hold: { take: { plains: 0.875, forest: 1, hills: 0.935, mountain: 1.3, marsh: 1.13, urban: 0.91, desert: 0.925 } as Record<string, number>, within: 300, river: 1.66, works: [1, 1.02, 1.09, 1.1] },
+  hold: { take: { plains: 0.94, forest: 1.005, hills: 0.96, mountain: 1.12, marsh: 1.245, urban: 0.995, desert: 0.97 } as Record<string, number>, within: 300, river: 1.51, works: [1, 1.02, 1.06, 1.07] },
   /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
   dug: { keep: 30 },
   nerve: {

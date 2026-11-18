@@ -14,7 +14,7 @@ import { RATIO, levelOf } from '../core/result';
 import { lineUp, unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import type { LandPlace, Terrain } from '../land/field';
-import { PRACTICE_GROUNDS, practiceBill, practiceTicket, type PracticeGround } from '../land/sample';
+import { PRACTICE_GROUNDS, practiceBill, practiceTicket, wornWords, type PracticeGround } from '../land/sample';
 import { LandBattle } from '../land/sim';
 import type { LandUnit } from '../land/units';
 import { newCampaign, offers, settle, type Offer } from './campaign';
@@ -32,11 +32,6 @@ const odds = (o: number): string => (o >= 10 ? o.toFixed(0) : o.toFixed(2));
 const practiceName = (p: PracticeGround): string => (p.river ? 'A river crossing' : p.fort ? 'Fortress works' : TERRAIN_WORD[p.terrain]);
 /** The field's title on a practice ground: "Practice: Marsh" (b408). The after card, already headed "Practice result", gives the ground alone. */
 const practiceTitle = (p: PracticeGround): string => `Practice: ${practiceName(p)}`;
-/**
- * How worn a practice defence stands, against the attack's 90 in 100 (b408): the card says so, so the enemy's lower
- * strength on the field is no surprise. Nothing where it stands as the attack does.
- */
-const wornWords = (s: number): string => (s >= 0.95 ? 'the defence at full strength' : s >= 0.85 ? '' : s >= 0.75 ? 'the defence worn to four fifths strength' : s >= 0.6 ? 'the defence worn to two thirds strength' : 'the defence worn to half strength');
 /** What the staff makes of a card's chance, as the offer and practice cards say it. */
 const staffSays = (c: number): string => (c >= 0.995 ? 'the staff is sure of it' : c <= 0.005 ? 'the staff gives it no chance' : `the staff gives it about ${Math.round(c * 100)}%`);
 /** The ground in the province card's own word (data/campaign/ground.json, 'says'). */
