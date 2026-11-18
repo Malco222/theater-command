@@ -537,6 +537,44 @@ def mark_in(tag, month):
     return [form for start, form in forms if start is None or start <= month][-1]
 
 
+# Japan's navy airscrews (the historian through the art director, 2026-11-18): no yellow tips. For the whole war the
+# early look: the front of each blade bare metal, its back red-brown, two thin red bands across it near the tip, a bare
+# metal spinner. Her spinning disc is pale metal with a faint red ring where the bands are.
+NAVY_AIRSCREW = {"blade": "A6AAAC", "blade_back": "5B352A", "blade_band": "B4281F", "boss": "8E9092", "blur": "A9ADAF", "blur_tip": "B4281F"}
+NAVY_BANDS = ((0.80, 0.835), (0.885, 0.92))                 # (where the two red bands lie, as parts of the blade's length)
+
+
+def navy_airscrew(m):
+    """Paints a Japanese navy machine's blades: red-brown behind, and the two red bands cut across each."""
+    blade, back, band = m.paint_at["blade"], m.paint_at["blade_back"], m.paint_at["blade_band"]
+    for pi, part in enumerate(m.parts):
+        if not part.name.startswith("prop.") or part.name.endswith(".blur"):
+            continue
+        hub, axis = Vector(part.pivot), Vector(part.axis).normalized()
+        which = [k for k in range(len(m.faces)) if m.fpart[k] == pi and m.fpaint[k] == blade]
+        if not which:
+            continue
+
+        def radius(i):
+            d = m.verts[i] - hub
+            return (d - axis * d.dot(axis)).length
+        R = max(radius(i) for k in which for i in m.faces[k])
+        red = []
+        for r0, r1 in NAVY_BANDS:
+            inside, outside = m.cut_ring(which, hub, axis, R * r0)
+            mid, beyond = m.cut_ring(outside, hub, axis, R * r1)
+            red += mid
+            which = inside + mid + beyond
+        red = set(red)
+        for k in which:
+            if k in red:
+                m.fpaint[k] = band
+                continue
+            a, b, c = (m.verts[i] for i in m.faces[k][:3])
+            if (b - a).cross(c - a).dot(axis) < 0.0:
+                m.fpaint[k] = back
+
+
 def paints_of(G, s, colours=None):
     """Every paint of a machine, by name, from her numbers (or from them with some colours changed: a later coat)."""
     colours = {k: v for k, v in (colours or {}).items() if k != "finish"}
@@ -545,6 +583,8 @@ def paints_of(G, s, colours=None):
     paints["torn"] = "2B2825"
     paints["blur"] = "3A3A36"
     paints["blur_tip"] = "D9B224"
+    if fitout.nation(s) == "JAP":
+        paints.update(NAVY_AIRSCREW)
     paints["line"] = rigid.mix_hex(paints["line"], paints["upper"], 0.3)      # (scribed lines seen close: finer and softer than the map's)
     paints.update(fitout.paints_for(s))
     paints.update(fitout.rivet_paints(paints))
@@ -1110,7 +1150,9 @@ def convert(name, fine=True):
     #  leaves her spinner clear, over it the smear of each blade, a little denser, and, where her blades have yellow
     #  tips, a thin ring of yellow near its rim.)
     n_blades = int(s.get("blades", 3))
-    tips = fitout.nation(s) in ("UK", "USA", "JAP")
+    navy = fitout.nation(s) == "JAP"                         # (bare metal blades with two red bands: see NAVY_AIRSCREW)
+    tips = navy or fitout.nation(s) in ("UK", "USA")
+    lo, hi = (NAVY_BANDS[0][0] - 0.01, NAVY_BANDS[1][1] + 0.01) if navy else (0.9, 1.0)
     for k, h in enumerate(hubs):
         m.use(f"prop.{k + 1}.blur")
         c = port(h) + X * 0.02
@@ -1119,14 +1161,16 @@ def convert(name, fine=True):
         def band(r0, r1, paint, dx=0.0, a0=0.0, a1=2.0 * math.pi, n=steps, c=c):
             rim = [[c + X * dx + Vector((0.0, math.cos(a0 + (a1 - a0) * i / n), math.sin(a0 + (a1 - a0) * i / n))) * (screw * r) for i in range(n + 1)] for r in (r0, r1)]
             m.add(rim[0] + rim[1], [(i, i + 1, n + 2 + i, n + 1 + i) for i in range(n)], paint, True, lambda q: X)
-        band(0.13, 0.95 if tips else 1.0, "blur")
+        band(0.13, 0.95 if tips and not navy else 1.0, "blur")
         if tips:
             # (the art director, 2026-11-18: one thin band was "a crisp gold wire" round a soft blur. Three bands, one
             #  inside the other and each faint, fade in and out as the blades' smear does)
-            band(0.9, 1.0, "blur_tip", dx=0.002)
-            band(0.925, 0.99, "blur_tip", dx=0.004)
-            band(0.945, 0.975, "blur_tip", dx=0.006)
-            band(0.95, 1.0, "blur")
+            wide = hi - lo
+            band(lo, hi, "blur_tip", dx=0.002)
+            band(lo + 0.25 * wide, hi - 0.1 * wide, "blur_tip", dx=0.004)
+            band(lo + 0.45 * wide, hi - 0.25 * wide, "blur_tip", dx=0.006)
+            if not navy:
+                band(0.95, 1.0, "blur")
         if fine:
             for b in range(n_blades):
                 a = 2.0 * math.pi * b / n_blades + 0.4 + 0.7 * k
@@ -1225,6 +1269,8 @@ def convert(name, fine=True):
                    "file": {"nation_paint": bool(s.get("nation_paint")), "number_ink": colours["ink"], "span": round(2.0 * half, 3),
                             "role": role, "crew": CREW.get(name, 1), "engines": len(hubs) + len(pods), "jets": len(pods), "year": s.get("year"), "tech": s.get("tech"), "tag": s.get("tag"),
                             "clear": {"glass": 0.3, "blur": 0.07, "blur_tip": 0.035}, "tally": m.tally}})
+    if navy:
+        navy_airscrew(m)
     f = Facts()
     f.name, f.spec, f.hull, f.wing, f.half, f.y_cut, f.x_cut, f.hubs, f.screw = name, s, hull, wing, half, y_cut, x_cut, [port(h) for h in hubs], screw
     f.role, f.crew, f.has_bombs, f.long = role, CREW.get(name, 1), has_bombs or bool(bay), hull.front - hull.back

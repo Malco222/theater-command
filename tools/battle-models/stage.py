@@ -618,9 +618,14 @@ class Effects:
     def once(self, t0, where, make):
         self.shots.append(dict(t=t0, where=where, make=make, done=False))
 
-    def light(self, t0, at, power, long=0.12, col=(1.0, 0.72, 0.4), r=3.0):
+    def light(self, t0, at, power, long=0.14, col=(1.0, 0.72, 0.4), r=3.0, shine=0.05):
+        """The light a flash throws, for a frame or two. (The art director, 2026-11-18: a flash that turned the whole
+        ship near-white and laid a glittering road down the sea read as a low sun. So it is weak enough that only
+        what stands within a few lengths of a gun is lit, to about half as bright again as the day, and it hardly
+        shines in the water.)"""
         d = bpy.data.lights.new("flash", "POINT")
         d.energy, d.color, d.shadow_soft_size = 0.0, col, r
+        d.specular_factor = shine
         ob = bpy.data.objects.new("flash", d)
         self.coll.objects.link(ob)
         ob.location = at
@@ -655,8 +660,31 @@ class Effects:
         self.live = keep
         for l in self.lights:
             a = t - l["t0"]
-            l["ob"].data.energy = l["power"] * (1 - a / l["long"]) if 0 <= a < l["long"] else 0.0
+            l["ob"].data.energy = l["power"] * min(1.0, (1 - a / l["long"]) / 0.4) if 0 <= a < l["long"] else 0.0     # (full, then quickly out)
         self.t = t
+
+    def flames(self, t, at, n, long, toward=None, spread=1.0, life=(0.1, 0.17), speed=(8.0, 22.0), wind=0.3, heart=0.0):
+        """A ragged ball of flame: `n` tongues thrown out from one place at one moment, each between long[0] and
+        long[1] metres, deep orange and no two alike, gone in a frame or two; `toward` leans the ball one way (along
+        a gun's bore, up from a deck) and `heart` is the size of the hot yellow heart at its root. (The art director,
+        2026-11-18: a gun's flash drawn as smooth glowing balls in a row was "a long smooth cream jet, like a
+        rocket's exhaust". Flame is ragged, and it breaks at once into smoke.)"""
+        g = self.rng
+        for i in range(n):
+            d = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-1, 1)))
+            if d.length < 0.05:
+                continue
+            d.normalize()
+            if toward is not None:
+                d = (d * spread + Vector(toward)).normalized()
+            ln = g.uniform(*long) * (1.0 if i % 3 else 1.4)
+            wide = ln * g.uniform(0.34, 0.5)
+            k = g.uniform(0.8, 1.2)
+            p = self.puff(t, at + d * ln * 0.42, vel=d * g.uniform(*speed), life=g.uniform(*life), r=(0.6, 1.0), col=(0.36 * k, 0.11 * k, 0.012), col2=(0.14, 0.025, 0.004),
+                          alpha=0.92, kind="tongue" if i % 2 else "lick", drag=3.0, wind=wind, squash=(0.5 * ln, 0.5 * wide, 0.5 * wide), fade_in=0.008, grow=0.5, hold=0.4, cool=1.0)
+            p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion((1.0, 0.0, 0.0), g.uniform(0, 6.283))).to_euler()
+        if heart > 0.0:
+            self.puff(t, at, life=g.uniform(0.07, 0.1), r=(0.5 * heart, heart), col=(1.0, 0.7, 0.28), col2=(0.6, 0.2, 0.03), alpha=1.0, kind="glow", wind=wind, fade_in=0.01, grow=0.45)
 
     # -- the effects themselves (each is a `make` for stream or once, or lays its own)
     def funnel_smoke(self, where, thick=0.5, r=2.4, start=-16.0, dark=0.3, end=1e9):
@@ -669,18 +697,15 @@ class Effects:
         self.stream(where, 0.3, make, start=start, end=end)
 
     def gun(self, t0, where, bore=0.38, light=True):
-        """A heavy gun fires: a tongue of flame, a ball of hot brown smoke that the wind takes."""
+        """A heavy gun fires: a ragged ball of orange flame, bigger than her turret for a moment, that breaks at once
+        into hot brown smoke the wind takes."""
         g = self.rng
         k = bore / 0.38
 
         def make(t, at, facing):
             side = facing.cross(Vector((0, 0, 1))).normalized()
             up = side.cross(facing)
-            q = facing.to_track_quat("X", "Z")
-            for i in range(3):       # the flash: long along the bore
-                p = self.puff(t, at + facing * (3.0 + 5.0 * i) * k, vel=facing * 18.0, life=0.14 + 0.03 * i, r=(2.0 * k, (4.6 - 0.7 * i) * k), col=(1.0, 0.7, 0.3),
-                              col2=(1.0, 0.38, 0.1), alpha=1.0, kind="glow", drag=6.0, wind=0.0, squash=(2.0, 1.0, 1.0), fade_in=0.01, grow=0.4)
-                p["ob"].rotation_euler = q.to_euler()
+            self.flames(t, at + facing * 3.0 * k, 13, (4.5 * k, 8.0 * k), toward=facing * 0.8, spread=0.9, life=(0.1, 0.17), speed=(10.0 * k, 26.0 * k), wind=0.2, heart=1.8 * k)
             for i in range(13):      # the smoke: thrown out along the bore, then it hangs, thins and drifts
                 sp = g.uniform(30.0, 110.0) * k
                 v = facing * sp + side * g.uniform(-16, 16) * k + up * g.uniform(-6, 14) * k
@@ -688,7 +713,7 @@ class Effects:
                 self.puff(t + 0.03, at + facing * 2.0, vel=v, life=g.uniform(4.0, 7.5), r=(1.6 * k, g.uniform(6.0, 11.0) * k), col=(0.72, 0.5, 0.26), col2=(c, c * 0.94, c * 0.84),
                           alpha=g.uniform(0.3, 0.5), drag=g.uniform(2.6, 3.6), rise=1.0, fade_in=0.05, grow=0.5, wind=0.85)
             if light:
-                self.light(t, at + facing * 9.0 * k + Vector((0, 0, 2.0)), 2.5e5 * k * k, 0.14)
+                self.light(t, at + facing * 4.0 * k + Vector((0, 0, 1.5)), 1.0e4 * k * k, 0.14)
         self.once(t0, where, make)
 
     def splash(self, t0, at, high=50.0, r=5.0):
@@ -722,14 +747,14 @@ class Effects:
         g = self.rng
 
         def make(t, at, facing):
-            self.puff(t, at, life=0.22, r=(3.0 * size, 9.0 * size), col=(1.0, 0.8, 0.45), col2=(1.0, 0.4, 0.1), alpha=1.0, kind="glow", wind=0.0, fade_in=0.01, grow=0.4)
+            self.flames(t, at + Vector((0, 0, 1.0)), 11, (3.0 * size, 6.0 * size), toward=(0, 0, 0.5), life=(0.1, 0.2), speed=(8.0 * size, 20.0 * size), wind=0.3, heart=1.5 * size)
             for i in range(10):
                 v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.1, 1.2))).normalized() * g.uniform(12, 40) * size
                 c = g.uniform(0.07, 0.16)
                 self.puff(t + 0.04, at, vel=v, life=g.uniform(5, 9), r=(2.5 * size, g.uniform(8, 13) * size), col=(0.35, 0.2, 0.1), col2=(c, c, c), alpha=0.8, drag=3.0, rise=1.6,
                           fade_in=0.05, grow=0.45, wind=0.9)
             if light:
-                self.light(t, at + Vector((0, 0, 3.0)), 4.0e5 * size * size, 0.2)
+                self.light(t, at + Vector((0, 0, 3.0)), 1.0e4 * size * size, 0.14)
         self.once(t0, where, make)
 
     def fire(self, where, start=0.0, end=1e9, size=1.0):
@@ -739,8 +764,15 @@ class Effects:
         def flame(t, at, facing):
             if at.z < 0.5:
                 return
-            self.puff(t, at + Vector((g.uniform(-2, 2) * size, g.uniform(-1.5, 1.5) * size, 0.5)), vel=(0, 0, g.uniform(5, 9)), life=g.uniform(0.5, 0.9), r=(2.2 * size, 1.0 * size),
-                      col=(1.0, 0.62, 0.2), col2=(1.0, 0.3, 0.06), alpha=0.95, kind="glow", wind=0.25, fade_in=0.05, squash=(1.0, 1.0, 1.6))
+            # (ragged tongues that stand up from her and lean with the wind; round glowing balls read as lamps)
+            d = (Vector((g.uniform(-0.3, 0.3), g.uniform(-0.3, 0.3), 1.0)) + self.wind * 0.035).normalized()
+            ln = g.uniform(3.0, 6.0) * size
+            wide = ln * g.uniform(0.3, 0.45)
+            k = g.uniform(0.85, 1.15)
+            p = self.puff(t, at + Vector((g.uniform(-2, 2) * size, g.uniform(-1.5, 1.5) * size, 0.3)) + d * ln * 0.42, vel=d * g.uniform(3, 7), life=g.uniform(0.2, 0.36), r=(0.7, 1.0),
+                          col=(0.34 * k, 0.1 * k, 0.011), col2=(0.2, 0.04, 0.005), alpha=0.92, kind="tongue" if g.random() < 0.65 else "lick", wind=0.25,
+                          squash=(0.5 * ln, 0.5 * wide, 0.5 * wide), fade_in=0.012, grow=0.5, hold=0.5, cool=1.0)
+            p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion((1.0, 0.0, 0.0), g.uniform(0, 6.283))).to_euler()
 
         def smoke(t, at, facing):
             if at.z < 0.5:
@@ -748,7 +780,7 @@ class Effects:
             c = g.uniform(0.03, 0.08)
             self.puff(t, at + Vector((g.uniform(-1.5, 1.5) * size, g.uniform(-1.5, 1.5) * size, 2.0)), vel=(g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(6, 9)), life=g.uniform(14, 19),
                       r=(3.4 * size, g.uniform(16, 23) * size), col=(c * 1.6, c * 1.2, c), col2=(c, c, c), alpha=0.85, drag=0.35, rise=1.6, fade_in=0.3, grow=0.6, wind=0.95, hold=0.3)
-        self.stream(where, 0.09, flame, start=start, end=end)
+        self.stream(where, 0.05, flame, start=start, end=end)
         self.stream(where, 0.3, smoke, start=start, end=end)
 
     def blast(self, t0, where, size=1.0):
@@ -756,9 +788,10 @@ class Effects:
         g = self.rng
 
         def make(t, at, facing):
-            for i in range(5):
-                self.puff(t + 0.02 * i, at + Vector((g.uniform(-8, 8), g.uniform(-4, 4), 4 + 6 * i)) * size, vel=(g.uniform(-6, 6), g.uniform(-6, 6), 30 + 14 * i), life=g.uniform(0.8, 1.4),
-                          r=(8 * size, g.uniform(18, 28) * size), col=(0.42, 0.22, 0.07), col2=(0.3, 0.09, 0.02), alpha=1.0, kind="glow", drag=1.6, wind=0.1, fade_in=0.02, grow=0.4)
+            # the tower of flame: three bursts of great ragged tongues, each higher than the last, gone inside a second
+            for i, (dt, high, n) in enumerate(((0.0, 5.0, 16), (0.1, 15.0, 14), (0.24, 27.0, 12))):
+                self.flames(t + dt, at + Vector((g.uniform(-4, 4), g.uniform(-3, 3), high)) * size, n, (11.0 * size, 22.0 * size), toward=(0, 0, 1.1), spread=0.95, life=(0.3, 0.75),
+                            speed=(18.0 * size, 55.0 * size), wind=0.15, heart=(7.0 * size if i == 0 else 0.0))
             for i in range(16):      # the pillar
                 c = g.uniform(0.03, 0.1)
                 self.puff(t + 0.05 + g.uniform(0, 0.5), at + Vector((g.uniform(-5, 5), g.uniform(-4, 4), 3.0)), vel=(g.uniform(-9, 9), g.uniform(-9, 9), g.uniform(60, 150) * size), life=g.uniform(12, 20),
@@ -769,7 +802,7 @@ class Effects:
                 c = g.uniform(0.05, 0.16)
                 self.puff(t + 0.05 + g.uniform(0, 0.4), at + Vector((g.uniform(-6, 6), g.uniform(-4, 4), 3.0)), vel=v, life=g.uniform(10, 18), r=(6 * size, g.uniform(18, 32) * size),
                           col=(0.6, 0.33, 0.12), col2=(c, c * 0.95, c * 0.9), alpha=0.7, drag=g.uniform(1.0, 1.7), rise=2.0, fade_in=0.08, grow=0.5, wind=0.8, hold=0.35, cool=5.0)
-            self.light(t, at + Vector((0, 0, 30.0)), 2.5e6 * size * size, 0.5, r=12.0)
+            self.light(t, at + Vector((0, 0, 18.0)), 6.0e4 * size * size, 0.17, r=10.0)
         self.once(t0, where, make)
 
     def froth(self, where, start, end, r=9.0):

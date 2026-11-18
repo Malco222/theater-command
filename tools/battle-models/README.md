@@ -106,8 +106,9 @@ plain mesh (the `far` mesh of her own file: the same shape, paints, camouflage b
 flies) with nobody in her, standing on her undercarriage with her tail down and a wooden chock (`chock`) before and
 behind each main wheel. Her airscrew is stopped, each machine's at its own angle (eleven stopped alike read as one
 aircraft copied eleven times), and the last hand's breadth of each blade is a paint of its own, `blade_tip`: yellow
-where her own airscrew wears yellow tips. On the generic fighter it is the blade's black, and the file's
-`blade_tip_for` gives the yellow and the owners whose machines wear it (America, Britain, Japan). A Hellcat is ranged without the tank under her middle. Parts:
+where her nation's airscrews wear yellow tips (America's and Britain's). On the generic fighter it is the blade's
+black, and the file's `blade_tip_for` gives the yellow and the owners whose machines wear it. A Zero has no such
+paint: Japan's navy airscrews wore no yellow (see "Japan's navy airscrews" under Aircraft). A Hellcat is ranged without the tank under her middle. Parts:
 `park` (root) and `plane.1` … `plane.11` (fixed, pivot on the deck under the machine), so the game can take them
 off the deck one at a time. In the file: `machine` (the aircraft it is made of), `places` (where each stands),
 `pitch` (how far her nose is up, degrees), and the aircraft's own `schemes`, `mark_months`, `nation_paint`,
@@ -248,6 +249,11 @@ What they add to the form:
 - **The yellow tips of a turning airscrew** (`blur_tip`; the file's `clear.blur_tip` is 0.035) are three soft rings
   laid over each other, widest and faintest outermost, so that the tip ring is as blurred as the blades and about
   a third as strong as it was: a faint warm haze at the rim, not a gold wire.
+- **Japan's navy airscrews** (`NAVY_AIRSCREW`, `NAVY_BANDS`, `navy_airscrew` in `planes.py`; the Zero, Kate, Val,
+  Nell and Betty, flying and ranged on a deck). They wore no yellow tips. The front of each blade is bare metal
+  (`blade`), its back red-brown (`blade_back`), with two thin red bands across it near the tip (`blade_band`, cut
+  into the blade at 0.80 to 0.835 and 0.885 to 0.92 of its length), and the spinner is bare metal. Her turning disc
+  is pale metal (`blur`) with a faint red ring (`blur_tip`) where the bands lie, as clear as the yellow one is.
 - **Matt paint, and less light from below** (`SKIN` and `BACK_LIGHT` in `airshow.py`, the pictures only). The war's
   paints were matt: roughness 0.6, shine 0.25. And the sunlit cloud and haze under her light her belly with half
   their brightness, or a white belly is as bright as the sky behind it and a pale wing seen from just below is lost
@@ -284,10 +290,11 @@ record='{"kills": [["GER", 6]], "missions": 32, "lead": [12, 19]}'`; `Plane(...,
 Paints added after the game's own: `torn` (the inside of a torn-off end), `blur` (the disc of a turning airscrew),
 and the fit-out's (`inside`, `leather`, `skin`, `suit`, `vest`, `goggles`, `exhaust`, `gunmetal`, `patch`, `lens`,
 `boot`, `rivet`, `rivet_under`, `blur_tip`, three lamps). **Draw `glass`, `blur` and `blur_tip` clear**: the file
-gives how clear under `clear` (`glass` 0.3, `blur` 0.07, `blur_tip` 0.3), and then her crew are seen through the
+gives how clear under `clear` (`glass` 0.3, `blur` 0.07, `blur_tip` 0.035), and then her crew are seen through the
 hood. The disc of a turning airscrew (`prop.N.blur`) is a faint disc that leaves the spinner clear, the smear of
-each blade over it, and a thin yellow ring near the rim where the blades have yellow tips (British, American and
-Japanese machines); drawn as one even grey disc it reads as a plastic plate.
+each blade over it, and a thin yellow ring near the rim where the blades have yellow tips (British and American
+machines; a Japanese navy machine has a faint red ring where her blades' red bands lie); drawn as one even grey disc
+it reads as a plastic plate.
 
 Parts: `plane` (root: the fuselage), `wing.port`, `wing.starboard` (each wing outboard of the fuselage with its
 engines and guns), `tail` (rear fuselage, tailplane, fins), `prop.N` (blades, numbered from the port side),
@@ -343,6 +350,14 @@ Rendering is Cycles on the CPU (EEVEE cannot start without a display). A 960x540
 25 seconds on four cores. `stage.py` holds the sea (swell, whitecaps, haze, a painted wake), the sky, a cloud
 deck, and the effects (soft puffs: smoke, spray, flame, splashes, a magazine blast). `marks.py` draws national
 markings for the pictures only; the game paints its own from the model's `marks`.
+
+Flame and the light of a flash (`flames`, `light`, `gun`, `burst`, `fire`, `blast` in `stage.py`). Flame is ragged
+tongues thrown out from the place that burns, deep orange, gone in a frame or two, breaking at once into smoke: a
+gun's flash drawn as smooth glowing balls in a row read as a rocket's exhaust, and a magazine drawn as big soft balls
+read as a balloon. The light a flash throws is weak and short: only what stands within a few lengths of the gun is
+lit, to about half as bright again as the day, for a frame or two, one light for a turret's salvo, and it hardly
+shines in the water. At a hundred times that the whole ship went near-white and a glittering road of light ran down
+the sea, like a low sun.
 
 Two lessons of the close fly-past, kept in `airshow.py`. The camera goes nearly all the way round the machine, so
 somewhere it looks up-sun, and there the sun's glare off the wings washed the camouflage out to cream: the sun now

@@ -69,6 +69,59 @@ class Part:
         self.kind, self.note = kind, note
 
 
+def ring_cut(verts, faces, which, hub, axis, r_cut):
+    """Cuts the faces numbered in `which` where they cross a radius from an axis, so that each piece lies wholly
+    inside it or wholly outside. `verts` and `faces` are changed in place (new points and faces go on their ends).
+    Returns (inside, outside, born): the numbers of the pieces inside and outside, and for every face added the
+    face it was cut from, so that the caller can give it the same paint, part and so on."""
+    hub, axis = Vector(hub), Vector(axis).normalized()
+
+    def radius(i):
+        d = verts[i] - hub
+        return (d - axis * d.dot(axis)).length
+
+    made, inside, outside, born = {}, [], [], []
+
+    def between(a, b):
+        key = (min(a, b), max(a, b))
+        if key not in made:
+            ra, rb = radius(a), radius(b)
+            verts.append(verts[a].lerp(verts[b], (r_cut - ra) / (rb - ra)))
+            made[key] = len(verts) - 1
+        return made[key]
+
+    def put(ring, where, like, at=None):
+        fans = [tuple(ring)] if len(ring) <= 4 else [(ring[0], ring[j], ring[j + 1]) for j in range(1, len(ring) - 1)]
+        for n, f in enumerate(fans):
+            if at is not None and n == 0:
+                faces[at] = f
+                where.append(at)
+                continue
+            faces.append(f)
+            born.append((len(faces) - 1, like))
+            where.append(len(faces) - 1)
+
+    for k in list(which):
+        f = faces[k]
+        out = [radius(i) > r_cut + 1e-6 for i in f]
+        if all(out):
+            outside.append(k)
+            continue
+        if not any(out):
+            inside.append(k)
+            continue
+        a_in, a_out = [], []
+        for j, a in enumerate(f):
+            (a_out if out[j] else a_in).append(a)
+            if out[j] != out[(j + 1) % len(f)]:
+                c = between(a, f[(j + 1) % len(f)])
+                a_in.append(c)
+                a_out.append(c)
+        put(a_in, inside, k, at=k)
+        put(a_out, outside, k)
+    return inside, outside, born
+
+
 class Model:
     """Collects the faces of a model, part by part, and what moves them."""
 
@@ -133,6 +186,22 @@ class Model:
             self.fpart.append(pi)
             self.fsmooth.append(smooth)
             self.fcoat.append(False)
+
+    def cut_ring(self, which, hub, axis, r_cut):
+        """Cuts the faces numbered in `which` at a radius from an axis (see `ring_cut`); each new face is painted and
+        placed as the one it was cut from. Returns (inside, outside): the numbers of the pieces."""
+        n = len(self.verts)
+        inside, outside, born = ring_cut(self.verts, self.faces, which, hub, axis, r_cut)
+        more = len(self.verts) - n
+        self.vcoat.extend([-1] * more)
+        self.vblend.extend([0.0] * more)
+        self.vsoot.extend([0.0] * more)
+        for _, like in born:
+            self.fpaint.append(self.fpaint[like])
+            self.fpart.append(self.fpart[like])
+            self.fsmooth.append(self.fsmooth[like])
+            self.fcoat.append(self.fcoat[like])
+        return inside, outside
 
     def raw(self, verts, faces, paints, part, coat=None, blend=None, soot=None, by_point=None, smooth=True):
         """Points and faces taken as they are (nothing turned round): `paints` a name for every face; `by_point` says,

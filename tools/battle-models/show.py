@@ -96,9 +96,12 @@ class Show:
     def fire(self, turret, t0):
         """Her effects for one turret's salvo (the guns' run-back is the model's own clip)."""
         clip = self.clip["fire." + turret.split(".")[1]]
+        first = True
         for e in clip["events"]:
             if e["fx"].startswith("muzzle_flash"):
-                self.fx.gun(t0 + e["t"], self.where(e["socket"]), bore=self.m.info.get("bore", 0.38))
+                # (one light for the turret's salvo, at its first gun: a light for every gun held the glare four frames)
+                self.fx.gun(t0 + e["t"], self.where(e["socket"]), bore=self.m.info.get("bore", 0.38), light=first)
+                first = False
 
 
 def turn(S, out, opt):
@@ -124,7 +127,7 @@ def broadside(S, out, opt):
     S.spray()
     L = S.L
     mains = [p.name for p in S.m.parts if p.name.startswith("turret.") and ".gun." not in p.name]
-    t_fire = {tn: 1.0 + (0.0 if S.m.parts[S.m.part_at[tn]].pivot.x > 0 else 0.3) for tn in mains}
+    t_fire = {tn: 1.02 + (0.0 if S.m.parts[S.m.part_at[tn]].pivot.x > 0 else 0.3) for tn in mains}     # (just off a frame's instant, so a flash is seen young)
     for tn, t0 in t_fire.items():
         S.fire(tn, t0)
     S.fx.splash(3.5, (62.0, -46.0, 0.0), high=58.0)

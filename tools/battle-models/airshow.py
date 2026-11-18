@@ -302,7 +302,7 @@ def fireball(fx, t0, where, size=1.0):
         for i in range(10):                                  # scraps: small, dark, flung far and falling
             v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-0.6, 1))).normalized() * g.uniform(25, 70) * size
             fx.puff(t, at, vel=v + Vector((40, 0, 0)), life=g.uniform(1.4, 2.6), r=(0.22, 0.12), col=(0.08, 0.07, 0.06), alpha=1.0, drag=0.5, gravity=9.8, wind=0.5, fade_in=0.01)
-        fx.light(t, at, 6.0e4 * size * size, 0.25, r=3.0)
+        fx.light(t, at, 4.0e3 * size * size, 0.14, r=3.0)          # (a frame or two, and only what is close to it is lit)
     fx.once(t0, where, make)
 
 
