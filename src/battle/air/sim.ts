@@ -12,7 +12,7 @@ import { fieldRatio } from '../core/result';
 import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, FieldTicket, Side, UnitState, Zone } from '../core/types';
 import { DT } from '../core/types';
 import { SKY, type Band } from './book';
-import { enginesOf, fighterWay, passesOn, pickPass, type Pass, type When } from './doctrine';
+import { enginesOf, escortRoles, fighterWay, passesOn, pickPass, type Pass, type Role, type When } from './doctrine';
 import { drawFall, fallWords } from './falls';
 import type { AirJob, AirOutcome, AirPlace, AirUnit, Straggler } from './types';
 import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow } from '../../campaign/airfought';
@@ -26,6 +26,8 @@ const off = (u: AirUnit): boolean => u.state === 'gone' || u.state === 'withdraw
 const flying = (u: AirUnit): boolean => !off(u) && u.job.do !== 'wait';
 /** A group that has broken off or turned for home: it runs, and does not fight back. */
 const away = (u: AirUnit): boolean => u.job.do === 'home' || u.state === 'routing';
+/** An escort's role: close, top cover or the sweep (a loose escort). */
+const roleOf = (j: { close: boolean; top?: boolean }): Role => (j.close ? 'close' : j.top ? 'top' : 'sweep');
 
 /**
  * A group's name as the subject of a dispatch, and whether it takes a plural verb (the UI director, air review 10):
@@ -166,6 +168,15 @@ export class AirSim implements BattleSim<AirUnit> {
     // Both sides start on the staff's plan; the player changes what he likes before or after he starts the clock.
     this.think('att', true);
     this.think('def', true);
+    // Each escort starts at the station its role gives it: top cover a band above its box and behind it, the sweep
+    // ahead of it (the close escort is already beside it). The staff's reckoning at the start sees them there.
+    for (const u of raid) {
+      if (u.job.do !== 'escort' || u.job.close) continue;
+      const b = this.unit(u.job.on)!, hd = bearing(b.x, b.y, SKY.target.x, SKY.target.y);
+      const d = u.job.top ? -SKY.escort.behind : SKY.escort.ahead;
+      u.x = b.x + Math.sin(hd) * d; u.y = Math.max(0, b.y + Math.cos(hd) * d); u.homeX = u.x;
+      if (u.job.top) { u.band = u.to; u.alt = SKY.bands.alt[u.band]; }
+    }
     this.start = this.expect();
     for (const u of this.units) this.mor0.set(u.id, u.mor);
     this.through0 = this.throughNow(this.place.forecast.bmr);
@@ -210,6 +221,21 @@ export class AirSim implements BattleSim<AirUnit> {
     return best;
   }
 
+  /**
+   * The role a raid's k-th escort group flies (its fighter groups in order), by its nation's doctrine that month. Top
+   * cover only from the third group (SKY.escort.topFrom): dealt to the second, its bounce moved the two-group raid's
+   * fighter losses past a tenth of the card (the design director's fallback, ruling 237.2), and the record had it in
+   * the large raids. The first two take the doctrine's other roles in its order.
+   */
+  private role(u: AirUnit): Role {
+    const roles = escortRoles(u.nat, this.when), from = SKY.escort.topFrom;
+    const k = Math.max(0, this.units.filter((f) => f.side === 'att' && f.air === 'ftr').indexOf(u));
+    const rest = roles.filter((r) => r !== 'top');
+    if (k < from) return rest[k % rest.length];
+    const top = roles.indexOf('top');
+    return roles[(k - from + Math.max(0, top)) % roles.length];
+  }
+
   private valid(u: AirUnit, job: AirJob): boolean {
     if (job.do === 'escort') { const b = this.unit(job.on); return !!b && !off(b) && b.side === u.side; }
     if (job.do === 'intercept') { const e = this.unit(job.on); return !!e && flying(e) && e.side !== u.side; }
@@ -223,13 +249,16 @@ export class AirSim implements BattleSim<AirUnit> {
       if (side === 'att') {
         if (!first && this.valid(u, u.job) && u.job.do !== 'patrol') continue;
         if (this.place.mission === 'superiority') { u.job = { do: 'hunt' }; continue; }
-        // Close escort, shared out over the bomber groups by their size.
+        // The escort, shared out over the bomber groups by their size, each group in the role its nation's doctrine gave
+        // it that month: the raid's first escort group the first role, the second the next (ruling 237.2). A group whose
+        // box is gone keeps its role with the next box.
         const boxes = this.units.filter((b) => b.side === 'att' && b.air === 'bmr' && !off(b));
         if (!boxes.length) { u.job = { do: 'home' }; continue; }
         const load = (b: AirUnit): number => this.units.filter((f) => f.job.do === 'escort' && f.job.on === b.id).reduce((s, f) => s + f.n, 0) / b.n;
         const b = [...boxes].sort((x, y) => load(x) - load(y) || x.id - y.id)[0];
-        u.job = { do: 'escort', on: b.id, close: true };
-        u.to = b.band;
+        const role = u.job.do === 'escort' ? roleOf(u.job) : this.role(u);
+        u.job = { do: 'escort', on: b.id, close: role === 'close', ...(role === 'top' ? { top: true } : {}) };
+        u.to = role === 'top' ? Math.min(2, b.band + 1) as Band : b.band;
       } else {
         // The defenders go for the bombers that have yet to drop; failing those, any raider still coming on.
         const loaded = (v: AirUnit): boolean => !away(v) && v.air === 'bmr' && !v.dropped && !v.jettisoned;
@@ -372,6 +401,15 @@ export class AirSim implements BattleSim<AirUnit> {
           const side = k % 2 ? 1 : -1, row = Math.floor(k / 2);
           return [b.x + side * SKY.escort.close * (1 + row * 0.5), b.y - row * 600];
         }
+        if (j.top) {
+          // Top cover dives on any enemy fighter that comes at its bombers (a band above, it bounces them), then climbs
+          // back to its station above and behind them.
+          const e = this.nearest(u, (v) => v.air === 'ftr' && v.job.do !== 'home' && v.state !== 'routing' && dist(v.x, v.y, b.x, b.y) <= SKY.escort.near);
+          this.chasing.set(u.id, e ? e.id : null);
+          if (e) return [e.x, e.y];
+          if (!u.contacts.length) u.to = Math.min(2, b.band + 1) as Band;
+          return [b.x - Math.sin(b.face) * SKY.escort.behind, b.y - Math.cos(b.face) * SKY.escort.behind];
+        }
         // A loose escort sweeps ahead of its bombers and goes for enemy fighters that come near them.
         const e = this.nearest(u, (v) => v.air === 'ftr' && dist(v.x, v.y, b.x, b.y) <= SKY.escort.reach);
         if (e) return [e.x, e.y];
@@ -381,10 +419,10 @@ export class AirSim implements BattleSim<AirUnit> {
     }
   }
 
-  /** A close escort breaking off from its bombers to engage attackers, and coming back to them (shown, the design's 1.8). */
+  /** A close escort or top cover breaking off from its bombers to engage attackers, and coming back to them (shown, the design's 1.8). */
   private engaging(u: AirUnit, was: number | null): void {
     const j = u.job;
-    if (j.do !== 'escort' || !j.close) { this.chasing.delete(u.id); return; }
+    if (j.do !== 'escort' || (!j.close && !j.top)) { this.chasing.delete(u.id); return; }
     const now = this.chasing.get(u.id) ?? null;
     if (now !== null && was === null) this.say('air:engage', u, '', { on: now, box: j.on });
     else if (now === null && was !== null) this.say('air:rejoin', u, '', { box: j.on });
@@ -699,6 +737,7 @@ export class AirSim implements BattleSim<AirUnit> {
       const ammo = u.kit0 > 0 ? clamp01((u.vig - SKY.spent) / (1 - SKY.spent)) : 1;
       u.extra = {
         model: u.model, form: u.form, style: u.style, ammo: Math.round(ammo * 1000) / 1000,
+        ...(u.job.do === 'escort' ? { role: roleOf(u.job) } : {}),
         ...(u.side === 'att' && u.fuel0 < SKY.fuel.home ? { fuel: Math.round(clamp01(u.fuel / Math.max(1, u.fuel0)) * 1000) / 1000 } : {}),
         fire: u.fire.map((f) => ({ ...f, rate: Math.round(f.rate * 10_000) / 10_000 })),
       };

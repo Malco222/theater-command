@@ -18,8 +18,12 @@ export type AirKind = 'ftr' | 'bmr';
 export type AirJob =
   /** Bombers: fly to the target, hold the run, drop, turn for home. */
   | { do: 'route' }
-  /** Fighters: stay with that bomber group: close (glued to it) or loose (sweeping ahead of it). */
-  | { do: 'escort'; on: number; close: boolean }
+  /**
+   * Fighters: stay with that bomber group: close (glued to it), top cover (a band above and behind it, diving on what
+   * comes at it) or loose (sweeping ahead of it). The computer deals the roles by its nation's doctrine (doctrine.ts
+   * escortRoles; ruling 237.2); the player's ESCORT order gives close or loose.
+   */
+  | { do: 'escort'; on: number; close: boolean; top?: boolean }
   /** Fighters: go for that enemy group. */
   | { do: 'intercept'; on: number }
   /** Fighters: go for the nearest enemy fighters ('free hunt'). */

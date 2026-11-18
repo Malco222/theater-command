@@ -278,3 +278,43 @@ describe('the guns (guns.ts; the design\'s section 3 with the historian\'s revie
     expect(t.place.guns!.FRA.ftr.mark).toBe('MS.406');
   });
 });
+
+/** The Alsace raid's escort split into `parts` groups, fought in a given month (as the escort roles' parity runs). */
+function splitEscort(parts: number, when: { year: number; month: number }) {
+  const t = structuredClone(ticketOf('GER', 'bomb', 'Alsace', 0));
+  t.place.when = when;
+  const f = t.att.forces.find((x) => x.kind !== 'bmr')!, each = Math.floor(f.men / parts);
+  for (let i = 1; i < parts; i++) { t.att.forces.push({ ...f, corps: 90_000 + i, men: each }); t.place.starts[90_000 + i] = { ...t.place.starts[f.corps] }; }
+  f.men -= each * (parts - 1);
+  return t;
+}
+
+describe('escorts doing their job (Brian, 19:38Z; ruling 237.2)', () => {
+  const roles = (s: AirSim) => s.units.filter((u) => u.side === 'att' && u.air === 'ftr').map((u) => (u.job.do === 'escort' ? (u.job.close ? 'close' : u.job.top ? 'top' : 'sweep') : u.job.do));
+
+  it('deals each escort group its role in its doctrine\'s order, top cover only from the third group', () => {
+    const at = (parts: number, when: { year: number; month: number }) => roles(airBattle(splitEscort(parts, when)));
+    expect(at(1, { year: 1939, month: 8 })).toEqual(['sweep']);
+    expect(at(1, { year: 1940, month: 8 })).toEqual(['close']);
+    expect(at(2, { year: 1939, month: 8 })).toEqual(['sweep', 'close']);
+    expect(at(3, { year: 1940, month: 8 })).toEqual(['close', 'sweep', 'top']);
+  });
+
+  it('top cover keeps a band above its box and behind it, dives on the attackers first, and climbs back; close escort keeps its box\'s band', () => {
+    const s = airBattle(splitEscort(3, { year: 1940, month: 8 }), { show: true }); s.ai.att = true; s.ai.def = true;
+    const top = s.units.find((u) => u.job.do === 'escort' && u.job.top)!;
+    let held = 0;
+    while (!s.over) {
+      s.step();
+      for (const u of s.units) {
+        const j = u.job;
+        if (j.do !== 'escort' || u.n <= 0 || u.contacts.length || u.state !== 'steady' || u.to !== u.band) continue;
+        const b = s.unit(j.on)!;
+        if (j.top) { held++; expect(u.band).toBe(Math.min(2, b.band + 1)); expect((s.view().units.find((v) => v.id === u.id)!.extra as { role: string }).role).toBe('top'); }
+        if (j.close) expect(u.band).toBe(b.band);
+      }
+    }
+    expect(held).toBeGreaterThan(0);
+    expect(s.history().find((e) => e.what === 'air:bounce' && e.unit === top.id)).toBeDefined();
+  });
+});

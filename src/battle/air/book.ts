@@ -39,8 +39,12 @@ export const SKY = {
   scramble: 50_000,
   /** Defending airfields stand this far from the target on the board: near + the real distance x squeeze, at most far. */
   fields: { near: 15_000, far: 40_000, squeeze: 0.2 },
-  /** Where a close escort flies beside its bombers, and how far ahead a loose escort sweeps. */
-  escort: { close: 1_500, ahead: 7_000, reach: 12_000, near: 4_000, cover: [0.4, 2.5] as [number, number] },
+  /**
+   * Where a close escort flies beside its bombers, how far ahead a loose escort sweeps, and how far behind its box top
+   * cover keeps station, a band above it (1 to 2 km, a placeholder; the design's 1.8); and the first escort group, by
+   * count from 0, that may fly top cover (ruling 237.2's fallback: the third).
+   */
+  escort: { close: 1_500, ahead: 7_000, behind: 1_500, reach: 12_000, near: 4_000, cover: [0.4, 2.5] as [number, number], topFrom: 2 },
   /** Battle seconds before the battle is called (an hour in the air), and the battle seconds the computer waits between rethinks (12 air seconds). */
   limit: 1_800,
   think: 6,

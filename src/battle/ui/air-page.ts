@@ -441,7 +441,7 @@ function updateTop(force = false): void {
   const ftr = us.filter((u) => u.air === 'ftr'), bmr = us.filter((u) => u.air === 'bmr' && !u.dropped && !u.jettisoned);
   el('escort').hidden = ftr.length === 0 || !sim.units.some((u) => u.side === me && u.air === 'bmr' && live(u));
   el('hunt').hidden = ftr.length === 0;
-  const ways = new Set<string>(ftr.map((u) => (u.job.do === 'escort' ? (u.job.close ? '1' : '0') : u.job.do === 'hunt' ? 'h' : '')));
+  const ways = new Set<string>(ftr.map((u) => (u.job.do === 'escort' ? (u.job.close ? '1' : u.job.top ? 'top' : '0') : u.job.do === 'hunt' ? 'h' : '')));
   strip.querySelectorAll<HTMLElement>('[data-escort]').forEach((b) => b.classList.toggle('is-on', ways.size === 1 && ways.has(b.dataset.escort!)));
   el('hunt').classList.toggle('is-lit', ways.size === 1 && ways.has('h'));
   el('jett').hidden = bmr.length === 0;
