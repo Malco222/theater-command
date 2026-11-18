@@ -1049,8 +1049,8 @@
   "_day_lamp": "By day only rows with day_lamp light the ground (at game.day_lamp_share); tank guns, anti-tank guns, machine guns, rifles and mortars do not (art director 21:16Z)."
  },
  "bullet_strike": {
-  "_how": "Art director 21:16Z: small dust spurts where a burst's rounds strike the ground (Shots, given the ground). About half the rounds kick one: a quick upward spurt and a low puff in the ground's dust colour, gone in under a second, scattered about the aim point by spread_mil of the range.",
-  "spurt_chance": 0.5,
+  "_how": "Art director 21:16Z: small dust spurts where a burst's rounds strike the ground (Shots, given the ground). About three rounds in ten kick one (pre-check 21:34Z: at one in two a firing gun cost about 16 puffs): a quick upward spurt and a low puff in the ground's dust colour, gone in under a second, scattered about the aim point by spread_mil of the range.",
+  "spurt_chance": 0.3,
   "spread_mil": 12
  },
  "tracer": {
@@ -1192,41 +1192,45 @@
   ]
  },
  "air_trails": {
-  "_how": "A trail from a moving point on an aircraft (TrailStart, TrailMove every frame, TrailStop). Puffs are laid every spacing_m along the path, each drawn smear x spacing longer along the path so they join in one line, and left hanging in the air (carried: the share of the aircraft's speed they keep) to drift with the wind. A trail starts thin and pale and comes to full over ramp_s, darkening from colour to colour_full over darken_s; each puff widens from r0_m to r1_m and pales toward colour_old as it hangs for life_s. Fire adds tongues streaming back flame_m from the root.",
+  "_how": "A trail from a moving point on an aircraft (TrailStart, TrailMove every frame, TrailStop). Puffs are laid every spacing_m along the path, each drawn smear x spacing longer behind it so they join in one line, and left hanging in the air (carried: the share of the aircraft's speed they keep) to drift with the wind. Each frame the young end is drawn from the point back to the newest puff, so a trail starts at the engine. A trail comes to full over ramp_s, darkening from colour to colour_full over darken_s; each puff widens from r0_m to r1_m as it hangs for life_s (grow: below 1 widens early, above 1 late) and pales toward colour_old. lumpy (0 to 1) makes some puffs bigger lumps and the rest smaller and shorter lived, and the smear shrinks over smear_s, so an old trail breaks into uneven lumps; rise_mps lifts the smoke. Fire adds ragged tongues streaming back about flame_m from the root, and its smoke starts at the flame's tips.",
   "smoke": {
-   "_what": "a damaged engine: thin and grey, thickening and darkening",
+   "_what": "a damaged engine: thin and dark at the engine, widening (about three times by 2 s) and breaking into paler lumps",
    "life_s": 7,
-   "spacing_m": 8,
-   "r0_m": 0.5,
-   "r1_m": 4.0,
-   "alpha": 0.45,
+   "spacing_m": 9,
+   "r0_m": 0.4,
+   "r1_m": 4.5,
+   "alpha": 0.5,
    "colour": [
-    130,
-    128,
-    124
+    92,
+    90,
+    87
    ],
    "colour_full": [
-    58,
-    56,
-    54
+    50,
+    48,
+    46
    ],
    "colour_old": [
-    120,
-    118,
-    115
+    140,
+    137,
+    133
    ],
-   "darken_s": 5,
-   "ramp_s": 2,
-   "smear": 1.5,
+   "darken_s": 3,
+   "ramp_s": 1.5,
+   "smear": 1.6,
    "carried": 0.05,
-   "flame_m": 0
+   "flame_m": 0,
+   "grow": 1.1,
+   "lumpy": 0.7,
+   "smear_s": 5,
+   "rise_mps": 0
   },
   "fire": {
-   "_what": "an engine or tank on fire: flame at the root, black smoke",
+   "_what": "an engine or tank on fire: ragged flame streaming aft from the root, black smoke rising from its tips",
    "life_s": 8,
-   "spacing_m": 7,
-   "r0_m": 0.8,
-   "r1_m": 5.5,
+   "spacing_m": 8,
+   "r0_m": 0.7,
+   "r1_m": 6.0,
    "alpha": 0.7,
    "colour": [
     44,
@@ -1245,9 +1249,13 @@
    ],
    "darken_s": 1,
    "ramp_s": 0.8,
-   "smear": 1.5,
+   "smear": 1.6,
    "carried": 0.05,
-   "flame_m": 3.0
+   "flame_m": 3.0,
+   "grow": 1.0,
+   "lumpy": 0.6,
+   "smear_s": 5,
+   "rise_mps": 1.2
   },
   "glycol": {
    "_what": "a holed radiator: a thin white vapour that soon thins out",
@@ -1276,7 +1284,9 @@
    "smear": 1.5,
    "carried": 0.05,
    "flame_m": 0
-  }
+  },
+  "_art_director": "21:27Z: 20 mm hits, glycol and the fire trail at distance PASS. Engine fire: ragged tongues tearing free of the cowl and streaming aft past the wing root, a pale yellow heart at the cowl and deep orange along the tongues, a new length and shape every frame, black smoke rising from the flame tips. Smoke: thin and dark at the engine, about three times wider by 2 s and still widening, breaking into uneven lumps, paler and thinner with age, each lump hanging where it was laid.",
+  "_load": "Pre-check 21:34Z: puffs a trail are about life_s x speed / spacing_m (the lumpy rows lose about an eighth to their short-lived small puffs). At 120 m/s: smoke about 80, fire about 105, glycol about 35. The room is game.max_puffs, shared by everything; when it is short the farthest puffs go first, so a far trail loses length first."
  },
  "dust": {
   "vehicles": {

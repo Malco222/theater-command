@@ -102,7 +102,8 @@ namespace TheaterFx
 		double HazeBy = 0.0, HazeAlpha = 0.0; // (a skirt: settles to HazeAlpha by HazeBy seconds)
 		double Heart = 0.5, Rim = 0.0; // how thick it is at its heart ring, and at its edge, as shares of its middle
 		double Inner = 0.5; // (where the heart ring sits, as a share of the radius: further out, a denser body with a thinner soft edge)
-		double Smear = 0.0; // (an aircraft trail's puff: drawn this many metres longer along Along, so puffs metres apart join in one line)
+		double Smear = 0.0; // (an aircraft trail's puff: drawn this many metres longer behind it, against Along, so puffs metres apart join in one line)
+		double SmearFor = 0.0; // (and that length shrinks to under a third over this many seconds, so an old trail breaks into lumps; 0 keeps it)
 		double LeastPx = 0.0;
 		double ShadeK = 1.0; // (how strongly it is lit on its sunward side and shadowed on the other: a skirt's lit top and dark foot)
 		double Rough = 0.0, Turn = 0.0, TurnRate = 0.0; // (a clod: how lumpy its outline is, and how it tumbles)
@@ -234,6 +235,7 @@ namespace TheaterFx
 		{
 			std::string Name;
 			double Life = 6.0, Spacing = 8.0, R0 = 0.5, R1 = 3.5, Alpha = 0.5, DarkenS = 4.0, RampS = 1.5, Smear = 1.5, Carried = 0.05, Flame = 0.0;
+			double Grow = 0.5, Lumpy = 0.0, SmearS = 0.0, Rise = 0.0;
 			Rgb Col, ColFull, ColOld;
 		};
 		/** A trail being laid: where its point was at the last call, and how far it has gone since its last puff. */
@@ -243,7 +245,8 @@ namespace TheaterFx
 			bool bOn = false;
 			std::string Kind;
 			double Born = 0.0, KindBorn = 0.0, Last = 0.0, Owed = 0.0, LastPuff = 0.0, NextFlame = 0.0;
-			Vec At, Carry;
+			double Tip = 0.0; // (fire: how far aft of the point its smoke starts, at the flame's tips)
+			Vec At, Carry, LastPuffAt;
 		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */
 		struct Firing
@@ -319,6 +322,7 @@ namespace TheaterFx
 			double Deep;
 		};
 		std::vector<Order> Sorted;
+		std::vector<Bit> Roots; // (each frame: the young end of each trail, from its point back to its newest hanging puff)
 
 		double Num(const std::string& Path, double Fallback) const;
 		double Pick(Dice& D, const std::string& Path, double Low, double High) const; // a number in the recipe's range

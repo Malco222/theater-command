@@ -43,7 +43,7 @@ if (Blasts) { Blasts->End(); Blasts.Reset(); }
 ```
 
 Lamps and day: a flash's lamp is full on the first frame drawn after the flash, about half on the next, then out
-(Tick draws first, then lights). `HourLight` tells the kit how much it is day: by day a lamp is a quarter as strong and
+(Tick draws first, then lights; call Tick once a frame, or a lamp lasts a single frame). `HourLight` tells the kit how much it is day: by day a lamp is a quarter as strong and
 warm white, and small guns light no ground. A flash shorter than a frame is still drawn once, so 30 frames a second
 shows every one; a close tracer (under 100 m) is drawn whole, muzzle to strike.
 
@@ -83,6 +83,7 @@ Blasts->TrailStop(EngineId);
 ```
 
 - `TrailStart` again on a running trail changes its kind, such as smoke catching fire (`fire`).
+- A trail not moved for 30 s is forgotten; call `TrailStart` again to bring it back.
 - Kinds live in the recipe's `air_trails`: `smoke`, `fire`, `glycol`. What a hit looks like lives in `air_hit`.
 - The same clock rule applies as for `AirGun`.
 
