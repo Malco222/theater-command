@@ -1901,16 +1901,13 @@
      ]
     ]
    ],
-   "note": "Haifa from July 1940; Bahrain 19 Oct 1940 (14); Gibraltar at night 1940-43.",
+   "note": "Haifa from July 1940; Bahrain 19 Oct 1940 (14); Gibraltar at night 1940-43. On the chart (the historian, b569): Rhodes (Maritza, Gadurra) and Sardinia (Elmas, Decimomannu, Alghero) had real air bases, but neither has an airfield on today's chart and nothing else on it reaches Haifa, Bahrain or Gibraltar; so the row flies Alexandria from Libya's fields and leaves those out.",
    "fly": [
     {
      "from": 11,
      "to": 40,
      "regions": [
-      "Palestine",
-      "Alexandria",
-      "Gibraltar",
-      "Bahrain"
+      "Alexandria"
      ]
     }
    ]
