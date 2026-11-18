@@ -27,7 +27,12 @@
 #include "UObject/UObjectIterator.h"
 #include <atomic>
 #if PLATFORM_MAC
-#include <sys/resource.h> // (setpriority, PRIO_DARWIN_THREAD, PRIO_DARWIN_BG: tc.Speed.QuietModel 4)
+#include <sys/resource.h> // (setpriority, PRIO_DARWIN_THREAD, PRIO_DARWIN_BG: tc.Speed.QuietModel 4; getrusage: the machine's line)
+#include <mach/mach.h> // (host_processor_info: how busy the chip's cores are, every program's work together)
+#include <mach/mach_host.h>
+#include <mach/processor_info.h>
+#include <mach/vm_map.h>
+#include <notify.h> // (notify_register_check, notify_get_state: the system's own word on how hot it is)
 #endif
 
 CSV_DEFINE_CATEGORY(Theater, true);
@@ -109,7 +114,7 @@ namespace
 		TEXT("How many points of the towns' and the trees' squares are newly shown in one frame when the eye crosses a height at which they change (the nearest squares first, one always), the rest the frames after; 0 shows every square in the same frame, as before. The same picture either way, a few frames later."));
 	TAutoConsoleVariable<int32> CVarTidyAside(
 		TEXT("tc.Speed.TidyAside"), 1,
-		TEXT("1 has Unreal clear out what is no longer used every five minutes, where it did every 61 s in one frame of 40 to 63 ms, and at once behind any pause of a tenth of a second that the game already has (a load, a month's end); 0 leaves it every 61 s, as before. A test's run (-unattended) keeps its 61 s and has the second half only. Read as the table is laid. The same picture either way."));
+		TEXT("1 has Unreal clear out what is no longer used every five minutes, where it did every 61 s in one frame of 40 to 63 ms, and at once behind any pause of a quarter of a second that the game already has (a load, a month's end); 0 leaves it every 61 s, as before. A test's run (-unattended) keeps its 61 s and has the second half only. Read as the table is laid. The same picture either way."));
 
 	FRWLock HoldersGuard; // (tc.Speed.HoldersLock: see TheaterSpeed::FHoldersRead)
 
@@ -127,6 +132,19 @@ namespace
 	double FrameSeenAt = 0.0; // (...and when the last frame was counted, by the same clock: a pause is told by the clock, not by the game's time)
 	double TidyWeighedAt = 0.0; // (...when the game's memory was last read for it, once a second)
 	double TidyLowMB = 0.0; // (...and the least the game has held since the engine last cleared out)
+	bool bTidyOwed = false; // (...and the game holds half a gigabyte over that least: the next pause is taken, whenever the last clear-out was)
+
+	// (The machine's own state, for the log's line on it: see ReadMachine.)
+	struct FMachineReading
+	{
+		double Clock = 0.0; // (the machine's clock at the reading)
+		double GameSeconds = 0.0; // (the seconds of a core's time this program has had since it began, all its threads together)
+		uint64 BusyTicks = 0; // (every core's ticks at work since the machine started, every program's)
+		uint64 AllTicks = 0; // (...and at work or idle)
+		int32 Cores = 0;
+		bool bValid = false;
+	};
+	FMachineReading MachineWas; // (as it stood at the last five seconds' end)
 	FCriticalSection KindsGuard;
 	TMap<FName, FIntPoint> KindsNow; // (still models handed over since the last frame's count, by kind: how many, and their points)
 
@@ -630,16 +648,21 @@ namespace TheaterSpeed
 	}
 
 	// (Speed: tc.Speed.TidyAside, the second half.) The clear-out is a frame of 40 to 63 ms. Behind a pause the game
-	// already has (a frame of over a tenth of a second: a load, a month's end) it is not seen, and the engine then
+	// already has (a frame of over a quarter of a second: a load, a month's end) it is not seen, and the engine then
 	// counts its five minutes from there. So after such a frame it is asked for at once, for the frame that follows,
 	// unless it was done or asked for in the last half minute: a month's end is several long frames, and one clear-out
 	// serves them all. It only sets the engine's own flag (UEngine::ForceGarbageCollection, no full purge): the engine
 	// does it in its own place in the next frame, as it does when its clock runs out.
+	// (Mended after the builder's capture 3 of 18 November, build 1688. A tenth of a second took in the game's own
+	// stutters, 100 and 140 ms, and made each of them 40 ms longer: a quarter of a second takes the loads and the
+	// months' ends and leaves those. And the half minute does not hold when a clear-out is owed, see TidyWhenHeavy:
+	// a second load inside the half minute left its 900 MB to be cleared out in the open.)
 	static void TidyBehind(double FrameTook)
 	{
-		if (FrameTook > 0.1 && CVarTidyAside.GetValueOnGameThread() != 0 && GEngine && FPlatformTime::Seconds() - TidiedAt > 30.0)
+		if (FrameTook > 0.25 && CVarTidyAside.GetValueOnGameThread() != 0 && GEngine && (bTidyOwed || FPlatformTime::Seconds() - TidiedAt > 30.0))
 		{
-			TidiedAt = FPlatformTime::Seconds(); // (asked: not asked again for half a minute, whatever comes of it)
+			TidiedAt = FPlatformTime::Seconds(); // (asked: not asked again for half a minute, whatever comes of it, unless one is owed again)
+			bTidyOwed = false;
 			GEngine->ForceGarbageCollection(false);
 			if (bLogging)
 			{
@@ -652,8 +675,12 @@ namespace TheaterSpeed
 	// 18 November (build 1684, run F) a journey that stood 6,900 tiles and handed 8,440 models over in three minutes
 	// with no clear-out held 600 MB more at its end than the same journey cleared every minute: about 200 MB a
 	// minute, at a pace no player keeps. So the wait is not left to the clock alone. The game's memory is read once
-	// a second, and when it stands half a gigabyte over the least it has been since the last clear-out, one is asked
-	// for: a long journey is cleared about every two minutes, and a quiet half hour every five.
+	// a second, and when it stands half a gigabyte over the least it has been since the last clear-out, one is OWED:
+	// the next pause is taken for it whenever the last was. Only at two gigabytes over is it asked for in the open.
+	// (Mended after capture 3, run I, where it was asked for in the open at half a gigabyte. Four loads in half a
+	// minute left 935 MB, so a list of loads was cleared out every half minute, wherever the eye was, in frames of
+	// 97 and 138 ms on a slowed Mac: more often than Unreal's own minute and for longer. The memory a load brings
+	// is not waste either, and the first clear-out of every run was for the world itself, 1,300 MB of it.)
 	static void TidyWhenHeavy(double Now)
 	{
 		if (Now - TidyWeighedAt < 1.0)
@@ -665,16 +692,88 @@ namespace TheaterSpeed
 		if (TidyLowMB <= 0.0 || HoldsMB < TidyLowMB)
 		{
 			TidyLowMB = HoldsMB;
+			return;
 		}
-		else if (HoldsMB - TidyLowMB > 500.0 && CVarTidyAside.GetValueOnGameThread() != 0 && GEngine && Now - TidiedAt > 30.0)
+		if (CVarTidyAside.GetValueOnGameThread() == 0 || !GEngine)
+		{
+			return;
+		}
+		const double OverMB = HoldsMB - TidyLowMB;
+		if (OverMB > 2000.0 && Now - TidiedAt > 30.0)
 		{
 			TidiedAt = Now;
+			bTidyOwed = false;
 			GEngine->ForceGarbageCollection(false);
 			if (bLogging)
 			{
-				UE_LOG(LogTheater, Display, TEXT("Speed: the engine's clear-out is asked for with the game holding %.0f MB, %.0f over its least since the last (tc.Speed.TidyAside)"), HoldsMB, HoldsMB - TidyLowMB);
+				UE_LOG(LogTheater, Display, TEXT("Speed: the engine's clear-out is asked for with the game holding %.0f MB, %.0f over its least since the last (tc.Speed.TidyAside)"), HoldsMB, OverMB);
 			}
 		}
+		else if (OverMB > 500.0 && !bTidyOwed)
+		{
+			bTidyOwed = true;
+			if (bLogging)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Speed: the engine's clear-out is owed, the game holding %.0f MB, %.0f over its least since the last: the next pause is taken for it (tc.Speed.TidyAside)"), HoldsMB, OverMB);
+			}
+		}
+	}
+
+	// (The second speed detective's, 18 November 2026, after capture 3: four runs on build 1688 in which the same
+	// work on the same view took the graphics chip 12 ms at the first run's start and 21 to 25 ms from its second
+	// minute to the fourth run's end, and the same load's SetLand 224, 293, 386 and 367 ms. The Mac has no fan and
+	// slows its own chip when it is hot, which is the likeliest reading, or another program was busy: the log could
+	// not say which.
+	// So each five seconds the log has a line on the machine: the system's own word on its heat, and how many of the
+	// chip's cores were kept busy by the game and by everything else. Read on a Mac alone, with no cost to a frame.)
+	static FMachineReading ReadMachine()
+	{
+		FMachineReading Seen;
+		Seen.Clock = FPlatformTime::Seconds();
+#if PLATFORM_MAC
+		struct rusage Usage;
+		if (getrusage(RUSAGE_SELF, &Usage) == 0)
+		{
+			Seen.GameSeconds = static_cast<double>(Usage.ru_utime.tv_sec) + static_cast<double>(Usage.ru_utime.tv_usec) * 1e-6
+				+ static_cast<double>(Usage.ru_stime.tv_sec) + static_cast<double>(Usage.ru_stime.tv_usec) * 1e-6;
+		}
+		static const host_t Host = mach_host_self();
+		natural_t CoreCount = 0;
+		processor_info_array_t Info = nullptr;
+		mach_msg_type_number_t InfoCount = 0;
+		if (host_processor_info(Host, PROCESSOR_CPU_LOAD_INFO, &CoreCount, &Info, &InfoCount) == KERN_SUCCESS && Info != nullptr)
+		{
+			const processor_cpu_load_info_data_t* Load = reinterpret_cast<const processor_cpu_load_info_data_t*>(Info);
+			for (natural_t Core = 0; Core < CoreCount; ++Core)
+			{
+				const uint64 AtWork = static_cast<uint64>(Load[Core].cpu_ticks[CPU_STATE_USER]) + static_cast<uint64>(Load[Core].cpu_ticks[CPU_STATE_SYSTEM])
+					+ static_cast<uint64>(Load[Core].cpu_ticks[CPU_STATE_NICE]);
+				Seen.BusyTicks += AtWork;
+				Seen.AllTicks += AtWork + static_cast<uint64>(Load[Core].cpu_ticks[CPU_STATE_IDLE]);
+			}
+			Seen.Cores = static_cast<int32>(CoreCount);
+			Seen.bValid = CoreCount > 0;
+			vm_deallocate(mach_task_self(), reinterpret_cast<vm_address_t>(Info), static_cast<vm_size_t>(InfoCount) * sizeof(integer_t));
+		}
+#endif
+		return Seen;
+	}
+
+	/** The system's own word on its heat: 0 nominal, 1 moderate, 2 heavy, 3 trapping, 4 sleeping; -1 where it is not told. */
+	static int32 ReadHeat()
+	{
+#if PLATFORM_MAC
+		// (the level the system's own heat keeper publishes, which needs no leave to read; the coarser "thermal state" a
+		// program is offered calls both moderate and heavy "fair")
+		static int Token = 0;
+		static const bool bRegistered = notify_register_check("com.apple.system.thermalpressurelevel", &Token) == NOTIFY_STATUS_OK;
+		uint64_t Level = 0;
+		if (bRegistered && notify_get_state(Token, &Level) == NOTIFY_STATUS_OK)
+		{
+			return static_cast<int32>(Level);
+		}
+#endif
+		return -1;
 	}
 
 	void ApplyCommandLineSets()
@@ -788,6 +887,7 @@ namespace TheaterSpeed
 					{
 						TidiedAt = FPlatformTime::Seconds();
 						TidyLowMB = 0.0; // (the least is found afresh: what was cleared goes over the frames that follow)
+						bTidyOwed = false;
 					}
 				});
 			}
@@ -824,6 +924,7 @@ namespace TheaterSpeed
 				MadeWindow[Index] = 0;
 			}
 			WindowModelling = WindowSlowModelling = 0;
+			MachineWas = FMachineReading();
 			TidyBehind(FrameTook); // (with no log there is no telling the step player's looks apart: a test's pause serves as well)
 			return;
 		}
@@ -976,6 +1077,27 @@ namespace TheaterSpeed
 		// its own, or the RHI's too? With no RHI thread, the RHI's work is done on the draw thread and counted there.)
 		UE_LOG(LogTheater, Display, TEXT("Speed: RHI thread %.1f ms a frame%s"), WindowRHI / Frames,
 			GRHIThreadTime == 0 && WindowRHI <= 0.0 ? TEXT(" (none: its work is in the draw thread's time)") : TEXT(""));
+		{
+			// (The machine's line, a line of its own as the RHI thread's is: see ReadMachine. Nothing where neither is told.)
+			const FMachineReading Machine = ReadMachine();
+			const int32 Heat = ReadHeat();
+			static const TCHAR* const HeatNames[] = { TEXT("nominal"), TEXT("moderate"), TEXT("heavy"), TEXT("trapping"), TEXT("sleeping") };
+			const FString HeatWord = Heat < 0 ? FString(TEXT("not told"))
+				: Heat < static_cast<int32>(UE_ARRAY_COUNT(HeatNames)) ? FString::Printf(TEXT("%s (%d of 4)"), HeatNames[Heat], Heat)
+				: FString::Printf(TEXT("%d"), Heat);
+			if (Machine.bValid && MachineWas.bValid && Machine.AllTicks > MachineWas.AllTicks && Machine.BusyTicks >= MachineWas.BusyTicks && Machine.Clock > MachineWas.Clock)
+			{
+				const double BusyCores = static_cast<double>(Machine.Cores) * static_cast<double>(Machine.BusyTicks - MachineWas.BusyTicks) / static_cast<double>(Machine.AllTicks - MachineWas.AllTicks);
+				const double GameCores = FMath::Max(Machine.GameSeconds - MachineWas.GameSeconds, 0.0) / (Machine.Clock - MachineWas.Clock);
+				UE_LOG(LogTheater, Display, TEXT("Speed: the machine: heat %s; of its %d cores the game kept %.1f busy and other programs %.1f"),
+					*HeatWord, Machine.Cores, GameCores, FMath::Max(BusyCores - GameCores, 0.0));
+			}
+			else if (Heat >= 0)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Speed: the machine: heat %s"), *HeatWord);
+			}
+			MachineWas = Machine;
+		}
 		TArray<const FSlot*> Busy;
 		for (const FSlot& Slot : Each)
 		{

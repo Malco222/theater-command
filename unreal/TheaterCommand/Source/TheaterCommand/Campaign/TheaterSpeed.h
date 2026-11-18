@@ -126,12 +126,20 @@ class APlayerController;
  *                         1684, where the log first named them). 0: every square in the same frame, as before. The same
  *                         picture either way; the far squares come up to a fifth of a second later.
  *   tc.Speed.TidyAside    1 (default): Unreal clears out what is no longer used every five minutes, and at once behind
- *                         any pause of a tenth of a second the game already has (a load, a month's end), where it did
- *                         every 61.1 s in one frame of 40 to 63 ms wherever the eye was: eleven such frames in the five
- *                         runs of the same capture. Read once, as the table is laid (gc.TimeBetweenPurgingPendingKill-
- *                         Objects). 0: every 61.1 s, as before. The same picture either way. A test's run
+ *                         any pause of a quarter of a second the game already has (a load, a month's end), where it
+ *                         did every 61.1 s in one frame of 40 to 63 ms wherever the eye was: eleven such frames in the
+ *                         five runs of the same capture. Read once, as the table is laid (gc.TimeBetweenPurgingPending-
+ *                         KillObjects). 0: every 61.1 s, as before. The same picture either way. A test's run
  *                         ("-unattended") keeps its 61.1 s, which is what finds an object held too loosely, and is
  *                         cleared out behind its loads as well; a timing run asks for the five minutes by -TheaterSet.
+ *                         When the game holds half a gigabyte over its least since the last clear-out, one is owed and
+ *                         the next pause is taken for it whenever the last was; only at two gigabytes over is it asked
+ *                         for in the open (mended after capture 3, where half a gigabyte asked in the open and a list
+ *                         of loads was cleared out every half minute, in frames of 97 and 138 ms).
+ * And the log's line on the machine itself, each five seconds, on a Mac: the system's own word on its heat (nominal,
+ * moderate, heavy, trapping, sleeping: a Mac with no fan slows its own chip when it is hot) and how many of the chip's
+ * cores the game and the other programs kept busy. Capture 3's four runs were on a Mac that slowed part way through
+ * the first, and nothing in the log said so but the chip's time for the same view.
  * And two for measuring only, which change the picture and are not to be left off without the art director:
  *   tc.Speed.TownShadows  1 (default): the near towns throw shadows. 0: they do not.
  *   tc.Speed.TrainShadows 1 (default): the trains throw shadows. 0: they do not.
