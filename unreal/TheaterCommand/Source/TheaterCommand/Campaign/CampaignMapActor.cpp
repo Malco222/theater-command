@@ -14837,7 +14837,9 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				// seen as 220, 153, 92, a peach, which she ruled out. So it is laid a little above her figures and is
 				// a quarter of the width; the edge is a little smaller and ends more sharply, so that no thin red
 				// ring stands round the fire. "-TheaterFlakHeart=ECA04A" lays the heart in another colour, for a picture.)
-				static FColor HeartLaid(236, 160, 74);
+				// (Measured on build 1702 with nothing crossing it: the heart 231, 164, 42 and the body 210, 90, 28, each a
+				// little short of her blue and the body short of her green. Both are laid up to meet her figures.)
+				static FColor HeartLaid(236, 160, 88);
 				static bool bHeartAsked = false;
 				if (!bHeartAsked)
 				{
@@ -14849,7 +14851,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 						UE_LOG(LogTheater, Display, TEXT("Flak: the flash's heart is laid as %d, %d, %d (-TheaterFlakHeart)"), HeartLaid.R, HeartLaid.G, HeartLaid.B);
 					}
 				}
-				const FLinearColor FlashEdge(FColor(185, 62, 22)), FlashBody(FColor(212, 104, 30)), FlashHeart(HeartLaid);
+				const FLinearColor FlashEdge(FColor(185, 62, 22)), FlashBody(FColor(210, 122, 50)), FlashHeart(HeartLaid);
 				DrawSmear(FlashAt + Lean * (0.04 * W), Lean, 0.15 * W, 0.105 * W, FlashEdge, 0.9f * Lit0, 0.75);
 				DrawSmear(FlashAt + Lean * (0.02 * W), Lean, 0.115 * W, 0.08 * W, FlashBody, 0.92f * Lit0, 0.65);
 				DrawSmear(FlashAt - Lean * (0.07 * W) + Athwart * (0.04 * W), Athwart, 0.07 * W, 0.055 * W, FlashBody, 0.9f * Lit0, 0.6);
