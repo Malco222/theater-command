@@ -12,15 +12,15 @@ The game is for personal use only.
 | `bomber_drone` | `bomber_drone.wav` | [Hahnweide Vintage Air Show 2011 - B-25 And P-38](https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_B-25_And_P-38.ogv) | Wikimedia Commons | CC BY 3.0 | LEJ.approach/dvldi |
 | `fighter_pass` | `fighter_pass.wav` | [Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38](https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_Flying_Bulls_B-25_And_P-38.ogv) | Wikimedia Commons | CC BY 3.0 | LEJ.approach/dvldi |
 | `machine_gun` | `machine_gun.wav` | [M240G Live Fire Prime Cuts](https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv) | Wikimedia Commons | Public domain | none |
-| `rifles` | `rifles.wav` | [U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll)](https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv) | Wikimedia Commons | Public domain | none |
+| `rifles` | `rifles.wav` | [gun lee enfield 303 rifle clean shot](https://freesound.org/people/kyles/sounds/450853/) | Freesound | CC0 | none |
+| `rifles` | `rifles.wav` | [gun lee enfield 303 rifle fire shot](https://freesound.org/people/kyles/sounds/450854/) | Freesound | CC0 | none |
+| `rifles` | `rifles.wav` | [gun lee enfield 303 rifle fire shot loud badass](https://freesound.org/people/kyles/sounds/450851/) | Freesound | CC0 | none |
 | `ship_guns` | `ship_guns.wav` | [913363-U.S. Marines From 2nd ANGLICO and the Coastal Brigade, Finnish Navy Conduct Series Fires Using 130mm 53 TK Cannon](https://commons.wikimedia.org/wiki/File:913363-U.S._Marines_From_2nd_ANGLICO_and_the_Coastal_Brigade,_Finnish_Navy_Conduct_Series_Fires_Using_130mm_53_TK_Cannon.webm) | Wikimedia Commons | Public domain | none |
 | `ship_guns` | `ship_guns.wav` | [Artillery Battery Barrage • U.S.-ROK Marines Live-Fire](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
-| `ship_horn` | `ship_horn.wav` | [Ship Horn - Fog Horn - Cruise Ship Grand Princess](https://freesound.org/people/coalcon/sounds/636075/) | Freesound | CC0 | none |
 | `battle` | `battle_loop.wav` | [U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll)](https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv) | Wikimedia Commons | Public domain | none |
 | `battle` | `battle_loop.wav` | [M240G Live Fire Prime Cuts](https://commons.wikimedia.org/wiki/File:M240G_Live_Fire_Prime_Cuts.ogv) | Wikimedia Commons | Public domain | none |
 | `battle` | `battle_loop.wav` | [Artillery Battery Barrage • U.S.-ROK Marines Live-Fire](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
 | `battle` | `battle_loop.wav` | [Distant WW2 Gunfire Kent](https://freesound.org/people/Cheeseheadburger/sounds/170478/) | Freesound | CC BY 4.0 | Cheeseheadburger |
-| `bugle` | `bugle_call.wav` | [Corneta Militar](https://freesound.org/people/Boscoricardo17/sounds/868980/) | Freesound | CC0 | none |
 | `explosion` | `explosion_far_01.wav` | [distant explosions](https://freesound.org/people/Kostrava/sounds/320788/) | Freesound | CC0 | none |
 | `field_gun` | `field_gun_fire.wav` | [GUNArtl_69thFieldArtilleryGun01_InMotionAudio_FREESampleSunday](https://freesound.org/people/InMotionAudio/sounds/702245/) | Freesound | CC0 | none |
 | `halftrack` | `halftrack_drive_loop.wav` | [M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC)](https://commons.wikimedia.org/wiki/File:M3_Halftrack_at_Ft_MacArthur,_CA_(M16A2_MGMC).ogv) | Wikimedia Commons | CC BY 3.0 | rafowell |
@@ -30,10 +30,52 @@ The game is for personal use only.
 | `tank_engine` | `tank_loop.wav` | [Taistelunäytös Lippujuhlan päivä 2014 18 T-34-85](https://commons.wikimedia.org/wiki/File:Taistelun%C3%A4yt%C3%B6s_Lippujuhlan_p%C3%A4iv%C3%A4_2014_18_T-34-85.webm) | Wikimedia Commons | Public domain | none |
 | `tank_gun` | `tank_gun_01.wav` | [2-37 AR, 1ID Hones Lethality During M1A2 Abrams Gunnery (1017452)](https://commons.wikimedia.org/wiki/File:2-37_AR,_1ID_Hones_Lethality_During_M1A2_Abrams_Gunnery_(1017452).webm) | Wikimedia Commons | Public domain | none |
 | `truck_engine` | `lorry_drive_loop.wav` | [M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC)](https://commons.wikimedia.org/wiki/File:M3_Halftrack_at_Ft_MacArthur,_CA_(M16A2_MGMC).ogv) | Wikimedia Commons | CC BY 3.0 | rafowell |
+| `click` | `click.wav` | [WWS Typewriter](https://commons.wikimedia.org/wiki/File:WWS_Typewriter.ogg) | Wikimedia Commons | CC BY 4.0 | Work With Sounds / Konrad Gutkowski |
+| `stamp` | `stamp.wav` | [Rubber seal dabbed on ink pad](https://commons.wikimedia.org/wiki/File:Rubber_seal_dabbed_on_ink_pad.ogg) | Wikimedia Commons | CC BY 3.0 | Subhashish Panigrahi |
+| `tick` | `tick.wav` | [Clock ticking](https://commons.wikimedia.org/wiki/File:Clock_ticking.ogg) | Wikimedia Commons | Public domain | none |
+| `coins` | `coins.wav` | [Coins dropped in wooden moneybox](https://commons.wikimedia.org/wiki/File:Coins_dropped_in_wooden_moneybox.ogg) | Wikimedia Commons | Public domain | none |
+| `pickup` | `pickup.wav` | [Chess piece sliding 1](https://freesound.org/people/Alnotreally/sounds/801348/) | Freesound | CC0 | none |
+| `hammer` | `hammer.wav` | [Large Anvil & Steel Hammer 2](https://freesound.org/people/Benboncan/sounds/103630/) | Freesound | CC BY 4.0 | Benboncan |
+| `bell` | `bell.wav` | [WWS Quarter-hourtowerclock](https://commons.wikimedia.org/wiki/File:WWS_Quarter-hourtowerclock.ogg) | Wikimedia Commons | CC BY 4.0 | Work With Sounds / Museum of Municipal Engineering |
+| `projector` | `projector.wav` | [Cinema projector PROYECSON](https://commons.wikimedia.org/wiki/File:Cinema_projector_PROYECSON.mp3) | Wikimedia Commons | CC BY 4.0 | Carlosjvives |
+| `newsreel` | `newsreel.wav` | [Ceremonial Fanfare - Concert Band - United States Air Force Heritage of America Band](https://commons.wikimedia.org/wiki/File:Ceremonial_Fanfare_-_Concert_Band_-_United_States_Air_Force_Heritage_of_America_Band.mp3) | Wikimedia Commons | Public domain | none |
+| `radio` | `radio.wav` | [Psalm118CW](https://commons.wikimedia.org/wiki/File:Psalm118CW.wav) | Wikimedia Commons | CC0 | none |
+| `drums` | `drums.wav` | [Drum - Cadence A](https://commons.wikimedia.org/wiki/File:Drum_-_Cadence_A.ogg) | Wikimedia Commons | Public domain | none |
+| `victory` | `victory.wav` | [To the Colors - Concert Band - United States Air Force Band](https://commons.wikimedia.org/wiki/File:To_the_Colors_-_Concert_Band_-_United_States_Air_Force_Band.mp3) | Wikimedia Commons | Public domain | none |
+| `defeat` | `defeat.wav` | [Taps on bugle](https://commons.wikimedia.org/wiki/File:Taps_on_bugle.ogg) | Wikimedia Commons | Public domain | none |
+| `train` | `train_loop.wav` | [Steam Locomotive NKP Berkshire 765 near Toledo 07-28-12](https://commons.wikimedia.org/wiki/File:Steam_Locomotive_NKP_Berkshire_765_near_Toledo_07-28-12.webm) | Wikimedia Commons | CC BY 3.0 | Gary Hoover |
+| `dive_alarm` | `dive_alarm.wav` | [WWII submarine dive klaxon](https://commons.wikimedia.org/wiki/File:WWII_submarine_dive_klaxon.ogg) | Wikimedia Commons | Public domain | none |
+| `surfacing` | `surfacing.wav` | [WWII submarine dive klaxon](https://commons.wikimedia.org/wiki/File:WWII_submarine_dive_klaxon.ogg) | Wikimedia Commons | Public domain | none |
+| `torpedo_launch` | `torpedo_launch.wav` | [G45-13-Submarine Torpedo Fire](https://freesound.org/people/craigsmith/sounds/438715/) | Freesound | CC0 | none |
+| `torpedo_run_loop` | `torpedo_run_loop.wav` | [G45-20-Submarine Motor Underwater](https://freesound.org/people/craigsmith/sounds/438722/) | Freesound | CC0 | none |
+| `ship_sinking` | `ship_sinking.wav` | [Moored Boat Metal Grinding, Groaning & Creaking](https://freesound.org/people/nebulousflynn/sounds/269061/) | Freesound | CC BY 4.0 | nebulousflynn |
+| `ship_sinking` | `ship_sinking.wav` | [G45-35-Distant Explosions Underwater](https://freesound.org/people/craigsmith/sounds/438737/) | Freesound | CC0 | none |
+| `depth_charge_roll` | `depth_charge_roll.wav` | [Rolling Metal Barrel](https://freesound.org/people/Mateusz_Chenc/sounds/512215/) | Freesound | CC0 | none |
+| `depth_charge_thrower` | `depth_charge_thrower.wav` | [G33-01-Mortar Firing](https://freesound.org/people/craigsmith/sounds/438507/) | Freesound | CC0 | none |
+| `lift_motor` | `lift_motor.wav` | [JS Ise's aircraft lift goes down from the flight-deck, -17 Jun. 2012 a](https://commons.wikimedia.org/wiki/File:JS_Ise%27s_aircraft_lift_goes_down_from_the_flight-deck,_-17_Jun._2012_a.ogv) | Wikimedia Commons | CC BY 3.0 | FLYWITHMETOTHEMOON from Japan |
+| `aircraft_break_up` | `aircraft_break_up.wav` | [R29-28-Large Metal Vehicle Crashes](https://freesound.org/people/craigsmith/sounds/487143/) | Freesound | CC0 | none |
+| `bomb_release` | `bomb_release.wav` | [G33-08-Whistle and Small Impact](https://freesound.org/people/craigsmith/sounds/438514/) | Freesound | CC0 | none |
+| `parachute_open` | `parachute_open.wav` | [parachute 2](https://freesound.org/people/Huggy13ear/sounds/138976/) | Freesound | CC BY 4.0 | Huggy13ear |
+| `ramp_winch` | `ramp_winch.wav` | [Hand Winch Quick Release](https://freesound.org/people/Benboncan/sounds/69177/) | Freesound | CC BY 4.0 | Benboncan |
+| `ramp_drop` | `ramp_drop.wav` | [Lowering Ramp](https://freesound.org/people/Gingie/sounds/346856/) | Freesound | CC0 | none |
+| `craft_grounds` | `craft_grounds.wav` | [Dragging Kayak](https://freesound.org/people/brunoboselli/sounds/488335/) | Freesound | CC BY 4.0 | brunoboselli |
+| `wind_loop` | `wind_loop.wav` | [Wind is blowing in the grass of a patagonian plain. Wind is blowing in the trees in background. (Tierra del fuego, Argentina).](https://freesound.org/people/felix.blume/sounds/139337/) | Freesound | CC0 | none |
+| `woods_loop` | `woods_loop.wav` | [Forest, close up of trees rustling in the wind](https://freesound.org/people/Anya_Media/sounds/523389/) | Freesound | CC0 | none |
+| `rain_loop` | `rain_loop.wav` | [Steady Rain](https://freesound.org/people/Benboncan/sounds/119784/) | Freesound | CC BY 4.0 | Benboncan |
 
 ## Credits owed
 
+- **Benboncan** "Large Anvil & Steel Hammer 2", "Hand Winch Quick Release", "Steady Rain" · CC BY 4.0
+- **brunoboselli** "Dragging Kayak" · CC BY 4.0
+- **Carlosjvives** "Cinema projector PROYECSON" · CC BY 4.0
 - **Cheeseheadburger** "Distant WW2 Gunfire Kent" · CC BY 4.0
+- **FLYWITHMETOTHEMOON from Japan** "JS Ise's aircraft lift goes down from the flight-deck, -17 Jun. 2012 a" · CC BY 3.0
+- **Gary Hoover** "Steam Locomotive NKP Berkshire 765 near Toledo 07-28-12" · CC BY 3.0
+- **Huggy13ear** "parachute 2" · CC BY 4.0
 - **klankbeeld** "marching boots" · CC BY 4.0
 - **LEJ.approach/dvldi** "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38", "Hahnweide Vintage Air Show 2011 - B-25 And P-38" · CC BY 3.0
+- **nebulousflynn** "Moored Boat Metal Grinding, Groaning & Creaking" · CC BY 4.0
 - **rafowell** "M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC)" · CC BY 3.0
+- **Subhashish Panigrahi** "Rubber seal dabbed on ink pad" · CC BY 3.0
+- **Work With Sounds / Konrad Gutkowski** "WWS Typewriter" · CC BY 4.0
+- **Work With Sounds / Museum of Municipal Engineering** "WWS Quarter-hourtowerclock" · CC BY 4.0

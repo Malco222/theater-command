@@ -711,12 +711,33 @@ private:
 		double Share = 0.0; // how far through its flight it is, 0 to 1
 		bool bEngaged = false; // the defender's fighters are among the bombers
 		double NextFlak = 0.0; // when the guns under it fire next (nothing until it comes under fire)
+		// The guns of a raid that is met: the two fighters' two guns each (0 to 3) and a gunner in each bomber (4 to
+		// 6). When each fires its next round, and how many it has fired: every fifth round is a tracer.
+		double NextRound[7] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+		int32 RoundsFired[7] = { 0, 0, 0, 0, 0, 0, 0 };
+		// A burst of flak close by jolts the formation: when, and by how many degrees it rolls and pitches. It settles in half a second.
+		double JoltAt = -10.0;
+		double JoltRoll = 0.0, JoltPitch = 0.0;
+		// (where the two sides were a frame ago, and when: for the speed a round leaves its gun with)
+		FVector SeenAt = FVector::ZeroVector, SeenRivalAt = FVector::ZeroVector;
+		double SeenWhen = 0.0;
 		// (Ruling 107.) By night: each bomber again as a shell of light, shown while a searchlight holds it.
 		int32 LitMachines = 0;
 		int32 LitShown = INDEX_NONE;
 		TObjectPtr<UMaterialInstanceDynamic> LitInk;
 	};
 	TArray<FFlight> Flights;
+	/**
+	 * (Brian, 18 November 2026: "i want tracer fire shown as well. 1 out of every 5 bullets with yellow".) A tracer
+	 * round in flight over a raid: where it left its gun and when, and how it flies. It flies straight and burns out.
+	 */
+	struct FTracerRound
+	{
+		FVector From = FVector::ZeroVector;
+		FVector Velocity = FVector::ZeroVector;
+		double Born = 0.0;
+	};
+	TArray<FTracerRound> TracerRounds;
 	void UpdateSorties();
 	float SortieSeenFrom = 6000.0f; // (how high the eye stands: the raid's pencilled course is thinned close up)
 	/**
@@ -1082,6 +1103,7 @@ private:
 		double Born = 0.0;
 		int32 Seed = 0; // no two alike
 		double Wings = 0.0; // a wingspan of the bombers it was fired at: every size of it is in these
+		int32 Flashed = 0; // how many frames its flash has been drawn: one or two, and no more
 	};
 	TArray<FFlakBurst> FlakBursts;
 	int32 FlakFired = 0;
@@ -1528,6 +1550,16 @@ private:
 	mutable TArray<bool> TownPacked; // true for a city or capital in a province too small for it: it is built tight and tall
 	mutable TArray<bool> TownHumbled; // true for a city that gave way to a greater town beside it: it is built as a town, a church and its streets
 	mutable TMap<int32, TArray<FVector>> TownClear; // for a greater town, the ground it leaves green beside each lesser town that gave way to it: the middle (X, Y) and how far round it (Z), in map units
+	/** For each of two towns that both kept their size beside one another: the other's middle, how far its roofs may run, its province, and how far off that ground this town keeps. */
+	struct FTownKeepOff
+	{
+		FVector2D Middle = FVector2D::ZeroVector;
+		double Reach = 0.0;
+		int32 Province = INDEX_NONE;
+		double Off = 0.0;
+	};
+	mutable TMap<int32, TArray<FTownKeepOff>> TownKeepOff;
+	TMap<int32, FVector2D> TownQuays; // where each port's quay stands, as its town was last built: the names of the provinces keep off them
 	TMap<int32, FVector> TownBeacons; // by province: the lantern of its port's lighthouse, on the table
 	TSet<int32> AirfieldsUsed; // the provinces whose airfields have air groups based on them
 	bool bAirfieldsKnown = false; // the rules say which airfields are in use (the grand campaign): an empty one is then built smaller

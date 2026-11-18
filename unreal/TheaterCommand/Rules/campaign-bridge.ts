@@ -2423,7 +2423,8 @@ function stormLook(region: number) {
   const going = stormCandidates(s, region);
   const verdict = verdictOf(look, 'storm').word;
   const size = v.sizeWord.toLowerCase();
-  const divisions = `${v.guard.toFixed(1)} division${v.guard === 1 ? '' : 's'}`;
+  // (The UI director, 18 November 2026: "0.0 divisions" reads as none. A guard under a division is "part of a division", as the province's card says.)
+  const divisions = v.guard < 0.95 ? 'part of a division' : `${v.guard.toFixed(1)} division${v.guard.toFixed(1) === '1.0' ? '' : 's'}`;
   const menOfGuard = v.guard > 0 ? Math.round(guardMen(s, r)) : 0;
   const guardOnly = v.inside === 0;
   const wall = look.lines.find((l) => l.label === 'The town');
@@ -2893,8 +2894,23 @@ function railShow(ids: number[], march: number[], army = '', armyIds: number[] =
       if (cuts.has(a)) continue;
       for (const b of railsAt(a)) if (cuts.has(b) && !pair.has(`${Math.min(a, b)}:${Math.max(a, b)}`)) bars.push([a, b]);
     }
+    // (The UI director, 18 November 2026.) Corps that are a town's garrison by choice were told of a siege that is not
+    // there ("... is shut in the town at New York. No train leaves a siege."). Until the rules' own new line arrives
+    // (the rules builder's 3c897ba), a garrison of a town nobody besieges is told what it is and how it comes out.
+    let line = said ? trainWho(s, cs, said.line, army, armyIds) : '';
+    try {
+      const seat = townSiege(s, cs[0].reg);
+      const inTown = cs.every((c) => !!(c as { town?: boolean }).town || !!(c as { garrison?: unknown }).garrison);
+      if (said && !said.can && seat && !seat.by && inTown && / is shut in the town /.test(said.line)) {
+        // (one corps by its own name, as the banner that sent it in names it; several as the army in hand is named)
+        const named = whoOf(cs, army, armyIds);
+        const who = named.who.charAt(0).toUpperCase() + named.who.slice(1);
+        const stronger = /fights? (\d+)% stronger/.exec(seat.lines.join(' '))?.[1];
+        line = `${who} ${named.many ? 'are' : 'is'} ${seat.town}'s garrison${stronger ? `: inside the town ${named.many ? 'they fight' : 'it fights'} ${stronger}% stronger` : ''}. TAKE THE FIELD brings ${named.many ? 'them' : 'it'} out.`;
+      }
+    } catch { /* the rules' own line stands */ }
     return {
-      can: !!said?.can, strong: said?.strong ?? '', line: said ? trainWho(s, cs, said.line, army, armyIds) : '', tracks, reach,
+      can: !!said?.can, strong: said?.strong ?? '', line, tracks, reach,
       dots: beyond.filter((id) => !cuts.has(id) && !(barred && steep.has(s.regions[id].name))),
       tint: beyond, bars, ringed: reach.filter((id) => cuts.has(id)),
     };
@@ -3062,7 +3078,8 @@ function province(id: number) {
     home,
     // The chief town of the province, and what the player gets for taking the place (or has from holding it).
     town: (() => { const t = townIn(s, r.id); return t ? { name: t.name, size: t.sizeWord, worth: t.worth, rank: t.rank } : null; })(),
-    prize: (() => { const z = prizeOfPlace(s, r.id); return z && prizeLine(s, r.id) ? { kind: z.kind, line: z.line, items: z.items.map((i) => `${i.label}: ${i.text}`) } : null; })(),
+    // (the line through the rules' own pass for names: "the United States' 51", never "the United States's")
+    prize: (() => { const z = prizeOfPlace(s, r.id); return z && prizeLine(s, r.id) ? { kind: z.kind, line: theWords(z.line), items: z.items.map((i) => `${i.label}: ${i.text}`) } : null; })(),
     // The town's building plots (the grand campaign): what stands, what is going up, how many are free.
     plots: (() => {
       const t = townBuildings(s, r.id);
@@ -3116,7 +3133,8 @@ function province(id: number) {
     // (all only in the grand campaign, where those rules apply).
     // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.
     // The town as a fortress (Version 54): what it adds to its defenders, and how its siege stands, in plain lines.
-    siege: (() => { try { const v = townSiege(s, r.id); return v ? { town: v.town, by: v.by ? s.nations[v.by]?.name ?? v.by : '', lines: v.lines, inside: v.inside, room: v.room } : null; } catch { return null; } })(),
+    // (The UI director, 18 November 2026: the besieger's name takes its article, "BESIEGED BY THE UNITED STATES"; and `own` says the town is the player's own, the one case in which the head is red.)
+    siege: (() => { try { const v = townSiege(s, r.id); return v ? { town: v.town, by: v.by ? theWords(`by ${s.nations[v.by]?.name ?? v.by}`).slice(3) : '', own: !!me && r.ctrl === me, lines: v.lines, inside: v.inside, room: v.room } : null; } catch { return null; } })(),
     // (Version 63) A province cut off from the rest of its country: what its troops live on, and for how long.
     pocket: (() => {
       try {
@@ -3542,7 +3560,9 @@ function land() {
   const steepNames = new Set<string>(GROUND.steep.regions);
   return {
     // (rules version 74: on the wider chart, its rivers, crossings and lines follow Europe's, which keep their numbers)
-    rivers: riversOf(s).map((r) => ({ name: r.name, pts: r.pts })),
+    // (`into`: what the wider chart's file says each river runs into, another river or a sea; the game joins a
+    // tributary's ribbon only to the river it names)
+    rivers: riversOf(s).map((r) => ({ name: r.name, pts: r.pts, into: (r as { into?: string }).into ?? '' })),
     crossings: crossingsOf(s).map((c) => [c.a, c.b, c.river, c.x, c.y]),
     rails: railLinks(s).map((l) => [l.a, l.b, l.x, l.y]),
     steep: s.regions.filter((r) => steepNames.has(r.name)).map((r) => r.id),

@@ -1619,6 +1619,7 @@ struct FLandRiver
 {
 	FString Name;
 	TArray<FVector2D> Course;
+	FString Into; // what it runs into, as the wider chart's file names it: another river, a lake or a sea. Empty where the rules do not say (Europe's)
 };
 
 /** Where a road and railway cross a river between two regions. */
@@ -1702,6 +1703,7 @@ struct FProvinceInfo
 	TArray<FTownOffer> TownOffers;
 	// The town as a fortress, and how its siege stands (the grand campaign): who stands round it, and plain lines.
 	FString SiegeBy;
+	bool bSiegeOwn = false; // the town is the player's own (a town of his besieged: its head is the one in red)
 	TArray<FString> SiegeLines;
 	// (Version 64) Fieldworks standing empty here: a heading, and who can use them.
 	FString LeftWorksTitle, LeftWorksText;

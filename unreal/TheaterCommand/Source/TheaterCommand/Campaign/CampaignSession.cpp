@@ -2843,6 +2843,7 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 		if (Object->TryGetObjectField(TEXT("siege"), Siege))
 		{
 			(*Siege)->TryGetStringField(TEXT("by"), Info.SiegeBy);
+			(*Siege)->TryGetBoolField(TEXT("own"), Info.bSiegeOwn);
 			(*Siege)->TryGetStringArrayField(TEXT("lines"), Info.SiegeLines);
 		}
 		const TSharedPtr<FJsonObject>* LeftWorks = nullptr;
@@ -3176,6 +3177,7 @@ FLandFeatures FCampaignSession::Land()
 			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
 			FLandRiver& River = Out.Rivers.AddDefaulted_GetRef();
 			Entry->TryGetStringField(TEXT("name"), River.Name);
+			Entry->TryGetStringField(TEXT("into"), River.Into);
 			const TArray<TSharedPtr<FJsonValue>>* Points = nullptr;
 			if (Entry->TryGetArrayField(TEXT("pts"), Points))
 			{

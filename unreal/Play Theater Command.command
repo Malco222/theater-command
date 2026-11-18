@@ -45,6 +45,15 @@ echo "Starting Theater Command..."
 # (-TheaterWorld: the whole-world map. The grand campaign is then played on the wider chart, with North America's
 # provinces; the history scenarios keep to Europe, with the world beyond as their backdrop. Take the flag out to
 # go back to the table laid with Europe alone.)
-"$ENGINE/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor" "$PWD/TheaterCommand.uproject" -game -windowed -TheaterWorld > /tmp/theater-command-game.log 2>&1 &
+# (-TheaterSpeedLog, the speed detective's ask of 18 November 2026: a few lines of timings in the game's log every five
+# seconds, and nothing different on screen. And each session's log is kept under its own date in
+# ~/Library/Logs/TheaterCommand/Sessions, where a later test run cannot write over it: the only reading there is
+# of a long evening's play in this window, on this Mac.)
+SESSIONS="$HOME/Library/Logs/TheaterCommand/Sessions"
+KEPT=()
+if mkdir -p "$SESSIONS" 2> /dev/null; then
+  KEPT=("-abslog=$SESSIONS/session-$(date +%Y-%m-%d-%H%M%S).log")
+fi
+"$ENGINE/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor" "$PWD/TheaterCommand.uproject" -game -windowed -TheaterWorld -TheaterSpeedLog "${KEPT[@]}" > /tmp/theater-command-game.log 2>&1 &
 disown
 sleep 2

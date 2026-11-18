@@ -34,6 +34,7 @@ struct FRegionPanelInfo
 	int32 PlotsFree = 0, PlotsCanBuild = 0;
 	FText ProvinceNote;
 	FText SiegeTitle, SiegeText; // the town as a fortress, and how its siege stands
+	bool bSiegeOwn = false; // a town of the player's own, besieged: the head is in red (its stores run out by a date); any other siege head is in the heads' brass
 	FText LeftWorksTitle, LeftWorksText; // fieldworks standing empty here, and who can use them
 	FText PocketTitle, PocketText; // a province cut off from the rest of its country: what its troops live on, and for how long
 	bool bPocketSpent = false;
@@ -147,6 +148,8 @@ struct FArmyTray
 	// able to attack them again".) The town's orders for the army in hand, as plain buttons on its own tray: until
 	// then they stood only under ORDERS on the province's card, and a right-click on the town.
 	FText StormButton, StormTip; // "STORM PANAMA CITY": the army stands round that town and may assault it. Empty when it may not
+	FString StormTown; // ("Storm Panama City": the same in the rules' own capitals, for the tray's line)
+	bool bStormFavoured = false; // the staff's forecast favours the assault: the one case in which the button is lit
 	FText GarrisonButton, GarrisonTip; // "GARRISON NEW YORK": corps in hand may go into the town of the province they stand in
 	FText FieldButton; // "TAKE THE FIELD": corps in hand are inside a town and may leave it
 	TArray<FString> GarrisonActions, FieldActions; // the province's own orders that do it, one for each corps
@@ -850,6 +853,8 @@ public:
 	/** A town order from the army's own tray: 0 storms the town it besieges (its card first), 1 sends the corps in hand into the town, 2 brings them out. */
 	void TrayTownOrder(int32 Which);
 	// (the score: whose wars were counted last, how many, and in which month, to hear one of them end)
+	FString StormFavourKey; // (the forecast is asked once for a hand, a place and a month)
+	bool bStormFavourKept = false;
 	FString MusicWarsOf;
 	int32 MusicWars = 0, MusicWarsTurn = 0;
 	void SendBackCorps(int32 CorpsId);

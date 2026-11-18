@@ -50,8 +50,19 @@ namespace
 	 * or longer than the moment on the map, is played for the seconds given and then fades. The recordings are
 	 * brought in by Tools/build_sounds.sh from Sounds/Real, to /Game/Campaign/Sounds/Real; a game without them
 	 * plays the stand-ins as before. ("-TheaterOldSounds" plays the stand-ins.)
-	 * What has no real recording yet keeps its stand-in: the desk's sounds (click, stamp, tick, coins, hammer,
-	 * pickup, bell), the newsreel's (projector, newsreel, radio), drums, horses, victory and defeat.
+	 * Round five (Brian's stamps on the listening board, 18 November 2026, 14:37 to 14:49 UTC): the desk's sounds
+	 * (click, stamp, tick, coins, pickup, bell), the newsreel's (projector, newsreel, radio), drums, victory and
+	 * defeat have their recordings too, under the same names; and the train its own (train_loop, of the first
+	 * approved batch). Nothing keeps a synthesised stand-in any more.
+	 * CUT BY BRIAN at the same check, and silent until a new take passes his ear: the horses, the bugle and the
+	 * ship's horn. They have no stand-in either: see Silent below. (The hammer was cut with them; at his third
+	 * check, 15:51 UTC the same day, a steel hammer on an anvil passed, and the rifles became a line of real
+	 * Lee-Enfields under the same name. The horses and the ship's horn were cut again.)
+	 * The pack's cues for a submarine, a carrier, a landing craft and an aircraft (dive_alarm, surfacing,
+	 * torpedo_launch, torpedo_run_loop, ship_sinking, depth_charge_roll, depth_charge_thrower, lift_motor,
+	 * aircraft_break_up, bomb_release, parachute_open, ramp_winch, ramp_drop, craft_grounds) and its three beds for
+	 * under a battle (wind_loop, woods_loop, rain_loop) are brought in with the rest and wait for the sound
+	 * director's mix to say where they play.
 	 */
 	struct FRealSound
 	{
@@ -65,9 +76,7 @@ namespace
 		{ TEXT("machine_gun"), TEXT("machine_gun"), 0.0f },
 		{ TEXT("rifles"), TEXT("rifles"), 0.0f },
 		{ TEXT("ship_guns"), TEXT("ship_guns"), 0.0f },
-		{ TEXT("ship_horn"), TEXT("ship_horn"), 3.5f },
 		{ TEXT("battle"), TEXT("battle_loop"), 5.0f }, // any unit in a fight
-		{ TEXT("bugle"), TEXT("bugle_call"), 0.0f }, // a battle begins
 		{ TEXT("explosion"), TEXT("explosion_far_01"), 0.0f }, // a shell or a bomb lands, seen from far off
 		{ TEXT("field_gun"), TEXT("field_gun_fire"), 0.0f },
 		{ TEXT("halftrack"), TEXT("halftrack_drive_loop"), 3.6f },
@@ -76,7 +85,25 @@ namespace
 		{ TEXT("tank_engine"), TEXT("tank_loop"), 3.8f },
 		{ TEXT("tank_gun"), TEXT("tank_gun_01"), 0.0f },
 		{ TEXT("truck_engine"), TEXT("lorry_drive_loop"), 3.4f },
+		// (round five: the desk, the newsreel and the stingers, each to its end)
+		{ TEXT("click"), TEXT("click"), 0.0f },
+		{ TEXT("stamp"), TEXT("stamp"), 0.0f },
+		{ TEXT("tick"), TEXT("tick"), 0.0f },
+		{ TEXT("coins"), TEXT("coins"), 0.0f },
+		{ TEXT("pickup"), TEXT("pickup"), 0.0f },
+		{ TEXT("hammer"), TEXT("hammer"), 0.0f }, // something is built or set to work (round six)
+		{ TEXT("bell"), TEXT("bell"), 0.0f },
+		{ TEXT("projector"), TEXT("projector"), 0.0f },
+		{ TEXT("newsreel"), TEXT("newsreel"), 0.0f },
+		{ TEXT("radio"), TEXT("radio"), 0.0f },
+		{ TEXT("drums"), TEXT("drums"), 0.0f },
+		{ TEXT("victory"), TEXT("victory"), 0.0f },
+		{ TEXT("defeat"), TEXT("defeat"), 0.0f },
+		{ TEXT("train"), TEXT("train_loop"), 3.6f }, // corps sent by rail
 	};
+
+	/** The moments Brian cut on 18 November 2026: they play nothing, neither a recording nor a stand-in, until a new take passes his ear. */
+	const TCHAR* const Silent[] = { TEXT("horses"), TEXT("bugle"), TEXT("ship_horn") };
 
 	/** The real recording for one of the game's names, and how long it plays: nothing where there is none, or it has not been brought in. */
 	USoundBase* FindReal(const TCHAR* Name, float& OutSeconds)
@@ -126,6 +153,14 @@ void CampaignSounds::Play(const UObject* World, const TCHAR* Name, float Volume,
 	if (!bEffectsOn || !World || !Name || !FApp::CanEverRenderAudio())
 	{
 		return;
+	}
+	for (const TCHAR* const Cut : Silent)
+	{
+		if (FCString::Strcmp(Cut, Name) == 0)
+		{
+			UE_LOG(LogTheater, Verbose, TEXT("Sound: %s is silent (cut by Brian; a new take is awaited)"), Name);
+			return;
+		}
 	}
 	// "-TheaterQuiet" plays everything too softly to hear: for trying the sound out without disturbing anyone.
 	static const bool bQuiet = FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet"));

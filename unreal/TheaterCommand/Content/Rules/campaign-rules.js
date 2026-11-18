@@ -36381,7 +36381,7 @@
     const going = stormCandidates(s, region);
     const verdict = verdictOf(look, "storm").word;
     const size = v.sizeWord.toLowerCase();
-    const divisions2 = `${v.guard.toFixed(1)} division${v.guard === 1 ? "" : "s"}`;
+    const divisions2 = v.guard < 0.95 ? "part of a division" : `${v.guard.toFixed(1)} division${v.guard.toFixed(1) === "1.0" ? "" : "s"}`;
     const menOfGuard = v.guard > 0 ? Math.round(guardMen(s, r)) : 0;
     const guardOnly2 = v.inside === 0;
     const wall = look.lines.find((l) => l.label === "The town");
@@ -36863,10 +36863,22 @@
         if (cuts.has(a)) continue;
         for (const b of railsAt(a)) if (cuts.has(b) && !pair2.has(`${Math.min(a, b)}:${Math.max(a, b)}`)) bars.push([a, b]);
       }
+      let line = said ? trainWho(s, cs, said.line, army, armyIds) : "";
+      try {
+        const seat4 = townSiege(s, cs[0].reg);
+        const inTown = cs.every((c) => !!c.town || !!c.garrison);
+        if (said && !said.can && seat4 && !seat4.by && inTown && / is shut in the town /.test(said.line)) {
+          const named2 = whoOf(cs, army, armyIds);
+          const who = named2.who.charAt(0).toUpperCase() + named2.who.slice(1);
+          const stronger2 = /fights? (\d+)% stronger/.exec(seat4.lines.join(" "))?.[1];
+          line = `${who} ${named2.many ? "are" : "is"} ${seat4.town}'s garrison${stronger2 ? `: inside the town ${named2.many ? "they fight" : "it fights"} ${stronger2}% stronger` : ""}. TAKE THE FIELD brings ${named2.many ? "them" : "it"} out.`;
+        }
+      } catch {
+      }
       return {
         can: !!said?.can,
         strong: said?.strong ?? "",
-        line: said ? trainWho(s, cs, said.line, army, armyIds) : "",
+        line,
         tracks,
         reach: reach3,
         dots: beyond.filter((id) => !cuts.has(id) && !(barred3 && steep2.has(s.regions[id].name))),
@@ -37011,9 +37023,10 @@ ${next.text}` : ""}` : next ? next.also : "";
         const t = townIn(s, r.id);
         return t ? { name: t.name, size: t.sizeWord, worth: t.worth, rank: t.rank } : null;
       })(),
+      // (the line through the rules' own pass for names: "the United States' 51", never "the United States's")
       prize: (() => {
         const z = prize(s, r.id);
-        return z && prizeLine(s, r.id) ? { kind: z.kind, line: z.line, items: z.items.map((i) => `${i.label}: ${i.text}`) } : null;
+        return z && prizeLine(s, r.id) ? { kind: z.kind, line: theWords(z.line), items: z.items.map((i) => `${i.label}: ${i.text}`) } : null;
       })(),
       // The town's building plots (the grand campaign): what stands, what is going up, how many are free.
       plots: (() => {
@@ -37084,10 +37097,11 @@ ${next.text}` : ""}` : next ? next.also : "";
       // (all only in the grand campaign, where those rules apply).
       // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.
       // The town as a fortress (Version 54): what it adds to its defenders, and how its siege stands, in plain lines.
+      // (The UI director, 18 November 2026: the besieger's name takes its article, "BESIEGED BY THE UNITED STATES"; and `own` says the town is the player's own, the one case in which the head is red.)
       siege: (() => {
         try {
           const v = townSiege(s, r.id);
-          return v ? { town: v.town, by: v.by ? s.nations[v.by]?.name ?? v.by : "", lines: v.lines, inside: v.inside, room: v.room } : null;
+          return v ? { town: v.town, by: v.by ? theWords(`by ${s.nations[v.by]?.name ?? v.by}`).slice(3) : "", own: !!me && r.ctrl === me, lines: v.lines, inside: v.inside, room: v.room } : null;
         } catch {
           return null;
         }
@@ -37493,7 +37507,9 @@ ${next.text}` : ""}` : next ? next.also : "";
     const steepNames = new Set(GROUND.steep.regions);
     return {
       // (rules version 74: on the wider chart, its rivers, crossings and lines follow Europe's, which keep their numbers)
-      rivers: riversOf(s).map((r) => ({ name: r.name, pts: r.pts })),
+      // (`into`: what the wider chart's file says each river runs into, another river or a sea; the game joins a
+      // tributary's ribbon only to the river it names)
+      rivers: riversOf(s).map((r) => ({ name: r.name, pts: r.pts, into: r.into ?? "" })),
       crossings: crossingsOf(s).map((c) => [c.a, c.b, c.river, c.x, c.y]),
       rails: railLinks(s).map((l) => [l.a, l.b, l.x, l.y]),
       steep: s.regions.filter((r) => steepNames.has(r.name)).map((r) => r.id)

@@ -5378,6 +5378,34 @@ void ACampaignMapActor::BuildWaterways()
 		}
 		RiverLaid[static_cast<int32>(&River - Land.Rivers.GetData())] = MoveTemp(Path);
 	}
+	// Open water beyond Europe, as a fine sheet of ground shows it: the chart draws no land there (or, outside the
+	// chart's frame, the world's real heights lie at or below the sea), there and two units round.
+	// (Seen at Quebec in the first picture of the rule below: asked only of the one place, a ribbon broke off on dry
+	// land short of its first bridge. The chart draws the estuary's head as a channel a unit or two across, which no
+	// sheet of ground shows as water: the very channel the ribbon is there to stand for.)
+	auto SeaAt = [this](const FVector2D& At)
+	{
+		if (Data.FindRegionAt(At.X, At.Y) != INDEX_NONE)
+		{
+			return false;
+		}
+		if (Data.IsCharted(At.X, At.Y))
+		{
+			for (const TArray<FVector2D>& Ring : Data.Land)
+			{
+				if (FCampaignMapData::PointInRing(Ring, At.X, At.Y))
+				{
+					return false; // (land no province claims, or a lake cut out of it: the lakes have their own rule)
+				}
+			}
+			return true;
+		}
+		return WorldTerrain.HasElevation() && WorldTerrain.MetresAt(WrapX(At.X), At.Y) <= 0.0f;
+	};
+	auto OpenSeaAt = [&SeaAt](const FVector2D& At)
+	{
+		return SeaAt(At) && SeaAt(At + FVector2D(2.0, 0.0)) && SeaAt(At - FVector2D(2.0, 0.0)) && SeaAt(At + FVector2D(0.0, 2.0)) && SeaAt(At - FVector2D(0.0, 2.0));
+	};
 	TArray<int32> RiverUnderFrom; // where a river's ribbon goes under the ribbon of the river it joins
 	RiverUnderFrom.Init(MAX_int32, Land.Rivers.Num());
 	if (Data.bWorld)
@@ -5397,16 +5425,26 @@ void ACampaignMapActor::BuildWaterways()
 			{
 				continue;
 			}
+			if (OpenSeaAt(Mine.Last()))
+			{
+				continue; // (a river that ends in open water ends there: it is no tributary)
+			}
 			// (the river it ends on, if it ends on one: the one whose line lies nearest its last point. The rules give a
 			// great river a score of points, and the curve drawn through them lies a good way off the straight line
 			// between two of them, on which a tributary's last point was set: the Madeira stopped fifteen units short
 			// of the Amazon. Within thirty units it is one, and the tributary is carried on to it.)
 			int32 Joined = INDEX_NONE;
 			double Nearest = 30.0;
+			// (The art director, 18 November 2026, at Quebec, the cause found: the St Lawrence's line stops in its estuary,
+			// and the St John's, thirty units off over the hills, was the nearest: the great river was carried on to it
+			// across the far shore as its tributary. The rules' file says what each river of the wider chart runs
+			// into. Where it says, a river is carried on only to the river it names, and one that runs into a sea
+			// or a lake to none.)
+			const FString& Into = Land.Rivers[Index].Into;
 			for (int32 Other = 0; Other < RiverLaid.Num(); ++Other)
 			{
 				const TArray<FVector2D>& Theirs = RiverLaid[Other];
-				if (Other == Index || Theirs.Num() < 6)
+				if (Other == Index || Theirs.Num() < 6 || (!Into.IsEmpty() && Land.Rivers[Other].Name != Into))
 				{
 					continue;
 				}
@@ -5503,6 +5541,26 @@ void ACampaignMapActor::BuildWaterways()
 		RiverPaths.Add(Path); // (kept, with how broad it is, for the towns' own bridges)
 		RiverBroad.Add(Broad);
 		int32 Previous[5] = { INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE };
+		// (The art director, 18 November 2026, at Quebec on build 1668: past the town the St Lawrence's ribbon carried on
+		// across the estuary's open water, a river drawn on top of the sea. The coarse sheet of ground, which is what
+		// "the land stops" is asked of below, is too coarse to show that estuary; a fine sheet shows it. Beyond
+		// Europe a ribbon is not drawn where it lies wholly over open water as the chart draws it (or, outside the
+		// chart's frame, as the world's real heights have it): it ends where it meets the estuary, widening into it,
+		// and is taken up again only where its course crosses land the sheets show, under a bridge of the rules.)
+		TArray<bool> OverWater;
+		int32 MeetsWater = MAX_int32;
+		if (bRiverBeyond)
+		{
+			OverWater.Init(false, Path.Num());
+			for (int32 K = Path.Num() / 2 + 1; K < Path.Num(); ++K)
+			{
+				OverWater[K] = OpenSeaAt(Path[K]);
+				if (OverWater[K] && MeetsWater == MAX_int32)
+				{
+					MeetsWater = K;
+				}
+			}
+		}
 		// (how far along the river each point lies, how broad the river is there and how brown: for its sand bars)
 		TArray<double> RunAt, HalfAt;
 		TArray<float> BrownAt;
@@ -5524,11 +5582,22 @@ void ACampaignMapActor::BuildWaterways()
 			const double Wander = FMath::Clamp(1.7 * FMath::PerlinNoise1D(static_cast<float>(Run * 0.031 + RiverIndex * 13.7)), -1.0, 1.0);
 			const double Flare = RiverUnderFrom[RiverIndex] < Path.Num() ? 1.0 + 0.6 * FMath::SmoothStep(static_cast<double>(RiverUnderFrom[RiverIndex] - 5), static_cast<double>(RiverUnderFrom[RiverIndex]), static_cast<double>(K)) : 1.0;
 			const double Wanders = (1.0 + FMath::SmoothStep(0.08f, 0.34f, JungleHere) * (Wander > 0.0 ? 0.4 * Wander : 0.3 * Wander)) * (bRiverBeyond ? Flare : 1.0);
-			const double Half = Broad * FMath::Lerp(0.5, 1.0, FMath::Sqrt(static_cast<double>(K) / FMath::Max(Path.Num() - 1, 1))) * Wanders;
+			// (it widens into the open water it meets: to a little over twice its breadth, over its last seven points)
+			const double Widens = MeetsWater < Path.Num() && K <= MeetsWater ? 1.0 + 1.2 * FMath::SmoothStep(static_cast<double>(MeetsWater - 7), static_cast<double>(MeetsWater), static_cast<double>(K)) : 1.0;
+			const double Half = Broad * FMath::Lerp(0.5, 1.0, FMath::Sqrt(static_cast<double>(K) / FMath::Max(Path.Num() - 1, 1))) * Wanders * Widens;
 			// A river does not run over the sea: stop where the land does.
 			if (GroundAt(Path[K].X, Path[K].Y) <= 0.0f && K > Path.Num() / 2)
 			{
 				break;
+			}
+			if (OverWater.IsValidIndex(K) && OverWater[K])
+			{
+				// (open water: the ribbon is broken off, and begins afresh where its course next crosses land)
+				for (int32 P = 0; P < 5; ++P)
+				{
+					Previous[P] = INDEX_NONE;
+				}
+				continue;
 			}
 			const float Frozen = WinterHard >= 0.8f ? FMath::SmoothStep(0.45f, 0.8f, SnowLying(Path[K], WinterHard)) : 0.0f;
 			FLinearColor MidstreamHere = MidstreamRuns, BankHere = BankRuns;
@@ -6933,6 +7002,7 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 		// "-TheaterTownsAsBuilt" leaves every town its first size.)
 		TownHumbled.Init(false, Data.Regions.Num());
 		TownClear.Reset();
+		TownKeepOff.Reset();
 		if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterTownsAsBuilt")))
 		{
 			auto RankOf = [](const FCampaignRegion& Region)
@@ -7036,6 +7106,26 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 					{
 						// (the lesser town builds no nearer the greater than a row of green beyond the greater's last roofs)
 						TownClear.FindOrAdd(Lesser.Id).Add(FVector(Greater.Center.X, Greater.Center.Y, TheirRun + Row));
+						// (The art director, 18 November 2026, on build 1668: Amsterdam's and Rotterdam's blocks still met in
+						// a thin grey band, so that the two read as one long city. The ring above keeps a row clear on
+						// the line between the two middles and less and less to either side of it, and it is kept from
+						// the middles of the blocks, whose edges then stand two or three units apart; the greater's
+						// last row stood on the border itself. So each also keeps off the other's ground, wherever
+						// the border between them runs: the lesser a row and half a block off any ground of the
+						// greater's province its roofs may reach, and the greater half a block off the lesser's. A row
+						// of open ground then lies between the edges of their blocks. The lesser's own middle always
+						// stays clear, as it did.)
+						const double HalfBlock = 2.0;
+						FTownKeepOff& OfLesser = TownKeepOff.FindOrAdd(Lesser.Id).AddDefaulted_GetRef();
+						OfLesser.Middle = Greater.Center;
+						OfLesser.Reach = FMath::Min(1.22 * Theirs, Apart - Row - HalfBlock - 0.8); // (the lesser's own middle always stays clear)
+						OfLesser.Province = Id;
+						OfLesser.Off = Row + HalfBlock;
+						FTownKeepOff& OfGreater = TownKeepOff.FindOrAdd(Id).AddDefaulted_GetRef();
+						OfGreater.Middle = Lesser.Center;
+						OfGreater.Reach = 1.22 * Was;
+						OfGreater.Province = Lesser.Id;
+						OfGreater.Off = HalfBlock;
 					}
 				}
 				++Gave;
@@ -7558,13 +7648,33 @@ void ACampaignMapActor::FillTownSite(const FCampaignRegion& Region, FMiniatureMe
 	// (a town is built on land, and on its own province's: one that stands by the sea or a frontier grows away from it)
 	// (and a greater town leaves green beside a lesser one that gave way to it: the art director's rule for close towns)
 	const TArray<FVector>* const Green = TownClear.Find(Region.Id);
-	Site.Dry = [this, Id = Region.Id, Clear = Green ? *Green : TArray<FVector>()](double X, double Y)
+	const TArray<FTownKeepOff>* const Beside = TownKeepOff.Find(Region.Id);
+	Site.Dry = [this, Id = Region.Id, Clear = Green ? *Green : TArray<FVector>(), KeepOff = Beside ? *Beside : TArray<FTownKeepOff>()](double X, double Y)
 	{
 		for (const FVector& Each : Clear)
 		{
 			if (FMath::Square(X - Each.X) + FMath::Square(Y - Each.Y) < FMath::Square(Each.Z))
 			{
 				return false;
+			}
+		}
+		// (two towns that both kept their size beside one another: neither builds nearer than its own distance to the
+		// ground of the other's province that the other's roofs may reach, looked for at that distance and at two
+		// thirds and a third of it, all round.)
+		for (const FTownKeepOff& Each : KeepOff)
+		{
+			if (FMath::Square(X - Each.Middle.X) + FMath::Square(Y - Each.Middle.Y) >= FMath::Square(Each.Reach + Each.Off))
+			{
+				continue;
+			}
+			for (int32 K = 0; K < 24; ++K)
+			{
+				const double Turn = (K % 8) * UE_DOUBLE_PI / 4.0, Out = Each.Off * (3 - K / 8) / 3.0;
+				const double Px = X + FMath::Cos(Turn) * Out, Py = Y + FMath::Sin(Turn) * Out;
+				if (FMath::Square(Px - Each.Middle.X) + FMath::Square(Py - Each.Middle.Y) < FMath::Square(Each.Reach) && Data.FindRegionAt(Px, Py) == Each.Province)
+				{
+					return false;
+				}
 			}
 		}
 		return GroundAt(X, Y) > 0.0f && Data.FindRegionAt(X, Y) == Id;
@@ -7693,6 +7803,7 @@ void ACampaignMapActor::BuildTowns()
 	TownQuarters.Reset();
 	TownBeacons.Reset();
 	TownLandmarks.Reset();
+	TownQuays.Reset();
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
 		const bool bCity = Region.Terrain == TEXT("urban");
@@ -7735,6 +7846,10 @@ void ACampaignMapActor::BuildTowns()
 		// of Europe. Its houses are the size houses always were: it is the town that is larger, not the houses.)
 		FMiniatureMesh::FTownSite Site;
 		FillTownSite(Region, Site);
+		if (Site.bQuay)
+		{
+			TownQuays.Add(Region.Id, Site.Quay);
+		}
 		TArray<FVector2D> Quarters;
 		FVector Beacon = FVector::ZeroVector, LandmarkTop = FVector::ZeroVector;
 		Model.Township(Site, &TownChimneys, &Quarters, &Beacon, &LandmarkTop);
@@ -9142,7 +9257,7 @@ void ACampaignMapActor::BuildWords()
 {
 	THEATER_SPEED_SCOPE(BuildWords);
 	MapWords.Reset();
-	int32 NamesMoved = 0;
+	int32 NamesMoved = 0, NamesOffShore = 0;
 	FString NamesOnWater, NamesOverRoofs;
 	// A province's own name, small, lying on its ground: for every province that has no plate, and for every one
 	// whose plate carries its town's name instead.
@@ -9195,7 +9310,67 @@ void ACampaignMapActor::BuildWords()
 				}
 				return true;
 			};
-			if (!Clear(At))
+			// (The art director, 18 November 2026, on build 1668: Holland's "H" sat on Amsterdam's harbour crane at the
+			// coast. A name keeps off the coast and the quays: every part of it lies on dry land with a letter's
+			// height of land round it, and clear of its own harbour and its neighbours', whose cranes, sheds and
+			// ships stand up in front of what lies north of them. A province with no such place keeps the place it
+			// had by the rule above.)
+			auto OffShore = [&](const FVector2D& Spot)
+			{
+				for (const double End : { -1.0, -0.5, 0.0, 0.5, 1.0 })
+				{
+					for (const double Up : { -1.0, 0.0, 1.0 })
+					{
+						if (GroundAt(Spot.X + End * (HalfWide + 0.8), Spot.Y + Up * Tall) <= 0.0f)
+						{
+							return false;
+						}
+					}
+				}
+				auto BehindQuay = [&](int32 Port)
+				{
+					const FVector2D* const Quay = TownQuays.Find(Port);
+					// (beside the quay, or within five units north of it, where the crane stands in front of the word)
+					return Quay && FMath::Abs(Spot.X - Quay->X) < HalfWide + 3.0 && Spot.Y - Quay->Y > -6.0 && Spot.Y - Quay->Y < 3.0;
+				};
+				if (BehindQuay(Region.Id))
+				{
+					return false;
+				}
+				for (const int32 Next : Region.Neighbors)
+				{
+					if (BehindQuay(Next))
+					{
+						return false;
+					}
+				}
+				return true;
+			};
+			const bool bWasClear = Clear(At);
+			bool bPlaced = bWasClear && OffShore(At);
+			for (double Out = Roofs + 1.5; Out < Roofs + 26.0 && !bPlaced; Out += 3.0)
+			{
+				for (const double Bearing : { 0.0, -45.0, 45.0, -90.0, 90.0, 180.0, -135.0, 135.0 })
+				{
+					const double Turn = FMath::DegreesToRadians(Bearing);
+					const FVector2D Spot = Region.Center + FVector2D(FMath::Sin(Turn) * (Out + FMath::Abs(FMath::Sin(Turn)) * HalfWide), -FMath::Cos(Turn) * Out);
+					if (Clear(Spot) && OffShore(Spot))
+					{
+						At = Spot;
+						bPlaced = true;
+						if (bWasClear)
+						{
+							++NamesOffShore;
+						}
+						else
+						{
+							++NamesMoved;
+						}
+						break;
+					}
+				}
+			}
+			if (!bPlaced && !bWasClear)
 			{
 				// (The art director, the same day: "a province with no name is a bigger loss than a name over a few
 				// roofs". The nearest open field of its own first; failing that, the water off its own shore; failing
@@ -9277,10 +9452,10 @@ void ACampaignMapActor::BuildWords()
 		Word.From = Word.To = At;
 		Word.bRegion = true;
 	}
-	if (NamesMoved > 0 || !NamesOnWater.IsEmpty() || !NamesOverRoofs.IsEmpty())
+	if (NamesMoved > 0 || NamesOffShore > 0 || !NamesOnWater.IsEmpty() || !NamesOverRoofs.IsEmpty())
 	{
-		UE_LOG(LogTheater, Display, TEXT("Names: %d provinces' names are moved onto open ground clear of their towns' roofs; on their own water: %s; over their roofs, smaller and shadowed: %s"),
-			NamesMoved, NamesOnWater.IsEmpty() ? TEXT("none") : *NamesOnWater, NamesOverRoofs.IsEmpty() ? TEXT("none") : *NamesOverRoofs);
+		UE_LOG(LogTheater, Display, TEXT("Names: %d provinces' names are moved onto open ground clear of their towns' roofs, and %d more off the coast and the quays; on their own water: %s; over their roofs, smaller and shadowed: %s"),
+			NamesMoved, NamesOffShore, NamesOnWater.IsEmpty() ? TEXT("none") : *NamesOnWater, NamesOverRoofs.IsEmpty() ? TEXT("none") : *NamesOverRoofs);
 	}
 	// Seas: across the middle of each, in spaced italic capitals.
 	for (const FCampaignSeaZone& Sea : Data.Seas)
@@ -12619,6 +12794,15 @@ void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 			Flight.Sortie.bEscort = false; // (no fighters go with the night bombers)
 		}
 	}
+	{
+		// ("-TheaterMet=FRA" has every bombing raid met by that nation's fighters, for a picture of the tracer.)
+		static FString StagedMeet;
+		static const bool bMeetAsked = FParse::Value(FCommandLine::Get(), TEXT("TheaterMet="), StagedMeet);
+		if (bMeetAsked && !StagedMeet.IsEmpty() && Sortie.bBombers)
+		{
+			Flight.Sortie.Meet = StagedMeet;
+		}
+	}
 	const bool bByNight = Flight.Sortie.bNight;
 	const bool bEscorted = Flight.Sortie.bEscort;
 	Flight.Began = GetWorld()->GetTimeSeconds();
@@ -12689,11 +12873,11 @@ void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 		}
 	}
 	// The defender's fighters, if any can reach: a pair of his own, that rise as the raid comes in.
-	if (!Sortie.Meet.IsEmpty())
+	if (!Flight.Sortie.Meet.IsEmpty())
 	{
 		FMiniatureMesh Pair;
 		const double Small = 0.55 * U;
-		const FString Theirs = FMiniatureMesh::MainFighterOf(Sortie.Meet);
+		const FString Theirs = FMiniatureMesh::MainFighterOf(Flight.Sortie.Meet);
 		Pair.Vehicle(Theirs, FVector(0.0, 0.0, 0.0), Small, 0.0, false);
 		Pair.Vehicle(Theirs, FVector(10.0 * Small, 9.0 * Small, 1.5 * Small), Small, 0.0, false);
 		if (Pair.Vertices.Num() > 0)
@@ -12815,7 +12999,11 @@ void ACampaignMapActor::UpdateSorties()
 		{
 			// The models face -X, so the formation is turned half round from the way it is heading.
 			const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(Heading.Y, Heading.X)) + 180.0;
-			Flight.Formation->SetRelativeLocationAndRotation(Where + FVector(0.0, 0.0, Aloft), FRotator(0.0, Yaw, Bank));
+			// (The modeller's flak rule and the art director's limit on it, 18 November 2026: a burst close by bumps the
+			// bombers. A small jolt of a few degrees, a roll and a nod that settle in half a second; they do not hop.)
+			const double Jolted = GetWorld()->GetTimeSeconds() - Flight.JoltAt;
+			const double Jolt = Jolted >= 0.0 && Jolted < 0.5 ? (1.0 - FMath::SmoothStep(0.0, 0.5, Jolted)) * FMath::Cos(Jolted * 21.0) : 0.0;
+			Flight.Formation->SetRelativeLocationAndRotation(Where + FVector(0.0, 0.0, Aloft), FRotator(Flight.JoltPitch * Jolt, Yaw, Bank + Flight.JoltRoll * Jolt));
 		}
 		Flight.At = Where + FVector(0.0, 0.0, Aloft);
 		Flight.Dir = Heading;
@@ -13250,6 +13438,10 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 
 	// Which way the eye is looking, to turn every puff to face it.
 	FVector Right = FVector::RightVector, Up = FVector::UpVector;
+	// (and where the eye is, with how many pixels of the window a thing of one unit takes at one unit's distance:
+	// for what must never be drawn smaller than a few pixels, a tracer)
+	FVector EyeAt = CameraFocus + FVector(0.0, 0.0, CameraDistance);
+	double PixelsAtOne = 1500.0;
 	if (const APlayerController* Player = World->GetFirstPlayerController())
 	{
 		if (Player->PlayerCameraManager)
@@ -13257,6 +13449,13 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const FRotationMatrix Looking(Player->PlayerCameraManager->GetCameraRotation());
 			Right = Looking.GetUnitAxis(EAxis::Y);
 			Up = Looking.GetUnitAxis(EAxis::Z);
+			EyeAt = Player->PlayerCameraManager->GetCameraLocation();
+			int32 WindowWide = 0, WindowHigh = 0;
+			Player->GetViewportSize(WindowWide, WindowHigh);
+			if (WindowWide > 0)
+			{
+				PixelsAtOne = WindowWide / (2.0 * FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(static_cast<double>(Player->PlayerCameraManager->GetFOVAngle()), 5.0, 150.0) * 0.5)));
+			}
 		}
 	}
 	const double Now = World->GetTimeSeconds();
@@ -13267,6 +13466,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	int32 FlakLitShapes = 0; // (and how many of those again as light, inside a searchlight's beam)
 	// (what the hour does to smoke: nothing by day, about a third and bluer in the deep of the night)
 	const FLinearColor SmokeHour = FMath::Lerp(FLinearColor(1.0f, 1.0f, 1.0f), FLinearColor(0.30f, 0.38f, 0.58f), GetMoonlight());
+	bool bDrawingLight = false;
 	// One puff: its middle, how far out its heart reaches (as a share of the whole), and how thick it is at its
 	// middle, at the heart's edge and at its rim. The two axes are its half-length and half-width as the eye sees it.
 	auto DrawPuff = [&](const FVector& Where, const FVector& AxisA, const FVector& AxisB, const FLinearColor& Colour, float AtMiddle, double HeartOut, float AtHeart, float AtRim)
@@ -13281,7 +13481,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		// and tracer are lights and keep their own: a light is known here by its colour, warm or very bright.)
 		const float Warm = FMath::Clamp((Colour.R - 2.2f * Colour.B - 0.03f) / 0.2f, 0.0f, 1.0f);
 		const float Bright = FMath::Clamp((0.3f * Colour.R + 0.59f * Colour.G + 0.11f * Colour.B - 0.75f) / 0.15f, 0.0f, 1.0f);
-		const FLinearColor HourLight = FMath::Lerp(SmokeHour, FLinearColor(1.0f, 1.0f, 1.0f), FMath::Max(Warm, Bright));
+		// (bDrawingLight: what is being drawn is a light whatever its colour, a yellow tracer)
+		const FLinearColor HourLight = bDrawingLight ? FLinearColor(1.0f, 1.0f, 1.0f) : FMath::Lerp(SmokeHour, FLinearColor(1.0f, 1.0f, 1.0f), FMath::Max(Warm, Bright));
 		const FLinearColor Lit(Colour.R * HourLight.R, Colour.G * HourLight.G, Colour.B * HourLight.B);
 		auto Inked = [&Lit](float Alpha) { FLinearColor Ink = Lit; Ink.A = Alpha; return Ink.ToFColor(false); };
 		const FColor MiddleInk = Inked(AtMiddle), HeartInk = Inked(AtHeart), RimInk = Inked(AtRim);
@@ -13926,7 +14127,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 
 	// Raids in flight: flak round the bombers over a defended target, tracer between them and the fighters that
 	// rise to meet them, and a damaged bomber trailing smoke on the way home.
-	const FLinearColor FlakBlack(0.03f, 0.03f, 0.035f), Tracer(1.0f, 0.86f, 0.35f);
+	const FLinearColor FlakBlack(0.03f, 0.03f, 0.035f);
+	const double TracerBurns = 0.6; // (seconds a tracer round is alight)
 	const double Table = UnitScale;
 	for (int32 F = 0; F < Flights.Num(); ++F)
 	{
@@ -13974,6 +14176,15 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				Burst.Born = Now - Ago;
 				Burst.Seed = Chance.RandRange(1, 1 << 20);
 				Burst.Wings = Wings;
+				// (a burst that goes off now, within about a wingspan and a quarter of the leader, jolts the formation:
+				// up to three and a half degrees of roll and one and a half of nod, the nearer the more)
+				const double Near = 1.0 - FMath::Clamp(FVector::Distance(Burst.At, Flight.At) / (1.25 * Wings), 0.0, 1.0);
+				if (Ago <= 0.0 && Near > 0.15)
+				{
+					Flight.JoltAt = Now;
+					Flight.JoltRoll = (Aside < 0.0 ? 1.0 : -1.0) * FMath::Lerp(1.2, 3.5, Near);
+					Flight.JoltPitch = (Rise < 0.0 ? 1.0 : -1.0) * FMath::Lerp(0.4, 1.5, Near);
+				}
 			};
 			if (Flight.NextFlak <= 0.0)
 			{
@@ -13992,29 +14203,101 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		}
 		if (Flight.bEngaged)
 		{
-			// Bursts of tracer: the fighters at the bombers, and the bombers' gunners (and their escort) back at them.
-			// (The art director's round 37: round dots among the bombers read as stray lamps. Tracer is short streaks
-			// along the line of fire, each about four times as long as it is wide, three or four in a row from the
-			// fighter's nose toward its bomber, and only while that side fires.)
-			const FVector FireLine = Flight.At - Flight.RivalAt;
-			const double Lead = FMath::Frac(Now * 2.6);
-			for (int32 K = 0; K < 4; ++K)
+			// Tracer: the fighters at the bombers, and the bombers' gunners back at them.
+			// (Brian, 18 November 2026: "i want tracer fire shown as well. 1 out of every 5 bullets with yellow". The
+			// aircraft modeller's sheet for it, brought to the table's scale, where a bomber's wings span ten units
+			// and the fighters fly within a wingspan of it. Each gun fires thirteen rounds a second while its side
+			// fires. Every fifth round is a tracer and the four between are not drawn; each gun's belt starts out of
+			// step with its neighbours'. A tracer leaves along the line to its mark, a little scattered, at its own
+			// speed and its shooter's, flies straight whatever its shooter then does, and burns out after six tenths
+			// of a second, well past its mark. Every round, drawn or not, flickers at its muzzle for one frame.
+			// Before this the tracer was four amber streaks in a row that turned with the fighters.)
+			const double Small = 0.55 * Table, Metre = 0.34 * Table; // (a table unit to the metre, as the fighters and the bombers are built)
+			const double RoundsASecond = 13.0;
+			static const int32 BeltStarts[7] = { 0, 3, 1, 4, 2, 0, 3 };
+			// (the fighters fire in bursts, and the gunners back at them in the gaps and a little over)
+			// (The modeller on the first pictures of the streams: a stream should last half a second of fire or more. The
+			// bursts were two thirds of a second in every second and a bit; they are a second and a third in every two
+			// and a bit, three or four tracers a gun.)
+			auto FightersFireAt = [](double When) { return FMath::Frac(When * 0.45) < 0.6; };
+			auto GunnersFireAt = [](double When) { return FMath::Frac(When * 0.45 + 0.5) < 0.6; };
+			const FTransform Pair = Flight.Rivals ? Flight.Rivals->GetComponentTransform() : FTransform(Flight.RivalAt);
+			const FTransform Vic = Flight.Formation ? Flight.Formation->GetComponentTransform() : FTransform(Flight.At);
+			const FVector Fighters[2] = { Pair.TransformPosition(FVector::ZeroVector), Pair.TransformPosition(FVector(10.0, 9.0, 1.5) * Small) };
+			const FVector Bombers[3] = { Vic.TransformPosition(FVector::ZeroVector), Vic.TransformPosition(FVector(26.0, 22.0, 3.0) * Metre), Vic.TransformPosition(FVector(26.0, -22.0, 3.0) * Metre) };
+			// (how fast each side is going, from where it was a frame ago)
+			const double Since = Now - Flight.SeenWhen;
+			const bool bSeen = Flight.SeenWhen > 0.0 && Since > 0.0005 && Since < 0.25;
+			const FVector BomberSpeed = bSeen ? (Flight.At - Flight.SeenAt) / Since : FVector::ZeroVector;
+			const FVector FighterSpeed = bSeen ? (Flight.RivalAt - Flight.SeenRivalAt) / Since : FVector::ZeroVector;
+			// (The modeller's look rule of 16:17 UTC the same day: tracers are streams, not scattered dashes. Each gun lays
+			// its tracers evenly along one line from its muzzle to a point led ahead of its mark; the whole stream
+			// wanders slowly by about a third of a degree, and each round is scattered a little about it. A fighter's
+			// paired streams meet at its mark; the bombers' streams converge on one fighter.)
+			auto FireGun = [&](int32 Gun, bool bFighters, const FVector& Muzzle, const FVector& Mark, const FVector& ShooterSpeed, const FVector& MarkSpeed)
 			{
-				const double T = Lead - K * 0.085;
-				if (T < 0.05 || T > 0.95)
+				double& Next = Flight.NextRound[Gun];
+				if (Next <= 0.0 || Next < Now - 0.25)
 				{
-					continue;
+					Next = Now; // (the first round, or the first after the game stood still)
 				}
-				if (FMath::Frac(Now * 0.9) < 0.6)
+				bool bFlicker = false;
+				while (Next <= Now)
 				{
-					DrawSmear(FMath::Lerp(Flight.RivalAt, Flight.At, T), FireLine, 0.34 * Table, 0.085 * Table, Tracer, 0.95f, 0.6);
+					const int32 Round = Flight.RoundsFired[Gun]++;
+					if (bFighters ? FightersFireAt(Next) : GunnersFireAt(Next))
+					{
+						bFlicker = true;
+						if ((Round + BeltStarts[Gun]) % 5 == 0 && TracerRounds.Num() < 160)
+						{
+							FRandomStream Chance(Round * 7919 + Gun * 131 + F * 17);
+							// (it burns out about as far past its mark as its mark is from it)
+							const double Range = FMath::Max(2.0 * FVector::Distance(Muzzle, Mark), 9.0 * Table);
+							const double Speed = Range / TracerBurns;
+							// (led: aimed where the mark will be when the round has flown to it)
+							const FVector Led = Mark + MarkSpeed * (FVector::Distance(Muzzle, Mark) / Speed);
+							const FVector Aim = (Led - Muzzle).GetSafeNormal();
+							// (the stream's slow wander, a third of a degree; and each round's own scatter, a little under half a degree)
+							const FVector Wander(FMath::Sin(Next * 0.7 + Gun * 1.9), FMath::Sin(Next * 0.53 + Gun * 2.7), FMath::Sin(Next * 0.61 + Gun * 1.0));
+							const FVector Scatter(Chance.FRandRange(-1.0f, 1.0f), Chance.FRandRange(-1.0f, 1.0f), Chance.FRandRange(-1.0f, 1.0f));
+							FTracerRound& Tracer = TracerRounds.AddDefaulted_GetRef();
+							Tracer.From = Muzzle;
+							Tracer.Velocity = (Aim + Wander * 0.006 + Scatter * 0.007).GetSafeNormal() * Speed + ShooterSpeed;
+							Tracer.Born = Next;
+						}
+					}
+					Next += 1.0 / RoundsASecond;
 				}
-				if (K < 3 && FMath::Frac(Now * 0.9 + 0.5) < 0.6)
+				if (bFlicker)
 				{
-					DrawSmear(FMath::Lerp(Flight.At + FVector(0.0, 0.0, 0.6 * Table), Flight.RivalAt, T), FireLine, 0.28 * Table, 0.07 * Table, FLinearColor(1.0f, 0.62f, 0.3f), 0.9f, 0.6);
+					// (the flash at the muzzle: small, pale yellow, and gone with the frame. Seen at three tenths of a
+					// unit and near white in the first picture, it was a lamp on each wing.)
+					bDrawingLight = true;
+					Draw(Muzzle, 0.15 * Table, FLinearColor(0.82f, 0.7f, 0.3f), 0.7f);
+					bDrawingLight = false;
+				}
+			};
+			for (int32 K = 0; K < 2; ++K)
+			{
+				// (each fighter at a bomber of its own: the leader's, and the nearer of the two behind it)
+				const FVector Mark = K == 0 ? Bombers[0] : (FVector::DistSquared(Fighters[1], Bombers[1]) < FVector::DistSquared(Fighters[1], Bombers[2]) ? Bombers[1] : Bombers[2]);
+				for (int32 Wing = 0; Wing < 2; ++Wing)
+				{
+					// (a gun in each wing, two metres out and a metre and a half ahead: a model's front is toward -X)
+					const FVector Muzzle = Fighters[K] + Pair.TransformVector(FVector(-1.5, Wing == 0 ? -2.0 : 2.0, 0.0) * Small);
+					FireGun(K * 2 + Wing, true, Muzzle, Mark, FighterSpeed, BomberSpeed);
 				}
 			}
+			// (a gunner in each bomber, from its back: all three at one fighter, the one nearer their leader)
+			const FVector& Hunted = FVector::DistSquared(Bombers[0], Fighters[0]) <= FVector::DistSquared(Bombers[0], Fighters[1]) ? Fighters[0] : Fighters[1];
+			for (int32 K = 0; K < 3; ++K)
+			{
+				FireGun(4 + K, false, Bombers[K] + FVector(0.0, 0.0, 0.6 * Table), Hunted, BomberSpeed, FighterSpeed);
+			}
 		}
+		Flight.SeenAt = Flight.At;
+		Flight.SeenRivalAt = Flight.RivalAt;
+		Flight.SeenWhen = Now;
 		if (Flight.Sortie.Loss >= 0.1f && Flight.Share > 0.5)
 		{
 			// One of them has been hit: it trails smoke all the way home. (The art director's round 37: by night it is
@@ -14033,6 +14316,45 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				Draw(Hit - Flight.Dir * Back + FVector(0.0, 0.0, -0.25 * Table * K + 0.4 * Table * FMath::Sin(Now * 2.0 + K)), (0.7 + 0.3 * K) * Table, Dark, 0.55f - 0.06f * K);
 			}
 		}
+	}
+
+	// The tracer rounds in flight: each a solid streak of yellow, paler at its heart, with a tail that thins away
+	// behind it. Never drawn under about three pixels across, however high the eye stands. (The modeller's yellow is
+	// to be seen at about 213, 199, 104: not amber, and not white. A puff's ink is laid in the light's own measure
+	// and the screen's is another: laid at those figures it was seen near white, 236, 229, 172. It is laid at the
+	// figures that are seen as his.)
+	// (Its length: the modeller's streak is half a bomber's wingspan long, which on this table, where the fighters fly
+	// within a wingspan of the bombers, would join gun to mark in one line. First drawn at eight tenths of a unit,
+	// as the old streaks were, it could hardly be seen beside a bomber. It is three units, under a third of a wingspan.)
+	{
+		const FLinearColor TracerYellow(0.665f, 0.571f, 0.138f), TracerPale(0.87f, 0.80f, 0.42f), TracerEdge(0.09f, 0.06f, 0.02f);
+		bDrawingLight = true;
+		for (int32 K = TracerRounds.Num() - 1; K >= 0; --K)
+		{
+			const FTracerRound& Round = TracerRounds[K];
+			const double Age = Now - Round.Born;
+			if (Age < 0.0 || Age >= TracerBurns)
+			{
+				TracerRounds.RemoveAtSwap(K, EAllowShrinking::No);
+				continue;
+			}
+			const FVector Head = Round.From + Round.Velocity * Age;
+			const FVector Flies = Round.Velocity.GetSafeNormal();
+			const double Pixel = FMath::Max(FVector::Distance(EyeAt, Head), 1.0) / PixelsAtOne; // (what one pixel of the window spans there)
+			// (The modeller on the first pictures: over a pale place, an army's sand-coloured base, the dashes were
+			// faint. The pale heart is a full three pixels across at the least, the yellow round it wider, and a thin
+			// dark edge lies under both, as a bright thing has against a bright ground.)
+			const double HalfWide = FMath::Max(0.09 * Table, 2.6 * Pixel);
+			// (and no longer than it has yet flown: it grows out of the muzzle)
+			const double Long = FMath::Min(FMath::Max(3.0 * Table, 9.0 * HalfWide), FMath::Max(Round.Velocity.Size() * Age, 2.0 * HalfWide));
+			// (it dwindles over the last two fifths of its flight, and is out at the end)
+			const float Burning = static_cast<float>(1.0 - FMath::SmoothStep(0.6 * TracerBurns, TracerBurns, Age));
+			DrawSmear(Head - Flies * (0.42 * Long), Flies, 0.46 * Long, 1.5 * HalfWide, TracerEdge, 0.5f * Burning, 0.8, 0.42f * Burning); // the dark edge under it
+			DrawSmear(Head - Flies * (0.9 * Long), Flies, 0.6 * Long, 0.55 * HalfWide, TracerYellow, 0.6f * Burning, 0.5); // the tail, thinning
+			DrawSmear(Head - Flies * (0.4 * Long), Flies, 0.4 * Long, HalfWide, TracerYellow, 1.0f * Burning, 0.75, 0.95f * Burning); // the streak, solid
+			DrawSmear(Head - Flies * (0.25 * Long), Flies, 0.2 * Long, FMath::Max(0.5 * HalfWide, 1.5 * Pixel), TracerPale, 0.9f * Burning, 0.6, 0.7f * Burning); // its paler heart
+		}
+		bDrawingLight = false;
 	}
 
 	// Flak: every burst in the air, as hanging smoke. Sizes are in the bombers' wingspans, long (down the wind) by
@@ -14179,7 +14501,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		int32 Shown = 0;
 		for (int32 B = FlakBursts.Num() - 1; B >= 0; --B)
 		{
-			const FFlakBurst& Burst = FlakBursts[B];
+			FFlakBurst& Burst = FlakBursts[B];
 			const double Age = Burst.Born < 0.0 ? -Burst.Born : Now - Burst.Born;
 			if (Age >= SmokeLife + 0.5 && Burst.Born >= 0.0)
 			{
@@ -14194,7 +14516,10 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				continue; // (from the top: three to five, the newest)
 			}
 			FRandomStream Shape(Burst.Seed);
-			const double W = Burst.Wings;
+			// (The modeller's flak rule, passed by the art director on 18 November 2026: no two bursts the same size.
+			// Each is between 0.65 and 1.35 of the size the brief gave them all; its dice are its own, so that the
+			// shapes the bursts had are the shapes they keep.)
+			const double W = Burst.Wings * (0.65 + 0.7 * FRandomStream(Burst.Seed * 31 + 7).FRand());
 			// (larger than life from playing height; and from the top never under about fourteen points by nine)
 			// (round 37: at 1.55 a burst was 40 by 34 px from playing height and eleven of them ran together; the brief's 28 by 21)
 			const double Held = FMath::Lerp(1.0, 1.1, Playing);
@@ -14228,7 +14553,12 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// (Smoke of every age takes the hour's light as the bombers do: about half by night, and bluer. The painted
 			// shapes carry their own dark and grey. From playing height a burst is held a little darker.)
 			const float Held2 = static_cast<float>(FMath::Lerp(1.0, 0.6, Playing));
-			const FLinearColor Hour = SmokeHour * Held2;
+			// (The same rule: a burst far from the eye is lifted by the haze between, paler and thinner. Counted from the
+			// distance of what the eye looks at: nothing there, and all there is of it at twice as far.)
+			const float Hazed = static_cast<float>(FMath::Clamp((FVector::Distance(EyeAt, Burst.At) / FMath::Max(static_cast<double>(CameraDistance), 1.0) - 1.0), 0.0, 1.0));
+			const FLinearColor Hour = FMath::Lerp(SmokeHour * Held2, FLinearColor(SmokeHour.R, SmokeHour.G * 1.02f, SmokeHour.B * 1.06f).GetClamped(), 0.6f * Hazed);
+			// (and it ages from black through charcoal to a grey-brown: the painted greys of its middle and old age are warmed)
+			const FLinearColor Aged[3] = { Hour, FLinearColor(Hour.R, Hour.G * 0.95f, Hour.B * 0.88f), FLinearColor(Hour.R, Hour.G * 0.91f, Hour.B * 0.8f) };
 			// (flat to the eye, with the wind along it: across it is square to both the wind and the eye's own line)
 			const FVector Sight = FVector::CrossProduct(Right, Up);
 			FVector AcrossWind = FVector::CrossProduct(Downwind, Sight);
@@ -14279,30 +14609,38 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 					LightShape(Heartland, Downwind * Square, AcrossWind * Square, FirstShape, Row, 0.7f * 0.62f * InBeam * Remains * 2.0f * AgeShare[Row], bTurned);
 				}
 			}
+			const float Thinned = Remains * (1.0f - 0.3f * Hazed);
 			for (int32 Row = 0; Row < 3; ++Row)
 			{
 				const double Square = 0.5 * SmokeLong * SheetSquare[Row] / SheetSmoke[Row];
-				DrawShape(Heartland, Downwind * Square, AcrossWind * Square, FirstShape, Row, Hour, Remains * AgeShare[Row], bTurned);
+				DrawShape(Heartland, Downwind * Square, AcrossWind * Square, FirstShape, Row, Aged[Row], Thinned * AgeShare[Row], bTurned);
 				if (bTwo && !bTop)
 				{
 					DrawShape(Heartland + Downwind * (SecondAlong * SmokeLong) + AcrossWind * (SecondUp * SmokeLong), Downwind * (Square * SecondSize), AcrossWind * (Square * SecondSize),
-						SecondShape, Row, Hour, 0.85f * Remains * AgeShare[Row], !bTurned);
+						SecondShape, Row, Aged[Row], 0.85f * Thinned * AgeShare[Row], !bTurned);
 				}
 			}
 			const double Long = SmokeLong, Wide = SmokeLong * 0.6; // (for the flash, which is placed by the smoke's size)
-			// The flash: about a fifth of a second, soft, with no sparks, off the middle of the smoke; at full strength at every hour.
-			if (Age < 0.2 && !bTop)
+			// The flash: one frame or two and gone, lumpy, a deep orange-red; off the middle of the smoke, with no sparks.
+			// (The modeller's flak rule, with the art director's limit of 18 November 2026: "deep orange-red, never
+			// peach". It was a fifth of a second of two warm smears with a cream heart. It is three lumps of red and
+			// orange, a little off one another, the smallest the hottest and still orange; by dusk and night, when
+			// the eye is wide open, it is let down so that it does not bleach.)
+			if (Age < 0.25 && Burst.Born >= 0.0 && Burst.Flashed < 2 && !bTop)
 			{
-				// (The art director's round 37: at dusk one showed as a pale cream disc 85 to 90 px across. A flash is
-				// small, warm and uneven: two warm smears a little off one another and a small hot heart; and by dusk
-				// and night, when the eye is wide open, it is let down so that it does not bleach.)
-				const float Lit0 = static_cast<float>(1.0 - FMath::SmoothStep(0.1, 0.2, Age)) * FMath::Lerp(1.0f, 0.6f, Moonlit);
+				++Burst.Flashed;
+				const float Lit0 = FMath::Lerp(1.0f, 0.6f, Moonlit);
 				const FVector FlashAt = Heartland - Downwind * (0.12 * Long) + FVector(0.0, 0.0, 0.05 * Wide);
 				const double Skew = Shape.FRandRange(0.0f, 6.283f);
 				const FVector Lean = Right * FMath::Cos(Skew) + Up * FMath::Sin(Skew);
-				DrawSmear(FlashAt + Lean * (0.03 * W), Lean, 0.16 * W, 0.1 * W, FLinearColor(FColor(150, 70, 14)), 0.5f * Lit0);
-				DrawSmear(FlashAt - Lean * (0.02 * W), FVector::CrossProduct(Lean, FVector::CrossProduct(Right, Up)), 0.08 * W, 0.055 * W, FLinearColor(FColor(255, 160, 50)), 0.8f * Lit0);
-				Draw(FlashAt, 0.03 * W, FLinearColor(FColor(255, 222, 150)), 0.9f * Lit0);
+				const FVector Athwart = FVector::CrossProduct(Lean, FVector::CrossProduct(Right, Up));
+				bDrawingLight = true;
+				// (Measured in the first picture of it, through its own smoke: 212, 119, 77 at its brightest, a dull
+				// orange on the way to peach. A bright ink is paled by the screen; these are laid deeper and redder.)
+				DrawSmear(FlashAt + Lean * (0.05 * W), Lean, 0.15 * W, 0.1 * W, FLinearColor(FColor(178, 30, 6)), 0.9f * Lit0, 0.6);
+				DrawSmear(FlashAt - Lean * (0.06 * W) + Athwart * (0.04 * W), Athwart, 0.1 * W, 0.075 * W, FLinearColor(FColor(204, 46, 8)), 0.95f * Lit0, 0.6);
+				Draw(FlashAt - Athwart * (0.03 * W), 0.05 * W, FLinearColor(FColor(226, 74, 12)), 0.95f * Lit0);
+				bDrawingLight = false;
 			}
 		}
 	}
