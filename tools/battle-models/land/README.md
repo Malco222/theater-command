@@ -21,7 +21,15 @@ It all runs in Blender as a Python module (`bpy`), with no Blender window:
 | `gear.py` | road wheels, sprockets, idlers, return rollers, and a track laid link by link round them |
 | `fittings.py` | barrels, hatches, cupolas, tools, bins, silencers, grilles, spare links |
 | `works.py` | the kit together (`Works`), the rig and clips every tank has, the pictures' weathering, the mesh as the game reads it |
-| `tanks_ger.py` | Panzer IV, Panther, Tiger |
+| `tanks_ger.py` | Panzer IV (two guns, two coats, the skirts of May 1943), Panther, Tiger; the Panzer IV's running gear as a function |
+| `tanks_sov.py`, `tanks_usa.py`, `tanks_uk.py`, `tanks_fra.py`, `tanks_ita.py`, `tanks_jap.py`, `tanks_pol.py` | T-34 and T-34-85, Sherman (and the M4's tub, gear, deck and tail as functions), Matilda, Char B1, M13, Type 97, 7TP |
+| `tanks_any.py` | the light and the medium tank of every nation without one of its own |
+| `tank_destroyers.py` | StuG III, SU-85, M10 |
+| `guns.py`, `guns_at.py` | the gun kit (`GunWorks`: wheels, saddle, cradle, piece, shield, trails, the towed gun's clips), five field guns, two anti-tank guns |
+| `sp_guns.py` | self-propelled artillery (`SpWorks`: the gun kit standing in a hull): M7, Sexton, Hummel, SU-76 |
+| `carriers.py` | wheels on tyres, steering, burst fire (`CarrierWorks`); the lorry, the Sd.Kfz. 251, the M3 half-track |
+| `armoured_cars.py` | Sd.Kfz. 222, M8, and every other army's armoured car |
+| `flak.py` | the light flak mounts, and the three wagons that carry them |
 | `vehicles.py` | every vehicle by name, whose it is, and the faces it showed through the war |
 | `ground.py` | the stage (`Battle`: the field battle's own ground and trees; `Field`: a plain meadow) and the effects (`Air`) |
 | `landmarks.py` | each nation's plain period marking, laid on the skin |
@@ -81,6 +89,8 @@ faces of a track link that the wheels and the ground polish. `soot` is laid roun
 
 ## Adding a vehicle
 
-Write a function in a `tanks_*.py` (or a new file) that builds it on `Works`, end it with `tank_clips(...)`, register
+Write a function in a `tanks_*.py` (or a new file) that builds it on `Works` (a towed gun on `GunWorks`, a gun in a
+hull on `SpWorks`, anything on tyres on `CarrierWorks`), end it with `tank_clips(...)`, `gun_clips(...)` or
+`car_clips(...)`, register
 it in `vehicles.py`, look at it with `landlook.py`, then export it, make its sheet and clips, and send the pictures to
 the art director's thread.
