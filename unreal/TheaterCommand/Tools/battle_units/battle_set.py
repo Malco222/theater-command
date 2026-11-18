@@ -634,6 +634,25 @@ def _farm(stage, at, yaw, mats):
     c.data.materials.append(mats["plaster"])
 
 
+def _broken_points(rnd, lx, ly, lz, wedge=0.0):
+    """Points whose convex hull is a broken chunk: a box with its corners knocked off at random, faces a little out
+    of square, extra facets, and (for a wedge) one end thinner than the other. Flat faces, sharp edges."""
+    pts = []
+    for sx in (-0.5, 0.5):
+        taper = 1.0 - wedge * (sx + 0.5)
+        for sy in (-0.5, 0.5):
+            for sz in (-0.5, 0.5):
+                cut = rnd.uniform(0.0, 0.35)
+                pts.append(Vector((sx * lx * (1 - cut * rnd.random()), sy * ly * (1 - cut * rnd.random()),
+                                   sz * lz * taper * (1 - cut * rnd.random()))))
+    for _ in range(rnd.randint(3, 7)):
+        ax = rnd.randrange(3)
+        q = Vector((rnd.uniform(-0.45, 0.45) * lx, rnd.uniform(-0.45, 0.45) * ly, rnd.uniform(-0.45, 0.45) * lz))
+        q[ax] = math.copysign((lx, ly, lz)[ax] * rnd.uniform(0.38, 0.5), rnd.uniform(-1, 1))
+        pts.append(q)
+    return pts
+
+
 def _crater_material():
     """A fresh shell hole: raw dark earth inside (wet and darkest at the bottom), churned clods on the lip, and a fan
     of darker spray thrown across the grass, thickest on one side, speckled and ragged so it never reads as a disc."""
@@ -795,32 +814,51 @@ def _crater(stage, x, y, r, mats, seed=0, water=False):
     sub = c.modifiers.new("sub", "SUBSURF")
     sub.levels = sub.render_levels = 1
     me.materials.append(_crater_material())
-    # clods and torn turf flung over the lip and out along the blast side
+    # clods: broken chunks of every size, a few on the crest, most tumbled down the outer slope, thinning out into
+    # the spray on the blast side; and a few flaps of torn turf
     cb = bmesh.new()
     tb = bmesh.new()
-    for k in range(int(70 * r)):
-        side_bias = blast + rnd.gauss(0, 1.1) if rnd.random() < 0.6 else rnd.uniform(0, 2 * math.pi)
-        dist = r * (0.85 + abs(rnd.gauss(0, 0.5)) * (1.6 if abs(math.remainder(side_bias - blast, 2 * math.pi)) < 1 else 0.9))
-        px, py = x + math.cos(side_bias) * dist, y + math.sin(side_bias) * dist
-        size = rnd.uniform(0.04, 0.16) * (1.3 if dist < 1.3 * r else 0.8)
-        turf = rnd.random() < 0.06 and dist < 1.6 * r
-        tgt = tb if turf else cb
-        ret = bmesh.ops.create_icosphere(tgt, subdivisions=2 if turf else 1, radius=1.0)
-        o = Vector((rnd.uniform(0, 50), rnd.uniform(0, 50), rnd.uniform(0, 50)))
-        sx, sy, sz = (size * 2.0, size * 1.5, size * 0.5) if turf else (size, size * rnd.uniform(0.7, 1.0), size * rnd.uniform(0.5, 0.8))
-        flip = math.pi * (rnd.random() < 0.5) if turf else 0.0          # half the torn turf lies earth side up
-        rot = Matrix.Rotation(rnd.uniform(0, 6.3), 4, "Z") @ Matrix.Rotation(flip + (rnd.uniform(-1.0, 1.0) if turf else rnd.uniform(-0.5, 0.5)), 4, "X")
-        base = Vector((px, py, stage.height(px, py) + h * math.exp(-((dist / r - 0.95) / 0.32) ** 2) + sz * 0.3))
-        for v in ret["verts"]:
-            q = Vector(v.co)
-            q *= 1.0 + 0.3 * noise.noise(q * 1.7 + o)
-            v.co = base + rot @ Vector((q.x * sx, q.y * sy, q.z * sz))
-    for bmx, name, mat in ((cb, "clods", mats["earth"]), (tb, "turf", _turf_material())):
+
+    def lip_z(px, py, dist):
+        return stage.height(px, py) + 0.02 + h * math.exp(-((max(dist / r, 0.95) - 0.95) / 0.32) ** 2)
+
+    for k in range(int(110 * r)):
+        u = rnd.random()
+        if u < 0.15:
+            band, big = rnd.uniform(0.85, 1.05), 1.0           # the crest
+        elif u < 0.7:
+            band, big = rnd.uniform(1.05, 1.75), 0.9           # tumbled down the outer slope
+        else:
+            band, big = rnd.uniform(1.75, 2.7), 0.45           # out into the spray
+        ang = blast + rnd.gauss(0, 1.0 if band > 1.75 else 1.6)
+        dist = r * band
+        px, py = x + math.cos(ang) * dist, y + math.sin(ang) * dist
+        size = math.exp(rnd.uniform(math.log(0.025), math.log(0.2))) * big
+        turf = rnd.random() < 0.07 and band < 1.6               # a sod of torn turf, half lying earth side up
+        if turf:
+            lx, ly, lz = size * 2.6 + 0.08, size * 1.9 + 0.06, rnd.uniform(0.035, 0.06)
+            flip = math.pi * (rnd.random() < 0.5)
+            rot = (Matrix.Rotation(rnd.uniform(0, 6.3), 4, "Z") @ Matrix.Rotation(flip + rnd.uniform(-0.6, 0.6), 4, "X"))
+            base = Vector((px, py, lip_z(px, py, dist) + 0.03))
+            tgt = tb
+        else:
+            lx, ly, lz = size, size * rnd.uniform(0.6, 1.0), size * rnd.uniform(0.45, 0.85)
+            rot = (Matrix.Rotation(rnd.uniform(0, 6.3), 4, "Z") @ Matrix.Rotation(rnd.uniform(-0.6, 0.6), 4, "X")
+                   @ Matrix.Rotation(rnd.uniform(-0.6, 0.6), 4, "Y"))
+            base = Vector((px, py, lip_z(px, py, dist) + lz * 0.25))
+            tgt = cb
+        vs = [tgt.verts.new(base + rot @ q) for q in _broken_points(rnd, lx, ly, lz)]
+        res = bmesh.ops.convex_hull(tgt, input=vs, use_existing_faces=False)
+        hull = {g for g in res["geom"] if isinstance(g, bmesh.types.BMVert)}
+        junk = [v for v in vs if v not in hull]
+        if junk:
+            bmesh.ops.delete(tgt, geom=junk, context="VERTS")
+    for bmx, name, mat, smooth in ((cb, "clods", mats["earth"], False), (tb, "turf", _turf_material(), False)):
         mm = bpy.data.meshes.new(name)
         bmx.to_mesh(mm)
         bmx.free()
         for poly in mm.polygons:
-            poly.use_smooth = True
+            poly.use_smooth = smooth
         ob = bpy.data.objects.new(name, mm)
         bpy.context.scene.collection.objects.link(ob)
         mm.materials.append(mat)
