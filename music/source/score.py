@@ -253,12 +253,12 @@ class Piece:
         stems = {}
         used = [t for t in self.T.values() if t.notes]
         for tr in used:
-            stems[tr.name] = render_track(tr, self.clock, total, seed=self.seed)
+            stems[tr.name] = render_track(tr, self.clock, total, seed=self.seed, wrap=n_loop if loop else None)
         hall = hall if hall is not None else make_hall()
         y, dry, wet = mix(stems, used, hall, wet_db=wet_db)
         if loop:
             y = fold_loop(y, n_loop)
-        y, L, tp = master(y, target_lufs=lufs)
+        y, L, tp = master(y, target_lufs=lufs, loop=loop)
         os.makedirs(outdir, exist_ok=True)
         path = os.path.join(outdir, f'{self.name}.wav')
         sf.write(path, y, SR, subtype='PCM_16')

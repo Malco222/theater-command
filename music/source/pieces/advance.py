@@ -4,17 +4,19 @@ BATTLE: "The Advance"
 For a battle. D minor, 132 to the minute, fifty-two bars, made to loop.
 
 Cellos and basses drive a figure grouped three, three and two from the first bar; a snare drum and the
-timpani keep it moving. The horns sound the five-note call in D minor (A  D  E  C#  F), hammered into a
-battle theme. In the middle the trumpets break into the main theme's call in its own key, B flat major,
-as if the line were holding; it is turned back into D minor, and the whole orchestra takes the battle
-theme at full strength before the figure winds down to begin again.
+timpani keep it moving. The horns hammer the main theme's tune (Brian's "The Long Walk Home") into a march
+in D minor: its long first note becomes a dotted drumbeat on one note, its climb (up a fourth, a step, a
+step) and its reach to the borrowed chord a semitone above home stay as they are. In the middle the
+trumpets break into the main theme itself, broad and slow, in its own key, B flat minor, as if the line
+were holding; it turns back to D minor, and the whole orchestra takes the march at full strength before
+the figure winds down to begin again.
 
   1-4    drums gather, the strings start their figure
-  5-12   the horns: the battle theme
+  5-12   the horns: the march
   13-20  trumpets and violins take it; the horns answer
-  21-28  woodwinds and horns toss pieces of it about; the strings tremble
-  29-36  the trumpets: the main theme's call in B flat, the line holding
-  37-44  everyone: the battle theme at full strength
+  21-28  horns toss its climb from chord to chord; the strings tremble
+  29-36  the trumpets: the main theme, broad, in B flat minor, the line holding
+  37-44  everyone: the march at full strength
   45-52  the figure winds down, the brass still striking
 """
 import sys
@@ -24,22 +26,23 @@ from score import Piece, chord_tones
 P = Piece('advance', 132, seed=31)
 T = P.T
 T['tbn'].spread_ms = 5; T['tpt'].spread_ms = 4; T['hn'].spread_ms = 8   # quick music: the brass strike together
-for b, l in ((1, 'Drums gather'), (5, 'The horns: the battle theme'), (13, 'Trumpets and violins take it'),
-             (21, 'Pieces of it, tossed about'), (29, 'The line holds: the call in B flat'), (37, 'Everyone'),
+for b, l in ((1, 'Drums gather'), (5, 'The horns: the main theme as a march'), (13, 'Trumpets and violins take it'),
+             (21, 'Its climb, tossed about'), (29, 'The line holds: the main theme, broad, in B flat minor'), (37, 'Everyone'),
              (45, 'Winding down')):
     P.section(b, l)
 
-THEME_H = 'Dm . A7 Dm | A | Dm . A7 . | Dm . A7 . | F . . C | Dm | Gm . . A7 | A'
+THEME_H = 'Dm | Dm | Eb/Bb | D/F# . A7 . | Dm | Bb . D/A . | G | Dm/A . A .'
 P.harmony(1, 'Dm | Dm | Bb | A')
 P.harmony(5, THEME_H)
 P.harmony(13, THEME_H.replace('| A', '| A7') if False else THEME_H)
 P.harmony(21, 'Bb | Gm | Eb | A | Bb | Gm | Em7b5 | A7')
-P.harmony(29, 'Bb | F Gm | Cm7 | F7 | Bb | D/F# Gm7 | Cm7 F7 | A')
+P.harmony(29, 'Bbm | Bbm | Bbm | Bbm | Cb/Gb | Cb/Gb . Gb . | Bb/D | A')
 P.harmony(37, THEME_H)
 P.harmony(45, 'Dm | Bb | Gm | A | Dm | Bb | Gm A | A7')
 
-THEME = 'D4:1.5 E4:0.5 C#4:1 F4:1 | E4:3 A3:1 | D4:1.5 E4:0.5 C#4:1 G4:1 | F4:2 E4:1 D4:1 | A4:1.5 G4:0.5 F4:1 E4:1 | F4:2 D4:2 | Bb4:1.5 A4:0.5 G4:1 E4:1 | A4:4>'
-PICK = 'r:3.5 A3:0.5 | '
+THEME = ('A3:1.5 A3:0.5 A3:1 D4:0.5 E4:0.5 | F4:3 E4:0.5 F4:0.5 | G4:3 D4:0.5 Bb3:0.5 | A3:4 | '
+         'A3:1.5 A3:0.5 A3:1 D4:0.5 E4:0.5 | F4:1.5 E4:0.5 F#4:2 | D4:0.5 B3:0.5 C#4:0.5 D4:0.5 E4:0.5 G4:0.5 F#4:0.5 F4:0.5 | D4:2 C#4:2>')
+PICK = 'r:4 | '
 
 # ---------------------------------------------------------------- the figure
 OST = ('R', 'R', '8', 'R', 'R', '8', '5', '3')
@@ -80,24 +83,24 @@ P.chords('hn', 3, [(4, 'D4'), (4, 'C#4')], vel='mf', curve=[(0, -10), (1, 0)])
 P.line('hn', 4, PICK + THEME, vel='f', legato=0.06)
 stabs('tbn', 5, 8, 60, 38)
 stabs('tba', 5, 8, 62, 29, n=1)
-P.chords('vln1', 5, [(8, 'A4'), (8, 'A4'), (4, 'A4'), (4, 'A4'), (4, 'Bb4'), (4, 'C#5')], vel='mp', art='trem', curve=[(0, -6), (0.6, 0), (1, -2)])
-P.chords('vln2', 5, [(8, 'F4'), (8, 'F4'), (4, 'F4'), (4, 'F4'), (4, 'G4'), (4, 'E4')], vel='mp', art='trem', curve=[(0, -6), (0.6, 0), (1, -2)])
+P.chords('vln1', 5, [(8, 'A4'), (4, 'Bb4'), (2, 'A4'), (2, 'A4'), (4, 'A4'), (2, 'Bb4'), (2, 'A4'), (4, 'B4'), (2, 'A4'), (2, 'A4')], vel='mp', art='trem', curve=[(0, -6), (0.6, 0), (1, -2)])
+P.chords('vln2', 5, [(8, 'F4'), (4, 'G4'), (2, 'F#4'), (2, 'G4'), (4, 'F4'), (2, 'F4'), (2, 'F#4'), (4, 'G4'), (2, 'F4'), (2, 'E4')], vel='mp', art='trem', curve=[(0, -6), (0.6, 0), (1, -2)])
 
 # ---------------------------------------------------------------- 13-20: trumpets and violins
 P.line('tpt', 12, PICK + THEME, vel='f', legato=0.05, octave=1)
 P.line('vln1', 12, PICK + THEME, vel='f', legato=0.1, octave=1, check=False)
-ANSWER = [(4, 'A3'), (4, 'A3'), (4, 'A3'), (4, 'A3'), (2, 'C4'), (2, 'C4'), (4, 'A3'), (3, 'Bb3'), (1, 'A3'), (4, 'C#4')]
+ANSWER = [(8, 'A3'), (4, 'Bb3'), (2, 'A3'), (2, 'A3'), (4, 'A3'), (2, 'Bb3'), (2, 'A3'), (4, 'B3'), (2, 'A3'), (2, 'A3')]
 P.chords('hn', 13, ANSWER, vel='mf', curve=[(0, -4), (0.5, 0), (1, -2)], overlap=0.05)
-P.chords('hn', 13, [(2, 'F3'), (1, 'E3'), (1, 'F3'), (4, 'E3'), (2, 'F3'), (2, 'E3'), (2, 'F3'), (2, 'E3'), (3, 'F3'), (1, 'E3'), (4, 'F3'), (3, 'G3'), (1, 'E3'), (4, 'E3')],
+P.chords('hn', 13, [(8, 'F3'), (4, 'G3'), (2, 'F#3'), (2, 'G3'), (4, 'F3'), (2, 'F3'), (2, 'F#3'), (4, 'G3'), (2, 'F3'), (2, 'E3')],
          vel='mf', curve=[(0, -4), (0.5, 0), (1, -2)], overlap=0.05)
 stabs('tbn', 13, 8, 66, 38)
 stabs('tba', 13, 8, 66, 29, n=1)
 
 # ---------------------------------------------------------------- 21-28: pieces of it
-P.line('hn', 21, 'D4:1.5 F4:0.5 Bb4:2 | Bb4:1.5 A4:0.5 G4:2 | G4:1.5 F4:0.5 Eb4:2 | E4:1.5 C#4:0.5 A3:2 | '
-       'D4:1.5 F4:0.5 Bb4:2 | Bb4:1.5 C5:0.5 D5:2 | E4:1 G4:1 Bb4:1 D5:1 | C#5:4>', vel='mf', legato=0.06)
-P.line('ob', 21, 'r:2 D5:1.5 F5:0.5 | r:2 Bb4:1.5 A4:0.5 | r:2 Eb5:1.5 F5:0.5 | r:2 E5:1.5 C#5:0.5 | '
-       'r:2 F5:1.5 D5:0.5 | r:2 G5:1.5 A5:0.5 | r:4 | r:4', vel='mp', check=False)
+CLIMB = ('F3:1.5 Bb3:0.5 C4:0.5 D4:1.5 | D4:1.5 G4:0.5 A4:0.5 Bb4:1.5 | Bb3:1.5 Eb4:0.5 F4:0.5 G4:1.5 | '
+         'E4:1.5 A4:0.5 B4:0.5 C#5:1.5 | F4:1.5 Bb4:0.5 C5:0.5 D5:1.5 | Bb4:1.5 A4:0.5 Bb4:0.5 D5:1.5 | E4:1 G4:1 Bb4:1 D5:1 | C#5:4>')
+P.line('hn', 21, CLIMB, vel='mf', legato=0.06)
+P.line('ob', 25, CLIMB.split(' | ', 4)[4], vel='mp', legato=0.06, octave=1, check=False)
 P.chords('vln1', 21, [(4, 'F5'), (4, 'D5'), (4, 'Eb5'), (4, 'E5'), (4, 'F5'), (4, 'G5'), (4, 'G5'), (4, 'G5')], vel='p', art='trem',
          curve=[(0, -4), (1, 0)])
 P.chords('vln2', 21, [(4, 'D5'), (4, 'Bb4'), (4, 'G4'), (4, 'C#5'), (4, 'D5'), (4, 'D5'), (4, 'E5'), (4, 'E5')], vel='p', art='trem',
@@ -110,14 +113,14 @@ P.T['timp'].add(P.at(27), 8, 45, 80, 'roll', curve=[(0, -18), (1, 0)])
 P.hit('cym', 29, 0, 60, 80, art='swell', dur=3.9 * 132 / 60, nudge=-3.7, release=0.25)
 
 # ---------------------------------------------------------------- 29-36: the line holds
-CALL_BB = 'F4:1 Bb4:2 C5:1 | A4:2 D5:2 | C5:1.5 Bb4:0.5 G4:1 Bb4:1 | F4:4 | F4:1 Bb4:2 C5:1 | A4:2 F5:2 | Eb5:1.5 D5:0.5 C5:1 A4:1 | A4:2 C#5:1 E5:1'
-P.line('tpt', 29, CALL_BB, vel='f', legato=0.05)
-P.line('vln1', 29, CALL_BB, vel='f', legato=0.1, check=False)
-P.line('fl', 29, CALL_BB, vel='mf', legato=0.06, octave=1, check=False)
-HYMN = [(4, 'D4 Bb3 F3 Bb1'), (2, 'C4 A3 F3 F1'), (2, 'D4 Bb3 G3 G1'), (4, 'Eb4 Bb3 G3 C2'), (4, 'Eb4 A3 F3 F1'),
-        (4, 'D4 Bb3 F3 Bb1'), (2, 'D4 A3 F#3 F#1'), (2, 'D4 Bb3 F3 G1'), (2, 'Eb4 Bb3 G3 C2'), (2, 'Eb4 A3 F3 F1'), (4, 'E4 C#4 A3 A1')]
+# the main theme's first phrase at half speed: each of its bars spread over two of these
+BROAD = 'F4:6 Bb4:1 C5:1 | Db5:8 | Eb5:6 Bb4:1 Gb4:1 | F4:4 | E4:4'
+P.line('tpt', 29, BROAD, vel='f', legato=0.05)
+P.line('vln1', 29, BROAD, vel='f', legato=0.1, check=False)
+P.line('fl', 29, BROAD, vel='mf', legato=0.06, octave=1, check=False)
+HYMN = [(16, 'Db4 Bb3 F3 Bb1'), (6, 'Eb4 Cb4 Gb3 Gb1'), (2, 'Db4 Bb3 Gb3 Gb1'), (4, 'D4 Bb3 F3 D2'), (4, 'E4 C#4 A3 A1')]
 for i in range(3):
-    P.chords('hn', 29, [(b, n.split()[i]) for b, n in HYMN], vel='mf', overlap=0.05, players=2)
+    P.chords('hn', 29, [(b, n.split()[i]) for b, n in HYMN], vel='mp', overlap=0.05, players=2)
 P.chords('tbn', 29, [(b, n.split()[2]) for b, n in HYMN], vel='mf', overlap=0.05)
 P.chords('tba', 29, [(b, n.split()[3]) for b, n in HYMN], vel='mf', overlap=0.05)
 

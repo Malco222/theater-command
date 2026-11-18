@@ -314,7 +314,10 @@ def note_number(name):
     return 12 * (int(m.group(3)) + 1) + step + acc
 
 
-def render_track(tr, clock, total_s, seed=0, humanize_ms=7.0, humanize_vel=4):
+def render_track(tr, clock, total_s, seed=0, humanize_ms=7.0, humanize_vel=4, wrap=None):
+    """wrap: for a loop, its length in samples. A note that starts a hair before the first beat (a player
+    early, or a sample's lead-in) has its first moments laid at the very end of the loop, where they belong
+    when the loop comes round, instead of being cut off (a cut there is a click at the join)."""
     rng = random.Random(hash((tr.name, seed)) & 0xffffffff)
     n = int(total_s * SR)
     out = np.zeros((n, 2), np.float32)
@@ -342,6 +345,8 @@ def render_track(tr, clock, total_s, seed=0, humanize_ms=7.0, humanize_vel=4):
                 y = _pan(y, pp, 0.8)
             i0 = int(start * SR)
             if i0 < 0:
+                if wrap and -i0 < wrap:
+                    out[wrap + i0:wrap] += y[:-i0]
                 y = y[-i0:]; i0 = 0
             i1 = min(n, i0 + len(y))
             if i1 > i0:
@@ -448,9 +453,11 @@ def limit(x, ceiling_db=-1.0, hold_ms=12.0):
     return (x * g[:, None]).astype(np.float32), worst
 
 
-def master(x, target_lufs=-16.0, ceiling_db=-1.0):
+def master(x, target_lufs=-16.0, ceiling_db=-1.0, loop=False):
     """The finishing desk: a slow, gentle glue on the whole orchestra, then the level set by loudness the
-    way broadcasters measure it, with the peaks kept under the ceiling."""
+    way broadcasters measure it, with the peaks kept under the ceiling.
+    For a loop, the desk first hears the loop's own end before its start (and its start after its end), so
+    the filter, the glue and the limiter are already settled at the join and nothing jumps there."""
     import pedalboard as pb
     import pyloudnorm as pyln
     board = pb.Pedalboard([
@@ -458,6 +465,10 @@ def master(x, target_lufs=-16.0, ceiling_db=-1.0):
         pb.Compressor(threshold_db=-22, ratio=1.6, attack_ms=60, release_ms=400),
     ])
     meter = pyln.Meter(SR)
+    pre = post = 0
+    if loop:
+        pre, post = min(len(x), 10 * SR), min(len(x), int(0.5 * SR))
+        x = np.concatenate([x[-pre:], x, x[:post]])
     y = board(x.T.astype(np.float32), SR).T
     y = y * 10 ** ((target_lufs - meter.integrated_loudness(y)) / 20)
     worst = 0.0
@@ -470,6 +481,8 @@ def master(x, target_lufs=-16.0, ceiling_db=-1.0):
             break
         y = y * 10 ** ((ceiling_db - tp - 0.05) / 20)
     master.last_reduction = worst
+    if loop:
+        y = y[pre:len(y) - post]
     return y.astype(np.float32), meter.integrated_loudness(y), tp
 
 
