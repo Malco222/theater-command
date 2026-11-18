@@ -418,7 +418,7 @@ def sheet(argv):
     w, h, spp = (int(v) for v in (argv[3] if len(argv) > 3 else "640x360x10").split("x"))
     tmp = os.path.splitext(out)[0] + "-parts"
     os.makedirs(tmp, exist_ok=True)
-    A = Air(clouds=12)
+    A = Air(clouds=12.0)                                     # (a full overcast below: a plain pale ground to read each machine against)
     stage.render_setup(w, h, spp)
     pics, labels = [], []
     for name in names:

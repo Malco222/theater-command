@@ -36,8 +36,9 @@ def main():
         cam = kit.camera("cam", 40.0)
         cam.data.clip_end = 40000.0
         L = yard.h.L
-        shots = {"bow": ((L * 0.92, -L * 0.66, L * 0.24), (L * 0.04, 0, 6), 40), "beam": ((0, -L * 1.05, L * 0.07), (0, 0, 9), 40),
-                 "top": ((0, -L * 0.03, L * 1.05), (0, 0, 0), 38), "quarter": ((-L * 0.72, -L * 0.52, L * 0.22), (-L * 0.03, 0, 8), 40)}
+        k = min(1.0, L / 110.0)                 # (a small craft is looked at from higher, and at her own height)
+        shots = {"bow": ((L * 0.92, -L * 0.66, L * (0.24 + 0.2 * (1 - k))), (L * 0.04, 0, 6 * k), 40), "beam": ((0, -L * 1.05, L * 0.07), (0, 0, 9 * k), 40),
+                 "top": ((0, -L * 0.03, L * 1.05), (0, 0, 0), 38), "quarter": ((-L * 0.72, -L * 0.52, L * (0.22 + 0.2 * (1 - k))), (-L * 0.03, 0, 8 * k), 40)}
         eye, tgt, lens = shots[view]
         cam.data.lens = lens
         kit.look_at(cam, eye, tgt)

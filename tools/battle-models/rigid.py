@@ -229,8 +229,18 @@ class Model:
     def oval(cx, cy, a, b, n=16):
         return [(cx + math.cos(2 * math.pi * k / n) * a, cy + math.sin(2 * math.pi * k / n) * b) for k in range(n)]
 
-    def house(self, x0, x1, half, z, high, paint, r=0.6, y=0.0, top_paint=None, steps=3, taper=0.0):
+    def house(self, x0, x1, half, z, high, paint, r=0.6, y=0.0, top_paint=None, steps=3, taper=0.0, square=(False, False)):
+        """`square`: leave the corners of the fore end, the after end, unrounded (a house built in two lengths end to end)."""
         plan = self.round_rect(x0, x1, y - half, y + half, r, steps)
+        if (square[0] or square[1]) and len(plan) > 4:
+            n = steps + 1
+            fore, rear = max(x0, x1), min(x0, x1)
+            c = [plan[i * n:(i + 1) * n] for i in range(4)]          # fore-left, rear-left, rear-right, fore-right
+            if square[0]:
+                c[0], c[3] = [(fore, y + half)], [(fore, y - half)]
+            if square[1]:
+                c[1], c[2] = [(rear, y + half)], [(rear, y - half)]
+            plan = [q for corner in c for q in corner]
         top = None
         if taper:
             top = self.round_rect(x0 - math.copysign(taper, x0 - x1), x1 + math.copysign(taper, x0 - x1), y - half + taper, y + half - taper, max(r - taper, 0.05), steps)

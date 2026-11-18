@@ -65,7 +65,7 @@ def main():
     kinds = sys.argv[3:] or ["json", "glb", "fbx"]
     names = {"ships": list(ships.BUILDERS), "planes": list(AIR), "all": list(ships.BUILDERS) + list(AIR)}.get(which) or which.split(",")
     import json
-    index_path = os.path.join(out, "index.json")
+    index_path = os.path.join(out, "index-sea-air.json")
     index = json.load(open(index_path)) if os.path.exists(index_path) else {}
     for name in names:
         try:

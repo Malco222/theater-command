@@ -407,7 +407,8 @@ def move_keys(long, fn, step=0.25):
 
 def clips_for_ship(m, yard, mains, cls):
     h = yard.h
-    big = {"battleship": 1.0, "cruiser": 0.7, "carrier": 0.9, "destroyer": 0.45, "submarine": 0.35, "merchant": 0.6}.get(cls, 0.6)
+    big = {"battleship": 1.0, "cruiser": 0.7, "carrier": 0.9, "destroyer": 0.45, "submarine": 0.35, "merchant": 0.6, "liner": 0.8, "landing": 0.25}.get(cls, 0.6)
+    small = cls == "landing"
     heavy = cls in ("battleship", "carrier")
     gun_cue = {"battleship": "naval_gun_heavy", "cruiser": "naval_gun_medium"}.get(cls, "naval_gun_light")
     screws = [p.name for p in m.parts if p.name.startswith("screw.")]
@@ -415,13 +416,15 @@ def clips_for_ship(m, yard, mains, cls):
 
     # under way: she rides the swell (a small ship works more than a great one), her screws turn, her aerials turn
     long = 12.0
-    roll, pitch, heave = (1.2, 0.5, 0.25) if heavy else ((2.0, 0.8, 0.3) if cls == "cruiser" else (4.0, 1.6, 0.45))
+    roll, pitch, heave = (1.2, 0.5, 0.25) if heavy else {"cruiser": (2.0, 0.8, 0.3), "liner": (2.0, 0.7, 0.3), "merchant": (3.0, 1.0, 0.35), "landing": (5.0, 2.4, 0.22)}.get(cls, (4.0, 1.6, 0.45))
+    revs = 14 if cls in ("merchant", "liner") else 24
     m.clips["sail"] = {"long": long, "loop": True, "about": "under way in a moderate sea: plays all the time she is afloat; other clips play over it",
                        "tracks": [{"part": "ship", "rot": quat_keys(long, lambda t: (wave(t, long, roll, 0.0, 1) + wave(t, long, roll * 0.3, 0.3, 2), wave(t, long, pitch, 0.2, 2), 0.0)),
                                    "move": move_keys(long, lambda t: (0.0, 0.0, wave(t, long, heave, 0.45, 2)))}]
-                       + [{"part": s, "turn": [[0.0, 0.0], [long, 360.0 * 24]]} for s in screws]
+                       + [{"part": s, "turn": [[0.0, 0.0], [long, 360.0 * revs]]} for s in screws]
                        + [{"part": r, "turn": [[0.0, 0.0], [long, 360.0 * 2]]} for r in radars],
-                       "events": [{"t": 0.0, "fx": "wake", "socket": "wake.stern"}, {"t": 0.0, "fx": "bow_wave", "socket": "wake.bow"}, {"t": 0.0, "fx": "funnel_smoke", "socket": "funnel.1"}]}
+                       "events": [{"t": 0.0, "fx": "wake", "socket": "wake.stern"}, {"t": 0.0, "fx": "bow_wave", "socket": "wake.bow"}]
+                       + ([{"t": 0.0, "fx": "funnel_smoke", "socket": "funnel.1"}] if any(s["name"] == "funnel.1" for s in m.sockets) else [])}
 
     # a turret fires: each gun runs back and comes out again; the flash and the brown smoke are the game's own effects
     for tn, guns, gx, raised in mains:
@@ -460,9 +463,9 @@ def clips_for_ship(m, yard, mains, cls):
                                                "move": move_keys(8.0, lambda t: (0, 0, -settle(t, 8.0, 0.9 * big + 0.3)))}],
                                    "events": [{"t": 0.0, "fx": "fire", "socket": "fire.2", "cue": "ship_burning_loop"}]}
 
-    deep = h.D + (26.0 if heavy else 16.0)
+    deep = h.D + (26.0 if heavy else (6.0 if small else 16.0))
     # she goes down by the bow: the stern lifts clear, the screws still turning, and she slides under
-    T = 26.0 if heavy else 20.0
+    T = 26.0 if heavy else (11.0 if small else 20.0)
 
     def by_bow(t, s=1.0):
         a = smooth(t / (T * 0.7))
@@ -487,7 +490,7 @@ def clips_for_ship(m, yard, mains, cls):
                              "events": [{"t": 0.0, "fx": "fire", "socket": "fire.3"}, {"t": T * 0.5, "fx": "steam_and_bubbles", "socket": "wake.stern", "cue": "ship_sinking"}, {"t": T * 0.95, "fx": "oil_slick", "socket": "wake.bow"}]}
 
     # she rolls over: on her beam ends, then bottom up, the red of her bottom showing, and down
-    Tc = 24.0 if heavy else 18.0
+    Tc = 24.0 if heavy else (9.0 if small else 18.0)
     for side, sgn in (("port", -1.0), ("starboard", 1.0)):
         def over(t, s=sgn):
             return (s * (20.0 * smooth(t / (Tc * 0.3)) + 70.0 * smooth((t - Tc * 0.22) / (Tc * 0.25)) + 82.0 * smooth((t - Tc * 0.45) / (Tc * 0.3))), -6.0 * smooth((t - Tc * 0.5) / (Tc * 0.5)), 0.0)
@@ -499,7 +502,7 @@ def clips_for_ship(m, yard, mains, cls):
                                       "events": [{"t": Tc * 0.3, "fx": "steam_and_bubbles", "socket": "fire.2", "cue": "ship_sinking"}, {"t": Tc * 0.95, "fx": "oil_slick", "socket": "fire.2"}]}
 
     # her magazine goes up: she breaks in two and the halves go down apart
-    Tb = 22.0 if heavy else 16.0
+    Tb = 22.0 if heavy else (9.0 if small else 16.0)
 
     def fore_rot(t):
         return (4.0 * smooth(t / 6.0), 6.0 * smooth(t / 2.5) + 30.0 * smooth((t - 2.0) / (Tb * 0.7)) ** 1.5, 2.0 * smooth(t / 8.0))
@@ -852,7 +855,7 @@ def carrier(tag, fine=True, hull_hex=None):
     ll, lw = c["lift"]
     x = x_fore - 12.0
     while x > x_aft + 10.0:
-        if not any(abs(x - lx) < ll * 0.5 + 4.0 and side == 0.0 for lx, side in lifts):
+        if not any(abs(x - lx) < ll * 0.5 + 4.0 and side == 0.0 for lx, side in lifts) and not (c["disc"] and abs(x - L * 0.38) < 7.6 + 4.2):
             yard.on(x).box((x, 0, iz + 0.02), (6.5, 0.4, 0.03), "line")
         x -= 13.0
     for hand in (PORT, STBD):
@@ -1144,3 +1147,8 @@ BUILDERS = {
     "Submarine_GER": lambda fine: submarine("GER", fine),
     "Submarine_USA": lambda fine: submarine("USA", fine),
 }
+
+# the ships of a convoy and a landing (merchants.py) are built with this file's pieces, so they are brought in last
+import merchants  # noqa: E402
+
+BUILDERS.update(merchants.BUILDERS)

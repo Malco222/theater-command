@@ -25,7 +25,7 @@ def main():
     ob, arm = rigid.to_blender(m, stage.ship_look)
     print(f"{name}: {m.triangles()} triangles, {len(m.parts)} parts, {len(m.sockets)} sockets, {len(m.clips)} clips, built in {time.time() - t:.1f}s")
     stage.sea_and_sky(calm=True)
-    kit.render_setup(1280, 720, samples=24)
+    kit.render_setup(1280, 720, samples=int(os.environ.get("LOOK_SPP", "24")))
     cam = kit.camera("cam", 50.0)
     L = yard.h.L
     shots = {
@@ -36,6 +36,10 @@ def main():
         "close": ((L * 0.36, -L * 0.16, L * 0.075), (L * 0.14, 0, 13), 40),
         "aft": ((-L * 0.4, -L * 0.14, L * 0.07), (-L * 0.2, 0, 10), 40),
         "low": ((L * 0.62, -L * 0.2, 4.0), (L * 0.2, 0, 14), 35),
+        # (a small craft: the places above are a big ship's)
+        "small": ((L * 0.95, -L * 0.75, L * 0.5), (L * 0.05, 0, L * 0.06), 45),
+        "smallaft": ((-L * 0.9, -L * 0.7, L * 0.45), (0, 0, L * 0.06), 45),
+        "smalllow": ((L * 1.25, -L * 0.55, L * 0.14), (0, 0, L * 0.09), 50),
     }
     for v in views:
         eye, tgt, lens = shots[v]

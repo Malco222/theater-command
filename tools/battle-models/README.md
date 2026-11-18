@@ -13,12 +13,13 @@ one format, described here.
 | --- | --- |
 | These scripts | `tools/battle-models/` in the repository |
 | The models for the game | `/mnt/project-files/battle-models/sea/` and `air/`: `<Name>.json`, `.glb`, `.fbx` |
-| What each model has (parts, sockets, clips) | `/mnt/project-files/battle-models/index.json` |
+| What each model has (parts, sockets, clips) | `/mnt/project-files/battle-models/index-sea-air.json` |
 | Review clips and line-up sheets | `sea/clips/`, `sea/sheets/`, `air/clips/`, `air/sheets/` |
 
 Ships: `Battleship_UK/GER/USA/JAP/ITA/FRA`, `Battleship`, `Cruiser_UK/GER/USA/JAP/ITA`, `Cruiser`, `Destroyer`,
 `Destroyer_GER/USA/JAP`, `Carrier`, `Carrier_USA/JAP`, `Submarine`, `Submarine_GER/USA` (the plain name is the
-layout for any other navy). Aircraft: the game's own fifteen (`Bf109`, `Spitfire`, `Zero`, `Mustang`, `Yak`, `Fw190`,
+layout for any other navy). For convoys and landings (`merchants.py`): `Freighter`, `Tanker`, `Troopship`,
+`LandingCraft` (an infantry boat, 36 men in her well) and `TankLandingCraft` (three tanks on her deck). Aircraft: the game's own fifteen (`Bf109`, `Spitfire`, `Zero`, `Mustang`, `Yak`, `Fw190`,
 `Hurricane`, `Warhawk`, `Fighter`, `Stuka`, `Sturmovik`, `He111`, `Lancaster`, `B17`, `Bomber`), plus `Parachute`
 and `Bomb`.
 
@@ -72,6 +73,17 @@ Clips: `sail` (loop), `fire.<turret>` and `fire.sec.*`, `broadside.heel`, `hit`,
 destroyers `torpedoes.port/starboard`, `depth_charges`; carriers `lift.N`; submarines `dive`, `surface`,
 `periscope`, `torpedoes.bow/stern`.
 
+The convoy's ships are ships like the rest (`ship`, `fore`, `aft`, a screw, a rudder, every ending), with the guns
+such ships were given: `turret.A` in the bows and `turret.Y` on the stern (clips `fire.A`, `fire.Y`), light guns at
+`aa.N`. The tanker has one clip more, `ablaze` (her cargo takes fire: oil fire at her fire sockets, burning oil on
+the water at her hit sockets).
+
+Landing craft add a `ramp` (a turn part: plus lowers it), the socket `ramp` at its lip (where men and tanks go off),
+and the clips `beach` (she takes the ground), `ramp.down` and `ramp.up`. What they carry is in parts of its own so
+the game can hide it or stand its own models there: `troops.1`, `troops.2` in the infantry boat (stand-in figures),
+`cargo.1…3` in the tank landing craft (stand-in tanks, each with a socket of the same name facing the ramp). A
+landing: `sail` while she runs in, then `beach`, then `ramp.down`; unload; `ramp.up` and she backs off.
+
 How a battle would use them: train turrets by setting each turret's turn to (bearing to target - rest bearing)
 inside its limits, lift guns by range, then play `fire.<turret>` on each salvo. Damage lights fires at `fire.N`
 sockets (more fires as she is hurt). A loss is one of the endings, chosen by what sank her: gunfire `sink.bow`
@@ -110,7 +122,8 @@ fuselage's own turning, so it flutters away rightly if the tracks are simply pla
 
 ```
 pip install bpy==5.3.0 numpy pillow            # Blender as a Python module (Python 3.13); needs ffmpeg for clips
-python export.py <out> all                     # every model: .json, .glb, .fbx, and index.json
+python export.py <out> all                     # every model: .json, .glb, .fbx, and index-sea-air.json
+python look.py Freighter <out> close,aft       # quick stills while building (small craft: small,smallaft)
 python show.py Battleship_UK turn <out>        # ship clips: turn, broadside, sink, capsize
 python airshow.py shot_down <out>              # aircraft clips: flypast, shot_down, ways_down
 python sheet.py <out.png> bow <names> 2        # a line-up sheet of ships;  python airshow.py sheet <out.png>
@@ -127,4 +140,5 @@ markings for the pictures only; the game paints its own from the model's `marks`
 - Effects are named in events but not built for the game; the pictures use Blender-only effects from `stage.py`.
 - Aircraft control surfaces do not move, bombers' turrets do not turn, bomb doors do not open.
 - One plain mesh (`far`) per model; no third level of detail.
-- Merchant ships (freighter, tanker, troopship) and landing craft are not built.
+- The men and tanks in the landing craft are stand-ins; the land team's soldiers and tanks should stand there.
+- No beach in the pictures' stage, so there is no clip of a landing yet.

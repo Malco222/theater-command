@@ -290,7 +290,7 @@ class Yard:
         """Under the stern: shafts, brackets, screws that turn, and the rudder."""
         m, h = self.m, self.h
         xs = h.frame_x(-0.86)
-        out = [0.26, 0.55] if screws == 4 else ([0.0, 0.42] if screws == 3 else [0.38])
+        out = [0.26, 0.55] if screws == 4 else ([0.0, 0.42] if screws == 3 else ([0.0] if screws == 1 else [0.38]))
         k = 0
         for share in out:
             for hand in ((PORT, STBD) if share > 0 else (PORT,)):
@@ -335,9 +335,9 @@ class Yard:
             m.prism(lower, top - high, top, "antifoul", top=plan, bottom=True, smooth=False)
 
     # ---- things that stand on her -----------------------------------------------------------------------
-    def house(self, x0, x1, half, z, high, paint="upper", r=0.8, y=0.0, top="deck", taper=0.0, part=None, rail=None, walls=True):
+    def house(self, x0, x1, half, z, high, paint="upper", r=0.8, y=0.0, top="deck", taper=0.0, part=None, rail=None, walls=True, square=(False, False)):
         m = self.m.use(part) if part else self.on((x0 + x1) * 0.5)
-        m.house(x0, x1, half, z, high, paint, r, y, top_paint=top, taper=taper, steps=3 if self.m.fine else 1)
+        m.house(x0, x1, half, z, high, paint, r, y, top_paint=top, taper=taper, steps=3 if self.m.fine else 1, square=square)
         fore, rear = max(x0, x1), min(x0, x1)
         if rail is None:
             rail = fore - rear >= 4.0 and half >= 2.4 and top == "deck"
@@ -680,14 +680,15 @@ def weather_for(yard):
     """Rust and soot for a ship in service: a little rust weeping down the sides, more toward the waterline and under
     the hawse pipes; soot on the funnel tops and what stands abaft them. Light: a ship in service, not a wreck."""
     h = yard.h
+    rusty = getattr(yard, "rusty", 1.0)          # (a tramp steamer shows more rust than a ship of war)
 
     def w(p, n, paint, part):
         wear = soot = 0.0
         if paint in ("hull", "boot"):
             up = min(max(p.z / max(h.deck_z(p.x), 0.5), 0.0), 1.0)
             streak = max(0.0, noise.noise(Vector((p.x * 0.9, 7.3, 0.0))) * 1.5 - 0.35) * max(0.0, noise.noise(Vector((p.x * 0.07, 2.1, 0.0))) + 0.45)
-            wear = min(0.26, streak * 0.55 * (1.0 - up * 0.7) + 0.04 * (1.0 - up))
-            wear += 0.05 * max(0.0, noise.noise(Vector((p.x * 0.05, p.z * 0.4, 3.1))))
+            wear = min(0.26 * rusty, (streak * 0.55 * (1.0 - up * 0.7) + 0.04 * (1.0 - up)) * rusty)
+            wear += 0.05 * rusty * max(0.0, noise.noise(Vector((p.x * 0.05, p.z * 0.4, 3.1))))
             for (x, y, z, reach) in yard.rust_at:
                 if abs(p.x - x) < 0.9 and p.y * y > 0 and z - reach < p.z <= z + 0.5:
                     wear = max(wear, 0.5 * (1.0 - (z - p.z) / reach))
