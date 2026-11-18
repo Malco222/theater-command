@@ -10,6 +10,7 @@
 #include "Campaign/CampaignView.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignTextures.h"
+#include "Effects/BattleEffects.h"
 #include "CampaignMapActor.generated.h"
 
 class UProceduralMeshComponent;
@@ -1120,6 +1121,14 @@ private:
 	TArray<FColor> FlakColours;
 	bool bFlakSmokeMade = false;
 	void UpdateSmoke(float CameraDistance, const FVector& CameraFocus);
+	/**
+	 * (The effects thread's battle effects kit, 18 November 2026; Brian wants explosions "very dramatic and life like".)
+	 * On the campaign table it is made only for its own test barrage, "-TheaterBlastTest", which plays round whatever the
+	 * eye looks at: Brian sees a clip of it before any of it is built into play. "-TheaterBlastScale=0.34" says how many
+	 * of the map's units a metre of it is drawn as (the raid's bombers are drawn at 0.34).
+	 */
+	TUniquePtr<FBattleEffects> Blasts;
+	FVector BlastTestAt = FVector(1.0e12, 0.0, 0.0);
 	UPROPERTY()
 	TObjectPtr<UTexture2D> MiniTexture;
 	TArray<int16> MiniRegion; // the province under each point of the small map, -1 for the sea, or MiniUnclaimed for land beyond the provinces
