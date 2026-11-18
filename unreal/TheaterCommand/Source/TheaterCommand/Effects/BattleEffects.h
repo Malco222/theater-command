@@ -88,8 +88,9 @@ public:
 	/** Everything gone: a new battle. */
 	void Clear();
 
-	/** Once a frame, with the world's time and the eye. HourLight is what the hour does to smoke (white by day; the
-	 * campaign map's night rule): flame, flashes and tracer keep their own colour. Returns the camera's jolt. */
+	/** Once a frame, with the world's time in seconds (what happens between ticks is stamped with the last tick's time)
+	 * and the eye. HourLight is what the hour does to smoke (white by day; the campaign map's night rule): flame,
+	 * flashes and tracer keep their own colour. Returns the camera's jolt. */
 	FBattleJolt Tick(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight = FLinearColor::White);
 
 	/** Camera shake on or off (Options: "Camera shake", default on). */
@@ -139,7 +140,7 @@ private:
 	TheaterFx::Vec ToFx(const FVector& World) const;
 	TheaterFx::Vec ToFxWay(const FVector& Way) const;
 	double Time() const;
-	void MakeSection(int32 NewRoom);
+	void MakeSection(int32 NewRoom, const FVector& Fill);
 	void Hide();
 	void PlayTest(double Now);
 };

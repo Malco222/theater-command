@@ -154,9 +154,8 @@ TheaterFx::Vec FBattleEffects::ToFxWay(const FVector& Way) const
 
 double FBattleEffects::Time() const
 {
-	const USceneComponent* Parent = Holder.Get();
-	const UWorld* World = Parent ? Parent->GetWorld() : nullptr;
-	return World ? World->GetTimeSeconds() : Clock;
+	// (one clock for everything: the time Tick was last given, so what happens and what is drawn always agree)
+	return Clock;
 }
 
 bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFunction<FVector(const FVector&)> InGroundUnder)
@@ -202,6 +201,7 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 	// (its colours are the recipe's own: Brightness 1, where the map's lines take 1.6)
 	UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(Highlight, Made);
 	Instance->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+	Made->SetMaterial(0, Instance); // (held here, in the mesh's own list, before it has any section: Ink only watches it)
 	Ink = Instance;
 
 	// The flashes' lamps: a few, shadowless, out until a flash lights one.
@@ -226,7 +226,8 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 		Lamp->SetVisibility(false);
 		LampLights[Index] = Lamp;
 	}
-	Clock = Time();
+	const UWorld* World = Parent->GetWorld();
+	Clock = World ? World->GetTimeSeconds() : 0.0; // (until the first Tick)
 	UE_LOG(LogTheater, Log, TEXT("Battle effects ready: %.2f world units a metre, room for %d puffs, %d lamps"), UnitsPerMetre, Core.Room(), LampsInUse);
 	return true;
 }
@@ -304,7 +305,7 @@ void FBattleEffects::Clear()
 	Hide();
 }
 
-void FBattleEffects::MakeSection(int32 NewRoom)
+void FBattleEffects::MakeSection(int32 NewRoom, const FVector& Fill)
 {
 	// The mesh is made with room for so many puffs (the map smoke's shape: a middle and two rings of eight, both faces
 	// of every triangle); after that only its points and colours change, until it needs more room or much less.
@@ -324,7 +325,7 @@ void FBattleEffects::MakeSection(int32 NewRoom)
 		}
 	}
 	Room = NewRoom;
-	Points.Init(FVector::ZeroVector, Room * PerPuff + 2);
+	Points.Init(Fill, Room * PerPuff + 2); // (spare room at the battle, not at the world's origin, so the bounds stay tight)
 	Colours.Init(FColor(0, 0, 0, 0), Room * PerPuff + 2);
 	LastSent = 0;
 	TArray<FVector> Normals;
@@ -394,13 +395,13 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 	{
 		RoomSpare = 0;
 	}
-	if (Wanted != Room)
-	{
-		MakeSection(Wanted);
-	}
 	const int32 PerPuff = TheaterFx::Battle::PerPuff;
 	const std::vector<TheaterFx::Vec>& From = Core.Points();
 	const std::vector<uint8_t>& Rgba = Core.Colours();
+	if (Wanted != Room)
+	{
+		MakeSection(Wanted, Drawn > 0 ? FVector(From[0].X, From[0].Y, From[0].Z) * UnitsPerMetre : Eye);
+	}
 	// (what the core drew, and what it folded away from last frame: the rest of the room is folded already)
 	const int32 Send = FMath::Min(Room, FMath::Max(Drawn, LastSent)) * PerPuff;
 	FBox Whole(ForceInit);
