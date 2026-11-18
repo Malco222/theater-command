@@ -30,6 +30,39 @@ def _mix(nt, blend="MIX", fac=1.0):
     return n, n.inputs[0], n.inputs[6], n.inputs[7], n.outputs[2]
 
 
+def _face(nt, ball=True):
+    """How squarely the camera looks into a puff at this point of it: 1 through its middle, 0 at its outline.
+    (The layer weight's "facing" was used for this, and drew a faint dark ring round every puff: it takes the
+    smoothed normal and forgets its sign, so at the outline, where that normal tips away from the camera, it rises
+    again. Black flak puffs against the sky showed it as frogspawn; flame tongues as a crisp brushed edge.) For a
+    ball it is worked out from where the sight line passes its middle, in the ball's own space, so squashing does
+    not matter and the facets do not show; for another shape, from the normal with its sign kept."""
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    if not ball:
+        d = nt.nodes.new("ShaderNodeVectorMath")
+        d.operation = "DOT_PRODUCT"
+        nt.links.new(geo.outputs["Incoming"], d.inputs[0])
+        nt.links.new(geo.outputs["Normal"], d.inputs[1])
+        return _math(nt, "MULTIPLY", d.outputs["Value"], 1.0, clamp=True)
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    vt = nt.nodes.new("ShaderNodeVectorTransform")
+    vt.vector_type, vt.convert_from, vt.convert_to = "VECTOR", "WORLD", "OBJECT"
+    nt.links.new(geo.outputs["Incoming"], vt.inputs["Vector"])        # (by name: it is not this node's first socket)
+    nm = nt.nodes.new("ShaderNodeVectorMath")
+    nm.operation = "NORMALIZE"
+    nt.links.new(vt.outputs[0], nm.inputs[0])
+    pd = nt.nodes.new("ShaderNodeVectorMath")
+    pd.operation = "DOT_PRODUCT"
+    nt.links.new(tc.outputs["Object"], pd.inputs[0])
+    nt.links.new(nm.outputs[0], pd.inputs[1])
+    pp = nt.nodes.new("ShaderNodeVectorMath")
+    pp.operation = "DOT_PRODUCT"
+    nt.links.new(tc.outputs["Object"], pp.inputs[0])
+    nt.links.new(tc.outputs["Object"], pp.inputs[1])
+    off2 = _math(nt, "SUBTRACT", pp.outputs["Value"], _math(nt, "MULTIPLY", pd.outputs["Value"], pd.outputs["Value"]))     # (how far off its middle the sight line passes, squared)
+    return _math(nt, "SQRT", _math(nt, "SUBTRACT", 1.0, off2, clamp=True))
+
+
 def _math(nt, op, a=None, b=None, clamp=False):
     n = nt.nodes.new("ShaderNodeMath")
     n.operation, n.use_clamp = op, clamp
@@ -513,10 +546,18 @@ class Effects:
             v.co = (x, y * k + 0.2 * u * math.sin(2.6 * u), z * k + 0.12 * u * u)
         for k in ("tongue", "lick"):
             self.meshes[k] = lick.copy()
-            self.meshes[k].materials.append(self._flame_mat(k == "tongue"))
+            self.meshes[k].materials.append(self._flame_mat(k))
         for k in ("jet", "ring"):                # (made last, so that nothing made before them is named differently)
             self.meshes[k] = self.mesh.copy()
             self.meshes[k].materials.append(self._jet_mat() if k == "jet" else self._ring_mat())
+        # "heart": the yellow heart of a fire, a short solid tongue. "bit": a scrap of wreckage, a dark chip. (Made after
+        # everything else, for the same reason.)
+        self.meshes["heart"] = lick.copy()
+        self.meshes["heart"].materials.append(self._flame_mat("heart"))
+        self.meshes["bit"] = self.mesh.copy()
+        self.meshes["bit"].materials.append(self._bit_mat())
+        self.meshes["tracer"] = self.mesh.copy()           # (a tracer round's streak of light)
+        self.meshes["tracer"].materials.append(self._tracer_mat())
 
     def _mat(self, kind):
         m = bpy.data.materials.new("fx_" + kind)
@@ -593,9 +634,7 @@ class Effects:
             soft = _math(nt, "SUBTRACT", 1.0, _math(nt, "ADD", _math(nt, "DIVIDE", r, reach), _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", nz.outputs[0], 0.5), 0.9)), clamp=True)
             soft = _math(nt, "MULTIPLY", soft, 1.7, clamp=True)
         else:                    # a puff: thick where you look into it, thinning to nothing at its edge
-            lw = nt.nodes.new("ShaderNodeLayerWeight")
-            lw.inputs["Blend"].default_value = 0.5
-            face = _math(nt, "SUBTRACT", 1.0, lw.outputs["Facing"], clamp=True)
+            face = _face(nt, ball=True)
             soft = _math(nt, "POWER", face, {"smoke": 2.4, "water": 1.9, "glow": 1.3}[kind])
             soft = _math(nt, "MULTIPLY", soft, _math(nt, "SUBTRACT", _math(nt, "MULTIPLY", nz.outputs[0], 1.9), 0.35, clamp=True), clamp=True)
         alpha = _math(nt, "MULTIPLY", soft, 0.85 if kind == "foam" else info.outputs["Alpha"], clamp=True)
@@ -650,9 +689,7 @@ class Effects:
         nz.inputs["Roughness"].default_value = 0.65
         nt.links.new(mp.outputs["Vector"], nz.inputs["Vector"])
         nt.links.new(_math(nt, "MULTIPLY", info.outputs["Random"], 61.0), nz.inputs["W"])
-        lw = nt.nodes.new("ShaderNodeLayerWeight")
-        lw.inputs["Blend"].default_value = 0.5
-        face = _math(nt, "SUBTRACT", 1.0, lw.outputs["Facing"], clamp=True)                  # 1 looking into it, 0 at its edge
+        face = _face(nt, ball=True)                  # 1 looking into it, 0 at its edge
         heart = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", face, 0.1), 2.4)                  # (over 1 in its heart: opaque there; the outer quarter of it can tear)
         torn = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", nz.outputs[0], 0.5), 2.8)
         sep = nt.nodes.new("ShaderNodeSeparateXYZ")
@@ -707,12 +744,17 @@ class Effects:
         nt.links.new(ms.outputs[0], out.inputs["Surface"])
         return m
 
-    def _flame_mat(self, hot):
+    def _flame_mat(self, kind):
         """Flame as tongues: fat near the root and drawn out to a thin soft tip, ragged (eaten away by noise, more
-        toward the tip), streaked along its length, each one different; deep orange, darkening to red at the tip,
-        and with `hot` a yellower heart at the root. (The art director, 2026-11-18: as plain stretched balls they
-        were "lens-shaped ovals with a line down the middle" and read as orange leaves.)"""
-        m = bpy.data.materials.new("fx_tongue" if hot else "fx_lick")
+        toward the tip), streaked along its length, each one different. Light and dark in every one of them: deep
+        orange in its body (the puff's own colour), dark red-brown toward its tip and along its edge, going into
+        smoke at its very end; "tongue" has a yellow root as well, "lick" (a scrap torn off downstream) has none, and
+        "heart" is the yellow heart of a fire: short, solid, orange only at its end. A tongue's edge is soft and seen
+        through for a few pixels; a heart's is not (a thin film of yellow over a pale skin or the sky is peach).
+        (The art director, 2026-11-18: as plain stretched balls they were "lens-shaped ovals with a line down the
+        middle" and read as orange leaves; then, one flat tone with a crisp edge, as "a paint splat".)"""
+        hot, solid = kind == "tongue", kind == "heart"
+        m = bpy.data.materials.new("fx_" + kind)
         m.use_nodes = True
         nt = m.node_tree
         nt.nodes.remove(nt.nodes["Principled BSDF"])
@@ -723,23 +765,26 @@ class Effects:
         nt.links.new(tc.outputs["Object"], sep.inputs[0])
         u = _math(nt, "MULTIPLY", _math(nt, "ADD", sep.outputs[0], 1.0), 0.5, clamp=True)      # 0 at the root, 1 at the tip
         mp = nt.nodes.new("ShaderNodeMapping")
-        mp.inputs["Scale"].default_value = (0.7, 4.2, 4.2)                                    # (streaks lie along the tongue)
+        mp.inputs["Scale"].default_value = (0.7, 3.0, 3.0)                                    # (streaks lie along the tongue)
         nt.links.new(tc.outputs["Object"], mp.inputs["Vector"])
         nz = nt.nodes.new("ShaderNodeTexNoise")
         nz.noise_dimensions = "4D"
         nz.inputs["Scale"].default_value = 1.0
-        nz.inputs["Detail"].default_value = 5.0
-        nz.inputs["Roughness"].default_value = 0.62
+        nz.inputs["Detail"].default_value = 3.5
+        nz.inputs["Roughness"].default_value = 0.55
         nt.links.new(mp.outputs["Vector"], nz.inputs["Vector"])
         nt.links.new(_math(nt, "MULTIPLY", info.outputs["Random"], 61.0), nz.inputs["W"])     # (no two alike)
         n = nz.outputs[0]
-        lw = nt.nodes.new("ShaderNodeLayerWeight")
-        lw.inputs["Blend"].default_value = 0.5
-        face = _math(nt, "SUBTRACT", 1.0, lw.outputs["Facing"], clamp=True)                   # 1 looking into it, 0 at its edge
-        eaten = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _math(nt, "MULTIPLY", n, 2.5), _math(nt, "ADD", 0.62 if hot else 0.8, _math(nt, "MULTIPLY", u, 0.85))), 3.2, clamp=True)
+        face = _face(nt, ball=False)                   # 1 looking into it, 0 at its edge
+        # (a tongue dies by being eaten away, never by going thin all over: thin orange over a bright sky is peach.
+        #  So as it dies the holes in it open, from the tip back, and what is left of it is as solid as it was.)
+        gone = _math(nt, "SUBTRACT", 1.0, info.outputs["Alpha"], clamp=True)
+        e0, eu = (0.62, 0.85) if hot else (0.3, 0.6) if solid else (0.8, 0.85)
+        bar = _math(nt, "ADD", _math(nt, "ADD", e0, _math(nt, "MULTIPLY", u, eu)), _math(nt, "MULTIPLY", gone, 1.0))
+        eaten = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _math(nt, "MULTIPLY", n, 2.5), bar), 3.2 if solid else 2.0, clamp=True)
         # its outline: only the middle of the ball is kept as it nears the tip, so it tapers, and the streaks tear its
-        # edge. (Near the tip the ball's face turns slowly, so the edge there is soft; at its sides it is crisp.)
-        taper = _math(nt, "MULTIPLY", _math(nt, "POWER", u, 1.3), 0.92)
+        # edge.
+        taper = _math(nt, "MULTIPLY", _math(nt, "POWER", u, 1.3), 0.75 if solid else 0.92)
         mp2 = nt.nodes.new("ShaderNodeMapping")
         mp2.inputs["Scale"].default_value = (0.55, 1.5, 1.5)                                  # (broad notches: a tongue forks and licks)
         nt.links.new(tc.outputs["Object"], mp2.inputs["Vector"])
@@ -751,23 +796,52 @@ class Effects:
         nt.links.new(_math(nt, "MULTIPLY", info.outputs["Random"], 37.0), nz2.inputs["W"])
         torn = _math(nt, "ADD", _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", n, 0.5), 1.0), _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", nz2.outputs[0], 0.5), 1.1))
         rim = _math(nt, "ADD", _math(nt, "SUBTRACT", _math(nt, "POWER", face, 0.9), taper), torn)
-        soft = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", rim, 1.6, clamp=True), eaten, clamp=True)
-        # (a tongue dies by being eaten away, never by going thin all over: thin orange over a bright sky is peach)
-        gone = _math(nt, "SUBTRACT", 1.0, info.outputs["Alpha"], clamp=True)
-        alpha = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", soft, gone), 3.0, clamp=True)
-        # colour: the puff's own (deep orange) through most of it, red and dim toward the tip, yellow in the heart
-        _, t_fac, t_a, t_b, col = _mix(nt)
-        t_b.default_value = (0.032, 0.006, 0.0015, 1.0)
-        nt.links.new(info.outputs["Color"], t_a)
-        nt.links.new(_math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _math(nt, "ADD", u, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 1.0, n), 0.5)), 0.72), 2.2, clamp=True), t_fac)
-        if hot:
-            _, h_fac, h_a, h_b, heart = _mix(nt)
-            h_a.default_value = (0.2, 0.066, 0.004, 1.0)
-            nt.links.new(col, h_b)
-            # (by how far along it is and by its streaks, not by how it faces the camera: that drew a pale line down its middle)
-            cool = _math(nt, "ADD", _math(nt, "MULTIPLY", u, 2.3), _math(nt, "ADD", 0.2, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 0.5, n), 0.9)))
-            nt.links.new(_math(nt, "MULTIPLY", _math(nt, "SUBTRACT", cool, 0.12), 1.6, clamp=True), h_fac)
-            col = heart
+        if not solid:                                # (dying, it draws in toward its middle: what is left of it is shreds in its heart, never a hollow outline)
+            rim = _math(nt, "SUBTRACT", rim, _math(nt, "MULTIPLY", gone, 0.45))
+        edge = _math(nt, "MULTIPLY", rim, 2.5 if solid else 1.15, clamp=True)                 # (1 well inside it, falling to 0 at its outline)
+        alpha = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", edge, eaten), 4.0 if solid else 1.5, clamp=True)
+        # colour. Its body is the puff's own colour, streaked lighter and darker along it.
+        _, s_fac, s_a, s_b, col = _mix(nt, "MULTIPLY")
+        s_fac.default_value = 1.0
+        nt.links.new(info.outputs["Color"], s_a)
+        shade = _math(nt, "ADD", 0.5, _math(nt, "MULTIPLY", n, 0.7))
+        grey = nt.nodes.new("ShaderNodeCombineXYZ")
+        for i in range(3):
+            nt.links.new(shade, grey.inputs[i])
+        nt.links.new(grey.outputs[0], s_b)
+        far = _math(nt, "ADD", u, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 0.5, n), 0.6))   # (how far along, the streaks running ahead and behind)
+        if solid:
+            # a heart: yellow all through, deep orange only at its end
+            _, t_fac, t_a, t_b, tip = _mix(nt)
+            t_b.default_value = (0.14, 0.026, 0.004, 1.0)
+            nt.links.new(col, t_a)
+            nt.links.new(_math(nt, "MULTIPLY", _math(nt, "SUBTRACT", far, 0.62), 2.2, clamp=True), t_fac)
+            col = tip
+        else:
+            # dark red-brown toward the tip, along the edge, and as it dies
+            _, t_fac, t_a, t_b, tip = _mix(nt)
+            t_b.default_value = (0.032, 0.006, 0.0015, 1.0)
+            nt.links.new(col, t_a)
+            dark = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", far, 0.2), 2.3)
+            # (and wherever it is seen through, at its soft edge and where it is being eaten: thin orange over the sky
+            #  is peach, thin red-brown is the smoke coming into it)
+            dark = _math(nt, "ADD", dark, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 1.0, _math(nt, "MULTIPLY", edge, eaten)), 1.3))
+            dark = _math(nt, "ADD", dark, _math(nt, "MULTIPLY", gone, 0.9), clamp=True)
+            nt.links.new(dark, t_fac)
+            # and smoke at its very end
+            _, k_fac, k_a, k_b, soot = _mix(nt)
+            k_b.default_value = (0.006, 0.0045, 0.0035, 1.0)
+            nt.links.new(tip, k_a)
+            nt.links.new(_math(nt, "ADD", _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", far, 0.66), 3.0), _math(nt, "MULTIPLY", gone, 0.35), clamp=True), k_fac)
+            col = soot
+            if hot:
+                # a yellow root (by how far along it is and by its streaks, not by how it faces the camera: that drew
+                # a pale line down its middle)
+                _, h_fac, h_a, h_b, heart = _mix(nt)
+                h_a.default_value = (0.175, 0.088, 0.0, 1.0)
+                nt.links.new(col, h_b)
+                nt.links.new(_math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _math(nt, "ADD", _math(nt, "MULTIPLY", u, 2.2), _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 0.5, n), 0.9)), 0.3), 2.0, clamp=True), h_fac)
+                col = heart
         body = nt.nodes.new("ShaderNodeEmission")
         body.inputs["Strength"].default_value = 7.0
         nt.links.new(col, body.inputs["Color"])
@@ -779,10 +853,73 @@ class Effects:
         nt.links.new(ms.outputs[0], out.inputs["Surface"])
         return m
 
+    def _tracer_mat(self):
+        """A tracer round's streak (the ball drawn out long along x, its head at +x): a solid core of light with a
+        faint soft glow round it, paler down its middle and thinning toward its tail. No noise in it: a mottled streak
+        a few pixels wide is half sky, and yellow mixed with a pale sky is straw."""
+        m = bpy.data.materials.new("fx_tracer")
+        m.use_nodes = True
+        nt = m.node_tree
+        nt.nodes.remove(nt.nodes["Principled BSDF"])
+        out = nt.nodes["Material Output"]
+        info = nt.nodes.new("ShaderNodeObjectInfo")
+        tc = nt.nodes.new("ShaderNodeTexCoord")
+        sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+        nt.links.new(tc.outputs["Object"], sep.inputs[0])
+        u = _math(nt, "ADD", _math(nt, "MULTIPLY", sep.outputs[0], 0.5), 0.5, clamp=True)       # 0 at its tail, 1 at its head
+        face = _face(nt, ball=True)
+        # a solid core down the middle half of its width, and a soft glow out to its edge (the art director,
+        # 2026-11-18: "a short bright dash with a soft glow"). The glow is kept faint: yellow thin over a pale sky is cream.
+        core = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", face, 0.82), 12.0, clamp=True)
+        glow = _math(nt, "MULTIPLY", _math(nt, "POWER", face, 1.3), 0.42)
+        tail = _math(nt, "ADD", _math(nt, "MULTIPLY", u, 1.6), 0.15, clamp=True)
+        alpha = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", _math(nt, "MAXIMUM", core, glow), tail), info.outputs["Alpha"], clamp=True)
+        hot = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", face, 0.93), 14.0, clamp=True), u)
+        body = nt.nodes.new("ShaderNodeEmission")
+        nt.links.new(info.outputs["Color"], body.inputs["Color"])
+        nt.links.new(_math(nt, "MULTIPLY", _math(nt, "ADD", 1.0, _math(nt, "MULTIPLY", hot, 0.5)), 7.0), body.inputs["Strength"])
+        clear = nt.nodes.new("ShaderNodeBsdfTransparent")
+        ms = nt.nodes.new("ShaderNodeMixShader")
+        nt.links.new(alpha, ms.inputs[0])
+        nt.links.new(clear.outputs[0], ms.inputs[1])
+        nt.links.new(body.outputs[0], ms.inputs[2])
+        nt.links.new(ms.outputs[0], out.inputs["Surface"])
+        return m
+
+    def _bit_mat(self):
+        """A scrap of wreckage: a small dark chip with a crisp ragged outline, no two alike (a soft round puff, however
+        small, reads as a ball of fluff)."""
+        m = bpy.data.materials.new("fx_bit")
+        m.use_nodes = True
+        nt = m.node_tree
+        nt.nodes.remove(nt.nodes["Principled BSDF"])
+        out = nt.nodes["Material Output"]
+        info = nt.nodes.new("ShaderNodeObjectInfo")
+        tc = nt.nodes.new("ShaderNodeTexCoord")
+        nz = nt.nodes.new("ShaderNodeTexNoise")
+        nz.noise_dimensions = "4D"
+        nz.inputs["Scale"].default_value = 1.7
+        nz.inputs["Detail"].default_value = 2.0
+        nt.links.new(tc.outputs["Object"], nz.inputs["Vector"])
+        nt.links.new(_math(nt, "MULTIPLY", info.outputs["Random"], 61.0), nz.inputs["W"])
+        face = _face(nt, ball=True)
+        chip = _math(nt, "MULTIPLY", _math(nt, "ADD", _math(nt, "SUBTRACT", face, 0.55), _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", nz.outputs[0], 0.5), 2.6)), 8.0, clamp=True)
+        alpha = _math(nt, "MULTIPLY", chip, info.outputs["Alpha"], clamp=True)
+        body = nt.nodes.new("ShaderNodeBsdfDiffuse")
+        nt.links.new(info.outputs["Color"], body.inputs["Color"])
+        clear = nt.nodes.new("ShaderNodeBsdfTransparent")
+        ms = nt.nodes.new("ShaderNodeMixShader")
+        nt.links.new(alpha, ms.inputs[0])
+        nt.links.new(clear.outputs[0], ms.inputs[1])
+        nt.links.new(body.outputs[0], ms.inputs[2])
+        nt.links.new(ms.outputs[0], out.inputs["Surface"])
+        return m
+
     # -- one puff
     def puff(self, t0, at, vel=(0, 0, 0), life=6.0, r=(2.0, 8.0), col=(0.5, 0.5, 0.5), col2=None, alpha=0.6, kind="smoke", drag=0.0, rise=0.0,
-             gravity=0.0, wind=1.0, squash=(1.0, 1.0, 1.0), fade_in=0.15, grow=0.6, hold=0.0, cool=1.6, name="puff", rng=None):
-        """`name`, `rng`: its object's name and the dice it is turned by. Something added to a clip that is already
+             gravity=0.0, wind=1.0, squash=(1.0, 1.0, 1.0), fade_in=0.15, grow=0.6, hold=0.0, cool=1.6, name="puff", rng=None, least=0.0):
+        """`least`: never thinner on the picture than this many pixels from its middle to its edge, however far off (a
+        tracer's light is seen a long way, though the round is small). `name`, `rng`: its object's name and the dice it is turned by. Something added to a clip that is already
         rendered takes its own of both, so that every other puff keeps the name and the turn it had (a puff's
         name decides the pattern of its stuff), and the frames it is not in come out as they were."""
         ob = self.spare[kind].pop() if self.spare.get(kind) else None
@@ -794,7 +931,7 @@ class Effects:
         ob.rotation_euler = (dice.uniform(0, 6.28), dice.uniform(0, 6.28), dice.uniform(0, 6.28)) if kind not in ("flat", "foam", "ring") else (0, 0, dice.uniform(0, 6.28))
         ob.hide_render = False
         p = dict(ob=ob, kind=kind, t0=t0, at=Vector(at), vel=Vector(vel), life=life, r=r, col=Vector(col), col2=Vector(col2 if col2 is not None else col), alpha=alpha,
-                 drag=drag, rise=rise, gravity=gravity, wind=wind, squash=Vector(squash), fade_in=fade_in, grow=grow, hold=hold, cool=cool)
+                 drag=drag, rise=rise, gravity=gravity, wind=wind, squash=Vector(squash), fade_in=fade_in, grow=grow, hold=hold, cool=cool, least=least)
         self.live.append(p)
         return p
 
@@ -818,9 +955,16 @@ class Effects:
             pos.z *= 1.0 - 0.75 * s * s
             wide, tall, thin = 1.0 + 0.9 * s, 1.0 - 0.6 * s, (1.0 - s) ** 1.3
         ob.location = pos
-        ob.scale = (rad * p["squash"][0] * wide, rad * p["squash"][1] * wide, rad * p["squash"][2] * tall)
-        fade = thin * min(1.0, a / max(p["fade_in"], 1e-3)) * (1.0 if f < p["hold"] else (1 - (f - p["hold"]) / max(1 - p["hold"], 1e-6)) ** 1.4)
         cam = bpy.context.scene.camera
+        sy, sz = rad * p["squash"][1] * wide, rad * p["squash"][2] * tall
+        if p["least"] and cam is not None:       # (the camera must be set for this frame before at() is called, for these)
+            far = (pos - cam.location).length
+            need = p["least"] * far * cam.data.sensor_width / (cam.data.lens * bpy.context.scene.render.resolution_x)
+            if far > 300.0:                      # (beyond 300 m it is let dwindle a little: a sky full of far tracers all as fat as near ones was confetti)
+                need *= math.sqrt(300.0 / far)
+            sy, sz = max(sy, need), max(sz, need)
+        ob.scale = (rad * p["squash"][0] * wide, sy, sz)
+        fade = thin * min(1.0, a / max(p["fade_in"], 1e-3)) * (1.0 if f < p["hold"] else (1 - (f - p["hold"]) / max(1 - p["hold"], 1e-6)) ** 1.4)
         if cam is not None and p["kind"] in ("smoke", "water"):
             # (a puff the camera is in, or nearly in, shows its rim "like a flat glass plate": it thins away as the
             #  camera comes up to it)
@@ -854,6 +998,7 @@ class Effects:
 
     def at(self, t):
         """Everything as it is at t. Sources lay the puffs that fell due since the last call."""
+        self.now = t                                 # (for a source that works out where it is: `t` is still the last call's)
         for s in self.streams:
             if s["next"] > t + 0.5 or s["next"] > s["end"]:
                 continue
@@ -918,7 +1063,7 @@ class Effects:
                 ln = heart * q.uniform(1.3, 2.2)
                 wide = ln * q.uniform(0.22, 0.34)
                 p = self.puff(t, at + d * ln * 0.3, vel=d * q.uniform(3.0, 8.0), life=life * q.uniform(1.2, 2.0), r=(0.7, 1.0), col=(0.193, 0.111, 0.0), col2=(0.16, 0.05, 0.002), alpha=0.95,
-                              kind="lick", drag=3.0, wind=wind, squash=(0.5 * ln, 0.5 * wide, 0.5 * wide), fade_in=0.008, grow=0.5, hold=0.5, cool=1.0, name="heart", rng=q)
+                              kind="heart", drag=3.0, wind=wind, squash=(0.5 * ln, 0.5 * wide, 0.5 * wide), fade_in=0.008, grow=0.5, hold=0.5, cool=1.0, name="heart", rng=q)
                 p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion((1.0, 0.0, 0.0), q.uniform(0, 6.283))).to_euler()
 
     # -- the effects themselves (each is a `make` for stream or once, or lays its own)
@@ -1130,7 +1275,7 @@ class Effects:
                 ln = q.uniform(6.0, 11.0) * size
                 wide = ln * q.uniform(0.45, 0.6)
                 p = self.puff(t + q.uniform(0.0, 0.6), at + Vector((q.uniform(-5, 5), q.uniform(-3, 3), 2.0)) * size + d * ln * 0.4, vel=d * q.uniform(4, 10), life=q.uniform(0.28, 0.45), r=(0.7, 1.0),
-                              col=(0.193, 0.111, 0.0), col2=(0.16, 0.05, 0.002), alpha=0.95, kind="lick", wind=0.15, squash=(0.5 * ln, 0.5 * wide, 0.5 * wide), fade_in=0.01, grow=0.5, hold=0.5,
+                              col=(0.193, 0.111, 0.0), col2=(0.16, 0.05, 0.002), alpha=0.95, kind="heart", wind=0.15, squash=(0.5 * ln, 0.5 * wide, 0.5 * wide), fade_in=0.01, grow=0.5, hold=0.5,
                               cool=1.0, name="heart", rng=q)
                 p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion((1.0, 0.0, 0.0), q.uniform(0, 6.283))).to_euler()
             self.light(t, at + Vector((0, 0, 18.0)), 6.0e4 * size * size, 0.17, r=10.0)
