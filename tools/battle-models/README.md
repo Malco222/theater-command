@@ -482,6 +482,17 @@ blue stays low, so it is yellow and never peach), with dice and names of its own
 tips are a dark red-brown. The blast's old dice are thrown in the order they always were, so the frames after the
 blast has cleared match the ones rendered before the change (frame 62 of the sinking: mean difference 0.5 of 255).
 
+A tongue of flame's shape (`_flame_mat`). As a plain stretched ball a tongue was a lens-shaped oval with a pale line
+down its middle, and a ball of them read as orange leaves, a flower, a tulip. A tongue now keeps only the middle of
+its ball as it nears the tip, so it is fat near the root and drawn out thin; broad notches and its own streaks tear
+its edge; its tip is soft, because the ball's face turns slowly there; and its yellower root follows how far along
+it is and its streaks, never how it faces the camera (that drew the line). Tongues are long and thin (a width of a
+fifth to a third of the length) and are rooted through the middle of a ball of flame, so its heart is not a hole.
+A heart is a few short yellow tongues, never a round glowing ball; the throws the old balls made are still made, so
+the dice after them are as they were. An engine fire's tongues are set back into the place that burns, or their
+blunt root ends show as a row of round heads. `flametest`-style check: three balls of flame against the sky at two
+moments, looked at twice size, before any clip.
+
 Smoke seen later and from near by (`trail` in `airshow.py`, `_place` in `stage.py`). A trail's puffs of one age
 all live as long as each other and drift little, or those that die early leave the rest standing as a chain of
 separate ovals; and a puff thins away as the camera comes up to it, or its rim shows like a flat glass plate. Bullet
