@@ -6722,6 +6722,69 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 			TownSpreads[Region.Id] = static_cast<float>(Wanted);
 			TownPacked[Region.Id] = bTight;
 		}
+		// (The art director's rule for close towns, 18 November 2026; the cities of the Americas stood Baltimore
+		// almost on top of Washington. Towns never move. Where two would touch, the higher-ranked keeps its size, a
+		// capital first and then by what the rules hold the place worth, and the other is built smaller until a
+		// gap of about a quarter of its own width lies between them. If even its smallest would touch, it keeps
+		// the smallest rather than vanishing. "-TheaterTownsAsBuilt" leaves every town its first size.)
+		if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterTownsAsBuilt")))
+		{
+			auto RankOf = [](const FCampaignRegion& Region)
+			{
+				return (Region.bCapital ? 1000.0 : 0.0) + Region.VictoryPoints * 10.0 + Region.Factories + (Region.Terrain == TEXT("urban") ? 0.5 : 0.0);
+			};
+			TArray<int32> Order;
+			for (const FCampaignRegion& Region : Data.Regions)
+			{
+				if (FirstTownRadius(Region) > 0.0)
+				{
+					Order.Add(Region.Id);
+				}
+			}
+			Order.Sort([this, &RankOf](int32 A, int32 B)
+			{
+				const double RankA = RankOf(Data.Regions[A]), RankB = RankOf(Data.Regions[B]);
+				return RankA != RankB ? RankA > RankB : A < B;
+			});
+			const double Smallest = 3.3; // (a small place at three quarters of its first size: the least a town is built)
+			int32 Gave = 0;
+			FString Said;
+			for (int32 A = 1; A < Order.Num(); ++A)
+			{
+				const FCampaignRegion& Lesser = Data.Regions[Order[A]];
+				const double Own = FirstTownRadius(Lesser), Was = Own * TownSpreads[Lesser.Id];
+				double Radius = Was;
+				const FCampaignRegion* To = nullptr;
+				for (int32 B = 0; B < A; ++B)
+				{
+					const FCampaignRegion& Greater = Data.Regions[Order[B]];
+					const double Apart = FVector2D::Distance(Lesser.Center, Greater.Center);
+					const double Theirs = FirstTownRadius(Greater) * TownSpreads[Greater.Id];
+					if (Radius + Theirs > Apart)
+					{
+						const double Fits = FMath::Max((Apart - Theirs) / 1.5, FMath::Min(Was, Smallest));
+						if (Fits < Radius)
+						{
+							Radius = Fits;
+							To = &Greater;
+						}
+					}
+				}
+				if (To && Radius < Was - 0.05)
+				{
+					TownSpreads[Lesser.Id] = static_cast<float>(Radius / Own);
+					++Gave;
+					if (Gave <= 8)
+					{
+						Said += FString::Printf(TEXT("%s%s to %s (%.1f to %.1f)"), Said.IsEmpty() ? TEXT("") : TEXT("; "), *Lesser.Name, *To->Name, Was, Radius);
+					}
+				}
+			}
+			if (Gave > 0)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Towns: %d give way to a greater town beside them and are built smaller: %s%s"), Gave, *Said, Gave > 8 ? TEXT("; and more") : TEXT(""));
+			}
+		}
 	}
 	return TownSpreads[RegionId];
 }

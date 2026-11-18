@@ -45,6 +45,23 @@
 
 namespace
 {
+	/**
+	 * The frame's own scale inside Unreal's game layer. (18 November 2026. It was "the window's height over 900". But
+	 * Unreal already draws everything on the game's screen at the window's height over 1080, so the frame grew with the
+	 * SQUARE of the window's height: right at the 1600 by 1000 it is drawn and reviewed at, 77 hundredths of its proper
+	 * size at Brian's 1441 by 878, 60 at the 776 he played at before, and double at the screen's fine pixels, where a
+	 * card filled the whole window. It is one number now, so that the frame keeps the same size against the window at
+	 * every size: what it is at 1600 by 1000. "-TheaterOldFrameScale" is the old rule.)
+	 */
+	float FrameScale(double PixelsHigh)
+	{
+		static const bool bOldRule = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldFrameScale"));
+		return bOldRule ? FMath::Clamp(static_cast<float>(PixelsHigh / 900.0), 0.7f, 3.5f) : 1000.0f / 900.0f;
+	}
+}
+
+namespace
+{
 	const FLinearColor PanelFill(0.012f, 0.010f, 0.008f, 0.88f);
 	const FLinearColor CardFill(0.045f, 0.040f, 0.034f, 0.96f);
 	const FLinearColor CardHover(0.085f, 0.075f, 0.062f, 0.98f);
@@ -4894,7 +4911,7 @@ namespace
 					{
 						GEngine->GameViewport->GetViewportSize(Size);
 					}
-					return FMath::Clamp(static_cast<float>(Size.Y / 900.0), 0.7f, 3.5f);
+					return FrameScale(Size.Y);
 				})
 				[
 					SAssignNew(ScreenRoot, SOverlay)
@@ -8405,7 +8422,7 @@ namespace
 			{
 				GEngine->GameViewport->GetViewportSize(Size);
 			}
-			const float Scale = FMath::Clamp(static_cast<float>(Size.Y / 900.0), 0.7f, 3.5f);
+			const float Scale = FrameScale(Size.Y);
 			auto Wide = [Scale](const TWeakPtr<SWidget>& Kept) -> float
 			{
 				const TSharedPtr<SWidget> Widget = Kept.Pin();
@@ -8467,7 +8484,7 @@ namespace
 			// (The screen's units to a pixel of the window: this screen's own scale, and the engine's for the window's
 			// size on top of it. In a window that is not 1,080 high the two differ, and by the first alone the box
 			// stood off from the pointer: in the pictures' window, 7 parts in 100 up and to the left.)
-			const double Scale = FMath::Clamp(Size.Y / 900.0, 0.7, 3.5) * FMath::Max(static_cast<double>(GetTickSpaceGeometry().Scale), 0.01);
+			const double Scale = FrameScale(Size.Y) * FMath::Max(static_cast<double>(GetTickSpaceGeometry().Scale), 0.01);
 			const FVector2D Screen = Size / Scale;
 			const FVector2D At = Controller.IsValid() ? Controller->GetPointer() / Scale : FVector2D::ZeroVector;
 			const FVector2D Tip = HoverTipBox.IsValid() ? HoverTipBox->GetDesiredSize() : FVector2D(300.0, 60.0);
@@ -8702,7 +8719,7 @@ namespace
 				{
 					GEngine->GameViewport->GetViewportSize(Pixels);
 				}
-				const double Scale = FMath::Clamp(Pixels.Y / 900.0, 0.7, 3.5);
+				const double Scale = FrameScale(Pixels.Y);
 				TArray<FBox2D> Keep;
 				Controller->GetLessonKeepClear(Keep);
 				auto Covers = [&Keep, Scale, Size](const FVector2D& At)
@@ -14228,7 +14245,7 @@ namespace
 			{
 				GEngine->GameViewport->GetViewportSize(Size);
 			}
-			const float Scale = FMath::Clamp(static_cast<float>(Size.Y / 900.0), 0.7f, 3.5f);
+			const float Scale = FrameScale(Size.Y);
 			const FVector2D At = (FVector2D(Tray->GetTickSpaceGeometry().GetAbsolutePosition()) - FVector2D(GetTickSpaceGeometry().GetAbsolutePosition())) / Scale;
 			const float High = static_cast<float>(BigCardShow->GetDesiredSize().Y);
 			return FMargin(static_cast<float>(At.X), FMath::Max(static_cast<float>(At.Y) - High - 8.0f, 8.0f), 0.0f, 0.0f);
