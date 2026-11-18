@@ -19,6 +19,7 @@ import nationsData from '../data/campaign/nations.json';
 import setupData from '../data/campaign/setup-1939.json';
 import worldData from '../data/campaign/world.json';
 import { ARSENAL, offers, yardLevel } from '../src/campaign/arsenal';
+import { BUDGET, PRODUCTION, canRaise, colonyPurse, farColony, landFactor, landShare, provinceYield } from '../src/campaign/economy';
 import { monthlyDiplomacy, signPeace } from '../src/campaign/diplomacy';
 import { tieBars, tieWar, tiedPair } from '../src/campaign/far';
 import { FAR_LAID, FAR_PATHS, FAR_SETUP } from '../src/campaign/far-rows';
@@ -551,3 +552,76 @@ describe('a colony on the far side (ruling 231)', () => {
     }
   });
 });
+
+describe("a far colony's purse and its factories (the rider b462 to ruling 231)", () => {
+  it('pays its own country a tenth of what it paid, a conqueror his usual share, and an older colony as ever', () => {
+    const g = grand();
+    const calcutta = g.byName['Calcutta'];
+    expect(calcutta).toMatchObject({ owner: 'UK', ctrl: 'UK', overseas: true, fac: 3, port: true });
+    expect(farColony(calcutta)).toBe(true);
+    expect(BUDGET.farColony).toMatchObject({ land: 0.1, port: 0.1, oil: 0.1, fac: 0.1 });
+    // Its own country: every part a tenth of a colony's pay.
+    const hers = provinceYield(g, calcutta, 'UK');
+    expect(hers.fac).toBeCloseTo(3 * 0.1, 9);
+    expect(hers.port).toBeCloseTo(BUDGET.port * BUDGET.overseas * landFactor(calcutta) * 0.1, 9);
+    expect(hers.land).toBeCloseTo(BUDGET.land[calcutta.terrain] * BUDGET.overseas * landFactor(calcutta) * landShare(calcutta) * 0.1, 9);
+    expect(hers.total).toBeCloseTo(hers.fac + hers.port + hers.land, 9);
+    const brunei = g.byName['Brunei'];
+    expect(provinceYield(g, brunei, 'UK').oil).toBeCloseTo(BUDGET.oil * BUDGET.overseas * 0.1, 9);
+    // A conqueror: what conquered ground has always paid.
+    const his = provinceYield(g, calcutta, 'JAP');
+    expect(his.fac).toBeCloseTo(3 * PRODUCTION.occupiedIncome, 9);
+    expect(his.port).toBeCloseTo(BUDGET.port * BUDGET.occupied * landFactor(calcutta), 9);
+    expect(provinceYield(g, brunei, 'JAP').oil).toBeCloseTo(BUDGET.oil * BUDGET.occupied, 9);
+    // The colonies of the old chart and of the Americas, and home ground on the far side: no factor.
+    for (const name of ['Alexandria', 'Trinidad']) {
+      const r = g.byName[name];
+      expect(r.overseas && !farColony(r), name).toBe(true);
+      expect(provinceYield(g, r, 'UK').port, name).toBeCloseTo(BUDGET.port * BUDGET.overseas * landFactor(r), 9);
+    }
+    const sverdlovsk = g.regions.find((r) => r.id >= FAR_FIRST && r.owner === 'SOV' && r.fac > 0 && !r.overseas)!;
+    expect(farColony(sverdlovsk)).toBe(false);
+    expect(provinceYield(g, sverdlovsk, 'SOV').fac).toBe(sverdlovsk.fac);
+    // Britain's far colonies together: about 3.5 a month where they paid 35.4.
+    let sum = 0, n = 0;
+    for (const r of g.regions) if (r.owner === 'UK' && r.ctrl === 'UK' && farColony(r)) { sum += provinceYield(g, r, 'UK').total; n++; }
+    expect(n).toBeGreaterThan(250);
+    expect(sum).toBeGreaterThan(3.4);
+    expect(sum).toBeLessThan(3.7);
+  });
+
+  it("pays Japan for Korea, Formosa and Karafuto as her home ground does (the historian's exception)", () => {
+    const g = grand();
+    const named = new Set(BUDGET.farColony.home);
+    // Twenty-two of Japan's provinces carry the colony mark: the Mandates' nine, Dairen, and the twelve named.
+    const marked = g.regions.filter((r) => r.owner === 'JAP' && r.ctrl === 'JAP' && r.overseas);
+    expect(marked.length).toBe(22);
+    expect(marked.filter((r) => named.has(r.name)).map((r) => r.name).sort()).toEqual([...named].sort());
+    for (const name of named) expect(g.byName[name], name).toMatchObject({ owner: 'JAP', overseas: true });
+    // The named twelve pay her as home ground does: a factory its whole point, land and a harbour with no share taken.
+    for (const r of marked.filter((x) => named.has(x.name))) {
+      expect(colonyPurse(r) || farColony(r), r.name).toBe(false);
+      const y = provinceYield(g, r, 'JAP');
+      expect(y.fac, r.name).toBe(r.fac);
+      expect(y.land, r.name).toBeCloseTo(BUDGET.land[r.terrain] * landFactor(r) * landShare(r), 9);
+      expect(y.port, r.name).toBeCloseTo(r.port ? BUDGET.port * landFactor(r) : 0, 9);
+      // The mark still says where her corps are raised: in the home islands, as before.
+      expect(canRaise(g, 'JAP', r), r.name).toBe(false);
+    }
+    expect(g.byName['Hamhung'].fac + g.byName['Formosa'].fac).toBe(2);
+    // The Mandates and Dairen are a purse: a tenth, as India is to Britain.
+    const rest = marked.filter((r) => !named.has(r.name));
+    expect(rest.length).toBe(10);
+    for (const r of rest) {
+      expect(farColony(r), r.name).toBe(true);
+      const y = provinceYield(g, r, 'JAP');
+      expect(y.fac, r.name).toBeCloseTo(r.fac * 0.1, 9);
+      expect(y.port, r.name).toBeCloseTo(r.port ? BUDGET.port * BUDGET.overseas * landFactor(r) * 0.1 : 0, 9);
+    }
+    // Manchukuo is its own country and stays as it is: no province of it is Japan's, and it pays itself in full.
+    const man = g.regions.filter((r) => r.owner === 'MAN');
+    expect(man.length).toBeGreaterThan(0);
+    for (const r of man) expect(r.overseas, r.name).toBe(false);
+  });
+});
+

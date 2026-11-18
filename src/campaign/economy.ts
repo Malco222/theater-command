@@ -30,7 +30,7 @@ import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
 import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
 import { raiseMorale } from './morale';
-import { WORLD_MAP, armyIdle, peaceFooting, warFooting, warWorkLeft } from './world';
+import { WORLD_MAP, armyIdle, peaceFooting, shoreOf, warFooting, warWorkLeft } from './world';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -91,6 +91,12 @@ export const firstCorpsNumber = (nat: string): number => PRODUCTION.firstCorpsNu
 export const BUDGET = budgetData as unknown as {
   scale: number; capital: number;
   land: Record<Terrain, number>; port: number; oil: number; occupied: number; overseas: number;
+  /**
+   * Rider b462 to ruling 231: the share of what a colony on the far side of the world pays that reaches its own
+   * country's treasury, by part; 'home' names the colony-marked provinces out there that are part of their country's
+   * own economy and pay it as home ground does (Korea, Formosa, Karafuto).
+   */
+  farColony: { land: number; port: number; oil: number; fac: number; home: string[] };
   /** Ruling 214: a factor on the land and harbour pay of the provinces a smaller power owned on the first day. */
   landFactor: Record<string, number>;
   upkeep: { corps: Record<Kind, number>; ships: Record<ShipClass, number>; air: { ftr: number; bmr: number }; peace: number };
@@ -138,6 +144,16 @@ export function landShare(r: Region, always = false): number {
   return shares.get(r.id) ?? 1;
 }
 
+const FAR_HOME = new Set(BUDGET.farColony.home);
+/**
+ * True for ground that pays its own country as a colony does: ground with the colony mark, but for the few provinces
+ * that were part of their country's own economy (budget.json, 'farColony.home'). Where its corps are raised and its
+ * works built is another matter (canRaise, arsenal.ts).
+ */
+export const colonyPurse = (r: Region): boolean => !!r.overseas && !FAR_HOME.has(r.name);
+/** True for such ground on the far side of the world (world.ts shoreOf 2). None while the far side's switch is off. */
+export const farColony = (r: Region): boolean => colonyPurse(r) && shoreOf(r) === 2;
+
 /**
  * What a province gives the nation that holds it. Conquered ground and colonies give less than the home country.
  * `whole` leaves a siege out of account: what the province is worth to its holder once the roads are open again.
@@ -151,13 +167,17 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   if (!budgeted(g)) { const fac = own ? works : works * PRODUCTION.occupiedIncome; return { land: 0, port: 0, oil: 0, fac, capital: 0, total: fac }; }
   // An administration set up on conquered ground makes it pay more of what it is worth.
   const lift = own ? 0 : hallShare(g, r);
-  const fac = own ? works : works * (PRODUCTION.occupiedIncome + lift);
-  const k = !own ? BUDGET.occupied + lift : r.overseas ? BUDGET.overseas : 1;
+  // A colony on the far side of the world keeps its purse: a tenth of what it pays reaches its own country (rider
+  // b462 to ruling 231: India's purse paid for India's army, which comes by its rows). The colonies of the old chart
+  // and of the Americas pay as they always have, and so does ground a conqueror has taken.
+  const far = own && farColony(r) ? BUDGET.farColony : null;
+  const fac = (own ? works : works * (PRODUCTION.occupiedIncome + lift)) * (far?.fac ?? 1);
+  const k = !own ? BUDGET.occupied + lift : colonyPurse(r) ? BUDGET.overseas : 1;
   const worth = bare || !budgeted(g) ? 1 : landFactor(r);
-  const land = BUDGET.land[r.terrain] * k * worth * landShare(r, bare);
+  const land = BUDGET.land[r.terrain] * k * worth * landShare(r, bare) * (far?.land ?? 1);
   // A harbour blocked pays nothing until it is mended (prizes.ts), and an oilfield alight pays only for the wells still at work.
-  const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * worth : 0;
-  const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) : 0;
+  const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * worth * (far?.port ?? 1) : 0;
+  const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) * (far?.oil ?? 1) : 0;
   const capital = own && g.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
   // With an enemy army round its town a province sends its holder next to nothing: the roads out are cut.
   if (!whole && nat === r.ctrl && besieged(g, r)) {
