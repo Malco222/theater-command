@@ -176,7 +176,10 @@ class Yard:
         return self.h.deck_z(x) + 0.02
 
     # ---- the hull ------------------------------------------------------------------------------------
-    def hull(self, deck_paint="planks", frames=None, deck_from=None, deck_to=None):
+    def hull(self, deck_paint="planks", frames=None, deck_from=None, deck_to=None, boot=None, above=None):
+        """`boot`: the height of the top of her boot topping, where her freeboard is too low for the usual rule (a
+        submarine's); `above`: the heights of the rows of points up her side, as shares of her freeboard (with `boot`,
+        of her side above the boot)."""
         m, h = self.m, self.h
         n = frames or (96 if m.fine else 40)
         us = [-1.0 + 2.0 * k / n for k in range(n + 1)]
@@ -189,13 +192,16 @@ class Yard:
         us = sorted(set([u for u in us if abs(u - ub) > 0.6 / n] + [ub]))
         boot_lo, boot_hi = -0.45, 0.85
         below = [-1.0, -0.86, -0.68, -0.48, -0.3, -0.16] if m.fine else [-1.0, -0.7, -0.35]
-        above = [0.22, 0.42, 0.62, 0.82, 1.0] if m.fine else [0.5, 1.0]
+        above = above or ([0.22, 0.42, 0.62, 0.82, 1.0] if m.fine else [0.5, 1.0])
 
         def ring(u):
             zd = h.deck_z(h.frame_x(u) + h.lean(u))
             wb = -0.07                                                      # the foot of the boot topping
-            wt = min(boot_hi / zd, 0.18)
-            shares = below + [wb, 0.0, wt] + [a for a in above if a > wt + 0.03]
+            wt = min(boot_hi / zd, 0.18) if boot is None else min(boot / zd, 0.6)
+            if boot is None:
+                shares = below + [wb, 0.0, wt] + [a for a in above if a > wt + 0.03]
+            else:                # (shares of what is left of her side above the boot: the same count of rows on every frame)
+                shares = below + [wb, 0.0, wt] + [wt + (1.0 - wt) * a for a in above]
             port = [h.point(u, w, PORT) for w in shares]
             # the deck's edge: the hull's own paint comes a little way in over the deck (the waterway)
             edge = port[-1]
@@ -207,7 +213,7 @@ class Yard:
         def paint(mid, n_):
             if mid.z < boot_lo * 0.6:
                 return "antifoul"
-            if mid.z < boot_hi * 0.75:
+            if mid.z < (boot_hi * 0.75 if boot is None else boot - 0.01):
                 return "boot"
             return "hull"
 

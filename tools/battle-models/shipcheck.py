@@ -4,7 +4,8 @@
     python3 shipcheck.py boxes <names|all>             # her largest plain boxes and bars, to see that none is out of scale
 
 A piece is a mesh island (points joined by edges). `loose` passes a piece that lies within `gap` metres of another,
-looking all along the faces of a small box or bar and not only at its corners. `boxes` found the 20 m sheet over the
+looking all along the faces of a small box or bar and not only at its corners; it also counts the points that are in
+no face at all (a skin laid over rings of unequal count leaves them, and twisted faces with them). `boxes` found the 20 m sheet over the
 Japanese towers, which was one solid piece standing on its post and so not loose at all: run both after a change.
 """
 import os
@@ -98,12 +99,13 @@ def loose(name, gap):
         found.append((tuple(round(q, 1) for q in (lo + hi) * 0.5), tuple(round(q, 1) for q in hi - lo), len(vs),
                       mats[f.material_index] if f else "?", groups[max(w, key=lambda kv: kv[1])[0]] if w else "?"))
     lo, hi = box(bm.verts)
+    lone = sum(1 for v in bm.verts if not v.link_faces)      # (points in no face: a skin whose rings were not all one count leaves them)
     print(f"{name}: {len(isl)} pieces, {len(bm.verts)} points, x {lo.x:.1f}..{hi.x:.1f}, beam {hi.y - lo.y:.1f}, top {hi.z:.1f}; "
-          f"loose {len(found)} ({time.time() - t0:.0f}s)", flush=True)
+          f"loose {len(found)}, points in no face {lone} ({time.time() - t0:.0f}s)", flush=True)
     for row in found[:40]:
         print("   at", row[0], "size", row[1], "points", row[2], "paint", row[3], "part", row[4], flush=True)
     bm.free()
-    return len(found)
+    return len(found) + lone
 
 
 def boxes(name, show=9):

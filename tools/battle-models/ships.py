@@ -10,6 +10,7 @@ turn, screws and rudder turn, and she can list, capsize, go down by the bow or t
 
 import math
 import os
+import random
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1026,7 +1027,7 @@ def slot(m, at, facing, long, high, paint="black", lift=0.02, arch=False):
     """A free-flooding hole in a submarine's casing, lying flat on her side: a slot with round ends along her length,
     or (`arch`) the upper half of a round hole, its flat side down."""
     n = Vector(facing).normalized()
-    t = (X - n * X.dot(n)).normalized()
+    t = Z.cross(n).normalized()                              # (level, along the skin: it serves on a wall that faces ahead too)
     u = n.cross(t)
     if u.z < 0:
         u = -u
@@ -1041,6 +1042,62 @@ def slot(m, at, facing, long, high, paint="black", lift=0.02, arch=False):
         hub = c
     k = len(ring)
     m.add([c + q for q in ring] + [hub], [(i, (i + 1) % k, k) for i in range(k if not arch else k - 1)] + ([(k - 1, 0, k)] if arch else []), paint, False, lambda q: n)
+
+
+def walk(plan):
+    """A closed plan of (x, y) points as a path to walk: its length, and a function of the distance gone along it that
+    gives the place and the level way out from it there."""
+    pts = [Vector((q[0], q[1], 0.0)) for q in plan]
+    count = len(pts)
+    mid = sum(pts, Vector()) / count
+    legs = [(pts[(i + 1) % count] - pts[i]).length for i in range(count)]
+    total = sum(legs)
+
+    def at(s):
+        s %= total
+        for i in range(count):
+            if s <= legs[i] or i == count - 1:
+                a, b = pts[i], pts[(i + 1) % count]
+                q = a + (b - a) * (s / max(legs[i], 1e-9))
+                out = Vector(((b - a).y, -(b - a).x, 0.0))
+                if out.length < 1e-9:
+                    out = q - mid
+                out.normalize()
+                return q, (out if out.dot(q - mid) > 0 else -out)
+            s -= legs[i]
+    return total, at
+
+
+def plating(m, plan, z0, z1, belts, every=1.3, pitch=0.14, stud=0.015, skip=()):
+    """A wall of plates: seams round it at the heights `belts`, upright seams every so far along it, and a row of
+    rivets beside each. `skip`: lengths (x from, x to) of the wall left bare (a door)."""
+    total, at = walk(plan)
+
+    def rivet(q, out, z):
+        if any(a <= q.x <= b for a, b in skip):
+            return
+        side = Z.cross(out)
+        c = q + Z * z + out * 0.006
+        m.add([c - side * stud, c - Z * stud, c + side * stud, c + Z * stud], [(0, 1, 2, 3)], "seam", False, lambda w, o=out: o)
+    steps = max(8, int(total / 0.3))
+    ring = [at(total * i / steps) for i in range(steps + 1)]
+    for z in belts:
+        m.strip([q + Z * z for q, _ in ring], [o for _, o in ring], 0.011, "seam", 0.006)
+        for i in range(int(total / pitch)):
+            q, out = at(i * pitch)
+            rivet(q, out, z + 0.045)
+            rivet(q, out, z - 0.045)
+    for i in range(int(total / every)):
+        q, out = at((i + 0.5) * total / int(total / every))
+        if any(a <= q.x <= b for a, b in skip):
+            continue
+        m.strip([q + Z * z0, q + Z * z1], [out, out], 0.011, "seam", 0.006)
+        side = Z.cross(out)
+        z = z0 + pitch * 0.5
+        while z < z1:
+            if all(abs(z - b) > 0.07 for b in belts):
+                rivet(q + side * 0.045, out, z)
+            z += pitch
 
 
 def hoop(m, mid, axis, r, thick, paint, sides=12):
@@ -1069,12 +1126,18 @@ def submarine(tag, fine=True, hull_hex=None):
                  tower=(6.0, -5.0, 2.9), gun=None, gun_aft=-13.0, aa=8.2, tubes=(6, 4))
     elif tag != "PLAIN":
         c.update(name=f"Submarine_{tag}", title=f"Submarine ({tag} paint; our own model)")
-    m = Model(c["name"], c["title"], "ship", livery(tag, "submarine", hull_hex), fine)
+    paints = livery(tag, "submarine", hull_hex)
+    m = Model(c["name"], c["title"], "ship", paints, fine)
     h = Hull(**c["hull"])
     L = h.L
     yard = Yard(m, h, break_x=-1.0)
     yard.soot_at, yard.rust_at = [], []
-    yard.hull("deck", frames=72 if fine else 32)
+    stains, pale = {}, {}                                    # (the rust and the dried salt a streak's own points carry: see `streak` below)
+
+    def key(v):
+        return (round(v.x, 3), round(v.y, 3), round(v.z, 3))
+    BOOT = 0.55                                              # (the top of her boot topping: her freeboard is too low for the ships' rule)
+    yard.hull("deck", frames=72 if fine else 32, boot=BOOT, above=[0.16, 0.33, 0.5, 0.67, 0.84, 1.0] if fine else None)
     x0, x1, th = c["tower"]
     Z0 = yard.deck((x0 + x1) * 0.5)
 
@@ -1092,6 +1155,29 @@ def submarine(tag, fine=True, hull_hex=None):
         bulwark(m, [(xb, half)] + turn + [(xb, -half)], t1, t1 + screen, 0.06, "upper", lip=0.07)
         if tag == "GER":      # the spray deflector half way up her tower, round its fore end
             ledge(m, [(x0 - rnd - 0.7, half)] + turn + [(x0 - rnd - 0.7, -half)], Z0 + th * 0.56, 0.16, "upper")
+        # her tower is plated: seams and rivets, small flooding holes above its foot, and the foot curving out to the casing
+        plan = Model.round_rect(x0, x1, -half, half, rnd, 6)
+        door = ((x1 + 1.75, x1 + 2.65),) if tag == "USA" else ()
+        belts = [Z0 + th * 0.3, t1] + ([Z0 + th * 0.66] if tag != "GER" else [])
+        plating(m, plan, Z0 + 0.24, t1 + screen - 0.22, belts, skip=door)
+        round_her, where = walk(plan)
+        base_ring = [where(round_her * i / 72.0) for i in range(72)]
+        first = len(m.verts)
+        m.skin([[Vector((q.x + o.x * reach, q.y + o.y * reach, Z0 + up)) for q, o in base_ring] for reach, up in ((0.14, -0.03), (0.07, 0.02), (0.025, 0.09), (0.0, 0.22))],
+               "upper", closed=True, smooth=True)
+        for v in m.verts[first:]:                             # (rust gathers where the foot meets the casing)
+            stains[key(v)] = 0.34 * min(1.0, max(0.0, 1.0 - (v.z - Z0) / 0.24)) * (0.5 + 0.5 * math.sin(v.x * 2.3 + v.y * 1.7))
+        hx_ = x1 + rnd + 0.35
+        while hx_ < x0 - rnd - 0.1:
+            if not any(a - 0.2 <= hx_ <= b + 0.2 for a, b in door):
+                for hand in (PORT, STBD):
+                    slot(m, (hx_, hand * half, Z0 + 0.46), (0, hand, 0), 0.2, 0.07, lift=0.012)
+                    if (int(hx_ * 7.0) + hand) % 3:         # (most of them weep a little rust down the wall)
+                        top_, long_ = Z0 + 0.42, 0.16 + 0.1 * ((int(hx_ * 13.0) + hand) % 3)
+                        mids = m.ribbon([(hx_, hand * half, top_ - long_ * i / 3.0) for i in range(4)], [(0, hand, 0)] * 4, 0.07, "upper", 0.003, taper=lambda s_: 1.0 - 0.5 * s_)
+                        for i, v in enumerate(mids):
+                            stains[key(v)] = 0.75 * (1.0 - i / 3.0) ** 1.2
+            hx_ += 0.62
     else:
         yard.house(x0, xb, half, t1, screen, r=rnd, top="deck", rail=False, walls=False)
     stand = x0 - 3.6
@@ -1164,19 +1250,37 @@ def submarine(tag, fine=True, hull_hex=None):
                 plan = plan[::-1]
             m.prism(plan, zz - 0.07, zz + 0.07, "hull", bottom=True)
 
-    # ---- torpedo tubes: the doors in her bows and stern
+    # ---- torpedo tubes: the doors in her bows and stern, under water
+    def below(u, zz, hand):
+        """The skin's point and outward facing on frame u at a depth (`Hull.side` serves only above the waterline)."""
+        lo, hi = -1.0, 0.0
+        for _ in range(24):
+            w = (lo + hi) * 0.5
+            if h.point(u, w, hand).z < zz:
+                lo = w
+            else:
+                hi = w
+        w = (lo + hi) * 0.5
+        q = h.point(u, w, hand)
+        a = h.point(min(u + 0.01, 1.0), w, hand) - h.point(max(u - 0.01, -1.0), w, hand)
+        b = h.point(u, min(w + 0.03, 0.0), hand) - h.point(u, max(w - 0.03, -1.0), hand)
+        n = a.cross(b)
+        if n.length < 1e-9:
+            n = Vector((0, hand, 0))
+        n.normalize()
+        return q, (n if n.y * hand > 0 else -n)
     nb, ns = c["tubes"]
     for k in range(nb):
         hand = PORT if k % 2 == 0 else STBD
         zz = -1.5 - (k // 2) * 1.1
-        p, n = h.side(h.frame_x(0.93), zz, hand)
+        p, n = below(0.93, zz, hand)
         m.use("fore")
         m.disc(p + n * 0.02, n, 0.3, "black", 8, oval=1.6)
         m.socket(f"torpedo.bow.{k + 1}", p + X * 1.0, (1, 0, 0), "fore", "a torpedo leaves her bow here, under water: only a track of bubbles shows")
     for k in range(ns):
         hand = PORT if k % 2 == 0 else STBD
         zz = -1.6 - (k // 2) * 0.9
-        p, n = h.side(h.frame_x(-0.95), zz, hand)
+        p, n = below(-0.95, zz, hand)
         m.use("aft")
         m.disc(p + n * 0.02, n, 0.28, "black", 8, oval=1.4)
         m.socket(f"torpedo.stern.{k + 1}", p - X * 1.0, (-1, 0, 0), "aft", "a torpedo leaves her stern here")
@@ -1198,6 +1302,77 @@ def submarine(tag, fine=True, hull_hex=None):
                     else:
                         slot(yard.on(x), p, n, 0.44, 0.13)
                 x += every
+
+        # She is the most streaked ship in the fleet (the art director, 08:15 UTC on 18 November): rust weeps down from
+        # her slots, salt dries in pale runs under her deck's edge, along her casing and down her tower. A streak is a
+        # ribbon lying on her skin in her skin's own paint, three points across: its middle points carry the rust or the
+        # salt (most at its head), its edges none, so it fades away to either side and has no outline.
+        rng = random.Random(len(c["name"]) * 97 + 5)
+
+        def streak(x_, z_top, hand, long, wide, rust=0.0, salt=0.0):
+            z_bot = max(z_top - long, BOOT + 0.04)
+            if z_top - z_bot < 0.1:
+                return
+            line = [h.side(x_, z_top + (z_bot - z_top) * i / 5.0, hand) for i in range(6)]
+            mids = yard.on(x_).ribbon([q for q, _ in line], [d for _, d in line], wide, "hull", 0.007, taper=lambda s_: 1.0 - 0.6 * s_)
+            for i, v in enumerate(mids):
+                fade = (1.0 - i / 5.0) ** 1.3
+                if rust:
+                    stains[key(v)] = rust * fade
+                if salt:
+                    pale[key(v)] = salt * fade
+        for drop, every, start, arch in rows:
+            x = -L * 0.43 + start
+            while x < L * 0.45:
+                for hand in (PORT, STBD):
+                    if rng.random() < 0.72:
+                        streak(x + rng.uniform(-0.12, 0.12), yard.deck(x) * (1.0 - drop) - (0.0 if arch else 0.06), hand, rng.uniform(0.3, 0.9), rng.uniform(0.09, 0.15),
+                               rust=rng.uniform(0.6, 1.0))
+                x += every
+        x = -L * 0.46
+        while x < L * 0.47:
+            for hand in (PORT, STBD):
+                if rng.random() < 0.25:
+                    streak(x, yard.deck(x) - 0.03, hand, rng.uniform(0.2, 0.5), rng.uniform(0.12, 0.22), salt=rng.uniform(0.25, 0.45))
+            x += rng.uniform(0.35, 0.8)
+        # (and bleached runs along the shoulder of her casing, each a few metres long, swelling and dying away)
+        for hand in (PORT, STBD):
+            x = -L * 0.45
+            while x < L * 0.44:
+                run_long = rng.uniform(2.5, 8.0)
+                n_ = max(4, int(run_long / 0.5))
+                down = rng.uniform(0.12, 0.3)
+                peak = rng.uniform(0.25, 0.45)
+                swell = [rng.uniform(0.55, 1.0) * max(0.0, math.sin(math.pi * i / n_)) ** 0.6 for i in range(n_ + 1)]
+                for part, keep in (("aft", lambda v: v <= yard.break_x), ("fore", lambda v: v >= yard.break_x)):
+                    xs = [x + run_long * i / n_ for i in range(n_ + 1)]
+                    line = [(i, h.side(v, yard.deck(v) - down, hand)) for i, v in enumerate(xs) if keep(v) and v <= L * 0.46]
+                    if len(line) > 1:
+                        m.use(part)
+                        mids = m.ribbon([q for _, (q, _) in line], [d for _, (_, d) in line], 0.17, "hull", 0.007)
+                        for (i, _), v in zip(line, mids):
+                            pale[key(v)] = peak * swell[i]
+                x += run_long + rng.uniform(1.0, 3.5)
+        for bx in (L * 0.36, L * 0.24, -L * 0.27, -L * 0.38):               # (under her bollards)
+            for hand in (PORT, STBD):
+                for d in (-0.2, 0.15):
+                    streak(bx + d, yard.deck(bx) - 0.05, hand, rng.uniform(0.5, 0.9), 0.1, rust=rng.uniform(0.6, 0.9))
+        for d in (-0.3, 0.0, 0.25):                                           # (and under her anchor's bed)
+            streak(L * 0.4 + d, yard.deck(L * 0.4) * 0.5 - 0.24, STBD, rng.uniform(0.5, 1.0), 0.11, rust=0.9)
+        # salt down her tower from the screen's lip
+        total, at = walk(Model.round_rect(x0, x1, -half, half, rnd, 6))
+        s_ = 0.0
+        while s_ < total:
+            q, out = at(s_)
+            if rng.random() < 0.5 and q.x > xb + 0.2:
+                long = rng.uniform(0.4, 1.2)
+                top_ = t1 + screen - 0.24
+                peak = rng.uniform(0.2, 0.4)
+                m.use(yard.half(x0))
+                mids = m.ribbon([q + Z * (top_ - long * i / 4.0) for i in range(5)], [out] * 5, rng.uniform(0.08, 0.15), "upper", 0.003, taper=lambda t_: 1.0 - 0.6 * t_)
+                for i, v in enumerate(mids):
+                    pale[key(v)] = peak * (1.0 - i / 4.0) ** 1.2
+            s_ += rng.uniform(0.3, 0.7)
 
         # her deck is laid in slats along her length: thin seams, a hand's breadth apart in life, here every 0.4 m
         def on_deck(u, y):
@@ -1258,7 +1433,27 @@ def submarine(tag, fine=True, hull_hex=None):
     yard.screws_and_rudder(screws=2, blades=3, r=0.95, rudders=1)
     yard.fire_points += [((x0 + x1) * 0.5, 0.0, t1), (gx, 0.0, yard.deck(gx) + 1.0)]
     sockets_common(yard)
-    m.weather = weather_for(yard)
+    yard.rusty = 1.7                                         # (rustier than a ship of the line: see weather_for)
+    plain_weather = weather_for(yard)
+
+    def weather(p, n_, paint, part):
+        wear, soot = plain_weather(p, n_, paint, part)
+        salt = 0.0
+        if paint == "hull":
+            # (her side's own weather is kept broad, nothing finer than a few metres: a streak's edge carries only this,
+            #  worked out at its own place, and must not be told from the skin under it, whose points are a metre apart)
+            up = min(max((p.z - BOOT) / max(h.deck_z(p.x) - BOOT, 0.3), 0.0), 1.0)
+            wear = (0.1 + 0.06 * math.sin(p.x * 0.45 + 1.3) + 0.04 * math.sin(p.x * 0.17 + 0.4)) * (1.0 - 0.75 * up)
+            soot = max(0.05, 0.5 * min(1.0, max(0.0, 1.0 - (p.z - BOOT) / 0.6)))      # the dark band where the sea washes her, fading up her side
+            wear = max(wear, stains.get(key(p), 0.0))
+            salt = pale.get(key(p), 0.0)
+        elif paint == "boot":
+            soot = max(soot, 0.25)
+        elif paint == "upper":                                # (her tower and what stands on her: even paint, but for the streaks and her tower's foot)
+            wear, soot = max(0.02, stains.get(key(p), 0.0)), 0.03
+            salt = pale.get(key(p), 0.0)
+        return wear, soot, salt
+    m.weather = weather
     clips_for_ship(m, yard, mains, "submarine")
 
     # ---- her own clips: she dives, she comes up, she shows a periscope

@@ -137,7 +137,7 @@ class Model:
         self.sockets, self.clips, self.marks = [], {}, []
         self.info = {}
         self.cur = 0
-        self.weather = None                              # f(point, facing, paint name, part name) -> (wear, soot), each 0..1
+        self.weather = None                              # f(point, facing, paint name, part name) -> (wear, soot) or (wear, soot, salt), each 0..1
 
     # ---- parts -------------------------------------------------------------------------------------
     def part(self, name, parent=None, pivot=(0, 0, 0), **kw):
@@ -392,6 +392,28 @@ class Model:
         fn = [Vector(n).normalized() for n in facings]
         self.add(verts, faces, paint, True, lambda m: fn[min(range(len(pts)), key=lambda i: (pts[i] - m).length_squared)])
 
+    def ribbon(self, points, facings, half, paint, lift=0.01, taper=None):
+        """A strip three points across (edge, middle, edge), so that what its middle points carry (rust, dried salt: see
+        `weather`) fades away to its edges. Returns its middle points, in order along it."""
+        pts = [Vector(p) for p in points]
+        if len(pts) < 2:
+            return []
+        verts, faces = [], []
+        for k, (p, n) in enumerate(zip(pts, facings)):
+            n = Vector(n).normalized()
+            along = pts[min(k + 1, len(pts) - 1)] - pts[max(k - 1, 0)]
+            side = along.cross(n)
+            if side.length < 1e-9:
+                side = Y.copy()
+            side.normalize()
+            w = half * (taper(k / (len(pts) - 1)) if taper else 1.0)
+            verts += [p + n * lift + side * w, p + n * lift, p + n * lift - side * w]
+        for k in range(len(pts) - 1):
+            faces += [(3 * k, 3 * k + 1, 3 * k + 4, 3 * k + 3), (3 * k + 1, 3 * k + 2, 3 * k + 5, 3 * k + 4)]
+        fn = [Vector(n).normalized() for n in facings]
+        self.add(verts, faces, paint, True, lambda m: fn[min(range(len(pts)), key=lambda i: (pts[i] - m).length_squared)])
+        return [verts[3 * k + 1] for k in range(len(pts))]
+
     def tub(self, at, r, high, paint, wall=0.08, sides=14, floor=None):
         """A gun tub: a low round wall, open at the top."""
         at = Vector(at)
@@ -445,9 +467,9 @@ def material(model, paint, look=None):
     return m
 
 
-def tint_of(model, wear, soot, paint_idx, face_idx=None, blend=None):
-    """What wear, soot and a sprayed coat do to a paint, as a colour to multiply the face's own paint by (the .glb
-    carries it as COLOR_0). `paint_idx` is the paint of each corner, `face_idx` the paint of the face it is a corner of."""
+def tint_of(model, wear, soot, paint_idx, face_idx=None, blend=None, salt=None):
+    """What wear, soot, dried salt and a sprayed coat do to a paint, as a colour to multiply the face's own paint by (the
+    .glb carries it as COLOR_0). `paint_idx` is the paint of each corner, `face_idx` the paint of the face it is a corner of."""
     names = list(model.paints)
     rust, black = np.array(hex_rgb(model.info.get("rust", "6E4A34"))), np.array(hex_rgb(model.info.get("soot", "1C1A19")))
     show = model.info.get("wear_show", 1.0)
@@ -459,6 +481,9 @@ def tint_of(model, wear, soot, paint_idx, face_idx=None, blend=None):
         shown = shown * (1.0 - into) + cols[model.paint_at["upper2"]][None, :] * into
     wear = wear * show
     worn = shown * (1.0 - wear[:, None]) + rust[None, :] * wear[:, None]
+    if salt is not None:      # (dried salt bleaches what it lies on, rust and all, toward a pale grey)
+        pale = np.array(hex_rgb(model.info.get("salt", "D2D5CF")))
+        worn = worn * (1.0 - salt[:, None]) + pale[None, :] * salt[:, None]
     worn = worn * (1.0 - soot[:, None]) + black[None, :] * soot[:, None]
     return np.clip(worn / np.maximum(base, 1e-4), 0.0, 8.0)
 
@@ -486,13 +511,17 @@ def to_blender(model, look=None, crease=38.0, collection=None):
             vpaint[i] = pa
     wear = np.zeros(nv)
     soot = np.array(model.vsoot, dtype=float) if len(model.vsoot) == nv else np.zeros(nv)
+    salt = np.zeros(nv)
     if model.weather:
         normals = np.zeros(nv * 3)
         me.vertices.foreach_get("normal", normals)
         normals = normals.reshape(-1, 3)
         for i, v in enumerate(model.verts):
-            w, s = model.weather(v, normals[i], names[vpaint[i]], model.parts[vpart[i]].name)
+            got = model.weather(v, normals[i], names[vpaint[i]], model.parts[vpart[i]].name)
+            w, s = got[0], got[1]
             wear[i], soot[i] = min(max(w, 0.0), 1.0), min(max(max(s, soot[i]), 0.0), 1.0)
+            if len(got) > 2:
+                salt[i] = min(max(got[2], 0.0), 1.0)
     # corner by corner: the paint (the face's own, or the point's where the coat is sprayed), and the tint that shows it
     nl = len(me.loops)
     lv = np.zeros(nl, dtype=np.int32)
@@ -508,7 +537,8 @@ def to_blender(model, look=None, crease=38.0, collection=None):
         lpaint = np.where(sprayed & (coat >= 0), coat, lpaint)
     lblend = np.where(lpaint == model.paint_at.get("upper", -2), blend[lv], 0.0)
     model._vpart, model._vpaint, model._wear, model._soot, model._lpaint, model._lblend = vpart, vpaint, wear, soot, lpaint, lblend
-    tint = tint_of(model, wear[lv], soot[lv], lpaint, lface, lblend)
+    model._salt = salt
+    tint = tint_of(model, wear[lv], soot[lv], lpaint, lface, lblend, salt[lv] if salt.any() else None)
     col = me.color_attributes.new("Col", "FLOAT_COLOR", "CORNER")
     col.data.foreach_set("color", np.concatenate([tint, np.ones((len(tint), 1))], axis=1).ravel())
     ob = bpy.data.objects.new(model.name, me)
@@ -691,7 +721,8 @@ def gather(model, ob):
     nor = np.round(cn, 2)
     part, paint = model._vpart[lv], model._lpaint
     wear, soot, blend = np.round(model._wear[lv] * 100), np.round(model._soot[lv] * 100), np.round(model._lblend * 100)
-    key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None]], axis=1)
+    salt = np.round(getattr(model, "_salt", np.zeros(len(me.vertices)))[lv] * 100)
+    key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None], salt[:, None]], axis=1)
     _, first, inverse = np.unique(key, axis=0, return_index=True, return_inverse=True)
     inverse = inverse.ravel()
     order = np.argsort(first)
@@ -706,8 +737,11 @@ def gather(model, ob):
 
     def flat(a, digits):
         return [round(float(v), digits) if digits else int(v) for v in a.ravel()]
-    return {"points": flat(p, 3), "facings": flat(n, 2), "paints": flat(paint[first], 0), "triangles": flat(t, 0),
-            "blend": flat(blend[first], 0), "soot": flat(soot[first], 0), "wear": flat(wear[first], 0), "part": flat(part[first], 0)}
+    out = {"points": flat(p, 3), "facings": flat(n, 2), "paints": flat(paint[first], 0), "triangles": flat(t, 0),
+           "blend": flat(blend[first], 0), "soot": flat(soot[first], 0), "wear": flat(wear[first], 0), "part": flat(part[first], 0)}
+    if salt.any():            # (only a model that carries dried salt has the list: a submarine)
+        out["salt"] = flat(salt[first], 0)
+    return out
 
 
 def mirror(v):

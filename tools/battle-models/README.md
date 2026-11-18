@@ -83,6 +83,21 @@ deck laid in slats, with bollards, a capstan, hatches and her anchor in its bed.
 deflector round the fore end of her tower and a direction-finding loop; America's a door in each side of her
 fairwater. Parts, sockets and clips are as they were; only the plain (`far`) mesh keeps a solid block for the screen.
 
+Her tower is plated (seams round it and up it, a row of rivets beside each: `plating` in `ships.py`), with small
+flooding holes above its foot, and the foot curves out to the casing. She is the most streaked ship in the fleet (the
+art director, 2026-11-18): rust weeps down from her slots, her bollards and her anchor's bed; salt dries in pale runs
+along the shoulder of her casing and down her tower; a dark band lies above her boot topping where the sea washes
+her. Weather in these files is a number at each point (`wear` toward rust, `soot` toward black, and on a submarine
+`salt` toward a pale grey, `info.salt`, D2D5CF if it is not given), so a streak is a ribbon lying on her skin with
+points of its own, three across (`Model.ribbon`), in the skin's own paint: its middle points carry the rust or the
+salt, most at its head, and its edges none, so it fades to either side and has no outline. Her side's own weather is
+kept broad (nothing finer than a few metres), so that a ribbon's edge cannot be told from the skin under it. A file
+has the list `salt` (0 to 100 at each point, like `wear` and `soot`) only where a model carries any; the .glb and
+.fbx carry it already in their point colours. Her boot topping's top is level at 0.55 m (`boot` of `Yard.hull`: the
+ships' rule by the height of the deck does not suit so low a side). Her torpedo doors lie under water (they had been
+drawn at the waterline: `Hull.side` serves only above it), and the `torpedo.bow.*` and `torpedo.stern.*` sockets
+with them.
+
 The convoy's ships are ships like the rest (`ship`, `fore`, `aft`, a screw, a rudder, every ending), with the guns
 such ships were given: `turret.A` in the bows and `turret.Y` on the stern (clips `fire.A`, `fire.Y`), light guns at
 `aa.N`. The tanker has one clip more, `ablaze` (her cargo takes fire: oil fire at her fire sockets, burning oil on
@@ -351,7 +366,7 @@ python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood
 python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
 python export.py <out> parks                   # the three deck ranges alone (they are also in `ships` and `all`)
 python show.py Carrier_USA turn <out> month=1942-06   # a carrier in a month: her range and its paint are that month's
-python shipcheck.py loose all                  # every piece of every ship that touches nothing else of her
+python shipcheck.py loose all                  # every piece of every ship that touches nothing else of her, and points in no face
 python shipcheck.py boxes Battleship_JAP       # her largest plain boxes and bars, to see that none is out of scale
 ```
 
