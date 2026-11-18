@@ -36868,9 +36868,10 @@
         const seat4 = townSiege(s, cs[0].reg);
         const inTown = cs.every((c) => !!c.town || !!c.garrison);
         if (said && !said.can && seat4 && !seat4.by && inTown && / is shut in the town /.test(said.line)) {
-          const who = army || (cs.length === 1 ? cs[0].name : "The garrison");
+          const named2 = whoOf(cs, army, armyIds);
+          const who = named2.who.charAt(0).toUpperCase() + named2.who.slice(1);
           const stronger2 = /fights? (\d+)% stronger/.exec(seat4.lines.join(" "))?.[1];
-          line = `${who} ${cs.length === 1 || army ? "is" : "are"} ${seat4.town}'s garrison${stronger2 ? `: inside the town it fights ${stronger2}% stronger` : ""}. TAKE THE FIELD brings it out.`;
+          line = `${who} ${named2.many ? "are" : "is"} ${seat4.town}'s garrison${stronger2 ? `: inside the town ${named2.many ? "they fight" : "it fights"} ${stronger2}% stronger` : ""}. TAKE THE FIELD brings ${named2.many ? "them" : "it"} out.`;
         }
       } catch {
       }
