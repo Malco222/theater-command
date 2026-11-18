@@ -8,9 +8,10 @@ import numpy as np, soundfile as sf, pyloudnorm as pyln
 from scipy import signal
 
 SONGS = [  # (original file, game name, loudness, where it plays)
-    ('The_Long_Walk_Home.mp3', 'theme', -16.0, 'opening screen: the main theme'),
+    ('The_Final_Salute.mp3', 'theme', -16.0, 'opening screen: the main theme'),
+    ('The_Long_Walk_Home.mp3', 'long_walk', -18.0, 'when a war ends, then the campaign map at peace with The Map Room and A Vigil at the Ridge'),
     ('The_Silent_Front.mp3', 'silent_front', -16.0, 'campaign map at war, taking turns with Standing To'),
-    ('A_Vigil_at_the_Ridge.mp3', 'vigil', -18.0, 'campaign map at peace, taking turns with The Map Room'),
+    ('A_Vigil_at_the_Ridge.mp3', 'vigil', -18.0, 'campaign map at peace, taking turns with The Map Room and The Long Walk Home'),
     ('Trench_Line_At_Twilight.mp3', 'trench_line', -15.0, 'battle, taking turns with The Advance'),
 ]
 src, out = sys.argv[1], sys.argv[2]
