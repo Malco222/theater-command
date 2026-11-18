@@ -4,7 +4,7 @@
 
 import { flagDefs, flagIcon, flagUse } from './flags';
 import { ORDER_SIGN, ORDER_STAR } from './ordersigns';
-import { markFor, monthCard, monthOrders, opensCampaign, type MonthCard, type MonthMark } from '../monthcard';
+import { cardSeen, markFor, monthCard, monthOrders, opensCampaign, type MonthCard, type MonthMark } from '../monthcard';
 import { gunsAlone, homeAlarms } from '../danger';
 import { monthCardHtml } from './monthview';
 import { footingCard, footingStrip } from './footingui';
@@ -61,7 +61,7 @@ import { ARSENAL, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel
 import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf } from '../traits';
 import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSays, steep } from '../ground';
-import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, riversOf, whyBlocked } from '../rivers';
+import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, riversOf, whyBlocked, worksName } from '../rivers';
 import { jobLine, minesAt, type JobKind } from '../engineers';
 import { briefTicket, minesKnown } from '../facing';
 import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
@@ -3071,7 +3071,7 @@ function provinceSlots(r: Region): string {
   const facs = r.fac ? `${r.fac} factor${r.fac === 1 ? 'y' : 'ies'}${occupied ? `, worth ${Math.round(PRODUCTION.occupiedIncome * 100)}% under occupation` : ''}` : 'No industry';
   const lv = r.fort?.lv ?? 0;
   const queued = me ? g.nations[me].queue.filter((b) => b.what === 'fort' && b.region === r.id).length : 0;
-  const state = `${lv ? `Level ${lv}` : 'No works'}${queued ? `, level ${lv + queued} building` : ''}`;
+  const state = `${lv ? `Level ${lv}: ${worksName(lv)}` : 'No works'}${queued ? `, level ${lv + queued} building` : ''}`;
   const sea = r.port ? 'A port: troops and supplies can come and go by sea' : r.seas.length ? 'A coast with no port' : 'Inland';
   const wings = g.airFleets.filter((f) => f.base === r.id && f.ship === undefined && f.ftr + f.bmr > 0);
   const flying = wings.length ? `${wings.length} air fleet${wings.length > 1 ? 's' : ''}, ${num(wings.reduce((t, f) => t + f.ftr + f.bmr, 0))} aircraft` : 'No air fleet based here';
@@ -3665,7 +3665,7 @@ function regionPane(): string {
   if (r.cap) tags.push('<span class="tag good">Capital</span>');
   if (r.port) tags.push('<span class="tag">Port</span>');
   if (r.seas.length) tags.push(`<span class="tag">Coast: ${r.seas.map((z) => esc(g.seas[z].name)).join(', ')}</span>`);
-  if (r.fort) tags.push(`<span class="tag">Fortified, level ${r.fort.lv}, facing ${r.fort.vs.map((v) => g.nations[v]?.adj ?? v).join(' and ')} ground</span>`);
+  if (r.fort) tags.push(`<span class="tag">Fortified, level ${r.fort.lv} (${worksName(r.fort.lv)}), facing ${r.fort.vs.map((v) => g.nations[v]?.adj ?? v).join(' and ')} ground</span>`);
   if (me === 'POL' && r.sov && r.ctrl === 'POL' && !g.flags.sovietMove && g.turn <= 3) tags.push('<span class="tag bad" title="Once Poland\'s front breaks, the Red Army crosses the border under its pact with Germany and takes this province. Troops left here are lost.">East of the pact line</span>');
   if (me && g.nations[me].alive && allied(g, me, r.ctrl)) tags.push(g.supply[me]?.[r.id] ? '<span class="tag good">In your supply net</span>' : '<span class="tag bad">No supply line to here</span>');
   const sky = skyOver(g, r.id);
@@ -3729,7 +3729,7 @@ function riverBlock(r: Region): string {
     const yours = g.human && allied(g, g.human, r.ctrl);
     return `<div class="rrow"><span><b>${esc(n.river)}</b>, toward ${esc(far.name)}</span><small>Bridges standing. An attack across them is cut to ${Math.round(ENGINEERING.river.attack * 100)}%.</small>${yours ? `<button class="btn small" data-act="blow" data-from="${r.id}" data-to="${far.id}" ${why ? `disabled title="${esc(why)}"` : 'title="Blow the bridges. Nothing on wheels or tracks crosses here, in either direction, until engineers rebuild them."'}>Blow the bridges</button>` : ''}</div>`;
   }).join('');
-  const mined = mines ? `<div class="rrow mined"><span><b>Minefields</b>${mines > 1 ? ', two belts' : ''}</span><small>Mines and booby traps on every road in: an attack on ${esc(r.name)} is cut by ${Math.round(ENGINEERING.mines.attack * mines * 100)}% and costs the enemy a move more to enter, unless his engineers clear lanes.</small></div>` : '';
+  const mined = mines ? `<div class="rrow mined"><span><b>Minefields</b>${mines > 1 ? ', two belts' : ''}</span><small>Minefields and booby traps on every road in: an attack on ${esc(r.name)} is cut by ${Math.round(ENGINEERING.mines.attack * mines * 100)}% and costs the enemy a move more to enter, unless his engineers clear lanes.</small></div>` : '';
   return `<div class="rivers">${rows}${mined}</div>`;
 }
 
@@ -7373,7 +7373,7 @@ function attackCard(): string {
     nats: [...new Set(foes.map((c) => c.nat))], role: 'defending', who: leaderOf(foes), men: foes.reduce((s, c) => s + men(c), 0), corps: foes.length, divs: rollDivs(foes),
     ...(sure ? {} : { menText: foeEst ? span(Math.round(foeEst.lo * 15) * 1000, Math.round(foeEst.hi * 15) * 1000) : '?', divsText: foeEst ? span(Math.max(1, Math.round(foeEst.lo)), Math.max(1, Math.round(foeEst.hi))) : '?' }),
     cards: foeChips(foes),
-    under: target.fort ? `<small class="fhelp">Dug in behind level ${target.fort.lv} fortifications${target.fort.vs.includes(me) ? '' : ', which do not face you'}.</small>` : '',
+    under: target.fort ? `<small class="fhelp">Dug in behind level ${target.fort.lv} fortifications, ${worksName(target.fort.lv)}${target.fort.vs.includes(me) ? '' : ', which do not face you'}.</small>` : '',
   };
   // The card is in the order of deciding (ruling 204): who fights, the verdict and its bar, what it should cost, what
   // he faces and the prize, the staff's line, and then the two folds, shut.
@@ -8081,8 +8081,9 @@ function arrive(show: boolean, from: Since, before: string[]): void {
   // design director's ruling 117, point 2.)
   ui.mark = g.human && humanUp(g) ? (g.turn === 1 && from.mark?.turn === 1 && from.mark.before.length === g.regions.length ? from.mark : markFor(g)) : null;
   if (card) { ui.lastCard = card; ui.monthAll = false; }
-  // The sky's tip is told once, on the card that first shows a closed sky where he flies or fights (ruling 143(g)).
-  if (card?.sky?.tip) g.flags['wx:tip'] = g.turn;
+  // The sky's tip is told once, on the card that first shows a closed sky where he flies or fights (ruling 143(g));
+  // the line when men run out, the first month and then every third (133(d)(1)).
+  if (card) cardSeen(g, card);
   refresh();
   if (lost) {
     openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
@@ -9044,6 +9045,8 @@ function onClick(e: MouseEvent): void {
       break;
     }
     case 'showmap': openModal(null); ui.sel = id; ui.tab = 'region'; focusOn([id]); refresh(); break;
+    // The month card's line when men run out (ruling 133(d)(1)): OPEN THE ARSENAL.
+    case 'openarsenal': openModal(null); ui.tab = 'build'; refresh(); break;
     // The month card's warning that ends with the help: SHOW ON MAP is a press on the tray's red row, from its first alarm.
     case 'homealarm': openModal(null); ui.alarmAt = -1; followHomeAlarm(); break;
     case 'declare': openModal({ kind: 'declare' }); break;

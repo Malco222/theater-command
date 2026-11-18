@@ -102,6 +102,8 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   // (What is ready first, then research, then what next month brings, then the other news of home. Deliveries
   // that find no line are counted in one; news that finds none is in the Newsreel.)
   const homeAll: { html: string; ready: number; next: number }[] = [
+    // (The line when men run out comes first, with its door: ruling 133(d)(1).)
+    ...(card.menOut ? [{ html: it('', `<span>${esc(card.menOut)} <button class="tb" data-act="openarsenal" title="The arsenal: what money alone can buy">OPEN THE ARSENAL</button></span>`, ' also'), ready: 0, next: 0 }] : []),
     ...card.home.filter((h) => !h.next).map((h) => ({ html: goods(h), ready: h.count, next: 0 })),
     ...card.research.map((t) => ({ html: it(`<span class="sg">${monthSign('star', 13, BRASS)}</span>`, `<span>Research complete: ${esc(t)}</span>`), ready: 0, next: 0 })),
     ...card.home.filter((h) => h.next).map((h) => ({ html: goods(h), ready: 0, next: h.count })),
