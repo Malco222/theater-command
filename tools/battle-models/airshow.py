@@ -380,7 +380,11 @@ def shot_down(A, opt):
     bomber, fighter = opt.get("bomber", "He111"), opt.get("fighter", "Spitfire")
     lead = Plane(A, bomber, (0, 0, 0))
     left = Plane(A, bomber, (-38.0, 34.0, 7.0))              # the one that is lost (to port of the leader, nearest the camera)
-    right = Plane(A, bomber, (-38.0, -34.0, -7.0))
+    # (stepped up like the other wing bomber, not down: seen from the camera she then flies above the stricken one's
+    #  smoke. Lower, she flew behind it for a second and came out of it a crisp brown cut-out with her green gone,
+    #  "a ghost plane": the art director, 11:16 UTC on 18 November 2026. Smoke in front of a machine should soften
+    #  her edges and grey her; these puffs only tint what is behind them.)
+    right = Plane(A, bomber, (-38.0, -34.0, 7.0))
     f1 = Plane(A, fighter)
     f2 = Plane(A, fighter)
     t_hit, t_fall, t_bail = 2.5, 2.9, 4.3
