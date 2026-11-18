@@ -62,7 +62,7 @@ export const FLEETS = fleetData as unknown as {
     city: { scale: number; max: number };
     reply: number;
   };
-  ai: { bombard: boolean; ready: number; sortie: number };
+  ai: { bombard: boolean; ready: number; sortie: number; guard?: boolean; hunt?: boolean };
   roles: Record<ShipClass, string>;
   brief: Record<ShipClass, string>;
   orders: Record<Stance, { label: string; blurb: string }>;
@@ -1841,8 +1841,57 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
     }
     // With no enemy fleet to fight, a fleet whose beat is on a lane the raiders are bleeding guards the cargoes instead.
     if (lane && f.duty === 'patrol' && bv <= 5 && laneLoss(g, lane.to, lane.zones, lane.id).raid > 0 && escort(g, f, lane.id)) continue;
+    // Ruling 52 (the grand campaign): a fleet with nothing better than its usual beat is not left idle on it. It
+    // sails with a lane of its own side's that the raiders are bleeding and nobody guards, anywhere in its reach; and
+    // failing that its destroyers hunt the submarines at work on its beat.
+    if (seaWar(g) && f.duty === 'patrol' && !f.tied && bv <= 5) {
+      const clear = (z: number): boolean => !(airOver(g, z, nat, true) - airOver(g, z, nat, false) > NAVY.air.avoid) && !(f.struck && f.struck[2] === z && g.turn - f.struck[0] <= CARRIERS.ai.shy && carrierRules(g));
+      const bare = FLEETS.ai.guard ? laneUnguarded(g, f, reach.filter(clear)) : null;
+      if (bare && escort(g, f, bare.id)) continue;
+      const z = FLEETS.ai.hunt ? huntingGround(g, f, [...beat].filter((x) => reach.includes(x) && clear(x))) : -1;
+      if (z >= 0 && sail(g, f, z, 'hunt')) continue;
+    }
     if (best < 0 || !sail(g, f, best, 'patrol')) home();
   }
+}
+
+/**
+ * A lane of a fleet's own side that the raiders are bleeding and no fleet of its side is sailing with, with a sea
+ * among those given (the seas in the fleet's reach that it can live in): its own nation's first.
+ */
+function laneUnguarded(g: Game, f: Fleet, seas: number[]): SeaRoute | null {
+  let found: SeaRoute | null = null;
+  for (const rt of seaRoutes(g)) {
+    if (!rt.zones.some((z) => seas.includes(z)) || whyNotEscort(g, f, rt.id)) continue;
+    if (g.fleets.some((x) => x !== f && atSea(x) && x.stance === 'escort' && x.lane === rt.id && (x.nat === f.nat || allied(g, x.nat, f.nat)))) continue;
+    // (Bleeding: raiders at sea on it now, an enemy in the fortress astride it, or cargo lost on it since last month.)
+    const m = g.convoys[rt.id];
+    const fort = NAVY.convoys.find((c) => c.id === rt.id)?.base;
+    const held = fort ? g.byName[fort.region] : undefined;
+    if (!(laneLoss(g, rt.to, rt.zones, rt.id).raid > 0) && !(held && atWar(g, held.ctrl, rt.to)) && !(m && m.turn >= g.turn - 1 && m.tons > 0)) continue;
+    if (rt.to === f.nat) return rt;
+    found ??= rt;
+  }
+  return found;
+}
+
+/**
+ * The sea among those given where a fleet's destroyers should hunt: the one with the most enemy submarines at sea.
+ * None for a fleet without destroyers, or while enemy surface ships are out in any of them.
+ */
+function huntingGround(g: Game, f: Fleet, seas: number[]): number {
+  if (f.ships.dd <= 0) return -1;
+  let best = -1, most = 0;
+  for (const z of seas) {
+    let subs = 0;
+    for (const x of g.fleets) {
+      if (x.zone !== z || !atSea(x) || !atWar(g, x.nat, f.nat)) continue;
+      if (surfaceShips(x) > 0) return -1;
+      subs += x.ships.ss;
+    }
+    if (subs > most) { most = subs; best = z; }
+  }
+  return best;
 }
 
 /** The shipping lane a computer-run fleet's station lies on, if it feeds the fleet's own nation or an ally at war: its own first. */
