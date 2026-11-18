@@ -8,7 +8,8 @@ import { diceRange } from '../src/battle/sea/result';
 import { SeaSim, type SeaLosses } from '../src/battle/sea/sim';
 import { createGame } from '../src/campaign/game';
 import { sail, seaBattles, seaField, shipCount, zoneOf, type SeaFought, type SeaMeeting } from '../src/campaign/navy';
-import { saveGame } from '../src/campaign/save';
+import { loadGame, saveGame } from '../src/campaign/save';
+import { fieldFights, plainTicket } from '../src/battle/sea/ticket';
 import { current, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 
@@ -23,6 +24,7 @@ function meet(seed: number): { g: Game; home: Fleet; battle: Fleet } {
   return { g, home, battle };
 }
 const ukClose = (g: Game): void => { seaBattles(g, 'UK'); };
+const loadOf = (g: Game): Game => loadGame(saveGame(g))!;
 const SURFACE = ['bb', 'cv', 'ca', 'dd'] as const;
 
 describe('with nothing played, the rules are untouched', () => {
@@ -82,6 +84,18 @@ describe('the look-ahead', () => {
       seen += real.length;
     }
     expect(seen).toBeGreaterThan(0);
+  });
+
+  it('does not offer an action where one side has no gun ship: the staff settles it by the dice (b438)', () => {
+    const { g, battle } = meet(5);
+    battle.ships = { bb: 0, cv: 2, ca: 0, dd: 0, ss: battle.ships.ss };
+    const met: SeaMeeting[] = [];
+    seaField.fought = (m) => { met.push(m); return undefined; };
+    try { seaBattles(loadOf(g), 'UK'); } finally { seaField.fought = undefined; }
+    expect(met.length).toBe(1); // the rules still fight it
+    expect(seaAhead(g, ukClose)).toEqual([]); // but the field is not offered it
+    expect(fieldFights(plainTicket({ seed: 1, att: [{ name: 'A', nat: 'UK', ships: { cv: 2 } }], def: [{ name: 'B', nat: 'JAP', ships: { cv: 2 } }] }))).toBe(false);
+    expect(fieldFights(plainTicket({ seed: 1, att: [{ name: 'A', nat: 'UK', ships: { cv: 2, dd: 1 } }], def: [{ name: 'B', nat: 'GER', ships: { bb: 1 } }] }))).toBe(true);
   });
 });
 

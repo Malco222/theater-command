@@ -701,7 +701,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
       u.extra.sunk++;
       this.fleetLoss.sunk[fleet][c]++;
       this.say({ what: 'sea:sunk', unit: u.id, side, text: `A ${one} of the ${u.extra.fleet} goes down.`, extra: { cls: c, fleet } });
-      for (const f of this.units) if (f.side === side && f.id !== u.id && live(f) && dist(f.x, f.y, u.x, u.y) <= SEA.nerve.nearR) f.mor = Math.max(0, f.mor - SEA.nerve.near);
+      // A ship going down shakes the pieces near it by the weight it carried, measured against its side's: a destroyer
+      // lost shakes less than a battleship, and a fleet of many light ships no more for the same weight lost (b438).
+      const shake = (SEA.nerve.near * this.info.get(u.id)!.weight) / Math.max(1e-6, this.weight0[side]);
+      for (const f of this.units) if (f.side === side && f.id !== u.id && live(f) && dist(f.x, f.y, u.x, u.y) <= SEA.nerve.nearR) f.mor = Math.max(0, f.mor - shake);
     } else {
       this.fleetLoss.burnt[fleet][c]++;
       u.extra.burnt = ((u.extra.burnt as number | undefined) ?? 0) + 1;

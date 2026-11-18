@@ -194,6 +194,19 @@ describe('what a blow takes', () => {
     expect(s.airLeft.def).toBe(12);
   });
 
+  it("a ship going down shakes the pieces near it by the weight it carried, against its side's (b438)", () => {
+    const shakeOf = (cls: 'dd' | 'bb'): number => {
+      const sim = withAir(), s = sim as any;
+      const lost = piece(sim, 'att', cls), near = sim.units.find((u) => u.side === 'att' && u.id !== lost.id && u.extra.cls === 'ca')!;
+      near.x = lost.x; near.y = lost.y;
+      const before = near.mor;
+      s.loseShip(lost);
+      expect(before - near.mor).toBeCloseTo((SEA.nerve.near * s.info.get(lost.id).weight) / s.weight0.att, 9);
+      return before - near.mor;
+    };
+    expect(shakeOf('dd')).toBeLessThan(shakeOf('bb'));
+  });
+
   it("a carrier's strikes and the coasts' raids are as strong as the aircraft left", () => {
     const sim = withAir(), s = sim as any;
     const cv = piece(sim, 'att', 'cv');

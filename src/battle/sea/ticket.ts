@@ -56,6 +56,17 @@ function linesOf(fleets: FleetTicket[], air: Record<Side, number>, odds: number)
   return lines;
 }
 
+/**
+ * Whether the field can fight this action: each side has a gun ship (a battleship, cruiser or destroyer). An action
+ * where one side has none, such as carriers against carriers, is an air battle, and the field flies no planes: the
+ * staff settles it, not offered on the field, as any action the field cannot honour is (the design director, b438,
+ * as b418). The Pacific's carrier actions mostly fall here.
+ */
+export function fieldFights(t: SeaTicket): boolean {
+  const guns = (side: Side): boolean => t.place.fleets.some((f) => f.side === side && f.mul > 0 && f.ships.bb + f.ships.ca + f.ships.dd > 0);
+  return guns('att') && guns('def');
+}
+
 /** A fleet action the rules are about to fight (navy.ts seaBattles, through seaField), written out for the field. */
 export function seaTicket(g: Game, m: SeaMeeting): SeaTicket {
   const zone = g.seas[m.zone];
