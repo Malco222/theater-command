@@ -828,8 +828,11 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			Fresh.DustAmount = 0.0f; // (no dust of the road on a machine in the air)
 			if (Raw->bNationPaint && PlanePaints.Num() > 15)
 			{
+				// (Brian, 18 November 2026: "make the camoflage reflect their terrian". The table's paint is now the colour of
+				// the country's home ground, and where it gives a second colour that one fills the patches.)
+				FLinearColor Second;
 				PlanePaints[0] = Paint;
-				PlanePaints[1] = Paint * 0.72f;
+				PlanePaints[1] = UnitTable::Paint2(Tag, Second) ? Second : Paint * 0.72f;
 				PlanePaints[3] = Paint * 0.6f;
 				PlanePaints[4] = Paint * 0.6f;
 				PlanePaints[15] = FMath::Lerp(Paint, PlanePaints[11], 0.5f);
@@ -1159,7 +1162,57 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 		Disc(0.33, Centre);
 	};
 
-	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND"))
+	// (Brian, 18 November 2026: "have the country logo show on the tanks and planes just like the major nations". The
+	// art director's table gives thirty-five countries a mark of their own in layers, bottom first; it is painted
+	// here, so it shows wherever a mark is: a tank's turret, a lorry's door, a wing, a fuselage. The marks drawn by
+	// hand below are the twenty-five the game had; none of those is in the table's list.)
+	if (const TArray<UnitTable::FInsigniaLayer> Own = UnitTable::Insignia(Tag); Own.Num() > 0)
+	{
+		for (const UnitTable::FInsigniaLayer& One : Own)
+		{
+			switch (One.Shape)
+			{
+			case UnitTable::FInsigniaLayer::EShape::Ring:
+				if (One.Inner <= 0.0)
+				{
+					Disc(One.Outer, One.Colour);
+				}
+				else
+				{
+					// (a true ring, open in the middle: eighteen four-sided pieces on the one layer)
+					for (int32 K = 0; K < 18; ++K)
+					{
+						const FVector2D A(FMath::Cos(K * UE_DOUBLE_TWO_PI / 18.0), FMath::Sin(K * UE_DOUBLE_TWO_PI / 18.0)),
+							B(FMath::Cos((K + 1) * UE_DOUBLE_TWO_PI / 18.0), FMath::Sin((K + 1) * UE_DOUBLE_TWO_PI / 18.0));
+						Slab(Where, Radius, Turn, { A * One.Inner, A * One.Outer, B * One.Outer, B * One.Inner }, Layer * Hair / Radius, (Layer + 1) * Hair / Radius, One.Colour);
+					}
+					++Layer;
+				}
+				break;
+			case UnitTable::FInsigniaLayer::EShape::Triangle:
+			{
+				// (X is up the mark and Y along it: a point straight up is at X; the table turns it in degrees)
+				TArray<FVector2D> Outline;
+				for (int32 K = 0; K < 3; ++K)
+				{
+					const double Angle = FMath::DegreesToRadians(One.Turn) + K * UE_DOUBLE_TWO_PI / 3.0;
+					Outline.Add(FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * One.Outer);
+				}
+				Slab(Where, Radius, Turn, Outline, Layer * Hair / Radius, (Layer + 1) * Hair / Radius, One.Colour);
+				++Layer;
+				break;
+			}
+			case UnitTable::FInsigniaLayer::EShape::Star:
+				Star(One.Outer, One.Colour, One.Points, One.Inner);
+				break;
+			case UnitTable::FInsigniaLayer::EShape::Bar:
+				Bar(One.Up0, One.Across0, One.Up1, One.Across1, One.Colour);
+				++Layer;
+				break;
+			}
+		}
+	}
+	else if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND"))
 	{
 		Rings(Blue, White, Red);
 	}

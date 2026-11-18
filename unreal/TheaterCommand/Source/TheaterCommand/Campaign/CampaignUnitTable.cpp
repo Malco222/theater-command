@@ -10,8 +10,9 @@ namespace
 {
 	struct FLook
 	{
-		FString Head, Cloth, Paint, Hull;
+		FString Head, Cloth, Paint, Paint2, Hull;
 		TArray<FString> Ring;
+		TArray<UnitTable::FInsigniaLayer> Insignia;
 		// Whose layout its battleship and its cruiser take: "*" its own, a tag another's by the record, empty the plain one.
 		FString BattleshipOf, CruiserOf;
 	};
@@ -36,6 +37,59 @@ namespace
 		Told->TryGetStringField(TEXT("hull"), Look.Hull);
 		// (a marking that is a list is a ring of the flag's colours; one that is words is drawn already, or is the default's note)
 		Told->TryGetStringArrayField(TEXT("marking"), Look.Ring);
+		Told->TryGetStringField(TEXT("paint2"), Look.Paint2);
+		// (The art director's table of 20:59Z on 18 November 2026: a country's own mark in layers, bottom first. A layer
+		// is {"ring": [inner, outer]}, {"tri": [radius, degrees]}, {"star": [radius, inner share, points]} or
+		// {"rect": [across from, across to, up from, up to]}, with "c" its colour. A layer that is none of these is left out.)
+		const TArray<TSharedPtr<FJsonValue>>* Layers = nullptr;
+		if (Told->TryGetArrayField(TEXT("insignia"), Layers))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Layers)
+			{
+				const TSharedPtr<FJsonObject>* Entry = nullptr;
+				const TArray<TSharedPtr<FJsonValue>>* Numbers = nullptr;
+				FString Hex;
+				if (!Value.IsValid() || !Value->TryGetObject(Entry) || !(*Entry)->TryGetStringField(TEXT("c"), Hex) || Hex.Len() != 6)
+				{
+					continue;
+				}
+				auto Number = [&Numbers](int32 Index) { return (*Numbers)[Index].IsValid() ? (*Numbers)[Index]->AsNumber() : 0.0; };
+				UnitTable::FInsigniaLayer One;
+				One.Colour = FLinearColor(FColor::FromHex(Hex));
+				if ((*Entry)->TryGetArrayField(TEXT("ring"), Numbers) && Numbers->Num() >= 2)
+				{
+					One.Shape = UnitTable::FInsigniaLayer::EShape::Ring;
+					One.Inner = Number(0);
+					One.Outer = Number(1);
+				}
+				else if ((*Entry)->TryGetArrayField(TEXT("tri"), Numbers) && Numbers->Num() >= 2)
+				{
+					One.Shape = UnitTable::FInsigniaLayer::EShape::Triangle;
+					One.Outer = Number(0);
+					One.Turn = Number(1);
+				}
+				else if ((*Entry)->TryGetArrayField(TEXT("star"), Numbers) && Numbers->Num() >= 3)
+				{
+					One.Shape = UnitTable::FInsigniaLayer::EShape::Star;
+					One.Outer = Number(0);
+					One.Inner = Number(1);
+					One.Points = FMath::Clamp(static_cast<int32>(Number(2)), 3, 24);
+				}
+				else if ((*Entry)->TryGetArrayField(TEXT("rect"), Numbers) && Numbers->Num() >= 4)
+				{
+					One.Shape = UnitTable::FInsigniaLayer::EShape::Bar;
+					One.Across0 = Number(0);
+					One.Across1 = Number(1);
+					One.Up0 = Number(2);
+					One.Up1 = Number(3);
+				}
+				else
+				{
+					continue;
+				}
+				Look.Insignia.Add(One);
+			}
+		}
 		// (The art director's table of 18 November 2026, after Brian's rule for small nations: a ship's "src" is "own",
 		// "shared" (another country's layout by the record, named in "of"), "generic", or "captured". A captured
 		// battleship is one a small nation holds by a great power's plans; it is to be that power's model in the
@@ -96,7 +150,14 @@ namespace
 				}
 				Kept.bLoaded = Kept.Countries.Num() > 0;
 			}
-			UE_LOG(LogTheater, Display, TEXT("Unit table: %d countries read%s"), Kept.Countries.Num(), Kept.bLoaded ? TEXT("") : TEXT(" (the game draws as it did before)"));
+			int32 Marked = 0, TwoCoats = 0;
+		for (const TPair<FString, FLook>& Each : Kept.Countries)
+		{
+			Marked += Each.Value.Insignia.Num() > 0 ? 1 : 0;
+			TwoCoats += Each.Value.Paint2.Len() == 6 ? 1 : 0;
+		}
+		UE_LOG(LogTheater, Display, TEXT("Unit table: %d countries read%s; %d with a mark of their own from the table, %d with a second camouflage colour"), Kept.Countries.Num(),
+			Kept.bLoaded ? TEXT("") : TEXT(" (the game draws as it did before)"), Marked, TwoCoats);
 		}
 		return Kept;
 	}
@@ -152,6 +213,18 @@ bool UnitTable::Hull(const FString& Tag, FLinearColor& Out)
 {
 	const FLook* Look = LookOf(Tag);
 	return Look && Colour(Look->Hull, Out);
+}
+
+TArray<UnitTable::FInsigniaLayer> UnitTable::Insignia(const FString& Tag)
+{
+	const FLook* Look = LookOf(Tag);
+	return Look ? Look->Insignia : TArray<FInsigniaLayer>();
+}
+
+bool UnitTable::Paint2(const FString& Tag, FLinearColor& Out)
+{
+	const FLook* Look = LookOf(Tag);
+	return Look && Colour(Look->Paint2, Out);
 }
 
 TArray<FLinearColor> UnitTable::Ring(const FString& Tag)

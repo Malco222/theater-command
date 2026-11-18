@@ -23,6 +23,26 @@ namespace UnitTable
 	/** For a country with no marking drawn: the ring of its flag's colours, outer, middle and centre. Empty where its marking is drawn, or not known. */
 	TArray<FLinearColor> Ring(const FString& Tag);
 	/**
+	 * (Brian, 18 November 2026: "have the country logo show on the tanks and planes just like the major nations".)
+	 * One layer of a country's own mark, in a square from -1 to 1 with Up toward the top of the mark and Across along
+	 * it: a disc (or a ring, where Inner is above nothing), a triangle with its point turned Turn degrees from
+	 * straight up, a star of Points points, or a bar.
+	 */
+	struct FInsigniaLayer
+	{
+		enum class EShape : uint8 { Ring, Triangle, Star, Bar };
+		EShape Shape = EShape::Ring;
+		FLinearColor Colour = FLinearColor::White;
+		double Inner = 0.0, Outer = 1.0; // a ring's two radii; a star's inner radius as a share of its outer
+		double Turn = 0.0;
+		int32 Points = 5;
+		double Across0 = 0.0, Across1 = 0.0, Up0 = 0.0, Up1 = 0.0; // a bar
+	};
+	/** The country's own mark from the art director's table, bottom layer first. Empty where the game draws its mark by hand, or it has none. */
+	TArray<FInsigniaLayer> Insignia(const FString& Tag);
+	/** (Brian, the same day: "make the camoflage reflect their terrian".) The second colour of its camouflage, for the patches. False where it has one coat. */
+	bool Paint2(const FString& Tag, FLinearColor& Out);
+	/**
 	 * Whose layout the country's battleship (its cruiser) takes: its own tag, another country's by the record (Vichy's
 	 * battleship is France's, a dominion's cruiser Britain's), or nothing for the plain hull, which is no navy's own.
 	 * A small nation's battleship, held only by a great power's captured or stolen plans, is the plain one until the
