@@ -2505,6 +2505,101 @@
     }
   };
 
+  // ../../src/campaign/air.ts
+  var air_exports = {};
+  __export(air_exports, {
+    AIR: () => AIR,
+    AIRWAR: () => AIRWAR,
+    CARRIERS: () => CARRIERS,
+    MISSION: () => MISSION,
+    SHIP_AIR_ONE: () => SHIP_AIR_ONE,
+    SHIP_AIR_ROOM: () => SHIP_AIR_ROOM,
+    SHIP_AIR_TIP: () => SHIP_AIR_TIP,
+    afloat: () => afloat,
+    airAI: () => airAI,
+    airBases: () => airBases,
+    airBattles: () => airBattles,
+    airDeliveries: () => airDeliveries,
+    airFleetsOf: () => airFleetsOf,
+    airIncomeLoss: () => airIncomeLoss,
+    airOnFall: () => airOnFall,
+    airOverBattle: () => airOverBattle,
+    airPlanFor: () => airPlanFor,
+    airPlanName: () => airPlanName,
+    airPool: () => airPool,
+    airRange: () => airRange,
+    airTargets: () => airTargets,
+    airUpkeep: () => airUpkeep,
+    airWar: () => airWar,
+    airWeight: () => airWeight,
+    airfieldsHold: () => airfieldsHold,
+    assessAir: () => assessAir,
+    bomberDefence: () => bomberDefence,
+    carrierOf: () => carrierOf,
+    carrierRules: () => carrierRules,
+    cover: () => cover2,
+    crowdedFields: () => crowdedFields,
+    crowdedNews: () => crowdedNews,
+    crowdedRow: () => crowdedRow,
+    crowding: () => crowding,
+    dayAim: () => dayAim,
+    deckBred: () => deckBred,
+    effortBattles: () => effortBattles,
+    fieldClass: () => fieldClass,
+    fieldRoom: () => fieldRoom,
+    fieldServes: () => fieldServes,
+    fightersOver: () => fightersOver,
+    fly: () => fly,
+    forecastAir: () => forecastAir,
+    formName: () => formName,
+    foundAirFleet: () => foundAirFleet,
+    foundShare: () => foundShare,
+    groupAt: () => groupAt,
+    guardsLand: () => guardsLand,
+    guardsSea: () => guardsSea,
+    gunsAt: () => gunsAt,
+    gunsStop: () => gunsStop,
+    hasAirfield: () => hasAirfield,
+    homeCommand: () => homeCommand,
+    homeOf: () => homeOf,
+    isOffensive: () => isOffensive,
+    km: () => km,
+    kmTo: () => kmTo,
+    kmToSea: () => kmToSea,
+    lineWear: () => lineWear,
+    moveTargets: () => moveTargets,
+    nearestRung: () => nearestRung,
+    openAirWar: () => openAirWar,
+    openWorldAir: () => openWorldAir,
+    overOcean: () => overOcean,
+    previewAir: () => previewAir,
+    raid: () => raid,
+    rebaseAir: () => rebaseAir,
+    rungsOf: () => rungsOf,
+    seaKm: () => seaKm,
+    seedClass: () => seedClass,
+    seedFields: () => seedFields,
+    setMission: () => setMission2,
+    setupAir: () => setupAir,
+    shareWords: () => shareWords,
+    shipAir: () => shipAir,
+    shipHits: () => shipHits,
+    shipsInPort: () => shipsInPort,
+    skyByNumbers: () => skyByNumbers,
+    skyDenies: () => skyDenies,
+    skyOnLand: () => skyOnLand,
+    skyOver: () => skyOver,
+    skyReach: () => skyReach,
+    splitFleet: () => splitFleet,
+    spreadAir: () => spreadAir,
+    troopCut: () => troopCut,
+    troopWeight: () => troopWeight,
+    whyNotBase: () => whyNotBase,
+    whyNotMission: () => whyNotMission2,
+    whyNotMoveAir: () => whyNotMoveAir,
+    whyNotShipAir: () => whyNotShipAir
+  });
+
   // ../../data/campaign/air.json
   var air_default = {
     _about: {
@@ -14319,6 +14414,11 @@
     const w = shareWords(c.share);
     return `so ${c.share < 0.6 && w !== "hardly any" ? "only " : ""}${w} of them ${can2}`;
   };
+  function crowdedRow(g2, cs) {
+    const w = cs[0], name = g2.regions[w.region].name;
+    const tail = `it serves ${counted(w.serves)} aircraft and has ${counted(w.based)}, so ${shareWords(w.share)} of them can fly`;
+    return theWords(cs.length === 1 ? `${name}'s airfield is crowded: ${tail}` : `${cs.length} of your airfields are crowded, ${name}'s worst: ${tail}`);
+  }
   var COUNT_HEAD = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
   function crowdedNews(g2) {
     var _a, _b;
@@ -15361,6 +15461,17 @@
       if (!pick2.best) break;
       send(pick2.best.m, pick2.best.t, pick2.best.fleets, flown++);
     }
+  }
+  function airPlanFor(g2, nat, turn = g2.turn) {
+    if (g2.flags.open === 1) return null;
+    return AIR.plan.find((p) => p.nat === nat && turn >= p.from && turn <= p.to && atWar(g2, nat, p.against)) ?? null;
+  }
+  function airPlanName(g2, nat) {
+    return airPlanFor(g2, nat)?.name ?? null;
+  }
+  function airDeliveries(g2, nat) {
+    const built = row(AIR.production[nat], g2.turn), trained = row(AIR.pilots.perMonth[nat], g2.turn);
+    return { ftr: built ? built[1] : 0, bmr: built ? built[2] : 0, pilots: trained ? trained[1] : 0 };
   }
   function foundShare(g2, a, nat) {
     return a.ships.some((x) => atSea(x) && fleetKnown(g2, x, nat) !== "exact") ? CARRIERS.strike.report : 1;
@@ -36794,6 +36905,20 @@
     }
     return { ports: [...ports], beaches };
   }
+  function bySeaWhy(ids2, to) {
+    const s = game();
+    const r = s.regions[to];
+    const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
+    if (!r || !cs.length) return { why: "" };
+    if (allied(s, cs[0].nat, r.ctrl)) {
+      for (const c of cs) {
+        const why = whyNotShip(s, c, r);
+        if (why) return { why };
+      }
+      return { why: "" };
+    }
+    return { why: whyNotLand(s, cs, r) ?? "" };
+  }
   function ship(ids2, to) {
     const s = game();
     const moved = [];
@@ -36859,7 +36984,10 @@ ${next.text}` : ""}` : next ? next.also : "";
     if (r.ok) {
       bits.push(r.taken ? `The landing at ${s.regions[to].name} has succeeded: the troops are ashore.` : `The landing at ${s.regions[to].name} was thrown back into the sea.`);
       if (r.lostAtSea && r.lostAtSea >= 100) bits.push(`${r.lostAtSea.toLocaleString("en-US")} men were lost on the crossing.`);
-      if (r.report) bits.push(battleNote(s, r.report));
+      if (r.report) {
+        const price = priceLine(s, r.report);
+        if (price) bits.push(price);
+      }
     }
     return { ok: r.ok, taken: !!r.taken, note: r.ok ? bits.join(" ") : r.why ?? "The landing could not be made.", moved, view: view2() };
   }
@@ -37551,7 +37679,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       const lone = new Set(gunsAloneOf(s).map((a) => a.region));
       const mine4 = all.filter((v) => v.holder === me.id), theirs2 = all.filter((v) => v.by === me.id && !lone.has(v.region));
       if (mine4.length) out.push({ k: `goto:${mine4[0].region}`, t: mine4.length === 1 ? `${mine4[0].town.toUpperCase()} IS BESIEGED` : `${mine4.length} OF YOUR TOWNS ARE BESIEGED`, tip: `${mine4.map((v) => v.town).slice(0, 4).join(", ")}: ${mine4[0].lines[mine4[0].lines.length - 1]} Attack the army round it to raise the siege, or let the garrison sally out.` });
-      if (theirs2.length) out.push({ k: `goto:${theirs2[0].region}`, t: theirs2.length === 1 ? `YOU BESIEGE ${theirs2[0].town.toUpperCase()}` : `YOU BESIEGE ${theirs2.length} TOWNS`, tip: `${theirs2.map((v) => v.town).slice(0, 4).join(", ")}. Starve it out, or storm it: pick the province and look under ORDERS.` });
+      if (theirs2.length) out.push({ k: `siege:${theirs2[0].region}`, t: theirs2.length === 1 ? `YOU BESIEGE ${theirs2[0].town.toUpperCase()}` : `YOU BESIEGE ${theirs2.length} TOWNS`, tip: `${theirs2.map((v) => v.town).slice(0, 4).join(", ")}. Starve it out, or storm it: a press takes your army there in hand, and STORM on its card attacks the town.` });
     } catch {
     }
     const book = pictureTrade(s);
@@ -37562,6 +37690,21 @@ ${next.text}` : ""}` : next ? next.also : "";
         out.push({ k: "page:trade", t: "A TRADING HOUSE STANDS IDLE", tip: "A country is ready to sign a trade agreement, and you have a trading house free for it. It would pay into the treasury every month." });
       }
     }
+    try {
+      const air2 = air_exports;
+      const fieldsOf = air2["crowdedFields"];
+      const rowOf = air2["crowdedRow"];
+      const crowded = fieldsOf ? fieldsOf(s, me.id) : [];
+      if (crowded.length && rowOf) {
+        const named2 = `${(s.regions[crowded[0].region]?.name ?? "").toUpperCase()}'S AIRFIELD IS CROWDED`;
+        out.push({
+          k: `field:${crowded[0].region}`,
+          t: crowded.length > 1 ? `${crowded.length} AIRFIELDS ARE CROWDED` : named2.length <= 34 ? named2 : "AN AIRFIELD IS CROWDED",
+          tip: ((row2) => /[.!?]$/.test(row2) ? row2 : `${row2}.`)(rowOf(s, crowded))
+        });
+      }
+    } catch {
+    }
     if (me.queue.length === 0 && arsenalOffers(s, -1).some((o) => !o.why)) {
       out.push({
         k: "arsenal",
@@ -37571,7 +37714,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     }
     const theirs = { research: "research", arsenal: "build", "page:trade": "build", "page:spies": "spies" };
     return out.filter((t) => {
-      const desk = theirs[t.k];
+      const desk = t.k.startsWith("field:") ? "air" : theirs[t.k];
       try {
         return !(desk && staffRunsDesk(s, desk));
       } catch {
@@ -40083,6 +40226,7 @@ ${standing5}`,
     force,
     forceOrder: playerOrder(forceOrder),
     seaReach,
+    bySeaWhy,
     ship,
     landingPlan,
     landOn: playerOrder(landOn, "march"),
