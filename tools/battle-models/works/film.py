@@ -141,10 +141,11 @@ def flames(fx, where, start=0.0, end=1e9, size=1.0):
     fx.stream(where, 0.07, make, start=start, end=end)
 
 
-def shell_hit(fx, t0, at, size=1.0, earth=True, lamp=None, glare=450.0, flame=1.0):
+def shell_hit(fx, t0, at, size=1.0, earth=True, lamp=None, glare=450.0, flame=1.0, wall=None):
     """A shell bursting on a work or the ground: a wink of ragged flame, a fan of thrown earth and dust, grey-brown
     smoke. Give t0 a fiftieth of a second before a frame. `lamp` is where the burst's light stands from the burst
-    (off a wall it has struck, or it burns the wall white), `glare` its strength for a burst of size 1, `flame` the size of its tongues of flame beside the burst's own."""
+    (off a wall it has struck, or it burns the wall white), `glare` its strength for a burst of size 1, `flame` the size of its tongues of flame beside the burst's own.
+    `wall` is the outward way of a wall it has struck: the flame is then a star spat along the wall's face and out from it."""
     g = fx.rng
     at = Vector(at)
     lamp = Vector(lamp) if lamp is not None else Z * 0.6
@@ -153,16 +154,40 @@ def shell_hit(fx, t0, at, size=1.0, earth=True, lamp=None, glare=450.0, flame=1.
         # (a field gun's shell, not a battleship's: a wink of flame and a knot of dark smoke that thins in seconds.
         # The flame is a star of ragged tongues thrown up and out, gone before the next frame: a ball of light here
         # read as a cream balloon, and its light, held over two frames, lit the young smoke into bubbles)
+        out = Vector(wall).normalized() if wall is not None else None
+        along = Z.cross(out) if out is not None else None
         for i in range(8):
             a = g.uniform(0, 2 * math.pi)
             h = g.uniform(0.15, 0.8)         # (how far it leans from upright: never level, for one thrown at the camera is a ball)
             d = Vector((math.cos(a) * h, math.sin(a) * h, 1.0)).normalized()
             R = g.uniform(0.38, 0.7) * size * flame
-            root = p0 + Z * 0.1 + Vector((g.uniform(-0.3, 0.3), g.uniform(-0.3, 0.3), 0.0)) * size      # (roots apart: heaped on one point their hot hearts make a ball)
+            ox, oy = g.uniform(-0.3, 0.3), g.uniform(-0.3, 0.3)
+            root = p0 + Z * 0.1 + Vector((ox, oy, 0.0)) * size      # (roots apart: heaped on one point their hot hearts make a ball)
+            thin = 0.36
+            if out is not None:
+                # (on a wall the upright tongues stood side by side as two smooth-bottomed balloons: here they are
+                # thin and spat all ways along the face, a little out from it. The same draws, so nothing after moves)
+                fan = math.radians(-30.0 + 240.0 * a / (2 * math.pi))
+                d = (out * (0.25 + 0.5 * h) + along * math.cos(fan) + Z * math.sin(fan)).normalized()
+                root = p0 + out * 0.12 + along * ox * 1.3 * size + Z * oy * 0.8 * size
+                thin = 0.2 + 0.12 * h
             p = fx.puff(t, root + d * R * 0.85, vel=d * 4.0, life=g.uniform(0.06, 0.085), r=(R * 0.8, R * 1.2), col=(0.34, 0.115, 0.02), col2=(0.28, 0.065, 0.012), alpha=1.0,
-                        kind="tongue" if i < 1 else "lick", drag=6.0, wind=0.0, squash=(1.0, 0.36, 0.36), fade_in=0.01, grow=0.4)
+                        kind="tongue" if i < 1 else "lick", drag=6.0, wind=0.0, squash=(1.0, thin, thin), fade_in=0.01, grow=0.4)
             p["ob"].rotation_euler = d.to_track_quat("X", "Z").to_euler()
             seen_only(p)
+        if out is not None:
+            keep = g.getstate()              # (more scraps of flame, some alive into a second frame; drawn aside, so the smoke that follows is as it was)
+            for i in range(14):
+                fan = math.radians(g.uniform(-35.0, 215.0))
+                d = (out * g.uniform(0.2, 0.7) + along * math.cos(fan) + Z * math.sin(fan)).normalized()
+                R = g.uniform(0.16, 0.44) * size * flame
+                root = p0 + out * 0.1 + along * g.uniform(-0.45, 0.45) * size * flame + Z * g.uniform(-0.3, 0.3) * size * flame
+                thin = g.uniform(0.2, 0.38)
+                p = fx.puff(t, root + d * R * 0.85, vel=d * 5.0, life=g.uniform(0.06, 0.15), r=(R * 0.8, R * 1.25), col=(0.34, 0.115, 0.02), col2=(0.2, 0.045, 0.01), alpha=1.0,
+                            kind="lick", drag=6.0, wind=0.0, squash=(1.0, thin, thin), fade_in=0.01, grow=0.4)
+                p["ob"].rotation_euler = d.to_track_quat("X", "Z").to_euler()
+                seen_only(p)
+            g.setstate(keep)
         for i in range(13):      # (many small puffs kept close make one ragged knot; a few big ones, or small ones flung apart, read as balls)
             v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.5, 1.6))).normalized() * g.uniform(1.2, 4.6) * size ** 0.5
             c = g.uniform(0.08, 0.16)
@@ -455,8 +480,8 @@ def breach(fx, cam, have):
         shell_hit(fx, t0, at, size=1.0)
         clods.append(Clods(t0, at, seed=11 + k))
     mark = scorch(box)
-    at_hit, _ = box.where("hit")
-    shell_hit(fx, hit, at_hit, size=1.5, earth=False, lamp=(1.6, 0.0, 0.4), glare=180.0, flame=0.6)
+    at_hit, out_hit = box.where("hit")
+    shell_hit(fx, hit, at_hit, size=1.5, earth=False, lamp=(1.6, 0.0, 0.4), glare=180.0, flame=0.6, wall=out_hit)
     dust(fx, hit + 0.1, at_hit, size=1.5, n=16, col=(0.6, 0.6, 0.57), out=5.0, alpha=0.3)
     chimney(fx, lambda: (box.where("hit")[0] + Vector((-0.4, 0, 0.5)), Vector((1, 0, 0.3))), start=hit + 0.25, size=0.9)
     chimney(fx, lambda: (box.where("smoke")[0] + Vector((0, 0, 0.6)), Z), start=hit + 0.5, size=0.5)
