@@ -183,6 +183,24 @@ What they add to the form:
   The Dauntless and the Avenger are one colour on top to begin with, but their skins are laid out for the three
   blues: the band down their sides and their fins are `upper2`. `airlook.py ... scheme=1944-07` shows a machine in
   a later coat.
+
+  Overall sea blue was the war's one gloss coat, so that entry alone says `finish: "gloss"`: give it a modest sheen
+  (the pictures use roughness 0.36, shine 0.4; `GLOSS` in `airshow.py`), never a mirror. Every other coat is matt.
+- **The American star by month** (`MARK_MONTHS` in `planes.py`; the file's `mark_months`). The marking changes with
+  the calendar on every American aircraft, whatever her paint: `USA-RED` (the star with a red centre) to begin
+  with, `USA` (the plain white star) from 1942-06, `USA-BAR` (the star with white bars and a blue surround) from
+  1943-09. A file whose `marks` are American carries `mark_months`: a list of `{from, tag}`, the first with no
+  `from`. Swap the tag of each of her marks for the last one whose month has come. The red surround of the summer
+  of 1943 is left out. `marks.py` draws all three.
+- **Cowl gills** (the file's mesh `gills`, behind a radial engine). The ring of small flaps behind the cowl is its
+  own mesh, in the cowl's paint (`nose`). Where a later coat paints the cowl like the rest of her (`nose` the same
+  as `upper`), the gills take the coat too, light under her as she is. A thin dark line marks the gap between
+  each pair, so that they are seen without a pale collar round her neck.
+- **The Val's spats** (`SPATS` in `planes.py`): the outer face of each spat is in her upper paint and the inner
+  face in her under paint, following the line down her side, so that a green Val has green spats, not white socks.
+- **The yellow tips of a turning airscrew** (`blur_tip`; the file's `clear.blur_tip` is 0.035) are three soft rings
+  laid over each other, widest and faintest outermost, so that the tip ring is as blurred as the blades and about
+  a third as strong as it was: a faint warm haze at the rim, not a gold wire.
 - **Matt paint, and less light from below** (`SKIN` and `BACK_LIGHT` in `airshow.py`, the pictures only). The war's
   paints were matt: roughness 0.6, shine 0.25. And the sunlit cloud and haze under her light her belly with half
   their brightness, or a white belly is as bright as the sky behind it and a pale wing seen from just below is lost

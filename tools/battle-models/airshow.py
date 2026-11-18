@@ -36,16 +36,22 @@ SKIN = [0.6, 0.25]                                           # (roughness and sh
 BACK_LIGHT = [0.5]                                           # (how much of the light off the cloud and haze below reaches her belly)
 
 
-def plane_look(paint, mat, nt, bsdf, mix, bare=False):
+GLOSS = [0.36, 0.4]                                          # (the one gloss coat, overall sea blue: a modest sheen, never a mirror)
+
+
+def plane_look(paint, mat, nt, bsdf, mix, bare=False, gloss=False):
     """What the pictures add to a paint: the disc of a turning airscrew is nearly clear, glass shines; a skin left
     unpainted (the file's `finish`) is metal."""
     if paint in ("blur", "blur_tip"):                        # (how clear: as the file says under `clear`)
-        bsdf.inputs["Alpha"].default_value = 0.07 if paint == "blur" else 0.3
+        bsdf.inputs["Alpha"].default_value = 0.07 if paint == "blur" else 0.035
         bsdf.inputs["Roughness"].default_value = 0.6
         bsdf.inputs["Specular IOR Level"].default_value = 0.1
     if paint in ("upper", "upper2", "under", "nose", "rivet", "rivet_under"):
         bsdf.inputs["Roughness"].default_value = SKIN[0]     # (matt paint: it takes a soft light along its curves and mirrors nothing)
         bsdf.inputs["Specular IOR Level"].default_value = SKIN[1]
+        if gloss:
+            bsdf.inputs["Roughness"].default_value = GLOSS[0]
+            bsdf.inputs["Specular IOR Level"].default_value = GLOSS[1]
         if bare:
             bsdf.inputs["Metallic"].default_value = 0.85
             bsdf.inputs["Roughness"].default_value = 0.4
@@ -87,10 +93,16 @@ class Plane:
     def __init__(self, air, name, at=(0, 0, 0), badges=True, record=None, scheme=None):
         self.air, self.name = air, name
         self.m, self.f = air.model(name)
-        if scheme:                                           # (seen in a later coat of paint: the month it comes in, as her file gives it)
-            self.m.paints.update(next(c for c in self.m.info["file"]["schemes"] if c["from"] == scheme)["colours"])
+        gloss = False
+        if scheme:                                           # (as she is seen in a month, YYYY-MM: her coat of paint and her markings then)
+            coats = [c for c in self.m.info["file"].get("schemes", []) if c["from"] <= scheme]
+            if coats:
+                self.m.paints.update(coats[-1]["colours"])
+                gloss = coats[-1].get("finish") == "gloss"
+            for mk in self.m.marks or []:
+                mk["tag"] = planes.mark_in(mk["tag"], scheme)
         bare = self.m.info["file"].get("finish") == "bare metal"
-        self.ob, self.arm = rigid.to_blender(self.m, (lambda *a: plane_look(*a, bare=True)) if bare else plane_look, crease=50.0)
+        self.ob, self.arm = rigid.to_blender(self.m, (lambda *a: plane_look(*a, bare=bare, gloss=gloss)), crease=50.0)
         self.badges = marks.put(self.m, self.ob, self.arm, record) if badges else []      # (record: what she has done, painted on her)
         self.at, self.q, self.pose = Vector(at), Quaternion(), {}
         self.vel = Vector()                                  # (against the formation)

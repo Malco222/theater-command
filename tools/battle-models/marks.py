@@ -91,6 +91,8 @@ def shapes(tag):
         return [ring(0.0, 1.0, DISC)]
     if tag == "USA":
         return [ring(0.0, 1.0, US_BLUE), star(0.98, WHITE)]
+    if tag == "USA-RED":                                                         # (until May 1942: a red disc in the middle of the star)
+        return [ring(0.0, 1.0, US_BLUE), star(0.98, WHITE), ring(0.0, 0.29, RED, 20)]
     if tag == "USA-BAR":
         return [ring(0.0, 1.0, US_BLUE) + rect(-2.05, -0.9, -0.33, 0.33, US_BLUE) + rect(0.9, 2.05, -0.33, 0.33, US_BLUE),
                 rect(-1.95, -0.95, -0.24, 0.24, WHITE) + rect(0.95, 1.95, -0.24, 0.24, WHITE), star(0.98, WHITE)]

@@ -68,6 +68,7 @@ PANES = {"B17": [(-13.2, -13.9, 0.0, 36.0), (-13.67, -14.36, 45.0, 90.0)], "B29"
          "Betty": [(-10.45, -11.4, -27.0, 90.0)]}                           # (the Betty's tail is a cone of glass round her gunner)
 # The machines whose every turret is aimed from somewhere else in her: nobody sits in one.
 REMOTE = {"B29"}
+SPATS = {"Val"}                                                           # (a fixed undercarriage in spats, painted as her sides are)
 LINE = 0.4                                                                # (how wide a scribed line is drawn, as a share of the map's)
 
 # The game's sculptor at a battle's grain: each line of it that sets a grain, and what stands there instead.
@@ -99,6 +100,27 @@ GRADED = [
 # `nose_bar` is how thick her nose's frames are against the game's (the art director, 2026-11-18, of the two heavies'
 # first noses: "white birdcages"; a third as thick, and in her skin's own finish: `nose_frames_paint`). `nose_cap` is
 # where the ribs begin: ahead of it is one round pane (the B-29's nose was a dome of a few rings of large panes).
+# The cooling gills round the back of a radial's cowling (the art director, 2026-11-18: in the canopy frames' pale
+# paint they read "as a white collar"). They are their own mesh, `gills`, painted as the cowl is, and between each
+# pair is a dark slit, so that they are still seen.
+GILLS = [
+    ("def radial_details(parts, frames, body, mouth, gills):", "def radial_details(parts, frames, body, mouth, gills, lines=None, plates=None):"),
+    ("        parts.strip(frames, [body.at(gills + 0.1, a, 0.0) + (body.at(gills - 0.14, a, 0.03) - body.at(gills + 0.1, a, 0.0)) * 0.5 for a in steps],\n"
+     "                    [body.out(gills, a) for a in steps], 0.12, 0.012)\n",
+     "        parts.strip(plates if plates is not None else frames, [body.at(gills + 0.1, a, 0.0) + (body.at(gills - 0.14, a, 0.03) - body.at(gills + 0.1, a, 0.0)) * 0.5 for a in steps],\n"
+     "                    [body.out(gills, a) for a in steps], 0.12, 0.012)\n"
+     "        if lines is not None and parts.fine:\n"
+     "            gap = 2.0 * math.pi * k / 16.0\n"
+     "            parts.strip(lines, [body.at(gills + 0.1 - 0.08 * j, gap, 0.0) for j in range(4)], [body.out(gills, gap)] * 4, 0.038 * body.w(-gills) / LINE_DRAWN, 0.008)\n"),
+    ("            radial_details(parts, frames, hull, lip, nose_back if nose_back < 1.0e8 else lip - 1.0)\n",
+     "            radial_details(parts, frames, hull, lip, nose_back if nose_back < 1.0e8 else lip - 1.0, lines, gill_plates)\n"),
+    ("                radial_details(parts, frames, nacelle, lead + 1.75, lead + 0.75)\n",
+     "                radial_details(parts, frames, nacelle, lead + 1.75, lead + 0.75, lines, gill_plates)\n"),
+    ("    frames = bmesh.new()\n", "    frames = bmesh.new()\n    gill_plates = bmesh.new()\n"),
+    ('    parts.add("frames", frames, "frame", False, outward=False)\n',
+     '    parts.add("frames", frames, "frame", False, outward=False)\n    parts.add("gills", gill_plates, "nose", False, outward=False)\n'),
+]
+
 NOSES = [
     ("        xs = [hull.front - 0.02 - (hull.front - glazed[0] - 0.04) * k / 12.0 for k in range(13)]\n",
      "        x_tip = s.get('nose_cap', hull.front - 0.02)\n"
@@ -451,12 +473,12 @@ def game():
     if _G is None:
         path = os.path.join(HERE, "game", "build_plane.py")
         src = open(path).read().split("\ndef main():")[0]
-        for old, new in FINER + JETS + GRADED + NOSES:
+        for old, new in FINER + JETS + GRADED + NOSES + GILLS:
             if src.count(old) != 1:
                 raise ValueError("the game's sculptor has changed here: " + old)
             src = src.replace(old, new)
         _G = {"__file__": path, "__name__": "build_plane", "BATTLE": BATTLE, "BATTLE_CHORDS": {True: CHORDS, False: CHORDS_PLAIN}, "battle_us": battle_us,
-              "BATTLE_FLAP": FLAP, "BATTLE_AILERON": AILERON, "BATTLE_ELEVATOR": ELEVATOR, "BATTLE_RUDDER": RUDDER}
+              "BATTLE_FLAP": FLAP, "BATTLE_AILERON": AILERON, "BATTLE_ELEVATOR": ELEVATOR, "BATTLE_RUDDER": RUDDER, "LINE_DRAWN": LINE}
         exec(compile(src, path, "exec"), _G)
         _G["PAINTS"]["torpedo"] = len(_G["PAINTS"])        # (a paint of a battle's own: what a torpedo bomber carries)
         _G["COMMON"]["torpedo"] = "6C7174"
@@ -478,7 +500,7 @@ ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "
 # The same machine in other colours, by the month they come in (the art director's unit table, `carrier_paint`). The
 # file lists them under `schemes`; the game paints her in the last one whose month has come.
 _THREE_BLUES = {"upper": "2A3850", "upper2": "55708C", "under": "D9DAD3", "nose": "2A3850"}
-_SEA_BLUE = {"upper": "1E2A40", "upper2": "1E2A40", "under": "1E2A40", "nose": "1E2A40"}
+_SEA_BLUE = {"upper": "1E2A40", "upper2": "1E2A40", "under": "1E2A40", "nose": "1E2A40", "finish": "gloss"}     # (the war's one gloss coat)
 _DARK_GREEN = {"upper": "2F4236", "upper2": "2F4236", "under": "A3A69C"}
 SCHEMES = {
     "Hellcat": [("1944-07", "overall sea blue", _SEA_BLUE)],
@@ -494,8 +516,24 @@ EXTRA_PLANES["Dauntless"]["graded"] = navy_blues(EXTRA_PLANES["Dauntless"]["hull
 EXTRA_PLANES["Avenger"]["graded"] = navy_blues(EXTRA_PLANES["Avenger"]["hull"], 2.3, -4.9)
 
 
+# A marking that changes with the months (the art director, 2026-11-18): the American star has a red centre until
+# May 1942, is plain from June 1942, and has white bars from September 1943. Whatever form a machine's numbers give
+# her, the file says which she wears when (`mark_months`), and the game draws that one.
+MARK_MONTHS = {"USA": [(None, "USA-RED"), ("1942-06", "USA"), ("1943-09", "USA-BAR")]}
+MARK_FAMILY = {"USA": "USA", "USA-BAR": "USA", "USA-RED": "USA"}
+
+
+def mark_in(tag, month):
+    """The form of a marking in a month (YYYY-MM): the last whose month has come."""
+    forms = MARK_MONTHS.get(MARK_FAMILY.get(tag))
+    if not forms or not month:
+        return tag
+    return [form for start, form in forms if start is None or start <= month][-1]
+
+
 def paints_of(G, s, colours=None):
     """Every paint of a machine, by name, from her numbers (or from them with some colours changed: a later coat)."""
+    colours = {k: v for k, v in (colours or {}).items() if k != "finish"}
     c = G["colours_of"](dict(s, colours=dict(s["colours"], **colours)) if colours else s)
     paints = {k: c.get(k, "808080") for k in G["PAINTS"]}
     paints["torn"] = "2B2825"
@@ -515,6 +553,8 @@ def schemes_of(G, name, s, paints, ink):
         entry = {"from": start, "name": title, "colours": {k: v for k, v in later.items() if paints.get(k) != v}}
         if c["ink"] != ink:
             entry["number_ink"] = c["ink"]
+        if change.get("finish"):
+            entry["finish"] = change["finish"]              # ("gloss": this coat alone shines a little)
         out.append(entry)
     return out
 
@@ -906,7 +946,7 @@ def convert(name, fine=True):
             return f"prop.{k + 1}"
         if kind == "dome":
             return turret_at(mean, 0.5) or ("tail" if mean.x < x_cut else "plane")
-        if kind in ("lines", "frames", "glints"):
+        if kind in ("lines", "frames", "glints", "gills"):
             mean = c
             if kind == "frames" and turret_at(c):
                 return turret_at(c)
@@ -930,6 +970,7 @@ def convert(name, fine=True):
 
     # ---- every piece, face by face ---------------------------------------------------------------
     nose_bars, nose_from = s.get("nose_frames_paint"), (s["glazed"][1] - 0.06 if s.get("glazed") else 1.0e9)
+    cowl_as_coat = paints["nose"] == paints["upper"]
     doped = fitout.nation(s) == "UK" and all(g[2] < 0.12 for g in s.get("guns", []))
     for ob in parts.objects:
         kind = ob.name.split(".")[0]
@@ -951,7 +992,7 @@ def convert(name, fine=True):
         blend_l, soot_l = bm.verts.layers.float.get("blend"), bm.verts.layers.float.get("soot")
         own = int(ob["paint"])
         mean = sum((v.co for v in bm.verts), Vector()) / max(len(bm.verts), 1)
-        per_face = kind in ("hull", "wing", "tail", "fin", "lines", "frames", "glints")
+        per_face = kind in ("hull", "wing", "tail", "fin", "lines", "frames", "glints", "gills")
         whole = None if per_face else where(kind, mean, mean, ob)
         fpart = [whole or where(kind, f.calc_center_median(), mean, ob) for f in bm.faces]
         loose_ = surf.keys() | {"bay.port", "bay.starboard", None}     # (parts that are cut out clean, not torn off)
@@ -975,6 +1016,11 @@ def convert(name, fine=True):
             glassy = kind == "hull" and bool(panes) and pane_at(f.calc_center_median())
             if kind == "frames" and nose_bars and f.calc_center_median().x > nose_from:
                 of_face = PAINTS[nose_bars]                  # (the frames of her glass nose, in her skin's own finish)
+            if kind == "gills" and cowl_as_coat:             # (her cowl is painted with the rest of her: so are its gills, grey beneath)
+                of_face = PAINTS["under"] if f.normal.z < -0.6 else PAINTS["upper"]
+            if kind == "extra" and name in SPATS and own == PAINTS["under"] and mean.z < -0.8 and abs(mean.y) > 1.0:
+                # (a fixed undercarriage in spats: the coat of her top on their outer faces, her under paint inside)
+                of_face = PAINTS["upper"] if f.normal.y * (1.0 if mean.y > 0.0 else -1.0) > -0.25 else PAINTS["under"]
             corners = tuple(reversed([point(l.vert, part) for l in f.loops]))      # (mirrored, so turned round)
             faces, fp, fc = out.setdefault(part, ([], [], []))
             faces.append(corners)
@@ -1069,8 +1115,12 @@ def convert(name, fine=True):
             m.add(rim[0] + rim[1], [(i, i + 1, n + 2 + i, n + 1 + i) for i in range(n)], paint, True, lambda q: X)
         band(0.13, 0.95 if tips else 1.0, "blur")
         if tips:
-            band(0.95, 0.985, "blur_tip")
-            band(0.985, 1.0, "blur")
+            # (the art director, 2026-11-18: one thin band was "a crisp gold wire" round a soft blur. Three bands, one
+            #  inside the other and each faint, fade in and out as the blades' smear does)
+            band(0.9, 1.0, "blur_tip", dx=0.002)
+            band(0.925, 0.99, "blur_tip", dx=0.004)
+            band(0.945, 0.975, "blur_tip", dx=0.006)
+            band(0.95, 1.0, "blur")
         if fine:
             for b in range(n_blades):
                 a = 2.0 * math.pi * b / n_blades + 0.4 + 0.7 * k
@@ -1168,7 +1218,7 @@ def convert(name, fine=True):
     m.info.update({"rust": "9A9C98", "soot": colours["soot"], "wear_show": 0.3,
                    "file": {"nation_paint": bool(s.get("nation_paint")), "number_ink": colours["ink"], "span": round(2.0 * half, 3),
                             "role": role, "crew": CREW.get(name, 1), "engines": len(hubs) + len(pods), "jets": len(pods), "year": s.get("year"), "tech": s.get("tech"), "tag": s.get("tag"),
-                            "clear": {"glass": 0.3, "blur": 0.07, "blur_tip": 0.3}, "tally": m.tally}})
+                            "clear": {"glass": 0.3, "blur": 0.07, "blur_tip": 0.035}, "tally": m.tally}})
     f = Facts()
     f.name, f.spec, f.hull, f.wing, f.half, f.y_cut, f.x_cut, f.hubs, f.screw = name, s, hull, wing, half, y_cut, x_cut, [port(h) for h in hubs], screw
     f.role, f.crew, f.has_bombs, f.long = role, CREW.get(name, 1), has_bombs or bool(bay), hull.front - hull.back
@@ -1179,6 +1229,10 @@ def convert(name, fine=True):
     later = schemes_of(G, name, s, paints, colours["ink"])
     if later:
         m.info["file"]["schemes"] = later                   # (her later coats of paint, by the month each comes in)
+    family = next((MARK_FAMILY[mk["tag"]] for mk in (m.marks or []) if mk.get("tag") in MARK_FAMILY), None)
+    if family:                                              # (her marking by month: swap each mark's tag for the last come)
+        m.info["file"]["mark_months"] = [({"from": start, "tag": form} if start else {"tag": form})
+                                         for start, form in MARK_MONTHS[family]]
     if has_torpedo:
         m.info["file"]["loads"] = (["torpedo", "bombs"] if has_bombs else ["torpedo"])
     f.bay, f.bay_half, f.rings_x = (bay if fine else None), BAY_HALF, rings_x
