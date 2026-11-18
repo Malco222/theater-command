@@ -7316,6 +7316,9 @@ namespace
 												})
 												[
 													SAssignNew(StartsScroll, SScrollBox)
+													// (the checker's fault 2: a wheel event put back on its line has moved nothing, and would otherwise
+													// pass on to the map under the card)
+													.ConsumeMouseWheel(EConsumeMouseWheel::Always)
 													.OnUserScrolled_Lambda([this](float Offset) { SnapList(Offset); })
 													+ SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)
 													[
@@ -13061,12 +13064,49 @@ namespace
 			}
 			// Where the list's view begins inside the list (how far it is scrolled), and whether what is left below it
 			// fits in the list's area: then it shows all of it, and there is no plate.
-			const double Top = FMath::Max(static_cast<double>(Along.AbsoluteToLocal(View.GetAbsolutePosition()).Y), 0.0);
+			double Top = FMath::Max(static_cast<double>(Along.AbsoluteToLocal(View.GetAbsolutePosition()).Y), 0.0);
 			const double End = ListFeet.Num() > 0 ? static_cast<double>(ListFeet.Last()) : 0.0;
+			// (The checker's fault 1.) The list's last stop: the first line's top from which the rest fits whole in the
+			// list's area. The list never rests below it, so its foot is never pulled up into a line. (Kept from the last
+			// frame while a list just laid out still measures as nothing.)
+			if (End > 0.5)
+			{
+				ListLastStop = 0.0f;
+				for (int32 Index = 0; Index < ListTops.Num(); ++Index)
+				{
+					const float Stop = ListStop(Index);
+					ListLastStop = Stop;
+					if (End - static_cast<double>(Stop) <= Area + 0.5)
+					{
+						break;
+					}
+				}
+			}
+			// (A belt: a view left off a line's top, by a page changed or a window drawn to a new size, is set on the line
+			// at or above it, never past the last stop. Not while the bar is held: the bar's own snap sees to it. Not in
+			// the frames after a laying out either, while new rows may not yet have their sizes: a list measured as
+			// nothing would send the view back to the top on every pick.)
+			const bool bHeld = FSlateApplication::Get().GetPressedMouseButtons().Contains(EKeys::LeftMouseButton);
+			if (!bHeld && OpeningSettle == 0 && End > 0.5 && ListTops.Num() > 0 && StartsScroll.IsValid())
+			{
+				float On = 0.0f;
+				for (int32 Index = 0; Index < ListTops.Num() && ListStop(Index) <= static_cast<float>(Top) + 0.5f; ++Index)
+				{
+					On = ListStop(Index);
+				}
+				On = FMath::Min(On, ListLastStop);
+				if (!FMath::IsNearlyEqual(static_cast<double>(On), Top, 0.5))
+				{
+					StartsScroll->SetScrollOffset(On);
+					ListRest = On;
+					Top = On;
+				}
+			}
 			ListViewTop = static_cast<float>(Top);
 			if (End - Top <= Area + 0.5)
 			{
-				ListViewHigh = static_cast<float>(Area);
+				// (no taller than what is left: a view taller than its list would have the box draw it from higher up)
+				ListViewHigh = static_cast<float>(FMath::Min(Area, FMath::Max(End - Top, 1.0)));
 				return;
 			}
 			bListRunsOn = true;
@@ -13128,13 +13168,26 @@ namespace
 					break;
 				}
 			}
-			StartsScroll->SetScrollOffset(FMath::Min(To, StartsScroll->GetScrollOffsetOfEnd()));
+			To = FMath::Min(To, ListLastStop);
+			StartsScroll->SetScrollOffset(To);
+			ListRest = To;
+			ListOwed = 0.0f;
+			ListWheelAt = 0.0;
+		}
+
+		/** Where the list rests with its line Index at the top: the line's top, and the list's very top for the first. */
+		float ListStop(int32 Index) const
+		{
+			return Index <= 0 || !ListTops.IsValidIndex(Index) ? 0.0f : ListTops[Index];
 		}
 
 		/**
-		 * (Items 4 and 5.) A scroll by the wheel or the bar comes to rest with a line's top at the list's top, the next
-		 * one the way it went, so that the foot of the list stays on a whole line and the plate's band does not move
-		 * under the pointer as the rows go by.
+		 * (Items 4 and 5.) A scroll by the wheel or the bar comes to rest with a line's top at the list's top, so that the
+		 * foot of the list stays on a whole line and the plate's band does not move under the pointer as the rows go by.
+		 * (The checker's fault 2.) A trackpad sends one swipe as a run of small wheel events, so the wheel does not move
+		 * a line an event: what it moves is owed, and the list stays on its line until the debt passes a third of the
+		 * next line's height (at most 24, so that one notch of a wheel moves one line), then steps one line that way. A
+		 * debt left a quarter of a second is forgotten. The bar, held and dragged, rests on the line nearest the thumb.
 		 */
 		void SnapList(float Offset)
 		{
@@ -13142,33 +13195,79 @@ namespace
 			{
 				return;
 			}
-			float To = Offset;
-			if (Offset > ListViewTop + 0.5f)
+			const float Last = ListLastStop;
+			float To = 0.0f;
+			if (FSlateApplication::Get().GetPressedMouseButtons().Contains(EKeys::LeftMouseButton))
 			{
-				for (const float Line : ListTops)
+				float Nearest = TNumericLimits<float>::Max();
+				for (int32 Index = 0; Index < ListTops.Num() && ListStop(Index) <= Last + 0.5f; ++Index)
 				{
-					if (Line >= Offset - 0.5f)
+					if (FMath::Abs(ListStop(Index) - Offset) < Nearest)
 					{
-						To = Line;
-						break;
+						Nearest = FMath::Abs(ListStop(Index) - Offset);
+						To = ListStop(Index);
+					}
+				}
+				ListOwed = 0.0f;
+				ListWheelAt = 0.0;
+			}
+			else
+			{
+				const double Now = FPlatformTime::Seconds();
+				const bool bFresh = Now - ListWheelAt > 0.25;
+				const float Rest = bFresh ? ListViewTop : ListRest;
+				ListOwed = (bFresh ? 0.0f : ListOwed) + (Offset - Rest);
+				ListWheelAt = Now;
+				To = Rest;
+				if (ListOwed > 0.0f)
+				{
+					// (the next line down, not past the last stop)
+					float Next = -1.0f;
+					for (int32 Index = 0; Index < ListTops.Num(); ++Index)
+					{
+						if (ListStop(Index) > Rest + 0.5f)
+						{
+							Next = ListStop(Index);
+							break;
+						}
+					}
+					if (Next < 0.0f || Rest >= Last - 0.5f)
+					{
+						ListOwed = 0.0f; // (at the last stop: nothing more to owe)
+					}
+					else if (ListOwed >= FMath::Min((Next - Rest) / 3.0f, 24.0f))
+					{
+						To = FMath::Min(Next, Last);
+						ListOwed = 0.0f;
+					}
+				}
+				else if (ListOwed < 0.0f)
+				{
+					// (the line above)
+					float Above = -1.0f;
+					for (int32 Index = ListTops.Num() - 1; Index >= 0; --Index)
+					{
+						if (ListStop(Index) < Rest - 0.5f)
+						{
+							Above = ListStop(Index);
+							break;
+						}
+					}
+					if (Above < 0.0f)
+					{
+						ListOwed = 0.0f; // (at the top)
+					}
+					else if (-ListOwed >= FMath::Min((Rest - Above) / 3.0f, 24.0f))
+					{
+						To = Above;
+						ListOwed = 0.0f;
 					}
 				}
 			}
-			else if (Offset < ListViewTop - 0.5f)
-			{
-				for (int32 Index = ListTops.Num() - 1; Index >= 0; --Index)
-				{
-					if (ListTops[Index] <= Offset + 0.5f)
-					{
-						To = ListTops[Index];
-						break;
-					}
-				}
-				To = Offset <= ListTops[0] + 0.5f ? 0.0f : To;
-			}
+			ListRest = To;
 			if (!FMath::IsNearlyEqual(To, Offset, 0.5f))
 			{
-				StartsScroll->SetScrollOffset(FMath::Clamp(To, 0.0f, StartsScroll->GetScrollOffsetOfEnd()));
+				StartsScroll->SetScrollOffset(To);
 			}
 		}
 
@@ -13322,6 +13421,15 @@ namespace
 			Starts->ClearChildren();
 			ListRows.Reset();
 			OpeningSettle = 3; // (see LookAtList)
+			// (The checker's note: a new page opens at its top, not at the last page's place.)
+			if (Opening.Tab != ListTab && StartsScroll.IsValid())
+			{
+				ListTab = Opening.Tab;
+				StartsScroll->SetScrollOffset(0.0f);
+				ListRest = 0.0f;
+				ListOwed = 0.0f;
+				ListWheelAt = 0.0;
+			}
 			OpeningFoot->SetContent(SNullWidget::NullWidget);
 			OpeningFoot->SetVisibility(EVisibility::Collapsed);
 
@@ -14440,6 +14548,11 @@ namespace
 		float ListViewHigh = -1.0f;
 		float ListViewTop = 0.0f;
 		TArray<float> ListTops, ListFeet;
+		float ListLastStop = 0.0f; // (the lowest the list rests: from there the rest fits whole)
+		float ListRest = 0.0f; // (the line's top the list rests on, as the wheel last left it)
+		float ListOwed = 0.0f; // (what the wheel has moved and the list not yet: see SnapList)
+		double ListWheelAt = 0.0; // (when the wheel last moved it)
+		int32 ListTab = INDEX_NONE; // (the page the list was last laid out for)
 		static constexpr float PlateBand = 28.0f; // (the plate, about 21 high, with 3 or 4 above and below it)
 		TSharedPtr<SHorizontalBox> OpeningTabs;
 		TSharedPtr<SBox> OpeningFoot;
