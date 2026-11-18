@@ -1702,6 +1702,7 @@ struct FProvinceInfo
 	TArray<FTownOffer> TownOffers;
 	// The town as a fortress, and how its siege stands (the grand campaign): who stands round it, and plain lines.
 	FString SiegeBy;
+	bool bSiegeOwn = false; // the town is the player's own (a town of his besieged: its head is the one in red)
 	TArray<FString> SiegeLines;
 	// (Version 64) Fieldworks standing empty here: a heading, and who can use them.
 	FString LeftWorksTitle, LeftWorksText;

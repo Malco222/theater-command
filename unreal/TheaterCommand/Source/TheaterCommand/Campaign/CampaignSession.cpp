@@ -2843,6 +2843,7 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 		if (Object->TryGetObjectField(TEXT("siege"), Siege))
 		{
 			(*Siege)->TryGetStringField(TEXT("by"), Info.SiegeBy);
+			(*Siege)->TryGetBoolField(TEXT("own"), Info.bSiegeOwn);
 			(*Siege)->TryGetStringArrayField(TEXT("lines"), Info.SiegeLines);
 		}
 		const TSharedPtr<FJsonObject>* LeftWorks = nullptr;

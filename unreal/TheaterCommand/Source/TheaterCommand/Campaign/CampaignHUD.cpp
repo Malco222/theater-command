@@ -7847,7 +7847,9 @@ namespace
 					if ((ProvinceTab == 0 || !bProvince) && !Info.SiegeText.IsEmpty())
 					{
 						// The town as a fortress, and how its siege stands.
-						const bool bBesieged = Info.SiegeTitle.ToString().StartsWith(TEXT("BESIEGED"));
+						// (The UI director, 18 November 2026: in the heads' brass when the player is the besieger; red only on
+						// a town of his own, whose stores run out by a date.)
+						const bool bBesieged = Info.bSiegeOwn;
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 						[
 							SNew(STextBlock).Text(Info.SiegeTitle).Font(SmallCaps()).ColorAndOpacity(bBesieged ? Alarm : Brass)
@@ -8391,15 +8393,18 @@ namespace
 				}
 				// (Brian, 18 November 2026.) The town's orders, on the army's own tray: storm the town it stands round (the
 				// one lit button: it is the attack he was looking for), go into the town it stands in, or come out again.
+				// (The UI director, 18 November 2026: one lit button on a card. A lit edge is the one thing the staff points
+				// at, not a state: STORM is lit only while the staff's forecast favours the assault; GARRISON, TAKE THE
+				// FIELD and FOLD WORN CORPS are plain. STAND AND DIG IN is lit as the chosen half of its pair.)
 				if (!Army.StormButton.IsEmpty())
 				{
 					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+						SNew(SButton).ButtonStyle(Army.bStormFavoured ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
 						.ToolTipText(Army.StormTip)
 						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->TrayTownOrder(0); } return FReply::Handled(); })
 						[
-							SNew(STextBlock).Text(Army.StormButton).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
+							SNew(STextBlock).Text(Army.StormButton).Font(SmallCaps()).ColorAndOpacity(Army.bStormFavoured ? BrightBrass : Muted)
 						]
 					];
 				}
@@ -8419,11 +8424,11 @@ namespace
 				{
 					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+						SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
 						.ToolTipText(FText::FromString(TEXT("The corps in hand leave the town and stand in the open country of the province again, where they can march and attack.")))
 						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->TrayTownOrder(2); } return FReply::Handled(); })
 						[
-							SNew(STextBlock).Text(Army.FieldButton).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
+							SNew(STextBlock).Text(Army.FieldButton).Font(SmallCaps()).ColorAndOpacity(Muted)
 						]
 					];
 				}
@@ -8432,11 +8437,11 @@ namespace
 				{
 					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+						SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
 						.ToolTipText(Army.FoldTip)
 						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenFold(); } return FReply::Handled(); })
 						[
-							SNew(STextBlock).Text(Army.FoldButton).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
+							SNew(STextBlock).Text(Army.FoldButton).Font(SmallCaps()).ColorAndOpacity(Muted)
 						]
 					];
 				}
@@ -9151,7 +9156,8 @@ namespace
 			{
 				Words->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Offer.Why)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Offer.bPoor ? Alarm : Lines).AutoWrapText(true)
+					// (the UI director, 18 November 2026: a shortfall is neither lost nor due by a date; it takes the cards' italic ink, not red)
+					SNew(STextBlock).Text(FText::FromString(Offer.Why)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Lines).AutoWrapText(true)
 				];
 			}
 			// A picture of what is on offer, where the game has a model of it: this nation's own tank, aircraft or ship.

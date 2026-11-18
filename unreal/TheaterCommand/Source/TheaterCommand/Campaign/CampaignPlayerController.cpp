@@ -5960,7 +5960,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 							}
 							else
 							{
-								Line += FString::Printf(TEXT("\nRight-click: attack. The staff's estimate: between %s and %s."), *Say(Glance.OddsLow), *Say(Glance.OddsHigh));
+								Line += TEXT("\nRight-click: attack. The staff's estimate: ") + CampaignText::OddsBetween(Glance.OddsLow, Glance.OddsHigh) + TEXT(".");
 							}
 							if (Glance.bValid && Glance.Even > 1.25f)
 							{
@@ -7105,8 +7105,8 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 	if (!bBySea && !bByRail && !Tray.StormButton.IsEmpty())
 	{
 		// (an army that stands round an enemy town is told how the town is attacked)
-		Tray.Hint = FText::FromString(TEXT("Press ") + Tray.StormButton.ToString()
-			+ TEXT(" above, or right-click the town, to attack it. A right-click elsewhere marches them away. Esc puts them down."));
+		// (The UI director's words, 18 November 2026: a line that carries a name keeps the name's own capitals.)
+		Tray.Hint = FText::FromString(Tray.StormTown + TEXT(": press its button above, or right-click the town. A right-click elsewhere marches them away. Esc puts them down."));
 	}
 	{
 		const FString Garrison = GarrisonSays();
@@ -7620,6 +7620,8 @@ void ACampaignPlayerController::RefreshOrders()
 	// round, go into the town of the province it stands in, or come out of it. They are the province's own orders,
 	// offered by the rules; a storm still opens its card first (ruling 182).
 	Tray.StormButton = Tray.StormTip = Tray.GarrisonButton = Tray.GarrisonTip = Tray.FieldButton = FText::GetEmpty();
+	Tray.StormTown.Reset();
+	Tray.bStormFavoured = false;
 	Tray.GarrisonActions.Reset();
 	Tray.FieldActions.Reset();
 	if (ArmyRegion != INDEX_NONE && PickedCorps.Num() > 0 && View.bHumanUp)
@@ -7634,6 +7636,7 @@ void ACampaignPlayerController::RefreshOrders()
 			if (Option.Action == TEXT("work:storm"))
 			{
 				Tray.StormButton = FText::FromString(Option.Label.ToUpper()); // ("Storm Panama City")
+				Tray.StormTown = Option.Label;
 				Tray.StormTip = FText::FromString(Option.Detail + TEXT(" Its card shows the odds first, and KEEP UP THE SIEGE leaves it be."));
 			}
 			else if (Option.Action.StartsWith(TEXT("work:garrison:")) && PickedCorps.Contains(FCString::Atoi(*Option.Action.Mid(14))))
@@ -7646,6 +7649,24 @@ void ACampaignPlayerController::RefreshOrders()
 			{
 				Tray.FieldActions.Add(Option.Action);
 			}
+		}
+		if (!Tray.StormButton.IsEmpty())
+		{
+			// (The UI director, 18 November 2026: one lit button on a card, and the light is the staff's pointer. STORM
+			// is lit only while the staff's forecast favours the assault. The forecast is read off a copy of the
+			// campaign, so it is asked once for a hand, a place and a month.)
+			FString Key = FString::Printf(TEXT("%d:%d:"), View.Turn, ArmyRegion);
+			for (const int32 Id : PickedCorps)
+			{
+				Key += FString::Printf(TEXT("%d,"), Id);
+			}
+			if (Key != StormFavourKey)
+			{
+				StormFavourKey = Key;
+				const FAttackPreview Storm = Session->PreviewStorm(ArmyRegion);
+				bStormFavourKept = Storm.bValid && Storm.Refused.IsEmpty() && Storm.Favours == TEXT("storm");
+			}
+			Tray.bStormFavoured = bStormFavourKept;
 		}
 		if (Tray.GarrisonActions.Num() > 0)
 		{
@@ -9423,8 +9444,7 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening, const
 	else
 	{
 		// The defenders are not all identified: the staff give the odds as a band that holds the truth.
-		auto Say = [](float Odds) { return Odds >= 1.0f ? FString::Printf(TEXT("%.1f to 1 for you"), Odds) : FString::Printf(TEXT("%.1f to 1 against"), 1.0f / FMath::Max(Odds, 0.01f)); };
-		FString Odds = FString::Printf(TEXT("The staff's estimate: between %s and %s"), *Say(Preview.OddsLow), *Say(Preview.OddsHigh));
+		FString Odds = TEXT("The staff's estimate: ") + CampaignText::OddsBetween(Preview.OddsLow, Preview.OddsHigh);
 		if (!Preview.ChanceWords.IsEmpty())
 		{
 			// (Version 63: a band too wide to plan on is given as the staff's best guess with its limits)
@@ -9631,9 +9651,8 @@ void ACampaignPlayerController::DressSiegeCard(const FAttackPreview& Preview, in
 	const FString Town = Preview.Town.IsEmpty() ? (Map.IsValid() && Map->GetData().Regions.IsValidIndex(RegionId) ? Map->GetData().Regions[RegionId].Name : FString()) : Preview.Town;
 	auto Odds = [&Town](float At, float Low, float High, bool bExact, const FString& ChanceWords)
 	{
-		auto Say = [](float Value) { return Value >= 1.0f ? FString::Printf(TEXT("%.1f to 1 for you"), Value) : FString::Printf(TEXT("%.1f to 1 against"), 1.0f / FMath::Max(Value, 0.01f)); };
 		FString Line = bExact ? (At >= 1.0f ? FString::Printf(TEXT("Odds of %.1f to 1 in your favour"), At) : FString::Printf(TEXT("Odds of %.1f to 1 against you"), 1.0f / FMath::Max(At, 0.01f)))
-			: FString::Printf(TEXT("The staff's estimate: between %s and %s"), *Say(Low), *Say(High));
+			: TEXT("The staff's estimate: ") + CampaignText::OddsBetween(Low, High);
 		if (!ChanceWords.IsEmpty())
 		{
 			Line += TEXT("  \u00B7  ") + ChanceTo(ChanceWords, Town, /*bNamed*/ !bExact); // (the estimate's line names the staff)
@@ -10807,6 +10826,7 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			if (Province.SiegeLines.Num() > 0)
 			{
 				RegionPanel.SiegeTitle = FText::FromString(Province.SiegeBy.IsEmpty() ? FString(TEXT("THE TOWN AS A FORTRESS")) : FString::Printf(TEXT("BESIEGED BY %s"), *Province.SiegeBy.ToUpper()));
+				RegionPanel.bSiegeOwn = !Province.SiegeBy.IsEmpty() && Province.bSiegeOwn;
 				RegionPanel.SiegeText = FText::FromString(FString::Join(Province.SiegeLines, TEXT("\n")));
 			}
 			RegionPanel.DirectiveText = FText::FromString(Province.DirectiveLine);
