@@ -18,13 +18,20 @@ import { decode } from './kit/source.mjs';
 import { finishShot, finishLoop } from './kit/film.mjs';
 import recipes from './recordings/recipes.mjs';
 import battle from './recordings/battle.mjs';
+import battle2 from './recordings/battle2.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2), setAt = args.indexOf('--set'), only = setAt >= 0 ? args.splice(setAt, 2)[1] : null;
 const [raw, out, ...want] = args;
 if (!raw || !out) { console.error('usage: node sound/make_from_recordings.mjs <raw-folder> <out-folder> [name ...]'); process.exit(1); }
 const sources = JSON.parse(fs.readFileSync(path.join(here, 'recordings/sources.json'), 'utf8'));
-const byId = Object.fromEntries(sources.map((s) => [s.id, s]));
+const byId = Object.fromEntries(sources.map((s) => [s.id, { ...s, archive: 'Wikimedia Commons' }]));
+// Freesound finds (recordings/freesound/found.json) are taken as "fs_" and their Freesound number. Their files sit in
+// recordings/freesound, not in the raw folder.
+const fsDir = path.join(here, 'recordings/freesound');
+if (fs.existsSync(path.join(fsDir, 'found.json'))) for (const r of JSON.parse(fs.readFileSync(path.join(fsDir, 'found.json'), 'utf8'))) {
+  byId['fs_' + r.id] = { id: 'fs_' + r.id, file: r.file, dir: fsDir, title: r.title, licence: r.licence, credit: r.credit_owed ? r.author : '', author: r.author, page: r.page, archive: 'Freesound' };
+}
 
 /** Family loudness, as in the first set, so the game's mixing rules still hold. */
 const FAMILY = { air: -20, flak: -18, guns: -16, ground: -20, rail: -21, sea: -19, fire: -24, desk: -27, calls: -20, beds: -30 };
@@ -33,6 +40,7 @@ const all = [];
 const defIn = (set) => (name, meta, make) => all.push({ name, set, ...meta, make });
 recipes(defIn('test'));
 battle(defIn('battle'));
+battle2(defIn('battle'));
 
 fs.mkdirSync(out, { recursive: true });
 const list = [];
@@ -43,7 +51,7 @@ for (const s of all) {
   /** take('id', { from, to, channels }): the samples of a logged recording. Using a recording not in the log is an error. */
   const take = (id, o = {}) => {
     const row = byId[id]; if (!row) throw new Error(`${s.name}: "${id}" is not in the licence log`);
-    const file = path.join(raw, row.file); if (!fs.existsSync(file)) throw new Error(`${s.name}: ${row.file} has not been fetched`);
+    const file = path.join(row.dir ?? raw, row.file); if (!fs.existsSync(file)) throw new Error(`${s.name}: ${row.file} has not been fetched`);
     used.add(id);
     return decode(file, { channels: s.ch ?? 1, ...o });
   };
@@ -59,7 +67,7 @@ for (const s of all) {
   const row = {
     name: s.name, family: s.family, bus: s.bus ?? 'world', loop: !!s.loop, channels: ch, seconds: +(n / SR).toFixed(2),
     peakDb: +toDb(peak(x)).toFixed(1), lufs: +(s.loop ? l.integrated : l.moment).toFixed(1), quieterThanAsked: done.short > 0.3 ? done.short : 0,
-    title: s.title ?? s.name, about: s.about ?? '', real: true, set: s.set, ...(s.battle ? { battle: s.battle } : {}), sources: [...used].map((id) => ({ id, title: byId[id].title, licence: byId[id].licence, credit: byId[id].credit, page: byId[id].page })),
+    title: s.title ?? s.name, about: s.about ?? '', real: true, set: s.set, ...(s.battle ? { battle: s.battle } : {}), ...(s.group ? { group: s.group } : {}), sources: [...used].map((id) => ({ id, title: byId[id].title, licence: byId[id].licence, credit: byId[id].credit, page: byId[id].page, archive: byId[id].archive })),
   };
   list.push(row);
   console.log(`${row.name.padEnd(22)} ${String(row.seconds).padStart(6)} s  ${ch === 1 ? 'mono  ' : 'stereo'}  peak ${String(row.peakDb).padStart(6)} dB  ${String(row.lufs).padStart(6)} LUFS${row.quieterThanAsked ? `  (${row.quieterThanAsked} dB under its target, to keep its peak whole)` : ''}  from ${[...used].join(', ')}`);

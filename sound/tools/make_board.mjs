@@ -73,7 +73,7 @@ if (realDir) {
   }
 }
 // The battle pack, stamped as "pack_" and its name (not "battle_": the first set has a battle_loop of its own), grouped by who or what makes the sound.
-const GROUPS = [['The rifleman and the machine gunner', /^(rifle_shot|lmg_burst|machine_gun)/], ['Explosions', /^(grenade|shell_|shells_|bomb_stick)/],
+const GROUPS = [['Voices', /^$/], ['Bugles and whistles', /^$/], ['The rifleman and the machine gunner', /^(rifle_shot|lmg_burst|machine_gun)/], ['Wartime guns, one for each army', /^$/], ['The soldier: feet, kit and bolt', /^$/], ['Explosions', /^(grenade|shell_|shells_|bomb_stick)/],
   ['The tank', /^tank_/], ['The sea', /^(ship_|sea_)/], ['The air', /^(fighter|plane_|dive|flak_light)/], ['Under a fight', /./]];
 const battle = [];
 if (battleDir) {
@@ -81,8 +81,9 @@ if (battleDir) {
   for (const s of list) {
     const lp = mp3s[s.name]?.loop ? [mp3s[s.name].loop.from, mp3s[s.name].loop.length] : 0;
     const from = s.sources.map((x) => `${x.title.replace(/^File:/, '').replace(/\.[a-z0-9]+$/i, '')} (${x.licence}${x.credit ? ', credit ' + x.credit : ''})`).join('; ');
-    const g = GROUPS.findIndex(([, re]) => re.test(s.name));
-    battle.push({ n: s.name, t: s.title ?? s.name, s: s.seconds, lp, a: s.about, on: s.battle ?? '', g, src: from + '. Wikimedia Commons.', w: shape(path.join(battleDir, s.name + '.wav'), 120), old: have.has(s.name) ? 1 : 0, oldlp: loopOf(s.name) });
+    const g = s.group ? GROUPS.findIndex(([t]) => t === s.group) : GROUPS.findIndex(([, re]) => re.test(s.name));
+    if (g < 0) throw new Error(`${s.name}: no board group "${s.group}"`);
+    battle.push({ n: s.name, t: s.title ?? s.name, s: s.seconds, lp, a: s.about, on: s.battle ?? '', g, src: from + '. ' + [...new Set(s.sources.map((x) => x.archive ?? 'Wikimedia Commons'))].join(', ') + '.', w: shape(path.join(battleDir, s.name + '.wav'), 120), old: have.has(s.name) ? 1 : 0, oldlp: loopOf(s.name) });
     fs.copyFileSync(path.join(battleMp3, s.name + '.mp3'), path.join(out, 'audio', `pack_${s.name}.mp3`));
     files.push({ path: `audio/pack_${s.name}.mp3` });
   }
