@@ -131,8 +131,19 @@ export const LAND = {
    * bill charges for the result it hands back (the design director, b356; tests/battle-land.test.ts).
    */
   spent: { att: 0.13, def: 0.18 } as Record<'att' | 'def', number>,
-  /** But not while less than this share of its power has been in the fight: one block's fall never takes a fresh army with it (ruling 226(2)). */
+  /**
+   * But not while more than this share of its power stands fresh or has not fought: one worn block never takes a fresh
+   * army with it (ruling 226(2), b476(1)).
+   */
   fought: 0.5,
+  /**
+   * A block at this share of its strength or more, and steady, is fresh, in contact or not; in an army of this many
+   * blocks or fewer (one block a fifth of it or more), the fresh hold the army at the brink as those not yet in the
+   * fight do. Larger armies hold by those not yet in the fight alone: the fresh rule there moves the field 8 points off
+   * its card, and at six blocks the hills-and-works practice ground 10 (the design director, b476(1) and b480; 356
+   * campaign attacks and the nine practice grounds, 18 November).
+   */
+  fresh: { str: 0.9, upTo: 5 },
   /**
    * What a block that leaves the field still loses on the way (stragglers, wounded, guns and lorries left behind), as a
    * share of the strength it had left. A defence driven off its own ground leaves far more behind than an attack that

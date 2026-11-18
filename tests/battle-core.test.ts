@@ -1,7 +1,7 @@
 // The shared battle core (src/battle/core): how a fought battle's result lands on the campaign's scale (ruling 217),
 // the clock, and the line a group is drawn up on. Shared by the land, sea and air battles.
 import { describe, expect, it } from 'vitest';
-import { CLAMP, Clock, clampToDice, diceChance, diceNow, fieldRatio, levelFor, levelOf, lineUp, RATIO, runOut, type BattleSim, type UnitBase } from '../src/battle/core';
+import { CLAMP, Clock, clampToDice, DROPS, diceChance, diceNow, fieldRatio, levelFor, levelOf, lineUp, LOOPS, nextGap, nextTake, RATIO, runOut, SALVOS, TOWN, type BattleSim, type UnitBase } from '../src/battle/core';
 
 describe('R: where a fought battle lands on the campaign scale', () => {
   it('a field win is on or above the line, a field defeat below it', () => {
@@ -75,5 +75,35 @@ describe('drawing a line', () => {
     for (const p of lineUp([u(1, 0, 0)], 'att', 1000, 1000, 0, 1000)) expect(Math.cos(p.face)).toBeGreaterThan(0.99);
     // A defender faces south.
     for (const p of lineUp([{ ...u(1, 0, 0), side: 'def' }], 'def', 0, 1000, 1000, 1000)) expect(Math.cos(p.face)).toBeLessThan(-0.99);
+  });
+});
+
+describe('the field\'s sounds: the approved pack\'s table', () => {
+  it('several takes play at random, never the same one twice running', () => {
+    let last: string | null = null;
+    const heard = new Set<string>();
+    for (let i = 0; i < 300; i++) {
+      const roll = ((i * 7919) % 1000) / 1000;
+      const t = nextTake(SALVOS.takes, last, roll);
+      expect(t).not.toBe(last);
+      expect(SALVOS.takes).toContain(t);
+      heard.add(t); last = t;
+    }
+    expect(heard.size).toBe(SALVOS.takes.length);
+    // A list of one has nothing else to give.
+    expect(nextTake(['only'], 'only', 0.5)).toBe('only');
+  });
+  it('guns in action drop one far salvo every 6 to 20 seconds, not a loop', () => {
+    expect(LOOPS.guns.fight).toBeUndefined();
+    expect(DROPS.guns?.fight).toBe(SALVOS);
+    expect(SALVOS.takes).toEqual(['far_guns_01', 'far_guns_02', 'far_guns_03']);
+    expect(nextGap(SALVOS, 0)).toBe(6);
+    expect(nextGap(SALVOS, 0.999)).toBeLessThan(20);
+  });
+  it('lorries drive on the lorry, and a town fight is the street battle with its machine guns', () => {
+    expect(LOOPS.wheels.march).toBe('lorry_drive_loop');
+    expect(LOOPS.wheels.idle).toBe('lorry_idle_loop');
+    expect(TOWN.loop).toBe('street_battle');
+    expect(TOWN.drops.takes).toEqual(['mg_town_01', 'mg_town_02', 'mg_town_03']);
   });
 });

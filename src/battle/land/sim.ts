@@ -39,6 +39,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** Everything said this battle, for the after-action card. */
   readonly log: FieldEvent[] = [];
   private power: Record<Side, number>;
+  /** Each side's blocks at the start, its works not counted: an army this small holds by its fresh blocks (b480). */
+  private blocks: Record<Side, number>;
   private nextThink = 0;
   private broke: Record<Side, boolean> = { att: false, def: false };
   /** When the first blow fell between the lines (guns firing from far back do not count): null until then. */
@@ -52,6 +54,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * his has fought it (b464(2); known). Set by whoever opens the field. Words and pictures only: the fight never reads it.
    */
   fog = false;
+  /** Under fog, the corps the attack card identified: their blocks show as the card shows them (b476(3); cardKnows). */
+  seen: Set<number> = new Set();
 
   constructor(ticket: FieldTicket<LandPlace>) {
     this.ticket = ticket;
@@ -63,6 +67,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const att = makeBlocks('att', ticket.att, A, 1);
     const def = makeBlocks('def', ticket.def, D, att.length + 1);
     this.units = [...att, ...def];
+    this.blocks = { att: att.filter((u) => u.kind !== 'fort').length, def: def.filter((u) => u.kind !== 'fort').length };
     deploy(this.units, 'att', this.field);
     deploy(this.units, 'def', this.field);
     for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
@@ -108,9 +113,10 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /**
    * Whether the player knows this block (b464(2)): his own always; the other side's where the card knew the defence,
-   * once one of his has fought it or it has struck one of his in contact (found), and once the battle is over.
+   * or the card identified its corps (b476(3)), once one of his has fought it or it has struck one of his in contact
+   * (found), and once the battle is over.
    */
-  known(u: LandUnit): boolean { return !this.fog || this.ticket[u.side].human || !!u.found || this.over !== null; }
+  known(u: LandUnit): boolean { return !this.fog || this.ticket[u.side].human || this.seen.has(u.corps) || !!u.found || this.over !== null; }
 
   /** A block's name in a dispatch: the side nobody plays carries its country, so it never reads like the player's own (ruling 226(7)). */
   named(u: LandUnit): string { return this.ticket[u.side].human ? u.name : `${this.ticket[u.side].adj} ${u.name}`; }
@@ -934,15 +940,25 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   breaking(s: Side): number {
     const worn = this.wornShare(s) / LAND.spent[s];
-    // Worn past what it will stand, it still holds while most of it has not been in the fight: the bar waits at the brink.
-    const held = worn >= 1 && this.foughtShare(s) < LAND.fought ? 0.99 : 1;
+    // Worn past what it will stand, it still holds while most of it is fresh or has not been in the fight: the bar waits
+    // at the brink (b476(1)).
+    const held = worn >= 1 && this.freshShare(s) > LAND.fought ? 0.99 : 1;
     return Math.min(held, Math.max(this.brokenShare(s) / LAND.breaks, worn));
   }
 
-  /** The share of a side's power that has been in the fight: struck a blow, or been worn by one. */
-  private foughtShare(s: Side): number {
+  /**
+   * The share of a side's power standing in blocks that have not been in the fight (never met the enemy, and not worn
+   * by a blow from afar) or, in an army of LAND.fresh.upTo blocks or fewer, that are fresh: steady, at nine tenths of
+   * their strength or more, in contact or not. While more than half the army stands so, one worn block never takes it
+   * with it (ruling 226(2); the design director, b476(1) and b480).
+   */
+  private freshShare(s: Side): number {
+    const small = this.blocks[s] <= LAND.fresh.upTo;
     let n = 0;
-    for (const u of this.units) if (u.side === s && (u.met || u.str < u.str0 * 0.97 || !fighting(u))) n += u.power0;
+    for (const u of this.units) {
+      if (u.side !== s || !fighting(u)) continue;
+      if ((small && u.state === 'steady' && u.str >= u.str0 * LAND.fresh.str) || (!u.met && u.str >= u.str0 * 0.97)) n += u.power0;
+    }
     return n / this.power[s];
   }
 

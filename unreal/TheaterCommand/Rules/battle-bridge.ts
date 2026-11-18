@@ -53,8 +53,15 @@
 // (battle seconds of the first contact, null before it). Each unit: { id, side, kind, name, x, y, face,
 // str, mor, state, figures0, figures, w, d, act, speed, engaged, cover, loop, order }. Field metres, x east, y north,
 // the attacker from the south; face in radians, 0 north, clockwise. 'loop' is the sound it plays while it does what it
-// does; each event's 'cue' is a one-shot, at its x and y. Sound names are the sound director's (sound-list.json).
-// Where the attack card did not know the defence (b453), an enemy block none of the player's has fought yet comes as
+// does; each event's 'cue' is a one-shot, at its x and y. Sound names are the approved battle pack's
+// (/mnt/project-files/sound/battle-pack/, played from its own files), or the generator's list where the pack has none.
+// A unit may also carry drops: { takes, every: [lo, hi] }: play one take at a time, at random and never the one played
+// last, then wait a random lo to hi seconds before the next (core/cues.ts nextTake and nextGap say it in code). Guns in
+// action carry far_guns_01 to 03 every 6 to 20 s in place of a loop; a block fighting among buildings plays
+// street_battle as its loop, with mg_town_01 to 03 dropped in; a lorry idles on lorry_idle_loop and drives on
+// lorry_drive_loop. Several units playing the same bed or drops near each other should share one voice, not stack.
+// Where the attack card did not know the defence (b453), an enemy block none of the player's has fought yet, of a corps
+// the card did not identify (a corps it names shows whole from the start, b476(3)), comes as
 // { id, side, known: false, x, y, face, w, d, act, speed, cover, state } (b464(2)): draw a plain stand in its side's
 // colour, w by d (the plain size every such block shares), with no name, strength, bar, state or arm, and no models of
 // its arm; its hover reads "Polish troops, not identified · Right-click to attack" (the last part only while the
@@ -82,10 +89,10 @@
 // its ships afloat and sunk, and its fleet; 'loop' comes from src/battle/sea/cues.ts.
 
 import { Clock, SPEEDS, type Speed } from '../../../src/battle/core/clock';
-import { LOOPS } from '../../../src/battle/core/cues';
+import { DROPS, LOOPS, TOWN } from '../../../src/battle/core/cues';
 import type { BattleSim, BattleView, Command, FieldResult, Side, UnitBase } from '../../../src/battle/core/types';
 import { GROUNDS } from '../../../src/battle/land/field';
-import { fieldBill, landTicket, pursuitLine } from '../../../src/battle/land/ticket';
+import { cardKnows, fieldBill, landTicket, pursuitLine } from '../../../src/battle/land/ticket';
 import { LandBattle } from '../../../src/battle/land/sim';
 import { staffOnly } from '../../../src/battle/land/offered';
 import { LAND, MOTION, type Kind } from '../../../src/battle/land/rules';
@@ -137,12 +144,17 @@ function unitOut(u: UnitBase): Record<string, unknown> {
   const air = (u as AirUnit).air ? (u as AirUnit) : null;
   const motion = MOTION[u.kind as Kind] as string | undefined;
   const loops = motion && motion !== 'fixed' ? LOOPS[motion as keyof typeof LOOPS] : undefined;
+  // A block fighting among buildings plays the town's street battle in place of the open field's bed, with the town's
+  // machine guns dropped in; guns in action drop one far salvo at a time (the approved pack's field table).
+  const town = !air && u.act === 'fight' && u.cover === 'buildings' && !!loops?.fight;
+  const drops = air ? undefined : town ? TOWN.drops : motion && motion !== 'fixed' ? DROPS[motion as keyof typeof LOOPS]?.[u.act] : undefined;
   const extra = air ? { ...(u.extra ?? {}), n: air.n, n0: air.n0, band: air.band, alt: Math.round(air.alt), job: air.job.do, per: air.per } : u.extra;
   return {
     id: u.id, side: u.side, kind: u.kind, name: u.name, x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10, face: Math.round(u.face * 1000) / 1000,
     str: Math.round(u.str * 1000) / 1000, mor: Math.round(u.mor * 1000) / 1000, state: u.state, figures0: u.figures0, figures: u.figures,
     w: u.w, d: u.d, act: u.act, speed: Math.round(u.speed * 10) / 10, engaged: u.engaged ?? -1, cover: u.cover ?? '',
-    loop: air ? airLoop(air) : (u.extra as { cls?: string } | undefined)?.cls ? SEA_LOOPS[u.act] ?? '' : loops?.[u.act] ?? '',
+    loop: air ? airLoop(air) : (u.extra as { cls?: string } | undefined)?.cls ? SEA_LOOPS[u.act] ?? '' : town ? TOWN.loop : loops?.[u.act] ?? '',
+    ...(drops ? { drops: { takes: drops.takes, every: drops.every } } : {}),
     // A land block's name for a card and what it belongs to under it ("11th Infantry" over "I Corps"), beside its full name.
     ...(land.short ? { short: land.short, parent: land.parent } : {}),
     order: land.order ? { kind: land.order.kind, x: land.order.x, y: land.order.y, target: land.order.target ?? -1, path: land.path } : null,
@@ -220,6 +232,8 @@ export function battleCalls(h: BattleHooks) {
       // until one of the player's has fought them (b464(2)).
       const look = attackOutlook(g, corps, target);
       sim.fog = !!look && !look.exact;
+      // All but the corps the card identified, which show as the card shows them (b476(3)).
+      if (sim.fog) sim.seen = cardKnows(g, t);
       // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the
       // card. Those going in are the ticket's own, so a corps spent since it was picked is not shown going (b453).
       const going = t.att.forces.map((f) => f.corps);

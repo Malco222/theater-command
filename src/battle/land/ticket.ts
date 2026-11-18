@@ -11,6 +11,7 @@ import { bridgeDown, riverBetween, riverName } from '../../campaign/rivers';
 import { minesAt } from '../../campaign/engineers';
 import { townName, townSize } from '../../campaign/towns';
 import { canOrder, jointForce, orderAttack, previewAttack } from '../../campaign/turn';
+import { corpsKnown } from '../../campaign/intel';
 import { KIND, type BattleReport, type Corps, type Game, type Region } from '../../campaign/types';
 import type { FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
 import type { LandPlace } from './field';
@@ -110,6 +111,21 @@ export function pursuitLine(t: FieldTicket<LandPlace>, result: FieldResult, rep:
   const army = t[s].human ? 'your army' : `the ${t[s].adj} army`;
   if (!result.broke) return `As ${army} withdrew under fire, it lost ${more.toLocaleString('en-GB')} more men in the rearguard and as stragglers.`;
   return `After ${army} broke, it lost ${more.toLocaleString('en-GB')} more men in the pursuit and as prisoners.`;
+}
+
+/**
+ * The other side's corps the player's staff has identified, as the attack card names them (this month's or an old
+ * report): on a field the card did not fully know, their blocks show as the card shows them and only the rest stay
+ * plain stands until met (the design director, b476(3)).
+ */
+export function cardKnows(g: Game, t: FieldTicket<LandPlace>): Set<number> {
+  const them = t.att.human ? t.def : t.att;
+  const out = new Set<number>();
+  for (const f of them.forces) {
+    const c = g.corps.find((x) => x.id === f.corps);
+    if (c && corpsKnown(g, c, g.human).level !== 'none') out.add(f.corps);
+  }
+  return out;
 }
 
 /** Hands a fought battle back: the rules' own attack order, with the field's R in place of the dice. */

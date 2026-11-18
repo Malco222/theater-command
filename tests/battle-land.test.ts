@@ -366,6 +366,16 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
       expect(shut.b.units.every((u) => shut.b.known(u))).toBe(true);
     }
   });
+  it('under fog, the blocks of a corps the card identified show as the card shows them; the rest stay plain (b476(3))', () => {
+    const b = new LandBattle(sampleTicket('plains', 1.3, { humanAtt: true, seed: 3 }));
+    b.fog = true;
+    const named = b.ticket.def.forces[0].corps;
+    b.seen = new Set([named]);
+    const theirs = b.units.filter((u) => u.side === 'def');
+    expect(theirs.some((u) => u.corps === named)).toBe(true);
+    expect(theirs.some((u) => u.corps !== named)).toBe(true);
+    for (const u of theirs) expect(b.known(u)).toBe(u.corps === named);
+  });
   it('a block his guns shell from far back is known to him; theirs shelling his from far back is not (b464(2))', () => {
     const t = sampleTicket('plains', 1.3, { humanAtt: true, seed: 3 });
     const gf = t.def.forces.find((f) => f.kind === 'art')!;
@@ -500,6 +510,49 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     expect(b.breaking('att')).toBeGreaterThan(before);
     expect(b.breaking('att')).toBeLessThan(0.75);
     expect(b.view().breaking!.att).toBeCloseTo(b.breaking('att'), 6);
+  });
+
+  it('worn past what it will stand, a small army holds at the brink while most of it is fresh, in contact or not (b476(1), b480)', () => {
+    // A small army, all in contact: the regiments worn are past what the army will stand, but most of it is fresh, so it
+    // holds at the brink.
+    const t = sampleTicket('plains', 1.2, { seed: 99 });
+    t.att.forces = [{ ...t.att.forces.find((f) => f.kind === 'inf')!, divs: 1, share: 1 }];
+    const b = new LandBattle(t);
+    const mine = b.units.filter((x) => x.side === 'att' && x.kind !== 'fort');
+    expect(mine.length).toBeGreaterThanOrEqual(3);
+    expect(mine.length).toBeLessThanOrEqual(LAND.fresh.upTo);
+    for (const u of mine) u.met = true;
+    const all = mine.reduce((a, u) => a + u.power0, 0), share = (us: LandUnit[]): number => us.reduce((a, u) => a + u.power0, 0) / all;
+    const worn: LandUnit[] = [], next: LandUnit[] = [];
+    for (const u of mine) if (share([...worn, u]) < 0.5) worn.push(u); else if (share([...worn, ...next]) <= 0.5) next.push(u);
+    for (const u of worn) u.str = u.str0 * 0.4;
+    expect(b.wornShare('att')).toBeGreaterThan(LAND.spent.att);
+    expect(share(worn)).toBeLessThan(0.5);
+    expect(b.breaking('att')).toBeCloseTo(0.99, 6);
+    // Under nine tenths, a regiment is fresh no longer: now most of it has fought, and it breaks.
+    expect(share([...worn, ...next])).toBeGreaterThan(0.5);
+    for (const u of next) u.str = u.str0 * 0.89;
+    expect(b.breaking('att')).toBeGreaterThanOrEqual(1);
+    // Nor is a whole one that wavers.
+    for (const u of next) { u.str = u.str0; u.state = 'wavering'; }
+    expect(b.breaking('att')).toBeGreaterThanOrEqual(1);
+    for (const u of next) u.state = 'steady';
+    expect(b.breaking('att')).toBeCloseTo(0.99, 6);
+  });
+  it('a larger army holds at the brink only by those not yet in the fight, as before (b480)', () => {
+    const b = new LandBattle(sampleTicket('plains', 1.2, { seed: 99 }));
+    const mine = b.units.filter((x) => x.side === 'att' && x.kind !== 'fort').sort((a, c) => c.power0 - a.power0);
+    expect(mine.length).toBeGreaterThan(LAND.fresh.upTo);
+    const all = mine.reduce((a, u) => a + u.power0, 0);
+    const worn: LandUnit[] = [];
+    for (const u of [...mine].reverse()) { if ((worn.reduce((a, x) => a + x.power0, 0) + u.power0) / all >= 0.45) break; worn.push(u); }
+    for (const u of worn) u.str = u.str0 * 0.6;
+    expect(b.wornShare('att')).toBeGreaterThan(LAND.spent.att);
+    // Most of it not yet in the fight: it holds.
+    expect(b.breaking('att')).toBeCloseTo(0.99, 6);
+    // All of it in contact, most of it whole: in a large army that is an attack called off, and it breaks.
+    for (const u of mine) u.met = true;
+    expect(b.breaking('att')).toBeGreaterThanOrEqual(1);
   });
 
   // The plain attack honours the card (mark 4, after the retest): at the telling odds, where the card gives neither
@@ -736,8 +789,8 @@ describe('the hand-off with a real campaign', () => {
   it('an army that broke pays the rules\' bill for that result, or the field\'s if larger; the winner pays the field\'s (b464)', () => {
     type Rep = NonNullable<ReturnType<typeof handBack>>;
     const lostBy = (x: Rep, s: 'att' | 'def'): number => (s === 'att' ? Math.max(x.attLost, x.attackers.reduce((a, u) => a + u.lost, 0)) : Math.max(x.defLost, x.defenders.reduce((a, u) => a + u.lost, 0)));
-    let n = 0, pursued = 0;
-    for (const seed of [3, 5, 7, 9, 11]) {
+    let n = 0, pursued = 0, same = 0;
+    for (const seed of [3, 5, 7, 9, 11, 13, 15, 17]) {
       const g = playing(seed), twin = playing(seed);
       const { c, r } = anAttack(g);
       const t = landTicket(g, [c], r);
@@ -750,12 +803,13 @@ describe('the hand-off with a real campaign', () => {
       const s = o.broke;
       if (!s) { expect(pursuitLine(t, o, rep)).toBeNull(); continue; }
       expect(s).toBe(o.winner === 'att' ? 'def' : 'att');
-      // SEND THEM IN for the same result: the twin campaign's own attack with the dice landing on the field's R.
+      // SEND THEM IN from the same save: the staff's roll is the odds the beaten army is billed at, never the field's own
+      // (b476(2)). Where the roll gives the same result, the beaten army pays the staff's bill, or the field's if larger.
       const tw = anAttack(twin);
-      const staff = orderAttack(twin, [tw.c], tw.r, o.R)!;
+      const staff = orderAttack(twin, [tw.c], tw.r)!;
       const men = (x: 'att' | 'def'): number => t[x].forces.reduce((a, f) => a + f.men, 0);
       const field = o.lost[s] * men(s);
-      expect(lostBy(rep, s) / Math.max(lostBy(staff, s), field)).toBeCloseTo(1, 1);
+      if (staff.taken === rep.taken) { expect(lostBy(rep, s) / Math.max(lostBy(staff, s), field)).toBeCloseTo(1, 1); same++; }
       // The winner as before: within a fifth of what the field cost it.
       const w = s === 'att' ? 'def' : 'att';
       if (o.lost[w] > 0.01) { const k = lostBy(rep, w) / (o.lost[w] * men(w)); expect(k).toBeGreaterThan(1 / 1.2); expect(k).toBeLessThan(1.2); }
@@ -770,6 +824,7 @@ describe('the hand-off with a real campaign', () => {
       n++;
     }
     expect(n).toBeGreaterThanOrEqual(2);
+    expect(same).toBeGreaterThanOrEqual(2);
     expect(pursued).toBeGreaterThanOrEqual(1);
   });
   it('a broken army of several corps pays the whole of the rules\' bill, though the field hit one corps hardest (b464)', () => {
@@ -789,7 +844,9 @@ describe('the hand-off with a real campaign', () => {
       const o = b.over!;
       if (o.broke !== 'def') continue;
       const rep = handBack(g, cs, r, o)!;
-      const staff = orderAttack(twin, candidates(twin, twin.regions[r.id]), twin.regions[r.id], o.R)!;
+      // SEND THEM IN from the same save: the staff's roll (b476(2)).
+      const staff = orderAttack(twin, candidates(twin, twin.regions[r.id]), twin.regions[r.id])!;
+      if (!staff.taken) continue;
       expect(lost(rep) / lost(staff)).toBeCloseTo(1, 1);
       n++;
     }
@@ -812,7 +869,8 @@ describe('the hand-off with a real campaign', () => {
       const o = b.over!;
       expect(o.how).toBe('withdrew');
       const rep = handBack(g, p.cs, p.r, o)!, q = pick(twin);
-      return { rep, staff: orderAttack(twin, q.cs, q.r, o.R)!, field: o.lost.def * t.def.forces.reduce((a, f) => a + f.men, 0), bar: o.pulled?.bar ?? null, line: pursuitLine(t, o, rep) };
+      // The staff's bill: SEND THEM IN from the same save, at its own roll (b476(2)).
+      return { rep, staff: orderAttack(twin, q.cs, q.r)!, field: o.lost.def * t.def.forces.reduce((a, f) => a + f.men, 0), bar: o.pulled?.bar ?? null, line: pursuitLine(t, o, rep) };
     };
     // Before the armies meet: the field's loss only, and nothing to tell.
     const early = out(0);
