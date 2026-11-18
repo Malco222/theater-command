@@ -20,7 +20,7 @@ export const SEA_CUES: Partial<Record<FieldEvent['what'], string>> = {
 };
 
 /** The loop a ship plays while it does this: a warship under way is its engines (under its wash, which the ship models
- *  key for themselves, destroyers their own wash). */
+ *  key for themselves). A destroyer's is its own wash: seaLoop. */
 export const SEA_LOOPS: Partial<Record<Act, string>> = {
   idle: 'sea_day_loop',
   march: 'ship_engine_loop',
@@ -29,3 +29,13 @@ export const SEA_LOOPS: Partial<Record<Act, string>> = {
   rout: 'ship_engine_loop',
   fight: 'sea_battle_loop',
 };
+
+/**
+ * The loop one piece plays (the sound director, 14:59Z): a destroyer or escort under way is its own wash,
+ * 'destroyer_wash_loop'; every other warship under way its engines; at rest and in the fight the same as any ship.
+ * (A transport's 'ship_steam_engine_loop' waits for transports on the field.)
+ */
+export function seaLoop(cls: string | undefined, act: Act): string {
+  const loop = SEA_LOOPS[act] ?? '';
+  return loop === 'ship_engine_loop' && cls === 'dd' ? 'destroyer_wash_loop' : loop;
+}

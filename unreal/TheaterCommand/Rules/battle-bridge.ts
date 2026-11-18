@@ -129,7 +129,7 @@ import type { BattleReport, Game } from '../../../src/campaign/types';
 import type { FieldBill } from '../../../src/campaign/game';
 import { seaField } from '../../../src/campaign/navy';
 import { attackOutlook, endEve, endHuman, humanUp, onEve, stepAI } from '../../../src/campaign/turn';
-import { SEA_LOOPS } from '../../../src/battle/sea/cues';
+import { seaLoop } from '../../../src/battle/sea/cues';
 import { foughtOf, playedHook, seaAhead, type SeaAhead, type SeaPlayed } from '../../../src/battle/sea/handoff';
 import { SEA } from '../../../src/battle/sea/numbers';
 import { SeaSim, type SeaLosses } from '../../../src/battle/sea/sim';
@@ -175,7 +175,7 @@ function unitOut(u: UnitBase): Record<string, unknown> {
     id: u.id, side: u.side, kind: u.kind, name: u.name, x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10, face: Math.round(u.face * 1000) / 1000,
     str: Math.round(u.str * 1000) / 1000, mor: Math.round(u.mor * 1000) / 1000, state: u.state, figures0: u.figures0, figures: u.figures,
     w: u.w, d: u.d, act: u.act, speed: Math.round(u.speed * 10) / 10, engaged: u.engaged ?? -1, cover: u.cover ?? '',
-    loop: air ? airLoop(air) : (u.extra as { cls?: string } | undefined)?.cls ? SEA_LOOPS[u.act] ?? '' : town ? TOWN.loop : loops?.[u.act] ?? '',
+    loop: air ? airLoop(air) : (u.extra as { cls?: string } | undefined)?.cls ? seaLoop((u.extra as { cls?: string }).cls, u.act) : town ? TOWN.loop : loops?.[u.act] ?? '',
     ...(drops ? { drops: { takes: drops.takes, every: drops.every } } : {}),
     // A land block's name for a card and what it belongs to under it ("11th Infantry" over "I Corps"), beside its full name.
     ...(land.short ? { short: land.short, parent: land.parent } : {}),

@@ -13,7 +13,7 @@ import { SEA_CLASSES, type SeaClass, type SeaShips, type SeaUnit } from '../src/
 import { foughtOf } from '../src/battle/sea/handoff';
 import { PRACTICE, practiceTicket } from '../src/battle/sea/practice';
 import { headCount, hurtAfloat, ofFleet, repairLines, theFleet } from '../src/battle/sea/words';
-import { SEA_CUES } from '../src/battle/sea/cues';
+import { SEA_CUES, seaLoop } from '../src/battle/sea/cues';
 
 const HOME: PlainFleet = { name: 'Home Fleet', nat: 'UK', ships: { bb: 2, cv: 1, ca: 3, dd: 8 } };
 const BATTLE: PlainFleet = { name: 'Battle Fleet', nat: 'GER', ships: { bb: 2, ca: 3, dd: 12 } };
@@ -514,6 +514,9 @@ describe('what the 3D game and the sound read', () => {
     // Brian cut the horn (14:49Z): a fleet breaking off names no sound until a new one passes his ear.
     expect(cues.has('ship_horn')).toBe(false);
     expect(Object.values(SEA_CUES)).not.toContain('ship_horn');
+    // Under way a destroyer is its own wash, every other warship its engines (the sound director, 14:59Z).
+    expect([seaLoop('dd', 'march'), seaLoop('dd', 'run'), seaLoop('bb', 'march'), seaLoop('cv', 'turn'), seaLoop('dd', 'fight'), seaLoop('ca', 'idle')])
+      .toEqual(['destroyer_wash_loop', 'destroyer_wash_loop', 'ship_engine_loop', 'ship_engine_loop', 'sea_battle_loop', 'sea_day_loop']);
     // A battleship's box is one hull; four destroyers in line ahead, three lengths apart.
     const bb = piece(sim, 'att', 'bb'), dd = sim.units.find((u) => u.extra.cls === 'dd' && u.extra.ships0 === 4)!;
     expect(bb.d).toBe(SEA.classes.bb.len);
