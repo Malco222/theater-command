@@ -400,8 +400,9 @@ describe('one war at the history stop, nobody playing', () => {
     // or 1943, and four landed in France at all. The realism version (its crowded airfields, ruling 229) moved the war
     // again. Seed 48 on it: the beaches of France refuse America's corps in June and July 1944, and its staff lands them
     // on the Cotentin in July. Of the 64 wars measured, seeds 17 to 80, four tell this story: seeds 30, 40, 48 and 58,
-    // landing at Rouen, Marseille, the Cotentin and Brittany.)
-    const g = startOpen(createGame(48, null));
+    // landing at Rouen, Marseille, the Cotentin and Brittany. The realism audit's desert row (b420) moved seeds 30, 40
+    // and 48; seed 58 still tells it.)
+    const g = startOpen(createGame(58, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
     const refused = new Set<number>();
