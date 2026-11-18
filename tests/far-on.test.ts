@@ -157,11 +157,13 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
 
   it("gives the far side's navies their yards, so that Japan can lay a keel (ruling b445)", () => {
     // The director's ruling of 18 November 2026: "a Japan that can lay no keel is a fault, not a balance choice". The
-    // arsenal's 47 yards ended at the Americas; the eleven of the planner's far-yards.md are laid with them.
+    // arsenal's 47 yards ended at the Americas; the twelve of the planner's far-yards.md are laid with them. The
+    // historian's marks (the largest ship each yard built in the war years): Vladivostok at 2 for the two cruisers
+    // Dalzavod completed, Hong Kong's merchant yards at 1 for Britain, and none at Singapore, a repair base.
     const yards = FW.arsenal.yards as Record<string, number>;
-    expect(yards).toEqual({ Hiroshima: 3, Yokohama: 3, Nagasaki: 3, Osaka: 3, Kyoto: 1, Sydney: 1, Melbourne: 1, Auckland: 1, Bangkok: 1, Abadan: 1, Vladivostok: 1 });
+    expect(yards).toEqual({ Hiroshima: 3, Yokohama: 3, Nagasaki: 3, Osaka: 3, Kyoto: 1, Sydney: 1, Melbourne: 1, Auckland: 1, Bangkok: 1, Abadan: 1, Vladivostok: 2, 'Hong Kong': 1 });
     const g = grand();
-    const HOME: Record<string, string> = { Hiroshima: 'JAP', Yokohama: 'JAP', Nagasaki: 'JAP', Osaka: 'JAP', Kyoto: 'JAP', Sydney: 'AUS', Melbourne: 'AUS', Auckland: 'NZL', Bangkok: 'THA', Abadan: 'IRN', Vladivostok: 'SOV' };
+    const HOME: Record<string, string> = { Hiroshima: 'JAP', Yokohama: 'JAP', Nagasaki: 'JAP', Osaka: 'JAP', Kyoto: 'JAP', Sydney: 'AUS', Melbourne: 'AUS', Auckland: 'NZL', Bangkok: 'THA', Abadan: 'IRN', Vladivostok: 'SOV', 'Hong Kong': 'UK' };
     for (const [name, level] of Object.entries(yards)) {
       const r = g.byName[name];
       expect(r, name).toBeDefined();
@@ -170,7 +172,8 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
     }
     // The older chart's yards stand as they were.
     expect([ARSENAL.yards.Hamburg, ARSENAL.yards.Norfolk, ARSENAL.yards.Lima]).toEqual([3, 3, 1]);
-    expect(Object.keys(ARSENAL.yards).length).toBe(47 + 11);
+    expect(Object.keys(ARSENAL.yards).length).toBe(47 + 12);
+    expect(ARSENAL.yards.Singapore).toBeUndefined();
     // Main's own rule (arsenal.test.ts), on the whole world: every nation with a navy on the first day has somewhere to
     // build a destroyer. It failed on Japan, Australia, New Zealand, Thailand and Iran.
     const offer = (nat: string, key: string) => offers(g, nat).find((o) => o.key === key)!;

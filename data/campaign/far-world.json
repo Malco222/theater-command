@@ -8,7 +8,7 @@
   "historian/manpower-213.json": "2026-11-17T18:10Z",
   "pacific-planner/runs-219/levy218-seats.json": "2026-11-17T18:57Z",
   "pacific-planner/20-trial/base-seats.json": "2026-11-17T17:59Z",
-  "pacific-planner/far-yards.md": "2026-11-18T03:39Z"
+  "pacific-planner/far-yards.md": "2026-11-18T03:44Z"
  },
  "_draft": "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
  "grand": {
@@ -2016,7 +2016,8 @@
    "Auckland": 1,
    "Bangkok": 1,
    "Abadan": 1,
-   "Vladivostok": 1
+   "Vladivostok": 2,
+   "Hong Kong": 1
   }
  },
  "league": {
