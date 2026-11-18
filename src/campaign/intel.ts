@@ -577,7 +577,7 @@ function theftBar(g: Game, nat: string, a: Agent, r: Region, x: PlanItem): strin
   if (!planRules(g)) return `Every country here ${hull ? 'draws' : 'develops'} its own ${W.many}.`;
   if (PLANS.great.includes(nat)) return hull ? `${N.name} lays down ${W.many} on its own designs.` : `${N.name} develops its own ${W.many}.`;
   const from = plansFrom(g, nat, x);
-  if (from !== null) return `${cap(W.who)} already ${doesWith(x)} on ${g.nations[from]?.adj ?? from} designs.`;
+  if (from !== null) return `${cap(W.who)} already ${W.verbs} ${W.many} on ${g.nations[from]?.adj ?? from} designs.`;
   if (PLANS.kin[nat] !== undefined) return whyNoTechPlans(g, nat, x);
   if (!host?.alive || !PLANS.great.includes(r.ctrl)) return `Plans of ${W.many} are kept by the great powers, in ${P.kept}. Send the agent to one.`;
   if (r.owner !== r.ctrl) return `${host.name} keeps its plans at home, in ${P.home}: ${r.name} is ground it has taken.`;

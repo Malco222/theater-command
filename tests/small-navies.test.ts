@@ -349,7 +349,7 @@ describe('rider b542: four-engined bombers, jets, rocket artillery and guided we
     expect(hasTech(g, 'ESP', 'jets')).toBe(true);
     expect(plansFrom(g, 'ESP', 'jets')).toBe('GER');
     expect(g.headlines.some((h) => /copies the German jet fighter plans at Berlin and gets them out\. Your air force can now fly jet fighters on German designs\.$/.test(h.text))).toBe(true);
-    expect(whyNotMission(g, 'ESP', big.id, 'jetPlans')).toBe('Your air force already fly jet fighters on German designs.');
+    expect(whyNotMission(g, 'ESP', big.id, 'jetPlans')).toBe('Your air force already flies jet fighters on German designs.');
   });
 
   it('every nation but the great powers has a spy team that works the Intelligence branch in order', () => {

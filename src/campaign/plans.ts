@@ -39,15 +39,16 @@ export const buildsOwn = (nat: string): boolean => PLANS.great.includes(nat) || 
 /**
  * The words for each weapon: one and many, where a great power keeps its plans ('yard': the capital and the great
  * naval yards; 'works': the capital and the great aircraft works, of the wing named; 'capital': the capital alone),
- * and who can use them once they are held, and how ('verb' and 'many': "lay down battleships").
+ * and who can use them once they are held, and how ('verb' and 'many': "lay down battleships"; 'verbs' agrees with
+ * 'who': "your air force flies").
  */
-export const PLAN_WORDS: Record<PlanItem, { one: string; many: string; place: 'yard' | 'works' | 'capital'; wing?: 'ftr' | 'bmr'; who: string; verb: string }> = {
-  bb: { one: 'battleship', many: 'battleships', place: 'yard', who: 'your shipyards', verb: 'lay down' },
-  cv: { one: 'carrier', many: 'aircraft carriers', place: 'yard', who: 'your shipyards', verb: 'lay down' },
-  heavybombers: { one: 'four-engined bomber', many: 'four-engined bombers', place: 'works', wing: 'bmr', who: 'your air force', verb: 'fly' },
-  jets: { one: 'jet fighter', many: 'jet fighters', place: 'works', wing: 'ftr', who: 'your air force', verb: 'fly' },
-  rockets: { one: 'rocket artillery', many: 'rocket artillery', place: 'capital', who: 'your army', verb: 'fire' },
-  guided: { one: 'guided weapon', many: 'guided weapons', place: 'capital', who: 'you', verb: 'launch' },
+export const PLAN_WORDS: Record<PlanItem, { one: string; many: string; place: 'yard' | 'works' | 'capital'; wing?: 'ftr' | 'bmr'; who: string; verb: string; verbs: string }> = {
+  bb: { one: 'battleship', many: 'battleships', place: 'yard', who: 'your shipyards', verb: 'lay down', verbs: 'lay down' },
+  cv: { one: 'carrier', many: 'aircraft carriers', place: 'yard', who: 'your shipyards', verb: 'lay down', verbs: 'lay down' },
+  heavybombers: { one: 'four-engined bomber', many: 'four-engined bombers', place: 'works', wing: 'bmr', who: 'your air force', verb: 'fly', verbs: 'flies' },
+  jets: { one: 'jet fighter', many: 'jet fighters', place: 'works', wing: 'ftr', who: 'your air force', verb: 'fly', verbs: 'flies' },
+  rockets: { one: 'rocket artillery', many: 'rocket artillery', place: 'capital', who: 'your army', verb: 'fire', verbs: 'fires' },
+  guided: { one: 'guided weapon', many: 'guided weapons', place: 'capital', who: 'you', verb: 'launch', verbs: 'launch' },
 };
 
 /** "lay down battleships". */
