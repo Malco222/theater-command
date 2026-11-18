@@ -14,7 +14,7 @@ import { blocked, blowBridges } from './rivers';
 import { groundRules, isFoot } from './ground';
 import { SUPPORT } from './support';
 import { aiBridges, aiEngineers } from './engineers';
-import { NAVY, canSailTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, useLift } from './navy';
+import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, useLift } from './navy';
 import { shoreAI } from './fleets';
 import { shoreOpen } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
@@ -1339,11 +1339,16 @@ function reinforce(g: Game, nat: string): void {
     .filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !c.hold && !c.airborne && !c.town && c.joint === undefined && c.supplied && c.str >= 0.7 && c.ap >= c.apMax)
     .filter((c) => homeland(g.regions[c.reg], nat) && c.reg !== quay && !lone(c))
     .sort((a, b) => atkPower(g, b) - atkPower(g, a) || a.id - b.id);
-  // No harbour at home with a way open to the theatre: round the Cape (b460).
+  // No harbour at home with a way open to the theatre: round the Cape (b460). Only while a harbour at home still
+  // opens on a sea its ships can use: a homeland whose own waters are shut, or whose harbours are all lost, sends
+  // nobody. (The two months at sea take in the journey to the quay.)
   const harbours = g.regions.filter((r) => homeland(r, nat) && r.port && r.ctrl === nat);
-  if (R.cape > 0 && !to.some((p) => harbours.some((r) => way(r, p)))) {
+  const sails = harbours.some((r) => r.seas.some((z) => !closedTo(g, z, nat)));
+  if (R.cape > 0 && sails && !to.some((p) => harbours.some((r) => way(r, p)))) {
     for (const c of pool) {
       if (!to.length || mayLeave(g, nat) < 1 || liftLeft(g, nat) < 1) break;
+      // (Looked at again for each: the one the corps before it leaves alone on the coast watch stays.)
+      if (lone(c)) continue;
       putToSea(g, c, to[0], R.cape);
       useLift(g, nat);
       to = short();
@@ -1353,6 +1358,7 @@ function reinforce(g: Game, nat: string): void {
   const waiting: Corps[] = [];
   for (const c of pool) {
     if (!to.length || mayLeave(g, nat) < 1 || liftLeft(g, nat) < 1) break;
+    if (lone(c)) continue;
     const here = g.regions[c.reg];
     const dest = here.port ? to.find((p) => room(p) && way(here, p) && shipMove(g, c, p)) : undefined;
     if (!dest) { waiting.push(c); continue; }

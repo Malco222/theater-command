@@ -8,7 +8,7 @@ import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, allied, atWar, bloc, capture, declareWar, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, warning } from './game';
+import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, warning } from './game';
 import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
@@ -640,6 +640,7 @@ function fire(g: Game, e: DiploEvent): boolean {
       // A country already in the war is no longer Moscow's to take, nor one that stands in an alliance, nor the player's own.
       if (!n?.alive || n.atWar.length || bloc(n) || playersOwn(g, id)) continue;
       for (const c of g.corps.filter((c) => c.nat === id)) removeCorps(g, c);
+      endVoyages(g, id);
       recordFall(g, id, e.annex.by, 'annexed');
       for (const r of g.regions) if (r.owner === id) transfer(g, r, e.annex.by);
       n.alive = false;
@@ -751,6 +752,7 @@ function fire(g: Game, e: DiploEvent): boolean {
     const first = (list: string[]): string | undefined => list.find((id) => live(id) && (!open || stake(id) > 0));
     const held = new Set(g.regions.filter((r) => r.ctrl === X.id).map((r) => r.id));
     for (const c of g.corps.filter((c) => c.nat === X.id)) removeCorps(g, c);
+    endVoyages(g, X.id);
     fleetsOnFall(g, X.id);
     airOnFall(g, X.id);
     // Where another army stands on the country's ground, that ground is its own to hold: the terms divide the rest.

@@ -2,7 +2,11 @@
 // that leaves Britain by sea, and at the looser stops of the history dial the staff sails its spare field corps to
 // Egypt while the desert's threat outweighs home's. 1c: the desert's Commonwealth rows of the grand campaign.
 import { describe, expect, it } from 'vitest';
-import { addCorps, capture, createGame, declareWar, removeCorps, startPhase, voyagesOf } from '../src/campaign/game';
+import { addCorps, capitulate, capture, createGame, declareWar, fieldArmy, removeCorps, startPhase, voyagesOf } from '../src/campaign/game';
+import { upkeep } from '../src/campaign/economy';
+import { menSpare } from '../src/campaign/manpower';
+import { eliteCount } from '../src/campaign/traits';
+import { closedTo } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { runAI } from '../src/campaign/ai';
 import { setStop } from '../src/campaign/history';
@@ -174,6 +178,56 @@ describe('the sailing to Egypt (ruling 229, 1a)', () => {
     expect(landed.length).toBeGreaterThan(0);
   });
 
+  it('corps at sea stay on the army\'s books: its field army, its pay, its men and its cap on special formations', () => {
+    const g = grand(3, 12);
+    push(g, 5);
+    runAI(g, 'UK');
+    const sea = voyagesOf(g, 'UK');
+    expect(sea.length).toBeGreaterThan(0);
+    const all = [...g.corps.filter((c) => c.nat === 'UK' && !c.dead), ...sea.map((v) => v.corps)];
+    expect(fieldArmy(g, 'UK')).toBeCloseTo(all.reduce((s, c) => s + c.divs * c.str, 0), 9);
+    const paid = upkeep(g, 'UK').filter((l) => l.key.startsWith('corps:')).reduce((s, l) => s + (l.count ?? 0), 0);
+    expect(paid).toBe(all.reduce((s, c) => s + c.divs, 0));
+    const v = sea[0].corps, elite = eliteCount(g, 'UK'), spare = menSpare(g, 'UK');
+    expect(Number.isFinite(spare)).toBe(true);
+    v.elite = 'dominion';
+    v.str -= 0.25;
+    expect(eliteCount(g, 'UK')).toBe(elite + 1);
+    expect(menSpare(g, 'UK')).toBeCloseTo(spare - 0.25 * v.divs, 6);
+  });
+
+  it('a Britain that falls loses its corps at sea with the rest of its army, and a freed one lands none of them', () => {
+    const g = grand(3, 12);
+    push(g, 5);
+    runAI(g, 'UK');
+    expect(voyagesOf(g, 'UK').length).toBeGreaterThan(0);
+    const ids = voyagesOf(g, 'UK').map((v) => v.corps.id);
+    capitulate(g, 'UK', 'GER');
+    expect(voyagesOf(g, 'UK')).toEqual([]);
+    expect(g.atSea).toBeUndefined();
+    g.nations.UK.alive = true;
+    g.turn = 14;
+    startPhase(g, 'UK');
+    expect(g.corps.some((c) => ids.includes(c.id))).toBe(false);
+  });
+
+  it('a Britain whose own waters are shut sends nobody round the Cape', () => {
+    const run = (shut: boolean): number => {
+      const g = grand(3, 12);
+      push(g, 5);
+      if (shut) {
+        const seas = new Set(g.regions.filter((r) => homeland(r, 'UK') && r.port).flatMap((r) => r.seas));
+        const model = g.fleets.find((f) => f.nat === 'ITA')!;
+        for (const z of seas) g.fleets.push({ ...model, id: 9000 + z, ships: { ...model.ships, bb: 60 }, base: -1, home: z, zone: z, stance: 'patrol' as const });
+        for (const z of seas) expect(closedTo(g, z, 'UK')).toBe(true);
+      }
+      runAI(g, 'UK');
+      return voyagesOf(g, 'UK').length;
+    };
+    expect(run(false)).toBeGreaterThan(0);
+    expect(run(true)).toBe(0);
+  });
+
   it('nobody goes round the Cape at stops 1 and 2, nor for a player\'s Britain', () => {
     for (const stop of [1, 2]) {
       const g = grand(stop, 12);
@@ -233,6 +287,27 @@ describe('the desert rows of the grand campaign (ruling 229, 1c)', () => {
     // XIII and XXX Corps bring 1 division each in the grand campaign, 2 in history's.
     expect(row('XIII Corps, Eighth Army')[6].openDivs).toBe(1);
     expect(row('XXX Corps, Eighth Army')[6].openDivs).toBe(1);
+  });
+
+  it('the New Zealanders stood in for leave Egypt when W Force lands, and a player is told where his division has gone', () => {
+    for (const human of [null, 'UK']) {
+      const g = startOpen(createGame(3, human));
+      setStop(g, 3, true);
+      g.turn = 19;
+      declareWar(g, 'ITA', 'UK');
+      startPhase(g, 'UK');
+      const nz = g.corps.find((c) => c.nat === 'UK' && c.name === '2nd New Zealand Division' && !c.dead);
+      expect(nz, 'the New Zealanders land in Egypt first').toBeDefined();
+      const from = g.regions[nz!.reg].name;
+      g.turn = 20;
+      declareWar(g, 'ITA', 'GRE');
+      const seen = g.headlines.length;
+      startPhase(g, 'UK');
+      expect(g.corps.some((c) => c.name.startsWith('W Force') && !c.dead), 'W Force lands').toBe(true);
+      expect(g.corps.some((c) => c.id === nz!.id)).toBe(false);
+      const told = g.headlines.slice(seen).filter((h) => h.text.startsWith('2nd New Zealand Division leaves'));
+      expect(told.map((h) => h.text)).toEqual(human ? [`2nd New Zealand Division leaves ${from} to sail with W Force (New Zealand Division and 1st Armoured Brigade).`] : []);
+    }
   });
 
   it('the Tobruk garrison lands at the nearest harbour its side holds when Tobruk is lost, and holds nothing in place there', () => {

@@ -243,6 +243,8 @@ export const traitSealift = (nat: string): number => traitsOf(nat).reduce((s, t)
 export function eliteCount(g: Game, nat: string): number {
   let k = g.nations[nat].queue.filter((b) => b.elite).length;
   for (const c of g.corps) if (c.nat === nat && !c.dead && c.elite) k++;
+  // (Corps at sea on a long passage still count against the cap.)
+  for (const v of g.atSea ?? []) if (v.nat === nat && v.corps.elite) k++;
   return k;
 }
 

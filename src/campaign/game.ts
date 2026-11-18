@@ -502,6 +502,8 @@ export function armySize(g: Game, nat: string): number {
 export function fieldArmy(g: Game, nat: string): number {
   let s = 0;
   for (const c of g.corps) if (c.nat === nat) s += c.divs * c.str;
+  // (Corps at sea on a long passage are still the nation's army: ruling 229, part 1.)
+  for (const v of g.atSea ?? []) if (v.nat === nat) s += v.corps.divs * v.corps.str;
   return s;
 }
 
@@ -2639,6 +2641,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
     if (armistice && at.vichy && at.overseas && at.ctrl === 'FRA') { c.nat = 'VIC'; c.hold = true; continue; }
     removeCorps(g, c);
   }
+  endVoyages(g, nat);
   fleetsOnFall(g, nat);
   airOnFall(g, nat);
   const pact = g.nations.SOV.alive && !atWar(g, 'SOV', by);
@@ -2999,6 +3002,13 @@ function fallbackHarbour(g: Game, nat: string, at: Region): Region | null {
 /** The corps a country has at sea on a long passage. */
 export const voyagesOf = (g: Game, nat: string): Voyage[] => (g.atSea ?? []).filter((v) => v.nat === nat);
 
+/** A country that falls loses its corps at sea with the rest of its army: none of them lands if it is freed later. */
+export function endVoyages(g: Game, nat: string): void {
+  if (!g.atSea?.length) return;
+  g.atSea = g.atSea.filter((v) => v.nat !== nat);
+  if (!g.atSea.length) delete g.atSea;
+}
+
 /**
  * Puts a corps to sea on a long passage (ruling 229, part 1; the design director's b460: the Cape): it leaves the map
  * from where it stands in its own country, with no loss on the way, and lands in `months` months at `to`, by the
@@ -3079,7 +3089,10 @@ function expeditions(g: Game, nat: string): void {
         // And it waits for its own country to be in that war: no army turns up in a war its country is not fighting.
         if (!o.war.includes(nat) && !atWar(g, nat, o.war[0]) && !atWar(g, nat, o.war[1])) return;
         // (A call-up is counted from the war's start, but never from before the month the row is first seen: a game
-        // saved before ruling 229 counts it from the month it is loaded, and loses none of it for being late.)
+        // saved before ruling 229 counts it from the month it is loaded, and loses none of it for being late. A
+        // country overrun before its call-up was ever counted never had it: freed, it returns with its liberation
+        // corps alone, ruling 229, 2b.)
+        if (fromWar && g.flags[`due:${i}`] === undefined && g.nations[nat].fellOn) { g.flags[`sent:${i}`] = 2; return; }
         due = g.flags[`due:${i}`] ??= fromWar ? Math.max(warBegan(g, o.war), g.turn - 1) + o.after : g.turn;
         if (g.turn < due) return;
       }
@@ -3139,7 +3152,11 @@ function expeditions(g: Game, nat: string): void {
         if (r2[6]?.unless !== row[2] || r2[1] !== nat) return;
         if (!g.flags[`sent:${j}`]) g.flags[`sent:${j}`] = 2;
         const x = g.corps.find((u) => u.nat === nat && !u.dead && u.name === r2[2]);
-        if (x) { removeCorps(g, x); g.supplyDirty = true; }
+        if (!x) return;
+        // (The player is told where his corps has gone: it sails with the force that has landed.)
+        if (nat === g.human) headline(g, 'event', `${x.name} leaves ${g.regions[x.reg].name} to sail with ${/^(the |[A-Z] Force|Creforce)/i.test(row[2]) ? '' : 'the '}${row[2]}.`, nat, reg.id);
+        removeCorps(g, x);
+        g.supplyDirty = true;
       });
     }
     if (o.from && !Array.isArray(o.from)) {

@@ -208,4 +208,24 @@ describe('the Balkan armies counted from the war\'s start', () => {
     for (const t of [7, 8]) { h.turn = t; startPhase(h, 'YUG'); }
     expect(h.corps.filter((c) => c.nat === 'YUG' && !c.dead).length).toBe(before);
   });
+
+  it('a country overrun before its call-up was ever counted never has it: freed, it comes back with its liberation corps alone (2b)', () => {
+    const g = grand(null, 6);
+    declareWar(g, 'ITA', 'YUG');
+    fall(g, 'YUG');
+    g.nations.YUG.alive = true;
+    const count = (): number => g.corps.filter((c) => c.nat === 'YUG' && !c.dead).length;
+    const start = count();
+    for (const t of [7, 8, 9]) { g.turn = t; startPhase(g, 'YUG'); }
+    expect(count()).toBe(start);
+    for (const { i } of yugo) expect(g.flags[`sent:${i}`]).toBe(2);
+    // One counted before its country fell keeps the months it was given.
+    const k = grand(null, 6);
+    declareWar(k, 'ITA', 'YUG');
+    k.turn = 6; startPhase(k, 'YUG');
+    fall(k, 'YUG');
+    k.nations.YUG.alive = true;
+    k.turn = 7; startPhase(k, 'YUG');
+    expect(yugo.filter(({ i }) => k.flags[`sent:${i}`] === 1)).toHaveLength(2);
+  });
 });
