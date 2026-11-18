@@ -22,6 +22,7 @@
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
 import { GUNS_ALONE, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, type Assessment } from './game';
+import { farGuard } from './economy';
 import { armyOf } from './joint';
 import { closedTo, seaOpenAt } from './navy';
 import { storyFallen } from './stories';
@@ -141,13 +142,14 @@ export const townBonus = (g: Game, r: Region, eased = 0): number => 1 + wallsOf(
 
 /**
  * The town's own guard, in divisions' worth: depot troops, police and militia. It stands only while the place is
- * held by the country it belongs to, and a small country's towns have small guards.
+ * held by the country it belongs to, and a small country's towns have small guards. (On the far side's colonial
+ * ground the guard is a tenth, and none at a post whose record garrison is its whole defence: economy.ts farGuard.)
  */
 export function guardOf(g: Game, r: Region): number {
   if (g.flags.sieges !== 1 || r.ctrl !== r.owner) return 0;
   const n = g.nations[r.owner];
   if (!n || !n.alive) return 0;
-  const full = Math.min(SIEGE.guard[townSize(g, r)], SIEGE.guardShare * Math.max(n.armyPeak, armySize(g, n.id)));
+  const full = Math.min(SIEGE.guard[townSize(g, r)], SIEGE.guardShare * Math.max(n.armyPeak, armySize(g, n.id))) * farGuard(r);
   const left = full * (1 - clamp((g.flags[`guard:${r.id}`] ?? 0) / 100, 0, 1));
   return left > 0.02 ? left : 0;
 }
