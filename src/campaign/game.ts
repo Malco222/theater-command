@@ -3178,6 +3178,8 @@ function expeditions(g: Game, nat: string): void {
       draw(g, o.of ?? nat, o.from, row[4], here ? c : undefined);
     }
     if (o.until) g.flags[`lent:${i}`] = c.id;
+    // (Lent to a war for a strip of frontier, it stays on that war's front while the war lasts: b502(c), ai.ts.)
+    if (o.stay) g.flags[`stay:${c.id}`] = 1;
     const the = /^(the |[A-Z] Force|Creforce)/i.test(c.name) ? '' : 'the ';
     // Troops come ashore at a port across the sea: a colony's, or a foreign one for a nation that lives by its ships.
     // An army that marched there, or is forming up at home, simply arrives.

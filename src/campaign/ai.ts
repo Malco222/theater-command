@@ -77,6 +77,11 @@ let single = false;
 let waves = 2;
 /** Set while the army being run fights a war for a strip of frontier: only corps this many marches from the front close up to it. */
 let near: number | null = null;
+/**
+ * A corps lent to a war for a strip of frontier ('stay' on its row: the Winter War's 13th Army, b502(c)) stays on that
+ * war's front while it lasts: the staff's reserves and its massing leave it where it stands, and it fights there.
+ */
+const stays = (g: Game, c: Corps): boolean => near !== null && g.flags[`stay:${c.id}`] === 1;
 /** True while an army overseas is fighting its staff's main effort: the force massed opposite the target is there to attack it. */
 let striking = false;
 /** Set while the army being run has orders to leave the theatre once the front there has gone. */
@@ -625,7 +630,7 @@ function mass(g: Game, nat: string, ph: PlanPhase | null, watchOnly = false): vo
     const d = hops(g, r.id, (x) => allied(g, nat, ctl(g, x)));
     const first = door?.name === name;
     const pool = g.corps
-      .filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && !KIND[c.kind].mobile && c.ap > 0 && !massed.has(c.id) && c.reg !== r.id && d[c.reg] > 0 && d[c.reg] <= 3 && (own(g.regions[c.reg]).length >= 2 || (first && spare(c, 2))))
+      .filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && !KIND[c.kind].mobile && c.ap > 0 && !massed.has(c.id) && !stays(g, c) && c.reg !== r.id && d[c.reg] > 0 && d[c.reg] <= 3 && (own(g.regions[c.reg]).length >= 2 || (first && spare(c, 2))))
       .sort((a, b) => d[a.reg] - d[b.reg] || atkPower(g, b) - atkPower(g, a));
     for (const c of pool) {
       if (have >= count || friendlyUnits(g, r, nat).length >= STACK) break;
@@ -2094,7 +2099,7 @@ function defend(g: Game, nat: string, line = true): void {
   const lost = (r: Region): boolean => allied(g, nat, r.owner) || r.prev === nat;
   // A slow command needs a month to organise any answer to ground it has just lost.
   const late = (r: Region): boolean => n.slowCommand && r.since >= g.turn;
-  const movers = g.corps.filter((c) => c.nat === nat && !c.hold && !c.dyle && c.kind !== 'fort' && c.ap > 0);
+  const movers = g.corps.filter((c) => c.nat === nat && !c.hold && !c.dyle && c.kind !== 'fort' && c.ap > 0 && !stays(g, c));
   for (const c of movers) {
     if (c.dead || c.ap <= 0 || massed.has(c.id)) continue;
     const here = g.regions[c.reg];
