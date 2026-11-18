@@ -216,6 +216,12 @@ describe('FIRST COMMAND, played', () => {
     expect(lessonReady(g, b, end)).toBe(false);
     month(g);
     expect(lessonReady(g, b, end)).toBe(true);
+    // The first month's end, read as the second opens, is not its deed: lesson 5 was not yet due then (the review of 85.1).
+    expect(lessonDeed(g, b, 'end', { ended: g.turn - 1 })).toEqual([]);
+    expect(lessonDue(g, b, end, {})).toBe(true);
+    // The second month's end is.
+    month(g);
+    expect(lessonDeed(g, b, 'end', { ended: g.turn - 1 }).map((l) => l.id)).toEqual(['end']);
   });
 
   it('names for lesson 2 at peace an army that does not stand in the capital', () => {

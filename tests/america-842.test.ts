@@ -179,11 +179,15 @@ describe('across an ocean an air group goes by sea, one a month', () => {
     const grp = at(g, 'New York')[0];
     const page = airPage(g, `rebase:${grp.id}`)!;
     expect(page.sections.map((s) => s.heading)).toEqual(['AIRFIELDS', 'ACROSS THE OCEAN, BY SEA']);
-    const row = page.sections[1].rows.find((r) => r.buttons[0].ok)!;
+    // (Britain's fields, across the Atlantic: the heading holds America's own far islands too.)
+    const row = page.sections[1].rows.find((r) => r.buttons[0].ok && g.byName[r.title]?.owner === 'UK')!;
+    expect(row).toBeDefined();
+    expect(page.sections[1].rows.some((r) => g.byName[r.title]?.owner === 'USA')).toBe(true);
     expect(row.buttons[0].label).toBe('SHIP IT HERE');
     const res = airAct(g, row.buttons[0].act)!;
     expect(res.ok).toBe(true);
     expect(res.note).toBe(`The group is shipped across the ocean to ${row.title}.`);
+    expect(g.regions[grp.base].owner).toBe('UK');
     expect(overOcean(g, grp, g.byName['New York'])).toBe(true);
     // At peace the heading lists America's own far islands alone.
     const p = seat('USA');

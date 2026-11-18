@@ -45,14 +45,14 @@ export const goalEnds = (goal: Goal): number => goal.by ?? goal.until ?? (goal.o
 /** The month a war between two nations began, either side declaring, or undefined if it has not. */
 const warSince = (g: Game, a: string, b: string): number | undefined => g.flags[`war:${a}:${b}`] ?? g.flags[`war:${b}:${a}`];
 
-/**
- * The last month that counts toward a goal in this campaign: the book's, unless its clock is a war (see Goal.war) that
- * came later than history's, or has not come at all (Infinity: nothing is decided yet).
- */
 /** True when the war a goal's clock runs from has come and gone: the foe has fallen, or made peace. */
 const warOver = (g: Game, nat: string, goal: Goal): boolean =>
   !!goal.war && warSince(g, nat, goal.war.with) !== undefined && !g.nations[nat].atWar.includes(goal.war.with);
 
+/**
+ * The last month that counts toward a goal in this campaign: the book's, unless its clock is a war (see Goal.war) that
+ * came later than history's, or has not come at all (Infinity: nothing is decided yet).
+ */
 export function goalEndsIn(g: Game, nat: string, goal: Goal): number {
   if (!goal.war || goal.until === undefined) return goalEnds(goal);
   const since = warSince(g, nat, goal.war.with);

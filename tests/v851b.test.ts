@@ -9,8 +9,9 @@
 import { describe, expect, it } from 'vitest';
 import { AIR, airBases, airFleetsOf, km, moveTargets, overOcean, whyNotMoveAir } from '../src/campaign/air';
 import { DIPLOMACY, monthlyDiplomacy } from '../src/campaign/diplomacy';
-import { addCorps, atWar, createGame } from '../src/campaign/game';
-import { GOALS, judgeGoals, openGoals } from '../src/campaign/goals';
+import { startDomination } from '../src/campaign/domination';
+import { addCorps, atWar, capitulate, createGame } from '../src/campaign/game';
+import { GOALS, goalEndsIn, judgeGoals, openGoals } from '../src/campaign/goals';
 import { freshNotebook, lessonsOn, notesWanted, readNotebook } from '../src/campaign/lessons';
 import { NAVY, coastReport, crossingsOf, sail } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
@@ -93,6 +94,21 @@ describe('"Not one step back" when the war with Germany ends early (b434)', () =
     g.nations.SOV.atWar = g.nations.SOV.atWar.filter((e) => e !== 'GER');
     expect(judgeGoals(g, 'SOV').filter((x) => x.key === 'short').map((x) => x.won)).toEqual([true]);
   });
+
+  it('runs its clock from the last act when that is where the war with Germany comes (the review of 85.1)', () => {
+    // France and Britain beaten before Germany ever turns east: the great powers left are at peace, and the Soviet
+    // player opens the last act.
+    const g = playing('SOV');
+    openGoals(g, 'SOV', 1);
+    const goal = GOALS.SOV.short!;
+    capitulate(g, 'FRA', 'GER');
+    capitulate(g, 'UK', 'GER');
+    expect(goalEndsIn(g, 'SOV', goal)).toBe(Infinity);
+    expect(startDomination(g, 'SOV')).toBe(true);
+    expect(g.nations.SOV.atWar).toContain('GER');
+    expect(g.flags['war:SOV:GER'] ?? g.flags['war:GER:SOV']).toBe(g.turn);
+    expect(goalEndsIn(g, 'SOV', goal)).toBe(goal.until! + Math.max(0, g.turn - goal.war!.from));
+  });
 });
 
 describe('the coast watch after the landing has come (ruling 229(e))', () => {
@@ -110,19 +126,28 @@ describe('the coast watch after the landing has come (ruling 229(e))', () => {
     const seen = (): number => g.headlines.filter((h) => /coast watchers have seen your shipping/.test(h.text)).length;
     coastReport(g, 'GER');
     expect(seen()).toBe(1);
-    // A landing on the British coast that stands: the next report says nothing of a landing to come.
-    for (const z of x.to.seas) g.flags[`landed:${z}:GER`] = g.turn;
+    // Germans on British ground, and a landing on another coast of the same sea: nobody has come ashore on Britain
+    // from the sea, and the watch still speaks.
+    const elsewhere = g.regions.find((r) => r.owner !== 'UK' && r.seas.some((z) => x.to.seas.includes(z)))!;
+    expect(elsewhere).toBeDefined();
+    for (const z of elsewhere.seas) g.flags[`landed:${z}:GER`] = g.turn;
+    g.flags[`landedAt:${elsewhere.id}:GER`] = g.turn;
     const ashore = addCorps(g, 'GER', 'Beach I', 'inf', 3, x.to.id, {});
     g.turn += NAVY.watch!.every;
     coastReport(g, 'GER');
-    expect(seen()).toBe(1);
+    expect(seen()).toBe(2);
+    // A landing on the British coast that stands (as landCorps writes it): the next report says nothing of a landing to come.
+    g.flags[`landedAt:${x.to.id}:GER`] = g.turn;
+    g.turn += NAVY.watch!.every;
+    coastReport(g, 'GER');
+    expect(seen()).toBe(2);
     // Thrown back into the sea, the watch speaks again.
     ashore.dead = true;
     x.to.units = x.to.units.filter((u) => u !== ashore);
     x.to.ctrl = 'UK';
     g.turn += NAVY.watch!.every;
     coastReport(g, 'GER');
-    expect(seen()).toBe(2);
+    expect(seen()).toBe(3);
   });
 });
 

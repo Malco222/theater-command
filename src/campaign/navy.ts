@@ -958,6 +958,8 @@ export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
     lostAtSea = crossing(g, cs, path, surprise, to);
     g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + cs.length;
     for (const z of to.seas) g.flags[`landed:${z}:${nat}`] = g.turn;
+    // (And the ground itself, for the coast watch: a landing on this enemy's homeland is not news to come.)
+    g.flags[`landedAt:${to.id}:${nat}`] = g.turn;
   }
   let taken = true;
   let report: BattleReport | null = null;
@@ -1161,12 +1163,14 @@ export function crossingsOf(g: Game, nat: string, o: { short?: boolean } = {}): 
  * the month can embark, so the report always comes a month before the landing can. A coast the attacker's own
  * army could march to is not watched for this: the war there is a land war already.
  */
-/** True when a nation has landed from the sea on another's homeland since their war began, and holds or stands on some of it still. */
+/**
+ * True when a nation has come ashore from the sea on another's homeland since their war began, and holds or stands
+ * on that ground still. A landing on some other coast of the same sea, or ground of his homeland taken by land, is not it.
+ */
 function landedOn(g: Game, att: string, d: string): boolean {
   const since = g.flags[`war:${att}:${d}`] ?? g.flags[`war:${d}:${att}`] ?? 0;
-  const home = g.regions.filter((r) => r.owner === d && !r.overseas);
-  return home.some((r) => r.seas.some((z) => (g.flags[`landed:${z}:${att}`] ?? -1) >= since))
-    && home.some((r) => r.ctrl === att || r.units.some((u) => u.nat === att && !u.dead));
+  return g.regions.some((r) => r.owner === d && !r.overseas && (g.flags[`landedAt:${r.id}:${att}`] ?? -1) >= since
+    && (r.ctrl === att || r.units.some((u) => u.nat === att && !u.dead)));
 }
 
 export function coastReport(g: Game, att: string): void {

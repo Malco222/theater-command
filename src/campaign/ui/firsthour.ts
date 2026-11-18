@@ -116,8 +116,8 @@ function readDeeds(): void {
     if (s.upTurn >= 0 && g.turn > s.upTurn) {
       // The month turned since his own was last open: a siege standing as he handed it over earns lesson 7; then
       // the month's end. (While the other nations move the page is drawn many times with nobody at the controls.)
-      if (s.siegeUp) lessonDone('siege', {});
-      lessonDone('end', {});
+      if (s.siegeUp) lessonDone('siege', { ended: s.upTurn });
+      lessonDone('end', { ended: s.upTurn });
       if (tip && tip.turn < g.turn) tip = null;
     } else if (up && g.turn === s.turn) {
       const fought = g.reports.slice(s.reports).filter((r) => r.attNat === me);
@@ -196,10 +196,11 @@ export function lessonsBegun(first: boolean): void {
   const g = page.game();
   if (first) {
     g.flags.firstCommand = 1;
-    if (allDone(book)) lessonsAgain(book);
     // (A player who had switched the notes off and comes back through FIRST COMMAND has them in its campaign again,
-    // and in no other until he says so.)
-    if (!book.on) book.set = false;
+    // and in no other until he says so. Read before the lessons are set again, which switches them on.)
+    const off = !book.on;
+    if (allDone(book)) lessonsAgain(book);
+    if (off) book.set = false;
     book.on = true;
     save();
   }

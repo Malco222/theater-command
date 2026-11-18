@@ -88,6 +88,8 @@ export function readNotebook(raw: unknown): Notebook {
 export interface Moment {
   card?: boolean;
   inHand?: number[];
+  /** A deed of a month already handed over (its end, a siege standing then): the month it was, read after the turn. */
+  ended?: number;
 }
 
 export const lessonById = (id: string): Lesson | undefined => LESSONS.find((l) => l.id === id);
@@ -178,10 +180,10 @@ export function bombersInRange(g: Game): boolean {
   return yes;
 }
 
-/** Whether the lesson's turn in the order has come: the lesson before it done, or the months gone by. */
-export function lessonReady(g: Game, book: Notebook, l: Lesson): boolean {
+/** Whether the lesson's turn in the order has come: the lesson before it done, or the months gone by (as of this month). */
+export function lessonReady(g: Game, book: Notebook, l: Lesson, turn = g.turn): boolean {
   const after = l.after ? isDone(book, l.after) : null;
-  const months = l.months !== undefined ? g.turn - seat(g) >= l.months : null;
+  const months = l.months !== undefined ? turn - seat(g) >= l.months : null;
   if (after !== null && months !== null) return after || months;
   return (after ?? true) && (months ?? true);
 }
@@ -226,7 +228,9 @@ export function lessonDeed(g: Game, book: Notebook, does: Deed, m: Moment = {}):
   if (!lessonsOn(g, book)) return [];
   const out: Lesson[] = [];
   const stamp = (l: Lesson | undefined): void => {
-    if (!l || isDone(book, l.id) || !lessonReady(g, book, l)) return;
+    // (A deed of the month handed over is judged as that month stood: a first month ended without a battle does not
+    // stamp lesson 5, which only the second month brings.)
+    if (!l || isDone(book, l.id) || !lessonReady(g, book, l, m.ended ?? g.turn)) return;
     book.done.push(l.id);
     book.later = book.later.filter((x) => x !== l.id);
     out.push(l);
