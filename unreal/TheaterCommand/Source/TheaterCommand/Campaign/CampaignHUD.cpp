@@ -566,6 +566,30 @@ namespace
 				const FLinearColor Day = Each.bInk ? FLinearColor(FColor(60, 80, 95)) : FMath::Lerp(Each.bSea ? FLinearColor(FColor(214, 232, 236)) : FLinearColor(FColor(244, 232, 204)),
 					Each.bSea ? FLinearColor(FColor(58, 78, 88)) : FLinearColor(FColor(52, 36, 22)), Sheet * (1.0f - Moon));
 				const FLinearColor Ink = FMath::Lerp(Day, FLinearColor(FColor(168, 184, 212)), Moon).CopyWithNewOpacity(Each.Alpha * (1.0f - 0.42f * Moon));
+				if (bWhole)
+				{
+					// (The art director, 18 November 2026: "Hollamd", "Gelderlamd": at the smaller sizes the last letters of
+					// a province's name stood doubled. Drawn as one piece of text and laid on the ground by a turn and a
+					// squeeze, a word came out as two sets of its letters, one set out a tenth wider than the other; it
+					// was so with the engine's edge and without it, and with the letters alone. A country's name, drawn a
+					// letter at a time, never did it. So a province's name is drawn the same way: each letter by itself,
+					// set where the word's own measure puts it.)
+					double Start = -0.5 * Box.X;
+					for (int32 K = 0; K < Glyph.Len(); ++K)
+					{
+						const FString Letter = Glyph.Mid(K, 1);
+						const FVector2D LetterBox = Measure->Measure(Letter, Type);
+						// (where the word's measure, with its letters' own pairing, puts this letter's left edge)
+						const double Left = Start + static_cast<double>(Measure->Measure(Glyph.Left(K), Type).X);
+						if (Letter != TEXT(" "))
+						{
+							const FVector2D Middle = Each.At / Scale + Right * (Left + 0.5 * LetterBox.X);
+							const FGeometry Stood = Geometry.MakeChild(LetterBox, FSlateLayoutTransform(Middle - LetterBox * 0.5), Lying, FVector2D(0.5, 0.5));
+							FSlateDrawElement::MakeText(OutDrawElements, LayerId, Stood.ToPaintGeometry(), Letter, Type, ESlateDrawEffect::None, Ink);
+						}
+					}
+					continue;
+				}
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Place.ToPaintGeometry(), Glyph, Type, ESlateDrawEffect::None, Ink);
 			}
 			return LayerId;
