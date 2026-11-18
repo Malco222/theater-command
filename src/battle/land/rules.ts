@@ -141,7 +141,8 @@ export const LAND = {
    * blocks or fewer (one block a fifth of it or more), the fresh hold the army at the brink as those not yet in the
    * fight do. Larger armies hold by those not yet in the fight alone: the fresh rule there moves the field 8 points off
    * its card, and at six blocks the hills-and-works practice ground 10 (the design director, b476(1) and b480; 356
-   * campaign attacks and the nine practice grounds, 18 November).
+   * campaign attacks and the nine practice grounds, 18 November). Never a defence behind fortress works or in a fort,
+   * whose works the card prices already (b488: Verdun's three divisions behind works ran 8.6 points under their card).
    */
   fresh: { str: 0.9, upTo: 5 },
   /**

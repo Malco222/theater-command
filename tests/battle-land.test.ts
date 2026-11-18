@@ -554,6 +554,24 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     for (const u of mine) u.met = true;
     expect(b.breaking('att')).toBeGreaterThanOrEqual(1);
   });
+  it('a small defence behind fortress works breaks as before: the card prices the works already (b488)', () => {
+    const brink = (fort: number): number => {
+      const t = sampleTicket('plains', 1.2, { seed: 99 });
+      t.def.forces = [{ ...t.def.forces.find((f) => f.kind === 'inf')!, divs: 1, share: 1 }];
+      t.place = { ...t.place, fort };
+      const b = new LandBattle(t);
+      const theirs = b.units.filter((x) => x.side === 'def' && x.kind !== 'fort');
+      expect(theirs.length).toBeLessThanOrEqual(LAND.fresh.upTo);
+      for (const u of theirs) u.met = true;
+      // A third of it worn hard, the rest whole and steady.
+      theirs[0].str = theirs[0].str0 * 0.2;
+      expect(b.wornShare('def')).toBeGreaterThan(LAND.spent.def);
+      return b.breaking('def');
+    };
+    // In the open the fresh regiments hold it at the brink (Mechili's cure); behind works of any level they do not.
+    expect(brink(0)).toBeCloseTo(0.99, 6);
+    for (const fort of [1, 2, 3]) expect(brink(fort)).toBeGreaterThanOrEqual(1);
+  });
 
   // The plain attack honours the card (mark 4, after the retest): at the telling odds, where the card gives neither
   // side a sure thing, on every ground and behind a river and fortress works, 40 battles at each odds. And dug in: the

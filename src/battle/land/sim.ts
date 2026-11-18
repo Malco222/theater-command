@@ -39,8 +39,12 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** Everything said this battle, for the after-action card. */
   readonly log: FieldEvent[] = [];
   private power: Record<Side, number>;
-  /** Each side's blocks at the start, its works not counted: an army this small holds by its fresh blocks (b480). */
-  private blocks: Record<Side, number>;
+  /**
+   * Whether a side holds at the brink by its fresh blocks: an army of LAND.fresh.upTo blocks or fewer, its works not
+   * counted (b480, b484), unless it is the defence behind fortress works or in a fort, which the card prices already
+   * (b488).
+   */
+  private freshHold: Record<Side, boolean>;
   private nextThink = 0;
   private broke: Record<Side, boolean> = { att: false, def: false };
   /** When the first blow fell between the lines (guns firing from far back do not count): null until then. */
@@ -67,7 +71,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     const att = makeBlocks('att', ticket.att, A, 1);
     const def = makeBlocks('def', ticket.def, D, att.length + 1);
     this.units = [...att, ...def];
-    this.blocks = { att: att.filter((u) => u.kind !== 'fort').length, def: def.filter((u) => u.kind !== 'fort').length };
+    const works = ticket.place.fort >= 1 || def.some((u) => u.kind === 'fort');
+    this.freshHold = { att: att.filter((u) => u.kind !== 'fort').length <= LAND.fresh.upTo, def: !works && def.filter((u) => u.kind !== 'fort').length <= LAND.fresh.upTo };
     deploy(this.units, 'att', this.field);
     deploy(this.units, 'def', this.field);
     for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
@@ -950,10 +955,11 @@ export class LandBattle implements BattleSim<LandUnit> {
    * The share of a side's power standing in blocks that have not been in the fight (never met the enemy, and not worn
    * by a blow from afar) or, in an army of LAND.fresh.upTo blocks or fewer, that are fresh: steady, at nine tenths of
    * their strength or more, in contact or not. While more than half the army stands so, one worn block never takes it
-   * with it (ruling 226(2); the design director, b476(1) and b480).
+   * with it (ruling 226(2); the design director, b476(1) and b480). Not for a defence behind works or in a fort: the
+   * works keep its men fresh and the card prices the works already, so the field never prices them twice (b488).
    */
   private freshShare(s: Side): number {
-    const small = this.blocks[s] <= LAND.fresh.upTo;
+    const small = this.freshHold[s];
     let n = 0;
     for (const u of this.units) {
       if (u.side !== s || !fighting(u)) continue;
