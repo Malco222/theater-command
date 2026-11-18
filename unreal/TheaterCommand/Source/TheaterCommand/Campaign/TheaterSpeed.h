@@ -43,6 +43,9 @@ class APlayerController;
  *   tc.Speed.KeptHeights  1 (default): the points the frontiers, the front line and the enemy's reach are laid on are
  *                         worked out once and kept (ACampaignMapActor::SurfacePointKept), until a fine sheet stands up
  *                         or goes over them. 0: every point is worked out again each time a line is laid, as before.
+ *   tc.Speed.FogAside     1 (default): when the haze moves, the staff's paper beyond the map (the world's picture of
+ *                         it and each fine sheet's) is laid on another thread and put on the table one picture a frame
+ *                         after, a frame or three later than before. 0: all laid in the frame of the press, as before.
  *   tc.Speed.DressSteps   1 (default): a fine sheet built on another thread is dressed (its pictures and paints made)
  *                         a little at a time, about 8 ms a frame and one sheet at a time, before its tiles are stood up
  *                         out of sight as ever. 0: every sheet that is ready is dressed whole in one frame, as before.
@@ -75,6 +78,7 @@ namespace TheaterSpeed
 	bool HoldersLock();
 	bool KeptHeights();
 	bool DressSteps();
+	bool FogAside();
 
 	/**
 	 * (tc.Speed.HoldersLock.) Whose each province is (its holder, its lawful owner and the League's members) is changed

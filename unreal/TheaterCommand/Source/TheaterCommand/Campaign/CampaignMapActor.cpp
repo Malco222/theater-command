@@ -1524,6 +1524,10 @@ void ACampaignMapActor::SeaVector(FName Name, const FLinearColor& Value)
 
 void ACampaignMapActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (FogAsideBuilding.IsValid())
+	{
+		FogAsideBuilding.Wait(); // (it reads the world's sheet, which goes with the map)
+	}
 	for (const auto& Pair : FineSheets)
 	{
 		if (Pair.Value->Building.IsValid())
@@ -2552,6 +2556,13 @@ namespace
 
 void ACampaignMapActor::BuildWorld()
 {
+	if (FogAsideBuilding.IsValid())
+	{
+		FogAsideBuilding.Wait(); // (speed, tc.Speed.FogAside: it reads the world's sheet, which is made again here)
+	}
+	FogAside.Reset();
+	FogAsideBuilding = TFuture<void>();
+	FogLaying = INDEX_NONE;
 	if (!Data.bWorld)
 	{
 		return;
@@ -9611,46 +9622,67 @@ void ACampaignMapActor::SoftenFog(TArray<FColor>& Pixels, int32 NX, int32 NY, do
 	}
 }
 
+void ACampaignMapActor::HiddenBeyond(TArray<bool>& OutHidden, bool& bOutAny) const
+{
+	OutHidden.Init(false, Data.Regions.Num());
+	bOutAny = false;
+	for (const int32 RegionId : HazeSet)
+	{
+		if (OutHidden.IsValidIndex(RegionId) && RegionId >= Data.FirstBeyond)
+		{
+			OutHidden[RegionId] = true;
+			bOutAny = true;
+		}
+	}
+}
+
+void ACampaignMapActor::LayFog(const TArray<bool>& Hidden, bool bAnyHidden, const FCampaignGround& Painted, const FCampaignTerrain& Shape, TArray<FColor>& OutPixels)
+{
+	OutPixels.Init(FColor(0, 0, 0, 255), Painted.NX * Painted.NY);
+	if (!bAnyHidden || Shape.Region.Num() != OutPixels.Num())
+	{
+		return;
+	}
+	for (int32 Index = 0; Index < OutPixels.Num(); ++Index)
+	{
+		const int32 Id = Painted.PaintedRegion(Index, Shape);
+		if (Id >= 0 && Hidden[Id])
+		{
+			OutPixels[Index].R = 255;
+		}
+	}
+	SoftenFog(OutPixels, Painted.NX, Painted.NY, Shape.Cell);
+}
+
 void ACampaignMapActor::FogBeyond()
 {
+	THEATER_SPEED_SCOPE(FogBeyond);
 	if (!Data.bWorld || !WorldLandMaterial || Data.Regions.Num() <= Data.FirstBeyond)
 	{
 		return;
 	}
 	TArray<bool> Hidden;
-	Hidden.Init(false, Data.Regions.Num());
 	bool bAnyHidden = false;
-	for (const int32 RegionId : HazeSet)
-	{
-		if (Hidden.IsValidIndex(RegionId) && RegionId >= Data.FirstBeyond)
-		{
-			Hidden[RegionId] = true;
-			bAnyHidden = true;
-		}
-	}
+	HiddenBeyond(Hidden, bAnyHidden);
 	if (!bAnyHidden && !WorldFogPicture)
 	{
 		return; // (nothing beyond the map is hidden, and nothing was)
 	}
-	auto Lay = [&Hidden, bAnyHidden](const FCampaignGround& Painted, const FCampaignTerrain& Shape, TArray<FColor>& OutPixels)
+	++FogAsked; // (counted either way: a haze laid in the frame outdates one being laid aside, which is then not put on the table)
+	if (WorldFogPicture && TheaterSpeed::FogAside())
 	{
-		OutPixels.Init(FColor(0, 0, 0, 255), Painted.NX * Painted.NY);
-		if (!bAnyHidden || Shape.Region.Num() != OutPixels.Num())
+		// (Speed, 17 November 2026: tc.Speed.FogAside. The world's picture of the haze, 1544 by 851, and each fine
+		// sheet's, were laid and softened here, in the frame of the press: most of ShowShroud's 131 ms on the march to
+		// Cleveland. They are now laid on another thread and put on the table one a frame after, the same pixels a
+		// frame or three later. The map's own haze already comes and goes over half a second.)
+		if (!FogAsideBuilding.IsValid())
 		{
-			return;
+			LaunchFogAside();
 		}
-		for (int32 Index = 0; Index < OutPixels.Num(); ++Index)
-		{
-			const int32 Id = Painted.PaintedRegion(Index, Shape);
-			if (Id >= 0 && Hidden[Id])
-			{
-				OutPixels[Index].R = 255;
-			}
-		}
-		SoftenFog(OutPixels, Painted.NX, Painted.NY, Shape.Cell);
-	};
+		return; // (one already under way is for an older haze: UpdateFogAside begins again when it is done)
+	}
 	TArray<FColor> Pixels;
-	Lay(WorldPaint, WorldTerrain, Pixels);
+	LayFog(Hidden, bAnyHidden, WorldPaint, WorldTerrain, Pixels);
 	if (!WorldFogPicture)
 	{
 		WorldFogPicture = CampaignTextures::Create(WorldPaint.NX, WorldPaint.NY, Pixels, false, false, TEXT("WorldFog"));
@@ -9666,10 +9698,87 @@ void ACampaignMapActor::FogBeyond()
 		FFineSheet& Sheet = *Pair.Value;
 		if (Sheet.FogPicture) // (speed, tc.Speed.DressSteps: a sheet part dressed has its fog picture or none yet; none before)
 		{
-			Lay(Sheet.Paint, Sheet.Shape, Pixels);
+			LayFog(Hidden, bAnyHidden, Sheet.Paint, Sheet.Shape, Pixels);
 			CampaignTextures::Update(Sheet.FogPicture, Pixels);
 		}
 	}
+}
+
+void ACampaignMapActor::LaunchFogAside()
+{
+	TSharedPtr<FFogAside, ESPMode::ThreadSafe> Job = MakeShared<FFogAside, ESPMode::ThreadSafe>();
+	Job->For = FogAsked;
+	HiddenBeyond(Job->Hidden, Job->bAnyHidden);
+	for (const auto& Pair : FineSheets)
+	{
+		if (Pair.Value->FogPicture)
+		{
+			Job->Sheets.Emplace(Pair.Value, TArray<FColor>());
+		}
+	}
+	FogAside = Job;
+	FogLaying = INDEX_NONE;
+	// (what it reads is made once and not changed after: which province each point of a sheet is painted for)
+	const FCampaignGround* World = &WorldPaint;
+	const FCampaignTerrain* WorldShape = &WorldTerrain;
+	FogAsideBuilding = Async(EAsyncExecution::ThreadPool, [Job, World, WorldShape]()
+	{
+		LayFog(Job->Hidden, Job->bAnyHidden, *World, *WorldShape, Job->World);
+		for (auto& Each : Job->Sheets)
+		{
+			LayFog(Job->Hidden, Job->bAnyHidden, Each.Key->Paint, Each.Key->Shape, Each.Value);
+		}
+	});
+}
+
+void ACampaignMapActor::UpdateFogAside()
+{
+	THEATER_SPEED_SCOPE(UpdateFogAside);
+	if (!FogAsideBuilding.IsValid() || !FogAsideBuilding.IsReady() || !FogAside.IsValid())
+	{
+		return;
+	}
+	if (FogAside->For != FogAsked)
+	{
+		if (TheaterSpeed::FogAside())
+		{
+			LaunchFogAside(); // (the haze has moved again since: laid again for it as it is now)
+		}
+		else
+		{
+			// (the switch was turned off since, and the haze was laid in the frame: this one is older, and dropped)
+			FogAside.Reset();
+			FogAsideBuilding = TFuture<void>();
+			FogLaying = INDEX_NONE;
+		}
+		return;
+	}
+	// One picture a frame, the world's first.
+	FogLaying = FMath::Max(FogLaying, 0);
+	if (FogLaying == 0)
+	{
+		if (WorldFogPicture && FogAside->World.Num() == WorldPaint.NX * WorldPaint.NY)
+		{
+			CampaignTextures::Update(WorldFogPicture, FogAside->World);
+		}
+		++FogLaying;
+		return;
+	}
+	while (FogAside->Sheets.IsValidIndex(FogLaying - 1))
+	{
+		auto& Each = FogAside->Sheets[FogLaying - 1];
+		++FogLaying;
+		// (a sheet taken away since is passed over; one still standing has its picture still)
+		const TSharedPtr<FFineSheet, ESPMode::ThreadSafe>* Still = FineSheets.Find(Each.Key->Key);
+		if (Still && *Still == Each.Key && Each.Key->FogPicture && Each.Value.Num() == Each.Key->Paint.NX * Each.Key->Paint.NY)
+		{
+			CampaignTextures::Update(Each.Key->FogPicture, Each.Value);
+			return;
+		}
+	}
+	FogAside.Reset();
+	FogAsideBuilding = TFuture<void>();
+	FogLaying = INDEX_NONE;
 }
 
 void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners, const TArray<FCampaignView::FSiegePaint>& Sieges)
@@ -9927,7 +10036,19 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		}
 	}
 	ShowVictorFlags(); // (a capital that has changed hands flies its new holder's flag, or its own country's is home again)
-	BuildFrontLine(); // (and the front is drawn where it now runs)
+	// (Speed, ruling b414: the press that takes a province did 24 to 44 ms of its work here, and at times far more,
+	// drawing the front where it now runs, and as much again on the frontier lines below. Once the table is laid
+	// they are drawn in the two frames after the press instead: the order answers first. "-TheaterLinesAtOnce"
+	// draws them in the press's own frame, as before.)
+	static const bool bLinesLater = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLinesAtOnce"));
+	if (bLinesLater && bLandLaid)
+	{
+		FrontLineDue = 1;
+	}
+	else
+	{
+		BuildFrontLine(); // (and the front is drawn where it now runs)
+	}
 
 	// Ink that spreads: what is on the table now is kept as the old paint, and the new is let in over a second from
 	// the frontier each province shares with ground its new holder held already. (Changes of the same moment run
@@ -9965,7 +10086,14 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	{
 		CampaignTextures::UpdateBoxAll(TintPicture, Paint.Tint, I0, J0, I1, J1);
 		CampaignTextures::UpdateBoxAll(OccupiedPicture, Paint.Occupied, I0, J0, I1, J1);
-		BuildBorders();
+		if (bLinesLater && bLandLaid)
+		{
+			BordersDue = 2; // (the frame after the front line's)
+		}
+		else
+		{
+			BuildBorders();
+		}
 		return;
 	}
 	for (const int32 Region : Taken)
@@ -13317,6 +13445,15 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus)
 {
 	THEATER_SPEED_SCOPE(MapUpdate);
+	// (lines put off by a press that changed whose ground is whose: see SetHolders)
+	if (FrontLineDue > 0 && --FrontLineDue == 0)
+	{
+		BuildFrontLine();
+	}
+	if (BordersDue > 0 && --BordersDue == 0)
+	{
+		BuildBorders();
+	}
 	if (bVictorsMoving)
 	{
 		DrawVictorFlags(); // (a flag on its way up or down a captured capital's pole)
@@ -13408,6 +13545,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateSeaMotion(CameraDistance, CameraFocus);
 	UpdateSky(CameraDistance, CameraFocus);
 	UpdateFogFade(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f);
+	UpdateFogAside(); // (speed: the haze beyond the map, laid on another thread)
 	SortieSeenFrom = CameraDistance;
 	UpdateSorties();
 	UpdateSearchlights(CameraDistance);
