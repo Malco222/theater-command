@@ -8,14 +8,17 @@
 // (k) The computer's Italian fleet keeps its harbours once Mussolini has fallen, and comes out against no landing.
 // (r) An army abroad with no lane open from any quay waits at its quay, as the home army does, and does not drop its
 //     plan (open.json 'descent.wait'): America's army in Britain, the months the Western Mediterranean is shut.
+// (s) The test of strength (b514): only the holder of a beach brings reserves from his own country. An ally's army
+//     standing in its own home stays there (open.json 'descent.strength.own'): Italy's, against a landing in Brittany.
 import { describe, expect, it } from 'vitest';
 import fleetData from '../data/campaign/fleets.json';
 import openData from '../data/campaign/open.json';
+import { reckon, type Reckoning } from '../src/campaign/ashore';
 import { allied, createGame, setWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { atSea, closedTo, fleetsOf, keepsHarbour, navalAI, sortieAgainst } from '../src/campaign/navy';
 import { lodgment, opensOn, opensSoon, seaBase, seaFoe, startOpen } from '../src/campaign/staff';
-import type { Game, Region } from '../src/campaign/types';
+import type { Corps, Game, Region } from '../src/campaign/types';
 
 const FRANCE_44 = 57;
 const DESCENT = openData.descent as unknown as { lead: number; wait: boolean };
@@ -224,5 +227,68 @@ describe('an army abroad waits at its quay when no lane is open (233(r))', () =>
   it('a player\'s army is never planned for', () => {
     const g = startOpen(createGame(3, 'USA'));
     expect(seaFoe(g, 'USA', 1)).toBeNull();
+  });
+});
+
+describe('only the holder of the beach brings reserves from home (233(s))', () => {
+  const STRENGTH = (openData.descent as unknown as { strength: { own?: boolean; reserve: number } }).strength;
+  /** The same war with France's army gone from its mainland: Germany's France is in one piece with Germany and with Italy. */
+  const fallen = (): Game => {
+    const g = war(FRANCE_44);
+    for (const r of g.regions) if (r.owner === 'FRA' && !r.overseas) {
+      for (const u of r.units) if (u.nat === 'FRA') u.dead = true;
+      r.units = r.units.filter((u) => u.nat !== 'FRA');
+    }
+    return g;
+  };
+  const atHome = (g: Game, nat: string): number => g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.town && g.regions[c.reg].owner === nat && !g.regions[c.reg].overseas).length;
+  /** The reckoning as first built (every enemy's corps out of the line on ground joined by rail counted for a share), and as ruled. */
+  const both = (g: Game, at: Region, force: Corps[]): { all: Reckoning; R: Reckoning } => {
+    STRENGTH.own = false;
+    let all: Reckoning;
+    try { all = reckon(g, 'UK', at, force)!; } finally { STRENGTH.own = true; }
+    return { all, R: reckon(g, 'UK', at, force)! };
+  };
+  const landing = (g: Game): Corps[] => g.corps.filter((c) => c.nat === 'UK' && !c.dead && c.kind === 'inf').slice(0, 3);
+
+  it('is in the data', () => {
+    expect(STRENGTH.own).toBe(true);
+  });
+
+  it('Italy\'s army standing in Italy is no reserve against a landing in Brittany; Germany\'s own is, and so is an Italian corps in France', () => {
+    const g = fallen();
+    const at = g.byName.Brittany;
+    const force = landing(g);
+    const { all, R } = both(g, at, force);
+    const italians = atHome(g, 'ITA');
+    expect(italians).toBeGreaterThan(5);
+    expect(all.behind - R.behind).toBeGreaterThan(5);
+    expect(all.behind - R.behind).toBeLessThanOrEqual(italians);
+    expect(R.reserve).toBeLessThan(all.reserve);
+    expect(R.chance).toBeGreaterThan(all.chance);
+    // Germany holds the beach: its corps at home are counted as before.
+    expect(R.behind).toBeGreaterThan(0);
+    expect(R.near).toBe(all.near);
+    // An Italian corps standing in France, outside its own country, can be brought like any other.
+    const c = g.corps.find((x) => x.nat === 'ITA' && !x.dead && x.kind === 'inf' && g.regions[x.reg].owner === 'ITA' && !g.regions[x.reg].overseas)!;
+    const to = g.byName.Paris;
+    const from = g.regions[c.reg];
+    from.units.splice(from.units.indexOf(c), 1);
+    c.reg = to.id;
+    to.units.push(c);
+    const moved = reckon(g, 'UK', at, force)!;
+    expect(moved.behind + moved.corps).toBe(R.behind + R.corps + 1);
+  });
+
+  it('on Italy\'s own shore Italy brings its reserves, and Germany\'s army at home in Germany stays there', () => {
+    const g = fallen();
+    const at = ['Naples', 'Apulia', 'Calabria'].map((nm) => g.byName[nm]).find((r) => r.port)!;
+    const { all, R } = both(g, at, landing(g));
+    // What stands within three marches counts as before, whoever's it is.
+    expect(R.near).toBe(all.near);
+    expect(R.corps).toBe(all.corps);
+    expect(R.behind).toBeGreaterThan(0);
+    expect(all.behind - R.behind).toBeGreaterThan(0);
+    expect(all.behind - R.behind).toBeLessThanOrEqual(atHome(g, 'GER'));
   });
 });
