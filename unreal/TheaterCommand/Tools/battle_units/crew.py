@@ -706,7 +706,7 @@ def bench_body(t, long, seed=0.0, slouch=0.6, hip_x=0.065):
 
 
 @crew_clip("sit_bench", 6.0, loop=True, anchor="seat", weapon="rifle",
-           place=[("vehicle", v, "rider.%d" % i, (0, 0, 0)) for v in ("M3Halftrack", "Truck") for i in range(1, 11)],
+           place=[("vehicle", v, "rider.%d" % i, (0, 0, 0)) for v in ("M3Halftrack", "Truck", "Hanomag") for i in range(1, 11)],
            about="A rider on a bench facing inboard: the rifle upright between his knees, both hands on it, the vehicle's "
                  "sway in his hips and back, his head looking about now and then.")
 def c_sit_bench(t):
@@ -746,7 +746,7 @@ def on_rim(s, centre, up, r, clock, a_lean=0.0):
 
 
 @crew_clip("sit_drive", 6.0, loop=True, anchor="seat", weapon="none",
-           place=[("vehicle", "M3Halftrack", "driver", (0, 0, 0))],
+           place=[("vehicle", v, "driver", (0, 0, 0)) for v in ("M3Halftrack", "Hanomag", "FlakHalftrack")],
            about="The driver: both hands on the wheel at ten to two, feet on the pedals, the body taking the ride, his eyes "
                  "on the road with a glance to each side. Fitted to the M3's wheel (its centre 0.44 ahead of the seat point "
                  "and 0.16 up, tilted 36 degrees back).")
@@ -772,7 +772,7 @@ def c_sit_drive(t):
 
 
 @crew_clip("sit_cab", 6.0, loop=True, anchor="seat", weapon="rifle",
-           place=[("vehicle", v, "rider.cab", (0, 0, 0)) for v in ("M3Halftrack",)],
+           place=[("vehicle", v, "rider.cab", (0, 0, 0)) for v in ("M3Halftrack", "Hanomag", "FlakHalftrack")],
            about="The man beside the driver: sat back, his rifle stood between his knees and leaned against his left "
                  "shoulder under his right hand, his left hand on his thigh; watching the road, and out of his side now and then.")
 def c_sit_cab(t):
@@ -896,7 +896,7 @@ def mg_body(t, long):
 
 
 @crew_clip("stand_mg", 4.0, loop=True, anchor="feet", weapon="none",
-           place=[("vehicle", "M3Halftrack", "gunner", (-0.27, 0.0, 0.0))],
+           place=[("vehicle", "M3Halftrack", "gunner", (0.0, 0.0, 0.0))],
            about="The half-track's gunner stood at the pedestal gun, both hands on its spade grips, thumbs at the trigger, "
                  "looking along the gun and about. Fitted to the M3 (grips 0.40 ahead of his feet and 1.08 up); "
                  "attach him to the part `mg_mount` so he turns with the gun.")
@@ -922,7 +922,7 @@ MG_ROUNDS = [round(0.075 * k, 3) for k in range(10)]    # the M3's own mg_burst:
 
 
 @crew_clip("stand_mg_burst", 1.0, loop=True, anchor="feet", weapon="none",
-           place=[("vehicle", "M3Halftrack", "gunner", (-0.27, 0.0, 0.0))],
+           place=[("vehicle", "M3Halftrack", "gunner", (0.0, 0.0, 0.0))],
            events=[{"t": t0, "fx": "muzzle_flash", "socket": "mg (the vehicle's)", "cue": ""} for t0 in MG_ROUNDS],
            about="The gunner firing: each of the ten rounds of the M3's own `mg_burst` (play them together) jolts his "
                  "shoulders and head, his hands staying on the grips; he leans into the gun.")
@@ -1913,10 +1913,10 @@ def wheel_turn(t, long=1.0):
     return -360.0 * t / long
 
 
-# (each fist round the middle of its handle, 1.5 cm nearer him than the grip socket (which is 1.5 cm off the rim, where
-# a fist's edge would go into the rim and the wheel's face), the thumb toward him: so it stays clear of the rim, the
-# spokes and the face all the way round)
-LAYER_FIST = {"back": 0.015, "dir": -1.0, "fingers": 66.0, "thumb": 40.0}
+# (each fist round the middle of its handle, on the grip socket (since the 10:19Z export the sockets are the fists'
+# middles, the handles 9.5 cm long), the thumb toward him: so it stays clear of the rim, the spokes and the wheel's face
+# all the way round; "back" would move it along the handle toward him)
+LAYER_FIST = {"back": 0.0, "dir": -1.0, "fingers": 66.0, "thumb": 40.0}
 
 
 def flak_wheel_hands(kind, t, long):
@@ -1966,7 +1966,7 @@ def _flak_layer(kind, t):
 @crew_clip("sit_handwheel_traverse", 1.0, loop=True, anchor="seat", weapon="none",
            place=[("fort", "HeavyFlak", "crew.layer.traverse", (0, 0, 0)), ("fort", "HeavyFlakTwin", "crew.layer.traverse", (0, 0, 0))],
            about="The traverse layer on his seat (attach to the part `mount`), his fists on the handwheel's two handles "
-                 "(grip.layer.traverse.l/r, each fist round the handle's middle, 1.5 cm nearer him than the socket), "
+                 "(each fist on grip.layer.traverse.l/r, the handle's middle, the thumb toward him), "
                  "turning it one turn a second the game's plus way (about the wheel's axis, the game's x: the right-hand "
                  "handle rises), from the handles' rest (9 and 3 o'clock) at t = 0: play it at the wheel's own speed (the "
                  "game spins handwheel.traverse 60 degrees for each degree the mount turns: one turn a second at 6 degrees "
@@ -2201,6 +2201,380 @@ def c_stand_ammo_hand_up(t):
 
 
 
+# ---- the twin heavy flak's loaders: loader.r from its ready rack's round.ready, loader.l (no ready round of his own)
+# from ammunition number one's hands over the rail, and number one himself
+TWIN = {}
+TWIN_HAND = (-2.25, -0.75, 1.90)     # (game axes: the round's middle as ammo.1 holds it up over the rail to loader.l)
+# (each loader's times: breech.r's runs 0.1 behind breech.l's in the twin's fire clip (3.3 s); loader.l takes his round
+# from ammo.1 at `grab`, loader.r lifts his out of the rack at `grab`)
+TWIN_T = {"r": {"dt": 0.1, "long": 3.3, "home": 2.3, "take": 2.7, "grab": 2.82, "up": 3.05, "ready": 0.4},
+          "l": {"dt": 0.0, "long": 3.3, "home": 2.2, "take": 3.0, "grab": 3.08, "carry": 3.5, "ready": 0.6}}
+# (loader.l walks to the rail after ramming, takes his round there at `grab` and walks back with it through the shot,
+# well clear of the recoil; ammo.1's clip is made for a hand-over at AMMO1_GIVE and played AMMO1_SHIFT later)
+AMMO1_GIVE = 2.75
+AMMO1_SHIFT = TWIN_T["l"]["grab"] - AMMO1_GIVE
+# (loader.l's stance while the guns fire, canonical, and his round's ready (base, axis): upright before his chest)
+TWIN_L = {"clear": dict(bend=6.0, turn=12.0, lean=-6.0, shift=(0.04, -0.08), drop=0.03, neck=(6.0, 30.0),
+                        feet={"l": (0.10, 0.06, 6.0), "r": (0.06, -0.20, -10.0)}),
+          "ready": ((0.24, -0.05, 0.5), (0.12, 0.05, 1.0)),
+          # (on his way to the rail and back: turning, taking the round from ammo.1, carrying it back)
+          "turn1": dict(bend=10.0, turn=20.0, drop=0.05, neck=(0.0, 10.0), feet={"l": (0.04, 0.10, 0.0), "r": (-0.04, -0.12, 0.0)},
+                        yaw=80.0, at=(-0.14, -0.08)),
+          "take": dict(bend=8.0, turn=0.0, drop=0.05, neck=(-12.0, 0.0), feet={"l": (0.04, 0.10, 4.0), "r": (-0.06, -0.10, -6.0)},
+                       yaw=178.0, at=(-0.60, -0.20)),
+          "carry": dict(bend=8.0, turn=-10.0, drop=0.05, neck=(6.0, 0.0), feet={"l": (0.04, 0.08, -62.0), "r": (-0.04, -0.12, -70.0)},
+                        yaw=60.0, at=(-0.22, -0.10))}
+
+
+def twin():
+    """The HeavyFlakTwin's measures (its frame, Blender's axes): per loader his side (+1 the breech to his left),
+    his breech, the frame his clip is made in (square to the gun, 0.20 m to his side of the breech's line, as the
+    single gun's loader's), his socket; round.ready; the hand-over over the rail; ammo.1's place."""
+    if not TWIN:
+        js = piece_json("fort", "HeavyFlakTwin")
+        parts = {p["name"]: p for p in js["parts"]}
+        g = lambda n: np.asarray(fsock("HeavyFlakTwin", n)["at"], float)
+        TWIN["rack"] = g2b(parts["round.ready"]["pivot"])
+        TWIN["ammo.1"] = crew_place("HeavyFlakTwin", "crew.ammo.1")
+        pl1 = TWIN["ammo.1"]
+        across = pl1.R @ _n(np.array((0.0, 1.0, 0.08)))       # (crosswise to number one, its nose to his left)
+        TWIN["hand"] = bomb_frame(g2b(TWIN_HAND) - across * 0.465, across)
+        for k, side in (("r", 1.0), ("l", -1.0)):
+            br = g("breech." + k)
+            fwd = -np.asarray(fsock("HeavyFlakTwin", "breech." + k)["facing"], float)
+            fit = Place(Place(br, fwd).world((-0.57, -0.20 * side, -1.59)), fwd)
+            TWIN["loader." + k] = {"side": side, "breech": br, "fit": fit,
+                                   "socket": crew_place("HeavyFlakTwin", "crew.loader." + k)}
+    return TWIN
+
+
+def _canon(k):
+    """For loader k: (S4, to_canon(world frame), from_canon(canonical frame)): his canonical frame is his fit frame,
+    mirrored across his own x-z plane for loader.l, so that both are made as the single gun's (the breech to his
+    left)."""
+    L = twin()["loader." + k]
+    S4 = M4(np.diag((1.0, L["side"], 1.0)), (0.0, 0.0, 0.0))
+    F = L["fit"].matrix()
+    return S4, (lambda M: S4 @ np.linalg.inv(F) @ M @ S4), (lambda Mc: S4 @ Mc @ S4)
+
+
+def twin_round(t, k):
+    """Loader k's round in his canonical frame (a 4x4) and whether it shows: held ready while the guns fire, swung up
+    and its nose put into the open breech, rammed home, gone; then the next: for loader.r out of the rack (round.ready),
+    for loader.l from ammo.1's hands over the rail, carried round to the ready."""
+    T = TWIN_T[k]
+    dt = T["dt"]
+    S4, canon, _ = _canon(k)
+    L = twin()["loader." + k]
+    br = (S4 @ np.append(L["fit"].local(L["breech"]), 1.0))[:3]
+    ready = bomb_frame((0.02, -0.52, 0.96), _n(np.array((0.75, 0.6, 0.15))))
+    if k == "l":
+        # (upright before his chest: the fuze setter's machine stands at his outboard side, as high as his chest)
+        ready = bomb_frame(TWIN_L["ready"][0], _n(np.array(TWIN_L["ready"][1])))
+    aligned = bomb_frame(br + np.array((-0.74, 0.0, -0.03)), (1.0, 0.0, 0.0))
+    home = bomb_frame(br + np.array((0.02, 0.0, 0.0)), (1.0, 0.0, 0.0))
+    W = T["ready"]
+    if W <= t < T["home"] + 0.02:
+        # (loader.l's round, upright, has further to turn: he starts to lift it sooner)
+        keys = [(W, ready), (0.75 if k == "l" else 1.0 + dt, ready),
+                (1.45 + dt, bomb_frame(br + np.array((-1.1, -0.12, -0.3)), (0.95, 0.05, 0.25))),
+                (1.75 + dt, aligned), (T["home"], home)]
+        return slerp_frames(keys, t), True
+    if W <= t < T["take"]:
+        return home, False
+    tt = t + T["long"] if t < W else t
+    if k == "r":
+        rack_at = (S4 @ np.append(L["fit"].local(twin()["rack"]), 1.0))[:3]
+        rack = bomb_frame(rack_at, (0.0, 0.0, 1.0), up=(1.0, 0.0, 0.0))
+        up = bomb_frame(rack_at + np.array((0.04, 0.0, 0.16)), (0.15, 0.0, 1.0), up=(1.0, 0.0, 0.0))
+        if tt < T["grab"]:
+            return rack, True                        # (standing in the rack, where round.ready stood, till he lifts it)
+        keys = [(T["take"], rack), (T["grab"], rack), (T["up"], up), (T["long"] + W, ready)]
+        return slerp_frames(keys, tt), True
+    H = canon(twin()["hand"])
+    if tt < T["grab"]:
+        return H, False                              # (ammo.1 holds it up till he has it)
+    ax = _n(np.array((-0.99, -0.09, 0.15)))
+    (cx, cy), cyaw = TWIN_L["carry"]["at"], TWIN_L["carry"]["yaw"]
+    fw = np.array((math.cos(math.radians(cyaw)), math.sin(math.radians(cyaw)), 0.0))
+    ax = _n(np.array((fw[1], -fw[0], 0.15)))           # (crosswise before his chest, its nose to his right)
+    c = np.array((cx, cy, 1.0)) + 0.28 * fw
+    carry = bomb_frame(c - 0.465 * ax, ax)
+    keys = [(T["take"], H), (T["grab"], H), (T["carry"], carry), (T["long"] + W, ready)]
+    return slerp_frames(keys, tt), True
+
+
+def _twin_yaw(k, t):
+    """Loader k's body's turn (canonical degrees) at t: loader.l turns round to the rail and back."""
+    if k == "r":
+        return 0.0
+    T = TWIN_T["l"]
+    tt = t + T["long"] if t < T["ready"] else t
+    return float(np.interp(tt, [2.35, 2.62, T["take"], T["grab"] + 0.04, T["carry"], T["carry"] + 0.3],
+                           [0.0, TWIN_L["turn1"]["yaw"], TWIN_L["take"]["yaw"], TWIN_L["take"]["yaw"], TWIN_L["carry"]["yaw"], 0.0]))
+
+
+def _mirror_hand(h, side):
+    """A hand's target made in the canonical frame, said in his own (y mirrored for loader.l: the hand is then the
+    other one)."""
+    if side > 0:
+        return h
+    if "blend" in h:
+        return {"blend": [(w, _mirror_hand(hh, side)) for w, hh in h["blend"]]}
+    m = lambda v: (v[0], -v[1], v[2])
+    out = dict(h)
+    for key in ("at", "a", "n", "pole_world"):
+        if key in h:
+            out[key] = m(h[key])
+    return out
+
+
+def _sbm(side, bend=0.0, turn=0.0, lean=0.0, shift=(0.0, 0.0), drop=0.0, neck=(0.0, 0.0), feet=None, yaw=0.0, at=(0.0, 0.0)):
+    """stand_body said canonically (the breech to his left), mirrored for loader.l; turned by `yaw` about his root
+    and set down at `at` (canonical)."""
+    if side < 0:
+        turn, lean, shift, neck = -turn, -lean, (shift[0], -shift[1]), (neck[0], -neck[1])
+        if feet:
+            feet = {"l": (feet["r"][0], -feet["r"][1], -feet["r"][2]), "r": (feet["l"][0], -feet["l"][1], -feet["l"][2])}
+        yaw, at = -yaw, (at[0], -at[1])
+    P = stand_body(bend=bend, turn=turn, side=lean, shift=shift, drop=drop, neck=neck, feet=feet)
+    if yaw or at[0] or at[1]:
+        P = yawed(P, yaw, (at[0], at[1], 0.0))
+    return P
+
+
+def _twin_loader(t, k, name):
+    """stand_load_breech_twin (k "r") and stand_load_breech_twin_l (k "l"): the single gun's loader's work, at the
+    twin's breech, made canonically and mirrored for loader.l."""
+    L = twin()["loader." + k]
+    T = TWIN_T[k]
+    dt, side = T["dt"], L["side"]
+    rig = MODEL["rig"]
+    free = (1, 1, 1, 1, 0, 1)
+    S4, canon, uncanon = _canon(k)
+    near, far = ("r", "l") if side > 0 else ("l", "r")          # (the real hands holding the canonical right and left)
+
+    def dress(t, P):
+        Bc, shown = twin_round(t, k)
+        Bh = twin_round(T["take"] if k == "r" else T["grab"], k)[0] if T["home"] + 0.02 <= t < T["take"] + (0.0 if k == "r" else 0.1) else Bc
+        under = np.array((0.0, 0.0, 0.6))
+        Ry = Rz(_twin_yaw(k, t))                                 # (his elbows' poles turn with him)
+        tt = t + T["long"] if t < T["ready"] else t
+        u = ramp(tt, T["grab"] + 0.03, T["long"] + 0.15) if tt >= T["take"] - 0.3 else 1.0
+        if k == "l":
+            xl, xr = 0.76 + (0.52 - 0.76) * u, 0.1 + (0.16 - 0.1) * u          # (outside ammo.1's hands, then to carry)
+        else:
+            xl, xr = 0.75 + (0.52 - 0.75) * u, 0.55 + (0.16 - 0.55) * u
+        on = {"l": on_rod("l", Bh, xl, 0.05, under, thumb=1.0, pole=Ry @ np.array((-0.2, 1.0, -1.0))),
+              "r": on_rod("r", Bh, xr, 0.055, under, thumb=1.0,
+                          pole=Ry @ np.array((-0.4, -1.0, -0.6) if k == "r" else (-0.6, -0.35, -1.0)))}   # (loader.l: the elbow in, off the machine)
+        Bf = twin_round(T["home"], k)[0] if t >= T["home"] else Bc
+        base = Bf[:3, 3]
+        fist = {"at": tuple(base - Bf[:3, 0] * 0.045), "a": tuple(_n(Bf[:3, 0] + np.array((0.0, 0.0, 0.3)))), "n": (0.0, -1.0, 0.0),
+                "pole_world": (-0.3, -1.0, -0.8)}
+        if k == "r":
+            w_ram = ramp(t, 1.7 + dt, 1.85 + dt) * (1 - ramp(t, T["home"] + 0.02, T["grab"]))
+            w_l_off = ramp(t, 1.85 + dt, 2.15 + dt) * (1 - ramp(t, 2.4 + dt, T["grab"]))
+            w_r_off = 0.0
+        else:
+            # (both hands down while he turns round to the rail, up to the round as he faces it)
+            w_ram = ramp(t, 1.7, 1.85) * (1 - ramp(t, T["home"] + 0.02, T["home"] + 0.35))
+            back = ramp(t, T["take"] - 0.4, T["take"])
+            w_r_off = ramp(t, T["home"] + 0.02, T["home"] + 0.35) * (1 - back) if T["home"] <= t < T["take"] + 0.05 else 0.0
+            w_l_off = ramp(t, 1.85, 2.15) * (1 - back) if 1.85 <= t < T["take"] + 0.05 else 0.0
+        rest = hands_rest_pinned(rig, P)
+        if k == "l" and w_r_off > 0.0:
+            # (his outboard hand, on his way to the rail, kept before his thigh, not swinging out into the fuze
+            # setter's machine)
+            pc = np.asarray(rig.solve(dict(P, hand_l=rest["l"], hand_r=rest["r"]))["H"]["pelvis"], float)
+            yr = math.radians(_twin_yaw(k, t) * side)
+            rn = dict(rest[near])
+            a_ = np.asarray(rn["at"], float).copy()
+            a_[:2] += (pc[:2] - a_[:2]) * 0.4 + 0.12 * np.array((math.cos(yr), math.sin(yr)))
+            rn["at"] = tuple(a_)
+            rest = dict(rest, **{near: rn})
+        hn = blend_hand([(1 - w_ram - w_r_off, _mirror_hand(on["r"], side)), (w_ram, _mirror_hand(fist, side)), (w_r_off, rest[near])])
+        hf = blend_hand([(1 - w_l_off, _mirror_hand(on["l"], side)), (w_l_off, rest[far])])
+        P["hand_" + near], P["hand_" + far] = hn, hf
+        P["fingers_" + far], P["fingers_" + near] = 62.0, 62.0 + 20.0 * w_ram
+        P["props"] = {"flak_round": (uncanon(Bc), shown)}
+        return P
+
+    sb = lambda **kw: _sbm(side, **kw)
+    if k == "l":
+        # (the fuze setter's machine stands 0.2 m outboard of loader.l, as high as his chest: he stands at his socket
+        # and keeps his feet inboard of it)
+        clear = sb(**TWIN_L["clear"])
+        lift = sb(bend=4.0, turn=-12.0, lean=4.0, shift=(-0.02, -0.06), drop=0.05, neck=(-8.0, 10.0),
+                  feet={"l": (0.12, 0.08, 6.0), "r": (-0.16, -0.18, -12.0)})
+        ram = sb(bend=18.0, turn=-24.0, lean=2.0, shift=(0.15, -0.06), drop=0.08, neck=(-4.0, 16.0),
+                 feet={"l": (0.22, 0.08, 4.0), "r": (-0.16, -0.18, -12.0)})
+        back = sb(bend=14.0, turn=-18.0, lean=0.0, shift=(0.06, -0.04), drop=0.08, neck=(0.0, 0.0),
+                  feet={"l": (0.16, 0.08, 4.0), "r": (-0.16, -0.18, -12.0)})
+    clear_s = sb(bend=8.0, turn=10.0, lean=-10.0, shift=(0.06, -0.27), drop=0.03, neck=(6.0, 18.0),
+               feet={"l": (0.10, -0.10, 6.0), "r": (0.05, -0.44, -14.0)})
+    if k == "r":
+        clear = clear_s
+        lift = sb(bend=4.0, turn=-12.0, lean=4.0, shift=(-0.02, -0.08), drop=0.05, neck=(-8.0, 10.0),
+                  feet={"l": (0.12, 0.08, 6.0), "r": (-0.16, -0.24, -16.0)})
+        ram = sb(bend=18.0, turn=-24.0, lean=2.0, shift=(0.15, -0.08), drop=0.08, neck=(-4.0, 16.0),
+                 feet={"l": (0.22, 0.08, 4.0), "r": (-0.16, -0.24, -16.0)})
+        back = sb(bend=14.0, turn=-30.0, lean=0.0, shift=(0.06, -0.1), drop=0.08, neck=(0.0, 0.0),
+                  feet={"l": (0.16, 0.08, 4.0), "r": (-0.16, -0.24, -16.0)})
+        # (round.ready stands 0.31 further out than the single gun's: he stands out to it, in front of the rack)
+        rack = sb(bend=46.0, turn=-80.0, lean=-6.0, shift=(0.08, -0.36), drop=0.13, neck=(26.0, -30.0),
+                  feet={"l": (0.12, -0.22, 8.0), "r": (0.0, -0.54, -34.0)})
+        rise = sb(bend=28.0, turn=-62.0, lean=-4.0, shift=(0.06, -0.38), drop=0.07, neck=(16.0, -24.0),
+                  feet={"l": (0.12, -0.22, 8.0), "r": (0.0, -0.54, -34.0)})
+        keys = [(0.0 + dt, S.mix([rise, clear], [0.35, 0.65])), (T["ready"], clear), (0.9 + dt, clear), (1.35 + dt, lift),
+                (1.75 + dt, lift), (T["home"], ram), (2.35 + dt, back), (T["take"], rack), (T["grab"] + 0.02, rack), (3.0 + dt, rise)]
+        plan_c = {"l": [(0.9 + dt, 1.15 + dt, clear, lift, 0.05, None), (1.8 + dt, 2.15 + dt, lift, ram, 0.05, None),
+                        (2.25 + dt, 2.5 + dt, ram, rack, 0.05, "y"), (3.2 + dt, 3.45 + dt, rack, clear, 0.05, None)],
+                  "r": [(1.1 + dt, 1.4 + dt, clear, lift, 0.07, "y"), (2.45 + dt, 2.65 + dt, back, rack, 0.05, "y"),
+                        (2.98 + dt, 3.22 + dt, rack, clear, 0.07, "x")]}
+    else:
+        # (he turns round to his right (canonically) to the rail behind him, takes the round from ammo.1's hands at
+        # `grab`, and turns back with it)
+        # (inboard, to his left canonically, so as to keep clear of the fuze setter's machine; at his socket again
+        # before the next shot)
+        turn1, take, carry = (sb(**TWIN_L[n]) for n in ("turn1", "take", "carry"))
+        L_ = T["long"]
+        keys = [(T["carry"] - L_, carry), (T["carry"] + 0.35 - L_, clear), (0.75, clear), (1.35, lift), (1.75, lift),
+                (T["home"], ram), (2.35, back), (2.62, turn1), (T["take"], take), (T["grab"] + 0.04, take)]
+        plan_c = {"r": [(1.1, 1.4, clear, lift, 0.07, "y"), (2.36, 2.54, back, turn1, 0.06, None),
+                        (2.70, 2.84, turn1, take, 0.10, None), (3.20, 3.38, take, carry, 0.14, None),
+                        (3.58, 3.74, carry, clear, 0.06, None)],
+                  "l": [(0.9, 1.15, clear, lift, 0.05, None), (1.8, 2.15, lift, ram, 0.05, None),
+                        (2.55, 2.69, ram, turn1, 0.06, None), (2.86, 3.0, turn1, take, 0.12, "y"),
+                        (3.40, 3.56, take, carry, 0.22, None), (3.75, 3.88, carry, clear, 0.05, None)]}
+    if keys[0][0] > 0.0:
+        # (looped wants a key at 0: the pose the loop passes through there)
+        t0k = keys[0][0]
+        lp = looped([(tk - t0k, Pk) for tk, Pk in keys], T["long"])
+        keys = [(0.0, lp((-t0k) % T["long"]))] + keys
+    keys = reached_keys(name, keys, dress, free, long=T["long"])
+    P = looped(keys, T["long"])(t)
+    tt = t + T["long"] if t < T["ready"] else t
+    for s_c, plan in plan_c.items():
+        P = stepped(P, s_c if side > 0 else {"l": "r", "r": "l"}[s_c], tt, plan)
+    return reframed(reach_fix(dress(t, P), free=free), L["fit"], L["socket"])
+
+
+@crew_clip("stand_load_breech_twin", 3.3, loop=True, anchor="feet", weapon="none",
+           place=[("fort", "HeavyFlakTwin", "crew.loader.r", (0, 0, 0))],
+           events=[{"t": 0.0, "fx": "piece_clip", "clip": "fire", "cue": "play the HeavyFlakTwin's own `fire` clip with it"},
+                   {"t": 1.85, "fx": "", "cue": "round_in"}, {"t": 2.3, "fx": "", "cue": "round_home"},
+                   {"t": 2.7, "fx": "hide_part", "part": "round.ready", "cue": ""},
+                   {"t": 0.7, "fx": "show_part", "part": "round.ready", "cue": ""}],
+           about="The twin's right-hand loader (crew.loader.r; attach to the part `mount`, no offset), stand_load_breech's "
+                 "work at breech.r, 0.1 s behind it as breech.r runs 0.1 behind breech.l in the twin's fire clip (3.3 s; play "
+                 "both from the same moment): at his socket, clear of the recoil, the next round in his arms while the right "
+                 "barrel runs back (0.1) and its case flies out (0.9); steps in to his left, rams the round home (2.3) and "
+                 "pulls his fist clear before breech.r closes (2.55); steps out to the ready rack, his hands on round.ready "
+                 "at 2.7 (hide the part then: the twin's fire clip does not; the prop shows in its place, standing as it "
+                 "stood), lifts it out from 2.82, up to the ready by 0.4. Show round.ready again at 0.7 (the rack refilled). "
+                 "The guns laid level.")
+def c_stand_load_breech_twin(t):
+    return _twin_loader(t, "r", "stand_load_breech_twin")
+
+
+@crew_clip("stand_load_breech_twin_l", 3.3, loop=True, anchor="feet", weapon="none",
+           place=[("fort", "HeavyFlakTwin", "crew.loader.l", (0, 0, 0))],
+           events=[{"t": 0.0, "fx": "piece_clip", "clip": "fire", "cue": "play the HeavyFlakTwin's own `fire` clip with it"},
+                   {"t": 1.75, "fx": "", "cue": "round_in"}, {"t": 2.2, "fx": "", "cue": "round_home"},
+                   {"t": 3.08, "fx": "", "cue": "round_taken"}],
+           about="The twin's left-hand loader (crew.loader.l; attach to the part `mount`, no offset): "
+                 "stand_load_breech_twin's mirror at breech.l, in step with it (the twin's fire clip from the same moment): "
+                 "his round held upright before him at his socket while the guns fire and run out (to 0.75), swung up "
+                 "and rammed home with his right fist (2.2), the fist clear before breech.l closes (2.35). He has no ready "
+                 "round: he walks back to the rail behind him (inboard of the fuze setter's machine, stepping over the "
+                 "low strut), takes the next round from ammo.1's hands over it (stand_ammo_crate_hand_up) at 3.08, and "
+                 "walks back with it through the next shot, well behind the recoil, at his socket again by 0.55. The "
+                 "guns laid level.")
+def c_stand_load_breech_twin_l(t):
+    return _twin_loader(t, "l", "stand_load_breech_twin_l")
+
+
+def twin_ammo_round(t):
+    """ammo.1's round on the twin (world): out of the crate at his right (0.6), carried, held up over the rail in both
+    hands (2.75) and taken from them by loader.l at 2.9."""
+    tw = twin()
+    pl = tw["ammo.1"]
+    in_crate = bomb_frame(pl.world((-0.465, -0.575, 0.07)), pl.R @ np.array((1.0, 0.0, 0.0)))
+    lifted_ = bomb_frame(pl.world((-0.4, -0.5, 0.5)), pl.R @ _n(np.array((1.0, 0.2, 0.15))))
+    carried = bomb_frame(pl.world((-0.05, -0.38, 0.95)), pl.R @ _n(np.array((0.8, 0.6, 0.1))))
+    across = pl.R @ _n(np.array((0.0, 1.0, 0.08)))
+    raised = bomb_frame(pl.world((0.62, 0.0, 1.45)) - across * 0.465, across)
+    keys = [(0.6, in_crate), (0.85, lifted_), (1.3, carried), (1.9, carried), (2.3, raised), (2.6, tw["hand"]), (2.75, tw["hand"])]
+    return slerp_frames(keys, t), 0.6 <= t < AMMO1_GIVE
+
+
+@crew_clip("stand_ammo_crate_hand_up", 3.3, loop=True, anchor="feet", weapon="none",
+           place=[("fort", "HeavyFlakTwin", "crew.ammo.1", (0, 0, 0))],
+           about="An ammunition man on the ground below a gun's platform, alone: squats to the crate at his right (a "
+                 "prop, crew.json), lifts a round out (0.93), carries it two steps forward and lifts it up over the "
+                 "rail, holding it there crosswise till the loader takes it (3.08: hidden), and goes straight back down "
+                 "to the crate for the next. On the twin at crew.ammo.1, in step with stand_load_breech_twin_l and the "
+                 "fire clip (3.3 s, from the same moment).")
+def c_stand_ammo_crate_hand_up(t):
+    return _ammo_crate_hand_up((t - AMMO1_SHIFT) % TWIN_T["l"]["long"])
+
+
+def _ammo_crate_hand_up(t):
+    """stand_ammo_crate_hand_up at its own times (the hand-over at AMMO1_GIVE)."""
+    tw = twin()
+    pl = tw["ammo.1"]
+    rig = MODEL["rig"]
+    free = (1, 1, 1, 1, 1, 1)
+    grab = AMMO1_GIVE
+    long = TWIN_T["l"]["long"]
+
+    def dress(t, P):
+        B, shown = twin_ammo_round(t)
+        # (in the crate till 0.6; after the loader has it, the hands leave from where they gave it, drawn back off the
+        # rail before they come down)
+        # (and straight down to the crate for the next, his hands there by 0.55)
+        if 0.6 <= t < grab:
+            Bh = B
+        else:
+            gave = twin_ammo_round(grab)[0].copy()
+            gave[:3, 3] += pl.R @ np.array((-0.28, 0.0, 0.02))
+            if t >= grab and t < grab + 0.15:
+                Bh = twin_ammo_round(grab)[0].copy()
+                Bh[:3, 3] += pl.R @ np.array((-0.28, 0.0, 0.02)) * ramp(t, grab, grab + 0.15)
+            else:
+                tt = t + long if t < 0.6 else t
+                Bh = slerp_frames([(grab + 0.15, gave), (long + 0.55, twin_ammo_round(0.6)[0])], tt)
+        hold = round_hands(pl, Bh, xs=(0.3, 0.6))
+        w = 1.0
+        for s in ("l", "r"):
+            P["hand_" + s] = to_local(pl, hold[s])
+            P["fingers_" + s] = 40.0 + 25.0 * w
+        P["props"] = {"flak_round": (np.linalg.inv(pl.matrix()) @ B, shown), "flak_crate": (M4(np.eye(3), (-0.05, -0.62, 0.0)), True)}
+        return P
+
+    stand = stand_body(bend=2.0, turn=-6.0, neck=(-10.0, 4.0))
+    # (squatting to the round lying in the crate on the ground)
+    crate = stand_body(bend=50.0, turn=-60.0, side=-8.0, shift=(-0.14, -0.12), drop=0.52, neck=(20.0, -20.0),
+                       feet={"l": (0.08, 0.14, -10.0), "r": (-0.1, -0.2, -45.0)})
+    carry = stand_body(bend=6.0, turn=-8.0, drop=0.03, neck=(8.0, 10.0), feet={"l": (0.05, 0.13, 6.0), "r": (-0.06, -0.14, -14.0)})
+    fwd = 0.46
+    carry2 = stand_body(bend=4.0, turn=0.0, shift=(fwd, 0.0), drop=0.03, neck=(-10.0, 0.0),
+                        feet={"l": (fwd + 0.05, 0.13, 2.0), "r": (fwd - 0.06, -0.14, -8.0)})
+    hand_up = stand_body(bend=-8.0, turn=4.0, shift=(fwd + 0.12, 0.02), neck=(-26.0, 0.0),
+                         feet={"l": (fwd + 0.24, 0.12, 0.0), "r": (fwd - 0.06, -0.15, -10.0)})
+    keys = [(0.0, S.mix([stand, crate], [0.55, 0.45])), (0.42, crate), (0.68, crate), (1.2, carry), (1.85, carry2), (2.45, hand_up),
+            (grab + 0.04, hand_up), (3.05, stand)]
+    keys = reached_keys("stand_ammo_crate_hand_up", keys, dress, free, long=long)
+    P = looped(keys, long)(t)
+    tt = t + long if t < 0.1 else t
+    P = stepped(P, "r", tt, [(0.15, 0.38, stand, crate, 0.06, None), (0.75, 1.0, crate, carry, 0.06, None),
+                             (1.45, 1.7, carry, carry2, 0.07, None), (2.82, 3.05, carry2, stand, 0.06, None)])
+    P = stepped(P, "l", tt, [(1.18, 1.45, stand, carry2, 0.07, None), (2.05, 2.3, carry2, hand_up, 0.06, None),
+                             (3.05, 3.3, hand_up, stand, 0.06, None)])
+    return reach_fix(dress(t, P), free=free)
+
+
 # ---- throw_flat: the dive to the ground under fire
 THROW = {"ahead": 1.1}                # (where his hips come down: 1.1 m ahead of where his feet were)
 
@@ -2280,13 +2654,13 @@ def measure_seats():
     """What is under each crew socket of the vehicles: ray-cast straight down from 0.25 m above `at` to the first
     surface (the seat's top, or the floor), and on down from 0.45 m ahead of it to the floor in front of the seat."""
     out = {}
-    for v in ("M3Halftrack", "Truck", "Hanomag", "PanzerIV"):
+    for v in ("M3Halftrack", "Truck", "Hanomag", "FlakHalftrack", "M7", "PanzerIV"):
         kit.fresh(FPS)
         objs = load_piece("vehicle", v)
         tree, bm = env_tree(objs)
         res = {}
         for name, s in sockets_of("vehicle", v).items():
-            if not (name in ("driver", "rider.cab", "gunner", "commander") or name.startswith("rider.")):
+            if not (name in ("driver", "rider.cab", "gunner", "commander") or name.startswith(("rider.", "crew."))):
                 continue
             at = np.asarray(s["at"], float)
             hit = tree.ray_cast(Vector(at + np.array((0.0, 0.0, 0.25))), Vector((0.0, 0.0, -1.0)), 2.0)
@@ -2378,17 +2752,21 @@ SEAT_H = {"sit_bench": BENCH_H, "sit_drive": CAB_H, "sit_cab": CAB_H, "sit_handw
 # Where each clip fits beyond the pieces it was fitted at (the names are the job, not the vehicle).
 FITS = {
     "sit_bench": "any rider on a bench facing inboard whose top is about 0.44 over the floor his boots are on (the M3's "
-                 "and the Truck's rider.N). Other heights: crew.pose(stance 'sit', seat_h).",
+                 "the Truck's and the Hanomag's rider.N). Other heights: crew.pose(stance 'sit', seat_h).",
     "sit_drive": "a driver at a wheel 0.44 ahead of his seat point and 0.16 over it, tilted 36 degrees back, the seat 0.40 "
-                 "over the floor (the M3's driver). Other wheels: crew.pose with the wheel's two grips.",
-    "sit_cab": "the man beside a driver, his seat 0.40 over the floor (the M3's rider.cab).",
+                 "over the floor (the M3's, the Hanomag's and the FlakHalftrack's driver: in the two Sd.Kfz. 251 his right boot "
+                 "goes into the block across the footwell, see the issues). Other wheels: crew.pose with the wheel's two grips.",
+    "sit_cab": "the man beside a driver, his seat 0.40 over the floor (the M3's, the Hanomag's and the FlakHalftrack's "
+               "rider.cab).",
     "commander_hatch": "a commander stood in a hatch or behind an open turret's wall, his forearms on its top: the root (his "
                        "feet) 1.17 m under that rim. PanzerIV commander: 0.92 under the socket. For the open M10, M8, M16, "
-                       "FlakHalftrack, FlakTruck, M7, Sexton, Hummel and SU76 (walls about 1 m over the floor) the root goes "
+                       "FlakTruck, Sexton, Hummel and SU76 (walls about 1 m over the floor) the root goes "
                        "1.17 under the wall's top, so his boots are about 0.17 under the floor, out of sight behind the "
-                       "wall; where they would show, crew.pose(stance 'stand') with his hands on the wall's top instead.",
+                       "wall; where they would show, crew.pose(stance 'stand') with his hands on the wall's top instead. "
+                       "The FlakHalftrack's and the M7's commanders stand on their floors (the sockets at their feet): "
+                       "not this clip, see the issues.",
     "stand_mg": "a man stood at a pedestal or ring-mounted machine gun with spade grips 0.40 ahead of his feet and 1.08 up "
-                "(the M3's gunner; the M7's crew.mg in its pulpit, with a root_offset that puts its grips there). Attach "
+                "(the M3's gunner, no offset; the M7's crew.mg once its pulpit has a step, see the issues). Attach "
                 "him to the gun's turning part.",
     "stand_mg_burst": "as stand_mg, firing.",
     "mg_pair_gunner": "a prone machine-gun team's gunner, anywhere on the ground.",
@@ -2405,7 +2783,18 @@ FITS = {
                          "1.59 up, stepping in to ram the round home with his fist and taking the next from a ready rack "
                          "0.23 behind him and 0.09 to his right (the HeavyFlak's crew.loader, which faces 8.5 degrees left "
                          "of the gun's line; these are square to his facing). The M7's, Sexton's, Hummel's, SU76's and M10's loaders: "
-                         "a root_offset that puts their breech there; a lower breech wants crew.pose.",
+                         "a root_offset that puts their breech there; a lower breech (the M7's, 0.73 over its floor) "
+                         "wants crew.pose.",
+    "stand_load_breech_twin": "a loader stood beside a breech's path, square to it, the breech 0.57 ahead of his feet, 0.30 "
+                              "to his left and 1.59 up, the round in his ready rack 0.17 behind him and 0.63 to his right "
+                              "(the HeavyFlakTwin's crew.loader.r; he works 0.1 s behind breech.l, as breech.r fires).",
+    "stand_load_breech_twin_l": "its mirror, the breech 0.30 to his right, with no rack: he takes each round from "
+                                "stand_ammo_crate_hand_up's hands 1.0 m behind him, 0.07 to his right and 1.24 up, over a "
+                                "rail (the HeavyFlakTwin's crew.loader.l).",
+    "stand_ammo_crate_hand_up": "an ammunition man alone on the ground behind a gun's platform, taking rounds from a crate "
+                                "(the prop) at his right and handing them up over a rail 1.7 m above his feet, 0.84 m ahead "
+                                "of his socket, 0.63 to its right and 1.90 up (the HeavyFlakTwin's crew.ammo.1, to "
+                                "stand_load_breech_twin_l).",
     "stand_ammo_give": "an ammunition man taking rounds from a crate (the prop, with the clip) behind his right and holding "
                        "them out to his left, about 0.9 m, to stand_ammo_hand_up.",
     "stand_ammo_hand_up": "an ammunition man taking the round from stand_ammo_give on his right and handing it up over a rail "
@@ -2438,7 +2827,8 @@ STAGES = {
 }
 CHECK_AT = {
     "sit_bench": [("vehicle", "M3Halftrack", "rider.1"), ("vehicle", "M3Halftrack", "rider.8"), ("vehicle", "Truck", "rider.2"),
-                  ("vehicle", "Truck", "rider.9")],
+                  ("vehicle", "Truck", "rider.9"), ("vehicle", "Hanomag", "rider.1"), ("vehicle", "Hanomag", "rider.5"),
+                  ("vehicle", "Hanomag", "rider.8")],
     "mg_pair_gunner": [], "mg_pair_feeder": [], "throw_flat": [],
 }
 
@@ -2460,6 +2850,7 @@ def stage_piece(kind, piece):
 # played from the same moment (the barrel's recoil, the breech opening, round.ready hidden while the loader's round is
 # out of the rack); a layer's handwheel turned with his hands)
 MOVES = {"stand_load_breech": ("fire",), "stand_ammo_hand_up": ("fire",), "stand_ammo_give": ("fire",),
+         "stand_load_breech_twin": ("fire",), "stand_load_breech_twin_l": ("fire",), "stand_ammo_crate_hand_up": ("fire",),
          "sit_handwheel_traverse": ("spin", "handwheel.traverse"), "sit_handwheel_elevate": ("spin", "handwheel.elevate")}
 
 
@@ -2484,11 +2875,15 @@ def piece_mover(clip, objs, kind, piece):
     arm = [o for o in objs if o.type == "ARMATURE"][0]
     names = [b.name for b in arm.data.bones]
     if mv[0] == "fire":
-        acts = [a for a in bpy.data.actions if a.name.split(".")[0] == "fire" and
-                any(fc.data_path.startswith('pose.bones["barrel') for fc in kit.fcurves_of(a))]
+        def bones_of(a):
+            return {fc.data_path.split('"')[1] for fc in kit.fcurves_of(a) if fc.data_path.startswith("pose.bones[")}
+        acts = [a for a in bpy.data.actions if a.name.split(".")[0] == "fire" and bones_of(a) and bones_of(a) <= set(names)]
         if not acts:
             return None
         act = acts[-1]
+        # (a part the clip's events hide (the twin's round.ready, which its fire clip leaves to the game))
+        hide = [(e["part"], e["t"]) for e in CREW[clip]["events"] if e.get("fx") == "hide_part"]
+        show = {e["part"]: e["t"] for e in CREW[clip]["events"] if e.get("fx") == "show_part"}
 
         def at(t):
             if arm.animation_data is None:
@@ -2500,6 +2895,11 @@ def piece_mover(clip, objs, kind, piece):
             except AttributeError:
                 pass
             bpy.context.scene.frame_set(int(round(t * FPS)))
+            for part, t_hide in hide:
+                t_show = show.get(part, 0.0)
+                gone = (t >= t_hide or t < t_show) if t_show < t_hide else (t_hide <= t < t_show)
+                arm.pose.bones[part].location = (0.0, -60.0, 0.0) if gone else (0.0, 0.0, 0.0)
+            bpy.context.view_layer.update()
             return env_tree(objs)
         return at
     part = mv[1]
@@ -2669,6 +3069,29 @@ PICTURES = {
                     "about": "The HeavyFlak's crew 0.1 s after the shot, the barrel run back 0.62 m (as the gun's own fire clip "
                              "has it then; round.ready hidden, the loader holds the next round): the loader at crew.loader, "
                              "clear to the right of the recoil, the round in his arms."},
+    "flak_twin": {"kind": "fort", "piece": "HeavyFlakTwin",
+                  "men": [("sit_handwheel_traverse", 0.2, "crew.layer.traverse"), ("sit_handwheel_elevate", 0.6, "crew.layer.elevate"),
+                          ("stand_load_breech_twin", 3.04, "crew.loader.r"), ("stand_load_breech_twin_l", 3.04, "crew.loader.l"),
+                          ("stand_ammo_crate_hand_up", 3.04, "crew.ammo.1")],
+                  "slides": [("round.ready", (0.0, 0.0, -60.0))],
+                  "eye": (-6.2, -2.9, 3.2), "target": (-1.9, -0.35, 1.3), "lens": 35,
+                  "about": "The HeavyFlakTwin's loaders at 3.04 s of the fire clip, both breeches closed: loader.l, back at "
+                           "the rail, takes his next round from ammo.1's hands over it; loader.r lifts his out of the ready "
+                           "rack (round.ready hidden, his prop round in its place); the layers at their wheels."},
+    "hanomag_m7": {"kind": "vehicle", "piece": "Hanomag",
+                   "men": [("sit_bench", 0.55 * i, "rider.%d" % i) for i in range(1, 11)] +
+                          [("sit_drive", 1.0, "driver"), ("sit_cab", 2.6, "rider.cab")],
+                   "also": [{"kind": "vehicle", "piece": "M7", "at": (0.6, -3.4), "yaw": 0.0, "men": [],
+                             "posed": [("commander", None, None, (4.0, -0.3, 2.2)),
+                                       ("crew.gunner", (0.89, -0.25, 1.55), (0.97, -0.34, 1.75), (2.6, 0.15, 1.9)),
+                                       ("crew.loader", None, None, (0.54, 0.15, 1.81)),
+                                       ("crew.loader2", None, None, (0.54, 0.15, 1.81)),
+                                       ("crew.mg", (1.30, 0.82, 2.68), (1.30, 0.92, 2.68), (3.0, 0.92, 2.75))]}],
+                   "eye": (5.6, -5.2, 6.6), "target": (-0.4, 1.6, 0.8), "lens": 28,
+                   "about": "A Hanomag with her riders (sit_bench at rider.1-10), driver (sit_drive) and rider.cab (sit_cab), "
+                            "and beside her an M7 with her crew posed by crew.pose, as no clip of ours fits them (see the "
+                            "issues): the commander, the layer stooping to his low handwheels, the two loaders by the low "
+                            "breech, the machine-gunner in the pulpit reaching up to the M2's grips."},
     "mortar_crew": {"kind": "fort", "piece": "Mortar",
                     "men": [("mortar_number1", 1.2, "crew.number1"), ("mortar_number2", 1.2, "crew.number2"), ("mortar_number3", 1.2, "crew.number3")],
                     "eye": (2.5, 2.3, 1.9), "target": (0.0, 0.0, 0.6), "lens": 35,
@@ -2742,6 +3165,23 @@ def build_picture(name, fast=False):
             # (a layer's handwheel turned as far as his hands have turned it, its handles in his fists)
             piv = next(p["pivot"] for p in piece_json(spec["kind"], spec["piece"])["parts"] if p["name"] == mv[1])
             pose_part(objs, mv[1], wheel_turn(t, CREW[clip]["long"]), (1.0, 0.0, 0.0), piv)
+    for extra in spec.get("also", []):
+        # (a second piece beside the first, at (x, y) and turned `yaw` degrees, the game's axes: its men on clips, and
+        # men posed by crew.pose where no clip fits)
+        at_b = g2b((extra["at"][0], extra["at"][1], 0.0))
+        yaw_b = -float(extra.get("yaw", 0.0))
+        T = M4(Rz(yaw_b), at_b)
+        load_piece(extra["kind"], extra["piece"], at=tuple(at_b), yaw=yaw_b)
+        esocks = sockets_of(extra["kind"], extra["piece"])
+        for clip, t, sock in extra.get("men", []):
+            off = next((o for kk, p, s_, o in CREW[clip]["place"] if p == extra["piece"] and s_ == sock), (0, 0, 0))
+            man_at(m, clip, t, T @ np.asarray(place_matrix(extra["kind"], extra["piece"], sock, off, esocks)))
+        js = {x["name"]: x for x in piece_json(extra["kind"], extra["piece"])["sockets"]}
+        for sock, gl, gr, look in extra.get("posed", []):
+            sk = js[sock]
+            cm = clone(m, with_weapon=False)
+            pose(cm, sk.get("stance", "stand"), sk.get("seat_h", 0.0), gl, gr, sk.get("facing", (1, 0, 0)), sk["at"], look=look)
+            cm["arm"].matrix_world = Matrix(T.tolist()) @ cm["arm"].matrix_world
     m["arm"].location = (0.0, 0.0, -50.0)
     kit.studio(sun_elev=42, sun_turn=-35)
     kit.backdrop("A49C84" if spec["kind"] == "ground" else "B5AD98")
@@ -2761,30 +3201,45 @@ def build_picture(name, fast=False):
 # ================================================================================================ the whole job
 ISSUES = [
     "Vehicles: the sockets' `at` is the seat's top (the M3's, the Truck's and the Hanomag's benches, drivers' and cab "
-    "seats: the ray-cast lands within a few millimetres of `at`); `gunner` is on the floor. crew.json `measure` has every "
-    "socket.",
-    "M3Halftrack `gunner`: 0.27 m too close to the pedestal gun's spade grips for a man stood at it; stand_mg's root "
-    "goes 0.27 m behind the socket (root_offset).",
-    "Truck: the cab has no inside (its box comes down to 1.45, through a seated driver's head; no wheel, no seats), so "
-    "sit_drive/sit_cab are not placed in it. Its benches are 0.455 over the floor (the M3's 0.44): sit_bench there "
-    "leaves the boots 1.5 cm above the floor.",
-    "Hanomag: its floor plate is 0.94, 0.09 under the benches' top and 0.06 under the driver's seat (no room for legs); "
-    "its wheel is inside a seated driver's chest; `gunner` is 0.20 m under the plate. Nothing is placed in it.",
-    "PanzerIV: no `driver` socket. Its open commander's hatch is drawn as painted discs over a shut roof (2.29): a man in "
-    "the cupola cuts through them (the black disc reads as the hole). Its `commander` socket's note says he 'stands here, head and "
-    "shoulders out', but it is 0.25 m under the cupola's rim: with his feet on it he would be out to the knees. "
-    "commander_hatch's root (his feet) goes 0.92 m under the socket instead (the rim 1.17 m over his feet, his chest out "
-    "of it); or move the socket down 0.92. The turret has no inside, so his legs stand in the shut "
-    "turret below the roof; he is checked against the mesh above the rim and against the cupola's ring as measured. He "
-    "wears the infantry kit.",
+    "seats: the ray-cast lands within a few millimetres of `at`); `gunner`, the FlakHalftrack's and the M7's stood men "
+    "are on the floor at their feet. crew.json `measure` has every socket.",
+    "M3Halftrack (the 09:57 export): `gunner` stands 0.77 behind the pedestal now, the spade grips 0.40 ahead of his "
+    "feet and 1.08 up, as stand_mg has them: it goes on the socket as it is (no root_offset; 0.1 cm).",
+    "Truck: her cab is shut and its glass dark, no man shown in it (her sockets' notes): sit_drive/sit_cab are not "
+    "placed there. Its benches are 0.455 over the floor (the M3's 0.44): sit_bench there leaves the boots 1.5 cm above "
+    "the floor.",
+    "Hanomag (the 10:19 export): the benches are 0.44 over the floor (0.59): sit_bench fits as it is (1.0 cm; rider.5 "
+    "1.25 cm, his chest at the stern). Hanomag and FlakHalftrack `driver` and `rider.cab`: the seats' tops 0.85, the "
+    "footwell 0.40 under them, the wheel where sit_drive has it. A block across the front of the footwell (x 0.95 to "
+    "1.30, its top 0.53, 8 cm over the footwell's floor) is where the boots go, 0.65-0.75 ahead of the seat point: "
+    "sit_drive's right boot goes 7.5 cm into it, sit_cab's left 3.2 cm. The block 0.15 further forward (from x 1.10), or "
+    "the footwell's floor up to its top, mends both. The seats' backs (0.14 behind the seat point) take the hips 2 cm. "
+    "The Hanomag's `gunner` shoulders his gun behind the shield (its butt 1.4 over his feet): no clip of ours "
+    "(stand_mg is for spade grips; a stood man there has his head 2 cm in the shield at the end of its look round): "
+    "crew.pose(stance 'stand').",
+    "FlakHalftrack: `commander` (feet at (-0.30, 0, 0.74)): a bar along her middle at 1.82, from x -0.38 to -0.13, is "
+    "1.08 over his feet, through a stood man's chest (commander_hatch there puts his back 2.5 cm into it), and no clip "
+    "of ours is a man stood watching the sky. `crew.loader` (-1.15, -0.42) is 0.43 m from the foot of the gun's mount "
+    "and under its platform (0.42 over his feet): a man stood there has his thigh 5.6 cm in it; `crew.loader2` 2.3 cm "
+    "(thigh). `crew.gunner` (seated at 1.62) has no grips on the gun, so sit_handwheel_* is not placed.",
+    "M7 (the 10:20 export): her floor (1.076) has room for crew.loader, crew.loader2 and commander to stand (a stood man "
+    "at the loaders' sockets is clear). Her breech is 0.73 over that floor (stand_load_breech's 1.59): no clip of ours "
+    "loads so low (crew.pose). `crew.gunner`'s handwheels are 0.43 (traverse) and 0.60 (elevation) over the floor, 0.13 "
+    "and 0.25 ahead of him: a stood layer stoops to them, and a stood man there has his hips 2.3 cm in the mount; a seat "
+    "about 0.45 high would let sit_handwheel_* go there. `commander`: the box's side 0.3-0.6 m from him is 0.92 over "
+    "the floor, so commander_hatch's forearms (1.17) would hang 0.25 over it: crew.pose. `crew.mg`: the M2's spade "
+    "grips are about 0.17 ahead of the socket, 0.11 to its left and 1.35 over the pulpit's floor (stand_mg has them "
+    "0.40 ahead and 1.08 up): a step 0.27 high in the pulpit with the socket on it lets stand_mg go there with "
+    "root_offset (-0.23, -0.11, 0).",
+    "PanzerIV (the 10:38 export): no `driver` socket. Its `commander` socket's note now says his feet go 0.92 under it, "
+    "as commander_hatch's root_offset has them (the rim 1.17 m over his feet, his chest out of it); checked against the "
+    "mesh above the rim and against the cupola's ring as measured (1.0 cm). He wears the infantry kit.",
     "Mortar: crew.number3 is 4 cm from the bomb box (a kneeling man's thigh goes into it): mortar_number3's root goes "
     "0.10 m to his left. MortarPit's number1 is 3 cm off the Mortar's (its root_offset puts his eye at the sight); "
     "MortarPit's number3 (by the niche) has no clip.",
-    "HeavyFlak and HeavyFlakTwin (the 09:41Z export): the layers' fists go round with grip.layer.*.l/r as the wheels turn "
-    "them (the clips turn the game's plus way: the right-hand handle rises, as the piece's own follow clip turns it), "
-    "each fist round the middle of its handle, 1.5 cm nearer him than the socket: a fist centred on the socket (1.5 cm "
-    "off the rim) puts its thumb 2.4 cm into the rim and the wheel's face at the top of the turn. Moving the sockets "
-    "1.5 cm along the handles would make them the fists' centres.",
+    "HeavyFlak and HeavyFlakTwin (the 10:19Z export): the layers' fists are centred on grip.layer.*.l/r (the handles' "
+    "middles) and go round with them as the wheels turn (the clips turn the game's plus way: the right-hand handle "
+    "rises, as the piece's own follow clip turns it), the thumbs toward the layers, clear of the rims.",
     "HeavyFlak: crew.loader (0.30 to the right of where it was, out of the recoil) also faces 8.5 degrees left of the "
     "gun's line, so a root_offset alone could not carry stand_load_breech there: the clip is said at the socket as it "
     "stands (no offset), the same moves in the gun's frame, and he stands at the socket, clear of the recoil, while the "
@@ -2792,9 +3247,17 @@ ISSUES = [
     "agrees with him: the fire clip hides it at 2.6, the moment his prop round shows in its place (standing as it stood), "
     "his hands close on it at 2.72 and lift it out from there; it shows again from 0.6, when he is at the breech. The "
     "clips assume the gun laid level (the breech at its rest).",
-    "HeavyFlakTwin: its loaders have no clip. loader.r's breech is 0.30 to his left (the single gun's 0.41) and its "
-    "round.ready 0.63 to his right (0.09): a root_offset cannot fit stand_load_breech to both; loader.l is the mirror and "
-    "has no ready round of its own. It wants its own clip (and a mirrored one for loader.l).",
+    "HeavyFlakTwin: its fire clip does not hide round.ready (the single gun's does): stand_load_breech_twin's events "
+    "say when (hide it at 2.7, when loader.r's hands close on it and his prop round shows in its place; show it again at "
+    "0.7).",
+    "HeavyFlakTwin: loader.l has no ready round, so stand_load_breech_twin_l walks to the rail for each one (1.0 m behind "
+    "his socket) and takes it from ammo.1 (stand_ammo_crate_hand_up) there. His way runs between a low strut (from the "
+    "platform at (-1.79, -0.73) up to the mount at (-0.90, -0.38): he steps over its low end) and crew.fuze, and a man "
+    "standing at crew.fuze is in it: the two overlap from 2.6 to 3.1. crew.fuze 0.3 m further out (y -1.54) clears him "
+    "by 4 cm; a ready rack of loader.l's own (a round.ready as loader.r's) would spare him the walk. The fuze setter's "
+    "machine stands 0.21 m outboard of loader.l at his waist and chest (its face at y -1.03, 0.94-1.18 m over the "
+    "platform): he holds his round upright before him while the guns fire, to keep his elbow off it. crew.fuze and "
+    "crew.ammo.2 have no clip.",
     "soldier.py's kneel_base (the soldier pack's own kneeling clips) puts the right boot's toes about 10 cm into the "
     "ground and the knee 4 cm over it. The crew's kneeling men are fixed here (kneel_grounded: the foot stood up on its "
     "tucked toes, the hips let down 4 cm); the soldier pack's kneel clips want the same.",
@@ -2911,7 +3374,8 @@ def write_readme(path, data, pictures):
     L.append("Playing together: `mg_pair_gunner` and `mg_pair_feeder` share one root (on the ground under the gunner's "
              "hips). `mortar_number1/2/3` start together, each at its own socket; the Mortar's own `fire` clip goes at 1.62 "
              "(the event in mortar_number2). `stand_load_breech`, `stand_ammo_hand_up` and `stand_ammo_give` run with the HeavyFlak's own "
-             "`fire` clip (3.2 s) from the same moment: t = 0 is the shot. The layers' clips turn the handwheel one turn a "
+             "`fire` clip (3.2 s) from the same moment: t = 0 is the shot; `stand_load_breech_twin`, `stand_load_breech_twin_l` and "
+             "`stand_ammo_crate_hand_up` with the HeavyFlakTwin's (3.3 s), the same way. The layers' clips turn the handwheel one turn a "
              "second the game's plus way: play them at the wheel's speed (the game spins it 60 degrees per degree of "
              "training), backwards while it turns minus. "
              "`throw_flat` ends with his hips 1.1 m ahead of its root (`end_offset`): carry on with the soldier's prone "
