@@ -391,8 +391,12 @@ describe('the landing card\'s line', () => {
 describe('one war at the history stop, nobody playing', () => {
   it('a staff refused on the mainland builds up for it sooner than spend its landing force on an island that passes', () => {
     // (Seed 39 as first measured: every beach in France refused America's three corps in June 1944, the staff put
-    // them on Malta that month, the quay stood empty through the summer and Germany fell before it came back.)
-    const g = startOpen(createGame(39, null));
+    // them on Malta that month, the quay stood empty through the summer and Germany fell before it came back. Seed 45
+    // since ruling 227, whose air war moved every war: Calais and Rouen refuse America's corps in June 1944 and the
+    // staff lands them at Marseille that month. In the 32 wars measured, seeds 40 to 71, no American first wave of 1944
+    // went to an island; six were refused a French beach that summer, two of them landed in France by August, and the
+    // rest built up.)
+    const g = startOpen(createGame(45, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
     landingWatch.tell = (e) => { if (!e.wave) landings.push({ turn: g.turn, nat: e.nat, to: e.to, corps: e.force.length }); };

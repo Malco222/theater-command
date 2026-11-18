@@ -184,7 +184,7 @@ export interface GroupRow {
 const escorted = (g: Game, f: AirFleet): AirFleet | null => (f.escorts === undefined ? null : g.airFleets.find((x) => x.id === f.escorts && x.nat === f.nat && x.bmr > 0) ?? null);
 
 export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human): GroupRow {
-  const R = airRange(f);
+  const R = airRange(f, g);
   const kind = kindOf(f);
   const away = f.flew === g.turn && isOffensive(f.mission);
   const with_ = escorted(g, f);
@@ -266,7 +266,7 @@ const mine = (g: Game, id: number, nat: string | null): AirFleet | null => {
 export function groupJobs(g: Game, id: number, nat: string | null = g.human): GroupJob[] {
   const f = mine(g, id, nat);
   if (!f) return [];
-  const R = airRange(f), kind = kindOf(f);
+  const R = airRange(f, g), kind = kindOf(f);
   const deck = carrierOf(g, f), home = deck ? `the ${deck.name}` : g.regions[f.base].name;
   const away = f.flew === g.turn && isOffensive(f.mission);
   const gone = away ? `It has flown its raid this month, and is back ${deck ? 'aboard' : 'at its airfield'} next month.` : null;
@@ -376,7 +376,7 @@ function whyNotSeat(g: Game, f: AirFleet, kind: RaidKind, target: number): strin
     if (!r) return 'Pick a province.';
     if (f.scouted === g.turn) return 'It has flown its reconnaissance this month.';
     if (!atWar(g, f.nat, r.ctrl)) return 'Only ground held by a nation you are at war with is photographed.';
-    const R = airRange(f);
+    const R = airRange(f, g);
     return kmTo(g, f, target) <= (f.bmr > 0 ? R.bmr : R.ftr) ? null : 'It is out of range.';
   }
   if (f.flew === g.turn) return 'It has flown its raid this month.';
@@ -766,7 +766,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   }
   plan.picked = going.map((f) => f.id);
   plan.seats = fleets.map((f): RaidSeat => {
-    const d = dist(f), R = airRange(f), k = kindOf(f);
+    const d = dist(f), R = airRange(f, g), k = kindOf(f);
     const effect = k === 'bmr' ? (d <= R.bmr ? 1 : 0) : kind === 'night' ? 0 : cover(d, R.ftr);
     const why = whys.get(f.id) ?? null;
     // (A group with no distance to fly is not told '0 km', which reads as a fault: its carriers lie off the target, or its field is at it.)

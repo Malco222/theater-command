@@ -39,7 +39,8 @@ const landings: { turn: number; nat: string; to: string; owner: string; island: 
 const canada: { turn: number; across: number; inBritain: number; where: string[] }[] = [];
 {
   // Seed 8 (seed 7 until Version 84, whose rules of what an attack brings and faces moved every war): nobody stands on
-  // Germany's ground in January 1943, and America's own landing in France is Marseille in June 1944.
+  // Germany's ground in January 1943. (America's own landing was Marseille in June 1944 until ruling 227; since then it
+  // is Sardinia in July 1943.)
   const g = wide(8);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, island: e.to.nb.length === 0, overseas: e.to.overseas, wave: e.wave, entered: germanyEntered(g) }); };
   while (g.turn < OCT_44) {
@@ -260,10 +261,16 @@ describe('a staff that waits for its date', () => {
     // January 1943 in the war nobody plays: Germany holds the Channel coast, and France's month has not come.
     const g = at(JAN_43);
     expect(germanyEntered(g)).toBe(false);
+    // (A quiet year on land with Germany, as when this war was first measured. Since ruling 227 the desert war runs on
+    // into the autumn of 1942 in every war of seeds 1 to 13, and a staff still fighting him on land looks for no
+    // crossing whatever its list says: so the year is made quiet here, and only the list is left to tell the two apart.)
+    const quiet = (x: Game): void => { x.nations.UK.lastFight.GER = Math.min(x.nations.UK.lastFight.GER ?? 0, JAN_43 - 12); x.nations.GER.lastFight.UK = Math.min(x.nations.GER.lastFight.UK ?? 0, JAN_43 - 12); };
+    quiet(g);
     for (const k of ['st:foe:UK', 'st:foeAt:UK']) delete g.flags[k];
     expect(seaFoe(g, 'UK')).toBeNull();
     // Where the list is put away the same staff, the same month, has the enemy across the Channel in its eye.
     const loose = at(JAN_43);
+    quiet(loose);
     for (const k of ['st:foe:UK', 'st:foeAt:UK']) delete loose.flags[k];
     expect(setStop(loose, 4)).toBe(true);
     expect(seaFoe(loose, 'UK')?.foe).toBe('GER');

@@ -582,7 +582,7 @@ export function whyNotSearch(g: Game, f: AirFleet, z: number): string | null {
   if (f.ftr + f.bmr <= 0) return 'It has no aircraft fit to fly.';
   if (f.scouted === g.turn) return 'It has flown its reconnaissance this month.';
   if (!g.nations[f.nat].atWar.length) return 'The nation is at peace.';
-  const R = airRange(f);
+  const R = airRange(f, g);
   return kmToSea(g, f, z) <= (f.bmr > 0 ? R.bmr : R.ftr) ? null : 'That sea is out of its range.';
 }
 

@@ -177,6 +177,9 @@ describe('the fleet and the fighters over the crossing', () => {
     const setup = (aim: boolean): { g: Game; beach: Region; mine: Game['airFleets'] } => {
       const g = quietYear();
       const mine = g.airFleets.filter((f) => f.nat === 'UK' && f.kind === 'ftr' && f.ftr >= 100);
+      // (Britain's strongest fighter group set down in Kent: since ruling 227 its staff bases its fighters by the threat,
+      // and after the quiet year they stand back from the Channel.)
+      [...mine].sort((x, y) => y.ftr - x.ftr)[0].base = g.byName.Kent.id;
       let beach: Region | null = null;
       for (const r of g.regions) {
         if (beach || (r.owner !== 'BEL' && r.owner !== 'NED')) continue;
