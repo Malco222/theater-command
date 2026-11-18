@@ -183,12 +183,24 @@ export interface Prize {
   /** How many railway lines meet here (the grand campaign). */
   rails: number;
   items: PrizeItem[];
-  /** One sentence: "Taking Lodz is worth 59 a month to you: 1 factory and 1 victory point of Poland's 17." */
+  /** One sentence: "Taking Lodz is worth 59 a month to you: a factory and 1 of Poland's 17 victory points." */
   line: string;
 }
 
 const listed = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
+/** A country's name as the owner of something: "Canada's", "the United States'". */
+const whoseIs = (n: { name: string }): string => `${theName(n as Parameters<typeof theName>[0])}${/s$/.test(n.name) ? "'" : "'s"}`;
+/**
+ * A town's share of its country's victory points (the UI director, review-1441x878, 18 November): the count before
+ * the owner, "2 of Canada's 13 victory points"; a town that holds them all, "Panama's only victory point" or "all 3
+ * of X's victory points". `row` is the form under the row's own label, which names them: "Panama's only one".
+ */
+function vpShare(vp: number, all: number, owner: { name: string }, row = false): string {
+  const of = whoseIs(owner);
+  if (vp >= all) return all === 1 ? (row ? `${of} only one` : `${of} only victory point`) : row ? `All ${all} of ${of}` : `all ${all} of ${of} victory points`;
+  return row ? `${vp} of ${of} ${all}` : `${vp} of ${of} ${all} victory points`;
+}
 
 /** What holding a province is worth to a nation: what it has there if it is its own, or what taking it would bring. */
 export function prizeOf(g: Game, region: number, nat: string | null = g.human): Prize | null {
@@ -243,15 +255,16 @@ export function prizeOf(g: Game, region: number, nat: string | null = g.human): 
   if (r.port) items.push({ key: 'harbour', label: 'Harbour', text: yard > 0 ? `A harbour with a shipyard of level ${yard}: a base for fleets, and a port for supply and for landings` : 'A harbour: a base for fleets, and a port for supply and for landings' });
   if (airfield > 0) items.push({ key: 'airfield', label: 'Airfield', text: `An airfield of level ${airfield} to fly from` });
   if (rails >= 3) items.push({ key: 'rail', label: 'Railway', text: `A junction where ${rails} lines meet` });
-  if (r.vp > 0 && !r.overseas) items.push({ key: 'vp', label: 'Victory points', text: `${r.vp} of ${theName(owner)}'s ${vpAll}: a country that has lost its capital and enough of these gives up the war` });
+  if (r.vp > 0 && !r.overseas) items.push({ key: 'vp', label: 'Victory points', text: `${vpShare(r.vp, vpAll, owner, true)}: a country that has lost its capital and enough of these gives up the war` });
   if (capitalOf && capitalOf !== nat && !allied(g, nat, capitalOf)) items.push({ key: 'capital', label: 'Capital', text: `The capital of ${theName(owner)}. Its fall may knock ${owner.name} out of the war, and shakes the morale of every corps it has` });
   // (A fallen country returns at a month's end, with no enemy corps in or next to its capital: ruling 229, part 2.)
   if (frees) items.push({ key: 'frees', label: 'Liberation', text: `The capital of ${theName(g.nations[frees])}, which has fallen. Take it and hold it to ${monthsEnd(g, g.nations[frees])}, with no enemy corps in or next to it, and ${g.nations[frees].name} returns to the war on your side` });
   if (fort > 0 && !mine && !friendly) items.push({ key: 'fort', label: 'Fortress', text: `Works of level ${fort} stand in the way` });
 
   const gains = [
-    factories ? plural(factories, 'factory', 'factories') : '', r.oil ? 'an oilfield' : '', r.port ? (yard > 0 ? 'a harbour and shipyard' : 'a harbour') : '',
-    r.vp > 0 && !r.overseas ? `${plural(r.vp, 'victory point')} of ${theName(owner)}'s ${vpAll}` : '',
+    // (A count of one is "a", and the harbour reads as its own row does, so the list has one "and": the UI director.)
+    factories ? (factories === 1 ? 'a factory' : plural(factories, 'factory', 'factories')) : '', r.oil ? 'an oilfield' : '', r.port ? (yard > 0 ? 'a harbour with a shipyard' : 'a harbour') : '',
+    r.vp > 0 && !r.overseas ? vpShare(r.vp, vpAll, owner) : '',
   ].filter(Boolean);
   const tail = gains.length ? `: ${listed(gains)}` : '';
   const line = kind === 'yours' ? `${town} pays ${income ? `${income} a month` : 'nothing'} into your treasury${tail}.`
