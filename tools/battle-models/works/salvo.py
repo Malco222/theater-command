@@ -436,26 +436,26 @@ def burst(fx, t0, at, seed=1, size=1.0, detail=1.0, far=0.0, glare=1.0):
 
     # frame 1 to 4: the shock. A low ring of dust skids out along the ground, knee high, to 15 m by the fourth frame,
     # and lies there thinning; a slower, thicker skirt inside it.
-    n = n_of(104)
+    n = n_of(150)                                             # (each lies along the ring, so they run together into a ragged front)
     for i in range(n):
         a = 2 * math.pi * (i + q.uniform(-0.5, 0.5)) / n
         d = Vector((math.cos(a), math.sin(a), 0.0))
         k = q.uniform(9.0, 11.5)
         c = q.uniform(0.85, 1.1)
-        p = fx.puff(t0 + 0.02 + q.uniform(0.0, 0.02), at + d * q.uniform(0.8, 1.6) * size + Z * 0.3, vel=d * q.uniform(11.0, 21.0) * k * size ** 0.5,
-                    life=q.uniform(1.8, 3.4), r=(0.65 * size, q.uniform(1.6, 2.6) * size), col=tone(DUST, c), alpha=see(q.uniform(0.6, 0.85)), kind="skirt",
-                    drag=k, rise=0.16, fade_in=0.02, grow=0.4, hold=0.15, wind=0.5, squash=(1.0, 1.0, 0.42))
-        flat(p, q)
-    n = n_of(44)
+        p = fx.puff(t0 + 0.02 + q.uniform(0.0, 0.02), at + d * q.uniform(0.8, 1.6) * size + Z * 0.3, vel=d * q.uniform(10.0, 21.0) * k * size ** 0.5,
+                    life=q.uniform(1.8, 3.4), r=(1.0 * size, q.uniform(2.2, 3.2) * size), col=tone(DUST, c), alpha=see(q.uniform(0.4, 0.6)), kind="skirt",
+                    drag=k, rise=0.16, fade_in=0.02, grow=0.4, hold=0.15, wind=0.5, squash=(1.0, q.uniform(0.55, 0.85), 0.3))
+        p["ob"].rotation_euler = (0.0, 0.0, a + math.pi / 2 + q.uniform(-0.5, 0.5))
+    n = n_of(60)
     for i in range(n):
         a = 2 * math.pi * (i + q.uniform(-0.5, 0.5)) / n
         d = Vector((math.cos(a), math.sin(a), 0.0))
         k = q.uniform(5.0, 7.0)
         c = q.uniform(0.75, 1.0)
         p = fx.puff(t0 + 0.03 + q.uniform(0.0, 0.04), at + d * q.uniform(0.5, 1.2) * size + Z * 0.4, vel=d * q.uniform(3.0, 10.0) * k * size ** 0.5,
-                    life=q.uniform(3.5, 6.5), r=(0.6 * size, q.uniform(1.7, 2.7) * size), col=tone(DUST.lerp(SOIL, 0.3), c), alpha=see(q.uniform(0.6, 0.8)), kind="skirt",
-                    drag=k, rise=0.22, fade_in=0.03, grow=0.45, hold=0.2, wind=0.7, squash=(1.0, 1.0, 0.6))
-        flat(p, q)
+                    life=q.uniform(3.5, 6.5), r=(0.8 * size, q.uniform(2.0, 3.0) * size), col=tone(DUST.lerp(SOIL, 0.3), c), alpha=see(q.uniform(0.45, 0.65)), kind="skirt",
+                    drag=k, rise=0.22, fade_in=0.03, grow=0.45, hold=0.2, wind=0.7, squash=(1.0, q.uniform(0.6, 0.9), 0.5))
+        p["ob"].rotation_euler = (0.0, 0.0, a + math.pi / 2 + q.uniform(-0.6, 0.6))
 
     # frame 2 to 12: the earth crown. Jets of dark soil, each a streak of small puffs drawn out along its own line,
     # the fastest at its tip, so the crown is spiked and no two jets are alike; a dark heart of the same stuff inside.
