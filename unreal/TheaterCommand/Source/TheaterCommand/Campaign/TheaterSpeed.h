@@ -46,6 +46,13 @@ class APlayerController;
  *   tc.Speed.FogAside     1 (default): when the haze moves, the staff's paper beyond the map (the world's picture of
  *                         it and each fine sheet's) is laid on another thread and put on the table one picture a frame
  *                         after, a frame or three later than before. 0: all laid in the frame of the press, as before.
+ *   tc.Speed.RegionGrid   1 (default): the province at a place is looked for among those whose bounds reach into its
+ *                         square of the map (FCampaignMapData::FindRegionAt), the same province as before. 0: every
+ *                         province is looked at, as before.
+ *   tc.Speed.RiverInks    1 (default): where the haze moves, the rivers' inks are darkened or lightened in place
+ *                         (ACampaignMapActor::RecolourRivers). 0: every river is drawn again, as before.
+ *   tc.Speed.FrontWeights 1 (default): when the front changes, the weight of the front line the eye is at is drawn,
+ *                         and the other weight (the staff map's, or the working one) a frame after. 0: both at once.
  *   tc.Speed.DressSteps   1 (default): a fine sheet built on another thread is dressed (its pictures and paints made)
  *                         a little at a time, about 8 ms a frame and one sheet at a time, before its tiles are stood up
  *                         out of sight as ever. 0: every sheet that is ready is dressed whole in one frame, as before.
@@ -79,6 +86,9 @@ namespace TheaterSpeed
 	bool KeptHeights();
 	bool DressSteps();
 	bool FogAside();
+	bool RegionGrid();
+	bool RiverInks();
+	bool FrontWeights();
 
 	/**
 	 * (tc.Speed.HoldersLock.) Whose each province is (its holder, its lawful owner and the League's members) is changed

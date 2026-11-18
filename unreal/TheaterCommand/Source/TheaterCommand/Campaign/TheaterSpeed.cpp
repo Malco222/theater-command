@@ -57,6 +57,15 @@ namespace
 	TAutoConsoleVariable<int32> CVarDressSteps(
 		TEXT("tc.Speed.DressSteps"), 1,
 		TEXT("1 dresses a fine sheet a little at a time (about 8 ms a frame, one sheet at a time); 0 dresses every ready sheet whole in one frame, as before."));
+	TAutoConsoleVariable<int32> CVarRegionGrid(
+		TEXT("tc.Speed.RegionGrid"), 1,
+		TEXT("1 finds the province at a place among those whose bounds reach into its square of the map; 0 looks through every province, as before. The same province either way."));
+	TAutoConsoleVariable<int32> CVarRiverInks(
+		TEXT("tc.Speed.RiverInks"), 1,
+		TEXT("1 darkens or lightens the rivers' inks where the haze has moved; 0 draws every river again, as before."));
+	TAutoConsoleVariable<int32> CVarFrontWeights(
+		TEXT("tc.Speed.FrontWeights"), 1,
+		TEXT("1 draws the weight of the front line the eye is at when the front changes, and the other weight a frame after; 0 draws both at once, as before."));
 	TAutoConsoleVariable<int32> CVarFogAside(
 		TEXT("tc.Speed.FogAside"), 1,
 		TEXT("1 lays the haze beyond the map on another thread when it moves and puts it on the table a picture a frame after; 0 lays it all in the frame of the press, as before."));
@@ -103,6 +112,7 @@ namespace
 	bool bLookedBefore = false; // (the step player worked in the frame before this one)
 	double WindowWorst = 0.0;
 	double WindowGame = 0.0, WindowDraw = 0.0, WindowChip = 0.0;
+	double WindowRHI = 0.0; // (the RHI thread's, where there is one: none, and its work is the draw thread's)
 	int32 Summaries = 0;
 
 	double Ms(uint64 Cycles)
@@ -314,6 +324,21 @@ namespace TheaterSpeed
 		return CVarFogAside.GetValueOnGameThread() != 0;
 	}
 
+	bool RegionGrid()
+	{
+		return CVarRegionGrid.GetValueOnAnyThread() != 0; // (asked on the sheets' threads too)
+	}
+
+	bool RiverInks()
+	{
+		return CVarRiverInks.GetValueOnGameThread() != 0;
+	}
+
+	bool FrontWeights()
+	{
+		return CVarFrontWeights.GetValueOnGameThread() != 0;
+	}
+
 	FHoldersRead::FHoldersRead()
 		: bHeld(!IsInGameThread())
 	{
@@ -447,7 +472,7 @@ namespace TheaterSpeed
 				Slot = FSlot{ Slot.Name };
 			}
 			RulesTallies().Reset();
-			WindowClock = WindowWorst = WindowGame = WindowDraw = WindowChip = 0.0;
+			WindowClock = WindowWorst = WindowGame = WindowDraw = WindowChip = WindowRHI = 0.0;
 			WindowFrames = WindowSlow = WindowSlowBeside = 0;
 			return;
 		}
@@ -521,6 +546,7 @@ namespace TheaterSpeed
 		WindowWorst = FMath::Max(WindowWorst, static_cast<double>(DeltaSeconds));
 		WindowGame += FPlatformTime::ToMilliseconds(GGameThreadTime);
 		WindowDraw += FPlatformTime::ToMilliseconds(GRenderThreadTime);
+		WindowRHI += FPlatformTime::ToMilliseconds(GRHIThreadTime);
 		WindowChip += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
 		if (WindowClock < 5.0 || WindowFrames < 2)
 		{
@@ -530,6 +556,10 @@ namespace TheaterSpeed
 		const double Frames = WindowFrames;
 		UE_LOG(LogTheater, Display, TEXT("Speed: %.1f s, %.1f frames a second (worst frame %.1f ms; %d of %d over 33 ms, %d of those beside the step player's look); game %.1f ms, draw %.1f ms, graphics chip %.1f ms"),
 			WindowClock, Frames / WindowClock, WindowWorst * 1000.0, WindowSlow, WindowFrames, WindowSlowBeside, WindowGame / Frames, WindowDraw / Frames, WindowChip / Frames);
+		// (Speed, 18 November 2026: a line of its own, so that the line above reads as it did. Is the draw thread's time
+		// its own, or the RHI's too? With no RHI thread, the RHI's work is done on the draw thread and counted there.)
+		UE_LOG(LogTheater, Display, TEXT("Speed: RHI thread %.1f ms a frame%s"), WindowRHI / Frames,
+			GRHIThreadTime == 0 && WindowRHI <= 0.0 ? TEXT(" (none: its work is in the draw thread's time)") : TEXT(""));
 		TArray<const FSlot*> Busy;
 		for (const FSlot& Slot : Each)
 		{
@@ -567,7 +597,7 @@ namespace TheaterSpeed
 			Slot = FSlot{ Slot.Name };
 		}
 		RulesTallies().Reset();
-		WindowClock = WindowWorst = WindowGame = WindowDraw = WindowChip = 0.0;
+		WindowClock = WindowWorst = WindowGame = WindowDraw = WindowChip = WindowRHI = 0.0;
 		WindowFrames = WindowSlow = WindowSlowBeside = 0;
 	}
 }
