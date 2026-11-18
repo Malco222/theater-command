@@ -17,7 +17,7 @@ import { aiBridges, aiEngineers } from './engineers';
 import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, useLift } from './navy';
 import { shoreAI } from './fleets';
 import { shoreOpen } from './history';
-import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheDay, opensNow, opensOn, opensSoon, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
+import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheDay, opensNow, opensOn, opensSoon, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './world';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
@@ -1082,6 +1082,12 @@ function crossSea(g: Game, nat: string, slot: number): void {
   // (With its men ashore on its own side of the ocean and not short, a staff lands nobody else there: the force its
   // forecast asks for and no more. Version 81, ruling 80.)
   if (sea.second && !slot && neighbourAcrossTheWater(g, nat, you) && lodgment(g, nat)) return;
+  // (The joint crossing, ruling 233(w): where its own corps at the quay are fewer than the force, corps of its
+  // computer-run allies standing ready there, with no crossing of their own staff's from that harbour, fill the
+  // force up to its size and sail in it, under every test on the whole force. Torch, Sicily and Salerno were
+  // Anglo-American landings under one command. Before, two British, two American and one Canadian corps filled
+  // Cornwall for a season of 1943 and nobody had the three corps a landing asks.)
+  if (ready.length && ready.length < L.force) ready.push(...quayGuests(g, nat, quay, you).slice(0, L.force - ready.length));
   // The test of strength (Version 83; staff.ts, `strengthAsked`): where the usual force would not be expected to
   // hold a beach, a bigger first wave is tried, as many as the ships lift and stand ready at the quay.
   const ask = strengthAsked(g, nat);
@@ -1113,7 +1119,7 @@ function crossSea(g: Game, nat: string, slot: number): void {
   const lodged = g.regions[(g.flags[`st:lodged:${nat}${sfx}`] ?? 0) - 1];
   if (lodged && lodged.ctrl === nat && lodged.port && lodged.nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) {
     let sent = 0;
-    for (const c of force) if (friendlyUnits(g, lodged, nat).length < STACK && holdsAshore(g, nat, lodged, [c], followUp(g, nat, quay, [c], lodged)) && shipMove(g, c, lodged)) sent++;
+    for (const c of force) if (c.nat === nat && friendlyUnits(g, lodged, nat).length < STACK && holdsAshore(g, nat, lodged, [c], followUp(g, nat, quay, [c], lodged)) && shipMove(g, c, lodged)) sent++;
     if (sent) { went(2); return; }
   }
   // (Against an enemy on the staff's own side of the ocean nobody waits for a day to be picked: he is attacked the
@@ -1134,6 +1140,8 @@ function crossSea(g: Game, nat: string, slot: number): void {
     // strength stands in the way the staff builds up for it beforehand. Ruling 233(q).)
     const soon = sea.second && opensSoon(g, nat, r);
     if (sea.second && ((!soon && !opensOn(g, nat, r)) || !builtUp(g, nat, r))) continue;
+    // (An ally's corps in the force goes only where its own staff's list lets it follow an ally ashore.)
+    if (force.some((c) => c.nat !== nat && !joinsOn(g, c.nat, r, nat))) continue;
     // (The history dial: by the book no second front is opened on a shore before history's first landing there.)
     if (!soon && !shoreOpen(g, r.owner, !!r.overseas, r.name)) continue;
     const plan = planLanding(g, force, r);
@@ -1455,6 +1463,7 @@ function takeAim(g: Game, nat: string, sfx: string, quay: Region, force: Corps[]
     // (A beach of the list whose month comes within the lead is named beforehand, so that the fleets stand off it: ruling 233(q).)
     const soon = opensSoon(g, nat, r);
     if ((!soon && !opensOn(g, nat, r)) || !builtUp(g, nat, r) || (!soon && !shoreOpen(g, r.owner, !!r.overseas, r.name))) continue;
+    if (force.some((c) => c.nat !== nat && !joinsOn(g, c.nat, r, nat))) continue;
     // The way there over the water, whoever holds it now.
     if (!seaPath(g, nat, quay, r, { max: NAVY.landing.range, surprise: true })) continue;
     const defended = hostileUnits(g, r, nat).length > 0;

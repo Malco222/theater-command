@@ -64,7 +64,7 @@ export const FLEETS = fleetData as unknown as {
     city: { scale: number; max: number };
     reply: number;
   };
-  ai: { bombard: boolean; ready: number; sortie: number; guard?: boolean; hunt?: boolean };
+  ai: { bombard: boolean; ready: number; sortie: number; guard?: boolean; hunt?: boolean; allies?: boolean };
   roles: Record<ShipClass, string>;
   brief: Record<ShipClass, string>;
   orders: Record<Stance, { label: string; blurb: string }>;
@@ -622,11 +622,11 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
     return null;
   }
   if (n.sealift <= 0) return `${n.name} has no shipping for a landing.`;
-  if (cs.some((c) => c.nat !== nat || c.reg !== from.id)) return 'A landing force sails from one port.';
+  if (cs.some((c) => (c.nat !== nat && !sailsWith(g, nat, c)) || c.reg !== from.id)) return 'A landing force sails from one port.';
   if (!from.port) return 'A landing force has to embark at a port.';
   if (cs.some((c) => c.kind === 'fort' || c.ap < Math.min(4, c.apMax))) return 'Only corps that have not moved this month can embark.';
   if (!to.seas.length) return `${to.name} has no coast.`;
-  if (allied(g, nat, to.ctrl) || !atWar(g, nat, to.ctrl)) return `${to.name} is not enemy ground.`;
+  if (allied(g, nat, to.ctrl) || cs.some((c) => !atWar(g, c.nat, to.ctrl))) return `${to.name} is not enemy ground.`;
   if (cs.length > STACK) return `No more than ${STACK} corps can go ashore in one place.`;
   if (liftLeft(g, nat) < cs.length) return liftLeft(g, nat) ? `There is shipping for only ${liftLeft(g, nat)} more corps this month.` : 'All the shipping is in use this month.';
   if (!seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: surpriseOn(g, nat, to) })) return laneWhy(g, nat, from, to, laneBar(g, nat, from, to, surpriseOn(g, nat, to)));
@@ -634,6 +634,16 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (!surpriseOn(g, nat, to) && skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`;
   return null;
 }
+
+/**
+ * The joint crossing (ruling 233(w); the grand campaign, computer staffs only): a corps of a computer-run ally may
+ * sail in a computer staff's landing force from the same quay, as Torch, Sicily and Salerno were Anglo-American
+ * landings under one command (ai.ts `crossSea` forms such a force, open.json 'descent.joint'). A player's corps are
+ * never drawn into one, a corps lent to another army keeps to that army, and a player's own landing force stays one
+ * nation's.
+ */
+export const sailsWith = (g: Game, nat: string, c: Corps): boolean =>
+  g.flags.open === 1 && g.human !== nat && g.human !== c.nat && c.joint === undefined && allied(g, nat, c.nat);
 
 /** True when a force is airborne troops and nothing else: it goes in by air, with no ships and no sea lane. */
 export const airborne = (cs: Corps[]): boolean => cs.length > 0 && cs.every((c) => !!c.airborne);
@@ -1785,15 +1795,36 @@ function blockadeWanted(g: Game, z: number, nat: string): boolean {
  * The seas a nation's staff means to send its second front across (ai.ts keeps the beach it has its eye on, and
  * staff.ts the quay, in the flags): the sea off the beach, and the others on the way to it.
  */
-function crossings(g: Game, nat: string): { off: Set<number>; way: Set<number> } {
+function crossings(g: Game, nat: string, of = nat): { off: Set<number>; way: Set<number> } {
   const off = new Set<number>(), way = new Set<number>();
   for (const sfx of ['', ':o']) {
-    const aim = g.regions[(g.flags[`st:aim:${nat}${sfx}`] ?? 0) - 1], quay = g.regions[(g.flags[`st:quay:${nat}${sfx}`] ?? 0) - 1];
-    if (!aim || !quay || !atWar(g, nat, aim.ctrl)) continue;
-    const path = seaPath(g, nat, quay, aim, { max: NAVY.landing.range, surprise: true });
+    const aim = g.regions[(g.flags[`st:aim:${of}${sfx}`] ?? 0) - 1], quay = g.regions[(g.flags[`st:quay:${of}${sfx}`] ?? 0) - 1];
+    if (!aim || !quay || !atWar(g, of, aim.ctrl) || !atWar(g, nat, aim.ctrl)) continue;
+    const path = seaPath(g, of, quay, aim, { max: NAVY.landing.range, surprise: true });
     if (!path) continue;
     path.forEach((z, i) => (i === path.length - 1 ? off : way).add(z));
   }
+  return { off, way };
+}
+
+/**
+ * Ruling 233(v), the grand campaign: the same seas for the second fronts of this nation's allies in the same war
+ * (fleets.json 'ai.allies'). A computer admiral whose own staff has named no crossing that month covers an ally's
+ * named crossing under the same tests: the fleet that covered the landings in Sicily and at Salerno was two navies'
+ * under one command. (Before it an American fleet patrolled within reach of a sea shut to a British landing force
+ * and had no orders for it.)
+ */
+function alliesCrossings(g: Game, nat: string): { off: Set<number>; way: Set<number> } {
+  const off = new Set<number>(), way = new Set<number>();
+  if (!FLEETS.ai.allies || g.flags.open !== 1) return { off, way };
+  for (const id of Object.keys(g.nations)) {
+    const A = g.nations[id];
+    if (id === nat || !A.alive || !A.atWar.length || !allied(g, nat, id)) continue;
+    const c = crossings(g, nat, id);
+    for (const z of c.off) off.add(z);
+    for (const z of c.way) way.add(z);
+  }
+  for (const z of off) way.delete(z);
   return { off, way };
 }
 
@@ -1814,6 +1845,7 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
   if (byHand(g, nat, 'navy')) return;
   const n = g.nations[nat];
   let cross: { off: Set<number>; way: Set<number> } | null = null;
+  let theirs: { off: Set<number>; way: Set<number> } | null = null;
   for (const f of fleetsOf(g, nat)) {
     const home = (): void => { sail(g, f, f.home, 'port'); };
     if (!n.atWar.length || !shipCount(f.ships) || (f.duty !== 'raid' && keepsHarbour(g, nat))) { home(); continue; }
@@ -1828,6 +1860,8 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
     const mine = fleetPower(g, f);
     const reach = fleetReach(g, f);
     cross ??= crossings(g, nat);
+    // (His own staff's crossing first: an ally's is covered in a month when his own staff has named none.)
+    theirs ??= cross.off.size || cross.way.size ? { off: new Set<number>(), way: new Set<number>() } : alliesCrossings(g, nat);
     // A fleet hunts on its own beat and the seas next to it. It goes further only to meet a landing or an invasion.
     const beat = new Set([f.station, ...g.seas[f.station].adj]);
     let best = -1, bv = 0;
@@ -1847,6 +1881,8 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       if (landedLately(g, z, nat) && own >= e.total) v += 30; // cut the sea lane behind an enemy landing
       // Its own staff's second front: stand off the beach the army means to land on, and on the way to it.
       if (f.duty === 'patrol' && own >= e.total && (cross.off.has(z) || cross.way.has(z))) v += cross.off.has(z) ? 40 : 25;
+      // An ally's second front, in a month when its own staff has named none (ruling 233(v)).
+      if (f.duty === 'patrol' && own >= e.total && (theirs.off.has(z) || theirs.way.has(z))) v += theirs.off.has(z) ? 40 : 25;
       if (invaded) v += 60;
       // A port the army stands round and cannot starve while ships reach it: close the sea off it, if the fleet can live there.
       if (f.duty === 'patrol' && own >= NAVY.battle.seek * e.total && blockadeWanted(g, z, nat)) v += SIEGE.ai.sea.blockade;
