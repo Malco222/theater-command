@@ -12980,8 +12980,10 @@ namespace
 				ListTops.Add(static_cast<float>(Along.AbsoluteToLocal(Each.GetAbsolutePosition()).Y));
 				ListFeet.Add(static_cast<float>(Along.AbsoluteToLocal(Each.LocalToAbsolute(FVector2D(0.0, Each.GetLocalSize().Y))).Y));
 			}
-			// (The UI director, 09:18.) Which lines are headings: each travels with the line under it, as one.
+			// (The UI director, 09:18.) Which lines are headings: each travels with the line under it, as one. And how
+			// many cards each line holds, for the plate's count.
 			ListHeadAt.Init(false, Arranged.Num());
+			ListCountAt.Init(0, Arranged.Num());
 			for (int32 Index = 0; Index < Arranged.Num(); ++Index)
 			{
 				for (const TWeakPtr<SWidget>& Head : ListHeads)
@@ -12992,7 +12994,16 @@ namespace
 						break;
 					}
 				}
+				for (const TPair<TWeakPtr<SWidget>, int32>& Kept : ListRows)
+				{
+					if (Kept.Key.Pin().Get() == &Arranged[Index].Widget.Get())
+					{
+						ListCountAt[Index] = Kept.Value;
+						break;
+					}
+				}
 			}
+			ListAreaHigh = Area;
 			// (The UI director, 03:53 and 07:10.) What the card needs: all it holds outside the list, and the list down to
 			// the foot of the first row of the smaller nations, on the grand campaign's page (the great powers above it),
 			// or of its first row on another page, with the plate's band under it. The rest of the card does not change
@@ -13077,9 +13088,9 @@ namespace
 			{
 				--OpeningSettle;
 			}
-			// Where the list's view begins inside the list (how far it is scrolled), and whether what is left below it
-			// fits in the list's area: then it shows all of it, and there is no plate.
-			double Top = FMath::Max(static_cast<double>(Along.AbsoluteToLocal(View.GetAbsolutePosition()).Y), 0.0);
+			// Where the list's view begins inside the list: how far it is asked to be scrolled, not where it was last drawn
+			// (the checker's fault 3: drawn, a step near the foot can fall short, the box still sized for the old top).
+			double Top = FMath::Max(static_cast<double>(StartsScroll->GetScrollOffset()), 0.0);
 			const double End = ListFeet.Num() > 0 ? static_cast<double>(ListFeet.Last()) : 0.0;
 			// Where the list rests: with a line's top at the top of its view, the list's very top for the first line, and
 			// never with a heading's line alone above it (09:18). (The checker's fault 1.) The list's last stop: the first
@@ -13125,6 +13136,21 @@ namespace
 					Top = On;
 				}
 			}
+			SizeList(Top);
+		}
+
+		/**
+		 * How high the list stands with its view's top at Top, whether it runs on, and how many cards are not wholly in
+		 * sight below, from the lines LookAtList last measured. Called once a frame, and straight after the list is
+		 * scrolled, so that the box has its new height in the same frame (the checker's fault 3: events come before the
+		 * frame's measuring). Where what is left below fits in the list's area, it shows all of it, and there is no plate.
+		 */
+		void SizeList(double Top)
+		{
+			bListRunsOn = false;
+			ListBelow = 0;
+			const double Area = ListAreaHigh;
+			const double End = ListFeet.Num() > 0 ? static_cast<double>(ListFeet.Last()) : 0.0;
 			ListViewTop = static_cast<float>(Top);
 			if (End - Top <= Area + 0.5)
 			{
@@ -13140,23 +13166,18 @@ namespace
 			{
 				// (09:18: a heading never ends the list; the room it would take stays under the plate)
 				const double Foot = static_cast<double>(ListFeet[Index]) - Top;
-				if (Foot > 0.5 && Foot <= Room + 0.5 && !ListHeadAt[Index])
+				if (Foot > 0.5 && Foot <= Room + 0.5 && !(ListHeadAt.IsValidIndex(Index) && ListHeadAt[Index]))
 				{
 					Fit = FMath::Max(Fit, Foot);
 				}
 			}
 			ListViewHigh = static_cast<float>(FMath::Min(FMath::CeilToDouble(Fit), Room));
-			// The cards not wholly in sight below, for the plate's count.
-			for (int32 Index = 0; Index < Arranged.Num(); ++Index)
+			// The cards not wholly in sight below, for the plate's count (nations, never headings).
+			for (int32 Index = 0; Index < ListFeet.Num() && Index < ListCountAt.Num(); ++Index)
 			{
-				const FArrangedWidget& Each = Arranged[Index];
-				const TPair<TWeakPtr<SWidget>, int32>* Row = ListRows.FindByPredicate([&Each](const TPair<TWeakPtr<SWidget>, int32>& Kept)
+				if (ListCountAt[Index] > 0 && static_cast<double>(ListFeet[Index]) - Top > static_cast<double>(ListViewHigh) + 0.5)
 				{
-					return Kept.Key.Pin().Get() == &Each.Widget.Get();
-				});
-				if (Row && static_cast<double>(ListFeet[Index]) - Top > static_cast<double>(ListViewHigh) + 0.5)
-				{
-					ListBelow += Row->Value;
+					ListBelow += ListCountAt[Index];
 				}
 			}
 		}
@@ -13172,6 +13193,7 @@ namespace
 				return;
 			}
 			float To = -1.0f;
+			float Holds = -1.0f; // (the stop that holds the first line not wholly in sight)
 			for (int32 Index = 0; Index < ListFeet.Num(); ++Index)
 			{
 				if (ListFeet[Index] - ListViewTop > ListViewHigh + 0.5f)
@@ -13179,6 +13201,13 @@ namespace
 					// (a heading comes into sight with the line under it)
 					const int32 Whole = ListHeadAt.IsValidIndex(Index) && ListHeadAt[Index] && ListFeet.IsValidIndex(Index + 1) ? Index + 1 : Index;
 					To = ListViewTop + (ListFeet[Whole] - (ListViewTop + ListViewHigh));
+					for (const float Stop : ListStops)
+					{
+						if (Stop <= ListTops[Index] + 0.5f)
+						{
+							Holds = Stop;
+						}
+					}
 					break;
 				}
 			}
@@ -13194,11 +13223,18 @@ namespace
 					break;
 				}
 			}
+			// (the checker's note: where a heading and its row stand taller than the view, the step goes no farther than
+			// the heading's own stop, so the heading is never passed by)
+			if (Holds > ListViewTop + 0.5f)
+			{
+				To = FMath::Min(To, Holds);
+			}
 			To = FMath::Min(To, ListLastStop);
 			StartsScroll->SetScrollOffset(To);
 			ListRest = To;
 			ListOwed = 0.0f;
 			ListWheelAt = 0.0;
+			SizeList(To);
 		}
 
 
@@ -13207,8 +13243,9 @@ namespace
 		 * foot of the list stays on a whole line and the plate's band does not move under the pointer as the rows go by.
 		 * (The checker's fault 2.) A trackpad sends one swipe as a run of small wheel events, so the wheel does not move
 		 * a line an event: what it moves is owed, and the list stays on its line until the debt passes a third of the
-		 * next line's height (at most 24, so that one notch of a wheel moves one line), then steps one line that way. A
-		 * debt left a quarter of a second is forgotten. The bar, held and dragged, rests on the line nearest the thumb.
+		 * next line's height (at most 24), then steps one line that way; the first event after a pause steps a line at
+		 * once, so that one notch of a wheel, however slow, moves one line. A debt left a quarter of a second is
+		 * forgotten. The bar, held and dragged, rests on the line nearest the thumb.
 		 */
 		void SnapList(float Offset)
 		{
@@ -13240,6 +13277,10 @@ namespace
 				ListOwed = (bFresh ? 0.0f : ListOwed) + (Offset - Rest);
 				ListWheelAt = Now;
 				To = Rest;
+				// (The checker's note: a Mac wheel turned slowly sends a notch as a small delta, which alone would never
+				// pass the debt's mark. The first event after a pause steps a line at once, whatever its size; those that
+				// follow it within the quarter second owe as above.)
+				const float Mark = bFresh && FMath::Abs(ListOwed) > 0.5f ? 0.0f : 24.0f;
 				if (ListOwed > 0.0f)
 				{
 					// (the next line down, not past the last stop)
@@ -13256,7 +13297,7 @@ namespace
 					{
 						ListOwed = 0.0f; // (at the last stop: nothing more to owe)
 					}
-					else if (ListOwed >= FMath::Min((Next - Rest) / 3.0f, 24.0f))
+					else if (ListOwed >= FMath::Min((Next - Rest) / 3.0f, Mark))
 					{
 						To = FMath::Min(Next, Last);
 						ListOwed = 0.0f;
@@ -13278,7 +13319,7 @@ namespace
 					{
 						ListOwed = 0.0f; // (at the top)
 					}
-					else if (-ListOwed >= FMath::Min((Rest - Above) / 3.0f, 24.0f))
+					else if (-ListOwed >= FMath::Min((Rest - Above) / 3.0f, Mark))
 					{
 						To = Above;
 						ListOwed = 0.0f;
@@ -13290,6 +13331,7 @@ namespace
 			{
 				StartsScroll->SetScrollOffset(To);
 			}
+			SizeList(To);
 		}
 
 		bool StoresShown() const
@@ -14580,6 +14622,8 @@ namespace
 		TArray<float> ListTops, ListFeet;
 		TArray<float> ListStops; // (where the list may rest: see LookAtList)
 		TArray<bool> ListHeadAt; // (which of the list's lines are headings)
+		TArray<int32> ListCountAt; // (how many cards each of the list's lines holds)
+		double ListAreaHigh = 0.0; // (the list's area, as last measured)
 		TArray<TWeakPtr<SWidget>> ListHeads; // (the headings, as laid out)
 		float ListLastStop = 0.0f; // (the lowest the list rests: from there the rest fits whole)
 		float ListRest = 0.0f; // (the line's top the list rests on, as the wheel last left it)
