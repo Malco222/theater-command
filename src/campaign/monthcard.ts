@@ -68,8 +68,9 @@ export interface MonthMark {
 }
 
 /**
- * A band: classes 1 and 2 of the ranking, red; and NEWS, brass and never red, for a line of news with a title of
- * its own that is no war and no fall (Britain stays out of Canada's war: ruling 211(b)).
+ * A band: class 1 of the ranking, the dated warning, red; class 2 (WAR, FALLEN, FREED) brass on the dark ground, since red
+ * is the warning's alone (ruling 160); and NEWS, brass too, for a line of news with a title of its own that is no war
+ * and no fall (Britain stays out of Canada's war: ruling 211(b)).
  */
 export interface CardBand {
   word: 'WAR' | 'WARNING' | 'FALLEN' | 'FREED' | 'NEWS';
@@ -87,7 +88,7 @@ export interface CardBand {
   when: string;
   /** A place on the map to show: the news's own, or the capital of the country it names. */
   region?: number;
-  /** FREED by his own side: the band's left edge takes the rows' good-news green, and its field stays red. */
+  /** FREED by his own side: the band's field and left edge take the rows' good-news green (the art director, 82.1). */
   good?: boolean;
   /**
    * A country in danger whose warning ends with the help of his home ground's first alarm (ruling 211(c)): SHOW ON MAP
@@ -124,7 +125,7 @@ export interface CardBox {
 
 /** A row of the player's fronts. The lead story is a row too, drawn large. */
 export interface CardRow {
-  /** Ruling 64's class: 2 for a red item that found no band, 3 ground, 4 sea and air, 5 goals and honours. */
+  /** Ruling 64's class: 2 for a band's item that found no band (red for a warning, else brass), 3 ground, 4 sea and air, 5 goals and honours. */
   cls: number;
   arm: 'land' | 'sea' | 'air' | null;
   picture: CardPicture | null;
@@ -1033,7 +1034,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const nearness = (b: (typeof banded)[number]): number => (b.onHim || (!mine(b.h.nat) && nameAt(me, b.band.head) >= 0) ? 0 : mine(b.h.nat) ? 1 : 2);
   banded.sort((a, b) => a.rank - b.rank || nearness(a) - nearness(b));
   card.bands = banded.slice(0, 2).map((b) => b.band);
-  // An item that finds no band stays red and sits above the first battle row.
+  // An item that finds no band keeps its class's colour (red for a warning, brass for the rest) and sits above the first
+  // battle row.
   for (const b of banded.slice(2)) {
     const row = blank();
     row.cls = 2;
