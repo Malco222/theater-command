@@ -1512,8 +1512,10 @@ function dialSection(s: Game): { heading: string; text: string; rows: PageRow[] 
       try { why = on ? null : dialCalls.whyNot ? dialCalls.whyNot(s, x.stop) : null; } catch { why = null; }
       return {
         nat: '', title: `${x.stop}  ·  ${x.name}  ·  ${x.under}${on ? '  ·  where it stands' : ''}`, lines: [x.blurb, ...x.lines],
-        buttons: [{ label: on ? 'THE DIAL STANDS HERE' : `TURN THE DIAL TO ${x.name.toUpperCase()}`, act: `history:${x.stop}`, ok: !on && up && !why,
-          tip: on ? 'The history dial stands at this stop.' : why ?? "The change reaches the other countries' decisions from next month. It can be turned again in any month." }],
+        // (The UI director, 11:19 on build 1638, as for the depth played: the stop the dial stands at has no button.
+        // Its title already says where it stands.)
+        buttons: on ? [] : [{ label: `TURN THE DIAL TO ${x.name.toUpperCase()}`, act: `history:${x.stop}`, ok: up && !why,
+          tip: why ?? "The change reaches the other countries' decisions from next month. It can be turned again in any month." }],
       };
     }),
   };
