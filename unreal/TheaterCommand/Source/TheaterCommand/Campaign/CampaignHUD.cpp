@@ -26,6 +26,7 @@
 #include "ImageUtils.h"
 #include "TextureResource.h"
 #include "Campaign/CampaignTextures.h"
+#include "Layout/ArrangedChildren.h"
 #include "Widgets/SLeafWidget.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
@@ -4123,6 +4124,48 @@ namespace
 	};
 
 	/**
+	 * (The UI director, 18 November 2026, on build 1596: every great power in sight.) Where a list on the opening card
+	 * runs on below what shows, it ends in a fade into the card's own leather: thin bands, clear at the top and nearly
+	 * solid at the foot, under the plate that counts what is below.
+	 */
+	class SListFade : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SListFade) : _Fill(FLinearColor::Black) {}
+			SLATE_ARGUMENT(FLinearColor, Fill)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Fill = Args._Fill;
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override
+		{
+			return FVector2D::ZeroVector;
+		}
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			const FVector2D Size = Geometry.GetLocalSize();
+			const int32 Bands = 14;
+			const double Band = Size.Y / Bands;
+			const FSlateRoundedBoxBrush Plain(FLinearColor::White, 0.0f);
+			for (int32 Step = 0; Step < Bands; ++Step)
+			{
+				// (eased: most of the change near the foot, so the last whole row still reads)
+				const float Share = static_cast<float>(Step + 1) / Bands;
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Size.X, Band + 0.5), FSlateLayoutTransform(FVector2D(0.0, Step * Band))), &Plain,
+					ESlateDrawEffect::None, Fill.CopyWithNewOpacity(0.94f * Share * Share));
+			}
+			return LayerId + 1;
+		}
+
+	private:
+		FLinearColor Fill;
+	};
+
+	/**
 	 * (Rules 84.3.3; the art director's look brief, section 6; the kit's tc-panel, tc-step, tc-seg and tc-close.) The
 	 * Guide's first page: a kit panel 640 wide, THE GUIDE · FIRST COMMAND over "The ten lessons" and one line of state,
 	 * then the ten in rows 38 high under a small label for each month. Done: a brass-700 edge, a brass-500 disc with a
@@ -4998,55 +5041,10 @@ namespace
 						])
 					]
 
-					// A tip that follows the pointer over the map: the province under it, in a few words.
+					// A tip that follows the pointer over the map: the province under it, in a few words. (The UI director,
+					// 18 November 2026, on build 1596: the pointer's slip stays whole. See PlaceHoverTip.)
 					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top)
-					.Padding(TAttribute<FMargin>::CreateLambda([this]()
-					{
-						FVector2D Size(1920.0, 1080.0);
-						if (GEngine && GEngine->GameViewport)
-						{
-							GEngine->GameViewport->GetViewportSize(Size);
-						}
-						// (The screen's units to a pixel of the window: this screen's own scale, and the engine's for the window's
-						// size on top of it. In a window that is not 1,080 high the two differ, and by the first alone the box
-						// stood off from the pointer: in the pictures' window, 7 parts in 100 up and to the left.)
-						const float Scale = FMath::Clamp(static_cast<float>(Size.Y / 900.0), 0.7f, 3.5f) * FMath::Max(GetTickSpaceGeometry().Scale, 0.01f);
-						const FVector2D At = Controller.IsValid() ? Controller->GetPointer() / Scale : FVector2D::ZeroVector;
-						// Kept on the screen, and out from under the column down its right side: to the left of the pointer
-						// when the tip would not fit between the pointer and that column. (The proving round of release 1:
-						// a long line about a sea ran on under the small map and lost its end. The tip is folded now, and
-						// placed by its own width.)
-						const float Width = static_cast<float>(Size.X) / Scale;
-						const float Wide = HoverTipBox.IsValid() ? static_cast<float>(HoverTipBox->GetDesiredSize().X) : 300.0f;
-						// (The art director's round 36: the box that explains a gate's mark never covers the mark, whose flag
-						// says who holds the gate. It opens under the plate, or above it where there is no room, six points clear.)
-						FBox2D Mark(ForceInit);
-						if (Controller.IsValid() && Controller->GetTipAnchor(Mark))
-						{
-							const float High = HoverTipBox.IsValid() ? static_cast<float>(HoverTipBox->GetDesiredSize().Y) : 60.0f;
-							const float Tall = static_cast<float>(Size.Y) / Scale;
-							// (the mark's place is in the screen's own units already)
-							const float AnchorLeft = FMath::Clamp(static_cast<float>(Mark.Min.X), 8.0f, FMath::Max(Width - 262.0f - Wide, 8.0f));
-							const float Under = static_cast<float>(Mark.Max.Y) + 6.0f;
-							return FMargin(AnchorLeft, Under + High > Tall - 8.0f ? static_cast<float>(Mark.Min.Y) - 6.0f - High : Under, 0.0f, 0.0f);
-						}
-						const float Left = static_cast<float>(At.X) + 18.0f + Wide > Width - 262.0f ? FMath::Max(static_cast<float>(At.X) - Wide - 14.0f, 8.0f) : static_cast<float>(At.X) + 18.0f;
-						float Top = static_cast<float>(At.Y) + 20.0f;
-						// (The art director's review of the agent piece: the pointer's box covered him while he was in hand. It
-						// hangs clear of him: under him, or over him where there is no room under.)
-						FBox2D Held(ForceInit);
-						if (Controller.IsValid() && Controller->GetAgentInHandBox(Held))
-						{
-							const float BoxHigh = HoverTipBox.IsValid() ? static_cast<float>(HoverTipBox->GetDesiredSize().Y) : 60.0f;
-							const float ScreenHigh = static_cast<float>(Size.Y) / Scale;
-							const FBox2D Him(Held.Min / Scale, Held.Max / Scale);
-							if (Left < Him.Max.X && Left + Wide > Him.Min.X && Top < Him.Max.Y && Top + BoxHigh > Him.Min.Y)
-							{
-								Top = static_cast<float>(Him.Max.Y) + 8.0f + BoxHigh > ScreenHigh - 8.0f ? static_cast<float>(Him.Min.Y) - 8.0f - BoxHigh : static_cast<float>(Him.Max.Y) + 8.0f;
-							}
-						}
-						return FMargin(Left, Top, 0.0f, 0.0f);
-					}))
+					.Padding(TAttribute<FMargin>::CreateLambda([this]() { return PlaceHoverTip(); }))
 					[
 						SAssignNew(HoverTipBox, SBorder).BorderImage(&PanelBrush).Padding(FMargin(10.0f, 6.0f))
 						.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetHoverTip().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
@@ -5054,14 +5052,14 @@ namespace
 							SNew(SVerticalBox)
 							+ SVerticalBox::Slot().AutoHeight()
 							[
-								SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).LineHeightPercentage(1.15f).WrapTextAt(520.0f)
+								SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).LineHeightPercentage(1.15f).WrapTextAt(420.0f)
 								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetHoverTip() : FText::GetEmpty(); })
 							]
 							// (Rulings 86 and 87.) Under it, what is said with a mark of its own colour in it: brass for "No
 							// moves left this month." and "Open to your ships.", the refusing red where the answer is no.
 							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 							[
-								SNew(SRichTextBlock).TextStyle(&TipPlain).DecoratorStyleSet(TipStyles.Get()).LineHeightPercentage(1.15f).WrapTextAt(520.0f)
+								SNew(SRichTextBlock).TextStyle(&TipPlain).DecoratorStyleSet(TipStyles.Get()).LineHeightPercentage(1.15f).WrapTextAt(420.0f)
 								.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetHoverTipMarked().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetHoverTipMarked() : FText::GetEmpty(); })
 							]
@@ -7212,13 +7210,26 @@ namespace
 					]
 
 					// The opening screen: where to begin and as whom.
+					// (The UI director, 18 November 2026, on build 1596.) The card is 1,200 by 940, so that under the title
+					// band (FIRST COMMAND and CONTINUE YOUR CAMPAIGN on it now too) the seven great powers, the three
+					// settings and BEGIN AS ... all show without scrolling; 16 clear of the window's edge, and drawn
+					// smaller, never cut, where the window gives it less room than that. On the frame of 1,600 by 1,000 it
+					// is exactly whole; where the window gives more height (1,280 by 720 gives 1,350) it grows to 1,000.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(16.0f))
 						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bVisible ? EVisibility::Visible : EVisibility::Collapsed; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
-							SNew(SBox).WidthOverride(1080.0f).HeightOverride(820.0f)
+							SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
+							[
+							SNew(SBox).WidthOverride(1200.0f)
+							.HeightOverride_Lambda([this]()
+							{
+								// (940 on the frame of 1,600 by 1,000; taller, to 1,000, where the window gives more room)
+								const double High = ScreenRoot.IsValid() ? ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y : 972.0;
+								return FOptionalSize(static_cast<float>(FMath::Clamp(High - 32.0, 940.0, 1000.0)));
+							})
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 22.0f, 26.0f, 22.0f))
 								[
@@ -7317,13 +7328,43 @@ namespace
 									[
 										SAssignNew(OpeningTabs, SHorizontalBox)
 									]
-									// What the page offers.
+									// What the page offers. (The UI director, on build 1596.) The list stands above the settings, never
+									// under them: its area ends 12 above the panel's top edge. Where it runs on below what shows, it ends
+									// in a fade and a plate counting what is below ("24 MORE ▼"); a click on the plate scrolls it down by
+									// one row of cards.
 									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)
 									[
-										SNew(SScrollBox)
-										+ SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+										SNew(SOverlay)
+										+ SOverlay::Slot()
 										[
-											SAssignNew(Starts, SVerticalBox)
+											SAssignNew(StartsScroll, SScrollBox)
+											+ SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+											[
+												SAssignNew(Starts, SVerticalBox)
+											]
+										]
+										+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Bottom).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+										[
+											SNew(SBox).HeightOverride(40.0f)
+											.Visibility_Lambda([this]() { return bListRunsOn ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+											[
+												SNew(SListFade).Fill(Leather)
+											]
+										]
+										+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Bottom).Padding(0.0f, 0.0f, 12.0f, 4.0f)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 3.0f, 14.0f, 4.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]() { return bListRunsOn ? EVisibility::Visible : EVisibility::Collapsed; })
+											.OnClicked_Lambda([this]() { ScrollListOn(); return FReply::Handled(); })
+											[
+												SNew(STextBlock).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(BrightBrass)
+												.Text_Lambda([this]()
+												{
+													// (the full-size triangle: the small one is in neither the typewriter nor, for certain, the face of signs
+													// it falls back on, and a sign no face has is drawn as an empty box)
+													return FText::FromString(ListBelow > 0 ? FString::Printf(TEXT("%d MORE \u25BC"), ListBelow) : FString(TEXT("MORE \u25BC")));
+												})
+											]
 										]
 									]
 									// The country chosen for the grand campaign, and the word to begin.
@@ -7332,6 +7373,7 @@ namespace
 										SAssignNew(OpeningFoot, SBox)
 									]
 								]
+							]
 							]
 						]
 					]
@@ -7406,6 +7448,7 @@ namespace
 			UpdateBigCard();
 			PlaceLessonNote();
 			PlaceLessonPointer();
+			LookAtList();
 			// Where the pieces of the frame are now, for the plates and names that must keep out from under them.
 			FrameRects.Reset();
 			for (const TSharedRef<SWidget>& Each : FramePieces)
@@ -8359,6 +8402,168 @@ namespace
 				*OutWidth = static_cast<float>(Size.X) / Scale - Gap.Left - Gap.Right;
 			}
 			return Gap;
+		}
+
+		/** Whether a widget is on the screen now: it, and every box it stands in up to the screen's own, is shown. */
+		bool IsShownNow(const TSharedRef<SWidget>& Widget) const
+		{
+			TSharedPtr<SWidget> At = Widget;
+			for (int32 Guard = 0; At.IsValid() && Guard < 64; ++Guard)
+			{
+				if (!At->GetVisibility().IsVisible())
+				{
+					return false;
+				}
+				if (At.Get() == ScreenRoot.Get())
+				{
+					return true;
+				}
+				At = At->GetParentWidget();
+			}
+			return false;
+		}
+
+		/**
+		 * Where the pointer's slip stands, in the screen's own measure. (The UI director, 18 November 2026, on build
+		 * 1596: over North Carolina the slip ran under the right-hand panel and down into the army's tray, cut short.)
+		 * It stands wholly inside the window and 8 clear of every panel, tray and plate of the frame (and of the staff's
+		 * note, the bigger unit card and an agent in hand). It opens below and right of the pointer; where that would
+		 * cross a panel it flips left, where it would cross the tray it flips above, and both where both; where it fits
+		 * nowhere whole by the pointer, it stands in the clear map at the place nearest the pointer, never over it. A
+		 * gate's slip opens under its mark, or over it, and never covers it (the art director's round 36).
+		 */
+		FMargin PlaceHoverTip() const
+		{
+			FVector2D Size(1920.0, 1080.0);
+			if (GEngine && GEngine->GameViewport)
+			{
+				GEngine->GameViewport->GetViewportSize(Size);
+			}
+			// (The screen's units to a pixel of the window: this screen's own scale, and the engine's for the window's
+			// size on top of it. In a window that is not 1,080 high the two differ, and by the first alone the box
+			// stood off from the pointer: in the pictures' window, 7 parts in 100 up and to the left.)
+			const double Scale = FMath::Clamp(Size.Y / 900.0, 0.7, 3.5) * FMath::Max(static_cast<double>(GetTickSpaceGeometry().Scale), 0.01);
+			const FVector2D Screen = Size / Scale;
+			const FVector2D At = Controller.IsValid() ? Controller->GetPointer() / Scale : FVector2D::ZeroVector;
+			const FVector2D Tip = HoverTipBox.IsValid() ? HoverTipBox->GetDesiredSize() : FVector2D(300.0, 60.0);
+			const double Clear = 8.0;
+			// What it keeps clear of, each grown by the 8.
+			TArray<FBox2D> Keep;
+			for (const TSharedRef<SWidget>& Each : FramePieces)
+			{
+				if (IsShownNow(Each))
+				{
+					const FBox2D Box = InFrame(TWeakPtr<SWidget>(Each));
+					if (Box.bIsValid)
+					{
+						Keep.Add(Box.ExpandBy(Clear));
+					}
+				}
+			}
+			if (bLessonShown && LessonNoteWidget.IsValid() && IsShownNow(LessonNoteWidget.ToSharedRef()))
+			{
+				const FBox2D Note = InFrame(LessonNoteWidget);
+				if (Note.bIsValid)
+				{
+					Keep.Add(Note.ExpandBy(Clear));
+				}
+			}
+			if (BigCardShow.IsValid() && IsShownNow(BigCardShow.ToSharedRef()))
+			{
+				const FBox2D Card = InFrame(BigCardShow);
+				if (Card.bIsValid)
+				{
+					Keep.Add(Card.ExpandBy(Clear));
+				}
+			}
+			// (The art director's review of the agent piece: the slip never covers him while he is in hand.)
+			FBox2D Held(ForceInit);
+			if (Controller.IsValid() && Controller->GetAgentInHandBox(Held))
+			{
+				Keep.Add(FBox2D(Held.Min / Scale, Held.Max / Scale).ExpandBy(Clear));
+			}
+			auto Whole = [&Keep, &Screen, &Tip, Clear](const FVector2D& Corner)
+			{
+				const FBox2D Box(Corner, Corner + Tip);
+				if (Box.Min.X < Clear || Box.Min.Y < Clear || Box.Max.X > Screen.X - Clear || Box.Max.Y > Screen.Y - Clear)
+				{
+					return false;
+				}
+				for (const FBox2D& Each : Keep)
+				{
+					if (Box.Intersect(Each))
+					{
+						return false;
+					}
+				}
+				return true;
+			};
+			TArray<FVector2D, TInlineAllocator<4>> Tries;
+			FVector2D Near = At; // (what the slip stands nearest to when it fits nowhere by its own rule)
+			FBox2D Mark(ForceInit);
+			if (Controller.IsValid() && Controller->GetTipAnchor(Mark))
+			{
+				// (the mark's place is in the screen's own units already) Under the plate, six clear, or over it.
+				Keep.Add(Mark.ExpandBy(6.0));
+				const double Left = FMath::Max(Mark.Min.X, Clear);
+				Tries.Add(FVector2D(Left, Mark.Max.Y + 6.0));
+				Tries.Add(FVector2D(Left, Mark.Min.Y - 6.0 - Tip.Y));
+				Tries.Add(FVector2D(Mark.Max.X - Tip.X, Mark.Max.Y + 6.0));
+				Tries.Add(FVector2D(Mark.Max.X - Tip.X, Mark.Min.Y - 6.0 - Tip.Y));
+				Near = Mark.GetCenter();
+			}
+			else
+			{
+				const double Right = At.X + 18.0, Left = At.X - 14.0 - Tip.X, Below = At.Y + 20.0, Above = At.Y - 12.0 - Tip.Y;
+				Tries.Add(FVector2D(Right, Below)); // below and right
+				Tries.Add(FVector2D(Left, Below)); // flipped left, off a panel
+				Tries.Add(FVector2D(Right, Above)); // flipped above, off the tray
+				Tries.Add(FVector2D(Left, Above)); // both
+			}
+			for (const FVector2D& Corner : Tries)
+			{
+				if (Whole(Corner))
+				{
+					return FMargin(static_cast<float>(Corner.X), static_cast<float>(Corner.Y), 0.0f, 0.0f);
+				}
+			}
+			// Nowhere whole by its rule: in the clear map nearest the pointer. Only a place against the window's edge, a
+			// kept piece's edge or the rule's own lines can be the nearest such place, so only those are tried.
+			TArray<double> Xs = { Clear, Screen.X - Clear - Tip.X }, Ys = { Clear, Screen.Y - Clear - Tip.Y };
+			for (const FVector2D& Corner : Tries)
+			{
+				Xs.Add(Corner.X);
+				Ys.Add(Corner.Y);
+			}
+			for (const FBox2D& Each : Keep)
+			{
+				Xs.Add(Each.Max.X);
+				Xs.Add(Each.Min.X - Tip.X);
+				Ys.Add(Each.Max.Y);
+				Ys.Add(Each.Min.Y - Tip.Y);
+			}
+			double Best = TNumericLimits<double>::Max();
+			FVector2D Chosen(FMath::Clamp(At.X + 18.0, Clear, FMath::Max(Screen.X - Clear - Tip.X, Clear)), FMath::Clamp(At.Y + 20.0, Clear, FMath::Max(Screen.Y - Clear - Tip.Y, Clear)));
+			for (const double X : Xs)
+			{
+				for (const double Y : Ys)
+				{
+					const FVector2D Corner(X, Y);
+					const FBox2D Box(Corner, Corner + Tip);
+					if (Box.ExpandBy(4.0).IsInside(At) || !Whole(Corner))
+					{
+						continue; // (never over the pointer, nor anywhere it is not whole)
+					}
+					const double Far = FMath::Min(FMath::Min(FVector2D::DistSquared(Near, Box.Min), FVector2D::DistSquared(Near, Box.Max)),
+						FMath::Min(FVector2D::DistSquared(Near, FVector2D(Box.Min.X, Box.Max.Y)), FVector2D::DistSquared(Near, FVector2D(Box.Max.X, Box.Min.Y))));
+					if (Far < Best)
+					{
+						Best = Far;
+						Chosen = Corner;
+					}
+				}
+			}
+			return FMargin(static_cast<float>(Chosen.X), static_cast<float>(Chosen.Y), 0.0f, 0.0f);
 		}
 
 		/** A piece of the frame as it stands in the frame's own measure (900 high); invalid when it is not on the screen. */
@@ -12736,6 +12941,66 @@ namespace
 					];
 				}
 				Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)[Row];
+				ListRows.Emplace(TWeakPtr<SWidget>(Row), FMath::Min(Columns, Cells.Num() - First)); // (for the plate's count)
+			}
+		}
+
+		/**
+		 * (The UI director, on build 1596.) Whether the opening card's list runs on below what shows, how many cards are
+		 * not wholly in sight below, and how far one row of them is: looked at once a frame, from where the list's rows
+		 * stand inside it now. Rows scrolled out of sight are not painted, so their places are worked out afresh here
+		 * rather than read from their last painting.
+		 */
+		void LookAtList()
+		{
+			bListRunsOn = false;
+			ListBelow = 0;
+			ListStep = 0.0f;
+			if (!StartsScroll.IsValid() || !Starts.IsValid() || !Controller.IsValid() || !Controller->GetOpening().bVisible)
+			{
+				return;
+			}
+			bListRunsOn = StartsScroll->GetScrollOffset() < StartsScroll->GetScrollOffsetOfEnd() - 1.0f;
+			if (!bListRunsOn)
+			{
+				return;
+			}
+			const FGeometry& View = StartsScroll->GetTickSpaceGeometry();
+			const double Bottom = View.GetAbsolutePosition().Y + View.GetAbsoluteSize().Y;
+			FArrangedChildren Arranged(EVisibility::Visible);
+			Starts->ArrangeChildren(Starts->GetTickSpaceGeometry(), Arranged);
+			for (int32 Index = 0; Index < Arranged.Num(); ++Index)
+			{
+				const FArrangedWidget& Each = Arranged[Index];
+				const TPair<TWeakPtr<SWidget>, int32>* Row = ListRows.FindByPredicate([&Each](const TPair<TWeakPtr<SWidget>, int32>& Kept)
+				{
+					return Kept.Key.Pin().Get() == &Each.Widget.Get();
+				});
+				if (!Row)
+				{
+					continue;
+				}
+				if (Each.Geometry.GetAbsolutePosition().Y + Each.Geometry.GetAbsoluteSize().Y > Bottom + 0.5)
+				{
+					ListBelow += Row->Value;
+					if (ListStep <= 0.0f)
+					{
+						ListStep = static_cast<float>(Each.Geometry.GetLocalSize().Y) + 8.0f; // (a row and the gap under it)
+					}
+				}
+			}
+			if (ListStep <= 0.0f)
+			{
+				ListStep = static_cast<float>(View.GetLocalSize().Y) * 0.6f;
+			}
+		}
+
+		/** The plate's click: the list down by one row of cards, never past its end. */
+		void ScrollListOn()
+		{
+			if (StartsScroll.IsValid())
+			{
+				StartsScroll->SetScrollOffset(FMath::Min(StartsScroll->GetScrollOffset() + FMath::Max(ListStep, 24.0f), StartsScroll->GetScrollOffsetOfEnd()));
 			}
 		}
 
@@ -12822,63 +13087,40 @@ namespace
 			return TEXT("Its own ways:  ") + FString::Join(Names, TEXT("  \u00B7  "));
 		}
 
-		/** One country on the grand campaign's page. The great powers get a card with a word about them; the rest a line. */
+		/**
+		 * One country to lead in the grand campaign. (The UI director, 18 November 2026, on build 1596.) A compact card:
+		 * the flag and the name only, 93 high on the table's frame (96 on the 1,600 by 1,000 one), seven great powers to
+		 * a row and the others eight; the name wraps onto a second line rather than run past the card. Its status line and
+		 * its sentence are in the summary at the panel's foot once it is picked, and on its hover before.
+		 */
 		TSharedRef<SWidget> MakeNation(const FOpeningNation& Nation, int32 Index, bool bChosen)
 		{
-			TSharedRef<SVerticalBox> Words = SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()
+			const FString Status = Nation.Standing.ToString(), Sentence = Nation.Blurb.ToString();
+			const FString Hover = Sentence.IsEmpty() ? Status : Status.IsEmpty() ? Sentence : Status + TEXT("\n") + Sentence;
+			return SNew(SBox).HeightOverride(93.0f)
 				[
-					SNew(STextBlock).Text(Nation.Name).Font(Font(TEXT("Bold"), Nation.bMajor ? 14 : 12)).ColorAndOpacity(Cream)
-				];
-			if (Nation.bMajor)
-			{
-				Words->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
-				[
-					SNew(STextBlock).Text(Nation.Standing).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true)
-				];
-				Words->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
-				[
-					SNew(STextBlock).Text(Nation.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.15f)
-				];
-				Words->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
-				[
-					SNew(STextBlock).Text(Nation.Strength).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Faint)
-				];
-			}
-			else
-			{
-				Words->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
-				[
-					SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  ·  %s"), *Nation.Standing.ToString(), *Nation.Strength.ToString())))
-					.Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted).AutoWrapText(true)
-				];
-				if (Nation.bSmall && !Nation.Blurb.IsEmpty())
-				{
-					Words->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
-					[
-						SNew(STextBlock).Text(Nation.Blurb).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.1f)
-					];
-				}
-			}
-			return SNew(SButton).ButtonStyle(bChosen ? &ChosenCard : &PlainButton).IsFocusable(false)
-				.ContentPadding(Nation.bMajor ? FMargin(13.0f, 11.0f, 13.0f, 12.0f) : FMargin(10.0f, 7.0f, 10.0f, 8.0f))
-				.OnClicked_Lambda([this, Index]()
-				{
-					if (Controller.IsValid())
+					SNew(SButton).ButtonStyle(bChosen ? &ChosenCard : &PlainButton).IsFocusable(false)
+					.ContentPadding(FMargin(6.0f, 7.0f, 6.0f, 7.0f)).HAlign(HAlign_Fill).VAlign(VAlign_Center)
+					.ToolTipText(FText::FromString(Hover))
+					.OnClicked_Lambda([this, Index]()
 					{
-						Controller->PickGrandNation(Index);
-					}
-					return FReply::Handled();
-				})
-				[
-					SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, Nation.bMajor ? 12.0f : 9.0f, 0.0f)
+						if (Controller.IsValid())
+						{
+							Controller->PickGrandNation(Index);
+						}
+						return FReply::Handled();
+					})
 					[
-						MakeFlag(Nation.Tag, Nation.bMajor ? 60.0f : 36.0f)
-					]
-					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
-					[
-						Words
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+						[
+							MakeFlag(Nation.Tag, Nation.bMajor ? 72.0f : 60.0f)
+						]
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 6.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Nation.Name).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Cream)
+							.AutoWrapText(true).Justification(ETextJustify::Center)
+						]
 					]
 				];
 		}
@@ -12910,6 +13152,7 @@ namespace
 			}
 
 			Starts->ClearChildren();
+			ListRows.Reset();
 			OpeningFoot->SetContent(SNullWidget::NullWidget);
 			OpeningFoot->SetVisibility(EVisibility::Collapsed);
 
@@ -13008,7 +13251,7 @@ namespace
 				for (int32 Index = 0; Index < Opening.Years.Num(); ++Index)
 				{
 					const bool bOn = Index == Opening.YearIndex;
-					YearRow->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 6.0f, 0.0f)
+					YearRow->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
 					[
 						SNew(SButton).ButtonStyle(bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(18.0f, 6.0f)).IsFocusable(false)
 						.OnClicked_Lambda([this, Index]() { if (Controller.IsValid()) { Controller->PickGrandYear(Index); } return FReply::Handled(); })
@@ -13017,9 +13260,10 @@ namespace
 						]
 					];
 				}
-				Starts->AddSlot().AutoHeight()[YearRow];
 				const FOpeningYear& Year = Opening.Years[FMath::Clamp(Opening.YearIndex, 0, Opening.Years.Num() - 1)];
-				Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+				// (The UI director, on build 1596: every great power in sight.) The day's note stands beside the years
+				// rather than under them, so that the great powers' row comes up into sight.
+				YearRow->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(12.0f, 0.0f, 0.0f, 0.0f)
 				[
 					SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
@@ -13031,6 +13275,7 @@ namespace
 						SNew(STextBlock).Text(Year.Note).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
 					]
 				];
+				Starts->AddSlot().AutoHeight()[YearRow];
 
 				if (Opening.bWorking)
 				{
@@ -13047,22 +13292,24 @@ namespace
 				{
 					(Opening.Nations[Index].bMajor ? Great : Opening.Nations[Index].bSmall ? Small : Rest).Add(MakeNation(Opening.Nations[Index], Index, Index == Opening.NationIndex));
 				}
+				// (The UI director, on build 1596.) The great powers in one row of seven compact cards, in the list's own
+				// order; the smaller nations after them in the same cards, eight to a row.
 				Starts->AddSlot().AutoHeight().Padding(0.0f, 18.0f, 0.0f, 8.0f)[Heading(TEXT("THE GREAT POWERS"))];
-				AddGrid(Great, 3);
+				AddGrid(Great, 7);
 				if (Small.Num() > 0)
 				{
-					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 2.0f)[Heading(TEXT("SMALL COUNTRIES, WITH A PATH OF THEIR OWN"))];
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 2.0f)[Heading(TEXT("OR A SMALLER NATION \u00B7 CHOOSE YOUR OWN PATH"))];
 					Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
 					[
 						SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Faint).AutoWrapText(true)
 						.Text(FText::FromString(TEXT("A small country chooses for itself: join the Axis, join the Allies, stand alone, or found a League of its own with a willing neighbour. Open DIPLOMACY in the game to choose.")))
 					];
-					AddGrid(Small, 4);
+					AddGrid(Small, 8);
 				}
 				if (Rest.Num() > 0)
 				{
 					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 8.0f)[Heading(TEXT("OTHER COUNTRIES"))];
-					AddGrid(Rest, 4);
+					AddGrid(Rest, 8);
 				}
 				if (!Opening.GrandNote.IsEmpty())
 				{
@@ -13072,46 +13319,13 @@ namespace
 					];
 				}
 
-				// The foot of the page: the country chosen, and the word to begin.
+				// The foot of the page: the country chosen, and the word to begin. (The UI director, on build 1596.) The
+				// summary names the pick: its name with JUST WATCH and BEGIN AS ... beside it, then its status line in
+				// italics, then the card's sentence, then the facts row and its ways as before. Under the name the lines
+				// run the summary's whole width, so that a long sentence takes as few lines as it can.
 				const bool bChosen = Opening.Nations.IsValidIndex(Opening.NationIndex);
-				TSharedRef<SHorizontalBox> Foot = SNew(SHorizontalBox);
-				if (bChosen)
-				{
-					const FOpeningNation& Nation = Opening.Nations[Opening.NationIndex];
-					Foot->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 16.0f, 0.0f)
-					[
-						MakeFlag(Nation.Tag, 96.0f)
-					];
-					Foot->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center)
-					[
-						SNew(SVerticalBox)
-						+ SVerticalBox::Slot().AutoHeight()
-						[
-							SNew(STextBlock).Text(Nation.Name).Font(Font(TEXT("Regular"), 22)).ColorAndOpacity(Cream)
-						]
-						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
-						[
-							SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Brass).AutoWrapText(true)
-							.Text(FText::FromString(FString::Printf(TEXT("%s  ·  %s  ·  %s"), *Year.Title.ToString(), *Nation.Standing.ToString(), *Nation.Strength.ToString())))
-						]
-						// What the country does in its own way: its abilities and its special formation, by name.
-						// What each one does is said when the mouse rests on the line, and in the game's own guide.
-						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
-						[
-							SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
-							.Visibility(Nation.Abilities.Num() > 0 ? EVisibility::Visible : EVisibility::Collapsed)
-							.ToolTipText(FText::FromString(FString::Join(Nation.Abilities, TEXT("\n"))))
-							.Text(FText::FromString(AbilityNames(Nation.Abilities)))
-						]
-					];
-				}
-				else
-				{
-					Foot->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center)
-					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("Choose a country above to lead it."))).Font(Font(TEXT("Italic"), 13)).ColorAndOpacity(Muted)
-					];
-				}
+				TSharedRef<SHorizontalBox> Buttons = SNew(SHorizontalBox);
+				TSharedRef<SWidget> Foot = SNullWidget::NullWidget;
 				// How hard the war is to be: five levels named for ranks, the chosen one lit, with what it changes beside them.
 				TSharedRef<SHorizontalBox> Difficulty = SNew(SHorizontalBox);
 				if (Opening.Levels.Num() > 0)
@@ -13212,7 +13426,7 @@ namespace
 						SNew(STextBlock).Text(FText::FromString(Says)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
 					];
 				}
-				Foot->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(14.0f, 0.0f, 0.0f, 0.0f)
+				Buttons->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(14.0f, 0.0f, 0.0f, 0.0f)
 				[
 					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(16.0f, 9.0f)).IsFocusable(false)
 					.ToolTipText(FText::FromString(TEXT("Nobody leads: every nation decides for itself, and you watch the war play out.")))
@@ -13223,7 +13437,7 @@ namespace
 				];
 				if (bChosen)
 				{
-					Foot->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+					Buttons->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
 					[
 						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 12.0f)).IsFocusable(false)
 						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AskToBegin(1); } return FReply::Handled(); })
@@ -13238,6 +13452,72 @@ namespace
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), BrightBrass)]
 						]
 					];
+				}
+				if (bChosen)
+				{
+					const FOpeningNation& Nation = Opening.Nations[Opening.NationIndex];
+					TSharedRef<SVerticalBox> Lines = SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Text(Nation.Name).Font(Font(TEXT("Regular"), 22)).ColorAndOpacity(Cream)
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							[
+								Buttons
+							]
+						];
+					if (!Nation.Standing.IsEmpty())
+					{
+						Lines->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Nation.Standing).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Brass).AutoWrapText(true)
+						];
+					}
+					if (!Nation.Blurb.IsEmpty())
+					{
+						Lines->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Nation.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+						];
+					}
+					Lines->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Brass).AutoWrapText(true)
+						.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s  \u00B7  %s"), *Year.Title.ToString(), *Nation.Standing.ToString(), *Nation.Strength.ToString())))
+					];
+					// What the country does in its own way: its abilities and its special formation, by name.
+					// What each one does is said when the mouse rests on the line, and in the game's own guide.
+					Lines->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+						.Visibility(Nation.Abilities.Num() > 0 ? EVisibility::Visible : EVisibility::Collapsed)
+						.ToolTipText(FText::FromString(FString::Join(Nation.Abilities, TEXT("\n"))))
+						.Text(FText::FromString(AbilityNames(Nation.Abilities)))
+					];
+					Foot = SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 4.0f, 16.0f, 0.0f)
+						[
+							MakeFlag(Nation.Tag, 96.0f)
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Top)
+						[
+							Lines
+						];
+				}
+				else
+				{
+					Foot = SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("Choose a country above to lead it."))).Font(Font(TEXT("Italic"), 13)).ColorAndOpacity(Muted)
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							Buttons
+						];
 				}
 				OpeningFoot->SetContent(SNew(SBorder).BorderImage(&FootBrush).Padding(FMargin(16.0f, 10.0f, 16.0f, 12.0f))
 				[
@@ -13963,6 +14243,14 @@ namespace
 		FSlateBrush FilmBrush;
 		FSlateBrush ClearBrush;
 		TSharedPtr<SVerticalBox> Starts;
+		// (The UI director, on build 1596.) The opening card's list as it scrolls: its rows of cards and how many cards
+		// each holds, and, as looked at each frame, whether it runs on below what shows, how many cards are not wholly
+		// in sight below, and how far one row of them is.
+		TSharedPtr<SScrollBox> StartsScroll;
+		TArray<TPair<TWeakPtr<SWidget>, int32>> ListRows;
+		bool bListRunsOn = false;
+		int32 ListBelow = 0;
+		float ListStep = 0.0f;
 		TSharedPtr<SHorizontalBox> OpeningTabs;
 		TSharedPtr<SBox> OpeningFoot;
 		FSlateBrush FootBrush;
