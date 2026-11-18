@@ -1833,15 +1833,26 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
     const here = meets(f, f.base, false);
     const R = reach(f, g).ftrRange;
     const engaged = P > 0 && foeAt(f.base) <= R;
-    let best: { r: Region; v: number } | null = null;
+    let best: { r: Region; v: number } | null = null, far: { r: Region; v: number } | null = null;
+    const inFerry = (r: Region): boolean => r.id !== f.base && !overOcean(g, f, r) && km(g, f.base, r.id) <= AIR.ferry && fieldRoom(g, r.id, f);
     for (const r of open) {
-      if (r.id === f.base || overOcean(g, f, r) || km(g, f.base, r.id) > AIR.ferry || !fieldRoom(g, r.id, f)) continue;
+      if (r.id === f.base || overOcean(g, f, r) || !fieldRoom(g, r.id, f)) continue;
+      const near = km(g, f.base, r.id) <= AIR.ferry;
+      // (Ruling 52(a): a field beyond a month's flight is weighed too, to be reached by stages. Only for a group out of the fight.)
+      if (!near && (P <= 0 || engaged)) continue;
       if (engaged && foeAt(r.id) > R) continue;
       const v = meets(f, r.id, false);
-      if (!best || v > best.v) best = { r, v };
+      if (near) { if (!best || v > best.v) best = { r, v }; } else if (!far || v > far.v) far = { r, v };
     }
-    if (best && best.v > here * K.better + K.least * f.ftr && rebaseAir(g, f, best.r)) meets(f, best.r.id, true);
-    else meets(f, f.base, true);
+    const need = here * K.better + K.least * f.ftr;
+    if (best && best.v > need && rebaseAir(g, f, best.r)) { meets(f, best.r.id, true); continue; }
+    if (far && far.v > need) {
+      // Too far to fly in a month: it goes to the open field within a month's flight that lies nearest to it.
+      let step: Region | null = null, sd = km(g, f.base, far.r.id);
+      for (const r of open) { if (!inFerry(r)) continue; const d = km(g, r.id, far.r.id); if (d < sd) { sd = d; step = r; } }
+      if (step && rebaseAir(g, f, step)) { meets(f, step.id, true); continue; }
+    }
+    meets(f, f.base, true);
   }
 }
 

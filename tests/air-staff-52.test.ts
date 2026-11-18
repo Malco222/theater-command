@@ -152,6 +152,25 @@ describe('a computer staff\'s fighters', () => {
     for (const f of landFighters(g, 'GER')) if (was.includes(f.id)) expect(engaged(f), g.regions[f.base].name).toBe(true);
   });
 
+  it('go by stages to a front beyond a month\'s flight', () => {
+    const g = grand();
+    declareWar(g, 'ITA', 'UK');
+    // Nothing threatens Italy from the air, and a field has been laid out behind the Egyptian frontier.
+    g.airFleets = g.airFleets.filter((f) => !atWar(g, 'ITA', f.nat));
+    const bardia = g.byName['Bardia'];
+    g.flags[`af:${bardia.id}`] = 2;
+    expect(hasAirfield(g, bardia.id)).toBe(true);
+    const far = landFighters(g, 'ITA').filter((f) => km(g, f.base, bardia.id) > AIR.ferry);
+    expect(far.length).toBeGreaterThan(0);
+    const was = new Map(landFighters(g, 'ITA').map((f) => [f.id, km(g, f.base, bardia.id)]));
+    airAI(g, 'ITA');
+    // The groups too far to fly there in a month have come a stage nearer; none has gone further off.
+    for (const f of far) expect(km(g, f.base, bardia.id), g.regions[f.base].name).toBeLessThan(was.get(f.id)!);
+    for (let m = 0; m < 3; m++) { g.turn++; airAI(g, 'ITA'); }
+    const R = Math.min(...landFighters(g, 'ITA').map((f) => airRange(f, g).ftr));
+    expect(landFighters(g, 'ITA').filter((f) => km(g, f.base, bardia.id) <= R).length).toBeGreaterThan(0);
+  });
+
   it('stay where they are in a nation at peace', () => {
     const g = grand();
     const bases = landFighters(g, 'SOV').map((f) => f.base);
