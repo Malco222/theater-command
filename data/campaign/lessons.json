@@ -27,13 +27,13 @@
     },
     {
       "id": "attack", "head": "Attack",
-      "text": "Right-click the enemy ground beside you. Before anything is spent, a card sets your army against theirs and gives the odds. At two to one or better, attack.",
+      "text": "Right-click the enemy ground beside you. Before anything is spent, a card sets your army against theirs and gives the odds. Attack when its verdict favours you.",
       "deed": "Order one attack.", "does": "attack", "due": "foe"
     },
     {
       "id": "end", "head": "Next army, then end the month",
-      "text": "NEXT ARMY (Tab) takes you to each army at the front with no orders. STAND THIS MONTH tells one to stay put. When the count is zero, END THE MONTH.",
-      "deed": "End the month.", "does": "end", "due": "month", "after": "attack"
+      "text": "NEXT ARMY (Tab) takes you to each army at the front with no orders. STAND THIS MONTH keeps one put. When it reads NEXT IN THE REAR, END THE MONTH.",
+      "deed": "End the month.", "does": "end", "due": "month", "after": "attack", "months": 1
     },
     {
       "id": "card", "head": "Read the month card",
@@ -63,14 +63,14 @@
   ],
   "closing": {
     "id": "yours", "head": "The war is yours",
-    "text": "STAFF hands you each desk when you want it: research, building, envoys, agents, the air, the navy. GOALS shows what you are playing for. Every lesson is in the Guide."
+    "text": "STAFF hands you each desk when you want it: research, building, envoys, agents, air, navy. GOALS shows what you are playing for. Every lesson is in the Guide."
   },
   "tips": [
     { "id": "kept", "text": "It will keep marching each month until it arrives. Any other order ends the march.", "when": "kept" },
     { "id": "cut", "text": "A red lamp: this line is cut. Send engineers to relay the track. Guns in this province would have stopped some of the bombers.", "when": "cut" }
   ],
   "names": {
-    "_about": "Each game's own word for a control, where it is not the list's. The browser game: END MONTH is its button; a railway journey is ordered on blue ground, not a station dot; a month card's line goes to its place by its pin; the arsenal is the BUILD page, which at Field command stands under STAFF (lesson 10's sentence is turned round to keep it to 30 words); the goals are on the REGION page; the Guide is the GUIDE on the top bar.",
+    "_about": "Each game's own word for a control, where it is not the list's. The browser game: END MONTH is its button; a railway journey is ordered on blue ground, not a station dot; a month card's line goes to its place by its pin; the arsenal is the BUILD page, which at Field command stands under STAFF (lesson 10's sentence is turned round to keep it to 30 words); the goals are on the REGION page; the Guide is the GUIDE on the top bar. The 3D game (the design director's ruling b425): the desks are YOUR STAFF and the raid is planned from the aircraft on the map; a month card's line goes to its place by its pin; the Guide is the GUIDE. (Its closing note says YOUR STAFF, which ruling b429 made room for by cutting both \"the\"s from the desks; NEXT IN THE REAR and STAND THIS MONTH read the same in both games.)",
     "browser": [
       ["END THE MONTH", "END MONTH"],
       ["Right-click a station dot to ride there", "Right-click blue ground to ride there"],
@@ -79,6 +79,13 @@
       ["Winter is for building: open the ARSENAL and place one order.", "Winter is for building: place one order in BUILD{under}."],
       ["in the ARSENAL", "under BUILD"],
       ["GOALS shows what you are playing for", "REGION shows what you are playing for"],
+      ["in the Guide", "in the GUIDE"]
+    ],
+    "unreal": [
+      ["Open STAFF and take the air war into your own hands. In the planner choose bombers, a raid and a target.", "In YOUR STAFF, take the air war yourself. Click your aircraft on the map: choose bombers, a raid and a target."],
+      ["Click a line to go to its place", "Click a line's pin to go to its place"],
+      ["Click one line of the card.", "Click the pin on one line of the card."],
+      ["STAFF hands you each desk when you want it", "YOUR STAFF hands you each desk when you want it"],
       ["in the Guide", "in the GUIDE"]
     ]
   }

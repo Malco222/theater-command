@@ -117,7 +117,11 @@ export function siegeOf(g: Game): { region: number; province: string; city: stri
   return null;
 }
 
-/** The army lesson 2 names: the first at the front with a move left, else the first with one at all. */
+/**
+ * The army lesson 2 names: of the armies at the front with no orders, the one nearest the capital; at peace, the
+ * nearest that does not stand in the capital itself (whose garrison should not be the first thing he moves); else
+ * the first with a move at all.
+ */
 export function pickupPlace(g: Game): number {
   const round = armyRound(g);
   // (Of the armies at the front with no orders, the one nearest his capital, where the map opens: Germany's first is
@@ -125,7 +129,8 @@ export function pickupPlace(g: Game): number {
   const cap = g.human ? g.regions[g.nations[g.human]?.capital ?? -1] : undefined;
   const far = (reg: number): number => (cap ? Math.hypot(g.regions[reg].x - cap.x, g.regions[reg].y - cap.y) : 0);
   const front = round.filter((a) => a.front && a.untouched).sort((a, b) => far(a.reg) - far(b.reg));
-  return (front[0] ?? round[0])?.reg ?? -1;
+  const home = round.filter((a) => a.untouched && a.reg !== cap?.id).sort((a, b) => far(a.reg) - far(b.reg));
+  return (front[0] ?? home[0] ?? round[0])?.reg ?? -1;
 }
 
 /**
@@ -143,9 +148,14 @@ export function trainInHand(g: Game, m: Moment): boolean {
   const cs = held(g, m);
   const me = g.human;
   if (!me || !cs.length || cs.some((c) => foesBeside(g, g.regions[c.reg], me))) return false;
+  return trainGround(g, cs).size > 0;
+}
+
+/** The ground the map lights for a train for these corps in hand: where a train takes all of them and no march does. */
+export function trainGround(g: Game, cs: Corps[]): Set<number> {
   const goes = new Set<number>();
   for (const c of cs) for (const id of reach(g, c).keys()) if (id !== c.reg) goes.add(id);
-  return trainReachFor(g, cs, goes).size > 0;
+  return trainReachFor(g, cs, goes);
 }
 
 // (A raid's targets are worked out from the whole air war: asked once a month and kept.)
