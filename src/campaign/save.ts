@@ -12,6 +12,7 @@ import { openSmallAir, restoreWorks } from './arsenal';
 import { resetRailheads } from './rails';
 import { openAirWar, openWorldAir } from './air';
 import { openCarriers } from './carriers';
+import { openFleetRows } from './navy';
 import { openSieges } from './siege';
 import { FAIR } from './difficulty';
 import { rollFromMemory } from './liberation';
@@ -239,6 +240,9 @@ export function loadGame(text: string): Game | null {
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
   if (g.flags.open === 1) openCarriers(g);
+  // And one saved before the fleet rows had the grand campaign's own fields: Force H takes its beat on the Western
+  // Mediterranean, once, while it still stands as the history row had it (ruling 233 rider b564).
+  if (g.flags.open === 1) openFleetRows(g);
   // And one saved before towns were garrisoned and besieged goes on under those rules.
   openSieges(g);
   // A campaign saved on an earlier stage of the wider chart: the ground drawn since stands as on the first day,

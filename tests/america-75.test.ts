@@ -50,9 +50,11 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; warned: boolean; island: boolean; wave: boolean }[] = [];
 const guard: number[] = [];
 {
-  // Seed 4 since Version 84.2.5: with guns no longer going forward alone (ruling 211(a)) seed 3's staffs make no
-  // landing before June 1943. (Seed 3 since Version 76, when seed 2's made none on the chart with Latin America.)
-  const g = wide(4);
+  // Seed 5 since ruling 233 rider b564: with Force H on the Western Mediterranean seed 4's Britain takes Sardinia in
+  // 1942, its America builds its army up there, and in October 1942 its staff sends no corps over. (Seed 4 since
+  // Version 84.2.5: with guns no longer going forward alone (ruling 211(a)) seed 3's staffs make no landing before
+  // June 1943. Seed 3 since Version 76, when seed 2's made none on the chart with Latin America.)
+  const g = wide(5);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, warned: e.warned, island: e.to.nb.length === 0, wave: e.wave }); };
   while (g.turn < JUN_43) {
     runTurnAI(g);
@@ -206,8 +208,8 @@ describe('the army sent across the ocean', () => {
       // Never a shore the enemy holds: the ocean run puts nobody ashore against a defence.
       expect(p.units.some((u) => atWar(g, 'USA', u.nat))).toBe(false);
     }
-    // The harbour where the army is built up is one Britain holds. (In this war since Version 84 it is Gibraltar,
-    // which the staff reckons the better placed of Britain's harbours that winter.)
+    // The harbour where the army is built up is one Britain holds. (In this war, seed 5's since ruling 233 rider b564,
+    // it is Cornwall.)
     expect(run.to[0].ctrl).toBe('UK');
   });
 
@@ -236,9 +238,7 @@ describe('the army sent across the ocean', () => {
     const O = WORLD.overseas.USA;
     const sail = (risk: number): Region[] => {
       // October 1942: a month in this war with danger on the way to the harbour where the army is built up, and no more
-      // than the staff will bear. (In January 1942, since Version 84 moved the wars, that harbour is Gibraltar, and no
-      // enemy is at work on the way to it. Since ruling 227 moved them again, so it is in January 1943, and from then
-      // on in this war the staff sends no corps over in the month.)
+      // than the staff will bear. (In seed 5's war, since ruling 233 rider b564, that harbour is Northumbria.)
       const g = at(OCT_42);
       const before = new Set(across(g, 'USA').map((c) => c.id));
       // A month's sailing banked and a fit corps on the quay.

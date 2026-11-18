@@ -230,17 +230,20 @@ export function addFleet(g: Game, given: FleetRow): Fleet {
 const rowFor = (g: Game, row: FleetRow): FleetRow => (row.open && seaWar(g) ? { ...row, ...row.open } : row);
 
 /**
- * As a grand campaign opens on a game begun as a history campaign (a later starting month), the fleets already formed
- * take what their rows say for the grand campaign: Force H its beat on the Western Mediterranean. A fleet that has
- * moved from the row's base keeps the home sea it has.
+ * As a grand campaign opens on a game begun as a history campaign (a later starting month), or one saved before the
+ * rows had a grand campaign's own fields is loaded, the fleets already formed take what their rows say for the grand
+ * campaign: Force H its beat on the Western Mediterranean. Only a fleet that still stands as the history row has it
+ * (at the row's base, on its home sea and station, tied or not as it was) is changed, so this is done once: a fleet
+ * that has moved, or been sent to another beat since, keeps what it has.
  */
 export function openFleetRows(g: Game): void {
   if (!seaWar(g)) return;
   for (const row of NAVY.fleets) {
     const f = row.open && g.fleets.find((x) => x.nat === row.nat && x.name === row.name);
-    if (!f) continue;
+    if (!f || !row.base || g.byName[row.base]?.id !== f.base) continue;
+    if (f.home !== zoneOf(g, row.home) || f.station !== zoneOf(g, row.zone) || f.tied !== !!row.tied) continue;
     const o = row.open!;
-    if (o.home && row.base && g.byName[row.base]?.id === f.base && zoneOf(g, o.home) >= 0) {
+    if (o.home && zoneOf(g, o.home) >= 0) {
       f.home = zoneOf(g, o.home);
       if (!atSea(f)) f.zone = f.home;
     }
@@ -1422,11 +1425,18 @@ export function navalUpkeep(g: Game, nat: string): void {
   const named = (name: string): Fleet | undefined => g.fleets.find((f) => f.nat === nat && f.name === name);
   for (const b of NAVY.building) if (b.nat === nat && g.turn >= b.from && g.turn <= b.to) { const f = named(b.fleet); if (f) f.ships[b.cls] += b.perMonth; }
   for (const [turn, who, fleet, ships, what, dial] of NAVY.arrivals) {
-    const f = who === nat && turn === g.turn ? named(fleet) : undefined;
-    if (!f) continue;
     // A row dated by the history dial (Force H's carriers, ruling 233 rider b564) is read only at its stops of the
-    // grand campaign, and like every row of the dial it leashes the computer's navies and never the player's.
-    if (dial?.stops && (g.flags.open !== 1 || !dial.stops.includes(stopOf(g)) || nat === g.human)) continue;
+    // grand campaign, and like every row of the dial it leashes the computer's navies and never the player's. It is
+    // read once, in the first month at one of its stops on or after its date, so a grand campaign begun later, or a
+    // dial turned to the book later, still has the record's ships; a row from before this month changes them without
+    // news.
+    const key = `arr:${turn}:${who}:${fleet}`;
+    const due = dial?.stops
+      ? turn <= g.turn && g.flags.open === 1 && dial.stops.includes(stopOf(g)) && nat !== g.human && !g.flags[key]
+      : turn === g.turn;
+    const f = who === nat && due ? named(fleet) : undefined;
+    if (!f) continue;
+    if (dial?.stops) g.flags[key] = g.turn;
     // A count below none is ships leaving for another fleet (the far side's rows): never more than are there, and the words say where they go.
     const leaving = CLASSES.some((c) => (ships[c] ?? 0) < 0);
     let gone = 0;
@@ -1435,8 +1445,9 @@ export function navalUpkeep(g: Game, nat: string): void {
       f.ships[c] = Math.max(0, was + (ships[c] ?? 0));
       if (was > f.ships[c]) { gone += was - f.ships[c]; if (dial?.sunk) f.lost[c] += was - f.ships[c]; }
     }
-    // A dial's row of ships lost that play has already sunk says nothing: the news has told it once.
-    if (dial && leaving && !gone) continue;
+    // A dial's row of ships lost that play has already sunk says nothing: the news has told it once. Nor does one
+    // read late: its month is past.
+    if ((dial && leaving && !gone) || turn < g.turn) continue;
     // (Many ships take the plural, however the phrase opens: "More of the American destroyers join", the third playtester, 84.3.1.)
     const many = / and /.test(what) || /s$/.test(what.split(' ')[0]) || (/\bof\b/.test(what) && /s$/.test(what));
     headline(g, 'info', leaving ? `${cap(what)}.` : `${cap(what)} ${many ? 'join' : 'joins'} ${fleetName(f)}.`, nat);
@@ -1529,26 +1540,33 @@ function datedStation(g: Game, G: BeatGroup, row: FleetRow): number {
  * Italy: every boat in its groups is shared out afresh by the row of the month, as shares of what the groups have, so
  * the game's own losses stand. A group that cannot sail ('held' ground lost, or its base gone before it ever formed)
  * is left out and the others share its boats. At stops 1 to 3 the shares are the historian's row by date. At stops 4
- * and 5 the staff places the boats by need: each group's beat is the sea within its reach where the enemy's
- * shipping is thickest (its dated beat where none is thicker), and the boats are shared in proportion to that
- * shipping; with no enemy shipping on any beat, as the war opened (the first row).
+ * and 5 the staff places the boats by need, as ruling 236 rider b554 has a staff's budget move: each group's beat is
+ * the sea within its reach where the enemy's shipping is thickest (its dated beat where none is thicker), and the
+ * boats start where the war opened them (the first row) and move towards a share in proportion to that shipping,
+ * about a fifth of the way in a year; with no enemy shipping on any beat, towards the opening shares.
  *
  * Germany: as many boats as the row asks, up to what it has, go from the U-boat Fleet to the two Mediterranean
  * groups, and any beyond the row come back to it. At stops 1 and 2 by date; at stops 3 to 5 only while an Axis army
- * fights in North Africa, the record's cause, and otherwise all of them come back.
+ * fights in North Africa, the record's cause, and otherwise all of them come back. These boats are only lent: a group
+ * whose base is lost sends them home rather than look for a port of its own nation's in the Mediterranean.
+ *
+ * A group formed here that is left with no boats stands down, and forms again, with its line of news, when it has some.
  */
 export function placeBoats(g: Game, nat: string): void {
   const B = NAVY.beats?.[nat];
   if (!B || !seaWar(g) || nat === g.human || !g.nations[nat]?.alive) return;
+  const stop = stopOf(g);
   let row: number[] | undefined;
   for (const r of B.rows) if (r[0] <= g.turn) row = r;
+  // By need, a navy at war before the record's first row places its boats as that row would have opened them.
+  if (!row && !B.from && stop >= 4 && g.nations[nat].atWar.length) row = B.rows[0];
   if (!row) return;
-  const stop = stopOf(g);
   const rows = B.groups.map((G) => (G.base !== undefined ? ({ ...G, nat } as FleetRow) : NAVY.fleets.find((r) => r.nat === nat && r.name === G.name)));
   const fleets = B.groups.map((G) => g.fleets.find((f) => f.nat === nat && f.name === G.name));
   const ours = (place: string | null | undefined): boolean => !!place && !!g.byName[place] && allied(g, nat, g.byName[place].ctrl);
-  // A group sails while its own ground is held, and forms only from a base its side holds.
-  const can = B.groups.map((G, i) => !!rows[i] && (!G.held || ours(G.held)) && (!!fleets[i] || ours(rows[i]!.base)));
+  // A group sails while its own ground is held, and forms only from a base its side holds. Once formed, a group of the
+  // navy's own boats that loses its base moves to another port of its own (newBase); lent boats need theirs held.
+  const can = B.groups.map((G, i) => !!rows[i] && (!G.held || ours(G.held)) && ((!!fleets[i] && !B.from) || ours(fleets[i] ? g.regions[fleets[i]!.base]?.name : rows[i]!.base)));
   // Each group's beat: by date, or at stops 4 and 5 for Italy the sea in its reach with the most enemy shipping.
   const beat = B.groups.map((G, i) => (can[i] ? datedStation(g, G, rows[i]!) : -1));
   const pool = B.from ? g.fleets.find((f) => f.nat === nat && f.name === B.from) : undefined;
@@ -1559,7 +1577,6 @@ export function placeBoats(g: Game, nat: string): void {
     if (stop >= 3 && B.cause && !armyInAfrica(g, B.cause)) want = want.map(() => 0);
     const have = pool.ships.ss + fleets.reduce((n, f) => n + (f?.ships.ss ?? 0), 0);
     total = Math.min(want.reduce((a, b) => a + b, 0), have);
-    if (!total && !fleets.some((f) => f && f.ships.ss > 0)) return;
   } else {
     total = fleets.reduce((n, f) => n + (f?.ships.ss ?? 0), 0);
     if (stop >= 4) {
@@ -1571,8 +1588,14 @@ export function placeBoats(g: Game, nat: string): void {
         if (!reach.includes(beat[i])) beat[i] = -1;
         for (const z of reach) if (shippingIn(g, nat, z) > (beat[i] >= 0 ? shippingIn(g, nat, beat[i]) : 0)) beat[i] = z;
       });
-      want = beat.map((z) => (z >= 0 ? shippingIn(g, nat, z) : 0));
-      if (!want.some((x) => x > 0)) want = B.groups.map((_, i) => (can[i] ? B.rows[0][i + 1] : 0));
+      const opening = B.groups.map((_, i) => (can[i] ? B.rows[0][i + 1] : 0));
+      const need = beat.map((z) => (z >= 0 ? shippingIn(g, nat, z) : 0));
+      const goal = need.some((x) => x > 0) ? need : opening;
+      const sum = goal.reduce((a, b) => a + b, 0);
+      // Where the boats are now: as the war opened them, the first month they are placed at all.
+      const now = B.groups.some((G, i) => G.base !== undefined && fleets[i]) ? fleets.map((f, i) => (can[i] ? f?.ships.ss ?? 0 : 0)) : wholeShares(total, opening);
+      // A sixtieth of the way each month is about a fifth of it in a year. (Boats whose group cannot sail go to the others now.)
+      want = now.map((x, i) => (sum > 0 ? x + ((total * goal[i]) / sum - x) / 60 : x));
     }
     if (!want.some((x) => x > 0)) return;
   }
@@ -1587,8 +1610,9 @@ export function placeBoats(g: Game, nat: string): void {
     if (pool) pool.ships.ss -= parts[i] - f.ships.ss;
     f.ships.ss = parts[i];
     if (beat[i] >= 0) f.station = beat[i];
-    // A group whose ground is lost stands down: its boats have gone to the others, and it forms again when the ground is retaken.
-    if (!can[i] && G.held && shipCount(f.ships) === 0) g.fleets.splice(g.fleets.indexOf(f), 1);
+    // A group formed here with no boats left stands down: they have gone to the others or home, and it forms again
+    // when it has some (the Atlantic flotilla when Bordeaux is retaken).
+    if (G.base !== undefined && shipCount(f.ships) === 0) g.fleets.splice(g.fleets.indexOf(f), 1);
   });
 }
 
