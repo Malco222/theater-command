@@ -9,7 +9,7 @@ import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { BUDGET, PRODUCTION, budgeted, canBuildYet, corpsName, deliver, firstCorpsNumber, gunsWanted, income, specOf, upkeepTotal } from './economy';
-import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, pcIncome, sneakOn, wouldSurprise } from './diplomacy';
+import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, majorsOf, pcIncome, sneakOn, wouldSurprise } from './diplomacy';
 import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
 import { AIR, airOnFall, airUpkeep, setupAir, skyByNumbers, skyOnLand, skyOver } from './air';
@@ -2765,12 +2765,18 @@ const OPEN_CALLUP = 1;
 export const callUpHeld = (g: Game, nat: string): boolean => g.flags.open === 1 && nat === g.human && g.flags[`mph:${nat}`] === 1;
 
 /**
+ * True while a nation is at war with a great power: what starts a call-up and keeps it running (ruling 228, 1a). A war
+ * with a small country, Finland's in the winter of 1939, calls up nobody.
+ */
+const greatWar = (g: Game, nat: string): boolean => { const big = majorsOf(g); return g.nations[nat].atWar.some((e) => big.includes(e)); };
+
+/**
  * A country's standing call-up as it stands (the grand campaign): whether the player holds it, and the corps the next
  * wave would raise at most, of how many divisions each. Null for a country that has none, or is not yet at war.
  */
 export function standingCallUp(g: Game, nat: string): { held: boolean; corps: number; divs: number } | null {
   const plan = EASTERN.mobilisation[nat], n = g.nations[nat];
-  if (g.flags.open !== 1 || !plan || !n?.alive || !n.atWar.length) return null;
+  if (g.flags.open !== 1 || !plan || !n?.alive || !greatWar(g, nat)) return null;
   const began = g.flags[`mobilised:${nat}`];
   const wave = began === undefined ? 0 : g.turn + 1 - began - (g.flags[`mphn:${nat}`] ?? 0);
   return { held: callUpHeld(g, nat), corps: plan.perMonth[wave] ?? plan.after, divs: plan.divs };
@@ -2790,11 +2796,11 @@ export function holdCallUp(g: Game, nat: string, hold: boolean): boolean {
   return true;
 }
 
-/** A nation with a mobilisation plan raises a wave of new corps every month once it is at war. */
+/** A nation with a mobilisation plan raises a wave of new corps every month once it is at war with a great power. */
 function mobilise(g: Game, nat: string): void {
   const plan = EASTERN.mobilisation[nat];
   const n = g.nations[nat];
-  if (!plan || !n.atWar.length) return;
+  if (!plan || !greatWar(g, nat)) return;
   const key = `mobilised:${nat}`;
   if (g.flags[key] === undefined) g.flags[key] = g.turn;
   const month = g.turn - g.flags[key];
