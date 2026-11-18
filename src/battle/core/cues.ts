@@ -1,17 +1,20 @@
 // What the battle sounds like: which of the sound director's recordings answer what a unit is doing and what
 // happens on the field. Names are the approved battle pack's (/mnt/project-files/sound/battle-pack/, its "The field"
-// table), with the generator's list (/mnt/project-files/sound/sound-list.json) where the pack has nothing yet. The 3D
-// game plays the pack's own files; the sims and the bridge only name them. TODO(polish): the sound director tunes
-// this table and adds battle hooks of their own.
+// table). The 3D game plays the pack's own files and mixes them by the sound director's plan
+// (/mnt/project-files/sound/mix/mix.json: the shared beds, each block's shots by its nation's weapons, the orders
+// and cheers by nation); the sims and the bridge only name what a block does and what happens. Nothing here names a
+// sound outside the pack, nor a fight loop for a block: the fight is its shots and the beds (the sound director, 14:59Z).
 
 import type { Act, FieldEvent } from './types';
 
 /** The loop a unit plays while it does this, by the kind of unit ('foot' for men, 'tracks' for tanks, 'wheels' for lorries, 'guns'). */
 export const LOOPS: Record<'foot' | 'tracks' | 'wheels' | 'guns', Partial<Record<Act, string>>> = {
-  foot: { march: 'marching_loop', run: 'marching_loop', fight: 'battle_loop' },
-  tracks: { march: 'tank_loop', run: 'tank_loop', fight: 'battle_loop', turn: 'tank_loop' },
-  // The pack's lorry: the engine holding its revs on the move, idling where it stands with nothing to do.
-  wheels: { idle: 'lorry_idle_loop', march: 'lorry_drive_loop', run: 'lorry_drive_loop', fight: 'battle_loop' },
+  // Men in a fight carry no loop of their own: their rifles and machine guns, by nation, and the shared beds are the fight.
+  foot: { march: 'marching_loop', run: 'marching_loop' },
+  // A tank in a fight keeps its engine idling under its gun, as where it stands with nothing to do.
+  tracks: { idle: 'tank_idle_loop', march: 'tank_loop', run: 'tank_loop', turn: 'tank_loop', fight: 'tank_idle_loop' },
+  // The pack's lorry: the engine holding its revs on the move, idling where it stands or fights.
+  wheels: { idle: 'lorry_idle_loop', march: 'lorry_drive_loop', run: 'lorry_drive_loop', fight: 'lorry_idle_loop' },
   // Guns in action have no loop: they fire one far salvo at a time (DROPS), as the pack asks.
   guns: {},
 };
@@ -47,14 +50,11 @@ export function nextGap(d: Drops, roll: number): number {
   return d.every[0] + (d.every[1] - d.every[0]) * roll;
 }
 
-/** The one-shot that answers an event, where the event does not name its own. */
+/**
+ * The one-shot that answers an event, where the event does not name its own: the attacker's whistle at first contact.
+ * Every other answer (an order in the army's own language, a cheer, a fall) is by nation in the sound director's plan
+ * (mix.json "events"), which the 3D game reads.
+ */
 export const ONE_SHOTS: Partial<Record<FieldEvent['what'], string>> = {
-  contact: 'rifles',
-  flanked: 'machine_gun',
-  routing: 'bugle',
-  broken: 'bugle',
-  end: 'battle',
+  contact: 'whistle_long',
 };
-
-/** The sound of an order given, as on the campaign map. */
-export const ORDER_CUES = { move: 'order_march', attack: 'order_attack', hold: 'order_cancel', withdraw: 'order_cancel' } as const;

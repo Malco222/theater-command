@@ -5,7 +5,7 @@
 // clock runs out. Deterministic: the same ticket and the same orders at the same ticks replay the same battle.
 
 import { Rng, hashString } from '../../core/rng';
-import { ONE_SHOTS, ORDER_CUES } from '../core/cues';
+import { ONE_SHOTS } from '../core/cues';
 import { ahead, aspectOf, bearing, clamp, dist, turn } from '../core/geometry';
 import { clampToDice, diceNow, fieldRatio, levelOf, RATIO } from '../core/result';
 import { lineUp } from '../core/select';
@@ -166,7 +166,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         // A group keeps its shape: each block goes to the point plus its place in the group.
         const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
         for (const u of us) this.send(u, { kind: 'move', x: c.x + (us.length > 1 ? u.x - cx : 0), y: c.y + (us.length > 1 ? u.y - cy : 0), face: c.face });
-        this.say({ what: 'contact', side: by, text: '', cue: ORDER_CUES.move });
+        this.say({ what: 'contact', side: by, text: '' });
         this.events.pop(); this.log.pop();
         return true;
       }

@@ -53,8 +53,11 @@
 // (battle seconds of the first contact, null before it). Each unit: { id, side, kind, name, x, y, face,
 // str, mor, state, figures0, figures, w, d, act, speed, engaged, cover, loop, order }. Field metres, x east, y north,
 // the attacker from the south; face in radians, 0 north, clockwise. 'loop' is the sound it plays while it does what it
-// does; each event's 'cue' is a one-shot, at its x and y. Sound names are the approved battle pack's
-// (/mnt/project-files/sound/battle-pack/, played from its own files), or the generator's list where the pack has none.
+// does (its engine or its march; a block in a fight carries no fight loop of its own, as its shots by its nation's
+// weapons and the shared beds are the fight, in the sound director's plan /mnt/project-files/sound/mix/mix.json, which
+// the 3D game reads for the beds, the shots, and the orders and cheers by nation); each event's 'cue' is a one-shot, at
+// its x and y (today only the attacker's whistle at first contact). Sound names are the approved battle pack's
+// (/mnt/project-files/sound/battle-pack/, played from its own files).
 // A unit may also carry drops: { takes, every: [lo, hi] }: play one take at a time, at random and never the one played
 // last, then wait a random lo to hi seconds before the next (core/cues.ts nextTake and nextGap say it in code). Guns in
 // action carry far_guns_01 to 03 every 6 to 20 s in place of a loop; a block fighting among buildings plays
@@ -160,15 +163,15 @@ function airLoop(a: AirUnit): string {
   return a.act === 'idle' || a.act === 'down' ? '' : SKY.cues.loops[a.air];
 }
 
-/** One unit as the 3D game reads it: plain fields only. */
-function unitOut(u: UnitBase): Record<string, unknown> {
+/** One unit as the 3D game reads it: plain fields only. Exported for the tests. */
+export function unitOut(u: UnitBase): Record<string, unknown> {
   const land = u as LandUnit;
   const air = (u as AirUnit).air ? (u as AirUnit) : null;
   const motion = MOTION[u.kind as Kind] as string | undefined;
   const loops = motion && motion !== 'fixed' ? LOOPS[motion as keyof typeof LOOPS] : undefined;
   // A block fighting among buildings plays the town's street battle in place of the open field's bed, with the town's
   // machine guns dropped in; guns in action drop one far salvo at a time (the approved pack's field table).
-  const town = !air && u.act === 'fight' && u.cover === 'buildings' && !!loops?.fight;
+  const town = !air && u.act === 'fight' && u.cover === 'buildings' && !!loops && motion !== 'guns';
   const drops = air ? undefined : town ? TOWN.drops : motion && motion !== 'fixed' ? DROPS[motion as keyof typeof LOOPS]?.[u.act] : undefined;
   const extra = air ? { ...(u.extra ?? {}), n: air.n, n0: air.n0, band: air.band, alt: Math.round(air.alt), job: air.job.do, per: air.per } : u.extra;
   return {
