@@ -13327,10 +13327,8 @@ namespace
 				}
 			}
 			ListRest = To;
-			if (!FMath::IsNearlyEqual(To, Offset, 0.5f))
-			{
-				StartsScroll->SetScrollOffset(To);
-			}
+			// (every event, however small: a move left in the box would be counted again by the next one)
+			StartsScroll->SetScrollOffset(To);
 			SizeList(To);
 		}
 
