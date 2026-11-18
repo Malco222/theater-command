@@ -221,12 +221,13 @@ describe('what the 3D game draws from', () => {
       else if (Array.isArray(v)) v.forEach(walk);
       else if (v && typeof v === 'object') Object.values(v).forEach(walk);
     };
-    // 'engines' and 'mix' name entries in the sound director's mix.json, not sounds.
-    const { engines, mix, ...sounds } = SKY.cues;
+    // 'engines', 'calibre' and 'mix' name entries in the sound director's mix.json, not sounds.
+    const { engines, calibre, mix, ...sounds } = SKY.cues;
     walk(sounds);
     expect(names.length).toBeGreaterThan(12);
     expect(Object.keys(engines)).toEqual(['bmr', 'ftr']);
-    expect(mix.flak.startsWith('air.')).toBe(true);
+    expect(Object.values(calibre)).toEqual(['rifle', 'heavy', 'cannon']);
+    for (const path of Object.values(mix)) expect(path.startsWith('air.')).toBe(true);
     // The made-up names the mix renamed (mix.json "rename", air) are gone.
     for (const old of ['explosion', 'fighter_loop', 'fighter_pass_02', 'flak_barrage_loop', 'parachutes']) expect(names).not.toContain(old);
   });

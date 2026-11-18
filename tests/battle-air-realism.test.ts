@@ -9,6 +9,7 @@ import { createGame, setWar } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import { SKY } from '../src/battle/air/book';
 import { bomberOf, enginesOf, escortRoles, fighterOf, fighterWay, passesOn } from '../src/battle/air/doctrine';
+import { bomberGuns, fighterGuns, type Loadout } from '../src/battle/air/guns';
 import { airBattle, type AirSim } from '../src/battle/air/sim';
 import { airTicket, raidGroups } from '../src/battle/air/ticket';
 import type { FieldEvent } from '../src/battle/core/types';
@@ -156,11 +157,13 @@ describe('the aircraft and the doctrine (doctrine.ts)', () => {
   it('draws the aircraft the 3D game draws, by its designers\' year (CampaignAircraft.cpp)', () => {
     expect(fighterOf('GER', 1941)).toBe('Bf109');
     expect(fighterOf('GER', 1942)).toBe('Fw190');
-    expect(fighterOf('UK', 1940)).toBe('Hurricane');
+    expect(fighterOf('UK', 1939)).toBe('Hurricane');
+    expect(fighterOf('UK', 1940)).toBe('Spitfire');
     expect(fighterOf('CAN', 1941)).toBe('Spitfire');
-    expect(fighterOf('USA', 1942)).toBe('Warhawk');
-    expect(fighterOf('USA', 1943)).toBe('Mustang');
-    expect(fighterOf('SOV', 1939)).toBe('Yak');
+    expect(fighterOf('USA', 1943)).toBe('Warhawk');
+    expect(fighterOf('USA', 1944)).toBe('Mustang');
+    expect(fighterOf('SOV', 1941)).toBe('Fighter:SOV');
+    expect(fighterOf('SOV', 1942)).toBe('Yak');
     expect(fighterOf('JAP', 1941)).toBe('Zero');
     expect(fighterOf('FRA', 1939)).toBe('Fighter:FRA');
     expect(bomberOf('UK', 1941)).toBe('Bomber:UK');
@@ -189,5 +192,89 @@ describe('the aircraft and the doctrine (doctrine.ts)', () => {
         }
         expect(escortRoles(nat, w)[0]).toBeDefined();
       }
+  });
+});
+
+describe('the historian\'s corrections (review-historian.md, 18 November)', () => {
+  it('escorts: Germany hunts free ahead until September 1940; the Americans are freed in January 1944; Britain and Italy', () => {
+    expect(escortRoles('GER', { year: 1939, month: 8 })[0]).toBe('sweep');
+    expect(escortRoles('GER', { year: 1940, month: 8 })[0]).toBe('close');
+    expect(escortRoles('USA', { year: 1943, month: 11 })).toEqual(['close', 'top']);
+    expect(escortRoles('USA', { year: 1944, month: 0 })[0]).toBe('sweep');
+    expect(escortRoles('UK', { year: 1940, month: 4 })).toEqual(['close', 'top']);
+    expect(escortRoles('ITA', { year: 1941, month: 5 })).toEqual(['close', 'top']);
+    expect(escortRoles('JAP', { year: 1942, month: 1 })).toEqual(['close', 'top', 'sweep']);
+  });
+
+  it('passes: France from astern, the Soviets from below, Japan head-on only at the four-engined; finger fours from spring 1941', () => {
+    const w = { year: 1942, month: 8 };
+    const top = (rows: [string, number][]) => rows.filter(([, k]) => k === Math.max(...rows.map(([, x]) => x))).map(([p]) => p);
+    expect(top(passesOn('FRA', w, 'He111', 'GER'))).toEqual(['astern', 'quarter', 'beam']);
+    expect(passesOn('SOV', w, 'He111', 'GER').map(([p]) => p)).toContain('below');
+    expect(top(passesOn('JAP', w, 'B17', 'USA'))).toEqual(['headon']);
+    expect(passesOn('JAP', w, 'Bomber:UK', 'UK').find(([p]) => p === 'headon')![1]).toBe(0.1);
+    expect(fighterWay('UK', { year: 1941, month: 1 }).form).toBe('line');
+    expect(fighterWay('UK', { year: 1941, month: 2 }).form).toBe('fours');
+  });
+});
+
+/** Each drawn model's muzzles, from its model file (/mnt/project-files/battle-models/air/<Model>.json, 18 November). */
+const SOCKETS: Record<string, string[]> = {
+  Bf109: ['gun.nose', 'gun.1', 'gun.2'], Fw190: ['gun.nose', 'gun.1', 'gun.2', 'gun.3', 'gun.4'], Zero: ['gun.nose', 'gun.1', 'gun.2'],
+  Hurricane: Array.from({ length: 8 }, (_, i) => `gun.${i + 1}`), Spitfire: Array.from({ length: 8 }, (_, i) => `gun.${i + 1}`),
+  Warhawk: Array.from({ length: 6 }, (_, i) => `gun.${i + 1}`), Mustang: Array.from({ length: 6 }, (_, i) => `gun.${i + 1}`),
+  Yak: ['gun.nose'], Fighter: ['gun.nose', 'gun.1', 'gun.2'],
+  He111: ['turret.1', 'turret.2', 'turret.3', 'turret.4'], B17: Array.from({ length: 13 }, (_, i) => `turret.${i + 1}`),
+  Lancaster: Array.from({ length: 8 }, (_, i) => `turret.${i + 1}`), Bomber: ['turret.1', 'turret.2'],
+};
+const NATS = ['GER', 'UK', 'CAN', 'FRA', 'POL', 'ITA', 'SOV', 'USA', 'JAP', 'CHN', 'ROM'];
+const FTR = ['Bf109', 'Fw190', 'Hurricane', 'Spitfire', 'Warhawk', 'Mustang', 'Yak', 'Zero', 'Fighter'];
+const BMR = ['He111', 'B17', 'Lancaster', 'Bomber'];
+const count = (l: Loadout) => l.guns.reduce((s, g) => s + g.n, 0);
+
+describe('the guns (guns.ts; the design\'s section 3 with the historian\'s review)', () => {
+  it('every drawn aircraft has guns in every month of the war, each from a muzzle its model has, never one it silences', () => {
+    for (const nat of NATS) for (let year = 1939; year <= 1945; year++) for (let month = 0; month < 12; month++) {
+      const w = { year, month };
+      for (const [kind, models] of [['ftr', FTR], ['bmr', BMR]] as const) for (const model of models) {
+        const l = kind === 'ftr' ? fighterGuns(model === 'Fighter' ? `Fighter:${nat}` : model, nat, w) : bomberGuns(model === 'Bomber' ? `Bomber:${nat}` : model, nat, w);
+        expect(l.guns.length).toBeGreaterThan(0);
+        for (const g of l.guns) {
+          expect(['rifle', 'hmg', 'cannon20']).toContain(g.kind);
+          expect(g.rate).toBeGreaterThan(0); expect(g.mv).toBeGreaterThan(400); expect(g.rounds).toBeGreaterThan(0);
+          expect(g.n).toBeGreaterThanOrEqual(g.at.length);
+          for (const a of g.at) { expect(SOCKETS[model]).toContain(a); expect(l.silent).not.toContain(a); }
+          if (kind === 'ftr') expect(g.mount).toBe('fixed');
+          if (g.mount === 'hand') expect(g.arc).toBeTruthy();
+        }
+        for (const a of l.silent) expect(SOCKETS[model]).toContain(a);
+        if (kind === 'bmr') expect(l.reach!.rifle).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('flies the marks the historian gave: the 109 by month in 1940, the RAF\'s convergence, the four-gun Mustang, the B-17 by year', () => {
+    const e1 = fighterGuns('Bf109', 'GER', { year: 1939, month: 8 });
+    expect(e1.mark).toBe('Bf 109E-1');
+    expect(e1.guns.map((g) => [g.gun, g.n, g.rounds])).toEqual([['MG 17', 2, 1_000], ['MG 17', 2, 500]]);
+    expect(fighterGuns('Bf109', 'GER', { year: 1940, month: 4 }).mark).toBe('Bf 109E-3');
+    expect(fighterGuns('Bf109', 'GER', { year: 1940, month: 6 }).mark).toBe('Bf 109E-4');
+    expect(fighterGuns('Bf109', 'GER', { year: 1941, month: 3 }).silent).toEqual(['gun.1', 'gun.2']);
+    expect(fighterGuns('Hurricane', 'UK', { year: 1940, month: 4 }).conv).toBe(366);
+    expect(fighterGuns('Hurricane', 'UK', { year: 1940, month: 5 }).conv).toBe(229);
+    expect(count(fighterGuns('Mustang', 'USA', { year: 1944, month: 4 }))).toBe(4);
+    expect(count(fighterGuns('Mustang', 'USA', { year: 1944, month: 5 }))).toBe(6);
+    expect(count(bomberGuns('He111', 'GER', { year: 1939, month: 8 }))).toBe(3);
+    expect(count(bomberGuns('B17', 'USA', { year: 1942, month: 7 }))).toBe(10);
+    expect(count(bomberGuns('B17', 'USA', { year: 1943, month: 9 }))).toBe(13);
+    expect(count(bomberGuns('Bomber:FRA', 'FRA', { year: 1939, month: 8 }))).toBe(3);
+    expect(fighterGuns('Fighter:ITA', 'ITA', { year: 1940, month: 5 }).guns.map((g) => g.kind)).toEqual(['hmg']);
+  });
+
+  it('rides on the ticket, so the 3D game fires the guns of the month', () => {
+    const t = ticketOf('GER', 'bomb', 'Alsace', 0);
+    expect(t.place.guns!.GER.ftr.mark).toBe('Bf 109E-1');
+    expect(t.place.guns!.GER.bmr.mark).toBe('He 111P');
+    expect(t.place.guns!.FRA.ftr.mark).toBe('MS.406');
   });
 });

@@ -37,12 +37,16 @@ export function designYear(g: Game, nat: string, branch: 'fighters' | 'bombers')
   return year;
 }
 
-/** The fighter the 3D game draws for a nation (CampaignAircraft.cpp MainFighterOf), from its designers' year. */
+/**
+ * The fighter the 3D game draws for a nation (CampaignAircraft.cpp MainFighterOf on the unreal branch, dad185a), from
+ * its designers' year: the Spitfire from 1940, the Mustang from 1944 (the historian: first escort 13 December 1943),
+ * the Yak from 1942 and the plain fighter, fitted as the I-16, before it (the historian's review, question 8).
+ */
 export function fighterOf(nat: string, design: number): string {
   if (nat === 'GER') return design >= 1942 ? 'Fw190' : 'Bf109';
-  if (COMMONWEALTH.has(nat)) return design >= 1941 ? 'Spitfire' : 'Hurricane';
-  if (nat === 'USA') return design >= 1943 ? 'Mustang' : 'Warhawk';
-  if (nat === 'SOV') return 'Yak';
+  if (COMMONWEALTH.has(nat)) return design >= 1940 ? 'Spitfire' : 'Hurricane';
+  if (nat === 'USA') return design >= 1944 ? 'Mustang' : 'Warhawk';
+  if (nat === 'SOV') return design >= 1942 ? 'Yak' : `Fighter:${nat}`;
   if (nat === 'JAP' || nat === 'JPN') return 'Zero';
   return `Fighter:${nat}`;
 }
@@ -73,16 +77,18 @@ export function fighterWay(nat: string, w: When): { form: Form; style: Style } {
   const d = at(w);
   // Pairs and fours diving from height, one pass and zoom away; never turning with a Hurricane, Spitfire or Hawk (D1, D2, D3, D22, D32).
   if (nat === 'GER') return { form: 'fours', style: 'dive' };
-  // Tight vics until autumn 1940, then fours in line astern, finger fours from 1942 (D4, D6, D7, D32).
-  if (COMMONWEALTH.has(nat)) return { form: d < 1940 + 8 / 12 ? 'vic' : d < 1942 ? 'line' : 'fours', style: 'turn' };
+  // Tight vics until autumn 1940, then fours in line astern (and the "fluid six"), finger fours from spring 1941
+  // (D4, D6, D7, D32; the historian's review, table 1.2: March 1941, not 1942).
+  if (COMMONWEALTH.has(nat)) return { form: d < 1940 + 8 / 12 ? 'vic' : d < 1941 + 2 / 12 ? 'line' : 'fours', style: 'turn' };
   // Pairs and fours; never turn with a Zero; boom and zoom (D15, D16, D17, D35, D36).
   if (nat === 'USA') return { form: 'fours', style: 'dive' };
   // Threes, low and turning, then pairs and fours from late 1942 (D12, D13, D14, D34).
   if (nat === 'SOV') return { form: d < 1942 + 10 / 12 ? 'threes' : 'fours', style: 'turn' };
   // Threes in a turning fight, fours from 1943 (D19, D20, FD12).
   if (nat === 'JAP' || nat === 'JPN') return { form: d < 1943 ? 'threes' : 'fours', style: 'turn' };
-  // France 1939-40 (tight patrols of three, out-turns the Bf 109, D8, D9); Poland and Italy (FDm1, FDm2); everyone
-  // else until the historian says otherwise.
+  // Italy: threes, then German pairs and fours with the MC.202 from 1942, turning but with height (the historian's review).
+  if (nat === 'ITA') return { form: d < 1942 ? 'threes' : 'fours', style: 'turn' };
+  // France 1939-40 (tight patrols of three, out-turns the Bf 109, D8, D9); Poland (FDm1); everyone else.
   return { form: 'threes', style: 'turn' };
 }
 
@@ -111,11 +117,17 @@ export function passesOn(attacker: string, w: When, bomber: string, bomberNat: s
   if (attacker === 'GER' && bomber === 'Lancaster') return [['quarter', M], ['astern', S], ['below', R]]; // on the trailing vic (B5)
   // Fighter Command in 1940 was ordered to go in head-on; few managed it (B27).
   if (COMMONWEALTH.has(attacker) && bomberNat === 'GER' && d < 1942) return [['headon', S], ['beam', S], ['quarter', S], ['below', R]];
-  if (attacker === 'JAP' || attacker === 'JPN') return [['headon', M], ['astern', R], ['beam', R], ['below', R]]; // mostly frontal (B28)
-  if (attacker === 'SOV') return [['quarter', M], ['astern', S], ['below', R]]; // for the historian (B29, FBm7)
-  if (bomber === 'B17' || bomber === 'Lancaster') return [['quarter', M], ['astern', S], ['headon', R]];
+  const four = enginesOf(bomber) === 4;
+  // Japan: mostly frontal against the four-engined (B28, from mid-1942); against twins from astern and the quarter
+  // (the historian's review, question 5).
+  if (attacker === 'JAP' || attacker === 'JPN') return four ? [['headon', M], ['astern', R], ['beam', R], ['below', R]] : [['astern', S], ['quarter', S], ['beam', S], ['headon', R]];
+  // The Soviet Union: from the quarter astern and from below, under the dorsal gunner's arc; beam some; head-on rarely (question 5, FBm7).
+  if (attacker === 'SOV') return [['quarter', S], ['below', S], ['beam', S], ['headon', R]];
+  // France: a patrol of three in turn from astern and the quarter astern; beam some; head-on rarely (question 5, FBm2).
+  if (attacker === 'FRA') return [['astern', S], ['quarter', S], ['beam', S], ['headon', R]];
+  if (four) return [['quarter', M], ['astern', S], ['headon', R]];
   // The 1939-41 twins, with a nose and a tail gun and little on the beam or below: from the beam and the quarter,
-  // above and below; rarely head-on (B2, B4, B27; France's own passes are for the historian, FBm2).
+  // above and below; rarely head-on (B2, B4, B27).
   return [['beam', S], ['quarter', S], ['below', S], ['headon', R]];
 }
 
@@ -138,10 +150,17 @@ export type Role = 'close' | 'top' | 'sweep';
 
 export function escortRoles(nat: string, w: When): Role[] {
   const d = at(w);
-  if (nat === 'GER') return d < 1940 + 8 / 12 ? ['close', 'sweep', 'top'] : ['close', 'top', 'sweep']; // E1, E2, E6, B33
-  if (COMMONWEALTH.has(nat) && d >= 1941) return ['close', 'top', 'sweep']; // E3
-  if (nat === 'USA') return d < 1944 ? ['close', 'top'] : ['sweep', 'top', 'close']; // E4, E13; E16, FE6
-  if (nat === 'SOV' && d >= 1942 + 8 / 12) return ['close']; // E21
-  if (nat === 'JAP' || nat === 'JPN') return ['close']; // E20
+  // The historian's review, question 7. Germany: the free hunt ahead first until Göring's orders of 18 and 19 August
+  // 1940 tied the 109s to the bombers, enforced by early September (E1, E2, E6, B33).
+  if (nat === 'GER') return d < 1940 + 8 / 12 ? ['sweep', 'top', 'close'] : ['close', 'top', 'sweep'];
+  // Britain: loose cover over the Battles and Blenheims in 1940, then the Circus wings from 1941 (E3).
+  if (COMMONWEALTH.has(nat)) return d < 1941 ? ['close', 'top'] : ['close', 'top', 'sweep'];
+  // The USA: tied to the bombers until Doolittle freed the fighters in January 1944 (E4, E13; E16, FE6).
+  if (nat === 'USA') return d < 1944 ? ['close', 'top'] : ['sweep', 'top', 'close'];
+  // The Soviet Union: close, whenever there was an escort (E21; order 0685 of 9 September 1942).
+  if (nat === 'SOV') return ['close'];
+  // Italy: crowded close round the bombers (over Malta).
+  if (nat === 'ITA') return ['close', 'top'];
+  // Japan: close and top together, a sweep ahead on big raids (not "below the bombers", E20, one report); and everyone else.
   return ['close', 'top', 'sweep'];
 }

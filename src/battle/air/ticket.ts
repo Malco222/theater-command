@@ -15,6 +15,7 @@ import { turnToDate } from '../../core/ticket';
 import type { FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
 import { SKY, type Band } from './book';
 import { bomberOf, designYear, fighterOf } from './doctrine';
+import { bomberGuns, fighterGuns } from './guns';
 import { groundOf } from './ground';
 import type { AirOutcome, AirPlace } from './types';
 
@@ -99,6 +100,8 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     nat: n, adj: g.nations[n]?.adj ?? n, color: g.nations[n]?.color ?? '#888888', human, forces,
     general: null,
   });
+  const when = { year: turnToDate(g.turn).year, month: turnToDate(g.turn).month };
+  const models = Object.fromEntries([...new Set([nat, defNat, ...att.map((f) => f.nat), ...def.map((f) => f.nat)])].map((n) => [n, { ftr: fighterOf(n, designYear(g, n, 'fighters')), bmr: bomberOf(n, designYear(g, n, 'bombers')) }]));
   const place: AirPlace = {
     kind, mission: m, target, name: a.place, night, nat, radar: !!a.radar,
     I: C.intensity[m as 'bomb' | 'night' | 'superiority'] ?? 1,
@@ -114,9 +117,11 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     starts,
     from: fromOf(att.map((f) => !!carrierOf(g, a.att.find((x) => x.f.id === f.corps)!.f))),
     saved: { att: AIR.pilots.away, def: AIR.pilots.home },
-    // When it is fought, and the aircraft each side's groups are, as the 3D game draws them (doctrine.ts).
-    when: { year: turnToDate(g.turn).year, month: turnToDate(g.turn).month },
-    models: Object.fromEntries([...new Set([nat, defNat, ...att.map((f) => f.nat), ...def.map((f) => f.nat)])].map((n) => [n, { ftr: fighterOf(n, designYear(g, n, 'fighters')), bmr: bomberOf(n, designYear(g, n, 'bombers')) }])),
+    // When it is fought, the aircraft each side's groups are, as the 3D game draws them (doctrine.ts), and their guns
+    // that month (guns.ts).
+    when,
+    models,
+    guns: Object.fromEntries(Object.entries(models).map(([n, k]) => [n, { ftr: fighterGuns(k.ftr, n, when), bmr: bomberGuns(k.bmr, n, when) }])),
     // The country round the target, turned as the board is (b384(j)).
     ground: groundOf(g, target, (x, y) => { const [rx, ry] = rot([(x - T.x) * AIR.kmPerUnit * 1000, -(y - T.y) * AIR.kmPerUnit * 1000]); return [SKY.target.x + rx, SKY.target.y + ry]; }),
   };

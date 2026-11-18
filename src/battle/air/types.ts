@@ -10,6 +10,7 @@ import type { Side, UnitBase } from '../core/types';
 import type { Band } from './book';
 import type { AirGround } from './ground';
 import type { Form, Pass, Style, When } from './doctrine';
+import type { Loadout } from './guns';
 
 export type AirKind = 'ftr' | 'bmr';
 
@@ -161,6 +162,8 @@ export interface AirPlace {
   /** When it is fought, and the aircraft each nation's fighters and bombers are (doctrine.ts): absent, September 1939 and the plain models. */
   when?: When;
   models?: Record<string, { ftr: string; bmr: string }>;
+  /** Each nation's guns that month, on the aircraft drawn for it (guns.ts): shown, never counted. */
+  guns?: Record<string, { ftr: Loadout; bmr: Loadout }>;
   /** Where each campaign group comes on: board position, height, fuel, and whether it waits on the ground. */
   starts: Record<number, { x: number; y: number; band: Band; fuel: number; wait: boolean }>;
   /** Where the raiders fly from: their own airfields, carriers at sea (the Home Fleet's aircraft), or both. */

@@ -107,9 +107,17 @@ export const SKY = {
     /**
      * What the mix plays with no event of its own, as paths into mix.json (the sound director's, never copied here):
      * the flak ring has no loop, its guns fire and their shells burst by "air"."flak"; the formations' engines are
-     * "air"."loops", by 'engines'.
+     * "air"."loops", by 'engines'; each gun as it fires is "air"."gunsByCalibre", by 'calibre'; a lost engine and a
+     * windmilling airscrew are "air"."engineLost" and "air"."windmilling".
      */
-    mix: { flak: 'air.flak', engines: 'air.loops' },
+    mix: { flak: 'air.flak', engines: 'air.loops', guns: 'air.gunsByCalibre', engineLost: 'air.engineLost', windmilling: 'air.windmilling' },
+    /**
+     * A gun's kind (guns.ts, the effects kit's fx.json air_guns rows) to its entry in the mix's "air"."gunsByCalibre":
+     * a heavy gun plays that entry's wing, turret or handHeld take by its mount; a single hand-held rifle-calibre gun
+     * plays handHeldRifle. A bomber's lost engine and a windmilling airscrew play nothing of their own: the mix drops
+     * the formation's drone by "air"."engineLost".
+     */
+    calibre: { rifle: 'rifle', hmg: 'heavy', cannon20: 'cannon' } as Record<'rifle' | 'hmg' | 'cannon20', string>,
   },
 
   /**
@@ -138,8 +146,10 @@ export const SKY = {
    * most 'most' at a time and never its last aircraft in formation. The box's next loss is its oldest straggler that
    * has been out at least 'seen' air seconds (so it is seen to leave before it falls) and has no escort over it. A twin
    * on one engine makes three quarters of its speed or less and cannot hold height (B39): it drops back at 'twin.back'
-   * of the box's speed and sinks. A four-engined straggler has one engine windmilling or two out (B38, B39; one cleanly
-   * feathered could keep its place, FB12): it drops back 4.5 to 9 m/s. Before its box bombs it keeps within 'held'
+   * of the box's speed and sinks. A four-engined straggler has one engine windmilling or two out (B38, B39), or, still
+   * loaded, one cleanly feathered (the historian, question 6: loaded, it seldom held the box; after the drop most
+   * could, FB12): it drops back 4.5 to 9 m/s. The historian: about half is a fair figure for 1943 (low), less in 1944,
+   * when escorts covered the stragglers (as 'cover' does here). Before its box bombs it keeps within 'held'
    * metres (its bombs are in the box's drop); after, it falls back freely and is clear of the fight, and gets home,
    * past 'clear' metres. k is tuned so that about half the bombers lost were stragglers first, until the historian
    * answers (ruling 237.1). Sink rates are placeholders.

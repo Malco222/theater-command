@@ -654,11 +654,15 @@ export class AirSim implements BattleSim<AirUnit> {
     if (m) for (const [k, v] of m) if (v > most) { most = v; by = k; }
     const four = enginesOf(b.model) === 4;
     const one = 1 + this.stragRng.int(four ? 4 : 2);
-    // Four engines: one dead and windmilling, or two out and feathered (B38, B39); two: one out, feathered.
-    const two = four && this.stragRng.next() < 0.5;
-    const eng = two ? [one, one % 4 + 1].sort((x, y) => x - y) : [one];
+    // Two engines: one out, feathered. Four: one dead and windmilling, or two out and feathered (B38, B39); and before
+    // its bombs have gone, one cleanly feathered too, for a loaded heavy on three engines seldom held the box at height
+    // (the historian's review, question 6: after the drop most could keep up, so it does not fall out for that).
+    const loaded = b.dropped <= 0 && !b.jettisoned;
+    const x = four ? this.stragRng.next() * (loaded ? 3 : 2) : 0;
+    const two = four && x >= 1 && x < 2, wind = four && x < 1;
+    const eng = two ? [one, one % 4 + 1].sort((p, q) => p - q) : [one];
     const s: Straggler = {
-      id: this.stragId++, eng, prop: four && !two ? 'windmill' : 'feather', why: by === 'flak' ? 'flak' : 'ftr', by, age: 0, back: 0, down: 0,
+      id: this.stragId++, eng, prop: wind ? 'windmill' : 'feather', why: by === 'flak' ? 'flak' : 'ftr', by, age: 0, back: 0, down: 0,
       rate: four ? this.stragRng.range(G.four.back[0], G.four.back[1]) : G.twin.back * SKY.speed.bmr, sink: four ? G.four.sink : G.twin.sink, cover: null,
     };
     b.strag.push(s);
