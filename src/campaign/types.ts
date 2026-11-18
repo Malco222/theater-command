@@ -946,6 +946,8 @@ export interface AirFleet extends Storied {
   close?: boolean;
   /** The week it last flew over a battle on that order, as month x 10 + week: one battle a week. */
   closeAt?: number;
+  /** The air campaign it flies in (ruling 236.2): the campaign's id, while the campaign stands. */
+  camp?: number;
   /** A carrier wing: the id of the fleet whose carriers it flies from. It goes where that fleet goes and has no airfield (the grand campaign). */
   ship?: number;
   /**
@@ -1011,6 +1013,97 @@ export interface AirReport {
   fleet?: number;
   /** True when a harbour was caught unready in the month war was declared. */
   surprise?: boolean;
+}
+
+/** Ruling 236.2: how a battle for the sky over one province stands, for the side fighting for it. */
+export type SkyState = 'contested' | 'held' | 'lost';
+
+/**
+ * The battle for the sky over one province (ruling 236.2): the side fighting for it, where it stands, and the months
+ * running it has gone that side's way (above 0) or the defender's (below 0). It carries over from month to month.
+ */
+export interface SkyFight {
+  by: string;
+  state: SkyState;
+  streak: number;
+  /** The month of the last fight, and the month the fight began. */
+  turn: number;
+  since: number;
+  /** The month it was won, while held. */
+  won?: number;
+  /** This month's best result so far (2 the defender's fields knocked out, 1 a month won, 0 even, -1 lost), and where the fight stood before it. */
+  best: number;
+  was: { state: SkyState; streak: number };
+}
+
+/**
+ * What the bombs have kept down in one province, of one kind ('works' its output, 'oil' its oilfield or fuel plants),
+ * ruling 236.2: damage carries over and comes back at the historian's rate for the target (air-campaign-236).
+ * 'v' is the share held down at the end of month 'at'; 'land' what raids have landed for later months; 'carry' what
+ * is still down this month from earlier raids, after the month's repair.
+ */
+export interface BombStock {
+  region: number;
+  kind: 'works' | 'oil';
+  by: string;
+  victim: string;
+  v: number;
+  rate: number;
+  at: number;
+  land: Record<number, number>;
+  carry: number;
+  /** This month: what came back, and what the raids did. */
+  mended: number;
+  done: number;
+  /** The last raid that landed here: its month, its side and what it did. */
+  last?: { turn: number; by: string; cut: number };
+}
+
+export type CampaignKind = 'sky' | 'bomb' | 'support';
+
+/** One month of an air campaign: where it went, what it sent and lost, and what it did (ruling 236.2). */
+export interface CampaignMonth {
+  turn: number;
+  target: number;
+  sent: number;
+  lost: number;
+  downed: number;
+  done: number;
+  sky?: SkyState;
+}
+
+/**
+ * An air campaign (ruling 236.2): a standing order to an air force, flown every month until it is called off. It
+ * holds its targets, its groups and escorts, day or night, and what it has done month by month.
+ */
+export interface AirCampaign {
+  id: number;
+  nat: string;
+  kind: CampaignKind;
+  name: string;
+  targets: number[];
+  /** The next target in turn, for a bombing campaign. */
+  next: number;
+  groups: number[];
+  escorts: number[];
+  night: boolean;
+  /** What a bombing campaign aims at: the works, the oil, or the railways. */
+  aim: 'works' | 'oil' | 'rail';
+  since: number;
+  /** The month it ended, and why. */
+  off?: number;
+  why?: string;
+  /** The row of the campaign table it was opened from, at the stops that follow the book. */
+  book?: number;
+  log: CampaignMonth[];
+}
+
+/** The air war's memory (ruling 236.2): the campaigns, the battles for the sky, and the damage the bombs left. */
+export interface AirWarMemory {
+  campaigns: AirCampaign[];
+  next: number;
+  sky: Record<number, SkyFight>;
+  stock: Record<string, BombStock>;
 }
 
 /**
@@ -1080,6 +1173,8 @@ export interface Game {
   passings: Passing[];
   /** Corps at sea on a long passage, off the map until the month they land (ruling 229, part 1: the Cape). Absent while there are none. */
   atSea?: Voyage[];
+  /** The air campaigns (ruling 236.2, the grand campaign with the switch on): absent while the switch is off. */
+  ac?: AirWarMemory;
   links: [number, number][];
   /** The chart's west edge. 0 on the map of Europe; further west (negative) once the wider world is attached (world.ts). */
   x0: number;

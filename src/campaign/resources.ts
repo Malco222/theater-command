@@ -14,6 +14,7 @@ import { prizeTaker } from './prizes';
 import { TECH } from './tech';
 import { oilAtHome } from './world';
 import { footWorn } from './footing';
+import { bombWorn, oilHeld } from './aircampaigns';
 
 export type Good = 'oil' | 'sup';
 
@@ -72,7 +73,10 @@ export interface ResLine { key: string; label: string; amount: number; count?: n
 /** What an oilfield yields a month to whoever holds it: less to a conqueror than to its owner. */
 export function fieldYield(g: Game, r: Region, nat: string = r.ctrl): number {
   if (!r.oil) return 0;
-  return (RES.oil.fields[r.name] ?? RES.oil.fields._default) * (r.owner === nat ? 1 : RES.oil.occupied) * (1 - fieldOut(g, r));
+  const y = (RES.oil.fields[r.name] ?? RES.oil.fields._default) * (r.owner === nat ? 1 : RES.oil.occupied) * (1 - fieldOut(g, r));
+  // Air campaigns (ruling 236.2): a refinery the bombers keep coming back to gives that much less.
+  const bombed = oilHeld(g, r);
+  return bombed > 0 ? y * (1 - bombed) : y;
 }
 
 /** The share of an oilfield's yield lost to sabotage this month: wells set alight burn for months. 0 for a field at work. */
@@ -92,7 +96,8 @@ function treeOil(g: Game, nat: string): { amount: number; factories: number } {
   for (const id of g.nations[nat].tech?.done ?? []) rate += TECH.techs.find((t) => t.id === id)?.oil ?? 0;
   if (!rate) return { amount: 0, factories: 0 };
   let fac = g.nations[nat].offmap?.industry ?? 0;
-  for (const r of g.regions) if (r.owner === nat && r.ctrl === nat && !r.overseas) fac += workingFactories(g, r);
+  // (Air campaigns, ruling 236.2: the fuel plants of a province bombed for its oil make that much less.)
+  for (const r of g.regions) if (r.owner === nat && r.ctrl === nat && !r.overseas) { const b = oilHeld(g, r); fac += b > 0 ? workingFactories(g, r) * (1 - b) : workingFactories(g, r); }
   return { amount: rate * fac, factories: fac };
 }
 
@@ -490,7 +495,8 @@ export function resourcesTick(g: Game, nat: string): void {
  */
 export function willLost(g: Game, nat: string): number {
   // (All-out war wears it too, with the nation's footing switched on: a count of its own above what shortage takes, ruling 172.)
-  return hungerLost(g, nat) + footWorn(g, nat);
+  // (And the bombing of its cities, with the air campaigns on: a small count of its own, ruling 236.2, b549.)
+  return hungerLost(g, nat) + footWorn(g, nat) + bombWorn(g, nat);
 }
 
 /** What privation alone has taken from a nation's will to fight: what shortage takes, up to its own ceiling. */

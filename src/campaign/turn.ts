@@ -72,6 +72,7 @@ import { staffRuns, type DeskId } from './depth';
 import { minesKnown, whatYouFace } from './facing';
 import { SUPPORT, type FaceLine } from './support';
 import EVE from '../../data/campaign/eve.json';
+import { airWarMonth } from './aircampaigns';
 
 export const current = (g: Game): string => g.order[g.phase];
 
@@ -100,6 +101,8 @@ function closePhase(g: Game, nat: string): void {
     openTheatres(g);
     // A smaller power's aircraft from abroad, and the month its own works open (ruling 213(d), the grand campaign).
     smallAirMonth(g);
+    // Air campaigns (ruling 236.2): the bombs' damage is repaired, held skies kept, and the book's campaigns open and close.
+    airWarMonth(g);
     monthlyDiplomacy(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
     historyMonth(g);

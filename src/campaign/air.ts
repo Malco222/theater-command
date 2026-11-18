@@ -36,6 +36,7 @@ import { beyondEurope } from './world';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
 import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretwar';
+import { acOn, aimOf, bombLands, campaignOrders, campaignResults, inCampaign, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 
 type Sched = [number, number, number][];
@@ -533,7 +534,9 @@ export function skyDenies(g: Game, nat: string, region: number): boolean {
 /** The share of a nation's production stopped this month by bombing and by strikes on its coastal trade. */
 export function airIncomeLoss(g: Game, nat: string): number {
   const r = g.raids[nat];
-  return r && r.turn === g.turn ? r.share : 0;
+  const now = r && r.turn === g.turn ? r.share : 0;
+  // Air campaigns (ruling 236.2): what earlier raids still hold down comes on top, as far as the same ceiling.
+  return acOn(g) ? Math.min(AIR.damage.industry.maxShare, now + stockLoss(g, nat)) : now;
 }
 
 /** Stops this share of a nation's production for a month: bombs on its factories, or shells from the sea. */
@@ -1114,7 +1117,8 @@ export function whyNotMission(g: Game, f: AirFleet, m: AirMission, target: numbe
   if (!f.bmr && !escort) return f.kind === 'ftr' ? 'Fighters do not fly with the night bombers.' : 'It has no bombers.';
   if (d > (escort ? R.ftrRange : R.bmrRange)) return escort ? 'It is beyond its fighters.' : 'It is beyond its bombers.';
   // In the grand campaign the rail yards and junctions are a target too.
-  if (r.fac > 0 || (onNet(target) && !railCut(g, target) && groundRules(g))) return null;
+  // (Air campaigns, ruling 236.2: an oilfield is a target too.)
+  if (r.fac > 0 || (onNet(target) && !railCut(g, target) && groundRules(g)) || (!!r.oil && acOn(g))) return null;
   return !groundRules(g) ? 'There is no industry there to bomb.' : onNet(target) ? 'There is no industry there, and its railway is already cut.' : 'There is no industry or railway there to bomb.';
 }
 
@@ -1641,7 +1645,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const r = g.regions[target];
     const total = g.regions.reduce((s, x) => s + (x.ctrl === r.ctrl ? x.fac : 0), 0);
     const open = Math.min(N.max, through / N.scale);
-    const cut = a.aa ? open * (1 - a.aa * WORKS.aa.cut) : open;
+    let cut = a.aa ? open * (1 - a.aa * WORKS.aa.cut) : open;
+    // Air campaigns (ruling 236.2): the damage carries over, and comes back at the historian's rate for the target.
+    if (acOn(g)) cut = bombLands(g, nat, r, cut, night, aimOf(g, fleets));
     const nation = total > 0 ? cut * (r.fac / total) : 0;
     raid(g, nat, r.ctrl, nation);
     // The air war: output is weighed by the province's own factories (ruling 227), so one with no industry has none to
@@ -1719,7 +1725,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   }
 
   // Has the sky been won? The attacker's surviving fighters against what the defender can put up once his losses are made good.
-  let sky = false, hold = 0;
+  let sky = false, hold = 0, held = false;
   if (m === 'superiority') {
     const Eafter = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
     const EpowAfter = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd * worth(g, x.f), 0);
@@ -1737,6 +1743,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     hold = Dnext > 0 ? EpowAfter / Dnext : 99;
     sky = Eafter >= AIR.sky.least && hold >= AIR.sky.win;
     if (sky) g.sky[target] = { nat, turn: g.turn };
+    // Air campaigns (ruling 236.2): the battle for the sky over a province carries over from month to month.
+    if (acOn(g)) held = skyFought(g, nat, target, sky) === 'held';
   }
 
   // Wear, and what the commanders learned.
@@ -1767,7 +1775,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   // Once the British and American air forces fight the same enemy side by side, the sky they win is the Allies'.
   const together = !!defNat && (nat === 'UK' || nat === 'USA') && ['UK', 'USA'].every((x) => g.nations[x]?.alive && g.nations[x].atWar.includes(defNat));
   let text: string;
-  if (m === 'superiority') text = `${who} ${a.att.length === 1 ? 'fights' : 'fight'} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? (together ? 'The Allied air forces now hold the sky there.' : `The ${g.nations[nat].adj} air force now holds the sky there.`) : df(def) ? 'The defenders still hold their sky.' : 'No fighters came up to meet them.'}`;
+  if (m === 'superiority') text = `${who} ${a.att.length === 1 ? 'fights' : 'fight'} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? (together ? 'The Allied air forces now hold the sky there.' : `The ${g.nations[nat].adj} air force now holds the sky there.`) : held ? 'The sky there is still ours.' : df(def) ? 'The defenders still hold their sky.' : 'No fighters came up to meet them.'}`;
   else if (m === 'fleet') text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} the ${a.ships[0].name} in ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'harbour') text = `${who} ${a.att.length === 1 ? 'raids' : 'raid'} the harbour of ${a.place}${a.surprise ? ' without warning' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'town') text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} the defences of ${townName(g.regions[target])}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
@@ -1799,6 +1807,8 @@ const df = (sides: AirSide[]): number => sides.reduce((s, x) => s + x.ftr, 0);
 export function airBattles(g: Game, nat: string): AirReport[] {
   const out: AirReport[] = [];
   if (!g.nations[nat]?.alive) return out;
+  // Air campaigns (ruling 236.2): each standing campaign gives its groups their orders for the month first.
+  if (acOn(g)) campaignOrders(g, nat);
   // The air war: a fighter group ordered to stick with a bomber group goes on the raid the bombers were left to fly.
   const followers: AirFleet[] = [];
   if (airWar(g)) for (const f of airFleetsOf(g, nat)) {
@@ -1825,6 +1835,7 @@ export function airBattles(g: Game, nat: string): AirReport[] {
   }
   // The escorts are back on patrol next month.
   for (const f of followers) f.flew = g.turn;
+  if (acOn(g)) campaignResults(g, nat, out);
   return out;
 }
 
@@ -1839,7 +1850,8 @@ export function airAI(g: Game, nat: string, ph?: PlanPhase | null): void {
   if (byHand(g, nat, 'air')) return;
   const n = g.nations[nat];
   // His air staff leaves the carriers' wings to whoever runs his navy.
-  const mine = airFleetsOf(g, nat).filter((f) => !afloat(f) || !byHand(g, nat, 'navy'));
+  // (Air campaigns, ruling 236.2: a group flying in a campaign is the campaign's, and the staff leaves it alone.)
+  const mine = airFleetsOf(g, nat).filter((f) => (!afloat(f) || !byHand(g, nat, 'navy')) && !inCampaign(g, f));
   // A group that has flown this month already stays away until the next.
   for (const f of mine) if (f.flew !== g.turn) { f.mission = 'support'; f.target = -1; }
   // (Its ground support is decided afresh each month, once its fighters are based: closeStaff.)

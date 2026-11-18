@@ -26,6 +26,7 @@ import { CLASSES, FLEETS, airOver, atSea, fleetPower, fleetReach, fleetsOf, sail
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
 import { weatherOn, whyNotSky, zoneOfSea } from './weather';
+import { inCampaign } from './aircampaigns';
 
 type WingKind = 'ftr' | 'bmr';
 const KINDS: WingKind[] = ['ftr', 'bmr'];
@@ -682,7 +683,7 @@ export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 
   const A = CARRIERS.ai, R = AIRWAR.ai.raids;
   const hit = new Set<string>();
   let flown = what === 'land' ? 100 : 0;
-  const fit = (f: AirFleet | undefined): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ready >= A.ready;
+  const fit = (f: AirFleet | undefined): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ready >= A.ready && !inCampaign(g, f);
   const send = (b: Blow): void => {
     const rep = fly(g, nat, b.m, b.t, b.fleets, `:sea${flown++}`);
     hit.add(`${b.m}:${b.t}`);
