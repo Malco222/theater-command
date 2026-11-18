@@ -1002,8 +1002,9 @@ def b17_head_on(A, opt):
         #  half empty, the fighters specks". Now from inside the box: just above and behind the port wing bomber's
         #  tail, she across the near third of the picture and the rest stacked round her, the horizon in the lower
         #  third, and the fighters coming through close by the camera.)
-        eye = left.at + Vector((-30.0, -6.0, 6.5))
-        look = eye + Vector((180.0, -24.0 + 1.2 * t, 15.5))
+        # (low and close: from higher up she lay along the bottom edge and only her back was seen)
+        eye = left.at + Vector((-24.0, -3.6, 3.7))
+        look = eye + Vector((180.0, -24.0 + 1.2 * t, 14.0))
         A.cam.data.lens = 28.0
         kit.look_at(A.cam, eye, look)
         A.at(t)                                              # (after the camera: a tracer is drawn as thick as the camera needs to see it)
@@ -1091,7 +1092,7 @@ def b17_escort(A, opt):
             # (the art director, 2026-11-18 15:57Z: from behind her tail the picture was "pale and empty". Now from
             #  on her back, looking aft past her fin, which stands dark down one side of the picture; the camera looks
             #  up a little, so the fighter comes in against the sky, and her tail guns' fire goes out from under it.)
-            eye = charlie.at + Vector((-6.4, 1.15, 2.7))
+            eye = charlie.at + Vector((-6.4, 1.5, 2.7))
             look = a.at + Z * (0.07 * (a.at - eye).length)
             A.cam.data.lens = 55.0
             if seen["at"] is not None:
