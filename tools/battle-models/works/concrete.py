@@ -71,15 +71,30 @@ def ragged(ob, size=0.18, amount=0.07, seed=0.0):
     return bits.s_noise(ob, amount, 0.35, seed)
 
 
-def split(body, cutter):
+def _bool_keep(a, b, op):
+    """As the kit's cut and join, but the cutter's faces keep the cutter's own slot: a break's faces can then be told
+    from the cast ones (by slot number alone they all came out as the block's)."""
+    mod = a.modifiers.new("b", "BOOLEAN")
+    mod.operation, mod.solver, mod.object = op, "EXACT", b
+    if hasattr(mod, "material_mode"):
+        mod.material_mode = "TRANSFER"
+    bits._apply(a, mod)
+    me = b.data
+    bpy.data.objects.remove(b)
+    bpy.data.meshes.remove(me)
+    return a
+
+
+def split(body, cutter, again=False):
     """Break a finished solid in two along a cutter: returns (the piece inside the cutter, the rest). Faces made by
-    the break carry slot 1."""
-    _slots(body, 0)
+    the break carry slot 1. `again` breaks a piece that is already the child of a break (its broken faces stay so)."""
+    if not again:
+        _slots(body, 0)
     _slots(cutter, 1)
     piece = s_copy(body)
     c2 = s_copy(cutter)
-    bits.s_both(piece, c2)
-    bits.s_cut(body, cutter)
+    _bool_keep(piece, c2, "INTERSECT")
+    _bool_keep(body, cutter, "DIFFERENCE")
     return piece, body
 
 
@@ -108,22 +123,77 @@ def take_slots(m, ob, paints, part=None, smooth_=True):
     bpy.data.meshes.remove(me)
 
 
+def lump(g, r, flat=0.6, points=11):
+    """An irregular broken lump about the origin, about r across each way and `flat` of that high: the hull of a
+    handful of points thrown about. Returns (points, three-sided faces)."""
+    bm = bmesh.new()
+    wide = g.uniform(0.55, 1.0)
+    for _ in range(points):
+        v = Vector((g.gauss(0, 1), g.gauss(0, 1), g.gauss(0, 1)))
+        v = v.normalized() * g.uniform(0.6, 1.0) if v.length > 1e-6 else X
+        bm.verts.new((v.x * r, v.y * r * wide, v.z * r * flat))
+    hull = bmesh.ops.convex_hull(bm, input=bm.verts[:])
+    inner = {e for e in list(hull["geom_interior"]) + list(hull["geom_unused"]) if isinstance(e, bmesh.types.BMVert)}
+    if inner:
+        bmesh.ops.delete(bm, geom=list(inner), context="VERTS")
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    bm.verts.index_update()
+    verts = [Vector(v.co) for v in bm.verts]
+    faces = [tuple(v.index for v in f.verts) for f in bm.faces]
+    bm.free()
+    return verts, faces
+
+
 def rubble(m, at, spread, count, seed=0, size=(0.12, 0.45), paint="concrete", flat=0.7, on=None):
     """Broken concrete lying where it fell: angular lumps with broken faces, many small and a few large, each bedded on
     the ground. `on(x, y)` gives the ground's height where a lump lies (a bank's slope); without it they lie at
     `at`'s height. (They were lens-shaped once and lay at one height: on a slope they read as saucers in the air.)"""
     g = rnd(seed)
     at = Vector(at)
-    box = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
-    for _ in range(count if m.fine else max(3, count // 3)):
-        r = size[0] + (size[1] - size[0]) * g.random() ** 1.8
-        a, d = g.uniform(0, 6.283), spread * g.random() ** 0.7
+    big = []
+
+    def lay(r, reach, flat_k, colour, points=11, tilt=0.5):
+        a, d = g.uniform(0, 6.283), reach * g.random() ** 0.7
         x, y = at.x + math.cos(a) * d, at.y + math.sin(a) * d * 0.8
-        hx, hy, hz = r, r * g.uniform(0.5, 0.95), r * g.uniform(0.32, 0.62) * flat / 0.7
-        rot = Matrix.Rotation(g.uniform(0, 6.283), 3, "Z") @ Matrix.Rotation(g.uniform(-0.4, 0.4), 3, "X") @ Matrix.Rotation(g.uniform(-0.35, 0.35), 3, "Y")
-        c = Vector((x, y, (on(x, y) if on else at.z) + hz * 0.7))
-        pts = [c + rot @ Vector((sx * hx * g.uniform(0.55, 1.0), sy * hy * g.uniform(0.55, 1.0), sz * hz * g.uniform(0.55, 1.0))) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
-        m.add(pts, box, paint if g.random() < 0.7 else "concrete.in", False, lambda q, c=c: q - c)
+        verts, faces = lump(g, r, flat_k, points)
+        rot = Matrix.Rotation(g.uniform(0, 6.283), 3, "Z") @ Matrix.Rotation(g.uniform(-tilt, tilt), 3, "X") @ Matrix.Rotation(g.uniform(-tilt, tilt), 3, "Y")
+        verts = [rot @ v for v in verts]
+        low = min(v.z for v in verts)
+        c = Vector((x, y, (on(x, y) if on else at.z) - low * 0.8))          # (bedded: a fifth of it sunk in)
+        m.add([c + v for v in verts], faces, colour, False, lambda q, c=c: q - c)
+        return c
+
+    # (they were boxes with their corners pushed about, all much of a size: toy bricks. Broken concrete is lumps of no
+    # shape in every size, most of it small, with grit and dust round the heap and a rod or two still holding pieces)
+    for _ in range(count if m.fine else max(3, count // 3)):
+        k = g.random() ** 2.4
+        r = size[0] + (size[1] - size[0]) * k
+        c = lay(r, spread * (1.0 - 0.45 * k), g.uniform(0.45, 0.95) * flat / 0.7, paint if g.random() < 0.6 else "concrete.in")
+        if k > 0.18:
+            big.append((c, r))
+    if not m.fine:
+        return
+    grit = (size[1] / 0.3) ** 0.5
+    for _ in range(count * 3):                   # chips and grit, thrown wider: the skirt of small stuff
+        lay(g.uniform(0.012, 0.045) * grit, spread * 1.7, g.uniform(0.4, 0.9), paint if g.random() < 0.5 else "concrete.in", 6)
+    for _ in range(count // 2):                  # crushed concrete and dust lying pale on the ground
+        lay(g.uniform(0.04, 0.11) * grit, spread * 1.5, 0.09, paint, 7, 0.08)
+    big.sort(key=lambda b: -b[1])
+    for c, r in big[:4]:                         # the largest keep a bent stub of their reinforcing (long ones stood up like whiskers)
+        for _ in range(1):
+            way = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.1, 0.7))).normalized()
+            side = way.cross(Vector((g.uniform(-1, 1), g.uniform(-1, 1), 0.2))).normalized()
+            long = r * 0.5 + g.uniform(0.08, 0.2)
+            bits.tube(m, [c, c + way * long * 0.55 + side * long * 0.04, c + way * long * 0.85 + side * long * 0.2, c + way * long * 0.95 + side * long * g.uniform(0.3, 0.55)], 0.011, "rust", 5)
+    tied = 0
+    for i in range(len(big)):                    # and a few pieces still hang together by theirs
+        for j in range(i + 1, len(big)):
+            (c1, r1), (c2, r2) = big[i], big[j]
+            gap = (c2 - c1).length
+            if tied < 3 and r1 + r2 < gap < r1 + r2 + 0.3:
+                mid = (c1 + c2) / 2 + Vector((g.uniform(-0.05, 0.05), g.uniform(-0.05, 0.05), g.uniform(0.02, 0.09)))
+                bits.tube(m, [c1, mid, c2], 0.011, "rust", 5)
+                tied += 1
 
 
 def net_hooks(m, pts, out_of, paint="wire"):
@@ -233,14 +303,61 @@ def Pillbox(fine=True, nation="_default", name="Pillbox", cooling="air"):
     bits.s_bevel(body, 0.03, 2)
 
     # ---- what a heavy hit breaks: the front face round its embrasure, and a corner of the roof
-    break1 = ragged(bits.s_wedge([local(0, A + 0.6, -1.02, 0.36), local(0, A + 0.6, 0.95, 0.30), local(0, A + 0.6, 0.80, 2.3), local(0, A + 0.6, -0.92, 2.3)],
-                                 [local(0, A - wall - 0.25, -0.80, 0.50), local(0, A - wall - 0.25, 0.72, 0.42), local(0, A - wall - 0.25, 0.62, 2.3), local(0, A - wall - 0.25, -0.70, 2.3)]), 0.2, 0.08, 2.0)
+    # (the break was a four-sided cutter with a little noise on it: a saw cut, and the pillbox a cut-away model. A
+    # shell's hole has no straight side: its outline wanders, bites the roof's edge, and the face comes away in pieces)
+    hole = [(-1.02, 0.36), (-0.45, 0.24), (0.20, 0.40), (0.70, 0.28), (1.02, 0.50), (0.84, 0.92), (1.10, 1.22), (0.90, 1.50),
+            (0.80, 1.72), (0.55, 2.45), (-0.15, 2.45), (-0.38, 1.80), (-0.70, 1.58), (-1.08, 1.34), (-0.88, 0.98), (-1.14, 0.66)]      # (along the face, up)
+    narrow = lambda t, z: (t * 0.82, 1.55 if z > 2.0 else 1.05 + (z - 1.05) * 0.86)        # noqa: E731  (the hole is smaller within, and the roof is bitten at its edge only)
+    break1 = ragged(bits.s_wedge([local(0, A + 0.6, t, z) for t, z in hole], [local(0, A - wall - 0.25, *narrow(t, z)) for t, z in hole]), 0.11, 0.12, 2.0)
+    bits.s_noise(break1, 0.04, 0.1, 5.0)
     front, body = split(body, break1)
+    crack = [(0.12, 0.05), (1.7, 0.05), (1.7, 2.6), (-0.18, 2.6), (-0.24, 1.80), (-0.02, 1.36), (0.20, 0.98), (0.02, 0.62)]         # (what lies right of a crack through the embrasure)
+    break2 = ragged(bits.s_wedge([local(0, A + 0.9, t, z) for t, z in crack], [local(0, A - wall - 0.5, t, z) for t, z in crack]), 0.12, 0.05, 6.0)
+    front_b, front = split(front, break2, again=True)
     inside = lambda p: (math.hypot(p.x, p.y) < A - wall + 0.05 and p.z < z_wall)        # noqa: E731
+    coat = lambda mid, n, k: "concrete.in" if (k == 1 or inside(mid)) else "concrete"     # noqa: E731
     m.use("pillbox")
-    take_slots(m, body, lambda mid, n, k: "concrete.in" if (k == 1 or inside(mid)) else "concrete", "pillbox")
-    m.part("front", "pillbox", local(0, A - 0.3, 0, 0.36), kind="free", note="the front face round its embrasure: a heavy hit throws it out and down")
-    take_slots(m, front, lambda mid, n, k: "concrete.in" if (k == 1 or inside(mid)) else "concrete", "front")
+    take_slots(m, body, coat, "pillbox")
+    m.part("front", "pillbox", local(0, A - 0.3, 0, 0.36), kind="free", note="the front face round its embrasure, left of the crack through it: a heavy hit throws it out and down")
+    take_slots(m, front, coat, "front")
+    m.part("front_b", "pillbox", local(0, A - 0.3, 0, 0.36), kind="free", note="the front face right of the crack: it breaks from the other piece and falls beside it")
+    take_slots(m, front_b, coat, "front_b")
+
+    # reinforcing rods: bent out of the break's rim, and a few left standing out of the fallen pieces. All of them lie
+    # within the wall's thickness, so nothing shows until the face is gone
+    def rod(base, way, long, seed):
+        g = rnd(seed)
+        way = Vector(way).normalized()
+        side = (way.cross(X) * g.choice((-1.0, 1.0)) * 0.6 - Z * 0.5 + X * g.uniform(-0.25, 0.25)).normalized()
+        bits.tube(m, [base, base + way * long * 0.45 + side * long * 0.03, base + way * long * 0.8 + side * long * 0.16, base + way * long * 0.95 + side * long * g.uniform(0.25, 0.5)], 0.011, "rust", 5)
+
+    if fine:
+        g = rnd(31)
+        mid_t, mid_z, k = 0.0, 1.1, 0
+        m.use("pillbox")
+        for i, (t, z) in enumerate(hole):
+            t2, z2 = hole[(i + 1) % len(hole)]
+            for f in (0.3, 0.75):
+                pt, pz = t + (t2 - t) * f, z + (z2 - z) * f
+                turn = g.uniform(-0.6, 0.6)
+                long = g.uniform(0.42, 0.7)
+                off = g.uniform(-0.12, 0.12)
+                if pz > 1.9 or g.random() < 0.3:
+                    continue
+                inward = Vector((0.0, mid_t - pt, mid_z - pz)).normalized()
+                way = Matrix.Rotation(turn, 3, "X") @ inward
+                base = local(0, out_at(pz) - 0.3 + off, pt, pz) - inward * 0.2
+                tip = base + way * long
+                if abs(tip.y) < 0.7 and 0.6 < tip.z < 1.36:       # (it would show in the embrasure before the break)
+                    continue
+                rod(base, way, long, 40 + k)
+                k += 1
+        for part, places in (("front", [(-1.0, 0.6), (-0.8, 1.45), (-0.5, 0.3)]), ("front_b", [(0.95, 0.7), (0.9, 1.4), (0.5, 0.33)])):
+            m.use(part)
+            for pt, pz in places:
+                outward = Vector((0.0, pt - mid_t, pz - mid_z)).normalized()
+                rod(local(0, out_at(pz) - 0.3, pt, pz) - outward * 0.15, outward, g.uniform(0.3, 0.4), 60 + k)
+                k += 1
     # the floor
     m.use("pillbox")
     fl = hexagon(A - wall + 0.02)
@@ -316,21 +433,35 @@ def Pillbox(fine=True, nation="_default", name="Pillbox", cooling="air"):
     # the front is thrown out and falls on its face down the bank (it must come to lie ON the earth: a slab left
     # leaning in the air reads as floating)
     q1 = Quaternion(Vector((0.08, -1, 0)).normalized(), math.radians(108.0))
+    q2 = Quaternion(Z, math.radians(9.0)) @ Quaternion(Vector((-0.05, -1, 0)).normalized(), math.radians(108.0))     # (the other piece swings a little aside as it goes)
     m.clips["fire"] = gun_clip("mg")
     m.clips["idle"] = {"long": 2.0, "loop": True, "about": "Standing; the rubble hidden.", "tracks": [{"part": "rubble", "scale": [[0.0, 0.0]]}], "events": []}
     m.clips["knocked_out"] = {
         "long": 2.6, "loop": False, "after": "hold",
-        "about": "A heavy shell or a charge at the embrasure: the front face is blown out and falls on its face down the bank, rubble is thrown after it, the door is blown open, smoke pours out. "
+        "about": "A heavy shell or a charge at the embrasure: the front face breaks in two through its embrasure and is blown out, the pieces falling on their faces down the bank a little apart; "
+                 "rubble is thrown after them, the door is blown open, smoke pours out. The break shows bent reinforcing rods; lay a scorch mark (soot and cracks) round it at `hit`. "
                  "(At rest play `idle`, which keeps the rubble hidden.)",
         "tracks": [{"part": "front", "rot": [[0.0, 1, 0, 0, 0], [0.2, *Quaternion().slerp(q1, 0.22)], [0.5, *Quaternion().slerp(q1, 0.62)], [0.8, *q1], [0.9, *Quaternion().slerp(q1, 0.975)], [1.0, *q1]],
                     "move": [[0.0, 0, 0, 0], [0.2, 0.3, 0.0, 0.22], [0.5, 0.52, 0.01, 0.48], [0.8, 0.62, 0.02, 0.47]]},
+                   {"part": "front_b", "rot": [[0.0, 1, 0, 0, 0], [0.24, *Quaternion().slerp(q2, 0.2)], [0.55, *Quaternion().slerp(q2, 0.6)], [0.86, *q2], [0.96, *Quaternion().slerp(q2, 0.972)], [1.06, *q2]],
+                    "move": [[0.0, 0, 0, 0], [0.24, 0.32, 0.03, 0.2], [0.55, 0.6, 0.08, 0.44], [0.86, 0.74, 0.1, 0.43]]},
                    {"part": "rubble", "scale": [[0.0, 0.0], [0.12, 0.0], [0.3, 1.0]], "move": [[0.0, -1.0, 0, 0.6], [0.12, -1.0, 0, 0.6], [0.3, -0.35, 0, 0.5], [0.75, 0.0, 0, 0.0]]},
                    {"part": "door", "turn": [[0.0, 0.0], [0.08, 0.0], [0.3, 96.0], [0.42, 82.0], [0.6, 90.0]]}],
         "events": [{"t": 0.0, "fx": "shell_burst_big", "socket": "hit", "cue": "explosion_debris"},
                    {"t": 0.05, "fx": "debris", "socket": "hit", "cue": ""},
+                   {"t": 0.05, "fx": "scorch", "socket": "hit", "cue": ""},
                    {"t": 0.25, "fx": "smoke_black", "socket": "smoke", "cue": "building_collapse"},
                    {"t": 0.6, "fx": "fire", "socket": "fire", "cue": "fire_start", "cue_loop": "fire_small_loop"}]}
     weather(m, [(pivot + X * 0.75, 0.75, 0.6)] + [(local(th, out_at(emb_z) + 0.05, 0, emb_z + 0.25), 0.5, 0.3) for th in (60, -60, 120, -120)], splash=0.9)
+    # the room and the faces of the break are dark with soot (a fire within lit them like a lantern's shade)
+    plain, hearth = m.weather, Vector((0.9, 0.0, 0.9))
+
+    def sooted(p, n, paint, part):
+        w, s = plain(p, n, paint, part)
+        if paint == "concrete.in" and part == "pillbox":
+            s = max(s, 0.3 + 0.6 * smooth(1.0 - (Vector(p) - hearth).length / 2.6))
+        return w, s
+    m.weather = sooted
     m.info["span"] = 6.4
     m.info["high"] = 0.9
     m.info["worn"] = [(-3.2, 0.9, 1.7), (-3.4, -0.4, 1.3)]

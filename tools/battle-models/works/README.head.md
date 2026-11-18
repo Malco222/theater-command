@@ -56,7 +56,9 @@ Our own plain designs throughout: no army's emblem, no lettering, nothing copied
    breech, cradle kick), with events for the flash, smoke, dust and the empty case. Handwheels (`handwheel.*`) are
    `spin` parts: turn them as the mount turns. `follow` and `sweep` clips are for a look only.
 6. **Events** name an effect (`fx`), a socket and a sound cue. Cue names are from the battle sound pack's list only
-   (ruling 144: no sound files until Brian has judged them); an empty cue means silence.
+   (ruling 144: no sound files until Brian has judged them); an empty cue means silence. `scorch` asks for a scorch
+   mark laid on the work round the socket (soot climbing above the hole, cracks running out from it): the broken
+   faces and bent rods are in the model, the mark is the game's to lay.
 7. **Lengths** (wire, fence, fieldworks, ditch, dragon's teeth, minefield) run along y from -5 to +5 so they join end
    to end. Wire and fence break by bay: `breach.N` (cut or blown) and `crush.N` (a tank drives over it).
 8. **No line of fieldworks or ditch ends in a cut.** A length's two ends are open sections made to join. Close every

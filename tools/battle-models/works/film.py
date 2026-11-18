@@ -21,6 +21,7 @@ from mathutils import Vector  # noqa: E402
 import kit  # noqa: E402
 import look  # noqa: E402
 import stage  # noqa: E402
+import concrete  # noqa: E402
 import works  # noqa: E402
 from scene import Set, ease, keys  # noqa: E402
 
@@ -158,7 +159,7 @@ def shell_hit(fx, t0, at, size=1.0, earth=True, lamp=None, glare=450.0, flame=1.
             d = Vector((math.cos(a) * h, math.sin(a) * h, 1.0)).normalized()
             R = g.uniform(0.38, 0.7) * size * flame
             root = p0 + Z * 0.1 + Vector((g.uniform(-0.3, 0.3), g.uniform(-0.3, 0.3), 0.0)) * size      # (roots apart: heaped on one point their hot hearts make a ball)
-            p = fx.puff(t, root + d * R * 0.85, vel=d * 4.0, life=g.uniform(0.06, 0.085), r=(R * 0.8, R * 1.2), col=(0.56, 0.21, 0.04), col2=(0.45, 0.11, 0.02), alpha=1.0,
+            p = fx.puff(t, root + d * R * 0.85, vel=d * 4.0, life=g.uniform(0.06, 0.085), r=(R * 0.8, R * 1.2), col=(0.34, 0.115, 0.02), col2=(0.28, 0.065, 0.012), alpha=1.0,
                         kind="tongue" if i < 1 else "lick", drag=6.0, wind=0.0, squash=(1.0, 0.36, 0.36), fade_in=0.01, grow=0.4)
             p["ob"].rotation_euler = d.to_track_quat("X", "Z").to_euler()
             seen_only(p)
@@ -172,14 +173,141 @@ def shell_hit(fx, t0, at, size=1.0, earth=True, lamp=None, glare=450.0, flame=1.
     fx.once(t0, (at, Z), flash)
 
     def make(t, p0, facing):
-        for i in range(34):      # thrown earth: up and out, falling back (clods: small, dark and many; soft balls of it hung in the sky like rings)
-            v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.9, 2.6))).normalized() * g.uniform(4, 12.5) * size ** 0.5
-            c = g.uniform(0.7, 1.05)
-            fx.puff(t, p0 + Z * 0.2, vel=v, life=g.uniform(1.2, 2.0), r=(0.04 * size, g.uniform(0.06, 0.15) * size), col=(0.2 * c, 0.155 * c, 0.105 * c), alpha=0.95, gravity=9.8,
-                    drag=0.5, fade_in=0.02, grow=0.4, wind=0.2, hold=0.7)
+        # the earth it throws: most of it a brown fountain that stands a moment and falls back as a veil; the clods
+        # that fly clear are solid lumps (see Clods). Soft round puffs of it hung in the sky as beads with rims.
+        for i in range(26):
+            v = Vector((g.uniform(-1, 1) * 1.5, g.uniform(-1, 1) * 1.5, g.uniform(4.2, 8.2))) * size ** 0.5
+            c = g.uniform(0.85, 1.15)
+            fx.puff(t, p0 + Z * 0.15 + Vector((g.uniform(-0.3, 0.3), g.uniform(-0.3, 0.3), 0.0)) * size, vel=v, life=g.uniform(1.0, 1.7), r=(0.16 * size, g.uniform(0.34, 0.62) * size),
+                    col=(0.25 * c, 0.185 * c, 0.12 * c), col2=(0.3 * c, 0.24 * c, 0.17 * c), alpha=g.uniform(0.3, 0.46), gravity=9.8, drag=0.9, fade_in=0.03, grow=0.5, wind=0.3)
     if earth:
         fx.once(t0, (at, Z), make)
     dust(fx, t0 + 0.05, at, size=0.9 * size, n=16, out=6.0, alpha=0.24)
+
+
+class Clods:
+    """The earth a ground burst throws clear: solid lumps of no shape in many sizes, most of them small and low, each
+    on its own arc and drawn out along its flight while it flies (the eye sees a thrown clod as a streak)."""
+
+    def __init__(self, t0, at, count=44, seed=1, size=1.0):
+        g = random.Random(seed)
+        self.t0, self.at, self.items = t0, Vector(at), []
+        mat = kit.material("clod", (0.14, 0.1, 0.065), rough=1.0, spec=0.05)
+        for i in range(count):
+            r = (0.012 + 0.05 * g.random() ** 2.6) * size
+            verts, faces = concrete.lump(g, r, g.uniform(0.5, 0.9), 7)
+            me = bpy.data.meshes.new("clod")
+            me.from_pydata([tuple(v) for v in verts], [], faces)
+            me.materials.append(mat)
+            ob = bpy.data.objects.new("clod", me)
+            bpy.context.scene.collection.objects.link(ob)
+            ob.rotation_mode = "QUATERNION"
+            ob.scale = (0.0, 0.0, 0.0)
+            a = g.uniform(0, 2 * math.pi)
+            out = g.uniform(0.5, 3.2) * size ** 0.5
+            up = (2.2 + 5.2 * g.random() ** 2.3) * size ** 0.5        # (few go high, and none hangs in the sky)
+            self.items.append((ob, Vector((math.cos(a) * out, math.sin(a) * out, up)), r))
+
+    def set(self, t):
+        a = t - self.t0
+        for ob, v, r in self.items:
+            if a < 0.0:
+                ob.scale = (0.0, 0.0, 0.0)
+                continue
+            down = (v.z + math.sqrt(v.z * v.z + 2 * 9.8 * 0.15)) / 9.8         # when it lands again
+            if a >= down:
+                ob.location = self.at + Vector((v.x * down, v.y * down, r * 0.3))
+                ob.scale = (1.0, 1.0, 1.0)
+                continue
+            ob.location = self.at + Vector((v.x * a, v.y * a, 0.15 + v.z * a - 4.9 * a * a))
+            now = Vector((v.x, v.y, v.z - 9.8 * a))
+            ob.rotation_quaternion = now.to_track_quat("X", "Z")
+            ob.scale = (1.0 + min(now.length, 9.0) * 0.16, 1.0, 1.0)
+
+
+def _step(nt, v, lo, hi):
+    n = nt.nodes.new("ShaderNodeMapRange")
+    n.interpolation_type = "SMOOTHSTEP"
+    n.inputs["From Min"].default_value, n.inputs["From Max"].default_value = lo, hi
+    nt.links.new(v, n.inputs["Value"])
+    return n.outputs["Result"]
+
+
+def scorch(item, mid=(0.0, 1.05), half=(1.1, 0.85), deep=1.2):
+    """Soot and cracks round a hole blown in a work's face that looks toward +x, laid in its concrete as the game lays
+    a scorch mark: nothing shows until the values this returns are raised (soot, cracks: each 0 to 1). `mid` and `half`
+    are the hole's middle and half-size (along the face, up) as the work stands at rest; the mark keeps to the wall
+    further out than `deep`. It is drawn where each point stood at rest, so what falls carries its own away."""
+    M = stage._math
+    item.ob.add_rest_position_attribute = True
+    knobs = []
+    for mat in item.ob.data.materials:
+        if not mat or "concrete" not in mat.name or not mat.use_nodes:
+            continue
+        nt = mat.node_tree
+        bsdf = next((n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"), None)
+        if bsdf is None:
+            continue
+        at = nt.nodes.new("ShaderNodeAttribute")
+        at.attribute_type, at.attribute_name = "GEOMETRY", "rest_position"
+        xyz = nt.nodes.new("ShaderNodeSeparateXYZ")
+        nt.links.new(at.outputs["Vector"], xyz.inputs[0])
+        x, y, z = xyz.outputs[0], xyz.outputs[1], xyz.outputs[2]
+
+        def oval(cy, cz, ry, rz):
+            u, w = M(nt, "DIVIDE", M(nt, "SUBTRACT", y, cy), ry), M(nt, "DIVIDE", M(nt, "SUBTRACT", z, cz), rz)
+            return M(nt, "SQRT", M(nt, "ADD", M(nt, "MULTIPLY", u, u), M(nt, "MULTIPLY", w, w)))
+        rim = _step(nt, oval(mid[0], mid[1], half[0], half[1]), 0.8, 1.0)                # (nothing in the middle: that is the hole, and what fell out of it)
+        wall = _step(nt, x, deep, deep + 0.3)
+        soot_reach = M(nt, "SUBTRACT", 1.0, _step(nt, oval(mid[0], mid[1] + 0.45, half[0] * 1.7, half[1] * 1.95), 0.45, 1.0))        # (soot climbs: its patch stands higher than the hole)
+        streak = nt.nodes.new("ShaderNodeTexNoise")
+        streak.inputs["Scale"].default_value, streak.inputs["Detail"].default_value = 1.0, 5.0
+        grain = nt.nodes.new("ShaderNodeMapping")
+        grain.inputs["Scale"].default_value = (7.0, 7.0, 1.5)
+        nt.links.new(at.outputs["Vector"], grain.inputs["Vector"])
+        nt.links.new(grain.outputs["Vector"], streak.inputs["Vector"])
+        uneven = M(nt, "ADD", 0.35, M(nt, "MULTIPLY", streak.outputs[0], 1.3), clamp=True)
+        k_soot = nt.nodes.new("ShaderNodeValue")
+        k_soot.outputs[0].default_value = 0.0
+        soot = M(nt, "MULTIPLY", M(nt, "MULTIPLY", M(nt, "MULTIPLY", rim, wall), M(nt, "MULTIPLY", M(nt, "MULTIPLY", soot_reach, uneven), 1.7, clamp=True)), k_soot.outputs[0], clamp=True)
+        # cracks: the edges of broken cells, widest at the hole and closing as they run out
+        cells = nt.nodes.new("ShaderNodeTexVoronoi")
+        cells.feature = "DISTANCE_TO_EDGE"
+        cells.inputs["Scale"].default_value = 2.0
+        warp = nt.nodes.new("ShaderNodeTexNoise")
+        warp.inputs["Scale"].default_value = 1.7
+        nt.links.new(at.outputs["Vector"], warp.inputs["Vector"])
+        little = nt.nodes.new("ShaderNodeVectorMath")
+        little.operation = "SCALE"
+        little.inputs["Scale"].default_value = 0.2
+        nt.links.new(warp.outputs["Color"], little.inputs[0])
+        bent = nt.nodes.new("ShaderNodeVectorMath")
+        bent.operation = "ADD"
+        nt.links.new(at.outputs["Vector"], bent.inputs[0])
+        nt.links.new(little.outputs[0], bent.inputs[1])
+        nt.links.new(bent.outputs[0], cells.inputs["Vector"])
+        crack_reach = M(nt, "SUBTRACT", 1.0, _step(nt, oval(mid[0], mid[1] + 0.1, half[0] * 1.65, half[1] * 1.7), 0.55, 1.0))
+        width = M(nt, "MULTIPLY", crack_reach, 0.032)
+        line = M(nt, "LESS_THAN", cells.outputs["Distance"], width)
+        k_crack = nt.nodes.new("ShaderNodeValue")
+        k_crack.outputs[0].default_value = 0.0
+        cracks = M(nt, "MULTIPLY", M(nt, "MULTIPLY", line, M(nt, "MULTIPLY", rim, wall)), k_crack.outputs[0], clamp=True)
+        dark = M(nt, "MAXIMUM", M(nt, "MULTIPLY", soot, 0.93), M(nt, "MULTIPLY", cracks, 0.72))
+        mix = nt.nodes.new("ShaderNodeMixRGB")
+        mix.inputs["Color2"].default_value = (0.018, 0.017, 0.016, 1.0)
+        base = bsdf.inputs["Base Color"]
+        if base.links:
+            nt.links.new(base.links[0].from_socket, mix.inputs["Color1"])
+        else:
+            mix.inputs["Color1"].default_value = base.default_value
+        nt.links.new(dark, mix.inputs["Fac"])
+        nt.links.new(mix.outputs["Color"], base)
+        knobs.append((k_soot, k_crack))
+
+    def lay(soot, cracks):
+        for a, b in knobs:
+            a.outputs[0].default_value, b.outputs[0].default_value = soot, cracks
+    return lay
 
 
 class Case:
@@ -322,8 +450,11 @@ def breach(fx, cam, have):
     s.lay(seed=5, flat=60.0, fine=33.0, sun_turn=120.0, sun_elev=36.0, trees=True, grass_area=44.0, grass_count=160000)
     hit = 1.98                                # (each burst a fiftieth before a frame, so the frame catches its flame young)
     near = [(0.48, (6.5, 1.5, 0.0)), (1.23, (5.0, -2.5, 0.0))]     # (both where the camera sees them fall)
-    for t0, at in near:
+    clods = []
+    for k, (t0, at) in enumerate(near):
         shell_hit(fx, t0, at, size=1.0)
+        clods.append(Clods(t0, at, seed=11 + k))
+    mark = scorch(box)
     at_hit, _ = box.where("hit")
     shell_hit(fx, hit, at_hit, size=1.5, earth=False, lamp=(1.6, 0.0, 0.4), glare=180.0, flame=0.6)
     dust(fx, hit + 0.1, at_hit, size=1.5, n=16, col=(0.6, 0.6, 0.57), out=5.0, alpha=0.3)
@@ -331,7 +462,17 @@ def breach(fx, cam, have):
     chimney(fx, lambda: (box.where("smoke")[0] + Vector((0, 0, 0.6)), Z), start=hit + 0.5, size=0.5)
     flames(fx, lambda: (box.where("fire")[0] + Vector((1.2, 0, 0.2)), Z), start=hit + 0.7, size=0.8)
     # (the fire within glows in the broken opening; strong enough to burn the walls white, it read as a lantern)
-    fx.light(hit + 0.7, at_hit + Vector((-0.9, 0, 0.2)), 100.0, long=30.0, col=(1.0, 0.42, 0.14), r=0.5)
+    fx.light(hit + 0.7, at_hit + Vector((-0.9, 0, 0.2)), 25.0, long=30.0, col=(1.0, 0.42, 0.14), r=0.5)
+    glow, flick = fx.lights[-1], random.Random(9)
+    murk = random.Random(4)
+
+    def room_smoke(t, p0, facing):
+        v = Vector((murk.uniform(-1, 1), murk.uniform(-1, 1), murk.uniform(0.0, 0.6))) * 0.14
+        c = murk.uniform(0.03, 0.07)
+        fx.puff(t, p0 + Vector((murk.uniform(-0.7, 0.7), murk.uniform(-0.8, 0.8), murk.uniform(-0.35, 0.35))), vel=v, life=murk.uniform(2.4, 3.4), r=(0.45, murk.uniform(0.55, 0.75)),
+                col=(c, c, c), alpha=murk.uniform(0.8, 0.95), drag=0.5, rise=0.1, fade_in=0.1, grow=0.5, wind=0.0)
+    # (thick at once: through a thin room the far embrasures showed the daylight beyond as pale lit panes)
+    fx.stream((Vector((0.0, 0.0, 1.0)), Z), 0.08, room_smoke, start=hit + 0.06, end=7.5)
     mg_until = 1.75
 
     def step(t):
@@ -350,6 +491,11 @@ def breach(fx, cam, have):
         shake = 0.05 * math.exp(-(t - hit) * 5.0) * math.sin((t - hit) * 60.0) if t >= hit else 0.0
         eye = Vector((math.cos(b) * far, math.sin(b) * far, 2.6 + shake))
         kit.look_at(cam, eye, Vector((0.6, 0.0, 1.3 + shake)))
+        for c in clods:
+            c.set(t)
+        # the scorch comes with the blow (cracks at once, the blast's own black), and the smoke goes on sooting the wall
+        mark(0.0 if t < hit else min(1.0, 0.5 + 0.5 * (t - hit) / 2.5), 0.0 if t < hit else 1.0)
+        glow["power"] = 25.0 * flick.uniform(0.55, 1.3)          # (a fire's light is never steady)
         fx.at(t)
 
     # the machine gun's flashes while it still fires: a small ragged tongue at the muzzle, alive for less than a frame,
