@@ -175,6 +175,7 @@ class Works(Shop, Gear, Fittings):
         `near` (x, z) as one is found, `long` by `high` (times `lines`; writing "down": `high` across and `long` down).
         Found on the mesh as she stands, so call it when she is built. The game paints the word; the file carries the place.
         reach: how far from `near` to look, along and up. parts: other parts whose plate will do as well.
+        near may be {LEFT: (x, z), RIGHT: (x, z)} when her two sides are not alike.
         bend: how far the plate may leave the flat under the word (a cast turret's side is never flat: the game lays
         the letters on the skin, as it does her marking)."""
         m = self.m
@@ -185,7 +186,9 @@ class Works(Shop, Gear, Fittings):
         nx, nz = int(reach[0] / step), int(reach[1] / step)
         along_len, up_len = (high * 1.25, long) if writing == "down" else (long, high * (1.25 * lines + 0.1 * (lines - 1)))
         places = []
+        both = near
         for s in sides:
+            near = both[s] if isinstance(both, dict) else both
             grid = {}
             for i in range(-nx, nx + 1):
                 for j in range(-nz, nz + 1):
@@ -242,7 +245,7 @@ class Works(Shop, Gear, Fittings):
                     if flat >= 0.97 * n:
                         passed.append((math.hypot(i * step, 1.6 * j * step), i, j, pc, nsum.normalized()))
                 for d, _, _, pc, nc in sorted(passed, key=lambda q: q[:3]):
-                    if clear(pc, nc, along_len * shrink / 2, up_len / 2):
+                    if clear(pc, nc, along_len * shrink / 2 + 0.06, up_len / 2):          # (a hand's breadth clear at each end: no word hard against a door or a pack)
                         best = (d, pc, nc, shrink)
                         break
                 if best is not None:

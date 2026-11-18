@@ -431,7 +431,7 @@ def m7(fine=True, tag="USA"):
                          "crew.loader": "a loader stands here, behind the breech: it is 0.73 over the floor, at his waist, and he bends to it"})
     v.tank_clips(recoil=1.0, kick=0.7, gun_low=-5.0, hatches=["hatch_driver"], traverse=6.0, idle_cue="tank_idle_sherman_loop", drive_cue="tank_sherman_drive_loop",
                  gun_cue="field_gun_fire", has_turret=False, mg="mg")
-    v.name_place((1.0, 1.55), long=0.9, high=0.12)                    # her crew's name (b477): on the box's side
+    v.name_place({LEFT: (1.51, 1.64), RIGHT: (1.87, 1.34)}, long=0.68, high=0.12)    # her crew's name (b477): on the box's side, forward; the pulpit takes the right side's upper plate
     return v
 
 
