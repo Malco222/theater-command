@@ -731,15 +731,17 @@ class Effects:
         face = _math(nt, "SUBTRACT", 1.0, lw.outputs["Facing"], clamp=True)                   # 1 looking into it, 0 at its edge
         eaten = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _math(nt, "MULTIPLY", n, 2.5), _math(nt, "ADD", 0.62 if hot else 0.8, _math(nt, "MULTIPLY", u, 0.85))), 3.2, clamp=True)
         soft = _math(nt, "MULTIPLY", _math(nt, "POWER", face, 0.9), eaten, clamp=True)
-        alpha = _math(nt, "MULTIPLY", soft, info.outputs["Alpha"], clamp=True)
+        # (a tongue dies by being eaten away, never by going thin all over: thin orange over a bright sky is peach)
+        gone = _math(nt, "SUBTRACT", 1.0, info.outputs["Alpha"], clamp=True)
+        alpha = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", soft, gone), 3.0, clamp=True)
         # colour: the puff's own (deep orange) through most of it, red and dim toward the tip, yellow in the heart
         _, t_fac, t_a, t_b, col = _mix(nt)
-        t_b.default_value = (0.11, 0.012, 0.002, 1.0)
+        t_b.default_value = (0.055, 0.006, 0.001, 1.0)
         nt.links.new(info.outputs["Color"], t_a)
         nt.links.new(_math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _math(nt, "ADD", u, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 1.0, n), 0.5)), 0.72), 2.2, clamp=True), t_fac)
         if hot:
             _, h_fac, h_a, h_b, heart = _mix(nt)
-            h_a.default_value = (1.45, 0.74, 0.16, 1.0)
+            h_a.default_value = (0.2, 0.066, 0.004, 1.0)
             nt.links.new(col, h_b)
             cool = _math(nt, "ADD", _math(nt, "MULTIPLY", u, 2.3), _math(nt, "ADD", _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 1.0, face), 0.75), _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 0.5, n), 0.9)))
             nt.links.new(_math(nt, "MULTIPLY", _math(nt, "SUBTRACT", cool, 0.12), 1.6, clamp=True), h_fac)
@@ -786,10 +788,16 @@ class Effects:
         k = p["drag"]
         go = p["vel"] * ((1 - math.exp(-k * a)) / k if k > 1e-6 else a)
         pos = p["at"] + go + self.wind * (p["wind"] * a) + Vector((0, 0, p["rise"] * a - 0.5 * p["gravity"] * a * a))
-        ob.location = pos
         rad = p["r"][0] + (p["r"][1] - p["r"][0]) * f ** p["grow"]
-        ob.scale = (rad * p["squash"][0], rad * p["squash"][1], rad * p["squash"][2])
-        fade = min(1.0, a / max(p["fade_in"], 1e-3)) * (1.0 if f < p["hold"] else (1 - (f - p["hold"]) / max(1 - p["hold"], 1e-6)) ** 1.4)
+        wide, tall, thin = 1.0, 1.0, 1.0
+        q = p.get("settle")
+        if q is not None and t > q[0]:           # (it collapses, spreads and is gone between two moments)
+            s = min(1.0, (t - q[0]) / max(q[1] - q[0], 1e-3))
+            pos.z *= 1.0 - 0.75 * s * s
+            wide, tall, thin = 1.0 + 0.9 * s, 1.0 - 0.6 * s, (1.0 - s) ** 1.3
+        ob.location = pos
+        ob.scale = (rad * p["squash"][0] * wide, rad * p["squash"][1] * wide, rad * p["squash"][2] * tall)
+        fade = thin * min(1.0, a / max(p["fade_in"], 1e-3)) * (1.0 if f < p["hold"] else (1 - (f - p["hold"]) / max(1 - p["hold"], 1e-6)) ** 1.4)
         cam = bpy.context.scene.camera
         if cam is not None and p["kind"] in ("smoke", "water"):
             # (a puff the camera is in, or nearly in, shows its rim "like a flat glass plate": it thins away as the
@@ -871,11 +879,11 @@ class Effects:
             ln = g.uniform(*long) * (1.0 if i % 3 else 1.4)
             wide = ln * g.uniform(0.34, 0.5)
             k = g.uniform(0.8, 1.2)
-            p = self.puff(t, at + d * ln * 0.42, vel=d * g.uniform(*speed), life=g.uniform(*life), r=(0.6, 1.0), col=(0.36 * k, 0.11 * k, 0.012), col2=(0.14, 0.025, 0.004),
+            p = self.puff(t, at + d * ln * 0.42, vel=d * g.uniform(*speed), life=g.uniform(*life), r=(0.6, 1.0), col=(0.14 * k, 0.026 * k, 0.004), col2=(0.1, 0.014, 0.002),
                           alpha=0.92, kind="tongue" if i % 2 else "lick", drag=3.0, wind=wind, squash=(0.5 * ln, 0.5 * wide, 0.5 * wide), fade_in=0.008, grow=0.5, hold=0.4, cool=1.0)
             p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion((1.0, 0.0, 0.0), g.uniform(0, 6.283))).to_euler()
         if heart > 0.0:
-            self.puff(t, at, life=g.uniform(0.07, 0.1), r=(0.5 * heart, heart), col=(1.0, 0.7, 0.28), col2=(0.6, 0.2, 0.03), alpha=1.0, kind="glow", wind=wind, fade_in=0.01, grow=0.45)
+            self.puff(t, at, life=g.uniform(0.07, 0.1), r=(0.5 * heart, heart), col=(0.2, 0.066, 0.004), col2=(0.14, 0.026, 0.004), alpha=1.0, kind="glow", wind=wind, fade_in=0.01, grow=0.45)
 
     # -- the effects themselves (each is a `make` for stream or once, or lays its own)
     def funnel_smoke(self, where, thick=0.5, r=2.4, start=-16.0, dark=0.3, end=1e9):
@@ -924,7 +932,7 @@ class Effects:
                       r=(r * 0.4, r * g.uniform(0.9, 1.9)), col=col, alpha=g.uniform(0.45, 0.75), kind="foam", wind=0.03,
                       squash=(g.uniform(1.0, 1.8), g.uniform(0.5, 0.9), 0.03), fade_in=0.35, grow=0.5, hold=0.12)
 
-    def splash(self, t0, at, high=50.0, r=5.0):
+    def splash(self, t0, at, high=50.0, r=5.0, settle=None):
         """A heavy shell falls in the sea: a tall white column that stands a moment and falls back, and the churned
         water it leaves.
 
@@ -987,9 +995,11 @@ class Effects:
             for i in range(n):
                 f = (i + 0.5) / n
                 v0 = math.sqrt(2 * 9.8 * high * f) * g.uniform(0.92, 1.05)
-                self.puff(t + 0.006 * i, p0 + Vector((g.uniform(-1, 1), g.uniform(-1, 1), 0.5)), vel=(g.uniform(-2.5, 2.5) * (1 - f), g.uniform(-2.5, 2.5) * (1 - f), v0), life=g.uniform(3.4, 4.6),
+                p = self.puff(t + 0.006 * i, p0 + Vector((g.uniform(-1, 1), g.uniform(-1, 1), 0.5)), vel=(g.uniform(-2.5, 2.5) * (1 - f), g.uniform(-2.5, 2.5) * (1 - f), v0), life=g.uniform(3.4, 4.6),
                           r=(r * 0.4, r * g.uniform(0.7, 1.15) * (1.3 - 0.6 * f)), col=(0.95, 0.97, 0.97), col2=(0.88, 0.92, 0.92), alpha=0.75, kind="water", gravity=9.8, wind=0.06,
                           squash=(1.0, 1.0, 2.3), fade_in=0.8, grow=0.3, hold=0.4)
+                if settle is not None:           # (`settle`: two ages of the splash between which its curtain comes down and is gone;
+                    p["settle"] = (t + settle[0], t + settle[1])                               #  left alone it hangs four seconds)
             self.foam(t, p0, r)
         self.once(t0, (at, Vector((0, 0, 1))), make)
 
@@ -1031,7 +1041,7 @@ class Effects:
             wide = ln * g.uniform(0.3, 0.45)
             k = g.uniform(0.85, 1.15)
             p = self.puff(t, at + Vector((g.uniform(-2, 2) * size, g.uniform(-1.5, 1.5) * size, 0.3)) + d * ln * 0.42, vel=d * g.uniform(3, 7), life=g.uniform(0.2, 0.36), r=(0.7, 1.0),
-                          col=(0.34 * k, 0.1 * k, 0.011), col2=(0.2, 0.04, 0.005), alpha=0.92, kind="tongue" if g.random() < 0.65 else "lick", wind=0.25,
+                          col=(0.135 * k, 0.025 * k, 0.004), col2=(0.1, 0.014, 0.002), alpha=0.92, kind="tongue" if g.random() < 0.65 else "lick", wind=0.25,
                           squash=(0.5 * ln, 0.5 * wide, 0.5 * wide), fade_in=0.012, grow=0.5, hold=0.5, cool=1.0)
             p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion((1.0, 0.0, 0.0), g.uniform(0, 6.283))).to_euler()
 

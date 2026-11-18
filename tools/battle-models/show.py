@@ -150,7 +150,7 @@ def _doomed(S, t_hit, t_end_fx, kind):
     S.funnels(end=t_hit)
     S.spray(end=t_hit + 1.0)
     S.fx.fire(S.where("fire.1"), start=-12.0, size=0.8)
-    S.fx.splash(0.45, (34.0, -62.0, 0.0), high=50.0)
+    S.fx.splash(0.45, (34.0, -62.0, 0.0), high=50.0, settle=(1.05, 2.3))      # (its curtain is down before the magazine goes: it hung "as a white rope by her bow", in front of the blast)
     S.fx.splash(0.8, (-72.0, 58.0, 0.0), high=50.0)
     S.set(S.play("sail", 0.0))
     S.preroll()

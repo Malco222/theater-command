@@ -464,6 +464,15 @@ lit, to about half as bright again as the day, for a frame or two, one light for
 shines in the water. At a hundred times that the whole ship went near-white and a glittering road of light ran down
 the sea, like a low sun.
 
+Flame's colour is measured, not judged by eye (the art director, 2026-11-18: the bridge fire, the magazine and the
+gun flash had all passed by eye and measured peach, about 230,177,140, where deep orange is 195 to 230 / 110 to 125 /
+40 to 55). Two causes. The tone curve (AgX) bleaches a bright flame toward white whatever its hue: a flat patch
+thrown at 2.5, 0.77, 0.08 comes out 248,191,151 and one at 0.95, 0.18, 0.03 comes out 225,118,58, so a tongue is
+thrown at about that (its colour is a seventh of it, the stuff's strength being 7), redder and dimmer at its tip,
+with a small paler heart. And a tongue that dies by going thin all over lets the pale sky through, which is peach
+again: it dies by being eaten away and stays solid where it is left. `flamemeasure`-style check: take the warm pixels
+of a frame (red well over blue) and read their middle.
+
 Smoke seen later and from near by (`trail` in `airshow.py`, `_place` in `stage.py`). A trail's puffs of one age
 all live as long as each other and drift little, or those that die early leave the rest standing as a chain of
 separate ovals; and a puff thins away as the camera comes up to it, or its rim shows like a flat glass plate. Bullet
@@ -495,7 +504,9 @@ drawn out tall and stood upright, thrown to its own height against a strong drag
 height in two frames: a dense core that narrows upward, thin streaks close in along its sides, a feathered head of
 thin jets each at its own height and lean, drops falling out of it, and a dark ragged ring of disturbed water
 spreading at its foot. The soft puffs come in slowly after it and are only the mist at its base and the curtain that
-falls. Three things that went wrong on the way: jets out of the top that stand parallel read as a fork; thin jets
+falls; `settle=(a, b)` brings that curtain down, spread and gone, between two ages of the splash (left alone it
+hangs four seconds, and in the sinking it stood "as a white rope by her bow" in front of the blast). Three things
+that went wrong on the way: jets out of the top that stand parallel read as a fork; thin jets
 that are fat and splayed read as petals; and stuff that tears only at its very rim reads as a wax candle (it tears in
 from the outer quarter now, and most toward its upper end).
 
