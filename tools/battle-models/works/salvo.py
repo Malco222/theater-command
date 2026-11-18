@@ -135,29 +135,51 @@ def lay_stage(seed, sites):
     return st, fresh
 
 
+DUSK_HAZE, DUSK_HAZE_GAIN = (0.8, 0.45, 0.22), 0.75           # what the far field fades into at dusk: the horizon's own glow
+DUSK = False
+
+
 def daylight(dusk):
-    """September daylight, or the last of it: a low red sun off to the left behind the smoke, out of the camera's eye."""
+    """September daylight, or the last of it: a low red sun behind the field (so the smoke and dust are lit from
+    behind and everything throws a long shadow toward the camera), standing above the top of the picture and so out
+    of the camera's eye; a sky that glows gold at the horizon; cool dim light in the shadows."""
     if not dusk:
         return kit.studio()
-    sun = kit.studio(sun_elev=7.0, sun_turn=-122.0, strength=2.1, sky=0.3)
-    sun.data.color = (1.0, 0.55, 0.28)
-    sun.data.angle = math.radians(2.0)
+    sun = kit.studio(sun_elev=8.0, sun_turn=-170.0, strength=5.5, sky=0.9)
+    sun.data.color = (1.0, 0.5, 0.22)
+    sun.data.angle = math.radians(2.5)
     nt = bpy.context.scene.world.node_tree
     ramp = next(n for n in nt.nodes if n.type == "VALTORGB")
-    ramp.color_ramp.elements[0].color = (0.46, 0.4, 0.42, 1)
-    ramp.color_ramp.elements[1].color = (0.86, 0.56, 0.36, 1)
+    mapr = next(n for n in nt.nodes if n.type == "MAP_RANGE")
+    mapr.inputs["From Min"].default_value = 0.82                # (the band of sky the battle camera sees)
+    mapr.inputs["From Max"].default_value = 1.0
+    ramp.color_ramp.elements[0].color = (1.0, 0.56, 0.22, 1)     # gold at the horizon
+    ramp.color_ramp.elements[1].color = (0.42, 0.34, 0.5, 1)     # dusk violet overhead
+    mid = ramp.color_ramp.elements.new(0.5)
+    mid.color = (0.86, 0.42, 0.33, 1)                            # rose between
+    # the camera sees that sky; the field is lit by a dimmer, cooler one
+    seen = nt.nodes["Background"]
+    lit = nt.nodes.new("ShaderNodeBackground")
+    lit.inputs["Color"].default_value = (0.4, 0.36, 0.52, 1)
+    lit.inputs["Strength"].default_value = 0.34
+    path = nt.nodes.new("ShaderNodeLightPath")
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    nt.links.new(path.outputs["Is Camera Ray"], mix.inputs[0])
+    nt.links.new(lit.outputs[0], mix.inputs[1])
+    nt.links.new(seen.outputs[0], mix.inputs[2])
+    nt.links.new(mix.outputs[0], next(n for n in nt.nodes if n.type == "OUTPUT_WORLD").inputs["Surface"])
     return sun
 
 
 def dusk_haze():
-    """The haze the stage's materials fade into, at dusk: dimmer and warm."""
+    """The haze the stage's materials fade into, at dusk: the horizon's glow."""
     for m in bpy.data.materials:
-        if not m.use_nodes:
+        if not m.node_tree:
             continue
         for n in m.node_tree.nodes:
             if n.type == "EMISSION" and abs(n.inputs["Strength"].default_value - 0.62) < 1e-4:
-                n.inputs["Color"].default_value = (0.62, 0.42, 0.3, 1)
-                n.inputs["Strength"].default_value = 0.36
+                n.inputs["Color"].default_value = (*DUSK_HAZE, 1)
+                n.inputs["Strength"].default_value = DUSK_HAZE_GAIN
 
 
 # ---- the tank and the men: other threads' .glb files, their clips read off the curves -------------------------
@@ -420,9 +442,9 @@ def burst(fx, t0, at, seed=1, size=1.0, detail=1.0, far=0.0, glare=1.0):
     # a real light for the world about it: one frame full, gone by the third (never a white-out). It hangs high, so
     # the ground is lifted evenly out to 30 m and is not burnt white at the hole; a second, low, lights the sides of
     # the men and the tank that face the burst.
-    lamp(fx, t0, at + Z * 16.0 * size, 8500.0 * glare * size * size, 0.1, (1.0, 0.78, 0.5), 2.0, "world")
+    lamp(fx, t0, at + Z * 16.0 * size, 8500.0 * glare * size * size * (0.5 if DUSK else 1.0), 0.1, (1.0, 0.78, 0.5), 2.0, "world")
     if far < 0.05:
-        lamp(fx, t0, at + Z * 1.5 * size, 2200.0 * glare * size * size, 0.1, (1.0, 0.78, 0.5), 1.0, "stand")
+        lamp(fx, t0, at + Z * 1.5 * size, 2200.0 * glare * size * size * (0.5 if DUSK else 1.0), 0.1, (1.0, 0.78, 0.5), 1.0, "stand")
     # frame 1 to 6: an orange glow inside the crown's foot, half hidden by the earth going up round it
     for i in range(n_of(7)):
         a = q.uniform(0, 2 * math.pi)
@@ -432,7 +454,7 @@ def burst(fx, t0, at, seed=1, size=1.0, detail=1.0, far=0.0, glare=1.0):
                     life=q.uniform(0.1, 0.17), r=(rr * 0.8, rr * 1.25), col=FLAME, col2=FLAME_OLD, alpha=see(0.95), kind="lick", drag=5.0,
                     wind=0.0, squash=(1.0, 0.34, 0.34), fade_in=0.01, grow=0.4)
         seen_only(along(p, d))
-    lamp(fx, t0 + 0.02, at + Z * 0.9 * size, 260.0 * glare * size * size, 0.17, (1.0, 0.42, 0.12), 0.6, "puffs")
+    lamp(fx, t0 + 0.02, at + Z * 0.9 * size, 260.0 * glare * size * size * (2.5 if DUSK else 1.0), 0.2 if DUSK else 0.17, (1.0, 0.42, 0.12), 0.6, "puffs")
 
     # frame 1 to 4: the shock. A low ring of dust skids out along the ground, knee high, to 15 m by the fourth frame,
     # and lies there thinning; a slower, thicker skirt inside it.
@@ -675,14 +697,19 @@ def tank(st, t_close):
 
 
 def build(dusk=False, view=None):
+    global DUSK
+    DUSK = dusk
     kit.fresh(FPS)
     daylight(dusk)
     sites = [(FAR.x, FAR.y, 0.85), (MIDDLE.x, MIDDLE.y, 0.85), (CLOSE.x, CLOSE.y, 0.85)]
     st, fresh = lay_stage(3, sites)
     if dusk:
         dusk_haze()
+        for o in bpy.data.objects:                            # (a low sun draws every tuft's shadow out into a scratch: the field
+            if o.name.startswith("grass"):                    # is left clean for the long shadows that matter)
+                o.visible_shadow = False
         global HAZE
-        HAZE = Vector((0.62, 0.42, 0.3)) * 0.36
+        HAZE = Vector(DUSK_HAZE) * 0.5
     hits = [(F_FAR, FAR), (F_MIDDLE, MIDDLE), (F_CLOSE, CLOSE)]
     hits = [(f / FPS, Vector((p.x, p.y, st.height(p.x, p.y)))) for f, p in hits]
     t_far, t_mid, t_close = (h[0] for h in hits)
@@ -713,8 +740,8 @@ def build(dusk=False, view=None):
     mine = len(fx.live)
     burst(fx, t_close - eps, hits[2][1], seed=33)
     if SHADOWS:                                               # (the close one's crown and cloud shade the ground and themselves)
-        for p in fx.live[mine:]:
-            if p["kind"] in ("smoke", "cloud") and p["life"] > 0.5:
+        for k, p in enumerate(fx.live[mine:]):                  # (at dusk every other puff of the cloud: the low sun's
+            if p["life"] > 0.5 and (p["kind"] == "smoke" or (p["kind"] == "cloud" and (not dusk or k % 2 == 0))):   # shadow rays cost double)
                 p["ob"].visible_shadow = True
     fwd = (aim - eye).normalized()
     debris = [Debris(fx, st, t_mid, hits[1][1], count=50, seed=42),
