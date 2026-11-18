@@ -13,7 +13,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { bookSeaAction, mendStars, seaActionName, shipStars, starRow, starSplit } from '../src/campaign/stars';
 import { orderArsenal, runTurnAI } from '../src/campaign/turn';
-import type { Fleet, Game, ShipClass } from '../src/campaign/types';
+import type { Fleet, Game, ShipClass, Ships } from '../src/campaign/types';
 
 const CLASSES: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
 const fleet = (g: Game, name: string): Fleet => g.fleets.find((f) => f.name === name)!;
@@ -44,7 +44,7 @@ function inStep(g: Game): void {
 }
 
 describe('how a row of stars is drawn', () => {
-  it('up to five bronze; from the sixth, every five is one silver', () => {
+  it('up to five bronze in a row; at the sixth, five bronze become one silver, every time alike', () => {
     const row = (n: number): [number, number] => { const s = starSplit(n); return [s.silver, s.bronze]; };
     expect(row(0)).toEqual([0, 0]);
     expect(row(1)).toEqual([0, 1]);
@@ -52,8 +52,18 @@ describe('how a row of stars is drawn', () => {
     expect(row(5)).toEqual([0, 5]);
     expect(row(6)).toEqual([1, 1]);
     expect(row(7)).toEqual([1, 2]);
-    expect(row(10)).toEqual([2, 0]);
+    // Ten is kept as five is: the five bronze turn silver only when an eleventh would make a sixth.
+    expect(row(10)).toEqual([1, 5]);
     expect(row(11)).toEqual([2, 1]);
+    expect(row(15)).toEqual([2, 5]);
+    expect(row(16)).toEqual([3, 1]);
+    // Every count from 1 on: the row adds up, and ends in one to five bronze.
+    for (let n = 1; n <= 40; n++) {
+      const [s, b] = row(n);
+      expect(5 * s + b, `${n}`).toBe(n);
+      expect(b, `${n}`).toBeGreaterThanOrEqual(1);
+      expect(b, `${n}`).toBeLessThanOrEqual(5);
+    }
   });
 });
 
@@ -101,6 +111,46 @@ describe('who earns a star', () => {
     expect(b.battle.ships.ss).toBeGreaterThan(0); // the Battle Fleet's submarines were in the action, and earn it with the rest
     expect(shipStars(b.battle, 'ss').every((s) => s.length === 1)).toBe(true);
     inStep(a.g); inStep(b.g);
+  });
+
+  it('an action handed back to the dice (toDice) is booked after every loss, the dice\'s and the field\'s', () => {
+    // Every ship of both fleets already has a star from an earlier action (place 0), so a loss not mended would show.
+    const veteran = (m: { g: Game; home: Fleet; battle: Fleet }): void => {
+      m.g.stories.seaActions = [[m.g.turn, zoneOf(m.g, 'nsea')]];
+      for (const f of [m.home, m.battle]) f.stars = Object.fromEntries(CLASSES.filter((c) => f.ships[c] > 0).map((c) => [c, Array.from({ length: f.ships[c] }, () => [0])]));
+    };
+    const field = (m: { g: Game; home: Fleet; battle: Fleet }, sunk: Record<number, Partial<Ships>>): void => {
+      const [x] = seaAhead(m.g, ukClose);
+      closeWith(m.g, new Map([[x.key, { meeting: x.meeting, fought: { R: 1.05, sunk, toDice: true } }]]), ukClose);
+    };
+    // The same action with nothing lost on the field: what the dice alone sink.
+    const d = meet(5);
+    veteran(d);
+    field(d, {});
+    const dice = d.g.seaReports[0].att[0].sunk, diceTheirs = d.g.seaReports[0].def[0].sunk;
+    // On the field each side lost more destroyers than the dice sink, and the Home Fleet a battleship: those go after the dice's.
+    const m = meet(5);
+    veteran(m);
+    const before = { ...m.home.ships }, theirs = { ...m.battle.ships };
+    const mine: Partial<Ships> = { bb: 1, dd: dice.dd + 2 }, lost: Partial<Ships> = { dd: diceTheirs.dd + 2 };
+    field(m, { [m.battle.id]: lost, [m.home.id]: mine });
+    const r = m.g.seaReports[0];
+    expect(r.won).toBe(true);
+    expect(m.g.stories.seaActions).toHaveLength(2);
+    for (const c of CLASSES) {
+      // The winner: the dice's losses or the field's, whichever is more; every ship left carries both actions.
+      expect(r.att[0].sunk[c], c).toBe(Math.max(dice[c], mine[c] ?? 0));
+      expect(m.home.ships[c], c).toBe(before[c] - r.att[0].sunk[c]);
+      expect(shipStars(m.home, c), c).toEqual(Array.from({ length: m.home.ships[c] }, () => [0, 1]));
+      // The loser: its ships sunk took their entries with them, and the rest keep the earlier action only.
+      expect(r.def[0].sunk[c], c).toBe(Math.max(diceTheirs[c], lost[c] ?? 0));
+      expect(m.battle.ships[c], c).toBe(theirs[c] - r.def[0].sunk[c]);
+      expect(m.battle.stars?.[c] ?? [], c).toEqual(Array.from({ length: m.battle.ships[c] }, () => [0]));
+    }
+    expect(r.att[0].sunk.bb).toBeGreaterThan(dice.bb);
+    expect(r.att[0].sunk.dd).toBeGreaterThan(dice.dd);
+    expect(r.def[0].sunk.dd).toBeGreaterThan(diceTheirs.dd);
+    inStep(m.g);
   });
 
   it('a draw earns nothing, and neither does a battle declined', () => {
@@ -245,14 +295,14 @@ describe('the cards', () => {
     const bb = starRow(g, home, 'bb')!;
     expect([bb.most, bb.silver, bb.bronze]).toEqual([7, 1, 2]);
     expect(bb.words[0]).toBe('This ship has 7 battle stars, one for each sea battle it came through on the winning side.');
-    expect(bb.words[1]).toBe('A silver star stands for five.');
+    expect(bb.words[1]).toBe('A silver star stands for 5 bronze stars.');
     expect(bb.battles.map((b) => b.line)).toEqual([
       'The action in the Norwegian Sea, November 1939', 'The action in the Norwegian Sea, December 1939', 'The action in the Norwegian Sea, January 1940',
       'The action in the Norwegian Sea, February 1940', 'The action in the Norwegian Sea, March 1940', 'The action in the Norwegian Sea, April 1940',
       'The action in the Norwegian Sea, May 1940',
     ]);
     home.stars = { bb: [[0]] };
-    expect(starRow(g, home, 'bb')!.words[0]).toBe('This ship has one battle star, for a sea battle it came through on the winning side.');
+    expect(starRow(g, home, 'bb')!.words[0]).toBe('This ship has 1 battle star, for a sea battle it came through on the winning side.');
     // Nothing on the card is taken from the stars but the row itself: the fleet's strength is the same without them.
     const power = fleetCard(g, home).power;
     delete home.stars;

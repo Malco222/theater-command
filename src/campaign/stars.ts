@@ -106,10 +106,15 @@ export function bookSeaAction(g: Game, zone: number, winners: Fleet[] | null): n
 
 // ---- Reading them --------------------------------------------------------------------------------------------
 
-/** How a row of n stars is drawn (the art director, b477): up to five bronze; from the sixth, each five is one silver. */
+/**
+ * How a row of n stars is drawn (the art director, b477): up to five bronze in a row; at the sixth, five bronze become
+ * one silver. Five bronze turn silver only when a sixth would appear, every time alike, so a row with any star ends in
+ * one to five bronze: 5 is five bronze, 6 one silver and one bronze, 10 one silver and five bronze, 11 two and one.
+ */
 export function starSplit(n: number): { silver: number; bronze: number } {
   const k = Math.max(0, Math.floor(n));
-  return k <= 5 ? { silver: 0, bronze: k } : { silver: Math.floor(k / 5), bronze: k % 5 };
+  const silver = k > 0 ? Math.floor((k - 1) / 5) : 0;
+  return { silver, bronze: k - 5 * silver };
 }
 
 const ORDINAL = ['', '', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];
@@ -171,6 +176,7 @@ export function starRow(g: Game, f: Fleet, c: ShipClass): StarRow | null {
     return { name, month, turn, zone, ships, of, line: `${name}, ${month}${ships < of ? ` (${ships} of ${of} ships)` : ''}` };
   });
   const { silver, bronze } = starSplit(most);
-  const head = `${of === 1 ? 'This ship has' : 'The most decorated of these ships has'} ${most === 1 ? 'one battle star, for a sea battle' : `${most} battle stars, one for each sea battle`} it came through on the winning side.`;
-  return { most, silver, bronze, each, battles, words: [head, ...(silver ? ['A silver star stands for five.'] : []), ...battles.map((b) => b.line)] };
+  // Counts inside a sentence stand as figures (the UI director, b476 3), "1 battle star" as "7 battle stars".
+  const head = `${of === 1 ? 'This ship has' : 'The most decorated of these ships has'} ${most} ${most === 1 ? 'battle star, for a sea battle' : 'battle stars, one for each sea battle'} it came through on the winning side.`;
+  return { most, silver, bronze, each, battles, words: [head, ...(silver ? ['A silver star stands for 5 bronze stars.'] : []), ...battles.map((b) => b.line)] };
 }
