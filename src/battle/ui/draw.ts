@@ -30,6 +30,11 @@ export interface Scene {
   ping: { x: number; y: number; at: number; kind: 'move' | 'attack' } | null;
   /** The sides' colours on this field, where the page has settled them (sideColours); else the ticket's. */
   colours?: Record<Side, string> | null;
+  /**
+   * What stands over the field's top in canvas pixels (left, top, right, bottom): the dispatch, the tag and the zoom
+   * group. A hover label keeps 8 clear of them (the UI director, b464).
+   */
+  avoid?: [number, number, number, number][];
 }
 
 export const toScreen = (s: Scene, x: number, y: number): [number, number] => [s.W / 2 + (x - s.cam.x) * s.cam.z, s.H / 2 - (y - s.cam.y) * s.cam.z];
@@ -348,7 +353,8 @@ function hoverLabel(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, b: LandB
     const label = mine ? `${u.name}${st}` : !b.known(u) ? `${b.ticket[u.side].adj} troops, not identified${attack}` : `${b.ticket[u.side].adj} ${u.name} · Strength ${Math.round(u.str * 100)}${st}${attack}`;
     x.font = '700 12px "Courier Prime", ui-monospace, monospace';
     const tw = x.measureText(label).width;
-    const lx = Math.min(s.W - tw - 14, Math.max(6, sx - tw / 2 - 6)), half = Math.max(w, d) / 2;
+    // Half the stand's height on the screen as it is turned, so the label sits just clear of it (b464).
+    const lx = Math.min(s.W - tw - 14, Math.max(6, sx - tw / 2 - 6)), half = (w * Math.abs(Math.sin(u.face)) + d * Math.abs(Math.cos(u.face))) / 2;
     // His own block's label below it; an enemy's on its far side from his army, clear of other blocks where it can
     // (the UI director, slice 3).
     let ly = sy + half + 10;
@@ -365,6 +371,14 @@ function hoverLabel(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, b: LandB
       ly = at(0);
       for (let k = 0; k < 4; k++) if (clear(at(k))) { ly = at(k); break; }
       ly = Math.max(4, Math.min(s.H - 24, ly));
+    }
+    // Never under the dispatch, the tag or the zoom group: near the field's top it goes below the stand, 8 clear of
+    // them (the UI director, b464).
+    const under = (y: number): [number, number, number, number] | undefined => s.avoid?.find((q) => lx < q[2] + 8 && lx + tw + 12 > q[0] - 8 && y < q[3] + 8 && y + 20 > q[1] - 8);
+    if (under(ly)) {
+      ly = sy + half + 10;
+      for (let q = under(ly), k = 0; q && k < 4; q = under(ly), k++) ly = q[3] + 8;
+      ly = Math.min(s.H - 24, ly);
     }
     x.fillStyle = '#e2d7bc'; x.strokeStyle = '#cdbf9c'; x.lineWidth = 1;
     x.fillRect(lx, ly, tw + 12, 20); x.strokeRect(lx, ly, tw + 12, 20);

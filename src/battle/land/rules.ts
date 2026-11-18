@@ -93,9 +93,11 @@ export const LAND = {
    * at 1.43 only because the tanks there stood for good at the first outcrop): over five sets of 160 battles a ground,
    * every ground lands within 4 points of its card, about 2 in the attack's favour; the test's own seeds run about 5
    * under that. 'river' 1.51 to 1.5 for b439, once blocks at a bridge made way for each other rather than shove at its
-   * foot to a standstill (Sedan's panzers ran out the clock there one fight in eleven).
+   * foot to a standstill (Sedan's panzers ran out the clock there one fight in eleven). 1.4 to 1.3 for b464(5), once foot
+   * waded out of the river at the wading pace instead of crawling up its bank under fire: the practice river and the
+   * telling odds behind a river land where they did (+5 and 0 against +6 and -2, the tests' seeds).
    */
-  hold: { take: { plains: 0.97, forest: 1.035, hills: 0.99, mountain: 1.12, marsh: 1.32, urban: 1.025, desert: 1.045 } as Record<string, number>, within: 300, river: 1.4, works: [1, 1.02, 1.06, 1.07] },
+  hold: { take: { plains: 0.97, forest: 1.035, hills: 0.99, mountain: 1.12, marsh: 1.32, urban: 1.025, desert: 1.045 } as Record<string, number>, within: 300, river: 1.3, works: [1, 1.02, 1.06, 1.07] },
   /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
   dug: { keep: 30 },
   nerve: {

@@ -2467,7 +2467,7 @@ button.uchip:hover { border-color: var(--brass); }
 .rslip::after { content: ''; position: absolute; left: var(--tail, 50%); bottom: -6px; width: 12px; height: 12px; margin-left: -6px; background: #e2d7bc; transform: rotate(45deg); box-shadow: 2px 2px 2px rgba(0, 0, 0, .28); }
 .rslip.loose::after { display: none; }
 .rslip .rv { font: 700 18px/22px Georgia, 'Times New Roman', serif; color: #3f6b36; }
-.rslip .rv.loss { color: #a22d18; }
+.rslip .rv.loss { color: #2a2118; }
 .rslip .rl { font: 400 12.5px/17px 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; }
 .rslip .rread { justify-self: start; margin-top: 5px; padding: 3px 9px 2px; font: 700 11px/15px 'Courier Prime', 'Courier 10 Pitch', 'Liberation Mono', 'Courier New', monospace; letter-spacing: .1em; text-transform: uppercase; color: #2a2118; background: transparent; border: 1px solid rgba(42, 33, 24, .55); border-radius: 3px; }
 .rslip .rread:hover { background: rgba(42, 33, 24, .12); }

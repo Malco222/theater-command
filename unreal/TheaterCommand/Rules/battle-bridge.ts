@@ -56,9 +56,9 @@
 // its arm; its hover reads "Polish troops, not identified · Right-click to attack" (the last part only while the
 // player holds some of his own). act is only 'march', 'idle' or 'down', state only 'unknown', 'gone' or 'withdrawn'.
 // It comes whole, without 'known', once one of his has fought it (his guns' target too), once it has struck one of his
-// in contact (its guns firing from far back do not count), and once the battle is over. The dispatches never name it: an
-// event about it has an empty text; play its cue at its x and y, and show nothing else of it (its 'what' and 'unit'
-// say what the player does not know).
+// in contact (its guns firing from far back do not count), and once the battle is over. The dispatches never name it:
+// where it falls on one of his, the event reads "Polish troops are attacking your 2nd Regiment."; no other event about
+// it is sent at all, words or sound (the UI director, b464: a sound with nothing to read looks like a fault).
 // An air group also carries extra: { n, n0, band, alt, job, per } (aircraft now and at the start, height band 0 to 2,
 // metres up, what it is doing, aircraft per model); /mnt/project-files/air-battles/3d-handoff.md says how to draw it.
 //

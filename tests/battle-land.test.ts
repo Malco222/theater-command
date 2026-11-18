@@ -346,8 +346,9 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
           b.step();
           for (const e of b.view('att').events) {
             const u = e.unit !== undefined ? b.unit(e.unit) : undefined;
-            // A dispatch names a block of theirs only once he knows it.
-            if (u && u.side === 'def' && !b.known(u)) expect(e.text).toBe('');
+            // A dispatch names a block of theirs only once he knows it: before that, "Enemy troops are attacking your ..."
+            // or nothing at all, words or sound (the UI director, b464).
+            if (u && u.side === 'def' && !b.known(u)) expect(e.text).toMatch(/^\S+ troops are attacking your /);
             if (e.text) said.push(e.text);
           }
           if (fog && b.over === null) {
@@ -420,6 +421,28 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     expect(wet).toBe(0);
   });
 
+  it('no block stands in the river: it wades over without stopping, and none is left in it when the battle ends (b464(5))', () => {
+    const p = PRACTICE_GROUNDS.find((x) => x.river)!;
+    let wading = 0, stood = 0, left = 0;
+    for (let s = 1; s <= 12; s++) {
+      const b = new LandBattle(practiceTicket(p, { humanAtt: true, seed: s * 7919 + 13 }));
+      b.ai.att = false; b.ai.def = true;
+      plainAttack(b);
+      const wet = (u: LandUnit): boolean => ['water', 'blown'].includes(GROUNDS[b.field.ground[Math.floor(u.y / b.field.cell) * b.field.cols + Math.floor(u.x / b.field.cell)]]);
+      const up = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
+      while (!b.over) {
+        b.step();
+        for (const u of b.units) if (up(u) && u.state !== 'routing' && wet(u)) { wading++; if (u.speed < 0.5) stood++; }
+      }
+      for (const u of b.units) if (up(u) && wet(u)) left++;
+    }
+    // Before b464 the foot crawled the last 20 m out of the river's bed at 0.8 m a second, and 97 blocks in 120 of these
+    // battles were left standing in it when the battle ended.
+    expect(wading).toBeGreaterThan(0);
+    expect(stood).toBe(0);
+    expect(left).toBe(0);
+  }, 60000);
+
   it('a close battle lasts minutes from the first contact, and never breaks an army most of which has not fought (mark 2)', () => {
     const fights: number[] = [];
     for (const ground of GROUNDS7) {
@@ -456,7 +479,9 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
       b.contactAt = from; b.t = to;
       return (b as unknown as { brokeAfter(s: 'att' | 'def'): string }).brokeAfter('def');
     };
-    expect(said(100, 135)).toMatch(/ broke within a minute of the first shots\.$/);
+    // "Of fighting" on every form (the UI director, b464).
+    expect(said(100, 110)).toMatch(/ broke within half a minute of fighting\.$/);
+    expect(said(100, 135)).toMatch(/ broke after half a minute of fighting\.$/);
     expect(said(100, 165)).toMatch(/ broke after a minute of fighting\.$/);
     expect(said(100, 185)).toMatch(/ broke after a minute and a half of fighting\.$/);
     expect(said(100, 220)).toMatch(/ broke after two minutes of fighting\.$/);

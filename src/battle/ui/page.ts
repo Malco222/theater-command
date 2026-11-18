@@ -823,6 +823,22 @@ function startLoop(): void {
   if (!looping) { looping = true; requestAnimationFrame(frame); }
 }
 
+/** The dispatch, the near-breaking warning, the tag and the zoom group where they show, in the canvas's own pixels. */
+function overField(): [number, number, number, number][] {
+  const cv = byId('field');
+  if (!cv) return [];
+  const c = cv.getBoundingClientRect(), out: [number, number, number, number][] = [];
+  for (const id of ['dispatch', 'fwarn', 'ftag']) {
+    const el = byId(id);
+    if (!el || el.hidden || el.classList.contains('is-old') || !el.textContent) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) out.push([r.left - c.left, r.top - c.top, r.right - c.left, r.bottom - c.top]);
+  }
+  const zoom = (cv.parentElement?.querySelector('.zoom') as HTMLElement | null)?.getBoundingClientRect();
+  if (zoom && zoom.width > 0) out.push([zoom.left - c.left, zoom.top - c.top, zoom.right - c.left, zoom.bottom - c.top]);
+  return out;
+}
+
 function frame(): void {
   if (!S.active) { looping = false; return; }
   requestAnimationFrame(frame);
@@ -841,6 +857,9 @@ function frame(): void {
   if (b.contactAt !== null && !S.met) { S.met = true; S.tag = { text: `The armies meet · Running ×${S.clock.speed || 1}`, until: t + 2.5 }; }
   S.wasRunning = running;
   const v = b.view(S.scene.me);
+  // What stands over the field's top, for a hover label to keep clear of (the UI director, b464): read only while
+  // there is a hover to place.
+  S.scene.avoid = S.scene.hover === null ? [] : overField();
   // The opening line says the clock is stopped: once it runs, the first fact replaces it.
   // With no orders given it stands, and says so (the UI director, after the retest).
   if (b.t > 0 && S.dispatch?.t === 0 && S.dispatch.what === 'contact' && !S.dispatch.unit) {
