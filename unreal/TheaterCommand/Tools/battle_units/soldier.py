@@ -1572,6 +1572,88 @@ def M4(R=None, t=(0.0, 0.0, 0.0)):
 
 KNEE_FLOOR = 0.045                               # (the lowest a knee's joint may go: a knee on the ground)
 
+# ---- the arms as a real body moves them (range of motion, the coordinator's sheet of 18 November 2026; arms_check.py
+# measures every frame against it). Inside ARM_EASY the solver keeps the pose's own elbow and hand; past it the elbow is
+# swung round the shoulder-wrist line, and a hand that grips rolled round what it grips (up to its `roll`), to the
+# nearest place a man's arm goes.
+ARM_EASY = dict(elevation=115.0, behind=15.0, medial=25.0, internal=45.0, external=55.0, elbow=135.0, pronation=55.0,
+                supination=60.0, wrist_flex=45.0, wrist_ext=45.0, radial=12.0, ulnar=22.0, tip_up=0.15, tip_in=0.4)
+ARM_HARD = dict(elevation=170.0, behind=30.0, medial=40.0, internal=70.0, external=90.0, elbow=145.0, pronation=80.0,
+                supination=85.0, wrist_flex=75.0, wrist_ext=65.0, radial=20.0, ulnar=30.0, tip_up=0.5, tip_in=0.7)
+ARM_SWING = np.radians(np.arange(-180.0, 180.0, 7.5))      # (the elbow's swing round the shoulder-wrist line, tried)
+ARM_PRIOR = 0.012          # (cost of a degree squared of swing or roll away from what the pose asks)
+ARM_GENTLE = 0.003         # (cost of a degree squared of the wrist off straight, the forearm off mid-turn)
+ARM_FLIP_COST = 6.0        # (cost of taking a rod's grip end for end, so the hand keeps the asked way unless it hurts)
+
+
+def _nv(V):
+    return V / np.maximum(np.linalg.norm(V, axis=-1, keepdims=True), 1e-12)
+
+
+def arm_angles_batch(Ms, A, K, T, Dup, Dh, flex0, a0, t0, n0):
+    """A real arm's angles (degrees) for N candidate poses at once, in his side's terms (Ms: world -> forward, out to
+    that side, up of his chest): the shoulder's elevation, plane, behind and across, the humerus's rotation (internal
+    +), the elbow's flexion and where its point goes, the forearm's pronation (+) and the wrist's flexion and radial
+    deviation. A the shoulder; K, T (N, 3) elbows and wrists; Dup, Dh (N, 3, 3) the upper arms' and hands' turns."""
+    u = _nv((K - A) @ Ms.T)
+    f = _nv((T - K) @ Ms.T)
+    fl = _nv(np.einsum("nij,j->ni", Dup, flex0) @ Ms.T)
+    fl = _nv(fl - u * np.sum(fl * u, -1, keepdims=True))
+    x = np.array((1.0, 0.0, 0.0))
+    k = np.stack((u[:, 1], -u[:, 0], np.zeros(len(u))), -1)        # (0, 0, -1) x u
+    c = -u[:, 2]
+    ref = c[:, None] * x + np.cross(k, np.broadcast_to(x, u.shape)) + k * (k[:, 0] / np.maximum(1.0 + c, 1e-6))[:, None]
+    ref = _nv(ref - u * np.sum(ref * u, -1, keepdims=True))
+    hinge = _nv(np.cross(u, fl))
+    ah = _nv(np.einsum("nij,j->ni", Dh, a0) @ Ms.T)
+    th = _nv(np.einsum("nij,j->ni", Dh, t0) @ Ms.T)
+    nh = _nv(np.einsum("nij,j->ni", Dh, n0) @ Ms.T)
+    h = _nv(hinge - f * np.sum(hinge * f, -1, keepdims=True))
+    npp = _nv(nh - f * np.sum(nh * f, -1, keepdims=True))
+    return dict(elevation=np.degrees(np.arccos(np.clip(-u[:, 2], -1, 1))), plane=np.degrees(np.arctan2(u[:, 0], u[:, 1])),
+                behind=np.degrees(np.arcsin(np.clip(-u[:, 0], -1, 1))), medial=np.degrees(np.arcsin(np.clip(-u[:, 1], -1, 1))),
+                rotation=np.degrees(np.arctan2(np.sum(np.cross(ref, fl) * u, -1), np.sum(ref * fl, -1))),
+                elbow=np.degrees(np.arctan2(np.sum(f * fl, -1), np.sum(f * u, -1))), tip_up=-fl[:, 2], tip_in=fl[:, 1],
+                pronation=np.degrees(np.arctan2(np.sum(np.cross(h, npp) * f, -1), np.sum(h * npp, -1))),
+                wrist_flex=np.degrees(np.arctan2(-np.sum(f * nh, -1), np.sum(f * ah, -1))),
+                wrist_dev=np.degrees(np.arctan2(-np.sum(f * th, -1), np.sum(f * ah, -1))))
+
+
+def arm_cost(an):
+    """How far past easy (and, ten times dearer, past the limits) a batch of arms is: degrees squared."""
+    def past(x, lim):
+        return np.maximum(x - lim, 0.0) ** 2
+    bent = np.clip((an["elbow"] - 15.0) / 20.0, 0.0, 1.0)
+    cost = 0.0
+    for lim, w in ((ARM_EASY, 1.0), (ARM_HARD, 10.0)):
+        behind = lim["behind"] + (50.0 - ARM_HARD["behind"]) * (lim is ARM_HARD) * np.clip(1.0 - an["elevation"] / 90.0, 0, 1)
+        cost = cost + w * (past(an["elevation"], lim["elevation"]) + past(an["behind"], behind) + past(an["medial"], lim["medial"])
+                           + past(an["rotation"], lim["internal"]) + past(-an["rotation"], lim["external"])
+                           + past(an["elbow"], lim["elbow"]) + 4.0 * past(-an["elbow"], 0.0)
+                           + past(an["pronation"], lim["pronation"]) + past(-an["pronation"], lim["supination"])
+                           + past(an["wrist_flex"], lim["wrist_flex"]) + past(-an["wrist_flex"], lim["wrist_ext"])
+                           + past(an["wrist_dev"], lim["radial"]) + past(-an["wrist_dev"], lim["ulnar"])
+                           + bent * (past(60.0 * an["tip_up"], 60.0 * lim["tip_up"]) + past(60.0 * an["tip_in"], 60.0 * lim["tip_in"])))
+    over90 = np.clip((an["elevation"] - 95.0) / 15.0, 0, 1) * (an["plane"] < 45.0)
+    # (and a gentle pull toward a straight wrist and a mid-turned forearm everywhere, as a real man's own comfort: the
+    # best arm then moves smoothly as the pose does, instead of sliding about a flat floor and snapping at its edge)
+    gentle = ARM_GENTLE * (an["wrist_flex"] ** 2 + 2.0 * an["wrist_dev"] ** 2 + 0.3 * an["pronation"] ** 2)
+    return cost + 10.0 * over90 * past(an["rotation"], -20.0) + gentle
+
+
+def hand_flip(h):
+    """Whether a hand may take its grip end for end (see Rig.comfortable_arm): its heaviest part says so."""
+    if "blend" in h:
+        return hand_flip(max(h["blend"], key=lambda x: x[0])[1])
+    return bool(h.get("flip", False))
+
+
+def arm_spec(h):
+    """Whether a hand is placed by its arm's own angles (all of it, through any blend): then it is not re-solved."""
+    if "blend" in h:
+        return all(arm_spec(hh) for w, hh in h["blend"] if abs(w) > 1e-9)
+    return "arm" in h
+
 
 class Rig:
     """The skeleton's rest, and the solver that turns a pose said in plain terms into bone rotations."""
@@ -1594,6 +1676,21 @@ class Rig:
             self.eye0 = {s: np.array(J["eye_" + s]) for s in ("l", "r")}
         else:
             self.eye0 = {"r": np.array((J["head"][0] + 0.004 + 0.083, -0.033, 1.64)), "l": np.array((J["head"][0] + 0.004 + 0.083, 0.033, 1.64))}
+        # the arms' rest references for the range of motion: the way each forearm swings as its elbow bends, the hand's
+        # axes (t toward the thumb), each upper arm's and forearm's rest frames as two_bone builds them
+        self.arm0 = {}
+        for s in ("l", "r"):
+            up, lo = self.H0["lowerarm_" + s] - self.H0["upperarm_" + s], self.H0["hand_" + s] - self.H0["lowerarm_" + s]
+            u = _n(up)
+            a0, t0, n0 = (np.asarray(v, float) for v in self.hand0[s])
+            if (self.T0["thumb_" + s] - self.H0["hand_" + s]) @ t0 < 0:
+                t0 = -t0
+            line = self.H0["hand_" + s] - self.H0["upperarm_" + s]
+            r_pole = up - _n(line) * (up @ _n(line))
+            self.arm0[s] = {"flex": _n(lo - u * (lo @ u)), "a": _n(a0), "t": _n(t0), "n": _n(n0),
+                            "Fu": frame2(up, r_pole), "Fl": frame2(lo, r_pole),
+                            "l1": float(np.linalg.norm(up)), "l2": float(np.linalg.norm(lo))}
+        self.pocket0 = self.H0["upperarm_r"] + np.array((POCKET[0], POCKET[1], POCKET[2]))
 
     # ---- forward kinematics
     def _child(self, st, b, L=None, Dw=None):
@@ -1640,6 +1737,119 @@ class Rig:
         st["D"][mid] = D_lo
         return dist - dist_c          # (how far short it fell: 0 when reached)
 
+    def pocket(self, st):
+        """The right shoulder's pocket (where a rifle's butt goes), riding the right clavicle."""
+        return self.at(st, "clavicle_r", self.pocket0)
+
+    def head_to_sight(self, st, P, w):
+        """The head let down and tilted onto the stock until the right eye is on the sights' line (as far as `w`): the
+        neck and head bent, leaned and turned together, as little as gets it there."""
+        W = st["W"]
+        R, o = W[:3, :3], W[:3, 3]
+        spec = WEAPONS[P.get("weapon_kind", "rifle")]
+        line0 = o + R @ np.array((0.0, 0.0, spec["sight_z"]))
+        bn, bh = P.get("neck", (0.0, 0.0, 0.0)), P.get("head", (0.0, 0.0, 0.0))
+        split = (np.array((0.55, 0.4, 0.5)), np.array((0.45, 0.6, 0.5)))
+
+        def put(d, into):
+            self._child(into, "neck", E(*(np.asarray(bn, float) + split[0] * d)))
+            self._child(into, "head", E(*(np.asarray(bh, float) + split[1] * d)))
+            return into
+
+        def resid(d):
+            tmp = put(d, {"D": dict(st["D"]), "H": dict(st["H"])})
+            v = self.eye(tmp, "r") - line0
+            rel = float(v @ R[:, 0])
+            lo, hi = SIGHT_RELIEF
+            return np.array((v @ R[:, 1], v @ R[:, 2], max(rel - hi, 0.0) + min(rel - lo, 0.0),
+                             0.0003 * d[0], 0.0003 * d[1], 0.0003 * d[2]))
+        d = np.zeros(3)
+        lo_d, hi_d = np.array((-40.0, -45.0, -60.0)), np.array((65.0, 45.0, 60.0))
+        for _ in range(10):
+            r0 = resid(d)
+            J = np.stack([(resid(d + e) - r0) / 0.5 for e in np.eye(3) * 0.5], axis=1)
+            step = np.linalg.solve(J.T @ J + 1e-6 * np.eye(3), -J.T @ r0)
+            d = np.clip(d + step, lo_d, hi_d)
+            if np.linalg.norm(step) < 0.05:
+                break
+        put(w * d, st)
+        r = resid(d)
+        st["sight_miss"] = float(np.hypot(r[0], r[1])) if w >= 0.999 else None
+        st["sight_turn"] = tuple(float(x) for x in w * d)
+
+    def comfortable_arm(self, st, s, g, a1, n1, pole, roll_axis=None, roll=0.0, prior=ARM_PRIOR, flip=False):
+        """The hand's turn and the elbow's pole for a hand gripping at g (its axes a1, n1 asked for): the elbow swung
+        round the shoulder-wrist line and the hand rolled round what it grips (up to `roll` degrees, about roll_axis
+        through g) to where the arm is easiest (arm_cost) and nearest what was asked. `flip`: the hand may also take
+        the grip turned end for end (half round its palm's normal: the thumb the other way along a rod or a rim, still
+        round it), at a small cost, where that is the easier arm."""
+        if flip:
+            best = None
+            for k, nn in enumerate((n1, n1)):
+                a_k = a1 if k == 0 else -np.asarray(a1, float)
+                Dh, V, c = self.comfortable_arm(st, s, g, a_k, n1, pole, roll_axis, roll, prior, False)
+                c = c + ARM_FLIP_COST * k
+                if best is None or c < best[2]:
+                    best = (Dh, V, c)
+            return best
+        R0 = self.arm0[s]
+        a0, t0, n0 = (np.asarray(v, float) for v in self.hand0[s])
+        D0 = frame2(a1, n1) @ frame2(a0, n0).T
+        g_rest = grip_point(self.J, s)
+        A = st["H"]["upperarm_" + s]
+        Ms = np.diag((1.0, -1.0 if s == "r" else 1.0, 1.0)) @ st["D"]["chest"].T
+        rolls = np.radians(np.linspace(-roll, roll, 9)) if roll > 0 else np.zeros(1)
+        ax = _n(roll_axis if roll_axis is not None else np.cross(_n(a1), _n(n1)))
+        l1, l2 = R0["l1"], R0["l2"]
+
+        def batch(rs, phis):
+            Dh = np.stack([R_axis(ax, math.degrees(r)) @ D0 for r in rs])                   # (nr, 3, 3)
+            Wr = g - np.einsum("rij,j->ri", Dh, g_rest - self.H0["hand_" + s])              # (nr, 3)
+            d = Wr - A
+            dist = np.linalg.norm(d, axis=-1)
+            dc = np.clip(dist, abs(l1 - l2) + 1e-4, (l1 + l2) * 0.9995)
+            ul = d / dist[:, None]
+            e1 = _nv(np.asarray(pole, float) - ul * (ul @ np.asarray(pole, float))[:, None])
+            e2 = np.cross(ul, e1)
+            ca = (l1 * l1 + dc * dc - l2 * l2) / (2 * l1 * dc)
+            sa = np.sqrt(np.maximum(1 - ca * ca, 0.0))
+            nr, nphi = len(rs), len(phis)
+            V = np.cos(phis)[None, :, None] * e1[:, None] + np.sin(phis)[None, :, None] * e2[:, None]   # (nr, nphi, 3)
+            K = A + l1 * (ul[:, None] * ca[:, None, None] + V * sa[:, None, None])
+            T = A + ul * dc[:, None]
+            T = np.broadcast_to(T[:, None], K.shape)
+            a = _nv(K - A)
+            nn = _nv(V - a * np.sum(V * a, -1, keepdims=True))
+            Dup = np.stack((a, nn, np.cross(a, nn)), axis=-1) @ R0["Fu"].T                     # (nr, nphi, 3, 3)
+            DhN = np.broadcast_to(Dh[:, None], (nr, nphi, 3, 3))
+            an = arm_angles_batch(Ms, A, K.reshape(-1, 3), T.reshape(-1, 3), Dup.reshape(-1, 3, 3),
+                                  DhN.reshape(-1, 3, 3), R0["flex"], R0["a"], R0["t"], R0["n"])
+            c = arm_cost(an).reshape(nr, nphi)
+            c = c + prior * np.degrees(phis)[None, :] ** 2 + ARM_PRIOR * np.degrees(rs)[:, None] ** 2
+            return c, V, Dh
+        c, V, Dh = batch(rolls, ARM_SWING)
+        i, j = np.unravel_index(int(np.argmin(c)), c.shape)
+        # (then a finer grid round the best, a step either way in both, and a parabola through the best of that and its
+        # neighbours: the answer moves smoothly from frame to frame instead of from one sample to the next)
+        ds = ARM_SWING[1] - ARM_SWING[0]
+        dr = (rolls[1] - rolls[0]) if len(rolls) > 1 else 0.0
+        fine_s = ARM_SWING[j] + np.linspace(-ds, ds, 9)
+        fine_r = np.clip(rolls[i] + np.linspace(-dr, dr, 9), rolls[0], rolls[-1]) if dr > 0 else rolls
+        c, V, Dh = batch(fine_r, fine_s)
+        i, j = np.unravel_index(int(np.argmin(c)), c.shape)
+        phi = fine_s[j]
+        if 0 < j < len(fine_s) - 1:
+            cm, c0, cp = c[i, j - 1], c[i, j], c[i, j + 1]
+            dj = 0.5 * (cm - cp) / (cm - 2 * c0 + cp) if (cm - 2 * c0 + cp) > 1e-9 else 0.0
+            phi = phi + float(np.clip(dj, -0.5, 0.5)) * (fine_s[1] - fine_s[0])
+        r = fine_r[i]
+        if 0 < i < len(fine_r) - 1 and fine_r[i + 1] > fine_r[i - 1]:
+            cm, c0, cp = c[i - 1, j], c[i, j], c[i + 1, j]
+            di = 0.5 * (cm - cp) / (cm - 2 * c0 + cp) if (cm - 2 * c0 + cp) > 1e-9 else 0.0
+            r = r + float(np.clip(di, -0.5, 0.5)) * (fine_r[1] - fine_r[0])
+        c1, V1, Dh1 = batch(np.array([r]), np.array([phi]))
+        return Dh1[0], V1[0, 0], float(c1[0, 0])
+
     # ---- the whole pose
     def solve(self, P, lift_knees=4):
         st = {"D": {}, "H": {}, "short": {}}
@@ -1684,11 +1894,18 @@ class Rig:
         st["D"]["bolt"] = st["D"]["weapon"] @ R_axis((1, 0, 0), -lift)
         st["H"]["bolt"] = st["H"]["weapon"] + st["D"]["weapon"] @ (self.H0["bolt"] - self.H0["weapon"] + np.array((-bk, 0.0, 0.0)))
         self._child(st, "bipod", R_axis((0, 1, 0), -P.get("bipod", 0.0)))
-        # the arms: each hand to its grip, or to a place of its own
+        if P.get("sight", 0.0) > 1e-3:
+            self.head_to_sight(st, P, min(float(P["sight"]), 1.0))
+        # the arms: each hand to its grip, or to a place of its own, the elbow and the hand's roll where a man's go
         for s, side in (("l", 1.0), ("r", -1.0)):
             a0, t0, n0 = self.hand0[s]
             target_g, a1, n1, pole = self.resolve_hand(st, P, P["hand_" + s], side)
-            Dh = frame2(a1, n1) @ frame2(a0, n0).T
+            if P.get("comfort", ARM_COMFORT) and not arm_spec(P["hand_" + s]):
+                rx, rr, pw = self.hand_roll(st, P, P["hand_" + s])
+                Dh, pole, st["arm_cost_" + s] = self.comfortable_arm(st, s, target_g, a1, n1, pole, rx, rr, pw,
+                                                                     flip=hand_flip(P["hand_" + s]))
+            else:
+                Dh = frame2(a1, n1) @ frame2(a0, n0).T
             g_rest = grip_point(self.J, s)
             wrist = target_g - Dh @ (g_rest - self.H0["hand_" + s])
             st["short"]["arm_" + s] = self.two_bone(st, "upperarm_" + s, "lowerarm_" + s, "hand_" + s, wrist, pole)
@@ -1700,15 +1917,65 @@ class Rig:
             self._child(st, "thumb_" + s, R_axis(kt, P.get("thumb_" + s, 0.0)))
         return st
 
+    def arm_place(self, st, arm, side):
+        """A hand placed by the arm's own angles, as rom.py measures them (degrees, in his side's terms of the chest):
+        arm = (elevation, plane, rotation, elbow, pronation[, wrist flexion, radial deviation]); elevation 0 hanging,
+        90 level, plane 0 out to the side and 90 straight ahead, rotation internal +, elbow flexion, pronation + from
+        mid-turn. Returns what resolve_hand does: (grip point, hand axis, palm, the elbow's pole), all in the world."""
+        s = "l" if side > 0 else "r"
+        el, pl, rot, fl, pr = (math.radians(float(x)) for x in arm[:5])
+        wf, wd = (math.radians(float(x)) for x in (tuple(arm[5:7]) + (0.0, 0.0))[:2])
+        C = st["D"]["chest"]
+        M = np.diag((1.0, side, 1.0))
+        to_w = C @ M
+        down = np.array((0.0, 0.0, -1.0))
+        u = np.array((math.sin(el) * math.sin(pl), math.sin(el) * math.cos(pl), -math.cos(el)))
+        ref = mocap.swing(down[None], u[None])[0] @ np.array((0.0, -1.0, 0.0))
+        k = R_axis(u, math.degrees(rot)) @ _n(ref - u * (ref @ u))
+        lo = math.cos(fl) * u + math.sin(fl) * np.cross(k, u)
+        n = R_axis(lo, math.degrees(pr)) @ k
+        a = lo
+        a, n = math.cos(wf) * a + math.sin(wf) * n, -math.sin(wf) * a + math.cos(wf) * n
+        t = np.cross(n, a)
+        a = math.cos(wd) * a + math.sin(wd) * t
+        R0 = self.arm0[s]
+        A = st["H"]["upperarm_" + s]
+        K = A + R0["l1"] * (to_w @ u)
+        T = K + R0["l2"] * (to_w @ lo)
+        a_w, n_w = to_w @ a, to_w @ n
+        a0, t0, n0 = self.hand0[s]
+        Dh = frame2(a_w, n_w) @ frame2(a0, n0).T
+        g = T + Dh @ (grip_point(self.J, s) - self.H0["hand_" + s])
+        w = _n(T - A)
+        pole = (K - A) - w * ((K - A) @ w)
+        return g, a_w, n_w, pole
+
+    def hand_roll(self, st, P, h):
+        """(axis, degrees) a hand may roll round what it holds: a grip on the weapon rolls round the weapon's own line
+        (the stock's wrist, the fore-end); a hand given a place of its own, round its palm's across axis."""
+        if "blend" in h:
+            hs = [hh for w, hh in h["blend"] if w > 1e-6]
+            h = max(h["blend"], key=lambda x: x[0])[1]
+        pw = float(h.get("pole_weight", ARM_PRIOR))
+        if "grip" in h:
+            return st["W"][:3, :3] @ np.asarray(h.get("roll_axis", (1.0, 0.0, 0.0)), float), float(h.get("roll", 35.0)), pw
+        return None, float(h.get("roll", 20.0)), pw
+
     def resolve_hand(self, st, P, h, side):
         """A hand's spec -> (grip point in the world, hand direction, palm direction, elbow pole)."""
         if "blend" in h:
+            # (the hands' turns mixed as quaternions, not their axes one by one: a turn mixed axis by axis bunches
+            # most of itself into the middle of the blend, and the wrist snaps there)
             out = [(w, self.resolve_hand(st, P, hh, side)) for w, hh in h["blend"]]
             g = sum(w * r[0] for w, r in out)
-            a = sum(w * r[1] for w, r in out)
-            n = sum(w * r[2] for w, r in out)
             pole = sum(w * r[3] for w, r in out)
-            return g, _n(a), _n(n), pole
+            qs = [mocap.mat_to_quat(frame2(r[1], r[2])) for _, r in out]
+            ref = qs[max(range(len(out)), key=lambda k: out[k][0])]
+            q = sum(w * (qq if float(qq @ ref) >= 0.0 else -qq) for (w, _), qq in zip(out, qs))
+            M = mocap.quat_to_mat(q / max(float(np.linalg.norm(q)), 1e-12))
+            return g, M[:, 0], M[:, 1], pole
+        if "arm" in h:
+            return self.arm_place(st, h["arm"], side)
         W = st["W"]
         Rw = W[:3, :3]
         if "grip" in h:
@@ -2680,13 +2947,36 @@ def man_objects(m):
 # ================================================================================================ the clips
 FPS = 60          # (every clip's length is a whole number of sixtieths: 0.65 s is 39 frames)
 
-# How each hand holds each weapon, in the weapon's own frame: `a` from the wrist to the knuckles, `n` the way the
-# palm faces. (The right hand's palm on the right of the stock's wrist, the thumb over the top; the left hand
-# cradling the fore-end from beneath, its thumb along the near side.)
+# How each hand holds each weapon at the port (the rifle across the body), in the weapon's own frame: `a` from the
+# wrist to the knuckles, `n` the way the palm faces. Both are power grips round the wood, found by scanning against
+# rom.py's limits with the elbows hanging: the right hand round the stock's wrist from in front, its palm toward the
+# body and the knuckles out; the left round the fore-end from below and to the left, the fingers wrapped over it.
 HOLD = {
-    "r": {"grip": "grip_r", "a": (0.5, 0.0, -0.85), "n": (0.0, 1.0, 0.0), "pole": (-0.3, -0.75, -0.55)},
-    "l": {"grip": "grip_l", "a": (0.15, -0.95, -0.28), "n": (0.0, -0.3, 1.0), "pole": (0.0, 0.45, -1.0)},
+    "r": {"grip": "grip_r", "a": (0.342, -0.94, 0.0), "n": (0.0, 0.0, -1.0), "pole": (-0.3, -0.75, -0.55),
+          "roll": 10.0},
+    "l": {"grip": "grip_l", "a": (0.342, 0.0, 0.94), "n": (0.0, 1.0, 0.0), "pole": (0.0, 0.45, -1.0), "roll": 10.0},
 }
+# Aimed (the butt in the shoulder's pocket, the cheek on the comb): the right hand in a power grip round the half-pistol
+# grip (its line taken 65 degrees up from the bore, the thumb's end forward), the palm on its right side facing in,
+# the hand's axis 57 degrees off the grip's line, so the forearm comes forward and in from an elbow out at the side
+# and below the shoulder (upper arm 60-70 degrees out) with the wrist near straight; the left hand under the
+# fore-end, the wood across its palm, the elbow under the rifle. (Found by scanning grips against rom.py's limits:
+# a hand square across the stock's wrist cannot be reached from a lowered elbow within them.)
+GRIP_LINE_R = (0.423, 0.0, 0.906)
+HOLD_AIM = {
+    "r": {"grip": "grip_r", "a": (0.888, 0.419, 0.187), "n": (-0.453, 0.866, 0.211), "pole": (-0.25, -1.0, -0.75),
+          "roll": 15.0, "roll_axis": GRIP_LINE_R},
+    "l": {"grip": "grip_l", "a": (0.89, -0.411, 0.199), "n": (-0.15, 0.15, 0.98), "pole_world": (0.15, 0.35, -1.0), "roll": 50.0},
+}
+ARM_COMFORT = True         # (every pose's arms through comfortable_arm unless the pose says comfort=False)
+POCKET = (0.088, 0.045, -0.045)      # the right shoulder's pocket at rest from the shoulder's joint: forward, in, down (m)
+BUTT_AT = {"rifle": (-0.324, 0.0, -0.045), "lmg": (-0.358, 0.0, -0.025)}   # where the pocket bears on each butt plate
+SIGHT_RELIEF = (-0.22, -0.06)      # how far behind the stock's wrist the eye may sit on the sights' line (m)
+
+
+# The arms at the port as rom.py measures them (elevation, plane, rotation, elbow, pronation, wrist flexion, radial
+# deviation; see Rig.arm_place): a key that lets go of the rifle starts from these, so the arm moves angle by angle.
+PORT_ARMS = {"l": (14.8, 14.2, 28.9, 124.8, -46.1, -30.8, -0.6), "r": (25.9, -16.7, 31.1, 94.4, -18.6, 47.8, -8.0)}
 
 
 def held(s, **over):
@@ -2708,14 +2998,34 @@ def port_arms(lift=0.0, out=0.0, tilt=0.0):
     return place
 
 
-def aim(yaw=0.0, pitch=0.0, relief=-0.045, kick=0.0, rise=0.0):
-    """The rifle shouldered and aimed: its sight line through the right eye, along the bearing given."""
+def aim(yaw=0.0, pitch=0.0, relief=None, kick=0.0, rise=0.0, cant=0.0):
+    """The rifle shouldered and aimed along the bearing given: its butt in the right shoulder's pocket (just inside the
+    shoulder's joint, riding the clavicle); the head comes down onto the comb to the sights (the pose's `sight`; see
+    Rig.head_to_sight). (`relief` is kept for old callers: the eye's place on the line is the head's to find.)"""
     def place(rig, st):
-        eye = rig.eye(st, "r")
-        R = R_axis((0, 0, 1), yaw) @ R_axis((0, 1, 0), -(pitch + rise))
-        spec = WEAPONS["rifle"]
-        o = eye - R @ np.array((relief - kick, 0.0, spec["sight_z"]))
+        R = R_axis((0, 0, 1), yaw) @ R_axis((0, 1, 0), -(pitch + rise)) @ R_axis((1, 0, 0), cant)
+        o = rig.pocket(st) - R @ np.array(BUTT_AT["rifle"]) + R[:, 0] * kick
         return M4(R, o)
+    return place
+
+
+def swing_arm(swing, out=10.0, rot=20.0, elbow=90.0, pron=0.0, wf=0.0, wd=0.0):
+    """Arm angles (Rig.arm_place) for an arm swung `swing` degrees forward (- back) in his body's own fore-and-aft
+    plane, `out` degrees out to the side: the swing of a walking or running arm, passing smoothly under the shoulder."""
+    sw, o = math.radians(swing), math.radians(out)
+    u = np.array((math.sin(sw) * math.cos(o), math.sin(o), -math.cos(sw) * math.cos(o)))
+    return (math.degrees(math.acos(-u[2])), math.degrees(math.atan2(u[0], u[1])), rot, elbow, pron, wf, wd)
+
+
+def in_left_hand(arm, hold=None, side=1.0):
+    """The rifle where the left hand (side -1: the right) has it, that arm placed by its own angles (Rig.arm_place):
+    the rifle carried in one hand follows the arm, rather than the arm being bent to wherever a rifle was put."""
+    h = hold or HOLD["l" if side > 0 else "r"]
+
+    def place(rig, st):
+        g, a_w, n_w, _ = rig.arm_place(st, arm, side)
+        R = frame2(a_w, n_w) @ frame2(h["a"], h["n"]).T
+        return M4(R, g - R @ (np.array(WEAPONS["rifle"][h["grip"]]) + np.asarray(h.get("slide", (0, 0, 0)), float)))
     return place
 
 
@@ -2884,7 +3194,12 @@ def mix(Ps, ws):
         if k == "weapon":
             out[k] = blend_places(vals)
         elif k.startswith("hand_"):
-            out[k] = {"blend": vals}
+            if all(isinstance(v, dict) and "arm" in v and "blend" not in v for w, v in vals) and len(vals) == len(pairs):
+                # (arms keyed by their own angles mix angle by angle, so the arm passes through real arms between)
+                n = max(len(v["arm"]) for w, v in vals)
+                out[k] = {"arm": tuple(sum(w * float((tuple(v["arm"]) + (0.0, 0.0))[i]) for w, v in vals) for i in range(n))}
+            else:
+                out[k] = {"blend": vals}
         elif k.startswith("foot_"):
             f = {}
             for fk in ("at", "yaw", "pitch", "roll", "toe", "pole"):
@@ -3167,18 +3482,14 @@ def c_flee(t):
     P["chest"] = add3(P["chest"], (0.0, 0.0, 12.0 * look))
     P["neck"] = (-8.0, 4.0 * look, 22.0 * look)
     P["head"] = (-6.0, 6.0 * look, 26.0 * look)
-    # the right hand trails the rifle by its middle, swinging with the stride; the left arm pumps
-    rh = np.array((0.06 - 0.16 * sw, -0.22, -0.43 + 0.03 * abs(sw)))
-    P["hand_r"] = {"grip": "carry", "a": (0.0, 0.25, -0.97), "n": (0.0, 1.0, 0.0), "pole": (-0.8, -0.3, -0.5)}
-
-    def place(rig, st, rh=rh, sw=sw):
-        C = rig.frame(st, "chest")
-        R = R_axis((0, 0, 1), 6.0 - 4.0 * sw) @ R_axis((0, 1, 0), 2.0 + 9.0 * sw)
-        g = np.array(WEAPONS["rifle"]["carry"])
-        return C @ M4(R, rh - R @ g)
-    P["weapon"] = place
-    lh = np.array((0.18 + 0.2 * sw, 0.17, -0.2 + 0.06 * sw))
-    P["hand_l"] = {"frame": "chest", "at": tuple(lh), "a": (0.6, -0.3, 0.3 + 0.4 * sw), "n": (0.0, -1.0, 0.0), "pole": (-0.6, 0.4, -0.6)}
+    # the right hand trails the rifle by its middle, the arm hanging and swinging with the stride (the rifle goes where
+    # that hand has it); the left arm pumps against the left leg, the elbow bent; both keyed by the arms' own angles
+    arm_r = swing_arm(18.0 * sw, out=9.0, rot=10.0, elbow=25.0 + 8.0 * max(sw, 0.0), pron=0.0, wf=10.0)
+    P["weapon"] = in_left_hand(arm_r, {"grip": "carry", "a": (0.0, 0.25, -0.97), "n": (0.0, 1.0, 0.0)}, side=-1.0)
+    P["hand_r"] = {"arm": arm_r}
+    f = -sw
+    P["hand_l"] = {"arm": swing_arm(42.0 * max(f, 0.0) - 32.0 * max(-f, 0.0), out=12.0, rot=25.0, elbow=95.0 + 15.0 * max(f, 0.0),
+                                    pron=-5.0)}
     P["fingers_l"] = 70.0
     P["thumb_l"] = 40.0
     P["fingers_r"] = 45.0
@@ -3186,17 +3497,19 @@ def c_flee(t):
 
 
 # ---- standing, kneeling and lying to fire
-HOLD_KNOB = {"grip": "knob", "a": (0.55, 0.45, -0.7), "n": (0.15, 0.85, 0.5), "pole": (-0.3, -0.9, -0.3)}
+# The bolt knob taken from beneath, the palm up and in, the fingers under it to lift it: the aimed grip turned 60
+# degrees round the bore and 20 to the right, so the hand goes from one to the other without a twist past its range.
+HOLD_KNOB = {"grip": "knob", "a": (0.851, -0.259, 0.456), "n": (-0.34, 0.39, 0.855), "pole": (-0.3, -0.9, -0.3), "roll": 20.0}
 
 
 def aim_stand(t=0.0):
     """Standing to fire: bladed a third of a turn to the right, left foot forward, the rifle shouldered, the cheek
     down on the stock and the head upright again to look along the sights."""
-    P = {"pelvis_at": (-0.02, 0.0, -0.03), "pelvis": (2.0, 0.0, -30.0), "spine_01": (3.0, 0.0, -2.0), "spine_02": (3.0, 0.0, -2.0),
-         "chest": (4.0, -2.0, -1.0), "neck": (4.0, -3.0, 16.0), "head": (8.0, -11.0, 17.0),
-         "clavicle_l": (0.0, 12.0), "clavicle_r": (8.0, 10.0),
+    P = {"pelvis_at": (-0.02, 0.0, -0.03), "pelvis": (2.0, 0.0, -30.0), "spine_01": (3.0, 0.0, -2.0), "spine_02": (6.0, 0.0, -4.0),
+         "chest": (9.0, -2.0, -4.0), "neck": (4.0, -3.0, 16.0), "head": (8.0, -11.0, 17.0),
+         "clavicle_l": (0.0, 12.0), "clavicle_r": (16.0, 10.0),
          "foot_l": {"at": (0.2, 0.14, ANKLE), "yaw": -12.0}, "foot_r": {"at": (-0.23, -0.14, ANKLE), "yaw": -55.0},
-         "weapon": aim(), "hand_l": held("l", pole=(0.4, 0.15, -1.0)), "hand_r": held("r", pole=(-0.2, -1.0, -0.05)),
+         "weapon": aim(), "sight": 1.0, "hand_l": dict(HOLD_AIM["l"]), "hand_r": dict(HOLD_AIM["r"]),
          "fingers_l": 30.0, "fingers_r": 30.0, "thumb_l": 25.0, "thumb_r": 35.0}
     return P
 
@@ -3204,15 +3517,15 @@ def aim_stand(t=0.0):
 def kneel_base(t=0.0, aimed=True):
     """On the right knee, sitting back toward the heel, the left foot forward with its knee up; aimed, the left
     elbow rests on the left knee."""
-    P = {"pelvis_at": (-0.2, 0.0, -0.49), "pelvis": (6.0, 0.0, -24.0), "spine_01": (4.0, 0.0, -2.0), "spine_02": (5.0, 0.0, -2.0),
-         "chest": (6.0, -2.0, -2.0), "neck": (2.0, -3.0, 14.0), "head": (7.0, -11.0, 14.0),
-         "clavicle_l": (0.0, 14.0), "clavicle_r": (8.0, 10.0),
+    P = {"pelvis_at": (-0.2, 0.0, -0.49), "pelvis": (6.0, 0.0, -24.0), "spine_01": (4.0, 0.0, -2.0), "spine_02": (8.0, 0.0, -4.0),
+         "chest": (10.0, -2.0, -5.0), "neck": (2.0, -3.0, 14.0), "head": (7.0, -11.0, 14.0),
+         "clavicle_l": (0.0, 14.0), "clavicle_r": (16.0, 10.0),
          "foot_l": {"at": (0.3, 0.17, ANKLE), "yaw": -10.0, "pole": (1.0, 0.25, 0.3)},
          "foot_r": {"at": (-0.5, -0.2, 0.105), "yaw": -40.0, "pitch": 72.0, "toe": 62.0, "pole": (1.0, -0.2, -0.6)},
-         "weapon": aim(), "hand_l": held("l", pole=(0.2, 0.2, -1.0)), "hand_r": held("r", pole=(-0.2, -1.0, -0.1)),
+         "weapon": aim(), "sight": 1.0, "hand_l": dict(HOLD_AIM["l"], pole_world=(0.3, 0.3, -1.0)), "hand_r": dict(HOLD_AIM["r"]),
          "fingers_l": 30.0, "fingers_r": 30.0, "thumb_l": 25.0, "thumb_r": 35.0}
     if not aimed:
-        P.update({"neck": (-2.0, 0.0, 6.0), "head": (-2.0, 0.0, 8.0), "weapon": port_arms(lift=0.05, out=0.02),
+        P.update({"neck": (-2.0, 0.0, 6.0), "head": (-2.0, 0.0, 8.0), "weapon": port_arms(lift=0.05, out=0.02), "sight": 0.0,
                   "hand_l": held("l"), "hand_r": held("r"), "clavicle_l": (0.0, 4.0), "clavicle_r": (0.0, 4.0),
                   "chest": (8.0, 0.0, 4.0), "spine_02": (5.0, 0.0, 4.0)})
     return P
@@ -3229,9 +3542,9 @@ def prone_base(t=0.0, arch=0.5, weapon="rifle"):
          "clavicle_l": (8.0, 14.0), "clavicle_r": (10.0, 10.0),
          "foot_l": {"at": (-0.8, 0.3, 0.125), "yaw": 22.0, "pitch": 132.0, "roll": -12.0, "toe": 12.0, "pole": (-0.1, 0.3, -1.0)},
          "foot_r": {"at": (-0.82, -0.28, 0.125), "yaw": -28.0, "pitch": 132.0, "roll": 12.0, "toe": 12.0, "pole": (-0.1, -0.3, -1.0)},
-         "weapon": aim(), "weapon_kind": weapon,
-         "hand_l": held("l", slide=(-0.16, 0.0, 0.0), pole_world=(0.0, 0.3, -1.0)),
-         "hand_r": held("r", pole_world=(-0.1, -1.0, -1.3)),
+         "weapon": aim(), "weapon_kind": weapon, "sight": 1.0,
+         "hand_l": dict(HOLD_AIM["l"], slide=(-0.16, 0.0, 0.0), pole_world=(0.0, 0.3, -1.0)),
+         "hand_r": dict(HOLD_AIM["r"], pole_world=(-0.1, -1.0, -1.3)),
          "fingers_l": 30.0, "fingers_r": 30.0, "thumb_l": 25.0, "thumb_r": 35.0}
     return P
 
@@ -3262,18 +3575,22 @@ def _kicked(place, back, rise):
     return p
 
 
-def bolt_cycle(P, t, t0, t1):
+def bolt_cycle(P, t, t0, t1, ease=0.0):
     """The bolt worked: the right hand leaves the grip for the knob, lifts it, draws it back, drives it home, turns
-    it down, and returns to the grip, between t0 and t1."""
+    it down, and returns to the grip, between t0 and t1 (the lift and the turn down each over a tenth of a second or
+    more, so the wrist never turns faster than a real one). `ease` (m): the rifle eased forward out of the shoulder
+    meanwhile (lying down, so the bolt drawn back does not crowd the shoulder past the elbow's bend)."""
     L = t1 - t0
-    reach = ramp(t, t0 - 0.08, t0 + 0.0) * (1 - ramp(t, t1 - 0.07, t1))
-    lift = 62.0 * (ramp(t, t0 + 0.02, t0 + 0.2 * L) - ramp(t, t0 + 0.68 * L, t0 + 0.82 * L))
-    back = 0.085 * (ramp(t, t0 + 0.2 * L, t0 + 0.42 * L) - ramp(t, t0 + 0.46 * L, t0 + 0.66 * L))
+    reach = ramp(t, t0 - 0.13, t0 + 0.01) * (1 - ramp(t, t1 - 0.06, t1 + 0.08))
+    lift = 62.0 * (ramp(t, t0 + 0.0, t0 + 0.3 * L) - ramp(t, t0 + 0.66 * L, t0 + 0.94 * L))
+    back = 0.085 * (ramp(t, t0 + 0.3 * L, t0 + 0.48 * L) - ramp(t, t0 + 0.5 * L, t0 + 0.66 * L))
     P["bolt"] = (back, lift)
     if reach > 0:
         P["hand_r"] = {"blend": [(1 - reach, P["hand_r"]), (reach, HOLD_KNOB)]}
         P["fingers_r"] = P.get("fingers_r", 30.0) * (1 - reach) + 60.0 * reach
         P["head"] = add3(P.get("head", (0, 0, 0)), (-3.0 * reach, 2.0 * reach, 0.0))
+        if ease:
+            P["weapon"] = _kicked(P["weapon"], -ease * reach, 0.0)
     return P
 
 
@@ -3298,17 +3615,34 @@ def c_fire_prone(t):
     P = prone_base(t)
     P = breathe(P, t, 1.4, 0.3)
     P = recoil(P, t, body=0.6)
-    return bolt_cycle(P, t, 0.6, 1.0)
+    return bolt_cycle(P, t, 0.6, 1.0, ease=0.09)
+
+
+UPPER = ("weapon", "hand_l", "hand_r", "sight", "neck", "head", "clavicle_l", "clavicle_r", "chest", "spine_02",
+         "fingers_l", "fingers_r", "thumb_l", "thumb_r")
+
+
+def upper_toward(P, Q, w):
+    """P with its upper body (the rifle, the hands, the head, the shoulders) taken a fraction w of the way to Q's."""
+    if w <= 1e-6:
+        return P
+    U = mix([P, Q], [1.0 - w, w])
+    out = dict(P)
+    out.update({k: U[k] for k in UPPER if k in U})
+    return out
 
 
 @clip("kneel_down", 0.5, events=[ev(0.4, "knee_down", bone="calf_r")])
 def c_kneel_down(t):
+    """Down on the right knee, the rifle brought up to the shoulder on the way down (over 0.4 s: a man cannot shoulder
+    it in a tenth, and the wrist would turn faster than a real one)."""
     mid = kneel_base(aimed=False)
     mid = dict(mid, pelvis_at=(-0.1, 0.0, -0.3), foot_r={"at": (-0.3, -0.18, 0.2), "yaw": -25.0, "pitch": 40.0, "toe": 20.0,
                                                           "pole": (1.0, -0.2, -0.3)})
     landed = kneel_base(aimed=False)
     landed["pelvis_at"] = (-0.19, 0.0, -0.475)
-    return keyed([(0.0, base_stand()), (0.2, mid), (0.4, landed), (0.5, kneel_base())])(t)
+    P = keyed([(0.0, base_stand()), (0.2, mid), (0.4, landed), (0.5, kneel_base())])(t)
+    return upper_toward(P, kneel_base(), ramp(t, 0.0, 0.5))
 
 
 @clip("stand_up", 0.6, events=[ev(0.12, "kit_rattle", bone="chest")])
@@ -3316,7 +3650,8 @@ def c_stand_up(t):
     low = kneel_base(aimed=False)
     mid = dict(kneel_base(aimed=False), pelvis_at=(-0.08, 0.0, -0.26), foot_r={"at": (-0.2, -0.16, 0.16), "yaw": -20.0,
                                                                                "pitch": 25.0, "toe": 10.0})
-    return keyed([(0.0, kneel_base()), (0.15, low), (0.38, mid), (0.6, base_stand())])(t)
+    P = keyed([(0.0, kneel_base()), (0.15, low), (0.38, mid), (0.6, base_stand())])(t)
+    return upper_toward(P, kneel_base(), 1.0 - ramp(t, 0.0, 0.5))
 
 
 @clip("go_prone", 1.0, events=[ev(0.32, "knee_down", bone="calf_r"), ev(0.75, "body_fall", bone="spine_02")])
@@ -3342,18 +3677,17 @@ def c_go_prone(t):
 def aim_bipod(rig, st):
     """The machine gun on its bipod: shouldered and sighted as a rifle is, then dipped or raised about the butt
     until the bipod's feet stand on the ground."""
-    eye = rig.eye(st, "r")
     spec = WEAPONS["lmg"]
     R = np.eye(3)
-    o = eye - np.array((-0.05, 0.0, spec["sight_z"]))
+    o = rig.pocket(st) - np.array(BUTT_AT["lmg"])
     foot_local = np.array(spec["hinge"]) + R_axis((0, 1, 0), -104.0) @ np.array((-0.31, 0.0, -0.004)) + np.array((0.0, 0.0, -0.008))
     for _ in range(3):
         fz = (o + R @ foot_local)[2]
-        butt = o + R @ np.array(spec["butt"])
-        arm_len = np.linalg.norm((R @ (foot_local - np.array(spec["butt"])))[[0, 2]])
+        butt = o + R @ np.array(BUTT_AT["lmg"])
+        arm_len = np.linalg.norm((R @ (foot_local - np.array(BUTT_AT["lmg"])))[[0, 2]])
         d = math.degrees(math.asin(max(min(fz / arm_len, 0.9), -0.9)))
         Rn = R_axis((0, 1, 0), d) @ R
-        o = butt - Rn @ np.array(spec["butt"])
+        o = butt - Rn @ np.array(BUTT_AT["lmg"])
         R = Rn
     return M4(R, o)
 
@@ -3375,8 +3709,11 @@ def c_lmg_burst(t):
     P["bipod"] = 104.0
     P["neck"] = (-28.0, -1.0, 4.0)
     P["hand_r"] = {"grip": "grip_r", "a": (0.96, 0.0, -0.28), "n": (0.0, 1.0, 0.0), "pole_world": (-0.1, -1.0, -1.2)}
-    P["hand_l"] = {"grip": "grip_butt", "a": (0.65, -0.7, -0.2), "n": (0.0, 0.0, -1.0), "pole_world": (0.0, 0.6, -1.0)}
-    P["fingers_l"] = 15.0
+    # (the left hand under the butt's small, its palm to the rear, the fingers round it to the right, pulling the butt
+    # into the shoulder: a hand on top of the butt sits by his right cheek and turns the left arm past its range)
+    P["hand_l"] = {"grip": "grip_butt", "slide": (0.09, 0.0, -0.075), "a": (0.032, -0.997, 0.076), "n": (-0.997, -0.037, -0.065),
+                   "pole_world": (0.0, 0.6, -1.0), "roll": 15.0}
+    P["fingers_l"] = 40.0
     j, on = lmg_shake(t)
     P["clavicle_r"] = add3(P["clavicle_r"], (1.5 * j, -5.0 * j))[:2]
     P["chest"] = add3(P["chest"], (-0.8 * j, 0.0, -1.0 * j))
@@ -3402,28 +3739,42 @@ def c_throw(t):
         return place
     hold_l = held("l", pole=(-0.2, 0.8, -0.6))
     stand = base_stand()
-    shift = dict(base_stand(), weapon=one_hand(), hand_l=hold_l,
-                 hand_r={"frame": "chest", "at": (0.12, -0.13, -0.27), "a": (0.3, 0.0, -0.95), "n": (0.0, 1.0, 0.0), "pole": (-0.4, -0.8, -0.4)},
+    stand_r = dict(stand, hand_r={"arm": PORT_ARMS["r"]})      # (the right arm leaves the rifle angle by angle)
+    # The throwing arm keyed by its own angles (elevation, plane, rotation internal +, elbow, pronation, wrist flexion,
+    # radial deviation; see Rig.arm_place), as a thrower's go: down to the pouch at the right hip, up past the shoulder,
+    # cocked with the elbow at shoulder height and the forearm up (externally rotated), whipped through with the
+    # forearm turning over, let go in front a little over the shoulder's height, and on down across the body.
+    # (the rifle in the left hand goes where that arm carries it: upright before him, then held out toward the target
+    # as he winds up, then pulled in as he throws)
+    left = {k: {"arm": v} for k, v in (("low", (25.0, 75.0, 15.0, 95.0, -20.0)), ("out", (55.0, 80.0, 0.0, 55.0, -20.0)),
+                                       ("in", (35.0, 60.0, 10.0, 100.0, -20.0)), ("tuck", (30.0, 45.0, 10.0, 105.0, -20.0)))}
+    shift = dict(base_stand(), weapon=in_left_hand(left["low"]["arm"]), hand_l=left["low"], hand_r={"arm": (22.0, 55.0, 35.0, 75.0, 35.0, 10.0, 0.0)},
                  fingers_r=60.0)
-    wind = dict(base_stand(), weapon=one_hand(lift=0.1, ahead=0.3), hand_l=hold_l,
+    wind = dict(base_stand(), weapon=in_left_hand(left["out"]["arm"]), hand_l=left["out"],
                 pelvis=(-4.0, 0.0, -28.0), spine_01=(-4.0, 3.0, -8.0), spine_02=(-5.0, 3.0, -8.0), chest=(-6.0, 4.0, -10.0),
                 neck=(0.0, 0.0, 22.0), head=(-4.0, 0.0, 24.0), clavicle_r=(14.0, -12.0), pelvis_at=(-0.06, 0.0, -0.04),
-                hand_r={"at": (-0.32, -0.32, 1.66), "a": (-0.2, 0.0, 1.0), "n": (1.0, 0.0, 0.0), "pole_world": (-0.3, -1.0, -0.6)},
+                hand_r={"arm": (95.0, 5.0, -75.0, 95.0, 15.0, -25.0, 0.0)},
                 fingers_r=70.0, thumb_r=50.0,
                 foot_l={"at": (0.36, 0.15, ANKLE), "yaw": -5.0}, foot_r={"at": (-0.2, -0.13, ANKLE), "yaw": -40.0})
     step = dict(wind, foot_l={"at": (0.22, 0.15, 0.17), "yaw": 0.0, "pitch": -10.0})
-    release = dict(base_stand(), weapon=one_hand(lift=0.0, ahead=-0.1), hand_l=hold_l,
-                   pelvis=(10.0, 0.0, 8.0), spine_01=(8.0, -2.0, 8.0), spine_02=(8.0, -2.0, 10.0), chest=(10.0, -3.0, 12.0),
+    # (on the way up from the belt the hand comes past the right shoulder with the elbow down and out, not through it)
+    lift = dict(shift, hand_r={"arm": (55.0, 40.0, -20.0, 120.0, 10.0, 0.0, 0.0)}, fingers_r=70.0)
+    release = dict(base_stand(), weapon=in_left_hand(left["in"]["arm"]), hand_l=left["in"],
+                   pelvis=(10.0, 0.0, 8.0), spine_01=(6.0, -2.0, 8.0), spine_02=(5.0, -3.0, 10.0), chest=(5.0, -4.0, 12.0),
                    neck=(-8.0, 0.0, -10.0), head=(-6.0, 0.0, -8.0), clavicle_r=(16.0, 14.0), pelvis_at=(0.08, 0.0, -0.06),
-                   hand_r={"at": (0.62, -0.18, 1.7), "a": (0.7, 0.0, 0.7), "n": (0.2, 0.9, -0.2), "pole_world": (-0.6, -0.6, -1.0)},
+                   hand_r={"arm": (110.0, 50.0, -15.0, 25.0, 45.0, 15.0, 0.0)},
                    fingers_r=5.0, thumb_r=0.0,
                    foot_l={"at": (0.36, 0.15, ANKLE), "yaw": -5.0}, foot_r={"at": (-0.2, -0.13, ANKLE), "yaw": -25.0, "pitch": 30.0, "toe": 30.0})
-    follow = dict(release, pelvis=(16.0, 0.0, 14.0), chest=(14.0, -3.0, 14.0), spine_02=(10.0, -2.0, 10.0),
-                  hand_r={"at": (0.45, 0.12, 0.95), "a": (0.3, 0.3, -0.9), "n": (-0.3, 0.9, 0.0), "pole_world": (-0.4, -1.0, 0.2)},
+    follow = dict(release, pelvis=(16.0, 0.0, 14.0), chest=(12.0, -3.0, 14.0), spine_02=(10.0, -2.0, 10.0),
+                  weapon=in_left_hand(left["tuck"]["arm"]), hand_l=left["tuck"],
+                  hand_r={"arm": (50.0, 105.0, 35.0, 35.0, 70.0, 10.0, 0.0)},
                   fingers_r=20.0, neck=(-10.0, 0.0, -6.0), head=(-8.0, 0.0, -4.0))
-    back = dict(base_stand(), foot_l={"at": (0.2, 0.13, 0.15), "yaw": 4.0, "pitch": -8.0})
-    return keyed([(0.0, stand), (0.25, shift), (0.5, step), (0.72, wind), (0.95, release), (1.15, follow), (1.38, back),
-                  (1.6, stand)])(t)
+    # (the arm comes back by its own angles to where it holds the rifle at the port, then takes the grip)
+    recover = dict(follow, hand_r={"arm": (35.0, 50.0, 35.0, 70.0, 20.0, 25.0, 0.0)}, fingers_r=40.0)
+    back = dict(base_stand(), foot_l={"at": (0.2, 0.13, 0.15), "yaw": 4.0, "pitch": -8.0},
+                hand_r={"arm": PORT_ARMS["r"]})
+    return keyed([(0.0, stand_r), (0.25, shift), (0.38, lift), (0.5, step), (0.72, wind), (0.95, release), (1.15, follow),
+                  (1.27, recover), (1.42, back), (1.6, stand)])(t)
 
 
 @clip("cower", 3.0, loop=True)
@@ -3442,11 +3793,16 @@ def c_cower(t):
          "foot_r": {"at": (0.06, -0.17, 0.12), "yaw": -15.0, "pitch": 28.0, "toe": 28.0, "pole": (1.0, -0.45, 0.0)},
          "fingers_l": 60.0, "fingers_r": 60.0, "thumb_l": 40.0, "thumb_r": 40.0}
 
-    R = frame_from(_n((-0.22 - 0.05 * flinch, 0.04, 1.0)), (-1.0, 0.0, 0.0))
-    butt = np.array((0.24, 0.0, 0.02))
+    # The rifle stood upright on its butt before his knees, clutched in both fists, one above the other round the
+    # fore-end (power grips, the thumbs up toward the muzzle), the elbows down and out: where the arms found it
+    # easiest against rom.py's limits (a rifle hugged to the chest drives the elbows back past the body).
+    R = frame_from(_n((-0.05 - 0.03 * flinch, 0.22, 1.0)), (-1.0, 0.0, 0.0))     # (past the left of his bowed head)
+    butt = np.array((0.5, 0.0, 0.03))
     P["weapon"] = M4(R, butt - R @ np.array(WEAPONS["rifle"]["butt"]))
-    P["hand_l"] = held("l", slide=(0.12, 0.0, 0.0), a=(0.0, -0.95, 0.0), n=(-1.0, 0.0, 0.0), pole_world=(0.0, 1.0, -0.6))
-    P["hand_r"] = held("r", slide=(0.24, 0.0, 0.0), a=(0.0, 0.95, 0.0), n=(-1.0, 0.0, 0.0), pole_world=(0.0, -1.0, -0.6), grip="grip_l")
+    P["hand_l"] = {"grip": "grip_l", "slide": (-0.1, 0.0, 0.0), "a": (0.26, -0.97, 0.0), "n": (0.0, 0.0, 1.0),
+                   "pole_world": (0.0, 1.0, -0.6), "roll": 40.0}
+    P["hand_r"] = {"grip": "grip_l", "slide": (0.04, 0.0, 0.0), "a": (0.42, 0.91, 0.0), "n": (0.0, 0.0, 1.0),
+                   "pole_world": (0.0, -1.0, -0.6), "roll": 40.0}
     return breathe(P, t, 1.0, 1.2)
 
 
@@ -3521,11 +3877,11 @@ def c_die_forward(t):
 
 @clip("die_kneel", 1.5, events=[ev(0.45, "knee_down", bone="calf_l"), ev(1.0, "body_fall", bone="spine_02")])
 def c_die_kneel(t):
-    stand = base_stand()
+    stand = dict(base_stand(), hand_l={"arm": PORT_ARMS["l"]}, hand_r={"arm": PORT_ARMS["r"]})
     hunch = dict(base_stand(), chest=(18.0, 0.0, 0.0), spine_02=(12.0, 0.0, 0.0), spine_01=(8.0, 0.0, 0.0), neck=(10.0, 0, 0), head=(12.0, 0, 0),
                  pelvis_at=(0.0, 0.0, -0.06), weapon=drop_rifle((0.4, -0.25, 0.5), 20.0, 40.0),
-                 hand_l={"frame": "chest", "at": (0.15, 0.04, -0.2), "a": (0.3, -0.9, 0.0), "n": (-1.0, 0.0, 0.0), "pole": (-0.3, 0.8, -0.5)},
-                 hand_r={"frame": "chest", "at": (0.16, -0.05, -0.22), "a": (0.3, 0.9, 0.0), "n": (-1.0, 0.0, 0.0), "pole": (-0.3, -0.8, -0.5)},
+                 # (both hands clutched to the belly, placed by the arms' own angles: the elbows down at his sides)
+                 hand_l={"arm": (24.0, 60.0, 42.0, 105.0, 30.0, 25.0, 0.0)}, hand_r={"arm": (24.0, 60.0, 42.0, 105.0, 30.0, 25.0, 0.0)},
                  fingers_l=40.0, fingers_r=40.0)
     knees = {"pelvis_at": (-0.12, 0.0, -0.46), "pelvis": (10.0, 0.0, 0.0), "spine_01": (10.0, 0, 0), "spine_02": (14.0, 0, 0),
              "chest": (16.0, 0.0, 0.0), "neck": (14.0, 0, 0), "head": (14.0, 0, 0), "clavicle_l": (-4.0, 10.0), "clavicle_r": (-4.0, 10.0),
@@ -3536,13 +3892,15 @@ def c_die_kneel(t):
     sway = dict(knees, pelvis=(14.0, -4.0, 4.0), chest=(20.0, -4.0, 0.0), head=(20.0, -6.0, 0.0))
     down = {"pelvis_at": (0.05, 0.08, -0.8), "pelvis": (84.0, -10.0, 14.0), "spine_01": (2.0, 0, 0), "spine_02": (2.0, -2.0, 0),
             "chest": (2.0, -4.0, 0.0), "neck": (-4.0, 0, -30.0), "head": (0.0, -10.0, -40.0), "clavicle_l": (4.0, 8.0), "clavicle_r": (4.0, 8.0),
-            "foot_l": {"at": (-0.78, 0.27, 0.09), "yaw": 30.0, "pitch": 95.0, "toe": 10.0, "pole": (0.0, 0.3, 1.0)},
-            "foot_r": {"at": (-0.74, -0.14, 0.09), "yaw": -10.0, "pitch": 95.0, "toe": 10.0, "pole": (0.0, -0.3, 1.0)},
+            # (face down, the kneecaps to the ground: a pole up would turn each leg half round in its hip)
+            "foot_l": {"at": (-0.78, 0.27, 0.09), "yaw": 30.0, "pitch": 95.0, "toe": 10.0, "pole": (0.0, 0.3, -1.0)},
+            "foot_r": {"at": (-0.74, -0.14, 0.09), "yaw": -10.0, "pitch": 95.0, "toe": 10.0, "pole": (0.0, -0.3, -1.0)},
             "weapon": drop_rifle((0.5, -0.3, 0.03), 25.0),
-            "hand_l": limp((0.55, 0.45, 0.04), (0.6, 0.4, 0.0), (0.0, 0.0, -1.0), (0.0, 0.6, -1.0)),
-            "hand_r": limp((0.4, -0.15, 0.04), (0.3, 0.6, 0.0), (0.0, 0.0, -1.0), (0.4, -0.6, -1.0)), "fingers_l": 30.0, "fingers_r": 35.0}
+            # (fallen on his face: the left arm flung out along the ground toward his head, the right down by his side)
+            "hand_l": {"arm": (115.0, -4.0, -35.0, 25.0, 50.0, 10.0, 0.0)},
+            "hand_r": {"arm": (35.0, -6.0, 20.0, 30.0, 50.0, 10.0, 0.0)}, "fingers_l": 30.0, "fingers_r": 35.0}
     bounce = dict(down, pelvis_at=(0.05, 0.08, -0.77), chest=(-3.0, -4.0, 0.0))
-    return keyed([(0.0, stand), (0.15, hunch), (0.45, knees), (0.75, sway), (1.0, down), (1.12, bounce), (1.5, down)])(t)
+    return keyed([(0.0, stand), (0.22, hunch), (0.45, knees), (0.75, sway), (1.0, down), (1.12, bounce), (1.5, down)])(t)
 
 
 # ================================================================================================ baking the clips
@@ -4732,6 +5090,11 @@ HERO_SECONDS, HERO_FPS = 8.0, 30
 HERO_SEEDS = [3, 11, 17, 23, 29, 31, 37, 41, 43, 47, 53, 59]    # (each man's face and build: man 0 is the German of the files)
 
 
+# Going prone is played at its own speed in the hero clip: sped up (it was 1.12 to 1.25) the capture's arms turn past
+# 900 degrees a second, faster than a real arm (rom.py).
+HERO_PRONE_RATE = 1.0
+
+
 def hero_plan(seed=11):
     """The squad's eight seconds: twelve men (the gunner in the middle) advance north at the ready in two loose rows
     across the stubble east of the road, each at his own pace and step. The machine-gun team (the gunner and his
@@ -4753,8 +5116,8 @@ def hero_plan(seed=11):
         segs = [{"clip": "advance", "at": 0.0, "rate": man["rate"], "phase": man["phase"]}]
         if i in (5, 6):                                       # the machine-gun team
             td = 1.9 if i == 5 else 2.15 + r.uniform(0.0, 0.2)
-            segs.append({"clip": "go_prone", "at": td, "rate": 1.2, "blend": 0.35})
-            up = td + CLIPS["go_prone"]["long"] / 1.2
+            segs.append({"clip": "go_prone", "at": td, "rate": HERO_PRONE_RATE, "blend": 0.35})
+            up = td + CLIPS["go_prone"]["long"] / HERO_PRONE_RATE
             if i == 5:
                 segs.append({"clip": "lmg_burst", "at": up - 0.1, "phase": -0.55, "blend": 0.6})
             else:
@@ -4762,7 +5125,8 @@ def hero_plan(seed=11):
             man["role"] = "gunner" if i == 5 else "number two"
         elif i in (2, 10):                                    # down and firing
             td = r.uniform(2.6, 3.4)
-            segs.append({"clip": "go_prone", "at": td, "rate": r.uniform(1.12, 1.25), "blend": 0.35})
+            r.uniform(1.12, 1.25)                         # (still drawn, so every man after draws as before)
+            segs.append({"clip": "go_prone", "at": td, "rate": HERO_PRONE_RATE, "blend": 0.35})
             up = td + CLIPS["go_prone"]["long"] / segs[-1]["rate"]
             segs.append({"clip": "fire_prone", "at": up - 0.1, "phase": -r.uniform(0.2, 0.7), "rate": r.uniform(0.94, 1.06), "blend": 0.45})
             man["role"] = "prone"

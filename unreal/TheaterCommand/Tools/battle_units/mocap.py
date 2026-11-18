@@ -34,6 +34,10 @@ HOW THE RETARGET WORKS
   * Loops: the best matching cycle in the take is cut, its seam closed by spreading the small difference over the
     cycle, and resampled to 30 fps with the last frame equal to the first. Travel is removed (IN PLACE); `stride` is
     the metres the man travels per loop, so the game sets play rate = speed / stride * length and the feet stay put.
+  * The capture's arms are then fitted to a real arm's range (fit_arms): each elbow back on its hinge, each hand's
+    twist and bend eased inside the limits, a capture hand that flipped over repaired from the frames either side,
+    and the elbows kept clear of the trunk. rom.py (numpy only) checks every joint of a clip against a real body's
+    range of motion and reports the worst, with its frame.
   * One-shots may be played at a changing speed (`speeds`), get a jolt at the hit (`jolt`) and have the arms part
     way to slack (`limp`): fall_forward uses all three so it reads as a man hit, not one lying down.
   * CMU has no belly crawl, so `crawl` (the low crawl under fire, rifle across the forearms) is keyed by hand on the
@@ -58,6 +62,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CMU_DIR = os.path.join(HERE, "mocap_cmu")
 BVH_DIR = os.path.join(CMU_DIR, "bvh")
 CLIPS_JSON = os.path.join(CMU_DIR, "clips.json")
+REST_REF = os.path.join(CMU_DIR, "rest_ref.json")    # the reference man's rest (Rest.load), for work without Blender
 FPS = 30
 SRC_FPS = 120
 
@@ -300,6 +305,14 @@ class Rest:
         if body is not None:
             sole = _sole_points(body, bones)
         return cls(bones, sole)
+
+    @classmethod
+    def load(cls, path=REST_REF):
+        """From a saved rest (names, parent names, head, tail, R lists): by default the reference man clips.json is
+        built on, human.build(seed=0, stand=0.02, curl=(30, 45, 25)), so clips can be read without Blender."""
+        d = json.load(open(path))
+        return cls({n: {"parent": p, "head": h, "tail": t, "matrix": R}
+                    for n, p, h, t, R in zip(d["names"], d["parent"], d["head"], d["tail"], d["R"])})
 
     def i(self, n):
         return self.ix[n]
@@ -603,9 +616,13 @@ def resample(m, times):
     return out
 
 
+KNEE_SIDE = 35.0      # degrees a leg's bend may lie off its kneecap's way (two_bone_ik; the hip turns the rest)
+
+
 def two_bone_ik(m, side, target, weight, heads=None, chain=("thigh_", "calf_", "foot_"), pole=None):
     """Bend thigh and calf so the ankle reaches `target` (F, 3) where weight (F,) > 0, the knee staying in the plane
-    the mocap gave it; the foot keeps its world rotation. Soft near full stretch, so the knee never snaps.
+    the mocap gave it (a leg's: kept forward, within KNEE_SIDE of its kneecap's way); the foot keeps its world
+    rotation. Soft near full stretch, so the knee never snaps. `pole` (F, 3 or 3,) sets the bend's way instead.
     chain=("upperarm_", "lowerarm_", "hand_") does the same for an arm."""
     r = m.rest
     th, ca, ft = (r.i(c + side) for c in chain)
@@ -621,8 +638,36 @@ def two_bone_ik(m, side, target, weight, heads=None, chain=("thigh_", "calf_", "
     dist_e = np.where(dist > soft, Ls - s * np.exp(-(dist - soft) / s), dist)
     dist_e = np.maximum(dist_e, abs(L1 - L2) + 0.02)
     dh = _norm(d)
-    pole = (knee - hip) if pole is None else np.broadcast_to(pole, knee.shape)
-    pole = pole - dh * np.sum(pole * dh, 1)[:, None]
+    if pole is None:
+        pole = knee - hip
+        pole = pole - dh * np.sum(pole * dh, 1)[:, None]
+        if chain[0] == "thigh_":
+            # A leg the capture holds straight shows no bend to keep, and its knee's tiny offset from the hip-ankle
+            # line (noise, or a degree of lock) would steer the bend any way, even backward. Below 3 cm of offset
+            # the kneecap's own way takes over: square to the knee's hinge (the thigh's y, as it is turned) and to
+            # the hip-ankle line, which stays well defined however deep the bend.
+            kh = np.einsum("fij,j->fi", m.W[:, th] @ r.R[th].T, np.array((0.0, 1.0, 0.0)))
+            kc = _norm(np.cross(dh, kh))
+            off = np.linalg.norm(pole, axis=1)
+            u = np.clip(1.0 - off / 0.03, 0.0, 1.0)
+            pole = pole + kc * (0.03 * u * u * (3 - 2 * u))[:, None]
+            # and a knee bends only forward over its foot: one behind the hip-ankle line (locked back) is mirrored
+            # to the front, and in frames where a captured knee lies off to one side of the kneecap by more than
+            # KNEE_SIDE degrees (a glitch, or the actor's straight leg bent by our IK) its way is taken from the good
+            # frames either side
+            sd = np.cross(dh, kc)
+            phi = np.arctan2(np.sum(pole * sd, 1), np.sum(pole * kc, 1))
+            phi = np.where(np.abs(phi) > np.pi / 2, np.sign(phi) * np.pi - phi, phi)
+            lim = math.radians(KNEE_SIDE)
+            bad = np.abs(phi) > lim
+            if bad.any() and not bad.all():
+                f_ = np.arange(len(phi))
+                phi = np.where(bad, np.interp(f_, f_[~bad], phi[~bad]), phi)
+            phi = np.clip(phi, -lim, lim)
+            pole = kc * np.cos(phi)[:, None] + sd * np.sin(phi)[:, None]
+    else:
+        pole = np.broadcast_to(pole, knee.shape)
+        pole = pole - dh * np.sum(pole * dh, 1)[:, None]
     ph = _norm(pole)
     cos_a = np.clip((L1 ** 2 + dist_e ** 2 - L2 ** 2) / (2 * L1 * dist_e), -1, 1)
     sin_a = np.sqrt(1 - cos_a ** 2)
@@ -971,6 +1016,40 @@ def load_clips(path=CLIPS_JSON):
     return json.load(open(path))
 
 
+def motion_of_clip(clip, rest=None, clips=None):
+    """A clips.json clip (a name or the dict) as a Motion on `rest` (the reference man's by default), no Blender."""
+    if isinstance(clip, str):
+        clip = (clips or load_clips())[clip]
+    rest = rest or Rest.load()
+    F = int(clip["frames"])
+    k = 0.5 * (rest.leg("l") + rest.leg("r")) / clip.get("leg", 0.5 * (rest.leg("l") + rest.leg("r")))
+    W = np.zeros((F, len(rest.names), 3, 3))
+    for b, p in enumerate(rest.parent):
+        n = rest.names[b]
+        D = quat_to_mat(np.array(clip["bones"][n])) if n in clip["bones"] else np.eye(3)
+        W[:, b] = (W[:, p] if p >= 0 else np.eye(3)) @ D @ rest.local(b)
+    pv = rest.i("pelvis")
+    m = Motion(rest, W, rest.head[pv] + np.array(clip["pelvis_loc"]) * k, int(clip["fps"]))
+    m.loop = bool(clip.get("loop"))
+    return m
+
+
+def carried(clip, carry, until=None, blend=0.3, rest=None, clips=None):
+    """A clip with carry_rifle laid over it, as the soldier plays it (soldier.MOCAP): the whole clip, or, given
+    `until` (s), the arms going back to the capture over `blend` seconds from then (going prone, the falls).
+    Returns (Motion, hand_error (F, 2))."""
+    m = motion_of_clip(clip, rest, clips)
+    mc, _, err = carry_rifle(m.copy(), carry, cyclic=m.loop)
+    if until is not None:
+        t = np.arange(len(m)) / m.fps
+        w = np.clip((t - until) / blend, 0.0, 1.0)
+        w = w * w * (3 - 2 * w)
+        mc = from_local(m.rest, slerp_mats(to_local(mc), to_local(m), w[:, None]), m.H, m.fps)
+        err = err * (1.0 - w)[:, None]
+    mc.loop = m.loop
+    return mc, err
+
+
 def apply(armature, clip, clips=None, name=None):
     """Make the action for `clip` (a name in clips.json, or a clip dict) on any human.build armature."""
     if clips is None and isinstance(clip, str):
@@ -1238,25 +1317,39 @@ LEFT_DROP = 0.0          # (the fore-end sits in the left hand's curled fingers;
 # the palm on its right side facing left (-x), the hand (wrist to knuckles) forward and down, square to the stock's
 # wrist, the fingers curled round under it. (hand's axis wrist to knuckles, palm normal), in the rifle's frame.
 GRIP_R = ((0.0, 0.6, -0.8), (-1.0, 0.0, 0.0))
-# The carries, in our rest man's frame (x forward, y left, z up, metres), before the trunk turns:
-#   hold, at  the point `hold` metres along the barrel from the grip (0 the grip, -0.3 the butt) is held `at` this
-#             point by the body, riding the chest (the butt in the shoulder for the ready)
+# The carries, as a man standing in the rest pose (facing +x, x forward, y left, z up, metres) holds them, his trunk
+# already turned by `twist`: what the rifle's place and angle are in the world for him. Each is then carried by his
+# chest as he moves (see carry_rifle).
+#   at      where the grip (the right hand's hold, the small of the stock) is
 #   barrel  which way the barrel points;  up  which way the rifle's top (its sights) faces
-#   twist   how far the trunk turns right (deg; the neck and head turn back to the front); lean  extra chest lean
-#   steady  how much of the chest's sway the rifle leaves out (0 = it turns with the chest, 1 = keeps the carry's
-#           angle and only rides up and down); the carry's mean angle is always `barrel`/`up` whatever the lean
-#   grip_l  the left hand's hold (hand axis, palm normal) in the rifle's frame
-#   pole_r/pole_l  which way each elbow points (rest frame);  clav  how far each clavicle (r, l) gives toward the hand
+#   left    how far along the barrel from the grip the left hand holds (default LEFT_HAND)
+#   twist   how far the trunk turns right (deg; spread over the spine, the neck and head turning back to the front)
+#   lean    extra chest lean (deg)
+#   ride    the bone whose head carries the rifle's place (its bob and travel): the chest by default
+#   follow  how much of that bone's mean lean (a crouched gait's trunk) the carry takes (1 = all of it, the default:
+#           the carry keeps its place on the chest; 0 = it keeps its own angle to the ground whatever the lean)
+#   steady  how much of the bone's sway about that mean the carry leaves out (0 = it sways with the bone, 1 = it
+#           keeps its mean, turning only with his heading)
+#   grip_l  the left hand's hold (hand axis wrist to knuckles, palm normal) in the rifle's frame
+#   pole_r/pole_l  which way each elbow goes, in the thorax (the chest's frame: x forward, y left, z up)
+#   clav_r/clav_l  each clavicle's (elevation, protraction) in degrees, turned in the thorax
+# The arms are then solved on their hinges (solve_arm): the elbow placed toward its pole at the arm's lengths, the
+# humerus turned so the elbow bends the way it is built to (never backward, never off its hinge), the hand at the
+# grip's angle, so every joint stays inside a real body's range (rom.py checks it).
 RIFLE_POSES = {
-    # across the chest, muzzle up past the left shoulder, sights toward him; the right hand at the small of the
-    # stock by the right hip, the left hand round the fore-end from the left, back of the hand forward
-    "port": dict(hold=0.0, at=(0.28, -0.12, 1.10), barrel=(0.10, 0.62, 0.78), up=(-1.0, 0.0, 0.0), twist=8.0,
-                 lean=0.0, steady=0.35, grip_l=((0.0, 0.25, -0.97), (1.0, 0.0, 0.0)),
-                 pole_r=(-0.2, -0.7, -0.7), pole_l=(-0.1, 0.4, -0.9), clav=(0.3, 0.3)),
-    # the butt in the right shoulder, muzzle forward and 15 degrees down, the left hand under the fore-end palm up
-    "ready": dict(hold=-0.30, at=(-0.02, -0.12, 1.43), barrel=(0.966, 0.0, -0.259), up=(0.259, 0.0, 0.966),
-                  twist=34.0, lean=6.0, steady=0.6, grip_l=((0.8, 0.5, 0.0), (0.0, 0.0, 1.0)),
-                  pole_r=(-0.35, -0.9, -0.25), pole_l=(0.0, 0.25, -1.0), clav=(0.25, 0.6)),
+    # port arms: diagonally across the chest a hand's breadth in front of it, muzzle up past the left shoulder,
+    # sights toward him; the right hand at the small of the stock just in front of the right hip, the elbow down and
+    # back; the left hand round the fore-end at chest height, its forearm about level, the elbow down by the side
+    "port": dict(at=(0.28, -0.10, 1.12), barrel=(0.41, 0.49, 0.77), up=(-0.81, -0.19, 0.55), twist=6.0, lean=0.0,
+                 steady=0.35, grip_l=((0.40, 0.72, -0.56), (0.81, 0.0, 0.59)),
+                 pole_r=(-0.52, -0.36, -0.33), pole_l=(0.0, 0.15, -1.0), clav_r=(0.0, 4.0), clav_l=(2.0, 6.0)),
+    # the ready (low): the butt by the right hip, outside the thigh, the muzzle forward and 40 degrees up (about 32
+    # in the crouched gaits, which take a quarter of the trunk's lean), turned 20 degrees in across his front; the
+    # right hand round the wrist of the stock at the belt, the elbow hanging down and a little back; the left hand
+    # under the fore-end from the left, the elbow down and in
+    "ready": dict(at=(0.21, -0.185, 1.06), barrel=(0.72, 0.26, 0.643), up=(-0.60, -0.22, 0.766), twist=14.0,
+                  lean=3.0, steady=0.6, follow=0.25, grip_l=((0.454, 0.770, -0.442), (0.62, 0.0, 0.78)),
+                  pole_r=(-1.0, -0.3, -0.45), pole_l=(-0.35, 0.12, -1.0), clav_r=(0.0, 0.0), clav_l=(2.0, 10.0)),
 }
 
 
@@ -1337,18 +1430,50 @@ def _fcurves(action):
         return out
 
 
-def carry_rifle(m, pose="port", cyclic=False, clav=None):
-    """The arms of Motion m put on a rifle carried at `pose` ("port" or "ready", or a dict like RIFLE_POSES'), the
-    legs, pelvis and the rest of the capture untouched. The rifle rides the chest (its bob and sway carry it, eased by
-    `steady`), the trunk turns for the ready, the clavicles give a little toward the hands, then each arm reaches its
-    grip by two-bone IK and the hand takes the grip's angle. Returns (m, rifle_frames (F, 4, 4), hand_error (F, 2))."""
+def solve_arm(m, side, wrist, pole, hd=None, soft=0.012):
+    """Put an arm's wrist on `wrist` (F, 3) on its hinge: the elbow toward `pole` (F, 3, world; only its part square
+    to the shoulder-wrist line counts) at the arm's two lengths, then the upper arm and forearm set by aim_limb so the
+    rest pose's elbow hinge lies square to the bend (the elbow bends forward on its hinge whatever the target; the
+    humerus takes the twist that needs). Soft near full reach, so the elbow never snaps straight. The hand bone is left
+    for the caller. Returns how far the wrist falls short (F,)."""
     r = m.rest
-    P = RIFLE_POSES[pose] if isinstance(pose, str) else pose
+    ua, la, ha = r.i("upperarm_" + side), r.i("lowerarm_" + side), r.i("hand_" + side)
+    hd = m.heads() if hd is None else hd
+    S = hd[:, ua]
+    L1 = np.linalg.norm(r.head[la] - r.head[ua])
+    L2 = np.linalg.norm(r.head[ha] - r.head[la])
+    d = wrist - S
+    dist = np.linalg.norm(d, axis=1)
+    Ls = L1 + L2
+    dist_e = np.where(dist > Ls - soft, Ls - soft * np.exp(-(dist - (Ls - soft)) / soft), dist)
+    dist_e = np.maximum(dist_e, abs(L1 - L2) + 0.02)
+    dh = _norm(d)
+    p = np.broadcast_to(np.asarray(pole, float), d.shape)
+    p = _norm(p - dh * np.sum(p * dh, 1)[:, None])
+    cos_a = np.clip((L1 ** 2 + dist_e ** 2 - L2 ** 2) / (2 * L1 * dist_e), -1, 1)
+    E = S + L1 * (dh * cos_a[:, None] + p * np.sqrt(1 - cos_a ** 2)[:, None])
+    Wr = S + dh * dist_e[:, None]
+    aim_limb(m, "upperarm_" + side, "lowerarm_" + side, E, Wr)
+    return dist - dist_e
+
+
+def turn_clavicle(m, side, elev, prot):
+    """Turn a clavicle (and the arm on it) in the thorax: `elev` degrees up, `prot` degrees forward (arrays (F,) or
+    numbers); negative is down / back."""
+    r = m.rest
+    sg = 1.0 if side == "l" else -1.0
+    Dch = m.W[:, r.i("chest")] @ r.R[r.i("chest")].T
     F = len(m)
-    ch = r.i("chest")
-    yaw = np.unwrap(yaw_of(m))                                  # his heading: steady over a loop, eased otherwise
-    yaw = np.full(F, yaw[:-1].mean()) if cyclic else smooth(yaw, 15)
-    # the trunk: a turn to the right (the head turning back), and a little more lean for the ready
+    R = axis_angle(np.array([0.0, 0.0, 1.0]), -sg * np.radians(np.broadcast_to(prot, (F,)))) @ \
+        axis_angle(np.array([1.0, 0.0, 0.0]), sg * np.radians(np.broadcast_to(elev, (F,))))
+    G = Dch @ R @ np.swapaxes(Dch, -1, -2)
+    for b in subtree(r, "clavicle_" + side):
+        m.W[:, b] = G @ m.W[:, b]
+
+
+def _carry_trunk(m, P):
+    """A carry's trunk: turned `twist` degrees right over the three spine bones (the neck and head turning back to
+    the front), the chest leant `lean` degrees more (the neck taking it back)."""
     if P.get("twist"):
         for b in ("spine_01", "spine_02", "chest"):
             bend(m, b, -math.radians(P["twist"]) / 3, axis=np.array([0.0, 0.0, 1.0]))
@@ -1357,64 +1482,73 @@ def carry_rifle(m, pose="port", cyclic=False, clav=None):
     if P.get("lean"):
         bend(m, "chest", math.radians(P["lean"]))
         bend(m, "neck", -math.radians(P["lean"]))
+
+
+def carry_rifle(m, pose="port", cyclic=False, clav=None):
+    """The arms of Motion m put on a rifle carried at `pose` ("port" or "ready", or a dict like RIFLE_POSES'), the
+    legs, pelvis and the rest of the capture untouched. The trunk turns for the carry; the rifle's place rides the
+    chest (its bob and travel), the carry turning with his heading and taking `follow` of the chest's mean lean and
+    (1 - steady) of its sway; the clavicles are set in the thorax; then each arm reaches its grip on its hinge
+    (solve_arm, the elbow toward its pole, carried with the rifle) and the hand takes the grip's angle.
+    `clav` = ((elev, prot) right, (elev, prot) left) in degrees overrides the pose's.
+    Returns (m, rifle_frames (F, 4, 4), hand_error (F, 2))."""
+    r = m.rest
+    P = RIFLE_POSES[pose] if isinstance(pose, str) else pose
+    F = len(m)
+    ch = r.i("chest")
+    yaw = np.unwrap(yaw_of(m))                                  # his heading: steady over a loop, eased otherwise
+    yaw = np.full(F, yaw[:-1].mean()) if cyclic else smooth(yaw, 15)
+    # the trunk: a turn to the right (the head turning back), and a little more lean
+    _carry_trunk(m, P)
     hd = m.heads()
-    # the carry as designed (rest man, trunk turned): the rifle's frame Fr and the held point, kept in the chest's
-    # frame so the chest carries it
-    Rt = rot_z(-math.radians(P.get("twist", 0.0)))
+    # the carry as designed (the rest man, his trunk turned as above), carried by the bone `ride`: its place rides the
+    # bone's head; the carry turns with his heading, takes `follow` of the bone's mean lean and (1 - steady) of its
+    # sway about that mean. The rifle's place and angle and the elbows' poles all go in that carrying frame K, so the
+    # hands keep their hold on the rifle and the arms their set as he leans and sways.
+    m0 = Motion(r, r.R[None].copy(), r.head[r.i("pelvis")][None].copy(), m.fps)
+    _carry_trunk(m0, P)
+    rb = r.i(P.get("ride", "chest"))
+    W0, H0 = m0.W[0, rb], m0.heads()[0, rb]
     Fr = _frame(P["barrel"], P["up"])
-    hold = np.array([0.0, P.get("hold", 0.0), 0.0])
-    chest_rest_turned = Rt @ r.R[ch]
-    pivot = r.head[r.i("spine_01")]
-    head_c = pivot + Rt @ (r.head[ch] - pivot)
-    loc_in_chest = chest_rest_turned.T @ (np.array(P["at"], float) - head_c)
-    rot_in_chest = chest_rest_turned.T @ Fr
-    Wc = m.W[:, ch]
-    held = hd[:, ch] + np.einsum("fij,j->fi", Wc, loc_in_chest)
-    # the angle: the carry's own, turned with his heading, plus (1 - steady) of the chest's sway about its mean
-    A = rot_z(-yaw) @ Wc @ rot_in_chest                          # the chest-carried angle, in his heading's frame
-    A0 = A[0]
-    Am = A0 @ rot_exp(rot_log(A0.T @ A).mean(0))                  # its mean
-    sway = rot_exp(rot_log(A @ Am.T) * (1.0 - P.get("steady", 0.0)))
-    rot = rot_z(yaw) @ sway @ Fr
+    Qh = rot_z(-yaw) @ m.W[:, rb] @ W0.T                          # the bone's turn from the design, in his heading
+    Q0 = Qh[0]
+    Qm = Q0 @ rot_exp(rot_log(Q0.T @ Qh).mean(0))                  # its mean
+    sway = rot_exp(rot_log(Qh @ Qm.T) * (1.0 - P.get("steady", 0.0)))
+    K = rot_z(yaw) @ sway @ rot_exp(rot_log(Qm) * P.get("follow", 1.0))
+    pos = hd[:, rb] + np.einsum("fij,j->fi", K, np.array(P["at"], float) - H0)
+    rot = K @ Fr
     # a touch of inertia: the rifle lags its carrier by a frame or two
     k = 2
     if cyclic:
         n = F - 1
         ext = lambda a: np.concatenate([a[n - k:n], a[:n], a[:k + 1]])
-        held = smooth(ext(held), k)[k:k + F]
+        pos = smooth(ext(pos), k)[k:k + F]
         rv = rot_log(np.swapaxes(rot[:1], -1, -2) @ rot)
         rot = rot[:1] @ rot_exp(smooth(ext(rv), k)[k:k + F])
     else:
-        held = smooth(held, k)
+        pos = smooth(pos, k)
         rv = rot_log(np.swapaxes(rot[:1], -1, -2) @ rot)
         rot = rot[:1] @ rot_exp(smooth(rv, k))
-    pos = held - np.einsum("fij,j->fi", rot, hold)                # the grip
     grips = hand_grips(r, P.get("grip_l"))
     targets = {}
     for s in ("r", "l"):
         G, gl = grips[s]
         Rh = rot @ G
-        pt = pos if s == "r" else pos + rot[:, :, 1] * LEFT_HAND - rot[:, :, 2] * LEFT_DROP
+        pt = pos if s == "r" else pos + rot[:, :, 1] * P.get("left", LEFT_HAND) - rot[:, :, 2] * LEFT_DROP
         wrist = pt - np.einsum("fij,j->fi", Rh, gl)
         targets[s] = (Rh, wrist, pt)
-    # the clavicles give toward the hands (shoulders forward and up as the arms reach)
-    clav = P.get("clav", (0.3, 0.3)) if clav is None else clav
-    clav = dict(zip(("r", "l"), np.broadcast_to(np.asarray(clav, float), (2,))))
+    # the clavicles, then the arms on their hinges
+    cl = dict(r=P.get("clav_r", (0.0, 0.0)), l=P.get("clav_l", (0.0, 0.0)))
+    if clav is not None:
+        cl = dict(r=clav[0], l=clav[1])
     for s in ("r", "l"):
-        cl, ua = r.i("clavicle_" + s), r.i("upperarm_" + s)
-        cur = hd[:, ua] - hd[:, cl]
-        want = targets[s][1] - hd[:, cl]
-        G_ = swing(cur, want)
-        part = rot_exp(rot_log(G_) * clav[s])
-        for b in subtree(r, "clavicle_" + s):
-            m.W[:, b] = part @ m.W[:, b]
+        turn_clavicle(m, s, cl[s][0], cl[s][1])
     hd = m.heads()
     err = np.zeros((F, 2))
     for k_, s in enumerate(("r", "l")):
         Rh, wrist, pt = targets[s]
-        pole_rest = np.array(P["pole_" + s], float)
-        pole = np.einsum("fij,j->fi", Wc @ r.R[ch].T, pole_rest)
-        two_bone_ik(m, s, wrist, np.ones(F), hd, chain=("upperarm_", "lowerarm_", "hand_"), pole=pole)
+        pole = np.einsum("fij,j->fi", K @ (m0.W[0, ch] @ r.R[ch].T), np.array(P["pole_" + s], float))
+        solve_arm(m, s, wrist, pole, hd)
         h = r.i("hand_" + s)
         m.W[:, h] = Rh
         for b in subtree(r, "hand_" + s)[1:]:
@@ -1423,7 +1557,6 @@ def carry_rifle(m, pose="port", cyclic=False, clav=None):
         hd = m.heads()
         err[:, k_] = np.linalg.norm(hd[:, h] - wrist, axis=1)
     frames = np.tile(np.eye(4), (F, 1, 1))
-    frames[:, :3, :3], frames[:, :3, 3] = rot, pos
     # the rifle rides the right hand from here: put its frame where the hand actually got to
     G, gl = grips["r"]
     h = r.i("hand_r")
@@ -1459,9 +1592,10 @@ def weapon_bone(armature, rest=None):
 
 
 def rifle_arms(armature, action, rifle_pose="port", name=None, clav=None):
-    """Both hands on a rifle at the port (across the chest) or at the ready (butt in the shoulder), the action's
-    body moving underneath. Bakes plain keys into `action` (or into a copy called `name`), on the trunk, clavicles,
-    arms and hands; adds the `weapon` bone if the rig lacks it. Returns (action, worst hand error in metres)."""
+    """Both hands on a rifle at the port (across the chest) or at the ready (butt by the right hip, muzzle forward
+    and up), the action's body moving underneath (carry_rifle). Bakes plain keys into `action` (or into a copy
+    called `name`), on the trunk, clavicles, arms and hands; adds the `weapon` bone if the rig lacks it.
+    Returns (action, worst hand error in metres)."""
     import bpy
     rest = Rest.of(armature)
     m = motion_of_action(armature, action, rest)
@@ -1507,6 +1641,226 @@ def _write_quats(armature, act, quats, frames):
             fc.update()
 
 
+# ------------------------------------------------------------------------------------------------ the arms in range
+# A real arm's limits (degrees; the coordinator's sheet, as rom.py checks them): the forearm's twist from mid-position
+# (palm square to the elbow's hinge), the wrist's bend toward the palm and toward the thumb.
+# fit_arms eases each a little inside (rom.py reads the bend toward the palm a few degrees larger when the hand is
+# also bent far sideways).
+ARM_LIMITS = dict(pronation=78.0, supination=83.0, flexion=72.0, extension=62.0, radial=19.0, ulnar=28.0,
+                  internal=68.0, external=88.0)
+
+
+def _soft(v, lo, hi, knee=8.0):
+    """v squeezed into [lo, hi], untouched until `knee` degrees from either end, then eased (tanh) up to it."""
+    v = np.asarray(v, float)
+    a, b = hi - knee, lo + knee
+    out = np.where(v > a, a + knee * np.tanh((v - a) / knee), v)
+    return np.where(out < b, b - knee * np.tanh((b - out) / knee), out)
+
+
+def fit_arms(m, seat=(10.0, 25.0), lim=None, knee=8.0, clear=0.004, loop=None):
+    """Keep the captured arms inside a real arm's range, the wrists' places unchanged. The capture's hand joints are
+    its weakest (markers on the back of a hand, a 3-axis elbow), so after the retarget:
+      * each elbow is put back on its hinge: the humerus turned about its own axis until the elbow's hinge lies
+        square to the bend the capture shows (the elbow and wrist stay where they are), fully once the elbow is bent
+        `seat`[1] degrees, not at all below `seat`[0] (a nearly straight arm shows no bend to read);
+      * each hand is eased (soft, `knee` degrees from the limit) into ARM_LIMITS: its twist about the forearm, then
+        its bend toward the palm and toward the thumb;
+      * each elbow is kept `clear` (m) of the trunk past its own flesh (rom.py's torso), the arm turned out at the
+        shoulder where the swing would sink it in (eased over a few frames; `loop` wraps that round a loop);
+      * each humerus's own turn (internal / external rotation) is eased into ARM_LIMITS, the arm below the shoulder
+        turned about the upper arm (the elbow stays put, the hand swings round).
+    Returns {side: (worst degrees taken off the twist, off the bend[, the most the arm was turned out])}."""
+    lim = dict(ARM_LIMITS, **(lim or {}))
+    loop = getattr(m, "loop", False) if loop is None else loop
+    r = m.rest
+    F = len(m)
+    out = {}
+    for s in ("l", "r"):
+        M = np.diag((1.0, 1.0 if s == "l" else -1.0, 1.0))
+        ua, la, ha = r.i("upperarm_" + s), r.i("lowerarm_" + s), r.i("hand_" + s)
+        u0 = M @ _norm(r.head[la] - r.head[ua])
+        l0 = M @ _norm(r.head[ha] - r.head[la])
+        h0 = M @ _norm(np.cross(u0, l0))                          # the hinge at rest (world, rides the upper arm)
+        # 1. the elbow on its hinge
+        hd = m.heads()
+        E, Wr = hd[:, la], hd[:, ha]
+        Du = m.W[:, ua] @ r.R[ua].T
+        k = np.einsum("fij,j->fi", Du, h0)
+        u = _norm(E - hd[:, ua])
+        lo = _norm(Wr - E)
+        bend = np.degrees(np.arccos(np.clip(np.sum(u * lo, 1), -1, 1)))
+        w = smoothstep((bend - seat[0]) / (seat[1] - seat[0]))
+        hb = _norm(np.einsum("ij,fj->fi", M, np.cross(np.einsum("ij,fj->fi", M, u), np.einsum("ij,fj->fi", M, lo))))
+        kp = _norm(k - u * np.sum(k * u, 1)[:, None])
+        hbp = _norm(hb - u * np.sum(hb * u, 1)[:, None])
+        ang = np.arctan2(np.sum(np.cross(kp, hbp) * u, 1), np.sum(kp * hbp, 1)) * w
+        G = axis_angle(u, ang)
+        Wh = m.W[:, ha].copy()
+        for b in subtree(r, "upperarm_" + s):
+            m.W[:, b] = G @ m.W[:, b]
+        # the forearm back onto the wrist on the turned hinge (the elbow has not moved; only its twist and bend line)
+        hd = m.heads()
+        Dl = m.W[:, la] @ r.R[la].T
+        lnow = _norm(np.einsum("fij,j->fi", Dl, r.head[ha] - r.head[la]))
+        Gl = swing(lnow, lo)
+        m.W[:, la] = Gl @ m.W[:, la]
+        m.W[:, ha] = Wh                                           # (the hand keeps its turn in the world)
+        # 2. the hand into its range: read as a twist about the forearm (psi, from mid-position), a bend toward the
+        # palm (th) and then toward the thumb (de), each eased into its limits, and the hand rebuilt from them. Frames
+        # where the capture's hand has flipped over (bent past anything a wrist does) first take the hand's turn on
+        # the forearm from the good frames either side.
+        hd = m.heads()
+        Du = m.W[:, ua] @ r.R[ua].T
+        Sm = lambda v: np.einsum("ij,fj->fi", M, v)               # world <-> this side's terms
+        l_ = Sm(_norm(hd[:, ha] - hd[:, la]))
+        k_ = Sm(np.einsum("fij,j->fi", Du, h0))
+        kp = _norm(k_ - l_ * np.sum(k_ * l_, 1)[:, None])
+        mir = np.array([1.0, 1.0, 1.0]) if s == "l" else np.array([-1.0, 1.0, 1.0])
+        a0 = r.R[ha] @ _norm(np.array(HAND_AXIS) * mir)
+        n0 = r.R[ha] @ (np.array(PALM_N) * mir)
+        n0 = _norm(n0 - a0 * (n0 @ a0))
+
+        def read():
+            Dh = m.W[:, ha] @ r.R[ha].T
+            a_ = Sm(np.einsum("fij,j->fi", Dh, a0))
+            n_ = Sm(np.einsum("fij,j->fi", Dh, n0))
+            th = np.arcsin(np.clip(-np.sum(n_ * l_, 1), -1, 1))
+            npsi = _norm(n_ + np.sin(th)[:, None] * l_)
+            psi = np.unwrap(np.arctan2(np.sum(np.cross(kp, npsi) * l_, 1), np.sum(kp * npsi, 1)))
+            psi -= 2 * np.pi * np.round(np.median(psi) / (2 * np.pi))        # (the turn nearest mid-position)
+            a1 = np.cos(th)[:, None] * l_ + np.sin(th)[:, None] * npsi
+            de = np.arctan2(np.sum(a_ * np.cross(npsi, l_), 1), np.sum(a_ * a1, 1))
+            return np.degrees(psi), np.degrees(th), np.degrees(de)
+        psi, th, de = read()
+        bad = (np.abs(de) > 75.0) | (np.abs(th) > 85.0) | (np.abs(psi) > 150.0)
+        if bad.any() and not bad.all():
+            Rel = np.swapaxes(m.W[:, la], -1, -2) @ m.W[:, ha]
+            good = np.where(~bad)[0]
+            for f in np.where(bad)[0]:
+                i0, i1 = good[good < f], good[good > f]
+                if len(i0) and len(i1):
+                    p0, p1 = i0[-1], i1[0]
+                    Rel[f] = slerp_mats(Rel[p0], Rel[p1], (f - p0) / (p1 - p0))
+                else:
+                    Rel[f] = Rel[i0[-1] if len(i0) else i1[0]]
+            m.W[:, ha] = m.W[:, la] @ Rel
+            psi, th, de = read()
+        psi2 = _soft(psi, -lim["supination"], lim["pronation"], knee)
+        th2 = _soft(th, -lim["extension"], lim["flexion"], knee)
+        de2 = _soft(de, -lim["ulnar"], lim["radial"], knee)
+        P2, T2, E2 = np.radians(psi2), np.radians(th2), np.radians(de2)
+        nq = np.einsum("fij,fj->fi", axis_angle(l_, P2), kp)
+        tq = np.cross(nq, l_)
+        aq = np.cos(T2)[:, None] * l_ + np.sin(T2)[:, None] * nq
+        n3 = -np.sin(T2)[:, None] * l_ + np.cos(T2)[:, None] * nq
+        a3 = np.cos(E2)[:, None] * aq + np.sin(E2)[:, None] * tq
+        m.W[:, ha] = hand_frame(Sm(a3), Sm(n3), s)
+        for b in subtree(r, "hand_" + s)[1:]:
+            p = r.parent[b]
+            m.W[:, b] = m.W[:, p] @ r.R[p].T @ r.R[b]
+        out[s] = (round(float(np.abs(psi2 - psi).max()), 1),
+                  round(float(np.hypot(th2 - th, de2 - de).max()), 1))
+        # 3. the elbow clear of the body: where the swinging arm's elbow would sink into the trunk (rom.py's slabs of
+        # the torso, the elbow's own flesh round it), the whole arm is turned out at the shoulder just enough, eased
+        # in and out over a few frames
+        import rom
+        body = rom.Body.of_rest(r)
+        ch = r.i("chest")
+        side_y = np.array((0.0, 1.0 if s == "l" else -1.0, 0.0))
+        take = np.zeros(F)
+        for _ in range(3):
+            hd = m.heads()
+            pen, _b = rom._elbow_place(body, rom.Poses.of_motion(m), hd[:, la])
+            need = np.nan_to_num(pen, nan=-9.0) + clear * 100.0           # cm still to go
+            if need.max() <= 0.05:
+                break
+            arm = np.linalg.norm(hd[:, la] - hd[:, ua], axis=1)
+            ang = np.maximum(need, 0.0) / 100.0 / arm
+            k = 4
+            if loop:                                                       # (a loop's last frame is its first)
+                pad = np.concatenate([ang[F - 1 - k:F - 1], ang, ang[1:k + 1]])
+            else:
+                pad = np.concatenate([ang[:1].repeat(k), ang, ang[-1:].repeat(k)])
+            ang = np.max(np.stack([pad[i:i + F] for i in range(2 * k + 1)]), 0)     # held a little either side
+            ang = cyc_smooth(ang, 3) if loop else smooth(ang[:, None], 3)[:, 0]
+            ang = np.maximum(ang, 0.0) * 1.15
+            o = np.einsum("fij,j->fi", m.W[:, ch] @ r.R[ch].T, side_y)            # the trunk's side, outward
+            u = _norm(hd[:, la] - hd[:, ua])
+            G = axis_angle(_norm(np.cross(u, o)), ang)
+            for b in subtree(r, "upperarm_" + s):
+                m.W[:, b] = G @ m.W[:, b]
+            take += np.degrees(ang)
+        if take.any():
+            out[s] = out[s] + (round(float(take.max()), 1),)
+        # 4. the humerus's own turn (internal / external rotation, as rom.py reads it) eased into its range: the whole
+        # arm below the shoulder turned about the upper arm (the elbow stays where it is, the forearm swings round)
+        goal = None
+        for _ in range(3):
+            rot = rom.measure(body, rom.Poses.of_motion(m))["sh_rot_" + s]
+            goal = _soft(rot, -lim["external"], lim["internal"], knee) if goal is None else goal
+            d = goal - rot
+            if np.abs(d).max() < 0.2:
+                break
+            hd = m.heads()
+            u = _norm(hd[:, la] - hd[:, ua])
+            G = axis_angle(u, np.radians(d) * (1.0 if s == "l" else -1.0))
+            for b in subtree(r, "upperarm_" + s):
+                m.W[:, b] = G @ m.W[:, b]
+    return out
+
+
+EASE_BONES = ("clavicle_l", "upperarm_l", "lowerarm_l", "hand_l", "clavicle_r", "upperarm_r", "lowerarm_r", "hand_r",
+              "ball_l", "ball_r")
+
+
+def ease_spikes(m, bones=EASE_BONES, limit=850.0, loop=None, rounds=8):
+    """Ease each bone's turn on its parent wherever it would turn faster than `limit` deg/s from one frame to the
+    next (rom.py flags 900): the capture's hands and elbows jerk at an impact, where markers are lost, and a toe
+    laid flat on the ground at a contact snaps there in one frame. The bone's local turn is averaged with its
+    neighbours over a few frames round each such step, as many rounds as it takes; its children keep their own
+    turns. Returns {bone: fastest deg/s left} for the bones it eased."""
+    loop = getattr(m, "loop", False) if loop is None else loop
+    r = m.rest
+    L = to_local(m)
+    F = len(m)
+    out = {}
+    for n in bones:
+        b = r.i(n)
+        eased = False
+        for _ in range(rounds):
+            Q = L[:, b]
+            dR = np.swapaxes(Q[:-1], -1, -2) @ Q[1:]
+            sp = np.degrees(np.arccos(np.clip((np.trace(dR, axis1=1, axis2=2) - 1) / 2, -1, 1))) * m.fps
+            fast = np.where(sp > limit)[0]
+            if not len(fast):
+                break
+            eased = True
+            q = mat_to_quat(Q)
+            for f in range(1, F):
+                if np.dot(q[f], q[f - 1]) < 0:
+                    q[f] = -q[f]
+            qs = cyc_smooth(q, 1) if loop else smooth(q, 1)
+            w = np.zeros(F)
+            for f in fast:
+                w[max(0, f - 1):f + 3] = 1.0
+            w = (cyc_smooth(w, 1) if loop else smooth(w[:, None], 1)[:, 0])
+            w = np.clip(w * 1.5, 0.0, 1.0)
+            q = q + (qs - q) * w[:, None]
+            q /= np.linalg.norm(q, axis=1)[:, None]
+            L[:, b] = quat_to_mat(q)
+            if loop:
+                L[-1, b] = L[0, b]
+        if eased:
+            Q = L[:, b]
+            dR = np.swapaxes(Q[:-1], -1, -2) @ Q[1:]
+            out[n] = round(float(np.degrees(np.arccos(np.clip((np.trace(dR, axis1=1, axis2=2) - 1) / 2, -1, 1))).max()
+                                 * m.fps), 0)
+    if out:
+        m.W[:] = from_local(r, L, m.H, m.fps).W
+    return out
+
+
 # ------------------------------------------------------------------------------------------------ the low crawl
 # CMU has no belly crawl, so `crawl` is keyed by hand on the rig: chest and hips on the ground, the head low and
 # looking ahead, the rifle lying across in front of the face on the forearms (the right hand on the wrist of the
@@ -1517,16 +1871,21 @@ CRAWL = dict(
     frames=54, stride=0.40,             # one loop (both sides) and the ground it covers
     draw=0.2, pull=0.3, glide=0.15,     # parts of a loop: a side drawing up, then pulling; the body's speed meanwhile
     pelvis_z=0.125,                     # the pelvis head's height, lying on the belly
-    neck_up=48.0, head_up=22.0,         # the head raised to look ahead, low
-    el_fwd=0.17, el_out=0.235, el_z=0.045,       # an elbow planted this far ahead of and out from its shoulder
-    kn_fwd=0.12, kn_out=0.40, kn_z=0.055,        # a knee drawn up: this far ahead of and out from its hip
+    neck_up=42.0, head_up=18.0,         # the head raised to look ahead, low (the neck's 60 degrees of extension)
+    el_fwd=0.11, el_out=0.26, el_z=0.045,        # an elbow planted this far ahead of and out from its shoulder
+    kn_fwd=-0.235, kn_out=0.32, kn_z=0.055,      # a knee drawn up: this far ahead of (- behind) and out from its hip
     kn_back=0.40, kn_in=0.14,                    # the other leg, straight: its knee this far behind and out
     kn_early=0.1, kn_ext=0.22,                   # the knee starts up before its elbow; the leg straightens in this
-    pf_frog=40.0, pf_straight=55.0,              # feet pointed (degrees) on the drawn-up and the straight leg
-    fa_left=25.0, fa_right=48.0,                 # each forearm's angle in from straight ahead
+    pf_frog=40.0, pf_straight=48.0,              # feet pointed (degrees) on the drawn-up and the straight leg
+    fa_left=25.0, fa_right=42.0,                 # each forearm's angle in from straight ahead
     fa_rise_l=0.05, fa_rise_r=0.11,              # and its rise toward the hand
     psi=5.0, psi_lo=-8.0, psi_hi=25.0,           # the rifle's muzzle this far forward of pointing straight left
+    clav_fwd=(3.0, 4.0), clav_roll=0.0,          # the shoulders drawn toward the head (degrees; + more on the reach)
+    shin_up=0.3,                                 # the drawn-up leg's shin: its rise off the ground going back
 )
+# (rom.py holds it in a real body's range: the drawn-up hip at most 45 degrees out, the clavicles within 30 up and
+# 20 back, the neck 60 back, the feet 50 pointed; the knee draw is the frog of a real low crawl, the leg on its inner
+# side, so the hip's external rotation, about 70, is past the common 50.)
 
 
 def smoothstep(u):
@@ -1630,8 +1989,8 @@ def belly_crawl(rest, P=None):
     # the shoulders drawn forward for the reach, the reaching side more
     for side, sg in (("l", 1.0), ("r", -1.0)):
         reach = 0.5 + 0.5 * sg * s
-        bend(m, "clavicle_" + side, -sg * np.radians(14 + 10 * reach), axis=Z_)
-        bend(m, "clavicle_" + side, sg * math.radians(8), axis=X_)
+        bend(m, "clavicle_" + side, -sg * np.radians(P["clav_fwd"][0] + P["clav_fwd"][1] * reach), axis=Z_)
+        bend(m, "clavicle_" + side, sg * math.radians(P["clav_roll"]), axis=X_)
     hd = m.heads()
     ln = lambda a, b: float(np.linalg.norm(r.head[r.i(b)] - r.head[r.i(a)]))
     L = dict(ua=ln("upperarm_l", "lowerarm_l"), fa=ln("lowerarm_l", "hand_l"), th=ln("thigh_l", "calf_l"),
@@ -1689,7 +2048,7 @@ def belly_crawl(rest, P=None):
         hp = m.heads()[:, r.i("thigh_" + side)]
         K = hp + L["th"] * _norm(p["K"] - hp)
         st = p["straight"][:, None]
-        A = K + L["sh"] * _norm(np.array([-0.95, -sg * 0.22, 0.06]) * (1 - st) + np.array([-0.99, -sg * 0.03, 0.10]) * st)
+        A = K + L["sh"] * _norm(np.array([-0.95, -sg * 0.22, P["shin_up"]]) * (1 - st) + np.array([-0.99, -sg * 0.03, 0.10]) * st)
         _, Rl, h1 = aim_limb(m, "thigh_" + side, "calf_" + side, K, A, h0=-r.R[r.i("thigh_" + side)][:, 0])
         pf = np.radians(P["pf_frog"] + (P["pf_straight"] - P["pf_frog"]) * p["straight"])
         fo, ba = r.i("foot_" + side), r.i("ball_" + side)
@@ -2005,6 +2364,9 @@ def build(names=None, out=CLIPS_JSON, verbose=True):
             m, info = make_keyed(spec, rest, verbose=verbose)
         else:
             m, info = (make_loop if spec.get("loop") else make_once)(spec, rest, verbose=verbose)
+        if not spec.get("make"):
+            info["fit_arms_deg"] = fit_arms(m, loop=bool(spec.get("loop")))   # (elbows on their hinges, hands in range)
+            info["eased_deg_s"] = ease_spikes(m, loop=bool(spec.get("loop")))  # (no joint past rom.py's 900 deg/s)
         motions[spec["name"]] = (m, info)
         if names and spec["name"] not in names:
             continue
