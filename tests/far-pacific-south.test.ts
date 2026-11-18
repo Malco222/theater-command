@@ -402,11 +402,11 @@ describe("the Pacific's page of history's book", () => {
     const g = war(1, 1);
     expect(bookExpects(g).filter((x) => x.theatre === 'pacific').map((x) => x.text)).toEqual([
       'The book is closed in the Pacific if Japan has stayed out of Indochina when August 1941 is over.',
-      'The book is closed in the Pacific if Japan is at war with America or Britain before its time: that is, before December 1941.',
-      'The book is closed in the Pacific if Japan has not struck when January 1942 is over.',
+      'The book is closed in the Pacific if Japan goes to war with America or Britain before its time: that is, before December 1941.',
+      'The book is closed in the Pacific if Japan has not yet struck when January 1942 is over.',
       'The book is closed in the Pacific if Singapore or Manila still stands when June 1942 is over.',
-      'The book is closed in the Pacific if Pearl Harbor has fallen: that is, before August 1945.',
-      'The book is closed in the Pacific if Brisbane has fallen: that is, before August 1945.',
+      'The book is closed in the Pacific if Pearl Harbor falls: that is, before August 1945.',
+      'The book is closed in the Pacific if Brisbane falls: that is, before August 1945.',
     ]);
   });
 

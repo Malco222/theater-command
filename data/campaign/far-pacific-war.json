@@ -14,14 +14,14 @@
     "bookIf": {"JAP:south": ["alive:JAP"]},
     "joined": {"axis": ["THA"]},
     "marks": [
-      {"theatre": "pacific", "until": 28, "if": ["peace:JAP,USA", "peace:JAP,UK"], "why": "war came there before its time", "expect": "Japan is at war with America or Britain before its time"},
+      {"theatre": "pacific", "until": 28, "if": ["peace:JAP,USA", "peace:JAP,UK"], "why": "war came there before its time", "expect": "Japan goes to war with America or Britain before its time"},
       {"theatre": "pacific", "by": 24, "if": ["holds:JAP,Saigon"], "why": "Japan has stayed out of Indochina"},
-      {"theatre": "pacific", "by": 29, "if": ["war:JAP,USA"], "why": "Japan did not strike when history's Japan did", "expect": "Japan has not struck"},
+      {"theatre": "pacific", "by": 29, "if": ["war:JAP,USA"], "why": "Japan did not strike when history's Japan did", "expect": "Japan has not yet struck"},
       {"theatre": "pacific", "by": 34, "if": ["allHeld:axis,Singapore|allHeld:axis,Manila"], "why": "Singapore and Manila still stand", "expect": "Singapore or Manila still stands"},
       {"theatre": "pacific", "by": 34, "if": ["allHeld:axis,Singapore"], "why": "Singapore still stands", "expect": ""},
       {"theatre": "pacific", "by": 34, "if": ["allHeld:axis,Manila"], "why": "Manila still stands", "expect": ""},
-      {"theatre": "pacific", "until": 72, "if": ["holds:USA,Pearl Harbor"], "why": "Pearl Harbor has fallen"},
-      {"theatre": "pacific", "until": 72, "if": ["holds:AUS,Brisbane"], "why": "Brisbane has fallen"}
+      {"theatre": "pacific", "until": 72, "if": ["holds:USA,Pearl Harbor"], "why": "Pearl Harbor has fallen", "expect": "Pearl Harbor falls"},
+      {"theatre": "pacific", "until": 72, "if": ["holds:AUS,Brisbane"], "why": "Brisbane has fallen", "expect": "Brisbane falls"}
     ]
   },
   "open": {
