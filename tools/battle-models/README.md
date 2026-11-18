@@ -239,6 +239,12 @@ What they add to the form:
   1943-09. A file whose `marks` are American carries `mark_months`: a list of `{from, tag}`, the first with no
   `from`. Swap the tag of each of her marks for the last one whose month has come. The red surround of the summer
   of 1943 is left out. `marks.py` draws all three.
+- **Japan's navy disc by month** (the same `mark_months`). The five navy types (Zero, Kate, Val, Nell, Betty) wear
+  the plain red disc, `JAP-PLAIN`. From 1942-10 to 1943-12 the disc on the FUSELAGE alone has a thin white ring
+  round it, `JAP-RING` (the ring a tenth of the disc's width, outside it, in the markings' matt off-white); from
+  1944-01 it is plain again. The wings' discs stay plain throughout. So an entry of `mark_months` may carry `on`,
+  and then it holds only for the marks whose `place` is that word. Every aircraft's mark says its `place`: `side`
+  (her fuselage), `wing`, `fin` or `code` (her number). An entry with no `on` holds for all her marks.
 - **Cowl gills** (behind a radial engine; a mesh of their own in the sculptor, `gills`). In the file the ring of
   small flaps behind the cowl is faces of the fuselage in the cowl's paint (`nose`), or, where her cowl is painted
   like the rest of her (`nose` the same colour as `upper`), in `upper` above and `under` below. So a later coat

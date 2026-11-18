@@ -176,7 +176,7 @@ def standing(kind):
             if n.z < -0.3:
                 continue                                  # (under her wing: nobody sees it on a deck)
             up = X if abs(n.z) > 0.7 else Z
-            marks.append({"tag": mk["tag"], "at": tip @ p + lift, "facing": rot @ n, "up": rot @ up, "radius": mk["radius"], "curve": mk.get("curve")})
+            marks.append({"tag": mk["tag"], "at": tip @ p + lift, "facing": rot @ n, "up": rot @ up, "radius": mk["radius"], "curve": mk.get("curve"), "place": mk.get("place")})
     out = dict(pm=pm, pf=pf, verts=verts, faces=faces, paints=paints, by_point=by_point, smooth=smooth, coat=coat, blend=blend, soot=soot,
                marks=marks, pitch=th, leg=leg, wheels=[tip @ w + lift for w in wheels], rw=rw, screws=screws,
                tips=owner in TIPPED, plain=owner == "*")
@@ -264,7 +264,7 @@ def park(kind, fine=True):
         m.fsmooth[n0:] = st["smooth"]
         for mk in st["marks"]:
             m.marks.append({"tag": mk["tag"], "at": mirror(mk["at"] + o), "radius": mk["radius"], "facing": mirror(mk["facing"]), "up": mirror(mk["up"]),
-                            "curve": mk["curve"], "both": False, "part": name})
+                            "curve": mk["curve"], "both": False, "part": name, "place": mk.get("place")})
     src = pm.info.get("file", {})
     m.info["file"] = {"machine": kind, "pitch": round(math.degrees(st["pitch"]), 2),
                       "places": [[round(x, 2), round(-y, 2), 0.0] for x, y in spots],
@@ -293,7 +293,7 @@ def in_month(m, month):
             m.paints.update(coats[-1]["colours"])
             gloss = coats[-1].get("finish") == "gloss"
         for mk in m.marks or []:
-            mk["tag"] = planes.mark_in(mk["tag"], month)
+            mk["tag"] = planes.mark_in(mk["tag"], month, mk.get("place"))
     return gloss
 
 

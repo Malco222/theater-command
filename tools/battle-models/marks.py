@@ -89,6 +89,8 @@ def shapes(tag):
         return [rect(0.25, 0.75, -0.9, 0.9, RED) + rect(-0.25, 0.25, -0.9, 0.9, WHITE) + rect(-0.75, -0.25, -0.9, 0.9, BLUE)]
     if tag == "JAP-PLAIN":
         return [ring(0.0, 1.0, DISC)]
+    if tag == "JAP-RING":                                                        # (late 1942 to the end of 1943, on the fuselage: a thin white ring round the disc, a tenth of its width)
+        return [ring(0.0, 1.2, WHITE), ring(0.0, 1.0, DISC)]
     if tag == "USA":
         return [ring(0.0, 1.0, US_BLUE), star(0.98, WHITE)]
     if tag == "USA-RED":                                                         # (until May 1942: a red disc in the middle of the star)

@@ -100,7 +100,7 @@ class Plane:
                 self.m.paints.update(coats[-1]["colours"])
                 gloss = coats[-1].get("finish") == "gloss"
             for mk in self.m.marks or []:
-                mk["tag"] = planes.mark_in(mk["tag"], scheme)
+                mk["tag"] = planes.mark_in(mk["tag"], scheme, mk.get("place"))
         bare = self.m.info["file"].get("finish") == "bare metal"
         self.ob, self.arm = rigid.to_blender(self.m, (lambda *a: plane_look(*a, bare=bare, gloss=gloss)), crease=50.0)
         self.badges = marks.put(self.m, self.ob, self.arm, record) if badges else []      # (record: what she has done, painted on her)

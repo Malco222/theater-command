@@ -525,16 +525,21 @@ EXTRA_PLANES["Avenger"]["graded"] = navy_blues(EXTRA_PLANES["Avenger"]["hull"], 
 # A marking that changes with the months (the art director, 2026-11-18): the American star has a red centre until
 # May 1942, is plain from June 1942, and has white bars from September 1943. Whatever form a machine's numbers give
 # her, the file says which she wears when (`mark_months`), and the game draws that one.
-MARK_MONTHS = {"USA": [(None, "USA-RED"), ("1942-06", "USA"), ("1943-09", "USA-BAR")]}
-MARK_FAMILY = {"USA": "USA", "USA-BAR": "USA", "USA-RED": "USA"}
+# Japan's navy (the historian through the art director, 07:42 UTC the same day): a thin white ring round the disc on
+# the FUSELAGE only, from October 1942 to December 1943, then the plain disc again; the wings' discs stay plain. A form
+# with a third word holds only for the marks in that place (a mark's `place`: side, wing, fin or code).
+MARK_MONTHS = {"USA": [(None, "USA-RED"), ("1942-06", "USA"), ("1943-09", "USA-BAR")],
+               "JAP": [(None, "JAP-PLAIN"), ("1942-10", "JAP-RING", "side"), ("1944-01", "JAP-PLAIN", "side")]}
+MARK_FAMILY = {"USA": "USA", "USA-BAR": "USA", "USA-RED": "USA", "JAP-PLAIN": "JAP", "JAP-RING": "JAP"}
 
 
-def mark_in(tag, month):
-    """The form of a marking in a month (YYYY-MM): the last whose month has come."""
+def mark_in(tag, month, place=None):
+    """The form of a marking in a month (YYYY-MM): the last whose month has come, of those that hold in this place."""
     forms = MARK_MONTHS.get(MARK_FAMILY.get(tag))
     if not forms or not month:
         return tag
-    return [form for start, form in forms if start is None or start <= month][-1]
+    fit = [f[1] for f in forms if (f[0] is None or f[0] <= month) and (len(f) < 3 or f[2] == place)]
+    return fit[-1] if fit else tag
 
 
 # Japan's navy airscrews (the historian through the art director, 2026-11-18): no yellow tips. For the whole war the
@@ -1264,6 +1269,11 @@ def convert(name, fine=True):
         return w, soot
     m.weather = weather
     m.marks = G["marks_of"](s, hull)
+    n_code = 1 if s.get("code") else 0                       # (where each is: her sides first, then her wings, her fin, her number)
+    n_fin = len(s.get("fin_marks", []))
+    for i, mk in enumerate(m.marks):
+        mk["place"] = ("side" if i < len(s.get("side_marks", [])) else "code" if i >= len(m.marks) - n_code
+                       else "fin" if i >= len(m.marks) - n_code - n_fin else "wing")
     m.tally = tally_of(name, s, hull, role, G, fins)
     m.info.update({"rust": "9A9C98", "soot": colours["soot"], "wear_show": 0.3,
                    "file": {"nation_paint": bool(s.get("nation_paint")), "number_ink": colours["ink"], "span": round(2.0 * half, 3),
@@ -1283,8 +1293,8 @@ def convert(name, fine=True):
         m.info["file"]["schemes"] = later                   # (her later coats of paint, by the month each comes in)
     family = next((MARK_FAMILY[mk["tag"]] for mk in (m.marks or []) if mk.get("tag") in MARK_FAMILY), None)
     if family:                                              # (her marking by month: swap each mark's tag for the last come)
-        m.info["file"]["mark_months"] = [({"from": start, "tag": form} if start else {"tag": form})
-                                         for start, form in MARK_MONTHS[family]]
+        m.info["file"]["mark_months"] = [dict({"from": f[0]} if f[0] else {}, tag=f[1], **({"on": f[2]} if len(f) > 2 else {}))
+                                         for f in MARK_MONTHS[family]]
     if has_torpedo:
         m.info["file"]["loads"] = (["torpedo", "bombs"] if has_bombs else ["torpedo"])
     f.bay, f.bay_half, f.rings_x = (bay if fine else None), BAY_HALF, rings_x
