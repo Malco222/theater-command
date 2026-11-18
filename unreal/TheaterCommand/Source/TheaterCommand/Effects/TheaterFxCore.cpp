@@ -388,7 +388,7 @@ namespace TheaterFx
 			const double CrownH = Pick(D, S + "crown_m", 8.0, 12.0);
 			Wink(Now, At, Scale, D);
 			Skirt(Now + 0.01, At, K, P, DustK, D);
-			Crown(Now + 0.005, At, CrownH, K, Slow, P, ClodK, D);
+			Crown(Now + 0.005, At, CrownH, K, Slow, P, ClodK, Size, D);
 			Smoke(Now, At, CrownH, K, Scale, Size, Ground, P, DustK, D);
 			const double Across = Num(S + "crater_m", 1.5);
 			if (Across > 0.0 && Ground != "water")
@@ -528,12 +528,18 @@ namespace TheaterFx
 		}
 	}
 
-	void Battle::Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, Dice& D)
+	void Battle::Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, const std::string& Size, Dice& D)
 	{
 		// The crown: a wide torn fan. A few heavy dark jets, very uneven in length and width, bunched and overlapping;
 		// lighter dust filling the gaps so that the outline is one torn fan; each heavy jet thinnest and torn at its
 		// tip, drawn to a point, with clods flying on beyond it. Then a dense dark body at the foot.
 		const std::string C = "burst.crown.";
+		// (a size may have its own crown numbers under sizes.<size>.crown.: the bombs' fan of many jets)
+		const std::string Own = "sizes." + Size + ".crown.";
+		auto Path = [&](const std::string& Name) -> std::string
+		{
+			return Has(Own + Name) || Has(Own + Name + ".0") ? Own + Name : C + Name;
+		};
 		const double Half = Num(C + "fan_deg", 100.0) * 0.5;
 		const double KD = Num(C + "drag", 6.5);
 		const double Over = Num(C + "overlap", 0.9);
@@ -558,20 +564,39 @@ namespace TheaterFx
 		const double FillScatter = Num(C + "fill_scatter", 1.6);
 		const double FillStretch = Num(C + "fill_stretch", 1.15);
 		const Vec Tilt = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), 0.0).Unit(Vec(1.0, 0.0, 0.0)) * std::tan(Radians(Pick(D, C + "tilt_deg", 4.0, 14.0)));
-		const int NHeavy = D.Whole(static_cast<int>(Num(C + "heavy_jets.0", 5.0)), static_cast<int>(Num(C + "heavy_jets.1", 8.0)));
+		const int NHeavy = D.Whole(static_cast<int>(Num(Path("heavy_jets") + ".0", 5.0)), static_cast<int>(Num(Path("heavy_jets") + ".1", 8.0)));
+		// (ranked heights, where a size asks for them: the second tallest jet clearly shorter than the tallest, then a
+		// few more at half its height or over, so the fan never reads as one or two stalks)
+		const bool bRanked = Has(Path("second_reach") + ".0");
+		const int NMid = static_cast<int>(Num(Path("mid_jets"), 0.0));
+		// (the heavy jets spaced round the compass, each nudged by up to this share of a gap: every side shows a fan)
+		const double SpreadEven = Clamp01(Num(Path("spread_even"), 0.0));
+		const double AzFrom = SpreadEven > 0.0 ? D.U(0.0, 2.0 * Pi) : 0.0;
 		const int NFill = D.Whole(static_cast<int>(Num(C + "fill_jets.0", 10.0)), static_cast<int>(Num(C + "fill_jets.1", 16.0)));
 		std::vector<Vec> Launch;
 		std::vector<double> LaunchR;
 		for (int J = 0; J < NHeavy + NFill; ++J)
 		{
 			const bool bHeavy = J < NHeavy;
-			const double Az = D.U(0.0, 2.0 * Pi); // (at random round the compass: bunched and overlapping, never spaced)
-			const double Lean = bHeavy ? (J == 0 ? D.U(2.0, 12.0) : Pick(D, C + "heavy_lean", 0.35, 1.0) * Half) : D.U(0.0, 1.0) * Half;
-			const double ReachF = bHeavy ? (J == 0 ? 1.0 : Pick(D, C + "heavy_reach", 0.3, 1.0)) : Pick(D, C + "fill_reach", 0.3, 0.75);
+			const double Az = bHeavy && SpreadEven > 0.0 ? AzFrom + 2.0 * Pi * (J + SpreadEven * D.U(-0.5, 0.5)) / std::max(NHeavy, 1)
+			                                             : D.U(0.0, 2.0 * Pi); // (otherwise at random round the compass: bunched and overlapping, never spaced)
+			const bool bShort = bRanked && J > 1 + NMid; // (a ranked crown's short jets, which may lean further out to widen its fan)
+			const double Lean = bHeavy ? (J == 0 ? D.U(2.0, 12.0) : Pick(D, Path(bShort && Has(Path("short_lean") + ".0") ? "short_lean" : "heavy_lean"), 0.35, 1.0) * Half) : D.U(0.0, 1.0) * Half;
+			double ReachF = 1.0;
+			if (!bHeavy)
+			{
+				ReachF = Pick(D, C + "fill_reach", 0.3, 0.75);
+			}
+			else if (J > 0)
+			{
+				ReachF = bRanked && J == 1 ? Pick(D, Path("second_reach"), 0.6, 0.75)
+				       : bRanked && !bShort ? Pick(D, Path("mid_reach"), 0.5, 0.7)
+				       : Pick(D, Path("heavy_reach"), 0.3, 1.0);
+			}
 			const Vec Dir = (Vec(std::cos(Az) * std::sin(Radians(Lean)), std::sin(Az) * std::sin(Radians(Lean)), std::cos(Radians(Lean))) + Tilt).Unit();
 			const double ReachJ = CrownH * ReachF;
 			const double V = ReachJ * KD * 1.12 / std::sqrt(Slow);
-			const double Thick = bHeavy ? Pick(D, C + "heavy_thick", 0.7, 2.6) : Pick(D, C + "fill_thick", 1.6, 3.0);
+			const double Thick = bHeavy ? Pick(D, Path("heavy_thick"), 0.7, 2.6) : Pick(D, C + "fill_thick", 1.6, 3.0);
 			const double Rf = FootR * Thick, Rt = TipR * Thick;
 			const double Shade = D.U(0.85, 1.15);
 			const double FillAlpha = Pick(D, C + "fill_alpha", 0.3, 0.5);
@@ -662,18 +687,17 @@ namespace TheaterFx
 			}
 		}
 		// the body: a dense dark mound of earth and dust at the crown's foot from about frame 4, slumping into the smoke
-		const std::string Bd = C + "body.";
-		const int NBody = static_cast<int>(Num(Bd + "puffs", 50.0) * std::max(0.7, std::sqrt(K)));
+		const int NBody = static_cast<int>(Num(Path("body.puffs"), 50.0) * std::max(0.7, std::sqrt(K)));
 		for (int I = 0; I < NBody; ++I)
 		{
 			const double A = D.U(0.0, 2.0 * Pi);
-			const double Out_ = CrownH * Num(Bd + "width", 0.3) * std::pow(D.U(), 0.6);
-			const double Up_ = CrownH * Num(Bd + "height", 0.22) * std::pow(D.U(), 1.3);
+			const double Out_ = CrownH * Num(Path("body.width"), 0.3) * std::pow(D.U(), 0.6);
+			const double Up_ = CrownH * Num(Path("body.height"), 0.22) * std::pow(D.U(), 1.3);
 			const Vec To = Vec(std::cos(A) * Out_, std::sin(A) * Out_, Up_) + Tilt * Up_;
-			const double Rr = CrownH * Pick(D, Bd + "puff_r", 0.06, 0.11);
+			const double Rr = CrownH * Pick(D, Path("body.puff_r"), 0.06, 0.11);
 			const double KB = 5.0;
 			Bit B;
-			B.Born = T0 + D.U(0.03, Num(Bd + "from_frame", 3.0) / 30.0);
+			B.Born = T0 + D.U(0.03, Num(Path("body.from_frame"), 3.0) / 30.0);
 			B.From = At + ZUp * (0.15 * K);
 			B.Vel = To * KB;
 			B.Drag = KB;
@@ -686,7 +710,7 @@ namespace TheaterFx
 			B.Col = P.Heavy.Mix(P.Dust, D.U(0.0, 0.35)) * D.U(0.85, 1.1);
 			B.Col2 = P.Smoke;
 			B.Cool = 1.2;
-			B.Alpha = Pick(D, Bd + "alpha", 0.85, 0.95);
+			B.Alpha = Pick(D, Path("body.alpha"), 0.85, 0.95);
 			B.FadeIn = 0.03;
 			B.Hold = 0.45;
 			B.Heart = 0.75;

@@ -472,7 +472,53 @@
     "500 lb"
    ],
    "push": true,
-   "cue_size": "bomb"
+   "cue_size": "bomb",
+   "crown": {
+    "_note": "Art director 20:00Z: a bomb's crown at frame 8 read as rabbit ears, two tall thin jets alone in a V. A bomb throws 5 to 9 heavy jets spaced round the compass (spread_even: each nudged by up to that share of a gap), so the fan shows from every side; the second tallest is clearly shorter than the tallest (second_reach, and heavy_lean at most 0.8 of the half fan, so it is at least a quarter shorter however it leans); at least three more reach half the tallest one's height or over (mid_jets, mid_reach); the rest are short (heavy_reach) and lean further out (short_lean), so the fan spans about 100 degrees at its foot. A dense dark body about a third of the crown's height stands at the root, so the jets rise out of a mass and never stand on the skirt like stalks. Height stays at the size's crown_m.",
+    "heavy_jets": [
+     5,
+     9
+    ],
+    "spread_even": 0.6,
+    "heavy_lean": [
+     0.3,
+     0.8
+    ],
+    "second_reach": [
+     0.6,
+     0.74
+    ],
+    "mid_jets": 3,
+    "mid_reach": [
+     0.66,
+     0.74
+    ],
+    "heavy_reach": [
+     0.3,
+     0.5
+    ],
+    "short_lean": [
+     0.65,
+     1.0
+    ],
+    "heavy_thick": [
+     1.0,
+     2.6
+    ],
+    "body": {
+     "puffs": 70,
+     "width": 0.2,
+     "height": 0.3,
+     "puff_r": [
+      0.08,
+      0.13
+     ],
+     "alpha": [
+      0.9,
+      0.97
+     ]
+    }
+   }
   },
   "bomb500": {
    "scale": 4.6,
@@ -491,7 +537,53 @@
     "1,000 lb"
    ],
    "push": true,
-   "cue_size": "bomb"
+   "cue_size": "bomb",
+   "crown": {
+    "_note": "Art director 20:00Z: a bomb's crown at frame 8 read as rabbit ears, two tall thin jets alone in a V. A bomb throws 5 to 9 heavy jets spaced round the compass (spread_even: each nudged by up to that share of a gap), so the fan shows from every side; the second tallest is clearly shorter than the tallest (second_reach, and heavy_lean at most 0.8 of the half fan, so it is at least a quarter shorter however it leans); at least three more reach half the tallest one's height or over (mid_jets, mid_reach); the rest are short (heavy_reach) and lean further out (short_lean), so the fan spans about 100 degrees at its foot. A dense dark body about a third of the crown's height stands at the root, so the jets rise out of a mass and never stand on the skirt like stalks. Height stays at the size's crown_m.",
+    "heavy_jets": [
+     5,
+     9
+    ],
+    "spread_even": 0.6,
+    "heavy_lean": [
+     0.3,
+     0.8
+    ],
+    "second_reach": [
+     0.6,
+     0.74
+    ],
+    "mid_jets": 3,
+    "mid_reach": [
+     0.66,
+     0.74
+    ],
+    "heavy_reach": [
+     0.3,
+     0.5
+    ],
+    "short_lean": [
+     0.65,
+     1.0
+    ],
+    "heavy_thick": [
+     1.0,
+     2.6
+    ],
+    "body": {
+     "puffs": 70,
+     "width": 0.2,
+     "height": 0.3,
+     "puff_r": [
+      0.08,
+      0.13
+     ],
+     "alpha": [
+      0.9,
+      0.97
+     ]
+    }
+   }
   }
  },
  "grounds": {

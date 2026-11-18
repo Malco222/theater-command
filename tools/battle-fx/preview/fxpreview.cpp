@@ -2,8 +2,8 @@
 // here by a small software painter so that the art director can see what the code draws without the Mac.
 //
 //   python3 flatten.py ../fx.json > /tmp/recipe.txt
-//   clang++ -O2 -std=c++20 -I ../../../unreal/TheaterCommand/Source/TheaterCommand fxpreview.cpp \
-//       ../../../unreal/TheaterCommand/Source/TheaterCommand/Effects/TheaterFxCore.cpp -o fxpreview
+//   SRC=../../../unreal/TheaterCommand/Source/TheaterCommand
+//   clang++ -O2 -std=c++20 -I $SRC fxpreview.cpp $SRC/Effects/TheaterFxCore.cpp -o fxpreview
 //   ./fxpreview /tmp/recipe.txt <out folder> <size> <ground> <frames, e.g. 4,8,40> [WxH] [back up]
 //
 // It draws what the game's mesh would carry: the same puffs, in the same order, with the same colours and alphas,
@@ -349,7 +349,8 @@ int main(int Argc, char** Argv)
 	const double Back = Argc > 7 ? std::stod(Argv[7]) : 40.0, UpBy = Argc > 8 ? std::stod(Argv[8]) : 14.0;
 
 	Battle Fx;
-	Fx.Setup(&Book, &Swell, nullptr, 3);
+	const char* SeedIs = std::getenv("FX_SEED"); // (FX_SEED=n: another throw of the dice, for the same hit seen several ways)
+	Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
 	Fx.SetWind(Vec(1.6, 0.4, 0.0));
 	const double Scale = Book.Numbers.count("sizes." + Size + ".scale") ? Book.Numbers["sizes." + Size + ".scale"] : 1.0;
 	const double Grow = std::pow(std::max(0.6, Scale), 0.75);
