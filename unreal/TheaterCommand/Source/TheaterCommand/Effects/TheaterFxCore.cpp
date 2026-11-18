@@ -133,8 +133,10 @@ namespace TheaterFx
 		ShadeDark = Num("game.shade_dark", 0.28);
 		ClodLeast = Num("game.clod_least_px", 1.2);
 		Beyond = Num("game.draw_beyond_m", 1500.0);
-		Out.assign(static_cast<size_t>(MaxPuffs) * PerPuff, Vec());
-		OutRgba.assign(static_cast<size_t>(MaxPuffs) * PerPuff * 4, 0);
+		Sides = std::max(6, std::min(24, static_cast<int>(Num("game.puff_sides", 16.0))));
+		PointsPerPuff = 2 * Sides + 1;
+		Out.assign(static_cast<size_t>(MaxPuffs) * PointsPerPuff, Vec());
+		OutRgba.assign(static_cast<size_t>(MaxPuffs) * PointsPerPuff * 4, 0);
 		Clear();
 	}
 
@@ -197,7 +199,7 @@ namespace TheaterFx
 		Out_.Smoke = Picture(P + "smoke", Rgb::FromPicture(72, 62, 52));
 		Out_.bFirst = Has(P + "first.0");
 		Out_.First = Picture(P + "first", Out_.Dust);
-		Out_.Grain = std::max(0.2, Num(P + "grain", 1.0));
+		Out_.Grain = std::max(0.2, std::min(1.0, Num(P + "grain", 1.0)));
 		Out_.FirstAtFoot = Num(P + "first_share.0", 0.0);
 		Out_.FirstAtTip = Num(P + "first_share.1", 1.0);
 		Out_.bSplinter = Has(P + "splinter.0");
@@ -317,6 +319,20 @@ namespace TheaterFx
 			B.Land2 = B.Land;
 			B.At2 = B.At1;
 		}
+	}
+
+	void Battle::Chunk(Bit& B, Dice& D) const
+	{
+		// (a clod is an irregular chunk, never a smooth bean: a lumpy outline of its own, tumbling as it flies, with a
+		// lit face toward the sun and a dark one away from it)
+		const std::string C = "burst.debris.clods.";
+		B.Rough = Pick(D, C + "rough", 0.25, 0.45);
+		B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+		B.Turn = D.U(0.0, 2.0 * Pi);
+		B.TurnRate = Pick(D, C + "tumble_turns_a_second", 0.5, 2.0) * 2.0 * Pi * (D.U() < 0.5 ? -1.0 : 1.0);
+		B.ShadeK = Num(C + "shade", 2.5);
+		B.Point = D.U(0.0, 0.3);
+		B.Tail = D.U(0.0, 0.25);
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -475,7 +491,7 @@ namespace TheaterFx
 			B.Windage = 0.6;
 			B.Life = Pick(D, Sk + "life_s", 2.5, 3.5) * std::min(2.0, K);
 			B.R0 = Num(Sk + "start_radius_m", 0.5) * K;
-			B.R1 = Num(Sk + "end_radius_m", 1.5) * K * D.U(0.7, 1.3);
+			B.R1 = Num(Sk + "end_radius_m", 1.5) * K * D.U(0.7, 1.3) * (bFront ? 1.0 : Num(Sk + "inner_radius_k", 1.0)); // (fewer, broader inner ones fill the round)
 			B.Grow = Num(Sk + "grow", 0.25);
 			B.Stretch = Num(Sk + "stretch_along_ring", 1.7);
 			B.Along = Vec(-std::sin(A), std::cos(A), 0.0);
@@ -512,6 +528,7 @@ namespace TheaterFx
 		const double TipR = Num(C + "jet_tip_r", 0.012) * CrownH;
 		const double Lumps = Num(C + "lump_chance", 0.2);
 		const double Jitter = Num(C + "edge_jitter", 0.4);
+		const double EdgeRough = Num(C + "edge_rough", 0.3);
 		const Vec Tilt = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), 0.0).Unit(Vec(1.0, 0.0, 0.0)) * std::tan(Radians(Pick(D, C + "tilt_deg", 4.0, 14.0)));
 		const int NHeavy = D.Whole(static_cast<int>(Num(C + "heavy_jets.0", 5.0)), static_cast<int>(Num(C + "heavy_jets.1", 8.0)));
 		const int NFill = D.Whole(static_cast<int>(Num(C + "fill_jets.0", 10.0)), static_cast<int>(Num(C + "fill_jets.1", 16.0)));
@@ -571,8 +588,12 @@ namespace TheaterFx
 				B.Hold = 0.4;
 				B.Heart = bHeavy ? (bGrained ? 0.65 : 0.8) : 0.5;
 				B.Rim = bHeavy && !bGrained ? 0.15 : 0.0; // (grains have soft edges, so no jet has a clean blade's side)
+				B.Rough = bHeavy ? EdgeRough : EdgeRough * 0.6; // (lumpy outlines: clumpy sides with no more puffs)
+				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+				B.Turn = D.U(0.0, 2.0 * Pi);
 				Bits.push_back(B);
-				F += Rl * (1.0 + (Along0 - 1.0) * P.Grain) * Over / std::max(ReachJ, 1e-3) * D.U(0.7, 1.2); // (stepped by the length it is drawn)
+				// (stepped by the length it is drawn; never less than a hundredth, so no number in the recipe can stall it)
+				F += std::max(0.01, Rl * std::max(1.0, 1.0 + (Along0 - 1.0) * P.Grain) * Over / std::max(ReachJ, 1e-3) * D.U(0.7, 1.2));
 			}
 			if (bHeavy && ClodK > 0.05)
 			{
@@ -662,6 +683,7 @@ namespace TheaterFx
 			B.Heart = 0.95;
 			B.Rim = 0.6;
 			B.LeastPx = ClodLeast;
+			Chunk(B, D);
 			Throw(B);
 			B.Life = B.Land2 + D.U(2.0, 4.0);
 			B.Hold = std::min(0.95, (B.Land2 + 1.0) / B.Life);
@@ -722,6 +744,8 @@ namespace TheaterFx
 		const Rgb Warm = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
 		const Vec Lean = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), 0.0) * 0.15;
 		const std::string Sm = "burst.smoke.";
+		const Rgb Top = Picture(Sm + "colour_top", Rgb::FromPicture(66, 64, 62));
+		const double TopShare = Num(Sm + "top_share", 0.8);
 		for (int I = 0; I < N; ++I)
 		{
 			const double F = std::pow(D.U(), 0.9); // (0 at the foot, 1 at the top of the crown)
@@ -730,7 +754,8 @@ namespace TheaterFx
 			const double Spread = (0.5 + 2.2 * F) * K;
 			const double Var = D.U(0.6, 1.6);
 			const double C = D.U(0.8, 1.2);
-			const Rgb Base = D.U() > 0.25 ? P.Smoke * C : P.Dust * (0.6 * C);
+			// (warm brown near the ground, charcoal grey toward the top: brown all the way up reads as dust)
+			const Rgb Base = (D.U() > 0.25 ? P.Smoke * C : P.Dust * (0.6 * C)).Mix(Top * C, std::min(1.0, F * 1.1) * TopShare);
 			Bit B;
 			B.Born = Born;
 			B.From = At + Lean * Hgt + Vec(D.Bell() * Spread * 0.6, D.Bell() * Spread * 0.6, Hgt * 0.45);
@@ -932,6 +957,7 @@ namespace TheaterFx
 			B.Heart = 0.95;
 			B.Rim = 0.6;
 			B.LeastPx = ClodLeast;
+			Chunk(B, D);
 			Throw(B);
 			B.Life = B.Land2 + 2.0;
 			B.Hold = std::min(0.95, (B.Land2 + 0.5) / B.Life);
@@ -1311,9 +1337,13 @@ namespace TheaterFx
 	// ---------------------------------------------------------------------------------------------------------------
 	// Drawing
 
-	void Battle::Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Point, double Tail, double Shade, const View& Eye)
+	void Battle::Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Point, double Tail, double Shade, const View& Eye, double Rough, uint32_t LumpSeed, double Turn)
 	{
-		const size_t First = static_cast<size_t>(Slot) * PerPuff;
+		const size_t First = static_cast<size_t>(Slot) * PointsPerPuff;
+		// (a clod's lumpy outline: a few waves round it, its own, turning as it tumbles)
+		const double P2 = (LumpSeed & 1023u) * (2.0 * Pi / 1024.0);
+		const double P3 = ((LumpSeed >> 10) & 1023u) * (2.0 * Pi / 1024.0);
+		const double P5 = ((LumpSeed >> 20) & 1023u) * (2.0 * Pi / 1024.0);
 		auto Put = [this](size_t I, const Vec& At, const Rgb& C, double A)
 		{
 			Out[I] = At;
@@ -1323,18 +1353,23 @@ namespace TheaterFx
 			OutRgba[I * 4 + 3] = Byte(A);
 		};
 		Put(First, Middle, Col, Alpha);
-		for (int K = 0; K < Ring; ++K)
+		for (int K = 0; K < Sides; ++K)
 		{
-			const double Angle = K * 2.0 * Pi / Ring;
+			const double Angle = K * 2.0 * Pi / Sides;
 			const Vec Dir = AxisA * std::cos(Angle) + AxisB * std::sin(Angle);
 			double Reach = 1.0;
 			if (K == 0)
 			{
 				Reach += Point;
 			}
-			else if (K == Ring / 2)
+			else if (K == Sides / 2)
 			{
 				Reach += Tail;
+			}
+			if (Rough > 0.0)
+			{
+				const double W = Angle - Turn;
+				Reach *= std::max(0.35, 1.0 + Rough * (0.5 * std::cos(2.0 * W + P2) + 0.35 * std::cos(3.0 * W + P3) + 0.25 * std::cos(5.0 * W + P5)));
 			}
 			Rgb Shaded = Col;
 			Rgb HeartShaded = Col;
@@ -1347,7 +1382,7 @@ namespace TheaterFx
 				HeartShaded = Col * (1.0 + 0.5 * (F - 1.0));
 			}
 			Put(First + 1 + static_cast<size_t>(K), Middle + Dir * (0.5 * Reach), HeartShaded, HeartAlpha);
-			Put(First + 1 + Ring + static_cast<size_t>(K), Middle + Dir * Reach, Shaded, RimAlpha);
+			Put(First + 1 + static_cast<size_t>(Sides) + static_cast<size_t>(K), Middle + Dir * Reach, Shaded, RimAlpha);
 		}
 	}
 
@@ -1458,7 +1493,7 @@ namespace TheaterFx
 		{
 			return false;
 		}
-		Lay(Slot, Middle, AxA, AxB, Col, A, A * B.Heart, A * B.Rim, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye);
+		Lay(Slot, Middle, AxA, AxB, Col, A, A * B.Heart, A * B.Rim, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, B.Turn + B.TurnRate * Age);
 		return true;
 	}
 
@@ -1504,8 +1539,8 @@ namespace TheaterFx
 		// fold away what was drawn last frame and is not now
 		for (int S = Slot; S < LastDrawn; ++S)
 		{
-			const size_t First = static_cast<size_t>(S) * PerPuff;
-			for (size_t I = 0; I < static_cast<size_t>(PerPuff); ++I)
+			const size_t First = static_cast<size_t>(S) * PointsPerPuff;
+			for (size_t I = 0; I < static_cast<size_t>(PointsPerPuff); ++I)
 			{
 				Out[First + I] = Out[First];
 				OutRgba[(First + I) * 4 + 3] = 0;

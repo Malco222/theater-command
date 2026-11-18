@@ -307,9 +307,10 @@ void FBattleEffects::Clear()
 
 void FBattleEffects::MakeSection(int32 NewRoom, const FVector& Fill)
 {
-	// The mesh is made with room for so many puffs (the map smoke's shape: a middle and two rings of eight, both faces
-	// of every triangle); after that only its points and colours change, until it needs more room or much less.
-	const int32 Ring = TheaterFx::Battle::Ring, PerPuff = TheaterFx::Battle::PerPuff;
+	// The mesh is made with room for so many puffs (the map smoke's shape: a middle and two rings, of game.puff_sides
+	// points each, both faces of every triangle); after that only its points and colours change, until it needs more
+	// room or much less.
+	const int32 Ring = Core.Ring(), PerPuff = Core.PerPuff();
 	TArray<int32> Triangles;
 	Triangles.Reserve(NewRoom * Ring * 18);
 	for (int32 Each = 0; Each < NewRoom; ++Each)
@@ -395,7 +396,7 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 	{
 		RoomSpare = 0;
 	}
-	const int32 PerPuff = TheaterFx::Battle::PerPuff;
+	const int32 PerPuff = Core.PerPuff();
 	const std::vector<TheaterFx::Vec>& From = Core.Points();
 	const std::vector<uint8_t>& Rgba = Core.Colours();
 	if (Wanted != Room)

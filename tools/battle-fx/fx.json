@@ -57,10 +57,10 @@
    "height_m": 1.2,
    "colour_from_ground": 0.85,
    "skirt": {
-    "puffs_outer": 90,
-    "puffs_inner": 160,
+    "puffs_outer": 50,
+    "puffs_inner": 90,
     "inner_speed": 0.6,
-    "end_radius_m": 2.3,
+    "end_radius_m": 3.0,
     "start_radius_m": 0.7,
     "stretch_along_ring": 1.7,
     "flatten": 0.75,
@@ -82,7 +82,9 @@
     "shade": 1.8,
     "_shade": "how strongly the skirt is lit on top and shadowed at its foot (1 is every other puff), so it shows its height (art director 17:09Z)",
     "heart": 0.3,
-    "_mend_1931": "Art director 19:31Z: the skirt must be one low continuous haze, never puffs. Its pieces are now drawn as low flattened balls seen from where the eye is (a low wall from the side, the whole round they cover from above, where they used to be thin upright cards that read as separate dabs), larger, more of them, softer and fainter, so they run together."
+    "_mend_1931": "Art director 19:31Z: the skirt must be one low continuous haze, never puffs. Its pieces are now drawn as low flattened balls seen from where the eye is (a low wall from the side, the whole round they cover from above, where they used to be thin upright cards that read as separate dabs), larger, more of them, softer and fainter, so they run together.",
+    "_budget": "Fewer, larger pieces since they cover their whole round from above (19:45Z): 130 a 105 where 250 overflowed the room in a battery's salvo (the pre-check's count).",
+    "inner_radius_k": 1.5
    },
    "grass": "flattens outward, springs back over 0.6 s",
    "heat_shimmer_frames": 2,
@@ -196,7 +198,9 @@
     1.05
    ],
    "edge_jitter": 0.9,
-   "_edges": "edge_jitter: how far each puff along a jet strays sideways, as a share of the jet's width; lump_chance: how many puffs are lumps half again or twice as wide. Ragged, clumpy sides, never smooth blades or leaves (art director 17:09Z)."
+   "_edges": "edge_jitter: how far each puff along a jet strays sideways, as a share of the jet's width; lump_chance: how many puffs are lumps half again or twice as wide. Ragged, clumpy sides, never smooth blades or leaves (art director 17:09Z).",
+   "edge_rough": 0.3,
+   "_edge_rough": "Each jet puff's outline is lumpy by this share (fill jets 0.6 of it), so a jet's sides are clumpy, never a smooth blade, with no more puffs."
   },
   "debris": {
    "frames": [
@@ -215,7 +219,17 @@
     ],
     "big_bounce_once": true,
     "landing_puff": true,
-    "_passed": "With the clods thrown from the jets' tips, about 130 in all for a 105, landing 0.9 to 3.1 s after the flash, the big ones bouncing once (the fortifications burst, passed 17:11Z)."
+    "_passed": "With the clods thrown from the jets' tips, about 130 in all for a 105, landing 0.9 to 3.1 s after the flash, the big ones bouncing once (the fortifications burst, passed 17:11Z).",
+    "rough": [
+     0.25,
+     0.45
+    ],
+    "tumble_turns_a_second": [
+     0.5,
+     2.0
+    ],
+    "shade": 2.5,
+    "_chunk": "Irregular chunks, never smooth beans (art director 19:36Z): each clod has its own lumpy outline (rough), tumbles as it flies, and has a lit face toward the sun and a dark one away (shade)."
    },
    "grit": {
     "streaks": true,
@@ -282,7 +296,14 @@
    "alpha": [
     0.35,
     0.6
-   ]
+   ],
+   "colour_top": [
+    66,
+    64,
+    62
+   ],
+   "top_share": 0.8,
+   "_top": "Warm brown near the ground, charcoal grey toward the top: brown all the way up reads as dust (art director 19:36Z). Each puff mixes toward colour_top by its height in the cloud, up to top_share."
   },
   "linger": {
    "seconds": "sizes.<kind>.linger_s",
@@ -582,7 +603,7 @@
      203,
      211
     ],
-    "grain": 0.5,
+    "grain": 0.6,
     "first_share": [
      0.35,
      0.8
@@ -995,7 +1016,7 @@
   "max_lamps": 2,
   "lamp_candela_at_full": 400.0,
   "_lamp": "A flash's lamp at full strength (a 105 mm is 1), in candelas at 100 world units a metre (the kit scales it for other scales). 400 is worked out from the map's key light of about 7 lux so that the ground 3 m from a 105 lifts about 1.24 times; set it on the Mac by measuring frames until the ground within 15 m lifts 1.1 to 1.3 times.",
-  "shade_lit": 0.18,
+  "shade_lit": 0.32,
   "shade_dark": 0.28,
   "_shade": "puffs are unlit: each is lightened toward the sun and darkened away from it by these shares, so a cloud has a lit and a shadowed side",
   "clod_least_px": 1.2,
@@ -1008,6 +1029,9 @@
   "spark_life_s": [
    0.12,
    0.3
-  ]
+  ],
+  "puff_sides": 12,
+  "_sides": "Points round each puff's ring (6 to 24). 12, so no eight-sided edge shows on a large near puff (art director 19:36Z asked 12 to 16). Each puff is 2 x sides + 1 points: 16 is rounder still if the Mac's frame time allows; 8 was the old shape.",
+  "_shade_1936": "shade_lit raised from 0.18 to 0.32 (art director 19:36Z): the sunward side of earth smoke shows as lit brown-grey; the shadow side stays charcoal (shade_dark 0.28)."
  }
 }
