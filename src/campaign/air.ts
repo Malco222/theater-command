@@ -1047,6 +1047,7 @@ export function airUpkeep(g: Game, nat: string): void {
     // The air war: it forms as air groups, and the ground it forms on has its airfields.
     if (airWar(g)) { if (!hasAirfield(g, base.id)) g.flags[`af:${base.id}`] = AIRWAR.fields.seed.base; splitFleet(g, f); }
   }
+  if (airWar(g)) growCommands(g, nat);
   const p = airPool(g, nat);
   const built = row(AIR.production[nat], g.turn), trained = row(AIR.pilots.perMonth[nat], g.turn);
   if (built) { p.ftr += built[1]; p.bmr += built[2]; }
@@ -1088,6 +1089,40 @@ export function airUpkeep(g: Game, nat: string): void {
   p.ftr = Math.min(p.ftr, most.ftr);
   p.bmr = Math.min(p.bmr, most.bmr);
   p.pilots = Math.min(p.pilots, most.pilots);
+}
+
+/**
+ * A command history grows (ruling 228, item 4: Bomber Command to 1,400 heavies, the Eighth to 1,600) forms new air
+ * groups as it grows, so that none is kept at more than the data allows: when its establishment of a kind passes what
+ * its groups of that kind can hold, new groups of that kind form beside the first of them, empty, and fill from the
+ * month's deliveries. Every group of the kind is then kept at an even part of the command (the old ones keep their
+ * proportions among themselves). A command that has lost every group of a kind raises none again.
+ */
+function growCommands(g: Game, nat: string): void {
+  const most = AIRWAR.groups.most;
+  for (const r of AIR.fleets) {
+    if (r.nat !== nat) continue;
+    const e = row(r.est, g.turn);
+    if (!e) continue;
+    for (const [kind, want] of [['ftr', e[1]], ['bmr', e[2]]] as const) {
+      const have = g.airFleets.filter((f) => f.nat === nat && f.ship === undefined && f.kind === kind && (f.parent ?? f.name) === r.name);
+      const n = Math.ceil(want / most);
+      if (!have.length || n <= have.length) continue;
+      const first = have[0], base = g.regions[first.base];
+      if (!base) continue;
+      for (const f of have) f.share = (f.share ?? 1) * (have.length / n);
+      let at = g.airFleets.indexOf(have[have.length - 1]);
+      for (let k = have.length; k < n; k++) {
+        const grp: AirFleet = {
+          id: g.nextAir++, nat, name: '', base: first.base, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
+          mission: 'rest', target: -1, ready: first.ready, leader: null, moved: first.moved, lost: { ftr: 0, bmr: 0 }, kind, parent: r.name, share: 1 / n,
+        };
+        grp.name = groupName(g, nat, kind, Math.round(want / n), base);
+        g.airFleets.splice(++at, 0, grp);
+        headline(g, 'info', `${grp.name} forms in ${base.name}, a new group of ${r.name}.`, nat, base.id);
+      }
+    }
+  }
 }
 
 /** A fleet whose base has fallen flies out to the nearest ground its nation still holds, leaving some aircraft behind. */
