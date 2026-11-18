@@ -4912,9 +4912,9 @@ namespace
 		return Note;
 	}
 
-	FString LessonMomentArgs(bool bCard, const TArray<int32>& InHand)
+	FString LessonMomentArgs(bool bCard, const TArray<int32>& InHand, bool bOpen)
 	{
-		return FString::Printf(TEXT("{\"card\":%s,\"inHand\":[%s]}"), bCard ? TEXT("true") : TEXT("false"), *IdList(InHand));
+		return FString::Printf(TEXT("{\"card\":%s,\"inHand\":[%s],\"open\":%s}"), bCard ? TEXT("true") : TEXT("false"), *IdList(InHand), bOpen ? TEXT("true") : TEXT("false"));
 	}
 }
 
@@ -4951,26 +4951,26 @@ bool FCampaignSession::ReadLessonDesk(const TSharedPtr<FJsonObject>& Object, FLe
 bool FCampaignSession::LessonNow(bool bCard, const TArray<int32>& InHand, FLessonDesk& Out)
 {
 	TSharedPtr<FJsonObject> Object;
-	return CallRules(TEXT("lessonNow"), FString::Printf(TEXT("[%s]"), *LessonMomentArgs(bCard, InHand)), Object) && ReadLessonDesk(Object, Out);
+	return CallRules(TEXT("lessonNow"), FString::Printf(TEXT("[%s]"), *LessonMomentArgs(bCard, InHand, bLessonPageOpen)), Object) && ReadLessonDesk(Object, Out);
 }
 
 bool FCampaignSession::LessonDeed(const FString& Deed, bool bCard, FLessonDesk& Out)
 {
 	TSharedPtr<FJsonObject> Object;
-	return CallRules(TEXT("lessonDeed"), FString::Printf(TEXT("[%s,%s]"), *JsonQuote(Deed), *LessonMomentArgs(bCard, TArray<int32>())), Object) && ReadLessonDesk(Object, Out);
+	return CallRules(TEXT("lessonDeed"), FString::Printf(TEXT("[%s,%s]"), *JsonQuote(Deed), *LessonMomentArgs(bCard, TArray<int32>(), bLessonPageOpen)), Object) && ReadLessonDesk(Object, Out);
 }
 
 bool FCampaignSession::LessonAct(const FString& Action, bool bCard, const TArray<int32>& InHand, FLessonDesk& Out)
 {
 	TSharedPtr<FJsonObject> Object;
-	return CallRules(TEXT("lessonAct"), FString::Printf(TEXT("[%s,%s]"), *JsonQuote(Action), *LessonMomentArgs(bCard, InHand)), Object) && ReadLessonDesk(Object, Out);
+	return CallRules(TEXT("lessonAct"), FString::Printf(TEXT("[%s,%s]"), *JsonQuote(Action), *LessonMomentArgs(bCard, InHand, bLessonPageOpen)), Object) && ReadLessonDesk(Object, Out);
 }
 
 FLessonGuide FCampaignSession::LessonGuide(bool bCard, const TArray<int32>& InHand)
 {
 	FLessonGuide Out;
 	TSharedPtr<FJsonObject> Object;
-	if (!CallRules(TEXT("guide"), FString::Printf(TEXT("[%s]"), *LessonMomentArgs(bCard, InHand)), Object) || !Object.IsValid())
+	if (!CallRules(TEXT("guide"), FString::Printf(TEXT("[%s]"), *LessonMomentArgs(bCard, InHand, bLessonPageOpen)), Object) || !Object.IsValid())
 	{
 		return Out;
 	}

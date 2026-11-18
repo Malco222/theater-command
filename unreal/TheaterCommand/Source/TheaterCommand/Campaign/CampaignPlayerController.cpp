@@ -3843,7 +3843,9 @@ void ACampaignPlayerController::AskLessons()
 		return;
 	}
 	// What is owed first, in the order it was done; then the desk as the screen stands now. Every lesson stamped on
-	// the way is gathered, for the note on the screen to take its stamp.
+	// the way is gathered, for the note on the screen to take its stamp. (Lesson 10's note says its words for the
+	// ARSENAL while the ARSENAL is open: the UI director, build 1640.)
+	Session->SetLessonPageOpen(bArsenalOpen);
 	TArray<FString> Stamped;
 	FLessonDesk Desk;
 	for (const TPair<FString, bool>& Deed : LessonDeedsOwed)
@@ -4995,8 +4997,8 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		OpenPage(TEXT("reports"));
 	}
 	// (Rules 84.3.3) FIRST COMMAND. The DONE stamp stands two seconds at most, then the next note comes. The notes are
-	// asked again whenever what only the screen sees has changed (the card open, the army in hand, his month or the
-	// others'), or an order of his has been answered; and only once no order is being answered.
+	// asked again whenever what only the screen sees has changed (the card open, the ARSENAL open, the army in hand, his
+	// month or the others'), or an order of his has been answered; and only once no order is being answered.
 	{
 		const double Now = FPlatformTime::Seconds();
 		if (LessonStampUntil > 0.0 && Now >= LessonStampUntil)
@@ -5025,7 +5027,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		}
 		if (const FCampaignSession* Seen = GetSession())
 		{
-			uint32 Key = (LessonCardOpen() ? 1u : 0u) | (bWatching ? 2u : 0u) | (Seen->GetView().bHumanUp ? 4u : 0u);
+			uint32 Key = (LessonCardOpen() ? 1u : 0u) | (bWatching ? 2u : 0u) | (Seen->GetView().bHumanUp ? 4u : 0u) | (bArsenalOpen ? 8u : 0u);
 			Key = HashCombine(Key, GetTypeHash(Seen->GetView().Turn));
 			for (const int32 Id : PickedCorps)
 			{

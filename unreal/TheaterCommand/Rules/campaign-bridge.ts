@@ -5797,8 +5797,11 @@ function raidsFlown(turn?: number) {
 // (trap 2) go through calls that read no deeds. The two deeds only the screen sees, the month card put down ('card')
 // and a line of it followed ('line'), the game reports by name with TC.lessonDeed.
 
-/** What only the screen can see: whether the month card is open, and the corps of the army in hand. */
-type LessonMoment = { card?: boolean; inHand?: number[] };
+/**
+ * What only the screen can see: whether the month card is open, the corps of the army in hand, and whether the page a
+ * lesson sends the player to is open (the ARSENAL, lesson 10's: its note then says its 'there' words).
+ */
+type LessonMoment = { card?: boolean; inHand?: number[]; open?: boolean };
 
 let lessonBook: Notebook = readNotebook(null);
 /** The notebook changed since the game last wrote it to the player's file. */
@@ -5934,9 +5937,13 @@ try {
   for (const pair of LESSON_NAMES_3D) if (!have.some(([was]) => was === pair[0])) have.push(pair);
 } catch { /* (the list's own words, then) */ }
 
-/** A lesson as the screen shows it: its number, its words with the campaign's places filled in, and its deed line. */
-function lessonShown(s: Game, l: Lesson) {
-  const w = lessonWords(s, l, LESSON_GAME);
+/**
+ * A lesson as the screen shows it: its number, its words with the campaign's places filled in, and its deed line.
+ * `open`: the page it sends the player to is open, and a lesson with words for that says them (lesson 10 in the
+ * ARSENAL asks for the artillery corps: a note never asks for what is already done, the UI director, build 1640).
+ */
+function lessonShown(s: Game, l: Lesson, open = false) {
+  const w = lessonWords(s, l, LESSON_GAME, '', open);
   return { kind: 'lesson', id: l.id, n: l.n, of: LESSONS.length, head: w.head, text: w.text, deed: w.deed, does: l.does, due: l.due };
 }
 
@@ -5979,7 +5986,7 @@ function lessonNow(moment: LessonMoment = {}) {
       // (Lesson 1 lies on the month card itself and nowhere else.)
       laid = lessonShown(s, l);
     } else if (l) {
-      note = lessonShown(s, l);
+      note = lessonShown(s, l, !!moment.open);
       const at = l.id === 'pickup' ? pickupPlace(s) : l.id === 'attack' ? lessonFoeFlag(s, m.inHand!) : l.id === 'city' ? siegeOf(s)?.region ?? -1 : -1;
       note.region = at;
     } else if (closingOwed(s, lessonBook)) {
