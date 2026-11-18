@@ -3,7 +3,9 @@
 // three beds the battle mix needs under its fighting (wind on open ground, a wood, rain). The takes carry names of
 // their own on the board (Brian's stamps on the cut ones stay as he left them); once he chooses, the chosen file goes
 // into the pack under the name the games call: horses_column -> horses, hammer_anvil or hammer_blows -> hammer,
-// ship_whistle or ship_horn_blast -> ship_horn, rifles_line -> rifles. All Freesound field
+// ship_whistle or ship_horn_blast -> ship_horn, rifles_line -> rifles. Brian's stamps, 18 Nov 15:51 to 15:52Z:
+// approved rifles_line (into the pack as rifles), hammer_anvil (as hammer), wind_loop, woods_loop, rain_loop; cut
+// horses_column, hammer_blows, ship_whistle, ship_horn_blast (horses and ship_horn stay silent). All Freesound field
 // recordings fetched on Brian's Mac (wanted3.json), cut with as little done to them as possible: a cut, a fade, a
 // low cut, and for the rifle line a distance for each shot.
 //
