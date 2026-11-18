@@ -136,6 +136,17 @@ namespace TheaterFx
 		ClodRough = Range("burst.debris.clods.rough", 0.25, 0.45);
 		ClodTurns = Range("burst.debris.clods.tumble_turns_a_second", 0.5, 2.0);
 		ClodShade = Num("burst.debris.clods.shade", 2.5);
+		TracerHalf = Num("tracer.streak_m", 16.0) * 0.5;
+		TracerLeast = Num("tracer.least_px", 3.0);
+		TracerCol = Picture("tracer.colour", Rgb::FromPicture(213, 199, 104));
+		TracerPale = TracerCol.Mix(Rgb(1.0f, 1.0f, 1.0f), 0.55);
+		TracerDayWide = Num("tracer.day_width", 1.5);
+		TracerDayCore = Picture("tracer.day_core", Rgb::FromPicture(245, 240, 210));
+		CannonHeartCol = Picture("air_guns.flash_heart", Rgb::FromPicture(240, 220, 150));
+		FlameCol = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
+		FlashCoreCol = Picture("burst.flash.core_colour", Rgb::FromPicture(236, 168, 72));
+		GunSmokeCol = Picture("air_guns.smoke_colour", Rgb::FromPicture(168, 166, 160));
+		AirRows.clear();
 		Sides = std::max(6, std::min(24, static_cast<int>(Num("game.puff_sides", 16.0))));
 		PointsPerPuff = 2 * Sides + 1;
 		std::vector<double>* Tables[8] = { &RingCos, &RingSin, &Ring2Cos, &Ring2Sin, &Ring3Cos, &Ring3Sin, &Ring5Cos, &Ring5Sin };
@@ -169,6 +180,7 @@ namespace TheaterFx
 		Knocks.clear();
 		Sources.clear();
 		GunRounds.clear();
+		Firings.clear();
 		for (size_t I = 0; I < OutRgba.size(); ++I)
 		{
 			OutRgba[I] = 0;
@@ -588,7 +600,7 @@ namespace TheaterFx
 		// (ranked heights, where a size asks for them: the second tallest jet clearly shorter than the tallest, then a
 		// few more at half its height or over, so the fan never reads as one or two stalks)
 		const bool bRanked = Has(Path("second_reach") + ".0");
-		const int NMid = std::clamp(static_cast<int>(Num(Path("mid_jets"), 0.0)), 0, NHeavy);
+		const int NMid = std::clamp(static_cast<int>(Num(Path("mid_jets"), 0.0)), 0, std::max(NHeavy, 0));
 		// (the heavy jets spaced round the compass, each nudged by up to this share of a gap: every side shows a fan)
 		const double SpreadEven = Clamp01(Num(Path("spread_even"), 0.0));
 		const double AzFrom = SpreadEven > 0.0 ? D.U(0.0, 2.0 * Pi) : 0.0;
@@ -1268,12 +1280,9 @@ namespace TheaterFx
 		}
 		Dice D(++Seeds * 32452843ull ^ PlaceKey(From));
 		const double Speed = Num("tracer.speed_mps", 760.0);
-		const double Half = Num("tracer.streak_m", 16.0) * 0.5;
+		const double Half = TracerHalf;
 		const double Life = Num("tracer.life_s", 0.6);
-		const double Least = Num("tracer.least_px", 3.0);
-		const Rgb Col = Picture("tracer.colour", Rgb::FromPicture(213, 199, 104));
-		const Rgb Pale = Col.Mix(Rgb(1.0f, 1.0f, 1.0f), 0.55);
-		const Rgb Flame = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
+		const Rgb Flame = FlameCol;
 		const Vec Line = To - From;
 		const double Dist = Line.Length();
 		const Vec Dir = Line.Unit(Vec(1.0, 0.0, 0.0));
@@ -1281,30 +1290,7 @@ namespace TheaterFx
 		const double Gap = 1.0 / std::max(PerSecond, 0.1);
 		auto Streak = [&](double Born, const Vec& Start, const Vec& Way, double Fast, double For)
 		{
-			for (int Layer = 0; Layer < 2; ++Layer)
-			{
-				Bit B;
-				B.Form = Bit::Shape::Streak;
-				B.Born = Born;
-				B.From = Start + Way * Half;
-				B.Vel = Way * Fast;
-				B.Life = For;
-				B.HalfLength = Half;
-				B.Along = Way;
-				B.R0 = B.R1 = Layer == 0 ? 0.045 : 0.018;
-				B.LeastPx = Layer == 0 ? Least : Least * 0.4;
-				B.Col = Layer == 0 ? Col : Pale; // (paler along its middle)
-				B.Col2 = B.Col;
-				B.Alpha = Layer == 0 ? 0.8 : 1.0;
-				B.FadeIn = 0.001;
-				B.Hold = 0.9;
-				B.Heart = 0.9;
-				B.Rim = Layer == 0 ? 0.2 : 0.5;
-				B.Point = 0.3;
-				B.Tail = 0.7; // (thinning toward the gun)
-				B.bLight = true;
-				Bits.push_back(B);
-			}
+			Tracer(Born, Start, Way, Way * Fast, For, 0.0, 0.0);
 		};
 		for (int R = 0; R < Rounds; ++R)
 		{
@@ -1346,6 +1332,276 @@ namespace TheaterFx
 				Streak(T + Reach, From + Aim * Dist - Off * Half, Off, Speed * Num("tracer.ricochet.slower", 0.5), std::max(0.15, Life - Reach));
 			}
 		}
+	}
+
+	void Battle::Tracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, double For, double Drag, double Drop)
+	{
+		for (int Layer = 0; Layer < 2; ++Layer)
+		{
+			Bit B;
+			B.Form = Bit::Shape::Streak;
+			B.Born = Born;
+			B.From = Start + Way * TracerHalf;
+			B.Vel = Vel;
+			B.Drag = Drag;
+			B.Gravity = Drop;
+			B.Life = For;
+			B.HalfLength = TracerHalf;
+			B.Along = Way;
+			B.R0 = B.R1 = Layer == 0 ? 0.045 : 0.018;
+			B.LeastPx = Layer == 0 ? TracerLeast : TracerLeast * 0.4;
+			B.Col = Layer == 0 ? TracerCol : TracerPale; // (paler along its middle)
+			B.Col2 = B.Col;
+			B.Alpha = Layer == 0 ? 0.8 : 1.0;
+			B.FadeIn = 0.001;
+			B.Hold = 0.9;
+			B.Heart = 0.9;
+			B.Rim = Layer == 0 ? 0.2 : 0.5;
+			B.Point = 0.3;
+			B.Tail = 0.7; // (thinning toward the gun)
+			B.bLight = true;
+			B.Glow = static_cast<uint8_t>(Layer + 1);
+			Bits.push_back(B);
+		}
+	}
+
+	const Battle::AirRow& Battle::AirRowOf(const std::string& Kind)
+	{
+		for (const AirRow& R : AirRows)
+		{
+			if (R.Name == Kind)
+			{
+				return R;
+			}
+		}
+		const std::string P = "air_guns." + Kind + ".";
+		AirRow R;
+		if (Kind != "hmg" && !Has(P + "muzzle_mps"))
+		{
+			R = AirRowOf("hmg"); // (a kind the recipe does not know fires as a heavy machine gun)
+		}
+		else
+		{
+			R.Rate = Num(P + "rate_per_min", 800.0);
+			R.Mps = Num(P + "muzzle_mps", 870.0);
+			R.Flash = Num(P + "flash_m", 0.45);
+			R.Strike = Num(P + "strike_m", 0.8);
+			R.Drag = Num(P + "drag", 0.36);
+			R.Drop = Num(P + "drop", 1.0) > 0.0 ? Num("air_guns.gravity", 9.81) : 0.0;
+			R.TracerS = Num(P + "tracer_s", 2.4);
+			R.Spread = Num(P + "spread_mil", 4.0) * 0.001;
+			R.OneIn = std::max(1, static_cast<int>(Num(P + "tracer_every", Num("tracer.one_in", 5.0))));
+			R.SmokeEvery = std::max(1, static_cast<int>(Num(P + "smoke_every", 3.0)));
+			R.SmokeS = Num(P + "smoke_s", 0.8);
+			R.SmokeAlpha = Num(P + "smoke_alpha", 0.1);
+			R.Licks = std::max(0, static_cast<int>(Num(P + "licks", 0.0)));
+			R.Lamp = Num(P + "lamp", 0.0);
+		}
+		R.Name = Kind;
+		AirRows.push_back(R);
+		return AirRows.back();
+	}
+
+	void Battle::AirGun(double Now, int Gun, const Vec& Muzzle, const Vec& Aim, const Vec& Carry, const char* Kind, double RatePerMin, double MuzzleMps)
+	{
+		// Brian 19:35Z: "make the gun fire very realistic and the tracer fire too". Each gun fires at its own rate
+		// (no two quite alike, so wing guns drift out of step), from wherever the muzzle was at the moment of each
+		// round; a round flies at the gun's speed plus the aircraft's own, slows in the air and falls. The tracer is
+		// the ruled streak, one in five.
+		Gun = std::max(0, Gun);
+		const AirRow& Row = AirRowOf(Kind && *Kind ? Kind : "hmg");
+		Firing* F = nullptr;
+		for (Firing& Each : Firings)
+		{
+			if (Each.Gun == Gun)
+			{
+				F = &Each;
+				break;
+			}
+		}
+		if (!F)
+		{
+			Firing New;
+			New.Gun = Gun;
+			New.Count = static_cast<int>(Mix64(static_cast<uint64_t>(Gun) + 1931ull) % static_cast<uint64_t>(Row.OneIn));
+			New.RateK = 0.97 + 0.06 * static_cast<double>(Mix64(static_cast<uint64_t>(Gun) + 7177ull) % 1000ull) / 999.0;
+			Firings.push_back(New);
+			F = &Firings.back();
+		}
+		const Vec Dir = (Aim - Muzzle).Unit(F->bOn ? F->Dir : Carry.Unit(Vec(1.0, 0.0, 0.0)));
+		const double Gap = 60.0 / std::max((RatePerMin > 0.0 ? RatePerMin : Row.Rate) * F->RateK, 1.0);
+		const double Mps = MuzzleMps > 0.0 ? MuzzleMps : Row.Mps;
+		Dice D(++Seeds * 86028121ull ^ PlaceKey(Muzzle));
+		if (!F->bOn || Now < F->Last || Now - F->Last > 0.25)
+		{
+			// (a new burst, or a gun not heard from for a while: the first round comes within half a gap)
+			F->bOn = true;
+			F->Last = Now;
+			F->Muzzle = Muzzle;
+			F->Dir = Dir;
+			F->Carry = Carry;
+			F->Next = Now + D.U(0.0, Gap * 0.5);
+		}
+		const double Between = Now - F->Last;
+		for (int Fired = 0; F->Next <= Now && Fired < 64; ++Fired)
+		{
+			const double K = Between > 1e-9 ? Clamp01((F->Next - F->Last) / Between) : 1.0;
+			const Vec At = F->Muzzle + (Muzzle - F->Muzzle) * K;
+			const Vec Way = (F->Dir + (Dir - F->Dir) * K).Unit(Dir);
+			const Vec By = F->Carry + (Carry - F->Carry) * K;
+			const int Which = F->Count++;
+			AirRound(F->Next, At, Way, By, Row, Mps, Which % Row.OneIn == 0, Which % Row.SmokeEvery == 0, D);
+			F->Next += Gap;
+		}
+		F->Next = std::max(F->Next, Now); // (a long stall: the rounds of the gap are not made up)
+		F->Last = Now;
+		F->Muzzle = Muzzle;
+		F->Dir = Dir;
+		F->Carry = Carry;
+	}
+
+	void Battle::AirGunStop(int Gun)
+	{
+		for (Firing& F : Firings)
+		{
+			if (F.Gun == std::max(0, Gun))
+			{
+				F.bOn = false;
+			}
+		}
+	}
+
+	void Battle::AirRound(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, double Mps, bool bTracer, bool bSmoke, Dice& D)
+	{
+		// the flicker: a tongue along the bore, under one frame, carried with the aircraft so it stays on the gun
+		// (machine guns, passed 21:07Z); cannon have their own flash
+		const double Len = Row.Flash * D.U(0.8, 1.15);
+		if (Row.Licks > 0)
+		{
+			CannonFlash(T, At, Dir, Carry, Row, D);
+		}
+		else
+		{
+			Bit B;
+			B.Born = T;
+			B.From = At + Dir * (Len * 0.5);
+			B.Vel = Carry;
+			B.Life = D.U(0.02, 0.035);
+			B.R0 = Len * 0.2;
+			B.R1 = Len * 0.28;
+			B.Along = Dir;
+			B.Stretch = 2.3;
+			B.Point = 0.9;
+			B.Tail = 0.1;
+			B.Col = FlashCoreCol.Mix(FlameCol, 0.35);
+			B.Col2 = FlameCol;
+			B.Alpha = 1.0;
+			B.FadeIn = 0.002;
+			B.Hold = 0.5;
+			B.Heart = 0.85;
+			B.Rim = 0.2;
+			B.bLight = true;
+			Bits.push_back(B);
+		}
+		if (Row.Lamp > 0.0)
+		{
+			Flash L;
+			L.At = At + Dir * (Len * 0.5);
+			L.Col = FlameCol;
+			L.Born = T;
+			L.Life = 0.03;
+			L.Strength = Row.Lamp;
+			L.Radius = 12.0;
+			Flashes.push_back(L);
+		}
+		// gun smoke: a thin grey wisp left hanging in the air where the gun was, so a firing wing trails a short
+		// smoky line behind it
+		if (bSmoke && Row.SmokeAlpha > 0.0)
+		{
+			Bit B;
+			B.Born = T + 0.01;
+			B.From = At + Dir * (Len * 0.8);
+			B.Vel = Dir * 6.0;
+			B.Drag = 4.0;
+			B.Windage = 1.0;
+			B.Life = Row.SmokeS * D.U(0.8, 1.2);
+			B.R0 = Len * 0.3;
+			B.R1 = Len * D.U(1.4, 2.0);
+			B.Grow = 0.4;
+			B.Col = GunSmokeCol;
+			B.Col2 = GunSmokeCol;
+			B.Alpha = Row.SmokeAlpha * D.U(0.7, 1.2);
+			B.FadeIn = 0.04;
+			B.Hold = 0.15;
+			B.Heart = 0.6;
+			B.Rim = 0.0;
+			Bits.push_back(B);
+		}
+		if (bTracer)
+		{
+			const Vec Aim = (Dir + Vec(D.Bell(), D.Bell(), D.Bell()) * Row.Spread).Unit(Dir);
+			const Vec Vel = Aim * Mps + Carry;
+			Tracer(T, At, Vel.Unit(Aim), Vel, Row.TracerS, Row.Drag, Row.Drop);
+		}
+	}
+
+	void Battle::CannonFlash(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D)
+	{
+		// Art director 21:07Z: a hot pale heart at the muzzle with orange only toward its edges; a ragged forward
+		// tongue two to three times the side licks' length; short side licks bent aft by the airstream; soft, uneven,
+		// never the same twice; one frame at full, a second at about half (Life 0.05 with Hold 0.45), then gone.
+		const Vec Across = Dir.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+		const Vec Over = Across.Cross(Dir).Unit(ZUp);
+		const double Len = Row.Flash * D.U(0.8, 1.2);
+		auto Lick = [&](const Vec& From, const Vec& Way, double R, double Stretch, const Rgb& Col, const Rgb& Col2, double Alpha, double Heart, double Rim, double Rough)
+		{
+			Bit B;
+			B.Born = T;
+			B.From = From;
+			B.Vel = Carry;
+			B.Life = 0.05 * D.U(0.9, 1.1);
+			B.R0 = R * 0.9;
+			B.R1 = R * 1.1;
+			B.Along = Way;
+			B.Stretch = Stretch;
+			B.Point = 0.7;
+			B.Tail = 0.15;
+			B.Col = Col;
+			B.Col2 = Col2;
+			B.Alpha = Alpha;
+			B.FadeIn = 0.002;
+			B.Hold = 0.45;
+			B.Heart = Heart;
+			B.Rim = Rim;
+			B.Rough = Rough;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.bLight = true;
+			Bits.push_back(B);
+		};
+		// the orange edge round the heart: see-through in its middle, strongest at its heart ring, soft at its rim
+		Lick(At + Dir * (Len * 0.14), Dir, Len * 0.3, 1.3, FlameCol, FlameCol * 0.7, 0.3, 2.6, 0.3, 0.35);
+		// the forward tongue: three ragged pieces, pale at the root and orange beyond, each a little off the line
+		const double Reach = Len * D.U(1.1, 1.4);
+		for (int K = 0; K < 3; ++K)
+		{
+			const double Along = Reach * (0.3 + 0.33 * K) * D.U(0.9, 1.1);
+			const Vec Off = (Across * D.Bell() + Over * D.Bell()) * (Len * 0.05 * (K + 1));
+			const Rgb Col = K == 0 ? CannonHeartCol.Mix(FlameCol, 0.45) : FlameCol;
+			Lick(At + Dir * Along + Off, (Dir + Off * (0.6 / std::max(Len, 1e-3))).Unit(Dir), Len * (0.2 - 0.045 * K) * D.U(0.85, 1.15), 2.2, Col, FlameCol * 0.75, 0.9, 0.8, 0.15, 0.4);
+		}
+		// short side licks, raked aft by the air the aircraft flies into; a third of the tongue or less
+		for (int I = 0; I < Row.Licks; ++I)
+		{
+			const double A = (I * 2.0 * Pi) / std::max(1, Row.Licks) + D.U(-0.6, 0.6);
+			const Vec Outward = (Across * std::cos(A) + Over * std::sin(A)).Unit(Across);
+			const Vec Way = (Outward - Dir * D.U(0.3, 0.55)).Unit(Outward);
+			const double R = Len * D.U(0.06, 0.085);
+			const double Stretch = D.U(2.2, 2.8);
+			Lick(At + Dir * (Len * 0.08) + Way * (R * Stretch * 0.8), Way, R, Stretch, FlameCol, FlameCol * 0.6, 0.85, 0.8, 0.1, 0.3);
+		}
+		// the hot heart right at the muzzle, laid last so it is pale over the orange
+		Lick(At + Dir * (Len * 0.1), Dir, Len * 0.15, 1.4, CannonHeartCol, CannonHeartCol.Mix(FlameCol, 0.5), 1.0, 0.95, 0.35, 0.2);
 	}
 
 	void Battle::Burn(double Now, const Vec& At, double Across, double Seconds)
@@ -1637,7 +1893,8 @@ namespace TheaterFx
 			break;
 		case Bit::Shape::Streak:
 		{
-			const Vec Way = B.HalfLength > 0.0 ? B.Along : Going(B, Age);
+			// (a tracer keeps its own heading, but an air gun's, slowing and falling over a long flight, bends with it)
+			const Vec Way = B.HalfLength > 0.0 ? (B.Gravity > 0.0 ? Going(B, Age).Unit(B.Along) : B.Along) : Going(B, Age);
 			const double Speed = Way.Length();
 			const Vec OnScreen = Way - Eye.Forward * Way.Dot(Eye.Forward);
 			const double L = OnScreen.Length();
@@ -1654,6 +1911,18 @@ namespace TheaterFx
 					A *= Width / Least;
 				}
 				Width = Least;
+			}
+			if (B.Glow > 0)
+			{
+				// (by day a tracer widens and its core whitens, so a stream holds on a pale sky; by dusk it is as ruled.
+				// Day is read from the hour's smoke light: white by day, dim at dusk)
+				const double Lum = 0.2126 * Eye.SmokeLight.R + 0.7152 * Eye.SmokeLight.G + 0.0722 * Eye.SmokeLight.B;
+				const double Day = Clamp01((Lum - 0.3) / 0.6);
+				Width *= 1.0 + (TracerDayWide - 1.0) * Day;
+				if (B.Glow == 2)
+				{
+					Col = Col.Mix(TracerDayCore, Day);
+				}
 			}
 			Half = std::max(Half, Width);
 			AxA = Ua * Half;

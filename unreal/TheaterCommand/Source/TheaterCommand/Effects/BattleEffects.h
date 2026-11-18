@@ -45,7 +45,7 @@ private:
  * and life like... like im in it and watching a movie at the same time").
  *
  * It knows nothing of the scene it is put in. Give it a parent to hang its mesh and lamps on, how many world units
- * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, Shots, Burn); and
+ * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, Shots, AirGun, Burn); and
  * tick it once a frame with the eye. It draws everything as soft puffs in one procedural mesh with the campaign map's
  * own M_Highlight (see-through, unlit, coloured by its points), the same shape of puff as the map's smoke, so no new
  * material is needed; flashes light the ground with at most two point lamps (game.max_lamps), shadowless.
@@ -85,6 +85,17 @@ public:
 	void Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun);
 	/** Rounds fired by one gun (any number that stays the same for that gun) toward To: every fifth a tracer. */
 	void Shots(int32 Gun, const FVector& From, const FVector& To, const FString& Weapon, int32 Rounds, float PerSecond);
+	/** A gun on an aircraft firing: call it every frame while the trigger is down, for each gun (Gun: any number that
+	 * stays the same for that gun). Now is this frame's time on the same clock Tick is given; an air scene with its
+	 * own air time (slowed when the player slows it) gives its own FBattleEffects that time in both. Muzzle is where
+	 * the gun is now and Aim the point it is laid on: the battle decides lead and convergence, so each gun gets its
+	 * own aim point. ShooterVelocity is the aircraft's velocity in world units a second. Kind is "rifle", "hmg" or
+	 * "cannon20" (the recipe's air_guns); RatePerMinute and MuzzleSpeed (world units a second) of 0 take the row's.
+	 * The kit lays each round from where the muzzle was at that moment, so the stream stays on the gun as it turns;
+	 * one round in five is the ruled tracer. */
+	void AirGun(double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& ShooterVelocity, const FString& Kind, float RatePerMinute = 0.0f, float MuzzleSpeed = 0.0f);
+	/** That gun's trigger let go. */
+	void AirGunStop(int32 Gun);
 	/** Something burning, about AcrossMetres wide: flames for Seconds, then a thinning grey column. */
 	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds);
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
@@ -143,6 +154,7 @@ private:
 	double TestStart = -1.0;
 
 	static double GroundHeight(void* Context, double X, double Y);
+	static std::string Named(const FString& Text);
 	TheaterFx::Vec ToFx(const FVector& World) const;
 	TheaterFx::Vec ToFxWay(const FVector& Way) const;
 	double Time() const;

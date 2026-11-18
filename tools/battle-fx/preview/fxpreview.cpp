@@ -5,6 +5,11 @@
 //   SRC=../../../unreal/TheaterCommand/Source/TheaterCommand
 //   clang++ -O2 -std=c++20 -I $SRC fxpreview.cpp $SRC/Effects/TheaterFxCore.cpp -o fxpreview
 //   ./fxpreview /tmp/recipe.txt <out folder> <size> <ground> <frames, e.g. 4,8,40> [WxH] [back up]
+//   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|far|target]
+//
+// The air shot: a fighter at 1,500 m and 150 m/s in a banked turn (FX_TURN=degrees a second, 3 by default) fires its
+// wing guns, laid to meet 300 m ahead, from the first frame; AirGun is called sixty times a second as the game would.
+// FX_DUSK=1 darkens the sky and the smoke to dusk.
 //
 // It draws what the game's mesh would carry: the same puffs, in the same order, with the same colours and alphas,
 // laid over a plain field (grass, a gentle swell, a sky) with five men of 1.75 m standing round the hit. The flash's
@@ -276,6 +281,52 @@ namespace
 		}
 	}
 
+	/** A flat-coloured triangle that hides what is behind it (the aircraft in the air shot). */
+	void Solid(Canvas& C, const Camera& Cam, const Vec P[3], const double Col[3])
+	{
+		double Sx[3], Sy[3], Z[3];
+		for (int K = 0; K < 3; ++K)
+		{
+			if (!Cam.Project(P[K], Sx[K], Sy[K], Z[K]))
+			{
+				return;
+			}
+		}
+		const double Area = (Sx[1] - Sx[0]) * (Sy[2] - Sy[0]) - (Sx[2] - Sx[0]) * (Sy[1] - Sy[0]);
+		if (std::fabs(Area) < 1e-9)
+		{
+			return;
+		}
+		const int X0 = std::max(0, static_cast<int>(std::floor(std::min({ Sx[0], Sx[1], Sx[2] }))));
+		const int X1 = std::min(C.W - 1, static_cast<int>(std::ceil(std::max({ Sx[0], Sx[1], Sx[2] }))));
+		const int Y0 = std::max(0, static_cast<int>(std::floor(std::min({ Sy[0], Sy[1], Sy[2] }))));
+		const int Y1 = std::min(C.H - 1, static_cast<int>(std::ceil(std::max({ Sy[0], Sy[1], Sy[2] }))));
+		for (int Y = Y0; Y <= Y1; ++Y)
+		{
+			for (int X = X0; X <= X1; ++X)
+			{
+				const double Px = X + 0.5, Py = Y + 0.5;
+				const double W0 = ((Sx[1] - Px) * (Sy[2] - Py) - (Sx[2] - Px) * (Sy[1] - Py)) / Area;
+				const double W1 = ((Sx[2] - Px) * (Sy[0] - Py) - (Sx[0] - Px) * (Sy[2] - Py)) / Area;
+				const double W2 = 1.0 - W0 - W1;
+				if (W0 < 0 || W1 < 0 || W2 < 0)
+				{
+					continue;
+				}
+				const size_t I = static_cast<size_t>(Y * C.W + X);
+				const double Deep = W0 * Z[0] + W1 * Z[1] + W2 * Z[2];
+				if (Deep > C.Depth[I])
+				{
+					continue;
+				}
+				C.R[I] = Col[0];
+				C.G[I] = Col[1];
+				C.B[I] = Col[2];
+				C.Depth[I] = Deep;
+			}
+		}
+	}
+
 	void Puffs(Canvas& C, const Camera& Cam, const Battle& Fx, int N)
 	{
 		const std::vector<Vec>& P = Fx.Points();
@@ -299,6 +350,184 @@ namespace
 				Tri(In0, Out1, Out0);
 			}
 		}
+	}
+}
+
+namespace
+{
+	/** The air shot (see the top of the file). */
+	int Air(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Kind, std::vector<int> Frames, int W, int H, const std::string& ShotName)
+	{
+		Battle Fx;
+		const char* SeedIs = std::getenv("FX_SEED");
+		Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetWind(Vec(1.6, 0.4, 0.0));
+		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
+		const char* TurnIs = std::getenv("FX_TURN");
+		const double Pi = 3.14159265358979;
+		const double Speed = 150.0, Turn = (TurnIs ? std::atof(TurnIs) : 3.0) * Pi / 180.0, Height = 1500.0;
+		const Vec ZUp(0.0, 0.0, 1.0);
+		struct Frame
+		{
+			Vec At, Fw, Up, Right;
+		};
+		auto Fly = [&](double T)
+		{
+			// (a level turn to the left: the nose swings at Turn, the wings banked as a true turn needs)
+			Frame F;
+			const double Psi = Turn * T;
+			const double R = Turn > 1e-6 ? Speed / Turn : 0.0;
+			F.At = Turn > 1e-6 ? Vec(R * std::sin(Psi), R * (1.0 - std::cos(Psi)), Height) : Vec(Speed * T, 0.0, Height);
+			F.Fw = Vec(std::cos(Psi), std::sin(Psi), 0.0);
+			const double Bank = std::atan(Speed * Turn / 9.81);
+			const Vec Left = ZUp.Cross(F.Fw);
+			F.Up = (ZUp * std::cos(Bank) + Left * std::sin(Bank)).Unit();
+			F.Right = F.Fw.Cross(F.Up).Unit();
+			return F;
+		};
+		// the guns, in the aircraft's own frame (forward, right, up), metres
+		std::vector<Vec> Guns;
+		auto Pair = [&](double Fwd, double Out, double Up_)
+		{
+			Guns.push_back(Vec(Fwd, Out, Up_));
+			Guns.push_back(Vec(Fwd, -Out, Up_));
+		};
+		if (Kind == "cannon20")
+		{
+			Pair(1.7, 2.0, -0.32);
+			Pair(1.6, 2.6, -0.32);
+		}
+		else if (Kind == "rifle")
+		{
+			for (double Out : { 2.4, 2.8, 3.2, 3.6 })
+			{
+				Pair(1.2, Out, -0.3);
+			}
+		}
+		else
+		{
+			for (double Out : { 2.3, 2.75, 3.2 })
+			{
+				Pair(1.25, Out, -0.3);
+			}
+		}
+		auto Place = [](const Frame& F, const Vec& L) { return F.At + F.Fw * L.X + F.Right * L.Y + F.Up * L.Z; };
+		const double Meet = 300.0;
+		std::sort(Frames.begin(), Frames.end());
+		int Step = 0;
+		Battle::View View;
+		for (int FrameNo : Frames)
+		{
+			const int Until = FrameNo * 2; // (frames at 30 a second, calls at 60)
+			for (; Step <= Until; ++Step)
+			{
+				const double T = Step / 60.0;
+				const Frame F = Fly(T);
+				for (size_t G = 0; G < Guns.size(); ++G)
+				{
+					const Vec Muzzle = Place(F, Guns[G]);
+					const Vec Aim = F.At + F.Fw * Meet; // (each gun laid on one point ahead: they converge there)
+					Fx.AirGun(T, static_cast<int>(G), Muzzle, Aim, F.Fw * Speed, Kind.c_str());
+				}
+			}
+			const double Now = FrameNo / 30.0;
+			const Frame F = Fly(Now);
+			const Vec Level = Vec(F.Fw.X, F.Fw.Y, 0.0).Unit();
+			const Vec LevelRight = Level.Cross(ZUp).Unit();
+			Camera Cam;
+			Cam.W = W;
+			Cam.H = H;
+			if (ShotName == "side")
+			{
+				// (off the outside wing, the aircraft left of the middle and its streams running off to the right)
+				Cam.Eye = F.At + LevelRight * 45.0 - Level * 8.0 + ZUp * 3.0;
+				Cam.Forward = ((F.At - Cam.Eye).Unit() + Level * 0.4).Unit();
+			}
+			else if (ShotName == "far")
+			{
+				Cam.Eye = F.At + Level * 520.0 + LevelRight * 260.0 + ZUp * 40.0;
+				Cam.Forward = (F.At + Level * 260.0 - Cam.Eye).Unit();
+			}
+			else if (ShotName == "target")
+			{
+				// (from just off the point the guns meet, looking back down the streams at the aircraft)
+				Cam.Eye = F.At + Level * 140.0 + LevelRight * 9.0 + ZUp * 4.0;
+				Cam.Forward = (F.At - Cam.Eye).Unit();
+			}
+			else
+			{
+				Cam.Eye = F.At - Level * 30.0 + ZUp * 9.0 + LevelRight * 4.0;
+				Cam.Forward = (F.At + Level * 200.0 - Cam.Eye).Unit();
+			}
+			Cam.Right = Cam.Forward.Cross(ZUp).Unit();
+			Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+			Cam.Ppr = W / (2.0 * std::tan(std::atan(18.0 / 35.0)));
+			View.Eye = Cam.Eye;
+			View.Right = Cam.Right;
+			View.Up = Cam.Up;
+			View.Forward = Cam.Forward;
+			View.PixelsPerRadian = Cam.Ppr;
+			if (bDusk)
+			{
+				View.SmokeLight = Rgb(0.22f, 0.22f, 0.27f);
+			}
+			const int N = Fx.Draw(Now, View);
+			Canvas C;
+			C.Init(W, H);
+			Paint(C, Cam, nullptr, 0, {}, false);
+			// the aircraft: a plain olive-drab shape, lit by the sun, so the flash and streams are judged on a wing
+			{
+				const Vec Sun = View.Sun.Unit();
+				const double Base[3] = { ToLinear(92), ToLinear(98), ToLinear(74) };
+				auto Face = [&](const Vec& A, const Vec& B, const Vec& Cc)
+				{
+					const Vec Pa = Place(F, A), Pb = Place(F, B), Pc = Place(F, Cc);
+					const Vec Nn = (Pb - Pa).Cross(Pc - Pa).Unit();
+					const double Lit = 0.45 + 0.55 * std::fabs(Nn.Dot(Sun));
+					const double Col[3] = { Base[0] * Lit, Base[1] * Lit, Base[2] * Lit };
+					const Vec Tri[3] = { Pa, Pb, Pc };
+					Solid(C, Cam, Tri, Col);
+				};
+				auto Quad = [&](const Vec& A, const Vec& B, const Vec& Cc, const Vec& D)
+				{
+					Face(A, B, Cc);
+					Face(A, Cc, D);
+				};
+				// fuselage: three sections, nose to tail (forward, half width, half height)
+				const double Sx[3] = { 4.5, 1.5, -5.0 }, Hw[3] = { 0.45, 0.62, 0.16 }, Hh[3] = { 0.5, 0.78, 0.3 };
+				for (int K = 0; K < 2; ++K)
+				{
+					auto Ring = [&](int I, double Ay, double Az) { return Vec(Sx[I], Hw[I] * Ay, Hh[I] * Az); };
+					const double Ys[5] = { 1, -1, -1, 1, 1 }, Zs[5] = { 1, 1, -1, -1, 1 };
+					for (int E = 0; E < 4; ++E)
+					{
+						Quad(Ring(K, Ys[E], Zs[E]), Ring(K, Ys[E + 1], Zs[E + 1]), Ring(K + 1, Ys[E + 1], Zs[E + 1]), Ring(K + 1, Ys[E], Zs[E]));
+					}
+				}
+				// wings, tailplane, fin
+				for (double S : { 1.0, -1.0 })
+				{
+					Quad(Vec(1.35, 0.6 * S, -0.32), Vec(0.95, 5.6 * S, -0.1), Vec(-0.3, 5.6 * S, -0.1), Vec(-0.95, 0.6 * S, -0.32));
+					Quad(Vec(-4.1, 0.15 * S, 0.05), Vec(-4.4, 2.1 * S, 0.1), Vec(-5.0, 2.1 * S, 0.1), Vec(-5.1, 0.15 * S, 0.05));
+				}
+				Quad(Vec(-3.8, 0.0, 0.3), Vec(-4.6, 0.0, 1.9), Vec(-5.2, 0.0, 1.9), Vec(-5.1, 0.0, 0.3));
+			}
+			if (bDusk)
+			{
+				for (size_t I = 0; I < C.R.size(); ++I)
+				{
+					C.R[I] *= 0.16;
+					C.G[I] *= 0.16;
+					C.B[I] *= 0.2;
+				}
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/air-%s-%s%s-f%03d.ppm", OutDir.c_str(), Kind.c_str(), ShotName.c_str(), bDusk ? "-dusk" : "", FrameNo);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs\n", FrameNo, N);
+		}
+		return 0;
 	}
 }
 
@@ -345,6 +574,10 @@ int main(int Argc, char** Argv)
 	if (Argc > 6)
 	{
 		std::sscanf(Argv[6], "%dx%d", &W, &H);
+	}
+	if (Size == "air")
+	{
+		return Air(Book, OutDir, Ground, Frames, W, H, Argc > 7 ? Argv[7] : "chase");
 	}
 	const double Back = Argc > 7 ? std::stod(Argv[7]) : 40.0, UpBy = Argc > 8 ? std::stod(Argv[8]) : 14.0;
 
