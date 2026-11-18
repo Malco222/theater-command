@@ -136,20 +136,57 @@ def shots(out, names, w, h, spp, force):
             json.dump(meta, f, indent=1)
 
 
-def sheets(out):
+def page(images, out, cols, names, notes, title):
+    """Our own sheet: pictures in a grid on paper, the name beneath each in letters sized to the picture (the shared sheet's are fixed, and vanish on pictures this wide)."""
+    from PIL import Image, ImageDraw
+    ims = [Image.open(p).convert("RGB") for p in images]
+    w, h = max(i.width for i in ims), max(i.height for i in ims)
+    rows = (len(ims) + cols - 1) // cols
+    pad = w // 60
+    name_f, note_f, title_f = kit._font(w // 26), kit._font(w // 44), kit._font(w // 20)
+    label_h = int(w / 26 * 1.3 + w / 44 * 1.6)
+    top = int(w / 20 * 1.9)
+    W = cols * w + (cols + 1) * pad
+    H = top + rows * (h + label_h + pad) + pad
+    S = Image.new("RGB", (W, H), (232, 226, 214))
+    d = ImageDraw.Draw(S)
+    d.text((pad, int(w / 20 * 0.4)), title, fill=(40, 34, 28), font=title_f)
+    for k, im in enumerate(ims):
+        r, c = divmod(k, cols)
+        last = len(ims) - r * cols if r == rows - 1 else cols
+        x = pad + c * (w + pad) + (cols - last) * (w + pad) // 2
+        y = top + r * (h + label_h + pad)
+        S.paste(im, (x, y))
+        d.text((x + 6, y + h + int(w / 26 * 0.12)), names[k], fill=(40, 34, 28), font=name_f)
+        d.text((x + 6, y + h + int(w / 26 * 1.3)), notes[k], fill=(104, 94, 80), font=note_f)
+    S.save(out, quality=90)
+    S.resize((W // 2, H // 2), Image.LANCZOS).save(out[:-4] + "-half.jpg", quality=88)
+    return out
+
+
+def sheets(out, index=None):
     meta = json.load(open(os.path.join(out, "shots", "meta.json")))
+    if index and os.path.exists(index):
+        # (the counts as exported: a shot's own count goes stale when a piece is mended after its picture)
+        for n, row in json.load(open(index)).items():
+            if n in meta:
+                meta[n]["triangles"] = row["triangles"]
+    army = {"GER": "German paint, to 1943", "GER:1943-06": "German paint, from 1943", "UK": "British paint", "USA": "American paint", "SOV": "Soviet paint"}
     made = []
     for k, (title, items) in enumerate(GROUPS):
         have = [(n, label) for n, label in items if os.path.exists(os.path.join(out, "shots", n + ".png"))]
         if not have:
             continue
-        labels = [f"{label}   ({meta[n]['triangles']:,} triangles" + (f", {meta[n]['parts']} moving parts" if meta[n]["parts"] > 1 else "") + ")" if n in meta else label for n, label in have]
+        notes = []
+        for n, _ in have:
+            bit = [f"{meta[n]['triangles']:,} triangles"] if n in meta else []
+            if n in meta and meta[n]["parts"] > 1:
+                bit.append(f"{meta[n]['parts']} moving parts")
+            if n in WEARS:
+                bit.append("shown in " + army[WEARS[n]])
+            notes.append("   \u00b7   ".join(bit))
         path = os.path.join(out, f"lineup-{k + 1}-{title.lower().replace(',', '').replace(' ', '-')}.jpg")
-        png = path[:-4] + ".png"
-        kit.sheet([os.path.join(out, "shots", n + ".png") for n, _ in have], png, cols=2 if len(have) <= 6 else 3, labels=labels, title="Fortifications and defences: " + title.lower())
-        from PIL import Image
-        Image.open(png).convert("RGB").save(path, quality=90)
-        os.remove(png)
+        page([os.path.join(out, "shots", n + ".png") for n, _ in have], path, 2 if len(have) <= 6 else 3, [label for _, label in have], notes, "Fortifications and defences: " + title.lower())
         made.append(path)
         print(path, flush=True)
     return made
@@ -158,7 +195,7 @@ def sheets(out):
 def main():
     what, out = sys.argv[1], sys.argv[2]
     if what == "sheet":
-        sheets(out)
+        sheets(out, sys.argv[3] if len(sys.argv) > 3 else None)
         return
     which = sys.argv[3] if len(sys.argv) > 3 else "all"
     size = next((a for a in sys.argv[3:] if "x" in a and a[0].isdigit()), "960x540x32")
