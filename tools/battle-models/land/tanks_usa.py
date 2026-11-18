@@ -150,10 +150,8 @@ def sherman(fine=True, tag="USA"):
         if fine:
             v.visor((1.905, yc, 1.62), Vector((1, 0, 0.12)).normalized(), 0.26, 0.085, 0.03, brow=True)
         v.headlamp(g_at(1.00, s * 1.02) + gn * 0.07, X, 0.062, stalk=0.07)
+        v.lamp_guard(g_at(1.00, s * 1.02) + gn * 0.07 + Z * 0.07, 0.062, g_at(1.00, s * 1.02), gn, Y, gl)      # the brush guard: two hoops of bar crossing over the lamp
         if fine:
-            lamp = g_at(1.00, s * 1.02) + gn * 0.14
-            for e in (-0.075, 0.075):                    # the guard bent over each lamp
-                v.tube([lamp + Y * e - Z * 0.11 + X * 0.02, lamp + Y * e + Z * 0.075 + X * 0.06, lamp + Y * e + Z * 0.075 - X * 0.08, lamp + Y * e - Z * 0.02 - X * 0.2], 0.007, "upper", 5)
             v.lift_eye(g_at(1.17, s * 1.16), gn, Y, 0.035)
         # the track guards: a short flap ahead over each sprocket, a stub behind
         v.plate([(2.46, s * 0.84, zs + 0.004), (2.46, s * 1.31, zs + 0.004), (2.92, s * 1.31, zs - 0.02), (2.92, s * 0.84, zs - 0.02)][::int(s)], 0.008, "upper", 0.003)

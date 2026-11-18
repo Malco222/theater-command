@@ -418,14 +418,57 @@ class Fittings:
             for s in (-1, 1):
                 self.tube([at + m @ Vector(p) for p in ((s * size[0] / 2, -0.06, size[2] * 0.65), (s * (size[0] / 2 + 0.03), -0.05, size[2] * 0.55), (s * (size[0] / 2 + 0.03), 0.05, size[2] * 0.55), (s * size[0] / 2, 0.06, size[2] * 0.65))], 0.006, "rope", 5)
 
-    def bucket(self, at, r=0.13, high=0.26, paint="steel", part=None):
+    def bucket(self, at, r=0.13, high=0.26, paint=None, part=None):
+        """A pail: dull galvanised grey, its inside a darker grey, its wire handle hanging down one side (a near-black
+        pail seen from above reads as a top hat)."""
         if not self.fine:
             return
         if part:
             self.m.use(part)
         at = Vector(at)
+        paint = paint or self.own_paint("zinc", "686D66")
         self.lathe(at, Z, [(high, r * 0.94), (high, r), (0.0, r * 0.78), (0.0, 0.0)], paint, 14)
-        self.lathe(at, Z, [(high * 0.3, 0.0), (high * 0.3, r * 0.8), (high, r * 0.94)], "black", 14)
+        self.lathe(at, Z, [(high * 0.3, 0.0), (high * 0.3, r * 0.8), (high, r * 0.94)], self.own_paint("zinc.in", "4A4E49"), 14)
+        tip = math.radians(105.0)                           # the handle, swung down past level to lie on her side
+        self.tube([at + Vector((1.06 * r * math.cos(a), 1.06 * r * math.sin(a) * math.sin(tip), high + 1.06 * r * math.sin(a) * math.cos(tip)))
+                   for a in [math.pi * k / 8 for k in range(9)]], 0.004, "steel", 5)
+
+    def belt_box(self, at, yaw=0.0, paint=None, part=None):
+        """A machine gun's belt box standing on a floor: dark field grey, its lid a lip wider, a carrying handle on it,
+        a catch on its side. `at` is the floor under its middle; it lies along `yaw`."""
+        if part:
+            self.m.use(part)
+        m = rot(yaw)
+        at = Vector(at)
+        paint = paint or self.own_paint("box.grey", "4A5446")
+        self.put(bm_box((0.26, 0.085, 0.148), at + Z * 0.074, m), paint, 0.005)
+        self.put(bm_box((0.268, 0.093, 0.024), at + Z * 0.160, m), paint, 0.004)
+        if self.fine:
+            self.put(bm_box((0.014, 0.005, 0.04), at + m @ Vector((0.0, 0.0485, 0.142)), m), "steel")
+            self.handle(at + m @ Vector((-0.05, 0.0, 0.172)), at + m @ Vector((0.05, 0.0, 0.172)), Z, r=0.005, reach=0.018, paint="steel")
+
+    def lamp_guard(self, lamp, r, on, out, across, up, bar=0.0125, paint="upper", part=None):
+        """A brush guard over a headlamp that stands off a sloped plate: two hoops of round bar crossing over the lamp,
+        their feet on the plate, and the lamp's stem carried down to the plate. lamp: the lamp's middle, r its
+        radius; on: any point of the plate; out: the plate's facing; across, up: two directions along it. Each hoop
+        is two straight legs and a half-round top, in stout bar and her own paint: thin dark rods splayed from the
+        lamp read as a spider's legs."""
+        if not self.fine:
+            return
+        if part:
+            self.m.use(part)
+        lamp, on, out, across, up = Vector(lamp), Vector(on), Vector(out).normalized(), Vector(across).normalized(), Vector(up).normalized()
+        off = (lamp - on).dot(out)                          # how far the lamp's middle stands off the plate
+        foot = lamp - out * off
+        wide = r + 0.045
+        leg = max(0.03, off + r + 0.04 - wide)
+        for along in (across, up):
+            pts = [foot - along * wide - out * 0.004, foot - along * wide + out * leg]
+            pts += [foot - along * (wide * math.cos(math.pi * k / 8)) + out * (leg + wide * math.sin(math.pi * k / 8)) for k in range(1, 8)]
+            pts += [foot + along * wide + out * leg, foot + along * wide - out * 0.004]
+            self.tube(pts, bar, paint, 8)
+        if out.z > 0.2:                                     # her stem, straight down to the plate
+            self.rod(lamp - Z * (off / out.z + 0.004), lamp - Z * 0.07, r * 0.27, paint, 8)
 
     def cable(self, points, r=0.012, paint="steel", eyes=True, part=None):
         """A tow cable laid along a row of points, an eye at each end."""

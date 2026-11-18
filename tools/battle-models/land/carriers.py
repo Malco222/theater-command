@@ -592,8 +592,12 @@ def hanomag(fine=True, tag="GER", paint=None, fit="troops", name="Hanomag", titl
             v.hull([(xb - 0.35, s * (yg - 0.03), zg + 0.1), (x_roof1 - 0.25, s * (yg - 0.03), zg + 0.1), (xb - 0.35, s * (yk - 0.05), zk + 0.02), (x_roof1 - 0.25, s * (yk - 0.05), zk + 0.02),
                     (xb - 0.35, s * (yg - 0.09), zg + 0.1), (x_roof1 - 0.25, s * (yg - 0.09), zg + 0.1), (xb - 0.35, s * (yk - 0.11), zk + 0.02), (x_roof1 - 0.25, s * (yk - 0.11), zk + 0.02)], "leather", 0.01, both=False)
             if fine:                                                                                                             # rifles clipped upright behind the bench
-                for x in (-0.6, -1.0, -1.4):
-                    v.rod((x, s * (yk - 0.09), zk + 0.06), (x, s * (yt - 0.03), zt - 0.1), 0.014, "wood", 6)
+                for x in (-0.6, -1.0, -1.4):                                                                                      # (their muzzles up: wood to the band, then the barrel and its foresight; a plain rod reads as a stick)
+                    a, b = Vector((x, s * (yk - 0.09), zk + 0.06)), Vector((x, s * (yt - 0.03), zt - 0.1))
+                    v.rod(a, a + (b - a) * 0.74, 0.017, "wood", 6)
+                    v.rod(a + (b - a) * 0.70, a + (b - a) * 0.76, 0.02, "steel", 6)
+                    v.rod(a + (b - a) * 0.74, a + (b - a) * 1.08, 0.008, "steel", 6)
+                    v.box((0.012, 0.006, 0.02), a + (b - a) * 1.05 + X * 0.012, "steel")
     if troops:
         # the tub is never empty (seen from above, bare grey walls round a bare floor read as an empty box): a ration
         # crate and two belt boxes on the floor by the step, a water can by the stern doors, all clear of the riders'
@@ -601,9 +605,16 @@ def hanomag(fine=True, tag="GER", paint=None, fit="troops", name="Hanomag", titl
         v.use("hull")
         v.crate((-0.085, -0.31, zfl), (0.36, 0.2, 0.16), 90.0)
         for y in (0.2, 0.33):
-            v.box((0.2, 0.09, 0.17), (-0.07, y, zfl + 0.085), "upper2", 0.006)
-            if fine:
-                v.handle((-0.12, y, zfl + 0.171), (-0.02, y, zfl + 0.171), Z, r=0.005, reach=0.018)
+            v.belt_box((-0.10, y, zfl))
+        # and where the battle camera can see them. Her tub is 1.17 m deep and the camera looks down at 30 degrees
+        # over her right wall and her cab: of the floor it sees only the left after corner, and above 0.3 over the
+        # floor only the foot of the left bench abaft the middle. So: along the foot of the left bench, behind the
+        # riders' heels and under their knees (a seated man's shins are 0.21 from the middle line, the tub's side
+        # 0.47, his thighs 0.46 over the floor), a ration crate with a belt box on it, two belt boxes piled, one
+        # in the corner by the stern doors and one further forward
+        v.crate((-1.94, 0.375, zfl), (0.36, 0.18, 0.16), 0.0)
+        for x, y, z, yaw in ((-1.93, 0.38, zfl + 0.16, 5.0), (-1.50, 0.40, zfl, 0.0), (-1.49, 0.395, zfl + 0.172, -6.0), (-2.24, 0.33, zfl, 90.0), (-1.14, 0.40, zfl, 3.0)):
+            v.belt_box((x, y, z), yaw)
         v.jerrycan((-2.26, -0.33, zfl), 90.0, paint="upper2")
     # the driver's and his mate's seats down in the footwell, the wheel, the dash under the drivers' plate
     v.slab((xa - 0.06, -yb0 + 0.02, 1.14), (xa - 0.02, yb0 - 0.02, zb0 + 0.02), "shade", 0.006)

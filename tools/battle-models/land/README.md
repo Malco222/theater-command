@@ -137,7 +137,20 @@ into one decal or does the same. Paint over paint is the same off-white, never d
 and lays a few soft dark strips where rain would run: from under a top edge open to the sky, or under a small thing
 that stands off the plate (a handle, a hatch's rim), never under an overhang; unlike in length and spacing, up to
 ten on a hull's side and four on a turret's, clear of her marking and her name. The art director's rule: six to ten
-on a side, not a hundred (fine even streaks all over a plate read as planks; none at all reads as plastic).
+on a side, not a hundred (fine even streaks all over a plate read as planks; none at all reads as plastic). A mark
+runs round a rivet's head or a weld (anything standing under 2 cm off the plate); a tall plate's top is likelier to
+carry one than a scrap's; only marks 20 cm long or more count toward a side's number; a short hull side that got
+fewer than six takes more, closer together (a half-track's body); and on a grey coat they are half as dark again
+(`rain_strength`: the same mark read half as strongly on the grey Sd.Kfz. 251 as on the green Sexton).
+
+**Small fittings with rules of their own** (`fittings.py`). `lamp_guard`: a brush guard is two hoops of 2.5 cm bar
+crossing over the lamp in her own paint, the lamp's stem carried down to the plate (thin dark rods splayed from a
+lamp read as a spider). `bucket`: a pail is dull galvanised grey with a darker inside and its wire handle hanging
+(near black, seen from above, it reads as a top hat). `belt_box`: a machine gun's belt box in dark field grey with a
+lid, a catch and a handle. A paint only some vehicles need is added by `own_paint` the first time it is asked for,
+so the others' files do not change. What lies on an open body's floor must lie where the battle camera sees it:
+the camera looks down at 30 degrees, so a wall hides the floor behind it for about 1.7 times its height (the
+Sexton's cases lie forward of x = -0.2; the Sd.Kfz. 251's boxes are piled in her left after corner).
 
 **Clips.** `idle`, `start`, `drive`, `move_off`, `stop`, `fire` (the barrel's recoil), `fire.rock` (the hull's answer,
 made for a gun trained ahead: turn it about the turret's bearing), `mg_burst`, `hull_mg_burst`, `hit`, `open_up`,

@@ -161,6 +161,19 @@ def rain_marks(model, tree, verts, faces, cols, groups, runs):
             return hit[0], hit[1], m.fpart[hit[2]], m.fpaint[hit[2]], hit[3]
         plate = lambda g: g is not None and g[2] in ok_part and g[3] in coat and g[1].y * s > 0.5 and abs(g[1].z) < 0.75
         same = lambda a, b: a[2] == b[2] and a[1].dot(b[1]) > 0.97 and abs((a[0] - b[0]).dot(b[1])) < 0.004      # two looks at one flat plate
+
+        def under(g, ref):
+            """Where a mark lies at this look: on the plate itself, or on the plate under a small thing standing on
+            it (a rivet's head, a weld, a hinge: rain runs round them); None where the plate ends."""
+            if g is None or g[2] != ref[2]:
+                return None
+            if plate(g) and same(g, ref):
+                return g[0]
+            off = (g[0] - ref[0]).dot(ref[1])
+            if -0.004 < off < 0.02:
+                return g[0] - Vector((0.0, off / ref[1].y, 0.0))
+            return None
+
         starts = []
         for i in range(nx + 1):
             col = [look(x_lo + i * sx, z_lo + j * sz) for j in range(nz + 1)]
@@ -194,7 +207,9 @@ def rain_marks(model, tree, verts, faces, cols, groups, runs):
                 # rain has to reach it: nothing over her side there (a track guard, a sponson, a bin) for a man's height up
                 if tree.ray_cast(g[0] + g[1] * 0.06 + Vector((0.0, 0.0, 0.02)), Vector((0.0, s * 0.2, 1.0)).normalized(), 2.0)[0] is not None:
                     continue
-                starts.append((weight, i, top, room, g[2]))
+                # (a tall plate's top is likelier to carry one than a scrap's: on a half-track's leaning side most
+                # of the marks would else fall on her bonnet's edges and lockers, where nobody sees them)
+                starts.append((weight * min(2.0, room / 0.25), i, top, room, g[2]))
         for on in sorted(ok_part):
             pool = [c for c in starts if c[4] == on]
             if not pool:
@@ -202,16 +217,24 @@ def rain_marks(model, tree, verts, faces, cols, groups, runs):
             span = (max(c[1] for c in pool) - min(c[1] for c in pool)) * sx
             most = 10 if part_name[on] == "hull" else 4
             want = max(2, min(most, int(round(span * 1.5)) + rng.randint(-1, 1)))
-            taken = []
-            while pool and len(taken) < want:
+            taken, spare, apart, seen = [], [], (0.3, 0.7), 0
+            while seen < want and len(taken) < most:        # (seen: those long enough to read; a scrap of a mark does not count)
+                if not pool:
+                    # a short hull side (a half-track's body) holds four at that spacing: the art director asks six
+                    # to ten a side, so the starts passed over are tried again, closer together
+                    if part_name[on] != "hull" or seen >= 6 or not spare or apart[0] < 0.3:
+                        break
+                    pool, spare, apart, want = spare, [], (0.2, 0.34), min(want, 7)
                 pick = rng.uniform(0.0, sum(c[0] for c in pool))
                 for k, c in enumerate(pool):
                     pick -= c[0]
                     if pick <= 0.0:
                         break
-                _, i, j, room, _ = pool.pop(k)
+                cand = pool.pop(k)
+                _, i, j, room, _ = cand
                 x0, z0 = x_lo + i * sx + rng.uniform(-0.012, 0.012), z_lo + j * sz + 0.006
-                if any(abs(x0 - tx) < rng.uniform(0.3, 0.7) for tx in taken):
+                if any(abs(x0 - tx) < rng.uniform(*apart) for tx in taken):
+                    spare.append(cand)
                     continue
                 long = min(room * rng.uniform(0.55, 1.0), rng.uniform(0.14, 0.6))
                 wide, dark = rng.uniform(0.09, 0.19), rng.uniform(0.5, 1.0)
@@ -219,23 +242,28 @@ def rain_marks(model, tree, verts, faces, cols, groups, runs):
                     continue
                 n = max(3, int(long / 0.025))
                 for wide in (wide, wide * 0.6):             # (a narrower one where a fitting stands in a broad one's way)
-                    rows, x = [], x0
+                    rows, x, ref = [], x0, None
                     for k in range(n + 1):
                         t = k / n
                         hw = wide / 2 * (1.0 - 0.35 * t)
                         five = [look(x + d * hw, z0 - t * long) for d, _ in RAIN_ACROSS]
-                        if any(not plate(g) for g in five) or abs(five[0][4] - five[-1][4]) > 0.025:
+                        if ref is None and plate(five[len(five) // 2]):
+                            ref = five[len(five) // 2]              # the plate the mark runs down
+                        laid = [under(g, ref) for g in five] if ref is not None else [None]
+                        if any(p is None for p in laid) or abs(laid[0].y - laid[-1].y) > 0.025:
                             if rows:
                                 break
+                            ref = None
                             continue                        # (the rounding of the edge it starts under)
                         rise = (0.3, 0.75)[len(rows)] if len(rows) < 2 else 1.0
-                        rows.append([(g[0] + g[1] * 0.002, dark * rise * (1.0 - t) ** 1.15 * a) for g, (_, a) in zip(five, RAIN_ACROSS)])
+                        rows.append([(p + ref[1] * 0.002, dark * rise * (1.0 - t) ** 1.15 * a) for p, (_, a) in zip(laid, RAIN_ACROSS)])
                         x += rng.uniform(-0.002, 0.002)
                     if len(rows) >= 5:
                         break
                 if len(rows) < 5:
                     continue
                 taken.append(x0)
+                seen += len(rows) * long / n >= 0.2
                 base, nc = len(verts), len(RAIN_ACROSS)
                 for row in rows:
                     for p, a in row:
@@ -251,10 +279,20 @@ def rain_marks(model, tree, verts, faces, cols, groups, runs):
                         cols.append("rain")
 
 
-def _rain_material():
-    mat = bpy.data.materials.get("rain mark")
+def rain_strength(model):
+    """How dark her marks are down their middles. On a grey coat a mark of the same depth reads about half as
+    strongly as on a green or a yellow one (measured on the grey half-track beside the Sexton): it takes half as
+    much again."""
+    import rigid
+    rgb = rigid.hex_rgb(model.paints["upper"])
+    grey = (max(rgb) - min(rgb)) / max(max(rgb), 1e-6) < 0.4
+    return RAIN_DARK * (1.5 if grey else 1.0)
+
+
+def _rain_material(dark=RAIN_DARK):
+    mat = bpy.data.materials.get("rain mark %.3f" % dark)
     if mat is None:
-        mat = bpy.data.materials.new("rain mark")
+        mat = bpy.data.materials.new("rain mark %.3f" % dark)
         mat.use_nodes = True
         nt = mat.node_tree
         for nd in list(nt.nodes):
@@ -265,7 +303,7 @@ def _rain_material():
         how.attribute_name = "run"
         fac = nt.nodes.new("ShaderNodeMath")
         fac.operation = "MULTIPLY"
-        fac.inputs[1].default_value = RAIN_DARK
+        fac.inputs[1].default_value = dark
         nt.links.new(how.outputs["Fac"], fac.inputs[0])
         clear = nt.nodes.new("ShaderNodeBsdfTransparent")
         film = nt.nodes.new("ShaderNodeBsdfDiffuse")
@@ -324,7 +362,7 @@ def put(model, ob, arm, burn=False, name=None, rings=0, rain=True):
     used = sorted(set(cols))
     for c in used:
         if c == "rain":
-            me.materials.append(_rain_material())
+            me.materials.append(_rain_material(rain_strength(model)))
             continue
         name = ("burnt mark:" if burn else "mark:") + c
         mat = bpy.data.materials.get(name)

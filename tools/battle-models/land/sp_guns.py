@@ -231,10 +231,7 @@ def m4_open_hull(v, zw, zb, xf, notch, pulpit=None, driver=LEFT, step=None, tag=
     for s in (LEFT, RIGHT):
         lamp_at = g_at(0.26, s * 1.05)
         v.headlamp(lamp_at + gn * 0.07, X, 0.062, stalk=0.07)
-        if fine:
-            lamp = lamp_at + gn * 0.14
-            for e in (-0.075, 0.075):                    # the guard bent over each lamp
-                v.tube([lamp + Y * e - Z * 0.11 + X * 0.02, lamp + Y * e + Z * 0.075 + X * 0.06, lamp + Y * e + Z * 0.075 - X * 0.08, lamp + Y * e - Z * 0.02 - X * 0.2], 0.007, "upper", 5)
+        v.lamp_guard(lamp_at + gn * 0.07 + Z * 0.07, 0.062, lamp_at, gn, Y, gl)          # the brush guard: two hoops of bar crossing over the lamp
         # the track guards: a short flap ahead over each sprocket
         v.plate([(2.46, s * 0.84, zs + 0.004), (2.46, s * 1.31, zs + 0.004), (2.92, s * 1.31, zs - 0.02), (2.92, s * 0.84, zs - 0.02)][::int(s)], 0.008, "upper", 0.003)
         v.plate([(2.92, s * 0.84, zs - 0.02), (2.92, s * 1.31, zs - 0.02), (3.00, s * 1.31, zs - 0.10), (3.00, s * 0.84, zs - 0.10)][::int(s)], 0.008, "upper", 0.003)

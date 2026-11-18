@@ -373,6 +373,14 @@ class Shop:
         self.fedge.extend(flags if added == len(flags) else [0.0] * added)
         bm.free()
 
+    def own_paint(self, name, hx):
+        """A paint only some vehicles need (a pail's zinc, a belt box's grey): added to hers the first time it is
+        asked for, so that the others' files do not change. Returns its name."""
+        if name not in self.m.paints:
+            self.m.paints[name] = hx
+            self.m.paint_at[name] = len(self.m.paints) - 1
+        return name
+
     def box(self, size, at, paint, bevel=0.0, turn=None, segs=1, part=None):
         self.put(bm_box(size, at, turn), paint, bevel, segs, part=part)
 
