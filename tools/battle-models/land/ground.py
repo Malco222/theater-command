@@ -647,12 +647,23 @@ class Air(stage.Effects):
         g = self.rng
 
         def one(t, at, facing):
-            p = self.puff(t, at + facing * 0.12, vel=facing * 3.0, life=0.045, r=(0.05, g.uniform(0.12, 0.2)), col=(1.0, 0.78, 0.4), col2=(1.0, 0.45, 0.12), alpha=1.0, kind="glow", wind=0.0,
-                          squash=(2.0, 1.0, 1.0), fade_in=0.005, grow=0.4)
-            p["ob"].rotation_euler = facing.to_track_quat("X", "Z").to_euler()
-            if g.random() < 0.5:
-                c = g.uniform(0.6, 0.75)
-                self.puff(t, at + facing * 0.15, vel=facing * g.uniform(1.5, 4.0), life=g.uniform(0.7, 1.2), r=(0.04, g.uniform(0.2, 0.34)), col=(c, c, c), alpha=0.14, drag=4.0, rise=0.3, wind=1.0)
+            # each round's flash is a small ragged star, warm yellow-orange, no two alike, and the eye misses some
+            if g.random() > 0.28:
+                side = facing.cross(Z)
+                side = side.normalized() if side.length > 1e-3 else X.copy()
+                up = side.cross(facing)
+                rays = [(facing, g.uniform(0.1, 0.17))]
+                for _ in range(g.randint(2, 4)):
+                    a = g.uniform(0, 6.283)
+                    rays.append(((facing * g.uniform(0.15, 0.7) + side * math.cos(a) + up * math.sin(a)).normalized(), g.uniform(0.05, 0.1)))
+                for d, long in rays:
+                    kk = g.uniform(0.8, 1.3)
+                    p = self.puff(t, at + facing * 0.03 + d * (0.5 * long), vel=d * 2.0, life=0.04, r=(0.7, 1.0), col=(0.62 * kk, 0.26 * kk, 0.035), col2=(0.4, 0.1, 0.01), alpha=1.0,
+                                  kind="tongue" if g.random() < 0.5 else "lick", wind=0.0, squash=(0.5 * long, 0.2 * long, 0.2 * long), fade_in=0.004, grow=0.5, hold=0.5, cool=1.0)
+                    p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
+            if g.random() < 0.6:     # a thin wisp of smoke
+                c = g.uniform(0.55, 0.7)
+                self.puff(t, at + facing * 0.12, vel=facing * g.uniform(1.0, 3.0), life=g.uniform(0.6, 1.1), r=(0.02, g.uniform(0.09, 0.16)), col=(c, c, c), alpha=0.11, drag=4.0, rise=0.35, wind=1.0)
         for i in range(rounds):
             self.once(t0 + i * every, where, one)
 

@@ -48,10 +48,11 @@ def main():
         rigid.apply_pose(arm, pose, model=m)
     landmarks.put(m, ob, arm)
     rut = abs(next(iter(v.belts.values()))["y"]) if v.belts else 0.9
+    towed = "carriage" in m.part_at                       # (a towed gun: no tank has run where she stands)
     if opt.get("ground", "meadow") == "battle":
-        field = ground.Battle(rut=rut)
+        field = ground.Battle(rut=rut, ruts=not towed)
     else:
-        field = ground.Field(kind=opt.get("ground", "meadow"), rut=rut, density=float(opt.get("grass", 0.0)), trees=opt.get("trees") == "1")
+        field = ground.Field(kind=opt.get("ground", "meadow"), rut=400.0 if towed else rut, density=float(opt.get("grass", 0.0)), trees=opt.get("trees") == "1")
     sun = field.sun
     kit.render_setup(w, h, samples=spp)
     cam = kit.camera("cam", 50.0)

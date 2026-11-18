@@ -2,6 +2,7 @@
 
     python landshow.py <Name> <out folder> sheet            # six stills on the field and a sheet of them
     python landshow.py <Name> <out folder> action           # she drives up, halts, trains her gun and fires
+                                                            # (a towed gun: she is laid, fires, and is knocked out)
     python landshow.py <Name> <out folder> brewup           # she is struck and her ammunition goes
     python landshow.py <Name> <out folder> faces            # one still of each gun and coat she wore (vehicles.FACES)
     options: fps=15 size=960x540 spp=20 only=12,40 (frames, to try a clip) tmp=<folder for frames>
@@ -53,7 +54,11 @@ class Show:
         self.burnt(0.0)
         belt = next(iter(self.v.belts.values())) if self.v.belts else None
         rut = abs(belt["y"]) if belt else 0.9
+        self.towed = "carriage" in self.m.part_at        # (a towed gun: no tank has run where she stands)
+        if self.towed:
+            rut = 400.0
         if field == "battle":
+            field_kw.setdefault("ruts", not self.towed)
             self.field = ground.Battle(rut=rut, rut_wide=belt["wide"] if belt else 0.3, pitch=belt["pitch"] if belt else 0.12, **field_kw)
         else:
             self.field = ground.Field(kind=field, rut=rut, grass=grass, density=density, **field_kw)
@@ -129,6 +134,9 @@ class Show:
         out = {}
         if "turret" in self.m.part_at:
             out.update(rigid.aim(self.m, "turret", bearing))
+        elif "traverse" in self.m.part_at:               # (a towed gun trains on her saddle, inside its limits)
+            lo, hi = self.m.parts[self.m.part_at["traverse"]].limits
+            out.update(rigid.aim(self.m, "traverse", max(lo, min(hi, bearing))))
         if "gun" in self.m.part_at:
             out.update(rigid.aim(self.m, "gun", lift))
         return out
@@ -193,6 +201,15 @@ def sheet(name, out, opt, w, h, spp):
         ("gear", "Running gear, close", (cx + L * 0.47, -L * 0.42, 0.6), (cx + L * 0.27, -1.0, 0.5), 50, 55.0, {}),
         ("trained", "Gun trained, hatch open", (cx + L * 0.75, -L * 0.62, H * 1.15), (cx + 0.3, 0, H * 0.55), 55, 60.0, rigid.merge(S.train(bearing, 8.0), opened)),
     ]
+    if S.towed:          # a towed gun: seen in action, at her breech, and closed up for the road
+        shots = [
+            ("front", "From the front", (cx + L * 1.12, -L * 0.9, H * 1.1), (cx + 0.5, 0, H * 0.38), 50, 60.0, {}),
+            ("rear", "From the rear", (cx - L * 1.1, L * 0.92, H * 1.3), (cx - 0.2, 0, H * 0.32), 50, 55.0, {}),
+            ("side", "Side on", (cx, -L * 1.8, H * 0.6), (cx, 0, H * 0.42), 50, 50.0, {}),
+            ("game", "As the battle camera sees her, laid on a target", (16 * 0.866 * 0.8, -16 * 0.866 * 0.6, 8.0), (cx * 0.5, 0, H * 0.3), 50, 60.0, S.train(12.0, 14.0)),
+            ("breech", "Breech and laying gear, close", (-L * 0.52, L * 0.38, H * 1.25), (-0.25, 0.05, H * 0.5), 50, 50.0, {}),
+            ("road", "Closed up for the road, her trail on the hook", (cx - L * 0.9, -L * 1.2, H * 1.15), (cx, 0, H * 0.36), 50, -32.0, S.play("towed", 0.0)),
+        ]
     only = opt.get("views", "").split(",") if opt.get("views") else None
     files, labels = [], []
     for key, label, eye, tgt, lens, sun, pose in shots:
@@ -272,6 +289,7 @@ def pool(names, out, opt, w, h, spp):
             arm.location = (x_at - back * r - step * i, y_at + (i - (len(row) - 1) / 2) * gap, 0.0)
     deep = back * (ranks - 1) + step * first
     if "look" in opt:                                    # (what stands in the row's way: say so)
+        bpy.context.view_layer.update()                  # (the stage has just been turned and moved)
         lo, hi = Vector((x_at - deep - 5.0, y_at - first * gap / 2 - 1.0, -1.0)), Vector((x_at + 5.0, y_at + first * gap / 2 + 1.0, 6.0))
         for ob in bpy.context.scene.objects:
             if ob.type != "MESH" or any(ob.parent == arm for _, arm in stood) or max(ob.dimensions) > 80.0:
@@ -303,16 +321,58 @@ def pool(names, out, opt, w, h, spp):
         short = lambda t: t.replace("Carro Armato ", "").replace(" medium tank", "").replace(" light tank", "")      # noqa: E731
         said = [", ".join(short(v.m.title) for v, _ in row) for row in rows]
         labels = ["Front, left to right: " + said[0], "From the other end. Rear, left to right: " + said[1]] if ranks > 1 else ["Left to right: " + said[0], "The same from the other end"]
-        kit.sheet(files, os.path.join(out, "sheets", f"{name}.png"), cols=1, labels=labels, title="The motor pool on the battle's ground")
+        kit.sheet(files, os.path.join(out, "sheets", f"{name}.png"), cols=1, labels=labels, title=opt.get("title", "The motor pool on the battle's ground").replace("_", " "))
         print("wrote", os.path.join(out, "sheets", f"{name}.png"), flush=True)
 
 
 # ---- she drives up, halts, trains and fires ----------------------------------------------------------
 
+def gun_action(S, name, out, opt, fps, only):
+    """A towed gun in action: she is laid on her target, fires (the piece runs back and out, her wheels jump, the
+    breech is thrown open and closed), and is struck: a wheel smashed off, she drops on her axle."""
+    m = S.m
+    bearing, lift = float(opt.get("bearing", 8.0)), float(opt.get("lift", 7.0))
+    t_lay0, t_lay1 = 0.35, 1.75
+    t_fire = math.ceil((t_lay1 + 0.45) * fps) / fps - 0.012
+    t_hit = math.ceil((t_fire + 3.3) * fps) / fps - 0.012
+    long = float(opt.get("long", t_hit + 3.4))
+    low = S.clip["knocked_out"]["tracks"]
+    low = next((tr["turn"][-1][1] for tr in low if tr.get("part") == "gun" and "turn" in tr), 0.0)
+    print(f"  laid {t_lay0:.2f} to {t_lay1:.2f}s, fires {t_fire:.3f}s (frame {int(t_fire * fps) + 2}), struck {t_hit:.3f}s (frame {int(t_hit * fps) + 2}), {long:.1f}s in all", flush=True)
+    S.fx.gun(t_fire, S.where("muzzle"), bore=m.info.get("bore", 0.075), brake=m.info.get("brake", False))
+    S.fx.shaken(t_fire + 0.02, [S.where(s) for s in S.sockets("dust.") if s != "dust.muzzle"], thick=0.8)
+    S.fx.strike(t_hit, S.where("hit.shield"), size=0.8)
+    S.fx.shaken(t_hit + 0.55, [S.where("dust.right")], thick=1.5)
+    S.fx.smoke_from(S.where("breech"), start=t_hit + 0.9, size=0.3, thick=0.55, every=0.24)
+    eye, look = Vector((5.9, -4.9, 1.5)), Vector((-0.25, 0.0, S.H * 0.5))
+
+    def step(t):
+        S.place((0, 0, 0))
+        f = ease(t_lay0, t_lay1, t)
+        down = ease(t_hit + 0.3, t_hit + 1.0, t)
+        ko = S.play("knocked_out", t - t_hit)
+        for part in ("gun", "traverse"):             # (here the piece falls from where she was laid, not from level)
+            ko.pop(part, None)
+        wheels = {}
+        for part, turns in (("handwheel_traverse", 2.5), ("handwheel_elevate", 3.5)):
+            if part in m.part_at:
+                wheels.update(rigid.aim(m, part, 360.0 * turns * f))
+        S.set(S.train(bearing * f + 2.2 * ease(t_hit + 0.15, t_hit + 0.5, t), lift * f + (low - lift) * down), wheels, S.play("fire", t - t_fire), ko)
+        S.fx.at(t)
+        S.look(eye, look, 42.0)
+
+    S.preroll(1.0)
+    tmp = opt.get("tmp", os.path.join(out, "frames", f"{name}-action"))
+    stage.film(tmp, long, fps, step, only=only)
+    finish(S, name, out, "action", tmp, fps, only)
+
+
 def action(name, out, opt, w, h, spp, fps, only):
     S = Show(name, field=opt.get("field", "battle"), density=float(opt.get("grass", 26.0)), build=choice(opt))
     stage.render_setup(w, h, samples=spp)
     m = S.m
+    if S.towed:
+        return gun_action(S, name, out, opt, fps, only)
     v0, t1, t2 = 6.5, 2.4, 3.9                       # under way at 6.5 m/s, braking from t1, at rest at t2
     x_end = 0.0
     x_start = x_end - (v0 * t1 + v0 * (t2 - t1) / 2)

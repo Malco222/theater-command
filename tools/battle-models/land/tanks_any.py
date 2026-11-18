@@ -226,7 +226,7 @@ def light_tank(fine=True, tag="_"):
     for s in (LEFT, RIGHT):
         v.mark(tag, (0.42, s * side_y(1.24), 1.24), Vector((0, s, 0.08)), 0.15, part="hull")
     v.tank_clips(recoil=0.16, kick=0.5, gun_low=-8.0, hatches=["hatch_commander", "hatch_driver"],
-                 traverse=18.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.7, 2.2, 0.32, 165.0))
+                 traverse=18.0, idle_cue="tank_idle_loop", drive_cue="light_tank_loop", gun_cue="tank_gun_01", blow=(-0.7, 2.2, 0.32, 165.0))
     return v
 
 

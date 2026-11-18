@@ -28,10 +28,13 @@ def plane_of(p0, p1, p2, toward):
 GER_COATS = {"grey": ("4E5459", "1939 to early 1943", "dark grey"), "yellow": ("A3925E", "1943 on", "dark yellow")}
 
 
-def coats(v, default="grey"):
-    """The paint swap as the file tells it: for each coat, the three colours to put in place of upper, upper2, shade."""
+def coats(v, default="grey", only=None):
+    """The paint swap as the file tells it: for each coat, the three colours to put in place of upper, upper2, shade.
+    `only`: the coats she ever wore (a Panther came after the grey and never wore it)."""
     out = {}
     for key, (hx, years, words) in GER_COATS.items():
+        if only and key not in only:
+            continue
         p = livery("GER", hx)
         out[key] = {"what": words, "years": years, "paints": {k: p[k] for k in ("upper", "upper2", "shade")}}
     return {"default": default, "choices": out}
@@ -283,10 +286,10 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None):
     return v
 
 
-def panther(fine=True, tag="GER"):
+def panther(fine=True, tag="GER", paint=None):
     """Panther Ausf. G: 6.87 m hull, 3.27 m wide, 2.99 m high; sloped plate all round, eight axles of big interleaved
     wheels a side with the track lying on them, drive at the front; the long 7.5 cm L/70 in a rounded mantlet."""
-    v = Works("Panther", "Panther", "tank", tag, fine)
+    v = Works("Panther", "Panther", "tank", tag, fine, paint=GER_COATS[paint or "yellow"][0])       # (she came after the grey: dark yellow from her first day)
     v.root(hull_pivot=(0.0, 0.0, 0.85))
     hw, sw, st, zf, zr = 0.90, 1.63, 1.26, 1.10, 1.76
     # ---- the hull: a tub between the tracks; over them a box whose every side leans in ---------------
@@ -424,13 +427,15 @@ def panther(fine=True, tag="GER"):
     v.socket("case", (x0 - 1.1, 0.0, zt + 0.4), -X, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.45, kick=0.8, gun_low=-8.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver", "hatch_radio"],
                  traverse=15.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-1.2, 3.2, 0.45, 168.0))
+    v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: the coat's colours stand in place of the paints of the same names. She wore dark yellow all her life.",
+                                                "paint": coats(v, "yellow", only=("yellow",))}
     return v
 
 
-def tiger(fine=True, tag="GER"):
+def tiger(fine=True, tag="GER", paint=None):
     """Tiger I: 6.32 m hull, 3.56 m wide, 3.00 m high; a flat-sided box on broad tracks, eight axles of interleaved
     wheels a side, drive at the front; the 8.8 cm L/56 in a horseshoe turret with a flat slab of a mantlet."""
-    v = Works("Tiger", "Tiger", "tank", tag, fine)
+    v = Works("Tiger", "Tiger", "tank", tag, fine, paint=GER_COATS[paint][0] if paint else None)
     v.root(hull_pivot=(0.0, 0.0, 0.85))
     hw, sw, zf, zr = 0.92, 1.57, 1.20, 1.80
     # ---- the hull ------------------------------------------------------------------------------------------
@@ -559,4 +564,6 @@ def tiger(fine=True, tag="GER"):
     v.socket("case", (x0 + 0.12, -0.5, roof), Z, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.55, kick=0.9, gun_low=-8.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver", "hatch_radio"],
                  traverse=6.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", blow=(-1.3, 3.4, 0.48, 165.0))
+    v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names.",
+                                                "paint": coats(v, paint or "grey")}
     return v

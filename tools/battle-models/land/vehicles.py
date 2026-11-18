@@ -3,6 +3,7 @@
 BUILDERS[name](fine) -> the Works that built it (its model is `.m`). ABOUT[name] says whose it is, what it does on the
 field and which of the game's units wear it (the unit table's names, generic-units/unit-table.json).
 """
+import guns
 import tanks_any
 import tanks_fra
 import tanks_ger
@@ -27,6 +28,11 @@ BUILDERS = {
     "7TP": tanks_pol.tp7,
     "LightTank": tanks_any.light_tank,
     "MediumTank": tanks_any.medium_tank,
+    "Gun75": guns.gun75,
+    "leFH18": guns.lefh18,
+    "25pdr": guns.pounder25,
+    "Howitzer105": guns.howitzer105,
+    "ZiS3": guns.zis3,
 }
 
 ABOUT = {
@@ -43,6 +49,11 @@ ABOUT = {
     "7TP": {"nation": "POL", "role": "light tank", "years": "1937-39", "units": "armor (Poland)"},
     "LightTank": {"nation": "any", "role": "light tank", "years": "1936-42", "units": "armor (every nation without a tank of its own; the United States to 1942, the Soviet Union to 1941)"},
     "MediumTank": {"nation": "any", "role": "medium tank", "years": "1940-45", "units": "armor (every nation without a tank of its own, once it has researched medium tanks)"},
+    "Gun75": {"nation": "FRA", "role": "field gun", "years": "1897-1945", "units": "artillery (France, and every nation without a gun of its own)"},
+    "leFH18": {"nation": "GER", "role": "field howitzer", "years": "1935-45", "units": "artillery (Germany)"},
+    "25pdr": {"nation": "UK", "role": "field gun", "years": "1940-45", "units": "artillery (Britain and the Commonwealth)"},
+    "Howitzer105": {"nation": "USA", "role": "field howitzer", "years": "1941-45", "units": "artillery (United States)"},
+    "ZiS3": {"nation": "SOV", "role": "field gun", "years": "1942-45", "units": "artillery (Soviet Union)"},
 }
 
 
@@ -53,6 +64,7 @@ FACES = {
     "PanzerIV": [("1939 to early 1942: the short gun, dark grey", {"gun": "short", "paint": "grey"}),
                  ("1942: the long gun, dark grey", {"gun": "long", "paint": "grey"}),
                  ("1943 on: the long gun, dark yellow", {"gun": "long", "paint": "yellow"})],
+    "Tiger": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
 }
 
 

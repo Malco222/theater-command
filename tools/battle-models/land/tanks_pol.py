@@ -177,5 +177,5 @@ def tp7(fine=True, tag="POL"):
     v.socket("hit.turret", (x0, y0 + 0.6, zt + 0.35), Y, part="turret")
     v.socket("case", (x0 - 0.3, y0 - 0.6, zt + 0.35), -Y, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.16, kick=0.5, gun_low=-10.0, hatches=["hatch_commander", "hatch_driver"],
-                 traverse=16.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.7, 2.1, 0.32, 165.0))
+                 traverse=16.0, idle_cue="tank_idle_loop", drive_cue="light_tank_loop", gun_cue="tank_gun_01", blow=(-0.7, 2.1, 0.32, 165.0))
     return v
