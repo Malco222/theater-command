@@ -1970,7 +1970,9 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
   const covering = n.atWar.length ? coverHops(g, nat, orders) : null;
   for (const f of fleetsOf(g, nat)) {
     const home = (): void => { sail(g, f, f.home, 'port'); };
-    if (!n.atWar.length || !shipCount(f.ships)) { home(); continue; }
+    // (A fleet on its month of peace at sea is not called home by its admiral: the month is the upkeep's, by the record
+    // or by the chance, and Japan's blow must find it out, ruling 234(d). No fleet has such a month with the far side off.)
+    if (!n.atWar.length || !shipCount(f.ships)) { if (f.cruised !== g.turn) home(); continue; }
     const o = orders?.find((x) => x.fleet === f.name);
     if (o) { if (!sail(g, f, zoneOf(g, o.zone), o.stance)) home(); continue; }
     if (covering?.has(f.id)) continue;
