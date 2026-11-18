@@ -24,8 +24,9 @@ function at(terrain: Terrain, o: { river?: boolean; fort?: number; divs?: number
   return t;
 }
 const list = (...kinds: PlaceKind[]) => kinds.map((kind) => ({ kind }));
-const SPLIT = "The staff settles every battle where only part of the attack must cross a river and the odds are 1.7 to 1 or less: the field cannot fight one at the card's odds.";
-const WHOLE = "The staff settles every battle where the whole attack must cross a river and the odds are 1.7 to 1 or less: the field cannot fight one at the card's odds.";
+// One sentence for a close river attack, split or whole (the UI director, 16:47Z).
+const SPLIT = "The staff settles every battle across a river where the odds are 1.7 to 1 or less: the field cannot fight one at the card's odds.";
+const WHOLE = SPLIT;
 
 describe('the safety net (b439)', () => {
   it('lists two kinds for release 1, with their measures: a river part or all of the attack must cross, on a close card (b492(1), b494)', () => {
@@ -83,7 +84,7 @@ describe('the safety net (b439)', () => {
     expect(staffOnly(at('plains', { divs: 12 }), list('largest'))).toBe("The staff settles every battle where eleven or more divisions defend: the field cannot fight one at the card's odds.");
     expect(staffOnly(at('desert', { fort: 1 }), list('works'))).toBe("The staff settles every battle against fortress works: the field cannot fight one at the card's odds.");
     expect(staffOnly(at('hills', { dry: 1 }), list('river-split-close'))).toBe(SPLIT);
-    expect(staffOnly(at('hills', { dry: 1 }), list('hills', 'river-split-close'))).toBe("The staff settles every battle in hill country where only part of the attack must cross a river and the odds are 1.7 to 1 or less: the field cannot fight one at the card's odds.");
+    expect(staffOnly(at('hills', { dry: 1 }), list('hills', 'river-split-close'))).toBe("The staff settles every battle in hill country across a river where the odds are 1.7 to 1 or less: the field cannot fight one at the card's odds.");
     // A kind of the list this battle is not: offered.
     expect(staffOnly(at('plains'), list('mountain', 'river'))).toBeNull();
     // No "yet", no "for now", no "there".

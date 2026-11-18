@@ -64,16 +64,16 @@ export function kindsOf(t: FieldTicket<LandPlace>): PlaceKind[] {
 /**
  * Each kind in running text after "every battle" (the UI director, 18 November): a river or works first, then the
  * ground, then the defence's size, worded from the defence's side so it reads true from either seat. The split
- * crossing's words are the UI director's (18 November, 16:37Z), and come last, as they end on the odds.
+ * crossings' words are the UI director's (18 November, 16:47Z), and come last, as they end on the odds.
  */
 const SAID: Record<PlaceKind, string> = {
   river: 'across a river', works: 'against fortress works',
   plains: 'in open country', forest: 'in the forests', hills: 'in hill country', mountain: 'in the mountains',
   marsh: 'in the marshes', urban: 'in city streets', desert: 'in the open desert',
   smallest: 'where two divisions or fewer defend', middle: 'where three to ten divisions defend', largest: 'where eleven or more divisions defend',
-  'river-split-close': 'where only part of the attack must cross a river and the odds are 1.7 to 1 or less',
-  // A stand-in in the split crossing's form until the UI director gives the words.
-  'river-whole-close': 'where the whole attack must cross a river and the odds are 1.7 to 1 or less',
+  // One sentence for both close river kinds (the UI director, 16:47Z); a battle is only ever one of them.
+  'river-split-close': 'across a river where the odds are 1.7 to 1 or less',
+  'river-whole-close': 'across a river where the odds are 1.7 to 1 or less',
 };
 const ORDER: PlaceKind[] = ['river', 'works', 'plains', 'forest', 'hills', 'mountain', 'marsh', 'urban', 'desert', 'smallest', 'middle', 'largest', 'river-split-close', 'river-whole-close'];
 
