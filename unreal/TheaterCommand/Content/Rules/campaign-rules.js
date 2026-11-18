@@ -37893,6 +37893,12 @@ ${standing5}`,
     if (p && card) {
       return { ok: true, ...p, headline: "", note: "", top: [], card };
     }
+    if (!p && id === "reports" && lastCard?.opening) {
+      try {
+        return { ok: true, id: "reports", title: `THE MONTH'S REPORT  ·  ${lastCard.date.toUpperCase()}`, headline: "", note: "", top: [], sections: [], month: monthShown(s, lastCard) };
+      } catch {
+      }
+    }
     if (p && id === "reports" && lastCard) {
       try {
         return { ok: true, ...p, month: monthShown(s, lastCard) };
@@ -38933,6 +38939,18 @@ ${standing5}`,
     return out;
   }
   var LESSON_GAME = "unreal";
+  var LESSON_NAMES_3D = [
+    ["Open STAFF and take the air war into your own hands. In the planner choose bombers, a raid and a target.", "In YOUR STAFF, take the air war yourself. Click your aircraft on the map: choose bombers, a raid and a target."],
+    ["STAFF hands you each desk when you want it", "YOUR STAFF hands you each desk when you want it"],
+    ["Click a line to go to its place", "Click a line's pin to go to its place"],
+    ["Click one line of the card.", "Click the pin on one line of the card."],
+    ["in the Guide", "in the GUIDE"]
+  ];
+  try {
+    const have = LESSON_NAMES[LESSON_GAME] ?? (LESSON_NAMES[LESSON_GAME] = []);
+    for (const pair2 of LESSON_NAMES_3D) if (!have.some(([was]) => was === pair2[0])) have.push(pair2);
+  } catch {
+  }
   function lessonShown(s, l) {
     const w = lessonWords(s, l, LESSON_GAME);
     return { kind: "lesson", id: l.id, n: l.n, of: LESSONS.length, head: w.head, text: w.text, deed: w.deed, does: l.does, due: l.due };

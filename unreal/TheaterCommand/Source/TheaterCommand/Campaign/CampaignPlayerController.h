@@ -838,6 +838,31 @@ public:
 	void SayWhy(const FString& Why);
 	/** The weather in the east this month, for the date plate; empty in clear weather. */
 	FText GetWeatherText() const;
+	// ---- (Rules 84.3.3) FIRST COMMAND: the staff's notes ------------------------------------------------------
+	/** The note on the desk as the screen shows it (held while its DONE stamp stands), if one is and the screen is free for it. */
+	bool HasLessonNote() const;
+	const FLessonNote& GetLessonNote() const { return LessonNote; }
+	/** A key for the note as it came: a new key is a new arrival, which slides in and chooses its home. */
+	int32 GetLessonArrival() const { return LessonArrival; }
+	/** Seconds since the note came (it slides in over 220 ms), and since its DONE stamp landed (negative while none stands). */
+	double GetLessonAge() const;
+	double GetLessonStampAge() const;
+	/** Whether the note's DONE stamp stands on it now (2 s at most, or until a click sends it). */
+	bool IsLessonStamped() const { return LessonStampUntil > 0.0 && LessonStampAt >= 0.0; }
+	/** The note just gone, fading over 110 ms: its words, and how far it has faded (0 to 1). False once it has gone. */
+	bool GetLessonLeaving(FLessonNote& Out, float& Faded) const;
+	/** Lesson 1, laid across the month card that is open now. */
+	bool IsLessonLaid() const { return bLessonLaid && bPageOpen && Page.Month.bValid; }
+	const FLessonNote& GetLaidLesson() const { return LessonLaid; }
+	/** The notes put away with LATER, waiting in the GUIDE (its count). */
+	int32 GetLessonsWaiting() const { return Lessons.Waiting; }
+	/** The note's own words to press: "later", "close" (the closing note), "tip" (a tip put away), "send" (a stamped note sent now). */
+	void PressLesson(const FString& Action);
+	/** (Ruling 147(a).) What the note at its home must never cover, in pixels of the screen: the army in hand, and the flag it points at. */
+	void GetLessonKeepClear(TArray<FBox2D>& Out) const;
+	/** Whether a veil (a card or a room over the map) is up, which the note stands beside as a slip. */
+	bool IsLessonBesideCard() const { return bPageOpen || Document.bValid || bArsenalOpen || bLedgerOpen || bGeneralsOpen || bResearchOpen || bDiplomacyOpen || FaceOff.bVisible; }
+
 	/** The adviser's first steps, and the way to send him away. */
 	const FAdviser& GetAdviser() const { return Adviser; }
 	void DismissAdviser() { Adviser.bOn = false; ++Adviser.Revision; }
@@ -1232,6 +1257,28 @@ private:
 	const void* HoveredButton = nullptr; // the button the pointer is on, to tick once as it crosses onto one
 	double BattleMusicUntil = 0.0; // the march plays until then
 	int32 SackAsked = INDEX_NONE; // the general whose dismissal has been asked once
+	// (Rules 84.3.3) FIRST COMMAND. The rules' last answer; the note on screen and when it came; the stamp on it; the
+	// note just gone; lesson 1 laid on the month card now open; and what is owed to the rules once no order is being
+	// answered (the code checker's note on T1: every lesson call waits out an order in flight, so none is made then).
+	FLessonDesk Lessons;
+	FLessonNote LessonNote, LessonGone, LessonLaid;
+	bool bLessonNote = false;
+	bool bLessonLaid = false;
+	int32 LessonArrival = 0;
+	double LessonCameAt = 0.0, LessonGoneAt = -1.0, LessonStampAt = -1.0, LessonStampUntil = 0.0;
+	bool bLessonsDue = false;
+	bool bLessonStampOwed = false; // the note's deed is done, and its stamp waits for the screen to be his again
+	uint32 LessonMomentKey = 0;
+	TArray<TPair<FString, bool>> LessonDeedsOwed; // a deed only the screen sees, and whether the month card was open
+	TArray<FString> LessonActsOwed;
+	bool bOpeningCardOwed = false; // trap 1: the card lesson 1 lies on, owed once the opening flight is over
+	bool LessonCardOpen() const { return bPageOpen && Page.Month.bValid; }
+	bool IsLessonQuiet() const;
+	void AskLessons();
+	void TakeLessons(const FLessonDesk& Desk);
+	void ShowDeskNote(double Now);
+	void LessonPageChanged();
+	void ResetLessons();
 	FAdviser Adviser;
 	void AdviserSaw(int32 Step);
 	bool bBusyWithScreens() const { return bWatching || Newsreel.bOn || Opening.bVisible || Announcements.Num() > 0 || bScripted; }

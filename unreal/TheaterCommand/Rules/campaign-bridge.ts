@@ -120,7 +120,7 @@ import { TRADE as TRADE_RULES, dealsOf as tradeDealsOf, housesOf as tradeHousesO
 import { civicSum as civicSumOf } from '../../../src/campaign/buildings';
 // (Rules 84.3.3) FIRST COMMAND: the first hour's ten staff notes, one list for both games.
 import {
-  BOMBING, CLOSING, FIRST_COMMAND, LESSONS, LESSON_DOOR, LESSON_GROUPS, LESSON_SETTING, TIPS, allDone, bringBack, closingOwed, currentLesson, doneCount,
+  BOMBING, CLOSING, FIRST_COMMAND, LESSONS, LESSON_DOOR, LESSON_GROUPS, LESSON_NAMES, LESSON_SETTING, TIPS, allDone, bringBack, closingOwed, currentLesson, doneCount,
   firstCommand, isDone, lessonDeed, lessonWords, lessonsAgain, lessonsOn, namedWords, pickupPlace, putAway, readNotebook, showAgain, siegeOf, waitingCount,
   type Deed, type Lesson, type Moment, type Notebook,
 } from '../../../src/campaign/lessons';
@@ -4911,6 +4911,11 @@ function page(id: string, region = -1) {
   if (p && card) {
     return { ok: true, ...p, headline: '', note: '', top: [], card };
   }
+  // (Rules 84.3.3, trap 1.) The card that opens a war played from its first month has no month of reports behind it:
+  // the page is the card alone, for lesson 1 to lie on.
+  if (!p && id === 'reports' && lastCard?.opening) {
+    try { return { ok: true, id: 'reports', title: `THE MONTH'S REPORT  \u00B7  ${lastCard.date.toUpperCase()}`, headline: '', note: '', top: [], sections: [], month: monthShown(s, lastCard) }; } catch { /* no card, then */ }
+  }
   // (Ruling 64.) The month's report is one card: the page's own lists stay behind it for a game with none.
   if (p && id === 'reports' && lastCard) {
     try { return { ok: true, ...p, month: monthShown(s, lastCard) }; } catch { /* the page as it was */ }
@@ -5900,8 +5905,27 @@ function endMonthWithLessons() {
   return out;
 }
 
-/** The 3D game's own words for a control, where they are not the list's (lessons.json `names`; none yet). */
+/** The 3D game's own words for a control, where they are not the list's: lessons.json `names.unreal`. */
 const LESSON_GAME = 'unreal';
+/**
+ * (Ruling b425, the design director, 18 November 2026.) The 3D game's swaps, lent here until lessons.json carries
+ * them all as names.unreal: YOUR STAFF, opened from the red line under the date, where the browser has a STAFF tab; the
+ * raid planned from the aircraft's own airfield; the month card's lines followed by their pins; the GUIDE on the
+ * top bar. Each keeps its lesson inside its word limit (lesson 9 stays at 36).
+ */
+const LESSON_NAMES_3D: [string, string][] = [
+  ['Open STAFF and take the air war into your own hands. In the planner choose bombers, a raid and a target.', 'In YOUR STAFF, take the air war yourself. Click your aircraft on the map: choose bombers, a raid and a target.'],
+  ['STAFF hands you each desk when you want it', 'YOUR STAFF hands you each desk when you want it'],
+  ['Click a line to go to its place', "Click a line's pin to go to its place"],
+  ['Click one line of the card.', 'Click the pin on one line of the card.'],
+  ['in the Guide', 'in the GUIDE'],
+];
+// (Where the list already carries names.unreal, only the pairs it lacks are added. The closing note's YOUR STAFF comes
+// with the list itself, beside ruling b429's cut that keeps that note at 29: lent here, it would make the older note 31.)
+try {
+  const have = LESSON_NAMES[LESSON_GAME] ?? (LESSON_NAMES[LESSON_GAME] = []);
+  for (const pair of LESSON_NAMES_3D) if (!have.some(([was]) => was === pair[0])) have.push(pair);
+} catch { /* (the list's own words, then) */ }
 
 /** A lesson as the screen shows it: its number, its words with the campaign's places filled in, and its deed line. */
 function lessonShown(s: Game, l: Lesson) {

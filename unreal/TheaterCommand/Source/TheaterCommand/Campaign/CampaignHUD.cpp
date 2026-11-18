@@ -3504,6 +3504,480 @@ namespace
 		bool bHeld = false;
 	};
 
+	/**
+	 * (Rules 84.3.3, FIRST COMMAND; the art director's look brief of 16 November, accepted by ruling 147.) The staff's
+	 * note: a staff officer's paper note clipped to the edge of the map table, the kit's own paper, faces and brass.
+	 * Form 0 is the note at its home (340 wide), 1 the slip beside a card that veils the map (148 at most), 2 the strip
+	 * laid across a card: lesson 1 on the first month's card, or any note where the card leaves no margin for the slip
+	 * (it is never hidden). The brief's measures are pixels of the 1600 by 1000 frame: Scale turns them into the
+	 * widget's own (0.9 on the table's frame of 900 high, 1 inside a card, which has its own).
+	 */
+	class SStaffNote : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SStaffNote) : _Form(0), _Scale(0.9f), _SlipWide(148.0f), _FromRight(false) {}
+			SLATE_ARGUMENT(TWeakObjectPtr<ACampaignPlayerController>, Controller)
+			SLATE_ATTRIBUTE(int32, Form)
+			SLATE_ARGUMENT(float, Scale)
+			SLATE_ATTRIBUTE(float, SlipWide) // the slip's width, in the brief's pixels
+			SLATE_ATTRIBUTE(bool, FromRight) // the second home slides in from the right
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Controller = Args._Controller;
+			Form = Args._Form;
+			K = Args._Scale;
+			SlipWide = Args._SlipWide;
+			FromRight = Args._FromRight;
+		}
+
+		/** What the note shows and how far it has come or gone: false where there is nothing to draw. */
+		bool What(FLessonNote& Out, float& Alpha, double& Slide, bool& bStamped, double& StampAge) const
+		{
+			Alpha = 1.0f;
+			Slide = 0.0;
+			bStamped = false;
+			StampAge = -1.0;
+			if (!Controller.IsValid())
+			{
+				return false;
+			}
+			const ACampaignPlayerController* C = Controller.Get();
+			if (Form.Get() == 2 && C->IsLessonLaid())
+			{
+				Out = C->GetLaidLesson();
+				return true;
+			}
+			if (C->HasLessonNote())
+			{
+				Out = C->GetLessonNote();
+				// (it slides 12 px in from its edge over 220 ms, and comes up as it does)
+				const double Age = FMath::Clamp(C->GetLessonAge() / 0.22, 0.0, 1.0);
+				const double Ease = 1.0 - FMath::Pow(1.0 - Age, 3.0);
+				Slide = (1.0 - Ease) * 12.0;
+				Alpha = static_cast<float>(FMath::Clamp(Age * 1.6, 0.0, 1.0));
+				bStamped = C->IsLessonStamped() && Out.Kind == TEXT("lesson");
+				StampAge = bStamped ? C->GetLessonStampAge() : -1.0;
+				return true;
+			}
+			float Faded = 0.0f;
+			if (C->GetLessonLeaving(Out, Faded))
+			{
+				// (it leaves by fading in 110 ms, with no travel)
+				Alpha = 1.0f - Faded;
+				return true;
+			}
+			return false;
+		}
+
+		/** The note set out at a width (in the widget's own units): its lines, its parts and their places. */
+		struct FLaid
+		{
+			double W = 0.0, H = 0.0, Top = 0.0; // the paper, and where it starts under the clip
+			bool bClip = true, bStrip = false, bTip = false, bDeed = false;
+			FString Label, Count, Quiet;
+			FVector2D LabelAt, CountAt, QuietAt, QuietSize, TagSize;
+			TArray<FString> HeadLines, TextLines, DeedLines;
+			FVector2D HeadAt, TextAt, DeedAt, BoxAt;
+			double HeadLine = 0.0, TextLine = 0.0, DeedLine = 0.0, Box = 0.0, RuleY = -1.0, DividerX = -1.0, DividerTop = 0.0, DividerBottom = 0.0;
+			FSlateFontInfo LabelFace, CountFace, QuietFace, HeadFace, TextFace, DeedFace, StampFace;
+			FVector2D StampAt, StampSize;
+		};
+
+		static void Wrap(const FString& Words, const FSlateFontInfo& Face, double Room, TArray<FString>& Out)
+		{
+			Out.Reset();
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			TArray<FString> Each;
+			Words.ParseIntoArrayWS(Each);
+			FString Line;
+			for (const FString& Word : Each)
+			{
+				const FString Tried = Line.IsEmpty() ? Word : Line + TEXT(" ") + Word;
+				if (!Line.IsEmpty() && Measure->Measure(Tried, Face).X > Room)
+				{
+					Out.Add(Line);
+					Line = Word;
+				}
+				else
+				{
+					Line = Tried;
+				}
+			}
+			if (!Line.IsEmpty())
+			{
+				Out.Add(Line);
+			}
+		}
+
+		/** (The laid strip's sentences: as many lines as the measure needs, of lengths as even as they will go.) */
+		static void WrapEven(const FString& Words, const FSlateFontInfo& Face, double Room, TArray<FString>& Out)
+		{
+			Wrap(Words, Face, Room, Out);
+			const int32 Lines = Out.Num();
+			if (Lines < 2)
+			{
+				return;
+			}
+			double Low = Room / Lines, High = Room;
+			TArray<FString> Tried;
+			for (int32 Step = 0; Step < 12; ++Step)
+			{
+				const double Mid = 0.5 * (Low + High);
+				Wrap(Words, Face, Mid, Tried);
+				if (Tried.Num() <= Lines)
+				{
+					High = Mid;
+				}
+				else
+				{
+					Low = Mid;
+				}
+			}
+			Wrap(Words, Face, High, Out);
+		}
+
+		FLaid Lay(const FLessonNote& Note, bool bStamped, double Width) const
+		{
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			auto P = [this](double Pixels) { return Pixels * K; };
+			auto Pt = [this](double Pixels) { return static_cast<float>(Pixels * K * 0.75); }; // (a face is asked for in points, a third larger than pixels)
+			auto Wide = [&Measure](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+			const int32 Shape = Form.Get();
+			FLaid L;
+			L.bStrip = Shape == 2;
+			L.bClip = !L.bStrip;
+			L.bTip = Note.Kind == TEXT("tip");
+			const bool bSlip = Shape == 1, bLesson = Note.Kind == TEXT("lesson"), bFirst = bLesson && Note.Id == TEXT("month");
+			L.W = Width;
+			L.Top = L.bClip ? P(8.0) : 0.0;
+			L.Label = L.bTip ? TEXT("TIP") : TEXT("STAFF NOTE");
+			L.Count = bLesson ? FString::Printf(TEXT("%d OF %d"), Note.N, Note.Of) : FString();
+			L.Quiet = bStamped || bFirst ? FString() : bLesson ? TEXT("LATER") : TEXT("CLOSE");
+			L.bDeed = bLesson && !Note.Deed.IsEmpty() && !bFirst;
+			L.LabelFace = Typed(Pt(11.0), true, L.bTip ? 60 : 140);
+			L.CountFace = Typed(Pt(11.0));
+			L.QuietFace = Typed(Pt(11.0), true, 40);
+			L.HeadFace = Serif(TEXT("Bold"), Pt(bSlip ? 16.0 : 18.0));
+			L.TextFace = Serif(TEXT("Regular"), Pt(bSlip ? 14.0 : 15.0));
+			L.DeedFace = Typed(Pt(bSlip ? 12.0 : 13.0));
+			L.StampFace = Serif(TEXT("Bold"), Pt(bSlip ? 17.0 : 22.0), 60);
+			L.HeadLine = P(bSlip ? 20.0 : 24.0);
+			L.TextLine = P(bSlip ? 20.0 : 22.0);
+			L.DeedLine = P(bSlip ? 16.0 : 18.0);
+			L.Box = P(bSlip ? 15.0 : 18.0);
+			const double Row = P(16.0);
+			L.QuietSize = FVector2D(L.Quiet.IsEmpty() ? 0.0 : Wide(L.Quiet, L.QuietFace), Row);
+			L.TagSize = L.bTip ? FVector2D(Wide(L.Label, L.LabelFace) + P(12.0), Row) : FVector2D::ZeroVector;
+			L.StampSize = FVector2D(Wide(TEXT("DONE"), L.StampFace) + P(bSlip ? 16.0 : 22.0), P(bSlip ? 25.0 : 34.0));
+			if (L.bStrip)
+			{
+				// The strip: STAFF NOTE and its number over the heading in a column 176 wide, a dashed rule, then the
+				// sentences at a measure of at most 820, their lines as even as they go; the deed line under them.
+				const double PadX = P(17.0), PadY = P(11.0), Column = P(176.0), Gap = P(28.0);
+				const double TextX = PadX + Column + Gap + Gap;
+				const double Room = FMath::Max(P(200.0), FMath::Min(P(820.0), Width - TextX - PadX - (L.Quiet.IsEmpty() ? 0.0 : L.QuietSize.X + P(20.0))));
+				Wrap(Note.Head, L.HeadFace, Column, L.HeadLines);
+				WrapEven(Note.Text, L.TextFace, Room, L.TextLines);
+				if (L.bDeed)
+				{
+					Wrap(Note.Deed, L.DeedFace, Room - L.Box - P(10.0) - (bStamped ? L.StampSize.X + P(16.0) : 0.0), L.DeedLines);
+				}
+				const double Left = Row + P(2.0) + L.HeadLines.Num() * L.HeadLine;
+				const double Right = L.TextLines.Num() * L.TextLine + (L.bDeed ? P(8.0) + FMath::Max(L.Box, L.DeedLines.Num() * L.DeedLine) : 0.0);
+				const double Inner = FMath::Max3(Left, Right, P(44.0));
+				L.H = FMath::Max(P(68.0), Inner + 2.0 * PadY);
+				const double LeftTop = PadY + (L.H - 2.0 * PadY - Left) * 0.5, RightTop = PadY + (L.H - 2.0 * PadY - Right) * 0.5;
+				L.LabelAt = FVector2D(PadX, LeftTop);
+				L.CountAt = FVector2D(PadX + Wide(L.Label, L.LabelFace) + P(10.0), LeftTop);
+				L.HeadAt = FVector2D(PadX, LeftTop + Row + P(2.0));
+				L.DividerX = PadX + Column + Gap;
+				L.DividerTop = PadY;
+				L.DividerBottom = L.H - PadY;
+				L.TextAt = FVector2D(TextX, RightTop);
+				L.BoxAt = FVector2D(TextX, RightTop + L.TextLines.Num() * L.TextLine + P(8.0));
+				L.DeedAt = FVector2D(TextX + L.Box + P(10.0), L.BoxAt.Y + (L.Box - L.DeedLine) * 0.5);
+				L.QuietAt = FVector2D(Width - PadX - L.QuietSize.X, PadY);
+				L.StampAt = FVector2D(Width - P(14.0) - L.StampSize.X, L.H - P(8.0) - L.StampSize.Y);
+				return L;
+			}
+			// The note (and the slip, the same note narrower): the head row, the heading, the sentences, the deed line.
+			const double PadTop = P(bSlip ? 16.0 : L.bTip ? 16.0 : 18.0), PadX = P(bSlip ? 11.0 : 16.0), PadBottom = P(bSlip ? 10.0 : L.bTip ? 13.0 : 12.0);
+			const double Inner = Width - 2.0 * PadX;
+			double Y = L.Top + PadTop;
+			L.LabelAt = FVector2D(PadX, Y);
+			if (bSlip && !L.bTip)
+			{
+				// (the head on two rows: STAFF NOTE, then the number with LATER at the right)
+				Y += Row + P(1.0);
+				L.CountAt = FVector2D(PadX, Y);
+				L.QuietAt = FVector2D(Width - PadX - L.QuietSize.X, Y);
+			}
+			else
+			{
+				L.CountAt = FVector2D(PadX + Wide(L.Label, L.LabelFace) + P(10.0), Y);
+				L.QuietAt = FVector2D(Width - PadX - L.QuietSize.X, Y);
+			}
+			Y += Row + P(bSlip ? 7.0 : 8.0);
+			const FString Head = L.bTip ? FString() : Note.Head;
+			if (!Head.IsEmpty())
+			{
+				Wrap(Head, L.HeadFace, Inner, L.HeadLines);
+				L.HeadAt = FVector2D(PadX, Y);
+				Y += L.HeadLines.Num() * L.HeadLine + P(4.0);
+			}
+			Wrap(Note.Text, L.TextFace, Inner, L.TextLines);
+			L.TextAt = FVector2D(PadX, Y);
+			Y += L.TextLines.Num() * L.TextLine;
+			if (L.bDeed)
+			{
+				Y += P(10.0);
+				L.RuleY = Y;
+				Y += P(9.0);
+				// (stamped, the deed line keeps clear of the stamp beside it; on the slip the stamp goes under it)
+				Wrap(Note.Deed, L.DeedFace, Inner - L.Box - P(10.0) - (bStamped && !bSlip ? P(112.0) : 0.0), L.DeedLines);
+				L.BoxAt = FVector2D(PadX, Y);
+				L.DeedAt = FVector2D(PadX + L.Box + P(10.0), Y + FMath::Max(0.0, (L.Box - L.DeedLine) * 0.5));
+				Y += FMath::Max(L.Box, L.DeedLines.Num() * L.DeedLine);
+			}
+			if (bStamped && bSlip)
+			{
+				Y += P(30.0);
+			}
+			Y += PadBottom;
+			L.H = Y - L.Top;
+			L.StampAt = FVector2D(Width - P(bSlip ? 8.0 : 14.0) - L.StampSize.X, Y - P(bSlip ? 6.0 : 8.0) - L.StampSize.Y);
+			return L;
+		}
+
+		double WidthNow() const
+		{
+			const int32 Shape = Form.Get();
+			return Shape == 1 ? FMath::Max(80.0, static_cast<double>(SlipWide.Get())) * K : Shape == 2 ? (LastWidth > 0.0 ? LastWidth : 1244.0) : 340.0 * K;
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override
+		{
+			FLessonNote Note;
+			float Alpha = 1.0f;
+			double Slide = 0.0, StampAge = -1.0;
+			bool bStamped = false;
+			if (!What(Note, Alpha, Slide, bStamped, StampAge))
+			{
+				return FVector2D(Form.Get() == 2 ? 0.0 : WidthNow(), 0.0);
+			}
+			const double Width = WidthNow();
+			const FLaid L = Lay(Note, bStamped, Width);
+			// (a strip asks for no width of its own: it lies across whatever the card gives it)
+			return FVector2D(L.bStrip ? 0.0 : Width, L.Top + L.H + 6.0 * K);
+		}
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			if (Form.Get() == 2)
+			{
+				LastWidth = Geometry.GetLocalSize().X;
+			}
+			FLessonNote Note;
+			float Alpha = 1.0f;
+			double Slide = 0.0, StampAge = -1.0;
+			bool bStamped = false;
+			if (!What(Note, Alpha, Slide, bStamped, StampAge))
+			{
+				return LayerId;
+			}
+			const FLaid L = Lay(Note, bStamped, Form.Get() == 2 ? Geometry.GetLocalSize().X : WidthNow());
+			Shown = L;
+			auto P = [this](double Pixels) { return Pixels * K; };
+			const FLinearColor Paper100(FColor::FromHex(TEXT("EDE6D6"))), Paper300(FColor::FromHex(TEXT("CDBF9C"))), Ink900(FColor::FromHex(TEXT("2A2118"))), Ink600(FColor::FromHex(TEXT("5C5040")));
+			const FLinearColor Brass700(FColor::FromHex(TEXT("8A6B3B"))), ClipBrass(FColor::FromHex(TEXT("C79D55"))), ClipLight(FColor::FromHex(TEXT("ECC884"))), GainDeep(FColor::FromHex(TEXT("3F6B36"))), SteelDeep(FColor::FromHex(TEXT("2F5068")));
+			auto A = [Alpha](const FLinearColor& Ink) { return Ink.CopyWithNewOpacity(Ink.A * Alpha); };
+			// (the home note slides in from its own edge: the left one from the left, the second home from the right)
+			const double From = FromRight.Get() ? Slide : -Slide;
+			const FVector2D O(From, 0.0);
+			auto Place = [&](const FVector2D& At, const FVector2D& Size) { return Geometry.ToPaintGeometry(Size, FSlateLayoutTransform(At + O)); };
+			static const FSlateColorBrush Solid(FLinearColor::White);
+			static const FSlateRoundedBoxBrush Round(FLinearColor::White, 4.0f);
+			static const FSlateRoundedBoxBrush Shadow(FLinearColor::White, 4.0f);
+			int32 Layer = LayerId;
+			const FVector2D PaperAt(0.0, L.Top), PaperSize(L.W, L.H);
+			if (!L.bStrip)
+			{
+				// The kit's card shadow, soft under the paper.
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer, Place(PaperAt + FVector2D(0.0, P(4.0)), PaperSize + FVector2D(0.0, P(2.0))), &Shadow, ESlateDrawEffect::None, A(FLinearColor(0.0f, 0.0f, 0.0f, 0.32f)));
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer, Place(PaperAt + FVector2D(-P(2.0), P(1.0)), PaperSize + FVector2D(P(4.0), P(8.0))), &Shadow, ESlateDrawEffect::None, A(FLinearColor(0.0f, 0.0f, 0.0f, 0.14f)));
+			}
+			++Layer;
+			{
+				// The paper: paper-100 going to paper-200 at its foot, a 1 px paper-300 edge, 2 px corners.
+				// (a box is drawn in the colour it is handed, not its brush's: the brush gives the corners and the edge)
+				const FSlateRoundedBoxBrush Sheet(Paper100, 2.0f, A(Paper300), 1.0f);
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer, Place(PaperAt, PaperSize), &Sheet, ESlateDrawEffect::None, A(Paper100));
+				const FLinearColor Foot = FLinearColor(FColor::FromHex(TEXT("E2D7BC")));
+				const int32 Bands = 8;
+				for (int32 Band = 0; Band < Bands; ++Band)
+				{
+					const double Y0 = L.Top + L.H * (0.35 + 0.65 * Band / Bands), Y1 = L.Top + L.H * (0.35 + 0.65 * (Band + 1) / Bands);
+					FSlateDrawElement::MakeBox(OutDrawElements, Layer, Place(FVector2D(1.0, Y0), FVector2D(L.W - 2.0, FMath::Min(Y1, L.Top + L.H - 1.0) - Y0)), &Solid, ESlateDrawEffect::None, A(Foot.CopyWithNewOpacity((Band + 0.5f) / Bands)));
+				}
+			}
+			++Layer;
+			if (L.bClip)
+			{
+				// The brass clip, 44 by 15, 26 in from the left and standing 8 above the paper's top (34 wide on the slip).
+				const bool bSlip = Form.Get() == 1;
+				const FVector2D ClipAt(P(bSlip ? 14.0 : 26.0), 0.0), ClipSize(P(bSlip ? 34.0 : 44.0), P(15.0));
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer, Place(ClipAt + FVector2D(0.0, P(2.0)), ClipSize), &Round, ESlateDrawEffect::None, A(FLinearColor(0.0f, 0.0f, 0.0f, 0.45f)));
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer + 1, Place(ClipAt, ClipSize), &Round, ESlateDrawEffect::None, A(ClipBrass));
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer + 1, Place(ClipAt + FVector2D(P(2.0), P(1.0)), FVector2D(ClipSize.X - P(4.0), ClipSize.Y * 0.4)), &Round, ESlateDrawEffect::None, A(ClipLight.CopyWithNewOpacity(0.85f)));
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer + 1, Place(ClipAt + FVector2D(P(4.0), P(1.0)), FVector2D(ClipSize.X - P(8.0), 1.0)), &Solid, ESlateDrawEffect::None, A(FLinearColor(1.0f, 0.96f, 0.84f, 0.75f)));
+			}
+			Layer += 2;
+			auto Write = [&](const FString& Words, const FVector2D& At, const FSlateFontInfo& Face, const FLinearColor& Ink)
+			{
+				FSlateDrawElement::MakeText(OutDrawElements, Layer, Place(At, FVector2D(L.W, 60.0)), Words, Face, ESlateDrawEffect::None, A(Ink));
+			};
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			auto Lines = [&](const TArray<FString>& Each, const FVector2D& At, double Line, const FSlateFontInfo& Face, const FLinearColor& Ink)
+			{
+				// (each line set in the middle of its leading, as a page sets "18 on 24")
+				const double Inset = FMath::Max(0.0, (Line - Measure->GetMaxCharacterHeight(Face)) * 0.5);
+				for (int32 K2 = 0; K2 < Each.Num(); ++K2)
+				{
+					Write(Each[K2], At + FVector2D(0.0, Inset + K2 * Line), Face, Ink);
+				}
+			};
+			const double RowInset = FMath::Max(0.0, (P(16.0) - Measure->GetMaxCharacterHeight(L.LabelFace)) * 0.5);
+			// The head row: STAFF NOTE (or the TIP tag on steel-deep), the number, and LATER or CLOSE at the right.
+			if (L.bTip)
+			{
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer, Place(L.LabelAt + FVector2D(0.0, -P(1.0)), L.TagSize + FVector2D(0.0, P(2.0))), &Solid, ESlateDrawEffect::None, A(SteelDeep));
+				Write(L.Label, L.LabelAt + FVector2D(P(6.0), RowInset), L.LabelFace, Paper100);
+			}
+			else
+			{
+				Write(L.Label, L.LabelAt + FVector2D(0.0, RowInset), L.LabelFace, Ink900);
+			}
+			if (!L.Count.IsEmpty())
+			{
+				Write(L.Count, L.CountAt + FVector2D(0.0, RowInset), L.CountFace, Ink600);
+			}
+			if (!L.Quiet.IsEmpty())
+			{
+				// (the kit's quiet button: an underlined word over a 1 px brass-700 rule)
+				Write(L.Quiet, L.QuietAt + FVector2D(0.0, RowInset), L.QuietFace, Ink600);
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer, Place(L.QuietAt + FVector2D(0.0, P(15.0)), FVector2D(L.QuietSize.X, 1.0)), &Solid, ESlateDrawEffect::None, A(Brass700));
+			}
+			if (L.HeadLines.Num() > 0)
+			{
+				Lines(L.HeadLines, L.HeadAt, L.HeadLine, L.HeadFace, Ink900);
+			}
+			Lines(L.TextLines, L.TextAt, L.TextLine, L.TextFace, Ink900);
+			auto Dashes = [&](const FVector2D& From2, const FVector2D& To2, const FLinearColor& Ink)
+			{
+				const double Long = FVector2D::Distance(From2, To2);
+				if (Long < 1.0)
+				{
+					return;
+				}
+				const FVector2D Way = (To2 - From2) / Long;
+				for (double Along = 0.0; Along < Long; Along += P(7.0))
+				{
+					FSlateDrawElement::MakeLines(OutDrawElements, Layer, Geometry.ToPaintGeometry(), { From2 + O + Way * Along, From2 + O + Way * FMath::Min(Along + P(4.0), Long) }, ESlateDrawEffect::None, A(Ink), true, 1.0f);
+				}
+			};
+			if (L.DividerX >= 0.0)
+			{
+				Dashes(FVector2D(L.DividerX, L.DividerTop), FVector2D(L.DividerX, L.DividerBottom), Ink600.CopyWithNewOpacity(0.45f));
+			}
+			if (L.bDeed)
+			{
+				if (L.RuleY >= 0.0)
+				{
+					Dashes(FVector2D(P(L.bStrip ? 0.0 : (Form.Get() == 1 ? 11.0 : 16.0)), L.RuleY), FVector2D(L.W - P(Form.Get() == 1 ? 11.0 : 16.0), L.RuleY), Ink600.CopyWithNewOpacity(0.6f));
+				}
+				// The deed's box: 1.5 px of ink-600, gain-deep and ticked once the deed is done.
+				const FLinearColor BoxInk = bStamped ? GainDeep : Ink600;
+				const FVector2D B0 = L.BoxAt + O, B1 = B0 + FVector2D(L.Box, L.Box);
+				FSlateDrawElement::MakeLines(OutDrawElements, Layer, Geometry.ToPaintGeometry(), { B0, FVector2D(B1.X, B0.Y), B1, FVector2D(B0.X, B1.Y), B0 }, ESlateDrawEffect::None, A(BoxInk), true, 1.5f);
+				if (bStamped)
+				{
+					const double U = L.Box / 16.0;
+					FSlateDrawElement::MakeLines(OutDrawElements, Layer, Geometry.ToPaintGeometry(), { B0 + FVector2D(3.0, 8.4) * U, B0 + FVector2D(6.2, 11.5) * U, B0 + FVector2D(13.0, 4.6) * U }, ESlateDrawEffect::None, A(GainDeep), true, 2.0f);
+				}
+				Lines(L.DeedLines, L.DeedAt, L.DeedLine, L.DeedFace, Ink900);
+			}
+			if (bStamped && StampAge >= 0.0)
+			{
+				// DONE: the kit's stamp in its won colour, turned 6 degrees, landing with a thump (220 ms).
+				const double T = FMath::Clamp(StampAge / 0.22, 0.0, 1.0);
+				const float Grow = static_cast<float>(1.0 + 0.45 * FMath::Pow(1.0 - T, 2.0));
+				const float StampAlpha = static_cast<float>(FMath::Clamp(T * 2.5, 0.0, 1.0)) * Alpha;
+				const float Turn = FMath::DegreesToRadians(-6.0f), Cos = FMath::Cos(Turn) * Grow, Sin = FMath::Sin(Turn) * Grow;
+				const FGeometry Stamp = Geometry.MakeChild(L.StampSize, FSlateLayoutTransform(L.StampAt + O), FSlateRenderTransform(FMatrix2x2(Cos, Sin, -Sin, Cos)), FVector2D(0.5, 0.5));
+				const FSlateRoundedBoxBrush Ring(FLinearColor::Transparent, 3.0f, GainDeep.CopyWithNewOpacity(0.92f * StampAlpha), static_cast<float>(P(3.0)));
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer + 1, Stamp.ToPaintGeometry(), &Ring, ESlateDrawEffect::None, FLinearColor::Transparent);
+				const FVector2D Size = Measure->Measure(TEXT("DONE"), L.StampFace);
+				FSlateDrawElement::MakeText(OutDrawElements, Layer + 1, Stamp.ToPaintGeometry(Size, FSlateLayoutTransform((L.StampSize - Size) * 0.5)), FString(TEXT("DONE")), L.StampFace, ESlateDrawEffect::None, GainDeep.CopyWithNewOpacity(0.92f * StampAlpha));
+			}
+			return Layer + 2;
+		}
+
+		virtual FReply OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override
+		{
+			if (!Controller.IsValid() || Event.GetEffectingButton() != EKeys::LeftMouseButton)
+			{
+				return FReply::Handled();
+			}
+			ACampaignPlayerController* C = Controller.Get();
+			if (Form.Get() == 2 && C->IsLessonLaid())
+			{
+				return FReply::Unhandled(); // (lesson 1 lies on the card: a click there is the card's)
+			}
+			if (C->IsLessonStamped())
+			{
+				C->PressLesson(TEXT("send")); // (ruling 147: a click sends a stamped note at once)
+				return FReply::Handled();
+			}
+			const FVector2D Here = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
+			if (!Shown.Quiet.IsEmpty() && C->HasLessonNote())
+			{
+				const FBox2D Quiet(Shown.QuietAt - FVector2D(6.0, 6.0), Shown.QuietAt + Shown.QuietSize + FVector2D(6.0, 6.0));
+				if (Quiet.IsInside(Here))
+				{
+					const FLessonNote& Note = C->GetLessonNote();
+					C->PressLesson(Note.Kind == TEXT("lesson") ? TEXT("later") : Note.Kind == TEXT("tip") ? TEXT("tip") : TEXT("close"));
+				}
+			}
+			return FReply::Handled();
+		}
+
+		virtual FCursorReply OnCursorQuery(const FGeometry& Geometry, const FPointerEvent& Event) const override
+		{
+			if (!Controller.IsValid() || (Form.Get() == 2 && Controller->IsLessonLaid()))
+			{
+				return FCursorReply::Unhandled();
+			}
+			if (Controller->IsLessonStamped())
+			{
+				return FCursorReply::Cursor(EMouseCursor::Hand);
+			}
+			const FVector2D Here = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
+			const FBox2D Quiet(Shown.QuietAt - FVector2D(6.0, 6.0), Shown.QuietAt + Shown.QuietSize + FVector2D(6.0, 6.0));
+			return !Shown.Quiet.IsEmpty() && Quiet.IsInside(Here) ? FCursorReply::Cursor(EMouseCursor::Hand) : FCursorReply::Unhandled();
+		}
+
+	private:
+		TWeakObjectPtr<ACampaignPlayerController> Controller;
+		TAttribute<int32> Form;
+		TAttribute<float> SlipWide;
+		TAttribute<bool> FromRight;
+		float K = 0.9f;
+		mutable double LastWidth = 0.0;
+		mutable FLaid Shown;
+	};
+
 	class SCampaignOverlay : public SCompoundWidget
 	{
 	public:
@@ -3766,7 +4240,7 @@ namespace
 					return FMath::Clamp(static_cast<float>(Size.Y / 900.0), 0.7f, 3.5f);
 				})
 				[
-					SNew(SOverlay)
+					SAssignNew(ScreenRoot, SOverlay)
 
 					// Under everything else on the screen: the names lettered across the map, and over them the name
 					// plates of the towns on the table.
@@ -4174,7 +4648,7 @@ namespace
 						// The small map: every country in its colour, the armies as marks, the part on screen boxed.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 4.0f, 0.0f, 12.0f)
 						[
-							Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(6.0f))
+							Edge(SmallMapPiece, SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(6.0f))
 							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsMapShown() ? EVisibility::Visible : EVisibility::Collapsed; })
 							.ToolTipText(FText::FromString(TEXT("The whole map. White marks are your armies, blue your allies', red the enemy's. Click or drag to look somewhere else.")))
 							[
@@ -5227,7 +5701,7 @@ namespace
 							// box that only ever scales down: every other page has a size that fits, and is left as it is.)
 							SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
 							[
-							SNew(SBox).WidthOverride_Lambda([this]() { return FOptionalSize(IsMonthCard() ? 1300.0f : IsRaidCard() ? 1180.0f : 1100.0f); }).HeightOverride_Lambda([this]() { return IsMonthCard() ? FOptionalSize() : FOptionalSize(IsRaidCard() ? 934.0f : 780.0f); })
+							SAssignNew(PageCardBox, SBox).WidthOverride_Lambda([this]() { return FOptionalSize(IsMonthCard() ? 1300.0f : IsRaidCard() ? 1180.0f : 1100.0f); }).HeightOverride_Lambda([this]() { return IsMonthCard() ? FOptionalSize() : FOptionalSize(IsRaidCard() ? 934.0f : 780.0f); })
 							// (the month's card is as tall as what it has to tell: a quiet month is a small card)
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 22.0f, 26.0f, 22.0f))
@@ -5275,6 +5749,13 @@ namespace
 												SNew(STextBlock).Text(FText::FromString(TEXT("CLOSE"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
 											]
 										]
+									]
+									// (Rules 84.3.3) The staff's note laid in the card, under its head, where the card leaves no margin
+									// for the slip: it is never hidden.
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+									[
+										SNew(SStaffNote).Controller(Controller).Form(2).Scale(1.0f)
+										.Visibility_Lambda([this]() { return !IsMonthCard() && bLessonInLaid && Controller.IsValid() && Controller->HasLessonNote() ? EVisibility::Visible : EVisibility::Collapsed; })
 									]
 									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)
 									[
@@ -5563,6 +6044,19 @@ namespace
 								]
 							]
 						]
+					]
+
+					// (Rules 84.3.3, FIRST COMMAND; the art director's look brief, ruling 147.) The staff's note: at its home
+					// under the date card, at its second home under the small map, or as the slip in the left margin of a
+					// card that veils the map. Over every card and room, under the films and the great moments.
+					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top)
+					.Padding(TAttribute<FMargin>::CreateLambda([this]() { return FMargin(static_cast<float>(LessonAt.X), static_cast<float>(LessonAt.Y), 0.0f, 0.0f); }))
+					[
+						SAssignNew(LessonNoteWidget, SStaffNote).Controller(Controller).Scale(0.9f)
+						.Form_Lambda([this]() { return bLessonSlip ? 1 : 0; })
+						.SlipWide_Lambda([this]() { return LessonSlipWide; })
+						.FromRight_Lambda([this]() { return LessonHome == 1 && !bLessonSlip; })
+						.Visibility_Lambda([this]() { return bLessonShown ? EVisibility::Visible : EVisibility::Collapsed; })
 					]
 
 					// The newsreel: the map behind is in black and white; a black band above carries the masthead and one
@@ -6182,6 +6676,7 @@ namespace
 		{
 			SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
 			UpdateBigCard();
+			PlaceLessonNote();
 			// Where the pieces of the frame are now, for the plates and names that must keep out from under them.
 			FrameRects.Reset();
 			for (const TSharedRef<SWidget>& Each : FramePieces)
@@ -7135,6 +7630,125 @@ namespace
 				*OutWidth = static_cast<float>(Size.X) / Scale - Gap.Left - Gap.Right;
 			}
 			return Gap;
+		}
+
+		/** A piece of the frame as it stands in the frame's own measure (900 high); invalid when it is not on the screen. */
+		FBox2D InFrame(const TWeakPtr<SWidget>& Kept) const
+		{
+			const TSharedPtr<SWidget> Widget = Kept.Pin();
+			if (!ScreenRoot.IsValid() || !Widget.IsValid() || !Widget->GetVisibility().IsVisible())
+			{
+				return FBox2D(ForceInit);
+			}
+			const FGeometry& Root = ScreenRoot->GetTickSpaceGeometry();
+			const FGeometry& Own = Widget->GetTickSpaceGeometry();
+			const FVector2D At = Own.GetAbsolutePosition(), Size = Own.GetAbsoluteSize();
+			if (Size.X < 1.0 || Size.Y < 1.0)
+			{
+				return FBox2D(ForceInit);
+			}
+			const FVector2D Min = Root.AbsoluteToLocal(At), Max = Root.AbsoluteToLocal(At + Size);
+			return FBox2D(Min, Max);
+		}
+
+		/**
+		 * (Rules 84.3.3; the art director's look brief, section 2, and ruling 147(a).) Where the staff's note stands this
+		 * frame. Beside a card that veils the map it is the slip in the card's left margin, 148 wide at most and never
+		 * touching the card; where the margin is too narrow (under 112), it is laid in the card under its head. Otherwise
+		 * it is at home under the date card, or at its second home under the small map when the army in hand or the
+		 * flag it points at would lie under the first; where both would, it is the slip at the left edge. It chooses as it
+		 * comes and does not move while he reads. The measures are the brief's pixels of the 1600 by 1000 frame, at 0.9.
+		 */
+		void PlaceLessonNote()
+		{
+			bLessonShown = bLessonSlip = bLessonInLaid = false;
+			if (!Controller.IsValid() || !ScreenRoot.IsValid())
+			{
+				return;
+			}
+			FLessonNote Gone;
+			float Faded = 0.0f;
+			const bool bNote = Controller->HasLessonNote();
+			if (!bNote && !Controller->GetLessonLeaving(Gone, Faded))
+			{
+				return;
+			}
+			const double K = 0.9;
+			const FVector2D Screen = ScreenRoot->GetTickSpaceGeometry().GetLocalSize();
+			if (Controller->IsLessonBesideCard())
+			{
+				// The card's left edge and top: a room's card as it is drawn (it may be scaled down to fit), the others
+				// centred at their own widths.
+				double Left = 0.0, Top = 14.0 * K;
+				const FBox2D Card = Controller->IsPageOpen() ? InFrame(PageCardBox) : FBox2D(ForceInit);
+				if (Card.bIsValid)
+				{
+					Left = Card.Min.X;
+					Top = FMath::Max(Top, Card.Min.Y);
+				}
+				else
+				{
+					const FFaceOff& Face = Controller->GetFaceOff();
+					const double CardWide = Controller->IsPageOpen() ? (IsMonthCard() ? 1300.0 : IsRaidCard() ? 1180.0 : 1100.0)
+						: Controller->GetDocument().bValid ? 820.0 : Controller->IsArsenalOpen() ? 1320.0 : Controller->IsLedgerOpen() ? 1120.0
+						: Controller->IsGeneralsOpen() ? 1220.0 : Controller->IsDiplomacyOpen() ? 1180.0 : Face.bVisible ? 912.0
+						: Controller->IsResearchOpen() && !(Controller->GetResearch().bTree && ChartLayout().bGood) ? 1220.0 : Screen.X;
+					const double High = Face.bVisible ? 560.0 : 780.0;
+					Left = (Screen.X - CardWide) * 0.5;
+					Top = FMath::Max(Top, (Screen.Y - High) * 0.5);
+				}
+				const double Room = Left - 14.0 * K;
+				if (Room >= 112.0 * K)
+				{
+					bLessonShown = bLessonSlip = true;
+					LessonSlipWide = static_cast<float>(FMath::Min(148.0, Room / K));
+					LessonAt = FVector2D(7.0 * K, Top);
+				}
+				else if (Controller->IsPageOpen())
+				{
+					bLessonInLaid = true; // (laid in the card under its head instead: never hidden)
+				}
+				return;
+			}
+			// At home: the paper's top 19 under the date card, the clip standing 8 above it; the second home's right
+			// edge with the small map's, 13 under it.
+			const FBox2D Date = InFrame(TopLeftPiece), Small = InFrame(SmallMapPiece);
+			const FVector2D Home1(25.0 * K, (Date.bIsValid ? Date.Max.Y : 247.0 * K) + 11.0 * K);
+			const FVector2D Home2(Small.bIsValid ? Small.Max.X - 340.0 * K : Screen.X - 365.0 * K, (Small.bIsValid ? Small.Max.Y : 607.0 * K) + 5.0 * K);
+			if (bNote && Controller->GetLessonArrival() != LessonPlacedArrival)
+			{
+				LessonPlacedArrival = Controller->GetLessonArrival();
+				FVector2D Size(340.0 * K, 240.0 * K);
+				if (LessonNoteWidget.IsValid())
+				{
+					Size.Y = FMath::Max(Size.Y * 0.5, static_cast<double>(LessonNoteWidget->GetDesiredSize().Y));
+				}
+				FVector2D Pixels(1920.0, 1080.0);
+				if (GEngine && GEngine->GameViewport)
+				{
+					GEngine->GameViewport->GetViewportSize(Pixels);
+				}
+				const double Scale = FMath::Clamp(Pixels.Y / 900.0, 0.7, 3.5);
+				TArray<FBox2D> Keep;
+				Controller->GetLessonKeepClear(Keep);
+				auto Covers = [&Keep, Scale, Size](const FVector2D& At)
+				{
+					const FBox2D Note(At, At + Size);
+					for (const FBox2D& Each : Keep)
+					{
+						if (Note.Intersect(FBox2D(Each.Min / Scale, Each.Max / Scale)))
+						{
+							return true;
+						}
+					}
+					return false;
+				};
+				LessonHome = !Covers(Home1) ? 0 : !Covers(Home2) ? 1 : 2;
+			}
+			bLessonShown = true;
+			bLessonSlip = LessonHome == 2;
+			LessonSlipWide = 148.0f;
+			LessonAt = LessonHome == 1 ? Home2 : LessonHome == 2 ? FVector2D(7.0 * K, Home1.Y) : Home1;
 		}
 
 		/** A piece of the frame that the news line must keep clear of on its right: one of the chips. */
@@ -8218,7 +8832,8 @@ namespace
 					+ SVerticalBox::Slot().AutoHeight()[Heading(TEXT("DISPATCHES  ·  THE MONTH IN ONE LOOK"))]
 					+ SVerticalBox::Slot().AutoHeight()
 					[
-						SNew(STextBlock).Text(FText::FromString(Card.Date)).Font(Serif(TEXT("Bold"), 30)).ColorAndOpacity(Cream)
+						// (ruling 123(b): the card that opens a campaign is headed by the moment, "As September 1939 opens")
+						SNew(STextBlock).Text(FText::FromString(Card.bOpening ? FString::Printf(TEXT("As %s opens"), *Card.Date) : Card.Date)).Font(Serif(TEXT("Bold"), 30)).ColorAndOpacity(Cream)
 					]
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
@@ -8254,6 +8869,15 @@ namespace
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), Ink)] // (item 6: the lit button shows its key)
 					]
 				]
+			];
+
+			// (Rules 84.3.3; the art director, ruling 149.) Lesson 1 laid across the first month's card under its head,
+			// above the score boxes and any warning band: the card moves down to make room and nothing on it is covered.
+			// Here too lies any note the card leaves no margin for (the month card on a screen narrower than 16 by 9).
+			PageBody->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 4.0f)
+			[
+				SNew(SStaffNote).Controller(Controller).Form(2).Scale(1.0f)
+				.Visibility_Lambda([this]() { return Controller.IsValid() && (Controller->IsLessonLaid() || (bLessonInLaid && Controller->HasLessonNote())) ? EVisibility::Visible : EVisibility::Collapsed; })
 			];
 
 			// 2. The red band: at most two, for news that changes the war.
@@ -12563,6 +13187,16 @@ namespace
 		TSharedPtr<SHorizontalBox> WatchStrip;
 		TWeakPtr<SWidget> TopLeftPiece; // the calendar plate, and
 		TArray<TWeakPtr<SWidget>> TopChips; // the chips down the right: the news line keeps between them
+		// (Rules 84.3.3) FIRST COMMAND: where the staff's note stands (see PlaceLessonNote), and what it is measured by.
+		TSharedPtr<SOverlay> ScreenRoot; // the frame's own measure, 900 high
+		TWeakPtr<SWidget> SmallMapPiece; // the small map's panel: the second home is under it
+		TSharedPtr<SBox> PageCardBox; // a room's card, which the slip stands beside
+		TSharedPtr<SStaffNote> LessonNoteWidget;
+		FVector2D LessonAt = FVector2D::ZeroVector;
+		bool bLessonShown = false, bLessonSlip = false, bLessonInLaid = false;
+		float LessonSlipWide = 148.0f;
+		int32 LessonHome = 0; // 0 under the date card, 1 under the small map, 2 the slip at the left edge (ruling 147(a))
+		int32 LessonPlacedArrival = -1;
 		TArray<FString> WatchShown;
 		int32 WatchNow = INDEX_NONE;
 		TSharedPtr<SVerticalBox> PageSections;

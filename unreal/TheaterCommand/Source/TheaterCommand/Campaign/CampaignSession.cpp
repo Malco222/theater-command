@@ -4848,21 +4848,31 @@ FString FCampaignSession::NotebookFile()
 
 void FCampaignSession::ReadNotebook()
 {
-	// What he has learnt, kept with the player and not with a save. A run starts as a new player does, unless told
-	// to keep what the last run left (-TheaterKeepLessons); a missing or unreadable file is a new player's too.
+	// What he has learnt, kept with the player and not with a save; a missing or unreadable file is a new player's.
+	// A run keeps the notes off, so that no picture or step of a run that is not about them finds one on the desk: a
+	// run that starts FIRST COMMAND turns them on as any start of it does, -TheaterLessons starts a run as a new player,
+	// and -TheaterKeepLessons keeps what the last run left.
 	FString Run, Text;
 	const bool bRun = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Run, false) || FParse::Value(FCommandLine::Get(), TEXT("TheaterSteps="), Run, false);
-	if ((bRun && !FParse::Param(FCommandLine::Get(), TEXT("TheaterKeepLessons"))) || !FFileHelper::LoadFileToString(Text, *NotebookFile()))
+	if (bRun && !FParse::Param(FCommandLine::Get(), TEXT("TheaterKeepLessons")))
+	{
+		Text = FParse::Param(FCommandLine::Get(), TEXT("TheaterLessons")) ? TEXT("{}") : TEXT("{\"on\":false}");
+	}
+	else if (!FFileHelper::LoadFileToString(Text, *NotebookFile()))
 	{
 		Text = TEXT("{}");
 	}
+	// (The code checker, 18 November: the file is read and written back as the reader understood it, so that nothing
+	// after its closing brace can reach the rules' arguments and fail the call there.)
 	TSharedPtr<FJsonObject> Kept;
-	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Kept) || !Kept.IsValid())
+	FString Clean;
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Clean);
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Kept) || !Kept.IsValid() || !FJsonSerializer::Serialize(Kept.ToSharedRef(), Writer))
 	{
-		Text = TEXT("{}");
+		Clean = TEXT("{}");
 	}
 	FString Json, Error;
-	if (Host.IsValid() && !Host->Call(TEXT("notebook"), FString::Printf(TEXT("[%s]"), *Text), Json, Error))
+	if (Host.IsValid() && !Host->Call(TEXT("notebook"), FString::Printf(TEXT("[%s]"), *Clean), Json, Error))
 	{
 		UE_LOG(LogTheater, Display, TEXT("FIRST COMMAND: these rules keep no staff notes (%s)"), *Error); // (the stand-in rules, or rules before 84.3.3)
 	}

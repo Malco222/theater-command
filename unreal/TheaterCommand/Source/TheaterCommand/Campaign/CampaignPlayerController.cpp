@@ -801,13 +801,27 @@ void ACampaignPlayerController::EnterCampaign()
 			}
 		}
 	}
-	// The adviser stands by for the first months of a campaign with somebody at the table.
+	// (Rules 84.3.3) FIRST COMMAND: the staff's notes start afresh with the campaign. A war played from its first
+	// month has no month card until its second (trap 1), so where lesson 1 is due the card it lies on is owed, and
+	// is opened once the opening flight is over; until then no note stands on the desk.
+	ResetLessons();
+	bool bNotesOn = false;
+	{
+		FLessonDesk Probe;
+		if (Nation && Session->LessonNow(true, TArray<int32>(), Probe))
+		{
+			bNotesOn = Probe.bOn;
+			bOpeningCardOwed = Probe.bLaid && View.Turn == 1;
+		}
+	}
+	// The adviser stands by for the first months of a campaign with somebody at the table: while the staff's notes
+	// are on, they teach in his place, at his place under the date card.
 	{
 		const int32 Next = Adviser.Revision + 1; // (so that the screen writes his list afresh)
 		Adviser = FAdviser();
 		bAdviserSpoke = false;
 		Adviser.Revision = Next;
-		Adviser.bOn = Nation != nullptr && View.Turn <= 2 && !bScripted && bAdviserWanted;
+		Adviser.bOn = Nation != nullptr && View.Turn <= 2 && !bScripted && bAdviserWanted && !bNotesOn;
 	}
 	Notify(Nation
 		? FString::Printf(TEXT("%s. You lead %s.%s"), *View.Date, *WithThe(Nation->Name), View.bEve ? TEXT(" Place your army, then end the month.") : TEXT(""))
@@ -1178,11 +1192,13 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 	{
 		AdviserSaw(3);
 	}
+	LessonPageChanged();
 }
 
 void ACampaignPlayerController::ClosePage()
 {
 	bPageOpen = false;
+	LessonPageChanged();
 }
 
 void ACampaignPlayerController::PressPage(const FString& Action)
@@ -1194,6 +1210,11 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 	}
 	if (Action.StartsWith(TEXT("goto:")))
 	{
+		// (Rules 84.3.3) A line of the month card followed by its pin: lesson 6's deed, which only the screen sees.
+		if (Page.Month.bValid)
+		{
+			LessonDeedsOwed.Emplace(TEXT("line"), true);
+		}
 		// A way from the list of forces to one of them on the table: the view goes there, and it is picked up or opened.
 		TArray<FString> Parts;
 		Action.ParseIntoArray(Parts, TEXT(":"));
@@ -1259,6 +1280,7 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 		Page = Session->Page(Action.Mid(5), SelectedRegion);
 		Page.Revision = Opened;
 		bPageOpen = Page.bValid;
+		LessonPageChanged();
 		return;
 	}
 	FString Note, Next;
@@ -1350,6 +1372,7 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 	Page = Session->Page(Id, SelectedRegion);
 	Page.Revision = Revision;
 	bPageOpen = Page.bValid;
+	LessonPageChanged();
 }
 
 void ACampaignPlayerController::GetPageLinks(TArray<FString>& OutIds, TArray<FString>& OutLabels) const
@@ -3551,6 +3574,244 @@ void ACampaignPlayerController::ToggleWealth()
 		: TEXT("The map as it is: each country's colour a stain over its own ground."), 6.0);
 }
 
+// ---- (Rules 84.3.3) FIRST COMMAND: the staff's notes ---------------------------------------------------------------
+// The rules say which note is on the desk, and stamp the lessons his deeds earn (campaign-bridge.ts, lessonNow): the
+// game keeps only what is on the screen. A note comes, slides in, and stays where it came until it goes; when its
+// deed is done the DONE stamp lands on it and it stays two seconds at most (a click sends it at once); then the next
+// comes. A deed done while another note is up earns its stamp quietly, as in the browser.
+
+void ACampaignPlayerController::ResetLessons()
+{
+	Lessons = FLessonDesk();
+	LessonNote = LessonGone = LessonLaid = FLessonNote();
+	bLessonNote = bLessonLaid = bLessonsDue = bOpeningCardOwed = bLessonStampOwed = false;
+	++LessonArrival;
+	LessonCameAt = 0.0;
+	LessonGoneAt = LessonStampAt = -1.0;
+	LessonStampUntil = 0.0;
+	LessonMomentKey = 0;
+	LessonDeedsOwed.Reset();
+	LessonActsOwed.Reset();
+}
+
+bool ACampaignPlayerController::IsLessonQuiet() const
+{
+	// (the browser's quiet(): nothing while the other nations move, a film runs, the map is not his to look at, the
+	// GUIDE is open, or the card lesson 1 lies on is still to open)
+	return !IsMapShown() || bWatching || Announcements.Num() > 0 || WarPrompt.bVisible || bMomentOn || bOpeningCardOwed || BriefingAt > 0.0
+		|| (Document.bValid && Document.Title == TEXT("How to play"));
+}
+
+bool ACampaignPlayerController::HasLessonNote() const
+{
+	return bLessonNote && !IsLessonQuiet() && FPlatformTime::Seconds() >= LessonCameAt;
+}
+
+double ACampaignPlayerController::GetLessonAge() const
+{
+	return FPlatformTime::Seconds() - LessonCameAt;
+}
+
+double ACampaignPlayerController::GetLessonStampAge() const
+{
+	return LessonStampAt < 0.0 ? -1.0 : FPlatformTime::Seconds() - LessonStampAt;
+}
+
+bool ACampaignPlayerController::GetLessonLeaving(FLessonNote& Out, float& Faded) const
+{
+	const double Since = FPlatformTime::Seconds() - LessonGoneAt;
+	if (LessonGoneAt < 0.0 || Since >= 0.11 || IsLessonQuiet())
+	{
+		return false;
+	}
+	Out = LessonGone;
+	Faded = static_cast<float>(FMath::Clamp(Since / 0.11, 0.0, 1.0));
+	return true;
+}
+
+void ACampaignPlayerController::LessonPageChanged()
+{
+	// (Lesson 1's deed is the card it lay on put down: by GIVE ORDERS, Enter, TOUR THE MAP or a line's pin, trap 7.)
+	if (bLessonLaid && !LessonCardOpen())
+	{
+		bLessonLaid = false;
+		LessonDeedsOwed.Emplace(TEXT("card"), true);
+	}
+	bLessonsDue = true;
+	// (Asked at once where no order is being answered, so that lesson 1 is on the month card as it first opens.)
+	if (Afterwards.Num() == 0 && !IsAnswering() && !Opening.bVisible)
+	{
+		AskLessons();
+	}
+}
+
+void ACampaignPlayerController::AskLessons()
+{
+	bLessonsDue = false;
+	FCampaignSession* Session = GetSession();
+	if (!Session || Session->GetView().Human.IsEmpty())
+	{
+		LessonDeedsOwed.Reset();
+		LessonActsOwed.Reset();
+		if (bLessonNote)
+		{
+			LessonGone = LessonNote;
+			LessonGoneAt = FPlatformTime::Seconds();
+			bLessonNote = false;
+		}
+		return;
+	}
+	// What is owed first, in the order it was done; then the desk as the screen stands now. Every lesson stamped on
+	// the way is gathered, for the note on the screen to take its stamp.
+	TArray<FString> Stamped;
+	FLessonDesk Desk;
+	for (const TPair<FString, bool>& Deed : LessonDeedsOwed)
+	{
+		if (Session->LessonDeed(Deed.Key, Deed.Value, Desk))
+		{
+			Stamped.Append(Desk.Stamped);
+		}
+	}
+	LessonDeedsOwed.Reset();
+	for (const FString& Act : LessonActsOwed)
+	{
+		if (Session->LessonAct(Act, LessonCardOpen(), PickedCorps, Desk))
+		{
+			Stamped.Append(Desk.Stamped);
+		}
+	}
+	LessonActsOwed.Reset();
+	if (!Session->LessonNow(LessonCardOpen(), PickedCorps, Desk))
+	{
+		return;
+	}
+	Stamped.Append(Desk.Stamped);
+	Desk.Stamped = MoveTemp(Stamped);
+	TakeLessons(Desk);
+}
+
+void ACampaignPlayerController::TakeLessons(const FLessonDesk& Desk)
+{
+	const double Now = FPlatformTime::Seconds();
+	Lessons = Desk;
+	// Lesson 1 lies on the month card while it is open, and nowhere else.
+	bLessonLaid = Desk.bLaid && LessonCardOpen();
+	if (bLessonLaid)
+	{
+		LessonLaid = Desk.Laid;
+	}
+	// The stamp lands on the note he is reading, if its deed is the one done. One earned while the screen is not his
+	// (END THE MONTH's, read once the others have moved: trap 2) waits with its note until his month is back.
+	if (bLessonNote && LessonStampUntil <= 0.0 && LessonNote.Kind == TEXT("lesson") && Desk.Stamped.Contains(LessonNote.Id))
+	{
+		bLessonStampOwed = true;
+	}
+	if (bLessonStampOwed)
+	{
+		if (IsLessonQuiet())
+		{
+			return;
+		}
+		bLessonStampOwed = false;
+		LessonStampAt = Now;
+		LessonStampUntil = Now + 2.0;
+		CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
+		return;
+	}
+	if (LessonStampUntil > 0.0)
+	{
+		return; // (the stamped note stays until its two seconds are up or it is clicked away; the next waits)
+	}
+	ShowDeskNote(Now);
+}
+
+void ACampaignPlayerController::ShowDeskNote(double Now)
+{
+	const bool bSame = bLessonNote && Lessons.bNote && Lessons.Note.Kind == LessonNote.Kind && Lessons.Note.Id == LessonNote.Id;
+	if (bSame)
+	{
+		LessonNote = Lessons.Note; // (its words may name another place now; it stays where it stands)
+		return;
+	}
+	if (bLessonNote)
+	{
+		// The note on the desk fades out over 110 ms, and the next slides in after it.
+		LessonGone = LessonNote;
+		LessonGoneAt = Now;
+		bLessonNote = false;
+	}
+	if (Lessons.bNote)
+	{
+		LessonNote = Lessons.Note;
+		bLessonNote = true;
+		++LessonArrival;
+		LessonCameAt = LessonGoneAt >= 0.0 && Now - LessonGoneAt < 0.11 ? LessonGoneAt + 0.11 : Now;
+	}
+}
+
+void ACampaignPlayerController::PressLesson(const FString& Action)
+{
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	if (Action == TEXT("send"))
+	{
+		// (Ruling 147: a click on a stamped note sends it at once.)
+		if (LessonStampUntil > 0.0)
+		{
+			LessonStampUntil = FPlatformTime::Seconds();
+		}
+		return;
+	}
+	LessonActsOwed.Add(Action);
+	bLessonsDue = true;
+	if (Afterwards.Num() == 0 && !IsAnswering())
+	{
+		AskLessons();
+	}
+}
+
+void ACampaignPlayerController::GetLessonKeepClear(TArray<FBox2D>& Out) const
+{
+	Out.Reset();
+	const FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	// A flag of his on the screen, cloth and plate, as GetColoursOnScreen boxes every flag; where none stands, the
+	// middle of its province.
+	auto FlagIn = [this, Session, &Out](int32 Region)
+	{
+		if (!Map->GetData().Regions.IsValidIndex(Region))
+		{
+			return;
+		}
+		FVector Middle;
+		double Radius = 0.0;
+		FVector2D At, Top;
+		const AArmyPiece* Piece = Map->FindPiece(Region, Session->GetView().Human);
+		if (Piece && Piece->GetColours(Middle, Radius) && PlayerCameraManager && ProjectWorldLocationToScreen(Middle, At)
+			&& ProjectWorldLocationToScreen(Middle + PlayerCameraManager->GetCameraRotation().Quaternion().GetUpVector() * Radius, Top))
+		{
+			const double Half = FMath::Clamp(FVector2D::Distance(At, Top) * 0.8, 6.0, 90.0) + 6.0;
+			Out.Add(FBox2D(At - FVector2D(Half, Half * 0.75 + 12.0), At + FVector2D(Half, Half * 1.35)));
+			return;
+		}
+		const FVector2D Center = Map->GetData().Regions[Region].Center;
+		if (ProjectWorldLocationToScreen(Map->MapToWorld(Center.X, Center.Y), At))
+		{
+			Out.Add(FBox2D(At - FVector2D(30.0, 40.0), At + FVector2D(30.0, 30.0)));
+		}
+	};
+	if (ArmyRegion != INDEX_NONE)
+	{
+		FlagIn(ArmyRegion);
+	}
+	if (bLessonNote && LessonNote.Region != INDEX_NONE)
+	{
+		FlagIn(LessonNote.Region);
+	}
+}
+
 void ACampaignPlayerController::AdviserSaw(int32 Step)
 {
 	if (!Adviser.bOn || Step < 0 || Step >= 5 || Adviser.bDone[Step])
@@ -4164,11 +4425,51 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		Answering->Deliver();
 	}
+	// (Rules 84.3.3, trap 1.) The card lesson 1 lies on, once the opening flight is over and nothing else has the screen.
+	if (bOpeningCardOwed && BriefingAt <= 0.0 && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible && !IsAnswering())
+	{
+		bOpeningCardOwed = false;
+		if (FCampaignSession* Owed = GetSession())
+		{
+			bMonthCardDue = Owed->OpenOpeningCard();
+		}
+	}
 	// (Ruling 64.) The month's card, once nothing else has the screen.
 	if (bMonthCardDue && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible)
 	{
 		bMonthCardDue = false;
 		OpenPage(TEXT("reports"));
+	}
+	// (Rules 84.3.3) FIRST COMMAND. The DONE stamp stands two seconds at most, then the next note comes. The notes are
+	// asked again whenever what only the screen sees has changed (the card open, the army in hand, his month or the
+	// others'), or an order of his has been answered; and only once no order is being answered.
+	{
+		const double Now = FPlatformTime::Seconds();
+		if (LessonStampUntil > 0.0 && Now >= LessonStampUntil)
+		{
+			LessonStampUntil = 0.0;
+			LessonStampAt = -1.0;
+			ShowDeskNote(Now);
+			bLessonsDue = true;
+		}
+		if (const FCampaignSession* Seen = GetSession())
+		{
+			uint32 Key = (LessonCardOpen() ? 1u : 0u) | (bWatching ? 2u : 0u) | (Seen->GetView().bHumanUp ? 4u : 0u);
+			Key = HashCombine(Key, GetTypeHash(Seen->GetView().Turn));
+			for (const int32 Id : PickedCorps)
+			{
+				Key = HashCombine(Key, GetTypeHash(Id));
+			}
+			if (Key != LessonMomentKey)
+			{
+				LessonMomentKey = Key;
+				bLessonsDue = true;
+			}
+		}
+		if (bLessonsDue && Afterwards.Num() == 0 && !IsAnswering() && !Opening.bVisible)
+		{
+			AskLessons();
+		}
 	}
 	if (MomentGlideUntil > 0.0 && FPlatformTime::Seconds() >= MomentGlideUntil)
 	{
@@ -6336,6 +6637,7 @@ void ACampaignPlayerController::RefreshOrders()
 {
 	THEATER_SPEED_SCOPE(RefreshOrders);
 	FCampaignSession* Session = GetSession();
+	bLessonsDue = true; // (Rules 84.3.3: an order of his may have done a lesson's deed; the notes are asked once it is all in)
 	if (PendingEnemyReach.IsSet())
 	{
 		// (an enemy's reach put off by LaterOrders and not yet shown: it is shown first, as it was before the steps)
