@@ -407,8 +407,11 @@ describe('call your shot', () => {
   it('kept: the cabinet pays what it said on the day, and forgives one directive ignored', () => {
     const g = playing('GER');
     const st = quiet(g);
-    const { near } = towns(g);
+    // A Polish town that is no safe promise in two months: only a promise that is not safe forgives a directive
+    // ignored. (With Warsaw's Defence Command inside its town from the first month, b566, every town next door is safe.)
+    const near = promiseTargets(g, 'GER', 40).filter((x) => x.holder === 'POL').map((x) => g.regions[x.region]).find((r) => promiseTerms(g, 'GER', r.id, 2)?.band !== 'safe')!;
     const t = promiseTerms(g, 'GER', near.id, 2)!;
+    expect(t.band).not.toBe('safe');
     expect(promise(g, 'GER', near.id, 2)).toBe(true);
     st.missed = 2;
     const n = g.nations.GER, pc = n.pc, pp = n.pp, trust = st.trust, h = g.headlines.length;

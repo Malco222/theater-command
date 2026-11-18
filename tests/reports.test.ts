@@ -316,10 +316,12 @@ describe('a report going stale', () => {
 
   it('shows on the army: some corps from old reports, the rest counted, and the age of the oldest', () => {
     const g = playing();
-    const cs = polesAt(g, 'Warsaw');
+    // The Polish army with the most corps in the field (Warsaw's own troops are inside its town from the first month, b566).
+    const where = g.regions.filter((r) => r.owner === 'POL').map((r) => r.name).sort((x, y) => polesAt(g, y).length - polesAt(g, x).length)[0];
+    const cs = polesAt(g, where);
     expect(cs.length).toBeGreaterThan(1);
     identify(g, [cs[0]], 'GER');
-    let a = armyAt(g, g.byName.Warsaw.id, 'POL')!;
+    let a = armyAt(g, g.byName[where].id, 'POL')!;
     expect(a.known).toBe('partial');
     expect(a.corps.map((c) => c.id)).toEqual([cs[0].id]);
     expect(a.unidentified).toBe(cs.length - 1);
@@ -330,16 +332,16 @@ describe('a report going stale', () => {
     // Knowing one corps for certain narrows the estimate of the whole.
     expect(a.est!.hi - a.est!.lo).toBeLessThan(strengthOf(cs) * R.contact);
     identify(g, cs, 'GER');
-    expect(armyAt(g, g.byName.Warsaw.id, 'POL')!.known).toBe('full');
+    expect(armyAt(g, g.byName[where].id, 'POL')!.known).toBe('full');
     g.turn += 2;
-    a = armyAt(g, g.byName.Warsaw.id, 'POL')!;
+    a = armyAt(g, g.byName[where].id, 'POL')!;
     expect(a.known).toBe('partial');
     expect(a.unidentified).toBe(0);
     expect(a.oldest).toBe(2);
     expect(a.corps.every((c) => c.known === 'report' && c.age === 2)).toBe(true);
     expect(a.est!.lo).toBeLessThanOrEqual(strengthOf(cs));
     expect(a.est!.hi).toBeGreaterThanOrEqual(strengthOf(cs));
-    const row = armiesSeen(g).find((x) => x.reg === g.byName.Warsaw.id && x.nat === 'POL')!;
+    const row = armiesSeen(g).find((x) => x.reg === g.byName[where].id && x.nat === 'POL')!;
     expect(row.known).toBe('partial');
     expect(row.identified).toBe(cs.length);
     expect(row.divs).toBeNull();
