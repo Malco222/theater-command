@@ -401,8 +401,9 @@ function helperName(g: Game, nat: string, h: Helper): string {
  * and only for what is asked about.
  */
 interface Kept { reach: (c: Corps) => () => Map<number, Reach>; ground: (c: Corps) => GroundOf; sight: (viewer: string) => Uint8Array }
-function keptNow(g: Game): Kept {
+function keptNow(g: Game, nat?: string, seen?: Uint8Array): Kept {
   const reaches = new Map<Corps, Map<number, Reach>>(), grounds = new Map<Corps, ReturnType<GroundOf>>(), sights = new Map<string, Uint8Array>();
+  if (nat && seen) sights.set(nat, seen);
   return {
     sight: (viewer) => { let m = sights.get(viewer); if (!m) { m = sightOf(g, viewer); sights.set(viewer, m); } return m; },
     reach: (c) => () => { let m = reaches.get(c); if (!m) { m = reach(g, c); reaches.set(c, m); } return m; },
@@ -484,9 +485,10 @@ function handLine(g: Game, help: NonNullable<HomeAlarm['help']>, r: Region, cure
  * The alarms of a nation's home ground (its own provinces, not those overseas): every province of it where an enemy
  * army stands, nearest the capital first; then every province of it still in enemy hands with no troops of theirs in
  * it, nearest the capital first (b385: such a row stands until the ground is his again, and names the cure). Empty
- * for a nation at peace.
+ * for a nation at peace. 'seen' is the nation's sightOf where the caller has it already (the 3D table works it out
+ * once a picture); the same answer either way.
  */
-export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
+export function homeAlarms(g: Game, nat: string | null = g.human, seen?: Uint8Array): HomeAlarm[] {
   if (!nat) return [];
   const n = g.nations[nat];
   if (!n?.alive || !n.atWar.length) return [];
@@ -498,7 +500,7 @@ export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
   const foe = (u: Corps): boolean => !u.dead && u.kind !== 'fort' && atWar(g, u.nat, nat);
   let all: Helper[] | null = null;
   const rails = new Map<number, Set<number>>();
-  const kept = keptNow(g);
+  const kept = keptNow(g, nat, seen);
   const out: HomeAlarm[] = [], empty: Region[] = [];
   for (const r of g.regions) {
     if (r.owner !== nat || r.overseas) continue;

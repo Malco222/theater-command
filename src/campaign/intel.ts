@@ -125,12 +125,15 @@ export interface CutKnown {
   hasty: number;
 }
 
-/** Every cut railway the viewer knows of, by province. Nobody at the table, the fog lifted, or a computer's staff asking: every cut there is. */
-export function cutsKnown(g: Game, viewer: string | null = g.human): Map<number, CutKnown> {
+/**
+ * Every cut railway the viewer knows of, by province. Nobody at the table, the fog lifted, or a computer's staff asking: every cut there is.
+ * 'seen' is the viewer's sightOf where the caller has it already (the 3D table works it out once a picture); the same answer either way.
+ */
+export function cutsKnown(g: Game, viewer: string | null = g.human, seen?: Uint8Array): Map<number, CutKnown> {
   const out = new Map<number, CutKnown>();
   if (!intelRules(g)) return out;
   const fog = viewer !== null && viewer === g.human && fogOn(g, viewer);
-  const sight = fog ? sightOf(g, viewer) : null;
+  const sight = fog ? seen ?? sightOf(g, viewer) : null;
   const kept = fog ? g.intel.cuts ?? {} : {};
   for (const r of g.regions) {
     if (!sight || sight[r.id] !== SIGHT.none) {
@@ -144,14 +147,14 @@ export function cutsKnown(g: Game, viewer: string | null = g.human): Map<number,
 }
 
 /** What the viewer knows of the railway of one province being cut, or null where he knows of no cut. Decided as cutsKnown decides it, for the one province. */
-export function cutKnown(g: Game, region: number, viewer: string | null = g.human): CutKnown | null {
+export function cutKnown(g: Game, region: number, viewer: string | null = g.human, seen?: Uint8Array): CutKnown | null {
   const r = g.regions[region];
-  if (!intelRules(g) || !r || r.id !== region) return cutsKnown(g, viewer).get(region) ?? null;
+  if (!intelRules(g) || !r || r.id !== region) return cutsKnown(g, viewer, seen).get(region) ?? null;
   const fog = viewer !== null && viewer === g.human && fogOn(g, viewer);
   const k = fog ? g.intel.cuts?.[region] : undefined;
   // A line not cut, and with no cut kept in his record, is known to nobody as cut, seen or not.
   if (!railCut(g, region) && !k) return null;
-  if (!fog || sightOf(g, viewer)[region] !== SIGHT.none) return railCut(g, region) ? { how: 'now', asOf: g.turn, since: cutOn(g, region), cause: cutCause(g, region), hasty: hastyLeft(g, region) } : null;
+  if (!fog || (seen ?? sightOf(g, viewer))[region] !== SIGHT.none) return railCut(g, region) ? { how: 'now', asOf: g.turn, since: cutOn(g, region), cause: cutCause(g, region), hasty: hastyLeft(g, region) } : null;
   return k ? { how: k.how, asOf: k.t, cause: k.why ?? null, hasty: 0 } : null;
 }
 
@@ -188,9 +191,9 @@ export interface CutSaid {
   short: string;
 }
 
-/** What the viewer is told of the railway of a province being cut (ruling 112(c)), or null where he knows of no cut. */
-export function cutSays(g: Game, region: number, viewer: string | null = g.human): CutSaid | null {
-  const k = cutKnown(g, region, viewer);
+/** What the viewer is told of the railway of a province being cut (ruling 112(c)), or null where he knows of no cut. 'seen' as for cutsKnown. */
+export function cutSays(g: Game, region: number, viewer: string | null = g.human, seen?: Uint8Array): CutSaid | null {
+  const k = cutKnown(g, region, viewer, seen);
   if (!k) return null;
   const name = g.regions[region].name, cause = k.cause ? CAUSE_WORDS[k.cause] : '';
   if (k.how === 'now') {
