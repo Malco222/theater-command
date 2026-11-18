@@ -42,6 +42,7 @@ import { RELATIONS, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, sor
 import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour } from './stories';
+import { takeWinterPeace, whyNotWinterPeace, winterMonth } from './winter';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
 import { fallenNations, liberationMonth, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
 import { armyCard, corpsCard, corpsSeen, type ArmyCard, type CorpsCard } from './armies';
@@ -100,6 +101,8 @@ function closePhase(g: Game, nat: string): void {
     // A smaller power's aircraft from abroad, and the month its own works open (ruling 213(d), the grand campaign).
     smallAirMonth(g);
     monthlyDiplomacy(g);
+    // The Winter War: the peace of Moscow, or the offer of it to a player on either side (ruling 228, 1b).
+    winterMonth(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
     historyMonth(g);
     // Wars nobody can fight any longer end in an armistice (the grand campaign).
@@ -2208,6 +2211,20 @@ export function orderDomination(g: Game): boolean {
 /** The player takes the victory and leaves the world as it is. World Domination can still be chosen in a later month. */
 export function orderKeepPeace(g: Game): boolean {
   return !!g.human && humanUp(g) && keepPeace(g);
+}
+
+// ---- The Winter War's peace (ruling 228, 1b) -------------------------------------------------------------------
+// The card and the standing offer for a Soviet or a Finnish player: winterPeace() gives the words for both builds,
+// winterCardDue() says when the card comes up at the month's start (and marks it seen), and the order takes the peace
+// on this month's terms. Fighting on needs no order: the offer stands while the war lasts.
+export { winterPeace, winterCardDue, type WinterPeace } from './winter';
+
+export function whyNotOrderWinterPeace(g: Game): string | null {
+  return whyNotWinterPeace(g, humanUp(g));
+}
+
+export function orderWinterPeace(g: Game): boolean {
+  return takeWinterPeace(g, humanUp(g));
 }
 
 /** The standings of the world: who still stands, how much of the map each holds, and who has fallen to whom. Foreign armies are as well known as the fog allows. */

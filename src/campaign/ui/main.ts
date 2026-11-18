@@ -37,7 +37,7 @@ import {
   claimsOf, dialOf, historyStops, orderHistory,
   crossings, liftOf, orderCrossingPlan,
   ordersByCity, ordersIn, type CityOrders, type OrderLine,
-  agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
+  agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, orderWinterPeace, whyNotOrderWinterPeace, winterCardDue, winterPeace, type WinterPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
 } from '../turn';
 import { carried } from '../support';
 import { INTEL, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
@@ -2776,6 +2776,9 @@ function alertList(): Alert[] {
   // The war between the alliances is decided and the player has not yet said what comes next.
   const act = lastAct(g);
   if (act?.open && !act.peace) out.unshift({ kind: 'lastact', text: 'The war is decided: take the victory, or World Domination' });
+  // Peace in the Winter War (ruling 228, 1b): the offer stands while the war lasts. War and peace are never a desk's.
+  const wp = winterPeace(g);
+  if (wp) out.push({ kind: 'winterpeace', text: `${upFirst(theName(wp.from))} ${wp.row.charAt(0).toLowerCase()}${wp.row.slice(1).replace(/\.$/, '')}` });
   // The alarm, first in the tray (ruling 211(c); words, section 1): an enemy army on his home ground, what it can reach
   // next month, and the nearest help. The row speaks of the one nearest his capital; each press goes on to the next.
   out.unshift(...guns);
@@ -2937,6 +2940,7 @@ function followAlert(kind: string): void {
   if (kind === 'debt') { openModal({ kind: 'ledger' }); return; }
   if (kind === 'tradecut' || kind === 'tradeidle') { openModal({ kind: 'trade' }); return; }
   if (kind === 'lastact') { openModal({ kind: 'lastact' }); return; }
+  if (kind === 'winterpeace') { openModal({ kind: 'winterpeace' }); return; }
   if (kind === 'crowded' && a.regs?.length) { openAirfield(a.regs[0]); return; }
   if (kind === 'directive' || kind === 'cabinetfall' || kind === 'cabinetseat' || kind === 'cabinetdoubt' || kind === 'cabinethead' || kind === 'promise') { openModal({ kind: 'cabinet' }); refresh(); return; }
   if (kind.startsWith('short ') || kind.startsWith('low ')) { openModal({ kind: 'stores', nat: g.human || '' }); return; }
@@ -4908,6 +4912,8 @@ function nextCard(): typeof ui.modal {
     ui.seenPass = g.passings.length;
     if (ids.length) return { kind: 'passing', ids };
   }
+  // Peace in the Winter War (ruling 228, 1b): at the month's start, when the offer is new or its terms have changed.
+  if (me && g.nations[me].alive && !passing && humanUp(g) && !onEve(g) && winterCardDue(g)) return { kind: 'winterpeace' };
   if (!act || !me || !g.nations[me].alive || passing) return null;
   if (act.winner === me && !g.flags['dom:hail']) { g.flags['dom:hail'] = g.turn; return { kind: 'worldwon' }; }
   if (act.open && humanUp(g) && !onEve(g) && !g.flags['dom:seen']) { g.flags['dom:seen'] = g.turn; return { kind: 'lastact' }; }
@@ -4982,6 +4988,27 @@ function lastActCard(ask: boolean): string {
     <div class="pathrow domrow${ask ? ' now' : ''}"><div class="pathhead"><b>World Domination</b>${btn}</div><p>Every alliance is dissolved. All ${B.left} nations still standing, yesterday's allies among them, are at war with one another from today. Troops on a former ally's soil go home under safe conduct. Nobody makes peace again: <b>the last great power standing has the world</b> once it holds ${shareWords(B.need)} of it, and the countries still standing then lay down their arms.</p></div>
     ${can ? '' : `<div class="note">${esc(act.why ?? 'Orders are given in your own month.')}</div>`}</div>
     <footer><button class="btn go" data-act="close">Decide later</button></footer>`;
+}
+
+/**
+ * Peace in the Winter War (ruling 228, 1b): Finland asks it of a Soviet player, Moscow offers it to a Finnish one, on
+ * what the Red Army holds this month. FIGHT ON is lit and takes Enter and Esc, the answer next month can undo; the
+ * peace takes a click.
+ */
+function winterPeaceCard(wp: WinterPeace): string {
+  const why = whyNotOrderWinterPeace(g), keys = !fingers(), red = wp.to === 'SOV';
+  const facts = [
+    `<div class="fact"><span>${red ? 'Yours by the peace' : 'Given up by the peace'}</span><b>${wp.cede.length ? esc(listOf(wp.cede)) : 'No ground'}</b></div>`,
+    wp.back.length ? `<div class="fact"><span>${red ? 'Handed back to Finland' : 'Handed back to you'}</span><b>${esc(listOf(wp.back))}</b></div>` : '',
+    wp.since < g.turn ? `<div class="fact"><span>Offered since</span><b>${date(wp.since)}</b></div>` : '',
+  ].join('');
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The Winter War · ${date(g.turn)}</div><h2>${esc(wp.title)}</h2></header>
+    <div class="body path"><p class="lead">${esc(wp.body)}</p>${wp.note ? `<p class="lead quiet">${esc(wp.note)}</p>` : ''}
+    <div class="facts">${facts}</div>
+    <div class="pathrow"><div class="pathhead"><b>${esc(wp.yes)}</b><button class="btn" data-act="winterpeace" ${why ? 'disabled' : ''}>${esc(wp.yes)}</button></div><p>${esc(wp.yesLine)}</p></div>
+    <div class="pathrow now"><div class="pathhead"><b>${esc(wp.no)}</b></div><p>${esc(wp.noLine)}</p></div>
+    ${why ? `<div class="note">${esc(why)}</div>` : ''}</div>
+    <footer><button class="btn go" data-act="close">${esc(wp.no)}${keys ? '<kbd>Enter</kbd>' : ''}</button></footer>`;
 }
 
 /** The end of the last act, for a player who is the last one standing. */
@@ -5062,6 +5089,7 @@ function staffsCard(): string {
 function powersPane(): string {
   const act = lastAct(g);
   if (act?.on) return worldPane();
+  const wp = winterPeace(g);
   const at = Object.values(g.nations).filter((n) => !n.dormant && (n.atWar.length || n.fellOn));
   const neutral = Object.values(g.nations).filter((n) => n.alive && !n.atWar.length && !n.dormant);
   const offer = act?.open && act.decided
@@ -5079,7 +5107,7 @@ function powersPane(): string {
       const form = gv ? ` <button class="btn tiny" data-act="cabinet" data-nat="${n.id}" title="${esc(gv.form.name)}. ${esc(gv.form.blurb)}">${FORM_WORD[gv.form.id]}</button>` : '';
       // Its general staff: the character it has in this war, and its main effort where the player may know it.
       const staff = rivalStaff(g, n.id);
-      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(theName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(theName).join(', ')}</small></div>${staff ? staffRow(staff) : ''}</div>`;
+      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(theName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(theName).join(', ')}</small></div>${staff ? staffRow(staff) : ''}${wp?.from === n.id ? `<div class="peaceask"><small>${esc(wp.row)}</small><button class="btn tiny" data-act="peaceterms">Terms ▸</button></div>` : ''}</div>`;
     } else {
       const f = fallen.find((x) => x.nat === n.id);
       const how = f?.fell.how === 'annexed' ? `Annexed by ${theName(n.fellOn!.to)}` : f?.fell.how === 'terms' ? `Left the war by treaty with ${theName(n.fellOn!.to)}` : `Asked ${theName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}`;
@@ -6252,6 +6280,11 @@ function openModal(m: typeof ui.modal): void {
   else if (m.kind === 'lastact') {
     if (!lastAct(g)?.decided || lastAct(g)!.on) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = lastActCard(!!m.ask);
+  }
+  else if (m.kind === 'winterpeace') {
+    const wp = winterPeace(g);
+    if (!wp) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = winterPeaceCard(wp);
   }
   else if (m.kind === 'worldwon') {
     if (lastAct(g)?.winner !== g.human || !g.human) { ui.modal = null; veil.classList.remove('open'); return; }
@@ -9117,6 +9150,8 @@ function onClick(e: MouseEvent): void {
     case 'path': openModal({ kind: 'path', ask: t.dataset.ask ?? '' }); break;
     case 'lastact': g.flags['dom:seen'] ??= g.turn; openModal({ kind: 'lastact', ask: t.dataset.ask === '1' }); break;
     case 'keeppeace': if (orderKeepPeace(g)) { refresh(); openModal({ kind: 'lastact' }); } break;
+    case 'peaceterms': openModal({ kind: 'winterpeace' }); break;
+    case 'winterpeace': { const line = winterPeace(g)?.yesLine ?? '', h = g.headlines.length; if (orderWinterPeace(g)) { ui.unread += g.headlines.length - h; ui.msg = line; openModal(null); refresh(); } break; }
     case 'domination': {
       const h = g.headlines.length;
       if (orderDomination(g)) {
@@ -9394,6 +9429,9 @@ function onKey(e: KeyboardEvent): void {
     ($('#card').querySelector('[data-act="askshow"]') as HTMLElement | null)?.click();
     return;
   }
+  // Peace in the Winter War (ruling 228, 1b): Enter, like Esc, is FIGHT ON, the answer next month can undo, even on a
+  // button in hand. The peace takes a click.
+  if (e.key === 'Enter' && ui.modal?.kind === 'winterpeace') { e.preventDefault(); if (!cardGuarded(e)) { openModal(ui.modal.back ?? null); refresh(); } return; }
   // NEXT ARMY: Tab takes up the next army that still has a move.
   if (e.key === 'Tab' && !e.shiftKey && !ui.modal && !passing && !tour && g.human && humanUp(g) && !onEve(g)) { e.preventDefault(); goNextArmy(); return; }
   // A key pressed on a button belongs to that button. On an order's card Enter is the lit button all the same,

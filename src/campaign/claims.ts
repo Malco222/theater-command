@@ -14,7 +14,7 @@ import { DIPLOMACY, holds, majorsOf, signPeace } from './diplomacy';
 import { allied, atWar, bloc, collapseScore, declareWar, headline, joinedSide, theName, warning } from './game';
 import { HISTORY, dialDraw, dialRules, stopDef, stopOf, FREE, type Ambition, type Mark } from './history';
 import { deterred } from './league';
-import { fronts, launch } from './staff';
+import { fronts, launch, ops } from './staff';
 import type { Game, Region } from './types';
 
 const listOf = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
@@ -113,6 +113,12 @@ export function readable(g: Game, a: Ambition): boolean {
   const n = g.nations[a.nat], H = g.nations[a.on];
   if (!n?.alive || !H?.alive || n.dormant || H.dormant || a.nat === g.human) return false;
   if (!(a.if ?? []).every((c) => holds(g, c))) return false;
+  // A claim that is the staff's own war (the Winter War, ruling 228): not pressed while that war may still come, and
+  // put away once it has. Only a war that never came (its chance passed, or its target out of reach) leaves the claim.
+  if (a.op) {
+    const op = ops(a.nat).find((o) => o.id === a.op), done = g.flags[`st:done:${a.nat}:${a.op}`] ?? 0;
+    if (done > 0 || (!done && op && g.turn <= (op.to ?? 999))) return false;
+  }
   // Where anything goes, not every claim is alive in every war: who holds which is dealt from the war's seed.
   if (S.share !== undefined && dialDraw(g, 'claim', a.id) >= S.share) return false;
   return stillHeld(g, a).length > 0;

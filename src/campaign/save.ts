@@ -20,6 +20,7 @@ import { openTrade } from './trade';
 import { numberDivisions } from './armies';
 import mapData from '../generated/campaign-map.json';
 import { WORLD_REGIONS, WORLD_STAGES, attachWorld, settleNewGround } from './world';
+import { openWinter } from './winter';
 import type { Corps, Game, General } from './types';
 
 /** A save is laid over the map it was played on, region by region. */
@@ -243,6 +244,9 @@ export function loadGame(text: string): Game | null {
   // A campaign saved on an earlier stage of the wider chart: the ground drawn since stands as on the first day,
   // with the garrisons and squadrons that belong on it.
   if (wide(d) && grown) settleNewGround(g, saved);
+  // A grand campaign saved before the Winter War had its place (ruling 228, 1b): the Mannerheim Line is laid as a new
+  // campaign lays it, and one saved after the war's months is marked late (winter.ts, openWinter).
+  if (g.flags.open === 1) openWinter(g, true);
   // Trade agreements; a grand campaign saved before there were any signs history's when it is loaded.
   g.trade = Array.isArray(d.trade) ? d.trade : [];
   openTrade(g);

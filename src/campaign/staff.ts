@@ -33,7 +33,8 @@ import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, neighbourByLand, overseasOf } from './world';
-import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, weather } from './game';
+import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, theName, weather } from './game';
+import { openWinter, winterOver } from './winter';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
@@ -59,6 +60,18 @@ export interface Op {
   landings?: PlanPhase['landings'];
   staging?: Record<string, number>;
   join?: 'allies' | 'axis';
+  /**
+   * A war for a strip of frontier (the Winter War): while it is the staff's only war, only the troops within this many
+   * marches of the front take part, and the rest of the army stays where it stands.
+   */
+  near?: number;
+  /** The ground such a war is fought for: while it is the staff's only war, the army attacks and steps only there. */
+  aims?: string[];
+  /** The news that follows the declaration, in the same line: the month card tells one story. */
+  news?: string;
+  /** The works and the peace of the Winter War (winter.ts). */
+  works?: Record<string, [number, ...string[]]>;
+  peace?: { cede: string[]; from: number; by: number; after: number; chance: number };
 }
 
 /**
@@ -93,6 +106,8 @@ export function startOpen(g: Game, wide = true): Game {
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
   if (wide) attachWorld(g);
+  // The Mannerheim Line across the Karelian isthmus, while Finland holds it (ruling 228, 1b).
+  openWinter(g);
   if (g.turn === 1) {
     g.flags['st:on:GER:POL'] = 1;
     g.flags['st:gain:GER'] = 1;
@@ -1110,6 +1125,18 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
     const want = lod?.short ? Math.max(sea.L.force, Math.min(n.sealift, STACK)) : more ? Math.max(sea.L.force, Math.min(STRENGTH!.wave, STACK)) : sea.L.force;
     phase.staging = { ...(phase.staging ?? {}), [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, want) };
   }
+  // A war for a strip of frontier (an op with 'near', the Winter War): while it is the staff's only war, only the troops
+  // near the front take part. The army facing the great powers stays where it stands. Only that war: once its story is
+  // over (the peace made, or the great war has swallowed it), a later war with the same country is fought in full.
+  const wars = new Set([...n.atWar, ...declare]);
+  const small = wars.size ? list.find((op) => op.near !== undefined && flag(g, `st:done:${nat}:${op.id}`) > 0 && !(op.peace && winterOver(g)) && [...wars].every((e) => (op.declare ?? []).includes(e))) : undefined;
+  if (small) {
+    phase.near = small.near;
+    const aims = (small.aims ?? []).filter((nm) => g.byName[nm] && wars.has(g.byName[nm].ctrl));
+    // (Its own ground the enemy has taken is won back all the same: the aims limit how far into his country it goes.)
+    const home = g.regions.filter((r) => r.owner === nat && wars.has(r.ctrl)).map((r) => r.name);
+    if (small.aims) { phase.targets = [...new Set([...aims, ...home])]; phase.main = aims.length ? aims : home; phase.strict = true; delete phase.haltOrder; }
+  }
   // A force kept ready for a stroke still to come.
   for (const op of list) {
     if (!op.staging || flag(g, `st:done:${nat}:${op.id}`) || g.turn > (op.to ?? 999)) continue;
@@ -1894,6 +1921,13 @@ export function afterDeclaring(g: Game, nat: string): void {
   const list = ops(nat);
   const op = flag(g, `st:go:${nat}`) === g.turn ? list[flag(g, `st:goOp:${nat}`) - 1] : null;
   const n = g.nations[nat];
+  // The op's own news follows its declaration in the same line, so that the month card tells one story (ruling 228, the UI director's words).
+  if (op?.news) for (const e of op.declare ?? []) {
+    if (g.flags[`war:${nat}:${e}`] !== g.turn || !g.nations[e]) continue;
+    const said = `${theName(n, true)} declares war on ${theName(g.nations[e])}.`;
+    const h = [...g.headlines].reverse().find((x) => x.turn === g.turn && x.kind === 'war' && x.nat === nat && x.text === said);
+    if (h) h.text = `${h.text} ${op.news}`;
+  }
   // In the last act there are no sides left to take.
   if (dominating(g)) return;
   if (!op?.join || !n.alive || n.align === 'allies' || n.align === 'axis') return;

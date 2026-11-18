@@ -75,6 +75,8 @@ let quiet = false;
 let single = false;
 /** How many waves the army being run may send at one place in a month: two, or more for a staff pressing a won war. */
 let waves = 2;
+/** Set while the army being run fights a war for a strip of frontier: only corps this many marches from the front close up to it. */
+let near: number | null = null;
 /** True while an army overseas is fighting its staff's main effort: the force massed opposite the target is there to attack it. */
 let striking = false;
 /** Set while the army being run has orders to leave the theatre once the front there has gone. */
@@ -481,7 +483,8 @@ function mainCampaign(g: Game, nat: string): void {
   single = ph?.renew === false;
   waves = ph?.waves ?? 2;
   bound = ph?.strict ? new Set(ph.targets ?? []) : null;
-  try { fight(g, nat, ph, posture); } finally { entrusted = new Set(); massed = new Set(); given = new Set(); quiet = false; single = false; waves = 2; bound = null; }
+  near = ph?.near ?? null;
+  try { fight(g, nat, ph, posture); } finally { entrusted = new Set(); massed = new Set(); given = new Set(); quiet = false; single = false; waves = 2; bound = null; near = null; }
 }
 
 /**
@@ -1910,6 +1913,8 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
   };
   for (const c of movers) {
     if (screen(c) || massed.has(c.id)) continue;
+    // (A war for a strip of frontier is fought by the troops near it: the rest of the army stays where it stands.)
+    if (near !== null && !(dist[c.reg] <= near)) continue;
     if (door && KIND[c.kind].mobile && door[c.reg] > 0) {
       // Fast troops close up on the main thrust's next objective.
       for (let step = 0; step < 6 && c.ap > 0 && door[c.reg] > 0; step++) {

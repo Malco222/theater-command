@@ -35,7 +35,8 @@
   ],
   "dates": {
     "GER": { "weser": 8, "west": 9, "balkans": 20, "east": 22 },
-    "ITA": { "jackal": 10, "greece": 14 }
+    "ITA": { "jackal": 10, "greece": 14 },
+    "SOV": { "winter": 3 }
   },
   "bookIf": {
     "_note": "By the book a dated choice is taken when these hold, in place of its own conditions (open.json): history's month is the staff's reason, and what was a precondition in the real war may already be over in this one. Italy came in as France was falling: with France already fallen in her month she comes in all the same. Germany went into the Balkans while Italy was held in Greece: with Greece already beaten she goes for Yugoslavia in her month all the same.",
@@ -49,7 +50,8 @@
     "GER:west": "west",
     "ITA:jackal": "med", "ITA:late": "med",
     "ITA:greece": "balkans", "GER:balkans": "balkans", "ITA:yugoslavia": "balkans", "BUL:balkans": "balkans",
-    "GER:east": "east", "SOV:west": "east", "SOV:vulture": "east", "ITA:east": "east", "ROM:east": "east", "HUN:east": "east", "SVK:east": "east", "FIN:east": "east"
+    "GER:east": "east", "SOV:west": "east", "SOV:vulture": "east", "ITA:east": "east", "ROM:east": "east", "HUN:east": "east", "SVK:east": "east", "FIN:east": "east",
+    "SOV:winter": "finland"
   },
   "theatres": {
     "north": { "name": "the north", "after": [] },
@@ -57,7 +59,8 @@
     "med": { "name": "the Mediterranean", "after": ["west"] },
     "balkans": { "name": "the Balkans", "after": ["west", "med"] },
     "east": { "name": "the east", "after": ["west"] },
-    "second": { "name": "the second front", "after": ["east"] }
+    "second": { "name": "the second front", "after": ["east"] },
+    "finland": { "name": "Finland", "after": [] }
   },
   "shores": [
     { "id": "britain", "from": 999, "owners": ["UK", "IRL"] },
@@ -77,7 +80,8 @@
     { "theatre": "balkans", "by": 16, "if": ["war:ITA,GRE|fallen:GRE"], "why": "Italy has left Greece alone" },
     { "theatre": "balkans", "by": 22, "if": ["war:GER,YUG|fallen:YUG"], "why": "Germany has left the Balkans alone" },
     { "theatre": "east", "until": 22, "if": ["peace:GER,SOV", "alive:GER", "alive:SOV"], "why": "Germany and the Soviet Union are at war before the summer of 1941" },
-    { "theatre": "east", "by": 23, "if": ["war:GER,SOV"], "why": "Germany has not turned east" }
+    { "theatre": "east", "by": 23, "if": ["war:GER,SOV"], "why": "Germany has not turned east" },
+    { "theatre": "finland", "by": 5, "if": ["war:SOV,FIN|fallen:FIN|holds:SOV,Karelia|alive:POL|flag:wnt:late"], "why": "the Soviet Union has left Finland alone" }
   ],
   "claims": { "weak": 0.35, "odds": 1.6, "thin": 2, "notice": 2, "chance": 0.5, "guard": 0.2, "lapse": 4, "aid": 0.5, "treaty": 1, "push": 4 },
   "ambitions": [
@@ -89,7 +93,7 @@
     { "id": "macedonia", "nat": "BUL", "on": "YUG", "ground": ["Macedonia"], "name": "Macedonia", "why": "claimed by Sofia since 1878" },
     { "id": "thrace", "nat": "BUL", "on": "GRE", "ground": ["Thrace"], "name": "Western Thrace", "why": "its lost outlet to the Aegean" },
     { "id": "bessarabia", "nat": "ROM", "on": "SOV", "ground": ["Bessarabia", "Bukovina"], "name": "Bessarabia and Bukovina", "why": "taken from it by Moscow's ultimatum", "if": ["flag:event:bessarabia"] },
-    { "id": "karelia", "nat": "SOV", "on": "FIN", "ground": ["Karelia"], "name": "the Karelian Isthmus", "why": "the frontier runs within gunshot of Leningrad" },
+    { "id": "karelia", "nat": "SOV", "on": "FIN", "ground": ["Karelia"], "name": "the Karelian Isthmus", "why": "the frontier runs within gunshot of Leningrad", "op": "winter" },
     { "id": "transylvania", "nat": "HUN", "on": "ROM", "ground": ["Transylvania"], "name": "Transylvania", "why": "Hungarian until the treaty of 1920", "stop": 5 },
     { "id": "dobruja", "nat": "BUL", "on": "ROM", "ground": ["Dobruja"], "name": "the Dobruja", "why": "its southern half was Bulgarian until 1913", "stop": 5 },
     { "id": "dalmatia", "nat": "ITA", "on": "YUG", "ground": ["Dalmatia"], "name": "Dalmatia", "why": "promised to Italy in 1915 and never handed over", "stop": 5 },

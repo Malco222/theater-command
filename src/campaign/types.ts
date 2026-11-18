@@ -824,6 +824,8 @@ export interface PlanPhase {
   strict?: boolean;
   /** The phase only applies while these two nations are at war with each other. */
   ifAtWar?: [string, string];
+  /** A war for a strip of frontier: only corps within this many marches of the front close up to it (the Winter War, ruling 228). */
+  near?: number;
   /** Corps sent across the sea, each to the first place on its list it can reach: an enemy coast is assaulted, a friendly port reinforced. */
   landings?: { corps: string; with?: string[]; to: string[]; minOdds?: number }[];
   /**

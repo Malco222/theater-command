@@ -28,8 +28,8 @@ export interface Stop {
 }
 /** What history's calendar expects in a theatre: these must hold before `until`, or from the month after `by`. */
 export interface Mark { theatre: string; until?: number; by?: number; if: string[]; why: string }
-/** A claim on named ground: who claims it, from whom, and why. */
-export interface Ambition { id: string; nat: string; on: string; ground: string[]; name: string; why: string; stop?: number; if?: string[]; lift?: number }
+/** A claim on named ground: who claims it, from whom, and why. 'op': the staff's own war for it (open.json): the claim is not pressed while that war may still come, and is put away once it has come (ruling 228). */
+export interface Ambition { id: string; nat: string; on: string; ground: string[]; name: string; why: string; stop?: number; if?: string[]; lift?: number; op?: string }
 
 export const HISTORY = data as unknown as {
   start: number;
