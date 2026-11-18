@@ -289,11 +289,11 @@ void FBattleEffects::Muzzle(const FVector& WorldAt, const FVector& Facing, const
 	}
 }
 
-void FBattleEffects::Shots(int32 Gun, const FVector& From, const FVector& To, const FString& Weapon, int32 Rounds, float PerSecond)
+void FBattleEffects::Shots(int32 Gun, const FVector& From, const FVector& To, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground)
 {
 	if (IsReady())
 	{
-		Core.Shots(Time(), Gun, ToFx(From), ToFx(To), Named(Weapon).c_str(), Rounds, PerSecond);
+		Core.Shots(Time(), Gun, ToFx(From), ToFx(To), Named(Weapon).c_str(), Rounds, PerSecond, Named(Ground).c_str());
 	}
 }
 
@@ -500,7 +500,7 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 
 	// the lamps: the strongest flashes now, out the moment they are spent
 	TheaterFx::Battle::Lamp Lit[MostLamps];
-	const int32 NLit = Core.Lamps(Now, Lit, LampsInUse);
+	const int32 NLit = Core.Lamps(Now, Lit, LampsInUse, Core.DayOf(Sight.SmokeLight)); // (after Draw: a flash's lamp goes by the frames it is drawn in)
 	for (int32 Index = 0; Index < LampsInUse; ++Index)
 	{
 		UPointLightComponent* Lamp = LampLights[Index].Get();
@@ -602,7 +602,7 @@ void FBattleEffects::PlayTest(double Now)
 		{
 			const FVector Gun = Where + FVector(0.0, 0.0, 0.6 * UnitsPerMetre);
 			const FVector Target = TestCentre + FVector(20.0, 20.0, 0.5) * UnitsPerMetre;
-			Shots(7, Gun, Target, Shot.Size, 25, 15.0f);
+			Shots(13, Gun, Target, Shot.Size, 25, 15.0f, TEXT("earth")); // (gun 13's belt starts on a tracer, so the first frames show one)
 			break;
 		}
 		case 5:

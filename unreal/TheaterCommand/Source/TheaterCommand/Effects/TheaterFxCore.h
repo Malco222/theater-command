@@ -113,6 +113,7 @@ namespace TheaterFx
 		double CloudShade = 0.0, CloudR = 1.0, CentreRise = 0.0;
 		Rgb Col, Col2;
 		bool bLight = false; // flame, flash, sparks, tracer: keeps its own colour by night and takes no shading
+		mutable bool bShown = false; // (laid at least once: a light shorter than a frame is kept until it has been)
 		uint8_t Glow = 0; // (a tracer's streak: 1 its body, 2 its pale core; by day both widen and the core whitens, to hold on a pale sky)
 		bool bHug = false; // rides the ground as it moves (skirts)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
@@ -143,7 +144,7 @@ namespace TheaterFx
 		void Muzzle(double Now, const Vec& At, const Vec& Facing, const char* Gun);
 		/** Rounds fired by one gun (Gun: any number that is the same for the same gun) from From toward To, PerSecond:
 		 * every fifth is a tracer (tracer.one_in), out of step between guns; machine guns flicker at the muzzle. */
-		void Shots(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond);
+		void Shots(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond, const char* Ground = "earth");
 		/** A gun on an aircraft firing, called every frame while its trigger is down. Muzzle is where the gun is now;
 		 * Aim the point this gun is laid on (the battle decides lead and convergence, so wing guns converge where it
 		 * says); Carry the aircraft's own velocity (metres a second). Kind is an air_guns row ("rifle", "hmg",
@@ -198,8 +199,12 @@ namespace TheaterFx
 			double Strength = 0.0; // 1 is a 105 mm shell's flash
 			double Radius = 30.0;
 		};
-		/** The strongest lamps lit at Now, at most Room of them. */
-		int Lamps(double Now, Lamp* Into, int Room) const;
+		/** The strongest lamps lit at Now, at most Room of them. Day (DayOf the hour's light, 0 at night, 1 by day)
+		 * turns them down to a share and toward a warm white, and puts out small guns' altogether. A flash's lamp is full
+		 * on the first frame drawn after it, half on the next, then out: call it after Draw. */
+		int Lamps(double Now, Lamp* Into, int Room, double Day = 0.0) const;
+		/** How much the hour's light (View::SmokeLight) is day: 0 at night, 1 in full day (game.day_light_from, _full). */
+		double DayOf(const Rgb& HourLight) const;
 
 		struct Jolt
 		{
@@ -253,6 +258,8 @@ namespace TheaterFx
 			Vec At;
 			Rgb Col;
 			double Born = 0.0, Life = 0.0, Strength = 0.0, Radius = 30.0, Flicker = 0.0;
+			bool bNightOnly = false; // (a small gun's flash: no lamp on the ground by day)
+			int FirstFrame = -1; // (the first frame drawn after it was born: its lamp is full then, half the next, then out)
 		};
 		struct Knock
 		{
@@ -299,7 +306,10 @@ namespace TheaterFx
 		std::vector<TrailRow> TrailRows;
 		std::vector<Trailing> Trails; // the aircraft trails being laid
 		// (the tracer's look, read at Setup: one streak for every gun, on the ground and in the air)
-		double TracerHalf = 8.0, TracerLeast = 3.0, TracerDayWide = 1.5;
+		double TracerHalf = 8.0, TracerLeast = 3.0, TracerDayWide = 1.5, WholePathBelow = 100.0;
+		double DayFrom = 0.38, DayFull = 0.9, DayLampShare = 0.25;
+		Rgb DayLampCol;
+		int FrameNo = 0; // (frames drawn: flashes' lamps go by frames, not seconds)
 		Rgb TracerCol, TracerPale, TracerDayCore, FlameCol, FlashCoreCol, GunSmokeCol, CannonHeartCol;
 		std::vector<Vec> Out;
 		std::vector<uint8_t> OutRgba;
@@ -328,7 +338,7 @@ namespace TheaterFx
 		void Armour(double T0, const Vec& At, double Scale, Dice& D);
 		/** A tracer's streak (two layers, paler along its middle), its tail at Start when born, flying at Vel along Way;
 		 * Drag and Drop (gravity) slow and bend it, for the air guns' long flights. */
-		void Tracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, double For, double Drag, double Drop);
+		void Tracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, double For, double Drag, double Drop, double Half = -1.0, double AlphaK = 1.0);
 		const AirRow& AirRowOf(const std::string& Kind);
 		void AirRound(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, double Mps, bool bTracer, bool bSmoke, Dice& D);
 		void CannonFlash(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D);

@@ -5,6 +5,7 @@
 //   SRC=../../../unreal/TheaterCommand/Source/TheaterCommand
 //   clang++ -O2 -std=c++20 -I $SRC fxpreview.cpp $SRC/Effects/TheaterFxCore.cpp -o fxpreview
 //   ./fxpreview /tmp/recipe.txt <out folder> <size> <ground> <frames, e.g. 4,8,40> [WxH] [back up]
+//     (size "mg": a machine gun's burst from 30 m away into the ground there, in place of a shell)
 //   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|far|target|hit|trail]
 //
 // The air shot: a fighter at 1,500 m and 150 m/s in a banked turn (FX_TURN=degrees a second, 3 by default) fires its
@@ -419,44 +420,8 @@ namespace
 		const char* TrailIs = std::getenv("FX_TRAIL");
 		const std::string TrailKind = TrailIs ? TrailIs : "smoke";
 		TheaterFx::Dice Spots(11);
-		std::sort(Frames.begin(), Frames.end());
-		int Step = 0;
-		Battle::View View;
-		for (int FrameNo : Frames)
+		auto Shoot = [&](const Frame& F)
 		{
-			const int Until = FrameNo * 2; // (frames at 30 a second, calls at 60)
-			for (; Step <= Until; ++Step)
-			{
-				const double T = Step / 60.0;
-				const Frame F = Fly(T);
-				if (bStruck)
-				{
-					// (struck: a hit every 0.07 s or so along the right wing and the nose; the engine trails from 0.3 s)
-					if (T >= 0.2 && T <= 1.0 && Step % 4 == 0)
-					{
-						const Vec Spot(Spots.U(-1.0, 3.5), Spots.U(-0.5, 4.5), Spots.U(-0.2, 0.4));
-						Fx.AirHit(T, Place(F, Spot), (F.Up + F.Right * 0.3).Unit(), F.Fw * Speed, Kind.c_str());
-					}
-					const Vec Engine = Place(F, Vec(2.9, 0.75, -0.35)); // (an exhaust on the cowling's near side)
-					if (Step == 18)
-					{
-						Fx.TrailStart(T, 1, Engine, F.Fw * Speed, TrailKind.c_str());
-					}
-					if (Step >= 18)
-					{
-						Fx.TrailMove(T, 1, Engine, F.Fw * Speed);
-					}
-					continue;
-				}
-				for (size_t G = 0; G < Guns.size(); ++G)
-				{
-					const Vec Muzzle = Place(F, Guns[G]);
-					const Vec Aim = F.At + F.Fw * Meet; // (each gun laid on one point ahead: they converge there)
-					Fx.AirGun(T, static_cast<int>(G), Muzzle, Aim, F.Fw * Speed, Kind.c_str());
-				}
-			}
-			const double Now = FrameNo / 30.0;
-			const Frame F = Fly(Now);
 			const Vec Level = Vec(F.Fw.X, F.Fw.Y, 0.0).Unit();
 			const Vec LevelRight = Level.Cross(ZUp).Unit();
 			Camera Cam;
@@ -497,6 +462,70 @@ namespace
 			Cam.Right = Cam.Forward.Cross(ZUp).Unit();
 			Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
 			Cam.Ppr = W / (2.0 * std::tan(std::atan(18.0 / 35.0)));
+			return Cam;
+		};
+		// (every step between the pictures is drawn too, as the game draws every frame: a flash's lamp and the shortest
+		// flickers go by the frames drawn)
+		auto DrawBetween = [&](int StepNo, int Until, double T, const Frame& F)
+		{
+			if (StepNo == Until)
+			{
+				return;
+			}
+			const Camera C = Shoot(F);
+			Battle::View V;
+			V.Eye = C.Eye;
+			V.Right = C.Right;
+			V.Up = C.Up;
+			V.Forward = C.Forward;
+			V.PixelsPerRadian = C.Ppr;
+			if (bDusk)
+			{
+				V.SmokeLight = Rgb(0.22f, 0.22f, 0.27f);
+			}
+			Fx.Draw(T, V);
+		};
+		std::sort(Frames.begin(), Frames.end());
+		int Step = 0;
+		Battle::View View;
+		for (int FrameNo : Frames)
+		{
+			const int Until = FrameNo * 2; // (frames at 30 a second, calls at 60)
+			for (; Step <= Until; ++Step)
+			{
+				const double T = Step / 60.0;
+				const Frame F = Fly(T);
+				if (bStruck)
+				{
+					// (struck: a hit every 0.07 s or so along the right wing and the nose; the engine trails from 0.3 s)
+					if (T >= 0.2 && T <= 1.0 && Step % 4 == 0)
+					{
+						const Vec Spot(Spots.U(-1.0, 3.5), Spots.U(-0.5, 4.5), Spots.U(-0.2, 0.4));
+						Fx.AirHit(T, Place(F, Spot), (F.Up + F.Right * 0.3).Unit(), F.Fw * Speed, Kind.c_str());
+					}
+					const Vec Engine = Place(F, Vec(2.9, 0.75, -0.35)); // (an exhaust on the cowling's near side)
+					if (Step == 18)
+					{
+						Fx.TrailStart(T, 1, Engine, F.Fw * Speed, TrailKind.c_str());
+					}
+					if (Step >= 18)
+					{
+						Fx.TrailMove(T, 1, Engine, F.Fw * Speed);
+					}
+					DrawBetween(Step, Until, T, F);
+					continue;
+				}
+				for (size_t G = 0; G < Guns.size(); ++G)
+				{
+					const Vec Muzzle = Place(F, Guns[G]);
+					const Vec Aim = F.At + F.Fw * Meet; // (each gun laid on one point ahead: they converge there)
+					Fx.AirGun(T, static_cast<int>(G), Muzzle, Aim, F.Fw * Speed, Kind.c_str());
+				}
+				DrawBetween(Step, Until, T, F);
+			}
+			const double Now = FrameNo / 30.0;
+			const Frame F = Fly(Now);
+			const Camera Cam = Shoot(F);
 			View.Eye = Cam.Eye;
 			View.Right = Cam.Right;
 			View.Up = Cam.Up;
@@ -665,10 +694,27 @@ int main(int Argc, char** Argv)
 		}
 	}
 	Fx.Draw(-0.1, View); // (the eye is known before the hit, as in the game)
-	Fx.Shell(-0.02, Hit, Size.c_str(), Ground.c_str(), false);
+	if (Size == "mg")
+	{
+		// (a machine gun's burst from 30 m off to the left into the ground by the hit: close tracer and strikes)
+		const Vec Gun = Vec(-28.0, 12.0, Swell(nullptr, -28.0, 12.0) + 0.6);
+		Fx.Muzzle(-0.02, Gun, (Hit - Gun).Unit(), "mg");
+		Fx.Shots(-0.02, 13, Gun, Hit + Vec(0.0, 0.0, 0.1), "mg", 25, 15.0, Ground.c_str());
+	}
+	else
+	{
+		Fx.Shell(-0.02, Hit, Size.c_str(), Ground.c_str(), false);
+	}
 	std::sort(Frames.begin(), Frames.end());
+	int Drawn = 0;
 	for (int Frame : Frames)
 	{
+		// (every frame before the picture is drawn too, as the game draws every frame: a flash's lamp goes by frames)
+		for (; Drawn < Frame; ++Drawn)
+		{
+			Fx.Draw(Drawn / 30.0, View);
+		}
+		Drawn = Frame + 1;
 		const double Now = Frame / 30.0;
 		const Battle::Jolt J = Fx.Shake(Now, Cam.Eye);
 		Camera Shot = Cam;
@@ -676,7 +722,7 @@ int main(int Argc, char** Argv)
 		View.Eye = Shot.Eye;
 		const int N = Fx.Draw(Now, View);
 		Battle::Lamp Lamps[2];
-		const int NL = Fx.Lamps(Now, Lamps, 2);
+		const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight)); // (a plain day: the lamp at its day share)
 		Canvas C;
 		C.Init(W, H);
 		Paint(C, Shot, Lamps, NL, Men, Ground == "snow");

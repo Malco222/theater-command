@@ -1037,14 +1037,21 @@
    "smoke_s": [
     6,
     10
-   ]
+   ],
+   "day_lamp": 1
   },
   "mortar": {
    "flame_m": 0.4,
    "light": "small",
    "smoke": "a short puff up the tube's line",
    "smoke_s": 2.5
-  }
+  },
+  "_day_lamp": "By day only rows with day_lamp light the ground (at game.day_lamp_share); tank guns, anti-tank guns, machine guns, rifles and mortars do not (art director 21:16Z)."
+ },
+ "bullet_strike": {
+  "_how": "Art director 21:16Z: small dust spurts where a burst's rounds strike the ground (Shots, given the ground). About half the rounds kick one: a quick upward spurt and a low puff in the ground's dust colour, gone in under a second, scattered about the aim point by spread_mil of the range.",
+  "spurt_chance": 0.5,
+  "spread_mil": 12
  },
  "tracer": {
   "_how": "Brian 2026-11-18: 'i want tracer fire shown as well. 1 out of every 5 bullets with yellow'. As a belt was loaded: every fifth round of a gun is a tracer; the four between are not seen. Out of step between guns.",
@@ -1077,7 +1084,9 @@
    240,
    210
   ],
-  "_day": "Art director 21:07Z: by day only, the streak is 1.5 times wider and its pale core pushed toward 245,240,210, so a stream holds against a pale sky. Day is read from the hour's light (white by day); at dusk the streak is as ruled. One in five and 213,199,104 stay."
+  "_day": "Art director 21:07Z: by day only, the streak is 1.5 times wider and its pale core pushed toward 245,240,210, so a stream holds against a pale sky. Day is read from the hour's light (white by day); at dusk the streak is as ruled. One in five and 213,199,104 stay.",
+  "whole_path_below_m": 100,
+  "_close": "Art director 21:16Z (build 1690, a machine gun seen from 19 m showed no tracer line): below whole_path_below_m a tracer crosses in a frame or two, so its whole path is drawn at once, muzzle to strike, fading toward the muzzle (three lengths at 35, 68 and 100 per cent), for at least one frame."
  },
  "air_guns": {
   "_how": "Brian 2026-11-18 19:35Z: 'make the gun fire very realistic and the tracer fire too'. Guns on aircraft (AirGun, called every frame while a trigger is down). The battle sends where each gun is, the point it is laid on (lead and convergence are the battle's), and the aircraft's own velocity; the kit lays each round from where the muzzle was at that moment. A round flies at muzzle_mps plus the aircraft's speed, slows (drag, a share of its speed lost a second) and falls (drop). Every round flickers at the muzzle; one in tracer_every is the ruled tracer (tracer.colour, tracer.streak_m), burning for tracer_s. The sound director's air.gunsByCalibre uses the same three families: rifle, heavy, 20 mm cannon.",
@@ -1331,7 +1340,7 @@
   "max_puffs": 3000,
   "max_lamps": 2,
   "lamp_candela_at_full": 400.0,
-  "_lamp": "A flash's lamp at full strength (a 105 mm is 1), in candelas at 100 world units a metre (the kit scales it for other scales). 400 is worked out from the map's key light of about 7 lux so that the ground 3 m from a 105 lifts about 1.24 times; set it on the Mac by measuring frames until the ground within 15 m lifts 1.1 to 1.3 times.",
+  "_lamp": "A flash's lamp at full strength (a 105 mm is 1), in candelas at 100 world units a metre (the kit scales it for other scales). 400 PASSED in build 1690 (art director 21:16Z): 1.23x screen brightness at 3 m and 1.11 to 1.15x at 13 to 16 m by night; 1200 overlit (1.57x).",
   "shade_lit": 0.32,
   "shade_dark": 0.28,
   "_shade": "puffs are unlit: each is lightened toward the sun and darkened away from it by these shares, so a cloud has a lit and a shadowed side",
@@ -1348,6 +1357,16 @@
   ],
   "puff_sides": 12,
   "_sides": "Points round each puff's ring (6 to 24). 12, so no eight-sided edge shows on a large near puff (art director 19:36Z asked 12 to 16). Each puff is 2 x sides + 1 points: 16 is rounder still if the Mac's frame time allows; 8 was the old shape.",
-  "_shade_1936": "shade_lit raised from 0.18 to 0.32 (art director 19:36Z): the sunward side of earth smoke shows as lit brown-grey; the shadow side stays charcoal (shade_dark 0.28)."
+  "_shade_1936": "shade_lit raised from 0.18 to 0.32 (art director 19:36Z): the sunward side of earth smoke shows as lit brown-grey; the shadow side stays charcoal (shade_dark 0.28).",
+  "day_light_from": 0.38,
+  "day_light_full": 0.9,
+  "day_lamp_share": 0.25,
+  "day_lamp_colour": [
+   255,
+   240,
+   215
+  ],
+  "_day": "How much the hour is day, from the light handed to Tick (its luminance): 0 at or below day_light_from, 1 at day_light_full. The campaign map's deepest night is about 0.377 (pre-check 21:16Z), so night is 0 there. By day (art director 21:16Z, build 1690) a lamp is day_lamp_share as strong and warm white (day_lamp_colour), and small guns (machine guns, rifles, guns under 75 mm, tank muzzles, aircraft guns and hits) light no ground at all; dust skirts stay. Tracer day widening reads the same Day.",
+  "_lamp_frames": "Art director 21:16Z, build 1690: a lamp never comes before its flash. A flash's lamp is full on the first frame drawn after the flash is born, about half on the next, then out. A light shorter than a frame (a flash, a flicker, a close tracer) is kept until a frame has drawn it once, so 30 frames a second and less still see every one."
  }
 }

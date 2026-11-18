@@ -34,6 +34,13 @@ namespace TheaterFx
 			return V ^ (V >> 31);
 		}
 
+		/** A light shorter than a frame (a flash, a flicker, a close tracer) that no frame has laid yet: it is kept, and
+		 * laid at full strength on the next frame, so a battle at 30 frames a second or less still sees it. */
+		bool Unseen(const TheaterFx::Bit& B)
+		{
+			return B.bLight && B.Life < 0.06 && !B.bShown;
+		}
+
 		uint64_t PlaceKey(const Vec& At)
 		{
 			const uint64_t A = static_cast<uint64_t>(static_cast<int64_t>(std::floor(At.X * 10.0)));
@@ -141,6 +148,11 @@ namespace TheaterFx
 		TracerCol = Picture("tracer.colour", Rgb::FromPicture(213, 199, 104));
 		TracerPale = TracerCol.Mix(Rgb(1.0f, 1.0f, 1.0f), 0.55);
 		TracerDayWide = Num("tracer.day_width", 1.5);
+		WholePathBelow = Num("tracer.whole_path_below_m", 100.0);
+		DayFrom = Num("game.day_light_from", 0.38);
+		DayFull = std::max(DayFrom + 0.01, Num("game.day_light_full", 0.9));
+		DayLampShare = Num("game.day_lamp_share", 0.25);
+		DayLampCol = Picture("game.day_lamp_colour", Rgb::FromPicture(255, 240, 215));
 		TracerDayCore = Picture("tracer.day_core", Rgb::FromPicture(245, 240, 210));
 		CannonHeartCol = Picture("air_guns.flash_heart", Rgb::FromPicture(240, 220, 150));
 		FlameCol = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
@@ -1195,6 +1207,7 @@ namespace TheaterFx
 			F.Life = 0.03;
 			F.Strength = Num(M + "light_w", 0.0) / 8500.0;
 			F.Radius = 12.0 * std::max(1.0, Len);
+			F.bNightOnly = Num(M + "day_lamp", 0.0) <= 0.0; // (by day only the big guns light the ground)
 			Flashes.push_back(F);
 		}
 		// then grey-brown smoke rolls out, hangs and drifts
@@ -1265,7 +1278,7 @@ namespace TheaterFx
 		}
 	}
 
-	void Battle::Shots(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond)
+	void Battle::Shots(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond, const char* GroundIn)
 	{
 		// Brian: "1 out of every 5 bullets with yellow". As a belt was loaded: every fifth round of a gun is a tracer
 		// and the four between are not seen; guns are out of step with each other.
@@ -1294,10 +1307,50 @@ namespace TheaterFx
 		{
 			Tracer(Born, Start, Way, Way * Fast, For, 0.0, 0.0);
 		};
+		// (where the rounds strike the ground, small dust spurts kick up: art director 21:16Z)
+		std::string Ground = GroundIn && *GroundIn ? GroundIn : "earth";
+		if (!Has("grounds." + Ground + ".paint.soil.0"))
+		{
+			Ground = "earth";
+		}
+		const bool bOnGround = To.Z - Height(To.X, To.Y) < 1.5;
+		const Rgb Dust = PaintOf(Ground).Dust;
+		const double SpurtChance = bOnGround ? Num("bullet_strike.spurt_chance", 0.5) : 0.0;
+		const double Scatter = 0.4 + Dist * Num("bullet_strike.spread_mil", 12.0) * 0.001;
+		const double Reach = Dist / std::max(Speed, 1.0);
 		for (int R = 0; R < Rounds; ++R)
 		{
 			const double T = Now + R * Gap;
 			const int Which = Count++;
+			if (D.U() < SpurtChance)
+			{
+				Vec At = To + Vec(D.Bell(), D.Bell(), 0.0) * (Scatter * 0.5);
+				At.Z = Height(At.X, At.Y) + 0.05;
+				for (int K = 0; K < 2; ++K)
+				{
+					Bit B;
+					B.Born = T + Reach + D.U(0.0, 0.01);
+					B.From = At;
+					B.Vel = Vec(D.Bell() * 0.6, D.Bell() * 0.6, K == 0 ? D.U(2.5, 4.5) : D.U(0.6, 1.2));
+					B.Gravity = 4.0;
+					B.Drag = 1.5;
+					B.Windage = 0.6;
+					B.Life = D.U(0.5, 0.9);
+					B.R0 = K == 0 ? 0.05 : 0.08;
+					B.R1 = K == 0 ? D.U(0.25, 0.4) : D.U(0.4, 0.6);
+					B.Grow = 0.5;
+					B.Col = Dust;
+					B.Col2 = Dust;
+					B.Alpha = K == 0 ? 0.65 : 0.45;
+					B.FadeIn = 0.01;
+					B.Hold = 0.15;
+					B.Heart = 0.7;
+					B.Rim = 0.0;
+					B.Rough = 0.3;
+					B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+					Bits.push_back(B);
+				}
+			}
 			if (bFlicker)
 			{
 				Bit B;
@@ -1322,8 +1375,20 @@ namespace TheaterFx
 				continue;
 			}
 			const Vec Aim = (Dir + Vec(D.Bell(), D.Bell(), D.Bell()) * 0.006).Unit();
-			const double Reach = Dist / std::max(Speed, 1.0);
-			Streak(T, From, Aim, Speed, std::min(Life, Reach));
+			if (Dist < WholePathBelow)
+			{
+				// (close in, a tracer crosses in under a frame or two: its whole path is drawn at once, muzzle to strike,
+				// fading toward the muzzle, for at least one frame; art director 21:16Z)
+				const double Third = Dist / 3.0;
+				for (int K = 0; K < 3; ++K)
+				{
+					Tracer(T, From + Aim * (Third * K), Aim, Vec(), Reach, 0.0, 0.0, Third * 0.5, 0.35 + 0.325 * K);
+				}
+			}
+			else
+			{
+				Streak(T, From, Aim, Speed, std::min(Life, Reach));
+			}
 			// (a tracer striking the ground or armour sometimes skips up at an angle)
 			if (Reach < Life && D.U() < Num("tracer.ricochet.chance", 0.18))
 			{
@@ -1336,25 +1401,29 @@ namespace TheaterFx
 		}
 	}
 
-	void Battle::Tracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, double For, double Drag, double Drop)
+	void Battle::Tracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, double For, double Drag, double Drop, double Half, double AlphaK)
 	{
+		if (Half <= 0.0)
+		{
+			Half = TracerHalf;
+		}
 		for (int Layer = 0; Layer < 2; ++Layer)
 		{
 			Bit B;
 			B.Form = Bit::Shape::Streak;
 			B.Born = Born;
-			B.From = Start + Way * TracerHalf;
+			B.From = Start + Way * Half;
 			B.Vel = Vel;
 			B.Drag = Drag;
 			B.Gravity = Drop;
 			B.Life = For;
-			B.HalfLength = TracerHalf;
+			B.HalfLength = Half;
 			B.Along = Way;
 			B.R0 = B.R1 = Layer == 0 ? 0.045 : 0.018;
 			B.LeastPx = Layer == 0 ? TracerLeast : TracerLeast * 0.4;
 			B.Col = Layer == 0 ? TracerCol : TracerPale; // (paler along its middle)
 			B.Col2 = B.Col;
-			B.Alpha = Layer == 0 ? 0.8 : 1.0;
+			B.Alpha = (Layer == 0 ? 0.8 : 1.0) * AlphaK;
 			B.FadeIn = 0.001;
 			B.Hold = 0.9;
 			B.Heart = 0.9;
@@ -1514,11 +1583,12 @@ namespace TheaterFx
 			L.Life = 0.03;
 			L.Strength = Row.Lamp;
 			L.Radius = 12.0;
+			L.bNightOnly = true;
 			Flashes.push_back(L);
 		}
 		// gun smoke: a thin grey wisp left hanging in the air where the gun was, so a firing wing trails a short
 		// smoky line behind it
-		if (bSmoke && Row.SmokeAlpha > 0.0)
+		if (bSmoke && Row.SmokeAlpha > 0.0 && Bits.size() < static_cast<size_t>(MaxPuffs) * 4 / 5) // (the first thing shed when the room fills)
 		{
 			Bit B;
 			B.Born = T + 0.01;
@@ -1749,6 +1819,7 @@ namespace TheaterFx
 		L.Life = 0.04;
 		L.Strength = 0.08 * S;
 		L.Radius = 12.0;
+		L.bNightOnly = true;
 		Flashes.push_back(L);
 	}
 
@@ -2071,9 +2142,12 @@ namespace TheaterFx
 
 	void Battle::Prune(double Now)
 	{
-		auto Gone = [Now](const Bit& B) { return Now > B.Born + B.Life; };
+		auto Gone = [Now](const Bit& B) { return Now > B.Born + B.Life && (!Unseen(B) || Now > B.Born + 0.5); };
 		Bits.erase(std::remove_if(Bits.begin(), Bits.end(), Gone), Bits.end());
-		Flashes.erase(std::remove_if(Flashes.begin(), Flashes.end(), [Now](const Flash& F) { return Now > F.Born + F.Life; }), Flashes.end());
+		// (a flash goes once its lamp has had its two frames, or after half a second unseen)
+		Flashes.erase(std::remove_if(Flashes.begin(), Flashes.end(), [this, Now](const Flash& F) { return (F.FirstFrame >= 0 && FrameNo - F.FirstFrame >= 2) || Now > F.Born + 0.5; }), Flashes.end());
+		Firings.erase(std::remove_if(Firings.begin(), Firings.end(), [Now](const Firing& F) { return Now - F.Last > 30.0; }), Firings.end());
+		Trails.erase(std::remove_if(Trails.begin(), Trails.end(), [Now](const Trailing& T) { return !T.bOn && Now - T.Last > 30.0; }), Trails.end());
 		Knocks.erase(std::remove_if(Knocks.begin(), Knocks.end(), [Now](const Knock& J) { return Now > J.Born + 1.0; }), Knocks.end());
 		Sources.erase(std::remove_if(Sources.begin(), Sources.end(), [Now](const Source& S) { return Now > S.End; }), Sources.end());
 	}
@@ -2158,13 +2232,15 @@ namespace TheaterFx
 	bool Battle::LayBit(int Slot, const Bit& B, double Now, const View& Eye)
 	{
 		const double Age = Now - B.Born;
-		if (Age < 0.0 || Age > B.Life)
+		if (Age < 0.0 || (Age > B.Life && !Unseen(B)))
 		{
 			return false;
 		}
-		const double F = Age / B.Life;
+		// (a light shorter than a frame that no frame has caught yet is laid now, where it is, at its full strength)
+		const double Shown = Unseen(B) && Age > B.Life * std::min(B.Hold, 0.5) ? B.Life * std::min(B.Hold, 0.5) : Age;
+		const double F = Shown / B.Life;
 		const double Rad = B.R0 + (B.R1 - B.R0) * std::pow(F, B.Grow);
-		const double Fade = std::min(1.0, Age / std::max(B.FadeIn, 1e-3)) * (F < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (F - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4));
+		const double Fade = std::min(1.0, Shown / std::max(B.FadeIn, 1e-3)) * (F < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (F - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4));
 		double A = B.Alpha * Fade;
 		if (B.HazeBy > 0.0)
 		{
@@ -2282,8 +2358,7 @@ namespace TheaterFx
 			{
 				// (by day a tracer widens and its core whitens, so a stream holds on a pale sky; by dusk it is as ruled.
 				// Day is read from the hour's smoke light: white by day, dim at dusk)
-				const double Lum = 0.2126 * Eye.SmokeLight.R + 0.7152 * Eye.SmokeLight.G + 0.0722 * Eye.SmokeLight.B;
-				const double Day = Clamp01((Lum - 0.3) / 0.6);
+				const double Day = DayOf(Eye.SmokeLight);
 				Width *= 1.0 + (TracerDayWide - 1.0) * Day;
 				if (B.Glow == 2)
 				{
@@ -2301,6 +2376,7 @@ namespace TheaterFx
 			return false;
 		}
 		Lay(Slot, Middle, AxA, AxB, Col, A, A * B.Heart, A * B.Rim, B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, B.Turn + B.TurnRate * Age);
+		B.bShown = true;
 		return true;
 	}
 
@@ -2310,6 +2386,14 @@ namespace TheaterFx
 		bEyeKnown = true;
 		Run(Now);
 		Prune(Now);
+		++FrameNo;
+		for (Flash& F : Flashes)
+		{
+			if (F.FirstFrame < 0 && Now > F.Born)
+			{
+				F.FirstFrame = FrameNo; // (strictly after its birth: a flash born at this very time shows only next frame)
+			}
+		}
 		int Slot = 0;
 		// the craters first: they lie on the ground, under everything else
 		for (const Bit& M : Marks)
@@ -2327,7 +2411,7 @@ namespace TheaterFx
 		Sorted.clear();
 		for (const Bit& B : Bits)
 		{
-			if (Now < B.Born || Now > B.Born + B.Life)
+			if (Now < B.Born || (Now > B.Born + B.Life && !Unseen(B)))
 			{
 				continue;
 			}
@@ -2357,20 +2441,39 @@ namespace TheaterFx
 		return Slot;
 	}
 
-	int Battle::Lamps(double Now, Lamp* Into, int Room) const
+	double Battle::DayOf(const Rgb& HourLight) const
 	{
+		const double Lum = 0.2126 * HourLight.R + 0.7152 * HourLight.G + 0.0722 * HourLight.B;
+		return Clamp01((Lum - DayFrom) / (DayFull - DayFrom));
+	}
+
+	int Battle::Lamps(double Now, Lamp* Into, int Room, double Day) const
+	{
+		// Art director 21:16Z: never before its flash; full on the flash's frame, about half the next, then out. By day
+		// a lamp is a quarter as strong and warm white, and small guns light no ground at all.
+		Day = Clamp01(Day);
+		const double ByDay = 1.0 + (DayLampShare - 1.0) * Day;
 		std::vector<Lamp> All;
 		for (const Flash& F : Flashes)
 		{
-			const double Age = Now - F.Born;
-			if (Age < 0.0 || Age > F.Life)
+			if (F.FirstFrame < 0 || Now < F.Born)
+			{
+				continue;
+			}
+			const int Frames = FrameNo - F.FirstFrame;
+			if (Frames < 0 || Frames > 1)
+			{
+				continue;
+			}
+			const double Strength = F.Strength * (Frames == 0 ? 1.0 : 0.5) * (F.bNightOnly ? 1.0 - Day : ByDay);
+			if (Strength <= 1e-4)
 			{
 				continue;
 			}
 			Lamp L;
 			L.At = F.At;
-			L.Col = F.Col;
-			L.Strength = F.Strength * (1.0 - Age / std::max(F.Life, 1e-6));
+			L.Col = F.Col.Mix(DayLampCol, Day);
+			L.Strength = Strength;
 			L.Radius = F.Radius;
 			All.push_back(L);
 		}
@@ -2385,7 +2488,8 @@ namespace TheaterFx
 			Lamp L;
 			L.At = S.At + ZUp * (S.Across * 0.6);
 			L.Col = Flame;
-			L.Strength = 0.25 * std::sqrt(S.Across) * (0.75 + 0.25 * std::sin(Now * 23.0 + Seed) * std::sin(Now * 7.3 + Seed * 0.5));
+			L.Strength = ByDay * 0.25 * std::sqrt(S.Across) * (0.75 + 0.25 * std::sin(Now * 23.0 + Seed) * std::sin(Now * 7.3 + Seed * 0.5));
+			L.Col = Flame.Mix(DayLampCol, Day);
 			L.Radius = 8.0 * S.Across;
 			All.push_back(L);
 		}

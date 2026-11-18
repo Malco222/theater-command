@@ -83,8 +83,9 @@ public:
 	/** A gun firing: its muzzle at WorldAt, pointing along Facing. Gun is "rifle", "mg", "tank_gun", "at_gun",
 	 * "howitzer" or "mortar". */
 	void Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun);
-	/** Rounds fired by one gun (any number that stays the same for that gun) toward To: every fifth a tracer. */
-	void Shots(int32 Gun, const FVector& From, const FVector& To, const FString& Weapon, int32 Rounds, float PerSecond);
+	/** Rounds fired by one gun (any number that stays the same for that gun) toward To: every fifth a tracer. Ground
+	 * is what they strike, for the little dust spurts there ("earth" if left out). */
+	void Shots(int32 Gun, const FVector& From, const FVector& To, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground = TEXT("earth"));
 	/** A gun on an aircraft firing: call it every frame while the trigger is down, for each gun (Gun: any number that
 	 * stays the same for that gun). Now is this frame's time on the same clock Tick is given; an air scene with its
 	 * own air time (slowed when the player slows it) gives its own FBattleEffects that time in both. Muzzle is where

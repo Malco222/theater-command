@@ -35,9 +35,17 @@ const FBattleJolt Jolt = Blasts->Tick(GetWorld()->GetTimeSeconds(), CameraLocati
 // a field battle's shell
 Blasts->Shell(Where, TEXT("howitzer"), TEXT("earth"), /*bOnArmour*/ false);
 
+// a machine gun's burst at a target (Ground: what the rounds kick up, earth if left out)
+Blasts->Shots(Gun, Muzzle, Target, TEXT("mg"), 25, 15.0f, TEXT("snow"));
+
 // EndPlay
 if (Blasts) { Blasts->End(); Blasts.Reset(); }
 ```
+
+Lamps and day: a flash's lamp is full on the first frame drawn after the flash, about half on the next, then out
+(Tick draws first, then lights). `HourLight` tells the kit how much it is day: by day a lamp is a quarter as strong and
+warm white, and small guns light no ground. A flash shorter than a frame is still drawn once, so 30 frames a second
+shows every one; a close tracer (under 100 m) is drawn whole, muzzle to strike.
 
 Names given to the kit (size, ground, calibre, gun, weapon, air gun kind) are matched in lower case, as in the recipe:
 `howitzer`, `snow`, `bomb250`, `hmg`. The wrapper lowers them, so `Snow` finds snow; a name the recipe does not have
