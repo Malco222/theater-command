@@ -192,7 +192,9 @@ describe('saving a free-play war', () => {
     expect(print(b)).toBe(print(a));
     // Forty months of war in all, with every air staff planning raids: more than the usual five seconds on a busy machine.
     // (Version 77: this seed's war keeps more armies in the field to the end; the staffs' new judgements cost under half a second of it.)
-  }, 30_000);
+    // (Version 85.2: with ruling 227's raids the two wars take about 28 seconds on a quiet four-core machine, and timed
+    // out at 30 in the whole suite.)
+  }, 90_000);
 
   it('says a historical save is not one', () => {
     expect(peekSave(saveGame(play(createGame(4, null), 2)))?.open).toBe(false);

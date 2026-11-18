@@ -395,8 +395,9 @@ describe('the raid planner', () => {
     expect(alone.meets.length).toBeGreaterThan(0);
     for (const m of alone.meets) { expect(m.able).toBeGreaterThan(0); expect(m.able).toBeLessThanOrEqual(m.ftr); expect(g.nations.GER.atWar).toContain(m.nat); }
     expect(alone.bomberLoss).toBeGreaterThan(0.1);
-    expect(alone.bomberLoss).toBeLessThanOrEqual(AIRWAR.losses.most);
-    expect(alone.foeLossN).toBe(0);
+    expect(alone.bomberLoss).toBeLessThanOrEqual(AIRWAR.losses.day);
+    // The bombers' own guns bring down some of the fighters that close with them (ruling 227): never none.
+    expect(alone.foeLossN).toBeGreaterThan(0);
     const escorted = previewRaid(g, 'bomb', target, [bombers[0], ...fighters.slice(0, 2)]);
     expect(escorted.fighters).toBeGreaterThan(0);
     expect(escorted.bomberLoss).toBeLessThan(alone.bomberLoss);

@@ -160,12 +160,15 @@ describe('across an ocean an air group goes by sea, one a month', () => {
     expect(b.base).toBe(g.byName.Norfolk.id);
     nextMonth(g);
     expect(whyNotMoveAir(g, b, kent)).not.toBe(SHIP_AIR_ONE);
-    // A field already full takes no group that comes by sea.
-    const full = g.airFleets.find((f) => f.nat === 'UK' && f.base === kent.id && f.ship === undefined)!;
-    const was = full.ftr;
+    // A field already full takes no group that comes by sea. (Britain's own group is set down there to fill it: since
+    // ruling 227 its staff bases its fighters by the threat, and No. 11 Group stands in the Midlands that month.)
+    const full = g.airFleets.find((f) => f.nat === 'UK' && f.kind === 'ftr' && f.ship === undefined)!;
+    const was = { ftr: full.ftr, base: full.base };
+    full.base = kent.id;
     full.ftr = 5000;
     expect(whyNotMoveAir(g, b, kent)).toBe(SHIP_AIR_ROOM);
-    full.ftr = was;
+    full.ftr = was.ftr;
+    full.base = was.base;
     expect(orderAirBase(g, b.id, kent.id)).toBe(true);
     // And home again the same way: from Britain, America's fields are across the ocean.
     nextMonth(g);
