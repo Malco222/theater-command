@@ -4,7 +4,9 @@ with a dugout), and an anti-tank ditch.
 Every dug piece models its own hole: walls, floor and the earth lips round it, as one lumpy sheet swept across a
 cross-section (`sweep`), and says in `m.info["dig"]` where the ground must be opened for it. A length runs along y
 from -5 to +5 with the enemy toward +x; its two ends are flat, open, and carry the same cross-section (the lumps fade
-out before the ends), so lengths butt end to end. Our own plain designs throughout.
+out before the ends), so lengths butt end to end. A line never stops in such a cut: an end piece closes it (the hole
+rounds off, the banks sink into the ground), one for a line's far end and its mirror for the start. Our own plain
+designs throughout.
 """
 import math
 
@@ -15,7 +17,7 @@ from bits import X, Y, Z, fbm, rnd
 from posts import ammo_box, machine_gun, mg_fire_clip, spent, weather
 from rigid import smooth
 
-MORE = {"mud": "4B4033"}
+MORE = {"mud": "4B4033", "stone": "6C675B"}
 
 
 # ---- a path in plan, and a frame along it ----------------------------------------------------------------------
@@ -96,12 +98,72 @@ def rows_for(L, step, breaks=()):
     return sorted(set(round(v, 5) for v in grid + edges))
 
 
-def sweep(m, path, prof, srows, amp, turf=0.2, seed=0.0, push=None, skip=None, endfall=0.8, groove=None):
+HOLE = ("wall", "niche", "floor", "sump", "riser", "tread", "fwall", "shelf", "slope")
+RIM = ("lip", "flip", "berm")
+
+
+def creep_of(prof):
+    """How far down its OUTER slope each point of a bank lies (0 at the crest and inside it, 1 at the foot): the
+    field's grass creeps up a bank from its foot."""
+    n = len(prof)
+    out = [0.0] * n
+    holes = [k for k in range(n) if prof[k][2] in HOLE]
+    if not holes:
+        return out
+    for side in (range(0, holes[0]), range(holes[-1] + 1, n)):
+        ks = [k for k in side if prof[k][2] not in RIM]
+        if not ks:
+            continue
+        crest = max(ks, key=lambda k: prof[k][1])
+        zc = prof[crest][1]
+        for k in ks:
+            outer = k <= crest if side.start == 0 else k >= crest
+            if outer:
+                out[k] = 0.75 if zc < 0.08 else 1.0 - max(prof[k][1], 0.0) / zc
+    return out
+
+
+def closing(prof, sa, R, T, uc):
+    """How a length's cross-section closes where a line ends: from `sa` on, the hole draws in about its middle `uc` to
+    a rounded end `R` further along (a half circle in plan, its walls still upright), and the banks sink into the
+    ground over `T`. Returns (the rows' s after sa, push, skip, low) for `sweep`; low(s) is how much of the banks'
+    height still stands."""
+    arc = 12
+    rows = [sa + R * math.sin(math.radians(90.0 * k / arc)) for k in range(1, arc + 1)]
+    n = max(2, int(math.ceil((T - R) / 0.2)))
+    rows += [sa + R + (T - R) * k / n for k in range(1, n + 1)]
+    hole = [q[2] in HOLE for q in prof]
+
+    def low(s):
+        return 1.0 - smooth(min(max((s - sa) / T, 0.0), 1.0))
+
+    def push(s, k, u, z, tag):
+        if s <= sa:
+            return 0.0, 0.0
+        if tag in HOLE or tag in RIM:
+            t = min((s - sa) / R, 1.0)
+            # (past the rounded end the two lips have met: they lie as one line, at one height, and sink with the banks)
+            dz = (0.03 - 0.08 * smooth((s - sa - R) / (T - R))) - z if (tag in RIM and s > sa + R) else 0.0
+            return (uc - u) * (1.0 - math.sqrt(max(0.0, 1.0 - t * t))), dz
+        if z > 0.0:
+            return 0.0, -(z + 0.05) * (1.0 - low(s))
+        return 0.0, 0.0
+
+    def skip(s, k):
+        return s > sa + R and (hole[k] or hole[k + 1])
+
+    return rows, push, skip, low
+
+
+def sweep(m, path, prof, srows, amp, turf=0.2, seed=0.0, push=None, skip=None, endfall=0.8, groove=None, fade=None, greener=None):
     """One lumpy sheet of earth swept along a path: `prof` is the cross-section, (u, z, tag) from the rear to the
     front; `amp[tag]` how lumpy each kind of point is; `push(s, k, u, z, tag)` -> (du, dz) cuts niches, recesses and
     sumps; `skip(s, k)` leaves out the quad over a row gap at profile point k (a doorway); `groove(s, u, z, tag)`
-    adds a lump of its own (rain gullies). The lumps die away within `endfall` of each end, so the ends are true."""
+    adds a lump of its own (rain gullies). The lumps die away within `endfall` of each end (one figure, or one for
+    each end), so an end that joins is true; `fade(s)` scales them where a line closes, `greener(s)` grows more grass."""
     n = len(prof)
+    ef0, ef1 = endfall if isinstance(endfall, (tuple, list)) else (endfall, endfall)
+    creep = creep_of(prof)
     nrm = []
     for k in range(n):
         i, j = k - 1, k + 1
@@ -115,9 +177,14 @@ def sweep(m, path, prof, srows, amp, turf=0.2, seed=0.0, push=None, skip=None, e
         nrm.append((-dz / ln, du / ln))
     s0, s1 = srows[0], srows[-1]
     verts = []
+    vcreep = []
     for s in srows:
-        w = smooth(min(s - s0, s1 - s) / endfall) if endfall else 1.0
+        w = min(smooth((s - s0) / ef0) if ef0 else 1.0, smooth((s1 - s) / ef1) if ef1 else 1.0)
+        if fade:
+            w *= fade(s)
+        more = greener(s) if greener else 0.0
         for k, (u, z, tag) in enumerate(prof):
+            vcreep.append(min(1.0, creep[k] + more) if tag not in HOLE and tag not in RIM else 0.0)
             du = dz = 0.0
             if push:
                 du, dz = push(s, k, u, z, tag)
@@ -139,7 +206,11 @@ def sweep(m, path, prof, srows, amp, turf=0.2, seed=0.0, push=None, skip=None, e
                 continue
             faces.append((r * n + k, r * n + k + 1, (r + 1) * n + k + 1, (r + 1) * n + k))
             ftags.append((prof[k][2], prof[k + 1][2]))
-    earth_skin(m, verts, faces, ftags, [prof[i % n][2] for i in range(len(verts))], turf, seed)
+    earth_skin(m, verts, faces, ftags, [prof[i % n][2] for i in range(len(verts))], turf, seed, vcreep)
+    # (where the thrown earth lies and how high, for what is strewn on it afterwards)
+    if not hasattr(m, "_earth"):
+        m._earth = []
+    m._earth += [(v.x, v.y, v.z) for i, v in enumerate(verts) if prof[i % n][2] in ("bank", "glacis", "spoil", "apron")]
     return verts
 
 
@@ -161,13 +232,14 @@ def earth_paint(tags, mid):
     return "mud" if mid.z < -1.85 else "earth"
 
 
-def earth_coat(tag, p, turf, seed=0.0):
+def earth_coat(tag, p, turf, seed=0.0, creep=0.0):
     """The paint of a point of open ground: dry thrown earth, darker damp earth, and turf grown over in soft patches
-    (more with `turf`); None for the walls and floors, which keep their face's paint."""
+    (more with `turf`, and more the further down a bank's outer slope the point lies, `creep`); None for the walls
+    and floors, which keep their face's paint."""
     if tag not in BARE:
         return None
     n = 0.5 + 0.5 * fbm((p.x / 1.5 + seed * 3.1, p.y / 1.5 - seed, 0.37), 1.0, 3) + 0.12 * fbm((p.x * 2.3, p.y * 2.3, 5.0 + seed), 1.0, 2)
-    if tag in ("bank", "glacis", "spoil", "apron", "edge") and p.z > 0.04 and n < turf:
+    if tag in ("bank", "glacis", "spoil", "apron", "edge") and ((p.z > 0.04 and n < turf) or (creep > 0.0 and n < turf + 0.85 * creep ** 1.3)):
         return "turf"
     d = fbm((p.x * 0.8 + 17.0, p.y * 0.8 - seed, 1.3), 1.0, 3)
     if tag in ("lip", "flip", "berm") or d > (0.0 if tag == "slope" else 0.22):
@@ -175,11 +247,11 @@ def earth_coat(tag, p, turf, seed=0.0):
     return "earth.dry"
 
 
-def earth_skin(m, verts, faces, ftags, ptags, turf=0.2, seed=0.0):
+def earth_skin(m, verts, faces, ftags, ptags, turf=0.2, seed=0.0, creep=None):
     """Dug earth into the model: the faces as wound (they already look out of the earth), walls and floors by their
     face's paint, open ground point by point so earth and turf run softly into each other."""
     vs = [Vector(v) for v in verts]
-    coat = [earth_coat(t, v, turf, seed) for v, t in zip(vs, ptags)]
+    coat = [earth_coat(t, v, turf, seed, creep[i] if creep else 0.0) for i, (v, t) in enumerate(zip(vs, ptags))]
     keep, paints, byp = [], [], []
     for f, tg in zip(faces, ftags):
         a, b, c = vs[f[0]], vs[f[1]], vs[f[2]]
@@ -298,16 +370,40 @@ def grenade(m, at, yaw=0.0):
     m.box(at + q @ Vector((0.022, 0, 0.03)), (0.008, 0.014, 0.06), "steel", yaw=yaw)
 
 
-def clods(m, boxes, count, seed=0, size=0.07):
-    """Lumps of thrown earth lying about: `boxes` are (x0, y0, x1, y1) where they lie, `count` in all."""
+def lay_of(m):
+    """h(x, y): how high the thrown earth lies at a place (0 where `sweep` laid none)."""
+    grid = {}
+    for x, y, z in getattr(m, "_earth", []):
+        k = (int(math.floor(x / 0.3)), int(math.floor(y / 0.3)))
+        grid[k] = max(grid.get(k, -9.0), z)
+
+    def h(x, y):
+        k = (int(math.floor(x / 0.3)), int(math.floor(y / 0.3)))
+        if k in grid:
+            return grid[k]
+        near = [grid[(k[0] + i, k[1] + j)] for i in (-1, 0, 1) for j in (-1, 0, 1) if (k[0] + i, k[1] + j) in grid]
+        return sum(near) / len(near) if near else 0.0
+    return h
+
+
+def clods(m, boxes, count, seed=0, size=0.07, stones=0.06):
+    """Lumps of thrown earth and stones lying on the banks, bedded into them: `boxes` are (x0, y0, x1, y1) where they
+    lie, `count` in all; most are small, a few as big as a helmet; `stones` of them are stones turned up in digging."""
     if not m.fine:
         count //= 4
     g = rnd(seed)
+    h = lay_of(m)
     for k in range(count):
         x0, y0, x1, y1 = boxes[k % len(boxes)]
         x, y = g.uniform(min(x0, x1), max(x0, x1)), g.uniform(min(y0, y1), max(y0, y1))
-        r = size * g.uniform(0.4, 1.2)
-        m.ball((x, y, r * 0.35), (r, r * g.uniform(0.6, 1.0), r * 0.6), g.choice(["earth", "earth.dry", "earth"]), 7 if m.fine else 4, 4 if m.fine else 2)
+        r = size * (0.45 + 1.7 * g.random() ** 3)
+        z0 = h(x, y)
+        if z0 < -0.02:                       # (sunk under the field where a line closes: nothing lies there)
+            continue
+        stone = g.random() < stones
+        big = r > size
+        m.ball((x, y, z0 + r * (0.22 if stone else 0.16)), (r * g.uniform(0.85, 1.3), r * g.uniform(0.6, 1.0), r * (g.uniform(0.4, 0.6) if stone else g.uniform(0.5, 0.75))),
+               "stone" if stone else g.choice(["earth", "earth.dry", "earth"]), (7 if big else 5) if m.fine else 4, 4 if m.fine else 2)
 
 
 def roots(m, per, hx, hy, depth, seed=0):
@@ -609,8 +705,8 @@ def bay_profile():
     return P
 
 
-BAY_AMP = {"bank": 0.06, "lip": 0.012, "wall": 0.035, "niche": 0.035, "floor": 0.018, "sump": 0.018, "riser": 0.006, "tread": 0.012,
-           "fwall": 0.01, "shelf": 0.01, "flip": 0.008, "berm": 0.0, "glacis": 0.045}
+BAY_AMP = {"bank": 0.075, "lip": 0.012, "wall": 0.035, "niche": 0.035, "floor": 0.018, "sump": 0.018, "riser": 0.006, "tread": 0.012,
+           "fwall": 0.01, "shelf": 0.01, "flip": 0.008, "berm": 0.0, "glacis": 0.06}
 
 
 def swell(s, u, z, tag):
@@ -973,7 +1069,8 @@ def bay_crew(m, path, root, positions, mg=None):
 def fieldworks(m, path, plan):
     """A length of fire bay along a path. `plan` says where the features stand along it (s values)."""
     fine = m.fine
-    L = path.L
+    close = plan.get("close")            # (where the line begins to close, how far on the bay's rounded end is, how far the banks run)
+    L = close[0] if close else path.L    # (the bay's fittings stop where it begins to close)
     root = m.parts[0].name
     mg, nch, door, lh, sump, lad, spill = (plan.get(k) for k in ("mg", "niche", "door", "loophole", "sump", "ladder", "spill"))
     rec = (mg - 0.75, mg + 0.75) if mg is not None else None
@@ -1011,7 +1108,12 @@ def fieldworks(m, path, plan):
         return door is not None and inside(s, (door - 0.4, door + 0.4)) and k_door0 <= k < k_floor
 
     rows = rows_for(L, 0.1 if fine else 0.5, breaks)
-    sweep(m, path, prof, rows, BAY_AMP, 0.25, 1.7, push, skip, groove=swell)
+    if close:
+        crows, cpush, cskip, low = closing(prof, close[0], close[1], close[2], (U_RL + U_FL) / 2)
+        sweep(m, path, prof, rows + crows, BAY_AMP, 0.25, 1.7, cpush, cskip, endfall=(0.8, 0.0), groove=swell,
+              fade=lambda s: 0.25 + 0.75 * low(s), greener=lambda s: 1.0 - low(s))
+    else:
+        sweep(m, path, prof, rows, BAY_AMP, 0.25, 1.7, push, skip, groove=swell)
     if sump is not None:
         c = path.at(sump, FLOOR_U, FLOOR - 0.3)
         al, r = path.axes(sump, 0.0)
@@ -1105,18 +1207,35 @@ def fieldworks(m, path, plan):
     return names, rec, stove
 
 
-def bay_info(m, path, rec=None, door=None, extra_clear=()):
-    """dig, clear, worn and span for a length of fieldworks."""
+def bay_info(m, path, rec=None, door=None, extra_clear=(), close=None):
+    """dig, clear, worn and span for a length of fieldworks (or for the piece that closes a line: `close`)."""
     L = path.L
-    rows = rows_for(L, 0.25, [rec] if rec else [])
-    left = [path.at(s, U_RL - 0.25) for s in rows]
-    right = [path.at(s, U_FL + 0.25 + (REC_PUSH if rec and rec[0] + 0.005 < s < rec[1] - 0.005 else 0.0)) for s in rows]
+    if close:
+        sa, R, T = close
+        uc = (U_RL + U_FL) / 2
+        rows = rows_for(sa, 0.25) + [sa + (R + 0.22) * math.sin(math.radians(a)) for a in range(10, 91, 10)]
+
+        def wd(s):
+            return math.sqrt(max(0.0, 1.0 - ((s - sa) / (R + 0.22)) ** 2)) if s > sa else 1.0
+        left = [path.at(s, uc + (U_RL - 0.25 - uc) * wd(s)) for s in rows]
+        right = [path.at(s, uc + (U_FL + 0.25 - uc) * wd(s)) for s in rows[:-1]]
+        L = sa + T * 0.7
+        crows = rows_for(L, 0.25)
+    else:
+        rows = crows = rows_for(L, 0.25, [rec] if rec else [])
+        left = [path.at(s, U_RL - 0.25) for s in rows]
+        right = [path.at(s, U_FL + 0.25 + (REC_PUSH if rec and rec[0] + 0.005 < s < rec[1] - 0.005 else 0.0)) for s in rows]
     m.info["dig"] = [[(round(p.x, 3), round(p.y, 3)) for p in left + right[::-1]]]
     m.info["dig_depth"] = -FLOOR
-    cl = [path.at(s, -3.3) for s in rows] + [path.at(s, 3.6) for s in rows][::-1]
+    # (the field's grass stands up onto the banks' feet, where the turf has crept; the stage wears the ground under
+    #  the bare earth of itself, so only the trodden places are named: behind the parados, here and there)
+    cl = [path.at(s, -2.75) for s in crows] + [path.at(s, 2.85) for s in crows][::-1]
     m.info["clear"] = [[(round(p.x, 3), round(p.y, 3)) for p in cl]] + list(extra_clear)
-    m.info["worn"] = [(p.x, p.y, 1.7) for p in (path.at(s, -1.6) for s in [L * k / 5 for k in range(6)])] + \
-                     [(p.x, p.y, 1.5) for p in (path.at(s, 2.0) for s in [L * k / 5 for k in range(6)])]
+    gw = rnd(int(L * 10) + 3)
+    m.info["worn"] = [(p.x, p.y, gw.uniform(0.6, 1.0), gw.uniform(0.4, 0.7)) for p in (path.at(s + gw.uniform(-0.6, 0.6), -3.6 + gw.uniform(-0.3, 0.3)) for s in [L * (k + 0.5) / 4 for k in range(4)])]
+    if close:
+        tip = path.at(sa + R + 0.9, uc)
+        m.info["worn"].append((tip.x, tip.y, 1.1, 0.8))
     m.info["span"] = 10.5
     m.info["high"] = 0.3
 
@@ -1167,7 +1286,7 @@ def Fieldworks(fine=True, nation="_default", name="Fieldworks"):
     shovel(m, path.at(5.2, -0.55, FLOOR + 0.06), path.at(5.0, -0.78, -1.15))
     tins(m, path.at(6.9, 0.5, STEP), 3, seed=3, r=0.15)
     m.rod(path.at(3.8, 0.55, STEP + 0.06), path.at(4.5, 0.6, STEP + 0.06), 0.06, "canvas", sides=12 if fine else 5)
-    clods(m, [(-2.6, -4.5, -1.0, 4.5), (1.4, -4.5, 3.0, 4.5)], 60, seed=12, size=0.06)
+    clods(m, [(-3.1, -4.7, -1.1, 4.7), (1.4, -4.7, 3.3, 4.7)], 150, seed=12, size=0.065)
     m.socket("hit", path.at(8.5, BAG_U + 0.3, 0.3), (1, 0, 0), part="fieldworks", note="where a shell strikes the parapet (the `hit` clip throws the bags there into the bay)")
     m.clips["idle"] = {"long": 2.0, "loop": True, "about": "Manned and still.", "tracks": [], "events": []}
     m.clips["fire"] = mg_fire_clip(names)
@@ -1200,7 +1319,7 @@ def FieldworksCorner(fine=True, nation="_default", name="FieldworksCorner", forw
     pick(m, path.at(L - 3.1, -0.45, FLOOR + 0.07), 80 + (45 if not forward else -45) * 0)
     tins(m, path.at(2.6, 0.5, STEP), 3, seed=5, r=0.15)
     g = rnd(4)
-    clods(m, [(p.x - 0.8, p.y - 0.8, p.x + 0.8, p.y + 0.8) for p in (path.at(L * k / 7, -2.0 + 4.0 * (k % 2)) for k in range(8))], 60, seed=12, size=0.06)
+    clods(m, [(p.x - 0.9, p.y - 0.9, p.x + 0.9, p.y + 0.9) for p in (path.at(L * k / 9, -2.1 + 4.4 * (k % 2)) for k in range(10))], 150, seed=12, size=0.065)
     hs = (sp[0] + sp[1]) / 2
     m.socket("hit", path.at(hs, BAG_U + 0.3, 0.3), path.axes(hs, 1.0)[1], part="fieldworks", note="where a shell strikes the parapet")
     _, r = path.axes(hs, BAG_U)
@@ -1234,7 +1353,7 @@ def FieldworksDugout(fine=True, nation="_default", name="FieldworksDugout"):
     tins(m, path.at(door + 0.9, -0.45, FLOOR + 0.07), 3, seed=8, r=0.18)
     m.box(path.at(door - 0.8, -0.45, FLOOR + 0.2), (0.32, 0.22, 0.34), "upper2")            # a water can by the door
     m.rod(path.at(door - 0.8, -0.5, FLOOR + 0.37), path.at(door - 0.8, -0.4, FLOOR + 0.37), 0.012, "steel", sides=6)
-    clods(m, [(-2.6, -4.5, -1.0, -2.6), (-2.6, 2.6, -1.0, 4.5), (1.4, -4.5, 3.0, 4.5)], 50, seed=12, size=0.06)
+    clods(m, [(-3.1, -4.7, -1.1, -2.6), (-3.1, 2.6, -1.1, 4.7), (1.4, -4.7, 3.3, 4.7), (1.4, -4.7, 3.3, 4.7)], 140, seed=12, size=0.065)
     m.socket("hit", path.at(5.95, BAG_U + 0.3, 0.3), (1, 0, 0), part="fieldworks", note="where a shell strikes the parapet")
     m.socket("smoke", stove + Z * 0.05, (0, 0, 1), part="fieldworks", note="the stove pipe's smoke")
     m.socket("door", path.at(door, ur(-1.0), FLOOR), (-1, 0, 0), part="fieldworks", note="the dugout's doorway: men go in and out here")
@@ -1246,6 +1365,66 @@ def FieldworksDugout(fine=True, nation="_default", name="FieldworksDugout"):
     m.info["aim"] = (-0.6, 0.0, -0.3)
     m.info["span"] = 11.0
     m.info["file"] = {"joins": joins(0.0)}
+    return m
+
+
+def mirror_y(m):
+    """The model turned into its mirror image across the x-z plane (y becomes -y): the piece that closes a line's far
+    end, made over into the one that closes its start."""
+    for v in m.verts:
+        v.y = -v.y
+    m.faces[:] = [tuple(reversed(f)) for f in m.faces]
+    for P in m.parts:
+        P.pivot.y = -P.pivot.y
+    for sk in m.sockets:
+        sk["at"].y, sk["facing"].y = -sk["at"].y, -sk["facing"].y
+    for key in ("dig", "clear"):
+        if key in m.info:
+            m.info[key] = [[(x, -y) for x, y in reversed(d)] for d in m.info[key]]
+    if "worn" in m.info:
+        m.info["worn"] = [(w[0], -w[1]) + tuple(w[2:]) for w in m.info["worn"]]
+    if "aim" in m.info:
+        m.info["aim"] = (m.info["aim"][0], -m.info["aim"][1], m.info["aim"][2])
+    if hasattr(m, "_earth"):
+        m._earth = [(x, -y, z) for x, y, z in m._earth]
+    return m
+
+
+def end_joins(section, start):
+    """An end piece joins at one end only. In the file's axes (y to the right) a piece that closes a line's FAR end has
+    its own start, the join, at file y = +5 and lies toward file -y; its mirror, closing a line's START, joins at file
+    y = -5."""
+    return {"section": section, "closes": "start" if start else "far end",
+            "ends": [{"at": [0.0, -5.0 if start else 5.0, 0.0], "facing": [0.0, -1.0 if start else 1.0, 0.0]}], "far_end_dx": 0.0}
+
+
+def FieldworksEnd(fine=True, nation="_default", name="FieldworksEnd", start=False):
+    """Where a line of fieldworks ends, so that no line stops in a cut: 1.6 m of the bay's own section (it butts onto
+    any length), then the bay rounds off in an upright end wall a metre further on, and the parados and the glacis
+    sink into the ground over three metres more; a ladder at the end is the way in and out. This one closes a line's
+    far end; with `start` it is its mirror image and closes the start."""
+    m = bits.model(name, "Fieldworks, the end of a line (our own model)", "works", nation, fine, MORE)
+    m.part("fieldworks", None, (0, 0, 0), kind="root")
+    m.use("fieldworks")
+    path = Path([(0.0, -5.0), (0.0, 1.5)])
+    close = (1.6, 1.0, 4.4)
+    plan = {"ladder": 1.05, "revet": [(0.0, 1.6, "planks")], "close": close}
+    fieldworks(m, path, plan)
+    bay_crew(m, path, "fieldworks", [(0.5, None)])
+    shovel(m, path.at(0.5, -0.55, FLOOR + 0.06), path.at(0.3, -0.78, -1.15))
+    clods(m, [(-3.1, -4.9, -1.1, -1.5), (1.4, -4.9, 3.3, -1.5), (-1.2, -3.3, 1.4, -1.9)], 80, seed=17, size=0.065)
+    m.socket("hit", path.at(0.9, BAG_U + 0.3, 0.3), (1, 0, 0), part="fieldworks", note="where a shell strikes the parapet")
+    m.socket("way", path.at(close[0] + close[1] + 0.6, (U_RL + U_FL) / 2, 0.0), (0, 1, 0), part="fieldworks", note="on the ground beyond the rounded end: men come and go from the line here")
+    m.clips["idle"] = {"long": 2.0, "loop": True, "about": "Manned and still.", "tracks": [], "events": []}
+    m.clips["hit"] = {"long": 1.0, "loop": False, "after": "hold", "about": "A shell bursts on the parapet.", "tracks": [],
+                      "events": [{"t": 0.0, "fx": "shell_burst", "socket": "hit", "cue": "shell_impact_near"}]}
+    dug_weather(m, bay_base(path))
+    bay_info(m, path, close=close)
+    m.info["span"] = 7.0
+    m.info["aim"] = (0.2, -3.2, -0.3)
+    if start:
+        mirror_y(m)
+    m.info["file"] = {"joins": end_joins("fieldworks: floor 2.0 m down and 0.9 m wide, fire step 0.92 m high on the enemy side, sandbag parapet on a berm", start)}
     return m
 
 
@@ -1273,16 +1452,18 @@ def ditch_profile():
     return P
 
 
-def AntiTankDitch(fine=True, nation="_default", name="AntiTankDitch"):
+def AntiTankDitch(fine=True, nation="_default", name="AntiTankDitch", close=None, start=False):
     """A 10 m length of anti-tank ditch: 4.5 m across the top, 2.5 m deep, the enemy's side sloped at 35 degrees so a
     tank runs down it and cannot climb out, the defender's side nearly upright and revetted with driven poles held by
-    wales and wired back, the spoil thrown up in a bank a metre high on the defender's side."""
-    m = bits.model(name, "Anti-tank ditch, a length (our own model)", "works", nation, fine, MORE)
+    wales and wired back, the spoil thrown up in a bank a metre high on the defender's side.
+    With `close` (where it begins to close, how far on its rounded end is, how far the bank runs) it is the piece that
+    ends a line: the ditch rounds off and the spoil bank sinks into the ground; with `start` too, that piece's mirror."""
+    m = bits.model(name, "Anti-tank ditch, the end of a line (our own model)" if close else "Anti-tank ditch, a length (our own model)", "works", nation, fine, MORE)
     m.part("ditch", None, (0, 0, 0), kind="root")
     m.use("ditch")
     path = Path([(0.0, -5.0), (0.0, 5.0)])
-    L = path.L
-    amp = {"bank": 0.08, "berm": 0.0, "lip": 0.01, "wall": 0.02, "floor": 0.035, "slope": 0.03, "apron": 0.015}
+    L = close[0] if close else path.L          # (the revetment and the water stop where the ditch begins to close)
+    amp = {"bank": 0.1, "berm": 0.0, "lip": 0.01, "wall": 0.02, "floor": 0.035, "slope": 0.03, "apron": 0.015}
 
     def gully(s, u, z, tag):
         if tag == "slope":           # rain has cut runnels down the enemy's slope
@@ -1290,7 +1471,12 @@ def AntiTankDitch(fine=True, nation="_default", name="AntiTankDitch"):
             return (-0.16 * max(0.0, fbm(Vector((s * 1.6, 0.3, 7.0)), 1.0, 2) - 0.05) - 0.05 * max(0.0, fbm(Vector((s * 4.0, f * 2.0, 3.0)), 1.0, 2))) \
                 * math.sin(math.pi * min(1.0, f * 1.1)) + 0.06 * fbm(Vector((s * 0.5, f * 3.0, 1.0)), 1.0, 2) * math.sin(math.pi * f)
         return swell(s, u, z, "bank" if tag == "bank" else "")
-    sweep(m, path, ditch_profile(), rows_for(L, 0.1 if fine else 0.5), amp, 0.18, 3.3, groove=gully)
+    if close:
+        crows, cpush, cskip, low = closing(ditch_profile(), close[0], close[1], close[2], (AT_LIP_D + AT_LIP_E) / 2)
+        sweep(m, path, ditch_profile(), rows_for(L, 0.1 if fine else 0.5) + crows, amp, 0.18, 3.3, cpush, cskip, endfall=(0.8, 0.0), groove=gully,
+              fade=lambda s: 0.25 + 0.75 * low(s), greener=lambda s: 1.0 - low(s))
+    else:
+        sweep(m, path, ditch_profile(), rows_for(L, 0.1 if fine else 0.5), amp, 0.18, 3.3, groove=gully)
     g = rnd(7)
     # water standing along the bottom
     pts = []
@@ -1317,8 +1503,8 @@ def AntiTankDitch(fine=True, nation="_default", name="AntiTankDitch"):
             uu = at_wall(z) + 0.135 + 0.07
             bits.log(m, path.at(a + 0.02, uu, z + g.uniform(-0.02, 0.02)), path.at(b - 0.02, uu, z + g.uniform(-0.02, 0.02)), 0.07, "timber", int(a * 10 + z * 3), sides=10 if fine else 5)
             a = b + 0.01
-    for k in range(9):
-        sc = 0.6 + k * (L - 1.2) / 8
+    for k in range(2 if close else 9):
+        sc = 0.6 + k * (L - 1.2) / (1 if close else 8)
         bits.log(m, path.at(sc, -2.6, -0.3), path.at(sc + 0.03, -2.62, 0.22), 0.035, "timber.dark", 400 + k, sides=7 if fine else 4)
         if fine:
             for z in (-0.55,):
@@ -1327,28 +1513,51 @@ def AntiTankDitch(fine=True, nation="_default", name="AntiTankDitch"):
                 bits.tube(m, ring + [path.at(sc, at_wall(z + 0.05), z + 0.05)], 0.004, "wire", 5)
             bits.tube(m, [path.at(sc, at_wall(0.0) + 0.02, 0.02), path.at(sc + 0.01, -2.3, 0.05), path.at(sc + 0.02, -2.58, 0.17)], 0.0045, "wire", 5)
     # what the engineers left: spare poles and a shovel on the berm, clods along the bank
-    for k in range(3):
-        bits.log(m, path.at(1.4 + k * 0.17, -2.9 - k * 0.05, 0.2 + 0.11 * (k == 2)), path.at(4.2 + k * 0.12, -2.95 - k * 0.05, 0.22 + 0.11 * (k == 2)), 0.06, "timber", 500 + k, sides=8 if fine else 4)
-    shovel(m, path.at(7.2, -2.5, 0.0), path.at(7.0, -2.75, 0.72))
-    clods(m, [(-6.8, -4.6, -2.6, 4.6), (2.6, -4.6, 3.4, 4.6)], 70, seed=21, size=0.08)
-    m.socket("hit", path.at(5.0, -4.1, 1.05), (1, 0, 0), part="ditch", note="where a shell strikes the spoil bank")
-    m.socket("bridge", path.at(5.0, (AT_LIP_D + AT_LIP_E) / 2, 0.0), (1, 0, 0), part="ditch",
-             note="the middle of a crossing laid by engineers: lip to lip 4.5 m, from x = -2.0 (defender) to x = +2.5 (enemy), along x")
+    if close:
+        clods(m, [(-6.9, -4.8, -2.6, -4.8 + close[0] + close[2] * 0.6), (-6.9, -4.8, -2.6, -3.0), (-6.9, -4.8, -2.6, -4.8 + close[0] + close[2] * 0.6)], 110, seed=23, size=0.085)
+        m.socket("hit", path.at(0.8, -4.1, 1.0), (1, 0, 0), part="ditch", note="where a shell strikes the spoil bank")
+    else:
+        for k in range(3):
+            bits.log(m, path.at(1.4 + k * 0.17, -2.9 - k * 0.05, 0.2 + 0.11 * (k == 2)), path.at(4.2 + k * 0.12, -2.95 - k * 0.05, 0.22 + 0.11 * (k == 2)), 0.06, "timber", 500 + k, sides=8 if fine else 4)
+        shovel(m, path.at(7.2, -2.5, 0.0), path.at(7.0, -2.75, 0.72))
+        clods(m, [(-6.9, -4.7, -2.6, 4.7), (-6.9, -4.7, -2.6, 4.7), (2.6, -4.7, 3.4, 4.7)], 220, seed=21, size=0.085)
+        m.socket("hit", path.at(5.0, -4.1, 1.05), (1, 0, 0), part="ditch", note="where a shell strikes the spoil bank")
+        m.socket("bridge", path.at(5.0, (AT_LIP_D + AT_LIP_E) / 2, 0.0), (1, 0, 0), part="ditch",
+                 note="the middle of a crossing laid by engineers: lip to lip 4.5 m, from x = -2.0 (defender) to x = +2.5 (enemy), along x")
     m.clips["idle"] = {"long": 2.0, "loop": True, "about": "Still.", "tracks": [], "events": []}
     m.clips["hit"] = {"long": 1.0, "loop": False, "after": "hold", "about": "A shell bursts on the spoil bank.", "tracks": [],
                       "events": [{"t": 0.0, "fx": "shell_burst", "socket": "hit", "cue": "shell_impact_near"}]}
     dug_weather(m, lambda p: -AT_DEPTH if AT_LIP_D - 0.1 < p.x < AT_LIP_E and p.z < -0.3 else 0.0)
-    rows = rows_for(L, 0.25)
-    m.info["dig"] = [[(round(p.x, 3), round(p.y, 3)) for p in [path.at(sc, AT_LIP_D - 0.25) for sc in rows] + [path.at(sc, AT_LIP_E + 0.25) for sc in rows][::-1]]]
+    rows = crows = rows_for(L, 0.25)
+    uc = (AT_LIP_D + AT_LIP_E) / 2
+    if close:
+        sa, R, T = close
+        rows = rows + [sa + (R + 0.22) * math.sin(math.radians(a)) for a in range(8, 91, 8)]
+        crows = rows_for(sa + T * 0.7, 0.25)
+
+    def wd(sc):
+        return math.sqrt(max(0.0, 1.0 - ((sc - close[0]) / (close[1] + 0.22)) ** 2)) if close and sc > close[0] else 1.0
+    m.info["dig"] = [[(round(p.x, 3), round(p.y, 3)) for p in [path.at(sc, uc + (AT_LIP_D - 0.25 - uc) * wd(sc)) for sc in rows] +
+                      [path.at(sc, uc + (AT_LIP_E + 0.25 - uc) * wd(sc)) for sc in (rows[:-1] if close else rows)][::-1]]]
     m.info["dig_depth"] = AT_DEPTH
-    m.info["clear"] = [[(round(p.x, 3), round(p.y, 3)) for p in [path.at(sc, -7.1) for sc in rows] + [path.at(sc, 3.6) for sc in rows][::-1]]]
-    m.info["worn"] = [(-2.5, y, 1.5) for y in (-4, -2, 0, 2, 4)]
-    m.info["span"] = 11.5
+    # (the field's grass stands up onto the bank's foot; the stage wears the ground under the bare earth of itself)
+    m.info["clear"] = [[(round(p.x, 3), round(p.y, 3)) for p in [path.at(sc, -6.5) for sc in crows] + [path.at(sc, 3.1) for sc in crows][::-1]]]
+    gw = rnd(9)
+    m.info["worn"] = [(-2.5 + gw.uniform(-0.2, 0.2), -5.0 + sc, gw.uniform(0.8, 1.3), gw.uniform(0.5, 0.9)) for sc in ([0.8, 2.0] if close else [1.0, 3.2, 5.1, 7.0, 9.0])]
+    m.info["span"] = 9.0 if close else 11.5
     m.info["high"] = 0.5
-    m.info["aim"] = (-0.8, 0.0, -0.5)
-    m.info["file"] = {"joins": {"section": "anti-tank ditch: 4.5 m across the top, 2.5 m deep, the enemy's side at 35 degrees",
-                                "ends": [{"at": [0.0, 5.0, 0.0], "facing": [0.0, 1.0, 0.0]}, {"at": [0.0, -5.0, 0.0], "facing": [0.0, -1.0, 0.0]}], "far_end_dx": 0.0}}
+    m.info["aim"] = (-0.8, -2.0, -0.5) if close else (-0.8, 0.0, -0.5)
+    section = "anti-tank ditch: 4.5 m across the top, 2.5 m deep, the enemy's side at 35 degrees"
+    if close and start:
+        mirror_y(m)
+    if close:
+        m.info["file"] = {"joins": end_joins(section, start)}
+    else:
+        m.info["file"] = {"joins": {"section": section, "ends": [{"at": [0.0, 5.0, 0.0], "facing": [0.0, 1.0, 0.0]}, {"at": [0.0, -5.0, 0.0], "facing": [0.0, -1.0, 0.0]}], "far_end_dx": 0.0}}
     return m
+
+
+DITCH_END = (1.4, 2.3, 6.4)        # where the ditch's end piece begins to close, its rounded end, how far its bank runs
 
 
 BUILDERS = {
@@ -1357,5 +1566,9 @@ BUILDERS = {
     "FieldworksCorner": FieldworksCorner,
     "FieldworksCorner_forward": lambda fine=True: FieldworksCorner(fine, forward=True, name="FieldworksCorner_forward"),
     "FieldworksDugout": FieldworksDugout,
+    "FieldworksEnd": FieldworksEnd,
+    "FieldworksEnd_start": lambda fine=True, nation="_default": FieldworksEnd(fine, nation, "FieldworksEnd_start", start=True),
     "AntiTankDitch": AntiTankDitch,
+    "AntiTankDitchEnd": lambda fine=True, nation="_default": AntiTankDitch(fine, nation, "AntiTankDitchEnd", close=DITCH_END),
+    "AntiTankDitchEnd_start": lambda fine=True, nation="_default": AntiTankDitch(fine, nation, "AntiTankDitchEnd_start", close=DITCH_END, start=True),
 }

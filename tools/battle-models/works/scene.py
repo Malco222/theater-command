@@ -68,6 +68,42 @@ class Set:
                     it.mounted[socket] = self.put(what, tuple(p), math.degrees(math.atan2(d.y, d.x)), mount=False, **({"nation": kw["nation"]} if "nation" in kw else {}))
         return it
 
+    def guest(self, path, at, yaw=0.0, paint=None, turn=None):
+        """Another thread's model (its .glb) stood at a socket for a picture: the vehicles thread's field gun in a pit
+        or a casemate, in its owner's `paint` (a hex colour). The game puts the gun there itself; this is for the eye.
+        `turn` {bone: (axis letter, degrees)} lays a bone of its rig."""
+        before = set(bpy.data.objects)
+        bpy.ops.import_scene.gltf(filepath=path)
+        new = [o for o in bpy.data.objects if o not in before]
+        for o in list(new):
+            if o.type == "MESH" and o.parent is None:        # (the importer's shape for the bones)
+                new.remove(o)
+                bpy.data.objects.remove(o, do_unlink=True)
+        holder = bpy.data.objects.new("guest", None)
+        bpy.context.scene.collection.objects.link(holder)
+        holder.location = tuple(at)
+        holder.rotation_euler = (0.0, 0.0, math.radians(yaw))
+        for o in new:
+            if o.parent is None:
+                o.parent = holder
+            if o.type == "ARMATURE":                         # (at rest: no clip playing)
+                o.animation_data_clear()
+                for b in o.pose.bones:
+                    b.location, b.rotation_quaternion, b.rotation_euler, b.scale = (0, 0, 0), (1, 0, 0, 0), (0, 0, 0), (1, 1, 1)
+                for bone, (axis, deg) in (turn or {}).items():
+                    b = o.pose.bones[bone]
+                    b.rotation_mode = "XYZ"
+                    setattr(b.rotation_euler, axis, math.radians(deg))
+            if o.type == "EMPTY":
+                o.hide_render = True
+        if paint:
+            for o in new:
+                for mat in (o.data.materials if o.type == "MESH" else []):
+                    if mat and mat.name.split(".")[0] in ("paint", "shade") and not mat.get("guest"):
+                        _field_paint(mat, rigid.hex_rgb(paint), 0.6 if mat.name.startswith("shade") else 1.0)
+                        mat["guest"] = True
+        return holder
+
     def lay(self, **kw):
         """The ground under them all: each work's holes, trodden earth and bare patches where it stands."""
         digs, worn, clear, paths, tracks = [], [], [], [], []
@@ -87,6 +123,40 @@ class Set:
         tracks += list(kw.pop("tracks", []))
         self.ground = ground.Ground(digs=digs, worn=worn, clear=clear, paths=paths, tracks=tracks, **kw)
         return self.ground
+
+
+def _field_paint(mat, rgb, gain=1.0):
+    """A guest's plain paint given the look of ours: mottled, matt, dusty toward the ground."""
+    nt = mat.node_tree
+    bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    noise = nt.nodes.new("ShaderNodeTexNoise")
+    noise.inputs["Scale"].default_value = 5.0
+    noise.inputs["Detail"].default_value = 6.0
+    nt.links.new(tc.outputs["Object"], noise.inputs["Vector"])
+    ramp = nt.nodes.new("ShaderNodeMapRange")
+    ramp.inputs["From Min"].default_value, ramp.inputs["From Max"].default_value = 0.3, 0.7
+    ramp.inputs["To Min"].default_value, ramp.inputs["To Max"].default_value = 0.78 * gain, 1.1 * gain
+    nt.links.new(noise.outputs["Fac"], ramp.inputs["Value"])
+    tint = nt.nodes.new("ShaderNodeMixRGB")
+    tint.blend_type = "MULTIPLY"
+    tint.inputs["Fac"].default_value = 1.0
+    tint.inputs["Color1"].default_value = tuple(rgb[:3]) + (1.0,)
+    nt.links.new(ramp.outputs["Result"], tint.inputs["Color2"])
+    # dust: the field's earth on everything near the ground
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    nt.links.new(tc.outputs["Object"], sep.inputs["Vector"])
+    low = nt.nodes.new("ShaderNodeMapRange")
+    low.inputs["From Min"].default_value, low.inputs["From Max"].default_value = 0.0, 1.1
+    low.inputs["To Min"].default_value, low.inputs["To Max"].default_value = 0.55, 0.0
+    nt.links.new(sep.outputs["Z"], low.inputs["Value"])
+    dust = nt.nodes.new("ShaderNodeMixRGB")
+    nt.links.new(low.outputs["Result"], dust.inputs["Fac"])
+    nt.links.new(tint.outputs["Color"], dust.inputs["Color1"])
+    dust.inputs["Color2"].default_value = tuple(rigid.hex_rgb("7E6C51")[:3]) + (1.0,)
+    nt.links.new(dust.outputs["Color"], bsdf.inputs["Base Color"])
+    bsdf.inputs["Roughness"].default_value = 0.68
+    bsdf.inputs["Metallic"].default_value = 0.0
 
 
 def ease(t, t0, t1):

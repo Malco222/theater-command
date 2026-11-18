@@ -6,6 +6,7 @@
 Pictures go to <out>/shots/<Name>.png, the sheets to <out>/lineup-<n>-<group>.jpg.
 """
 import json
+import math
 import os
 import sys
 import time
@@ -32,16 +33,36 @@ GROUPS = [
     ("Posts and pits", [("MGNest", "Machine-gun post"), ("FlakPit", "Heavy flak pit"), ("SandbagRing", "Sandbag ring, light flak"), ("GunPit", "Gun pit"), ("MortarPit", "Mortar pit"),
                         ("SandbagWall", "Sandbag wall"), ("ObservationPost", "Observation post"), ("CamoNet", "Camouflage net")]),
     ("Concrete", [("Pillbox", "Pillbox"), ("Bunker", "Bunker, gun casemate"), ("CoastalBattery", "Coastal battery"), ("FlakTower", "Flak tower"), ("DragonsTeeth", "Dragon's teeth")]),
-    ("Wire, obstacles and dug works", [("Wire", "Wire belt"), ("WireFence", "Wire fence"), ("Hedgehogs", "Hedgehogs"), ("Minefield", "Minefield, marked"), ("RoadBar", "Road bar"),
-                                       ("Foxhole", "Foxhole"), ("Fieldworks", "Fieldworks"), ("FieldworksCorner", "Fieldworks, corner"), ("FieldworksDugout", "Fieldworks, dugout"),
-                                       ("AntiTankDitch", "Anti-tank ditch")]),
+    ("Wire and obstacles", [("Wire", "Wire belt"), ("WireFence", "Wire fence"), ("Hedgehogs", "Hedgehogs"), ("Minefield", "Minefield, marked"), ("RoadBar", "Road bar")]),
+    ("Fieldworks and dug works", [("FieldworksLine", "Fieldworks, a line of five pieces"), ("Fieldworks", "Fieldworks, fire bay"), ("FieldworksCorner", "Fieldworks, corner"),
+                                  ("FieldworksDugout", "Fieldworks, dugout"), ("AntiTankDitch", "Anti-tank ditch"), ("Foxhole", "Foxhole")]),
 ]
+# a length of a line is shown with the line's two end pieces on it, so that nothing in a picture stops in a cut:
+# (the piece that closes its start, the piece that closes its far end)
+CAPS = {"Fieldworks": ("FieldworksEnd_start", "FieldworksEnd"), "FieldworksCorner": ("FieldworksEnd_start", "FieldworksEnd"),
+        "FieldworksDugout": ("FieldworksEnd_start", "FieldworksEnd"), "AntiTankDitch": ("AntiTankDitchEnd_start", "AntiTankDitchEnd")}
+# pictures of several pieces joined as the game joins them: the pieces in order along the line, from its start
+LINES = {"FieldworksLine": ["FieldworksEnd_start", "Fieldworks", "FieldworksCorner", "FieldworksDugout", "FieldworksEnd"]}
+# their views: (bearing, metres off, how high it looks down, lens, how far along the line from its middle the camera aims)
+LINE_VIEW = {"FieldworksLine": (-152.0, 42.0, 26.0, 35, -3.5)}
 # (bearing, how far in spans, how high it looks down, lens) where the usual three-quarter view does not suit
 VIEW = {"LightFlak": (-28.0, 2.7, 14.0, 50), "HeavyFlak": (-28.0, 2.25, 15.0, 50), "HeavyFlakTwin": (-28.0, 2.3, 15.0, 50), "FlakTower": (-32.0, 1.5, 10.0, 50), "CoastalBattery": (-30.0, 1.5, 14.0, 50), "Bunker": (-30.0, 1.5, 15.0, 50), "CamoNet": (-28.0, 1.5, 22.0, 50),
-        "Fieldworks": (-140.0, 1.5, 30.0, 50), "FieldworksCorner": (-140.0, 1.5, 30.0, 50), "FieldworksDugout": (-140.0, 1.5, 30.0, 50), "Foxhole": (-150.0, 1.4, 32.0, 50),
-        "AntiTankDitch": (-40.0, 1.5, 28.0, 50), "MortarPit": (-150.0, 1.5, 30.0, 50), "GunPit": (-150.0, 1.5, 28.0, 50)}
+        "Fieldworks": (-140.0, 1.8, 30.0, 50), "FieldworksCorner": (-140.0, 1.8, 30.0, 50), "FieldworksDugout": (-140.0, 1.8, 30.0, 50), "Foxhole": (-150.0, 1.4, 32.0, 50),
+        "AntiTankDitch": (-40.0, 1.75, 28.0, 50), "MortarPit": (-150.0, 1.95, 30.0, 50), "GunPit": (-150.0, 1.5, 28.0, 50)}
 # a pose that shows the piece better than rest: {part: degrees}
-LAID = {"HeavyFlak": {"mount": 28.0, "cradle": 42.0}, "HeavyFlakTwin": {"mount": 24.0, "cradle": 48.0}, "LightFlak": {"mount": 25.0, "cradle": 38.0}, "Searchlight": {"mount": 30.0, "drum": 40.0}}
+# (the guns are trained across the picture, never at the camera: a barrel seen end on is a thin rod standing up)
+LAID = {"HeavyFlak": {"mount": -54.0, "cradle": 40.0}, "HeavyFlakTwin": {"mount": -54.0, "cradle": 42.0}, "LightFlak": {"mount": -52.0, "cradle": 36.0}, "Searchlight": {"mount": 30.0, "drum": 40.0}}
+# a work whose guns all follow one target: the bearing on the ground they are trained to (degrees from the work's front,
+# anticlockwise seen from above) and how high they are laid
+TRAIN = {"FlakTower": (58.0, 45.0)}
+# another thread's model stood at a socket for the picture (the game puts it there itself): socket, the file under the
+# land models' folder
+LAND = os.environ.get("LAND_MODELS", "/mnt/project-files/battle-models/land/")
+GUESTS = {"GunPit": ("gun", "gun/Gun75.glb"), "Bunker": ("gun", "gun/Gun75.glb")}
+# lamps lit inside a work for its picture: (place in the work's own axes, watts), so what stands in the dark shows
+LAMPS = {"Bunker": [((1.35, 0.9, 1.1), 14.0), ((1.35, -0.9, 1.1), 14.0), ((-0.4, 0.0, 1.3), 22.0)]}
+# where the sun stands for a work's picture (turn, height), where the usual sun leaves its face dark
+SUN = {}
 
 
 # whose paint a piece wears in its picture (in the game every piece takes its owner's: see nations.json)
@@ -93,17 +114,60 @@ def paints(out, w, h, spp):
     return jpg
 
 
+def line(name, out, w, h, spp):
+    """Several pieces joined end to end as the game joins them (each one's start on the last one's far end)."""
+    kit.fresh()
+    s = Set()
+    x, y, tris, first = 0.0, -10.0, 0, None
+    for piece in LINES[name]:
+        it = s.put(piece, (x, y, 0.0))
+        first = first or (x, y)
+        tris += it.m.triangles()
+        x += it.m.info.get("file", {}).get("joins", {}).get("far_end_dx", 0.0)
+        y += 10.0
+    mid = (0.5 * (first[0] + x), 0.5 * (first[1] + y - 10.0))
+    reach = 0.5 * (y - 10.0 - first[1]) + 6.0
+    s.lay(trees=True, flat=reach * 2.2, fine=reach + 4.0, centre=mid, grass_area=reach * 2.0 + 14.0, grass_count=320000, sun_turn=150.0, sun_elev=40.0)
+    look.render_setup(w, h, spp)
+    cam = look.cam()
+    yaw, far, pitch, lens, along = LINE_VIEW[name]
+    cam.data.lens = lens
+    kit.orbit(cam, Vector((mid[0], mid[1] + along, -0.3)), far, pitch, yaw)
+    kit.still(os.path.join(out, "shots", name + ".png"))
+    return {"triangles": tris, "parts": 0, "clips": [], "pieces": len(LINES[name])}
+
+
 def shot(name, out, w, h, spp):
+    if name in LINES:
+        return line(name, out, w, h, spp)
     kit.fresh()
     s = Set()
     it = s.put(name, **({"nation": WEARS[name]} if name in WEARS else {}))
+    if name in CAPS:
+        s.put(CAPS[name][0], (0.0, -10.0, 0.0))
+        s.put(CAPS[name][1], (it.m.info.get("file", {}).get("joins", {}).get("far_end_dx", 0.0), 10.0, 0.0))
     for target in [it] + list(it.mounted.values()):
         laid = LAID.get(target.name)
+        if laid and name in TRAIN and target is not it:
+            # (every gun of the work on the one target; the mount's own sense of turning is read from its axis)
+            bearing, high = TRAIN[name]
+            sense = 1.0 if target.m.parts[target.m.part_at["mount"]].axis[2] > 0 else -1.0
+            laid = {"mount": sense * (bearing - target.yaw), "cradle": high if target.name != "LightFlak" else high - 8.0}
         if laid:
             target.set(target.clip("idle", 0.0), *[target.aim(p, d) for p, d in laid.items()])
+    if name in GUESTS and os.path.exists(os.path.join(LAND, GUESTS[name][1])):
+        p, d = it.where(GUESTS[name][0])
+        s.guest(os.path.join(LAND, GUESTS[name][1]), tuple(p), math.degrees(math.atan2(d.y, d.x)), bits.paint_of(WEARS.get(name, "_default"))[0])
+    for at, watts in LAMPS.get(name, []):
+        lamp = bpy.data.lights.new("lamp", "POINT")
+        lamp.energy, lamp.color, lamp.shadow_soft_size = watts, (1.0, 0.9, 0.76), 0.12
+        ob = bpy.data.objects.new("lamp", lamp)
+        ob.location = at
+        bpy.context.scene.collection.objects.link(ob)
     span = it.m.info.get("span", 4.0)
     area = max(38.0, span * 1.6)
-    s.lay(trees=True, flat=max(34.0, span * 2.2), fine=max(26.0, span * 1.2), grass_area=area, grass_count=int(min(320000, 120000 * (area / 38.0) ** 2)), sun_turn=150.0, sun_elev=40.0)
+    turn, elev = SUN.get(name, (150.0, 40.0))
+    s.lay(trees=True, flat=max(34.0, span * 2.2), fine=max(26.0, span * 1.2), grass_area=area, grass_count=int(min(320000, 120000 * (area / 38.0) ** 2)), sun_turn=turn, sun_elev=elev)
     look.render_setup(w, h, spp)
     cam = look.cam()
     tgt = Vector(it.m.info.get("aim", (0.0, 0.0, it.m.info.get("high", span * 0.16))))
@@ -120,7 +184,7 @@ def shots(out, names, w, h, spp, force):
     os.makedirs(os.path.dirname(meta_path), exist_ok=True)
     meta = json.load(open(meta_path)) if os.path.exists(meta_path) else {}
     for name in names:
-        if name not in works.BUILDERS:
+        if name not in works.BUILDERS and name not in LINES:
             print("no such work yet:", name, flush=True)
             continue
         if os.path.exists(os.path.join(out, "shots", name + ".png")) and not force:
@@ -180,6 +244,10 @@ def sheets(out, index=None):
         notes = []
         for n, _ in have:
             bit = [f"{meta[n]['triangles']:,} triangles"] if n in meta else []
+            if n in LINES:
+                bit.append("an end, a fire bay, a corner, a dugout and an end, joined as the game joins them")
+            if n in CAPS:
+                bit.append("shown with the line's two end pieces")
             if n in meta and meta[n]["parts"] > 1:
                 bit.append(f"{meta[n]['parts']} moving parts")
             if n in WEARS:

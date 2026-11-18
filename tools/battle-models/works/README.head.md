@@ -37,7 +37,10 @@ Our own plain designs throughout: no army's emblem, no lettering, nothing copied
 2. **`takes`**: `{socket: model}`: another model stands at that socket, facing the socket's way (the flak tower's
    four `HeavyFlakTwin` and eight `LightFlak`, a flak pit's gun). Each is its own model so it can be laid, fired and
    knocked out by itself. A socket named `gun` with no entry in `takes` is for the vehicle modeller's towed gun
-   (`../land/vehicles/AntiTankGun` and its kin: origin on the ground under the axle, x toward the muzzle).
+   (`../land/gun/Gun75` and its kin: origin on the ground under the axle, x toward the muzzle). A `GunPit` or a
+   `Bunker` is never shown empty: the pictures stand `Gun75` at the socket in its owner's paint, and so should the game.
+   The heavy and the light flak gun are built to stand in a pit, a sandbag ring or the tower, never bare on open
+   ground (the art director's note of review 2).
 3. **Crew places.** A socket `crew.<role>` is where a man of the crew stands, kneels, sits or lies, facing the
    socket's way; it carries `stance` (`stand`, `kneel`, `sit`, `prone`) and, where he sits, `seat_h` (metres from his
    feet to the seat). `grip.<role>.l` and `grip.<role>.r` are where his hands go. The soldier modeller's men and
@@ -54,6 +57,14 @@ Our own plain designs throughout: no army's emblem, no lettering, nothing copied
    (ruling 144: no sound files until Brian has judged them); an empty cue means silence.
 7. **Lengths** (wire, fence, fieldworks, ditch, dragon's teeth, minefield) run along y from -5 to +5 so they join end
    to end. Wire and fence break by bay: `breach.N` (cut or blown) and `crush.N` (a tank drives over it).
+8. **No line of fieldworks or ditch ends in a cut.** A length's two ends are open sections made to join. Close every
+   line with its end pieces: `FieldworksEnd` and `AntiTankDitchEnd` close a line's far end (the join is at the file's
+   y = +5, where every length has its start: place it as you would the next length), `FieldworksEnd_start` and
+   `AntiTankDitchEnd_start` are their mirror images and close a line's start (the join at the file's y = -5: place it
+   as you would a length before the first). In an end piece the hole rounds off in an upright end wall and the banks sink under the
+   ground; its `dig` outline is rounded to match. `joins.ends` in each file lists the joins in the file's axes, and
+   `joins.far_end_dx` how far the far end is offset in x (the dogleg corner's 3 m). Where two pieces join, their
+   `dig` outlines share an edge: cut one hole for both, with no wall of earth between them.
 
 ## The campaign's ten pieces and these
 

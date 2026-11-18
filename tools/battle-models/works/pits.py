@@ -25,7 +25,7 @@ def V2(a, r=1.0):
     return Vector((math.cos(math.radians(a)) * r, math.sin(math.radians(a)) * r, 0.0))
 
 
-def bag(m, at, yaw=0.0, size=bits.BAG, seed=0, paint=None, droop=0.02, pitch=0.0, roll=0.0, q=(7, 10), tie=0.35):
+def bag(m, at, yaw=0.0, size=bits.BAG, seed=0, paint=None, droop=0.03, pitch=0.0, roll=0.0, q=(7, 10), tie=0.35):
     """One filled sandbag (the kit's shape) at a chosen fineness `q` (rings along, points round), the neck tied off on
     some of them. The kit's own bag is finer; a wall of four hundred of them would be too many triangles."""
     g = rnd(seed)
@@ -1024,7 +1024,8 @@ def MortarPit(fine=True, nation="_default", name="MortarPit"):
 
     def cut(x, y):
         return smooth((abs(y) - 0.65) / 0.4) if x < -1.0 else 1.0
-    ring_bank(m, 1.84, [(0.0, 0.24), (0.14, 0.28), (0.39, 0.26), (0.74, 0.12), (1.04, 0.03), (1.19, 0.0)], seed=4, lump=0.035, step=2.5, cut=cut, turf=0.45)
+    # (the bank lies low against the collar, so the bags' staggered courses show above it)
+    ring_bank(m, 1.84, [(0.0, 0.1), (0.14, 0.13), (0.39, 0.13), (0.74, 0.07), (1.04, 0.02), (1.19, 0.0)], seed=4, lump=0.03, step=2.5, cut=cut, turf=0.5)
     # the mortar, its bombs to hand, empties of the charges' containers
     O = Vector((-0.22, 0.0, -D))
     mt = mortar(m, "pit", O)

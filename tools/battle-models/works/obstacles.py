@@ -528,6 +528,9 @@ def DragonsTeeth(fine=True, nation="_default", name="DragonsTeeth"):
                 cover = 0.06 * smooth(1.0 - inside / 1.0) + 0.07 * (bits.fbm((x * 0.7, y * 0.7, 4.0), 1.0) + 0.12 * bits.fbm((x * 3.0, y * 3.0, 6.0), 0.5) + 0.015)
                 cover = max(cover, 0.045 * smooth(1.0 - inside / 0.35))
                 z = SLAB_TOP + (cover + lump if cover > 0.006 else -0.015)
+            if 0.0 <= ends < 0.4 and inside >= 0.0:
+                # soil and grass over the footing's two ends as over its long edges
+                z = max(z, SLAB_TOP + 0.05 * smooth(1.0 - ends / 0.4) + lump)
             if ends < 0.0:
                 # past the ends the cover runs out under the field too (or under the next length's, where lengths join)
                 z = -0.04 + (max(z, SLAB_TOP + 0.03) + 0.04) * smooth(1.0 + ends / run)
@@ -858,7 +861,7 @@ def mound(m, cx, cy, R, H, paint="earth", seed=0, hole=0.0, base=0.004):
     n = 18 if m.fine else 8
     nr = 4 if m.fine else 2
     v0 = len(m.verts)
-    el, tw = (0.0 if hole else g.uniform(0.08, 0.25)), g.uniform(0, math.pi)
+    el, tw = (0.0 if hole else g.uniform(0.15, 0.45)), g.uniform(0, math.pi)
     rings = []
     for j in range(nr + 1):
         f = j / nr
@@ -870,7 +873,9 @@ def mound(m, cx, cy, R, H, paint="earth", seed=0, hole=0.0, base=0.004):
             rr = r * (1.0 + (0.3 * bits.fbm((math.cos(a) * 1.4 + seed * 0.37, math.sin(a) * 1.4, f * 0.5), 0.5)
                              + 0.14 * bits.fbm((math.cos(a) * 3.5, math.sin(a) * 3.5 + seed * 0.37, 2.0), 0.4)) * (0.4 + 0.6 * f))
             rr *= 1.0 + el * math.cos(2 * (a - tw))
-            ring.append(Vector((cx + math.cos(a) * rr, cy + math.sin(a) * rr, base + max(0.0, h + 0.012 * bits.fbm((cx + math.cos(a) * rr * 3, cy + math.sin(a) * rr * 3, seed), 0.3) * (1 - f)))))
+            # (the outermost ring lies under the ground: the earth has no rim, only a ragged edge where it meets the field)
+            z = -0.02 if j == nr else base + max(0.0, h + 0.012 * bits.fbm((cx + math.cos(a) * rr * 3, cy + math.sin(a) * rr * 3, seed), 0.3) * (1 - f))
+            ring.append(Vector((cx + math.cos(a) * rr, cy + math.sin(a) * rr, z)))
         rings.append(ring)
     if hole:
         rings.insert(0, [Vector((cx + (q.x - cx) * 0.9, cy + (q.y - cy) * 0.9, -0.03)) for q in rings[0]])
@@ -1003,8 +1008,12 @@ def Minefield(fine=True, nation="_default", name="Minefield"):
         for y in ys:
             spots.append((x + g.uniform(-0.25, 0.25), y + g.uniform(-0.3, 0.3)))
     shown = {1: 1, 5: 2, 8: 3, 12: 4}
-    m.info["clear"] = [[(x + math.cos(a) * 0.45, y + math.sin(a) * 0.45) for a in (k * math.pi / 4 for k in range(8))] for x, y in spots]
+    # (a buried mine shows as a flat scuff of turned soil, and four in ten not at all: the grass has grown back over them)
+    grown_over = {0, 3, 6, 10}
+    m.info["clear"] = [[(x + math.cos(a) * 0.4, y + math.sin(a) * 0.4) for a in (k * math.pi / 4 for k in range(8))] for i, (x, y) in enumerate(spots) if i not in grown_over]
     for i, (x, y) in enumerate(spots):
+        if i in grown_over:
+            continue
         if i in shown:
             N = shown[i]
             nm = f"mine.{N}"
@@ -1024,7 +1033,7 @@ def Minefield(fine=True, nation="_default", name="Minefield"):
             crater(m, x, y, 0.95, seed=600 + i)
             m.use(root)
         else:
-            mound(m, x, y, g.uniform(0.34, 0.5), g.uniform(0.025, 0.05), "earth", seed=700 + i)
+            mound(m, x + g.uniform(-0.1, 0.1), y + g.uniform(-0.1, 0.1), g.uniform(0.2, 0.46), g.uniform(0.008, 0.022), "earth", seed=700 + i)
     # what the engineers left: an empty mine crate on the defender's side and a prodder lying by it
     cr = Vector((-3.7, 2.4, 0.0))
     q = 18.0

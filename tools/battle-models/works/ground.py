@@ -388,7 +388,16 @@ class Ground:
         for d in self.digs:
             n, b = len(d), len(verts)
             verts += [(x, y, float(self.height(x, y)) + 0.01) for x, y in d] + [(x, y, -depth) for x, y in d]
-            faces += [(b + k, b + (k + 1) % n, b + n + (k + 1) % n, b + n + k) for k in range(n)]
+            for k in range(n):
+                # (no side where this hole runs on into the next: two lengths of a line butted end to end are one hole)
+                (x0, y0), (x1, y1) = d[k], d[(k + 1) % n]
+                ln = math.hypot(x1 - x0, y1 - y0) or 1.0
+                nx, ny = (y1 - y0) / ln * 0.08, -(x1 - x0) / ln * 0.08
+                mx, my = 0.5 * (x0 + x1), 0.5 * (y0 + y1)
+                pts = (np.array([mx + nx, mx - nx]), np.array([my + ny, my - ny]))
+                if any(o is not d and inside_many(o, *pts).any() for o in self.digs):
+                    continue
+                faces.append((b + k, b + (k + 1) % n, b + n + (k + 1) % n, b + n + k))
             faces.append(tuple(b + n + k for k in range(n)))
         me = bpy.data.meshes.new("holes")
         me.from_pydata(verts, [], faces)

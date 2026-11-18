@@ -358,10 +358,14 @@ def Searchlight(fine=True, nation="_default", name="Searchlight"):
         m.lathe(T + Y * s * (R + 0.02), Y * s, [(0.0, 0.1), (0.14, 0.1), (0.15, 0.07), (0.19, 0.07)], "steel", 14 if fine else 8)
     bits.tube(m, [P + Vector((0, -R - 0.1, 0.34)), P + Vector((-0.25, 0, 0.26)), P + Vector((0, R + 0.1, 0.34))], 0.03, "upper", 6)
     # the control arm: out to the left and back, a hand bar at its end
+    # (short and braced, dropping to a man's chest: a long level rod reads as a cable strung in the air)
     arm_root = T + Y * (R + 0.2)
-    hand = arm_root + Vector((-0.5, 2.6, -0.25))
-    bits.tube(m, [arm_root, arm_root + Y * 0.3, hand], 0.024, "steel", 8)
-    bits.tube(m, [hand - X * 0.22, hand + X * 0.22], 0.016, "steel", 6)
+    hand = arm_root + Vector((-0.3, 1.25, -0.52))
+    bits.tube(m, [arm_root, arm_root + Y * 0.22, hand], 0.03, "upper", 8, radii=[0.034, 0.032, 0.024])
+    bits.tube(m, [T + Y * (R + 0.1) - Z * 0.62, arm_root.lerp(hand, 0.55)], 0.014, "steel", 6)
+    bits.tube(m, [hand - X * 0.24, hand + X * 0.24], 0.015, "steel", 6)
+    for sx in (-1, 1):
+        m.lathe(hand + X * sx * 0.12, X * sx, [(0.0, 0.021), (0.11, 0.023), (0.125, 0.016)], "timber", 8)
     bits.crew(m, "operator", hand + Vector((0.0, 0.45, -(hand.z))), (0, -1, 0), "stand", "mount", "standing clear of the glare at the end of the control arm, swinging the light by it",
               grips={"l": (hand + X * 0.18, (0, -1, 0)), "r": (hand - X * 0.18, (0, -1, 0))})
     # the elevation handwheel on the right arm
@@ -395,9 +399,18 @@ def Searchlight(fine=True, nation="_default", name="Searchlight"):
     # the arc's feed housing at the back, its cable
     m.lathe(T - X * L, -X, [(0.0, 0.2), (0.2, 0.18), (0.22, 0.1), (0.3, 0.1)], "upper", 14 if fine else 8)
     if fine:
-        cable = [T - X * (L + 0.3), T - X * (L + 0.5) - Z * 0.4, P + Vector((-0.6, 0.0, -0.1)), Vector((-1.2, 0.2, 0.05)), Vector((-2.2, 0.5, 0.03)), Vector((-3.4, 0.2, 0.03))]
+        # (it leaves the base's drum low down, drops to the ground and lies slack in the grass, in lazy bends)
+        cable = [Vector((-0.3, -0.3, 0.3)), Vector((-0.44, -0.46, 0.24)), Vector((-0.56, -0.62, 0.06)), Vector((-0.7, -0.9, 0.028)), Vector((-0.6, -1.5, 0.028)), Vector((-1.0, -2.0, 0.028)),
+                 Vector((-1.7, -2.05, 0.028)), Vector((-2.3, -1.7, 0.028)), Vector((-2.9, -1.75, 0.028)), Vector((-3.4, -2.0, 0.028))]
         m.use("light")
-        bits.tube(m, cable[2:], 0.02, "rubber", 6)
+        fine_cable = [cable[0]]
+        for a, b, c, d in zip([cable[0]] + cable[:-1], cable, cable[1:] + [cable[-1]], cable[2:] + [cable[-1]] * 2):
+            for k in range(1, 5):          # (a smooth curve through the points)
+                t = k / 4
+                fine_cable.append(0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (-a + 3 * b - 3 * c + d) * t ** 3))
+        fine_cable = [q for q in fine_cable if q.x >= -3.4001]
+        bits.tube(m, fine_cable, 0.024, "rubber", 7)
+        m.lathe(Vector((-0.29, -0.29, 0.3)), Vector((-0.7, -0.7, -0.1)).normalized(), [(0.0, 0.045), (0.05, 0.045), (0.06, 0.03)], "steel", 8)
         m.use("drum")
     m.socket("beam", T + X * (L + 0.02), (1, 0, 0), part="drum", note="the beam leaves here, along the drum's own forward way")
     m.part("glass.broken", "drum", T + X * L, kind="free", note="shards in the rim, hidden (scale 0) until she is knocked out")
@@ -412,7 +425,7 @@ def Searchlight(fine=True, nation="_default", name="Searchlight"):
     m.disc(T + X * (L - 0.03), X, R - 0.04, "void", S)
     m.use("light")
     m.socket("hit", T, (1, 0, 0), part="light")
-    m.socket("cable", (-3.4, 0.2, 0.03), (-1, 0, 0), part="light", note="the cable runs from here to the generator")
+    m.socket("cable", (-3.4, -2.0, 0.03), (-1, -0.4, 0), part="light", note="the cable runs from here to the generator")
     bits.patch(m, 0.0, 0.0, 2.3, "earth.dry", seed=4)
     qk = Quaternion(Vector((0.2, 1, 0)).normalized(), math.radians(-14.0))
     m.clips["idle"] = {"long": 2.0, "loop": True, "about": "Standing, the glass whole.", "tracks": [{"part": "glass.broken", "scale": [[0.0, 0.0]]}], "events": []}
