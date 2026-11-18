@@ -2,7 +2,7 @@
 // the player does not, and the player's orders go through the same rules.
 
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
-import { airBattles, airBases, airTargets, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, type AirAssess } from './air';
+import { airBattles, airBases, airTargets, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import {
@@ -80,6 +80,8 @@ function closePhase(g: Game, nat: string): void {
   seaBattles(g, nat);
   // Carriers lost in the month's fleet actions take their aircraft with them (the grand campaign).
   syncWings(g);
+  // A computer staff leaves no airfield of its own crowded at its month's end (b437).
+  spreadAir(g, nat);
   // The routine of the month, in one line (the grand campaign).
   foldNews(g, nat);
   endPhase(g, nat);
