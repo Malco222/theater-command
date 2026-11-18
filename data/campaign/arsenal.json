@@ -74,13 +74,13 @@
     "field": { "label": "Airfields", "cost": [0, 10, 15, 22], "months": 3, "upkeep": 0.04, "holds": 500, "blurb": "Runways, hangars and control rooms. An air fleet can be founded here for fighter patrols, and each level lets more aircraft fly from the province." }
   },
   "yards": {
-    "Hamburg": 3, "Bremen": 3, "Stettin": 1, "Konigsberg": 1,
+    "Hamburg": 3, "Bremen": 3, "Schleswig-Holstein": 3, "Stettin": 1, "Konigsberg": 1,
     "Clydeside": 3, "Northumbria": 3, "Ulster": 3, "Lancashire": 2, "London": 2, "Hampshire": 2,
-    "Brittany": 3, "Nantes": 2, "Marseille": 2, "Rouen": 1,
-    "Liguria": 3, "Naples": 2, "Apulia": 2, "Friuli": 2,
+    "Brittany": 3, "Nantes": 3, "Marseille": 2, "Rouen": 1,
+    "Liguria": 3, "Naples": 2, "Apulia": 2, "Friuli": 3,
     "Leningrad": 3, "Nikolaev": 3, "Crimea": 1, "Murmansk": 1, "Arkhangelsk": 1,
     "Rotterdam": 2, "Holland": 2, "Antwerp": 1, "Zealand": 2, "Oslo": 1, "Cadiz": 2, "Catalonia": 1, "Athens": 1, "Danzig Corridor": 1,
-    "Norfolk": 3, "New York": 3, "Philadelphia": 3, "Boston": 2, "Bath": 1, "San Francisco": 3, "Puget Sound": 3, "Los Angeles": 1,
+    "Norfolk": 3, "New York": 3, "Philadelphia": 3, "Boston": 3, "Bath": 1, "San Francisco": 3, "Puget Sound": 3, "Los Angeles": 1,
     "Nova Scotia": 1, "Vancouver": 1, "Esquimalt": 1,
     "Rio de Janeiro": 1, "Buenos Aires": 1, "Santiago": 1, "Lima": 1
   },

@@ -55,7 +55,7 @@
 
     {"nat": "ITA", "name": "1st Fleet", "base": "Apulia", "port": "Taranto", "home": "ionian", "zone": "ionian", "duty": "patrol", "admiral": "Inigo Campioni", "ships": {"bb": 4, "cv": 0, "ca": 12, "dd": 30, "ss": 0}},
     {"nat": "ITA", "name": "2nd Fleet", "base": "Naples", "port": "Naples", "home": "tyrr", "zone": "tyrr", "duty": "patrol", "admiral": "Riccardo Paladini", "ships": {"bb": 0, "cv": 0, "ca": 7, "dd": 25, "ss": 0}},
-    {"nat": "ITA", "name": "Submarine Fleet", "base": "Liguria", "port": "La Spezia", "home": "tyrr", "zone": "wmed", "duty": "raid", "admiral": "Mario Falangola", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 0, "ss": 60}},
+    {"nat": "ITA", "name": "Submarine Fleet", "base": "Liguria", "port": "La Spezia", "home": "tyrr", "zone": "wmed", "duty": "raid", "admiral": "Mario Falangola", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 0, "ss": 100}},
 
     {"nat": "SOV", "name": "Baltic Fleet", "base": "Leningrad", "port": "Kronstadt", "home": "finland", "zone": "finland", "duty": "patrol", "tied": true, "admiral": "Vladimir Tributs", "ships": {"bb": 2, "cv": 0, "ca": 2, "dd": 20, "ss": 50}},
     {"nat": "SOV", "name": "Black Sea Fleet", "base": "Crimea", "port": "Sevastopol", "home": "black", "zone": "black", "duty": "patrol", "tied": true, "admiral": "Filipp Oktyabrsky", "ships": {"bb": 1, "cv": 0, "ca": 5, "dd": 17, "ss": 44}},
@@ -71,7 +71,10 @@
     {"nat": "GER", "fleet": "U-boat Fleet", "cls": "ss", "from": 29, "to": 99, "perMonth": 18},
     {"nat": "UK", "fleet": "Western Approaches Fleet", "cls": "dd", "from": 6, "to": 12, "perMonth": 4},
     {"nat": "UK", "fleet": "Western Approaches Fleet", "cls": "dd", "from": 13, "to": 99, "perMonth": 8},
-    {"nat": "UK", "fleet": "Home Fleet", "cls": "dd", "from": 10, "to": 99, "perMonth": 1}
+    {"nat": "UK", "fleet": "Home Fleet", "cls": "dd", "from": 10, "to": 99, "perMonth": 1},
+    {"nat": "USA", "fleet": "Atlantic Fleet", "cls": "dd", "from": 28, "to": 42, "perMonth": 4},
+    {"nat": "USA", "fleet": "Atlantic Fleet", "cls": "dd", "from": 43, "to": 99, "perMonth": 8},
+    {"nat": "CAN", "fleet": "Royal Canadian Navy", "cls": "dd", "from": 13, "to": 60, "perMonth": 2}
   ],
   "arrivals": [
     [10, "UK", "Home Fleet", {"cv": 1}, "the carrier Illustrious"],

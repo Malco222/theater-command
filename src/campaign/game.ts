@@ -1199,9 +1199,12 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (frozen(g, d.nat, target)) { p *= 1 - (1 - EASTERN.winter.defence) * cmdWinter(g, d); coldDef = true; }
     // A dug-in box is not driven round (ruling 146, the Historian's third fix): the cut falls only on men on foot who
     // have not dug in, and in the grand campaign it fades as their works are finished, where the guns make it a box.
+    // (A position driven round for want of guns is judged no help in strength, so its works do not turn the day's
+    // luck against the attack either: they would count twice. The design director's b420, the historian's b418.)
+    let unboxed = false;
     if (openDesert && !KIND[d.kind].mobile && d.kind !== 'fort') {
       const box = !d.dug ? 0 : !wide ? 1 : boxed ? worksShare(worksNow(d)) : 0;
-      if (d.dug && !boxed) fewGuns = true;
+      if (d.dug && !boxed) { fewGuns = true; unboxed = true; }
       if (box < 1) { const cut = DESERT.open + (1 - DESERT.open) * box; p *= cut; turned = true; turnedTo = Math.min(turnedTo, cut); }
     }
     const dl = lineStrength(g, d).mul;
@@ -1221,7 +1224,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     cmdD += p * lead;
     D += p * lead;
     // Works grow with the months spent on them: a line held since the spring is not one occupied last month.
-    if (d.dug && d.supplied) readyD += p * lead * worksShare(worksNow(d));
+    if (d.dug && d.supplied && !unboxed) readyD += p * lead * worksShare(worksNow(d));
     if (d.dug) { dugD += p * lead; worksD += p * lead * worksNow(d); }
     if (blows > 0) { tiredD += p * lead * blows; tiredMost = Math.max(tiredMost, blows); }
   }
@@ -1260,8 +1263,9 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     const broken = breachOf(g, target), place = townName(target);
     lines.push({ label: 'Forces', value: `${attackers.length} corps, ${sum(attackers)} men, against ${defenders.length ? `${defenders.length} corps, ${sum(defenders)} men` : watch > 0 ? 'no army' : '0 corps, 0 men'}${watch > 0 ? `${defenders.length ? ', and' : ':'} the town guard of about ${guardMen(g, target).toLocaleString('en-US')}` : ''}` });
     lines.push({
-      // ("Panama City, Panama's capital", not "Capital of Panama City": the UI director, build 1668.)
-      label: 'The town', value: `${townSize(g, target) === 'capital' ? `${place}, ${theWords(`${theName(g.nations[target.owner])}'s`)} capital` : `${TOWNS.words[townSize(g, target)]} of ${place}`}${target.fort ? `, with fortress works of level ${target.fort.lv}` : ''}`,
+      // ("Panama City, Panama's capital", not "Capital of Panama City"; "Lodz, a city", not "City of Lodz": the UI director,
+      // builds 1668 and 1678.)
+      label: 'The town', value: `${townSize(g, target) === 'capital' ? `${place}, ${theWords(`${theName(g.nations[target.owner])}'s`)} capital` : `${place}, a ${TOWNS.words[townSize(g, target)].toLowerCase()}`}${target.fort ? `, with fortress works of level ${target.fort.lv}` : ''}`,
       effect: `Its defenders fight ${Math.round((walls - 1) * 100)}% stronger in the streets${broken > 0 ? `: bombardment has already broken down ${Math.round(broken * 100)}% of its works` : ''}`,
     });
   } else {
