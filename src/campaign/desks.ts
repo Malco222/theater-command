@@ -18,7 +18,7 @@ import { ARSENAL, aiArsenal, liftView, offers, orderOffer, type Wing } from './a
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { monthsFor, staffTeams, techById, techOf, teamsOf } from './tech';
-import { TRADE, bestPartner, dealsOf, endTrade, housesOf, signTrade, tradeRules, wealthOf } from './trade';
+import { TRADE, bestPartner, dealsOf, endTrade, housesFull, housesOf, signTrade, tradeRules, wealthOf } from './trade';
 import { DIPLOMACY, canCourt, court, courtable, envoysWord, freeCourt, receptive, step } from './diplomacy';
 import { INTEL, abroad, agentsOf, atWork, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, whyNotMission, whyNotRecruit, whyNotSend } from './intel';
 import { cabinetOff, officeSecure, setCabinet, setCanFall } from './government';
@@ -211,7 +211,7 @@ function build(g: Game, nat: string): string | null {
       if (endTrade(g, d.a, d.b)) did.push(`gave up the trade agreement with ${the(o)}, which nothing was getting through`);
     }
     const signed: string[] = [];
-    for (let k = 0; k < 2 && dealsOf(g, nat).length < housesOf(g, nat) && n.pc >= TRADE.sign.pc; k++) {
+    for (let k = 0; k < 2 && !housesFull(g, nat) && n.pc >= TRADE.sign.pc; k++) {
       const b = bestPartner(g, nat, ctx);
       if (!b || !signTrade(g, nat, b, ctx)) break;
       signed.push(the(g.nations[b]));
@@ -537,7 +537,18 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
     }
     case 'diplomacy': {
       const b = bloc(n);
-      if (!b || b === 'league') return 'Only a member of the Axis or the Allies courts neutrals.';
+      if (!b || b === 'league') {
+        // (Out of the blocs, the backer of the Americas still courts back, at no cost, the neighbours the Axis courts: ruling 223(d).)
+        // (The UI director's words, words-ruling-223.md: the envoys named as the other 223 lines name them, and who courts back.)
+        const back = Object.values(g.nations).filter((T) => T.id !== nat && courtable(T) && freeCourt(g, nat, T.id));
+        if (back.length) {
+          const names = back.map(the), list = names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+          const it = back.length > 1 ? 'them' : 'it';
+          const how = staffRuns(g, nat, 'diplomacy') ? `Your staff courts ${it} back each month, at no cost.` : `Courting ${it} back costs nothing: Court back, on ${back.length > 1 ? 'their rows' : 'its row'} under Powers.`;
+          return `${envoysWord(g, back.map((T) => T.id))} envoys are courting ${list}. ${how} Only a member of the Axis or the Allies courts other neutrals.`;
+        }
+        return 'Only a member of the Axis or the Allies courts neutrals.';
+      }
       const open = Object.values(g.nations).filter((T) => T.id !== nat && courtable(T)).length;
       // Who the envoys are with, while they are at it: the news speaks only when they begin and when the country moves.
       const who = staffRuns(g, nat, 'diplomacy') ? Object.values(g.nations).filter((T) => (g.flags[`court:${nat}:${T.id}`] ?? -9) >= g.turn - 1).sort((x, y) => g.flags[`court:${nat}:${y.id}`] - g.flags[`court:${nat}:${x.id}`])[0] : undefined;

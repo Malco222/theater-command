@@ -8,7 +8,7 @@ import { atWar, capitalDistances, computeSupply, createGame, openTheatres } from
 import { seat } from './commanders';
 import { FIELDS } from './research';
 import { newStories } from './stories';
-import { restoreWorks } from './arsenal';
+import { openSmallAir, restoreWorks } from './arsenal';
 import { resetRailheads } from './rails';
 import { openAirWar, openWorldAir } from './air';
 import { openCarriers } from './carriers';
@@ -219,6 +219,9 @@ export function loadGame(text: string): Game | null {
   if (g.flags.open === 1) openAirWar(g);
   // And one saved before the air commands beyond the old chart were listed (America's): they are raised on their fields.
   if (g.flags.open === 1) openWorldAir(g);
+  // And one saved before the aircraft from abroad (ruling 213(d)): the rows due before the month it was saved in came
+  // with the order of battle it already has, so they are marked as come and not delivered all at once.
+  if (g.flags.open === 1 && g.flags.gifts === undefined) openSmallAir(g);
   // A grand campaign saved before morale was kept, or before divisions carried numbers, picks both up here.
   openMorale(g);
   numberDivisions(g);

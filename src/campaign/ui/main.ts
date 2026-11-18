@@ -2687,7 +2687,8 @@ function drawPane(): void {
  */
 function articled(root: HTMLElement, buttons = false): void {
   const bare = `h1,h2,h3,h4,h5,h6,.kick,th,td,kbd,select,option,label,input,textarea,svg${buttons ? '' : ',button'}`;
-  const BLOCK = 'p,li,div,dd,dt,section,header,footer,blockquote,figcaption';
+  // (Where buttons are rows of their own, as in the tray, each starts its sentence afresh.)
+  const BLOCK = `p,li,div,dd,dt,section,header,footer,blockquote,figcaption${buttons ? ',button' : ''}`;
   const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let block: Element | null = null, before = '';
   for (let n = walk.nextNode() as Text | null; n; n = walk.nextNode() as Text | null) {
@@ -2696,7 +2697,8 @@ function articled(root: HTMLElement, buttons = false): void {
     const b = el.closest(BLOCK);
     if (b !== block) { block = b; before = ''; }
     const t = n.data;
-    if (el.closest(bare) || !/[A-Z]/.test(t)) { before += t; continue; }
+    // (A sign or a figure with no word in it, the red row's mark or a count, does not begin the sentence.)
+    if (el.closest(bare) || !/[A-Z]/.test(t)) { if (/[A-Za-z]/.test(before + t)) before += t; continue; }
     const now = theWords(t, before);
     if (now !== t) n.data = now;
     before += now;
@@ -2872,7 +2874,7 @@ function replaceCard(data: Record<string, string | undefined>): string {
     <footer><button class="btn go" data-act="close">Keep it</button><button class="btn" data-act="start" data-sure="1" ${again}>Start the new one</button></footer>`;
 }
 
-const alertButtons = (): string => alertList().map((a) => `<button class="alert ${a.kind}" data-act="alert" data-kind="${a.kind}"${a.html ? ` title="${esc(a.text)}"` : ''}>${a.html ?? esc(a.text)}</button>`).join('');
+const alertButtons = (): string => alertList().map((a) => `<button class="alert ${a.kind}" data-act="alert" data-kind="${a.kind}"${a.html ? ` title="${esc(theWords(a.text))}"` : ''}>${a.html ?? esc(a.text)}</button>`).join('');
 
 /**
  * The red alarm's press (ruling 211(c); words, section 1): it picks up the nearest army that can come and centres the
@@ -3106,7 +3108,8 @@ function provinceSlots(r: Region): string {
   const facTag = me && isHome(g, me, r) ? factoryTag(g, me) : null;
   const room = facTag ? built + facComing : r.terrain === 'urban' || r.cap ? ARSENAL.works.factory.most.city : ARSENAL.works.factory.most.town;
   const city = list.some((o) => o.key === 'work:factory' && (o.why === null || o.poor)) || built + facComing > 0;
-  const industry = slot('work:factory', slotIcon(GLYPH.factory), 'Industry', r.fac > 0, city ? pipsOf(built, facComing, room) : '', `${facs}${facComing ? `, ${facComing} more building` : ''}`, 'Build a factory', true, facTag ?? '');
+  // (The country's tag is not said again where the slot's own line already says it: 'No industry'.)
+  const industry = slot('work:factory', slotIcon(GLYPH.factory), 'Industry', r.fac > 0, city ? pipsOf(built, facComing, room) : '', `${facs}${facComing ? `, ${facComing} more building` : ''}`, 'Build a factory', true, facTag && facTag !== facs ? facTag : '');
   const works = slot('work:fort', slotIcon(GLYPH.works), 'Works', lv > 0, pipsOf(lv, queued, 3), state, `Build level ${lv + queued + 1}`);
   const yard = yardLevel(g, r), yardComing = coming('yard');
   const YARD = ['', 'builds destroyers, submarines and troopships', 'builds every ship up to cruisers', 'builds every class of ship'];

@@ -653,11 +653,11 @@ const townOrder = (g: Game, c: Corps): boolean => !c.dead && g.human !== null &&
  */
 export const prizesOf = (g: Game, region: number): PrizesView | null => prizesAt(g, region, g.human);
 
-/** Provinces to mark on the map: a prize wrecked there (burning), or in the hands of an army that has not taken the town (seized). Under the fog, only ground the player can see. */
-export function prizesOnMap(g: Game): PrizeMark[] {
+/** Provinces to mark on the map: a prize wrecked there (burning), or in the hands of an army that has not taken the town (seized). Under the fog, only ground the player can see. 'seen' is the player's sightOf where the caller has it already (the 3D table works it out once a picture). */
+export function prizesOnMap(g: Game, seen?: Uint8Array): PrizeMark[] {
   const all = prizeMarks(g);
-  if (g.human === null || !fogOn(g, g.human)) return all;
-  const sight = sightOf(g, g.human);
+  if (!all.length || g.human === null || !fogOn(g, g.human)) return all;
+  const sight = seen ?? sightOf(g, g.human);
   return all.filter((m) => sight[m.region] !== SIGHT.none || allied(g, g.human!, g.regions[m.region].ctrl));
 }
 
@@ -924,11 +924,11 @@ export function guardOnly(g: Game, region: number): GuardOnly | null {
   return { town: v.town, men, head: 'Held by its town guard only', strength: `About ${menWord(men)} men, and no army.`, march: foe ? 'An army you march in goes at the town as it arrives.' : '' };
 }
 
-/** Every siege the player knows of: his own, his allies', and any other on ground he can see. */
-export function siegesInSight(g: Game): SiegeView[] {
+/** Every siege the player knows of: his own, his allies', and any other on ground he can see. 'seen' as for prizesOnMap. */
+export function siegesInSight(g: Game, seen?: Uint8Array): SiegeView[] {
   const all = siegesNow(g);
-  if (g.human === null || !fogOn(g, g.human)) return all;
-  const sight = sightOf(g, g.human);
+  if (!all.length || g.human === null || !fogOn(g, g.human)) return all;
+  const sight = seen ?? sightOf(g, g.human);
   return all.filter((v) => allied(g, g.human!, v.holder) || (v.by !== null && allied(g, g.human!, v.by)) || sight[v.region] !== SIGHT.none);
 }
 
@@ -1691,7 +1691,7 @@ export function airOptions(g: Game, id: number, mission: AirMission): { targets:
 // ---- The air war as its own game (the grand campaign): airfields, air groups, and raids planned from their target ----
 
 /** Every airfield on the map as the player knows it, for a map to draw. Empty in a historical scenario. */
-export const airfieldsSeen = (g: Game): AirfieldRow[] => airfields(g, g.human);
+export const airfieldsSeen = (g: Game, seen?: Uint8Array): AirfieldRow[] => airfields(g, g.human, seen);
 
 /** One airfield opened: its size and the air groups based there. Null outside the grand campaign. */
 export const airfieldAt = (g: Game, region: number): AirfieldCard | null => airfieldCard(g, region, g.human);

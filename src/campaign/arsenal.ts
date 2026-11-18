@@ -76,11 +76,11 @@ const queued = (g: Game, nat: string, item: string, region: number): number => g
 /** What guns and airfields cost a nation to man each month, as lines for its ledger. */
 export function worksUpkeep(g: Game, nat: string): LedgerLine[] {
   let aa = 0, field = 0;
-  for (const k in g.flags) {
-    if (!k.startsWith('wk:')) continue;
-    const [, what, id] = k.split(':');
-    if ((what !== 'aa' && what !== 'field') || g.regions[+id]?.ctrl !== nat) continue;
-    if (what === 'aa') aa += g.flags[k]; else field += g.flags[k];
+  // Province by province: the levels are whole numbers, so the order they are added in changes nothing.
+  for (const r of g.regions) {
+    if (r.ctrl !== nat) continue;
+    aa += g.flags[`wk:aa:${r.id}`] ?? 0;
+    field += g.flags[`wk:field:${r.id}`] ?? 0;
   }
   const out: LedgerLine[] = [];
   if (aa > 0) out.push({ key: 'works:aa', label: 'Anti-aircraft guns', amount: aa * ARSENAL.works.aa.upkeep, count: aa });
@@ -243,6 +243,7 @@ function bestField(g: Game, nat: string): Region | null {
  * are already in the order of battle history left, so their rows are marked as come.
  */
 export function openSmallAir(g: Game): void {
+  g.flags.gifts = 1;
   SMALL().gifts.forEach(([month], i) => { if (month < g.turn) g.flags[`gift:${i}`] = 1; });
 }
 

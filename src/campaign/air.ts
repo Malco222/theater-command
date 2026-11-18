@@ -479,16 +479,32 @@ export function openWorldAir(g: Game): void {
 export function openAirWar(g: Game): void {
   if (g.flags.airwar === 1) return;
   g.flags.airwar = 1;
-  const S = AIRWAR.fields.seed;
-  const seed = (id: number, cls: number): void => { if (fieldClass(g, id) < cls) g.flags[`af:${id}`] = cls; };
-  for (const r of g.regions) {
-    if (r.cap) seed(r.id, S.base);
-    else if (r.fac >= S.city.fac || r.vp >= S.city.vp) seed(r.id, S.city.class);
-    else if (r.fac >= S.town.fac || r.vp >= S.town.vp) seed(r.id, S.town.class);
-  }
-  for (const row of AIR.fleets) { const b = g.byName[row.base]; if (b && !row.scripted) seed(b.id, S.base); }
-  for (const f of [...g.airFleets]) { seed(f.base, S.base); splitFleet(g, f); }
+  seedFields(g);
+  for (const f of [...g.airFleets]) { seedField(g, f.base, AIRWAR.fields.seed.base); splitFleet(g, f); }
 }
+
+const seedField = (g: Game, id: number, cls: number): void => { if (fieldClass(g, id) < cls) g.flags[`af:${id}`] = cls; };
+
+/**
+ * The first day's airfields, from region `from` on: a capital's, a city's and a town's by its factories and victory
+ * points, and the base of every air force on the record. A campaign saved on a smaller chart lays them on the ground
+ * drawn since when it is loaded (world.ts, settleNewGround); a field already there is never made smaller.
+ */
+export function seedFields(g: Game, from = 0): void {
+  const S = AIRWAR.fields.seed;
+  for (let i = from; i < g.regions.length; i++) seedField(g, i, groundClass(g.regions[i]));
+  for (const row of AIR.fleets) { const b = g.byName[row.base]; if (b && b.id >= from && !row.scripted) seedField(g, b.id, S.base); }
+}
+
+/** The first day's airfield for a province by its ground alone: a capital's air base, a city's airfield, a town's landing ground. */
+const groundClass = (r: Region): number => {
+  const S = AIRWAR.fields.seed;
+  return r.cap ? S.base : r.fac >= S.city.fac || r.vp >= S.city.vp ? S.city.class : r.fac >= S.town.fac || r.vp >= S.town.vp ? S.town.class : 0;
+};
+
+/** The airfield the first day gives a province on today's chart, the base of an air force on the record included (seedFields). */
+export const seedClass = (g: Game, r: Region): number =>
+  Math.max(groundClass(r), AIR.fleets.some((row) => !row.scripted && g.byName[row.base]?.id === r.id) ? AIRWAR.fields.seed.base : 0);
 
 // ---- Bases and orders ---------------------------------------------------------------------
 

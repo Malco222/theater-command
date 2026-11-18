@@ -7,7 +7,7 @@
 import data from '../../data/campaign/trade.json';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import diplomacyData from '../../data/campaign/diplomacy.json';
-import { civicSum } from './buildings';
+import { civicHouses, civicSum } from './buildings';
 import { govMul } from './government';
 import { provinceYield } from './economy';
 import { atWar, bloc, headline } from './game';
@@ -51,8 +51,23 @@ const dealOf = (g: Game, a: string, b: string): TradeDeal | undefined => g.trade
 
 /** How many agreements a country can keep. */
 export function housesOf(g: Game, nat: string): number {
+  return Math.min(TRADE.houses.most, housesBuilt(g, nat) + civicHouses(g, nat));
+}
+
+/** The trading houses a country has before its buildings open any. */
+const housesBuilt = (g: Game, nat: string): number => {
   const H = TRADE.houses;
-  return Math.min(H.most, (MAJORS.includes(nat) || !!g.nations[nat]?.offmap || (worldOn(g) && WORLD.great.includes(nat)) ? H.major : H.minor) + civicSum(g, nat).houses);
+  return MAJORS.includes(nat) || !!g.nations[nat]?.offmap || (worldOn(g) && WORLD.great.includes(nat)) ? H.major : H.minor;
+};
+
+/**
+ * Whether every trading house a country has is in use. Buildings only ever add houses, so a country using fewer than it
+ * has without them has one free, and its buildings are counted only when they could decide it (trade is weighed
+ * against every country in turn, and counting the buildings walks the map).
+ */
+export function housesFull(g: Game, nat: string): boolean {
+  const used = dealsOf(g, nat).length;
+  return used >= Math.min(TRADE.houses.most, housesBuilt(g, nat)) && used >= housesOf(g, nat);
 }
 
 // ---- The way the goods go ---------------------------------------------------------------------------
@@ -277,8 +292,8 @@ export function whyNoTrade(g: Game, a: string, b: string, ctx: TradeCtx = new Ma
   if (dealOf(g, a, b)) return `You already trade with ${the(B)}.`;
   if (barred(a, b)) return `${The(B)} will not sign with you.`;
   if (cold(A, B)) return `Feeling in ${bloc(B) === null ? the(B) : the(A)} runs too strongly against it.`;
-  if (ownHouse && dealsOf(g, a).length >= housesOf(g, a)) return 'Every trading house you have is in use. A merchant quarter in a harbour town or your capital opens another.';
-  if (dealsOf(g, b).length >= housesOf(g, b)) return `${The(B)} has no trading house free.`;
+  if (ownHouse && housesFull(g, a)) return 'Every trading house you have is in use. A merchant quarter in a harbour town or your capital opens another.';
+  if (housesFull(g, b)) return `${The(B)} has no trading house free.`;
   if (tradeRoute(g, a, b, ctx).way === 'none') return `No way is open for goods between you and ${the(B)}: no border, no ground at peace with you both between, and the sea is closed.`;
   return null;
 }
@@ -372,7 +387,7 @@ export function tradeTick(g: Game, nat: string): void {
     else if (d.state === 'cut' && nat !== g.human && o !== g.human) endTrade(g, d.a, d.b);
   }
   if (nat === g.human || !can(n) || n.capital < 0) return;
-  for (let k = 0; k < 2 && dealsOf(g, nat).length < housesOf(g, nat); k++) {
+  for (let k = 0; k < 2 && !housesFull(g, nat); k++) {
     const b = byWorth(g, nat, ctx, (id) => id === g.human);
     if (!b || !signTrade(g, nat, b, ctx, true)) break;
   }
@@ -388,7 +403,7 @@ export function openTrade(g: Game): void {
   for (let round = 0; round < TRADE.houses.most; round++) {
     let signed = false;
     for (const n of order) {
-      if (dealsOf(g, n.id).length >= housesOf(g, n.id)) continue;
+      if (housesFull(g, n.id)) continue;
       const b = byWorth(g, n.id, ctx, () => false);
       if (b && signTrade(g, n.id, b, ctx, true)) signed = true;
     }

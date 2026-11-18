@@ -115,10 +115,10 @@ function fieldRow(g: Game, id: number, viewer: string | null, sight: Uint8Array)
   };
 }
 
-/** Every airfield on the map, for a map to draw. Empty outside the grand campaign's air war, where airfields are not places. */
-export function airfields(g: Game, viewer: string | null = g.human): AirfieldRow[] {
+/** Every airfield on the map, for a map to draw. Empty outside the grand campaign's air war, where airfields are not places. 'seen' is the viewer's sightOf where the caller has it already. */
+export function airfields(g: Game, viewer: string | null = g.human, seen?: Uint8Array): AirfieldRow[] {
   if (!airWar(g)) return [];
-  const sight = sightOf(g, viewer);
+  const sight = seen ?? sightOf(g, viewer);
   const out: AirfieldRow[] = [];
   for (const r of g.regions) { const row = fieldRow(g, r.id, viewer, sight); if (row) out.push(row); }
   return out;

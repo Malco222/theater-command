@@ -1139,7 +1139,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     // (A work already said among the deliveries, 'Anti-aircraft guns ready' with its place and level, is not said a
     // second time as a line of news.)
     const built = h.kind === 'info' ? /^The (anti-aircraft guns|airfields) at (.+) are (?:in place|ready): level \d+\.$/.exec(h.text) : null;
-    if (built && card.home.some((x) => x.bare && x.region !== undefined && g.regions[x.region]?.name === built[2] && x.text.toLowerCase().startsWith(built[1]))) { used.add(h); continue; }
+    // (The headline gives a place its article, "at the Ruhr": the delivery row has the bare name.)
+    if (built && card.home.some((x) => x.bare && x.region !== undefined && g.regions[x.region]?.name === built[2].replace(/^the /, '') && x.text.toLowerCase().startsWith(built[1]))) { used.add(h); continue; }
     if (h.kind === 'info') news.push(h);
   }
   // The other news of home, in the lines the box has left. The three foot boxes share one height: three items of
@@ -1162,7 +1163,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const same = m ? arrivals.get(m[2])! : [];
     if (m && same.length > 1) { said.push({ text: `${m[1]} and ${same.length - 1} more corps have arrived at ${m[2]}`, full: same.map((x) => x.text).join(' '), hs: same }); continue; }
     const lost = /^Your staff on the loss of ([^:]+):/.exec(h.text);
-    const fixed = lost && held.has(lost[1]) ? h.text.replace(`the loss of ${lost[1]}`, `the battle at ${lost[1]}`) : h.text;
+    const fixed = lost && held.has(lost[1].replace(/^the /, '')) ? h.text.replace(`the loss of ${lost[1]}`, `the battle at ${lost[1]}`) : h.text;
     // (A directive is said as its chip says it: who set it, and its title.)
     const dir = /^A directive from ([^:]+): /.exec(h.text), title = dir ? N.gov?.dir?.title : undefined;
     said.push({ text: dir && title ? `A directive from ${dir[1]}: ${title}` : first(fixed), full: fixed, hs: [h] });
