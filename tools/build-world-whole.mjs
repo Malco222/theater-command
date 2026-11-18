@@ -86,6 +86,28 @@ const farRegions = far.map((r) => {
   if (period.has(r.name)) renamed.push(`${r.name} -> ${period.get(r.name)}`);
   return out;
 });
+// The Vichy mark (game.ts, the fall: ground so marked goes to Vichy France with its corps, the rest of a fallen
+// country's colonies passes into a sea power's keeping). The chart gives it by hand to 41 provinces of French Africa
+// and Madagascar. Two things more, found with the far side on (18 November):
+//   - Indochina's eleven provinces are marked, as ruling 199 says (point 1), and so are the cities cut out of them;
+//   - a city cut out of a marked province carries the mark, as it carries the colony mark: without it 19 cities of
+//     French West Africa and Madagascar (Segou of Bamako, Antsirabe of Tananarive) passed into British keeping
+//     while the ground round them went to Vichy.
+const VICHY_199 = ['Hanoi', 'Vinh', 'Hue', 'Qui Nhon', 'Cam Ranh', 'Saigon', 'Phnom Penh', 'Battambang', 'Pakse', 'Vientiane', 'Luang Prabang'];
+const vichyBy = { chart: 0, ruling199: 0, city: 0 };
+for (const r of farRegions) if (r.flags?.vichy) vichyBy.chart++;
+for (const name of VICHY_199) {
+  const r = farRegions.find((x) => x.name === name);
+  if (!r || r.owner !== 'FRA' || r.of !== undefined) { problems.push(`ruling 199: ${name} is not a province of France's on the chart`); continue; }
+  if (!r.flags?.vichy) { r.flags = { ...r.flags, vichy: 1 }; vichyBy.ruling199++; }
+}
+const farAt = new Map(farRegions.map((r) => [r.id, r]));
+for (const r of farRegions) {
+  if (r.of === undefined || r.flags?.vichy) continue;
+  const p = farAt.get(r.of);
+  if (p?.flags?.vichy && r.owner === p.owner) { r.flags = { ...r.flags, vichy: 1 }; vichyBy.city++; }
+}
+
 // Where the final chart has redrawn one of the Americas' provinces at its edge with the far side (the Alaska panhandle's
 // mainland, taken from Whitehorse, Watson Lake and Prince Rupert on 17 November), the whole world takes its outline and
 // its seas from the final chart; everything else, its neighbours above all, stays the cities version's. With the far
@@ -193,6 +215,7 @@ if (idsOut) {
 }
 console.log(`the whole wider world: ${A.regions.length} provinces of the Americas (${first} to ${FAR_FIRST - 1}) and ${farRegions.length} beyond them (${FAR_FIRST} to ${first + regions.length - 1}); stages ${chart.stages.join(', ')}`);
 console.log(`${joins.length} land borders across the stages, ${links.length} ferries, ${seas.zones.length} seas, ${lakes.length} lakes, ${rails.links.length} railway links, ${rivers.rivers.length} rivers with ${rivers.crossings.length} crossings`);
+console.log(`the Vichy mark beyond the old chart: ${vichyBy.chart} provinces as the chart gives it, ${vichyBy.ruling199} of Indochina by ruling 199, ${vichyBy.city} cities from their province`);
 console.log(`the Americas redrawn by the final chart, outline and seas taken from it with the far side on (${redrawn.length}): ${redrawn.join(', ') || 'none'}`);
 console.log(table.join('\n'));
 console.log(`names as of September 1939 in the clerk's tables, NOT applied (${renamed.length}): ${renamed.join(', ') || 'none'}`);
