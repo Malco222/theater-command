@@ -175,10 +175,13 @@ export function aircraftLeft(t: SeaTicket, u: SeaUnit): { left: number; full: nu
 }
 
 /** A piece's name as every place shows it, numbered in kind, with what it has lost: "Cruiser 2", "Destroyers 4 · 3 of 4",
- *  and a carrier's aircraft once they are worn, counted as ships are: "Carrier 1 · 18 aircraft", "Carrier 1 · no aircraft". */
+ *  and a carrier's aircraft once they are worn, counted as ships are: "Carrier 1 · 18 aircraft", "Carrier 1 · no aircraft".
+ *  The count shows only while some ships of a piece of more than one are still afloat: a piece with none left stands
+ *  bare, "Cruiser 1", "Destroyers 2", and its state says "Lost" (the UI director, 2b1f0e3), never "0 of 1". */
 export const shownName = (u: SeaUnit, t?: SeaTicket): string => {
+  if (u.extra.ships <= 0) return u.name;
   const air = t ? aircraftLeft(t, u) : null;
-  return `${u.name}${u.extra.ships < u.extra.ships0 ? ` · ${u.extra.ships} of ${u.extra.ships0}` : ''}${air ? ` · ${air.left ? `${air.left} aircraft` : 'no aircraft'}` : ''}`;
+  return `${u.name}${u.extra.ships0 > 1 && u.extra.ships < u.extra.ships0 ? ` · ${u.extra.ships} of ${u.extra.ships0}` : ''}${air ? ` · ${air.left ? `${air.left} aircraft` : 'no aircraft'}` : ''}`;
 };
 
 /** What a carrier's worn aircraft mean, for the hover on its name (the UI director, keep-together). */

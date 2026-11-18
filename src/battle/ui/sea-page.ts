@@ -626,6 +626,9 @@ function wireBattle(): void {
     updateTray(true); updateTop();
   };
   canvas.addEventListener('pointerup', up);
+  // The hover goes the moment the pointer leaves the sea, as hovers do everywhere else in the game: a stale one reads as
+  // a fact about a ship the player is no longer pointing at (the UI director, 2b1f0e3).
+  canvas.addEventListener('pointerleave', () => { if (!down) { sc.hover = null; canvas.style.cursor = 'default'; } });
   canvas.addEventListener('pointercancel', () => { down = null; sc.box = null; sc.line = null; });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();

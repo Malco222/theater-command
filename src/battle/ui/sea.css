@@ -22,6 +22,9 @@
 /* Under 1440 the title takes the type scale's next size down (the prose size, bold) so it holds one line, and keeps
    its line height, so the bar is one height at every width (the UI director, round 2). */
 @media (max-width: 1439px) { .sea .btitle .tc-title-3 { font-size: 15px; } }
+/* Under 1440 the bar is 83 high whatever the title, the height the longest sea's name needs once the odds fold, so the
+   sea never starts lower in one action than in another (the UI director, 2b1f0e3). */
+@media (max-width: 1439px) { .sea .bbar { min-height: 83px; } }
 /* And at any width where the facts have folded and a long sea's name would still push the buttons off the bar; there
    the middle may give 8 more, its break bars still 52 wide at 1280 ("The action in the Central Mediterranean"). */
 .sea .btitle.is-small .tc-title-3 { font-size: 15px; }
