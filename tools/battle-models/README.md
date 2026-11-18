@@ -105,14 +105,22 @@ adds what is seen at that distance:
 - rows of rivets along frames, stringers, spars and ribs (small dark squares, the fine model only);
 - a bomb bay behind two doors with the bombs on their racks (`He111`, `Lancaster`, `B17`, `Bomber`);
 - the black rubber along the leading edges of the `B17`, her two open waist windows with a gunner standing at each
-  gun (`WAIST` in `planes.py` cuts them out of her skin), and her tail gunner behind his windows.
+  gun (`WAIST` in `planes.py` cuts them out of her skin);
+- her tail gunner in a closed position: three small framed panes in each side and a glazed panel over his guns
+  (`PANES` in `planes.py` turns those faces of her skin to glass; `fitout.tail_gunner` frames them and lines the
+  compartment dark);
+- her ball turret as a steel ball in the belly's paint (`BALL` in `fitout.py`): the game's glass dome is left out,
+  the ball lifts with its two guns (it is in part `turret.N.guns`) and has one round window between them with the
+  gunner curled up behind it, and the yoke it hangs in trains (part `turret.N`).
 
 The aerial wire from the mast to the fin is left off every machine (Brian, 2026-11-18); the mast stays.
 
 `Me262` is a battle's own (the game has no jet): its numbers are `EXTRA_PLANES` in `planes.py`, in the game's form
 with one new key, `jets` (the pods under the wings). Three small patches (`JETS`) let the game's sculptor leave the
 airscrew off and skin the pods; `fitout.jets` adds the intake lips and bullets, the tailpipes and the cannon ports.
-She has no `prop.N` parts and no flaps; her sockets add `jet.N` (each tailpipe). She is a 1944 unit (`file.year`).
+She has no `prop.N` parts and no flaps; her sockets add `jet.N` (each tailpipe). Her file says `year` 1944 and
+`tech` "jets": by the art director's unit table Germany flies her only once jet fighters are researched (the rules'
+tech `jets`), and whether a battle mixes her in among the Fw 190s is the air battle builder's call.
 
 Paints added after the game's own: `torn` (the inside of a torn-off end), `blur` (the disc of a turning airscrew),
 and the fit-out's (`inside`, `leather`, `skin`, `suit`, `vest`, `goggles`, `exhaust`, `gunmetal`, `patch`, `lens`,
@@ -155,7 +163,7 @@ python export.py <out> all                     # every model: .json, .glb, .fbx,
 python look.py Freighter <out> close,aft       # quick stills while building (small craft: small,smallaft)
 python show.py Battleship_UK turn <out>        # ship clips: turn, broadside, sink, capsize
 python airshow.py shot_down <out>              # aircraft clips: flypast (plane=Me262 for another machine), shot_down, ways_down
-python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, rear, over, under, side; clip=bombs_away@1.6)
+python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, rear, over, under, side, tail, tailside, waist, belly, ball; clip=bombs_away@1.6)
 python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
 ```
 
@@ -183,6 +191,10 @@ stands so that the glare falls in the gap the camera never visits (`SUN`), and a
   `ramp_drop`, `ramp_winch`.
 - Effects are named in events but not built for the game; the pictures use Blender-only effects from `stage.py`.
 - Aircraft have no undercarriage that lowers; a carrier's deck park uses the plain models.
+- Camouflage patches are blended from point to point of the skin, so their edges are as soft as the skin's grain is
+  coarse. The art director would like the 1940 British and German schemes tight-edged (a hand's width); that needs
+  the skin cut along the patch edges, or the patches drawn in the game's shader. Soft is right for the Soviet
+  greens and the Me 262's mottle.
 - One plain mesh (`far`) per model; no third level of detail.
 - The men and tanks in the landing craft are stand-ins; the land team's soldiers and tanks should stand there.
 - No beach in the pictures' stage, so there is no clip of a landing yet.

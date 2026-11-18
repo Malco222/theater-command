@@ -152,6 +152,8 @@ def glazed_nose(m, f, s, G, hull):
 def gunners(m, f):
     """In each turret: the gunner, looking along his guns, and their breeches beside his head."""
     for k, c, radii in f.turrets:
+        if k in f.balls:
+            continue                                      # (see ball_turret)
         guns = f.guns_of.get(k, [])
         way = sum(((b - a) for a, b in guns), Vector())
         way.z = 0.0
@@ -164,6 +166,79 @@ def gunners(m, f):
             for a, b in guns:
                 d = (b - a).normalized()
                 m.rod(a - d * 0.3, a + d * 0.04, 0.04, "gunmetal", sides=6)
+
+
+# The machines whose belly turret is a steel ball.
+BALL = {"B17"}
+
+
+def ball_turret(m, f):
+    """A belly turret that is a steel ball in her belly's paint, hung in a yoke that trains. The ball itself lifts with
+    its two guns, and has one round window between them, through which its gunner, curled up inside, is seen. (The
+    art director, 2026-11-18: a clear sphere with a man sitting upright in it reads as a goldfish bowl.)"""
+    for k, c, radii in f.turrets:
+        if k not in f.balls:
+            continue
+        guns = f.guns_of.get(k, [])
+        d = sum(((b - a) for a, b in guns), Vector())
+        d = d.normalized() if d.length > 1e-6 else X.copy()
+        side = Z.cross(d).normalized()                    # (to port; the line the ball lifts about)
+        dw = (d + d.cross(side) * 0.16).normalized()      # (his window looks a little above his guns: it is at his eye)
+        up = dw.cross(side)
+        R = min(radii) * 0.985
+        around = 28 if m.fine else 12
+        steps = 12 if m.fine else 5
+        tw = math.asin(0.165 / R)                         # (the half angle of his window)
+
+        def on(t, a, r=R):
+            """A place on the ball: t from the middle of his window, a round it."""
+            return c + (dw * math.cos(t) + (side * math.cos(a) + up * math.sin(a)) * math.sin(t)) * r
+
+        m.use(f"turret.{k}.guns")
+        for r, paint in ((R, "under"), (R - 0.025, "inside")):                          # (the ball, and the dark inside it)
+            m.lathe(c, dw, [(r * math.cos(t), r * math.sin(t)) for t in (tw + (math.pi - tw) * i / steps for i in range(steps + 1))], paint, around, caps=(False, False))
+        m.lathe(c, dw, [((R - 0.006) * math.cos(t), (R - 0.006) * math.sin(t)) for t in (tw * i / 3.0 for i in range(4))], "glass", around, caps=(False, False))
+        ring = [2.0 * math.pi * i / around for i in range(around + 1)]
+        m.strip([on(tw, a) for a in ring], [(on(tw, a) - c).normalized() for a in ring], 0.02, "gunmetal", lift=0.006)
+        for a, b in guns:                                 # (a collar where each gun comes out of the ball)
+            g = (b - a).normalized()
+            along = (c - a).dot(g)
+            off = (a + g * along - c).length
+            if off < R:
+                p = a + g * (along + math.sqrt(R * R - off * off))
+                m.rod(p - g * 0.05, p + g * 0.07, 0.05, "gunmetal", sides=10)
+        # his head at the window, his body and his knees behind it
+        u, v = (10, 6) if m.fine else (6, 4)
+        head = c + dw * (R - 0.27)
+        m.ball(head, 0.1, "leather", u, v)
+        m.ball(head + dw * 0.05 - up * 0.012, 0.076, "skin", u, v)
+        m.ball(c - dw * 0.08 + up * 0.02, 0.3, "suit", u, v)
+        for hand in (-1.0, 1.0):
+            m.ball(c + dw * 0.17 + side * 0.25 * hand + up * 0.1, 0.1, "suit", u, v)
+            if m.fine:
+                m.ball(head + dw * 0.1 + side * 0.037 * hand + up * 0.02, 0.033, "goggles", 8, 4)
+        if m.fine:
+            m.ball(head + dw * 0.1 - up * 0.05, 0.046, "inside", 8, 4)
+            # the seams of the ball's two halves, its door behind him, a ring of rivets round his window
+            seam = [tw + 0.09 + (2.0 * math.pi - 2.0 * tw - 0.18) * i / 40.0 for i in range(41)]
+            pts = [c + (dw * math.cos(t) + up * math.sin(t)) * R for t in seam]
+            m.strip(pts, [(q - c).normalized() for q in pts], 0.005, "line", lift=0.004)
+            pts = [c + (side * math.cos(a) + up * math.sin(a)) * R for a in ring]
+            m.strip(pts, [(q - c).normalized() for q in pts], 0.005, "line", lift=0.004)
+            door = [on(math.radians(t), math.radians(a)) for t, a in ((128, 55), (128, 125), (168, 125), (168, 55), (128, 55))]
+            door = [door[i] + (door[i + 1] - door[i]) * j / 6.0 for i in range(4) for j in range(6)] + [door[0]]
+            door = [c + (q - c).normalized() * R for q in door]
+            m.strip(door, [(q - c).normalized() for q in door], 0.005, "line", lift=0.004)
+            for i in range(16):
+                q = on(tw + 0.085, 2.0 * math.pi * (i + 0.5) / 16.0)
+                m.disc(q + (q - c).normalized() * 0.004, q - c, 0.009, "rivet_under", 4)
+        # the yoke it hangs in: a boss at each end of the line it lifts about, an arm from each up into her belly
+        m.use(f"turret.{k}")
+        for hand in (-1.0, 1.0):
+            boss = c + side * (R - 0.02) * hand
+            m.rod(boss, boss + side * 0.075 * hand, 0.12, "gunmetal", sides=14 if m.fine else 8)
+            m.rod(boss + side * 0.045 * hand, c + side * (R * 0.86) * hand + Z * 0.5, 0.05, "under", 0.06, sides=8)
+    m.use("plane")
 
 
 def exhausts(m, f, s, G, hull):
@@ -372,8 +447,8 @@ def rivets(m, f, s, G, hull):
         if f.bay and f.bay[1] - 0.06 <= x <= f.bay[0] + 0.06 and abs(deg - 270.0) < f.bay_half + 2.5:
             return                                         # (her bomb doors)
         p, n = hull.at(x, a, 0.003), hull.out(x, a)
-        if f.waist_hole(p, 0.03):
-            return                                         # (an open window)
+        if f.waist_hole(p, 0.03) or f.pane_at(p, 0.03):
+            return                                         # (an open window, a pane of glass)
         for (x0, x1, half_high) in bands:
             if x1 - 0.05 < x < x0 + 0.05 and abs(n.y) > 0.6 and abs(p.z - hull.z(-x) - hull.h(-x) * 0.3) < half_high + 0.04:
                 return                                     # (her cabin windows)
@@ -493,27 +568,35 @@ def boots(m, f, s, G, hull):
     m.use("plane")
 
 
+def liner(m, f, hull, x_hi, x_lo, open_at, inset=0.035):
+    """Her skin again from the inside, a little in from it and dark, left open where open_at(how far along her, degrees
+    up from level) says: what is seen through a window is then her compartment, and not the far side's paint. Gives
+    the rings it runs over."""
+    n = f.around
+    step = 2.0 * math.pi / n
+    xs = [x for x in sorted(f.rings_x, reverse=True) if x_lo - 1e-4 <= x <= x_hi + 1e-4]
+    verts = [port(hull.at(x, k * step, -inset)) for x in xs for k in range(n)]
+    faces = []
+    for i in range(len(xs) - 1):
+        xm = 0.5 * (xs[i] + xs[i + 1])
+        for k in range(n):
+            high = math.degrees(math.asin(math.sin((k + 0.5) * step)))
+            if open_at(xm, high):
+                continue
+            faces.append((i * n + k, i * n + (k + 1) % n, (i + 1) * n + (k + 1) % n, (i + 1) * n + k))
+    m.add(verts, faces, "inside", True, lambda q: Vector((q.x, 0.0, hull.z(-q.x))) - q)
+    return xs
+
+
 def waist(m, f, s, G, hull):
     """A heavy bomber's open waist windows: the dark of the compartment seen through them, a rim round each, and a
     gunner standing at each gun with its breech and its ammunition box."""
     if not f.waist:
         return
     x0, x1, a0, a1 = f.waist
-    n = f.around
-    step = 2.0 * math.pi / n
-    xs = [x for x in sorted(f.rings_x, reverse=True) if x1 - 0.62 <= x <= x0 + 0.62]
     m.use("tail" if 0.5 * (x0 + x1) < f.x_cut else "plane")
-    # the compartment: her skin again from the inside, a little in from it, with the same two windows
-    verts = [port(hull.at(x, k * step, -0.035)) for x in xs for k in range(n)]
-    faces = []
-    for i in range(len(xs) - 1):
-        xm = 0.5 * (xs[i] + xs[i + 1])
-        for k in range(n):
-            high = math.degrees(math.asin(math.sin((k + 0.5) * step)))
-            if x1 < xm < x0 and a0 < high < a1:
-                continue
-            faces.append((i * n + k, i * n + (k + 1) % n, (i + 1) * n + (k + 1) % n, (i + 1) * n + k))
-    m.add(verts, faces, "inside", True, lambda q: Vector((q.x, 0.0, hull.z(-q.x))) - q)
+    # the compartment, with the same two windows
+    xs = liner(m, f, hull, x0 + 0.62, x1 - 0.62, lambda x, high: x1 < x < x0 and a0 < high < a1)
     for x, way in ((xs[0], -X), (xs[-1], X)):
         m.disc((x, 0.0, hull.z(-x)), way, hull.h(-x) * 0.97, "inside", 24, oval=hull.w(-x) / hull.h(-x))
     xm = 0.5 * (x0 + x1)
@@ -559,6 +642,21 @@ def tail_gunner(m, f, s, G, hull):
     xb = x + 0.68
     m.disc((xb, 0.0, hull.z(-xb)), -X, hull.h(-xb) * 0.96, "inside", 20 if m.fine else 10, oval=hull.w(-xb) / hull.h(-xb))     # (nobody looks along her fuselage)
     m.box((x + 0.12, 0.0, hull.z(-x) - 0.5 * hull.h(-x)), (0.6, 1.0 * hull.w(-x), 0.03), "inside")
+    if f.panes:
+        # (her skin is closed round him: he is seen through small framed windows in her sides and a glazed panel over his guns)
+        liner(m, f, hull, xb, hull.back, lambda q, high: any(x1 < q < x0 and a0 < high < a1 for x0, x1, a0, a1 in f.panes), inset=0.02)
+        for x0, x1, a0, a1 in f.panes:
+            wx = [q for q in sorted(f.rings_x, reverse=True) if x1 - 1e-4 <= q <= x0 + 1e-4]
+            arc = [a0 + (a1 - a0) * k / 6.0 for k in range(7)]
+            for hand in (1.0, -1.0):
+                ang = (lambda a: math.radians(a)) if hand > 0 else (lambda a: math.radians(180.0 - a))
+                for a in (a0, a1):
+                    if a >= 90.0 and hand < 0:
+                        continue                          # (the bar down the middle of a panel across her back, once)
+                    m.strip([port(hull.at(q, ang(a))) for q in wx], [port(hull.out(q, ang(a))) for q in wx], 0.016, "frame", lift=0.006)
+                for q in wx:                              # (a bar at each of her frames: small panes)
+                    if q > hull.back + 0.02:
+                        m.strip([port(hull.at(q, ang(a))) for a in arc], [port(hull.out(q, ang(a))) for a in arc], 0.014 if x1 < q < x0 else 0.018, "frame", lift=0.006)
     for nm, base, tip in f.flex:                         # (his guns' breeches, at his hands)
         if base.x < x - 0.3 and abs(base.y) < 0.3 and m.fine:
             m.use(nm)
@@ -615,6 +713,7 @@ def fit(m, f, s, G, hull):
     cockpit(m, f, s, G, hull)
     glazed_nose(m, f, s, G, hull)
     gunners(m, f)
+    ball_turret(m, f)
     waist(m, f, s, G, hull)
     tail_gunner(m, f, s, G, hull)
     exhausts(m, f, s, G, hull)

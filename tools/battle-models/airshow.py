@@ -228,16 +228,17 @@ def trail(fx, where, start, end=1e9, kind="black", size=1.0):
         gust = 0.72 + 0.5 * abs(math.sin(23.0 * t) * math.sin(7.3 * t + 1.0))        # (it flares and sinks)
         k = g.uniform(0.85, 1.15)
         # rooted on her, round the place that burns
-        tongue(t, at + flow * g.uniform(0.3, 1.2) * size + across(flow, g.uniform(0.15, 0.42) * size), flow, v, g.uniform(1.7, 3.9) * size * gust, "tongue",
+        tongue(t, at + flow * g.uniform(0.3, 1.2) * size + across(flow, g.uniform(0.1, 0.32) * size), flow, v, g.uniform(1.7, 3.9) * size * gust, "tongue",
                (0.30 * k, 0.082 * k, 0.009), (0.24, 0.05, 0.006), g.uniform(0.07, 0.15), g.uniform(0.02, 0.08))
-        # torn off downstream, and going red
-        if g.random() < 0.6:
-            tongue(t, at + flow * g.uniform(2.2, 6.0) * size * gust + across(flow, g.uniform(0.0, 0.55) * size), flow, v, g.uniform(1.0, 2.5) * size, "lick",
-                   (0.25 * k, 0.062 * k, 0.007), (0.13, 0.02, 0.004), g.uniform(0.09, 0.2), g.uniform(0.22, 0.45), alpha=0.85, splay=0.24)
-        # scraps of it going out in the head of the smoke
-        if g.random() < 0.22:
-            tongue(t, at + flow * g.uniform(5.0, 8.5) * size + across(flow, g.uniform(0.0, 0.8) * size), flow, v, g.uniform(0.8, 1.6) * size, "lick",
-                   (0.15, 0.032, 0.005), (0.035, 0.012, 0.006), g.uniform(0.25, 0.45), g.uniform(0.6, 0.85), alpha=0.6, splay=0.3)
+        # torn off just downstream, in line with the tongues, and going red
+        # (few, close and short lived: many of them, flung wide and far down the smoke, read as orange petals blowing about)
+        if g.random() < 0.4:
+            tongue(t, at + flow * g.uniform(2.0, 4.6) * size * gust + across(flow, g.uniform(0.0, 0.32) * size), flow, v, g.uniform(1.0, 2.2) * size, "lick",
+                   (0.25 * k, 0.062 * k, 0.007), (0.13, 0.02, 0.004), g.uniform(0.07, 0.14), g.uniform(0.15, 0.3), alpha=0.85, splay=0.12)
+        # a scrap of it going out in the head of the smoke
+        if g.random() < 0.09:
+            tongue(t, at + flow * g.uniform(4.2, 6.2) * size + across(flow, g.uniform(0.0, 0.4) * size), flow, v, g.uniform(0.6, 1.1) * size, "lick",
+                   (0.13, 0.028, 0.005), (0.03, 0.011, 0.006), g.uniform(0.1, 0.18), g.uniform(0.3, 0.5), alpha=0.5, splay=0.16)
         # the heart of it, where the petrol or the oil comes out
         if g.random() < 0.4:
             p = fx.puff(t, at + flow * g.uniform(0.2, 0.7) * size + across(flow, g.uniform(0.0, 0.2) * size), vel=v, life=g.uniform(0.05, 0.1), r=(0.2 * size, g.uniform(0.34, 0.5) * size * gust),
@@ -252,18 +253,25 @@ def fireball(fx, t0, where, size=1.0):
     g = fx.rng
 
     def make(t, at, facing):
-        for i in range(6):
-            fx.puff(t + 0.01 * i, at + Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-0.8, 0.8))) * size, vel=Vector((g.uniform(-8, 8), g.uniform(-8, 8), g.uniform(-6, 8))) * size,
-                    life=g.uniform(0.2, 0.4), r=(0.8 * size, g.uniform(1.6, 2.6) * size), col=(1.0, 0.62, 0.2), col2=(0.5, 0.14, 0.02), alpha=1.0, kind="glow", drag=3.0, wind=0.9, fade_in=0.01, grow=0.45)
-        for i in range(12):
-            k = g.uniform(0.6, 1.25)
-            fx.puff(t + 0.015 * i, at + Vector((g.uniform(-2, 2), g.uniform(-2, 2), g.uniform(-1.5, 1.5))) * size, vel=Vector((g.uniform(-16, 16), g.uniform(-16, 16), g.uniform(-12, 16))) * size,
-                    life=g.uniform(0.4, 0.85), r=(1.2 * size, g.uniform(3.0, 5.2) * size), col=(0.36 * k, 0.1 * k, 0.012 * k), col2=(0.1, 0.012, 0.002), alpha=0.9, kind="glow", drag=3.0, wind=0.9, fade_in=0.01, grow=0.45)
-        for i in range(22):
-            v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-1, 1))).normalized() * g.uniform(8, 30) * size
-            c = g.uniform(0.04, 0.12)
-            fx.puff(t + 0.05, at, vel=v, life=g.uniform(5, 9), r=(1.6 * size, g.uniform(4.5, 8.5) * size), col=(0.4, 0.2, 0.08), col2=(c, c, c), alpha=0.7, drag=2.6, fade_in=0.04,
-                    grow=0.45, wind=1.0, hold=0.3, cool=5.0)
+        # a burst of ragged tongues thrown out every way from one place at one moment, left behind by her and gone in a
+        # third of a second (round glowing balls laid one after another down the wind read as a string of beads)
+        for i in range(int(12 + 16 * size)):
+            d = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-0.8, 0.9))).normalized()
+            long = g.uniform(2.2, 5.5) * size * (1.0 if i % 3 else 1.5)
+            wide = long * g.uniform(0.28, 0.45)
+            k = g.uniform(0.8, 1.2)
+            p = fx.puff(t, at + d * long * 0.4, vel=d * g.uniform(8, 22) * size, life=g.uniform(0.14, 0.34), r=(0.6, 1.0), col=(0.36 * k, 0.11 * k, 0.012), col2=(0.14, 0.025, 0.004), alpha=0.92,
+                        kind="tongue" if i % 2 else "lick", drag=3.0, wind=0.85, squash=(0.5 * long, 0.5 * wide, 0.5 * wide), fade_in=0.008, grow=0.5, hold=0.4, cool=1.0)
+            p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
+        for i in range(3):                                   # its white-hot heart, for an instant
+            fx.puff(t, at + Vector((g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5), g.uniform(-0.4, 0.4))) * size, life=g.uniform(0.08, 0.14), r=(0.8 * size, g.uniform(1.4, 2.0) * size),
+                    col=(1.0, 0.7, 0.28), col2=(0.6, 0.2, 0.03), alpha=1.0, kind="glow", wind=0.85, fade_in=0.01, grow=0.45)
+        # (thrown wide and thin, and soon dark: packed close and left brown, they hang behind her as one solid brown lump)
+        for i in range(16):
+            v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-1, 1))).normalized() * g.uniform(14, 60) * size
+            c = g.uniform(0.04, 0.11)
+            fx.puff(t + 0.05 + 0.02 * i, at, vel=v, life=g.uniform(4, 7.5), r=(1.6 * size, g.uniform(3.5, 8.5) * size), col=(0.24, 0.13, 0.06), col2=(c, c, c), alpha=g.uniform(0.3, 0.5),
+                    drag=2.0, fade_in=0.04, grow=0.45, wind=1.0, hold=0.3, cool=1.2)
         for i in range(10):                                  # scraps: small, dark, flung far and falling
             v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-0.6, 1))).normalized() * g.uniform(25, 70) * size
             fx.puff(t, at, vel=v + Vector((40, 0, 0)), life=g.uniform(1.4, 2.6), r=(0.22, 0.12), col=(0.08, 0.07, 0.06), alpha=1.0, drag=0.5, gravity=9.8, wind=0.5, fade_in=0.01)

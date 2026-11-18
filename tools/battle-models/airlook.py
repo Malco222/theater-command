@@ -21,6 +21,8 @@ import bpy  # noqa: E402
 
 import kit  # noqa: E402
 import stage  # noqa: E402
+from mathutils import Vector  # noqa: E402
+
 from airshow import Air, Plane  # noqa: E402
 
 
@@ -48,6 +50,12 @@ def main():
              "belly": ((-L * 0.17 + 4.6, 5.2, -3.4), (-L * 0.17, 0, -0.9), 50.0),
              "under": ((s * 0.5, s * 0.42, -s * 0.4), (0, 0, -0.1), 50.0),
              "side": ((0.0, s * 1.0, 0.6), (-L * 0.06, 0, 0.2), 50.0)}
+    back = p.f.hull.back
+    shots["tailside"] = ((back + 0.9, 3.4, 0.75), (back + 0.75, 0, 0.36), 50.0)      # (abeam of a tail gunner's windows)
+    for k, c, radii in p.f.turrets:                      # (straight in at the window of a ball turret, from where its guns point)
+        if k in p.f.balls:
+            d = sum(((b - a) for a, b in p.f.guns_of.get(k, [])), Vector()).normalized()
+            shots["ball"] = (tuple(c + d * 2.6 + Vector((0.0, 0.9, 0.35))), tuple(c), 50.0)
     for v in views:
         eye, look, lens = shots[v]
         A.cam.data.lens = lens

@@ -57,7 +57,11 @@ BAY_HALF = 27.0
 # level of her middle). They are cut on the lines of her skin's own rings, on the fine model only.
 WAIST = {"B17": (-4.5, -5.3, 0.0, 27.0)}
 # Windows the game's numbers give a machine, made larger where a battle looks in at a man: (from, to, half its height).
-GLASS = {"B17": [(-13.1, -14.2, 0.28), (0.85, 0.35, 0.16)]}
+GLASS = {"B17": [(0.85, 0.35, 0.16)]}
+# A closed gun position's windows: panes of glass set in her skin, each (from, to along her; from, to round her side
+# in degrees up from level), on both sides alike; a pane that runs up to 90 is one panel across her back. They are
+# framed by fitout.tail_gunner. (The art director, 2026-11-18: one clear band round her tail read as a missing panel.)
+PANES = {"B17": [(-13.2, -13.9, 0.0, 36.0), (-13.9, -14.36, 45.0, 90.0)]}
 LINE = 0.4                                                                # (how wide a scribed line is drawn, as a share of the map's)
 
 # The game's sculptor at a battle's grain: each line of it that sets a grain, and what stands there instead.
@@ -78,7 +82,7 @@ FINER = [
 # jet engines under the wings, each (its stations, how far out), open at both ends, with no airscrew anywhere.
 EXTRA_PLANES = {
     "Me262": {
-        "title": "Me 262A (our own model)", "year": 1944,
+        "title": "Me 262A (our own model)", "year": 1944, "tech": "jets",
         "hull": [(4.45, -0.08, 0.03, 0.03), (4.32, -0.08, 0.11, 0.11), (3.95, -0.07, 0.28, 0.27), (3.3, -0.05, 0.46, 0.44), (2.3, -0.02, 0.63, 0.59), (1.1, 0.02, 0.76, 0.69),
                  (-0.2, 0.05, 0.8, 0.73), (-1.4, 0.09, 0.72, 0.7), (-2.8, 0.18, 0.5, 0.56), (-4.3, 0.3, 0.28, 0.4), (-5.5, 0.4, 0.12, 0.24), (-6.15, 0.45, 0.03, 0.1)],
         "square": 2.6,
@@ -249,6 +253,21 @@ def convert(name, fine=True):
         a = math.degrees(math.atan2((c.z - hull.z(-c.x)) / hull.h(-c.x), abs(c.y) / hull.w(-c.x)))
         return waist[2] - 40.0 * slack - 0.5 < a < waist[3] + 40.0 * slack + 0.5
 
+    panes = []
+    if fine:
+        grid = 360.0 / around
+        for px0, px1, pa0, pa1 in PANES.get(name, []):
+            panes.append((min(rings_x, key=lambda r: abs(r - px0)), min(rings_x, key=lambda r: abs(r - px1)), round(pa0 / grid) * grid, round(pa1 / grid) * grid))
+
+    def pane_at(c, slack=0.0):
+        """Whether a point of her skin lies in a pane of glass of a closed gun position (either side)."""
+        for x0, x1, a0, a1 in panes:
+            if x1 - slack < c.x < x0 + slack:
+                a = math.degrees(math.atan2((c.z - hull.z(-c.x)) / hull.h(-c.x), abs(c.y) / hull.w(-c.x)))
+                if a0 - 40.0 * slack - 0.5 < a < a1 + 40.0 * slack + 0.5:
+                    return True
+        return False
+
     def bay_door(c):
         """The door of her bay a point of her belly is on, if it is (fine model only: the plain one has no keel line to part them at)."""
         if not bay or not fine or not (bay[1] < c.x < bay[0]):
@@ -325,6 +344,7 @@ def convert(name, fine=True):
             for hand in ((1.0, -1.0) if (a_.y != 0.0 or b_.y != 0.0) else (1.0,)):
                 rods.append((Vector((a_.x, a_.y * hand, a_.z)), Vector((b_.x, b_.y * hand, b_.z))))
     turrets, gun_part = [], {}                           # (number, middle, radii) of each turret; the part of each gun
+    balls = set()                                        # (the numbers of the turrets that are steel balls)
     for c, radii in domes:
         mine = [i for i, (a_, b_) in enumerate(rods) if (a_ - c).length < max(radii) + 0.5 and i not in gun_part]
         if not mine:
@@ -339,6 +359,8 @@ def convert(name, fine=True):
         way.z = 0.0
         way = way.normalized() if way.length > 1e-6 else X.copy()
         belly = c.z < hull.z(-c.x) - 0.3 * hull.h(-c.x)
+        if belly and name in fitout.BALL:
+            balls.add(k)                                    # (a steel ball, not a glass dome: see fitout.ball_turret)
         m.part(f"turret.{k}.guns", f"turret.{k}", port(c), axis=tuple(way.cross(Z).normalized()), kind="turn", limits=(-85, 10) if belly else (-10, 80), note="its guns; plus lifts them")
         for i in mine:
             gun_part[i] = f"turret.{k}.guns"
@@ -361,7 +383,12 @@ def convert(name, fine=True):
                 return f"turret.{k}"
         return None
 
+    def in_ball(p):
+        return any(k in balls and sum(((p[j] - c[j]) / (radii[j] * 1.15)) ** 2 for j in range(3)) <= 1.0 for k, c, radii in turrets)
+
     def where(kind, c, mean, ob):
+        if kind in ("dome", "frames", "glints") and in_ball(mean if kind == "dome" else c):
+            return None                                     # (the game's glass dome there, its frames and its glints, are left out)
         if kind in ("wing", "tail", "fin"):
             on = on_surface(kind, c)
             if on:
@@ -370,6 +397,8 @@ def convert(name, fine=True):
             return bay_door(c)
         if kind in ("hull", "lines") and waist_hole(c):
             return None                                     # (an open window: see fitout.waist)
+        if kind == "lines" and pane_at(c):
+            return None                                     # (no panel line is scribed across a pane of glass)
         if kind == "hull":
             return "tail" if c.x < x_cut else "plane"
         if kind == "wing":
@@ -446,11 +475,12 @@ def convert(name, fine=True):
             if part is None:
                 continue
             of_face = own if own >= 0 else f[layer]
+            glassy = kind == "hull" and bool(panes) and pane_at(f.calc_center_median())
             corners = tuple(reversed([point(l.vert, part) for l in f.loops]))      # (mirrored, so turned round)
             faces, fp, fc = out.setdefault(part, ([], [], []))
             faces.append(corners)
-            fp.append(paint_names[of_face] if of_face >= 0 else "upper")
-            fc.append(of_face < 0)
+            fp.append("glass" if glassy else paint_names[of_face] if of_face >= 0 else "upper")
+            fc.append(of_face < 0 and not glassy)
         # (where a skin is cut between two parts, both torn ends are closed)
         caps = {}
         if kind in ("hull", "wing"):
@@ -616,7 +646,7 @@ def convert(name, fine=True):
     m.marks = G["marks_of"](s, hull)
     m.info.update({"rust": "9A9C98", "soot": colours["soot"], "wear_show": 0.3,
                    "file": {"nation_paint": bool(s.get("nation_paint")), "number_ink": colours["ink"], "span": round(2.0 * half, 3),
-                            "role": role, "crew": CREW.get(name, 1), "engines": len(hubs) + len(pods), "jets": len(pods), "year": s.get("year"),
+                            "role": role, "crew": CREW.get(name, 1), "engines": len(hubs) + len(pods), "jets": len(pods), "year": s.get("year"), "tech": s.get("tech"),
                             "clear": {"glass": 0.3, "blur": 0.14}}})
     f = Facts()
     f.name, f.spec, f.hull, f.wing, f.half, f.y_cut, f.x_cut, f.hubs, f.screw = name, s, hull, wing, half, y_cut, x_cut, [port(h) for h in hubs], screw
@@ -627,6 +657,7 @@ def convert(name, fine=True):
     f.engines, f.pods = len(hubs) + len(pods), pods
     f.year = s.get("year")                                   # (a machine that only comes late in the war)
     f.waist, f.around, f.waist_hole = waist, around, waist_hole
+    f.panes, f.pane_at, f.balls = panes, pane_at, balls
     f.surf = list(surf)
     f.turrets = [(k, port(c), radii) for k, c, radii in turrets]
     f.flex = [(nm, port(a_), port(b_)) for nm, a_, b_ in flex]
