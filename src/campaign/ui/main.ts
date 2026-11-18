@@ -594,7 +594,7 @@ function mount(): void {
       <div class="mapwrap" id="mapwrap">
         <svg id="map" preserveAspectRatio="xMidYMid slice">
           <defs>${flagDefs()}<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
-          <g id="world"><g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="gates"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="kept"></g><g id="route"></g><g id="guards"></g></g><use id="wrapw" class="wrapcopy" href="#world" display="none"/><use id="wrape" class="wrapcopy" href="#world" display="none"/>
+          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="gates"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="kept"></g><g id="route"></g><g id="guards"></g><g id="wrapw" class="wrapcopy" display="none"></g><g id="wrape" class="wrapcopy" display="none"></g>
         </svg>
         <svg id="mapfx" class="mapfx" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g id="fxmarks"></g><g id="fxcover"></g><g id="ghost"></g></svg>
         <div class="hint" id="hint"></div>
@@ -9666,12 +9666,31 @@ function shipPorts(): string {
 /** Where the pointer is across the map, as a share of its width (null while it is off the map): the view keeps that point on the map itself. */
 let pointerAt: number | null = null;
 
-/** One copy of the map beyond the seam: shown, a world's width east or west, while the view reaches past the edge. */
+/**
+ * One copy of the map beyond the seam: shown, a world's width east or west, while the view reaches past the edge.
+ *
+ * A copy is a group of the map's layers drawn again (`<use>`), one for each layer, and it is empty while it is put
+ * away. Two things the browser charges for, both found by the page check of Version 84.3.1 (steps 2e and 3b: a
+ * hurried second Enter came in after the key guard's half second had run out), and both paid on the map of Europe
+ * too, where nothing is ever copied:
+ * - a `<use>` keeps its own tree of what it points at and builds it again after every change there, shown or not:
+ *   two hidden copies of the whole map cost every redraw about 150 ms;
+ * - one group round all the layers (so that a copy could point at a single thing) makes the browser paint and
+ *   compose the whole map again whenever one layer changes: about 100 ms more a redraw.
+ * So the layers stand straight under the map as they always did, and a copy points at them only while it is shown.
+ */
 function showCopy(sel: string, on: boolean, dx: number): void {
   const el = document.querySelector(sel);
   if (!el) return;
-  if (!on) { if (el.getAttribute('display') !== 'none') el.setAttribute('display', 'none'); return; }
+  if (!on) {
+    if (el.getAttribute('display') !== 'none') el.setAttribute('display', 'none');
+    if (el.firstChild) { el.innerHTML = ''; el.removeAttribute('data-of'); }
+    return;
+  }
   el.setAttribute('transform', `translate(${dx} 0)`);
+  // Every layer under the map, in the map's order (the first hour's mark too, laid among them while it is up).
+  const of = [...$('#map').children].filter((k) => k.tagName === 'g' && !!k.id && !k.classList.contains('wrapcopy')).map((k) => k.id).join(' ');
+  if (el.getAttribute('data-of') !== of) { el.innerHTML = of.split(' ').map((id) => `<use href="#${id}"/>`).join(''); el.setAttribute('data-of', of); }
   el.removeAttribute('display');
 }
 
