@@ -7210,25 +7210,27 @@ namespace
 					]
 
 					// The opening screen: where to begin and as whom.
-					// (The UI director, 18 November 2026, on build 1596.) The card is 1,200 by 940, so that under the title
-					// band (FIRST COMMAND and CONTINUE YOUR CAMPAIGN on it now too) the seven great powers, the three
-					// settings and BEGIN AS ... all show without scrolling; 16 clear of the window's edge, and drawn
-					// smaller, never cut, where the window gives it less room than that. On the frame of 1,600 by 1,000 it
-					// is exactly whole; where the window gives more height (1,280 by 720 gives 1,350) it grows to 1,000.
+					// (The UI director, 18 November 2026, on build 1596, and at 03:48 on 23c9ebe.) The card is the kit's
+					// page, card-lg: 1,240 wide, and as high as the screen less space-12 (48) above and below, so that under
+					// the title band (FIRST COMMAND on its own row above CONTINUE YOUR CAMPAIGN) the seven great powers, the
+					// three settings and BEGIN AS ... all show without scrolling, and the smaller nations take what height is
+					// left. It is never under 1,040 high: what those keep, with one row of the smaller nations and their
+					// plate, for every pick but those whose sentence runs long. Where the screen is shorter than that and
+					// its 48s (the frame of 1,600 by 1,000 is 972 high), the card is drawn smaller, never cut.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(16.0f))
+						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(48.0f))
 						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bVisible ? EVisibility::Visible : EVisibility::Collapsed; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
 							[
-							SNew(SBox).WidthOverride(1200.0f)
+							SNew(SBox).WidthOverride(1240.0f)
 							.HeightOverride_Lambda([this]()
 							{
-								// (940 on the frame of 1,600 by 1,000; taller, to 1,000, where the window gives more room)
+								// (1,254 on the frame of 1,280 by 720, which is 1,350 high; 1,040, drawn smaller, on the others)
 								const double High = ScreenRoot.IsValid() ? ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y : 972.0;
-								return FOptionalSize(static_cast<float>(FMath::Clamp(High - 32.0, 940.0, 1000.0)));
+								return FOptionalSize(static_cast<float>(FMath::Max(High - 96.0, 1040.0)));
 							})
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 22.0f, 26.0f, 22.0f))
@@ -7331,7 +7333,9 @@ namespace
 									// What the page offers. (The UI director, on build 1596.) The list stands above the settings, never
 									// under them: its area ends 12 above the panel's top edge. Where it runs on below what shows, it ends
 									// in a fade and a plate counting what is below ("24 MORE ▼"); a click on the plate scrolls it down by
-									// one row of cards.
+									// one row of cards. (03:48: the full triangle, a size under the plate's type, so that it sits at the
+									// letters' height and not above them. The small one is in neither the typewriter nor, for certain, the
+									// face of signs it falls back on, and a sign no face has is drawn as an empty box.)
 									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)
 									[
 										SNew(SOverlay)
@@ -7357,13 +7361,20 @@ namespace
 											.Visibility_Lambda([this]() { return bListRunsOn ? EVisibility::Visible : EVisibility::Collapsed; })
 											.OnClicked_Lambda([this]() { ScrollListOn(); return FReply::Handled(); })
 											[
-												SNew(STextBlock).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(BrightBrass)
-												.Text_Lambda([this]()
-												{
-													// (the full-size triangle: the small one is in neither the typewriter nor, for certain, the face of signs
-													// it falls back on, and a sign no face has is drawn as an empty box)
-													return FText::FromString(ListBelow > 0 ? FString::Printf(TEXT("%d MORE \u25BC"), ListBelow) : FString(TEXT("MORE \u25BC")));
-												})
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+												[
+													SNew(STextBlock).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(BrightBrass)
+													.Text_Lambda([this]()
+													{
+														return FText::FromString(ListBelow > 0 ? FString::Printf(TEXT("%d MORE"), ListBelow) : FString(TEXT("MORE")));
+													})
+												]
+												// (on the letters' line: both lines are measured by the typewriter's face, so their feet meet)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(6.0f, 0.0f, 0.0f, 0.0f)
+												[
+													SNew(STextBlock).Font(Font(TEXT("Bold"), 9)).ColorAndOpacity(BrightBrass).Text(FText::FromString(TEXT("\u25BC")))
+												]
 											]
 										]
 									]
@@ -13089,7 +13100,7 @@ namespace
 
 		/**
 		 * One country to lead in the grand campaign. (The UI director, 18 November 2026, on build 1596.) A compact card:
-		 * the flag and the name only, 93 high on the table's frame (96 on the 1,600 by 1,000 one), seven great powers to
+		 * the flag and the name only, 93 high in the frame's own measure, seven great powers to
 		 * a row and the others eight; the name wraps onto a second line rather than run past the card. Its status line and
 		 * its sentence are in the summary at the panel's foot once it is picked, and on its hover before.
 		 */
