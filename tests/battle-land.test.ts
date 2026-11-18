@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { diceChance, runOut } from '../src/battle/core';
 import { buildField, coverAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, wornWords, type LandUnit, type PracticeGround } from '../src/battle/land';
 import { ENGINEERING } from '../src/campaign/rivers';
-import { createGame, hostileUnits } from '../src/campaign/game';
+import { createGame, hostileUnits, type FieldBill } from '../src/campaign/game';
 import { blocked } from '../src/campaign/rivers';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, candidates, humanUp, orderAttack, previewAttack, stepAI } from '../src/campaign/turn';
@@ -794,6 +794,51 @@ describe('the hand-off with a real campaign', () => {
       n++;
     }
     expect(n).toBeGreaterThanOrEqual(2);
+  });
+  it('an army pulled out after contact pays the rules\' bill for that defeat times its bar squared, or its field loss (b474)', () => {
+    type Rep = NonNullable<ReturnType<typeof handBack>>;
+    const lost = (x: Rep, s: 'att' | 'def'): number => (s === 'att' ? Math.max(x.attLost, x.attackers.reduce((a, u) => a + u.lost, 0)) : Math.max(x.defLost, x.defenders.reduce((a, u) => a + u.lost, 0)));
+    // Pomorze as the Poles, the Germans' XIX and XXI Corps attacking: WITHDRAW pressed at a bar, or before the armies meet.
+    const out = (at: number): { rep: Rep; staff: Rep; field: number; bar: number | null; line: string | null } => {
+      const g = playing(3), twin = playing(3);
+      const pick = (x: typeof g) => { const r = x.regions.find((y) => y.name === 'Pomorze')!; return { r, cs: candidates(x, r).filter((c) => c.name === 'XIX Corps' || c.name === 'XXI Corps') }; };
+      const p = pick(g), t = landTicket(g, p.cs, p.r)!;
+      t.att.human = false; t.def.human = true;
+      const b = new LandBattle(t);
+      b.ai.att = b.ai.def = true;
+      for (let i = 0; i < 20000 && !b.over; i++) { if (at === 0 && b.t > 3) break; b.step(); if (at > 0 && b.contactAt !== null && b.breaking('def') >= at) break; }
+      expect(b.over).toBeNull();
+      expect(b.command({ do: 'withdrawAll', side: 'def' }, 'def')).toBe(true);
+      const o = b.over!;
+      expect(o.how).toBe('withdrew');
+      const rep = handBack(g, p.cs, p.r, o)!, q = pick(twin);
+      return { rep, staff: orderAttack(twin, q.cs, q.r, o.R)!, field: o.lost.def * t.def.forces.reduce((a, f) => a + f.men, 0), bar: o.pulled?.bar ?? null, line: pursuitLine(t, o, rep) };
+    };
+    // Before the armies meet: the field's loss only, and nothing to tell.
+    const early = out(0);
+    expect(early.bar).toBeNull();
+    expect(lost(early.rep, 'def')).toBeLessThanOrEqual(Math.round(early.field * 1.15) + 1);
+    expect(early.line).toBeNull();
+    for (const at of [0.3, 0.6, 0.9]) {
+      const x = out(at);
+      expect(x.bar!).toBeGreaterThanOrEqual(at);
+      const want = Math.max(x.field, lost(x.staff, 'def') * x.bar! ** 2);
+      expect(lost(x.rep, 'def') / want).toBeGreaterThan(0.97);
+      expect(lost(x.rep, 'def') / want).toBeLessThan(1.03);
+      // Pulled out early, it pays its field loss and no more is told; late, the rearguard's line says what the rest cost.
+      if (at === 0.3) expect(x.line).toBeNull();
+      else expect(x.line).toMatch(/^As your army withdrew under fire, it lost \d{1,3}(,\d{3})* more men in the rearguard and as stragglers\.$/);
+    }
+  });
+  it('an attack called off under fire pays its own bill for that repulse the same way (b474)', () => {
+    type Rep = NonNullable<ReturnType<typeof handBack>>;
+    const lost = (x: Rep): number => Math.max(x.attLost, x.attackers.reduce((a, u) => a + u.lost, 0));
+    const call = (bill?: FieldBill): Rep => { const g = playing(5); const { c, r } = anAttack(g); return orderAttack(g, [c], r, 0.9, bill)!; };
+    const staff = lost(call());
+    for (const bar of [0.4, 0.8, 1]) {
+      const rep = call({ corps: {}, att: 0.02, def: 0.01, whole: true, pulled: { side: 'att', bar } });
+      expect(lost(rep) / Math.max(staff * bar * bar, 1)).toBeCloseTo(1, 1);
+    }
   });
   it('with no battle fought, the rules run exactly as before', () => {
     const g1 = playing(5), g2 = playing(5);

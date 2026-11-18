@@ -39,7 +39,11 @@
 //   TC.battleEnd()               -> what TC.attack returns ({ report, siege, note, price, paid, moved, view }), once the
 //                                   battle is over; null before that (after an air battle: what TC.act returns for the raid).
 //                                   Where the army that broke was booked more than the field cost it, also pursuit: one
-//                                   line for the after card, under ON THE FIELD straight after the strength line (b464)
+//                                   line for the after card, under ON THE FIELD straight after the strength line (b464).
+//                                   An army pulled out after contact pays the rules' bill for that defeat times its bar
+//                                   squared where that is more than the field cost it; pursuit then says what the
+//                                   rearguard and the stragglers cost, in the same place: "As the Polish army withdrew
+//                                   under fire, it lost 4,644 more men in the rearguard and as stragglers." (b474)
 //   TC.airLook(kind, target, ids) -> { ticket } for the raid the raid card shows, or { ticket: null, why } where it
 //                                   cannot be fought out (src/battle/air FOUGHT_KINDS: 'bomb', 'superiority')
 //   TC.airStart(kind, target, ids) -> { sky, view }: the air battle opens paused; sky is the board, sent once
@@ -221,7 +225,7 @@ export function battleCalls(h: BattleHooks) {
       const going = t.att.forces.map((f) => f.corps);
       const ses = begin(sim, (r) => {
         const out = h.attack(ids, to, r.R, fieldBill(r));
-        // The army that broke, booked more than the field cost it: the after card's line for the pursuit (b464).
+        // The army that broke, or pulled out under fire, booked more than the field cost it: the after card's line (b464, b474).
         const rep = (out as { report?: BattleReport | null } | null)?.report;
         const pursuit = rep ? pursuitLine(t, r, rep) : null;
         return pursuit && out && typeof out === 'object' ? { ...out, pursuit } : out;

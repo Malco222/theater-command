@@ -973,8 +973,12 @@ export interface AttackOpts {
  * before is the field's, and the bill for the whole day is never less than it. 'broke': the side whose army broke on
  * the field (routed or driven from it). Where that side lost the day, the rules settle the pursuit (b464): it pays
  * what the rules charge for the same result, R, as SEND THEM IN would, or the field's loss where that is larger.
+ * 'pulled': the side that withdrew its army after the armies met, and how near breaking it stood (its bar, 0 to 1).
+ * Where that side lost the day it pays the rules' bill for that defeat times the bar squared, or its field loss where
+ * that is larger (b474): an army that pulls out early gets away for little more than it had lost; one on the point of
+ * breaking could not get away at all, and pays the whole.
  */
-export interface FieldBill { corps: Record<number, number>; att: number; def: number; whole: boolean; broke?: 'att' | 'def' }
+export interface FieldBill { corps: Record<number, number>; att: number; def: number; whole: boolean; broke?: 'att' | 'def'; pulled?: { side: 'att' | 'def'; bar: number } }
 
 /**
  * How far a side's bill may stand from what the field cost it: the after card's headline and its field line are one
@@ -1000,10 +1004,11 @@ function fieldScale(cs: Corps[], planned: number[], share: number | undefined, w
  * corps' share with the split, before the scale), each held to 'cap' and then times 'mul': where the corps the field hit
  * hardest reaches its cap, the rest of the bill falls on the others, so the side's whole bill is still the rules'.
  */
-function pursuitScale(cs: Corps[], part: number[], plain: number[], cap: number, mul: number, share: number): number {
+function pursuitScale(cs: Corps[], part: number[], plain: number[], cap: number, mul: number, share: number, of = 1): number {
   const m = cs.map((c) => men(c)), tot = m.reduce((a, b) => a + b, 0);
   if (tot <= 0 || mul <= 0) return 1;
-  const want = Math.max(share / mul, cs.reduce((a, _c, i) => a + m[i] * Math.min(cap, plain[i]), 0) / tot) * tot;
+  // 'of': the part of the rules' bill it pays; all of it for a pursuit, the bar squared for a withdrawal (b474).
+  const want = Math.max(share / mul, of * (cs.reduce((a, _c, i) => a + m[i] * Math.min(cap, plain[i]), 0) / tot)) * tot;
   // The bill rises with the scale until each corps reaches its cap: a straight line between caps, so a few steps find it.
   let k = 1;
   for (let n = 0; n <= cs.length + 1; n++) {
@@ -1826,8 +1831,12 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // Fought on the field, each side's whole bill is held near what the field cost it (ruling 226(6)); an army that broke
   // on the field and lost the day pays the rules' bill for that result, or the field's if larger (b464).
   const attPart = (c: Corps, i: number, w = attW[i]): number => attFrac * w * tollFor(a.faced?.toll, c) * cmdLoss(g, c);
+  // An army that pulled out after contact and lost the day pays that bill times its bar squared, or its field loss (b474).
+  const pulled = (s: 'att' | 'def'): number | null => (opts.field?.pulled?.side === s ? Math.min(1, Math.max(0, opts.field.pulled.bar)) ** 2 : null);
+  const attOut = pulled('att');
   const attK = !opts.field ? 1
     : opts.field.broke === 'att' && R < 1.2 ? pursuitScale(attackers, attackers.map((c, i) => attPart(c, i)), attackers.map((c, i) => attPart(c, i, 1)), 0.6, 1, opts.field.att)
+      : attOut !== null && R < 1.2 ? pursuitScale(attackers, attackers.map((c, i) => attPart(c, i)), attackers.map((c, i) => attPart(c, i, 1)), 0.6, 1, opts.field.att, attOut)
       : fieldScale(attackers, attackers.map((c, i) => Math.min(0.6, attFrac * attW[i] * tollFor(a.faced?.toll, c) * cmdLoss(g, c))), opts.field.att, opts.field.whole);
   attackers.forEach((c, i) => {
     const before = men(c);
@@ -1845,8 +1854,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // Men on foot driven out of open desert by a mobile enemy do not all get away.
   const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
   const defPart = (c: Corps, i: number, w = defW[i]): number => defFrac * w * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready);
+  const defOut = pulled('def');
   const defK = !opts.field ? 1
     : opts.field.broke === 'def' && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c, i) => defPart(c, i, 1)), 0.8, a.weight, opts.field.def)
+      : defOut !== null && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c, i) => defPart(c, i, 1)), 0.8, a.weight, opts.field.def, defOut)
       : fieldScale(defenders, defenders.map((c, i) => Math.min(0.8, defPart(c, i)) * a.weight), opts.field.def, opts.field.whole);
   defenders.forEach((c, i) => {
     const before = men(c);

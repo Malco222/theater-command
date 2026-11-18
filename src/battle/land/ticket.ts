@@ -89,7 +89,7 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
 export function fieldBill(result: FieldResult): FieldBill {
   const corps: Record<number, number> = {};
   for (const f of result.forces ?? []) corps[f.corps] = f.lost;
-  return { corps, att: result.lost.att, def: result.lost.def, whole: result.how !== 'objective', ...(result.broke ? { broke: result.broke } : {}) };
+  return { corps, att: result.lost.att, def: result.lost.def, whole: result.how !== 'objective', ...(result.broke ? { broke: result.broke } : {}), ...(result.pulled ? { pulled: { ...result.pulled } } : {}) };
 }
 
 /**
@@ -98,15 +98,18 @@ export function fieldBill(result: FieldResult): FieldBill {
  * prisoners. Null where it was not (a rounding's worth is not a pursuit). The price line already counts these men.
  */
 export function pursuitLine(t: FieldTicket<LandPlace>, result: FieldResult, rep: BattleReport): string | null {
-  const s = result.broke;
-  // Only where the army that broke also lost the day, as the bill has it (game.ts: R under 1.2 for the attack).
+  // The army that broke, or the one that pulled out under fire (b474): its rearguard and stragglers.
+  const s = result.broke ?? result.pulled?.side;
+  // Only where that army also lost the day, as the bill has it (game.ts: R under 1.2 for the attack).
   if (!s || (s === 'def') !== result.R >= 1.2) return null;
   const us = s === 'att' ? rep.attackers : rep.defenders;
   const lost = Math.max(s === 'att' ? rep.attLost : rep.defLost, us.reduce((a, u) => a + u.lost, 0));
   const onField = Math.round(result.lost[s] * t[s].forces.reduce((a, f) => a + f.men, 0));
   const more = lost - onField;
   if (more <= Math.max(10, onField * 0.01)) return null;
-  return `After ${t[s].human ? 'your army' : `the ${t[s].adj} army`} broke, it lost ${more.toLocaleString('en-GB')} more men in the pursuit and as prisoners.`;
+  const army = t[s].human ? 'your army' : `the ${t[s].adj} army`;
+  if (!result.broke) return `As ${army} withdrew under fire, it lost ${more.toLocaleString('en-GB')} more men in the rearguard and as stragglers.`;
+  return `After ${army} broke, it lost ${more.toLocaleString('en-GB')} more men in the pursuit and as prisoners.`;
 }
 
 /** Hands a fought battle back: the rules' own attack order, with the field's R in place of the dice. */

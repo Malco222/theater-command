@@ -45,6 +45,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   contactAt: number | null = null;
   /** The player has been warned that their army is near breaking (ruling 226(3)). */
   private warned: Record<Side, boolean> = { att: false, def: false };
+  /** Each army's bar, how near breaking it stands, as last judged: what a withdrawal after contact pays by (b474). */
+  private bar: Record<Side, number> = { att: 0, def: 0 };
   /**
    * The attack card did not know the defence (b453): an enemy block shows the player only where it stands until one of
    * his has fought it (b464(2); known). Set by whoever opens the field. Words and pictures only: the fight never reads it.
@@ -185,6 +187,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       }
       case 'withdrawAll': {
         if (c.side !== by) return false;
+        // How near breaking it stood when it pulled out, before its blocks leave the count (b474).
+        this.bar[by] = this.breaking(by);
         for (const u of this.units) if (u.side === by && fighting(u)) { u.state = 'withdrawn'; u.act = 'down'; }
         this.finish(other(by), 'withdrew');
         return true;
@@ -947,6 +951,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       const left = this.units.filter((u) => u.side === s && fighting(u));
       if (!left.length) { this.finish(other(s), this.units.some((u) => u.side === s && u.state === 'withdrawn') && !this.units.some((u) => u.side === s && u.state === 'routing') ? 'withdrew' : 'destroyed'); return; }
       const near = this.breaking(s);
+      this.bar[s] = near;
       // At three quarters, a line each army's way (the UI director's words for ruling 226(3)): the player's own in amber
       // on the page, the other's one dispatch. With nobody playing, nothing is said.
       if (!this.warned[s] && near >= 0.75 && (this.ticket.att.human || this.ticket.def.human)) {
@@ -1023,6 +1028,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       level: levelOf(r, men.att > men.def), lines,
       forces: [...forces.values()].map((f) => ({ corps: f.corps, side: f.side, lost: f.p > 0 ? Math.round((f.lost / f.p) * 1000) / 1000 : 0 })),
       ...(how === 'rout' || how === 'destroyed' ? { broke: loser } : {}),
+      // Pulled out after the armies met: the rearguard and the stragglers are the rules' to bill, by its bar (b474).
+      ...(how === 'withdrew' && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.bar[loser]) * 1000) / 1000 } } : {}),
     };
     if (verdict !== winner) this.over.lines.push('The day went their way, but the campaign counts it as close as the odds allowed.');
     this.say({ what: 'end', text: lines[0] });
