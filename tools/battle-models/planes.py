@@ -82,6 +82,12 @@ FINER = [
     ("tail.us(0.4 if fine else 1.0)", "battle_us(tail, BATTLE['tail'] if fine else 1.0, BATTLE_ELEVATOR[:2])"),
     ("fin.us(0.3 if fine else 0.8)", "battle_us(fin, BATTLE['fin'] if fine else 0.8, BATTLE_RUDDER[:1])"),
     ("n_around = 20 if fine else 10", "n_around = 28 if fine else 10"),
+    # (what hangs under her or stands on her: a spat, a wheel, a bomb, a gun barrel, round close up and not cut like a gem)
+    ('parts.ball("extra", (at[0], at[1] * hand, at[2]), radii, paint)', 'parts.ball("extra", (at[0], at[1] * hand, at[2]), radii, paint, u=28, v=18)'),
+    ("ra, rb, paint=paint, sides=10)", "ra, rb, paint=paint, sides=(22 if max(ra, rb) > 0.08 else 12))"),
+    ("[[body.at(x, 2.0 * math.pi * k / 12.0) for k in range(12)] for x in body.xs(0.3)]",
+     "[[body.at(x, 2.0 * math.pi * k / 24.0) for k in range(24)] for x in body.xs(0.12)]"),
+    ('parts.rod("tailwheel", (x, -0.04, z), (x, 0.04, z), 0.12, paint="tyre", sides=12 if fine else 6)', 'parts.rod("tailwheel", (x, -0.04, z), (x, 0.04, z), 0.12, paint="tyre", sides=20 if fine else 6)'),
 ]
 
 
