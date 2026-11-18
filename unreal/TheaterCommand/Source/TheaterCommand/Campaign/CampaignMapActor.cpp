@@ -7191,6 +7191,7 @@ void ACampaignMapActor::ShowTownForm(bool bFar)
 	{
 		LightsMesh->SetMeshSectionVisible(0, !bFar);
 	}
+	TownSquareForm.Init(static_cast<int8>(bFar ? 1 : 0), FMath::Max(TownSquares.Num(), TownFarSquares.Num())); // (speed: tc.Speed.ShowSpread)
 }
 
 void ACampaignMapActor::SetTownShadows(bool bCast)
@@ -14983,15 +14984,60 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	// Trees are drawn only close to: in the squares of country round what the eye is looking at.
 	const bool bNear = CameraDistance < 7200.0f; // (from working height and above the woods are one canopy: art fix 7)
 	const double Reach = CameraDistance * 1.25 + TreeSquare * 0.75;
-	for (int32 Index = 0; Index < TreeMeshes.Num(); ++Index)
+	// (Speed, 18 November 2026: tc.Speed.ShowSpread. A square that is shown is handed whole to the draw thread, every
+	// point of it, in that frame. When the eye came down through this height every square in reach was shown in the
+	// one frame: 39 squares and 368 thousand points, a frame of 47 ms, in the builder's capture 2 (build 1684). And
+	// the towns below went all 105 at once, a million points and 50 to 64 ms, each time the eye crossed their height.
+	// Now the squares newly shown are counted by their points and shown so many a frame, the nearest to the eye's
+	// point first and one always; the rest are still owed the frame after, and the photographer and the step player
+	// wait for them (bSquaresComing). A square taken away costs nothing and goes at once, as before.)
+	const int32 ShowSpread = TheaterSpeed::ShowSpread();
+	auto PointsOf = [](UProceduralMeshComponent* Mesh)
 	{
-		const bool bShow = bNear && FVector::DistSquared2D(TreeCentres[Index], CameraFocus) < Reach * Reach;
-		if (bShow != TreesShown[Index])
+		int32 Points = 0;
+		for (int32 Section = 0; Mesh && Section < Mesh->GetNumSections(); ++Section)
 		{
-			TreesShown[Index] = bShow;
-			if (TreeMeshes[Index])
+			const FProcMeshSection* Its = Mesh->GetProcMeshSection(Section);
+			Points += Its ? Its->ProcVertexBuffer.Num() : 0;
+		}
+		return Points;
+	};
+	bSquaresComing = false;
+	{
+		TArray<TPair<double, int32>> Owed; // (how far from the eye's point, squared, and which square)
+		for (int32 Index = 0; Index < TreeMeshes.Num(); ++Index)
+		{
+			const double Away = FVector::DistSquared2D(TreeCentres[Index], CameraFocus);
+			const bool bShow = bNear && Away < Reach * Reach;
+			if (bShow != TreesShown[Index])
 			{
-				TreeMeshes[Index]->SetVisibility(bShow);
+				if (bShow && ShowSpread > 0)
+				{
+					Owed.Emplace(Away, Index);
+					continue;
+				}
+				TreesShown[Index] = bShow;
+				if (TreeMeshes[Index])
+				{
+					TreeMeshes[Index]->SetVisibility(bShow);
+				}
+			}
+		}
+		Owed.Sort([](const TPair<double, int32>& A, const TPair<double, int32>& B) { return A.Key < B.Key; });
+		int32 Shown = 0;
+		for (const TPair<double, int32>& Next : Owed)
+		{
+			const int32 Its = PointsOf(TreeMeshes[Next.Value]);
+			if (Shown > 0 && Shown + Its > ShowSpread)
+			{
+				bSquaresComing = true;
+				break;
+			}
+			Shown += Its;
+			TreesShown[Next.Value] = true;
+			if (TreeMeshes[Next.Value])
+			{
+				TreeMeshes[Next.Value]->SetVisibility(true);
 			}
 		}
 	}
@@ -15150,8 +15196,63 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		const int32 FarNow = CameraDistance > (TownsFarShown == 1 ? 10800.0f : 11600.0f) ? 1 : 0;
 		if (FarNow != TownsFarShown && TownMesh && TownFarMesh)
 		{
+			// (Speed: tc.Speed.ShowSpread, as for the trees above. The first time, and after the towns are built again,
+			// every square is put in its form at once, as before: that is a load's frame. At a change of height only
+			// what is not a square changes here, the windows' panes among it, and the squares follow below.)
+			const bool bSpread = ShowSpread > 0 && TownsFarShown != -1 && TownSquareForm.Num() > 0 && TownSquareForm.Num() == FMath::Max(TownSquares.Num(), TownFarSquares.Num());
 			TownsFarShown = FarNow;
-			ShowTownForm(FarNow == 1);
+			if (bSpread)
+			{
+				TownMesh->SetVisibility(FarNow != 1);
+				TownFarMesh->SetVisibility(FarNow == 1);
+				if (LightsMesh && LightsMesh->GetNumSections() > 0)
+				{
+					LightsMesh->SetMeshSectionVisible(0, FarNow != 1);
+				}
+			}
+			else
+			{
+				ShowTownForm(FarNow == 1);
+			}
+		}
+		// (Speed: tc.Speed.ShowSpread.) The squares of towns not yet in the form the eye's height asks for change to
+		// it here, the nearest to the eye's point first: a square's two forms change places in the one frame, so no
+		// town is ever missing or drawn twice. So many points of the form newly shown a frame, and one square always.
+		if (TownsFarShown != -1 && TownSquareForm.Num() == FMath::Max(TownSquares.Num(), TownFarSquares.Num()))
+		{
+			const int8 Wanted = static_cast<int8>(TownsFarShown == 1 ? 1 : 0);
+			TArray<TPair<double, int32>> Owed;
+			for (int32 Index = 0; Index < TownSquareForm.Num(); ++Index)
+			{
+				if (TownSquareForm[Index] != Wanted)
+				{
+					const UProceduralMeshComponent* Either = TownSquares.IsValidIndex(Index) && TownSquares[Index] ? TownSquares[Index].Get() : TownFarSquares.IsValidIndex(Index) ? TownFarSquares[Index].Get() : nullptr;
+					Owed.Emplace(Either ? FVector::DistSquared2D(Either->Bounds.Origin, CameraFocus) : 0.0, Index);
+				}
+			}
+			Owed.Sort([](const TPair<double, int32>& A, const TPair<double, int32>& B) { return A.Key < B.Key; });
+			int32 Shown = 0;
+			for (const TPair<double, int32>& Next : Owed)
+			{
+				UProceduralMeshComponent* Near = TownSquares.IsValidIndex(Next.Value) ? TownSquares[Next.Value].Get() : nullptr;
+				UProceduralMeshComponent* Far = TownFarSquares.IsValidIndex(Next.Value) ? TownFarSquares[Next.Value].Get() : nullptr;
+				const int32 Its = PointsOf(Wanted == 1 ? Far : Near);
+				if (ShowSpread > 0 && Shown > 0 && Shown + Its > ShowSpread)
+				{
+					bSquaresComing = true;
+					break;
+				}
+				Shown += Its;
+				TownSquareForm[Next.Value] = Wanted;
+				if (Near)
+				{
+					Near->SetVisibility(Wanted != 1);
+				}
+				if (Far)
+				{
+					Far->SetVisibility(Wanted == 1);
+				}
+			}
 		}
 	}
 

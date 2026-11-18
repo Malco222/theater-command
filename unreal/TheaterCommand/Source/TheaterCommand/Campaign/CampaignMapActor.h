@@ -112,7 +112,7 @@ public:
 	 * clearing on it. (A picture of the world waits for it, and for the haze beyond the map while it is being laid
 	 * on another thread, tc.Speed.FogAside.)
 	 */
-	bool AreFineSheetsComing() const { return bFineSheetsComing || bLandTilesComing || FogAsideBuilding.IsValid(); }
+	bool AreFineSheetsComing() const { return bFineSheetsComing || bLandTilesComing || bSquaresComing || FogAsideBuilding.IsValid(); }
 	/** Whether the next change of holders is one month following another (ink spreads, a siege's colour moves) or the table laid out afresh (it does not). */
 	void SetInkAllowed(bool bAllowed) { bInkAllowed = bAllowed; }
 	void SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners = TArray<FString>(), const TArray<FCampaignView::FSiegePaint>& Sieges = TArray<FCampaignView::FSiegePaint>());
@@ -563,6 +563,7 @@ private:
 	void UpdateFineSheets(float CameraDistance, const FVector& CameraFocus);
 	bool bFineSheetsComing = false; // the view wants fine ground that does not stand yet
 	bool bLandTilesComing = false; // (speed: tc.Speed.TileTime) ...or tiles of the map's own ground or the world's coarse sheet that are not stood up yet
+	bool bSquaresComing = false; // (speed: tc.Speed.ShowSpread) ...or squares of towns or trees that are not shown in their new form yet
 	bool bRiversBeyondShown = true; // the ribbons of the wider chart's rivers: put away when the eye is high
 	bool bInkAllowed = false;
 	void DressFineSheet(FFineSheet& Sheet);
@@ -1376,6 +1377,7 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> TownFarMesh;
 	int32 TownsFarShown = -1; // 1 while the far towns are the ones drawn, 0 the near, -1 not yet said
+	TArray<int8> TownSquareForm; // (speed: tc.Speed.ShowSpread) the form each square of towns is shown in now: 1 far, 0 near
 	/**
 	 * (Speed, 17 November 2026; "tc.Speed.TownSquares".) The same towns cut into squares of country, near form and far
 	 * form, a mesh to each square. One mesh the size of the world is drawn whole every frame wherever the eye is, and

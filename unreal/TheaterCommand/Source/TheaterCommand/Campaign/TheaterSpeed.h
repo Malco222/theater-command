@@ -118,6 +118,20 @@ class APlayerController;
  *                         sheet stands the coarse sheet's tiles round it afresh and hands them and its own to the draw
  *                         thread: 25 to 30 ms, and two stood in one frame made a 45 ms one (the same capture). 0: every
  *                         ready sheet in the same frame, as before. The same picture either way.
+ *   tc.Speed.ShowSpread   80000 (default): when the eye crosses a height at which the towns change form (10,800 and
+ *                         11,600) or the trees come and go (7,200), the squares newly shown are handed to the draw
+ *                         thread that many points a frame, the nearest to the eye's point first and one always, and the
+ *                         rest the frames after. All 105 squares of towns went in the one frame: a million points and
+ *                         50 to 64 ms on every zoom through that height (the builder's capture 2 of 18 November, build
+ *                         1684, where the log first named them). 0: every square in the same frame, as before. The same
+ *                         picture either way; the far squares come up to a fifth of a second later.
+ *   tc.Speed.TidyAside    1 (default): Unreal clears out what is no longer used every five minutes, and at once behind
+ *                         any pause of a tenth of a second the game already has (a load, a month's end), where it did
+ *                         every 61.1 s in one frame of 40 to 63 ms wherever the eye was: eleven such frames in the five
+ *                         runs of the same capture. Read once, as the table is laid (gc.TimeBetweenPurgingPendingKill-
+ *                         Objects). 0: every 61.1 s, as before. The same picture either way. A test's run
+ *                         ("-unattended") keeps its 61.1 s, which is what finds an object held too loosely, and is
+ *                         cleared out behind its loads as well; a timing run asks for the five minutes by -TheaterSet.
  * And two for measuring only, which change the picture and are not to be left off without the art director:
  *   tc.Speed.TownShadows  1 (default): the near towns throw shadows. 0: they do not.
  *   tc.Speed.TrainShadows 1 (default): the trains throw shadows. 0: they do not.
@@ -160,6 +174,7 @@ namespace TheaterSpeed
 	double TileTime(); // the ms of tiles stood up in a frame: 0 for no limit, as before
 	int32 QuietModel(); // 0 as before, 1 one thread a sheet, 2 the background's priority, 3 its own lowest thread, 4 and background work on a Mac
 	bool StandOne();
+	int32 ShowSpread(); // the points of towns' and trees' squares newly shown in a frame: 0 for no limit, as before
 
 	/**
 	 * (tc.Speed.QuietModel.) Stood on a thread while it models a fine sheet quietly: the loops under it that would
