@@ -1145,9 +1145,12 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (frozen(g, d.nat, target)) { p *= 1 - (1 - EASTERN.winter.defence) * cmdWinter(g, d); coldDef = true; }
     // A dug-in box is not driven round (ruling 146, the Historian's third fix): the cut falls only on men on foot who
     // have not dug in, and in the grand campaign it fades as their works are finished, where the guns make it a box.
+    // (A position driven round for want of guns is judged no help in strength, so its works do not turn the day's
+    // luck against the attack either: they would count twice. The design director's b420, the historian's b418.)
+    let unboxed = false;
     if (openDesert && !KIND[d.kind].mobile && d.kind !== 'fort') {
       const box = !d.dug ? 0 : !wide ? 1 : boxed ? worksShare(worksNow(d)) : 0;
-      if (d.dug && !boxed) fewGuns = true;
+      if (d.dug && !boxed) { fewGuns = true; unboxed = true; }
       if (box < 1) { const cut = DESERT.open + (1 - DESERT.open) * box; p *= cut; turned = true; turnedTo = Math.min(turnedTo, cut); }
     }
     const dl = lineStrength(g, d).mul;
@@ -1167,7 +1170,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     cmdD += p * lead;
     D += p * lead;
     // Works grow with the months spent on them: a line held since the spring is not one occupied last month.
-    if (d.dug && d.supplied) readyD += p * lead * worksShare(worksNow(d));
+    if (d.dug && d.supplied && !unboxed) readyD += p * lead * worksShare(worksNow(d));
     if (d.dug) { dugD += p * lead; worksD += p * lead * worksNow(d); }
     if (blows > 0) { tiredD += p * lead * blows; tiredMost = Math.max(tiredMost, blows); }
   }
