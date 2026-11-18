@@ -77,11 +77,30 @@ export const SKY = {
    * aircraft, at most 'most', in a box 'gap' metres between models; a loss is one model falling out of it ('air:lost').
    */
   look: { most: { ftr: 12, bmr: 12 }, gap: { ftr: 140, bmr: 110 }, rows: { ftr: 3, bmr: 3 } },
-  /** The sounds that answer what happens (names from the sound director's list, /mnt/project-files/sound/sound-list.json). */
+  /**
+   * The sounds that answer what happens: every name is a file in the approved pack (/mnt/project-files/sound/battle-pack/wav/),
+   * as the sound director's mix renamed them (18 November, /mnt/project-files/sound/mix/mix.json "rename"). How loud, how
+   * far and how dull each one plays is the mix's, read from mix.json, never copied here.
+   */
   cues: {
     dogfight: 'dogfight', onBombers: 'fighter_pass', scramble: 'aircraft_takeoff', siren: 'air_raid_siren', bombs: 'bomb_stick_01',
-    explode: 'explosion', down: 'plane_down', chutes: 'parachutes', bingo: 'fighter_pass_02',
-    loops: { bmr: 'bomber_heavy_loop', ftr: 'fighter_loop', flak: 'flak_barrage_loop' },
+    explode: 'plane_explode', down: 'plane_down', chutes: 'parachute_open', bingo: 'fighter_pass',
+    /** Far takes: past the family's farTakesFrom (mix.json "distance", explosions) a blast plays one of these instead. */
+    far: { plane_explode: ['explosion_far_01', 'explosion_far_02'] },
+    /**
+     * A fighter group's own pass, by the model the 3D game draws for it (FMiniatureMesh::MainFighterOf): a 'fighter_pass'
+     * cue on a fighter group, or on a bomber group the fighters reached (the contact's extra.with), plays its model's
+     * take; a model with no recording of its own keeps 'fighter_pass'. No Thunderbolt is drawn yet.
+     */
+    pass: { Spitfire: 'spitfire_pass', Fw190: 'fw190_pass', Mustang: 'p51_pass', P47: 'p47_pass' } as Record<string, string>,
+    /** Engines, one per formation while it flies (the bridge's 'loop'). */
+    loops: { bmr: 'bomber_heavy_loop', ftr: 'fighter_engine_loop' },
+    /**
+     * The flak ring has no loop: inside it the guns fire one of 'drops' every 'every' seconds (at random between the two),
+     * and each shot bursts as one of 'then.takes' 'then.after' seconds later, among the bombers. The timings are the
+     * sound director's (mix.json "rename", air) as of 18 November: if mix.json moves them, mix.json wins.
+     */
+    flak: { drops: ['flak_heavy_fire_01', 'flak_light_fire'], every: [0.8, 2.5], then: { after: [1.5, 4], takes: ['flak_burst_01'] } },
   },
 
   /**

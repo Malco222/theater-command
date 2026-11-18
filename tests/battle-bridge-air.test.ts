@@ -24,7 +24,7 @@ describe('air through the bridge', () => {
     expect(st.sky.bands).toEqual([1800, 4500, 7200]);
     const u0 = (st.view.units as any[])[0];
     expect(u0.extra.n).toBeGreaterThan(0);
-    expect(['bomber_heavy_loop', 'fighter_loop', '']).toContain(u0.loop);
+    expect(['bomber_heavy_loop', 'fighter_engine_loop', '']).toContain(u0.loop);
     TC.battleSpeed(4);
     expect(TC.battleEnd()).toBeNull();
     let v: any = null;

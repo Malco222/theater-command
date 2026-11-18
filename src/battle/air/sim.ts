@@ -429,7 +429,9 @@ export class AirSim implements BattleSim<AirUnit> {
         }
         for (const x of [a, d]) if (!(before.get(x.id)?.size)) {
           x.luck = this.rng.range(1 - SKY.wear.luck, 1 + SKY.wear.luck);
-          this.say('contact', x, told(this.called(x), '{N} [is|are] in a fight.'), undefined, x.air === 'bmr' ? C.onBombers : C.dogfight);
+          // A bomber group's contact names the fighters on it, so the 3D game can play their model's own pass (SKY.cues.pass).
+          const other = x === a ? d : a;
+          this.say('contact', x, told(this.called(x), '{N} [is|are] in a fight.'), x.air === 'bmr' ? { with: other.id } : undefined, x.air === 'bmr' ? C.onBombers : C.dogfight);
         }
       }
     }

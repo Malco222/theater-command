@@ -207,6 +207,24 @@ describe('what the 3D game draws from', () => {
     for (const a of ['march', 'fight']) expect([...acts], a).toContain(a);
     // Every event that makes a sound names one from the sound director's list, and says where it happened.
     for (const e of s.history().filter((x) => x.cue)) { expect(typeof e.cue).toBe('string'); expect(typeof e.x).toBe('number'); }
+    // A bomber group's first contact names the fighters on it, so the 3D game can play their own pass.
+    const units = new Map(s.view().units.map((u) => [u.id, u]));
+    const onBmr = s.history().filter((e) => e.what === 'contact' && units.get(e.unit!)?.air === 'bmr');
+    expect(onBmr.length).toBeGreaterThan(0);
+    for (const e of onBmr) { expect(e.cue).toBe(SKY.cues.onBombers); expect(units.get((e.extra as { with: number }).with)?.air).toBe('ftr'); }
+  });
+
+  it('names none of the made-up sounds the mix renamed (the sound director, 18 November)', () => {
+    const names: string[] = [];
+    const walk = (v: unknown): void => {
+      if (typeof v === 'string') names.push(v);
+      else if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+    };
+    walk(SKY.cues);
+    expect(names.length).toBeGreaterThan(15);
+    // The made-up names the mix renamed (mix.json "rename", air) are gone.
+    for (const old of ['explosion', 'fighter_loop', 'fighter_pass_02', 'flak_barrage_loop', 'parachutes']) expect(names).not.toContain(old);
   });
 });
 
