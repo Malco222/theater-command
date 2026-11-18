@@ -254,7 +254,8 @@ bool ACampaignMapActor::BuildMap()
 		double MapUnitsAMetre = 0.34;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastScale="), MapUnitsAMetre);
 		Blasts = MakeUnique<FBattleEffects>();
-		const bool bMade = Blasts->Begin(Root, FMath::Max(MapUnitsAMetre, 0.01) * UnitScale, [this](const FVector& Over)
+		BlastUnitsAMetre = FMath::Max(MapUnitsAMetre, 0.01) * UnitScale;
+		const bool bMade = Blasts->Begin(Root, BlastUnitsAMetre, [this](const FVector& Over)
 		{
 			const FVector2D Under = WorldToMap(Over);
 			return SurfacePoint(Under.X, Under.Y, 0.0);
@@ -13494,14 +13495,33 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		// (the effects kit's test barrage, round whatever the eye looks at: laid again when the eye has gone thirty
 		// units from where it was laid. The camera's jolt it returns is not used here: the campaign's eye is the
 		// player's own.)
+		// ("-TheaterBlastSlow=8" plays the barrage at an eighth of its pace, so that stills four seconds apart show it
+		// half a second apart. "-TheaterBlastOff=40,90" lays it so that the shot the kit places 40 metres north and
+		// 90 east of its middle falls where the eye looks: the bomb. Both are for the test frames.)
+		static double BlastSlow = 1.0;
+		static FVector BlastOff = FVector::ZeroVector;
+		static bool bBlastAsked = false;
+		if (!bBlastAsked)
+		{
+			bBlastAsked = true;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastSlow="), BlastSlow);
+			FString Asked;
+			TArray<FString> Parts;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastOff="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 2)
+			{
+				BlastOff = FVector(FCString::Atod(*Parts[0]), FCString::Atod(*Parts[1]), 0.0);
+			}
+		}
+		const double BlastNow = Now / FMath::Max(BlastSlow, 0.01);
 		if (FVector::DistSquared2D(BlastTestAt, CameraFocus) > FMath::Square(30.0 * UnitScale))
 		{
 			BlastTestAt = CameraFocus;
-			const FVector2D Under = WorldToMap(CameraFocus);
+			const FVector2D Under = WorldToMap(CameraFocus - BlastOff * BlastUnitsAMetre);
 			Blasts->Clear();
+			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour); // (its clock first: the barrage is timed from it)
 			Blasts->RunTest(SurfacePoint(Under.X, Under.Y, 0.0));
 		}
-		Blasts->Tick(Now, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour);
+		Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour);
 	}
 	bool bDrawingLight = false;
 	// One puff: its middle, how far out its heart reaches (as a share of the whole), and how thick it is at its

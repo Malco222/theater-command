@@ -1129,6 +1129,7 @@ private:
 	 */
 	TUniquePtr<FBattleEffects> Blasts;
 	FVector BlastTestAt = FVector(1.0e12, 0.0, 0.0);
+	double BlastUnitsAMetre = 3.4; // (world units to the metre the kit was begun with)
 	UPROPERTY()
 	TObjectPtr<UTexture2D> MiniTexture;
 	TArray<int16> MiniRegion; // the province under each point of the small map, -1 for the sea, or MiniUnclaimed for land beyond the provinces
