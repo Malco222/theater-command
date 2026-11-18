@@ -5385,9 +5385,12 @@ void ACampaignMapActor::BuildWaterways()
 			OverWater.Init(false, Path.Num());
 			for (int32 K = Path.Num() / 2 + 1; K < Path.Num(); ++K)
 			{
-				const FVector2D Along = (Path[FMath::Min(K + 1, Path.Num() - 1)] - Path[K - 1]).GetSafeNormal();
-				const FVector2D Side(Along.Y, -Along.X);
-				OverWater[K] = OpenWater(Path[K]) && OpenWater(Path[K] + Side * Broad) && OpenWater(Path[K] - Side * Broad);
+				// (Seen at Quebec in the first picture of this rule: asked only of the chart, the ribbon broke off on dry
+				// land short of its first bridge. The chart draws the estuary's head as a channel a unit or two across,
+				// which no sheet of ground shows as water: the very channel the ribbon is there to stand for. Open water
+				// is water two units from any land, all round, as a fine sheet's smoothed coast will show it.)
+				OverWater[K] = OpenWater(Path[K]) && OpenWater(Path[K] + FVector2D(2.0, 0.0)) && OpenWater(Path[K] - FVector2D(2.0, 0.0))
+					&& OpenWater(Path[K] + FVector2D(0.0, 2.0)) && OpenWater(Path[K] - FVector2D(0.0, 2.0));
 				if (OverWater[K] && MeetsWater == MAX_int32)
 				{
 					MeetsWater = K;
@@ -6939,15 +6942,26 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 					{
 						// (the lesser town builds no nearer the greater than a row of green beyond the greater's last roofs)
 						TownClear.FindOrAdd(Lesser.Id).Add(FVector(Greater.Center.X, Greater.Center.Y, TheirRun + Row));
-						// (The art director, 18 November 2026, on build 1668: Amsterdam's and Rotterdam's streets still met in
-						// a thin grey band, so that the two read as one long city. A ring round the greater's middle
-						// keeps a row clear on the line between the two middles and less and less to either side of it,
-						// where the greater's streets run out along its roads past its own measure. The open ground is
-						// kept from both sides: the greater's arm toward the lesser stops at its own measure, and the
-						// lesser builds no nearer than a row to any ground of the greater's province its roofs may
-						// reach. The lesser's own middle always stays clear, as it did.)
-						TownClear.FindOrAdd(Id).Add(FVector(Lesser.Center.X, Lesser.Center.Y, Apart - TheirRun));
-						TownKeepOff.FindOrAdd(Lesser.Id).Add(FVector4(Greater.Center.X, Greater.Center.Y, FMath::Min(1.22 * Theirs, Apart - Row - 0.8), static_cast<double>(Id)));
+						// (The art director, 18 November 2026, on build 1668: Amsterdam's and Rotterdam's blocks still met in
+						// a thin grey band, so that the two read as one long city. The ring above keeps a row clear on
+						// the line between the two middles and less and less to either side of it, and it is kept from
+						// the middles of the blocks, whose edges then stand two or three units apart; the greater's
+						// last row stood on the border itself. So each also keeps off the other's ground, wherever
+						// the border between them runs: the lesser a row and half a block off any ground of the
+						// greater's province its roofs may reach, and the greater half a block off the lesser's. A row
+						// of open ground then lies between the edges of their blocks. The lesser's own middle always
+						// stays clear, as it did.)
+						const double HalfBlock = 2.0;
+						FTownKeepOff& OfLesser = TownKeepOff.FindOrAdd(Lesser.Id).AddDefaulted_GetRef();
+						OfLesser.Middle = Greater.Center;
+						OfLesser.Reach = FMath::Min(1.22 * Theirs, Apart - Row - HalfBlock - 0.8); // (the lesser's own middle always stays clear)
+						OfLesser.Province = Id;
+						OfLesser.Off = Row + HalfBlock;
+						FTownKeepOff& OfGreater = TownKeepOff.FindOrAdd(Id).AddDefaulted_GetRef();
+						OfGreater.Middle = Lesser.Center;
+						OfGreater.Reach = 1.22 * Was;
+						OfGreater.Province = Lesser.Id;
+						OfGreater.Off = HalfBlock;
 					}
 				}
 				++Gave;
@@ -7469,8 +7483,8 @@ void ACampaignMapActor::FillTownSite(const FCampaignRegion& Region, FMiniatureMe
 	// (a town is built on land, and on its own province's: one that stands by the sea or a frontier grows away from it)
 	// (and a greater town leaves green beside a lesser one that gave way to it: the art director's rule for close towns)
 	const TArray<FVector>* const Green = TownClear.Find(Region.Id);
-	const TArray<FVector4>* const Off = TownKeepOff.Find(Region.Id);
-	Site.Dry = [this, Id = Region.Id, Clear = Green ? *Green : TArray<FVector>(), KeepOff = Off ? *Off : TArray<FVector4>()](double X, double Y)
+	const TArray<FTownKeepOff>* const Beside = TownKeepOff.Find(Region.Id);
+	Site.Dry = [this, Id = Region.Id, Clear = Green ? *Green : TArray<FVector>(), KeepOff = Beside ? *Beside : TArray<FTownKeepOff>()](double X, double Y)
 	{
 		for (const FVector& Each : Clear)
 		{
@@ -7479,20 +7493,20 @@ void ACampaignMapActor::FillTownSite(const FCampaignRegion& Region, FMiniatureMe
 				return false;
 			}
 		}
-		// (a town that kept its size beside a greater one: no nearer than a row of green to the ground of the greater's
-		// province that the greater's roofs may reach, looked for a row away and half a row away, all round)
-		const double Row = 4.2;
-		for (const FVector4& Each : KeepOff)
+		// (two towns that both kept their size beside one another: neither builds nearer than its own distance to the
+		// ground of the other's province that the other's roofs may reach, looked for at that distance and at two
+		// thirds and a third of it, all round.)
+		for (const FTownKeepOff& Each : KeepOff)
 		{
-			if (FMath::Square(X - Each.X) + FMath::Square(Y - Each.Y) >= FMath::Square(Each.Z + Row))
+			if (FMath::Square(X - Each.Middle.X) + FMath::Square(Y - Each.Middle.Y) >= FMath::Square(Each.Reach + Each.Off))
 			{
 				continue;
 			}
-			for (int32 K = 0; K < 16; ++K)
+			for (int32 K = 0; K < 24; ++K)
 			{
-				const double Turn = (K % 8) * UE_DOUBLE_PI / 4.0, Out = K < 8 ? Row : 0.5 * Row;
+				const double Turn = (K % 8) * UE_DOUBLE_PI / 4.0, Out = Each.Off * (3 - K / 8) / 3.0;
 				const double Px = X + FMath::Cos(Turn) * Out, Py = Y + FMath::Sin(Turn) * Out;
-				if (FMath::Square(Px - Each.X) + FMath::Square(Py - Each.Y) < FMath::Square(Each.Z) && Data.FindRegionAt(Px, Py) == static_cast<int32>(Each.W))
+				if (FMath::Square(Px - Each.Middle.X) + FMath::Square(Py - Each.Middle.Y) < FMath::Square(Each.Reach) && Data.FindRegionAt(Px, Py) == Each.Province)
 				{
 					return false;
 				}

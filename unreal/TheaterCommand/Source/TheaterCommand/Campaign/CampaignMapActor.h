@@ -1527,7 +1527,15 @@ private:
 	mutable TArray<bool> TownPacked; // true for a city or capital in a province too small for it: it is built tight and tall
 	mutable TArray<bool> TownHumbled; // true for a city that gave way to a greater town beside it: it is built as a town, a church and its streets
 	mutable TMap<int32, TArray<FVector>> TownClear; // for a greater town, the ground it leaves green beside each lesser town that gave way to it: the middle (X, Y) and how far round it (Z), in map units
-	mutable TMap<int32, TArray<FVector4>> TownKeepOff; // for a lesser town that kept its size beside a greater: the greater's middle (X, Y), how far its roofs may run (Z) and its province (W). The lesser builds no nearer that ground than a row of green
+	/** For each of two towns that both kept their size beside one another: the other's middle, how far its roofs may run, its province, and how far off that ground this town keeps. */
+	struct FTownKeepOff
+	{
+		FVector2D Middle = FVector2D::ZeroVector;
+		double Reach = 0.0;
+		int32 Province = INDEX_NONE;
+		double Off = 0.0;
+	};
+	mutable TMap<int32, TArray<FTownKeepOff>> TownKeepOff;
 	TMap<int32, FVector2D> TownQuays; // where each port's quay stands, as its town was last built: the names of the provinces keep off them
 	TMap<int32, FVector> TownBeacons; // by province: the lantern of its port's lighthouse, on the table
 	TSet<int32> AirfieldsUsed; // the provinces whose airfields have air groups based on them
