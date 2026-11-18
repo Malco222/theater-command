@@ -7164,13 +7164,14 @@ namespace
 					// (48) above and below, its type at full size, so that under the title band (FIRST COMMAND on its own
 					// row, CONTINUE at the end of the pages' row) the seven great powers, the three settings and BEGIN AS ...
 					// all show without scrolling; the smaller nations take what height is left. (The give order of 08:57,
-					// after 07:10 and the review of build 1628, item 4.) First the margins: where standing up to 16 from
-					// the screen's top and foot shows more whole rows of nations than the 48s do, the card stands as tall
-					// as those rows and the MORE plate's band under them, and the 48s give only that much. Then the list,
-					// down to one whole row and its plate, never less; where even that is more than the screen less its
-					// 16s, the card is drawn smaller, and never under 0.95 of its size; and only past that, on the smallest
-					// frame (1,280 by 720), does the list go down to its plate alone. The summary at the foot is as tall for
-					// every nation, so what the card needs does not change with the pick. (See LookAtList for what it needs.)
+					// capped at 09:04, after 07:10 and the review of build 1628, item 4.) First the margins, only to bring
+					// in a second whole row of the smaller nations, never a third: where the 48s show fewer and standing
+					// up to 16 from the screen's top and foot shows two, the card stands as tall as the two rows and the MORE
+					// plate's band under them, and the 48s give only that much. Then the list, down to one whole row and
+					// its plate, never less; where even that is more than the screen less its 16s, the card is drawn
+					// smaller, and never under 0.95 of its size; and only past that, on the smallest frame (1,280 by 720),
+					// does the list go down to its plate alone. The summary at the foot is as tall for every nation, so what
+					// the card needs does not change with the pick. (See LookAtList for what it needs.)
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
 						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(16.0f))
@@ -12978,10 +12979,12 @@ namespace
 			// the foot of the first row of the smaller nations, on the grand campaign's page (the great powers above it),
 			// or of its first row on another page, with the plate's band under it. The rest of the card does not change
 			// with the card's height, or with the nation picked, so this holds still as the card grows.
-			// (08:57: margins before a row.) On the grand campaign's page the margins give first: where the card, standing
-			// up to 16 from the screen's top and foot, shows more whole rows of cards than within the 48s, it stands as tall
-			// as those rows and their plate's band, and the margins give only that much (at Brian's window, the 19 that
-			// show Brazil's second row). Where it shows no more, it keeps its 48s.
+			// (08:57: margins before a row; capped at 09:04.) On the grand campaign's page the margins give to bring in a
+			// second whole row of the smaller nations, never a third: where the 48s show fewer and standing up to 16
+			// from the screen's top and foot shows two, the card stands as tall as the two rows and their plate's band, and
+			// the margins give only that much (at Brian's window, the 19 that show Brazil's second row). Where the 48s
+			// show two already, or 16 would not show two, it keeps its 48s; a larger frame may show a third row within
+			// them, but never by trimming the margins.
 			float Need = 0.0f;
 			const int32 Keep = Controller->GetOpening().Tab == 0 && ListRows.Num() > 1 ? 1 : 0;
 			const double ScreenHigh = ScreenRoot.IsValid() ? ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y : 0.0;
@@ -12991,7 +12994,7 @@ namespace
 				const double ListEnd = ListFeet.Num() > 0 ? static_cast<double>(ListFeet.Last()) : 0.0;
 				int32 Within48 = -1;
 				int32 Within16 = -1;
-				float Need16 = 0.0f;
+				float NeedTwo = 0.0f; // (the card's need with two whole rows)
 				for (int32 CardRow = Keep; CardRow < ListRows.Num(); ++CardRow)
 				{
 					const TSharedPtr<SWidget> RowWidget = ListRows[CardRow].Key.Pin();
@@ -13026,12 +13029,16 @@ namespace
 					if (RowNeed <= ScreenHigh - 32.0 + 0.5)
 					{
 						Within16 = CardRow;
-						Need16 = RowNeed;
+					}
+					if (CardRow == Keep + 1)
+					{
+						NeedTwo = RowNeed;
+						break; // (no row past the second is ever bought with the margins)
 					}
 				}
-				if (Within16 > Within48)
+				if (Keep > 0 && Within48 < Keep + 1 && Within16 >= Keep + 1)
 				{
-					Need = Need16;
+					Need = NeedTwo;
 				}
 			}
 			// (What the card needs now turns on the screen's height too: a window drawn to a new size measures afresh.)
