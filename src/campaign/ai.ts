@@ -463,7 +463,7 @@ function mainCampaign(g: Game, nat: string): void {
   }
   navalAI(g, nat, ph?.fleets);
   shoreAI(g, nat);
-  airAI(g, nat);
+  airAI(g, nat, ph);
   if (open) homeAgain(g, nat);
   // A nation at peace gives its army no orders, unless its staff is bringing it up for a war of its own choosing.
   if (!n.atWar.length && !(open && ph?.posture === 'redeploy')) return;

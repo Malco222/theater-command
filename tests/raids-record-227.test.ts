@@ -254,19 +254,21 @@ describe('ruling 227 (b424, b428): a raid on troops priced by the record', () =>
     expect(airWeight(createGame(7, null), 'SOV')).toBeNull();
   });
 
-  it('bases a staff\'s fighters by the threat: half of Germany\'s groups or more in reach of the eastern front in 1941 and 1942, and the homeland still guarded', () => {
+  it('bases a staff\'s air by the threat and its main effort (b428, b447, b450): half of Germany\'s operational groups or more in reach of the eastern front in 1941 and 1942, and the homeland still guarded', () => {
     const g = startOpen(createGame(10, null));
     const front = (): number[] => g.regions.filter((r) => (r.ctrl === 'GER' && r.nb.some((j) => g.regions[j].ctrl === 'SOV')) || (r.ctrl === 'SOV' && r.nb.some((j) => g.regions[j].ctrl === 'GER'))).map((r) => r.id);
     let months = 0;
     while (g.turn <= 40) {
       runTurnAI(g);
       if (g.turn < 25 || !g.nations.GER.alive || !g.nations.GER.atWar.includes('SOV')) continue;
-      const groups = g.airFleets.filter((f) => f.nat === 'GER' && f.kind === 'ftr' && f.ftr > 0 && f.ship === undefined);
+      // Every land group that flies, fighters by a fighter's reach and bombers by a bomber's: its bombers stand in
+      // reach of the battles of its main effort, its fighters by the threat with the effort's troops asking for the sky.
+      const groups = g.airFleets.filter((f) => f.nat === 'GER' && f.ftr + f.bmr > 0 && f.ship === undefined);
       const east = front();
-      const near = groups.filter((f) => east.some((r) => kmTo(g, f, r) <= airRange(f, g).ftr));
+      const near = groups.filter((f) => east.some((r) => kmTo(g, f, r) <= (f.kind === 'ftr' ? airRange(f, g).ftr : airRange(f, g).bmr)));
       expect(near.length * 2).toBeGreaterThanOrEqual(groups.length);
-      // Home defence is kept for the raids the staff expects: a group still guards the Ruhr's works.
-      expect(groups.some((f) => kmTo(g, f, g.byName.Ruhr.id) <= airRange(f, g).ftr)).toBe(true);
+      // Home defence is kept for the raids the staff expects: a fighter group still guards the Ruhr's works.
+      expect(groups.some((f) => f.kind === 'ftr' && kmTo(g, f, g.byName.Ruhr.id) <= airRange(f, g).ftr)).toBe(true);
       months++;
     }
     expect(months).toBeGreaterThanOrEqual(12);
