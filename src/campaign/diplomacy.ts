@@ -20,6 +20,7 @@ import { mayJoin, stopDef, stopOf } from './history';
 import { hashString } from '../core/rng';
 import worldData from '../../data/campaign/world.json';
 import { pressData, warWorkMonth, worldMonth } from './world';
+import { guarantorsOf, type Guarantor } from './guarantees';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -443,6 +444,11 @@ export interface WarForecast {
    */
   ready: 'war' | 'alert' | 'watch' | null;
   friends: Friend[];
+  /**
+   * Who stands by it (ruling 229, part 3): its guarantors, as each stands toward this declarer this month, with the
+   * card's line for each. The grand campaign's; none in a historical scenario, which keeps the war it had.
+   */
+  guarantors: Guarantor[];
   alarm: Alarm[];
   /** True when the country trades with the declarer today: that income ends with the peace. */
   trade: boolean;
@@ -489,6 +495,7 @@ export function warForecast(g: Game, by: string, on: string): WarForecast {
     joins: B && bloc(B) === null && ba && ba !== 'league' && !ownPath(g, on) ? (ba === 'axis' ? 'allies' : 'axis') : null,
     sneak: sneak ? RELATIONS.sneak.attack : 1,
     friends: friendsOf(on).filter((f) => g.nations[f.nat]?.alive),
+    guarantors: guarantorsOf(g, by, on),
     alarm: alarmed(g, by, on),
     trade: g.flags.open === 1 && tradePartners(g, by).some((n) => n.id === on),
     league: standsWith(g, by, on),

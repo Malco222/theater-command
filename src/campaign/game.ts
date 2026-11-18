@@ -19,6 +19,7 @@ import { locked, techTick, winterReady } from './tech';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { crown } from './domination';
 import { afterFall, recordFall, retaken, standsFreed } from './liberation';
+import { honour } from './guarantees';
 import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedMonth, restedOrg } from './morale';
 import { civicDrafts, civicSum, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
@@ -316,6 +317,8 @@ export function declareWar(g: Game, a: string, b: string): void {
   // country outside both blocs the neutral world takes note. Both are read off before anything changes.
   const sneak = wouldSurprise(g, a, b);
   const shock = alarmed(g, a, b);
+  // (The alliance the country stood in before the blow, for its guarantees: an attacked neutral takes a side below.)
+  const sideWas = bloc(B);
   // A country outside every alliance that is struck down is a fright to its friends: the month such pacts are made.
   if (g.flags.open === 1 && bloc(B) === null) g.flags[`shock:${b}`] = g.turn;
   setWar(g, a, b);
@@ -351,6 +354,8 @@ export function declareWar(g: Game, a: string, b: string): void {
   }
   // Britain may stand by its dominions, one way only (ruling 211(b)): six times in ten she goes to war the same month.
   standsBy(g, a, b);
+  // A guarantee the card names is kept (ruling 229, part 3): its computer-run guarantors declare war the same day.
+  honour(g, a, b, sideWas);
   if (A.blitz && !g.flags[`tempo:${a}:${g.turn}`]) {
     g.flags[`tempo:${a}:${g.turn}`] = 1;
     for (const c of g.corps) if (c.nat === a && KIND[c.kind].mobile && g.order[g.phase] === a) { c.ap += 1; c.apMax += 1; }
@@ -2911,11 +2916,23 @@ function roomNear(g: Game, nat: string, at: Region): Region | null {
   return null;
 }
 
+/** True where the war an expedition row names is on: '*' as the second name is a war with anyone. */
+const warOn = (g: Game, w: string[]): boolean => (w[1] === '*' ? (g.nations[w[0]]?.atWar.length ?? 0) > 0 : atWar(g, w[0], w[1]));
+/** The month the war a row names began, by its declaration (the earliest, for '*'): this month where none was declared. */
+function warBegan(g: Game, w: string[]): number {
+  const foes = w[1] === '*' ? g.nations[w[0]]?.atWar ?? [] : [w[1]];
+  let first = Infinity;
+  for (const f of foes) for (const k of [`war:${w[0]}:${f}`, `war:${f}:${w[0]}`]) if (g.flags[k] !== undefined) first = Math.min(first, g.flags[k]);
+  return first === Infinity ? g.turn : first;
+}
+
 function expeditions(g: Game, nat: string): void {
   const gone: Corps[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
-    if (row[1] !== nat || g.turn < row[0]) return;
     const o = row[6] ?? {};
+    // (A country's own call-up counted from its war's start waits for no book month in the grand campaign: ruling 229, part 3.)
+    const fromWar = g.flags.open === 1 && !!o.war && o.after !== undefined;
+    if (row[1] !== nat || (!fromWar && g.turn < row[0])) return;
     // A row marked 'open' belongs to the grand campaign alone: history's campaigns keep the order of battle they were measured with.
     if (o.open && g.flags.open !== 1) return;
     if (g.flags[`sent:${i}`]) {
@@ -2939,10 +2956,11 @@ function expeditions(g: Game, nat: string): void {
       const k = reg ? THEATRE_OF.get(reg.name) ?? -1 : -1;
       if (k >= 0 && THEATRE_LIST[k].scripted && row[0] >= (THEATRE_LIST[k].opens ?? 0)) return;
       if (o.war) {
-        if (!atWar(g, o.war[0], o.war[1])) return;
+        if (!warOn(g, o.war)) return;
         // And it waits for its own country to be in that war: no army turns up in a war its country is not fighting.
         if (!o.war.includes(nat) && !atWar(g, nat, o.war[0]) && !atWar(g, nat, o.war[1])) return;
-        due = g.flags[`due:${i}`] ??= g.turn;
+        due = g.flags[`due:${i}`] ??= fromWar ? warBegan(g, o.war) + o.after : g.turn;
+        if (g.turn < due) return;
       }
       // A country's own army, raised on its own soil, forms up at the capital if the place meant for it is already lost.
       const cap = g.nations[nat].capital;
@@ -2956,7 +2974,7 @@ function expeditions(g: Game, nat: string): void {
       // A full province sends it on to the nearest ground with room.
       if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = roomNear(g, nat, reg) ?? reg;
     }
-    if (g.turn - due > 6 || (o.war && !atWar(g, o.war[0], o.war[1])) || (o.until && g.turn >= o.until)) { if (g.turn - due > 6) g.flags[`sent:${i}`] = 1; return; }
+    if (g.turn - due > 6 || (o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) { if (g.turn - due > 6) g.flags[`sent:${i}`] = 1; return; }
     // An army put together out of a defeat forms only once the ground is really lost: while the nation or an ally
     // still holds any place named, the formations it would be made from fight on where they stand.
     if (o.ifLost && (o.ifLost as string[]).some((nm) => { const r = g.byName[nm]; return !r || allied(g, nat, r.ctrl); })) return;

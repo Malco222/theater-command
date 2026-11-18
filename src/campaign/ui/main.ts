@@ -82,6 +82,7 @@ import { GOALS, GOAL_KEYS, goalChecks, goalEndsIn, goalState, goalWhen, judgeGoa
 import { RIVALS, fronts, isOpen, startOpen, type Front } from '../staff';
 import { ashoreSays } from '../ashore';
 import { liberate } from '../liberation';
+import { guarantorsOf } from '../guarantees';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsUpkeep, fortCost, isHome, ledger, needsOf, provinceYield, raiseSite, specOf, type Ledger, type LedgerLine } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
 import { loadGame, peekSave, saveGame, staleSave } from '../save';
@@ -7737,7 +7738,8 @@ function invadeCard(on: string, target: number): string {
   // the tie moves no opinion; the one rule is the roll the card states under What follows).
   const mother = motherOf(on);
   const motherRow = mother ? `<div class="frow mother">${chip(mother)}<span class="grow"><b>${esc(newsName(g.nations[mother]))}</b><small>${esc(motherLine(mother, on, natName(on)))}</small></span><small class="stand">${esc(standLabel(g.nations[mother]))}</small></div>` : '';
-  const friendRows = motherRow + f.friends.filter((x) => x.nat !== mother).map((x) => `<div class="frow">${chip(x.nat)}<span class="grow"><b>${esc(natName(x.nat))}</b><small>${esc(upFirst(x.why))}</small></span><small class="stand">${esc(standLabel(g.nations[x.nat]))}</small></div>`).join('');
+  // Who stands by it (ruling 229, part 3): its guarantors only, each with what it does to you (the UI director's words).
+  const friendRows = motherRow + f.guarantors.filter((x) => x.nat !== mother).map((x) => `<div class="frow">${chip(x.nat)}<span class="grow"><b>${esc(newsName(g.nations[x.nat]))}</b><small>${esc(upFirst(x.why))}</small></span><small class="stand">${esc(standLabel(g.nations[x.nat]))}</small></div>`).join('');
   const what: string[] = [];
   const The = esc(upFirst(theName(on)));
   // A third country's corps on that ground, at peace with him (rulings b341(a) and b343).
@@ -7784,7 +7786,7 @@ function invadeCard(on: string, target: number): string {
     : `${The} ${stands}.`;
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Diplomacy · ${date(g.turn)}</div><h2>${flagIcon(on, n.color, 34, 'inh')} Declare war on ${esc(theName(on))}?</h2></header>
     <div class="body invade"><p class="lead">${lead}</p>
-    ${friendRows ? `<h3>Its friends</h3><div class="frows">${friendRows}</div>` : `<p class="sub">${The} has no close friends among the nations.</p>`}
+    ${friendRows ? `<h3>Who stands by it</h3><div class="frows">${friendRows}</div>` : `<p class="sub">No country is bound to stand by ${esc(theName(on))}.</p>`}
     <h3>What follows if you say yes</h3><ul class="follows">${what.map((x) => `<li>${x}</li>`).join('')}</ul></div>
     <footer><button class="btn" data-act="close">Not now</button><button class="btn warn" data-act="dodeclare" data-nat="${on}" data-target="${target}">${r ? 'Declare war and march ▸' : 'Declare war'}</button></footer>`;
 }
@@ -7794,17 +7796,17 @@ function motherOf(nat: string): string | null {
   const p = isOpen(g) && !g.flags.dom ? patronOf(nat) : null;
   return p && g.nations[p]?.alive ? p : null;
 }
-/** The friends the declare list names: the mother country first, as the card does. */
-function friendNames(nat: string): string[] {
+/** Who backs a country, as the declare list names them: the mother country first, as the card does, then its guarantors (ruling 229, part 3). */
+function backedBy(nat: string): string[] {
   const mother = motherOf(nat);
-  return [...(mother ? [newsName(g.nations[mother])] : []), ...friendsOf(nat).filter((f) => f.nat !== mother && g.nations[f.nat]?.alive).map((f) => theName(f.nat))];
+  return [...(mother ? [newsName(g.nations[mother])] : []), ...(g.human ? guarantorsOf(g, g.human, nat) : []).filter((x) => x.nat !== mother).map((x) => newsName(g.nations[x.nat]))];
 }
 
 function declareCard(): string {
   const list = declarable(g);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Diplomacy</div><h2>Declare war</h2></header>
     <div class="body"><p class="lead">A neutral that is attacked joins the other side, and its friends may march to help it at once.</p>
-    ${list.map((id) => `<button class="pickrow" data-act="askdeclare" data-nat="${id}">${chip(id)}<span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${divsOf(fieldArmy(g, id))} · ${esc(standLabel(g.nations[id]))}${friendNames(id).length ? ` · friends: ${esc(listOf(friendNames(id)))}` : ''}</span></span></button>`).join('')}
+    ${list.map((id) => `<button class="pickrow" data-act="askdeclare" data-nat="${id}">${chip(id)}<span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${divsOf(fieldArmy(g, id))} · ${esc(standLabel(g.nations[id]))}${backedBy(id).length ? ` · backed by ${esc(listOf(backedBy(id)))}` : ''}</span></span></button>`).join('')}
     <p class="sub" style="margin-top:8px">Pick a country to see what declaring war on it would mean. Nothing happens until you confirm.</p></div>
     <footer><button class="btn" data-act="close">Not now</button></footer>`;
 }
