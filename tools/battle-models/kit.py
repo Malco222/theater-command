@@ -410,7 +410,11 @@ def sheet(images, out, cols=3, labels=None, pad=16, bg=(232, 226, 214), label_h=
         y = top + pad + r * (h + label_h + pad)
         S.paste(im, (x, y))
         if labels:
-            d.text((x + 4, y + h + 6), labels[k], fill=(40, 34, 28), font=font)
+            f, size = font, 22
+            while size > 12 and d.textlength(labels[k], font=f) > w - 8:      # (a long label is set smaller, never run into the next one)
+                size -= 1
+                f = _font(size)
+            d.text((x + 4, y + h + 6 + (22 - size) // 2), labels[k], fill=(40, 34, 28), font=f)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     S.save(out)
     return out
