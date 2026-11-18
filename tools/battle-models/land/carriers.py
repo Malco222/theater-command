@@ -604,8 +604,10 @@ def hanomag(fine=True, tag="GER", paint=None, fit="troops", name="Hanomag", titl
         # knees and the gunner's boots
         v.use("hull")
         v.crate((-0.085, -0.31, zfl), (0.36, 0.2, 0.16), 90.0)
-        for y in (0.2, 0.33):
-            v.belt_box((-0.10, y, zfl))
+        # (the two belt boxes lie across her, piled against the step by the left wall: lengthways at x = -0.10 the
+        # first bench man's left boot and the standing gunner's left toe stood 2 cm into them, the soldiers' fit check)
+        v.belt_box((0.0, 0.33, zfl), 90.0)
+        v.belt_box((0.0, 0.325, zfl + 0.172), 84.0)
         # and where the battle camera can see them. Her tub is 1.17 m deep and the camera looks down at 30 degrees
         # over her right wall and her cab: of the floor it sees only the left after corner, and above 0.3 over the
         # floor only the foot of the left bench abaft the middle. So: along the foot of the left bench, behind the
