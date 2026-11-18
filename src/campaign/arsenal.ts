@@ -7,7 +7,7 @@
 
 import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
-import { AIRWAR, airFleetsOf, airPool, airWar, carrierRules, foundAirFleet, hasAirfield } from './air';
+import { AIRWAR, airFleetsOf, airPool, airWar, airfieldsHold, carrierRules, foundAirFleet, hasAirfield } from './air';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
 import { govMul } from './government';
@@ -310,8 +310,30 @@ const strongest = (fs: AirFleet[]): AirFleet | null => fs.reduce<AirFleet | null
 export function stationSite(g: Game, nat: string, want = -1): number {
   if (canStation(g, nat, g.regions[want])) return want;
   const main = strongest(airFleetsOf(g, nat).filter((f) => f.ship === undefined && canStation(g, nat, g.regions[f.base])));
-  if (main) return main.base;
+  if (main) return airWar(g) ? roomNear(g, nat, main.base) : main.base;
   return g.regions.find((r) => canStation(g, nat, r))?.id ?? -1;
+}
+
+/**
+ * The air war: where new aircraft go when nobody names the place. The main air base while its fields have room for a
+ * wing more, counting what is based there and what is on order for it; else the nation's field nearest it that has
+ * that room; and the main base still if none has. (The third playtester, 84.3.1: every new Soviet group formed at one
+ * field, Ryazan holding 3,399 aircraft where it serves 1,500, so that most of them could not fly.)
+ */
+function roomNear(g: Game, nat: string, base: number): number {
+  const wing = Math.max(ARSENAL.air.ftr.count, ARSENAL.air.bmr.count);
+  const free = (id: number): number => airfieldsHold(g, id)
+    - g.airFleets.reduce((s, f) => s + (f.base === id && f.ship === undefined ? f.ftr + f.bmr : 0), 0)
+    - g.nations[nat].queue.reduce((s, b) => s + (b.what === 'air' && b.region === id ? b.count ?? ARSENAL.air[b.item as Wing].count : 0), 0);
+  if (free(base) >= wing) return base;
+  const B = g.regions[base];
+  let best = base, near = Infinity;
+  for (const r of g.regions) {
+    if (r.id === base || !canStation(g, nat, r)) continue;
+    const d = Math.hypot(r.x - B.x, r.y - B.y);
+    if (d < near && free(r.id) >= wing) { near = d; best = r.id; }
+  }
+  return best;
 }
 
 /**
