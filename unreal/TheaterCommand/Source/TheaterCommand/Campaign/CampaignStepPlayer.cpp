@@ -8,6 +8,7 @@
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Input/HittestGrid.h"
 #include "Layout/WidgetPath.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -125,7 +126,7 @@ namespace
 	 * says what a press there would reach instead: the widget's kind, where in the code it was made, and its words, so
 	 * that a replay names the layer and nobody has to guess it (v8425 part C, steps 25 and 31).
 	 */
-	bool Reachable(const FFoundButton& Button, FString* Over = nullptr)
+	bool Reachable(const FFoundButton& Button, FString* Over = nullptr, bool* bOffTheScreen = nullptr)
 	{
 		const TSharedPtr<SWindow> Window = GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWindow() : nullptr;
 		if (!Window.IsValid() || !Button.Widget.IsValid())
@@ -136,13 +137,42 @@ namespace
 		const FVector2D Middle = Place.LocalToAbsolute(Place.GetLocalSize() * 0.5);
 		const TArray<TSharedRef<SWindow>> Windows = { Window.ToSharedRef() };
 		const FWidgetPath Under = FSlateApplication::Get().LocateWindowUnderMouse(Middle, Windows, false, 0);
-		if (Under.IsValid() && Under.ContainsWidget(Button.Widget.Get()))
+		// What lies at the button's middle, from the window down to the topmost widget.
+		TArray<TSharedRef<SWidget>> Path;
+		if (Under.IsValid())
 		{
-			return true;
+			for (int32 Index = 0; Index < Under.Widgets.Num(); ++Index)
+			{
+				Path.Add(Under.Widgets[Index].Widget);
+			}
+		}
+		if (Path.Num() == 0)
+		{
+			// (18 November 2026. A picture run's window is 1600 by 1000 whatever the Mac's screen is: Brian's is 1470 by
+			// 956 points. The part of the window that hangs off the screen is no part of it to macOS, and a press there
+			// "reached nothing" though the button was drawn and nothing lay over it: the plates at the right edge, the
+			// sixth row of a list, the foot of a tall card all read as faults of the game. A player's own window is cut
+			// to suit his screen, so this is the replay's trouble alone. There the window's own chart of what lies
+			// where is asked instead, and the step's note says so.)
+			for (const FWidgetAndPointer& Each : Window->GetHittestGrid().GetBubblePath(Middle, 0.0f, false, 0))
+			{
+				Path.Add(Each.Widget);
+			}
+			if (bOffTheScreen)
+			{
+				*bOffTheScreen = Path.Num() > 0;
+			}
+		}
+		for (const TSharedRef<SWidget>& Each : Path)
+		{
+			if (&Each.Get() == Button.Widget.Get())
+			{
+				return true;
+			}
 		}
 		if (Over)
 		{
-			if (!Under.IsValid() || Under.Widgets.Num() == 0)
+			if (Path.Num() == 0)
 			{
 				*Over = TEXT("nothing in the window takes a press there");
 			}
@@ -150,9 +180,9 @@ namespace
 			{
 				// The topmost widget at that point, and the two it sits in: enough to find the layer in the code.
 				TArray<FString> Said;
-				for (int32 Index = Under.Widgets.Num() - 1; Index >= FMath::Max(0, Under.Widgets.Num() - 3); --Index)
+				for (int32 Index = Path.Num() - 1; Index >= FMath::Max(0, Path.Num() - 3); --Index)
 				{
-					const TSharedRef<SWidget> Each = Under.Widgets[Index].Widget;
+					const TSharedRef<SWidget> Each = Path[Index];
 					FString Words;
 					Lettering(Each, Words);
 					Said.Add(FString::Printf(TEXT("%s at %s%s"), *Each->GetTypeAsString(), *Each->GetReadableLocation(),
@@ -284,11 +314,16 @@ bool FStepPlayer::Press(ACampaignPlayerController& Player, const FString& Words)
 		return false;
 	}
 	FString Over;
-	if (!Reachable(Button, &Over))
+	bool bOffTheScreen = false;
+	if (!Reachable(Button, &Over, &bOffTheScreen))
 	{
 		bError = true;
 		Note = TEXT("the button is on the screen but something lies over it: a press would not reach it") + (Over.IsEmpty() ? FString() : TEXT(". At its middle: ") + Over);
 		return false;
+	}
+	if (bOffTheScreen)
+	{
+		Note = TEXT("pressed where the test window hangs off the Mac's screen (the window's own chart was asked)");
 	}
 	StaticCastSharedPtr<SButton>(Button.Widget)->SimulateClick();
 	return true;
