@@ -357,7 +357,7 @@ def m8(fine=True, tag="USA"):
             for dy in (-0.2, 0.2):
                 v.hinge(c + Y * dy - dk * 0.28 + dn * 0.014 - Y * 0.05, c + Y * dy - dk * 0.28 + dn * 0.014 + Y * 0.05, 0.012)
         v.lathe((-2.445, s * 0.86, 1.2), -X, [(0.03, 0.0), (0.03, 0.035), (0.0, 0.04), (0.0, 0.0)], "red", 10)       # a tail lamp
-    v.roll((-2.26, -0.78, 1.5), (-2.26, 0.78, 1.5), r=0.1)
+    v.roll((-2.26, -0.78, 1.5), (-2.26, 0.78, 1.5), r=0.1, paint=v.own_paint("canvas.olive", "6E6C50"))   # a darker sheet: tan is the lightest thing on an olive car
     v.slab((-0.84, -yr + 0.04, zd), (-0.80, yr - 0.04, zr), coat, 0.004)                                               # the step down to the deck
     v.silencer((-2.30, -0.86, 0.96), (-1.84, -0.86, 0.96), 0.07, pipe=[(-1.7, -0.7, 0.98), (-1.84, -0.86, 0.96)], tail=((-2.30, -0.86, 0.96), (-1, -0.3, -0.2)))
     v.socket("exhaust.1", (-2.42, -0.9, 0.94), (-1, -0.3, -0.2))
