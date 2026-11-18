@@ -1,0 +1,75 @@
+[
+ {
+  "file": "desk_coins_wooden_box.ogg",
+  "format": "vorbis 44100 Hz 1 ch 140 kbps",
+  "seconds": 5.4,
+  "read": [
+   0,
+   5.4
+  ],
+  "fromFilm": false,
+  "peakDb": -2.4,
+  "lufs": -26,
+  "loudestMomentLufs": -21.4,
+  "floorDb": -62.1,
+  "rangeDb": 39.2,
+  "topKhz": 22.6,
+  "bands": {
+   "sub": -35.9,
+   "low": -24.3,
+   "lowmid": -25.7,
+   "mid": -8.1,
+   "presence": -2.4,
+   "air": -5.9
+  },
+  "stereo": null,
+  "talk": 0.33,
+  "events": 5,
+  "firstEvents": [
+   {
+    "at": 0.88,
+    "db": -12.4
+   },
+   {
+    "at": 1.105,
+    "db": -26.2
+   },
+   {
+    "at": 1.9,
+    "db": -19.4
+   },
+   {
+    "at": 3.1,
+    "db": -19.9
+   },
+   {
+    "at": 4.265,
+    "db": -21
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 0.88,
+    "db": -12.4
+   },
+   {
+    "at": 1.9,
+    "db": -19.4
+   },
+   {
+    "at": 3.1,
+    "db": -19.9
+   },
+   {
+    "at": 4.265,
+    "db": -21
+   },
+   {
+    "at": 1.105,
+    "db": -26.2
+   }
+  ],
+  "steady": null,
+  "flags": []
+ }
+]
