@@ -37,8 +37,9 @@ def shapes(tag):
     return []
 
 
-def put(model, ob, arm):
-    """Lays the model's markings on its skin (as it stands at rest), each riding the part it is on. Returns the objects made."""
+def put(model, ob, arm, burn=False):
+    """Lays the model's markings on its skin (as it stands at rest), each riding the part it is on. Returns the objects made.
+    burn: the marking darkens as its object's colour (red, 0 to 1) says she has burnt, as works.land_look(burn=...) does."""
     if not model.marks:
         return []
     tree = BVHTree.FromPolygons([tuple(v) for v in model.verts], [tuple(f) for f in model.faces])
@@ -76,7 +77,7 @@ def put(model, ob, arm):
     me.from_pydata([tuple(p) for p in verts], [], faces)
     used = sorted(set(cols))
     for c in used:
-        name = "mark:" + c
+        name = ("burnt mark:" if burn else "mark:") + c
         mat = bpy.data.materials.get(name)
         if mat is None:
             mat = bpy.data.materials.new(name)
@@ -85,6 +86,21 @@ def put(model, ob, arm):
             rgb = tuple(((int(c[i:i + 2], 16) / 255.0) ** 2.2) * 0.85 for i in (0, 2, 4))        # (a little dulled: paint in the weather)
             b.inputs["Base Color"].default_value = (*rgb, 1.0)
             b.inputs["Roughness"].default_value = 0.7
+            if burn:
+                nt = mat.node_tree
+                info = nt.nodes.new("ShaderNodeObjectInfo")
+                sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+                nt.links.new(info.outputs["Color"], sep.inputs[0])
+                far = nt.nodes.new("ShaderNodeMapRange")
+                far.inputs["From Min"].default_value, far.inputs["From Max"].default_value = 0.3, 1.0
+                far.inputs["To Min"].default_value, far.inputs["To Max"].default_value = 0.0, 0.86
+                nt.links.new(sep.outputs[0], far.inputs["Value"])
+                mx = nt.nodes.new("ShaderNodeMix")
+                mx.data_type = "RGBA"
+                mx.inputs[6].default_value = (*rgb, 1.0)
+                mx.inputs[7].default_value = (0.04, 0.032, 0.026, 1.0)
+                nt.links.new(far.outputs["Result"], mx.inputs[0])
+                nt.links.new(mx.outputs[2], b.inputs["Base Color"])
         me.materials.append(mat)
     me.polygons.foreach_set("material_index", [used.index(c) for c in cols])
     me.update()

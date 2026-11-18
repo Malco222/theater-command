@@ -37,6 +37,7 @@ class Works(Shop, Gear, Fittings):
     def ring_well(self, at, r, part="hull"):
         """What is under a turret: the race it turns on and the dark of the fighting compartment (seen only when the
         turret has been blown off her)."""
+        self.ring_r = r
         self.lathe(at, Z, [(0.0, r - 0.05), (0.014, r - 0.05), (0.014, r), (0.0, r)], "steel", self.n(40, 12), part=part)
         self.lathe(at, Z, [(0.003, 0.0), (0.003, r - 0.05)], "black", self.n(40, 12), part=part)
 
@@ -347,7 +348,22 @@ EDGE_WEAR = 0.4          # how far a plate's cut-back edge goes toward bare worn
 COATS = ("upper", "upper2", "shade")
 
 
-def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.45):
+def burn_sources(model, ring_r=0.85):
+    """Where a vehicle burns when she is knocked out, for `land_look(burn=...)`: the turret ring, the engine deck and
+    every hatch that fire stands out of, each with how far its black reaches (metres)."""
+    out = []
+    for s in model.sockets:
+        n = s["name"]
+        if n == "ring":
+            out.append({"at": Vector(s["at"]), "reach": 1.2, "ring": ring_r})
+        elif n == "engine":
+            out.append({"at": Vector(s["at"]), "reach": 1.5})
+        elif n.startswith("fire."):
+            out.append({"at": Vector(s["at"]), "reach": 0.8})
+    return out
+
+
+def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.45, burn=None):
     """What the pictures add to a paint that the numbers do not carry. She has been driven: dust in the colour of the
     ground she stands on, thick on the running gear and gone by the middle of the hull, lying on whatever looks up;
     mud packed where a wheel's dish or a corner keeps it; dirt in every recess; paint rubbed through only where the
@@ -539,8 +555,68 @@ def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.45):
         if soot is not None:
             soot = _math(nt, "MULTIPLY", soot, 0.95, clamp=True)
             base = toward(base, (0.012, 0.011, 0.010), soot)
+        burnt = None
+        if burn:
+            # she has burnt: black round what burnt (the turret ring, the engine deck, the hatches fire stood out of),
+            # the paint beyond it blistered to dark brown-grey streaks, smoke lying on all that looks up. How far gone
+            # she is rides the object's own colour (its red, 0 to 1), so a clip can burn her as it runs.
+            info = nt.nodes.new("ShaderNodeObjectInfo")
+            sc = nt.nodes.new("ShaderNodeSeparateXYZ")
+            nt.links.new(info.outputs["Color"], sc.inputs[0])
+            amount = sc.outputs[0]
+            gone = _math(nt, "SUBTRACT", 1.0, amount)        # (what has not burnt yet: the black and the brown creep out from the fire as this falls)
+            run = _noise(nt, pos, 1.0, 3.0, 0.5, stretch=(26.0, 26.0, 1.2))      # (streaks that run down her sides)
+            ragged = _math(nt, "MULTIPLY", _ramp(nt, mid, 0.25, 0.75, 0.6, 1.0), _ramp(nt, run, 0.3, 0.7, 0.8, 1.0))
+            core, wide, ring_black = None, None, None
+            for src in burn:
+                d = nt.nodes.new("ShaderNodeVectorMath")
+                d.operation = "SUBTRACT"
+                nt.links.new(pos, d.inputs[0])
+                d.inputs[1].default_value = src["at"]
+                ds = nt.nodes.new("ShaderNodeSeparateXYZ")
+                nt.links.new(d.outputs[0], ds.inputs[0])
+                # (soot goes up and lies wide; down her sides it reaches a shorter way)
+                dz = _math(nt, "ADD", _math(nt, "MULTIPLY", _math(nt, "MAXIMUM", ds.outputs[2], 0.0), 0.55), _math(nt, "MULTIPLY", _math(nt, "MINIMUM", ds.outputs[2], 0.0), 1.7))
+                cb = nt.nodes.new("ShaderNodeCombineXYZ")
+                nt.links.new(ds.outputs[0], cb.inputs[0])
+                nt.links.new(ds.outputs[1], cb.inputs[1])
+                nt.links.new(dz, cb.inputs[2])
+                ln = nt.nodes.new("ShaderNodeVectorMath")
+                ln.operation = "LENGTH"
+                nt.links.new(cb.outputs[0], ln.inputs[0])
+                r, edge = src["reach"], src.get("ring", 0.0)             # (the ring's black starts at its own edge)
+                c = _ramp(nt, ln.outputs["Value"], edge + r * 0.1, edge + r, 1.0, 0.0)
+                w = _ramp(nt, ln.outputs["Value"], edge + r * 0.6, edge + r * 2.4, 1.0, 0.0)
+                core = c if core is None else _math(nt, "MAXIMUM", core, c)
+                wide = w if wide is None else _math(nt, "MAXIMUM", wide, w)
+                if src.get("ring"):      # the ring and all under it once she has blown: the turret's foot, its basket, the well in the roof
+                    flat = nt.nodes.new("ShaderNodeCombineXYZ")
+                    nt.links.new(ds.outputs[0], flat.inputs[0])
+                    nt.links.new(ds.outputs[1], flat.inputs[1])
+                    fl = nt.nodes.new("ShaderNodeVectorMath")
+                    fl.operation = "LENGTH"
+                    nt.links.new(flat.outputs[0], fl.inputs[0])
+                    disc = _math(nt, "MULTIPLY", _ramp(nt, fl.outputs["Value"], src["ring"], src["ring"] + 0.22, 1.0, 0.0),
+                                 _math(nt, "MULTIPLY", _ramp(nt, ds.outputs[2], 0.04, 0.12, 1.0, 0.0), _ramp(nt, ds.outputs[2], -0.9, -0.6, 0.0, 1.0)))
+                    ring_black = _math(nt, "MULTIPLY", disc, _ramp(nt, amount, 0.3, 0.5, 0.0, 1.0))
+            # black: a ragged collar round each fire, full by the end out to about two fifths of its reach
+            black = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _math(nt, "MULTIPLY", core, ragged), _math(nt, "MULTIPLY", gone, 0.6)), 2.5, clamp=True)
+            if ring_black is not None:
+                black = _math(nt, "MAXIMUM", black, ring_black)
+            # the paint beyond it, blistered: all of her above the track guards by the end, in streaks; thickest near the fires
+            z0 = 0.34 * body_top(model)
+            every = _ramp(nt, z, z0, z0 + 0.45, 0.0, 0.6)
+            streaks = _math(nt, "MULTIPLY", _ramp(nt, run, 0.3, 0.65, 0.4, 1.0), _ramp(nt, big, 0.2, 0.8, 0.75, 1.0))
+            brown = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _math(nt, "MULTIPLY", _math(nt, "MAXIMUM", wide, every), streaks), _math(nt, "MULTIPLY", gone, 0.7)), 2.2, clamp=True)
+            fall = _math(nt, "MULTIPLY", _ramp(nt, nsep.outputs[2], 0.3, 0.9, 0.0, 0.5), amount)        # (smoke lies on all that looks up)
+            brown = _math(nt, "MAXIMUM", brown, fall)
+            base = toward(base, tone(big, 0.3, (0.036, 0.029, 0.024), 0.75, (0.07, 0.044, 0.03)), _math(nt, "MULTIPLY", brown, 0.92))
+            base = toward(base, (0.012, 0.011, 0.010), black)
+            burnt = _math(nt, "MAXIMUM", black, _math(nt, "MULTIPLY", brown, 0.8))
         nt.links.new(base, bsdf.inputs["Base Color"])
         covered = _math(nt, "MAXIMUM", grime, mud)
+        if burnt is not None:
+            covered = _math(nt, "MAXIMUM", covered, burnt)
         if soot is not None:
             covered = _math(nt, "MAXIMUM", covered, soot)
         if rough is None:

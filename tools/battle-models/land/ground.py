@@ -491,6 +491,8 @@ class Battle:
 # a warm pool on the ground under it, never the whole field.
 FLASH_TOUCH = 230.0     # the lamp at the muzzle
 FLASH_POOL = 500.0      # the lamp that throws the pool straight down
+BLAST_POOL = 8000.0     # when her ammunition goes: the lamp nine metres over her that lights the ground round her
+BLAST_TOUCH = 1500.0    # and the lamp at her heart that lights her own plates
 
 
 class Air(stage.Effects):
@@ -670,7 +672,7 @@ class Air(stage.Effects):
                 self.puff(t + 0.02, at + facing * 0.1, vel=v, life=g.uniform(2.2, 3.8), r=(0.2 * size, g.uniform(0.9, 1.6) * size), col=(0.42, 0.3, 0.18), col2=(c, c, c), alpha=g.uniform(0.35, 0.55),
                           drag=3.4, rise=0.5, fade_in=0.03, grow=0.5, wind=1.0)
             if light:
-                self.light(t, at + facing * 0.5, 1.2e4 * size * size, 0.12, r=0.5)
+                self.light(t, at + facing * 0.5, 2.5e3 * size * size, 0.12, r=0.5)
         self.once(t0, where, make)
 
     def smoke_from(self, where, start=0.0, end=1e9, size=1.0, thick=1.0, dark=0.06, every=0.1):
@@ -687,7 +689,8 @@ class Air(stage.Effects):
 
     def flames(self, where, start=0.0, end=1e9, size=1.0, lean=None):
         """Fire coming out of her, drawn as tongues: ragged streaks rooted where she burns, alive for a frame or two,
-        a yellow heart at the root, scraps torn off above going red into the smoke."""
+        a yellow heart at the root, the scraps torn off above still joined to the fire under them, and now and then
+        a spark: tiny, quick, gone."""
         g = self.rng
         blow = (lean if lean is not None else self.wind * 0.12)
 
@@ -711,11 +714,14 @@ class Air(stage.Effects):
             k = g.uniform(0.85, 1.15)
             tongue(t, at + across(flow, g.uniform(0.0, 0.28) * size), flow, g.uniform(0.7, 1.5) * size * gust, "tongue", (0.30 * k, 0.082 * k, 0.009), (0.24, 0.05, 0.006), g.uniform(0.07, 0.14))
             if g.random() < 0.55:
-                tongue(t, at + flow * g.uniform(0.7, 1.7) * size * gust + across(flow, g.uniform(0.0, 0.3) * size), flow, g.uniform(0.45, 1.0) * size, "lick", (0.25 * k, 0.062 * k, 0.007),
-                       (0.13, 0.02, 0.004), g.uniform(0.09, 0.2), alpha=0.85, splay=0.3, rise=3.0)
-            if g.random() < 0.2:
-                tongue(t, at + flow * g.uniform(1.6, 2.6) * size + across(flow, g.uniform(0.0, 0.4) * size), flow, g.uniform(0.3, 0.6) * size, "lick", (0.15, 0.032, 0.005), (0.035, 0.012, 0.006),
-                       g.uniform(0.2, 0.4), alpha=0.6, splay=0.35, rise=3.5)
+                tongue(t, at + flow * g.uniform(0.35, 0.9) * size * gust + across(flow, g.uniform(0.0, 0.3) * size), flow, g.uniform(0.45, 1.0) * size, "lick", (0.25 * k, 0.062 * k, 0.007),
+                       (0.13, 0.02, 0.004), g.uniform(0.09, 0.18), alpha=0.85, splay=0.3, rise=2.0)
+            if g.random() < 0.12:
+                tongue(t, at + flow * g.uniform(0.9, 1.5) * size * gust + across(flow, g.uniform(0.0, 0.3) * size), flow, g.uniform(0.3, 0.55) * size, "lick", (0.15, 0.032, 0.005), (0.035, 0.012, 0.006),
+                       g.uniform(0.1, 0.18), alpha=0.6, splay=0.35, rise=2.5)
+            if g.random() < 0.22:
+                self.puff(t, at + flow * g.uniform(0.3, 1.0) * size, vel=flow * g.uniform(3.0, 7.0) + across(flow, g.uniform(0.3, 2.0)), life=g.uniform(0.3, 0.65), r=(0.028, 0.01), col=(1.0, 0.72, 0.32),
+                          col2=(0.8, 0.2, 0.04), alpha=1.0, kind="glow", drag=1.0, gravity=5.0, wind=0.3, fade_in=0.004)
             if g.random() < 0.35:
                 p = self.puff(t, at + flow * g.uniform(0.05, 0.25) * size, life=g.uniform(0.05, 0.1), r=(0.1 * size, g.uniform(0.2, 0.32) * size * gust), col=(0.62, 0.34, 0.07), col2=(0.4, 0.15, 0.02),
                               alpha=0.95, kind="glow", wind=0.0, squash=(1.0, 1.0, 1.5), fade_in=0.006, grow=0.6)
@@ -739,44 +745,64 @@ class Air(stage.Effects):
                 w = f["where"]() if callable(f["where"]) else f["where"]
                 f["ob"].location = Vector(w[0]) + Z * 0.7
 
-    def brew_up(self, t0, where, size=1.0):
-        """Her ammunition goes: a blinding flash, a jet of flame straight up out of her, burning scraps thrown wide, and
-        a rolling ball of fire that turns to a black pillar."""
+    def brew_up(self, t0, where, size=1.0, vents=()):
+        """Her ammunition goes: one frame of yellow-white at her heart, then ragged tongues of orange flame thrown up
+        and out of the turret ring and every open hatch (`vents`), burning scraps flung wide, black smoke wrapping the
+        fire within half a second and standing up as a pillar. Its light falls on the ground near her and no farther."""
         g = self.rng
 
+        def tongue(t, root, d, long, life, kind, kk, speed):
+            p = self.puff(t, root + d * (0.5 * long), vel=d * speed, life=life, r=(0.72, 1.0), col=(0.34 * kk, 0.1 * kk, 0.012), col2=(0.2, 0.04, 0.005), alpha=0.95, kind=kind, wind=0.1,
+                          squash=(0.5 * long, 0.17 * long, 0.17 * long), fade_in=0.006, grow=0.5, hold=0.5, cool=1.0)
+            p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
+
         def make(t, at, facing):
-            for i in range(5):       # the flash: a moment only, and never one round ball
-                self.puff(t, at + Vector((g.uniform(-0.7, 0.7), g.uniform(-0.7, 0.7), g.uniform(0.2, 1.4))) * size, life=g.uniform(0.07, 0.12), r=(0.5 * size, g.uniform(1.1, 1.7) * size),
-                          col=(0.9, 0.62, 0.3), col2=(0.7, 0.3, 0.08), alpha=0.7, kind="glow", wind=0.0, fade_in=0.006, grow=0.4)
-            for i in range(16):      # the jet: flame standing straight up out of the turret ring, in ragged tongues
-                long = g.uniform(1.6, 3.6) * size
-                d = (Z + Vector((g.uniform(-0.16, 0.16), g.uniform(-0.16, 0.16), 0.0))).normalized()
-                kk = g.uniform(0.85, 1.2)
-                p = self.puff(t + 0.02 * i, at + Vector((g.uniform(-0.35, 0.35), g.uniform(-0.35, 0.35), 0.1)) * size + d * (0.5 * long), vel=d * g.uniform(5.0, 12.0), life=g.uniform(0.25, 0.5), r=(0.72, 1.0),
-                              col=(0.34 * kk, 0.1 * kk, 0.012), col2=(0.2, 0.04, 0.005), alpha=0.95, kind="tongue" if i % 2 == 0 else "lick", wind=0.1,
-                              squash=(0.5 * long, 0.16 * long, 0.16 * long), fade_in=0.006, grow=0.5, hold=0.5, cool=1.0)
-                p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
-            for i in range(22):      # the ball of fire rolling up, going dark: many small ones, each its own shade
-                kk = g.uniform(0.5, 1.2)
-                self.puff(t + 0.02 * i, at + Vector((g.uniform(-0.9, 0.9), g.uniform(-0.9, 0.9), g.uniform(0.4, 2.6))) * size, vel=Vector((g.uniform(-5, 5), g.uniform(-5, 5), g.uniform(5, 17))) * size,
-                          life=g.uniform(0.5, 1.1), r=(0.4 * size, g.uniform(0.9, 1.7) * size), col=(0.36 * kk, 0.1 * kk, 0.012 * kk), col2=(0.08, 0.01, 0.002), alpha=g.uniform(0.6, 0.85), kind="glow",
+            roots = [at]
+            for w in vents:
+                w = w() if callable(w) else w
+                roots.append(Vector(w[0]))
+            for i in range(6):       # the core: one frame of yellow-white, bursting out round the ring and over it
+                a = 6.283 * (i + g.uniform(-0.3, 0.3)) / 6
+                self.puff(t, at + Vector((math.cos(a) * g.uniform(0.3, 1.0), math.sin(a) * g.uniform(0.3, 1.0), g.uniform(0.2, 1.7))) * size, life=0.085, r=(0.6 * size, g.uniform(1.0, 1.5) * size),
+                          col=(1.0, 0.9, 0.6), col2=(1.0, 0.62, 0.22), alpha=0.9, kind="glow", wind=0.0, fade_in=0.004, grow=0.4)
+            for i in range(14):      # the jet: flame standing straight up out of the turret ring, in ragged tongues
+                d = (Z + Vector((g.uniform(-0.18, 0.18), g.uniform(-0.18, 0.18), 0.0))).normalized()
+                tongue(t + 0.022 * i, at + Vector((g.uniform(-0.35, 0.35), g.uniform(-0.35, 0.35), 0.1)) * size, d, g.uniform(1.6, 3.4) * size, g.uniform(0.22, 0.45),
+                       "tongue" if i % 2 == 0 else "lick", g.uniform(0.85, 1.2), g.uniform(5.0, 12.0))
+            for i in range(28):      # tongues thrown up and out all round, from the ring and from every hatch
+                a = g.uniform(0, 6.283)
+                d = (Z + Vector((math.cos(a), math.sin(a), 0.0)) * g.uniform(0.35, 1.1)).normalized()
+                tongue(t + g.uniform(0.0, 0.3), roots[i % len(roots)] + Vector((g.uniform(-0.2, 0.2), g.uniform(-0.2, 0.2), 0.05)) * size, d, g.uniform(1.0, 2.6) * size, g.uniform(0.16, 0.38),
+                       "tongue" if i % 3 else "lick", g.uniform(0.8, 1.15), g.uniform(6.0, 15.0))
+            for i in range(7):       # a little body in the middle of it: dark red, gone in a third of a second
+                kk = g.uniform(0.5, 1.0)
+                self.puff(t + 0.03 * i, at + Vector((g.uniform(-0.6, 0.6), g.uniform(-0.6, 0.6), g.uniform(0.5, 2.2))) * size, vel=Vector((g.uniform(-3, 3), g.uniform(-3, 3), g.uniform(5, 12))) * size,
+                          life=g.uniform(0.25, 0.42), r=(0.3 * size, g.uniform(0.6, 1.0) * size), col=(0.3 * kk, 0.075 * kk, 0.01 * kk), col2=(0.06, 0.008, 0.002), alpha=g.uniform(0.5, 0.7), kind="glow",
                           drag=2.4, wind=0.7, fade_in=0.01, grow=0.45)
             for i in range(40):      # burning scraps and sparks: flung far, falling
                 v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.2, 1.6))).normalized() * g.uniform(8, 30) * size
                 self.puff(t, at + Z * 0.5, vel=v, life=g.uniform(0.8, 2.0), r=(0.06, 0.02), col=(1.0, 0.75, 0.35), col2=(0.8, 0.22, 0.04), alpha=1.0, kind="glow", drag=0.7, gravity=9.8, wind=0.0,
                           fade_in=0.004)
-            for i in range(30):      # the black-brown cloud and the pillar
-                up = i < 12
+            for i in range(34):      # black smoke born in the fire, wrapping it within half a second: many small puffs
+                c = g.uniform(0.025, 0.07)
+                self.puff(t + 0.05 + g.uniform(0, 0.35), at + Vector((g.uniform(-1.2, 1.2), g.uniform(-1.2, 1.2), g.uniform(0.6, 3.4))) * size, vel=Vector((g.uniform(-4, 4), g.uniform(-4, 4), g.uniform(4, 12))) * size,
+                          life=g.uniform(3.5, 6.5), r=(0.35 * size, g.uniform(1.0, 1.9) * size), col=(0.09, 0.045, 0.025), col2=(c, c * 0.96, c * 0.92), alpha=g.uniform(0.45, 0.7), drag=2.0, rise=1.2,
+                          fade_in=0.12, grow=0.5, wind=0.9, hold=0.4, cool=14.0)
+            for i in range(64):      # the black-brown cloud and the pillar: many puffs, none big enough to read as a ball
+                up = i < 26
                 v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.2, 1.3))).normalized() * g.uniform(5, 20) * size
                 if up:
                     v = Vector((g.uniform(-2, 2), g.uniform(-2, 2), g.uniform(16, 42) * size))
                 c = g.uniform(0.04, 0.12)
-                self.puff(t + 0.05 + g.uniform(0, 0.35), at + Vector((g.uniform(-0.8, 0.8), g.uniform(-0.8, 0.8), 0.8)) * size, vel=v, life=g.uniform(7, 12), r=(0.8 * size, g.uniform(3.2, 5.8) * size),
-                          col=(0.3, 0.16, 0.07), col2=(c, c * 0.96, c * 0.92), alpha=g.uniform(0.6, 0.8), drag=g.uniform(1.4, 2.2), rise=1.5, fade_in=0.3, grow=0.5, wind=0.9, hold=0.35, cool=5.0)
+                self.puff(t + 0.06 + g.uniform(0, 0.45), at + Vector((g.uniform(-1.0, 1.0), g.uniform(-1.0, 1.0), g.uniform(0.6, 1.8))) * size, vel=v, life=g.uniform(7, 12), r=(0.5 * size, g.uniform(1.7, 3.3) * size),
+                          col=(0.085, 0.048, 0.028), col2=(c, c * 0.96, c * 0.92), alpha=g.uniform(0.4, 0.62), drag=g.uniform(1.4, 2.2), rise=1.5, fade_in=0.3, grow=0.5, wind=0.9, hold=0.35, cool=12.0)
             foot = Vector((at.x, at.y, 0.0))
             for i in range(26):      # the ground all round her jumps
                 a = g.uniform(0, 6.283)
                 out = Vector((math.cos(a), math.sin(a), 0.0))
                 self._dust_puff(t + 0.04, foot + out * g.uniform(1.8, 4.5) + Z * 0.15, out * g.uniform(3.0, 9.0) + Z * g.uniform(0.5, 2.0), big=g.uniform(0.9, 1.5), thick=1.3, life=g.uniform(3.0, 5.5))
-            self.light(t, at + Z * 3.0, 6.0e4 * size * size, 0.3, r=1.5)
+            # the light of it: a pool thrown down on the ground round her from over her head, a touch on her own
+            # plates; one frame and fading the next. The far field, the trees and the sky do not change.
+            self.spot(t, at + Z * 9.0, BLAST_POOL * size * size, 0.16, cone=120.0, r=1.0)
+            self.light(t, at + Z * 2.0, BLAST_TOUCH * size * size, 0.16, col=(1.0, 0.6, 0.28), r=0.8)
         self.once(t0, where, make)

@@ -39,15 +39,18 @@ def ease(a, b, t):
 
 
 class Show:
-    def __init__(self, name, field="battle", wind=None, sun=(25.0, 34.0), grass=(-34.0, 46.0, -30.0, 30.0), density=26.0, tag=None, build=None, **field_kw):
+    def __init__(self, name, field="battle", wind=None, sun=(25.0, 34.0), grass=(-34.0, 46.0, -30.0, 30.0), density=26.0, tag=None, build=None, burn=False, **field_kw):
         kit.fresh()
         t = time.time()
         self.v = vehicles.build(name, True, tag, **(build or {}))
+        self.burns = burn
         self.m = self.v.m
         # the dust she carries is the ground she stands on
         dust_hex = "9A8A6A" if field == "battle" else ground.KINDS[field][3]
-        self.ob, self.arm = works.to_scene(self.m, dust_hex=dust_hex)
-        landmarks.put(self.m, self.ob, self.arm)
+        look_kw = {"burn": works.burn_sources(self.m, getattr(self.v, "ring_r", 0.85))} if burn else {}
+        self.ob, self.arm = works.to_scene(self.m, dust_hex=dust_hex, **look_kw)
+        self.marks = landmarks.put(self.m, self.ob, self.arm, burn=burn)
+        self.burnt(0.0)
         belt = next(iter(self.v.belts.values())) if self.v.belts else None
         rut = abs(belt["y"]) if belt else 0.9
         if field == "battle":
@@ -66,6 +69,11 @@ class Show:
         # (and how high by her body, so a tall aerial does not send them up into the air)
         self.L, self.H, self.cx = max(max(xs) - min(xs), (max(hull) - min(hull)) * 1.27), min(max(zs), 1.36 * works.body_top(self.m)), (max(xs) + min(xs)) / 2
         print(f"{name}: {self.m.triangles()} triangles, built and staged in {time.time() - t:.1f}s", flush=True)
+
+    def burnt(self, how_far):
+        """How far she has burnt, 0 to 1 (a Show made with burn=True: the look reads it from her own colour)."""
+        for ob in [self.ob] + (self.marks if self.burns else []):
+            ob.color = (max(0.0, min(1.0, how_far)), 0.0, 0.0, 1.0)
 
     def sun_at(self, bearing, elev):
         """The sun stands at this bearing (degrees, from +x toward +y) and height."""
@@ -237,9 +245,10 @@ def faces(name, out, opt, w, h, spp):
 # ---- the whole motor pool on one field ---------------------------------------------------------------
 
 def pool(names, out, opt, w, h, spp):
-    """Every vehicle named, drawn up in echelon on the battle's ground: the picture of them all together, a second
-    from the other end of the row, and a sheet of the two. `gap=` metres between neighbours, `step=` metres each
-    stands behind her neighbour, `as=` the file's name."""
+    """Every vehicle named, drawn up on the battle's ground in one rank or two (the second standing in the gaps of
+    the first): the picture of them all together from above their right front, a second from the other end, and a
+    sheet of the two. `gap=` metres between neighbours, `ranks=` how many ranks, `rank=` metres between them, `step=`
+    metres each stands behind her neighbour, `x=` `y=` where the front rank's middle stands, `as=` the file's name."""
     kit.fresh()
     t = time.time()
     stood = []
@@ -252,12 +261,18 @@ def pool(names, out, opt, w, h, spp):
     stage.render_setup(w, h, samples=spp)
     cam = kit.camera("cam", 50.0)
     cam.data.clip_end = 20000.0
-    n, gap, step = len(stood), float(opt.get("gap", 4.5)), float(opt.get("step", 1.5))
-    x_at = float(opt.get("x", 0.0))
-    for i, (v, arm) in enumerate(stood):
-        arm.location = (x_at - step * i, ((n - 1) / 2 - i) * gap, 0.0)
-    if "look" in opt:                                    # (what stands in the row's way: say so, do not render)
-        lo, hi = Vector((x_at - step * n - 6.0, -n * gap / 2 - 2.0, -1.0)), Vector((x_at + 6.0, n * gap / 2 + 2.0, 6.0))
+    n, gap = len(stood), float(opt.get("gap", 4.5))
+    ranks = int(opt.get("ranks", 2 if n > 7 else 1))
+    step, back = float(opt.get("step", 0.0 if ranks > 1 else 1.5)), float(opt.get("rank", 10.5))
+    x_at, y_at = float(opt.get("x", 0.0)), float(opt.get("y", 0.0))
+    first = (n + ranks - 1) // ranks                     # how many stand in the front rank
+    rows = [stood[:first], stood[first:]] if ranks > 1 else [stood]
+    for r, row in enumerate(rows):                       # (the first named stands on the left as the first picture sees them)
+        for i, (v, arm) in enumerate(row):
+            arm.location = (x_at - back * r - step * i, y_at + (i - (len(row) - 1) / 2) * gap, 0.0)
+    deep = back * (ranks - 1) + step * first
+    if "look" in opt:                                    # (what stands in the row's way: say so)
+        lo, hi = Vector((x_at - deep - 5.0, y_at - first * gap / 2 - 1.0, -1.0)), Vector((x_at + 5.0, y_at + first * gap / 2 + 1.0, 6.0))
         for ob in bpy.context.scene.objects:
             if ob.type != "MESH" or any(ob.parent == arm for _, arm in stood) or max(ob.dimensions) > 80.0:
                 continue
@@ -266,11 +281,12 @@ def pool(names, out, opt, w, h, spp):
             if all(a[k] < hi[k] and b[k] > lo[k] for k in range(3)):
                 print(f"  in the way: {ob.name}  x {a.x:.1f}..{b.x:.1f}  y {a.y:.1f}..{b.y:.1f}  z {a.z:.1f}..{b.z:.1f}", flush=True)
     print(f"{n} vehicles staged in {time.time() - t:.1f}s", flush=True)
-    wide = (n - 1) * gap
-    mid = Vector((x_at - step * (n - 1) / 2, 0.0, 1.1))
+    wide = (first - 1) * gap
+    mid = Vector((x_at - deep / 2, y_at, 1.0))
     name = opt.get("as", "pool")
-    shots = [("a", (mid.x + 0.62 * wide + 16.0, -(0.5 * wide + 15.0), 4.6), 38.0), ("b", (mid.x + 0.45 * wide + 15.0, 0.5 * wide + 17.0, 3.4), 40.0)]
-    lens = float(opt.get("lens", 62.0))
+    high = float(opt.get("high", 13.0 if ranks > 1 else 5.0))
+    shots = [("a", (mid.x + 0.55 * wide + 17.0, mid.y - (0.42 * wide + 12.0), high), 38.0), ("b", (mid.x + 0.5 * wide + 16.0, mid.y + 0.42 * wide + 13.0, high * 0.7), 40.0)]
+    lens = float(opt.get("lens", 46.0 if ranks > 1 else 62.0))
     files = []
     for key, eye, sun in shots:
         if opt.get("views") and key not in opt["views"].split(","):
@@ -284,8 +300,10 @@ def pool(names, out, opt, w, h, spp):
         files.append(path)
         print(f"  {key}: {time.time() - tick:.1f}s", flush=True)
     if len(files) == 2:
-        kit.sheet(files, os.path.join(out, "sheets", f"{name}.png"), cols=1, labels=[", ".join(v.m.title for v, _ in stood), "The same row from its other end"],
-                  title="The motor pool so far, drawn up on the battle's ground")
+        short = lambda t: t.replace("Carro Armato ", "").replace(" medium tank", "").replace(" light tank", "")      # noqa: E731
+        said = [", ".join(short(v.m.title) for v, _ in row) for row in rows]
+        labels = ["Front, left to right: " + said[0], "From the other end. Rear, left to right: " + said[1]] if ranks > 1 else ["Left to right: " + said[0], "The same from the other end"]
+        kit.sheet(files, os.path.join(out, "sheets", f"{name}.png"), cols=1, labels=labels, title="The motor pool on the battle's ground")
         print("wrote", os.path.join(out, "sheets", f"{name}.png"), flush=True)
 
 
@@ -376,13 +394,15 @@ def action(name, out, opt, w, h, spp, fps, only):
 # ---- she is struck and her ammunition goes -----------------------------------------------------------
 
 def brewup(name, out, opt, w, h, spp, fps, only):
-    S = Show(name, field=opt.get("field", "battle"), density=float(opt.get("grass", 26.0)), grass=(-26.0, 30.0, -30.0, 26.0), build=choice(opt))
+    S = Show(name, field=opt.get("field", "battle"), density=float(opt.get("grass", 26.0)), grass=(-26.0, 30.0, -30.0, 26.0), build=choice(opt), burn=True)
     stage.render_setup(w, h, samples=spp)
     m = S.m
     t_hit = 0.8
     clip = "brew_up" if "brew_up" in S.clip else "knocked_out"
     long = float(opt.get("long", 8.0))
     blast = next((e["t"] for e in S.clip[clip]["events"] if e["fx"] == "magazine_blast"), None)
+    if blast is not None:                         # (the blast falls just before a frame, so its one bright frame is caught whole)
+        t_hit = math.ceil((t_hit + blast) * fps) / fps - 0.012 - blast
     side = "hit.turret" if S.has("hit.turret") else "hit.left"
     S.fx.strike(t_hit, S.where(side))
     if S.has("engine"):
@@ -392,8 +412,8 @@ def brewup(name, out, opt, w, h, spp, fps, only):
     if blast is not None:
         tb = t_hit + blast
         for s in hatches:                             # flame stands out of every hatch for the half second before she goes
-            S.fx.flames(S.where(s), start=t_hit + 0.08, end=tb, size=1.5, lean=Vector((0, 0, 0)))
-        S.fx.brew_up(tb, S.where("ring"), size=1.0)
+            S.fx.flames(S.where(s), start=t_hit + 0.08, end=tb, size=1.1, lean=Vector((0, 0, 0)))
+        S.fx.brew_up(tb, S.where("ring"), size=1.0, vents=[S.where(s) for s in hatches])
         burning = ["ring"] + [s for s in hatches if s not in on_turret]
     else:
         tb = t_hit + 1.2
@@ -411,6 +431,8 @@ def brewup(name, out, opt, w, h, spp, fps, only):
         S.place((0, 0, 0))
         S.set(S.play("idle", t) if t < t_hit else {}, S.play("hit", t - t_hit) if blast is not None and t < t_hit + blast else {}, S.play(clip, t - t_hit))
         S.fx.at(t)
+        # she burns as the clip runs: scorched by the fire from her hatches, half gone in the blast, black by the end
+        S.burnt(0.0 if t < t_hit else 0.18 * ease(t_hit, tb, t) if t < tb else (0.5 + 0.5 * ease(tb, tb + 4.5, t)) if blast is not None else 0.8 * ease(tb, tb + 5.0, t))
         up = ease(t_hit + 0.4, t_hit + 3.0, t)
         S.look(eye + Vector((1.0, 1.0, 0.3)) * up, Vector((0.0, 0.3, S.H * 0.55 + 1.7 * up)), 40.0 - 4.0 * up)
 
