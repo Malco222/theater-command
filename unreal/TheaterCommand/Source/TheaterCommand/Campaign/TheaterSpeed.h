@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Async/Future.h" // (TFuture: ModelAside)
 #include "Async/ParallelFor.h" // (EParallelForFlags)
 #include "HAL/PlatformTime.h"
 #include "ProfilingDebugging/CsvProfiler.h"
@@ -77,15 +78,19 @@ class APlayerController;
  *                         has in hand (DressPaint, about 32 ms of every fine sheet in the builder's logs). The same
  *                         picture either way.
  * (The second speed detective's, 18 November 2026: the whole world smooth.)
- *   tc.Speed.SheetShelf   6 (default): a fine sheet of the world the eye has left is stood down as before (after twenty
+ *   tc.Speed.SheetShelf   12 (default): a fine sheet of the world the eye has left is stood down as before (after twenty
  *                         seconds, or one once the eye is above the height the sheets are for), but what was modelled
  *                         for it (its heights, paint, pictures) is kept on a shelf, up to this many sheets, the longest
  *                         unwanted dropped first. Wanted again, its tiles are stood up from the shelf in a few frames:
  *                         it is not modelled again (some seconds on every spare core, in the builder's logs of build
  *                         1634). The same picture either way. 0: dropped whole and modelled again, as before.
- *                         (A sheet kept is 60 to 80 MB by the pre-checker's count of its arrays: about half a GB
- *                         for a full shelf, which used to be given back. The log's "made:" line says what the game
- *                         holds.)
+ *                         (A sheet kept is 60 to 80 MB by the pre-checker's count of its arrays. Measured on the Mac
+ *                         on 18 November, build 1680: with four and six on the shelf the game held 40 to 100 MB more
+ *                         than without, about 15 to 20 MB a sheet. The shelf was 6 then; it is 12 now because the eye
+ *                         at playing height has 12 sheets standing, and going up past their height and coming down
+ *                         again modelled the other six afresh. The log's "made:" line says what the game holds.)
+ *                         A sheet whose ground changed hands while it lay on the shelf has that ground painted when it
+ *                         comes off, one such sheet a frame.
  *   tc.Speed.TileTime     4 (default): the tiles of ground stood up in one frame, over every sheet together, are stopped
  *                         for that frame once they have taken this many ms (one is always stood up; never more than
  *                         five a sheet, as before). The rest come the next frame; the tiles they replace stay until
@@ -98,6 +103,17 @@ class APlayerController;
  *                         thread's long frames while new ground comes up, and which of the two cures it at the least
  *                         wait for the ground ("Speed: fine sheet ... was modelled in ... s" says the wait). The same
  *                         ground whichever.
+ *                         (Measured 18 November, build 1680: neither 1 nor 2 helped. While a sheet is modelled the
+ *                         game, draw and RHI threads each take about twice as long over the same work, and a frame is
+ *                         ten times as likely to run over 33 ms, with the loops spread, single or at the background's
+ *                         priority alike: the modelling thread itself is in the frame's way.)
+ *                         3: each sheet on a thread of its own at the engine's lowest priority, its loops on that
+ *                         thread. 4: as 3, and on a Mac the thread is marked as background work, which Apple's chips
+ *                         keep to their efficiency cores, leaving the fast ones to the frame. STILL FOR MEASURING.
+ *   tc.Speed.StandOne     1 (default): one ready fine sheet is stood a frame, and the next the frame after. Standing a
+ *                         sheet stands the coarse sheet's tiles round it afresh and hands them and its own to the draw
+ *                         thread: 25 to 30 ms, and two stood in one frame made a 45 ms one (the same capture). 0: every
+ *                         ready sheet in the same frame, as before. The same picture either way.
  * And two for measuring only, which change the picture and are not to be left off without the art director:
  *   tc.Speed.TownShadows  1 (default): the near towns throw shadows. 0: they do not.
  *   tc.Speed.TrainShadows 1 (default): the trains throw shadows. 0: they do not.
@@ -138,7 +154,8 @@ namespace TheaterSpeed
 	bool BordersKept();
 	int32 SheetShelf(); // how many fine sheets are kept on the shelf: 0 for none, as before
 	double TileTime(); // the ms of tiles stood up in a frame: 0 for no limit, as before
-	int32 QuietModel(); // 0 as before, 1 one thread a sheet, 2 the background's priority
+	int32 QuietModel(); // 0 as before, 1 one thread a sheet, 2 the background's priority, 3 its own lowest thread, 4 and background work on a Mac
+	bool StandOne();
 
 	/**
 	 * (tc.Speed.QuietModel.) Stood on a thread while it models a fine sheet quietly: the loops under it that would
@@ -157,6 +174,11 @@ namespace TheaterSpeed
 	};
 	/** How a loop of a sheet's modelling is to run on this thread: spread over the cores as ever, or (under an FQuietModelling) as that asks. */
 	EParallelForFlags ModelLoop();
+	/**
+	 * (tc.Speed.QuietModel.) Sets a fine sheet's modelling going aside and returns the future that says when it is
+	 * done: on the engine's pool as before (0, 1, 2), or on a thread of its own at the lowest priority (3, 4).
+	 */
+	TFuture<void> ModelAside(int32 How, TUniqueFunction<void()> Work);
 
 	/**
 	 * What was made in a frame, for the speed log (on any thread): a long frame is followed by a line of these, and
@@ -175,6 +197,8 @@ namespace TheaterSpeed
 		Count
 	};
 	void NoteMade(EMade What, int32 HowMany = 1);
+	/** A still model of this kind ("LandTile", "TreeSquare") was handed to the draw thread, with so many points: a long frame's line names the kinds. */
+	void NoteStillKind(FName Kind, int32 Points);
 	/** Once a frame, from the map: how many fine sheets are being modelled, stand, and lie on the shelf. */
 	void NoteSheets(int32 Modelling, int32 Standing, int32 Shelved);
 

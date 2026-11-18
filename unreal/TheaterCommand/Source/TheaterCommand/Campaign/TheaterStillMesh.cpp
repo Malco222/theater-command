@@ -207,6 +207,7 @@ FPrimitiveSceneProxy* UTheaterStillMesh::CreateSceneProxy()
 		}
 		TheaterSpeed::NoteMade(TheaterSpeed::EMade::StillModels);
 		TheaterSpeed::NoteMade(TheaterSpeed::EMade::StillPoints, Points);
+		TheaterSpeed::NoteStillKind(FName(*GetFName().GetPlainNameString()), Points); // ("LandTile_12" is of the kind "LandTile")
 		if (IsInGameThread())
 		{
 			THEATER_SPEED_SCOPE(StillModelHandOver);

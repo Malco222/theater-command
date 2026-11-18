@@ -2988,9 +2988,10 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 			const bool bAside = TheaterSpeed::FineAside();
 			TSet<int32> Haze = bAside ? HazeSet : TSet<int32>();
 			// (Speed: tc.Speed.QuietModel, for measuring. How its loops run: spread over the cores as before, on this one
-			// thread alone, or spread at the background's priority.)
+			// thread alone, or spread at the background's priority. And where it runs: on the engine's pool as before, or
+			// on a thread of its own at the lowest priority. See TheaterSpeed::ModelAside.)
 			const int32 Quiet = TheaterSpeed::QuietModel();
-			Sheet->Building = Async(EAsyncExecution::ThreadPool, [Sheet, Map, Box, Scale, bAside, Quiet, HazeThen = MoveTemp(Haze)]()
+			Sheet->Building = TheaterSpeed::ModelAside(Quiet, [Sheet, Map, Box, Scale, bAside, Quiet, HazeThen = MoveTemp(Haze)]()
 			{
 				const double Began = FPlatformTime::Seconds();
 				const TheaterSpeed::FQuietModelling QuietHere(Quiet);
@@ -3012,6 +3013,8 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 	// Bring on the ones that are built, and take down the ones the eye left a while ago.
 	TArray<FIntPoint> Gone;
 	bool bDressing = false;
+	bool bCaughtUp = false; // (speed: one sheet off the shelf has had its changed ground painted this frame)
+	bool bStoodOne = false; // (speed: tc.Speed.StandOne) one sheet has been stood this frame
 	for (const auto& Pair : FineSheets)
 	{
 		FFineSheet& Sheet = *Pair.Value;
@@ -3070,6 +3073,15 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 			{
 				// (Speed: tc.Speed.SheetShelf. Ground changed hands while it lay on the shelf, which did not paint it
 				// then: that ground is painted again now, before any of it is seen, as RepaintBeyond would have.)
+				// (One sheet a frame. After a load every province has changed hands, and six sheets came off the shelf
+				// together and were each painted whole in the one frame: 108 ms of a 153 ms frame, in the builder's
+				// capture of 18 November (Poland, build 1680). The others wait their turn out of sight, as they wait
+				// for their tiles: none stands before it is painted.)
+				if (bCaughtUp)
+				{
+					continue;
+				}
+				bCaughtUp = true;
 				const FBox2D Changed = Sheet.HoldersChanged;
 				Sheet.HoldersChanged = FBox2D(ForceInit);
 				RepaintBeyond(Changed, &Sheet);
@@ -3078,6 +3090,15 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 			// sheet is shown and that box of the coarse sheet is taken away, in the same frame.
 			if (!UpdateLand(Sheet.Land, CameraDistance, CameraFocus, false))
 			{
+				// (Speed: tc.Speed.StandOne. One sheet is stood a frame: standing one stands the coarse sheet's tiles
+				// round it up afresh and hands them and its own to the draw thread, 25 to 30 ms of the game thread in
+				// the same capture, and two off the shelf stood in one frame made a 45 ms one. The next is ready and
+				// out of sight until the next frame, with the coarse sheet still lying there, as while its tiles came.)
+				if (bStoodOne && TheaterSpeed::StandOne())
+				{
+					continue;
+				}
+				bStoodOne = true;
 				StandFineSheet(Sheet);
 			}
 		}
