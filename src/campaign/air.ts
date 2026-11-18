@@ -57,8 +57,15 @@ interface FleetRow {
    * Soviet Far East's on Japan): while the two are at peace a computer staff leaves it on its fields at every stop,
    * and at every stop what the record adds to it arrives and what the record takes from it leaves with the date,
    * never through the pool (the aircraft that went west in December 1941 are on Europe's rows already).
+   * 'to' (rider b525): the record ends this command by a change of name, and these are the rows that took its place.
+   * It is not stood down by the date: it ends in the first month from the record's that every one of them stands,
+   * and what it holds passes to them (handOver, below). 'leaves' (b525): [month, fighters, bombers, who, foe], a part
+   * of the command that leaves by the record for a reason outside the game (the Soviet volunteers in China, April
+   * 1941): it leaves with the date at every stop, and never through the pool; only where no book is kept and `who`
+   * is at war with `foe` that month, it stays.
    */
   bmrRange?: number; quality?: number; ally?: boolean; arrives?: boolean; moves?: [number, string][]; posted?: boolean; byBook?: boolean; watch?: string;
+  to?: string[]; leaves?: [number, number, number, string, string][];
 }
 export interface AirOrder { fleet: string; base?: string[]; mission: AirMission; region?: string; sea?: string }
 export interface AirPlan { nat: string; from: number; to: number; name: string; against: string; orders: AirOrder[] }
@@ -235,12 +242,30 @@ const watching = (g: Game, f: AirFleet): boolean => {
  * a withdrawal the record made is the staff's own to make there, or a battle's to bring about.
  */
 function kept(g: Game, r: FleetRow, turn = g.turn): [number, number, number] | null {
-  const e = row(r.est, turn);
-  if (!e || !r.byBook || stopDef(g).book) return e;
+  let e = row(r.est, turn);
+  if (!e) return e;
+  if (r.to) {
+    // (A command the record renamed: gone once it has handed over, and until then not stood down by the date.)
+    if (g.flags[`air:over:${r.name}`]) return [e[0], 0, 0];
+    if (e[1] + e[2] <= 0) for (const x of r.est) { if (x[0] > turn) break; if (x[1] + x[2] > 0) e = [e[0], x[1], x[2]]; }
+  }
+  if (!r.byBook || stopDef(g).book) return e;
+  // (What left for a reason outside the game is no part of "the most": it is counted back in step by step, and what did leave taken off.)
+  const left = (at: number, did: boolean): [number, number] => {
+    let ftr = 0, bmr = 0;
+    for (const L of r.leaves ?? []) if (L[0] <= at && !(did && g.flags[`air:stay:${r.name}:${L[0]}`])) { ftr += L[1]; bmr += L[2]; }
+    return [ftr, bmr];
+  };
   let ftr = 0, bmr = 0;
-  for (const x of r.est) { if (x[0] > turn) break; ftr = Math.max(ftr, x[1]); bmr = Math.max(bmr, x[2]); }
-  return [e[0], ftr, bmr];
+  for (const x of r.est) { if (x[0] > turn) break; const back = left(x[0], false); ftr = Math.max(ftr, x[1] + back[0]); bmr = Math.max(bmr, x[2] + back[1]); }
+  const gone = left(turn, true);
+  return [e[0], Math.max(0, ftr - gone[0]), Math.max(0, bmr - gone[1])];
 }
+/** The month the record ends a command it renamed: its last row, where that reads nothing. */
+const endOf = (r: FleetRow): number | undefined => { const x = r.est[r.est.length - 1]; return x[1] + x[2] <= 0 ? x[0] : undefined; };
+/** The commands the record renamed into this one that are due to hand over and have not: their month has come. */
+const dueInto = (g: Game, s: FleetRow): FleetRow[] =>
+  AIR.fleets.filter((r) => r.to?.includes(s.name) && !g.flags[`air:over:${r.name}`] && (endOf(r) ?? Infinity) <= g.turn);
 /**
  * How well a nation's air force fights, plane for plane: its row in air.json, or by date where the record has it
  * fall (ruling 187(b), air.json 'decline': Japan's, at the stops of the history dial that keep the book and no others).
@@ -1243,6 +1268,8 @@ function recordMoves(g: Game, nat: string): void {
 export function airUpkeep(g: Game, nat: string): void {
   const n = g.nations[nat];
   if (!n?.alive) return;
+  // (Rider b525: a part of a command that leaves for a reason outside the game stays where no book is kept and the reason no longer holds.)
+  if (!stopDef(g).book) for (const r of AIR.fleets) for (const L of r.leaves ?? []) if (r.nat === nat && L[0] === g.turn && atWar(g, L[3], L[4])) g.flags[`air:stay:${r.name}:${L[0]}`] = 1;
   for (const r of AIR.fleets) {
     if (r.nat !== nat || (r.from ?? 1) <= 1 || g.turn < r.from! || g.flags[`air:${r.name}`]) continue;
     // An air force history raised for an invasion of its own planning is nobody's to raise in free play.
@@ -1254,11 +1281,18 @@ export function airUpkeep(g: Game, nat: string): void {
     const f = addAir(g, r, base);
     if (!f) continue;
     g.flags[`air:${r.name}`] = g.turn;
+    // (Rider b525: where the record renamed a command into this one, what that command held by the record is counted
+    // against this one's figure: it forms without them, and takes what the old command has left: handOver.)
+    for (const old of dueInto(g, r)) {
+      const had = kept(g, old);
+      if (had) { f.ftr = Math.max(0, f.ftr - had[1]); f.bmr = Math.max(0, f.bmr - had[2]); }
+    }
     headline(g, 'info', `${f.name} forms in ${base.name}.`, nat, base.id);
     // The air war: it forms as air groups, and the ground it forms on has its airfields.
     if (airWar(g)) { if (!hasAirfield(g, base.id)) g.flags[`af:${base.id}`] = AIRWAR.fields.seed.base; splitFleet(g, f); }
   }
   firstOfKind(g, nat);
+  handOver(g);
   const p = airPool(g, nat);
   const built = row(AIR.production[nat], g.turn), trained = row(AIR.pilots.perMonth[nat], g.turn);
   if (built) { p.ftr += built[1]; p.bmr += built[2]; }
@@ -1291,10 +1325,19 @@ export function airUpkeep(g: Game, nat: string): void {
       const est = f.extra ? { ftr: ef + f.extra.ftr, bmr: eb + f.extra.bmr } : { ftr: ef, bmr: eb };
       // (A country that builds no aircraft on these rows, and a command that stands apart: what the record adds to the command arrives with the date. Not in another's keeping, whose works supply it.)
       const apart = !!r!.watch && !f.raised;
+      // (Rider b522: where no book is kept and the command is at war with the country it watches, the record's reason
+      // for a withdrawal, a quiet border, no longer holds: nothing leaves while that war lasts.)
+      if (apart && !stopDef(g).book && atWar(g, nat, r!.watch!)) { est.ftr = Math.max(est.ftr, f.est.ftr); est.bmr = Math.max(est.bmr, f.est.bmr); }
       if ((r!.arrives || r!.watch) && !f.raised) { f.ftr += Math.max(0, est.ftr - f.est.ftr); f.bmr += Math.max(0, est.bmr - f.est.bmr); }
       f.est = est;
       // (And what the record takes from a command that stands apart leaves with the date: it is on other rows already.)
       if (apart) { f.ftr = Math.min(f.ftr, est.ftr); f.bmr = Math.min(f.bmr, est.bmr); }
+      // (So does a part of a command that leaves for a reason outside the game: home, not to the pool.)
+      for (const L of r!.leaves ?? []) {
+        if (L[0] !== g.turn || g.flags[`air:stay:${r!.name}:${L[0]}`] || f.raised) continue;
+        if (f.kind !== 'bmr') f.ftr = Math.max(0, f.ftr - Math.round(L[1] * (f.share ?? 1)));
+        if (f.kind !== 'ftr') f.bmr = Math.max(0, f.bmr - Math.round(L[2] * (f.share ?? 1)));
+      }
     }
     if (f.ftr > f.est.ftr) { const s = f.ftr - f.est.ftr; f.ftr -= s; p.ftr += s; p.pilots += s; }
     if (f.bmr > f.est.bmr) { const s = f.bmr - f.est.bmr; f.bmr -= s; p.bmr += s; }
@@ -1321,6 +1364,41 @@ export function airUpkeep(g: Game, nat: string): void {
   p.ftr = Math.min(p.ftr, most.ftr);
   p.bmr = Math.min(p.bmr, most.bmr);
   p.pilots = Math.min(p.pilots, most.pilots);
+}
+
+/**
+ * The record's changes of name (ruling 234's rider b525): a command the record renamed ends in the first month, from
+ * the record's own, that every command which took its place stands, and what it holds passes to them, kind by kind
+ * up to what each is kept at, in the order the row names them. What is left over goes to the pool of the country that
+ * took it over. So nothing stands twice, and nothing vanishes because a date came: where the new command never forms
+ * (its ground is not held), the old one stands. Every stop, every seat. Read in every country's month, since the two
+ * commands may be different countries' (the volunteer group in China's service, the task force America's).
+ */
+function handOver(g: Game): void {
+  for (const r of AIR.fleets) {
+    const at = r.to ? endOf(r) : undefined;
+    if (at === undefined || at > g.turn || g.flags[`air:over:${r.name}`]) continue;
+    const next = r.to!.map((n) => AIR.fleets.find((x) => x.name === n)).filter((x): x is FleetRow => !!x);
+    const groups = (x: FleetRow): AirFleet[] => g.airFleets.filter((f) => f.ship === undefined && rowOf(f) === x);
+    // (A command that has formed stands, though a battle has left it no group.)
+    if (!next.length || !next.every((x) => groups(x).length > 0 || g.flags[`air:${x.name}`] || ((x.from ?? 1) <= 1 && g.flags.worldair === 1))) continue;
+    const old = groups(r);
+    g.flags[`air:over:${r.name}`] = g.turn;
+    if (!old.length) continue;
+    let ftr = old.reduce((s, f) => s + f.ftr, 0), bmr = old.reduce((s, f) => s + f.bmr, 0);
+    const where = old[0].base;
+    for (const x of next) {
+      for (const f of groups(x)) {
+        const a = Math.min(ftr, Math.max(0, f.est.ftr - f.ftr)), b = Math.min(bmr, Math.max(0, f.est.bmr - f.bmr));
+        f.ftr += a; ftr -= a; f.bmr += b; bmr -= b;
+      }
+    }
+    const p = airPool(g, next[0].nat);
+    p.ftr += ftr; p.pilots += ftr; p.bmr += bmr;
+    for (const f of old) g.airFleets.splice(g.airFleets.indexOf(f), 1);
+    if (g.flags[`air:${r.name}`]) { delete g.flags[`air:${r.name}`]; delete g.flags[`air:mv:${r.name}`]; }
+    headline(g, 'info', `${r.name} is no more: its men and aircraft are now ${list(next.map((x) => x.name))}.`, old[0].nat, where);
+  }
 }
 
 /**

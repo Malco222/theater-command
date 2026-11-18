@@ -86,6 +86,7 @@ interface Rules {
   north: { nat: string; fallen: string; months: number; book: number; while: string[] };
   demand: { of: string; key: string; theatre: string; book: number; war: [string, string]; fallen: string; months: number; never: string };
   keepers: string[];
+  africa?: [number, number];
   shores?: { slice: number; seas: string[] };
   skies?: { per: number; cover?: Record<string, number>; seas: string[] };
   says: Record<string, string>;
@@ -302,9 +303,16 @@ function demandMonth(g: Game): void {
 
 // ---- A fallen country's far ground (ruling 199(b), (c)) ---------------------------------------------------
 
-/** The keepers of ground on the far side of the world, in their order; null for ground anywhere else, which keeps the world's own list. */
+/**
+ * The keepers of ground on the far side of the world, in their order; null for ground anywhere else, which keeps the
+ * world's own list. Ruling 199's list is Asia's and the Pacific's: Africa's far ground (pacific.json 'africa', the
+ * provinces from the first to the last counted from the far side's first) keeps the world's own order, Britain and
+ * then America (ruling 234(e)1). What is kept there, and how, is the same.
+ */
 export function keepersOf(g: Game, r: Region): string[] | null {
-  return PACIFIC !== null && reads(g) && shoreOf(r) === 2 ? PACIFIC.keepers : null;
+  if (PACIFIC === null || !reads(g) || shoreOf(r) !== 2) return null;
+  const A = PACIFIC.africa, id = provinceOf(r.id) - FAR_FIRST;
+  return A && id >= A[0] && id <= A[1] ? WORLD.protector : PACIFIC.keepers;
 }
 
 /** The first keeper of this ground still fighting the victor, as protectorOf reads its list (world.ts). */

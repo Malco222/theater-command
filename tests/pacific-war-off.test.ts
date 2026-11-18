@@ -8,7 +8,7 @@ import { FAR_LAID, lay } from '../src/campaign/far-rows';
 import { atWar, capitulate, createGame, declareWar, setWar } from '../src/campaign/game';
 import { HISTORY, setStop as setStopOff, shoreOpen } from '../src/campaign/history';
 import { frontArmys, lines, neverHis } from '../src/campaign/line';
-import { NAVY, airOver, atSea, navalUpkeep } from '../src/campaign/navy';
+import { NAVY, airOver, assaultStrength, atSea, navalUpkeep } from '../src/campaign/navy';
 import { AIR, airQuality, airRange, airUpkeep } from '../src/campaign/air';
 import { ARSENAL, smallAirMonth } from '../src/campaign/arsenal';
 import airData from '../data/campaign/air.json';
@@ -115,7 +115,7 @@ describe('the Pacific\'s air forces with the far side off (rulings 184 and 187)'
   it('lays no row of them, counts the air over every sea from its coasts, and keeps no group\'s record of feeding', () => {
     // air.json as it is on disk: thirty-six commands, none of Japan's, no nation row for it, no quality by date.
     expect(AIR.fleets.length).toBe(36);
-    expect(AIR.fleets.some((r) => r.nat === 'JAP' || 'moves' in r || 'ally' in r || 'arrives' in r || 'quality' in r || 'bmrRange' in r || 'byBook' in r || 'watch' in r || 'posted' in r)).toBe(false);
+    expect(AIR.fleets.some((r) => r.nat === 'JAP' || 'moves' in r || 'ally' in r || 'arrives' in r || 'quality' in r || 'bmrRange' in r || 'byBook' in r || 'watch' in r || 'posted' in r || 'to' in r || 'leaves' in r)).toBe(false);
     expect(AIR.nations.JAP).toBeUndefined();
     expect(AIR.production.JAP).toBeUndefined();
     expect(AIR.decline).toBeUndefined();
@@ -173,6 +173,14 @@ describe('the carriers of ruling 234(d) with the far side off', () => {
         for (const f of g.fleets) if (f.nat === 'USA') { expect(atSea(f), `${f.name} ${t}`).toBe(false); expect(f.cruised).toBeUndefined(); }
       }
     }
+  });
+});
+
+describe("Japan's landing craft of ruling 234(b)2 with the far side off", () => {
+  it('no row of them: only the Allies have landing craft, from June 1943', () => {
+    expect(NAVY.landing.craft).toEqual([[46, ['UK', 'USA'], 0.8]]);
+    const g = startOpen(createGame(3, null));
+    for (const t of [1, 28, 46, 70]) { g.turn = t; expect(assaultStrength(g, 'JAP'), `month ${t}`).toBe(NAVY.landing.assault); }
   });
 });
 

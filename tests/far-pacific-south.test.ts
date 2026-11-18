@@ -14,8 +14,9 @@ import { bookMonth } from '../src/campaign/claims';
 import { DIPLOMACY, holds, monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { allied, atWar, bloc, capitulate, createGame, declareWar, startPhase } from '../src/campaign/game';
 import { HISTORY, bookExpects, onBook, setStop } from '../src/campaign/history';
-import { NAVY, navalUpkeep } from '../src/campaign/navy';
+import { NAVY, assaultStrength, navalUpkeep } from '../src/campaign/navy';
 import { PACIFIC, demand, freezeAt, keepersOf, mayDemand, pacificOpening } from '../src/campaign/pacific';
+import { FAR_FIRST, WORLD_FIRST, WORLD_MAP, protectorOf } from '../src/campaign/world';
 import { ops, startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Corps, Game } from '../src/campaign/types';
@@ -80,6 +81,18 @@ describe("Japan's opening (ruling 200): the rows", () => {
     expect(moves.map((m) => [m.turn, m.base, m.home])).toEqual([[27, 'Etorofu', 'kurile'], [29, 'Hiroshima', 'inland']]);
     expect(moves.every((m) => JSON.stringify(m.stops) === '[1,2]')).toBe(true);
   });
+
+  it("gives Japan landing craft from the first month, a row beside the Allies' of June 1943 (ruling 234(b)2)", () => {
+    expect(NAVY.landing.craft).toEqual([[46, ['UK', 'USA'], 0.8], [1, ['JAP'], 0.8]]);
+    const g = war(1, 1);
+    // A force of Japan's keeps 0.8 of its strength fighting its way off a beach; Britain's and America's 0.6 until June 1943. It never grows.
+    expect(assaultStrength(g, 'JAP')).toBe(0.8);
+    expect([assaultStrength(g, 'UK'), assaultStrength(g, 'USA'), assaultStrength(g, 'GER')]).toEqual([NAVY.landing.assault, NAVY.landing.assault, NAVY.landing.assault]);
+    g.turn = 46;
+    expect([assaultStrength(g, 'JAP'), assaultStrength(g, 'UK'), assaultStrength(g, 'USA'), assaultStrength(g, 'GER')]).toEqual([0.8, 0.8, 0.8, NAVY.landing.assault]);
+    g.turn = 70;
+    expect(assaultStrength(g, 'JAP')).toBe(0.8);
+  });
 });
 
 describe("a fallen country's far ground (ruling 199)", () => {
@@ -88,6 +101,32 @@ describe("a fallen country's far ground (ruling 199)", () => {
     expect(PACIFIC?.keepers).toEqual(['UK', 'AUS', 'USA']);
     expect(keepersOf(g, g.byName['Batavia'])).toEqual(['UK', 'AUS', 'USA']);
     expect(keepersOf(g, g.byName['Curacao'])).toBeNull();
+  });
+
+  it("the list is Asia's and the Pacific's: Africa's far ground keeps the world's own order, Britain and then America (ruling 234(e)1)", () => {
+    const g = war(1, 9);
+    expect(PACIFIC?.africa).toEqual([478, 678]);
+    // The pair is the chart's: El Aaiun to Sao Tome, the provinces of Africa beyond the old chart with its islands.
+    const first = g.regions.find((r) => r.id >= FAR_FIRST)!.id;
+    expect([g.regions[first + 478].name, g.regions[first + 678].name]).toEqual(['El Aaiun', 'Sao Tome']);
+    for (const name of ['Dakar', 'Djibouti', 'Brazzaville', 'Tananarive', 'Luanda', 'Massawa', 'Windhoek', 'Reunion', 'Sao Tome', 'El Aaiun']) expect(keepersOf(g, g.byName[name]), name).toEqual(['UK', 'USA']);
+    // (A town cut out of an African province reads as its province does.)
+    const cut = g.regions.find((r) => { const of = (WORLD_MAP.regions[r.id - WORLD_FIRST] as { of?: number } | undefined)?.of; return of !== undefined && of >= first + 478 && of <= first + 678; })!;
+    expect(cut).toBeDefined();
+    expect(keepersOf(g, cut), cut.name).toEqual(['UK', 'USA']);
+    // Asia and the Pacific keep ruling 199's list, to the last province before Africa and the first after it.
+    for (const name of ['Aden', 'Goa', 'Addu Atoll', 'Saigon', 'Noumea', 'Dili', 'Macau', 'Batavia']) if (g.byName[name]) expect(keepersOf(g, g.byName[name]), name).toEqual(['UK', 'AUS', 'USA']);
+    expect(keepersOf(g, g.regions[first + 477])).toEqual(['UK', 'AUS', 'USA']);
+    expect(keepersOf(g, g.regions[first + 679])).toEqual(['UK', 'AUS', 'USA']);
+    // Britain fighting, she is the keeper of both. Britain beaten: Africa's keeper is America, where Asia's is Australia.
+    if (!atWar(g, 'GER', 'UK')) declareWar(g, 'GER', 'UK');
+    if (!atWar(g, 'GER', 'AUS')) declareWar(g, 'GER', 'AUS');
+    if (!atWar(g, 'GER', 'USA')) declareWar(g, 'GER', 'USA');
+    expect(protectorOf(g, 'GER', g.byName['Tananarive'])).toBe('UK');
+    expect(protectorOf(g, 'GER', g.byName['Batavia'])).toBe('UK');
+    fell(g, 'UK', 9, 'GER');
+    expect(protectorOf(g, 'GER', g.byName['Tananarive'])).toBe('USA');
+    expect(protectorOf(g, 'GER', g.byName['Batavia'])).toBe('AUS');
   });
 
   it("the Netherlands fall: the Indies are in Britain's keeping, and their garrison and fleet stay and answer to Britain", () => {

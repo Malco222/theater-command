@@ -603,7 +603,9 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
 
   it("pays Japan for Korea, Formosa and Karafuto as her home ground does (the historian's exception)", () => {
     const g = grand();
-    const named = new Set(BUDGET.farColony.home);
+    // (The list names America's Hawaii too, ruling 234(e)3: below.)
+    const named = new Set(BUDGET.farColony.home.filter((name) => g.byName[name]?.owner === 'JAP'));
+    expect(named.size).toBe(12);
     // Twenty-two of Japan's provinces carry the colony mark: the Mandates' nine, Dairen, and the twelve named.
     const marked = g.regions.filter((r) => r.owner === 'JAP' && r.ctrl === 'JAP' && r.overseas);
     expect(marked.length).toBe(22);
@@ -635,12 +637,66 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
     for (const r of man) expect(r.overseas, r.name).toBe(false);
   });
 
+  it("Hawaii is America's home ground, an incorporated territory and no colony (ruling 234(e)3)", () => {
+    const g = grand();
+    const hawaii = ['Pearl Harbor', 'Honolulu', 'Maui', 'Hawaii', 'Kauai'];
+    expect(BUDGET.farColony.home.filter((name) => g.byName[name]?.owner === 'USA')).toEqual(hawaii);
+    for (const name of hawaii) {
+      const r = g.byName[name];
+      expect(r, name).toMatchObject({ owner: 'USA', ctrl: 'USA', overseas: true });
+      expect(colonyPurse(r) || farColony(r), name).toBe(false);
+      const y = provinceYield(g, r, 'USA');
+      // As home ground pays: land and a harbour with no share taken, and no tenth.
+      expect(y.land, name).toBeCloseTo(BUDGET.land[r.terrain] * landShare(r), 9);
+      expect(y.port, name).toBeCloseTo(r.port ? BUDGET.port : 0, 9);
+      expect(y.fac, name).toBe(r.fac);
+    }
+    // Alaska, Guam, Wake, Midway, Samoa and the Philippines are a purse still: a tenth.
+    for (const name of ['Anchorage', 'Guam', 'Wake', 'Midway', 'Samoa', 'Manila']) {
+      const r = g.byName[name];
+      expect(farColony(r), name).toBe(true);
+      expect(provinceYield(g, r, 'USA').port, name).toBeCloseTo(BUDGET.port * BUDGET.overseas * 0.1, 9);
+    }
+  });
+
+  it("one cut, not two: on a far colony the tenth stands in place of ruling 214's factor, which falls on the rest of that country's ground (ruling 234(e)3)", () => {
+    const g = grand();
+    const rows: [string, string, string][] = [['NED', 'Batavia', 'Holland'], ['POR', 'Goa', 'Lisbon'], ['AUS', 'Port Moresby', 'Sydney'], ['NZL', 'Apia', 'Wellington'], ['SAF', 'Windhoek', 'Cape Town']];
+    for (const [nat, colony, home] of rows) {
+      const c = g.byName[colony], h = g.byName[home];
+      expect(landFactor(c), colony).toBe(BUDGET.landFactor[nat]);
+      expect(landFactor(c), colony).toBeLessThan(1);
+      expect([c.owner, farColony(c)], colony).toEqual([nat, true]);
+      const y = provinceYield(g, c, nat);
+      // The colony: the colony's half and the tenth, as Britain's Singapore pays, and no factor.
+      expect(y.land, colony).toBeCloseTo(BUDGET.land[c.terrain] * BUDGET.overseas * landShare(c, true) * 0.1, 9);
+      expect(y.port, colony).toBeCloseTo(c.port ? BUDGET.port * BUDGET.overseas * 0.1 : 0, 9);
+      // The town card says the same.
+      expect(worthOf(g, c), colony).toBe(Math.max(1, Math.round((y.land + y.port + y.oil + y.fac) * BUDGET.scale)));
+      // The rest of its ground: the factor, as before.
+      expect(h, home).toMatchObject({ owner: nat });
+      expect(farColony(h), home).toBe(false);
+      expect(provinceYield(g, h, nat).land, home).toBeCloseTo(BUDGET.land[h.terrain] * BUDGET.landFactor[nat], 9);
+    }
+    // A conqueror takes no tenth, and the factor goes with the ground as it did.
+    const batavia = g.byName['Batavia'];
+    if (!atWar(g, 'JAP', 'NED')) declareWar(g, 'JAP', 'NED');
+    capture(g, batavia, 'JAP');
+    expect(provinceYield(g, batavia, 'JAP', true).port).toBeCloseTo(BUDGET.port * BUDGET.occupied * BUDGET.landFactor.NED, 9);
+    // Trade reads the land bare, as before: no factor and no change.
+    const goa = g.byName['Goa'];
+    expect(provinceYield(g, goa, 'POR', false, true).land).toBeCloseTo(BUDGET.land[goa.terrain] * BUDGET.overseas * landShare(goa, true) * 0.1, 9);
+  });
+
   it("pays an ally that keeps it for a fallen country a tenth of a keeper's share: the Indies are no purse of London's", () => {
     const g = grand();
     const palembang = g.byName['Palembang'], batavia = g.byName['Batavia'];
     expect(palembang).toMatchObject({ owner: 'NED', ctrl: 'NED', overseas: true, oil: true });
     expect(batavia).toMatchObject({ owner: 'NED', overseas: true, port: true });
-    const whole = g.regions.filter((r) => r.owner === 'NED' && farColony(r)).reduce((t, r) => t + provinceYield(g, r, 'UK', true).total, 0);
+    const indies = g.regions.filter((r) => r.owner === 'NED' && farColony(r));
+    const whole = indies.reduce((t, r) => t + provinceYield(g, r, 'UK', true).total, 0);
+    // (One cut, not two: a keeper's tenth is of the ground's pay with no factor of ruling 214 on it. Ruling 234(e)3.)
+    const unfactored = indies.reduce((t, r) => { const y = provinceYield(g, r, 'UK', true), f = landFactor(r); return t + (y.land / f) * landShare(r, true) + y.port / f + y.oil + y.fac; }, 0);
     // May 1940: the Netherlands fall to Germany, and their colonies beyond the old chart pass into Britain's keeping.
     // (Attacked, they stand with Germany's enemies: that is what makes Britain their keeper and no conqueror.)
     if (!atWar(g, 'UK', 'GER')) setWar(g, 'UK', 'GER');
@@ -651,12 +707,13 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
     expect(allied(g, 'UK', 'NED')).toBe(true);
     const kept = provinceYield(g, palembang, 'UK');
     expect(kept.oil).toBeCloseTo(BUDGET.oil * BUDGET.occupied * 0.1, 9);
-    expect(kept.port).toBeCloseTo(palembang.port ? BUDGET.port * BUDGET.occupied * landFactor(palembang) * 0.1 : 0, 9);
-    expect(provinceYield(g, batavia, 'UK').port).toBeCloseTo(BUDGET.port * BUDGET.occupied * landFactor(batavia) * 0.1, 9);
+    expect(kept.port).toBeCloseTo(palembang.port ? BUDGET.port * BUDGET.occupied * 0.1 : 0, 9);
+    expect(provinceYield(g, batavia, 'UK').port).toBeCloseTo(BUDGET.port * BUDGET.occupied * 0.1, 9);
     // All the Indies together: under one a month to their keeper, where a conqueror's share was near seven.
     const keeping = g.regions.filter((r) => r.owner === 'NED' && r.ctrl === 'UK' && farColony(r)).reduce((t, r) => t + provinceYield(g, r, 'UK').total, 0);
     expect(whole).toBeGreaterThan(6);
-    expect(keeping).toBeCloseTo(whole * 0.1, 6);
+    expect(keeping).toBeCloseTo(unfactored * 0.1, 6);
+    expect(keeping).toBeLessThan(1.5);
     // A conqueror is paid as ever: Japan is no ally of the Netherlands.
     expect(allied(g, 'JAP', 'NED')).toBe(false);
     expect(provinceYield(g, palembang, 'JAP').oil).toBeCloseTo(BUDGET.oil * BUDGET.occupied, 9);

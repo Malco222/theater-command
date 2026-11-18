@@ -188,8 +188,10 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   const far = farColony(r) && (own || allied(g, nat, r.owner)) ? BUDGET.farColony : null;
   const fac = (own ? works : works * (PRODUCTION.occupiedIncome + lift)) * (far?.fac ?? 1);
   const k = !own ? BUDGET.occupied + lift : colonyPurse(r) ? BUDGET.overseas : 1;
-  const worth = bare || !budgeted(g) ? 1 : landFactor(r);
-  const land = BUDGET.land[r.terrain] * k * worth * landShare(r, bare) * (far?.land ?? 1) * share;
+  // (One cut, not two: ruling 234(e)3. Where the far colony's tenth is taken, ruling 214's factor is not, and the
+  // ground pays as any country's far colony does; the factor falls on the rest of that country's ground.)
+  const worth = bare || !budgeted(g) || far ? 1 : landFactor(r);
+  const land = BUDGET.land[r.terrain] * k * worth * landShare(r, bare || !!far) * (far?.land ?? 1) * share;
   // A harbour blocked pays nothing until it is mended (prizes.ts), and an oilfield alight pays only for the wells still at work.
   const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * worth * (far?.port ?? 1) * share : 0;
   const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) * (far?.oil ?? 1) * share : 0;

@@ -259,14 +259,15 @@ export function smallAirMonth(g: Game): void {
   const S = SMALL();
   // The far side (ruling 234's rider b518, 7): a smaller power whose own works keep up the commands the record gives
   // it. What its works build this month, kind by kind from the month each opens, goes to its pool, with the men to fly
-  // the fighters; its commands are made up from the pool as a great power's are.
+  // the fighters; its commands are made up from the pool as a great power's are. One count at every seat (rider b522):
+  // while a wing of a kind is on order the works build that wing, and nothing of that kind goes to the pool besides.
   for (const nat of AIR.works ?? []) {
     const n = g.nations[nat];
     if (!n?.alive || n.dormant) continue;
     const p = airPool(g, nat);
     for (const wing of ['ftr', 'bmr'] as Wing[]) {
       const from = worksFrom(nat, wing);
-      if (from === null || from > g.turn) continue;
+      if (from === null || from > g.turn || n.queue.some((q) => q.what === 'air' && q.item === wing)) continue;
       const k = Math.round(worksRate(g, nat, wing));
       p[wing] += k;
       if (wing === 'ftr') p.pilots += k;

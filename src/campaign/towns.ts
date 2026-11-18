@@ -119,8 +119,9 @@ export function worthOf(g: Game, r: Region): number {
   const capital = r.cap && seat && seat.capital === r.id ? BUDGET.capital : 0;
   // Ruling 214: a smaller power's land and harbours pay by its worth, and the town shows what it truly pays: never
   // nothing where it pays something.
-  const f = landFactor(r);
-  const pays = (BUDGET.land[r.terrain] * k * f * landShare(r) * (far?.land ?? 1) + (r.port ? BUDGET.port * k * f * (far?.port ?? 1) : 0) + (r.oil ? BUDGET.oil * k * (far?.oil ?? 1) : 0)
+  // (One cut, not two: where the far colony's tenth is taken, the factor is not. Ruling 234(e)3; economy.ts.)
+  const f = far ? 1 : landFactor(r);
+  const pays = (BUDGET.land[r.terrain] * k * f * landShare(r, !!far) * (far?.land ?? 1) + (r.port ? BUDGET.port * k * f * (far?.port ?? 1) : 0) + (r.oil ? BUDGET.oil * k * (far?.oil ?? 1) : 0)
     + r.fac * (far?.fac ?? 1)) * farShare(r) + capital;
   return pays > 0 ? Math.max(1, Math.round(pays * BUDGET.scale)) : 0;
 }
