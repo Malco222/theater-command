@@ -23,7 +23,8 @@
 //   TC.battleLook(ids, to)       -> { ticket } for the attack the card shows, null where there is no field battle to fight,
 //                                   or { ticket: null, why } where the staff settles that kind of place (offered.ts): keep
 //                                   FIGHT IT YOURSELF on the card, off, with why beside it
-//   TC.battleStart(ids, to)      -> { field, view }: the battle opens paused; field is the ground, sent once
+//   TC.battleStart(ids, to)      -> { field, view }: the battle opens paused; field is the ground, sent once ("The
+//                                   ground" below)
 //   TC.battleTick(seconds)       -> view: runs the clock for that much real time at the speed set. Until the armies first
 //                                   meet (view.contact null) a land battle runs ×4 whatever the speed below that, then
 //                                   drops to the speed set (ruling 226(1)): say so on the field, "×4 until the armies
@@ -92,6 +93,22 @@
 // fight. Draw her as the model of block 'unit', knocked out (her knocked_out clip, then burn), burning at first and
 // then smoking to the end, never cut off (the art director's b477 look). Men on foot within r metres take light cover
 // in the rules already; nothing more to draw for it. The zones also hold its craters (below).
+// The ground (Brian, 18 November: "make sure the battle terrian matches the map in the world so it matches. if are
+// attacking in hills than have that or a forrest or towns ect"): field is built from the province on the campaign map
+// (src/battle/land/field.ts): its terrain, the river between the armies and its bridges, its town and the town's size,
+// its fortress works. { w, h, cell, cols, rows, grounds, ground, height, zones, town, place, storeys?, landmark? }:
+// ground[r * cols + c] is an index into grounds, row 0 at the attacker's (south) edge, height that cell's metres. A
+// capital or a city is streets (the design director, b511; the art director's rings, 17:23Z): a capital's core of
+// blocks fills the defender's part of the field with suburbs back to the attacker's start, about 70 per cent built; a
+// city's core is about 800 by 600 m round its centre, suburbs to mid-field, about a third built. Its grounds:
+// 'buildings' (the core's blocks and the terraces), 'road' (its avenues too), 'suburb' (houses and gardens, open ground
+// between), 'industry' (sheds, yards, chimneys), 'park' (squares and parks, open with trees). storeys[i]: the houses'
+// storeys on a built cell (3 to 5 in a core, 2 in terraces and industry, 1 or 2 in suburbs, villages and towns), 0
+// elsewhere: draw the core tight, tall and shadowed, the suburbs low, green and open (the art director). landmark:
+// { x, y, kind } with kind 'spire', 'dome' or 'station', one a city, at its heart; draw it generic, no real building.
+// The region's own building style (brick in the north and east, stone and plaster in the south, timber further east)
+// is the 3D game's to pick from place and the nations, where it has the sets. Looks only beyond the grounds' cover.
+//
 // Explosions (Brian, 18 November: "very dramatic and life like"; his own look, copying no game's effects): the 3D game
 // draws every burst, its flash and light, shock, earth crown, debris, smoke, the camera's jolt and the scar it leaves,
 // by the art director's sheet (/mnt/project-files/art-director/explosions/explosions-look.md) and the ground under it.
@@ -113,8 +130,9 @@
 //     armour, then her brew-up, no earth crown and no crater. cal: the firing block's. by: the block that fired, left
 //     out where the player does not know that block (b464(2)): then it is always guns firing from far back, unseen.
 //     ground: the field's ground under it, a name from field.grounds, which picks the sheet's look: woods a tree burst;
-//     buildings, bunker, road and bridge town and stone; marsh mud; water and blown the splash column; the rest earth,
-//     or sand where place.terrain is desert, and snow or mud as the weather the 3D game shows on the field. reach:
+//     buildings, suburb, industry, bunker, road and bridge town and stone; marsh mud; water and blown the splash
+//     column; the rest (park too) earth, or sand where place.terrain is desert, and snow or mud as the weather the 3D
+//     game shows on the field. reach:
 //     metres from x, y within which men drop or are knocked flat and vehicles rock on their springs (the sheet's
 //     "Things react"; men a little beyond it flinch and duck). It is the blast's, not the camera shake's radius, which
 //     stays the sheet's: light 4, mortar 9, field 11, howitzer 15, heavy 23.
@@ -249,9 +267,10 @@ export function unitOut(u: UnitBase): Record<string, unknown> {
   const air = (u as AirUnit).air ? (u as AirUnit) : null;
   const motion = MOTION[u.kind as Kind] as string | undefined;
   const loops = motion && motion !== 'fixed' ? LOOPS[motion as keyof typeof LOOPS] : undefined;
-  // A block fighting among buildings plays the town's street battle in place of the open field's bed, with the town's
-  // machine guns dropped in; guns in action drop one far salvo at a time (the approved pack's field table).
-  const town = !air && u.act === 'fight' && u.cover === 'buildings' && !!loops && motion !== 'guns';
+  // A block fighting among buildings (a city's suburbs and industry too) plays the town's street battle in place of the
+  // open field's bed, with the town's machine guns dropped in; guns in action drop one far salvo at a time (the approved
+  // pack's field table).
+  const town = !air && u.act === 'fight' && (u.cover === 'buildings' || u.cover === 'suburb' || u.cover === 'industry') && !!loops && motion !== 'guns';
   const drops = air ? undefined : town ? TOWN.drops : motion && motion !== 'fixed' ? DROPS[motion as keyof typeof LOOPS]?.[u.act] : undefined;
   const extra = air ? { ...(u.extra ?? {}), n: air.n, n0: air.n0, band: air.band, alt: Math.round(air.alt), job: air.job.do, per: air.per } : u.extra;
   return {
@@ -370,7 +389,10 @@ export function battleCalls(h: BattleHooks) {
       if (look && !look.exact) ses.band = { lo: look.lo, hi: look.hi };
       const f = sim.field;
       return {
-        field: { w: f.w, h: f.h, cell: f.cell, cols: f.cols, rows: f.rows, grounds: GROUNDS, ground: f.ground, height: f.height.map((x) => Math.round(x * 10) / 10), zones: f.zones, town: f.town, place: t.place },
+        field: {
+          w: f.w, h: f.h, cell: f.cell, cols: f.cols, rows: f.rows, grounds: GROUNDS, ground: f.ground, height: f.height.map((x) => Math.round(x * 10) / 10), zones: f.zones, town: f.town, place: t.place,
+          ...(f.storeys ? { storeys: f.storeys } : {}), ...(f.landmark ? { landmark: f.landmark } : {}),
+        },
         going, view: viewOut(ses, sim.view(ses.me)),
       };
     },

@@ -272,7 +272,8 @@ describe('the fight is not moved by a hair', () => {
     'practice 6 seed 2': [1.539, 222, 9404, 25997, '90ac7ec7304adae0'],
     'practice 7 seed 5': [1.129, 241, 19498, 14269, '45635242105cb477'],
     Pomorze: [5.304, 142, 131, 9945, '7a3ee283c24c69c8'],
-    'Polish Silesia': [2.432, 135, 1250, 9946, 'eff2427dbc560900'],
+    // Re-recorded on the city's streets (b511: Katowice is a city, fought in its streets now), viewed and not alike.
+    'Polish Silesia': [2.297, 190, 1877, 9951, '2503c86320bb8f12'],
   };
   const check = (key: string, b: LandBattle, viewed: boolean): number => {
     b.ai.def = true;
@@ -300,7 +301,8 @@ describe('the fight is not moved by a hair', () => {
       const r = g.regions.find((x) => x.name === name)!;
       const cs = candidates(g, r).filter((c) => corps.includes(c.name));
       shells += check(name, new LandBattle(landTicket(g, cs, r)!), true);
+      check(name, new LandBattle(landTicket(g, cs, r)!), false);
     }
-    expect(shells).toBe(10);
+    expect(shells).toBe(8);
   });
 });

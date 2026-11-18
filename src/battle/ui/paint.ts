@@ -15,6 +15,8 @@ const INK = '#2a2d2f';
 const WASH: Record<Ground, string> = {
   open: '#e4dabf', field: '#e8dab0', woods: '#bcc196', rough: '#d8ceb1', marsh: '#c9d0be', water: '#9db2bd', road: '#e4dabf',
   bridge: '#e4dabf', buildings: '#d6caac', rock: '#cbc5b6', bunker: '#d8ceb1', works: '#dccfae', blown: '#9db2bd',
+  // A city's own, plainly (the design director, b511(c): blocks, streets and cover enough to read, no more).
+  suburb: '#dcd3b4', industry: '#cfc4a9', park: '#cfd2a6',
 };
 const SAND: Partial<Record<Ground, string>> = { open: '#ead8a9', rough: '#dcc79a', field: '#e7d3a1', road: '#ead8a9', bunker: '#dcc79a' };
 
@@ -171,7 +173,7 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
   // canopy: an empty star with nothing in it reads as a mark (the art director, b408 review). Roads, water and
   // buildings still cut it, and a bunker that shows has its sign.
   const woody = (c: number, r: number): boolean => g(c, r) === 'woods';
-  const isWood = (c: number, r: number): boolean => woody(c, r) || (!['road', 'water', 'bridge', 'blown', 'buildings'].includes(g(c, r))
+  const isWood = (c: number, r: number): boolean => woody(c, r) || (!['road', 'water', 'bridge', 'blown', 'buildings', 'industry'].includes(g(c, r))
     && c > 0 && r > 0 && c < f.cols - 1 && r < f.rows - 1 && woody(c - 1, r) && woody(c + 1, r) && woody(c, r - 1) && woody(c, r + 1));
   const woods = patches(f, isWood, 5);
   // Each crown is nudged off its cell's middle and sized a little up or down, from a stream of its own so the rest of
@@ -332,6 +334,21 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
         const bw = 5 + rnd() * 7, bh = 4 + rnd() * 6, bx = X + rnd() * (cs - bw), by = Y + rnd() * (cs - bh);
         x.fillRect(bx, by, bw, bh); x.strokeRect(bx, by, bw, bh);
       }
+    } else if (kd === 'suburb') {
+      // Houses with gardens: one or two small roofs a cell, a hedge line now and then.
+      x.fillStyle = 'rgba(112,98,78,.7)'; x.strokeStyle = 'rgba(42,33,24,.75)'; x.lineWidth = 0.7;
+      const n = 1 + Math.floor(rnd() * 2);
+      for (let i = 0; i < n; i++) {
+        const bw = 4 + rnd() * 3, bx = X + 2 + rnd() * (cs - bw - 4), by = Y + 2 + rnd() * (cs - bw - 4);
+        x.fillRect(bx, by, bw, bw * 0.8); x.strokeRect(bx, by, bw, bw * 0.8);
+      }
+    } else if (kd === 'industry') {
+      // Sheds and yards: one long roof a cell.
+      x.fillStyle = 'rgba(120,112,100,.85)'; x.strokeStyle = 'rgba(42,33,24,.9)'; x.lineWidth = 0.9;
+      x.fillRect(X + 2, Y + 4, cs - 4, cs * 0.5); x.strokeRect(X + 2, Y + 4, cs - 4, cs * 0.5);
+    } else if (kd === 'park') {
+      x.fillStyle = 'rgba(120,140,90,.55)';
+      for (let i = 0; i < 2; i++) { x.beginPath(); x.arc(X + 4 + rnd() * (cs - 8), Y + 4 + rnd() * (cs - 8), 3, 0, Math.PI * 2); x.fill(); }
     } else if (kd === 'works') {
       x.strokeStyle = 'rgba(92,70,40,.85)'; x.lineWidth = 1.5;
       x.beginPath(); x.moveTo(X + 2, Y + cs / 2);

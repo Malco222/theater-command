@@ -48,20 +48,20 @@ export const LAND = {
    * prices, the field draws but never prices again). Counted twice, the plain attack carried 23 points less often than
    * the card said in the campaign's dug-in battles, four in five of all it fights; counted once it lands within 3 (b407).
    */
-  cover: { open: 1, field: 0.95, woods: 0.7, rough: 0.85, marsh: 1, water: 1.25, road: 1.05, bridge: 1.2, buildings: 0.55, rock: 0.75, bunker: 0.4, works: 1, blown: 1.25 } as Record<Ground, number>,
+  cover: { open: 1, field: 0.95, woods: 0.7, rough: 0.85, marsh: 1, water: 1.25, road: 1.05, bridge: 1.2, buildings: 0.55, rock: 0.75, bunker: 0.4, works: 1, blown: 1.25, suburb: 0.75, industry: 0.6, park: 0.9 } as Record<Ground, number>,
   pace: {
-    foot: { open: 1, field: 0.9, woods: 0.6, rough: 0.7, marsh: 0.35, water: 0.35, road: 1.1, bridge: 1, buildings: 0.7, rock: 0.4, bunker: 0.5, works: 0.8, blown: 0.15 },
-    wheels: { open: 0.9, field: 0.8, woods: 0.3, rough: 0.4, marsh: 0, water: 0, road: 1.5, bridge: 1.2, buildings: 0.5, rock: 0, bunker: 0, works: 0.5, blown: 0 },
-    tracks: { open: 1, field: 0.9, woods: 0.4, rough: 0.6, marsh: 0.12, water: 0, road: 1.3, bridge: 1, buildings: 0.5, rock: 0, bunker: 0, works: 0.6, blown: 0 },
-    guns: { open: 1, field: 0.9, woods: 0.4, rough: 0.5, marsh: 0.15, water: 0, road: 1.4, bridge: 1, buildings: 0.6, rock: 0, bunker: 0, works: 0.7, blown: 0 },
-    fixed: { open: 0, field: 0, woods: 0, rough: 0, marsh: 0, water: 0, road: 0, bridge: 0, buildings: 0, rock: 0, bunker: 0, works: 0, blown: 0 },
+    foot: { open: 1, field: 0.9, woods: 0.6, rough: 0.7, marsh: 0.35, water: 0.35, road: 1.1, bridge: 1, buildings: 0.7, rock: 0.4, bunker: 0.5, works: 0.8, blown: 0.15, suburb: 0.85, industry: 0.75, park: 1 },
+    wheels: { open: 0.9, field: 0.8, woods: 0.3, rough: 0.4, marsh: 0, water: 0, road: 1.5, bridge: 1.2, buildings: 0.5, rock: 0, bunker: 0, works: 0.5, blown: 0, suburb: 0.7, industry: 0.55, park: 0.85 },
+    tracks: { open: 1, field: 0.9, woods: 0.4, rough: 0.6, marsh: 0.12, water: 0, road: 1.3, bridge: 1, buildings: 0.5, rock: 0, bunker: 0, works: 0.6, blown: 0, suburb: 0.75, industry: 0.55, park: 0.95 },
+    guns: { open: 1, field: 0.9, woods: 0.4, rough: 0.5, marsh: 0.15, water: 0, road: 1.4, bridge: 1, buildings: 0.6, rock: 0, bunker: 0, works: 0.7, blown: 0, suburb: 0.75, industry: 0.6, park: 0.95 },
+    fixed: { open: 0, field: 0, woods: 0, rough: 0, marsh: 0, water: 0, road: 0, bridge: 0, buildings: 0, rock: 0, bunker: 0, works: 0, blown: 0, suburb: 0, industry: 0, park: 0 },
   } as Record<Motion, Record<Ground, number>>,
   /**
    * Tanks are blind in the streets: what they strike and what they take there. Not in woods: the card prices tanks in
    * forest and on hills already (the campaign's ground rules), so the field draws them slow there but never prices them
    * again (b418). Priced twice, the panzers at Sedan carried the Meuse 21 points less often than their card said.
    */
-  tanksClose: { punch: 0.6, take: 1.3, ground: ['buildings'] as Ground[] },
+  tanksClose: { punch: 0.6, take: 1.3, ground: ['buildings', 'industry'] as Ground[] },
   /** Metres a second two blocks standing in each other's ground are eased apart, and the metres enemies keep between their fronts. */
   spread: 4,
   apart: 10,
@@ -102,7 +102,19 @@ export const LAND = {
    * an attack whose armour must cross pays dearly at the bridges; 1.3 lifted the telling odds 7.5 points and the
    * practice river 5 over their no-river twins, 1.2 leaves them level (+0.6) and below (-5.8).
    */
-  hold: { take: { plains: 0.97, forest: 1.035, hills: 0.99, mountain: 1.12, marsh: 1.32, urban: 1.025, desert: 1.045 } as Record<string, number>, within: 300, river: 1.2, works: [1, 1.02, 1.06, 1.07] },
+  hold: {
+    take: { plains: 0.97, forest: 1.035, hills: 0.99, mountain: 1.12, marsh: 1.32, urban: 1.025, desert: 1.045 } as Record<string, number>, within: 300, river: 1.2, works: [1, 1.02, 1.06, 1.07],
+    // A capital's and a city's streets (field.ts streetsOf): the card prices the place's ground, not the cover of its
+    // houses, so the field takes that cover back off the held defence (b418; b511). With none, cities fell 4 points
+    // under the card and capitals 17, most to the clock. A kind of ground may have its own, else the size's (b515(f)):
+    // capital 1.1 is the plains capital's fit (48 attacks, captured and hand-made), and the hills' and forest's; an
+    // urban capital's core is deepest; a mountain capital, a desert city and a marsh city hold on their own ground.
+    // Fitted 18 November, 10 fights each, on 555 capital and city attacks captured from the campaign and hand-made on
+    // every kind of ground: capitals -1.0 against the card, cities +0.2, every kind within a tenth (furthest: plains
+    // cities captured -9.5, plains capitals captured +9.0 on 8); the practice city +2.0; every other place unchanged.
+    // Next (b515(g)): a city's clock follows its built share, and these come back toward 1.
+    streets: { city: 1.05, capital: 1.1, 'urban capital': 1.5, 'mountain capital': 1, 'desert city': 1, 'marsh city': 1 } as Record<string, number>,
+  },
   /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
   dug: { keep: 30 },
   nerve: {

@@ -3,7 +3,7 @@
 // through the rules' own attack order. The design director's rulings 217 and 217(2)(a) of 2026-11-17.
 import { describe, expect, it } from 'vitest';
 import { diceChance, runOut, type BreakCause } from '../src/battle/core';
-import { BEND, buildField, coverAt, groundAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, wornWords, type LandUnit, type PracticeGround } from '../src/battle/land';
+import { BEND, buildField, coverAt, groundAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, wornWords, type LandPlace, type LandUnit, type PracticeGround } from '../src/battle/land';
 import { ENGINEERING, riverBetween } from '../src/campaign/rivers';
 import { createGame, hostileUnits, type FieldBill } from '../src/campaign/game';
 import { blocked } from '../src/campaign/rivers';
@@ -34,6 +34,34 @@ describe('the field is built from the province', () => {
     expect(count(f('marsh'), 'marsh')).toBeGreaterThan(1000);
     expect(count(f('urban'), 'buildings')).toBeGreaterThan(count(f('plains'), 'buildings') * 2);
     expect(count(f('plains', { fort: 2 }), 'bunker')).toBeGreaterThan(0);
+  });
+  it('a capital or a city is fought in its streets, a town or a village about its houses as before (Brian; b511)', () => {
+    // Brian, 18 November: "if are attacking in hills than have that or a forrest or towns ect"; the design director:
+    // the share of streets follows the city's size on the map.
+    const built = (fl: ReturnType<typeof buildField>) => (count(fl, 'buildings') + count(fl, 'suburb') + count(fl, 'industry')) / fl.ground.length;
+    const at = (t: Parameters<typeof sampleTicket>[0], town: LandPlace['townSize']) => buildField(sampleTicket(t, 1, { town }).place, 9);
+    for (const seed of [1, 2, 3]) {
+      const cap = buildField(sampleTicket('urban', 1, { town: 'capital' }).place, seed);
+      expect(built(cap)).toBeGreaterThan(0.6);
+      // Its core fills the defender's part of the field; its suburbs reach back to the attacker's start.
+      const row = (r: number) => cap.ground.slice(r * cap.cols, (r + 1) * cap.cols).map((k) => GROUNDS[k]);
+      expect(row(Math.round(cap.rows * 0.8)).filter((k) => k === 'buildings').length).toBeGreaterThan(cap.cols * 0.6);
+      expect(row(8).filter((k) => k === 'suburb').length).toBeGreaterThan(cap.cols * 0.3);
+      expect(cap.landmark).toBeDefined();
+      const city = buildField(sampleTicket('urban', 1, { town: 'village' }).place, seed);
+      expect(built(city)).toBeGreaterThan(0.22);
+      expect(built(city)).toBeLessThan(0.45);
+    }
+    // A capital in hill country is a capital's streets all the same; a town or a village keeps its cluster.
+    expect(built(at('hills', 'capital'))).toBeGreaterThan(0.6);
+    expect(built(at('hills', 'town'))).toBeLessThan(0.05);
+    expect(built(at('plains', 'village'))).toBeLessThan(0.02);
+    // Every built cell has its storeys, and nothing else has any: three to five in a core.
+    const cap = at('urban', 'capital');
+    cap.ground.forEach((k, i) => expect(cap.storeys![i] > 0).toBe(['buildings', 'suburb', 'industry'].includes(GROUNDS[k])));
+    expect(Math.max(...cap.storeys!)).toBe(5);
+    // The new grounds come after the old, whose codes saved fields keep.
+    expect(GROUNDS.slice(13)).toEqual(['suburb', 'industry', 'park']);
   });
 });
 

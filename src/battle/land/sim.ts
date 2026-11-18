@@ -11,7 +11,7 @@ import { clampToDice, diceNow, fieldRatio, levelOf, RATIO } from '../core/result
 import { lineUp } from '../core/select';
 import { DT, type BattleSim, type BattleView, type BreakCause, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Side, type Zone } from '../core/types';
 import { thinkFor } from './ai';
-import { buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt, zonesOf, type Ground, type LandField, type LandPlace } from './field';
+import { buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt, streetsOf, zonesOf, type Ground, type LandField, type LandPlace } from './field';
 import { crewFor } from './crews';
 import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
 import { LAND, MOTION, type Kind, type Motion } from './rules';
@@ -154,7 +154,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private holdTake(u: LandUnit): number {
     const p = this.ticket.place, H = LAND.hold;
-    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1);
+    const streets = streetsOf(p);
+    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1);
   }
 
   /** The share of the attack's tanks and lorries, by strength, that must cross the river: 0 where it has none (b494). */
