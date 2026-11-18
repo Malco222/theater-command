@@ -34,6 +34,7 @@ BUILDERS = {
     "7TP": tanks_pol.tp7,
     "LightTank": tanks_any.light_tank,
     "MediumTank": tanks_any.medium_tank,
+    "AssaultGun": tanks_any.assault_gun,
     "StuG3": tank_destroyers.stug3,
     "SU85": tank_destroyers.su85,
     "M10": tank_destroyers.m10,
@@ -57,6 +58,7 @@ BUILDERS = {
     "Sexton": sp_guns.sexton,
     "Hummel": sp_guns.hummel,
     "SU76": sp_guns.su76,
+    "SelfPropelledGun": sp_guns.sp_gun,
 }
 
 ABOUT = {
@@ -76,6 +78,7 @@ ABOUT = {
     "StuG3": {"nation": "GER", "role": "assault gun", "years": "1942-45", "units": "assault guns beside Germany's armor and infantry"},
     "SU85": {"nation": "SOV", "role": "tank destroyer", "years": "1943-45", "units": "tank destroyers beside the Soviet Union's armor"},
     "M10": {"nation": "USA", "role": "tank destroyer", "years": "1942-45", "units": "tank destroyers beside the United States' armor (Britain and the Free French were lent her too)"},
+    "AssaultGun": {"nation": "any", "role": "assault gun", "years": "1941-45", "units": "assault guns and tank destroyers beside the armor and infantry of every army without one of its own"},
     "Gun75": {"nation": "FRA", "role": "field gun", "years": "1897-1945", "units": "artillery (France, and every nation without a gun of its own)"},
     "leFH18": {"nation": "GER", "role": "field howitzer", "years": "1935-45", "units": "artillery (Germany)"},
     "25pdr": {"nation": "UK", "role": "field gun", "years": "1940-45", "units": "artillery (Britain and the Commonwealth)"},
@@ -95,6 +98,7 @@ ABOUT = {
     "M7": {"nation": "USA", "role": "self-propelled howitzer", "years": "1942-45", "units": "the artillery that keeps up with the United States' armor (the Free French were lent her too)"},
     "Hummel": {"nation": "GER", "role": "self-propelled howitzer", "years": "1943-45", "units": "the heavy artillery that keeps up with Germany's armor"},
     "SU76": {"nation": "SOV", "role": "self-propelled gun", "years": "1943-45", "units": "the light guns that keep up with the Soviet Union's infantry and armor"},
+    "SelfPropelledGun": {"nation": "any", "role": "self-propelled gun", "years": "1942-45", "units": "the guns that keep up with the armor of every army without a self-propelled gun of its own"},
     "Sexton": {"nation": "UK", "role": "self-propelled gun", "years": "1943-45", "units": "the artillery that keeps up with the armor of Britain and the Commonwealth"},
 }
 

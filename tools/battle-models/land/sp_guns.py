@@ -2,7 +2,9 @@
 the guns keep up with the armour. The M7 (the United States' 105 mm howitzer on the M4's hull, a round machine-gun
 pulpit at her right front corner), the Sexton (Britain's and the Commonwealth's 25-pounder in the same hull, a
 plain tall box with no pulpit), the Hummel (Germany's 15 cm heavy field howitzer on a lengthened Panzer IV hull)
-and the SU-76 (the Soviet Union's 76 mm divisional gun on a lengthened light tank's hull).
+and the SU-76 (the Soviet Union's 76 mm divisional gun on a lengthened light tank's hull). Last, a self-propelled
+gun no one nation owns, our own design: a 75 mm field gun in an open box on the medium tank's hull (tanks_any.py),
+for every army with none of its own.
 
 Each is modelled to the real type's measurements and layout from the published dimensions; every shape is our own
 mesh, made from numbers here. The gun is the towed gun's own (guns.py), built by the same kit, so the breech the
@@ -17,8 +19,9 @@ import math
 from mathutils import Vector
 
 from carriers import wall
-from guns import GunWorks, sheet
+from guns import GunWorks, edge_rivets, sheet
 from motorpool import LEFT, RIGHT, X, Y, Z, bm_box, rot
+from tanks_any import medium_hull
 from tanks_ger import GER_COATS, coat, coats, pz4_gear
 from tanks_usa import m4_deck, m4_gear, m4_tail, m4_tub
 
@@ -905,6 +908,140 @@ def su76(fine=True, tag="SOV"):
     v.tank_clips(recoil=0.8, kick=0.9, gun_low=-5.0, hatches=["hatch_driver"], traverse=5.0, idle_cue="tank_idle_loop", drive_cue="tank_loop",
                  gun_cue="field_gun_fire", has_turret=False, mg=None)
     v.name_place((-0.3, 1.6), long=1.0, high=0.12, lines=2)           # the slogan (b477): on the box's side
+    return v
+
+
+def sp_gun(fine=True, tag="_"):
+    """The self-propelled gun: the medium tank's hull, the driver under a low roof in her nose and behind him an
+    open-topped box of thin plate with a 75 mm field gun standing in it, firing ahead over the nose through a notch
+    in the box's face, a small shield on its cradle before the notch. For every army with no self-propelled gun of
+    its own. 6.0 m long, 2.75 m wide, 2.2 m high over her sight."""
+    v = SpWorks("SelfPropelledGun", "Self-propelled gun", "tank", tag, fine,
+                paints={"canvas.seat": "4F5038", "canvas.tarp": "5E5E44", "cloth.sack": "6A6448", "torn.mud": "4C402C", "torn.mud2": "3E3D29"})
+    h = medium_hull(v, fine, box=False)
+    sw, zg, gl, gn, g_at, d_at, dn = h["sw"], h["zg"], h["gl"], h["gn"], h["g_at"], h["d_at"], h["dn"]
+    zn, zw, zb, th = 1.44, 2.08, 1.74, 0.028               # the nose's roof; the top of the box's sides and of its back; its plate
+    xe, xn, xf, xk = -0.85, 1.42, 1.30, -0.45              # the engine's bulkhead; the foot and the head of the box's face; where the sides begin to fall to the back
+    k = 0.12                                               # the sides lean in this much for each metre they rise
+    y_at = lambda z: sw - (z - zg) * k                     # noqa: E731
+    sn = [Vector((0, s, k)).normalized() for s in (1.0, -1.0)]
+    top_at = lambda x: zw if x >= xk else zb + (x - xe) * (zw - zb) / (xk - xe)      # noqa: E731  (her top edge over a place along her)
+    xg = 2.60 + gl.x / gl.z * (zn - zg)                    # the head of the glacis
+    zf = zg + 0.008                                        # her floor
+
+    # ---- the nose: the driver under a low roof, his lid in it ------------------------------------------------------
+    v.use("hull")
+    v.hull([(2.60, sw, zg), (xg, y_at(zn), zn), (xn, y_at(zn), zn), (xn, sw, zg)], coat, bevel=0.014)
+    v.hatch_rect("hatch_driver", "hull", (1.75, 0.52, zn), (0.42, 0.50), Z, X, hinge="front", opens=105.0)
+    v.use("hull")
+    v.periscope((1.80, -0.52, zn), X, (0.07, 0.14, 0.07))
+    v.vent((1.62, -0.84, zn), 0.09, 0.045)
+    if fine:
+        v.weld((xg, -y_at(zn) + 0.04, zn), (xg, y_at(zn) - 0.04, zn), (gn + Z).normalized())
+        for s in (LEFT, RIGHT):
+            v.lift_eye((1.95, s * 0.92, zn), Z, X, 0.03)
+    v.slab((xn - 0.006, 0.22, zg + 0.05), (xn, 0.74, zn - 0.07), "shade", 0.004)                        # the way through to the driver's seat, low on the left
+
+    # ---- the box: thin plate leaning in, open above, lower at the back; the gun's notch cut down into its face ------
+    side = [(xe, zg), (xn, zg), (xn, zn), (xf, zw), (xk, zw), (xe, zb)]
+    sl = Vector((xf - xn, 0, zw - zn))
+    Hs = sl.length
+    sl = sl.normalized()                                   # up the box's face
+    sf = Vector((sl.z, 0, -sl.x))                          # out of it
+    for s, n in ((LEFT, sn[0]), (RIGHT, sn[1])):
+        wall(v, [(x, s * y_at(z), z) for x, z in side][::int(s)], -n, th, coat, 0.004)
+        if fine:
+            v.weld((0.35, s * (y_at(zg + 0.03) + 0.001), zg + 0.03), (0.35, s * (y_at(zw - 0.03) + 0.001), zw - 0.03), n)
+            # the plate's own work: bolts along her top edge, the angle inside it, stiffeners up the inside, the seams at her face and her back
+            edge = [(xf - 0.06, zw), (xk, zw), (xe + 0.08, top_at(xe + 0.08))]
+            for (xa, za), (xb_, zb_) in zip(edge, edge[1:]):
+                v.edge_bolts((xa, s * (y_at(za - 0.045) + 0.0005), za - 0.045), (xb_, s * (y_at(zb_ - 0.045) + 0.0005), zb_ - 0.045), n, gap=0.15, r=0.01)
+                v.rib((xa, s * (y_at(za - 0.045) - th), za - 0.045), (xb_, s * (y_at(zb_ - 0.045) - th), zb_ - 0.045), -n, deep=0.04, wide=0.011)
+            for x in (-0.25, 0.35, 0.95):
+                z = top_at(x) - 0.05
+                v.rib((x, s * (y_at(zg + 0.01) - th), zg + 0.01), (x, s * (y_at(z) - th), z), -n, deep=0.03, wide=0.026)
+            v.weld((xn, s * (y_at(zn) + 0.001), zn), (xf, s * (y_at(zw) + 0.001), zw - 0.01), (n + sf).normalized())
+            v.weld((xe + 0.002, s * (y_at(zg) - 0.004), zg + 0.02), (xe + 0.002, s * (y_at(zb) - 0.004), zb - 0.02), (n - X).normalized())
+            for i in range(8):
+                v.bolt((xe + 0.2 + 0.29 * i, s * (y_at(zg + 0.05) + 0.001), zg + 0.05), n, 0.011, 0.007)
+            v.handle(Vector((-0.70, s * y_at(1.56), 1.56)), Vector((-0.34, s * y_at(1.56), 1.56)), n, 0.011, 0.05)
+            v.port(Vector((0.95, s * (y_at(1.74) + 0.001), 1.74)), n, 0.04)
+        v.mark(tag, (0.0, s * (y_at(1.60) + 0.002), 1.60), n, 0.17, part="hull")
+    px, zt, slot = 1.26, 1.80, 0.30                        # the pintle and the trunnions; half the notch
+    bn = (zt - 0.31 - zn) / sl.z
+    sheet(v, [(-y_at(zn), 0.0), (y_at(zn), 0.0), (y_at(zw), Hs), (slot, Hs), (slot, bn), (-slot, bn), (-slot, Hs), (-y_at(zw), Hs)], [], (xn, 0.0, zn), Y, sl, th, coat, 0.004)
+    if fine:
+        s_at = lambda u, y: Vector((xn, y, zn)) + sl * u + sf * 0.0005       # noqa: E731  (a place on her face, u metres up it)
+        v.edge_bolts(s_at(Hs - 0.045, slot + 0.07), s_at(Hs - 0.045, y_at(zw) - 0.09), sf, gap=0.15, r=0.01)
+        v.edge_bolts(s_at(Hs - 0.045, -slot - 0.07), s_at(Hs - 0.045, -y_at(zw) + 0.09), sf, gap=0.15, r=0.01)
+        for e in (-1, 1):
+            v.box((Hs - bn, 0.045, 0.01), s_at((Hs + bn) / 2, e * (slot + 0.028)) + sf * 0.005, coat, 0.003, turn=_turn(sl, sf))      # a strip up each side of the notch
+        v.weld(s_at(0.01, -y_at(zn) + 0.05), s_at(0.01, y_at(zn) - 0.05), sf)
+    # the back plate, over the engine's deck
+    wall(v, [(xe + 0.002, -y_at(zg), zg), (xe + 0.002, y_at(zg), zg), (xe + 0.002, y_at(zb), zb), (xe + 0.002, -y_at(zb), zb)], X, th, coat, 0.004)
+    if fine:
+        v.edge_bolts((xe + 0.0015, -y_at(zb) + 0.1, zb - 0.045), (xe + 0.0015, y_at(zb) - 0.1, zb - 0.045), -X, gap=0.15, r=0.01)
+        v.rib((xe + 0.002 + th, -y_at(zb) + th, zb - 0.045), (xe + 0.002 + th, y_at(zb) - th, zb - 0.045), X, deep=0.04, wide=0.011)
+    v.roll((xe - 0.092, -0.62, 1.60), (xe - 0.092, 0.62, 1.60), r=0.09, paint=v.own_paint("canvas.drab", "5C5B44"))       # her sheet, strapped across the back plate (dark enough to sit in her coat: a tan roll is the lightest thing on her)
+    v.slab((xe + 0.03, -(sw - 0.03), zg), (xn - 0.002, sw - 0.03, zf), "shade")                          # her floor, trodden dark
+
+    # ---- the piece: the 75 mm field gun's own saddle, cradle and barrel, a small shield on the cradle ------------
+    v.pedestal((px, 0.0, zt - 0.31), zg, r=0.28)
+    v.saddle(px, zt, 0.16, (12.0, 12.0), rate=5.0, foot=0.26)
+    v.cradle(-5.0, 28.0, 0.2, 0.17, 1.25, 0.88, 0.085, round_under=True)
+    v.use("gun")                                           # (the shield lifts and trains with the gun, and covers the notch)
+    out = [(-0.38, -0.19), (-0.30, -0.27), (0.30, -0.27), (0.38, -0.19), (0.38, 0.20), (0.27, 0.31), (-0.27, 0.31), (-0.38, 0.20)]
+    sheet(v, out, [], (px + 0.26, 0.0, zt), Y, Z, 0.014, coat, 0.003)
+    if fine:
+        edge_rivets(v, out, (px + 0.26, 0.0, zt), Y, Z)
+    xb = v.piece(2.72, 0.075, 0.98, 0.082, 0.058, 0.75, steps=((0.36, 0.068),), ring=(0.24, 0.23, 0.23), block="screw", round_ring=True, lug=0.9)
+    v.handwheels((px - 0.34, 0.33, zt - 0.095), (px - 0.44, 0.27, zt - 0.255), r=0.1, grips="gunner")
+    v.sight((px - 0.22, 0.25, zt + 0.025), high=0.2)
+
+    # ---- inside her: rounds along the right wall and at the back on the left, the layer's seat, the wireless, a box
+    #      of fuzes, the detachment's sacks in the corner under the face ---------------------------------------------
+    v.rounds(-0.78, 0.60, -1.04, -0.80, zg, 0.44, r=0.045, gap=0.105, tray=0.72)
+    v.rounds(-0.78, -0.25, 0.80, 1.04, zg, 0.44, r=0.045, gap=0.105, tray=0.72)
+    v.trodden(((-0.35, -0.15, 0.36, 0.22, 60.0), (-0.5, 0.3, 0.34, 0.2, -45.0), (0.15, -0.45, 0.4, 0.22, 30.0), (0.25, 0.25, 0.36, 0.2, -20.0), (0.75, -0.6, 0.3, 0.2, 10.0)), zf)
+    for x, y, yaw in ((0.05, 0.25, 20.0), (-0.55, 0.0, 80.0), (0.35, -0.42, -50.0)):                  # the empty cases the loader threw down, clear of the men's feet
+        v.spent((x, y, zf), yaw, 0.045, 0.385)
+    v.use("hull")
+    gs = (px - 0.60, 0.56)
+    v.rod((gs[0], gs[1], zg), (gs[0], gs[1], zg + 0.40), 0.02, "steel", 8)                              # the layer's seat, the wheels by his right knee
+    v.box((0.3, 0.3, 0.055), (gs[0], gs[1], zg + 0.43), "canvas.seat", 0.02)
+    v.crate((0.18, 0.92, zg), (0.62, 0.3, 0.2), 0.0)                                                    # a box of fuzes against the left wall, a helmet left on it
+    v.sack((1.18, -0.78, zg), 0.15, 0.36, "cloth.sack")
+    v.sack((0.90, -0.88, zg), 0.13, 0.32, "cloth.sack")
+    v.jerrycan((1.22, 0.92, zg), 90.0)
+    v.rammer((-0.40, y_at(1.92) - th - 0.034, 1.92), (1.15, y_at(1.92) - th - 0.034, 1.92), head=0.04)  # the cleaning staff along the left wall
+    for y in (-0.36, 0.36):                                # the detachment's packs on the back plate
+        v.pack((xe + 0.002 + th, y, 1.40), X, paint="canvas.tarp")
+    if fine:
+        v.box((0.36, 0.14, 0.24), (0.80, -(y_at(1.72) - th - 0.075), 1.72), "shade", 0.008)             # the wireless, on the right wall
+        v.bucket((0.78, 0.94, zg), 0.11, 0.22)                                                          # (against the wall, clear of the layer's boots)
+        v.helmet((0.18, 0.92, zg + 0.205))
+        v.helmet((-0.10, y_at(1.78) - th - 0.07, 1.78), (0.0, -1.0, 0.25))                              # helmets hung on the walls (clear of the plate: a brim must never come through it)
+        v.helmet((0.22, -(y_at(1.78) - th - 0.07), 1.78), (0.0, 1.0, 0.25))                             # (one a side: two side by side over the roll read as a face from behind)
+    v.aerial("aerial", "hull", (0.80, -(y_at(zw) - th / 2), zw), 2.0)
+
+    # ---- the detachment's places, and what happens to her -----------------------------------------------------------
+    v.socket("commander", (-0.45, 0.50, zf), X, part="hull", note="the gun's commander stands here at the back of the open box, on the left: its sides come to his chest (1.06 over the floor)")
+    v.socket("crew.gunner", (gs[0], gs[1], zg + 0.4575), X, part="hull",
+             note="the layer, seated left of the breech: the top of his seat, 0.46 over the floor; the handwheels are by his right knee, their handles 0.16 and 0.36 ahead, 0.19 to his right, 0.09 and 0.22 over the seat (his hands: grip.gunner.l, grip.gunner.r)")
+    v.socket("crew.loader", (xb - 0.58, -0.5, zf), X, part="hull", note="the loader stands here, right of the breech and clear of its run back")
+    v.socket("case", (xb - 0.5, -0.2, zf), -X, part="hull", note="where the empty case falls, on her floor")
+    v.socket("engine", d_at(0.6, 0.0) + dn * 0.05, Z, part="hull", note="engine deck: smoke and the first fire")
+    v.socket("fire.1", d_at(0.5, 0.5) + dn * 0.05, Z, part="hull")
+    v.socket("fire.2", (0.2, 0.0, 1.8), Z, part="hull", note="out of her open box")
+    v.socket("fire.3", (1.75, 0.52, zn + 0.05), Z, part="hull", note="out of the driver's hatch")
+    v.socket("ring", (0.2, 0.0, zg), Z, part="hull", note="the middle of her floor: where the blast comes from when her ammunition goes")
+    v.socket("hit.front", g_at(0.4, -0.3), gn, part="hull")
+    v.socket("hit.left", (0.3, y_at(1.6), 1.6), sn[0], part="hull")
+    v.socket("hit.right", (0.3, -y_at(1.6), 1.6), sn[1], part="hull")
+    v.socket("hit.rear", (-2.8, 0.0, 0.9), -X, part="hull")
+    v.socket("hit.turret", Vector((xn, -0.65, zn)) + sl * (Hs * 0.55), sf, part="hull", note="the box's face")
+    v.tank_clips(recoil=0.65, kick=0.8, gun_low=-5.0, hatches=["hatch_driver"], traverse=5.0, idle_cue="tank_idle_loop", drive_cue="tank_loop",
+                 gun_cue="field_gun_fire", has_turret=False, mg=None)
     return v
 
 

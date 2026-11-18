@@ -230,16 +230,16 @@ def light_tank(fine=True, tag="_"):
     return v
 
 
-def medium_tank(fine=True, tag="_"):
-    """The medium tank: 5.7 m long, 2.75 m wide, 2.4 m high. A welded hull with a sloped front plate, the drive at
-    the back, five wheels a side on swing arms with three return rollers, a welded turret with a 50 mm gun, a bin
-    on its back and the commander's cupola."""
-    v = Works("MediumTank", "Medium tank", "tank", tag, fine)
+def medium_hull(v, fine, box=True):
+    """The medium tank's hull and running gear: a welded tub with a sloped front plate, the drive at the back, five
+    wheels a side on swing arms with three return rollers. `box` False leaves out the crew's box with its roof lids,
+    the bow gun and the aerial: the assault gun stands a fixed box of her own there. Returns her measures."""
     v.root(hull_pivot=(0.0, 0.0, 0.72))
     hw, sw, zg, zr = 0.84, 1.14, 1.02, 1.52          # half-width between the tracks and of the upper hull; the guards; the roof
     # ---- the tub, the crew's part with its sloped front, the engine's part falling away to the tail ----------
     v.hull([(x, hw, z) for x, z in [(-2.70, 0.56), (-2.52, 0.40), (2.20, 0.40), (2.72, 0.70), (2.60, zg), (-2.78, zg), (-2.78, 0.70)]], coat, bevel=0.014)
-    v.hull([(2.60, sw, zg), (1.95, sw, zr), (-0.85, sw, zr), (-0.85, sw, zg)], coat, bevel=0.014)
+    if box:
+        v.hull([(2.60, sw, zg), (1.95, sw, zr), (-0.85, sw, zr), (-0.85, sw, zg)], coat, bevel=0.014)
     v.hull([(-0.85, 1.10, zg), (-0.85, 1.07, 1.44), (-2.62, 1.03, 1.30), (-2.80, 1.07, zg)], coat, bevel=0.014)
     gl = Vector((1.95 - 2.60, 0, zr - zg)).normalized()               # up the front plate
     gn = Vector((gl.z, 0, -gl.x))
@@ -263,14 +263,16 @@ def medium_tank(fine=True, tag="_"):
         v.headlamp((2.30, s * 1.22, zg), X, 0.07, stalk=0.1)
     # the front plate: the driver's visor on the left, the bow gun in its ball on the right
     v.visor(g_at(0.50, 0.46) + gn * 0.004, Vector((1, 0, 0.15)).normalized(), 0.36, 0.12, 0.10)
-    v.lathe(g_at(0.46, -0.46) - gn * 0.02, gn, [(0.12, 0.0), (0.12, 0.09), (0.07, 0.15), (0.0, 0.19), (0.0, 0.0)], "upper", v.n(24, 8))
-    v.mg_ball(g_at(0.46, -0.46) + gn * 0.10, Vector((0.94, 0, 0.1)).normalized(), 0.08, socket="hull_mg", length=0.38, ring=False)
+    if box:
+        v.lathe(g_at(0.46, -0.46) - gn * 0.02, gn, [(0.12, 0.0), (0.12, 0.09), (0.07, 0.15), (0.0, 0.19), (0.0, 0.0)], "upper", v.n(24, 8))
+        v.mg_ball(g_at(0.46, -0.46) + gn * 0.10, Vector((0.94, 0, 0.1)).normalized(), 0.08, socket="hull_mg", length=0.38, ring=False)
     if fine:
         v.weld(g_at(0.03, -1.1), g_at(0.03, 1.1), gn)
         v.spare_links(g_at(0.27, -0.26), g_at(0.27, 0.26), 4, 0.13, 0.42, gn, style={"kind": "plate", "grouser": 0.014, "cleats": True})
     # the roof: a lid each for the driver and the bow gunner
-    v.hatch_rect("hatch_driver", "hull", (1.66, 0.50, zr), (0.42, 0.50), Z, X, hinge="front", opens=105.0)
-    v.hatch_rect("hatch_radio", "hull", (1.66, -0.50, zr), (0.42, 0.50), Z, X, hinge="front", opens=105.0)
+    if box:
+        v.hatch_rect("hatch_driver", "hull", (1.66, 0.50, zr), (0.42, 0.50), Z, X, hinge="front", opens=105.0)
+        v.hatch_rect("hatch_radio", "hull", (1.66, -0.50, zr), (0.42, 0.50), Z, X, hinge="front", opens=105.0)
     v.use("hull")
     # the engine deck: two louvred grilles, two doors behind them; an exhaust standing at each corner of the tail
     for s in (LEFT, RIGHT):
@@ -292,7 +294,8 @@ def medium_tank(fine=True, tag="_"):
     v.jack((-0.4, -1.24, zg), 0.0)
     if fine:
         v.cable([(2.0, -1.2, zg + 0.02), (1.2, -1.22, zg + 0.018), (0.6, -1.22, zg + 0.018)], 0.013)
-    v.aerial("aerial", "hull", (-0.70, -1.0, zr), 2.0)
+    if box:
+        v.aerial("aerial", "hull", (-0.70, -1.0, zr), 2.0)
 
     # ---- the running gear: five wheels a side on swing arms, the drive at the back --------------------------
     ty, r_w = 1.12, 0.33
@@ -313,6 +316,16 @@ def medium_tank(fine=True, tag="_"):
     for s in (LEFT, RIGHT):
         v.lathe((-2.44, s * (hw - 0.01), 0.68), Y * s, [(0.16, 0.0), (0.16, 0.16), (0.08, 0.24), (0.0, 0.26), (0.0, 0.0)], "upper", v.n(22, 8))
         v.lathe((2.36, s * (hw - 0.01), 0.70), Y * s, [(0.12, 0.0), (0.12, 0.08), (0.0, 0.12), (0.0, 0.0)], "upper", v.n(16, 6))
+    return {"hw": hw, "sw": sw, "zg": zg, "zr": zr, "gl": gl, "gn": gn, "g_at": g_at, "d_at": d_at, "dn": dn}
+
+
+def medium_tank(fine=True, tag="_"):
+    """The medium tank: 5.7 m long, 2.75 m wide, 2.4 m high. A welded hull with a sloped front plate, the drive at
+    the back, five wheels a side on swing arms with three return rollers, a welded turret with a 50 mm gun, a bin
+    on its back and the commander's cupola."""
+    v = Works("MediumTank", "Medium tank", "tank", tag, fine)
+    h = medium_hull(v, fine)
+    sw, zr, gn, g_at, d_at, dn = h["sw"], h["zr"], h["gn"], h["g_at"], h["d_at"], h["dn"]
 
     # ---- the turret: welded plate, its sides leaning in, a bin on its back -----------------------------------
     x0, zt, th = 0.55, zr, 0.60
@@ -365,4 +378,77 @@ def medium_tank(fine=True, tag="_"):
         v.mark(tag, (-0.25, s * (sw + 0.002), 1.28), Y * s, 0.16, part="hull")
     v.tank_clips(recoil=0.26, kick=0.7, gun_low=-9.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver", "hatch_radio"],
                  traverse=16.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.8, 2.6, 0.4, 168.0))
+    return v
+
+
+def assault_gun(fine=True, tag="_"):
+    """The assault gun: the medium tank's hull with a fixed box where her turret stood, its front plate the hull's
+    own carried on up, and a 75 mm gun in a cast collar on the right of that plate. For every army with no assault
+    gun or tank destroyer of its own. 7.7 m over the gun, 2.75 m wide, 2.1 m high over the commander's cap."""
+    v = Works("AssaultGun", "Assault gun", "tank", tag, fine)
+    h = medium_hull(v, fine, box=False)
+    m = v.m
+    sw, zg, gl, gn, g_at, d_at, dn = h["sw"], h["zg"], h["gl"], h["gn"], h["g_at"], h["d_at"], h["dn"]
+    zc = 1.92                                             # the box's roof
+    lean = math.radians(12.0)                             # its sides lean in
+    xt = 2.60 + gl.x / gl.z * (zc - zg)                   # the head of the front plate: the hull's own, carried on up
+    xb = -0.85 + (zc - zg) * math.tan(math.radians(8.0))  # the head of the back plate
+    ht = sw - (zc - zg) * math.tan(lean)                  # half the roof's width
+    y_at = lambda z: sw - (z - zg) * math.tan(lean)       # noqa: E731
+    sn = [Vector((0, s * math.cos(lean), math.sin(lean))) for s in (1.0, -1.0)]
+    v.use("hull")
+    v.hull([(2.60, sw, zg), (-0.85, sw, zg), (xt, ht, zc), (xb, ht, zc)], coat, bevel=0.016)
+
+    # ---- the gun: a fixed cast collar on the front plate, a ball in it, the barrel -------------------------------
+    gy, gz = -0.16, 1.48
+    gp = g_at((gz - zg) / gl.z, gy)                       # where the bore meets the front plate
+    v.lathe((gp.x - 0.9, gy, gz), X, [(1.20, 0.0), (1.20, 0.23), (1.08, 0.31), (0.5, 0.37), (0.0, 0.37), (0.0, 0.0)], coat, v.n(36, 12))
+    v.part("turret", "hull", (gp.x + 0.1, gy, gz), axis=(0, 0, -1), limits=[-10.0, 10.0], kind="turn",
+           note="the gun's own traverse in its mounting, ten degrees each way: + to the right; for more the game turns the whole of her")
+    v.part("gun", "turret", (gp.x + 0.1, gy, gz), axis=(0, -1, 0), limits=[-6.0, 20.0], kind="turn", note="lifts at the trunnions: + muzzle up; the game lays it")
+    v.ball((gp.x + 0.30, gy, gz), 0.215, coat, v.n(28, 10), v.n(14, 6))
+    v.lathe((gp.x + 0.40, gy, gz), X, [(0.36, 0.0), (0.36, 0.1), (0.30, 0.118), (0.0, 0.14), (0.0, 0.0)], coat, v.n(24, 8))
+    bx = gp.x + 0.74
+    v.part("barrel", "gun", (bx, gy, gz), slide=(-1, 0, 0), slide_limits=[0.0, 0.32], axis=(0, -1, 0), kind="slide", note="runs back along its own length when she fires (metres)")
+    v.barrel((bx, gy, gz), 1.9, 0.075, r0=0.088, r1=0.062, brake=None, sleeve=None)
+    v.socket("muzzle", (bx + 1.92, gy, gz), X)
+    m.info["bore"] = 0.075
+    m.info["brake"] = False
+
+    # ---- the roof: the commander's cap on the right, the loader's lid on the left, the driver's ahead of it ------
+    v.use("hull")
+    cup = v.cupola((-0.05, -0.44, zc), 0.27, 0.16, slits=4, start=0.4)
+    v.hatch_round("hatch_commander", "hull", cup, 0.2, Z, -X, thick=0.028, opens=100.0)
+    v.socket("commander", cup + Z * -0.25, X, part="hull", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
+    v.hatch_rect("hatch_loader", "hull", (-0.28, 0.40, zc), (0.46, 0.52), Z, X, hinge="back", opens=100.0)
+    v.hatch_rect("hatch_driver", "hull", (1.12, 0.46, zc), (0.40, 0.46), Z, X, hinge="front", opens=105.0)
+    v.use("hull")
+    v.slab((0.86, 0.0, zc), (1.06, 0.18, zc + 0.14), coat, 0.03, segs=2)                 # the gunner's sight under its hood
+    v.periscope((0.74, -0.62, zc), X, (0.09, 0.13, 0.11))
+    v.vent((0.42, -0.02, zc), 0.1, 0.045)
+    v.aerial("aerial", "hull", (-0.52, -0.80, zc), 2.0)
+    v.roll((-0.86, -0.62, 1.62), (-0.86, 0.62, 1.62), r=0.09, paint=v.own_paint("canvas.drab", "5C5B44"))      # her sheet, strapped across the back plate (dark enough to sit in her coat)
+    if fine:
+        for s, n in ((LEFT, sn[0]), (RIGHT, sn[1])):
+            v.handle(Vector((0.9, s * y_at(1.78), 1.78)), Vector((0.3, s * y_at(1.78), 1.78)), n, 0.011, 0.06)
+            v.port(Vector((-0.3, s * y_at(1.62), 1.62)), n, 0.04)
+            v.weld(Vector((xt - 0.03, s * ht, zc)), Vector((xb + 0.03, s * ht, zc)), (n + Z).normalized())
+        v.weld(Vector((xt, -ht + 0.03, zc)), Vector((xt, ht - 0.03, zc)), (gn + Z).normalized())
+        for at in ((1.2, -0.66), (1.2, 0.8), (-0.52, 0.0)):
+            v.lift_eye((at[0], at[1], zc), Z, Y, 0.03)
+
+    v.socket("engine", d_at(0.6, 0.0) + dn * 0.05, Z, part="hull", note="engine deck: smoke and the first fire")
+    v.socket("fire.1", d_at(0.5, 0.5) + dn * 0.05, Z, part="hull")
+    v.socket("fire.2", (cup.x, cup.y, cup.z + 0.1), Z, part="hull", note="out of the commander's hatch")
+    v.socket("fire.3", (1.12, 0.46, zc + 0.05), Z, part="hull", note="out of the driver's hatch")
+    v.socket("hit.front", g_at(0.4, 0.3), gn, part="hull")
+    v.socket("hit.left", (0.3, y_at(1.5), 1.5), sn[0], part="hull")
+    v.socket("hit.right", (0.3, -y_at(1.5), 1.5), sn[1], part="hull")
+    v.socket("hit.rear", (-2.8, 0.0, 0.9), -X, part="hull")
+    v.socket("hit.turret", (0.5, y_at(1.75), 1.75), sn[0], part="hull", note="the fighting box's side")
+    v.socket("case", (-0.28, 0.40, zc + 0.1), Y, part="hull", note="where the empty case is thrown out")
+    for s, n in ((LEFT, sn[0]), (RIGHT, sn[1])):
+        v.mark(tag, (-0.25, s * (y_at(1.5) + 0.002), 1.5), n, 0.16, part="hull")
+    v.tank_clips(recoil=0.3, kick=0.8, gun_low=-6.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver"], traverse=6.0,
+                 idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", has_turret=False, mg=None)
     return v

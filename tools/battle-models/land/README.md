@@ -23,10 +23,10 @@ It all runs in Blender as a Python module (`bpy`), with no Blender window:
 | `works.py` | the kit together (`Works`), the rig and clips every tank has, the pictures' weathering, the mesh as the game reads it |
 | `tanks_ger.py` | Panzer IV (two guns, two coats, the skirts of May 1943), Panther, Tiger; the Panzer IV's running gear and the skirts along a hull (`hull_skirts`) as functions |
 | `tanks_sov.py`, `tanks_usa.py`, `tanks_uk.py`, `tanks_fra.py`, `tanks_ita.py`, `tanks_jap.py`, `tanks_pol.py` | T-34 and T-34-85, Sherman (and the M4's tub, gear, deck and tail as functions), Matilda, Char B1, M13, Type 97, 7TP |
-| `tanks_any.py` | the light and the medium tank of every nation without one of its own |
+| `tanks_any.py` | the light and the medium tank of every nation without one of its own; the medium tank's hull as a function (`medium_hull`), and the assault gun built on it |
 | `tank_destroyers.py` | StuG III (two coats, the box shield round her gun and the cast one of late 1943, skirts), SU-85, M10 |
 | `guns.py`, `guns_at.py` | the gun kit (`GunWorks`: wheels, saddle, cradle, piece, shield, trails, the towed gun's clips), five field guns, two anti-tank guns |
-| `sp_guns.py` | self-propelled artillery (`SpWorks`: the gun kit standing in a hull): M7, Sexton, Hummel, SU-76 |
+| `sp_guns.py` | self-propelled artillery (`SpWorks`: the gun kit standing in a hull): M7, Sexton, Hummel, SU-76, and the self-propelled gun of every army without one (a 75 mm field gun in an open box on `medium_hull`) |
 | `carriers.py` | wheels on tyres, steering, burst fire (`CarrierWorks`); the lorry, the Sd.Kfz. 251, the M3 half-track |
 | `armoured_cars.py` | Sd.Kfz. 222, M8, and every other army's armoured car |
 | `flak.py` | the light flak mounts, and the three wagons that carry them |
@@ -40,6 +40,24 @@ It all runs in Blender as a Python module (`bpy`), with no Blender window:
 | `export_land.py` | `<Name>.json`, `.glb`, `.fbx` and `index-land.json` |
 | `rigid.py`, `kit.py`, `marks.py`, `stage.py` | unchanged copies from the warships' and aircraft's folder (`tools/battle-models/` on their branch) |
 | `battle_set.py`, `soldier_kit.py` | the soldier thread's preview stage and its kit, copied unchanged but for one import line |
+
+## One of each kind for every army without its own
+
+Brian's ask of 18 November: a generic version of every family for the smaller nations. In `vehicles.py` these are
+the vehicles whose nation is `any`, each our own design and no one maker's:
+
+| Family | The generic |
+|---|---|
+| tanks | `LightTank`, `MediumTank` |
+| assault guns and tank destroyers | `AssaultGun` (the medium tank's hull, a fixed box, a 75 mm gun in a cast collar) |
+| self-propelled guns | `SelfPropelledGun` (the medium tank's hull, an open-topped box, the 75 mm field gun) |
+| armoured cars | `ArmouredCar` |
+| carriers | `Truck` (the lorry carries their infantry: no generic half-track) |
+| anti-aircraft wagons | `FlakTruck` |
+| towed guns | `Gun75` (the field gun: France's, and every nation's without a gun of its own), `AntiTankGun` |
+
+A generic carries no name place (b477 is for the named types) and its marking is the army's own (`tag`). The two
+built on `medium_hull` share her running gear, so one track and one set of wheels serve three vehicles.
 
 ## The model file (`<Name>.json`)
 
