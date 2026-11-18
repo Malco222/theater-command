@@ -1,0 +1,250 @@
+#pragma once
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+/**
+ * The battle effects, worked out in plain C++ so that the same code runs in the game and in the cloud preview
+ * (tools/battle-fx/preview): a shell landing, a gun firing, tracer, a burning wreck, the crater left behind and the
+ * camera's jolt. Every number comes from the recipe, Content/Effects/battle-fx.json (tools/battle-fx/fx.json), so the
+ * look is tuned there and not here.
+ *
+ * Nothing here knows Unreal. Places are in metres, Z up, time in seconds. What it gives back each frame is a list of
+ * soft puffs, each a middle point and two rings of eight (the shape the campaign map's smoke uses, so one material
+ * and one triangle list serve both), already turned to the eye, coloured, and laid far to near; a few lamps for the
+ * flashes; and the camera's jolt, which the caller adds to its own camera if it wants it.
+ *
+ * Lessons the shapes follow (the art director's sheet, art-director/explosions):
+ * - the earth is the star of a land hit: a wide torn fan of dark jets, uneven, thinnest and torn at the tip, clods
+ *   flying on beyond; never a dome, a ball, a hand of fingers or a broom of even strokes;
+ * - many small overlapping puffs of varied size, never a few big round ones (they read as eggs, grapes, cotton);
+ * - a flash lights the ground for one frame and is gone by the third; no orange fireball on a ground hit;
+ * - smoke climbs, leans downwind and lingers; a crater stays for the whole battle.
+ */
+namespace TheaterFx
+{
+	struct Vec
+	{
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		Vec() = default;
+		Vec(double InX, double InY, double InZ) : X(InX), Y(InY), Z(InZ) {}
+		Vec operator+(const Vec& O) const { return Vec(X + O.X, Y + O.Y, Z + O.Z); }
+		Vec operator-(const Vec& O) const { return Vec(X - O.X, Y - O.Y, Z - O.Z); }
+		Vec operator*(double S) const { return Vec(X * S, Y * S, Z * S); }
+		Vec operator-() const { return Vec(-X, -Y, -Z); }
+		Vec& operator+=(const Vec& O) { X += O.X; Y += O.Y; Z += O.Z; return *this; }
+		double Dot(const Vec& O) const { return X * O.X + Y * O.Y + Z * O.Z; }
+		Vec Cross(const Vec& O) const { return Vec(Y * O.Z - Z * O.Y, Z * O.X - X * O.Z, X * O.Y - Y * O.X); }
+		double Length() const;
+		/** This one made a metre long, or Otherwise when it has no length. */
+		Vec Unit(const Vec& Otherwise = Vec(0.0, 0.0, 1.0)) const;
+	};
+
+	/** A colour as light (linear), 0 to 1. Picture colours from the recipe (sRGB 0 to 255) are turned to these. */
+	struct Rgb
+	{
+		float R = 0.0f, G = 0.0f, B = 0.0f;
+		Rgb() = default;
+		Rgb(float InR, float InG, float InB) : R(InR), G(InG), B(InB) {}
+		static Rgb FromPicture(double R255, double G255, double B255);
+		Rgb operator*(double S) const;
+		Rgb Mix(const Rgb& O, double T) const;
+	};
+
+	/** Where the numbers come from. The path is dotted, with a list's places as numbers: "sizes.how105.crown_m.0". */
+	class Recipe
+	{
+	public:
+		virtual ~Recipe() = default;
+		virtual bool Find(const char* Path, double& Out) const = 0;
+		/** A word at Path (the calibre map's sizes); none by default. */
+		virtual bool FindWord(const char* Path, std::string& Out) const
+		{
+			(void)Path;
+			(void)Out;
+			return false;
+		}
+	};
+
+	/** A small steady random source, the same on every machine, so a battle's effects can be played again alike. */
+	class Dice
+	{
+	public:
+		explicit Dice(uint64_t Seed = 1);
+		double U(); // 0 to 1
+		double U(double A, double B);
+		int Whole(int A, int B); // A to B, both included
+		double Bell(); // a normal spread, middle 0, width 1
+	private:
+		uint64_t State = 1;
+		uint64_t Next();
+	};
+
+	/** One thing drawn: a puff of smoke, dust or earth, a tongue of flame, a clod, a spark, a tracer, a crater's mark. */
+	struct Bit
+	{
+		enum class Shape : uint8_t
+		{
+			Puff, // turned to the eye; drawn out along Along (on the screen) when Stretch is over 1
+			Upright, // stands on the ground and turns about the upright only: low skirts of dust, which never cut into the ground
+			Flat, // lies on the ground (a crater's mark)
+			Streak // drawn out along its own flight: clods, sparks, tracer; never thinner than LeastPx on the screen
+		};
+		Shape Form = Shape::Puff;
+		Vec From, Vel, Along;
+		double Born = 0.0, Life = 1.0;
+		double Drag = 0.0, Gravity = 0.0, Rise = 0.0, Windage = 0.0;
+		double R0 = 0.1, R1 = 0.2, Grow = 0.5; // radius when born, at the end of its life, and how soon it gets there
+		double Stretch = 1.0, Flatten = 1.0, Point = 0.0, Tail = 0.0, Spin = 0.0;
+		double HalfLength = 0.0; // (a tracer's streak: half its length in metres)
+		double Alpha = 1.0, FadeIn = 0.02, Hold = 0.2, Cool = 1.0;
+		double HazeBy = 0.0, HazeAlpha = 0.0; // (a skirt: settles to HazeAlpha by HazeBy seconds)
+		double Heart = 0.5, Rim = 0.0; // how thick it is at half its radius, and at its edge, as shares of its middle
+		double LeastPx = 0.0;
+		double ShadeK = 1.0; // (how strongly it is lit on its sunward side and shadowed on the other: a skirt's lit top and dark foot)
+		Rgb Col, Col2;
+		bool bLight = false; // flame, flash, sparks, tracer: keeps its own colour by night and takes no shading
+		bool bHug = false; // rides the ground as it moves (skirts)
+		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
+		bool bThrown = false;
+		double Land = 1e9, Land2 = 1e9;
+		Vec Vel2, At1, At2;
+	};
+
+	class Battle
+	{
+	public:
+		/** The ground's height (metres) at X, Y (metres). */
+		using GroundFn = double (*)(void* Context, double X, double Y);
+
+		void Setup(const Recipe* InRecipe, GroundFn InGround, void* InContext, uint32_t Seed);
+		void SetWind(const Vec& MetresPerSecond) { Wind = MetresPerSecond; }
+		void Clear();
+
+		/** The size row (sizes.<kind>) a calibre from the field battle draws (from_shell_cal): "howitzer" -> "how105". */
+		std::string SizeOfCalibre(const char* Calibre) const;
+
+		/** A shell, mortar bomb, grenade or bomb landing at At at Now. Size is a sizes row ("how105"), Ground a grounds
+		 * row ("earth", "sand", "snow", "mud", "town", "woods", "water"). On armour: sparks and a grey puff, no earth. */
+		void Shell(double Now, const Vec& At, const char* Size, const char* Ground, bool bOnArmour = false);
+		/** An armour-piercing round that misses: a low spurt of earth and a skip, no crown and no crater. */
+		void Skip(double Now, const Vec& At, const Vec& Heading, const char* Ground);
+		/** A gun firing, its muzzle at At, pointing along Facing. Gun is a muzzle row ("tank_gun", "mg", "howitzer"). */
+		void Muzzle(double Now, const Vec& At, const Vec& Facing, const char* Gun);
+		/** Rounds fired by one gun (Gun: any number that is the same for the same gun) from From toward To, PerSecond:
+		 * every fifth is a tracer (tracer.one_in), out of step between guns; machine guns flicker at the muzzle. */
+		void Shots(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond);
+		/** Something burning at At, about Across metres wide, flames for Seconds, then a thinning grey column. */
+		void Burn(double Now, const Vec& At, double Across, double Seconds);
+
+		/** What the eye is: where it is, which way its screen's right, up and forward point, and how many pixels a
+		 * radian across the screen is (the screen's width / (2 tan(field of view / 2))). Smoke takes SmokeLight (the
+		 * hour: white by day); Sun is the way toward the sun. */
+		struct View
+		{
+			Vec Eye, Right, Up, Forward;
+			double PixelsPerRadian = 1000.0;
+			Rgb SmokeLight = Rgb(1.0f, 1.0f, 1.0f);
+			Vec Sun = Vec(-0.45, -0.35, 0.82);
+		};
+		/** Lays everything alive at Now for this eye into Points and Colours (PerPuff points a puff, far to near).
+		 * Returns how many puffs; the rest of the room up to the last frame's count is folded away. */
+		int Draw(double Now, const View& Eye);
+		static constexpr int Ring = 8, PerPuff = 2 * Ring + 1;
+		int Room() const { return MaxPuffs; }
+		const std::vector<Vec>& Points() const { return Out; }
+		const std::vector<uint8_t>& Colours() const { return OutRgba; } // four a point: red, green, blue, alpha (linear)
+		bool Busy(double Now) const;
+
+		struct Lamp
+		{
+			Vec At;
+			Rgb Col;
+			double Strength = 0.0; // 1 is a 105 mm shell's flash
+			double Radius = 30.0;
+		};
+		/** The strongest lamps lit at Now, at most Room of them. */
+		int Lamps(double Now, Lamp* Into, int Room) const;
+
+		struct Jolt
+		{
+			Vec Offset; // metres
+			double Roll = 0.0; // degrees
+		};
+		/** The camera's jolt at Now for an eye at Eye, from every hit close enough; nothing from far ones. */
+		Jolt Shake(double Now, const Vec& Eye) const;
+
+	private:
+		struct Flash
+		{
+			Vec At;
+			Rgb Col;
+			double Born = 0.0, Life = 0.0, Strength = 0.0, Radius = 30.0, Flicker = 0.0;
+		};
+		struct Knock
+		{
+			Vec At;
+			double Born = 0.0, Strength = 0.0, Within = 0.0, Push = 0.0;
+		};
+		struct Source
+		{
+			Vec At;
+			double Start = 0.0, Flames = 0.0, End = 0.0, Across = 1.0, Next = 0.0, NextSmoke = 0.0;
+			int Kind = 0; // 0 a burning thing, 1 a smouldering crater
+			uint64_t Seed = 1;
+		};
+		struct Paint
+		{
+			Rgb Soil, Heavy, Dust, Clod, Smoke, First, Splinter;
+			bool bFirst = false, bSplinter = false;
+		};
+
+		const Recipe* Book = nullptr;
+		GroundFn GroundAt = nullptr;
+		void* GroundContext = nullptr;
+		Vec Wind = Vec(1.6, 0.4, 0.0);
+		uint64_t Seeds = 1;
+		int MaxPuffs = 3000;
+		int LastDrawn = 0;
+		double ShadeLit = 0.18, ShadeDark = 0.28, ClodLeast = 1.2, Beyond = 1500.0;
+		Vec LastEye;
+		bool bEyeKnown = false; // (the eye of the last frame drawn: a hit close to it throws clods past the lens)
+		std::vector<Bit> Bits; // alive or still to be born
+		std::vector<Bit> Marks; // craters: for the whole battle
+		std::vector<Flash> Flashes;
+		std::vector<Knock> Knocks;
+		std::vector<Source> Sources;
+		std::vector<int> GunRounds; // rounds fired by each gun so far
+		std::vector<Vec> Out;
+		std::vector<uint8_t> OutRgba;
+		struct Order
+		{
+			const Bit* B;
+			double Deep;
+		};
+		std::vector<Order> Sorted;
+
+		double Num(const std::string& Path, double Fallback) const;
+		double Pick(Dice& D, const std::string& Path, double Low, double High) const; // a number in the recipe's range
+		Rgb Picture(const std::string& Path, const Rgb& Fallback) const;
+		bool Has(const std::string& Path) const;
+		double Height(double X, double Y) const;
+		Paint PaintOf(const std::string& Ground) const;
+		void Throw(Bit& B) const; // a clod's flight worked out against the ground
+
+		void Wink(double T0, const Vec& At, double Scale, Dice& D);
+		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D);
+		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, Dice& D);
+		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D);
+		void Scar(double T0, const Vec& At, double Across, const Paint& P, bool bSnow, Dice& D);
+		void Armour(double T0, const Vec& At, double Scale, Dice& D);
+		void Run(double Now); // the steady sources: fire, smouldering
+		void Prune(double Now);
+
+		Vec Where(const Bit& B, double Age) const;
+		Vec Going(const Bit& B, double Age) const;
+		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Point, double Tail, double Shade, const View& Eye);
+		bool LayBit(int Slot, const Bit& B, double Now, const View& Eye);
+	};
+}
