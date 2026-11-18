@@ -31,7 +31,7 @@ def fits_of(place, entries, army):
             text = brushhand.japanese(latin)
             if text is None:
                 continue                                    # (no characters drawn for this one: see `not_drawn`)
-            laid = [brushhand.fit_down(text, pl["long"], place["high"], place.get("least", brushhand.LEAST)) for pl in place["places"]]
+            laid = [brushhand.fit_down(text, pl["long"], place["high"], place.get("least", brushhand.LEAST), place.get("high_one")) for pl in place["places"]]
         else:
             text = (brushhand.russian(latin) if army == "SOV" else latin).upper()
             laid = [brushhand.fit(text, pl["long"], place["high"], pl.get("lines", place.get("lines", 1)), place.get("least", brushhand.LEAST), place.get("high_two")) for pl in place["places"]]

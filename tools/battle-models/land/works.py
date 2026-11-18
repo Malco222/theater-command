@@ -47,7 +47,7 @@ NAME_HOW = ("Once her unit has come through three battles the game paints her cr
             "has `lines` 2 and the name two words (letters `high_two` tall, or `high` where that is not given), else painted smaller, but never "
             "under `least`; a name that fits neither way is not for this tank. `writing` down: the characters stand one under another, `long` the "
             "room downward. `script` japanese: her name is in Japanese characters, and only the names in brush-alphabet.json `japanese.names` have "
-            "theirs drawn; for any other name paint nothing (never Latin letters on her). "
+            "theirs drawn; for any other name paint nothing (never Latin letters on her); a name of a single character is `high_one` tall. "
             "kind `rings`: no name, but `most` thin bands round the barrel, the first at `at` and each next one `step` on along `toward` (to the breech), "
             "`wide` across, lying on the barrel whose radius there is `radius`; one ring, then more as she lasts. `ink`: for a name off-white on grey, "
             "olive and green coats and near-black on dark yellow; rings off-white on every coat. Matt, never brighter than her national marking; it "
@@ -177,7 +177,7 @@ class Works(Shop, Gear, Fittings):
         return d
 
     def name_place(self, near, long=0.9, high=0.12, part="hull", sides=(LEFT, RIGHT), lines=1, writing="across", reach=(1.3, 0.4), parts=None, bend=0.014, note="",
-                   high_two=None, script=None):
+                   high_two=None, script=None, high_one=None, ink=None):
         """Where her crew paints her name: a flat run of her own painted plate on the side of `part`, as near to
         `near` (x, z) as one is found, `long` by `high` (times `lines`; writing "down": `high` across and `long` down).
         Found on the mesh as she stands, so call it when she is built. The game paints the word; the file carries the place.
@@ -188,7 +188,8 @@ class Works(Shop, Gear, Fittings):
         bend: how far the plate may leave the flat under the word (a cast turret's side is never flat: the game lays
         the letters on the skin, as it does her marking).
         script: "japanese" says the word is in Japanese characters: only the names whose characters brushhand has
-        (`brushhand.JAPANESE`) are painted, any other not at all."""
+        (`brushhand.JAPANESE`) are painted, any other not at all. high_one: how tall a name of a single character is
+        painted (the place is found with room for it). ink: "white" or "black" where the record overrules the coat's rule."""
         m = self.m
         tree, ids = self._skin()
         ok_parts = {m.part_at[p] for p in ([part] + list(parts or ()))}
@@ -200,7 +201,7 @@ class Works(Shop, Gear, Fittings):
 
         def room(n_lines):                                  # (along, up) for so many lines
             if writing == "down":
-                return high * 1.25, long
+                return max(high * 1.25, (high_one or 0.0) * 1.12), long
             return long, (high * 1.25 if n_lines == 1 else high_two * (1.25 * n_lines + 0.1 * (n_lines - 1)))
 
         places = []
@@ -288,12 +289,16 @@ class Works(Shop, Gear, Fittings):
             more = {}
             if any(p["lines"] > 1 for p in places) and high_two != high:
                 more["high_two"] = high_two
+            if high_one:
+                more["high_one"] = high_one
             if script:
                 more.update(script=script)
                 note = (note + " " if note else "") + "Only the names in brush-alphabet.json `japanese.names` have their characters drawn: for any other, paint nothing here."
             if note:
                 more["note"] = note
-            self._name_file("name", high=high, least=NAME_LEAST, lines=max(p["lines"] for p in places), writing=writing, places=places, **more)
+            d_ = self._name_file("name", high=high, least=NAME_LEAST, lines=max(p["lines"] for p in places), writing=writing, places=places, **more)
+            if ink:
+                d_["ink"] = {"use": ink, **NAME_INK}
         return places
 
     def kill_rings(self, part, muzzle="muzzle", most=5, wide=0.025, step=0.075, note=""):

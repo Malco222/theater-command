@@ -291,10 +291,11 @@ def japanese(name):
     return _JAPANESE.get(_plain(name))
 
 
-def fit_down(chars, long, high, least=LEAST):
-    """How characters go one under another into a place `long` (downward): (their height, [chars]) or None."""
+def fit_down(chars, long, high, least=LEAST, high_one=None):
+    """How characters go one under another into a place `long` (downward): (their height, [chars]) or None.
+    high_one: a name of a single character is painted this tall (a little larger, so its strokes stay open)."""
     n = len(chars)
-    h = min(high, long / (n + KANJI_GAP * (n - 1)))
+    h = min(high_one if (n == 1 and high_one) else high, long / (n + KANJI_GAP * (n - 1)))
     return (h, [chars]) if h >= least - 1e-9 else None
 
 
@@ -396,6 +397,7 @@ def table():
                          "ends": {k: [list(p) for p in v] for k, v in KANJI_ENDS.items()},
                          "hand": {"size": [0.93, 1.05], "squash": [0.95, 1.05], "lean": [-0.045, 0.045], "off_the_line": 0.04, "column_leans": 0.025,
                                   "weight": {"character": [0.92, 1.12], "stroke": [0.86, 1.16], "fuller_on_few_strokes": 0.28}, "run_on": [0.22, 0.15]},
-                         "fit": "n characters need n + gap * (n - 1) character heights of the place's `long`; at the place's `high` if that fits, else smaller, never under `least`.",
+                         "fit": "n characters need n + gap * (n - 1) character heights of the place's `long`; at the place's `high` if that fits, else smaller, never "
+                                "under `least`. A name of a single character is painted at the place's `high_one` (a little larger, so its strokes stay open), never larger.",
                          "characters": KANJI},
             "letters": {ch: {"wide": round(w, 3), "strokes": [[[round(a, 3), round(b, 3)] for (a, b) in st] for st in strokes]} for ch, (w, strokes) in LETTERS.items()}}

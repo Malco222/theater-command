@@ -67,7 +67,7 @@ def crew_mark(model, tree, name, rings, verts, faces, cols, groups):
         for pl in place["places"]:
             at, n, run, up = back(pl["at"]), back(pl["facing"]).normalized(), back(pl["along"]).normalized(), back(pl["up"]).normalized()
             if place.get("script") == "japanese":
-                got = brushhand.fit_down(text, pl["long"], place["high"], place.get("least", brushhand.LEAST))
+                got = brushhand.fit_down(text, pl["long"], place["high"], place.get("least", brushhand.LEAST), place.get("high_one"))
             else:
                 got = brushhand.fit(text, pl["long"], place["high"], pl.get("lines", place.get("lines", 1)), place.get("least", brushhand.LEAST), place.get("high_two"))
             if got is None:
@@ -124,9 +124,11 @@ def crew_mark(model, tree, name, rings, verts, faces, cols, groups):
 
 # Where rain has run down her (the art director, 2026-11-18): a few soft dark marks on a side, each from under a top
 # edge or something that stands off the plate (a hatch, a port, a box), unlike in length and spacing; six to ten on a
-# hull's side, never a hundred, or a big plate reads as planks. For the pictures only: the games do their own dirt.
+# hull's side, never a hundred, or a big plate reads as planks. Rain is soft: each a few centimetres wide at its top with
+# blurred edges, fading downward; a thin dark even one reads as a seam. For the pictures only: the games do their own dirt.
 RAIN_PARTS = ("hull", "turret")
-RAIN_DARK = 0.55                                            # how much of the coat's light the darkest mark takes, down its middle
+RAIN_DARK = 0.28                                            # how much of the coat's light the darkest mark takes, down its middle
+RAIN_ACROSS = ((-1.0, 0.0), (-0.55, 0.22), (-0.2, 0.85), (0.0, 1.0), (0.2, 0.85), (0.55, 0.22), (1.0, 0.0))     # soft at both edges: (where across, how dark)
 
 
 def rain_marks(model, tree, verts, faces, cols, groups, runs):
@@ -209,37 +211,40 @@ def rain_marks(model, tree, verts, faces, cols, groups, runs):
                         break
                 _, i, j, room, _ = pool.pop(k)
                 x0, z0 = x_lo + i * sx + rng.uniform(-0.012, 0.012), z_lo + j * sz + 0.006
-                if any(abs(x0 - tx) < rng.uniform(0.16, 0.5) for tx in taken):
+                if any(abs(x0 - tx) < rng.uniform(0.3, 0.7) for tx in taken):
                     continue
-                long = min(room * rng.uniform(0.55, 1.0), rng.uniform(0.12, 0.55))
-                if any((hand is None or hand == s) and abs(x0 - kx) < rx and kz - rz < z0 and z0 - long < kz + rz for kx, kz, rx, rz, hand in keep_off):
+                long = min(room * rng.uniform(0.55, 1.0), rng.uniform(0.14, 0.6))
+                wide, dark = rng.uniform(0.09, 0.19), rng.uniform(0.5, 1.0)
+                if any((hand is None or hand == s) and abs(x0 - kx) < rx + wide / 2 and kz - rz < z0 and z0 - long < kz + rz for kx, kz, rx, rz, hand in keep_off):
                     continue
-                wide, dark = rng.uniform(0.03, 0.065), rng.uniform(0.5, 1.0)
-                rows, x = [], x0
                 n = max(3, int(long / 0.025))
-                for k in range(n + 1):
-                    t = k / n
-                    hw = wide / 2 * (1.0 - 0.45 * t)
-                    three = [look(x + d, z0 - t * long) for d in (-hw, 0.0, hw)]
-                    if any(not plate(g) for g in three) or abs(three[0][4] - three[2][4]) > 0.01:
-                        if rows:
-                            break
-                        continue                            # (the rounding of the edge it starts under)
-                    rise = 0.45 if not rows else 1.0
-                    rows.append([(g[0] + g[1] * 0.002, a) for g, a in zip(three, (0.0, dark * rise * (1.0 - t) ** 1.15, 0.0))])
-                    x += rng.uniform(-0.0015, 0.0015)
+                for wide in (wide, wide * 0.6):             # (a narrower one where a fitting stands in a broad one's way)
+                    rows, x = [], x0
+                    for k in range(n + 1):
+                        t = k / n
+                        hw = wide / 2 * (1.0 - 0.35 * t)
+                        five = [look(x + d * hw, z0 - t * long) for d, _ in RAIN_ACROSS]
+                        if any(not plate(g) for g in five) or abs(five[0][4] - five[-1][4]) > 0.025:
+                            if rows:
+                                break
+                            continue                        # (the rounding of the edge it starts under)
+                        rise = (0.3, 0.75)[len(rows)] if len(rows) < 2 else 1.0
+                        rows.append([(g[0] + g[1] * 0.002, dark * rise * (1.0 - t) ** 1.15 * a) for g, (_, a) in zip(five, RAIN_ACROSS)])
+                        x += rng.uniform(-0.002, 0.002)
+                    if len(rows) >= 5:
+                        break
                 if len(rows) < 5:
                     continue
                 taken.append(x0)
-                base = len(verts)
+                base, nc = len(verts), len(RAIN_ACROSS)
                 for row in rows:
                     for p, a in row:
                         verts.append(p)
                         groups.append(part_name[on])
                         runs[len(verts) - 1] = a
                 for k in range(len(rows) - 1):
-                    for c in (0, 1):
-                        q = [base + 3 * k + c, base + 3 * k + c + 1, base + 3 * (k + 1) + c + 1, base + 3 * (k + 1) + c]
+                    for c in range(nc - 1):
+                        q = [base + nc * k + c, base + nc * k + c + 1, base + nc * (k + 1) + c + 1, base + nc * (k + 1) + c]
                         if (verts[q[1]] - verts[q[0]]).cross(verts[q[2]] - verts[q[0]]).y * s < 0:
                             q.reverse()
                         faces.append(q)
