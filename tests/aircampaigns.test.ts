@@ -374,9 +374,10 @@ describe("the book: history's campaigns on their months (b549)", () => {
     const all = bombers().reduce((s, f) => s + f.bmr, 0), took = fs.reduce((s, f) => s + f.bmr, 0);
     const med = AC.split.GER.filter(([from]) => from <= 17).pop()![1].med;
     expect(med).toBe(0.3);
-    // It stops once it has its share: never more than the share and one group over.
+    // Whole groups, the nearest to its share: one group, or never more than the share and half the last group over.
     expect(took).toBeGreaterThan(0);
-    expect(took).toBeLessThanOrEqual(0.7 * med * all + Math.max(...fs.map((f) => f.bmr)));
+    const big = Math.max(...fs.map((f) => f.bmr));
+    expect(took).toBeLessThanOrEqual(Math.max(big, 0.7 * med * all + big / 2));
   });
 
   it("holds the record's share of the RAF at home in August 1941, not every group in reach (b569(3))", () => {
@@ -395,11 +396,15 @@ describe("the book: history's campaigns on their months (b549)", () => {
       return (c?.groups ?? []).reduce((s, id) => s + (g.airFleets.find((f) => f.id === id)?.[k] ?? 0), 0);
     };
     const big = (k: 'bmr' | 'ftr'): number => Math.max(...raf.map((f) => f[k]));
-    // The night bombing: 0.3 of the bombers at home; the sweeps: 0.2 of the fighters. Each is flown.
+    // The historian's shares are of the whole RAF at home: the night bombing 0.3 of it, in bombers; the sweeps 0.2,
+    // in fighters. Each is flown, in whole groups: one, or never more than the share and half the last group over.
+    const all = bmr + ftr;
     expect(held(17, 'bmr')).toBeGreaterThan(0);
-    expect(held(17, 'bmr')).toBeLessThanOrEqual(0.3 * bmr + big('bmr'));
+    expect(held(17, 'bmr')).toBeLessThanOrEqual(Math.max(big('bmr'), 0.3 * all + big('bmr') / 2));
     expect(held(18, 'ftr')).toBeGreaterThan(0);
-    expect(held(18, 'ftr')).toBeLessThanOrEqual(0.2 * ftr + big('ftr'));
+    expect(held(18, 'ftr')).toBeLessThanOrEqual(Math.max(big('ftr'), 0.2 * all + big('ftr') / 2));
+    // Together about half the RAF at home, as the record had it, not nine tenths.
+    expect((held(17, 'bmr') + held(18, 'ftr')) / all).toBeLessThan(0.6);
   });
 
   it("opens the battle for the sky over southern England in August 1940 and closes it when its months are over", () => {

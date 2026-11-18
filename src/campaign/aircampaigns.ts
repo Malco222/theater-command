@@ -639,34 +639,39 @@ function theatreOf(g: Game, nat: string, th: string | undefined): { mine: (f: Ai
   return { mine: () => true, part: 1 };
 }
 
+/** The front-line aircraft of a kind in a nation's theatre: fighters, or bombers. */
+function strength(g: Game, nat: string, th: { mine: (f: AirFleet) => boolean }, bombers: boolean): number {
+  return airFleetsOf(g, nat).reduce((s, f) => s + (!afloat(f) && th.mine(f) ? (bombers ? (f.kind !== 'ftr' ? f.bmr : 0) : (f.kind !== 'bmr' ? f.ftr : 0)) : 0), 0);
+}
+
 /**
- * The groups a book row takes in its month (b569(3) and (4)): 'share' of its theatre's front-line aircraft of the
- * kind, whatever other rows hold this month, those already in reach of its targets first, the nearest first. A group
- * out of reach is moved, as the record's air forces moved, to the field its side holds nearest the record's bases for
- * the month that is in reach of the targets, one with room for it first; with no such field it stays where it is and
- * the row does without it. With none of the record's bases on the chart, no group is moved.
+ * The groups a book row takes in its month (b569(3) and (4)): 'want' aircraft of the kind, those already in reach of
+ * its targets first, the nearest first. Groups are whole, so it takes the nearest whole groups to its want: it always
+ * takes one, and takes another only while that comes nearer the want than stopping does. A group out of reach is
+ * moved, as the record's air forces moved, to the field its side holds nearest the record's bases for the month that
+ * is in reach of the targets, one with room for it first; with no such field it stays where it is and the row does
+ * without it. With none of the record's bases on the chart, no group is moved.
  */
-function bookGroups(g: Game, nat: string, targets: number[], bombers: boolean, share: number, taken: Set<number>, th: { mine: (f: AirFleet) => boolean; part: number }, bases: number[]): AirFleet[] {
-  const kind = airFleetsOf(g, nat).filter((f) => !afloat(f) && th.mine(f) && (bombers ? f.bmr > 0 && f.kind !== 'ftr' : f.ftr > 0 && f.kind !== 'bmr'));
-  const fs = kind.filter((f) => !taken.has(f.id));
+function bookGroups(g: Game, nat: string, targets: number[], bombers: boolean, want: number, taken: Set<number>, th: { mine: (f: AirFleet) => boolean }, bases: number[]): AirFleet[] {
+  const fs = airFleetsOf(g, nat).filter((f) => !afloat(f) && th.mine(f) && !taken.has(f.id) && (bombers ? f.bmr > 0 && f.kind !== 'ftr' : f.ftr > 0 && f.kind !== 'bmr'));
   const size = (f: AirFleet): number => (bombers ? f.bmr : f.ftr);
   const range = (f: AirFleet): number => (bombers ? airRange(f, g).bmr : airRange(f, g).ftr);
   const nearFrom = (at: number): number => Math.min(...targets.map((t) => km(g, at, t)));
   const near = (f: AirFleet): number => Math.min(...targets.map((t) => kmTo(g, f, t)));
   const toBase = (at: number): number => Math.min(...bases.map((b) => km(g, at, b)));
-  const want = share * th.part * kind.reduce((s, f) => s + size(f), 0) - 1e-9;
   const out: AirFleet[] = [];
   let got = 0;
+  const enough = (f: AirFleet): boolean => want <= 0 || (got > 0 && got + size(f) / 2 > want);
   const can = fs.filter((f) => near(f) <= range(f)).sort((a, b) => near(a) - near(b) || a.id - b.id);
   for (const f of can) {
-    if (got >= want) return out;
+    if (enough(f)) return out;
     out.push(f);
     got += size(f);
   }
   if (!bases.length) return out;
   const rest = fs.filter((f) => !can.includes(f)).sort((a, b) => toBase(a.base) - toBase(b.base) || a.id - b.id);
   for (const f of rest) {
-    if (got >= want) break;
+    if (enough(f)) break;
     const fields = g.regions.filter((r) => nearFrom(r.id) <= range(f) && whyNotBase(g, f, r, true) === null)
       .sort((a, b) => Number(fieldRoom(g, b.id, f)) - Number(fieldRoom(g, a.id, f)) || toBase(a.id) - toBase(b.id) || a.id - b.id);
     if (!fields.length || !rebaseAir(g, f, fields[0], true)) continue;
@@ -700,11 +705,15 @@ function bookMonth(g: Game): void {
     const share = row.share ? rowAt(row.share, g.turn) : 1;
     const th = theatreOf(g, row.nat, row.theatre);
     const bases = (row.bases ? rowAt(row.bases, g.turn) : []).map((nm) => g.byName[nm]?.id).filter((b): b is number => b !== undefined);
+    // The share is of the theatre's whole front-line strength, as the historian gives it, whatever other rows hold
+    // this month: a bombing row fills it with bombers, a fight for the sky with each kind it flies at that share.
+    const ftr = strength(g, row.nat, th, false) * th.part, bmr = strength(g, row.nat, th, true) * th.part;
     const main = kind === 'sky'
-      ? [...bookGroups(g, row.nat, targets, false, share, taken, th, bases), ...(p!.bombers ? bookGroups(g, row.nat, targets, true, share, taken, th, bases) : [])]
-      : bookGroups(g, row.nat, targets, true, share, taken, th, bases);
+      ? [...bookGroups(g, row.nat, targets, false, share * ftr, taken, th, bases), ...(p!.bombers ? bookGroups(g, row.nat, targets, true, share * bmr, taken, th, bases) : [])]
+      : bookGroups(g, row.nat, targets, true, share * (ftr + bmr), taken, th, bases);
     for (const f of main) taken.add(f.id);
-    const esc = kind === 'bomb' && !night && p!.escort ? bookGroups(g, row.nat, targets, false, p!.escort, taken, th, bases) : [];
+    // Its escort: 'escort' of the theatre's fighters (the feature builder's reading).
+    const esc = kind === 'bomb' && !night && p!.escort ? bookGroups(g, row.nat, targets, false, p!.escort * ftr, taken, th, bases) : [];
     for (const f of esc) taken.add(f.id);
     const aim = p!.aim ?? 'works';
     if (!c) {
