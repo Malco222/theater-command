@@ -17,17 +17,24 @@
  *  - The staffs press what is left: on the chief enemy's fall the great powers still standing that they are at war
  *    with already are named an offensive at once, and the war newly declared is pressed from its first month.
  *
- *  - Vichy does not outlive a France that is free again in its own capital. At that month's end its ground at home
- *    and overseas is France's and its troops answer to France, unless a player is playing it.
+ *  - Vichy does not outlive Germany. Once Germany has fallen and France is free again in its own capital, at that
+ *    month's end Vichy's ground at home and overseas is France's and its troops answer to France, unless a player is
+ *    playing it.
  *
- * (A freed country taking up the wars it was in when it fell is liberation.ts's, where it returns.)
+ *  - A freed country takes up the wars it was in when it fell, beside those who freed it: in the month their chief
+ *    enemy falls, or as it returns if he has fallen already (liberation.ts).
+ *
+ * Nothing here acts before the chief enemy's fall, so a war nobody plays goes as it did until then. (The dial
+ * 'before' in the data lets Vichy end with a free France in Paris, and a freed country take up its old wars as it
+ * returns, while the chief enemy still stands: the letter of ruling 115(b) and (c), which moved Berlin a month or two
+ * earlier in three wars of twenty-four and so waits on the design director.)
  * The numbers are in data/campaign/liberation.json, 'finish'.
  */
 import { turnToDate } from '../core/ticket';
 import { airOnFall } from './air';
 import { DIPLOMACY, majorsOf } from './diplomacy';
 import { allied, atWar, bloc, declareWar, headline, theName, warning } from './game';
-import { LIB, handBack, recordFall, warsAtFall } from './liberation';
+import { LIB, handBack, recordFall, rejoinWars, warsAtFall } from './liberation';
 import { fleetsOnFall } from './navy';
 import { dropSieges } from './siege';
 import { launch } from './staff';
@@ -76,6 +83,17 @@ export function finishMonthEnd(g: Game): void {
   for (const x of majors) {
     const X = g.nations[x];
     if (!X || X.alive || X.fellOn?.turn !== g.turn) continue;
+    // A country freed before its liberators' chief enemy fell takes up its old wars now (ruling 115(c)).
+    for (const N of Object.values(g.nations)) {
+      if (!N.alive || !N.freedOn || N.id === g.human || !sideOf(g, N.id) || DIPLOMACY.leaders[sideOf(g, N.id) === 'allies' ? 'axis' : 'allies'] !== x) continue;
+      const on = rejoinWars(g, N.id, N.freedOn.by);
+      if (!on.length) continue;
+      const names = on.map((e) => theName(g.nations[e]));
+      const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+      const said = (whom: string): string => `With ${theName(X)} beaten, ${theName(N)} takes up its old war with ${whom} again, beside those who freed it.`;
+      if (g.human && on.includes(g.human)) warning(g, 'An old enemy returns', said('you'), g.human, undefined, N.id);
+      else headline(g, 'event', said(list), N.id);
+    }
     for (const who of warsAtFall(g, x)) {
       const G = g.nations[who], side = sideOf(g, who);
       if (!majors.includes(who) || who === g.human || !G?.alive || G.dormant || !side) continue;
@@ -115,13 +133,16 @@ export function finishMonthOpen(g: Game): void {
 }
 
 /**
- * Vichy's end (ruling 115(b)): a government and not a country. Once France is free again and holds its own capital,
- * what Vichy holds at home and overseas is France's, its troops answer to France, its wars are over, and it is
- * struck off as the fallen are. Never while a player is playing it.
+ * Vichy's end (ruling 115(b)): a government and not a country, and it does not outlive Germany. Once Germany has
+ * fallen and France is free again and holds its own capital, what Vichy holds at home and overseas is France's, its
+ * troops answer to France, its wars are over, and it is struck off as the fallen are. Never while a player is
+ * playing it.
  */
 function endVichy(g: Game): void {
   const V = g.nations.VIC, F = g.nations.FRA;
   if (!V?.alive || V.dormant || g.human === 'VIC' || !F?.alive || !F.freedOn || F.capital < 0 || g.regions[F.capital].ctrl !== 'FRA') return;
+  // (Not before Germany has fallen, unless the data lets it end with a free France alone.)
+  if (!LIB.finish.before && g.nations[DIPLOMACY.leaders.axis]?.alive) return;
   V.alive = false;
   V.fellOn = { turn: g.turn, week: g.week, to: 'FRA', how: 'annexed' };
   recordFall(g, 'VIC', 'FRA', 'annexed');
