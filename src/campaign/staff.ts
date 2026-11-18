@@ -101,7 +101,7 @@ const OPEN = openData as unknown as {
   /** A staff grows bolder the longer its front is quiet: months of quiet, and what each stage does. */
   impatience: { after: number[]; ratio: number[]; odds: number[]; effort: number; floor: number; any: number; local: number[]; locals: number };
   /** The second front: when a staff with shipping and no land front crosses the sea, and with what. */
-  descent: Landings & { after: number; abroad?: number; lead?: number; day?: boolean; wait?: boolean; afresh?: boolean; room?: boolean; joint?: boolean; hold?: number; feed?: number; strength?: unknown; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
+  descent: Landings & { after: number; abroad?: number; lead?: number; day?: boolean; wait?: boolean; afresh?: boolean; room?: boolean; joint?: boolean; stands?: boolean; hold?: number; feed?: number; strength?: unknown; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
   /** The coast watch: the share of its field corps a staff will keep in the harbours of its homeland, the fewest it keeps, and the most in one harbour. */
   coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };
 };
@@ -1635,7 +1635,8 @@ export function seaFoe(g: Game, nat: string, slot = 0): { foe: string; L: Landin
  * The army overseas. A nation with shipping whose troops stand idle on a far shore (friendly ground not in one
  * piece with its capital, with no enemy on it or next to it) crosses from a port there against an enemy it has not
  * fought for a season. The quay and the enemy are chosen together, by how lightly the harbours in reach are held,
- * from the ports with a landing force of its own within three marches, and looked at again every three months.
+ * from the ports with a landing force of its own within three marches (of two that are equal, the one it stands at:
+ * ruling 233(y)), and looked at again every three months.
  * While the men it put ashore still have a front to hold, the same quay feeds them. With no lane open from any of
  * those ports it waits where it was, or at the port nearest his harbours (open.json, 'descent.wait').
  */
@@ -1677,7 +1678,7 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
   }
   if (!idle.length) return drop();
   const shut = g.seas.map((z) => closedTo(g, z.id, nat));
-  let best: { foe: string; quay: Region } | null = null, bw = 0, bs = Infinity;
+  let best: { foe: string; quay: Region } | null = null, bw = 0, bs = Infinity, bh = -1;
   let near: { foe: string; quay: Region } | null = null, bd = Infinity;
   for (const p of idle) {
     if (!room(p)) continue;
@@ -1694,9 +1695,15 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
       for (const j of r.nb) if (d[j] < 0 && allied(g, nat, g.regions[j].ctrl)) { d[j] = d[r.id] + 1; q.push(j); }
     }
     if (spare < D.force) continue;
+    // (Ruling 233(y), open.json `descent.stands`: of two quays equal in worth and in seas the army names the one it
+    // stands at, the port with more of its own corps on the quay, then with more of them within the marches. Before,
+    // the first port of the list won: in May 1944 America's army, four corps in Cornwall and two in Kent, named Kent;
+    // the four were sent elsewhere, and for three months the two were one short of a landing force.)
+    const stands = D.stands ? 100 * p.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng').length + spare : 0;
     foes.forEach((e, k) => {
       const w = quayWorth(g, nat, p, shores[k], shut);
-      if (w.worth > bw + 1e-9 || (w.worth > 0 && Math.abs(w.worth - bw) <= 1e-9 && w.seas < bs)) { best = { foe: e, quay: p }; bw = w.worth; bs = w.seas; }
+      const even = w.worth > 0 && Math.abs(w.worth - bw) <= 1e-9;
+      if (w.worth > bw + 1e-9 || (even && (w.seas < bs || (w.seas === bs && stands > bh)))) { best = { foe: e, quay: p }; bw = w.worth; bs = w.seas; bh = stands; }
       // Seas between this quay and the nearest of his harbours, by the shortest way round, whoever holds them.
       const d = shores[k].length ? seaHops(g, p.seas, shores[k]) : Infinity;
       if (d < bd) { bd = d; near = { foe: e, quay: p }; }

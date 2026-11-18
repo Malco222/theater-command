@@ -1,4 +1,4 @@
-// Ruling 233, riders (j), (k), (q), (r), (s), (u), (v), (w) and (x) (the design director's b506 to b532; the grand campaign, computer staffs only).
+// Ruling 233, riders (j), (k), (q), (r), (s), (u), (v), (w), (x) and (y) (the design director's b506 to b548; the grand campaign, computer staffs only).
 // (j) History's list of shores has an order: when the month comes for a later shore of the list, a staff's home army
 //     turns to the enemy who holds it nearest the home ports, though its first enemy across the sea still stands.
 //     Britain turns to France in 1944 while Italy fights on. (Before it a staff kept one enemy across the sea for as
@@ -21,6 +21,8 @@
 // (x) The home army's quay is chosen afresh the month its staff's target changes, and a home port where its allies'
 //     corps leave no room for the force is passed over while another port serves (b532; 'descent.afresh', 'descent.room'):
 //     the invasion of France was mounted from every harbour of the south coast, not from one.
+// (y) An army abroad names the quay it stands at (b548; 'descent.stands'): of two ports equal in worth and in seas,
+//     the one with more of its own corps on the quay, then within the marches. Before, the first port of the list won.
 import { describe, expect, it } from 'vitest';
 import fleetData from '../data/campaign/fleets.json';
 import openData from '../data/campaign/open.json';
@@ -33,7 +35,7 @@ import { lodgment, onTheDay, opensNow, opensOn, opensSoon, quayGuests, seaBase, 
 import type { Corps, Game, Region } from '../src/campaign/types';
 
 const FRANCE_44 = 57;
-const DESCENT = openData.descent as unknown as { lead: number; wait: boolean; day: boolean; afresh: boolean; room: boolean; joint: boolean; force: number };
+const DESCENT = openData.descent as unknown as { lead: number; wait: boolean; day: boolean; afresh: boolean; room: boolean; joint: boolean; stands: boolean; force: number };
 const LEAD = DESCENT.lead;
 /** A grand war nobody plays: Britain at war with Germany and Italy, France fallen, and Britain's staff set on Italy since last year. */
 const war = (turn: number, stop = 3, human: string | null = null): Game => {
@@ -563,5 +565,53 @@ describe('the home army\'s quay is chosen afresh, and never a harbour with no ro
     crowd(kept, best, 3);
     kept.turn++;
     expect(seaBase(kept, 'UK')?.id).not.toBe(best.id);
+  });
+});
+
+describe('an army abroad names the quay it stands at (233(y))', () => {
+  /** America at war beside Britain in May 1944, France in German hands and every sea open: its corps idle in Britain, `west` of them in Cornwall and `east` in Kent. */
+  const inBritain = (west: number, east: number): { g: Game; cornwall: Region; kent: Region } => {
+    const g = startOpen(createGame(3, null));
+    g.nations.USA.align = g.nations.UK.align;
+    expect(allied(g, 'USA', 'UK')).toBe(true);
+    for (const [a, b] of [['GER', 'UK'], ['GER', 'USA']]) setWar(g, a, b);
+    for (const r of g.regions) if (r.owner === 'FRA' && !r.overseas && r.nb.length > 0) r.ctrl = 'GER';
+    g.turn = FRANCE_44;
+    const cornwall = g.byName.Cornwall, kent = g.byName.Kent;
+    const us = g.corps.filter((x) => x.nat === 'USA' && !x.dead && x.kind !== 'fort' && x.kind !== 'eng' && !x.town);
+    expect(us.length).toBeGreaterThanOrEqual(west + east);
+    us.slice(0, west + east).forEach((c, i) => {
+      const from = g.regions[c.reg], at = i < west ? cornwall : kent;
+      from.units.splice(from.units.indexOf(c), 1);
+      c.reg = at.id;
+      at.units.push(c);
+    });
+    return { g, cornwall, kent };
+  };
+
+  it('is in the data', () => {
+    expect(DESCENT.stands).toBe(true);
+  });
+
+  it('of two quays equal in worth and in seas, the one with more of its corps on it', () => {
+    // (Four corps on the quay at Kent; Hampshire, a march away, is as good a port and comes first in the list.)
+    const { g, kent } = inBritain(2, 4);
+    expect(seaFoe(g, 'USA', 1)).toMatchObject({ foe: 'GER', second: true });
+    expect(seaBase(g, 'USA', 1)).toBe(kent);
+    // (And the other way round: the army stands in Cornwall, and Cornwall is named.)
+    const b = inBritain(4, 2);
+    expect(seaFoe(b.g, 'USA', 1)?.foe).toBe('GER');
+    expect(seaBase(b.g, 'USA', 1)).toBe(b.cornwall);
+  });
+
+  it('as first built (the dial off) the first port of the list won the tie: a quay with none of its corps on it', () => {
+    DESCENT.stands = false;
+    try {
+      const { g, kent } = inBritain(2, 4);
+      expect(seaFoe(g, 'USA', 1)?.foe).toBe('GER');
+      const first = seaBase(g, 'USA', 1)!;
+      expect(first).not.toBe(kent);
+      expect(first.units.filter((u) => u.nat === 'USA')).toHaveLength(0);
+    } finally { DESCENT.stands = true; }
   });
 });
