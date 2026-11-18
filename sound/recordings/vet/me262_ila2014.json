@@ -1,0 +1,49 @@
+[
+ {
+  "file": "me262_ila2014.mka",
+  "format": "vorbis 44100 Hz 2 ch 319 kbps",
+  "seconds": 207.1,
+  "read": [
+   0,
+   207.1
+  ],
+  "fromFilm": false,
+  "peakDb": 0.3,
+  "lufs": -12.4,
+  "loudestMomentLufs": -7.7,
+  "floorDb": -24.7,
+  "rangeDb": 12.2,
+  "topKhz": 16,
+  "bands": {
+   "sub": -54.5,
+   "low": -23.6,
+   "lowmid": -7.7,
+   "mid": -3,
+   "presence": -5.4,
+   "air": -16.3
+  },
+  "stereo": 0.54,
+  "talk": 0.38,
+  "events": 1,
+  "firstEvents": [
+   {
+    "at": 0.155,
+    "db": -16.2
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 0.155,
+    "db": -16.2
+   }
+  ],
+  "steady": {
+   "from": 4.5,
+   "to": 12.5,
+   "wobbleDb": 0.53
+  },
+  "flags": [
+   "NOISY: the quietest moments sit at -25 dB (no clean silence between events)"
+  ]
+ }
+]
