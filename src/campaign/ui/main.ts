@@ -98,6 +98,7 @@ import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type
 import { tenthPct } from '../../core/math';
 import { turnToDate } from '../../core/ticket';
 import { cardChanging, cardDrawn as lessonCard, guideCard, initFirstHour, lessonsAside, lessonsBegun, lessonsDrawn } from './firsthour';
+import { EVERYWHERE, Lines, Sheet, boxOf, boxOfLine, meetsAny, piece, pieceAt, within, type Area, type Piece } from './cull';
 
 let g: Game;
 /** The month after the last one the historical plans cover: February 1945, when the Bulge has been closed. */
@@ -328,11 +329,25 @@ function mix(a: string, b: string, t: number): string {
   return `rgb(${c[0]},${c[1]},${c[2]})`;
 }
 
+/** The outlines already written out: a province's never changes, and every redraw used to write each one afresh, several times. */
+const pathsMade = new WeakMap<object, string>();
 function pathOf(polys: [number, number][][][]): string {
-  let d = '';
+  let d = pathsMade.get(polys);
+  if (d !== undefined) return d;
+  d = '';
   for (const poly of polys) for (const ring of poly) d += 'M' + ring.map((p) => `${p[0]} ${p[1]}`).join('L') + 'Z';
+  pathsMade.set(polys, d);
   return d;
 }
+/** The box round an outline (a province's, kept as its outline is). */
+const boxesMade = new WeakMap<object, Area>();
+function areaOf(polys: [number, number][][][]): Area {
+  let b = boxesMade.get(polys);
+  if (!b) { b = boxOf(polys); boxesMade.set(polys, b); }
+  return b;
+}
+/** A province's outline as a piece of a layer: what is drawn on it reaches no further than a stroke beyond it. */
+const onOutline = (html: string, r: Region): Piece => piece(html, areaOf(r.polys), 4);
 
 // ---- Unit symbols (standard military map symbols, drawn in a w x h box) -------------------
 
@@ -456,7 +471,7 @@ function hullIcon(f: Fleet): string {
 }
 
 /** The fleets on the map: one marker for each navy in each sea, and a smaller one for ships lying in harbour. */
-function fleetMarks(): string {
+function fleetMarks(): Piece[] {
   // In the grand campaign the player sees his own side's fleets, and anybody else's only as far as they have been found.
   const fog = carrierRules(g) && !!g.human;
   const seen = new Map<number, FleetSeen>(fog ? fleetsInSight(g).map((s) => [s.id, s]) : []);
@@ -475,7 +490,7 @@ function fleetMarks(): string {
   const rows = new Map<string, number>();
   for (const key of groups.keys()) { const k = key.split(':').slice(0, 2).join(':'); rows.set(k, (rows.get(k) ?? 0) + 1); }
   const used = new Map<string, number>();
-  let out = '';
+  const out: Piece[] = [];
   for (const [key, fs] of groups) {
     const [where, idText, , tail] = key.split(':');
     const id = Number(idText), slot = `${where}:${id}`;
@@ -498,7 +513,9 @@ function fleetMarks(): string {
     let x: number, y: number, small = false;
     if (where === 'p') { const r = g.regions[id]; x = r.x + 16 + i * 12; y = r.y + 12; small = true; }
     else { const z = g.seas[id]; x = z.x + (i - (rows.get(slot)! - 1) / 2) * 30; y = z.y + (where === 'h' ? 37 : 19); small = where === 'h'; }
-    out += `<g class="ctr flt${!vague && fs[0].stance === 'raid' ? ' raid' : ''}${small ? ' port' : ''}${vague ? ' vague' : ''}${targets.length ? ' aim' : ''}${tipText && where !== 'p' ? ' ftip' : ''}"${own ? ` data-fleets="${fs.map((f) => f.id).join(',')}"` : targets.length ? ` data-foe="${targets.join(',')}"` : ''} transform="translate(${x.toFixed(1)} ${y.toFixed(1)})${small ? ' scale(.68)' : ''}">${tipText ? `<title>${esc(tipText)}</title><circle class="fhit" r="15"/>` : ''}${picked ? '<circle class="fsel" r="17"/>' : ''}${targets.length ? '<circle class="faim" r="16"/>' : ''}<path class="hull" d="${shape}" fill="${g.nations[fs[0].nat].color}"/><g class="jack" transform="translate(-5 -12.4)">${flagUse(fs[0].nat, g.nations[fs[0].nat].color, 10, 6.4)}<rect width="10" height="6.4" fill="none"/></g><text x="0" y="11.5">${vague ? '?' : n}</text>${badge ? `<g class="fbadge"><circle cx="11" cy="-4.5" r="4.4"/><text x="11" y="-2.3">${badge}</text></g>` : ''}${decks ? `<g class="fbadge cvb"><circle cx="-11" cy="-4.5" r="4.4"/><path d="${PLANE}" transform="translate(-11 -4.5) scale(.36)"/></g>` : ''}</g>`;
+    // (The gate marks keep clear of every fleet: where each stands is kept, as its marker gives it.)
+    fleetSpots.push({ x: +x.toFixed(1), y: +y.toFixed(1) });
+    out.push(pieceAt(`<g class="ctr flt${!vague && fs[0].stance === 'raid' ? ' raid' : ''}${small ? ' port' : ''}${vague ? ' vague' : ''}${targets.length ? ' aim' : ''}${tipText && where !== 'p' ? ' ftip' : ''}"${own ? ` data-fleets="${fs.map((f) => f.id).join(',')}"` : targets.length ? ` data-foe="${targets.join(',')}"` : ''} transform="translate(${x.toFixed(1)} ${y.toFixed(1)})${small ? ' scale(.68)' : ''}">${tipText ? `<title>${esc(tipText)}</title><circle class="fhit" r="15"/>` : ''}${picked ? '<circle class="fsel" r="17"/>' : ''}${targets.length ? '<circle class="faim" r="16"/>' : ''}<path class="hull" d="${shape}" fill="${g.nations[fs[0].nat].color}"/><g class="jack" transform="translate(-5 -12.4)">${flagUse(fs[0].nat, g.nations[fs[0].nat].color, 10, 6.4)}<rect width="10" height="6.4" fill="none"/></g><text x="0" y="11.5">${vague ? '?' : n}</text>${badge ? `<g class="fbadge"><circle cx="11" cy="-4.5" r="4.4"/><text x="11" y="-2.3">${badge}</text></g>` : ''}${decks ? `<g class="fbadge cvb"><circle cx="-11" cy="-4.5" r="4.4"/><path d="${PLANE}" transform="translate(-11 -4.5) scale(.36)"/></g>` : ''}</g>`, x, y, 26));
   }
   return out;
 }
@@ -512,8 +529,8 @@ function planeIcon(f: AirFleet): string {
 }
 
 /** Air fleets at their bases, and a line from each one that is flying a mission to where it is flying it. */
-function airBaseMarks(): string {
-  let out = airWar(g) ? airfieldMarks() : '';
+function airBaseMarks(): Piece[] {
+  const out: Piece[] = airWar(g) ? airfieldMarks() : [];
   for (const f of g.airFleets) {
     if (!isOffensive(f.mission) || f.ftr + f.bmr <= 0) continue;
     // A wing aboard flies from where its fleet is, not from its home port.
@@ -522,7 +539,7 @@ function airBaseMarks(): string {
     if (!t) continue;
     const ty = f.mission === 'strike' ? t.y + 9 : t.y, tx = nearX(g, t.x, b.x);
     const c = g.nations[f.nat].color;
-    out += `<path class="airline under" d="M${b.x} ${b.y}L${tx} ${ty}"/><path class="airline${f.mission === 'night' ? ' night' : ''}" d="M${b.x} ${b.y}L${tx} ${ty}" stroke="${c}"/><circle class="airhit" cx="${tx}" cy="${ty}" r="3.4" fill="${c}"/>`;
+    out.push(piece(`<path class="airline under" d="M${b.x} ${b.y}L${tx} ${ty}"/><path class="airline${f.mission === 'night' ? ' night' : ''}" d="M${b.x} ${b.y}L${tx} ${ty}" stroke="${c}"/><circle class="airhit" cx="${tx}" cy="${ty}" r="3.4" fill="${c}"/>`, { x0: Math.min(b.x, tx), y0: Math.min(b.y, ty), x1: Math.max(b.x, tx), y1: Math.max(b.y, ty) }, 6));
   }
   // Under the fog of war an airfield is seen but not what flies from it.
   const hidden = new Set(airWar(g) && g.human ? airfieldsSeen(g).filter((a) => a.groups < 0).map((a) => a.region) : []);
@@ -543,7 +560,9 @@ function airBaseMarks(): string {
     const picked = ui.tab === 'air' && fs.some((f) => f.id === ui.air);
     // In the air war the aircraft stand on their airfield's pad: smaller, with the count under the pad.
     const aw = airWar(g);
-    out += `<g class="ctr flt air${aw ? ' onpad' : ''}" transform="translate(${(r.x - 17 - i * (aw ? 16 : 13)).toFixed(1)} ${(r.y + 11).toFixed(1)}) scale(${aw ? '.5' : '.62'})">${picked ? `<circle class="fsel" r="${aw ? 22 : 17}"/>` : ''}<path class="hull" d="${PLANE}" fill="${g.nations[fs[0].nat].color}"/><g class="jack" transform="translate(${aw ? '9 -17' : '4.5 -12'})">${flagUse(fs[0].nat, g.nations[fs[0].nat].color, 10, 6.4)}<rect width="10" height="6.4" fill="none"/></g><text x="0" y="${aw ? 24 : 17.5}">${n}</text></g>`;
+    const ax = +(r.x - 17 - i * (aw ? 16 : 13)).toFixed(1), ay = +(r.y + 11).toFixed(1);
+    fleetSpots.push({ x: ax, y: ay });
+    out.push(pieceAt(`<g class="ctr flt air${aw ? ' onpad' : ''}" transform="translate(${(r.x - 17 - i * (aw ? 16 : 13)).toFixed(1)} ${(r.y + 11).toFixed(1)}) scale(${aw ? '.5' : '.62'})">${picked ? `<circle class="fsel" r="${aw ? 22 : 17}"/>` : ''}<path class="hull" d="${PLANE}" fill="${g.nations[fs[0].nat].color}"/><g class="jack" transform="translate(${aw ? '9 -17' : '4.5 -12'})">${flagUse(fs[0].nat, g.nations[fs[0].nat].color, 10, 6.4)}<rect width="10" height="6.4" fill="none"/></g><text x="0" y="${aw ? 24 : 17.5}">${n}</text></g>`, ax, ay, 22));
   }
   return out;
 }
@@ -596,7 +615,7 @@ function mount(): void {
       <div class="mapwrap" id="mapwrap">
         <svg id="map" preserveAspectRatio="xMidYMid slice">
           <defs>${flagDefs()}<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
-          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="gates"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="kept"></g><g id="route"></g><g id="guards"></g><g id="wrapw" class="wrapcopy" display="none"></g><g id="wrape" class="wrapcopy" display="none"></g>
+          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="railsigns"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="gates"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="kept"></g><g id="route"></g><g id="guards"></g><g id="wrapw" class="wrapcopy" display="none"></g><g id="wrape" class="wrapcopy" display="none"></g>
         </svg>
         <svg id="mapfx" class="mapfx" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g id="fxmarks"></g><g id="fxcover"></g><g id="ghost"></g></svg>
         <div class="hint" id="hint"></div>
@@ -640,23 +659,104 @@ function mount(): void {
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => { const w = $('#map').clientWidth; if (w && w !== mapPixels) { mapPixels = w; sizeGates(); } }).observe($('#map'));
   window.addEventListener('resize', drawTechLines);
   window.addEventListener('resize', fitMonth);
+  const sheet = (id: string, fresh?: (p: Piece, nodes: ChildNode[]) => void): Sheet => new Sheet($(`#${id}`), fresh);
+  layer = {
+    seas: sheet('seas'), land: new Lines($('#land')),
+    // A province put in the page takes its colour from the last redraw (refresh sets the colours of those already there).
+    regs: sheet('regs', (_p, nodes) => { const el = nodes[0] as Element | undefined; const fill = el ? regFill[Number(el.getAttribute('data-id'))] : undefined; if (el && fill) el.setAttribute('fill', fill); }),
+    occ: sheet('occ'), riches: sheet('riches'), fog: sheet('fog'), marks: sheet('marks'),
+    railLines: new Lines($('#rails')), railSigns: sheet('railsigns'),
+    rivers: sheet('rivers'), towns: sheet('towns'), labels: sheet('labels'), bridges: sheet('bridges'), fleets: sheet('fleets'), units: sheet('units'),
+  };
+}
+
+// ---- Drawing only what the view shows (cull.ts) ------------------------------------------------------------------
+
+/**
+ * The map's heavy layers. Each holds in the page only its pieces in the window round the view; the light ones (the
+ * sea lanes, the flashes and rings, the sieges, the gates and their guards, the city badges, the stamps and the roads)
+ * are drawn whole, as they always were.
+ */
+let layer: {
+  seas: Sheet; land: Lines; regs: Sheet; occ: Sheet; riches: Sheet; fog: Sheet; marks: Sheet; railLines: Lines; railSigns: Sheet;
+  rivers: Sheet; towns: Sheet; labels: Sheet; bridges: Sheet; fleets: Sheet; units: Sheet;
+} | null = null;
+/** Each province's colour as last drawn, by its id: given to its outline when that comes into the page. */
+let regFill: string[] = [];
+/** Where each army's flag stands, as the armies were last drawn (all of them, in the window or not): the flags' boxes are read from it. */
+let flagSpots: { x: number; y: number }[] = [];
+/** Where each fleet and air group stands on the map, as last drawn: the gate marks keep clear of them. */
+let fleetSpots: { x: number; y: number }[] = [];
+/**
+ * How far the window round the view reaches beyond it on every side, as a share of the view's width and height, and
+ * how far beyond the view a piece already drawn is kept. A pan inside the window costs nothing but the move; one that
+ * leaves it puts in the strip it comes to and lets go of what lies beyond the wider box behind.
+ */
+const CULL_IN = 0.3, CULL_OUT = 0.65;
+/** The window the layers hold, the wider box they keep what they hold within, and the width of the view they were made for. */
+let cullWin: Area[] = [EVERYWHERE], cullKeep: Area[] = [EVERYWHERE], cullW = Infinity;
+/** Everything, for the pieces of a layer drawn wherever the view is. */
+const whole = (html: string): Piece => piece(html, EVERYWHERE);
+
+/**
+ * The stretches of the map the screen can show: the view as last put on the map, grown by so much of itself on every
+ * side, and, where that reaches past the seam of a map that goes round the world, the stretch of the map that the copy
+ * beyond the seam shows there. Everything while the map has no view yet.
+ */
+function viewAreas(grow: number): Area[] {
+  const vb = ($('#map') as unknown as SVGSVGElement).viewBox?.baseVal;
+  if (!vb || !(vb.width > 0) || !(vb.height > 0)) return [EVERYWHERE];
+  const gx = vb.width * grow, gy = vb.height * grow;
+  const box: Area = { x0: vb.x - gx, y0: vb.y - gy, x1: vb.x + vb.width + gx, y1: vb.y + vb.height + gy };
+  const out = [box];
+  const round = wrapSpan(g);
+  if (round > 0) {
+    // The copy a world's width east of the map shows the map's west end there, and the one west of it its east end.
+    if (box.x1 > g.x0 + round) out.push({ x0: box.x0 - round, y0: box.y0, x1: box.x1 - round, y1: box.y1 });
+    if (box.x0 < g.x0) out.push({ x0: box.x0 + round, y0: box.y0, x1: box.x1 + round, y1: box.y1 });
+  }
+  return out;
+}
+
+/**
+ * Keeps the layers' window round the view: where the screen now shows something outside it, or the view has been
+ * brought so much nearer that the window holds far more than it needs, the window is made again round the view and
+ * every layer takes in and lets go of its pieces to match.
+ */
+function keepWindow(): void {
+  const need = viewAreas(0);
+  const w = need[0].x1 - need[0].x0;
+  if (need.every((n) => cullWin.some((win) => within(n, win))) && !(w * 2.5 < cullW)) return;
+  cullWin = viewAreas(CULL_IN); cullKeep = viewAreas(CULL_OUT); cullW = w;
+  if (!layer) return;
+  for (const s of [layer.seas, layer.land, layer.regs, layer.occ, layer.riches, layer.fog, layer.marks, layer.railLines, layer.railSigns, layer.rivers, layer.towns, layer.labels, layer.bridges, layer.fleets, layer.units]) s.recull(cullWin, cullKeep);
+  // A cut's lamp put in the page now is sized for the height the railways were drawn at: it takes the height of the map now.
+  sizeLamps();
 }
 
 function drawStatic(): void {
-  $('#seas').innerHTML = seaBorders(g).map((b) => `<path class="seaborder" d="M${b.map((p) => `${p[0]} ${p[1]}`).join('L')}"/>`).join('')
+  if (!layer) return;
+  keepWindow();
+  // (Each piece of a layer carries the box it draws in: a name's is wide enough for its letters, spaced as the map spaces them.)
+  layer.seas.set([
+    ...seaBorders(g).map((b) => piece(`<path class="seaborder" d="M${b.map((p) => `${p[0]} ${p[1]}`).join('L')}"/>`, boxOfLine(b), 2)),
     // The great lakes of the wider world are named where they lie: none is a sea a ship of the war sails.
-    + lakesOf(g).map((l) => `<text class="sealbl narrow lake" x="${l.x}" y="${l.y}">${esc(l.name.replace(/^Lake /, ''))}</text>`).join('')
-    + g.seas.map((z) => {
+    ...lakesOf(g).map((l) => { const name = l.name.replace(/^Lake /, ''); return pieceAt(`<text class="sealbl narrow lake" x="${l.x}" y="${l.y}">${esc(name)}</text>`, l.x, l.y - 3, name.length * 4.5 + 10, 14); }),
+    ...g.seas.map((z) => {
       // Long names, and names in tight water, go on two lines.
       const cut = z.narrow || z.name.length > 12 ? z.name.lastIndexOf(' ') : -1;
       const lines = cut > 0 ? [z.name.slice(0, cut), z.name.slice(cut + 1)] : [z.name];
       const step = z.narrow ? 9 : 11;
-      return `<text class="sealbl${z.narrow ? ' narrow' : ''}" y="${z.y - (lines.length - 1) * step / 2}">${lines.map((t, i) => `<tspan x="${z.x}" dy="${i ? step : 0}">${esc(t)}</tspan>`).join('')}</text>`;
-    }).join('');
-  $('#land').innerHTML = `<path class="land" d="${pathOf(g.land)}"/>`;
-  $('#regs').innerHTML = g.regions.map((r) => `<path class="reg" data-id="${r.id}" d="${pathOf(r.polys)}"/>`).join('');
+      return pieceAt(`<text class="sealbl${z.narrow ? ' narrow' : ''}" y="${z.y - (lines.length - 1) * step / 2}">${lines.map((t, i) => `<tspan x="${z.x}" dy="${i ? step : 0}">${esc(t)}</tspan>`).join('')}</text>`,
+        z.x, z.y - 3, Math.max(...lines.map((t) => t.length)) * 6 + 14, 30);
+    }),
+  ], cullWin);
+  // The land is one outline: each piece of it is drawn while it lies in the window, in one path as before.
+  layer.land.set([{ head: '<path class="land" d="', tail: '"/>', bits: g.land.map((poly) => piece(poly.map((ring) => 'M' + ring.map((p) => `${p[0]} ${p[1]}`).join('L') + 'Z').join(''), boxOf([poly]), 2)) }], cullWin);
+  regFill = [];
+  layer.regs.set(g.regions.map((r) => onOutline(`<path class="reg" data-id="${r.id}" d="${pathOf(r.polys)}"/>`, r)), cullWin);
   // The great rivers, each a smooth line with its name set along its middle reach.
-  $('#rivers').innerHTML = riversOf(g).map((rv) => {
+  layer.rivers.set(riversOf(g).map((rv) => {
     const p = rv.pts;
     let d = `M${p[0][0]} ${p[0][1]}`;
     for (let i = 0; i < p.length - 1; i++) {
@@ -669,8 +769,10 @@ function drawStatic(): void {
     let ang = (Math.atan2(p[k + 1][1] - p[k][1], p[k + 1][0] - p[k][0]) * 180) / Math.PI;
     if (ang > 90) ang -= 180; else if (ang < -90) ang += 180;
     const mx = (p[k][0] + p[k + 1][0]) / 2, my = (p[k][1] + p[k + 1][1]) / 2;
-    return `<path class="rivercase" d="${d}"/><path class="river" d="${d}"/>${best > 26 ? `<text class="rivlbl" transform="translate(${mx.toFixed(1)} ${my.toFixed(1)}) rotate(${ang.toFixed(0)})" y="-2.2">${esc(rv.name)}</text>` : ''}`;
-  }).join('');
+    // (The curve strays from its points by at most a third of its longest reach, and the name runs along a reach, half its length each way.)
+    return piece(`<path class="rivercase" d="${d}"/><path class="river" d="${d}"/>${best > 26 ? `<text class="rivlbl" transform="translate(${mx.toFixed(1)} ${my.toFixed(1)}) rotate(${ang.toFixed(0)})" y="-2.2">${esc(rv.name)}</text>` : ''}`,
+      boxOfLine(p), 8 + best / 3 + (best > 26 ? rv.name.length * 2.5 : 0));
+  }), cullWin);
 }
 
 /** Whether a point of the map lies inside a province. */
@@ -689,9 +791,11 @@ let litProvinces = new Set<number>();
  * The railways (the grand campaign). Each line runs from one province's centre to the next by the point where it
  * crosses the border, so each province owns its half: a province whose line is cut has its halves in broken red.
  */
-function railMarks(): string {
-  if (!groundRules(g)) return '';
-  let ok = '', cut = '', old = '', signs = '', lit = '';
+function railMarks(): { ok: Piece[]; cut: Piece[]; old: Piece[]; lit: Piece[]; signs: Piece[] } | null {
+  if (!groundRules(g)) return null;
+  // Each half of a line is a piece of its path, with its own move, so a path holds only the halves in the window.
+  const ok: Piece[] = [], cut: Piece[] = [], old: Piece[] = [], signs: Piece[] = [], lit: Piece[] = [];
+  const half = (x0: number, y0: number, x1: number, y1: number): Piece => piece(`M${x0} ${y0}L${x1} ${y1}`, { x0: Math.min(x0, x1), y0: Math.min(y0, y1), x1: Math.max(x0, x1), y1: Math.max(y0, y1) }, 3);
   // The cut's lamp (the art director's railway brief, section 7): one a cut province, on its longest stretch of track.
   // It stands inside its province by its own width and clear of the town's mark, where any place on its track allows.
   const lamp = new Map<number, { x: number; y: number; d: number; clear: boolean }>();
@@ -722,16 +826,16 @@ function railMarks(): string {
   litProvinces = new Set<number>(tracks.flat());
   for (const l of railLinks(g)) {
     const a = g.regions[l.a], b = g.regions[l.b];
-    const ha = `M${a.x} ${a.y}L${l.x} ${l.y}`, hb = `M${l.x} ${l.y}L${b.x} ${b.y}`;
-    if (glow.has(Math.min(l.a, l.b) * g.regions.length + Math.max(l.a, l.b))) lit += `M${a.x} ${a.y}L${l.x} ${l.y}L${b.x} ${b.y}`;
+    const ha = half(a.x, a.y, l.x, l.y), hb = half(l.x, l.y, b.x, b.y);
+    if (glow.has(Math.min(l.a, l.b) * g.regions.length + Math.max(l.a, l.b))) lit.push(piece(`M${a.x} ${a.y}L${l.x} ${l.y}L${b.x} ${b.y}`, { x0: Math.min(a.x, l.x, b.x), y0: Math.min(a.y, l.y, b.y), x1: Math.max(a.x, l.x, b.x), y1: Math.max(a.y, l.y, b.y) }, 3));
     // A cut shows where the player knows of it: seen now, or as he last knew it, drawn fainter (rulings 113 and 114).
     const ka = cutsSeen.get(l.a), kb = cutsSeen.get(l.b);
-    if (!ka) ok += ha; else if (ka.how === 'now') cut += ha; else old += ha;
-    if (!kb) ok += hb; else if (kb.how === 'now') cut += hb; else old += hb;
+    if (!ka) ok.push(ha); else if (ka.how === 'now') cut.push(ha); else old.push(ha);
+    if (!kb) ok.push(hb); else if (kb.how === 'now') cut.push(hb); else old.push(hb);
     if (ka) stretch(l.a, a, l.x, l.y);
     if (kb) stretch(l.b, b, l.x, l.y);
     // Where a working line meets a cut one it ends in a red buffer bar across the track, at the border (section 6).
-    if (!ka !== !kb && !(works.has(l.a) && works.has(l.b))) signs += `<rect class="railstop${(ka ?? kb)!.how === 'now' ? '' : ' old'}" x="-0.65" y="-2.1" width="1.3" height="4.2" transform="translate(${l.x} ${l.y}) rotate(${((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI).toFixed(0)})"/>`;
+    if (!ka !== !kb && !(works.has(l.a) && works.has(l.b))) signs.push(pieceAt(`<rect class="railstop${(ka ?? kb)!.how === 'now' ? '' : ' old'}" x="-0.65" y="-2.1" width="1.3" height="4.2" transform="translate(${l.x} ${l.y}) rotate(${((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI).toFixed(0)})"/>`, l.x, l.y, 4));
   }
   // (Seen: a red disc with a broken rail in cream. Known from a report or as last seen: the same, hollow, in a dashed
   // ring on a dark see-through disc, so that it reads on every country's ground as a lamp gone out.)
@@ -739,22 +843,37 @@ function railMarks(): string {
   const s = (R / 3.4).toFixed(3);
   for (const [id, p] of lamp) {
     const now = cutsSeen.get(id)!.how === 'now';
-    signs += `<g class="raillamp${now ? '' : ' old'}" data-x="${p.x.toFixed(1)}" data-y="${p.y.toFixed(1)}" transform="translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) scale(${s})">${now && works.has(id) ? '<circle class="ring" r="4.1"/>' : ''}${now ? '' : '<circle class="back" r="3.85"/>'}<circle r="3"/><path d="M-1.9 -0.35H-0.25M0.3 -0.15L1.9 0.95"/></g>`;
+    // (A lamp keeps its size on the screen as the map is brought nearer or sent farther: its box is its size from far up.)
+    signs.push(pieceAt(`<g class="raillamp${now ? '' : ' old'}" data-x="${p.x.toFixed(1)}" data-y="${p.y.toFixed(1)}" transform="translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) scale(${s})">${now && works.has(id) ? '<circle class="ring" r="4.1"/>' : ''}${now ? '' : '<circle class="back" r="3.85"/>'}<circle r="3"/><path d="M-1.9 -0.35H-0.25M0.3 -0.15L1.9 0.95"/></g>`, p.x, p.y, 1.3 * lampUnits(widest() / Math.max(1, mapPixels || 1)) + 2));
   }
-  return `<path class="railbed" d="${ok}"/><path class="railtie" d="${ok}"/>${cut ? `<path class="railcutbed" d="${cut}"/><path class="railcut" d="${cut}"/>` : ''}${old ? `<path class="railcutbed" d="${old}"/><path class="railcut old" d="${old}"/>` : ''}${lit ? `<path class="raillitbed" d="${lit}"/><path class="raillit" d="${lit}"/>` : ''}${signs}`;
+  return { ok, cut, old, lit, signs };
+}
+/** The railways in their layer: the lines as paths of their halves in the window, then the stop bars and lamps. */
+function drawRails(): void {
+  if (!layer) return;
+  const m = railMarks();
+  const line = (cls: string, bits: Piece[]) => ({ head: `<path class="${cls}" d="`, tail: '"/>', bits });
+  layer.railLines.set(!m ? [] : [
+    line('railbed', m.ok), line('railtie', m.ok),
+    ...(m.cut.length ? [line('railcutbed', m.cut), line('railcut', m.cut)] : []),
+    ...(m.old.length ? [line('railcutbed', m.old), line('railcut old', m.old)] : []),
+    ...(m.lit.length ? [line('raillitbed', m.lit), line('raillit', m.lit)] : []),
+  ], cullWin);
+  layer.railSigns.set(m ? m.signs : [], cullWin);
 }
 
 /** The bridges over the rivers: a span where they stand, a broken one in red where they are down (the grand campaign). */
-function bridgeMarks(): string {
-  if (!groundRules(g)) return '';
-  return crossingsOf(g).map((x) => {
+function bridgeMarks(): Piece[] {
+  if (!groundRules(g)) return [];
+  const crossings = crossingsOf(g);
+  return crossings.map((x) => {
     const a = g.regions[x.a], b = g.regions[x.b];
     const ang = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
     const down = bridgeDown(g, x);
     return `<g class="bridge${down ? ' down' : ''}" transform="translate(${x.x} ${x.y}) rotate(${ang.toFixed(0)})">${down
       ? '<path class="deck" d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6"/><path class="wing" d="M-3.6 -1.2l-1.1 -1.1M-3.6 1.2l-1.1 1.1M3.6 -1.2l1.1 -1.1M3.6 1.2l1.1 1.1"/><path class="gap" d="M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3"/>'
       : '<rect class="road" x="-3.6" y="-1.2" width="7.2" height="2.4"/><path class="deck" d="M-3.6 -1.2H3.6M-3.6 1.2H3.6"/><path class="wing" d="M-3.6 -1.2l-1.1 -1.1M-3.6 1.2l-1.1 1.1M3.6 -1.2l1.1 -1.1M3.6 1.2l1.1 1.1"/>'}</g>`;
-  }).join('');
+  }).map((html, i) => pieceAt(html, crossings[i].x, crossings[i].y, 8));
 }
 
 function drawLabels(): void {
@@ -763,7 +882,8 @@ function drawLabels(): void {
   // (A town with an order badge keeps its mark for as long as the badge is drawn: a badge with no town over it reads as its neighbour's.)
   const cities = g.human && g.nations[g.human]?.alive ? ordersByCity(g).filter((c) => c.badge) : [];
   const badged = new Set(cities.map((c) => c.region));
-  $('#towns').innerHTML = list.map((t) => `<g${badged.has(t.region) ? ' class="haso"' : ''} transform="translate(${t.x} ${t.y})${t.size === 'capital' || t.size === 'city' ? ' scale(1.2)' : ''}">${townGlyph(t.size, t.rank, t.size !== 'capital' && !!g.regions[t.region].cap)}</g>`).join('');
+  if (!layer) return;
+  layer.towns.set(list.map((t) => pieceAt(`<g${badged.has(t.region) ? ' class="haso"' : ''} transform="translate(${t.x} ${t.y})${t.size === 'capital' || t.size === 'city' ? ' scale(1.2)' : ''}">${townGlyph(t.size, t.rank, t.size !== 'capital' && !!g.regions[t.region].cap)}</g>`, t.x, t.y - 2, 18)), cullWin);
   // Where each name would stand, and then where it does: names that run into each other are settled first.
   const spots: NameSpot[] = g.regions.map((r) => {
     const busy = r.units.length > 0, t = list[r.id], place = WORLD.labels?.[r.name];
@@ -772,7 +892,19 @@ function drawLabels(): void {
     return { lx, ly, west: place === 'west', nw: r.name.length * (r.cap ? 4.5 : 3.4), fw: figuresWide(t) };
   });
   const slid = settleNames(spots, list);
-  $('#labels').innerHTML = g.regions.map((r) => {
+  // Each province's marks and name are a piece of the layer: the fort and the peaks by its middle, the name and the
+  // worth line where they were settled, with room beyond the width the letters are reckoned at.
+  const marksBox = (r: Region): Area => ({ x0: r.x - 8, y0: r.y - 16, x1: r.x + 28, y1: r.y + 10 });
+  const labelPiece = (r: Region, html: string): Piece => {
+    let b = marksBox(r);
+    const l = labelBox[r.id];
+    if (l) for (const x of l.figs ? [l.name, l.figs] : [l.name]) {
+      const gx = Math.max(6, 0.3 * (x.x1 - x.x0));
+      b = { x0: Math.min(b.x0, x.x0 - gx), y0: Math.min(b.y0, x.y0 - 6), x1: Math.max(b.x1, x.x1 + gx), y1: Math.max(b.y1, x.y1 + 6) };
+    }
+    return piece(html, b);
+  };
+  layer.labels.set(g.regions.map((r) => {
     const busy = r.units.length > 0;
     const t = list[r.id];
     const star = '';
@@ -786,12 +918,12 @@ function drawLabels(): void {
     // The order badge hangs from the town's own mark, which never moves: a name shifts under the army that stands on it.
     badgeSpot[r.id] = { x: t.x, y: t.y + (t.size === 'capital' || t.size === 'city' ? 5.6 : 4.6) };
     // (A name with no room is not written, and its worth line with it: the art director's rule of 2026-11-16.)
-    if (slid[r.id].hide) { delete labelBox[r.id]; labelHtml[r.id] = ''; return `${star}${fort}${high}`; }
+    if (slid[r.id].hide) { delete labelBox[r.id]; labelHtml[r.id] = ''; return labelPiece(r, `${star}${fort}${high}`); }
     // Where the name and the worth line under it lie, for the marks that give way to them (Version 82).
     labelBox[r.id] = { ...nameBoxes(spots[r.id], slid[r.id].dx, slid[r.id].dy), cap: !!r.cap, size: t.size };
     labelHtml[r.id] = `<text class="lbl${r.cap ? ' cap' : t.size === 'city' ? ' big' : ''}${place === 'west' ? ' west' : ''}" x="${lx}" y="${ly}">${esc(r.name)}</text><g class="figs ${t.size}">${townFigures(t, lx, ly + 6.3, place === 'west')}</g>`;
-    return `${star}${fort}${high}${labelHtml[r.id]}`;
-  }).join('');
+    return labelPiece(r, `${star}${fort}${high}${labelHtml[r.id]}`);
+  }), cullWin);
   badgeDrawn = { cities, list };
   $('#obadges').innerHTML = orderBadges(cities, list);
 }
@@ -1002,7 +1134,7 @@ let lampSpots = new Map<number, { x: number; y: number }>();
 /** As the map is brought nearer or sent farther the lamps keep their size on the screen. */
 function sizeLamps(): void {
   const s = (lampUnits() / 3.4).toFixed(3);
-  for (const m of document.querySelectorAll<SVGGElement>('#rails .raillamp')) m.setAttribute('transform', `translate(${m.dataset.x} ${m.dataset.y}) scale(${s})`);
+  for (const m of document.querySelectorAll<SVGGElement>('#railsigns .raillamp')) m.setAttribute('transform', `translate(${m.dataset.x} ${m.dataset.y}) scale(${s})`);
 }
 /**
  * The provinces that have just changed hands flash once (ruling 206). The list is kept for the month, and every
@@ -1152,10 +1284,7 @@ function drawGates(): void {
   const views = gateViews(g, g.human && g.nations[g.human]?.alive ? g.human : null);
   // What a mark must not lie on: every army's flag, every fleet at sea or in port, and the marks of the towns.
   const solid: Box[] = [...flagBoxes()];
-  for (const f of document.querySelectorAll('#fleets g.ctr')) {
-    const m = /translate\(([-\d.]+)[ ,]+([-\d.]+)\)/.exec(f.getAttribute('transform') ?? '');
-    if (m) solid.push({ x0: +m[1] - 13, y0: +m[2] - 11, x1: +m[1] + 13, y1: +m[2] + 9 });
-  }
+  for (const f of fleetSpots) solid.push({ x0: f.x - 13, y0: f.y - 11, x1: f.x + 13, y1: f.y + 9 });
   const list = towns(g);
   for (const t of list) if (t.size !== 'village') solid.push(markBox(t));
   solid.push(...shownLabels());
@@ -1245,14 +1374,12 @@ function askGate(id: number): void {
   refresh();
 }
 
-/** The box of every army's flag on the map just now, with the size it carries over it: read from what is drawn, so only what the player sees. */
+/**
+ * The box of every army's flag on the map just now, with the size it carries over it: as the armies were last drawn,
+ * so only what the player sees. (Read from where each flag was put, as the layer holds only those in the window.)
+ */
 function flagBoxes(): Box[] {
-  const out: Box[] = [];
-  for (const el of document.querySelectorAll('#units g.ctr.army')) {
-    const m = /translate\(([-\d.]+)[ ,]+([-\d.]+)\)/.exec(el.getAttribute('transform') ?? '');
-    if (m) out.push({ x0: +m[1], y0: +m[2] - 6, x1: +m[1] + 22, y1: +m[2] + 14 });
-  }
-  return out;
+  return flagSpots.map(({ x, y }) => ({ x0: x, y0: y - 6, x1: x + 22, y1: y + 14 }));
 }
 
 /**
@@ -1377,18 +1504,22 @@ function refresh(): void {
   const myTurn = humanUp(g);
   // Any other order to a corps ends its kept march: the page says so as soon as the order is given (Version 82).
   if (me && myTurn) settleMarches(g);
-  // Region colours: who holds it.
-  const regs = $('#regs').children;
-  let occ = '';
+  if (!layer) return;
+  // The heavy layers hold what lies in the window round the view (cull.ts): the window first, for the view as it is now.
+  keepWindow();
+  // Region colours: who holds it. (A province in the page is given its new colour; one out of it takes it as it comes in.)
+  const regs = layer.regs.pieces;
+  const occ: Piece[] = [];
   for (const r of g.regions) {
     const n = g.nations[r.ctrl];
     // The League shows in one colour of its own, as the third alliance it is.
-    (regs[r.id] as SVGPathElement).setAttribute('fill', mix(n.league ? LEAGUE.color : n.color, '#e9e2cf', n.atWar.length ? 0.4 : n.league ? 0.5 : 0.63));
-    if (r.ctrl !== r.owner) occ += `<path class="occ" d="${pathOf(r.polys)}"/>`;
+    const fill = mix(n.league ? LEAGUE.color : n.color, '#e9e2cf', n.atWar.length ? 0.4 : n.league ? 0.5 : 0.63);
+    if (regFill[r.id] !== fill) { regFill[r.id] = fill; (regs[r.id]?.nodes?.[0] as Element | undefined)?.setAttribute('fill', fill); }
+    if (r.ctrl !== r.owner) occ.push(onOutline(`<path class="occ" d="${pathOf(r.polys)}"/>`, r));
   }
-  $('#occ').innerHTML = occ;
+  layer.occ.set(occ, cullWin);
   // The worth lens: every province tinted by what it pays, the poor ground dimmed and the rich in gold.
-  $('#riches').innerHTML = ui.lens === 'worth' ? towns(g).map((t) => `<path class="rich k${t.rank}" d="${pathOf(g.regions[t.region].polys)}"/>`).join('') + tradeMarks() : '';
+  layer.riches.set(ui.lens === 'worth' ? [...towns(g).map((t) => onOutline(`<path class="rich k${t.rank}" d="${pathOf(g.regions[t.region].polys)}"/>`, g.regions[t.region])), whole(tradeMarks())] : [], cullWin);
   ($('#legtrade') as HTMLElement).hidden = !(ui.lens === 'worth' && tradeRules(g) && g.trade.length > 0);
   $('#map').classList.toggle('lensworth', ui.lens === 'worth');
   $('#mapfx').classList.toggle('lensworth', ui.lens === 'worth');
@@ -1396,9 +1527,9 @@ function refresh(): void {
   // The fog of war: ground the player's side cannot see into is veiled, lightly where an army shows as a flag and a count.
   seen = sight(g);
   const foggy = fogOn(g);
-  let veil = '';
-  if (foggy) for (const r of g.regions) if (seen[r.id] < 2) veil += `<path class="fog ${seen[r.id] ? 'dim' : 'dark'}" d="${pathOf(r.polys)}"/>`;
-  $('#fog').innerHTML = veil;
+  const veil: Piece[] = [];
+  if (foggy) for (const r of g.regions) if (seen[r.id] < 2) veil.push(onOutline(`<path class="fog ${seen[r.id] ? 'dim' : 'dark'}" d="${pathOf(r.polys)}"/>`, r));
+  layer.fog.set(veil, cullWin);
   ($('#legfog') as HTMLElement).hidden = !foggy;
   // Where an air force has won the sky, the region is ringed in its colour.
   let skies = '';
@@ -1429,8 +1560,12 @@ function refresh(): void {
   $('#fxmarks').innerHTML = freeable + sg.turning + pm.moving + directiveMark();
   $('#orders').innerHTML = wonStamps();
 
-  // Where the picked corps can go.
-  let marks = '';
+  // Where the picked corps can go. (Each mark is a piece of its layer: a province's outline, a sea's ring, or, for the air war's marks, the whole of them.)
+  const marks: Piece[] = [];
+  const mark = (html: string, r: Region): void => { marks.push(onOutline(html, r)); };
+  // (Where the army in hand can march, ride or land is kept in the page wherever the view is: the first hour's pointer
+  // picks one of these marks and follows it as the map moves, off the screen and back, as it did before.)
+  const markGo = (html: string): void => { marks.push(whole(html)); };
   const picked = pickedCorps();
   reaches = [];
   trainTo = new Set<number>();
@@ -1448,56 +1583,64 @@ function refresh(): void {
   if (!af) ui.airMode = '';
   const raiding = ui.tab === 'air' && airWar(g) && !!g.human && humanUp(g);
   if (!raiding) { ui.raid = ''; ui.lead = -1; }
-  if (raiding && (af || ui.raid)) marks += airWarMarks();
-  else if (af) marks += airMarks(af);
+  if (raiding && (af || ui.raid)) marks.push(whole(airWarMarks()));
+  else if (af) marks.push(whole(airMarks(af)));
   else if (fl) {
-    if (ui.rebase) for (const r of baseTargets(g, fl)) marks += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
+    if (ui.rebase) for (const r of baseTargets(g, fl)) mark(`<path class="mk rail" d="${pathOf(r.polys)}"/>`, r);
     else {
-      for (const z of fleetReach(g, fl)) marks += `<circle class="mk sea${atSea(fl) && fl.zone === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`;
-      for (const id of shellAt) marks += `<path class="mk hit" d="${pathOf(g.regions[id].polys)}"/>`;
+      for (const z of fleetReach(g, fl)) marks.push(pieceAt(`<circle class="mk sea${atSea(fl) && fl.zone === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`, g.seas[z].x, g.seas[z].y + 9, 33));
+      for (const id of shellAt) mark(`<path class="mk hit" d="${pathOf(g.regions[id].polys)}"/>`, g.regions[id]);
     }
   } else if (ui.rail && picked.length) {
-    for (const r of railTargets(picked[0])) marks += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
+    for (const r of railTargets(picked[0])) mark(`<path class="mk rail" d="${pathOf(r.polys)}"/>`, r);
   } else if (ui.land && picked.length) {
-    for (const r of lands) marks += `<path class="mk hit" d="${pathOf(r.polys)}"/>`;
+    for (const r of lands) markGo(`<path class="mk hit" d="${pathOf(r.polys)}"/>`);
   } else if (ui.ship && picked.length) {
     const ports = new Set<number>();
     for (const c of picked) for (const r of shipTargets(g, c)) ports.add(r.id);
-    for (const id of ports) marks += `<path class="mk rail" d="${pathOf(g.regions[id].polys)}"/>`;
+    for (const id of ports) mark(`<path class="mk rail" d="${pathOf(g.regions[id].polys)}"/>`, g.regions[id]);
   } else {
     const goes = new Map<number, boolean>();
     for (const c of picked) { const m = reach(g, c); reaches.push({ from: c.reg, ap: c.ap, map: m }); for (const [id, rc] of m) if (id !== c.reg) goes.set(id, (goes.get(id) ?? false) || rc.attack); }
-    for (const [id, attack] of goes) marks += `<path class="mk ${attack ? 'hit' : 'move'}" d="${pathOf(g.regions[id].polys)}"/>`;
+    for (const [id, attack] of goes) markGo(`<path class="mk ${attack ? 'hit' : 'move'}" d="${pathOf(g.regions[id].polys)}"/>`);
     // Beyond the march, in a second and quieter tint: every province the army in hand could ride to this month (ruling 110(b)).
-    if (ui.tab === 'region') { trainTo = trainReachFor(g, heldCorps(), goes); for (const id of trainTo) marks += `<path class="mk railfar" d="${pathOf(g.regions[id].polys)}"/>`; }
+    if (ui.tab === 'region') { trainTo = trainReachFor(g, heldCorps(), goes); for (const id of trainTo) markGo(`<path class="mk railfar" d="${pathOf(g.regions[id].polys)}"/>`); }
     // Neutral ground next to the picked armies: marching in means war, and the game asks first.
-    for (const id of invasions(g, picked).keys()) if (!goes.has(id)) marks += `<path class="mk war" d="${pathOf(g.regions[id].polys)}"/>`;
+    for (const id of invasions(g, picked).keys()) if (!goes.has(id)) mark(`<path class="mk war" d="${pathOf(g.regions[id].polys)}"/>`, g.regions[id]);
     // Ground the picked tanks cannot enter, where they stand next to it or to somewhere they can reach.
     if (groundRules(g)) {
       const near = new Set<number>([...goes.keys(), ...picked.map((c) => c.reg)]);
-      for (const r of g.regions) if (picked.some((c) => barred(g, c, r) || (g.regions[c.reg].nb.includes(r.id) && noCrossing(g, c.kind, c.reg, r.id))) && r.nb.some((j) => near.has(j))) marks += `<path class="mk nogo" d="${pathOf(r.polys)}"/>`;
+      for (const r of g.regions) if (picked.some((c) => barred(g, c, r) || (g.regions[c.reg].nb.includes(r.id) && noCrossing(g, c.kind, c.reg, r.id))) && r.nb.some((j) => near.has(j))) mark(`<path class="mk nogo" d="${pathOf(r.polys)}"/>`, r);
     }
   }
-  if (ui.sel >= 0) marks += `<path class="mk sel" d="${pathOf(g.regions[ui.sel].polys)}"/>`;
-  else if (ui.sea >= 0 && ui.tab === 'region') marks += `<circle class="mk seasel" cx="${g.seas[ui.sea].x}" cy="${g.seas[ui.sea].y + 9}" r="33"/>`;
-  $('#marks').innerHTML = marks;
-  ($('#legwar') as HTMLElement).hidden = !marks.includes('mk war');
+  if (ui.sel >= 0) mark(`<path class="mk sel" d="${pathOf(g.regions[ui.sel].polys)}"/>`, g.regions[ui.sel]);
+  else if (ui.sea >= 0 && ui.tab === 'region') marks.push(pieceAt(`<circle class="mk seasel" cx="${g.seas[ui.sea].x}" cy="${g.seas[ui.sea].y + 9}" r="33"/>`, g.seas[ui.sea].x, g.seas[ui.sea].y + 9, 37));
+  layer.marks.set(marks, cullWin);
+  ($('#legwar') as HTMLElement).hidden = !marks.some((m) => m.html.includes('mk war'));
   ($('#legtrain') as HTMLElement).hidden = !trainTo.size;
   cutsSeen = cutsKnown(g);
   ($('#legleague') as HTMLElement).hidden = !leagueMembers(g).length;
-  $('#rails').innerHTML = railMarks();
-  $('#bridges').innerHTML = bridgeMarks();
+  drawRails();
+  layer.bridges.set(bridgeMarks(), cullWin);
   $('#lanes').innerHTML = laneMarks();
-  $('#fleets').innerHTML = airBaseMarks() + fleetMarks();
+  fleetSpots = [];
+  layer.fleets.set([...airBaseMarks(), ...fleetMarks()], cullWin);
 
   // Armies. Each nation's force in a region is one piece on the map: its colours on a standard with the branch
   // of its strongest corps, its commander's name over it, and under it a bar for the strength it has left.
-  let units = '';
+  const units: Piece[] = [];
+  flagSpots = [];
   // A piece a ring meets is drawn on the sheet, over the ring, and its own place on the map is kept but not shown.
+  // (Each is a piece of its layer: the standard, its base and bar, the count under it and the commander's name over it.)
+  // (The player's own armies are kept in the page wherever the view is: the first hour's pointer finds them there, and
+  // follows one off the screen and back. They are few beside the whole world's.)
+  const mine = g.human ? ` data-nat="${g.human}"` : '';
   const put = (x: number, y: number, top: boolean, more: boolean, html: string): void => {
-    if (!fxZones.length || !pieceBoxes(x, y, top, more).some(meetsZone)) { units += html; return; }
+    flagSpots.push({ x, y });
+    const at = (h: string): Piece => (mine && h.includes(mine) ? whole(h) : pieceAt(h, x + 11, y + 8, 34, 30));
+    if (!fxZones.length || !pieceBoxes(x, y, top, more).some(meetsZone)) { units.push(at(html)); return; }
     fxPieces += html;
-    units += html.replace('<g class="ctr army', '<g class="ctr army covered');
+    units.push(at(html.replace('<g class="ctr army', '<g class="ctr army covered')));
   };
   for (const r of g.regions) {
     if (!r.units.length) continue;
@@ -1550,12 +1693,12 @@ function refresh(): void {
     });
   }
   // Fieldworks standing empty on ground the player's side holds: a small dotted bank, under whatever stands there.
-  let left = '';
+  const left: Piece[] = [];
   if (groundRules(g)) for (const r of g.regions) {
     const v = fieldworksLeft(g, r.id);
-    if (v) left += `<g class="leftworks" transform="translate(${r.x - 11} ${r.y - 7})"><path class="u" d="M-2.8 17A13.8 4.2 0 0 0 24.8 17"/><path d="M-2.8 17A13.8 4.2 0 0 0 24.8 17"/><title>Fieldworks standing empty: room for ${v.corps === 1 ? 'one corps' : `${v.corps} corps`}, ${Math.round(v.months * 10) / 10} months of work. A corps of yours that marches in takes them over.</title></g>`;
+    if (v) left.push(pieceAt(`<g class="leftworks" transform="translate(${r.x - 11} ${r.y - 7})"><path class="u" d="M-2.8 17A13.8 4.2 0 0 0 24.8 17"/><path d="M-2.8 17A13.8 4.2 0 0 0 24.8 17"/><title>Fieldworks standing empty: room for ${v.corps === 1 ? 'one corps' : `${v.corps} corps`}, ${Math.round(v.months * 10) / 10} months of work. A corps of yours that marches in takes them over.</title></g>`, r.x, r.y + 10, 30, 20));
   }
-  $('#units').innerHTML = left + units + agentMarks();
+  layer.units.set([...left, ...units, whole(agentMarks())], cullWin);
   drawLabels();
   // The names a ring meets, a neighbour's too; then the shields; then the pieces: the map's own order.
   let fxNames = '';
@@ -2517,6 +2660,8 @@ function march(pts: [number, number][], nat: string, kind: Kind, to: number): vo
     ghost.innerHTML = '';
     marchHide = null;
     for (const real of document.querySelectorAll<SVGGElement>(`.army[data-reg="${to}"][data-nat="${nat}"]`)) real.style.visibility = '';
+    // (A piece out of the window comes into the page as the last redraw drew it: it comes in shown too.)
+    for (const p of layer?.units.pieces ?? []) if (!p.nodes && p.html.includes(`data-reg="${to}" data-nat="${nat}"`)) p.html = p.html.replace(' style="visibility:hidden"', '');
   };
   if (pts.length < 2 || typeof requestAnimationFrame !== 'function') { done(); return; }
   ghost.innerHTML = `<g class="ctr army chosen"><ellipse class="base" cx="11" cy="16.2" rx="13" ry="3.4" fill="${g.nations[nat].color}"/><path class="pole" d="M-.6 -1.5V16.2"/>${standard(nat, kind)}</g>`;
@@ -5820,8 +5965,8 @@ function groupIcon(kind: 'ftr' | 'bmr' | 'mixed', nat: string): string {
 }
 
 /** Every airfield on the map: a patch of grass with its runways, larger for a larger field, rimmed in its holder's colours. A click opens it. */
-function airfieldMarks(): string {
-  let out = '';
+function airfieldMarks(): Piece[] {
+  const out: Piece[] = [];
   for (const a of airfieldsSeen(g)) {
     const k = Math.max(1, Math.min(4, a.size));
     const w = [0, 11, 14, 17, 19][k], h = [0, 8, 10, 12, 13.5][k];
@@ -5830,7 +5975,7 @@ function airfieldMarks(): string {
     const strips = k === 1 ? `M${(-w * 0.32).toFixed(1)} ${(h * 0.2).toFixed(1)}L${(w * 0.32).toFixed(1)} ${(-h * 0.2).toFixed(1)}`
       : k === 2 ? `M${(-w * 0.36).toFixed(1)} ${(h * 0.16).toFixed(1)}H${(w * 0.36).toFixed(1)}M${(-w * 0.16).toFixed(1)} ${(-h * 0.32).toFixed(1)}L${(w * 0.2).toFixed(1)} ${(h * 0.32).toFixed(1)}`
       : `M${(-w * 0.37).toFixed(1)} ${(h * 0.2).toFixed(1)}H${(w * 0.37).toFixed(1)}M0 ${(-h * 0.36).toFixed(1)}L${(-w * 0.27).toFixed(1)} ${(h * 0.33).toFixed(1)}M0 ${(-h * 0.36).toFixed(1)}L${(w * 0.27).toFixed(1)} ${(h * 0.33).toFixed(1)}`;
-    out += `<g class="afm ${a.side}${on ? ' on' : ''}" data-id="${a.region}" transform="translate(${(a.x - 17).toFixed(1)} ${(a.y + 11).toFixed(1)})">${on ? `<rect class="afsel" x="${(-w / 2 - 2.6).toFixed(1)}" y="${(-h / 2 - 2.6).toFixed(1)}" width="${(w + 5.2).toFixed(1)}" height="${(h + 5.2).toFixed(1)}" rx="3.6"/>` : ''}<rect class="afpad" x="${(-w / 2).toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${w}" height="${h}" rx="2"/><path class="afrun" d="${strips}"/></g>`;
+    out.push(pieceAt(`<g class="afm ${a.side}${on ? ' on' : ''}" data-id="${a.region}" transform="translate(${(a.x - 17).toFixed(1)} ${(a.y + 11).toFixed(1)})">${on ? `<rect class="afsel" x="${(-w / 2 - 2.6).toFixed(1)}" y="${(-h / 2 - 2.6).toFixed(1)}" width="${(w + 5.2).toFixed(1)}" height="${(h + 5.2).toFixed(1)}" rx="3.6"/>` : ''}<rect class="afpad" x="${(-w / 2).toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${w}" height="${h}" rx="2"/><path class="afrun" d="${strips}"/></g>`, a.x - 17, a.y + 11, w / 2 + 8, h / 2 + 8));
   }
   return out;
 }
@@ -9749,10 +9894,13 @@ function applyView(): void {
   // The map ends in the Sahara: there is nothing to scroll to below it.
   v.y = Math.max(-200, Math.min(g.height - h, v.y));
   const box = `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${h.toFixed(1)}`;
-  svg.setAttribute('viewBox', box);
+  // (The browser lays out every word on the map again whenever the view is set, even to the view it has: so only a new one is set.)
+  if (svg.getAttribute('viewBox') !== box) svg.setAttribute('viewBox', box);
   showCopy('#wrape', round > 0 && v.x + v.w > g.x0 + round, round);
   showCopy('#wrapw', round > 0 && v.x < g.x0, -round);
-  $('#mapfx').setAttribute('viewBox', box);
+  if ($('#mapfx').getAttribute('viewBox') !== box) $('#mapfx').setAttribute('viewBox', box);
+  // The heavy layers take in what the view now comes to (cull.ts).
+  keepWindow();
   placeResult();
   svg.classList.toggle('near', v.w < 600);
   svg.classList.toggle('mid', v.w < 760);
