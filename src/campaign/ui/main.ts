@@ -47,7 +47,7 @@ import { DEPTH, deskDef, type DeskId } from '../depth';
 import { FREE as HIST_FREE, type DialView } from '../history';
 import type { ClaimView } from '../claims';
 import { setDepth, type CommandView } from '../desks';
-import { SIEGE, besiegers, garrisonOf, guardMen, salliers, siegeRules, stormForce, townHitText } from '../siege';
+import { SIEGE, besiegers, driveOut, garrisonOf, guardMen, guardWorth, salliers, siegeRules, stormForce, townHitText } from '../siege';
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../prizes';
 import { GOV, type GovView, type PromiseTarget, type PromiseTerms } from '../government';
 import { MANPOWER, menWords } from '../manpower';
@@ -94,7 +94,7 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, envoysWord, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { tenthPct } from '../../core/math';
 import { turnToDate } from '../../core/ticket';
@@ -3666,7 +3666,14 @@ function siegeBlock(r: Region): string {
     const ours = alive && allied(g, me!, v.by);
     head = `<div class="sghead">${ringIcon(g.nations[v.by].color, 30)}<span class="grow"><b>${esc(v.town)} is under siege</b><small>${ours && v.by === me ? 'Your army holds' : `${esc(g.nations[v.by].adj)} troops hold`} the country round it${v.since >= 0 ? ` since ${date(v.since)}` : ''}. ${mine ? 'You still hold the town, and the province with it.' : `${esc(g.nations[v.holder].adj)} troops still hold the town, and the province with it.`}</small></span></div>`;
   } else {
-    const say = foe ? `Beat the army in the field and you hold the country round ${esc(v.town)}. The province is yours only when the town itself is stormed, starved out or opens its gates.`
+    // (Ruling 232: with no garrison inside, the town falls with the field; a garrison holds it after.)
+    const drive = driveOut(g);
+    const say = drive && foe ? (v.inside > 0 ? `Beat the army in the field and you hold the country round ${esc(v.town)}. The garrison will hold the town after the field is lost: it must then be stormed or starved out.`
+        : v.inside === 0 ? `Beat the army in the field and ${esc(v.town)} falls with it: with no garrison inside, its guard fights beside the army, behind its walls.`
+        : `If no garrison is inside, ${esc(v.town)} falls with the field. A garrison holds it after, to be stormed or starved out.`)
+      : drive && mine ? (v.inside > 0 ? `Whoever holds ${esc(v.town)} holds the province. The garrison will hold the town after the field is lost: an enemy must then storm it or starve it out.`
+        : `Whoever holds ${esc(v.town)} holds the province. With no garrison inside, an enemy who beats your army in the field takes the town with it. Troops you put inside hold it after the field is lost.`)
+      : foe ? `Beat the army in the field and you hold the country round ${esc(v.town)}. The province is yours only when the town itself is stormed, starved out or opens its gates.`
       : mine ? `Whoever holds ${esc(v.town)} holds the province. Troops you put inside fight from behind its walls, and an enemy who beats your army in the field must still take the town.`
       : `Whoever holds ${esc(v.town)} holds the province.`;
     head = `<div class="sghead plain"><span class="grow"><b>The key to ${esc(r.name)}</b><small>${say}</small></span></div>`;
@@ -7335,10 +7342,30 @@ function resultLine(r: BattleReport): string {
   const mine = place.ctrl === me;
   const held = mine ? `${r.regionName} is yours.` : me && allied(g, me, place.ctrl) ? `${r.regionName} is freed.` : `${r.regionName} is taken.`;
   const and = town === r.regionName ? (mine ? ' and is yours.' : '.') : `. ${held}`;
-  const what = r.siege ? `The country round ${town} is won. The town holds out.` : r.town ? `${town} is stormed${and}` : r.gates ? `${town} opened its gates${and}` : held;
+  const what = r.siege ? `The country round ${town} is won. The town holds out.` : r.town ? `${town} is stormed${and}` : r.gates ? `${town} opened its gates${and}` : r.guarded && r.taken ? `${town} is taken${and}` : held;
   if (r.yielded) return `${what} The defenders fell back before the blow.`;
   const a = lostIn(r.attackers, r.attLost), d = lostIn(r.defenders, r.defLost);
-  return `${what} You lost ${num(a.lost)} men, they lost ${num(d.lost)}.`;
+  const went = driveWords(r);
+  return `${what}${went ? ` ${went}` : ''} You lost ${num(a.lost)} men, they lost ${num(d.lost)}.`;
+}
+/**
+ * Ruling 232: where a beaten field army went, in the ruling's words. "The Panamanian army falls back to Darien." or
+ * "Cut off, the Panamanian army lays down its arms." Empty where the rule was off when the battle was fought.
+ */
+function driveWords(r: BattleReport): string {
+  if (!r.taken || r.town || r.sally || r.yielded) return '';
+  const out: string[] = [];
+  const field = r.defenders.filter((u) => !u.guard);
+  for (const nat of new Set(field.map((u) => u.nat))) {
+    const us = field.filter((u) => u.nat === nat);
+    const places = [...new Set(us.filter((u) => u.to !== undefined && g.regions[u.to]).map((u) => placeName(g.regions[u.to!].name)))];
+    const cut = us.some((u) => u.cut);
+    if (!places.length && !cut) continue;
+    const adj = g.nations[nat]?.adj ?? nat;
+    if (places.length) out.push(`The ${adj} army falls back to ${places.length === 1 ? places[0] : `${places.slice(0, -1).join(', ')} and ${places[places.length - 1]}`}.`);
+    if (cut) out.push(places.length ? 'The rest, cut off, lay down their arms.' : `Cut off, the ${adj} army lays down its arms.`);
+  }
+  return out.join(' ');
 }
 /** Where a province's town stands on the map. */
 const spotOf = (region: number): { x: number; y: number } => towns(g)[region] ?? g.regions[region];
@@ -7413,7 +7440,9 @@ function reportCard(r: BattleReport): string {
     : r.relief ? (r.taken ? `The army round ${town} was driven off. The siege is raised.` : `The attempt to relieve ${town} failed. The siege goes on.`)
     : r.siege ? `The country round ${town} was won, but the town holds out. ${esc(r.regionName)} does not change hands until the town is stormed, starved out or opens its gates.`
     : r.gates ? `The army outside was beaten, and ${town} opened its gates without a fight. ${one ? 'It' : esc(r.regionName)} has fallen.`
+    : r.guarded && r.taken ? (one ? `The army outside was beaten, and ${town} is taken.` : `The army outside was beaten, and ${town} is taken. ${esc(r.regionName)} has fallen.`)
     : r.taken ? `${esc(r.regionName)} was taken.` : `The attack on ${esc(r.regionName)} was thrown back.`;
+  const went = driveWords(r);
   const mineNow = !!r.siege && r.turn === g.turn && humanUp(g) && (r.attNat === g.human || r.attackers.some((u) => u.nat === g.human));
   const stormWhy = mineNow ? whyNotStormTown(g, r.region) : 'no';
   const next = r.siege && mineNow ? `<div class="note siegenote">${ringIcon(g.nations[r.attNat].color, 26)}<span><b>${town} is under siege.</b> Your army has closed round it and marches no further this month. You can storm it at once, off the march, or wait: next month the assault goes in at full weight, and anything your bombers, ships and guns break down meanwhile makes it easier. Keep the ring closed and hunger will do the work in the end.</span></div>`
@@ -7421,7 +7450,7 @@ function reportCard(r: BattleReport): string {
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${kick} · ${date(r.turn)}, week ${r.week}</div><h2>${title}</h2></header>
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
-      <div class="sub">${r.yielded ? `The defenders were under orders to give ground and slipped away before the blow fell. ${esc(r.regionName)} was given up without a fight. The odds against them were ${r.odds.toFixed(2)} to 1.` : `${told} ${priceLine(r)} Final odds ${r.odds.toFixed(2)} to 1${r.prisoners ? ` · ${num(r.prisoners)} prisoners` : ''}.`}</div>
+      <div class="sub">${r.yielded ? `The defenders were under orders to give ground and slipped away before the blow fell. ${esc(r.regionName)} was given up without a fight. The odds against them were ${r.odds.toFixed(2)} to 1.` : `${told}${went ? ` ${esc(went)}` : ''} ${priceLine(r)} Final odds ${r.odds.toFixed(2)} to 1${r.prisoners ? ` · ${num(r.prisoners)} prisoners` : ''}.`}</div>
       ${paidLine(r)}${spoils}${next}${wornNote(r)}
       <div class="faceoff">${sidePanel(side(r.attackers, r.attLost, 'attacking', r.taken), 'att')}<div class="fmid"><span class="vsmark">VS</span></div>${sidePanel(side(r.defenders, r.defLost, 'defending', !r.taken), 'def')}</div>
       <div class="balance"><div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[r.attNat].color}"></i><i style="flex:1;background:${g.nations[r.defNat].color}"></i></div><span class="need" style="left:${(100 * 1.2 / 2.2).toFixed(1)}%" title="What it takes to carry the ground: roughly 1.2 to 1"></span></div>
@@ -7543,10 +7572,14 @@ function attackCard(): string {
     nats: [me, ...new Set(chosen.filter((c) => c.nat !== me).map((c) => c.nat))], role: 'attacking', who: leaderOf(chosen), men: chosen.reduce((s, c) => s + men(c), 0), corps: chosen.length, divs: rollDivs(chosen),
     cards: cands.map((c) => corpsChip(c, { act: true, on: inSet.has(c.id), note: why(c) })).join(''),
   };
+  // The town's guard fighting beside them where no garrison stands (ruling 232): a defender on the card, with the odds.
+  const watch = a?.guard ?? 0, watchMen = watch > 0 ? guardMen(g, target) : 0;
+  const guardChip = watch > 0 ? `<div class="ucard" title="Town guard of ${esc(townName(target))}: ${guardWorth(watch)}, behind its walls. Win the field and the town falls with it."><span class="utop">${ringIcon(g.nations[target.ctrl].color, 30)}</span><b>Town guard</b><span class="um">${watch >= 0.95 ? `${watch.toFixed(1)} div · ` : ''}about ${num(watchMen)} men</span></div>` : '';
   const theirs: Side = {
-    nats: [...new Set(foes.map((c) => c.nat))], role: 'defending', who: leaderOf(foes), men: foes.reduce((s, c) => s + men(c), 0), corps: foes.length, divs: rollDivs(foes),
-    ...(sure ? {} : { menText: foeEst ? span(Math.round(foeEst.lo * 15) * 1000, Math.round(foeEst.hi * 15) * 1000) : '?', divsText: foeEst ? span(Math.max(1, Math.round(foeEst.lo)), Math.max(1, Math.round(foeEst.hi))) : '?' }),
-    cards: foeChips(foes),
+    nats: [...new Set(foes.map((c) => c.nat))], role: 'defending', who: leaderOf(foes), men: foes.reduce((s, c) => s + men(c), 0) + watchMen, corps: foes.length, divs: rollDivs(foes) + Math.round(watch * 10) / 10,
+    // (Under the fog the guard, which is no secret, is added to both ends of the estimate.)
+    ...(sure ? {} : { menText: foeEst ? span(Math.round(foeEst.lo * 15) * 1000 + watchMen, Math.round(foeEst.hi * 15) * 1000 + watchMen) : '?', divsText: foeEst ? span(Math.max(1, Math.round(foeEst.lo + watch)), Math.max(1, Math.round(foeEst.hi + watch))) : '?' }),
+    cards: foeChips(foes) + guardChip,
     under: target.fort ? `<small class="fhelp">Dug in behind level ${target.fort.lv} fortifications${target.fort.vs.includes(me) ? '' : ', which do not face you'}.</small>` : '',
   };
   // The card is in the order of deciding (ruling 204): who fights, the verdict and its bar, what it should cost, what

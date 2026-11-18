@@ -433,6 +433,9 @@ export interface ReportUnit {
   fate: '' | 'retreated' | 'surrendered' | 'destroyed' | 'advanced' | 'evacuated' | 'yielded' | 'sheltered';
   /** Not a corps: the town's own guard of depot troops, police and militia (the grand campaign). */
   guard?: boolean;
+  /** Ruling 232: the province a beaten field army fell back to, and a field army cut off that laid down its arms. */
+  to?: number;
+  cut?: boolean;
 }
 
 export interface BattleReport {
@@ -468,6 +471,8 @@ export interface BattleReport {
   siege?: boolean;
   /** The field was won and the town, held only by its guard, opened its gates without a fight (the grand campaign). */
   gates?: boolean;
+  /** The town's guard fought beside the field army (ruling 232, the grand campaign): won, the town fell with the field. */
+  guarded?: boolean;
   /** A relief: the attackers came to raise a siege of their own side's town. */
   relief?: boolean;
   /** The garrison of a besieged town came out against the army round it. */

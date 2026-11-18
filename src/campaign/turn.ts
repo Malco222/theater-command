@@ -506,7 +506,8 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   const corpsWord = (x: number): string => `${x} corps`;
   // What the ticket says of the defenders' numbers, spirit and armour is left out where it is not known.
   const lines = a.lines.map((l): TicketLine => {
-    if (l.label === 'Forces') return { ...l, value: `${l.value.split(', against ')[0]}, against ${corpsWord(n)}${k.none.length ? `, ${k.none.length === n ? 'none' : `${n - k.none.length}`} of them identified` : ', known from old reports'}` };
+    // (The town's guard fighting beside them (ruling 232) is no secret: its part of the line stays.)
+    if (l.label === 'Forces') { const guard = a.guard ? / and the town guard of about [\d,]+$/.exec(l.value)?.[0] : undefined; return { ...l, value: `${l.value.split(', against ')[0]}, against ${corpsWord(n)}${k.none.length ? `, ${k.none.length === n ? 'none' : `${n - k.none.length}`} of them identified` : ', known from old reports'}${guard ? `,${guard}` : ''}` }; }
     if (l.label === 'Morale') {
       const ours = l.value.split(', defenders')[0];
       return { ...l, value: /^Attackers/.test(ours) ? `${ours}; the defenders' spirit is not known` : "The defenders' spirit is not known", effect: l.effect ? l.effect.split(', defence')[0].replace(/^Defence.*$/, '') || undefined : undefined };
