@@ -41,7 +41,7 @@ export const SIEGE = data as unknown as {
   sortie: number; pay: number;
   capital: number; capitalAfter: number; capitalYear: number;
   driveOut?: boolean;
-  ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sea: { after: number; blockade: number }; relieved: { months: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>>; great?: { works: number; on?: boolean } };
+  ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sea: { after: number; blockade: number }; relieved: { months: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>>; great?: { works: number; on?: boolean; field?: number } };
 };
 
 /** True where towns are garrisoned and besieged: the grand campaign. A historical scenario is fought as it always was. */

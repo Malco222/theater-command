@@ -46,6 +46,8 @@ export const HISTORY = data as unknown as {
   shores: { id: string; from: number; owners: string[] }[];
   claims: { weak: number; odds: number; thin: number; notice: number; chance: number; guard: number; lapse: number; aid: number; treaty: number; push: number };
   ambitions: Ambition[];
+  /** The book's restraints (b509(c), b512): towns a computer staff does not storm, and ground it does not enter, at the stops named. */
+  restraint?: { stops: number[]; storm: { nat: string; town: string; why: string }[]; enter: { nat: string; ground: string[]; why: string }[] };
 };
 
 /** The stop with nothing added: where a campaign starts, and what every game without a stop is played at. */
@@ -58,6 +60,14 @@ export const dialRules = (g: Game): boolean => g.flags.open === 1;
 export const stopOf = (g: Game): number => (g.flags.open === 1 ? g.flags.hist ?? FREE : FREE);
 export const stopDef = (g: Game): Stop => HISTORY.stops.find((s) => s.stop === stopOf(g)) ?? HISTORY.stops.find((s) => s.stop === FREE)!;
 export const stopByNumber = (n: number): Stop | undefined => HISTORY.stops.find((s) => s.stop === n);
+/** True where the book's restraints hold: a computer staff, at a stop that names them (b509(c), b512). */
+const restrained = (g: Game, nat: string): boolean => !!HISTORY.restraint && nat !== g.human && g.flags.open === 1 && HISTORY.restraint.stops.includes(stopOf(g));
+/** The computer staff whose own restraint keeps it from storming this town, if any: Germany before Leningrad by the book. */
+export const stormHeldBy = (g: Game, town: string): string | null =>
+  HISTORY.restraint?.storm.find((s) => s.town === town && restrained(g, s.nat))?.nat ?? null;
+/** True for ground a computer staff's armies do not go into by the book: Finland's before Leningrad in 1941. */
+export const halted = (g: Game, nat: string, place: string): boolean =>
+  restrained(g, nat) && HISTORY.restraint!.enter.some((h) => h.nat === nat && h.ground.includes(place));
 /** The loosest stop this campaign has been played at: what its verdicts, medals and par are read against. */
 export const loosest = (g: Game): number => (g.flags.open === 1 ? g.flags.histMax ?? stopOf(g) : FREE);
 
