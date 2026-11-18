@@ -133,6 +133,9 @@ namespace TheaterFx
 		ShadeDark = Num("game.shade_dark", 0.28);
 		ClodLeast = Num("game.clod_least_px", 1.2);
 		Beyond = Num("game.draw_beyond_m", 1500.0);
+		ClodRough = Range("burst.debris.clods.rough", 0.25, 0.45);
+		ClodTurns = Range("burst.debris.clods.tumble_turns_a_second", 0.5, 2.0);
+		ClodShade = Num("burst.debris.clods.shade", 2.5);
 		Sides = std::max(6, std::min(24, static_cast<int>(Num("game.puff_sides", 16.0))));
 		PointsPerPuff = 2 * Sides + 1;
 		std::vector<double>* Tables[8] = { &RingCos, &RingSin, &Ring2Cos, &Ring2Sin, &Ring3Cos, &Ring3Sin, &Ring5Cos, &Ring5Sin };
@@ -190,6 +193,14 @@ namespace TheaterFx
 		const double A = Num(Path + ".0", Num(Path, Low));
 		const double B = Num(Path + ".1", Has(Path + ".0") ? A : High);
 		return D.U(A, B);
+	}
+
+	Battle::Span Battle::Range(const std::string& Path, double Low, double High) const
+	{
+		Span S;
+		S.A = Num(Path + ".0", Num(Path, Low));
+		S.B = Num(Path + ".1", Has(Path + ".0") ? S.A : High);
+		return S;
 	}
 
 	Rgb Battle::Picture(const std::string& Path, const Rgb& Fallback) const
@@ -343,12 +354,12 @@ namespace TheaterFx
 	{
 		// (a clod is an irregular chunk, never a smooth bean: a lumpy outline of its own, tumbling as it flies, with a
 		// lit face toward the sun and a dark one away from it)
-		const std::string C = "burst.debris.clods.";
-		B.Rough = Pick(D, C + "rough", 0.25, 0.45);
+		B.Rough = ClodRough.Pick(D);
 		B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 		B.Turn = D.U(0.0, 2.0 * Pi);
-		B.TurnRate = Pick(D, C + "tumble_turns_a_second", 0.5, 2.0) * 2.0 * Pi * (D.U() < 0.5 ? -1.0 : 1.0);
-		B.ShadeK = Num(C + "shade", 2.5);
+		const double Turns = ClodTurns.Pick(D); // (then which way: two throws, in this order)
+		B.TurnRate = Turns * 2.0 * Pi * (D.U() < 0.5 ? -1.0 : 1.0);
+		B.ShadeK = ClodShade;
 		B.Point = D.U(0.0, 0.3);
 		B.Tail = D.U(0.0, 0.25);
 	}
@@ -489,6 +500,14 @@ namespace TheaterFx
 		const int NOut = static_cast<int>(Num(Sk + "puffs_outer", 110.0) * Many);
 		const int NIn = static_cast<int>(Num(Sk + "puffs_inner", 60.0) * Many);
 		const double HazeAlpha = Num(Sk + "haze_alpha", 0.15) * std::pow(DustK, 0.4);
+		// (every number the loop needs, read once)
+		const double DragOf = Num(Sk + "drag", 8.0), RiseOf = Num(Sk + "rise_mps", 0.5);
+		const Span LifeOf = Range(Sk + "life_s", 2.5, 3.5), AlphaOf = Range(Sk + "alpha", 0.45, 0.6);
+		const double StartR = Num(Sk + "start_radius_m", 0.5), EndR = Num(Sk + "end_radius_m", 1.5), InnerK = Num(Sk + "inner_radius_k", 1.0);
+		const double GrowOf = Num(Sk + "grow", 0.25), StretchOf = Num(Sk + "stretch_along_ring", 1.7);
+		const double FlattenOf = Num(Sk + "flatten", 0.75), Billow = Num(Sk + "front_billow", 1.35);
+		const double HazeBy = Num(Sk + "haze_by_s", 1.0), ShadeOf = Num(Sk + "shade", 1.8), HeartOf = Num(Sk + "heart", 0.55);
+		const double DustAlpha = std::pow(DustK, 0.4);
 		for (int I = 0; I < NOut + NIn; ++I)
 		{
 			const bool bFront = I < NOut;
@@ -497,7 +516,7 @@ namespace TheaterFx
 			const double Speed = bFront ? 1.0 : std::sqrt(D.U(0.02, 0.85)); // (the inner ones fill back toward the hole, evenly over its round: one skirt, not a ring)
 			const double A = 2.0 * Pi * (Place + D.U(-0.4, 0.4)) / std::max(N, 1);
 			const Vec Outward(std::cos(A), std::sin(A), 0.0);
-			const double Drag = Num(Sk + "drag", 8.0) * D.U(0.85, 1.15);
+			const double Drag = DragOf * D.U(0.85, 1.15);
 			Bit B;
 			B.Form = Bit::Shape::Upright;
 			B.bHug = true;
@@ -505,24 +524,24 @@ namespace TheaterFx
 			B.From = At + Outward * (D.U(0.4, 1.0) * K);
 			B.Vel = Outward * (Reach * Speed * Drag * D.U(0.85, 1.0));
 			B.Drag = Drag;
-			B.Rise = Num(Sk + "rise_mps", 0.5) * D.U(0.6, 1.4);
+			B.Rise = RiseOf * D.U(0.6, 1.4);
 			B.Windage = 0.6;
-			B.Life = Pick(D, Sk + "life_s", 2.5, 3.5) * std::min(2.0, K);
-			B.R0 = Num(Sk + "start_radius_m", 0.5) * K;
-			B.R1 = Num(Sk + "end_radius_m", 1.5) * K * D.U(0.7, 1.3) * (bFront ? 1.0 : Num(Sk + "inner_radius_k", 1.0)); // (fewer, broader inner ones fill the round)
-			B.Grow = Num(Sk + "grow", 0.25);
-			B.Stretch = Num(Sk + "stretch_along_ring", 1.7);
+			B.Life = LifeOf.Pick(D) * std::min(2.0, K);
+			B.R0 = StartR * K;
+			B.R1 = EndR * K * D.U(0.7, 1.3) * (bFront ? 1.0 : InnerK); // (fewer, broader inner ones fill the round)
+			B.Grow = GrowOf;
+			B.Stretch = StretchOf;
 			B.Along = Vec(-std::sin(A), std::cos(A), 0.0);
-			B.Flatten = Num(Sk + "flatten", 0.75) * D.U(0.8, 1.2) * (bFront ? Num(Sk + "front_billow", 1.35) : 1.0); // (the front edge stands tallest)
+			B.Flatten = FlattenOf * D.U(0.8, 1.2) * (bFront ? Billow : 1.0); // (the front edge stands tallest)
 			B.Col = Col * D.U(0.9, 1.08);
 			B.Col2 = B.Col;
-			B.Alpha = std::min(0.9, Pick(D, Sk + "alpha", 0.45, 0.6) * std::pow(DustK, 0.4));
+			B.Alpha = std::min(0.9, AlphaOf.Pick(D) * DustAlpha);
 			B.FadeIn = 0.02;
 			B.Hold = 0.1;
-			B.HazeBy = Num(Sk + "haze_by_s", 1.0);
+			B.HazeBy = HazeBy;
 			B.HazeAlpha = std::min(B.Alpha, HazeAlpha);
-			B.ShadeK = Num(Sk + "shade", 1.8); // (a lit top and a shadowed foot, so it shows its height)
-			B.Heart = Num(Sk + "heart", 0.55);
+			B.ShadeK = ShadeOf; // (a lit top and a shadowed foot, so it shows its height)
+			B.Heart = HeartOf;
 			B.Rim = 0.0;
 			Bits.push_back(B);
 		}
@@ -569,7 +588,7 @@ namespace TheaterFx
 		// (ranked heights, where a size asks for them: the second tallest jet clearly shorter than the tallest, then a
 		// few more at half its height or over, so the fan never reads as one or two stalks)
 		const bool bRanked = Has(Path("second_reach") + ".0");
-		const int NMid = static_cast<int>(Num(Path("mid_jets"), 0.0));
+		const int NMid = std::clamp(static_cast<int>(Num(Path("mid_jets"), 0.0)), 0, NHeavy);
 		// (the heavy jets spaced round the compass, each nudged by up to this share of a gap: every side shows a fan)
 		const double SpreadEven = Clamp01(Num(Path("spread_even"), 0.0));
 		const double AzFrom = SpreadEven > 0.0 ? D.U(0.0, 2.0 * Pi) : 0.0;
@@ -697,16 +716,20 @@ namespace TheaterFx
 		}
 		// the body: a dense dark mound of earth and dust at the crown's foot from about frame 4, slumping into the smoke
 		const int NBody = static_cast<int>(Num(Path("body.puffs"), 50.0) * std::max(0.7, std::sqrt(K)));
+		const double BodyWide = Num(Path("body.width"), 0.3), BodyHigh = Num(Path("body.height"), 0.22);
+		const Span BodyR = Range(Path("body.puff_r"), 0.06, 0.11), BodyAlpha = Range(Path("body.alpha"), 0.85, 0.95);
+		const double BodyFrom = Num(Path("body.from_frame"), 3.0) / 30.0;
+		const double BodyRim = Num(Path("body.rim"), 0.1), BodyRough = Num(Path("body.rough"), 0.0);
 		for (int I = 0; I < NBody; ++I)
 		{
 			const double A = D.U(0.0, 2.0 * Pi);
-			const double Out_ = CrownH * Num(Path("body.width"), 0.3) * std::pow(D.U(), 0.6);
-			const double Up_ = CrownH * Num(Path("body.height"), 0.22) * std::pow(D.U(), 1.3);
+			const double Out_ = CrownH * BodyWide * std::pow(D.U(), 0.6);
+			const double Up_ = CrownH * BodyHigh * std::pow(D.U(), 1.3);
 			const Vec To = Vec(std::cos(A) * Out_, std::sin(A) * Out_, Up_) + Tilt * Up_;
-			const double Rr = CrownH * Pick(D, Path("body.puff_r"), 0.06, 0.11);
+			const double Rr = CrownH * BodyR.Pick(D);
 			const double KB = 5.0;
 			Bit B;
-			B.Born = T0 + D.U(0.03, Num(Path("body.from_frame"), 3.0) / 30.0);
+			B.Born = T0 + D.U(0.03, BodyFrom);
 			B.From = At + ZUp * (0.15 * K);
 			B.Vel = To * KB;
 			B.Drag = KB;
@@ -719,12 +742,12 @@ namespace TheaterFx
 			B.Col = P.Heavy.Mix(P.Dust, D.U(0.0, 0.35)) * D.U(0.85, 1.1);
 			B.Col2 = P.Smoke;
 			B.Cool = 1.2;
-			B.Alpha = Pick(D, Path("body.alpha"), 0.85, 0.95);
+			B.Alpha = BodyAlpha.Pick(D);
 			B.FadeIn = 0.03;
 			B.Hold = 0.45;
 			B.Heart = 0.75;
-			B.Rim = Num(Path("body.rim"), 0.1);
-			B.Rough = Num(Path("body.rough"), 0.0); // (a bomb's big body pieces lumpy, never flat-faced)
+			B.Rim = BodyRim;
+			B.Rough = BodyRough; // (a bomb's big body pieces lumpy, never flat-faced)
 			if (B.Rough > 0.0)
 			{
 				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
@@ -734,13 +757,14 @@ namespace TheaterFx
 		}
 		// the clods: those at the jets' tips, and more thrown clear low and wide
 		const int NMore = static_cast<int>(ClodK * 50.0 * std::max(0.5, K * K));
+		const double ClodLo = Num("burst.debris.clod_r_m.0", 0.015), ClodHi = Num("burst.debris.clod_r_m.1", 0.09);
 		for (int I = 0; I < NMore; ++I)
 		{
 			const double A = D.U(0.0, 2.0 * Pi);
 			const double Out_ = D.U(1.0, 6.0) * K;
 			const double Up_ = (2.0 + 9.0 * std::pow(D.U(), 2.0)) * K;
 			Launch.push_back(Vec(std::cos(A) * Out_, std::sin(A) * Out_, Up_));
-			const double Lo = Num("burst.debris.clod_r_m.0", 0.015), Hi = Num("burst.debris.clod_r_m.1", 0.09);
+			const double Lo = ClodLo, Hi = ClodHi;
 			LaunchR.push_back((Lo + (Hi - Lo) * std::pow(D.U(), 2.2)) * K);
 		}
 		// (a close hit throws a few lumps past the lens: what puts the player in the hole)
@@ -850,6 +874,8 @@ namespace TheaterFx
 		}
 		const double CloudShade = Num(Sm + "cloud_shade", 1.0);
 		const double CloudR = Num(Sm + "cloud_r", 0.3);
+		const Span SmokeR0 = Range(Sm + "puff_r.0", 0.5, 0.9), SmokeR1 = Range(Sm + "puff_r.1", 1.2, 2.6), SmokeAlpha = Range(Sm + "alpha", 0.35, 0.6);
+		const double SmokeGrow = Num(Sm + "grow", 0.3);
 		for (int I = 0; I < N; ++I)
 		{
 			const double F = std::pow(D.U(), 0.9); // (0 at the foot, 1 at the top of the crown)
@@ -872,16 +898,16 @@ namespace TheaterFx
 				B.Vel = Vec(Lobe.X, Lobe.Y, 0.0) * (0.8 * K) + Vec(D.Bell(), D.Bell(), 0.0) * (0.4 * K) + ZUp * (Hgt * D.U(0.7, 1.4) * (1.0 + Lobe.Z));
 			}
 			B.Life = Linger * D.U(0.45, 1.0);
-			B.R0 = Pick(D, Sm + "puff_r.0", 0.5, 0.9) * K * Var;
-			B.R1 = Pick(D, Sm + "puff_r.1", 1.2, 2.6) * K * (1.0 + 0.5 * F) * Var;
+			B.R0 = SmokeR0.Pick(D) * K * Var;
+			B.R1 = SmokeR1.Pick(D) * K * (1.0 + 0.5 * F) * Var;
 			B.Col = (F < 0.25 && Born - T0 < 0.22) ? Base.Mix(Warm, 0.35) : Base; // (warm only at its foot, at first)
 			B.Col2 = Base;
 			B.Cool = B.Life / 0.15;
-			B.Alpha = Pick(D, Sm + "alpha", 0.35, 0.6);
+			B.Alpha = SmokeAlpha.Pick(D);
 			B.Drag = D.U(1.4, 2.2);
 			B.Rise = D.U(0.25, 0.9) * std::sqrt(K);
 			B.FadeIn = 0.08;
-			B.Grow = Num(Sm + "grow", 0.3);
+			B.Grow = SmokeGrow;
 			B.Windage = D.U(0.5, 1.0);
 			B.Hold = 0.15;
 			B.Heart = D.U(0.4, 0.7); // (some firmer than others: a torn cloud, not one soft egg)

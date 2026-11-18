@@ -17,6 +17,8 @@
 #include "Serialization/JsonSerializer.h"
 #include "TheaterCommand.h"
 
+#include <string_view>
+
 // ---------------------------------------------------------------------------------------------------------------------
 // The recipe
 
@@ -28,72 +30,83 @@ bool FBattleFxRecipe::Load(const FString& Path)
 	{
 		return false;
 	}
-	Root = File;
+	Numbers.clear();
+	Words.clear();
+	Walk(MakeShared<FJsonValueObject>(File), std::string());
 	return true;
 }
 
-TSharedPtr<FJsonValue> FBattleFxRecipe::At(const char* Path) const
+void FBattleFxRecipe::Walk(const TSharedPtr<FJsonValue>& Value, const std::string& Path)
 {
-	if (!Root.IsValid() || !Path)
+	if (!Value.IsValid())
 	{
-		return nullptr;
+		return;
 	}
-	TArray<FString> Parts;
-	FString(Path).ParseIntoArray(Parts, TEXT("."), true);
-	TSharedPtr<FJsonValue> Here = MakeShared<FJsonValueObject>(Root);
-	for (const FString& Part : Parts)
+	switch (Value->Type)
 	{
-		if (!Here.IsValid())
+	case EJson::Object:
+	{
+		const TSharedPtr<FJsonObject> Object = Value->AsObject();
+		if (Object.IsValid())
 		{
-			return nullptr;
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Field : Object->Values)
+			{
+				const std::string Name(TCHAR_TO_UTF8(*Field.Key));
+				Walk(Field.Value, Path.empty() ? Name : Path + "." + Name);
+			}
 		}
-		if (Here->Type == EJson::Object)
-		{
-			const TSharedPtr<FJsonObject> Object = Here->AsObject();
-			Here = Object.IsValid() ? Object->TryGetField(Part) : nullptr;
-		}
-		else if (Here->Type == EJson::Array && Part.IsNumeric())
-		{
-			const TArray<TSharedPtr<FJsonValue>>& List = Here->AsArray();
-			const int32 Index = FCString::Atoi(*Part);
-			Here = List.IsValidIndex(Index) ? List[Index] : nullptr;
-		}
-		else
-		{
-			return nullptr;
-		}
+		break;
 	}
-	return Here;
+	case EJson::Array:
+	{
+		const TArray<TSharedPtr<FJsonValue>>& List = Value->AsArray();
+		for (int32 Index = 0; Index < List.Num(); ++Index)
+		{
+			Walk(List[Index], Path + "." + std::to_string(Index));
+		}
+		break;
+	}
+	case EJson::Number:
+		Numbers[Path] = Value->AsNumber();
+		break;
+	case EJson::Boolean:
+		Numbers[Path] = Value->AsBool() ? 1.0 : 0.0;
+		break;
+	case EJson::String:
+		Words[Path] = std::string(TCHAR_TO_UTF8(*Value->AsString()));
+		break;
+	default:
+		break;
+	}
 }
 
 bool FBattleFxRecipe::Find(const char* Path, double& Out) const
 {
-	const TSharedPtr<FJsonValue> Value = At(Path);
-	if (!Value.IsValid())
+	if (!Path)
 	{
 		return false;
 	}
-	if (Value->Type == EJson::Number)
+	const auto Found = Numbers.find(std::string_view(Path));
+	if (Found == Numbers.end())
 	{
-		Out = Value->AsNumber();
-		return true;
+		return false;
 	}
-	if (Value->Type == EJson::Boolean)
-	{
-		Out = Value->AsBool() ? 1.0 : 0.0;
-		return true;
-	}
-	return false;
+	Out = Found->second;
+	return true;
 }
 
 bool FBattleFxRecipe::FindWord(const char* Path, std::string& Out) const
 {
-	const TSharedPtr<FJsonValue> Value = At(Path);
-	if (!Value.IsValid() || Value->Type != EJson::String)
+	if (!Path)
 	{
 		return false;
 	}
-	Out = std::string(TCHAR_TO_UTF8(*Value->AsString()));
+	const auto Found = Words.find(std::string_view(Path));
+	if (Found == Words.end())
+	{
+		return false;
+	}
+	Out = Found->second;
 	return true;
 }
 

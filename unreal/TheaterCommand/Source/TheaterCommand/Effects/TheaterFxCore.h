@@ -186,6 +186,12 @@ namespace TheaterFx
 		Jolt Shake(double Now, const Vec& Eye) const;
 
 	private:
+		/** A range from the recipe, read once before a loop, so a loop of puffs does not ask the recipe each time. */
+		struct Span
+		{
+			double A = 0.0, B = 0.0;
+			double Pick(Dice& D) const { return D.U(A, B); }
+		};
 		struct Flash
 		{
 			Vec At;
@@ -222,6 +228,8 @@ namespace TheaterFx
 		std::vector<double> RingCos, RingSin, Ring2Cos, Ring2Sin, Ring3Cos, Ring3Sin, Ring5Cos, Ring5Sin; // (made once at Setup, so no puff works out a cosine a side each frame)
 		int LastDrawn = 0;
 		double ShadeLit = 0.18, ShadeDark = 0.28, ClodLeast = 1.2, Beyond = 1500.0;
+		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
+		double ClodShade = 2.5;
 		Vec LastEye;
 		bool bEyeKnown = false; // (the eye of the last frame drawn: a hit close to it throws clods past the lens)
 		std::vector<Bit> Bits; // alive or still to be born
@@ -241,6 +249,7 @@ namespace TheaterFx
 
 		double Num(const std::string& Path, double Fallback) const;
 		double Pick(Dice& D, const std::string& Path, double Low, double High) const; // a number in the recipe's range
+		Span Range(const std::string& Path, double Low, double High) const;
 		Rgb Picture(const std::string& Path, const Rgb& Fallback) const;
 		bool Has(const std::string& Path) const;
 		double Height(double X, double Y) const;
