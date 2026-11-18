@@ -38,7 +38,7 @@
     "ITA": {
       "traits": [
         { "id": "fast", "name": "Fast light infantry", "text": "Light infantry on bicycles, motorcycles and trucks, with a tradition of moving at the double.", "cost": { "what": ["corps:mot"], "mul": 0.8 } },
-        { "id": "craft", "name": "Flotillas of light craft", "text": "Torpedo boats, submarines and raiders built for a narrow sea.", "cost": { "what": ["ship:dd", "ship:ss"], "mul": 0.8 } }
+        { "id": "craft", "name": "Destroyer and submarine flotillas", "text": "Built in numbers for the narrow seas of the Mediterranean.", "cost": { "what": ["ship:dd", "ship:ss"], "mul": 0.8 } }
       ],
       "unit": { "id": "alpine", "label": "Alpine corps", "word": "Alpine", "kind": "mtn", "divs": 2, "cost": 36, "months": 5, "most": 3, "starts": 1, "attack": 1.25, "defence": 1.25, "when": { "terrain": ["mountain", "hills"] }, "text": "Mountain troops recruited valley by valley in the Alps, the best soldiers Italy has. At their best on high ground." }
     },
