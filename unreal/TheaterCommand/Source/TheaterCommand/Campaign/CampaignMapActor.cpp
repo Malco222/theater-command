@@ -8869,6 +8869,14 @@ void ACampaignMapActor::BuildParade()
 		UE_LOG(LogTheater, Warning, TEXT("Parade: no region called %s"), *Where);
 		return;
 	}
+	// ("-TheaterSeason=48" shows the parade's models as they are marked in that month of the war: turn 48 is August 1943.)
+	{
+		int32 Held = 0;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeason="), Held))
+		{
+			::UnitTable::SetTurn(Held);
+		}
+	}
 	// The models stand in line ahead on a plain board, all to one scale, in front of a wall ruled at every
 	// half metre, with a man of 1.75 m by each: so each can be looked at closely, measured, and compared with
 	// the next. "-TheaterModels=PanzerIV,T34" chooses which; all of them otherwise.
@@ -9895,6 +9903,12 @@ AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& 
 void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)
 {
 	THEATER_SPEED_SCOPE(ShowArmies);
+	// (The painter is told the month before any piece is painted: a campaign taken up again lays out its armies
+	// before its season, and a dominion's pieces of 1943 would wear the roundel of 1939.)
+	{
+		int32 Held = 0;
+		::UnitTable::SetTurn(FParse::Value(FCommandLine::Get(), TEXT("TheaterSeason="), Held) ? Held : View.Turn);
+	}
 	UWorld* World = GetWorld();
 	if (!World || !Data.IsLoaded() || HasParade())
 	{
