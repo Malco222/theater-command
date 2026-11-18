@@ -8,7 +8,8 @@
 import { describe, expect, it } from 'vitest';
 import arsenal from '../data/campaign/arsenal.json';
 import { offers, orderOffer, yardLevel } from '../src/campaign/arsenal';
-import { allied, atWar, capture, createGame } from '../src/campaign/game';
+import { addCorps, allied, atWar, capture, createGame } from '../src/campaign/game';
+import { JOBS, jobsFor, orderJob } from '../src/campaign/engineers';
 import { INTEL, MISSIONS, MISSION_TEXT, THEFT, caughtChance, guardChance, intelTick, mostAgents, successChance, whyNotMission } from '../src/campaign/intel';
 import { PLANS, PLAN_ITEMS, buildsOwn, givesPlans, grantPlans, onPlans, planRules, plansFrom, plansOf, whyNoPlans, whyNoTechPlans } from '../src/campaign/plans';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -422,5 +423,29 @@ describe('rider b542: four-engined bombers, jets, rocket artillery and guided we
     // Cover identities: after the attempt the agent lies low a month less.
     intelTick(g, 'ESP');
     if (g.intel.agents.includes(a)) expect(a.rest).toBe(g.turn + Math.max(1, INTEL.risk.lieLow - 1));
+  });
+});
+
+// Brian, 18 November: "small nations can still build all the pill boxes and defenses with their eigineers". The lock
+// is on capital ships and the four technologies alone: a smaller nation's engineers and its treasury build every
+// work a great power's do.
+describe('fortifications are never locked', () => {
+  it('a smaller nation\'s engineers and treasury build every defence a great power\'s do', () => {
+    const g = grand('ESP');
+    const madrid = g.byName['Madrid'];
+    g.nations.ESP.pp = 5000;
+    const works = offers(g, 'ESP', madrid.id).filter((o) => o.group === 'works');
+    expect(works.map((o) => o.key)).toContain('work:fort');
+    for (const o of works) expect(o.why ?? '', o.key).not.toMatch(/plans|great powers/);
+    expect(orderOffer(g, 'ESP', 'work:fort', madrid.id), 'fortifications').not.toBeNull();
+    const eng = addCorps(g, 'ESP', 'Test Sappers', 'eng', 1, madrid.id, { fresh: true });
+    const jobs = jobsFor(g, eng);
+    expect(jobs.map((j) => j.key)).toEqual(JOBS);
+    for (const j of jobs) expect(j.why ?? '', j.key).not.toMatch(/plans|great powers/);
+    expect(jobs.find((j) => j.key === 'works')!.why).toBeNull();
+    expect(jobs.find((j) => j.key === 'mines')!.why).toBeNull();
+    expect(orderJob(g, eng, 'works')).toBe(true);
+    // No technology the plans hold back gates any order at all.
+    for (const id of PLANS.techs) expect(TECH.techs.find((t) => t.id === id)!.unlock ?? [], id).toEqual([]);
   });
 });
