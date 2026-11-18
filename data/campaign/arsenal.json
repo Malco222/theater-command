@@ -87,9 +87,10 @@
   "guns": { "soften": 0.15, "softenMost": 0.6, "thicken": 0.05, "thickenMost": 0.2 },
   "ai": { "aaAfterRaid": true, "guns": { "per": 6, "most": 10, "facing": 3, "fit": 0.9 } },
   "plans": {
-    "_note": "Brian, 18 November: the smaller nations build no battleships or carriers until they hold a great power's plans. 'great' build both as before (the tech tree still holds carriers back); 'kin' hold the plans of the power named (the dominions Britain's, Vichy and Free France France's) and build as a great power does. Any other country gets them by taking ground a great power owns, in a war with it, or by a spy's theft (intel.json, bbPlans and cvPlans). Plans of carriers open carriers without the country's own research. Ships a country starts with stay. The grand campaign only.",
+    "_note": "Brian, 18 November: the smaller nations build no battleships or carriers until they hold a great power's plans. 'great' build both as before (the tech tree still holds carriers back); 'kin' hold the plans of the power named (the dominions Britain's, Vichy and Free France France's) and build as a great power does. Any other country gets them by taking ground a great power owns, in a war with it, or by a spy's theft (intel.json, bbPlans and cvPlans). Plans of carriers open carriers without the country's own research. Ships a country starts with stay. The grand campaign only. 'techs' (rider b542, Brian: heavy bombers, jets and rockets 'should all be treated like the battleships'): technologies a smaller nation cannot research; it gains each with a great power's plans, where that power has researched it, and the kin wherever their great power has.",
     "on": true,
     "hulls": ["bb", "cv"],
+    "techs": ["heavybombers", "jets", "rockets", "guided"],
     "great": ["GER", "UK", "USA", "SOV", "FRA", "ITA", "JAP"],
     "kin": { "CAN": "UK", "AUS": "UK", "NZL": "UK", "SAF": "UK", "IND": "UK", "VIC": "FRA", "FFR": "FRA" }
   }

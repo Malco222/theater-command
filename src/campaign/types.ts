@@ -231,7 +231,7 @@ export interface TechState {
   /** Technologies researched, in the order they were finished. */
   done: string[];
   /** One entry for each research team at work: the technology, the months still to go and the months it was begun with. */
-  work: { id: string; left: number; of: number }[];
+  work: { id: string; left: number; of: number; spy?: boolean }[];
 }
 
 /** The branches of research. */
@@ -1090,10 +1090,13 @@ export interface Passing {
 }
 
 /** What an agent is doing: watching, reading a government's books, an act of sabotage, a theft of plans, or guarding the home country. */
-export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'bbPlans' | 'cvPlans' | 'guard';
+export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'bbPlans' | 'cvPlans' | 'bomberPlans' | 'jetPlans' | 'rocketPlans' | 'guidedPlans' | 'guard';
 
-/** Plans of one capital ship a smaller nation holds (Brian, 18 November): whose they are, how it got them, and when. */
-export interface PlanHeld { hull: 'bb' | 'cv'; from: string; how: 'taken' | 'stolen'; turn: number }
+/**
+ * Plans a smaller nation holds of a weapon only the great powers make (Brian, 18 November; ruling 235 and its rider
+ * b542): a battleship, a carrier, or one of four technologies. Whose they are, how it got them, and when.
+ */
+export interface PlanHeld { what: 'bb' | 'cv' | 'heavybombers' | 'jets' | 'rockets' | 'guided'; from: string; how: 'taken' | 'stolen'; turn: number }
 
 /** A spy: a piece the player recruits, sends abroad and may lose. */
 export interface Agent {

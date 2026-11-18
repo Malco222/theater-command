@@ -297,7 +297,7 @@ function spies(g: Game, nat: string): string | null {
   const did: string[] = [];
   const war = n.atWar.filter((e) => g.nations[e]?.alive);
   // One recruit a month while the service has room: all it can run in a war, a guard or two in peace.
-  const want = war.length ? mostAgents(nat) : Math.min(mostAgents(nat), Math.max(1, S.guards));
+  const want = war.length ? mostAgents(nat, g) : Math.min(mostAgents(nat, g), Math.max(1, S.guards));
   if (agentsOf(g, nat).length < want && whyNotRecruit(g, nat) === null && allowance(g, nat) >= INTEL.agents.cost && n.pp - INTEL.agents.cost >= PRODUCTION.aiReserve) {
     const a = recruit(g, nat);
     if (a) { g.flags['dk:alw'] = Math.max(0, allowance(g, nat) - INTEL.agents.cost); did.push(`recruited agent ${a.name}`); }
@@ -557,7 +557,7 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
     }
     case 'spies': {
       const all = agentsOf(g, nat), out = all.filter((a) => abroad(g, a)).length;
-      return all.length ? `${all.length} of ${mostAgents(nat)} agents: ${out} abroad, ${all.length - out} at home.` : `No agents yet. The service can run ${mostAgents(nat)}.`;
+      return all.length ? `${all.length} of ${mostAgents(nat, g)} agents: ${out} abroad, ${all.length - out} at home.` : `No agents yet. The service can run ${mostAgents(nat, g)}.`;
     }
     case 'air': {
       // Carrier wings are counted apart: they are aboard their fleets, at no airfield (ruling 176(b)).

@@ -14,9 +14,10 @@ import { traitRule, type Trait, type When } from './traits';
 import { RES, keepsStores, oilMonths } from './resources';
 import { researchSpeed } from './buildings';
 import { govMul } from './government';
+import { PLANS, planRules, whyNoTechPlans } from './plans';
 import type { Field, Game, Nation, TechState } from './types';
 
-export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine';
+export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine' | 'intel';
 
 export interface Tech {
   id: string;
@@ -50,7 +51,12 @@ export interface Tech {
   cost?: { what: string[]; mul: number };
   fleet?: number;
   seaLoss?: number;
+  /** The Intelligence branch (rider b542 on ruling 235): what it does for the nation's agents (intel.ts). */
+  spy?: Partial<SpyTech>;
 }
+
+/** What the Intelligence branch has done for a nation's agents, all told. */
+export interface SpyTech { caught: number; rest: number; theft: number; agents: number; guard: number }
 
 /** A formation the tree unlocks beyond the ordinary kinds. */
 export interface TechUnit { label: string; word: string; divs: number; cost: number; months: number; most: number; blurb: string }
@@ -59,6 +65,7 @@ export const TECH = data as unknown as {
   months: number[];
   early: number;
   slots: Record<string, number>;
+  spyTeams?: number;
   branches: { id: Branch; label: string; text: string }[];
   eras: string[];
   techs: Tech[];
@@ -145,7 +152,48 @@ export function teamsOf(g: Game, nat: string): number {
   return (TECH.slots[nat] ?? TECH.slots._default) + sum(g, nat).slots + (g.nations[nat].lab?.founded ?? 0);
 }
 
+/**
+ * Rider b542 on ruling 235 (Brian: a smaller nation's "tech tree is more around spying efforts"): every nation but
+ * the great powers has a team more, its secret service's laboratory, that works the Intelligence branch alone.
+ */
+export const spyTeamsOf = (g: Game, nat: string): number => (techRules(g) && planRules(g) && !PLANS.great.includes(nat) ? TECH.spyTeams ?? 0 : 0);
+
+/** The work of a nation's ordinary teams, and of its spy team. */
+const teamWork = (s: TechState): TechState['work'] => s.work.filter((w) => !w.spy);
+const spyWork = (s: TechState): TechState['work'] => s.work.filter((w) => w.spy);
+
+/** True when a new project on this technology would go to the nation's spy team. */
+const forSpyTeam = (g: Game, nat: string, s: TechState, t: Tech): boolean => t.branch === 'intel' && spyWork(s).length < spyTeamsOf(g, nat);
+
 export const hasTech = (g: Game, nat: string, id: string): boolean => !!techOf(g, nat)?.done.includes(id);
+
+/** What the Intelligence branch has done for a nation's agents: 'caught' multiplies, the rest add. */
+export function spyOf(g: Game, nat: string): SpyTech {
+  const out: SpyTech = { caught: 1, rest: 0, theft: 0, agents: 0, guard: 0 };
+  for (const id of techOf(g, nat)?.done ?? []) {
+    const x = BY_ID[id]?.spy;
+    if (!x) continue;
+    out.caught *= x.caught ?? 1; out.rest += x.rest ?? 0; out.theft += x.theft ?? 0; out.agents += x.agents ?? 0; out.guard += x.guard ?? 0;
+  }
+  return out;
+}
+
+/** A technology gained with a great power's plans (plans.ts): in service at once, as if researched. */
+export function grantTech(g: Game, nat: string, id: string): boolean {
+  const s = techOf(g, nat);
+  if (!s || !BY_ID[id] || s.done.includes(id)) return false;
+  s.done.push(id);
+  s.work = s.work.filter((w) => w.id !== id);
+  return true;
+}
+
+/** The kin of a great power (arsenal.json plans.kin) have its plans of the locked technologies wherever it has researched them. */
+function kinTechs(g: Game, n: Nation): void {
+  const of = PLANS.kin[n.id];
+  if (!of || !planRules(g) || !n.tech) return;
+  const m = g.nations[of]?.tech;
+  for (const id of PLANS.techs) if (m?.done.includes(id) && !n.tech.done.includes(id)) grantTech(g, n.id, id);
+}
 
 // ---- Starting and stopping work ---------------------------------------------------------------------
 
@@ -165,17 +213,20 @@ export function whyNotResearch(g: Game, nat: string, id: string): string | null 
   if (!g.nations[nat].alive) return 'The nation is out of the war.';
   if (s.done.includes(id)) return 'Already researched.';
   if (s.work.some((w) => w.id === id)) return 'A team is already at work on it.';
+  // (Rider b542: the four weapons only the great powers develop come to the others with a great power's plans.)
+  const held = whyNoTechPlans(g, nat, id);
+  if (held) return held;
   const lacks = t.needs.filter((x) => !s.done.includes(x));
   if (lacks.length) return `Needs ${and(lacks.map((x) => BY_ID[x]?.name ?? x))} first.`;
-  if (s.work.length >= teamsOf(g, nat)) return 'Every research team is busy. Wait for one to finish, or stop a project.';
+  if (!forSpyTeam(g, nat, s, t) && teamWork(s).length >= teamsOf(g, nat)) return 'Every research team is busy. Wait for one to finish, or stop a project.';
   return null;
 }
 
 /** Puts a free research team to work on a technology. */
 export function startResearch(g: Game, nat: string, id: string): boolean {
   if (whyNotResearch(g, nat, id) !== null) return false;
-  const of = monthsFor(BY_ID[id], g.turn);
-  techOf(g, nat)!.work.push({ id, left: of, of });
+  const of = monthsFor(BY_ID[id], g.turn), s = techOf(g, nat)!;
+  s.work.push({ id, left: of, of, ...(forSpyTeam(g, nat, s, BY_ID[id]) ? { spy: true } : {}) });
   return true;
 }
 
@@ -220,7 +271,7 @@ export function facesTanks(g: Game, nat: string): boolean {
 }
 
 /** What a computer-run nation's staff would research next, or null when nothing is open to it. */
-export function staffPick(g: Game, nat: string, turn = g.turn): string | null {
+export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): string | null {
   const s = techOf(g, nat);
   if (!s) return null;
   const A = TECH.ai, order = A.order[nat] ?? A.order._default, year = yearOf(turn);
@@ -229,6 +280,9 @@ export function staffPick(g: Game, nat: string, turn = g.turn): string | null {
   const thirsty = oilMonths(g, nat) < RES.ai.synthAt;
   for (const t of TECH.techs) {
     if (s.done.includes(t.id) || s.work.some((w) => w.id === t.id) || t.needs.some((x) => !s.done.includes(x))) continue;
+    // (Rider b542: the spy team works the Intelligence branch alone, in its order; the other teams never do, and
+    // nobody's staff begins what only a great power's plans can give it.)
+    if ((t.branch === 'intel') !== spy || whyNoTechPlans(g, nat, t.id)) continue;
     const place = order.indexOf(t.branch);
     // A staff watching its oil run down puts the fuel chemists first.
     const fuel = t.oil && thirsty ? A.fuel ?? 0 : 0;
@@ -247,6 +301,7 @@ export function staffPick(g: Game, nat: string, turn = g.turn): string | null {
 /** One month in the laboratories: every team's work moves on, what is finished is in service, and a staff with a free team picks its next project. */
 function month(g: Game, n: Nation, turn: number, staffed: boolean, quiet: boolean): void {
   const s = n.tech!;
+  kinTechs(g, n);
   const due: string[] = [];
   // Schools and institutes at home quicken every team.
   const pace = researchSpeed(g, n.id) * govMul(g, n.id, 'research');
@@ -256,12 +311,24 @@ function month(g: Game, n: Nation, turn: number, staffed: boolean, quiet: boolea
     for (const id of due) finish(g, n, id, quiet);
   }
   if (!staffed) return;
-  while (s.work.length < teamsOf(g, n.id)) {
-    const id = staffPick(g, n.id, turn);
-    if (!id) break;
-    const of = monthsFor(BY_ID[id], turn);
-    s.work.push({ id, left: of, of });
+  fill(g, n, turn);
+}
+
+/** A staff sets its free teams to work, the spy team on the Intelligence branch (rider b542). Returns the projects begun. */
+function fill(g: Game, n: Nation, turn: number): string[] {
+  const s = n.tech!;
+  const begun: string[] = [];
+  for (const spy of [false, true]) {
+    const room = (): boolean => (spy ? spyWork(s).length < spyTeamsOf(g, n.id) : teamWork(s).length < teamsOf(g, n.id));
+    while (room()) {
+      const id = staffPick(g, n.id, turn, spy);
+      if (!id) break;
+      const of = monthsFor(BY_ID[id], turn);
+      s.work.push({ id, left: of, of, ...(spy ? { spy: true } : {}) });
+      begun.push(id);
+    }
   }
+  return begun;
 }
 
 /**
@@ -285,16 +352,7 @@ export function openTech(g: Game): void {
 
 /** Fills a staff's free teams without a month passing. Returns the projects begun. */
 function month0(g: Game, n: Nation): string[] {
-  const s = n.tech!;
-  const begun: string[] = [];
-  while (s.work.length < teamsOf(g, n.id)) {
-    const id = staffPick(g, n.id);
-    if (!id) break;
-    const of = monthsFor(BY_ID[id], g.turn);
-    s.work.push({ id, left: of, of });
-    begun.push(id);
-  }
-  return begun;
+  return fill(g, n, g.turn);
 }
 
 /** The player's advisers set his free research teams to work, as a computer nation's staff would (depth.ts). Returns the projects begun. */
@@ -386,6 +444,13 @@ export function techRule(t: Tech): string {
   if (t.slots) out.push(t.slots === 1 ? 'One more research team.' : `${t.slots} more research teams.`);
   if (t.winterKit) out.push('Its troops no longer march and fight worse in the eastern winter.');
   if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month, where no raider can reach it. A country that keeps no stocks of oil has no use for it.`);
+  // The Intelligence branch (rider b542): what it does for the nation's agents (intel.ts).
+  const x = t.spy;
+  if (x?.caught !== undefined) out.push(`Its agents abroad are caught ${pct(1 - x.caught)} less often.`);
+  if (x?.rest) out.push(`After an attempt its agents lie low ${x.rest === 1 ? 'a month' : `${x.rest} months`} less, never under a month.`);
+  if (x?.theft) out.push(`Its agents' thefts of a great power's plans come off ${Math.round(x.theft * 100)} more times in every 100.`);
+  if (x?.agents) out.push(`Its secret service can run ${x.agents === 1 ? 'one more agent' : `${x.agents} more agents`} at once.`);
+  if (x?.guard) out.push(`Its agents on guard at home stop ${Math.round(x.guard * 100)} more of every 100 enemy plots.`);
   return out.join(' ');
 }
 
@@ -417,6 +482,8 @@ export interface TechView {
   nat: string;
   teams: number;
   busy: number;
+  /** Of the teams, those of the secret service's laboratory, which work the Intelligence branch alone (rider b542). */
+  spyTeams: number;
   done: number;
   total: number;
   branches: { id: Branch; label: string; text: string; done: number; total: number }[];
@@ -443,7 +510,7 @@ export function techView(g: Game, nat: string): TechView | null {
     };
   });
   return {
-    nat, teams: teamsOf(g, nat), busy: s.work.length, done: nodes.filter((x) => x.state === 'done').length, total: nodes.length,
+    nat, teams: teamsOf(g, nat) + spyTeamsOf(g, nat), busy: s.work.length, spyTeams: spyTeamsOf(g, nat), done: nodes.filter((x) => x.state === 'done').length, total: nodes.length,
     branches: TECH.branches.map((b) => ({ ...b, done: nodes.filter((x) => x.branch === b.id && x.state === 'done').length, total: nodes.filter((x) => x.branch === b.id).length })),
     eras: TECH.eras, nodes,
   };
@@ -453,8 +520,8 @@ export function techView(g: Game, nat: string): TechView | null {
 export function idleTeams(g: Game, nat: string): number {
   const s = techOf(g, nat);
   if (!s || !g.nations[nat].alive) return 0;
-  const free = teamsOf(g, nat) - s.work.length;
-  return free > 0 && staffPick(g, nat) ? free : 0;
+  const free = Math.max(0, teamsOf(g, nat) - teamWork(s).length), spare = Math.max(0, spyTeamsOf(g, nat) - spyWork(s).length);
+  return (free > 0 && staffPick(g, nat) ? free : 0) + (spare > 0 && staffPick(g, nat, g.turn, true) ? spare : 0);
 }
 
 /** For a battle ticket: what the tree has added to these branches, nation by nation. */
