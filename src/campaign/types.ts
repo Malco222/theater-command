@@ -1127,6 +1127,8 @@ export interface Intel {
   how?: Record<number, 'battle' | 'agent' | 'air'>;
   /** Seas the player's aircraft have searched, and the month they did. */
   sea?: Record<number, number>;
+  /** Seas each computer staff's aircraft have searched, and the month they did (ruling 52): by nation, then by sea. */
+  seaBy?: Record<string, Record<number, number>>;
   /**
    * Cut railways as the player last knew them (rulings 113 and 114): the month, whether he saw the cut or has it by
    * the report of his own raid, agent or troops, and the cause where it was known. One record a province.

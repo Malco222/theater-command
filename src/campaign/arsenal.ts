@@ -7,7 +7,7 @@
 
 import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
-import { AIRWAR, airFleetsOf, airPool, airWar, airfieldsHold, carrierRules, foundAirFleet, hasAirfield } from './air';
+import { AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, carrierRules, cover, foundAirFleet, hasAirfield, km, whyNotBase } from './air';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
 import { govMul } from './government';
@@ -693,13 +693,91 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
 // ---- The computer's use of it -----------------------------------------------------------------------
 
 /**
- * A computer-run nation in the grand campaign puts guns on its industry once it has been bombed: one level at a
- * time on the province with the most factories that is not yet fully defended. It buys nothing else from the
- * arsenal: its fleets and air forces grow on history's programmes.
+ * What a computer-run nation's staff orders from the arsenal in the grand campaign, beside the corps its factories
+ * raise (economy.ts): guns for its bombed industry, and airfields behind its army.
  */
 export function aiArsenal(g: Game, nat: string): void {
   const n = g.nations[nat];
   if (!budgeted(g) || byHand(g, nat, 'build') || !n.alive) return;
+  aiGuns(g, nat);
+  aiAirfields(g, nat);
+}
+
+/**
+ * A computer staff lays out airfields behind its army (ruling 52(a); the air war of the grand campaign). Where a
+ * stretch of its front lies beyond the reach of every airfield its fighters could use, it orders a field from the
+ * arsenal in the province of its own that would cover most of the divisions standing there: one behind the line for
+ * choice, one in it where it holds nothing else. It waits until its front has stood out of reach so many months
+ * running (airwar.json ai.basing 'fields': a field is no answer to a campaign that is over in a month), except
+ * where a war begins with the front already out of reach: that field is ordered in the war's first month. One on order
+ * at a time, paid for as its guns are, above the staff's reserve. The fighters come up by the staff's own basing rule
+ * once the field is open (air.ts, baseByThreat). A player's own production desk orders none: that is his to decide.
+ */
+function aiAirfields(g: Game, nat: string): void {
+  const n = g.nations[nat];
+  const wait = AIRWAR.ai.basing.fields;
+  if (!airWar(g) || wait === undefined || nat === g.human) return;
+  if (n.queue.some((b) => b.what === 'work' && b.item === 'field')) return;
+  const key = `bf:${nat}`;
+  const bare = bareFront(g, nat);
+  if (!bare.length) { delete g.flags[key]; return; }
+  // (The month it was first seen so, kept one up so that the campaign's first month is not a nought.)
+  const since = g.flags[key] ?? (g.flags[key] = g.turn + 1);
+  // A front that begins a war out of reach of every field is not waited on: the staff knew where the war would open.
+  const fresh = bare.some(([id]) => g.regions[id].nb.some((j) => {
+    const e = g.regions[j].ctrl;
+    const began = atWar(g, nat, e) ? g.flags[`war:${nat}:${e}`] ?? g.flags[`war:${e}:${nat}`] : undefined;
+    return began !== undefined && g.turn - began <= 1;
+  }));
+  if (!fresh && g.turn + 1 - since < wait) return;
+  const R = fighterReach(g, nat);
+  let best: Region | null = null, bv = 0;
+  for (const r of g.regions) {
+    if (r.ctrl !== nat || hasAirfield(g, r.id)) continue;
+    let v = 0;
+    for (const [id, divs] of bare) v += divs * cover(km(g, r.id, id), R);
+    if (v <= 0) continue;
+    // (A field in the front line is the first thing an enemy advance takes.)
+    if (!r.nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) v *= 2;
+    if (v > bv) { best = r; bv = v; }
+  }
+  if (!best) return;
+  const o = offers(g, nat, best.id).find((x) => x.key === 'work:field');
+  if (o && o.why === null && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g, nat, 'work:field', best.id);
+}
+
+/** The land fighter groups a nation has, and the shortest reach among them. */
+const landFighters = (g: Game, nat: string) => airFleetsOf(g, nat).filter((f) => f.kind === 'ftr' && f.ftr > 0 && f.ship === undefined);
+const fighterReach = (g: Game, nat: string): number => Math.min(...landFighters(g, nat).map((f) => airRange(f, g).ftr));
+
+/**
+ * The stretches of a nation's front that no airfield open to its fighter groups can reach: each province where its
+ * field corps stand beside ground an enemy holds, with the divisions it has there. Empty when it is at peace or has
+ * no fighters.
+ */
+export function bareFront(g: Game, nat: string): [number, number][] {
+  const n = g.nations[nat];
+  if (!n?.alive || !n.atWar.length) return [];
+  const fighters = landFighters(g, nat);
+  if (!fighters.length) return [];
+  const R = Math.min(...fighters.map((f) => airRange(f, g).ftr));
+  // The front: its field corps beside ground an enemy holds, by their divisions.
+  const front = new Map<number, number>();
+  for (const c of g.corps) {
+    if (c.nat !== nat || c.dead || c.kind === 'fort' || c.kind === 'eng') continue;
+    if (g.regions[c.reg].nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) front.set(c.reg, (front.get(c.reg) ?? 0) + c.divs);
+  }
+  if (!front.size) return [];
+  const open = g.regions.filter((r) => r.id === fighters[0].base || whyNotBase(g, fighters[0], r, true) === null);
+  return [...front.entries()].filter(([id]) => !open.some((r) => km(g, r.id, id) <= R));
+}
+
+/**
+ * A computer-run nation in the grand campaign puts guns on its industry once it has been bombed: one level at a
+ * time on the province with the most factories that is not yet fully defended.
+ */
+function aiGuns(g: Game, nat: string): void {
+  const n = g.nations[nat];
   const raided = g.raids[nat];
   if (!raided || g.turn - raided.turn > 2) return;
   if (n.queue.some((b) => b.what === 'work' && b.item === 'aa')) return;

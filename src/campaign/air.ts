@@ -86,7 +86,7 @@ export const AIRWAR = warData as unknown as {
   /** Ruling 227 (b433): what a won sky lends the land battle in the air war; see the note in the data. */
   sky: { land: number; attack: number; defence: number; own: number; radar: string };
   success: { k: number; factory: number };
-  ai: { escortReady: number; basing: { better: number; least: number }; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number }; beach?: { groups: number; home: number; monthly: number; sky: number } } };
+  ai: { escortReady: number; basing: { better: number; least: number; presence?: number; fields?: number }; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number }; beach?: { groups: number; home: number; monthly: number; sky: number } } };
 };
 
 /** True once the air war is its own game: airfields are places and air groups of one kind fly from them. The grand campaign only. */
@@ -106,7 +106,7 @@ export const CARRIERS = carrierData as unknown as {
   sunk: { saved: number };
   empty: number;
   search: { ships: Ships; next: number; air: number; flight: number; find: number; report: number; open: number; subs: number; aircraft: number; ready: number };
-  ai: { success: number; loss: number; worth: number; landShare: number; sortie: number; ready: number; shy: number };
+  ai: { success: number; loss: number; worth: number; landShare: number; sortie: number; ready: number; shy: number; trade?: boolean; searches?: number };
 };
 
 /** True once carriers have wings of their own and aircraft can be aimed at one fleet or at a harbour. The grand campaign only. */
@@ -1772,6 +1772,18 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
   // The troops fighting the battles of the staff's main effort ask for the sky there (b447): the margin over the
   // enemy aircraft that can reach them that holds it by numbers (airwar.json sky 'own'), not their bare share.
   if (battles.length) for (const id of troops) if (battles.includes(id) || g.regions[id].nb.some((j) => battles.includes(j))) ask[at.get(id)!] *= Math.max(1, AIRWAR.sky.own);
+  // Ruling 52(a): the fighters come up behind the army whether or not enemy aircraft are over it. Each stretch of
+  // front asks for a standing share besides, by the divisions the nation has there: 'presence' of all that the
+  // threat asks for, and all of the fighters where nothing threatens at all.
+  const P = g.flags.open === 1 ? K.presence ?? 0 : 0;
+  if (P > 0 && troops.size) {
+    const divs = new Map<number, number>();
+    let all = 0;
+    for (const c of g.corps) if (c.nat === nat && !c.dead && c.kind !== 'fort' && troops.has(c.reg)) { divs.set(c.reg, (divs.get(c.reg) ?? 0) + c.divs); all += c.divs; }
+    const threat = ask.reduce((s, x) => s + x, 0);
+    const share = threat > 0 ? threat * P : 1;
+    if (all > 0) for (const [id, d] of divs) ask[at.get(id)!] += (share * d) / all;
+  }
   const asked = ask.reduce((s, x) => s + x, 0);
   if (asked <= 0) return;
   const fighters = mine.filter((f) => f.kind === 'ftr' && f.ftr > 0 && !afloat(f));
@@ -1808,16 +1820,39 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
   for (const f of fighters) if (stays(f)) meets(f, f.base, true);
   // The airfields open to this nation's groups (whyNotBase, leaving out each group's own base and how far it can fly in a month).
   const open = g.regions.filter((r) => whyNotBase(g, free[0], r, true) === null || r.id === free[0].base);
+  // Ruling 52(a), its second part: a move behind the army never takes a group out of reach of the enemy. A group
+  // that can reach ground an enemy holds from where it stands goes only to a field from which it still can.
+  const foes = P > 0 ? g.regions.filter((r) => atWar(g, nat, r.ctrl)).map((r) => r.id) : [];
+  const toFoe = new Map<number, number>();
+  const foeAt = (base: number): number => {
+    let d = toFoe.get(base);
+    if (d === undefined) { d = Infinity; for (const id of foes) d = Math.min(d, km(g, base, id)); toFoe.set(base, d); }
+    return d;
+  };
   for (const f of free.sort((a, b) => b.ftr - a.ftr || a.id - b.id)) {
     const here = meets(f, f.base, false);
-    let best: { r: Region; v: number } | null = null;
+    const R = reach(f, g).ftrRange;
+    const engaged = P > 0 && foeAt(f.base) <= R;
+    let best: { r: Region; v: number } | null = null, far: { r: Region; v: number } | null = null;
+    const inFerry = (r: Region): boolean => r.id !== f.base && !overOcean(g, f, r) && km(g, f.base, r.id) <= AIR.ferry && fieldRoom(g, r.id, f);
     for (const r of open) {
-      if (r.id === f.base || overOcean(g, f, r) || km(g, f.base, r.id) > AIR.ferry || !fieldRoom(g, r.id, f)) continue;
+      if (r.id === f.base || overOcean(g, f, r) || !fieldRoom(g, r.id, f)) continue;
+      const near = km(g, f.base, r.id) <= AIR.ferry;
+      // (Ruling 52(a): a field beyond a month's flight is weighed too, to be reached by stages. Only for a group out of the fight.)
+      if (!near && (P <= 0 || engaged)) continue;
+      if (engaged && foeAt(r.id) > R) continue;
       const v = meets(f, r.id, false);
-      if (!best || v > best.v) best = { r, v };
+      if (near) { if (!best || v > best.v) best = { r, v }; } else if (!far || v > far.v) far = { r, v };
     }
-    if (best && best.v > here * K.better + K.least * f.ftr && rebaseAir(g, f, best.r)) meets(f, best.r.id, true);
-    else meets(f, f.base, true);
+    const need = here * K.better + K.least * f.ftr;
+    if (best && best.v > need && rebaseAir(g, f, best.r)) { meets(f, best.r.id, true); continue; }
+    if (far && far.v > need) {
+      // Too far to fly in a month: it goes to the open field within a month's flight that lies nearest to it.
+      let step: Region | null = null, sd = km(g, f.base, far.r.id);
+      for (const r of open) { if (!inFerry(r)) continue; const d = km(g, r.id, far.r.id); if (d < sd) { sd = d; step = r; } }
+      if (step && rebaseAir(g, f, step)) { meets(f, step.id, true); continue; }
+    }
+    meets(f, f.base, true);
   }
 }
 
