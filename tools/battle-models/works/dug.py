@@ -451,13 +451,13 @@ def Foxhole(fine=True, nation="_default", name="Foxhole"):
     gy0, gy1, gz0, gz1 = -0.16, 0.12, -0.62, -0.42                  # the grenade niche, in the front wall
     per = rr_perimeter(HX, HY, RC, 0.05 if fine else 0.25, (gy0, gy0 + 0.012, gy1 - 0.012, gy1))
     # rings from the outer edge of the trodden apron in to the floor: (offset, z, tag)
-    ring = [(1.5, 0.004, "edge"), (1.25, 0.014, "apron"), (1.0, 0.018, "apron"), (0.75, 0.02, "apron"), (0.55, 0.018, "apron"), (0.38, 0.016, "apron"),
+    ring = [(1.5, -0.04, "edge"), (1.25, 0.004, "apron"), (1.0, 0.016, "apron"), (0.75, 0.02, "apron"), (0.55, 0.018, "apron"), (0.38, 0.016, "apron"),
             (0.25, 0.014, "lip"), (0.14, 0.01, "lip"), (0.07, -0.005, "lip"), (0.025, -0.04, "wall")]
     for z in (-0.18, -0.3, gz1, gz1, -0.52, gz0, gz0, -0.75, -0.9, -1.05, -1.14):
         ring.append((-0.035 * (-z) / D, z, "wall"))
     ring += [(-0.06, -D + 0.015, "floor"), (-0.1, -D, "floor"), (-0.14, -D, "floor")]
     if not fine:
-        ring = [(1.5, 0.004, "edge"), (0.9, 0.018, "apron"), (0.38, 0.016, "apron"), (0.14, 0.01, "lip"), (0.025, -0.04, "wall"),
+        ring = [(1.5, -0.04, "edge"), (0.9, 0.018, "apron"), (0.38, 0.016, "apron"), (0.14, 0.01, "lip"), (0.025, -0.04, "wall"),
                 (-0.012, -0.42, "wall"), (-0.024, -0.82, "wall"), (-0.035, -1.14, "wall"), (-0.1, -D, "floor")]
     amp = {"apron": 0.018, "lip": 0.02, "wall": 0.03, "floor": 0.012}
     niche_rows = [i for i, r in enumerate(ring) if r[1] in (gz0, gz1)]
@@ -590,7 +590,7 @@ def ur(z):
 
 
 def bay_profile():
-    P = [(-3.5, 0.004, "edge"), (-3.1, 0.02, "bank"), (-2.7, 0.08, "bank"), (-2.35, 0.17, "bank"), (-2.05, 0.25, "bank"), (-1.8, 0.29, "bank"),
+    P = [(-3.5, -0.04, "edge"), (-3.1, 0.02, "bank"), (-2.7, 0.08, "bank"), (-2.35, 0.17, "bank"), (-2.05, 0.25, "bank"), (-1.8, 0.29, "bank"),
          (-1.55, 0.26, "bank"), (-1.3, 0.16, "bank"), (-1.12, 0.07, "bank"), (-0.98, 0.03, "lip"), (-0.87, 0.014, "lip")]
     for z, tag in [(-0.04, "wall"), (-0.12, "wall"), (DOOR_TOP, "wall"), (-0.5, "wall"), (-0.75, "wall"), (-1.05, "wall"), (-1.05, "niche"), (-1.3, "niche"),
                    (-1.55, "niche"), (-1.55, "wall"), (-1.75, "wall"), (-1.9, "wall")]:
@@ -605,7 +605,7 @@ def bay_profile():
     P += [(uf(SHELF), SHELF, "fwall"), (uf(SHELF), SHELF, "shelf"), (uf(-0.13), -0.13, "shelf"), (uf(-0.04), -0.04, "shelf"),
           (U_FL + 0.035, 0.03, "flip"), (0.97, BERM, "berm"), (1.1, BERM, "berm"), (1.24, BERM, "berm"),
           (1.3, 0.13, "glacis"), (1.45, 0.18, "glacis"), (1.75, 0.17, "glacis"), (2.2, 0.12, "glacis"), (2.75, 0.06, "glacis"), (3.3, 0.022, "glacis"),
-          (3.9, 0.004, "edge")]
+          (3.9, -0.04, "edge")]
     return P
 
 
@@ -920,8 +920,10 @@ def dugout(m, path, s, seed=0):
             m.lathe(c - t * 0.008, t, [(0.0, 0.058), (0.016, 0.058)], "rubber", 12, (False, False))
     # the roof: logs across the chamber, their ends showing at the mound's foot, the mound over them
     def mound_h(ss, uu):
-        a = abs((ss - s) / 2.0) ** 4 + abs((uu + 3.25) / 2.3) ** 4
-        return 1.05 * max(0.0, 1.0 - a) ** 0.5
+        # (a heap, not a cushion: it runs out to nothing at its foot and is broad on top, a little higher to the rear)
+        r = math.hypot((ss - s) / 2.28, (uu + 3.25) / 2.33)
+        k = min(max((1.0 - r) / 0.78, 0.0), 1.0)
+        return (0.98 + 0.1 * (-(uu + 3.25) / 2.33)) * k * k * (3.0 - 2.0 * k)
     for k in range(12):
         uu = -1.42 - k * 0.25
         e = 2.0 + g.uniform(-0.08, 0.12)
@@ -935,14 +937,14 @@ def dugout(m, path, s, seed=0):
             uu = -0.92 - 4.7 * j / nu
             h = mound_h(ss, uu)
             p = path.at(ss, uu, 0.0)
-            h += 0.06 * fbm(p * 1.0 + Vector((5.0, 0, 0)), 0.5) * min(1.0, h * 4)
-            verts.append(path.at(ss, uu, max(h, 0.0) + (0.012 if h > 0 else -0.03)))
+            h += (0.07 * fbm(p * 1.0 + Vector((5.0, 0, 0)), 0.5) + 0.09 * fbm(p * 0.45 + Vector((1.0, 7.0, 0)), 1.0, 2)) * min(1.0, h * 3)
+            verts.append(path.at(ss, uu, max(h, 0.0) - 0.03 * (1.0 - min(1.0, h * 25))))
     for i in range(ns):
         for j in range(nu):
             f = (i * (nu + 1) + j, (i + 1) * (nu + 1) + j, (i + 1) * (nu + 1) + j + 1, i * (nu + 1) + j + 1)
-            if max(verts[c].z for c in f) > 0.02:
+            if max(verts[c].z for c in f) > -0.02:
                 faces.append(f)
-    bits.turfed(m, verts, faces, amount=0.35, base="earth.dry", low=0.08, seed=3.0)
+    bits.turfed(m, verts, faces, amount=0.5, base="earth.dry", low=0.08, seed=3.0)
     # sandbags round the stove pipe's foot, and the pipe: a bend and a hat
     pc = path.at(s + 0.7, -3.0, 0.0)
     for k in range(4):
@@ -1258,7 +1260,7 @@ def at_wall(z):
 
 
 def ditch_profile():
-    P = [(-7.3, 0.004, "edge"), (-6.8, 0.04, "bank"), (-6.2, 0.2, "bank"), (-5.6, 0.5, "bank"), (-5.0, 0.8, "bank"), (-4.5, 0.97, "bank"), (-4.0, 1.02, "bank"),
+    P = [(-7.3, -0.04, "edge"), (-6.8, 0.04, "bank"), (-6.2, 0.2, "bank"), (-5.6, 0.5, "bank"), (-5.0, 0.8, "bank"), (-4.5, 0.97, "bank"), (-4.0, 1.02, "bank"),
          (-3.55, 0.9, "bank"), (-3.15, 0.6, "bank"), (-2.85, 0.3, "bank"), (-2.65, 0.1, "bank"), (-2.45, 0.03, "berm"), (-2.2, 0.02, "berm"), (-2.06, 0.012, "lip")]
     for z in (-0.05, -0.3, -0.6, -0.9, -1.2, -1.5, -1.8, -2.1, -2.38):
         P.append((at_wall(z), z, "wall"))
@@ -1267,7 +1269,7 @@ def ditch_profile():
     for k in range(13):
         f = k / 12
         P.append((u0 + (AT_LIP_E - u0) * f, z0 * (1 - f) - 0.02 * math.sin(math.pi * f), "slope"))
-    P += [(AT_LIP_E + 0.1, 0.012, "lip"), (2.85, 0.016, "apron"), (3.3, 0.014, "apron"), (3.9, 0.004, "edge")]
+    P += [(AT_LIP_E + 0.1, 0.012, "lip"), (2.85, 0.016, "apron"), (3.3, 0.014, "apron"), (3.9, -0.04, "edge")]
     return P
 
 

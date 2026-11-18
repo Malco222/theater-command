@@ -37,7 +37,7 @@ GROUPS = [
                                        ("AntiTankDitch", "Anti-tank ditch")]),
 ]
 # (bearing, how far in spans, how high it looks down, lens) where the usual three-quarter view does not suit
-VIEW = {"LightFlak": (-28.0, 1.9, 14.0, 50), "HeavyFlak": (-28.0, 1.7, 15.0, 50), "HeavyFlakTwin": (-28.0, 1.75, 15.0, 50), "FlakTower": (-32.0, 1.8, 10.0, 50), "CoastalBattery": (-30.0, 1.5, 14.0, 50), "Bunker": (-30.0, 1.5, 15.0, 50), "CamoNet": (-28.0, 1.5, 22.0, 50),
+VIEW = {"LightFlak": (-28.0, 2.7, 14.0, 50), "HeavyFlak": (-28.0, 1.7, 15.0, 50), "HeavyFlakTwin": (-28.0, 1.75, 15.0, 50), "FlakTower": (-32.0, 1.8, 10.0, 50), "CoastalBattery": (-30.0, 1.5, 14.0, 50), "Bunker": (-30.0, 1.5, 15.0, 50), "CamoNet": (-28.0, 1.5, 22.0, 50),
         "Fieldworks": (-140.0, 1.5, 30.0, 50), "FieldworksCorner": (-140.0, 1.5, 30.0, 50), "FieldworksDugout": (-140.0, 1.5, 30.0, 50), "Foxhole": (-150.0, 1.4, 32.0, 50),
         "AntiTankDitch": (-40.0, 1.5, 28.0, 50), "MortarPit": (-150.0, 1.5, 30.0, 50), "GunPit": (-150.0, 1.5, 28.0, 50)}
 # a pose that shows the piece better than rest: {part: degrees}

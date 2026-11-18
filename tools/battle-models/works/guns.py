@@ -511,7 +511,7 @@ def LightFlak(fine=True, nation="_default", name="LightFlak"):
                               "events": [{"t": 0.0, "fx": "shell_burst", "socket": "hit", "cue": "explosion_debris"}, {"t": 0.2, "fx": "fire", "socket": "fire", "cue": "fire_start", "cue_loop": "fire_small_loop"}]}
     weather(m, [(g["T"] + X * 2.5, 0.4, 0.85)], splash=0.2, rust=0.45)
     m.info["span"] = 3.0
-    m.info["high"] = 1.25
+    m.info["high"] = 1.45
     m.info["worn"] = [(0.0, 0.0, 2.4)]
     m.info["clear"] = [[(math.cos(math.radians(a)) * 1.0, math.sin(math.radians(a)) * 1.0) for a in range(0, 360, 30)]]
     return m

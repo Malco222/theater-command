@@ -161,7 +161,7 @@ def tint_material(name, rough=0.75, up=0.7, sheen=0.2, through=0.45):
 
 class Ground:
     def __init__(self, digs=(), worn=(), seed=3, flat=34.0, fine=26.0, cell=0.25, sun_turn=150.0, sun_elev=40.0, trees=True, grass=True, kind="grass",
-                 sky_level=0.55, sun=3.2, grass_area=38.0, grass_count=120000, clear=(), paths=(), tracks=(), churn=(), centre=(0.0, 0.0), hedges=True):
+                 sky_level=0.55, sun=3.2, grass_area=38.0, grass_count=120000, clear=(), paths=(), tracks=(), churn=(), centre=(0.0, 0.0), hedges=True, dig_depth=3.4):
         self.digs = [[(p[0], p[1]) for p in d] for d in digs]
         self.clear = [[(p[0], p[1]) for p in d] for d in clear]      # outlines where no grass stands (under a work)
         self.cx, self.cy = centre
@@ -175,6 +175,7 @@ class Ground:
         if trees:
             self._trees(hedges)
         self.terrain = self._terrain()
+        self._holes(dig_depth)
         if grass:
             self._grass(grass_area, grass_count)
         self._clods()
@@ -376,6 +377,42 @@ class Ground:
         nt.links.new(bump.outputs["Normal"], rough.inputs["Normal"])
         nt.links.new(rough.outputs["Normal"], bsdf.inputs["Normal"])
         return battle_set.haze(m)
+
+    def _holes(self, depth):
+        """Earth under every hole cut in the ground: its sides and a floor well below any work's own, so that where a
+        work leaves its hole open (the end of a length of fieldworks, made to join the next) there is a face of earth,
+        never the sky seen through the ground."""
+        if not self.digs:
+            return None
+        verts, faces = [], []
+        for d in self.digs:
+            n, b = len(d), len(verts)
+            verts += [(x, y, float(self.height(x, y)) + 0.01) for x, y in d] + [(x, y, -depth) for x, y in d]
+            faces += [(b + k, b + (k + 1) % n, b + n + (k + 1) % n, b + n + k) for k in range(n)]
+            faces.append(tuple(b + n + k for k in range(n)))
+        me = bpy.data.meshes.new("holes")
+        me.from_pydata(verts, [], faces)
+        me.update()
+        mat = bpy.data.materials.new("hole-earth")
+        mat.use_nodes = True
+        nt = mat.node_tree
+        bsdf = nt.nodes["Principled BSDF"]
+        nz = nt.nodes.new("ShaderNodeTexNoise")
+        nz.inputs["Scale"].default_value, nz.inputs["Detail"].default_value = 3.0, 8.0
+        r = nt.nodes.new("ShaderNodeValToRGB")
+        r.color_ramp.elements[0].position, r.color_ramp.elements[0].color = 0.3, (*kit.hex_rgb("5A4A3A"), 1)
+        r.color_ramp.elements[1].position, r.color_ramp.elements[1].color = 0.72, (*kit.hex_rgb("7A6850"), 1)
+        nt.links.new(nz.outputs["Fac"], r.inputs["Fac"])
+        nt.links.new(r.outputs["Color"], bsdf.inputs["Base Color"])
+        bsdf.inputs["Roughness"].default_value = 1.0
+        bump = nt.nodes.new("ShaderNodeBump")
+        bump.inputs["Strength"].default_value, bump.inputs["Distance"].default_value = 0.6, 0.06
+        nt.links.new(nz.outputs["Fac"], bump.inputs["Height"])
+        nt.links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+        me.materials.append(mat)
+        ob = bpy.data.objects.new("holes", me)
+        bpy.context.scene.collection.objects.link(ob)
+        return ob
 
     # ---- what grows
     def _trees(self, hedges):

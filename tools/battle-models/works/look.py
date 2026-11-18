@@ -283,8 +283,12 @@ def works_look(paint, mat, nt, bsdf, mix):
     elif key in ("steel", "iron"):
         col = _edges(nt, col, (0.5, 0.5, 0.5), 0.6, radius=0.012)
         nt.links.new(col, bsdf.inputs["Base Color"])
-        bsdf.inputs["Roughness"].default_value = 0.42
-        bsdf.inputs["Metallic"].default_value = 0.75
+        # (dull: a broad flat of weathered steel must not mirror the sky)
+        r = nt.nodes.new("ShaderNodeMapRange")
+        r.inputs["To Min"].default_value, r.inputs["To Max"].default_value = 0.5, 0.8
+        nt.links.new(_noise(nt, tc, 7.0, 5.0), r.inputs["Value"])
+        nt.links.new(r.outputs["Result"], bsdf.inputs["Roughness"])
+        bsdf.inputs["Metallic"].default_value = 0.5
     elif key in ("rust", "wire"):
         mott = _ramp(nt, _noise(nt, tc, 8.0, 6.0), 0.6, 1.35, 0.25, 0.75)
         col = _times(nt, col, mott, 0.9)
