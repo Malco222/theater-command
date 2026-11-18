@@ -1206,13 +1206,20 @@ namespace TheaterFx
 		}
 		if (Has(M + "light_w"))
 		{
+			// (the lamp hangs above the muzzle, as a shell's does, so the ground at the gun's foot is lifted, never washed
+			// white: at the muzzle's own height a lamp of a shell's strength burns a white pool there. Its strength is cut
+			// by the square of how much lower it hangs than a shell's lamp of the same strength, so its brightest spot on
+			// the ground is no brighter than that shell's: 1700, a tank gun at night lit 1 m round its foot to 249 of 255)
+			const double Watts = std::max(0.0, Num(M + "light_w", 0.0) / 8500.0);
+			const double Hang = Num("game.muzzle_lamp_height_m", 6.0) * std::sqrt(Watts);
+			const double ShellHang = std::max(1.0, Num("burst.flash.light.height_m", 16.0) * std::sqrt(Watts));
 			Flash F;
-			F.At = At + Fw * (Len * 0.5);
+			F.At = At + Fw * (Len * 0.5) + ZUp * Hang;
 			F.Col = Picture("burst.flash.light.colour", Rgb::FromPicture(255, 196, 140));
 			F.Born = Now;
 			F.Life = 0.03;
-			F.Strength = Num(M + "light_w", 0.0) / 8500.0;
-			F.Radius = 12.0 * std::max(1.0, Len);
+			F.Strength = Watts * std::min(1.0, (Hang * Hang) / (ShellHang * ShellHang));
+			F.Radius = 12.0 * std::max(1.0, Len) + Hang;
 			F.bNightOnly = Num(M + "day_lamp", 0.0) <= 0.0; // (by day only the big guns light the ground)
 			Flashes.push_back(F);
 		}
