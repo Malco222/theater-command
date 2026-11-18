@@ -1,6 +1,6 @@
 """Quick looks at a vehicle while she is being built: stills from fixed places.
 
-    python landlook.py <Name> <out folder> [views] [samples] [WxH] [pose=clip@t,clip@t] [turn=deg] [lift=deg] [gun= paint= skirts=]
+    python landlook.py <Name> <out folder> [views] [samples] [WxH] [pose=clip@t,clip@t] [turn=deg] [lift=deg] [gun= paint= mantlet= skirts=]
 
 views: front, rear, side, top, gear (the running gear, close), game (the game's camera: 16 m off, 30 degrees down),
 low, turret, deck. Default: front,rear,gear,game.
@@ -32,7 +32,7 @@ def main():
     opt = dict(a.split("=", 1) for a in sys.argv[6:] if "=" in a)
     kit.fresh()
     t = time.time()
-    pick = {k: opt[k] for k in ("gun", "paint") if k in opt}       # (what a builder offers besides: gun=short paint=yellow skirts=r4)
+    pick = {k: opt[k] for k in ("gun", "paint", "mantlet") if k in opt}       # (what a builder offers besides: gun=short paint=yellow mantlet=cone skirts=r4)
     if opt.get("skirts"):
         pick["skirts"] = True if opt["skirts"] in ("all", "1", "yes") else opt["skirts"]
     v = vehicles.build(name, True, **pick)

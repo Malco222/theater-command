@@ -40,27 +40,48 @@ def coats(v, default="grey", only=None):
     return {"default": default, "choices": out}
 
 
-def pz4_skirts(v, x0, zt, lost=()):
-    """The Panzer IV's skirts of May 1943 on: five thin plates a side hung on a rail a hand's width off her hull,
-    over the upper run of the tracks, and a shield round her turret's sides and back with a door each side. Every
-    hull plate is a part of its own, since tanks lost them: `lost` names the ones this tank has lost ("l2", "r4").
-    Returns the names of all the skirts' parts, and of the hull plates among them."""
+# How a file's `swaps.by_month` is read (the Panzer IV's and the StuG III's alike).
+BY_MONTH_HOW = ("by_month: the face she wore in each month of a campaign, one row per run of months (from and to are both counted in), naming "
+                "the choice of each swap. Where a row gives a `mix`, both served side by side: each vehicle of a unit draws its own choice by "
+                "those shares, and a game that shows one face a unit takes `one`.")
+
+# The Panzer IV's faces by the month (the historian, 18 Nov: the two guns served side by side through 1942, about a
+# third of them long by the middle of the year and most by its end; medium-low on the shares).
+PZ4_MONTHS = [{"to": "1942-03", "gun": "short", "paint": "grey", "skirts": "off"},
+              {"from": "1942-04", "to": "1942-08", "gun": {"mix": {"short": 0.67, "long": 0.33}, "one": "long"}, "paint": "grey", "skirts": "off"},
+              {"from": "1942-09", "to": "1943-01", "gun": {"mix": {"long": 0.67, "short": 0.33}, "one": "long"}, "paint": "grey", "skirts": "off"},
+              {"from": "1943-02", "to": "1943-04", "gun": "long", "paint": "yellow", "skirts": "off"},
+              {"from": "1943-05", "gun": "long", "paint": "yellow", "skirts": "on"}]
+
+
+def hull_skirts(v, lost, xa, xb, n, ys, zr, zbot, guard, side_y=None, straps=None, mark_z=1.22):
+    """Skirts along a hull: n thin plates a side hung on a rail that stands off her side, over the upper run of the
+    tracks. Every plate is a part of its own, since they were lost: `lost` names the ones this vehicle has lost
+    ("l2", "r4"). xa, xb: where the rail runs; ys, zr: how far out it stands and how high; zbot: the plates' feet;
+    guard: (y, z) of the track guard's edge its stays stand on; side_y: her side, where a strap reaches the rail
+    from it (a number, or a function of x that gives None where no side is in reach: there a brace stands on the
+    guard instead); straps: where along her they are; mark_z: how high her cross sits on the middle plate (None:
+    the plates carry none, her own shows over them).
+    Returns the names of all the skirts' parts, and of the plates among them."""
     fine = v.fine
     parts, plates = [], []
-    ys, zr = 1.60, 1.60                                    # the rail: how far out it stands, how high
-    xa, xb, n = -2.56, 1.94, 5
     step = (xb - xa) / n
+    straps = straps or [xa + 0.04] + [xa + step * k for k in range(1, n)] + [xb - 0.04]
     for letter, s in SIDES:
         rail = f"skirt_rail_{letter}"
         parts.append(rail)
         v.part(rail, "hull", (0.0, s * ys, zr), kind="fixed", note="the rail her hull skirts hang on, on its brackets (shown with the skirts)")
         v.slab((xa - 0.02, s * (ys - 0.04), zr - 0.006), (xb + 0.02, s * ys, zr), coat, 0.002)                 # an angle iron: its flat,
         v.slab((xa - 0.02, s * (ys - 0.006), zr - 0.05), (xb + 0.02, s * ys, zr), coat, 0.002)                 # and its web
-        for x in (xa + 0.04, xa + step, xa + 2 * step, xa + 3 * step, xa + 4 * step, 1.66):
-            v.slab((x - 0.022, s * 1.31, zr - 0.034), (x + 0.022, s * (ys - 0.03), zr - 0.006), coat, 0.002)   # a strap out from her side
-            v.rod((x, s * (ys - 0.02), zr - 0.03), (x, s * 1.43, 1.105), 0.012, coat, 6)                       # and a stay down to the track guard
-            if fine:
-                v.bolt((x, s * 1.34, zr - 0.006), Z, 0.009, 0.006)
+        for x in straps:
+            sy = side_y(x) if callable(side_y) else side_y
+            if sy is not None:
+                v.slab((x - 0.022, s * sy, zr - 0.034), (x + 0.022, s * (ys - 0.03), zr - 0.006), coat, 0.002)     # a strap out from her side
+            v.rod((x, s * (ys - 0.02), zr - 0.03), (x, s * guard[0], guard[1]), 0.012, coat, 6)                    # and a stay down to the track guard
+            if sy is None:
+                v.rod((x, s * (ys - 0.02), zr - 0.03), (x, s * (guard[0] - 0.14), guard[1]), 0.012, coat, 6)       # (a brace beside it where no side is in reach)
+            elif fine:
+                v.bolt((x, s * (sy + 0.03), zr - 0.006), Z, 0.009, 0.006)
         for k in range(n):
             name = f"skirt_{letter}{k + 1}"
             parts.append(name)
@@ -68,8 +89,8 @@ def pz4_skirts(v, x0, zt, lost=()):
             if f"{letter}{k + 1}" in lost:
                 continue
             x1, x2 = xa + step * k + 0.008, xa + step * (k + 1) - 0.008
-            ztop, zbot = zr + 0.025, 0.52
-            v.part(name, "hull", ((x1 + x2) / 2, s * ys, zr), kind="fixed", note="a skirt plate hung on the rail: tanks lose them (the game hides none, one or two a tank)")
+            ztop = zr + 0.025
+            v.part(name, "hull", ((x1 + x2) / 2, s * ys, zr), kind="fixed", note="a skirt plate hung on the rail: they get lost (the game hides none, one or two a vehicle)")
             # hung by hand and knocked about: each plate a degree or two off true, one end lower, its foot swung out or in
             tilt, swing = math.radians(1.7) * v.rng.uniform(-1.0, 1.0), math.radians(2.0) * v.rng.uniform(-1.0, 1.0)
             yo, long, high = s * (ys + 0.014), x2 - x1, ztop - zbot
@@ -85,10 +106,23 @@ def pz4_skirts(v, x0, zt, lost=()):
             v.plate([tuple(c) for c in cs][::int(s)], 0.006, coat, 0.002)
             for x in (x1 + 0.16, x2 - 0.16):               # the two hooks it hangs by
                 v.slab((x - 0.03, s * (ys - 0.012), zr - 0.07), (x + 0.03, s * (ys + 0.022), zr + 0.012), "steel", 0.003)
-            if k == 2:                                     # her cross, on the plate's own face
+            if k == n // 2 and mark_z is not None:         # her cross, on the plate's own face
                 face = (pt(0, high) - pt(0, 0)).cross(pt(1, 0) - pt(0, 0)).normalized()
                 face = face if face.y * s > 0 else -face
-                v.mark("GER", tuple(pt(0.5, 1.22 - zbot) + face * 0.0015), face, 0.2, part=name)
+                v.mark("GER", tuple(pt(0.5, mark_z - zbot) + face * 0.0015), face, 0.2, part=name)
+    return parts, plates
+
+
+def pz4_skirts(v, x0, zt, lost=()):
+    """The Panzer IV's skirts of May 1943 on: five thin plates a side hung on a rail a hand's width off her hull,
+    over the upper run of the tracks, and a shield round her turret's sides and back with a door each side. Every
+    hull plate is a part of its own, since tanks lost them: `lost` names the ones this tank has lost ("l2", "r4").
+    Returns the names of all the skirts' parts, and of the hull plates among them."""
+    fine = v.fine
+    xa, xb, n = -2.56, 1.94, 5
+    step = (xb - xa) / n
+    parts, plates = hull_skirts(v, lost, xa, xb, n, 1.60, 1.60, 0.52, (1.43, 1.105), side_y=1.31,
+                                straps=(xa + 0.04, xa + step, xa + 2 * step, xa + 3 * step, xa + 4 * step, 1.66))
     # ---- the turret's shield: a horseshoe of plate round her sides and back, standing off on stays ---------------
     z0, z1 = zt + 0.08, zt + 0.58
     side = [(0.80, 1.02), (0.34, 1.17), (-0.52, 1.15), (-1.20, 0.98), (-1.68, 0.55)]
@@ -371,8 +405,8 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None):
                  traverse=14.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.9, 2.9, 0.42, 172.0))
     swaps = {"how": "one model for the whole war. gun: show the chosen gun's parts and scale the other's to nothing (a part scaled to "
                     "nothing is not drawn), and use its sockets in place of the default ones. paint: put the chosen coat's colours "
-                    "in place of the paints of the same names.",
-             "paint": coats(v, paint or "grey")}
+                    "in place of the paints of the same names. " + BY_MONTH_HOW,
+             "paint": coats(v, paint or "grey"), "by_month": PZ4_MONTHS}
     if gun == "all":
         swaps["gun"] = {"default": "long", "choices": {
             "long": {"what": "7.5 cm L/43 and L/48, double-baffle muzzle brake", "years": "1942 on", "parts": ["barrel_long"], "sockets": {"muzzle": "muzzle"}, "muzzle_brake": True},

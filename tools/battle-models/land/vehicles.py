@@ -101,7 +101,7 @@ ABOUT = {
 
 # What a builder takes to build everything the game's file carries (both of a Panzer IV's guns), and the faces a
 # vehicle showed through the war, for the sheet of them: (words, what to pass the builder).
-WHOLE = {"PanzerIV": {"gun": "all", "skirts": True}}
+WHOLE = {"PanzerIV": {"gun": "all", "skirts": True}, "StuG3": {"mantlet": "all", "skirts": True}}
 FACES = {
     "PanzerIV": [("1939 to early 1942: the short gun, dark grey", {"gun": "short", "paint": "grey"}),
                  ("1942: the long gun, dark grey", {"gun": "long", "paint": "grey"}),
@@ -110,7 +110,10 @@ FACES = {
     "Tiger": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "Hanomag": [("1939 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "leFH18": [("1939 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
-    "StuG3": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
+    "StuG3": [("1942 to early 1943: the box shield round her gun, dark grey", {"paint": "grey"}),
+              ("Early 1943: dark yellow", {"paint": "yellow"}),
+              ("May 1943 on: skirts along her hull (this one has lost a plate)", {"paint": "yellow", "skirts": "l2"}),
+              ("1944 on, about half of them: the cast shield shaped like a boar's head", {"paint": "yellow", "mantlet": "cone", "skirts": True})],
     "Pak40": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "SdKfz222": [("1938 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "FlakHalftrack": [("1940 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],

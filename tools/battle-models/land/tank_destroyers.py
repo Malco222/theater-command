@@ -13,18 +13,32 @@ from mathutils import Vector
 from carriers import wall
 from motorpool import LEFT, RIGHT, X, Y, Z
 from tanks_any import turn_to
-from tanks_ger import GER_COATS, coat, coats
+from tanks_ger import BY_MONTH_HOW, GER_COATS, coat, coats, hull_skirts
 from tanks_sov import t34_hull
 from tanks_usa import m4_gear, m4_tub
 from works import Works
 
 
-def stug3(fine=True, tag="GER", paint=None):
+# The StuG III's faces by the month (the historian, 18 Nov: she reached units in 1942-04; dark yellow by the order of
+# February 1943; skirts with the Panzer IV's; the cast shield was made from November 1943 and reached the front about
+# two months on, and casting never kept up, so the box stayed on a large share to the end: half and half is a fair
+# guess, low on the share, high that both served together).
+STUG3_MONTHS = [{"to": "1943-01", "paint": "grey", "mantlet": "box", "skirts": "off"},
+                {"from": "1943-02", "to": "1943-04", "paint": "yellow", "mantlet": "box", "skirts": "off"},
+                {"from": "1943-05", "to": "1943-12", "paint": "yellow", "mantlet": "box", "skirts": "on"},
+                {"from": "1944-01", "paint": "yellow", "mantlet": {"mix": {"cone": 0.5, "box": 0.5}, "one": "cone"}, "skirts": "on"}]
+
+
+def stug3(fine=True, tag="GER", paint=None, mantlet="box", skirts=None):
     """Sturmgeschuetz III of 1942 on: 5.4 m hull, 2.95 m wide, only 2.16 m high. The Panzer III's hull (six wheels a
     side on torsion bars, three return rollers, the drive at the front) under a low fixed box for four men, its sides
-    built out over the tracks; the long 7.5 cm gun in a cast shield shaped like a boar's head, a little right of her
-    middle; the commander's cupola at the back on the left, the loader's machine gun behind a folding shield on the
-    right. Dark grey to early 1943, dark yellow after: one model, a paint swap."""
+    built out over the tracks, extra plates bolted on its front; the long 7.5 cm gun a little right of her middle;
+    the commander's cupola at the back on the left, the loader's machine gun behind a folding shield on the right.
+    One model for the war, by swaps: paint "grey" (to early 1943) or "yellow" (after); mantlet "box", the welded
+    box shield round the gun (her only one to the end of 1943, and on about half of them after), or "cone", the
+    cast shield shaped like a boar's head of 1944 on ("all" builds both for the game's file, which shows one);
+    skirts (May 1943 on, with the yellow coat): True hangs them all, a string names the plates this one has lost
+    ("l2,r4"). She keeps the cupola and the loader's shield of December 1942 on through all her months."""
     v = Works("StuG3", "StuG III", "tank", tag, fine, paint=GER_COATS[paint or "grey"][0])
     v.root(hull_pivot=(0.0, 0.0, 0.72))
     m = v.m
@@ -61,8 +75,13 @@ def stug3(fine=True, tag="GER", paint=None):
     for y in (-0.62, 0.62):
         v.hook((2.47, y, 0.52), Vector((0.8, 0, -0.5)).normalized(), 0.085)
         v.hook((-2.70, y, 0.60), -X, 0.085)
-    # the driver's plate: his visor on the left
-    v.visor((1.505, 0.52, 1.30), X, 0.36, 0.13, 0.07)
+    # the box's front: an extra plate bolted on each side of the gun, the driver's visor in the left one
+    for y0, y1, ys_ in ((0.39, 0.87, (0.45, 0.63, 0.81)), (-0.87, -0.59, (-0.80, -0.66))):
+        v.slab((1.50, y0, 1.085), (1.53, y1, 1.45), coat, 0.005)
+        for y in ys_:
+            for z in ((1.125, 1.41) if y0 > 0 else (1.125, 1.27, 1.41)):
+                v.bolt((1.53, y, z), X, 0.021, 0.016, sides=8)
+    v.visor((1.532, 0.52, 1.30), X, 0.36, 0.13, 0.07)
     if fine:
         v.weld((1.50, 0.34, 1.462), (1.50, 0.88, 1.462), X)
         for s in (LEFT, RIGHT):                           # a pistol port in each side of the box
@@ -79,9 +98,22 @@ def stug3(fine=True, tag="GER", paint=None):
 
     def ring(x, half_w, half_h, cut):
         return [(x, gy + sy * a, gz + sz * b) for sy in (1, -1) for sz in (1, -1) for a, b in ((half_w, half_h - cut), (half_w - cut, half_h))]
-    v.hull(ring(1.55, 0.33, 0.29, 0.10) + ring(1.88, 0.25, 0.23, 0.09) + ring(2.20, 0.125, 0.125, 0.045), coat, bevel=0.03, segs=3, both=False, angle=40.0)
-    if fine:
-        v.lathe((2.20, gy, gz), X, [(0.03, 0.0), (0.03, 0.118), (0.0, 0.13), (0.0, 0.0)], coat, v.n(24, 8))
+    # two shields for the one mounting: each is its own part on the gun, and the game shows one of them
+    if mantlet in ("all", "box"):
+        v.part("mantlet_box", "gun", (1.55, gy, gz), kind="fixed", note="the welded box shield round the gun, the recoil gear's sleeve standing out of its face: her only one to the end of 1943")
+        v.hull(ring(1.55, 0.35, 0.28, 0.05) + ring(1.94, 0.255, 0.215, 0.045), coat, bevel=0.008, both=False)
+        v.lathe((1.94, gy, gz), X, [(0.28, 0.0), (0.28, 0.112), (0.19, 0.112), (0.19, 0.134), (0.0, 0.134), (0.0, 0.0)], coat, v.n(24, 8))
+        for sy in (1, -1):
+            for sz in (1, -1):
+                v.bolt((1.94, gy + sy * 0.205, gz + sz * 0.165), X, 0.017, 0.013, sides=8)
+        if fine:
+            for sy in (1, -1):                             # the welds along its upper edges
+                v.weld((1.56, gy + sy * 0.30, gz + 0.281), (1.93, gy + sy * 0.21, gz + 0.216), Z)
+    if mantlet in ("all", "cone"):
+        v.part("mantlet_cone", "gun", (1.55, gy, gz), kind="fixed", note="the cast shield shaped like a boar's head: 1944 on, beside the box")
+        v.hull(ring(1.55, 0.33, 0.29, 0.10) + ring(1.88, 0.25, 0.23, 0.09) + ring(2.20, 0.125, 0.125, 0.045), coat, bevel=0.03, segs=3, both=False, angle=40.0)
+        if fine:
+            v.lathe((2.20, gy, gz), X, [(0.03, 0.0), (0.03, 0.118), (0.0, 0.13), (0.0, 0.0)], coat, v.n(24, 8))
     v.part("barrel", "gun", (2.22, gy, gz), slide=(-1, 0, 0), slide_limits=[0.0, 0.42], axis=(0, -1, 0), kind="slide", note="runs back along its own length when she fires (metres)")
     v.barrel((2.22, gy, gz), 1.84, 0.075, r0=0.098, r1=0.066, brake="double", steps=((0.30, None),), sleeve=None)
     v.socket("muzzle", (4.08, gy, gz), X)
@@ -109,7 +141,7 @@ def stug3(fine=True, tag="GER", paint=None):
         v.weld((0.86, 0.8, zr + 0.002), (0.86, 1.1, zr + 0.002), Z)
     v.aerial("aerial", "hull", (-0.86, 1.04, zr), 2.0)
     for s in (LEFT, RIGHT):
-        v.mark("GER", (-0.25, s * 1.283, 1.46), Vector((0, s * 0.926, 0.378)), 0.17, part="hull")
+        v.mark("GER", (-0.25, s * 1.234, 1.58), Vector((0, s * 0.926, 0.378)), 0.17, part="hull")       # (high on the box's side: it shows over her skirts)
 
     # ---- the engine deck: four doors, an air intake's cowl each side; two silencers across the tail -------------
     for s in (LEFT, RIGHT):
@@ -159,6 +191,13 @@ def stug3(fine=True, tag="GER", paint=None):
         v.lathe((2.26, s * 0.90, 0.64), Y * s, [(0.2, 0.0), (0.2, 0.13), (0.14, 0.2), (0.0, 0.24), (0.0, 0.0)], "upper", v.n(22, 8))
         v.lathe((-2.30, s * 0.90, 0.58), Y * s, [(0.12, 0.0), (0.12, 0.08), (0.0, 0.12), (0.0, 0.0)], "upper", v.n(16, 6))
 
+    # ---- her skirts of May 1943 on: five plates a side on a rail, strapped to the box and standing on the guards --
+    skirt_parts, skirt_plates = [], []
+    if skirts:
+        skirt_parts, skirt_plates = hull_skirts(v, set(skirts.split(",")) if isinstance(skirts, str) else (), -2.50, 2.10, 5, 1.62, 1.38, 0.52, (1.44, zg),
+                                                side_y=lambda x: 1.30 if -0.9 <= x <= 1.0 else None, mark_z=None)
+        v.use("hull")
+
     # ---- sockets for what happens to her ----------------------------------------------------------------------
     v.socket("engine", (-1.7, 0.0, ze + 0.04), Z, part="hull", note="engine deck: smoke and the first fire")
     v.socket("fire.1", (-1.33, 0.44, ze + 0.04), Z, part="hull")
@@ -172,7 +211,21 @@ def stug3(fine=True, tag="GER", paint=None):
     v.socket("case", (-0.46, -0.60, zr + 0.1), -Y, part="hull", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.38, kick=0.8, gun_low=-6.0, hatches=["hatch_commander", "hatch_loader"], traverse=6.0,
                  idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", has_turret=False, mg="mg")
-    m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names.", "paint": coats(v, paint or "grey")}
+    swaps = {"how": "one model for the whole war. paint: put the chosen coat's colours in place of the paints of the same names. mantlet: show "
+                    "the chosen shield's part and scale the other's to nothing (a part scaled to nothing is not drawn). skirts: show their "
+                    "parts or scale them to nothing. " + BY_MONTH_HOW,
+             "paint": coats(v, paint or "grey"), "by_month": STUG3_MONTHS}
+    if mantlet == "all":
+        swaps["mantlet"] = {"default": "box", "choices": {
+            "box": {"what": "the welded box shield round the gun", "years": "1942 on (beside the cast one from 1944)", "parts": ["mantlet_box"]},
+            "cone": {"what": "the cast shield shaped like a boar's head", "years": "1944-01 on, on about half of them", "parts": ["mantlet_cone"]}}}
+    if skirts:
+        swaps["skirts"] = {"default": "off", "choices": {
+            "off": {"what": "no skirts", "years": "to 1943-04", "parts": []},
+            "on": {"what": "thin plates hung on a rail along each side of her hull", "years": "1943-05 on, with the dark yellow coat", "parts": skirt_parts,
+                   "lose": {"parts": skirt_plates, "how": "each vehicle hides none, one or two of these plates at random, so a battery is not one "
+                                                           "vehicle copied; the rails always stay"}}}}
+    m.info.setdefault("file", {})["swaps"] = swaps
     return v
 
 

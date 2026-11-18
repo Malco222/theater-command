@@ -21,10 +21,10 @@ It all runs in Blender as a Python module (`bpy`), with no Blender window:
 | `gear.py` | road wheels, sprockets, idlers, return rollers, and a track laid link by link round them |
 | `fittings.py` | barrels, hatches, cupolas, tools, bins, silencers, grilles, spare links |
 | `works.py` | the kit together (`Works`), the rig and clips every tank has, the pictures' weathering, the mesh as the game reads it |
-| `tanks_ger.py` | Panzer IV (two guns, two coats, the skirts of May 1943), Panther, Tiger; the Panzer IV's running gear as a function |
+| `tanks_ger.py` | Panzer IV (two guns, two coats, the skirts of May 1943), Panther, Tiger; the Panzer IV's running gear and the skirts along a hull (`hull_skirts`) as functions |
 | `tanks_sov.py`, `tanks_usa.py`, `tanks_uk.py`, `tanks_fra.py`, `tanks_ita.py`, `tanks_jap.py`, `tanks_pol.py` | T-34 and T-34-85, Sherman (and the M4's tub, gear, deck and tail as functions), Matilda, Char B1, M13, Type 97, 7TP |
 | `tanks_any.py` | the light and the medium tank of every nation without one of its own |
-| `tank_destroyers.py` | StuG III, SU-85, M10 |
+| `tank_destroyers.py` | StuG III (two coats, the box shield round her gun and the cast one of late 1943, skirts), SU-85, M10 |
 | `guns.py`, `guns_at.py` | the gun kit (`GunWorks`: wheels, saddle, cradle, piece, shield, trails, the towed gun's clips), five field guns, two anti-tank guns |
 | `sp_guns.py` | self-propelled artillery (`SpWorks`: the gun kit standing in a hull): M7, Sexton, Hummel, SU-76 |
 | `carriers.py` | wheels on tyres, steering, burst fire (`CarrierWorks`); the lorry, the Sd.Kfz. 251, the M3 half-track |
@@ -61,6 +61,10 @@ track runs for ever and nothing is seen to jump. Run them at different speeds, o
 **`swaps`.** One model per vehicle for the whole war. A gun swap names the parts of each gun: show the chosen gun's
 parts, scale the other's to nothing, and use its sockets in place of the default ones. A paint swap gives the three
 colours to put in place of `upper`, `upper2` and `shade`. Another nation's paint is the same three colours changed.
+A swap of fittings (the StuG III's `mantlet`, the `skirts`) names its parts the same way; `lose` names the skirt
+plates of which each vehicle hides none, one or two. Where the faces changed with the months the swaps carry
+`by_month`: one row per run of months (`from` and `to` both counted in) naming the choice of each swap, so the game
+picks a true face for the campaign's month and never one that was not seen (the cast shield in dark grey).
 
 **Sockets.** `muzzle`, `coax`, `hull_mg`, `exhaust.N`, `engine`, `fire.N` (where flame comes out), `ring` (the turret
 ring: where the blast comes from), `hit.front/left/right/rear/turret`, `dust.left/right`, `commander`, `case`, `aerial`.
