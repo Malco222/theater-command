@@ -190,6 +190,32 @@ def light_flak(v, at, parent="hull", lift=0.0, shield="wide", low=-5.0):
 
 
 # =====================================================================================================================
+def tombstone(v, xa, xb, y0, y1, lo, high=0.36, rise=0.09, out=0.0):
+    """A chest of belted rounds for the heavy machine gun, as the record has it: flat-sided and flat-footed, its top a
+    low arch (the men called it the tombstone), a touch taller than it is long; the lid shuts on a rim where the
+    sides end. xa..xb long, y0..y1 wide, standing on lo. out: +1 or -1 names the side its catch is on (0: none)."""
+    fine = v.fine
+    y0, y1 = min(y0, y1), max(y0, y1)
+    xm, half, side = (xa + xb) / 2, (xb - xa) / 2, high - rise
+    R = (half * half + rise * rise) / (2.0 * rise)
+    a0 = math.asin(half / R)
+    n = 10 if fine else 4
+    arch = [(xm + R * math.sin(a0 - 2.0 * a0 * i / n), lo + high - R + R * math.cos(a0 - 2.0 * a0 * i / n)) for i in range(n + 1)]
+    v.extrude([(xa, lo), (xb, lo)] + arch, y0, y1, coat, 0.005)
+    v.slab((xa - 0.004, y0 - 0.004, lo + side - 0.016), (xb + 0.004, y1 + 0.004, lo + side - 0.002), coat, 0.002)       # the rim its lid shuts on
+    if not fine:
+        return
+    ym = (y0 + y1) / 2
+    zt = lo + high - R + math.sqrt(R * R - 0.05 * 0.05)
+    v.handle((xm - 0.05, ym, zt), (xm + 0.05, ym, zt), Z, r=0.005, reach=0.02, paint="steel")                           # carried by the handle on its top
+    if out:
+        yf = y1 if out > 0 else y0
+        v.slab((xa + 0.045, yf, lo + 0.05), (xb - 0.045, yf + out * 0.004, lo + side - 0.05), coat, 0.002)              # its side, pressed for stiffness
+        v.slab((xm - 0.02, yf + out * 0.003, lo + side - 0.05), (xm + 0.02, yf + out * 0.011, lo + side + 0.022), "steel", 0.002)   # the catch
+        for x in (xa + 0.03, xb - 0.03):
+            v.bolt((x, yf, lo + 0.03), Y * out, 0.007, 0.004)
+
+
 def quad_mount(v, at, parent="hull", high=0.28, low=-5.0, seat="canvas.seat"):
     """Four heavy machine guns in a powered mount, stood on a floor at `at`, looking forward: the gunner sits between
     two side plates that carry the trunnions; outboard of each a round plate turns with the guns, with two guns and
@@ -249,25 +275,11 @@ def quad_mount(v, at, parent="hull", high=0.28, low=-5.0, seat="canvas.seat"):
             for dy in (-0.028, 0.028):
                 v.rod(g(-0.44, y + dy, dz), g(-0.52, y + dy, dz), 0.011, "steel", 6)                                                # the back plate's buffer and grips
             v.rod(g(0.12, y, dz + 0.005), g(0.2, y, dz + 0.005), 0.034, "steel", v.n(12, 8))                                          # the barrel's bearing
-            # its chest, outboard: a tall box with a round head and a band about it, a chute in to the gun
-            c0, c1 = s * 0.60, s * 0.81
+            # its chest, outboard, fixed to the gun's own cradle (the two a side stand one above the other): a
+            # flat-sided box with a low arched top, a chute in to the gun
             lo = dz - 0.14 if dz > 0 else dz - 0.20
-            xa, xb = -0.30, 0.08
-            xm = (xa + xb) / 2
-
-            def head(grow):
-                rr = (xb - xa) / 2 + grow
-                return ([(T.x + xa - grow, T.z + lo - grow), (T.x + xb + grow, T.z + lo - grow)]
-                        + [(T.x + xm + rr * math.cos(math.radians(a)), T.z + lo + 0.17 + rr * math.sin(math.radians(a))) for a in range(0, 181, 15 if fine else 45)])
-            v.extrude(head(0.0), min(c0, c1), max(c0, c1), coat, 0.006)
-            ym = (c0 + c1) / 2
-            v.extrude(head(0.006), ym - 0.014, ym + 0.014, coat, 0.002)
+            tombstone(v, T.x - 0.28, T.x + 0.06, T.y + s * 0.60, T.y + s * 0.765, T.z + lo, out=s)
             v.slab(g(-0.2, s * 0.585, dz - 0.03), g(-0.06, s * 0.60, dz + 0.04), "steel", 0.003)
-            if fine:
-                v.handle(g(xm - 0.05, c1 + s * 0.001, lo + 0.26), g(xm + 0.05, c1 + s * 0.001, lo + 0.26), Y * s, r=0.006, reach=0.025, paint="steel")
-                v.slab(g(xm - 0.03, c1, lo + 0.07), g(xm + 0.03, c1 + s * 0.008, lo + 0.13), "steel", 0.002)                          # its catch
-                for x in (xa + 0.035, xb - 0.035):
-                    v.bolt(g(x, c1, lo + 0.035), Y * s, 0.008, 0.005)
             spots.append((k, y, dz))
     lean = math.radians(8.0)
     w = Vector((-math.sin(lean), 0.0, math.cos(lean)))
@@ -309,11 +321,10 @@ def m16(fine=True, tag="USA"):
     P, T = quad_mount(v, (-1.6, 0.0, zs), "hull")
     _flak_sockets(v, P, T, (-0.55, 0.0, zs), [(-1.5, 0.72, zs), (-1.5, -0.72, zs)], "fire.3")
     v.use("hull")
-    for s in (LEFT, RIGHT):                                # spare chests stowed along her sides, and at the stern
-        for x in (-2.55, -2.82):
-            v.slab((x - 0.11, s * 0.62, zs), (x + 0.11, s * 0.94, zs + 0.34), coat, 0.012)
-            if fine:
-                v.handle((x - 0.05, s * 0.78, zs + 0.341), (x + 0.05, s * 0.78, zs + 0.341), Z, r=0.006, reach=0.022, paint="steel")
+    for s in (LEFT, RIGHT):                                # spare chests in a row across her stern, clear of the mount as it turns
+        for k, dx in enumerate((0.0, 0.018, -0.012)):
+            y = s * (0.40 + 0.185 * k)
+            tombstone(v, -2.87 + dx, -2.53 + dx, y, y + s * 0.165, zs)
     v.car_clips(burst=10, every=0.09, burst_cue="machine_gun", muzzles=["muzzle.1", "muzzle.2", "muzzle.3", "muzzle.4"], recoil=0.02, kick=0.15, gun_low=-5.0,
                 hatches=[], traverse=60.0, idle_cue="halftrack_idle_loop", drive_cue="halftrack_drive_loop", has_turret=False, mg=None)
     return v

@@ -54,14 +54,17 @@ PZ4_MONTHS = [{"to": "1942-03", "gun": "short", "paint": "grey", "skirts": "off"
               {"from": "1943-05", "gun": "long", "paint": "yellow", "skirts": "on"}]
 
 
-def hull_skirts(v, lost, xa, xb, n, ys, zr, zbot, guard, side_y=None, straps=None, mark_z=1.22):
+def hull_skirts(v, lost, xa, xb, n, ys, zr, zbot, guard, side_y=None, straps=None, mark_z=1.22, under=False, bent=None):
     """Skirts along a hull: n thin plates a side hung on a rail that stands off her side, over the upper run of the
     tracks. Every plate is a part of its own, since they were lost: `lost` names the ones this vehicle has lost
     ("l2", "r4"). xa, xb: where the rail runs; ys, zr: how far out it stands and how high; zbot: the plates' feet;
     guard: (y, z) of the track guard's edge its stays stand on; side_y: her side, where a strap reaches the rail
     from it (a number, or a function of x that gives None where no side is in reach: there a brace stands on the
     guard instead); straps: where along her they are; mark_z: how high her cross sits on the middle plate (None:
-    the plates carry none, her own shows over them).
+    the plates carry none, her own shows over them); under: the plates hang under the rail by straps hooked over it,
+    so the rail shows along their tops (else their tops stand proud of it and hide it); bent: plates with a lower
+    corner bent out, {"r3": ("fore", 0.11)}: which end, and how far out the corner's tip stands (metres).
+    The pictures splash their lower third with the ground's mud (works.land_look reads the model's `splash`).
     Returns the names of all the skirts' parts, and of the plates among them."""
     fine = v.fine
     parts, plates = [], []
@@ -89,7 +92,7 @@ def hull_skirts(v, lost, xa, xb, n, ys, zr, zbot, guard, side_y=None, straps=Non
             if f"{letter}{k + 1}" in lost:
                 continue
             x1, x2 = xa + step * k + 0.008, xa + step * (k + 1) - 0.008
-            ztop = zr + 0.025
+            ztop = zr - 0.045 if under else zr + 0.025
             v.part(name, "hull", ((x1 + x2) / 2, s * ys, zr), kind="fixed", note="a skirt plate hung on the rail: they get lost (the game hides none, one or two a vehicle)")
             # hung by hand and knocked about: each plate a degree or two off true, one end lower, its foot swung out or in
             tilt, swing = math.radians(1.7) * v.rng.uniform(-1.0, 1.0), math.radians(2.0) * v.rng.uniform(-1.0, 1.0)
@@ -103,13 +106,34 @@ def hull_skirts(v, lost, xa, xb, n, ys, zr, zbot, guard, side_y=None, straps=Non
                 cs = [pt(0, 0), pt(0, high), pt(1, high), pt(1, 0.42), pt(1 - 0.3 / long, 0)]
             if k == 0:                                     # and the aftermost's
                 cs = [pt(0.26 / long, 0), pt(0, 0.36), pt(0, high), pt(1, high), pt(1, 0)]
+            fold = (bent or {}).get(f"{letter}{k + 1}") if 0 < k < n - 1 else None
+            if fold:                                       # a lower corner caught on something and bent out: the plate folds along a line across the corner
+                cu, ch = 0.30 / long, 0.27
+                if fold[0] == "fore":
+                    a, b, tip = pt(1 - cu, 0), pt(1, ch), pt(1, 0)
+                    cs = [pt(0, 0), pt(0, high), pt(1, high), b, a]
+                else:
+                    a, b, tip = pt(0, ch), pt(cu, 0), pt(0, 0)
+                    cs = [b, a, pt(0, high), pt(1, high), pt(1, 0)]
+                foot = a + (b - a) * ((tip - a).dot(b - a) / (b - a).length_squared)
+                d = (tip - foot).length
+                tip = foot + (tip - foot) / d * math.sqrt(d * d - fold[1] ** 2) + Vector((0.0, s * fold[1], 0.0))
+                v.plate([tuple(c) for c in (b, tip, a)][::int(s)], 0.006, coat, 0.002)
             v.plate([tuple(c) for c in cs][::int(s)], 0.006, coat, 0.002)
             for x in (x1 + 0.16, x2 - 0.16):               # the two hooks it hangs by
+                if under:                                  # (a strap riveted to the plate's face, up past its top and hooked over the rail: in her own paint)
+                    v.slab((x - 0.026, s * (ys - 0.002), ztop - 0.075), (x + 0.026, s * (ys + 0.024), zr + 0.004), coat, 0.003)
+                    v.slab((x - 0.026, s * (ys - 0.018), zr), (x + 0.026, s * (ys + 0.024), zr + 0.009), coat, 0.002)
+                    if fine:
+                        for dz in (0.02, 0.055):
+                            v.bolt((x, s * (ys + 0.024), ztop - dz), Y * s, 0.006, 0.004)
+                    continue
                 v.slab((x - 0.03, s * (ys - 0.012), zr - 0.07), (x + 0.03, s * (ys + 0.022), zr + 0.012), "steel", 0.003)
             if k == n // 2 and mark_z is not None:         # her cross, on the plate's own face
                 face = (pt(0, high) - pt(0, 0)).cross(pt(1, 0) - pt(0, 0)).normalized()
                 face = face if face.y * s > 0 else -face
                 v.mark("GER", tuple(pt(0.5, mark_z - zbot) + face * 0.0015), face, 0.2, part=name)
+    v.m.splash = list(getattr(v.m, "splash", [])) + [(ys - 0.03, zbot, zbot + 0.45 * (zr - zbot))]
     return parts, plates
 
 

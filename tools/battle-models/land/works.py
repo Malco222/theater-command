@@ -357,7 +357,8 @@ def _ramp(nt, fac, lo, hi, a=0.0, b=1.0):
 
 
 DUST = "9A8A6A"          # the dust of the battle stage's road: what she carries unless the picture says other ground
-EDGE_WEAR = 0.4          # how far a plate's cut-back edge goes toward bare worn metal (the file's `wear`, 0..100)
+EDGE_DARK = 0.22         # how far a plate's cut-back edge goes dark where boots and hands rub it: in the file it rides on `soot`
+#                          (wear on an edge goes darker, never whiter: a pale line along every edge reads as chalk)
 COATS = ("upper", "upper2", "shade")
 
 
@@ -389,6 +390,8 @@ def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.45, burn=None
     dust_rgb = hex_rgb(dust_hex)
     mud_rgb = tuple(c * 0.3 for c in dust_rgb)             # the same earth, packed and not yet dry
     pipes = [Vector(s["at"]) for s in model.sockets if s["name"].startswith("exhaust")]
+    splash = list(getattr(model, "splash", []))            # skirts hung beside the tracks: (how far out they hang, their feet, the mud's top)
+    dried_rgb = tuple(c * 0.56 for c in dust_rgb)
 
     def look(paint, mat, nt, bsdf, mix):
         key = paint.split(".")[0]
@@ -502,10 +505,11 @@ def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.45, burn=None
             # recesses keep their dirt: a dark wash in every corner, darker in the seams round hatches and bolts
             base = toward(base, (0.36, 0.32, 0.27), _math(nt, "MULTIPLY", nook, 0.6), "MULTIPLY")
             base = toward(base, (0.22, 0.19, 0.16), _math(nt, "MULTIPLY", crack, 0.75), "MULTIPLY")
-            # edges where boots and hands come: paint rubbed thin and pale, then knocked through to dark steel in places
+            # edges where boots and hands come: paint rubbed thin and dark (wear goes darker, never whiter: a pale
+            # line along an edge reads as chalk), then knocked through to dark steel in places
             rub = _math(nt, "MULTIPLY", edge_at, _ramp(nt, mid, 0.25, 0.75, 0.2, 1.0))
             chip = _math(nt, "MULTIPLY", edge_at, _ramp(nt, fine, 0.48, 0.58, 0.0, 1.0), clamp=True)
-            base = toward(base, (0.50, 0.50, 0.47), _math(nt, "MULTIPLY", rub, 0.4 * wear, clamp=True))
+            base = toward(base, (0.60, 0.57, 0.53), _math(nt, "MULTIPLY", rub, 0.5 * wear, clamp=True), "MULTIPLY")
             base = toward(base, (0.07, 0.065, 0.06), _math(nt, "MULTIPLY", chip, 0.8 * wear, clamp=True))
             rough = _math(nt, "SUBTRACT", _ramp(nt, big, 0.2, 0.8, 0.46, 0.6), _math(nt, "MULTIPLY", chip, 0.2), clamp=True)
         elif key == "track":
@@ -570,6 +574,23 @@ def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.45, burn=None
         mud = _math(nt, "MULTIPLY", mud, 0.9 * dust, clamp=True)
         base = toward(base, dust_rgb, grime)
         base = toward(base, mud_rgb, mud)
+        if splash and key in COATS:
+            # skirts hang in what the tracks throw up: mud dried thick along their feet, thinning in ragged fingers to a
+            # third of the way up, still wet and dark at the very foot, spots of it flung higher
+            absy = _math(nt, "ABSOLUTE", sep.outputs[1])
+            finger = _noise(nt, pos, 1.0, 3.0, 0.55, stretch=(16.0, 16.0, 3.0))
+            speck = _ramp(nt, _noise(nt, pos, 38.0, 3.0, 0.6), 0.3, 0.6, 0.72, 1.0)
+            spot = _ramp(nt, _noise(nt, pos, 11.0, 3.0, 0.6), 0.60, 0.68, 0.0, 1.0)
+            for y_out, z0, z1 in splash:
+                on = _math(nt, "GREATER_THAN", absy, y_out)
+                edge = _math(nt, "ADD", _ramp(nt, z, z0, z1, 0.0, 1.0), _math(nt, "ADD", _math(nt, "MULTIPLY", finger, 0.9), _math(nt, "MULTIPLY", mid, 0.4)))
+                dried = _math(nt, "MULTIPLY", _ramp(nt, edge, 0.95, 1.45, 1.0, 0.0), speck)
+                flung = _math(nt, "MULTIPLY", spot, _ramp(nt, z, z0, z0 + 2.2 * (z1 - z0), 0.85, 0.0))
+                cake = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", on, _math(nt, "MAXIMUM", dried, flung)), 0.92 * dust, clamp=True)
+                wet = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", on, _ramp(nt, edge, 0.6, 0.9, 1.0, 0.0)), 0.75 * dust, clamp=True)
+                base = toward(base, dried_rgb, cake)
+                base = toward(base, mud_rgb, wet)
+                grime = _math(nt, "MAXIMUM", grime, cake)
         if soot is not None:
             soot = _math(nt, "MULTIPLY", soot, 0.95, clamp=True)
             base = toward(base, (0.012, 0.011, 0.010), soot)
@@ -698,11 +719,11 @@ def to_scene(model, look="land", crease=50.0, weighted=True, **look_kw):
     model._ledge = np.repeat(np.array(fe, dtype=float), total)
     me.attributes.new("Edge", "FLOAT", "CORNER").data.foreach_set("value", model._ledge)
     if look != "land" and model._ledge.any():
-        # (the pictures' look draws edge wear itself; without it, the wear goes into the corner colours the .glb carries)
+        # (the pictures' look draws edge wear itself; without it, the edges' dark goes into the corner colours the .glb carries)
         lv = np.zeros(len(me.loops), dtype=np.int32)
         me.loops.foreach_get("vertex_index", lv)
         lface = np.repeat(np.array(model.fpaint, dtype=np.int32), total)
-        tint = rigid.tint_of(model, np.maximum(model._wear[lv], model._ledge * EDGE_WEAR), model._soot[lv], model._lpaint, lface, model._lblend)
+        tint = rigid.tint_of(model, model._wear[lv], np.maximum(model._soot[lv], model._ledge * EDGE_DARK), model._lpaint, lface, model._lblend)
         me.color_attributes["Col"].data.foreach_set("color", np.concatenate([tint, np.ones((len(tint), 1))], axis=1).ravel())
     if weighted:
         mod = ob.modifiers.new("wn", "WEIGHTED_NORMAL")
@@ -718,9 +739,9 @@ def to_scene(model, look="land", crease=50.0, weighted=True, **look_kw):
 
 
 def gather_land(model, ob):
-    """rigid.gather, with the wear of every corner on a plate's cut-back edge raised: the mesh as the game reads it.
-    (A point on an edge is two points in the file, one for the flat face and one for the edge, so the wear stays a
-    thin line and does not spread over the plate.)"""
+    """rigid.gather, with every corner on a plate's cut-back edge darkened a little (on `soot`): the mesh as the game
+    reads it. (A point on an edge is two points in the file, one for the flat face and one for the edge, so the dark
+    stays a thin line and does not spread over the plate.)"""
     me = ob.data
     lv = np.zeros(len(me.loops), dtype=np.int32)
     me.loops.foreach_get("vertex_index", lv)
@@ -739,8 +760,8 @@ def gather_land(model, ob):
     me.loop_triangles.foreach_get("loops", tris)
     pos, nor = np.round(co[lv], 3), np.round(cn, 2)
     part, paint = model._vpart[lv], model._lpaint
-    wear = np.round(np.maximum(model._wear[lv], ledge * EDGE_WEAR) * 100)
-    soot, blend = np.round(model._soot[lv] * 100), np.round(model._lblend * 100)
+    wear = np.round(model._wear[lv] * 100)
+    soot, blend = np.round(np.maximum(model._soot[lv], ledge * EDGE_DARK) * 100), np.round(model._lblend * 100)
     key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None]], axis=1)
     _, first, inverse = np.unique(key, axis=0, return_index=True, return_inverse=True)
     inverse = inverse.ravel()

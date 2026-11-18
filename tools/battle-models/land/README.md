@@ -87,9 +87,9 @@ made for a gun trained ahead: turn it about the turret's bearing), `mg_burst`, `
 `knocked_out`, `burn`, `brew_up` (the turret is thrown off its ring and lies beside her), `tracks.left`, `tracks.right`.
 A clip's events carry the effect, the socket and the sound cue's name only (ruling 144).
 
-**`wear` and `soot`.** `wear` (0 to 100) is how far a point goes toward the model's `rust` colour, which for a
-vehicle is paint rubbed thin over worn metal: it is raised on the plate edges that boots and hands reach, and on the
-faces of a track link that the wheels and the ground polish. `soot` is laid round each exhaust outlet.
+**`wear` and `soot`.** `wear` (0 to 100) is how far a point goes toward the model's `rust` colour (no vehicle
+raises it now). `soot` (toward the dark `soot` colour) is laid round each exhaust outlet, and lightly along the plate edges that boots
+and hands reach: wear on an edge goes darker, never whiter (a pale line along every edge reads as chalk).
 
 **Budget.** About 50,000 triangles near and 5,000 far for a medium tank.
 
@@ -99,8 +99,9 @@ faces of a track link that the wheels and the ground polish. `soot` is laid roun
   light as rolled steel does. Round things are turned with enough sides for the closest camera.
 * The pictures' weathering (`works.land_look`) follows the art director's ruling: tracks are steel (dark, rust in the
   hollows, bright on the guide horns, the wheel path and the cleats); dust in the colour of the ground she stands on,
-  thick on the running gear and gone by mid-hull; mud where a wheel's dish keeps it; grime in every recess; paint worn
-  through only where boots and hands come; an exhaust that is dark mottled rust, sooted round its outlet.
+  thick on the running gear and gone by mid-hull; mud where a wheel's dish keeps it, and splashed up the lower third
+  of hull skirts; grime in every recess; paint rubbed dark and worn through only where boots and hands come (an edge
+  never goes paler than its paint); an exhaust that is dark mottled rust, sooted round its outlet.
 * Markings are each nation's plain period marking and nothing else.
 * Smoke and flame are many small soft puffs and ragged tongues, never solid balls.
 

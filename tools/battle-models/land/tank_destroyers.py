@@ -195,7 +195,8 @@ def stug3(fine=True, tag="GER", paint=None, mantlet="box", skirts=None):
     skirt_parts, skirt_plates = [], []
     if skirts:
         skirt_parts, skirt_plates = hull_skirts(v, set(skirts.split(",")) if isinstance(skirts, str) else (), -2.50, 2.10, 5, 1.62, 1.38, 0.52, (1.44, zg),
-                                                side_y=lambda x: 1.30 if -0.9 <= x <= 1.0 else None, mark_z=None)
+                                                side_y=lambda x: 1.30 if -0.9 <= x <= 1.0 else None, mark_z=None, under=True,
+                                                bent={"r3": ("fore", 0.11), "l2": ("aft", 0.08)})
         v.use("hull")
 
     # ---- sockets for what happens to her ----------------------------------------------------------------------
