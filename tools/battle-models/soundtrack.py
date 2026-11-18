@@ -1,7 +1,11 @@
 """soundtrack.py <clip's sound log .json> <sound pack's wav folder> <mix.json> <out.wav> [<video.mp4> <out.mp4>] [ends=0.05,0.25]
 
 Mixes an air clip's sound track, and (given a video) lays it under the picture. `ends`: the fade at its start and at
-its end in seconds (0.02,0.02 for a clip cut straight onto the next in a longer film).
+its end in seconds.
+
+soundtrack.py film <sound pack's wav folder> <mix.json> <out.wav> <log .json> <log .json> ...
+
+Mixes several clips cut end to end as one film: the engines cross over each cut, what rings rings on, one trim for all.
 
 airshow.py writes the log beside a clip's frames: where the camera was on every frame, and every thing heard with its
 name in the sound pack, when, and where it was on every frame. This reads that, the approved pack's recordings where
@@ -131,11 +135,16 @@ def edges(x, a=0.004, b=0.03):
 
 
 class Mix:
-    def __init__(self, log, folder, rules):
+    def __init__(self, log, folder, rules, lead=0.0, tail=0.0, first=0.0):
+        """`lead`, `tail`: seconds mixed before the clip's first picture and after its last, for a clip cut into a
+        longer film (its engines are heard a moment before the cut, and what was ringing rings on under the next
+        clip). `first`: nothing new starts sooner than this after the clip's first picture."""
         self.log, self.folder, self.rules = log, folder, rules
         self.T = float(log["seconds"])
-        self.N = int(round(self.T * SR))
-        self.t = np.arange(self.N) / SR
+        self.lead, self.tail, self.first = lead, tail, first
+        self.off = int(round(lead * SR))                     # (the sample of the clip's first picture)
+        self.N = int(round((self.T + tail) * SR)) + self.off
+        self.t = (np.arange(self.N) - self.off) / SR         # (the clip's own time at every sample)
         cam = np.array(log["camera"], dtype=np.float64)
         self.ct = cam[:, 0]
         eye, look = cam[:, 1:4], cam[:, 4:7]
@@ -222,7 +231,11 @@ class Mix:
         phase = (self.dice.uniform(0, len(x)) + np.cumsum(rate)) % (len(x) - 1)
         i = phase.astype(np.int64)
         y = x[i] + (x[i + 1] - x[i]) * (phase - i)
-        on = np.clip((self.t - t0) / 0.25, 0.0, 1.0) * np.clip(((t1 if t1 is not None else self.T + 1.0) - self.t) / 0.4, 0.0, 1.0)
+        if self.lead and t0 <= 0.01:                         # (it was running before the clip began, and runs on after it)
+            t0 = -self.lead - 1.0
+        if self.tail and t1 is not None and t1 >= self.T - 0.01:
+            t1 = None
+        on = np.clip((self.t - t0) / 0.25, 0.0, 1.0) * np.clip(((t1 if t1 is not None else self.T + self.tail + 1.0) - self.t) / 0.4, 0.0, 1.0)
         self.lay("loops", y, 0, g * on, side)
         self.report.append(dict(name=name, kind="loop", machines=len(paths), metres=[round(float(d.min())), round(float(d.max()))], db=round(20 * math.log10(max(float(g.max()), 1e-6)), 1), note=note))
 
@@ -233,7 +246,7 @@ class Mix:
             return self.report.append(dict(name=name, silent="not in the pack"))
         fam = family(name)
         d, side, _ = self.heard(s["path"])
-        i0 = min(max(int(s["t0"] * SR), 0), self.N - 1)
+        i0 = min(max(int(s["t0"] * SR) + self.off, 0), self.N - 1)
         d0 = float(d[i0])
         late = min(d0 / SOUND, self.rules["flashToBang"]["maxSeconds"]) if fam in self.rules["flashToBang"]["families"] and d0 > self.rules["flashToBang"]["from"] else 0.0
         var = self.rules["variety"]
@@ -246,8 +259,8 @@ class Mix:
         if big:
             g = max(g, db(-12.0))                 # (a big moment always plays)
         g *= db(s.get("gain", 0.0) + self.dice.uniform(-1, 1) * var["levelDb"])
-        at = self.clear(name, s["t0"] + late)
-        start = int(at * SR)
+        at = self.clear(name, max(s["t0"] + late, self.first))
+        start = int(at * SR) + self.off
         self.lay("big" if big else "close", x, start, g, float(side[min(max(start, 0), self.N - 1)]))
         if big and d0 <= 150.0:                   # (farther off it is heard, but the rest does not dip for it)
             self.big_at.append(at)
@@ -257,7 +270,7 @@ class Mix:
         """When a machine is nearest the microphone, and how near."""
         d, side, _ = self.heard(s["path"])
         pt = [p[0] for p in s["path"]]
-        a, b = max(int(pt[0] * SR), 0), min(int(pt[-1] * SR), self.N - 1)
+        a, b = max(int(pt[0] * SR) + self.off, 0), min(int(pt[-1] * SR) + self.off, self.N - 1)
         near = a + int(np.argmin(d[a:b + 1]))
         return near, float(d[near]), d, side
 
@@ -268,7 +281,7 @@ class Mix:
         played = []
         for (near, far, d, side), s in found:
             if any(s["name"] == n and abs(near - m) < 1.5 * SR for n, m in played):
-                self.report.append(dict(name=s["name"], silent="one of a group: the nearest machine's fly-past is played", nearest_at=round(near / SR, 2)))
+                self.report.append(dict(name=s["name"], silent="one of a group: the nearest machine's fly-past is played", nearest_at=round((near - self.off) / SR, 2)))
                 continue
             group = sum(1 for (m, _, _, _), o in found if o["name"] == s["name"] and abs(m - near) < 1.5 * SR)
             played.append((s["name"], near))
@@ -286,7 +299,7 @@ class Mix:
         start = near - int(np.argmax(loud))
         g = float(self.level("aircraft", np.array([d[near]]))[0]) * db(s.get("gain", 0.0) + more_db + self.dice.uniform(-1, 1) * 1.0)
         self.lay("close", edges(x, 0.05, 0.3), start, g, side)
-        self.report.append(dict(name=name, kind="pass", nearest_at=round(near / SR, 2), metres=round(float(d[near])), db=round(20 * math.log10(max(g, 1e-6)), 1)))
+        self.report.append(dict(name=name, kind="pass", nearest_at=round((near - self.off) / SR, 2), metres=round(float(d[near])), db=round(20 * math.log10(max(g, 1e-6)), 1)))
 
     def bursts(self, guns):
         """Guns: each one's burst recording laid end to end while it fires. At most six are heard at once (the mix's
@@ -295,7 +308,7 @@ class Mix:
         take = []
         for s in guns:
             d, side, _ = self.heard(s["path"])
-            a, b = max(int(s["t0"] * SR), 0), min(int(s["t1"] * SR), self.N)
+            a, b = max(int(max(s["t0"], self.first) * SR) + self.off, 0), min(int(s["t1"] * SR) + self.off, self.N)
             if b - a < int(0.05 * SR):
                 continue
             g = self.level(family(s["name"]), d)
@@ -308,7 +321,7 @@ class Mix:
         for peak, s, a, b, g, side, d in take:
             own = kinds.setdefault(s["name"], np.zeros(self.N, dtype=np.int32))
             if busy[a:b].max() >= limit or own[a:b].max() >= 4:
-                self.report.append(dict(name=s["name"], silent="more than %d guns at once" % limit, at=round(a / SR, 2)))
+                self.report.append(dict(name=s["name"], silent="more than %d guns at once" % limit, at=round((a - self.off) / SR, 2)))
                 continue
             busy[a:b] += 1
             own[a:b] += 1
@@ -317,16 +330,36 @@ class Mix:
                 self.report.append(dict(name=s["name"], silent="not in the pack"))
                 continue
             x0 = low_pass(x0, self.top(family(s["name"]), float(np.median(d[a:b]))))
-            at = int(self.clear(s["name"], a / SR) * SR)
+            at = int(self.clear(s["name"], (a - self.off) / SR) * SR) + self.off
             while at < b:
                 x = pitched(x0, 1.0 + self.dice.uniform(-1, 1) * var["pitchPercent"]["mg"] / 100.0)
                 x = edges(x[:b - at], 0.003, 0.04)
                 self.lay("close", x, at, g * db(s.get("gain", 0.0) + self.dice.uniform(-1, 1) * var["levelDb"]), side)
                 at += len(x)
-            self.report.append(dict(name=s["name"], kind="burst", at=[round(a / SR, 2), round(b / SR, 2)], metres=[round(float(d[a:b].min())), round(float(d[a:b].max()))], db=round(20 * math.log10(max(peak, 1e-6)), 1)))
+            self.report.append(dict(name=s["name"], kind="burst", at=[round((a - self.off) / SR, 2), round((b - self.off) / SR, 2)], metres=[round(float(d[a:b].min())), round(float(d[a:b].max()))], db=round(20 * math.log10(max(peak, 1e-6)), 1)))
 
-    def run(self):
-        sounds = self.log["sounds"]
+    def thinned(self, sounds):
+        """Shell bursts: where they come thicker than one in `air.flak.soundEvery` seconds (0.6), only the nearest of
+        them are heard (the sound director, 2026-11-18: sixteen in eight seconds were a flat roar, and no hit stood
+        out of it). The picture keeps them all."""
+        flak = self.rules.get("air", {}).get("flak", {})
+        names, gap = set(flak.get("burst", ())), flak.get("soundEvery", 0.6)
+        mine = []
+        for s in sounds:
+            if s["kind"] == "shot" and s["name"] in names:
+                d, _, _ = self.heard(s["path"])
+                mine.append((float(d[min(max(int(s["t0"] * SR) + self.off, 0), self.N - 1)]), s))
+        kept, drop = [], set()
+        for far, s in sorted(mine, key=lambda k: k[0]):
+            if any(abs(s["t0"] - o["t0"]) < gap - 1e-6 for o in kept):
+                drop.add(id(s))
+                self.report.append(dict(name=s["name"], silent="a nearer burst within %.1f s (%d m)" % (gap, far), at=round(s["t0"], 2)))
+            else:
+                kept.append(s)
+        return [s for s in sounds if id(s) not in drop]
+
+    def run(self, raw=False):
+        sounds = self.thinned(self.log["sounds"])
         loops = [s for s in sounds if s["kind"] == "loop"]
         # machines on the same loop within 80 m of each other share one
         groups = []
@@ -356,6 +389,8 @@ class Mix:
             x = self.t - at
             dip = np.where(x < 0, 0.0, np.where(x < a, x / a, np.where(x < a + h, 1.0, np.clip(1.0 - (x - a - h) / rel, 0.0, 1.0))))
             duck = np.minimum(duck, 10.0 ** (r["duckDb"]["close"] * dip / 20.0))
+        if raw:                                    # (for a film: its engines, and the rest, before any trim)
+            return self.buses["loops"] * duck[:, None], self.buses["close"] * duck[:, None] + self.buses["big"]
         out = (self.buses["loops"] + self.buses["close"]) * duck[:, None] + self.buses["big"]
         return self.master(out)
 
@@ -392,7 +427,65 @@ class Mix:
         return out
 
 
+def film(logs, folder, rules, lead=0.3, tail=1.0, cross=0.4):
+    """Several clips cut end to end as one film (the sound director, 2026-11-18): each clip's engines come in over
+    `cross` seconds beginning `lead` before its first picture, as the last clip's go out (a cut from inside a formation
+    to outside it is a jump in level and tone otherwise); what was ringing at a cut rings on under the next clip for up
+    to `tail` seconds; nothing new starts in the first tenth of a second after a cut; and the whole film is brought to
+    its level by one trim. Returns the mix and the Mix that mastered it."""
+    parts, total = [], 0.0
+    for k, log in enumerate(logs):
+        m = Mix(log, folder, rules, lead=lead if k else 0.0, tail=tail if k < len(logs) - 1 else 0.0, first=0.1 if k else 0.0)
+        loops, rest = m.run(raw=True)
+        parts.append((m, loops, rest, total))
+        total += m.T
+    F = Mix.__new__(Mix)
+    F.rules, F.T = rules, total
+    F.N = int(round(total * SR))
+    F.t = np.arange(F.N) / SR
+    F.buses = {"loops": np.zeros((F.N, 2))}
+    F.report = []
+    out = np.zeros((F.N, 2))
+    for k, (m, loops, rest, cut) in enumerate(parts):
+        ins = np.sin(0.5 * math.pi * np.clip((m.t + lead) / cross, 0.0, 1.0)) if k else np.ones(m.N)
+        outs = np.cos(0.5 * math.pi * np.clip((m.t - (m.T - lead)) / cross, 0.0, 1.0)) if k < len(parts) - 1 else np.ones(m.N)
+        ring = np.where(m.t > m.T, np.clip((m.T + m.tail - m.t) / max(m.tail, 1e-6), 0.0, 1.0), 1.0) * np.where(m.t < 0.0, ins, 1.0)
+        a = int(round(cut * SR)) - m.off
+        b = min(a + m.N, F.N)
+        lo = max(a, 0)
+        F.buses["loops"][lo:b] += (loops * (ins * outs)[:, None])[lo - a:b - a]
+        out[lo:b] += (rest * ring[:, None])[lo - a:b - a]
+        F.report.append(dict(clip=k + 1, starts=round(cut, 2), seconds=m.T, sounds=m.report))
+    return F.master(out + F.buses["loops"]), F
+
+
+def save(out, m, out_wav):
+    with wave.open(out_wav, "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes((out * 32767.0).astype("<i2").tobytes())
+    with open(os.path.splitext(out_wav)[0] + "-placed.json", "w") as f:
+        json.dump(dict(seconds=m.T, lufs=round(m.lufs, 1), range_lu=round(m.range_lu, 1), drone_db=round(m.drone_db, 1), loud_tenth_db=round(m.loud_db, 1), trim_db=round(m.trim_db, 1),
+                       peak_db=round(m.peak_db, 1), rms_db=round(m.rms_db, 1), sounds=m.report), f, indent=1)
+    rows = [r for r in m.report if "clip" not in r] + [r for c in m.report if "clip" in c for r in c["sounds"]]
+    heard = [r for r in rows if "silent" not in r]
+    print("mixed %s: %.1f s, %d heard, %d silent, %.1f LUFS, range %.1f LU, drone %.1f dB, loud tenth %.1f dB (%.1f over), trim %+.1f dB, peak %.1f dB"
+          % (os.path.basename(out_wav), m.T, len(heard), len(rows) - len(heard), m.lufs, m.range_lu, m.drone_db, m.loud_db, m.loud_db - m.drone_db, m.trim_db, m.peak_db))
+
+
 def main():
+    if len(sys.argv) > 5 and sys.argv[1] == "film":           # soundtrack.py film <pack wav folder> <mix.json> <out.wav> <log> <log> ...
+        folder, rules_path, out_wav = sys.argv[2:5]
+        with open(rules_path) as f:
+            rules = json.load(f)
+        logs = []
+        for p_ in sys.argv[5:]:
+            with open(p_) as f:
+                logs.append(json.load(f))
+        out, m = film(logs, folder, rules)
+        save(out, m, out_wav)
+        return
     for a in [a for a in sys.argv if a.startswith("ends=")]:     # (ends=0.02,0.02: a clip that is cut straight onto the next in a longer film)
         ENDS[:] = [float(v) for v in a[5:].split(",")]
         sys.argv.remove(a)
@@ -405,17 +498,7 @@ def main():
         rules = json.load(f)
     m = Mix(log, folder, rules)
     out = m.run()
-    with wave.open(out_wav, "wb") as w:
-        w.setnchannels(2)
-        w.setsampwidth(2)
-        w.setframerate(SR)
-        w.writeframes((out * 32767.0).astype("<i2").tobytes())
-    with open(os.path.splitext(out_wav)[0] + "-placed.json", "w") as f:
-        json.dump(dict(seconds=m.T, lufs=round(m.lufs, 1), range_lu=round(m.range_lu, 1), drone_db=round(m.drone_db, 1), loud_tenth_db=round(m.loud_db, 1), trim_db=round(m.trim_db, 1),
-                       peak_db=round(m.peak_db, 1), rms_db=round(m.rms_db, 1), sounds=m.report), f, indent=1)
-    heard = [r for r in m.report if "silent" not in r]
-    print("mixed %s: %.1f s, %d heard, %d silent, %.1f LUFS, range %.1f LU, drone %.1f dB, loud tenth %.1f dB (%.1f over), trim %+.1f dB, peak %.1f dB"
-          % (os.path.basename(out_wav), m.T, len(heard), len(m.report) - len(heard), m.lufs, m.range_lu, m.drone_db, m.loud_db, m.loud_db - m.drone_db, m.trim_db, m.peak_db))
+    save(out, m, out_wav)
     if len(sys.argv) >= 7:
         video, out_mp4 = sys.argv[5:7]
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", video, "-i", out_wav, "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", out_mp4], check=True)
