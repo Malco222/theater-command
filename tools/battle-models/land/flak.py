@@ -118,10 +118,12 @@ def light_flak(v, at, parent="hull", lift=0.0, shield="wide", low=-5.0):
     v.rod(p(-0.22, 0.0, 0.08), p(-0.22, 0.0, 0.2), 0.03, coat, 8)
     sx = -0.67                                             # the seat's point: a seated man's knees end short of the cradle, his boots stand between the cheeks
     v.tube([p(-0.22, 0.0, 0.2), p(sx + 0.18, 0.0, 0.26), p(sx + 0.02, 0.0, 0.29)], 0.022, coat, 8)                                  # the seat's bracket
-    v.box((0.30, 0.34, 0.045), p(sx, 0.0, 0.315), "leather", 0.016)
-    v.tube([p(sx - 0.14, 0.0, 0.3), p(sx - 0.20, 0.0, 0.42), p(sx - 0.21, 0.0, 0.56)], 0.016, coat, 6)
-    v.box((0.045, 0.30, 0.2), p(sx - 0.195, 0.0, 0.6), "leather", 0.016)
-    grip_r = ring_wheel(v, p(-0.18, -0.33, 0.44), -Y, r=0.1)                                                                        # he lays her with one hand,
+    v.box((0.34, 0.34, 0.045), p(sx - 0.02, 0.0, 0.315), "leather", 0.016)
+    v.tube([p(sx - 0.19, 0.0, 0.3), p(sx - 0.2205, 0.0, 0.41), p(sx - 0.2205, 0.0, 0.52)], 0.016, coat, 6)                             # (up from the seat's rear edge: its face 0.19 behind his seat's point and more)
+    v.slab(p(sx - 0.2235, -0.15, 0.5), p(sx - 0.2175, 0.15, 0.7), coat, 0.002)                                                      # the seat's back: a plate,
+    v.box((0.015, 0.30, 0.2), p(sx - 0.21, 0.0, 0.6), "leather", 0.005)                                                             # and a thin pad on it: its face 0.2025 behind the seat's point (a seated man's back wants 0.195)
+    v.tube([p(-0.12, -0.225, 0.40), p(-0.23, -0.235, 0.44)], 0.02, coat, 8)                                                         # the laying gear's arm, back from the right cheek to its wheel
+    grip_r = ring_wheel(v, p(-0.23, -0.33, 0.44), -Y, r=0.1)                                                                        # he lays her with one hand (its handle 0.34 ahead of his seat's point, where his hand reaches it),
     grip_l = ring_wheel(v, p(-0.27, 0.33, 0.5), Vector((-0.5, 0.86, 0.0)), r=0.1, turn=180.0)                                       # and trains her with the other
     v.socket("crew.gunner", p(sx, 0.0, 0.34), X, part="turret", note="the gunner, seated behind the gun: the top of his seat, 0.31 over the platform his boots are on; he turns with the mount")
     v.socket("grip.gunner.r", grip_r, -Y, part="turret", note="his right hand: the handle of the wheel he lays her by (its middle)")
@@ -242,21 +244,21 @@ def quad_mount(v, at, parent="hull", high=0.28, low=-5.0, seat="canvas.seat"):
     v.lathe(P, Z, [(0.04, 0.0), (0.04, 0.47), (0.0, 0.47), (0.0, 0.0)], coat, n_big)
     tz = 0.84
     T = p(0.0, 0.0, tz)
-    side = [(P.x - 0.42, P.z + 0.04), (P.x + 0.49, P.z + 0.04), (P.x + 0.49, P.z + 0.40), (P.x + 0.15, P.z + 0.97), (P.x - 0.15, P.z + 0.97), (P.x - 0.42, P.z + 0.56)]
+    side = [(P.x - 0.455, P.z + 0.04), (P.x + 0.49, P.z + 0.04), (P.x + 0.49, P.z + 0.40), (P.x + 0.15, P.z + 0.97), (P.x - 0.15, P.z + 0.97), (P.x - 0.455, P.z + 0.56)]
     for s in (LEFT, RIGHT):
         y0, y1 = sorted((s * 0.31, s * 0.33))
         v.extrude(side, P.y + y0, P.y + y1, coat, 0.004)
         v.lathe(T + Y * (s * 0.33), Y * s, [(0.035, 0.0), (0.035, 0.09), (0.0, 0.11), (0.0, 0.0)], coat, v.n(18, 8))                 # the trunnion's bearing
     v.slab(p(0.47, -0.31, 0.04), p(0.49, 0.31, 0.40), coat, 0.003)                                                                  # the plate before his legs (0.67 ahead of his seat's point: room for his boots)
-    v.slab(p(-0.42, -0.31, 0.04), p(-0.40, 0.31, 0.56), coat, 0.003)                                                                # and behind his back
-    v.slab(p(-0.76, -0.27, 0.04), p(-0.42, 0.27, 0.36), coat, 0.02, 2)                                                              # the power unit behind him: a little engine and its dynamo
+    v.slab(p(-0.455, -0.31, 0.04), p(-0.435, 0.31, 0.56), coat, 0.003)                                                              # and behind his back
+    v.slab(p(-0.76, -0.27, 0.04), p(-0.455, 0.27, 0.36), coat, 0.02, 2)                                                             # the power unit behind him: a little engine and its dynamo
     v.rod(p(-0.6, -0.2, 0.44), p(-0.6, 0.06, 0.44), 0.085, coat, v.n(16, 8))
     v.rod(p(-0.6, 0.08, 0.44), p(-0.6, 0.2, 0.44), 0.06, "steel", v.n(14, 8))
     v.tube([p(-0.7, -0.14, 0.5), p(-0.76, -0.14, 0.56), p(-0.82, -0.14, 0.5), p(-0.82, -0.14, 0.2)], 0.014, "steel", 6)                # its exhaust
     if fine:
         v.louvres(p(-0.762, 0.0, 0.2), (0.3, 0.2), -X, count=6, down=-Z)
-    v.box((0.34, 0.40, 0.05), p(-0.2, 0.0, 0.3), seat, 0.018)                                                                       # his seat
-    v.box((0.04, 0.40, 0.34), p(-0.385, 0.0, 0.55), seat, 0.016)                                                                    # (its back 0.165 behind the seat's point)
+    v.box((0.37, 0.40, 0.05), p(-0.215, 0.0, 0.3), seat, 0.018)                                                                     # his seat
+    v.box((0.04, 0.40, 0.34), p(-0.415, 0.0, 0.55), seat, 0.016)                                                                    # (its back 0.195 behind the seat's point: a seated man's back wants 0.185)
     v.rod(p(0.2, 0.0, 0.04), p(0.12, 0.0, 0.6), 0.016, "steel", 8)                                                                  # the column with the two grips he steers her by
     v.rod(p(0.12, -0.13, 0.6), p(0.12, 0.13, 0.6), 0.012, "steel", 6)
     for s in (LEFT, RIGHT):

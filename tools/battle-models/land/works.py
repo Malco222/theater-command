@@ -378,12 +378,13 @@ class Works(Shop, Gear, Fittings):
         return self
 
     def tank_clips(self, recoil=0.35, kick=0.9, gun_low=-8.0, hatches=(), traverse=14.0, idle_cue="tank_idle_loop", drive_cue="tank_loop",
-                   gun_cue="tank_gun_01", blow=(-0.9, 2.9, 0.42, 172.0), has_turret=True, mg="coax", exhausts=None, fire_sockets=None):
+                   gun_cue="tank_gun_01", blow=(-0.9, 2.9, 0.42, 172.0), has_turret=True, mg="coax", exhausts=None, fire_sockets=None, open_lids=1):
         """The clips a tank has. Nothing here moves her over the ground or trains her turret: the game does that (the
         root, the `turret` and `gun` parts, the wheels and the track clips). These are what her own body does.
 
         recoil: metres the barrel runs back; kick: degrees the hull rocks to the shot; gun_low: where the gun droops to
-        when she is knocked out; hatches: lids that are thrown open when she is knocked out, the commander's first;
+        when she is knocked out; hatches: lids that are thrown open when she is knocked out, the commander's first
+        (open_lids: how many of them `open_up` opens for him: one, or both halves of a lid in two);
         blow: where the turret comes to rest when her ammunition goes (back, to the left, up, turned over degrees)."""
         m = self.m
         ex = exhausts or [s["name"] for s in m.sockets if s["name"].startswith("exhaust")]
@@ -464,7 +465,7 @@ class Works(Shop, Gear, Fittings):
         hs = [h for h in hatches if h in m.part_at]
         if hs:
             m.clips["open_up"] = {"long": 1.0, "loop": False, "after": "hold", "about": "the commander's hatch is opened (she travels opened up; play it backward to close down for action)",
-                                  "tracks": [{"part": hs[0], "turn": lid_keys(hs[0], 0.1)}], "events": [ev(0.1, "hatch_open", "commander")]}
+                                  "tracks": [{"part": h, "turn": lid_keys(h, 0.1)} for h in hs[:open_lids]], "events": [ev(0.1, "hatch_open", "commander")]}
         # knocked out: struck, the gun droops, the crew's hatches are thrown open, smoke, then fire from the engine
         tr = [self.hull_keys(3.0, pitch=lambda t: 1.0 * math.exp(-4.5 * t) * math.sin(two_pi * 2.0 * t) - 0.5 * rigid.smooth(t / 1.2),
                              roll=lambda t: 1.4 * math.exp(-4.5 * t) * math.sin(two_pi * 1.7 * t + 0.3) + 1.2 * rigid.smooth(t / 1.5),

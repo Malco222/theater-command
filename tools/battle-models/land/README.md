@@ -117,7 +117,12 @@ seat 0.40; a gunner seated on his gun's mount (the flak wagons' `crew.gunner`) i
 note gives the seat's height over the platform. Every other socket is the floor at his feet (a kneeling man's, the
 M7's layer, the floor under his hips), with one exception: a tank
 commander's `commander` is 0.25 m under his hatch's rim, and the crew pack's `commander_hatch` clip puts his feet
-0.92 m under the socket. A man who serves a gun that turns is on the part that turns (the M3's `gunner` is on
+0.92 m under the socket. The three armoured cars' `commander` is the same, whether he stands under a lid (the
+ArmouredCar) or in an open turret (the SdKfz 222, whose `open_up` throws both her screens open, and the M8): the
+floor seen in a low turret is the hull's roof, the hull is solid, and only what is over that floor shows of him.
+The leFH 18's layer stands inside her trail legs, left of the breech's path (between her left leg and her tall wheel
+there is no room for a man), and her laying gear is on a narrow case beside the breech where his hands reach it.
+A man who serves a gun that turns is on the part that turns (the M3's `gunner` is on
 `mg_mount`). Where his hands hold something there is a socket for each, named after his own: `grip.gunner.l` and
 `grip.gunner.r` for `crew.gunner`, `grip.layer.l` and `grip.layer.r` for a towed gun's `crew.layer`. Each is the
 middle of a handle; on a handwheel it is on the wheel's own part, so it goes round with the wheel (the left hand

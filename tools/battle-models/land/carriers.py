@@ -503,7 +503,7 @@ def hanomag(fine=True, tag="GER", paint=None, fit="troops", name="Hanomag", titl
     v.slab((xt, -yw, zbel), (xt + 0.02, yw, zt_toe + 0.02), "shade", 0.004)                                                  # the toe space's front,
     v.slab((xa, -yw, zt_toe), (xt + 0.02, yw, zt_toe + 0.02), "shade", 0.004)                                                # and its roof under the engine's bulkhead
     for s in (LEFT, RIGHT):
-        v.slab((xa, s * (yw - 0.03), zbel), (xt + 0.02, s * yw, zt_toe + 0.02), "shade")
+        v.slab((xa, s * (yw - 0.008), zbel), (xt + 0.02, s * yw, zt_toe + 0.02), "shade")                                      # (thin walls: a boot wants 0.605 from her middle)
     if fine:
         for y in (0.30, 0.43):                             # the driver's pedals
             v.box((0.012, 0.07, 0.10), (xt - 0.05, y, zfw + 0.085), "steel", 0.004, turn=rot(0.0, -28.0))
@@ -513,7 +513,7 @@ def hanomag(fine=True, tag="GER", paint=None, fit="troops", name="Hanomag", titl
     v.slab((xr2, -0.5, zfl - 0.01), (xr2 + 0.03, 0.5, zg), "shade")                                                          # the sill under the stern doors
     for s in (LEFT, RIGHT):
         v.slab((xr2, s * 0.47, zfl - 0.01), (xw, s * 0.5, zg - 0.018), "shade")                                              # the tub's sides, up to the guards
-        v.slab((xw, s * (yw - 0.03), zbel), (xa, s * yw, zg - 0.018), "shade")
+        v.slab((xw, s * (yw - 0.008), zbel), (xa, s * yw, zg - 0.018), "shade")
         v.slab((xw - 0.03, s * 0.47, zbel), (xw, s * yw, zg - 0.018), "shade")
         v.slab((xr2 + 0.02, s * 0.5, zg - 0.018), (xw, s * (yk + 0.01), zg), coat, 0.004)                                    # the guards over the tracks
         v.slab((xw, s * yw, zg - 0.018), (xa + 0.02, s * (yk + 0.01), zg), coat, 0.004)

@@ -306,25 +306,29 @@ class GunWorks(Works):
         self.xb = xb
         return xb
 
-    def handwheels(self, at_e, at_t, r=0.11, grips="layer"):
+    def handwheels(self, at_e, at_t, r=0.11, grips="layer", axis_t=(-0.75, 0.25, 0.6), shaft=0.22, handle=0.075, back=False):
         """The layer's two handwheels on the left of the saddle, each a part that spins. grips: the man's name in
         her sockets (crew.<name>): each hand gets its place on a wheel's handle, and goes round with the wheel
-        (grip.<name>.l on the elevating wheel, the outer one; grip.<name>.r on the traversing wheel, by the breech)."""
-        for name, at, ax, hand in (("handwheel_elevate", at_e, Vector((0, 1, 0)), "l"), ("handwheel_traverse", at_t, Vector((-0.75, 0.25, 0.6)).normalized(), "r")):
+        (grip.<name>.l on the elevating wheel, the outer one; grip.<name>.r on the traversing wheel, by the breech).
+        axis_t: which way the traversing wheel faces; shaft: how far each wheel's shaft runs in; handle: its length;
+        back: the handles rest at the back of their wheels, nearest a man who stands behind them."""
+        for name, at, ax, hand in (("handwheel_elevate", at_e, Vector((0, 1, 0)), "l"), ("handwheel_traverse", at_t, Vector(axis_t).normalized(), "r")):
             at = Vector(at)
             self.use(self.mount)
-            self.rod(at - ax * 0.22, at, 0.014, "steel", 8)
+            self.rod(at - ax * shaft, at, 0.014, "steel", 8)
             self.part(name, self.mount, at, axis=tuple(ax), kind="spin", note="the layer's handwheel: spins as the gun is laid")
             _, side, up = frame(ax)
+            if back:
+                side = -side
             n = self.n(20, 8)
             self.tube([at + (side * math.cos(2 * math.pi * k / n) + up * math.sin(2 * math.pi * k / n)) * r for k in range(n)], 0.011, "steel", 6, closed=True)
             for k in range(3):
                 d = side * math.cos(2 * math.pi * k / 3) + up * math.sin(2 * math.pi * k / 3)
                 self.rod(at, at + d * r, 0.008, "steel", 6, caps=False)
             self.lathe(at - ax * 0.015, ax, [(0.035, 0.0), (0.035, 0.022), (0.0, 0.026), (0.0, 0.0)], "steel", 8)
-            self.rod(at + side * r, at + side * r + ax * 0.075, 0.012, "wood", 8)
+            self.rod(at + side * r, at + side * r + ax * handle, 0.012, "wood", 8)
             if grips:
-                self.socket(f"grip.{grips}.{hand}", at + side * r + ax * 0.0375, tuple(ax), part=name,
+                self.socket(f"grip.{grips}.{hand}", at + side * r + ax * (handle * 0.5), tuple(ax), part=name,
                             note="the layer's %s hand on the %s wheel's handle: it goes round with the wheel" % ("left" if hand == "l" else "right", "elevating" if hand == "l" else "traversing"))
         self.use(self.mount)
 
@@ -667,10 +671,10 @@ def _bm_section(section, x0, x1):
     return bm
 
 
-def crew(v, layer, loader, commander, ammo, case):
+def crew(v, layer, loader, commander, ammo, case, layer_note="the layer, at the sight and the handwheels"):
     """Where her detachment stands (on the ground, on the root) and where the empty cases fall."""
     v.use("vehicle")
-    v.socket("crew.layer", layer, X, part="vehicle", note="the layer, at the sight and the handwheels")
+    v.socket("crew.layer", layer, X, part="vehicle", note=layer_note)
     v.socket("crew.loader", loader, X, part="vehicle", note="the loader, behind the breech")
     v.socket("crew.commander", commander, X, part="vehicle", note="the gun commander")
     v.socket("crew.ammo", ammo, X, part="vehicle", note="the man who hands the rounds up")
@@ -719,8 +723,17 @@ def lefh18(fine=True, tag="GER", paint=None):
     v.saddle(0.0, 1.18, 0.21, 28.0, rate=4.0, foot=0.32)
     v.cradle(-5.0, 42.0, 0.3, 0.2, 0.95, 0.6, 0.15, over=(-0.5, 1.3, 0.078, 0.235))
     v.piece(2.94, 0.105, 0.86, 0.135, 0.092, 1.1, steps=((0.42, 0.115),), ring=(0.32, 0.36, 0.35), block="right", lug=0.55, swell=(0.13, 0.106))
-    v.handwheels((-0.3, 0.4, 1.05), (-0.42, 0.33, 0.9), r=0.12)
-    v.sight((-0.2, 0.31, 1.22), high=0.26)
+    # (between her left trail leg and her tall wheel there is no room for a man: her layer stands inside the legs,
+    # left of the breech's path, and the laying gear reaches back to him: an arm from the left cheek to a narrow case
+    # beside the breech that carries the two handwheels on its outer face and the dial sight on its top. Narrow, and
+    # no further back, so that trained 28 degrees to the right nothing of it swings into her left wheel)
+    v.use("traverse")
+    v.hull([(-0.30, 0.212, 0.93), (-0.30, 0.24, 0.93), (-0.30, 0.212, 1.03), (-0.30, 0.24, 1.03), (-0.535, 0.25, 0.90), (-0.535, 0.335, 0.90), (-0.535, 0.25, 1.12), (-0.535, 0.335, 1.12)], coat, 0.006)
+    v.slab((-0.70, 0.25, 0.86), (-0.52, 0.335, 1.36), coat, 0.012)
+    if fine:
+        v.bolts((-0.61, 0.336, 1.12), Y, 0.035, 6, r=0.007, high=0.004)
+    v.handwheels((-0.60, 0.35, 1.24), (-0.62, 0.35, 1.00), r=0.10, axis_t=(0, 1, 0), shaft=0.09, handle=0.06, back=True)   # (his hands 0.46 and 0.44 ahead of his feet, 1.24 and 1.00 up)
+    v.sight((-0.61, 0.2925, 1.36), high=0.14)
     if fine:                                               # the two spring equilibrators, standing either side of the cradle
         v.use("traverse")
         for s in (LEFT, RIGHT):
@@ -734,7 +747,9 @@ def lefh18(fine=True, tag="GER", paint=None):
     v.socket("dust.left", (-0.3, T / 2, 0.05), (-1, 0, 0.3), part="vehicle")
     v.socket("dust.right", (-0.3, -T / 2, 0.05), (-1, 0, 0.3), part="vehicle")
     v.socket("dust.muzzle", (2.0, 0.0, 0.03), X, part="vehicle", note="the ground under the muzzle: the blast lifts the dust here")
-    crew(v, (-0.7, 0.6, 0.0), (-1.6, -0.5, 0.0), (-2.7, 1.6, 0.0), (-2.2, -1.6, 0.0), (-1.5, -0.2, 0.0))
+    crew(v, (-1.16, 0.45, 0.0), (-1.6, -0.5, 0.0), (-2.7, 1.6, 0.0), (-2.2, -1.6, 0.0), (-1.5, -0.2, 0.0),
+         layer_note="the layer stands inside the trail legs, left of the breech's path (his knee 4 cm clear of the left leg), at the two handwheels and the sight on "
+                    "their case beside the breech (the handles 0.45 ahead of his feet at rest, the elevating one 1.24 up, the traversing one 1.00 up)")
     v.gun_clips(1.1, E.x, lift=0.04, close=close, eye_z=0.22, track=T, low=-5.0)
     v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names.", "paint": coats(v, paint or "grey")}
     return v
