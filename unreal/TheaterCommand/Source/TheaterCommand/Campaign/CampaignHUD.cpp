@@ -531,68 +531,6 @@ namespace
 	};
 
 	/**
-	 * (The art director's round 38: "a cut ends after a whole word".) One line of words that is cut, where it must be,
-	 * after a whole word, with the mark of a cut after it. It takes whatever width its row gives it.
-	 */
-	class SWordLine : public SLeafWidget
-	{
-	public:
-		SLATE_BEGIN_ARGS(SWordLine) {}
-			SLATE_ARGUMENT(FString, Words)
-			SLATE_ARGUMENT(FSlateFontInfo, Face)
-			SLATE_ARGUMENT(FLinearColor, Ink)
-		SLATE_END_ARGS()
-
-		void Construct(const FArguments& Args)
-		{
-			Words = Args._Words;
-			Face = Args._Face;
-			Ink = Args._Ink;
-		}
-
-		virtual FVector2D ComputeDesiredSize(float) const override
-		{
-			return FVector2D(FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Words, Face));
-		}
-
-		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
-		{
-			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
-			const double Room = Geometry.GetLocalSize().X;
-			FString Shown = Words;
-			if (Measure->Measure(Shown, Face).X > Room + 0.5)
-			{
-				for (;;)
-				{
-					int32 Space = INDEX_NONE;
-					if (!Shown.FindLastChar(TEXT(' '), Space) || Space <= 0)
-					{
-						break;
-					}
-					Shown = Shown.Left(Space);
-					// (a comma, a colon or a dash left hanging at the cut goes with it)
-					while (Shown.Len() > 1 && (Shown.EndsWith(TEXT(",")) || Shown.EndsWith(TEXT(":")) || Shown.EndsWith(TEXT(";")) || Shown.EndsWith(TEXT("\u00B7")) || Shown.EndsWith(TEXT(" "))))
-					{
-						Shown.LeftChopInline(1);
-					}
-					if (Measure->Measure(Shown + TEXT(" \u2026"), Face).X <= Room)
-					{
-						Shown += TEXT(" \u2026");
-						break;
-					}
-				}
-			}
-			FSlateDrawElement::MakeText(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), Shown, Face, ESlateDrawEffect::None, Ink * Style.GetColorAndOpacityTint());
-			return LayerId;
-		}
-
-	private:
-		FString Words;
-		FSlateFontInfo Face;
-		FLinearColor Ink = FLinearColor::White;
-	};
-
-	/**
 	 * THE RESEARCH TREE AS A WALL CHART (Brian, 16 November 2026: "make the research tree a lot more visually
 	 * appealing"; the art director's research-tree brief). One chart that holds every technology with no scrolling:
 	 * five shelves, one a branch, run left to right through the four eras. Brass is finished, a lit card is being
@@ -4174,15 +4112,15 @@ namespace
 			Controller = Args._Controller;
 		}
 
-		virtual FVector2D ComputeDesiredSize(float) const override
+		virtual FVector2D ComputeDesiredSize(float LayoutScale) const override
 		{
-			const FLaid& L = Laid();
+			const FLaid& L = Laid(LayoutScale);
 			return L.bValid ? FVector2D(L.W, L.H) : FVector2D::ZeroVector;
 		}
 
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
 		{
-			const FLaid& L = Laid();
+			const FLaid& L = Laid(Geometry.Scale);
 			if (!L.bValid)
 			{
 				return LayerId;
@@ -4259,9 +4197,10 @@ namespace
 			{
 				Write(Layer, Label.Words, FVector2D(P(Pad), P(Label.Y)), L.LabelFace, Brass500);
 			}
-			const double RowX = P(Pad), RowW = L.W - 2.0 * P(Pad), RowH = P(38.0);
+			const double RowX = P(Pad), RowW = L.W - 2.0 * P(Pad);
 			for (const FRowLaid& Each : L.Rows)
 			{
+				const double RowH = P(Each.High);
 				const FLessonRow& Row = Each.Row;
 				const FVector2D At(RowX, P(Each.Y)), Size(RowW, RowH);
 				const bool bDone = Row.State == TEXT("done"), bNow = Row.State == TEXT("now");
@@ -4305,25 +4244,33 @@ namespace
 					const FVector2D NumberSize = Measure->Measure(Number, L.NumberFace);
 					Write(Layer + 3, Number, DiscAt + (FVector2D(Disc, Disc) - NumberSize) * 0.5, L.NumberFace, RingInk);
 				}
-				// Its name, and what stands at its right.
+				// Its name, and what stands at its right. (The name's lines stand together in the row's middle.)
 				const double NameX = DiscAt.X + Disc + P(12.0), RightX = At.X + RowW - P(12.0);
+				const double Step = P(L.NameStep), NamesTop = At.Y + (RowH - Step * Each.Names.Num()) * 0.5;
+				auto WriteName = [&](const FSlateFontInfo& WithFace, const FLinearColor& WithInk)
+				{
+					for (int32 Nth = 0; Nth < Each.Names.Num(); ++Nth)
+					{
+						WriteIn(Layer + 2, Each.Names[Nth], NameX, NamesTop + Nth * Step, Step, WithFace, WithInk, false);
+					}
+				};
 				if (bDone)
 				{
 					// SHOW ME AGAIN: the kit's quiet word, underlined 2 under its letters.
 					const bool bAgainHot = Hovered(Each.Spot);
 					const FVector2D Word = WriteIn(Layer + 2, L.Again, RightX, At.Y, RowH - P(2.0), L.QuietFace, bAgainHot ? Brass100 : Brass300, true);
 					Fill(Layer + 2, FVector2D(RightX - Word.X, At.Y + (RowH - P(2.0) + Word.Y) * 0.5 + P(1.0)), FVector2D(Word.X, 1.0), bAgainHot ? Brass100 : Brass700);
-					WriteIn(Layer + 2, Each.Name, NameX, At.Y, RowH, L.NameFace, Paper200, false);
+					WriteName(L.NameFace, Paper200);
 				}
 				else if (bNow)
 				{
 					WriteIn(Layer + 2, L.Waiting, RightX, At.Y, RowH, L.WaitFace, Brass100, true);
-					WriteIn(Layer + 2, Each.Name, NameX, At.Y, RowH, L.NameFace, Brass100, false);
+					WriteName(L.NameFace, Brass100);
 				}
 				else
 				{
 					WriteIn(Layer + 2, L.Later, RightX, At.Y, RowH, L.LaterFace, TextFaint, true);
-					WriteIn(Layer + 2, Each.Name, NameX, At.Y, RowH, L.LaterNameFace, TextMuted, false);
+					WriteName(L.LaterNameFace, TextMuted);
 				}
 			}
 
@@ -4426,8 +4373,9 @@ namespace
 		struct FRowLaid
 		{
 			FLessonRow Row;
-			FString Name; // (its name, shortened to fit if it must)
+			TArray<FString> Names; // (its name, on as many lines as it takes: never cut short)
 			double Y = 0.0;
+			double High = 38.0; // (38, and a line more for each further line of its name)
 			int32 Spot = INDEX_NONE;
 		};
 		struct FLabelLaid
@@ -4440,7 +4388,8 @@ namespace
 		{
 			bool bValid = false;
 			int32 Revision = INDEX_NONE;
-			double W = 0.0, H = 0.0;
+			double Scale = 1.0; // (the scale its names were folded at)
+			double W = 0.0, H = 0.0, NameStep = 0.0;
 			FString Label, Head, State, Setting;
 			FString Again = TEXT("SHOW ME AGAIN"), Waiting = TEXT("WAITING FOR YOU"), Later = TEXT("when its moment comes");
 			FString OnWord = TEXT("ON"), OffWord = TEXT("OFF"), RulesWord = TEXT("HOW A MONTH WORKS ›");
@@ -4453,24 +4402,33 @@ namespace
 			FSlateFontInfo LabelFace, HeadFace, StateFace, NameFace, LaterNameFace, NumberFace, QuietFace, WaitFace, LaterFace, SettingFace, SegFace;
 		};
 
-		/** The page as the controller has it now, set out again only when it changes. */
-		const FLaid& Laid() const
+		/**
+		 * The page as the controller has it now, set out again only when it changes, or when it is drawn at another
+		 * scale (its names fold at the scale they are painted at; Scale 0 keeps the last).
+		 */
+		const FLaid& Laid(double Scale = 0.0) const
 		{
 			if (!Controller.IsValid() || !Controller->IsLessonGuideOpen())
 			{
 				return Kept; // (as last set out: it is not drawn while closed)
 			}
 			const int32 Revision = Controller->GetLessonGuideRevision();
-			if (!Kept.bValid || Kept.Revision != Revision)
+			const double At = Scale > 0.01 ? Scale : Kept.bValid ? Kept.Scale : 1.0;
+			const bool bChanged = !Kept.bValid || Kept.Revision != Revision;
+			if (bChanged || !FMath::IsNearlyEqual(Kept.Scale, At, 0.001))
 			{
-				Kept = Lay(Controller->GetLessonGuide());
+				Kept = Lay(Controller->GetLessonGuide(), At);
 				Kept.Revision = Revision;
-				HoverSpot = INDEX_NONE;
+				Kept.Scale = At;
+				if (bChanged)
+				{
+					HoverSpot = INDEX_NONE;
+				}
 			}
 			return Kept;
 		}
 
-		static FLaid Lay(const FLessonGuide& Guide)
+		static FLaid Lay(const FLessonGuide& Guide, double Scale)
 		{
 			FLaid L;
 			if (!Guide.bValid)
@@ -4499,6 +4457,8 @@ namespace
 			L.LaterFace = Typed(Pt(12.0));
 			L.SettingFace = Typed(Pt(13.0));
 			L.SegFace = Typed(Pt(13.0), true, 80);
+			// (a name's further line: the step of its face, in the brief's pixels)
+			L.NameStep = static_cast<double>(Measure->GetMaxCharacterHeight(L.NameFace)) / K;
 			// The close stud, 32 across, at the top right.
 			FSpot& Close = L.Spots.AddDefaulted_GetRef();
 			Close.Box = FBox2D(FVector2D(L.W - P(19.0 + 32.0), P(18.0)), FVector2D(L.W - P(19.0), P(50.0)));
@@ -4536,23 +4496,23 @@ namespace
 					const FString& Right = bDone ? L.Again : bNow ? L.Waiting : L.Later;
 					const FSlateFontInfo& RightFace = bDone ? L.QuietFace : bNow ? L.WaitFace : L.LaterFace;
 					const FSlateFontInfo& NameFace = bDone || bNow ? L.NameFace : L.LaterNameFace;
-					// (the name keeps clear of what stands at the right, and is cut short with a mark if it must be)
-					const double Room = P(RowW - 8.0 - 22.0 - 12.0 - 12.0 - 16.0) - Wide(Right, RightFace);
-					Each.Name = Each.Row.Head;
-					if (Wide(Each.Name, NameFace) > Room)
+					// (the name keeps clear of what stands at the right; where it is longer it goes on to a second line
+					// and the row grows, never cut short with three dots: the UI director, 08:57 on the review of build
+					// 1628. It folds at the scale it is painted at.)
+					const double Room = P(RowW - 8.0 - 22.0 - 12.0 - 12.0 - 16.0) - PaintWide(Right, RightFace, Scale);
+					FoldWords(Each.Row.Head, NameFace, Room, Each.Names, false, Scale);
+					if (Each.Names.Num() == 0)
 					{
-						while (Each.Name.Len() > 1 && Wide(Each.Name + TEXT("…"), NameFace) > Room)
-						{
-							Each.Name.LeftChopInline(1);
-						}
-						Each.Name = Each.Name.TrimEnd() + TEXT("…");
+						Each.Names.Add(FString());
 					}
+					Each.High = 38.0 + (Each.Names.Num() - 1) * L.NameStep;
+					const double Middle = Y + Each.High * 0.5;
 					if (bDone)
 					{
 						// SHOW ME AGAIN, a quiet word at the right: only the word takes the click.
 						const double RightEdge = P(Pad + RowW - 12.0), WordW = Wide(L.Again, L.QuietFace);
 						FSpot& Again = L.Spots.AddDefaulted_GetRef();
-						Again.Box = FBox2D(FVector2D(RightEdge - WordW - P(6.0), P(Y + 6.0)), FVector2D(RightEdge + P(6.0), P(Y + 32.0)));
+						Again.Box = FBox2D(FVector2D(RightEdge - WordW - P(6.0), P(Middle - 13.0)), FVector2D(RightEdge + P(6.0), P(Middle + 13.0)));
 						Again.Act = TEXT("again:") + Each.Row.Id;
 						Each.Spot = L.Spots.Num() - 1;
 					}
@@ -4560,11 +4520,11 @@ namespace
 					{
 						// A row waiting for him: the whole row brings its note back.
 						FSpot& Back = L.Spots.AddDefaulted_GetRef();
-						Back.Box = FBox2D(FVector2D(P(Pad), P(Y)), FVector2D(P(Pad + RowW), P(Y + 38.0)));
+						Back.Box = FBox2D(FVector2D(P(Pad), P(Y)), FVector2D(P(Pad + RowW), P(Y + Each.High)));
 						Back.Act = TEXT("back:") + Each.Row.Id;
 						Each.Spot = L.Spots.Num() - 1;
 					}
-					Y += 38.0;
+					Y += Each.High;
 				}
 			}
 			Y += 18.0;
@@ -7203,13 +7163,14 @@ namespace
 					// and e09457e.) The card is the kit's page, card-lg: 1,240 wide, and as high as the screen less space-12
 					// (48) above and below, its type at full size, so that under the title band (FIRST COMMAND on its own
 					// row, CONTINUE at the end of the pages' row) the seven great powers, the three settings and BEGIN AS ...
-					// all show without scrolling; the smaller nations take what height is left. (The give order of 07:10,
-					// and the review of build 1628, item 4.) The smaller nations give down to one whole row and the MORE
-					// plate in its band under it, never less; where even that is more than the screen less its 48s, the
-					// card stands taller, as tall as it needs, and the 48s give, down to 16; only past that is it drawn
-					// smaller, and never under 0.95 of its size; and only past that, on the smallest frame (1,280 by 720),
-					// does the list go down to its plate alone. The summary at the foot is as tall for every nation, so what
-					// the card needs does not change with the pick. (See LookAtList for what it needs.)
+					// all show without scrolling; the smaller nations take what height is left. (The give order of 08:57,
+					// after 07:10 and the review of build 1628, item 4.) First the margins: where standing up to 16 from
+					// the screen's top and foot shows more whole rows of nations than the 48s do, the card stands as tall
+					// as those rows and the MORE plate's band under them, and the 48s give only that much. Then the list,
+					// down to one whole row and its plate, never less; where even that is more than the screen less its
+					// 16s, the card is drawn smaller, and never under 0.95 of its size; and only past that, on the smallest
+					// frame (1,280 by 720), does the list go down to its plate alone. The summary at the foot is as tall for
+					// every nation, so what the card needs does not change with the pick. (See LookAtList for what it needs.)
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
 						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(16.0f))
@@ -10574,11 +10535,11 @@ namespace
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight()
 				[
-					SNew(SWordLine).Words(Seat.Name).Face(Font(TEXT("Bold"), 13)).Ink(bCan ? Cream : Faint) // (cut after a whole word where it must be)
+					SNew(SPhraseText).Text(FText::FromString(Seat.Name)).Face(Font(TEXT("Bold"), 13)).Ink(bCan ? Cream : Faint).Guess(226.0f) // (on to a second line where it must be, never cut)
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 				[
-					SNew(SWordLine).Words(Where).Face(Font(TEXT("Regular"), 10)).Ink(bCan ? Muted : Faint)
+					SNew(SPhraseText).Text(FText::FromString(Where)).Face(Font(TEXT("Regular"), 10)).Ink(bCan ? Muted : Faint).Guess(226.0f)
 					.ToolTipText(FText::FromString(FString::Printf(TEXT("%s%s. %s km to fly to the target."), Seat.bAfloat ? TEXT("Aboard the ") : TEXT("Based at "), *Seat.Base, *FText::AsNumber(Seat.Km).ToString())))
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
@@ -10715,7 +10676,7 @@ namespace
 				}
 				Whose->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center)
 				[
-					SNew(SWordLine).Words(Under).Face(Font(TEXT("Regular"), 11)).Ink(Cream) // (cut after a whole word where it must be)
+					SNew(SPhraseText).Text(FText::FromString(Under)).Face(Font(TEXT("Regular"), 11)).Ink(Cream).Guess(380.0f) // (on to a second line where it must be, never cut)
 				];
 				Print->AddSlot().VAlign(VAlign_Bottom)
 				[
@@ -10867,7 +10828,7 @@ namespace
 							]
 							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom).Padding(9.0f, 0.0f, 0.0f, 5.0f)
 							[
-								SNew(SWordLine).Words(Way.Verdict).Face(Serif(TEXT("Bold"), 11)).Ink(Cream) // (cut after a whole word where it must be)
+								SNew(SPhraseText).Text(FText::FromString(Way.Verdict)).Face(Serif(TEXT("Bold"), 11)).Ink(Cream).Guess(130.0f) // (on to a second line where it must be, never cut)
 							]
 						];
 						Inside->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[RaidMeter(Way.Success, BrightBrass, 4.0f)];
@@ -10927,7 +10888,7 @@ namespace
 									]
 									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom).Padding(10.0f, 0.0f, 0.0f, 2.0f)
 									[
-										SNew(SWordLine).Words(Way.Hits[K].Value).Face(Font(TEXT("Regular"), 10)).Ink(bDim ? Faint : Muted) // (cut after a whole word where it must be)
+										SNew(SPhraseText).Text(FText::FromString(Way.Hits[K].Value)).Face(Font(TEXT("Regular"), 10)).Ink(bDim ? Faint : Muted).Guess(130.0f) // (on to a second line where it must be, never cut)
 									]
 								];
 							}
@@ -13017,20 +12978,67 @@ namespace
 			// the foot of the first row of the smaller nations, on the grand campaign's page (the great powers above it),
 			// or of its first row on another page, with the plate's band under it. The rest of the card does not change
 			// with the card's height, or with the nation picked, so this holds still as the card grows.
+			// (08:57: margins before a row.) On the grand campaign's page the margins give first: where the card, standing
+			// up to 16 from the screen's top and foot, shows more whole rows of cards than within the 48s, it stands as tall
+			// as those rows and their plate's band, and the margins give only that much (at Brian's window, the 19 that
+			// show Brazil's second row). Where it shows no more, it keeps its 48s.
 			float Need = 0.0f;
 			const int32 Keep = Controller->GetOpening().Tab == 0 && ListRows.Num() > 1 ? 1 : 0;
-			const TSharedPtr<SWidget> KeptRow = ListRows.IsValidIndex(Keep) ? ListRows[Keep].Key.Pin() : TSharedPtr<SWidget>();
-			if (OpeningCardBox.IsValid() && KeptRow.IsValid())
+			const double ScreenHigh = ScreenRoot.IsValid() ? ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y : 0.0;
+			if (OpeningCardBox.IsValid() && ListRows.IsValidIndex(Keep))
 			{
-				for (int32 Index = 0; Index < Arranged.Num(); ++Index)
+				const double Outside = OpeningCardBox->GetTickSpaceGeometry().GetLocalSize().Y - Area;
+				const double ListEnd = ListFeet.Num() > 0 ? static_cast<double>(ListFeet.Last()) : 0.0;
+				int32 Within48 = -1;
+				int32 Within16 = -1;
+				float Need16 = 0.0f;
+				for (int32 CardRow = Keep; CardRow < ListRows.Num(); ++CardRow)
 				{
-					if (&Arranged[Index].Widget.Get() == KeptRow.Get())
+					const TSharedPtr<SWidget> RowWidget = ListRows[CardRow].Key.Pin();
+					int32 RowAt = INDEX_NONE;
+					for (int32 Nth = 0; RowWidget.IsValid() && Nth < Arranged.Num(); ++Nth)
 					{
-						const double Outside = OpeningCardBox->GetTickSpaceGeometry().GetLocalSize().Y - Area;
-						Need = static_cast<float>(FMath::CeilToDouble(Outside + ListFeet[Index] + PlateBand));
+						if (&Arranged[Nth].Widget.Get() == RowWidget.Get())
+						{
+							RowAt = Nth;
+							break;
+						}
+					}
+					if (RowAt == INDEX_NONE)
+					{
+						continue;
+					}
+					// (the last line of the list needs no plate under it)
+					const double RowFoot = static_cast<double>(ListFeet[RowAt]);
+					const float RowNeed = static_cast<float>(FMath::CeilToDouble(Outside + RowFoot + (RowFoot >= ListEnd - 0.5 ? 0.0 : static_cast<double>(PlateBand))));
+					if (CardRow == Keep)
+					{
+						Need = RowNeed;
+					}
+					if (Keep == 0 || ScreenHigh <= 0.0)
+					{
 						break;
 					}
+					if (RowNeed <= ScreenHigh - 96.0 + 0.5)
+					{
+						Within48 = CardRow;
+					}
+					if (RowNeed <= ScreenHigh - 32.0 + 0.5)
+					{
+						Within16 = CardRow;
+						Need16 = RowNeed;
+					}
 				}
+				if (Within16 > Within48)
+				{
+					Need = Need16;
+				}
+			}
+			// (What the card needs now turns on the screen's height too: a window drawn to a new size measures afresh.)
+			if (!FMath::IsNearlyEqual(ScreenHigh, OpeningHigh, 0.5))
+			{
+				OpeningHigh = ScreenHigh;
+				OpeningSettle = FMath::Max(OpeningSettle, 3);
 			}
 			// (The checker's note E.) Drawn smaller, the card's text is measured at the scale it is drawn at, a line a whole
 			// pixel high, so what it needs moves a little with the scale, and the scale with what it needs: left free, it
@@ -14414,6 +14422,7 @@ namespace
 		TSharedPtr<SBox> OpeningCardBox;
 		float OpeningNeed = 0.0f;
 		int32 OpeningSettle = 0; // (frames after a laying out in which what is measured is taken as it is)
+		double OpeningHigh = 0.0; // (the screen's height the card was last measured for)
 		TArray<TPair<TWeakPtr<SWidget>, int32>> ListRows;
 		bool bListRunsOn = false;
 		int32 ListBelow = 0;
