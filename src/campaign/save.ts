@@ -80,6 +80,8 @@ export function saveGame(g: Game): string {
     intel: g.flags.open === 1 ? g.intel : undefined,
     // The roll of the fallen and the freed: left out while it is empty, so a save with nothing on it is written as it always was.
     passings: g.passings.length ? g.passings : undefined,
+    // Corps at sea on a long passage: left out while there are none, so a save with none is written as it always was.
+    atSea: g.atSea?.length ? g.atSea : undefined,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -231,6 +233,8 @@ export function loadGame(text: string): Game | null {
   g.intel = { agents: [], next: 1, notes: [], heat: {}, ...(d.intel ?? {}) };
   // A save from before the roll of the fallen was kept: it is written up from what each nation remembers of its own fall.
   g.passings = Array.isArray(d.passings) ? d.passings : rollFromMemory(g);
+  // Corps at sea on a long passage (ruling 229, part 1): none in a save from before the Cape was sailed.
+  if (Array.isArray(d.atSea) && d.atSea.length) g.atSea = d.atSea;
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
   if (g.flags.open === 1) openCarriers(g);

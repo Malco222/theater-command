@@ -11,7 +11,7 @@
 // list. The dial leashes the computer-run world and never the player: no claim is pressed for him.
 
 import { DIPLOMACY, holds, majorsOf, signPeace } from './diplomacy';
-import { allied, atWar, bloc, collapseScore, declareWar, headline, theName, warning } from './game';
+import { allied, atWar, bloc, collapseScore, declareWar, headline, joinedSide, theName, warning } from './game';
 import { HISTORY, dialDraw, dialRules, stopDef, stopOf, FREE, type Ambition, type Mark } from './history';
 import { deterred } from './league';
 import { fronts, launch } from './staff';
@@ -166,6 +166,7 @@ function march(g: Game, a: Ambition, why: string): void {
       n.align = other === 'axis' ? 'axis_cobelligerent' : 'allies_cobelligerent';
       n.opinion = n.home = other === 'axis' ? 100 : -100;
       g.supplyDirty = true;
+      joinedSide(g, a.nat);
     }
   }
   launch(g, a.nat, [a.on], C.push);

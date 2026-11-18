@@ -397,13 +397,20 @@ describe('one war at the history stop, nobody playing', () => {
     // since the staffs fly raids on troops again (b435): America's staff lands its three corps at Bordeaux in June
     // 1944, its only landing of the war. In the 32 wars measured, seeds 40 to 71, no American first wave of 1944 went
     // to an island and two landed in France in 1944, this one and seed 66; 25 put their first wave on Sardinia in 1942
-    // or 1943, and four landed in France at all.)
-    const g = startOpen(createGame(50, null));
+    // or 1943, and four landed in France at all. The realism version (its crowded airfields, ruling 229) moved the war
+    // again. Seed 48 on it: the beaches of France refuse America's corps in June and July 1944, and its staff lands them
+    // on the Cotentin in July. Of the 64 wars measured, seeds 17 to 80, four tell this story: seeds 30, 40, 48 and 58,
+    // landing at Rouen, Marseille, the Cotentin and Brittany.)
+    const g = startOpen(createGame(48, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
+    const refused = new Set<number>();
     landingWatch.tell = (e) => { if (!e.wave) landings.push({ turn: g.turn, nat: e.nat, to: e.to, corps: e.force.length }); };
-    try { while (g.turn <= 60 && g.nations.GER.alive) runTurnAI(g); } finally { landingWatch.tell = null; }
+    strengthWatch.tell = (e) => { if (e.nat === 'USA' && g.turn >= 57 && e.force.length >= 3 && e.at.owner === 'FRA' && e.at.nb.length > 0 && e.R.chance < e.ask) refused.add(g.turn); };
+    try { while (g.turn <= 60 && g.nations.GER.alive) runTurnAI(g); } finally { landingWatch.tell = null; strengthWatch.tell = null; }
     const usa = landings.filter((l) => l.nat === 'USA' && l.turn >= 57);
+    // It was refused on the mainland first, in a month before its landing there.
+    expect([...refused].some((t) => usa.some((l) => l.turn > t))).toBe(true);
     // No American first wave of 1944 goes to an island; its landing of that summer is in France.
     expect(usa.filter((l) => l.to.nb.length === 0)).toEqual([]);
     expect(usa.some((l) => l.to.owner === 'FRA' && !l.to.overseas)).toBe(true);

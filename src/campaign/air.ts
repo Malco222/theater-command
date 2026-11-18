@@ -9,7 +9,7 @@
 // lists is split into air groups of one kind, fighters or bombers, and a group flies one raid a month, planned
 // from its target and flown the moment the order is given. A historical scenario keeps the fleets as they were.
 
-import { byHand } from './depth';
+import { byHand, staffRuns } from './depth';
 import data from '../../data/campaign/air.json';
 import warData from '../../data/campaign/airwar.json';
 import namesData from '../../data/campaign/air-names.json';
@@ -19,7 +19,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp, tenthPct } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
-import { allied, atWar, headline, routineNews, thornGround, worksOf } from './game';
+import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { hasTech } from './tech';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
@@ -778,6 +778,173 @@ export function rebaseAir(g: Game, f: AirFleet, r: Region, bySea = false): boole
 export function fieldRoom(g: Game, base: number, f: AirFleet): boolean {
   const there = g.airFleets.reduce((s, x) => s + (x !== f && x.base === base && x.ship === undefined ? x.ftr + x.bmr : 0), 0);
   return there + f.ftr + f.bmr <= (airWar(g) ? Math.max(AIRWAR.fields.least, airfieldsHold(g, base)) : airfieldsHold(g, base));
+}
+
+// ---- Room on the fields: a staff's month's end (the design director's b437) --------------------------------------
+
+/** How many aircraft the airfields of a region serve in the air war, as crowding() counts them. */
+export const fieldServes = (g: Game, region: number): number => Math.max(AIRWAR.fields.least, airfieldsHold(g, region));
+/** The aircraft a land group keeps room for on its field: its establishment, or what it has if that is more. */
+const keepsRoom = (f: AirFleet): number => Math.max(f.ftr + f.bmr, f.est.ftr + f.est.bmr);
+/** The room a field's groups keep, every nation's, as crowding() counts the aircraft on it. */
+const roomTaken = (g: Game, region: number): number => g.airFleets.reduce((s, x) => s + (x.ship === undefined && x.base === region ? keepsRoom(x) : 0), 0);
+/** The smallest part of a group a staff splits off to put it on another field: half a wing. */
+const LEAST_PART = 50;
+
+/** The enemy-held ground with enemy troops on it beside a nation's own field corps: the front its air groups cover. */
+function frontOf(g: Game, nat: string): number[] {
+  const out = new Set<number>();
+  for (const c of g.corps) {
+    if (c.nat !== nat || c.dead || c.kind === 'fort') continue;
+    for (const j of g.regions[c.reg].nb) {
+      const r = g.regions[j];
+      if (atWar(g, nat, r.ctrl) && r.units.some((u) => !u.dead && atWar(g, nat, u.nat))) out.add(j);
+    }
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+/**
+ * Part of an air group, as a fraction of it, made a group of its own on the same field: it takes its part of the
+ * aircraft and of the establishment (its share of the command, and of the wings bought for it), so the command is
+ * kept at what it was; the group keeps its name, its commander and its record, and the new one is named as its
+ * country names its groups.
+ */
+function splitOff(g: Game, f: AirFleet, q: number): AirFleet {
+  const take = (n: number): number => Math.round(n * q);
+  const grp: AirFleet = {
+    id: g.nextAir++, nat: f.nat, name: '', base: f.base, ftr: take(f.ftr), bmr: take(f.bmr), est: { ftr: take(f.est.ftr), bmr: take(f.est.bmr) },
+    mission: f.mission, target: f.target, ready: f.ready, leader: null, moved: f.moved, lost: { ftr: 0, bmr: 0 },
+  };
+  if (f.kind) grp.kind = f.kind;
+  if (f.parent !== undefined) grp.parent = f.parent;
+  if (f.flew !== undefined) grp.flew = f.flew;
+  if (f.scouted !== undefined) grp.scouted = f.scouted;
+  const share = f.share ?? 1;
+  grp.share = share * q;
+  f.share = share - grp.share;
+  if (f.extra) { grp.extra = { ftr: take(f.extra.ftr), bmr: take(f.extra.bmr) }; f.extra = { ftr: f.extra.ftr - grp.extra.ftr, bmr: f.extra.bmr - grp.extra.bmr }; }
+  f.ftr -= grp.ftr; f.bmr -= grp.bmr;
+  f.est = { ftr: f.est.ftr - grp.est.ftr, bmr: f.est.bmr - grp.est.bmr };
+  const kind = grp.kind ?? (grp.bmr > grp.ftr ? 'bmr' : 'ftr');
+  grp.name = groupName(g, f.nat, kind, Math.max(grp.est[kind], grp[kind]), g.regions[grp.base] ?? null);
+  g.airFleets.splice(g.airFleets.indexOf(f) + 1, 0, grp);
+  return grp;
+}
+
+/**
+ * A computer staff's month's end in the air war (the design director's b437): no field of its own is left serving
+ * fewer aircraft than its groups are kept at. From a crowded field it sends groups to the nearest fields with room
+ * that still reach the stretch of front they cover (failing those, the nearest with room), the group whose going is
+ * just enough first, so that the field it leaves stays full; a group too big for any field with room is split, and
+ * the part that has room goes. The player's groups are never moved, unless he has handed the air war to his staff:
+ * he is told (crowdedRow, crowdedNews). Returns the groups moved.
+ */
+export function spreadAir(g: Game, nat: string): AirFleet[] {
+  const moved: AirFleet[] = [];
+  if (!airWar(g) || byHand(g, nat, 'air') || !g.nations[nat]?.alive) return moved;
+  const land = (f: AirFleet): boolean => f.nat === nat && f.ship === undefined && f.ashore === undefined && f.base >= 0 && !!g.regions[f.base];
+  const mine = g.airFleets.filter(land);
+  if (!mine.length) return moved;
+  const front = frontOf(g, nat);
+  const fields = g.regions.filter((r) => hasAirfield(g, r.id));
+  const free = (id: number): number => fieldServes(g, id) - roomTaken(g, id);
+  /** The fields a group could go to this month, nearest first: those that reach the front it covers, then the rest. */
+  const placesFor = (f: AirFleet): Region[] => {
+    const R = f.kind === 'bmr' ? reach(f).bmrRange : reach(f).ftrRange;
+    const covers = front.filter((t) => km(g, f.base, t) <= R);
+    const near = fields
+      .map((r) => ({ r, d: km(g, f.base, r.id) }))
+      .filter((x) => x.r.id !== f.base && x.d <= AIR.ferry && !overOcean(g, f, x.r) && whyNotBase(g, f, x.r) === null)
+      .sort((a, b) => a.d - b.d || a.r.id - b.r.id);
+    const reaches = (r: Region): boolean => !covers.length || covers.some((t) => km(g, r.id, t) <= R);
+    return [...near.filter((x) => reaches(x.r)), ...near.filter((x) => !reaches(x.r))].map((x) => x.r);
+  };
+  for (const F of [...new Set(mine.map((f) => f.base))].sort((a, b) => a - b)) {
+    for (let guard = 0; guard < 64; guard++) {
+      const over = roomTaken(g, F) - fieldServes(g, F);
+      if (over <= 0) break;
+      const here = g.airFleets.filter((f) => land(f) && f.base === F && f.moved !== g.turn && keepsRoom(f) > 0);
+      if (!here.length) break;
+      const dest = (f: AirFleet): Region | undefined => placesFor(f).find((r) => free(r.id) >= keepsRoom(f));
+      const bySize = [...here].sort((a, b) => keepsRoom(a) - keepsRoom(b) || a.id - b.id);
+      // The group whose going is just enough, so that the field stays full; else the largest that has somewhere to go.
+      let pick: { f: AirFleet; to: Region } | null = null;
+      for (const f of bySize) { if (keepsRoom(f) < over) continue; const to = dest(f); if (to) { pick = { f, to }; break; } }
+      if (!pick) for (const f of [...bySize].reverse()) { const to = dest(f); if (to) { pick = { f, to }; break; } }
+      if (!pick) {
+        // No group has a field with room for all of it: the largest is split, and the part that has room goes.
+        const f = bySize[bySize.length - 1];
+        const to = placesFor(f).filter((r) => free(r.id) >= LEAST_PART).sort((a, b) => free(b.id) - free(a.id))[0];
+        if (!to) break;
+        const part = Math.min(over, free(to.id));
+        if (part < LEAST_PART || part >= keepsRoom(f)) break;
+        pick = { f: splitOff(g, f, part / keepsRoom(f)), to };
+      }
+      if (!rebaseAir(g, pick.f, pick.to)) break;
+      moved.push(pick.f);
+    }
+  }
+  return moved;
+}
+
+/** How much of a crowded field's aircraft can fly, in words: what it serves over what is based there (the UI director's sheet for b448). */
+export function shareWords(share: number): string {
+  const steps: [number, string][] = [[0.85, 'nine in ten'], [0.7, 'three quarters'], [0.6, 'two thirds'], [0.45, 'half'], [0.3, 'a third'], [0.22, 'a quarter'], [0.15, 'a fifth'], [0.07, 'a tenth']];
+  return steps.find(([at]) => share >= at)?.[1] ?? 'hardly any';
+}
+
+/** A crowded airfield: what it serves, what is based there, and the share of that which can fly. */
+export interface CrowdedField { region: number; serves: number; based: number; share: number }
+
+/** A nation's crowded airfields, worst first: the fields its groups are on where more aircraft are based than the field serves. */
+export function crowdedFields(g: Game, nat: string | null = g.human): CrowdedField[] {
+  if (!nat || !airWar(g)) return [];
+  const bases = [...new Set(g.airFleets.filter((f) => f.nat === nat && f.ship === undefined && f.base >= 0 && !!g.regions[f.base]).map((f) => f.base))];
+  return bases
+    .map((id) => {
+      const based = g.airFleets.reduce((s, x) => s + (x.base === id && x.ship === undefined ? x.ftr + x.bmr : 0), 0);
+      const serves = fieldServes(g, id);
+      return { region: id, serves, based, share: based > 0 ? serves / based : 1 };
+    })
+    .filter((c) => c.based > c.serves)
+    .sort((a, b) => a.share - b.share || b.based - a.based || a.region - b.region);
+}
+
+const counted = (n: number): string => Math.round(n).toLocaleString('en-US');
+/** "so a third of them fly", "so only a third", never "only hardly any". */
+const soFly = (c: CrowdedField, can: string): string => {
+  const w = shareWords(c.share);
+  return `so ${c.share < 0.6 && w !== 'hardly any' ? 'only ' : ''}${w} of them ${can}`;
+};
+
+/** The tray's one row while any field of his is crowded: the worst named, and how many there are (b448; a press opens the worst). */
+export function crowdedRow(g: Game, cs: CrowdedField[]): string {
+  const w = cs[0], name = g.regions[w.region].name;
+  const tail = `it serves ${counted(w.serves)} aircraft and has ${counted(w.based)}, so ${shareWords(w.share)} of them can fly`;
+  return theWords(cs.length === 1 ? `${name}'s airfield is crowded: ${tail}` : `${cs.length} of your airfields are crowded, ${name}'s worst: ${tail}`);
+}
+
+const COUNT_HEAD = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+/**
+ * The month card's line as the player's month opens (b448): news of a field of his that has become crowded since
+ * the month before, and not again while it stays crowded. Not while his staff runs the air war: it spreads the groups.
+ */
+export function crowdedNews(g: Game): void {
+  const me = g.human;
+  if (!me || !airWar(g) || !g.nations[me]?.alive) return;
+  const pre = `crowd:${me}:`;
+  const now = staffRuns(g, me, 'air') ? [] : crowdedFields(g, me);
+  const at = new Set(now.map((c) => c.region));
+  for (const k of Object.keys(g.flags)) if (k.startsWith(pre) && !at.has(Number(k.slice(pre.length)))) delete g.flags[k];
+  const fresh = now.filter((c) => g.flags[`${pre}${c.region}`] === undefined);
+  for (const c of now) g.flags[`${pre}${c.region}`] ??= g.turn;
+  if (!fresh.length) return;
+  const w = fresh[0], name = g.regions[w.region].name;
+  const line = `serves ${counted(w.serves)} aircraft and ${counted(w.based)} are based there, ${soFly(w, 'fly')}. Move some groups to a field with room and they all fly.`;
+  const head = fresh.length === 1 ? `${name}'s airfield is crowded` : `${COUNT_HEAD[fresh.length] ?? fresh.length} airfields are crowded`;
+  const text = fresh.length === 1 ? `It ${line}` : `${name}'s is the worst: it ${line}`;
+  g.headlines.push({ turn: g.turn, week: newsWeek(g), kind: 'info', nat: me, region: w.region, head: theWords(head), text: theWords(text) });
 }
 
 /** True when a strike on this sea has something to hit: enemy ships at sea, or an enemy's trade along its coast. */
@@ -1809,8 +1976,9 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
         if (BP && whyNotMission(g, f, 'superiority', t) === null) continue;
         for (const r of airBases(g, f)) {
           const d = km(g, r.id, t);
-          // (For a player: not onto airfields that are full already. Aircraft that cannot be served fly nowhere.)
-          if (BP && !roomOn(r.id, f)) continue;
+          // (Not onto airfields that are full already: aircraft that cannot be served fly nowhere. Nor across an
+          // ocean, where a group goes only by sea.)
+          if (!roomOn(r.id, f) || overOcean(g, f, r)) continue;
           // (Of two groups that could go as near, a player's staff sends the one that is not over the capital.)
           if (d <= reach(f, g).ftrRange && (!move || d < move.d || (!!BP && d === move.d && move.f.base === cap && f.base !== cap))) move = { f, to: r, d };
         }

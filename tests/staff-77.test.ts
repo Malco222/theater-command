@@ -213,6 +213,9 @@ describe('a front is any harbour its side holds near the enemy', () => {
       const beach = g.byName.Brittany;
       for (const c of [...beach.units]) removeCorps(g, c);
       capture(g, beach, 'UK');
+      // (And the army next door sent away. Germany moves first in the month, and since ruling 229 five of its corps stand
+      // at Rennes in this war: they would take the empty beach back before America's staff sat down to its orders.)
+      for (const j of beach.nb) for (const c of [...g.regions[j].units]) if (c.nat !== 'UK') removeCorps(g, c);
       const quay = g.byName.Cornwall;
       const c = addCorps(g, 'USA', 'Waiting Corps', 'inf', 2, quay.id, {});
       c.supplied = true;
