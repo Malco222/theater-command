@@ -1448,7 +1448,30 @@ export function seaFoe(g: Game, nat: string, slot = 0): { foe: string; L: Landin
   // (A staff with history's list of shores looks only at those of his harbours it may open on this month.)
   const inReach = (e: string): boolean => from.length > 0 && seaHops(g, from, harbours(g, e).filter((r) => opensOn(g, nat, r))) <= NAVY.landing.range;
   const kept = ids[flag(g, key) - 1];
-  if (kept && g.nations[kept].alive && atWar(g, nat, kept)) {
+  // (History's list has an order, ruling 233(j): when the month has come for a later shore of the list, the home
+  // army turns to the enemy who holds it nearest the home ports, unless it has men ashore with a front to hold.
+  // France in June 1944, though Italy still stands; and Germany on the Channel, not Italy at Marseille. The army
+  // abroad keeps the first: see `abroad`.)
+  const P = planned(g, nat);
+  const dueOf = new Map<string, number>();
+  /** The month of the latest shore of the list an enemy holds a harbour on, within a landing of the home ports, with the hops to it taken off as a fraction: later first, then nearer. */
+  const due = (e: string): number => {
+    if (!P?.from || !dated(g) || !from.length) return 0;
+    let m = dueOf.get(e);
+    if (m !== undefined) return m;
+    m = 0;
+    for (const r of harbours(g, e)) {
+      const f = P.from[r.owner];
+      if (f === undefined || f < Math.floor(m) || g.turn < f || r.overseas || !r.nb.length || !P.open.includes(r.owner) || P.not?.includes(r.name)) continue;
+      const hops = seaHops(g, from, [r]);
+      if (hops <= NAVY.landing.range) m = Math.max(m, f + 1 - (hops + 1) / (NAVY.landing.range + 2));
+    }
+    dueOf.set(e, m);
+    return m;
+  };
+  const turnsTo = (e: string): boolean => { const x = g.nations[e]; return e !== kept && !!x?.alive && x.capital >= 0 && due(e) > (kept ? due(kept) : 0) && !inTouch(g, nat, e, home.on); };
+  const later = !!kept && !!P?.from && !lodgment(g, nat) && n.atWar.some(turnsTo);
+  if (kept && g.nations[kept].alive && atWar(g, nat, kept) && !later) {
     if (g.turn - flag(g, at) < 12 || lodgment(g, nat)) return { foe: kept, L: D, second: true };
     if (inReach(kept) && !inTouch(g, nat, kept, home.on)) { g.flags[at] = g.turn; return { foe: kept, L: D, second: true }; }
   }
@@ -1459,7 +1482,7 @@ export function seaFoe(g: Game, nat: string, slot = 0): { foe: string; L: Landin
     const x = g.nations[e];
     if (!x?.alive || x.capital < 0) continue;
     // (Nor does a staff beyond the old chart wait a year for an enemy on its own side of the ocean: he is its first business. Version 81.)
-    const q = e === claim ? 999 : neighbourAcrossTheWater(g, nat, e) ? 500 + quietWith(g, nat, e) : quietWith(g, nat, e);
+    const q = e === claim ? 999 : later && turnsTo(e) ? 900 + due(e) : neighbourAcrossTheWater(g, nat, e) ? 500 + quietWith(g, nat, e) : quietWith(g, nat, e);
     if (q > bq && !inTouch(g, nat, e, home.on) && inReach(e)) { bq = q; best = e; }
   }
   if (!best) { delete g.flags[key]; return null; }
