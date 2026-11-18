@@ -1,0 +1,45 @@
+[
+ {
+  "file": "footstep_gravel.mp3",
+  "format": "mp3 44100 Hz 2 ch 112 kbps",
+  "seconds": 0.6,
+  "read": [
+   0,
+   0.6
+  ],
+  "fromFilm": false,
+  "peakDb": -0.1,
+  "lufs": -22.4,
+  "loudestMomentLufs": -22.4,
+  "floorDb": -120,
+  "rangeDb": 100.8,
+  "topKhz": 22.6,
+  "bands": {
+   "sub": -41.3,
+   "low": -34.7,
+   "lowmid": -12.2,
+   "mid": -1.2,
+   "presence": -13.2,
+   "air": -8.7
+  },
+  "stereo": 0.94,
+  "talk": null,
+  "events": 1,
+  "firstEvents": [
+   {
+    "at": 0.12,
+    "db": -14.1
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 0.12,
+    "db": -14.1
+   }
+  ],
+  "steady": null,
+  "flags": [
+   "LOW RATE: mp3 at 112 kbps"
+  ]
+ }
+]

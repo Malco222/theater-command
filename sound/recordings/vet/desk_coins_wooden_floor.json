@@ -1,0 +1,83 @@
+[
+ {
+  "file": "desk_coins_wooden_floor.ogg",
+  "format": "vorbis 44100 Hz 1 ch 140 kbps",
+  "seconds": 5.7,
+  "read": [
+   0,
+   5.7
+  ],
+  "fromFilm": false,
+  "peakDb": -2.4,
+  "lufs": -21.7,
+  "loudestMomentLufs": -15.2,
+  "floorDb": -60.9,
+  "rangeDb": 42.6,
+  "topKhz": 22.6,
+  "bands": {
+   "sub": -43.7,
+   "low": -30.8,
+   "lowmid": -37.2,
+   "mid": -19.5,
+   "presence": -14.2,
+   "air": -0.2
+  },
+  "stereo": null,
+  "talk": 0.2,
+  "events": 6,
+  "firstEvents": [
+   {
+    "at": 0.61,
+    "db": -25.7
+   },
+   {
+    "at": 0.9,
+    "db": -16.9
+   },
+   {
+    "at": 1.095,
+    "db": -12.6
+   },
+   {
+    "at": 2.21,
+    "db": -23.2
+   },
+   {
+    "at": 2.715,
+    "db": -31.5
+   },
+   {
+    "at": 3.09,
+    "db": -25.3
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 1.095,
+    "db": -12.6
+   },
+   {
+    "at": 0.9,
+    "db": -16.9
+   },
+   {
+    "at": 2.21,
+    "db": -23.2
+   },
+   {
+    "at": 3.09,
+    "db": -25.3
+   },
+   {
+    "at": 0.61,
+    "db": -25.7
+   },
+   {
+    "at": 2.715,
+    "db": -31.5
+   }
+  ],
+  "steady": null,
+  "flags": []
+ }
+]

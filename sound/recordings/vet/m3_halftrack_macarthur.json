@@ -1,0 +1,97 @@
+[
+ {
+  "file": "m3_halftrack_macarthur.mka",
+  "format": "vorbis 44100 Hz 1 ch 157 kbps",
+  "seconds": 91.1,
+  "read": [
+   0,
+   91.1
+  ],
+  "fromFilm": false,
+  "peakDb": -10.9,
+  "lufs": -26.6,
+  "loudestMomentLufs": -20.2,
+  "floorDb": -35.8,
+  "rangeDb": 14.7,
+  "topKhz": 18,
+  "bands": {
+   "sub": -19,
+   "low": -8.3,
+   "lowmid": -1.1,
+   "mid": -15.1,
+   "presence": -35.2,
+   "air": -45.9
+  },
+  "stereo": null,
+  "talk": 0.28,
+  "events": 7,
+  "firstEvents": [
+   {
+    "at": 0.16,
+    "db": -29.2
+   },
+   {
+    "at": 4.08,
+    "db": -18
+   },
+   {
+    "at": 8.115,
+    "db": -20.9
+   },
+   {
+    "at": 8.315,
+    "db": -18.3
+   },
+   {
+    "at": 39.37,
+    "db": -16.8
+   },
+   {
+    "at": 46.34,
+    "db": -17.8
+   },
+   {
+    "at": 60.1,
+    "db": -18.8
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 39.37,
+    "db": -16.8
+   },
+   {
+    "at": 46.34,
+    "db": -17.8
+   },
+   {
+    "at": 4.08,
+    "db": -18
+   },
+   {
+    "at": 8.315,
+    "db": -18.3
+   },
+   {
+    "at": 60.1,
+    "db": -18.8
+   },
+   {
+    "at": 8.115,
+    "db": -20.9
+   },
+   {
+    "at": 0.16,
+    "db": -29.2
+   }
+  ],
+  "steady": {
+   "from": 15.5,
+   "to": 23.5,
+   "wobbleDb": 1.03
+  },
+  "flags": [
+   "NOISY: the quietest moments sit at -36 dB (no clean silence between events)"
+  ]
+ }
+]

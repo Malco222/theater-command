@@ -1,0 +1,66 @@
+[
+ {
+  "file": "train_iowa_glaneur.ogg",
+  "format": "vorbis 44100 Hz 2 ch 128 kbps",
+  "seconds": 93.9,
+  "read": [
+   0,
+   93.9
+  ],
+  "fromFilm": false,
+  "peakDb": -5.7,
+  "lufs": -24.3,
+  "loudestMomentLufs": -12.5,
+  "floorDb": -43.4,
+  "rangeDb": 19.7,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -38.6,
+   "low": -12.7,
+   "lowmid": -6,
+   "mid": -4.8,
+   "presence": -6.1,
+   "air": -9.7
+  },
+  "stereo": 0.64,
+  "talk": 0.27,
+  "events": 3,
+  "firstEvents": [
+   {
+    "at": 52.37,
+    "db": -23.6
+   },
+   {
+    "at": 57.98,
+    "db": -22.5
+   },
+   {
+    "at": 77.765,
+    "db": -11.6
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 77.765,
+    "db": -11.6
+   },
+   {
+    "at": 57.98,
+    "db": -22.5
+   },
+   {
+    "at": 52.37,
+    "db": -23.6
+   }
+  ],
+  "steady": {
+   "from": 37,
+   "to": 45,
+   "wobbleDb": 0.71
+  },
+  "flags": [
+   "LOW RATE: vorbis at 128 kbps",
+   "NOISY: the quietest moments sit at -43 dB (no clean silence between events)"
+  ]
+ }
+]

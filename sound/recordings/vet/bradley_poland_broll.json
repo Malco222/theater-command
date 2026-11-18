@@ -1,0 +1,95 @@
+[
+ {
+  "file": "bradley_poland_broll.mka",
+  "format": "opus 48000 Hz 2 ch 118 kbps",
+  "seconds": 60.1,
+  "read": [
+   0,
+   60
+  ],
+  "fromFilm": false,
+  "peakDb": 0.2,
+  "lufs": -28.4,
+  "loudestMomentLufs": -14.1,
+  "floorDb": -59.6,
+  "rangeDb": 35.4,
+  "topKhz": 16,
+  "bands": {
+   "sub": -51.7,
+   "low": -48.4,
+   "lowmid": -46.8,
+   "mid": -5.5,
+   "presence": -1.8,
+   "air": -12.5
+  },
+  "stereo": 1,
+  "talk": 0.31,
+  "events": 7,
+  "firstEvents": [
+   {
+    "at": 11.165,
+    "db": -14.2
+   },
+   {
+    "at": 17.34,
+    "db": -10.4
+   },
+   {
+    "at": 22.01,
+    "db": -16.4
+   },
+   {
+    "at": 22.28,
+    "db": -15.6
+   },
+   {
+    "at": 22.545,
+    "db": -18.5
+   },
+   {
+    "at": 29.03,
+    "db": -28.2
+   },
+   {
+    "at": 29.615,
+    "db": -27.2
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 17.34,
+    "db": -10.4
+   },
+   {
+    "at": 11.165,
+    "db": -14.2
+   },
+   {
+    "at": 22.28,
+    "db": -15.6
+   },
+   {
+    "at": 22.01,
+    "db": -16.4
+   },
+   {
+    "at": 22.545,
+    "db": -18.5
+   },
+   {
+    "at": 29.615,
+    "db": -27.2
+   },
+   {
+    "at": 29.03,
+    "db": -28.2
+   }
+  ],
+  "steady": {
+   "from": 0,
+   "to": 8,
+   "wobbleDb": 1.33
+  },
+  "flags": []
+ }
+]

@@ -1,0 +1,65 @@
+[
+ {
+  "file": "abrams_gunnery_2_37.mka",
+  "format": "opus 48000 Hz 2 ch 124 kbps",
+  "seconds": 25.9,
+  "read": [
+   0,
+   25.9
+  ],
+  "fromFilm": false,
+  "peakDb": 3.6,
+  "lufs": -14.5,
+  "loudestMomentLufs": -9.2,
+  "floorDb": -36.3,
+  "rangeDb": 25.8,
+  "topKhz": 16,
+  "bands": {
+   "sub": -19.3,
+   "low": -4.3,
+   "lowmid": -5.5,
+   "mid": -6.9,
+   "presence": -11.4,
+   "air": -19.3
+  },
+  "stereo": 0.82,
+  "talk": 0.27,
+  "events": 3,
+  "firstEvents": [
+   {
+    "at": 9.25,
+    "db": -16.6
+   },
+   {
+    "at": 9.575,
+    "db": -14.9
+   },
+   {
+    "at": 10.175,
+    "db": -5.9
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 10.175,
+    "db": -5.9
+   },
+   {
+    "at": 9.575,
+    "db": -14.9
+   },
+   {
+    "at": 9.25,
+    "db": -16.6
+   }
+  ],
+  "steady": {
+   "from": 10,
+   "to": 18,
+   "wobbleDb": 2.06
+  },
+  "flags": [
+   "NOISY: the quietest moments sit at -36 dB (no clean silence between events)"
+  ]
+ }
+]

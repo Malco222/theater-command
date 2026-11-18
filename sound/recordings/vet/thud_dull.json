@@ -1,0 +1,36 @@
+[
+ {
+  "file": "thud_dull.ogg",
+  "format": "vorbis 44100 Hz 1 ch 140 kbps",
+  "seconds": 0.4,
+  "read": [
+   0,
+   0.4
+  ],
+  "fromFilm": false,
+  "peakDb": -4.2,
+  "lufs": -20.4,
+  "loudestMomentLufs": -20.4,
+  "floorDb": -34.1,
+  "rangeDb": 24.6,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -7.6,
+   "low": -1.4,
+   "lowmid": -28.3,
+   "mid": -37.6,
+   "presence": -41.8,
+   "air": -52.3
+  },
+  "stereo": null,
+  "talk": null,
+  "events": 0,
+  "firstEvents": [],
+  "loudestEvents": [],
+  "steady": null,
+  "flags": [
+   "CLIPPED: 6 flat tops (52 samples at the ceiling)",
+   "NOISY: the quietest moments sit at -34 dB (no clean silence between events)"
+  ]
+ }
+]

@@ -1,0 +1,121 @@
+[
+ {
+  "file": "prop_plane_ezwa.ogg",
+  "format": "vorbis 44100 Hz 1 ch 140 kbps",
+  "seconds": 55.8,
+  "read": [
+   0,
+   55.8
+  ],
+  "fromFilm": false,
+  "peakDb": -20.9,
+  "lufs": -40.3,
+  "loudestMomentLufs": -31.9,
+  "floorDb": -56.1,
+  "rangeDb": 23.9,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -3.2,
+   "low": -5.3,
+   "lowmid": -9.2,
+   "mid": -11.4,
+   "presence": -22.5,
+   "air": -29.6
+  },
+  "stereo": null,
+  "talk": 0.13,
+  "events": 10,
+  "firstEvents": [
+   {
+    "at": 1.94,
+    "db": -39.6
+   },
+   {
+    "at": 3.045,
+    "db": -36
+   },
+   {
+    "at": 5.085,
+    "db": -35.9
+   },
+   {
+    "at": 5.45,
+    "db": -33.4
+   },
+   {
+    "at": 5.785,
+    "db": -37
+   },
+   {
+    "at": 6.555,
+    "db": -31.7
+   },
+   {
+    "at": 10.985,
+    "db": -32.3
+   },
+   {
+    "at": 13.895,
+    "db": -35.2
+   },
+   {
+    "at": 14.125,
+    "db": -30.4
+   },
+   {
+    "at": 16.465,
+    "db": -29.2
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 16.465,
+    "db": -29.2
+   },
+   {
+    "at": 14.125,
+    "db": -30.4
+   },
+   {
+    "at": 6.555,
+    "db": -31.7
+   },
+   {
+    "at": 10.985,
+    "db": -32.3
+   },
+   {
+    "at": 5.45,
+    "db": -33.4
+   },
+   {
+    "at": 13.895,
+    "db": -35.2
+   },
+   {
+    "at": 5.085,
+    "db": -35.9
+   },
+   {
+    "at": 3.045,
+    "db": -36
+   },
+   {
+    "at": 5.785,
+    "db": -37
+   },
+   {
+    "at": 1.94,
+    "db": -39.6
+   }
+  ],
+  "steady": {
+   "from": 20.5,
+   "to": 28.5,
+   "wobbleDb": 1.28
+  },
+  "flags": [
+   "RUMBLE: -3.2 dB of the energy is below 40 Hz (wind or handling noise is likely)"
+  ]
+ }
+]

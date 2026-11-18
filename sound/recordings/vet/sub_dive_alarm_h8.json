@@ -1,0 +1,45 @@
+[
+ {
+  "file": "sub_dive_alarm_h8.ogg",
+  "format": "vorbis 44100 Hz 1 ch 110 kbps",
+  "seconds": 4.1,
+  "read": [
+   0,
+   4.1
+  ],
+  "fromFilm": false,
+  "peakDb": -8,
+  "lufs": -16.9,
+  "loudestMomentLufs": -14.1,
+  "floorDb": -37.7,
+  "rangeDb": 20.4,
+  "topKhz": 22.6,
+  "bands": {
+   "sub": -28.4,
+   "low": -16.6,
+   "lowmid": -13.2,
+   "mid": -1.1,
+   "presence": -13.2,
+   "air": -12
+  },
+  "stereo": null,
+  "talk": 0.12,
+  "events": 1,
+  "firstEvents": [
+   {
+    "at": 2.085,
+    "db": -21.1
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 2.085,
+    "db": -21.1
+   }
+  ],
+  "steady": null,
+  "flags": [
+   "NOISY: the quietest moments sit at -38 dB (no clean silence between events)"
+  ]
+ }
+]

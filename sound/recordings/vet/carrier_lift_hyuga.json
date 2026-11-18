@@ -1,0 +1,53 @@
+[
+ {
+  "file": "carrier_lift_hyuga.mka",
+  "format": "vorbis 44100 Hz 2 ch 67 kbps",
+  "seconds": 36,
+  "read": [
+   0,
+   36
+  ],
+  "fromFilm": false,
+  "peakDb": -0.2,
+  "lufs": -14.9,
+  "loudestMomentLufs": -11.6,
+  "floorDb": -18.6,
+  "rangeDb": 9.9,
+  "topKhz": 9,
+  "bands": {
+   "sub": -3.6,
+   "low": -6.7,
+   "lowmid": -7.9,
+   "mid": -9.1,
+   "presence": -20.5,
+   "air": -37.2
+  },
+  "stereo": 1,
+  "talk": 0.4,
+  "events": 1,
+  "firstEvents": [
+   {
+    "at": 0.12,
+    "db": -9.5
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 0.12,
+    "db": -9.5
+   }
+  ],
+  "steady": {
+   "from": 0,
+   "to": 8,
+   "wobbleDb": 0.76
+  },
+  "flags": [
+   "CLIPPED: 6 flat tops (50 samples at the ceiling)",
+   "THIN TOP: nothing above 9.0 kHz (a low-rate copy, or a dull microphone)",
+   "LOW RATE: vorbis at 67 kbps",
+   "RUMBLE: -3.6 dB of the energy is below 40 Hz (wind or handling noise is likely)",
+   "NOISY: the quietest moments sit at -19 dB (no clean silence between events)"
+  ]
+ }
+]

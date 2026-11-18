@@ -1,0 +1,65 @@
+[
+ {
+  "file": "b17_paine_2011.mka",
+  "format": "vorbis 44100 Hz 2 ch 94 kbps",
+  "seconds": 111.4,
+  "read": [
+   0,
+   111.4
+  ],
+  "fromFilm": false,
+  "peakDb": 2.7,
+  "lufs": -4.6,
+  "loudestMomentLufs": -1.6,
+  "floorDb": -120,
+  "rangeDb": 113.2,
+  "topKhz": 18,
+  "bands": {
+   "sub": -25,
+   "low": -10.2,
+   "lowmid": -6.3,
+   "mid": -6.4,
+   "presence": -5.5,
+   "air": -8.4
+  },
+  "stereo": 0.95,
+  "talk": 0.19,
+  "events": 3,
+  "firstEvents": [
+   {
+    "at": 9.58,
+    "db": -7.4
+   },
+   {
+    "at": 29.28,
+    "db": -16.4
+   },
+   {
+    "at": 73.015,
+    "db": -11.6
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 9.58,
+    "db": -7.4
+   },
+   {
+    "at": 73.015,
+    "db": -11.6
+   },
+   {
+    "at": 29.28,
+    "db": -16.4
+   }
+  ],
+  "steady": {
+   "from": 17,
+   "to": 25,
+   "wobbleDb": 0.1
+  },
+  "flags": [
+   "LOW RATE: vorbis at 94 kbps"
+  ]
+ }
+]

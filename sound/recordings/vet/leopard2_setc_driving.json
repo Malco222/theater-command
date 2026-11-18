@@ -1,0 +1,49 @@
+[
+ {
+  "file": "leopard2_setc_driving.mka",
+  "format": "vorbis 48000 Hz 2 ch 324 kbps",
+  "seconds": 130.6,
+  "read": [
+   0,
+   130.6
+  ],
+  "fromFilm": false,
+  "peakDb": 0.4,
+  "lufs": -10,
+  "loudestMomentLufs": -6.8,
+  "floorDb": -17.2,
+  "rangeDb": 8.4,
+  "topKhz": 16,
+  "bands": {
+   "sub": -41,
+   "low": -5.3,
+   "lowmid": -2.6,
+   "mid": -11.7,
+   "presence": -17.2,
+   "air": -30.4
+  },
+  "stereo": 1,
+  "talk": 0.27,
+  "events": 1,
+  "firstEvents": [
+   {
+    "at": 1.905,
+    "db": -9
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 1.905,
+    "db": -9
+   }
+  ],
+  "steady": {
+   "from": 45.5,
+   "to": 53.5,
+   "wobbleDb": 0.4
+  },
+  "flags": [
+   "NOISY: the quietest moments sit at -17 dB (no clean silence between events)"
+  ]
+ }
+]

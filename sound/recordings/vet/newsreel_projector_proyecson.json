@@ -1,0 +1,57 @@
+[
+ {
+  "file": "newsreel_projector_proyecson.mp3",
+  "format": "mp3 44100 Hz 2 ch 241 kbps",
+  "seconds": 22.3,
+  "read": [
+   0,
+   22.3
+  ],
+  "fromFilm": false,
+  "peakDb": -8.3,
+  "lufs": -25.8,
+  "loudestMomentLufs": -23.9,
+  "floorDb": -44,
+  "rangeDb": 14.1,
+  "topKhz": 18,
+  "bands": {
+   "sub": -26.8,
+   "low": -23,
+   "lowmid": -7.8,
+   "mid": -3.8,
+   "presence": -5.6,
+   "air": -8.8
+  },
+  "stereo": 0.4,
+  "talk": 0.28,
+  "events": 2,
+  "firstEvents": [
+   {
+    "at": 0.91,
+    "db": -21.2
+   },
+   {
+    "at": 21.815,
+    "db": -37.7
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 0.91,
+    "db": -21.2
+   },
+   {
+    "at": 21.815,
+    "db": -37.7
+   }
+  ],
+  "steady": {
+   "from": 6.5,
+   "to": 14.5,
+   "wobbleDb": 0.42
+  },
+  "flags": [
+   "NOISY: the quietest moments sit at -44 dB (no clean silence between events)"
+  ]
+ }
+]

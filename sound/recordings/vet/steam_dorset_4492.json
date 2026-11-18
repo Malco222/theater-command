@@ -1,0 +1,122 @@
+[
+ {
+  "file": "steam_dorset_4492.mka",
+  "format": "vorbis 44100 Hz 1 ch 73 kbps",
+  "seconds": 130.4,
+  "read": [
+   0,
+   130.4
+  ],
+  "fromFilm": false,
+  "peakDb": -1,
+  "lufs": -12.1,
+  "loudestMomentLufs": -3.8,
+  "floorDb": -30.3,
+  "rangeDb": 22.3,
+  "topKhz": 18,
+  "bands": {
+   "sub": -48.1,
+   "low": -23.1,
+   "lowmid": -10.5,
+   "mid": -4.3,
+   "presence": -3.1,
+   "air": -14.4
+  },
+  "stereo": null,
+  "talk": 0.36,
+  "events": 10,
+  "firstEvents": [
+   {
+    "at": 49.73,
+    "db": -8.4
+   },
+   {
+    "at": 69.235,
+    "db": -7.8
+   },
+   {
+    "at": 78.49,
+    "db": -9.1
+   },
+   {
+    "at": 79.395,
+    "db": -9.6
+   },
+   {
+    "at": 80.045,
+    "db": -12
+   },
+   {
+    "at": 81.85,
+    "db": -12.7
+   },
+   {
+    "at": 82.15,
+    "db": -8.7
+   },
+   {
+    "at": 89.23,
+    "db": -14.3
+   },
+   {
+    "at": 108.96,
+    "db": -17.6
+   },
+   {
+    "at": 116.755,
+    "db": -13.9
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 69.235,
+    "db": -7.8
+   },
+   {
+    "at": 49.73,
+    "db": -8.4
+   },
+   {
+    "at": 82.15,
+    "db": -8.7
+   },
+   {
+    "at": 78.49,
+    "db": -9.1
+   },
+   {
+    "at": 79.395,
+    "db": -9.6
+   },
+   {
+    "at": 80.045,
+    "db": -12
+   },
+   {
+    "at": 81.85,
+    "db": -12.7
+   },
+   {
+    "at": 116.755,
+    "db": -13.9
+   },
+   {
+    "at": 89.23,
+    "db": -14.3
+   },
+   {
+    "at": 108.96,
+    "db": -17.6
+   }
+  ],
+  "steady": {
+   "from": 67.5,
+   "to": 75.5,
+   "wobbleDb": 0.78
+  },
+  "flags": [
+   "LOW RATE: vorbis at 73 kbps",
+   "NOISY: the quietest moments sit at -30 dB (no clean silence between events)"
+  ]
+ }
+]

@@ -1,0 +1,43 @@
+[
+ {
+  "file": "explosion_ls100155.ogg",
+  "format": "vorbis 44100 Hz 2 ch 160 kbps",
+  "seconds": 1.6,
+  "read": [
+   0,
+   1.6
+  ],
+  "fromFilm": false,
+  "peakDb": 0.5,
+  "lufs": -14.7,
+  "loudestMomentLufs": -12.2,
+  "floorDb": -48,
+  "rangeDb": 40.2,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -21.8,
+   "low": -10.7,
+   "lowmid": -1,
+   "mid": -11.1,
+   "presence": -27.4,
+   "air": -43.7
+  },
+  "stereo": 0.92,
+  "talk": null,
+  "events": 1,
+  "firstEvents": [
+   {
+    "at": 0.6,
+    "db": -1.7
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 0.6,
+    "db": -1.7
+   }
+  ],
+  "steady": null,
+  "flags": []
+ }
+]

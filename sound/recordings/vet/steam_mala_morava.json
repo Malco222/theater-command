@@ -1,0 +1,39 @@
+[
+ {
+  "file": "steam_mala_morava.mka",
+  "format": "opus 48000 Hz 1 ch 120 kbps",
+  "seconds": 16.2,
+  "read": [
+   0,
+   16.2
+  ],
+  "fromFilm": false,
+  "peakDb": -3,
+  "lufs": -13.5,
+  "loudestMomentLufs": -5.8,
+  "floorDb": -26.4,
+  "rangeDb": 16.1,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -38.1,
+   "low": -15.3,
+   "lowmid": -2.9,
+   "mid": -4.1,
+   "presence": -13.7,
+   "air": -18.9
+  },
+  "stereo": null,
+  "talk": 0.21,
+  "events": 0,
+  "firstEvents": [],
+  "loudestEvents": [],
+  "steady": {
+   "from": 7.5,
+   "to": 15.5,
+   "wobbleDb": 0.76
+  },
+  "flags": [
+   "NOISY: the quietest moments sit at -26 dB (no clean silence between events)"
+  ]
+ }
+]

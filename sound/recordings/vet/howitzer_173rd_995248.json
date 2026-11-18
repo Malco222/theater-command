@@ -1,0 +1,73 @@
+[
+ {
+  "file": "howitzer_173rd_995248.mka",
+  "format": "opus 48000 Hz 2 ch 125 kbps",
+  "seconds": 19.2,
+  "read": [
+   0,
+   19.2
+  ],
+  "fromFilm": false,
+  "peakDb": 0.4,
+  "lufs": -13.6,
+  "loudestMomentLufs": -10,
+  "floorDb": -32.3,
+  "rangeDb": 22.7,
+  "topKhz": 16,
+  "bands": {
+   "sub": -19.2,
+   "low": -1.8,
+   "lowmid": -10.5,
+   "mid": -8.2,
+   "presence": -12.4,
+   "air": -21.4
+  },
+  "stereo": 0.77,
+  "talk": 0.24,
+  "events": 4,
+  "firstEvents": [
+   {
+    "at": 0.255,
+    "db": -6.6
+   },
+   {
+    "at": 6.555,
+    "db": -7.4
+   },
+   {
+    "at": 10.14,
+    "db": -7.3
+   },
+   {
+    "at": 11.02,
+    "db": -4.4
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 11.02,
+    "db": -4.4
+   },
+   {
+    "at": 0.255,
+    "db": -6.6
+   },
+   {
+    "at": 10.14,
+    "db": -7.3
+   },
+   {
+    "at": 6.555,
+    "db": -7.4
+   }
+  ],
+  "steady": {
+   "from": 0.5,
+   "to": 8.5,
+   "wobbleDb": 1.68
+  },
+  "flags": [
+   "NOISY: the quietest moments sit at -32 dB (no clean silence between events)"
+  ]
+ }
+]

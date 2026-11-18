@@ -1,0 +1,403 @@
+{
+ "note": "Round two (18 November 2026): the 3D game's last stand-in sounds and the ship and aircraft cues with no recording. Fetched on Brian's Mac by sound/tools/freesound_fetch.mjs. The craigsmith tapes are first-generation copies of 1930s and 1940s optical film sound effects (CC0). The older sounds of craigsmith's G45 (submarine), G33 (war) and G26 (crash) tapes are listed by id: their ids run in tape order (G45-nn is 438702+nn, G33-nn 438506+nn, G26-nn 438317+nn), and a pack page shows only its 12 newest.",
+ "packs": [
+  {
+   "user": "craigsmith",
+   "pack": 24916,
+   "for": "submarine",
+   "keep": "."
+  },
+  {
+   "user": "craigsmith",
+   "pack": 37713,
+   "for": "alarm",
+   "keep": "dive|diving|klaxon|submarine|ship|general|battle|alarm"
+  },
+  {
+   "user": "craigsmith",
+   "pack": 24904,
+   "for": "bombs_war",
+   "keep": "bomb|drop|fall|whistle|release|plane|crash|parachute|torpedo|ship|depth"
+  },
+  {
+   "user": "craigsmith",
+   "pack": 24899,
+   "for": "crash",
+   "keep": "metal|plane|aircraft|wreck|rumble|truck"
+  },
+  {
+   "user": "craigsmith",
+   "pack": 27528,
+   "for": "crash",
+   "keep": "metal|plane|aircraft|wreck|rumble|truck"
+  },
+  {
+   "user": "craigsmith",
+   "pack": 24910,
+   "for": "misc",
+   "keep": "projector|film|typewriter|stamp|clock|tick|coin|hammer|bell|drum|horse|gallop|bugle|fanfare|radio|static|morse|telegraph|winch|chain|crane|ramp|boat|ship|parachute|door"
+  }
+ ],
+ "sounds": [
+  {
+   "id": 72853,
+   "for": "parachute_open"
+  },
+  {
+   "id": 138976,
+   "for": "parachute_open"
+  },
+  {
+   "id": 811077,
+   "for": "parachute_open"
+  },
+  {
+   "id": 346856,
+   "for": "ramp_drop"
+  },
+  {
+   "id": 36390,
+   "for": "ramp_drop"
+  },
+  {
+   "id": 437155,
+   "for": "ramp_drop"
+  },
+  {
+   "id": 69177,
+   "for": "ramp_winch"
+  },
+  {
+   "id": 69158,
+   "for": "ramp_winch"
+  },
+  {
+   "id": 61685,
+   "for": "ramp_winch"
+  },
+  {
+   "id": 201169,
+   "for": "ramp_winch"
+  },
+  {
+   "id": 436401,
+   "for": "craft_grounds"
+  },
+  {
+   "id": 488335,
+   "for": "craft_grounds"
+  },
+  {
+   "id": 269061,
+   "for": "ship_sinking"
+  },
+  {
+   "id": 31574,
+   "for": "ship_sinking"
+  },
+  {
+   "id": 432217,
+   "for": "depth_charge_roll"
+  },
+  {
+   "id": 512215,
+   "for": "depth_charge_roll"
+  },
+  {
+   "id": 35531,
+   "for": "torpedo_launch"
+  },
+  {
+   "id": 377770,
+   "for": "dive_alarm"
+  },
+  {
+   "id": 546119,
+   "for": "pickup"
+  },
+  {
+   "id": 801348,
+   "for": "pickup"
+  },
+  {
+   "id": 792572,
+   "for": "pickup"
+  },
+  {
+   "id": 733927,
+   "for": "pickup"
+  },
+  {
+   "id": 555190,
+   "for": "pickup"
+  },
+  {
+   "id": 438703,
+   "for": "submarine"
+  },
+  {
+   "id": 438704,
+   "for": "submarine"
+  },
+  {
+   "id": 438705,
+   "for": "submarine"
+  },
+  {
+   "id": 438706,
+   "for": "submarine"
+  },
+  {
+   "id": 438707,
+   "for": "submarine"
+  },
+  {
+   "id": 438708,
+   "for": "submarine"
+  },
+  {
+   "id": 438709,
+   "for": "submarine"
+  },
+  {
+   "id": 438710,
+   "for": "submarine"
+  },
+  {
+   "id": 438711,
+   "for": "submarine"
+  },
+  {
+   "id": 438712,
+   "for": "submarine"
+  },
+  {
+   "id": 438714,
+   "for": "submarine"
+  },
+  {
+   "id": 438715,
+   "for": "submarine"
+  },
+  {
+   "id": 438716,
+   "for": "submarine"
+  },
+  {
+   "id": 438717,
+   "for": "submarine"
+  },
+  {
+   "id": 438718,
+   "for": "submarine"
+  },
+  {
+   "id": 438719,
+   "for": "submarine"
+  },
+  {
+   "id": 438720,
+   "for": "submarine"
+  },
+  {
+   "id": 438721,
+   "for": "submarine"
+  },
+  {
+   "id": 438722,
+   "for": "submarine"
+  },
+  {
+   "id": 438723,
+   "for": "submarine"
+  },
+  {
+   "id": 438724,
+   "for": "submarine"
+  },
+  {
+   "id": 438725,
+   "for": "submarine"
+  },
+  {
+   "id": 438507,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438508,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438509,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438510,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438511,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438512,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438513,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438514,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438515,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438516,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438517,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438518,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438519,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438520,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438521,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438522,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438523,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438524,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438525,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438526,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438318,
+   "for": "crash"
+  },
+  {
+   "id": 438319,
+   "for": "crash"
+  },
+  {
+   "id": 438320,
+   "for": "crash"
+  },
+  {
+   "id": 438321,
+   "for": "crash"
+  },
+  {
+   "id": 438322,
+   "for": "crash"
+  },
+  {
+   "id": 438323,
+   "for": "crash"
+  },
+  {
+   "id": 438324,
+   "for": "crash"
+  },
+  {
+   "id": 438325,
+   "for": "crash"
+  },
+  {
+   "id": 438326,
+   "for": "crash"
+  },
+  {
+   "id": 438327,
+   "for": "crash"
+  },
+  {
+   "id": 438328,
+   "for": "crash"
+  },
+  {
+   "id": 438329,
+   "for": "crash"
+  },
+  {
+   "id": 438330,
+   "for": "crash"
+  },
+  {
+   "id": 438331,
+   "for": "crash"
+  },
+  {
+   "id": 438332,
+   "for": "crash"
+  },
+  {
+   "id": 438701,
+   "for": "submarine"
+  },
+  {
+   "id": 438702,
+   "for": "submarine"
+  },
+  {
+   "id": 438527,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438529,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438531,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438533,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438534,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438535,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438536,
+   "for": "bombs_war"
+  },
+  {
+   "id": 438537,
+   "for": "bombs_war"
+  }
+ ]
+}

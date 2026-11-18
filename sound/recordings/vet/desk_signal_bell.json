@@ -1,0 +1,89 @@
+[
+ {
+  "file": "desk_signal_bell.ogg",
+  "format": "vorbis 44100 Hz 2 ch 112 kbps",
+  "seconds": 11,
+  "read": [
+   0,
+   11
+  ],
+  "fromFilm": false,
+  "peakDb": -1.3,
+  "lufs": -17,
+  "loudestMomentLufs": -14.3,
+  "floorDb": -88.4,
+  "rangeDb": 71.9,
+  "topKhz": 18,
+  "bands": {
+   "sub": -37.1,
+   "low": -38.5,
+   "lowmid": -23.3,
+   "mid": -13.1,
+   "presence": -3.8,
+   "air": -2.8
+  },
+  "stereo": 0.44,
+  "talk": 0.24,
+  "events": 6,
+  "firstEvents": [
+   {
+    "at": 2.005,
+    "db": -14.1
+   },
+   {
+    "at": 2.71,
+    "db": -13.6
+   },
+   {
+    "at": 3.59,
+    "db": -15.6
+   },
+   {
+    "at": 5.31,
+    "db": -14.2
+   },
+   {
+    "at": 6.145,
+    "db": -13.8
+   },
+   {
+    "at": 7.03,
+    "db": -13.9
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 2.71,
+    "db": -13.6
+   },
+   {
+    "at": 6.145,
+    "db": -13.8
+   },
+   {
+    "at": 7.03,
+    "db": -13.9
+   },
+   {
+    "at": 2.005,
+    "db": -14.1
+   },
+   {
+    "at": 5.31,
+    "db": -14.2
+   },
+   {
+    "at": 3.59,
+    "db": -15.6
+   }
+  ],
+  "steady": {
+   "from": 1.5,
+   "to": 9.5,
+   "wobbleDb": 12.14
+  },
+  "flags": [
+   "LOW RATE: vorbis at 112 kbps"
+  ]
+ }
+]

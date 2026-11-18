@@ -1,0 +1,40 @@
+[
+ {
+  "file": "scrap_steel_truck.ogg",
+  "format": "vorbis 48000 Hz 1 ch 80 kbps",
+  "seconds": 56.9,
+  "read": [
+   0,
+   56.9
+  ],
+  "fromFilm": false,
+  "peakDb": -3.5,
+  "lufs": -19,
+  "loudestMomentLufs": -10.8,
+  "floorDb": -40.5,
+  "rangeDb": 23.4,
+  "topKhz": 20.2,
+  "bands": {
+   "sub": -38.8,
+   "low": -18.2,
+   "lowmid": -6.7,
+   "mid": -4.1,
+   "presence": -4.7,
+   "air": -14.4
+  },
+  "stereo": null,
+  "talk": 0.33,
+  "events": 0,
+  "firstEvents": [],
+  "loudestEvents": [],
+  "steady": {
+   "from": 37.5,
+   "to": 45.5,
+   "wobbleDb": 1.46
+  },
+  "flags": [
+   "LOW RATE: vorbis at 80 kbps",
+   "NOISY: the quietest moments sit at -40 dB (no clean silence between events)"
+  ]
+ }
+]

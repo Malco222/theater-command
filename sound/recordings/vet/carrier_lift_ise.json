@@ -1,0 +1,40 @@
+[
+ {
+  "file": "carrier_lift_ise.mka",
+  "format": "vorbis 44100 Hz 2 ch 88 kbps",
+  "seconds": 61,
+  "read": [
+   0,
+   61
+  ],
+  "fromFilm": false,
+  "peakDb": 0.6,
+  "lufs": -12.8,
+  "loudestMomentLufs": -9.4,
+  "floorDb": -20.6,
+  "rangeDb": 10.2,
+  "topKhz": 16,
+  "bands": {
+   "sub": -6.6,
+   "low": -8.8,
+   "lowmid": -7.4,
+   "mid": -5,
+   "presence": -9.9,
+   "air": -27.4
+  },
+  "stereo": 1,
+  "talk": 0.41,
+  "events": 0,
+  "firstEvents": [],
+  "loudestEvents": [],
+  "steady": {
+   "from": 33,
+   "to": 41,
+   "wobbleDb": 0.34
+  },
+  "flags": [
+   "LOW RATE: vorbis at 88 kbps",
+   "NOISY: the quietest moments sit at -21 dB (no clean silence between events)"
+  ]
+ }
+]

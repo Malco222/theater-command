@@ -1,0 +1,73 @@
+[
+ {
+  "file": "bugle_taps.ogg",
+  "format": "vorbis 44100 Hz 2 ch 320 kbps",
+  "seconds": 58.7,
+  "read": [
+   0,
+   58.7
+  ],
+  "fromFilm": false,
+  "peakDb": -5.9,
+  "lufs": -16,
+  "loudestMomentLufs": -11.6,
+  "floorDb": -42.6,
+  "rangeDb": 27.1,
+  "topKhz": 16,
+  "bands": {
+   "sub": -50.1,
+   "low": -54.7,
+   "lowmid": -17.3,
+   "mid": -0.4,
+   "presence": -11.8,
+   "air": -48.6
+  },
+  "stereo": 0.99,
+  "talk": 0.19,
+  "events": 4,
+  "firstEvents": [
+   {
+    "at": 0.22,
+    "db": -29.9
+   },
+   {
+    "at": 14.92,
+    "db": -28.7
+   },
+   {
+    "at": 29.8,
+    "db": -26
+   },
+   {
+    "at": 46.12,
+    "db": -31.2
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 29.8,
+    "db": -26
+   },
+   {
+    "at": 14.92,
+    "db": -28.7
+   },
+   {
+    "at": 0.22,
+    "db": -29.9
+   },
+   {
+    "at": 46.12,
+    "db": -31.2
+   }
+  ],
+  "steady": {
+   "from": 47,
+   "to": 55,
+   "wobbleDb": 1.13
+  },
+  "flags": [
+   "NOISY: the quietest moments sit at -43 dB (no clean silence between events)"
+  ]
+ }
+]

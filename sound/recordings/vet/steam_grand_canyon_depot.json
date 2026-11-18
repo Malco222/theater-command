@@ -1,0 +1,39 @@
+[
+ {
+  "file": "steam_grand_canyon_depot.mka",
+  "format": "opus 48000 Hz 2 ch 120 kbps",
+  "seconds": 27.4,
+  "read": [
+   0,
+   27.3
+  ],
+  "fromFilm": false,
+  "peakDb": -0.5,
+  "lufs": -15.5,
+  "loudestMomentLufs": -7.5,
+  "floorDb": -31.4,
+  "rangeDb": 21.4,
+  "topKhz": 16,
+  "bands": {
+   "sub": -38.6,
+   "low": -9.7,
+   "lowmid": -2.5,
+   "mid": -6,
+   "presence": -12.5,
+   "air": -17.9
+  },
+  "stereo": 0.92,
+  "talk": 0.06,
+  "events": 0,
+  "firstEvents": [],
+  "loudestEvents": [],
+  "steady": {
+   "from": 11,
+   "to": 19,
+   "wobbleDb": 2.25
+  },
+  "flags": [
+   "NOISY: the quietest moments sit at -31 dB (no clean silence between events)"
+  ]
+ }
+]

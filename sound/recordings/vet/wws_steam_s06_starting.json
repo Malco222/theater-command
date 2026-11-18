@@ -1,0 +1,40 @@
+[
+ {
+  "file": "wws_steam_s06_starting.ogg",
+  "format": "vorbis 48000 Hz 2 ch 112 kbps",
+  "seconds": 57.3,
+  "read": [
+   0,
+   57.3
+  ],
+  "fromFilm": false,
+  "peakDb": -1.2,
+  "lufs": -14.3,
+  "loudestMomentLufs": -12.4,
+  "floorDb": -26.1,
+  "rangeDb": 8.7,
+  "topKhz": 18,
+  "bands": {
+   "sub": -36.3,
+   "low": -21.1,
+   "lowmid": -7.7,
+   "mid": -3.8,
+   "presence": -9.5,
+   "air": -5.4
+  },
+  "stereo": 0.72,
+  "talk": 0.35,
+  "events": 0,
+  "firstEvents": [],
+  "loudestEvents": [],
+  "steady": {
+   "from": 27.5,
+   "to": 35.5,
+   "wobbleDb": 0.27
+  },
+  "flags": [
+   "LOW RATE: vorbis at 112 kbps",
+   "NOISY: the quietest moments sit at -26 dB (no clean silence between events)"
+  ]
+ }
+]

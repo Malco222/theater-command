@@ -1,0 +1,82 @@
+[
+ {
+  "file": "horses_six_galloping.ogg",
+  "format": "vorbis 24000 Hz 2 ch 67 kbps",
+  "seconds": 25.2,
+  "read": [
+   0,
+   25.2
+  ],
+  "fromFilm": false,
+  "peakDb": 0.6,
+  "lufs": -17.8,
+  "loudestMomentLufs": -10.4,
+  "floorDb": -56,
+  "rangeDb": 40,
+  "topKhz": 14.3,
+  "bands": {
+   "sub": -24.9,
+   "low": -10.8,
+   "lowmid": -5.8,
+   "mid": -4.1,
+   "presence": -6.9,
+   "air": -14.3
+  },
+  "stereo": 0.59,
+  "talk": 0.32,
+  "events": 5,
+  "firstEvents": [
+   {
+    "at": 2.07,
+    "db": -30.7
+   },
+   {
+    "at": 4.98,
+    "db": -17.1
+   },
+   {
+    "at": 6.79,
+    "db": -12.5
+   },
+   {
+    "at": 7.85,
+    "db": -12.8
+   },
+   {
+    "at": 11.13,
+    "db": -20.1
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 6.79,
+    "db": -12.5
+   },
+   {
+    "at": 7.85,
+    "db": -12.8
+   },
+   {
+    "at": 4.98,
+    "db": -17.1
+   },
+   {
+    "at": 11.13,
+    "db": -20.1
+   },
+   {
+    "at": 2.07,
+    "db": -30.7
+   }
+  ],
+  "steady": {
+   "from": 11.5,
+   "to": 19.5,
+   "wobbleDb": 3.32
+  },
+  "flags": [
+   "THIN TOP: nothing above 14.3 kHz (a low-rate copy, or a dull microphone)",
+   "LOW RATE: vorbis at 67 kbps"
+  ]
+ }
+]

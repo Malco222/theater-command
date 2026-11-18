@@ -1,0 +1,74 @@
+[
+ {
+  "file": "gepard_stryker_84s.mka",
+  "format": "opus 48000 Hz 2 ch 73 kbps",
+  "seconds": 83.8,
+  "read": [
+   0,
+   83.7
+  ],
+  "fromFilm": false,
+  "peakDb": -16.2,
+  "lufs": -34.3,
+  "loudestMomentLufs": -31.3,
+  "floorDb": -44.1,
+  "rangeDb": 11.8,
+  "topKhz": 16,
+  "bands": {
+   "sub": -32.9,
+   "low": -8.5,
+   "lowmid": -3.1,
+   "mid": -5.1,
+   "presence": -14.5,
+   "air": -25.6
+  },
+  "stereo": 1,
+  "talk": 0.27,
+  "events": 4,
+  "firstEvents": [
+   {
+    "at": 10.78,
+    "db": -25.6
+   },
+   {
+    "at": 62.53,
+    "db": -26.6
+   },
+   {
+    "at": 81.035,
+    "db": -25.7
+   },
+   {
+    "at": 82.76,
+    "db": -25.7
+   }
+  ],
+  "loudestEvents": [
+   {
+    "at": 10.78,
+    "db": -25.6
+   },
+   {
+    "at": 81.035,
+    "db": -25.7
+   },
+   {
+    "at": 82.76,
+    "db": -25.7
+   },
+   {
+    "at": 62.53,
+    "db": -26.6
+   }
+  ],
+  "steady": {
+   "from": 37.5,
+   "to": 45.5,
+   "wobbleDb": 0.34
+  },
+  "flags": [
+   "LOW RATE: opus at 73 kbps",
+   "NOISY: the quietest moments sit at -44 dB (no clean silence between events)"
+  ]
+ }
+]
