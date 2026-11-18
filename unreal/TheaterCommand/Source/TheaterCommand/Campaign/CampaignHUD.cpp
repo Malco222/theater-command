@@ -7210,27 +7210,28 @@ namespace
 					]
 
 					// The opening screen: where to begin and as whom.
-					// (The UI director, 18 November 2026, on build 1596, and at 03:48 on 23c9ebe.) The card is the kit's
-					// page, card-lg: 1,240 wide, and as high as the screen less space-12 (48) above and below, so that under
-					// the title band (FIRST COMMAND on its own row above CONTINUE YOUR CAMPAIGN) the seven great powers, the
-					// three settings and BEGIN AS ... all show without scrolling, and the smaller nations take what height is
-					// left. It is never under 1,040 high: what those keep, with one row of the smaller nations and their
-					// plate, for every pick but those whose sentence runs long. Where the screen is shorter than that and
-					// its 48s (the frame of 1,600 by 1,000 is 972 high), the card is drawn smaller, never cut.
+					// (The UI director, 18 November 2026, on build 1596, and at 03:48 and 03:53 on 23c9ebe and b604af6.) The
+					// card is the kit's page, card-lg: 1,240 wide, and as high as the screen less space-12 (48) above and
+					// below, its type at full size, so that under the title band (FIRST COMMAND on its own row above
+					// CONTINUE YOUR CAMPAIGN) the seven great powers, the three settings and BEGIN AS ... all show without
+					// scrolling; the smaller nations take what height is left, down to their MORE plate alone. Where even
+					// that is more than the screen less its 48s (a pick whose sentence runs long, on a short frame), the
+					// card stands taller, as tall as it needs, and the 48s give, down to 16; only past that is it drawn
+					// smaller, never cut. (See LookAtList for what it needs.)
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(48.0f))
+						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(16.0f))
 						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bVisible ? EVisibility::Visible : EVisibility::Collapsed; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
 							[
-							SNew(SBox).WidthOverride(1240.0f)
+							SAssignNew(OpeningCardBox, SBox).WidthOverride(1240.0f)
 							.HeightOverride_Lambda([this]()
 							{
-								// (1,254 on the frame of 1,280 by 720, which is 1,350 high; 1,040, drawn smaller, on the others)
+								// (876 on the frame of 1,600 by 1,000, which is 972 high; 1,254 on the frame of 1,280 by 720)
 								const double High = ScreenRoot.IsValid() ? ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y : 972.0;
-								return FOptionalSize(static_cast<float>(FMath::Max(High - 96.0, 1040.0)));
+								return FOptionalSize(static_cast<float>(FMath::Max(High - 96.0, static_cast<double>(OpeningNeed))));
 							})
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 22.0f, 26.0f, 22.0f))
@@ -12971,15 +12972,36 @@ namespace
 			{
 				return;
 			}
+			const FGeometry& View = StartsScroll->GetTickSpaceGeometry();
+			const FGeometry& Along = Starts->GetTickSpaceGeometry();
+			FArrangedChildren Arranged(EVisibility::Visible);
+			Starts->ArrangeChildren(Along, Arranged);
+			// (The UI director, 03:53.) What the card needs: all it holds outside the list, and the list down to the foot
+			// of its first row of cards (the great powers, on the grand campaign's page) with the fade and its plate under
+			// it. The rest of the card does not change with the card's height, so this holds still as the card grows.
+			float Need = 0.0f;
+			const TSharedPtr<SWidget> FirstRow = ListRows.Num() > 0 ? ListRows[0].Key.Pin() : TSharedPtr<SWidget>();
+			if (OpeningCardBox.IsValid() && FirstRow.IsValid())
+			{
+				for (int32 Index = 0; Index < Arranged.Num(); ++Index)
+				{
+					const FArrangedWidget& Each = Arranged[Index];
+					if (&Each.Widget.Get() == FirstRow.Get())
+					{
+						const double Foot = Along.AbsoluteToLocal(Each.Geometry.LocalToAbsolute(FVector2D(0.0, Each.Geometry.GetLocalSize().Y))).Y;
+						const double Outside = OpeningCardBox->GetTickSpaceGeometry().GetLocalSize().Y - View.GetLocalSize().Y;
+						Need = static_cast<float>(FMath::CeilToDouble(Outside + Foot + 40.0)); // (40: the fade, the plate within it)
+						break;
+					}
+				}
+			}
+			OpeningNeed = Need;
 			bListRunsOn = StartsScroll->GetScrollOffset() < StartsScroll->GetScrollOffsetOfEnd() - 1.0f;
 			if (!bListRunsOn)
 			{
 				return;
 			}
-			const FGeometry& View = StartsScroll->GetTickSpaceGeometry();
 			const double Bottom = View.GetAbsolutePosition().Y + View.GetAbsoluteSize().Y;
-			FArrangedChildren Arranged(EVisibility::Visible);
-			Starts->ArrangeChildren(Starts->GetTickSpaceGeometry(), Arranged);
 			for (int32 Index = 0; Index < Arranged.Num(); ++Index)
 			{
 				const FArrangedWidget& Each = Arranged[Index];
@@ -13125,7 +13147,7 @@ namespace
 						SNew(SVerticalBox)
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
 						[
-							MakeFlag(Nation.Tag, Nation.bMajor ? 72.0f : 60.0f)
+							MakeFlag(Nation.Tag, 60.0f) // (40 tall: 03:53)
 						]
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 6.0f, 0.0f, 0.0f)
 						[
@@ -13252,7 +13274,7 @@ namespace
 				Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)
 				[
 					SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
-					.Text(FText::FromString(TEXT("Pick a country and the year you take it over. History is played up to that day. After it nothing is written: every nation makes its own decisions, and the war is yours to shape.")))
+					.Text(FText::FromString(TEXT("Pick a country and a year. From the day you take over, the war is yours to shape."))) // (03:53: one line)
 				];
 				TSharedRef<SHorizontalBox> YearRow = SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 14.0f, 0.0f)
@@ -13304,17 +13326,14 @@ namespace
 					(Opening.Nations[Index].bMajor ? Great : Opening.Nations[Index].bSmall ? Small : Rest).Add(MakeNation(Opening.Nations[Index], Index, Index == Opening.NationIndex));
 				}
 				// (The UI director, on build 1596.) The great powers in one row of seven compact cards, in the list's own
-				// order; the smaller nations after them in the same cards, eight to a row.
-				Starts->AddSlot().AutoHeight().Padding(0.0f, 18.0f, 0.0f, 8.0f)[Heading(TEXT("THE GREAT POWERS"))];
+				// order; the smaller nations after them in the same cards, eight to a row. (03:53: the label and the row
+				// about 120 in all.)
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 4.0f)[Heading(TEXT("THE GREAT POWERS"))];
 				AddGrid(Great, 7);
 				if (Small.Num() > 0)
 				{
-					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 2.0f)[Heading(TEXT("OR A SMALLER NATION \u00B7 CHOOSE YOUR OWN PATH"))];
-					Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
-					[
-						SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Faint).AutoWrapText(true)
-						.Text(FText::FromString(TEXT("A small country chooses for itself: join the Axis, join the Allies, stand alone, or found a League of its own with a willing neighbour. Open DIPLOMACY in the game to choose.")))
-					];
+					// (03:53: the label says it; the note that was under it is gone.)
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 8.0f)[Heading(TEXT("OR A SMALLER NATION \u00B7 CHOOSE YOUR OWN PATH"))];
 					AddGrid(Small, 8);
 				}
 				if (Rest.Num() > 0)
@@ -14258,6 +14277,9 @@ namespace
 		// each holds, and, as looked at each frame, whether it runs on below what shows, how many cards are not wholly
 		// in sight below, and how far one row of them is.
 		TSharedPtr<SScrollBox> StartsScroll;
+		// (03:53) The opening card, and the height it needs to hold whole all that is ruled to stay (0 until it is known).
+		TSharedPtr<SBox> OpeningCardBox;
+		float OpeningNeed = 0.0f;
 		TArray<TPair<TWeakPtr<SWidget>, int32>> ListRows;
 		bool bListRunsOn = false;
 		int32 ListBelow = 0;
