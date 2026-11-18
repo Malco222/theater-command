@@ -889,34 +889,82 @@ def carrier(tag, fine=True, hull_hex=None):
     # ---- the island
     ix, il = L * c["island"][0], c["island"][1]
     yc = STBD * (w - 2.6)
-    t1 = yard.house(ix + il * 0.5, ix - il * 0.5, 2.4, iz, 3.2, r=1.0, y=yc, rail=False)
-    t2 = yard.house(ix + il * 0.5 - 0.8, ix + il * 0.5 - min(9.0, il * 0.6), 2.2, t1, 2.6, r=0.9, y=yc, rail=False)
-    yard.windows(ix + il * 0.5 - 0.8, 2.2, t2 - 1.45, 0.9, y=yc, back=3.0)
-    t3 = yard.house(ix + il * 0.5 - 1.8, ix + il * 0.5 - min(7.4, il * 0.5), 1.8, t2, 2.2, r=0.8, y=yc, rail=False)
-    yard.windows(ix + il * 0.5 - 1.8, 1.8, t3 - 1.35, 0.8, y=yc, back=2.4)
-    yard.director("director.fore", ix + il * 0.5 - min(4.6, il * 0.3), t3, 2.2, y=yc)
-    mx = ix + il * 0.5 - min(10.0, il * 0.66)
-    head = yard.mast(mx, t1, 15.0, lean=0.03, tripod=1.5, yards=((0.6, 0.24), (0.8, 0.14)), y=yc)
-    radar(yard, "radar.air", head.x, head.z + 0.2, 4.2, 1.8, y=yc)
-    if c["funnels"] == "island":
-        fl = il * 0.36
-        fxn = ix - il * 0.5 + fl * 0.5 + 1.2
-        yard.funnel(fxn, t1, 8.6 if tag == "USA" else 7.4, fl, 3.9, 0.06, y=yc)
-        yard.fire_points.append((fxn + 4.0, yc, t1))
-    else:                        # the boiler smoke is led out and down over the starboard side, abaft the island
-        for k, fx_ in enumerate((-L * 0.02, -L * 0.075)):
-            m.use(yard.half(fx_))
-            a, b, e = Vector((fx_, STBD * (hw - 1.0), fd - 2.4)), Vector((fx_ - 0.5, STBD * (hw + 3.2), fd - 2.6)), Vector((fx_ - 1.6, STBD * (hw + 5.0), fd - 5.4))
-            m.rod(a, b, 1.75, "upper", sides=12 if fine else 6)
-            m.rod(b, e, 1.7, "upper", rb=1.55, sides=12 if fine else 6)
-            m.ball(b, (1.74, 1.74, 1.74), "upper", 10, 6)
-            d = (e - b).normalized()
-            m.disc(e + d * 0.02, d, 1.35, "black", 12)
-            m.socket(f"funnel.{k + 1}", e + d * 0.6, d, yard.half(fx_), "a funnel's mouth, turned down over the side: her smoke rolls out and aft along the water")
-            yard.soot_at.append((e.x, e.y, e.z + 2.0, 6.0))
-        yard.fire_points.append((ix, yc, t1))
-    for dx in (il * 0.5 + 3.0, -il * 0.5 - 3.0):
-        yard.light_gun(ix + dx, yc, iz + 0.02, 4, tub=True, facing=-70.0 if dx > 0 else -110.0, long=2.0)
+    if tag == "USA":
+        # The tall American island. (The art director, 10:34 UTC on 18 November 2026: the first, 8 m to its bridge
+        # roof with a 12 m funnel, was "a long low box with a squat funnel ... it reads like a Japanese island". The
+        # historian's sizes, for a 266 m ship, his own reckoning from plans and photographs, shapes surer than
+        # metres: four bridge levels to 11 or 12 m over the deck with a director box on top to 15 m; one stout mast
+        # between bridge and funnel to 30 m, the big square air-search aerial on a platform, a homing beacon at
+        # its head; a big flat-sided upright funnel in the after half, 12 to 14 m long, 6 wide, its top at 18 to
+        # 20 m; a second director at the after end and a smaller aerial on a pole by the funnel; and on the flight
+        # deck two twin gun houses before the island and two abaft it, the inner of each pair firing over the
+        # outer: the surest sign of an American carrier.)
+        k = L / 266.0
+        il = 40.0 * k
+        x_f, x_a = ix + il * 0.5, ix - il * 0.5
+        yc = STBD * (w - 3.0)                                     # (the middle of its foot; its outboard wall stands at the deck's edge)
+        yu = yc + STBD * 0.7                                      # (its upper levels are wider and overhang outboard)
+        t1 = yard.house(x_f, x_a, 2.8, iz, 3.0, r=1.0, y=yc, rail=False)
+        t2 = yard.house(x_f - 4.2, x_f - 16.5, 3.5, t1, 2.7, r=1.0, y=yu, rail=False)
+        t3 = yard.house(x_f - 5.0, x_f - 15.8, 3.5, t2, 2.6, r=1.0, y=yu)
+        yard.windows(x_f - 5.0, 3.5, t3 - 1.5, 0.9, y=yu, back=4.0)
+        t4 = yard.house(x_f - 6.4, x_f - 14.6, 3.0, t3, 2.5, r=0.9, y=yu)
+        yard.windows(x_f - 6.4, 3.0, t4 - 1.45, 0.9, y=yu, back=3.2)
+        yard.light_gun(x_f - 2.0, yc, t1 + 0.02, 4, tub=True, facing=0.0, long=2.0)      # the four-barrelled guns before her bridge
+        for name_, dx_, dz_ in (("director.fore", x_f - 9.6, t4), ("director.aft", x_a + 2.7, None)):
+            if dz_ is None:                                       # (the after one on a house of its own at the island's end)
+                dz_ = yard.house(x_a + 4.9, x_a + 0.5, 2.3, t1, 4.0, r=0.9, y=yc, rail=False)
+            dy_ = yu if name_ == "director.fore" else yc
+            yard.on(dx_).lathe((dx_, dy_, dz_), Z, [(0.0, 1.45), (0.5, 1.3)], "upper", 14 if fine else 8)
+            yard.director(name_, dx_, dz_ + 0.5, 4.0, y=dy_, r=1.25, high=1.6, bearing=0.0 if name_ == "director.fore" else 180.0)
+            radar(yard, "radar." + name_.split(".")[1], dx_, dz_ + 0.5 + 1.6 + 0.3, 1.7, 1.0, y=dy_, parent=name_, spin=False)
+        mx = x_f - 18.0
+        head = yard.mast(mx, t1, 25.0, lean=0.015, tripod=2.3, yards=((0.84, 0.1),), top=(0.965, 0.38), y=yc)
+        m_ = yard.on(mx)
+        m_.box((mx + 1.6, yc, t1 + 17.6), (4.6, 2.4, 0.14), "upper")                     # the platform her big aerial stands on, and its brace
+        m_.rod((mx + 0.2, yc, t1 + 14.6), (mx + 3.4, yc, t1 + 17.5), 0.1, "upper", sides=5)
+        radar(yard, "radar.air", mx + 2.9, t1 + 17.7, 4.6, 4.3, y=yc)
+        fl = 13.0 * k
+        fxn = x_a + 5.6 + fl * 0.5
+        yard.funnel(fxn, t1, 17.5 - 3.0, fl, 5.4, 0.02, cap=0.06, y=yc, flat=True)
+        yard.fire_points.append((fxn + 7.5, yc, t1))
+        px_ = x_a + 5.0                                           # the smaller aerial on its pole, at the funnel's after end
+        yard.on(px_).rod((px_, yc, t1 + 4.0), (px_, yc, t1 + 15.4), 0.17, "upper", rb=0.1, sides=7 if fine else 5)
+        radar(yard, "radar.air.2", px_, t1 + 15.4, 2.8, 1.3, y=yc)
+        # her twin gun houses on the flight deck, two before the island and two abaft it; the inner of each pair
+        # stands on a round base and fires over the outer
+        for n_, (gx_, up_, bearing_) in enumerate(((x_f + 11.4, 0.01, 0.0), (x_f + 4.6, 2.8, 0.0), (x_a - 4.6, 2.8, 180.0), (x_a - 11.4, 0.01, 180.0))):
+            yard.turret(f"sec.S{n_ + 1}", gx_, iz, 4.2, 2, 4.4, bearing_, 0.11, raised=up_, y=yc, style="house", rate=15.0, elev=(-5, 80), rest_elev=6.0,
+                        limits=(-140, 140), floats=False)
+    else:
+        t1 = yard.house(ix + il * 0.5, ix - il * 0.5, 2.4, iz, 3.2, r=1.0, y=yc, rail=False)
+        t2 = yard.house(ix + il * 0.5 - 0.8, ix + il * 0.5 - min(9.0, il * 0.6), 2.2, t1, 2.6, r=0.9, y=yc, rail=False)
+        yard.windows(ix + il * 0.5 - 0.8, 2.2, t2 - 1.45, 0.9, y=yc, back=3.0)
+        t3 = yard.house(ix + il * 0.5 - 1.8, ix + il * 0.5 - min(7.4, il * 0.5), 1.8, t2, 2.2, r=0.8, y=yc, rail=False)
+        yard.windows(ix + il * 0.5 - 1.8, 1.8, t3 - 1.35, 0.8, y=yc, back=2.4)
+        yard.director("director.fore", ix + il * 0.5 - min(4.6, il * 0.3), t3, 2.2, y=yc)
+        mx = ix + il * 0.5 - min(10.0, il * 0.66)
+        head = yard.mast(mx, t1, 15.0, lean=0.03, tripod=1.5, yards=((0.6, 0.24), (0.8, 0.14)), y=yc)
+        radar(yard, "radar.air", head.x, head.z + 0.2, 4.2, 1.8, y=yc)
+        if c["funnels"] == "island":
+            fl = il * 0.36
+            fxn = ix - il * 0.5 + fl * 0.5 + 1.2
+            yard.funnel(fxn, t1, 7.4, fl, 3.9, 0.06, y=yc)
+            yard.fire_points.append((fxn + 4.0, yc, t1))
+        else:                        # the boiler smoke is led out and down over the starboard side, abaft the island
+            for k, fx_ in enumerate((-L * 0.02, -L * 0.075)):
+                m.use(yard.half(fx_))
+                a, b, e = Vector((fx_, STBD * (hw - 1.0), fd - 2.4)), Vector((fx_ - 0.5, STBD * (hw + 3.2), fd - 2.6)), Vector((fx_ - 1.6, STBD * (hw + 5.0), fd - 5.4))
+                m.rod(a, b, 1.75, "upper", sides=12 if fine else 6)
+                m.rod(b, e, 1.7, "upper", rb=1.55, sides=12 if fine else 6)
+                m.ball(b, (1.74, 1.74, 1.74), "upper", 10, 6)
+                d = (e - b).normalized()
+                m.disc(e + d * 0.02, d, 1.35, "black", 12)
+                m.socket(f"funnel.{k + 1}", e + d * 0.6, d, yard.half(fx_), "a funnel's mouth, turned down over the side: her smoke rolls out and aft along the water")
+                yard.soot_at.append((e.x, e.y, e.z + 2.0, 6.0))
+            yard.fire_points.append((ix, yc, t1))
+        for dx in (il * 0.5 + 3.0, -il * 0.5 - 3.0):
+            yard.light_gun(ix + dx, yc, iz + 0.02, 4, tub=True, facing=-70.0 if dx > 0 else -110.0, long=2.0)
 
     # ---- the guns: galleries of light guns under the deck's edge, heavier pairs at her four corners
     k = 0
@@ -935,6 +983,8 @@ def carrier(tag, fine=True, hull_hex=None):
                 yard.light_gun(gx + dx, yg, fd - 0.62, 2, tub=False, facing=hand * 90.0, long=1.8)
     for i, gx in enumerate((L * 0.37, -L * 0.4)):
         for hand in (PORT, STBD):
+            if tag == "USA" and hand == STBD:                 # (hers to starboard are the four gun houses on her flight deck)
+                continue
             yg = hand * (hw + 0.6)
             zg = fd - 3.4
             mm = yard.on(gx)
@@ -1210,9 +1260,9 @@ def submarine(tag, fine=True, hull_hex=None):
                     slot(m, (hx_, hand * half, Z0 + 0.46), (0, hand, 0), 0.2, 0.07, lift=0.012)
                     own = random.Random(int(hx_ * 131.0) + (5 if hand > 0 else 2) + 17 * len(tag))
                     luck = own.random()
-                    if luck < 0.24:
+                    if luck < 0.3:
                         continue
-                    way = down_foot(own.uniform(0.3, 0.5) if luck > 0.9 else own.uniform(0.06, 0.19))
+                    way = down_foot(own.uniform(0.34, 0.5) if luck > 0.9 else own.uniform(0.2, 0.32) if luck > 0.7 else own.uniform(0.05, 0.19))
                     wide_, rust_, n_ = own.uniform(0.05, 0.085), own.uniform(0.55, 1.0), len(way)
                     got = m.ribbon([(hx_, hand * (half + r_), Z0 + z_) for r_, z_, _, _ in way], [(0, hand * f_[0], f_[1]) for _, _, f_, _ in way], wide_, "upper", 0.003,
                                    taper=lambda q_: max(0.06, (1.0 - way[min(int(round(q_ * (n_ - 1))), n_ - 1)][3]) ** 0.8), core=0.6)

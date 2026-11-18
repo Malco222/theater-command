@@ -539,11 +539,17 @@ class Yard:
                     else:
                         m.box((x - back / 2, y + hand * (half + 0.03), z + high / 2), (abs(back), 0.06, high), "glass")
 
-    def funnel(self, x, z, high, long, wide, lean=0.08, cap=0.1, y=0.0, pipes=True, name=None):
+    def funnel(self, x, z, high, long, wide, lean=0.08, cap=0.1, y=0.0, pipes=True, name=None, flat=False):
+        """`flat`: flat-sided, its plan a rectangle with rounded corners (an American carrier's) rather than an oval."""
         m = self.on(x)
         n = 20 if m.fine else 10
         dx = -high * lean
-        plan0, plan1 = Model.oval(x, y, long * 0.5, wide * 0.5, n), Model.oval(x, y, long * 0.47, wide * 0.46, n)
+        if flat:
+            plan0 = Model.round_rect(x + long * 0.5, x - long * 0.5, y - wide * 0.5, y + wide * 0.5, wide * 0.3, 3 if m.fine else 1)
+            plan1 = Model.round_rect(x + long * 0.48, x - long * 0.48, y - wide * 0.47, y + wide * 0.47, wide * 0.29, 3 if m.fine else 1)
+            n = len(plan0)
+        else:
+            plan0, plan1 = Model.oval(x, y, long * 0.5, wide * 0.5, n), Model.oval(x, y, long * 0.47, wide * 0.46, n)
         zc = z + high * (1.0 - cap)
         rings = [[Vector((px + dx * t, py, z + high * (1.0 - cap) * t)) for (px, py), (qx, qy) in zip(plan0, plan1) for px, py in [(lerp(px, qx, t), lerp(py, qy, t))]] for t in (0.0, 0.5, 1.0)]
         m.skin(rings, "upper", (False, False))
@@ -752,6 +758,10 @@ class Yard:
         elif style == "open":        # a submarine's deck gun: no shield at all, the gun in its cradle on a pedestal
             Lf, Lr, hh = 0.3 * S, 0.3 * S, 0.66 * S
             lo = hi = []
+        elif style == "house":       # an American twin gun house: a tall slab-sided box, its face sloping back
+            Lf, Lr, hh = 0.58 * S, 0.62 * S, 0.62 * S
+            lo = [(Lf, 0.42 * S), (0.44 * S, 0.5 * S), (-Lr, 0.5 * S), (-Lr, -0.5 * S), (0.44 * S, -0.5 * S), (Lf, -0.42 * S)]
+            hi = [(Lf - 0.27 * S, 0.4 * S), (0.2 * S, 0.48 * S), (-Lr + 0.02 * S, 0.48 * S), (-Lr + 0.02 * S, -0.48 * S), (0.2 * S, -0.48 * S), (Lf - 0.27 * S, -0.4 * S)]
         else:                        # a destroyer's gun in its shield, open at the back
             Lf, Lr, hh = 0.5 * S, 0.42 * S, 0.5 * S
             lo = [(Lf, 0.3 * S), (0.2 * S, 0.5 * S), (-Lr, 0.5 * S), (-Lr, -0.5 * S), (0.2 * S, -0.5 * S), (Lf, -0.3 * S)]
@@ -791,7 +801,7 @@ class Yard:
         guns = []
         fwd = rot @ X
         lat = rot @ Y
-        gap = S * (0.21 if barrels >= 4 else 0.27 if barrels == 3 else 0.3)
+        gap = S * (0.21 if barrels >= 4 else 0.27 if barrels == 3 else 0.42 if style == "house" else 0.3)
         tr_x = Lf - (0.36 * S if style == "heavy" else 0.3 * S)
         for k in range(barrels):
             off = (k - (barrels - 1) / 2.0) * gap

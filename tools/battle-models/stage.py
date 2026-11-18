@@ -254,13 +254,16 @@ def paint_wake(path, L, B, half_of=None, bow=None, stern=None, x0=-4.0, x1=0.62,
     # and each length dies away softly at its ends; no two arms alike, port and starboard neither.)
     crest = np.zeros((h, w), dtype=np.float32)
     tan = math.tan(math.radians(19.5))
-    for k, (xo, yo, power, reach) in enumerate(((bow - 0.02 * L, 0.0, 0.62, 1.9 * L), (bow - 0.27 * L, B * 0.42, 0.4, 1.5 * L), (stern + 0.06 * L, B * 0.45, 0.36, 1.6 * L))):
+    # (Dimmed by half and thinned at the art director's word, 10:45 UTC: as broad and nearly as bright as the foam
+    # astern they read as "brush marks on the sea". The brightest white is for the curl at her stem and the first few
+    # lengths astern only.)
+    for k, (xo, yo, power, reach) in enumerate(((bow - 0.02 * L, 0.0, 0.31, 1.9 * L), (bow - 0.27 * L, B * 0.42, 0.2, 1.5 * L), (stern + 0.06 * L, B * 0.45, 0.18, 1.6 * L))):
         d = xo - x
         cells = max(8, int(round((X1 - X0) / 55.0)))
         lengths = ss(0.45, 0.62, fbm(w, h, cells, 61 + 7 * k, octaves=3))
         wander = (fbm(w, h, cells * 2, 83 + 7 * k, octaves=2) - 0.5) * 5.0
         mid = yo + np.clip(d, 0, None) * tan + wander
-        thick = (0.9 + 0.013 * np.clip(d, 0, None)) * (0.65 + 0.9 * fbm(w, h, cells * 2, 97 + 7 * k, octaves=2))
+        thick = (0.55 + 0.008 * np.clip(d, 0, None)) * (0.65 + 0.9 * fbm(w, h, cells * 2, 97 + 7 * k, octaves=2))
         arm = np.exp(-((ay - mid) / thick) ** 2) * power * (1 - ss(0.25 * reach, reach, d)) * ss(0.0, 0.03 * L, d) * lengths
         # a second, fainter crest inside the first, with lengths of its own
         lengths2 = ss(0.5, 0.66, fbm(w, h, cells, 113 + 7 * k, octaves=3))
