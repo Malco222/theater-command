@@ -428,6 +428,14 @@ Rendering is Cycles on the CPU (EEVEE cannot start without a display). A 960x540
 deck, and the effects (soft puffs: smoke, spray, flame, splashes, a magazine blast). `marks.py` draws national
 markings for the pictures only; the game paints its own from the model's `marks`.
 
+The wake (`paint_wake` and `Sea.wake` in `stage.py`) is a picture painted once to the ship's measures: red the white
+water, green the churned green under it, blue the crests of her bow wave. Two lessons (the art director, 2026-11-18,
+of a carrier's clip). The crests are laid on the sea as painted and never multiplied by the streaks that go by with
+the water: cut across by those, each arm of the bow wave became "a row of bright white dashes of equal size and
+spacing, like road paint". An arm is a faint crest that comes and goes in lengths of every size, wanders, swells and
+thins, soft at its ends. And the foam astern is one pale streak without a break, whitest at the stern, that widens
+and fades in uneven patches: a hard cut to white-or-nothing made it a fan of white stripes.
+
 Flame and the light of a flash (`flames`, `light`, `gun`, `burst`, `fire`, `blast` in `stage.py`). Flame is ragged
 tongues thrown out from the place that burns, deep orange, gone in a frame or two, breaking at once into smoke: a
 gun's flash drawn as smooth glowing balls in a row read as a rocket's exhaust, and a magazine drawn as big soft balls
@@ -457,7 +465,8 @@ the heart and a scatter of smaller ones about it, each drawn out into a streak, 
 little apart; the stuff has holes and lace all through it and thins to nothing at its rim, pale green where it is
 thick and white where thin (faint: pushed harder it reads as paint), and as a patch dies its holes open rather than
 the whole growing paler. Kept off pure white (about 0.84, 0.9, 0.88 in the sun). The oil slick keeps the plain
-"flat" stuff: dark and matt but for a tenth of dull shine.
+"flat" stuff: dark and matt but for a tenth of dull shine, and how far a patch reaches differs all the way round it,
+so its rim is bays and tongues (a round rim showed from the battle camera as a smooth curve).
 
 Two lessons of the close fly-past, kept in `airshow.py`. The camera goes nearly all the way round the machine, so
 somewhere it looks up-sun, and there the sun's glare off the wings washed the camouflage out to cream: the sun now

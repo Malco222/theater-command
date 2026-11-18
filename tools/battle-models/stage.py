@@ -216,7 +216,8 @@ def _noise(nt, coords, metres, name="noise", seed=11, beta=1.6):
 
 def paint_wake(path, L, B, half_of=None, bow=None, stern=None, x0=-4.0, x1=0.62, y1=0.95, w=2304):
     """The wake as a picture seen from above, in the ship's own measures: red is how much white water, green how much
-    of the pale churned green under it. From x0 to x1 lengths along her, y1 lengths to each side."""
+    of the pale churned green under it, blue the crests of her bow wave. From x0 to x1 lengths along her, y1 lengths
+    to each side."""
     from PIL import Image
     X0, X1, Y1 = x0 * L, x1 * L, y1 * L
     h = int(round(w * 2 * Y1 / (X1 - X0)))
@@ -245,17 +246,26 @@ def paint_wake(path, L, B, half_of=None, bow=None, stern=None, x0=-4.0, x1=0.62,
     rim = np.exp(-((ay - wide * 0.86) / (1.2 + 0.006 * np.clip(s, 0, None))) ** 2) * 0.35 * ss(0.15 * L, 0.8 * L, s)
     foam = np.maximum(foam, np.where(aft, along * edge * (0.75 + 0.5 * rough) + rim * along, 0.0))
     green = np.maximum(green, np.where(aft, (0.45 + 0.55 * np.exp(-np.clip(s, 0, None) / (1.6 * L))) * (1 - ss(3.0 * L, 4.0 * L, s)) * (1 - ss(wide * 0.8, wide * 1.5, ay)), 0.0))
-    # the bow wave: a V of feathered crests, gone within a length of the stern; fainter ones from her shoulder and quarter
+    # the bow wave: a V of faint crests, gone within a length of the stern; fainter ones from her shoulder and quarter.
+    # They go in the picture's blue, apart from the white water: laid on the sea as they are, never broken up by the
+    # streaks that go by with the water. (The art director, 2026-11-18, of a carrier's clip: each arm, cut across by
+    # those streaks, was "a row of bright white dashes of equal size and spacing, like road paint". An arm's crest
+    # comes and goes in lengths of every size from twenty metres to a hundred, wanders a little, swells and thins,
+    # and each length dies away softly at its ends; no two arms alike, port and starboard neither.)
+    crest = np.zeros((h, w), dtype=np.float32)
     tan = math.tan(math.radians(19.5))
-    for xo, yo, power, reach in ((bow - 0.02 * L, 0.0, 0.62, 1.9 * L), (bow - 0.27 * L, B * 0.42, 0.4, 1.5 * L), (stern + 0.06 * L, B * 0.45, 0.36, 1.6 * L)):
+    for k, (xo, yo, power, reach) in enumerate(((bow - 0.02 * L, 0.0, 0.62, 1.9 * L), (bow - 0.27 * L, B * 0.42, 0.4, 1.5 * L), (stern + 0.06 * L, B * 0.45, 0.36, 1.6 * L))):
         d = xo - x
-        mid = yo + np.clip(d, 0, None) * tan
-        thick = 0.9 + 0.013 * np.clip(d, 0, None)
-        feather = 0.55 + 0.9 * fbm(w, h, 40, 5 + abs(int(xo)), stretch=2.0)
-        arm = np.exp(-((ay - mid) / thick) ** 2) * power * (1 - ss(0.25 * reach, reach, d)) * ss(0.0, 0.03 * L, d) * feather
-        # a second, fainter crest inside the first
-        arm2 = np.exp(-((ay - mid * 0.8 + 1.5) / (thick * 0.8)) ** 2) * power * 0.4 * (1 - ss(0.2 * reach, 0.8 * reach, d)) * ss(0.05 * L, 0.2 * L, d) * feather
-        foam = np.maximum(foam, np.where(d > 0, np.maximum(arm, arm2), 0.0))
+        cells = max(8, int(round((X1 - X0) / 55.0)))
+        lengths = ss(0.45, 0.62, fbm(w, h, cells, 61 + 7 * k, octaves=3))
+        wander = (fbm(w, h, cells * 2, 83 + 7 * k, octaves=2) - 0.5) * 5.0
+        mid = yo + np.clip(d, 0, None) * tan + wander
+        thick = (0.9 + 0.013 * np.clip(d, 0, None)) * (0.65 + 0.9 * fbm(w, h, cells * 2, 97 + 7 * k, octaves=2))
+        arm = np.exp(-((ay - mid) / thick) ** 2) * power * (1 - ss(0.25 * reach, reach, d)) * ss(0.0, 0.03 * L, d) * lengths
+        # a second, fainter crest inside the first, with lengths of its own
+        lengths2 = ss(0.5, 0.66, fbm(w, h, cells, 113 + 7 * k, octaves=3))
+        arm2 = np.exp(-((ay - mid * 0.8 + 1.5) / (thick * 0.8)) ** 2) * power * 0.4 * (1 - ss(0.2 * reach, 0.8 * reach, d)) * ss(0.05 * L, 0.2 * L, d) * lengths2
+        crest = np.maximum(crest, np.where(d > 0, np.maximum(arm, arm2), 0.0))
     # the curl at the stem and the broken water down her sides
     inside = (x < bow) & (x > stern)
     out_of_hull = ay - hb
@@ -266,6 +276,7 @@ def paint_wake(path, L, B, half_of=None, bow=None, stern=None, x0=-4.0, x1=0.62,
     img = np.zeros((h, w, 3), dtype=np.uint8)
     img[..., 0] = np.clip(foam, 0, 1) * 255
     img[..., 1] = np.clip(green, 0, 1) * 255
+    img[..., 2] = np.clip(crest, 0, 1) * 255
     os.makedirs(os.path.dirname(path), exist_ok=True)
     Image.fromarray(img[::-1].copy()).save(path)        # (a picture's first row is its top; the sea's y runs up)
     return (X0, X1, -Y1, Y1)
@@ -422,12 +433,20 @@ class Sea:
         nt.links.new(im.outputs["Color"], sep.inputs[0])
         power = nt.nodes.new("ShaderNodeValue")
         power.outputs[0].default_value = strength
-        # streaks that go by with the water (long fore and aft, narrow across)
+        # The white water astern: one pale streak without a break, whitest at her stern, that widens and fades in
+        # uneven patches, with streaks in it that go by with the water (long fore and aft, narrow across). (It was
+        # cut hard into white streaks and nothing: the art director, 2026-11-18, "foam astern is a continuous pale
+        # streak that widens, greens and fades in uneven patches".)
         st = _noise(nt, self.tc.outputs["Object"], (70.0, 10.0), "streaks", 37, 1.4)
+        patch = _noise(nt, self.tc.outputs["Object"], (170.0, 95.0), "patches", 41, 1.9)
         red = _math(nt, "MULTIPLY", sep.outputs[0], power.outputs[0])
-        streak = _math(nt, "ADD", _math(nt, "MULTIPLY", st, 1.3), 0.2)
-        white = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _math(nt, "MULTIPLY", red, streak), 0.35), 3.5, clamp=True)
-        self.mask = _math(nt, "MAXIMUM", self.mask, white)
+        streak = _math(nt, "ADD", _math(nt, "MULTIPLY", st, 0.75), 0.55)      # (the noise pictures are spread evenly from 0 to 1)
+        body = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", red, streak), _math(nt, "ADD", _math(nt, "MULTIPLY", patch, 0.6), 0.7))
+        white = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", body, 0.06), 1.2, clamp=True)
+        # the crests of her bow wave: faint, as painted, with only a shimmer from the water going by
+        shim = _noise(nt, self.tc.outputs["Object"], (23.0, 19.0), "shimmer", 53, 1.2)
+        crest = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", sep.outputs[2], power.outputs[0]), _math(nt, "ADD", _math(nt, "MULTIPLY", shim, 0.4), 0.45), clamp=True)
+        self.mask = _math(nt, "MAXIMUM", self.mask, _math(nt, "MAXIMUM", white, crest))
         nt.links.new(self.mask, self.foam_mix.inputs[0])
         green = _math(nt, "MULTIPLY", sep.outputs[1], power.outputs[0])
         if self.green_fac.is_linked:
@@ -538,11 +557,29 @@ class Effects:
             nt.links.new(info.outputs["Color"], g_a)
             g_b.default_value = (0.74, 0.95, 0.87, 1.0)
             nt.links.new(_math(nt, "SUBTRACT", _math(nt, "MULTIPLY", thick, 1.4), 0.15, clamp=True), g_fac)
-        elif kind == "flat":     # a patch lying on the water: thick in the middle, ragged at the edge
+        elif kind == "flat":     # a patch lying on the water: thick in the middle, torn into tongues at the edge
+            # (the art director, 2026-11-18, of the oil at a sinking: its near edge was "a smooth curve". How far the
+            # patch reaches differs all the way round it, by a noise read on the way out from its middle, its own for
+            # each patch: so its rim is bays and tongues, and a dozen of them one on another have no arc anywhere.)
             sep = nt.nodes.new("ShaderNodeSeparateXYZ")
             nt.links.new(tc.outputs["Object"], sep.inputs[0])
             r = _math(nt, "SQRT", _math(nt, "ADD", _math(nt, "MULTIPLY", sep.outputs[0], sep.outputs[0]), _math(nt, "MULTIPLY", sep.outputs[1], sep.outputs[1])))
-            soft = _math(nt, "SUBTRACT", 1.0, _math(nt, "ADD", r, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", nz.outputs[0], 0.5), 0.9)), clamp=True)
+            flat_ = nt.nodes.new("ShaderNodeCombineXYZ")
+            nt.links.new(sep.outputs[0], flat_.inputs[0])
+            nt.links.new(sep.outputs[1], flat_.inputs[1])
+            way = nt.nodes.new("ShaderNodeVectorMath")
+            way.operation = "NORMALIZE"
+            nt.links.new(flat_.outputs[0], way.inputs[0])
+            ring = nt.nodes.new("ShaderNodeTexNoise")
+            ring.noise_dimensions = "4D"
+            ring.inputs["Scale"].default_value = 1.7
+            ring.inputs["Detail"].default_value = 3.0
+            ring.inputs["Roughness"].default_value = 0.65
+            nt.links.new(way.outputs[0], ring.inputs["Vector"])
+            nt.links.new(_math(nt, "MULTIPLY", info.outputs["Random"], 61.0), ring.inputs["W"])
+            reach = _math(nt, "MINIMUM", _math(nt, "ADD", 0.08, _math(nt, "MULTIPLY", ring.outputs[0], 1.3)), 0.97)
+            reach = _math(nt, "MAXIMUM", reach, 0.2)
+            soft = _math(nt, "SUBTRACT", 1.0, _math(nt, "ADD", _math(nt, "DIVIDE", r, reach), _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", nz.outputs[0], 0.5), 0.9)), clamp=True)
             soft = _math(nt, "MULTIPLY", soft, 1.7, clamp=True)
         else:                    # a puff: thick where you look into it, thinning to nothing at its edge
             lw = nt.nodes.new("ShaderNodeLayerWeight")
@@ -969,12 +1006,12 @@ class Effects:
         low over the sea a patch on the water is seen edge on, so it has to spread well clear of her side to be seen.)"""
         g = self.rng
 
-        def make(t, p0, facing):
+        def make(t, p0, facing):                              # (a patch's torn rim reaches its full size only here and there: hence sizes a third over `r`)
             for i in range(13):
                 a = g.uniform(0, 2 * math.pi)
                 way = Vector((math.cos(a), math.sin(a), 0.0))
                 self.puff(t + i * 0.25, Vector((p0[0] + way.x * r * 0.08, p0[1] + way.y * r * 0.08, 0.22 - 0.003 * i)), vel=way * g.uniform(3.0, 8.0), drag=0.25, life=13.0,
-                          r=(r * 0.12, r * g.uniform(0.55, 0.95)), col=(0.03, 0.034, 0.04), alpha=0.72, kind="flat", wind=0.0, squash=(1.4, 1.0, 0.004), fade_in=1.0, grow=0.45, hold=0.9)
+                          r=(r * 0.16, r * g.uniform(0.75, 1.3)), col=(0.03, 0.034, 0.04), alpha=0.72, kind="flat", wind=0.0, squash=(1.4, 1.0, 0.004), fade_in=1.0, grow=0.45, hold=0.9)
         self.once(t0, (Vector(at), Vector((0, 0, 1))), make)
 
 
