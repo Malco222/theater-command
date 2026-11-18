@@ -110,10 +110,11 @@ export function whyNotFreedBy(g: Game, nat: string, by: string, soon = false): s
 /**
  * The enemy round a fallen country's capital, as the one who holds it sees it (ruling 229, part 2): whether corps at
  * war with the holder stand in the capital, and whether they stand next to it. Forts are works, not an army that
- * could take the city back, and are left out, as they are of the danger at a capital's gates.
+ * could take the city back, and are left out, as they are of the danger at a capital's gates. A town's garrison counts
+ * with the field: it can march out again.
  */
 export function capitalThreat(g: Game, cap: Region, holder: string): { inIt: boolean; next: boolean } {
-  const foe = (r: Region): boolean => r.units.some((u) => !u.dead && u.kind !== 'fort' && atWar(g, u.nat, holder));
+  const foe = (r: Region): boolean => [...r.units, ...(r.garr ?? [])].some((u) => !u.dead && u.kind !== 'fort' && atWar(g, u.nat, holder));
   return { inIt: foe(cap), next: cap.nb.some((j) => foe(g.regions[j])) };
 }
 

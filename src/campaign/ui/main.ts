@@ -81,7 +81,7 @@ import { SIDE_NAME, shareWords } from '../domination';
 import { GOALS, GOAL_KEYS, goalChecks, goalEndsIn, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
 import { RIVALS, fronts, isOpen, startOpen, type Front } from '../staff';
 import { ashoreSays } from '../ashore';
-import { liberate } from '../liberation';
+import { LIB, liberate } from '../liberation';
 import { guarantorsOf } from '../guarantees';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsUpkeep, fortCost, isHome, ledger, needsOf, provinceYield, raiseSite, specOf, type Ledger, type LedgerLine } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
@@ -4900,8 +4900,11 @@ function nextCard(): typeof ui.modal {
   const me = g.human;
   // A nation that has fallen, or one that has come back: each is announced once, in the order it happened.
   if (me && !passing && ui.seenPass < g.passings.length) {
-    // A country set free by its conqueror's fall is told on the conqueror's card, unless it is the player's own.
-    const ids = g.passings.slice(ui.seenPass).filter((p) => !(p.kind === 'freed' && p.after && !p.player && g.passings.some((q) => q.kind === 'fell' && q.nat === p.after && q.turn === p.turn))).map((p) => p.id);
+    // A country set free by its conqueror's fall is told on the conqueror's card, unless it is the player's own: when
+    // the two are new together. (A country freed at the month's end, after its conqueror's card was read earlier in
+    // the month, has a card of its own: ruling 229, part 2.)
+    const fresh = g.passings.slice(ui.seenPass);
+    const ids = fresh.filter((p) => !(p.kind === 'freed' && p.after && !p.player && fresh.some((q) => q.kind === 'fell' && q.nat === p.after && q.turn === p.turn))).map((p) => p.id);
     ui.seenPass = g.passings.length;
     if (ids.length) return { kind: 'passing', ids };
   }
@@ -8075,7 +8078,9 @@ function arrive(show: boolean, from: Since, before: string[]): void {
     const weeks = Object.values(GOALS[lost] ?? {}).some((x) => x?.outlast !== undefined) ? weeksLasted(g, lost) : null;
     const nth = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'eleventh', 'twelfth'];
     const hope = nationsFallen(g).find((f) => f.nat === lost);
-    const back = hope?.canReturn ? ` If ${theName(hope.fell.to)}'s enemies take ${hope.capitalName}, ${natName(lost)} is liberated and you lead it again.` : '';
+    // (Ruling 229, part 2, in the UI director's words for the fallen country's card: a return at a month's end, with no
+    // enemy corps in or next to the capital, and never in the month it fell.)
+    const back = hope?.canReturn ? ` If a member of an alliance at war with ${theName(hope.fell.to)} holds ${hope.capitalName} ${g.turn - hope.fell.turn < LIB.gap ? 'at the end of next month or later' : 'at the end of a month'}, with no enemy corps in or next to it, ${natName(lost)} is liberated and you lead it again.` : '';
     // The head of a card names the month it reports (ruling 117, point 5): the month the country fell in, which was
     // played out to its end before this card opened.
     const fellIn = [...g.passings].reverse().find((p) => p.nat === lost && p.kind === 'fell');

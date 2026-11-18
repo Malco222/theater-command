@@ -570,9 +570,12 @@ function hold(g: Game, nat: string, ph: PlanPhase | null): void {
   for (const [name, count] of Object.entries(ph.staging)) {
     const r = g.byName[name];
     if (!r || !allied(g, nat, r.ctrl)) continue;
-    standing(g, nat, r).filter((u) => watchman(ph, name, u)).slice(0, count).forEach((u, k) => { if (!KIND[u.kind].mobile || k < 2) massed.add(u.id); });
+    standing(g, nat, r).filter((u) => watchman(ph, name, u) && !commandAtHome(g, nat, r, u)).slice(0, count).forEach((u, k) => { if (!KIND[u.kind].mobile || k < 2) massed.add(u.id); });
   }
 }
+
+/** A home command that holds in place, on a quay a floor binds (ruling 229, 1b): it never sails, so it fills no place in a force that would. */
+const commandAtHome = (g: Game, nat: string, r: Region, u: Corps): boolean => u.hold && leavesHome(g, nat, r);
 
 /** Whether a corps counts toward the force kept at a staging place: on the coast watch, only a corps of the field army of two divisions or more, and not the town's standing garrison. */
 const watchman = (ph: PlanPhase, name: string, u: Corps): boolean => !ph.watch?.includes(name) || (!u.hold && u.divs >= 2 && u.kind !== 'eng');
@@ -602,7 +605,7 @@ function mass(g: Game, nat: string, ph: PlanPhase | null, watchOnly = false): vo
     if (!r || !allied(g, nat, r.ctrl)) continue;
     let have = own(r).filter((u) => massed.has(u.id)).length;
     if (have >= count) continue;
-    for (const u of standing(g, nat, r)) if (have < count && !massed.has(u.id) && watchman(ph, name, u) && (!KIND[u.kind].mobile || have < 2)) { massed.add(u.id); have++; }
+    for (const u of standing(g, nat, r)) if (have < count && !massed.has(u.id) && watchman(ph, name, u) && !commandAtHome(g, nat, r, u) && (!KIND[u.kind].mobile || have < 2)) { massed.add(u.id); have++; }
     const d = hops(g, r.id, (x) => allied(g, nat, ctl(g, x)));
     const first = door?.name === name;
     const pool = g.corps
@@ -1042,9 +1045,9 @@ function crossSea(g: Game, nat: string, slot: number): void {
     .filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && u.supplied && u.str >= 0.7 && u.ap >= u.apMax)
     // (The fighting corps take the boats first: guns land on no enemy shore by themselves, ruling 211(a).)
     .sort((a, b) => (gunsRule(g) ? Number(fights(b)) - Number(fights(a)) : 0) || atkPower(g, b) - atkPower(g, a) || a.id - b.id);
-  // (From a quay at home, no more go than the floor at home lets go: ruling 229, 1b. Those that hold in place are not
-  // counted in the floor, and none of them stands ready at a quay.)
-  if (leavesHome(g, nat, quay)) ready.splice(Math.min(ready.length, mayLeave(g, nat)));
+  // (From a quay at home, no more go than the floor at home lets go: ruling 229, 1b. The home commands that hold in
+  // place are not counted in the floor, and never sail: three of them stand on harbours.)
+  if (leavesHome(g, nat, quay)) { const go = ready.filter((u) => !u.hold).slice(0, mayLeave(g, nat)); ready.splice(0, ready.length, ...go); }
   if (sea.second) {
     const ashore = lodgment(g, nat, slot);
     if (ashore?.short && ashore.ports.length) {

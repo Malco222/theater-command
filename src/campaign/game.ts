@@ -310,6 +310,28 @@ export function setWar(g: Game, a: string, b: string): void {
   if (!B.atWar.includes(a)) B.atWar.push(a);
 }
 
+/**
+ * The grand campaign: a country that has taken a side is at peace with that side's members. A guarantee kept against
+ * a country outside both blocs leaves it at war with the guarantors (guarantees.ts, honour), and if it later joins
+ * their side, as an attacked neutral does, that war ends with no news of its own (ruling 229, part 3).
+ */
+export function joinedSide(g: Game, id: string): void {
+  const N = g.nations[id];
+  // (The last act has no sides: every power fights for itself.)
+  if (g.flags.open !== 1 || g.flags.dom || !N) return;
+  for (const x of [...N.atWar]) if (allied(g, id, x)) {
+    N.atWar = N.atWar.filter((y) => y !== x);
+    if (g.nations[x]) g.nations[x].atWar = g.nations[x].atWar.filter((y) => y !== id);
+    g.supplyDirty = true;
+  }
+}
+
+/** The month's end (the grand campaign): every country at peace with its own side's members, whatever path took it there. */
+export function sidesAtPeace(g: Game): void {
+  if (g.flags.open !== 1) return;
+  for (const id of Object.keys(g.nations).sort()) if (g.nations[id].atWar.length) joinedSide(g, id);
+}
+
 export function declareWar(g: Game, a: string, b: string): void {
   const A = g.nations[a], B = g.nations[b];
   if (!A.alive || !B.alive || atWar(g, a, b) || allied(g, a, b)) return;
@@ -332,6 +354,7 @@ export function declareWar(g: Game, a: string, b: string): void {
       A.align = side === 'axis' ? 'axis_cobelligerent' : 'allies_cobelligerent';
       A.opinion = A.home = side === 'axis' ? 100 : -100;
       g.supplyDirty = true;
+      joinedSide(g, a);
     }
   }
   // A neutral that is attacked joins the other side. A small country in the player's hands chooses for itself.
@@ -339,6 +362,7 @@ export function declareWar(g: Game, a: string, b: string): void {
   if (bloc(B) === null && ba && ba !== 'league' && !ownPath(g, b)) {
     B.align = ba === 'axis' ? 'allies' : 'axis_cobelligerent';
     B.opinion = B.home = ba === 'axis' ? -100 : 100;
+    joinedSide(g, b);
   }
   headline(g, 'war', `${theName(A, true)} declares war on ${theName(B)}.`, a);
   // War on one member of the League is war on them all.
@@ -2933,19 +2957,38 @@ function warBegan(g: Game, w: string[]): number {
 
 /** The rows another row's 'unless' names: the month each of them lands is kept (the grand campaign, ruling 229, 1c). */
 const UNLESS = new Set<string>(((setup as any).expeditions as any[] ?? []).map((row) => row[6]?.unless).filter((x): x is string => !!x));
-/** True once the row of that name has landed in this game. */
-const rowLanded = (g: Game, name: string): boolean => ((setup as any).expeditions as any[] ?? []).some((row, i) => row[2] === name && g.flags[`came:${i}`] !== undefined);
+/**
+ * True once the row of that name has landed in this game: in the grand campaign (its month kept), or before it began,
+ * under history (a row settled is marked 1; one the grand campaign gave up on, or never sent, 2).
+ */
+const rowLanded = (g: Game, name: string): boolean => ((setup as any).expeditions as any[] ?? []).some((row, i) => row[2] === name && (g.flags[`came:${i}`] !== undefined || g.flags[`sent:${i}`] === 1));
+
+/**
+ * A grand campaign begun after the first day (staff.ts, startOpen): a row whose men history's full-size corps already
+ * brought ('carried', the corps row's name: the South Africans and New Zealanders of XIII and XXX Corps, ruling 229,
+ * 1c) does not come as well, once that corps has landed under history.
+ */
+export function carriedRows(g: Game): void {
+  const rows = (setup as any).expeditions as any[] ?? [];
+  rows.forEach((row, i) => {
+    const o = row[6] ?? {};
+    if (!o.carried || g.flags[`sent:${i}`]) return;
+    if (rows.some((r, j) => r[2] === o.carried && r[1] === row[1] && g.flags[`sent:${j}`] === 1)) g.flags[`sent:${i}`] = 2;
+  });
+}
 
 /**
  * The grand campaign: where a dated formation lands when its side no longer holds the place meant for it (ruling 229,
  * 1c, as ruling 221's F lands troops lifted off a coast): the nearest harbour its side holds on that front, clear of
- * the enemy and with room; in the same side theatre, or else in the same country. Null where there is none.
+ * the enemy and with room, in the same side theatre. Null where there is none, or the place is on no side theatre.
  */
 function fallbackHarbour(g: Game, nat: string, at: Region): Region | null {
   const k = THEATRE_OF.get(at.name) ?? -1;
+  // (A place on no named front has no fall-back: its row waits for it as before. 1c is the desert's.)
+  if (k < 0) return null;
   let best: Region | null = null, bd = Infinity;
   for (const r of g.regions) {
-    if (!r.port || r.id === at.id || (k >= 0 ? THEATRE_OF.get(r.name) !== k : r.owner !== at.owner)) continue;
+    if (!r.port || r.id === at.id || THEATRE_OF.get(r.name) !== k) continue;
     if (!allied(g, nat, r.ctrl) || hostileUnits(g, r, nat).length || friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= STACK) continue;
     const d = Math.hypot(r.x - at.x, r.y - at.y);
     if (d < bd || (d === bd && best && r.id < best.id)) { bd = d; best = r; }
@@ -2987,7 +3030,9 @@ function expeditions(g: Game, nat: string): void {
         if (!warOn(g, o.war)) return;
         // And it waits for its own country to be in that war: no army turns up in a war its country is not fighting.
         if (!o.war.includes(nat) && !atWar(g, nat, o.war[0]) && !atWar(g, nat, o.war[1])) return;
-        due = g.flags[`due:${i}`] ??= fromWar ? warBegan(g, o.war) + o.after : g.turn;
+        // (A call-up is counted from the war's start, but never from before the month the row is first seen: a game
+        // saved before ruling 229 counts it from the month it is loaded, and loses none of it for being late.)
+        due = g.flags[`due:${i}`] ??= fromWar ? Math.max(warBegan(g, o.war), g.turn - 1) + o.after : g.turn;
         if (g.turn < due) return;
       }
       // A country's own army, raised on its own soil, forms up at the capital if the place meant for it is already lost.
@@ -2995,9 +3040,10 @@ function expeditions(g: Game, nat: string): void {
       if (reg && reg.owner === nat && !allied(g, nat, reg.ctrl) && cap >= 0) reg = g.regions[cap];
       // Nor is it put down in a friendly country that is at peace: it forms at home instead.
       if (reg && reg.ctrl !== nat && allied(g, nat, reg.ctrl) && !sharesWar(g, nat, reg.ctrl) && cap >= 0) reg = g.regions[cap];
-      // A place its side no longer holds: it lands at the nearest harbour its side holds on that front, and is not
-      // cancelled for the loss (ruling 229, 1c). It holds nothing in place there: the place it was to hold is gone.
-      if (reg && !allied(g, nat, reg.ctrl) && !o.joins && row[3] !== 'fort') {
+      // A place its side has lost to the enemy: it lands at the nearest harbour its side holds on that front, and is
+      // not cancelled for the loss (ruling 229, 1c). It holds nothing in place there: the place it was to hold is gone.
+      // (A place held by a country it is not at war with, Vichy's or a neutral's, is waited for as before.)
+      if (reg && !allied(g, nat, reg.ctrl) && atWar(g, nat, reg.ctrl) && !o.joins && !o.join && row[3] !== 'fort') {
         const h = fallbackHarbour(g, nat, reg);
         if (h) { reg = h; fell = true; }
       }
@@ -3008,12 +3054,12 @@ function expeditions(g: Game, nat: string): void {
       // A full province sends it on to the nearest ground with room.
       if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = roomNear(g, nat, reg) ?? reg;
     }
-    if (g.turn - due > 6 || (o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) { if (g.turn - due > 6) g.flags[`sent:${i}`] = 1; return; }
+    if (g.turn - due > 6 || (o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) { if (g.turn - due > 6) g.flags[`sent:${i}`] = g.flags.open === 1 ? 2 : 1; return; }
     // An army put together out of a defeat forms only once the ground is really lost: while the nation or an ally
     // still holds any place named, the formations it would be made from fight on where they stand.
     if (o.ifLost && (o.ifLost as string[]).some((nm) => { const r = g.byName[nm]; return !r || allied(g, nat, r.ctrl); })) return;
     // (A row that stands in for another, in a war where that other has already landed, never comes: ruling 229, 1c.)
-    if (o.unless && g.flags.open === 1 && rowLanded(g, o.unless)) { g.flags[`sent:${i}`] = 1; return; }
+    if (o.unless && g.flags.open === 1 && rowLanded(g, o.unless)) { g.flags[`sent:${i}`] = 2; return; }
     const old = o.joins ? g.corps.find((x) => x.nat === nat && x.name === o.joins && !x.dead) : undefined;
     if (old) {
       g.flags[`sent:${i}`] = 1;
@@ -3030,14 +3076,24 @@ function expeditions(g: Game, nat: string): void {
       return;
     }
     // Troops sent to take over a stretch of an ally's line ('join') go in whatever already stands there.
-    if (!reg || !allied(g, nat, reg.ctrl) || (!o.join && friendlyUnits(g, reg, nat).length >= STACK)) return;
+    // (Room is counted as everywhere else: engineers take none.)
+    if (!reg || !allied(g, nat, reg.ctrl) || (!o.join && friendlyUnits(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK)) return;
     g.flags[`sent:${i}`] = 1;
     if (Array.isArray(o.from)) {
       for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       g.supplyDirty = true;
     }
     const c = addCorps(g, nat, row[2], row[3], g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, fell ? { ...o, hold: undefined } : o);
-    if (g.flags.open === 1 && UNLESS.has(row[2])) g.flags[`came:${i}`] = g.turn;
+    if (g.flags.open === 1 && UNLESS.has(row[2])) {
+      g.flags[`came:${i}`] = g.turn;
+      // (A row standing in for this one, landed already, goes with it: the same men cannot stand in two places.)
+      ((setup as any).expeditions as any[] ?? []).forEach((r2, j) => {
+        if (r2[6]?.unless !== row[2] || r2[1] !== nat) return;
+        if (!g.flags[`sent:${j}`]) g.flags[`sent:${j}`] = 2;
+        const x = g.corps.find((u) => u.nat === nat && !u.dead && u.name === r2[2]);
+        if (x) { removeCorps(g, x); g.supplyDirty = true; }
+      });
+    }
     if (o.from && !Array.isArray(o.from)) {
       // A formation put together where it stands, out of the army around it, is not itself broken up for the next one.
       const here = theatreName(reg) === o.from;

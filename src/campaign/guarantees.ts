@@ -45,8 +45,9 @@ function rowsFor(g: Game, by: string, on: string, was: Bloc | null): Row[] {
     const G = g.nations[row.by];
     // (France's guarantees end at its armistice, and a freed France does not take them up again.)
     if (!G?.alive || G.dormant || G.fellOn) return false;
-    // (A country that stands in another alliance than its guarantor's has no guarantee from it.)
-    return !was || was === bloc(G);
+    // (A country that has joined another alliance than its guarantor's, the attacker's or a third, has no guarantee from
+    // it; one in the League of small nations keeps it, as the record's guarantees had no word about such a league.)
+    return !was || was === 'league' || was === bloc(G);
   });
 }
 
