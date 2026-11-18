@@ -248,6 +248,20 @@ bool ACampaignMapActor::BuildMap()
 	BuildParade();
 	BuildTrees();
 	BuildLabels();
+	if (FBattleEffects::WantsTest() && !Blasts.IsValid())
+	{
+		// (the effects kit's test barrage: see Blasts)
+		double MapUnitsAMetre = 0.34;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastScale="), MapUnitsAMetre);
+		Blasts = MakeUnique<FBattleEffects>();
+		BlastUnitsAMetre = FMath::Max(MapUnitsAMetre, 0.01) * UnitScale;
+		const bool bMade = Blasts->Begin(Root, BlastUnitsAMetre, [this](const FVector& Over)
+		{
+			const FVector2D Under = WorldToMap(Over);
+			return SurfacePoint(Under.X, Under.Y, 0.0);
+		});
+		UE_LOG(LogTheater, Display, TEXT("Effects: the test barrage is %s, a metre drawn as %.2f of a map unit"), bMade ? TEXT("made ready") : TEXT("NOT made (its recipe or its material is missing)"), MapUnitsAMetre);
+	}
 
 	UE_LOG(LogTheater, Log, TEXT("Campaign table built in %.2f s: %d labels, %d army pieces"),
 		FPlatformTime::Seconds() - StartTime, Labels.Num(), Pieces.Num());
@@ -1626,6 +1640,11 @@ void ACampaignMapActor::SeaVector(FName Name, const FLinearColor& Value)
 
 void ACampaignMapActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (Blasts.IsValid())
+	{
+		Blasts->End();
+		Blasts.Reset();
+	}
 	if (FogAsideBuilding.IsValid())
 	{
 		FogAsideBuilding.Wait(); // (it reads the world's sheet, which goes with the map)
@@ -13442,6 +13461,9 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	// for what must never be drawn smaller than a few pixels, a tracer)
 	FVector EyeAt = CameraFocus + FVector(0.0, 0.0, CameraDistance);
 	double PixelsAtOne = 1500.0;
+	FRotator EyeFacing(-60.0, 0.0, 0.0);
+	float EyeFieldOfView = 40.0f;
+	int32 EyeWindowWide = 1600;
 	if (const APlayerController* Player = World->GetFirstPlayerController())
 	{
 		if (Player->PlayerCameraManager)
@@ -13450,11 +13472,14 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			Right = Looking.GetUnitAxis(EAxis::Y);
 			Up = Looking.GetUnitAxis(EAxis::Z);
 			EyeAt = Player->PlayerCameraManager->GetCameraLocation();
+			EyeFacing = Player->PlayerCameraManager->GetCameraRotation();
+			EyeFieldOfView = Player->PlayerCameraManager->GetFOVAngle();
 			int32 WindowWide = 0, WindowHigh = 0;
 			Player->GetViewportSize(WindowWide, WindowHigh);
 			if (WindowWide > 0)
 			{
-				PixelsAtOne = WindowWide / (2.0 * FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(static_cast<double>(Player->PlayerCameraManager->GetFOVAngle()), 5.0, 150.0) * 0.5)));
+				EyeWindowWide = WindowWide;
+				PixelsAtOne = WindowWide / (2.0 * FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(static_cast<double>(EyeFieldOfView), 5.0, 150.0) * 0.5)));
 			}
 		}
 	}
@@ -13466,6 +13491,39 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	int32 FlakLitShapes = 0; // (and how many of those again as light, inside a searchlight's beam)
 	// (what the hour does to smoke: nothing by day, about a third and bluer in the deep of the night)
 	const FLinearColor SmokeHour = FMath::Lerp(FLinearColor(1.0f, 1.0f, 1.0f), FLinearColor(0.30f, 0.38f, 0.58f), GetMoonlight());
+	if (Blasts.IsValid() && Blasts->IsReady())
+	{
+		// (the effects kit's test barrage, round whatever the eye looks at: laid again when the eye has gone thirty
+		// units from where it was laid. The camera's jolt it returns is not used here: the campaign's eye is the
+		// player's own.)
+		// ("-TheaterBlastSlow=8" plays the barrage at an eighth of its pace, so that stills four seconds apart show it
+		// half a second apart. "-TheaterBlastOff=40,90" lays it so that the shot the kit places 40 metres north and
+		// 90 east of its middle falls where the eye looks: the bomb. Both are for the test frames.)
+		static double BlastSlow = 1.0;
+		static FVector BlastOff = FVector::ZeroVector;
+		static bool bBlastAsked = false;
+		if (!bBlastAsked)
+		{
+			bBlastAsked = true;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastSlow="), BlastSlow);
+			FString Asked;
+			TArray<FString> Parts;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastOff="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 2)
+			{
+				BlastOff = FVector(FCString::Atod(*Parts[0]), FCString::Atod(*Parts[1]), 0.0);
+			}
+		}
+		const double BlastNow = Now / FMath::Max(BlastSlow, 0.01);
+		if (FVector::DistSquared2D(BlastTestAt, CameraFocus) > FMath::Square(30.0 * UnitScale))
+		{
+			BlastTestAt = CameraFocus;
+			const FVector2D Under = WorldToMap(CameraFocus - BlastOff * BlastUnitsAMetre);
+			Blasts->Clear();
+			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour); // (its clock first: the barrage is timed from it)
+			Blasts->RunTest(SurfacePoint(Under.X, Under.Y, 0.0));
+		}
+		Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour);
+	}
 	bool bDrawingLight = false;
 	// One puff: its middle, how far out its heart reaches (as a share of the whole), and how thick it is at its
 	// middle, at the heart's edge and at its rim. The two axes are its half-length and half-width as the eye sees it.
@@ -14609,7 +14667,10 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 					LightShape(Heartland, Downwind * Square, AcrossWind * Square, FirstShape, Row, 0.7f * 0.62f * InBeam * Remains * 2.0f * AgeShare[Row], bTurned);
 				}
 			}
-			const float Thinned = Remains * (1.0f - 0.3f * Hazed);
+			// ("-TheaterFlakFlashHeld" holds every flash for six tenths of a second, so that a still catches some: a
+			// flash of two frames is in one still in ten. Its smoke is held as thin as it is in those two frames.)
+			static const bool bFlashHeld = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlakFlashHeld"));
+			const float Thinned = Remains * (1.0f - 0.3f * Hazed) * (bFlashHeld && Age < 0.6 && Burst.Born >= 0.0 ? 0.15f : 1.0f);
 			for (int32 Row = 0; Row < 3; ++Row)
 			{
 				const double Square = 0.5 * SmokeLong * SheetSquare[Row] / SheetSmoke[Row];
@@ -14626,7 +14687,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// peach". It was a fifth of a second of two warm smears with a cream heart. It is three lumps of red and
 			// orange, a little off one another, the smallest the hottest and still orange; by dusk and night, when
 			// the eye is wide open, it is let down so that it does not bleach.)
-			if (Age < 0.25 && Burst.Born >= 0.0 && Burst.Flashed < 2 && !bTop)
+			if ((bFlashHeld ? Age < 0.6 : (Age < 0.25 && Burst.Flashed < 2)) && Burst.Born >= 0.0 && !bTop)
 			{
 				++Burst.Flashed;
 				const float Lit0 = FMath::Lerp(1.0f, 0.6f, Moonlit);
