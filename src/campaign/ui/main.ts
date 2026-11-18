@@ -78,7 +78,7 @@ import {
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
 import { phaseFor, theatrePhases } from '../ai';
 import { SIDE_NAME, shareWords } from '../domination';
-import { GOALS, GOAL_KEYS, goalChecks, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
+import { GOALS, GOAL_KEYS, goalChecks, goalEndsIn, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
 import { RIVALS, fronts, isOpen, startOpen, type Front } from '../staff';
 import { ashoreSays } from '../ashore';
 import { liberate } from '../liberation';
@@ -2952,7 +2952,7 @@ function goalsBlock(): string {
     const goal = GOALS[me]![key];
     const st = goalState(g, key);
     if (!goal || st === 'out') return '';
-    const when = goalWhen(goal, date);
+    const when = goalWhen(goal, date, goalEndsIn(g, me, goal), goal.war && g.nations[goal.war.with] ? theName(goal.war.with) : '');
     return `<div class="goal ${st}"><span class="gk">${key === 'short' ? 'Short campaign' : 'Long campaign'} · ${when}</span><b>${esc(goal.title)}${st === 'won' ? ' <span class="tag good">Won</span>' : st === 'lost' ? ' <span class="tag bad">Lost</span>' : ''}</b><small>${esc(goal.text)}</small><span class="gchecks">${goalChecks(g, me, goal).map((c) => `<span class="${c.done ? 'done' : ''}">${c.done ? '✓' : '○'} ${esc(c.label)}</span>`).join('')}</span></div>`;
   }).join('');
   return rows ? `<h3>Campaign goals</h3>${rows}` : '';

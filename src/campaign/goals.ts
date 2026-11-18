@@ -21,6 +21,12 @@ export interface Goal {
   by?: number;
   /** A goal of endurance: decided when the month after this one opens. */
   until?: number;
+  /**
+   * An endurance goal against one enemy: its clock is history's war with that enemy, begun in month `from`. A war that
+   * comes later moves the day it is decided by as many months, and with no war yet nothing is decided (the third
+   * playtester's finding 5 on 84.3.1: "Not one step back" was won at peace when Germany came in 1943).
+   */
+  war?: { with: string; from: number };
   /** A goal of holding out: the nation is still in the war after this many weeks of it, four to a month. */
   outlast?: number;
 }
@@ -33,8 +39,21 @@ export const GOALS = data.nations as unknown as Record<string, Partial<Record<Go
 
 const CODE: Record<number, GoalState> = { 1: 'won', 2: 'lost', 3: 'out' };
 
-/** The last month that counts toward a goal. */
+/** The last month that counts toward a goal, as the book sets it. */
 export const goalEnds = (goal: Goal): number => goal.by ?? goal.until ?? (goal.outlast !== undefined ? Math.ceil(goal.outlast / 4) : 0);
+
+/** The month a war between two nations began, either side declaring, or undefined if it has not. */
+const warSince = (g: Game, a: string, b: string): number | undefined => g.flags[`war:${a}:${b}`] ?? g.flags[`war:${b}:${a}`];
+
+/**
+ * The last month that counts toward a goal in this campaign: the book's, unless its clock is a war (see Goal.war) that
+ * came later than history's, or has not come at all (Infinity: nothing is decided yet).
+ */
+export function goalEndsIn(g: Game, nat: string, goal: Goal): number {
+  if (!goal.war || goal.until === undefined) return goalEnds(goal);
+  const since = warSince(g, nat, goal.war.with);
+  return since === undefined ? Infinity : goal.until + Math.max(0, since - goal.war.from);
+}
 
 /** Weeks of war a nation has come through: every nation that moves before it has had its month when its own comes round. */
 function weeksThrough(g: Game, nat: string): number {
@@ -79,10 +98,14 @@ export function goalChecks(g: Game, nat: string, goal: Goal): { label: string; d
 
 const met = (g: Game, nat: string, goal: Goal): boolean => g.nations[nat].alive && goalChecks(g, nat, goal).every((c) => c.done);
 
-/** How long a goal gives, in words for the goals panel. */
-export function goalWhen(goal: Goal, date: (turn: number) => string): string {
+/**
+ * How long a goal gives, in words for the goals panel: `end` is this campaign's last month (goalEndsIn), and `foe` the
+ * name of the enemy whose war starts the clock, for a goal still waiting on it.
+ */
+export function goalWhen(goal: Goal, date: (turn: number) => string, end = goalEnds(goal), foe = ''): string {
   if (goal.outlast !== undefined) return `decided by how long you hold out`;
-  return goal.until !== undefined ? `decided when ${date(goal.until + 1)} opens` : `by the end of ${date(goal.by!)}`;
+  if (goal.until !== undefined && goal.war && end === Infinity) return `decided after ${goal.until - goal.war.from + 1} months of war with ${foe || goal.war.with}`;
+  return goal.until !== undefined ? `decided when ${date(end + 1)} opens` : `by the end of ${date(end)}`;
 }
 
 /**
@@ -96,7 +119,7 @@ export function openGoals(g: Game, nat: string, from: number): void {
     const goal = GOALS[nat]?.[key];
     delete g.flags[`goal:${key}`];
     if (!goal) continue;
-    if (goalEnds(goal) < from || (from > 1 && goal.by !== undefined && met(g, nat, goal))) g.flags[`goal:${key}`] = 3;
+    if (goalEndsIn(g, nat, goal) < from || (from > 1 && goal.by !== undefined && met(g, nat, goal))) g.flags[`goal:${key}`] = 3;
   }
 }
 
@@ -115,7 +138,7 @@ export function judgeGoals(g: Game, nat: string): { key: GoalKey; goal: Goal; wo
       else if (g.nations[nat].alive && weeksThrough(g, nat) >= goal.outlast) won = ok;
     }
     else if (!g.nations[nat].alive) won = false;
-    else if (goal.until !== undefined) { if (g.turn > goal.until) won = ok; }
+    else if (goal.until !== undefined) { if (g.turn > goalEndsIn(g, nat, goal)) won = ok; }
     // A goal that asks for an army ashore when the enemy falls is settled the day he falls: arriving afterwards is no victory.
     else if (goal.ashore && goal.beaten?.length && goal.beaten.every((id) => { const x = g.nations[id]; return !!x && !x.alive && !x.dormant; })) won = ok && g.turn <= goalEnds(goal) + 1;
     // What stands when the month after the last one opens still counts: an ally may have finished the job.
