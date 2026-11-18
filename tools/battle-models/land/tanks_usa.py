@@ -69,6 +69,54 @@ def m4_gear(v, hw):
     v.use("hull")
 
 
+def m4_deck(v, zr, caps=True):
+    """The M4's engine deck, behind x = -1.60 where it starts to fall to the tail: the armoured air intake across
+    her, the two doors, the filler caps (caps: the pair on the roof ahead of the deck too), the lifting eyes."""
+    fine = v.fine
+    dk = Vector((-2.58 + 1.60, 0, 1.66 - zr)).normalized()            # back along the engine deck
+    dn = Vector((dk.z, 0, -dk.x))                                     # up out of it
+    d_at = lambda u, y: Vector((-1.60, y, zr)) + dk * u + dn * 0.002      # noqa: E731
+    # the engine deck: the armoured air intake across it behind the turret, two big doors in the sloped part with their
+    # hinges and handles, four filler caps, lifting eyes at the back corners
+    v.slab((-1.50, -0.66, zr), (-1.20, 0.66, zr + 0.085), "upper", 0.02, segs=2)
+    v.grille((-1.35, 0.0, zr + 0.085), (1.20, 0.20), Z, Y, slats=3, deep=0.02)
+    for s in (LEFT, RIGHT):
+        c = d_at(0.52, s * 0.37)
+        v.box((0.84, 0.68, 0.03), c + dn * 0.014, "upper", 0.008, turn=_turn(dk, dn))
+        if fine:
+            v.handle(d_at(0.52, s * 0.56) + dn * 0.03 - dk * 0.09, d_at(0.52, s * 0.56) + dn * 0.03 + dk * 0.09, dn, 0.009, 0.045, "steel")
+            for u in (0.24, 0.80):
+                v.hinge(d_at(u, s * 0.022) - dk * 0.06 + dn * 0.03, d_at(u, s * 0.022) + dk * 0.06 + dn * 0.03, 0.016)
+            for u in (0.14, 0.52, 0.90):
+                v.bolt(d_at(u, s * 0.67) + dn * 0.03, dn, 0.014, 0.01)
+            v.lift_eye(d_at(0.86, s * 1.14), dn, X, 0.032)
+        if caps:
+            v.lathe((-0.55, s * 1.08, zr), Z, [(0.035, 0.0), (0.035, 0.06), (0.012, 0.075), (0.0, 0.075)], "upper", v.n(14, 6))
+        v.lathe(d_at(0.30, s * 1.08), dn, [(0.035, 0.0), (0.035, 0.06), (0.012, 0.075), (0.0, 0.075)], "upper", v.n(14, 6))
+
+
+def m4_tail(v):
+    """The M4's tail under the deck's overhang: the engine's doors, an air cleaner each side, the two exhausts."""
+    fine = v.fine
+    rb = Vector((-2.58 + 2.76, 0, 1.66 - 1.18)).normalized()          # up the tail plate
+    rn = Vector((-rb.z, 0, rb.x))
+    r_at = lambda u, y: Vector((-2.76, y, 1.18)) + rb * u + rn * 0.002    # noqa: E731
+    # the tail: the engine's doors in the lower plate, an air cleaner each side under the overhang, two exhausts between
+    for s in (LEFT, RIGHT):
+        v.slab((-2.645, s * 0.03, 0.60), (-2.62, s * 0.52, 1.0), "upper", 0.006)
+        if fine:
+            v.handle((-2.645, s * 0.40, 0.76), (-2.645, s * 0.40, 0.88), -X, 0.008, 0.04, "steel")
+            for z in (0.68, 0.92):
+                v.hinge((-2.648, s * 0.535, z - 0.04), (-2.648, s * 0.535, z + 0.04), 0.014)
+        v.silencer((-2.73, s * 0.76, 0.96), (-2.73, s * 0.40, 0.96), 0.085, paint="upper", bands=2)
+    for i, y in enumerate((0.16, -0.16)):
+        v.tube([(-2.60, y, 1.03), (-2.70, y, 1.01), (-2.80, y, 0.95)], 0.04, "rust", v.n(10, 5))
+        v.socket(f"exhaust.{i + 1}", (-2.82, y, 0.94), (-1, 0, -0.45))
+    if fine:
+        for y in (-0.9, 0.9):
+            v.lift_eye(r_at(0.40, y), rn, Y, 0.03)
+
+
 def sherman(fine=True, tag="USA"):
     """M4 Sherman, welded hull, 75 mm gun: 5.84 m long, 2.62 m wide, 2.74 m high, the muzzle no farther forward than
     her nose."""
@@ -120,22 +168,7 @@ def sherman(fine=True, tag="USA"):
         v.weld(Vector((1.37, -1.28, zr + 0.002)), Vector((1.37, -0.84, zr + 0.002)), Z)
         v.weld(Vector((1.37, 0.84, zr + 0.002)), Vector((1.37, 1.28, zr + 0.002)), Z)
 
-    # the engine deck: the armoured air intake across it behind the turret, two big doors in the sloped part with their
-    # hinges and handles, four filler caps, lifting eyes at the back corners
-    v.slab((-1.50, -0.66, zr), (-1.20, 0.66, zr + 0.085), "upper", 0.02, segs=2)
-    v.grille((-1.35, 0.0, zr + 0.085), (1.20, 0.20), Z, Y, slats=3, deep=0.02)
-    for s in (LEFT, RIGHT):
-        c = d_at(0.52, s * 0.37)
-        v.box((0.84, 0.68, 0.03), c + dn * 0.014, "upper", 0.008, turn=_turn(dk, dn))
-        if fine:
-            v.handle(d_at(0.52, s * 0.56) + dn * 0.03 - dk * 0.09, d_at(0.52, s * 0.56) + dn * 0.03 + dk * 0.09, dn, 0.009, 0.045, "steel")
-            for u in (0.24, 0.80):
-                v.hinge(d_at(u, s * 0.022) - dk * 0.06 + dn * 0.03, d_at(u, s * 0.022) + dk * 0.06 + dn * 0.03, 0.016)
-            for u in (0.14, 0.52, 0.90):
-                v.bolt(d_at(u, s * 0.67) + dn * 0.03, dn, 0.014, 0.01)
-            v.lift_eye(d_at(0.86, s * 1.14), dn, X, 0.032)
-        v.lathe((-0.55, s * 1.08, zr), Z, [(0.035, 0.0), (0.035, 0.06), (0.012, 0.075), (0.0, 0.075)], "upper", v.n(14, 6))
-        v.lathe(d_at(0.30, s * 1.08), dn, [(0.035, 0.0), (0.035, 0.06), (0.012, 0.075), (0.0, 0.075)], "upper", v.n(14, 6))
+    m4_deck(v, zr)
     # along the sides: the pioneer tools on the left, the tow cable on the right, a star each side
     if fine:
         v.shovel((-1.55, sw + 0.03, 1.50), 0.0, 0.95, roll=90.0)
@@ -148,20 +181,7 @@ def sherman(fine=True, tag="USA"):
     for s in (LEFT, RIGHT):
         v.mark("USA", (0.25, s * (sw + 0.002), 1.42), Y * s, 0.2, part="hull")
 
-    # the tail: the engine's doors in the lower plate, an air cleaner each side under the overhang, two exhausts between
-    for s in (LEFT, RIGHT):
-        v.slab((-2.645, s * 0.03, 0.60), (-2.62, s * 0.52, 1.0), "upper", 0.006)
-        if fine:
-            v.handle((-2.645, s * 0.40, 0.76), (-2.645, s * 0.40, 0.88), -X, 0.008, 0.04, "steel")
-            for z in (0.68, 0.92):
-                v.hinge((-2.648, s * 0.535, z - 0.04), (-2.648, s * 0.535, z + 0.04), 0.014)
-        v.silencer((-2.73, s * 0.76, 0.96), (-2.73, s * 0.40, 0.96), 0.085, paint="upper", bands=2)
-    for i, y in enumerate((0.16, -0.16)):
-        v.tube([(-2.60, y, 1.03), (-2.70, y, 1.01), (-2.80, y, 0.95)], 0.04, "rust", v.n(10, 5))
-        v.socket(f"exhaust.{i + 1}", (-2.82, y, 0.94), (-1, 0, -0.45))
-    if fine:
-        for y in (-0.9, 0.9):
-            v.lift_eye(r_at(0.40, y), rn, Y, 0.03)
+    m4_tail(v)
 
     m4_gear(v, hw)
 

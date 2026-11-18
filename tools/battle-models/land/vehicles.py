@@ -8,6 +8,7 @@ import carriers
 import flak
 import guns
 import guns_at
+import sp_guns
 import tank_destroyers
 import tanks_any
 import tanks_fra
@@ -52,6 +53,8 @@ BUILDERS = {
     "M16": flak.m16,
     "FlakHalftrack": flak.flak_halftrack,
     "FlakTruck": flak.flak_truck,
+    "M7": sp_guns.m7,
+    "Sexton": sp_guns.sexton,
 }
 
 ABOUT = {
@@ -87,6 +90,8 @@ ABOUT = {
     "M16": {"nation": "USA", "role": "anti-aircraft half-track", "years": "1943-45", "units": "the light flak that rolls with the United States' columns"},
     "FlakHalftrack": {"nation": "GER", "role": "anti-aircraft half-track", "years": "1940-45", "units": "the light flak that rolls with Germany's armor"},
     "FlakTruck": {"nation": "any", "role": "anti-aircraft lorry", "years": "1936-45", "units": "the light flak that rolls with every other army's columns"},
+    "M7": {"nation": "USA", "role": "self-propelled howitzer", "years": "1942-45", "units": "the artillery that keeps up with the United States' armor (the Free French were lent her too)"},
+    "Sexton": {"nation": "UK", "role": "self-propelled gun", "years": "1943-45", "units": "the artillery that keeps up with the armor of Britain and the Commonwealth"},
 }
 
 

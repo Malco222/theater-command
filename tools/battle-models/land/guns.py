@@ -82,6 +82,10 @@ def edge_rivets(v, outline, origin, u, w, inset=0.03, every=0.1, r=0.008, least=
 
 
 class GunWorks(Works):
+    # the part the saddle is and the part it turns on: a towed gun's `traverse` on her `carriage`; a gun carried in
+    # a hull sets these to `turret` and `hull`, the names the game trains a tank by
+    mount, mount_on = "traverse", "carriage"
+
     # ---- the root, the axle, the wheels ------------------------------------------------------------------
     def gun_root(self, z):
         """z: how high her axle stands (a wheel's radius, unless she stands on a firing platform)."""
@@ -159,14 +163,17 @@ class GunWorks(Works):
 
     # ---- the saddle, the cradle, the piece -------------------------------------------------------------------
     def saddle(self, xt, zt, cy, half_traverse, rate=4.0, thick=0.018, foot=0.3, lighten=True):
-        """The top carriage: a turntable and two cheeks that carry the trunnions at (xt, +-cy, zt)."""
+        """The top carriage: a turntable and two cheeks that carry the trunnions at (xt, +-cy, zt). half_traverse:
+        degrees each way, or (to the left, to the right). It stands on the pintle, wherever that is along her."""
         p = self.pintle
-        self.part("traverse", "carriage", p, axis=(0, 0, -1), limits=[-half_traverse, half_traverse], kind="turn",
+        px = p.x
+        left, right = half_traverse if isinstance(half_traverse, (tuple, list)) else (half_traverse, half_traverse)
+        self.part(self.mount, self.mount_on, p, axis=(0, 0, -1), limits=[-left, right], kind="turn",
                   note="trains on the bottom carriage: + to the right (clockwise from above); the game lays it inside its limits")
         self.lathe(p, Z, [(0.03, 0.0), (0.03, cy + 0.07), (0.0, cy + 0.09), (0.0, 0.0)], coat, self.n(28, 10))
         zb = p.z + 0.02
         for s in (LEFT, RIGHT):
-            out = [(-foot, zb), (foot * 0.9, zb), (xt + 0.13, zt - 0.05), (xt + 0.13, zt + 0.075), (xt - 0.13, zt + 0.075), (xt - 0.36, zb + (zt - zb) * 0.5), (-foot, zb + 0.12)]
+            out = [(px - foot, zb), (px + foot * 0.9, zb), (xt + 0.13, zt - 0.05), (xt + 0.13, zt + 0.075), (xt - 0.13, zt + 0.075), (xt - 0.36, zb + (zt - zb) * 0.5), (px - foot, zb + 0.12)]
             holes = []
             if lighten and zt - zb > 0.3:
                 mx, mz = xt - 0.06, zb + (zt - zb) * 0.45
@@ -176,10 +183,10 @@ class GunWorks(Works):
             self.lathe((xt, s * (cy + thick), zt), (0, s, 0), [(0.02, 0.0), (0.02, 0.058), (0.0, 0.07), (0.0, 0.0)], coat, self.n(18, 8))
             self.bolts((xt, s * (cy + thick + 0.02), zt), (0, s, 0), 0.04, 4, r=0.009, high=0.006)
             self.slab((xt - 0.12, s * cy, zt + 0.07), (xt + 0.12, s * (cy + thick), zt + 0.095), coat, 0.004)
-        self.slab((-foot * 0.8, -cy, zb), (-foot * 0.55, cy, zb + 0.1), coat, 0.006)                       # the transoms between the cheeks
-        self.slab((foot * 0.5, -cy, zb), (foot * 0.75, cy, zb + 0.1), coat, 0.006)
-        self.m.info.setdefault("file", {}).setdefault("controls", {})["traverse"] = {
-            "part": "traverse", "what": "trained by the game inside its limits: + to the right", "degrees_per_second": rate}
+        self.slab((px - foot * 0.8, -cy, zb), (px - foot * 0.55, cy, zb + 0.1), coat, 0.006)               # the transoms between the cheeks
+        self.slab((px + foot * 0.5, -cy, zb), (px + foot * 0.75, cy, zb + 0.1), coat, 0.006)
+        self.m.info.setdefault("file", {}).setdefault("controls", {})[self.mount] = {
+            "part": self.mount, "what": "trained by the game inside its limits: + to the right", "degrees_per_second": rate}
         self.xt, self.zt, self.cy = xt, zt, cy
 
     def cradle(self, low, high, w, h, ahead, behind, drop, over=None, arc=True, round_under=False):
@@ -187,7 +194,7 @@ class GunWorks(Works):
         bore), from `behind` the trunnions to `ahead` of them. over: (from, length, radius, rise) a recuperator
         cylinder carried over the barrel."""
         xt, zt, cy = self.xt, self.zt, self.cy
-        self.part("gun", "traverse", (xt, 0.0, zt), axis=(0, -1, 0), limits=[low, high], kind="turn", note="the cradle lifts at the trunnions: + muzzle up; the game lays it")
+        self.part("gun", self.mount, (xt, 0.0, zt), axis=(0, -1, 0), limits=[low, high], kind="turn", note="the cradle lifts at the trunnions: + muzzle up; the game lays it")
         top = zt - drop
         self.rod((xt, -cy - 0.012, zt), (xt, cy + 0.012, zt), 0.042, "shade", 14)                            # the trunnion pin
         if round_under:      # (a recoil cylinder as the cradle: round below, flat rails above)
@@ -303,9 +310,9 @@ class GunWorks(Works):
         """The layer's two handwheels on the left of the saddle, each a part that spins."""
         for name, at, ax in (("handwheel_elevate", at_e, Vector((0, 1, 0))), ("handwheel_traverse", at_t, Vector((-0.75, 0.25, 0.6)).normalized())):
             at = Vector(at)
-            self.use("traverse")
+            self.use(self.mount)
             self.rod(at - ax * 0.22, at, 0.014, "steel", 8)
-            self.part(name, "traverse", at, axis=tuple(ax), kind="spin", note="the layer's handwheel: spins as the gun is laid")
+            self.part(name, self.mount, at, axis=tuple(ax), kind="spin", note="the layer's handwheel: spins as the gun is laid")
             _, side, up = frame(ax)
             n = self.n(20, 8)
             self.tube([at + (side * math.cos(2 * math.pi * k / n) + up * math.sin(2 * math.pi * k / n)) * r for k in range(n)], 0.011, "steel", 6, closed=True)
@@ -314,12 +321,12 @@ class GunWorks(Works):
                 self.rod(at, at + d * r, 0.008, "steel", 6, caps=False)
             self.lathe(at - ax * 0.015, ax, [(0.035, 0.0), (0.035, 0.022), (0.0, 0.026), (0.0, 0.0)], "steel", 8)
             self.rod(at + side * r, at + side * r + ax * 0.075, 0.012, "wood", 8)
-        self.use("traverse")
+        self.use(self.mount)
 
     def sight(self, at, high=0.3):
         """The dial sight on its bracket, left of the breech."""
         at = Vector(at)
-        self.use("traverse")
+        self.use(self.mount)
         self.rod(at, at + Z * high, 0.016, "steel", 8)
         self.slab(at + Vector((-0.035, -0.03, high)), at + Vector((0.035, 0.03, high + 0.07)), "shade", 0.006)
         self.rod(at + Z * (high + 0.07), at + Z * (high + 0.15), 0.02, "shade", 10)
@@ -336,12 +343,13 @@ class GunWorks(Works):
         self.tube([at, at - Z * 0.12 - Y * (s * 0.1), at - Z * 0.2 - Y * (s * 0.2)], 0.014, coat, 6)
 
     # ---- the shield --------------------------------------------------------------------------------------
-    def shield(self, x, half, z0, z1, lean=0.0, slot=None, corner=0.0, top=None, apron=None, wing=None, port=None, thick=0.006, split=None, stays=True, part="traverse"):
+    def shield(self, x, half, z0, z1, lean=0.0, slot=None, corner=0.0, top=None, apron=None, wing=None, port=None, thick=0.006, split=None, stays=True, part=None):
         """A gun shield on the saddle: a plate across her at x from z0 to z1, leaning back `lean` degrees.
         slot: (half width, foot, head or None for open to the top) the opening the piece looks through;
         corner: how much of each upper corner is cut away; top: (height, lean) a flap along the head, leaning back
         farther; apron: (depth, swing) a flap hung along the foot; wing: (width, sweep, foot) a wing each side, swept
         back, its foot at that height; port: (y, z, w, h) the layer's sight port; split: half the gap of a shield in two halves."""
+        part = part or self.mount
         self.use(part)
         sl, cl = math.sin(math.radians(lean)), math.cos(math.radians(lean))
         O, u, w = Vector((x, 0.0, z0)), Y, Vector((-sl, 0.0, cl))
