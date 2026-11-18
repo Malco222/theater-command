@@ -360,6 +360,8 @@ export interface Corps extends Storied {
   mw?: [string, number, number][];
   /** The number its first division carries (the grand campaign): its divisions are numbered on from there. */
   dn?: number;
+  /** Its divisions' numbers in order, where they do not run on from 'dn' (the grand campaign: real ones of 1939 beside stand-ins, armies.ts). */
+  nos?: number[];
   /** In garrison inside its province's town since this month (the grand campaign): it is on the region's `garr` list, not among its `units`. */
   town?: number;
 }
@@ -431,6 +433,9 @@ export interface ReportUnit {
   fate: '' | 'retreated' | 'surrendered' | 'destroyed' | 'advanced' | 'evacuated' | 'yielded' | 'sheltered';
   /** Not a corps: the town's own guard of depot troops, police and militia (the grand campaign). */
   guard?: boolean;
+  /** Ruling 232: the province a beaten field army fell back to, and a field army cut off that laid down its arms. */
+  to?: number;
+  cut?: boolean;
 }
 
 export interface BattleReport {
@@ -466,6 +471,8 @@ export interface BattleReport {
   siege?: boolean;
   /** The field was won and the town, held only by its guard, opened its gates without a fight (the grand campaign). */
   gates?: boolean;
+  /** The town's guard fought beside the field army (ruling 232, the grand campaign): won, the town fell with the field. */
+  guarded?: boolean;
   /** A relief: the attackers came to raise a siege of their own side's town. */
   relief?: boolean;
   /** The garrison of a besieged town came out against the army round it. */
@@ -832,6 +839,8 @@ export interface PlanPhase {
   strict?: boolean;
   /** The phase only applies while these two nations are at war with each other. */
   ifAtWar?: [string, string];
+  /** A war for a strip of frontier: only corps within this many marches of the front close up to it (the Winter War, ruling 228). */
+  near?: number;
   /** Corps sent across the sea, each to the first place on its list it can reach: an enemy coast is assaulted, a friendly port reinforced. */
   landings?: { corps: string; with?: string[]; to: string[]; minOdds?: number }[];
   /** Harbours the nation holds without owning them from which the main plan's named landings may also sail (the far side: Japan's quays on Hainan and in Indochina, ruling 200 and the planner's paper 18). */
@@ -1165,7 +1174,7 @@ export const MEN_PER_DIV = 15000;
 
 export const KIND: Record<Kind, { label: string; atk: number; def: number; move: number; mobile: boolean }> = {
   inf: { label: 'Infantry', atk: 10, def: 14, move: 2, mobile: false },
-  mot: { label: 'Motorized', atk: 12, def: 12, move: 1, mobile: true },
+  mot: { label: 'Motorised', atk: 12, def: 12, move: 1, mobile: true },
   arm: { label: 'Armor', atk: 24, def: 11, move: 1, mobile: true },
   cav: { label: 'Cavalry', atk: 8, def: 8, move: 1, mobile: true },
   mtn: { label: 'Mountain', atk: 9, def: 15, move: 2, mobile: false },

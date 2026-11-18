@@ -110,7 +110,9 @@ fs.writeFileSync(new URL('../src/generated/world-cities-rivers.json', import.met
   if (more.runOn.length) console.log(`  ${more.runOn.length} courses run on to the shore the survey ends them short of: ${[...more.runOn].sort((p, q) => q.by - p.by).map((c) => `${c.name} ${c.by}`).join(', ')}`);
   if (more.gone.length) console.log(`crossings handed over on a reach where the river did not run in 1939, struck (${more.gone.length}): ${more.gone.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far} from its course)`).join(', ')}`);
   if (more.toMouth.length) console.log(`crossings moved from open water to their river's mouth (${more.toMouth.length}): ${more.toMouth.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
-  if (more.adrift.length) console.log(`crossings on an arm of the sea or a lake beyond their river as drawn (${more.adrift.length}): ${more.adrift.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
+  if (more.ranOn.length) console.log(`rivers run on past the foot the coast gave them, through crossings by the land (${more.ranOn.length}): ${more.ranOn.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
+  if (more.toRoad.length) console.log(`crossings moved onto their river where the road meets it (${more.toRoad.length}): ${more.toRoad.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
+  if (more.adrift.length) console.log(`crossings left off their river as drawn (${more.adrift.length}): ${more.adrift.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
   if (more.off.length) console.log(`crossings handed over whose river's real course runs over 25 units away (${more.off.length}): ${more.off.map((o) => `${o.a} - ${o.b} (${o.river}, ${o.far})`).join(', ')}`);
   // The new crossings, countable by country and by river: for the rules' measure.
   const byCountry = {}, byRiver = {};

@@ -229,7 +229,7 @@ export interface Ledger {
   provinces: ({ id: number; name: string } & Yield)[];
 }
 
-const KIND_LABEL: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain troops', cav: 'Cavalry', mot: 'Motorized troops', art: 'Artillery', eng: 'Engineers', arm: 'Armour', fort: 'Fortress troops' };
+const KIND_LABEL: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain troops', cav: 'Cavalry', mot: 'Motorised troops', art: 'Artillery', eng: 'Engineers', arm: 'Armour', fort: 'Fortress troops' };
 const SHIP_LABEL: Record<ShipClass, string> = { bb: 'Battleships', cv: 'Carriers', ca: 'Cruisers', dd: 'Destroyers', ss: 'Submarines' };
 
 /** What it costs each month to keep one corps of this kind and size in being. */
@@ -398,6 +398,7 @@ function roman(n: number): string {
   return out;
 }
 
+/** A new corps' name. (A name is a name: "XIV Motorized Corps" keeps the spelling the order of battle uses, though the labels say "Motorised".) */
 export function corpsName(nat: string, kind: Kind, no: number): string {
   const arm = PRODUCTION.armourName[nat] ?? PRODUCTION.armourName._default;
   const word = kind === 'arm' ? `${arm} ` : kind === 'mot' ? 'Motorized ' : kind === 'mtn' ? 'Mountain ' : kind === 'art' ? 'Artillery ' : kind === 'eng' ? 'Engineer ' : '';

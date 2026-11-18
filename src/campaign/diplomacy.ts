@@ -612,7 +612,7 @@ export function holds(g: Game, cond: string): boolean {
 }
 
 /** Sends a corps standing on ground its country has just given up back to the nearest home region with room. */
-function withdraw(g: Game, nat: string, from: Region): void {
+export function withdraw(g: Game, nat: string, from: Region): void {
   for (const c of [...from.units]) {
     if (c.nat !== nat) continue;
     let best: Region | null = null, bd = 1e12;
@@ -642,7 +642,7 @@ export function signPeace(g: Game, a: string, b: string): boolean {
   return true;
 }
 
-function transfer(g: Game, r: Region, to: string): void {
+export function transfer(g: Game, r: Region, to: string): void {
   r.owner = to; r.ctrl = to; r.cap = false; r.since = g.turn;
   g.supplyDirty = true;
 }
@@ -675,7 +675,11 @@ function fire(g: Game, e0: DiploEvent): boolean {
     if (playersOwn(g, e.cede.from)) {
       const to = g.nations[e.cede.to], lost = e.cede.regions.filter((nm) => g.byName[nm]?.owner === e.cede!.from);
       if (!to?.alive || !lost.length) return false;
-      headline(g, 'event', `${to.name} demands ${lost.length === 1 ? lost[0] : `${lost.slice(0, -1).join(', ')} and ${lost[lost.length - 1]}`}. ${g.nations[e.cede.from].name} gives up nothing without a fight.`, e.cede.from);
+      // (In a war the two are already fighting the demand is peace terms refused: the UI director's words, ruling 228.)
+      const asked = lost.length === 1 ? lost[0] : `${lost.slice(0, -1).join(', ')} and ${lost[lost.length - 1]}`, from = g.nations[e.cede.from];
+      headline(g, 'event', atWar(g, e.cede.from, e.cede.to)
+        ? `${theName(to, true)} offers peace for ${asked}. ${theName(from, true)} will not sign its ground away, and the war goes on.`
+        : `${theName(to, true)} demands ${asked}. ${theName(from, true)} gives up nothing without a fight.`, e.cede.from);
       return true;
     }
     for (const name of e.cede.regions) {

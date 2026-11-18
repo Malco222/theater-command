@@ -10,6 +10,11 @@
 // falls by assault, which is quick and bloody, or by hunger, which is slow. A relieving army that beats the
 // besiegers in the field raises the siege. A town nobody holds falls to whoever walks in.
 //
+// Ruling 232 (Brian's ask of 18 November: "if i drive the army out of a city then i should conquer it"), behind the
+// switch `driveOut`: a field army beaten outside its town never falls back into it. Where no garrison stands in the
+// town, its guard fights in the same battle as the field army, behind its walls, and the town falls with the field.
+// Only a garrison ordered in beforehand holds the town after the field is lost, to be stormed or starved.
+//
 // A province is under siege exactly when troops at war with its holder stand in its field. Nothing more is stored
 // about who besieges whom: only the month the town was invested, the months it has been closely shut in, how much
 // of its works have been broken down and how much of its guard is out of action, all in the flags.
@@ -35,11 +40,24 @@ export const SIEGE = data as unknown as {
   bombard: { raidFull: number; shellFull: number; org: number; floor: number; guard: number; intensity: number; value: number };
   sortie: number; pay: number;
   capital: number; capitalAfter: number; capitalYear: number;
-  ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sea: { after: number; blockade: number }; relieved: { months: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>> };
+  driveOut?: boolean;
+  ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sea: { after: number; blockade: number }; relieved: { months: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>>; great?: { works: number; on?: boolean; field?: number } };
 };
 
 /** True where towns are garrisoned and besieged: the grand campaign. A historical scenario is fought as it always was. */
 export const siegeRules = (g: Game): boolean => g.flags.sieges === 1;
+
+// (A run outside the browser, or a test, can set the switch by TC_DRIVE=1 or 0, read as the modules load.)
+const G = globalThis as { TC_DRIVE?: unknown; process?: { env?: Record<string, string | undefined> } };
+const forcedDrive = G.TC_DRIVE ?? G.process?.env?.TC_DRIVE;
+/** The switch of ruling 232 (siege.json, 'driveOut'), as the game reads it: a test may turn it for its own file. */
+export const DRIVE = { on: forcedDrive !== undefined ? !!forcedDrive && forcedDrive !== '0' : SIEGE.driveOut === true };
+
+/**
+ * True where ruling 232 holds (the grand campaign, with its switch on): beat the army, take the city. A beaten field
+ * army never goes into the town, and a town with no garrison falls with the field.
+ */
+export const driveOut = (g: Game): boolean => DRIVE.on && siegeRules(g);
 
 /** Turns the rules on for a grand campaign: a new one, or one saved before there were sieges. */
 export function openSieges(g: Game): void {
@@ -87,6 +105,21 @@ export function besiegerOf(g: Game, r: Region): string | null {
 /** How many corps the town can hold. */
 export const roomIn = (g: Game, r: Region): number => SIEGE.room[townSize(g, r)] + (r.fort ? SIEGE.fortRoom : 0);
 
+// Ruling 139: a staff holds its great cities. (A run outside the browser can turn it off by TC_GREAT=0, read as the modules load.)
+const GG = globalThis as { TC_GREAT?: unknown; process?: { env?: Record<string, string | undefined> } };
+const forcedGreat = GG.TC_GREAT ?? GG.process?.env?.TC_GREAT;
+export const GREAT = { on: forcedGreat !== undefined ? !!forcedGreat && forcedGreat !== '0' : !!SIEGE.ai.great?.on };
+
+/**
+ * A great city (ruling 139): a capital, or a city whose works stand at the level named in siege.json (ai.great.works)
+ * or higher. Its staff fills it before it leaves a corps in the field, and goes to its relief at the capital's odds.
+ */
+export function greatCity(g: Game, r: Region): boolean {
+  if (!GREAT.on || !SIEGE.ai.great || !siegeRules(g)) return false;
+  const size = townSize(g, r);
+  return size === 'capital' || (size === 'city' && !!r.fort && r.fort.lv >= SIEGE.ai.great.works);
+}
+
 /** The share of the town's works that bombardment has broken down, 0 to 1. */
 export const breachOf = (g: Game, r: Region): number => clamp((g.flags[`breach:${r.id}`] ?? 0) / 100, 0, 1);
 
@@ -133,6 +166,30 @@ function hitGuard(g: Game, r: Region, pct: number): void {
   const now = Math.min(100, (g.flags[`guard:${r.id}`] ?? 0) + Math.max(0, pct));
   if (now > 0) g.flags[`guard:${r.id}`] = Math.round(now);
 }
+
+/**
+ * The town's guard that fights beside its field army against an attack by `nat` (ruling 232), in divisions' worth:
+ * where no garrison stands in the town, the guard is in the same battle as the army outside, and falls with it.
+ * 0 where the rule is off, where a garrison holds the town (it is a separate fight), or where the attack is not an
+ * enemy's (a relief, a sortie).
+ */
+export function guardInField(g: Game, r: Region, nat: string): number {
+  // (Shut in by an enemy already in the field, the guard is not beside the army there: a third power that beats the
+  // besiegers takes the siege over, as before.)
+  if (!driveOut(g) || garrisonOf(r).length || besieged(g, r) || !atWar(g, nat, r.ctrl)) return 0;
+  return guardOf(g, r);
+}
+
+/** A guard's size in words: "1 division's worth", "2.4 divisions' worth", and below one, "part of a division's worth" (never 0). */
+export const guardWorth = (d: number): string => d >= 0.95 && d < 1.05 ? "1 division's worth" : d >= 1.05 ? `${(Math.round(d * 10) / 10).toFixed(1)} divisions' worth` : "part of a division's worth";
+
+/**
+ * How much stronger the guard fights behind the town's walls in a battle for the province (ruling 232), as it would in
+ * a storm. Fortress works count for the guard only against the share of the attack (`open`, 0 to 1) they do not
+ * already slow in the field, so they are never counted twice.
+ */
+export const fieldWalls = (g: Game, r: Region, eased: number, open: number): number =>
+  1 + (SIEGE.bonus[townSize(g, r)] - 1 + (r.fort ? (SIEGE.fortBonus[r.fort.lv] ?? 0) * clamp(open, 0, 1) : 0)) * (1 - breachOf(g, r)) * (1 - clamp(eased, 0, 1));
 
 /** True while anybody holds the town: a garrison, or its guard. */
 export const townHeld = (g: Game, r: Region): boolean => garrisonOf(r).length > 0 || guardOf(g, r) > 0;
@@ -543,7 +600,8 @@ export function lift(g: Game, r: Region, by: string | null = null): void {
   if (by && was && lasted >= PRIZES.settle) prizesOnLoss(g, r, by, was, 'outside');
 }
 
-export type Fell = 'storm' | 'gates' | 'hunger' | 'empty';
+/** How a town fell: stormed, opened to a summons, starved, empty, or with its guard in the battle for the province (ruling 232). */
+export type Fell = 'storm' | 'gates' | 'hunger' | 'empty' | 'field';
 
 /** The town falls, and the province with it. Anyone still inside lays down his arms. */
 export function fall(g: Game, r: Region, by: string, how: Fell): void {
@@ -569,7 +627,8 @@ export function fall(g: Game, r: Region, by: string, how: Fell): void {
   const cap = r.cap && r.owner === old;
   // Scorched earth: what was not already lost with the field is burned, if that is the order, as the place falls.
   prizesOnLoss(g, r, by, old, since === undefined ? 'all' : 'inside');
-  if (!cap && how !== 'empty' && how !== 'storm') {
+  // (A town stormed, or taken with the field (ruling 232), is told by the battle's own report.)
+  if (!cap && how !== 'empty' && how !== 'storm' && how !== 'field') {
     const text = how === 'gates' ? `${townName(r)} opens its gates to ${adj} troops without a fight.`
       : `Starved out after a siege of ${months(lasted)}, ${townName(r)} surrenders to ${adj} forces.`;
     tell(g, r, text, old, [by, old], { won: by, lost: old });
@@ -964,7 +1023,9 @@ export function siegeView(g: Game, region: number): SiegeView | null {
   const lines: string[] = [];
   const pct = Math.round((bonus - 1) * 100);
   lines.push(`Troops inside ${townName(r)} fight ${pct}% stronger${broken > 0 ? `: bombardment has broken down ${Math.round(broken * 100)}% of its works` : ''}. It has room for ${roomIn(g, r) === 1 ? 'one corps' : `${roomIn(g, r)} corps`}.`);
-  if (guard > 0) lines.push(`Its own guard of depot troops, police and militia is worth ${guard >= 0.95 ? `${guard.toFixed(1)} divisions` : 'part of a division'}. It holds the town while no army does.`);
+  if (guard > 0) lines.push(`Its own guard of depot troops, police and militia is worth ${guard >= 0.95 ? `${guard.toFixed(1)} divisions` : 'part of a division'}. ${driveOut(g) && !inside && !by && r.units.some((u) => !u.dead && allied(g, u.nat, r.ctrl)) ? 'With no garrison inside, it fights beside the army in the field, and the town falls with the field.' : 'It holds the town while no army does.'}`);
+  // (Ruling 232: only a garrison ordered in beforehand holds the town once the field is lost.)
+  if (driveOut(g) && inside && !by) lines.push('The garrison will hold the town after the field is lost: it must then be stormed or starved out.');
   if (by) {
     const closed = ringClosed(g, r);
     const seas = bySea ? feedingSeas(g, r).map((z) => g.seas[z].name) : [];

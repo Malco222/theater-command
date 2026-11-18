@@ -89,12 +89,12 @@
       "text": "German troops gather on the Danube and Sofia is pressed to choose a side."
     },
     {
-      "id": "belgrade-coup", "from": 20, "to": 20,
+      "id": "belgrade-coup", "from": 20, "to": 20, "past": true,
       "if": ["alive:YUG", "atPeace:YUG", "notInBloc:YUG", "alive:GER", "alive:GRE", "flag:war:ITA:GRE"],
       "text": "Officers in Belgrade overthrow the regent for leaning toward the Axis, and crowds cheer the young King. Berlin now counts Yugoslavia an enemy."
     },
     {
-      "id": "italy-east", "from": 23, "to": 24, "mode": "history",
+      "id": "italy-east", "from": 22, "to": 24, "mode": "history",
       "if": ["alive:ITA", "alive:SOV", "inBloc:ITA,axis", "flag:war:GER:SOV"],
       "war": [["ITA", "SOV"]],
       "text": "Rome follows Berlin into the war in the east and promises an Italian army for the Russian front."
@@ -142,6 +142,34 @@
       "text": "German submarines have sunk Brazilian ships within sight of the coast, and crowds fill the streets of Rio. Brazil declares war on the Axis and joins the Allies."
     },
     {
+      "id": "bolivia-war", "from": 44, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:BOL", "war:USA,GER", "peace:BOL,GER", "openTo:BOL,allies"],
+      "enter": { "nations": ["BOL"], "align": "allies" },
+      "war": [["BOL", "GER"]],
+      "text": "Bolivia, whose tin already goes to the Allied factories, declares war on the Axis and joins the Allies."
+    },
+    {
+      "id": "colombia-war", "from": 51, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:COL", "war:USA,GER", "peace:COL,GER", "openTo:COL,allies"],
+      "enter": { "nations": ["COL"], "align": "allies" },
+      "war": [["COL", "GER"]],
+      "text": "German submarines have sunk Colombian ships in the Caribbean. Colombia declares war on Germany and joins the Allies."
+    },
+    {
+      "id": "americas-war-1945", "from": 66, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "war:USA,GER"],
+      "enter": { "nations": ["ECU", "PAR", "PER", "URU", "VEN"], "align": "allies" },
+      "war": [["ECU", "GER"], ["PAR", "GER"], ["PER", "GER"], ["URU", "GER"], ["VEN", "GER"]],
+      "text": "Ecuador, Paraguay, Peru, Uruguay and Venezuela declare war on the Axis: only a country at war by March has a seat at the founding conference of the United Nations."
+    },
+    {
+      "id": "argentina-war", "from": 67, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:ARG", "war:USA,GER", "peace:ARG,GER", "openTo:ARG,allies"],
+      "enter": { "nations": ["ARG"], "align": "allies" },
+      "war": [["ARG", "GER"]],
+      "text": "Argentina, the last of the American republics to break with the Axis, declares war on Germany and joins the Allies."
+    },
+    {
       "id": "usa-italy", "from": 28, "to": 99, "mode": "open",
       "if": ["alive:USA", "alive:ITA", "war:USA,GER", "war:ITA,UK", "peace:USA,ITA"],
       "war": [["USA", "ITA"]],
@@ -180,7 +208,7 @@
       "text": "With Africa lost, a quarter of a million men gone into captivity at Tunis and the bombers over Sicily and Rome, the Italian army has no heart left for this war. Its divisions will not fight as they did."
     },
     {
-      "id": "mussolini-falls", "from": 48, "to": 70,
+      "id": "mussolini-falls", "from": 48, "to": 70, "past": true,
       "if": ["alive:ITA", "computer:ITA,47", "anyHeld:allies,Sicily,Sardinia,Calabria,Apulia,Naples,Rome"],
       "text": "The Fascist Grand Council has voted against Mussolini. The King has dismissed him and had him arrested, and Marshal Badoglio forms a government. \"The war goes on,\" says Rome, and nobody believes it."
     },
@@ -319,7 +347,7 @@
       "text": "After sixty-three days the Warsaw rising is over. The Home Army has laid down its arms, some two hundred thousand of the city's people are dead, and what is left of Warsaw is being blown up street by street. The Red Army watched from across the river."
     },
     {
-      "id": "slovak-rising", "from": 61, "to": 61, "mode": "history",
+      "id": "slovak-rising", "from": 61, "to": 61, "mode": "history", "past": true,
       "if": ["alive:SVK", "war:GER,SOV", "allHeld:allies,Lwow"],
       "text": "Slovakia has risen. Part of the Slovak army and thousands of partisans hold the mountains round Banska Bystrica against the German divisions sent in to disarm them, and the Red Army is fighting its way toward them through the Dukla Pass."
     },

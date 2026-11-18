@@ -38,7 +38,7 @@ import {
   claimsOf, dialOf, historyStops, orderHistory,
   crossings, liftOf, orderCrossingPlan,
   ordersByCity, ordersIn, type CityOrders, type OrderLine,
-  agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
+  agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, orderWinterPeace, whyNotOrderWinterPeace, winterCardDue, winterPeace, type WinterPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
 } from '../turn';
 import { carried } from '../support';
 import { INTEL, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
@@ -47,7 +47,7 @@ import { DEPTH, deskDef, type DeskId } from '../depth';
 import { FREE as HIST_FREE, type DialView } from '../history';
 import type { ClaimView } from '../claims';
 import { setDepth, type CommandView } from '../desks';
-import { SIEGE, besiegers, garrisonOf, guardMen, salliers, siegeRules, stormForce, townHitText } from '../siege';
+import { SIEGE, besiegers, driveOut, garrisonOf, guardMen, guardWorth, salliers, siegeRules, stormForce, townHitText } from '../siege';
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../prizes';
 import { GOV, type GovView, type PromiseTarget, type PromiseTerms } from '../government';
 import { MANPOWER, menWords } from '../manpower';
@@ -94,7 +94,7 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, envoysWord, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { tenthPct } from '../../core/math';
 import { turnToDate } from '../../core/ticket';
@@ -2925,6 +2925,9 @@ function alertList(): Alert[] {
   // The war between the alliances is decided and the player has not yet said what comes next.
   const act = lastAct(g);
   if (act?.open && !act.peace) out.unshift({ kind: 'lastact', text: 'The war is decided: take the victory, or World Domination' });
+  // Peace in the Winter War (ruling 228, 1b): the offer stands while the war lasts. War and peace are never a desk's.
+  const wp = winterPeace(g);
+  if (wp) out.push({ kind: 'winterpeace', text: `${upFirst(theName(wp.from))} ${wp.row.charAt(0).toLowerCase()}${wp.row.slice(1).replace(/\.$/, '')}` });
   // The alarm, first in the tray (ruling 211(c); words, section 1): an enemy army on his home ground, what it can reach
   // next month, and the nearest help. The row speaks of the one nearest his capital; each press goes on to the next.
   out.unshift(...guns);
@@ -3086,6 +3089,7 @@ function followAlert(kind: string): void {
   if (kind === 'debt') { openModal({ kind: 'ledger' }); return; }
   if (kind === 'tradecut' || kind === 'tradeidle') { openModal({ kind: 'trade' }); return; }
   if (kind === 'lastact') { openModal({ kind: 'lastact' }); return; }
+  if (kind === 'winterpeace') { openModal({ kind: 'winterpeace' }); return; }
   if (kind === 'crowded' && a.regs?.length) { openAirfield(a.regs[0]); return; }
   if (kind === 'directive' || kind === 'cabinetfall' || kind === 'cabinetseat' || kind === 'cabinetdoubt' || kind === 'cabinethead' || kind === 'promise') { openModal({ kind: 'cabinet' }); refresh(); return; }
   if (kind.startsWith('short ') || kind.startsWith('low ')) { openModal({ kind: 'stores', nat: g.human || '' }); return; }
@@ -3662,7 +3666,14 @@ function siegeBlock(r: Region): string {
     const ours = alive && allied(g, me!, v.by);
     head = `<div class="sghead">${ringIcon(g.nations[v.by].color, 30)}<span class="grow"><b>${esc(v.town)} is under siege</b><small>${ours && v.by === me ? 'Your army holds' : `${esc(g.nations[v.by].adj)} troops hold`} the country round it${v.since >= 0 ? ` since ${date(v.since)}` : ''}. ${mine ? 'You still hold the town, and the province with it.' : `${esc(g.nations[v.holder].adj)} troops still hold the town, and the province with it.`}</small></span></div>`;
   } else {
-    const say = foe ? `Beat the army in the field and you hold the country round ${esc(v.town)}. The province is yours only when the town itself is stormed, starved out or opens its gates.`
+    // (Ruling 232: with no garrison inside, the town falls with the field; a garrison holds it after.)
+    const drive = driveOut(g);
+    const say = drive && foe ? (v.inside > 0 ? `Beat the army in the field and you hold the country round ${esc(v.town)}. The garrison will hold the town after the field is lost: it must then be stormed or starved out.`
+        : v.inside === 0 ? `Beat the army in the field and ${esc(v.town)} falls with it: with no garrison inside, its guard fights beside the army, behind its walls.`
+        : `If no garrison is inside, ${esc(v.town)} falls with the field. A garrison holds it after, to be stormed or starved out.`)
+      : drive && mine ? (v.inside > 0 ? `Whoever holds ${esc(v.town)} holds the province. The garrison will hold the town after the field is lost: an enemy must then storm it or starve it out.`
+        : `Whoever holds ${esc(v.town)} holds the province. With no garrison inside, an enemy who beats your army in the field takes the town with it. Troops you put inside hold it after the field is lost.`)
+      : foe ? `Beat the army in the field and you hold the country round ${esc(v.town)}. The province is yours only when the town itself is stormed, starved out or opens its gates.`
       : mine ? `Whoever holds ${esc(v.town)} holds the province. Troops you put inside fight from behind its walls, and an enemy who beats your army in the field must still take the town.`
       : `Whoever holds ${esc(v.town)} holds the province.`;
     head = `<div class="sghead plain"><span class="grow"><b>The key to ${esc(r.name)}</b><small>${say}</small></span></div>`;
@@ -5058,6 +5069,8 @@ function nextCard(): typeof ui.modal {
     ui.seenPass = g.passings.length;
     if (ids.length) return { kind: 'passing', ids };
   }
+  // Peace in the Winter War (ruling 228, 1b): at the month's start, when the offer is new or its terms have changed.
+  if (me && g.nations[me].alive && !passing && humanUp(g) && !onEve(g) && winterCardDue(g)) return { kind: 'winterpeace' };
   if (!act || !me || !g.nations[me].alive || passing) return null;
   if (act.winner === me && !g.flags['dom:hail']) { g.flags['dom:hail'] = g.turn; return { kind: 'worldwon' }; }
   if (act.open && humanUp(g) && !onEve(g) && !g.flags['dom:seen']) { g.flags['dom:seen'] = g.turn; return { kind: 'lastact' }; }
@@ -5132,6 +5145,27 @@ function lastActCard(ask: boolean): string {
     <div class="pathrow domrow${ask ? ' now' : ''}"><div class="pathhead"><b>World Domination</b>${btn}</div><p>Every alliance is dissolved. All ${B.left} nations still standing, yesterday's allies among them, are at war with one another from today. Troops on a former ally's soil go home under safe conduct. Nobody makes peace again: <b>the last great power standing has the world</b> once it holds ${shareWords(B.need)} of it, and the countries still standing then lay down their arms.</p></div>
     ${can ? '' : `<div class="note">${esc(act.why ?? 'Orders are given in your own month.')}</div>`}</div>
     <footer><button class="btn go" data-act="close">Decide later</button></footer>`;
+}
+
+/**
+ * Peace in the Winter War (ruling 228, 1b): Finland asks it of a Soviet player, Moscow offers it to a Finnish one, on
+ * what the Red Army holds this month. FIGHT ON is lit and takes Enter and Esc, the answer next month can undo; the
+ * peace takes a click.
+ */
+function winterPeaceCard(wp: WinterPeace): string {
+  const why = whyNotOrderWinterPeace(g), keys = !fingers(), red = wp.to === 'SOV';
+  const facts = [
+    `<div class="fact"><span>${red ? 'Yours by the peace' : 'Given up by the peace'}</span><b>${wp.cede.length ? esc(listOf(wp.cede)) : 'No ground'}</b></div>`,
+    wp.back.length ? `<div class="fact"><span>${red ? 'Handed back to Finland' : 'Handed back to you'}</span><b>${esc(listOf(wp.back))}</b></div>` : '',
+    wp.since < g.turn ? `<div class="fact"><span>Offered since</span><b>${date(wp.since)}</b></div>` : '',
+  ].join('');
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The Winter War · ${date(g.turn)}</div><h2>${esc(wp.title)}</h2></header>
+    <div class="body path"><p class="lead">${esc(wp.body)}</p>${wp.note ? `<p class="lead quiet">${esc(wp.note)}</p>` : ''}
+    <div class="facts">${facts}</div>
+    <div class="pathrow"><div class="pathhead"><b>${esc(wp.yes)}</b><button class="btn" data-act="winterpeace" ${why ? 'disabled' : ''}>${esc(wp.yes)}</button></div><p>${esc(wp.yesLine)}</p></div>
+    <div class="pathrow now"><div class="pathhead"><b>${esc(wp.no)}</b></div><p>${esc(wp.noLine)}</p></div>
+    ${why ? `<div class="note">${esc(why)}</div>` : ''}</div>
+    <footer><button class="btn go" data-act="close">${esc(wp.no)}${keys ? '<kbd>Enter</kbd>' : ''}</button></footer>`;
 }
 
 /** The end of the last act, for a player who is the last one standing. */
@@ -5212,6 +5246,7 @@ function staffsCard(): string {
 function powersPane(): string {
   const act = lastAct(g);
   if (act?.on) return worldPane();
+  const wp = winterPeace(g);
   const at = Object.values(g.nations).filter((n) => !n.dormant && (n.atWar.length || n.fellOn));
   const neutral = Object.values(g.nations).filter((n) => n.alive && !n.atWar.length && !n.dormant);
   const offer = act?.open && act.decided
@@ -5229,7 +5264,7 @@ function powersPane(): string {
       const form = gv ? ` <button class="btn tiny" data-act="cabinet" data-nat="${n.id}" title="${esc(gv.form.name)}. ${esc(gv.form.blurb)}">${FORM_WORD[gv.form.id]}</button>` : '';
       // Its general staff: the character it has in this war, and its main effort where the player may know it.
       const staff = rivalStaff(g, n.id);
-      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(theName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(theName).join(', ')}</small></div>${staff ? staffRow(staff) : ''}</div>`;
+      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(theName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(theName).join(', ')}</small></div>${staff ? staffRow(staff) : ''}${wp?.from === n.id ? `<div class="peaceask"><small>${esc(wp.row)}</small><button class="btn tiny" data-act="peaceterms">Terms ▸</button></div>` : ''}</div>`;
     } else {
       const f = fallen.find((x) => x.nat === n.id);
       const how = f?.fell.how === 'annexed' ? `Annexed by ${theName(n.fellOn!.to)}` : f?.fell.how === 'terms' ? `Left the war by treaty with ${theName(n.fellOn!.to)}` : `Asked ${theName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}`;
@@ -6403,6 +6438,11 @@ function openModal(m: typeof ui.modal): void {
     if (!lastAct(g)?.decided || lastAct(g)!.on) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = lastActCard(!!m.ask);
   }
+  else if (m.kind === 'winterpeace') {
+    const wp = winterPeace(g);
+    if (!wp) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = winterPeaceCard(wp);
+  }
   else if (m.kind === 'worldwon') {
     if (lastAct(g)?.winner !== g.human || !g.human) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = worldWonCard();
@@ -7302,10 +7342,30 @@ function resultLine(r: BattleReport): string {
   const mine = place.ctrl === me;
   const held = mine ? `${r.regionName} is yours.` : me && allied(g, me, place.ctrl) ? `${r.regionName} is freed.` : `${r.regionName} is taken.`;
   const and = town === r.regionName ? (mine ? ' and is yours.' : '.') : `. ${held}`;
-  const what = r.siege ? `The country round ${town} is won. The town holds out.` : r.town ? `${town} is stormed${and}` : r.gates ? `${town} opened its gates${and}` : held;
+  const what = r.siege ? `The country round ${town} is won. The town holds out.` : r.town ? `${town} is stormed${and}` : r.gates ? `${town} opened its gates${and}` : r.guarded && r.taken ? `${town} is taken${and}` : held;
   if (r.yielded) return `${what} The defenders fell back before the blow.`;
   const a = lostIn(r.attackers, r.attLost), d = lostIn(r.defenders, r.defLost);
-  return `${what} You lost ${num(a.lost)} men, they lost ${num(d.lost)}.`;
+  const went = driveWords(r);
+  return `${what}${went ? ` ${went}` : ''} You lost ${num(a.lost)} men, they lost ${num(d.lost)}.`;
+}
+/**
+ * Ruling 232: where a beaten field army went, in the ruling's words. "The Panamanian army falls back to Darien." or
+ * "Cut off, the Panamanian army lays down its arms." Empty where the rule was off when the battle was fought.
+ */
+function driveWords(r: BattleReport): string {
+  if (!r.taken || r.town || r.sally || r.yielded) return '';
+  const out: string[] = [];
+  const field = r.defenders.filter((u) => !u.guard);
+  for (const nat of new Set(field.map((u) => u.nat))) {
+    const us = field.filter((u) => u.nat === nat);
+    const places = [...new Set(us.filter((u) => u.to !== undefined && g.regions[u.to]).map((u) => placeName(g.regions[u.to!].name)))];
+    const cut = us.some((u) => u.cut);
+    if (!places.length && !cut) continue;
+    const adj = g.nations[nat]?.adj ?? nat;
+    if (places.length) out.push(`The ${adj} army falls back to ${places.length === 1 ? places[0] : `${places.slice(0, -1).join(', ')} and ${places[places.length - 1]}`}.`);
+    if (cut) out.push(places.length ? 'The rest, cut off, lay down their arms.' : `Cut off, the ${adj} army lays down its arms.`);
+  }
+  return out.join(' ');
 }
 /** Where a province's town stands on the map. */
 const spotOf = (region: number): { x: number; y: number } => towns(g)[region] ?? g.regions[region];
@@ -7380,7 +7440,9 @@ function reportCard(r: BattleReport): string {
     : r.relief ? (r.taken ? `The army round ${town} was driven off. The siege is raised.` : `The attempt to relieve ${town} failed. The siege goes on.`)
     : r.siege ? `The country round ${town} was won, but the town holds out. ${esc(r.regionName)} does not change hands until the town is stormed, starved out or opens its gates.`
     : r.gates ? `The army outside was beaten, and ${town} opened its gates without a fight. ${one ? 'It' : esc(r.regionName)} has fallen.`
+    : r.guarded && r.taken ? (one ? `The army outside was beaten, and ${town} is taken.` : `The army outside was beaten, and ${town} is taken. ${esc(r.regionName)} has fallen.`)
     : r.taken ? `${esc(r.regionName)} was taken.` : `The attack on ${esc(r.regionName)} was thrown back.`;
+  const went = driveWords(r);
   const mineNow = !!r.siege && r.turn === g.turn && humanUp(g) && (r.attNat === g.human || r.attackers.some((u) => u.nat === g.human));
   const stormWhy = mineNow ? whyNotStormTown(g, r.region) : 'no';
   const next = r.siege && mineNow ? `<div class="note siegenote">${ringIcon(g.nations[r.attNat].color, 26)}<span><b>${town} is under siege.</b> Your army has closed round it and marches no further this month. You can storm it at once, off the march, or wait: next month the assault goes in at full weight, and anything your bombers, ships and guns break down meanwhile makes it easier. Keep the ring closed and hunger will do the work in the end.</span></div>`
@@ -7388,7 +7450,7 @@ function reportCard(r: BattleReport): string {
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${kick} · ${date(r.turn)}, week ${r.week}</div><h2>${title}</h2></header>
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
-      <div class="sub">${r.yielded ? `The defenders were under orders to give ground and slipped away before the blow fell. ${esc(r.regionName)} was given up without a fight. The odds against them were ${r.odds.toFixed(2)} to 1.` : `${told} ${priceLine(r)} Final odds ${r.odds.toFixed(2)} to 1${r.prisoners ? ` · ${num(r.prisoners)} prisoners` : ''}.`}</div>
+      <div class="sub">${r.yielded ? `The defenders were under orders to give ground and slipped away before the blow fell. ${esc(r.regionName)} was given up without a fight. The odds against them were ${r.odds.toFixed(2)} to 1.` : `${told}${went ? ` ${esc(went)}` : ''} ${priceLine(r)} Final odds ${r.odds.toFixed(2)} to 1${r.prisoners ? ` · ${num(r.prisoners)} prisoners` : ''}.`}</div>
       ${paidLine(r)}${spoils}${next}${wornNote(r)}
       <div class="faceoff">${sidePanel(side(r.attackers, r.attLost, 'attacking', r.taken), 'att')}<div class="fmid"><span class="vsmark">VS</span></div>${sidePanel(side(r.defenders, r.defLost, 'defending', !r.taken), 'def')}</div>
       <div class="balance"><div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[r.attNat].color}"></i><i style="flex:1;background:${g.nations[r.defNat].color}"></i></div><span class="need" style="left:${(100 * 1.2 / 2.2).toFixed(1)}%" title="What it takes to carry the ground: roughly 1.2 to 1"></span></div>
@@ -7510,10 +7572,14 @@ function attackCard(): string {
     nats: [me, ...new Set(chosen.filter((c) => c.nat !== me).map((c) => c.nat))], role: 'attacking', who: leaderOf(chosen), men: chosen.reduce((s, c) => s + men(c), 0), corps: chosen.length, divs: rollDivs(chosen),
     cards: cands.map((c) => corpsChip(c, { act: true, on: inSet.has(c.id), note: why(c) })).join(''),
   };
+  // The town's guard fighting beside them where no garrison stands (ruling 232): a defender on the card, with the odds.
+  const watch = a?.guard ?? 0, watchMen = watch > 0 ? guardMen(g, target) : 0;
+  const guardChip = watch > 0 ? `<div class="ucard" title="Town guard of ${esc(townName(target))}: ${guardWorth(watch)}, behind its walls. Win the field and the town falls with it."><span class="utop">${ringIcon(g.nations[target.ctrl].color, 30)}</span><b>Town guard</b><span class="um">${watch >= 0.95 ? `${watch.toFixed(1)} div · ` : ''}about ${num(watchMen)} men</span></div>` : '';
   const theirs: Side = {
-    nats: [...new Set(foes.map((c) => c.nat))], role: 'defending', who: leaderOf(foes), men: foes.reduce((s, c) => s + men(c), 0), corps: foes.length, divs: rollDivs(foes),
-    ...(sure ? {} : { menText: foeEst ? span(Math.round(foeEst.lo * 15) * 1000, Math.round(foeEst.hi * 15) * 1000) : '?', divsText: foeEst ? span(Math.max(1, Math.round(foeEst.lo)), Math.max(1, Math.round(foeEst.hi))) : '?' }),
-    cards: foeChips(foes),
+    nats: [...new Set(foes.map((c) => c.nat))], role: 'defending', who: leaderOf(foes), men: foes.reduce((s, c) => s + men(c), 0) + watchMen, corps: foes.length, divs: rollDivs(foes) + Math.round(watch * 10) / 10,
+    // (Under the fog the guard, which is no secret, is added to both ends of the estimate.)
+    ...(sure ? {} : { menText: foeEst ? span(Math.round(foeEst.lo * 15) * 1000 + watchMen, Math.round(foeEst.hi * 15) * 1000 + watchMen) : '?', divsText: foeEst ? span(Math.max(1, Math.round(foeEst.lo + watch)), Math.max(1, Math.round(foeEst.hi + watch))) : '?' }),
+    cards: foeChips(foes) + guardChip,
     under: target.fort ? `<small class="fhelp">Dug in behind level ${target.fort.lv} fortifications${target.fort.vs.includes(me) ? '' : ', which do not face you'}.</small>` : '',
   };
   // The card is in the order of deciding (ruling 204): who fights, the verdict and its bar, what it should cost, what
@@ -9272,6 +9338,8 @@ function onClick(e: MouseEvent): void {
     case 'path': openModal({ kind: 'path', ask: t.dataset.ask ?? '' }); break;
     case 'lastact': g.flags['dom:seen'] ??= g.turn; openModal({ kind: 'lastact', ask: t.dataset.ask === '1' }); break;
     case 'keeppeace': if (orderKeepPeace(g)) { refresh(); openModal({ kind: 'lastact' }); } break;
+    case 'peaceterms': openModal({ kind: 'winterpeace' }); break;
+    case 'winterpeace': { const line = winterPeace(g)?.yesLine ?? '', h = g.headlines.length; if (orderWinterPeace(g)) { ui.unread += g.headlines.length - h; ui.msg = line; openModal(null); refresh(); } break; }
     case 'domination': {
       const h = g.headlines.length;
       if (orderDomination(g)) {
@@ -9549,6 +9617,9 @@ function onKey(e: KeyboardEvent): void {
     ($('#card').querySelector('[data-act="askshow"]') as HTMLElement | null)?.click();
     return;
   }
+  // Peace in the Winter War (ruling 228, 1b): Enter, like Esc, is FIGHT ON, the answer next month can undo, even on a
+  // button in hand. The peace takes a click.
+  if (e.key === 'Enter' && ui.modal?.kind === 'winterpeace') { e.preventDefault(); if (!cardGuarded(e)) { openModal(ui.modal.back ?? null); refresh(); } return; }
   // NEXT ARMY: Tab takes up the next army that still has a move.
   if (e.key === 'Tab' && !e.shiftKey && !ui.modal && !passing && !tour && g.human && humanUp(g) && !onEve(g)) { e.preventDefault(); goNextArmy(); return; }
   // A key pressed on a button belongs to that button. On an order's card Enter is the lit button all the same,
