@@ -108,6 +108,18 @@ for (const r of farRegions) {
   if (p?.flags?.vichy && r.owner === p.owner) { r.flags = { ...r.flags, vichy: 1 }; vichyBy.city++; }
 }
 
+// Oilfields the old chart already counts elsewhere (ruling 231, 1(d)): the oil of Iran's Ahwaz and Saudi Arabia's
+// Dhahran is the Gulf route's (Britain's share of need) and Iraq's 12, as on the old chart, so their provinces carry
+// no oil mark; with a yield of their own Britain would be paid twice for southern Iran. A lane that names its fields
+// (ruling 194, points 2 to 4) may carry them later.
+const UNMARK_231 = ['Ahwaz', 'Dhahran'];
+for (const name of UNMARK_231) {
+  const r = farRegions.find((x) => x.name === name);
+  if (!r?.flags?.oil) { problems.push(`ruling 231: ${name} is not an oilfield of the chart`); continue; }
+  const { oil, ...rest } = r.flags;
+  r.flags = rest;
+}
+
 // Where the final chart has redrawn one of the Americas' provinces at its edge with the far side (the Alaska panhandle's
 // mainland, taken from Whitehorse, Watson Lake and Prince Rupert on 17 November), the whole world takes its outline and
 // its seas from the final chart; everything else, its neighbours above all, stays the cities version's. With the far
@@ -215,7 +227,7 @@ if (idsOut) {
 }
 console.log(`the whole wider world: ${A.regions.length} provinces of the Americas (${first} to ${FAR_FIRST - 1}) and ${farRegions.length} beyond them (${FAR_FIRST} to ${first + regions.length - 1}); stages ${chart.stages.join(', ')}`);
 console.log(`${joins.length} land borders across the stages, ${links.length} ferries, ${seas.zones.length} seas, ${lakes.length} lakes, ${rails.links.length} railway links, ${rivers.rivers.length} rivers with ${rivers.crossings.length} crossings`);
-console.log(`the Vichy mark beyond the old chart: ${vichyBy.chart} provinces as the chart gives it, ${vichyBy.ruling199} of Indochina by ruling 199, ${vichyBy.city} cities from their province`);
+console.log(`the Vichy mark beyond the old chart: ${vichyBy.chart} provinces as the chart gives it, ${vichyBy.ruling199} of Indochina by ruling 199, ${vichyBy.city} cities from their province; oil marks taken off by ruling 231: ${UNMARK_231.join(", ")}; oilfields beyond the old chart: ${farRegions.filter((r) => r.flags?.oil).map((r) => r.name).join(", ")}`);
 console.log(`the Americas redrawn by the final chart, outline and seas taken from it with the far side on (${redrawn.length}): ${redrawn.join(', ') || 'none'}`);
 console.log(table.join('\n'));
 console.log(`names as of September 1939 in the clerk's tables, NOT applied (${renamed.length}): ${renamed.join(', ') || 'none'}`);
