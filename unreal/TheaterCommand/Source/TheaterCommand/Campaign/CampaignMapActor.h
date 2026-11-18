@@ -175,6 +175,16 @@ public:
 
 	/** The given nation's piece in a region, if it has one there. */
 	AArmyPiece* FindPiece(int32 RegionId, const FString& Nation) const;
+	/** (Rules 84.3.3) An air group's piece, by the group's id; none where it is not on the table. */
+	AArmyPiece* FindAirPiece(int32 WingId) const;
+
+	/**
+	 * (Rules 84.3.3, FIRST COMMAND; the art director's first-hour brief, section 3.) The staff note's pointer on the map:
+	 * four brass corner clamps drawn on the ground, under every piece, flag and plate, so that where an arm would cross
+	 * one it passes under it. Given as quads already laid on the ground (four corners each, in order round the quad),
+	 * with an ink for each, the dark case first and the brass over it. Empty takes it away.
+	 */
+	void ShowPointer(const TArray<FVector>& Corners, const TArray<FColor>& Inks);
 
 	/**
 	 * Tints the regions a picked-up army could go to: its own colour for a march, red for an attack. An empty list clears it.
@@ -1256,6 +1266,10 @@ private:
 	/** What is drawn for an army that has been picked up: where it can go, and the road to where the pointer is. */
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
 	TObjectPtr<UProceduralMeshComponent> OrdersMesh;
+
+	/** (Rules 84.3.3) The staff note's pointer on the ground: a mesh of its own, small, laid again as the eye moves. */
+	UPROPERTY(VisibleAnywhere, Category = "Campaign")
+	TObjectPtr<UProceduralMeshComponent> PointerMesh;
 
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
 	TObjectPtr<UInstancedStaticMeshComponent> TownMarkers;

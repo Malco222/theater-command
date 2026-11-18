@@ -860,6 +860,11 @@ public:
 	void PressLesson(const FString& Action);
 	/** (Ruling 147(a).) What the note at its home must never cover, in pixels of the screen: the army in hand, and the flag it points at. */
 	void GetLessonKeepClear(TArray<FBox2D>& Out) const;
+	/** (The brief, section 3.) What the note's pointer frames now, worked out once a frame: a button or a card's line by its
+	 * name, or a place on the map, which the pointer frames on the ground under the pieces. */
+	const FLessonAim& GetLessonAim() const { return LessonAim; }
+	/** Where the note stands on the screen, in the viewport's pixels: a place pointed at keeps out from under it. */
+	void SetLessonNoteOnScreen(const FBox2D& Box) { LessonNoteOnScreen = Box; }
 	/** Whether a veil (a card or a room over the map) is up, which the note stands beside as a slip. */
 	bool IsLessonBesideCard() const { return bPageOpen || Document.bValid || bArsenalOpen || bLedgerOpen || bGeneralsOpen || bResearchOpen || bDiplomacyOpen || FaceOff.bVisible; }
 
@@ -1279,6 +1284,15 @@ private:
 	void ShowDeskNote(double Now);
 	void LessonPageChanged();
 	void ResetLessons();
+	// (The pointer.) What it frames this frame; where the note stands; the ground pointer as last laid (its frame and
+	// the eye it was laid for), so that it is laid again only when either has moved.
+	FLessonAim LessonAim;
+	FBox2D LessonNoteOnScreen = FBox2D(ForceInit);
+	FString GroundAimLaid;
+	void AimLesson();
+	bool PieceBoxOnScreen(const AArmyPiece* Piece, FBox2D& Out) const;
+	bool GroundSpotOnScreen(int32 Region, FVector2D& Out, FVector& Foot) const;
+	void LayGroundPointer(const FLessonAim& Aim);
 	FAdviser Adviser;
 	void AdviserSaw(int32 Step);
 	bool bBusyWithScreens() const { return bWatching || Newsreel.bOn || Opening.bVisible || Announcements.Num() > 0 || bScripted; }

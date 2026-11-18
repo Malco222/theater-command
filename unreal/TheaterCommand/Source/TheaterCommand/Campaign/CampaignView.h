@@ -563,6 +563,23 @@ struct FLessonDesk
 	int32 Done = 0;
 };
 
+/**
+ * (Rules 84.3.3; the art director's first-hour brief, section 3.) The one thing the staff note's pointer frames now:
+ * nothing; a piece of the screen by its name (a button, or a line on a card); or a place on the map, as a box in
+ * the viewport's pixels, which is drawn on the ground under every piece.
+ */
+struct FLessonAim
+{
+	enum EKind : uint8 { Nothing, Screen, Ground };
+	EKind Kind = Nothing;
+	/** On the screen: "giveorders", "line", "end", "send", "siege", "depth", "arsenal", "fly", "otherraid", "act:<the act>". */
+	FName Name;
+	/** On the ground: the frame, already 6 px clear of the thing it frames, in the viewport's pixels; and the ground under
+	 * the thing in the world, whose height the frame is laid at. */
+	FBox2D Box = FBox2D(ForceInit);
+	FVector Foot = FVector::ZeroVector;
+};
+
 /** (Rules 84.3.3) A row of the Guide's list of the ten lessons. */
 struct FLessonRow
 {

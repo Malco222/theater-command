@@ -3592,6 +3592,12 @@ void ACampaignPlayerController::ResetLessons()
 	LessonMomentKey = 0;
 	LessonDeedsOwed.Reset();
 	LessonActsOwed.Reset();
+	LessonAim = FLessonAim();
+	if (!GroundAimLaid.IsEmpty() && Map.IsValid())
+	{
+		Map->ShowPointer(TArray<FVector>(), TArray<FColor>());
+	}
+	GroundAimLaid.Reset();
 }
 
 bool ACampaignPlayerController::IsLessonQuiet() const
@@ -3810,6 +3816,365 @@ void ACampaignPlayerController::GetLessonKeepClear(TArray<FBox2D>& Out) const
 	{
 		FlagIn(LessonNote.Region);
 	}
+	// (and what the pointer frames on the ground, which the note must never cover either)
+	if (LessonAim.Kind == FLessonAim::Ground)
+	{
+		Out.Add(LessonAim.Box);
+	}
+}
+
+// ---- (Rules 84.3.3; the art director's first-hour brief, section 3) The pointer -----------------------------------
+// The one thing the note points at, for the lesson on the desk and where he stands now (firsthour.ts, target()): on a
+// card only the card's own way to the deed, never a thing the card covers (trap 9); otherwise a button by its name,
+// a flag of his, or the lit ground nearest the army in hand. On the map it is laid on the ground (ShowPointer).
+
+namespace
+{
+	/** (lessons.ts, BOMBING) The raids that earn lesson 9: "Fight for the sky" is not one of them (trap 8). */
+	bool IsBombingRaid(const FString& Kind)
+	{
+		static const TCHAR* const Bombing[] = { TEXT("bomb"), TEXT("night"), TEXT("ground"), TEXT("line"), TEXT("town"), TEXT("harbour"), TEXT("strike"), TEXT("fleet") };
+		for (const TCHAR* Each : Bombing)
+		{
+			if (Kind == Each)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
+bool ACampaignPlayerController::PieceBoxOnScreen(const AArmyPiece* Piece, FBox2D& Out) const
+{
+	Out = FBox2D(ForceInit);
+	if (!Piece || Piece->IsHidden() || !PlayerCameraManager)
+	{
+		return false;
+	}
+	// The whole piece, from the pole's tip to the base (the brief): the base's round on the ground, and the flag over
+	// it where it flies one.
+	const FQuat Eye = PlayerCameraManager->GetCameraRotation().Quaternion();
+	const FVector Right = Eye.GetRightVector(), Up = Eye.GetUpVector();
+	const FVector Along = FVector::CrossProduct(Right, FVector::UpVector).GetSafeNormal();
+	const FVector Base = Piece->GetActorLocation();
+	const double Round = FMath::Max(Piece->GetBaseRadius() * Piece->GetActorScale3D().X, 1.0);
+	TArray<FVector, TInlineAllocator<8>> Points;
+	Points.Add(Base + Right * Round);
+	Points.Add(Base - Right * Round);
+	Points.Add(Base + Along * Round);
+	Points.Add(Base - Along * Round);
+	FVector Middle;
+	double Cloth = 0.0;
+	if (Piece->GetColours(Middle, Cloth))
+	{
+		Points.Add(Middle + Up * (Cloth * 0.8) + Right * (Cloth * 0.7));
+		Points.Add(Middle + Up * (Cloth * 0.8) - Right * (Cloth * 0.7));
+	}
+	else
+	{
+		Points.Add(Base + FVector::UpVector * (Round * 2.0));
+	}
+	for (const FVector& Point : Points)
+	{
+		FVector2D At;
+		if (!ProjectWorldLocationToScreen(Point, At))
+		{
+			Out = FBox2D(ForceInit);
+			return false;
+		}
+		Out += At;
+	}
+	return Out.bIsValid;
+}
+
+bool ACampaignPlayerController::GroundSpotOnScreen(int32 Region, FVector2D& Out, FVector& Foot) const
+{
+	if (!Map.IsValid() || !Map->GetData().Regions.IsValidIndex(Region))
+	{
+		return false;
+	}
+	const FVector2D Center = Map->GetData().Regions[Region].Center;
+	Foot = Map->SurfacePointOver(Center.X, Center.Y, 0.0);
+	if (!ProjectWorldLocationToScreen(Foot, Out))
+	{
+		return false;
+	}
+	int32 Width = 0, Height = 0;
+	GetViewportSize(Width, Height);
+	const double Half = 22.0 * Height / 1000.0;
+	const FBox2D Frame(Out - FVector2D(Half, Half), Out + FVector2D(Half, Half));
+	if (Frame.Min.X < 0.0 || Frame.Min.Y < 0.0 || Frame.Max.X > Width || Frame.Max.Y > Height)
+	{
+		return false;
+	}
+	// (A spot he can see and click: not under a panel of the frame, nor under the note.)
+	for (const FBox2D& Panel : FrameOnScreen)
+	{
+		if (Panel.Intersect(Frame))
+		{
+			return false;
+		}
+	}
+	return !(LessonNoteOnScreen.bIsValid && LessonNoteOnScreen.Intersect(Frame));
+}
+
+void ACampaignPlayerController::AimLesson()
+{
+	THEATER_SPEED_SCOPE(AimLesson);
+	FLessonAim Aim;
+	const FCampaignSession* Session = GetSession();
+	int32 Width = 0, Height = 0;
+	GetViewportSize(Width, Height);
+	const double S = Height / 1000.0; // (the brief's pixels, of the 1600 by 1000 frame, in the viewport's)
+	auto OnScreen = [&Aim](const FName& Name)
+	{
+		Aim.Kind = FLessonAim::Screen;
+		Aim.Name = Name;
+	};
+	// A piece of his framed whole, 6 px clear of it.
+	auto FramePiece = [&](const AArmyPiece* Piece) -> bool
+	{
+		FBox2D Box;
+		if (!PieceBoxOnScreen(Piece, Box))
+		{
+			return false;
+		}
+		Box = Box.ExpandBy(6.0 * S);
+		if (Box.Max.X < 0.0 || Box.Max.Y < 0.0 || Box.Min.X > Width || Box.Min.Y > Height)
+		{
+			return false;
+		}
+		Aim.Kind = FLessonAim::Ground;
+		Aim.Box = Box;
+		Aim.Foot = Piece->GetActorLocation();
+		return true;
+	};
+	auto FrameFlag = [&](int32 Region) -> bool
+	{
+		return Map.IsValid() && Session && FramePiece(Map->FindPiece(Region, Session->GetView().Human));
+	};
+	// Of the provinces lit on the ground, the one nearest the army in hand that he can see: a frame 44 square at its middle.
+	auto FrameGround = [&](const TArray<int32>& Lit) -> bool
+	{
+		FVector2D From(Width * 0.5, Height * 0.5);
+		FBox2D Hand;
+		if (RingedPiece.IsValid() && PieceBoxOnScreen(RingedPiece.Get(), Hand))
+		{
+			From = Hand.GetCenter();
+		}
+		double Best = TNumericLimits<double>::Max();
+		for (const int32 Region : Lit)
+		{
+			FVector2D At;
+			FVector Foot;
+			if (Region == ArmyRegion || !GroundSpotOnScreen(Region, At, Foot))
+			{
+				continue;
+			}
+			const double Far = FVector2D::DistSquared(At, From);
+			if (Far < Best)
+			{
+				Best = Far;
+				Aim.Kind = FLessonAim::Ground;
+				Aim.Box = FBox2D(At - FVector2D(22.0 * S, 22.0 * S), At + FVector2D(22.0 * S, 22.0 * S));
+				Aim.Foot = Foot;
+			}
+		}
+		return Aim.Kind == FLessonAim::Ground;
+	};
+	if (Session && Map.IsValid() && !IsLessonQuiet() && !Session->GetView().Human.IsEmpty())
+	{
+		const FString& Human = Session->GetView().Human;
+		if (IsLessonLaid())
+		{
+			OnScreen(TEXT("giveorders")); // (lesson 1: the card put down is its deed; its pointer only while its card is up, trap 7)
+		}
+		else if (bLessonNote && !IsLessonStamped() && LessonNote.Kind == TEXT("lesson"))
+		{
+			const FString& Id = LessonNote.Id;
+			const FViewDesk* Air = FindDesk(TEXT("air"));
+			const FViewDesk* Build = FindDesk(TEXT("build"));
+			const bool bInHand = PickedCorps.Num() > 0 && ArmyRegion != INDEX_NONE;
+			if (IsLessonBesideCard())
+			{
+				const bool bFace = FaceOff.bVisible && !FaceOff.bResolved;
+				if (Id == TEXT("card") && LessonCardOpen())
+				{
+					OnScreen(TEXT("line"));
+				}
+				else if (Id == TEXT("attack") && bFace && !FaceOff.bMarch && !FaceOff.bStorm)
+				{
+					OnScreen(TEXT("send"));
+				}
+				else if (Id == TEXT("city") && bFace && (FaceOff.bMarch || FaceOff.bStorm))
+				{
+					OnScreen(TEXT("siege"));
+				}
+				else if (Id == TEXT("raid") && bPageOpen && Page.Card.bValid)
+				{
+					OnScreen(IsBombingRaid(Page.Card.Kind) ? TEXT("fly") : TEXT("otherraid")); // (trap 8: back to a bombing raid)
+				}
+				else if ((Id == TEXT("raid") || Id == TEXT("build")) && bPageOpen && Page.Id == TEXT("staff"))
+				{
+					const FViewDesk* Desk = Id == TEXT("raid") ? Air : Build;
+					if (Desk && Desk->bStaff && !Desk->Act.IsEmpty())
+					{
+						OnScreen(FName(*(TEXT("act:") + Desk->Act)));
+					}
+				}
+				else if (Id == TEXT("build") && bArsenalOpen && Build && Build->bStaff)
+				{
+					OnScreen(TEXT("deskbar:build"));
+				}
+			}
+			else if (Id == TEXT("pickup") || Id == TEXT("city"))
+			{
+				FrameFlag(LessonNote.Region);
+			}
+			else if (Id == TEXT("march") && bInHand)
+			{
+				TArray<int32> Lit;
+				for (const FReachRegion& Step : Reach)
+				{
+					if (!Step.bAttack && !Step.IsWar())
+					{
+						Lit.Add(Step.Region);
+					}
+				}
+				FrameGround(Lit);
+			}
+			else if (Id == TEXT("attack"))
+			{
+				TArray<int32> Lit;
+				for (const FReachRegion& Step : Reach)
+				{
+					if (Step.bAttack && !Step.IsWar() && bInHand)
+					{
+						Lit.Add(Step.Region);
+					}
+				}
+				if (!FrameGround(Lit))
+				{
+					FrameFlag(LessonNote.Region);
+				}
+			}
+			else if (Id == TEXT("rail") && bInHand)
+			{
+				FrameGround(RailBeyond.Array());
+			}
+			else if (Id == TEXT("end"))
+			{
+				OnScreen(TEXT("end"));
+			}
+			else if (Id == TEXT("raid"))
+			{
+				if (Air && Air->bStaff)
+				{
+					OnScreen(TEXT("depth")); // (ruling b425: YOUR STAFF opens from the red line under the date)
+				}
+				else
+				{
+					// "Click your aircraft on the map": the first group of his that he can see.
+					for (const FViewAirFleet& Wing : Session->GetView().AirFleets)
+					{
+						if (Wing.Nation == Human && FramePiece(Map->FindAirPiece(Wing.Id)))
+						{
+							break;
+						}
+					}
+				}
+			}
+			else if (Id == TEXT("build"))
+			{
+				OnScreen(Build && Build->bStaff ? TEXT("depth") : TEXT("arsenal"));
+			}
+		}
+	}
+	LessonAim = Aim;
+	if (Aim.Kind == FLessonAim::Ground)
+	{
+		LayGroundPointer(Aim);
+	}
+	else if (!GroundAimLaid.IsEmpty())
+	{
+		GroundAimLaid.Reset();
+		if (Map.IsValid())
+		{
+			Map->ShowPointer(TArray<FVector>(), TArray<FColor>());
+		}
+	}
+}
+
+void ACampaignPlayerController::LayGroundPointer(const FLessonAim& Aim)
+{
+	if (!Map.IsValid() || !PlayerCameraManager)
+	{
+		return;
+	}
+	// Laid again only when the frame or the eye has moved.
+	const FVector Eye = PlayerCameraManager->GetCameraLocation();
+	const FRotator Facing = PlayerCameraManager->GetCameraRotation();
+	const FString Key = FString::Printf(TEXT("%.0f %.0f %.0f %.0f|%.1f %.1f %.1f|%.2f %.2f %.2f"), Aim.Box.Min.X, Aim.Box.Min.Y, Aim.Box.Max.X, Aim.Box.Max.Y,
+		Eye.X, Eye.Y, Eye.Z, Facing.Pitch, Facing.Yaw, Facing.Roll);
+	if (Key == GroundAimLaid)
+	{
+		return;
+	}
+	GroundAimLaid = Key;
+	int32 Width = 0, Height = 0;
+	GetViewportSize(Width, Height);
+	const double S = Height / 1000.0;
+	const FVector2D A = Aim.Box.Min, B = Aim.Box.Max;
+	const double Arm = ((B.X - A.X) < 60.0 * S ? 12.0 : 16.0) * S;
+	TArray<FVector> Corners;
+	TArray<FColor> Inks;
+	// A rectangle of the screen laid on the ground: each corner where the eye's ray through it meets the ground at the
+	// height of the thing framed, so that from the eye it stands exactly where the screen has it, and a piece in front
+	// of it hides it.
+	auto Lay = [&](double X0, double Y0, double X1, double Y1, double Lift, const FColor& Ink)
+	{
+		const FVector2D Points[4] = { FVector2D(FMath::Min(X0, X1), FMath::Min(Y0, Y1)), FVector2D(FMath::Max(X0, X1), FMath::Min(Y0, Y1)),
+			FVector2D(FMath::Max(X0, X1), FMath::Max(Y0, Y1)), FVector2D(FMath::Min(X0, X1), FMath::Max(Y0, Y1)) };
+		FVector Laid[4];
+		for (int32 Each = 0; Each < 4; ++Each)
+		{
+			FVector From, Way;
+			if (!DeprojectScreenPositionToWorld(static_cast<float>(Points[Each].X), static_cast<float>(Points[Each].Y), From, Way) || Way.Z > -0.02)
+			{
+				return;
+			}
+			const double Along = (Aim.Foot.Z - From.Z) / Way.Z;
+			if (Along <= 0.0)
+			{
+				return;
+			}
+			const FVector2D On = Map->WorldToMap(From + Way * Along);
+			Laid[Each] = Map->SurfacePointOver(On.X, On.Y, Lift);
+		}
+		for (const FVector& Corner : Laid)
+		{
+			Corners.Add(Corner);
+		}
+		Inks.Add(Ink);
+	};
+	// The four clamps: a path through each corner of the frame, Thick across with square ends, the arm along the edge
+	// taking the corner's square and the arm down the side the rest (the browser's #fhground, fh-case under fh-arm).
+	auto Clamps = [&](double Thick, double Lift, const FColor& Ink)
+	{
+		const double Half = Thick * 0.5;
+		const FVector2D Ends[4] = { A, FVector2D(B.X, A.Y), FVector2D(A.X, B.Y), B };
+		const FVector2D Ways[4] = { FVector2D(1.0, 1.0), FVector2D(-1.0, 1.0), FVector2D(1.0, -1.0), FVector2D(-1.0, -1.0) };
+		for (int32 Each = 0; Each < 4; ++Each)
+		{
+			const FVector2D C = Ends[Each], W = Ways[Each];
+			Lay(C.X - W.X * Half, C.Y - W.Y * Half, C.X + W.X * (Arm + Half), C.Y + W.Y * Half, Lift, Ink);
+			Lay(C.X - W.X * Half, C.Y + W.Y * Half, C.X + W.X * Half, C.Y + W.Y * (Arm + Half), Lift, Ink);
+		}
+	};
+	Clamps(6.0 * S, 0.34, FLinearColor(FColor::FromHex(TEXT("0E0B08"))).CopyWithNewOpacity(0.9f).ToFColor(false)); // (desk-950 at 90%)
+	Clamps(3.0 * S, 0.38, FLinearColor(FColor::FromHex(TEXT("E0B872"))).ToFColor(false)); // (brass-300)
+	Map->ShowPointer(Corners, Inks);
 }
 
 void ACampaignPlayerController::AdviserSaw(int32 Step)
@@ -4470,6 +4835,8 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		{
 			AskLessons();
 		}
+		// What the note points at this frame (the screen draws a button's; the ground's is laid here).
+		AimLesson();
 	}
 	if (MomentGlideUntil > 0.0 && FPlatformTime::Seconds() >= MomentGlideUntil)
 	{

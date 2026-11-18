@@ -3978,6 +3978,84 @@ namespace
 		mutable FLaid Shown;
 	};
 
+	/**
+	 * (Rules 84.3.3; the art director's first-hour brief, section 3, and the kit's tc-pointer.) The staff note's pointer
+	 * on a button or a line of a card: four brass corner clamps, like a draughtsman's corner marks, 9 px clear of the
+	 * thing and breathing out to 13 and back in two seconds. Each arm is 3 px of brass-300 inside 6 px of desk-950 at
+	 * 90%, with a 5 px glow of brass-300; 12 long, or 16 round a thing 60 px or more each way. It takes no clicks.
+	 * (On the map the same clamps lie on the ground under the pieces, and do not breathe: ACampaignMapActor::ShowPointer.)
+	 */
+	class SLessonPointer : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SLessonPointer) {}
+			SLATE_ATTRIBUTE(FBox2D, Frame) // the thing framed, in the widget's own measure; invalid for nothing
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Frame = Args._Frame;
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override
+		{
+			return FVector2D::ZeroVector;
+		}
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+		{
+			const FBox2D Thing = Frame.Get();
+			if (!Thing.bIsValid)
+			{
+				return LayerId;
+			}
+			const double K = 0.9; // (the brief's pixels are the 1600 by 1000 frame's)
+			const double Breath = 0.5 - 0.5 * FMath::Cos(FPlatformTime::Seconds() * PI); // (out and back in two seconds)
+			const double Clear = (9.0 + 4.0 * Breath) * K;
+			const FVector2D Size = Thing.GetSize();
+			const double Arm = (Size.X >= 60.0 * K && Size.Y >= 60.0 * K ? 16.0 : 12.0) * K;
+			const FVector2D A = Thing.Min - FVector2D(Clear, Clear), B = Thing.Max + FVector2D(Clear, Clear);
+			static const FSlateColorBrush Solid(FLinearColor::White);
+			auto Rect = [&](int32 Layer, double X0, double Y0, double X1, double Y1, const FLinearColor& Ink)
+			{
+				const double Left = FMath::Min(X0, X1), Top = FMath::Min(Y0, Y1);
+				const FVector2D Box(FMath::Abs(X1 - X0), FMath::Abs(Y1 - Y0));
+				if (Box.X > 0.0 && Box.Y > 0.0)
+				{
+					FSlateDrawElement::MakeBox(OutDrawElements, Layer, Geometry.ToPaintGeometry(Box, FSlateLayoutTransform(FVector2D(Left, Top))), &Solid, ESlateDrawEffect::None, Ink);
+				}
+			};
+			// The four clamps, each an arm along the frame's edge and one down its side, Inset in from the frame's corner,
+			// Thick across and Long along (the arm along the edge takes the corner's square: no square is laid twice).
+			auto Clamps = [&](int32 Layer, double Inset, double Thick, double Long, const FLinearColor& Ink)
+			{
+				const FVector2D Corners[4] = { A, FVector2D(B.X, A.Y), FVector2D(A.X, B.Y), B };
+				const FVector2D Ways[4] = { FVector2D(1.0, 1.0), FVector2D(-1.0, 1.0), FVector2D(1.0, -1.0), FVector2D(-1.0, -1.0) };
+				for (int32 Each = 0; Each < 4; ++Each)
+				{
+					const FVector2D C = Corners[Each], W = Ways[Each];
+					Rect(Layer, C.X + W.X * Inset, C.Y + W.Y * Inset, C.X + W.X * (Inset + Long), C.Y + W.Y * (Inset + Thick), Ink);
+					Rect(Layer, C.X + W.X * Inset, C.Y + W.Y * (Inset + Thick), C.X + W.X * (Inset + Thick), C.Y + W.Y * (Inset + Long), Ink);
+				}
+			};
+			const FLinearColor Brass300(FColor::FromHex(TEXT("E0B872"))), Desk950(FColor::FromHex(TEXT("0E0B08")));
+			// The glow: the dark clamps' shape spread 5 px in brass, fading as it goes (the kit's drop-shadow at 75%).
+			const double Spreads[3] = { 4.5, 3.0, 1.5 };
+			const float Glows[3] = { 0.06f, 0.12f, 0.2f };
+			for (int32 Step = 0; Step < 3; ++Step)
+			{
+				const double E = Spreads[Step] * K;
+				Clamps(LayerId, -E, 6.0 * K + 2.0 * E, Arm + 6.0 * K + 2.0 * E, Brass300.CopyWithNewOpacity(Glows[Step]));
+			}
+			Clamps(LayerId + 1, 0.0, 6.0 * K, Arm + 6.0 * K, Desk950.CopyWithNewOpacity(0.9f));
+			Clamps(LayerId + 2, 1.5 * K, 3.0 * K, Arm + 1.5 * K, Brass300);
+			return LayerId + 3;
+		}
+
+	private:
+		TAttribute<FBox2D> Frame;
+	};
+
 	class SCampaignOverlay : public SCompoundWidget
 	{
 	public:
@@ -4308,14 +4386,14 @@ namespace
 								// (Rules version 66) How deep the campaign is played, and the door to the staff's room.
 								+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
 								[
-									SNew(SButton).ButtonStyle(&FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("NoBorder")).ContentPadding(FMargin(0.0f, 1.0f, 0.0f, 0.0f)).IsFocusable(false)
+									Aimed(TEXT("depth"), SNew(SButton).ButtonStyle(&FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("NoBorder")).ContentPadding(FMargin(0.0f, 1.0f, 0.0f, 0.0f)).IsFocusable(false)
 									.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetDepthLine().IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
 									.ToolTipText(FText::FromString(TEXT("How deep you play: which parts of the war are on your own desk and which your staff runs for you. Click to open YOUR STAFF, where the depth or any one desk can be changed in any month.")))
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenStaff(); } return FReply::Handled(); })
 									[
 										SNew(STextBlock).Font(Serif(TEXT("Italic"), 11)).ColorAndOpacity(InkRed)
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetDepthLine() : FText::GetEmpty(); })
-									]
+									])
 								]
 								// The weather, when it is not fair: mud in the east, or the eastern winter.
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
@@ -4547,7 +4625,7 @@ namespace
 								.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the strip is not the map
 								[
 									SNew(SHorizontalBox)
-									+ SHorizontalBox::Slot().AutoWidth()[MakeDoor(0, TEXT("ARSENAL"), TEXT("The arsenal: order corps, aircraft, ships, factories and other works. (1)"), [this]() { Controller->OpenArsenal(); })]
+									+ SHorizontalBox::Slot().AutoWidth()[Aimed(TEXT("arsenal"), MakeDoor(0, TEXT("ARSENAL"), TEXT("The arsenal: order corps, aircraft, ships, factories and other works. (1)"), [this]() { Controller->OpenArsenal(); }))]
 									+ SHorizontalBox::Slot().AutoWidth()[MakeDoor(1, TEXT("GENERALS"), TEXT("Your generals: who commands what, who is waiting for a command, and the corps that have nobody. (2)"), [this]() { Controller->OpenGenerals(); })]
 									+ SHorizontalBox::Slot().AutoWidth()[MakeDoor(2, TEXT("RESEARCH"), TEXT("The design offices: put design teams on the branches whose new weapons you want early. The number is the teams standing idle. (3)"), [this]() { Controller->OpenResearch(); }, [this]() { return Controller->GetIdleTeams(); })]
 									+ SHorizontalBox::Slot().AutoWidth()[MakeDoor(3, TEXT("DIPLOMACY"), TEXT("The foreign office: who is at war, where every neutral stands, courting them, and declaring war. (4)"), [this]() { Controller->OpenDiplomacy(); })]
@@ -5374,7 +5452,7 @@ namespace
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
-											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
+											Aimed(TEXT("send"), SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
 											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && !F->CallOffLit() ? EVisibility::Visible : EVisibility::Collapsed; })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmAttack(); } return FReply::Handled(); })
 											[
@@ -5391,13 +5469,13 @@ namespace
 														KeyCap(TEXT("ENTER"), BrightBrass)
 													]
 												]
-											]
+											])
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
 											// (A long shot or worse: SEND THEM IN keeps its place as a plain button that takes a click only.
 											// A pick that cannot go: it keeps its place dimmed, takes no click, and its hover says why.)
-											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
+											Aimed(TEXT("send"), SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
 											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->bMarch && !F->bStorm && F->CallOffLit() ? EVisibility::Visible : EVisibility::Collapsed; })
 											.IsEnabled_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->Alone.IsEmpty(); })
 											.ToolTipText_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Alone : FText::GetEmpty(); })
@@ -5405,14 +5483,14 @@ namespace
 											[
 												SNew(STextBlock).Text_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bSally ? TEXT("SALLY OUT") : TEXT("SEND THEM IN")); }).Font(Font(TEXT("Bold"), 11, 140))
 												.ColorAndOpacity_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F && !F->Alone.IsEmpty() ? Faint : Cream); })
-											]
+											])
 										]
 										// (Rules 84.1; rulings 177(b) and 178(c).) Before a march on a guarded town: the two orders in the
 										// forecasts' order, after CALL IT OFF. They never change places: only the light moves, to the
 										// order its own forecast favours.
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
-											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
+											Aimed(TEXT("siege"), SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
 											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && (F->bMarch || F->bStorm) && !F->bFavourSiege ? EVisibility::Visible : EVisibility::Collapsed; })
 											.ToolTipText_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bStorm ? TEXT("Every corps of yours round the town goes in.") : TEXT("The army marches in and goes at the town as it arrives: a hasty assault, off the march.")); })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmMarch(true); } return FReply::Handled(); })
@@ -5430,7 +5508,7 @@ namespace
 														KeyCap(TEXT("ENTER"), BrightBrass)
 													]
 												]
-											]
+											])
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
@@ -5444,7 +5522,7 @@ namespace
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
-											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
+											Aimed(TEXT("siege"), SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
 											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && (F->bMarch || F->bStorm) && F->bFavourSiege ? EVisibility::Visible : EVisibility::Collapsed; })
 											.ToolTipText_Lambda([Face]() { const FFaceOff* F = Face(); return FText::FromString(F && F->bStorm ? TEXT("The siege goes on. Nothing changes this month.") : TEXT("The army marches in and closes round the town. Nothing is risked this month, and next month the assault goes in made ready.")); })
 											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmMarch(false); } return FReply::Handled(); })
@@ -5462,7 +5540,7 @@ namespace
 														KeyCap(TEXT("ENTER"), BrightBrass)
 													]
 												]
-											]
+											])
 										]
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
@@ -6049,6 +6127,12 @@ namespace
 					// (Rules 84.3.3, FIRST COMMAND; the art director's look brief, ruling 147.) The staff's note: at its home
 					// under the date card, at its second home under the small map, or as the slip in the left margin of a
 					// card that veils the map. Over every card and room, under the films and the great moments.
+					// (Its pointer on a button or a card's line first, under the note: see SLessonPointer.)
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SLessonPointer).Visibility(EVisibility::HitTestInvisible)
+						.Frame_Lambda([this]() { return PointerFrame; })
+					]
 					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top)
 					.Padding(TAttribute<FMargin>::CreateLambda([this]() { return FMargin(static_cast<float>(LessonAt.X), static_cast<float>(LessonAt.Y), 0.0f, 0.0f); }))
 					[
@@ -6677,6 +6761,7 @@ namespace
 			SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
 			UpdateBigCard();
 			PlaceLessonNote();
+			PlaceLessonPointer();
 			// Where the pieces of the frame are now, for the plates and names that must keep out from under them.
 			FrameRects.Reset();
 			for (const TSharedRef<SWidget>& Each : FramePieces)
@@ -7751,6 +7836,71 @@ namespace
 			LessonAt = LessonHome == 1 ? Home2 : LessonHome == 2 ? FVector2D(7.0 * K, Home1.Y) : Home1;
 		}
 
+		/** (Rules 84.3.3) A thing the staff note's pointer may frame, by the name the controller aims at (FLessonAim). */
+		template <typename WidgetType>
+		TSharedRef<WidgetType> Aimed(const FName& Name, TSharedRef<WidgetType> Widget)
+		{
+			AimPieces.Emplace(Name, TWeakPtr<SWidget>(Widget));
+			return Widget;
+		}
+
+		/**
+		 * (Rules 84.3.3; the brief, section 3; trap 9.) What the pointer frames on the screen this frame: the first thing
+		 * shown by the name the controller aims at, unless it is scrolled out of its card. And where the note stands, in
+		 * the viewport's pixels, for a place pointed at on the ground to keep out from under it.
+		 */
+		void PlaceLessonPointer()
+		{
+			PointerFrame = FBox2D(ForceInit);
+			AimPieces.RemoveAll([](const TPair<FName, TWeakPtr<SWidget>>& Each) { return !Each.Value.IsValid(); });
+			if (!Controller.IsValid() || !ScreenRoot.IsValid())
+			{
+				return;
+			}
+			{
+				FBox2D NotePixels(ForceInit);
+				const FBox2D Note = bLessonShown && LessonNoteWidget.IsValid() ? InFrame(LessonNoteWidget) : FBox2D(ForceInit);
+				FVector2D Pixels(0.0, 0.0);
+				if (GEngine && GEngine->GameViewport)
+				{
+					GEngine->GameViewport->GetViewportSize(Pixels);
+				}
+				const FVector2D Screen = ScreenRoot->GetTickSpaceGeometry().GetLocalSize();
+				if (Note.bIsValid && Screen.X > 1.0 && Screen.Y > 1.0)
+				{
+					const FVector2D Scale(Pixels.X / Screen.X, Pixels.Y / Screen.Y);
+					NotePixels = FBox2D(Note.Min * Scale, Note.Max * Scale);
+				}
+				Controller->SetLessonNoteOnScreen(NotePixels);
+			}
+			const FLessonAim& Aim = Controller->GetLessonAim();
+			if (Aim.Kind != FLessonAim::Screen)
+			{
+				return;
+			}
+			const FBox2D Card = Controller->IsPageOpen() ? InFrame(PageCardBox) : FBox2D(ForceInit);
+			for (const TPair<FName, TWeakPtr<SWidget>>& Each : AimPieces)
+			{
+				if (Each.Key != Aim.Name)
+				{
+					continue;
+				}
+				const FBox2D Box = InFrame(Each.Value);
+				if (!Box.bIsValid)
+				{
+					continue;
+				}
+				// (Scrolled out of its card, it is not pointed at: the clamps would hang over the card's head round nothing.)
+				const double Middle = Box.GetCenter().Y;
+				if (Card.bIsValid && (Middle < Card.Min.Y || Middle > Card.Max.Y))
+				{
+					continue;
+				}
+				PointerFrame = Box;
+				return;
+			}
+		}
+
 		/** A piece of the frame that the news line must keep clear of on its right: one of the chips. */
 		template <typename WidgetType>
 		TSharedRef<WidgetType> Chip(TSharedRef<WidgetType> Widget)
@@ -8031,7 +8181,7 @@ namespace
 			{
 				Box->AddSlot()
 				[
-					OfficeButton(*Button.Label, Button.bDanger ? Alarm : BrightBrass, Button.bOk, Button.Tip, [this, Act = Button.Act]() { if (Controller.IsValid()) { Controller->PressPage(Act); } })
+					Aimed(FName(*(TEXT("act:") + Button.Act)), OfficeButton(*Button.Label, Button.bDanger ? Alarm : BrightBrass, Button.bOk, Button.Tip, [this, Act = Button.Act]() { if (Controller.IsValid()) { Controller->PressPage(Act); } }))
 				];
 			}
 			return Box;
@@ -8443,8 +8593,8 @@ namespace
 					];
 			};
 			return SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()[Make(true, DarkInk)]
-				+ SVerticalBox::Slot().AutoHeight()[Make(false, DeskInk)];
+				+ SVerticalBox::Slot().AutoHeight()[Aimed(TEXT("end"), Make(true, DarkInk))]
+				+ SVerticalBox::Slot().AutoHeight()[Aimed(TEXT("end"), Make(false, DeskInk))];
 		}
 
 		/**
@@ -8784,10 +8934,12 @@ namespace
 					]
 				];
 			}
-			return SNew(SBox).HeightOverride(71.0f)
+			const TSharedRef<SBox> Row = SNew(SBox).HeightOverride(71.0f)
 				[
 					SNew(SBorder).BorderImage(&MonthBoxBrush).Padding(FMargin(0.0f))[Line]
 				];
+			// (Rules 84.3.3) A line that carries a pin is one lesson 6 points at, the whole line framed.
+			return Told.Region >= 0 || Told.Sea >= 0 ? Aimed(TEXT("line"), Row) : Row;
 		}
 
 		/**
@@ -8857,7 +9009,7 @@ namespace
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
-					SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(30.0f, 11.0f)).IsFocusable(false)
+					Aimed(TEXT("giveorders"), SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(30.0f, 11.0f)).IsFocusable(false)
 					.ToolTipText(FText::FromString(TEXT("Puts the report away. Enter does the same, and R opens it again.")))
 					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ClosePage(); } return FReply::Handled(); })
 					[
@@ -8867,7 +9019,7 @@ namespace
 							SNew(STextBlock).Text(FText::FromString(TEXT("GIVE ORDERS"))).Font(Font(TEXT("Bold"), 12, 240)).ColorAndOpacity(Ink)
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), Ink)] // (item 6: the lit button shows its key)
-					]
+					])
 				]
 			];
 
@@ -10156,21 +10308,21 @@ namespace
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
 				[
-					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(20.0f, 10.0f)).IsFocusable(false)
+					Aimed(TEXT("otherraid"), SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(20.0f, 10.0f)).IsFocusable(false)
 					.ToolTipText(FText::FromString(TEXT("The kinds of raid, to pick another.")))
 					.OnClicked_Lambda(Go(Card.OtherAct))
 					[
 						SNew(STextBlock).Text(FText::FromString(TEXT("ANOTHER KIND OF RAID"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Cream)
-					]
+					])
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
-					SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(38.0f, 11.0f)).IsFocusable(false).IsEnabled(Card.Fly.bOk)
+					Aimed(TEXT("fly"), SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(38.0f, 11.0f)).IsFocusable(false).IsEnabled(Card.Fly.bOk)
 					.ToolTipText(FText::FromString(Card.Fly.Tip))
 					.OnClicked_Lambda(Go(Card.Fly.Act))
 					[
 						SNew(STextBlock).Text(FText::FromString(Card.Fly.Label.IsEmpty() ? FString(TEXT("FLY THE RAID")) : Card.Fly.Label)).Font(Font(TEXT("Bold"), 12, 240)).ColorAndOpacity(Card.Fly.bOk ? Ink : Faint)
-					]
+					])
 				]
 			];
 		}
@@ -10897,14 +11049,14 @@ namespace
 					]
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 					[
-						SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
+						Aimed(FName(*(TEXT("deskbar:") + Id)), SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
 						.ToolTipText_Lambda([Found]() { const FViewDesk* D = Found(); return D ? FText::FromString(D->Tip) : FText::GetEmpty(); })
 						.OnClicked_Lambda([this, Id]() { if (Controller.IsValid()) { Controller->PressDesk(Id); } return FReply::Handled(); })
 						[
 							SNew(STextBlock).Font(Font(TEXT("Bold"), 10, 160))
 							.ColorAndOpacity_Lambda([Found]() { const FViewDesk* D = Found(); return FSlateColor(D && D->bStaff ? BrightBrass : Muted); })
 							.Text_Lambda([Found]() { const FViewDesk* D = Found(); return D ? FText::FromString(D->Label) : FText::GetEmpty(); })
-						]
+						])
 					]
 				];
 		}
@@ -13197,6 +13349,8 @@ namespace
 		float LessonSlipWide = 148.0f;
 		int32 LessonHome = 0; // 0 under the date card, 1 under the small map, 2 the slip at the left edge (ruling 147(a))
 		int32 LessonPlacedArrival = -1;
+		TArray<TPair<FName, TWeakPtr<SWidget>>> AimPieces; // what the note's pointer may frame on the screen, by name (see Aimed)
+		FBox2D PointerFrame = FBox2D(ForceInit); // what it frames this frame, in the frame's own measure
 		TArray<FString> WatchShown;
 		int32 WatchNow = INDEX_NONE;
 		TSharedPtr<SVerticalBox> PageSections;
