@@ -113,6 +113,10 @@ namespace TheaterFx
 		// side is in its shadow; the middle drifts with the wind and climbs at CentreRise)
 		Vec Centre;
 		double CloudShade = 0.0, CloudR = 1.0, CentreRise = 0.0;
+		// (smoke seen with the sun behind the eye shows its sunlit face: FaceLit is how far it then goes toward LitCol, most
+		// on its cloud's sunward side and least on the far side; none seen side-on or against the sun, nor at night)
+		double FaceLit = 0.0;
+		Rgb LitCol;
 		Rgb Col, Col2;
 		bool bLight = false; // flame, flash, sparks, tracer: keeps its own colour by night and takes no shading
 		mutable bool bShown = false; // (laid at least once: a light shorter than a frame is kept until it has been)
@@ -364,7 +368,7 @@ namespace TheaterFx
 
 		Vec Where(const Bit& B, double Age) const;
 		Vec Going(const Bit& B, double Age) const;
-		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough = 0.0, uint32_t LumpSeed = 0, double Turn = 0.0, const Rgb& Floor = Rgb(), const Rgb& Through = Rgb(), const Vec& Outward = Vec());
+		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough = 0.0, uint32_t LumpSeed = 0, double Turn = 0.0, const Rgb& Floor = Rgb(), const Rgb& Through = Rgb(), const Vec& Outward = Vec(), const Rgb& Lift = Rgb());
 		bool LayBit(int Slot, const Bit& B, double Now, const View& Eye);
 	};
 }

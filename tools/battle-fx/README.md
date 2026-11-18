@@ -106,6 +106,11 @@ Blasts->AirFlak(AirNow, BurstWorld, TEXT("heavy"));
   for home. Each burst is about 12 to 19 puffs.
 - The preview: `./fxpreview recipe.txt out air hmg 6,20,95,245 960x540 burst` (one burst, close) or `... 360 960x540
   flak` (heavy guns round a flying aircraft).
+  `... 6,12,35,95 960x540 above` is one burst 60 m over the fields as the campaign camera sees it: FX_DIST metres off (75),
+  looking down FX_PITCH degrees (50), facing FX_YAW degrees (90); FX_SUN=x,y,z sets the sun for every air shot.
+- Seen with the sun behind the eye (as from the campaign camera on a sunny day), a flak burst shows its sunlit face:
+  `face_lit` takes its outer lobes and wisps toward `lit_colour`, most on the sunward side, while its young heart and
+  far side stay dark. Seen side-on, against the sun or at night it keeps the dark look.
 
 `-TheaterBlastTest` on the command line plays a 24-second barrage of every size and kind round the point given to
 RunTest, again and again, for test pictures.

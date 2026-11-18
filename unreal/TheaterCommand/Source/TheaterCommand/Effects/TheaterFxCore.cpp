@@ -1866,6 +1866,8 @@ namespace TheaterFx
 		const double LeastPx = Num(P + "least_px", 9.0);
 		const Rgb Young = Picture(P + "colour", Rgb::FromPicture(46, 43, 42));
 		const Rgb Old = Picture(P + "colour_old", Rgb::FromPicture(128, 122, 116));
+		const double FaceLit = std::max(0.0, Num(P + "face_lit", 0.0));
+		const Rgb LitCol = Picture(P + "lit_colour", Rgb::FromPicture(140, 134, 124));
 		auto Smoke = [&](const Vec& From, double R, double R1, const Vec& Vel, double A, double Life)
 		{
 			Bit B;
@@ -1895,6 +1897,8 @@ namespace TheaterFx
 			B.Centre = At;
 			B.CloudShade = Shade;
 			B.CloudR = Half;
+			B.FaceLit = FaceLit;
+			B.LitCol = LitCol;
 			return B;
 		};
 		// the lobes: a crooked chain down the wind, never a clump: spread along the wind, wandering across it and up
@@ -2432,7 +2436,7 @@ namespace TheaterFx
 	// ---------------------------------------------------------------------------------------------------------------
 	// Drawing
 
-	void Battle::Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough, uint32_t LumpSeed, double Turn, const Rgb& Floor, const Rgb& Through, const Vec& Outward)
+	void Battle::Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough, uint32_t LumpSeed, double Turn, const Rgb& Floor, const Rgb& Through, const Vec& Outward, const Rgb& Lift)
 	{
 		const size_t First = static_cast<size_t>(Slot) * PointsPerPuff;
 		auto Put = [this](size_t I, const Vec& At, const Rgb& C, double A)
@@ -2443,7 +2447,11 @@ namespace TheaterFx
 			OutRgba[I * 4 + 2] = Byte(C.B);
 			OutRgba[I * 4 + 3] = Byte(A);
 		};
-		Put(First, Middle, Rgb(std::max(Col.R, Floor.R), std::max(Col.G, Floor.G), std::max(Col.B, Floor.B)), Alpha);
+		// (Lift: the sunlit face of smoke seen with the sun behind the eye, all of it at the middle, less toward the edge
+		// and least on the edge away from the sun, so each lobe shows as a lit dome and the lobes can be counted)
+		const bool bLift = std::fabs(Lift.R) + std::fabs(Lift.G) + std::fabs(Lift.B) > 1e-6f;
+		const Rgb Mid = bLift ? Rgb(Col.R + Lift.R, Col.G + Lift.G, Col.B + Lift.B) : Col;
+		Put(First, Middle, Rgb(std::max(Mid.R, Floor.R), std::max(Mid.G, Floor.G), std::max(Mid.B, Floor.B)), Alpha);
 		// (a clod's lumpy outline: a few waves round it, its own, turning as it tumbles. Each wave is
 		// cos(n * (Angle - Turn) + Pn), worked out from the ring's own table, so a puff costs six cosines, not three a side)
 		double C2 = 1.0, S2 = 0.0, C3 = 1.0, S3 = 0.0, C5 = 1.0, S5 = 0.0;
@@ -2497,6 +2505,15 @@ namespace TheaterFx
 				Shaded = Col * F;
 				HeartShaded = Col * (1.0 + 0.5 * (F - 1.0));
 			}
+			if (bLift)
+			{
+				const double Len2 = AA * Cs * Cs + BB * Sn * Sn + 2.0 * AB * Cs * Sn;
+				const double Toward = Len2 > 1e-18 ? (SunA * Cs + SunB * Sn) / std::sqrt(Len2) : 0.0;
+				const double Lean = Clamp01(0.5 + 0.5 * Toward / std::max(SunAcross, 0.05)); // (1 on the side toward the sun on the screen)
+				const float KHeart = static_cast<float>(0.6 + 0.4 * Lean), KRim = static_cast<float>(0.15 + 0.6 * Lean);
+				HeartShaded = Rgb(HeartShaded.R + KHeart * Lift.R, HeartShaded.G + KHeart * Lift.G, HeartShaded.B + KHeart * Lift.B);
+				Shaded = Rgb(Shaded.R + KRim * Lift.R, Shaded.G + KRim * Lift.G, Shaded.B + KRim * Lift.B);
+			}
 			Shaded = Rgb(std::max(Shaded.R, Floor.R), std::max(Shaded.G, Floor.G), std::max(Shaded.B, Floor.B));
 			HeartShaded = Rgb(std::max(HeartShaded.R, Floor.R), std::max(HeartShaded.G, Floor.G), std::max(HeartShaded.B, Floor.B));
 			if (bThrough)
@@ -2541,7 +2558,7 @@ namespace TheaterFx
 			return false;
 		}
 		Rgb Col = B.Col.Mix(B.Col2, F * B.Cool);
-		Rgb Floor, Through;
+		Rgb Floor, Through, Lift;
 		if (!B.bLight)
 		{
 			Col = Rgb(Col.R * Eye.SmokeLight.R, Col.G * Eye.SmokeLight.G, Col.B * Eye.SmokeLight.B);
@@ -2567,6 +2584,19 @@ namespace TheaterFx
 			{
 				const double Toward = FromMid.Dot(Eye.Sun) / Len * Clamp01(Len / std::max(B.CloudR, 1e-3));
 				Col = Col * std::max(0.3, 1.0 + B.CloudShade * (ShadeLit * std::max(0.0, Toward) - ShadeDark * std::max(0.0, -Toward)));
+				if (B.FaceLit > 0.0 && Dist > 1e-6)
+				{
+					// (art director 23:44Z: flak seen from above with the sun behind the eye shows its sunlit face in a
+					// light grey, dark only in its hollows, its far side and its young heart; seen side-on or against
+					// the sun it keeps the look she passed. Most on the cloud's thin outer lobes and wisps and on its
+					// sunward side; next to none in its dense young heart, where the lobes are still close in, nor on
+					// its far side. Laid by Lay: all of it at a lobe's middle, less toward its edge)
+					const double Face = (Eye.Eye - P).Dot(Eye.Sun) / Dist;
+					const double Day = (Eye.SunLight.R + Eye.SunLight.G + Eye.SunLight.B) / 3.0;
+					const double W = Clamp01(1.2 * Outer + 1.5 * Toward - 0.15);
+					const float L = static_cast<float>(Clamp01(B.FaceLit * std::max(0.0, Face) * W * std::sqrt(W) * Day));
+					Lift = Rgb((B.LitCol.R * Eye.SmokeLight.R - Col.R) * L, (B.LitCol.G * Eye.SmokeLight.G - Col.G) * L, (B.LitCol.B * Eye.SmokeLight.B - Col.B) * L);
+				}
 				Col = Rgb(std::max(Col.R, Floor.R), std::max(Col.G, Floor.G), std::max(Col.B, Floor.B));
 			}
 		}
@@ -2705,7 +2735,7 @@ namespace TheaterFx
 			return false;
 		}
 		const double Heart = B.HeartEnd >= 0.0 ? B.Heart + (B.HeartEnd - B.Heart) * F : B.Heart;
-		Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * B.Rim, B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, B.Turn + B.TurnRate * Age, Floor, Through, Outward);
+		Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * B.Rim, B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, B.Turn + B.TurnRate * Age, Floor, Through, Outward, Lift);
 		B.bShown = true;
 		return true;
 	}

@@ -424,11 +424,25 @@ namespace
 		TheaterFx::Dice Spots(11);
 		// flak: "burst" is one burst beside the aircraft's path, watched from a fixed eye; "flak" is heavy guns firing
 		// round the aircraft as it flies on, bursts every 0.9 s or so (ragged), more behind than ahead
-		const bool bFlak = ShotName == "flak" || ShotName == "burst";
+		// "above" is one burst 60 m over the fields seen as the campaign camera sees it: FX_DIST metres off (75), looking
+		// down FX_PITCH degrees (50; the campaign camera never looks flatter than 22), facing FX_YAW degrees (90: the
+		// game's test sun, 42 degrees up toward 249, then stands behind the eye's left)
+		const bool bAbove = ShotName == "above";
+		const bool bFlak = ShotName == "flak" || ShotName == "burst" || bAbove;
 		const Frame Start = Fly(0.15);
 		const Vec StartLevel = Vec(Start.Fw.X, Start.Fw.Y, 0.0).Unit();
 		const Vec StartRight = StartLevel.Cross(ZUp).Unit();
-		const Vec BurstAt = Start.At + StartLevel * 60.0 - StartRight * 25.0 + ZUp * 4.0;
+		const Vec BurstAt = bAbove ? Vec(0.0, 0.0, 60.0) : Start.At + StartLevel * 60.0 - StartRight * 25.0 + ZUp * 4.0;
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		Vec AirSun = Battle::View().Sun; // (FX_SUN=x,y,z: the way toward the sun)
+		if (const char* SunIs = std::getenv("FX_SUN"))
+		{
+			double X = 0.0, Y = 0.0, Z = 1.0;
+			if (std::sscanf(SunIs, "%lf,%lf,%lf", &X, &Y, &Z) == 3)
+			{
+				AirSun = Vec(X, Y, Z).Unit();
+			}
+		}
 		double NextBurst = 0.2;
 		auto Shoot = [&](const Frame& F)
 		{
@@ -437,7 +451,13 @@ namespace
 			Camera Cam;
 			Cam.W = W;
 			Cam.H = H;
-			if (ShotName == "burst")
+			if (bAbove)
+			{
+				const double Pitch = EnvNum("FX_PITCH", 50.0) * Pi / 180.0, Yaw = EnvNum("FX_YAW", 90.0) * Pi / 180.0;
+				Cam.Forward = Vec(std::cos(Pitch) * std::cos(Yaw), std::cos(Pitch) * std::sin(Yaw), -std::sin(Pitch));
+				Cam.Eye = BurstAt - Cam.Forward * EnvNum("FX_DIST", 75.0);
+			}
+			else if (ShotName == "burst")
 			{
 				Cam.Eye = BurstAt + StartRight * (std::getenv("FX_FAR") ? 160.0 : 95.0) - StartLevel * 10.0 + ZUp * 8.0;
 				Cam.Forward = (BurstAt + StartLevel * (std::getenv("FX_FAR") ? 22.0 : 8.0) - Cam.Eye).Unit();
@@ -500,6 +520,7 @@ namespace
 			V.Up = C.Up;
 			V.Forward = C.Forward;
 			V.PixelsPerRadian = C.Ppr;
+			V.Sun = AirSun;
 			if (bDusk)
 			{
 				V.SmokeLight = Rgb(0.22f, 0.22f, 0.27f);
@@ -538,7 +559,7 @@ namespace
 				}
 				if (bFlak)
 				{
-					if (ShotName == "burst")
+					if (ShotName == "burst" || bAbove)
 					{
 						if (Step == 9)
 						{
@@ -577,6 +598,7 @@ namespace
 			View.Up = Cam.Up;
 			View.Forward = Cam.Forward;
 			View.PixelsPerRadian = Cam.Ppr;
+			View.Sun = AirSun;
 			if (bDusk)
 			{
 				View.SmokeLight = Rgb(0.22f, 0.22f, 0.27f);
@@ -584,7 +606,9 @@ namespace
 			const int N = Fx.Draw(Now, View);
 			Canvas C;
 			C.Init(W, H);
-			Paint(C, Cam, nullptr, 0, {}, false);
+			Battle::Lamp AirLamps[2];
+			const int NAirLamps = bAbove ? Fx.Lamps(Now, AirLamps, 2, Fx.DayOf(View.SmokeLight)) : 0; // (over the fields: the flash's lamp on the ground)
+			Paint(C, Cam, AirLamps, NAirLamps, {}, false);
 			// the aircraft: a plain olive-drab shape, lit by the sun, so the flash and streams are judged on a wing
 			{
 				const Vec Sun = View.Sun.Unit();
