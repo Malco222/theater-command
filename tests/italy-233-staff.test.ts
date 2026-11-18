@@ -1,4 +1,4 @@
-// Ruling 233, riders (j), (k), (q), (r), (s) and (u) (the design director's b506 to b516; the grand campaign, computer staffs only).
+// Ruling 233, riders (j), (k), (q), (r), (s), (u) and (v) (the design director's b506 to b520; the grand campaign, computer staffs only).
 // (j) History's list of shores has an order: when the month comes for a later shore of the list, a staff's home army
 //     turns to the enemy who holds it nearest the home ports, though its first enemy across the sea still stands.
 //     Britain turns to France in 1944 while Italy fights on. (Before it a staff kept one enemy across the sea for as
@@ -12,6 +12,8 @@
 //     standing in its own home stays there (open.json 'descent.strength.own'): Italy's, against a landing in Brittany.
 // (u) History's list picks the day (b516): a staff that has planned for a shore of the list since the first month of
 //     its lead lands on it in the shore's month without the monthly dice, where every test passes (open.json 'descent.day').
+// (v) A computer admiral whose own staff has named no crossing covers the named crossing of an ally in the same war
+//     (b520; fleets.json 'ai.allies'): America's Atlantic Fleet, the months Britain's way to Sardinia is shut.
 import { describe, expect, it } from 'vitest';
 import fleetData from '../data/campaign/fleets.json';
 import openData from '../data/campaign/open.json';
@@ -326,5 +328,61 @@ describe('only the holder of the beach brings reserves from home (233(s))', () =
     expect(R.behind).toBeGreaterThan(0);
     expect(all.behind - R.behind).toBeGreaterThan(0);
     expect(all.behind - R.behind).toBeLessThanOrEqual(atHome(g, 'GER'));
+  });
+});
+
+describe('a computer admiral covers an ally\'s named crossing (233(v))', () => {
+  const AI = fleetData.ai as { allies?: boolean };
+  const sea = (g: Game, name: string): number => g.seas.findIndex((z) => z.name === name);
+  /** America in the war beside Britain, Britain's home army with its beach named (Sardinia, from Cornwall), and an American patrol fleet based in Cornwall with the Western Approaches for its beat. */
+  const allies = (): { g: Game; f: Game['fleets'][number]; off: number; beat: number } => {
+    const g = startOpen(createGame(3, null));
+    g.nations.USA.align = g.nations.UK.align;
+    for (const [a, b] of [['GER', 'UK'], ['ITA', 'UK'], ['GER', 'USA'], ['ITA', 'USA']]) setWar(g, a, b);
+    g.turn = 46;
+    const quay = g.byName.Cornwall, beat = sea(g, 'Western Approaches'), off = sea(g, 'Western Mediterranean');
+    g.flags['st:aim:UK'] = g.byName.Sardinia.id + 1;
+    g.flags['st:quay:UK'] = quay.id + 1;
+    const f = fleetsOf(g, 'USA').filter((x) => x.duty !== 'raid').sort((a, b) => b.ships.bb + b.ships.ca - a.ships.bb - a.ships.ca)[0];
+    Object.assign(f, { base: quay.id, home: beat, station: beat, zone: beat, stance: 'port', duty: 'patrol', tied: false, ready: 1 });
+    return { g, f, off, beat };
+  };
+
+  it('is in the data', () => {
+    expect(AI.allies).toBe(true);
+  });
+
+  it('with no crossing of its own staff, the American fleet stands off the beach Britain has named', () => {
+    const { g, f, off } = allies();
+    expect(g.byName.Sardinia.seas).toContain(off);
+    navalAI(g, 'USA');
+    expect(atSea(f)).toBe(true);
+    expect(f.zone).toBe(off);
+    // With the dial off it keeps its own beat, as before.
+    const was = allies();
+    AI.allies = false;
+    try { navalAI(was.g, 'USA'); } finally { AI.allies = true; }
+    expect(was.f.zone).toBe(was.beat);
+  });
+
+  it('its own staff\'s crossing comes first, and an ally\'s war that is not its own is not covered', () => {
+    // America's own army has a beach named too (the Cotentin, from Cornwall): Britain's is left to Britain's fleets.
+    const own = allies();
+    own.g.byName.Cotentin.ctrl = 'GER';
+    own.g.flags['st:aim:USA:o'] = own.g.byName.Cotentin.id + 1;
+    own.g.flags['st:quay:USA:o'] = own.g.byName.Cornwall.id + 1;
+    navalAI(own.g, 'USA');
+    expect(own.f.zone).not.toBe(own.off);
+    // America at peace with Italy: the beach is no enemy's of hers.
+    const peace = allies();
+    peace.g.nations.USA.atWar = peace.g.nations.USA.atWar.filter((e) => e !== 'ITA');
+    peace.g.nations.ITA.atWar = peace.g.nations.ITA.atWar.filter((e) => e !== 'USA');
+    navalAI(peace.g, 'USA');
+    expect(peace.f.zone).not.toBe(peace.off);
+    // A player's fleets are his own to order.
+    const mine = allies();
+    mine.g.human = 'USA';
+    navalAI(mine.g, 'USA');
+    expect(mine.f.zone).toBe(mine.beat);
   });
 });
