@@ -169,7 +169,10 @@ class Show:
 
 def choice(opt):
     """What the command line asks of the builder: gun=short paint=yellow."""
-    return {k: opt[k] for k in ("gun", "paint") if k in opt}
+    out = {k: opt[k] for k in ("gun", "paint") if k in opt}
+    if opt.get("skirts"):                                  # skirts=all, or the hull plates she has lost: skirts=l2,r4
+        out["skirts"] = True if opt["skirts"] in ("all", "1", "yes") else opt["skirts"]
+    return out
 
 
 def options(argv):

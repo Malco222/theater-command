@@ -92,11 +92,12 @@ ABOUT = {
 
 # What a builder takes to build everything the game's file carries (both of a Panzer IV's guns), and the faces a
 # vehicle showed through the war, for the sheet of them: (words, what to pass the builder).
-WHOLE = {"PanzerIV": {"gun": "all"}}
+WHOLE = {"PanzerIV": {"gun": "all", "skirts": True}}
 FACES = {
     "PanzerIV": [("1939 to early 1942: the short gun, dark grey", {"gun": "short", "paint": "grey"}),
                  ("1942: the long gun, dark grey", {"gun": "long", "paint": "grey"}),
-                 ("1943 on: the long gun, dark yellow", {"gun": "long", "paint": "yellow"})],
+                 ("Early 1943: the long gun, dark yellow", {"gun": "long", "paint": "yellow"}),
+                 ("May 1943 on: skirts on her hull and turret (this one has lost a plate)", {"gun": "long", "paint": "yellow", "skirts": "r4"})],
     "Tiger": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "Hanomag": [("1939 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "leFH18": [("1939 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],

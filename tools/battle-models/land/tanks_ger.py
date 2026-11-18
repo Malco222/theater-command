@@ -40,12 +40,93 @@ def coats(v, default="grey", only=None):
     return {"default": default, "choices": out}
 
 
-def panzer4(fine=True, tag="GER", gun="long", paint=None):
+def pz4_skirts(v, x0, zt, lost=()):
+    """The Panzer IV's skirts of May 1943 on: five thin plates a side hung on a rail a hand's width off her hull,
+    over the upper run of the tracks, and a shield round her turret's sides and back with a door each side. Every
+    hull plate is a part of its own, since tanks lost them: `lost` names the ones this tank has lost ("l2", "r4").
+    Returns the names of all the skirts' parts, and of the hull plates among them."""
+    fine = v.fine
+    parts, plates = [], []
+    ys, zr = 1.60, 1.60                                    # the rail: how far out it stands, how high
+    xa, xb, n = -2.56, 1.94, 5
+    step = (xb - xa) / n
+    for letter, s in SIDES:
+        rail = f"skirt_rail_{letter}"
+        parts.append(rail)
+        v.part(rail, "hull", (0.0, s * ys, zr), kind="fixed", note="the rail her hull skirts hang on, on its brackets (shown with the skirts)")
+        v.slab((xa - 0.02, s * (ys - 0.04), zr - 0.006), (xb + 0.02, s * ys, zr), coat, 0.002)                 # an angle iron: its flat,
+        v.slab((xa - 0.02, s * (ys - 0.006), zr - 0.05), (xb + 0.02, s * ys, zr), coat, 0.002)                 # and its web
+        for x in (xa + 0.04, xa + step, xa + 2 * step, xa + 3 * step, xa + 4 * step, 1.66):
+            v.slab((x - 0.022, s * 1.31, zr - 0.034), (x + 0.022, s * (ys - 0.03), zr - 0.006), coat, 0.002)   # a strap out from her side
+            v.rod((x, s * (ys - 0.02), zr - 0.03), (x, s * 1.43, 1.105), 0.012, coat, 6)                       # and a stay down to the track guard
+            if fine:
+                v.bolt((x, s * 1.34, zr - 0.006), Z, 0.009, 0.006)
+        for k in range(n):
+            name = f"skirt_{letter}{k + 1}"
+            parts.append(name)
+            plates.append(name)
+            if f"{letter}{k + 1}" in lost:
+                continue
+            x1, x2 = xa + step * k + 0.008, xa + step * (k + 1) - 0.008
+            ztop, zbot = zr + 0.025, 0.52
+            v.part(name, "hull", ((x1 + x2) / 2, s * ys, zr), kind="fixed", note="a skirt plate hung on the rail: tanks lose them (the game hides none, one or two a tank)")
+            j = lambda k=1.0: v.rng.uniform(-1.0, 1.0) * k                                                     # noqa: E731  (hung by hand, knocked about)
+            yo = s * (ys + 0.014)
+            bent = 0.0 if k == 2 else 0.028                 # (the plate that carries her cross hangs true)
+            a, b = (x1, yo + bent * j(), zbot + 0.02 * j()), (x2, yo + bent * j(), zbot + 0.02 * j())
+            cs = [a, (x1, yo, ztop), (x2, yo, ztop), b]
+            if k == n - 1:                                 # the foremost plate's lower corner is cut away
+                cs = [a, (x1, yo, ztop), (x2, yo, ztop), (x2, yo, zbot + 0.42), (x2 - 0.3, b[1], b[2])]
+            if k == 0:                                     # and the aftermost's
+                cs = [(x1 + 0.26, a[1], a[2]), (x1, yo, zbot + 0.36), (x1, yo, ztop), (x2, yo, ztop), b]
+            v.plate(cs[::int(s)], 0.006, coat, 0.002)
+            for x in (x1 + 0.16, x2 - 0.16):               # the two hooks it hangs by
+                v.slab((x - 0.03, s * (ys - 0.012), zr - 0.07), (x + 0.03, s * (ys + 0.022), zr + 0.012), "steel", 0.003)
+            if k == 2:
+                v.mark("GER", ((x1 + x2) / 2, yo + s * 0.001, 1.22), Y * s, 0.2, part=name)
+    # ---- the turret's shield: a horseshoe of plate round her sides and back, standing off on stays ---------------
+    z0, z1 = zt + 0.08, zt + 0.58
+    side = [(0.80, 1.02), (0.34, 1.17), (-0.52, 1.15), (-1.20, 0.98), (-1.68, 0.55)]
+    v.part("skirt_turret", "turret", (x0 - 0.4, 0.0, z0), kind="fixed", note="the shield round her turret's sides and back (shown with the skirts; it always stays)")
+    parts.append("skirt_turret")
+
+    def quad(p, q, s, cut=0.0):
+        a, b = (x0 + p[0], s * p[1]), (x0 + q[0], s * q[1])
+        cs = [(a[0], a[1], z0), (b[0], b[1], z0), (b[0], b[1], z1), (a[0], a[1], z1 - cut)]
+        return cs[::int(s)]
+    for letter, s in SIDES:
+        v.use("skirt_turret")
+        v.plate(quad(side[0], side[1], s, cut=0.18), 0.008, coat, 0.002)
+        v.plate(quad(side[2], side[3], s), 0.008, coat, 0.002)
+        v.plate(quad(side[3], side[4], s), 0.008, coat, 0.002)
+        for a, b in (((0.60, 0.56, 2.22), (0.56, 1.09, 2.2)), ((-0.66, 0.62, 2.28), (-0.80, 1.07, 2.26)), ((-1.0, 0.36, 2.285), (-1.70, 0.36, 2.26)),
+                     ((0.5, 0.80, 1.86), (0.55, 1.09, 1.86)), ((-0.74, 0.85, 1.86), (-0.80, 1.07, 1.86))):
+            v.rod((x0 + a[0], s * a[1], a[2]), (x0 + b[0], s * b[1], b[2]), 0.013, coat, 6)
+        # the door: across from her own side doors, hung on its fore edge, opening outward
+        name = f"skirt_door_{letter}"
+        parts.append(name)
+        hinge = Vector((x0 + side[1][0], s * side[1][1], (z0 + z1) / 2))
+        v.part(name, "skirt_turret", hinge, axis=(0, 0, -s), limits=[0.0, 100.0], kind="turn", note="the door in her turret's shield: + opens it outward (thrown open when her men bail out)")
+        v.plate(quad((side[1][0] - 0.006, side[1][1]), (side[2][0] + 0.006, side[2][1]), s), 0.008, coat, 0.002)
+        xm, ym = x0 + (side[1][0] + side[2][0]) / 2, s * ((side[1][1] + side[2][1]) / 2 + 0.001)
+        v.slab((xm - 0.004, ym - 0.002, z0 + 0.01), (xm + 0.004, ym + 0.003, z1 - 0.01), "shade")                   # it is in two leaves
+        if fine:
+            for z in (z0 + 0.1, z1 - 0.1):
+                v.hinge((hinge.x, hinge.y + s * 0.006, z - 0.04), (hinge.x, hinge.y + s * 0.006, z + 0.04), 0.011)
+            v.handle((xm - 0.16, ym + s * 0.001, z0 + 0.25), (xm - 0.06, ym + s * 0.001, z0 + 0.25), Y * s, 0.007, 0.03, "steel")
+    v.use("skirt_turret")
+    p, q = (x0 + side[4][0], side[4][1]), (x0 + side[4][0], -side[4][1])
+    v.plate([(p[0], p[1], z0), (q[0], q[1], z0), (q[0], q[1], z1), (p[0], p[1], z1)], 0.008, coat, 0.002)      # across her back, behind the bin
+    return parts, plates
+
+
+def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None):
     """Panzer IV: 5.92 m hull, 2.88 m wide, 2.68 m high; eight small road wheels a side on leaf-sprung bogies, four
     return rollers, drive at the front. She served the whole war with two guns and two coats, and this one model is
     both: gun="long" is the 7.5 cm L/48 with its double-baffle muzzle brake (1942 on), "short" the 7.5 cm L/24 with
     none (1939 to early 1942), "all" builds both barrels for the game's file, which shows one (its `swaps`);
-    paint "grey" (to early 1943) or "yellow" (1943 on)."""
+    paint "grey" (to early 1943) or "yellow" (1943 on); skirts (May 1943 on, with the yellow coat): True hangs
+    them all, a string names the hull plates this tank has lost ("l2,r4")."""
     v = Works("PanzerIV", "Panzer IV", "tank", tag, fine, paint=GER_COATS[paint][0] if paint else None)
     v.root(hull_pivot=(0.0, 0.0, 0.75))
     m = v.m
@@ -256,6 +337,7 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None):
         v.socket("muzzle.short" if gun == "all" else "muzzle", (tx + 1.44, 0, tz), X, note="the short gun's muzzle: it stops short of her nose")
     v.m.info["bore"] = 0.075
     v.m.info["brake"] = gun != "short"
+    skirt_parts, skirt_plates = pz4_skirts(v, x0, zt, set(skirts.split(",")) if isinstance(skirts, str) else ()) if skirts else ([], [])
     v.m.use("barrel")
 
     # ---- sockets for what happens to her ------------------------------------------------------------------
@@ -272,7 +354,7 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None):
     v.socket("case", (x0 - 0.2, -0.75, 2.0), -Y, part="turret", note="where the empty case is thrown out")
     for s in (LEFT, RIGHT):
         v.mark("GER", (-0.25, s * 1.312, 1.42), Y * s, 0.17, part="hull")
-    v.tank_clips(recoil=0.38, kick=0.9, gun_low=-8.0, hatches=["hatch_commander", "hatch_gunner", "hatch_loader", "hatch_driver", "hatch_radio"],
+    v.tank_clips(recoil=0.38, kick=0.9, gun_low=-8.0, hatches=["hatch_commander", "skirt_door_l", "skirt_door_r", "hatch_gunner", "hatch_loader", "hatch_driver", "hatch_radio"],
                  traverse=14.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.9, 2.9, 0.42, 172.0))
     swaps = {"how": "one model for the whole war. gun: show the chosen gun's parts and scale the other's to nothing (a part scaled to "
                     "nothing is not drawn), and use its sockets in place of the default ones. paint: put the chosen coat's colours "
@@ -282,6 +364,12 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None):
         swaps["gun"] = {"default": "long", "choices": {
             "long": {"what": "7.5 cm L/43 and L/48, double-baffle muzzle brake", "years": "1942 on", "parts": ["barrel_long"], "sockets": {"muzzle": "muzzle"}, "muzzle_brake": True},
             "short": {"what": "7.5 cm L/24, no muzzle brake", "years": "1939 to early 1942", "parts": ["barrel_short"], "sockets": {"muzzle": "muzzle.short"}, "muzzle_brake": False}}}
+    if skirts:
+        swaps["skirts"] = {"default": "off", "choices": {
+            "off": {"what": "no skirts", "years": "to April 1943", "parts": []},
+            "on": {"what": "thin plates hung on rails along her hull, a shield round her turret's sides and back", "years": "1943-05 on, with the dark yellow coat", "parts": skirt_parts,
+                   "lose": {"parts": skirt_plates, "how": "each tank hides none, one or two of these hull plates at random, so a company is not one tank copied; "
+                                                           "the rails and the turret's shield always stay"}}}}
     m.info.setdefault("file", {})["swaps"] = swaps
     return v
 
