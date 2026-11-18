@@ -486,6 +486,8 @@ play on it whatever she plays.
   upper surfaces in soft-edged blotches; the under surface is its own paint.
 - To see one as a country flies her: `python airlook.py Fighter <out> quarter 1280x720x16
   owner=<unit-table.json>#ARG` (her coat, her marking, her rudder flag, from the art director's unit table).
+  `high` shows the marks on her wings. Neighbouring layers of one colour in a country's `insignia` are laid at one
+  height (Sweden's three crowns are 24 pieces; each layer stands a few millimetres prouder than the last).
 
 ## Making them again, and the pictures
 
@@ -497,7 +499,7 @@ python show.py Battleship_UK turn <out>        # ship clips: turn, broadside, si
 python airshow.py shot_down <out>              # aircraft clips: flypast (plane=Me262 for another machine), shot_down, ways_down, b17_head_on, b17_escort, b17_flak
 python airshow.py b17_flak <out> frames=none   # no pictures: only the clip's sound log, <out>/air-b17_flak-sound.json (seconds)
 python soundtrack.py <log.json> <sound pack's wav folder> <mix.json> <out.wav> [<video.mp4> <out.mp4>]   # mix a clip's sound, and lay it under the picture
-python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, glass, rear, over, under, side, quarter, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; clip=load.bombs@0; record=JSON)
+python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, glass, rear, over, under, side, quarter, high, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; clip=load.bombs@0; record=JSON)
 python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
 python export.py <out> parks                   # the three deck ranges alone (they are also in `ships` and `all`)
 python show.py Carrier_USA turn <out> month=1942-06   # a carrier in a month: her range and its paint are that month's

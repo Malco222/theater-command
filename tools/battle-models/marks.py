@@ -78,20 +78,30 @@ def star(r, col, inner=0.382, points=5):
 def layers(insignia):
     """A country's own marking as the art director's unit table gives it (`insignia`: layers lowest first in a square
     from -1 to 1, each a ring [r0, r1], a star [r, inner, points], a rect [u0, u1, v0, v1] or a tri [r, turn], with
-    its colour c), as the layers `shapes` gives for a great power's."""
-    out = []
+    its colour c), as the layers `shapes` gives for a great power's. Neighbours of one colour lie in one layer: each
+    layer stands a few millimetres prouder than the one under it, and a device drawn as two dozen pieces (Sweden's
+    three crowns) stood a hand's breadth off her skin by its last piece, its parts sliding over each other from
+    the side."""
+    out, last = [], None
     for one in insignia:
         c = one["c"]
         if "ring" in one:
-            out.append(ring(one["ring"][0], one["ring"][1], c))
+            shape = ring(one["ring"][0], one["ring"][1], c)
         elif "star" in one:
             r, inner, points = one["star"]
-            out.append(star(r, c, inner, int(points)))
+            shape = star(r, c, inner, int(points))
         elif "rect" in one:
-            out.append(rect(*one["rect"], c))
+            shape = rect(*one["rect"], c)
         elif "tri" in one:
             r, turn = one["tri"]
-            out.append(poly([(r * math.sin(math.radians(turn + 120.0 * k)), r * math.cos(math.radians(turn + 120.0 * k))) for k in range(3)], c))
+            shape = poly([(r * math.sin(math.radians(turn + 120.0 * k)), r * math.cos(math.radians(turn + 120.0 * k))) for k in range(3)], c)
+        else:
+            continue
+        if out and c == last:
+            out[-1] = out[-1] + shape
+        else:
+            out.append(shape)
+        last = c
     return out
 
 
