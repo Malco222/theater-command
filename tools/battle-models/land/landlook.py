@@ -16,7 +16,9 @@ sys.path.insert(0, HERE)
 import bpy  # noqa: E402
 from mathutils import Vector  # noqa: E402
 
+import ground  # noqa: E402
 import kit  # noqa: E402
+import landmarks  # noqa: E402
 import rigid  # noqa: E402
 import vehicles  # noqa: E402
 import works  # noqa: E402
@@ -30,9 +32,9 @@ def main():
     opt = dict(a.split("=", 1) for a in sys.argv[6:] if "=" in a)
     kit.fresh()
     t = time.time()
-    v = vehicles.BUILDERS[name](True)
+    v = vehicles.build(name, True)
     m = v.m
-    ob, arm = works.to_scene(m)
+    ob, arm = works.to_scene(m, dust=float(opt.get("dust", 1.0)), wear=float(opt.get("wear", 1.0)))
     print(f"{name}: {m.triangles()} triangles, {len(m.parts)} parts, {len(m.sockets)} sockets, {len(m.clips)} clips, built in {time.time() - t:.1f}s", flush=True)
     pose = {}
     if "turn" in opt and "turret" in m.part_at:
@@ -44,8 +46,13 @@ def main():
         pose = rigid.merge(pose, rigid.pose_of(m, m.clips[clip], float(at)))
     if pose:
         rigid.apply_pose(arm, pose, model=m)
-    sun = kit.studio()
-    kit.field_ground(kind=opt.get("ground", "grass"))
+    landmarks.put(m, ob, arm)
+    rut = abs(next(iter(v.belts.values()))["y"]) if v.belts else 0.9
+    if opt.get("ground", "meadow") == "battle":
+        field = ground.Battle(rut=rut)
+    else:
+        field = ground.Field(kind=opt.get("ground", "meadow"), rut=rut, density=float(opt.get("grass", 0.0)), trees=opt.get("trees") == "1")
+    sun = field.sun
     kit.render_setup(w, h, samples=spp)
     cam = kit.camera("cam", 50.0)
     xs = [p.x for p in m.verts]

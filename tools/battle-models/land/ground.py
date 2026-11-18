@@ -392,6 +392,100 @@ class Field:
 
 # ---- the air round a vehicle -------------------------------------------------------------------------
 
+class Battle:
+    """The field battle's own ground and trees, so a vehicle is judged where she will stand: the soldier thread's
+    preview stage (battle_set.py, copied here unchanged but for the name of the kit it imports), under this folder's sky.
+
+    Every vehicle here stands at the origin, heading +x, with the ground at z = 0. So the stage is laid as it is, and then
+    turned and moved until a stretch of its dirt road runs along +x through the origin. Her tracks and wheels are rigid,
+    so the ground round that stretch is levelled (`flat`: level out to the first distance, the stage's own rolling ground
+    beyond the second); two ruts with the prints of track links are laid along it, which the stage does not have.
+
+    stand: where on the stage she halts (the road's point at that y); toward: -1 heading south down the road, +1 north."""
+
+    def __init__(self, rut=1.225, rut_wide=0.44, stand=18.0, toward=-1.0, seed=3, sun_elev=34.0, sun_turn=-38.0, strength=3.4, level=0.6,
+                 clouds=True, flat=(30.0, 66.0), behind=48.0, ahead=18.0, ruts=True, pitch=0.12, **_):
+        import battle_set
+        self.kind, self.rut = "battle", rut
+        self.dust_hex = "9A8A6A"                       # (the stage's road)
+        self.sun = stage.sky(sun_elev=sun_elev, sun_turn=sun_turn, strength=strength, level=level, clouds=clouds)
+        road = battle_set.ROAD
+        (ax, ay), (bx, by) = next(((a, b) for a, b in zip(road, road[1:]) if a[1] <= stand <= b[1]), (road[0], road[1]))
+        f = (stand - ay) / (by - ay)
+        sx, sy = ax + (bx - ax) * f, stand
+        u = Vector((bx - ax, by - ay)).normalized() * (1.0 if toward > 0 else -1.0)
+        plain = battle_set._ground_height
+        h0 = plain(sx, sy, [])
+
+        def levelled(x, y, rd):
+            h = plain(x, y, rd)
+            t = min(max((x - sx) * u.x + (y - sy) * u.y, -behind), ahead)
+            d = math.hypot(x - (sx + u.x * t), y - (sy + u.y * t))
+            k = min(max((d - flat[0]) / (flat[1] - flat[0]), 0.0), 1.0)
+            return h0 + (h - h0) * k * k * (3.0 - 2.0 * k)
+        had = {o.name for o in bpy.data.objects}
+        battle_set._ground_height = levelled
+        try:
+            self.stage = battle_set.build(seed)
+        finally:
+            battle_set._ground_height = plain
+        root = bpy.data.objects.new("battle_stage", None)
+        bpy.context.scene.collection.objects.link(root)
+        for o in bpy.data.objects:
+            if o.name not in had and o.parent is None and o is not root:
+                o.parent = root
+        ang = math.atan2(u.y, u.x)
+        turn = Quaternion(Z, -ang)
+        root.rotation_euler = (0.0, 0.0, -ang)
+        root.location = -(turn @ Vector((sx, sy, h0 + 0.03)))        # (the road lies 3 cm proud of the ground)
+        self.root, self._turn, self._at = root, turn, Vector((sx, sy, h0 + 0.03))
+        if ruts:
+            self._ruts(rut, rut_wide, -behind, ahead, pitch)
+
+    def here(self, x, y, z=0.0):
+        """A place on the stage (its own x, y, and a height above its ground there) in the picture's axes."""
+        return self._turn @ (Vector((x, y, self.stage.height(x, y) + z)) - self._at)
+
+    def _ruts(self, rut, wide, x0, x1, pitch):
+        me = bpy.data.meshes.new("ruts")
+        w = wide * 0.75
+        vs, fs = [], []
+        for sgn in (1.0, -1.0):
+            k = len(vs)
+            vs += [(x0, sgn * rut - w, 0.006), (x1, sgn * rut - w, 0.006), (x1, sgn * rut + w, 0.006), (x0, sgn * rut + w, 0.006)]
+            fs.append((k, k + 1, k + 2, k + 3))
+        me.from_pydata(vs, [], fs)
+        ob = bpy.data.objects.new("ruts", me)
+        bpy.context.scene.collection.objects.link(ob)
+        ob.visible_shadow = False
+        m = bpy.data.materials.new("ruts")
+        m.use_nodes = True
+        nt = m.node_tree
+        bsdf = nt.nodes["Principled BSDF"]
+        tc = nt.nodes.new("ShaderNodeTexCoord")
+        pos = tc.outputs["Object"]
+        sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+        nt.links.new(pos, sep.inputs[0])
+        wave = nt.nodes.new("ShaderNodeTexWave")
+        wave.wave_type, wave.bands_direction = "BANDS", "X"
+        wave.inputs["Scale"].default_value = 0.31416 / pitch
+        wave.inputs["Distortion"].default_value = 0.6
+        wave.inputs["Detail"].default_value = 1.0
+        nt.links.new(pos, wave.inputs["Vector"])
+        prints = _smooth(nt, wave.outputs["Fac"], 0.35, 0.75)
+        across = _math(nt, "ABSOLUTE", _math(nt, "SUBTRACT", _math(nt, "ABSOLUTE", sep.outputs[1]), rut))
+        ragged = _math(nt, "ADD", across, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _noise(nt, pos, 2.2, 3.0, 0.6), 0.5), wide * 0.5))
+        inside = _smooth(nt, ragged, wide * 0.3, wide * 0.6, 1.0, 0.0)
+        ends = _math(nt, "MULTIPLY", _smooth(nt, sep.outputs[0], x0, x0 + 8.0), _smooth(nt, sep.outputs[0], x1 - 6.0, x1, 1.0, 0.0))
+        patch = _smooth(nt, _noise(nt, pos, 0.5, 3.0, 0.5), 0.3, 0.7, 0.55, 1.0)
+        a = _math(nt, "MULTIPLY", _math(nt, "ADD", 0.3, _math(nt, "MULTIPLY", prints, 0.45)), _math(nt, "MULTIPLY", inside, _math(nt, "MULTIPLY", ends, patch)))
+        nt.links.new(a, bsdf.inputs["Alpha"])
+        r, g, b = hex_rgb(self.dust_hex)
+        bsdf.inputs["Base Color"].default_value = (r * 0.42, g * 0.4, b * 0.38, 1.0)
+        bsdf.inputs["Roughness"].default_value = 1.0
+        ob.data.materials.append(m)
+
+
 class Air(stage.Effects):
     """stage.Effects with a land vehicle's effects. Places and facings are in the world's axes."""
 

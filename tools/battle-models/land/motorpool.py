@@ -31,8 +31,8 @@ SIDES = (("l", LEFT), ("r", RIGHT))
 # Paints every vehicle has. `upper` is the coat: the game gives it the nation's paint (unit-table.json). `upper2` is a
 # second camouflage colour (how far a point is into it is the file's `blend`).
 COMMON = {
-    "upper": "60664A", "upper2": "7A6A48", "shade": "3C402E", "track": "3B3632", "rubber": "202022", "steel": "3A3C3E",
-    "bright": "8C8E90", "wood": "7C5E3C", "canvas": "8C8468", "glass": "1B2A33", "black": "101112", "rust": "70482E",
+    "upper": "60664A", "upper2": "7A6A48", "shade": "3C402E", "track": "37322E", "rubber": "202022", "steel": "3A3C3E",
+    "bright": "8C8E90", "wood": "7C5E3C", "canvas": "8C8468", "glass": "1B2A33", "black": "101112", "rust": "4A3226",
     "lamp": "D8D4C0", "white": "E6E2D8", "red": "A82020", "yellow": "C9A227", "blue": "2F4A7A", "leather": "4A3626",
     "torn": "241D1A", "rope": "8A7A5A", "cloth": "807A56", "skin": "C49A7A", "brass": "9A8448",
 }
@@ -70,6 +70,35 @@ def frame(axis):
         side = axis.cross(X)
     side.normalize()
     return axis, side, side.cross(axis)
+
+
+def sym_plan(left):
+    """A plan from its left half (x, y points from the front going back): the full outline, counter-clockwise."""
+    left = [tuple(p) for p in left]
+    return left + [(x, -y) for x, y in reversed(left)]
+
+
+def inset_plan(plan, insets):
+    """A plan (x, y going counter-clockwise) with every edge moved inward by its own distance (edge i runs from point
+    i to point i + 1). The walls between the two plans are then flat plates, each leaning by its own amount."""
+    n = len(plan)
+    if isinstance(insets, (int, float)):
+        insets = [insets] * n
+    lines = []
+    for i in range(n):
+        a, b = Vector(plan[i][:2]), Vector(plan[(i + 1) % n][:2])
+        d = (b - a).normalized()
+        lines.append((a + Vector((-d.y, d.x)) * insets[i], d))
+    out = []
+    for i in range(n):
+        (p, d), (q, e) = lines[i - 1], lines[i]
+        den = d.x * e.y - d.y * e.x
+        if abs(den) < 1e-9:
+            out.append(tuple(q))
+            continue
+        t = ((q.x - p.x) * e.y - (q.y - p.y) * e.x) / den
+        out.append(tuple(p + d * t))
+    return out
 
 
 # ---- solids in bmesh ---------------------------------------------------------------------------------
@@ -321,6 +350,12 @@ class Shop:
 
     def socket(self, name, at, facing=(1, 0, 0), part=None, note=""):
         self.m.socket(name, at, facing, part, note)
+
+    def flag(self, before, flags):
+        """Marks the faces added since the model had `before` of them: how far each is a rubbed edge or a polished face."""
+        self.fedge.extend([0.0] * (before - len(self.fedge)))
+        added = len(self.m.faces) - before
+        self.fedge.extend(list(flags) if (flags is not None and added == len(flags)) else [0.0] * added)
 
     # -- faces from a bmesh solid
     def put(self, bm, paint, bevel=0.0, segs=1, angle=24.0, recalc=True, smooth_faces=True, part=None):

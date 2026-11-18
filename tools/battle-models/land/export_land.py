@@ -26,11 +26,11 @@ import works  # noqa: E402
 def one(name, out, kinds):
     t = time.time()
     kit.fresh()
-    far_v = vehicles.build(name, False)
+    far_v = vehicles.build(name, False, whole=True)
     far_ob, _ = works.to_scene(far_v.m, look=None, crease=40.0, weighted=False)
     far = works.gather_land(far_v.m, far_ob)
     kit.fresh()
-    v = vehicles.build(name, True)
+    v = vehicles.build(name, True, whole=True)
     m = v.m
     ob, arm = works.to_scene(m, look=None)
     near = works.gather_land(m, ob)

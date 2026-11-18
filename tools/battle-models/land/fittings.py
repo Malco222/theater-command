@@ -462,8 +462,8 @@ class Fittings:
             self.m.use(part)
         for k in range(count):
             c = a + along * (pitch * (k + 0.5)) + f * 0.004
-            for vs, fs, pa in shape:
-                self.m.add([c + along * u + across * v + f * w for u, v, w in vs], fs, "track" if pa == "bright" else pa, False, None, part)
+            for vs, fs, pa, _ in shape:
+                self.m.add([c + along * u + across * v + f * w for u, v, w in vs], fs, pa, False, None, part)
         if bar:
             m = Matrix((along, across, f)).transposed()
             for off in (-wide * 0.3, wide * 0.3):

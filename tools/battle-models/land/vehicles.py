@@ -7,13 +7,31 @@ import tanks_ger
 
 BUILDERS = {
     "PanzerIV": tanks_ger.panzer4,
+    "Panther": tanks_ger.panther,
+    "Tiger": tanks_ger.tiger,
 }
 
 ABOUT = {
     "PanzerIV": {"nation": "GER", "role": "medium tank", "years": "1939-45", "units": "armor (Germany, to 1944)"},
+    "Panther": {"nation": "GER", "role": "medium tank", "years": "1943-45", "units": "armor (Germany, from 1944)"},
+    "Tiger": {"nation": "GER", "role": "heavy tank", "years": "1942-45", "units": "heavy armor (Germany)"},
 }
 
 
-def build(name, fine=True, tag=None):
+# What a builder takes to build everything the game's file carries (both of a Panzer IV's guns), and the faces a
+# vehicle showed through the war, for the sheet of them: (words, what to pass the builder).
+WHOLE = {"PanzerIV": {"gun": "all"}}
+FACES = {
+    "PanzerIV": [("1939 to early 1942: the short gun, dark grey", {"gun": "short", "paint": "grey"}),
+                 ("1942: the long gun, dark grey", {"gun": "long", "paint": "grey"}),
+                 ("1943 on: the long gun, dark yellow", {"gun": "long", "paint": "yellow"})],
+}
+
+
+def build(name, fine=True, tag=None, whole=False, **choice):
+    """`choice`: what a builder offers besides (a Panzer IV's gun="short", paint="yellow"). `whole`: everything the
+    game's file carries, swaps and all (for the export; a picture builds one face of her)."""
     fn = BUILDERS[name]
-    return fn(fine, tag) if tag else fn(fine)
+    if whole:
+        choice = {**WHOLE.get(name, {}), **choice}
+    return fn(fine, tag, **choice) if tag else fn(fine, **choice)

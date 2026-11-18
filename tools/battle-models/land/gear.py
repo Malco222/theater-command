@@ -213,8 +213,9 @@ class Gear:
         W = wide
         out = []
 
-        def box(u0, u1, v0, v1, w0, w1, paint, taper=0.0, tv=0.0, top=None):
-            # (taper draws the outer face in along u: a grouser bar is a ridge; tv along v; `top` paints its outer face)
+        def box(u0, u1, v0, v1, w0, w1, paint, taper=0.0, tv=0.0, top=None, shine=(0.0, 0.0, 0.0)):
+            # (taper draws the outer face in along u: a grouser bar is a ridge; tv along v; `top` paints its outer face;
+            #  `shine` is how far the face next the wheels, the four sides and the outer face are polished to bare steel)
             tu = (u1 - u0) * taper * 0.5
             tw = (v1 - v0) * tv * 0.5
             vs = [(u0, v0, w0), (u1, v0, w0), (u1, v1, w0), (u0, v1, w0), (u0 + tu, v0 + tw, w1), (u1 - tu, v0 + tw, w1), (u1 - tu, v1 - tw, w1), (u0 + tu, v1 - tw, w1)]
@@ -224,23 +225,24 @@ class Gear:
                 fs = [tuple(reversed(f)) for f in fs]
                 cap = [tuple(reversed(f)) for f in cap]
             if top:
-                out.append((vs, fs, paint))
-                out.append((vs, cap, top))
+                out.append((vs, fs, paint, [shine[0]] + [shine[1]] * 4))
+                out.append((vs, cap, top, [shine[2]]))
             else:
-                out.append((vs, fs + cap, paint))
+                out.append((vs, fs + cap, paint, [shine[0]] + [shine[1]] * 4 + [shine[2]]))
 
         paint = style.get("paint", "track")
         kind = style.get("kind", "plate")
         g = style.get("grouser", 0.014)
         if kind == "plate":
             # a cast plate link: the plate, a raised bar across it, the pin's eyes at each edge
-            box(-L / 2, L / 2, -W / 2, W / 2, 0.0, thick, paint)
+            # (the wheels polish the face they run on; the ground polishes the cleat and leaves the hollows to rust)
+            box(-L / 2, L / 2, -W / 2, W / 2, 0.0, thick, paint, shine=(0.8, 0.0, 0.0))
             if self.fine:
                 bar = style.get("bar", 0.34)
-                box(-L * bar, L * bar, -W / 2 + 0.012, W / 2 - 0.012, thick, thick + g, paint, taper=0.45, top="bright")
+                box(-L * bar, L * bar, -W / 2 + 0.012, W / 2 - 0.012, thick, thick + g, paint, taper=0.45, shine=(0.0, 0.3, 1.0))
                 if style.get("cleats"):
                     for vv in (-W * 0.3, W * 0.3):
-                        box(-L * 0.46, L * 0.46, vv - 0.02, vv + 0.02, thick, thick + g * 0.7, paint, taper=0.2)
+                        box(-L * 0.46, L * 0.46, vv - 0.02, vv + 0.02, thick, thick + g * 0.7, paint, taper=0.2, shine=(0.0, 0.2, 0.9))
                 # the pin and its eyes, closing the gap to the next link
                 box(L / 2 - 0.004, pitch - L / 2 + 0.004, -W / 2, W / 2, 0.003, thick - 0.002, paint)
         elif kind == "block":
@@ -255,15 +257,15 @@ class Gear:
                         fs = [(4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
                         if sgn < 0:
                             fs = [tuple(reversed(f)) for f in fs]
-                        out.append((pts, fs, "rubber"))
+                        out.append((pts, fs, "rubber", None))
                 for vv in (-1.0, 1.0):
                     v0, v1 = (W / 2 - 0.035, W / 2) if vv > 0 else (-W / 2, -W / 2 + 0.035)
                     box(L / 2 - 0.035, L / 2 + pitch * 0.14, v0, v1, 0.002, thick - 0.004, "steel")
         elif kind == "skeleton":
             # an open (skeleton) link: two rails and cross bars
             for vv in (-W / 2, W / 2 - W * 0.22):
-                box(-L / 2, L / 2, vv, vv + W * 0.22, 0.0, thick, paint)
-            box(-L * 0.18, L * 0.18, -W / 2, W / 2, thick * 0.2, thick + g, paint, taper=0.4)
+                box(-L / 2, L / 2, vv, vv + W * 0.22, 0.0, thick, paint, shine=(0.8, 0.0, 0.3))
+            box(-L * 0.18, L * 0.18, -W / 2, W / 2, thick * 0.2, thick + g, paint, taper=0.4, shine=(0.0, 0.3, 1.0))
         # the guide horns, standing in toward the wheels
         horn = style.get("horn", "centre")
         hh = style.get("horn_high", 0.07)
@@ -281,7 +283,7 @@ class Gear:
                       ((u0 + u1) / 2 - 0.012, vv - hw * 0.5, -hh), ((u0 + u1) / 2 + 0.012, vv - hw * 0.5, -hh), ((u0 + u1) / 2 + 0.012, vv + hw * 0.5, -hh), ((u0 + u1) / 2 - 0.012, vv + hw * 0.5, -hh)]
                 fs = [(4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
                 fs = [tuple(reversed(f)) for f in fs]
-                out.append((vs, fs, "steel" if horn == "ends" else paint))
+                out.append((vs, fs, "steel" if horn == "ends" else paint, None if horn == "ends" else [0.85] * 5))
         return out
 
     def track(self, letter, side, y, wheels, pitch=0.12, wide=0.4, thick=0.03, style=None, sag=0.03, parent="vehicle", every=1):
@@ -332,10 +334,12 @@ class Gear:
             U, W = Vector((-way.x, 0, -way.y)), Vector((o.x, 0, o.y))        # (a link's own forward is the way it travels when she drives ahead)
             Vv = W.cross(U)                                                   # so u, v, w is a right-handed set
             mirror = Vv.y * side < 0                                          # keep v outward on both sides (the shape may not be symmetric)
-            for vs, fs, paint in shape:
+            for vs, fs, paint, shine in shape:
                 pts3 = [pivot + U * u + Vv * (-v if mirror else v) + W * w for u, v, w in vs]
                 f2 = [tuple(reversed(f)) for f in fs] if mirror else fs
+                before = len(self.m.faces)
                 self.m.add(pts3, f2, paint, False, None, lname)
+                self.flag(before, shine)
             # the clip: this link goes to where the one behind it in travel stands (s falls by one pitch)
             a0 = math.atan2(way.y, way.x)
             keys_r, keys_m = [], []
