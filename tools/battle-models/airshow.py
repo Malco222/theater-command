@@ -254,25 +254,28 @@ def trail(fx, where, start, end=1e9, kind="black", size=1.0):
         p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
 
     def flame(t, at, facing):
+        # (its colours are thrown dim, as the sea's fires are: under the picture's tone curve a bright flame bleaches to
+        #  peach whatever its hue. The art director measured this fire at about 227,169,138 where deep orange is about
+        #  210,115,55; see the README, "Flame's colour is measured".)
         v, flow = going()
         gust = 0.72 + 0.5 * abs(math.sin(23.0 * t) * math.sin(7.3 * t + 1.0))        # (it flares and sinks)
         k = g.uniform(0.85, 1.15)
         # rooted on her, round the place that burns
         tongue(t, at + flow * g.uniform(0.3, 1.2) * size + across(flow, g.uniform(0.1, 0.32) * size), flow, v, g.uniform(1.7, 3.9) * size * gust, "tongue",
-               (0.30 * k, 0.082 * k, 0.009), (0.24, 0.05, 0.006), g.uniform(0.07, 0.15), g.uniform(0.02, 0.08))
+               (0.14 * k, 0.026 * k, 0.004), (0.1, 0.014, 0.002), g.uniform(0.07, 0.15), g.uniform(0.02, 0.08))
         # torn off just downstream, in line with the tongues, and going red
         # (few, close and short lived: many of them, flung wide and far down the smoke, read as orange petals blowing about)
         if g.random() < 0.4:
             tongue(t, at + flow * g.uniform(2.0, 4.6) * size * gust + across(flow, g.uniform(0.0, 0.32) * size), flow, v, g.uniform(1.0, 2.2) * size, "lick",
-                   (0.25 * k, 0.062 * k, 0.007), (0.13, 0.02, 0.004), g.uniform(0.07, 0.14), g.uniform(0.15, 0.3), alpha=0.85, splay=0.12)
+                   (0.12 * k, 0.021 * k, 0.0035), (0.07, 0.01, 0.002), g.uniform(0.07, 0.14), g.uniform(0.15, 0.3), alpha=0.85, splay=0.12)
         # a scrap of it going out in the head of the smoke
         if g.random() < 0.09:
             tongue(t, at + flow * g.uniform(4.2, 6.2) * size + across(flow, g.uniform(0.0, 0.4) * size), flow, v, g.uniform(0.6, 1.1) * size, "lick",
-                   (0.13, 0.028, 0.005), (0.03, 0.011, 0.006), g.uniform(0.1, 0.18), g.uniform(0.3, 0.5), alpha=0.5, splay=0.16)
+                   (0.07, 0.013, 0.003), (0.03, 0.011, 0.006), g.uniform(0.1, 0.18), g.uniform(0.3, 0.5), alpha=0.5, splay=0.16)
         # the heart of it, where the petrol or the oil comes out
         if g.random() < 0.4:
             p = fx.puff(t, at + flow * g.uniform(0.2, 0.7) * size + across(flow, g.uniform(0.0, 0.2) * size), vel=v, life=g.uniform(0.05, 0.1), r=(0.2 * size, g.uniform(0.34, 0.5) * size * gust),
-                        col=(0.62, 0.34, 0.07), col2=(0.4, 0.15, 0.02), alpha=0.95, kind="glow", wind=0.03, squash=(1.7, 1.0, 1.0), fade_in=0.006, grow=0.6)
+                        col=(0.2, 0.066, 0.004), col2=(0.14, 0.026, 0.004), alpha=0.95, kind="glow", wind=0.03, squash=(1.7, 1.0, 1.0), fade_in=0.006, grow=0.6)
             p["ob"].rotation_euler = flow.to_track_quat("X", "Z").to_euler()
     make, every = {"black": (black, 0.017), "thin": (thin, 0.04), "flame": (flame, 0.0115)}[kind]
     fx.stream(where, every, make, start=start, end=end)
@@ -290,12 +293,12 @@ def fireball(fx, t0, where, size=1.0):
             long = g.uniform(2.2, 5.5) * size * (1.0 if i % 3 else 1.5)
             wide = long * g.uniform(0.28, 0.45)
             k = g.uniform(0.8, 1.2)
-            p = fx.puff(t, at + d * long * 0.4, vel=d * g.uniform(8, 22) * size, life=g.uniform(0.14, 0.34), r=(0.6, 1.0), col=(0.36 * k, 0.11 * k, 0.012), col2=(0.14, 0.025, 0.004), alpha=0.92,
+            p = fx.puff(t, at + d * long * 0.4, vel=d * g.uniform(8, 22) * size, life=g.uniform(0.14, 0.34), r=(0.6, 1.0), col=(0.14 * k, 0.026 * k, 0.004), col2=(0.1, 0.014, 0.002), alpha=0.92,
                         kind="tongue" if i % 2 else "lick", drag=3.0, wind=0.85, squash=(0.5 * long, 0.5 * wide, 0.5 * wide), fade_in=0.008, grow=0.5, hold=0.4, cool=1.0)
             p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
-        for i in range(3):                                   # its white-hot heart, for an instant
+        for i in range(3):                                   # its yellow heart, for an instant
             fx.puff(t, at + Vector((g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5), g.uniform(-0.4, 0.4))) * size, life=g.uniform(0.08, 0.14), r=(0.8 * size, g.uniform(1.4, 2.0) * size),
-                    col=(1.0, 0.7, 0.28), col2=(0.6, 0.2, 0.03), alpha=1.0, kind="glow", wind=0.85, fade_in=0.01, grow=0.45)
+                    col=(0.193, 0.111, 0.0), col2=(0.16, 0.05, 0.002), alpha=1.0, kind="glow", wind=0.85, fade_in=0.01, grow=0.45)
         # (thrown wide and thin, and soon dark: packed close and left brown, they hang behind her as one solid brown lump)
         for i in range(16):
             v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-1, 1))).normalized() * g.uniform(14, 60) * size
@@ -339,7 +342,7 @@ def strikes(fx, plane, t0, t1, sockets=("fuel", "engine.1", "tank.port")):
             long = g.uniform(0.45, 1.0)
             wide = long * g.uniform(0.28, 0.42)
             k = g.uniform(0.8, 1.2)
-            p = fx.puff(t, p0 + d * long * 0.4, vel=plane.vel + d * g.uniform(3, 9), life=g.uniform(0.07, 0.12), r=(0.6, 1.0), col=(0.4 * k, 0.13 * k, 0.014), col2=(0.16, 0.03, 0.004), alpha=0.92,
+            p = fx.puff(t, p0 + d * long * 0.4, vel=plane.vel + d * g.uniform(3, 9), life=g.uniform(0.07, 0.12), r=(0.6, 1.0), col=(0.15 * k, 0.028 * k, 0.004), col2=(0.1, 0.014, 0.002), alpha=0.92,
                         kind="tongue" if i % 2 else "lick", drag=3.0, wind=0.0, squash=(0.5 * long, 0.5 * wide, 0.5 * wide), fade_in=0.006, grow=0.5, hold=0.4, cool=1.0)
             p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
         if g.random() < 0.6:
