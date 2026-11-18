@@ -105,6 +105,11 @@ export interface FieldTicket<P = unknown> {
   limit: number;
   /** The campaign's weather over the place, in its own words ('clear', 'rain', 'snow', 'mud'), where it keeps any. */
   weather?: string;
+  /**
+   * Which attack on this ground this month it is, from 0: a second attack on the same place keeps its seed (and so its
+   * ground) but draws a fresh day's luck, as the campaign's own dice would.
+   */
+  attempt?: number;
 }
 
 /** What a unit is doing. */

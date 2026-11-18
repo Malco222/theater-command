@@ -3,7 +3,9 @@
 //
 // Attacking: every block takes an enemy block in its own lane and goes for it; tanks and lorries go for the ends of
 // the enemy line; guns come up until the enemy is in reach and stand. Defending: hold the ground, help a neighbour
-// who is in a fight, and go after a block that is wavering or running close by.
+// who is in a fight, and go after a block that is wavering or running close by. A reserve held behind the line goes,
+// once the line is struck, to where it is struck hardest; a block on a quiet stretch of the line, with no enemy facing
+// it, closes on the fight (the design director, b407).
 
 import { dist } from '../core/geometry';
 import type { Side } from '../core/types';
@@ -47,8 +49,22 @@ export function thinkFor(b: LandBattle, side: Side): void {
   // Defending: the line stays where it was drawn up. A block steps out only to finish one that is wavering right in
   // front of it, or to take one that has come round a neighbour's flank, and never far from its own ground.
   const leash = 300;
+  // Where the line is struck, hardest first: its blocks in a fight, the most worn first (b407). Its guns firing from
+  // far back are not the line struck, as they are not contact (sim.ts contactAt).
+  const struck = mine.filter((m) => m.kind !== 'art' && m.reserve !== 'held' && m.engaged !== undefined && foes.some((f) => f.id === m.engaged))
+    .sort((a, c) => a.str / a.str0 - c.str / c.str0);
+  let next = 0;
+  const sendTo = (u: LandUnit): void => {
+    const at = struck[next++ % struck.length];
+    u.reserve = 'sent';
+    by(u, foes.find((f) => f.id === at.engaged)!);
+  };
   for (const u of mine) {
     if (u.kind === 'art' || u.order?.kind === 'withdraw') continue;
+    if (u.reserve === 'held') { if (struck.length) sendTo(u); continue; }
+    if (u.reserve === 'sent') { if (!hasTarget(u) && struck.length) sendTo(u); continue; }
+    // A quiet stretch: no enemy in this block's lane anywhere on the field, while the line is struck elsewhere.
+    if (struck.length && !hasTarget(u) && u.engaged === undefined && !foes.some((f) => Math.abs(f.x - u.home[0]) < LAND.quiet)) { sendTo(u); continue; }
     const away = dist(u.x, u.y, u.home[0], u.home[1]);
     if (hasTarget(u)) {
       if (away > leash) b.command({ do: 'move', units: [u.id], x: u.home[0], y: u.home[1], face: Math.PI }, side);

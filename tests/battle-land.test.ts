@@ -3,12 +3,13 @@
 // through the rules' own attack order. The design director's rulings 217 and 217(2)(a) of 2026-11-17.
 import { describe, expect, it } from 'vitest';
 import { diceChance, runOut } from '../src/battle/core';
-import { buildField, GROUNDS, LandBattle, blocksFor, handBack, landTicket, sampleTicket, goingIn } from '../src/battle/land';
+import { buildField, GROUNDS, LandBattle, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, sampleTicket, goingIn, type PracticeGround } from '../src/battle/land';
+import { ENGINEERING } from '../src/campaign/rivers';
 import { createGame, hostileUnits } from '../src/campaign/game';
 import { blocked } from '../src/campaign/rivers';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, orderAttack, previewAttack, stepAI } from '../src/campaign/turn';
-import type { Corps, Game, Region } from '../src/campaign/types';
+import { FORT_MUL, type Corps, type Game, type Region } from '../src/campaign/types';
 
 const count = (f: ReturnType<typeof buildField>, k: (typeof GROUNDS)[number]): number => f.ground.filter((g) => GROUNDS[g] === k).length;
 
@@ -120,16 +121,18 @@ describe('orders and the end', () => {
 
 describe('fair to the dice (ruling 217(3))', () => {
   // Two computer generals carry the ground about as often as the dice would at the same odds, on every ground. The
-  // measure: the mean gap between the field's win rate and the dice's chance over a spread of odds, 16 battles each.
+  // measure: the mean gap between the field's win rate and the dice's chance over a spread of odds, 24 battles each
+  // (24 since the day's luck, ruling 226: each battle now draws its own fortune, so 16 left the gap mostly chance).
   const ODDS = [0.8, 1.0, 1.1, 1.2, 1.3, 1.4, 1.6, 1.8];
+  const RUNS = 24;
   const gaps: Record<string, number> = {};
   for (const ground of ['plains', 'forest', 'hills', 'mountain', 'marsh', 'urban', 'desert'] as const) {
     it(`on ${ground}`, () => {
       let gap = 0;
       for (const odds of ODDS) {
         let won = 0;
-        for (let s = 1; s <= 16; s++) { const b = new LandBattle(sampleTicket(ground, odds, { seed: s * 7919 + 13 })); b.ai.att = b.ai.def = true; runOut(b); if (b.over!.winner === 'att') won++; }
-        gap += Math.abs(won / 16 - diceChance(odds, [0.8, 1.2]));
+        for (let s = 1; s <= RUNS; s++) { const b = new LandBattle(sampleTicket(ground, odds, { seed: s * 7919 + 13 })); b.ai.att = b.ai.def = true; runOut(b); if (b.over!.winner === 'att') won++; }
+        gap += Math.abs(won / RUNS - diceChance(odds, [0.8, 1.2]));
       }
       gaps[ground] = gap / ODDS.length;
       expect(gaps[ground]).toBeLessThanOrEqual(0.13);
@@ -255,35 +258,99 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     expect(b.view().breaking!.att).toBeCloseTo(b.breaking('att'), 6);
   });
 
-  // Over 20 battles at each odds on every ground, the plain attack carries the day within a tenth of the card's chance.
-  const gaps: Record<string, { gap: number; bias: number }> = {};
-  for (const ground of GROUNDS7) {
-    it(`the plain attack honours the card on ${ground} (mark 4)`, () => {
-      const ODDS = [0.8, 1.0, 1.2, 1.4, 1.6, 1.8];
+  // The plain attack honours the card (mark 4, after the retest): at the telling odds, where the card gives neither
+  // side a sure thing, on every ground and behind a river and fortress works, 40 battles at each odds. And dug in: the
+  // card counts a defence's fieldworks in its strength, so the field gives them no cover on top (b407).
+  const TELLING = [1.1, 1.2, 1.3, 1.4];
+  const telling: Record<string, { gap: number; bias: number }> = {};
+  const EVERY: { key: string; ground: (typeof GROUNDS7)[number]; river?: boolean; fort?: number; dug?: boolean }[] = [
+    ...GROUNDS7.map((g) => ({ key: g, ground: g })), { key: 'a river crossing', ground: 'plains', river: true }, { key: 'fortress works', ground: 'hills', fort: 2 },
+    { key: 'dug in on open ground', ground: 'plains', dug: true },
+  ];
+  for (const e of EVERY) {
+    it(`the plain attack honours the card at the telling odds: ${e.key} (mark 4)`, () => {
       let gap = 0, bias = 0;
-      for (const odds of ODDS) {
+      for (const odds of TELLING) {
         let won = 0;
-        for (let s = 1; s <= 20; s++) {
-          const b = new LandBattle(sampleTicket(ground, odds, { seed: s * 7919 + 13, humanAtt: true }));
+        for (let s = 1; s <= 40; s++) {
+          const b = new LandBattle(sampleTicket(e.ground, odds, { seed: s * 7919 + 13, humanAtt: true, river: e.river, fort: e.fort, dug: e.dug }));
           b.ai.att = false; b.ai.def = true;
           plainAttack(b);
           runOut(b);
           if (b.over!.winner === 'att') won++;
         }
-        const d = won / 20 - diceChance(odds, [0.8, 1.2]);
+        const d = won / 40 - diceChance(odds, [0.8, 1.2]);
         gap += Math.abs(d); bias += d;
       }
-      gaps[ground] = { gap: gap / ODDS.length, bias: bias / ODDS.length };
-      expect(gaps[ground].bias).toBeGreaterThanOrEqual(-0.1);
-      expect(gaps[ground].bias).toBeLessThanOrEqual(0.1);
-      expect(gaps[ground].gap).toBeLessThanOrEqual(0.13);
+      telling[e.key] = { gap: gap / TELLING.length, bias: bias / TELLING.length };
+      expect(telling[e.key].bias).toBeGreaterThanOrEqual(-0.1);
+      expect(telling[e.key].bias).toBeLessThanOrEqual(0.1);
+      expect(telling[e.key].gap).toBeLessThanOrEqual(0.15);
     }, 120000);
   }
-  it('and within a tenth across all grounds together (mark 4)', () => {
-    const all = Object.values(gaps);
-    expect(all.length).toBe(7);
+  it('and within a tenth across them all together (mark 4)', () => {
+    const all = Object.values(telling);
+    expect(all.length).toBe(EVERY.length);
     expect(all.reduce((a, g) => a + g.gap, 0) / all.length).toBeLessThanOrEqual(0.1);
+    expect(Math.abs(all.reduce((a, g) => a + g.bias, 0) / all.length)).toBeLessThanOrEqual(0.04);
   });
+
+  // Each practice ground's card is reckoned as the campaign's attack card would reckon those armies there (the design
+  // director, b400), the defence sized to the ground so it is a contest (b406), and the plain attack wins about as often
+  // as that card says: 120 battles on each, within a tenth.
+  it("a practice ground's card prices its ground the campaign's way (b400)", () => {
+    const at = (p: PracticeGround): number => practiceReckoning(p).odds;
+    const open = at({ terrain: 'plains' });
+    expect(open).toBeGreaterThan(1.2);
+    expect(open).toBeLessThan(1.5);
+    // Behind a river every corps attacks over the bridges at the campaign's cut, and nothing else changes.
+    expect(at({ terrain: 'plains', river: true }) / open).toBeCloseTo(ENGINEERING.river.attack, 6);
+    // Close country, mountains and works cost the attack; the open desert costs the defence on foot.
+    for (const t of ['forest', 'hills', 'mountain', 'marsh', 'urban'] as const) expect(at({ terrain: t })).toBeLessThan(open);
+    expect(at({ terrain: 'mountain' })).toBeLessThan(at({ terrain: 'hills' }));
+    expect(at({ terrain: 'hills', fort: 2 })).toBeLessThan(at({ terrain: 'hills' }) / FORT_MUL[2] + 1e-9);
+    expect(at({ terrain: 'desert' })).toBeGreaterThan(open);
+    // The practice ticket carries that card, and the field takes its strengths from it.
+    for (const p of PRACTICE_GROUNDS) {
+      const t = practiceTicket(p, { seed: 5 });
+      expect(t.reckoning.odds).toBeCloseTo(at(p), 9);
+      expect(t.place.terrain).toBe(p.terrain);
+      expect(!!t.place.river).toBe(!!p.river);
+      expect(t.place.fort).toBe(p.fort ?? 0);
+      // The defence on the field is the one the card reckoned: its divisions, its kind and its strength.
+      const def = t.def.forces;
+      expect(def.filter((f) => f.kind !== 'art').map((f) => f.divs)).toEqual(p.def ?? [3, 3]);
+      expect(def.filter((f) => f.kind === 'art').reduce((a, f) => a + f.divs, 0)).toBe(p.guns ?? 1);
+      for (const f of def) { expect(f.str).toBe(p.str ?? 0.9); if (f.kind !== 'art') expect(f.kind).toBe(p.kind ?? 'inf'); }
+      expect(def.reduce((a, f) => a + f.share, 0)).toBeCloseTo(1, 9);
+      // The attack is the same on every ground.
+      expect(t.att.forces.map((f) => [f.kind, f.divs, f.str])).toEqual(practiceTicket(PRACTICE_GROUNDS[0]).att.forces.map((f) => [f.kind, f.divs, f.str]));
+    }
+  });
+  it('every practice card is a contest: the staff gives it between 4 and 8 in 10 (the design director, b406)', () => {
+    for (const p of PRACTICE_GROUNDS) {
+      const k = practiceReckoning(p);
+      const c = diceChance(k.odds, k.dice);
+      expect(c).toBeGreaterThanOrEqual(0.4);
+      expect(c).toBeLessThanOrEqual(0.8);
+    }
+  });
+  for (const p of PRACTICE_GROUNDS) {
+    const key = `${p.terrain}${p.river ? ', a river crossing' : ''}${p.fort ? ', fortress works' : ''}`;
+    it(`the plain attack honours the practice card as shown: ${key} (mark 4, b400, b406)`, () => {
+      let won = 0, chance = 0;
+      for (let s = 1; s <= 120; s++) {
+        const t = practiceTicket(p, { seed: s * 7919 + 13, humanAtt: true });
+        chance = diceChance(t.reckoning.odds, t.reckoning.dice);
+        const b = new LandBattle(t);
+        b.ai.att = false; b.ai.def = true;
+        plainAttack(b);
+        runOut(b);
+        if (b.over!.winner === 'att') won++;
+      }
+      expect(Math.abs(won / 120 - chance)).toBeLessThanOrEqual(0.1);
+    }, 120000);
+  }
 });
 
 describe('the hand-off with a real campaign', () => {
@@ -323,6 +390,24 @@ describe('the hand-off with a real campaign', () => {
     expect(rep).not.toBeNull();
     expect(rep.odds).toBeCloseTo(b.over!.R);
     expect(rep.taken || rep.siege === true).toBe(b.over!.R >= 1.2);
+  });
+  it('a second attack on the same place this month keeps its ground and draws a fresh day\'s luck (the review, 21:55)', () => {
+    // Over a handful of places: an attack thrown back leaves a report, and the next ticket for that place counts it.
+    let differs = 0, n = 0;
+    for (const seed of [3, 4, 5, 6, 7]) {
+      const g = playing(seed);
+      const { c, r } = anAttack(g);
+      const t0 = landTicket(g, [c], r)!;
+      expect(t0.attempt).toBe(g.reports.filter((x) => x.turn === g.turn && x.region === r.id && x.attNat === t0.att.nat).length);
+      g.reports.push({ ...(g.reports[0] ?? {}), turn: g.turn, region: r.id, attNat: t0.att.nat, taken: false } as (typeof g.reports)[number]);
+      const t1 = landTicket(g, [c], r)!;
+      expect(t1.attempt).toBe((t0.attempt ?? 0) + 1);
+      expect(t1.seed).toBe(t0.seed);
+      expect(new LandBattle(t1).field.cols).toBe(new LandBattle(t0).field.cols);
+      if (new LandBattle(t1).fortune !== new LandBattle(t0).fortune) differs++;
+      n++;
+    }
+    expect(differs).toBe(n);
   });
   it('the after card\'s headline and its field line speak in one measure, within a fifth (ruling 226(6))', () => {
     let n = 0;

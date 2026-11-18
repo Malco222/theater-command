@@ -4,7 +4,7 @@
 // enemy wears it down, nerve follows losses, runners run, and the battle ends when an army breaks, leaves, or the
 // clock runs out. Deterministic: the same ticket and the same orders at the same ticks replay the same battle.
 
-import { Rng } from '../../core/rng';
+import { Rng, hashString } from '../../core/rng';
 import { ONE_SHOTS, ORDER_CUES } from '../core/cues';
 import { ahead, aspectOf, bearing, clamp, dist, turn } from '../core/geometry';
 import { clampToDice, diceNow, fieldRatio, levelOf, RATIO } from '../core/result';
@@ -53,6 +53,25 @@ export class LandBattle implements BattleSim<LandUnit> {
     deploy(this.units, 'def', this.field);
     for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
+    // The day's luck, from the card's own run (ruling 226(4)): the attack's blows land that much harder or softer, and
+    // the defence's the other way, so the field spreads its results as the card's chance does. Drawn apart from the
+    // blow-by-blow luck, so nothing else in the fight moves with it. A second attack on the same place this month
+    // (ticket.attempt) draws afresh.
+    const [d0, d1] = ticket.reckoning.dice;
+    const roll = d0 + (d1 - d0) * new Rng(hashString(ticket.attempt ? `fortune:${ticket.seed}:${ticket.attempt}` : `fortune:${ticket.seed}`)).next();
+    this.fortune = 1 + LAND.fortune * (roll - 1);
+  }
+
+  /** The day's luck: the attack's blows are multiplied by it, the defence's divided. */
+  readonly fortune: number;
+
+  /**
+   * What a defender standing on its own ground takes of a blow: set per ground, and for a river or fortress works,
+   * so that the field counts the ground once, as the card's odds already have (ruling 226(4)).
+   */
+  private get holdTake(): number {
+    const p = this.ticket.place, H = LAND.hold;
+    return (H.take[p.terrain] ?? 0.4) * (p.river ? H.river : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1);
   }
 
   private say(e: Omit<FieldEvent, 't'>): void {
@@ -66,6 +85,13 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /** A block's name in a dispatch: the side nobody plays carries its country, so it never reads like the player's own (ruling 226(7)). */
   named(u: LandUnit): string { return this.ticket[u.side].human ? u.name : `${this.ticket[u.side].adj} ${u.name}`; }
+
+  /** A practice ground is no place in the campaign: its sides are the player's and theirs, not compass words. */
+  private get practice(): boolean { return this.ticket.place.region < 0; }
+  /** "The Polish army", or on a practice ground "Your army" or "Their army" (the UI director, after the retest). */
+  private army(s: Side): string { return this.practice ? (this.ticket[s].human ? 'Your army' : 'Their army') : `The ${this.ticket[s].adj} army`; }
+  /** "the Polish defence", or on a practice ground "your defence" or "the defence". */
+  private sideOf(s: Side, noun: string): string { return this.practice ? `${this.ticket[s].human ? 'your' : 'the'} ${noun}` : `the ${this.ticket[s].adj} ${noun}`; }
 
   // ---- Orders -----------------------------------------------------------------------------------------------------
 
@@ -290,10 +316,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     const [am, nm] = LAND.aspect[aspect];
     let take = LAND.cover[gt];
     if (t.kind === 'arm' && LAND.tanksClose.ground.includes(gt)) take *= LAND.tanksClose.take;
-    if (t.dug && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.dug.keep) take *= LAND.dug.take;
-    if (t.side === 'def' && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= LAND.hold.take[this.ticket.place.terrain] ?? 0.4;
+    if (t.side === 'def' && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake;
     const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
-    const dmg = p * am * take * luck * DT;
+    const dmg = p * am * take * luck * (u.side === 'att' ? this.fortune : 1 / this.fortune) * DT;
     return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect };
   }
 
@@ -512,7 +537,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       // on the page, the other's one dispatch. With nobody playing, nothing is said.
       if (!this.warned[s] && near >= 0.75 && (this.ticket.att.human || this.ticket.def.human)) {
         this.warned[s] = true;
-        this.say({ what: 'nearBreak', side: s, text: this.ticket[s].human ? 'Your army is near breaking: pull back the worn, or hand it to the staff.' : `The ${this.ticket[s].adj} army is near breaking.` });
+        this.say({ what: 'nearBreak', side: s, text: this.ticket[s].human ? 'Your army is near breaking: pull back the worn, or hand it to the staff.' : `${this.army(s)} is near breaking.` });
       }
       // An army breaks when half its power is running or gone, or when it has bled as much as an army of its side
       // will stand (LAND.spent): so a battle fought out costs about what the campaign bills for its result (b356).
@@ -520,7 +545,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         this.broke[s] = true;
         // The blocks that broke are already running; the rest fall back in order with their army.
         for (const u of left) { u.fellBack = true; u.order = { kind: 'withdraw', x: u.x, y: s === 'att' ? 0 : this.field.h }; u.path = []; u.keepFace = null; u.engaged = undefined; }
-        this.say({ what: 'broken', side: s, text: `The ${this.ticket[s].adj} army breaks.` });
+        this.say({ what: 'broken', side: s, text: `${this.army(s)} breaks.` });
         this.finish(other(s), 'rout');
         return;
       }
@@ -541,8 +566,12 @@ export class LandBattle implements BattleSim<LandUnit> {
   private finish(winner: Side, how: FieldResult['how'], R?: number): void {
     if (this.over) return;
     const lost = this.lostShares();
+    // Men counted as the shares are, with what the runners and the fled leave behind, so the two never tell two stories.
     const men = { att: 0, def: 0 };
-    for (const u of this.units) men[u.side] += Math.round(u.men0 * (1 - u.str / u.str0));
+    for (const u of this.units) {
+      const kept = u.state === 'gone' ? u.str * (1 - LAND.count.gone[u.side]) : u.state === 'routing' || u.fellBack ? u.str * (1 - LAND.count.routing[u.side]) : u.str;
+      men[u.side] += Math.round(u.men0 * (1 - kept / u.str0));
+    }
     const k = this.ticket.reckoning;
     const r = R ?? clampToDice(fieldRatio(winner, lost), k.odds, k.dice, winner);
     // The campaign's verdict follows R: under the dice's clamp it can differ from who held the field.
@@ -553,21 +582,24 @@ export class LandBattle implements BattleSim<LandUnit> {
       f.lost += u.power0 * (1 - u.str / u.str0); f.p += u.power0;
       forces.set(u.corps, f);
     }
-    const A = this.ticket.att.adj, D = this.ticket.def.adj;
+    const loser = other(winner);
     // "about 4%", or under one in a hundred "less than 1%", never "about 0%" (the UI director's words, b358).
-    const pct = (p: number): string => (p < 0.005 ? 'less than 1%' : `about ${Math.round(p * 100)}%`);
+    // Where nothing was lost at all, it says "none" (b408).
+    const pct = (p: number): string => (p < 1e-4 ? 'none' : p < 0.005 ? 'less than 1%' : `about ${Math.round(p * 100)}%`);
+    const cap = (t: string): string => t[0].toUpperCase() + t.slice(1);
+    const line = this.practice && this.ticket.def.human ? 'Your line' : this.practice ? 'Their line' : `The ${this.ticket.def.adj} line`;
     const lines = [
-      how === 'rout' ? this.brokeAfter(winner === 'att' ? D : A)
-        : how === 'withdrew' ? `The ${winner === 'att' ? D : A} army withdrew from the field.`
-          : how === 'time' ? `The ${D} line held until the day was done.`
-            : how === 'destroyed' ? `The ${winner === 'att' ? D : A} army was driven from the field.`
+      how === 'rout' ? this.brokeAfter(loser)
+        : how === 'withdrew' ? `${this.army(loser)} withdrew from the field.`
+          : how === 'time' ? `${line} held until the day was done.`
+            : how === 'destroyed' ? `${this.army(loser)} was driven from the field.`
               : this.staffLine(),
-      // Handed over, the field's figure is only the part before the staff took it: it says so, as it reads beside the
-      // campaign's bill for the whole day (the design director, b356).
-      how === 'objective'
-        ? `Before you handed the battle to the staff, the ${A} attack had lost ${pct(lost.att)} of its strength on the field, and the ${D} defence ${pct(lost.def)}.`
-        : `The ${A} attack lost ${pct(lost.att)} of its strength, the ${D} defence ${pct(lost.def)}.`,
     ];
+    // Handed over, the field's figure is only the part before the staff took it: it says so, as it reads beside the
+    // campaign's bill for the whole day (the design director, b356). Handed over before a shot, the staff's line says so
+    // already, and there is no figure to give (the UI director, after the retest).
+    if (how !== 'objective') lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? 'Neither side lost any of its strength.' : `${cap(this.sideOf('att', 'attack'))} lost ${pct(lost.att)} of its strength, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
+    else if (this.contactAt !== null) lines.push(`Before you handed the battle to the staff, ${this.sideOf('att', 'attack')} had lost ${pct(lost.att)} of its strength on the field, and ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
     // The battle is over: nothing marches on (the blocks' cards and the 3D models alike).
     for (const u of this.units) if (live(u) && u.state !== 'routing') { u.act = 'idle'; u.speed = 0; u.engaged = undefined; }
     this.over = {
@@ -585,19 +617,22 @@ export class LandBattle implements BattleSim<LandUnit> {
    * where the card put it, by five points of the balance or more.
    */
   private staffLine(): string {
-    const where = this.ticket.place.name;
-    if (this.contactAt === null) return `The staff settled the whole attack on ${where}: no shot had been fired.`;
+    // A practice ground is not a place: the staff settle the battle there, not the attack on it (b408).
+    const what = this.practice ? 'battle' : `attack on ${this.ticket.place.name}`;
+    // Before the armies met: true whether or not the guns had opened (b409, the UI director's words).
+    if (this.contactAt === null) return `The staff settled the whole ${what}: the armies had not met.`;
     const me: Side = this.ticket.def.human && !this.ticket.att.human ? 'def' : 'att';
     const bal = this.standing(), tot = this.power.att + this.power.def;
     // Moved his way by five points of the balance's share or more (the design director, 20:51): a point's drift is not a gain.
     const moved = (bal[me] / Math.max(1e-9, bal.att + bal.def)) >= this.power[me] / tot + 0.05;
-    return `The staff settled the rest of the attack on ${where} from where it stood${moved ? ': what you had won stays won' : ''}.`;
+    return `The staff settled the rest of the ${what} from where it stood${moved ? ': what you had won stays won' : ''}.`;
   }
 
   /** How long it broke after, counted from the first contact (ruling 226(6), the UI director's words). */
-  private brokeAfter(who: string): string {
+  private brokeAfter(s: Side): string {
     const m = Math.round((this.t - (this.contactAt ?? this.t)) / 60);
-    return m < 1 ? `The ${who} army broke within a minute of the first shots.` : m === 1 ? `The ${who} army broke after a minute of fighting.` : `The ${who} army broke after ${m} minutes of fighting.`;
+    const who = this.army(s);
+    return m < 1 ? `${who} broke within a minute of the first shots.` : m === 1 ? `${who} broke after a minute of fighting.` : `${who} broke after ${m} minutes of fighting.`;
   }
 
   /** Each side's standing power against what it brought, as the staff reckons the day now. */
