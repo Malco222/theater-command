@@ -45,6 +45,13 @@
 .sea .bbal { flex: 1 1 360px; min-width: 320px; max-width: 420px; margin-right: 4px; grid-template-columns: minmax(0, 1fr); }
 .sea .bends { display: grid; grid-template-columns: auto minmax(0, max-content) auto; justify-content: space-between; column-gap: 6px; align-items: start; }
 .sea .bends #ratio { white-space: normal; min-width: 0; }
+/* The odds always on two lines, the card's over now's, at every width from the first second, as the land's are, so the
+   bars never jump when a button's word grows (the UI director, b467). Now's line keeps room for its longest figures. */
+.sea .bends #ratio .facts > span { flex-direction: column; }
+.sea .bends #ratio .fact + .fact { min-width: calc(13ch + 1.4em); }
+/* In a chase WITHDRAW reads END THE CHASE: the odds block gives the extra width (down from 320 to about 300 at 1280), so
+   the button keeps 14 clear of the page's edge and the page never scrolls sideways (the UI director, b467). */
+.sea .bbar.is-ending .bbal, .sea .bbar.is-ending .btitle.is-small ~ .bbal { min-width: 260px; }
 /* The clock says what it is doing (ruling 226, 8): RUNNING in paper, PAUSED in brass. */
 .sea .bclock .tc-label { color: var(--paper-300); }
 .sea .bclock .tc-label.is-paused { color: var(--brass-300); }

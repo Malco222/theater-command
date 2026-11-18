@@ -443,14 +443,21 @@ function updateTop(force = false): void {
   if (el('ratio').dataset.was !== ratio) { el('ratio').dataset.was = ratio; el('ratio').innerHTML = ratio; }
   el('brkMe').style.width = `${(sim.nearBreak(me) * 100).toFixed(1)}%`;
   el('brkThem').style.width = `${(sim.nearBreak(them) * 100).toFixed(1)}%`;
-  document.querySelectorAll<HTMLElement>('[data-clock]').forEach((x) => x.classList.toggle('is-lit', Number(x.dataset.clock) === S.clock.speed));
+  // While a rush runs no speed button is lit: the chip over the sea is the one sign of the clock's speed (the UI
+  // director, b467). The pause lights as ever; 1, 2 or 3 in the chase ends the rush and lights its button.
+  const rushing = S.clock.speed > 0 && S.clock.rush > 1;
+  document.querySelectorAll<HTMLElement>('[data-clock]').forEach((x) => x.classList.toggle('is-lit', !rushing && Number(x.dataset.clock) === S.clock.speed));
   (el('wask') as HTMLElement).hidden = !S.asking;
   // While the player's own fleet is breaking off WITHDRAW has nothing to do, so it is greyed and says why.
   const wd = document.querySelector<HTMLButtonElement>('[data-act="withdraw"]')!, going = sim.brokenSide === me;
   if (wd.disabled !== going) { wd.disabled = going; if (going) wd.title = ALREADY_GOING; else wd.removeAttribute('title'); }
   // Once the enemy has broken off the button ends the chase, in plain style (the UI director, b467).
   const ending = sim.brokenSide === them && !sim.over, word = ending ? END_CHASE_WORD : WITHDRAW_WORD;
-  if (wd.textContent !== word) { wd.textContent = word; wd.classList.toggle('tc-btn--grave', !ending); }
+  if (wd.textContent !== word) {
+    wd.textContent = word; wd.classList.toggle('tc-btn--grave', !ending);
+    // The longer button takes its width from the odds block, never from the page's edge (sea.css .is-ending).
+    wd.closest('.bbar')!.classList.toggle('is-ending', ending);
+  }
   (el('sask') as HTMLElement).hidden = !S.handing;
   if (S.handing) { const q = handQuestion(sim); if (el('saskText').textContent !== q) el('saskText').textContent = q; }
   // The foot of what stands over the top of the sea, so the far ports' name and the opening view keep clear of it.
@@ -462,7 +469,7 @@ function updateTop(force = false): void {
   let tag = '';
   if (!S.asking && !S.handing && !sim.over) {
     if (paused) tag = `Paused ${cap('Space')}`;
-    else if (S.closing) tag = `×${APPROACH * S.clock.speed} until the fleets meet`;
+    else if (S.closing) tag = `×${APPROACH} until the fleets meet`;
     else if (S.chasing) tag = `×${APPROACH} until the chase is over ${cap('1')}`;
     else if (S.tag && now() < S.tag.until) tag = esc(S.tag.text);
   }
@@ -801,9 +808,10 @@ function frame(): void {
   // broken off, time runs fast through the chase until the action ends, unless the player takes the chase's clock in
   // hand with a speed key (b402, 3; b458, 1: an order lets the enemy go or pursues it, and neither slows the clock).
   // The chase runs at ×8 whatever speed the clock was set to before the break (the design director, b467): at ×32 the
-  // player could not strike or choose, and the chase should read the same every time.
+  // player could not strike or choose, and the chase should read the same every time. The approach does too, as the
+  // land's does ("×8 until the fleets meet"); the speed the player chose takes over when the rush ends.
   const chase = !sim.over && sim.brokenSide !== null && !S.chaseByHand;
-  S.clock.rush = chase ? APPROACH / (S.clock.speed || 1) : sim.quiet ? APPROACH : 1;
+  S.clock.rush = chase || sim.quiet ? APPROACH / (S.clock.speed || 1) : 1;
   S.clock.advance(sim, dt);
   const quiet = !sim.over && sim.quiet;
   if (S.closing && !quiet && !sim.over) S.tag = { text: `The action begins · Running ×${S.clock.speed}`, until: t + 2.5 };
