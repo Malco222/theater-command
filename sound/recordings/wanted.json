@@ -2,6 +2,42 @@
  "note": "Round one: recordings for the six test sounds, all from Wikimedia Commons. Licences were read from Commons when found; fetch_recording.mjs reads them again and refuses anything a game may not use.",
  "recordings": [
   {
+   "id": "gmc_cckw_besancon",
+   "for": "lorry",
+   "title": "File:GMC CCKW 353 à Besançon le 8 septembre 2026.webm",
+   "licence": "CC0",
+   "seconds": 13,
+   "mb": 6.7,
+   "note": "A real wartime GMC CCKW 353 lorry (the American deuce-and-a-half) running at a show in Besançon. Round four, for the field gun, lorry and half-track."
+  },
+  {
+   "id": "m3_halftrack_macarthur",
+   "for": "half-track",
+   "title": "File:M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC).ogv",
+   "licence": "CC BY 3.0",
+   "seconds": 91,
+   "mb": 142.9,
+   "note": "A real M3 half-track (the M16 anti-aircraft version) at Fort MacArthur, California. Round four."
+  },
+  {
+   "id": "jeep_willys_engine",
+   "for": "lorry",
+   "title": "File:Jeep Willys - engine and exhaust sound (YouTube U- wTDXrO6U).opus",
+   "licence": "CC BY 3.0",
+   "seconds": 72,
+   "mb": 0.8,
+   "note": "A Willys jeep starting and running: a light wartime engine. Round four."
+  },
+  {
+   "id": "howitzer_173rd_995248",
+   "for": "field gun",
+   "title": "File:173rd Airborne Brigade Refine Strengths with Howitzer Live Fire (995248).webm",
+   "licence": "Public domain",
+   "seconds": 19,
+   "mb": 10.3,
+   "note": "A towed howitzer crew firing: the shot, and the breech and case if they can be heard. Round four."
+  },
+  {
    "id": "t34_estonia_museum",
    "for": "tank",
    "title": "File:Tank T-34 Eesti Vabadusvõitluse Muuseumis.ogg",
