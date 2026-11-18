@@ -5,7 +5,10 @@
 #include "Templates/Function.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
-class FJsonObject;
+#include <functional>
+#include <map>
+#include <string>
+
 class FJsonValue;
 class UMaterialInstanceDynamic;
 class UPointLightComponent;
@@ -29,8 +32,11 @@ public:
 	virtual bool FindWord(const char* Path, std::string& Out) const override;
 
 private:
-	TSharedPtr<FJsonObject> Root;
-	TSharedPtr<FJsonValue> At(const char* Path) const;
+	// (flattened once at Load, path to value, as tools/battle-fx/preview/flatten.py does: a landing shell asks
+	// thousands of times, so each ask is one look-up, with no string made and no tree walked)
+	std::map<std::string, double, std::less<>> Numbers;
+	std::map<std::string, std::string, std::less<>> Words;
+	void Walk(const TSharedPtr<FJsonValue>& Value, const std::string& Path);
 };
 
 /**
