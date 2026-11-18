@@ -467,9 +467,11 @@ play on it whatever she plays.
 
 ### Firing arcs, and a small nation's flag
 
-- A turret's limits are in its file (`turret.N` trains, `turret.N.guns` lifts). A turret in her nose or tail trains
-  95 degrees each way and its guns lift from -45 to 60 (the Lancaster's two; from memory, the historian's word
-  replaces it); one under her belly -85 to 10; any other -10 to 80.
+- A turret's limits are in its file (`turret.N` trains, `turret.N.guns` lifts). By default a turret in her nose or
+  tail trains 95 degrees each way and its guns lift from -45 to 60; one under her belly -85 to 10; any other -10
+  to 80. A ruling for one aircraft goes in `planes.TURRET_LIMITS` and replaces the default. The Lancaster's are the
+  historian's (2026-11-18): nose 95 each way, -45 to 60; mid-upper all round, 0 to 70; tail 95 each way, -60 to 60.
+  The files hold no cut-out for her own fins and wings: not firing through them is the game's.
 - A hand-held gun (`flexgun.N`, `kind: free`) has no limits in its file. `gunarcs.py <air folder> <out.json>
   <out.md>` reads every one off the exported files and gives each a placeholder arc by where it is and which way it
   points at rest (waist, nose cheek, nose, tail, rear cockpit, under the fuselage): `air/gun-arcs.json`. They are the

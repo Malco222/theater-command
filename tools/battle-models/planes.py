@@ -68,6 +68,10 @@ PANES = {"B17": [(-13.2, -13.9, 0.0, 36.0), (-13.67, -14.36, 45.0, 90.0)], "B29"
          "Betty": [(-10.45, -11.4, -27.0, 90.0)]}                           # (the Betty's tail is a cone of glass round her gunner)
 # The machines whose every turret is aimed from somewhere else in her: nobody sits in one.
 REMOTE = {"B29"}
+# (limits a ruling has set for one aircraft's turrets, by the turret's number: (train, lift). The historian, 2026-11-18
+#  21:19Z, for the Lancaster: her nose turret 95 either side and 45 below to 60 above; her mid-upper all round, from
+#  level to 70 above; her tail turret 95 either side and 60 below to 60 above, the widest field in her.)
+TURRET_LIMITS = {"Lancaster": {1: ((-95, 95), (-45, 60)), 2: ((-180, 180), (0, 70)), 3: ((-95, 95), (-60, 60))}}
 SPATS = {"Val"}                                                           # (a fixed undercarriage in spats, painted as her sides are)
 LINE = 0.4                                                                # (how wide a scribed line is drawn, as a share of the map's)
 
@@ -962,8 +966,10 @@ def convert(name, fine=True):
         belly = c.z < hull.z(-c.x) - 0.3 * hull.h(-c.x)
         # (a turret in her nose or her tail sweeps a little past each beam and points well below her: the air battles
         #  asked, 2026-11-18, since a tail gunner's work is the fighter climbing at him from below. The figures are
-        #  the usual ones for a British nose or tail turret, from memory: the historian's word replaces them.)
-        m.part(f"turret.{k}", parent, port(c), axis=(0, 0, -1), kind="turn", limits=((-75, 75) if belly else (-95, 95)) if at_end else (-180, 180),
+        #  the usual ones for a British nose or tail turret, from memory: a ruling in TURRET_LIMITS replaces them.)
+        train, lift = TURRET_LIMITS.get(name, {}).get(k, (((-75, 75) if belly else (-95, 95)) if at_end else (-180, 180),
+                                                          (-85, 10) if belly else (-45, 60) if at_end else (-10, 80)))
+        m.part(f"turret.{k}", parent, port(c), axis=(0, 0, -1), kind="turn", limits=train,
                note="a gun turret: its dome, its frames, its gunner; plus trains it clockwise seen from above")
         way = sum((port(rods[i][1] - rods[i][0]) for i in mine), Vector())
         way.z = 0.0
@@ -972,7 +978,7 @@ def convert(name, fine=True):
             balls.add(k)                                    # (a round one under her belly is a steel ball, not a glass dome: see fitout.ball_turret)
         elif belly or name in REMOTE:
             remote.add(k)                                   # (a low one under her is worked from inside her: nobody sits in it)
-        m.part(f"turret.{k}.guns", f"turret.{k}", port(c), axis=tuple(way.cross(Z).normalized()), kind="turn", limits=(-85, 10) if belly else (-45, 60) if at_end else (-10, 80), note="its guns; plus lifts them")
+        m.part(f"turret.{k}.guns", f"turret.{k}", port(c), axis=tuple(way.cross(Z).normalized()), kind="turn", limits=lift, note="its guns; plus lifts them")
         for i in mine:
             gun_part[i] = f"turret.{k}.guns"
     flex = []
