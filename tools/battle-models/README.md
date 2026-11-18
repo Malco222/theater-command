@@ -434,7 +434,7 @@ has not been hit has none, so nothing changes for a game that does not use it.
   "bullets" (a raking row of five to eight holes, unevenly spaced, each a dark hole with bare metal on one stretch
   of its rim only) or "flak" (a ragged tear 30 to 55 cm across, three to six petals of torn metal bent into it, most
   of them dark and one or two catching the light, a halo of soot round it, and a scatter of splinter holes). A
-  fighter has eight or nine hits, a heavy bomber fourteen; 1,500 to 2,900 triangles. Holes are larger than life
+  fighter has eight or nine hits, a heavy bomber fourteen; 1,400 to 2,900 triangles. Holes are larger than life
   (8 to 10 cm) so that a battle camera sees them.
 - Three clips show them, with seconds standing for hits: `damage.bullets` held at k shows her first k bullet hits,
   `damage.flak` her first k flak hits (lay one over the other), `damage` the first k of all kinds. At rest all show.
