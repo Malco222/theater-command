@@ -276,19 +276,19 @@ def su85(fine=True, tag="SOV"):
     v.vent((0.62, -0.12, zc), 0.1, 0.045)
     if fine:
         for s, n in ((LEFT, sn[0]), (RIGHT, sn[1])):
-            v.handle(Vector((0.7, s * y_at(1.86), 1.86)), Vector((0.1, s * y_at(1.86), 1.86)), n, 0.011, 0.06)
+            v.handle(Vector((0.7, s * y_at(1.95), 1.95)), Vector((0.1, s * y_at(1.95), 1.95)), n, 0.011, 0.06)     # high on the plate: the slogan goes under it
             v.port(Vector((-0.2, s * y_at(1.8), 1.8)), n, 0.04)
         for at in ((0.75, 0.6), (0.75, -0.6), (-0.32, 0.0)):
             v.lift_eye((at[0], at[1], zc), Z, Y, 0.03)
     for s, n in ((LEFT, sn[0]), (RIGHT, sn[1])):
-        v.mark("SOV", (0.42, s * (y_at(1.8) + 0.002), 1.8), n, 0.15, part="hull")
+        v.mark("SOV", (1.02, s * (y_at(1.78) + 0.002), 1.78), n, 0.15, part="hull")      # ahead of the hand rail: the plate behind it is the slogan's
 
     v.socket("fire.2", (cup.x, cup.y, cup.z + 0.1), Z, part="hull", note="out of the commander's hatch")
     v.socket("hit.turret", (0.5, y_at(1.8), 1.8), sn[0], part="hull", note="the fighting box's side")
     v.socket("case", (-0.12, 0.22, zc + 0.1), Y, part="hull", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.36, kick=0.9, gun_low=-5.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver"], traverse=6.0,
                  idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", has_turret=False, mg=None)
-    v.name_place((-0.5, 1.8), long=1.0, high=0.12, lines=2)           # the slogan (b477): on the casemate's side
+    v.name_place((0.33, 1.75), long=0.9, high=0.11, lines=2)          # the slogan (b477): on the casemate's side, under the hand rail and ahead of the pistol port
     return v
 
 

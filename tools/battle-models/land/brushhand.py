@@ -8,7 +8,9 @@ gives each stroke back as a ribbon of the brush's width.
 
     strokes, long = brushhand.word("BUCKEYE", seed="Sherman")     # ribbons in units of the letters' height, and the word's length
 
-Latin capitals and the Russian ones (the Soviet slogans were in their own letters). Japanese is not here.
+Latin capitals (with the marks French, Polish, Italian and German names carry: a crew paints the accent as one more
+dab of the brush) and the Russian ones (the Soviet slogans were in their own letters; `SLOGANS` gives the historian's
+twenty in them). Japanese is not here.
 The same table is written out for the games as `brush-alphabet.json` (export_land.py), so the field paints the hand
 the pictures show.
 """
@@ -60,6 +62,24 @@ LATIN = {
     "'": (0.10, [[(0.07, 1.0), (0.03, 0.78)]]),
     "!": (0.10, [[(0.05, 1.0), (0.05, 0.30)], [(0.05, 0.07), (0.05, 0.0)]]),
 }
+
+
+def _marked(base, mark):
+    """A capital with its mark: the mark is one more dab of the brush, over the letter or under it."""
+    w, strokes = LATIN[base]
+    c = 0.34 if base in "CG" else w / 2
+    dab = {"acute": [[(c - 0.05, 1.13), (c + 0.09, 1.30)]], "grave": [[(c + 0.05, 1.13), (c - 0.09, 1.30)]],
+           "hat": [[(c - 0.14, 1.12), (c, 1.28), (c + 0.14, 1.12)]], "dots": [[(c - 0.12, 1.15), (c - 0.12, 1.25)], [(c + 0.12, 1.15), (c + 0.12, 1.25)]],
+           "bar": [[(c - 0.16, 1.20), (c + 0.16, 1.20)]], "dot": [[(c, 1.14), (c, 1.25)]],
+           "tail": [[(w - 0.04, 0.0), (w - 0.13, -0.12), (w - 0.03, -0.20)]], "hook": [[(c + 0.02, 0.0), (c - 0.04, -0.12), (c + 0.07, -0.20)]],
+           "stroke": [[(-0.10, 0.36), (0.22, 0.64)]]}[mark]
+    return (w, list(strokes) + dab)
+
+
+_MARKS = {"À": "A grave", "Â": "A hat", "Ä": "A dots", "Ā": "A bar", "Ą": "A tail", "Ç": "C hook", "Ć": "C acute", "É": "E acute", "È": "E grave", "Ê": "E hat",
+          "Ë": "E dots", "Ē": "E bar", "Ę": "E tail", "Ì": "I grave", "Î": "I hat", "Ï": "I dots", "Ī": "I bar", "Ł": "L stroke", "Ń": "N acute", "Ò": "O grave",
+          "Ó": "O acute", "Ô": "O hat", "Ö": "O dots", "Ō": "O bar", "Ś": "S acute", "Ù": "U grave", "Û": "U hat", "Ü": "U dots", "Ū": "U bar", "Ź": "Z acute", "Ż": "Z dot"}
+LATIN.update({ch: _marked(*how.split()) for ch, how in _MARKS.items()})
 _L = LATIN
 RUSSIAN = {
     "А": _L["A"], "В": _L["B"], "Е": _L["E"], "К": _L["K"], "М": _L["M"], "Н": _L["H"], "О": _L["O"], "Р": _L["P"], "С": _L["C"], "Т": _L["T"], "Х": _L["X"],
@@ -95,9 +115,21 @@ _RU = [("shch", "Щ"), ("zh", "Ж"), ("kh", "Х"), ("ts", "Ц"), ("ch", "Ч"), (
        ("u", "У"), ("f", "Ф"), ("'", "Ь")]
 
 
+# The historian's twenty Soviet lines (tank-names-b477.json), in their own letters: his Latin spelling drops the soft
+# sign, so a letter-for-letter reading cannot give it back. Period paint wrote Е for Ё.
+SLOGANS = {"Za Rodinu": "ЗА РОДИНУ", "Mstitel": "МСТИТЕЛЬ", "Smelyy": "СМЕЛЫЙ", "Vpered na zapad": "ВПЕРЕД НА ЗАПАД", "Za nashu Moskvu": "ЗА НАШУ МОСКВУ",
+           "Za Odessu": "ЗА ОДЕССУ", "Bogatyr": "БОГАТЫРЬ", "Sokol": "СОКОЛ", "Burya": "БУРЯ", "Molniya": "МОЛНИЯ", "Podarok frontu": "ПОДАРОК ФРОНТУ",
+           "Ot kolkhoznikov": "ОТ КОЛХОЗНИКОВ", "Ne otstupim": "НЕ ОТСТУПИМ", "Pobeda": "ПОБЕДА", "Sibiryak": "СИБИРЯК", "Volga": "ВОЛГА", "Groza": "ГРОЗА",
+           "Druzhba": "ДРУЖБА", "Za Sevastopol": "ЗА СЕВАСТОПОЛЬ", "Ural": "УРАЛ"}
+_SLOGANS = {k.lower(): v for k, v in SLOGANS.items()}
+
+
 def russian(latin):
-    """A slogan written in Latin letters, in Russian ones (a plain letter-for-letter reading, good for the pictures:
-    the land thread's own table of slogans rules in the game)."""
+    """A slogan written in Latin letters, in Russian ones: the historian's own twenty from the table, any other by a
+    plain letter-for-letter reading (good for a picture; give the game the Russian itself)."""
+    key = " ".join(latin.replace("_", " ").replace("'", "").lower().split())
+    if key in _SLOGANS:
+        return _SLOGANS[key]
     out, s, i = "", latin.lower(), 0
     while i < len(s):
         for a, b in _RU:
@@ -178,4 +210,5 @@ def table():
                      "A hand is never even: `hand` gives how far each letter's size, lean and baseline may stray, and the gap between letters. Never a printed face.",
             "brush": 0.135, "space": SPACE,
             "hand": {"size": [0.93, 1.07], "lean": [-0.055, 0.075], "baseline": 0.06, "gap": [0.25, 0.35], "run_on": [0.30, 0.22], "lift_off": 0.38},
+            "slogans_russian": dict(SLOGANS),
             "letters": {ch: {"wide": round(w, 3), "strokes": [[[round(a, 3), round(b, 3)] for (a, b) in st] for st in strokes]} for ch, (w, strokes) in LETTERS.items()}}

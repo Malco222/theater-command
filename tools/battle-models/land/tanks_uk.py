@@ -238,5 +238,5 @@ def matilda(fine=True, tag="UK"):
     v.socket("case", (x0 - 0.3, -0.79, zt + 0.3), -Y, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.18, kick=0.45, gun_low=-12.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver"],
                  traverse=14.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.8, 2.4, 0.38, 166.0))
-    v.name_place((0.3, 1.0), long=0.9, high=0.12)                     # her crew's name (b477): on the side skirting plates
+    v.name_place((0.3, 1.015), long=0.9, high=0.10, reach=(1.6, 0.12))   # her crew's name (b477): on the side skirting plates, in the band between the chutes' heads and the bolts along the top
     return v

@@ -201,9 +201,32 @@ class Works(Shop, Gear, Fittings):
                 on = mk.get("part", "hull")
                 if (on == part or on in (parts or ())) and (mk.get("both") or -mk["at"][1] * s > 0):
                     taken.append((mk["at"][0], mk["at"][2], mk["radius"] + 0.06))
+            def clear(pc, nc, half_run, half_up, fs=0.012):
+                """A closer look at a place that passed: nothing stands off the plate across it (a hand rail, a
+                hinge, a box's edge), which the coarse look can miss between its rows."""
+                up_ = (Z - nc * Z.dot(nc)).normalized()
+                run_ = up_.cross(nc)
+                na, nb = int(half_run / fs), int(half_up / fs)
+                bad, tot, rows = 0, 0, []
+                for b in range(-nb, nb + 1):
+                    row = []
+                    for a in range(-na, na + 1):
+                        hit = tree.ray_cast(pc + run_ * (a * fs) + up_ * (b * fs) + nc * 0.5, -nc, 1.2)
+                        tot += 1
+                        if hit[0] is None or m.fpart[ids[hit[2]]] not in ok_parts or m.fpaint[ids[hit[2]]] not in ok_paints:
+                            bad += 1
+                            row.append(None)
+                            continue
+                        row.append(hit[3])
+                        if (row[-2:-1] and row[-2] is not None and abs(row[-2] - hit[3]) > 0.016) or (rows and rows[-1][len(row) - 1] is not None and abs(rows[-1][len(row) - 1] - hit[3]) > 0.016):
+                            bad += 1
+                    rows.append(row)
+                return bad <= 0.006 * tot
+
             best = None
             for shrink in (1.0, 0.88, 0.76, 0.64, 0.52):
-                hx, hz = int(along_len * shrink / 2 / step) + 1, int(up_len / 2 / step) + 1
+                hx, hz = max(1, math.ceil(along_len * shrink / 2 / step - 0.2)), max(1, math.ceil(up_len / 2 / step - 0.2))
+                passed = []
                 for (i, j), (pc, nc) in grid.items():
                     x, z = near[0] + i * step, near[1] + j * step
                     if any(abs(x - tx) < hx * step + r and abs(z - tz) < hz * step + r for tx, tz, r in taken):
@@ -217,9 +240,11 @@ class Works(Shop, Gear, Fittings):
                                 flat += 1
                                 nsum += g[1]
                     if flat >= 0.97 * n:
-                        d = math.hypot(i * step, 1.6 * j * step)
-                        if best is None or d < best[0]:
-                            best = (d, pc, nsum.normalized(), shrink)
+                        passed.append((math.hypot(i * step, 1.6 * j * step), i, j, pc, nsum.normalized()))
+                for d, _, _, pc, nc in sorted(passed, key=lambda q: q[:3]):
+                    if clear(pc, nc, along_len * shrink / 2, up_len / 2):
+                        best = (d, pc, nc, shrink)
+                        break
                 if best is not None:
                     break
             if best is None:

@@ -33,7 +33,7 @@ It all runs in Blender as a Python module (`bpy`), with no Blender window:
 | `vehicles.py` | every vehicle by name, whose it is, and the faces it showed through the war |
 | `ground.py` | the stage (`Battle`: the field battle's own ground and trees; `Field`: a plain meadow) and the effects (`Air`) |
 | `landmarks.py` | each nation's plain period marking, laid on the skin; a crew's name or rings too, for a proof picture (`landlook.py <Name> <out> side 14 960x540 name=WORD` or `rings=3`) |
-| `brushhand.py` | the crew's brush hand: Latin and Russian capitals as strokes, laid out unevenly as a hand does; written out for the games as `brush-alphabet.json` |
+| `brushhand.py` | the crew's brush hand: Latin capitals (with their accents) and Russian ones as strokes, laid out unevenly as a hand does, and the Soviet slogans in Russian letters; written out for the games as `brush-alphabet.json` |
 | `landshow.py`, `landlook.py` | sheets, clips, quick stills |
 | `export_land.py` | `<Name>.json`, `.glb`, `.fbx` and `index-land.json` |
 | `rigid.py`, `kit.py`, `marks.py`, `stage.py` | unchanged copies from the warships' and aircraft's folder (`tools/battle-models/` on their branch) |
@@ -101,9 +101,13 @@ side that carries one (`at`, the plate's `facing`, the writing's `along` and `up
 `long`), the letters `high` tall, `lines`, `writing` (across or down). kind `rings`: the barrel's `part`, the first
 ring's middle `at`, `toward` the breech, `step`, `wide`, `most`, and the barrel's `radius` under each ring. `ink`
 says off-white or near-black for her coat (and for each coat she can wear). The place is found on the mesh when she
-is built (`Works.name_place`, `Works.kill_rings`): a flat run of her own painted plate clear of her national marking.
-The game paints the word in the brush hand of `brush-alphabet.json`, never a printed face
-(`/mnt/project-files/art-director/battles/b477-battle-details-look.md`).
+is built (`Works.name_place`, `Works.kill_rings`): a flat run of her own painted plate clear of her national marking,
+with no hand rail, hinge or box across it. The game paints the word in the brush hand of `brush-alphabet.json`, never
+a printed face (`/mnt/project-files/art-director/battles/b477-battle-details-look.md`): letters `high` tall, or
+smaller when the word is longer than the room (`long`); a word about nine letters long fills a 0.9 m place at 12 cm.
+That file has every letter the historian's names use (French, Polish, Italian and German marks are one more dab of
+the brush) and his twenty Soviet lines in Russian letters (`slogans_russian`: his Latin spelling drops the soft sign,
+so read them from there). No Japanese characters yet: nobody has ruled the script.
 
 **Clips.** `idle`, `start`, `drive`, `move_off`, `stop`, `fire` (the barrel's recoil), `fire.rock` (the hull's answer,
 made for a gun trained ahead: turn it about the turret's bearing), `mg_burst`, `hull_mg_burst`, `hit`, `open_up`,
