@@ -14056,7 +14056,11 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const bool bSeen = Flight.SeenWhen > 0.0 && Since > 0.0005 && Since < 0.25;
 			const FVector BomberSpeed = bSeen ? (Flight.At - Flight.SeenAt) / Since : FVector::ZeroVector;
 			const FVector FighterSpeed = bSeen ? (Flight.RivalAt - Flight.SeenRivalAt) / Since : FVector::ZeroVector;
-			auto FireGun = [&](int32 Gun, bool bFighters, const FVector& Muzzle, const FVector& Mark, const FVector& ShooterSpeed)
+			// (The modeller's look rule of 16:17 UTC the same day: tracers are streams, not scattered dashes. Each gun lays
+			// its tracers evenly along one line from its muzzle to a point led ahead of its mark; the whole stream
+			// wanders slowly by about a third of a degree, and each round is scattered a little about it. A fighter's
+			// paired streams meet at its mark; the bombers' streams converge on one fighter.)
+			auto FireGun = [&](int32 Gun, bool bFighters, const FVector& Muzzle, const FVector& Mark, const FVector& ShooterSpeed, const FVector& MarkSpeed)
 			{
 				double& Next = Flight.NextRound[Gun];
 				if (Next <= 0.0 || Next < Now - 0.25)
@@ -14073,13 +14077,18 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 						if ((Round + BeltStarts[Gun]) % 5 == 0 && TracerRounds.Num() < 160)
 						{
 							FRandomStream Chance(Round * 7919 + Gun * 131 + F * 17);
-							const FVector Aim = (Mark - Muzzle).GetSafeNormal();
-							// (about a degree and a half of scatter; and it burns out about as far past its mark as its mark is from it)
-							const FVector Scatter(Chance.FRandRange(-1.0f, 1.0f), Chance.FRandRange(-1.0f, 1.0f), Chance.FRandRange(-1.0f, 1.0f));
+							// (it burns out about as far past its mark as its mark is from it)
 							const double Range = FMath::Max(2.0 * FVector::Distance(Muzzle, Mark), 9.0 * Table);
+							const double Speed = Range / TracerBurns;
+							// (led: aimed where the mark will be when the round has flown to it)
+							const FVector Led = Mark + MarkSpeed * (FVector::Distance(Muzzle, Mark) / Speed);
+							const FVector Aim = (Led - Muzzle).GetSafeNormal();
+							// (the stream's slow wander, a third of a degree; and each round's own scatter, a little under half a degree)
+							const FVector Wander(FMath::Sin(Next * 0.7 + Gun * 1.9), FMath::Sin(Next * 0.53 + Gun * 2.7), FMath::Sin(Next * 0.61 + Gun * 1.0));
+							const FVector Scatter(Chance.FRandRange(-1.0f, 1.0f), Chance.FRandRange(-1.0f, 1.0f), Chance.FRandRange(-1.0f, 1.0f));
 							FTracerRound& Tracer = TracerRounds.AddDefaulted_GetRef();
 							Tracer.From = Muzzle;
-							Tracer.Velocity = (Aim + Scatter * 0.026).GetSafeNormal() * (Range / TracerBurns) + ShooterSpeed;
+							Tracer.Velocity = (Aim + Wander * 0.006 + Scatter * 0.007).GetSafeNormal() * Speed + ShooterSpeed;
 							Tracer.Born = Next;
 						}
 					}
@@ -14102,15 +14111,14 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				{
 					// (a gun in each wing, two metres out and a metre and a half ahead: a model's front is toward -X)
 					const FVector Muzzle = Fighters[K] + Pair.TransformVector(FVector(-1.5, Wing == 0 ? -2.0 : 2.0, 0.0) * Small);
-					FireGun(K * 2 + Wing, true, Muzzle, Mark, FighterSpeed);
+					FireGun(K * 2 + Wing, true, Muzzle, Mark, FighterSpeed, BomberSpeed);
 				}
 			}
+			// (a gunner in each bomber, from its back: all three at one fighter, the one nearer their leader)
+			const FVector& Hunted = FVector::DistSquared(Bombers[0], Fighters[0]) <= FVector::DistSquared(Bombers[0], Fighters[1]) ? Fighters[0] : Fighters[1];
 			for (int32 K = 0; K < 3; ++K)
 			{
-				// (a gunner in each bomber, from its back, at the nearer fighter)
-				const FVector Muzzle = Bombers[K] + FVector(0.0, 0.0, 0.6 * Table);
-				const FVector Mark = FVector::DistSquared(Muzzle, Fighters[0]) < FVector::DistSquared(Muzzle, Fighters[1]) ? Fighters[0] : Fighters[1];
-				FireGun(4 + K, false, Muzzle, Mark, BomberSpeed);
+				FireGun(4 + K, false, Bombers[K] + FVector(0.0, 0.0, 0.6 * Table), Hunted, BomberSpeed, FighterSpeed);
 			}
 		}
 		Flight.SeenAt = Flight.At;
@@ -14162,8 +14170,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const double HalfWide = FMath::Max(0.09 * Table, 2.0 * Pixel);
 			// (and no longer than it has yet flown: it grows out of the muzzle)
 			const double Long = FMath::Min(FMath::Max(3.0 * Table, 9.0 * HalfWide), FMath::Max(Round.Velocity.Size() * Age, 2.0 * HalfWide));
-			// (it burns out over its last tenth of a second)
-			const float Burning = static_cast<float>(1.0 - FMath::SmoothStep(TracerBurns - 0.1, TracerBurns, Age));
+			// (it dwindles over the last two fifths of its flight, and is out at the end)
+			const float Burning = static_cast<float>(1.0 - FMath::SmoothStep(0.6 * TracerBurns, TracerBurns, Age));
 			DrawSmear(Head - Flies * (0.9 * Long), Flies, 0.6 * Long, 0.55 * HalfWide, TracerYellow, 0.6f * Burning, 0.5); // the tail, thinning
 			DrawSmear(Head - Flies * (0.4 * Long), Flies, 0.4 * Long, HalfWide, TracerYellow, 1.0f * Burning, 0.75, 0.95f * Burning); // the streak, solid
 			DrawSmear(Head - Flies * (0.25 * Long), Flies, 0.2 * Long, 0.45 * HalfWide, TracerPale, 0.9f * Burning, 0.6, 0.7f * Burning); // its paler heart
