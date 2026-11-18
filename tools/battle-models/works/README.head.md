@@ -41,14 +41,21 @@ Our own plain designs throughout: no army's emblem, no lettering, nothing copied
    the muzzle). The `GunPit` has room for all five; the `Bunker` takes `Gun75`, `25pdr` and `ZiS3` freely and the
    `leFH18` with its spades at the back wall, but not the `Howitzer105` (0.4 m too long). The anti-tank guns
    (`Pak40`, `AntiTankGun`) fire flat with their bores under a metre up: they stand in the `AntiTankPit`, whose
-   front is cut down for them, or in the `Bunker`, not in the `GunPit`. A `GunPit` or a `Bunker` is
+   front is cut down for them, or in the `Bunker`, not in the `GunPit`. The `AntiTankPit` has a loose part `boughs`:
+   cut branches leaned from the gun's shield down to the low front and one laid across her barrel. It is fitted to
+   the `Pak40` (shield top 1.20 m above the pit floor); for the `AntiTankGun` move the part 0.15 m forward and
+   0.06 m down. Take it off if the pit ever stands without its gun. A `GunPit` or a `Bunker` is
    never shown empty: the pictures stand `Gun75` at the socket in its owner's paint, and so should the game.
    The heavy and the light flak gun are built to stand in a pit, a sandbag ring or the tower, never bare on open
    ground (the art director's note of review 2).
 3. **Crew places.** A socket `crew.<role>` is where a man of the crew stands, kneels, sits or lies, facing the
    socket's way; it carries `stance` (`stand`, `kneel`, `sit`, `prone`) and, where he sits, `seat_h` (metres from his
    feet to the seat). `grip.<role>.l` and `grip.<role>.r` are where his hands go. The soldier modeller's men and
-   their gun-serving clips fit these; until then a piece works unmanned.
+   their gun-serving clips fit these (`../land/soldier/crew/`); a piece also works unmanned. On the heavy flak guns
+   the layers' grips are on the handwheels' two handles and belong to the `handwheel.*` parts, so they turn with the
+   wheel; the loader's socket is beside the breech's path, clear of the recoil; and the ready rack's nearest round
+   is a part of its own, `round.ready`, which `fire` hides while the loader's own round (the crew pack's prop) is
+   out of the rack.
 4. **`idle` is the rest pose, not the bind pose.** A piece that can be broken keeps its rubble, craters or broken
    glass as parts hidden at scale 0, and `idle` holds them there: play `idle` (or apply its first key) whenever the
    piece stands unharmed. `knocked_out`, `breach`, `crush.N`, `detonate.N` and the like are one-shot clips with

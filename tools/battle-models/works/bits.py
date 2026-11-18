@@ -34,6 +34,7 @@ PAINTS = {
     "net": "4C4735", "garnish": "5B693B", "garnish.2": "7B6B46", "garnish.3": "3F4A2C",
     "glass": "1E2629", "sign": "A5362A", "sign.2": "D6C169", "sign.3": "D9D5C9", "void": "0B0B0B",
     "leather": "5A3E2A", "wood.paint": "5E6A48",
+    "leaf": "4B5C2F", "leaf.2": "5E6D39", "leaf.dull": "6C6840", "leaf.dry": "76633F",
 }
 
 # Each army's field paint. The first colour comes from the art director's unit table (ruling 78(f): every gun takes its

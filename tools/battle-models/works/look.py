@@ -295,7 +295,7 @@ def works_look(paint, mat, nt, bsdf, mix):
         nt.links.new(col, bsdf.inputs["Base Color"])
         bsdf.inputs["Roughness"].default_value = 0.8
         bsdf.inputs["Metallic"].default_value = 0.35
-    elif key in ("canvas", "net", "garnish", "leather"):
+    elif key in ("canvas", "net", "garnish", "leather", "leaf"):
         mott = _ramp(nt, _noise(nt, tc, 6.0, 6.0), 0.72, 1.2, 0.25, 0.75)
         col = _times(nt, col, mott, 0.8)
         nt.links.new(col, bsdf.inputs["Base Color"])

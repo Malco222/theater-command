@@ -689,6 +689,109 @@ def SandbagRing(fine=True, nation="_default", name="SandbagRing"):
     return m
 
 
+def bough(m, pts, side, seed=0, wilt=0.0):
+    """A cut branch lying along `pts` (butt first): a woody stem, twigs to left and right of it in the spray's own
+    plane (`side` lies in that plane, across the stem), sprigs off the twigs, and leaves of one shape along them all.
+    `wilt` 0..1 is how far the leaves have dulled and drooped: cut boughs wilt in a day."""
+    g = rnd(seed)
+    pts = [Vector(q) for q in pts]
+    spans = [(b - a).length for a, b in zip(pts, pts[1:])]
+    L = sum(spans)
+    n = len(pts)
+    r0 = 0.009 + 0.004 * L
+    bits.tube(m, pts, r0, "timber.dark", sides=5 if m.fine else 3, radii=[r0 * (1.0 - 0.72 * i / (n - 1)) for i in range(n)])
+    side = Vector(side)
+
+    def at(f):
+        d = f * L
+        for (a, b), sp in zip(zip(pts, pts[1:]), spans):
+            if d <= sp:
+                return a.lerp(b, d / sp), (b - a).normalized()
+            d -= sp
+        return pts[-1].copy(), (pts[-1] - pts[-2]).normalized()
+
+    def tone():
+        w = wilt * g.uniform(0.6, 1.4)
+        if w > 0.75:
+            return g.choice(("leaf.dull", "leaf.dull", "leaf.dry"))
+        if w > 0.4:
+            return g.choice(("leaf.dull", "leaf", "leaf.dull"))
+        return g.choice(("leaf", "leaf", "leaf", "leaf.2"))
+
+    def leaf(c, u, up, scale=1.0):
+        # one leaf, its stalk at c, lying along u, its upper face toward `up`: a pointed oval creased along its midrib
+        hang = wilt * g.uniform(0.45, 0.95)
+        u = (u * (1.0 - hang) - Z * (0.12 + hang)).normalized()
+        up = up + Vector((g.uniform(-0.35, 0.35), g.uniform(-0.35, 0.35), g.uniform(-0.1, 0.2)))
+        up = up - u * up.dot(u)
+        if up.length < 1e-4:
+            up = Z - u * Z.dot(u)
+        up.normalize()
+        v = u.cross(up)
+        long = g.uniform(0.095, 0.118) * scale * (1.0 - 0.12 * wilt)
+        w = long * 0.31 * (1.0 - 0.45 * hang)
+        fold = w * (0.28 + 0.9 * hang)
+        c = c + u * 0.012
+        m.add([c, c + u * long * 0.32 + v * w + up * fold, c + u * long * 0.7 + v * w * 0.72 + up * fold * 0.8, c + u * long - up * w * 0.15,
+               c + u * long * 0.7 - v * w * 0.72 + up * fold * 0.8, c + u * long * 0.32 - v * w + up * fold],
+              [(0, 1, 2, 3), (0, 3, 4, 5)], tone(), False, lambda q, up=up: up)
+
+    def clothe(a, b, up, start=0.18):
+        # leaves by turns to left and right along a twig from a to b, and one at its end
+        way = (b - a).normalized()
+        across = up.cross(way).normalized()
+        span = (b - a).length
+        k = max(1, int(span * (1.0 - start) / 0.056))
+        for j in range(k):
+            t = start + (1.0 - start) * (j + 0.5) / k
+            sg = 1.0 if j % 2 == 0 else -1.0
+            leaf(a.lerp(b, t), (way * 0.62 + across * sg * 0.78).normalized(), up)
+        leaf(b, way, up)
+
+    twigs = max(4, int(L / 0.17)) if m.fine else max(3, int(L / 0.5))
+    for i in range(twigs):
+        f = 0.2 + 0.76 * (i + g.uniform(0.2, 0.8)) / twigs
+        p, d = at(f)
+        s = side - d * side.dot(d)
+        s.normalize()
+        up = s.cross(d)
+        if up.z < 0.0:
+            up = -up
+        sg = 1.0 if i % 2 == 0 else -1.0
+        ang = math.radians(g.uniform(34.0, 56.0))
+        long = g.uniform(0.3, 0.52) * (1.12 - 0.62 * f) * min(1.25, 0.55 + L * 0.33)
+        way = (d * math.cos(ang) + s * sg * math.sin(ang) + up * g.uniform(-0.05, 0.3)).normalized()
+        sag = wilt * g.uniform(0.25, 0.6)
+        tip = p + way * long - Z * long * (0.1 + sag)
+        mid = p + way * long * 0.5 + Z * long * 0.04
+        if not m.fine:
+            # from far off: the twig's leaves as one blade
+            v = up.cross(way).normalized() * long * 0.3
+            m.add([p, mid + v, tip, mid - v], [(0, 1, 2, 3)], tone(), False, lambda q, up=up: up)
+            continue
+        bits.tube(m, [p, mid, tip], 0.0045, "timber.dark", sides=4, radii=[0.005, 0.0036, 0.002], caps=False)
+        clothe(mid.lerp(p, 0.55), mid, up, 0.0)
+        clothe(mid, tip, up, 0.0)
+        if long > 0.26:
+            for k, t in enumerate((0.38, 0.66) if long < 0.45 else (0.3, 0.5, 0.72)):
+                q0 = p.lerp(mid, t * 2.0) if t < 0.5 else mid.lerp(tip, t * 2.0 - 1.0)
+                sd = up.cross(way).normalized() * (1.0 if (k + i) % 2 == 0 else -1.0)
+                q1 = q0 + (way * 0.7 + sd * 0.7 + up * g.uniform(-0.1, 0.25)).normalized() * g.uniform(0.12, 0.2) - Z * 0.02 * (1.0 + 3.0 * sag)
+                bits.tube(m, [q0, q1], 0.003, "timber.dark", sides=3, radii=[0.003, 0.0018], caps=False)
+                clothe(q0, q1, up, 0.25)
+    # the leader: the stem's own last third carries leaves too
+    if m.fine:
+        p0, d0 = at(0.7)
+        up = (side - d0 * side.dot(d0)).cross(d0)
+        if up.z < 0.0:
+            up = -up
+        up.normalize()
+        for k in range(3):
+            a, _ = at(0.7 + 0.1 * k)
+            b, _ = at(0.8 + 0.1 * k)
+            clothe(a, b, up, 0.0)
+
+
 # ---- 3. the gun pit ---------------------------------------------------------------------------------------------
 
 def GunPit(fine=True, nation="_default", name="GunPit", low_front=False):
@@ -719,11 +822,16 @@ def GunPit(fine=True, nation="_default", name="GunPit", low_front=False):
     nh = math.degrees(math.asin(NH / (R + 0.135)))
 
     NOTCH = 22.0                  # (half the width of an anti-tank gun's low front, in degrees)
+    COURSE = bits.BAG[2] * 0.93
+    STEP = math.degrees(bits.BAG[0] / (R + 0.135))      # (a bag's length round the wall)
+
+    def courses_at(a):
+        return 8 if not low_front else min(8, 5 + max(0, int(math.ceil((abs(a) - NOTCH) / STEP))))
 
     def keep(t, c, f):
         a = -ARM + 2 * ARM * f
-        if low_front and abs(a) < NOTCH + 8.0 and c >= 5 + min(2, int(max(0.0, abs(a) - NOTCH) / 4.0)):
-            return False             # (five courses across the front, stepping up to eight at its shoulders)
+        if low_front and c >= courses_at(a):
+            return False             # (five courses across the front; at its shoulders a bag's length to each step up)
         return not (abs(a - NA) < nh + 1.5 and c < 4)
     bag_wall(m, bits.arc(0, 0, R + 0.135, -ARM, ARM, 50), 8, -D, seed=7, batter=0.016, thick=1, inward=-1.0, keep=keep, q=(6, 10), tie=0.3)
     # the parapet: the spoil, in front and at the sides
@@ -731,9 +839,12 @@ def GunPit(fine=True, nation="_default", name="GunPit", low_front=False):
         a = abs(math.degrees(math.atan2(y, x)))
         k = smooth((ARM + 10 - a) / 16.0)
         if low_front:
-            k *= 1.0 - 0.72 * smooth((NOTCH + 10.0 - a) / 10.0)
+            # (the earth stands as high as the bags in front of it, a little ahead of each step: no slot behind a step)
+            k *= 0.3 + 0.7 * smooth((a - NOTCH + 6.0) / (2.6 * STEP))
         return k
-    ring_bank(m, RO - 0.02, [(0.0, 0.47), (0.2, 0.53), (0.5, 0.5), (0.9, 0.33), (1.3, 0.13), (1.6, 0.03), (1.8, 0.0)], seed=9, lump=0.04, step=2.0, cut=taper, turf=0.4, a0=-ARM - 12, a1=ARM + 12)
+    PROF = [(0.0, 0.47), (0.2, 0.53), (0.5, 0.5), (0.9, 0.33), (1.3, 0.13), (1.6, 0.03), (1.8, 0.0)]
+    # (behind a low wall the earth's inner edge would show the gap it leaves behind the bags: there it runs in under them)
+    ring_bank(m, RO - 0.02, ([(-0.12, 0.40)] if low_front else []) + PROF, seed=9, lump=0.04, step=2.0, cut=taper, turf=0.4, a0=-ARM - 12, a1=ARM + 12)
     niche(m, NA, R + 0.01, -D, 0.07, NH, 0.85, seed=3)
     # two logs at the back for the trail spades, each pinned by stakes
     for sy in (-1, 1):
@@ -768,20 +879,73 @@ def GunPit(fine=True, nation="_default", name="GunPit", low_front=False):
             case(m, p, Vector((math.cos(ya), math.sin(ya), 0.0)), 0.044, 0.42, 8)
     ammo_box(m, V2(115, 1.95) + Z * -D, 115 + 90, (0.72, 0.3, 0.16), 4, lid=True, rounds=3, cal=0.075, long=0.6)
     m.rod(V2(-60, 3.1) + Z * 0.5, V2(-25, 3.2) + Z * 0.55, 0.02, "timber", sides=8)
-    if low_front and fine:
-        # cut boughs laid over the parapet either side of the gun's front: the position is hidden, not announced
-        for k in range(34):
-            a = g.uniform(NOTCH + 5.0, ARM - 8.0) * g.choice((-1, 1))
-            r = RO + g.uniform(0.05, 0.85)
-            p = V2(a, r) + Z * (0.5 * (1.0 - 0.45 * (r - RO)) - 0.02)
-            way = (V2(a + g.uniform(-50, 50), 1.0) * g.uniform(0.5, 0.9) - Z * g.uniform(0.1, 0.3))
-            bits.log(m, p - way * 0.35, p + way * 0.65, 0.014, "timber.dark", g.randrange(999), sides=5, taper=0.4)
-            for j in range(52):          # its leaves: a spray of small blades about the outer part of the stick
-                c = p + way * g.uniform(-0.1, 0.65) + Vector((g.uniform(-0.14, 0.14), g.uniform(-0.14, 0.14), g.uniform(0.0, 0.24)))
-                u = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-0.5, 0.5))).normalized()
-                v = u.cross(Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-1, 1)))).normalized()
-                long, wide = g.uniform(0.07, 0.12), g.uniform(0.03, 0.055)
-                m.add([c - u * long, c + v * wide, c + u * long, c - v * wide], [(0, 1, 2, 3)], g.choice(("garnish", "garnish", "garnish.3", "garnish.2")), False, None)
+    if low_front:
+        # cut boughs hide the gun: laid over the low front, butts back and tips toward the enemy, a few over the
+        # parapet's shoulders, and (a part of their own) leaned from the gun's shield down to the low front
+        gb = rnd(61)
+
+        def top_at(x, y):
+            r, a = math.hypot(x, y), math.degrees(math.atan2(y, x))
+            if r < R:
+                return floor_z(x, y)
+            if r < RO - 0.02:
+                return -D + courses_at(a) * COURSE + 0.02
+            off = r - (RO - 0.02)
+            for (o0, h0), (o1, h1) in zip(PROF, PROF[1:]):
+                if off <= o1:
+                    return (h0 + (h1 - h0) * (off - o0) / (o1 - o0)) * taper(x, y)
+            return 0.0
+
+        def lay(butt, tip, lift0, lift1, n=7):
+            # a stiff branch resting on what lies under it: it bridges the hollows, it does not follow them
+            pts = []
+            for i in range(n):
+                t = i / (n - 1)
+                q = butt.lerp(tip, t)
+                pts.append(Vector((q.x, q.y, top_at(q.x, q.y) + lift0 + (lift1 - lift0) * t)))
+            for _ in range(6):
+                for i in range(1, n - 1):
+                    pts[i].z = max(pts[i].z, (pts[i - 1].z + pts[i + 1].z) / 2 - 0.015)
+            return pts
+
+        def laid(a, r, a2, long, roll, wilt, lift=(0.035, 0.2)):
+            butt = V2(a, r)
+            way = V2(a2)
+            pts = lay(butt, butt + way * long, lift[0], lift[1])
+            side = Vector((-way.y, way.x, 0.0)) * math.cos(math.radians(roll)) + Z * math.sin(math.radians(roll))
+            bough(m, pts, side, gb.randrange(1 << 30), wilt)
+
+        def wilted():
+            return gb.choice((0.0, 0.0, 0.0, 0.15, 0.55, 0.85, 1.0))
+        if fine:
+            for k in range(14):                       # over the low front
+                a = -NOTCH - 3.0 + (2 * NOTCH + 6.0) * (k + gb.uniform(0.15, 0.85)) / 14
+                flat = abs(a) < 8.0                    # (under the barrel they lie flat)
+                laid(a, gb.uniform(2.44, 2.62), a + gb.uniform(-26, 26), gb.uniform(1.35, 2.0), gb.uniform(-8, 8) if flat else gb.uniform(-26, 26), wilted(),
+                     (0.035, gb.uniform(0.08, 0.16) if flat else gb.uniform(0.12, 0.32)))
+            for sy in (-1, 1):                        # over the shoulders, where the wall steps up
+                for k in range(4):
+                    a = sy * (NOTCH + 6.0 + 44.0 * (k + gb.uniform(0.1, 0.9)) / 4)
+                    laid(a, gb.uniform(2.46, 2.6), a * gb.uniform(0.4, 0.8), gb.uniform(1.5, 2.1), gb.uniform(-20, 20), wilted(), (0.035, gb.uniform(0.1, 0.25)))
+        # leaned on the gun: butts hooked over the shield's top edge, tips down on the low front either side of the barrel
+        SX, SZ = 0.05, 0.8 + 0.015                    # (the Pak 40's shield top, 1.2 m above the pit floor)
+        m.part("boughs", "pit", (SX, 0.0, SZ), kind="free", note="cut boughs leaned from the gun's shield down to the low front, and one laid across her barrel: loose, the game takes them off when the pit stands without its gun, and may let them fall at her first shots. Fitted to the Pak40 (shield top 1.20 m above the pit floor, 0.05 m ahead of the socket); for the AntiTankGun move the part 0.15 m forward and 0.06 m down")
+        m.use("boughs")
+        for k, (yb, yt, xt) in enumerate(((-0.52, -1.25, 2.5), (-0.37, -0.82, 2.75), (-0.21, -0.42, 2.9), (0.2, 0.47, 2.85), (0.35, 0.86, 2.7), (0.5, 1.3, 2.45))):
+            rest = Vector((SX, yb, SZ))
+            tip = Vector((xt + gb.uniform(-0.1, 0.1), yt + gb.uniform(-0.08, 0.08), 0.0))
+            tip.z = top_at(tip.x, tip.y) + gb.uniform(0.2, 0.3)
+            way = (tip - rest).normalized()
+            pts = [rest - way * gb.uniform(0.08, 0.16) + Z * 0.01, rest, rest.lerp(tip, 0.35) - Z * 0.015, rest.lerp(tip, 0.7) - Z * 0.03, tip]
+            roll = math.radians(gb.uniform(-16, 16))
+            side = Vector((-way.y, way.x, 0.0)).normalized() * math.cos(roll) + Z * math.sin(roll)
+            bough(m, pts, side, gb.randrange(1 << 30), (0.0, 0.7, 0.1, 0.0, 0.9, 0.3)[k])
+        # (one across the barrel: it rests on the shield and on the barrel's top, 1.04 m above the floor)
+        rest, over = Vector((SX, -0.3, SZ + 0.01)), Vector((1.25, 0.0, 1.04 - D + 0.012))
+        way = (over - rest).normalized()
+        pts = [rest - way * 0.12, rest, over, over + way * 0.7 - Z * 0.03, over + way * 1.3 - Z * 0.1]
+        bough(m, pts, Vector((-way.y, way.x, 0.0)).normalized(), gb.randrange(1 << 30), 0.2)
+        m.use("pit")
     if low_front:
         m.socket("gun", (0.0, 0.0, -D), (1, 0, 0), note="the anti-tank gun stands on the pit floor's middle facing the enemy. Room: 4.8 m across inside the bags; across the front 44 degrees the bags stand five courses (0.56 m above the floor) and the earth beyond is lower still, so a bore 0.8 m up or more fires flat over it and traverses 20 degrees either way; at the sides the parapet top is 0.9 m above the floor. Two logs lie 2.8 m behind, 0.7 m apart: split trails (up to 4.0 m wide, 3.1 m back) pass outside their ends into the open rear. Of the vehicle modeller's guns: Pak40 (bore 0.96 m up) and AntiTankGun (0.86 m) both have room")
     else:
