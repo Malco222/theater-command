@@ -38297,7 +38297,9 @@ ${standing5}`,
             nat: "",
             title: `${d.name}  ·  ${d.under}${d.on ? "  ·  where you are" : ""}`,
             lines: [d.blurb, `Yours: ${list4(d.yours)}.`, `Your staff's: ${list4(d.staff)}.`],
-            buttons: [{ label: d.on ? "YOU PLAY AT THIS DEPTH" : `GO TO ${d.name.toUpperCase()}`, act: `depth:${d.id}`, ok: !d.on, tip: d.on ? "The campaign stands at this depth." : `${d.blurb} It can be changed again in any month.` }]
+            // (The UI director, 10:57 on build 1638: the depth played has no button, which read as a dead one in faint ink.
+            // Its title already says where you are.)
+            buttons: d.on ? [] : [{ label: `GO TO ${d.name.toUpperCase()}`, act: `depth:${d.id}`, ok: true, tip: `${d.blurb} It can be changed again in any month.` }]
           }))
         },
         ...(() => {
