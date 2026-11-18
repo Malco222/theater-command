@@ -964,7 +964,8 @@ function termsAt(g: Game, nat: string, r: Region, months: number, read = promise
   // Within a band a shorter day pays a little more: the longest is no longer always the right pick.
   const longest = P.months[P.months.length - 1], haste = 1 + (P.haste * (longest - months)) / Math.max(1, longest - P.months[0]);
   const capital = band.capital ? Math.max(1, Math.round(band.capital * size * haste)) : 0, money = round1(income(g, nat) * band.money * size * haste);
-  const due = g.turn + months - 1, trust = round1(band.trust * swing * haste), price = round1(band.price * swing), back = round1(band.price * P.back * swing);
+  // (What taking it back costs is reckoned from the price as the vow keeps it, rounded, as closeVow charges it.)
+  const due = g.turn + months - 1, trust = round1(band.trust * swing * haste), price = round1(band.price * swing), back = round1(price * P.back);
   const parts = [`the cabinet's trust rises ${trust}`];
   if (capital) parts.push(`it votes ${capital} political capital`);
   if (money) parts.push(`${moneyShown(money)} for the treasury`);

@@ -157,10 +157,15 @@ describe('heavy equipment needs industry', () => {
 });
 
 describe('artillery', () => {
-  /** A Polish province on the German border, with a Polish garrison in it and German infantry next door. */
+  /**
+   * A Polish province on the German border, with a Polish garrison in it and German infantry next door. Its town's
+   * guard is spent, so the corps alone defend: under ruling 232 a guard would stand beside them behind its walls, and
+   * these tests weigh the guns against the corps.
+   */
   const front = (g: Game): { target: Region; from: Region } => {
     const target = g.regions.find((r) => r.ctrl === 'POL' && r.units.some((c) => c.nat === 'POL') && r.nb.some((j) => g.regions[j].ctrl === 'GER' && g.regions[j].owner === 'GER'))!;
     const from = g.regions[target.nb.find((j) => g.regions[j].ctrl === 'GER' && g.regions[j].owner === 'GER')!];
+    g.flags[`guard:${target.id}`] = 100;
     return { target, from };
   };
 

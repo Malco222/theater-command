@@ -311,7 +311,9 @@ describe('call your shot', () => {
       }
       for (const x of t.terms) {
         expect(x.due).toBe(g.turn + x.months - 1);
-        expect(x.back).toBeCloseTo(Math.round(P.bands[rank(x.band)].price * P.back * swing('GER') * 10) / 10, 9);
+        // The price as the vow keeps it, and taking it back costs a share of that price, rounded as it is charged.
+        expect(x.price).toBeCloseTo(Math.round(P.bands[rank(x.band)].price * swing('GER') * 10) / 10, 9);
+        expect(x.back).toBeCloseTo(Math.round(x.price * P.back * 10) / 10, 9);
         expect(x.text).toContain(x.bandName);
         expect(x.text).toContain(x.town);
       }

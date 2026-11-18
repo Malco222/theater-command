@@ -22,6 +22,7 @@
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
 import { GUNS_ALONE, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, type Assessment } from './game';
+import { seat } from './commanders';
 import { armyOf } from './joint';
 import { closedTo, seaOpenAt } from './navy';
 import { storyFallen } from './stories';
@@ -41,6 +42,7 @@ export const SIEGE = data as unknown as {
   sortie: number; pay: number;
   capital: number; capitalAfter: number; capitalYear: number;
   driveOut?: boolean;
+  startIn?: { nat: string; corps: string; name: string; gen?: string; trait?: string; xp?: number }[];
   ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sea: { after: number; blockade: number }; relieved: { months: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>>; great?: { works: number; on?: boolean; field?: number } };
 };
 
@@ -472,6 +474,26 @@ export function joinTown(g: Game, r: Region, c: Corps): void {
   if (c.digs) delete c.digs;
   if (c.yields) delete c.yields;
   if (c.job) delete c.job;
+}
+
+/**
+ * Ruling 232's mend for a city whose record garrison stood inside before any field army fell back (the design
+ * director's b566 and b567: Warsaw, September 1939). At the start of a 1939 grand campaign with the ruling on, each
+ * corps SIEGE.startIn names stands inside its own town, under the record's name, commander and experience. Its
+ * divisions are the row's own, so nothing is counted twice; the rest of a siege's garrison comes by play, under 232(d).
+ */
+export function startGarrisons(g: Game): void {
+  if (g.turn !== 1 || !driveOut(g)) return;
+  for (const s of SIEGE.startIn ?? []) {
+    const c = g.corps.find((x) => x.nat === s.nat && x.name === s.corps && !x.dead && x.town === undefined);
+    const r = c ? g.regions[c.reg] : undefined;
+    if (!c || !r || r.ctrl !== s.nat || r.owner !== s.nat || garrisonOf(r).length >= roomIn(g, r)) continue;
+    r.units.splice(r.units.indexOf(c), 1);
+    joinTown(g, r, c);
+    c.name = s.name;
+    if (s.xp !== undefined) c.xp = s.xp;
+    if (s.gen) seat(g, c, s.gen, s.trait);
+  }
 }
 
 /**

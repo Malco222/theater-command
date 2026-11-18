@@ -226,7 +226,9 @@ describe('an enemy whose home is on that side is the first business (rulings 75b
     const quay = doorQuay(g, 'USA')!;
     expect(quay).not.toBeNull();
     expect(quay.owner === 'USA' && !quay.overseas).toBe(true);
-    // He is landed on within three months and beaten within five, and the force is home again two months after.
+    // He is beaten within three months, and the force is home again two months after. (Under ruling 232 the corps
+    // in the Canal Zone take Panama City with the field, its guard beside the police, so he can fall in the month he
+    // declares with no American corps ever standing on his ground; before the ruling a landing came first.)
     let landed = 0, fell = 0;
     for (let i = 0; i < 5 && !fell; i++) {
       const t = g.turn;
@@ -234,9 +236,9 @@ describe('an enemy whose home is on that side is the first business (rulings 75b
       if (!landed && standingIn(g, 'PAN')) landed = t;
       if (!g.nations.PAN.alive) fell = t;
     }
-    expect(landed).toBeGreaterThan(0);
-    expect(landed - SEP_40).toBeLessThanOrEqual(3);
     expect(fell).toBeGreaterThan(0);
+    expect(fell - SEP_40).toBeLessThanOrEqual(3);
+    if (landed) expect(landed).toBeLessThanOrEqual(fell);
     runTurnAI(g);
     runTurnAI(g);
     expect(field(g, 'USA').filter((c) => beyondEurope(c.reg) && g.regions[c.reg].owner !== 'USA').length).toBe(0);

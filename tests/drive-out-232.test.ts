@@ -76,6 +76,9 @@ describe("ruling 232: beat the army, take the city", () => {
     const g = seat('GER');
     const warsaw = g.byName['Warsaw'], masuria = g.byName['Masuria'];
     expect(masuria.ctrl).toBe('GER');
+    // (Warsaw opens with its Defence Command inside (rider b566). Sent away to Lublin, it leaves the city to its guard.)
+    expect(garrisonOf(warsaw).map((c) => c.name)).toEqual(['Warsaw Defence Command']);
+    for (const c of [...garrisonOf(warsaw)]) relocate(g, c, g.byName['Lublin']);
     expect(garrisonOf(warsaw)).toHaveLength(0);
     const poles = field(g, warsaw, 'POL');
     expect(poles.length).toBeGreaterThan(0);

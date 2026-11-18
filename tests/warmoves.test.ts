@@ -11,7 +11,7 @@ import east from '../data/campaign/east.json';
 import open from '../data/campaign/open.json';
 import { PRODUCTION, aiProduction } from '../src/campaign/economy';
 import { addCorps, allied, atWar, checkCollapse, collapseScore, createGame, homeLost, relocate, routineNews, foldNews, startPhase } from '../src/campaign/game';
-import { SIEGE, arrive, besieged, garrison, garrisonOf, guardOf, ringClosed, siegeEmpties, townHeld } from '../src/campaign/siege';
+import { DRIVE, SIEGE, arrive, besieged, garrison, garrisonOf, guardOf, ringClosed, siegeEmpties, townHeld } from '../src/campaign/siege';
 import { boldness, monthly, probed, probing, quietNews, quietWith, startOpen } from '../src/campaign/staff';
 import { townSize } from '../src/campaign/towns';
 import { attackOutlook, beginHuman, candidates, humanUp, orderAttack, orderMove, previewAttack, runTurnAI, stepAI, stormOutlook, whyNotAttack } from '../src/campaign/turn';
@@ -318,14 +318,29 @@ describe('sieges that end', () => {
     expect(rep.taken).toBe(true);
     expect(town.ctrl).toBe('GER');
     expect(rep.gates).toBe(true);
-    // A city whose field army is beaten is besieged and not taken, and its report carries no such mark.
-    const h = playing('GER');
-    const city = h.regions.find((r) => r.owner === 'POL' && r.ctrl === 'POL' && townSize(h, r) === 'city' && germansBy(h, r).length > 0 && r.units.some((u) => u.nat === 'POL'))!;
-    for (const u of city.units) { u.str = 0.15; u.org = 0.2; }
-    const siege = orderAttack(h, candidates(h, city), city)!;
-    expect(siege.gates).toBeFalsy();
-    expect(city.ctrl).toBe('POL');
-    expect(besieged(h, city)).toBe(true);
+    // A city whose field army is beaten opens no gates, and its report carries no such mark. Under ruling 232, with no
+    // garrison in it, its guard fought beside the army behind its walls and the city falls with the field: the report
+    // carries the guard's mark instead. With the switch off, as before the ruling, the city is besieged and not taken.
+    for (const on of [true, false]) {
+      const was = DRIVE.on;
+      DRIVE.on = on;
+      try {
+        const h = playing('GER');
+        const city = h.regions.find((r) => r.owner === 'POL' && r.ctrl === 'POL' && townSize(h, r) === 'city' && germansBy(h, r).length > 0 && r.units.some((u) => u.nat === 'POL'))!;
+        for (const u of city.units) { u.str = 0.15; u.org = 0.2; }
+        const siege = orderAttack(h, candidates(h, city), city)!;
+        expect(siege.gates, `232 ${on ? 'on' : 'off'}`).toBeFalsy();
+        if (on) {
+          expect(siege.guarded).toBe(true);
+          expect(siege.taken).toBe(true);
+          expect(city.ctrl).toBe('GER');
+          expect(besieged(h, city)).toBe(false);
+        } else {
+          expect(city.ctrl).toBe('POL');
+          expect(besieged(h, city)).toBe(true);
+        }
+      } finally { DRIVE.on = was; }
+    }
   });
 
   it('an assault is more of a gamble than a fight in the open: the even chance stands at longer odds', () => {
