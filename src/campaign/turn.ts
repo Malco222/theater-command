@@ -43,7 +43,7 @@ import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour } from './stories';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
-import { fallenNations, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
+import { fallenNations, liberationMonth, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
 import { armyCard, corpsCard, corpsSeen, type ArmyCard, type CorpsCard } from './armies';
 export { FORT_NO_ORDERS, garrisonLine, whyNotOrder, whyNotOrderGarrison } from './armies';
 export { gunsLeftAlone } from './siege';
@@ -88,6 +88,9 @@ function closePhase(g: Game, nat: string): void {
   if (nat === 'GER') sovietEvent(g);
   g.phase++;
   if (g.phase >= g.order.length) {
+    // A fallen country whose capital its friends hold, with no enemy corps in or next to it, returns at the month's
+    // end, dated the month that ends (ruling 229, part 2; the grand campaign).
+    liberationMonth(g);
     g.phase = 0; g.turn++; g.week = 1;
     // A gate that has changed hands is no longer shut by the order of the country that lost it.
     gatesTick(g);

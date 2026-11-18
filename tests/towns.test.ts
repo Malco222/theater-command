@@ -247,7 +247,10 @@ describe('the prize', () => {
     expect(p.capitalOf).toBeNull();
     expect(p.items.map((i) => i.key)).toContain('frees');
     expect(p.items.find((i) => i.key === 'income')!.text).toContain("Poland's treasury");
-    expect(p.line).toMatch(/^Taking Warsaw frees Poland, which returns to the war on your side and takes its capital back\. Germany loses \d+ a month/);
+    expect(p.line).toMatch(/^Taking Warsaw frees Poland if you hold it at the end of next month with no enemy corps in or next to it: Poland returns to the war on your side and takes its capital back\. Germany loses \d+ a month/);
+    expect(p.items.find((i) => i.key === 'frees')!.text).toBe('The capital of Poland, which has fallen. Take it and hold it to the end of next month, with no enemy corps in or next to it, and Poland returns to the war on your side');
+    g.turn++;
+    expect(prizeOf(g, w, 'FRA')!.line).toMatch(/^Taking Warsaw frees Poland if you hold it at the month's end with no enemy corps in or next to it: /);
     // Its conqueror frees nobody by holding it, and nor does a country that is not in the war.
     expect(prizeOf(g, w, 'GER')!.frees).toBeNull();
     expect(prizeOf(g, w, 'SWE')!.frees).toBeNull();

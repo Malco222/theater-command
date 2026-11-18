@@ -1997,8 +1997,9 @@ export function capture(g: Game, r: Region, nat: string): void {
   // Overseas the prizes are the ports: whoever holds them feeds the army that fights there.
   else if (r.overseas && r.port && r.vp > 0 && atWar(g, nat, old)) headline(g, 'battle', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id, { arm: 'land', won: nat, lost: old });
   checkCollapse(g, old, nat);
-  // The grand campaign: a fallen country whose capital its conqueror's enemies now hold comes back into the war.
-  retaken(g, r, nat);
+  // The grand campaign: ground of France's taken back from Vichy goes to a freed France. (A fallen country whose
+  // capital its conqueror's enemies now hold comes back at the month's end, ruling 229 part 2: turn.ts.)
+  retaken(g, r);
   // A third country's corps at peace with the new holder goes home (ruling b341(b), the grand campaign).
   if (g.flags.open === 1) goHome(g, r);
 }

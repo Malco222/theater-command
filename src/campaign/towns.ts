@@ -18,7 +18,7 @@ import { BUDGET, budgeted, landFactor, landShare, provinceYield } from './econom
 import { workLevel, yardLevel } from './arsenal';
 import { railsAt, workingFactories } from './rails';
 import { fieldYield, resRules } from './resources';
-import { whyNoReturn, whyNotFreedBy } from './liberation';
+import { monthsEnd, whyNoReturn, whyNotFreedBy } from './liberation';
 
 export const TOWNS = data as unknown as {
   sizes: { city: { vp: number; fac: number }; town: { vp: number } };
@@ -234,7 +234,8 @@ export function prizeOf(g: Game, region: number, nat: string | null = g.human): 
   if (rails >= 3) items.push({ key: 'rail', label: 'Railway', text: `A junction where ${rails} lines meet` });
   if (r.vp > 0 && !r.overseas) items.push({ key: 'vp', label: 'Victory points', text: `${r.vp} of ${theName(owner)}'s ${vpAll}: a country that has lost its capital and enough of these gives up the war` });
   if (capitalOf && capitalOf !== nat && !allied(g, nat, capitalOf)) items.push({ key: 'capital', label: 'Capital', text: `The capital of ${theName(owner)}. Its fall may knock ${owner.name} out of the war, and shakes the morale of every corps it has` });
-  if (frees) items.push({ key: 'frees', label: 'Liberation', text: `The capital of ${theName(g.nations[frees])}, which has fallen. Take it and ${g.nations[frees].name} returns to the war on your side` });
+  // (A fallen country returns at a month's end, with no enemy corps in or next to its capital: ruling 229, part 2.)
+  if (frees) items.push({ key: 'frees', label: 'Liberation', text: `The capital of ${theName(g.nations[frees])}, which has fallen. Take it and hold it to ${monthsEnd(g, g.nations[frees])}, with no enemy corps in or next to it, and ${g.nations[frees].name} returns to the war on your side` });
   if (fort > 0 && !mine && !friendly) items.push({ key: 'fort', label: 'Fortress', text: `Works of level ${fort} stand in the way` });
 
   const gains = [
@@ -244,7 +245,7 @@ export function prizeOf(g: Game, region: number, nat: string | null = g.human): 
   const tail = gains.length ? `: ${listed(gains)}` : '';
   const line = kind === 'yours' ? `${town} pays ${income} a month into your treasury${tail}.`
     : kind === 'ally' ? `${town} is held by ${theName(holder)}, your ally, and pays ${incomeNow} a month into its treasury${tail}.`
-    : frees ? `Taking ${town} frees ${g.nations[frees].name}, which returns to the war on your side and takes its capital back. ${theName(holder, true)} loses ${incomeNow} a month${tail}.`
+    : frees ? `Taking ${town} frees ${g.nations[frees].name} if you hold it at ${monthsEnd(g, g.nations[frees])} with no enemy corps in or next to it: ${g.nations[frees].name} returns to the war on your side and takes its capital back. ${theName(holder, true)} loses ${incomeNow} a month${tail}.`
     : kind === 'restored' ? `Taking ${town} gives it back to ${theName(owner)}, your ally, and takes ${incomeNow} a month from ${theName(holder)}${tail}.`
     : `Taking ${town} is worth ${income} a month to you and costs ${theName(holder)} ${incomeNow}${tail}.${capitalOf && atWar(g, nat, capitalOf) ? ` It is ${theName(owner)}'s capital.` : ''}`;
   return { region, town, nat, kind, to, income, incomeNow, factories, oil, oilNow, harbour: r.port, yard, airfield, fort, vp: r.vp, capitalOf, frees, rails, items, line };
