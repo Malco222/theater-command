@@ -3066,6 +3066,19 @@ function landVoyages(g: Game, nat: string): void {
   if (!g.atSea.length) delete g.atSea;
 }
 
+/**
+ * True for a corps lent to a war for a strip of frontier (a row with 'stay', b502(c): the Winter War's 13th Army)
+ * while that war is still its country's only war: the staff keeps it on that front, fighting, and puts it in no
+ * garrison. Once the war is over, or a greater one has swallowed it, it is a corps like any other.
+ */
+export function lentStays(g: Game, c: Corps): boolean {
+  const i = g.flags[`stay:${c.id}`];
+  if (!i || c.dead) return false;
+  const war: string[] | undefined = ((setup as any).expeditions as any[])[i - 1]?.[6]?.war;
+  const foe = war?.find((x) => x !== c.nat);
+  return !!foe && atWar(g, c.nat, foe) && g.nations[c.nat].atWar.every((e) => war!.includes(e));
+}
+
 function expeditions(g: Game, nat: string): void {
   const gone: Corps[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
@@ -3179,7 +3192,7 @@ function expeditions(g: Game, nat: string): void {
     }
     if (o.until) g.flags[`lent:${i}`] = c.id;
     // (Lent to a war for a strip of frontier, it stays on that war's front while the war lasts: b502(c), ai.ts.)
-    if (o.stay) g.flags[`stay:${c.id}`] = 1;
+    if (o.stay) g.flags[`stay:${c.id}`] = i + 1;
     const the = /^(the |[A-Z] Force|Creforce)/i.test(c.name) ? '' : 'the ';
     // Troops come ashore at a port across the sea: a colony's, or a foreign one for a nation that lives by its ships.
     // An army that marched there, or is forming up at home, simply arrives.

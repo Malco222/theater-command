@@ -5,7 +5,9 @@
 // not walked off to Moscow's guard. The grand campaign only: the history campaigns are as they were.
 import { describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
-import { atWar, createGame, declareWar } from '../src/campaign/game';
+import { atWar, createGame, declareWar, lentStays } from '../src/campaign/game';
+import { garrisons } from '../src/campaign/ai';
+import { garrisonOf } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Corps, Game } from '../src/campaign/types';
@@ -38,16 +40,32 @@ describe("the Winter War's lent corps", () => {
     runTurnAI(g);
     const c = lent(g)!;
     expect(c).toBeDefined();
-    expect(g.flags[`stay:${c.id}`]).toBe(1);
+    expect(lentStays(g, c)).toBe(true);
     // While the war with Finland lasts, it is on the isthmus front: Leningrad, or the Finnish ground next to it.
     const front = new Set(['Leningrad', ...g.byName.Leningrad.nb.map((j) => g.regions[j].name)]);
     while (g.turn < JUNE_40 && atWar(g, 'SOV', 'FIN')) {
       if (!c.dead) expect(front.has(g.regions[c.reg].name), g.regions[c.reg].name).toBe(true);
+      // It fights: it is put in no garrison while the war lasts.
+      if (!c.dead) expect(c.town).toBeUndefined();
       runTurnAI(g);
     }
+    expect(lentStays(g, c)).toBe(false);
     while (g.turn <= JUNE_40) runTurnAI(g);
     expect(lent(g)).toBeUndefined();
     expect(g.headlines.some((h) => /lent to the campaign.*leave for other fronts: .*13th Army/.test(h.text))).toBe(true);
+  });
+
+  it('is put in no garrison while the war lasts, and is a corps like any other once a greater war swallows it', () => {
+    const g = begun();
+    while (!lent(g) && g.turn < JUNE_40) runTurnAI(g);
+    const c = lent(g)!;
+    const L = g.byName.Leningrad;
+    if (c.reg !== L.id) { g.regions[c.reg].units = g.regions[c.reg].units.filter((u) => u !== c); c.reg = L.id; L.units.push(c); }
+    for (const u of L.units.filter((u) => u.nat === 'SOV' && u !== c)) u.kind = 'arm';
+    garrisons(g, 'SOV', true);
+    expect(garrisonOf(L)).not.toContain(c);
+    declareWar(g, 'GER', 'SOV');
+    expect(lentStays(g, c)).toBe(false);
   });
 
   it('is not sent in the history campaigns', () => {

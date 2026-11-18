@@ -28,7 +28,7 @@ import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   DEFENCE, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
-  hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, voyagesOf, weekOf, whyNoProbe, worksOf,
+  hasRoom, hostileUnits, lentStays, limitAttackers, moveCorps, moveCost, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
@@ -79,9 +79,10 @@ let waves = 2;
 let near: number | null = null;
 /**
  * A corps lent to a war for a strip of frontier ('stay' on its row: the Winter War's 13th Army, b502(c)) stays on that
- * war's front while it lasts: the staff's reserves and its massing leave it where it stands, and it fights there.
+ * war's front while it lasts: the staff's reserves and its massing leave it where it stands, it is put in no
+ * garrison, and it fights there.
  */
-const stays = (g: Game, c: Corps): boolean => near !== null && g.flags[`stay:${c.id}`] === 1;
+const stays = (g: Game, c: Corps): boolean => lentStays(g, c);
 /** True while an army overseas is fighting its staff's main effort: the force massed opposite the target is there to attack it. */
 let striking = false;
 /** Set while the army being run has orders to leave the theatre once the front there has gone. */
@@ -220,7 +221,7 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
     // (A place the staff stepped out of this month, because the ring was closing round it, is left no garrison.)
     if (inside.length >= want || !near(r, 1) || sacks.has(r.id)) continue;
     if (great) {
-      const all = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined);
+      const all = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && !stays(g, c));
       const first = (c: Corps): number => (c.kind === 'inf' ? 0 : 1);
       let have = inside.length;
       for (const c of all.sort((a, b) => first(a) - first(b) || corpsBase(g, a) - corpsBase(g, b))) {
@@ -229,7 +230,7 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
       }
       continue;
     }
-    const foot = r.units.filter((c) => c.nat === nat && !c.dead && c.kind === 'inf' && c.joint === undefined).sort((a, b) => corpsBase(g, a) - corpsBase(g, b));
+    const foot = r.units.filter((c) => c.nat === nat && !c.dead && c.kind === 'inf' && c.joint === undefined && !stays(g, c)).sort((a, b) => corpsBase(g, a) - corpsBase(g, b));
     let field = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng').length, have = inside.length;
     for (const c of foot) {
       if (have >= want || field <= 1) break;
