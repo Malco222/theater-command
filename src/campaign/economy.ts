@@ -96,7 +96,7 @@ export const BUDGET = budgetData as unknown as {
    * country's treasury, by part; 'home' names the colony-marked provinces out there that are part of their country's
    * own economy and pay it as home ground does (Korea, Formosa, Karafuto).
    */
-  farColony: { land: number; port: number; oil: number; fac: number; home: string[] };
+  farColony: { land: number; port: number; oil: number; fac: number; home: string[]; guard?: number; posts?: string[] };
   /** Ruling b466: the share at which a country's own home ground on the far side counts, for its pay and for lines. */
   farHome: Record<string, number>;
   /** Ruling 214: a factor on the land and harbour pay of the provinces a smaller power owned on the first day. */
@@ -155,6 +155,15 @@ const FAR_HOME = new Set(BUDGET.farColony.home);
 export const colonyPurse = (r: Region): boolean => !!r.overseas && !FAR_HOME.has(r.name);
 /** True for such ground on the far side of the world (world.ts shoreOf 2). None while the far side's switch is off. */
 export const farColony = (r: Region): boolean => colonyPurse(r) && shoreOf(r) === 2;
+const FAR_POSTS = new Set(BUDGET.farColony.posts ?? []);
+/**
+ * The share of a town's own guard that stands on this ground (ruling 234's rider b547; siege.ts guardOf). 1 on home
+ * ground and everywhere on the near side. On the far side's colonial ground the record's towns were held by the
+ * garrisons the rows already bring, not by a home town's division of depot troops, police and militia: a far post
+ * whose garrison the historian has given (budget.json 'farColony.posts') keeps no guard beside it, so that the
+ * record's figure is its whole defence, counted once; any other town there keeps the far side's one number, the tenth.
+ */
+export const farGuard = (r: Region): number => (!farColony(r) ? 1 : FAR_POSTS.has(r.name) ? 0 : BUDGET.farColony.guard ?? 1);
 /**
  * The share at which a province counts (ruling b466): 1 everywhere but on a country's own home ground on the far side
  * of the world, where budget.json's 'farHome' names a share for it. It is one factor on the whole of what the ground
