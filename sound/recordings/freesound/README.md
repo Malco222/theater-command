@@ -53,6 +53,10 @@ Done 18 November 2026 for the job in `JOB.md`. Brian asked for it (17 Nov, 23:49
 | upgrade_air_raid_siren | 4 | Real siren tests (Devonport, Prague, Bulgaria) |
 | upgrade_tank_engines | 6 | Sherman E8 start and drive, Soviet T-26, tanks on terrain (1984 tape) |
 
+## Brian's cuts
+
+- 437862 (B-17 steady four-engine drone, craigsmith, CC0): start at 0:07 (Brian, 18 Nov 2026). Before 7 s the level drops out twice; from 7 s it holds steady. Stored as `start_s` in `found.json`; the `.ogg` here is left whole.
+
 ## Flags to check before use
 
 - **Recorded on location for a documentary or film set** (the uploader's own field recording, not audio lifted from a film): Lubini 338321, 338240, 338323, 338046, 338241, 337773; skowix 871765. Ruling 144 bars audio taken from a film; these were recorded live by the uploader, so they look fine, but the sound director decides.

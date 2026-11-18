@@ -2299,7 +2299,9 @@
   "file_kind": "Freesound public preview (Ogg Vorbis, about 100 to 190 kbps), not the original upload",
   "bytes": 386592,
   "peak_dbfs": -6.1,
-  "mean_dbfs": -26.8
+  "mean_dbfs": -26.8,
+  "start_s": 7.0,
+  "start_note": "Brian, 18 Nov 2026: start at 0:07. Before 7 s the level drops out twice (about -63 dB at 2 s and 5 s); from 7 s it holds near -26 dB RMS."
  },
  {
   "item": "upgrade_aircraft_bombers",
