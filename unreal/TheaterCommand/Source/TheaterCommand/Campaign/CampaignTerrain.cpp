@@ -1,6 +1,7 @@
 #include "Campaign/CampaignTerrain.h"
 
 #include "Campaign/CampaignMapData.h"
+#include "Campaign/TheaterSpeed.h"
 #include "TheaterCommand.h"
 #include "Async/ParallelFor.h"
 #include "Misc/FileHelper.h"
@@ -549,10 +550,13 @@ void FCampaignTerrain::MeasureFrontiers(const FCampaignMapData& Data)
 	TMap<FString, int32> Numbers;
 	TArray<int32> Holder;
 	Holder.SetNumUninitialized(Data.Regions.Num());
-	for (int32 Each = 0; Each < Data.Regions.Num(); ++Each)
 	{
-		const int32* Known = Numbers.Find(Data.Regions[Each].Owner);
-		Holder[Each] = Known ? *Known : Numbers.Add(Data.Regions[Each].Owner, Numbers.Num());
+		const TheaterSpeed::FHoldersRead Reading; // (speed: a fine sheet's thread reads these while ground may change hands)
+		for (int32 Each = 0; Each < Data.Regions.Num(); ++Each)
+		{
+			const int32* Known = Numbers.Find(Data.Regions[Each].Owner);
+			Holder[Each] = Known ? *Known : Numbers.Add(Data.Regions[Each].Owner, Numbers.Num());
+		}
 	}
 	auto OwnerOf = [&](int32 Idx) -> int32
 	{
@@ -600,10 +604,13 @@ void FCampaignTerrain::MeasureFrontiers(const FCampaignMapData& Data, int32 I0, 
 	TMap<FString, int32> Numbers;
 	TArray<int32> Holder;
 	Holder.SetNumUninitialized(Data.Regions.Num());
-	for (int32 Each = 0; Each < Data.Regions.Num(); ++Each)
 	{
-		const int32* Known = Numbers.Find(Data.Regions[Each].Owner);
-		Holder[Each] = Known ? *Known : Numbers.Add(Data.Regions[Each].Owner, Numbers.Num());
+		const TheaterSpeed::FHoldersRead Reading; // (speed: a fine sheet's thread reads these while ground may change hands)
+		for (int32 Each = 0; Each < Data.Regions.Num(); ++Each)
+		{
+			const int32* Known = Numbers.Find(Data.Regions[Each].Owner);
+			Holder[Each] = Known ? *Known : Numbers.Add(Data.Regions[Each].Owner, Numbers.Num());
+		}
 	}
 	auto OwnerOf = [&](int32 Idx) -> int32
 	{

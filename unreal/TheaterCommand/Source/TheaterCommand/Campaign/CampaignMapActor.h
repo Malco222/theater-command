@@ -90,6 +90,13 @@ public:
 	/** The same, but clear of every bump within a short reach: for lines drawn over rough ground, which a ridge would otherwise cut. */
 	FVector SurfacePointOver(double X, double Y, double Lift) const;
 
+	/**
+	 * (Speed: tc.Speed.KeptHeights.) SurfacePointOver, kept: for the lines laid again and again on the same ground (the
+	 * frontiers, the front line, the enemy's reach), each point is worked out once and kept, the very same answer,
+	 * until a fine sheet of the world stands up or is taken away over it (the only thing that changes the ground's height).
+	 */
+	FVector SurfacePointKept(double X, double Y, double Lift) const;
+
 	int32 RegionAtWorld(const FVector& World) const;
 
 	void SetSelectedRegion(int32 RegionId);
@@ -499,6 +506,8 @@ private:
 		UProceduralMeshComponent* Sea = nullptr;
 		TMap<FName, CampaignTextures::FLevels> Ahead; // (speed) its pictures with their smaller copies, made on the thread that modelled it
 		TSet<int32> FogFor; // (speed) the haze its fog picture among them was made for
+		int32 DressStage = 0; // (speed: tc.Speed.DressSteps) how far DressFineSheet has gone with it
+		FBox2D HoldersChanged = FBox2D(ForceInit); // (speed: tc.Speed.HoldersLock) ground that changed hands while it was being modelled, painted again before it is dressed
 	};
 	TMap<FIntPoint, TSharedPtr<FFineSheet, ESPMode::ThreadSafe>> FineSheets;
 	TArray<double> FineXs, FineYs; // the lines the fine sheets are ruled by, west to east and north to south
@@ -535,8 +544,8 @@ private:
 	float GroundAt(double X, double Y) const;
 	/** How much of the ground at a place is land, anywhere in the world: 0 open sea, 0.5 the shoreline, 1 well inland. */
 	float CoverAt(double X, double Y) const;
-	/** Ground beyond the map's own box that has changed hands is painted again on the world's sheets. */
-	void RepaintBeyond(const FBox2D& Changed);
+	/** Ground beyond the map's own box that has changed hands is painted again on the world's sheets (or on Only, alone). */
+	void RepaintBeyond(const FBox2D& Changed, FFineSheet* Only = nullptr);
 	/** The staff's paper over ground beyond the map's own box that nobody of the player's can see. */
 	void FogBeyond();
 	// A setting of the land's or the sea's paint goes to every sheet's copy of it.
@@ -1082,6 +1091,12 @@ private:
 		float Start = 0.0f;
 	};
 	TArray<FInkRun> InkRuns;
+	// (speed: tc.Speed.KeptHeights) the points SurfacePointKept has worked out, by squares of the world as it is kept
+	mutable TMap<FIntPoint, TMap<FVector, FVector>> KeptPoints;
+	mutable int32 KeptPointsFor = -1; // (the provinces the map had when they were kept: another map, and they are dropped)
+	mutable float KeptPointsScale = 0.0f;
+	/** A fine sheet has stood up or been taken away over Box: the points kept on and around it are worked out again. */
+	void ForgetKeptPoints(const FBox2D& Box);
 	TArray<int32> BorderAcross; // (for each edge of each outline, in the order the frontier lines are built: the province across it)
 	int32 BorderAcrossFor = 0; // (how many provinces the map had when that was found: another map, and it is found again)
 	double InkBegan = 0.0, PaintStepped = 0.0;
