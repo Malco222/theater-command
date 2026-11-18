@@ -9,7 +9,8 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import farAir from '../data/campaign/far-air.json';
 import { AIR, AIRWAR, airAI, airPool, airQuality, airRange, airUpkeep, cover, crowding, groupOverSea, groupsOver, seaKm, whyNotMission } from '../src/campaign/air';
-import { ARSENAL, smallAirMonth } from '../src/campaign/arsenal';
+import { ARSENAL, orderOffer, smallAirMonth } from '../src/campaign/arsenal';
+import { deliver } from '../src/campaign/economy';
 import { monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { allied, atWar, capitulate, capture, createGame, declareWar, removeCorps, setWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
@@ -538,7 +539,24 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
       expect(fighters()).toBeLessThanOrEqual(had + left + built[1]);
       expect(airQuality(task[0], g)).toBe(0.9);
     }
-    // The 19th Bomb Group's bombers are the Fifth Air Force's from the month that forms (February 1942), counted in its 60.
+    // The 19th Bomb Group's bombers are the Fifth Air Force's from the month that forms (March 1942), counted in its 60.
+    // (Rider b534: by the book the record moves them first, to Darwin in January 1942, and they hand over there;
+    // where no book is kept they stand at Del Monte until the Fifth forms.)
+    for (const stop of [3, 1]) {
+      const g = pacificWar(stop, 28);
+      monthlyDiplomacy(g);
+      airUpkeep(g, 'USA');
+      const group = '19th Bomb Group (Del Monte)';
+      expect(ROWS.find((r) => r.name === group)).toMatchObject({ moves: [[29, 'Darwin']], ally: true, to: ['Fifth Air Force'] });
+      expect(bases(g, command(g, 'USA', group))).toEqual(['Del Monte']);
+      for (let t = 29; t <= 30; t++) { g.turn = t; airUpkeep(g, 'USA'); }
+      expect(sum(command(g, 'USA', group)), `stop ${stop}`).toEqual([0, 16]);
+      expect(bases(g, command(g, 'USA', group)), `stop ${stop}`).toEqual([stop === 1 ? 'Darwin' : 'Del Monte']);
+      g.turn = 31;
+      airUpkeep(g, 'USA');
+      expect(command(g, 'USA', group).length, `stop ${stop}`).toBe(0);
+      expect(sum(command(g, 'USA', 'Fifth Air Force'))).toEqual([80, 60]);
+    }
     {
       const g = pacificWar(1, 28);
       // (The Fifth stands on Australia's ground as her ally's.)
@@ -653,6 +671,50 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
     expect(fed()).toEqual([12, 28, 12]);
   });
 
+  it('b534, 1: a player\'s Australia ordering wings for a year ends within one wing of each kind of the staff\'s, same seed', () => {
+    // The month as turn.ts and the country's own phase run it: the works' month, what is due is handed over, then the
+    // seat's orders. The year is read from the first order to the same point of the month twelve months on.
+    const WINGS = ['ftr', 'bmr'] as const;
+    const year = (human: string | null): { gain: [number, number][]; orders: [number, number] } => {
+      const g = pacificWar(1, 36, human, 7);
+      const n = g.nations.AUS;
+      n.queue = n.queue.filter((b) => b.what !== 'air');
+      const held = (): [number, number] => {
+        const p = airPool(g, 'AUS'), fs = g.airFleets.filter((f) => (f.raised ?? f.nat) === 'AUS' && f.ship === undefined);
+        return [p.ftr + fs.reduce((s, f) => s + f.ftr, 0), p.bmr + fs.reduce((s, f) => s + f.bmr, 0)];
+      };
+      const seen: [number, number][] = [];
+      const orders: [number, number] = [0, 0];
+      for (let m = 0; m <= 12; m++, g.turn++) {
+        smallAirMonth(g);
+        deliver(g, 'AUS');
+        seen.push(held());
+        if (!human || m === 12) continue;
+        // The player orders a wing of each kind the month its works are free, and is never short of money for it.
+        WINGS.forEach((w, i) => {
+          if (n.queue.some((b) => b.what === 'air' && b.item === w)) return;
+          n.pp = 1e6;
+          expect(orderOffer(g, 'AUS', `air:${w}`), `${w} in month ${m}`).not.toBeNull();
+          orders[i]++;
+        });
+      }
+      return { gain: seen.map((x) => [x[0] - seen[0][0], x[1] - seen[0][1]]), orders };
+    };
+    const staff = year(null), player = year('AUS');
+    const wing = [ARSENAL.air.ftr.count, ARSENAL.air.bmr.count];
+    // The staff's works feed the pool every month: 12 fighters and 28 bombers a month from July 1942.
+    expect(staff.gain[12]).toEqual([144, 336]);
+    // The player's works build the wing on order and nothing besides: a fighter wing in nine months, a bomber wing in
+    // four, so one fighter wing and three bomber wings are in by the year's end, with a second fighter wing building.
+    expect(player.orders).toEqual([2, 3]);
+    expect(player.gain[12]).toEqual([100, 300]);
+    [0, 1].forEach((i) => expect(Math.abs(staff.gain[12][i] - player.gain[12][i]), i ? 'bombers' : 'fighters').toBeLessThanOrEqual(wing[i]));
+    // Month by month the player's aircraft come a wing at a time, so the widest the two stand apart is on the eve of a
+    // wing: 96 fighters in the ninth month, and 108 bombers in the twelfth, with that wing in the month after.
+    const apart = [0, 1].map((i) => Math.max(...staff.gain.map((x, m) => x[i] - player.gain[m][i])));
+    expect(apart).toEqual([96, 108]);
+  });
+
   it('9: one count: where the record\'s own rows bring a country its aircraft, the rows from abroad step aside', () => {
     const G = ARSENAL.smallAir.gifts;
     const g = war(1, 24);
@@ -711,8 +773,13 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
     g.turn = 29;
     airUpkeep(g, 'SOV');
     expect(one.ftr).toBe(one.est.ftr);
-    // Rider b522: where no book is kept and Moscow is at war with Tokyo before the withdrawal's date, nothing leaves:
-    // the record's reason, a quiet border, no longer holds. At a stop that keeps the book the record stands.
+    // Riders b522 and b534: where no book is kept and Moscow is at war with Tokyo in the withdrawal's month, it is
+    // dropped: the record's reason, a quiet border, no longer holds. Dropped, not paid late: peace does not send it
+    // west afterwards, and what the record adds or takes after it comes and goes as dated. At a stop that keeps the
+    // book the record stands.
+    const peace = (w: Game): void => { for (const [a, b] of [['JAP', 'SOV'], ['SOV', 'JAP']]) w.nations[a].atWar = w.nations[a].atWar.filter((x) => x !== b); };
+    const dated = (turn: number): number => ROWS.filter((r) => r.nat === 'SOV').reduce((n, r) => { const e = r.est.filter((x) => x[0] <= turn).pop()!; return n + e[1] + e[2]; }, 0);
+    expect([dated(27), dated(28), dated(41), dated(71)]).toEqual([4640, 2574, 3100, 5152]);
     for (const stop of [3, 1]) {
       const w = war(stop, 27);
       airUpkeep(w, 'SOV');
@@ -722,10 +789,29 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
       w.turn = 28;
       airUpkeep(w, 'SOV');
       if (stop === 3) expect(kept(far(w)), 'stop 3').toBe(before); else expect(Math.abs(kept(far(w)) - 2574), 'stop 1').toBeLessThanOrEqual(3);
-      // (The summer of 1945's additions still arrive on top.)
-      w.turn = 71;
+      // Peace the month after: what was dropped stays dropped.
+      peace(w);
+      w.turn = 29;
       airUpkeep(w, 'SOV');
-      expect(kept(far(w)), `stop ${stop}, July 1945`).toBeGreaterThanOrEqual(stop === 3 ? before : 2574);
+      if (stop === 3) expect(kept(far(w)), 'stop 3, at peace again').toBe(before); else expect(Math.abs(kept(far(w)) - 2574)).toBeLessThanOrEqual(3);
+      // The record's later months apply as dated, on top of what stayed: January 1943's and July 1945's additions arrive.
+      const stayed = stop === 3 ? 4640 - 2574 : 0;
+      for (const t of [41, 71]) {
+        w.turn = t;
+        airUpkeep(w, 'SOV');
+        expect(Math.abs(kept(far(w)) - (dated(t) + stayed)), `stop ${stop}, month ${t}`).toBeLessThanOrEqual(5);
+      }
+    }
+    // (A war that begins after the withdrawal's month brings nothing back.)
+    {
+      const w = war(3, 27);
+      airUpkeep(w, 'SOV');
+      w.turn = 28;
+      airUpkeep(w, 'SOV');
+      declareWar(w, 'JAP', 'SOV');
+      w.turn = 29;
+      airUpkeep(w, 'SOV');
+      expect(Math.abs(kept(far(w)) - 2574)).toBeLessThanOrEqual(3);
     }
     // (And at peace with Japan at a stop with no book it leaves with the date, as by the book.)
     {
