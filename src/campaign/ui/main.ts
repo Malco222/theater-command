@@ -7742,7 +7742,12 @@ function invadeCard(on: string, target: number): string {
     : 'No surprise: its army is watching the frontier.');
   // The player's own allies are not bound to follow him into a war of his choosing.
   const hang = Object.values(g.nations).filter((x) => x.id !== me && x.alive && !x.dormant && allied(g, me, x.id) && !atWar(g, x.id, on)).map((x) => x.id);
-  if (hang.length) what.push(`<b>Your allies do not follow at once.</b> ${esc(upFirst(listOf(hang.map(theName))))} ${hang.length === 1 ? 'stays' : 'stay'} at peace with ${esc(theName(on))}: each comes in when its own government judges the moment right, and that may be months away.`);
+  // (Allies already in that war are named first, so a small one left at peace does not read as the whole alliance:
+  // Italy on France, with Germany at war already, the third playtester, 84.3.1.)
+  const inWar = Object.values(g.nations).filter((x) => x.id !== me && x.alive && !x.dormant && allied(g, me, x.id) && atWar(g, x.id, on)).map((x) => x.id);
+  const already = inWar.length ? `${esc(upFirst(listOf(inWar.map(theName))))} ${inWar.length === 1 ? 'is' : 'are'} at war with ${esc(theName(on))} already. ` : '';
+  const whom = `Your ${inWar.length ? 'other ' : ''}${hang.length === 1 ? 'ally does' : 'allies do'}`;
+  if (hang.length) what.push(`<b>${whom} not follow at once.</b> ${already}${esc(upFirst(listOf(hang.map(theName))))} ${hang.length === 1 ? 'stays' : 'stay'} at peace with ${esc(theName(on))}: each comes in when its own government judges the moment right, and that may be months away.`);
   // A country whose factories climb to war work by steps (the United States) is told so before it goes to war.
   const work = g.nations[me].atWar.length ? null : warFooting(g, me);
   if (work !== null && work < 1) what.push(`<b>Your industry will not turn over in a day.</b> ${Math.round(work * 100)} in 100 of it is on war work now. From the month you are at war it climbs step by step, and all of it is on war work in about ${warWorkLeft(g, me)} months.`);
@@ -9114,9 +9119,17 @@ function onClick(e: MouseEvent): void {
     case 'dodeclare': {
       const h = g.headlines.length;
       const to = Number(t.dataset.target ?? -1);
-      const done = orderDeclare(g, t.dataset.nat!);
+      const on = t.dataset.nat!;
+      const was = new Set(g.human ? g.nations[g.human].atWar : []);
+      const done = orderDeclare(g, on);
       ui.unread += g.headlines.length - h;
       openModal(null);
+      // The line under the map says what was done, as every order's does (the third playtester, 84.3.1: it still
+      // showed the hint from before the card).
+      if (done && g.human) {
+        const more = g.nations[g.human].atWar.filter((x) => !was.has(x) && x !== on);
+        ui.msg = `You are at war with ${theName(on)}${more.length ? `, and with ${listOf(more.map(theName))}` : ''}.`;
+      }
       refresh();
       // The army that was sent over the frontier goes now: into the attack planner if the ground is held, or straight in.
       if (done && to >= 0) orderAt(to);

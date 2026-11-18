@@ -1334,7 +1334,9 @@ export function navalUpkeep(g: Game, nat: string): void {
     const f = who === nat && turn === g.turn ? named(fleet) : undefined;
     if (!f) continue;
     for (const c of CLASSES) f.ships[c] += ships[c] ?? 0;
-    headline(g, 'info', `${cap(what)} ${/ and /.test(what) || /s$/.test(what.split(' ')[0]) ? 'join' : 'joins'} the ${f.name}.`, nat);
+    // (Many ships take the plural, however the phrase opens: "More of the American destroyers join", the third playtester, 84.3.1.)
+    const many = / and /.test(what) || /s$/.test(what.split(' ')[0]) || (/\bof\b/.test(what) && /s$/.test(what));
+    headline(g, 'info', `${cap(what)} ${many ? 'join' : 'joins'} the ${f.name}.`, nat);
   }
   for (const f of fleetsOf(g, nat)) {
     if (f.base >= 0 && !allied(g, nat, g.regions[f.base].ctrl) && !newBase(g, f)) continue;

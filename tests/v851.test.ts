@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { ARSENAL, airLine, canStation, stationSite, type AirDelivery } from '../src/campaign/arsenal';
 import { airFleetsOf, airWar, airfieldsHold } from '../src/campaign/air';
 import { deliver } from '../src/campaign/economy';
-import { createGame } from '../src/campaign/game';
+import { atWar, createGame, theWords } from '../src/campaign/game';
+import { bridgesOnCapture, crossingsAt, farBank, riverName } from '../src/campaign/rivers';
+import { runTurnAI } from '../src/campaign/turn';
+import setup from '../data/campaign/setup-1939.json';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
@@ -60,5 +63,47 @@ describe('new aircraft go to a field with room (finding 7)', () => {
     for (const r of g.regions) if (r.id !== main.base && canStation(g, 'SOV', r) && airfieldsHold(g, r.id) - based(r.id) >= wing) expect(d(r.id), r.name).toBeGreaterThanOrEqual(d(at));
     // A place the player names is kept, full or not.
     expect(stationSite(g, 'SOV', main.base)).toBe(main.base);
+  });
+});
+
+describe('the words (finding 8)', () => {
+  it('gives a plural place the apostrophe alone', () => {
+    expect(theWords("The bombing stopped 40% of Midlands's output for a month.")).toBe("The bombing stopped 40% of the Midlands' output for a month.");
+    expect(theWords("Ardennes's roads are narrow.")).toBe("The Ardennes' roads are narrow.");
+    expect(theWords("Netherlands's fleet sails.")).toBe("The Netherlands' fleet sails.");
+    // A single name ending in s keeps its 's.
+    expect(theWords("Paris's factories.")).toBe("Paris's factories.");
+  });
+
+  it('has the American destroyers join, not joins', () => {
+    const g = createGame(3, null);
+    while (g.turn < 16) runTurnAI(g);
+    const lines = g.headlines.filter((h) => /American destroyers/.test(h.text)).map((h) => h.text);
+    expect(lines).toContain('More of the American destroyers join the Western Approaches Fleet.');
+    expect(lines).toContain('The first of fifty old American destroyers join the Western Approaches Fleet.');
+    expect(lines.some((t) => /destroyers joins/.test(t))).toBe(false);
+  });
+
+  it('names the two Soviet tank corps of 1939 as the record does', () => {
+    const names = (setup as unknown as { corps: unknown[][] }).corps.filter((r) => r[0] === 'SOV').map((r) => r[1]);
+    expect(names).toContain('15th Tank Corps');
+    expect(names).toContain('25th Tank Corps');
+    expect(names.some((n) => /Front tanks/.test(String(n)))).toBe(false);
+  });
+
+  it('tells the bridges over one river at one place once in a month, whatever the bridges and the captures', () => {
+    const g = playing('GER');
+    // A Polish province on a river with more than one bridge to Polish ground across it.
+    const pick = g.regions.find((r) => r.ctrl === 'POL' && crossingsAt(r.id).filter((c) => g.regions[farBank(c, r.id)].ctrl === 'POL').length >= 2)!;
+    expect(pick).toBeDefined();
+    expect(atWar(g, 'GER', 'POL')).toBe(true);
+    const before = g.headlines.length;
+    pick.ctrl = 'GER';
+    bridgesOnCapture(g, pick, 'GER');
+    bridgesOnCapture(g, pick, 'GER');
+    const told = g.headlines.slice(before).filter((h) => /bridges over/.test(h.text)).map((h) => h.text);
+    const rivers = new Set(crossingsAt(pick.id).filter((c) => g.regions[farBank(c, pick.id)].ctrl === 'POL').map(riverName));
+    expect(told.length, told.join(' | ')).toBeLessThanOrEqual(rivers.size * 2);
+    expect(new Set(told).size).toBe(told.length);
   });
 });
