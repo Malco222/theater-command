@@ -145,6 +145,11 @@ describe('a goal of endurance against one enemy (the third playtester, 84.3.1, f
     openGoals(g, 'SOV', JAN_41);
     for (const k of Object.keys(g.flags)) if (/^war:(GER:SOV|SOV:GER)$/.test(k)) delete g.flags[k];
     if (since !== undefined) g.flags['war:GER:SOV'] = since;
+    // (A war that has come is one still being fought: since b434 a goal whose clock it is is judged the month it ends.)
+    const S = g.nations.SOV, G = g.nations.GER;
+    S.atWar = S.atWar.filter((e) => e !== 'GER');
+    G.atWar = G.atWar.filter((e) => e !== 'SOV');
+    if (since !== undefined) { S.atWar.push('GER'); G.atWar.push('SOV'); }
     g.turn = turn;
     return g;
   };
