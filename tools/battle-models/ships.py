@@ -421,6 +421,10 @@ def clips_for_ship(m, yard, mains, cls):
     small = cls == "landing"
     heavy = cls in ("battleship", "carrier")
     gun_cue = {"battleship": "ship_gun_heavy", "cruiser": "ship_gun_medium"}.get(cls, "ship_guns")      # (the sound director's names)
+    # under way, two loops together, by her size (the sound director, 2026-11-18): a small hull has a choppy wash, a
+    # great one a heavy bow wave; a merchant or a liner has a steam engine's beat
+    wash_cue = "destroyer_wash_loop" if cls in ("destroyer", "submarine", "landing") else "ship_wash_loop"
+    engine_cue = "ship_steam_engine_loop" if cls in ("merchant", "liner") else "ship_engine_loop"
     screws = [p.name for p in m.parts if p.name.startswith("screw.")]
     radars = [p.name for p in m.parts if p.name.startswith("radar.") and p.kind == "spin"]
 
@@ -433,7 +437,7 @@ def clips_for_ship(m, yard, mains, cls):
                                    "move": move_keys(long, lambda t: (0.0, 0.0, wave(t, long, heave, 0.45, 2)))}]
                        + [{"part": s, "turn": [[0.0, 0.0], [long, 360.0 * revs]]} for s in screws]
                        + [{"part": r, "turn": [[0.0, 0.0], [long, 360.0 * 2]]} for r in radars],
-                       "events": [{"t": 0.0, "fx": "wake", "socket": "wake.stern", "cue": "ship_wash_loop"}, {"t": 0.0, "fx": "bow_wave", "socket": "wake.bow", "cue": "ship_engine_loop"}]
+                       "events": [{"t": 0.0, "fx": "wake", "socket": "wake.stern", "cue": wash_cue}, {"t": 0.0, "fx": "bow_wave", "socket": "wake.bow", "cue": engine_cue}]
                        + ([{"t": 0.0, "fx": "funnel_smoke", "socket": "funnel.1"}] if any(s["name"] == "funnel.1" for s in m.sockets) else [])}
 
     # a turret fires: each gun runs back and comes out again; the flash and the brown smoke are the game's own effects

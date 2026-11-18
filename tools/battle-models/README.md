@@ -516,15 +516,17 @@ stands so that the glare falls in the gap the camera never visits (`SUN`), and a
 ## Not done yet
 
 - Sound: events are keyed to the sound director's names where a real recording exists (`ship_gun_heavy`,
-  `ship_gun_medium`, `ship_guns`, `shell_impact_near`, `magazine_explosion`, `fire_loop`, `depth_charge`,
-  `ship_wash_loop`, `ship_engine_loop`, `plane_guns`, `gunner_burst`, `ricochet_01`, `plane_down`, `plane_explode`,
+  `ship_gun_medium`, `ship_guns`, `shell_impact_near`, `magazine_explosion`, `fire_loop`, `fire_small_loop` (an
+  aircraft's engine burning), `depth_charge`, and under way two loops together by her size: `ship_wash_loop` or, for
+  destroyers, surfaced submarines and landing craft, `destroyer_wash_loop`, over `ship_engine_loop` or, for merchants
+  and the liner, `ship_steam_engine_loop`; `plane_guns`, `gunner_burst`, `ricochet_01`, `plane_down`, `plane_explode`,
   `fighter_engine_loop`, `aero_engine_idle_loop`, `b17_drone_loop`, `b24_drone_loop`, `bomber_medium_loop`,
   `stuka_drone_loop`, `jet_engine_loop`; list in `/mnt/project-files/sound/battle-pack/sound-list.json`). Brian approved the
   pack on 2026-11-18 (ruling 144 is met), so the game may now play these: MP3s with `mp3-list.json` for the browser game,
-  `wav/` for the 3D game, credits owed in the pack's README. All 21 names are in the pack (checked against the 59 ship
+  `wav/` for the 3D game, credits owed in the pack's README. Every keyed name with a recording is in the pack (checked against the 59 ship
   and aircraft files). A model file carries names only; no sound file is added by these tools. Names with no recording
   yet, which stay silent: `bomb_release`,
-  `bomb_doors`, `aircraft_fire`, `aircraft_break_up`, `parachute_open`, `ship_sinking`, `torpedo_launch`,
+  `bomb_doors`, `aircraft_break_up`, `parachute_open`, `ship_sinking`, `torpedo_launch`,
   `torpedo_run_loop`,
   `depth_charge_roll`, `depth_charge_thrower`, `dive_alarm`, `surfacing`, `lift_motor`, `craft_grounds`,
   `ramp_drop`, `ramp_winch`.

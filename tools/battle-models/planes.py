@@ -1492,7 +1492,7 @@ def clips_for_plane(m, f):
                       "The game carries her down; this is her attitude, her fire and her smoke. Play `bail_out` over it if her crew get out.",
                       "tracks": [{"part": "plane", "rot": rot_keys(lambda t: q_of(roll=-(18.0 * smooth(t / 2.0) + 50.0 * (t / long) ** 2 * (1.0 if not big else 0.6)), pitch=-(8.0 * smooth(t / 1.5) + 52.0 * smooth((t - 1.0) / 6.0)), yaw=10.0 * smooth(t / long)), long, 0.2)}]
                       + props(m, f, "slow")(long)[:2] + props(m, f, "fast")(long)[2:] + stick(roll=[[0.0, 0.0], [2.0, 9.0], [long, 4.0]], pitch=[[0.0, 0.0], [3.0, 6.0], [long, -8.0]]),
-                      "events": [{"t": 0.0, "fx": "engine_fire", "socket": eng[0], "cue": "aircraft_fire"}, {"t": 0.0, "fx": "smoke_trail_black", "socket": eng[0], "cue": ""},
+                      "events": [{"t": 0.0, "fx": "engine_fire", "socket": eng[0], "cue": "fire_small_loop"}, {"t": 0.0, "fx": "smoke_trail_black", "socket": eng[0], "cue": ""},
                                  {"t": 2.5, "fx": "fire", "socket": "stub.port" if len(eng) == 1 else "tank.port", "cue": ""}, {"t": 0.0, "fx": "engine_dying", "socket": eng[0], "cue": "plane_down"}]}
     # (a wing gone: she rolls hard toward the missing wing and whirls down; the wing flutters away behind)
     long = 8.0
