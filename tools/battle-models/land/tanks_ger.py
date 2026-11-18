@@ -125,6 +125,46 @@ def pz4_skirts(v, x0, zt, lost=()):
     return parts, plates
 
 
+def pz4_gear(v, xs=None, idler=(-2.52, 0.64), rollers=None, dust_x=-2.75):
+    """The Panzer IV's running gear: eight small road wheels a side in four leaf-sprung pairs, four return rollers,
+    the drive at the front. xs: where the wheels stand (a longer hull spreads the pairs); idler: (x, z); rollers:
+    (x, z) each."""
+    fine = v.fine
+    ty = 1.225
+    xs = xs or [-1.76 + 0.503 * i for i in range(8)]
+    r_w, r_s, r_i, r_r = 0.235, 0.335, 0.31, 0.125
+    spr, idl = (2.50, 0.70), idler
+    rollers = rollers or [(-1.50, 0.905), (-0.50, 0.905), (0.50, 0.905), (1.50, 0.905)]
+    for letter, s in SIDES:
+        v.use("vehicle")
+        for i, x in enumerate(xs):
+            v.road_wheel(f"wheel_{letter}{i + 1}", "vehicle", x, s * ty, r_w, r_w, s, w=0.085, tyre=0.032, gap=0.075, bolts=6, sides=30)
+        v.sprocket(f"sprocket_{letter}", "vehicle", spr[0], s * ty, spr[1], r_s, s, teeth=18, wide=0.24, tooth=0.03, holes=6, sides=30)
+        v.idler(f"idler_{letter}", "vehicle", idl[0], s * ty, idl[1], r_i, s, wide=0.24, kind="spoke", spokes=7)
+        for i, (x, z) in enumerate(rollers):
+            v.roller(f"roller_{letter}{i + 1}", "vehicle", x, s * ty, z, r_r, s, wide=0.17, tyre=0.02, reach=0.26)
+        wheels = [(x, r_w, r_w) for x in xs] + [(spr[0], spr[1], r_s)] + [(x, z, r_r) for x, z in reversed(rollers)] + [(idl[0], idl[1], r_i)]
+        v.track(letter, s, s * ty, wheels, pitch=0.12, wide=0.40, thick=0.028, style={"kind": "plate", "horn": "centre", "horn_high": 0.075, "grouser": 0.014})
+        # the bogies: a leaf spring under each pair of wheels, on the root so they stay with the wheels
+        v.use("vehicle")
+        for k in range(4):
+            xa, xb = xs[2 * k], xs[2 * k + 1]
+            xm = (xa + xb) / 2
+            yi = s * (ty - 0.30)
+            v.slab((xm - 0.11, s * 0.93, 0.36), (xm + 0.11, s * (ty - 0.2), 0.58), "shade", 0.01)
+            if fine:
+                for j in range(4):                       # the leaves
+                    half = 0.27 - j * 0.045
+                    v.slab((xm - half, yi - 0.04, 0.30 - j * 0.02), (xm + half, yi + 0.04, 0.315 - j * 0.02), "shade")
+                for xw in (xa, xb):                      # the swing arms
+                    v.rod((xm + (0.06 if xw > xm else -0.06), yi, 0.46), (xw, yi, r_w), 0.035, "shade", 8)
+                v.bolts((xm, s * (ty - 0.2) + s * 0.001, 0.47), Y * s, 0.075, 6, r=0.012)
+        # final drive housing at the sprocket
+        v.use("hull")
+        v.lathe((spr[0], s * 0.90, spr[1]), Y * s, [(0.22, 0.0), (0.22, 0.13), (0.16, 0.2), (0.0, 0.24), (0.0, 0.0)], "upper", v.n(22, 8))
+        v.socket("dust." + ("left" if s > 0 else "right"), (dust_x, s * ty, 0.05), (-1, 0, 0.3), part="vehicle")
+
+
 def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None):
     """Panzer IV: 5.92 m hull, 2.88 m wide, 2.68 m high; eight small road wheels a side on leaf-sprung bogies, four
     return rollers, drive at the front. She served the whole war with two guns and two coats, and this one model is
@@ -235,39 +275,7 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None):
     v.aerial("aerial", "hull", (-2.35, 1.22, 1.60), 2.0)
 
     # ---- the running gear ----------------------------------------------------------------------------
-    ty = 1.225
-    xs = [-1.76 + 0.503 * i for i in range(8)]
-    r_w, r_s, r_i, r_r = 0.235, 0.335, 0.31, 0.125
-    spr, idl = (2.50, 0.70), (-2.52, 0.64)
-    rollers = [(-1.50, 0.905), (-0.50, 0.905), (0.50, 0.905), (1.50, 0.905)]
-    for letter, s in SIDES:
-        v.use("vehicle")
-        for i, x in enumerate(xs):
-            v.road_wheel(f"wheel_{letter}{i + 1}", "vehicle", x, s * ty, r_w, r_w, s, w=0.085, tyre=0.032, gap=0.075, bolts=6, sides=30)
-        v.sprocket(f"sprocket_{letter}", "vehicle", spr[0], s * ty, spr[1], r_s, s, teeth=18, wide=0.24, tooth=0.03, holes=6, sides=30)
-        v.idler(f"idler_{letter}", "vehicle", idl[0], s * ty, idl[1], r_i, s, wide=0.24, kind="spoke", spokes=7)
-        for i, (x, z) in enumerate(rollers):
-            v.roller(f"roller_{letter}{i + 1}", "vehicle", x, s * ty, z, r_r, s, wide=0.17, tyre=0.02, reach=0.26)
-        wheels = [(x, r_w, r_w) for x in xs] + [(spr[0], spr[1], r_s)] + [(x, z, r_r) for x, z in reversed(rollers)] + [(idl[0], idl[1], r_i)]
-        v.track(letter, s, s * ty, wheels, pitch=0.12, wide=0.40, thick=0.028, style={"kind": "plate", "horn": "centre", "horn_high": 0.075, "grouser": 0.014})
-        # the bogies: a leaf spring under each pair of wheels, on the root so they stay with the wheels
-        v.use("vehicle")
-        for k in range(4):
-            xa, xb = xs[2 * k], xs[2 * k + 1]
-            xm = (xa + xb) / 2
-            yi = s * (ty - 0.30)
-            v.slab((xm - 0.11, s * 0.93, 0.36), (xm + 0.11, s * (ty - 0.2), 0.58), "shade", 0.01)
-            if fine:
-                for j in range(4):                       # the leaves
-                    half = 0.27 - j * 0.045
-                    v.slab((xm - half, yi - 0.04, 0.30 - j * 0.02), (xm + half, yi + 0.04, 0.315 - j * 0.02), "shade")
-                for xw in (xa, xb):                      # the swing arms
-                    v.rod((xm + (0.06 if xw > xm else -0.06), yi, 0.46), (xw, yi, r_w), 0.035, "shade", 8)
-                v.bolts((xm, s * (ty - 0.2) + s * 0.001, 0.47), Y * s, 0.075, 6, r=0.012)
-        # final drive housing at the sprocket
-        v.use("hull")
-        v.lathe((spr[0], s * 0.90, spr[1]), Y * s, [(0.22, 0.0), (0.22, 0.13), (0.16, 0.2), (0.0, 0.24), (0.0, 0.0)], "upper", v.n(22, 8))
-        v.socket("dust." + ("left" if s > 0 else "right"), (-2.75, s * ty, 0.05), (-1, 0, 0.3), part="vehicle")
+    pz4_gear(v)
 
     # ---- the turret -----------------------------------------------------------------------------------
     x0, zt = 0.18, 1.72

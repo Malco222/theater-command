@@ -55,6 +55,8 @@ BUILDERS = {
     "FlakTruck": flak.flak_truck,
     "M7": sp_guns.m7,
     "Sexton": sp_guns.sexton,
+    "Hummel": sp_guns.hummel,
+    "SU76": sp_guns.su76,
 }
 
 ABOUT = {
@@ -91,6 +93,8 @@ ABOUT = {
     "FlakHalftrack": {"nation": "GER", "role": "anti-aircraft half-track", "years": "1940-45", "units": "the light flak that rolls with Germany's armor"},
     "FlakTruck": {"nation": "any", "role": "anti-aircraft lorry", "years": "1936-45", "units": "the light flak that rolls with every other army's columns"},
     "M7": {"nation": "USA", "role": "self-propelled howitzer", "years": "1942-45", "units": "the artillery that keeps up with the United States' armor (the Free French were lent her too)"},
+    "Hummel": {"nation": "GER", "role": "self-propelled howitzer", "years": "1943-45", "units": "the heavy artillery that keeps up with Germany's armor"},
+    "SU76": {"nation": "SOV", "role": "self-propelled gun", "years": "1943-45", "units": "the light guns that keep up with the Soviet Union's infantry and armor"},
     "Sexton": {"nation": "UK", "role": "self-propelled gun", "years": "1943-45", "units": "the artillery that keeps up with the armor of Britain and the Commonwealth"},
 }
 
