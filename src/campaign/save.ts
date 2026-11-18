@@ -4,7 +4,7 @@
 // same war the unsaved one would have.
 
 import { Rng } from '../core/rng';
-import { atWar, computeSupply, createGame, openTheatres } from './game';
+import { atWar, capitalDistances, computeSupply, createGame, openTheatres } from './game';
 import { seat } from './commanders';
 import { FIELDS } from './research';
 import { newStories } from './stories';
@@ -55,14 +55,19 @@ export const armyWords = (text: string): string => ARMIES_RENAMED.reduce((t, [wa
 
 export function saveGame(g: Game): string {
   return JSON.stringify({
-    v: SAVE_VERSION, seed: g.seed, human: g.human, turn: g.turn, phase: g.phase, week: g.week, order: g.order,
+    // A grand campaign is written in today's words: its air groups may be squadrons (ruling 220), and no old fleet
+    // word is read into them on loading. Left out of a historical save, which is written exactly as it always was.
+    v: SAVE_VERSION, words: g.flags.open === 1 ? 1 : undefined, seed: g.seed, human: g.human, turn: g.turn, phase: g.phase, week: g.week, order: g.order,
     nextCorps: g.nextCorps, nextBuild: g.nextBuild, flags: g.flags, rng: g.rng.state,
     dirty: g.supplyDirty,
     // The supply picture, in the order of the countries' names so that the same picture is always written the same way.
     supply: Object.fromEntries(Object.entries(g.supply).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => [k, Array.from(v).join('')])),
     nations: g.nations,
-    // The order corps stand in within a region is kept too: battles and retreats take them in that order.
-    regions: g.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, r.prev, r.units.map((c) => c.id)]),
+    // The order corps stand in within a region is kept too: battles and retreats take them in that order. So is the
+    // order of the corps inside its town, as an eighth entry where there is a garrison (Version 84.3): it decides who
+    // defends a storm, who is turned out of a full town and what becomes of each corps when the town falls. A
+    // province with nobody inside its town is written as it always was.
+    regions: g.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, r.prev, r.units.map((c) => c.id), ...(r.garr?.length ? [r.garr.map((c) => c.id)] : [])]),
     corps: g.corps,
     generals: g.generals,
     fleets: g.fleets, nextFleet: g.nextFleet, seaReports: g.seaReports.slice(-KEEP_SEA), convoys: g.convoys,
@@ -100,15 +105,28 @@ export function staleSave(text: string): boolean {
  * A campaign saved before every group of ships was called a fleet (the player's ask of 17 November 2026: "ships
  * should be called fleets"): "Atlantic Squadron" reads "Atlantic Fleet", an escort group an escort fleet, wherever
  * the save wrote the name: on the fleet, on its carrier wings, in the news and in the battle reports. An air group's
- * own name ("1st Air Squadron") stands as it is. Names only: nothing else in the save is touched.
+ * own name ("1st Air Squadron") stands as it is. Names only: nothing else in the save is touched. A save written in
+ * today's words (marked "words") takes none of these: America's "1st Pursuit Squadron" is an air group (ruling 220).
+ * Version 84.3 (the design director's rider of 17 November): the five fleets whose names did not say ships take the
+ * word as well, in every save. Germany's fleet in the Baltic is named for its port, since the Soviet Baltic Fleet
+ * shares that sea.
  */
-export const fleetWords = (text: string): string =>
-  text.replace(/( Air)? Squadron\b/g, (m, air) => (air ? m : ' Fleet')).replace(/ Escort Group\b/g, ' Escort Fleet').replace(/ Submarine Flotilla\b/g, ' Submarine Fleet');
+const FLEETS_RENAMED: [RegExp, string][] = [
+  [/\bWestern Approaches Command\b/g, 'Western Approaches Fleet'], [/\bDover Command\b/g, 'Dover Fleet'], [/\bU-boat Arm\b/g, 'U-boat Fleet'],
+  [/\bBaltic Station\b/g, 'Swinemunde Fleet'], [/\bSubmarine Command\b/g, 'Submarine Fleet'],
+];
+const OLD_FLEET_WORDS = /Squadron|Escort Group|Submarine Flotilla|Western Approaches Command|Dover Command|U-boat Arm|Baltic Station|Submarine Command/;
+export const fleetWords = (text: string, today = false): string => {
+  let t = today ? text : text.replace(/( Air)? Squadron\b/g, (m, air) => (air ? m : ' Fleet')).replace(/ Escort Group\b/g, ' Escort Fleet').replace(/ Submarine Flotilla\b/g, ' Submarine Fleet');
+  for (const [was, now] of FLEETS_RENAMED) t = t.replace(was, now);
+  return t;
+};
 
 export function loadGame(text: string): Game | null {
   if (text.includes(' Army (')) text = armyWords(text);
   let d: any;
-  try { d = JSON.parse(/Squadron|Escort Group|Submarine Flotilla/.test(text) ? fleetWords(text) : text); } catch { return null; }
+  const today = text.startsWith(`{"v":${SAVE_VERSION},"words":1,`);
+  try { d = JSON.parse(OLD_FLEET_WORDS.test(text) ? fleetWords(text, today) : text); } catch { return null; }
   if (!d || d.v !== SAVE_VERSION || !Array.isArray(d.regions)) return null;
   if (!fits(d.regions.length, wide(d))) return null; // saved on a different map
   const g = createGame(d.seed, d.human ?? null);
@@ -144,6 +162,9 @@ export function loadGame(text: string): Game | null {
   restoreWorks(g);
   // A save from an older build may lack fields added since; the fresh game fills them in.
   for (const [id, n] of Object.entries(d.nations as Record<string, any>)) g.nations[id] = { ...g.nations[id], ...n };
+  // The distances to each capital are counted from the capitals the save brings (the fresh game counted them from the
+  // first day's): Vichy's, set at the armistice, is the one that moves.
+  for (const n of Object.values(g.nations)) if (n.capital >= 0) g.capDist[n.id] = capitalDistances(g, n.capital);
   // A save from before research: the design teams are taken to have kept to history's schedule so far.
   for (const [id, n] of Object.entries(d.nations as Record<string, any>)) {
     const lab = g.nations[id]?.lab;
@@ -164,9 +185,12 @@ export function loadGame(text: string): Game | null {
   g.regions.forEach((r, i) => {
     const ids = d.regions[i][6] as number[] | undefined;
     if (ids) for (const id of ids) { const c = byId.get(id); if (c && c.reg === r.id && !c.town) { r.units.push(c); byId.delete(id); } }
+    // The corps inside the town, in the order they stood there (a save from Version 84.3 on).
+    const inside = d.regions[i][7] as number[] | undefined;
+    if (inside) for (const id of inside) { const c = byId.get(id); if (c && c.reg === r.id && c.town) { (r.garr ??= []).push(c); byId.delete(id); } }
   });
-  // Anything a save from an older build did not list goes in as it comes. A corps in garrison (the grand campaign)
-  // is on no field's list: it goes back inside its town, in the order it was saved.
+  // Anything a save from an older build did not list goes in as it comes. A corps in garrison that such a save
+  // did not list goes back inside its town in the order of the corps' roll.
   for (const c of g.corps) if (byId.has(c.id)) { const r = g.regions[c.reg]; if (c.town) (r.garr ??= []).push(c); else r.units.push(c); }
   // A carved place that finds itself in the front line is not left empty: if the ground it was cut from has two
   // or more corps free to move, the first of them takes post there.

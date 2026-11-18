@@ -566,6 +566,15 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 					(*Row)->TryGetStringField(TEXT("what"), Left.What);
 					(*Row)->TryGetBoolField(TEXT("red"), Left.bRed);
 					(*Row)->TryGetStringField(TEXT("line"), Left.Line);
+					(*Row)->TryGetNumberField(TEXT("from"), Left.From);
+					const TArray<TSharedPtr<FJsonValue>>* Help = nullptr;
+					if ((*Row)->TryGetArrayField(TEXT("help"), Help))
+					{
+						for (const TSharedPtr<FJsonValue>& Id : *Help)
+						{
+							Left.HelpCorps.Add(FMath::RoundToInt32(Id->AsNumber()));
+						}
+					}
 				}
 			}
 		}
@@ -1823,6 +1832,7 @@ FAttackPreview ReadPreview(const TSharedPtr<FJsonObject>& Object, int32 RegionId
 		return Out; // the troops there stand on a neutral's ground: no attack until war is declared on it
 	}
 	Out.bValid = true;
+	Object->TryGetStringField(TEXT("alone"), Out.Alone); // (the pick cannot go: the card shows it, and says why)
 	{
 		double Even = 1.2;
 		Object->TryGetNumberField(TEXT("even"), Even);

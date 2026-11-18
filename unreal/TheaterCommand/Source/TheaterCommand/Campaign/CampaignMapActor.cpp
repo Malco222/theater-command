@@ -742,8 +742,11 @@ void ACampaignMapActor::BuildFrontLine()
 			}
 		}
 	}
-	Weights[0].Commit(FrontLineMesh, 0, InkMaterial);
-	Weights[1].Commit(FrontLineMesh, 1, InkMaterial);
+	{
+		THEATER_SPEED_SCOPE(FrontLineCommit);
+		Weights[0].Commit(FrontLineMesh, 0, InkMaterial);
+		Weights[1].Commit(FrontLineMesh, 1, InkMaterial);
+	}
 	FrontLineMesh->SetMeshSectionVisible(1, false);
 	FrontLineFar = 0;
 	UE_LOG(LogTheater, Log, TEXT("The front line: %d stretches of the player's own fronts, %d of others' (%d wars)"), Mine, Theirs, WarPairs.Num() / 2);
@@ -1455,7 +1458,7 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 	// unseen ground went from (16, 32, 63), bluer than the ground in view, to (27, 39, 52).)
 	static float HazeDark = 0.33f, HazeDrain = 0.5f, HazeWisps = 0.34f, HazeFloor = 0.55f, HazeDrainNight = 0.75f;
 	static FLinearColor HazeDay(0.13f, 0.165f, 0.21f), HazeNight(0.24f, 0.22f, 0.17f);
-	static FLinearColor HazeCastDay(0.79f, 1.0f, 1.22f), HazeCastNight(1.0f, 0.95f, 0.6f);
+	static FLinearColor HazeCastDay(0.79f, 1.0f, 1.22f), HazeCastNight(0.68f, 0.95f, 0.80f); // (ruling 205(a): the moon's light is less blue now, so the haze's own cast by night gives up its red to keep the fog the colour it was built)
 	static bool bHazeRead = false;
 	if (!bHazeRead)
 	{
@@ -1487,7 +1490,7 @@ void ACampaignMapActor::UpdateSeaMotion(float CameraDistance, const FVector& Cam
 	// (by night the same paint came out at 57% of ground in view, where two thirds is asked: it is lifted a little there)
 	LandScalar(TEXT("HazeDark"), FMath::Lerp(HazeDark, HazeDark * ACampaignEnvironment::MoonLook().Haze, Moon)); // (ruling 205(a): the fog by night stays as built while the ground in view is lifted)
 	LandScalar(TEXT("HazeDrain"), FMath::Lerp(HazeDrain, HazeDrainNight, Moon));
-	LandScalar(TEXT("HazeFloor"), HazeFloor);
+	LandScalar(TEXT("HazeFloor"), HazeFloor * FMath::Lerp(1.0f, ACampaignEnvironment::MoonLook().HazeFloor, Moon)); // (ruling 205(a): by night the floor comes down with the share, so the fog stays as dark as it was built)
 	{
 		// How far the haze has travelled, in the table's units: the game's clock times its pace, 7.3 units a second,
 		// about five pixels a second from where he plays (the art director: never over eight). It goes about twenty
@@ -3438,9 +3441,12 @@ void ACampaignMapActor::BuildBorders()
 	{
 		BorderAcrossFor = Data.Regions.Num();
 	}
-	Buffers.Commit(BorderMesh, 0, InkMaterial);
-	Faint.Commit(BorderMesh, 1, ProvinceInk);
-	FaintPale.Commit(BorderMesh, 2, ProvincePaleInk);
+	{
+		THEATER_SPEED_SCOPE(BordersCommit); // (how much of the lines' cost is handing them to the graphics chip)
+		Buffers.Commit(BorderMesh, 0, InkMaterial);
+		Faint.Commit(BorderMesh, 1, ProvinceInk);
+		FaintPale.Commit(BorderMesh, 2, ProvincePaleInk);
+	}
 	UE_LOG(LogTheater, Log, TEXT("Borders: %d frontier edges, %d region edges"), NationalCount, RegionCount);
 }
 
@@ -7428,7 +7434,7 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		if (WoodsMaterial)
 		{
 			// (and the woods are cooled and dimmed with it, or the yellows of autumn shine like lamps in the blackout)
-			WoodsMaterial->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.36f, 0.56f, 0.8f), Moon));
+			WoodsMaterial->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, ACampaignEnvironment::MoonLook().Trees, Moon));
 		}
 		// (the grey floor a wood keeps under the snow: the art director's ruling of round 19)
 		LandVector(TEXT("SnowWoodFloor"), SnowWoodFloor);
@@ -13581,7 +13587,11 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	// The woods are one dense canopy from working height and above (the nation's stain lies over it at half
 	// strength, so a wood is still seen to be its owner's); close to, where single trees stand on it, the cloth
 	// under them is laid a little thinner.
-	const float Woods = FMath::Lerp(0.8f, 0.86f, FMath::SmoothStep(3200.0f, 6500.0f, CameraDistance)); // (close to it is the dark floor of the forest)
+	// (By moonlight the cloth is laid thinner: a wood on the player's own ground was as dark as the fog of war beside
+	// it, and read as fog. See FMoonLook::Woods.)
+	const float WoodsMoon = bLamplightNow ? 0.0f : ACampaignEnvironment::MoonOf(NightNow);
+	const float Woods = FMath::Lerp(0.8f, 0.86f, FMath::SmoothStep(3200.0f, 6500.0f, CameraDistance)) // (close to it is the dark floor of the forest)
+		* FMath::Lerp(1.0f, ACampaignEnvironment::MoonLook().Woods, WoodsMoon);
 	if (LandMaterial && FMath::Abs(Woods - WoodsShown) > 0.01f)
 	{
 		WoodsShown = Woods;

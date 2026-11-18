@@ -40,7 +40,7 @@ export const WORLD = data as unknown as {
   nations: Record<string, any>;
   home: Record<string, { align?: string }>;
   follow: Record<string, string>;
-  dominions?: Record<string, { of: string[]; answers: number; since?: Record<string, number> }>;
+  dominions?: Record<string, { of: string[]; answers: number; steps?: number[]; europe?: string[]; beside?: string; willGone?: number; since?: Record<string, number> }>;
   corps: [string, string, string, number, string, { xp?: number; str?: number; hold?: number }][];
   fleets: FleetRow[];
   peace: Record<string, [number, number][]>;
@@ -77,7 +77,6 @@ export function patronOf(nat: string): string | null {
   return null;
 }
 
-/** The share of the time a mother country answers when war is made on a dominion of hers: 0.6 for Britain (Brian's rule of 17 November 2026). */
 /**
  * The declare card's row for a dominion's mother country, first among its friends (the UI director's words, 17 November
  * 2026): "The mother country: Canada has been a dominion since 1867." Display only: the tie moves no opinion.
@@ -87,8 +86,19 @@ export function motherLine(patron: string, nat: string, name: string): string {
   return since ? `The mother country: ${name} has been a dominion since ${since}.` : `The mother country: ${name} is a dominion.`;
 }
 
-export function answersOf(patron: string): number {
-  return WORLD.dominions?.[patron]?.answers ?? 0;
+/**
+ * The share of the time a mother country answers when war is made on a dominion of hers, at the step her own war in
+ * Europe stands at (ruling 222: 0.8, 0.6, 0.4 or 0.2 for Britain), or her one share where she has no steps.
+ */
+export function answersOf(patron: string, step?: number): number {
+  const row = WORLD.dominions?.[patron];
+  return (step ? row?.steps?.[step - 1] : undefined) ?? row?.answers ?? 0;
+}
+
+/** What a mother country's war in Europe is read by (ruling 222): the great powers of Europe, the ally beside her, the share of her will that puts her in danger. */
+export function pressData(patron: string): { europe: string[]; beside: string | null; willGone: number } {
+  const row = WORLD.dominions?.[patron];
+  return { europe: row?.europe ?? [], beside: row?.beside ?? null, willGone: row?.willGone ?? 1 / 3 };
 }
 
 /** True for a province beyond the map of Europe. */

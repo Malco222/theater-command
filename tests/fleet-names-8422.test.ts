@@ -1,4 +1,4 @@
-// Every group of ships is called a fleet (Version 84.2.2; the player's ask of 17 November 2026: "it has atlantic
+// Every group of ships is called a fleet (Versions 84.2.2 and 84.3; the player's ask of 17 November 2026: "it has atlantic
 // squadron for the fleet name. ships should be called fleets"). Names and words only: no rule reads a fleet's name
 // but the American staff's own list of the fleet it sends across the ocean, which is renamed with it.
 import { describe, expect, it } from 'vitest';
@@ -18,6 +18,11 @@ describe('A group of ships is called a fleet', () => {
     const g = wide();
     for (const f of g.fleets) expect(f.name).not.toMatch(/Squadron/);
     for (const row of [...navy.fleets, ...world.fleets]) expect(row.name).not.toMatch(/Squadron/);
+    // Version 84.3: every fleet on the first day says what it is, a fleet, or is a whole navy or Force H.
+    for (const row of [...navy.fleets, ...world.fleets]) expect(row.name, row.name).toMatch(/ Fleet$| Navy$|^Force H$/);
+    for (const nat of new Set(g.fleets.map((f) => f.nat))) { const mine = g.fleets.filter((f) => f.nat === nat).map((f) => f.name); expect(new Set(mine).size, nat).toBe(mine.length); }
+    // No two fleets of one name in one sea: Germany's in the Baltic is not a second Baltic Fleet.
+    expect(g.fleets.filter((f) => f.name === 'Baltic Fleet').map((f) => f.nat)).toEqual(['SOV']);
     expect(g.fleets.some((f) => f.nat === 'USA' && f.name === 'Atlantic Fleet')).toBe(true);
     expect(g.fleets.some((f) => f.nat === 'FRA' && f.name === 'Atlantic Fleet')).toBe(true);
     // The fleet the American staff sends across the ocean is still on its list.
@@ -47,7 +52,10 @@ describe('A group of ships is called a fleet', () => {
     part.name = '1st Escort Group';
     g.headlines.push({ turn: g.turn, week: g.week, text: 'The Atlantic Squadron crosses the ocean to Plymouth.', kind: 'info', nat: 'USA' });
     const before = { ships: { ...f.ships }, base: f.base, zone: f.zone, id: f.id, n: g.fleets.length };
-    const h = loadGame(saveGame(g))!;
+    // An older build wrote no mark of today's words on its save.
+    const old = saveGame(g).replace('{"v":1,"words":1,', '{"v":1,');
+    expect(old.startsWith('{"v":1,"seed":')).toBe(true);
+    const h = loadGame(old)!;
     const now = h.fleets.find((x) => x.id === before.id)!;
     expect(now.name).toBe('Atlantic Fleet');
     expect([now.ships, now.base, now.zone, h.fleets.length]).toEqual([before.ships, before.base, before.zone, before.n]);
@@ -68,11 +76,15 @@ describe('A group of ships is called a fleet', () => {
     expect(fleetWords('2nd Submarine Flotilla')).toBe('2nd Submarine Fleet');
     expect(fleetWords('The Mediterranean Squadron defeats the 2nd Squadron in the Tyrrhenian Sea')).toBe('The Mediterranean Fleet defeats the 2nd Fleet in the Tyrrhenian Sea');
     expect(fleetWords('"parent":"1st Air Squadron"')).toBe('"parent":"1st Air Squadron"');
+    expect(fleetWords('The U-boat Arm sinks 9 ships of the Western Approaches Command; Dover Command, Baltic Station and Submarine Command are in port. I Bomber Command flies.'))
+      .toBe('The U-boat Fleet sinks 9 ships of the Western Approaches Fleet; Dover Fleet, Swinemunde Fleet and Submarine Fleet are in port. I Bomber Command flies.');
     const g = wide();
     g.airFleets[0].name = '1st Air Squadron';
     const h = loadGame(saveGame(g))!;
     expect(h.airFleets.map((a) => a.name)).toEqual(g.airFleets.map((a) => a.name));
     expect(h.fleets.map((f) => f.name)).toEqual(g.fleets.map((f) => f.name));
-    expect(saveGame(h)).not.toMatch(/[^r] Squadron|Escort Group|Submarine Flotilla/);
+    // No fleet carries an old word; an air group may be a squadron (ruling 220), and comes back as it went in.
+    expect(h.fleets.some((f) => /Squadron|Escort Group|Flotilla/.test(f.name))).toBe(false);
+    expect(saveGame(h)).toBe(saveGame(g));
   });
 });

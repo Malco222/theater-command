@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 8787bf1 2026-11-17. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 80043bd 2026-11-17. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -355,7 +355,7 @@
       ["POL", "Army Krakow (Bielsko)", "inf", 3, "Krakow", {}],
       ["POL", "Army Karpaty", "mtn", 2, "Przemysl", {}],
       ["POL", "Army Prusy", "inf", 3, "Kielce", {}],
-      ["POL", "Army Prusy reserve", "inf", 3, "Warsaw", {}],
+      ["POL", "Wyszkow Group", "inf", 3, "Warsaw", {}],
       ["POL", "Warsaw garrison", "inf", 2, "Warsaw", { hold: 1 }],
       ["POL", "Lublin reserve", "inf", 2, "Lublin", {}],
       ["POL", "Lwow garrison", "inf", 1, "Lwow", { hold: 1 }],
@@ -789,6 +789,7 @@
   var DEG = Math.PI / 180;
   var TAU = Math.PI * 2;
   var clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  var tenthPct = (x) => x * 100 < 0.05 ? "less than 0.1%" : `${(x * 100).toFixed(1)}%`;
 
   // ../../src/core/ticket.ts
   function turnToDate(turn) {
@@ -1040,7 +1041,7 @@
   var arsenal_default = {
     _about: "The arsenal: everything a nation can order in the grand campaign beyond the four classic corps of production.json, and the works a province can be given. The historical scenarios do not use it. 'land' adds kinds of corps. 'needs' is how many factories the province a corps is raised in must have: infantry and mountain troops can be raised anywhere at home, heavier equipment only where there is industry. 'air' is aircraft by the wing: 'count' machines with crews, ordered by a nation that has a home province with 'factories' factories (its aircraft industry) and stationed on airfields. 'ships' are laid down in a home port whose shipyard is of level 'yard' or better; 'count' hulls join the fleet based there, or the nation's main fleet of that kind; 'tp' is troopships, each order adding one corps a month to the nation's sea lift, up to 'lift.most' orders. 'works' are built in a province: a factory in a city (a province that is urban, the capital, already has industry or is worth two victory points), at 'cost' plus 'step' for each one already added there, up to 'most' new ones; shipyards, anti-aircraft guns and airfields in levels 1 to 3 at the listed 'cost' for each level. 'yards' is the shipyard level history left in each port. A level of anti-aircraft guns stops 'cut' of the bombing of that province's industry and adds 'flak' to the bombers' losses; a level of airfields lets 'holds' more aircraft fly from the province. 'upkeep' is the monthly cost of a level. Costs are in production points (shown times a hundred); months are how long the order takes. 'guns' is what artillery does in a land battle: each division in the attack takes 'soften' off the worth of the defender's fortifications and trenches, up to 'softenMost'; each division in the defence adds 'thicken' to the other defenders, up to 'thickenMost'. 'ai' is what a computer-run nation will do with it: put guns on its most bombed industry once it has been raided; and, facing 'facing' dug-in enemy corps or more, raise artillery corps until it has one to every 'per' of its other corps, 'most' at the most, and none while its field army is under 'fit' of the largest it has been (an army being worn away wants men in the line before guns).",
     land: {
-      art: { label: "Artillery corps", divs: 2, cost: 66, months: 5, blurb: "Massed guns. Breaks fortified lines and fieldworks in the attack, but cannot take ground without infantry or tanks. Thickens any defence it stands in. Slow, weak if caught alone, and as dear as an armoured corps." },
+      art: { label: "Artillery corps", divs: 2, cost: 66, months: 5, blurb: "Massed guns. Breaks fortified lines and fieldworks in the attack, but cannot take ground without infantry or tanks. Thickens any defence it stands in. Slow, weak if caught alone, and as dear as a corps of tanks." },
       eng: { label: "Engineer corps", divs: 1, cost: 18, months: 3, blurb: "Bridging columns, sappers and labour battalions. Rebuilds blown bridges, fortifies provinces, lays minefields, and in an assault breaches fortifications and clears mines. A poor fighter on its own, and it cannot take ground without infantry or tanks." }
     },
     needs: { inf: 0, mtn: 0, cav: 0, eng: 0, mot: 1, art: 1, arm: 2 },
@@ -1842,7 +1843,7 @@
       what: "The wider world, attached to a grand campaign when it opens (src/campaign/world.ts). The history campaigns never see any of it: they keep the map of Europe. The provinces and seas themselves come from tools/build-geo-world.mjs (data/campaign/world.mjs, world-seas.json); this file holds what the rules add to them.",
       nations: "Countries that exist only on the wider map, in the same form as nations.json. Canada, Mexico and Cuba came with North America (Version 74); the six larger countries of South America, which a player can take, and the twelve small republics of Central America, the Caribbean and South America came with the Latin slice (Version 76). The small republics share one muted colour until the art director sends each its own.",
       home: "What changes for a country of nations.json once its homeland is on the map. The United States is no longer a country beyond the map's edge that wakes in December 1941: it is there from the first day, neutral, with its factories on its own soil.",
-      dominions: "A mother country may stand by each of her dominions ('of'), one way only (ruling 211(b) as Brian changed it on 17 November 2026): when a country at peace with her makes war on a dominion, while the two stand in the same alliance, she answers 'answers' of the time (0.6: six times in ten) and stays out the rest. 'since' is the year each became a dominion, said on the declare card's row for the mother country (display only). One roll for each such war, made when it is declared; the same in every year, at every stop of the dial and at every difficulty. A war a dominion starts is not hers. Ireland is outside. Countries not on the map yet are passed over.",
+      dominions: "A mother country may stand by each of her dominions ('of'), one way only (ruling 211(b) as Brian changed it on 17 November 2026): when a country at peace with her makes war on a dominion, while the two stand in the same alliance, she answers as far as her own war in Europe allows (ruling 222, Brian's ask of 17 November 2026): 'steps' are the shares for the four steps, counting from the bottom the first that holds: 4, in danger at home (an enemy army on her home ground, or 'willGone' of her will to fight gone), two times in ten; 3, at war with one of the great powers of Europe ('europe') with her ally 'beside' not fighting beside her, four; 2, at war there with that ally fighting beside her, six; 1, no such war, eight. 'answers' is the share for a mother country with no steps. 'since' is the year each became a dominion, said on the declare card's row for the mother country (display only). One roll for each such war, made when it is declared, at the step of that day; the same at every stop of the dial and at every difficulty. A war a dominion starts is not hers. Ireland is outside. Countries not on the map yet are passed over.",
       follow: "Dominions: each goes to war with whoever its mother country is at war with on the day the world is attached.",
       corps: "The armies standing at home on the first day: [nation, name, kind, divisions, province, options]. 'str' is the strength it starts at (a peacetime army is a cadre).",
       fleets: "Fleets in home waters on the first day, in the form of navy.json.",
@@ -1885,7 +1886,7 @@
       USA: { align: "leaning_allies" }
     },
     follow: { CAN: "UK" },
-    dominions: { UK: { of: ["CAN", "AUS", "NZL", "SAF"], answers: 0.6, since: { CAN: 1867, AUS: 1901, NZL: 1907, SAF: 1910 } } },
+    dominions: { UK: { of: ["CAN", "AUS", "NZL", "SAF"], answers: 0.6, steps: [0.8, 0.6, 0.4, 0.2], europe: ["GER", "ITA", "FRA", "SOV"], beside: "FRA", willGone: 0.3333, since: { CAN: 1867, AUS: 1901, NZL: 1907, SAF: 1910 } } },
     corps: [
       ["USA", "First Army", "inf", 2, "New York", { xp: 0.05, str: 0.5 }],
       ["USA", "Washington garrison", "inf", 1, "Washington", { xp: 0.05, str: 0.6, hold: 1 }],
@@ -3707,16 +3708,10 @@
       words: [[500, "Landing ground"], [1e3, "Airfield"], [2e3, "Air base"], [99999, "Great air base"]]
     },
     groups: {
-      _note: "most is the largest group a fleet is split into. names is how each nation numbers its groups of each kind: {n} is the number and {nth} the ordinal. A command small enough to be one group keeps its own name.",
+      _note: "most is the largest group a fleet is split into. A command small enough to be one group keeps its own name. Every other group takes, once, the name of the rung of its country's ladder nearest its full strength (ruling 220, air-names.json); names._default is the plain form where no rung is near or the country has no ladder: {n} is the number and {nth} the ordinal.",
       most: 250,
       names: {
-        _default: { ftr: "{nth} Fighter Group", bmr: "{nth} Bomber Group" },
-        GER: { ftr: "Jagdgeschwader {n}", bmr: "Kampfgeschwader {n}" },
-        UK: { ftr: "No. {n} Fighter Wing", bmr: "No. {n} Bomber Group" },
-        FRA: { ftr: "Groupe de Chasse {n}", bmr: "Groupe de Bombardement {n}" },
-        ITA: { ftr: "Stormo Caccia {n}", bmr: "Stormo Bombardieri {n}" },
-        SOV: { ftr: "{nth} Fighter Division", bmr: "{nth} Bomber Division" },
-        USA: { ftr: "{nth} Fighter Group", bmr: "{nth} Bomb Group" }
+        _default: { ftr: "{nth} Fighter Group", bmr: "{nth} Bomber Group" }
       }
     },
     raids: {
@@ -3777,6 +3772,1039 @@
       _note: "The computer's air staff. escortReady is the least readiness at which a fighter group flies escort. raids is how every computer nation at war plans raids of its own, at every level: each month 'share' of its bomber groups fit to fly go out (a group is fit with 'least' bombers and readiness 'ready'), each against the best target among the 'look' most promising it can reach, and only where the forecast gives a chance of success of 'success' or better, a gain of 'worth' aircraft or more, and bomber losses of no more than 'loss'. 'rail' is what a province with a junction and no factory is worth beside one with industry. It flies up to 'sweeps' fights for the sky a month, over front where its fighters go in at 'sky' times the odds that win it; 'skyWorth' is what the sky over an army's front is worth to it, in aircraft. The harder levels replace share, least, loss and rail for a rival (difficulty.json, bombing); the easier ones cut a rival's share. 'sour' is how a staff gives up a poor trade: a raid on factories that loses 'dear' aircraft or more and is worth less than 'trade' for each one lost, 'times' running on the same target, is not flown there again for 'rest' months (a wrecked factory or a cut railway makes it a good month). 'beach' is for a player who has named a crossing as their plan and handed the air war to the staff: it brings fighter groups up to airfields within reach of the beach, up to 'monthly' a month, until 'groups' are in reach, leaves at least 'home' guarding the homeland, and puts none on an airfield that is already full; and it sends every fit fighter group in reach up together to fight for the sky over the beach in any month it expects to win it, at 'sky' times the odds that win a sky (a staff's own offensives keep the wider margin above). A computer nation's own staff does not use it.",
       escortReady: 0.5,
       raids: { share: 0.34, least: 60, loss: 0.1, rail: 0.25, ready: 0.6, success: 0.55, look: 4, worth: 15, sweeps: 1, sky: 1.2, skyWorth: 150, sour: { trade: 8, dear: 5, times: 3, rest: 12 }, beach: { groups: 8, home: 2, monthly: 2, sky: 1 } }
+    }
+  };
+
+  // ../../data/campaign/air-names.json
+  var air_names_default = {
+    _about: "Ruling 220 (log b352, b359): each country's ladder of air formation names with the real strength of each rung in aircraft, by the historian (historian/air-formation-names-220.json, 17 November 2026). An air group takes, once, as it is formed, the name of the rung nearest its full strength: near is between half and twice the rung's strength, the nearest by ratio; where no rung is near, the plain form of airwar.json's groups.names._default. Tokens: {n} the number, {nth} the English ordinal, {n+K} the number plus K, {nth_fr} the French ordinal (1re, 1er before a régiment), {nth_nl} the Dutch (1e). Rows with from or until (months from 1, September 1939) hold only then; rows 'in exile' hold only while the country's homeland is lost, and then only they. Japan: JAP_navy for groups based on the provinces named in navyBases (none on the map yet), JAP elsewhere.",
+    near: [
+      0.5,
+      2
+    ],
+    navyBases: [],
+    ladders: {
+      GER: [
+        {
+          rung: "Gruppe",
+          ftr: 40,
+          bmr: 30,
+          form: {
+            ftr: "Jagdgruppe {n}",
+            bmr: "Kampfgruppe {n}"
+          }
+        },
+        {
+          rung: "Geschwader",
+          ftr: 120,
+          bmr: 90,
+          form: {
+            ftr: "Jagdgeschwader {n}",
+            bmr: "Kampfgeschwader {n}"
+          }
+        },
+        {
+          rung: "Division",
+          ftr: 250,
+          bmr: 250,
+          form: {
+            ftr: "{n}. Jagddivision",
+            bmr: "{n}. Fliegerdivision"
+          }
+        }
+      ],
+      UK: [
+        {
+          rung: "squadron",
+          ftr: 16,
+          bmr: 16,
+          form: {
+            ftr: "No. {n} Squadron",
+            bmr: "No. {n} Squadron"
+          }
+        },
+        {
+          rung: "wing",
+          ftr: 48,
+          bmr: 48,
+          form: {
+            ftr: "No. {n} Wing",
+            bmr: "No. {n} Wing"
+          }
+        },
+        {
+          rung: "group",
+          ftr: 250,
+          bmr: 250,
+          form: {
+            ftr: "No. {n} Group",
+            bmr: "No. {n} Group"
+          }
+        }
+      ],
+      CAN: [
+        {
+          rung: "squadron",
+          ftr: 16,
+          bmr: 16,
+          form: {
+            ftr: "No. {n} Squadron RCAF",
+            bmr: "No. {n} Squadron RCAF"
+          }
+        },
+        {
+          rung: "wing",
+          ftr: 48,
+          bmr: 48,
+          form: {
+            ftr: "No. {n} Wing RCAF",
+            bmr: "No. {n} Wing RCAF"
+          }
+        },
+        {
+          rung: "group",
+          ftr: 250,
+          bmr: 250,
+          form: {
+            ftr: "No. {n} Group RCAF",
+            bmr: "No. {n} (RCAF) Group"
+          }
+        }
+      ],
+      AUS: [
+        {
+          rung: "squadron",
+          ftr: 18,
+          bmr: 18,
+          form: {
+            ftr: "No. {n} Squadron RAAF",
+            bmr: "No. {n} Squadron RAAF"
+          }
+        },
+        {
+          rung: "wing",
+          ftr: 60,
+          bmr: 60,
+          form: {
+            ftr: "No. {n} Wing RAAF",
+            bmr: "No. {n} Wing RAAF"
+          }
+        },
+        {
+          rung: "operational group",
+          ftr: 200,
+          bmr: 200,
+          form: {
+            ftr: "No. {n} Operational Group RAAF",
+            bmr: "No. {n} Operational Group RAAF"
+          },
+          from: 37
+        }
+      ],
+      NZL: [
+        {
+          rung: "squadron",
+          ftr: 18,
+          bmr: 18,
+          form: {
+            ftr: "No. {n} Squadron RNZAF",
+            bmr: "No. {n} Squadron RNZAF"
+          }
+        },
+        {
+          rung: "group",
+          ftr: 100,
+          bmr: 100,
+          form: {
+            ftr: "No. {n} Group RNZAF",
+            bmr: "No. {n} Group RNZAF"
+          }
+        }
+      ],
+      SAF: [
+        {
+          rung: "squadron",
+          ftr: 18,
+          bmr: 18,
+          form: {
+            ftr: "No. {n} Squadron SAAF",
+            bmr: "No. {n} Squadron SAAF"
+          }
+        },
+        {
+          rung: "wing",
+          ftr: 50,
+          bmr: 50,
+          form: {
+            ftr: "No. {n} Wing SAAF",
+            bmr: "No. {n} Wing SAAF"
+          }
+        }
+      ],
+      FRA: [
+        {
+          rung: "groupe",
+          ftr: 26,
+          bmr: 12,
+          form: {
+            ftr: "Groupe de Chasse I/{n}",
+            bmr: "Groupe de Bombardement I/{n}"
+          }
+        },
+        {
+          rung: "escadre",
+          ftr: 52,
+          bmr: 24,
+          form: {
+            ftr: "{nth_fr} Escadre de Chasse",
+            bmr: "{nth_fr} Escadre de Bombardement"
+          }
+        },
+        {
+          rung: "groupement",
+          ftr: 130,
+          bmr: 60,
+          form: {
+            ftr: "Groupement de Chasse {n}",
+            bmr: "Groupement de Bombardement {n}"
+          }
+        }
+      ],
+      VIC: [
+        {
+          rung: "groupe",
+          ftr: 26,
+          bmr: 12,
+          form: {
+            ftr: "Groupe de Chasse I/{n}",
+            bmr: "Groupe de Bombardement I/{n}"
+          }
+        },
+        {
+          rung: "escadre",
+          ftr: 52,
+          bmr: 24,
+          form: {
+            ftr: "{nth_fr} Escadre de Chasse",
+            bmr: "{nth_fr} Escadre de Bombardement"
+          }
+        }
+      ],
+      ITA: [
+        {
+          rung: "gruppo",
+          ftr: 27,
+          bmr: 18,
+          form: {
+            ftr: "{n}° Gruppo Caccia Terrestre",
+            bmr: "{n}° Gruppo Bombardamento Terrestre"
+          }
+        },
+        {
+          rung: "stormo",
+          ftr: 54,
+          bmr: 36,
+          form: {
+            ftr: "{n}° Stormo Caccia Terrestre",
+            bmr: "{n}° Stormo Bombardamento Terrestre"
+          }
+        },
+        {
+          rung: "brigata",
+          ftr: 110,
+          bmr: 75,
+          form: {
+            ftr: "{n}ª Brigata Aerea",
+            bmr: "{n}ª Brigata Aerea"
+          }
+        },
+        {
+          rung: "divisione",
+          ftr: 220,
+          bmr: 150,
+          form: {
+            ftr: "{n}ª Divisione Aerea",
+            bmr: "{n}ª Divisione Aerea"
+          }
+        }
+      ],
+      SOV: [
+        {
+          rung: "regiment",
+          ftr: 60,
+          bmr: 60,
+          form: {
+            ftr: "{nth} Fighter Aviation Regiment",
+            bmr: "{nth} Bomber Aviation Regiment"
+          },
+          until: 24
+        },
+        {
+          rung: "regiment",
+          ftr: 32,
+          bmr: 32,
+          form: {
+            ftr: "{nth} Fighter Aviation Regiment",
+            bmr: "{nth} Bomber Aviation Regiment"
+          },
+          from: 25
+        },
+        {
+          rung: "division",
+          ftr: 250,
+          bmr: 250,
+          form: {
+            ftr: "{nth} Fighter Aviation Division",
+            bmr: "{nth} Bomber Aviation Division"
+          },
+          until: 24
+        },
+        {
+          rung: "division",
+          ftr: 100,
+          bmr: 100,
+          form: {
+            ftr: "{nth} Fighter Aviation Division",
+            bmr: "{nth} Bomber Aviation Division"
+          },
+          from: 25
+        },
+        {
+          rung: "corps",
+          ftr: 250,
+          bmr: 250,
+          form: {
+            ftr: "{nth} Fighter Aviation Corps",
+            bmr: "{nth} Bomber Aviation Corps"
+          },
+          from: 37
+        }
+      ],
+      USA: [
+        {
+          rung: "squadron",
+          ftr: 25,
+          bmr: 12,
+          form: {
+            ftr: "{nth} Pursuit Squadron",
+            bmr: "{nth} Bombardment Squadron"
+          },
+          until: 32
+        },
+        {
+          rung: "squadron",
+          ftr: 25,
+          bmr: 12,
+          form: {
+            ftr: "{nth} Fighter Squadron",
+            bmr: "{nth} Bombardment Squadron"
+          },
+          from: 33
+        },
+        {
+          rung: "group",
+          ftr: 75,
+          bmr: 48,
+          form: {
+            ftr: "{nth} Pursuit Group",
+            bmr: "{nth} Bombardment Group"
+          },
+          until: 32
+        },
+        {
+          rung: "group",
+          ftr: 75,
+          bmr: 48,
+          form: {
+            ftr: "{nth} Fighter Group",
+            bmr: "{nth} Bombardment Group"
+          },
+          from: 33
+        },
+        {
+          rung: "wing",
+          ftr: 225,
+          bmr: 190,
+          form: {
+            ftr: "{nth} Fighter Wing",
+            bmr: "{nth} Bombardment Wing"
+          }
+        }
+      ],
+      JAP: [
+        {
+          rung: "sentai",
+          ftr: 36,
+          bmr: 27,
+          form: {
+            ftr: "{nth} Sentai",
+            bmr: "{nth} Sentai"
+          }
+        },
+        {
+          rung: "air brigade",
+          ftr: 100,
+          bmr: 90,
+          form: {
+            ftr: "{nth} Air Brigade",
+            bmr: "{nth} Air Brigade"
+          }
+        },
+        {
+          rung: "air division",
+          ftr: 250,
+          bmr: 250,
+          form: {
+            ftr: "{nth} Air Division",
+            bmr: "{nth} Air Division"
+          }
+        }
+      ],
+      JAP_navy: [
+        {
+          rung: "kokutai",
+          ftr: 54,
+          bmr: 36,
+          form: {
+            ftr: "{n+200} Air Group",
+            bmr: "{n+700} Air Group"
+          }
+        },
+        {
+          rung: "air flotilla",
+          ftr: 150,
+          bmr: 150,
+          form: {
+            ftr: "{nth} Air Flotilla",
+            bmr: "{nth} Air Flotilla"
+          }
+        }
+      ],
+      POL: [
+        {
+          rung: "eskadra",
+          ftr: 10,
+          bmr: 9,
+          form: {
+            ftr: "{n}. Eskadra Myśliwska",
+            bmr: "{n}. Eskadra Bombowa"
+          }
+        },
+        {
+          rung: "dywizjon",
+          ftr: 21,
+          bmr: 18,
+          form: {
+            ftr: "{n}. Dywizjon Myśliwski",
+            bmr: "{n}. Dywizjon Bombowy"
+          }
+        },
+        {
+          rung: "brigade",
+          ftr: 54,
+          bmr: 86,
+          form: {
+            ftr: "Brygada Pościgowa",
+            bmr: "Brygada Bombowa"
+          }
+        },
+        {
+          rung: "squadron in exile",
+          ftr: 16,
+          bmr: 16,
+          form: {
+            ftr: "No. {n+301} (Polish) Squadron",
+            bmr: "No. {n+299} (Polish) Squadron"
+          },
+          from: 11
+        },
+        {
+          rung: "wing in exile",
+          ftr: 48,
+          bmr: 48,
+          form: {
+            ftr: "No. {n+130} (Polish) Wing",
+            bmr: "No. {n+130} (Polish) Wing"
+          },
+          from: 11
+        }
+      ],
+      SVK: [
+        {
+          rung: "letka",
+          ftr: 12,
+          bmr: 9,
+          form: {
+            ftr: "Letka {n}",
+            bmr: "Letka {n}"
+          }
+        }
+      ],
+      BEL: [
+        {
+          rung: "groupe",
+          ftr: 28,
+          bmr: 22,
+          form: {
+            ftr: "Groupe I/{n} Aé",
+            bmr: "Groupe I/{n} Aé"
+          }
+        },
+        {
+          rung: "régiment",
+          ftr: 70,
+          bmr: 55,
+          form: {
+            ftr: "{nth_fr} Régiment d'Aéronautique",
+            bmr: "{nth_fr} Régiment d'Aéronautique"
+          }
+        }
+      ],
+      NED: [
+        {
+          rung: "afdeling",
+          ftr: 10,
+          bmr: 9,
+          form: {
+            ftr: "{nth_nl} Jachtvliegtuigafdeling",
+            bmr: "{nth_nl} Bommenwerpersafdeling"
+          }
+        },
+        {
+          rung: "vliegtuiggroep",
+          ftr: 27,
+          bmr: 27,
+          form: {
+            ftr: "Vliegtuiggroep {n}",
+            bmr: "Vliegtuiggroep {n}"
+          }
+        },
+        {
+          rung: "regiment",
+          ftr: 65,
+          bmr: 65,
+          form: {
+            ftr: "{nth_nl} Luchtvaartregiment",
+            bmr: "{nth_nl} Luchtvaartregiment"
+          }
+        }
+      ],
+      DEN: [
+        {
+          rung: "eskadrille",
+          ftr: 9,
+          bmr: 9,
+          form: {
+            ftr: "{n}. Eskadrille",
+            bmr: "{n}. Eskadrille"
+          }
+        }
+      ],
+      NOR: [
+        {
+          rung: "ving",
+          ftr: 9,
+          bmr: 6,
+          form: {
+            ftr: "Jagevingen",
+            bmr: "Bombevingen"
+          }
+        },
+        {
+          rung: "squadron in exile",
+          ftr: 16,
+          bmr: 16,
+          form: {
+            ftr: "No. {n+330} (Norwegian) Squadron",
+            bmr: "No. {n+332} (Norwegian) Squadron"
+          },
+          from: 10
+        },
+        {
+          rung: "wing in exile",
+          ftr: 36,
+          bmr: 36,
+          form: {
+            ftr: "No. 132 (Norwegian) Wing",
+            bmr: "No. 132 (Norwegian) Wing"
+          },
+          from: 56
+        }
+      ],
+      SWE: [
+        {
+          rung: "flygflottilj",
+          ftr: 36,
+          bmr: 36,
+          form: {
+            ftr: "Flygflottilj F {n}",
+            bmr: "Flygflottilj F {n}"
+          }
+        },
+        {
+          rung: "flygeskader",
+          ftr: 150,
+          bmr: 150,
+          form: {
+            ftr: "{n}. Flygeskadern",
+            bmr: "{n}. Flygeskadern"
+          }
+        }
+      ],
+      FIN: [
+        {
+          rung: "lentolaivue",
+          ftr: 24,
+          bmr: 12,
+          form: {
+            ftr: "Lentolaivue {n}",
+            bmr: "Lentolaivue {n}"
+          }
+        },
+        {
+          rung: "lentorykmentti",
+          ftr: 60,
+          bmr: 40,
+          form: {
+            ftr: "Lentorykmentti {n}",
+            bmr: "Lentorykmentti {n}"
+          }
+        }
+      ],
+      SUI: [
+        {
+          rung: "Fliegerkompanie",
+          ftr: 10,
+          bmr: 10,
+          form: {
+            ftr: "Fliegerkompanie {n}",
+            bmr: "Fliegerkompanie {n}"
+          }
+        },
+        {
+          rung: "Fliegerabteilung",
+          ftr: 30,
+          bmr: 30,
+          form: {
+            ftr: "Fliegerabteilung {n}",
+            bmr: "Fliegerabteilung {n}"
+          }
+        },
+        {
+          rung: "Fliegerregiment",
+          ftr: 90,
+          bmr: 90,
+          form: {
+            ftr: "Fliegerregiment {n}",
+            bmr: "Fliegerregiment {n}"
+          }
+        }
+      ],
+      ESP: [
+        {
+          rung: "grupo",
+          ftr: 27,
+          bmr: 27,
+          form: {
+            ftr: "Grupo {n} de Caza",
+            bmr: "Grupo {n} de Bombardeo"
+          }
+        },
+        {
+          rung: "regimiento",
+          ftr: 55,
+          bmr: 36,
+          form: {
+            ftr: "{n}.º Regimiento de Caza",
+            bmr: "{n}.º Regimiento de Bombardeo"
+          }
+        }
+      ],
+      POR: [
+        {
+          rung: "esquadrilha",
+          ftr: 10,
+          bmr: 9,
+          form: {
+            ftr: "Esquadrilha {n}",
+            bmr: "Esquadrilha {n}"
+          }
+        }
+      ],
+      HUN: [
+        {
+          rung: "század",
+          ftr: 12,
+          bmr: 9,
+          form: {
+            ftr: "{n}. Vadászszázad",
+            bmr: "{n}. Bombázószázad"
+          }
+        },
+        {
+          rung: "osztály",
+          ftr: 36,
+          bmr: 27,
+          form: {
+            ftr: "{n}. Vadászosztály",
+            bmr: "{n}. Bombázóosztály"
+          }
+        },
+        {
+          rung: "ezred",
+          ftr: 100,
+          bmr: 60,
+          form: {
+            ftr: "{n}. Vadászrepülő-ezred",
+            bmr: "{n}. Bombázóezred"
+          }
+        }
+      ],
+      ROM: [
+        {
+          rung: "escadrila",
+          ftr: 12,
+          bmr: 9,
+          form: {
+            ftr: "Escadrila {n} Vânătoare",
+            bmr: "Escadrila {n} Bombardament"
+          }
+        },
+        {
+          rung: "grupul",
+          ftr: 30,
+          bmr: 24,
+          form: {
+            ftr: "Grupul {n} Vânătoare",
+            bmr: "Grupul {n} Bombardament"
+          }
+        },
+        {
+          rung: "flotila",
+          ftr: 70,
+          bmr: 50,
+          form: {
+            ftr: "Flotila {n} Vânătoare",
+            bmr: "Flotila {n} Bombardament"
+          }
+        },
+        {
+          rung: "gruparea",
+          ftr: 250,
+          bmr: 250,
+          form: {
+            ftr: "Gruparea Aeriană de Luptă",
+            bmr: "Gruparea Aeriană de Luptă"
+          }
+        }
+      ],
+      YUG: [
+        {
+          rung: "grupa",
+          ftr: 25,
+          bmr: 18,
+          form: {
+            ftr: "{n}. Vazduhoplovna Grupa",
+            bmr: "{n}. Vazduhoplovna Grupa"
+          }
+        },
+        {
+          rung: "puk",
+          ftr: 50,
+          bmr: 36,
+          form: {
+            ftr: "{n}. Lovački Puk",
+            bmr: "{n}. Bombarderski Puk"
+          }
+        },
+        {
+          rung: "brigada",
+          ftr: 100,
+          bmr: 70,
+          form: {
+            ftr: "{n}. Vazduhoplovna Brigada",
+            bmr: "{n}. Vazduhoplovna Brigada"
+          }
+        }
+      ],
+      BUL: [
+        {
+          rung: "orlyak",
+          ftr: 24,
+          bmr: 18,
+          form: {
+            ftr: "{n}. Iztrebitelen Orlyak",
+            bmr: "{n}. Bombardirovachen Orlyak"
+          }
+        },
+        {
+          rung: "polk",
+          ftr: 70,
+          bmr: 50,
+          form: {
+            ftr: "{n}. Iztrebitelen Polk",
+            bmr: "{n}. Bombardirovachen Polk"
+          }
+        }
+      ],
+      GRE: [
+        {
+          rung: "mira",
+          ftr: 10,
+          bmr: 9,
+          form: {
+            ftr: "{n+20} Mira Dioxeos",
+            bmr: "{n+30} Mira Vomvardismou"
+          }
+        },
+        {
+          rung: "squadron in exile",
+          ftr: 16,
+          bmr: 16,
+          form: {
+            ftr: "No. {n+334} (Hellenic) Squadron",
+            bmr: "No. {n+12} (Hellenic) Squadron"
+          },
+          from: 20
+        }
+      ],
+      TUR: [
+        {
+          rung: "bölük",
+          ftr: 9,
+          bmr: 9,
+          form: {
+            ftr: "{n}. Bölük",
+            bmr: "{n}. Bölük"
+          }
+        },
+        {
+          rung: "alay",
+          ftr: 60,
+          bmr: 60,
+          form: {
+            ftr: "{n}. Hava Alayı",
+            bmr: "{n}. Hava Alayı"
+          }
+        }
+      ],
+      IRQ: [
+        {
+          rung: "squadron",
+          ftr: 10,
+          bmr: 10,
+          form: {
+            ftr: "No. {n} Squadron RIrAF",
+            bmr: "No. {n} Squadron RIrAF"
+          }
+        }
+      ],
+      IRN: [
+        {
+          rung: "squadron",
+          ftr: 12,
+          bmr: 12,
+          form: {
+            ftr: "{nth} Squadron",
+            bmr: "{nth} Squadron"
+          }
+        },
+        {
+          rung: "regiment",
+          ftr: 40,
+          bmr: 40,
+          form: {
+            ftr: "{nth} Air Regiment",
+            bmr: "{nth} Air Regiment"
+          }
+        }
+      ],
+      AFG: [
+        {
+          rung: "squadron",
+          ftr: 10,
+          bmr: 10,
+          form: {
+            ftr: "{nth} Squadron",
+            bmr: "{nth} Squadron"
+          }
+        }
+      ],
+      CHN: [
+        {
+          rung: "squadron",
+          ftr: 9,
+          bmr: 9,
+          form: {
+            ftr: "{nth} Pursuit Squadron",
+            bmr: "{nth} Bombardment Squadron"
+          }
+        },
+        {
+          rung: "group",
+          ftr: 30,
+          bmr: 27,
+          form: {
+            ftr: "{nth} Pursuit Group",
+            bmr: "{nth} Bombardment Group"
+          },
+          until: 47
+        },
+        {
+          rung: "group",
+          ftr: 30,
+          bmr: 27,
+          form: {
+            ftr: "{nth} Fighter Group",
+            bmr: "{nth} Bombardment Group"
+          },
+          from: 48
+        },
+        {
+          rung: "wing",
+          ftr: 100,
+          bmr: 100,
+          form: {
+            ftr: "Chinese-American Composite Wing",
+            bmr: "Chinese-American Composite Wing"
+          },
+          from: 50
+        }
+      ],
+      THA: [
+        {
+          rung: "squadron",
+          ftr: 12,
+          bmr: 9,
+          form: {
+            ftr: "{nth} Squadron",
+            bmr: "{nth} Squadron"
+          }
+        },
+        {
+          rung: "wing",
+          ftr: 36,
+          bmr: 27,
+          form: {
+            ftr: "{nth} Wing",
+            bmr: "{nth} Wing"
+          }
+        }
+      ],
+      ARG: [
+        {
+          rung: "grupo",
+          ftr: 25,
+          bmr: 18,
+          form: {
+            ftr: "Grupo {n} de Caza",
+            bmr: "Grupo {n} de Bombardeo"
+          }
+        },
+        {
+          rung: "regimiento",
+          ftr: 50,
+          bmr: 40,
+          form: {
+            ftr: "Regimiento Aéreo {n}",
+            bmr: "Regimiento Aéreo {n}"
+          }
+        }
+      ],
+      BRA: [
+        {
+          rung: "grupo",
+          ftr: 25,
+          bmr: 15,
+          form: {
+            ftr: "{n}º Grupo de Aviação de Caça",
+            bmr: "{n}º Grupo de Bombardeio"
+          }
+        },
+        {
+          rung: "regimento",
+          ftr: 50,
+          bmr: 50,
+          form: {
+            ftr: "{n}º Regimento de Aviação",
+            bmr: "{n}º Regimento de Aviação"
+          },
+          until: 16
+        }
+      ],
+      MEX: [
+        {
+          rung: "escuadrón",
+          ftr: 25,
+          bmr: 25,
+          form: {
+            ftr: "Escuadrón {n}",
+            bmr: "Escuadrón {n}"
+          }
+        },
+        {
+          rung: "grupo",
+          ftr: 50,
+          bmr: 50,
+          form: {
+            ftr: "Grupo Aéreo {n}",
+            bmr: "Grupo Aéreo {n}"
+          }
+        }
+      ],
+      CHL: [
+        {
+          rung: "grupo",
+          ftr: 20,
+          bmr: 15,
+          form: {
+            ftr: "Grupo de Aviación N.º {n}",
+            bmr: "Grupo de Aviación N.º {n}"
+          }
+        }
+      ],
+      PER: [
+        {
+          rung: "escuadrón",
+          ftr: 12,
+          bmr: 9,
+          form: {
+            ftr: "Escuadrón de Caza N.º {n}",
+            bmr: "Escuadrón de Bombardeo N.º {n}"
+          }
+        },
+        {
+          rung: "grupo",
+          ftr: 30,
+          bmr: 30,
+          form: {
+            ftr: "Grupo Aéreo N.º {n}",
+            bmr: "Grupo Aéreo N.º {n}"
+          }
+        }
+      ],
+      COL: [
+        {
+          rung: "escuadrilla",
+          ftr: 9,
+          bmr: 9,
+          form: {
+            ftr: "Escuadrilla {n}",
+            bmr: "Escuadrilla {n}"
+          }
+        }
+      ],
+      VEN: [
+        {
+          rung: "escuadrilla",
+          ftr: 9,
+          bmr: 9,
+          form: {
+            ftr: "Escuadrilla {n}",
+            bmr: "Escuadrilla {n}"
+          }
+        }
+      ]
     }
   };
 
@@ -3884,18 +4912,18 @@
     ore: { to: "GER", source: "Norrbotten", share: 0.08, iceMonths: [12, 1, 2, 3, 4], winterPort: "Narvik", summerZones: ["bothnia", "baltic"] },
     fleets: [
       { nat: "UK", name: "Home Fleet", base: "Highlands", port: "Scapa Flow", home: "nsea", zone: "nsea", duty: "patrol", admiral: "Charles Forbes", ships: { bb: 7, cv: 2, ca: 12, dd: 24, ss: 0 } },
-      { nat: "UK", name: "Western Approaches Command", base: "Cornwall", port: "Plymouth", home: "wapp", zone: "wapp", duty: "patrol", tied: true, admiral: "Martin Dunbar-Nasmith", ships: { bb: 0, cv: 0, ca: 3, dd: 36, ss: 0 } },
-      { nat: "UK", name: "Dover Command", base: "Kent", port: "Dover", home: "channel", zone: "channel", duty: "patrol", tied: true, admiral: "Bertram Ramsay", ships: { bb: 0, cv: 0, ca: 2, dd: 18, ss: 0 } },
+      { nat: "UK", name: "Western Approaches Fleet", base: "Cornwall", port: "Plymouth", home: "wapp", zone: "wapp", duty: "patrol", tied: true, admiral: "Martin Dunbar-Nasmith", ships: { bb: 0, cv: 0, ca: 3, dd: 36, ss: 0 } },
+      { nat: "UK", name: "Dover Fleet", base: "Kent", port: "Dover", home: "channel", zone: "channel", duty: "patrol", tied: true, admiral: "Bertram Ramsay", ships: { bb: 0, cv: 0, ca: 2, dd: 18, ss: 0 } },
       { nat: "UK", name: "Mediterranean Fleet", base: "Alexandria", port: "Alexandria", home: "emed", zone: "emed", duty: "patrol", admiral: "Andrew Cunningham", ships: { bb: 3, cv: 1, ca: 7, dd: 22, ss: 8 } },
       { nat: "UK", name: "Force H", from: 11, base: "Gibraltar", port: "Gibraltar", home: "iberia", zone: "iberia", duty: "patrol", admiral: "James Somerville", ships: { bb: 2, cv: 1, ca: 2, dd: 9, ss: 0 } },
       { nat: "GER", name: "Battle Fleet", base: "Bremen", port: "Wilhelmshaven", home: "nsea", zone: "nsea", duty: "port", admiral: "Wilhelm Marschall", ships: { bb: 2, cv: 0, ca: 8, dd: 20, ss: 0 } },
-      { nat: "GER", name: "U-boat Arm", base: "Bremen", port: "Wilhelmshaven", home: "nsea", zone: "wapp", duty: "raid", admiral: "Karl Donitz", ships: { bb: 0, cv: 0, ca: 0, dd: 0, ss: 27 } },
-      { nat: "GER", name: "Baltic Station", base: "Stettin", port: "Swinemunde", home: "baltic", zone: "baltic", duty: "patrol", tied: true, admiral: "Rolf Carls", ships: { bb: 0, cv: 0, ca: 2, dd: 6, ss: 6 } },
+      { nat: "GER", name: "U-boat Fleet", base: "Bremen", port: "Wilhelmshaven", home: "nsea", zone: "wapp", duty: "raid", admiral: "Karl Donitz", ships: { bb: 0, cv: 0, ca: 0, dd: 0, ss: 27 } },
+      { nat: "GER", name: "Swinemunde Fleet", base: "Stettin", port: "Swinemunde", home: "baltic", zone: "baltic", duty: "patrol", tied: true, admiral: "Rolf Carls", ships: { bb: 0, cv: 0, ca: 2, dd: 6, ss: 6 } },
       { nat: "FRA", name: "Atlantic Fleet", base: "Brittany", port: "Brest", home: "biscay", zone: "biscay", duty: "patrol", admiral: "Marcel Gensoul", ships: { bb: 2, cv: 1, ca: 3, dd: 10, ss: 12 } },
       { nat: "FRA", name: "Mediterranean Fleet", base: "Marseille", port: "Toulon", home: "wmed", zone: "wmed", duty: "patrol", admiral: "Jean-Pierre Esteva", ships: { bb: 3, cv: 0, ca: 10, dd: 28, ss: 40 } },
       { nat: "ITA", name: "1st Fleet", base: "Apulia", port: "Taranto", home: "ionian", zone: "ionian", duty: "patrol", admiral: "Inigo Campioni", ships: { bb: 4, cv: 0, ca: 12, dd: 30, ss: 0 } },
       { nat: "ITA", name: "2nd Fleet", base: "Naples", port: "Naples", home: "tyrr", zone: "tyrr", duty: "patrol", admiral: "Riccardo Paladini", ships: { bb: 0, cv: 0, ca: 7, dd: 25, ss: 0 } },
-      { nat: "ITA", name: "Submarine Command", base: "Liguria", port: "La Spezia", home: "tyrr", zone: "wmed", duty: "raid", admiral: "Mario Falangola", ships: { bb: 0, cv: 0, ca: 0, dd: 0, ss: 60 } },
+      { nat: "ITA", name: "Submarine Fleet", base: "Liguria", port: "La Spezia", home: "tyrr", zone: "wmed", duty: "raid", admiral: "Mario Falangola", ships: { bb: 0, cv: 0, ca: 0, dd: 0, ss: 60 } },
       { nat: "SOV", name: "Baltic Fleet", base: "Leningrad", port: "Kronstadt", home: "finland", zone: "finland", duty: "patrol", tied: true, admiral: "Vladimir Tributs", ships: { bb: 2, cv: 0, ca: 2, dd: 20, ss: 50 } },
       { nat: "SOV", name: "Black Sea Fleet", base: "Crimea", port: "Sevastopol", home: "black", zone: "black", duty: "patrol", tied: true, admiral: "Filipp Oktyabrsky", ships: { bb: 1, cv: 0, ca: 5, dd: 17, ss: 44 } },
       { nat: "SOV", name: "Northern Fleet", base: "Murmansk", port: "Polyarny", home: "barents", zone: "barents", duty: "patrol", tied: true, admiral: "Arseniy Golovko", ships: { bb: 0, cv: 0, ca: 0, dd: 8, ss: 15 } },
@@ -3903,19 +4931,19 @@
       { nat: "POL", name: "Polish Navy", base: "Danzig Corridor", port: "Gdynia", home: "baltic", zone: "baltic", duty: "patrol", tied: true, admiral: "Jozef Unrug", ships: { bb: 0, cv: 0, ca: 0, dd: 4, ss: 5 } }
     ],
     building: [
-      { nat: "GER", fleet: "U-boat Arm", cls: "ss", from: 2, to: 12, perMonth: 2 },
-      { nat: "GER", fleet: "U-boat Arm", cls: "ss", from: 13, to: 18, perMonth: 6 },
-      { nat: "GER", fleet: "U-boat Arm", cls: "ss", from: 19, to: 28, perMonth: 13 },
-      { nat: "GER", fleet: "U-boat Arm", cls: "ss", from: 29, to: 99, perMonth: 18 },
-      { nat: "UK", fleet: "Western Approaches Command", cls: "dd", from: 6, to: 12, perMonth: 4 },
-      { nat: "UK", fleet: "Western Approaches Command", cls: "dd", from: 13, to: 99, perMonth: 8 },
+      { nat: "GER", fleet: "U-boat Fleet", cls: "ss", from: 2, to: 12, perMonth: 2 },
+      { nat: "GER", fleet: "U-boat Fleet", cls: "ss", from: 13, to: 18, perMonth: 6 },
+      { nat: "GER", fleet: "U-boat Fleet", cls: "ss", from: 19, to: 28, perMonth: 13 },
+      { nat: "GER", fleet: "U-boat Fleet", cls: "ss", from: 29, to: 99, perMonth: 18 },
+      { nat: "UK", fleet: "Western Approaches Fleet", cls: "dd", from: 6, to: 12, perMonth: 4 },
+      { nat: "UK", fleet: "Western Approaches Fleet", cls: "dd", from: 13, to: 99, perMonth: 8 },
       { nat: "UK", fleet: "Home Fleet", cls: "dd", from: 10, to: 99, perMonth: 1 }
     ],
     arrivals: [
       [10, "UK", "Home Fleet", { cv: 1 }, "the carrier Illustrious"],
-      [13, "UK", "Western Approaches Command", { dd: 12 }, "the first of fifty old American destroyers"],
-      [14, "UK", "Western Approaches Command", { dd: 12 }, "more of the American destroyers"],
-      [15, "UK", "Western Approaches Command", { dd: 12 }, "more of the American destroyers"],
+      [13, "UK", "Western Approaches Fleet", { dd: 12 }, "the first of fifty old American destroyers"],
+      [14, "UK", "Western Approaches Fleet", { dd: 12 }, "more of the American destroyers"],
+      [15, "UK", "Western Approaches Fleet", { dd: 12 }, "more of the American destroyers"],
       [16, "UK", "Home Fleet", { bb: 1 }, "the battleship King George V"],
       [16, "UK", "Mediterranean Fleet", { cv: 1 }, "the carrier Formidable"],
       [21, "UK", "Home Fleet", { bb: 1, cv: 1 }, "the battleship Prince of Wales and the carrier Victorious"],
@@ -4987,7 +6015,7 @@
       leadership: { label: "Leadership", steady: 0.06, rally: 0.06, blurb: "Each point means 6% less cohesion lost in battle and 6% more regained each month." }
     },
     traits: {
-      panzer_leader: { label: "Panzer leader", good: true, effect: "Fast troops under him move an extra week every month and attack 6% harder.", earned: "Three decisive victories at the head of fast troops.", attack: 1.06, ap: 1, needs: ["fast", 3], not: ["hard_charger"], mobile: true },
+      panzer_leader: { label: "Leader of fast troops", good: true, effect: "Fast troops under him move an extra week every month and attack 6% harder.", earned: "Three decisive victories at the head of fast troops.", attack: 1.06, ap: 1, needs: ["fast", 3], not: ["hard_charger"], mobile: true },
       hard_charger: { label: "Hard charger", good: true, effect: "Presses an attack home: 6% harder in attack.", earned: "Three attacks won when the odds were close.", attack: 1.06, needs: ["close", 3], not: ["panzer_leader", "cautious"] },
       encirclement_master: { label: "Encirclement master", good: true, effect: "Attacks 15% harder against defenders who have no line of retreat.", earned: "Three victories that ended with the defenders laying down their arms.", pocket: 1.15, needs: ["enc", 3] },
       iron_defender: { label: "Iron defender", good: true, effect: "His corps is 6% stronger in defence.", earned: "Three positions held against a stronger attacker.", defence: 1.06, needs: ["held", 3], not: ["cautious"] },
@@ -8809,6 +9837,19 @@
     if (e.total < NAVY.closed.min) return false;
     return e.total >= NAVY.closed.ratio * seaSide(g2, z, nat, false).total;
   }
+  function opensAt(g2, z, nat) {
+    if (!closedTo(g2, z, nat)) return 0;
+    const e = seaSide(g2, z, nat, true).total;
+    return Math.max(Math.floor(e / NAVY.closed.ratio), Math.floor(Math.round(e) / NAVY.closed.ratio)) + 1;
+  }
+  function closedLine(g2, z, nat) {
+    const e = seaSide(g2, z, nat, true), own = seaSide(g2, z, nat, false);
+    const foeCoast = g2.seas[z].coast.some((id) => {
+      const n = g2.nations[g2.regions[id].ctrl];
+      return !!n && n.alive && atWar(g2, g2.regions[id].ctrl, nat) && skyOver(g2, id) === null;
+    });
+    return `The ${g2.seas[z].name} is closed to your troopships: the enemy has ${round2(e.total)} there to your ${round2(own.total)}, and ${opensAt(g2, z, nat)} would open it. Put a fleet to sea there, or ${foeCoast && e.air >= 0.5 ? "win the sky over the enemy's coast on it" : "beat the enemy's fleets in it"}.`;
+  }
   function canPass(g2, a, b, nat) {
     const i = g2.gates.findIndex((x) => x.a === a && x.b === b || x.a === b && x.b === a);
     if (i < 0) return true;
@@ -8964,6 +10005,44 @@
     if (lost >= 500) headline(g2, "battle", `${c.name} loses ${lost.toLocaleString("en-US")} men to enemy ships and aircraft on the crossing to ${to.name}.`, c.nat, to.id, { arm: "sea", lost: c.nat });
     return true;
   }
+  function laneBar(g2, nat, from, to, surprise = false) {
+    const range = NAVY.landing.range;
+    const through = seaPath(g2, nat, from, to, { max: range, surprise: true });
+    if (through && !surprise) {
+      const sea = through.find((z) => closedTo(g2, z, nat));
+      if (sea !== void 0) return { kind: "sea", sea };
+      const worst = through.reduce((a, z) => seaRisk(g2, z, nat) > seaRisk(g2, a, nat) ? z : a, through[0]);
+      return { kind: "far", seas: seaPath(g2, nat, from, to)?.length ?? range + 1, ...seaRisk(g2, worst, nat) > 0 ? { round: worst } : {} };
+    }
+    const long = seaPath(g2, nat, from, to, { surprise: true });
+    if (long) return { kind: "far", seas: long.length };
+    const prev = new Int16Array(g2.seas.length).fill(-2);
+    const q = [];
+    for (const z of from.seas) {
+      prev[z] = -1;
+      q.push(z);
+    }
+    for (let i = 0; i < q.length; i++) for (const j of g2.seas[q[i]].adj) if (prev[j] === -2) {
+      prev[j] = q[i];
+      q.push(j);
+    }
+    const end = q.find((z) => to.seas.includes(z));
+    if (end === void 0) return { kind: "none" };
+    const way = [];
+    for (let z = end; z >= 0; z = prev[z]) way.unshift(z);
+    for (let i = 1; i < way.length; i++) {
+      if (canPass(g2, way[i - 1], way[i], nat)) continue;
+      const gate = g2.gates.findIndex((x) => x.a === way[i - 1] && x.b === way[i] || x.a === way[i] && x.b === way[i - 1]);
+      if (gate >= 0) return { kind: "gate", gate };
+    }
+    return { kind: "none" };
+  }
+  function laneWhy(g2, nat, from, to, bar) {
+    if (bar.kind === "sea") return closedLine(g2, bar.sea, nat);
+    if (bar.kind === "far") return `${to.name} is too far for a landing from ${from.name}: troopships cross ${NAVY.landing.range} seas at most, and ${bar.round !== void 0 ? `the safe way round the ${g2.seas[bar.round].name} is longer` : bar.seas > NAVY.landing.range ? `this is ${bar.seas}` : "the safe way round is longer"}.`;
+    if (bar.kind === "gate") return `The ${g2.gates[bar.gate].name} ${/s$/.test(g2.gates[bar.gate].name) ? "are" : "is"} shut to your ships, and no other way leads to ${to.name}.`;
+    return `No sea joins ${from.name} to ${to.name}.`;
+  }
   var surpriseOn = (g2, nat, to) => g2.flags[`war:${nat}:${to.ctrl}`] === g2.turn;
   function whyNotLand(g2, cs, to) {
     if (!cs.length) return "No corps chosen.";
@@ -8991,7 +10070,7 @@
     if (allied(g2, nat, to.ctrl) || !atWar(g2, nat, to.ctrl)) return `${to.name} is not enemy ground.`;
     if (cs.length > STACK) return `No more than ${STACK} corps can go ashore in one place.`;
     if (liftLeft(g2, nat) < cs.length) return liftLeft(g2, nat) ? `There is shipping for only ${liftLeft(g2, nat)} more corps this month.` : "All the shipping is in use this month.";
-    if (!seaPath(g2, nat, from, to, { max: NAVY.landing.range, surprise: surpriseOn(g2, nat, to) })) return "No sea lane to that coast is open: it is too far, or the enemy holds the sea between.";
+    if (!seaPath(g2, nat, from, to, { max: NAVY.landing.range, surprise: surpriseOn(g2, nat, to) })) return laneWhy(g2, nat, from, to, laneBar(g2, nat, from, to, surpriseOn(g2, nat, to)));
     if (!surpriseOn(g2, nat, to) && skyDenies(g2, nat, to.id)) return `${g2.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`;
     return null;
   }
@@ -9157,7 +10236,11 @@
   }
   function planLanding(g2, cs, to) {
     const why = whyNotLand(g2, cs, to);
-    if (why) return { why, surprise: false, path: [], risk: 0, defended: false, assess: null, sky: false, sortie: 0 };
+    if (why) {
+      const from = g2.regions[cs[0].reg], sur = surpriseOn(g2, cs[0].nat, to);
+      const lane = !airborne(cs) && from.port && to.seas.length > 0 && !seaPath(g2, cs[0].nat, from, to, { max: NAVY.landing.range, surprise: sur }) && why === laneWhy(g2, cs[0].nat, from, to, laneBar(g2, cs[0].nat, from, to, sur));
+      return { why, surprise: false, path: [], risk: 0, defended: false, assess: null, sky: false, sortie: 0, ...lane ? { bar: laneBar(g2, cs[0].nat, from, to, sur) } : {} };
+    }
     const nat = cs[0].nat;
     const defended = hostileUnits(g2, to, nat).length > 0;
     const sky = skyOver(g2, to.id);
@@ -9270,9 +10353,9 @@
     const account = crossingAccount(g2, nat, path, to, reach3);
     const barred3 = n.sealift <= 0 ? "lift" : shut >= 0 ? "sea" : account.sky === "denied" ? "sky" : null;
     const bar = barred3 === "lift" ? `${n.name} has no shipping for a landing. Troopships are laid down in the shipyards.` : barred3 === "sea" ? `The ${g2.seas[shut].name} is closed to your troopships: the enemy is much the stronger there.` : barred3 === "sky" ? `${g2.nations[to.ctrl].adj} fighters hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.` : null;
-    return { from, to, path, bar, barred: barred3, account };
+    return { from, to, path, bar, barred: barred3, account, ...barred3 === "sea" ? { shut } : {} };
   }
-  function crossingsOf2(g2, nat) {
+  function crossingsOf2(g2, nat, o = {}) {
     const n = g2.nations[nat];
     if (!seaWar(g2) || !n?.alive || !n.atWar.length) return [];
     const troops = (r) => r.units.reduce((s, u) => s + (u.nat === nat && !u.dead && u.kind !== "fort" ? 1 : 0), 0);
@@ -9308,7 +10391,7 @@
     for (const [k, coasts] of shores) {
       const [owner, foe, far] = k.split(":");
       const home = owner === foe && far === "0";
-      let best = null, hope = null;
+      let best = null, hope = null, short = null;
       const lanes2 = /* @__PURE__ */ new Map();
       for (const c of coasts) lanes2.set(c.seas.join(","), [...lanes2.get(c.seas.join(",")) ?? [], c]);
       for (const p of ports.values()) {
@@ -9320,6 +10403,7 @@
             const row2 = { ...look, foe, owner, home, planned: false };
             if (better2(row2, best)) best = row2;
             if (won(row2) < Infinity && (!hope || won(row2) < won(hope) - 1e-9)) hope = row2;
+            if (o.short && row2.barred === "sea" && (!short || row2.path.length < short.path.length)) short = row2;
           }
         }
       }
@@ -9335,6 +10419,8 @@
       if (best) out.push(best);
       const shown2 = out.filter((x) => x.foe === foe && x.owner === owner && x.home === home);
       if (hope && !shown2.some((x) => x.from === hope.from && x.to === hope.to) && shown2.every((x) => x.bar !== null || won(hope) < x.account.risk - 0.05) && shown2.every((x) => won(hope) < won(x) - 0.05)) out.push({ ...hope, hope: true });
+      const listed6 = out.filter((x) => x.foe === foe && x.owner === owner && x.home === home);
+      if (short && listed6.length && listed6.every((x) => x.barred !== "sea" && x.path.length > short.path.length)) out.push({ ...short, short: true });
     }
     return out.sort((a, b) => Number(b.planned) - Number(a.planned) || Number(b.home) - Number(a.home) || Number(a.bar !== null) - Number(b.bar !== null) || a.account.risk - b.account.risk || a.to.id - b.to.id);
   }
@@ -9421,13 +10507,14 @@
     if (!rt) return "There is no such lane.";
     const to = g2.nations[rt.to];
     if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
-    if (!to?.alive || rt.to !== f.nat && !allied(g2, f.nat, rt.to)) return `${cap(rt.name)} feeds ${to?.name ?? rt.to}, which is no ally of ${g2.nations[f.nat].name}.`;
-    if (!to.atWar.length || !g2.nations[f.nat].atWar.length) return `${cap(rt.name)} is not under attack: nobody is at war over it.`;
+    const many = /s$/.test(rt.name);
+    if (!to?.alive || rt.to !== f.nat && !allied(g2, f.nat, rt.to)) return `${cap(rt.name)} ${many ? "feed" : "feeds"} ${to?.name ?? rt.to}, which is no ally of ${g2.nations[f.nat].name}.`;
+    if (!to.atWar.length || !g2.nations[f.nat].atWar.length) return `Not under attack: nobody is at war over ${rt.name}.`;
     const stop = laneStopped(g2, lane);
     if (stop) return `Nothing sails on ${rt.name} now. ${stop.why}`.trim();
     if (escortWorth(f.ships) <= 0) return `The ${f.name} has nothing that can guard a convoy: escorts are destroyers, carriers and cruisers.`;
     const reach3 = fleetReach(g2, f);
-    if (!rt.zones.some((z) => reach3.includes(z))) return `${cap(rt.name)} is out of reach of the ${f.name} from ${f.port}.`;
+    if (!rt.zones.some((z) => reach3.includes(z))) return `${cap(rt.name)} ${many ? "are" : "is"} out of reach of the ${f.name} from ${f.port}.`;
     return null;
   }
   function escort(g2, f, lane) {
@@ -9991,8 +11078,13 @@
     const since = WORLD.dominions?.[patron]?.since?.[nat];
     return since ? `The mother country: ${name} has been a dominion since ${since}.` : `The mother country: ${name} is a dominion.`;
   }
-  function answersOf(patron) {
-    return WORLD.dominions?.[patron]?.answers ?? 0;
+  function answersOf(patron, step2) {
+    const row2 = WORLD.dominions?.[patron];
+    return (step2 ? row2?.steps?.[step2 - 1] : void 0) ?? row2?.answers ?? 0;
+  }
+  function pressData(patron) {
+    const row2 = WORLD.dominions?.[patron];
+    return { europe: row2?.europe ?? [], beside: row2?.beside ?? null, willGone: row2?.willGone ?? 1 / 3 };
   }
   var beyondEurope = (r) => (typeof r === "number" ? r : r.id) >= WORLD_FIRST;
   function attachWorld(g2, fresh4 = true) {
@@ -10401,14 +11493,14 @@
     g2.airFleets.push(f);
     return f;
   }
-  function foundAirFleet(g2, nat, r, name, kind) {
+  function foundAirFleet(g2, nat, r, name, kind, strength2 = 0) {
     const taken2 = (x) => g2.airFleets.some((f2) => f2.name === x);
     let unique = name;
     for (let k = 2; taken2(unique); k++) unique = `${name} ${k}`;
     const f = {
       id: g2.nextAir++,
       nat,
-      name: kind ? groupName(g2, nat, kind) : unique,
+      name: kind ? groupName(g2, nat, kind, strength2, r) : unique,
       base: r.id,
       ftr: 0,
       bmr: 0,
@@ -10429,13 +11521,60 @@
     return f;
   }
   var ordinal = (k) => `${k}${k % 100 >= 11 && k % 100 <= 13 ? "th" : k % 10 === 1 ? "st" : k % 10 === 2 ? "nd" : k % 10 === 3 ? "rd" : "th"}`;
-  function groupName(g2, nat, kind) {
+  var NAMES = air_names_default;
+  var homeLost = (g2, nat) => {
+    const n = g2.nations[nat];
+    return !n || !n.alive || n.capital < 0 || g2.regions[n.capital]?.ctrl !== nat;
+  };
+  function rungsOf(g2, nat, base) {
+    const ladder = (nat === "JAP" && base && NAMES.navyBases.includes(base.name) ? NAMES.ladders.JAP_navy : null) ?? NAMES.ladders[nat] ?? [];
+    const now = ladder.filter((r) => (r.from ?? 1) <= g2.turn && g2.turn <= (r.until ?? Infinity));
+    const exile = now.filter((r) => /in exile/.test(r.rung));
+    return exile.length && homeLost(g2, nat) ? exile : now.filter((r) => !/in exile/.test(r.rung));
+  }
+  function nearestRung(rungs, kind, strength2) {
+    const [lo, hi] = NAMES.near;
+    let best = null, bd = Infinity;
+    for (const r of rungs) {
+      const v = r[kind];
+      if (!(v > 0) || strength2 < lo * v || strength2 > hi * v) continue;
+      const d = Math.abs(Math.log(strength2 / v));
+      if (d < bd) {
+        bd = d;
+        best = r;
+      }
+    }
+    return best;
+  }
+  function formName(form, n) {
+    return form.replace(/\{n\+(\d+)\}/g, (_, k) => String(n + Number(k))).replace(/\{nth_fr\}/g, n === 1 ? /R[ée]giment/i.test(form) ? "1er" : "1re" : `${n}e`).replace(/\{nth_nl\}/g, `${n}e`).replace(/\{nth\}/g, ordinal(n)).replace(/\{n\}/g, String(n));
+  }
+  function groupName(g2, nat, kind, strength2, base) {
+    const taken2 = (x) => g2.airFleets.some((f) => f.nat === nat && f.name === x);
+    const rungs = rungsOf(g2, nat, base);
+    for (let left = rungs; left.length; ) {
+      const r = nearestRung(left, kind, strength2);
+      if (!r) break;
+      const form = r.form[kind];
+      if (!/\{n/.test(form)) {
+        if (!taken2(form)) return form;
+        left = left.filter((x) => x !== r);
+        continue;
+      }
+      const key7 = `agn:${nat}:${kind}:${r.rung}`;
+      let name2;
+      do {
+        g2.flags[key7] = (g2.flags[key7] ?? 0) + 1;
+        name2 = formName(form, g2.flags[key7]);
+      } while (taken2(name2));
+      return name2;
+    }
     const key6 = `agn:${nat}:${kind}`;
     let name;
     do {
       g2.flags[key6] = (g2.flags[key6] ?? 0) + 1;
-      name = (AIRWAR.groups.names[nat] ?? AIRWAR.groups.names._default)[kind].replace("{nth}", ordinal(g2.flags[key6])).replace("{n}", String(g2.flags[key6]));
-    } while (g2.airFleets.some((f) => f.nat === nat && f.name === name));
+      name = formName(AIRWAR.groups.names._default[kind], g2.flags[key6]);
+    } while (taken2(name));
     return name;
   }
   function splitFleet(g2, f) {
@@ -10482,7 +11621,7 @@
       if (i > 0) g2.airFleets.splice(at + i, 0, grp);
       out.push(grp);
     });
-    if (out.length > 1) for (const grp of out) grp.name = groupName(g2, f.nat, grp.kind);
+    if (out.length > 1) for (const grp of out) grp.name = groupName(g2, f.nat, grp.kind, Math.max(grp.est[grp.kind], grp[grp.kind]), g2.regions[grp.base] ?? null);
     return out;
   }
   function openWorldAir(g2) {
@@ -11121,7 +12260,7 @@
       const nation = total > 0 ? cut * (r.fac / total) : 0;
       raid(g2, nat, r.ctrl, nation);
       value += airWar(g2) && r.fac <= 0 ? 0 : cut * 1e3;
-      result = r.fac > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${(nation * 100).toFixed(1)}% of ${g2.nations[r.ctrl].adj} production.` : "";
+      result = r.fac > 0 && cut > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g2.nations[r.ctrl].adj} production.` : "";
       if (bombFactories(g2, nat, r, cut)) {
         value += 300;
         notable2 = true;
@@ -11184,7 +12323,7 @@
       const worst = Object.entries(hurt).sort((x, y) => y[1] - x[1])[0];
       shipsSunk = shipCount(sunk);
       value += shipCount(sunk) * 30 + (worst ? worst[1] * 3e3 : 0);
-      result = [shipCount(sunk) ? `${cap2(shipList(sunk))} sunk.` : "", worst ? `Merchant shipping losses cost ${g2.nations[worst[0]].name} ${(worst[1] * 100).toFixed(1)}% of a month's production.` : ""].filter(Boolean).join(" ") || "The bombers found little to hit.";
+      result = [shipCount(sunk) ? `${cap2(shipList(sunk))} sunk.` : "", worst ? `Merchant shipping losses cost ${g2.nations[worst[0]].name} ${tenthPct(worst[1])} of a month's production.` : ""].filter(Boolean).join(" ") || "The bombers found little to hit.";
     }
     let sky = false, hold2 = 0;
     if (m === "superiority") {
@@ -12324,7 +13463,7 @@
     const n = g2.nations[nat];
     if (!n.atWar.length) return "Only a country at war accepts this.";
     if (need === "war") return null;
-    const lost = homeLost(g2, nat), months3 = warMonths(g2, nat);
+    const lost = homeLost2(g2, nat), months3 = warMonths(g2, nat);
     if (need === "long") return months3 >= GOV.needs.longMonths || lost > 0 ? null : `The country will accept this after ${GOV.needs.longMonths} months of war, or once home ground is lost.`;
     return lost >= GOV.needs.pressedHome || months3 >= GOV.needs.pressedMonths ? null : `Only a country with its back to the wall accepts this: a tenth of the homeland lost, or ${GOV.needs.pressedMonths} months of war.`;
   }
@@ -12570,7 +13709,7 @@
     if (n.atWar.length) {
       for (const a of Object.values(g2.nations)) {
         if (a.id === nat || !a.alive || !allied(g2, nat, a.id) || !a.atWar.length) continue;
-        const lost = homeLost(g2, a.id);
+        const lost = homeLost2(g2, a.id);
         const cap8 = a.capital >= 0 ? g2.regions[a.capital] : null;
         if (lost < D.relief.pressed && !(cap8 && cap8.ctrl === a.id && besieged(g2, cap8))) continue;
         const foe = pressing(g2, a);
@@ -13688,7 +14827,7 @@
       const war = airWar(g2);
       let f = canStation(g2, nat, r) || r.ctrl === nat ? fleetAt(g2, nat, r.id, wing) : null;
       if (!f && r.ctrl === nat && (!war || hasAirfield(g2, r.id))) {
-        f = foundAirFleet(g2, nat, r, `${r.name} Air Command`, war ? wing : void 0);
+        f = foundAirFleet(g2, nat, r, `${r.name} Air Command`, war ? wing : void 0, count4);
         tell2(war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`);
       } else {
         f ?? (f = strongest(airFleetsOf(g2, nat).filter((x) => x.ship === void 0 && x.ashore === void 0 && (!war || x.kind === wing))));
@@ -14526,7 +15665,7 @@
     return pts;
   }
   function laneStop(g2, row2) {
-    const cut = (why, state = "cut") => ({ state, why });
+    const cut = (why, state = "cut") => ({ state, why: why[0].toUpperCase() + why.slice(1) });
     const to = row2.to;
     if (row2.allies) {
       const friend2 = row2.allies.find((a) => g2.nations[a]?.alive && allied(g2, a, to) && g2.nations[a].atWar.length > 0);
@@ -15531,8 +16670,12 @@
   }
   var TIMES2 = ["never", "once", "twice", "three times", "four times", "five times", "six times", "seven times", "eight times", "nine times"];
   function patronSays(g2, patron, on) {
-    const P = newsName(g2.nations[patron]), k = Math.min(9, Math.max(1, Math.round(answersOf(patron) * 10)));
-    return [`${P} may stand by it.`, `${g2.nations[on].name} is a dominion: ${TIMES2[k]} in ten ${P} declares war on you the same month, and ${TIMES2[10 - k]} in ten it stays out of this war.`];
+    const P = newsName(g2.nations[patron]), press = patronPress(g2, patron);
+    const k = Math.min(9, Math.max(1, Math.round(press.answers * 10)));
+    const ally = pressData(patron).beside, F = ally && g2.nations[ally] ? newsName(g2.nations[ally]) : "France";
+    const why = press.step === 4 ? `${P} must look to its own shores` : press.step === 3 ? press.fallen ? `${F} has fallen, and ${P} fights on in Europe` : ally && atWar(g2, ally, patron) ? `${P} is at war in Europe, with ${F} among its enemies` : `${P} is at war in Europe, and ${F} stays out of it` : press.step === 2 ? `${P} is at war in Europe, with ${F} still fighting beside it` : `${P} has no war in Europe to hold it back`;
+    const times = TIMES2[k][0].toUpperCase() + TIMES2[k].slice(1);
+    return [`${P} may stand by it.`, `${times} in ten ${P} declares war on you the same month, and ${TIMES2[10 - k]} in ten it stays out of this war: ${why}.`];
   }
   function warForecast(g2, by, on) {
     const A = g2.nations[by], B2 = g2.nations[on];
@@ -15550,7 +16693,7 @@
       trade: g2.flags.open === 1 && tradePartners(g2, by).some((n) => n.id === on),
       league: standsWith(g2, by, on),
       patron,
-      answers: patron ? answersOf(patron) : 0,
+      answers: patron ? patronPress(g2, patron).answers : 0,
       patronSays: patron ? patronSays(g2, patron, on) : null
     };
   }
@@ -18335,7 +19478,20 @@
     if (!P?.alive || !A?.alive || !B2?.alive || atWar(g2, p, a) || allied(g2, p, a) || !allied(g2, p, b)) return null;
     return p;
   }
-  var dominionAnswers = (g2, p, a, b, war) => hashString(`dominion:${g2.seed}:${war}:${p}:${a}:${b}`) / 4294967296 < answersOf(p);
+  function patronPress(g2, p) {
+    const P = g2.nations[p], { europe, beside, willGone } = pressData(p);
+    const at = (step2, fallen = false) => ({ step: step2, answers: answersOf(p, step2), fallen });
+    if (!P?.alive) return at(1);
+    const foe = (u) => !u.dead && u.kind !== "fort" && atWar(g2, u.nat, p);
+    const invaded = g2.regions.some((r) => r.owner === p && !r.overseas && (r.units.some(foe) || !allied(g2, p, r.ctrl) && (r.garr ?? []).some(foe)));
+    if (invaded || P.resilience > 0 && collapseScore(g2, p) >= willGone * P.resilience) return at(4);
+    const enemies = europe.filter((e) => e !== p && g2.nations[e]?.alive && atWar(g2, p, e));
+    if (!enemies.length) return at(1);
+    const F = beside ? g2.nations[beside] : void 0;
+    if (F?.alive && !F.dormant && F.atWar.some((e) => enemies.includes(e))) return at(2);
+    return at(3, !F?.alive);
+  }
+  var dominionAnswers = (g2, p, a, b, war) => hashString(`dominion:${g2.seed}:${war}:${p}:${a}:${b}`) / 4294967296 < (war < g2.turn ? answersOf(p) : patronPress(g2, p).answers);
   function standsBy(g2, a, b, since) {
     const p = standsByWhom(g2, a, b);
     if (!p) return false;
@@ -18583,6 +19739,13 @@
   }
   function frontage(r) {
     return r.terrain === "plains" ? 4 : r.terrain === "mountain" ? 2 : 3;
+  }
+  function corpsNamed2(g2, nat, name) {
+    const adj = g2.nations[nat]?.adj;
+    if (!adj) return name;
+    const head = name.split("(")[0];
+    for (const n of Object.values(g2.nations)) if (n.adj && new RegExp(`(^|[^A-Za-z])${n.adj}([^A-Za-z]|$)`).test(head)) return name;
+    return `${adj} ${name}`;
   }
   var fights = (c) => c.kind !== "art" && c.kind !== "eng" && c.kind !== "fort";
   var GUNS_ALONE2 = "Guns cannot take ground alone. Send infantry or tanks in with them.";
@@ -19722,6 +20885,51 @@
     else if (r.overseas && r.port && r.vp > 0 && atWar(g2, nat, old)) headline(g2, "battle", `${r.name} falls to ${g2.nations[nat].adj} forces.`, old, r.id, { arm: "land", won: nat, lost: old });
     checkCollapse(g2, old, nat);
     retaken(g2, r, nat);
+    if (g2.flags.open === 1) goHome(g2, r);
+  }
+  function goHome(g2, r) {
+    const by = /* @__PURE__ */ new Map();
+    for (const c of r.units) {
+      if (c.dead || c.kind === "fort" || c.nat === r.ctrl || allied(g2, c.nat, r.ctrl) || atWar(g2, c.nat, r.ctrl)) continue;
+      (by.get(c.nat) ?? by.set(c.nat, []).get(c.nat)).push(c);
+    }
+    for (const [nat, cs] of by) {
+      let went = 0;
+      for (const c of cs) {
+        const to = ownNearest(g2, c);
+        if (!to) continue;
+        place(g2, c, to);
+        c.ap = 0;
+        went++;
+      }
+      if (!went) continue;
+      const adj = g2.nations[nat].adj;
+      headline(g2, "info", went === 1 ? `The ${adj} corps at ${r.name} goes home: the province has changed hands.` : `The ${went} ${adj} corps at ${r.name} go home: the province has changed hands.`, g2.human ?? nat, r.id);
+    }
+  }
+  function ownNearest(g2, c) {
+    const mine3 = (r) => r.id !== c.reg && r.ctrl === c.nat && hasRoom(g2, r, c);
+    const seen2 = new Uint8Array(g2.regions.length);
+    const q = [c.reg];
+    seen2[c.reg] = 1;
+    for (let i = 0; i < q.length; i++) {
+      const r = g2.regions[q[i]];
+      if (mine3(r)) return r;
+      for (const j of r.nb) if (!seen2[j]) {
+        seen2[j] = 1;
+        q.push(j);
+      }
+    }
+    const from = g2.regions[c.reg];
+    let best = null, bd = Infinity;
+    for (const r of g2.regions) if (mine3(r)) {
+      const d = (r.x - from.x) ** 2 + (r.y - from.y) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = r;
+      }
+    }
+    return best;
   }
   function hasRoom(g2, to, c) {
     const here = friendlyUnits(g2, to, c.nat);
@@ -20001,7 +21209,7 @@
     const brk = nearestBreak(g2, ride);
     return { can: true, strong: "", line: `By rail this month, but a train reaches no farther than it can march.${brk ? ` ${brk.line}` : ""}` };
   }
-  function homeLost(g2, nat) {
+  function homeLost2(g2, nat) {
     let vp = 0, held = 0;
     for (const r of g2.regions) if (r.owner === nat && !r.overseas) {
       vp += r.vp;
@@ -20025,7 +21233,7 @@
     if (n.capital < 0) return 0;
     const capLost = capitalLost(g2, nat);
     const army = n.armyPeak > 0 ? clamp(armySize(g2, nat) / n.armyPeak, 0, 1) : 1;
-    const score = COLLAPSE.capital * capLost + COLLAPSE.home * homeLost(g2, nat) + COLLAPSE.army * (1 - army) + exhausted(g2, nat);
+    const score = COLLAPSE.capital * capLost + COLLAPSE.home * homeLost2(g2, nat) + COLLAPSE.army * (1 - army) + exhausted(g2, nat);
     const worn = willLost(g2, nat);
     return worn > 0 ? score + worn : score;
   }
@@ -20049,7 +21257,7 @@
     if (collapseScore(g2, nat) < n.resilience) return;
     if (g2.flags.open === 1) {
       const seat3 = g2.regions[n.capital];
-      if (siegeRules(g2) && allied(g2, nat, seat3.ctrl) && !besieged(g2, seat3) && homeLost(g2, nat) < SIEGE.stand) return;
+      if (siegeRules(g2) && allied(g2, nat, seat3.ctrl) && !besieged(g2, seat3) && homeLost2(g2, nat) < SIEGE.stand) return;
       const to = victorOf(g2, nat);
       if (!to) return;
       by = to;
@@ -20146,6 +21354,7 @@
       if (cap8) {
         cap8.cap = true;
         V.capital = cap8.id;
+        g2.capDist.VIC = capitalDistances(g2, cap8.id);
       }
       headline(g2, "fall", "France signs an armistice. The north and the Atlantic coast are occupied; a new government at Vichy keeps the south.", "FRA", void 0, { arm: "land", won: by, lost: "FRA" });
     } else {
@@ -20677,6 +21886,8 @@
   // ../../src/campaign/turn.ts
   var turn_exports = {};
   __export(turn_exports, {
+    AS_FORECAST_LOSS: () => AS_FORECAST_LOSS,
+    EVE_NO_RAID: () => EVE_NO_RAID,
     FAVOURED: () => FAVOURED,
     FORT_NO_ORDERS: () => FORT_NO_ORDERS,
     KIND: () => KIND,
@@ -20692,6 +21903,7 @@
     armiesAt: () => armiesAt,
     armyAt: () => armyAt,
     arsenalOffers: () => arsenalOffers,
+    asForecast: () => asForecast,
     attackOutlook: () => attackOutlook,
     beginEve: () => beginEve,
     beginHuman: () => beginHuman,
@@ -21447,7 +22659,7 @@
     const place2 = placeOf(g2, kind, target);
     if (kind === "bomb" || kind === "night") {
       const r = g2.regions[target];
-      out.push(r.fac > 0 ? `Should stop about ${pct6(fc.cut)} of ${place2}'s output for a month: ${(fc.nation * 100).toFixed(1)}% of ${g2.nations[r.ctrl].adj} production.` : `There is no industry at ${place2}: the bombers go for its rail yards.`);
+      out.push(r.fac > 0 ? `Should stop about ${pct6(fc.cut)} of ${place2}'s output for a month: ${tenthPct(fc.nation)} of ${g2.nations[r.ctrl].adj} production.` : `There is no industry at ${place2}: the bombers go for its rail yards.`);
       if (fc.rail) out.push(`About a ${pct6(fc.rail)} chance of cutting the railway through ${place2}, which stays cut until engineers relay it.`);
       if (fc.ruin) out.push(`About a ${pct6(fc.ruin)} chance of wrecking a factory outright.`);
     } else if (kind === "superiority") {
@@ -22188,7 +23400,7 @@
       plan.lines.push({ label: "The town", value: `${townName(r)}, ${v.sizeWord.toLowerCase()}: troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger`, effect: `A weight of fire of ${SIEGE.bombard.shellFull} breaks down ${SIEGE.breach.shell}% of its works, less its share; never more than ${SIEGE.breach.most}% in all` });
       if (town) plan.lines.push({ label: "The shelling", value: town.works >= 0.5 ? `About ${Math.round(town.works)}% of the works broken down` : "Little more can be broken", effect: townHitText(g2, r, town, "shells", false) });
     } else {
-      plan.lines.push({ label: "Industry", value: plural6(r.fac, "factory", "factories"), effect: output > 0 ? `${Math.round(output * 100)}% of its output stopped for a month: ${(plan.nation * 100).toFixed(1)}% of ${g2.nations[r.ctrl].adj} production` : "Nothing to hit" });
+      plan.lines.push({ label: "Industry", value: plural6(r.fac, "factory", "factories"), effect: output > 0 ? `${Math.round(output * 100)}% of its output stopped for a month: ${tenthPct(plan.nation)} of ${g2.nations[r.ctrl].adj} production` : "Nothing to hit" });
     }
     if (fort > 0) plan.lines.push({ label: "Shore batteries", value: `Fortress level ${fort}`, effect: `About ${Math.round(plan.reply * 100)}% of the cruisers and destroyers that stand in are likely to be sunk` });
     plan.lines.push({ label: "Readiness", value: `${Math.round(f.ready * 100)}% now`, effect: `${Math.round(plan.ready * 100)}% afterwards: a bombardment wears the ships and empties the magazines` });
@@ -22222,7 +23434,7 @@
       output = plan.output;
       nation = plan.nation;
       raid(g2, f.nat, r.ctrl, nation);
-      result = `The shelling stopped ${Math.round(output * 100)}% of ${r.name}'s output for a month: ${(nation * 100).toFixed(1)}% of ${g2.nations[r.ctrl].adj} production.`;
+      result = output > 0 ? `The shelling stopped ${Math.round(output * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g2.nations[r.ctrl].adj} production.` : "";
     }
     const sunk = plan.reply > 0 ? sinkShips(f, plan.reply, rng, ["ca", "dd"]) : none2();
     if (shipCount(sunk)) result += ` The shore batteries sank ${shipList(sunk)}.`;
@@ -26111,6 +27323,8 @@
       if (!scope || !leaving || !scope.has(c.reg) || havensOf(g2.regions[c.reg]).includes(g2.regions[c.reg].name)) return false;
       return !c.supplied || !g2.nations[g2.regions[c.reg].owner].alive || leaving.when.some((nm) => !!g2.byName[nm] && atWar(g2, c.nat, g2.byName[nm].ctrl));
     }
+    const here = g2.regions[c.reg];
+    if (beyondEurope(here) && here.ctrl === c.nat && atWar(g2, c.nat, here.owner)) return !c.supplied || c.org < 0.3;
     let host = null, size = 0;
     for (const n of Object.values(g2.nations)) {
       if (n.id === c.nat || n.dormant || !allied(g2, c.nat, n.id) || n.capital < 0 || n.seaSupply) continue;
@@ -26308,7 +27522,10 @@
   var armyWords = (text) => ARMIES_RENAMED.reduce((t, [was, now]) => t.split(was).join(now), text);
   function saveGame(g2) {
     return JSON.stringify({
+      // A grand campaign is written in today's words: its air groups may be squadrons (ruling 220), and no old fleet
+      // word is read into them on loading. Left out of a historical save, which is written exactly as it always was.
       v: SAVE_VERSION,
+      words: g2.flags.open === 1 ? 1 : void 0,
       seed: g2.seed,
       human: g2.human,
       turn: g2.turn,
@@ -26323,8 +27540,11 @@
       // The supply picture, in the order of the countries' names so that the same picture is always written the same way.
       supply: Object.fromEntries(Object.entries(g2.supply).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, Array.from(v).join("")])),
       nations: g2.nations,
-      // The order corps stand in within a region is kept too: battles and retreats take them in that order.
-      regions: g2.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, r.prev, r.units.map((c) => c.id)]),
+      // The order corps stand in within a region is kept too: battles and retreats take them in that order. So is the
+      // order of the corps inside its town, as an eighth entry where there is a garrison (Version 84.3): it decides who
+      // defends a storm, who is turned out of a full town and what becomes of each corps when the town falls. A
+      // province with nobody inside its town is written as it always was.
+      regions: g2.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, r.prev, r.units.map((c) => c.id), ...r.garr?.length ? [r.garr.map((c) => c.id)] : []]),
       corps: g2.corps,
       generals: g2.generals,
       fleets: g2.fleets,
@@ -26357,12 +27577,25 @@
       return null;
     }
   }
-  var fleetWords = (text) => text.replace(/( Air)? Squadron\b/g, (m, air2) => air2 ? m : " Fleet").replace(/ Escort Group\b/g, " Escort Fleet").replace(/ Submarine Flotilla\b/g, " Submarine Fleet");
+  var FLEETS_RENAMED = [
+    [/\bWestern Approaches Command\b/g, "Western Approaches Fleet"],
+    [/\bDover Command\b/g, "Dover Fleet"],
+    [/\bU-boat Arm\b/g, "U-boat Fleet"],
+    [/\bBaltic Station\b/g, "Swinemunde Fleet"],
+    [/\bSubmarine Command\b/g, "Submarine Fleet"]
+  ];
+  var OLD_FLEET_WORDS = /Squadron|Escort Group|Submarine Flotilla|Western Approaches Command|Dover Command|U-boat Arm|Baltic Station|Submarine Command/;
+  var fleetWords = (text, today = false) => {
+    let t = today ? text : text.replace(/( Air)? Squadron\b/g, (m, air2) => air2 ? m : " Fleet").replace(/ Escort Group\b/g, " Escort Fleet").replace(/ Submarine Flotilla\b/g, " Submarine Fleet");
+    for (const [was, now] of FLEETS_RENAMED) t = t.replace(was, now);
+    return t;
+  };
   function loadGame(text) {
     if (text.includes(" Army (")) text = armyWords(text);
     let d;
+    const today = text.startsWith(`{"v":${SAVE_VERSION},"words":1,`);
     try {
-      d = JSON.parse(/Squadron|Escort Group|Submarine Flotilla/.test(text) ? fleetWords(text) : text);
+      d = JSON.parse(OLD_FLEET_WORDS.test(text) ? fleetWords(text, today) : text);
     } catch {
       return null;
     }
@@ -26401,6 +27634,7 @@
     for (const k of Object.keys(g2.flags)) if (k.startsWith("harbour:") && g2.regions[+k.slice(8)]) g2.regions[+k.slice(8)].port = true;
     restoreWorks(g2);
     for (const [id, n] of Object.entries(d.nations)) g2.nations[id] = { ...g2.nations[id], ...n };
+    for (const n of Object.values(g2.nations)) if (n.capital >= 0) g2.capDist[n.id] = capitalDistances(g2, n.capital);
     for (const [id, n] of Object.entries(d.nations)) {
       const lab = g2.nations[id]?.lab;
       if (!lab || n.lab !== void 0) continue;
@@ -26429,6 +27663,14 @@
         const c = byId.get(id);
         if (c && c.reg === r.id && !c.town) {
           r.units.push(c);
+          byId.delete(id);
+        }
+      }
+      const inside2 = d.regions[i][7];
+      if (inside2) for (const id of inside2) {
+        const c = byId.get(id);
+        if (c && c.reg === r.id && c.town) {
+          (r.garr ?? (r.garr = [])).push(c);
           byId.delete(id);
         }
       }
@@ -27775,6 +29017,17 @@
     const b = verdictOf(look).band;
     return b === "certain" || b === "favoured";
   }
+  var AS_FORECAST_LOSS = 1.5;
+  function asForecast(look, rep, of2 = "attack") {
+    if (!look || !rep.taken) return false;
+    const band = verdictOf(look, of2).band;
+    if (band !== "certain" && band !== "favoured") return false;
+    if (rep.level === "Pyrrhic victory") return false;
+    const said = look.cost.won;
+    if (!said) return false;
+    const lost = Math.max(rep.attLost, rep.attackers.reduce((s, u) => s + u.lost, 0));
+    return lost <= AS_FORECAST_LOSS * said.ours;
+  }
   var menWord = (n) => Math.round(n).toLocaleString("en-US");
   function marchOutlook(g2, corps, to) {
     const r = g2.regions[to], me = g2.human;
@@ -27960,8 +29213,8 @@
     if (res.ok && res.taken && !res.air && beach.port && g2.flags.open === 1 && !lodgment(g2, nat)) g2.flags[`st:lodged:${nat}`] = beach.id + 1;
     return res;
   }
-  function crossings2(g2) {
-    return g2.human && g2.nations[g2.human].alive ? crossingsOf2(g2, g2.human) : [];
+  function crossings2(g2, short = false) {
+    return g2.human && g2.nations[g2.human].alive ? crossingsOf2(g2, g2.human, { short }) : [];
   }
   function crossingStaffWord(g2) {
     return g2.human && g2.nations[g2.human].alive ? crossingWord(g2, g2.human) : null;
@@ -28157,13 +29410,19 @@
     return !!myAir(g2, id) && setGroupJob(g2, id, key6, g2.human);
   }
   var airGroupBases = (g2, id) => groupBases(g2, id, g2.human);
-  var raidMenu = (g2) => raidKinds(g2, g2.human);
-  var raidMenuOne = (g2) => raidKindsOne(g2, g2.human);
-  var raidTargetsFor = (g2, kind, lead2 = -1) => raidTargets(g2, kind, g2.human, lead2);
-  var previewRaid = (g2, kind, target, ids2) => planRaid(g2, kind, target, ids2, g2.human);
+  var EVE_NO_RAID = "It is the eve of war: no raid flies until the first shot is fired.";
+  var eveRaid = (g2, kind) => onEve(g2) && kind !== "recon";
+  var eveMenu = (g2, menu) => onEve(g2) ? menu.map((k) => k.key === "recon" ? k : { ...k, targets: 0, why: EVE_NO_RAID }) : menu;
+  var raidMenu = (g2) => eveMenu(g2, raidKinds(g2, g2.human));
+  var raidMenuOne = (g2) => eveMenu(g2, raidKindsOne(g2, g2.human));
+  var raidTargetsFor = (g2, kind, lead2 = -1) => eveRaid(g2, kind) ? [] : raidTargets(g2, kind, g2.human, lead2);
+  var previewRaid = (g2, kind, target, ids2) => {
+    const p = planRaid(g2, kind, target, ids2, g2.human);
+    return eveRaid(g2, kind) ? { ...p, why: EVE_NO_RAID } : p;
+  };
   var previewDayNight = (g2, kind, target, ids2) => dayOrNight(g2, kind, target, ids2, g2.human);
   function orderRaid(g2, kind, target, ids2) {
-    return g2.human !== null && humanUp(g2) ? launchRaid(g2, kind, target, ids2, g2.human) : null;
+    return g2.human !== null && humanUp(g2) && !eveRaid(g2, kind) ? launchRaid(g2, kind, target, ids2, g2.human) : null;
   }
   var flownRaids = (g2, turn = g2.turn) => raidReplays(g2, turn, g2.human);
   function orderScout(g2, id, target) {
@@ -28792,7 +30051,7 @@
   function standing4(g2, nat, ahead = 0) {
     const n = g2.nations[nat];
     const capital2 = n.capital < 0 ? 0 : capitalLost(g2, nat, ahead);
-    const home = homeLost(g2, nat);
+    const home = homeLost2(g2, nat);
     const army = n.armyPeak > 0 ? clamp(armySize(g2, nat) / n.armyPeak, 0, 1) : 1;
     const more = exhausted(g2, nat) + willLost(g2, nat);
     return { capital: capital2, home, army, more, score: weigh(capital2, home, army, more) };
@@ -28912,7 +30171,7 @@
     const seat3 = g2.regions[r.region];
     const name = theName(n, true), mid = theName(n), city = seat3.name;
     const parts = `${r.capital[0].toUpperCase()}${r.capital.slice(1)}, ${r.home} and ${r.army}`;
-    const alarm2 = homeAlarms(g2, r.nat)[0];
+    const alarm2 = homeAlarms(g2, r.nat).find((a) => a.case !== "empty");
     const help = alarm2 ? alarm2.lines[2] : "";
     const make = (level, head, sub, tail, note4, more = {}) => level !== "last" && help ? { title: IN_DANGER, level, head, text: `${head}. ${sub} ${tail} ${help}`, sub: `${sub} ${help}`, note: note4, nat: r.nat, region: r.region, reading: r, alarm: alarm2, ...more } : { title: IN_DANGER, level, head, text: `${head}. ${sub} ${tail}`, sub, note: note4, nat: r.nat, region: r.region, reading: r, ...more };
     const stop = r.seat === "besieged" ? `Break the siege of ${city}, or win back home ground.` : r.seat === "reach" ? `Hold ${city}, or win back home ground.` : r.seat === "lost" ? `Take back ${city} or other home ground.` : "Win back home ground, and keep the army in being.";
@@ -28984,7 +30243,7 @@
     if (!allied(g2, nat, r.ctrl)) return `the army round ${townName(r)}`;
     return h.corps.length === 1 ? `${h.corps[0].name} at ${r.name}` : `the army at ${r.name}`;
   }
-  function nearestHelp(g2, nat, target, all, rails) {
+  function nearestHelp(g2, nat, target, all, rails, walkIn2 = false) {
     const t = g2.regions[target];
     const mine3 = (id) => allied(g2, nat, g2.regions[id].ctrl) && !g2.regions[id].units.some((u) => !u.dead && atWar(g2, u.nat, nat));
     const goals = [...mine3(target) ? [target] : [], ...t.nb.filter(mine3)];
@@ -29005,7 +30264,10 @@
     const better2 = (h, months3, rail2) => !best || months3 < best.months || months3 === best.months && (rail2 && !best.rail || rail2 === best.rail && h.hops < best.h.hops);
     const turnOf2 = current(g2) === nat;
     for (const h of near) {
-      if (turnOf2 && h.fighters.some((c) => reach2(g2, c).get(target)?.attack)) {
+      if (turnOf2 && h.fighters.some((c) => {
+        const e = reach2(g2, c).get(target);
+        return !!e && (e.attack || walkIn2 && c.reg !== target);
+      })) {
         if (better2(h, 0, false)) best = { h, months: 0, rail: false, to: target };
         continue;
       }
@@ -29048,6 +30310,12 @@
     const b = best;
     return { region: b.h.region, months: b.months, rail: b.rail, corps: b.h.corps.map((c) => c.id), name: helperName(g2, nat, b.h), to: b.to };
   }
+  function handLine(g2, help, r, cure) {
+    const held = help.name.startsWith("the army ") ? `The${help.name.slice(3)}` : g2.corps.find((c) => c.id === help.corps[0])?.name ?? help.name;
+    if (help.to === r.id) return `${held} is in hand. Right-click ${r.name} to ${cure === "empty" ? "march in" : "send it"}.`;
+    if (help.to === help.region) return `${held} is in hand. It can ${cure === "empty" ? "march into" : cure} ${r.name} next month.`;
+    return `${held} is in hand. Right-click ${g2.regions[help.to].name} to send it on towards ${r.name}.`;
+  }
   function homeAlarms(g2, nat = g2.human) {
     if (!nat) return [];
     const n = g2.nations[nat];
@@ -29060,7 +30328,7 @@
     const foe = (u) => !u.dead && u.kind !== "fort" && atWar(g2, u.nat, nat);
     let all = null;
     const rails = /* @__PURE__ */ new Map();
-    const out = [];
+    const out = [], empty = [];
     for (const r of g2.regions) {
       if (r.owner !== nat || r.overseas) continue;
       const held = allied(g2, nat, r.ctrl);
@@ -29069,7 +30337,10 @@
         foes = (r.garr ?? []).filter(foe);
         inTown = foes.length > 0;
       }
-      if (!foes.length) continue;
+      if (!foes.length) {
+        if (!held && atWar(g2, r.ctrl, nat)) empty.push(r);
+        continue;
+      }
       const w = /* @__PURE__ */ new Map();
       for (const u of foes) w.set(armyOf(u), (w.get(armyOf(u)) ?? 0) + u.divs * u.str);
       const by = [...w.keys()].sort((a, b) => w.get(b) - w.get(a) || (a < b ? -1 : 1))[0];
@@ -29099,11 +30370,22 @@
       const named2 = reachIds.map((id) => id === cap8 ? `${g2.regions[id].name}, your capital` : g2.regions[id].name);
       const s2 = !named2.length ? "" : named2.length === 1 ? `Next month ${many ? "they" : "it"} can reach ${named2[0]}.` : named2.length === 2 ? `Next month ${many ? "they" : "it"} can reach ${named2[0]} or ${named2[1]}.` : `Next month ${many ? "they" : "it"} can reach ${named2[0]}${named2[0].includes(",") ? "," : ""} and ${named2.length - 1} more towns of yours.`;
       const s3 = !help ? `No army of yours can come. A new corps takes ${monthsWord4(raise2)}.` : help.months === 0 ? `Nearest help: ${help.name}, in reach this month.` : `Nearest help: ${help.name}, ${monthsWord4(help.months)} by ${help.rail ? "rail" : "road"}.`;
-      const held1 = help ? help.name.startsWith("the army ") ? `The${help.name.slice(3)}` : g2.corps.find((c) => c.id === help.corps[0])?.name ?? help.name : "";
-      const hand = help ? `${held1} is in hand. Right-click ${g2.regions[help.to].name} to send it.` : "";
+      const hand = help ? handLine(g2, help, r, inTown ? "storm" : "attack") : "";
       out.push({ case: kase, region: r.id, by, reach: reachIds, help, raise: raise2, lines: [s1, s2, s3], hand });
     }
-    return out.sort((a, b) => far(a.region) - far(b.region) || a.region - b.region);
+    out.sort((a, b) => far(a.region) - far(b.region) || a.region - b.region);
+    empty.sort((a, b) => far(a.id) - far(b.id) || a.id - b.id);
+    for (const r of empty) {
+      if (!all) all = helpers(g2, nat);
+      const help = nearestHelp(g2, nat, r.id, all, rails, true);
+      const adj = g2.nations[r.ctrl]?.adj ?? "enemy";
+      const s1 = `${r.name}, on your home ground, is still in ${adj} hands, with no troops in it.`;
+      const who = help ? `${help.name[0].toUpperCase()}${help.name.slice(1)}` : "";
+      const s3 = !help ? `No army of yours can reach it. A new corps takes ${monthsWord4(raise2)}.` : help.months === 0 ? `${who} can march in and take it back this month.` : `${who} can march in and take it back in ${monthsWord4(help.months)}, by ${help.rail ? "rail" : "road"}.`;
+      const hand = help ? handLine(g2, help, r, "empty") : "";
+      out.push({ case: "empty", region: r.id, by: r.ctrl, reach: [], help, raise: raise2, lines: [s1, "", s3], hand });
+    }
+    return out;
   }
   function gunsAlone(g2, nat = g2.human) {
     if (!nat || !gunsRule(g2) || !siegeRules(g2)) return [];
@@ -29115,9 +30397,11 @@
       if (!round3.length || round3.some(fights) || !round3.some((c) => armyOf(c) === nat)) continue;
       const what = round3.every((c) => c.kind === "eng") ? "engineers" : round3.some((c) => c.kind === "eng") ? "guns and engineers" : "guns";
       if (!fighters) fighters = g2.corps.filter((c) => !c.dead && armyOf(c) === nat && fights(c) && !c.hold && c.town === void 0 && c.leave === void 0 && c.ap > 0);
-      const red = current(g2) === nat && fighters.some((c) => reach2(g2, c).has(r.id));
+      const can2 = current(g2) === nat ? fighters.filter((c) => reach2(g2, c).has(r.id)) : [];
+      const red = can2.length > 0;
+      const at = can2.length ? [...new Set(can2.map((c) => c.reg))].sort((a, b) => Number(!r.nb.includes(a)) - Number(!r.nb.includes(b)) || can2.filter((c) => c.reg === b).length - can2.filter((c) => c.reg === a).length || a - b)[0] : -1;
       const town = townName(r);
-      out.push({ region: r.id, what, red, line: red ? `Only ${what} are left round ${town}: send infantry or tanks this month, or the siege is raised.` : `Only ${what} are left round ${town}. No infantry or tanks of yours can reach them this month: the siege will be raised.` });
+      out.push({ region: r.id, what, red, help: can2.filter((c) => c.reg === at).map((c) => c.id), from: at, line: red ? `Only ${what} are left round ${town}: send infantry or tanks this month, or the siege is raised.` : `Only ${what} are left round ${town}. No infantry or tanks of yours can reach them this month: the siege will be raised.` });
     }
     return out;
   }
@@ -30274,6 +31558,13 @@
         const town = townName(g2.regions[h.region]), by = raisedBy.get(h.region);
         Object.assign(row2, { tag: "HELD", tone: "good", picture: "town", line: `The siege of ${town} is raised.`, head: `The siege of ${town} is raised`, theirs: by ?? null });
         if (by) row2.join = { word: "against", name: theName(g2.nations[by]) };
+      }
+      const laid = h.arm === "land" && h.region !== void 0 && / troops close round [^:]+: .+ is under siege\b/.test(h.text);
+      if (laid && bad && h.won && g2.nations[h.won]) {
+        Object.assign(row2, { tag: "BESIEGED", tone: "warn", picture: "town", line: `${g2.nations[h.won].adj} troops close round the town.`, head: `${row2.place} is besieged`, theirs: h.won });
+      }
+      if (h.arm === "land" && !row2.join && row2.theirs && g2.nations[row2.theirs] && (row2.tag === "WON" || row2.tag === "LOST" || row2.tag === "BESIEGED")) {
+        row2.join = { word: row2.tag === "BESIEGED" ? "by" : "against", name: theName(g2.nations[row2.theirs]) };
       }
       const escorts = /^The escorts of (?:the )?(.+?) sinks? /.exec(h.text);
       if (escorts && ships) row2.line = `Sunk by escorts of the ${escorts[1]}.`;
@@ -32089,7 +33380,7 @@
   function gunsAloneOf(s) {
     if (!s.human || !humanUp(s)) return [];
     try {
-      return (gunsAlone(s, s.human) ?? []).filter((a) => !!a.line).map((a) => ({ region: a.region, what: a.what ?? "", red: !!a.red, line: a.line }));
+      return (gunsAlone(s, s.human) ?? []).filter((a) => !!a.line).map((a) => ({ region: a.region, what: a.what ?? "", red: !!a.red, line: a.line, help: a.help ?? [], from: a.from ?? -1 }));
     } catch {
       return [];
     }
@@ -32539,6 +33830,11 @@
   }
   var oddsPct = (p) => p >= 0.9995 ? 100 : p <= 5e-4 ? 0 : Math.min(99, Math.max(1, Math.round(p * 100)));
   var chanceWords = (look) => look.exact || Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : look.wide ? `a best guess of ${oddsPct(look.guess)}%, anywhere from ${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`;
+  var endWords = (words, named2 = false) => words === "about 100%" ? named2 ? "they are sure of it" : "your staff is sure of it" : words === "about 0%" ? named2 ? "they give it no chance" : "your staff gives it no chance" : "";
+  var chanceTo = (look, place2) => {
+    const words = chanceWords(look);
+    return endWords(words) || `${words} to take ${place2}`;
+  };
   var roughMen = (n) => n < 100 ? "under 100" : (Math.round(n / 100) * 100).toLocaleString("en");
   function costLines(look) {
     if (!look?.cost) return [];
@@ -32557,9 +33853,8 @@
     const extra = everyone.filter((c) => !inSet.has(c.id)).length;
     const massed2 = extra ? attackOutlook(s, everyone, target) : null;
     if (!massed2 || odds !== null && massed2.odds <= odds * 1.02) return null;
-    const chance = chanceWords(massed2);
     return {
-      note: `${extra === 1 ? "One more corps stands" : `${extra} more corps stand`} within reach. Send everyone the roads will carry, ${everyone.length} corps in all, and the odds ${odds !== null ? `go from ${odds.toFixed(2)} to ${massed2.odds.toFixed(2)} to 1` : `are ${massed2.odds.toFixed(2)} to 1`}: ${chance} to take ${target.name}.`,
+      note: `${extra === 1 ? "One more corps stands" : `${extra} more corps stand`} within reach. Send everyone the roads will carry, ${everyone.length} corps in all, and the odds ${odds !== null ? `go from ${odds.toFixed(2)} to ${massed2.odds.toFixed(2)} to 1` : `are ${massed2.odds.toFixed(2)} to 1`}: ${chanceTo(massed2, target.name)}.`,
       ids: cands.map((c) => c.id)
     };
   }
@@ -32584,7 +33879,7 @@
     const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${num5(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.${thin}` : "There is nothing more a probe could find here.");
     return {
       head: v.works > 0 ? `The defenders stand in fieldworks of ${mo(v.works)}${v.works >= DEFENCE.entrench.months ? ", finished" : ""}.` : "The defenders are not dug in.",
-      done: done ? `${done.name} has probed this line: it found ${listOf5(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ""}. It cost ${num5(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now it reads ${done.now}.` : ""}` : "",
+      done: done ? `${done.name} has probed this line: it found ${listOf5(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ""}. It cost ${num5(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now ${endWords(done.now, true) || `it reads ${done.now}`}.` : ""}` : "",
       probe: { label: `PROBE${v.probe.name ? ` WITH ${v.probe.name.toUpperCase()}` : " THE LINE"}`, text: probeText, ok: !v.probe.why && !!gains, corps: v.probe.corps },
       bomb: v.bomb ? {
         label: "BOMB THE LINE",
@@ -32601,6 +33896,45 @@
       } : null
     };
   }
+  function barredCard(s, ids2, to, alone) {
+    const target = s.regions[to];
+    const picked = wouldAttack(s, ids2, to);
+    const mass2 = massNote(s, picked, to, null);
+    const foes = s.human ? hostileUnits(s, target, s.human).filter((u) => !u.dead) : [];
+    const named2 = (c) => {
+      const kn = c.nat !== s.human && s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: "exact", age: 0 };
+      return kn.level === "none" ? { id: c.id, nat: c.nat, name: "A corps not identified", kind: "", divs: 0, men: 0, gen: null } : kn.level === "report" ? { id: c.id, nat: c.nat, name: `${corpsNamed2(s, c.nat, c.name)} (a report ${kn.age} month${kn.age === 1 ? "" : "s"} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null } : { id: c.id, nat: c.nat, name: corpsNamed2(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
+    };
+    return {
+      region: to,
+      alone,
+      exact: true,
+      attack: 0,
+      defence: 0,
+      odds: 0,
+      lo: 0,
+      hi: 0,
+      even: 1.2,
+      note: "",
+      lines: [],
+      face: [],
+      cost: [],
+      opened: "",
+      hasChance: false,
+      chanceWords: "",
+      tone: "",
+      verdict: "",
+      soften: null,
+      prize: prizeLine(s, to),
+      allies: [...new Set(picked.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))],
+      mass: mass2?.note ?? "",
+      massIds: mass2?.ids ?? [],
+      ids: picked.map((c) => c.id),
+      pickedIds: [],
+      attackers: picked.map((c) => ({ id: c.id, name: corpsNamed2(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+      defenders: foes.map(named2)
+    };
+  }
   function preview(ids2, to, open = false, glance = false) {
     const s = game();
     let pickedIds = [];
@@ -32613,11 +33947,12 @@
       }
     }
     const alone = leadWhy(s, wouldAttack(s, ids2, to), to);
-    if (alone) return { region: to, refused: alone };
-    const corps = attackers(s, ids2, to);
+    if (alone && (open || glance)) return { region: to, refused: alone };
     const foeThere = !!s.human && s.regions[to].units.some((u) => !u.dead && atWar(s, s.human, u.nat));
     const refused = foeThere ? whyNotAttack(s, s.regions[to]) : "";
     if (refused) return { region: to, refused };
+    if (alone) return barredCard(s, ids2, to, alone);
+    const corps = attackers(s, ids2, to);
     const a = previewAttack(s, corps, s.regions[to]);
     if (!a) return null;
     const look = attackOutlook(s, corps, s.regions[to]);
@@ -32654,7 +33989,7 @@
     const allies = [...new Set(corps.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))];
     const named2 = (c) => {
       const kn = c.nat !== s.human && s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: "exact", age: 0 };
-      return kn.level === "none" ? { id: c.id, nat: c.nat, name: "A corps not identified", kind: "", divs: 0, men: 0, gen: null } : kn.level === "report" ? { id: c.id, nat: c.nat, name: `${c.name} (a report ${kn.age} month${kn.age === 1 ? "" : "s"} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null } : { id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
+      return kn.level === "none" ? { id: c.id, nat: c.nat, name: "A corps not identified", kind: "", divs: 0, men: 0, gen: null } : kn.level === "report" ? { id: c.id, nat: c.nat, name: `${corpsNamed2(s, c.nat, c.name)} (a report ${kn.age} month${kn.age === 1 ? "" : "s"} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null } : { id: c.id, nat: c.nat, name: corpsNamed2(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
     };
     if (look && !look.exact) {
       return {
@@ -32674,7 +34009,7 @@
         note: `${look.note}${look.wide && look.narrow ? ` ${look.narrow}` : ""}`,
         even,
         lines: briefTicket([...look.lines, ...frontLine(s, ids2, to) ? [frontLine(s, ids2, to)] : [], ...evenLine], look.face),
-        attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+        attackers: corps.map((c) => ({ id: c.id, name: corpsNamed2(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
         defenders: a.defenders.map(named2)
       };
     }
@@ -32696,9 +34031,14 @@
       defence: a.D,
       odds: a.odds,
       lines: briefTicket([...a.lines, ...frontLine(s, ids2, to) ? [frontLine(s, ids2, to)] : [], ...evenLine], look?.face),
-      attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
-      defenders: a.defenders.map((c) => ({ id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null }))
+      attackers: corps.map((c) => ({ id: c.id, name: corpsNamed2(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+      defenders: a.defenders.map((c) => ({ id: c.id, nat: c.nat, name: corpsNamed2(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null }))
     };
+  }
+  function namedReport(s, r) {
+    if (!r) return null;
+    const named2 = (u) => ({ ...u, name: corpsNamed2(s, u.nat, u.name) });
+    return { ...r, attackers: r.attackers.map(named2), defenders: r.defenders.map(named2) };
   }
   function battleNote(s, r) {
     if (r.yielded) return `The ${s.nations[r.defNat].adj} troops fell back from ${r.regionName} without a fight.`;
@@ -32848,7 +34188,7 @@
     const v = verdictOf(look, "sortie");
     const named2 = (c) => {
       const kn = c.nat !== me && !allied(s, c.nat, me) ? knowledgeOf(s, c) : { level: "exact", age: 0 };
-      return kn.level === "none" ? { id: c.id, nat: c.nat, name: "A corps not identified", kind: "", divs: 0, men: 0, gen: null } : kn.level === "report" ? { id: c.id, nat: c.nat, name: `${c.name} (a report ${kn.age} month${kn.age === 1 ? "" : "s"} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null } : { id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
+      return kn.level === "none" ? { id: c.id, nat: c.nat, name: "A corps not identified", kind: "", divs: 0, men: 0, gen: null } : kn.level === "report" ? { id: c.id, nat: c.nat, name: `${corpsNamed2(s, c.nat, c.name)} (a report ${kn.age} month${kn.age === 1 ? "" : "s"} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null } : { id: c.id, nat: c.nat, name: corpsNamed2(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
     };
     const ids2 = corps.map((c) => c.id);
     return {
@@ -32883,7 +34223,7 @@
       defence: look.exact ? a.D : 1,
       odds: look.exact ? a.odds : look.odds,
       lines: briefTicket(look.exact ? a.lines : look.lines, look.face),
-      attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+      attackers: corps.map((c) => ({ id: c.id, name: corpsNamed2(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
       defenders: a.defenders.map(named2)
     };
   }
@@ -32893,7 +34233,7 @@
     const why = r ? whyNotSallyOut(s, region) : "Pick a province.";
     const report = why ? null : orderSally(s, region);
     const paid = report?.paid && !report.yielded ? { text: report.paid.att, sign: report.paid.sign ?? "" } : null;
-    return { report, siege: false, fell: false, stands: "", marched: 0, note: report ? battleNote(s, report) : why ?? "", price: report ? priceLine(s, report) : "", paid, moved: [], view: view2() };
+    return { report: namedReport(s, report), siege: false, fell: false, stands: "", marched: 0, note: report ? battleNote(s, report) : why ?? "", price: report ? priceLine(s, report) : "", paid, moved: [], view: view2() };
   }
   function garrisonWhy(region) {
     try {
@@ -32964,7 +34304,7 @@
       holderName: s.nations[r.ctrl]?.name ?? r.ctrl,
       prize: prizeLine(s, to),
       allies: [],
-      attackers: going.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+      attackers: going.map((c) => ({ id: c.id, name: corpsNamed2(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
       defenders: [],
       // (where the guard will fight: the assault as the army arrives, in the fields an attack's forecast is read from)
       ...now ? {
@@ -33014,7 +34354,7 @@
     const town = townSiege(s, to)?.town ?? r.name;
     const note4 = report ? battleNote(s, report) : !res.moved ? "" : res.fell ? `${r.name} is yours: your army has marched in.` : res.stands === "garrison" ? `Your army has closed round ${town}: the siege begins.` : res.stands === "guard" ? `Your army stands round ${town}, and its town guard holds out. The assault can go in next month made ready.` : "";
     const paid = report?.paid && !report.yielded ? { text: report.paid.att, sign: report.paid.sign ?? "" } : null;
-    return { report, siege: false, fell: res.fell, stands: res.stands ?? "", marched: res.moved, note: note4, price: report ? priceLine(s, report) : "", paid, moved, view: view2() };
+    return { report: namedReport(s, report), siege: false, fell: res.fell, stands: res.stands ?? "", marched: res.moved, note: note4, price: report ? priceLine(s, report) : "", paid, moved, view: view2() };
   }
   function stormLook(region) {
     const s = game();
@@ -33069,7 +34409,7 @@
       holderName: s.nations[r.ctrl]?.name ?? r.ctrl,
       prize: prizeLine(s, region),
       allies: [],
-      attackers: going.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+      attackers: going.map((c) => ({ id: c.id, name: corpsNamed2(s, c.nat, c.name), kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
       defenders: [],
       attack: look.odds,
       defence: 1,
@@ -33108,7 +34448,7 @@
       inside2 = 0;
     }
     const paid = report?.paid && !report.yielded ? { text: report.paid.att, sign: report.paid.sign ?? "" } : null;
-    return { report, siege: false, fell, stands: fell || !report ? "" : inside2 > 0 ? "garrison" : "guard", marched: 0, note: report ? battleNote(s, report) : why ?? "", price: report ? priceLine(s, report) : "", paid, moved: [], view: view2() };
+    return { report: namedReport(s, report), siege: false, fell, stands: fell || !report ? "" : inside2 > 0 ? "garrison" : "guard", marched: 0, note: report ? battleNote(s, report) : why ?? "", price: report ? priceLine(s, report) : "", paid, moved: [], view: view2() };
   }
   function gateAsk(gate) {
     const s = game();
@@ -33168,7 +34508,7 @@
     const moved = report ? s.corps.filter((c) => !c.dead && (c.nat === s.human || !!s.human && c.joint === s.human) && c.reg === to && before.get(c.id) !== to).map((c) => ({ id: c.id, path: [to] })) : [];
     const siege = !!report?.siege;
     const paid = report?.paid && !report.yielded ? { text: report.paid.att, sign: report.paid.sign ?? "" } : null;
-    return { report: report && siege ? { ...report, taken: false } : report, siege, note: report ? battleNote(s, report) : "", price: report ? priceLine(s, report) : "", paid, moved, view: view2() };
+    return { report: namedReport(s, report && siege ? { ...report, taken: false } : report), siege, note: report ? battleNote(s, report) : "", price: report ? priceLine(s, report) : "", paid, moved, view: view2() };
   }
   var monthBook = null;
   var lastCard = null;
@@ -34587,8 +35927,9 @@ ${next.text}` : ""}` : next ? next.also : "";
     if (!r) return null;
     const nameOf2 = (nat) => upFirst2(theName2(s, nat));
     const side3 = (units) => units.map((u) => ({
+      // (Rules 84.3.) Every corps on the report carries its country's word: "German XIX Corps".
       nat: u.nat,
-      title: `${u.name}${u.guard ? "" : `  ·  ${u.divs} division${u.divs === 1 ? "" : "s"}`}`,
+      title: `${corpsNamed2(s, u.nat, u.name)}${u.guard ? "" : `  ·  ${u.divs} division${u.divs === 1 ? "" : "s"}`}`,
       lines: [`${cardNum(u.men)} men, ${cardNum(u.lost)} lost${u.fate ? `  ·  ${u.fate}` : ""}`],
       buttons: []
     }));

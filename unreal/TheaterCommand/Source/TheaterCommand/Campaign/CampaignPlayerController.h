@@ -329,6 +329,12 @@ struct FWarPrompt
 	bool bSortie = false;
 	/** True where the card is an order he asked for himself: Enter gives it, Esc calls it off, and the buttons wear their key caps. */
 	bool IsOrder() const { return bApproach || bSortie; }
+	/**
+	 * (The UI director's 84.3 check, item 6: one rule for every card.) The question of war itself: its safe answer
+	 * (NOT NOW) is lit and takes Enter and Esc, and the declaration takes a click. The landing and the gate keep their
+	 * order lit, as before.
+	 */
+	bool IsWarQuestion() const { return !IsOrder() && !bLanding && !bGate; }
 	int32 ApproachTo = INDEX_NONE;
 	TArray<FApproachRow> Ways;
 	int32 Way = 0;
@@ -412,6 +418,12 @@ struct FFaceOff
 	// (The UI director, 17 November.) The verdict reads "A long shot" or worse: SEND THEM IN is then a plain button
 	// that takes a click only, and the light and Enter go to CALL IT OFF.
 	bool bLongShot = false;
+	// (The UI director, 17 November.) The card shows exactly what was picked. Where that pick cannot go (guns or
+	// engineers alone, ruling 211(a)) this is the rules' sentence: it stands at the foot, there is no forecast, SEND
+	// THEM IN is not lit and takes no key, and CALL IT OFF is lit with Enter and Esc.
+	FText Alone;
+	/** The light and Enter are on CALL IT OFF: the verdict is a long shot or worse, or the pick cannot go at all. */
+	bool CallOffLit() const { return bLongShot || !Alone.IsEmpty(); }
 	bool bFavourSiege = false; // which order the forecast favours: that button is the lit one
 	FText NowLabel, NowSays, LaterLabel, LaterOdds, LaterSays;
 	float LaterBalance = 0.5f;
@@ -498,6 +510,8 @@ public:
 	void AskToBegin(int32 Kind, int32 GroupIndex = 0, int32 SideIndex = 0);
 	/** The answer to that question: begin the new war and let the saved one go, or keep it. */
 	void AnswerBegin(bool bBegin);
+	/** (The UI director's 84.3 check, item 6.) The door's BEGIN AS ... is up: Enter presses it, and it shows ENTER. */
+	bool CanBeginByKey() const { return Opening.bVisible && Opening.AskKind == 0 && Opening.Tab == 0 && Opening.Years.Num() > 0 && Opening.Nations.IsValidIndex(Opening.NationIndex); }
 
 	/** Saves the campaign and shows the opening screen over it. */
 	void OpenMenu();
@@ -929,8 +943,11 @@ public:
 	/** How many sentences the paper line has been given so far: a sentence said again is still an answer. */
 	int32 StepNotices() const { return NoticesSaid; }
 	int32 NoticesSaid = 0;
-	void PressEscape() { Escape(); }
-	void PressSpace() { SpaceBar(); }
+	void PressEscape() { EscapeKey(); }
+	void PressTab() { TabKey(); } // (the code checker's pre-check: a replay's Tab goes through the key guard, as a player's does)
+	void PressSpace() { SpaceKey(); }
+	/** Enter as the key gives it: the lit button of the card that is up, or the map's own END THE MONTH under the key guard. */
+	void PressEnter() { EnterKey(); }
 	/** What the game is showing by itself just now, for the screens a month's end brings: the question, the replay, a newsreel, an announcement, or the page on top. */
 	FString StepState() const;
 	/** A click on a province's airfield, as the mouse gives it. */
@@ -983,6 +1000,8 @@ public:
 
 	/** While a script is driving (the development photographer), the pointer does not light or route anything. */
 	void SetScripted(bool bInScripted) { bScripted = bInScripted; }
+	/** (The UI director's 84.3 check, item 3.) Where the screen's panels stand, in the viewport's own pixels, as the HUD last laid them out. */
+	void SetFrameOnScreen(TArray<FBox2D>&& Boxes) { FrameOnScreen = MoveTemp(Boxes); }
 
 private:
 	void WheelUp();
@@ -1161,6 +1180,20 @@ private:
 	double LastClickAt = 0.0;
 	bool bPointerOverPanel = false; // the pointer is on one of the screen's panels, not on the map
 	bool bButtonDown = false; // the mouse was down at the last look
+	// (The UI director's 84.3 check, item 3.) Nothing silent under a panel.
+	TArray<FBox2D> FrameOnScreen; // the panels, in the viewport's pixels
+	int32 FrameReachFor = INDEX_NONE; // an army just picked up, whose reach is to be framed clear of the panels once the view is still
+	double FrameReachFrom = 0.0, FrameReachUntil = 0.0;
+	FVector LastCameraSpot = FVector::ZeroVector;
+	bool bSlateRightDown = false; // the right button, as the screen itself saw it at the last look
+	bool bRightPressOnPanel = false; // and it went down on a panel
+	bool bRightGameOnPanel = false; // the map saw the press, but it was on a panel: no order goes through the panel
+	bool bPanelRightClick = false; // a right-click on a panel, to be answered with a line
+	FVector2D RightPanelPress = FVector2D::ZeroVector;
+	/** An army has been picked up by a hand (a press on its flag, or Tab): its reach is framed clear of the panels soon. */
+	void FrameReachSoon();
+	/** Frames the army in hand and the ground it can reach in the largest stretch of the screen no panel covers. */
+	void FrameReach();
 	const void* HoveredButton = nullptr; // the button the pointer is on, to tick once as it crosses onto one
 	double BattleMusicUntil = 0.0; // the march plays until then
 	int32 SackAsked = INDEX_NONE; // the general whose dismissal has been asked once
@@ -1264,6 +1297,8 @@ private:
 	FVector2D StagedPointer = FVector2D::ZeroVector;
 	int32 HoverTipHand = INDEX_NONE; // what was in hand, and how it was to travel, when the tip was written
 	int32 HoverTipRegion = INDEX_NONE;
+	bool bTipHushed = false; // (84.3 check, item 4) Tab moved the view: no hover box until the pointer moves
+	FVector2D TipHushedAt = FVector2D::ZeroVector; // where the pointer stood when it was hushed
 	bool bWatchAll = true; // watch every nation's move at the month's end; V switches to only what touches the player
 	TMap<int32, int32> WatchStood; // where each corps stood at the last step watched, to see who has marched
 	void OpenScreen1();
@@ -1272,6 +1307,18 @@ private:
 	void OpenScreen4();
 	void OpenScreen5();
 	bool bScripted = false;
+	// (Rules 84.3.1; the second playtester's check of 84.3.) The keys as they are bound: each notes when it put a card
+	// down, and the map's own Enter waits the key guard's half second after that. A card put down by the mouse leaves
+	// the map's Enter free.
+	void EnterKey();
+	void EscapeKey();
+	void SpaceKey();
+	/** (Rules 84.3.2.) Tab, NEXT ARMY's key: on the question before the month's end it is SHOW ME, and it tells the guard. */
+	void TabKey();
+	bool IsCardUp() const { return IsTableBusy() || EndAsk.bVisible; }
+	double KeyShutAt = -1000.0;
+	double DoorSince = 0.0; // when the door last came up: it takes no Enter in its first half second
+	bool bEnterByKey = false; // (EndMonth was called by the Enter key: on the question before the month's end it is SHOW ME)
 	bool bAlwaysWatch = false;
 	bool bByRail = false;
 	bool bBySea = false;
