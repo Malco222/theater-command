@@ -508,6 +508,8 @@ struct FMonthElse
 struct FMonthCard
 {
 	bool bValid = false;
+	/** (Rules 84.3.3; ruling 123(b).) The card that opens a campaign, headed by the moment: "As September 1939 opens". */
+	bool bOpening = false;
 	FString Date;
 	TArray<FMonthBand> Bands;
 	TArray<FMonthScore> Score;
@@ -518,6 +520,101 @@ struct FMonthCard
 	TArray<FMonthHome> Home;
 	TArray<FMonthStaff> Staff;
 	TArray<FMonthElse> Elsewhere;
+};
+
+/** (Rules 84.3.3) One of FIRST COMMAND's staff notes, a tip or the closing note, in the rules' words for this game. */
+struct FLessonNote
+{
+	/** "lesson", "tip" or "closing". */
+	FString Kind;
+	FString Id;
+	/** Its place in the list, from 1, and how many there are (0 for a tip or the closing note). */
+	int32 N = 0;
+	int32 Of = 10;
+	FString Head;
+	FString Text;
+	/** The deed line under the sentences ("Send one army by rail."); empty for lesson 1, a tip and the closing note. */
+	FString Deed;
+	/** The deed by its name in the list ('pick', 'march', 'rail', ...), and the moment it came due by ('army', 'train', ...). */
+	FString Does;
+	FString Due;
+	/** Where the pointer stands on the map for a lesson that points at a flag: the army to pick up, one beside the enemy, the siege. */
+	int32 Region = INDEX_NONE;
+};
+
+/** (Rules 84.3.3) What stands on the desk for FIRST COMMAND now, as the rules answer TC.lessonNow. */
+struct FLessonDesk
+{
+	bool bValid = false;
+	/** The notes are on, in a campaign with a player at the controls. */
+	bool bOn = false;
+	/** The campaign FIRST COMMAND opened. */
+	bool bFirst = false;
+	/** The note on the desk (a lesson, a tip or the closing note), if one is. */
+	bool bNote = false;
+	FLessonNote Note;
+	/** Lesson 1, laid on the month card while it is open. */
+	bool bLaid = false;
+	FLessonNote Laid;
+	/** Lessons stamped DONE since the game last asked: the note it shows takes the stamp. */
+	TArray<FString> Stamped;
+	/** Notes put away with LATER (the count on GUIDE), and lessons done. */
+	int32 Waiting = 0;
+	int32 Done = 0;
+};
+
+/**
+ * (Rules 84.3.3; the art director's first-hour brief, section 3.) The one thing the staff note's pointer frames now:
+ * nothing; a piece of the screen by its name (a button, or a line on a card); or a place on the map, as a box in
+ * the viewport's pixels, which is drawn on the ground under every piece.
+ */
+struct FLessonAim
+{
+	enum EKind : uint8 { Nothing, Screen, Ground };
+	EKind Kind = Nothing;
+	/** On the screen: "giveorders", "line", "end", "send", "siege", "depth", "arsenal", "fly", "otherraid", "act:<the act>". */
+	FName Name;
+	/** On the ground: the frame, already 6 px clear of the thing it frames, in the viewport's pixels; and the ground under
+	 * the thing in the world, whose height the frame is laid at. */
+	FBox2D Box = FBox2D(ForceInit);
+	FVector Foot = FVector::ZeroVector;
+};
+
+/** (Rules 84.3.3) A row of the Guide's list of the ten lessons. */
+struct FLessonRow
+{
+	FString Id;
+	int32 N = 0;
+	FString Head;
+	/** "done", "now" (waiting for him) or "later" (when its moment comes). */
+	FString State;
+	/** The first waiting row carries the kit's lit glow. */
+	bool bLit = false;
+};
+
+/** (Rules 84.3.3) The Guide's first page: the ten lessons under their months, and the setting. */
+struct FLessonGuide
+{
+	bool bValid = false;
+	bool bFirst = false;
+	FString Label, Head, State, Setting;
+	bool bOn = true;
+	int32 Waiting = 0;
+	TArray<FString> GroupLabels;
+	TArray<TArray<FLessonRow>> Groups;
+};
+
+/** (Rules 84.3.3; ruling 141) FIRST COMMAND's button on the door, and the campaign it opens. */
+struct FLessonDoor
+{
+	bool bValid = false;
+	FString Label;
+	/** "New here? Learn as you play.", or "The ten lessons again." once all ten are done. */
+	FString Line;
+	bool bAllDone = false;
+	FString Nation;
+	int32 From = 1;
+	FString Level, Depth;
 };
 
 struct FOfficePage

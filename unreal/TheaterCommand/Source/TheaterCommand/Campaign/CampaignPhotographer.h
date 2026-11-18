@@ -58,6 +58,7 @@ private:
 	bool bDismiss = false; // put that screen away again
 	bool bAnnounce = false; // show the screen that tells of a nation's fall
 	bool bGuide = false; // open the page that says how to play
+	bool bLessonGuide = false; // open the Guide's list of the ten lessons (FIRST COMMAND), as GUIDE does in a war he leads
 	bool bWorks = false; // stand a full set of works in the region looked at: factories, a shipyard, guns and an airfield
 	int32 TownPlot = -1; // on the town's bar: click this plot, so its choices are laid out
 	FString TownOrder; // and order this line of building from them

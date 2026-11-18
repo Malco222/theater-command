@@ -101,7 +101,7 @@ import { markFor as markOfRules, monthCard as cardOfRules, monthMark, monthOrder
 import { keepsStores } from '../../../src/campaign/resources';
 import { newsSide } from '../../../src/campaign/turn';
 import type { RaidKind, RaidPlan, RaidWay } from '../../../src/campaign/airwar';
-import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSack } from '../../../src/campaign/turn';
+import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts } from '../../../src/campaign/turn';
 import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
@@ -118,6 +118,13 @@ import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
 import { TRADE as TRADE_RULES, dealsOf as tradeDealsOf, housesOf as tradeHousesOf, tradePath as tradePathOf, tradeRules as tradeIsOn, whyNoTrade as whyNoTradeWith } from '../../../src/campaign/trade';
 import { civicSum as civicSumOf } from '../../../src/campaign/buildings';
+// (Rules 84.3.3) FIRST COMMAND: the first hour's ten staff notes, one list for both games.
+import {
+  BOMBING, CLOSING, FIRST_COMMAND, LESSONS, LESSON_DOOR, LESSON_GROUPS, LESSON_NAMES, LESSON_SETTING, TIPS, allDone, bringBack, closingOwed, currentLesson, doneCount,
+  firstCommand, isDone, lessonDeed, lessonWords, lessonsAgain, lessonsOn, namedWords, pickupPlace, putAway, readNotebook, showAgain, siegeOf, waitingCount,
+  type Deed, type Lesson, type Moment, type Notebook,
+} from '../../../src/campaign/lessons';
+import { cutThroughGuns } from '../../../src/campaign/rails';
 import type { BattleReport, Build, Corps, Game, Kind, Posture, Region } from '../../../src/campaign/types';
 
 let g: Game | null = null;
@@ -960,7 +967,7 @@ function shellingSince(s: Game, since: number): { regions: number[]; notes: stri
 }
 
 /** The fights at sea since a report (by its id): the seas they were in, a line on each, and whether the player's ships were in one. */
-function seaFightsSince(s: Game, since: number): { zones: number[]; notes: string[]; mine: boolean } {
+function seaFightsSince(s: Game, since: number): { zones: number[]; notes: string[]; mine: boolean; sunk: { zone: number; nat: string; cls: string; n: number }[] } {
   const fresh = s.seaReports.filter((r) => r.id > since);
   const adj = (nat: string): string => s.nations[nat]?.adj ?? nat;
   // (release 1) Ships seen to sink: in a fight the player's side took part in he knows what went down, on both
@@ -1221,7 +1228,7 @@ function listNames(names: string[]): string {
 }
 
 /** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
-function start(options?: { human?: string | null; from?: number; view?: string; seed?: number; level?: string; secure?: boolean; depth?: string; history?: number; world?: boolean }) {
+function start(options?: { human?: string | null; from?: number; view?: string; seed?: number; level?: string; secure?: boolean; depth?: string; history?: number; world?: boolean; first?: boolean }) {
   wideWorld = options?.world === true;
   const human = options?.human === undefined ? 'GER' : options.human;
   const from = options?.from ?? 1;
@@ -1251,6 +1258,10 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   if (options?.view === 'grand' && options?.history && options.history !== 3) { try { dialCalls.order?.(g, options.history, true); } catch { /* no dial in these rules */ } }
   // The month the player took his seat, kept with the game (the chimneys of an idle country stand cold only from his second month).
   if (human) (g.flags as Record<string, number>).began = g.turn;
+  // (Rules 84.3.3) The campaign FIRST COMMAND opened, marked as the browser marks it: the notes teach in any campaign
+  // while they are on, and the Guide lists them by its months in this one.
+  if (human && options?.first) (g.flags as Record<string, number>).firstCommand = 1;
+  lessonsBegin(!!human && !!options?.first);
   // Honours earned before the player took over are his to carry; their citations are old news.
   if (from > 1) takeOver(g);
   if (human) {
@@ -1282,6 +1293,7 @@ function load(text: string) {
   const loaded = loadGame(text);
   if (!loaded) return null;
   g = loaded;
+  lessonsBegin(false);
   swapAsked = ''; wreckAsked = ''; // (nothing asked in the campaign being left is remembered in this one)
   fallenNation = null;
   lastMonth = null;
@@ -2516,6 +2528,8 @@ function attack(ids: number[], to: number) {
 
 interface CardFigure { value: string; label: string }
 interface MonthCard {
+  /** (Rules 84.3.3; ruling 123(b).) The card that opens a campaign: headed by the moment, "As September 1939 opens". */
+  opening?: boolean;
   date: string;
   bands: { kind: string; flags: string[]; text: string; tip: string; week: number; when: string; region: number; title: string; sub: string; note: string; good: boolean; spent: boolean; alarm: boolean }[];
   score: { label: string; sign: string; figure: string; sub: string; tone: number }[];
@@ -4897,6 +4911,11 @@ function page(id: string, region = -1) {
   if (p && card) {
     return { ok: true, ...p, headline: '', note: '', top: [], card };
   }
+  // (Rules 84.3.3, trap 1.) The card that opens a war played from its first month has no month of reports behind it:
+  // the page is the card alone, for lesson 1 to lie on.
+  if (!p && id === 'reports' && lastCard?.opening) {
+    try { return { ok: true, id: 'reports', title: `THE MONTH'S REPORT  \u00B7  ${lastCard.date.toUpperCase()}`, headline: '', note: '', top: [], sections: [], month: monthShown(s, lastCard) }; } catch { /* no card, then */ }
+  }
   // (Ruling 64.) The month's report is one card: the page's own lists stay behind it for a game with none.
   if (p && id === 'reports' && lastCard) {
     try { return { ok: true, ...p, month: monthShown(s, lastCard) }; } catch { /* the page as it was */ }
@@ -5758,6 +5777,281 @@ function raidsFlown(turn?: number) {
   return { sea: s.seaReports.map((r) => [r.id, r.turn, r.zoneName]), battles: s.flags.airBattles ?? 0, reports: s.airReports.length, turns: [...new Set(s.airReports.map((r) => r.turn))], raids: flownRaids(s, turn ?? s.turn) };
 }
 
+// ---- FIRST COMMAND: the first hour's ten staff notes (rules 84.3.3) -------------------------------------------
+// The lessons, their words and the tests of their deeds are the shared rules' (src/campaign/lessons.ts, read from
+// data/campaign/lessons.json): the game keeps nothing of its own but where the note is drawn. The notebook (which
+// lessons are done, put away or shown) is the player's, not the campaign's: the game hands it in from its own small
+// file beside the options with TC.notebook(kept), and writes it back whenever an answer carries `book`.
+//
+// Deeds are read across the player's own orders (the handoff, first-hour/HANDOFF-3D.md, section 3): what a march, a
+// train, an attack, a storm, a raid or an arsenal order brought about is read off the war as the call returns, as the
+// browser reads it off the page between two drawings. Nothing his staff does is read: a desk or a depth handed over
+// in the middle of his month (where the staff works at once, trap 4) and the other nations' moves at the month's end
+// (trap 2) go through calls that read no deeds. The two deeds only the screen sees, the month card put down ('card')
+// and a line of it followed ('line'), the game reports by name with TC.lessonDeed.
+
+/** What only the screen can see: whether the month card is open, and the corps of the army in hand. */
+type LessonMoment = { card?: boolean; inHand?: number[] };
+
+let lessonBook: Notebook = readNotebook(null);
+/** The notebook changed since the game last wrote it to the player's file. */
+let lessonBookChanged = false;
+/** Lessons stamped DONE since the game last asked, in order: the note it shows takes the stamp. */
+let lessonStamps: string[] = [];
+/** The tip on screen, the month it came in, and the orders given since: it goes at the next order or the month's end. */
+let lessonTip: { id: string; turn: number; acts: number } | null = null;
+/** How many of his lines were cut through no guns when his month was last open (-1: not yet counted in this campaign). */
+let lessonCuts = -1;
+
+/** A campaign begun or read in: nothing of the last one's notes stands on the desk. */
+function lessonsBegin(first: boolean): void {
+  lessonStamps = []; lessonTip = null; lessonCuts = -1;
+  if (first) {
+    if (allDone(lessonBook)) lessonsAgain(lessonBook);
+    lessonBook.on = true;
+    lessonBookChanged = true;
+  }
+}
+
+/** True while it is his own month to give orders in, as the notes read it (no eve of war, nobody else moving). */
+const lessonUp = (s: Game): boolean => !!s.human && humanUp(s) && !onEve(s);
+
+/** Stamps the lesson a deed earns, if its turn has come. */
+function lessonDid(s: Game, deed: Deed, m: LessonMoment = {}): void {
+  const got = lessonDeed(s, lessonBook, deed, m);
+  if (!got.length) return;
+  lessonBookChanged = true;
+  for (const l of got) if (!lessonStamps.includes(l.id)) lessonStamps.push(l.id);
+}
+
+/** A tip is shown once, the first time its moment comes; the march's only once the march lesson is done. */
+function lessonTipDue(s: Game, id: string): void {
+  if (lessonBook.tips.includes(id) || !lessonsOn(s, lessonBook) || !TIPS.some((t) => t.id === id)) return;
+  if (id === 'kept' && !isDone(lessonBook, 'march')) return;
+  lessonBook.tips.push(id);
+  lessonBookChanged = true;
+  lessonTip = { id, turn: s.turn, acts: 0 };
+}
+
+/** His lines cut by bombers where no guns stood: the moment of the tip that says so. */
+const lessonCutCount = (s: Game): number => (s.human ? s.regions.filter((r) => r.ctrl === s.human && cutThroughGuns(s, r.id) === 0).length : 0);
+
+/** The war as an order of his finds it, to read his deeds against once it is carried out. */
+interface DeedMark { turn: number; reports: number; air: number; queue: Set<number>; kept: Set<string>; hand: { id: number; reg: number }[] }
+const keptMarches = (s: Game): Set<string> => new Set(Object.keys(s.flags).filter((k) => k.startsWith('march:')));
+function deedMark(s: Game, ids: number[]): DeedMark | null {
+  const me = s.human;
+  if (!me || !lessonUp(s) || !lessonsOn(s, lessonBook)) return null;
+  return {
+    turn: s.turn, reports: s.reports.length, air: s.airReports.length, queue: new Set((s.nations[me]?.queue ?? []).map((b) => b.id)), kept: keptMarches(s),
+    hand: ids.map((id) => s.corps.find((c) => c.id === id && !c.dead)).filter((c): c is Corps => !!c).map((c) => ({ id: c.id, reg: c.reg })),
+  };
+}
+/** What his order brought about, read as the browser reads it between two drawings (firsthour.ts, readDeeds). */
+function deedsSince(was: DeedMark, how: 'march' | 'rail' | ''): void {
+  const s = game();
+  const me = s.human;
+  if (!me || s.turn !== was.turn || !lessonUp(s)) return;
+  const fought = s.reports.slice(was.reports).filter((r) => r.attNat === me);
+  if (fought.some((r) => r.town)) lessonDid(s, 'siege');
+  if (fought.length) lessonDid(s, 'attack');
+  const flew = s.airReports.slice(was.air);
+  if (flew.some((r) => r.attNat === me && BOMBING.includes(r.mission))) lessonDid(s, 'raid');
+  const queue = s.nations[me]?.queue ?? [];
+  const ordered = queue.some((b) => !was.queue.has(b.id));
+  if (ordered) lessonDid(s, 'order');
+  // A march kept from month to month (trap 3: even one whose first leg rides the railway is a march), or the army
+  // in hand moved: by a march, or by the train it was ordered onto.
+  const kept = [...keptMarches(s)].filter((k) => !was.kept.has(k));
+  const moved = was.hand.some((h) => { const c = s.corps.find((x) => x.id === h.id); return !!c && !c.dead && c.reg !== h.reg; });
+  // (Any order he gives puts away a tip that came before it.)
+  if (lessonTip && (fought.length || moved || kept.length || flew.length || ordered || queue.length !== was.queue.size)) lessonTip.acts++;
+  if (fought.length) return;
+  if (kept.length) lessonTipDue(s, 'kept');
+  if (kept.length || (moved && how === 'march')) lessonDid(s, 'march');
+  if (moved && how === 'rail' && !kept.length) lessonDid(s, 'rail');
+}
+
+/**
+ * One of the player's own orders, with its deeds read. `how` says what moving the army in hand means (a march or a
+ * train); `counts` leaves out an order that is not his own doing (a desk or a depth handed to the staff).
+ */
+function playerOrder<A extends unknown[], R>(fn: (...a: A) => R, how: 'march' | 'rail' | '' = '', counts: (...a: A) => boolean = () => true): (...a: A) => R {
+  return (...a: A): R => {
+    let was: DeedMark | null = null;
+    try { was = g && counts(...a) ? deedMark(g, how && Array.isArray(a[0]) ? (a[0] as number[]) : []) : null; } catch { was = null; }
+    const out = fn(...a);
+    if (was) { try { deedsSince(was, how); } catch { /* (the notes never stop an order) */ } }
+    return out;
+  };
+}
+/** The calls of the page actions that are the staff's work, not his: a depth, a desk or the staff's purse. */
+const staffAct = (action: unknown): boolean => typeof action === 'string' && /^(depth|desk|cap):/.test(action);
+
+/** The month handed over: a siege of his standing as he hands it over earns lesson 7, and the month's end lesson 5. */
+function endMonthWithLessons() {
+  const s = game();
+  const up = lessonUp(s) && lessonsOn(s, lessonBook);
+  let siegeUp = false;
+  try { siegeUp = up && !isDone(lessonBook, 'city') && siegeOf(s) !== null; } catch { siegeUp = false; }
+  const t0 = s.turn;
+  const out = endMonth();
+  const t = game();
+  if (up && t.turn > t0) {
+    if (siegeUp) lessonDid(t, 'siege');
+    lessonDid(t, 'end');
+  }
+  if (lessonTip && lessonTip.turn < t.turn) lessonTip = null;
+  return out;
+}
+
+/** The 3D game's own words for a control, where they are not the list's: lessons.json `names.unreal`. */
+const LESSON_GAME = 'unreal';
+/**
+ * (Ruling b425, the design director, 18 November 2026.) The 3D game's swaps, lent here until lessons.json carries
+ * them all as names.unreal: YOUR STAFF, opened from the red line under the date, where the browser has a STAFF tab; the
+ * raid planned from the aircraft's own airfield; the month card's lines followed by their pins; the GUIDE on the
+ * top bar. Each keeps its lesson inside its word limit (lesson 9 stays at 36).
+ */
+const LESSON_NAMES_3D: [string, string][] = [
+  ['Open STAFF and take the air war into your own hands. In the planner choose bombers, a raid and a target.', 'In YOUR STAFF, take the air war yourself. Click your aircraft on the map: choose bombers, a raid and a target.'],
+  ['STAFF hands you each desk when you want it', 'YOUR STAFF hands you each desk when you want it'],
+  ['Click a line to go to its place', "Click a line's pin to go to its place"],
+  ['Click one line of the card.', 'Click the pin on one line of the card.'],
+  ['in the Guide', 'in the GUIDE'],
+];
+// (Where the list already carries names.unreal, only the pairs it lacks are added. The closing note's YOUR STAFF comes
+// with the list itself, beside ruling b429's cut that keeps that note at 29: lent here, it would make the older note 31.)
+try {
+  const have = LESSON_NAMES[LESSON_GAME] ?? (LESSON_NAMES[LESSON_GAME] = []);
+  for (const pair of LESSON_NAMES_3D) if (!have.some(([was]) => was === pair[0])) have.push(pair);
+} catch { /* (the list's own words, then) */ }
+
+/** A lesson as the screen shows it: its number, its words with the campaign's places filled in, and its deed line. */
+function lessonShown(s: Game, l: Lesson) {
+  const w = lessonWords(s, l, LESSON_GAME);
+  return { kind: 'lesson', id: l.id, n: l.n, of: LESSONS.length, head: w.head, text: w.text, deed: w.deed, does: l.does, due: l.due };
+}
+
+/** The army lesson 4 points at when none is in hand: one of his with a move left beside the enemy (the browser's flag). */
+function lessonFoeFlag(s: Game, inHand: number[]): number {
+  const me = s.human;
+  if (!me) return -1;
+  const beside = s.regions.find((r) => r.units.some((c) => c.nat === me && c.ap > 0 && !c.dead) && r.nb.some((k) => s.regions[k].units.some((u) => s.nations[me].atWar.includes(u.nat))));
+  if (beside) return beside.id;
+  const held = s.corps.find((c) => inHand.includes(c.id) && !c.dead);
+  return held ? held.reg : -1;
+}
+
+/**
+ * The note on the desk now, for the moment the screen describes: the lesson due, a tip, or the closing note; lesson
+ * 1 laid on the month card while it is open; the lessons stamped since last asked; and the notebook when it changed.
+ * The army in hand earns lesson 2 (its deed is picking one up). `region` is where the pointer stands on the map for
+ * a lesson that points at a flag: the army to pick up, one beside the enemy, the province under siege.
+ */
+function lessonNow(moment: LessonMoment = {}) {
+  const s = game();
+  const m: Moment = { card: !!moment.card, inHand: (moment.inHand ?? []).filter((id) => Number.isFinite(id)) };
+  const on = lessonsOn(s, lessonBook), up = lessonUp(s);
+  let note: Record<string, unknown> | null = null;
+  let laid: Record<string, unknown> | null = null;
+  if (on && up) {
+    if (m.inHand!.length && s.corps.some((c) => m.inHand!.includes(c.id) && !c.dead && c.nat === s.human && canOrder(s, c))) lessonDid(s, 'pick', m);
+    if (!lessonBook.tips.includes('cut')) {
+      const cuts = lessonCutCount(s);
+      if (lessonCuts >= 0 && cuts > lessonCuts) lessonTipDue(s, 'cut');
+      lessonCuts = cuts;
+    }
+    const l = currentLesson(s, lessonBook, m);
+    if (lessonTip && !(lessonTip.acts < 1 && lessonTip.turn === s.turn)) lessonTip = null;
+    // (A lesson that comes only with the month card goes before a tip, which waits until the card is put down.)
+    if (lessonTip && !(l?.due === 'card' && m.card)) {
+      const t = TIPS.find((x) => x.id === lessonTip!.id);
+      if (t) note = { kind: 'tip', id: t.id, n: 0, of: LESSONS.length, head: '', text: namedWords(t.text, LESSON_GAME), deed: '', does: '', due: t.when };
+    } else if (l && l.id === 'month') {
+      // (Lesson 1 lies on the month card itself and nowhere else.)
+      laid = lessonShown(s, l);
+    } else if (l) {
+      note = lessonShown(s, l);
+      const at = l.id === 'pickup' ? pickupPlace(s) : l.id === 'attack' ? lessonFoeFlag(s, m.inHand!) : l.id === 'city' ? siegeOf(s)?.region ?? -1 : -1;
+      note.region = at;
+    } else if (closingOwed(s, lessonBook)) {
+      const w = lessonWords(s, { ...LESSONS[0], text: CLOSING.text, deed: '' }, LESSON_GAME);
+      note = { kind: 'closing', id: CLOSING.id, n: 0, of: LESSONS.length, head: CLOSING.head, text: w.text, deed: '', does: '', due: '' };
+    }
+  }
+  const stamped = lessonStamps;
+  lessonStamps = [];
+  const out = { on, first: firstCommand(s), note, laid, stamped, waiting: waitingCount(lessonBook), done: doneCount(lessonBook), ...(lessonBookChanged ? { book: lessonBook } : {}) };
+  lessonBookChanged = false;
+  return out;
+}
+
+/** A deed only the screen sees, reported by name: 'card' (the month card lesson 1 lay on, put down) or 'line' (a line of the month card followed). */
+function lessonDeedOf(deed: string, moment: LessonMoment = {}) {
+  const s = game();
+  if ((deed === 'card' || deed === 'line') && lessonUp(s)) lessonDid(s, deed, { card: !!moment.card, inHand: moment.inHand ?? [] });
+  return lessonNow(moment);
+}
+
+/**
+ * What the player does with the notes: 'later' puts the note away (it waits in the Guide), 'back:<id>' brings one
+ * back, 'again:<id>' arms a lesson done for its next moment (SHOW ME AGAIN), 'all' the ten from the first, 'on' and
+ * 'off' the setting, 'close' the closing note, and 'tip' puts the tip away. Answers as lessonNow does.
+ */
+function lessonAct(action: string, moment: LessonMoment = {}) {
+  const s = game();
+  const [what, id = ''] = action.split(':');
+  if (what === 'later') { const l = lessonsOn(s, lessonBook) ? currentLesson(s, lessonBook, { card: !!moment.card, inHand: moment.inHand ?? [] }) : null; if (l && l.id !== 'month') putAway(lessonBook, l.id); }
+  else if (what === 'back') bringBack(lessonBook, id);
+  else if (what === 'again') showAgain(lessonBook, id);
+  else if (what === 'all') lessonsAgain(lessonBook);
+  else if (what === 'on' || what === 'off') lessonBook.on = what === 'on';
+  else if (what === 'close') { if (!lessonBook.done.includes(CLOSING.id)) lessonBook.done.push(CLOSING.id); }
+  else if (what === 'tip') { lessonTip = null; return lessonNow(moment); }
+  else return lessonNow(moment);
+  lessonBookChanged = true;
+  return lessonNow(moment);
+}
+
+/** The notebook from the player's file (any shape: what is missing is a new player's), or as it stands. */
+function lessonNotebook(kept?: unknown) {
+  if (kept !== undefined) { lessonBook = readNotebook(kept); lessonBookChanged = false; }
+  return { book: lessonBook, door: { ...LESSON_DOOR, done: allDone(lessonBook), line: allDone(lessonBook) ? LESSON_DOOR.again : LESSON_DOOR.fresh }, campaign: FIRST_COMMAND, setting: LESSON_SETTING };
+}
+
+const WORD_COUNT = ['None', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+/** The Guide's first page: the ten lessons, each done, waiting or to come, under its month in FIRST COMMAND. */
+function lessonGuide(moment: LessonMoment = {}) {
+  const s = g;
+  const first = !!s && firstCommand(s);
+  let cur = '';
+  try { cur = s && lessonsOn(s, lessonBook) ? currentLesson(s, lessonBook, { card: !!moment.card, inHand: moment.inHand ?? [] })?.id ?? '' : ''; } catch { cur = ''; }
+  const waiting = LESSONS.filter((l) => !isDone(lessonBook, l.id) && (lessonBook.later.includes(l.id) || l.id === cur));
+  const done = doneCount(lessonBook);
+  const state = `${done ? `${WORD_COUNT[done]} done.` : 'None done yet.'}${waiting.length ? ` ${waiting.length === 1 ? 'One is' : `${WORD_COUNT[waiting.length]} are`} waiting for you.` : ''}`;
+  let lit = false;
+  const row = (l: Lesson) => {
+    if (isDone(lessonBook, l.id)) return { id: l.id, n: l.n, head: l.head, state: 'done', lit: false };
+    if (waiting.includes(l)) { const glow = !lit; lit = true; return { id: l.id, n: l.n, head: l.head, state: 'now', lit: glow }; }
+    return { id: l.id, n: l.n, head: l.head, state: 'later', lit: false };
+  };
+  const groups = LESSON_GROUPS.map((gr, k) => ({ label: first ? gr.label : gr.plain, rows: LESSONS.slice(gr.from, LESSON_GROUPS[k + 1]?.from ?? LESSONS.length).map(row) }));
+  return { first, label: first ? 'THE GUIDE · FIRST COMMAND' : 'THE GUIDE', head: 'The ten lessons', state, groups, on: lessonBook.on, setting: LESSON_SETTING, waiting: waitingCount(lessonBook) };
+}
+
+/**
+ * The card that opens a war played from its first month, for lesson 1 to lie on (trap 1: a war from September 1939
+ * has no card until its second month). Kept as the month's card, so that the reports page shows it as it shows any
+ * month's; `opening` heads it by the moment, "As September 1939 opens" (ruling 123(b)). False where there is none to open.
+ */
+function openingCard() {
+  const s = game();
+  if (!s.human || !s.nations[s.human]) return { ok: false };
+  try { lastCard = { ...shownCard(s, cardOfRules(s, markOfRules(s), s.human, { opening: true })), opening: true }; } catch { return { ok: false }; }
+  return { ok: true };
+}
+
 // ---- The playtester's click-through (a development tool: Brian, 17 November 2026, "i want the playtester to really
 // click everything to make sure it works in the 3d game too") --------------------------------------------------
 
@@ -5823,4 +6117,6 @@ function find(name: string) {
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, railShow, railTip, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move, previewAttack: preview, attack, takeOutlook, take, stormLook, storm, gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally, endMonth, lead: leadOf };
+  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(move, 'march'), previewAttack: preview, attack: playerOrder(attack), takeOutlook, take: playerOrder(take, 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: leadOf,
+  // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
+  lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard };

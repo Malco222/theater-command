@@ -196,6 +196,8 @@ ACampaignMapActor::ACampaignMapActor()
 	ShowCamera = MakeStudioCamera(TEXT("ShowCamera"), ShowMesh, true);
 	HighlightMesh = MakeMesh(TEXT("Highlight"), false);
 	OrdersMesh = MakeMesh(TEXT("Orders"), false);
+	PointerMesh = MakeMesh(TEXT("Pointer"), false);
+	PointerMesh->SetTranslucentSortPriority(1); // (over the ground's washes and the reach; under the table's signs)
 
 	auto MakeMarkers = [this](const TCHAR* Name)
 	{
@@ -1132,6 +1134,37 @@ AArmyPiece* ACampaignMapActor::FindFleetPiece(int32 FleetId) const
 {
 	const TObjectPtr<AArmyPiece>* Piece = FleetPieces.Find(FleetId);
 	return Piece ? Piece->Get() : nullptr;
+}
+
+AArmyPiece* ACampaignMapActor::FindAirPiece(int32 WingId) const
+{
+	const TObjectPtr<AArmyPiece>* Piece = AirPieces.Find(WingId);
+	return Piece ? Piece->Get() : nullptr;
+}
+
+void ACampaignMapActor::ShowPointer(const TArray<FVector>& Corners, const TArray<FColor>& Inks)
+{
+	if (!PointerMesh)
+	{
+		return;
+	}
+	if (Corners.Num() == 0 || Corners.Num() != Inks.Num() * 4 || !HighlightMaterial)
+	{
+		PointerMesh->ClearAllMeshSections();
+		return;
+	}
+	FCampaignMeshBuffers Buffers;
+	for (int32 Quad = 0; Quad < Inks.Num(); ++Quad)
+	{
+		int32 At[4];
+		for (int32 Each = 0; Each < 4; ++Each)
+		{
+			At[Each] = Buffers.AddVertex(Corners[Quad * 4 + Each], FVector::UpVector, Inks[Quad]);
+		}
+		Buffers.AddTriangleFacingUp(At[0], At[1], At[2]);
+		Buffers.AddTriangleFacingUp(At[0], At[2], At[3]);
+	}
+	Buffers.Commit(PointerMesh, 0, HighlightMaterial);
 }
 
 void ACampaignMapActor::ShowChart(bool bOn, const TArray<int32>& Levels, const TArray<FOldSighting>& Old)

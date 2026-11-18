@@ -13,6 +13,7 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 
 #include <atomic>
 
@@ -136,6 +137,7 @@ bool FCampaignSession::Prepare(FString& OutError)
 		return false;
 	}
 	bReady = true;
+	ReadNotebook();
 	return true;
 }
 
@@ -272,7 +274,7 @@ TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
 	return Out;
 }
 
-bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level, const FString& Depth, int32 History)
+bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level, const FString& Depth, int32 History, bool bFirstCommand)
 {
 	bRunning = false;
 	if (!bReady && !Prepare(OutError))
@@ -280,12 +282,13 @@ bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& Vi
 		return false;
 	}
 	// (rules version 74: with -TheaterWorld the grand campaign is played on the wider chart, which the table then has laid out)
-	const FString Arguments = FString::Printf(TEXT("[{\"human\":%s,\"from\":%d,\"view\":%s,\"seed\":%d%s%s%s%s}]"),
+	const FString Arguments = FString::Printf(TEXT("[{\"human\":%s,\"from\":%d,\"view\":%s,\"seed\":%d%s%s%s%s%s}]"),
 		Human.IsEmpty() ? TEXT("null") : *JsonQuote(Human), From, *JsonQuote(ViewMode), Seed,
 		FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")) ? TEXT(",\"world\":true") : TEXT(""),
 		Level.IsEmpty() ? TEXT("") : *(TEXT(",\"level\":") + JsonQuote(Level)),
 		Depth.IsEmpty() ? TEXT("") : *(TEXT(",\"depth\":") + JsonQuote(Depth)),
-		History > 0 ? *FString::Printf(TEXT(",\"history\":%d"), History) : TEXT(""));
+		History > 0 ? *FString::Printf(TEXT(",\"history\":%d"), History) : TEXT(""),
+		bFirstCommand ? TEXT(",\"first\":true") : TEXT(""));
 	FString ViewJson;
 	DropAside();
 	RulesMemo.Reset(); // (a new war, or one read in: nothing asked of the old one holds)
@@ -385,6 +388,17 @@ namespace
 			TEXT("stands"), TEXT("province"), TEXT("railShow"), TEXT("garrisonWhy"), TEXT("gateLeft") };
 		return Questions.Contains(Function);
 	}
+
+	/**
+	 * (Rules 84.3.3) FIRST COMMAND's calls: they read the war and change only the player's notebook, never the war
+	 * (checked: the saved game is the same before and after each), so they neither forget the questions kept nor are
+	 * kept themselves. Each answers for the notebook as it stands, which they change.
+	 */
+	bool IsBesideTheWar(const FString& Function)
+	{
+		static const TSet<FString> Beside = { TEXT("lessonNow"), TEXT("lessonDeed"), TEXT("lessonAct"), TEXT("notebook"), TEXT("guide") };
+		return Beside.Contains(Function);
+	}
 }
 
 bool FCampaignSession::CallRules(const FString& Function, const FString& ArgumentsJson, TSharedPtr<FJsonObject>& OutObject)
@@ -404,7 +418,7 @@ bool FCampaignSession::CallRules(const FString& Function, const FString& Argumen
 	// the same hover tip just before the odds: were it not here, it would forget the odds on every hover.)
 	// "tc.Speed.RulesMemo 0" always asks.
 	const bool bQuestion = IsQuestion(Function);
-	if (!bQuestion)
+	if (!bQuestion && !IsBesideTheWar(Function))
 	{
 		RulesMemo.Reset();
 	}
@@ -3558,6 +3572,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 		const TSharedPtr<FJsonObject>& Told = *MonthObject;
 		FMonthCard& Month = Out.Month;
 		Month.bValid = true;
+		Told->TryGetBoolField(TEXT("opening"), Month.bOpening);
 		Told->TryGetStringField(TEXT("date"), Month.Date);
 		Told->TryGetStringField(TEXT("none"), Month.None);
 		Told->TryGetStringField(TEXT("foot"), Month.Foot);
@@ -4818,4 +4833,225 @@ void FCampaignSession::FightAside(const FString& Function, const TArray<int32>& 
 		{
 			Then(Answer.IsValid() ? *Read : FAttackResult());
 		});
+}
+
+// ---- (Rules 84.3.3) FIRST COMMAND ------------------------------------------------------------------------------
+
+FString FCampaignSession::NotebookFile()
+{
+	// (A run that takes pictures or plays the playtester's steps keeps its own, as it keeps its own campaign and options:
+	// the player's own notebook is never written by a run.)
+	FString Run;
+	const bool bRun = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Run, false) || FParse::Value(FCommandLine::Get(), TEXT("TheaterSteps="), Run, false);
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Campaign"), bRun ? TEXT("lessons-runs.json") : TEXT("lessons.json"));
+}
+
+void FCampaignSession::ReadNotebook()
+{
+	// What he has learnt, kept with the player and not with a save; a missing or unreadable file is a new player's.
+	// A run keeps the notes off, so that no picture or step of a run that is not about them finds one on the desk: a
+	// run that starts FIRST COMMAND turns them on as any start of it does, -TheaterLessons starts a run as a new player,
+	// and -TheaterKeepLessons keeps what the last run left.
+	FString Run, Text;
+	const bool bRun = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Run, false) || FParse::Value(FCommandLine::Get(), TEXT("TheaterSteps="), Run, false);
+	if (bRun && !FParse::Param(FCommandLine::Get(), TEXT("TheaterKeepLessons")))
+	{
+		Text = FParse::Param(FCommandLine::Get(), TEXT("TheaterLessons")) ? TEXT("{}") : TEXT("{\"on\":false}");
+	}
+	else if (!FFileHelper::LoadFileToString(Text, *NotebookFile()))
+	{
+		Text = TEXT("{}");
+	}
+	// (The code checker, 18 November: the file is read and written back as the reader understood it, so that nothing
+	// after its closing brace can reach the rules' arguments and fail the call there.)
+	TSharedPtr<FJsonObject> Kept;
+	FString Clean;
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Clean);
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Kept) || !Kept.IsValid() || !FJsonSerializer::Serialize(Kept.ToSharedRef(), Writer))
+	{
+		Clean = TEXT("{}");
+	}
+	FString Json, Error;
+	if (Host.IsValid() && !Host->Call(TEXT("notebook"), FString::Printf(TEXT("[%s]"), *Clean), Json, Error))
+	{
+		UE_LOG(LogTheater, Display, TEXT("FIRST COMMAND: these rules keep no staff notes (%s)"), *Error); // (the stand-in rules, or rules before 84.3.3)
+	}
+}
+
+void FCampaignSession::KeepNotebook(const TSharedPtr<FJsonObject>& Answer)
+{
+	const TSharedPtr<FJsonObject>* Book = nullptr;
+	if (!Answer.IsValid() || !Answer->TryGetObjectField(TEXT("book"), Book) || !Book || !Book->IsValid())
+	{
+		return;
+	}
+	FString Text;
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Text);
+	if (FJsonSerializer::Serialize(Book->ToSharedRef(), Writer))
+	{
+		FFileHelper::SaveStringToFile(Text + TEXT("\n"), *NotebookFile(), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	}
+}
+
+namespace
+{
+	FLessonNote ReadLessonNote(const TSharedPtr<FJsonObject>& Object)
+	{
+		FLessonNote Note;
+		double Number = 0.0;
+		Object->TryGetStringField(TEXT("kind"), Note.Kind);
+		Object->TryGetStringField(TEXT("id"), Note.Id);
+		if (Object->TryGetNumberField(TEXT("n"), Number)) { Note.N = static_cast<int32>(Number); }
+		if (Object->TryGetNumberField(TEXT("of"), Number)) { Note.Of = static_cast<int32>(Number); }
+		Object->TryGetStringField(TEXT("head"), Note.Head);
+		Object->TryGetStringField(TEXT("text"), Note.Text);
+		Object->TryGetStringField(TEXT("deed"), Note.Deed);
+		Object->TryGetStringField(TEXT("does"), Note.Does);
+		Object->TryGetStringField(TEXT("due"), Note.Due);
+		if (Object->TryGetNumberField(TEXT("region"), Number) && Number >= 0.0) { Note.Region = static_cast<int32>(Number); }
+		return Note;
+	}
+
+	FString LessonMomentArgs(bool bCard, const TArray<int32>& InHand)
+	{
+		return FString::Printf(TEXT("{\"card\":%s,\"inHand\":[%s]}"), bCard ? TEXT("true") : TEXT("false"), *IdList(InHand));
+	}
+}
+
+bool FCampaignSession::ReadLessonDesk(const TSharedPtr<FJsonObject>& Object, FLessonDesk& Out)
+{
+	Out = FLessonDesk();
+	if (!Object.IsValid())
+	{
+		return false;
+	}
+	KeepNotebook(Object);
+	Out.bValid = true;
+	Object->TryGetBoolField(TEXT("on"), Out.bOn);
+	Object->TryGetBoolField(TEXT("first"), Out.bFirst);
+	const TSharedPtr<FJsonObject>* Note = nullptr;
+	if (Object->TryGetObjectField(TEXT("note"), Note) && Note && Note->IsValid())
+	{
+		Out.bNote = true;
+		Out.Note = ReadLessonNote(*Note);
+	}
+	const TSharedPtr<FJsonObject>* Laid = nullptr;
+	if (Object->TryGetObjectField(TEXT("laid"), Laid) && Laid && Laid->IsValid())
+	{
+		Out.bLaid = true;
+		Out.Laid = ReadLessonNote(*Laid);
+	}
+	Object->TryGetStringArrayField(TEXT("stamped"), Out.Stamped);
+	double Number = 0.0;
+	if (Object->TryGetNumberField(TEXT("waiting"), Number)) { Out.Waiting = static_cast<int32>(Number); }
+	if (Object->TryGetNumberField(TEXT("done"), Number)) { Out.Done = static_cast<int32>(Number); }
+	return true;
+}
+
+bool FCampaignSession::LessonNow(bool bCard, const TArray<int32>& InHand, FLessonDesk& Out)
+{
+	TSharedPtr<FJsonObject> Object;
+	return CallRules(TEXT("lessonNow"), FString::Printf(TEXT("[%s]"), *LessonMomentArgs(bCard, InHand)), Object) && ReadLessonDesk(Object, Out);
+}
+
+bool FCampaignSession::LessonDeed(const FString& Deed, bool bCard, FLessonDesk& Out)
+{
+	TSharedPtr<FJsonObject> Object;
+	return CallRules(TEXT("lessonDeed"), FString::Printf(TEXT("[%s,%s]"), *JsonQuote(Deed), *LessonMomentArgs(bCard, TArray<int32>())), Object) && ReadLessonDesk(Object, Out);
+}
+
+bool FCampaignSession::LessonAct(const FString& Action, bool bCard, const TArray<int32>& InHand, FLessonDesk& Out)
+{
+	TSharedPtr<FJsonObject> Object;
+	return CallRules(TEXT("lessonAct"), FString::Printf(TEXT("[%s,%s]"), *JsonQuote(Action), *LessonMomentArgs(bCard, InHand)), Object) && ReadLessonDesk(Object, Out);
+}
+
+FLessonGuide FCampaignSession::LessonGuide(bool bCard, const TArray<int32>& InHand)
+{
+	FLessonGuide Out;
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("guide"), FString::Printf(TEXT("[%s]"), *LessonMomentArgs(bCard, InHand)), Object) || !Object.IsValid())
+	{
+		return Out;
+	}
+	Out.bValid = true;
+	Object->TryGetBoolField(TEXT("first"), Out.bFirst);
+	Object->TryGetStringField(TEXT("label"), Out.Label);
+	Object->TryGetStringField(TEXT("head"), Out.Head);
+	Object->TryGetStringField(TEXT("state"), Out.State);
+	Object->TryGetStringField(TEXT("setting"), Out.Setting);
+	Object->TryGetBoolField(TEXT("on"), Out.bOn);
+	double Number = 0.0;
+	if (Object->TryGetNumberField(TEXT("waiting"), Number)) { Out.Waiting = static_cast<int32>(Number); }
+	const TArray<TSharedPtr<FJsonValue>>* Groups = nullptr;
+	if (Object->TryGetArrayField(TEXT("groups"), Groups))
+	{
+		for (const TSharedPtr<FJsonValue>& GroupValue : *Groups)
+		{
+			const TSharedPtr<FJsonObject> Group = GroupValue.IsValid() ? GroupValue->AsObject() : nullptr;
+			if (!Group.IsValid())
+			{
+				continue;
+			}
+			FString Label;
+			Group->TryGetStringField(TEXT("label"), Label);
+			Out.GroupLabels.Add(Label);
+			TArray<FLessonRow>& Rows = Out.Groups.AddDefaulted_GetRef();
+			const TArray<TSharedPtr<FJsonValue>>* RowValues = nullptr;
+			if (Group->TryGetArrayField(TEXT("rows"), RowValues))
+			{
+				for (const TSharedPtr<FJsonValue>& RowValue : *RowValues)
+				{
+					const TSharedPtr<FJsonObject> Entry = RowValue.IsValid() ? RowValue->AsObject() : nullptr;
+					if (!Entry.IsValid())
+					{
+						continue;
+					}
+					FLessonRow& Row = Rows.AddDefaulted_GetRef();
+					Entry->TryGetStringField(TEXT("id"), Row.Id);
+					if (Entry->TryGetNumberField(TEXT("n"), Number)) { Row.N = static_cast<int32>(Number); }
+					Entry->TryGetStringField(TEXT("head"), Row.Head);
+					Entry->TryGetStringField(TEXT("state"), Row.State);
+					Entry->TryGetBoolField(TEXT("lit"), Row.bLit);
+				}
+			}
+		}
+	}
+	return Out;
+}
+
+FLessonDoor FCampaignSession::LessonDoor()
+{
+	// (Asked on the door, before any campaign is under way: straight to the rules, which need no war for it.)
+	FLessonDoor Out;
+	FString Json, Error;
+	TSharedPtr<FJsonObject> Object;
+	if (!bReady || !Host.IsValid() || !Host->Call(TEXT("notebook"), TEXT("[]"), Json, Error)
+		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
+	{
+		return Out;
+	}
+	const TSharedPtr<FJsonObject>* Door = nullptr;
+	const TSharedPtr<FJsonObject>* Campaign = nullptr;
+	if (!Object->TryGetObjectField(TEXT("door"), Door) || !Door || !Door->IsValid() || !Object->TryGetObjectField(TEXT("campaign"), Campaign) || !Campaign || !Campaign->IsValid())
+	{
+		return Out;
+	}
+	Out.bValid = true;
+	(*Door)->TryGetStringField(TEXT("label"), Out.Label);
+	(*Door)->TryGetStringField(TEXT("line"), Out.Line);
+	(*Door)->TryGetBoolField(TEXT("done"), Out.bAllDone);
+	(*Campaign)->TryGetStringField(TEXT("nat"), Out.Nation);
+	double From = 1.0;
+	if ((*Campaign)->TryGetNumberField(TEXT("from"), From)) { Out.From = static_cast<int32>(From); }
+	(*Campaign)->TryGetStringField(TEXT("level"), Out.Level);
+	(*Campaign)->TryGetStringField(TEXT("depth"), Out.Depth);
+	return Out;
+}
+
+bool FCampaignSession::OpenOpeningCard()
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	return CallRules(TEXT("openingCard"), TEXT("[]"), Object) && Object.IsValid() && Object->TryGetBoolField(TEXT("ok"), bOk) && bOk;
 }

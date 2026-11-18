@@ -156,6 +156,7 @@ void ACampaignPlayerController::RefreshOpening(bool bShow)
 	}
 
 	Opening.SavedLine = FText::FromString(Mode->DescribeSavedCampaign());
+	Opening.Door = Rules->LessonDoor(); // (rules 84.3.3: FIRST COMMAND's words, lit until the ten are done)
 	Opening.bCanReturn = Rules->IsRunning();
 	if (bShow && !Opening.bVisible)
 	{
@@ -722,6 +723,34 @@ void ACampaignPlayerController::AnswerBegin(bool bBegin)
 	{
 		BeginGrandCampaign(Kind == 2);
 	}
+	else if (Kind == 4)
+	{
+		BeginFirstCommand();
+	}
+}
+
+void ACampaignPlayerController::BeginFirstCommand()
+{
+	// (Ruling 141; rules 84.3.3.) FIRST COMMAND's campaign is the rules' own (lessons.json: Germany, from its first
+	// month, at Cadet and Field command), begun as the door's other wars are, and marked as FIRST COMMAND's: the
+	// notes are on, and the ten are armed again if all were done.
+	ACampaignGameMode* Mode = GetMode();
+	FCampaignSession* Rules = GetSession();
+	if (!Mode || !Rules || Opening.bWorking)
+	{
+		return;
+	}
+	const FLessonDoor Door = Rules->LessonDoor();
+	if (!Door.bValid || Door.Nation.IsEmpty())
+	{
+		return;
+	}
+	if (Mode->StartCampaign(Door.Nation, Door.From, TEXT("grand"), NewSeed(), Door.Level, Door.Depth, 0, true))
+	{
+		bFreshCampaign = true;
+		EnterCampaign();
+		CampaignSounds::Play(this, TEXT("bugle"), 0.6f);
+	}
 }
 
 void ACampaignPlayerController::OpenMenu()
@@ -801,13 +830,27 @@ void ACampaignPlayerController::EnterCampaign()
 			}
 		}
 	}
-	// The adviser stands by for the first months of a campaign with somebody at the table.
+	// (Rules 84.3.3) FIRST COMMAND: the staff's notes start afresh with the campaign. A war played from its first
+	// month has no month card until its second (trap 1), so where lesson 1 is due the card it lies on is owed, and
+	// is opened once the opening flight is over; until then no note stands on the desk.
+	ResetLessons();
+	bool bNotesOn = false;
+	{
+		FLessonDesk Probe;
+		if (Nation && Session->LessonNow(true, TArray<int32>(), Probe))
+		{
+			bNotesOn = Probe.bOn;
+			bOpeningCardOwed = Probe.bLaid && View.Turn == 1;
+		}
+	}
+	// The adviser stands by for the first months of a campaign with somebody at the table: while the staff's notes
+	// are on, they teach in his place, at his place under the date card.
 	{
 		const int32 Next = Adviser.Revision + 1; // (so that the screen writes his list afresh)
 		Adviser = FAdviser();
 		bAdviserSpoke = false;
 		Adviser.Revision = Next;
-		Adviser.bOn = Nation != nullptr && View.Turn <= 2 && !bScripted && bAdviserWanted;
+		Adviser.bOn = Nation != nullptr && View.Turn <= 2 && !bScripted && bAdviserWanted && !bNotesOn;
 	}
 	Notify(Nation
 		? FString::Printf(TEXT("%s. You lead %s.%s"), *View.Date, *WithThe(Nation->Name), View.bEve ? TEXT(" Place your army, then end the month.") : TEXT(""))
@@ -1178,11 +1221,13 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 	{
 		AdviserSaw(3);
 	}
+	LessonPageChanged();
 }
 
 void ACampaignPlayerController::ClosePage()
 {
 	bPageOpen = false;
+	LessonPageChanged();
 }
 
 void ACampaignPlayerController::PressPage(const FString& Action)
@@ -1194,6 +1239,11 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 	}
 	if (Action.StartsWith(TEXT("goto:")))
 	{
+		// (Rules 84.3.3) A line of the month card followed by its pin: lesson 6's deed, which only the screen sees.
+		if (Page.Month.bValid)
+		{
+			LessonDeedsOwed.Emplace(TEXT("line"), true);
+		}
 		// A way from the list of forces to one of them on the table: the view goes there, and it is picked up or opened.
 		TArray<FString> Parts;
 		Action.ParseIntoArray(Parts, TEXT(":"));
@@ -1259,6 +1309,7 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 		Page = Session->Page(Action.Mid(5), SelectedRegion);
 		Page.Revision = Opened;
 		bPageOpen = Page.bValid;
+		LessonPageChanged();
 		return;
 	}
 	FString Note, Next;
@@ -1350,6 +1401,7 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 	Page = Session->Page(Id, SelectedRegion);
 	Page.Revision = Revision;
 	bPageOpen = Page.bValid;
+	LessonPageChanged();
 }
 
 void ACampaignPlayerController::GetPageLinks(TArray<FString>& OutIds, TArray<FString>& OutLabels) const
@@ -2479,10 +2531,116 @@ void ACampaignPlayerController::OpenGuide()
 	{
 		return;
 	}
+	// The same key puts away whichever of the Guide's pages is open.
+	if (bLessonGuideOpen)
+	{
+		CloseLessonGuide();
+		return;
+	}
 	if (Document.bValid && Document.Title == TEXT("How to play"))
 	{
-		CloseDocument(); // the same key puts the page away again
+		CloseDocument();
 		return;
+	}
+	if (IsAnswering())
+	{
+		return; // (Speed, b414 mark 1, as Enter: opening either page asks the rules, and an order is still being answered)
+	}
+	// (Rules 84.3.3; ruling 147.) In a war he leads, the Guide opens on its list of the ten lessons: the typed page of
+	// rules is its second, behind "How a month works".
+	if (!OpenLessonGuide())
+	{
+		OpenHowToPlay();
+	}
+}
+
+bool ACampaignPlayerController::OpenLessonGuide()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || Session->GetView().Human.IsEmpty())
+	{
+		return false;
+	}
+	FLessonGuide Guide = Session->LessonGuide(LessonCardOpen(), PickedCorps);
+	if (!Guide.bValid)
+	{
+		return false;
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	CloseArsenal();
+	CloseLedger();
+	CloseDiplomacy();
+	CloseResearch();
+	CloseGenerals();
+	CloseDocument();
+	LessonGuidePage = MoveTemp(Guide);
+	bLessonGuideOpen = true;
+	++LessonGuideRevision;
+	GuideOverPage = bPageOpen ? Page.Id : FString(); // (a card open under it stays; another opened after takes its place)
+	return true;
+}
+
+void ACampaignPlayerController::RefreshLessonGuide()
+{
+	FCampaignSession* Session = GetSession();
+	if (!bLessonGuideOpen || !Session)
+	{
+		return;
+	}
+	FLessonGuide Guide = Session->LessonGuide(LessonCardOpen(), PickedCorps);
+	if (Guide.bValid)
+	{
+		LessonGuidePage = MoveTemp(Guide);
+		++LessonGuideRevision;
+	}
+}
+
+void ACampaignPlayerController::PressGuide(const FString& Action)
+{
+	if (!bLessonGuideOpen)
+	{
+		return;
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	if (Action.StartsWith(TEXT("back:")))
+	{
+		// (a row waiting for him: its note comes back, and the Guide closes on it, as the browser's does)
+		bLessonGuideOpen = false;
+		++LessonGuideRevision;
+	}
+	// (Asked as the note's own presses are: at once where no order is being answered, else once it is. The list is
+	// read again with the answer.)
+	LessonActsOwed.Add(Action);
+	bLessonsDue = true;
+	if (Afterwards.Num() == 0 && !IsAnswering())
+	{
+		AskLessons();
+	}
+}
+
+void ACampaignPlayerController::CloseLessonGuide()
+{
+	if (!bLessonGuideOpen)
+	{
+		return;
+	}
+	bLessonGuideOpen = false;
+	++LessonGuideRevision;
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	bLessonsDue = true; // (the notes stood aside while it was open: the desk is asked again)
+}
+
+void ACampaignPlayerController::OpenHowToPlay()
+{
+	EndNewsreel();
+	if (bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible)
+	{
+		return;
+	}
+	if (bLessonGuideOpen)
+	{
+		bLessonGuideOpen = false; // (from the list's "How a month works": the typed page takes its place)
+		++LessonGuideRevision;
 	}
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseArsenal();
@@ -3455,6 +3613,38 @@ void ACampaignPlayerController::SpeakAdviser()
 	}
 }
 
+void ACampaignPlayerController::SpeakLesson(const FLessonNote& Note)
+{
+	// (Rules 84.3.3; the design director's brief: "the same notes in the 3D game from the same list, read aloud by the
+	// built-in voice when the voice is on". The deed line is read last.) A tip is its one line; the closing note its
+	// heading and sentences. Each part ends as a sentence does, so that the voice stops between them.
+	FString Words;
+	auto Add = [&Words](const FString& Part)
+	{
+		const FString Said = Part.TrimStartAndEnd();
+		if (Said.IsEmpty())
+		{
+			return;
+		}
+		Words += (Words.IsEmpty() ? TEXT("") : TEXT(" ")) + Said;
+		if (!Said.EndsWith(TEXT(".")) && !Said.EndsWith(TEXT("?")) && !Said.EndsWith(TEXT("!")) && !Said.EndsWith(TEXT(":")))
+		{
+			Words += TEXT(".");
+		}
+	};
+	if (Note.Kind != TEXT("tip"))
+	{
+		Add(Note.Head);
+	}
+	Add(Note.Text);
+	if (Note.Kind == TEXT("lesson"))
+	{
+		Add(Note.Deed);
+	}
+	// (A note is said at once, cutting short whatever was being said; the lines waiting keep their turn after it.)
+	Speak(Words, TEXT("Daniel"), 176, 1);
+}
+
 bool ACampaignPlayerController::IsFrameHidden() const
 {
 	// ("-TheaterNoFrame" takes a run's pictures with the frame put away)
@@ -3549,6 +3739,626 @@ void ACampaignPlayerController::ToggleWealth()
 		: Next == 4 ? (bFogAtSea ? TEXT("The admiral's chart: a sea you have not searched lies under a veil, a lighter one where the search is thin, and a red ring marks where enemy ships were last seen. Press Y to put it away.")
 			: TEXT("The admiral's chart: every sea is in full view in this campaign, so there is nothing to veil. Press Y to put it away."))
 		: TEXT("The map as it is: each country's colour a stain over its own ground."), 6.0);
+}
+
+// ---- (Rules 84.3.3) FIRST COMMAND: the staff's notes ---------------------------------------------------------------
+// The rules say which note is on the desk, and stamp the lessons his deeds earn (campaign-bridge.ts, lessonNow): the
+// game keeps only what is on the screen. A note comes, slides in, and stays where it came until it goes; when its
+// deed is done the DONE stamp lands on it and it stays two seconds at most (a click sends it at once); then the next
+// comes. A deed done while another note is up earns its stamp quietly, as in the browser.
+
+void ACampaignPlayerController::ResetLessons()
+{
+	Lessons = FLessonDesk();
+	LessonNote = LessonGone = LessonLaid = FLessonNote();
+	bLessonNote = bLessonLaid = bLessonsDue = bOpeningCardOwed = bLessonStampOwed = bLessonGoneStamped = bLessonNoteHidden = bArsenalStrip = bArsenalStripPutAway = false;
+	bLessonLaidSpoken = false;
+	if (bLessonGuideOpen)
+	{
+		bLessonGuideOpen = false;
+		++LessonGuideRevision;
+	}
+	++LessonArrival;
+	LessonCameAt = 0.0;
+	LessonGoneAt = LessonStampAt = -1.0;
+	LessonStampUntil = 0.0;
+	LessonMomentKey = 0;
+	LessonDeedsOwed.Reset();
+	LessonActsOwed.Reset();
+	LessonAim = FLessonAim();
+	if (!GroundAimLaid.IsEmpty() && Map.IsValid())
+	{
+		Map->ShowPointer(TArray<FVector>(), TArray<FColor>());
+	}
+	GroundAimLaid.Reset();
+}
+
+bool ACampaignPlayerController::IsLessonQuiet() const
+{
+	// (the browser's quiet(): nothing while the other nations move, a film runs, the map is not his to look at, the
+	// GUIDE is open, or the card lesson 1 lies on is still to open)
+	return !IsMapShown() || bWatching || Announcements.Num() > 0 || WarPrompt.bVisible || bMomentOn || bOpeningCardOwed || BriefingAt > 0.0
+		|| bLessonGuideOpen || (Document.bValid && Document.Title == TEXT("How to play"));
+}
+
+bool ACampaignPlayerController::HasLessonNote() const
+{
+	return bLessonNote && !IsLessonQuiet() && FPlatformTime::Seconds() >= LessonCameAt;
+}
+
+double ACampaignPlayerController::GetLessonAge() const
+{
+	return FPlatformTime::Seconds() - LessonCameAt;
+}
+
+double ACampaignPlayerController::GetLessonStampAge() const
+{
+	return LessonStampAt < 0.0 ? -1.0 : FPlatformTime::Seconds() - LessonStampAt;
+}
+
+bool ACampaignPlayerController::GetLessonLeaving(FLessonNote& Out, float& Faded) const
+{
+	const double Since = FPlatformTime::Seconds() - LessonGoneAt;
+	if (LessonGoneAt < 0.0 || Since >= 0.11 || IsLessonQuiet())
+	{
+		return false;
+	}
+	Out = LessonGone;
+	Faded = static_cast<float>(FMath::Clamp(Since / 0.11, 0.0, 1.0));
+	return true;
+}
+
+void ACampaignPlayerController::LessonPageChanged()
+{
+	// (Lesson 1's deed is the card it lay on put down: by GIVE ORDERS, Enter, TOUR THE MAP or a line's pin, trap 7.)
+	if (bLessonLaid && !LessonCardOpen())
+	{
+		bLessonLaid = false;
+		LessonDeedsOwed.Emplace(TEXT("card"), true);
+	}
+	bLessonsDue = true;
+	// (Asked at once where no order is being answered, so that lesson 1 is on the month card as it first opens.)
+	if (Afterwards.Num() == 0 && !IsAnswering() && !Opening.bVisible)
+	{
+		AskLessons();
+	}
+}
+
+void ACampaignPlayerController::AskLessons()
+{
+	bLessonsDue = false;
+	FCampaignSession* Session = GetSession();
+	if (!Session || Session->GetView().Human.IsEmpty())
+	{
+		LessonDeedsOwed.Reset();
+		LessonActsOwed.Reset();
+		if (bLessonNote)
+		{
+			LessonGone = LessonNote;
+			bLessonGoneStamped = false;
+			LessonGoneAt = FPlatformTime::Seconds();
+			bLessonNote = false;
+		}
+		return;
+	}
+	// What is owed first, in the order it was done; then the desk as the screen stands now. Every lesson stamped on
+	// the way is gathered, for the note on the screen to take its stamp.
+	TArray<FString> Stamped;
+	FLessonDesk Desk;
+	for (const TPair<FString, bool>& Deed : LessonDeedsOwed)
+	{
+		if (Session->LessonDeed(Deed.Key, Deed.Value, Desk))
+		{
+			Stamped.Append(Desk.Stamped);
+		}
+	}
+	LessonDeedsOwed.Reset();
+	for (const FString& Act : LessonActsOwed)
+	{
+		if (Session->LessonAct(Act, LessonCardOpen(), PickedCorps, Desk))
+		{
+			Stamped.Append(Desk.Stamped);
+		}
+	}
+	LessonActsOwed.Reset();
+	if (!Session->LessonNow(LessonCardOpen(), PickedCorps, Desk))
+	{
+		return;
+	}
+	Stamped.Append(Desk.Stamped);
+	Desk.Stamped = MoveTemp(Stamped);
+	TakeLessons(Desk);
+	RefreshLessonGuide(); // (the Guide's list, if it is open, as the notebook now stands)
+}
+
+void ACampaignPlayerController::TakeLessons(const FLessonDesk& Desk)
+{
+	const double Now = FPlatformTime::Seconds();
+	Lessons = Desk;
+	// Lesson 1 lies on the month card while it is open, and nowhere else.
+	bLessonLaid = Desk.bLaid && LessonCardOpen();
+	if (bLessonLaid)
+	{
+		LessonLaid = Desk.Laid;
+	}
+	// The stamp lands on the note he is reading, if its deed is the one done. One earned while the screen is not his
+	// (END THE MONTH's, read once the others have moved: trap 2) waits with its note until his month is back.
+	if (bLessonNote && LessonStampUntil <= 0.0 && LessonNote.Kind == TEXT("lesson") && Desk.Stamped.Contains(LessonNote.Id))
+	{
+		bLessonStampOwed = true;
+	}
+	if (bLessonStampOwed)
+	{
+		if (IsLessonQuiet() || bLessonNoteHidden)
+		{
+			return;
+		}
+		bLessonStampOwed = false;
+		LessonStampAt = Now;
+		LessonStampUntil = Now + 2.0;
+		CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
+		return;
+	}
+	if (LessonStampUntil > 0.0)
+	{
+		return; // (the stamped note stays until its two seconds are up or it is clicked away; the next waits)
+	}
+	ShowDeskNote(Now);
+}
+
+void ACampaignPlayerController::ShowDeskNote(double Now, bool bWasStamped)
+{
+	const bool bSame = bLessonNote && Lessons.bNote && Lessons.Note.Kind == LessonNote.Kind && Lessons.Note.Id == LessonNote.Id;
+	if (bSame)
+	{
+		LessonNote = Lessons.Note; // (its words may name another place now; it stays where it stands)
+		return;
+	}
+	if (bLessonNote)
+	{
+		// The note on the desk fades out over 110 ms, and the next slides in after it: a stamped one with its stamp.
+		LessonGone = LessonNote;
+		bLessonGoneStamped = bWasStamped && LessonNote.Kind == TEXT("lesson");
+		LessonGoneAt = Now;
+		bLessonNote = false;
+	}
+	if (Lessons.bNote)
+	{
+		LessonNote = Lessons.Note;
+		bLessonNote = true;
+		++LessonArrival;
+		LessonCameAt = LessonGoneAt >= 0.0 && Now - LessonGoneAt < 0.11 ? LessonGoneAt + 0.11 : Now;
+	}
+}
+
+void ACampaignPlayerController::PressLesson(const FString& Action)
+{
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	if (Action == TEXT("send"))
+	{
+		// (Ruling 147: a click on a stamped note sends it at once.)
+		if (LessonStampUntil > 0.0)
+		{
+			LessonStampUntil = FPlatformTime::Seconds();
+		}
+		return;
+	}
+	LessonActsOwed.Add(Action);
+	bLessonsDue = true;
+	if (IsArsenalStrip() && (Action == TEXT("later") || Action == TEXT("close") || Action == TEXT("tip")))
+	{
+		// (he asked: the arsenal closes up)
+		bArsenalStrip = false;
+		bArsenalStripPutAway = true;
+	}
+	if (Afterwards.Num() == 0 && !IsAnswering())
+	{
+		AskLessons();
+	}
+}
+
+void ACampaignPlayerController::GetLessonKeepClear(TArray<FBox2D>& Out) const
+{
+	Out.Reset();
+	const FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	// A flag of his on the screen, cloth and plate, as GetColoursOnScreen boxes every flag; where none stands, the
+	// middle of its province.
+	auto FlagIn = [this, Session, &Out](int32 Region)
+	{
+		if (!Map->GetData().Regions.IsValidIndex(Region))
+		{
+			return;
+		}
+		FVector Middle;
+		double Radius = 0.0;
+		FVector2D At, Top;
+		const AArmyPiece* Piece = Map->FindPiece(Region, Session->GetView().Human);
+		if (Piece && Piece->GetColours(Middle, Radius) && PlayerCameraManager && ProjectWorldLocationToScreen(Middle, At)
+			&& ProjectWorldLocationToScreen(Middle + PlayerCameraManager->GetCameraRotation().Quaternion().GetUpVector() * Radius, Top))
+		{
+			const double Half = FMath::Clamp(FVector2D::Distance(At, Top) * 0.8, 6.0, 90.0) + 6.0;
+			Out.Add(FBox2D(At - FVector2D(Half, Half * 0.75 + 12.0), At + FVector2D(Half, Half * 1.35)));
+			return;
+		}
+		const FVector2D Center = Map->GetData().Regions[Region].Center;
+		if (ProjectWorldLocationToScreen(Map->MapToWorld(Center.X, Center.Y), At))
+		{
+			Out.Add(FBox2D(At - FVector2D(30.0, 40.0), At + FVector2D(30.0, 30.0)));
+		}
+	};
+	if (ArmyRegion != INDEX_NONE)
+	{
+		FlagIn(ArmyRegion);
+	}
+	if (bLessonNote && LessonNote.Region != INDEX_NONE)
+	{
+		FlagIn(LessonNote.Region);
+	}
+	// (and what the pointer frames on the ground, which the note must never cover either)
+	if (LessonAim.Kind == FLessonAim::Ground)
+	{
+		Out.Add(LessonAim.Box);
+	}
+}
+
+// ---- (Rules 84.3.3; the art director's first-hour brief, section 3) The pointer -----------------------------------
+// The one thing the note points at, for the lesson on the desk and where he stands now (firsthour.ts, target()): on a
+// card only the card's own way to the deed, never a thing the card covers (trap 9); otherwise a button by its name,
+// a flag of his, or the lit ground nearest the army in hand. On the map it is laid on the ground (ShowPointer).
+
+namespace
+{
+	/** (lessons.ts, BOMBING) The raids that earn lesson 9: "Fight for the sky" is not one of them (trap 8). */
+	bool IsBombingRaid(const FString& Kind)
+	{
+		static const TCHAR* const Bombing[] = { TEXT("bomb"), TEXT("night"), TEXT("ground"), TEXT("line"), TEXT("town"), TEXT("harbour"), TEXT("strike"), TEXT("fleet") };
+		for (const TCHAR* Each : Bombing)
+		{
+			if (Kind == Each)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
+bool ACampaignPlayerController::PieceBoxOnScreen(const AArmyPiece* Piece, FBox2D& Out) const
+{
+	Out = FBox2D(ForceInit);
+	if (!Piece || Piece->IsHidden() || !PlayerCameraManager)
+	{
+		return false;
+	}
+	// The whole piece, from the pole's tip to the base (the brief): the base's round on the ground, and the flag over
+	// it where it flies one.
+	const FQuat Eye = PlayerCameraManager->GetCameraRotation().Quaternion();
+	const FVector Right = Eye.GetRightVector(), Up = Eye.GetUpVector();
+	const FVector Along = FVector::CrossProduct(Right, FVector::UpVector).GetSafeNormal();
+	const FVector Base = Piece->GetActorLocation();
+	const double Round = FMath::Max(Piece->GetBaseRadius() * Piece->GetActorScale3D().X, 1.0);
+	TArray<FVector, TInlineAllocator<8>> Points;
+	Points.Add(Base + Right * Round);
+	Points.Add(Base - Right * Round);
+	Points.Add(Base + Along * Round);
+	Points.Add(Base - Along * Round);
+	FVector Middle;
+	double Cloth = 0.0;
+	if (Piece->GetColours(Middle, Cloth))
+	{
+		Points.Add(Middle + Up * (Cloth * 0.8) + Right * (Cloth * 0.7));
+		Points.Add(Middle + Up * (Cloth * 0.8) - Right * (Cloth * 0.7));
+	}
+	else
+	{
+		Points.Add(Base + FVector::UpVector * (Round * 2.0));
+	}
+	for (const FVector& Point : Points)
+	{
+		FVector2D At;
+		if (!ProjectWorldLocationToScreen(Point, At))
+		{
+			Out = FBox2D(ForceInit);
+			return false;
+		}
+		Out += At;
+	}
+	return Out.bIsValid;
+}
+
+bool ACampaignPlayerController::GroundSpotOnScreen(int32 Region, FVector2D& Out, FVector& Foot) const
+{
+	if (!Map.IsValid() || !Map->GetData().Regions.IsValidIndex(Region))
+	{
+		return false;
+	}
+	const FVector2D Center = Map->GetData().Regions[Region].Center;
+	Foot = Map->SurfacePointOver(Center.X, Center.Y, 0.0);
+	if (!ProjectWorldLocationToScreen(Foot, Out))
+	{
+		return false;
+	}
+	int32 Width = 0, Height = 0;
+	GetViewportSize(Width, Height);
+	const double Half = 22.0 * Height / 1000.0;
+	const FBox2D Frame(Out - FVector2D(Half, Half), Out + FVector2D(Half, Half));
+	if (Frame.Min.X < 0.0 || Frame.Min.Y < 0.0 || Frame.Max.X > Width || Frame.Max.Y > Height)
+	{
+		return false;
+	}
+	// (A spot he can see and click: not under a panel of the frame, nor under the note.)
+	for (const FBox2D& Panel : FrameOnScreen)
+	{
+		if (Panel.Intersect(Frame))
+		{
+			return false;
+		}
+	}
+	return !(LessonNoteOnScreen.bIsValid && LessonNoteOnScreen.Intersect(Frame));
+}
+
+void ACampaignPlayerController::AimLesson()
+{
+	THEATER_SPEED_SCOPE(AimLesson);
+	FLessonAim Aim;
+	const FCampaignSession* Session = GetSession();
+	int32 Width = 0, Height = 0;
+	GetViewportSize(Width, Height);
+	const double S = Height / 1000.0; // (the brief's pixels, of the 1600 by 1000 frame, in the viewport's)
+	auto OnScreen = [&Aim](const FName& Name)
+	{
+		Aim.Kind = FLessonAim::Screen;
+		Aim.Name = Name;
+	};
+	// A piece of his framed whole, 6 px clear of it.
+	auto FramePiece = [&](const AArmyPiece* Piece) -> bool
+	{
+		FBox2D Box;
+		if (!PieceBoxOnScreen(Piece, Box))
+		{
+			return false;
+		}
+		Box = Box.ExpandBy(6.0 * S);
+		if (Box.Max.X < 0.0 || Box.Max.Y < 0.0 || Box.Min.X > Width || Box.Min.Y > Height)
+		{
+			return false;
+		}
+		Aim.Kind = FLessonAim::Ground;
+		Aim.Box = Box;
+		Aim.Foot = Piece->GetActorLocation();
+		return true;
+	};
+	auto FrameFlag = [&](int32 Region) -> bool
+	{
+		return Map.IsValid() && Session && FramePiece(Map->FindPiece(Region, Session->GetView().Human));
+	};
+	// Of the provinces lit on the ground, the one nearest the army in hand that he can see: a frame 44 square at its middle.
+	auto FrameGround = [&](const TArray<int32>& Lit) -> bool
+	{
+		FVector2D From(Width * 0.5, Height * 0.5);
+		FBox2D Hand;
+		if (RingedPiece.IsValid() && PieceBoxOnScreen(RingedPiece.Get(), Hand))
+		{
+			From = Hand.GetCenter();
+		}
+		double Best = TNumericLimits<double>::Max();
+		for (const int32 Region : Lit)
+		{
+			FVector2D At;
+			FVector Foot;
+			if (Region == ArmyRegion || !GroundSpotOnScreen(Region, At, Foot))
+			{
+				continue;
+			}
+			const double Far = FVector2D::DistSquared(At, From);
+			if (Far < Best)
+			{
+				Best = Far;
+				Aim.Kind = FLessonAim::Ground;
+				Aim.Box = FBox2D(At - FVector2D(22.0 * S, 22.0 * S), At + FVector2D(22.0 * S, 22.0 * S));
+				Aim.Foot = Foot;
+			}
+		}
+		return Aim.Kind == FLessonAim::Ground;
+	};
+	if (Session && Map.IsValid() && !IsLessonQuiet() && !Session->GetView().Human.IsEmpty())
+	{
+		const FString& Human = Session->GetView().Human;
+		if (IsLessonLaid())
+		{
+			OnScreen(TEXT("giveorders")); // (lesson 1: the card put down is its deed; its pointer only while its card is up, trap 7)
+		}
+		else if (bLessonNote && !IsLessonStamped() && LessonNote.Kind == TEXT("lesson"))
+		{
+			const FString& Id = LessonNote.Id;
+			const FViewDesk* Air = FindDesk(TEXT("air"));
+			const FViewDesk* Build = FindDesk(TEXT("build"));
+			const bool bInHand = PickedCorps.Num() > 0 && ArmyRegion != INDEX_NONE;
+			if (IsLessonBesideCard())
+			{
+				const bool bFace = FaceOff.bVisible && !FaceOff.bResolved;
+				if (Id == TEXT("card") && LessonCardOpen())
+				{
+					OnScreen(TEXT("line"));
+				}
+				else if (Id == TEXT("attack") && bFace && !FaceOff.bMarch && !FaceOff.bStorm)
+				{
+					OnScreen(TEXT("send"));
+				}
+				else if (Id == TEXT("city") && bFace && (FaceOff.bMarch || FaceOff.bStorm))
+				{
+					OnScreen(TEXT("siege"));
+				}
+				else if (Id == TEXT("raid") && bPageOpen && Page.Card.bValid)
+				{
+					OnScreen(IsBombingRaid(Page.Card.Kind) ? TEXT("fly") : TEXT("otherraid")); // (trap 8: back to a bombing raid)
+				}
+				else if ((Id == TEXT("raid") || Id == TEXT("build")) && bPageOpen && Page.Id == TEXT("staff"))
+				{
+					const FViewDesk* Desk = Id == TEXT("raid") ? Air : Build;
+					if (Desk && Desk->bStaff && !Desk->Act.IsEmpty())
+					{
+						OnScreen(FName(*(TEXT("act:") + Desk->Act)));
+					}
+				}
+				else if (Id == TEXT("build") && bArsenalOpen)
+				{
+					// (Through the arsenal's door the clamps leave its button (the art director's brief, section 10): on
+					// LET MY STAFF's row while the staff has the desk, else on the first thing he can order, as the browser.)
+					OnScreen(Build && Build->bStaff ? TEXT("deskbar:build") : TEXT("order"));
+				}
+			}
+			else if (Id == TEXT("pickup") || Id == TEXT("city"))
+			{
+				FrameFlag(LessonNote.Region);
+			}
+			else if (Id == TEXT("march") && bInHand)
+			{
+				TArray<int32> Lit;
+				for (const FReachRegion& Step : Reach)
+				{
+					if (!Step.bAttack && !Step.IsWar())
+					{
+						Lit.Add(Step.Region);
+					}
+				}
+				FrameGround(Lit);
+			}
+			else if (Id == TEXT("attack"))
+			{
+				TArray<int32> Lit;
+				for (const FReachRegion& Step : Reach)
+				{
+					if (Step.bAttack && !Step.IsWar() && bInHand)
+					{
+						Lit.Add(Step.Region);
+					}
+				}
+				if (!FrameGround(Lit))
+				{
+					FrameFlag(LessonNote.Region);
+				}
+			}
+			else if (Id == TEXT("rail") && bInHand)
+			{
+				FrameGround(RailBeyond.Array());
+			}
+			else if (Id == TEXT("end"))
+			{
+				OnScreen(TEXT("end"));
+			}
+			else if (Id == TEXT("raid"))
+			{
+				if (Air && Air->bStaff)
+				{
+					OnScreen(TEXT("depth")); // (ruling b425: YOUR STAFF opens from the red line under the date)
+				}
+				else
+				{
+					// "Click your aircraft on the map": the first group of his that he can see.
+					for (const FViewAirFleet& Wing : Session->GetView().AirFleets)
+					{
+						if (Wing.Nation == Human && FramePiece(Map->FindAirPiece(Wing.Id)))
+						{
+							break;
+						}
+					}
+				}
+			}
+			else if (Id == TEXT("build"))
+			{
+				OnScreen(Build && Build->bStaff ? TEXT("depth") : TEXT("arsenal"));
+			}
+		}
+	}
+	LessonAim = Aim;
+	if (Aim.Kind == FLessonAim::Ground)
+	{
+		LayGroundPointer(Aim);
+	}
+	else if (!GroundAimLaid.IsEmpty())
+	{
+		GroundAimLaid.Reset();
+		if (Map.IsValid())
+		{
+			Map->ShowPointer(TArray<FVector>(), TArray<FColor>());
+		}
+	}
+}
+
+void ACampaignPlayerController::LayGroundPointer(const FLessonAim& Aim)
+{
+	if (!Map.IsValid() || !PlayerCameraManager)
+	{
+		return;
+	}
+	// Laid again only when the frame or the eye has moved.
+	const FVector Eye = PlayerCameraManager->GetCameraLocation();
+	const FRotator Facing = PlayerCameraManager->GetCameraRotation();
+	const FString Key = FString::Printf(TEXT("%.0f %.0f %.0f %.0f|%.1f %.1f %.1f|%.2f %.2f %.2f"), Aim.Box.Min.X, Aim.Box.Min.Y, Aim.Box.Max.X, Aim.Box.Max.Y,
+		Eye.X, Eye.Y, Eye.Z, Facing.Pitch, Facing.Yaw, Facing.Roll);
+	if (Key == GroundAimLaid)
+	{
+		return;
+	}
+	GroundAimLaid = Key;
+	int32 Width = 0, Height = 0;
+	GetViewportSize(Width, Height);
+	const double S = Height / 1000.0;
+	const FVector2D A = Aim.Box.Min, B = Aim.Box.Max;
+	const double Arm = ((B.X - A.X) < 60.0 * S ? 12.0 : 16.0) * S;
+	TArray<FVector> Corners;
+	TArray<FColor> Inks;
+	// A rectangle of the screen laid on the ground: each corner where the eye's ray through it meets the ground at the
+	// height of the thing framed, so that from the eye it stands exactly where the screen has it, and a piece in front
+	// of it hides it.
+	auto Lay = [&](double X0, double Y0, double X1, double Y1, double Lift, const FColor& Ink)
+	{
+		const FVector2D Points[4] = { FVector2D(FMath::Min(X0, X1), FMath::Min(Y0, Y1)), FVector2D(FMath::Max(X0, X1), FMath::Min(Y0, Y1)),
+			FVector2D(FMath::Max(X0, X1), FMath::Max(Y0, Y1)), FVector2D(FMath::Min(X0, X1), FMath::Max(Y0, Y1)) };
+		FVector Laid[4];
+		for (int32 Each = 0; Each < 4; ++Each)
+		{
+			FVector From, Way;
+			if (!DeprojectScreenPositionToWorld(static_cast<float>(Points[Each].X), static_cast<float>(Points[Each].Y), From, Way) || Way.Z > -0.02)
+			{
+				return;
+			}
+			const double Along = (Aim.Foot.Z - From.Z) / Way.Z;
+			if (Along <= 0.0)
+			{
+				return;
+			}
+			const FVector2D On = Map->WorldToMap(From + Way * Along);
+			Laid[Each] = Map->SurfacePointOver(On.X, On.Y, Lift);
+		}
+		for (const FVector& Corner : Laid)
+		{
+			Corners.Add(Corner);
+		}
+		Inks.Add(Ink);
+	};
+	// The four clamps: a path through each corner of the frame, Thick across with square ends, the arm along the edge
+	// taking the corner's square and the arm down the side the rest (the browser's #fhground, fh-case under fh-arm).
+	auto Clamps = [&](double Thick, double Lift, const FColor& Ink)
+	{
+		const double Half = Thick * 0.5;
+		const FVector2D Ends[4] = { A, FVector2D(B.X, A.Y), FVector2D(A.X, B.Y), B };
+		const FVector2D Ways[4] = { FVector2D(1.0, 1.0), FVector2D(-1.0, 1.0), FVector2D(1.0, -1.0), FVector2D(-1.0, -1.0) };
+		for (int32 Each = 0; Each < 4; ++Each)
+		{
+			const FVector2D C = Ends[Each], W = Ways[Each];
+			Lay(C.X - W.X * Half, C.Y - W.Y * Half, C.X + W.X * (Arm + Half), C.Y + W.Y * Half, Lift, Ink);
+			Lay(C.X - W.X * Half, C.Y + W.Y * Half, C.X + W.X * Half, C.Y + W.Y * (Arm + Half), Lift, Ink);
+		}
+	};
+	Clamps(6.0 * S, 0.34, FLinearColor(FColor::FromHex(TEXT("0E0B08"))).CopyWithNewOpacity(0.9f).ToFColor(false)); // (desk-950 at 90%)
+	Clamps(3.0 * S, 0.38, FLinearColor(FColor::FromHex(TEXT("E0B872"))).ToFColor(false)); // (brass-300)
+	Map->ShowPointer(Corners, Inks);
 }
 
 void ACampaignPlayerController::AdviserSaw(int32 Step)
@@ -4014,6 +4824,10 @@ void ACampaignPlayerController::Escape()
 	{
 		DismissAnnouncement();
 	}
+	else if (bLessonGuideOpen)
+	{
+		CloseLessonGuide();
+	}
 	else if (Document.bValid)
 	{
 		CloseDocument();
@@ -4164,11 +4978,106 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		Answering->Deliver();
 	}
+	// (Rules 84.3.3, trap 1.) The card lesson 1 lies on, once the opening flight is over and nothing else has the screen.
+	if (bOpeningCardOwed && BriefingAt <= 0.0 && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible && !IsAnswering())
+	{
+		bOpeningCardOwed = false;
+		if (FCampaignSession* Owed = GetSession())
+		{
+			bMonthCardDue = Owed->OpenOpeningCard();
+		}
+	}
 	// (Ruling 64.) The month's card, once nothing else has the screen.
 	if (bMonthCardDue && !bWatching && !Newsreel.bOn && Announcements.Num() == 0 && !FaceOff.bVisible && !WarPrompt.bVisible && !Opening.bVisible)
 	{
 		bMonthCardDue = false;
 		OpenPage(TEXT("reports"));
+	}
+	// (Rules 84.3.3) FIRST COMMAND. The DONE stamp stands two seconds at most, then the next note comes. The notes are
+	// asked again whenever what only the screen sees has changed (the card open, the army in hand, his month or the
+	// others'), or an order of his has been answered; and only once no order is being answered.
+	{
+		const double Now = FPlatformTime::Seconds();
+		if (LessonStampUntil > 0.0 && Now >= LessonStampUntil)
+		{
+			LessonStampUntil = 0.0;
+			LessonStampAt = -1.0;
+			ShowDeskNote(Now, true);
+			bLessonsDue = true;
+		}
+		// (A stamp earned while the screen was not his lands once it is again, whatever ended last: an announcement,
+		// a question of war, a moment at the front, the briefing or the newsreel; or a room with no margin for the note.)
+		if (bLessonStampOwed && !IsLessonQuiet() && !bLessonNoteHidden)
+		{
+			bLessonsDue = true;
+		}
+		// (The art director's brief, section 10.) Lesson 10's deed is done in the arsenal: while the arsenal is open its
+		// note is laid across it, and the strip keeps its room until the room closes, for what comes next (the closing
+		// note) to take; unless he puts the note away himself.
+		if (!bArsenalOpen)
+		{
+			bArsenalStrip = bArsenalStripPutAway = false;
+		}
+		else if (!bArsenalStrip && !bArsenalStripPutAway && HasLessonNote() && LessonNote.Kind == TEXT("lesson") && LessonNote.Id == TEXT("build"))
+		{
+			bArsenalStrip = true;
+		}
+		if (const FCampaignSession* Seen = GetSession())
+		{
+			uint32 Key = (LessonCardOpen() ? 1u : 0u) | (bWatching ? 2u : 0u) | (Seen->GetView().bHumanUp ? 4u : 0u);
+			Key = HashCombine(Key, GetTypeHash(Seen->GetView().Turn));
+			for (const int32 Id : PickedCorps)
+			{
+				Key = HashCombine(Key, GetTypeHash(Id));
+			}
+			if (Key != LessonMomentKey)
+			{
+				LessonMomentKey = Key;
+				bLessonsDue = true;
+			}
+		}
+		if (bLessonsDue && Afterwards.Num() == 0 && !IsAnswering() && !Opening.bVisible)
+		{
+			AskLessons();
+		}
+		// What the note points at this frame (the screen draws a button's; the ground's is laid here).
+		AimLesson();
+		// (The Guide's list is a card over the war: whatever else is opened, the others' turn, or a reel (the briefing's
+		// flight plays as one), takes its place.)
+		if (bLessonGuideOpen && (Opening.bVisible || bWatching || Newsreel.bOn || FaceOff.bVisible || WarPrompt.bVisible || Document.bValid || bArsenalOpen || bLedgerOpen
+			|| bDiplomacyOpen || bResearchOpen || bGeneralsOpen || (bPageOpen ? Page.Id : FString()) != GuideOverPage))
+		{
+			bLessonGuideOpen = false;
+			++LessonGuideRevision;
+			bLessonsDue = true;
+		}
+		// (The brief.) The note is read aloud as it comes, when the voice is on: its heading, its sentences, and its
+		// deed line last; lesson 1 as it is laid on the card. Never while the screen hides it: the screen places a note
+		// after this tick, so a new one is read from the next tick on, once the screen has said whether it shows.
+		if (HasLessonNote() && LessonSpokenArrival != LessonArrival)
+		{
+			if (LessonPlacedArrival != LessonArrival)
+			{
+				LessonPlacedArrival = LessonArrival;
+			}
+			else if (!bLessonNoteHidden)
+			{
+				LessonSpokenArrival = LessonArrival;
+				SpeakLesson(LessonNote);
+			}
+		}
+		if (IsLessonLaid() && !IsLessonQuiet())
+		{
+			if (!bLessonLaidSpoken)
+			{
+				bLessonLaidSpoken = true;
+				SpeakLesson(LessonLaid);
+			}
+		}
+		else
+		{
+			bLessonLaidSpoken = false;
+		}
 	}
 	if (MomentGlideUntil > 0.0 && FPlatformTime::Seconds() >= MomentGlideUntil)
 	{
@@ -6336,6 +7245,7 @@ void ACampaignPlayerController::RefreshOrders()
 {
 	THEATER_SPEED_SCOPE(RefreshOrders);
 	FCampaignSession* Session = GetSession();
+	bLessonsDue = true; // (Rules 84.3.3: an order of his may have done a lesson's deed; the notes are asked once it is all in)
 	if (PendingEnemyReach.IsSet())
 	{
 		// (an enemy's reach put off by LaterOrders and not yet shown: it is shown first, as it was before the steps)
@@ -7457,7 +8367,9 @@ void ACampaignPlayerController::AfterFarMarch(const TArray<FCorpsMove>& Marches,
 
 bool ACampaignPlayerController::IsTableBusy() const
 {
-	return bWatching || Newsreel.bOn || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen || Announcements.Num() > 0;
+	// (Rules 84.3.3: the Guide's list of the ten lessons lies over the table as a paper does. The key guard, the hover
+	// and the right button read it here.)
+	return bWatching || Newsreel.bOn || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen || bLessonGuideOpen || Announcements.Num() > 0;
 }
 
 bool ACampaignPlayerController::IsAnswering() const
@@ -7703,6 +8615,7 @@ void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWor
 	else if (WarPrompt.bVisible) { OutOpen = WarPrompt.Title.ToString(); }
 	else if (EndAsk.bVisible) { OutOpen = TEXT("The question at the month's end"); }
 	else if (Document.bValid) { OutOpen = Document.Title; }
+	else if (bLessonGuideOpen) { OutOpen = LessonGuidePage.Head.IsEmpty() ? FString(TEXT("THE GUIDE")) : TEXT("THE GUIDE: ") + LessonGuidePage.Head; } // (84.3.3: the ten lessons)
 	else if (bPageOpen) { OutOpen = Page.Title; }
 	else if (bArsenalOpen) { OutOpen = TEXT("THE ARSENAL"); }
 	else if (bResearchOpen) { OutOpen = TEXT("RESEARCH"); }
@@ -7723,6 +8636,11 @@ void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWor
 		else { Said.Add(FaceOff.OddsLine.ToString()); }
 	}
 	else if (WarPrompt.bVisible) { Said.Add(WarPrompt.Body.ToString()); }
+	else if (bLessonGuideOpen)
+	{
+		if (!LessonGuidePage.State.IsEmpty()) { Said.Add(LessonGuidePage.State); }
+		if (LessonGuidePage.Waiting > 0) { Said.Add(FString::Printf(TEXT("%d waiting"), LessonGuidePage.Waiting)); }
+	}
 	else if (bPageOpen)
 	{
 		if (!Page.Headline.IsEmpty()) { Said.Add(Page.Headline); }
@@ -8957,8 +9875,9 @@ void ACampaignPlayerController::EndMonth()
 		}
 		return;
 	}
-	// (A paper laid over the map has no lit button: Enter never ends the month behind it. Esc puts it away.)
-	if (Document.bValid && bEnterByKey && !bScripted)
+	// (A paper laid over the map has no lit button: Enter never ends the month behind it. Esc puts it away. The Guide's
+	// list of the ten lessons is such a paper.)
+	if ((Document.bValid || bLessonGuideOpen) && bEnterByKey && !bScripted)
 	{
 		return;
 	}

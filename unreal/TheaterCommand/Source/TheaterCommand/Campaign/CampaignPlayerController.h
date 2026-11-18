@@ -216,9 +216,11 @@ struct FOpening
 	FText SavedLine; // empty when there is nothing to continue
 	// (Ruling 130.) Nothing replaces a saved campaign without first asking and naming what would be lost. The
 	// beginning that waits on the player's answer: 0 none; 1 the grand campaign, led; 2 the grand campaign,
-	// watched; 3 a scenario (its group and side).
+	// watched; 3 a scenario (its group and side); 4 FIRST COMMAND.
 	int32 AskKind = 0;
 	int32 AskGroup = 0, AskSide = 0;
+	// (Rules 84.3.3; ruling 141) FIRST COMMAND's button on the title band: its words, and whether the ten are done.
+	FLessonDoor Door;
 	int32 Revision = 0;
 };
 
@@ -505,7 +507,7 @@ public:
 	/**
 	 * (Ruling 130.) Begins a new war from the opening screen: at once where no campaign is saved on this computer,
 	 * and otherwise only after the player has been asked, with the saved campaign named. Kind is 1 for the grand
-	 * campaign led, 2 for it watched, 3 for a scenario.
+	 * campaign led, 2 for it watched, 3 for a scenario, 4 for FIRST COMMAND.
 	 */
 	void AskToBegin(int32 Kind, int32 GroupIndex = 0, int32 SideIndex = 0);
 	/** The answer to that question: begin the new war and let the saved one go, or keep it. */
@@ -592,8 +594,14 @@ public:
 	void OpenLedger();
 	void CloseLedger();
 
-	/** How to play, as a page over the table. */
+	/** GUIDE, or H: in a war he leads, the Guide's list of the ten lessons (rules 84.3.3); otherwise, or from that
+	 * list, How to play, as a page over the table (the Guide's second page, ruling 147). The same key puts either away. */
 	void OpenGuide();
+	/** How to play: the typed page of rules. */
+	void OpenHowToPlay();
+	/** (Ruling 141) The door's FIRST COMMAND: the campaign the rules name for it (Germany, from September 1939, at Cadet
+	 * and Field command), marked as FIRST COMMAND's. Through AskToBegin(4) where a campaign is saved. */
+	void BeginFirstCommand();
 
 	/** A room the rules set out themselves: the secret service, the last act. */
 	const FOfficePage& GetPage() const { return Page; }
@@ -838,6 +846,50 @@ public:
 	void SayWhy(const FString& Why);
 	/** The weather in the east this month, for the date plate; empty in clear weather. */
 	FText GetWeatherText() const;
+	// ---- (Rules 84.3.3) FIRST COMMAND: the staff's notes ------------------------------------------------------
+	/** The note on the desk as the screen shows it (held while its DONE stamp stands), if one is and the screen is free for it. */
+	bool HasLessonNote() const;
+	const FLessonNote& GetLessonNote() const { return LessonNote; }
+	/** A key for the note as it came: a new key is a new arrival, which slides in and chooses its home. */
+	int32 GetLessonArrival() const { return LessonArrival; }
+	/** Seconds since the note came (it slides in over 220 ms), and since its DONE stamp landed (negative while none stands). */
+	double GetLessonAge() const;
+	double GetLessonStampAge() const;
+	/** Whether the note's DONE stamp stands on it now (2 s at most, or until a click sends it). */
+	bool IsLessonStamped() const { return LessonStampUntil > 0.0 && LessonStampAt >= 0.0; }
+	/** The note just gone, fading over 110 ms: its words, and how far it has faded (0 to 1). False once it has gone. */
+	bool GetLessonLeaving(FLessonNote& Out, float& Faded) const;
+	/** The note leaving was stamped DONE, and leaves with its stamp. */
+	bool IsLessonGoneStamped() const { return bLessonGoneStamped; }
+	/** (The art director's brief, section 10.) Lesson 10 is laid across the open arsenal, and its strip keeps its room until the room closes. */
+	bool IsArsenalStrip() const { return bArsenalStrip && bArsenalOpen; }
+	/** The screen found no room for the note this frame (a room with no margin): it waits unseen, and a stamp owed waits with it. */
+	void SetLessonNoteHidden(bool bHidden) { bLessonNoteHidden = bHidden; }
+	/** Lesson 1, laid across the month card that is open now. */
+	bool IsLessonLaid() const { return bLessonLaid && bPageOpen && Page.Month.bValid; }
+	const FLessonNote& GetLaidLesson() const { return LessonLaid; }
+	/** The notes put away with LATER, waiting in the GUIDE (its count). */
+	int32 GetLessonsWaiting() const { return Lessons.Waiting; }
+	/** (Rules 84.3.3) The Guide's first page, the ten lessons, is open, and what it lists. */
+	bool IsLessonGuideOpen() const { return bLessonGuideOpen; }
+	const FLessonGuide& GetLessonGuide() const { return LessonGuidePage; }
+	int32 GetLessonGuideRevision() const { return LessonGuideRevision; }
+	/** A press on the Guide's list: "back:<id>" (a row waiting for him: its note comes back, and the Guide closes on
+	 * it), "again:<id>" (SHOW ME AGAIN), "on" or "off" (the setting). */
+	void PressGuide(const FString& Action);
+	void CloseLessonGuide();
+	/** The note's own words to press: "later", "close" (the closing note), "tip" (a tip put away), "send" (a stamped note sent now). */
+	void PressLesson(const FString& Action);
+	/** (Ruling 147(a).) What the note at its home must never cover, in pixels of the screen: the army in hand, and the flag it points at. */
+	void GetLessonKeepClear(TArray<FBox2D>& Out) const;
+	/** (The brief, section 3.) What the note's pointer frames now, worked out once a frame: a button or a card's line by its
+	 * name, or a place on the map, which the pointer frames on the ground under the pieces. */
+	const FLessonAim& GetLessonAim() const { return LessonAim; }
+	/** Where the note stands on the screen, in the viewport's pixels: a place pointed at keeps out from under it. */
+	void SetLessonNoteOnScreen(const FBox2D& Box) { LessonNoteOnScreen = Box; }
+	/** Whether a veil (a card or a room over the map) is up, which the note stands beside as a slip. */
+	bool IsLessonBesideCard() const { return bPageOpen || Document.bValid || bArsenalOpen || bLedgerOpen || bGeneralsOpen || bResearchOpen || bDiplomacyOpen || FaceOff.bVisible; }
+
 	/** The adviser's first steps, and the way to send him away. */
 	const FAdviser& GetAdviser() const { return Adviser; }
 	void DismissAdviser() { Adviser.bOn = false; ++Adviser.Revision; }
@@ -1232,6 +1284,55 @@ private:
 	const void* HoveredButton = nullptr; // the button the pointer is on, to tick once as it crosses onto one
 	double BattleMusicUntil = 0.0; // the march plays until then
 	int32 SackAsked = INDEX_NONE; // the general whose dismissal has been asked once
+	// (Rules 84.3.3) FIRST COMMAND. The rules' last answer; the note on screen and when it came; the stamp on it; the
+	// note just gone; lesson 1 laid on the month card now open; and what is owed to the rules once no order is being
+	// answered (the code checker's note on T1: every lesson call waits out an order in flight, so none is made then).
+	FLessonDesk Lessons;
+	FLessonNote LessonNote, LessonGone, LessonLaid;
+	bool bLessonNote = false;
+	bool bLessonLaid = false;
+	int32 LessonArrival = 0;
+	double LessonCameAt = 0.0, LessonGoneAt = -1.0, LessonStampAt = -1.0, LessonStampUntil = 0.0;
+	bool bLessonsDue = false;
+	bool bLessonStampOwed = false; // the note's deed is done, and its stamp waits for the screen to be his again
+	bool bLessonGoneStamped = false;
+	bool bLessonNoteHidden = false;
+	bool bArsenalStrip = false; // lesson 10's strip is laid across the arsenal, and keeps its room
+	bool bArsenalStripPutAway = false; // he put the note in the strip away himself: the room closes up until it is next opened
+	uint32 LessonMomentKey = 0;
+	TArray<TPair<FString, bool>> LessonDeedsOwed; // a deed only the screen sees, and whether the month card was open
+	TArray<FString> LessonActsOwed;
+	bool bOpeningCardOwed = false; // trap 1: the card lesson 1 lies on, owed once the opening flight is over
+	bool LessonCardOpen() const { return bPageOpen && Page.Month.bValid; }
+	bool IsLessonQuiet() const;
+	void AskLessons();
+	void TakeLessons(const FLessonDesk& Desk);
+	void ShowDeskNote(double Now, bool bWasStamped = false);
+	void LessonPageChanged();
+	void ResetLessons();
+	// (The pointer.) What it frames this frame; where the note stands; the ground pointer as last laid (its frame and
+	// the eye it was laid for), so that it is laid again only when either has moved.
+	FLessonAim LessonAim;
+	FBox2D LessonNoteOnScreen = FBox2D(ForceInit);
+	FString GroundAimLaid;
+	void AimLesson();
+	// (The Guide's list.) Open, what it lists, and the page under it, which it gives way to if another is opened.
+	bool bLessonGuideOpen = false;
+	FLessonGuide LessonGuidePage;
+	int32 LessonGuideRevision = 0;
+	FString GuideOverPage;
+	bool OpenLessonGuide();
+	void RefreshLessonGuide();
+	// (The brief: the notes "read aloud by the built-in voice when the voice is on", the deed line last.) The note
+	// last read, by its arrival (and the arrival the screen has had a tick to place); and whether lesson 1, laid on the
+	// card that is open, has been read.
+	int32 LessonSpokenArrival = -1;
+	int32 LessonPlacedArrival = -1;
+	bool bLessonLaidSpoken = false;
+	void SpeakLesson(const FLessonNote& Note);
+	bool PieceBoxOnScreen(const AArmyPiece* Piece, FBox2D& Out) const;
+	bool GroundSpotOnScreen(int32 Region, FVector2D& Out, FVector& Foot) const;
+	void LayGroundPointer(const FLessonAim& Aim);
 	FAdviser Adviser;
 	void AdviserSaw(int32 Step);
 	bool bBusyWithScreens() const { return bWatching || Newsreel.bOn || Opening.bVisible || Announcements.Num() > 0 || bScripted; }

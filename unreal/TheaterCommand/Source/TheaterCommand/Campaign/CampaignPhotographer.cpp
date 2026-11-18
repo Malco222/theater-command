@@ -182,6 +182,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shot.Options = TEXT("narrator,loud");
 	}
 	Add(TEXT("14e-guide"), TEXT("Warsaw"), 0.5f).bGuide = true;
+	Add(TEXT("14e2-lesson-guide"), TEXT("Warsaw"), 0.5f).bLessonGuide = true;
 	{
 		// The opening flight: its title, an enemy's frontier, and the objective. Then put away.
 		FShot& Title = Add(TEXT("14j-flight-title"), TEXT("Berlin"), 0.5f);
@@ -1081,6 +1082,7 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 	}
 	Controller->CloseMenu();
 	Controller->CloseDocument();
+	Controller->CloseLessonGuide(); // (84.3.3: the Guide's list, left up by 14e2, is put away before the next picture)
 	Controller->CloseLedger();
 	Controller->CloseDiplomacy();
 	Controller->CloseResearch();
@@ -1710,6 +1712,11 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 		Controller->Announce(Told);
 	}
 	if (Shot.bGuide)
+	{
+		// (Rules 84.3.3: in a war he leads GUIDE now opens the list of the ten lessons; this picture stays the typed page.)
+		Controller->OpenHowToPlay();
+	}
+	if (Shot.bLessonGuide)
 	{
 		Controller->OpenGuide();
 	}
