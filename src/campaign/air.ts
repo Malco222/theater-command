@@ -86,7 +86,7 @@ export const AIRWAR = warData as unknown as {
   /** Ruling 227 (b433): what a won sky lends the land battle in the air war; see the note in the data. */
   sky: { land: number; attack: number; defence: number; own: number; radar: string };
   success: { k: number; factory: number };
-  ai: { escortReady: number; basing: { better: number; least: number }; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number }; beach?: { groups: number; home: number; monthly: number; sky: number } } };
+  ai: { escortReady: number; basing: { better: number; least: number; presence?: number; fields?: number }; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number }; beach?: { groups: number; home: number; monthly: number; sky: number } } };
 };
 
 /** True once the air war is its own game: airfields are places and air groups of one kind fly from them. The grand campaign only. */
@@ -106,7 +106,7 @@ export const CARRIERS = carrierData as unknown as {
   sunk: { saved: number };
   empty: number;
   search: { ships: Ships; next: number; air: number; flight: number; find: number; report: number; open: number; subs: number; aircraft: number; ready: number };
-  ai: { success: number; loss: number; worth: number; landShare: number; sortie: number; ready: number; shy: number };
+  ai: { success: number; loss: number; worth: number; landShare: number; sortie: number; ready: number; shy: number; trade?: boolean; searches?: number };
 };
 
 /** True once carriers have wings of their own and aircraft can be aimed at one fleet or at a harbour. The grand campaign only. */
@@ -1772,6 +1772,18 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
   // The troops fighting the battles of the staff's main effort ask for the sky there (b447): the margin over the
   // enemy aircraft that can reach them that holds it by numbers (airwar.json sky 'own'), not their bare share.
   if (battles.length) for (const id of troops) if (battles.includes(id) || g.regions[id].nb.some((j) => battles.includes(j))) ask[at.get(id)!] *= Math.max(1, AIRWAR.sky.own);
+  // Ruling 52(a): the fighters come up behind the army whether or not enemy aircraft are over it. Each stretch of
+  // front asks for a standing share besides, by the divisions the nation has there: 'presence' of all that the
+  // threat asks for, and all of the fighters where nothing threatens at all.
+  const P = g.flags.open === 1 ? K.presence ?? 0 : 0;
+  if (P > 0 && troops.size) {
+    const divs = new Map<number, number>();
+    let all = 0;
+    for (const c of g.corps) if (c.nat === nat && !c.dead && c.kind !== 'fort' && troops.has(c.reg)) { divs.set(c.reg, (divs.get(c.reg) ?? 0) + c.divs); all += c.divs; }
+    const threat = ask.reduce((s, x) => s + x, 0);
+    const share = threat > 0 ? threat * P : 1;
+    if (all > 0) for (const [id, d] of divs) ask[at.get(id)!] += (share * d) / all;
+  }
   const asked = ask.reduce((s, x) => s + x, 0);
   if (asked <= 0) return;
   const fighters = mine.filter((f) => f.kind === 'ftr' && f.ftr > 0 && !afloat(f));
