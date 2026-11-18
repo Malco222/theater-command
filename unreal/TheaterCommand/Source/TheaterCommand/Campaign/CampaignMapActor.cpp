@@ -7543,6 +7543,10 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 	}
 	ApplyPaperLight();
 	PaperShown = -1.0f; // (the margin's paper takes the hour's light too)
+	if ((SelectedRegion != INDEX_NONE || HoveredRegion != INDEX_NONE) && HighlightMesh && FMath::Abs(FMath::Clamp(GetMoonlight(), 0.0f, 1.0f) - HighlightMoon) > 0.04f)
+	{
+		RebuildHighlight(); // (the picked province's edge and the pointed one's follow the hour)
+	}
 	// The land's own shading follows the light of the hour: a warm sun and cool shade by day (the lit tones a tenth
 	// brighter than they were first mixed), and by moonlight both of them cool. By lamplight they stay as by day.
 	if (LandMaterial)
@@ -12606,7 +12610,12 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				const double Burst = (0.9 + 5.0 * Phase) * Unit * Seen;
 				Draw(At + FVector(0.0, 0.0, Burst * 0.7), Burst, Flash, 0.9f * Dark * static_cast<float>(1.0 - Phase / 0.09));
 			}
-			for (int32 K = 0; K < Smoulders.Num(); ++K)
+			// (The art director's mend to ruling 205, 18 November 2026: an old battlefield gives off no light of its own.
+			// The wrecks still smouldering each laid an ember's glow three units wide on the ground, and from playing
+			// height a month-old battle was nearly as bright by night as a town on fire. Their smoke still rises; the
+			// craters and the wrecks take the moon as the ground beside them does. "-TheaterScorchGlow" brings it back.)
+			static const bool bScorchGlow = FParse::Param(FCommandLine::Get(), TEXT("TheaterScorchGlow"));
+			for (int32 K = 0; bScorchGlow && K < Smoulders.Num(); ++K)
 			{
 				Draw(Smoulders[K] + FVector(0.0, 0.0, 0.8 * Unit), 3.2 * Unit, Ember, 0.2f * Dark * (0.8f + 0.2f * FMath::Sin(static_cast<float>(Now) * 1.7f + K)));
 			}
@@ -15400,15 +15409,23 @@ void ACampaignMapActor::RebuildHighlight()
 {
 	THEATER_SPEED_SCOPE(RebuildHighlight);
 	HighlightMesh->ClearAllMeshSections();
+	// (By moonlight both are taken down: this paint is not lit by the room, so by night the white edge round the
+	// province under the pointer stood at grey 223 on ground at 60, brighter than a town on fire. The art director's
+	// question of 18 November 2026 about the white bands on the coast at Vancouver.)
+	const float Moon = FMath::Clamp(GetMoonlight(), 0.0f, 1.0f);
+	HighlightMoon = Moon;
+	auto ByMoon = [Moon](const FLinearColor& Day, const FLinearColor& Night) { return FMath::Lerp(Day, Night, Moon); };
 	if (SelectedRegion != INDEX_NONE)
 	{
 		// (a light wash and a bright edge: the ground keeps the colour of whoever holds it while it is picked)
-		AddRegionOverlay(SelectedRegion, FLinearColor(1.0f, 0.82f, 0.42f, 0.11f), FLinearColor(1.0f, 0.9f, 0.62f, 0.95f), 0);
+		AddRegionOverlay(SelectedRegion, ByMoon(FLinearColor(1.0f, 0.82f, 0.42f, 0.11f), FLinearColor(0.62f, 0.56f, 0.4f, 0.07f)),
+			ByMoon(FLinearColor(1.0f, 0.9f, 0.62f, 0.95f), FLinearColor(0.62f, 0.56f, 0.4f, 0.8f)), 0);
 	}
 	// (with an agent in hand the province pointed at wears the edge of the ground he would watch, and not this pale wash)
 	if (HoveredRegion != INDEX_NONE && HoveredRegion != SelectedRegion && WatchRegion == INDEX_NONE)
 	{
-		AddRegionOverlay(HoveredRegion, FLinearColor(1.0f, 1.0f, 1.0f, 0.12f), FLinearColor(1.0f, 1.0f, 1.0f, 0.55f), 2);
+		AddRegionOverlay(HoveredRegion, ByMoon(FLinearColor(1.0f, 1.0f, 1.0f, 0.12f), FLinearColor(0.5f, 0.56f, 0.68f, 0.07f)),
+			ByMoon(FLinearColor(1.0f, 1.0f, 1.0f, 0.55f), FLinearColor(0.5f, 0.56f, 0.68f, 0.42f)), 2);
 	}
 }
 
@@ -15430,14 +15447,17 @@ void ACampaignMapActor::AppendRegionFill(FCampaignMeshBuffers& Buffers, int32 Re
 	Remap.Init(INDEX_NONE, Stride * (J1 - J0 + 2));
 
 	auto Mine = [&](int32 I, int32 J) { return Terrain.Region[Terrain.Index(I, J)] == RegionId; };
+	const bool bLandOnly = Data.bWorld && Data.FirstBeyond != INDEX_NONE && RegionId >= Data.FirstBeyond;
 	auto VertexAt = [&](int32 I, int32 J)
 	{
 		int32& Slot = Remap[(J - J0) * Stride + (I - I0)];
 		if (Slot == INDEX_NONE)
 		{
 			FLinearColor C = Fill;
-			C.A = Mine(I, J) ? Fill.A : 0.0f;
 			const double X = FMath::Min(I * Cell, Data.Width), Y = FMath::Min(J * Cell, Data.Height);
+			// (Beyond Europe the chart gives each province squares of the sea off its coast, now one's and now its
+			// neighbour's: a wash lay on them as a band of chequers in the water. There it lies on the land only.)
+			C.A = Mine(I, J) && (!bLandOnly || Terrain.CoverageAt(X, Y) >= 0.35f) ? Fill.A : 0.0f;
 			Slot = Buffers.AddVertex(SurfacePoint(X, Y, 0.16), FVector::UpVector, C.ToFColor(false));
 		}
 		return Slot;
@@ -15506,9 +15526,26 @@ void ACampaignMapActor::AddRegionOverlay(int32 RegionId, const FLinearColor& Fil
 	}
 	{
 		// A bright line round its outline.
+		// (Beyond Europe a province's coast is traced along the squares of the chart it was read from, and the line
+		// round it climbed the coast in steps. Each corner there is cut once, which turns a step into a slope; Europe's
+		// own outlines were drawn by hand and are left as they are.)
 		FCampaignMeshBuffers Buffers;
+		const bool bRound = Data.bWorld && Data.FirstBeyond != INDEX_NONE && RegionId >= Data.FirstBeyond;
+		TArray<FVector2D> Rounded;
 		for (const TArray<FVector2D>& Ring : Data.Regions[RegionId].Polygons)
 		{
+			if (bRound && Ring.Num() >= 6)
+			{
+				Rounded.Reset(Ring.Num() * 2);
+				for (int32 K = 0; K < Ring.Num(); ++K)
+				{
+					const FVector2D A = Ring[K], B = Ring[(K + 1) % Ring.Num()];
+					Rounded.Add(A * 0.75 + B * 0.25);
+					Rounded.Add(A * 0.25 + B * 0.75);
+				}
+				AppendRibbon(Buffers, Rounded, 0.42, 0.24, Outline.ToFColor(false), true);
+				continue;
+			}
 			AppendRibbon(Buffers, Ring, 0.42, 0.24, Outline.ToFColor(false), true);
 		}
 		Buffers.Commit(HighlightMesh, FirstSection + 1, HighlightMaterial);
