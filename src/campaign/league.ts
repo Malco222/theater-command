@@ -16,6 +16,7 @@ import type { Game, Nation } from './types';
 import { atWar, bloc, headline } from './game';
 import { DIPLOMACY, RELATIONS, friendsOf, step } from './diplomacy';
 import { leagueMul } from './history';
+import { shoreOf } from './world';
 
 export const LEAGUE = data as unknown as {
   name: string; full: string; color: string; never: string[];
@@ -65,10 +66,15 @@ export const leagueFounded = (g: Game): boolean => g.flags['league:born'] !== un
 const listOf = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const dice = (g: Game, key: string): number => hashString(`league:${g.seed}:${g.turn}:${key}`) / 4294967296;
 
-/** True for a country with a nation at war on its border: it feels the war coming. */
+/**
+ * True for a country with a nation at war on its border: it feels the war coming. A colony on the far side of the
+ * world never brings the war home to it (ruling 231, 2: Portugal kept out with Goa beside British India, and kept out
+ * again when Timor was occupied). The colonies of the old chart count as they always have (Spain looked to its
+ * Morocco in November 1942), and so do those of the Americas.
+ */
 export function threatened(g: Game, id: string): boolean {
   for (const r of g.regions) {
-    if (r.owner !== id || r.ctrl !== id) continue;
+    if (r.owner !== id || r.ctrl !== id || (r.overseas && shoreOf(r) === 2)) continue;
     for (const j of r.nb) {
       const o = g.regions[j].ctrl;
       if (o !== id && g.nations[o]?.alive && g.nations[o].atWar.length > 0) return true;

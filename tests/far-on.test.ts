@@ -24,7 +24,7 @@ import { tieBars, tieWar, tiedPair } from '../src/campaign/far';
 import { FAR_LAID, FAR_PATHS, FAR_SETUP } from '../src/campaign/far-rows';
 import { allied, atWar, bloc, capitulate, capture, createGame, declareWar, sameSide, setWar, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
-import { small } from '../src/campaign/league';
+import { small, threatened } from '../src/campaign/league';
 import { NAVY } from '../src/campaign/navy';
 import { RES, fieldOverseas, fieldYield, stores } from '../src/campaign/resources';
 import { blocked } from '../src/campaign/rivers';
@@ -470,5 +470,47 @@ describe("the whole world's oil (rulings 194 and 231)", () => {
     setWar(g, 'GER', 'UK'); setWar(g, 'GER', 'SOV');
     expect(words('Brunei')).toBe('An oilfield');
     expect(words('Baku')).toMatch(/^An oilfield: 24 a month to your depots/);
+  });
+});
+
+describe('a colony on the far side (ruling 231)', () => {
+  it('never makes its home country feel the war coming, as a colony of the old chart or of the Americas still does', () => {
+    const g = grand();
+    // One war in the world: Britain's with Italy.
+    for (const n of Object.values(g.nations)) n.atWar = [];
+    setWar(g, 'UK', 'ITA');
+    const beside = (name: string, nat: string): boolean => g.byName[name].nb.some((j) => g.regions[j].ctrl === nat);
+    const homeTouches = (id: string): boolean => g.regions.some((r) => r.owner === id && r.ctrl === id && !r.overseas && r.nb.some((j) => ['UK', 'ITA'].includes(g.regions[j].ctrl)));
+    // Portugal: Goa stands beside British India, and nothing of hers at home is near the war.
+    expect(g.byName['Goa']).toMatchObject({ owner: 'POR', ctrl: 'POR', overseas: true });
+    expect(shoreOf(g.byName['Goa'])).toBe(2);
+    expect(beside('Goa', 'UK')).toBe(true);
+    expect(homeTouches('POR')).toBe(false);
+    expect(threatened(g, 'POR')).toBe(false);
+    // The Netherlands: the Indies beside British Borneo count for nothing, and Dutch Guiana beside British Guiana counts as it always has.
+    expect(homeTouches('NED')).toBe(false);
+    expect(shoreOf(g.byName['Dutch Guiana'])).toBe(1);
+    expect(beside('Dutch Guiana', 'UK')).toBe(true);
+    expect(threatened(g, 'NED')).toBe(true);
+    for (const r of g.regions) if (r.owner === 'NED' && shoreOf(r) === 1) r.ctrl = 'UK';
+    expect(g.regions.some((r) => r.owner === 'NED' && r.ctrl === 'NED' && r.overseas && shoreOf(r) === 2 && r.nb.some((j) => g.regions[j].ctrl === 'UK'))).toBe(true);
+    expect(threatened(g, 'NED')).toBe(false);
+    // Belgium's Congo beside Uganda and Rhodesia, the same.
+    expect(homeTouches('BEL')).toBe(false);
+    expect(threatened(g, 'BEL')).toBe(false);
+    // A far-side country's home ground reads as any country's: Thailand beside British Burma.
+    expect(threatened(g, 'THA')).toBe(true);
+    // The old chart's colonies count as they always have. One war again, France's with Italy: Britain's Egypt stands
+    // beside Italian Libya and her Palestine beside French Syria, and nothing of hers at home or in the Americas is near it.
+    for (const n of Object.values(g.nations)) n.atWar = [];
+    setWar(g, 'FRA', 'ITA');
+    const touches = (side: number, colony: boolean): boolean => g.regions.some((r) => r.owner === 'UK' && r.ctrl === 'UK' && r.overseas === colony && shoreOf(r) === side
+      && r.nb.some((j) => ['FRA', 'ITA'].includes(g.regions[j].ctrl)));
+    expect([0, 1, 2].map((side) => touches(side, false))).toEqual([false, false, false]);
+    expect([touches(0, true), touches(1, true), touches(2, true)]).toEqual([true, false, true]);
+    expect(threatened(g, 'UK')).toBe(true);
+    for (const r of g.regions) if (r.owner === 'UK' && r.overseas && shoreOf(r) === 0) r.ctrl = 'BEL';
+    expect(touches(2, true)).toBe(true);
+    expect(threatened(g, 'UK')).toBe(false);
   });
 });
