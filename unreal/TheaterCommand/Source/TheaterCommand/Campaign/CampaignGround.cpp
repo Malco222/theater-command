@@ -460,9 +460,12 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// (The art director's world-detail order, item 2, 17 November 2026: "the strict square grid stays only on the
 			// North American plains, where it is true". The square mile was surveyed over the Middle West and all the
 			// West; the old colonies, the mountains and the old South were never ruled, and their fields lie crooked as
-			// Europe's do. It comes in over a degree, and the land's paint brings the squares' gold in from that edge.
-			// "-TheaterOldFields" lays the squares over all temperate North America again, as before.)
-			static const bool bOldFields = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldFields"));
+			// Europe's do. It comes in over a degree, and the land's paint brings the squares' gold in from that edge.)
+			// (The art director's review of build 1608, 18 November 2026: the plan passes, but south of the Ohio the
+			// crooked fields came out as soft strips six to ten dots wide and many times as long, "brushed cloth, not
+			// farmland". Until they are whole plots with an edge and a colour of their own, the fields lie as before
+			// and the new lie is asked for with "-TheaterNewFields".)
+			static const bool bOldFields = !FParse::Param(FCommandLine::Get(), TEXT("TheaterNewFields"));
 			// (the chart may count the New World's longitudes on past 180 east: they are brought back to west of Greenwich)
 			const float WestLongitude = Longitude > 180.0f ? Longitude - 360.0f : Longitude;
 			const float WestOfThePlains = 1.0f - FMath::SmoothStep(-101.0f, -99.0f, WestLongitude);
@@ -1668,7 +1671,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// (Item 2 again: where the fields are not squares, a province beyond Europe turns its fields by an angle of
 			// its own and makes them a little larger or smaller than its neighbour's, as every province of Europe does.
 			// They all lay at one slant of twenty degrees, and the land read as one ruled board from Maine to Chile.)
-			static const bool bOldLie = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldFields"));
+			static const bool bOldLie = !FParse::Param(FCommandLine::Get(), TEXT("TheaterNewFields"));
 			if (!bSquare && Id >= 0 && bBeyond && !bOldLie)
 			{
 				const uint32 Own = static_cast<uint32>(Id) * 2654435761u;
