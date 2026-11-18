@@ -1,0 +1,185 @@
+# Freesound round two, fetched on Brian's Mac, 2026-11-18 08:09 EST
+# node sound/tools/freesound_fetch.mjs sound/recordings/freesound/wanted2.json --gap 3
+# Earlier tries fetched nothing: one stopped on Freesound's broken preview address (fixed in 209a4c8), two stopped on Freesound 502 server errors.
+# Full printed output of the run that completed:
+
+pack 24916 page 1: 12 sounds, 12 kept
+  438737	G45-35-Distant Explosions Underwater.wav
+  438736	G45-34-Reverberant Torpedos.wav
+  438735	G45-33-Interior Forward Torpedo Room.wav
+  438734	G45-32-Submarine Big Interior.wav
+  438733	G45-31-Submarine Churn Underwater.wav
+  438732	G45-30-Submarine Hatch Opening.wav
+  438731	G45-29-Submarine Engine Start.wav
+  438730	G45-28-Submarine Annunciator.wav
+  438729	G45-27-Submarine Interior Control.wav
+  438728	G45-26-Submarine Motor Start Up.wav
+  438727	G45-25-Submarine Battery Charger.wav
+  438726	G45-24-Submarine Interior Engine Room.wav
+pack 37713 page 1: 12 sounds, 2 kept
+  675700	S06-04 Old mechanical police siren.wav
+  675699	S24-16 European siren by with Doppler effect.wav
+  675698	S32-03 Two tone fog horn.wav
+  675697	S32-02 Fog horn with echo.wav
+  675696	S32-01 Fog horn in LA Harbor; motor in foreground.wav
+  675695	S29-01 Submarine signal bell.wav
+  675694	S29-12 Ship’s time bells.wav
+  675693	S29-19 Bell buoy.wav
+  675692	S03-05 Glass bell; medium size.wav
+  675691	S24-14 Single air raid siren.wav
+  675690	S24-15 Hand Cranked siren.wav
+  675689	S41-24 French police siren.wav
+pack 24904 page 1: 12 sounds, 4 kept
+  438538	G33-32-Distant Bomb Explosion.wav
+  438537	G33-31-Distorted Explosion.wav
+  438536	G33-30-Blasts with Short Decay.wav
+  438535	G33-29-Mortar Gun.wav
+  438534	G33-28-Multiple Explosions.wav
+  438533	G33-27-Sutomatic Gun Fire.wav
+  438532	G33-26-Constant Bombardment.wav
+  438531	G33-25-Bazooka.wav
+  438530	G33-24-Atomic Bomb.wav
+  438529	G33-23-Explosion with Sharp Wood Crack.wav
+  438528	G33-22-Falling Debris and Explosion.wav
+  438527	G33-21-Medium Explosion with Debris.wav
+pack 24899 page 1: 12 sounds, 2 kept
+  438346	G26-27-Huge Storm Sequence.wav
+  438345	G26-26-Crowbar Prying Squeaky Wood.wav
+  438344	G26-25-Christmas Tree Crash.wav
+  438343	G26-24-Tree Crashes.wav
+  438342	G26-23-Fight Scuffle.wav
+  438341	G26-22-Low rumble and Crash.wav
+  438340	G26-21-Crash with Approaching Sirens.wav
+  438339	G26-20-Car Crash with Distorted Tire Squeal.wav
+  438338	G26-19-Long Motor Revving and Crash.wav
+  438337	G26-18-Car Crash with Siren.wav
+  438336	G26-17-Car Crashing into Trash Cans.wav
+  438335	G26-16-Truck Crash into Car.wav
+pack 27528 page 1: 12 sounds, 1 kept
+  487146	R29-34-Big Object Falls and Crashes in Room.wav
+  487145	R29-32-Large Quick Interior Crash.wav
+  487144	R29-29-Throwing Junk at Doors.wav
+  487143	R29-28-Large Metal Vehicle Crashes.wav
+  487142	R29-04-Crashing Collapse of Wood Building.wav
+  487141	R29-02-Long Constant Crash of Destruction.wav
+  487140	R28-14-Glass Bottles Roll and Break.wav
+  487139	R28-13-Glass Windows Smashed.wav
+  487138	R28-12-Glass Windows Break.wav
+  487137	R28-11-Glass Windows Break.wav
+  487136	R28-10-Many Bottles Break.wav
+  487135	R28-09-Big Glass Breaks.wav
+pack 24910 page 1: 12 sounds, 0 kept
+  438648	G39-31-Low Pitched Oscillator.wav
+  438647	G39-30-Oscillator Flutter.wav
+  438646	G39-29-15 Croaks-new.wav
+  438645	G39-28-13 White Noise Effects.wav
+  438644	G39-27 - Oscillator Beeps with Reverb.wav
+  438643	G39-26-Submarine Beeps and Thumps.wav
+  438642	G39-25-Oil Boil.wav
+  438641	G39-24-Steam Hiss.wav
+  438640	G39-23-Steam Hiss.wav
+  438639	G39-22-Rain on Concrete.wav
+  438638	G39-21-Tire Squeals.wav
+  438637	G39-20-Whip Cracks.wav
+72853: Parachute.wav | Benboncan | CC BY 4.0 | ? s
+138976: parachute 2.wav | Huggy13ear | CC BY 4.0 | ? s
+811077: Solo Skydive Interior Plane and Freefall | DangerLaef | CC0 | ? s
+346856: Lowering Ramp.mp3 | Gingie | CC0 | ? s
+36390: Dock ramp.wav | epolk | Sampling+ | ? s
+437155: Boarding ferry hold with camper-van by arnaud coutancier | arnaud coutancier | CC BY-NC 3.0 | ? s
+69177: Hand Winch Quick Release.wav | Benboncan | CC BY 4.0 | ? s
+69158: Hand Winch, Double Ratchet.wav | Benboncan | CC BY 4.0 | ? s
+61685: Anchor Chain.wav | Benboncan | CC BY 4.0 | ? s
+201169: Sukhapha anchor chain.wav | phonoflora | CC BY 4.0 | ? s
+436401: Boat dragged on shore by arnaud coutancier | arnaud coutancier | CC BY-NC 3.0 | ? s
+488335: Dragging Kayak | brunoboselli | CC BY 4.0 | ? s
+269061: Moored Boat Metal Grinding, Groaning & Creaking | nebulousflynn | CC BY 4.0 | ? s
+31574: ship_creak.mp3 | Walter_Odington | CC0 | ? s
+432217: Metal barrel rolling | caquet | CC0 | ? s
+512215: Rolling Metal Barrel | Mateusz_Chenc | CC0 | ? s
+35531: Torpedo launch.wav | jobro | CC BY 3.0 | ? s
+377770: SND Dive Alarm.wav | Knochenschall | CC0 | ? s
+546119: Piece Placement.mp3 | el_boss | CC0 | ? s
+801348: Chess piece sliding 1 | Alnotreally | CC0 | ? s
+792572: Chess piece | Imrius | CC BY 4.0 | ? s
+733927: Chess Pieces Move (Close) | JJTaynos | CC0 | ? s
+555190: Board Game Pieces.WAV | taure | CC0 | ? s
+438703: G45-03-Submarine Bell Alarm.wav | craigsmith | CC0 | ? s
+438704: G45-04a-Submarine Sonar Blips 1.wav | craigsmith | CC0 | ? s
+438705: G45-04b-Submarine Sonar Blips 2.wav | craigsmith | CC0 | ? s
+438706: G45-04c-Submarine Sonar Blips 3.wav | craigsmith | CC0 | ? s
+438707: G45-05-Ship Submarine Detector.wav | craigsmith | CC0 | ? s
+438708: G45-06-Submarine Sonar Variant Blips.wav | craigsmith | CC0 | ? s
+438709: G45-07-Close Sonar Blips.wav | craigsmith | CC0 | ? s
+438710: G45-08-Sonar Blips.wav | craigsmith | CC0 | ? s
+438711: G45-09-Submarine Detector and Short Sonar Blips.wav | craigsmith | CC0 | ? s
+438712: G45-10-Submarine Battle.wav | craigsmith | CC0 | ? s
+438714: G45-12-Submarine Missile Explosions.wav | craigsmith | CC0 | ? s
+438715: G45-13-Submarine Torpedo Fire.wav | craigsmith | CC0 | ? s
+438716: G45-14-Torpedo Explosion.wav | craigsmith | CC0 | ? s
+438717: G45-15-Hornlike Sub Alarm.wav | craigsmith | CC0 | ? s
+438718: G45-16-Submarine Compressor Motor.wav | craigsmith | CC0 | ? s
+438719: G45-17-Hum in Conning Tower.wav | craigsmith | CC0 | ? s
+438720: G45-18-Submarine Motor Stop.wav | craigsmith | CC0 | ? s
+438721: G45-19-Submarine Motor Topside.wav | craigsmith | CC0 | ? s
+438722: G45-20-Submarine Motor Underwater.wav | craigsmith | CC0 | ? s
+438723: G45-21-Submarine Interior General.wav | craigsmith | CC0 | ? s
+438724: G45-22-Submarine Air Conditioner.wav | craigsmith | CC0 | ? s
+438725: G45-23-Submarine Motors Whine and Stop.wav | craigsmith | CC0 | ? s
+438507: G33-01-Mortar Firing.wav | craigsmith | CC0 | ? s
+438508: G33-02_37mm Anti-Tank Gun.wav | craigsmith | CC0 | ? s
+438509: G33-03-Grenades Exploding.wav | craigsmith | CC0 | ? s
+438510: G33-04-Rifle Cracks with Ricochet.wav | craigsmith | CC0 | ? s
+438511: G33-05-Large Gun Firing.wav | craigsmith | CC0 | ? s
+438512: G33-06-A Soldier Under Fire.wav | craigsmith | CC0 | ? s
+438513: G33-07-Bomb Whistle and Hit Debris.wav | craigsmith | CC0 | ? s
+438514: G33-08-Whistle and Small Impact.wav | craigsmith | CC0 | ? s
+438515: G33-09-Explosion with Shell Whine.wav | craigsmith | CC0 | ? s
+438516: G33-10-Missile Explosion.wav | craigsmith | CC0 | ? s
+438517: G33-11-Shell Overhead with Explosion.wav | craigsmith | CC0 | ? s
+438518: G33-12-Shrill Explosion.wav | craigsmith | CC0 | ? s
+438519: G33-13-Explosion with Hum.wav | craigsmith | CC0 | ? s
+438520: G33-14-Shell whine and Explosion.wav | craigsmith | CC0 | ? s
+438521: G33-15-Five Loud Bursts.wav | craigsmith | CC0 | ? s
+438522: G33-16-Explosion with Metallic Debris.wav | craigsmith | CC0 | ? s
+438523: G33-17-Loud Burst with Echo.wav | craigsmith | CC0 | ? s
+438524: G33-18-Explosion with Debris.wav | craigsmith | CC0 | ? s
+438525: G33-19-Booming Gun and Debris.wav | craigsmith | CC0 | ? s
+438526: G33-20-Loud Burst and Roar.wav | craigsmith | CC0 | ? s
+438318: G26-01-Battering Ram.wav | craigsmith | CC0 | ? s
+438319: G26-02-Bucket Crash.wav | craigsmith | CC0 | ? s
+438320: G26-03-Bulbs Break.wav | craigsmith | CC0 | ? s
+438321: G26-04-Bricks Fall.wav | craigsmith | CC0 | ? s
+438322: G26-05-Wooden Chair Break.wav | craigsmith | CC0 | ? s
+438323: G26-06-Cement Crashes.wav | craigsmith | CC0 | ? s
+438324: G26-07-Windows Breaking.wav | craigsmith | CC0 | ? s
+438325: G26-08-Garbage Cans.wav | craigsmith | CC0 | ? s
+438326: G26-09-Jars Break.wav | craigsmith | CC0 | ? s
+438327: G26-10-Iron Pipes Dropping.wav | craigsmith | CC0 | ? s
+438328: G26-11-Glass Globe Break.wav | craigsmith | CC0 | ? s
+438329: G26-11a-Metal Tray Drop.wav | craigsmith | CC0 | ? s
+438330: G26-12-Woman Screams, Drops Tray.wav | craigsmith | CC0 | ? s
+438331: G26-12a-Wood Splinters.wav | craigsmith | CC0 | ? s
+438332: G26-13-Buildings Falling.wav | craigsmith | CC0 | ? s
+438737: G45-35-Distant Explosions Underwater.wav | craigsmith | CC0 | ? s
+438736: G45-34-Reverberant Torpedos.wav | craigsmith | CC0 | ? s
+438735: G45-33-Interior Forward Torpedo Room.wav | craigsmith | CC0 | ? s
+438734: G45-32-Submarine Big Interior.wav | craigsmith | CC0 | ? s
+438733: G45-31-Submarine Churn Underwater.wav | craigsmith | CC0 | ? s
+438732: G45-30-Submarine Hatch Opening.wav | craigsmith | CC0 | ? s
+438731: G45-29-Submarine Engine Start.wav | craigsmith | CC0 | ? s
+438730: G45-28-Submarine Annunciator.wav | craigsmith | CC0 | ? s
+438729: G45-27-Submarine Interior Control.wav | craigsmith | CC0 | ? s
+438728: G45-26-Submarine Motor Start Up.wav | craigsmith | CC0 | ? s
+438727: G45-25-Submarine Battery Charger.wav | craigsmith | CC0 | ? s
+438726: G45-24-Submarine Interior Engine Room.wav | craigsmith | CC0 | ? s
+675695: S29-01 Submarine signal bell.wav | craigsmith | CC0 | ? s
+675694: S29-12 Ship’s time bells.wav | craigsmith | CC0 | ? s
+438538: G33-32-Distant Bomb Explosion.wav | craigsmith | CC0 | ? s
+438532: G33-26-Constant Bombardment.wav | craigsmith | CC0 | ? s
+438530: G33-24-Atomic Bomb.wav | craigsmith | CC0 | ? s
+438528: G33-22-Falling Debris and Explosion.wav | craigsmith | CC0 | ? s
+438341: G26-22-Low rumble and Crash.wav | craigsmith | CC0 | ? s
+438335: G26-16-Truck Crash into Car.wav | craigsmith | CC0 | ? s
+487143: R29-28-Large Metal Vehicle Crashes.wav | craigsmith | CC0 | ? s
+DONE: 101 fetched, 0 failed, 101 asked for
