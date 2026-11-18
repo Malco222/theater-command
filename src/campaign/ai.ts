@@ -17,7 +17,7 @@ import { aiBridges, aiEngineers } from './engineers';
 import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, useLift } from './navy';
 import { shoreAI } from './fleets';
 import { shoreOpen, stormHeldBy } from './history';
-import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
+import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, onTheAttack, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './world';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
@@ -184,8 +184,10 @@ function campaign(g: Game, nat: string): void {
  * The grand campaign: who stands in the towns. With the month's moves made, a city or a capital the enemy has
  * reached is given a garrison from the infantry standing there, as long as a corps is left in the field; a
  * fortress town gets one too. A great city of the nation's own (ruling 139: its capital, or a city with great works)
- * is filled to its room first, infantry before the rest, even if nobody is left in the field: a lone corps goes in.
- * At the start of the month a garrison with no enemy within two marches comes out.
+ * takes the corps the field can spare against the enemy next door, infantry before the rest, and where the field
+ * cannot be held it is filled to its room, a lone corps and all (b512(e)); a staff attacking the country next door
+ * in a war it began keeps the corps its attack needs out, and its lone corps too until that enemy strikes the
+ * province (b519(m)). At the start of the month a garrison with no enemy within two marches comes out.
  */
 export function garrisons(g: Game, nat: string, post: boolean): void {
   if (!siegeRules(g)) return;
@@ -233,11 +235,22 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
       const need = (SIEGE.ai.great?.field ?? 0) * threat;
       let held = friendlyUnits(g, r, nat).reduce((s, u) => s + defPower(g, u, r), 0);
       const holds = held >= need;
+      // An attacker does not shut its attackers in (b519(m)): against the countries next door that this staff is
+      // itself attacking, in a war it began, while the offensive is on, the town takes only corps the attack does
+      // not need (none fit to attack), and the lone-corps rule waits until one of them has attacked the province.
+      const foes = [...new Set(r.nb.map((j) => ctl(g, g.regions[j])).filter((x) => atWar(g, nat, x)))];
+      const attacker = foes.length > 0 && foes.every((e) => onTheAttack(g, nat, e));
+      const struck = attacker && foes.some((e) => {
+        const since = Math.max(g.flags[`war:${nat}:${e}`] ?? 0, g.flags[`war:${e}:${nat}`] ?? 0);
+        return g.reports.some((p) => p.region === r.id && p.attNat === e && p.turn >= since);
+      });
+      const lone = !holds && (!attacker || struck);
+      const needed = (c: Corps): boolean => attacker && !lone && !c.hold && c.org >= 0.35;
       let have = inside.length;
       for (const c of all.sort((a, b) => first(a) - first(b) || corpsBase(g, a) - corpsBase(g, b))) {
         if (have >= want) break;
         const worth = defPower(g, c, r);
-        if (holds && held - worth < need) continue;
+        if (needed(c) || (!lone && held - worth < need)) continue;
         if (garrison(g, c)) { have++; held -= worth; }
       }
       continue;
