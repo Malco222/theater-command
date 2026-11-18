@@ -102,9 +102,11 @@ for (const j of jobs) {
   const licUrl = (html.match(/href="(https?:\/\/creativecommons\.org\/(?:licenses|publicdomain)\/[^"]+)"/) || [])[1] || '';
   const author = (page.url.match(/\/people\/([^/]+)\/sounds\//) || [])[1] || '';
   const about = meta(html, 'og:description') || meta(html, 'description');
+  if (typeof j.keep === 'string') j.keep = new RegExp(j.keep, 'i');
   if (j.keep && !j.keep.test(title)) { console.log(`${j.id}: ${unescape(title)}: not wanted`); continue; }
   if (!audio || !licUrl) { console.log(`${j.id}: no preview or licence on its page`); bad++; continue; }
-  const hq = audio.replace(/-lq\.mp3$/, '-hq.ogg').replace(/-hq\.mp3$/, '-hq.ogg');
+  // Freesound's own page tag reads "https://freesound.orghttps://cdn.freesound.org/previews/...": keep the CDN address.
+  const hq = audio.replace(/^.*(?=https:\/\/cdn\.freesound\.org\/)/, '').replace(/-lq\.mp3$/, '-hq.ogg').replace(/-hq\.mp3$/, '-hq.ogg');
   const file = path.join(dir, `${j.id}.ogg`);
   const f = curl(hq, file + '.part');
   if (f.code !== 200) { fs.rmSync(file + '.part', { force: true }); console.log(`${j.id}: preview answered ${f.code || f.why}`); bad++; continue; }
