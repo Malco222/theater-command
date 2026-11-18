@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { setDepth } from '../src/campaign/desks';
 import { setLevel } from '../src/campaign/difficulty';
-import { createGame } from '../src/campaign/game';
+import { createGame, placeName } from '../src/campaign/game';
 import {
   CLOSING, FIRST_COMMAND, LESSONS, LESSON_DOOR, LESSON_GROUPS, LESSON_NAMES, TIPS, WORDS_MOST, WORDS_MOST_RAID, allDone, bringBack, closingOwed,
   currentLesson, doneCount, firstCommand, freshNotebook, isDone, lessonDeed, lessonDue, lessonReady, lessonWords, lessonsAgain, lessonsOn,
@@ -13,7 +13,8 @@ import {
 } from '../src/campaign/lessons';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
-import type { Game } from '../src/campaign/types';
+import { townName } from '../src/campaign/towns';
+import type { Game, Region } from '../src/campaign/types';
 
 /** FIRST COMMAND as the door opens it, at the player's first month. */
 function firstHour(seed = 5): Game {
@@ -209,5 +210,21 @@ describe('FIRST COMMAND, played', () => {
     const g = firstHour();
     const w = lessonWords(g, LESSONS.find((l) => l.id === 'city')!, 'browser');
     expect(w.text.startsWith('The province is not yours until its town falls.')).toBe(true);
+  });
+
+  it('names a province once where it is named for its town, and its town where it is not (the cities chart)', () => {
+    const g = firstHour();
+    const city = LESSONS.find((l) => l.id === 'city')!;
+    const ger = g.corps.find((c) => c.nat === 'GER' && !c.dead)!;
+    const enemy = g.regions.filter((r) => r.ctrl === 'POL');
+    const besiege = (r: Region): string => {
+      for (const x of g.regions) x.units = x.units.filter((u) => u !== ger);
+      r.units.push(ger);
+      return lessonWords(g, city, 'browser').text;
+    };
+    const same = enemy.find((r) => townName(r) === r.name)!, other = enemy.find((r) => townName(r) !== r.name)!;
+    expect(g.flags.sieges).toBe(1);
+    expect(besiege(same).startsWith(`${same.name} is not yours until its town falls.`)).toBe(true);
+    expect(besiege(other).startsWith(`${placeName(other.name, true)} is not yours until ${townName(other)} falls.`)).toBe(true);
   });
 });

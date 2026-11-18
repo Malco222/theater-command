@@ -811,6 +811,32 @@ describe('at home, what his staff did, and elsewhere', () => {
     expect(said).toContain('2. Fliegerdivision bombs Rotterdam');
     expect(said).toContain('The 10. Armee is cut down to 2');
   });
+
+  it('an air formation\'s ordinal holds its sentence together wherever it stands (ruling 220\'s names)', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'battle', text: '3. Fliegerdivision and 1. Jagddivision strike the Home Fleet in the North Sea. Ships were hit.', nat: 'SOV' });
+    news(g, { kind: 'battle', text: 'Kampfgeschwader 1 and 2. Jagddivision raid the French troops at Alsace. The raids cut the roads.', nat: 'BRA' });
+    news(g, { kind: 'battle', text: 'Losses were 1 and 2. The rest came home.', nat: 'ARG' });
+    const said = monthCard(g, mark, ME).elsewhere.map((e) => e.text.replace(/\.$/, ''));
+    expect(said).toContain('3. Fliegerdivision and 1. Jagddivision strike the Home Fleet in the North Sea');
+    expect(said).toContain('Kampfgeschwader 1 and 2. Jagddivision raid the French troops at Alsace');
+    expect(said).toContain('Losses were 1 and 2');
+  });
+
+  it('several countries that declare war on him share one band, a sentence with its verb, "the" in lower case past the first', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    for (const nat of ['CUB', 'DOM']) declareWar(g, nat, ME);
+    expect(monthCard(g, mark, ME).bands[0].head).toBe('Cuba and the Dominican Republic declare war on Germany');
+    const h = game();
+    const mark2 = monthMark(h, ME);
+    const many = ['CUB', 'DOM', 'HAI', 'GUA', 'HON', 'NIC', 'COS', 'PAN', 'ELS', 'ECU'];
+    for (const nat of many) declareWar(h, nat, ME);
+    const head = monthCard(h, mark2, ME).bands[0].head;
+    expect(head.length).toBeLessThanOrEqual(76);
+    expect(head).toMatch(/^Cuba, the Dominican Republic, .+ and \d+ more declare war on Germany$/);
+  });
 });
 
 describe('a year of war with nobody playing, a card a month for four countries', () => {

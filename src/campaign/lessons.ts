@@ -258,6 +258,7 @@ export function lessonWords(g: Game, l: Lesson, game: string, under = ''): { hea
   const fill = (t: string): string => t
     .split('{place}').join(at >= 0 ? placeThe(g.regions[at].name) : 'the front')
     .split('{province}').join(s ? capital(placeThe(s.province)) : 'The province')
-    .split('{city}').join(s ? s.city : 'its town');
+    // (A province named for its town is not named twice: "Vancouver is not yours until its town falls.")
+    .split('{city}').join(s && s.city !== s.province ? placeThe(s.city) : 'its town');
   return { head: l.head, text: fill(namedWords(l.text, game, under)), deed: namedWords(l.deed, game, under) };
 }

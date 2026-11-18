@@ -78,6 +78,12 @@ describe('the cities version, as reviewed', () => {
       const money = p?.items.find((x) => x.key === 'income')?.text ?? '';
       expect(money, r.name).not.toMatch(/(land|harbour|oilfield|factory|factories|seat of government) 0\b/);
       if (/under 1/.test(money)) under++;
+      // And they add up to the total beside them: exactly, unless a part is under one.
+      const said = [...(/\((.+)\)/.exec(money)?.[1] ?? '').matchAll(/(?<!under) (\d+)(?=,|$)/g)].reduce((s, m) => s + Number(m[1]), 0);
+      if (p && /\(/.test(money)) {
+        if (/under 1/.test(money)) expect(said, `${r.name}: ${money}`).toBeLessThanOrEqual(p.income);
+        else expect(said, `${r.name}: ${money}`).toBe(p.income);
+      }
     }
     expect(small).toBeGreaterThan(0);
     expect(under).toBeGreaterThan(0);
