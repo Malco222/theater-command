@@ -218,8 +218,10 @@ export function prizeOf(g: Game, region: number, nat: string | null = g.human): 
   const whose = to === nat ? 'your treasury' : `${theName(g.nations[to])}'s treasury`;
   if (budgeted(g) || factories) {
     const y = provinceYield(g, r, to);
-    const parts = [y.land ? `land ${pay(y.land)}` : '', y.port ? `harbour ${pay(y.port)}` : '', y.oil ? `oilfield ${pay(y.oil)}` : '',
-      y.fac ? `${plural(factories, 'factory', 'factories')} ${pay(y.fac)}` : '', y.capital ? `seat of government ${pay(y.capital)}` : ''].filter(Boolean);
+    // (Its parts as the province card words them: a part under one says so, and the parts never add up past the total.)
+    const part = (v: number): string => (Math.round(v * scale) < 1 ? 'under 1' : String(Math.round(v * scale)));
+    const parts = [y.land ? `land ${part(y.land)}` : '', y.port ? `harbour ${part(y.port)}` : '', y.oil ? `oilfield ${part(y.oil)}` : '',
+      y.fac ? `${plural(factories, 'factory', 'factories')} ${part(y.fac)}` : '', y.capital ? `seat of government ${part(y.capital)}` : ''].filter(Boolean);
     items.push({ key: 'income', label: 'Money', text: `${income} a month to ${whose}${parts.length ? ` (${parts.join(', ')})` : ''}${to !== r.owner ? '. Conquered ground pays less than it pays its own country' : ''}` });
   }
   if (r.fac > 0) items.push({ key: 'factory', label: 'Industry', text: `${plural(r.fac, 'factory', 'factories')}${factories < r.fac ? `, ${r.fac - factories} wrecked by bombing` : ''}${to !== r.owner ? '. Working for a conqueror they turn out less, and heavy equipment can only be built at home' : ''}` });

@@ -19,7 +19,7 @@ import worldMap from '../generated/world-americas.json';
 import data from '../../data/campaign/world.json';
 import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, standsBy, theName } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
-import { seedFields } from './air';
+import { fieldClass, seedClass, seedFields } from './air';
 import { newLab, researches } from './research';
 import type { Game, Region } from './types';
 
@@ -199,9 +199,11 @@ export function settleNewGround(g: Game, from: number): void {
   if (!worldOn(g)) return;
   // A city cut out of a province since the campaign was saved stands as its province does: held by whoever holds
   // the province, since the month it changed hands (a city of Buffalo's held by Canada is Canada's).
+  const parents = new Set<number>();
   for (let i = Math.max(from, WORLD_FIRST); i < g.regions.length; i++) {
     const r = g.regions[i], of = (WORLD_MAP.regions[i - WORLD_FIRST] as { of?: number } | undefined)?.of;
     if (of === undefined || of >= from) continue;
+    parents.add(of);
     const p = g.regions[of];
     if (p && p.ctrl !== r.ctrl) { r.ctrl = p.ctrl; r.since = p.since; }
   }
@@ -219,9 +221,17 @@ export function settleNewGround(g: Game, from: number): void {
     if (o.str !== undefined) c.str = o.str;
   }
   for (const row of WORLD.fleets) if (fresh(row.base) && g.nations[row.nat]?.alive && g.byName[row.base!].ctrl === row.nat) addFleet(g, row);
-  // Its first-day airfields too, where the air war is already running; the old provinces keep theirs, and the air
-  // groups based on them.
-  if (g.flags.airwar === 1) seedFields(g, Math.max(from, WORLD_FIRST));
+  // Its first-day airfields too, where the air war is already running. The field a province held for a city cut out
+  // of it since goes with the city (Houston's, out of East Texas): the province keeps the one the first day gives it
+  // now, unless an air group is based there. What engineers or the treasury built there (wk:field) stays its own.
+  if (g.flags.airwar === 1) {
+    seedFields(g, Math.max(from, WORLD_FIRST));
+    for (const p of parents) {
+      const want = seedClass(g, g.regions[p]);
+      if (fieldClass(g, p) <= want || g.airFleets.some((f) => f.base === p)) continue;
+      if (want) g.flags[`af:${p}`] = want; else delete g.flags[`af:${p}`];
+    }
+  }
   for (const n of Object.values(g.nations)) if (n.alive) n.armyPeak = Math.max(n.armyPeak, armySize(g, n.id));
   g.supplyDirty = true;
 }

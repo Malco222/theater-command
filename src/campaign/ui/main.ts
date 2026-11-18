@@ -2870,7 +2870,7 @@ function replaceCard(data: Record<string, string | undefined>): string {
     <footer><button class="btn go" data-act="close">Keep it</button><button class="btn" data-act="start" data-sure="1" ${again}>Start the new one</button></footer>`;
 }
 
-const alertButtons = (): string => alertList().map((a) => `<button class="alert ${a.kind}" data-act="alert" data-kind="${a.kind}"${a.html ? ` title="${esc(a.text)}"` : ''}>${a.html ?? esc(a.text)}</button>`).join('');
+const alertButtons = (): string => alertList().map((a) => `<button class="alert ${a.kind}" data-act="alert" data-kind="${a.kind}"${a.html ? ` title="${esc(theWords(a.text))}"` : ''}>${a.html ?? esc(a.text)}</button>`).join('');
 
 /**
  * The red alarm's press (ruling 211(c); words, section 1): it picks up the nearest army that can come and centres the

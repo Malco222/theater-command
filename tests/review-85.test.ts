@@ -54,19 +54,32 @@ describe('the cities version, as reviewed', () => {
     }
     expect(seeded).toBeGreaterThan(10);
     expect(fieldClass(g, g.byName.Houston.id)).toBe(fieldClass(fresh, g.byName.Houston.id));
+    // The province a city was cut out of keeps only the field the first day gives it now (no air group is based on
+    // these): East Texas's went with Houston, Toronto's town keeps its landing ground.
+    for (const name of ['East Texas', 'Toronto', 'Ohio Valley', 'Minas Gerais']) {
+      const id = g.byName[name].id;
+      expect(JSON.parse(brianSave).flags[`af:${id}`], name).toBeGreaterThan(fieldClass(fresh, id));
+      expect(g.airFleets.some((f) => f.base === id)).toBe(false);
+      expect(fieldClass(g, id), name).toBe(fieldClass(fresh, id));
+    }
   });
 
   it('ground that pays something never reads as paying nothing on the prize card', () => {
     const g = playing('USA');
-    let small = 0;
+    let small = 0, under = 0;
     for (const r of g.regions) {
       if (r.owner !== 'MEX' && r.owner !== 'CAN') continue;
       const y = provinceYield(g, r, 'USA').total;
       if (y > 0 && Math.round(y * BUDGET.scale) < 1) small++;
       const p = prizeOf(g, r.id, 'USA');
       if (p && y > 0) expect(p.income, r.name).toBeGreaterThanOrEqual(1);
+      // Its parts as the province card words them: none says 0, and one under one says so.
+      const money = p?.items.find((x) => x.key === 'income')?.text ?? '';
+      expect(money, r.name).not.toMatch(/(land|harbour|oilfield|factory|factories|seat of government) 0\b/);
+      if (/under 1/.test(money)) under++;
     }
     expect(small).toBeGreaterThan(0);
+    expect(under).toBeGreaterThan(0);
   });
 
   it("Canada at peace after the fall of France counts its months to full war work from where a new war would start them", () => {
@@ -96,5 +109,8 @@ describe('the cities version, as reviewed', () => {
     orderDesk(g, 'diplomacy', !staffRuns(g, 'USA', 'diplomacy'));
     g.flags['court:GER:MEX'] = g.turn;
     expect(desk()).toMatch(/^German envoys are courting Mexico and Argentina\. (Your staff courts them back|Courting them back costs nothing: Court back, on their rows under Powers\.)/);
+    // Only a country that can still be courted is named: one gone to war is out of it.
+    g.nations.ARG.atWar = ['GER'];
+    expect(desk()).toMatch(/^German envoys are courting Mexico\. /);
   });
 });

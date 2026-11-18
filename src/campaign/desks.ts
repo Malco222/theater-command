@@ -540,7 +540,7 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
       if (!b || b === 'league') {
         // (Out of the blocs, the backer of the Americas still courts back, at no cost, the neighbours the Axis courts: ruling 223(d).)
         // (The UI director's words, words-ruling-223.md: the envoys named as the other 223 lines name them, and who courts back.)
-        const back = Object.values(g.nations).filter((T) => T.id !== nat && freeCourt(g, nat, T.id));
+        const back = Object.values(g.nations).filter((T) => T.id !== nat && courtable(T) && freeCourt(g, nat, T.id));
         if (back.length) {
           const names = back.map(the), list = names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
           const it = back.length > 1 ? 'them' : 'it';
