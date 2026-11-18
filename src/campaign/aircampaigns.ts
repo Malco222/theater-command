@@ -51,6 +51,7 @@ export const AC = data as unknown as {
   repair: Record<string, RepairRow>;
   book: BookRow[];
   split: Record<string, [number, Record<string, number>][]>;
+  fields: { rows: { region: string; from: number; class: number }[] };
   radar: { tech: string; control: string; ground: number; need: number; record: ChainRow[]; night: Record<string, [number, number][]> };
   gunners: { night: number; ground: number; day: Record<string, [number, number][]>; box: { nats: string[]; alone: number; escorted: number }; b29: { nat: string; vs: string[]; from: number; ratio: number; regions: string[] } };
 };
@@ -58,6 +59,18 @@ interface ChainRow { nat: string; from: number; name: string; by: string; ground
 
 /** True where air campaigns are flown: the grand campaign, with the switch on. */
 export const acOn = (g: Game): boolean => g.flags.open === 1 && g.flags.ac === 1;
+
+/**
+ * The record's airfields today's chart does not seed (b574: Rhodes, Sardinia, the Libyan fields): with the switch on,
+ * the class of airfield a province has at least from its month; 0 elsewhere, and always 0 with the switch off.
+ */
+export function recordField(g: Game, region: number): number {
+  if (!acOn(g)) return 0;
+  const name = g.regions[region]?.name;
+  let out = 0;
+  for (const f of AC.fields.rows) if (f.region === name && f.from <= g.turn) out = Math.max(out, f.class);
+  return out;
+}
 
 /** Turns the air campaigns on or off (a new game, or the test kitchen). */
 export function setAirCampaigns(g: Game, on: boolean): void {

@@ -3,7 +3,7 @@
 // lost), bombing damage carries over and comes back at the historian's rates, and at the stops that follow the book
 // the historian's campaigns open and close on their months. The grand campaign only, behind a switch that is off.
 import { afterEach, describe, expect, it } from 'vitest';
-import { AIR, CLOSE, airAI, airBattles, airFleetsOf, airIncomeLoss, airOverBattle, airRange, fly, kmTo } from '../src/campaign/air';
+import { AIR, CLOSE, airAI, airBattles, airFleetsOf, airIncomeLoss, airOverBattle, airRange, fly, hasAirfield, kmTo, whyNotBase } from '../src/campaign/air';
 import {
   AC, acOn, airWarMonth, bombLands, bombWorn, callOff, campaignView, chainAt, gunnerRatio, heldDown, lossBand, nightFighters, openCampaign, setAirCampaigns, skyFight, skyFought, stockLoss, whyNotCampaign,
 } from '../src/campaign/aircampaigns';
@@ -378,6 +378,23 @@ describe("the book: history's campaigns on their months (b549)", () => {
     expect(took).toBeGreaterThan(0);
     const big = Math.max(...fs.map((f) => f.bmr));
     expect(took).toBeLessThanOrEqual(Math.max(big, 0.7 * med * all + big / 2));
+  });
+
+  it("gives Rhodes, Sardinia and the Libyan fields their airfields with the switch on, and only then (b574)", () => {
+    const g = grand();
+    const ita = airFleetsOf(g, 'ITA').find((f) => f.bmr > 0 && f.ship === undefined)!;
+    const rhodes = g.byName.Rhodes, tobruk = g.byName.Tobruk;
+    setAirCampaigns(g, false);
+    expect(hasAirfield(g, rhodes.id)).toBe(false);
+    expect(whyNotBase(g, ita, rhodes, true)).not.toBeNull();
+    setAirCampaigns(g, true);
+    for (const nm of ['Rhodes', 'Sardinia', 'Tripoli', 'Benghazi', 'Derna', 'Tobruk']) expect(hasAirfield(g, g.byName[nm].id)).toBe(true);
+    expect(whyNotBase(g, ita, rhodes, true)).toBeNull();
+    // Whoever holds the field uses it.
+    tobruk.ctrl = 'UK';
+    const raf = airFleetsOf(g, 'UK').find((f) => f.ship === undefined)!;
+    expect(whyNotBase(g, raf, tobruk, true)).toBeNull();
+    expect(whyNotBase(g, ita, tobruk, true)).not.toBeNull();
   });
 
   it("holds the record's share of the RAF at home in August 1941, not every group in reach (b569(3))", () => {

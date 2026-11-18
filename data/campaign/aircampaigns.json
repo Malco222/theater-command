@@ -2084,6 +2084,17 @@
   "Craven and Cate, The Army Air Forces in World War II; Freeman, The Mighty Eighth War Diary (1981)",
   "Overy, The Air War 1939-1945 (1980) and The Bombing War (2013); Hardesty, Red Phoenix (1982); Bergerud, Fire in the Sky (2000)"
  ],
+ "fields": {
+  "_about": "Rider b574 (the design director, 22:11Z): the record's Mediterranean air war was flown from fields today's chart does not seed. With the switch on, these provinces have an airfield of at least this class (1 a landing ground, 2 an airfield, 3 an air base; airwar.json fields.sizes) from this turn; whoever holds the province uses it, as everywhere. With the switch off they are not read. Which Libyan provinces and from when: the historian (b574); the classes are the feature builder's reading.",
+  "rows": [
+   { "region": "Rhodes", "from": 1, "class": 1, "why": "Maritza and Gadurra, the Aegean command's base: about 100 or more aircraft in 1940-41 (the historian, b569, high)." },
+   { "region": "Sardinia", "from": 1, "class": 2, "why": "Elmas, Decimomannu and Alghero, home to the torpedo and bomber groups (the historian, b569, high)." },
+   { "region": "Tripoli", "from": 1, "class": 2, "why": "Castel Benito." },
+   { "region": "Benghazi", "from": 1, "class": 2, "why": "Benina." },
+   { "region": "Derna", "from": 1, "class": 1, "why": "Derna's field." },
+   { "region": "Tobruk", "from": 1, "class": 2, "why": "El Adem and the fields by Tobruk." }
+  ]
+ },
  "radar": {
   "_about": "Ruling 236 riders b553 and b558 (Brian, 20:43Z: \"if you had radar then your fighters are much better at intercepting bombing raids\"), inside the switch; the historian's rows, historian/radar-night-b553.json. (a) Warning: the record's two chains (air.json radar.chains: Chain Home from 1, the Kammhuber Line from 24) stay on their months at every stop. At the stops that follow the book each other great power's chain comes in on its 'record' row's month whatever its research, over the row's 'regions' only where it names them ('where' is the card's phrase for that ground; 'plural' makes the raid report say 'give warning'). At stops 3 to 5 a nation holding Early-warning radar ('tech') has a chain over all the ground it holds, catching 'ground' of what a raid on its fields would. Without a chain only air.json radar.without (7 in 10) of the defending fighters meet a raid. (b) 'night': what a nation's fighters count for by night, as a share of their worth by day, in place of air.json combat.night.fighters (0.03): the historian's dated rows [from turn, figure], a row holding until the next. At the stops that follow the book they run by date; at stops 3 to 5 Fighter control ('control') is the gate: without it the nation keeps its first figure, with it the figure for the month. The regions are the historian's (historian/radar-night-b553.json, regions_b558); the optional middle Soviet step of August 1942 (six cities) is left out, as the director ruled. (c) b569(2): at stops 3 to 5 a staff whose ground was bombed by night within 'need' months takes Fighter control first in its research, once it holds Early-warning radar, every nation alike.",
   "tech": "earlywarning",
