@@ -410,27 +410,37 @@ class Model:
         mesh is made they are brought down onto the skin under them and take its shading (`lay_on_skin`), so nothing
         tells the ribbon from the skin but what it carries. `paint` is the skin's; the ribbon's own is that with ".on"
         after it (`on_paint`). Returns its middle points, in order along it."""
+        return self.bands([left, mid, right], facings, paint, lift)[1]
+
+    def bands(self, lines, facings, paint, lift=0.004):
+        """As `band`, with any number of points across (five give a streak a core and a softer edge). Returns each
+        line's points as they were laid, in order along it."""
         fn = [Vector(n).normalized() for n in facings]
-        mids = [Vector(q) for q in mid]
-        if len(mids) < 2:
-            return []
+        lines = [[Vector(q) for q in line] for line in lines]
+        n, w = len(lines[0]), len(lines)
+        if n < 2:
+            return [[] for _ in lines]
         verts, faces = [], []
-        for a, b, c, n in zip(left, mids, right, fn):
-            verts += [Vector(a) + n * lift, b + n * lift, Vector(c) + n * lift]
-        for k in range(len(mids) - 1):
-            faces += [(3 * k, 3 * k + 1, 3 * k + 4, 3 * k + 3), (3 * k + 1, 3 * k + 2, 3 * k + 5, 3 * k + 4)]
+        for k in range(n):
+            verts += [line[k] + fn[k] * lift for line in lines]
+        for k in range(n - 1):
+            for j in range(w - 1):
+                faces.append((w * k + j, w * k + j + 1, w * (k + 1) + j + 1, w * (k + 1) + j))
+        mid = lines[w // 2]
         base = len(self.verts)
-        self.add(verts, faces, self.on_paint(paint), True, lambda m: fn[min(range(len(mids)), key=lambda i: (mids[i] - m).length_squared)])
+        self.add(verts, faces, self.on_paint(paint), True, lambda m: fn[min(range(n), key=lambda i: (mid[i] - m).length_squared)])
         for i in range(len(verts)):
             self.lying[base + i] = lift
-        return [verts[3 * k + 1] for k in range(len(mids))]
+        return [[verts[w * k + j] for k in range(n)] for j in range(w)]
 
-    def ribbon(self, points, facings, half, paint, lift=0.004, taper=None):
-        """A `band` along a row of points, so far to either side of them (`taper`: f(0..1 along it) -> a share of that)."""
+    def ribbon(self, points, facings, half, paint, lift=0.004, taper=None, core=None):
+        """A `band` along a row of points, so far to either side of them (`taper`: f(0..1 along it) -> a share of that).
+        With `core` (a share of its half width) it is five points across: edge, shoulder, middle, shoulder, edge; and
+        what comes back is all five lines (`bands`) rather than the middle one."""
         pts = [Vector(p) for p in points]
         if len(pts) < 2:
-            return []
-        left, right = [], []
+            return [] if core is None else [[] for _ in range(5)]
+        left, right, l2, r2 = [], [], [], []
         for k, (p, n) in enumerate(zip(pts, facings)):
             n = Vector(n).normalized()
             along = pts[min(k + 1, len(pts) - 1)] - pts[max(k - 1, 0)]
@@ -441,6 +451,11 @@ class Model:
             w = half * (taper(k / (len(pts) - 1)) if taper else 1.0)
             left.append(p + side * w)
             right.append(p - side * w)
+            if core is not None:
+                l2.append(p + side * w * core)
+                r2.append(p - side * w * core)
+        if core is not None:
+            return self.bands([left, l2, pts, r2, right], facings, paint, lift)
         return self.band(left, pts, right, facings, paint, lift)
 
     def tub(self, at, r, high, paint, wall=0.08, sides=14, floor=None):
@@ -766,6 +781,20 @@ def place(model, pose, name):
         d = q @ d
         k = P.parent
     return p, d
+
+
+def carried(model, pose, part, point):
+    """Where a point of a part (the part by name; the point as it lies at rest) is under a pose, in the model's own axes."""
+    p, k = Vector(point), model.part_at[part]
+    while k >= 0:
+        P = model.parts[k]
+        q, mv, sc = pose.get(P.name, (Quaternion(), Vector(), Vector((1, 1, 1))))
+        if P.slide is not None and P.axis is not None:
+            mv = q @ mv
+        rel = p - P.pivot
+        p = P.pivot + mv + q @ Vector((rel.x * sc[0], rel.y * sc[1], rel.z * sc[2]))
+        k = P.parent
+    return p
 
 
 def bake_actions(model, arm, fps=30):

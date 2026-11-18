@@ -156,6 +156,36 @@ def _doomed(S, t_hit, t_end_fx, kind):
     S.preroll()
 
 
+def _goes_under(S, half, every=5.0):
+    """Where a half of a broken ship is going under: the places along both her sides where the sea has climbed more
+    than half way up to her deck's edge and her deck is not yet deep under. Gives a function of nothing: those
+    places now, each (a place on the sea, the way outward from her there)."""
+    h, bx = S.yard.h, S.yard.break_x
+    x_end = h.frame_x(0.97) if half == "fore" else h.frame_x(-0.97)
+    n = max(2, int(abs(x_end - bx) / every))
+    rest = []
+    for i in range(n + 1):
+        x = bx + (x_end - bx) * i / n
+        u = h.u_of(x)
+        rest.append((h.point(u, 1.0), h.point(u, 0.0), Vector((x, 0.0, 0.0))))
+
+    def where():
+        out = []
+        for edge, water, mid in rest:
+            c = rigid.carried(S.m, S.pose, half, mid)
+            for hand in (1.0, -1.0):
+                e = rigid.carried(S.m, S.pose, half, Vector((edge.x, hand * edge.y, edge.z)))
+                w = rigid.carried(S.m, S.pose, half, Vector((water.x, hand * water.y, water.z)))
+                if not (-2.0 < e.z < 0.55 * edge.z) or w.z > 0.0:
+                    continue
+                p = w.lerp(e, -w.z / (e.z - w.z)) if e.z > 0.0 else e
+                way = Vector((p.x - c.x, p.y - c.y, 0.0))
+                if way.length > 0.5:
+                    out.append((Vector((p.x, p.y, 0.0)), way.normalized()))
+        return out
+    return where
+
+
 def sink(S, out, opt):
     T, t_hit, quick = 10.5, 1.7, 2.5
     L = S.L
@@ -164,9 +194,15 @@ def sink(S, out, opt):
     S.fx.blast(t_hit, S.where("fire.2"), size=1.0)
     S.fx.fire(S.where("fire.3"), start=t_hit + 0.2, size=1.2)
     S.fx.fire(S.where("fire.2"), start=t_hit + 0.2, end=t_hit + 3.0, size=1.5)
-    mid = rigid.place(S.m, {}, "fire.2")[0]
-    S.fx.froth((Vector((mid.x, 0, 0)), Vector((0, 0, 1))), t_hit + 3.2, T + 2, r=13.0)
-    S.fx.slick(t_hit + 6.0, (mid.x, 0, 0), r=46.0)
+    bx = S.yard.break_x
+    if any(s["name"] == "break" for s in S.m.sockets):      # (steam and smoke pour from the gap until it goes under)
+        S.fx.steam(S.where("break"), t_hit + 0.15, t_hit + 5.0)
+    # The white water: heaviest in the middle, where the two broken ends go down (air bursting up, and a dark sheen
+    # of oil spreading from there); lighter along each half's own side where the sea climbs it.
+    for half in ("fore", "aft"):
+        S.fx.froth(_goes_under(S, half), t_hit + 0.9, T + 2)
+    S.fx.boil((bx, 0.0), t_hit + 2.6, T + 2, r=(34.0, 20.0), rise=2.2)
+    S.fx.slick(t_hit + 3.4, (bx, 0, 0), r=46.0)
 
     def step(t):
         after = t - t_hit
@@ -190,8 +226,8 @@ def capsize(S, out, opt):
     S.fx.burst(t_hit + 0.05, S.where("fire.2"), size=1.0)
     S.fx.fire(S.where("fire.2"), start=t_hit + 0.3, size=1.1)
     mid = rigid.place(S.m, {}, "fire.2")[0]
-    S.fx.froth((Vector((mid.x, -8.0, 0)), Vector((0, 0, 1))), t_hit + 4.0, T + 2, r=16.0)
-    S.fx.slick(t_hit + 7.0, (mid.x, -10.0, 0), r=50.0)
+    S.fx.boil((mid.x, -8.0), t_hit + 4.0, T + 2, r=(40.0, 20.0), rise=3.0)
+    S.fx.slick(t_hit + 5.5, (mid.x, -10.0, 0), r=50.0)
 
     def step(t):
         after = t - t_hit

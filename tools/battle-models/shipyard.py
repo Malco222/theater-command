@@ -10,6 +10,7 @@ break her back. Everything that stands on her belongs to whichever half it stand
 """
 
 import math
+import random
 
 from mathutils import Matrix, Vector, noise
 
@@ -176,32 +177,48 @@ class Yard:
         return self.h.deck_z(x) + 0.02
 
     # ---- the hull ------------------------------------------------------------------------------------
-    def hull(self, deck_paint="planks", frames=None, deck_from=None, deck_to=None, boot=None, above=None):
+    def hull(self, deck_paint="planks", frames=None, deck_from=None, deck_to=None, boot=None, above=None, tear=None):
         """`boot`: the height of the top of her boot topping, where her freeboard is too low for the usual rule (a
         submarine's); `above`: the heights of the rows of points up her side, as shares of her freeboard (with `boot`,
-        of her side above the boot)."""
+        of her side above the boot); `tear`: how far the line she breaks along runs fore and aft of the break, in
+        metres (None: by her beam; 0: a clean cut, and none of what a torn end shows).
+
+        Where she breaks (the art director, 09:24 UTC on 18 November 2026: "She parts along a straight, clean vertical
+        line, flat plating on both sides of a dark wedge, like a model sawn in two... destruction must look broken,
+        never cut away"). So her two halves meet along a ragged line: the frame at the break has its points thrown
+        fore and aft by turns, and both skins share it, so that whole she shows nothing and broken each half ends in
+        teeth of plating. The deck's last strip on each half is a part of its own (`tear.fore`, `tear.aft`), hinged
+        across her, which the `break` clip heaves up. And behind each ragged edge is what a torn end shows
+        (`torn_ends`)."""
         m, h = self.m, self.h
         n = frames or (96 if m.fine else 40)
         us = [-1.0 + 2.0 * k / n for k in range(n + 1)]
         ub = h.u_of(self.break_x)
+        if tear is None:
+            tear = min(max(0.05 * h.B, 0.5), 1.6)
+        self.tear, self.jag = tear, None
         # (frames close together either side of a step in the deck, so that the step is a wall and not a ramp)
         for sx in (h.step_at, h.step_aft_at):
             if sx is not None:
                 su = h.u_of(sx)
                 us = [u for u in us if abs(u - su) > 1.2 / n] + [su - 0.0012, su + 0.0012]
-        us = sorted(set([u for u in us if abs(u - ub) > 0.6 / n] + [ub]))
+        # (no frame nearer the break than the ragged line reaches)
+        us = sorted(set([u for u in us if abs(u - ub) > max(0.6 / n, (tear + 0.5) / h.Lwl * 2.0 if tear > 0 else 0.0)] + [ub]))
         boot_lo, boot_hi = -0.45, 0.85
         below = [-1.0, -0.86, -0.68, -0.48, -0.3, -0.16] if m.fine else [-1.0, -0.7, -0.35]
         above = above or ([0.22, 0.42, 0.62, 0.82, 1.0] if m.fine else [0.5, 1.0])
 
-        def ring(u):
+        def shares_of(u):
             zd = h.deck_z(h.frame_x(u) + h.lean(u))
             wb = -0.07                                                      # the foot of the boot topping
             wt = min(boot_hi / zd, 0.18) if boot is None else min(boot / zd, 0.6)
             if boot is None:
-                shares = below + [wb, 0.0, wt] + [a for a in above if a > wt + 0.03]
-            else:                # (shares of what is left of her side above the boot: the same count of rows on every frame)
-                shares = below + [wb, 0.0, wt] + [wt + (1.0 - wt) * a for a in above]
+                return below + [wb, 0.0, wt] + [a for a in above if a > wt + 0.03]
+            # (shares of what is left of her side above the boot: the same count of rows on every frame)
+            return below + [wb, 0.0, wt] + [wt + (1.0 - wt) * a for a in above]
+
+        def ring(u):
+            shares = shares_of(u)
             port = [h.point(u, w, PORT) for w in shares]
             # the deck's edge: the hull's own paint comes a little way in over the deck (the waterway)
             edge = port[-1]
@@ -219,12 +236,28 @@ class Yard:
 
         rings = [ring(u) for u in us]
         k = us.index(ub)
-        m.use("aft")
-        m.skin(rings[:k + 1], paint, caps=(True, True), closed=False, cap_paint="torn")
-        m.use("fore")
-        m.skin(rings[k:], paint, caps=(True, True), closed=False, cap_paint="torn")
-        # the deck, laid across from waterway to waterway with a little camber
         across = 7 if m.fine else 3
+        deck_jag = [0.0] * across
+        if tear > 0:
+            # the ragged line: every point of the break's frame but those of her deck's edge and waterway (the first
+            # two and the last two) is thrown fore or aft, and the deck's own points across her likewise
+            rg = random.Random(int(h.L * 10) + 7)
+            whole = rings[k]
+            jag, sign = [0.0] * len(whole), 1.0
+            for i in range(2, len(whole) - 2):
+                sign = -sign if rg.random() < 0.72 else sign
+                jag[i] = sign * tear * rg.uniform(0.35, 1.0)
+            rings[k] = [Vector((p.x + d, p.y, p.z)) for p, d in zip(whole, jag)]
+            self.jag = (shares_of(ub), jag)
+            for j in range(1, across - 1):
+                sign = -sign if rg.random() < 0.72 else sign
+                deck_jag[j] = sign * tear * 0.8 * rg.uniform(0.35, 1.0)
+        torn = tear > 0 and m.fine
+        m.use("aft")
+        m.skin(rings[:k + 1], paint, caps=(True, not torn), closed=False, cap_paint="torn")
+        m.use("fore")
+        m.skin(rings[k:], paint, caps=(not torn, True), closed=False, cap_paint="torn")
+        # the deck, laid across from waterway to waterway with a little camber
         for part, sel in (("aft", us[:k + 1]), ("fore", us[k:])):
             m.use(part)
             rows = []
@@ -234,8 +267,24 @@ class Yard:
                 x = e.x
                 if deck_from is not None and (x < deck_from or x > deck_to):
                     pass
-                rows.append([Vector((x, half * (1.0 - 2.0 * j / (across - 1)), e.z + 0.02 + 0.22 * (1.0 - (1.0 - 2.0 * j / (across - 1)) ** 2) * min(1.0, half / 4.0))) for j in range(across)])
+                rows.append([Vector((x + (deck_jag[j] if u == ub else 0.0), half * (1.0 - 2.0 * j / (across - 1)),
+                                     e.z + 0.02 + 0.22 * (1.0 - (1.0 - 2.0 * j / (across - 1)) ** 2) * min(1.0, half / 4.0))) for j in range(across)])
+            if tear > 0 and len(rows) > 2:
+                # (the deck's last strip is a flap hinged across her at the frame next the break: see `hull` above)
+                flap, rows = (rows[-2:], rows[:-1]) if part == "aft" else (rows[:2], rows[1:])
+                hinge = flap[0] if part == "aft" else flap[1]
+                name = m.part("tear." + part, part, (hinge[0].x, 0.0, hinge[across // 2].z), axis=(0, 1, 0), limits=[-50.0, 50.0], kind="turn",
+                              note="the deck at her break: hinged across her, heaved up by the `break` clip when her back breaks (" + ("+" if part == "fore" else "-") + " lifts its torn edge)")
+                m.use(name)
+                m.sheet(flap, deck_paint, Z, smooth=False)
+                m.sheet([[p - Z * 0.05 for p in row] for row in flap], "torn", -Z, smooth=False)
+                m.use(part)
             m.sheet(rows, deck_paint, Z, smooth=False)
+        if tear > 0:
+            m.socket("break", (self.break_x + 0.8, 0.0, h.deck_z(self.break_x) - 1.0), (0, 0, 1), "fore",
+                     "where her back breaks: steam and smoke pour from the gap until it goes under")
+        if torn:
+            self.torn_ends(whole, rings[k], ring, paint)
         if m.fine:   # the plating's seams along each side, scribed, and the edge of the armour belt
             for hand in (PORT, STBD):
                 for share, lo, hi in ((0.36, -0.9, 0.93), (0.68, -0.93, 0.95)):
@@ -249,12 +298,100 @@ class Yard:
                             nn = a.cross(b).normalized()
                             if nn.y * hand < 0:
                                 nn = -nn
-                            pts.append(p)
+                            pts.append(p + X * self.jag_at(share, hand) if u == ub else p)
                             nrm.append(nn)
                         m.strip(pts, nrm, 0.035, "seam", 0.012)
         m.socket("wake.bow", (h.frame_x(1.0), 0, 0), (1, 0, 0), "ship", "the stem at the waterline: the bow wave's curl and the V of the wake start here")
         m.socket("wake.stern", (h.frame_x(-1.0), 0, 0), (-1, 0, 0), "ship", "the stern at the waterline: the ribbon of churned water starts here")
         m.info.setdefault("file", {}).update({"length": h.L, "beam": h.B, "draught": h.T, "waterline": [round(h.frame_x(-1.0), 2), round(h.frame_x(1.0), 2)]})
+
+    def jag_at(self, w, hand):
+        """How far fore (+) or aft the ragged line of her break lies from the break itself, at a share `w` of her side
+        (as `Hull.point` takes it) on one hand."""
+        if self.jag is None:
+            return 0.0
+        shares, jag = self.jag
+        w = min(max(w, shares[0]), shares[-1])
+        i = max(j for j in range(len(shares) - 1) if shares[j] <= w)
+        t = (w - shares[i]) / max(shares[i + 1] - shares[i], 1e-9)
+        # (the frame's points run from the starboard waterway down round her keel and up to the port waterway)
+        at = (lambda j: len(jag) - 1 - len(shares) + j) if hand == PORT else (lambda j: len(shares) - j)
+        return lerp(jag[at(i)], jag[at(i + 1)], t)
+
+    def half_of(self, p, hand):
+        """Which half a place on her side belongs to: which side of the ragged line it lies."""
+        zd = self.h.deck_z(p.x)
+        return "fore" if p.x >= self.break_x + self.jag_at(min(max(p.z / max(zd, 0.1), 0.0), 1.0), hand) else "aft"
+
+    def torn_ends(self, whole, ragged, ring, paint):
+        """What each half shows where her back is broken (only a fine model has it; whole, all of it is inside her).
+        Behind the ragged edge of her plating: the plating's own thickness; a dark lining to her skin, so that the
+        inside of her is not seen through; a bulkhead a few metres in; two of her frames standing bare, the nearer one
+        uncovered wherever the plating is torn back past it; her decks between, broken off short or long; and tongues
+        of plating bent inward, which reach past the break into the other half while she is whole and stand out of
+        the torn end when the halves part. `whole` is the break's frame, `ragged` the same thrown fore and aft."""
+        m, h, bx, tear = self.m, self.h, self.break_x, self.tear
+        rg = random.Random(int(h.L * 10) + 11)
+        back = tear + 1.8
+        zc = (h.deck_z(bx) - h.T) * 0.5
+        nb = len(ragged)
+
+        def inward(p):
+            v = Vector((0.0, -p.y, zc - p.z))
+            return v.normalized() if v.length > 1e-6 else Z.copy()
+
+        def inset(p, d):
+            return p + inward(p) * min(d, max((Vector((0.0, p.y, p.z - zc))).length - 0.05, 0.0))
+
+        def section(x):
+            got = ring(h.u_of(x))
+            return got if len(got) == nb else [Vector((x, p.y, p.z)) for p in whole]
+        quads = [(i, i + 1, nb + i + 1, nb + i) for i in range(nb - 1)]
+        for part, sg in (("fore", 1.0), ("aft", -1.0)):
+            m.use(part)
+            face = lambda mid, sg=sg: Vector((-sg, 0.0, 0.0))             # (toward the other half)
+            lining = [inset(p, 0.07) for p in ragged]
+            wall = [inset(p, 0.07) for p in section(bx + sg * back)]
+            m.add(ragged + lining, quads, "torn", False, lambda mid, sg=sg: Vector((-sg, 0.0, 0.0)) - inward(mid) * 0.2)      # the plating's thickness
+            m.add(lining + wall, quads, "torn", False, inward)                                                               # the lining
+            m.add(wall + [Vector((bx + sg * back, 0.0, zc))], [(i, i + 1, nb) for i in range(nb - 1)] + [(nb - 1, 0, nb)], "torn", False, face)   # the bulkhead
+            # her frames: an angle bar round her inside, pale against the dark
+            for dist in (0.3 * tear + 0.15, back - 0.7):
+                xr = bx + sg * dist
+                sec = section(xr)
+                foot, lip = [inset(p, 0.06) for p in sec], [inset(p, 0.42) for p in sec]
+                near = [Vector((p.x - sg * 0.09, p.y, p.z)) for p in foot]
+                near_lip = [Vector((p.x - sg * 0.09, p.y, p.z)) for p in lip]
+                far_lip = [Vector((p.x + sg * 0.09, p.y, p.z)) for p in lip]
+                m.add(near + near_lip, quads, "upper", False, face)                           # its web, toward the break
+                m.add(near_lip + far_lip, quads, "upper", False, inward)                      # its flange, toward her middle
+                far = [Vector((p.x + sg * 0.09, p.y, p.z)) for p in foot]
+                m.add(far + far_lip, quads, "torn", False, lambda mid, sg=sg: Vector((sg, 0.0, 0.0)))
+                m.add(near + far, quads, "upper", False, lambda mid: -inward(mid))             # its heel, where the plating was
+            # her decks below: each a shelf from the bulkhead toward the break, broken off ragged
+            z = h.deck_z(bx) - 2.6
+            while z > 0.4:
+                wide = h.side(bx, z, PORT)[0].y - 0.3
+                if wide > 1.0:
+                    edge = [(bx - sg * tear * rg.uniform(-0.9, 0.7), wide * (1.0 - 2.0 * i / 6.0)) for i in range(7)]
+                    plan = [(bx + sg * back, -wide), (bx + sg * back, wide)] + edge
+                    m.prism(plan, z - 0.1, z, "torn", top_paint="deck", bottom=True)
+                z -= 2.6
+            # tongues of plating bent inward
+            for i in range(2, nb - 3):
+                if rg.random() > 0.55:
+                    continue
+                a, b = inset(ragged[i], 0.22), inset(ragged[i + 1], 0.22)
+                long, bend = (tear + 1.2) * rg.uniform(0.45, 1.0), rg.uniform(0.15, 0.9)
+                mid_ = (a + b) * 0.5
+                rows = []
+                for st in (0.0, 0.5, 1.0):
+                    shift = Vector((-sg * long * st, 0.0, 0.0)) + inward(mid_) * bend * st * st
+                    rows.append([a.lerp(mid_, 0.45 * st) + shift, b.lerp(mid_, 0.45 * st) + shift])
+                flat = [p for row in rows for p in row]
+                faces = [(0, 1, 3, 2), (2, 3, 5, 4)]
+                m.add(flat, faces, paint, False, lambda mid: -inward(mid))
+                m.add([p + inward(p) * 0.03 for p in flat], faces, "torn", False, inward)
 
     def portholes(self, x0, x1, drop, every=3.2, r=0.17, skip=()):
         """A row of scuttles along each side, so far below the deck's edge."""
@@ -267,7 +404,7 @@ class Yard:
                     z = self.h.deck_z(x) - drop
                     if z > 1.6:
                         p, n = self.h.side(x, z, hand)
-                        self.on(x).disc(p + n * 0.025, n, r, "glass", 8)
+                        self.m.use(self.half_of(p, hand)).disc(p + n * 0.025, n, r, "glass", 8)
             x += every
 
     def rails(self, x0, x1, inset=0.25, every=2.6, high=1.05, z_of=None, y_of=None, both=True):

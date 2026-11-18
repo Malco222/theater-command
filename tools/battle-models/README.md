@@ -61,19 +61,36 @@ clip that moves a part as an action. Events and sockets are only in the `.json`.
 ## Ships
 
 Parts: `ship` (root), `fore` and `aft` (her two halves: everything is a child of one or the other, so she can
-break in two), `turret.A/B/…` with `turret.A.gun.1…` (turn, then slide for the run-back), `director.*`, `radar.*`,
+break in two), `tear.fore` and `tear.aft` (the deck's last strip at her break, each hinged across her: see "Where
+she breaks" below), `turret.A/B/…` with `turret.A.gun.1…` (turn, then slide for the run-back), `director.*`, `radar.*`,
 `sec.P1…/sec.S1…` (secondary mounts, port and starboard) with their guns, `tubes.N` (torpedo tubes), `screw.N`,
 `rudder`, a carrier's `lift.N` and `deckpark`, a submarine's `periscope.N` and `planes.bow/stern`.
 
 Sockets: `muzzle.turret.A.1…`, `muzzle.sec.P1.1…`, `aa.N` (light guns), `funnel.N`, `fire.N` (where fires start,
 bow to stern), `hit.port.N` / `hit.starboard.N` (torpedo and shell strikes along the waterline), `wake.bow`,
-`wake.stern`, `wash.N` (the screws), `ensign`, `jack`, `torpedo.*`, `depth.*`, a carrier's `launch`, `land` and
-`lift.N`.
+`wake.stern`, `wash.N` (the screws), `ensign`, `jack`, `torpedo.*`, `depth.*`, `break` (where her back breaks: steam
+and smoke pour from the gap), a carrier's `launch`, `land` and `lift.N`.
 
 Clips: `sail` (loop), `fire.<turret>` and `fire.sec.*`, `broadside.heel`, `hit`, `list.port/starboard`,
 `sink.bow`, `sink.stern`, `capsize.port/starboard`, `break` (a magazine hit: she breaks in two);
 destroyers `torpedoes.port/starboard`, `depth_charges`; carriers `lift.N`; submarines `dive`, `surface`,
 `periscope`, `torpedoes.bow/stern`.
+
+**Where she breaks.** The first sinking showed her parting "along a straight, clean vertical line, flat plating on
+both sides of a dark wedge, like a model sawn in two" (the art director, 2026-11-18: destruction must look broken,
+never cut away). So her halves meet along a ragged line (`Yard.hull`, `tear`: by her beam, 0.5 to 1.6 m fore and
+aft of the break; a submarine's is still 0, a clean cut). The frame at the break has its points thrown fore and aft
+by turns and both skins share it: whole, she shows nothing; broken, each half ends in teeth of plating that fit the
+other's. Her deck's edge is not thrown, so what stands on her deck is as it was; a scuttle or a seam near the break
+belongs to the half whose plating it lies on (`Yard.half_of`, `Yard.jag_at`). Behind each ragged edge a fine model
+has (`Yard.torn_ends`) the plating's thickness, a dark lining, a bulkhead a few metres in, two frames (the nearer
+stands bare wherever the plating is torn back past it), her lower decks broken off short or long, and tongues of
+plating bent inward: these reach past the break into the other half while she is whole and stand out of the torn
+end when the halves part. Nothing that must show outside her can be hidden so: what is bent outward has to be a
+part that moves. The deck's last strip on each half is therefore `tear.fore` / `tear.aft`, a turn part hinged
+across her at the next frame, and the `break` clip heaves it up in its first third of a second (+ lifts the torn
+edge of `tear.fore`, - that of `tear.aft`). The clip's event `steam` at the socket `break` asks for steam and smoke
+from the gap until it goes under. A carrier's flight deck and hangar are still cut clean above her hull.
 
 A submarine seen close: her tower's top is an open bridge inside a thin screen with a turned-out lip (the hatch, the
 sight on its post and the periscope standards stand inside it), her deck gun is an open mounting on a pedestal with no
@@ -85,9 +102,13 @@ fairwater. Parts, sockets and clips are as they were; only the plain (`far`) mes
 
 Her tower is plated (seams round it and up it, a row of rivets beside each: `plating` in `ships.py`), with small
 flooding holes above its foot, and the foot curves out to the casing. She is the most streaked ship in the fleet (the
-art director, 2026-11-18): rust weeps down from her slots, her bollards and her anchor's bed; salt dries in pale runs
-along the shoulder of her casing and down her tower; a dark band lies above her boot topping where the sea washes
-her. Her boot topping's top is level at 0.55 m (`boot` of `Yard.hull`: the ships' rule by the height of the deck
+art director, 2026-11-18): rust weeps down from her slots, her bollards and her anchor's bed, each weep a dark brown
+core with a softer orange-brown edge, most of them running into the dark band at her waterline; salt dries in a pale
+chalky bloom along the edge of her casing, on the lower third of her tower and in runs down from the lip of her
+bridge screen; a dark, rusty band lies above her boot topping where the sea washes her. (First built at about half
+this strength, she "read new from the yard" from the battle camera: judge weathering on the picture of the whole
+boat and on the sheet, not on the close looks.) Her rust is her own colour, 8A4E28: her file says so in `rust`, and
+a file without the key takes the usual 6E4A34. Her boot topping's top is level at 0.55 m (`boot` of `Yard.hull`: the ships' rule by the height of the deck
 does not suit so low a side). Her torpedo doors lie under water (they had been drawn at the waterline: `Hull.side`
 serves only above it), and the `torpedo.bow.*` and `torpedo.stern.*` sockets with them.
 
@@ -95,9 +116,15 @@ serves only above it), and the `torpedo.bow.*` and `torpedo.stern.*` sockets wit
 toward black, and where a model carries any, `salt` toward a pale grey: `info.salt`, D2D5CF if it is not given), so
 a streak finer than the skin's own points needs points of its own. It is a ribbon lying on the skin, three points
 across (`Model.band`, or `Model.ribbon` along a line): its middle points carry the rust or the salt, most at its
-head, and its edges none, so it fades to either side. Four things keep it from showing as a panel, and each was
-found by a picture from 6 m:
+head, and its edges none, so it fades to either side. With `core` a ribbon is five points across (`Model.bands`
+takes any number of lines): a weep of rust has a middle line and two shoulders that carry rust and darkening, and
+edges that carry none. Five things keep it from showing as a panel, and the first four were each found by a picture
+from 6 m:
 
+- No two things lying on one skin may overlap: neither can show through the other, and where they share a triangle
+  of the skin they fight. So the casing's salt lies on the rows above her slots, where no rust runs; a weep is made
+  narrower, or left out, where it would touch the one beside it (`laid` in `streak`); the tower's bloom lies between
+  the weeps from the holes at its foot.
 - Its paint is the skin's own colour under the skin's name with `.on` after it (`hull.on`, `upper.on`:
   `Model.on_paint`), so that pictures and the game can treat it apart. In the pictures it is seen by the camera
   and by nothing else (`stage.ship_look`), so it stops no light: otherwise its edge draws a hairline of shadow
@@ -173,8 +200,9 @@ Britain's armoured flight deck stays grey. The pictures show a ship in her last 
 How a battle would use them: train turrets by setting each turret's turn to (bearing to target - rest bearing)
 inside its limits, lift guns by range, then play `fire.<turret>` on each salvo. Damage lights fires at `fire.N`
 sockets (more fires as she is hurt). A loss is one of the endings, chosen by what sank her: gunfire `sink.bow`
-or `sink.stern`, torpedoes `capsize.*`, a magazine `break`. No wake on a sinking ship. She leaves a small ragged
-oil slick.
+or `sink.stern`, torpedoes `capsize.*`, a magazine `break`. No wake on a sinking ship. Where she goes under the
+sea boils white (heaviest where the last of her went down, lighter along her side where the sea is climbing it),
+and a dark sheen of oil wells up there and spreads.
 
 ## Aircraft
 
@@ -408,6 +436,14 @@ Smoke seen later and from near by (`trail` in `airshow.py`, `_place` in `stage.p
 all live as long as each other and drift little, or those that die early leave the rest standing as a chain of
 separate ovals; and a puff thins away as the camera comes up to it, or its rim shows like a flat glass plate. Bullet
 strikes are a spit of small orange tongues and a dark scrap, never a round glowing bead.
+
+White water at a sinking (`froth`, `boil`, `steam`, `slick` in `stage.py`; `sink` in `show.py`). Three lessons.
+Foam laid about the middle of her deck is under her and none of it shows: it is laid outside the line of her side,
+at the places where the sea has climbed more than half way to her deck's edge (`_goes_under` finds them from her
+pose). From a camera low over the sea a flat patch is a sliver a few pixels deep, so white water needs height:
+spouts against her side, and where the last of her went down domes of air bursting up several metres. And the
+heaviest of it belongs in the middle, where the broken ends went down, with the oil welling up there and spreading
+outward over the seconds; each half's own line is lighter.
 
 Foam on the sea (`foam` and the kind "foam" in `stage.py`; a splash's foot and the froth where a ship goes under).
 One broad flat patch, however ragged its stuff, reads as a white plate laid on the sea. Churned water is a patch at
