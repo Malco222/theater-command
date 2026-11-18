@@ -605,7 +605,9 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			// ("-TheaterLanding=Calais:9:Kent" pictures another shore, after that many months have been played, with
 			// the army of another province: the landing card's amber verdicts come only later in a war, and a great
 			// army is more than the ships can carry.)
-			FString LandAt = TEXT("Hamburg"), LandFrom = TEXT("London");
+			// (Since rules 85 Hamburg is no beach from London in September 1939: the pictures showed "They cannot get
+			// there this month." in place of the landing card. The one beach the rules offer then is Schleswig-Holstein.)
+			FString LandAt = TEXT("Schleswig-Holstein"), LandFrom = TEXT("London");
 			int32 LandMonths = 0;
 			{
 				FString LandingAsked;

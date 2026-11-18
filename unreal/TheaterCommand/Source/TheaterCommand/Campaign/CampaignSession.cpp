@@ -2025,6 +2025,17 @@ FString FCampaignSession::WhyNotLead(const TArray<int32>& CorpsIds, int32 Region
 	return Why;
 }
 
+FString FCampaignSession::WhyNotBySea(const TArray<int32>& CorpsIds, int32 RegionId)
+{
+	FString Why;
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() > 0 && CallRules(TEXT("bySeaWhy"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
+	{
+		Object->TryGetStringField(TEXT("why"), Why);
+	}
+	return Why;
+}
+
 FApproachPlan FCampaignSession::PlanApproach(const TArray<int32>& CorpsIds, int32 RegionId)
 {
 	FApproachPlan Plan;

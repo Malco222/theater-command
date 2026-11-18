@@ -44,6 +44,8 @@ import { TECH as TECH_TREE, hasTech, idleTeams, techOf } from '../../../src/camp
 import { eliteOf, traitRule, traitRules, traitsOf, eliteRule } from '../../../src/campaign/traits';
 import { commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk } from '../../../src/campaign/turn';
 import * as everyRule from '../../../src/campaign/turn';
+// (the air war's rules by name too: a rule a later version adds is used when the rules have it, and not missed when they have not)
+import * as everyAirRule from '../../../src/campaign/air';
 import { gunsAlone, homeAlarms, type HomeAlarm } from '../../../src/campaign/danger';
 import { DEPTH, deskDef, type DeskId } from '../../../src/campaign/depth';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
@@ -85,7 +87,7 @@ import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, riversOf } from '../../../src/campaign/rivers';
 import { cutRail, railCut, railLinks, railNote, railsAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, cutSays, cutsKnown } from '../../../src/campaign/intel';
-import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, forecastAir, gunsAt as gunsRound, km as airKm, moveTargets, overOcean, whyNotMission } from '../../../src/campaign/air';
@@ -2933,6 +2935,23 @@ function seaReach(ids: number[]) {
   return { ports: [...ports], beaches };
 }
 
+/**
+ * (The UI director, 18 November 2026; ruling 204.) Why the chosen corps cannot go by sea to a place the by-sea offer
+ * leaves out: the first test the place fails, in the rules' own words (to friendly ground, the first corps that
+ * cannot be shipped there; to any other, the landing). Empty where the rules have nothing against it.
+ */
+function bySeaWhy(ids: number[], to: number): { why: string } {
+  const s = game();
+  const r = s.regions[to];
+  const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+  if (!r || !cs.length) return { why: '' };
+  if (allied(s, cs[0].nat, r.ctrl)) {
+    for (const c of cs) { const why = whyNotShip(s, c, r); if (why) return { why }; }
+    return { why: '' };
+  }
+  return { why: whyNotLand(s, cs, r) ?? '' };
+}
+
 /** Ships the chosen corps to a friendly port. */
 function ship(ids: number[], to: number) {
   const s = game();
@@ -3018,7 +3037,9 @@ function landOn(ids: number[], to: number) {
   if (r.ok) {
     bits.push(r.taken ? `The landing at ${s.regions[to].name} has succeeded: the troops are ashore.` : `The landing at ${s.regions[to].name} was thrown back into the sea.`);
     if (r.lostAtSea && r.lostAtSea >= 100) bits.push(`${r.lostAtSea.toLocaleString('en-US')} men were lost on the crossing.`);
-    if (r.report) bits.push(battleNote(s, r.report));
+    // (The UI director, 18 November 2026: a notice holds three lines at most. The landing's own sentence and what it
+    // cost; what the attack did to the defenders' works is the battle report's to say.)
+    if (r.report) { const price = priceLine(s, r.report); if (price) bits.push(price); }
   }
   return { ok: r.ok, taken: !!r.taken, note: r.ok ? bits.join(' ') : r.why ?? 'The landing could not be made.', moved, view: view() };
 }
@@ -3744,6 +3765,23 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
       out.push({ k: 'page:trade', t: 'A TRADING HOUSE STANDS IDLE', tip: 'A country is ready to sign a trade agreement, and you have a trading house free for it. It would pay into the treasury every month.' });
     }
   }
+  // (Version 86, the design director's b448; the UI director, 18 November 2026.) His crowded airfields, in one row:
+  // a single field names its place ("OREL'S AIRFIELD IS CROWDED"), with "AN AIRFIELD IS CROWDED" only where the name
+  // will not fit; several are counted. The rules' own sentence is its hover, and a press opens the worst field.
+  try {
+    const air = everyAirRule as Record<string, unknown>;
+    const fieldsOf = air['crowdedFields'] as ((g: Game, nat: string | null) => { region: number }[]) | undefined;
+    const rowOf = air['crowdedRow'] as ((g: Game, cs: { region: number }[]) => string) | undefined;
+    const crowded = fieldsOf ? fieldsOf(s, me.id) : [];
+    if (crowded.length && rowOf) {
+      const named = `${(s.regions[crowded[0].region]?.name ?? '').toUpperCase()}'S AIRFIELD IS CROWDED`;
+      out.push({
+        k: `field:${crowded[0].region}`,
+        t: crowded.length > 1 ? `${crowded.length} AIRFIELDS ARE CROWDED` : named.length <= 34 ? named : 'AN AIRFIELD IS CROWDED',
+        tip: ((row: string) => (/[.!?]$/.test(row) ? row : `${row}.`))(rowOf(s, crowded)),
+      });
+    }
+  } catch { /* rules before Version 86 */ }
   // Nothing on order at all, with money in the treasury for something the arsenal offers.
   if (me.queue.length === 0 && arsenalOffers(s, -1).some((o) => !o.why)) {
     out.push({
@@ -3753,7 +3791,8 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
   }
   // (Version 66) What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
   const theirs: Record<string, DeskId> = { research: 'research', arsenal: 'build', 'page:trade': 'build', 'page:spies': 'spies' };
-  return out.filter((t) => { const desk = theirs[t.k]; try { return !(desk && staffRunsDesk(s, desk)); } catch { return true; } });
+  // (a crowded field is the air desk's, as in the browser: its row is not shown while the staff runs the air war)
+  return out.filter((t) => { const desk = t.k.startsWith('field:') ? ('air' as DeskId) : theirs[t.k]; try { return !(desk && staffRunsDesk(s, desk)); } catch { return true; } });
 }
 
 function alertsOf(s: Game): string[] {
@@ -6131,6 +6170,6 @@ function find(name: string) {
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
   raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(move, 'march'), previewAttack: preview, attack: playerOrder(attack), takeOutlook, take: playerOrder(take, 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: leadOf,
+  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, start, save, peek, load, view, reach: reachOf, marchPlan: marchPlanOf, nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(move, 'march'), previewAttack: preview, attack: playerOrder(attack), takeOutlook, take: playerOrder(take, 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: leadOf,
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard };

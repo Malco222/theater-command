@@ -53,6 +53,33 @@ namespace
 	 * card filled the whole window. It is one number now, so that the frame keeps the same size against the window at
 	 * every size: what it is at 1600 by 1000. "-TheaterOldFrameScale" is the old rule.)
 	 */
+	/**
+	 * A question card's lines, marked for its lettering: a line all in capitals is a section's head and takes the card
+	 * label's style; the rest take the style named (none: the card's plain line). What the rules wrote is kept letter
+	 * for letter: the marks' own signs are made safe first.
+	 */
+	FText CardMarkup(const FString& Plain, const TCHAR* LineStyle = nullptr)
+	{
+		TArray<FString> Lines;
+		Plain.ParseIntoArray(Lines, TEXT("\n"), false);
+		FString Marked;
+		for (int32 K = 0; K < Lines.Num(); ++K)
+		{
+			const FString& Line = Lines[K];
+			int32 Capitals = 0, Small = 0;
+			for (const TCHAR Char : Line)
+			{
+				Capitals += FChar::IsUpper(Char) ? 1 : 0;
+				Small += FChar::IsLower(Char) ? 1 : 0;
+			}
+			const FString Safe = Line.Replace(TEXT("&"), TEXT("&amp;")).Replace(TEXT("<"), TEXT("&lt;")).Replace(TEXT(">"), TEXT("&gt;")).Replace(TEXT("\""), TEXT("&quot;"));
+			const bool bHead = Capitals >= 3 && Small == 0;
+			Marked += (K > 0 ? TEXT("\n") : TEXT(""));
+			Marked += Safe.IsEmpty() ? Safe : bHead ? TEXT("<Head>") + Safe + TEXT("</>") : LineStyle ? FString::Printf(TEXT("<%s>"), LineStyle) + Safe + TEXT("</>") : Safe;
+		}
+		return FText::FromString(Marked);
+	}
+
 	float FrameScale(double PixelsHigh)
 	{
 		static const bool bOldRule = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldFrameScale"));
@@ -507,6 +534,14 @@ namespace
 					// (a soft dark edge, so cream letters hold on pale ground and on snow)
 					Type.OutlineSettings.OutlineSize = FMath::Max(1, FMath::RoundToInt32(Size / 22.0f));
 					Type.OutlineSettings.OutlineColor = FMath::Lerp(FLinearColor(0.02f, 0.013f, 0.01f, 0.55f * Each.Alpha), FLinearColor(0.8f, 0.72f, 0.55f, 0.0f), Sheet);
+					if (Each.bShadowed)
+					{
+						// (The art director, 18 November 2026: a province's name that has only its town's roofs to lie on keeps
+						// its place, "slightly smaller with a soft dark shadow over the roofs": a broad dark edge, so that no
+						// roof's pale line joins a letter.)
+						Type.OutlineSettings.OutlineSize = FMath::Max(2, FMath::RoundToInt32(Size / 9.0f));
+						Type.OutlineSettings.OutlineColor = FMath::Lerp(FLinearColor(0.02f, 0.013f, 0.01f, 0.72f * Each.Alpha), FLinearColor(0.8f, 0.72f, 0.55f, 0.0f), Sheet);
+					}
 				}
 				const FString Glyph = bWhole ? Each.Whole : FString(1, &Each.Char);
 				const FVector2D Box = Measure->Measure(Glyph, Type);
@@ -4714,6 +4749,14 @@ namespace
 				TipStyles->Set("Rail", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)).SetColorAndOpacity(FSlateColor(FLinearColor(FColor(198, 228, 255)))));
 				TipStyles->Set("Strong", FTextBlockStyle(TipPlain).SetFont(Font(TEXT("Bold"), 11)));
 				TipStyles->Set("Dim", FTextBlockStyle(TipPlain).SetColorAndOpacity(FSlateColor(Muted)));
+				// (The UI director, 18 November 2026, on the landing card: its section heads "take the card label style,
+				// brass small capitals at the label size", as the attack card's WHAT YOU FACE does: SmallCaps(), the frame's
+				// one size of small capital label.)
+				CardPlain = FTextBlockStyle().SetFont(Font(TEXT("Regular"), 13)).SetColorAndOpacity(FSlateColor(Muted));
+				CardStyles = MakeShared<FSlateStyleSet>(TEXT("TheaterCardMarks"));
+				CardStyles->Set("Head", FTextBlockStyle(CardPlain).SetFont(SmallCaps()).SetColorAndOpacity(FSlateColor(Brass)));
+				CardStyles->Set("Amber", FTextBlockStyle(CardPlain).SetColorAndOpacity(FSlateColor(FLinearColor(FColor::FromHex(TEXT("D9A441"))))));
+				CardStyles->Set("Red", FTextBlockStyle(CardPlain).SetColorAndOpacity(FSlateColor(Alarm)));
 			}
 			// (the month's card, to the art director's brief: boxes (62, 58, 54), the red band, the stamp, a sign's disc, a tag)
 			MonthBoxBrush = FSlateRoundedBoxBrush(FLinearColor(FColor(62, 58, 54)), 4.0f);
@@ -5582,7 +5625,9 @@ namespace
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
 							SNew(SBox).WidthOverride(912.0f)
-							.MaxDesiredHeight_Lambda([this]() { return FOptionalSize(FMath::Max(520.0f, static_cast<float>(GetTickSpaceGeometry().GetLocalSize().Y) - 44.0f)); })
+							// (the frame's own height, not the window's: the two differ by the frame's scale, and by the window's measure a
+							// tall card ran past the bottom of Brian's window before it began to scroll)
+							.MaxDesiredHeight_Lambda([this]() { return FOptionalSize(FMath::Max(520.0f, (ScreenRoot.IsValid() ? static_cast<float>(ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y) : 972.0f) - 44.0f)); })
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(34.0f, 24.0f, 22.0f, 26.0f))
 								[
@@ -7014,7 +7059,11 @@ namespace
 						[
 							// (a landing's question carries the reckoning and the holding of the sea: it is broader, so that its lines do not
 							// fold; the march-up card is the landing card's width, sheet 34's 880)
+							// (The UI director, 18 November 2026: the landing card stood 822 of Brian's 893 and was the tallest in the
+							// game. Its flag stands beside its title, 48 high, not above it; and should a card still be taller than
+							// the window, its lines scroll inside it: the title, the verdict and the two buttons never leave the window.)
 							SNew(SBox).WidthOverride_Lambda([this]() { return FOptionalSize(Controller.IsValid() && Controller->GetWarPrompt().bLanding ? 900.0f : Controller.IsValid() && Controller->GetWarPrompt().bApproach ? 880.0f : 640.0f); })
+							.MaxDesiredHeight_Lambda([this]() { return FOptionalSize(FMath::Max(520.0f, (ScreenRoot.IsValid() ? static_cast<float>(ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y) : 972.0f) - 44.0f)); })
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 24.0f, 30.0f, 24.0f))
 								[
@@ -7022,16 +7071,28 @@ namespace
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
 									[
 										SNew(SBox).WidthOverride(132.0f).HeightOverride(88.0f)
-										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bApproach ? EVisibility::Collapsed : EVisibility::Visible; })
+										.Visibility_Lambda([this]() { return Controller.IsValid() && (Controller->GetWarPrompt().bApproach || Controller->GetWarPrompt().bLanding) ? EVisibility::Collapsed : EVisibility::Visible; })
 										[
 											SNew(SImage).Image_Lambda([this]() { return FlagBrush(Controller.IsValid() ? Controller->GetWarPrompt().Tag : FString()); })
 										]
 									]
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 16.0f, 0.0f, 0.0f)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(TAttribute<FMargin>::CreateLambda([this]() { return FMargin(0.0f, Controller.IsValid() && Controller->GetWarPrompt().bLanding ? 0.0f : 16.0f, 0.0f, 0.0f); }))
 									[
-										SNew(STextBlock).Font(Font(TEXT("Regular"), 24)).ColorAndOpacity(Cream)
+										SNew(SHorizontalBox)
 										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bApproach ? EVisibility::Collapsed : EVisibility::Visible; })
-										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Title : FText::GetEmpty(); })
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 16.0f, 0.0f)
+										[
+											SNew(SBox).WidthOverride(72.0f).HeightOverride(48.0f)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bLanding ? EVisibility::Visible : EVisibility::Collapsed; })
+											[
+												SNew(SImage).Image_Lambda([this]() { return FlagBrush(Controller.IsValid() ? Controller->GetWarPrompt().Tag : FString()); })
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+										[
+											SNew(STextBlock).Font(Font(TEXT("Regular"), 24)).ColorAndOpacity(Cream)
+											.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Title : FText::GetEmpty(); })
+										]
 									]
 									+ SVerticalBox::Slot().AutoHeight()
 									[
@@ -7063,38 +7124,51 @@ namespace
 										})
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().VerdictUnder : FText::GetEmpty(); })
 									]
-									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 12.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
-										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Body.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
-										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Body : FText::GetEmpty(); })
-									]
-									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
-									[
-										// (Rules version 83: the test of strength, the card's last note. Plain where the staff would
-										// expect to hold, amber where it is an even thing, red where they would not expect the force to
-										// be still ashore. It never stops him.)
-										SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).AutoWrapText(true).LineHeightPercentage(1.2f)
-										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Ashore.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
-										.ColorAndOpacity_Lambda([this]()
-										{
-											const int32 Tone = Controller.IsValid() ? Controller->GetWarPrompt().AshoreTone : 0;
-											return FSlateColor(Tone == 3 ? Alarm : Tone == 2 ? FLinearColor(FColor::FromHex(TEXT("D9A441"))) : Muted);
-										})
-										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Ashore : FText::GetEmpty(); })
-									]
-									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
-									[
-										SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
-										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Last.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
-										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Last : FText::GetEmpty(); })
-									]
-									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
-									[
-										// (rules version 73: the warning that the sea behind the beach could be closed, in red)
-										SNew(STextBlock).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Alarm).AutoWrapText(true).LineHeightPercentage(1.2f)
-										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Warning.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
-										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Warning : FText::GetEmpty(); })
+										// (what scrolls, where the card is taller than the window: the card's lines)
+										SNew(SScrollBox).ScrollBarThickness(FVector2D(4.0, 4.0))
+										+ SScrollBox::Slot()
+										[
+											SNew(SVerticalBox)
+											+ SVerticalBox::Slot().AutoHeight()
+											[
+												// (a section's head, a line all in capitals, takes the card label's style: brass small capitals)
+												SNew(SRichTextBlock).TextStyle(&CardPlain).DecoratorStyleSet(CardStyles.Get()).AutoWrapText(true).LineHeightPercentage(1.2f)
+												.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Body.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+												.Text_Lambda([this]() { return Controller.IsValid() ? CardMarkup(Controller->GetWarPrompt().Body.ToString()) : FText::GetEmpty(); })
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+											[
+												// (Rules version 83: the test of strength, the card's last note. Plain where the staff would
+												// expect to hold, amber where it is an even thing, red where they would not expect the force to
+												// be still ashore. It never stops him.)
+												SNew(SRichTextBlock).TextStyle(&CardPlain).DecoratorStyleSet(CardStyles.Get()).AutoWrapText(true).LineHeightPercentage(1.2f)
+												.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Ashore.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+												.Text_Lambda([this]()
+												{
+													if (!Controller.IsValid())
+													{
+														return FText::GetEmpty();
+													}
+													const int32 Tone = Controller->GetWarPrompt().AshoreTone;
+													return CardMarkup(Controller->GetWarPrompt().Ashore.ToString(), Tone == 3 ? TEXT("Red") : Tone == 2 ? TEXT("Amber") : nullptr);
+												})
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
+												.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Last.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+												.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Last : FText::GetEmpty(); })
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+											[
+												// (rules version 73: the warning that the sea behind the beach could be closed, in red)
+												SNew(STextBlock).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Alarm).AutoWrapText(true).LineHeightPercentage(1.2f)
+												.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Warning.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+												.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Warning : FText::GetEmpty(); })
+											]
+										]
 									]
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 22.0f, 0.0f, 0.0f)
 									[
@@ -8382,30 +8456,56 @@ namespace
 		 */
 		FMargin NoticeGap(float* OutWidth) const
 		{
-			FVector2D Size(1920.0, 1080.0);
-			if (GEngine && GEngine->GameViewport)
+			// (The UI director, 18 November 2026, on the by-sea notice at Brian's window: its end ran under NEXT ARMY.
+			// "Its width is bounded by the plates on either side, 16 clear of each, and it wraps inside." The plates'
+			// edges are read where they stand this frame, in the frame's own measure: no window size, and no scale
+			// of the screen's, comes into it, so no size of window or fineness of pixel can put it out.)
+			const float Clear = 16.0f;
+			if (!ScreenRoot.IsValid())
 			{
-				GEngine->GameViewport->GetViewportSize(Size);
+				if (OutWidth)
+				{
+					*OutWidth = 800.0f;
+				}
+				return FMargin(24.0f, 112.0f, 24.0f, 0.0f);
 			}
-			// (window pixels to this screen's units: the frame's own scale and, on top of it, Unreal's for the window's size. The pre-checker's find of 18 November 2026: by the first alone these came out two thirds too large in Brian's window.)
-			const float Scale = FrameScale(Size.Y) * FMath::Max(GetTickSpaceGeometry().Scale, 0.01f);
-			auto Wide = [Scale](const TWeakPtr<SWidget>& Kept) -> float
+			const FGeometry& Frame = ScreenRoot->GetTickSpaceGeometry();
+			const float Whole = static_cast<float>(Frame.GetLocalSize().X);
+			auto Edges = [&Frame](const TWeakPtr<SWidget>& Kept, float& OutLeft, float& OutRight)
 			{
 				const TSharedPtr<SWidget> Widget = Kept.Pin();
-				return Widget.IsValid() && Widget->GetVisibility().IsVisible() ? static_cast<float>(Widget->GetTickSpaceGeometry().GetAbsoluteSize().X) / Scale : 0.0f;
+				if (!Widget.IsValid() || !Widget->GetVisibility().IsVisible())
+				{
+					return false;
+				}
+				const FGeometry& Its = Widget->GetTickSpaceGeometry();
+				if (Its.GetLocalSize().X < 1.0f || Its.GetLocalSize().Y < 1.0f)
+				{
+					return false;
+				}
+				OutLeft = static_cast<float>(Frame.AbsoluteToLocal(Its.GetAbsolutePosition()).X);
+				OutRight = static_cast<float>(Frame.AbsoluteToLocal(Its.GetAbsolutePosition() + Its.GetAbsoluteSize()).X);
+				return OutRight > OutLeft;
 			};
-			const float Calendar = Wide(TopLeftPiece);
-			float Chips = 0.0f;
+			float From = 24.0f, To = Whole - 24.0f, Left = 0.0f, Right = 0.0f;
+			if (Edges(TopLeftPiece, Left, Right))
+			{
+				From = FMath::Max(From, Right + Clear);
+			}
 			for (const TWeakPtr<SWidget>& Each : TopChips)
 			{
-				Chips = FMath::Max(Chips, Wide(Each));
+				// (a chip of the right-hand column: whatever of it lies in the right half of the frame)
+				if (Edges(Each, Left, Right) && Left > Whole * 0.5f)
+				{
+					To = FMath::Min(To, Left - Clear);
+				}
 			}
-			const FMargin Gap(24.0f + (Calendar > 0.0f ? Calendar + 14.0f : 0.0f), 112.0f, 24.0f + (Chips > 0.0f ? Chips + 14.0f : 0.0f), 0.0f);
+			To = FMath::Max(To, From + 292.0f); // (never narrower than a short line and its plate)
 			if (OutWidth)
 			{
-				*OutWidth = static_cast<float>(Size.X) / Scale - Gap.Left - Gap.Right;
+				*OutWidth = To - From;
 			}
-			return Gap;
+			return FMargin(From, 112.0f, FMath::Max(Whole - To, 0.0f), 0.0f);
 		}
 
 		/** Whether a widget is on the screen now: it, and every box it stands in up to the screen's own, is shown. */
@@ -8920,7 +9020,7 @@ namespace
 		static FText ArsenalSummary(const FArsenal& Stock)
 		{
 			FString Line = Stock.Region.IsEmpty()
-				? FString(TEXT("No province of yours is selected, so works cannot be built: close this, click one of your territories, and open the arsenal again. Corps, aircraft and ships go where the notes say."))
+				? FString(TEXT("No province of yours is selected, so works cannot be built: close this, click one of your provinces, and open the arsenal again. Corps, aircraft and ships go where the notes say."))
 				: FString::Printf(TEXT("With %s in mind: works are built there, and new corps form up there if it has the industry they need."), *Stock.Region);
 			if (!Stock.bBudget)
 			{
@@ -8933,42 +9033,63 @@ namespace
 		TSharedRef<SWidget> MakeOffer(const FArsenalOffer& Offer)
 		{
 			const bool bCan = Offer.Why.IsEmpty();
+			// (The UI director, 18 November 2026, on build 1640 at Brian's window: a card that could not be ordered stood
+			// at 1.44 to 1 against its ground and could not be read. Its name and its lines keep a muted ink at 4.5 to 1
+			// or better; only its picture and its price are dimmed, and its reason stays. It is no pressed-out button
+			// either: a button that is switched off is greyed whole by the screen. The lines of a card that can be
+			// ordered take the same ink: 5.1 to 1 on the card, where the frame's muted ink stood at 4.4.)
+			const FLinearColor Lines(FColor::FromHex(TEXT("B4AB98")));
 			FString Terms = FString::Printf(TEXT("%s  \u00B7  %d month%s"), *Cash(Offer.Cost), Offer.Months, Offer.Months == 1 ? TEXT("") : TEXT("s"));
 			if (Offer.Upkeep > 0)
 			{
 				Terms += FString::Printf(TEXT("  \u00B7  then %s a month"), *Cash(Offer.Upkeep));
 			}
+			// (Seen at Brian's window, 18 November 2026: "Destroyer flotilla" beside "4 destroyers" read "Destroye:", its
+			// first word cut where the two had no room in the column. What is delivered stands beside the name only
+			// where the name's longest word and it have room together: 19 typed letters beside a picture, 26 without.
+			// Otherwise it opens the line below, as a long description always has.)
+			int32 LongestWord = 0;
+			{
+				TArray<FString> NameWords;
+				Offer.Label.ParseIntoArray(NameWords, TEXT(" "));
+				for (const FString& Word : NameWords)
+				{
+					LongestWord = FMath::Max(LongestWord, Word.Len());
+				}
+			}
+			const bool bPictured = Offer.Key.StartsWith(TEXT("corps:")) || Offer.Key.StartsWith(TEXT("cadre:")) || Offer.Key.StartsWith(TEXT("air:")) || Offer.Key.StartsWith(TEXT("ship:")) || Offer.Key == TEXT("elite") || Offer.Key == TEXT("para");
+			const bool bBeside = Offer.Size.Len() <= 16 && LongestWord + Offer.Size.Len() <= (bPictured ? 19 : 26);
 			TSharedRef<SVerticalBox> Words = SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight()
 				[
 					SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().FillWidth(1.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(Offer.Label)).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(bCan ? Cream : Faint).AutoWrapText(true)
+						SNew(STextBlock).Text(FText::FromString(Offer.Label)).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(bCan ? Cream : Lines).AutoWrapText(true)
 					]
 					+ SHorizontalBox::Slot().AutoWidth().Padding(8.0f, 0.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(Offer.Size.Len() <= 16 ? Offer.Size : FString())).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(bCan ? Muted : Faint)
+						SNew(STextBlock).Text(FText::FromString(bBeside ? Offer.Size : FString())).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Lines)
 					]
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Terms)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(bCan ? BrightBrass : (Offer.bPoor ? Alarm : Faint)).AutoWrapText(true)
+					SNew(STextBlock).Text(FText::FromString(Terms)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(bCan ? BrightBrass : Faint).AutoWrapText(true)
 				];
 			// A long description of what is delivered goes on the line below instead of beside the name.
-			const FString Where = Offer.Size.Len() > 16 ? Offer.Size.Left(1).ToUpper() + Offer.Size.Mid(1) + TEXT(". ") + Offer.Note : Offer.Note;
+			const FString Where = !bBeside && !Offer.Size.IsEmpty() ? Offer.Size.Left(1).ToUpper() + Offer.Size.Mid(1) + TEXT(". ") + Offer.Note : Offer.Note;
 			if (!Where.IsEmpty())
 			{
 				Words->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Where)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(bCan ? Muted : Faint).AutoWrapText(true)
+					SNew(STextBlock).Text(FText::FromString(Where)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Lines).AutoWrapText(true)
 				];
 			}
 			if (!bCan)
 			{
 				Words->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Offer.Why)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Offer.bPoor ? Alarm : Muted).AutoWrapText(true)
+					SNew(STextBlock).Text(FText::FromString(Offer.Why)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Offer.bPoor ? Alarm : Lines).AutoWrapText(true)
 				];
 			}
 			// A picture of what is on offer, where the game has a model of it: this nation's own tank, aircraft or ship.
@@ -8991,14 +9112,23 @@ namespace
 			{
 				Face->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 10.0f, 0.0f)
 				[
-					SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(2.0f))
+					SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(2.0f)).ColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, bCan ? 1.0f : 0.4f))
 					[
 						SNew(SPortrait).Picture(Portrait).Size(FVector2D(78.0, 48.0))
 					]
 				];
 			}
 			Face->AddSlot().FillWidth(1.0f)[Words];
-			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(9.0f, 7.0f, 11.0f, 8.0f)).IsFocusable(false).IsEnabled(bCan)
+			if (!bCan)
+			{
+				// (a card, not a button: it takes no press, and nothing greys it)
+				return SNew(SBorder).BorderImage(&PlainButton.Normal).Padding(FMargin(9.0f, 7.0f, 11.0f, 8.0f))
+					.ToolTipText(FText::FromString(Offer.Blurb))
+					[
+						Face
+					];
+			}
+			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(9.0f, 7.0f, 11.0f, 8.0f)).IsFocusable(false)
 				.ToolTipText(FText::FromString(Offer.Blurb))
 				.OnClicked_Lambda([this, Key = Offer.Key]()
 				{
@@ -9048,7 +9178,7 @@ namespace
 					List->AddSlot().AutoHeight()
 					[
 						SNew(STextBlock).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
-						.Text(FText::FromString(Column == 3 && Stock.Region.IsEmpty() ? TEXT("Select one of your own territories first.") : TEXT("Nothing on offer here in this campaign.")))
+						.Text(FText::FromString(Column == 3 && Stock.Region.IsEmpty() ? TEXT("Select one of your own provinces first.") : TEXT("Nothing on offer here in this campaign.")))
 					];
 				}
 				// What is already on order goes under the army's column, where there is room.
@@ -12539,7 +12669,7 @@ namespace
 			{
 				LedgerIn->AddSlot().AutoHeight()
 				[
-					SNew(STextBlock).Text(FText::FromString(TEXT("Nothing is on order. New corps and works are ordered from a territory's panel."))).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
+					SNew(STextBlock).Text(FText::FromString(TEXT("Nothing is on order. New corps and works are ordered from a province's panel."))).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
 				];
 			}
 			for (const FLedgerLine& Line : Books.Orders)
@@ -13609,6 +13739,98 @@ namespace
 						]
 					];
 				}
+				// ---- The credits (the UI director, 18 November 2026): the last section of this page, so that MENU reaches
+				// them too. A line for each creator, A to Z: the name, each recording's title in quotes, and its licence
+				// (each title its own where one creator's differ). Read from Sounds/Real/credits.json in the game's
+				// folder, the one list CREDITS.md is made from; with no list there is no section.
+				{
+					struct FCredited
+					{
+						FString Creator;
+						TArray<TPair<FString, FString>> Titles; // a recording's title, and its licence
+					};
+					static TArray<FCredited> Credits;
+					static bool bRead = false;
+					if (!bRead)
+					{
+						bRead = true;
+						FString Text;
+						TSharedPtr<FJsonObject> Root;
+						const TArray<TSharedPtr<FJsonValue>>* Sounds = nullptr;
+						if (FFileHelper::LoadFileToString(Text, *(FPaths::ProjectDir() / TEXT("Sounds/Real/credits.json")))
+							&& FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) && Root.IsValid() && Root->TryGetArrayField(TEXT("sounds"), Sounds))
+						{
+							for (const TSharedPtr<FJsonValue>& Sound : *Sounds)
+							{
+								const TArray<TSharedPtr<FJsonValue>>* Sources = nullptr;
+								if (!Sound->AsObject().IsValid() || !Sound->AsObject()->TryGetArrayField(TEXT("sources"), Sources))
+								{
+									continue;
+								}
+								for (const TSharedPtr<FJsonValue>& Source : *Sources)
+								{
+									FString Creator, Title, Licence;
+									if (!Source->AsObject().IsValid() || !Source->AsObject()->TryGetStringField(TEXT("creator"), Creator) || Creator.IsEmpty())
+									{
+										continue; // (public domain, or given to it: no credit is owed)
+									}
+									Source->AsObject()->TryGetStringField(TEXT("title"), Title);
+									Source->AsObject()->TryGetStringField(TEXT("licence"), Licence);
+									FCredited* Theirs = Credits.FindByPredicate([&Creator](const FCredited& Each) { return Each.Creator == Creator; });
+									if (!Theirs)
+									{
+										Theirs = &Credits.AddDefaulted_GetRef();
+										Theirs->Creator = Creator;
+									}
+									Theirs->Titles.AddUnique(TPair<FString, FString>(Title, Licence));
+								}
+							}
+							Credits.Sort([](const FCredited& A, const FCredited& B) { return A.Creator.Compare(B.Creator, ESearchCase::IgnoreCase) < 0; });
+						}
+					}
+					if (Credits.Num() > 0)
+					{
+						Starts->AddSlot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 6.0f)
+						[
+							Heading(TEXT("CREDITS"))
+						];
+						Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+						[
+							SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+							.Text(FText::FromString(TEXT("Sounds recorded by others and shared on freesound.org and Wikimedia Commons, used under Creative Commons licences and cut and mixed for this game. Every licence and link is in CREDITS.md, in the game's folder.")))
+						];
+						const FLinearColor Body(FColor::FromHex(TEXT("B4AB98"))); // (4.5 to 1 or better on the card)
+						for (const FCredited& Each : Credits)
+						{
+							bool bOneLicence = true;
+							for (const TPair<FString, FString>& Title : Each.Titles)
+							{
+								bOneLicence = bOneLicence && Title.Value == Each.Titles[0].Value;
+							}
+							FString Said;
+							for (const TPair<FString, FString>& Title : Each.Titles)
+							{
+								Said += (Said.IsEmpty() ? TEXT("") : TEXT(", ")) + FString::Printf(TEXT("\u201C%s\u201D"), *Title.Key) + (bOneLicence ? FString() : TEXT("  \u00B7  ") + Title.Value);
+							}
+							if (bOneLicence)
+							{
+								Said += TEXT("  \u00B7  ") + Each.Titles[0].Value;
+							}
+							Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 14.0f, 0.0f)
+								[
+									SNew(STextBlock).Text(FText::FromString(Each.Creator)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream)
+								]
+								+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Bottom)
+								[
+									SNew(STextBlock).Text(FText::FromString(Said)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Body).AutoWrapText(true)
+								]
+							];
+						}
+					}
+				}
 				return;
 			}
 
@@ -14606,6 +14828,8 @@ namespace
 		FSlateBrush RearChipBrush, RearRingBrush; // (ruling 101) NEXT IN THE REAR: dim leather, and the hollow ring round its number
 		FTextBlockStyle TipPlain; // (rulings 86 and 87) the pointer's box, and the marks inside it
 		TSharedPtr<FSlateStyleSet> TipStyles;
+		FTextBlockStyle CardPlain; // a question card's lines, and the marks inside them: a section's head, an amber line, a red one
+		TSharedPtr<FSlateStyleSet> CardStyles;
 		FSlateBrush MonthBoxBrush, MonthBandBrush, MonthStampBrush, MonthDiscBrush, MonthTagBrush; // the month's card
 		FSlateBrush MonthNewsBrush, MonthLabelBrush;
 		TMap<FString, TSharedPtr<FSlateBrush>> MonthPictures; // its pictures, as they are read

@@ -235,6 +235,7 @@ struct FMapLetter
 	bool bSea = false;
 	bool bInk = false; // (a sea's name on a sea the chart veils: in dark chart ink, or it is lost on the pale veil)
 	FString Whole; // a province's name, written whole here instead of a single letter
+	bool bShadowed = false; // (a province's name that lies over roofs: a soft dark shadow under it)
 };
 
 /** A town's name plate as the screen should draw it this frame. */
