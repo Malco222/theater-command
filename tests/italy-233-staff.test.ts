@@ -1,4 +1,4 @@
-// Ruling 233, riders (j), (k), (q), (r), (s), (u) and (v) (the design director's b506 to b520; the grand campaign, computer staffs only).
+// Ruling 233, riders (j), (k), (q), (r), (s), (u), (v), (w) and (x) (the design director's b506 to b532; the grand campaign, computer staffs only).
 // (j) History's list of shores has an order: when the month comes for a later shore of the list, a staff's home army
 //     turns to the enemy who holds it nearest the home ports, though its first enemy across the sea still stands.
 //     Britain turns to France in 1944 while Italy fights on. (Before it a staff kept one enemy across the sea for as
@@ -14,18 +14,26 @@
 //     its lead lands on it in the shore's month without the monthly dice, where every test passes (open.json 'descent.day').
 // (v) A computer admiral whose own staff has named no crossing covers the named crossing of an ally in the same war
 //     (b520; fleets.json 'ai.allies'): America's Atlantic Fleet, the months Britain's way to Sardinia is shut.
+// (w) The joint crossing (b532; open.json 'descent.joint'): where a staff's own corps at its quay are fewer than the
+//     force, corps of its computer-run allies standing ready there with no orders of their own from that harbour fill
+//     the force and sail in it. Torch, Sicily and Salerno were Anglo-American landings under one command. A player's
+//     corps are never drawn in, and a player's landing force stays one nation's.
+// (x) The home army's quay is chosen afresh the month its staff's target changes, and a home port where its allies'
+//     corps leave no room for the force is passed over while another port serves (b532; 'descent.afresh', 'descent.room'):
+//     the invasion of France was mounted from every harbour of the south coast, not from one.
 import { describe, expect, it } from 'vitest';
 import fleetData from '../data/campaign/fleets.json';
 import openData from '../data/campaign/open.json';
 import { reckon, type Reckoning } from '../src/campaign/ashore';
 import { allied, createGame, setWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
-import { atSea, closedTo, fleetsOf, keepsHarbour, navalAI, sortieAgainst } from '../src/campaign/navy';
-import { lodgment, onTheDay, opensNow, opensOn, opensSoon, seaBase, seaFoe, startOpen } from '../src/campaign/staff';
+import { atSea, closedTo, fleetsOf, keepsHarbour, landCorps, navalAI, sailsWith, sortieAgainst, whyNotLand } from '../src/campaign/navy';
+import { fieldCtrl } from '../src/campaign/siege';
+import { lodgment, onTheDay, opensNow, opensOn, opensSoon, quayGuests, seaBase, seaFoe, startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
 const FRANCE_44 = 57;
-const DESCENT = openData.descent as unknown as { lead: number; wait: boolean; day: boolean };
+const DESCENT = openData.descent as unknown as { lead: number; wait: boolean; day: boolean; afresh: boolean; room: boolean; joint: boolean; force: number };
 const LEAD = DESCENT.lead;
 /** A grand war nobody plays: Britain at war with Germany and Italy, France fallen, and Britain's staff set on Italy since last year. */
 const war = (turn: number, stop = 3, human: string | null = null): Game => {
@@ -384,5 +392,176 @@ describe('a computer admiral covers an ally\'s named crossing (233(v))', () => {
     mine.g.human = 'USA';
     navalAI(mine.g, 'USA');
     expect(mine.f.zone).toBe(mine.beat);
+  });
+});
+
+describe('allies at the same quay sail in one force (233(w))', () => {
+  const ONE_PORT = 'A landing force sails from one port.';
+  /** Corps of a nation brought to a harbour, rested and ready. */
+  const bring = (g: Game, nat: string, at: Region, count: number): Corps[] => {
+    const cs = g.corps.filter((c) => c.nat === nat && !c.dead && c.kind === 'inf' && !c.town && c.reg !== at.id).slice(0, count);
+    expect(cs.length, nat).toBe(count);
+    for (const c of cs) {
+      const from = g.regions[c.reg];
+      from.units.splice(from.units.indexOf(c), 1);
+      c.reg = at.id;
+      at.units.push(c);
+      Object.assign(c, { str: 1, org: 1, ap: c.apMax, supplied: true, hold: false });
+    }
+    return cs;
+  };
+  /** July 1943, nobody playing: America and Canada in the war beside Britain, and Cornwall, Britain's quay for Sardinia, full: two British corps, two American, one Canadian. */
+  const cornwall = (human: string | null = null): { g: Game; quay: Region; uk: Corps[]; us: Corps[]; can: Corps[] } => {
+    const g = war(47, 3, human);
+    for (const id of ['USA', 'CAN']) { g.nations[id].align = g.nations.UK.align; for (const e of ['GER', 'ITA']) setWar(g, e, id); }
+    const quay = g.byName.Cornwall;
+    quay.units = quay.units.filter((u) => u.kind === 'fort');
+    g.flags['st:quay:UK'] = quay.id + 1;
+    return { g, quay, uk: bring(g, 'UK', quay, 2), us: bring(g, 'USA', quay, 2), can: bring(g, 'CAN', quay, 1) };
+  };
+
+  it('is in the data', () => {
+    expect(DESCENT.joint).toBe(true);
+  });
+
+  it('the guests at a quay are the allies\' ready corps with no orders of their own from that harbour', () => {
+    const { g, quay, us, can } = cornwall();
+    expect(allied(g, 'UK', 'USA') && allied(g, 'UK', 'CAN')).toBe(true);
+    expect(quayGuests(g, 'UK', quay, 'ITA').map((c) => c.id).sort()).toEqual([...us, ...can].map((c) => c.id).sort());
+    // America's own army abroad has named a crossing from Cornwall: its corps there have their orders.
+    g.flags['st:quay:USA:o'] = quay.id + 1;
+    expect(quayGuests(g, 'UK', quay, 'ITA')).toEqual(can);
+    delete g.flags['st:quay:USA:o'];
+    // One that has marched this month, one that is worn down, and one told to hold stay behind.
+    us[0].ap = 0;
+    us[1].str = 0.5;
+    can[0].hold = true;
+    expect(quayGuests(g, 'UK', quay, 'ITA')).toEqual([]);
+    // An ally at peace with the enemy across the water sends nobody.
+    const peace = cornwall();
+    peace.g.nations.USA.atWar = peace.g.nations.USA.atWar.filter((e) => e !== 'ITA');
+    peace.g.nations.ITA.atWar = peace.g.nations.ITA.atWar.filter((e) => e !== 'USA');
+    expect(quayGuests(peace.g, 'UK', peace.quay, 'ITA')).toEqual(peace.can);
+    // With the dial off nobody joins, as before.
+    const off = cornwall();
+    DESCENT.joint = false;
+    try { expect(quayGuests(off.g, 'UK', off.quay, 'ITA')).toEqual([]); } finally { DESCENT.joint = true; }
+  });
+
+  it('a player\'s corps are never drawn in, and a player\'s own landing force stays one nation\'s', () => {
+    // The player is America: his corps at Cornwall are his own to order.
+    const his = cornwall('USA');
+    expect(quayGuests(his.g, 'UK', his.quay, 'ITA')).toEqual(his.can);
+    expect(sailsWith(his.g, 'UK', his.us[0])).toBe(false);
+    expect(whyNotLand(his.g, [...his.uk, his.us[0]], his.g.byName.Sardinia)).toBe(ONE_PORT);
+    // The player is Britain: no ally's corps joins his force, by his staff or by his own hand.
+    const mine = cornwall('UK');
+    expect(quayGuests(mine.g, 'UK', mine.quay, 'ITA')).toEqual([]);
+    expect(whyNotLand(mine.g, [...mine.uk, mine.us[0]], mine.g.byName.Sardinia)).toBe(ONE_PORT);
+    // And outside the grand campaign a landing force is one nation's, as it always was.
+    const old = cornwall();
+    delete old.g.flags.open;
+    expect(whyNotLand(old.g, [...old.uk, old.us[0]], old.g.byName.Sardinia)).toBe(ONE_PORT);
+  });
+
+  it('two British corps and an American one are a landing force, and the beach falls to the staff that named the crossing', () => {
+    const { g, uk, us } = cornwall();
+    const beach = g.byName.Sardinia;
+    expect(beach.ctrl).toBe('ITA');
+    const force = [...uk, us[0]];
+    expect(sailsWith(g, 'UK', us[0])).toBe(true);
+    // Not against a shore the ally is not at war with.
+    const peace = cornwall();
+    peace.g.nations.USA.atWar = peace.g.nations.USA.atWar.filter((e) => e !== 'ITA');
+    peace.g.nations.ITA.atWar = peace.g.nations.ITA.atWar.filter((e) => e !== 'USA');
+    expect(whyNotLand(peace.g, [...peace.uk, peace.us[0]], peace.g.byName.Sardinia)).toBe('Sardinia is not enemy ground.');
+    // The island's garrison is taken off and the enemy's fleets lie in harbour: the three go ashore together.
+    for (const u of beach.units) u.dead = true;
+    beach.units = [];
+    for (const f of g.fleets) if (f.nat === 'ITA' || f.nat === 'GER') f.stance = 'port';
+    expect(whyNotLand(g, force, beach)).toBeNull();
+    const res = landCorps(g, force, beach);
+    expect(res.ok).toBe(true);
+    expect(force.every((c) => c.dead || c.reg === beach.id)).toBe(true);
+    expect(force.filter((c) => !c.dead).map((c) => c.nat).sort()).toEqual(['UK', 'UK', 'USA']);
+    expect(fieldCtrl(g, beach)).toBe('UK');
+    expect(lodgment(g, 'USA')).toBeNull();
+  });
+});
+
+describe('the home army\'s quay is chosen afresh, and never a harbour with no room (233(x))', () => {
+  /** Italy out of the war, February 1944: Britain's home army turns to France (as `alone` above). */
+  const turned = (): Game => {
+    const g = startOpen(createGame(3, null));
+    setWar(g, 'GER', 'UK');
+    for (const r of g.regions) if (r.owner === 'FRA' && !r.overseas && r.nb.length > 0) r.ctrl = 'GER';
+    g.turn = FRANCE_44 - LEAD;
+    g.flags['war:UK:GER'] = 1;
+    g.nations.USA.align = g.nations.UK.align;
+    setWar(g, 'GER', 'USA');
+    return g;
+  };
+  const without = <T>(dial: 'afresh' | 'room', f: () => T): T => { DESCENT[dial] = false; try { return f(); } finally { DESCENT[dial] = true; } };
+  /** A home port the staff would keep if it had it (it serves the list's shores), other than the one it picks on merit. */
+  const another = (best: Region): Region => {
+    for (const r of turned().regions) {
+      if (r.id === best.id || !r.port || r.owner !== 'UK' || r.overseas) continue;
+      const g = turned();
+      g.flags['st:quay:UK'] = r.id + 1;
+      g.flags['st:quayAt:UK'] = g.turn - 1;
+      if (without('afresh', () => seaBase(g, 'UK'))?.id === r.id) return r;
+    }
+    throw new Error('no second quay serves');
+  };
+  const crowd = (g: Game, port: Region, count: number): void => {
+    const at = g.regions[port.id];
+    const cs = g.corps.filter((c) => c.nat === 'USA' && !c.dead && c.kind === 'inf' && !c.town && c.reg !== at.id).slice(0, count);
+    expect(cs.length).toBe(count);
+    for (const c of cs) { const from = g.regions[c.reg]; from.units.splice(from.units.indexOf(c), 1); c.reg = at.id; at.units.push(c); }
+  };
+
+  it('is in the data', () => {
+    expect(DESCENT.afresh).toBe(true);
+    expect(DESCENT.room).toBe(true);
+  });
+
+  it('a quay kept from another target is not kept: the staff chooses for the shore it has turned to', () => {
+    const best = seaBase(turned(), 'UK')!;
+    const old = another(best);
+    // The quay it had against Italy, chosen last month: as first built it was kept for half a year while a lane lay open from it.
+    const g = turned();
+    g.flags['st:quay:UK'] = old.id + 1;
+    g.flags['st:quayAt:UK'] = g.turn - 1;
+    g.flags['st:quayFor:UK'] = 1;
+    expect(seaBase(g, 'UK')?.id).toBe(best.id);
+    expect(g.flags['st:quayAt:UK']).toBe(g.turn);
+    // Chosen for this target, it is kept like any other choice.
+    g.turn++;
+    g.flags['st:quay:UK'] = old.id + 1;
+    expect(seaBase(g, 'UK')?.id).toBe(old.id);
+  });
+
+  it('a home port its allies fill is passed over while another serves; with none, the full one is the quay as before', () => {
+    const best = seaBase(turned(), 'UK')!;
+    const g = turned();
+    // Three American corps in the best harbour: two places are left of five, and the force is three.
+    crowd(g, best, 3);
+    const quay = seaBase(g, 'UK')!;
+    expect(quay.id).not.toBe(best.id);
+    expect(quay.owner).toBe('UK');
+    // Two leave room for the force.
+    const two = turned();
+    crowd(two, best, 2);
+    expect(seaBase(two, 'UK')?.id).toBe(best.id);
+    // As first built the staff asked no room of its home quay.
+    const was = turned();
+    crowd(was, best, 3);
+    expect(without('room', () => seaBase(was, 'UK'))?.id).toBe(best.id);
+    // And a quay already chosen is left the month its allies fill it.
+    const kept = turned();
+    expect(seaBase(kept, 'UK')?.id).toBe(best.id);
+    crowd(kept, best, 3);
+    kept.turn++;
+    expect(seaBase(kept, 'UK')?.id).not.toBe(best.id);
   });
 });

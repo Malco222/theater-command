@@ -622,11 +622,11 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
     return null;
   }
   if (n.sealift <= 0) return `${n.name} has no shipping for a landing.`;
-  if (cs.some((c) => c.nat !== nat || c.reg !== from.id)) return 'A landing force sails from one port.';
+  if (cs.some((c) => (c.nat !== nat && !sailsWith(g, nat, c)) || c.reg !== from.id)) return 'A landing force sails from one port.';
   if (!from.port) return 'A landing force has to embark at a port.';
   if (cs.some((c) => c.kind === 'fort' || c.ap < Math.min(4, c.apMax))) return 'Only corps that have not moved this month can embark.';
   if (!to.seas.length) return `${to.name} has no coast.`;
-  if (allied(g, nat, to.ctrl) || !atWar(g, nat, to.ctrl)) return `${to.name} is not enemy ground.`;
+  if (allied(g, nat, to.ctrl) || cs.some((c) => !atWar(g, c.nat, to.ctrl))) return `${to.name} is not enemy ground.`;
   if (cs.length > STACK) return `No more than ${STACK} corps can go ashore in one place.`;
   if (liftLeft(g, nat) < cs.length) return liftLeft(g, nat) ? `There is shipping for only ${liftLeft(g, nat)} more corps this month.` : 'All the shipping is in use this month.';
   if (!seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: surpriseOn(g, nat, to) })) return laneWhy(g, nat, from, to, laneBar(g, nat, from, to, surpriseOn(g, nat, to)));
@@ -634,6 +634,16 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (!surpriseOn(g, nat, to) && skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`;
   return null;
 }
+
+/**
+ * The joint crossing (ruling 233(w); the grand campaign, computer staffs only): a corps of a computer-run ally may
+ * sail in a computer staff's landing force from the same quay, as Torch, Sicily and Salerno were Anglo-American
+ * landings under one command (ai.ts `crossSea` forms such a force, open.json 'descent.joint'). A player's corps are
+ * never drawn into one, a corps lent to another army keeps to that army, and a player's own landing force stays one
+ * nation's.
+ */
+export const sailsWith = (g: Game, nat: string, c: Corps): boolean =>
+  g.flags.open === 1 && g.human !== nat && g.human !== c.nat && c.joint === undefined && allied(g, nat, c.nat);
 
 /** True when a force is airborne troops and nothing else: it goes in by air, with no ships and no sea lane. */
 export const airborne = (cs: Corps[]): boolean => cs.length > 0 && cs.every((c) => !!c.airborne);

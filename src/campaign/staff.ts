@@ -76,7 +76,7 @@ const OPEN = openData as unknown as {
   /** A staff grows bolder the longer its front is quiet: months of quiet, and what each stage does. */
   impatience: { after: number[]; ratio: number[]; odds: number[]; effort: number; floor: number; any: number; local: number[]; locals: number };
   /** The second front: when a staff with shipping and no land front crosses the sea, and with what. */
-  descent: Landings & { after: number; abroad?: number; lead?: number; day?: boolean; wait?: boolean; hold?: number; feed?: number; strength?: unknown; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
+  descent: Landings & { after: number; abroad?: number; lead?: number; day?: boolean; wait?: boolean; afresh?: boolean; room?: boolean; joint?: boolean; hold?: number; feed?: number; strength?: unknown; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
   /** The coast watch: the share of its field corps a staff will keep in the harbours of its homeland, the fewest it keeps, and the most in one harbour. */
   coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };
 };
@@ -1624,13 +1624,20 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
  * open to its ships (while it has men ashore, the one with an open lane to them). With no lane open from any home
  * port the force waits where it was, or at the port nearest his harbours by the shortest way round. The choice is
  * kept while its lane stays open and looked at again every half year. For the army on a far shore: see `abroad`.
+ *
+ * Ruling 233(x) (open.json `descent.afresh`, `descent.room`): the choice is made afresh the month the staff's
+ * target changes (another enemy, or another shore of history's list), and a home port where its allies' corps leave
+ * no room for the force is passed over while another port serves, as the army abroad's quay already is. (Before,
+ * Britain kept Cornwall, its quay for Sardinia, when it turned to France, and stood there short of its force beside
+ * the Americans in 13 wars of 48 on the list's day: the invasion of France was mounted from every harbour of the
+ * south coast, not from one.)
  */
 export function seaBase(g: Game, nat: string, slot = 0): Region | null {
   const sea = seaFoe(g, nat, slot);
   if (!sea) return null;
   if (slot) return abroad(g, nat)?.quay ?? null;
   const you = sea.foe;
-  const key = `st:quay:${nat}`, at = `st:quayAt:${nat}`;
+  const key = `st:quay:${nat}`, at = `st:quayAt:${nat}`, tk = `st:quayFor:${nat}`;
   const lod = sea.second ? lodgment(g, nat) : null;
   // (The quay is chosen for the harbours the staff may land on, this month or within the lead: a staff with
   // history's list is not sent to face a shore that is no part of it because that shore is clear. Britain's force
@@ -1638,10 +1645,15 @@ export function seaBase(g: Game, nat: string, slot = 0): Region | null {
   const listed = sea.second ? harbours(g, you).filter((r) => opensOn(g, nat, r) || opensSoon(g, nat, r)) : [];
   const shores = lod?.short ? [lod.at] : listed.length ? listed : harbours(g, you);
   const shut = g.seas.map((z) => closedTo(g, z.id, nat));
+  const D = OPEN.descent;
+  // (The target the quay was chosen for: the enemy, and the countries of the list's shores it may land on or plan for.)
+  const target = D.afresh ? 1 + (hashString(`${you}:${[...new Set(listed.map((r) => r.owner))].sort().join(',')}`) % 1000000) : 0;
+  const room = (p: Region): boolean => !D.room || STACK - friendlyUnits(g, p, nat).filter((u) => u.nat !== nat).length >= sea.L.force;
   const kept = g.regions[flag(g, key) - 1];
-  const fresh = !!kept && kept.ctrl === nat && g.turn - flag(g, at) < 6;
-  if (fresh && quayWorth(g, nat, kept, shores, shut).worth > 0) return kept;
+  const fresh = !!kept && kept.ctrl === nat && g.turn - flag(g, at) < 6 && (!target || flag(g, tk) === target);
+  if (fresh && room(kept) && quayWorth(g, nat, kept, shores, shut).worth > 0) return kept;
   let best: Region | null = null, bw = 0, bs = Infinity;
+  let full: Region | null = null, fw = 0, fs = Infinity;
   let near: Region | null = null, bd = Infinity;
   for (const id of homeGround(g, nat).list) {
     const r = g.regions[id];
@@ -1650,16 +1662,36 @@ export function seaBase(g: Game, nat: string, slot = 0): Region | null {
     const d = seaHops(g, r.seas, shores);
     if (d < bd) { bd = d; near = r; }
     const w = quayWorth(g, nat, r, shores, shut);
+    if (!room(r)) { if (w.worth > fw + 1e-9 || (w.worth > 0 && Math.abs(w.worth - fw) <= 1e-9 && w.seas < fs)) { full = r; fw = w.worth; fs = w.seas; } continue; }
     if (w.worth > bw + 1e-9 || (w.worth > 0 && Math.abs(w.worth - bw) <= 1e-9 && w.seas < bs)) { best = r; bw = w.worth; bs = w.seas; }
   }
+  // (No port with room serves: the full one that does, as before.)
+  best ??= full;
   if (!best) {
     if (fresh) return kept;
-    if (!near || bd > NAVY.landing.range) { delete g.flags[key]; return null; }
+    if (!near || bd > NAVY.landing.range) { delete g.flags[key]; delete g.flags[tk]; return null; }
     best = near;
   }
   g.flags[key] = best.id + 1;
   g.flags[at] = g.turn;
+  if (target) g.flags[tk] = target;
   return best;
+}
+
+/**
+ * The joint crossing (ruling 233(w); open.json `descent.joint`; computer staffs only): the corps of a staff's
+ * computer-run allies that stand ready at its quay with no orders of their own from it, the strongest first. Their
+ * own staff has named no crossing from that harbour, for its home army or its army abroad, and they are at war with
+ * the enemy across the water. Where the staff's own corps at the quay are fewer than its force they fill it up and
+ * sail in it (ai.ts `crossSea`). Never a player's corps, and never for a player's staff.
+ */
+export function quayGuests(g: Game, nat: string, quay: Region, you: string): Corps[] {
+  if (!OPEN.descent.joint || g.flags.open !== 1 || g.human === nat) return [];
+  const named = (id: string): boolean => ['', ':o'].some((sfx) => flag(g, `st:quay:${id}${sfx}`) - 1 === quay.id);
+  return quay.units
+    .filter((u) => u.nat !== nat && u.nat !== g.human && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && !u.hold && !u.town && u.joint === undefined && u.leave === undefined
+      && u.supplied && u.str >= 0.7 && u.ap >= u.apMax && !!g.nations[u.nat]?.alive && allied(g, nat, u.nat) && atWar(g, u.nat, you) && !named(u.nat))
+    .sort((a, b) => b.divs * b.str - a.divs * a.str || a.id - b.id);
 }
 
 /**
