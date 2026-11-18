@@ -1,6 +1,7 @@
-// What a fleet action sounds like: the sound director's recordings (/mnt/project-files/sound/sound-list.json, all
-// original) that answer what happens at sea. The sim names them on its events; the screens and the 3D game play them.
-// TODO(polish): the sound director tunes this table (a torpedo_hit waits for the torpedo run).
+// What a fleet action sounds like: the battle pack's real recordings (/mnt/project-files/sound/battle-pack/, approved by
+// Brian 18 November; its README's table "The sea" follows this file) that answer what happens at sea. The sim names
+// them on its events; the 3D game plays them. A ship going down has no recording yet: 'ship_sinking' stays named, and
+// silent, until one comes, as the ship models name it. A torpedo_hit waits for the torpedo run.
 
 import type { Act, FieldEvent } from '../core/types';
 
@@ -14,15 +15,17 @@ export const SEA_CUES: Partial<Record<FieldEvent['what'], string>> = {
   'sea:burning': 'fire_start',
   routing: 'ship_horn',
   broken: 'ship_horn',
-  end: 'ship_bell',
+  // The action ends: two bells (the README: "a fleet signals; action stations; the action ends").
+  end: 'ship_bells_two',
 };
 
-/** The loop a ship plays while it does this. */
+/** The loop a ship plays while it does this: a warship under way is its engines (under its wash, which the ship models
+ *  key for themselves, destroyers their own wash). */
 export const SEA_LOOPS: Partial<Record<Act, string>> = {
   idle: 'sea_day_loop',
-  march: 'ship_loop',
-  run: 'ship_loop',
-  turn: 'ship_loop',
-  rout: 'ship_loop',
+  march: 'ship_engine_loop',
+  run: 'ship_engine_loop',
+  turn: 'ship_engine_loop',
+  rout: 'ship_engine_loop',
   fight: 'sea_battle_loop',
 };

@@ -22,7 +22,7 @@ import { DICE, RULES_CLASSES, SEA } from './numbers';
 import { drawUp, type PieceInfo } from './pieces';
 import { SEA_CUES } from './cues';
 import { none, seaLevel, seaRatio, shipsIn, shipWords, sunkCaps } from './result';
-import { hurtAfloat, ofFleet, theFleet } from './words';
+import { headCount, hurtAfloat, ofFleet, theFleet } from './words';
 import type { SeaClass, SeaCommand, SeaOrder, SeaShips, SeaSpeed, SeaTicket, SeaUnit } from './types';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
@@ -802,7 +802,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       if (!at) continue;
       this.splash(at, s.weight, s.side);
       this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + s.weight;
-      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.count ? `${s.count} bombers` : 'Aircraft'} from ${theFleet(s.from)} find ${this.told(at)}.`, extra: { count: s.count } });
+      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.count ? `${headCount(s.count)} bombers` : 'Aircraft'} from ${theFleet(s.from)} find ${this.told(at)}.`, extra: { count: s.count } });
     }
   }
 
@@ -942,7 +942,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
    *  "a battleship of the Home Fleet", "3 destroyers of Force H". */
   private told(u: SeaUnit, start = false): string {
     const c = RULES_CLASSES[u.extra.cls as SeaClass], n = Math.max(1, u.extra.ships);
-    const s = n === 1 ? `a ${c.one} ${ofFleet(u.extra.fleet)}` : `${n} ${c.many} ${ofFleet(u.extra.fleet)}`;
+    // At a sentence's head one to nine are words (the UI director, b476 3): "Four destroyers of the Home Fleet ...".
+    const s = n === 1 ? `a ${c.one} ${ofFleet(u.extra.fleet)}` : `${start ? headCount(n) : n} ${c.many} ${ofFleet(u.extra.fleet)}`;
     return start ? s[0].toUpperCase() + s.slice(1) : s;
   }
 

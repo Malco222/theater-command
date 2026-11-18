@@ -12,7 +12,7 @@ import { plainTicket, type PlainFleet } from '../src/battle/sea/ticket';
 import { SEA_CLASSES, type SeaClass, type SeaShips, type SeaUnit } from '../src/battle/sea/types';
 import { foughtOf } from '../src/battle/sea/handoff';
 import { PRACTICE, practiceTicket } from '../src/battle/sea/practice';
-import { hurtAfloat, ofFleet, repairLines, theFleet } from '../src/battle/sea/words';
+import { headCount, hurtAfloat, ofFleet, repairLines, theFleet } from '../src/battle/sea/words';
 
 const HOME: PlainFleet = { name: 'Home Fleet', nat: 'UK', ships: { bb: 2, cv: 1, ca: 3, dd: 8 } };
 const BATTLE: PlainFleet = { name: 'Battle Fleet', nat: 'GER', ships: { bb: 2, ca: 3, dd: 12 } };
@@ -508,7 +508,7 @@ describe('what the 3D game and the sound read', () => {
     expect(placed).toBe(true);
     for (const a of ['march', 'fight']) expect(seen.has(a), a).toBe(true);
     expect(seen.has('down')).toBe(sim.units.some((u) => u.state === 'gone'));
-    for (const c of ['ship_guns', 'ship_bell']) expect(cues.has(c), c).toBe(true);
+    for (const c of ['ship_guns', 'ship_bells_two']) expect(cues.has(c), c).toBe(true);
     expect(cues.has('ship_sinking')).toBe(sim.units.some((u) => u.extra.sunk > 0));
     // A battleship's box is one hull; four destroyers in line ahead, three lengths apart.
     const bb = piece(sim, 'att', 'bb'), dd = sim.units.find((u) => u.extra.cls === 'dd' && u.extra.ships0 === 4)!;
@@ -780,12 +780,15 @@ describe('b458, 3: the ships each side took home badly hurt', () => {
 
   it("the after card names them by kind, in the repair line's form, yours first", () => {
     const none = ships({});
-    expect(repairLines({ att: none, def: ships({ bb: 1, ca: 1 }) }, 'att', 'Italian')).toEqual(['2 Italian ships came home for repair: 1 battleship and 1 cruiser.']);
-    expect(repairLines({ att: none, def: ships({ ca: 1 }) }, 'att', 'Italian')).toEqual(['1 Italian cruiser came home for repair.']);
-    expect(repairLines({ att: ships({ dd: 2 }), def: none }, 'att', 'German')).toEqual(['2 of your destroyers came home for repair.']);
-    expect(repairLines({ att: ships({ dd: 1 }), def: ships({ dd: 3 }) }, 'att', 'German')).toEqual(['1 of your destroyers came home for repair.', '3 German destroyers came home for repair.']);
-    expect(repairLines({ att: ships({ bb: 1 }), def: ships({ ca: 1, dd: 2 }) }, 'def', 'British')).toEqual(['3 of your ships came home for repair: 1 cruiser and 2 destroyers.', '1 British battleship came home for repair.']);
+    expect(repairLines({ att: none, def: ships({ bb: 1, ca: 1 }) }, 'att', 'Italian')).toEqual(['Two Italian ships came home for repair: 1 battleship and 1 cruiser.']);
+    expect(repairLines({ att: none, def: ships({ ca: 1 }) }, 'att', 'Italian')).toEqual(['One Italian cruiser came home for repair.']);
+    expect(repairLines({ att: ships({ dd: 2 }), def: none }, 'att', 'German')).toEqual(['Two of your destroyers came home for repair.']);
+    expect(repairLines({ att: ships({ dd: 1 }), def: ships({ dd: 3 }) }, 'att', 'German')).toEqual(['One of your destroyers came home for repair.', 'Three German destroyers came home for repair.']);
+    expect(repairLines({ att: ships({ bb: 1 }), def: ships({ ca: 1, dd: 2 }) }, 'def', 'British')).toEqual(['Three of your ships came home for repair: 1 cruiser and 2 destroyers.', 'One British battleship came home for repair.']);
     expect(repairLines({ att: none, def: none }, 'att', 'Italian')).toEqual([]);
+    // One to nine open a sentence as words; from 10 the figure stands (the UI director, b476 3).
+    expect([1, 2, 9, 10, 12].map(headCount)).toEqual(['One', 'Two', 'Nine', '10', '12']);
+    expect(repairLines({ att: none, def: ships({ dd: 10, ca: 1 }) }, 'att', 'Italian')).toEqual(['11 Italian ships came home for repair: 1 cruiser and 10 destroyers.']);
   });
 
   it('every action books each fleet\'s badly hurt ships: those burning, and those afloat at half their hull or less', () => {

@@ -15,6 +15,12 @@ export const theFleet = (name: string): string => (/\b(?:Fleet|Navy)$/.test(name
 /** "of the Home Fleet", "of Force H": a ship's fleet after its kind. */
 export const ofFleet = (name: string): string => `of ${theFleet(name)}`;
 
+/**
+ * A count that opens a sentence (the UI director, b476 3): one to nine are words ("Two Italian ships came home for
+ * repair"), from 10 the figure stands. Inside a sentence figures stand ("1 battleship and 1 cruiser").
+ */
+export const headCount = (n: number): string => (n >= 1 && n <= 9 ? ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'][n - 1] : String(n));
+
 /** A list as English says it: "a, b and c". */
 export const andList = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
@@ -37,7 +43,7 @@ export function hurtAfloat(str: number, ships0: number, afloat: number): number 
 
 /**
  * The after card's lines for the ships each side took home badly hurt, in the repair line's form, every ship named by
- * its kind (b458, 3): "2 of your destroyers came home for repair.", "2 Italian ships came home for repair: 1
+ * its kind (b458, 3): "Two of your destroyers came home for repair.", "Two Italian ships came home for repair: 1
  * battleship and 1 cruiser." Yours first, then theirs, as the loss line says them. None for a side with none.
  */
 export function repairLines(hurt: Record<Side, SeaShips>, me: Side, theirAdj: string): string[] {
@@ -45,7 +51,7 @@ export function repairLines(hurt: Record<Side, SeaShips>, me: Side, theirAdj: st
   const one = (s: SeaShips): string | null => { const k = SEA_CLASSES.filter((c) => s[c] > 0); return k.length === 1 ? (s[k[0]] === 1 ? RULES_CLASSES[k[0]].one : RULES_CLASSES[k[0]].many) : null; };
   const out: string[] = [];
   const m = hurt[me], t = hurt[them], nm = count(m), nt = count(t);
-  if (nm) out.push(one(m) ? `${nm} of your ${RULES_CLASSES[SEA_CLASSES.find((c) => m[c] > 0)!].many} came home for repair.` : `${nm} of your ships came home for repair: ${andList(kindsOf(m))}.`);
-  if (nt) out.push(one(t) ? `${nt} ${theirAdj} ${one(t)} came home for repair.` : `${nt} ${theirAdj} ships came home for repair: ${andList(kindsOf(t))}.`);
+  if (nm) out.push(one(m) ? `${headCount(nm)} of your ${RULES_CLASSES[SEA_CLASSES.find((c) => m[c] > 0)!].many} came home for repair.` : `${headCount(nm)} of your ships came home for repair: ${andList(kindsOf(m))}.`);
+  if (nt) out.push(one(t) ? `${headCount(nt)} ${theirAdj} ${one(t)} came home for repair.` : `${headCount(nt)} ${theirAdj} ships came home for repair: ${andList(kindsOf(t))}.`);
   return out;
 }
