@@ -253,9 +253,17 @@ def sheet(name, out, opt, w, h, spp):
 # ---- the faces she showed through the war ------------------------------------------------------------
 
 def faces(name, out, opt, w, h, spp):
-    """One still of each face of her that vehicles.FACES names (a gun, a coat), from the same place, side by side."""
+    """One still of each face of her that vehicles.FACES names (a gun, a coat), from the same place, side by side.
+    `only=3` renders that face again and keeps the others' stills."""
     files, labels, eye = [], [], None
+    redo = {int(a) for a in opt["only"].split(",")} if opt.get("only") else None
+    title = vehicles.build(name, False).m.title
     for k, (words, pick) in enumerate(vehicles.FACES.get(name, [])):
+        path = os.path.join(out, "sheets", "stills", f"{name}-face{k + 1}.png")
+        if redo and (k + 1) not in redo and os.path.exists(path):
+            files.append(path)
+            labels.append(words)
+            continue
         S = Show(name, field=opt.get("field", "battle"), build=pick)
         stage.render_setup(w, h, samples=spp)
         if eye is None:
@@ -267,14 +275,13 @@ def faces(name, out, opt, w, h, spp):
         S.set({})
         S.look(eye, tgt, 44)
         S.sun_at(math.degrees(math.atan2(eye[1] - tgt[1], eye[0] - tgt[0])) + 60.0, 36.0)
-        path = os.path.join(out, "sheets", "stills", f"{name}-face{k + 1}.png")
         t = time.time()
         kit.still(path)
         print(f"  {words}: {time.time() - t:.1f}s", flush=True)
         files.append(path)
         labels.append(words)
     if files:
-        kit.sheet(files, os.path.join(out, "sheets", f"{name}-faces.png"), cols=len(files), labels=labels, title=f"{S.m.title}: one model, the faces she showed through the war")
+        kit.sheet(files, os.path.join(out, "sheets", f"{name}-faces.png"), cols=len(files), labels=labels, title=f"{title}: one model, the faces she showed through the war")
         print("wrote", os.path.join(out, "sheets", f"{name}-faces.png"), flush=True)
 
 

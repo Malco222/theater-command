@@ -112,7 +112,7 @@ FACES = {
     "leFH18": [("1939 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "StuG3": [("1942 to early 1943: the box shield round her gun, dark grey", {"paint": "grey"}),
               ("Early 1943: dark yellow", {"paint": "yellow"}),
-              ("May 1943 on: skirts along her hull (this one has lost a plate)", {"paint": "yellow", "skirts": "l2"}),
+              ("May 1943 on: skirts along her hull (this one has lost a plate)", {"paint": "yellow", "skirts": "r4"}),
               ("1944 on, about half of them: the cast shield shaped like a boar's head", {"paint": "yellow", "mantlet": "cone", "skirts": True})],
     "Pak40": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "SdKfz222": [("1938 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
