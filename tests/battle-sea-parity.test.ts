@@ -1,20 +1,24 @@
 // The fairness test for fleet actions (ruling 217): with the computer on both sides, the field must give the
 // attacker the same chance the rules' dice give at the same odds, within a tenth, whatever the fleets are made of.
-// The seeds are fixed, so the test is exact from run to run; the tolerance allows for the luck of 40 battles.
+// The seeds are fixed, so the test is exact from run to run, and their luck of the day is spread evenly over the dice's
+// run (tests/sea-luck.ts): plain seeds rolled lucky for the attacker and measured the seeds, not the field. The
+// tolerance allows for the luck of 40 battles.
 import { describe, expect, it } from 'vitest';
 import { runOut } from '../src/battle/core/clock';
 import { seaChance } from '../src/battle/sea/result';
 import { SeaSim } from '../src/battle/sea/sim';
 import { plainTicket, type PlainFleet } from '../src/battle/sea/ticket';
 import type { Side } from '../src/battle/core/types';
+import { evenLuck } from './sea-luck';
 
 const RUNS = 40;
+const SEEDS = evenLuck(RUNS);
 const ODDS = [0.9, 1, 1.15];
 
 function wins(att: PlainFleet[], def: PlainFleet[], odds: number, air?: Partial<Record<Side, number>>): number {
   let won = 0;
-  for (let s = 1; s <= RUNS; s++) {
-    const sim = new SeaSim(plainTicket({ att, def, seed: s * 7919, odds, air, human: null }));
+  for (const seed of SEEDS) {
+    const sim = new SeaSim(plainTicket({ att, def, seed, odds, air, human: null }));
     runOut(sim);
     if (sim.over!.winner === 'att') won++;
   }

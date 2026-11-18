@@ -23,14 +23,35 @@ const piece = (sim: SeaSim, side: 'att' | 'def', cls: string): SeaUnit => sim.un
 const events = (sim: SeaSim): FieldEvent[] => sim.view().events;
 
 describe('the pieces', () => {
+  it('b415: the gun classes have one best range, one reach and no punch of their own; carriers stand off beyond the guns', () => {
+    const { bb, ca, dd, cv } = SEA.classes;
+    for (const c of [ca, dd]) { expect(c.best).toBe(bb.best); expect(c.reach).toBe(bb.reach); }
+    expect(cv.standoff!).toBeGreaterThan(bb.reach);
+    for (const c of SEA_CLASSES) expect(SEA.classes[c]).not.toHaveProperty('punch');
+  });
+
+  it('b415: the same wear takes the same weight out of a battleship as out of a piece of destroyers', () => {
+    const weightLost = (cls: 'bb' | 'dd'): number => {
+      const sim = new SeaSim(plainTicket({ att: [HOME], def: [BATTLE], seed: 11, human: null }));
+      const s = sim as unknown as { evenWear(u: SeaUnit, w: number): number; wear(u: SeaUnit, a: number): void; weight0: Record<string, number> };
+      const foe = sim.units.find((u) => u.side === 'def' && u.extra.cls === cls)!;
+      const before = sim.lostShare('def');
+      s.wear(foe, s.evenWear(foe, 0.6));
+      return (sim.lostShare('def') - before) * s.weight0.def;
+    };
+    expect(weightLost('bb')).toBeCloseTo(0.6 / SEA.fire.hull, 6);
+    expect(weightLost('dd')).toBeCloseTo(0.6 / SEA.fire.hull, 6);
+  });
+
   it('capital ships sail singly, destroyers in fours, and no piece is called a flotilla or a squadron', () => {
     const { units } = drawUp(plainTicket({ att: [HOME], def: [BATTLE], seed: 1 }).place.fleets);
     const att = units.filter((u) => u.side === 'att');
     expect(att.filter((u) => u.extra.cls === 'bb').every((u) => u.extra.ships0 === 1)).toBe(true);
     expect(att.filter((u) => u.extra.cls === 'dd').map((u) => u.extra.ships0)).toEqual([4, 4]);
     for (const u of units) expect(u.name).not.toMatch(/flotilla|squadron/i);
-    expect(att.find((u) => u.extra.cls === 'dd')!.name).toBe('4 destroyers, Home Fleet');
-    expect(att.find((u) => u.extra.cls === 'bb')!.name).toBe('Battleship, Home Fleet');
+    expect(att.find((u) => u.extra.cls === 'dd')!.name).toBe('Destroyers 1');
+    expect(att.find((u) => u.extra.cls === 'bb')!.name).toBe('Battleship 1');
+    expect(att.filter((u) => u.extra.cls === 'ca').map((u) => u.name)).toEqual(['Cruiser 1', 'Cruiser 2', 'Cruiser 3']);
     // Only a carrier has the strike.
     for (const u of units) expect(!!u.abilities?.some((a) => a.key === 'strike')).toBe(u.extra.cls === 'cv');
   });

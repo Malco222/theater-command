@@ -118,6 +118,20 @@ const SLICK_FOR = 240;
 
 export const live = (u: SeaUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
 
+/** A piece's name as every place shows it, numbered in kind, with what it has lost: "Cruiser 2", "Destroyers 4 · 3 of 4". */
+export const shownName = (u: SeaUnit): string => `${u.name}${u.extra.ships < u.extra.ships0 ? ` · ${u.extra.ships} of ${u.extra.ships0}` : ''}`;
+
+const STATE_SAID: Record<string, string> = { wavering: 'Wavering', routing: 'Breaking off' };
+/** The hover over a ship, in the land's form: whose, what, its fleet, its hull, and for an enemy what a right-click does
+ *  when ships are in hand (the UI director): "German Cruiser 2, Battle Fleet · Hull 99 · Right-click to engage". With
+ *  nothing in hand a right-click does nothing, so the hover does not offer it. */
+export function hoverText(sim: SeaSim, u: SeaUnit, me: Side, inHand = 0): string {
+  const bits = [`${u.side === me ? '' : `${sim.ticket[u.side].adj} `}${shownName(u)}, ${u.extra.fleet}`, `Hull ${Math.round(u.str * 100)}`];
+  if (STATE_SAID[u.state]) bits.push(STATE_SAID[u.state]);
+  if (inHand > 0 && u.side !== me && u.state !== 'routing') bits.push('Right-click to engage');
+  return bits.join(' · ');
+}
+
 /** The marks the frame keeps from the sim's events. */
 export function takeEvents(s: SeaScene, sim: SeaSim, events: FieldEvent[], realNow: number): void {
   const bt = sim.t;
@@ -139,6 +153,14 @@ export function takeEvents(s: SeaScene, sim: SeaSim, events: FieldEvent[], realN
 /** The smallest a ship is drawn, in pixels, by class, so that a whole fleet reads at the widest view (the art director: a sign before it is a size). */
 const MIN_LEN: Record<SeaClass, number> = { bb: 20, cv: 20, ca: 16, dd: 12 };
 const MIN_BEAM: Record<SeaClass, number> = { bb: 5.4, cv: 5.4, ca: 4.2, dd: 3.2 };
+// The guns' rhythm is the class's flavour and nothing more: battleships fire slow, heavy salvos with a big flash and tall splashes,
+// destroyers quick, light ones; every class does the same harm per unit of weight each minute (the design
+// director, b415). Look only: the reckoning never reads this table.
+const SALVO: Record<string, { every: number; flash: number; streak: number; splashes: number; rise: number }> = {
+  bb: { every: 3.2, flash: 5.5, streak: 2.1, splashes: 4, rise: 6.5 },
+  ca: { every: 2.4, flash: 3.5, streak: 1.4, splashes: 3, rise: 4 },
+  dd: { every: 1.6, flash: 2.4, streak: 1, splashes: 2, rise: 2.8 },
+};
 /** The width of our ships' ink rim and of the paper line inside it, each, in pixels. */
 const RIM = 0.75;
 
@@ -223,17 +245,16 @@ export function drawSea(x: CanvasRenderingContext2D, sim: SeaSim, s: SeaScene): 
   const colour: Record<Side, string> = s.colours ?? { att: sim.ticket.att.color, def: sim.ticket.def.color };
   const byId = new Map(sim.units.map((u) => [u.id, u]));
 
-  // Reach for what is in hand: the range it hits hardest at (solid) and the furthest it hits at all (dashed), each
-  // named at its top edge (the UI director, 10).
-  for (const id of s.sel) {
-    const u = byId.get(id);
-    if (!u || !live(u) || u.extra.cls === 'cv') continue;
-    const C = SEA.classes[u.extra.cls as SeaClass];
+  // Reach for one ship only, so a fleet in hand does not bury the sea (the UI director, sea newcomer 1): the one alone
+  // in hand, or the one of those in hand under the pointer. One ring, the furthest its guns hit at all, named once at
+  // its top edge: the guns hit as hard anywhere within it (one reach, b415), so there is no nearer ring to show.
+  const ringId = s.sel.size === 1 ? [...s.sel][0] : s.hover !== null && s.hover !== undefined && s.sel.has(s.hover) ? s.hover : null;
+  const ringOn = ringId !== null ? byId.get(ringId) : undefined;
+  if (ringOn && live(ringOn) && ringOn.extra.cls !== 'cv') {
+    const u = ringOn, C = SEA.classes[u.extra.cls as SeaClass];
     const [cx, cy] = toScreen(s, u.x, u.y);
     x.strokeStyle = 'rgba(138,107,59,.75)'; x.lineWidth = 1.2;
-    x.beginPath(); x.arc(cx, cy, C.best * cam.z, 0, Math.PI * 2); x.stroke();
     x.setLineDash([5, 6]); x.beginPath(); x.arc(cx, cy, C.reach * cam.z, 0, Math.PI * 2); x.stroke(); x.setLineDash([]);
-    ringWord(x, 'BEST RANGE', cx, cy - C.best * cam.z);
     ringWord(x, 'REACH', cx, cy - C.reach * cam.z);
   }
 
@@ -304,12 +325,12 @@ export function drawSea(x: CanvasRenderingContext2D, sim: SeaSim, s: SeaScene): 
   }
 
   // The guns, salvo by salvo: a flash at the guns, a short pale streak flying to the fall of shot and gone within a
-  // second, then the splashes round the target. No standing line from every ship (the art director, 1).
+  // second, then the splashes round the target. No standing line from every ship (the art director, 1). Each class's rhythm is in SALVO.
   for (const u of sim.units) {
     if (!live(u) || u.engaged === undefined) continue;
     const t = byId.get(u.engaged);
     if (!t) continue;
-    const every = u.extra.cls === 'dd' ? 1.6 : u.extra.cls === 'ca' ? 2.4 : 3.2;
+    const look = SALVO[u.extra.cls as string] ?? SALVO.ca, every = look.every;
     const phase = ((s.now + u.id * 0.37) % every) / every;
     const [a, b] = toScreen(s, u.x, u.y);
     const salvo = Math.floor((s.now + u.id * 0.37) / every);
@@ -318,17 +339,17 @@ export function drawSea(x: CanvasRenderingContext2D, sim: SeaSim, s: SeaScene): 
     const [c0, d0] = toScreen(s, t.x, t.y);
     const c = c0 + fx, d = d0 + fy;
     const flight = 0.9 / every;
-    if (phase < 0.08) { x.fillStyle = `rgba(255,226,160,${0.95 - phase * 10})`; x.beginPath(); x.arc(a, b, 3.5, 0, Math.PI * 2); x.fill(); }
+    if (phase < 0.08) { x.fillStyle = `rgba(255,226,160,${0.95 - phase * 10})`; x.beginPath(); x.arc(a, b, look.flash, 0, Math.PI * 2); x.fill(); }
     if (phase < flight) {
       const k = phase / flight, k0 = Math.max(0, k - 0.18);
-      x.strokeStyle = `rgba(250,246,236,${0.75 * (1 - k * 0.5)})`; x.lineWidth = 1.4;
+      x.strokeStyle = `rgba(250,246,236,${0.75 * (1 - k * 0.5)})`; x.lineWidth = look.streak;
       x.beginPath(); x.moveTo(a + (c - a) * k0, b + (d - b) * k0); x.lineTo(a + (c - a) * k, b + (d - b) * k); x.stroke();
     } else if (phase < flight + 0.3) {
       const k = (phase - flight) / 0.3;
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < look.splashes; i++) {
         const an = u.id * 1.7 + i * 2.1 + salvo;
-        x.strokeStyle = `${FOAM}${0.9 * (1 - k)})`; x.lineWidth = 1.3;
-        x.beginPath(); x.arc(c + Math.cos(an) * spread * 0.25, d + Math.sin(an) * spread * 0.18, 1.5 + 4 * k, 0, Math.PI * 2); x.stroke();
+        x.strokeStyle = `${FOAM}${0.9 * (1 - k)})`; x.lineWidth = look.streak * 0.9;
+        x.beginPath(); x.arc(c + Math.cos(an) * spread * 0.25, d + Math.sin(an) * spread * 0.18, 1.5 + look.rise * k, 0, Math.PI * 2); x.stroke();
       }
     }
   }
@@ -353,6 +374,7 @@ export function drawSea(x: CanvasRenderingContext2D, sim: SeaSim, s: SeaScene): 
 
   // The hulls: the departed and the sunk are not drawn; the enemy first, the player's own on top.
   const order = sim.units.filter(live).sort((a, c) => (a.side === s.me ? 1 : 0) - (c.side === s.me ? 1 : 0));
+  const labels: { text: string; x: number; y: number; first: boolean }[] = [];
   for (const u of order) {
     const cls = u.extra.cls as SeaClass, C = SEA.classes[cls];
     const L = Math.max(MIN_LEN[cls], C.len * cam.z), B = Math.max(MIN_BEAM[cls], C.beam * cam.z * 1.6);
@@ -369,16 +391,30 @@ export function drawSea(x: CanvasRenderingContext2D, sim: SeaSim, s: SeaScene): 
       x.strokeStyle = held ? BRASS : 'rgba(45,36,26,.7)'; x.lineWidth = held ? 2 : 1.2;
       x.beginPath(); x.arc(a, b, L * 0.75 + 4, 0, Math.PI * 2); x.stroke();
     }
-    // A hull's bar only while it is in hand or under the pointer; an enemy's only under the pointer (the UI director, 13).
+    // A hull's bar while it is in hand or under the pointer; an enemy's only under the pointer (the UI director, 13).
     if ((held && u.side === s.me) || over) {
       const w = 24;
       x.fillStyle = 'rgba(14,11,8,.7)'; x.fillRect(a - w / 2, b + L * 0.6 + 3, w, 3);
       const shown = Math.round(u.str * 100);
       x.fillStyle = shown < 35 ? ALARM : shown < 65 ? AMBER : '#5f9a52'; x.fillRect(a - w / 2, b + L * 0.6 + 3, (w * shown) / 100, 3);
-      x.font = '700 12px "Courier Prime", monospace'; x.textAlign = 'center'; x.textBaseline = 'bottom';
-      x.lineWidth = 3; x.strokeStyle = 'rgba(14,11,8,.85)'; x.strokeText(u.name, a, b - L * 0.6 - 6);
-      x.fillStyle = '#ede6d6'; x.fillText(u.name, a, b - L * 0.6 - 6);
     }
+    // Words over a ship only for the one under the pointer (the hover) and the one alone in hand (its name): never for
+    // every ship in hand (the UI director, sea newcomer 1).
+    if (over) labels.push({ text: hoverText(sim, u, s.me, s.sel.size), x: a, y: b - L * 0.6 - 6, first: true });
+    else if (held && s.sel.size === 1) labels.push({ text: shownName(u), x: a, y: b - L * 0.6 - 6, first: false });
+  }
+  // At most two lines of words; where they would touch they stack in a column, the hover on top (the name is placed
+  // first and the hover lifts above it), kept on the sea below the dispatch strip.
+  x.font = '700 12px "Courier Prime", monospace'; x.textAlign = 'center'; x.textBaseline = 'bottom';
+  const placed: [number, number, number, number][] = [];
+  const top = (s.clearTop ?? 50) + 16;
+  for (const l of labels.sort((p, q) => Number(p.first) - Number(q.first))) {
+    const w = x.measureText(l.text).width, h = 15;
+    let lx = Math.max(w / 2 + 6, Math.min(W - w / 2 - 6, l.x)), ly = Math.max(top, Math.min(H - 4, l.y));
+    for (const [px, py, pw, ph] of placed) if (Math.abs(lx - px) < (w + pw) / 2 + 4 && Math.abs(ly - py) < ph) ly = py - ph - 2 >= top ? py - ph - 2 : py + ph + 2;
+    placed.push([lx, ly, w, h]);
+    x.lineWidth = 3; x.strokeStyle = 'rgba(14,11,8,.85)'; x.strokeText(l.text, lx, ly);
+    x.fillStyle = '#ede6d6'; x.fillText(l.text, lx, ly);
   }
 
   // Strikes on their way in: a ring closing on the target as they come, named.

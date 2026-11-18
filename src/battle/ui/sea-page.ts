@@ -18,10 +18,11 @@ import type { Command, FieldEvent, Side } from '../core/types';
 import { closeWith, foughtOf, seaAhead, type SeaAhead } from '../sea/handoff';
 import { SEA } from '../sea/numbers';
 import { SeaSim, type SeaLosses } from '../sea/sim';
+import { PRACTICE, type Practice } from '../sea/practice';
 import { plainTicket, type PlainFleet } from '../sea/ticket';
 import type { SeaClass, SeaShips, SeaSpeed, SeaTicket, SeaUnit } from '../sea/types';
 import { toField, toScreen } from './draw';
-import { drawSea, live, shipSvg, sideColours, takeEvents, type SeaScene } from './sea-draw';
+import { drawSea, live, shipSvg, shownName, sideColours, takeEvents, type SeaScene } from './sea-draw';
 
 const KEY_GUARD = 0.5;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -67,6 +68,10 @@ interface State {
   resume: Speed;
   /** Nothing is happening yet, so time runs fast (ruling 226, 1). */
   closing: boolean;
+  /** A fleet has broken off and time runs fast through the chase, until the player takes it in hand (b402, 3). */
+  chasing: boolean;
+  /** The player has given an order or set a speed since a fleet broke off: the chase runs at his speed. */
+  chaseByHand: boolean;
   /** The tag at the top of the sea for a moment: "RUNNING ×2", "THE FLEETS MEET · RUNNING ×1" (real seconds). */
   tag: { text: string; until: number } | null;
   /** The warnings at three quarters of the way to breaking off: ours stands while it holds, theirs is said once. */
@@ -82,7 +87,7 @@ const app = document.getElementById('app')!;
 const S: State = {
   screen: 'choose', sim: null, from: null, clock: new Clock(),
   scene: { cam: { x: 10000, y: 10000, z: 0.04 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null, marks: [], inbound: [] },
-  guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, handing: false, resume: 1, closing: true, tag: null, last: 0, trayAt: 0, trayFrom: 0, trayShown: 0, traySel: '',
+  guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, handing: false, resume: 1, closing: true, chasing: false, chaseByHand: false, tag: null, last: 0, trayAt: 0, trayFrom: 0, trayShown: 0, traySel: '',
 };
 const now = (): number => performance.now() / 1000;
 const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
@@ -101,24 +106,11 @@ function campaignAction(seed: number): FromCampaign | null {
   return ahead ? { g, ahead, close } : null;
 }
 
-interface Practice { name: string; about: string; sea: string; att: PlainFleet[]; def: PlainFleet[]; odds: number; air?: Partial<Record<Side, number>> }
-// Nations and fleets the campaign has, in seas it names, so a practice action reads as the campaign's own would.
-const PRACTICE: Practice[] = [
-  { name: 'Two battle lines', about: 'Battleships, cruisers and destroyers on both sides, at even odds', sea: 'North Sea', odds: 1,
-    att: [{ name: 'Home Fleet', nat: 'UK', ships: { bb: 3, ca: 4, dd: 8 }, admiral: 1 }], def: [{ name: 'Battle Fleet', nat: 'GER', ships: { bb: 2, ca: 4, dd: 12 }, admiral: 1 }] },
-  { name: 'Carriers against a battle line', about: 'Your carriers strike from behind their screen; theirs is all guns', sea: 'Ionian Sea', odds: 1.1,
-    att: [{ name: 'Mediterranean Fleet', nat: 'UK', ships: { cv: 2, ca: 3, dd: 8 } }], def: [{ name: '1st Fleet', nat: 'ITA', ships: { bb: 3, ca: 2, dd: 8 } }] },
-  { name: 'Under the enemy\'s aircraft', about: 'Their coast is near and its aircraft raid your ships all through the action', sea: 'Tyrrhenian Sea', odds: 1.15, air: { def: 15 },
-    att: [{ name: 'Mediterranean Fleet', nat: 'UK', ships: { bb: 3, cv: 1, ca: 5, dd: 12 } }], def: [{ name: '2nd Fleet', nat: 'ITA', ships: { bb: 4, ca: 6, dd: 14 } }] },
-  { name: 'Outgunned', about: 'They are the stronger: break off well, or make them pay', sea: 'North Sea', odds: 0.85,
-    att: [{ name: 'Home Fleet', nat: 'UK', ships: { bb: 2, ca: 4, dd: 10 } }], def: [{ name: 'Battle Fleet', nat: 'GER', ships: { bb: 3, ca: 4, dd: 12 } }] },
-];
-
 /** The campaign's own names and colours for the practice actions' nations. A nation it lacks reads as "Enemy", never by its code. */
 let nations: Game['nations'] | null = null;
 function practiceTicket(p: Practice): SeaTicket {
   nations ??= createGame(1, null).nations;
-  const t = plainTicket({ att: p.att, def: p.def, seed: 1 + Math.floor(Math.random() * 1e6), odds: p.odds, air: p.air, human: 'att', zoneName: p.sea });
+  const t = plainTicket({ att: p.att, def: p.def, seed: 1 + Math.floor(Math.random() * 1e6), air: p.air, human: 'att', zoneName: p.sea });
   for (const side of ['att', 'def'] as Side[]) {
     const n = nations[t[side].nat];
     if (n) { t[side].adj = n.adj; t[side].color = n.color; } else t[side].adj = side === 'att' ? 'Your' : 'Enemy';
@@ -152,10 +144,11 @@ function showChooser(): void {
       <h2 class="tc-label shead">${facts(['Practice actions', 'Nothing goes back to the campaign'])}</h2>
       <div class="offers">${PRACTICE.map((p, i) => {
         const fl = [...p.att.map((f) => ({ ...f, side: 'att' as Side })), ...p.def.map((f) => ({ ...f, side: 'def' as Side }))];
+        const pt = plainTicket({ att: p.att, def: p.def, seed: 1, air: p.air });
         return `<button class="tc-card is-press offer" data-practice="${i}">
-        <span class="otop"><b class="tc-title-3">${esc(p.name)}</b><span class="tc-data"><b>${odds(p.odds)}</b> to 1</span></span>
+        <span class="otop"><b class="tc-title-3">${esc(p.name)}</b><span class="tc-data"><b>${odds(pt.reckoning.odds)}</b> to 1</span></span>
         <span class="tc-data omid">${esc(p.about)}</span>
-        <span class="tc-data olow"><span class="oside">${shipsKept(sideShips(fl, 'att'))}</span><span class="oside">against ${shipsKept(sideShips(fl, 'def'))}</span><span class="oside">${names(fl, 'att')} against ${names(fl, 'def')}</span></span></button>`;
+        <span class="tc-data olow"><span class="oside">${shipsKept(sideShips(fl, 'att'))}</span><span class="oside">against ${shipsKept(sideShips(fl, 'def'))}</span><span class="oside">${facts([`${names(fl, 'att')} against ${names(fl, 'def')}`, staff(chanceOf(pt))])}</span></span></button>`;
       }).join('')}</div>
     </div></div>`;
   app.querySelector('[data-from]')?.addEventListener('click', () => { if (from) startBattle(from.ahead.ticket, from); });
@@ -181,7 +174,7 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   sc.sel = new Set(); sc.hover = null; sc.box = null; sc.line = null; sc.ping = null; sc.marks = []; sc.inbound = [];
   sc.colours = sideColours(t.att.color, t.def.color);
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
-  S.asking = false; S.handing = false; S.closing = true; S.tag = null;
+  S.asking = false; S.handing = false; S.closing = true; S.chasing = false; S.chaseByHand = false; S.tag = null;
   S.dispatch = { t: 0, what: 'contact', text: `Your fleet has the enemy in sight in the ${t.place.zoneName}: give your orders, then press Space to begin.` };
   S.dispatchAge = 0;
   guard();
@@ -233,12 +226,8 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   S.last = now();
 }
 
-/** What a piece is, without its fleet, with what it has lost: "4 destroyers", "3 of 4 destroyers", "Battleship". */
-const whatOf = (u: SeaUnit): string => {
-  const c = CLASS_ONE[u.extra.cls as SeaClass], n0 = u.extra.ships0, n = u.extra.ships;
-  if (n0 === 1) return c[0][0].toUpperCase() + c[0].slice(1);
-  return n < n0 ? `${n} of ${n0} ${c[1]}` : `${n0} ${c[1]}`;
-};
+/** What a piece is, numbered in kind, with what it has lost: "Cruiser 2", "Destroyers 4 · 3 of 4" (the design director). */
+const whatOf = (u: SeaUnit): string => shownName(u);
 
 function card(u: SeaUnit, color: string): string {
   return `<button class="tc-card is-press ucard" data-unit="${u.id}" title="${esc(u.name)}">
@@ -303,8 +292,8 @@ function sizeChips(): void {
   };
   const names = new Set<string>();
   for (const u of S.sim!.units) if (u.side === S.scene.me) {
-    const n0 = u.extra.ships0, cl = CLASS_ONE[u.extra.cls as SeaClass];
-    names.add(n0 === 1 ? cl[0] : `${n0 - 1} of ${n0} ${cl[1]}`);
+    const n0 = u.extra.ships0;
+    names.add(n0 === 1 ? u.name : `${u.name} · ${n0 - 1} of ${n0}`);
   }
   let w = probe('.ustate', `<b>${STATE_WORD.steady}</b><span class="act"> · ${ORDER_WORD.attack}</span>`);
   for (const n of names) w = Math.max(w, probe('.uwhat b', esc(n)));
@@ -379,7 +368,8 @@ function keepFighting(): void {
 function updateTop(force = false): void {
   const sim = S.sim!;
   const el = (id: string): HTMLElement => document.getElementById(id)!;
-  el('time').textContent = `${mmss(sim.t)} of ${mmss(sim.ticket.limit)}`;
+  // The time only, as the air's clock: actions end long before the limit, which the hover names (sea newcomer 4).
+  el('time').textContent = mmss(sim.t);
   // The clock says what it is doing (ruling 226, 8): PAUSED or RUNNING over the time, the first segment Paused when lit.
   const paused = S.clock.speed === 0, state = el('clockState');
   const sw = paused ? 'Paused' : 'Running';
@@ -415,6 +405,7 @@ function updateTop(force = false): void {
   if (!S.asking && !S.handing && !sim.over) {
     if (paused) tag = `Paused ${cap('Space')}`;
     else if (S.closing) tag = `×${APPROACH * S.clock.speed} until the action begins`;
+    else if (S.chasing) tag = `×${APPROACH * S.clock.speed} until the action ends ${cap('1')}`;
     else if (S.tag && now() < S.tag.until) tag = esc(S.tag.text);
   }
   if (tagEl.innerHTML !== tag) tagEl.innerHTML = tag;
@@ -483,7 +474,15 @@ function clampCam(): void {
 // ---- Orders -----------------------------------------------------------------------------------------------------------
 
 function chosen(): number[] { return [...S.scene.sel].filter((id) => { const u = unit(id); return !!u && orderable(u); }); }
-const give = (c: Command | { do: 'sea:speed'; units: number[]; speed: SeaSpeed }): boolean => S.sim!.command(c as Command, S.scene.me);
+const give = (c: Command | { do: 'sea:speed'; units: number[]; speed: SeaSpeed }): boolean => {
+  // Whether a chase was already on before this order: an order that itself ends the action (withdraw) does not take
+  // a chase in hand, so the last minutes run fast however the fleet broke off.
+  const inChase = S.sim!.brokenSide !== null;
+  const ok = S.sim!.command(c as Command, S.scene.me);
+  // An order in the chase takes it in hand: time drops back to the speed set (b402, 3).
+  if (ok && inChase) S.chaseByHand = true;
+  return ok;
+};
 /** How near the pointer must be to a piece to take it, in metres: a few pixels at any zoom. */
 const reachPx = (): number => Math.max(250, 18 / S.scene.cam.z);
 
@@ -662,11 +661,15 @@ function frame(): void {
   const sim = S.sim;
   // Until the action begins, the core clock runs fast on its own, then drops back to the speed the player set; and
   // again once an early strike has come and gone with nothing in contact or in the air (ruling 226, 1; 20:18 UTC).
-  S.clock.rush = sim.quiet ? APPROACH : 1;
+  // Once a fleet has broken off, time runs fast through the chase until the action ends, unless the player takes the
+  // chase in hand with an order or a speed (the design director, b402, 3).
+  const chase = !sim.over && sim.brokenSide !== null && !S.chaseByHand;
+  S.clock.rush = sim.quiet || chase ? APPROACH : 1;
   S.clock.advance(sim, dt);
   const quiet = !sim.over && sim.quiet;
   if (S.closing && !quiet && !sim.over) S.tag = { text: `The action begins · Running ×${S.clock.speed}`, until: t + 2.5 };
   S.closing = quiet;
+  S.chasing = !sim.over && sim.brokenSide !== null && !S.chaseByHand;
   const v = sim.view(S.scene.me);
   takeEvents(S.scene, sim, v.events, t);
   // At the press of Space, one line so the wait has a meaning (the UI director, 6).
@@ -693,6 +696,8 @@ const APPROACH = 8;
 function setClock(to: Speed | 'toggle'): void {
   if (S.asking || S.handing) return;
   const was = S.clock.speed;
+  // Choosing a speed takes the chase in hand; a pause does not, however it is given (button or Space).
+  if (to !== 'toggle' && to !== 0 && S.sim?.brokenSide) S.chaseByHand = true;
   if (to === 'toggle') S.clock.toggle(); else S.clock.set(to);
   if (was === 0 && S.clock.speed > 0) S.tag = { text: `Running ×${S.clock.speed}`, until: now() + 2 };
   updateTop();

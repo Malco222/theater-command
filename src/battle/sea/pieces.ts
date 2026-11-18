@@ -57,11 +57,16 @@ export function drawUp(fleets: FleetTicket[]): { units: SeaUnit[]; info: Map<num
       const gap = c === 'dd' ? 500 : 650;
       const y = baseY - toward * row * 700;
       list.forEach((p, i) => {
-        const x = F.size / 2 + (i - (list.length - 1) / 2) * gap;
+        // The defender's line is the attacker's turned half round, not its mirror: each side's first ship is on its
+        // own left, so a ship turning to starboard does for one side what it does for the other (b402: drawn as a
+        // mirror, the same helm put one side across the other's bows).
+        const x = F.size / 2 + (side === 'def' ? -1 : 1) * (i - (list.length - 1) / 2) * gap;
         const w = shipWeight(p.f, c);
         const u: SeaUnit = {
           id, side, corps: p.f.id, nat: p.f.nat, kind: c,
-          name: p.n === 1 ? `${cap(RULES_CLASSES[c].one)}, ${p.f.name}` : `${p.n} ${RULES_CLASSES[c].many}, ${p.f.name}`,
+          // Numbered in kind on its side, as the campaign counts ships by kind and the field never names what the
+          // campaign does not know (the design director): "Cruiser 2", "Destroyers 4". Its fleet is extra.fleet.
+          name: `${cap(p.n === 1 ? RULES_CLASSES[c].one : RULES_CLASSES[c].many)} ${i + 1}`,
           x, y, face: side === 'att' ? 0 : Math.PI, str: 1, mor: 1, state: 'steady',
           men0: p.n * SEA.classes[c].crew,
           // For the models: one figure a ship, the piece's ships in line ahead three lengths apart (the sim keeps these up to date).
