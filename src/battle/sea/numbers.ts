@@ -8,7 +8,7 @@ import type { SeaClass } from './types';
 interface ClassOnField { speed: number; turn: number; best: number; reach: number; per: number; crew: number; len: number; beam: number; standoff?: number }
 
 export const SEA = seaData as unknown as {
-  field: { size: number; edge: number; limit: number };
+  field: { size: number; edge: number; limit: number; row: number };
   classes: Record<SeaClass, ClassOnField>;
   speeds: { slow: number; cruise: number; flank: number; accel: number };
   fire: { rate: number; hull: number; far: number; endOn: number; damaged: number; retarget: number };
@@ -17,13 +17,13 @@ export const SEA = seaData as unknown as {
   strike: { windup: number; every: number; share: number; radius: number };
   air: { every: number; share: number };
   pieces: { most: number };
-  ai: { keep: number; beyond: number };
+  ai: { keep: number; beyond: number; station: number; broadside: number };
   evade: { see: number; speed: number; screen: number };
 };
 
 /** The rules' classes: a ship's weight in a fleet action (power) and how readily it is sunk (tough: lower is tougher). */
 export const RULES_CLASSES = (navyData as unknown as { classes: Record<SeaClass, { label: string; one: string; many: string; power: number; tough: number }> }).classes;
 
-/** The rules' fleet action: the odds an admiral wants before he offers battle, and the swing of the dice (navy.ts seaBattles). */
+/** The rules' fleet action: the odds an admiral wants before offering battle, and the swing of the dice (navy.ts seaBattles). */
 export const RULES_BATTLE = (navyData as unknown as { battle: { seek: number; evadeAt: number; evade: number } }).battle;
 export const DICE: [number, number] = [0.8, 1.2];

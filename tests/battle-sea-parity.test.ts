@@ -38,12 +38,18 @@ const GUNS_A: PlainFleet = { name: 'Home Fleet', nat: 'UK', ships: { bb: 3, ca: 
 const GUNS_B: PlainFleet = { name: 'Battle Fleet', nat: 'GER', ships: { bb: 2, ca: 4, dd: 12 } };
 const CARRIERS: PlainFleet = { name: 'Striking Force', nat: 'JAP', ships: { cv: 2, ca: 2, dd: 8 } };
 const BATTLE_LINE: PlainFleet = { name: 'Battle Force', nat: 'US', ships: { bb: 2, ca: 3, dd: 8 } };
+// A battle line against a fleet with no battleships: drawn up 700 m a row apart, each ship at its own speed, the line
+// reached the fight a minute after its screen and won 5 times in 100 at even weight (b407).
+const HEAVY_LINE: PlainFleet = { name: 'Atlantic Fleet', nat: 'US', ships: { bb: 4, ca: 4, dd: 8 } };
+const LIGHT_FLEET: PlainFleet = { name: '2nd Fleet', nat: 'ITA', ships: { ca: 7, dd: 25 } };
 
 describe('fleet actions are as fair as the dice, on every kind of fleet', () => {
   fair('the heavier battle line attacking the lighter', [GUNS_A], [GUNS_B]);
   fair('the lighter battle line attacking the heavier', [GUNS_B], [GUNS_A]);
   fair('carriers attacking a battle line', [CARRIERS], [BATTLE_LINE]);
   fair('a battle line attacking carriers', [BATTLE_LINE], [CARRIERS]);
+  fair('a battle line attacking a fleet with no battleships', [HEAVY_LINE], [LIGHT_FLEET]);
+  fair('a fleet with no battleships attacking a battle line', [LIGHT_FLEET], [HEAVY_LINE]);
   fair("with the coast's aircraft on the attacker's side", [GUNS_A], [GUNS_B], { att: 10 });
   fair("with the coast's aircraft on the defender's side", [GUNS_A], [GUNS_B], { def: 15 });
 });

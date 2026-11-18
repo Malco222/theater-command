@@ -31,6 +31,9 @@ export interface PieceInfo {
   fleet: FleetTicket;
 }
 
+/** Each class's row in the line, counted back from the front: destroyers ahead, then cruisers, battleships, carriers. */
+const ROW: Record<SeaClass, number> = { dd: 0, ca: 1, bb: 2, cv: 3 };
+
 /**
  * The pieces of both sides, drawn up at the start: the attacker's toward the south edge facing north, the defender's
  * toward the north edge facing south, each fleet in its own column, capital ships in the centre and the destroyers
@@ -52,10 +55,10 @@ export function drawUp(fleets: FleetTicket[]): { units: SeaUnit[]; info: Map<num
     const order: SeaClass[] = ['dd', 'ca', 'bb', 'cv'];
     const toward = side === 'att' ? 1 : -1;
     const baseY = side === 'att' ? F.edge : F.size - F.edge;
-    order.forEach((c, row) => {
+    order.forEach((c) => {
       const list = rows[c];
       const gap = c === 'dd' ? 500 : 650;
-      const y = baseY - toward * row * 700;
+      const y = baseY - toward * ROW[c] * F.row;
       list.forEach((p, i) => {
         // The defender's line is the attacker's turned half round, not its mirror: each side's first ship is on its
         // own left, so a ship turning to starboard does for one side what it does for the other (b402: drawn as a

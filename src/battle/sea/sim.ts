@@ -10,7 +10,7 @@
 //
 // The first slice's orders (ruling 217): course (move, line), attack, speed, withdraw (one piece, or the whole
 // fleet), and the carrier strike. Pieces with no order fight at will, as their captains would: the player steps in
-// where he wants a different target, a different course, or the fight broken off. Formations, the torpedo run and
+// where they want a different target, a different course, or the fight broken off. Formations, the torpedo run and
 // smoke wait for the polish pass (TODO(polish)).
 //
 // Same ticket, same orders, same battle: every roll comes from the battle's own seeded stream.
@@ -78,6 +78,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private readonly caps: Record<Side, SeaShips>;
   private readonly lostShips: Record<Side, SeaShips> = { att: none(), def: none() };
   private readonly weight0: Record<Side, number> = { att: 0, def: 0 };
+  /** The coasts' aircraft still in the fight, each side's, in weight: the card counts them in the side's strength. */
+  private readonly airLeft: Record<Side, number>;
+  /** What is left of each carrier piece's aircraft, 1 at the start, by unit id (1 for every other piece). */
+  private readonly deck: number[] = [];
   private readonly breakAt: Record<Side, number>;
   /** The side that handed the action to the staff, if one did. */
   private handedBy: Side | null = null;
@@ -127,8 +131,15 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.dealt[u.id] = 0;
       this.inReach[u.id] = 0;
       this.swing[u.id] = 0;
+      this.deck[u.id] = 1;
+      if (u.extra.cls === 'cv') u.extra.planes = 1;
       this.weight0[u.side] += this.weightOf(u);
     }
+    // The card counts the coasts' aircraft in each side's strength (navy.ts seaBattles), so the field does: they are
+    // worn down with the fleet and a side breaks off on the whole of what it brought (b415).
+    this.airLeft = { att: ticket.place.air.att, def: ticket.place.air.def };
+    this.weight0.att += this.airLeft.att;
+    this.weight0.def += this.airLeft.def;
     for (const f of ticket.place.fleets) { this.fleetLoss.sunk[f.id] = none(); this.fleetLoss.burnt[f.id] = none(); }
     this.caps = sunkCaps(ticket.place.fleets, ticket.reckoning.odds);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
@@ -155,19 +166,20 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const p = this.info.get(u.id)!, n0 = u.extra.ships0;
     const afloat = this.ships(u);
     if (afloat <= 0) return 0;
-    return p.weight * (afloat * SEA.fire.damaged + (1 - SEA.fire.damaged) * u.str * n0);
+    return p.weight * (afloat * SEA.fire.damaged + (1 - SEA.fire.damaged) * u.str * n0) * this.deck[u.id];
   }
-  /** Its weight as it stands: what is left of its hull. */
-  private weightOf(u: SeaUnit): number { return this.info.get(u.id)!.weight * u.extra.ships0 * (live(u) || u.state === 'withdrawn' ? u.str : 0); }
+  /** Its weight as it stands: what is left of its hull, and of a carrier's aircraft. */
+  private weightOf(u: SeaUnit): number { return this.info.get(u.id)!.weight * u.extra.ships0 * (live(u) || u.state === 'withdrawn' ? u.str : 0) * this.deck[u.id]; }
   private hullOf(u: SeaUnit): number { const p = this.info.get(u.id)!; return p.hull * u.extra.ships0; }
 
   /** The order a piece is under, for the screens (undefined: it fights at will). */
   orderOf(id: number): SeaOrder | undefined { return this.orders.get(id); }
 
-  /** The share of a side's starting weight it has lost: hull worn away, on pieces still there or gone. */
+  /** The share of a side's starting weight it has lost: hull worn away, on pieces still there or gone, and aircraft lost,
+   *  the carriers' and the coasts'. */
   lostShare(side: Side): number {
-    let left = 0;
-    for (const u of this.units) if (u.side === side) left += this.info.get(u.id)!.weight * u.extra.ships0 * u.str;
+    let left = this.airLeft[side];
+    for (const u of this.units) if (u.side === side) left += this.info.get(u.id)!.weight * u.extra.ships0 * u.str * this.deck[u.id];
     return this.weight0[side] > 0 ? 1 - left / this.weight0[side] : 0;
   }
 
@@ -198,7 +210,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const chasing = this.broken !== null && this.broken !== by;
     const ok = this.order(c, by);
     // Once the enemy has broken off, a side's ships run it down at full speed, the player's as the staff's, until the
-    // player gives an order of his own: then they do as told (b402: the newcomer's chase is the staff's).
+    // player gives an order of their own: then they do as told (b402: the newcomer's chase is the staff's).
     if (ok && chasing && c.do !== 'dice' && c.do !== 'auto') this.chaseTaken[by] = true;
     return ok;
   }
@@ -309,10 +321,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
     for (const u of this.units) if (live(u)) this.steer(u);
     if (tick % 10 === 0) this.decide();
     for (const u of this.units) { u.engaged = undefined; if (live(u)) this.fire(u); }
-    for (const u of this.units) this.pose(u);
     this.landStrikes();
     this.coastAir();
     for (const u of this.units) if (live(u)) this.nerve(u);
+    // What the models show, once every blow of the tick has told: a ship a strike or a raid sank is not drawn afloat.
+    for (const u of this.units) this.pose(u);
     for (const u of this.units) for (const a of u.abilities ?? []) if (a.ready > 0) a.ready = Math.max(0, Math.round((a.ready - DT) * 1000) / 1000);
     this.zones = this.zones.filter((z) => z.until > this.t);
     this.judge();
@@ -419,6 +432,44 @@ export class SeaSim implements BattleSim<SeaUnit> {
 
   private nearestFoe(u: SeaUnit): SeaUnit | null { return nearestEnemy(this.units, u.side, u.x, u.y); }
 
+  /** Whether a gun ship keeps with its fleet until the guns meet: at cruising speed, fighting at will or under an
+   *  order to attack (a ship the player has sent at a speed of its own, or on a course, goes as told). */
+  private keepsStation(e: SeaUnit): boolean {
+    if (!live(e) || e.state === 'routing' || e.extra.cls === 'cv' || e.extra.speed !== 'cruise') return false;
+    const o = this.orders.get(e.id);
+    return !o || o.kind === 'attack';
+  }
+
+  /** Whether a side has no gun ship left in the fight: only carriers, or ships breaking off. */
+  private gunless(side: Side): boolean {
+    return !this.units.some((e) => e.side === side && live(e) && e.state !== 'routing' && e.extra.cls !== 'cv');
+  }
+
+  /** How far toward the enemy a ship stands: y for the attacker, -y for the defender. */
+  private ahead(e: SeaUnit): number { return e.side === 'att' ? e.y : -e.y; }
+
+  /** A side's gun ships keeping with its fleet: the cruising speed of the slowest of them, and how far toward the enemy
+   *  the rearmost of them stands (see ahead). Null when none keeps station: before the guns meet a fleet keeps together
+   *  only to meet a gun line, so not once either side has broken off (the chase runs at full speed) and not against
+   *  an enemy with no gun ship left in the fight (the screen runs carriers down at its own speed). */
+  private keeping(side: Side): { slowest: number; rear: number } | null {
+    if (this.broken !== null || this.contactAt !== null || this.gunless(other(side))) return null;
+    let slowest = Infinity, rear = Infinity;
+    for (const e of this.units) {
+      if (e.side !== side || !this.keepsStation(e)) continue;
+      slowest = Math.min(slowest, SEA.classes[e.extra.cls as SeaClass].speed);
+      rear = Math.min(rear, this.ahead(e));
+    }
+    return Number.isFinite(slowest) ? { slowest, rear } : null;
+  }
+
+  /** The speed a ship makes until the guns meet if it is keeping with its fleet, else null: for the screens' estimate
+   *  of when the action begins. */
+  fleetSpeed(u: SeaUnit): number | null {
+    const line = this.keepsStation(u) ? this.keeping(u.side) : null;
+    return line ? line.slowest * SEA.speeds.cruise : null;
+  }
+
   // ---- Ship handling -------------------------------------------------------------------------------------------
 
   private steer(u: SeaUnit): void {
@@ -453,8 +504,23 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const away = this.groupEvasion(u, false);
       if (away) { want = away.course; speed = Math.min(C.speed * SEA.speeds.flank, away.speed); }
       // A beaten enemy is run down at full speed while there is time.
-      // The player's ships too, until the player gives an order of his own (b402: the newcomer's chase is the staff's).
+      // The player's ships too, until the player gives an order of their own (b402: the newcomer's chase is the staff's).
       if (this.broken && this.broken !== u.side && !this.chaseTaken[u.side]) speed = C.speed * SEA.speeds.flank;
+      // Carriers with no gun ship left to stand between them and the enemy's guns are run down at full speed too, by
+      // every gun ship not sent at a speed of its own: at cruising speed a battle line never came up with carriers
+      // opening the range at theirs, so equal weight of unscreened carriers won every time either way round (b415).
+      else if (u.extra.cls !== 'cv' && u.extra.speed === 'cruise' && this.gunless(other(u.side))) speed = C.speed * SEA.speeds.flank;
+      // Until the guns first meet, the fleet keeps together (the historian: fleet speed was the slowest heavy ship's, and
+      // the screen kept station on the battle line). Each at its own speed, a battle line reached the fight a minute
+      // after its screen and lost to a light fleet of the same weight 95 times in 100 (b407, ruling 217); with the
+      // screen 600 m ahead of it, still 13 in 100 short. So the screen closes up on the line: a ship more than
+      // 'station' ahead of the rearmost slows to half the fleet's speed until the line comes up (never a dead stop).
+      // A ship the player has sent at a speed of its own goes at it.
+      const line = this.keepsStation(u) ? this.keeping(u.side) : null;
+      if (line) {
+        speed = Math.min(speed, line.slowest * SEA.speeds.cruise);
+        if (this.ahead(u) - line.rear > SEA.ai.station) speed = Math.min(speed, line.slowest * SEA.speeds.slow);
+      }
     }
     // Stay on the field unless leaving it.
     if (u.state !== 'routing' && o.kind !== 'leave') {
@@ -515,7 +581,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     return norm(a + Math.PI / 2);
   }
 
-  /** The course that brings a piece to its best range with its broadside to the enemy. */
+  /** The course that brings a piece into reach with its broadside to the enemy, and opens the range when it is too near. */
   private engage(u: SeaUnit, foe: SeaUnit): number {
     const C = SEA.classes[u.extra.cls as SeaClass];
     const d = dist(u.x, u.y, foe.x, foe.y), b = bearing(u.x, u.y, foe.x, foe.y);
@@ -524,7 +590,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
     // A carrier keeps behind its screen, out of the destroyers' reach, and its aircraft do its fighting.
     if (u.extra.cls === 'cv') off = d < want ? 2.6 : d > want * 1.3 ? 0.6 : Math.PI / 2;
     else if (d > C.reach) off = 0.15;
-    else if (d > want * 1.15) off = 0.6;
+    // Within 'broadside' metres of the enemy it is steering for (the nearest, or its target: see steer) a ship turns
+    // its guns' arcs onto it: closing on to its best range left the ships behind their own screen end-on for the
+    // whole fight (b407).
+    else if (d > SEA.ai.broadside) off = 0.6;
     else if (d < want * 0.75) off = 2.1;
     else off = Math.PI / 2;
     // Turn whichever way round is shorter, and keep to it unless the other way becomes much shorter.
@@ -577,7 +646,32 @@ export class SeaSim implements BattleSim<SeaUnit> {
     // Gunfire, like a strike, takes the same weight out of the fight whatever it falls on (wear in proportion to the
     // ship's hull): a heavy fleet's light screen is no weaker for being light, and a fleet is worth what the campaign
     // counts it, whatever its mix (the second playtester's newcomer test, b402).
-    this.wear(foe, this.evenWear(foe, w));
+    this.take(foe, w);
+  }
+
+  /**
+   * A blow of weight 'w' on a side wears the whole of what the side brought, by weight, as the card counts it (b415):
+   * the ship it fell on takes the gun ships' share, each carrier its own share and the coasts' aircraft theirs. A
+   * carrier is a ship to the card, so its share wears as a hull does ('fire.hull'), but the loss falls on its air
+   * group and it stays afloat, out of the guns' reach. The coasts' aircraft have no hull: a blow takes its whole weight
+   * from them. Kept whole while the guns fought, carriers and the coasts' aircraft were worth more the longer the gun
+   * fight ran (a fifth of the card one way or the other with the fleets' mix); worn with the fleet, they are worth
+   * what the card prices them. A blow that falls on a carrier itself falls on its hull.
+   */
+  private take(foe: SeaUnit, w: number): void {
+    if (foe.extra.cls === 'cv') { this.wear(foe, this.evenWear(foe, w)); return; }
+    const s = foe.side;
+    let ships = 0, total = this.airLeft[s];
+    for (const u of this.units) if (u.side === s && live(u)) { const x = this.weightOf(u); total += x; if (u.extra.cls !== 'cv') ships += x; }
+    if (total <= 0) return;
+    this.wear(foe, this.evenWear(foe, (w * ships) / total));
+    for (const u of this.units) {
+      if (u.side !== s || !live(u) || u.extra.cls !== 'cv') continue;
+      const whole = this.info.get(u.id)!.weight * u.extra.ships0 * u.str;
+      if (whole > 0) this.deck[u.id] = Math.max(0, this.deck[u.id] - (w * this.weightOf(u)) / total / SEA.fire.hull / whole);
+      u.extra.planes = this.deck[u.id];
+    }
+    this.airLeft[s] = Math.max(0, this.airLeft[s] * (1 - w / total));
   }
 
   /** The wear that takes 'w' of weight out of the fight on this piece, whatever it is: in proportion to its hull. */
@@ -642,7 +736,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
   /** The coasts' aircraft raid the enemy's ships every so often, with the weight the rules give them over this sea. */
   private coastAir(): void {
     for (const side of ['att', 'def'] as Side[]) {
-      const w = this.ticket.place.air[side];
+      const w = this.airLeft[side];
       if (w <= 0 || this.t < this.nextAir[side]) continue;
       this.nextAir[side] += SEA.air.every;
       const foes = this.units.filter((e) => e.side !== side && live(e));
@@ -668,7 +762,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const share = weight * (this.output(e) + (e.id === at.id ? this.output(e) : 0)) / total;
       // A strike or a raid takes the same weight out of the fight whatever it falls on, wear in proportion to the
       // ship's hull, so where the player sends it is a choice of which ships to cripple, not a trick (ruling 226, 4).
-      this.wear(e, this.evenWear(e, share));
+      this.take(e, share);
     }
   }
 
@@ -748,7 +842,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     ];
     // HAND IT TO THE STAFF (log b348): the paper line after it, in the UI director's three forms (ruling 226, 5): the
     // whole action before a shot told; "what you had won stays won" only where the field had moved the hander's way by
-    // 5 points or more, his share of the balance at the hand-over against the card's (the design director, 20:51 UTC).
+    // 5 points or more, their share of the balance at the hand-over against the card's (the design director, 20:51 UTC).
     if (toDice) {
       const zone = this.ticket.place.zoneName, by = this.handedBy ?? 'att';
       const k = this.ticket.reckoning.odds, now = (k * (1 - this.lostShare('att'))) / Math.max(1e-6, 1 - this.lostShare('def'));
@@ -797,10 +891,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
             : u.extra.way > C.speed * SEA.speeds.cruise * 1.05 ? 'run' : 'march';
   }
 
-  /** Each side's ships still in the fight, as a share of both sides' weight at the start. */
+  /** Each side's strength still in the fight, its ships and its coasts' aircraft, as a share of both sides' at the start. */
   balance(): Record<Side, number> {
     const total = this.weight0.att + this.weight0.def;
-    const standing = (side: Side): number => this.units.reduce((n, u) => n + (u.side === side && live(u) ? this.weightOf(u) : 0), 0);
+    const standing = (side: Side): number => this.units.reduce((n, u) => n + (u.side === side && live(u) ? this.weightOf(u) : 0), this.airLeft[side]);
     return { att: total > 0 ? standing('att') / total : 0, def: total > 0 ? standing('def') / total : 0 };
   }
 

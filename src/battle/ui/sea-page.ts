@@ -688,8 +688,9 @@ function frame(): void {
   if (v.over && S.screen === 'battle') showAfter();
 }
 
-/** How much faster time runs until the action begins: the long approach, about three battle minutes, passes in about
- *  twenty seconds at ×1. The approach itself stays as it is, since it is part of the fleets' balance (parity). */
+/** How much faster time runs until the action begins: the long approach, about four battle minutes with the fleets
+ *  keeping together at their slowest ship's speed, passes in about half a minute at ×1. The approach itself stays as
+ *  it is, since it is part of the fleets' balance (parity). */
 const APPROACH = 8;
 
 /** Sets the clock, and as it starts from stopped says so for a moment: "RUNNING ×2" (ruling 226, 8). */
@@ -704,12 +705,12 @@ function setClock(to: Speed | 'toggle'): void {
 }
 
 /** About how many minutes on the battle clock before the nearest guns of either side reach the other: the gap closed
- *  at the speed each ship then has set, held ships closing at none (the design director: it never disagrees with the
- *  clock on screen). */
+ *  at the speed each ship then makes, its fleet's while it keeps with it (sim.fleetSpeed), held ships closing at none
+ *  (the design director: it never disagrees with the clock on screen). */
 function minutesToRange(sim: SeaSim): number {
   let best = Infinity;
   const us = sim.units.filter(live);
-  const way = (u: SeaUnit): number => (sim.orderOf(u.id)?.kind === 'hold' ? 0 : SEA.classes[u.extra.cls as SeaClass].speed * SEA.speeds[u.extra.speed as SeaSpeed]);
+  const way = (u: SeaUnit): number => (sim.orderOf(u.id)?.kind === 'hold' ? 0 : sim.fleetSpeed(u) ?? SEA.classes[u.extra.cls as SeaClass].speed * SEA.speeds[u.extra.speed as SeaSpeed]);
   for (const a of us) for (const b of us) {
     if (a.side !== S.scene.me || b.side === a.side) continue;
     const A = SEA.classes[a.extra.cls as SeaClass], B = SEA.classes[b.extra.cls as SeaClass];

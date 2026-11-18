@@ -74,6 +74,8 @@ export interface SeaExtra {
   target: number;
   /** The campaign fleet it came from, by name, for the card ("Home Fleet"). */
   fleet: string;
+  /** A carrier's aircraft still in the fight, from 1 at the start: they are worn as the fleet is (b415). */
+  planes?: number;
   [k: string]: unknown;
 }
 

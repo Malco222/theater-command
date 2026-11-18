@@ -1,9 +1,9 @@
 // The hand-back between the campaign and the field for fleet actions.
 //
 // The rules fight a month's fleet actions while they close a nation's month (turn.ts closePhase, navy.ts seaBattles),
-// in among its air battles and the rest of the month's routine. So a screen that offers the player his fleet actions
+// in among its air battles and the rest of the month's routine. So a screen that offers the player their fleet actions
 // first looks ahead: it closes the month on a copy of the game, with the seam (navy.ts seaField) noting each action
-// as the rules are about to fight it, and writes each one out as a ticket. The player fights the ones he wants; then
+// as the rules are about to fight it, and writes each one out as a ticket. The player fights the ones they want; then
 // the month is closed on the game itself, with the seam handing each played action's result to the rules in place of
 // the dice. An action the look-ahead did not see, or saw with other fleets in it (an action played earlier in the
 // month can change what follows), is settled by the dice as before. With the seam unset nothing here runs at all.

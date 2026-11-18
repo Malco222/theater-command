@@ -41,7 +41,7 @@ const POWER = 0.5;
 
 /**
  * R from a played fleet action: who held the sea, and how lopsided the exchange of weight lost was. Clamped to what
- * the dice could roll at the battle's odds (ruling 217); within that, the attacker's win is never below 1 and his
+ * the dice could roll at the battle's odds (ruling 217); within that, the attacker's win is never below 1 and their
  * defeat never at 1 or above.
  */
 export function seaRatio(winner: Side, lost: Record<Side, number>, odds: number): number {

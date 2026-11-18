@@ -91,6 +91,127 @@ describe('the same seed gives the same action', () => {
   });
 });
 
+describe('how the staff sails a fleet', () => {
+  it('until the guns meet a fleet keeps together: no faster than its slowest gun ship, the screen on station ahead of the line (b407)', () => {
+    const sim = battle(5, { human: null, att: [{ name: 'Atlantic Fleet', nat: 'US', ships: { bb: 4, ca: 4, dd: 8 } }], def: [{ name: '2nd Fleet', nat: 'ITA', ships: { ca: 7, dd: 25 } }] });
+    const ahead = (u: SeaUnit): number => (u.side === 'att' ? u.y : -u.y);
+    let steps = 0;
+    while (sim.contactTime === null && !sim.over && steps++ < 6000) {
+      sim.step();
+      // No ship lies stopped waiting for the line (the review of b407: destroyers stopped dead for twenty seconds).
+      for (const u of sim.units) expect(u.extra.way, u.name).toBeGreaterThan(0.5);
+      // Way comes off slowly (speeds.accel): after half a minute every gun ship sails no faster than the slowest.
+      if (sim.t < 30) continue;
+      for (const side of ['att', 'def'] as const) {
+        const guns = sim.units.filter((u) => u.side === side && u.extra.cls !== 'cv');
+        const slowest = Math.min(...guns.map((u) => SEA.classes[u.extra.cls as 'bb' | 'ca' | 'dd'].speed));
+        for (const u of guns) expect(u.extra.way, u.name).toBeLessThanOrEqual(slowest * SEA.speeds.cruise + 1e-9);
+      }
+    }
+    expect(sim.contactTime).not.toBeNull();
+    // The whole fleet comes into the fight together: when the guns meet, every gun ship is on station, and the
+    // destroyers are still ahead of the battle line.
+    for (const side of ['att', 'def'] as const) {
+      const guns = sim.units.filter((u) => u.side === side && u.extra.cls !== 'cv');
+      const rear = Math.min(...guns.map(ahead));
+      for (const u of guns) expect(ahead(u) - rear, u.name).toBeLessThanOrEqual(SEA.ai.station + 50);
+      const bbs = guns.filter((u) => u.extra.cls === 'bb');
+      for (const dd of guns.filter((u) => u.extra.cls === 'dd')) for (const bb of bbs) expect(ahead(dd), `${dd.name} ahead of ${bb.name}`).toBeGreaterThan(ahead(bb));
+    }
+  });
+
+  it('a fleet that breaks off before the guns meet is run down at full speed, not at the battle line\'s', () => {
+    const sim = battle(5, { human: null });
+    // The fleets close until the nearest of them are about 6 km apart, then the defender's admiral breaks off.
+    const gap = (): number => Math.min(...sim.units.filter((u) => u.side === 'att').flatMap((a) => sim.units.filter((b) => b.side === 'def').map((b) => Math.hypot(a.x - b.x, a.y - b.y))));
+    while (gap() > 6000 && sim.contactTime === null) sim.step();
+    expect(sim.contactTime).toBeNull();
+    expect(sim.command({ do: 'withdrawAll', side: 'def' }, 'def')).toBe(true);
+    run(sim, 30);
+    for (const dd of sim.units.filter((u) => u.side === 'att' && u.extra.cls === 'dd')) expect(dd.extra.way, dd.name).toBeGreaterThan(SEA.classes.dd.speed * SEA.speeds.cruise);
+  });
+
+  it('carriers with no gun ship left are run down at full speed, not held to the battle line\'s', () => {
+    const sim = battle(5, { human: null, att: [{ name: 'Battle Force', nat: 'US', ships: { bb: 2, ca: 3, dd: 8 } }], def: [{ name: 'Carrier Division', nat: 'JAP', ships: { cv: 2 } }] });
+    run(sim, 40);
+    expect(sim.contactTime).toBeNull();
+    for (const u of sim.units.filter((e) => e.side === 'att')) expect(u.extra.way, u.name).toBeGreaterThan(SEA.classes[u.extra.cls as 'bb' | 'ca' | 'dd'].speed * SEA.speeds.cruise);
+  });
+
+  it("a ship the player sends at a speed of its own is not held back by the fleet's", () => {
+    const sim = battle();
+    const dd = piece(sim, 'att', 'dd');
+    expect(sim.command({ do: 'sea:speed', units: [dd.id], speed: 'flank' } as never, 'att')).toBe(true);
+    run(sim, 40);
+    expect(sim.contactTime).toBeNull();
+    expect(dd.extra.way).toBeGreaterThan(SEA.classes.bb.speed * SEA.speeds.cruise);
+  });
+
+  it('a ship within broadside reach of the enemy turns its guns onto it, beyond it closes, and too near it opens the range (b407)', () => {
+    const sim = battle(5, { human: null });
+    const u = piece(sim, 'att', 'dd'), foe = piece(sim, 'def', 'dd');
+    const engage = (d: number): number => {
+      // The enemy dead ahead of a ship heading straight for it: how far off that bearing the ship would steer.
+      u.face = 0; foe.x = u.x; foe.y = u.y + d;
+      const want = (sim as unknown as { engage(a: SeaUnit, b: SeaUnit): number }).engage(u, foe);
+      return Math.abs(Math.atan2(Math.sin(want), Math.cos(want)));
+    };
+    expect(engage(SEA.ai.broadside - 250)).toBeCloseTo(Math.PI / 2, 6);
+    expect(engage(SEA.classes.dd.best)).toBeCloseTo(Math.PI / 2, 6);
+    expect(engage((SEA.ai.broadside + SEA.classes.dd.reach) / 2)).toBeLessThan(1);
+    expect(engage(SEA.classes.dd.best * 0.5)).toBeGreaterThan(Math.PI / 2);
+  });
+});
+
+describe('what a blow takes', () => {
+  // b415: the card counts each side's carriers and its coasts' aircraft in its strength; the field wears them as it
+  // wears the ships, so a side breaks off on the whole of what it brought and the aircraft are worth what the card says.
+  const withAir = (): SeaSim => new SeaSim(plainTicket({ att: [HOME], def: [BATTLE], air: { att: 20, def: 12 }, seed: 3, human: null }));
+
+  it("the field's strength is the card's: the ships and the coasts' aircraft", () => {
+    const sim = withAir(), s = sim as any;
+    expect(s.weight0.att).toBeCloseTo(sim.ticket.reckoning.A, 6);
+    expect(s.weight0.def).toBeCloseTo(sim.ticket.reckoning.D, 6);
+    expect(sim.lostShare('att')).toBe(0);
+    expect(sim.balance().att + sim.balance().def).toBeCloseTo(1, 9);
+  });
+
+  it("a blow on a ship wears the side's ships, its carriers' aircraft and its coasts' aircraft by their weight, and no carrier's hull", () => {
+    const sim = withAir(), s = sim as any;
+    const dd = piece(sim, 'att', 'dd'), cv = piece(sim, 'att', 'cv');
+    const T = s.weight0.att, w = 0.2, nerve = cv.mor;
+    s.take(dd, w);
+    expect(dd.extra.sunk).toBe(0); // (a ship going down nearby shakes the carrier's nerve as any other's)
+    // Each part of what the side brought takes its share of the blow by weight: the ships and the carrier wear as hulls
+    // do ('fire.hull' turns weight into wear), the coasts' aircraft have no hull and lose the whole of theirs ...
+    const air = 20 / T, out = w / T;
+    expect(1 - (cv.extra.planes as number)).toBeCloseTo(out / SEA.fire.hull, 9);
+    expect(1 - s.airLeft.att / 20).toBeCloseTo(out, 9);
+    expect(sim.lostShare('att') * T).toBeCloseTo((w * (1 - air)) / SEA.fire.hull + w * air, 9);
+    // ... and the carrier stays afloat and unshaken: it is its aircraft that are lost.
+    expect(cv.str).toBe(1);
+    expect(cv.mor).toBe(nerve);
+    expect(s.airLeft.def).toBe(12);
+  });
+
+  it("a carrier's strikes and the coasts' raids are as strong as the aircraft left", () => {
+    const sim = withAir(), s = sim as any;
+    const cv = piece(sim, 'att', 'cv');
+    const full = s.output(cv);
+    s.deck[cv.id] = 0.5;
+    expect(s.output(cv)).toBeCloseTo(full / 2, 9);
+    s.airLeft.att = 5;
+    s.nextAir = { att: 0, def: Infinity };
+    const before = sim.lostShare('def');
+    s.coastAir();
+    const T = s.weight0.def;
+    // The raid's weight, shared over what the defender brought: its ships wear as hulls, its coasts' aircraft (12)
+    // whole (to within the raid's falling on several ships one after another).
+    const W = SEA.fire.rate * 5 * SEA.air.share * SEA.air.every * s.day('att'), air = 12 / T;
+    expect((sim.lostShare('def') - before) * T).toBeCloseTo((W * (1 - air)) / SEA.fire.hull + W * air, 3);
+  });
+});
+
 describe('the orders of the first slice', () => {
   it('a course: a ship steers for the point it is sent to and heaves to there', () => {
     const sim = battle();
