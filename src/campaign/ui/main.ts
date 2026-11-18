@@ -7352,7 +7352,7 @@ declare const FIELD_CSS: string;
 /**
  * FIGHT IT YOURSELF on the attack card (the design director, b439): the same attack fought on the land field, its
  * result handed back through the campaign's own attack order. Behind ruling 226's gate (ON_CAMPAIGN in the field's
- * offered.ts) until the design director opens it; a page opened with ?field shows it for the directors' review.
+ * offered.ts), which the design director opened on 18 November (b507); a page opened with ?field shows it either way.
  */
 const fieldShown = (): boolean => ON_CAMPAIGN || /[?&]field(=|&|$)/.test(location.search);
 const FIELD_HOVER = 'You command the battle on the field, at the card\'s odds, and its result stands in the campaign. You can hand it to the staff at any time.';

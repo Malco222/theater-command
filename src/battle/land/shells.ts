@@ -19,27 +19,29 @@
 // as small arms. On such a block 'cal' only says what its own heavy weapons throw. Cavalry, engineers and fortress
 // troops carry none.
 //
-// Where a shell lands: a blow from a gun block or a tank block that costs the block it strikes one of its models (its
-// figures fall, sim.ts suffer()) lands one shell for that model, at the model's place within the struck block's ground,
-// fixed by the block and the model and never drawn from the battle's random stream, as the wrecks are (sim.ts wreck());
-// on tanks, at the wreck of the tank it knocked out. Blows are summed per tick per target, and the striker that did the
-// most that tick cost the model: where that was a block of men or lorries, it was small arms, and no shell lands. Guns
-// firing from far back strike lightly (LAND.guns.punch) and seldom do the most to a block in contact, so few shells are
-// theirs; their barrage is the mix plan's own timed shots (battle-bridge.ts). Each shell is a 'shell' event (FieldEvent
-// in core/types.ts), sent once, in the view that follows it.
+// Where a shell lands: a model a block loses (its figures fall, sim.ts suffer()) lands one shell where a gun block or a
+// tank block cost it that model, at the model's place within the struck block's ground, fixed by the block and the
+// model and never drawn from the battle's random stream, as the wrecks are (sim.ts wreck()); on tanks, at the wreck of
+// the tank it knocked out. Who cost it is the share rule (the design director, b507: "Guns that fire should be seen
+// firing, and it changes no result"): each block keeps what every striker has done to it over the fight, and each
+// model it loses goes to the striker of that tick it owes most, who is then paid a model's worth. Guns firing from far
+// back strike lightly (LAND.guns.punch), but their blows add up, and in time a model falls to them; where the striker
+// owed is a block of men or lorries, it was small arms, and no shell lands. Their barrage between hits is the mix
+// plan's own timed shots (battle-bridge.ts). Each shell is a 'shell' event (FieldEvent in core/types.ts), sent once, in
+// the view that follows it.
 //
 // Craters that stay: every shell on the ground leaves a crater to the end of the battle (the sheet: "no crater that
 // disappears"), as a zone in the view beside the wrecks: { id, kind: 'crater', x, y, r, until, at, cal }, r half the
 // sheet's crater across for its class (CRATER), ids -1, -2 and on. None on armour (the shell struck a tank) and none in
-// the river (its splash column leaves nothing). A fight lands few: the six cold-check campaign fights land 4, 5, 0, 5,
-// 0 and 0 shells, the nine practice grounds over five seeds 2.6 a fight, 6 at most, and twenty river crossings of the
-// campaign's 6.2 a fight, 27 at most, all on the ground. Their craters add at most 464 bytes, under 4 per cent, to the
-// last view of the six fights (9,000 to 12,800 bytes), 240 on average on the practice grounds, and in the river
-// crossings at most 2,500 bytes (27 craters), never over 13 per cent of the view. That small, the view carries them
-// whole, so a crater can never be lost with a view the 3D game did not read (the 'shell' events are sent once), and
-// they stand as the wrecks do (b477). Had a fight landed hundreds, they would have stayed in the events alone. Craters
-// change no rule: no cover, no slowing, nothing the fight reads. They are looks only, until the design director rules
-// otherwise.
+// the river (its splash column leaves nothing). A fight lands few: the six cold-check campaign fights land 2, 5, 0, 5,
+// 0 and 0 shells, the nine practice grounds over five seeds 2.8 a fight, 6 at most (a quarter of them from guns), and
+// twenty river crossings of the campaign's 5.8 a fight, 24 at most, all on the ground. Their craters add at most 464
+// bytes, under 4 per cent, to the last view of the six fights (9,000 to 12,800 bytes), under 600 on the practice
+// grounds, and in the river crossings at most 2,200 bytes (24 craters), never over 13 per cent of the view. That small,
+// the view carries them whole, so a crater can never be lost with a view the 3D game did not read (the 'shell' events
+// are sent once), and they stand as the wrecks do (b477). Had a fight landed hundreds, they would have stayed in the
+// events alone. Craters change no rule: no cover, no slowing, nothing the fight reads. They are looks only, until the
+// design director rules otherwise.
 //
 // Which units feel a hit (the sheet, "Things react"): the 3D game works out who stands near from where everyone stands;
 // what it cannot know is how far the blast reaches, and the event carries that (REACH).

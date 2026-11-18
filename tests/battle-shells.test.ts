@@ -28,7 +28,7 @@ const plainAttack = (b: LandBattle): void => {
 const shellsOf = (es: FieldEvent[]): FieldEvent[] => es.filter((e) => e.what === 'shell');
 const cratersOf = (zs: Zone[]): Zone[] => zs.filter((z) => z.kind === 'crater');
 const hurt = (b: LandBattle, u: LandUnit, share: number, by?: LandUnit): void =>
-  (b as unknown as { suffer(t: LandUnit, d: number, n: number, by?: LandUnit): void }).suffer(u, u.power0 * share, 1, by);
+  (b as unknown as { suffer(t: LandUnit, d: number, n: number, from?: [LandUnit, number][]): void }).suffer(u, u.power0 * share, 1, by ? [[by, u.power0 * share]] : []);
 
 describe('what each block throws, by the model the 3D game draws it with', () => {
   type Row = { gun?: { model: string }; tank?: { model: string } };
@@ -126,7 +126,9 @@ describe('what each block throws, by the model the 3D game draws it with', () =>
 describe('where the shells land', () => {
   /**
    * A fight played as the screen plays it, a view after every tick, with every blow watched (never changed): the shells
-   * each tick sent, set against the models each block lost that tick and the striker that did it the most harm.
+   * each tick sent, set against the models each block lost that tick and whose they were by the share rule (the design
+   * director, b507): each striker's harm is kept on the block it struck, and each model lost goes to the one of that
+   * tick's strikers owed most, the first of equals, which pays a model's worth.
    */
   function watch(b: LandBattle): { shells: FieldEvent[]; craters: Zone[][] } {
     const P = LandBattle.prototype as unknown as { blow(u: LandUnit, t: LandUnit): { dmg: number } };
@@ -134,6 +136,7 @@ describe('where the shells land', () => {
     let seen: [LandUnit, LandUnit, number][] = [];
     P.blow = function (this: LandBattle, u: LandUnit, t: LandUnit) { const r = blow0.call(this, u, t); seen.push([u, t, r.dmg]); return r; };
     const shells: FieldEvent[] = [], craters: Zone[][] = [];
+    const owed = new Map<number, Map<number, number>>();
     try {
       for (let i = 0; i < 20000 && !b.over; i++) {
         const was = new Map(b.units.map((u) => [u.id, { x: u.x, y: u.y, face: u.face, figures: u.figures }]));
@@ -146,16 +149,24 @@ describe('where the shells land', () => {
         for (const u of b.units) {
           const lost = was.get(u.id)!.figures - u.figures;
           const on = now.filter((e) => e.on === u.id);
+          const from = seen.filter((x) => x[1] === u), mine = owed.get(u.id) ?? new Map<number, number>();
+          owed.set(u.id, mine);
+          for (const [f, , d] of from) mine.set(f.id, (mine.get(f.id) ?? 0) + d);
           if (lost <= 0) { expect(on).toEqual([]); continue; }
-          // The striker that did the most to it this tick, the first of equals.
-          const top = seen.filter((s) => s[1] === u).reduce((m, s) => (s[2] > m[2] ? s : m));
-          if (!SHELLS_FROM.includes(top[0].kind)) { expect(on).toEqual([]); continue; }
+          // Each model lost to the striker of this tick owed most, the first of equals; guns' and tanks' land shells.
+          const model = u.power0 / (u.tray * u.str0), firers: LandUnit[] = [];
+          for (let k = 0; k < lost; k++) {
+            const by = from.reduce<LandUnit | null>((m, [f]) => (!m || mine.get(f.id)! > mine.get(m.id)! ? f : m), null)!;
+            mine.set(by.id, mine.get(by.id)! - model);
+            if (SHELLS_FROM.includes(by.kind)) firers.push(by);
+          }
           // One shell for each model a gun or a tank cost it, from that block, of its class, now.
-          expect(on.length).toBe(lost);
-          due += lost;
+          expect(on.map((e) => e.by)).toEqual(firers.map((f) => f.id));
+          due += firers.length;
           const w = was.get(u.id)!, c = Math.cos(w.face), s = Math.sin(w.face);
-          for (const e of on) {
-            expect([e.by, e.cal, e.t, e.reach, e.text, e.cue]).toEqual([top[0].id, top[0].cal, at, REACH[top[0].cal!], '', undefined]);
+          for (const [n, e] of on.entries()) {
+            const top = firers[n];
+            expect([e.by, e.cal, e.t, e.reach, e.text, e.cue]).toEqual([top.id, top.cal, at, REACH[top.cal!], '', undefined]);
             expect(e.unit).toBeUndefined();
             expect(e.armour).toBe(u.kind === 'arm');
             expect(e.ground).toBe(groundAt(b.field, e.x!, e.y!));

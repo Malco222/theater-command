@@ -86,6 +86,13 @@ export interface LandUnit extends UnitBase {
    * None where it has only small arms.
    */
   cal?: Calibre;
+  /**
+   * Looks only (shells.ts): the harm each block that struck it has done it, by the striker's id, less a model's worth
+   * for each model of it the striker was given. Each model it loses goes to the striker of that tick owed most, so a gun
+   * firing from far back lands its shells in its share of the harm (the design director, b507). Nothing in the fight
+   * reads it.
+   */
+  owed?: Record<number, number>;
   /** The way it stepped this tick, if it marched: at a bridge or a pass, a friend in its way makes way (LAND.queue). */
   pressing?: number;
   /** The friend it made way for this tick (LAND.queue): next tick it waits rather than step back into that friend's way. */

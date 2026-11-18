@@ -24,8 +24,10 @@ function at(terrain: Terrain, o: { river?: boolean; fort?: number; divs?: number
   return t;
 }
 const list = (...kinds: PlaceKind[]) => kinds.map((kind) => ({ kind }));
-// One sentence for a close river attack, split or whole (the UI director, 16:47Z).
-const SPLIT = "The staff settles every battle across a river where the odds are 1.7 to 1 or less: the field cannot fight one at the card's odds.";
+// One sentence for a close river attack, split or whole (the UI director, 16:47Z), naming the staff's best guess and
+// giving this card's figure (17:05Z).
+const CLOSE = (odds = '1.3') => `The staff settles every battle across a river where its best guess of the odds is 1.7 to 1 or less, as here (${odds} to 1): the field cannot fight one at the card's odds.`;
+const SPLIT = CLOSE();
 const WHOLE = SPLIT;
 
 describe('the safety net (b439)', () => {
@@ -37,13 +39,15 @@ describe('the safety net (b439)', () => {
     expect(staffOnly(at('forest', { dry: 1 }))).toBe(SPLIT);
     expect(staffOnly(at('plains', { dry: 2, fort: 2, divs: 12 }))).toBe(SPLIT);
     expect(staffOnly(at('forest', { river: true }))).toBe(WHOLE);
-    expect(staffOnly(at('plains', { river: true, fort: 2, divs: 12, odds: 0.5 }))).toBe(WHOLE);
+    expect(staffOnly(at('plains', { river: true, fort: 2, divs: 12, odds: 0.5 }))).toBe(CLOSE('0.5'));
+    // The figure is the one the card showed: its best guess where it did not know the defence, to two places.
+    expect(staffOnly(at('forest', { river: true, odds: 2.4, seen: 1.4449 }))).toBe(CLOSE('1.44'));
   });
   it('offers every other battle on the field: river crossings on easier cards, and every ground, works and size', () => {
     for (const g of GROUNDS) {
       for (const odds of [0.5, 1.3, 1.7, 3]) {
         // The whole attack crosses: offered on a card easier than close. No river: offered at any odds.
-        expect(staffOnly(at(g, { river: true, fort: 2, odds }))).toBe(odds > 1.7 ? null : WHOLE);
+        expect(staffOnly(at(g, { river: true, fort: 2, odds }))).toBe(odds > 1.7 ? null : CLOSE(String(odds)));
         expect(staffOnly(at(g, { odds }))).toBeNull();
         expect(staffOnly(at(g, { fort: 1, divs: 2, odds }))).toBeNull();
         expect(staffOnly(at(g, { river: true, divs: 12, odds: odds + 1.5 }))).toBeNull();
@@ -84,7 +88,7 @@ describe('the safety net (b439)', () => {
     expect(staffOnly(at('plains', { divs: 12 }), list('largest'))).toBe("The staff settles every battle where eleven or more divisions defend: the field cannot fight one at the card's odds.");
     expect(staffOnly(at('desert', { fort: 1 }), list('works'))).toBe("The staff settles every battle against fortress works: the field cannot fight one at the card's odds.");
     expect(staffOnly(at('hills', { dry: 1 }), list('river-split-close'))).toBe(SPLIT);
-    expect(staffOnly(at('hills', { dry: 1 }), list('hills', 'river-split-close'))).toBe("The staff settles every battle in hill country across a river where the odds are 1.7 to 1 or less: the field cannot fight one at the card's odds.");
+    expect(staffOnly(at('hills', { dry: 1 }), list('hills', 'river-split-close'))).toBe("The staff settles every battle in hill country across a river where its best guess of the odds is 1.7 to 1 or less, as here (1.3 to 1): the field cannot fight one at the card's odds.");
     // A kind of the list this battle is not: offered.
     expect(staffOnly(at('plains'), list('mountain', 'river'))).toBeNull();
     // No "yet", no "for now", no "there".

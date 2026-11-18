@@ -130,10 +130,13 @@
 //     the next impact the plan has timed for that block, so the plan's pace holds. Its sound is the plan's impacts
 //     (near, middle or far by the listener's distance, sized by impacts.bySize), and its incoming the plan's artillery,
 //     mortar or tankGun by block 'by' (no 'by': artillery). A fight lands few shells (the six cold-check campaign
-//     fights 0 to 5, the nine practice grounds 2.6 a fight, 6 at most, twenty river crossings 6.2 a fight, 27 at
-//     most), one block's two seldom closer than 7 s apart (as little as 2.7 s in a river crossing), so the plan's
-//     shots are most of what is seen and heard, and every model that falls to a gun or a tank falls under a shell. A
-//     big blow could cost a block two models in one tick: then two land in the same second.
+//     fights 0 to 5, the nine practice grounds 2.8 a fight, 6 at most, twenty river crossings 5.8 a fight, 24 at
+//     most), one block's two never closer than 7 s apart in those fights, so the plan's shots are most of what is
+//     seen and heard, and every model that falls to a gun or a tank falls under a shell. Which striker a model falls
+//     to is the share rule (the design director, b507): each block keeps what every striker has done to it over the
+//     fight, and a model it loses goes to the striker it owes most, so guns firing from far back, whose blows are
+//     light, still land their shells in time (a quarter of the practice grounds' shells are the guns'). A big blow
+//     could cost a block two models in one tick: then two land in the same second.
 //   The browser page draws none of it (Brian: no look work in the browser).
 // A tank block may also carry crew (b477, Brian's pick: tank crews name their tanks): { mark: 'name', names } or
 // { mark: 'rings', rings }, one entry per tank in the block's model order. names[i] is { name, en } or null (that tank is

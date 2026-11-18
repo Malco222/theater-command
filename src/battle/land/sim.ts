@@ -496,7 +496,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
     // Blows first, from where everyone stands, then nerve, then movement: no block gets to strike first by its place in the list.
-    const hurt = new Map<number, { dmg: number; nerve: number; by: LandUnit; most: number }>();
+    const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][] }>();
     for (const u of this.units) {
       if (!fighting(u)) continue;
       const t = this.targetOf(u);
@@ -508,11 +508,10 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (this.ticket[u.side].human || u.kind !== 'art' || this.gap(u, t) < LAND.guns.closeAt) { u.found = true; t.found = true; }
       if (!u.met) { u.met = true; if (u.side === 'att' || !t.met) this.say({ what: 'contact', unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y }); }
       const blow = this.blow(u, t);
-      const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, by: u, most: 0 };
+      const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [] };
       h.dmg += blow.dmg; h.nerve += blow.nerve;
-      // Whose blow cost a model this tick, where one is lost: the striker that did the most (shells.ts). Never read by
-      // the fight.
-      if (blow.dmg > h.most) { h.most = blow.dmg; h.by = u; }
+      // Who struck it this tick, and how hard: whose blow a lost model goes to (suffer; shells.ts). Never read by the fight.
+      h.from.push([u, blow.dmg]);
       hurt.set(t.id, h);
       if (blow.front) t.pinned = true;
       if (blow.aspect !== 'front' && this.t - t.flankedAt > 20) {
@@ -520,7 +519,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         if (t.side === 'att' ? this.ticket.att.human : this.ticket.def.human) this.say({ what: 'flanked', unit: t.id, side: t.side, text: `${this.named(t)} is hit from the ${blow.aspect === 'rear' ? 'rear' : 'flank'}.`, x: t.x, y: t.y });
       }
     }
-    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.by);
+    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from);
     for (const u of this.units) if (live(u)) this.nerve(u);
     for (const u of this.units) if (live(u)) this.move(u);
     this.spread();
@@ -657,8 +656,13 @@ export class LandBattle implements BattleSim<LandUnit> {
     return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect };
   }
 
-  /** 'by' is the striker that did the most to it this tick: a gun or a tank that costs it a model lands a shell there. */
-  private suffer(t: LandUnit, dmg: number, nerveMul: number, by?: LandUnit): void {
+  /**
+   * 'from' is who struck it this tick and how hard. Each model it loses goes to the one of them owed most (LandUnit.owed:
+   * the harm each striker has done it, less a model's worth for each model given), the first of equals; a gun or a tank
+   * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
+   * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
+   */
+  private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = []): void {
     // Damage is in power: as a share of what the block came with, it comes off its strength meter.
     const share = dmg / Math.max(1e-9, t.power0);
     const before = t.str, had = t.figures;
@@ -668,10 +672,15 @@ export class LandBattle implements BattleSim<LandUnit> {
     t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady));
     t.still = 0;
     t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
-    const shells = by !== undefined && SHELLS_FROM.includes(by.kind);
+    const owed = (t.owed ??= {}), model = t.power0 / Math.max(1e-9, t.tray * t.str0);
+    for (const [u, d] of from) owed[u.id] = (owed[u.id] ?? 0) + d;
     for (let k = t.figures; k < had; k++) {
       const w = t.kind === 'arm' ? this.wreck(t) : null;
-      if (shells) this.shell(by!, t, k, w);
+      let by: LandUnit | undefined;
+      for (const [u] of from) if (!by || owed[u.id] > owed[by.id]) by = u;
+      if (!by) continue;
+      owed[by.id] -= model;
+      if (SHELLS_FROM.includes(by.kind)) this.shell(by, t, k, w);
     }
   }
 
