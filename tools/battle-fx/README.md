@@ -47,6 +47,11 @@ Lamps and day: a flash's lamp is full on the first frame drawn after the flash, 
 warm white, and small guns light no ground. A flash shorter than a frame is still drawn once, so 30 frames a second
 shows every one (and a slow frame shows a flak flash's pieces together, glow, spikes and heart, never the heart alone); a close tracer (under 100 m) is drawn whole, muzzle to strike.
 
+Sun and sky: `SetSun` gives the way toward the sun. Smoke's shadow side never falls below `game.sky_fill` of its own
+colour in the hour's light, and looking toward the sun the thin edges of smoke and the fringe of a cloud glow warm
+(`game.sun_through`). The sun's own light is full by day and none at night, read from the hour's light; the preview
+takes it as FX_SUNLIGHT=r,g,b.
+
 Names given to the kit (size, ground, calibre, gun, weapon, air gun kind) are matched in lower case, as in the recipe:
 `howitzer`, `snow`, `bomb250`, `hmg`. The wrapper lowers them, so `Snow` finds snow; a name the recipe does not have
 falls back (an unknown ground to earth, an unknown size to how105, an unknown air gun to hmg).

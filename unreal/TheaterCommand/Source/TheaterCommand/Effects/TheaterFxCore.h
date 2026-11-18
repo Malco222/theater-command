@@ -187,6 +187,7 @@ namespace TheaterFx
 			double PixelsPerRadian = 1000.0;
 			Rgb SmokeLight = Rgb(1.0f, 1.0f, 1.0f);
 			Vec Sun = Vec(-0.45, -0.35, 0.82);
+			Rgb SunLight = Rgb(1.0f, 1.0f, 1.0f); // (the sun's own light, its colour and strength: none at night)
 		};
 		/** Lays everything alive at Now for this eye into Points and Colours (PerPuff points a puff, far to near).
 		 * Returns how many puffs; the rest of the room up to the last frame's count is folded away. */
@@ -302,6 +303,8 @@ namespace TheaterFx
 		std::vector<double> RingCos, RingSin, Ring2Cos, Ring2Sin, Ring3Cos, Ring3Sin, Ring5Cos, Ring5Sin; // (made once at Setup, so no puff works out a cosine a side each frame)
 		int LastDrawn = 0;
 		double ShadeLit = 0.18, ShadeDark = 0.28, ClodLeast = 1.2, Beyond = 1500.0;
+		double SkyFill = 0.25, SunThrough = 1.5, SunThroughPow = 3.0;
+		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
 		double ClodShade = 2.5;
 		Vec LastEye;
@@ -361,7 +364,7 @@ namespace TheaterFx
 
 		Vec Where(const Bit& B, double Age) const;
 		Vec Going(const Bit& B, double Age) const;
-		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough = 0.0, uint32_t LumpSeed = 0, double Turn = 0.0);
+		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough = 0.0, uint32_t LumpSeed = 0, double Turn = 0.0, const Rgb& Floor = Rgb(), const Rgb& Through = Rgb(), const Vec& Outward = Vec());
 		bool LayBit(int Slot, const Bit& B, double Now, const View& Eye);
 	};
 }

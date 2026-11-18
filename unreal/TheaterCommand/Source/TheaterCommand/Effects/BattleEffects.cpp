@@ -458,6 +458,8 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 	Sight.PixelsPerRadian = FMath::Max(1, ViewWidth) / (2.0 * FMath::Tan(HalfView));
 	Sight.SmokeLight = TheaterFx::Rgb(HourLight.R, HourLight.G, HourLight.B);
 	Sight.Sun = ToFxWay(Sun);
+	const float SunUp = static_cast<float>(Core.DayOf(Sight.SmokeLight)); // (the sun's own light: full by day, none at night)
+	Sight.SunLight = TheaterFx::Rgb(SunUp, SunUp, SunUp);
 	const int32 Drawn = Core.Draw(Now, Sight);
 
 	// (room kept in steps of 300 puffs, let down only after two seconds with fewer, as the map's smoke does)

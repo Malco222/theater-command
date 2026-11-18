@@ -153,11 +153,12 @@
      6
     ],
     "colour": [
-     184,
-     100,
-     3
+     182,
+     92,
+     38
     ],
-    "half_hidden": true
+    "half_hidden": true,
+    "_art_director": "22:24Z (dusk salvo sheet): a flash's edge stays at about 180,75,35 or a warmer grey, never fully saturated; was 184,100,3. It dies to a warm grey ember (66,36,22), not a pure red."
    },
    "rise_time_s": 0.35,
    "hang_s": 0.25,
@@ -1358,6 +1359,15 @@
   "shade_lit": 0.32,
   "shade_dark": 0.28,
   "_shade": "puffs are unlit: each is lightened toward the sun and darkened away from it by these shares, so a cloud has a lit and a shadowed side",
+  "sky_fill": 0.25,
+  "sun_through": 1.5,
+  "sun_through_power": 3.0,
+  "sun_through_colour": [
+   255,
+   205,
+   160
+  ],
+  "_backlight": "Art director 22:24Z (dusk salvo sheet): with the sun behind, smoke never falls below about a fifth of the ground's value, from sky fill, and its thin edges and tips glow warm where the sun shows through, so it reads as smoke against the light and not as a hole. sky_fill: a smoke puff's shadow side is never darker than this share of its own colour in the hour's light. sun_through: the warm light added at a puff's thin edge when the eye looks toward the sun (sun_through_colour times the sun's own light, View::SunLight, white by day and none at night), falling off as the cosine to the sun to the power sun_through_power.",
   "clod_least_px": 1.2,
   "draw_beyond_m": 1500,
   "muzzle_smoke": [
@@ -1444,9 +1454,9 @@
    ],
    "flash_mid_m": 3.5,
    "flash_glow": [
-    150,
+    160,
     70,
-    14
+    34
    ],
    "flash_glow_m": 8.0,
    "lamp": 0.35,
