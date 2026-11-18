@@ -530,8 +530,16 @@ export function whyNotBase(g: Game, f: AirFleet, r: Region, bySea = false): stri
   return null;
 }
 
-/** True when a field lies across an ocean from a land group's base: the group can get there only by sea (world.json 'overseas'). */
-export const overOcean = (f: AirFleet, r: Region): boolean => f.ship === undefined && beyondEurope(f.base) !== beyondEurope(r);
+/**
+ * True when a field in the wider world lies beyond a month's flying from a land group's base there and one of the two
+ * is an island or a colony: the group goes by sea, as it would across an ocean (the Canal Zone's groups to Louisiana,
+ * and back; Canada's to Iceland). A staff does not send its groups this way (airBases).
+ */
+const farIsle = (g: Game, f: AirFleet, r: Region): boolean =>
+  f.ship === undefined && f.base >= 0 && beyondEurope(f.base) && beyondEurope(r) && (g.regions[f.base].overseas || r.overseas) && km(g, f.base, r.id) > AIR.ferry;
+
+/** True when a field lies across an ocean from a land group's base, or is a far island of the wider world: the group can get there only by sea (world.json 'overseas'). */
+export const overOcean = (g: Game, f: AirFleet, r: Region): boolean => (f.ship === undefined && beyondEurope(f.base) !== beyondEurope(r)) || farIsle(g, f, r);
 
 export const SHIP_AIR_TIP = 'A group crosses an ocean by sea: one group a month, to a friendly airfield with room for all of it. Settling in costs it some readiness.';
 export const SHIP_AIR_ONE = 'One air group a month crosses an ocean by sea, and one has gone this month.';
@@ -550,16 +558,20 @@ export function whyNotShipAir(g: Game, f: AirFleet, r: Region): string | null {
 }
 
 /** Why a group cannot move to a region's airfields, by air or (across an ocean) by sea; null if it can. */
-export const whyNotMoveAir = (g: Game, f: AirFleet, r: Region): string | null => (overOcean(f, r) ? whyNotShipAir(g, f, r) : whyNotBase(g, f, r));
+export const whyNotMoveAir = (g: Game, f: AirFleet, r: Region): string | null => (overOcean(g, f, r) ? whyNotShipAir(g, f, r) : whyNotBase(g, f, r));
 
 /** Ships a land air group across an ocean to a friendly airfield with room for it: the nation's one such sailing of the month. */
 export function shipAir(g: Game, f: AirFleet, r: Region): boolean {
-  if (!overOcean(f, r) || whyNotShipAir(g, f, r) || !rebaseAir(g, f, r, true)) return false;
+  if (!overOcean(g, f, r) || whyNotShipAir(g, f, r) || !rebaseAir(g, f, r, true)) return false;
   g.flags[`fy:air:${f.nat}`] = g.turn;
   return true;
 }
 
-export const airBases = (g: Game, f: AirFleet): Region[] => g.regions.filter((r) => whyNotMoveAir(g, f, r) === null);
+/** The fields a staff moves its groups between (the far islands of the wider world left out: farIsle). */
+export const airBases = (g: Game, f: AirFleet): Region[] => g.regions.filter((r) => !farIsle(g, f, r) && whyNotMoveAir(g, f, r) === null);
+
+/** Every field a player can send a group to now, by air or by sea. */
+export const moveTargets = (g: Game, f: AirFleet): Region[] => g.regions.filter((r) => whyNotMoveAir(g, f, r) === null);
 
 /**
  * Whether a nation's fighters could fight for the sky over a region: from the airfields they are on now ('now'), or

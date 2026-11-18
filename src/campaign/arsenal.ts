@@ -8,7 +8,7 @@
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
-import { AIRWAR, airFleetsOf, airPool, airWar, carrierRules, foundAirFleet, hasAirfield } from './air';
+import { AIRWAR, airFleetsOf, airPool, airWar, airfieldsHold, carrierRules, foundAirFleet, hasAirfield } from './air';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
 import { govMul } from './government';
@@ -311,8 +311,30 @@ const strongest = (fs: AirFleet[]): AirFleet | null => fs.reduce<AirFleet | null
 export function stationSite(g: Game, nat: string, want = -1): number {
   if (canStation(g, nat, g.regions[want])) return want;
   const main = strongest(airFleetsOf(g, nat).filter((f) => f.ship === undefined && canStation(g, nat, g.regions[f.base])));
-  if (main) return main.base;
+  if (main) return airWar(g) ? roomNear(g, nat, main.base) : main.base;
   return g.regions.find((r) => canStation(g, nat, r))?.id ?? -1;
+}
+
+/**
+ * The air war: where new aircraft go when nobody names the place. The main air base while its fields have room for a
+ * wing more, counting what is based there and what is on order for it; else the nation's field nearest it that has
+ * that room; and the main base still if none has. (The third playtester, 84.3.1: every new Soviet group formed at one
+ * field, Ryazan holding 3,399 aircraft where it serves 1,500, so that most of them could not fly.)
+ */
+function roomNear(g: Game, nat: string, base: number): number {
+  const wing = Math.max(ARSENAL.air.ftr.count, ARSENAL.air.bmr.count);
+  const free = (id: number): number => airfieldsHold(g, id)
+    - g.airFleets.reduce((s, f) => s + (f.base === id && f.ship === undefined ? f.ftr + f.bmr : 0), 0)
+    - g.nations[nat].queue.reduce((s, b) => s + (b.what === 'air' && b.region === id ? b.count ?? ARSENAL.air[b.item as Wing].count : 0), 0);
+  if (free(base) >= wing) return base;
+  const B = g.regions[base];
+  let best = base, near = Infinity;
+  for (const r of g.regions) {
+    if (r.id === base || !canStation(g, nat, r)) continue;
+    const d = Math.hypot(r.x - B.x, r.y - B.y);
+    if (d < near && free(r.id) >= wing) { near = d; best = r.id; }
+  }
+  return best;
 }
 
 /**
@@ -576,12 +598,38 @@ export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build |
 
 // ---- Delivery ---------------------------------------------------------------------------------------
 
-/** Hands over an order from the arsenal that is due: aircraft to their fleet, ships to theirs, works to the province. */
-export function deliverArsenal(g: Game, nat: string, b: Build): void {
+/** A wing of the player's from the factories: its own line, and what the month's one line says of it. */
+export interface AirDelivery { text: string; region: number; wing: Wing; count: number; fleet: string; base: string; new: boolean; war: boolean }
+
+/**
+ * The month's aircraft from the factories in one line, wings joining the same group counted together: "The month's
+ * aircraft from the factories: 200 fighters join 12th Fighter Aviation Division at Moscow; a new air group, the 13th
+ * Fighter Aviation Regiment, forms on the airfield at Moscow with 100 fighters." One wing keeps its own line.
+ */
+export function airLine(list: AirDelivery[]): { text: string; region: number } | null {
+  if (!list.length) return null;
+  if (list.length === 1) return { text: list[0].text, region: list[0].region };
+  const parts: AirDelivery[] = [];
+  for (const d of list) {
+    const same = !d.new && parts.find((p) => !p.new && p.fleet === d.fleet && p.wing === d.wing && p.base === d.base);
+    if (same) same.count += d.count; else parts.push({ ...d });
+  }
+  const word = (d: AirDelivery): string => `${d.count} ${d.wing === 'ftr' ? 'fighters' : 'bombers'}`;
+  const said = parts.map((d) => (d.new ? (d.war ? `a new air group, the ${d.fleet}, forms on the airfield at ${d.base} with ${word(d)}` : `a new air fleet, ${d.fleet}, forms on the airfields of ${d.base} with ${word(d)}`) : `${word(d)} join ${d.fleet} at ${d.base}`));
+  return { text: `The month's aircraft from the factories: ${said.join('; ')}.`, region: list[0].region };
+}
+
+/**
+ * Hands over an order from the arsenal that is due: aircraft to their fleet, ships to theirs, works to the province.
+ * `air`, where given, takes the player's lines for aircraft instead of the news, so that a month's deliveries can be told
+ * in one line (the third playtester, 84.3.1: about 1,800 such lines in 46 Soviet wars). See airLine.
+ */
+export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery[]): void {
   const n = g.nations[nat];
   const r = g.regions[b.region];
   const tell = (text: string): void => { if (nat === g.human) headline(g, 'info', text, nat, r.id); };
   if (b.what === 'air') {
+    const tellAir = (d: AirDelivery): void => { if (nat !== g.human) return; if (air) air.push(d); else headline(g, 'info', d.text, nat, d.region); };
     const wing = b.item as Wing, count = b.count ?? ARSENAL.air[wing].count;
     const word = `${count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`;
     // The wing goes where it was ordered for; if that ground is lost, to the strongest fleet the nation has left.
@@ -589,11 +637,11 @@ export function deliverArsenal(g: Game, nat: string, b: Build): void {
     let f = canStation(g, nat, r) || r.ctrl === nat ? fleetAt(g, nat, r.id, wing) : null;
     if (!f && r.ctrl === nat && (!war || hasAirfield(g, r.id))) {
       f = foundAirFleet(g, nat, r, `${r.name} Air Command`, war ? wing : undefined, count);
-      tell(war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`);
+      tellAir({ text: war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`, region: r.id, wing, count, fleet: f.name, base: r.name, new: true, war });
     } else {
       // The air war: the wing goes to the strongest group of its own kind.
       f ??= strongest(airFleetsOf(g, nat).filter((x) => x.ship === undefined && x.ashore === undefined && (!war || x.kind === wing)));
-      if (f) tell(`${cap(word)} from the factories join ${f.name} at ${g.regions[f.base].name}.`);
+      if (f) tellAir({ text: `${cap(word)} from the factories join ${f.name} at ${g.regions[f.base].name}.`, region: f.base, wing, count, fleet: f.name, base: g.regions[f.base].name, new: false, war });
     }
     if (!f) {
       // No air fleet and nowhere to found one: the machines wait in reserve.

@@ -27,6 +27,7 @@ import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, wh
 import { DEFENCE, allied, atWar, headline, worksOf } from './game';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, atSea, shipList, surfaceShips } from './navy';
+import { airfieldOpenTo } from './prizes';
 import { onNet, railCut, railsAt } from './rails';
 import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, type TownHit } from './siege';
 import { townName } from './towns';
@@ -342,8 +343,10 @@ export function groupBases(g: Game, id: number, nat: string | null = g.human): B
   }
   for (const r of g.regions) {
     const holds = airfieldsHold(g, r.id);
-    if (holds <= 0 || r.id === f.base || !allied(g, f.nat, r.ctrl)) continue;
-    const d = kmTo(g, f, r.id), sea = overOcean(f, r);
+    // (A field our side's siege has the use of, in a province the enemy still holds, is listed as the map offers it:
+    // the code checker on 85.1, Helsinki under a Soviet siege.)
+    if (holds <= 0 || r.id === f.base || (!allied(g, f.nat, r.ctrl) && !airfieldOpenTo(g, f.nat, r))) continue;
+    const d = kmTo(g, f, r.id), sea = overOcean(g, f, r);
     if (!sea && d > AIR.ferry) continue;
     const there = g.airFleets.reduce((s, x) => s + (x.base === r.id && !afloat(x) ? x.ftr + x.bmr : 0), 0);
     const o: BaseOption = { region: r.id, name: r.name, km: d, word: fieldWord(holds).word, holds, free: Math.max(0, holds - there), why: sea ? whyNotShipAir(g, f, r) : whyNotBase(g, f, r) };

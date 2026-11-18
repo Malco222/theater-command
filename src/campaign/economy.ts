@@ -18,7 +18,7 @@ import { airIncomeLoss } from './air';
 import { seaIncomeLoss } from './navy';
 import { techMul } from './research';
 import { fallenOf, inherit, noteCorps, raisedXp, revivable } from './stories';
-import { deliverArsenal, worksUpkeep } from './arsenal';
+import { airLine, deliverArsenal, worksUpkeep, type AirDelivery } from './arsenal';
 import { barredKind } from './ground';
 import { workingFactories } from './rails';
 import { incomeMul, levelOf } from './difficulty';
@@ -525,9 +525,11 @@ export function deliver(g: Game, nat: string): void {
   const due = n.queue.filter((b) => b.eta <= g.turn);
   if (!due.length) return;
   n.queue = n.queue.filter((b) => b.eta > g.turn);
+  // The month's aircraft from the factories are told in one line, not one a wing (the third playtester, 84.3.1).
+  const air: AirDelivery[] = [];
   for (const b of due) {
     const r = g.regions[b.region];
-    if (b.what === 'air' || b.what === 'ship' || b.what === 'work') { deliverArsenal(g, nat, b); continue; }
+    if (b.what === 'air' || b.what === 'ship' || b.what === 'work') { deliverArsenal(g, nat, b, air); continue; }
     if (b.what === 'civic') { const news = deliverCivic(g, nat, b); if (news && nat === g.human) headline(g, 'info', news, nat, r.id); continue; }
     if (b.what === 'fort') {
       if (!isHome(g, nat, r)) continue; // the ground was lost before the works were finished
@@ -559,6 +561,8 @@ export function deliver(g: Game, nat: string): void {
     if (old && old.heir === undefined) inherit(g, c, old.id);
     if (nat === g.human) headline(g, 'info', old ? `${b.name} is raised again at ${at.name}, ${g.turn - old.turn} months after it was lost at ${g.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id);
   }
+  const line = airLine(air);
+  if (line) headline(g, 'info', line.text, nat, line.region);
 }
 
 /**

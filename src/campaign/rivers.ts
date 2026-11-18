@@ -152,6 +152,20 @@ export function blowChance(g: Game, c: Crossing, taken: Region, by: string): num
 }
 
 /**
+ * The lines of bridge news already told this month, so that a river crossed at one place by several bridges, or a
+ * place taken twice, is told once (the third playtester, 84.3.1: "German troops seize the bridges over the Dnieper at
+ * Kiev before they can be blown" three times in August 1942). News only: every bridge still rolls its own dice.
+ */
+const bridgeTold = new WeakMap<Game, { turn: number; said: Set<string> }>();
+function firstTelling(g: Game, key: string): boolean {
+  let t = bridgeTold.get(g);
+  if (!t || t.turn !== g.turn) bridgeTold.set(g, (t = { turn: g.turn, said: new Set() }));
+  if (t.said.has(key)) return false;
+  t.said.add(key);
+  return true;
+}
+
+/**
  * When a region changes hands, the side that still holds the far bank of each of its rivers blows the bridges,
  * unless the captors are on them first. The dice are the bridge's own, so nothing else in the war shifts.
  */
@@ -165,8 +179,8 @@ export function bridgesOnCapture(g: Game, taken: Region, by: string): void {
     const name = riverName(c), holder = g.nations[far.ctrl].adj, captor = g.nations[by].adj;
     if (roll < blowChance(g, c, taken, by)) {
       blow(g, c);
-      if (concerns(g, by, far.ctrl)) headline(g, 'battle', `${holder} troops blow the bridges over the ${name} at ${taken.name} as ${captor} forces reach the river.`, far.ctrl, taken.id, { arm: 'land' });
-    } else if (concerns(g, by, far.ctrl)) {
+      if (concerns(g, by, far.ctrl) && firstTelling(g, `blow:${name}:${taken.id}:${far.ctrl}`)) headline(g, 'battle', `${holder} troops blow the bridges over the ${name} at ${taken.name} as ${captor} forces reach the river.`, far.ctrl, taken.id, { arm: 'land' });
+    } else if (concerns(g, by, far.ctrl) && firstTelling(g, `seize:${name}:${taken.id}:${by}`)) {
       headline(g, 'battle', `${captor} troops seize the bridges over the ${name} at ${taken.name} before they can be blown.`, by, taken.id, { arm: 'land', won: by, lost: far.ctrl });
     }
   }

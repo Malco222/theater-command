@@ -700,6 +700,8 @@ describe('sea lift on the fleet card', () => {
     clear(x.from);
     const force = [corps(g, 'GER', x.from), corps(g, 'GER', x.from)];
     expect(landCorps(g, force, x.to).ok).toBe(true);
+    // (The ground landed on is written down, for the coast watch: ruling 229(e).)
+    expect(g.flags[`landedAt:${x.to.id}:GER`]).toBe(g.turn);
     expect(liftView(g, 'GER').left).toBe(l.lift - 2);
     expect(liftView(g, 'GER').lift).toBe(l.lift);
   });

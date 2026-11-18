@@ -7,6 +7,7 @@
 // historical scenarios. The numbers are in data/campaign/prizes.json.
 import { describe, expect, it } from 'vitest';
 import { whyNotBase } from '../src/campaign/air';
+import { groupBases } from '../src/campaign/airwar';
 import { income, ledger, provinceYield } from '../src/campaign/economy';
 import { addCorps, createGame, declareWar, relocate } from '../src/campaign/game';
 import { whyNotShip } from '../src/campaign/navy';
@@ -259,6 +260,11 @@ describe('the prizes outside the walls go with the field', () => {
     expect(why === null || /Too far|already changed base/.test(why)).toBe(true);
     const polish = g.airFleets.find((f) => f.nat === 'POL' && f.ship === undefined && f.base !== town.id);
     if (polish) expect(whyNotBase(g, polish, town)).toMatch(/enemy holds the country round the town/);
+    // The list of a group's airfields offers it as the map does (the code checker on 85.1: Helsinki under a Soviet siege).
+    const near = g.airFleets.filter((f) => f.nat === 'GER' && f.ship === undefined).find((f) => { f.moved = -1; return whyNotBase(g, f, town) === null; })!;
+    expect(near).toBeDefined();
+    expect(town.ctrl).toBe('POL');
+    expect(groupBases(g, near.id, 'GER').some((b) => b.region === town.id && b.why === null)).toBe(true);
   });
 
   it('trains run through a great junction held with the field, though the station in the town is shut', () => {

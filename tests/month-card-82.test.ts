@@ -856,8 +856,9 @@ describe('a year of war with nobody playing, a card a month for four countries',
         expect(card.bands.length).toBeLessThanOrEqual(2);
         bands += card.bands.length;
         const rows = order(card);
-        // The rows in order of class, the red ones first; the lead story is the heaviest of ground, sea and air.
-        expect(card.rows.map((r) => r.cls)).toEqual([...card.rows.map((r) => r.cls)].sort((a, b) => a - b));
+        // The rows in order of class, the red ones first, above the fold and below it (a ring of his lifted above the
+        // fold may put a row of war and peace under it: ruling 106, b444); the lead story is the heaviest of ground, sea and air.
+        for (const part of [card.rows.slice(0, card.show), card.rows.slice(card.show)]) expect(part.map((r) => r.cls)).toEqual([...part.map((r) => r.cls)].sort((a, b) => a - b));
         const fighting = rows.filter((r) => r.cls === 3 || r.cls === 4);
         if (fighting.length) { leads++; expect(card.lead, `${nat} ${card.month}`).not.toBeNull(); if (!card.lead!.stake) expect(card.lead!.picture).not.toBeNull(); expect(card.quiet).toBe(''); expect(card.show).toBe(card.bands.length > 1 ? 5 : 6); }
         else { quiet++; expect(card.lead).toBeNull(); expect(card.quiet).not.toBe(''); expect(card.show).toBe(card.bands.length > 1 ? 6 : 7); if (card.bands.length) expect(card.quiet).not.toBe('A quiet month.'); }
