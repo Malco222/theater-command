@@ -429,7 +429,9 @@ pip install bpy==5.3.0 numpy pillow            # Blender as a Python module (Pyt
 python export.py <out> all                     # every model: .json, .glb, .fbx, and index-sea-air.json
 python look.py Freighter <out> close,aft       # quick stills while building (small craft: small,smallaft)
 python show.py Battleship_UK turn <out>        # ship clips: turn, broadside, sink, capsize
-python airshow.py shot_down <out>              # aircraft clips: flypast (plane=Me262 for another machine), shot_down, ways_down
+python airshow.py shot_down <out>              # aircraft clips: flypast (plane=Me262 for another machine), shot_down, ways_down, b17_head_on, b17_escort, b17_flak
+python airshow.py b17_flak <out> frames=none   # no pictures: only the clip's sound log, <out>/air-b17_flak-sound.json (seconds)
+python soundtrack.py <log.json> <sound pack's wav folder> <mix.json> <out.wav> [<video.mp4> <out.mp4>]   # mix a clip's sound, and lay it under the picture
 python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, glass, rear, over, under, side, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; clip=load.bombs@0; record=JSON)
 python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
 python export.py <out> parks                   # the three deck ranges alone (they are also in `ships` and `all`)
@@ -545,6 +547,40 @@ somewhere it looks up-sun, and there the sun's glare off the wings washed the ca
 stands so that the glare falls in the gap the camera never visits (`SUN`), and a painted skin shines a little less
 (`SKIN`). A machine that only comes late in the war carries its `year` in its file, and its sheet label says
 "from 1944"; one that needs a technology and has no year says "by research".
+
+Battle scenes in the air (`b17_head_on`, `b17_escort`, `b17_flak` in `airshow.py`). Each is a few seconds of a
+fight round a box of B-17s, built from the same parts: `bombers()` (the box, each with her drone and her gunners),
+`Flight` (a fighter's path through keyed points, banking into its turns), `guns()`, `gunners()`, `strikes()`, `trail()`,
+`fireball()`, `flak()`. Three rules were learnt making them:
+
+- **No machine closes faster than it could fly.** The box flies at 95 m/s. A fighter creeping up astern closes at 40
+  to 50 m/s, an escort coming down at about 100, a head-on pass at about 245. Keys set by eye came out over 900 km/h.
+- **Tracers** (Brian, 2026-11-18: "1 out of every 5 bullets with yellow"). `TRACER` and `guns()`: every fifth round
+  of each gun is a yellow streak, the four between are not drawn, and the guns' belts are out of step. A streak is
+  16 m long (a film shutter's worth), a solid core with a faint glow (`_tracer_mat`), and never thinner than a few
+  pixels (`puff(least=)`; beyond 300 m it is let dwindle, or a sky of far tracers is confetti). Its yellow is
+  measured: radiance about 1.05, 0.93, 0 shows 213, 199, 104; the flames' 1.4, 0.85, 0 is amber, and anything
+  brighter is cream. The camera must be set for a frame before `A.at(t)`, because the least thickness is worked out
+  from it. Every round gives a short yellow tongue at the muzzle (a round bright ball there was a cream bead).
+- **Flak** is one dense black ball of big puffs one on another, lumps round it and two or three stubby arms, left
+  standing in the air while the box flies on. Three dozen small puffs thrown wide were a bunch of dots.
+
+A ring round every puff (`_face` in `stage.py`). The layer weight's "facing" forgets the sign of the smoothed normal,
+so at a puff's outline, where that normal tips away from the camera, it rose again: a faint dark ring round every puff
+of smoke (black flak against the sky stood as frogspawn) and a crisp brushed edge on every tongue of flame. `_face()`
+works it out from where the sight line passes the ball's middle, in the ball's own space; for a tongue, from the
+normal with its sign kept. Use it in any new effect's stuff. (In Blender 5.3 the vector transform node's first socket
+is not its vector: sockets are taken by name. Linked to the wrong one it fails without a word.)
+
+A clip's sound (`Air.cue`, `Air.hear`, `Air.sound_file`; `soundtrack.py`). A scene says what is heard as it says what
+is seen: the name of a recording in the project's approved sound pack, when, and what it rides on. `airshow.py` writes
+that beside the frames as a log of names and numbers (where the camera was and where each sound was on every frame).
+`soundtrack.py` mixes it by the sound director's rules (`mix.json`): the microphone stands between the camera and what
+it looks at; every sound falls away and dulls with distance by its family's law; a blast farther than 150 m is heard
+after it is seen; engine loops bend with speed toward or away; a fighter going by within 300 m plays its own fly-past
+recording, set so its loudest moment falls when it is nearest; guns are their burst recording laid end to end while
+they fire, six at once; a machine going down dips the rest; a limiter keeps the whole under -1 dB. This repository
+holds no sound: the mixer reads the pack where it lies, and a name the pack does not hold is silent, never made up.
 
 ## Not done yet
 

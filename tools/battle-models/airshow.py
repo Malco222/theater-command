@@ -379,19 +379,22 @@ def fireball(fx, t0, where, size=1.0):
         aft = -way.normalized()
         # the core: fat torn lumps of flame lying back from the burst, alive for two or three frames. (Deep orange going
         # dark at their ends: lumps with yellow roots made the whole core one pale yellow mass.)
+        # (The art director, 2026-11-18 15:28Z, of the first frames: "still a starburst: thin spines ... the flat cards
+        #  read as crumpled paper or leaves". So the lumps are nearly as wide as long, and the long tongues are three
+        #  to five, lie astern, and none is more than three times its width.)
         for i in range(int(9 + 13 * size)):
-            d = (any_way(g) * 0.75 + aft * 0.8).normalized()
-            long = g.uniform(3.0, 5.6) * size
+            d = (any_way(g) * 0.6 + aft * 0.9).normalized()
+            long = g.uniform(3.2, 5.2) * size
             k = g.uniform(0.8, 1.15)
             root = at + aft * g.uniform(-0.6, 3.6) * size + any_way(g) * g.uniform(0.0, 1.0) * size
-            lay(t, root, d, long, long * g.uniform(0.42, 0.62), "lick" if i % 4 else "tongue", (0.14 * k, 0.026 * k, 0.004), (0.1, 0.014, 0.002), g.uniform(0.24, 0.34), g, share=g.uniform(0.74, 0.86))
+            lay(t, root, d, long, long * g.uniform(0.62, 0.88), "lick" if i % 4 else "tongue", (0.14 * k, 0.026 * k, 0.004), (0.1, 0.014, 0.002), g.uniform(0.24, 0.34), g, share=g.uniform(0.74, 0.86))
         # a few long tongues thrown out of it, back and to the side, each with its yellow root in the core
-        for i in range(int(3 + 4 * size)):
-            d = (any_way(g) * 0.95 + aft * 0.8).normalized()
-            long = g.uniform(5.5, 9.0) * size
+        for i in range(int(3 + 2 * size)):
+            d = (any_way(g) * 0.4 + aft * 1.0).normalized()
+            long = g.uniform(5.0, 7.5) * size
             k = g.uniform(0.8, 1.15)
             root = at + aft * g.uniform(0.0, 3.0) * size + any_way(g) * g.uniform(0.0, 0.5) * size
-            lay(t, root, d, long, long * g.uniform(0.15, 0.24), "tongue", (0.14 * k, 0.026 * k, 0.004), (0.1, 0.014, 0.002), g.uniform(0.2, 0.3), g, share=g.uniform(0.62, 0.78), fling=(6.0, 16.0))
+            lay(t, root, d, long, long * g.uniform(0.34, 0.42), "tongue", (0.14 * k, 0.026 * k, 0.004), (0.1, 0.014, 0.002), g.uniform(0.2, 0.3), g, share=g.uniform(0.62, 0.78), fling=(6.0, 16.0))
         # its yellow heart: short and solid, inside the core (never a round glowing ball, and never a thin film)
         for i in range(int(5 + 5 * size)):
             d = (any_way(q) * 0.7 + aft * 0.6).normalized()
@@ -409,7 +412,8 @@ def fireball(fx, t0, where, size=1.0):
                         hold=hold, cool=cool, squash=(q.uniform(1.25, 1.7), 1.0, q.uniform(0.85, 1.1)), name="soot", rng=q)
             p["ob"].rotation_euler = ((aft + any_way(q) * 0.45).normalized().to_track_quat("X", "Z") @ Quaternion(X, q.uniform(0, 6.283))).to_euler()
         for i in range(int(30 + 40 * size)):
-            smoke(q.uniform(0.0, 0.11), -0.5 + 8.5 * q.random() ** 1.7, q.uniform(0.2, 1.7), q.uniform(3, 20), q.uniform(3.0, 5.0), (q.uniform(0.45, 0.85), q.uniform(2.2, 4.0)),
+            # (a third of it with the burst itself: the first frame has its smoke)
+            smoke(0.0 if i % 3 == 0 else q.uniform(0.0, 0.11), -0.5 + 8.5 * q.random() ** 1.7, q.uniform(0.2, 1.7), q.uniform(3, 20), q.uniform(3.0, 5.0), (q.uniform(0.45, 0.85), q.uniform(2.2, 4.0)),
                   q.uniform(0.014, 0.055), q.uniform(0.7, 0.92), 0.5, 0.025, 0.14, 2.0)
         # fire still glowing through it, in patches on its outside, for a few frames
         for i in range(int(10 + 14 * size)):
