@@ -3,7 +3,7 @@
 // to its room before it leaves a corps in the field, infantry first, and a lone corps goes in; and it goes to the
 // relief of a great city at a capital's odds, the garrison's sortie counted in them. Nothing in the siege's own rules
 // changes, and the historical scenarios have no sieges at all.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { garrisons, reliefBar } from '../src/campaign/ai';
 import { createGame, relocate } from '../src/campaign/game';
 import { GREAT, SIEGE, garrisonOf, greatCity, roomIn } from '../src/campaign/siege';
@@ -33,7 +33,13 @@ function warsaw(g: Game, keep: (c: Corps) => boolean, name = 'Warsaw'): Region {
   return town;
 }
 
-afterEach(() => { GREAT.on = !!SIEGE.ai.great; });
+// (Held back by the design director's b509 until its mend: off by default, turned on here to test the rule as written.)
+beforeEach(() => { GREAT.on = true; });
+afterEach(() => { GREAT.on = !!SIEGE.ai.great?.on; });
+
+it('waits on its mend: off unless turned on (b509)', () => {
+  expect(SIEGE.ai.great?.on).toBe(false);
+});
 
 describe('the great cities', () => {
   it('are the capitals and the cities with great works', () => {
