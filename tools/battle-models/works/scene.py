@@ -99,8 +99,9 @@ class Set:
         if paint:
             for o in new:
                 for mat in (o.data.materials if o.type == "MESH" else []):
-                    if mat and mat.name.split(".")[0] in ("paint", "shade") and not mat.get("guest"):
-                        _field_paint(mat, rigid.hex_rgb(paint), 0.6 if mat.name.startswith("shade") else 1.0)
+                    kind = mat.name.split(".")[0].split(":")[-1] if mat else ""      # ("Gun75:upper", "paint.001")
+                    if kind in ("paint", "upper", "upper2", "shade") and not mat.get("guest"):
+                        _field_paint(mat, rigid.hex_rgb(paint), 0.6 if kind == "shade" else 1.0)
                         mat["guest"] = True
         return holder
 

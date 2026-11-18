@@ -58,7 +58,8 @@ TRAIN = {"FlakTower": (58.0, 45.0)}
 # another thread's model stood at a socket for the picture (the game puts it there itself): socket, the file under the
 # land models' folder
 LAND = os.environ.get("LAND_MODELS", "/mnt/project-files/battle-models/land/")
-GUESTS = {"GunPit": ("gun", "gun/Gun75.glb"), "Bunker": ("gun", "gun/Gun75.glb")}
+GUN = next((g for g in ("vehicles/Gun75.glb", "gun/Gun75.glb") if os.path.exists(os.path.join(LAND, g))), "vehicles/Gun75.glb")
+GUESTS = {"GunPit": ("gun", GUN), "Bunker": ("gun", GUN)}    # (the land vehicles' towed field gun, for the eye)
 # lamps lit inside a work for its picture: (place in the work's own axes, watts), so what stands in the dark shows
 LAMPS = {"Bunker": [((1.35, 0.9, 1.1), 14.0), ((1.35, -0.9, 1.1), 14.0), ((-0.4, 0.0, 1.3), 22.0)]}
 # where the sun stands for a work's picture (turn, height), where the usual sun leaves its face dark
