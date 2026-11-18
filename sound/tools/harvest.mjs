@@ -34,6 +34,9 @@ const log = () => (fs.existsSync(path.join(rec, 'sources.json')) ? JSON.parse(fs
 for (const w of wanted.recordings) {
   if (only && !only.includes(w.id)) continue;
   let row = log().find((r) => r.id === w.id);
+  // Already in the repository (fetched on another machine, or before): leave it, so the archive's patience is spent
+  // only on what is new.
+  if (row && !fs.existsSync(path.join(raw, row.file)) && fs.existsSync(path.join(rec, 'audio', row.file))) continue;
   if (!row || !fs.existsSync(path.join(raw, row.file))) {
     if (fetched++ && gap > 0) nap(gap * 1000);
     const f = node('fetch_recording.mjs', [w.title, '--id', w.id, '--for', w.for, '--raw', raw, '--note', w.note ?? '']);
