@@ -95,9 +95,9 @@
     },
     {
       "id": "rashid-ali", "from": 20, "to": 21, "mode": "open",
-      "_note": "Ruling 228(3c), the historian's realism audit item 11: Iraq's coup of 1 April 1941 and its war with Britain, at stops 1 and 2 only. Iraq leans to the Axis and declares war, which makes it Germany's co-belligerent by the rules of every such declaration; the declaration is told in the event's own words (the UI director's, ruling 228 section 4).",
+      "_note": "Ruling 228(3c), the historian's realism audit item 11: Iraq's coup of 1 April 1941 and its war with Britain, at stops 1 and 2 only. Iraq leaves its leaning to Britain and goes to war with her on its own account, in no alliance: Germany sent a few aircraft but never counted Iraq an ally, and an Iraq in the Axis would be a front of Germany's own that held up the attack in the east. The declaration is told in the event's own words (the UI director's, ruling 228 section 4).",
       "if": ["stop:1,2", "by:21", "alive:IRQ", "atPeace:IRQ", "notInBloc:IRQ", "alive:UK", "war:UK,GER"],
-      "enter": {"nations": ["IRQ"], "align": "leaning_axis"},
+      "enter": {"nations": ["IRQ"], "align": "independent"},
       "war": [["IRQ", "UK"]],
       "tell": "war",
       "text": "Rashid Ali takes Iraq into war with Britain. He and four army colonels have seized power in Baghdad, the Regent has fled, and Iraqi troops with guns hold the plateau above the RAF station at Habbaniya. He looks to Berlin and Rome for help. While Iraq is against Britain, no oil comes by the Gulf route."

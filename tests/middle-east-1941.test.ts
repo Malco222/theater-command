@@ -37,7 +37,8 @@ describe('Rashid Ali (stops 1 and 2)', () => {
     expect(laneStopped(g, 'gulf')).toBeNull();
     at(g, 20);
     expect(atWar(g, 'IRQ', 'UK')).toBe(true);
-    expect(g.nations.IRQ.align).toBe('axis_cobelligerent');
+    // On its own account, in no alliance: Germany's fronts are not Iraq's.
+    expect(g.nations.IRQ.align).toBe('independent');
     const said = g.headlines.filter((h) => h.turn === 20 && /Iraq/.test(h.text));
     expect(said).toHaveLength(1);
     expect(said[0].kind).toBe('war');
