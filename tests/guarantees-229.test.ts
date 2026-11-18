@@ -188,7 +188,7 @@ describe('the Balkan armies counted from the war\'s start', () => {
   });
 
   it('Yugoslavia calls up twelve divisions over its war\'s second and third months, in the grand campaign only', () => {
-    expect(yugo.map(({ row }) => [row[2], row[4], row[6].after])).toEqual([['Sixth Army', 3, 1], ['Fifth Army', 3, 1], ['Fourth Army', 3, 2], ['Coastal Army', 3, 2]]);
+    expect(yugo.map(({ row }) => [row[2], row[4], row[6].after])).toEqual([['Sixth Army', 3, 1], ['Third Army', 3, 1], ['Seventh Army', 3, 2], ['Coastal Army', 3, 2]]);
     for (const { row } of yugo) expect(row[6]).toMatchObject({ open: 1, xp: 0.05, war: ['YUG', '*'] });
     const g = grand(null, 6);
     declareWar(g, 'ITA', 'YUG');
