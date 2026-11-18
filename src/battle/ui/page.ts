@@ -42,6 +42,15 @@ const TERRAIN_WORD: Record<Terrain, string> = { plains: 'Open country', forest: 
 const between = (lo: number, hi: number): string => `between ${lo.toFixed(1)} and ${hi.toFixed(1)} to 1`;
 /** Facts in a row that fold whole: the dot between two goes with the fold, never ending or starting a line (brief check 19). */
 const facts = (bits: string[]): string => `<span class="facts"><span>${bits.map((b) => `<span class="fact">${b}</span>`).join('')}</span></span>`;
+/**
+ * The title's second line: where the field is ("Open country · across the Vistula"), under the date, so the title holds
+ * three lines at every width and the bar one height (the UI director, after 1969d7b). A practice ground in the open says
+ * nothing more than its date.
+ */
+const placeLine = (t: FieldTicket<LandPlace>): string => {
+  const bits = [...(S.offer || t.place.river || t.place.fort ? [esc(TERRAIN_WORD[t.place.terrain])] : []), ...(t.place.river ? [`across the ${esc(t.place.river)}`] : [])];
+  return bits.length ? `<span class="tc-data">${facts(bits)}</span>` : '';
+};
 /** "Warsaw, the capital"; "the town of Gdynia". */
 const townWords = (p: LandPlace): string => (p.townSize === 'capital' ? `${esc(p.town!)}, the capital` : `the ${p.townSize ?? 'town'} of ${esc(p.town!)}`);
 
@@ -224,7 +233,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
   S.colours = col; S.scene.colours = col;
   app.innerHTML = `<div class="battle tc">
     <header class="bbar">
-      <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${facts([esc(t.date), ...(S.offer || t.place.river || t.place.fort ? [esc(TERRAIN_WORD[t.place.terrain])] : []), ...(t.place.river ? [`across the ${esc(t.place.river)}`] : [])])}</span></div>
+      <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${esc(t.date)}</span>${placeLine(t)}</div>
       <div class="bclock" title="At ${mmss(t.limit)} the day is done, and the defender holds."><span class="tc-label" id="clockState">Paused</span><span class="tc-data" id="time">0:00</span></div>
       <div class="bspeed" role="group" aria-label="Speed">
         <button class="tc-btn tc-btn--sm" data-speed="0" title="Pause (Space)"><span id="pauseWord">Paused</span> <span class="tc-key">Space</span></button>
@@ -233,7 +242,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
         <button class="tc-btn tc-btn--sm" data-speed="4" title="Four times as fast (3)">×4 <span class="tc-key">3</span></button>
       </div>
       <div class="bbal" title="Each side's strength still standing. ${S.offer?.band ? 'The pale band is where the attack card put it: the defence is not fully known.' : 'The pale mark is where the attack card put it.'}">
-        <div class="bends"><span>${S.offer ? esc(mine.adj) : 'Yours'}</span><span id="ratio" class="tc-data"></span><span>${S.offer ? esc(theirs.adj) : 'Theirs'}</span></div>
+        <div class="bends"><span>${S.offer ? esc(mine.adj) : 'Yours'}</span><span id="ratio" class="tc-data${S.offer?.band ? ' is-band' : ''}"></span><span>${S.offer ? esc(theirs.adj) : 'Theirs'}</span></div>
         <div class="btrack"><i id="balA" style="background:${col.att}"></i><i id="balD" style="background:${col.def}"></i><b id="balMark"></b></div>
         <div class="bbreak" title="When a bar fills, that army breaks and leaves the field."><span class="bbar2"><i id="brkMe" style="background:${col[S.scene.me]}"></i></span><span class="tc-label">How near to breaking</span><span class="bbar2 is-theirs"><i id="brkThem" style="background:${col[S.scene.me === 'att' ? 'def' : 'att']}"></i></span></div>
       </div>
@@ -249,13 +258,15 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
       <div class="ftop"><div class="dispatch tc-paper" id="dispatch"></div><div class="fwarn tc-paper" id="fwarn" hidden>Your army is near breaking: pull back the worn, or hand it to the staff.</div></div>
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole field">Whole field</button></div>
     </div>
-    <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', '<span class="tc-key">R</span> fall back off the field', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round'])}</div>
+    <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', '<span class="tc-key">R</span> fall back off the field', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round', '<span class="knarrow"><span class="tc-key">Space</span> pause</span>', '<span class="knarrow"><span class="tc-key">1</span> <span class="tc-key">2</span> <span class="tc-key">3</span> speed</span>'])}</div>
     <footer class="tray${grouped(b) ? ' is-grouped' : ''}" id="tray"><button class="tc-card is-press tmore" data-page="-1" hidden></button>${grouped(b) ? groups(b) : b.units.filter((u) => u.side === S.scene.me).map((u) => card(u, col[S.scene.me])).join('')}<button class="tc-card is-press tmore" data-page="1" hidden></button></footer>
   </div>`;
   canvas = byId('field') as HTMLCanvasElement;
   ctx = canvas.getContext('2d')!;
   // Every battle opens on the whole field, not where the last one was left zoomed in.
   S.scene.W = 0; S.scene.H = 0;
+  fitBar();
+  void document.fonts?.ready.then(() => { if (S.b === b && S.screen === 'battle') { fitBar(); fit(); } });
   fit();
   wireBattle();
   updateTop(true);
@@ -459,7 +470,9 @@ function updateTop(force = false): void {
     el('balA').style.width = `${(share * 100).toFixed(1)}%`;
     el('balD').style.width = `${((1 - share) * 100).toFixed(1)}%`;
     el('balMark').style.left = at(k.odds);
-    el('ratio').textContent = `Card ${odds(k.odds)} to 1 · now ${odds(nowOdds)} to 1`;
+    // Card over now, as the band's two lines are, so a scouted battle starts the field at the same height (the UI director).
+    const ratio = el('ratio'), said = facts([`Card ${odds(k.odds)} to 1`, `now ${odds(nowOdds)} to 1`]);
+    if (ratio.dataset.said !== said) { ratio.innerHTML = said; ratio.dataset.said = said; }
   }
   const sp = S.clock.speed;
   root.querySelectorAll<HTMLElement>('[data-speed]').forEach((x) => x.classList.toggle('is-lit', Number(x.dataset.speed) === sp));
@@ -491,6 +504,22 @@ function updateTop(force = false): void {
     // While the clock runs a dispatch fades a few seconds after it comes; while paused it stays (the UI director, 8a).
     box.classList.toggle('is-old', !!d && S.dispatchAge > DISPATCH_FOR);
   }
+}
+
+/**
+ * The top bar holds one row at every width (the UI director, after 1969d7b): where the two buttons would be pushed off
+ * its end they stack at the right end, small; where even that is not enough the title takes the next size down.
+ * Worked out again when the window changes size.
+ */
+function fitBar(): void {
+  const bar = root.querySelector<HTMLElement>('.bbar'), title = bar?.querySelector<HTMLElement>('.btitle'), acts = bar?.querySelector<HTMLElement>('.bacts');
+  if (!bar || !title || !acts) return;
+  acts.classList.remove('is-stacked');
+  title.classList.remove('is-small');
+  const pad = parseFloat(getComputedStyle(bar).paddingRight) || 0;
+  const over = (): boolean => acts.getBoundingClientRect().right > bar.getBoundingClientRect().right - pad + 0.5;
+  if (over()) acts.classList.add('is-stacked');
+  if (over()) title.classList.add('is-small');
 }
 
 function fit(): void {
@@ -727,7 +756,7 @@ function orderAt(px: number, py: number): void {
   else if (give({ do: 'move', units: ids, x: fx, y: fy })) sc.ping = { x: fx, y: fy, at: now(), kind: 'move' };
 }
 
-window.addEventListener('resize', () => { if (S.active && S.b && S.screen !== 'choose') { fit(); pageTray(); } });
+window.addEventListener('resize', () => { if (S.active && S.b && S.screen !== 'choose') { fitBar(); fit(); pageTray(); } });
 
 // Keys go to the field first, and over the campaign no further: Enter would end its month, Tab pick its next army.
 window.addEventListener('keydown', (e) => {

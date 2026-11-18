@@ -45,15 +45,35 @@ button { cursor: pointer; }
 .bspeed .tc-btn.is-lit { border-color: var(--brass-300); color: var(--brass-100); box-shadow: var(--shadow-lit); }
 .bbal { flex: 1; min-width: 220px; max-width: 420px; display: grid; gap: 3px; }
 .bends #ratio { white-space: nowrap; }
-/* The staff's band (b453) in the card's words is longer than the bar: it folds at the dot, the card's line over the
-   one for now. The second line keeps room for its longest figures, so the bar's height holds still while the clock runs. */
-.bends #ratio .fact + .fact { min-width: calc(30ch + 1.4em); }
-/* The balance never slides under the buttons: at its narrowest it still holds both names and the odds, and the bar
-   folds its buttons onto a second row first, as the fleet action's does (the UI director, 245e366). The odds line keeps
-   room for its longest figures, so the fold follows the width alone, never the odds of the moment. */
-.battle:not(.sea) .bbal { min-width: min-content; }
-.battle:not(.sea) .bends #ratio { min-width: 30ch; text-align: center; }
-.battle:not(.sea) .bends #ratio .facts { text-align: left; }
+/* ---- The land's top bar: one row and 83 high at every width, for every battle, built the way the fleet action's is
+   (the UI director, after 1969d7b). Everything here is scoped off .sea, which keeps its own. ---- */
+.battle:not(.sea) .bbar { flex-wrap: nowrap; gap: 12px; min-height: 83px; }
+.battle:not(.sea) .btitle, .battle:not(.sea) .bclock, .battle:not(.sea) .bspeed { flex: none; }
+/* The title holds three lines: its name, the date, and where the field is ("Open country · across the Vistula"). */
+.battle:not(.sea) .btitle .tc-title-3 { white-space: nowrap; }
+.battle:not(.sea) .btitle.is-small .tc-title-3 { font-size: 15px; }
+/* The middle narrows to fit and never slides under the buttons: at its narrowest it still holds both names, the odds,
+   and break bars of 50 a side. */
+.battle:not(.sea) .bbal { flex: 1 1 360px; min-width: min-content; }
+.battle:not(.sea) .bbar2 { min-width: 50px; }
+/* The odds always take two lines, the card's over now, whether the defence was scouted or not, so every battle starts
+   the field at the same height. The line for now keeps room for its longest figures, so nothing moves as they change:
+   "now 9.99 to 1", or for the staff's band (b453) "now between 88.8 and 88.8 to 1". */
+.battle:not(.sea) .bends #ratio .facts > span { flex-direction: column; }
+.battle:not(.sea) .bends #ratio .fact + .fact { min-width: calc(13ch + 1.4em); }
+.battle:not(.sea) .bends #ratio.is-band .fact + .fact { min-width: calc(30ch + 1.4em); }
+/* The two buttons stay on the bar's one row; where they would be pushed off its end they stack at the right end, small
+   (page.ts fitBar). */
+.battle:not(.sea) .bacts { flex: none; }
+.battle:not(.sea) .bacts.is-stacked { flex-direction: column; gap: 4px; align-items: stretch; }
+.battle:not(.sea) .bacts.is-stacked > .tc-btn { height: var(--control-sm); padding: 0 var(--space-3); font-size: 11px; }
+/* Under 1440 the clock's buttons drop their key caps, and the line of keys under the field takes them instead:
+   "Space pause · 1 2 3 speed". */
+.battle:not(.sea) .keys .fact:has(.knarrow) { display: none; }
+@media (max-width: 1439px) {
+  .battle:not(.sea) .bspeed .tc-key { display: none; }
+  .battle:not(.sea) .keys .fact:has(.knarrow) { display: block; }
+}
 .bclock .tc-label { color: var(--paper-300); }
 .bclock .tc-label.is-paused { color: var(--brass-300); }
 /* How near to breaking (ruling 226(3)): under the balance bar, a bar a side in its nation's colour, no numbers;
@@ -162,6 +182,7 @@ button { cursor: pointer; }
 @media (max-width: 720px) {
   .after .aside2 { grid-template-columns: 1fr; }
   .bbar { gap: 8px; }
+  .battle:not(.sea) .bbar { flex-wrap: wrap; }
   .bspeed .tc-key, .keys { display: none; }
 }
 .tc-label { font-size: 12px; }
