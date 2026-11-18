@@ -60,14 +60,26 @@ def _load_build_tank():
 bt = _load_build_tank()
 PAINT_NAMES = sorted(bt.PAINTS, key=bt.PAINTS.get)          # paint, shade, track, rubber, wood, steel, canvas, glass, rust, stripe
 MODELS_DIR = os.path.normpath(os.path.join(TOOLS, "..", "Content", "Models"))
-OUT_ROOT = "/mnt/project-files/battle-models/land/"
-WORK = "/home/user/art/guns/"
+OUT_ROOT = os.environ.get("GV_OUT_ROOT", "/mnt/project-files/battle-models/land/")    # where the models and pictures go (--out too)
+WORK = os.environ.get("GV_WORK", "/home/user/art/guns/")                             # scratch: local copies, stills, film frames
 FPS = 30
 FAST = False
 
 
 def pick(lod, *v):
     return v[min(lod, len(v) - 1)]
+
+
+# Brian's standing rule for every battle unit: smooth and detailed. At LOD0 a curved surface gets enough sides that its
+# outline shows no facets to a close camera, whatever count its maker asked for; the far LODs keep their own counts.
+LOD_NOW = 0                       # the level of detail being built (each unit's geo() sets it)
+
+
+def round_sides(r, sides):
+    if LOD_NOW != 0 or sides < 6:                     # (a five-sided rivet head or a square bar keeps its shape)
+        return sides
+    want = 32 if r >= 0.3 else 24 if r >= 0.05 else 12 if r >= 0.02 else sides
+    return max(sides, want)
 
 
 def smoothstep(e0, e1, x):
@@ -144,9 +156,11 @@ def bm_box(size, bevel=0.0, seg=1, shape=None):
     return bm
 
 
-def bm_lathe(prof, sides, cap0=False, cap1=False, phase=0.0):
+def bm_lathe(prof, sides, cap0=False, cap1=False, phase=0.0, exact=False):
     """A profile [(radius, height)] turned round local z. Taken bottom to top (counter-clockwise in radius-height) its
-    faces look outward; a radius of 0 is a pole."""
+    faces look outward; a radius of 0 is a pole. Unless `exact` (a hex nut), round_sides sets its sides at LOD0."""
+    if not exact:
+        sides = round_sides(max(r for r, h in prof), sides)
     bm = bmesh.new()
     rings = []
     for r, h in prof:
@@ -235,6 +249,8 @@ def bm_tube(pts, radius, sides=6, closed=False, caps=True, up=None, profile=None
     bm = bmesh.new()
     P = [Vector(p) for p in pts]
     n = len(P)
+    if profile is None:
+        sides = round_sides(radius(0) if callable(radius) else radius, sides)
     prof = profile or circle_profile(sides)
     T = []
     for i in range(n):
@@ -274,7 +290,7 @@ def rod(g, a, b, r, sides, mat, bone, r2=None, caps=True):
 
 def bolt(g, at, normal, bone, r=0.014, h=0.012, mat="shade", sides=6, spin=0.0):
     """A hex-headed bolt standing out of a plate."""
-    g.put(bm_lathe([(r, -0.003), (r, h)], sides, cap1=True), mat, bone, toward(at, normal, spin))
+    g.put(bm_lathe([(r, -0.003), (r, h)], sides, cap1=True, exact=True), mat, bone, toward(at, normal, spin))
 
 
 def rivet(g, at, normal, bone, r=0.009, mat="paint", sides=5):
@@ -317,7 +333,7 @@ def weld(g, a, b, out, bone, wide=0.011, high=0.008, seg=None, sink=0.0, mat="sh
 def handwheel(g, centre, axis, radius, bone, lod, spokes=4, mat="steel", knob=True):
     """A crank wheel: a round rim on spokes, with a turning handle standing out of it."""
     m = toward(centre, axis)
-    n = pick(lod, 14, 8)
+    n = pick(lod, 28, 8)
     g.put(bm_tube([m @ Vector((radius * math.cos(2 * math.pi * k / n), radius * math.sin(2 * math.pi * k / n), 0.0)) for k in range(n)],
                   pick(lod, 0.011, 0.014), pick(lod, 5, 4), closed=True), mat, bone)
     if lod >= 2:
@@ -655,9 +671,10 @@ def make_mesh(g, name, arm=None, nation="GER"):
     rest = me.attributes.new("rest", "FLOAT_VECTOR", "POINT")
     rest.data.foreach_set("vector", [c for v in me.vertices for c in v.co])
     me.polygons.foreach_set("use_smooth", [True] * len(me.polygons))
-    me.set_sharp_from_angle(angle=math.radians(40.0))
+    set_sharp_edges(me)
     obj = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(obj)
+    weighted_normals(obj)
     groups = {}
     for i, w in enumerate(g.wt):
         for bone, x in w.items():
@@ -1203,6 +1220,8 @@ class FieldGun:
 
     # -------------------------------------------------------------------------------------------- the model
     def geo(self, lod):
+        global LOD_NOW
+        LOD_NOW = lod
         g = Geo()
         self.wheels(g, lod)
         self.lower(g, lod)
@@ -1724,6 +1743,8 @@ class AmmoBoxes:
                 g.put(bm_box((0.07, 0.03, 0.012)), "steel", "root", base @ Matrix.Translation((x, -W * 0.5 - 0.004, Hh)))
 
     def geo(self, lod):
+        global LOD_NOW
+        LOD_NOW = lod
         g = Geo()
         L, W, Hh = self.BOX
         self.box_(g, Vector((0.0, 0.25, 0.0)), 4.0, lod)
@@ -1789,14 +1810,16 @@ def road_wheel(g, c, side, r, w, bone, lod, rim_r=None, lugs=14, disc="paint", i
     tp = tyre_profile(r, w, lod, bulge=0.014, rim_r=ri, tread=0.008)
     if lod == 0:
         tp = tp[:3] + tp[4:6] + tp[7:]                                      # (the lugs make the tread's edge)
-    g.put(bm_lathe(tp, n), "rubber", bone, m)
+    if inner and lod == 0:
+        n = 20                                                              # (hidden behind the outer twin: plainer)
+    g.put(bm_lathe(tp, n, exact=inner), "rubber", bone, m)
     if lod == 0 and lugs and not inner:
         tread_lugs(g, c, side, r, w, lugs, bone, chevron=True, depth=0.018)
     if lod == 2:
         g.put(bm_cyl(ri, w * 0.8, n), disc, bone, m)
         return
     if inner:
-        g.put(bm_lathe([(ri, -w * 0.4), (ri, w * 0.4), (0.0, w * 0.4)], n), disc, bone, m)
+        g.put(bm_lathe([(ri, -w * 0.4), (ri, w * 0.4), (0.0, w * 0.4)], n, exact=True), disc, bone, m)
         return
     prof = [(ri, -w * 0.42), (ri + 0.004, w * 0.3), (ri - 0.03, w * 0.32), (ri * 0.6, w * 0.18), (0.12, w * 0.24), (0.0, w * 0.3)]
     g.put(bm_lathe(prof if lod == 0 else [(ri, -w * 0.4), (ri, w * 0.3), (0.12, w * 0.2), (0.0, w * 0.28)], n), disc, bone, m)
@@ -2058,6 +2081,8 @@ class Lorry:
 
     # -------------------------------------------------------------------------------------------- the model
     def geo(self, lod):
+        global LOD_NOW
+        LOD_NOW = lod
         g = Geo()
         self.wheels(g, lod)
         self.chassis(g, lod)
@@ -2306,7 +2331,7 @@ class Lorry:
         them; flat guards over the rear twins with mud flaps."""
         R, FX = self.R, self.FX
         rr = R + 0.11
-        steps = pick(lod, 12, 6, 3)
+        steps = pick(lod, 24, 6, 3)
         for side in (1.0, -1.0):
             yc = side * (self.FY + 0.02)
             pts, ups = [], []
@@ -2395,8 +2420,8 @@ class Lorry:
         """The canvas tilt over five hoops: sagging between them, lashed down along its foot, its back rolled up; an inner
         skin so that it is not hollow seen from inside; the hoops themselves."""
         b0, b1 = self.BED0 - 0.03, self.BED1 + 0.03
-        nx = pick(lod, 24, 8, 2)
-        ns = pick(lod, 17, 10, 6)
+        nx = pick(lod, 32, 8, 2)
+        ns = pick(lod, 23, 10, 6)
         prof, outs = self.tilt_profile(ns)
         hoops = self.HOOPS
         rng = random.Random(3)
@@ -2466,10 +2491,10 @@ class Lorry:
                     g.put(bm_tube(pts, 1.0, profile=[(-0.02, -0.003), (0.02, -0.003), (0.02, 0.003), (-0.02, 0.003)], up=(0, 1, 0)), "shade", "body")
         # the hoops, inside the canvas
         if lod < 2:
-            ph, po = self.tilt_profile(pick(lod, 12, 8), foot=self.SIDE_TOP - 0.1)
+            ph, po = self.tilt_profile(pick(lod, 20, 8), foot=self.SIDE_TOP - 0.1)
             for x in (hoops[:2] if lod == 0 else hoops[:1]):
                 pts = [Vector((x, y - oy * 0.035, z - oz * 0.035)) for (y, z), (oy, oz) in zip(ph, po)]
-                g.put(bm_tube(pts, 0.016, 4), "shade", "body")
+                g.put(bm_tube(pts, 0.016, pick(lod, 6, 4)), "shade", "body")
         # the lashings along the foot, from the canvas's eyelets to hooks on the dropsides
         if lod == 0:
             for side in (1.0, -1.0):
@@ -2863,6 +2888,8 @@ class HalfTrack:
 
     # -------------------------------------------------------------------------------------------- the model
     def geo(self, lod):
+        global LOD_NOW
+        LOD_NOW = lod
         g = Geo()
         self.running_gear(g, lod)
         self.front_wheels(g, lod)
@@ -2921,15 +2948,15 @@ class HalfTrack:
                 if lod == 1:
                     g.put(bm_cyl(r - 0.01, wide * 0.8, 8), "paint", bone, m)
                     return
-                n = 12
+                n = 20
             elif lod == 1:
                 n = 10
             if lod == 2:
                 g.put(bm_cyl(r, wide * 0.8, n), "rubber", bone, m)
                 return
-            g.put(bm_lathe([(r - 0.04, -wide * 0.5), (r, -wide * 0.5), (r, wide * 0.5), (r - 0.04, wide * 0.5)], n), "rubber", bone, m)
+            g.put(bm_lathe([(r - 0.04, -wide * 0.5), (r, -wide * 0.5), (r, wide * 0.5), (r - 0.04, wide * 0.5)], n, exact=inner), "rubber", bone, m)
             prof = [(r - 0.04, -wide * 0.5), (r - 0.04, wide * 0.5), (r * 0.7, wide * 0.55), (r * 0.45, wide * 0.48), (0.08, wide * 0.6), (0.0, wide * 0.62)]
-            g.put(bm_lathe(prof if (lod == 0 and not inner) else [prof[0], prof[1], prof[3], prof[5]], n), "paint", bone, m)
+            g.put(bm_lathe(prof if (lod == 0 and not inner) else [prof[0], prof[1], prof[3], prof[5]], n, exact=inner), "paint", bone, m)
             if lod == 0 and not inner:
                 bolt_ring(g, m @ Vector((0, 0, wide * 0.5)), out, r * 0.57, 6, bone, 0.011, 0.01, "shade", sides=4)
                 bolt(g, m @ Vector((0, 0, wide * 0.6)), out, bone, 0.035, 0.02, "shade", sides=6)
@@ -3365,6 +3392,40 @@ def _glb(path, objs, anim):
     kit._select_only(objs)
     bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_animations=False, export_apply=False,
                               export_yup=True, export_skins=True, export_extras=True)
+
+
+def set_sharp_edges(me, hard=60.0, fold=25.0, big=0.004):
+    """Sharp where two faces meet at more than `hard` degrees, or where two big faces (over `big` square metres each:
+    plates, not bevels or the sides of a round thing) meet at more than `fold`. Everything else is smooth, so a bevel
+    or a curved surface shades as one; weighted_normals then keeps the big faces flat beside it."""
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.edges.ensure_lookup_table()
+    area = {f.index: f.calc_area() for f in bm.faces}
+    sharp = []
+    hard, fold = math.radians(hard), math.radians(fold)
+    for e in bm.edges:
+        if len(e.link_faces) != 2:
+            sharp.append(True)
+            continue
+        f0, f1 = e.link_faces
+        a = f0.normal.angle(f1.normal, 0.0)
+        sharp.append(a > hard or (a > fold and min(area[f0.index], area[f1.index]) > big))
+    bm.free()
+    att = me.attributes.get("sharp_edge") or me.attributes.new("sharp_edge", "BOOLEAN", "EDGE")
+    att.data.foreach_set("value", sharp)
+
+
+def weighted_normals(obj):
+    """Face-area weighted normals (Blender's Weighted Normal, keeping the sharp edges), applied into the mesh's own
+    custom normals: the .glb, the .fbx and the .json all carry them."""
+    mod = obj.modifiers.new("wn", "WEIGHTED_NORMAL")
+    mod.mode = "FACE_AREA"
+    mod.weight = 50
+    mod.keep_sharp = True
+    mod.thresh = 0.01
+    with bpy.context.temp_override(object=obj, active_object=obj):
+        bpy.ops.object.modifier_apply(modifier=mod.name)
 
 
 def mesh_json(obj, index):
@@ -3904,54 +3965,70 @@ WIND = Vector((1.4, 0.9, 0.0))                          # m/s, toward the east-n
 
 
 def field_gun_shot(fx, t0, where, ground, bore=0.075):
-    """A field gun fires, its muzzle a metre off the ground: a short tongue of flame, a ring of grey-brown smoke thrown
-    out round the muzzle, a plume forward along the line, a ball hanging at the muzzle, a wide fan of tan dust blown off
-    the ground in front, and a flash of light. Sized from the shared gun (bore 0.38 m) by the bore, and from the tank's."""
+    """A field gun fires, its muzzle a metre off the ground. Everything is many small soft puffs, never a few big balls
+    (the warship artist's lesson): the flash as ragged tongues of flame along and round the bore, a hot yellow heart
+    going deep orange at the edges and tips; a ring of grey-brown smoke thrown out round the muzzle; smoke hanging at the
+    muzzle; a plume forward along the line; a wide fan of tan dust blown off the ground in front; a flash of light. Sized
+    by the bore from the shared gun (0.38 m) and the tank's."""
     g = fx.rng
     k = max(bore / 0.075, 0.6)
+    HEART, MID, EDGE = (1.0, 0.86, 0.5), (1.0, 0.56, 0.16), (0.82, 0.26, 0.04)
+
+    def tongue(t, at, d, length, width, n, heat):
+        """One ragged tongue of flame from `at` along `d`: small puffs, hottest near its root and its middle line."""
+        side = d.cross(Vector((0, 0, 1)))
+        side = side.normalized() if side.length > 1e-6 else Vector((0, 1, 0))
+        up = side.cross(d).normalized()
+        q = d.to_track_quat("X", "Z").to_euler()
+        for i in range(n):
+            u = g.uniform(0.0, 1.0) ** 0.8
+            off = u * length
+            spread = width * (0.35 + 0.65 * math.sin(math.pi * min(u * 1.25, 1.0)))
+            lat = side * g.gauss(0.0, 0.45) * spread + up * g.gauss(0.0, 0.45) * spread
+            edge = min(1.0, lat.length / max(spread, 1e-6) * 0.8 + u * 0.7)
+            col = Vector(HEART).lerp(Vector(MID), min(1.0, edge * 1.4)) if edge < 0.7 else Vector(MID).lerp(Vector(EDGE), (edge - 0.7) / 0.3)
+            r = (0.03 + 0.09 * (1.0 - u) * g.uniform(0.6, 1.0)) * k * heat
+            p = fx.puff(t + g.uniform(0.0, 0.012), at + d * off + lat, vel=d * g.uniform(3.0, 7.0) + lat * 4.0, life=g.uniform(0.035, 0.07),
+                        r=(r * 0.7, r * 1.25), col=tuple(col), col2=EDGE, alpha=1.0, kind="glow", drag=6.0, wind=0.0,
+                        squash=(g.uniform(1.6, 2.6), 1.0, 1.0), fade_in=0.008, grow=0.5, cool=1.2)
+            p["ob"].rotation_euler = q
 
     def make(t, at, facing):
         side = facing.cross(Vector((0, 0, 1))).normalized()
         up = side.cross(facing)
-        q = facing.to_track_quat("X", "Z")
-        for i in range(3):                                   # the flash, long along the bore, a hot core in it
-            p = fx.puff(t, at + facing * (0.25 + 0.3 * i) * k, vel=facing * 6.0, life=0.045 + 0.01 * i, r=(0.12 * k, (0.4 - 0.08 * i) * k),
-                        col=(0.95, 0.55, 0.18), col2=(0.85, 0.32, 0.07), alpha=1.0, kind="glow", drag=6.0, wind=0.0, squash=(2.0, 1.0, 1.0), fade_in=0.01, grow=0.4)
-            p["ob"].rotation_euler = q.to_euler()
-        p = fx.puff(t, at + facing * 0.3 * k, vel=facing * 4.0, life=0.035, r=(0.08 * k, 0.2 * k), col=(1.0, 0.9, 0.62), col2=(1.0, 0.7, 0.3), alpha=1.0,
-                    kind="glow", drag=6.0, wind=0.0, squash=(2.2, 1.0, 1.0), fade_in=0.01, grow=0.4)
-        p["ob"].rotation_euler = q.to_euler()
-        for i in range(4):                                   # (and a little sideways out of the muzzle's mouth)
-            d = (side * (1 if i % 2 else -1) * 0.8 + facing * 0.6 + up * g.uniform(-0.2, 0.3)).normalized()
-            fx.puff(t, at + facing * 0.15, vel=d * 4.0, life=0.04, r=(0.08 * k, 0.28 * k), col=(0.95, 0.6, 0.2), col2=(0.8, 0.3, 0.06), alpha=0.9,
-                    kind="glow", drag=6.0, wind=0.0, fade_in=0.01, grow=0.4)
-        for i in range(26):                                  # the ring round the muzzle (flattened: the ground below, little lift): it stands and thins
-            a = 2 * math.pi * i / 26 + g.uniform(-0.08, 0.08)
+        # the flash: one long tongue along the bore and a crown of short ones round the muzzle's mouth
+        tongue(t, at + facing * 0.05, facing, 1.25 * k, 0.32 * k, 34, 1.0)
+        for i in range(7):
+            a = 2 * math.pi * i / 7 + g.uniform(-0.3, 0.3)
+            d = (facing * 0.55 + (side * math.cos(a) + up * math.sin(a)) * 0.85).normalized()
+            tongue(t, at + facing * 0.08, d, g.uniform(0.25, 0.45) * k, 0.1 * k, 6, 0.7)
+        for i in range(60):                                  # the ring round the muzzle (flattened: the ground below, little lift): it stands and thins
+            a = 2 * math.pi * i / 60 + g.uniform(-0.05, 0.05)
             out = side * math.cos(a) + up * (math.sin(a) * 0.55)
             c = g.uniform(0.55, 0.66)
-            fx.puff(t + 0.02, at + facing * 0.35, vel=out * g.uniform(3.0, 4.2) * k + facing * g.uniform(2.0, 4.0), life=g.uniform(4.0, 5.5),
-                    r=(0.2 * k, g.uniform(0.8, 1.1) * k), col=(0.62, 0.54, 0.43), col2=(c, c * 0.98, c * 0.94), alpha=0.6, drag=3.0, rise=0.25,
-                    fade_in=0.03, grow=0.5, wind=0.9)
-        for i in range(6):                                   # a ball of smoke hanging at the muzzle
+            fx.puff(t + 0.02, at + facing * 0.35 + out * g.uniform(0.0, 0.15), vel=out * g.uniform(2.6, 4.4) * k + facing * g.uniform(1.5, 4.5),
+                    life=g.uniform(4.0, 5.5), r=(0.12 * k, g.uniform(0.42, 0.62) * k), col=(0.62, 0.54, 0.43), col2=(c, c * 0.98, c * 0.94), alpha=0.5,
+                    drag=3.0, rise=0.25, fade_in=0.03, grow=0.5, wind=0.9)
+        for i in range(18):                                  # smoke hanging at the muzzle
             c = g.uniform(0.52, 0.62)
-            fx.puff(t + 0.03, at + facing * 0.7, vel=facing * g.uniform(1.0, 3.0) + Vector((g.uniform(-0.8, 0.8), g.uniform(-0.8, 0.8), g.uniform(0.0, 0.8))),
-                    life=g.uniform(4.5, 6.0), r=(0.3 * k, g.uniform(1.0, 1.5) * k), col=(0.62, 0.53, 0.42), col2=(c, c * 0.98, c * 0.94), alpha=0.55,
+            fx.puff(t + 0.03, at + facing * g.uniform(0.4, 1.0), vel=facing * g.uniform(0.8, 3.0) + Vector((g.uniform(-0.9, 0.9), g.uniform(-0.9, 0.9), g.uniform(0.0, 0.9))),
+                    life=g.uniform(4.5, 6.0), r=(0.15 * k, g.uniform(0.45, 0.75) * k), col=(0.62, 0.53, 0.42), col2=(c, c * 0.98, c * 0.94), alpha=0.45,
                     drag=2.0, rise=0.3, fade_in=0.03, grow=0.5, wind=0.9)
-        for i in range(10):                                  # the plume along the line of fire
-            fx.puff(t + 0.02, at + facing * 0.6, vel=facing * g.uniform(8.0, 30.0) * k + up * g.uniform(-1.0, 2.0) + side * g.uniform(-2.0, 2.0),
-                    life=g.uniform(4.0, 6.0), r=(0.3 * k, g.uniform(1.2, 1.9) * k), col=(0.64, 0.52, 0.38), col2=(0.58, 0.57, 0.54), alpha=0.55,
+        for i in range(28):                                  # the plume along the line of fire
+            fx.puff(t + 0.02, at + facing * 0.6, vel=facing * g.uniform(6.0, 32.0) * k + up * g.uniform(-1.0, 2.0) + side * g.uniform(-2.2, 2.2),
+                    life=g.uniform(4.0, 6.0), r=(0.15 * k, g.uniform(0.55, 0.95) * k), col=(0.64, 0.52, 0.38), col2=(0.58, 0.57, 0.54), alpha=0.45,
                     drag=3.0, rise=0.3, fade_in=0.03, grow=0.5, wind=0.9)
         flat = Vector((facing.x, facing.y, 0.0)).normalized()
         s2 = Vector((-flat.y, flat.x, 0.0))
-        for i in range(30):                                  # the dust: a fan blown off the ground ahead of the muzzle
+        for i in range(70):                                  # the dust: a fan blown off the ground ahead of the muzzle
             u = g.uniform(0.3, 6.0)
             w = g.uniform(-1.0, 1.0) * (0.7 + 0.4 * u)
             p = at + flat * u + s2 * w
             z = ground(p)
             out = (flat + s2 * (w / max(u, 1.0))).normalized()
-            fx.puff(t + 0.02 + 0.012 * u, Vector((p.x, p.y, z + 0.25)), vel=out * g.uniform(3.0, 7.0) + Vector((0, 0, g.uniform(0.6, 2.2))),
-                    life=g.uniform(4.0, 6.0), r=(0.3, g.uniform(1.4, 2.5)), col=DUST, col2=DUST2, alpha=0.55, drag=1.8, rise=0.15, fade_in=0.05,
-                    grow=0.5, wind=0.85, squash=(1.0, 1.0, 0.7))
+            fx.puff(t + 0.02 + 0.012 * u, Vector((p.x, p.y, z + 0.15 + g.uniform(0.0, 0.3))), vel=out * g.uniform(3.0, 7.0) + Vector((0, 0, g.uniform(0.6, 2.4))),
+                    life=g.uniform(4.0, 6.0), r=(0.15, g.uniform(0.7, 1.3)), col=DUST, col2=DUST2, alpha=0.45, drag=1.8, rise=0.15, fade_in=0.05,
+                    grow=0.5, wind=0.85, squash=(1.0, 1.0, 0.75))
         fx.light(t + 0.02, at + facing * 1.2 + Vector((0, 0, 0.5)), 1.8e3 * k, 0.08)     # (with the flash, not before it; daylight)
     fx.once(t0, where, make)
 
@@ -3961,10 +4038,10 @@ def dust_kick(fx, t0, at, ground, n=5, size=1.0):
     g = fx.rng
 
     def make(t, p0, facing):
-        for i in range(n):
+        for i in range(n * 2):
             p = p0 + Vector((g.uniform(-0.3, 0.3), g.uniform(-0.3, 0.3), 0.0))
-            fx.puff(t + g.uniform(0.0, 0.06), Vector((p.x, p.y, ground(p) + 0.1)), vel=Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.3, 1.0))) * 1.2,
-                    life=g.uniform(2.0, 3.0), r=(0.12 * size, g.uniform(0.5, 0.8) * size), col=DUST, col2=DUST2, alpha=0.45, drag=2.0, rise=0.1,
+            fx.puff(t + g.uniform(0.0, 0.06), Vector((p.x, p.y, ground(p) + 0.08)), vel=Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.3, 1.0))) * 1.2,
+                    life=g.uniform(2.0, 3.0), r=(0.08 * size, g.uniform(0.3, 0.5) * size), col=DUST, col2=DUST2, alpha=0.4, drag=2.0, rise=0.1,
                     fade_in=0.05, grow=0.5, wind=0.8, squash=(1.0, 1.0, 0.7))
     fx.once(t0, at, make)
 

@@ -403,13 +403,64 @@ LOOK_NOW = dict(LOOK["GER"])
 
 def paint_material(paint):
     """The material for a paint, named by the paint (the game colours it); the studio colour is for the pictures."""
+    if paint == "eye":
+        return eye_paint()
     rough = {"steel": 0.45, "boots": 0.42, "straps": 0.55, "helmet": 0.6, "skin": 0.55, "wood": 0.5, "eye": 0.3}.get(paint, 0.85)
     metal = 0.6 if paint == "steel" else 0.0
     noise = {"tunic": 0.18, "trousers": 0.18, "pack": 0.2, "lower": 0.15, "helmet": 0.12, "wood": 0.25, "skin": 0.06}.get(paint, 0.05)
     sheen = 0.4 if paint in ("tunic", "trousers", "pack", "lower") else 0.0
     m = kit.material(paint, kit.hex_rgb(LOOK_NOW[paint]), rough=rough, metal=metal, sheen=sheen, noise=noise,
                      noise_scale=90.0, bump=0.15 if paint in ("tunic", "trousers", "pack") else 0.0)
-    return studio_wear(m, paint)
+    m = studio_wear(m, paint)
+    if paint == "skin":
+        skin_studio(m)
+    return m
+
+
+def eye_paint():
+    """The eyes: the game paints them one dark colour; the pictures paint the white, a brown iris and the pupil by
+    each point's `look` (how near it is to the eyeball's front)."""
+    m = bpy.data.materials.get("eye")
+    if m:
+        return m
+    m = bpy.data.materials.new("eye")
+    m.use_nodes = True
+    m.diffuse_color = (*kit.hex_rgb(LOOK_NOW["eye"]), 1.0)
+    nt = m.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    bsdf.inputs["Roughness"].default_value = 0.12
+    att = nt.nodes.new("ShaderNodeAttribute")
+    att.attribute_name = "look"
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    e = ramp.color_ramp.elements
+    e[0].position, e[0].color = 0.0, (0.72, 0.69, 0.64, 1)
+    e[1].position, e[1].color = 0.87, (0.72, 0.69, 0.64, 1)
+    e.new(0.9).color = (0.16, 0.09, 0.045, 1)
+    e.new(0.972).color = (0.015, 0.012, 0.01, 1)
+    nt.links.new(att.outputs["Fac"], ramp.inputs["Fac"])
+    nt.links.new(ramp.outputs["Color"], bsdf.inputs["Base Color"])
+    return m
+
+
+def skin_studio(m):
+    """The skin in the pictures: a little light under it (subsurface), and the short hair (the `scalp` amount) dark."""
+    nt = m.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    bsdf.inputs["Subsurface Weight"].default_value = 0.18
+    bsdf.inputs["Subsurface Radius"].default_value = (0.012, 0.005, 0.003)
+    bsdf.inputs["Subsurface Scale"].default_value = 0.6
+    base_in = bsdf.inputs["Base Color"]
+    if not base_in.links:
+        return
+    src = base_in.links[0].from_socket
+    att = nt.nodes.new("ShaderNodeAttribute")
+    att.attribute_name = "scalp"
+    mix = nt.nodes.new("ShaderNodeMix")
+    mix.data_type = "RGBA"
+    nt.links.new(att.outputs["Fac"], mix.inputs["Factor"])
+    nt.links.new(src, mix.inputs["A"])
+    mix.inputs["B"].default_value = (*kit.hex_rgb("2E241D"), 1.0)
+    nt.links.new(mix.outputs["Result"], base_in)
 
 
 DUST = "B8AA8C"
@@ -675,17 +726,19 @@ def spline(ctrl, n):
 
 
 # ================================================================================================ the kit
-def build_kit(J, spec, body_ls):
+def build_kit(J, spec, body_ls, Z=None):
     """Belt and buckle, ammunition pouches, Y-straps, bread bag, water bottle, entrenching tool, and by nation the
     gas-mask canister or the pack with its bedroll (or a blanket roll across the body). Returns
     {name: (object, bone or None)}: a bone means the piece is rigid on it; None means it takes the body's weights."""
     tunic = body_ls[0]
+    Z = Z or (lambda z: z)                     # (heights as set on the sculpted man, mapped onto this one)
     out = {}
     # ---- the belt round the waist, laid on the tunic, and its buckle
     g = Geo()
     ang = np.linspace(0, 2 * math.pi, 28, endpoint=False)
-    zb = 1.0
-    start = np.stack([np.cos(ang) * 0.3, np.sin(ang) * 0.3, np.full_like(ang, zb)], axis=1)
+    zb = Z(1.0)
+    cx = J["spine_01"][0] + 0.03 if "crown" in J else 0.0
+    start = np.stack([cx + np.cos(ang) * 0.2, np.sin(ang) * 0.2, np.full_like(ang, zb)], axis=1)
     P, N = project(tunic, start)
     P[:, 2] = zb
     P = P + N * 0.005
@@ -697,15 +750,15 @@ def build_kit(J, spec, body_ls):
     out["belt"] = (g.build("belt"), None)
     # ---- the small things on the tunic: buttons down the front and on the pocket flaps, the collar tabs
     g = Geo()
-    spots = [((0.3, 0.0, z), (-1.0, 0.0, 0.0)) for z in (1.405, 1.325, 1.245, 1.165, 1.085)]
+    spots = [((0.3, 0.0, z), (-1.0, 0.0, 0.0)) for z in (Z(1.405), Z(1.325), Z(1.245), Z(1.165), Z(1.085))]
     for side in (1.0, -1.0):
-        spots += [((0.3, 0.078 * side, 1.336), (-1.0, -0.25 * side, 0.0)), ((0.3, 0.105 * side, 0.918), (-1.0, -0.25 * side, 0.0))]
+        spots += [((0.3, 0.078 * side, Z(1.336)), (-1.0, -0.25 * side, 0.0)), ((0.3, 0.105 * side, Z(0.918)), (-1.0, -0.25 * side, 0.0))]
     for start, way in spots:
         p, nrm = on_surface(tunic, start, way)
         g.tube(p - nrm * 0.001, p + nrm * 0.0035, 0.0085, 0.0072, "steel", 8)
     collar = body_ls[3]
     for side in (1.0, -1.0):
-        p, nrm = on_surface(collar, (0.25, 0.036 * side, 1.452), (-1.0, -0.3 * side, 0.0))
+        p, nrm = on_surface(collar, (0.3, 0.036 * side, Z(1.452)), (-1.0, -0.3 * side, 0.0))
         g.box(p + nrm * 0.0005, (0.0022, 0.02, 0.0105), "lower", frame_from(nrm, (0.0, 0.0, 1.0)))
     out["details"] = (g.build("details"), None)
     # ---- the ammunition pouches: three cells either side of the buckle, on the belt
@@ -713,7 +766,7 @@ def build_kit(J, spec, body_ls):
     for side in (1.0, -1.0):
         for k, y in enumerate((0.06, 0.103, 0.143)):
             a = math.atan2(y * side, 0.12)
-            p0, n0 = project(tunic, [(math.cos(a) * 0.3, math.sin(a) * 0.3, zb - 0.012)])
+            p0, n0 = project(tunic, [(cx + math.cos(a) * 0.2, math.sin(a) * 0.2, zb - 0.012)])
             p0, n0 = p0[0], n0[0]
             R = frame_from(n0, (0.0, 0.0, 1.0))
             c = p0 + n0 * 0.028
@@ -723,18 +776,17 @@ def build_kit(J, spec, body_ls):
     # ---- the Y-straps: from the belt in front, over each shoulder, joining in the middle of the back
     g = Geo()
     for side in (1.0, -1.0):
-        ctrl = [(0.13, 0.082 * side, 1.03), (0.13, 0.09 * side, 1.16), (0.125, 0.1 * side, 1.28), (0.09, 0.112 * side, 1.4),
-                (0.025, 0.12 * side, 1.468), (-0.05, 0.112 * side, 1.45), (-0.12, 0.085 * side, 1.37), (-0.142, 0.045 * side, 1.29),
-                (-0.145, 0.006 * side, 1.235)]
+        ctrl = [(x, y * side, Z(z)) for x, y, z in ((0.13, 0.082, 1.03), (0.13, 0.09, 1.16), (0.125, 0.1, 1.28), (0.09, 0.112, 1.4),
+                (0.025, 0.12, 1.468), (-0.05, 0.112, 1.45), (-0.12, 0.085, 1.37), (-0.142, 0.045, 1.29), (-0.145, 0.006, 1.235))]
         P, N = project(tunic, spline(ctrl, 14))
         g.band(P + N * 0.004, N, 0.032, 0.004, "straps")
-    P, N = project(tunic, spline([(-0.145, 0.0, 1.245), (-0.14, 0.0, 1.13), (-0.13, 0.0, 1.03)], 4))
+    P, N = project(tunic, spline([(-0.145, 0.0, Z(1.245)), (-0.14, 0.0, Z(1.13)), (-0.13, 0.0, Z(1.03))], 4))
     g.band(P + N * 0.004, N, 0.036, 0.004, "straps")
     out["straps"] = (g.build("straps"), None)
     # ---- what hangs from the belt: bread bag (right hip), water bottle (behind it), entrenching tool (left hip)
     L = Layer("bread_bag", "pack")
     flap = Layer("bread_flap", "pack")
-    p0, n0 = project(tunic, [(-0.03, -0.3, 0.905)])
+    p0, n0 = project(tunic, [(-0.03, -0.3, Z(0.905))])
     p0, n0 = p0[0], n0[0]
     R = frame_from(n0, (0.0, 0.0, 1.0))
     c = p0 + n0 * 0.034
@@ -743,7 +795,7 @@ def build_kit(J, spec, body_ls):
     out["bread_bag"] = (mesh_from_layers("bread_bag", [L, flap], 0.003, 160), "pelvis")
     L = Layer("bottle", "pack")
     cup = Layer("cup", "steel")
-    p0, n0 = project(tunic, [(-0.3, -0.16, 0.89)])
+    p0, n0 = project(tunic, [(-0.3, -0.16, Z(0.89))])
     p0, n0 = p0[0], n0[0]
     R = frame_from(n0, (0.0, 0.0, 1.0))
     c = p0 + n0 * 0.08
@@ -752,7 +804,7 @@ def build_kit(J, spec, body_ls):
     out["bottle"] = (mesh_from_layers("bottle", [L, cup], 0.003, 140), "pelvis")
     L = Layer("shovel_case", "straps")
     hnd = Layer("shovel_handle", "wood")
-    p0, n0 = project(tunic, [(-0.08, 0.3, 0.88)])
+    p0, n0 = project(tunic, [(-0.08, 0.3, Z(0.88))])
     p0, n0 = p0[0], n0[0]
     R = frame_from(n0, (0.0, 0.0, 1.0))
     c = p0 + n0 * 0.024
@@ -763,8 +815,8 @@ def build_kit(J, spec, body_ls):
     # ---- by nation
     if spec["canister"]:
         L = Layer("canister", "helmet")
-        a, b = np.array((-0.175, -0.125, 0.845)), np.array((-0.175, 0.125, 0.885))
-        p0, n0 = project(tunic, [(-0.3, 0.0, 0.865)])
+        a, b = np.array((-0.175, -0.125, Z(0.845))), np.array((-0.175, 0.125, Z(0.885)))
+        p0, n0 = project(tunic, [(-0.3, 0.0, Z(0.865))])
         off = p0[0][0] - 0.052 - 0.006
         a[0] = b[0] = off
         L.add(RoundCone(a, b, 0.052, 0.052))
@@ -777,9 +829,9 @@ def build_kit(J, spec, body_ls):
     if spec["pack"]:
         L = Layer("pack", "pack")
         roll = Layer("bedroll", "pack")
-        p0, n0 = project(tunic, [(-0.3, 0.0, 1.25)])
+        p0, n0 = project(tunic, [(-0.3, 0.0, Z(1.25))])
         back = p0[0][0]
-        c = np.array((back - 0.068, 0.0, 1.235))
+        c = np.array((back - 0.068, 0.0, Z(1.235)))
         L.add(RoundBox(c, (0.07, 0.15, 0.16), 0.03))
         L.add(RoundBox(c + np.array((-0.004, 0.0, 0.08)), (0.074, 0.154, 0.07), 0.022), 0.004)          # the flap
         roll.add(RoundCone(c + np.array((0.01, 0.17, 0.205)), c + np.array((0.01, -0.17, 0.205)), 0.055, 0.055))
@@ -790,7 +842,7 @@ def build_kit(J, spec, body_ls):
         for k in range(13):
             t = 2.0 * math.pi * k / 12.0
             lift = math.sin(t)
-            pts.append((0.16 * math.cos(t) - 0.015, -0.03 - 0.2 * lift, 1.2 + 0.25 * lift))
+            pts.append((0.16 * math.cos(t) - 0.015, -0.03 - 0.2 * lift, Z(1.2 + 0.25 * lift)))
         for k in range(12):
             L.add(RoundCone(pts[k], pts[k + 1], 0.05, 0.05), 0.02)
         out["roll"] = (mesh_from_layers("roll", [L], 0.005, 260), None)
@@ -847,7 +899,10 @@ def build_helmet(kind, J, sides=24):
     pose. The head bone's own frame is the model's (x forward, z up), so the helmet file is the same shape moved to
     the head bone's head."""
     k = HELMETS[kind]
-    C = np.array((J["head"][0] + 0.004 - 0.01 + k["dx"], 0.0, 1.655))
+    if "crown" in J:                                   # (MakeHuman's man: on his skull as measured)
+        C = np.array((J["skull_x"] - 0.004 + k["dx"], 0.0, J["crown"] - 0.095))
+    else:
+        C = np.array((J["head"][0] + 0.004 - 0.01 + k["dx"], 0.0, 1.655))
     th = 0.0045 if not k.get("cloth") else 0.006
     nexp = k.get("n", 2.0)
     outer, inner = [], []
@@ -927,12 +982,19 @@ def build_helmet(kind, J, sides=24):
             i = sides // 4 if side > 0 else 3 * sides // 4
             r, z = outer[i][-2]
             hx = J["head"][0] + 0.004
-            ctrl = [C + np.array((0.0, side * (r - 0.012), z + 0.004)), (hx + 0.02, side * 0.07, 1.575), (hx + 0.055, side * 0.04, 1.528),
-                    (hx + 0.064, 0.0, 1.512)]
+            if "eye_x" in J:                           # (MakeHuman's man: in front of the ear, under the jaw, under the chin)
+                chin, ex = np.array(J["chin"]), J["eye_x"]
+                ctrl = [C + np.array((0.0, side * (r - 0.012), z + 0.004)), np.array((ex - 0.072, side * 0.066, chin[2] + 0.05)),
+                        chin + np.array((-0.045, side * 0.042, -0.003)), chin + np.array((-0.016, 0.0, -0.007))]
+                centre = np.array((J["skull_x"], 0.0, chin[2] + 0.07))
+            else:
+                ctrl = [C + np.array((0.0, side * (r - 0.012), z + 0.004)), (hx + 0.02, side * 0.07, 1.575), (hx + 0.055, side * 0.04, 1.528),
+                        (hx + 0.064, 0.0, 1.512)]
+                centre = np.array((hx, 0.0, 1.6))
             pts = spline(ctrl, 6)
             nrm = []
             for q in pts:
-                v = q - np.array((hx, 0.0, 1.6))
+                v = q - centre
                 nrm.append(v / np.linalg.norm(v))
             g.band(pts, nrm, 0.012, 0.003, "straps")
     ob = g.build("helmet_" + kind, sharp=55.0)
@@ -1073,7 +1135,8 @@ GRIP_IN_HAND = (0.074, 0.0, 0.031)          # where a grip's middle lies in the 
 
 def grip_point(J, s):
     a, t, n = (np.array(v) for v in J["hand_axes_" + s])
-    return np.array(J["hand_" + s]) + a * GRIP_IN_HAND[0] + t * GRIP_IN_HAND[1] + n * GRIP_IN_HAND[2]
+    g = J.get("grip_in_hand_" + s, GRIP_IN_HAND)
+    return np.array(J["hand_" + s]) + a * g[0] + t * g[1] + n * g[2]
 
 
 def build_armature(J):
@@ -1275,7 +1338,10 @@ class Rig:
         self.M0 = {b.name: b.matrix_local.copy() for b in arm.data.bones}
         self.hand0 = {s: tuple(np.array(v) for v in J["hand_axes_" + s]) for s in ("l", "r")}
         self.prev_q = {}
-        self.eye0 = {"r": np.array((J["head"][0] + 0.004 + 0.083, -0.033, 1.64)), "l": np.array((J["head"][0] + 0.004 + 0.083, 0.033, 1.64))}
+        if "eye_r" in J:
+            self.eye0 = {s: np.array(J["eye_" + s]) for s in ("l", "r")}
+        else:
+            self.eye0 = {"r": np.array((J["head"][0] + 0.004 + 0.083, -0.033, 1.64)), "l": np.array((J["head"][0] + 0.004 + 0.083, 0.033, 1.64))}
 
     # ---- forward kinematics
     def _child(self, st, b, L=None, Dw=None):
@@ -1435,9 +1501,671 @@ class Rig:
         return self.at(st, "head", self.eye0[s])
 
 
+# ================================================================================================ the body, from MakeHuman
+# The man himself is MakeHuman's base man (human.py, CC0): a real face, real anatomy and MakeHuman's own skin weights,
+# his hands half shut. His uniform is made from MakeHuman's two clothing helper shells fitted to him (the body-tight
+# suit and the skirt): each shell is read as a distance field, every face of it pushed out by how loosely that cloth
+# hangs over that bone, and the cloths are joined and cut as layers, so hems, cuffs and boot tops stay true edges. The
+# collar, cuffs, folds, pockets, buttons, boots and soles are our own shapes laid on it. Whatever the uniform covers of
+# the skin is cut away; the head, the neck and the hands stay, thinned to the triangle budget.
+SOLE = 0.02                        # the boots' soles lift him: made 1.73 m tall, he stands 1.75 m in his boots
+CURL = (30.0, 45.0, 25.0)          # his fingers half shut in the rest pose (the thumb a third as much), ready for a rifle
+GRIP_ALONG, GRIP_OUT = 0.78, 0.03  # a gripped stock's middle: so far from the wrist toward the knuckles, so far off the palm
+NATION_SEED = {"GER": 3, "POL": 7}  # whose face each army's exported man has (the squad's men get faces of their own)
+BUDGET = {"uniform": 3250, "head": 1750, "hand": 380}
+
+
+def _axis_resample(G, q, lo, h, axis, far):
+    """G resampled along one axis at coordinates q (linear between samples). Beyond the grid the edge value is taken
+    and the distance beyond it added, so the field keeps rising away from the shape."""
+    q = np.asarray(q, float)
+    n = G.shape[axis]
+    qc = np.clip(q, lo, lo + (n - 1) * h)
+    f = (qc - lo) / h
+    i = np.clip(np.floor(f).astype(np.int64), 0, n - 2)
+    t = np.clip(f - i, 0.0, 1.0).astype(np.float32)
+    shape = [1, 1, 1]
+    shape[axis] = len(q)
+    A = np.take(G, i, axis=axis)
+    B = np.take(G, i + 1, axis=axis)
+    return A + (B - A) * t.reshape(shape) + np.abs(q - qc).astype(np.float32).reshape(shape)
+
+
+def trilinear(G, lo, h, P, far=0.1):
+    """Values of the grid G (corner lo, spacing h) at points P (N, 3), linear between samples; beyond the grid, the
+    edge's value and the distance beyond it."""
+    P = np.asarray(P, float)
+    n = np.array(G.shape)
+    hi = lo + (n - 1) * h
+    Pc = np.clip(P, lo, hi)
+    f = (Pc - lo) / h
+    i = np.clip(np.floor(f).astype(np.int64), 0, n - 2)
+    t = np.clip(f - i, 0.0, 1.0)
+    out = np.zeros(len(f))
+    for dx in (0, 1):
+        wx = t[:, 0] if dx else 1.0 - t[:, 0]
+        for dy in (0, 1):
+            wy = t[:, 1] if dy else 1.0 - t[:, 1]
+            for dz in (0, 1):
+                wz = t[:, 2] if dz else 1.0 - t[:, 2]
+                out += wx * wy * wz * G[i[:, 0] + dx, i[:, 1] + dy, i[:, 2] + dz]
+    return out + np.linalg.norm(P - Pc, axis=1)
+
+
+class GridField:
+    """A distance field held as samples on a grid (sculpt's shapes' interface: d(px, py, pz), and the box lo..hi
+    outside which it need not be asked)."""
+
+    def __init__(self, G, glo, gh, lo=None, hi=None, far=0.1):
+        self.G, self.glo, self.gh, self.far = G, np.asarray(glo, float), float(gh), far
+        ghi = self.glo + (np.array(G.shape) - 1) * gh
+        self.lo = self.glo.copy() if lo is None else np.maximum(np.asarray(lo, float), self.glo)
+        self.hi = ghi if hi is None else np.minimum(np.asarray(hi, float), ghi)
+        self.c, self.R = (self.lo + self.hi) / 2, None
+
+    def d(self, px, py, pz):
+        px, py, pz = np.asarray(px), np.asarray(py), np.asarray(pz)
+        if px.ndim == 3 and px.shape[1:] == (1, 1) and py.shape[::2] == (1, 1) and pz.shape[:2] == (1, 1):
+            # (a whole block of the sculpting grid: resampled axis by axis)
+            G = _axis_resample(self.G, px.ravel(), self.glo[0], self.gh, 0, self.far)
+            G = _axis_resample(G, py.ravel(), self.glo[1], self.gh, 1, self.far)
+            return _axis_resample(G, pz.ravel(), self.glo[2], self.gh, 2, self.far)
+        bx, by, bz = np.broadcast_arrays(px, py, pz)
+        P = np.stack([bx.ravel(), by.ravel(), bz.ravel()], axis=1)
+        return trilinear(self.G, self.glo, self.gh, P, self.far).reshape(bx.shape)
+
+
+class Both:
+    """Where two shapes overlap (the larger of their distances): a sphere cut flat, to take off one sleeve's end."""
+
+    def __init__(self, a, b):
+        self.a, self.b = a, b
+        boxes = [(p.lo, p.hi) for p in (a, b) if p.lo is not None]
+        self.lo = np.max([bx[0] for bx in boxes], axis=0) if boxes else None
+        self.hi = np.min([bx[1] for bx in boxes], axis=0) if boxes else None
+        self.c, self.R = (a.c if a.lo is not None else b.c), None
+
+    def d(self, px, py, pz):
+        return np.maximum(self.a.d(px, py, pz), self.b.d(px, py, pz))
+
+
+class ShellField:
+    """One of MakeHuman's clothing shells as a distance field: smoothed (subdivided twice), then at every point of a
+    grid round it the distance to the nearest point of the shell, signed by the way that face looks, and which face it
+    was. A cloth is the shell with each face pushed out by its bones' share of how loose the cloth is (`cloth`)."""
+
+    def __init__(self, ob, h=0.005, band=0.032, levels=2):
+        from mathutils.bvhtree import BVHTree
+        # its open ends (neck, wrists, waist) capped first, so what lies beyond an opening is outside it
+        src = ob
+        ob = src.copy()
+        ob.data = src.data.copy()
+        bpy.context.scene.collection.objects.link(ob)
+        for m in list(ob.modifiers):
+            ob.modifiers.remove(m)
+        bm = bmesh.new()
+        bm.from_mesh(ob.data)
+        bmesh.ops.holes_fill(bm, edges=[e for e in bm.edges if e.is_boundary], sides=0)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        bm.to_mesh(ob.data)
+        bm.free()
+        mod = ob.modifiers.new("smooth_for_field", "SUBSURF")
+        mod.levels = levels
+        dg = bpy.context.evaluated_depsgraph_get()
+        eo = ob.evaluated_get(dg)
+        me = eo.to_mesh()
+        V = np.zeros(len(me.vertices) * 3)
+        me.vertices.foreach_get("co", V)
+        V = V.reshape(-1, 3)
+        self.names = [g.name for g in ob.vertex_groups]
+        W = np.zeros((len(V), len(self.names)), np.float32)
+        for v in me.vertices:
+            for ge in v.groups:
+                if ge.group < len(self.names):
+                    W[v.index, ge.group] = ge.weight
+        F = [tuple(p.vertices) for p in me.polygons]
+        eo.to_mesh_clear()
+        tmp_me = ob.data
+        bpy.data.objects.remove(ob)
+        bpy.data.meshes.remove(tmp_me)
+        W /= np.maximum(W.sum(axis=1, keepdims=True), 1e-6)
+        self.Wf = np.array([W[list(f)].mean(axis=0) for f in F], np.float32)
+        self.Fc = np.array([V[list(f)].mean(axis=0) for f in F])
+        bvh = BVHTree.FromPolygons(V.tolist(), F)
+        lo = V.min(axis=0) - band - 0.012
+        hi = V.max(axis=0) + band + 0.012
+        # coarse: everywhere (the sign deep inside and far out)
+        hc = 4 * h
+        nc = np.ceil((hi - lo) / hc).astype(int) + 1
+        xs, ys, zs = (lo[a] + np.arange(nc[a]) * hc for a in range(3))
+        Pc = np.stack(np.meshgrid(xs, ys, zs, indexing="ij"), axis=-1).reshape(-1, 3)
+        Gc = np.empty(len(Pc), np.float32)
+        fn = bvh.find_nearest
+        for k, p in enumerate(Pc.tolist()):
+            loc, nrm, idx, dist = fn(p)
+            Gc[k] = dist if (p[0] - loc[0]) * nrm[0] + (p[1] - loc[1]) * nrm[1] + (p[2] - loc[2]) * nrm[2] >= 0 else -dist
+        Gc = Gc.reshape(tuple(nc))
+        # fine: read from the coarse, then exactly in a band round the shell
+        n = np.ceil((hi - lo) / h).astype(int) + 1
+        G = GridField(Gc, lo, hc).d(*(np.asarray(lo[a] + np.arange(n[a]) * h).reshape([-1 if b == a else 1 for b in range(3)])
+                                       for a in range(3))).astype(np.float32)
+        fi = np.full(G.shape, -1, np.int32)
+        near = np.argwhere(np.abs(G) < band)
+        pts = (lo + near * h).tolist()
+        vals = np.empty(len(pts), np.float32)
+        faces = np.full(len(pts), -1, np.int32)
+        for k, p in enumerate(pts):
+            loc, nrm, idx, dist = fn(p, band * 1.6)
+            if loc is None:
+                vals[k] = np.nan
+                continue
+            vals[k] = dist if (p[0] - loc[0]) * nrm[0] + (p[1] - loc[1]) * nrm[1] + (p[2] - loc[2]) * nrm[2] >= 0 else -dist
+            faces[k] = idx
+        ok = ~np.isnan(vals)
+        G[tuple(near[ok].T)] = vals[ok]
+        fi[tuple(near[ok].T)] = faces[ok]
+        self.sd, self.fi, self.lo, self.h = G, fi, lo, h
+
+    def cloth(self, loose, lo=None, hi=None, default=0.0, more=None):
+        """The shell pushed out face by face: `loose` {bone: metres}, each face by its bones' share (others `default`),
+        and by `more(face middles)` if given. Kept to the box lo..hi."""
+        off = self.Wf @ np.array([loose.get(n, default) for n in self.names], np.float32)
+        if more is not None:
+            off = off + np.asarray(more(self.Fc), np.float32)
+        G = self.sd.copy()
+        m = self.fi >= 0
+        G[m] -= off[self.fi[m]]
+        far = self.sd[~m]                              # (away from the shell: inside stays inside, outside outside)
+        G[~m] = np.where(far < 0, far - max(float(off.max()), 0.0), far - min(float(off.min()), 0.0))
+        return GridField(G, self.lo, self.h, lo, hi)
+
+
+def mh_body(nation, seed=None, name=None):
+    """MakeHuman's man for an army (his face by `seed`), standing on his soles, hands half shut, with low eyeballs."""
+    import human
+    seed = NATION_SEED.get(nation, 3) if seed is None else seed
+    man = human.build(seed=seed, nation=nation, height=1.75 - SOLE, stand=SOLE, curl=CURL, eye_res=(10, 6),
+                      name=name or f"man{seed}")
+    man["seed"] = seed
+    return man
+
+
+def joints_of(man):
+    """Our joints (as `joints()` gives them for the sculpted man) on MakeHuman's man: bone heads from his rig, and the
+    hands' axes, the grip, the eyes, the toes and the head's own measures from his joints and his mesh."""
+    arm = man["armature"]
+    H = {b.name: np.array(b.head_local) for b in arm.data.bones}
+    T = {b.name: np.array(b.tail_local) for b in arm.data.bones}
+    mj = {k: np.array(v) for k, v in man["mh_joints"].items()}
+    J = {b: tuple(float(x) for x in H[b]) for b in H}
+    J["root"] = (0.0, 0.0, 0.0)
+    J["head_end"] = tuple(T["head"])
+    for s, S in (("l", "L"), ("r", "R")):
+        g = lambda b, end="head": mj[f"{b}.{S}____{end}"]
+        wr = np.array(J["hand_" + s])
+        a = _n(g("finger3-1") - wr)
+        t = g("finger2-1") - g("finger5-1")
+        t = _n(t - a * (a @ t))
+        n = np.cross(a, t) if s == "l" else np.cross(t, a)
+        J["hand_axes_" + s] = (tuple(a), tuple(t), tuple(n))
+        knuckles = np.mean([g(f"finger{f}-1") for f in range(2, 6)], axis=0)
+        J["fingers_" + s] = tuple(knuckles)
+        J["fingers_end_" + s] = tuple(g("finger3-3", "tail"))
+        J["thumb_end_" + s] = tuple(g("finger1-3", "tail"))
+        L = float(np.linalg.norm(knuckles - wr))
+        J["grip_in_hand_" + s] = (GRIP_ALONG * L, 0.0, GRIP_OUT)
+        balls = np.mean([g(f"toe{k}-1") for k in range(1, 6)], axis=0)
+        J["ball_" + s] = tuple(balls)
+        J["toe_" + s] = tuple(np.mean([g("toe1-2", "tail")] + [g(f"toe{k}-3", "tail") for k in range(2, 6)], axis=0))
+    for e, s in zip(man["eyes"], ("l", "r")):
+        c = np.mean([np.array(v.co) for v in e.data.vertices], axis=0)
+        J["eye_" + s] = tuple(c)
+    # the head: the skull's middle and top (for the helmets), and the chin (for their straps)
+    B = np.array([v.co for v in man["body"].data.vertices])
+    eye_z = J["eye_l"][2]
+    skull = B[B[:, 2] > eye_z + 0.03]
+    J["crown"] = float(B[:, 2].max())
+    J["skull_x"] = float((skull[:, 0].max() + skull[:, 0].min()) / 2)
+    J["skull_half"] = (float((skull[:, 0].max() - skull[:, 0].min()) / 2), float(np.abs(skull[:, 1]).max()))
+    ex = J["eye_l"][0]
+    prof = B[(np.abs(B[:, 1]) < 0.008) & (B[:, 0] > ex - 0.005) & (B[:, 2] < eye_z - 0.05)]
+    men = prof[np.argmin(prof[:, 2])]                                  # the bottom of the chin
+    J["chin"] = (float(men[0]), 0.0, float(men[2]))
+    J["eye_x"] = float(ex)
+    return J
+
+
+def landmarks(J):
+    """Heights on this man, and the map from the sculpted man's heights to his (the kit's places were set on that man)."""
+    LM = {"ankle": J["foot_l"][2], "knee": J["calf_l"][2], "hip": J["thigh_l"][2], "shoulder": J["upperarm_l"][2],
+          "head": J["head"][2], "crown": J["crown"]}
+    LM["belt"] = LM["hip"] + 0.105
+    LM["hem"] = LM["hip"] - 0.15
+    nk, hd = np.array(J["neck"]), np.array(J["head"])
+    LM["neck_axis"] = _n(hd - nk)
+    LM["collar_c"] = nk - LM["neck_axis"] * 0.012
+    LM["collar"] = float(LM["collar_c"][2])
+    old = [0.0, 0.088, 0.49, 0.915, 1.0, 1.418, 1.452, 1.585, 1.75]
+    new = [0.0, LM["ankle"], LM["knee"], LM["hip"], LM["belt"], LM["shoulder"], LM["collar"], LM["head"], LM["crown"]]
+    LM["Z"] = lambda z: float(np.interp(z, old, new))
+    return LM
+
+
+def ring_frame(axis):
+    """A frame whose z runs along `axis` and whose x leans forward (for rings round a limb)."""
+    z = _n(axis)
+    x = np.array((1.0, 0.0, 0.0)) - z * z[0]
+    if np.linalg.norm(x) < 1e-3:
+        x = np.array((0.0, 0.0, 1.0)) - z * z[2]
+    x = _n(x)
+    return np.stack([x, np.cross(z, x), z], axis=1)
+
+
+def ring_axes(L, c, R):
+    """The layer's half-widths round c along the frame's x and y (each the mean of the two ways)."""
+    dirs = [R[:, 0], -R[:, 0], R[:, 1], -R[:, 1]]
+    lo, hi = np.zeros(4), np.full(4, 0.25)
+    for _ in range(22):
+        mid = (lo + hi) / 2
+        inside = L.at_points(np.array([c + dd * m for dd, m in zip(dirs, mid)])) < 0
+        lo, hi = np.where(inside, mid, lo), np.where(inside, hi, mid)
+    r = (lo + hi) / 2
+    return float(r[0] + r[1]) / 2, float(r[2] + r[3]) / 2
+
+
+def leg_point(J, s, z):
+    """The middle of the lower leg at height z."""
+    a, k = np.array(J["foot_" + s]), np.array(J["calf_" + s])
+    return a + (k - a) * ((z - a[2]) / (k[2] - a[2]))
+
+
+def neck_size(man, LM):
+    """The neck's half-widths (ahead, across) where the collar sits, and the middle of it there."""
+    B = np.array([v.co for v in man["body"].data.vertices])
+    ax, c = LM["neck_axis"], LM["collar_c"]
+    s = (B - c) @ ax
+    ring = B[(np.abs(s) < 0.006) & (np.linalg.norm((B - c) - np.outer(s, ax), axis=1) < 0.09)]
+    fwd = _n(np.array((1.0, 0.0, 0.0)) - ax * ax[0])
+    x = (ring - c) @ fwd
+    y = ring[:, 1]
+    mid = c + fwd * (x.max() + x.min()) / 2
+    return (float(x.max() - x.min()) / 2, float(np.abs(y).max())), mid, fwd
+
+
+def uniform_layers(man, J, spec, LM):
+    """Tunic, trousers and boots (or ankle boots and gaiters), collar and cuffs, soles: the uniform as layers."""
+    t0 = time.time()
+    tights, skirt = ShellField(man["tights"]), ShellField(man["skirt"])
+    print(f"  shells read as fields in {time.time() - t0:.0f} s")
+    Z = LM["Z"]
+    tunic, trousers, boots = Layer("tunic", "tunic"), Layer("trousers", "trousers"), Layer("boots", "boots")
+    collar, cuffs, soles = Layer("collar", "tunic"), Layer("cuffs", "tunic"), Layer("soles", "boots")
+    layers = [tunic, trousers, boots, collar, cuffs, soles]
+    BIGBOX = 3.0
+    # ---- the tunic: the suit over the chest, back and arms, loose at the waist; the skirt over the hips to the hem
+    loose = {"pelvis": 0.017, "spine_01": 0.017, "spine_02": 0.015, "chest": 0.012, "clavicle_l": 0.01, "clavicle_r": 0.01,
+             "neck": 0.007, "upperarm_l": 0.011, "upperarm_r": 0.011, "lowerarm_l": 0.009, "lowerarm_r": 0.009,
+             "hand_l": 0.008, "hand_r": 0.008}
+    OFF = -0.06                                        # (a bone a cloth does not cover: its part of the shell drawn in, out of sight)
+    ARMS = {b + s: OFF for b in ("upperarm_", "lowerarm_", "hand_", "fingers_", "thumb_") for s in ("l", "r")}
+    LEGS = ("pelvis", "spine_01", "thigh_l", "thigh_r")
+    tunic.add(tights.cloth(loose, lo=(-BIGBOX, -BIGBOX, LM["hem"] - 0.02), default=OFF))
+    # the skirt hangs over the hips and the trousers from the belt, flaring a little to the hem
+    flare = lambda P: 0.024 + 0.012 * np.clip((LM["belt"] - P[:, 2]) / (LM["belt"] - LM["hem"]), 0.0, 1.0)
+    skirt_box = dict(lo=(-BIGBOX, -BIGBOX, LM["hem"] - 0.02), hi=(BIGBOX, BIGBOX, LM["belt"] + 0.03))
+    tunic.add(skirt.cloth(ARMS, more=flare, **skirt_box), 0.02)
+    tunic.add(tights.cloth({b: 0.0 for b in LEGS}, more=flare, default=OFF, **skirt_box), 0.02)
+    tunic.cut(HalfSpace((0.0, 0.0, LM["hem"]), (0.0, 0.0, -1.0)), 0.004)
+    ax = LM["neck_axis"]
+    tunic.cut(HalfSpace(LM["collar_c"] + ax * 0.004, ax), 0.004)
+    (nrx, nry), nmid, nfwd = neck_size(man, LM)
+    for s, side in (("l", 1.0), ("r", -1.0)):
+        el, wr = np.array(J["lowerarm_" + s]), np.array(J["hand_" + s])
+        fa = _n(wr - el)
+        cut_at = wr - fa * 0.03
+        tunic.sub(Both(HalfSpace(cut_at, -fa), Sphere(cut_at + fa * 0.05, 0.11)), 0.0)
+    # (the shapes over it are placed on the tunic as it stands so far)
+    # the folds: the sleeve gathered in rings at the elbow, where the arm bends
+    for s, side in (("l", 1.0), ("r", -1.0)):
+        sh, el, wr = (np.array(J[k + s]) for k in ("upperarm_", "lowerarm_", "hand_"))
+        fa = _n(wr - el)
+        Rc = ring_frame(fa)
+        folds = []
+        for off, tilt in ((-0.06, 10), (-0.012, 8), (0.04, 12), (0.075, -6)):
+            c = el + fa * off
+            folds.append((c, ring_axes(tunic, c, Rc), tilt))
+        for c, (rx, ry), tilt in folds:
+            tunic.add(Torus(c, rx - 0.004, 0.0105, Rc @ rot_euler(tilt, tilt * 0.4, 0), major_y=ry - 0.004), 0.011)
+        # the turned-back cuff at the sleeve's end
+        cc = wr - fa * 0.048
+        rx, ry = ring_axes(tunic, cc, Rc)
+        cuffs.add(Tube(cc, -0.02, 0.018, (rx + 0.004, ry + 0.004), (rx + 0.0045, ry + 0.0045), 0.005, Rc))
+        # the shoulder strap on the shoulder's top, from the collar to the shoulder's point
+        inner = nmid + np.array((0.0, side * (nry + 0.012), 0.0))
+        outer = sh + np.array((0.0, side * 0.035, 0.0))
+        mid = (inner + outer) / 2
+        p, nrm = on_surface(tunic, mid + np.array((0.0, 0.0, 0.25)), (0.0, 0.0, -1.0))
+        Rs = frame_from(_n(outer - inner), nrm)
+        L_ = float(np.linalg.norm(outer - inner))
+        tunic.add(RoundBox(p, (L_ / 2, 0.021, 0.006), 0.005, Rs), 0.004)
+    # ---- the collar: a band round the foot of the neck, square to the neck, open a little at the throat
+    Rn = np.stack([nfwd, np.cross(ax, nfwd), ax], axis=1)
+    collar.add(Tube(nmid, -0.024, 0.026, (nrx + 0.017, nry + 0.016), (nrx + 0.012, nry + 0.012), 0.01, Rn))
+    collar.add(Torus(nmid + ax * 0.024, nrx + 0.009, 0.0075, Rn, major_y=nry + 0.009), 0.006)
+    collar.sub(RoundBox(nmid + nfwd * (nrx + 0.02) + ax * 0.03, (0.03, 0.009, 0.045), 0.004, Rn), 0.002)
+    LM["neck_ring"] = (nmid, nfwd, nrx, nry)
+    # the cloth bunched above and below the belt: folds running up from it, more at the back
+    zb = LM["belt"]
+    cx = J["spine_01"][0] + 0.03
+    for k, ang in enumerate(np.radians([70, 108, 140, 166, 194, 220, 252, 290])):
+        lean = 0.012 * math.sin(3.1 * k)
+        a0 = np.array((cx + math.cos(ang) * 0.2, math.sin(ang) * 0.2, zb + 0.026))
+        a1 = np.array((cx + math.cos(ang + lean * 4) * 0.2, math.sin(ang + lean * 4) * 0.2, zb + 0.075 + 0.012 * math.cos(2.3 * k)))
+        (p0, p1), (n0, n1) = project(tunic, [a0, a1])
+        tunic.add(RoundCone(p0 - n0 * 0.007, p1 - n1 * 0.0105, 0.0135, 0.011), 0.012)
+        b0 = np.array((cx + math.cos(ang + 0.1) * 0.22, math.sin(ang + 0.1) * 0.22, zb - 0.028))
+        b1 = np.array((cx + math.cos(ang + 0.13) * 0.22, math.sin(ang + 0.13) * 0.22, zb - 0.075))
+        (q0, q1), (m0, m1) = project(tunic, [b0, b1])
+        tunic.add(RoundCone(q0 - m0 * 0.009, q1 - m1 * 0.012, 0.0125, 0.011), 0.012)
+    # and where the back of the tunic wrinkles across the shoulder blades
+    for z, w in ((Z(1.36), 0.06), (Z(1.3), 0.075)):
+        (p0, p1), (n0, n1) = project(tunic, [(-0.3, w, z + 0.01), (-0.3, -w, z - 0.008)])
+        tunic.add(RoundCone(p0 - n0 * 0.007, p1 - n1 * 0.007, 0.0125, 0.0125), 0.014)
+    # the front's button strip and the four pockets (two on the breast, two on the skirt), each a patch with a flap
+    top = nmid + nfwd * nrx
+    p, nrm = on_surface(tunic, (0.4, 0.0, (top[2] + LM["hem"]) / 2), (-1.0, 0.0, 0.0))
+    half = (top[2] - 0.03 - LM["hem"]) / 2
+    tunic.add(RoundBox(p - nrm * 0.004, (0.006, 0.014, half), 0.005, frame_from(nrm, (0.0, 0.0, 1.0))), 0.008)
+    LM["pockets"] = []
+    for side in (1.0, -1.0):
+        for aim_, half in (((0.4, 0.08 * side, Z(1.305)), (0.006, 0.05, 0.058)), ((0.4, 0.105 * side, Z(0.875)), (0.006, 0.06, 0.07))):
+            p, nrm = on_surface(tunic, np.array(aim_), (-1.0, -0.25 * side, 0.0))
+            R = frame_from(nrm, (0.0, 0.0, 1.0))
+            tunic.add(RoundBox(p, half, 0.005, R), 0.004)
+            flap = p + R @ np.array((0.005, 0.0, half[2] - 0.013))
+            tunic.add(RoundBox(flap, (0.0075, half[1] + 0.004, 0.018), 0.006, R), 0.003)
+            LM["pockets"].append((p, R, half))
+    # ---- the trousers: the suit over the seat and legs, full in the thigh
+    trousers.add(tights.cloth({"pelvis": 0.012, "spine_01": 0.012, "thigh_l": 0.017, "thigh_r": 0.017, "calf_l": 0.009,
+                               "calf_r": 0.009, "foot_l": 0.006, "foot_r": 0.006, "ball_l": 0.006, "ball_r": 0.006},
+                              hi=(BIGBOX, BIGBOX, LM["belt"] + 0.04), default=OFF))
+    boot_top = LM["knee"] - 0.075 if spec["tall_boots"] else LM["ankle"] + 0.045
+    for s, side in (("l", 1.0), ("r", -1.0)):
+        hip, knee, ank = (np.array(J[k + s]) for k in ("thigh_", "calf_", "foot_"))
+        Rk = ring_frame(knee - hip)
+        folds = []
+        for off, tilt in ((0.07, 12), (0.02, 14), (-0.03, -10)):
+            c = knee + _n(knee - hip) * off
+            folds.append((c, ring_axes(trousers, c, Rk), tilt))
+        if spec["tall_boots"]:
+            Rs_ = ring_frame(knee - ank)
+            for z, tilt in ((boot_top + 0.016, 8), (boot_top + 0.04, -10)):
+                c = leg_point(J, s, z)
+                folds.append((c, ring_axes(trousers, c, Rs_), tilt))
+        for c, (rx, ry), tilt in folds:
+            trousers.add(Torus(c, rx - 0.003, 0.011, ring_frame(knee - hip if c[2] > LM["knee"] - 0.06 else knee - ank)
+                               @ rot_euler(tilt, tilt * 0.5, 0), major_y=ry - 0.003), 0.012)
+    # ---- the boots: the suit's feet and calves made boots, with a toe, a heel and a sole of their own
+    boots.add(tights.cloth({"calf_l": 0.012, "calf_r": 0.012, "foot_l": 0.009, "foot_r": 0.009, "ball_l": 0.008, "ball_r": 0.008},
+                           hi=(BIGBOX, BIGBOX, boot_top + 0.02), default=OFF))
+    T = np.array([v.co for v in man["tights"].data.vertices])
+    lower = straps = None
+    if not spec["tall_boots"]:
+        lower, straps = Layer("gaiters", "lower"), Layer("gaiter_straps", "straps")
+        layers += [lower, straps]
+        lower.add(tights.cloth({b + s: 0.013 for b in ("calf_", "foot_") for s in ("l", "r")}, lo=(-BIGBOX, -BIGBOX, LM["ankle"] + 0.01),
+                               hi=(BIGBOX, BIGBOX, LM["ankle"] + 0.23), default=OFF))
+    for s, side in (("l", 1.0), ("r", -1.0)):
+        ank, ball = np.array(J["foot_" + s]), np.array(J["ball_" + s])
+        foot = T[(T[:, 2] < SOLE + 0.02) & (T[:, 1] * side > 0.05)][:, :2]
+        mid = foot.mean(axis=0)
+        w_, v_ = np.linalg.eigh(np.cov((foot - mid).T))
+        along = v_[:, 1] if v_[0, 1] > 0 else -v_[:, 1]                                               # (the foot's own length)
+        Ry = rot_euler(0, 0, math.degrees(math.atan2(along[1], along[0])))
+        u = (foot - mid) @ along
+        across = np.array((-along[1], along[0]))
+        wv = (foot - mid) @ across
+        heel_u, toe_u = u.min(), u.max()
+        half_w = (wv.max() - wv.min()) / 2 + 0.01
+        at = lambda uu, ww=0.0, z=0.0: np.array((*(mid + along * uu + across * ww), z))
+        L_ = (toe_u - heel_u) / 2 + 0.024
+        soles.add(RoundBox(at((toe_u + heel_u) / 2 + 0.008, (wv.max() + wv.min()) / 2, SOLE * 0.5 + 0.0005),
+                           (L_, half_w + 0.006, SOLE * 0.5 + 0.0005), 0.005, Ry))                             # the sole, proud of the upper
+        soles.add(RoundBox(at(heel_u + 0.033, 0.0, 0.021), (0.042, half_w - 0.008, 0.02), 0.004, Ry), 0.004)   # the heel
+        boots.add(Ellipsoid(at(toe_u - 0.035, 0.0, SOLE + 0.03), (0.062, half_w - 0.008, 0.032), Ry), 0.02)  # the toe cap
+        boots.add(RoundBox(at(heel_u + 0.028, 0.0, SOLE + 0.03), (0.035, half_w - 0.014, 0.028), 0.014, Ry), 0.012)  # the heel's counter
+        if lower is not None:
+            for z in (LM["ankle"] + 0.08, LM["ankle"] + 0.18):
+                c = leg_point(J, s, z)
+                rx, ry = ring_axes(lower, c, ring_frame((0.0, 0.0, 1.0)))
+                straps.add(Torus(c, rx + 0.001, 0.0055, major_y=ry + 0.001))
+    boots.cut(HalfSpace((0.0, 0.0, boot_top), (0.0, 0.0, 1.0)), 0.006)
+    boots.cut(HalfSpace((0.0, 0.0, SOLE - 0.002), (0.0, 0.0, -1.0)), 0.0)                       # (standing on the sole)
+    if lower is not None:
+        lower.cut(HalfSpace((0.0, 0.0, LM["ankle"] + 0.22), (0.0, 0.0, 1.0)), 0.005)
+        lower.cut(HalfSpace((0.0, 0.0, LM["ankle"] + 0.012), (0.0, 0.0, -1.0)), 0.0)
+        for s, side in (("l", 1.0), ("r", -1.0)):
+            c = leg_point(J, s, LM["ankle"] + 0.245)
+            rx, ry = ring_axes(trousers, c, ring_frame((0.0, 0.0, 1.0)))
+            trousers.add(Torus(c, rx - 0.002, 0.016, major_y=ry - 0.002), 0.02)                            # bloused over the gaiter
+    LM["boot_top"] = boot_top
+    print(f"  uniform laid out in {time.time() - t0:.0f} s")
+    return layers
+
+
+def uniform_weights(piece, man):
+    """The uniform takes the weights of the shell it was made from: the nearest points of the suit and the skirt."""
+    from mathutils import kdtree
+    srcs = [man["tights"], man["skirt"]]
+    names = [g.name for g in man["tights"].vertex_groups]
+    pts, Ws = [], []
+    for ob in srcs:
+        W, nm = weights_of(ob)
+        Wm = np.zeros((len(W), len(names)))
+        for j, n in enumerate(nm):
+            if n in names:
+                Wm[:, names.index(n)] = W[:, j]
+        V = np.array([v.co for v in ob.data.vertices])
+        if ob is man["skirt"]:
+            keep = V[:, 2] > 0.6                       # (the skirt's top only: the tunic's skirt hangs from it)
+            V, Wm = V[keep], Wm[keep]
+        pts.append(V)
+        Ws.append(Wm)
+    P = np.vstack(pts)
+    W = np.vstack(Ws)
+    kd = kdtree.KDTree(len(P))
+    for i, p in enumerate(P):
+        kd.insert(p, i)
+    kd.balance()
+    out = np.zeros((len(piece.data.vertices), len(names)))
+    for v in piece.data.vertices:
+        tot = 0.0
+        for co, j, d in kd.find_n(v.co, 4):
+            w = 1.0 / max(d, 1e-3)
+            out[v.index] += W[j] * w
+            tot += w
+        out[v.index] /= tot
+    set_weights(piece, out, names, 4, 0.02)
+
+
+def thin(ob, tris):
+    """Decimate a mesh object to about `tris` triangles (its weights and paints go with it)."""
+    have = sum(len(p.vertices) - 2 for p in ob.data.polygons)
+    if have <= tris:
+        return ob
+    mod = ob.modifiers.new("thin", "DECIMATE")
+    mod.ratio = tris / have
+    bpy.context.view_layer.objects.active = ob
+    with bpy.context.temp_override(object=ob, active_object=ob):
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+    ob.data.validate()
+    return ob
+
+
+def skin_parts(man, layers, nation):
+    """What shows of MakeHuman's skin under the uniform: the head and neck, and the hands, each thinned to its budget,
+    and the eyeballs. Returns objects already weighted (MakeHuman's weights on our bones)."""
+    body = man["body"]
+    for m in list(body.modifiers):
+        body.modifiers.remove(m)
+    me = body.data
+    V = np.array([v.co for v in me.vertices])
+    d = np.min([L.at_points(V) for L in layers], axis=0)
+    hidden = d < -0.003
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.verts.ensure_lookup_table()
+    gone = [f for f in bm.faces if all(hidden[v.index] for v in f.verts)]
+    bmesh.ops.delete(bm, geom=gone, context="FACES")
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+    # split what is left into islands: the head with the neck, and each hand (crumbs under the cloth go)
+    bpy.context.view_layer.objects.active = body
+    for o in bpy.context.selected_objects:
+        o.select_set(False)
+    body.select_set(True)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.separate(type="LOOSE")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    parts = [o for o in bpy.context.selected_objects if o.type == "MESH"]
+    keep = []
+    for o in parts:
+        n = len(o.data.polygons)
+        if n < 40:
+            bpy.data.objects.remove(o)
+            continue
+        z = np.mean([v.co.z for v in o.data.vertices])
+        y = np.mean([v.co.y for v in o.data.vertices])
+        print(f"    skin island at z {z:.2f}: {n} faces")
+        if z > 1.3:
+            o.name = "head"
+            thin(o, BUDGET["head"])
+        else:
+            o.name = "hand_" + ("l" if y > 0 else "r")
+            thin(o, BUDGET["hand"])
+        keep.append(o)
+    for o in keep:
+        o.data.materials.clear()
+        o.data.materials.append(paint_material("skin"))
+        for p in o.data.polygons:
+            p.material_index = 0
+            p.use_smooth = True
+    for e in man["eyes"]:
+        for m in list(e.modifiers):
+            e.modifiers.remove(m)
+        e.data.materials.clear()
+        e.data.materials.append(paint_material("eye"))
+        keep.append(e)
+    return keep
+
+
+def join_meshes(objs, name):
+    """One mesh object of several (weights and paints kept, by name)."""
+    for o in bpy.context.selected_objects:
+        o.select_set(False)
+    for o in objs:
+        mw = o.matrix_world.copy()
+        o.parent = None
+        o.matrix_world = mw
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
+    bpy.ops.object.join()
+    ob = objs[0]
+    ob.name = ob.data.name = name
+    return ob
+
+
+def body_attributes(body, J):
+    """The skin's `scalp` (how much short hair, from MakeHuman's group) and the eyes' `look` (how near a point of an
+    eyeball is to its front: the iris and pupil are painted by it in the pictures), as point attributes."""
+    me = body.data
+    n = len(me.vertices)
+    scalp = np.zeros(n, np.float32)
+    g = body.vertex_groups.get("scalp")
+    if g is not None:
+        for v in me.vertices:
+            for ge in v.groups:
+                if ge.group == g.index:
+                    scalp[v.index] = ge.weight
+        body.vertex_groups.remove(g)
+    look = np.zeros(n, np.float32)
+    eye_slot = [i for i, m in enumerate(me.materials) if m.name.split(".")[0] == "eye"]
+    if eye_slot:
+        idx = {v for p in me.polygons if p.material_index in eye_slot for v in p.vertices}
+        for i in idx:
+            co = np.array(me.vertices[i].co)
+            c = np.array(J["eye_l"] if co[1] > 0 else J["eye_r"])
+            look[i] = _n(co - c)[0]
+    for nm, vals in (("scalp", scalp), ("look", look)):
+        if nm not in me.attributes:
+            me.attributes.new(nm, "FLOAT", "POINT")
+        me.attributes[nm].data.foreach_set("value", vals)
+
+
 # ================================================================================================ the man, put together
-def assemble(nation, weapon="rifle", J=None):
-    """Sculpt, dress, arm and rig one soldier of a nation. Returns a dict of his objects and his Rig."""
+def assemble(nation, weapon="rifle", seed=None):
+    """Dress, arm and rig one soldier of a nation on MakeHuman's man (his face by `seed`; by default his army's own).
+    Returns a dict of his objects and his Rig."""
+    spec = NATION_KIT[nation]
+    LOOK_NOW.update(LOOK.get(nation, LOOK["GER"]))
+    t0 = time.time()
+    man = mh_body(nation, seed)
+    J = joints_of(man)
+    LM = landmarks(J)
+    ls = uniform_layers(man, J, spec, LM)
+    cloth = mesh_from_layers("uniform", ls, 0.0034, BUDGET["uniform"])
+    uniform_weights(cloth, man)
+    parts = skin_parts(man, ls, nation)
+    body = join_meshes([cloth] + parts, "body_" + nation)
+    body_attributes(body, J)
+    kitp = build_kit(J, spec, ls, LM["Z"])
+    helmet = build_helmet(spec["helmet"], J)
+    if weapon == "rifle":
+        gun, part = build_rifle()
+        part_bone = "bolt"
+    else:
+        gun, part = build_lmg()
+        part_bone = "bipod"
+    for ob in (man["tights"], man["skirt"], man["armature"]):
+        bpy.data.objects.remove(ob)
+    print(f"  {nation}: dressed in {time.time() - t0:.1f} s ({tris_of(body)} triangles of body and uniform)")
+    arm = build_armature(J)
+    arm.name = "soldier_" + nation
+    attach(body, arm)
+    kit_objs = []
+    for name, (ob, bone) in kitp.items():
+        if bone:
+            skin_rigid(ob, bone)
+        else:
+            skin_like(ob, body)
+        attach(ob, arm)
+        kit_objs.append(ob)
+    skin_rigid(helmet, "head")
+    attach(helmet, arm)
+    Wm = Matrix.Translation(Vector(arm.data.bones["weapon"].head_local))
+    for ob, bone in ((gun, "weapon"), (part, part_bone)):
+        ob.data.transform(Wm)
+        skin_rigid(ob, bone)
+        attach(ob, arm)
+    mark_rest(body, dusty=True)
+    for ob in kit_objs + [helmet, gun, part]:
+        mark_rest(ob)
+    rig = Rig(arm, J)
+    g0 = np.array(arm.data.bones["weapon"].head_local)
+    sockets = [add_socket(arm, "muzzle", "weapon", tuple(g0 + np.array(MUZZLE))),
+               add_socket(arm, "hand_r", "hand_r", tuple(grip_point(J, "r")), tuple(rig.hand0["r"][0])),
+               add_socket(arm, "head", "head", J["head"]),
+               add_socket(arm, "chest", "chest", (J["chest"][0] + 0.15, 0.0, LM["Z"](1.3))),
+               add_socket(arm, "weapon", "weapon", tuple(g0))]
+    return {"nation": nation, "arm": arm, "rig": rig, "body": body, "kit": kit_objs, "helmet": helmet, "weapon": gun,
+            "weapon_part": part, "sockets": sockets, "J": J, "LM": LM, "spec": spec, "weapon_kind": weapon, "seed": man["seed"]}
+
+
+def assemble_sculpted(nation, weapon="rifle", J=None):
+    """The first pass (kept for the before-and-after picture): the man sculpted from numbers, dressed, armed and rigged.
+    Returns a dict of his objects and his Rig."""
     J = J or joints()
     spec = NATION_KIT[nation]
     LOOK_NOW.update(LOOK.get(nation, LOOK["GER"]))
