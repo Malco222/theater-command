@@ -16,7 +16,8 @@ import { techMonth } from './tech';
 import { fleetsOnFall, gateShutSince } from './navy';
 import { airOnFall } from './air';
 import { recordFall } from './liberation';
-import { mayJoin, stopDef } from './history';
+import { mayJoin, stopDef, stopOf } from './history';
+import { hashString } from '../core/rng';
 import worldData from '../../data/campaign/world.json';
 import { pressData, warWorkMonth, worldMonth } from './world';
 
@@ -64,6 +65,7 @@ export const DIPLOMACY = data as unknown as {
   leaders: Record<'allies' | 'axis', string>; majors: string[];
   pcIncome: Record<string, number>; pcCap: number;
   court: { cost: number; opinion: number; home: number };
+  americas?: { backer: string; of: string[]; join: Record<string, number>; readiness: Record<string, number>; most: number; months: number };
   tradeIncome: number; resist: Record<string, number>;
   home: Record<string, number>; bandwagon: Record<string, number>;
   events: DiploEvent[];
@@ -144,14 +146,89 @@ export function receptive(target: Nation, b: 'allies' | 'axis'): number {
   return clamp(1 + (target.home * sideOf(b)) / 60, 0.4, 1.6) * (DIPLOMACY.resist[target.id] ?? 1);
 }
 
+// ---- The Axis courts the Americas (ruling 223, Brian's ask of 17 November 2026) -------------------------------
+
+const AMERICAS = DIPLOMACY.americas;
+
+/** True for a neutral of the Americas the Axis weighs higher once the backer is drawn in (diplomacy.json 'americas'). */
+export const americasNeutral = (g: Game, id: string): boolean => !!AMERICAS && g.flags.world === 1 && AMERICAS.of.includes(id) && !!g.nations[id];
+
+/** True once the backer (the United States) is at war with the Axis, or leans to or stands with the Allies: the Axis then courts its neighbours. */
+export function americasOpen(g: Game): boolean {
+  if (!AMERICAS || g.flags.world !== 1) return false;
+  const U = g.nations[AMERICAS.backer];
+  if (!U?.alive) return false;
+  return step(U) < 0 || U.atWar.some((e) => bloc(g.nations[e]) === 'axis');
+}
+
+/** The share of campaigns in which the Axis can win this country over, at this stop of the dial: the stop's figure times its readiness (b391). */
+export const americasShare = (g: Game, id: string): number =>
+  !AMERICAS ? 0 : (AMERICAS.join[String(stopOf(g))] ?? 0) * (AMERICAS.readiness[id] ?? AMERICAS.readiness._default ?? 1);
+
+/** How many countries of the Americas have joined the Axis by its courting in this campaign. */
+const americasIn = (g: Game): number => (AMERICAS?.of ?? []).filter((id) => g.flags[`americas:in:${id}`] !== undefined).length;
+
+/** The one roll for this country and this campaign: whether the Axis can win it over. The same every month. */
+export const americasWon = (g: Game, id: string): boolean => hashString(`americas:${g.seed}:${id}`) / 4294967296 < americasShare(g, id);
+
+/** The countries of the Axis that have courted this country this month or last. */
+export const axisCourters = (g: Game, id: string): Nation[] =>
+  Object.values(g.nations).filter((n) => bloc(n) === 'axis' && (g.flags[`court:${n.id}:${id}`] ?? -9) >= g.turn - 1);
+/** The Axis has courted this country this month or last. */
+export const axisCourts = (g: Game, id: string): boolean => axisCourters(g, id).length > 0;
+/** Whose envoys court it, as the words say them (the UI director's words for ruling 223): "German", or "Axis" for two or more. */
+export const envoysWord = (g: Game, ids: string[]): string => {
+  const who = new Set(ids.flatMap((id) => axisCourters(g, id).map((n) => n.adj)));
+  return who.size === 1 ? [...who][0] : 'Axis';
+};
+
+/**
+ * The backer courts this neutral at no cost while the Axis courts it (ruling 223(d)), whether or not it has joined
+ * the Allies yet: in 1939 the United States only leans their way.
+ */
+export const freeCourt = (g: Game, by: string, target: string): boolean => {
+  const B = g.nations[by];
+  return !!AMERICAS && by === AMERICAS.backer && !!B?.alive && bloc(B) !== 'axis' && bloc(B) !== 'league' && americasNeutral(g, target) && axisCourts(g, target);
+};
+
+/**
+ * The month's courting in the Americas (ruling 223): the envoys of the Axis leader, or of the first great power of
+ * the Axis still standing if the player has the leader, go to the neutral of the Americas most ready to listen; and
+ * a computer-run United States courts back, at no cost, every one the Axis courts. A player's Axis courts by hand.
+ */
+function americasMonth(g: Game): void {
+  if (!americasOpen(g)) return;
+  const axis = [DIPLOMACY.leaders.axis, ...majorsOf(g)].map((id) => g.nations[id]).find((n) => n?.alive && bloc(n) === 'axis' && n.id !== g.human);
+  if (axis && !(g.human && g.nations[g.human] && bloc(g.nations[g.human]) === 'axis' && g.human === DIPLOMACY.leaders.axis)) {
+    let best: Nation | null = null, top = 0;
+    for (const id of AMERICAS!.of) {
+      const T = g.nations[id];
+      if (!T || !canCourt(g, axis.id, id).ok) continue;
+      const v = receptive(T, 'axis') * (2 + step(T));
+      if (v > top) { top = v; best = T; }
+    }
+    if (best) court(g, axis.id, best.id);
+  }
+  const U = g.nations[AMERICAS!.backer];
+  if (U && U.id !== g.human) for (const id of AMERICAS!.of) if (freeCourt(g, U.id, id)) court(g, U.id, id);
+  // A country won over opens the front at home: once the United States is at war with the Axis, so is it (223(e)).
+  if (U?.alive && U.atWar.some((e) => bloc(g.nations[e]) === 'axis')) {
+    for (const id of AMERICAS!.of) {
+      const T = g.nations[id];
+      if (T?.alive && g.flags[`americas:in:${id}`] !== undefined && bloc(T) === 'axis' && !T.atWar.includes(U.id) && id !== g.human) declareWar(g, id, U.id);
+    }
+  }
+}
+
+
 export function canCourt(g: Game, by: string, target: string): { ok: boolean; why: string } {
   const B = g.nations[by], T = g.nations[target];
   const b = B ? bloc(B) : null;
-  if (!B || !T || !B.alive || !b || b === 'league') return { ok: false, why: 'Only a member of the Axis or the Allies can court neutrals.' };
+  if (!B || !T || !B.alive || (!b && !freeCourt(g, by, target)) || b === 'league') return { ok: false, why: 'Only a member of the Axis or the Allies can court neutrals.' };
   // A small country in the player's hands chooses its own path: nobody talks it round.
   if (by === target || !courtable(T) || ownPath(g, target)) return { ok: false, why: 'Not open to courting.' };
   if (g.flags[`court:${by}:${target}`] === g.turn) return { ok: false, why: 'Already courted this month.' };
-  if (B.pc < DIPLOMACY.court.cost) return { ok: false, why: `Needs ${DIPLOMACY.court.cost} political capital.` };
+  if (B.pc < DIPLOMACY.court.cost && !freeCourt(g, by, target)) return { ok: false, why: `Needs ${DIPLOMACY.court.cost} political capital.` };
   return { ok: true, why: '' };
 }
 
@@ -159,16 +236,33 @@ export function canCourt(g: Game, by: string, target: string): { ok: boolean; wh
 export function court(g: Game, by: string, target: string): boolean {
   if (!canCourt(g, by, target).ok) return false;
   const B = g.nations[by], T = g.nations[target];
-  const b = bloc(B) as 'allies' | 'axis';
+  // (The United States courting back before it has joined the Allies pulls toward them: ruling 223(d).)
+  const b = (bloc(B) ?? 'allies') as 'allies' | 'axis';
   const k = receptive(T, b) * sideOf(b);
-  B.pc -= DIPLOMACY.court.cost;
+  if (!freeCourt(g, by, target)) B.pc -= DIPLOMACY.court.cost;
   T.opinion = clamp(T.opinion + DIPLOMACY.court.opinion * k, -100, 100);
   T.home = clamp(T.home + DIPLOMACY.court.home * k, -100, 100);
   g.flags[`court:${by}:${target}`] = g.turn;
   // A neutral the player has courted is his affair: the history dial does not hold it back from joining.
   if (by === g.human && g.flags.hist !== undefined) g.flags[`courted:${target}`] = g.turn;
+  if (b === 'axis' && by !== g.human && americasNeutral(g, target) && americasOpen(g)) courtsAmericas(g, B, T);
   settle(g, T);
   return true;
+}
+
+/**
+ * A computer-run Axis country's envoys in a neutral of the Americas: the news says so the first month, and a country
+ * the campaign's roll favours joins the Axis after so many months of it (ruling 223(a) and (b)).
+ */
+function courtsAmericas(g: Game, B: Nation, T: Nation): void {
+  const key = `americas:months:${T.id}`, months = (g.flags[key] ?? 0) + 1;
+  g.flags[key] = months;
+  if (months === 1) {
+    const seat = g.regions[T.capital];
+    headline(g, 'event', `${B.adj} envoys are courting ${seat ? seat.name : T.name}.`, T.id, seat?.id);
+  }
+  // (No more than one country of the Americas joins the Axis in a campaign: b391.)
+  if (months >= AMERICAS!.months && americasWon(g, T.id) && americasIn(g) < AMERICAS!.most && joinBloc(g, T, 'axis')) g.flags[`americas:in:${T.id}`] = g.turn;
 }
 
 const blocName = (s: number): string => (s > 0 ? 'the Axis' : 'the Allies');
@@ -421,6 +515,8 @@ function settle(g: Game, n: Nation): void {
     setAlign(g, n, 0);
     headline(g, 'event', `${n.name} steps back from ${blocName(s)} to strict neutrality.`, n.id);
   } else if (s !== 0 && n.opinion * s >= DIPLOMACY.joinAt) {
+    // (A neutral of the Americas joins the Axis only as ruling 223 has it, or as a player's own envoys bring it in.)
+    if (s > 0 && americasNeutral(g, n.id) && !(g.human && bloc(g.nations[g.human]) === 'axis' && g.flags[`court:${g.human}:${n.id}`] !== undefined)) return;
     // The history dial: by the book only the countries that really joined a bloc join it of their own accord.
     if (mayJoin(g, n.id, s > 0 ? 'axis' : 'allies')) joinBloc(g, n, s > 0 ? 'axis' : 'allies');
   }
@@ -756,6 +852,8 @@ export function monthlyDiplomacy(g: Game): void {
     n.opinion = clamp(n.opinion + (n.home - n.opinion) * DIPLOMACY.pull + m * bw + (sore.get(n.id) ?? 0), -100, 100);
     settle(g, n);
   }
+  // The Axis courts the Americas, and the United States courts back (ruling 223).
+  americasMonth(g);
   // The wider world: the dominions follow their mother country, and a great industry that has gone to war turns over a little more of itself.
   worldMonth(g);
   warWorkMonth(g);

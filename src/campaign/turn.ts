@@ -19,7 +19,7 @@ import {
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
-import { liftView, offers, orderOffer, type LiftView, type Offer } from './arsenal';
+import { liftView, offers, orderOffer, smallAirMonth, type LiftView, type Offer } from './arsenal';
 import { cityOrders, ordersAt, type CityOrders, type OrderLine } from './orders';
 import { blocked, blowBridges, crossingOf, whyNotBlow } from './rivers';
 import { cancelJob, jobsFor, orderJob, type JobKind, type JobOffer } from './engineers';
@@ -90,6 +90,8 @@ function closePhase(g: Game, nat: string): void {
     // A gate that has changed hands is no longer shut by the order of the country that lost it.
     gatesTick(g);
     openTheatres(g);
+    // A smaller power's aircraft from abroad, and the month its own works open (ruling 213(d), the grand campaign).
+    smallAirMonth(g);
     monthlyDiplomacy(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
     historyMonth(g);
@@ -650,11 +652,11 @@ const townOrder = (g: Game, c: Corps): boolean => !c.dead && g.human !== null &&
  */
 export const prizesOf = (g: Game, region: number): PrizesView | null => prizesAt(g, region, g.human);
 
-/** Provinces to mark on the map: a prize wrecked there (burning), or in the hands of an army that has not taken the town (seized). Under the fog, only ground the player can see. */
-export function prizesOnMap(g: Game): PrizeMark[] {
+/** Provinces to mark on the map: a prize wrecked there (burning), or in the hands of an army that has not taken the town (seized). Under the fog, only ground the player can see. 'seen' is the player's sightOf where the caller has it already (the 3D table works it out once a picture). */
+export function prizesOnMap(g: Game, seen?: Uint8Array): PrizeMark[] {
   const all = prizeMarks(g);
-  if (g.human === null || !fogOn(g, g.human)) return all;
-  const sight = sightOf(g, g.human);
+  if (!all.length || g.human === null || !fogOn(g, g.human)) return all;
+  const sight = seen ?? sightOf(g, g.human);
   return all.filter((m) => sight[m.region] !== SIGHT.none || allied(g, g.human!, g.regions[m.region].ctrl));
 }
 
@@ -921,11 +923,11 @@ export function guardOnly(g: Game, region: number): GuardOnly | null {
   return { town: v.town, men, head: 'Held by its town guard only', strength: `About ${menWord(men)} men, and no army.`, march: foe ? 'An army you march in goes at the town as it arrives.' : '' };
 }
 
-/** Every siege the player knows of: his own, his allies', and any other on ground he can see. */
-export function siegesInSight(g: Game): SiegeView[] {
+/** Every siege the player knows of: his own, his allies', and any other on ground he can see. 'seen' as for prizesOnMap. */
+export function siegesInSight(g: Game, seen?: Uint8Array): SiegeView[] {
   const all = siegesNow(g);
-  if (g.human === null || !fogOn(g, g.human)) return all;
-  const sight = sightOf(g, g.human);
+  if (!all.length || g.human === null || !fogOn(g, g.human)) return all;
+  const sight = seen ?? sightOf(g, g.human);
   return all.filter((v) => allied(g, g.human!, v.holder) || (v.by !== null && allied(g, g.human!, v.by)) || sight[v.region] !== SIGHT.none);
 }
 
@@ -1084,6 +1086,29 @@ export function asForecast(look: Outlook | null | undefined, rep: BattleReport, 
 const menWord = (n: number): string => Math.round(n).toLocaleString('en-US');
 
 /**
+ * A forecast read off a copy of the campaign, kept with the save the copy was made from. The pointer resting over a
+ * town asks the same question again and again, and the card asks it once more when the army is sent: the copy is
+ * the dear part (a whole load of the campaign). The copy is made from the save alone, so the same save and the same
+ * question make the same copy and the same answer, and a kept answer is that answer. Only the last one is kept, and
+ * each asking is handed its own copy of it.
+ */
+let kept: { text: string; ask: string; out: unknown } | null = null;
+const plainCopy = <T>(x: T): T => {
+  if (Array.isArray(x)) return x.map(plainCopy) as T;
+  if (x && typeof x === 'object') { const o: Record<string, unknown> = {}; for (const k of Object.keys(x)) o[k] = plainCopy((x as Record<string, unknown>)[k]); return o as T; }
+  return x;
+};
+function offCopy<T>(g: Game, ask: string, read: (h: Game) => T): T | undefined {
+  const text = saveGame(g);
+  if (kept && kept.ask === ask && kept.text === text) return plainCopy(kept.out as T);
+  const h = loadGame(text);
+  if (!h) return undefined;
+  const out = read(h);
+  kept = { text, ask, out: plainCopy(out) };
+  return out;
+}
+
+/**
  * What marching these corps into a province will meet, before anything is ordered: ordering an army onto enemy
  * ground where no enemy corps stands is the order to take the place. Null where the march is no such thing: the
  * ground is a friend's or a neutral's, an enemy army stands in its field (that is an attack), an army already
@@ -1105,17 +1130,19 @@ export function marchOutlook(g: Game, corps: Corps[], to: number): MarchOutlook 
   if (v.inside > 0) return { ...base, meets: 'garrison', line: `${v.inside === 1 ? 'A corps holds' : `${v.inside} corps hold`} ${v.town}: your army closes round it and the siege begins.` };
   if (!townHeld(g, r)) return { ...base, meets: 'open', line: `Nothing holds ${v.town}: ${r.name} is yours as your army marches in.` };
   // Only the guard: the march is made on a copy of the campaign, and the copy says what follows.
-  const h = loadGame(saveGame(g));
-  if (!h) return null;
-  const hr = h.regions[to];
-  const there: number[] = [];
-  for (const c of marchOrder(g, able)) { const hc = h.corps.find((x) => x.id === c.id); if (hc && orderMove(h, hc, to) > 0 && hc.reg === to) there.push(c.id); }
-  if (!there.length) return null;
-  if (allied(h, me, hr.ctrl)) return { ...base, going: there, meets: 'gates', line: `Only ${guardWords}, holds ${v.town}, and against this force it opens its gates: ${r.name} is yours as your army marches in.` };
-  const outlook = stormOutlook(h, to);
-  // Made ready: the same army round the same town, with the month it came up behind it.
-  h.flags[`siege:${to}`] = h.turn - 1;
-  const prepared = stormOutlook(h, to);
+  const order = marchOrder(g, able).map((c) => c.id);
+  const read = offCopy(g, `march ${to} ${order.join(',')}`, (h) => {
+    const there: number[] = [];
+    for (const id of order) { const hc = h.corps.find((x) => x.id === id); if (hc && orderMove(h, hc, to) > 0 && hc.reg === to) there.push(id); }
+    if (!there.length || allied(h, me, h.regions[to].ctrl)) return { there, gates: there.length > 0, outlook: null, prepared: null };
+    const outlook = stormOutlook(h, to);
+    // Made ready: the same army round the same town, with the month it came up behind it.
+    h.flags[`siege:${to}`] = h.turn - 1;
+    return { there, gates: false, outlook, prepared: stormOutlook(h, to) };
+  });
+  if (!read || !read.there.length) return null;
+  const { there, outlook, prepared } = read;
+  if (read.gates) return { ...base, going: there, meets: 'gates', line: `Only ${guardWords}, holds ${v.town}, and against this force it opens its gates: ${r.name} is yours as your army marches in.` };
   return {
     ...base, going: there, meets: 'guard', outlook, prepared, favours: outlook && favoured(outlook) ? 'storm' : 'siege',
     ifStorm: IF_STORM,
@@ -1148,10 +1175,7 @@ export function stormChoice(g: Game, region: number): StormChoice | null {
   if (!outlook) return null;
   const hasty = g.flags[`siege:${region}`] === g.turn && outlook.lines.some((l) => l.label === 'A hasty assault');
   let prepared: Outlook | null = null;
-  if (hasty) {
-    const h = loadGame(saveGame(g));
-    if (h) { h.flags[`siege:${region}`] = h.turn - 1; prepared = stormOutlook(h, region); }
-  }
+  if (hasty) prepared = offCopy(g, `storm ${region}`, (h) => { h.flags[`siege:${region}`] = h.turn - 1; return stormOutlook(h, region); }) ?? null;
   const v = townSiege(g, region);
   // Made ready, the wait is a better storm. Otherwise it is what the siege itself is doing: the stores, the ring, the sea.
   const ifWait = prepared ? `Made ready, a month later: ${carryWord(prepared)}, if nothing else changes.` : v && v.by ? v.lines[v.guard > 0 ? 2 : 1] ?? '' : '';
@@ -1688,7 +1712,7 @@ export function airOptions(g: Game, id: number, mission: AirMission): { targets:
 // ---- The air war as its own game (the grand campaign): airfields, air groups, and raids planned from their target ----
 
 /** Every airfield on the map as the player knows it, for a map to draw. Empty in a historical scenario. */
-export const airfieldsSeen = (g: Game): AirfieldRow[] => airfields(g, g.human);
+export const airfieldsSeen = (g: Game, seen?: Uint8Array): AirfieldRow[] => airfields(g, g.human, seen);
 
 /** One airfield opened: its size and the air groups based there. Null outside the grand campaign. */
 export const airfieldAt = (g: Game, region: number): AirfieldCard | null => airfieldCard(g, region, g.human);

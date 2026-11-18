@@ -25,10 +25,11 @@ import { tradeTick } from './trade';
 import { numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { armyOf, jointHold, jointMonth } from './joint';
-import { closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
+import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
+import placesData from '../../data/campaign/places.json';
 import defenceData from '../../data/campaign/defence.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
@@ -73,7 +74,7 @@ export function regionOf(r: any): Region {
   // Which side theatre each region belongs to. A theatre with an opening month is ordinary ground until then (see openTheatres).
   const k = THEATRE_OF.get(r.name) ?? -1;
   return {
-    id: r.id, name: r.name, owner: r.owner, ctrl: r.owner, terrain: r.terrain, vp: r.vp, fac: r.fac,
+    id: r.id, name: r.name, owner: r.owner, ctrl: r.owner, first: r.owner, terrain: r.terrain, vp: r.vp, fac: r.fac,
     // A depot on the coast is a harbour too. One inland feeds an army but takes no ships.
     cap: !!r.flags.cap, port: !!r.flags.port || (!!r.flags.depot && (r.seas ?? []).length > 0),
     fort: r.flags.fort ? { lv: r.flags.fort[0], vs: r.flags.fort.slice(1) } : null,
@@ -167,7 +168,7 @@ export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: n
 
 /** A country's name as it reads in a sentence: "the United States", "Germany". */
 export function theName(n: Nation, start = false): string {
-  return /^(United|Soviet|Netherlands)/.test(n.name) ? `${start ? 'The' : 'the'} ${n.name}` : n.name;
+  return /^(United|Soviet|Netherlands|Dominican Republic)/.test(n.name) ? `${start ? 'The' : 'the'} ${n.name}` : n.name;
 }
 
 /**
@@ -175,12 +176,39 @@ export function theName(n: Nation, start = false): string {
  * ("against the United States", "The United States against Canada": the UI director's words for ruling 211(f)).
  * Every line of news passes through it, so no line has to remember; "a Soviet Union that ..." is left as written.
  */
-const ARTICLED = /(^|[^A-Za-z])(?<![Tt]he )(?<!\b[Aa]n? )(United States|United Kingdom|Soviet Union|Netherlands)\b/g;
-export function theWords(text: string): string {
-  return text.replace(ARTICLED, (_m, pre: string, name: string, at: number) => {
-    const head = /(^|[.!?]\s+)$/.test(text.slice(0, at + pre.length));
+const ARTICLED = /(^|[^A-Za-z])(?<![Tt]he )(?<!\b[Aa]n? )(United States|United Kingdom|Soviet Union|Netherlands|Dominican Republic)\b/g;
+/**
+ * And the places whose names take "the" (data/campaign/places.json, the UI director's list and rule): "the Ruhr", "The
+ * Ruhr" at the head of a line, "the Ruhr's output". A name inside a longer one keeps that one's form: one that runs on
+ * into a capital word ("Azores Waters", "Terek Cossacks"), one after a title or a word that makes a name ("Army Group
+ * Kuban", "General Mackenzie", "Mount Lebanon"), and the longer places the file names ("Rio Grande do Sul").
+ */
+const PLACES = placesData as { the: string[]; within?: Record<string, string[]> };
+const reEsc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const NAME_WORDS = 'Army|Group|Corps|Front|Fleet|Force|Command|Division|Brigade|Detachment|Legion|Operation|General|Admiral|Marshal|Colonel|Major|Captain|Lord|Sir|President|Minister|King|Mount|Lake|Cape|Port|Fort|River|Gulf|Bay|Isle|Saint|St|New|North|South|East|West|Upper|Lower|Old|Great';
+const PLACED = new RegExp(`(^|[^A-Za-z])(?<![Tt]he )(?<!\\b[Aa]n? )(?<!\\b(?:${NAME_WORDS}) )(${[...PLACES.the].sort((a, b) => b.length - a.length).map((n) => {
+  const longer = PLACES.within?.[n] ?? [];
+  const after = longer.filter((l) => l.startsWith(n)).map((l) => `(?!${reEsc(l.slice(n.length))})`).join('');
+  const before = longer.filter((l) => l.endsWith(n) && l !== n).map((l) => `(?<!${reEsc(l.slice(0, l.length - n.length))})`).join('');
+  return `${before}${reEsc(n)}${after}`;
+}).join('|')})\\b(?! [A-Z])`, 'g');
+/**
+ * A line of running text with its articles. `before` is the text that runs before it in the same sentence or
+ * paragraph, where the line is one piece of a longer one (a page's text, piece by piece): it decides "The" or "the"
+ * and is not itself changed.
+ */
+export function theWords(text: string, before = ''): string {
+  const cut = before.length;
+  const put = (s: string, re: RegExp): string => s.replace(re, (m: string, pre: string, name: string, at: number) => {
+    if (at + pre.length < cut) return m;
+    const head = /(^|[.!?]\s+)$/.test(s.slice(0, at + pre.length));
     return `${pre}${head ? 'The' : 'the'} ${name}`;
   });
+  return put(put(before + text, ARTICLED), PLACED).slice(cut);
+}
+/** A place's name as it reads in running text: "the Ruhr", "Warsaw"; `start` at the head of a sentence. */
+export function placeName(name: string, start = false): string {
+  return PLACES.the.includes(name) ? `${start ? 'The' : 'the'} ${name}` : name;
 }
 
 export function headline(g: Game, kind: Headline['kind'], text: string, nat?: string, region?: number, tag?: NewsTag): void {
@@ -446,8 +474,15 @@ export function fieldArmy(g: Game, nat: string): number {
   return s;
 }
 
-/** True where the desert's supply rules apply: desert ground, and the overseas coast that feeds it. */
-export const inDesert = (r: Region): boolean => r.overseas || r.terrain === DESERT.terrain;
+/**
+ * The Western Desert's own rules (desert.json: supply counted from the port, every bound shorter, no railway) are
+ * for the desert of the map of Europe alone. Desert ground on the wider world (ruling 212, the cities version) is the
+ * ground's own row: it moves, fights and digs in as desert, but its supply is counted as anywhere else, and a
+ * railway drawn across it runs. Keyed by the chart, so nothing on Europe's map moves.
+ */
+export const sandRules = (r: Region): boolean => r.terrain === DESERT.terrain && !beyondEurope(r);
+/** True where the desert's supply rules apply: the desert of Europe's map, and the overseas coast that feeds it. */
+export const inDesert = (r: Region): boolean => r.overseas || sandRules(r);
 
 export function industry(g: Game, nat: string): number {
   let s = 0;
@@ -480,7 +515,7 @@ export function frozen(g: Game, nat: string, r: Region): boolean {
  * the front through country already held is an ordinary march.
  */
 export function lineDrag(g: Game, c: Corps, to: Region): number {
-  if (to.terrain === DESERT.terrain) {
+  if (sandRules(to)) {
     // In the desert the same holds for everyone: the further from the port, the shorter each bound.
     if (allied(g, c.nat, to.ctrl) && to.since < g.turn) return 0;
     ensureSupply(g);
@@ -538,8 +573,9 @@ export function computeSupply(g: Game): void {
   const active = new Set(g.corps.map((c) => c.nat));
   // The seas each nation's supply ships can still use, worked out once: an ally's overseas ports feed its friends too.
   const lanes = new Map<string, Uint8Array | null>();
+  const seasNow = new SeaPicture(g);
   const lanesOf = (id: string): Uint8Array | null => {
-    if (!lanes.has(id)) { const n = g.nations[id]; lanes.set(id, n && (n.seaSupply || n.sealift > 0) ? openSeas(g, id) : null); }
+    if (!lanes.has(id)) { const n = g.nations[id]; lanes.set(id, n && (n.seaSupply || n.sealift > 0) ? openSeas(g, id, seasNow) : null); }
     return lanes.get(id)!;
   };
   const withShips = Object.values(g.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
@@ -554,6 +590,9 @@ export function computeSupply(g: Game): void {
   const size = g.regions.length;
   const holders: string[] = [], holderNo = new Map<string, number>();
   const road = new Int16Array(size), deep = new Uint8Array(size), sand = new Uint8Array(size);
+  // The provinces that can be anybody's source of supply at all, in order: a port, or a capital, a big industrial
+  // province or a depot standing on its owner's own ground. Every other province only carries the line.
+  const sources: number[] = [];
   for (const r of g.regions) {
     const who = field ? field[r.id] : r.ctrl;
     let k = holderNo.get(who);
@@ -561,6 +600,7 @@ export function computeSupply(g: Game): void {
     road[r.id] = k;
     if (EASTERN.deepOwners.includes(r.owner)) deep[r.id] = 1;
     if (inDesert(r)) sand[r.id] = 1;
+    if (r.port || (r.ctrl === r.owner && (r.cap || r.fac >= 3 || !!g.flags['depot:' + r.id]))) sources.push(r.id);
   }
   for (const id of active) {
     const friend = new Uint8Array(holders.length);
@@ -573,7 +613,8 @@ export function computeSupply(g: Game): void {
     const sunk = convoyDrag(g, id);
     // A nation with ships can also be fed through any friendly port its supply ships can still reach.
     const open = lanesOf(id);
-    for (let at = 0; at < size; at++) {
+    let mates: string[] | null = null;
+    for (const at of sources) {
       if (!friend[road[at]]) continue;
       const r = g.regions[at];
       // An army round a town it has not taken holds the beaches beside the harbour and no more: ships can still
@@ -586,7 +627,7 @@ export function computeSupply(g: Game): void {
       // Overseas, an ally's working port feeds the troops who came to fight beside him.
       if (!quay && !shut && r.overseas && r.port && r.ctrl !== id) { const theirs = lanesOf(r.ctrl); quay = !!theirs && r.seas.some((z) => theirs[z]); }
       // In a side theatre the allies share their shipping: a port any of them can still reach feeds them all.
-      if (!quay && r.theatre >= 0 && r.port) quay = shippers(id).some((a) => { const theirs = lanesOf(a); return !!theirs && r.seas.some((z) => theirs[z]); });
+      if (!quay && r.theatre >= 0 && r.port) quay = (mates ??= shippers(id)).some((a) => { const theirs = lanesOf(a); return !!theirs && r.seas.some((z) => theirs[z]); });
       // A fortified port overseas keeps stores: with the sea behind it closed, it feeds its garrison a while longer.
       if (!shut && r.overseas && r.port && r.fort) {
         if (quay) g.flags[`stores:${r.id}`] = g.turn;
@@ -647,7 +688,7 @@ function desertLines(g: Game, ok: Uint8Array, head: Float32Array, out: Float32Ar
     const a = q[i];
     for (const j of g.regions[a].nb) {
       if (!ok[j]) continue;
-      const far = d[a] + (g.regions[j].terrain === DESERT.terrain ? DESERT.step : 0);
+      const far = d[a] + (sandRules(g.regions[j]) ? DESERT.step : 0);
       if (far < d[j] - 1e-6) { d[j] = far; q.push(j); }
     }
   }
@@ -713,6 +754,12 @@ export function corpsNamed(g: Game, nat: string, name: string): string {
   for (const n of Object.values(g.nations)) if (n.adj && new RegExp(`(^|[^A-Za-z])${n.adj}([^A-Za-z]|$)`).test(head)) return name;
   return `${adj} ${name}`;
 }
+/**
+ * Ground of a country of the Americas that joined the Axis by its courting (ruling 223(c), diplomacy.ts): it keeps
+ * its own small army, and no computer-run country of its side ships a corps to its harbours or bases an air group on
+ * its fields. Its enemies are not barred from what they take of it.
+ */
+export const thornGround = (g: Game, r: Region, nat: string): boolean => nat !== r.owner && nat !== g.human && g.flags[`americas:in:${r.owner}`] !== undefined && allied(g, nat, r.owner);
 
 export const fights = (c: Corps): boolean => c.kind !== 'art' && c.kind !== 'eng' && c.kind !== 'fort';
 /** The sentence wherever guns are sent forward alone (ruling 146). */
@@ -2116,7 +2163,7 @@ export function railReach(g: Game, c: Corps): Set<number> {
 function railWalk(g: Game, c: Corps): { out: Set<number>; through: number[]; ends: number[] } {
   const out = new Set<number>();
   // No train leaves a province under siege, unless the army round the town holds a great junction outside it (prizes.ts).
-  if (c.kind === 'fort' || c.ap < 4 || g.regions[c.reg].terrain === DESERT.terrain || (besieged(g, g.regions[c.reg]) && !junctionOpenTo(g, c.nat, g.regions[c.reg]))) return { out, through: [], ends: [] };
+  if (c.kind === 'fort' || c.ap < 4 || sandRules(g.regions[c.reg]) || (besieged(g, g.regions[c.reg]) && !junctionOpenTo(g, c.nat, g.regions[c.reg]))) return { out, through: [], ends: [] };
   const net = groundRules(g);
   if (net && railCut(g, c.reg)) return { out, through: [], ends: [] };
   const seen = new Uint8Array(g.regions.length);
@@ -2125,7 +2172,7 @@ function railWalk(g: Game, c: Corps): { out: Set<number>; through: number[]; end
   for (let i = 0; i < q.length; i++) {
     for (const j of net ? railsAt(q[i]) : g.regions[q[i]].nb) {
       const r = g.regions[j];
-      if (seen[j] || r.terrain === DESERT.terrain) continue;
+      if (seen[j] || sandRules(r)) continue;
       if ((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) continue;
       if (downBetween(g, q[i], j)) continue; // no train crosses a river whose bridges are down
       if (net && railCut(g, j)) {
@@ -2220,13 +2267,13 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
       : fuelSlows(g, c) ? `No train for ${c.name} this month: short of fuel, it has less than the whole month a train takes.`
       : `No train for ${c.name} this month: the railway takes a whole month of movement, and it has less.`,
   };
-  if (from.terrain === DESERT.terrain) return { code: 'desert', line: 'No railway crosses the desert.', at: from.id };
+  if (sandRules(from)) return { code: 'desert', line: 'No railway crosses the desert.', at: from.id };
   if (besieged(g, from) && !junctionOpenTo(g, c.nat, from)) return news('siege', `${from.name} is under siege.`, 'No train leaves it.', from.id);
   if (net && !onNet(from.id)) return { code: 'noline', line: `No railway runs through ${from.name}: ${c.name} goes by road.`, at: from.id };
   if (net && railCut(g, from.id)) return news('cut', `The railway at ${from.name} is cut${cutAside(g, from.id)}.`, `No train leaves until ${mended(from.id)}.`, from.id);
   if (to === undefined || to === c.reg || !g.regions[to]) return null;
   const dest = g.regions[to];
-  if (dest.terrain === DESERT.terrain) return { code: 'desert', line: 'No railway crosses the desert.', at: to };
+  if (sandRules(dest)) return { code: 'desert', line: 'No railway crosses the desert.', at: to };
   if (!allied(g, c.nat, dest.ctrl) && !junctionOpenTo(g, c.nat, dest)) return { code: 'foe', line: `${dest.name} is not in friendly hands. Trains run through friendly ground only.`, at: to };
   if (besieged(g, dest) && !junctionOpenTo(g, c.nat, dest)) return news('siege', `${dest.name} is under siege.`, 'No train runs into it.', to);
   if (net && !onNet(to)) return { code: 'noline', line: `No railway runs to ${dest.name}.`, at: to };
@@ -2244,7 +2291,7 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   while (dq.length) {
     const a = dq.shift()!;
     for (const b of net ? railsAt(a) : g.regions[a].nb) {
-      if (g.regions[b].terrain === DESERT.terrain) continue;
+      if (sandRules(g.regions[b])) continue;
       const w = weigh(a, b);
       if (cost[a] + w >= cost[b]) continue;
       cost[b] = cost[a] + w; prev[b] = a;
@@ -2371,7 +2418,7 @@ export function nearestBreak(g: Game, corps: Corps[]): NoTrain | null {
       if (seen.has(j)) continue;
       seen.add(j);
       const r = g.regions[j];
-      if (r.terrain === DESERT.terrain) continue;
+      if (sandRules(r)) continue;
       const open = !((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) && !downBetween(g, q[i], j) && !(net && railCut(g, j));
       if (open) { q.push(j); continue; }
       if (reach.has(j) || !allied(g, c.nat, r.ctrl)) continue;

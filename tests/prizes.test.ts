@@ -97,13 +97,20 @@ describe('what a province has, and where it lies', () => {
     expect(count('oil')).toBe(5);
     expect(count('works')).toBe(37);
     expect(count('junction')).toBe(32);
-    // Five more in Latin America since Version 76 (Maracaibo and eastern Venezuela, Santander, Talara, Comodoro Rivadavia).
-    expect(count('oil', true)).toBe(15);
-    // Buenos Aires, Rio de Janeiro and Sao Paulo are factory districts too.
-    expect(count('works', true)).toBe(57);
-    expect(count('junction', true)).toBe(37);
-    expect(g.regions.filter((r) => beyondEurope(r) && hasPrize(g, r, 'junction')).map((r) => r.name)).toEqual(['Pittsburgh', 'Chicago', 'Kansas', 'East Texas', 'Northern Ontario']);
-    expect(kindsAt(g, g.byName['East Texas'])).toEqual(['oil', 'works', 'airfield', 'harbour', 'junction']);
+    // Five more in Latin America since Version 76 (Maracaibo and eastern Venezuela, Santander, Talara, Comodoro Rivadavia),
+    // and Calgary's Turner Valley field since the cities version (the clerk's reference-cities.md).
+    expect(count('oil', true)).toBe(16);
+    // On the cities chart the factories of a province went in part to its cities (ruling 210): Houston and Indiana are
+    // factory districts now, and Washington, East Texas, Toronto and Rio de Janeiro are not, their factories spread
+    // among their cities, one apiece. Buenos Aires and Sao Paulo still are.
+    expect(count('works', true)).toBe(55);
+    // The great junctions of the wider world are read from the cities chart's railways (five lines or more): Kansas and
+    // Northern Ontario are not, their lines now meeting at their cities; the others are new on the denser net.
+    expect(count('junction', true)).toBe(43);
+    expect(g.regions.filter((r) => beyondEurope(r) && hasPrize(g, r, 'junction')).map((r) => r.name)).toEqual(['Pittsburgh', 'Chicago', 'Alabama', 'Mississippi', 'East Texas', 'New Mexico', 'Winnipeg', 'Monterrey', 'Minneapolis', 'Pergamino', 'Denver']);
+    // East Texas keeps its oil and its junction; its factories, airfield and harbour are Houston's, its city on the coast.
+    expect(kindsAt(g, g.byName['East Texas'])).toEqual(['oil', 'junction']);
+    expect(kindsAt(g, g.byName['Houston'])).toEqual(['works', 'airfield', 'harbour']);
     expect(count('airfield')).toBeGreaterThan(100);
     expect(count('harbour')).toBeGreaterThan(80);
     expect(kindsAt(g, g.byName['Warsaw'])).toEqual(['works', 'airfield', 'junction']);
@@ -329,7 +336,7 @@ describe('wrecking a prize by order', () => {
     expect(prizeOut(g, ruhr, 'works')).toBe(PRIZES.wreck.works);
     expect(workingFactories(g, ruhr)).toBe(ruhr.fac - worksOutside(ruhr));
     expect(prizeUser(g, ruhr, 'works')).toBeNull();
-    expect(g.headlines.slice(news).some((h) => /German troops blow up the factory district of Ruhr: its 2 factories stand idle for 6 months/.test(h.text))).toBe(true);
+    expect(g.headlines.slice(news).some((h) => /German troops blow up the factory district of the Ruhr: its 2 factories stand idle for 6 months/.test(h.text))).toBe(true);
     expect(whyNotWreckPrize(g, ruhr.id, 'works')).toMatch(/already wrecked/);
     expect(prizeMarks(g).find((m) => m.region === ruhr.id)).toEqual({ region: ruhr.id, by: null, burning: ['works'], seized: [] });
     // The same corps has no month left for the airfield.

@@ -15,6 +15,8 @@ import { BUDGET, PRODUCTION, budgeted, cadreTerms, cadresOf, canRaise, corpsCost
 import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
 import { atWar, headline } from './game';
+import { majorsOf } from './diplomacy';
+import { turnToDate } from '../core/ticket';
 import { NAVY, fleetsOf, foundFleet, liftLeft, shipCount } from './navy';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
 
@@ -39,6 +41,12 @@ export const ARSENAL = data as unknown as {
   };
   yards: Record<string, number>;
   guns: { soften: number; softenMost: number; thicken: number; thickenMost: number };
+  /** Ruling 213(d) and the works rates of 218(d): a smaller power's aircraft works and the record's aircraft from abroad (see the note in the data). */
+  smallAir: {
+    perPoint: number;
+    works: Record<string, { ftr: number | null; bmr: number | null; rate: [number | null, number | null]; earlier?: { until: number; rate: [number | null, number | null] } }>;
+    gifts: [number, string, number, 'ftr' | 'bmr' | 'mixed', string[]][];
+  };
 };
 
 const TOP = 3;
@@ -68,11 +76,11 @@ const queued = (g: Game, nat: string, item: string, region: number): number => g
 /** What guns and airfields cost a nation to man each month, as lines for its ledger. */
 export function worksUpkeep(g: Game, nat: string): LedgerLine[] {
   let aa = 0, field = 0;
-  for (const k in g.flags) {
-    if (!k.startsWith('wk:')) continue;
-    const [, what, id] = k.split(':');
-    if ((what !== 'aa' && what !== 'field') || g.regions[+id]?.ctrl !== nat) continue;
-    if (what === 'aa') aa += g.flags[k]; else field += g.flags[k];
+  // Province by province: the levels are whole numbers, so the order they are added in changes nothing.
+  for (const r of g.regions) {
+    if (r.ctrl !== nat) continue;
+    aa += g.flags[`wk:aa:${r.id}`] ?? 0;
+    field += g.flags[`wk:field:${r.id}`] ?? 0;
   }
   const out: LedgerLine[] = [];
   if (aa > 0) out.push({ key: 'works:aa', label: 'Anti-aircraft guns', amount: aa * ARSENAL.works.aa.upkeep, count: aa });
@@ -89,6 +97,204 @@ export function restoreWorks(g: Game): void {
 
 /** True if this nation has an aircraft industry: a home province with this many factories. */
 const industry = (g: Game, nat: string, factories: number): boolean => g.regions.some((r) => isHome(g, nat, r) && r.fac >= factories);
+
+// ---- A smaller power's industry (ruling 213, the grand campaign) -----------------------------------------------
+
+const SMALL = () => ARSENAL.smallAir;
+const WING_WORD: Record<Wing, string> = { ftr: 'fighters', bmr: 'bombers' };
+
+/** True for a great power: its aircraft industry is its factories, and its factories are as many as it can pay for. */
+export const greatPower = (g: Game, nat: string): boolean => majorsOf(g).includes(nat);
+
+/** Ruling 213(d): the month from which a smaller power's own works build this kind (1 = September 1939), or null for never. */
+export const worksFrom = (nat: string, wing: Wing): number | null => SMALL().works[nat]?.[wing] ?? null;
+
+/** The most a smaller power's works build of this kind a month, in aircraft (ruling 218(d), the historian's rates). */
+export function worksRate(g: Game, nat: string, wing: Wing): number {
+  const w = SMALL().works[nat];
+  if (!w) return 0;
+  const rate = w.earlier && g.turn <= w.earlier.until ? w.earlier.rate : w.rate;
+  return (rate[wing === 'ftr' ? 0 : 1] ?? 0) * SMALL().perPoint;
+}
+
+/**
+ * Why a smaller power cannot order a wing of this kind this month, in the words passed for ruling 213(d), or null when
+ * its works build it. A works that will open names its month, whatever the country builds today.
+ */
+export function whyNoWorks(g: Game, nat: string, wing: Wing): string | null {
+  const name = g.nations[nat].name;
+  const w = SMALL().works[nat];
+  if (!w || (w.ftr === null && w.bmr === null)) return `${name} has no aircraft industry: more aircraft come only from abroad.`;
+  const from = w[wing], other: Wing = wing === 'ftr' ? 'bmr' : 'ftr';
+  if (from !== null && (from > g.turn || worksRate(g, nat, wing) <= 0)) {
+    // Shut until its month, or building none of this kind at its earlier rate: open the month after that rate ends.
+    const at = worksOpensAt(g, nat, wing)!;
+    return `${name} builds no ${WING_WORD[wing]} before ${turnToDate(at).label}: until then more ${WING_WORD[wing]} come only from abroad.`;
+  }
+  if (from === null) return `${name} builds ${WING_WORD[other]} at home, but no ${WING_WORD[wing]}: more ${WING_WORD[wing]} come only from abroad.`;
+  return null;
+}
+
+/** The month a shut works opens for this kind, or null where it never builds it (the same reckoning as whyNoWorks). */
+function worksOpensAt(g: Game, nat: string, wing: Wing): number | null {
+  const w = SMALL().works[nat];
+  const from = w?.[wing] ?? null;
+  if (!w || from === null) return null;
+  return Math.max(from, g.turn + 1, w.earlier && !(w.earlier.rate[wing === 'ftr' ? 0 : 1] ?? 0) ? w.earlier.until + 1 : 0);
+}
+
+/**
+ * The short tag on a province's offer card for a wing a smaller power's works do not build this month (ruling
+ * 213(d)): "No aircraft industry", "Builds no bombers", or the month it opens, "Fighters from July 1942". Null when
+ * the wing can be built.
+ */
+export function aircraftTag(g: Game, nat: string, wing: Wing): string | null {
+  if (!budgeted(g) || greatPower(g, nat) || whyNoWorks(g, nat, wing) === null) return null;
+  const w = SMALL().works[nat];
+  if (!w || (w.ftr === null && w.bmr === null)) return 'No aircraft industry';
+  const at = worksOpensAt(g, nat, wing);
+  if (at === null) return `Builds no ${WING_WORD[wing]}`;
+  return `${cap(WING_WORD[wing])} from ${turnToDate(at).label}`;
+}
+
+/**
+ * Said once (ruling 213(d)): where a smaller power can order neither kind this month, the reasons in place of the
+ * Arsenal page's opening lines, each said once. Null where it can order one kind or both.
+ */
+export function worksOpening(g: Game, nat: string): string | null {
+  if (!budgeted(g) || greatPower(g, nat)) return null;
+  const why = (['ftr', 'bmr'] as Wing[]).map((w) => whyNoWorks(g, nat, w));
+  if (why.some((x) => x === null)) return null;
+  const w = SMALL().works[nat];
+  if (!w || (w.ftr === null && w.bmr === null)) return why[0];
+  const name = g.nations[nat].name;
+  const at = (['ftr', 'bmr'] as Wing[]).map((k) => ({ k, at: worksOpensAt(g, nat, k) }));
+  const dated = at.filter((x) => x.at !== null).sort((a, b) => a.at! - b.at!);
+  // Both still to open: one sentence, the earlier month first.
+  if (dated.length === 2) return `${name} builds no ${WING_WORD[dated[0].k]} before ${turnToDate(dated[0].at!).label} and no ${WING_WORD[dated[1].k]} before ${turnToDate(dated[1].at!).label}: until then more aircraft come only from abroad.`;
+  // One to open and one never: the two sentences as they stand, the one with a month first.
+  const first = dated[0]?.k ?? 'ftr', other: Wing = first === 'ftr' ? 'bmr' : 'ftr';
+  return `${whyNoWorks(g, nat, first)} ${whyNoWorks(g, nat, other)}`;
+}
+
+/**
+ * How many months a smaller power's wing takes (ruling 218(d)): its works build at their rate, one wing of a kind at a
+ * time, so a second order waits for the first.
+ */
+function worksMonths(g: Game, nat: string, wing: Wing): number {
+  const spec = ARSENAL.air[wing];
+  const per = worksRate(g, nat, wing);
+  if (per <= 0) return spec.months;
+  const busy = Math.max(0, ...g.nations[nat].queue.filter((b) => b.what === 'air' && b.item === wing).map((b) => b.eta - g.turn));
+  return Math.max(spec.months, busy + Math.ceil(spec.count / per));
+}
+
+/** Ruling 213(e): the factories a smaller power began the war with, wherever they stand now. */
+export function firstFactories(g: Game, nat: string): number {
+  let n = 0;
+  for (const r of g.regions) if ((r.first ?? r.owner) === nat) n += Math.max(0, r.fac - factoriesBuilt(g, r.id));
+  return n;
+}
+
+/** Ruling 213(e): the most factories a smaller power's industry can carry in this war: half again its first-day count, rounded up. Null for a great power, and outside the grand campaign. */
+export const factoryCeiling = (g: Game, nat: string): number | null => (!budgeted(g) || greatPower(g, nat) ? null : Math.ceil(firstFactories(g, nat) * 1.5));
+
+/** The factories a country has now on its own ground, and those building. */
+export function factoriesHeld(g: Game, nat: string): { held: number; building: number } {
+  let held = 0;
+  for (const r of g.regions) if (isHome(g, nat, r)) held += r.fac;
+  const building = g.nations[nat].queue.filter((b) => b.what === 'work' && b.item === 'factory').length;
+  return { held, building };
+}
+
+/** Why a smaller power may order no new factory, in the words passed for ruling 213(e), or null. A factory lost may be built back. */
+export function whyNoFactory(g: Game, nat: string): string | null {
+  const most = factoryCeiling(g, nat);
+  if (most === null) return null;
+  const name = g.nations[nat].name;
+  if (most <= 0) return `${name} has no industry to build on.`;
+  const { held, building } = factoriesHeld(g, nat);
+  if (held + building < most) return null;
+  return `${name}'s industry can carry ${plural(most, 'factory', 'factories')} in this war, and it has ${held + building}${building ? ', built or building' : ''}.`;
+}
+
+/** The short tag on a province's Industry slot when a smaller power may build no more (ruling 213(e)): "3 of 3 factories", or "No industry". */
+export function factoryTag(g: Game, nat: string): string | null {
+  if (whyNoFactory(g, nat) === null) return null;
+  const most = factoryCeiling(g, nat)!;
+  if (most <= 0) return 'No industry';
+  const { held, building } = factoriesHeld(g, nat);
+  return `${held + building} of ${plural(most, 'factory', 'factories')}`;
+}
+
+/** The best airfield a country holds: the largest, its capital before others. */
+function bestField(g: Game, nat: string): Region | null {
+  let best: Region | null = null, rank = -1;
+  for (const r of g.regions) {
+    if (!canStation(g, nat, r)) continue;
+    const k = workLevel(g, 'field', r.id) * 10 + (g.flags[`af:${r.id}`] ?? 0) * 10 + (g.nations[nat].capital === r.id ? 5 : 0) + r.fac;
+    if (k > rank) { best = r; rank = k; }
+  }
+  return best;
+}
+
+/**
+ * A grand campaign begun later in the war (ruling 213(d)): the record's aircraft from abroad of the months before it
+ * are already in the order of battle history left, so their rows are marked as come.
+ */
+export function openSmallAir(g: Game): void {
+  g.flags.gifts = 1;
+  SMALL().gifts.forEach(([month], i) => { if (month < g.turn) g.flags[`gift:${i}`] = 1; });
+}
+
+/**
+ * The month's aircraft from abroad (ruling 213(d)): each of the record's rows that falls due arrives, while one of its
+ * givers stands and is not at war with the receiver, as a new air group on the receiver's best airfield (two for a
+ * mixed row, half each). A row whose givers are gone, or whose receiver has fallen, is lost; one with no airfield to land on waits for one. And the
+ * month a smaller power's works open, its own player reads one line of news. The grand campaign only.
+ */
+export function smallAirMonth(g: Game): void {
+  if (!budgeted(g) || !airWar(g)) return;
+  const S = SMALL();
+  S.gifts.forEach(([month, to, points, kind, givers], i) => {
+    const key = `gift:${i}`;
+    if (month > g.turn || g.flags[key]) return;
+    const n = g.nations[to];
+    // A receiver not on this map waits for it; one that has fallen loses the row.
+    if (!n || n.dormant) return;
+    if (!n.alive) { g.flags[key] = 1; return; }
+    const giver = givers.find((x) => x === to || (g.nations[x]?.alive && !g.nations[x].dormant && !atWar(g, x, to)));
+    if (!giver) { g.flags[key] = 1; return; }
+    const r = bestField(g, to);
+    if (!r) return;
+    g.flags[key] = 1;
+    const count = Math.round(points * S.perPoint);
+    const parts: [Wing, number][] = kind === 'mixed' ? [['ftr', Math.ceil(count / 2)], ['bmr', Math.floor(count / 2)]] : [[kind, count]];
+    const made: string[] = [];
+    for (const [wing, k] of parts) {
+      if (k <= 0) continue;
+      const f = foundAirFleet(g, to, r, `${r.name} Air Command`, wing, k);
+      f[wing] += k; f.est[wing] += k;
+      (f.extra ??= { ftr: 0, bmr: 0 })[wing] += k;
+      made.push(`${k} ${WING_WORD[wing]} (the ${f.name})`);
+    }
+    if (to === g.human && made.length) {
+      const from = giver === to ? 'from its own works' : `from ${g.nations[giver].name}`;
+      headline(g, 'info', `${cap(made.join(' and '))} arrive ${from} and form on the airfield at ${r.name}.`, to, r.id);
+    }
+  });
+  // The month a works opens: one plain line for its own player, never for a works that stands on the first day.
+  const me = g.human;
+  if (me && !greatPower(g, me) && g.nations[me]?.alive) {
+    const open = (['ftr', 'bmr'] as Wing[]).filter((w) => worksFrom(me, w) === g.turn && g.turn > 1);
+    if (open.length) {
+      const name = g.nations[me].name;
+      headline(g, 'info', open.length === 2
+        ? `${name} now builds fighters and bombers at home: both wings can be ordered on the Arsenal page.`
+        : `${name} now builds ${WING_WORD[open[0]]} at home: ${open[0] === 'ftr' ? 'Fighter' : 'Bomber'} wings can be ordered on the Arsenal page.`, me);
+    }
+  }
+}
 
 /** True if a new wing can be stationed in this region: the nation holds it and it has airfields, built or already in use by one of its fleets. */
 export function canStation(g: Game, nat: string, r: Region | undefined): boolean {
@@ -271,15 +477,18 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
 
   for (const wing of ['ftr', 'bmr'] as Wing[]) {
     const spec = ARSENAL.air[wing];
-    const built = industry(g, nat, spec.factories);
+    // Ruling 213(d): a smaller power builds aircraft where the record had a works, from the month it opened, at its rate.
+    const small = budgeted(g) && !greatPower(g, nat);
+    const none = small ? whyNoWorks(g, nat, wing) : null;
+    const built = small ? none === null : industry(g, nat, spec.factories);
     const at = built ? stationSite(g, nat, sel) : -1;
     const joins = at >= 0 ? fleetAt(g, nat, at, wing) : null;
     const cost = priceOf(g, nat, `air:${wing}`, spec.cost);
     out.push({
-      key: `air:${wing}`, group: 'air', label: spec.label, blurb: spec.blurb, size: `${spec.count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`, cost, months: spec.months,
+      key: `air:${wing}`, group: 'air', label: spec.label, blurb: spec.blurb, size: `${spec.count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`, cost, months: small && built ? worksMonths(g, nat, wing) : spec.months,
       upkeep: spec.count * BUDGET.upkeep.air[wing], at,
       note: at < 0 ? '' : joins ? `Joins ${joins.name} at ${g.regions[at].name}.` : airWar(g) ? `Forms a new air group on the airfield at ${g.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g.regions[at].name}.`,
-      why: !built ? `Needs an aircraft industry: a home province with ${spec.factories} factories.` : at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(cost),
+      why: none ?? (!built ? `Needs an aircraft industry: a home province with ${spec.factories} factories.` : at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(cost)),
     });
   }
 
@@ -307,8 +516,12 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const have = r ? factoriesBuilt(g, r.id) + queued(g, nat, 'factory', r.id) : 0;
     const most = r && (r.terrain === 'urban' || r.cap) ? W.factory.most.city : W.factory.most.town;
     const cost = W.factory.cost + W.factory.step * have;
-    const why = !r ? pick : !isHome(g, nat, r) || r.overseas ? 'Factories are built in the home country.' : !isCity(r) ? 'Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size.' : have >= most ? `${r.name} has room for no more new factories.` : poor(cost);
-    out.push({ key: 'work:factory', group: 'works', label: W.factory.label, blurb: W.factory.blurb, size: 'one factory', cost, months: W.factory.months, upkeep: 0, at: r ? r.id : -1, note: r ? `${r.name} has ${plural(r.fac, 'factory', 'factories')}${have ? `, ${have} of ${most} new ones built or building` : ''}.` : '', why });
+    // Ruling 213(e): a smaller power at the end of its industry: the country's fact comes before the province's reasons.
+    const ceiling = whyNoFactory(g, nat);
+    const why = ceiling ?? (!r ? pick : !isHome(g, nat, r) || r.overseas ? 'Factories are built in the home country.' : !isCity(r) ? 'Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size.' : have >= most ? `${r.name} has room for no more new factories.` : poor(cost));
+    const carry = factoryCeiling(g, nat);
+    const said = carry !== null && carry > 0 && !ceiling ? ` ${g.nations[nat].name} has ${factoriesHeld(g, nat).held + factoriesHeld(g, nat).building} of the ${plural(carry, 'factory', 'factories')} its industry can carry in this war.` : '';
+    out.push({ key: 'work:factory', group: 'works', label: W.factory.label, blurb: W.factory.blurb, size: 'one factory', cost, months: W.factory.months, upkeep: 0, at: r ? r.id : -1, note: r ? `${r.name} has ${plural(r.fac, 'factory', 'factories')}${have ? `, ${have} of ${most} new ones built or building` : ''}.${said}` : '', why });
   }
   const FULL = { yard: 'The shipyard at % is as large as a yard can be.', aa: 'The guns at % are as heavy as they can be.', field: 'The airfields at % are as large as they can be.' };
   const NONE = { yard: 'no shipyard', aa: 'no guns', field: 'only rough landing grounds' };

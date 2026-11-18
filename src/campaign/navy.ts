@@ -5,7 +5,7 @@
 
 import { byHand } from './depth';
 import mapData from '../generated/campaign-map.json';
-import worldMap from '../generated/world-map.json';
+import worldMap from '../generated/world-americas.json';
 import data from '../../data/campaign/navy.json';
 import fleetData from '../../data/campaign/fleets.json';
 import { Rng, hashString } from '../core/rng';
@@ -17,7 +17,7 @@ import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
-import { aloneLine, allied, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
+import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
@@ -253,6 +253,108 @@ export function closedTo(g: Game, z: number, nat: string): boolean {
   return e.total >= NAVY.closed.ratio * seaSide(g, z, nat, false).total;
 }
 
+/**
+ * The seas as they stand at one moment, for asking of nation after nation whether each sea is closed to it (the supply
+ * picture asks it of every nation with ships, every phase). What a sea holds does not depend on who asks: the fleets
+ * at sea in it and their weight, and the coasts that put aircraft over it. So that is worked out once a sea, and only
+ * whose side each is on is asked again. The sums are seaSide's and airOver's, in the same order, so a sea is closed
+ * here exactly when closedTo finds it so (a test holds the two together). Good only while nothing moves.
+ */
+export class SeaPicture {
+  private fleets: { nat: string; power: number }[][] | null = null;
+  private coasts: ({ ctrl: string; air: number; sky: string | null; skyAir: number }[] | undefined)[] = [];
+  private most: Float64Array | null = null;
+  private harbours: Region[] | null = null;
+  constructor(private readonly g: Game) {}
+
+  /** Every province with a port, in order. */
+  ports(): Region[] {
+    return (this.harbours ??= this.g.regions.filter((r) => r.port));
+  }
+
+  /** closedTo, from the picture. */
+  closed(z: number, nat: string): boolean {
+    // A sea where even everything in it together comes short of the least that closes a sea is open to everybody.
+    if (this.mostIn(z) < NAVY.closed.min) return false;
+    const e = this.side(z, nat, true);
+    if (e < NAVY.closed.min) return false;
+    return e >= NAVY.closed.ratio * this.side(z, nat, false);
+  }
+
+  /**
+   * The most any side could have in a sea: every fleet at sea in it and the larger share of every coast's air, added
+   * as side() adds them. No part is below nothing, so whatever side() adds for one side is never more than this.
+   */
+  private mostIn(z: number): number {
+    const g = this.g, zone = g.seas[z];
+    // Only while the sea's own weight for air is no less than nothing does a larger sum stay the larger.
+    if (zone.air < 0 || NAVY.air.weight < 0) return Infinity;
+    if (!this.most) this.most = new Float64Array(g.seas.length).fill(NaN);
+    if (Number.isNaN(this.most[z])) {
+      let ships = 0;
+      for (const f of this.afloat(z)) ships += Math.max(0, f.power);
+      let air = 0;
+      if (zone.coast.length) {
+        let s = 0;
+        for (const c of this.coastsOf(z)) s += Math.max(0, c.air * (c.sky ? AIR.sky.seaFoe : 1), c.sky ? c.skyAir * AIR.sky.seaOwn : 0);
+        air = (s / zone.coast.length) * zone.air;
+      }
+      this.most[z] = ships + air * NAVY.air.weight;
+    }
+    return this.most[z];
+  }
+
+  /** The fleets at sea in a sea, with their weight, in the order of the game's fleets. */
+  private afloat(z: number): { nat: string; power: number }[] {
+    const g = this.g;
+    if (!this.fleets) {
+      const by: { nat: string; power: number }[][] = g.seas.map(() => []);
+      for (const f of g.fleets) if (atSea(f) && by[f.zone]) by[f.zone].push({ nat: f.nat, power: fleetPower(g, f) });
+      this.fleets = by;
+    }
+    return this.fleets[z];
+  }
+
+  /** The coasts of a sea that put aircraft over it (airOver's), with who has won the sky over each. */
+  private coastsOf(z: number): { ctrl: string; air: number; sky: string | null; skyAir: number }[] {
+    const g = this.g;
+    let cs = this.coasts[z];
+    if (!cs) {
+      cs = [];
+      for (const id of g.seas[z].coast) {
+        const r = g.regions[id];
+        if (r.since >= g.turn) continue;
+        const n = g.nations[r.ctrl];
+        if (!n || !n.alive || !n.atWar.length) continue;
+        const sky = skyOver(g, id);
+        cs.push({ ctrl: r.ctrl, air: n.air, sky, skyAir: sky ? g.nations[sky].air : 0 });
+      }
+      this.coasts[z] = cs;
+    }
+    return cs;
+  }
+
+  /** seaSide's total. */
+  private side(z: number, nat: string, hostile: boolean): number {
+    const g = this.g;
+    let ships = 0;
+    for (const f of this.afloat(z)) if (hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat)) ships += f.power;
+    return ships + this.air(z, nat, hostile) * NAVY.air.weight;
+  }
+
+  /** airOver. */
+  private air(z: number, nat: string, hostile: boolean): number {
+    const g = this.g, zone = g.seas[z];
+    if (!zone.coast.length) return 0;
+    let s = 0;
+    for (const c of this.coastsOf(z)) {
+      if (hostile ? atWar(g, c.ctrl, nat) : allied(g, c.ctrl, nat)) s += c.air * (c.sky ? AIR.sky.seaFoe : 1);
+      else if (c.sky && (hostile ? atWar(g, c.sky, nat) : allied(g, c.sky, nat))) s += c.skyAir * AIR.sky.seaOwn;
+    }
+    return (s / zone.coast.length) * zone.air;
+  }
+}
+
 /** The smallest strength of a nation's own side in a sea, in whole points, that opens it to its troopships; 0 while it is open. */
 export function opensAt(g: Game, z: number, nat: string): number {
   if (!closedTo(g, z, nat)) return 0;
@@ -315,13 +417,16 @@ export function gatesTick(g: Game): void {
   }
 }
 
-/** The seas a nation's supply ships and troopships can use: those it can reach from a home port without crossing a sea closed to it. */
-export function openSeas(g: Game, nat: string): Uint8Array {
+/** The seas a nation's supply ships and troopships can use: those it can reach from a home port without crossing a sea closed to it. A picture of the seas, if given, answers which are closed. */
+export function openSeas(g: Game, nat: string, seas?: SeaPicture): Uint8Array {
   const open = new Uint8Array(g.seas.length);
-  const shut = g.seas.map((z) => closedTo(g, z.id, nat));
+  // Whether a sea is closed to the nation is asked only of the seas its ships could reach, once each (-1: not asked yet).
+  const shutAt = new Int8Array(g.seas.length).fill(-1);
+  const shut = (z: number): boolean => { if (shutAt[z] < 0) shutAt[z] = (seas ? seas.closed(z, nat) : closedTo(g, z, nat)) ? 1 : 0; return shutAt[z] === 1; };
   const q: number[] = [];
-  const start = (z: number): void => { if (!shut[z] && !open[z]) { open[z] = 1; q.push(z); } };
-  for (const r of g.regions) if (r.port && r.owner === nat && r.ctrl === nat) r.seas.forEach(start);
+  const start = (z: number): void => { if (!open[z] && !shut(z)) { open[z] = 1; q.push(z); } };
+  const coastal = seas ? seas.ports() : g.regions;
+  for (const r of coastal) if (r.port && r.owner === nat && r.ctrl === nat) r.seas.forEach(start);
   for (const f of g.fleets) if (f.nat === nat && f.base < 0) start(f.home); // a base off the map is a home port too
   // The grand campaign: a harbour the nation has taken serves its supply ships as a home port does, once its own
   // roads reach the quay: the stores come down to it overland and go on by sea. So an army put across a narrow sea
@@ -331,12 +436,12 @@ export function openSeas(g: Game, nat: string): Uint8Array {
     const road = [g.nations[nat].capital];
     linked[road[0]] = 1;
     for (let i = 0; i < road.length; i++) for (const j of g.regions[road[i]].nb) if (!linked[j] && allied(g, nat, g.regions[j].ctrl)) { linked[j] = 1; road.push(j); }
-    for (const r of g.regions) if (linked[r.id] && r.port && r.ctrl === nat && r.owner !== nat && prizeOut(g, r, 'harbour') <= 0) r.seas.forEach(start);
+    for (const r of coastal) if (linked[r.id] && r.port && r.ctrl === nat && r.owner !== nat && prizeOut(g, r, 'harbour') <= 0) r.seas.forEach(start);
   }
   // So is the sea a country off the map sends its convoys in by.
   const off = g.nations[nat]?.offmap;
   if (off && g.nations[nat].alive && zoneOf(g, off.sea) >= 0) start(zoneOf(g, off.sea));
-  for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!open[j] && !shut[j] && canPass(g, q[i], j, nat)) { open[j] = 1; q.push(j); }
+  for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!open[j] && !shut(j) && canPass(g, q[i], j, nat)) { open[j] = 1; q.push(j); }
   return open;
 }
 
@@ -413,6 +518,7 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
   if (!from.port || !to.port || to.id === from.id) return 'Troops are shipped from one port to another.';
   if (!allied(g, c.nat, to.ctrl)) return `${to.name} is not in friendly hands.`;
+  if (thornGround(g, to, c.nat)) return `${g.nations[to.owner].name} keeps its own army: no corps of its allies is shipped there.`;
   // A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts).
   for (const p of [from, to]) { const out = prizeOut(g, p, 'harbour'); if (out > 0) return `The harbour of ${p.name} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.`; }
   if (hostileUnits(g, to, c.nat).length) {

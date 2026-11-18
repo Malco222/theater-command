@@ -4,18 +4,26 @@
 // [region, region, x, y]: the two provinces it joins and the point where it crosses from one into the other.
 // Run after build-geo-campaign and build-rivers.
 // With 'world' it lays the net of the wider world the same way, on the provinces of world-map.json (run after
-// build-geo-world and build-rivers world), written to world-rails.json.
+// build-geo-world and build-rivers world), written to world-rails.json. With 'far' it lays the net of the far
+// side on the new provinces of world-next.json (run after build-geo-far and build-rivers far) and writes
+// world-next-rails.json: today's lines, then the new ones. The Pacific slice's net is laid as the new world's is;
+// the globe slice's is laid by hand (FAR_RAIL_LINES), and may cross the old sheet's edge into today's provinces.
 import fs from 'node:fs';
 import { GROUND, NEAREST } from '../data/campaign/rails.mjs';
 
-const world = process.argv.includes('world');
-const { ADD, CUT, NO_RAIL } = world
-  ? await import('../data/campaign/world.mjs').then((m) => ({ ADD: m.WORLD_RAIL_ADD, CUT: m.WORLD_RAIL_CUT, NO_RAIL: new Set(m.WORLD_NO_RAIL) }))
-  : await import('../data/campaign/rails.mjs').then((m) => ({ ADD: m.ADD, CUT: m.CUT, NO_RAIL: new Set() }));
-const file = world ? 'world' : 'campaign';
-const map = JSON.parse(fs.readFileSync(new URL(`../src/generated/${file}-map.json`, import.meta.url), 'utf8'));
-// The provinces as a list, and by their numbers: the new world's are numbered on from Europe's.
-const L = map.regions;
+const far = process.argv.includes('far');
+const world = !far && process.argv.includes('world');
+const { ADD, CUT, NO_RAIL, LINES = [] } = far
+  ? await import('../data/campaign/far.mjs').then((m) => ({ ADD: m.FAR_RAIL_ADD, CUT: m.FAR_RAIL_CUT, NO_RAIL: new Set(m.FAR_NO_RAIL), LINES: m.FAR_RAIL_LINES }))
+  : world
+    ? await import('../data/campaign/world.mjs').then((m) => ({ ADD: m.WORLD_RAIL_ADD, CUT: m.WORLD_RAIL_CUT, NO_RAIL: new Set(m.WORLD_NO_RAIL) }))
+    : await import('../data/campaign/rails.mjs').then((m) => ({ ADD: m.ADD, CUT: m.CUT, NO_RAIL: new Set() }));
+const file = far ? 'world-next' : world ? 'world' : 'campaign';
+const map = JSON.parse(fs.readFileSync(new URL(`../src/generated/${far ? 'world-next' : `${file}-map`}.json`, import.meta.url), 'utf8'));
+// The provinces as a list, and by their numbers: the new world's are numbered on from Europe's. On the far side
+// the net is laid over the new provinces only, and today's lines are kept as they stand in world-rails.json.
+const L = far ? map.regions.filter((r) => r.id >= map.first + map.stages[0]) : map.regions;
+const before = far ? JSON.parse(fs.readFileSync(new URL('../src/generated/world-rails.json', import.meta.url), 'utf8')).links : [];
 const R = [];
 for (const r of L) R[r.id] = r;
 const byName = new Map(L.map((r) => [r.name, r]));
@@ -23,7 +31,9 @@ const key = (a, b) => (a < b ? `${a}:${b}` : `${b}:${a}`);
 // None runs in the desert, and a strait is crossed by train ferry only where an island has no other line.
 const straits = new Set(map.links.map(([a, b]) => key(a, b)));
 const FERRY = 3;
-const railable = (r) => r.terrain !== 'desert' && !NO_RAIL.has(r.name);
+// (On the far side the net is grown over the Pacific slice only: the globe slice's lines are laid by hand below.)
+const byHand = far ? map.first + map.stages[1] : Infinity;
+const railable = (r) => r.id < byHand && r.terrain !== 'desert' && !NO_RAIL.has(r.name);
 const cost = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) * ((GROUND[a.terrain] + GROUND[b.terrain]) / 2) * (straits.has(key(a.id, b.id)) ? FERRY : 1);
 const edges = [];
 for (const r of L) for (const j of r.nb) if (j > r.id && R[j] && railable(r) && railable(R[j])) edges.push({ a: r.id, b: j, w: cost(r, R[j]) });
@@ -82,6 +92,24 @@ const named = (list, what) => list.map(([a, b]) => { const p = byName.get(a), q 
 for (const k of named(ADD, 'add')) lines.add(k);
 for (const k of named(CUT, 'cut')) lines.delete(k);
 
+// 5. The lines laid by hand: each a chain of neighbouring provinces. A province of today's map in a chain carries
+// the line across the old sheet's edge, where the new province borders it ('joins').
+const across = [];
+if (LINES.length) {
+  const olds = [...JSON.parse(fs.readFileSync(new URL('../src/generated/campaign-map.json', import.meta.url), 'utf8')).regions, ...map.regions.filter((r) => r.id < map.first + map.stages[0])];
+  const oldByName = new Map(olds.map((r) => [r.name, r]));
+  const joins = new Set((map.joins ?? []).map(([a, b]) => key(a, b)));
+  for (const chain of LINES) {
+    for (let i = 0; i + 1 < chain.length; i++) {
+      const p = byName.get(chain[i]), q = byName.get(chain[i + 1]);
+      if (p && q && p.nb.includes(q.id)) { lines.add(key(p.id, q.id)); continue; }
+      const o = oldByName.get(chain[i]) ?? oldByName.get(chain[i + 1]), n = p ?? q;
+      if (o && n && !(p && q) && joins.has(key(o.id, n.id))) { across.push([o, n]); continue; }
+      console.warn('bad line', chain[i], chain[i + 1]);
+    }
+  }
+}
+
 // Where each line crosses from one province into the next: over the bridge where a river runs between them,
 // otherwise at the point of their common border nearest the straight road.
 const bridges = new Map(JSON.parse(fs.readFileSync(new URL(`../src/generated/${file}-rivers.json`, import.meta.url), 'utf8')).crossings.map(([a, b, , x, y]) => [key(a, b), [x, y]]));
@@ -103,9 +131,40 @@ function via(a, b) {
   }
   return [r1(best[0]), r1(best[1])];
 }
-const links = [...lines].map((k) => k.split(':').map(Number)).sort((p, q) => p[0] - q[0] || p[1] - q[1]).map(([a, b]) => [a, b, ...via(R[a], R[b])]);
-fs.writeFileSync(new URL(`../src/generated/${file}-rails.json`, import.meta.url), JSON.stringify({ links }) + '\n');
+// A line across the old sheet's edge crosses where the two provinces' borders run together: the shapes of the two
+// maps share no corners, so the stretch they have in common is found edge by edge.
+function viaEdge(o, n) {
+  const bridge = bridges.get(key(o.id, n.id));
+  if (bridge) return bridge;
+  const mx = (o.x + n.x) / 2, my = (o.y + n.y) / 2;
+  let best = null, bd = Infinity;
+  const edgesOf = (r) => r.polys.flat(1).flatMap((ring) => ring.map((p, i) => [p, ring[(i + 1) % ring.length]]));
+  const theirs = edgesOf(o);
+  for (const [p, q] of edgesOf(n)) {
+    const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (len < 0.05) continue;
+    const ux = (q[0] - p[0]) / len, uy = (q[1] - p[1]) / len;
+    for (const [c, d] of theirs) {
+      // How far c and d lie off the line of pq, and where along it.
+      const off = (v) => Math.abs((v[0] - p[0]) * uy - (v[1] - p[1]) * ux), along = (v) => (v[0] - p[0]) * ux + (v[1] - p[1]) * uy;
+      if (off(c) > 0.3 || off(d) > 0.3) continue;
+      const lo = Math.max(0, Math.min(along(c), along(d))), hi = Math.min(len, Math.max(along(c), along(d)));
+      if (hi - lo < 0.2) continue;
+      const t = Math.max(lo, Math.min(hi, (mx - p[0]) * ux + (my - p[1]) * uy));
+      const x = p[0] + t * ux, y = p[1] + t * uy, dist = Math.hypot(x - mx, y - my);
+      if (dist < bd) { bd = dist; best = [r1(x), r1(y)]; }
+    }
+  }
+  if (!best) console.warn('no common border found for', o.name, n.name);
+  return best ?? [r1(mx), r1(my)];
+}
+const links = [
+  ...across.map(([o, n]) => [o.id, n.id, ...viaEdge(o, n)]),
+  ...[...lines].map((k) => k.split(':').map(Number)).map(([a, b]) => [a, b, ...via(R[a], R[b])]),
+].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+fs.writeFileSync(new URL(`../src/generated/${file}-rails.json`, import.meta.url), JSON.stringify({ links: [...before, ...links] }) + '\n');
 const on = new Set(links.flatMap(([a, b]) => [a, b]));
-console.log(`rails: ${links.length} lines of ${edges.length} borders, ${on.size} provinces on the net, ${cities.length} cities; off the net: ${L.filter((r) => !on.has(r.id)).map((r) => r.name).join(', ') || 'none'}`);
+console.log(`rails: ${links.length} lines of ${edges.length} borders, ${on.size} provinces on the net, ${cities.length} cities; off the net: ${L.filter((r) => r.id < byHand && !on.has(r.id)).map((r) => r.name).join(', ') || 'none'}`);
+if (LINES.length) console.log(`laid by hand: ${links.filter(([a, b]) => b >= byHand).length} lines (${across.length} across the old sheet's edge: ${across.map(([o, n]) => `${o.name} - ${n.name}`).join(', ')}); on the net by hand: ${L.filter((r) => r.id >= byHand && on.has(r.id)).length} of ${L.filter((r) => r.id >= byHand).length} provinces`);
 if (joined.length) console.log(`joined within a country: ${joined.join(', ')}`);
-if (process.argv.includes('--list')) for (const [a, b] of links) console.log(`${R[a].name} - ${R[b].name}`);
+if (process.argv.includes('--list')) for (const [a, b] of links) console.log(`${R[a]?.name ?? a} - ${R[b].name}`);

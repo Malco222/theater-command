@@ -13,7 +13,7 @@
 // teach them again unless he asks. Nothing here moves a piece or takes a control: a note waits until its deed is done.
 
 import data from '../../data/campaign/lessons.json';
-import { hostileUnits, trainReachFor } from './game';
+import { hostileUnits, placeName, trainReachFor } from './game';
 import { besiegers } from './siege';
 import { townName } from './towns';
 import { armyRound } from './round';
@@ -130,12 +130,9 @@ export function pickupPlace(g: Game): number {
 
 /**
  * A place's name in running text: "the Saar", "the Danzig Corridor"; a town or a plain political division stays bare.
- * (The UI director's rule of 2026-11-17 and the rules builder's sweep, rules-builder/the-before-places.md. The cities
- * version brings the game's own list; this one is the sweep's, for the notes until then.)
+ * (The UI director's rule of 2026-11-17: the game's own list, data/campaign/places.json, as every other line has it.)
  */
-const THE = new Set(['Ruhr', 'Rhineland', 'Saar', 'Tyrol', 'Somme', 'Riviera', 'Ardennes', 'Midlands', 'Highlands', 'Basque Country', 'Banat', 'Peloponnese', 'Crimea', 'Kuban',
-  'Danzig Corridor', 'Vosges', 'West Country', 'Don Bend', 'Kalmyk Steppe', 'Qattara Depression', 'Lebanon', 'Marche', 'Alto Adige', 'Eifel', 'Neumark', 'Grenzmark', 'Jura', 'Cotentin', 'Valdai', 'Terek']);
-export const placeThe = (name: string): string => (THE.has(name) ? `the ${name}` : name);
+export const placeThe = (name: string): string => placeName(name);
 const capital = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
@@ -261,6 +258,7 @@ export function lessonWords(g: Game, l: Lesson, game: string, under = ''): { hea
   const fill = (t: string): string => t
     .split('{place}').join(at >= 0 ? placeThe(g.regions[at].name) : 'the front')
     .split('{province}').join(s ? capital(placeThe(s.province)) : 'The province')
-    .split('{city}').join(s ? s.city : 'its town');
+    // (A province named for its town is not named twice: "Vancouver is not yours until its town falls.")
+    .split('{city}').join(s && s.city !== s.province ? placeThe(s.city) : 'its town');
   return { head: l.head, text: fill(namedWords(l.text, game, under)), deed: namedWords(l.deed, game, under) };
 }

@@ -257,7 +257,7 @@ describe('lifted off the beaches', () => {
     expect(evacuate(g, wforce)).toBe(true);
     expect(g.regions[wforce.reg].name).toBe('Crete');
     expect(wforce.str).toBeCloseTo(0.75, 6);
-    expect(g.headlines.some((h) => /lifted off the beaches at Peloponnese and taken to Crete/.test(h.text))).toBe(true);
+    expect(g.headlines.some((h) => /lifted off the beaches at the Peloponnese and taken to Crete/.test(h.text))).toBe(true);
     // Nobody is lifted off Crete to Crete: from there the way out is home.
     expect(refuge(g, wforce, g.byName['Crete'])).toBe(london);
     // With Crete gone the next lift from the mainland goes home.
