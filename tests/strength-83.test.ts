@@ -398,8 +398,10 @@ describe('one war at the history stop, nobody playing', () => {
     // 1944, its only landing of the war. In the 32 wars measured, seeds 40 to 71, no American first wave of 1944 went
     // to an island and two landed in France in 1944, this one and seed 66; 25 put their first wave on Sardinia in 1942
     // or 1943, and four landed in France at all. The realism version (its crowded airfields, ruling 229) moved the war
-    // again: SEED_NOTE)
-    const g = startOpen(createGame(50, null));
+    // again. Seed 48 on it: the beaches of France refuse America's corps in June and July 1944, and its staff lands them
+    // on the Cotentin in July. Of the 64 wars measured, seeds 17 to 80, four tell this story: seeds 30, 40, 48 and 58,
+    // landing at Rouen, Marseille, the Cotentin and Brittany.)
+    const g = startOpen(createGame(48, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
     const refused = new Set<number>();

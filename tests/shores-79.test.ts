@@ -263,17 +263,24 @@ describe('a staff that waits for its date', () => {
     expect(germanyEntered(g)).toBe(false);
     // (A quiet year on land with Germany, as when this war was first measured. Since ruling 227 the desert war runs on
     // into the autumn of 1942 in every war of seeds 1 to 13, and a staff still fighting him on land looks for no
-    // crossing whatever its list says: so the year is made quiet here, and only the list is left to tell the two apart.)
-    const quiet = (x: Game): void => { x.nations.UK.lastFight.GER = Math.min(x.nations.UK.lastFight.GER ?? 0, JAN_43 - 12); x.nations.GER.lastFight.UK = Math.min(x.nations.GER.lastFight.UK ?? 0, JAN_43 - 12); };
+    // crossing whatever its list says: so the year is made quiet here, and only the list is left to tell the two apart.
+    // Italy's war is kept alive the other way: since ruling 229 Britain clears the desert by the summer of 1941 in this
+    // war, and Sardinia, an island, is on no list's dates, so a quiet half-year with Italy would make it the enemy.)
+    const quiet = (x: Game): void => {
+      x.nations.UK.lastFight.GER = Math.min(x.nations.UK.lastFight.GER ?? 0, JAN_43 - 12); x.nations.GER.lastFight.UK = Math.min(x.nations.GER.lastFight.UK ?? 0, JAN_43 - 12);
+      x.nations.UK.lastFight.ITA = JAN_43 - 1; x.nations.ITA.lastFight.UK = JAN_43 - 1;
+    };
     quiet(g);
     for (const k of ['st:foe:UK', 'st:foeAt:UK']) delete g.flags[k];
     expect(seaFoe(g, 'UK')).toBeNull();
-    // Where the list is put away the same staff, the same month, has the enemy across the Channel in its eye.
+    // Where the list is put away the same staff, the same month, has an enemy across the water in its eye: Germany
+    // across the Channel, or, since ruling 229, Finland, at war with Britain beside Germany in this war and never yet
+    // fought, so the quietest enemy of all. Neither is on the list's dates in January 1943.
     const loose = at(JAN_43);
     quiet(loose);
     for (const k of ['st:foe:UK', 'st:foeAt:UK']) delete loose.flags[k];
     expect(setStop(loose, 4)).toBe(true);
-    expect(seaFoe(loose, 'UK')?.foe).toBe('GER');
+    expect(['GER', 'FIN']).toContain(seaFoe(loose, 'UK')?.foe);
   });
 
   it('is not fighting a war nobody can fight: it will come that month', () => {

@@ -58,7 +58,8 @@
     {
       "id": "build", "head": "Build and rest",
       "text": "An army that stands a whole month rests and mends. Winter is for building: open the ARSENAL and place one order. Guns round a rail junction guard it against bombers.",
-      "deed": "Place one order in the ARSENAL.", "does": "order", "due": "month", "after": "raid", "months": 3
+      "deed": "Place one order in the ARSENAL.", "does": "order", "due": "month", "after": "raid", "months": 3,
+      "there": "Order an artillery corps. Guns round a rail junction guard it against bombers. An army that stands a whole month rests and mends."
     }
   ],
   "closing": {

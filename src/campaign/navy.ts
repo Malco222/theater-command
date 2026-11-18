@@ -17,7 +17,7 @@ import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
-import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
+import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
@@ -523,7 +523,9 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   const n = g.nations[c.nat], from = g.regions[c.reg];
   if (n.sealift <= 0) return `${n.name} has no shipping to move an army by sea.`;
   if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
-  if (!from.port || !to.port || to.id === from.id) return 'Troops are shipped from one port to another.';
+  // (The place at fault is named, so a refused order by sea says what is wrong with it: the UI director, build 1638.)
+  if (to.id === from.id) return `They are in ${placeName(to.name)} already.`;
+  for (const p of [to, from]) if (!p.port) return `${placeName(p.name, true)} has no port: troops are shipped from one port to another.`;
   if (!allied(g, c.nat, to.ctrl)) return `${to.name} is not in friendly hands.`;
   if (thornGround(g, to, c.nat)) return `${g.nations[to.owner].name} keeps its own army: no corps of its allies is shipped there.`;
   // A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts).
@@ -900,7 +902,9 @@ export function crossingAccount(g: Game, nat: string, path: number[], to: Region
     if (d.last) lines.push({ label: `The sky over ${to.name}`, value: sky === 'ours' ? 'yours' : sky === 'denied' ? 'held by enemy fighters' : 'nobody holds it', effect: sky === 'ours' ? `keeps ${Math.round((1 - AIR.sky.seaFoe) * 100)}% of them off the troopships` : sky === 'denied' ? 'no invasion fleet can cross under them' : fly ? 'no help to either side' : 'out of reach of your fighters from any airfield you hold' });
     if (d.hunters > 0 || d.last) lines.push({ label: `Your ships and aircraft in the ${name(d.z)}`, value: `${round(d.own.ships)} and ${round(d.own.air)}`, effect: d.own.total >= 0.5 ? 'each counts double against the hunters' : 'nothing covers the troopships' });
   }
-  lines.push({ label: 'Caught at sea', value: `${Math.round(risk * 100)} in 100`, effect: risk > 0 ? `about ${Math.round(risk * NAVY.intercept.loss * 100)}% of the men lost` : 'nothing is in a position to stop the crossing' });
+  // (A share that rounds to nothing is said in words, as the chances at the ends are: the UI director, build 1638.)
+  const lost = Math.round(risk * NAVY.intercept.loss * 100);
+  lines.push({ label: 'Caught at sea', value: `${Math.round(risk * 100)} in 100`, effect: risk > 0 ? (lost > 0 ? `about ${lost}% of the men lost` : 'almost none of the men lost') : 'nothing is in a position to stop the crossing' });
   const helps: CrossingHelp[] = [];
   if (risk > 0) {
     // The invader's own fleets that could stand in the worst sea and are not there now.

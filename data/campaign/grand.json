@@ -8,7 +8,7 @@
   ],
   "nations": [
     { "id": "GER", "years": {
-      "1939": "At war with Poland, Britain and France. Where you go next, and when, is up to you.",
+      "1939": "Where you go next, and when, is up to you.",
       "1940": "Poland is yours and the western front is quiet. Strike through the Low Countries in the spring, look north to Norway first, or wait and build.",
       "1941": "Master of the continent from the Pyrenees to the Bug. Britain is unbeaten, your ally needs rescuing in Africa, and the pact with Moscow lasts only as long as you both want it to.",
       "1942": "The drive on Moscow has failed in the snow and the army is worn out. Hold through the winter, then decide where the summer's blow will fall: Moscow again, or the oil of the Caucasus."
@@ -24,22 +24,22 @@
       "1940": "The army has stood on the frontier all winter. The Line covers Alsace and Lorraine. The Belgian frontier and the Ardennes are yours to worry about."
     } },
     { "id": "SOV", "years": {
-      "1939": "At peace behind a pact. Build the Red Army and wait, or march before Germany does.",
+      "1939": "A pact with Germany has bought you time. Build the Red Army and wait, or march before Germany does.",
       "1940": "The pact has given you eastern Poland and time. Use it: the army is large, half trained, and strung out along a new frontier.",
       "1941": "Germany holds Europe and her army has nothing else to do. You have a year at most, perhaps only months. Decide where the Red Army stands when the day comes.",
       "1942": "Moscow is saved and the counter-offensive is rolling. The factories are beyond the Urals now. Push while the frost lasts, then get ready for the summer."
     } },
     { "id": "ITA", "years": {
-      "1939": "Neutral, with an army in Libya and Albania. Pick your moment and your side of the Mediterranean.",
-      "1940": "Still neutral, with both sides watching you. If France begins to fall, that is the moment to move. If it does not, staying out may be worth more.",
-      "1941": "At war and losing it: beaten in the desert, stuck in the Greek mountains, the fleet hit in its own harbour. Hold Tripoli until help comes, or find another way out.",
+      "1939": "You have an army in Libya and Albania. Pick your moment and your side.",
+      "1940": "Both sides are watching you. If France begins to fall, that is the moment to move. If it does not, staying out may be worth more.",
+      "1941": "Your armies are beaten in the desert and stuck in the Greek mountains, and the fleet has been hit in its own harbour. Hold Tripoli until help comes, or find another way out.",
       "1942": "The army is back at the gates of Cyrenaica and the convoys to Tripoli are getting through. Malta is still British, and it sits on your supply line."
     } },
     { "id": "USA", "under": "A long peace comes first: in history the United States was not at war until December 1941. Take over in 1942 to begin at war.", "peaceUntil": 28, "years": {
-      "1939": "At peace, an ocean away, with a small army at home and the greatest industry in the world working at a tenth of what it could. Going to war will not turn the factories over in a day: they climb to full war work over many months. Arm while you can, and choose your moment.",
-      "1940": "Still at peace. The war in Europe has gone quiet for the winter, your factories are taking orders from London and Paris, and the army is still a cadre.",
-      "1941": "At peace and arming fast. France has fallen, Britain fights on alone and is paying with everything it has. A fifth of your industry is on war work, and war itself will take the rest there only step by step. How long can you stand aside?",
-      "1942": "At war since December. Industry is turning over to war work month by month and will be at full stretch in 1943. The army is forming at home and has an ocean to cross before it can fight: ship it port to port, to Britain or to Africa."
+      "1939": "An ocean away, with a small army at home and the greatest industry in the world working at a tenth of what it could. Going to war will not turn the factories over in a day: they climb to full war work over many months. Arm while you can, and choose your moment.",
+      "1940": "The war in Europe has gone quiet for the winter, your factories are taking orders from London and Paris, and the army is still a cadre.",
+      "1941": "You are arming fast. France has fallen, Britain fights on alone and is paying with everything it has. A fifth of your industry is on war work, and war itself will take the rest there only step by step. How long can you stand aside?",
+      "1942": "Industry is turning over to war work month by month and will be at full stretch in 1943. The army is forming at home and has an ocean to cross before it can fight: ship it port to port, to Britain or to Africa."
     } },
     { "id": "POL", "years": {
       "1939": "Outnumbered and nearly surrounded. You place your army on the eve of war. The first month is the one history wrote: survive it and the rest is yours."
@@ -60,7 +60,7 @@
     { "id": "GRE", "small": true, "years": { "1939": "Seven divisions in the mountains, a British guarantee, and Italy across the water in Albania." } },
     { "id": "TUR", "small": true, "years": { "1939": "Twelve divisions astride the Straits, leaning toward the Allies. Everyone would like you on their side." } },
     { "id": "IRL", "small": true, "years": { "1939": "One division and the Atlantic. Neutral, with Britain next door and family in America." } },
-    { "id": "CAN", "small": true, "years": { "1939": "At war beside Britain from the first week, with three thin divisions, six destroyers and factories no bomber can reach. Send your army across the Atlantic, or keep it to guard your own shores." } },
+    { "id": "CAN", "small": true, "years": { "1939": "Beside Britain from the first week, with three thin divisions, six destroyers and factories no bomber can reach. Send your army across the Atlantic, or keep it to guard your own shores." } },
     { "id": "MEX", "small": true, "years": { "1939": "Four thin divisions, oilfields the foreign companies want back, and a long frontier with the United States. Stay out, stand with your neighbour, or look for friends further off. Staying out is a quiet game of building and trade: a fight comes only if you choose one. Join the Allies and ship an army to their ports, join the Axis, or march on a neighbour. War with the United States is fought on your own northern frontier from its first month." } },
     { "id": "BRA", "small": true, "years": { "1939": "Six thin divisions, two old battleships and half a continent. Washington wants your airfields and your rubber, and Berlin wants your trade. Stay out, pick a side, or lead the continent yourself. Staying out is a quiet game of building and trade: a fight comes only if you choose one. Join the Allies and ship an army to their ports, join the Axis, or march on a neighbour. War with the United States is fought at a distance while you keep to your own ground: your coast lies beyond the reach of its landing craft. Take a colony nearer its harbours and its army lands there and marches on you." } },
     { "id": "ARG", "small": true, "years": { "1939": "The richest country in South America, with five divisions and the strongest navy south of the Canal. Britain buys your beef and half your officers admire Germany. Nobody can make you choose. Staying out is a quiet game of building and trade: a fight comes only if you choose one. Join the Allies and ship an army to their ports, join the Axis, or march on a neighbour. War with the United States is fought at a distance: your coast lies beyond the reach of its landing craft." } },

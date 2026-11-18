@@ -23,7 +23,7 @@ import { honour } from './guarantees';
 import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedMonth, restedOrg } from './morale';
 import { civicDrafts, civicSum, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
-import { numberCorps } from './armies';
+import { growCorps, numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { armyOf, jointHold, jointMonth } from './joint';
 import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
@@ -3135,9 +3135,9 @@ function expeditions(g: Game, nat: string): void {
       if (o.until) g.flags[`lent:${i}`] = old.id;
       // The new divisions come at full strength; the corps they join is as rested as it was.
       old.str = (old.str * old.divs + row[4]) / (old.divs + row[4]);
-      old.divs += row[4];
+      // (They carry numbers of their own, never those of the corps beside it: armies.ts.)
+      growCorps(g, old, row[4], row[3]);
       old.name = row[2];
-      old.kind = row[3];
       g.supplyDirty = true;
       if (o.news) headline(g, 'event', o.news, nat, old.reg);
       return;

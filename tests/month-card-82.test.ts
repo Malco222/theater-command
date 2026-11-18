@@ -577,6 +577,30 @@ describe('the art director\'s mends and the 3D builder\'s three points', () => {
     expect(monthCard(g, mark, ME).staff[0]).toMatchObject({ short: said[3][2], text: said[3][1], desk: 'build' });
   });
 
+  it('the 3D game\'s card gives every line whole: its rows and boxes wrap, so no sentence is cut with three dots (its UI director, build 1628)', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    // (two such fights: one is the lead story, told whole on either card, and the other a row)
+    const storm = (at: Region): string => `German troops storm ${at.name} after a long fight in its streets and take its bridges whole.`;
+    for (const at of fields(g).slice(0, 2)) news(g, { kind: 'battle', arm: 'land', text: storm(at), nat: ME, region: at.id, won: ME, lost: 'POL' });
+    news(g, { kind: 'info', text: 'Your secret service sent Heron to London to read the books.', nat: ME, desk: 'spies' } as Parameters<typeof news>[1]);
+    // (the browser's card, in its typewriter rows, cuts them)
+    const cut = monthCard(g, mark, ME);
+    const row = cut.rows.find((r) => r.region !== undefined && /^German troops storm /.test(r.line))!;
+    expect(row.line).toMatch(/…$/);
+    expect(cut.staff[0].short).toBe('Spies: sent Heron to London to read…');
+    // (the 3D game's does not)
+    const whole = monthCard(g, mark, ME, { whole: true });
+    expect(whole.rows.find((r) => r.region === row.region)!.line).toBe(storm(g.regions[row.region!]));
+    expect(whole.staff[0].short).toBe('Spies: sent Heron to London to read the books');
+    for (const r of [...whole.rows, ...(whole.lead ? [whole.lead] : [])]) expect(r.line, r.line).not.toMatch(/…$/);
+    for (const x of [...whole.staff.map((y) => y.short), ...whole.also, ...whole.elsewhere.map((y) => y.text)]) expect(x, x).not.toMatch(/…$/);
+    // A foot box's lines are each whole, as many as it has lines.
+    const long = 'German troops close round Lille: the city is under siege, with one corps inside';
+    expect(fitFoot([long, long], Infinity, 2, 3)).toEqual([{ text: `${long}.`, at: 0 }, { text: `${long}.`, at: 1 }]);
+    expect(staffShort('spies', 'Your secret service recruited agent Chalice and sent Bellows to Berlin to read the books.', Infinity)).toBe('Spies: recruited agent Chalice and 1 more');
+  });
+
   it('a line in a foot box keeps to whole words, never half a name, and a cut shows itself', () => {
     // (The room is a count of letters to a line, and two lines: the boxes are set in a typewriter face.)
     expect(wholeWords('Engineers finish the bridge at Lodz.', 30)).toBe('Engineers finish the bridge at Lodz.');

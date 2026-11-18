@@ -356,6 +356,8 @@ export interface Corps extends Storied {
   mw?: [string, number, number][];
   /** The number its first division carries (the grand campaign): its divisions are numbered on from there. */
   dn?: number;
+  /** Its divisions' numbers in order, where they do not run on from 'dn' (the grand campaign: real ones of 1939 beside stand-ins, armies.ts). */
+  nos?: number[];
   /** In garrison inside its province's town since this month (the grand campaign): it is on the region's `garr` list, not among its `units`. */
   town?: number;
 }
