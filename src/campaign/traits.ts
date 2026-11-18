@@ -9,6 +9,7 @@ import { homeShare, levyMen, menLeft, menWords, poolAtStart } from './manpower';
 import { provinceYield } from './economy';
 import type { LedgerLine } from './economy';
 import { techTraits } from './tech';
+import { beyondEurope } from './world';
 import type { Corps, Game, Kind, Region, Terrain } from './types';
 import { KIND, MEN_PER_DIV } from './types';
 
@@ -38,6 +39,11 @@ export interface Trait {
   income?: number;
   incomeMul?: number;
   incomeAt?: 'peace' | 'war';
+  /**
+   * The 'income' stands for works beyond the edge of the map (the Soviet works in the Urals and Siberia, ruling 228):
+   * on a chart that shows the nation's own factories beyond Europe they earn as provinces, and the sum is not paid.
+   */
+  uncharted?: boolean;
   oil?: number;
   relocate?: number;
   drafts?: number;
@@ -175,6 +181,9 @@ export interface TraitMoney {
 
 const NO_MONEY: TraitMoney = { lines: [], flat: 0, mul: 1, mulBy: '' };
 
+/** True where the chart shows factories of the nation's own beyond the map of Europe (the far side of the world). */
+const chartsWorks = (g: Game, nat: string): boolean => g.regions.some((r) => r.owner === nat && r.fac > 0 && beyondEurope(r));
+
 /** What a nation's abilities add to its books this month. */
 export function traitMoney(g: Game, nat: string): TraitMoney {
   const row = TRAITS.nations[nat];
@@ -189,18 +198,20 @@ export function traitMoney(g: Game, nat: string): TraitMoney {
   for (const t of row.traits) {
     if (t.builtin) continue;
     const now = !t.incomeAt || (t.incomeAt === 'war') === n.atWar.length > 0;
-    if (t.income && now) add(t, t.income);
     if (t.incomeMul && now) { out.mul *= t.incomeMul; out.mulBy = t.name; }
     if (t.oil) {
       let oil = 0, wells = 0;
       for (const r of g.regions) if (r.ctrl === nat && r.owner === nat && r.oil) { oil += provinceYield(g, r, nat).oil; wells++; }
       add(t, oil * (t.oil - 1), wells);
     }
+    // (An ability that both earns its own sum and keeps overrun factories at work, the Soviet factories in the east
+    // (ruling 228), is one line in the books: the works beyond the Urals and the factories moved there.)
+    const flat = t.income && now && !(t.uncharted && chartsWorks(g, nat)) ? t.income : 0;
     if (t.relocate) {
       let fac = 0;
       for (const r of g.regions) if (r.owner === nat && r.ctrl !== nat && r.fac > 0 && atWar(g, nat, r.ctrl)) fac += r.fac;
-      add(t, fac * t.relocate, fac);
-    }
+      add(t, flat + fac * t.relocate, fac || undefined);
+    } else if (flat) add(t, flat);
   }
   return out;
 }
@@ -384,7 +395,7 @@ export function traitRule(t: Trait, scale = 100): string {
   const fight = fightWords(t, 'its');
   if (fight) out.push(fight);
   const at = t.incomeAt === 'peace' ? ' while at peace' : t.incomeAt === 'war' ? ' while at war' : '';
-  if (t.income) out.push(`Earns ${Math.round(t.income * scale).toLocaleString('en-US')} a month${at}.`);
+  if (t.income) out.push(`Earns ${Math.round(t.income * scale).toLocaleString('en-US')} a month${at}${t.uncharted ? ', for works beyond the edge of the map' : ''}.`);
   if (t.incomeMul) out.push(`Earnings up ${pct(t.incomeMul)}${at}.`);
   if (t.oil) out.push(`Home oilfields earn ${t.oil === 2 ? 'double' : `${t.oil} times as much`}.`);
   if (t.relocate) out.push(`${Math.round(t.relocate * 100)}% of the factories in home provinces an enemy holds go on earning.`);

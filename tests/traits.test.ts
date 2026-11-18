@@ -15,6 +15,7 @@ import {
   traitFleet, traitMoney, traitNames, traitRule, traitSeaLoss, traitSealift, traitsMonth, traitsOf, whyNoElite,
 } from '../src/campaign/traits';
 import { TECH } from '../src/campaign/tech';
+import { beyondEurope } from '../src/campaign/world';
 import { runTurnAI } from '../src/campaign/turn';
 import { KIND, type Corps, type Game } from '../src/campaign/types';
 
@@ -277,18 +278,25 @@ describe('in the books', () => {
     expect(traitMoney(g, 'ROM').flat).toBe(0);
   });
 
-  it('keeps a quarter of the Soviet factories an enemy has overrun at work in the east', () => {
+  it('keeps half the Soviet factories an enemy has overrun at work in the east, beside the works there (ruling 228)', () => {
     const g = grand('SOV');
     expect(traitMoney(g, 'SOV').flat).toBe(0);
     declareWar(g, 'GER', 'SOV');
+    // At war the works of the Urals and Siberia earn 10 a month, about a fifth of Soviet industry.
+    expect(traitMoney(g, 'SOV').lines).toEqual([{ key: 'trait:urals', label: 'Factories to the east', amount: 10, count: undefined }]);
     const kiev = g.byName['Kiev'], minsk = g.byName['Minsk'];
     kiev.ctrl = 'GER'; minsk.ctrl = 'GER';
     const m = traitMoney(g, 'SOV');
-    expect(m.lines).toEqual([{ key: 'trait:urals', label: 'Factories to the east', amount: (kiev.fac + minsk.fac) * 0.25, count: kiev.fac + minsk.fac }]);
+    expect(m.lines).toEqual([{ key: 'trait:urals', label: 'Factories to the east', amount: 10 + (kiev.fac + minsk.fac) * 0.5, count: kiev.fac + minsk.fac }]);
     expect(ledger(g, 'SOV').gross).toBeCloseTo(income(g, 'SOV'), 9);
     // Ground given up to a country it is not at war with earns nothing.
     g.byName['Odessa'].ctrl = 'ROM';
     expect(traitMoney(g, 'SOV').flat).toBeCloseTo(m.flat);
+    // The 10 stands for works beyond the edge of the map: on a chart that shows Soviet factories there, they earn as
+    // provinces and the sum is not paid. What is kept of the overrun factories is paid either way.
+    const far = g.regions.find((r) => beyondEurope(r))!;
+    far.owner = 'SOV'; far.fac = 3;
+    expect(traitMoney(g, 'SOV').flat).toBeCloseTo(m.flat - 10);
   });
 
   it('raises American earnings once the United States is at war', () => {
