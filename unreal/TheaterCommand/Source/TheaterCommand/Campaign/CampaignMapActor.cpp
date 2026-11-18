@@ -6722,16 +6722,38 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 			TownSpreads[Region.Id] = static_cast<float>(Wanted);
 			TownPacked[Region.Id] = bTight;
 		}
-		// (The art director's rule for close towns, 18 November 2026; the cities of the Americas stood Baltimore
-		// almost on top of Washington. Towns never move. Where two would touch, the higher-ranked keeps its size, a
-		// capital first and then by what the rules hold the place worth, and the other is built smaller until a
-		// gap of about a quarter of its own width lies between them. If even its smallest would touch, it keeps
-		// the smallest rather than vanishing. "-TheaterTownsAsBuilt" leaves every town its first size.)
+		// (The art director's rule for close towns, 18 November 2026, with her mends of that morning; the cities of the
+		// Americas stood Baltimore almost on top of Washington. Towns never move. The rule is for towns whose roofs
+		// would really touch across the border between them, not for towns that are merely near: Anzio stands clear
+		// of Rome and is left alone. Where two would touch, the higher-ranked keeps its size, a capital first and then
+		// by what the rules hold the place worth, and the other is built smaller: but never less than the next kit
+		// up from a hamlet, a town of a church and its streets with its quay, eight to a dozen roofs. The greater
+		// town then leaves its rows on that side unbuilt, so that green field shows between the two.
+		// "-TheaterTownsAsBuilt" leaves every town its first size.)
+		TownHumbled.Init(false, Data.Regions.Num());
+		TownClear.Reset();
 		if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterTownsAsBuilt")))
 		{
 			auto RankOf = [](const FCampaignRegion& Region)
 			{
 				return (Region.bCapital ? 1000.0 : 0.0) + Region.VictoryPoints * 10.0 + Region.Factories + (Region.Terrain == TEXT("urban") ? 0.5 : 0.0);
+			};
+			// How far a town's own ground runs from its middle toward another's: it is built on land, and on its own province's.
+			auto Runs = [this](const FCampaignRegion& From, const FCampaignRegion& Toward, double Far)
+			{
+				const double Apart = FVector2D::Distance(From.Center, Toward.Center);
+				const FVector2D Way = (Toward.Center - From.Center) / FMath::Max(Apart, 0.01);
+				double Last = 0.0;
+				for (double Out = 0.25; Out <= FMath::Min(Far, Apart); Out += 0.25)
+				{
+					const FVector2D At = From.Center + Way * Out;
+					if (GroundAt(At.X, At.Y) <= 0.0f || Data.FindRegionAt(At.X, At.Y) != From.Id)
+					{
+						break;
+					}
+					Last = Out;
+				}
+				return Last;
 			};
 			TArray<int32> Order;
 			for (const FCampaignRegion& Region : Data.Regions)
@@ -6746,43 +6768,61 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 				const double RankA = RankOf(Data.Regions[A]), RankB = RankOf(Data.Regions[B]);
 				return RankA != RankB ? RankA > RankB : A < B;
 			});
-			const double Smallest = 3.3; // (a small place at three quarters of its first size: the least a town is built)
+			const double Touching = 1.0; // (under half a house of green between their roofs: they touch)
+			const double CityNeeds = 7.0; // (a city's blocks and square want this much; below it the town's kit is built)
 			int32 Gave = 0;
 			FString Said;
 			for (int32 A = 1; A < Order.Num(); ++A)
 			{
 				const FCampaignRegion& Lesser = Data.Regions[Order[A]];
+				const bool bCity = Lesser.Terrain == TEXT("urban");
 				const double Own = FirstTownRadius(Lesser), Was = Own * TownSpreads[Lesser.Id];
+				// (the least it is built: a large town's first size for a city, a small place's for the rest; a capital its own)
+				const double Least = FMath::Min(Was, Lesser.bCapital ? 10.1 : bCity ? 6.4 : 4.4);
 				double Radius = Was;
-				const FCampaignRegion* To = nullptr;
+				TArray<int32, TInlineAllocator<4>> Beside;
+				FString Names;
 				for (int32 B = 0; B < A; ++B)
 				{
 					const FCampaignRegion& Greater = Data.Regions[Order[B]];
 					const double Apart = FVector2D::Distance(Lesser.Center, Greater.Center);
 					const double Theirs = FirstTownRadius(Greater) * TownSpreads[Greater.Id];
-					if (Radius + Theirs > Apart)
+					if (Was + Theirs > Apart && Apart - Runs(Lesser, Greater, Was) - Runs(Greater, Lesser, Theirs) < Touching)
 					{
-						const double Fits = FMath::Max((Apart - Theirs) / 1.5, FMath::Min(Was, Smallest));
-						if (Fits < Radius)
-						{
-							Radius = Fits;
-							To = &Greater;
-						}
+						Radius = FMath::Min(Radius, FMath::Max((Apart - Theirs) / 1.5, Least));
+						Beside.Add(Greater.Id);
+						Names += (Names.IsEmpty() ? TEXT("") : TEXT(" and ")) + Greater.Name;
 					}
 				}
-				if (To && Radius < Was - 0.05)
+				if (Beside.Num() == 0)
 				{
-					TownSpreads[Lesser.Id] = static_cast<float>(Radius / Own);
-					++Gave;
-					if (Gave <= 8)
+					continue;
+				}
+				TownSpreads[Lesser.Id] = static_cast<float>(Radius / Own);
+				TownHumbled[Lesser.Id] = bCity && !Lesser.bCapital && Radius < CityNeeds;
+				// The green between: about a row of a city's blocks, and more beside a larger town; but the greater
+				// town keeps at least three fifths of its reach on that side.
+				const double Green = FMath::Clamp(0.5 * Radius + 3.0, 4.2, 7.0);
+				for (const int32 Id : Beside)
+				{
+					const FCampaignRegion& Greater = Data.Regions[Id];
+					const double Apart = FVector2D::Distance(Lesser.Center, Greater.Center);
+					const double Theirs = FirstTownRadius(Greater) * TownSpreads[Id];
+					const double Keep = FMath::Min(Radius + Green, Apart - 0.6 * Runs(Greater, Lesser, Theirs));
+					if (Keep > 0.0)
 					{
-						Said += FString::Printf(TEXT("%s%s to %s (%.1f to %.1f)"), Said.IsEmpty() ? TEXT("") : TEXT("; "), *Lesser.Name, *To->Name, Was, Radius);
+						TownClear.FindOrAdd(Id).Add(FVector(Lesser.Center.X, Lesser.Center.Y, Keep));
 					}
+				}
+				++Gave;
+				if (Gave <= 8)
+				{
+					Said += FString::Printf(TEXT("%s%s beside %s (%.1f to %.1f%s)"), Said.IsEmpty() ? TEXT("") : TEXT("; "), *Lesser.Name, *Names, Was, Radius, TownHumbled[Lesser.Id] ? TEXT(", as a town") : TEXT(""));
 				}
 			}
 			if (Gave > 0)
 			{
-				UE_LOG(LogTheater, Display, TEXT("Towns: %d give way to a greater town beside them and are built smaller: %s%s"), Gave, *Said, Gave > 8 ? TEXT("; and more") : TEXT(""));
+				UE_LOG(LogTheater, Display, TEXT("Towns: %d would touch a greater town beside them; each is built smaller and the greater leaves green between: %s%s"), Gave, *Said, Gave > 8 ? TEXT("; and more") : TEXT(""));
 			}
 		}
 	}
@@ -7254,7 +7294,8 @@ void ACampaignMapActor::FillTownSite(const FCampaignRegion& Region, FMiniatureMe
 	Site.Radius = TownRadius(Region.Id);
 	Site.Unit = U * 2.1;
 	Site.MapUnit = U;
-	Site.Tier = Region.bCapital ? 3 : bCity ? 2 : bBig ? 1 : 0;
+	// (a city that gave way to a greater town beside it is built as a town: see TownSpread)
+	Site.Tier = Region.bCapital ? 3 : bCity ? (TownHumbled.IsValidIndex(Region.Id) && TownHumbled[Region.Id] ? 1 : 2) : bBig ? 1 : 0;
 	Site.Factories = Region.Factories;
 	Site.Ruined = FMath::Clamp(WreckedIn.FindRef(Region.Id), 0, Region.Factories); // (bombed-out works: the first of them are wrecks)
 	Site.Seed = Region.Id;
@@ -7289,7 +7330,19 @@ void ACampaignMapActor::FillTownSite(const FCampaignRegion& Region, FMiniatureMe
 	}
 	Site.Ground = [this](double X, double Y, double Lift) { return SurfacePoint(X, Y, Lift); };
 	// (a town is built on land, and on its own province's: one that stands by the sea or a frontier grows away from it)
-	Site.Dry = [this, Id = Region.Id](double X, double Y) { return GroundAt(X, Y) > 0.0f && Data.FindRegionAt(X, Y) == Id; };
+	// (and a greater town leaves green beside a lesser one that gave way to it: the art director's rule for close towns)
+	const TArray<FVector>* const Green = TownClear.Find(Region.Id);
+	Site.Dry = [this, Id = Region.Id, Clear = Green ? *Green : TArray<FVector>()](double X, double Y)
+	{
+		for (const FVector& Each : Clear)
+		{
+			if (FMath::Square(X - Each.X) + FMath::Square(Y - Each.Y) < FMath::Square(Each.Z))
+			{
+				return false;
+			}
+		}
+		return GroundAt(X, Y) > 0.0f && Data.FindRegionAt(X, Y) == Id;
+	};
 	Site.bPacked = IsTownPacked(Region.Id);
 	// The roads and railways out of it run toward the towns of the provinces next door.
 	for (const int32 Next : Region.Neighbors)
@@ -7303,25 +7356,51 @@ void ACampaignMapActor::FillTownSite(const FCampaignRegion& Region, FMiniatureMe
 	if (Region.bPort)
 	{
 		// A port's quay stands at the water's edge: the nearest shore to the town's middle, looked for all round.
-		double Nearest = Site.Radius + 16.0;
-		for (double Bearing = 0.0; Bearing < 360.0; Bearing += 10.0)
+		auto LookForShore = [&](TFunctionRef<bool(const FVector2D&)> Water)
 		{
-			const FVector2D Way(FMath::Sin(FMath::DegreesToRadians(Bearing)), -FMath::Cos(FMath::DegreesToRadians(Bearing)));
-			for (double Out = 1.5; Out < Nearest; Out += 0.5)
+			double Nearest = Site.Radius + 16.0;
+			for (double Bearing = 0.0; Bearing < 360.0; Bearing += 10.0)
 			{
-				const FVector2D Wet = Region.Center + Way * Out, Beyond = Region.Center + Way * (Out + 3.0);
-				if (GroundAt(Wet.X, Wet.Y) <= 0.0f)
+				const FVector2D Way(FMath::Sin(FMath::DegreesToRadians(Bearing)), -FMath::Cos(FMath::DegreesToRadians(Bearing)));
+				for (double Out = 1.5; Out < Nearest; Out += 0.5)
 				{
-					// (open water, not a river's mouth or a pond: it is still water three units further out)
-					if (GroundAt(Beyond.X, Beyond.Y) <= 0.0f && Out > 2.5)
+					const FVector2D Wet = Region.Center + Way * Out, Beyond = Region.Center + Way * (Out + 3.0);
+					if (Water(Wet))
 					{
-						Nearest = Out;
-						Site.bQuay = true;
-						Site.Quay = Region.Center + Way * (Out - 0.25);
-						Site.SeaBearing = Bearing;
+						// (open water, not a river's mouth or a pond: it is still water three units further out)
+						if (Water(Beyond) && Out > 2.5)
+						{
+							Nearest = Out;
+							Site.bQuay = true;
+							Site.Quay = Region.Center + Way * (Out - 0.25);
+							Site.SeaBearing = Bearing;
+						}
+						break;
 					}
-					break;
 				}
+			}
+		};
+		LookForShore([this](const FVector2D& At) { return GroundAt(At.X, At.Y) <= 0.0f; });
+		if (!Site.bQuay && Data.bWorld && Data.FirstBeyond != INDEX_NONE && Region.Id >= Data.FirstBeyond && WorldTerrain.HasElevation())
+		{
+			// (Beyond Europe a town is built on the world's coarse sheet of heights, whose cells are too large to
+			// show a narrow bay: Baltimore on the Chesapeake was a port with no quay. Where the coarse sheet finds no
+			// shore, the real heights the fine sheets are made from are asked: water is where they lie at or below
+			// the sea, there and a unit round, as a fine sheet's smoothed coast will show it.)
+			LookForShore([this](const FVector2D& At)
+			{
+				for (const FVector2D& Step : { FVector2D(0.0, 0.0), FVector2D(1.0, 0.0), FVector2D(-1.0, 0.0), FVector2D(0.0, 1.0), FVector2D(0.0, -1.0) })
+				{
+					if (WorldTerrain.MetresAt(WrapX(At.X + Step.X), At.Y + Step.Y) > 0.0f)
+					{
+						return false;
+					}
+				}
+				return true;
+			});
+			if (Site.bQuay)
+			{
+				UE_LOG(LogTheater, Verbose, TEXT("Towns: %s has its quay from the real heights' coast"), *Region.Name);
 			}
 		}
 	}

@@ -1506,6 +1506,8 @@ private:
 	float StandardGrowth = 1.0f, StandardLean = 0.0f; // how large the pieces' standards are drawn just now, and how far they lean back toward the eye
 	mutable TArray<float> TownSpreads; // TownSpread for every province, worked out once
 	mutable TArray<bool> TownPacked; // true for a city or capital in a province too small for it: it is built tight and tall
+	mutable TArray<bool> TownHumbled; // true for a city that gave way to a greater town beside it: it is built as a town, a church and its streets
+	mutable TMap<int32, TArray<FVector>> TownClear; // for a greater town, the ground it leaves green beside each lesser town that gave way to it: the middle (X, Y) and how far round it (Z), in map units
 	TMap<int32, FVector> TownBeacons; // by province: the lantern of its port's lighthouse, on the table
 	TSet<int32> AirfieldsUsed; // the provinces whose airfields have air groups based on them
 	bool bAirfieldsKnown = false; // the rules say which airfields are in use (the grand campaign): an empty one is then built smaller
