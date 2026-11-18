@@ -9376,7 +9376,9 @@ function onClick(e: MouseEvent): void {
       }
       // A defence the card did not know: the field shows the card's band, never its own odds, until the fight ends (b453),
       // and the after card's staff gives the card's own best guess (b464(6)).
-      const look = m.look ?? null, band = look && !look.exact ? { lo: look.lo, hi: look.hi, guess: look.guess } : undefined;
+      // The after card speaks the chance as this card printed it, never a figure it did not show (b476(4)).
+      const look = m.look ?? null;
+      const band = look && !look.exact ? { lo: look.lo, hi: look.hi, guess: look.guess, said: { end: chanceEndOf(look), lo: oddsPct(look.chanceLo), hi: oddsPct(look.chanceHi), guess: look.wide ? oddsPct(look.guess) : null } } : undefined;
       // The field's result, once booked, is kept at once in place of the staff's: a page closed on the after card comes
       // back to what that card said, with no word of the staff.
       const keep = (): void => {

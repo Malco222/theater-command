@@ -12,6 +12,14 @@ import { handBack, landTicket, oddsNow, type LandPlace } from '../land';
 /** The country the slice plays, and the seed of its campaign. TODO(polish): any country and start year, from the campaign's own menu. */
 export const PLAYS = { nat: 'GER', seed: 3 };
 
+/**
+ * The chance as the attack card printed it, in whole percents (b476(4)): the after card never states a figure the card
+ * did not show. 'end' where the card said the staff was sure of it or gave it no chance; 'guess' where it printed a
+ * best guess ("a best guess of 71%, anywhere from 40 to 95%"); else 'lo' and 'hi' ("60 to 100%", or "about 70%" where
+ * they are one figure).
+ */
+export interface CardSaid { end: 'sure' | 'none' | null; lo: number; hi: number; guess: number | null }
+
 export interface Offer {
   target: Region;
   /** Every corps the roads will carry, as the attack card opens. */
@@ -24,7 +32,7 @@ export interface Offer {
    * knew the defence. 'guess' is the card's best guess at the chance over the band: after the fight the staff names
    * that, never the chance at the true odds (b464(6)).
    */
-  band?: { lo: number; hi: number; guess: number };
+  band?: { lo: number; hi: number; guess: number; said?: CardSaid };
 }
 
 /** A grand campaign at the player's first month. */

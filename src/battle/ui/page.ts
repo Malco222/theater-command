@@ -18,9 +18,9 @@ import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import type { LandPlace, Terrain } from '../land/field';
 import { PRACTICE_GROUNDS, practiceBill, practiceTicket, wornWords, type PracticeGround } from '../land/sample';
 import { LandBattle } from '../land/sim';
-import { pursuitLine } from '../land/ticket';
+import { cardKnows, pursuitLine } from '../land/ticket';
 import type { LandUnit } from '../land/units';
-import { newCampaign, offers, settle, type Offer } from './campaign';
+import { newCampaign, offers, settle, type CardSaid, type Offer } from './campaign';
 import { drawFrame, signSvg, toField, toScreen, type Scene } from './draw';
 import { paintField, type Painted } from './paint';
 
@@ -227,8 +227,10 @@ let ctx: CanvasRenderingContext2D;
 
 function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: PracticeGround | null = null): void {
   const b = new LandBattle(t);
-  // A defence the card did not know (b453): its blocks show only where they stand until his have fought them (b464(2)).
+  // A defence the card did not know (b453): its blocks show only where they stand until his have fought them (b464(2)),
+  // all but those of the corps the card identified, which show as the card shows them (b476(3)).
   b.fog = !!o?.band;
+  if (b.fog) b.seen = cardKnows(S.g, t);
   S.b = b; S.offer = o; S.ground = o ? null : ground; S.screen = 'battle';
   S.field = paintField(b.field, t.place.terrain, t.seed);
   S.scene.me = t.att.human ? 'att' : 'def';
@@ -455,6 +457,9 @@ function updateTray(force = false): void {
   }
 }
 
+/** The speed buttons' hovers while the battle runs. */
+const SPEED_TIPS: Record<number, string> = { 0: 'Pause (Space)', 1: 'Normal speed (1)', 2: 'Twice as fast (2)', 4: 'Four times as fast (3)' };
+
 function updateTop(force = false): void {
   const b = S.b!;
   const el = (id: string): HTMLElement => byId(id)!;
@@ -464,7 +469,10 @@ function updateTop(force = false): void {
   // Both shares are of the same whole, so their ratio is the odds standing now (the card's at the start).
   const nowOdds = bal.att / Math.max(1e-6, bal.def);
   const at = (o: number): string => `${((100 * o) / (1 + o)).toFixed(1)}%`;
-  if (band) {
+  // Once the result is in, the balance keeps the last figure it showed before the end (the UI director, b476): a
+  // withdrawal empties the field, and "now" would read nothing.
+  const frozen = !!b.over && !!el('ratio').dataset.said;
+  if (frozen) { /* as it stood */ } else if (band) {
     // A defence the card did not know (b453): the staff's band, moved as the fight has moved the balance since, and
     // the bar drawn at its middle. The card's own odds are not shown until the fight ends.
     const r = nowOdds / Math.max(1e-6, k.odds), mid = Math.sqrt(band.lo * band.hi) * r;
@@ -491,12 +499,20 @@ function updateTop(force = false): void {
   // While the rush runs no speed button is lit: the tag on the field is the one sign of the speed, and its key cap says
   // what ends it (the UI director, b467). The pause lights as ever.
   const rushing = sp > 0 && b.contactAt === null && !S.rushByHand && sp < RUSH;
-  root.querySelectorAll<HTMLElement>('[data-speed]').forEach((x) => x.classList.toggle('is-lit', !rushing && Number(x.dataset.speed) === sp));
+  // Once the result is in (the UI director, b476): the clock reads BATTLE OVER at the time it ended, nothing is lit,
+  // and the speed buttons are off, their hover saying why.
+  const over = !!b.over;
+  root.querySelectorAll<HTMLElement>('[data-speed]').forEach((x) => {
+    x.classList.toggle('is-lit', !over && !rushing && Number(x.dataset.speed) === sp);
+    x.classList.toggle('is-off', over);
+    x.setAttribute('aria-disabled', over ? 'true' : 'false');
+    x.title = over ? 'The battle is over.' : SPEED_TIPS[Number(x.dataset.speed)];
+  });
   // Paused means paused (ruling 226(8)): the clock's label is the state, and the first segment reads Paused when lit.
   const cs = el('clockState');
-  cs.textContent = sp === 0 ? 'Paused' : 'Running';
-  cs.classList.toggle('is-paused', sp === 0);
-  el('pauseWord').textContent = sp === 0 ? 'Paused' : 'Pause';
+  cs.textContent = over ? 'Battle over' : sp === 0 ? 'Paused' : 'Running';
+  cs.classList.toggle('is-paused', !over && sp === 0);
+  el('pauseWord').textContent = !over && sp === 0 ? 'Paused' : 'Pause';
   // How near to breaking (ruling 226(3)): a bar a side, no numbers.
   const v = { att: b.breaking('att'), def: b.breaking('def') };
   const me = S.scene.me, them: Side = me === 'att' ? 'def' : 'att';
@@ -671,7 +687,7 @@ function wireBattle(): void {
     else { sc.cam.x += e.deltaX / sc.cam.z; sc.cam.y -= e.deltaY / sc.cam.z; clampCam(); }
   }, { passive: false });
 
-  app.querySelectorAll<HTMLElement>('[data-speed]').forEach((el) => el.addEventListener('click', () => { if (S.asking) return; setSpeed(Number(el.dataset.speed) as Speed); updateTop(); }));
+  app.querySelectorAll<HTMLElement>('[data-speed]').forEach((el) => el.addEventListener('click', () => { if (S.asking || S.b?.over) return; setSpeed(Number(el.dataset.speed) as Speed); updateTop(); }));
   app.querySelectorAll<HTMLElement>('[data-zoom]').forEach((el) => el.addEventListener('click', () => {
     const k = Number(el.dataset.zoom);
     if (k === 0) whole(); else zoomAt(sc.W / 2, sc.H / 2, k > 0 ? 1.4 : 1 / 1.4);
@@ -785,10 +801,10 @@ window.addEventListener('keydown', (e) => {
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   const pan = 120 / sc.cam.z;
   switch (key) {
-    case ' ': e.preventDefault(); if (!S.asking) S.clock.toggle(); break;
-    case '1': if (!S.asking) setSpeed(1); break;
-    case '2': if (!S.asking) setSpeed(2); break;
-    case '3': if (!S.asking) setSpeed(4); break;
+    case ' ': e.preventDefault(); if (!S.asking && !b.over) S.clock.toggle(); break;
+    case '1': if (!S.asking && !b.over) setSpeed(1); break;
+    case '2': if (!S.asking && !b.over) setSpeed(2); break;
+    case '3': if (!S.asking && !b.over) setSpeed(4); break;
     case 'h': give({ do: 'hold', units: chosen() }); break;
     case 'r': give({ do: 'withdraw', units: chosen() }); break;
     // Esc changes nothing: it closes the question if one is open, else drops the blocks in hand.
@@ -883,11 +899,14 @@ function frame(): void {
 const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea', yielded: 'gave ground under orders', sheltered: 'fell back into the town' };
 
 /** How the day went against the chance the staff gave it, in the UI director's plain words (no dice on the player's page). */
-function reckoned(carried: boolean, chance: number, practice = false): string {
-  if (chance >= 0.995) return carried ? 'As the staff expected: they were sure of it.' : 'Worse than the staff expected: they were sure of it.';
-  if (chance <= 0.005) return carried ? 'Better than the staff expected: they gave it no chance.' : 'As the staff expected: they gave it no chance.';
+function reckoned(carried: boolean, chance: number, practice = false, said?: CardSaid): string {
+  // Where the card printed a band, its own figures (b476(4)): "60 to 100%", or its best guess where it printed one.
+  const end = said ? said.end : chance >= 0.995 ? 'sure' : chance <= 0.005 ? 'none' : null;
+  if (end === 'sure') return carried ? 'As the staff expected: they were sure of it.' : 'Worse than the staff expected: they were sure of it.';
+  if (end === 'none') return carried ? 'Better than the staff expected: they gave it no chance.' : 'As the staff expected: they gave it no chance.';
+  const figure = !said ? `about ${Math.round(chance * 100)}%` : said.guess !== null ? `about ${said.guess}%` : said.lo === said.hi ? `about ${said.lo}%` : `${said.lo} to ${said.hi}%`;
   // A practice ground is not a place to take (b408): there the staff gave him a chance to win it.
-  const p = `they gave you about ${Math.round(chance * 100)}% to ${practice ? 'win' : 'take'} it.`;
+  const p = `they gave you ${figure} to ${practice ? 'win' : 'take'} it.`;
   if (carried) return chance < 0.5 ? `You did better than the staff expected: ${p}` : `As the staff expected: ${p}`;
   return chance >= 0.5 ? `You did worse than the staff expected: ${p}` : `As the staff feared: ${p}`;
 }
@@ -900,6 +919,8 @@ function showAfter(): void {
   S.dispatch = null;
   byId('dispatch')!.innerHTML = '';
   updateTray(true);
+  // The top bar stays in view under the card: BATTLE OVER, nothing lit (the UI director, b476).
+  updateTop();
   const t = b.ticket, k = t.reckoning;
   const g = S.g;
   const settled = S.offer ? settle(g, S.offer, r) : null;
@@ -954,7 +975,7 @@ function showAfter(): void {
     ${rep ? `<p class="told"><b>${told}</b> ${price}</p>${paid}` : ''}
     <h3 class="tc-label">On the field</h3><ul class="flines">${fieldLines}</ul>
     <h3 class="tc-label">Against the staff's reckoning</h3>
-    <p class="dice">${esc(reckoned(won, chance, !rep))}${rep ? '' : ' Nothing goes back to the campaign from a practice ground.'}</p>
+    <p class="dice">${esc(reckoned(won, chance, !rep, S.offer?.band?.said))}${rep ? '' : ' Nothing goes back to the campaign from a practice ground.'}</p>
     ${settled?.drift ? '<p class="warn">The campaign moved while the battle was fought: its odds are not the card\'s any more.</p>' : ''}
     ${sides}
     <div class="afoot"><button class="tc-btn tc-btn--primary tc-btn--lg" data-act="continue">Continue</button></div>
