@@ -1168,8 +1168,16 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 	// hand below are the twenty-five the game had; none of those is in the table's list.)
 	if (const TArray<UnitTable::FInsigniaLayer> Own = UnitTable::Insignia(Tag); Own.Num() > 0)
 	{
-		for (const UnitTable::FInsigniaLayer& One : Own)
+		for (int32 Index = 0; Index < Own.Num(); ++Index)
 		{
+			const UnitTable::FInsigniaLayer& One = Own[Index];
+			// (The art director, 21:59Z the same day: neighbouring layers of one colour lie at one height. A mark of
+			// many small pieces, each a hair above the last, stood centimetres off the skin and broke apart seen from
+			// the side.)
+			if (Index > 0 && Layer > 0 && One.Colour.Equals(Own[Index - 1].Colour))
+			{
+				--Layer;
+			}
 			switch (One.Shape)
 			{
 			case UnitTable::FInsigniaLayer::EShape::Ring:

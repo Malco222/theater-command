@@ -41,8 +41,12 @@ namespace
 		// (The art director's table of 20:59Z on 18 November 2026: a country's own mark in layers, bottom first. A layer
 		// is {"ring": [inner, outer]}, {"tri": [radius, degrees]}, {"star": [radius, inner share, points]} or
 		// {"rect": [across from, across to, up from, up to]}, with "c" its colour. A layer that is none of these is left out.)
+		// (A country whose marking is "as built" keeps on the map the mark the game draws by hand; its layers, where it
+		// has them, are for the battle: Sweden's three crowns, which at the map's size would be specks.)
 		const TArray<TSharedPtr<FJsonValue>>* Layers = nullptr;
-		if (Told->TryGetArrayField(TEXT("insignia"), Layers))
+		FString MarkingWords;
+		const bool bAsBuilt = Told->TryGetStringField(TEXT("marking"), MarkingWords) && MarkingWords == TEXT("as built");
+		if (!bAsBuilt && Told->TryGetArrayField(TEXT("insignia"), Layers))
 		{
 			for (const TSharedPtr<FJsonValue>& Value : *Layers)
 			{
