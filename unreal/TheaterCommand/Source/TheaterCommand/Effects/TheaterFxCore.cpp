@@ -560,6 +560,7 @@ namespace TheaterFx
 		const double HeavyHeart = Num(C + "heavy_heart", 0.92); // (how solid a heavy piece is at its heart ring)
 		const double HeavyInner = Num(C + "heavy_inner", 0.72); // (and where that ring sits: the edge band is the rest)
 		const double TipInner = Num(C + "tip_inner", 0.6);
+		const double PieceMax = Num(Path("piece_max_m"), 0.0); // (0: no limit, as for the shells)
 		const double FillRough = Num(C + "fill_rough", 0.55); // (the dust between the jets: soft, billowing, scattered; never a long clear prism)
 		const double FillScatter = Num(C + "fill_scatter", 1.6);
 		const double FillStretch = Num(C + "fill_stretch", 1.15);
@@ -609,7 +610,15 @@ namespace TheaterFx
 				const bool bTip = bHeavy && F >= TipAt;
 				const double OnTip = bTip ? (F - TipAt) / std::max(1.0 - TipAt, 1e-6) : 0.0;
 				const bool bGrained = P.Grain < 0.999;
-				const double Rl = Rwhole * (bGrained ? P.Grain : 1.0 + (std::clamp(TipGrain, 0.2, 1.0) - 1.0) * OnTip); // (granular grounds and torn tips: smaller pieces, more of them)
+				double Rl = Rwhole * (bGrained ? P.Grain : 1.0 + (std::clamp(TipGrain, 0.2, 1.0) - 1.0) * OnTip); // (granular grounds and torn tips: smaller pieces, more of them)
+				// (a piece's outline has the ring's few points however big it is, so a bomb's jet is built of more pieces
+				// no bigger than piece_max_m, scattered across the jet's width, and never one big flat-faced piece)
+				double Split = 1.0;
+				if (PieceMax > 0.0 && Rl > PieceMax)
+				{
+					Split = Rl / PieceMax;
+					Rl = PieceMax;
+				}
 				const double Sp = V * (0.05 + 0.95 * std::pow(F, 0.9));
 				const double Rr = Rl * (D.U() < Lumps ? D.U(1.4, 2.0) : D.U(0.8, 1.1));
 				Rgb Col = bHeavy ? P.Heavy * Shade : P.Soil.Mix(P.Dust, DustShare) * Shade;
@@ -617,7 +626,7 @@ namespace TheaterFx
 				{
 					Col = P.First * D.U(0.84, 1.04); // (snow: thrown up first, never two grains the same shade, earth showing through)
 				}
-				const Vec Side = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-1.0, 1.0)) * (Rwhole * (bTip ? 1.1 : Jitter) * KD * (bGrained ? 1.5 : 1.0) * (bHeavy ? 1.0 : FillScatter)); // (ragged, clumpy sides; grains and dust scattered wider, never a string of beads)
+				const Vec Side = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-1.0, 1.0)) * (Rwhole * (bTip ? 1.1 : Jitter) * KD * (bGrained ? 1.5 : 1.0) * (bHeavy ? 1.0 : FillScatter) * std::min(2.0, std::sqrt(Split))); // (ragged, clumpy sides; grains, dust and split pieces scattered wider, never a string of beads)
 				Bit B;
 				B.Born = T0 + 0.01 + 0.025 * (1.0 - F);
 				B.From = At + ZUp * 0.1 + Dir * (0.25 * K);
@@ -714,7 +723,13 @@ namespace TheaterFx
 			B.FadeIn = 0.03;
 			B.Hold = 0.45;
 			B.Heart = 0.75;
-			B.Rim = 0.1;
+			B.Rim = Num(Path("body.rim"), 0.1);
+			B.Rough = Num(Path("body.rough"), 0.0); // (a bomb's big body pieces lumpy, never flat-faced)
+			if (B.Rough > 0.0)
+			{
+				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+				B.Turn = D.U(0.0, 2.0 * Pi);
+			}
 			Bits.push_back(B);
 		}
 		// the clods: those at the jets' tips, and more thrown clear low and wide

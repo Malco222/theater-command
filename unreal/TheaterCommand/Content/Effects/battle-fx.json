@@ -505,6 +505,7 @@
      1.0,
      2.6
     ],
+    "piece_max_m": 1.8,
     "body": {
      "puffs": 70,
      "width": 0.2,
@@ -516,8 +517,11 @@
      "alpha": [
       0.9,
       0.97
-     ]
-    }
+     ],
+     "rim": 0.0,
+     "rough": 0.35
+    },
+    "_pieces": "Art director 20:05Z: at bomb size the big pieces showed flat faces with straight edges, like a dark crystal cluster. A piece's outline has the ring's few points however big it is, so a bomb's jets are built of more pieces no bigger than piece_max_m (radius when thrown), scattered across each jet's width, and the body's pieces are lumpy (body.rough) with soft edges (body.rim 0)."
    }
   },
   "bomb500": {
@@ -570,6 +574,7 @@
      1.0,
      2.6
     ],
+    "piece_max_m": 2.2,
     "body": {
      "puffs": 70,
      "width": 0.2,
@@ -581,8 +586,11 @@
      "alpha": [
       0.9,
       0.97
-     ]
-    }
+     ],
+     "rim": 0.0,
+     "rough": 0.35
+    },
+    "_pieces": "Art director 20:05Z: at bomb size the big pieces showed flat faces with straight edges, like a dark crystal cluster. A piece's outline has the ring's few points however big it is, so a bomb's jets are built of more pieces no bigger than piece_max_m (radius when thrown), scattered across each jet's width, and the body's pieces are lumpy (body.rough) with soft edges (body.rim 0)."
    }
   }
  },

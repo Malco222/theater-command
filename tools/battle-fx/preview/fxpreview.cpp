@@ -353,7 +353,9 @@ int main(int Argc, char** Argv)
 	Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
 	Fx.SetWind(Vec(1.6, 0.4, 0.0));
 	const double Scale = Book.Numbers.count("sizes." + Size + ".scale") ? Book.Numbers["sizes." + Size + ".scale"] : 1.0;
-	const double Grow = std::pow(std::max(0.6, Scale), 0.75);
+	const char* GrowIs = std::getenv("FX_FRAME_AS"); // (FX_FRAME_AS=size: frame the shot as for that size, so two sizes can be seen from one camera)
+	const double FrameScale = GrowIs && Book.Numbers.count(std::string("sizes.") + GrowIs + ".scale") ? Book.Numbers[std::string("sizes.") + GrowIs + ".scale"] : Scale;
+	const double Grow = std::pow(std::max(0.6, FrameScale), 0.75);
 	const Vec Hit(0.0, 0.0, Swell(nullptr, 0.0, 0.0));
 	const Vec Away = Vec(-0.35, -1.0, 0.0).Unit();
 	Camera Cam;
