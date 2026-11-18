@@ -130,11 +130,14 @@ describe('the numbers divisions carry', () => {
     expect(nos('GER', 'XII Corps')).toEqual(['15th Infantry Division', '34th Infantry Division', '52nd Infantry Division', '79th Infantry Division']);
     expect(nos('GER', 'XVIII Corps')).toEqual(['3rd Mountain Division', '2nd Mountain Division', '1st Mountain Division']);
     expect(nos('POL', 'Army Lodz')).toEqual(['2nd Infantry Division', '10th Infantry Division', '28th Infantry Division', '30th Infantry Division']);
-    // Guderian's second division was a motorised one, of another arm than the game's corps: a stand-in, above the
-    // record's panzer divisions (the 10th the highest); and the garrisons no field division held stand above the 269th.
-    const xix = nos('GER', 'XIX Corps');
-    expect(xix[0]).toBe('3rd Panzer Division');
-    expect(parseInt(xix[1], 10)).toBeGreaterThan(10);
+    // Guderian's corps had the 10th Panzer from mid-September; the light divisions carry their panzer numbers of that
+    // winter (the historian); the garrisons no field division held are stand-ins above the 269th.
+    expect(nos('GER', 'XIX Corps')).toEqual(['3rd Panzer Division', '10th Panzer Division']);
+    expect(nos('GER', 'XV Corps')).toEqual(['7th Panzer Division', '8th Panzer Division']);
+    expect(nos('GER', 'XXII Corps')).toEqual(['2nd Panzer Division', '9th Panzer Division']);
+    expect(nos('POL', 'Army Karpaty')).toEqual(['2nd Mountain Brigade', '3rd Mountain Brigade']);
+    const late = addCorps(g, 'GER', 'XXXIX Corps', 'arm', 1, g.byName['Berlin'].id, {});
+    expect(divisionsOf(g, late)[0].no).toBe(11);
     for (const name of ['Berlin garrison', 'Hamburg garrison']) expect(parseInt(nos('GER', name)[0], 10)).toBeGreaterThanOrEqual(270);
     expect(parseInt(nos('POL', 'Warsaw garrison')[1], 10)).toBeGreaterThan(60);
     // No stand-in takes a number the record holds for its nation's arm, placed or spare.

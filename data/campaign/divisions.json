@@ -10,7 +10,7 @@
     "record": "Real division numbers of 1939 that no first-day corps carries (setup-1939.json's 'nos' holds those that do), by nation and arm, from the historian's divisions-1939-ger.md (18 November 2026): divisions in no corps that day, and those of another arm than the game's corps. A stand-in division is numbered from above the highest real number of its nation's arm, so that no stand-in ever takes a real number and no name is carried twice (the design director, 18 November)."
   },
   "record": {
-    "GER": { "arm": [5, 10], "mot": [2, 20], "cav": [1], "inf": [14, 26, 31, 56, 57, 62, 72, 73, 76, 86, 208, 209, 212, 214, 215, 216, 223, 227, 231, 239, 246, 251, 252, 253, 254, 255, 256, 257, 258, 260, 262, 263, 267, 268, 269] },
+    "GER": { "arm": [5, 6], "mot": [2, 20], "cav": [1], "inf": [14, 26, 31, 56, 57, 62, 72, 73, 76, 86, 208, 209, 212, 214, 215, 216, 223, 227, 231, 246, 251, 252, 253, 254, 255, 256, 257, 258, 260, 262, 263, 267, 268, 269] },
     "POL": { "inf": [24, 36, 39, 45, 50] }
   },
   "kinds": {
@@ -28,6 +28,7 @@
     "SOV": { "inf": ["Rifle Division", "Rifles"], "arm": ["Tank Division", "Tanks"], "mot": ["Motor Rifle Division", "Motor Rifles"] },
     "USA": { "arm": ["Armored Division", "Armored"], "mot": ["Motorized Division", "Motorized"] },
     "ITA": { "mtn": ["Alpine Division", "Alpini"] },
+    "POL": { "mtn": ["Mountain Brigade", "Mountain"] },
     "FRA": { "mtn": ["Alpine Division", "Alpine"] }
   },
   "order": ["arm", "mot", "cav", "inf", "mtn", "art", "eng", "fort"],
