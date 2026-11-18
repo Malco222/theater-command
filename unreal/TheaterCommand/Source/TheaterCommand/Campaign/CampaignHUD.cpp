@@ -6232,18 +6232,24 @@ namespace
 									// (Rules 84.3.3; the art director's look brief, section 10.) Lesson 10's deed is done here, so its
 									// note is laid across the room on every screen, under the head and the desk's row and above the
 									// columns, which move down by the strip and 12. The strip's room is made as the room opens and
-									// kept until it closes (the closing note, due next, takes it), unless he puts the note away.
+									// kept until it closes (the closing note, due next, takes it), unless he puts the note away. While
+									// the room is kept the note inside is Hidden, never Collapsed, when it is not laid there: a box with
+									// a collapsed child asks for nothing, min height or not, and the columns would jump. A collapsed box
+									// is asked only for its visibility, so the kept height is let go there.
 									+ SVerticalBox::Slot().AutoHeight()
 									[
 										SNew(SBox).Padding(FMargin(0.0f, 12.0f, 0.0f, 0.0f))
-										.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsArsenalStrip() ? EVisibility::Visible : EVisibility::Collapsed; })
+										.Visibility_Lambda([this]()
+										{
+											if (Controller.IsValid() && Controller->IsArsenalStrip())
+											{
+												return EVisibility::Visible;
+											}
+											ArsenalStripHigh = 0.0f;
+											return EVisibility::Collapsed;
+										})
 										.MinDesiredHeight_Lambda([this]()
 										{
-											if (!Controller.IsValid() || !Controller->IsArsenalStrip())
-											{
-												ArsenalStripHigh = 0.0f;
-												return FOptionalSize();
-											}
 											if (ArsenalStrip.IsValid())
 											{
 												ArsenalStripHigh = FMath::Max(ArsenalStripHigh, static_cast<float>(ArsenalStrip->GetDesiredSize().Y) + 12.0f);
@@ -6252,7 +6258,15 @@ namespace
 										})
 										[
 											SAssignNew(ArsenalStrip, SStaffNote).Controller(Controller).Form(2).Scale(1.0f)
-											.Visibility_Lambda([this]() { return bLessonInLaid && Controller.IsValid() && Controller->IsArsenalStrip() && Controller->HasLessonNote() ? EVisibility::Visible : EVisibility::Collapsed; })
+											.Visibility_Lambda([this]()
+											{
+												if (!Controller.IsValid() || !Controller->IsArsenalStrip())
+												{
+													return EVisibility::Collapsed;
+												}
+												// (laid here, leaving too, so the stamp's fade draws; otherwise it holds the room unseen)
+												return bLessonInLaid ? EVisibility::Visible : EVisibility::Hidden;
+											})
 										]
 									]
 									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 16.0f, 0.0f, 0.0f)
