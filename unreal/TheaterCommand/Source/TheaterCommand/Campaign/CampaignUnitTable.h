@@ -38,8 +38,20 @@ namespace UnitTable
 		int32 Points = 5;
 		double Across0 = 0.0, Across1 = 0.0, Up0 = 0.0, Up1 = 0.0; // a bar
 	};
-	/** The country's own mark from the art director's table, bottom layer first. Empty where the game draws its mark by hand, or it has none. */
+	/**
+	 * The country's own mark from the art director's table, bottom layer first. Empty where the game draws its mark by
+	 * hand, or it has none. Where the table dates a mark (the Commonwealth's wartime roundels, with the red taken out
+	 * in the Pacific and in Burma), this is the one that stands in the campaign's month.
+	 */
 	TArray<FInsigniaLayer> Insignia(const FString& Tag);
+	/** The campaign's month, told by the map whenever it shows a month (turn 1 is September 1939). */
+	void SetTurn(int32 Turn);
+	/**
+	 * Which of the country's dated marks stands in the campaign's month: 0 for none, else one more than its place in
+	 * the table's list. A painted model is kept under this as well as under its country, so that a model painted
+	 * before the mark changed is not handed out after.
+	 */
+	int32 MarkEra(const FString& Tag);
 	/** (Brian, the same day: "make the camoflage reflect their terrian".) The second colour of its camouflage, for the patches. False where it has one coat. */
 	bool Paint2(const FString& Tag, FLinearColor& Out);
 	/**

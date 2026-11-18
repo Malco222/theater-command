@@ -1,5 +1,6 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignMiniatureParts.h"
+#include "Campaign/CampaignUnitTable.h"
 #include "TheaterCommand.h"
 
 /**
@@ -1621,7 +1622,19 @@ bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double M
 	}
 	static TMap<FString, FMiniatureMesh> BuiltFine, BuiltPlain;
 	TMap<FString, FMiniatureMesh>& Built = bFine ? BuiltFine : BuiltPlain;
-	FMiniatureMesh* Model = Built.Find(Name);
+	// (kept by its name and by which of its country's dated marks stands: see UnitTable::MarkEra)
+	FString BuiltKey = Name;
+	{
+		FString KindNamed = Name, WhoseNamed;
+		Name.Split(TEXT(":"), &KindNamed, &WhoseNamed);
+		const VehicleParts::FModel* Named = VehicleParts::Find(KindNamed);
+		const int32 Era = UnitTable::MarkEra(WhoseNamed.IsEmpty() && Named ? FString(Named->Nation) : WhoseNamed);
+		if (Era > 0)
+		{
+			BuiltKey += FString::Printf(TEXT("|%d"), Era);
+		}
+	}
+	FMiniatureMesh* Model = Built.Find(BuiltKey);
 	if (!Model)
 	{
 		// "Truck:SOV" is the lorry in Soviet paint: the part before the colon is the model.
@@ -1666,7 +1679,7 @@ bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double M
 			}
 		}
 		UE_LOG(LogTheater, Log, TEXT("Model %s%s built: %d points, %d triangles"), *Name, bFine ? TEXT("") : TEXT(" (plain)"), Fresh.Vertices.Num(), Fresh.Triangles.Num() / 3);
-		Model = &Built.Add(Name, MoveTemp(Fresh));
+		Model = &Built.Add(BuiltKey, MoveTemp(Fresh));
 	}
 	{
 		TGuardValue<uint8> Painted(Finish, 255); // (the model says of each point how worn its paint is: see MarkWear)

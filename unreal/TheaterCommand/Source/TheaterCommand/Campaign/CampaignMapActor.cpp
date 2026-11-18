@@ -15,6 +15,7 @@ FLinearColor ACampaignEnvironment_DuskShade();
 
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignFlags.h"
+#include "Campaign/CampaignUnitTable.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignTextures.h"
 #include "TheaterCommand.h"
@@ -255,10 +256,21 @@ bool ACampaignMapActor::BuildMap()
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastScale="), MapUnitsAMetre);
 		Blasts = MakeUnique<FBattleEffects>();
 		BlastUnitsAMetre = FMath::Max(MapUnitsAMetre, 0.01) * UnitScale;
-		const bool bMade = Blasts->Begin(Root, BlastUnitsAMetre, [this](const FVector& Over)
+		// ("-TheaterBlastOff=0,60,60" has a third number: everything is drawn that many metres lower, so that what the
+		// kit hangs 60 metres up, its flak burst, stands at the ground where the campaign's eye can come close to it.)
+		double Lowered = 0.0;
+		{
+			FString Asked;
+			TArray<FString> Parts;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastOff="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
+			{
+				Lowered = FCString::Atod(*Parts[2]) * BlastUnitsAMetre;
+			}
+		}
+		const bool bMade = Blasts->Begin(Root, BlastUnitsAMetre, [this, Lowered](const FVector& Over)
 		{
 			const FVector2D Under = WorldToMap(Over);
-			return SurfacePoint(Under.X, Under.Y, 0.0);
+			return SurfacePoint(Under.X, Under.Y, 0.0) - FVector(0.0, 0.0, Lowered);
 		});
 		UE_LOG(LogTheater, Display, TEXT("Effects: the test barrage is %s, a metre drawn as %.2f of a map unit"), bMade ? TEXT("made ready") : TEXT("NOT made (its recipe or its material is missing)"), MapUnitsAMetre);
 	}
@@ -11612,6 +11624,7 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 	{
 		Turn = Held;
 	}
+	::UnitTable::SetTurn(Turn); // (some countries' marks change by date: the painter is told the month)
 	const int32 Month = ((Turn + 7) % 12 + 12) % 12; // 0 is January; the war's first month is September
 	if (Month == ShownMonth || !MasksPicture || Paint.Masks.Num() == 0 || Paint.Masks.Num() != Terrain.Height.Num())
 	{
@@ -13518,8 +13531,9 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastFrames="), BlastFrames);
 			FString Asked;
 			TArray<FString> Parts;
-			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastOff="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 2)
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastOff="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) >= 2)
 			{
+				// (a third number lowers the whole barrage: it is read where the kit is begun)
 				BlastOff = FVector(FCString::Atod(*Parts[0]), FCString::Atod(*Parts[1]), 0.0);
 			}
 		}

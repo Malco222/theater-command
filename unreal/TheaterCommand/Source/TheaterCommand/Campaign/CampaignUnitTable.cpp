@@ -13,6 +13,9 @@ namespace
 		FString Head, Cloth, Paint, Paint2, Hull;
 		TArray<FString> Ring;
 		TArray<UnitTable::FInsigniaLayer> Insignia;
+		// (its dated marks: the month each stands from, counted in months from the year 0, and its layers)
+		TArray<int32> DatedFrom;
+		TArray<TArray<UnitTable::FInsigniaLayer>> Dated;
 		// Whose layout its battleship and its cruiser take: "*" its own, a tag another's by the record, empty the plain one.
 		FString BattleshipOf, CruiserOf;
 	};
@@ -23,6 +26,58 @@ namespace
 		FLook Default;
 		bool bLoaded = false;
 	};
+
+	/** A mark's layers as the table gives them, bottom first. A layer that is none of the four shapes is left out. */
+	TArray<UnitTable::FInsigniaLayer> ReadLayers(const TArray<TSharedPtr<FJsonValue>>& List)
+	{
+		TArray<UnitTable::FInsigniaLayer> Out;
+		for (const TSharedPtr<FJsonValue>& Value : List)
+		{
+			const TSharedPtr<FJsonObject>* Entry = nullptr;
+			const TArray<TSharedPtr<FJsonValue>>* Numbers = nullptr;
+			FString Hex;
+			if (!Value.IsValid() || !Value->TryGetObject(Entry) || !(*Entry)->TryGetStringField(TEXT("c"), Hex) || Hex.Len() != 6)
+			{
+				continue;
+			}
+			auto Number = [&Numbers](int32 Index) { return (*Numbers)[Index].IsValid() ? (*Numbers)[Index]->AsNumber() : 0.0; };
+			UnitTable::FInsigniaLayer One;
+			One.Colour = FLinearColor(FColor::FromHex(Hex));
+			if ((*Entry)->TryGetArrayField(TEXT("ring"), Numbers) && Numbers->Num() >= 2)
+			{
+				One.Shape = UnitTable::FInsigniaLayer::EShape::Ring;
+				One.Inner = Number(0);
+				One.Outer = Number(1);
+			}
+			else if ((*Entry)->TryGetArrayField(TEXT("tri"), Numbers) && Numbers->Num() >= 2)
+			{
+				One.Shape = UnitTable::FInsigniaLayer::EShape::Triangle;
+				One.Outer = Number(0);
+				One.Turn = Number(1);
+			}
+			else if ((*Entry)->TryGetArrayField(TEXT("star"), Numbers) && Numbers->Num() >= 3)
+			{
+				One.Shape = UnitTable::FInsigniaLayer::EShape::Star;
+				One.Outer = Number(0);
+				One.Inner = Number(1);
+				One.Points = FMath::Clamp(static_cast<int32>(Number(2)), 3, 24);
+			}
+			else if ((*Entry)->TryGetArrayField(TEXT("rect"), Numbers) && Numbers->Num() >= 4)
+			{
+				One.Shape = UnitTable::FInsigniaLayer::EShape::Bar;
+				One.Across0 = Number(0);
+				One.Across1 = Number(1);
+				One.Up0 = Number(2);
+				One.Up1 = Number(3);
+			}
+			else
+			{
+				continue;
+			}
+			Out.Add(One);
+		}
+		return Out;
+	}
 
 	FLook Read(const TSharedPtr<FJsonObject>& Told)
 	{
@@ -48,50 +103,27 @@ namespace
 		const bool bAsBuilt = Told->TryGetStringField(TEXT("marking"), MarkingWords) && MarkingWords == TEXT("as built");
 		if (!bAsBuilt && Told->TryGetArrayField(TEXT("insignia"), Layers))
 		{
-			for (const TSharedPtr<FJsonValue>& Value : *Layers)
+			Look.Insignia = ReadLayers(*Layers);
+		}
+		// (Her "marking_months": {"from": "1942-06", "insignia": [...]}, each standing from its month until the next.
+		// These are plain discs and bars and stand on the map too, whatever the country's first mark is.)
+		const TArray<TSharedPtr<FJsonValue>>* Months = nullptr;
+		if (Told->TryGetArrayField(TEXT("marking_months"), Months))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Months)
 			{
 				const TSharedPtr<FJsonObject>* Entry = nullptr;
-				const TArray<TSharedPtr<FJsonValue>>* Numbers = nullptr;
-				FString Hex;
-				if (!Value.IsValid() || !Value->TryGetObject(Entry) || !(*Entry)->TryGetStringField(TEXT("c"), Hex) || Hex.Len() != 6)
+				FString From, YearText, MonthText;
+				if (Value.IsValid() && Value->TryGetObject(Entry) && (*Entry)->TryGetStringField(TEXT("from"), From) && From.Split(TEXT("-"), &YearText, &MonthText)
+					&& (*Entry)->TryGetArrayField(TEXT("insignia"), Layers))
 				{
-					continue;
+					TArray<UnitTable::FInsigniaLayer> Mark = ReadLayers(*Layers);
+					if (Mark.Num() > 0)
+					{
+						Look.DatedFrom.Add(FCString::Atoi(*YearText) * 12 + FMath::Clamp(FCString::Atoi(*MonthText), 1, 12) - 1);
+						Look.Dated.Add(MoveTemp(Mark));
+					}
 				}
-				auto Number = [&Numbers](int32 Index) { return (*Numbers)[Index].IsValid() ? (*Numbers)[Index]->AsNumber() : 0.0; };
-				UnitTable::FInsigniaLayer One;
-				One.Colour = FLinearColor(FColor::FromHex(Hex));
-				if ((*Entry)->TryGetArrayField(TEXT("ring"), Numbers) && Numbers->Num() >= 2)
-				{
-					One.Shape = UnitTable::FInsigniaLayer::EShape::Ring;
-					One.Inner = Number(0);
-					One.Outer = Number(1);
-				}
-				else if ((*Entry)->TryGetArrayField(TEXT("tri"), Numbers) && Numbers->Num() >= 2)
-				{
-					One.Shape = UnitTable::FInsigniaLayer::EShape::Triangle;
-					One.Outer = Number(0);
-					One.Turn = Number(1);
-				}
-				else if ((*Entry)->TryGetArrayField(TEXT("star"), Numbers) && Numbers->Num() >= 3)
-				{
-					One.Shape = UnitTable::FInsigniaLayer::EShape::Star;
-					One.Outer = Number(0);
-					One.Inner = Number(1);
-					One.Points = FMath::Clamp(static_cast<int32>(Number(2)), 3, 24);
-				}
-				else if ((*Entry)->TryGetArrayField(TEXT("rect"), Numbers) && Numbers->Num() >= 4)
-				{
-					One.Shape = UnitTable::FInsigniaLayer::EShape::Bar;
-					One.Across0 = Number(0);
-					One.Across1 = Number(1);
-					One.Up0 = Number(2);
-					One.Up1 = Number(3);
-				}
-				else
-				{
-					continue;
-				}
-				Look.Insignia.Add(One);
 			}
 		}
 		// (The art director's table of 18 November 2026, after Brian's rule for small nations: a ship's "src" is "own",
@@ -154,14 +186,15 @@ namespace
 				}
 				Kept.bLoaded = Kept.Countries.Num() > 0;
 			}
-			int32 Marked = 0, TwoCoats = 0;
+			int32 Marked = 0, TwoCoats = 0, Dated = 0;
 		for (const TPair<FString, FLook>& Each : Kept.Countries)
 		{
 			Marked += Each.Value.Insignia.Num() > 0 ? 1 : 0;
 			TwoCoats += Each.Value.Paint2.Len() == 6 ? 1 : 0;
+			Dated += Each.Value.Dated.Num() > 0 ? 1 : 0;
 		}
-		UE_LOG(LogTheater, Display, TEXT("Unit table: %d countries read%s; %d with a mark of their own from the table, %d with a second camouflage colour"), Kept.Countries.Num(),
-			Kept.bLoaded ? TEXT("") : TEXT(" (the game draws as it did before)"), Marked, TwoCoats);
+		UE_LOG(LogTheater, Display, TEXT("Unit table: %d countries read%s; %d with a mark of their own from the table, %d with a second camouflage colour, %d with marks that change by date"), Kept.Countries.Num(),
+			Kept.bLoaded ? TEXT("") : TEXT(" (the game draws as it did before)"), Marked, TwoCoats, Dated);
 		}
 		return Kept;
 	}
@@ -219,10 +252,42 @@ bool UnitTable::Hull(const FString& Tag, FLinearColor& Out)
 	return Look && Colour(Look->Hull, Out);
 }
 
+namespace
+{
+	// (the campaign's month, in months from the year 0: September 1939 until the map says otherwise)
+	int32 MonthNow = 1939 * 12 + 8;
+}
+
+void UnitTable::SetTurn(int32 Turn)
+{
+	MonthNow = 1939 * 12 + 7 + Turn; // (turn 16 is December 1940, as the map's season has it)
+}
+
+int32 UnitTable::MarkEra(const FString& Tag)
+{
+	int32 Era = 0;
+	if (const FLook* Look = LookOf(Tag))
+	{
+		for (int32 K = 0; K < Look->DatedFrom.Num(); ++K)
+		{
+			if (Look->DatedFrom[K] <= MonthNow)
+			{
+				Era = K + 1;
+			}
+		}
+	}
+	return Era;
+}
+
 TArray<UnitTable::FInsigniaLayer> UnitTable::Insignia(const FString& Tag)
 {
 	const FLook* Look = LookOf(Tag);
-	return Look ? Look->Insignia : TArray<FInsigniaLayer>();
+	if (!Look)
+	{
+		return TArray<FInsigniaLayer>();
+	}
+	const int32 Era = MarkEra(Tag);
+	return Era > 0 ? Look->Dated[Era - 1] : Look->Insignia;
 }
 
 bool UnitTable::Paint2(const FString& Tag, FLinearColor& Out)

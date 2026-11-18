@@ -796,7 +796,9 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	{
 		return false;
 	}
-	const FString Key = Which + TEXT("|") + Tag;
+	// (kept by its country and by which of the country's dated marks stands: see UnitTable::MarkEra)
+	const int32 Era = UnitTable::MarkEra(Tag);
+	const FString Key = Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag;
 	FMiniatureMesh* Model = Painted.Find(Key);
 	if (!Model)
 	{
@@ -909,7 +911,10 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			const int32 Number = 1 + static_cast<int32>(GetTypeHash(Tag + Name) % 14);
 			for (const FRaw::FMark& Mark : Raw->PlaneMarks)
 			{
-				const FString What = Mark.Tag == TEXT("*") ? Tag : Mark.Tag;
+				// (A dominion flying a British machine wears the British marks the model names, until its own wartime
+				// roundel stands: then the roundels on its sides and wings are its own. The fin flash stays.)
+				const bool bOwnNow = Era > 0 && (Mark.Tag == TEXT("UK") || Mark.Tag == TEXT("UK-A1") || Mark.Tag == TEXT("UK-B"));
+				const FString What = Mark.Tag == TEXT("*") || bOwnNow ? Tag : Mark.Tag;
 				for (const double Hand : { 1.0, -1.0 })
 				{
 					if (Hand < 0.0 && !Mark.bBoth)
