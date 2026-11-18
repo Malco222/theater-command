@@ -21,9 +21,10 @@ export interface Offer {
   /**
    * The staff's estimate of the odds where the defence is not fully known, as the attack card showed it: the field
    * shows this band, never the card's own odds, until the fight ends (the design director, b453). None where the card
-   * knew the defence.
+   * knew the defence. 'guess' is the card's best guess at the chance over the band: after the fight the staff names
+   * that, never the chance at the true odds (b464(6)).
    */
-  band?: { lo: number; hi: number };
+  band?: { lo: number; hi: number; guess: number };
 }
 
 /** A grand campaign at the player's first month. */

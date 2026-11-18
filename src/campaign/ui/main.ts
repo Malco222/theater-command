@@ -136,7 +136,7 @@ const ui = {
   /** True once the player has asked to see every line of a Battle Ticket on a narrow screen, where it opens folded to the lines that matter most. */
   ticketAll: false,
   /** A battle won as forecast, told by a slip on its province (ruling 204): it lies there until the next press anywhere. */
-  result: null as null | { id: number; region: number },
+  result: null as null | { id: number; region: number; /** The battle the staff settled in place of the field (b464(4)). */ staff?: boolean },
   /** How each order that was fought this sitting was told: '' for the slip, else why its card opened. */
   resultLog: [] as { turn: number; id: number; why: string }[],
   /** True once the player has opened the tray's unit cards on a narrow screen, where the tray is folded to one row so that the map stays open to a finger. */
@@ -624,8 +624,10 @@ function mount(): void {
   document.addEventListener('keyup', onKeyUp);
   window.addEventListener('blur', forgetKeys);
   // A result's slip lies on the map until the next press anywhere (ruling 204). The press still does its own work.
+  // The staff's slip after a reload is not put down by a press on a card that came up over it (the month's first card):
+  // it waits on the map until the card is down (b464(4)).
   document.addEventListener('pointerdown', (e) => {
-    if (ui.result && !(e.target as Element | null)?.closest?.('#rslip')) { ui.result = null; drawResult(); }
+    if (ui.result && !(ui.result.staff && ui.modal) && !(e.target as Element | null)?.closest?.('#rslip')) { ui.result = null; drawResult(); }
   }, true);
   // A press on a button that is off is answered on the paper line with the sentence its hover carries (ruling 204: no silent press).
   document.addEventListener('pointerup', (e) => {
@@ -1613,6 +1615,31 @@ function queueSave(): void {
 
 function readSave(): string | null {
   try { return localStorage.getItem(SAVE_KEY); } catch { return null; }
+}
+
+/**
+ * The battle the staff booked in place of the field (the design director, b464(4)). Opening the field keeps the attack
+ * settled by the staff; this mark, kept beside the save and never in it, names that battle and stamps the save's text.
+ * The field's own result, once kept, takes the mark away. A save continued with the mark on it, unchanged since, opens
+ * with the staff's result slip, once.
+ */
+const STAFF_KEY = 'theater-command-staff-v1';
+/** A save's text in one number (djb2 over its code units); its length goes beside it. */
+const stampOf = (text: string): number => { let h = 5381; for (let i = 0; i < text.length; i++) h = (Math.imul(h, 33) ^ text.charCodeAt(i)) >>> 0; return h; };
+function markStaff(text: string, id: number): void {
+  try { localStorage.setItem(STAFF_KEY, JSON.stringify({ id, n: text.length, stamp: stampOf(text) })); } catch { /* the save stands; only its slip is lost */ }
+}
+function unmarkStaff(): void { try { localStorage.removeItem(STAFF_KEY); } catch { /* storage is off */ } }
+/** The staff's battle, where `text` is the save kept as the field opened and nothing has been kept since. Read once. */
+function staffBooked(text: string, at: Game): BattleReport | null {
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(STAFF_KEY); } catch { return null; }
+  if (raw === null) return null;
+  unmarkStaff();
+  try {
+    const m = JSON.parse(raw) as { id?: unknown; n?: unknown; stamp?: unknown };
+    return m.n === text.length && m.stamp === stampOf(text) ? at.reports.find((r) => r.id === m.id) ?? null : null;
+  } catch { return null; }
 }
 
 const sumDivs = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs * c.str, 0);
@@ -7139,11 +7166,15 @@ function resultLine(r: BattleReport): string {
   const mine = place.ctrl === me;
   const held = mine ? `${r.regionName} is yours.` : me && allied(g, me, place.ctrl) ? `${r.regionName} is freed.` : `${r.regionName} is taken.`;
   const and = town === r.regionName ? (mine ? ' and is yours.' : '.') : `. ${held}`;
-  const what = r.siege ? `The country round ${town} is won. The town holds out.` : r.town ? `${town} is stormed${and}` : r.gates ? `${town} opened its gates${and}` : held;
+  // (An attack thrown back, and a battle he defended, are told by a slip only where the staff settled them: b464(4).)
+  const what = !r.taken && !r.siege ? `The attack on ${r.regionName} was thrown back.` : r.siege ? `The country round ${town} is won. The town holds out.` : r.town ? `${town} is stormed${and}` : r.gates ? `${town} opened its gates${and}` : held;
   if (r.yielded) return `${what} The defenders fell back before the blow.`;
   const a = lostIn(r.attackers, r.attLost), d = lostIn(r.defenders, r.defLost);
-  return `${what} You lost ${num(a.lost)} men, they lost ${num(d.lost)}.`;
+  const [ours, theirs] = defending(r) ? [d, a] : [a, d];
+  return `${what} You lost ${num(ours.lost)} men, they lost ${num(theirs.lost)}.`;
 }
+/** Whether the player fought a battle on the defending side, as verdictFor reads it. */
+const defending = (r: BattleReport): boolean => !!g.human && r.attNat !== g.human && !r.attackers.some((u) => u.nat === g.human) && r.defenders.some((u) => u.nat === g.human);
 /** Where a province's town stands on the map. */
 const spotOf = (region: number): { x: number; y: number } => towns(g)[region] ?? g.regions[region];
 /** The slip itself: the verdict in the card's own word, the sentence, and the way to the full report. It takes no press. */
@@ -7151,7 +7182,10 @@ function drawResult(): void {
   const el = $('#rslip');
   const rep = ui.result ? g.reports.find((r) => r.id === ui.result!.id) : null;
   if (!rep || !g.human) { ui.result = null; if (!el.hidden) { el.hidden = true; el.innerHTML = ''; } return; }
-  el.innerHTML = `<b class="rv">${esc(verdictFor(rep).text)}</b><span class="rl">${esc(theWords(resultLine(rep)))}</span><button class="rread" data-act="report" data-id="${rep.id}">Read the report</button>`;
+  const v = verdictFor(rep);
+  // A battle the staff settled in place of the field says so first (the design director, b464(4); the UI director's words).
+  const staff = ui.result?.staff ? `<span class="rl">The staff settled ${defending(rep) ? 'the defence of' : 'the attack on'} ${esc(rep.regionName)}: a battle on the field is not kept in a save.</span>` : '';
+  el.innerHTML = `<b class="rv${v.cls === 'loss' ? ' loss' : ''}">${esc(v.text)}</b>${staff}<span class="rl">${esc(theWords(resultLine(rep)))}</span><button class="rread" data-act="report" data-id="${rep.id}">Read the report</button>`;
   el.hidden = false;
   placeResult();
 }
@@ -7864,8 +7898,11 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
 
 /** Picks up the campaign saved in this browser. Returns false if there is none that can be read. */
 function continueGame(): boolean {
-  const loaded = loadGame(readSave() ?? '');
+  const text = readSave() ?? '';
+  const loaded = loadGame(text);
   if (!loaded) return false;
+  // The page closed in the middle of a field battle: the staff settled it, and its slip is the first thing on the map (b464(4)).
+  const staff = staffBooked(text, loaded);
   stopAuto();
   dropPassing();
   g = loaded;
@@ -7876,9 +7913,10 @@ function continueGame(): boolean {
   drawStatic();
   const me = g.human;
   const cap = me ? g.nations[me].capital : -1;
-  const focus = cap >= 0 ? g.regions[cap] : g.byName['Paris'];
+  const focus = staff ? g.regions[staff.region] : cap >= 0 ? g.regions[cap] : g.byName['Paris'];
   ui.view = { x: focus.x - 300, y: focus.y - 230, w: 620 };
   applyView();
+  if (staff) { ui.result = { id: staff.id, region: staff.region, staff: true }; slipAt = performance.now(); }
   if (me && !humanUp(g)) advanceToHuman(false); else { if (me) ui.mark = markFor(g); refresh(); }
   return true;
 }
@@ -9319,20 +9357,24 @@ function onClick(e: MouseEvent): void {
       if (ui.live) {
         try {
           const staffs = loadGame(saveGame(g));
-          if (staffs && orderAttack(staffs, staffs.corps.filter((c) => ids.has(c.id)), staffs.regions[target.id])) {
+          const theirs = staffs ? orderAttack(staffs, staffs.corps.filter((c) => ids.has(c.id)), staffs.regions[target.id]) : null;
+          if (staffs && theirs) {
             if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
-            localStorage.setItem(SAVE_KEY, saveGame(staffs));
+            const text = saveGame(staffs);
+            localStorage.setItem(SAVE_KEY, text);
+            markStaff(text, theirs.id);
           }
         } catch { /* storage is off or full: the game still plays */ }
       }
-      // A defence the card did not know: the field shows the card's band, never its own odds, until the fight ends (b453).
-      const look = m.look ?? null, band = look && !look.exact ? { lo: look.lo, hi: look.hi } : undefined;
+      // A defence the card did not know: the field shows the card's band, never its own odds, until the fight ends (b453),
+      // and the after card's staff gives the card's own best guess (b464(6)).
+      const look = m.look ?? null, band = look && !look.exact ? { lo: look.lo, hi: look.hi, guess: look.guess } : undefined;
       // The field's result, once booked, is kept at once in place of the staff's: a page closed on the after card comes
-      // back to what that card said.
+      // back to what that card said, with no word of the staff.
       const keep = (): void => {
         if (!ui.live) return;
         if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
-        try { localStorage.setItem(SAVE_KEY, saveGame(g)); } catch { /* storage is off or full: the game still plays */ }
+        try { localStorage.setItem(SAVE_KEY, saveGame(g)); unmarkStaff(); } catch { /* storage is off or full: the game still plays */ }
       };
       fightOnField(g, { target, corps, odds: ticket.reckoning.odds, ticket, ...(band ? { band } : {}) }, css, (rep) => {
         ui.unread += g.headlines.length - h;

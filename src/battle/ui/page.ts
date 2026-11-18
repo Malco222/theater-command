@@ -910,7 +910,9 @@ function showAfter(): void {
   const bill = !rep && r.how === 'objective' && S.ground ? practiceBill(S.ground, R, r.lost, Object.fromEntries(r.forces.map((x) => [x.corps, x.lost]))) : null;
   const menOf = (s: Side): number => t[s].forces.reduce((a, f) => a + f.men, 0);
   const level = rep ? rep.level : bill ? levelOf(R, menOf('att') * bill.att > menOf('def') * bill.def) : r.level;
-  const chance = diceChance(k.odds, k.dice);
+  // The staff speaks only its band (b464(6)): where the card did not know the defence, the chance it gave is the card's
+  // best guess, never the chance at the true odds.
+  const chance = S.offer?.band ? S.offer.band.guess : diceChance(k.odds, k.dice);
   const A = t.att.adj, D = t.def.adj;
   const pct = (x: number): string => (x < 1e-4 ? 'none' : x < 0.005 ? 'less than 1%' : `about ${Math.round(x * 100)}%`);
   const shown = bill ? [r.lines[0], `Your attack lost ${pct(bill.att)} of its strength, the defence ${pct(bill.def)}.`, ...r.lines.slice(1)] : r.lines;

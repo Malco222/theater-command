@@ -1921,16 +1921,22 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (a.faced) {
     const lost = { foot: 0, tanks: 0, guns: 0 };
     for (const u of attU) lost[u.kind === 'arm' ? 'tanks' : u.kind === 'art' ? 'guns' : 'foot'] += u.lost;
-    // Fought on the field with the cost uneven, the corps that paid most is named in place of "fell evenly" (ruling 226(6)).
-    const most = (us: typeof attU, w: number[]): string | undefined => {
-      if (!opts.field || us.length < 2) return undefined;
-      const top = us.reduce((b, u, i) => (u.lost > us[b].lost ? i : b), 0);
-      const sum = us.reduce((x, u) => x + u.lost, 0);
-      return w[top] >= 1.25 && sum > 0 && us[top].lost / sum > 1 / us.length + 0.1 ? us[top].name : undefined;
-    };
-    // With one corps on a side there is nothing to say about how the cost fell among them (the UI director, slice 3).
-    const said = whoPaid(a.faced, lost, true, most(attU, attW), !!opts.field && attU.length < 2);
-    rep.paid = { att: said.text, def: whoPaid(a.faced, lost, false, most(attU, attW), !!opts.field && attU.length < 2).text, ...(said.sign ? { sign: said.sign } : {}) };
+    // Fought on the field, how the cost fell is read from each corps' share of its own men, as its row gives it, never
+    // from men lost alone (ruling 226(6), b464(6)). "Evenly" only where no corps lost more than a quarter again the share
+    // another did; a corps is named only where its share stands a quarter clear of the next and it lost the most men
+    // too, so "paid most of it" holds either way. Otherwise, as with one corps on a side (the UI director, slice 3), the
+    // line says nothing of how the cost fell.
+    const fell = ((us: typeof attU): { most?: string; quiet: boolean } => {
+      if (!opts.field) return { quiet: false };
+      if (us.length < 2) return { quiet: true };
+      const of = (u: (typeof us)[number]): number => (u.men > 0 ? u.lost / u.men : 0);
+      const by = [...us].sort((x, y) => of(y) - of(x)), top = by[0];
+      if (of(top) <= 0) return { quiet: true };
+      if (of(top) <= 1.25 * of(by[by.length - 1])) return { quiet: false };
+      return of(top) >= 1.25 * of(by[1]) && us.every((u) => u === top || u.lost < top.lost) ? { most: top.name, quiet: false } : { quiet: true };
+    })(attU);
+    const said = whoPaid(a.faced, lost, true, fell.most, fell.quiet);
+    rep.paid = { att: said.text, def: whoPaid(a.faced, lost, false, fell.most, fell.quiet).text, ...(said.sign ? { sign: said.sign } : {}) };
     // The first time a line of the player's, or one he attacks, takes a third or more out of the tanks' shock, his staff says what did it.
     if (a.faced.shock !== null && a.faced.shock <= 2 / 3 && (attNat === g.human || defNat === g.human) && !g.flags['tip:antitank']) {
       g.flags['tip:antitank'] = g.turn;

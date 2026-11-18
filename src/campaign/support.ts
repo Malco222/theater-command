@@ -296,12 +296,12 @@ export interface Paid { foot: number; tanks: number; guns: number }
  * The result's line (ruling 149 as settled at 21:14Z): who paid most and to what, then the tanks' shock if tanks went
  * in. Two sentences at most, shares in words. 'mine' is true when the reader attacked, false when he defended.
  */
-export function whoPaid(f: Faced, lost: Paid, mine: boolean, most?: string, alone = false): { text: string; sign: FaceSign | null } {
+export function whoPaid(f: Faced, lost: Paid, mine: boolean, most?: string, quiet = false): { text: string; sign: FaceSign | null } {
   const all = lost.foot + lost.tanks + lost.guns;
   const who = mine ? 'Your' : 'Their', whose = mine ? 'their' : 'your';
   // A battle fought on the field whose cost fell unevenly names the corps that paid most (ruling 226(6)); fought with
-  // one corps, the line goes.
-  let first = most ? `${most} paid most of it.` : alone ? '' : `The cost fell evenly on ${mine ? 'your' : 'their'} corps.`;
+  // one corps, or uneven with no one corps to name (b464(6)), the line goes.
+  let first = most ? `${most} paid most of it.` : quiet ? '' : `The cost fell evenly on ${mine ? 'your' : 'their'} corps.`;
   let sign: FaceSign | null = null;
   if (all > 0) {
     const w = f.toll.why;

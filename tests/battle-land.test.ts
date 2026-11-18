@@ -8,7 +8,7 @@ import { ENGINEERING } from '../src/campaign/rivers';
 import { createGame, hostileUnits } from '../src/campaign/game';
 import { blocked } from '../src/campaign/rivers';
 import { startOpen } from '../src/campaign/staff';
-import { beginHuman, humanUp, orderAttack, previewAttack, stepAI } from '../src/campaign/turn';
+import { beginHuman, candidates, humanUp, orderAttack, previewAttack, stepAI } from '../src/campaign/turn';
 import { FORT_MUL, type Corps, type Game, type Region } from '../src/campaign/types';
 
 const count = (f: ReturnType<typeof buildField>, k: (typeof GROUNDS)[number]): number => f.ground.filter((g) => GROUNDS[g] === k).length;
@@ -395,6 +395,20 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     expect(at(0.5)).toBeLessThanOrEqual(240);
   }, 120000);
 
+  it('"broke after" reads the field\'s own time from the first contact to the break, to the half minute (b464(6))', () => {
+    const b = new LandBattle(sampleTicket('plains', 1.2, { seed: 5 }));
+    const said = (from: number, to: number): string => {
+      b.contactAt = from; b.t = to;
+      return (b as unknown as { brokeAfter(s: 'att' | 'def'): string }).brokeAfter('def');
+    };
+    expect(said(100, 135)).toMatch(/ broke within a minute of the first shots\.$/);
+    expect(said(100, 165)).toMatch(/ broke after a minute of fighting\.$/);
+    expect(said(100, 185)).toMatch(/ broke after a minute and a half of fighting\.$/);
+    expect(said(100, 220)).toMatch(/ broke after two minutes of fighting\.$/);
+    expect(said(100, 250)).toMatch(/ broke after two and a half minutes of fighting\.$/);
+    expect(said(40, 400)).toMatch(/ broke after six minutes of fighting\.$/);
+  });
+
   it('one block running falls back alone: the army bar counts only its share', () => {
     const b = new LandBattle(sampleTicket('plains', 1.2, { seed: 99 }));
     const u = b.units.find((x) => x.side === 'att' && x.kind === 'inf')!;
@@ -623,11 +637,46 @@ describe('the hand-off with a real campaign', () => {
     }
     expect(n).toBeGreaterThanOrEqual(3);
   });
+  it('a corps of one division fights under that division\'s own name: 7th Armoured\'s regiments are 7th Armoured\'s (b464(3))', () => {
+    const g = playing();
+    const { c, r } = anAttack(g);
+    // The cold check's Mechili: the British 7th Armoured Division, a corps of one division, alone in front of the attack.
+    const seventh = g.corps.find((x) => x.nat === 'UK' && x.name === '7th Armoured Division' && !x.dead)!;
+    const was = g.regions[seventh.reg];
+    was.units = was.units.filter((u) => u !== seventh);
+    seventh.reg = r.id;
+    r.units = r.units.filter((u) => u.nat === 'GER').concat(seventh);
+    const t = landTicket(g, [c], r)!;
+    expect(t.def.forces.map((f) => f.divisions!.map((d) => d.name))).toEqual([['7th Armoured Division']]);
+    const blocks = new LandBattle(t).units.filter((u) => u.side === 'def');
+    expect(blocks.length).toBe(LAND.blocks.regiments);
+    expect(blocks.map((u) => u.name)).toEqual(['1st', '2nd', '3rd'].map((n) => `${n} Regiment, 7th Armoured`));
+    expect(blocks.every((u) => u.parent === '7th Armoured')).toBe(true);
+  });
   it('with no battle fought, the rules run exactly as before', () => {
     const g1 = playing(5), g2 = playing(5);
     const a1 = anAttack(g1), a2 = anAttack(g2);
     const r1 = orderAttack(g1, [a1.c], a1.r), r2 = orderAttack(g2, [a2.c], a2.r, undefined);
     expect(JSON.stringify(r1)).toBe(JSON.stringify(r2));
     expect(g1.rng.state).toBe(g2.rng.state);
+  });
+  it('"the cost fell evenly" weighs each corps\' share of its own men, not men lost (b464(6))', () => {
+    // Mlawa as the cold check fought it: I Corps (three divisions) and Corps Wodrig (two), the field's own split.
+    const paid = (sI: number, sW: number): { text: string; rows: string } => {
+      const g = playing(3);
+      const r = g.regions.find((x) => x.name === 'Mlawa')!;
+      const cs = candidates(g, r).filter((c) => c.name === 'I Corps' || c.name === 'Corps Wodrig');
+      expect(cs.length).toBe(2);
+      const men = (c: Corps): number => (c.name === 'I Corps' ? 45000 : 30000), s = (c: Corps): number => (c.name === 'I Corps' ? sI : sW);
+      const att = cs.reduce((a, c) => a + men(c) * s(c), 0) / cs.reduce((a, c) => a + men(c), 0);
+      const rep = orderAttack(g, cs, r, 1.6, { corps: Object.fromEntries(cs.map((c) => [c.id, s(c)])), att, def: 0.22, whole: true })!;
+      return { text: rep.paid!.att, rows: rep.attackers.map((u) => `${u.name} ${u.lost}/${u.men}`).join(', ') };
+    };
+    // The cold check's Mlawa: Wodrig lost 13.7% of its men and the most men, I Corps 7.1%. It used to read "evenly".
+    expect(paid(0.071, 0.137).text).toBe('Corps Wodrig paid most of it.');
+    expect(paid(0.08, 0.08).text).toBe('The cost fell evenly on your corps.');
+    // Wodrig hit harder for its size but I Corps lost more men: neither "evenly" nor "paid most of it" is true.
+    const split = paid(0.1, 0.138);
+    expect(split.text, split.rows).toBe('');
   });
 });

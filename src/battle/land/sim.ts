@@ -987,11 +987,18 @@ export class LandBattle implements BattleSim<LandUnit> {
     return `The staff settled the rest of the ${what} from where it stood${moved ? ': what you had won stays won' : ''}.`;
   }
 
-  /** How long it broke after, counted from the first contact (ruling 226(6), the UI director's words). */
+  /**
+   * How long it broke after: the field's own time from the first contact to the break (ruling 226(6)), to the half
+   * minute (b464(6)). Whole minutes made everything from half a minute to a minute and a half "a minute", the span most
+   * routs at odds the card calls sure or hopeless fall in.
+   */
   private brokeAfter(s: Side): string {
-    const m = Math.round((this.t - (this.contactAt ?? this.t)) / 60);
-    const who = this.army(s);
-    return m < 1 ? `${who} broke within a minute of the first shots.` : m === 1 ? `${who} broke after a minute of fighting.` : `${who} broke after ${m} minutes of fighting.`;
+    const sec = this.t - (this.contactAt ?? this.t), who = this.army(s);
+    if (sec < 60) return `${who} broke within a minute of the first shots.`;
+    const halves = Math.round(sec / 30), m = Math.floor(halves / 2), half = halves % 2 === 1;
+    const n = ['', 'a', 'two', 'three', 'four', 'five', 'six'][m] ?? `${m}`;
+    const span = m === 1 ? (half ? 'a minute and a half' : 'a minute') : `${n}${half ? ' and a half' : ''} minutes`;
+    return `${who} broke after ${span} of fighting.`;
   }
 
   /** Each side's standing power against what it brought, as the staff reckons the day now. */
