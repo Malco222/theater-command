@@ -739,6 +739,14 @@ int main(int Argc, char** Argv)
 			View.Sun = Vec(X, Y, Z).Unit();
 		}
 	}
+	if (const char* LightIs = std::getenv("FX_SUNLIGHT")) // (FX_SUNLIGHT=r,g,b: the sun's own light, linear; white by default)
+	{
+		float R = 1.0f, G = 1.0f, B = 1.0f;
+		if (std::sscanf(LightIs, "%f,%f,%f", &R, &G, &B) == 3)
+		{
+			View.SunLight = Rgb(R, G, B);
+		}
+	}
 	Fx.Draw(-0.1, View); // (the eye is known before the hit, as in the game)
 	if (Size == "mg")
 	{

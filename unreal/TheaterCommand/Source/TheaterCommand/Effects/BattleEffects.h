@@ -120,7 +120,8 @@ public:
 	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds);
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);
-	/** The way toward the sun (world axes): each puff is lightened on that side. */
+	/** The way toward the sun (world axes): each puff is lightened on that side, and looking toward it smoke's thin
+	 * edges glow warm where the sun shows through (by day and dusk, as the hour's light says; none at night). */
 	void SetSun(const FVector& TowardSun);
 	/** Everything gone: a new battle. */
 	void Clear();

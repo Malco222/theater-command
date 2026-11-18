@@ -140,6 +140,10 @@ namespace TheaterFx
 		MaxPuffs = std::max(100, static_cast<int>(Num("game.max_puffs", 3000.0)));
 		ShadeLit = Num("game.shade_lit", 0.18);
 		ShadeDark = Num("game.shade_dark", 0.28);
+		SkyFill = Clamp01(Num("game.sky_fill", 0.25));
+		SunThrough = std::max(0.0, Num("game.sun_through", 1.5));
+		SunThroughPow = std::max(0.5, Num("game.sun_through_power", 3.0));
+		SunThroughCol = Picture("game.sun_through_colour", Rgb::FromPicture(255, 205, 160));
 		ClodLeast = Num("game.clod_least_px", 1.2);
 		Beyond = Num("game.draw_beyond_m", 1500.0);
 		ClodRough = Range("burst.debris.clods.rough", 0.25, 0.45);
@@ -498,7 +502,7 @@ namespace TheaterFx
 			B.Stretch = 1.8;
 			B.Point = 0.6;
 			B.Col = Glow * 0.8;
-			B.Col2 = Rgb(0.05f, 0.01f, 0.0f);
+			B.Col2 = Rgb::FromPicture(66, 36, 22); // (art director 22:24Z: a flash's edge is never fully saturated: it dies to a warm grey)
 			B.Alpha = 0.85;
 			B.FadeIn = 0.01;
 			B.Hold = 0.2;
@@ -1933,7 +1937,7 @@ namespace TheaterFx
 		// (two ways square to the eye's line, so what is off the middle shows as off the middle)
 		const Vec FaceA = (bEyeKnown ? ToEye.Cross(ZUp) : Side).Unit(Side);
 		const Vec FaceB = (bEyeKnown ? FaceA.Cross(ToEye) : ZUp).Unit(ZUp);
-		const Rgb GlowCol = Picture(P + "flash_glow", Rgb::FromPicture(150, 70, 14));
+		const Rgb GlowCol = Picture(P + "flash_glow", Rgb::FromPicture(160, 70, 34));
 		const Rgb MidCol = Picture(P + "flash_mid", Rgb::FromPicture(255, 170, 60));
 		const Rgb HeartCol = Picture(P + "flash_heart", Rgb::FromPicture(255, 245, 215));
 		const double GlowR = Num(P + "flash_glow_m", 8.0) * D.U(0.85, 1.15);
@@ -2421,7 +2425,7 @@ namespace TheaterFx
 	// ---------------------------------------------------------------------------------------------------------------
 	// Drawing
 
-	void Battle::Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough, uint32_t LumpSeed, double Turn)
+	void Battle::Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough, uint32_t LumpSeed, double Turn, const Rgb& Floor, const Rgb& Through, const Vec& Outward)
 	{
 		const size_t First = static_cast<size_t>(Slot) * PointsPerPuff;
 		auto Put = [this](size_t I, const Vec& At, const Rgb& C, double A)
@@ -2432,7 +2436,7 @@ namespace TheaterFx
 			OutRgba[I * 4 + 2] = Byte(C.B);
 			OutRgba[I * 4 + 3] = Byte(A);
 		};
-		Put(First, Middle, Col, Alpha);
+		Put(First, Middle, Rgb(std::max(Col.R, Floor.R), std::max(Col.G, Floor.G), std::max(Col.B, Floor.B)), Alpha);
 		// (a clod's lumpy outline: a few waves round it, its own, turning as it tumbles. Each wave is
 		// cos(n * (Angle - Turn) + Pn), worked out from the ring's own table, so a puff costs six cosines, not three a side)
 		double C2 = 1.0, S2 = 0.0, C3 = 1.0, S3 = 0.0, C5 = 1.0, S5 = 0.0;
@@ -2453,6 +2457,8 @@ namespace TheaterFx
 		const double AA = AxisA.Dot(AxisA), BB = AxisB.Dot(AxisB), AB = AxisA.Dot(AxisB);
 		const double SunUp = ZUp.Dot(Eye.Sun);
 		const double In = std::clamp(Inner, 0.1, 0.95);
+		const bool bThrough = Through.R + Through.G + Through.B > 1e-6f;
+		const double SunAcross = std::sqrt(std::max(0.0, 1.0 - Eye.Forward.Dot(Eye.Sun) * Eye.Forward.Dot(Eye.Sun))); // (how far the sun is off the eye's line, on the screen)
 		for (int K = 0; K < Sides; ++K)
 		{
 			const size_t I = static_cast<size_t>(K);
@@ -2484,6 +2490,22 @@ namespace TheaterFx
 				Shaded = Col * F;
 				HeartShaded = Col * (1.0 + 0.5 * (F - 1.0));
 			}
+			Shaded = Rgb(std::max(Shaded.R, Floor.R), std::max(Shaded.G, Floor.G), std::max(Shaded.B, Floor.B));
+			HeartShaded = Rgb(std::max(HeartShaded.R, Floor.R), std::max(HeartShaded.G, Floor.G), std::max(HeartShaded.B, Floor.B));
+			if (bThrough)
+			{
+				// (the sun through the thin edge: all round, most on the side toward the sun on the screen)
+				const double Len2 = AA * Cs * Cs + BB * Sn * Sn + 2.0 * AB * Cs * Sn;
+				const double Toward = Len2 > 1e-18 ? (SunA * Cs + SunB * Sn) / std::sqrt(Len2) : 0.0;
+				double Side = 0.6 + 0.4 * Clamp01(Toward / std::max(SunAcross, 0.05));
+				if (Outward.Length() > 0.5)
+				{
+					Side *= Clamp01(Dir.Dot(Outward) / std::max(std::sqrt(Len2), 1e-9)); // (a cloud's puff: only its edge facing out of the cloud)
+				}
+				const Rgb Lit = Through * Side;
+				Shaded = Rgb(Shaded.R + Lit.R, Shaded.G + Lit.G, Shaded.B + Lit.B);
+				HeartShaded = Rgb(HeartShaded.R + 0.1f * Lit.R, HeartShaded.G + 0.1f * Lit.G, HeartShaded.B + 0.1f * Lit.B);
+			}
 			Put(First + 1 + I, Middle + Dir * (In * Reach), HeartShaded, HeartAlpha);
 			Put(First + 1 + static_cast<size_t>(Sides) + I, Middle + Dir * Reach, Shaded, RimAlpha);
 		}
@@ -2512,9 +2534,11 @@ namespace TheaterFx
 			return false;
 		}
 		Rgb Col = B.Col.Mix(B.Col2, F * B.Cool);
+		Rgb Floor, Through;
 		if (!B.bLight)
 		{
 			Col = Rgb(Col.R * Eye.SmokeLight.R, Col.G * Eye.SmokeLight.G, Col.B * Eye.SmokeLight.B);
+			Floor = Col * SkyFill; // (art director 22:24Z: the sky lights smoke's shadow side too, so it is never a hole)
 		}
 		const Vec P = Where(B, Age);
 		const double Dist = (P - Eye.Eye).Length();
@@ -2522,16 +2546,35 @@ namespace TheaterFx
 		{
 			return false;
 		}
+		double Outer = 1.0; // (how near the puff is to its cloud's edge: only a cloud's own fringe lets the sun through)
+		Vec Outward; // (and which way on the screen is out of its cloud)
 		if (B.CloudShade > 0.0 && !B.bLight)
 		{
 			// (the cloud's sunward side lit, its far side in its own shadow: shading each puff alone barely shows
 			// once many overlap)
 			const Vec FromMid = P - (B.Centre + Wind * (0.75 * Age) + ZUp * (B.CentreRise * Age));
 			const double Len = FromMid.Length();
+			Outer = Clamp01(Len / std::max(B.CloudR, 1e-3));
+			Outward = (FromMid - Eye.Forward * FromMid.Dot(Eye.Forward)).Unit(Vec());
 			if (Len > 1e-3)
 			{
 				const double Toward = FromMid.Dot(Eye.Sun) / Len * Clamp01(Len / std::max(B.CloudR, 1e-3));
 				Col = Col * std::max(0.3, 1.0 + B.CloudShade * (ShadeLit * std::max(0.0, Toward) - ShadeDark * std::max(0.0, -Toward)));
+				Col = Rgb(std::max(Col.R, Floor.R), std::max(Col.G, Floor.G), std::max(Col.B, Floor.B));
+			}
+		}
+		if (!B.bLight && (B.CloudShade > 0.0 || B.Smear > 0.0) && SunThrough > 0.0 && Dist > 1e-6)
+		{
+			// (smoke clouds and trails only: a low sheet of dust along the ground would glow as a fog over the field)
+			// (art director 22:24Z: with the sun behind it, smoke's thin edges glow warm where the sun shows through,
+			// most when the eye looks almost into the sun; a cloud's fringe, never its thick body. Most at middle
+			// thickness (art director 22:36Z): near see-through dust stays near unseen, never a glowing fog sheet)
+			const double Back = (P - Eye.Eye).Dot(Eye.Sun) / Dist;
+			if (Back > 0.0)
+			{
+				const double Thick = Clamp01(A);
+				const double K = SunThrough * std::pow(Back, SunThroughPow) * 4.0 * Thick * (1.0 - Thick) * Outer * Outer;
+				Through = Rgb(SunThroughCol.R * Eye.SunLight.R, SunThroughCol.G * Eye.SunLight.G, SunThroughCol.B * Eye.SunLight.B) * K;
 			}
 		}
 		const double MetresAPixel = Dist / std::max(Eye.PixelsPerRadian, 1.0);
@@ -2655,7 +2698,7 @@ namespace TheaterFx
 			return false;
 		}
 		const double Heart = B.HeartEnd >= 0.0 ? B.Heart + (B.HeartEnd - B.Heart) * F : B.Heart;
-		Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * B.Rim, B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, B.Turn + B.TurnRate * Age);
+		Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * B.Rim, B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, B.Turn + B.TurnRate * Age, Floor, Through, Outward);
 		B.bShown = true;
 		return true;
 	}
