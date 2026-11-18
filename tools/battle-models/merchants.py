@@ -623,7 +623,7 @@ def tanker(fine=True, hull_hex=None):
     S.clips_for_ship(m, yard, mains, "merchant")
     m.clips["ablaze"] = {"long": 6.0, "loop": False, "after": "hold",
                          "about": "her cargo takes fire: flame the length of her tank deck and burning oil spreading on the water; she burns until she goes (play a list or a sinking over it)",
-                         "tracks": [], "events": [{"t": 0.0, "fx": "oil_fire", "socket": "fire.1", "cue": "ship_burning_loop"}, {"t": 0.8, "fx": "oil_fire", "socket": "fire.3"},
+                         "tracks": [], "events": [{"t": 0.0, "fx": "oil_fire", "socket": "fire.1", "cue": "fire_loop"}, {"t": 0.8, "fx": "oil_fire", "socket": "fire.3"},
                                                   {"t": 1.6, "fx": "oil_fire", "socket": "fire.2"}, {"t": 2.4, "fx": "burning_oil_on_water", "socket": "hit.port.3"},
                                                   {"t": 3.0, "fx": "burning_oil_on_water", "socket": "hit.starboard.3"}]}
     return m, yard

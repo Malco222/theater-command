@@ -126,7 +126,7 @@ python export.py <out> all                     # every model: .json, .glb, .fbx,
 python look.py Freighter <out> close,aft       # quick stills while building (small craft: small,smallaft)
 python show.py Battleship_UK turn <out>        # ship clips: turn, broadside, sink, capsize
 python airshow.py shot_down <out>              # aircraft clips: flypast, shot_down, ways_down
-python sheet.py <out.png> bow <names> 2        # a line-up sheet of ships;  python airshow.py sheet <out.png>
+python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
 ```
 
 Rendering is Cycles on the CPU (EEVEE cannot start without a display). A 960x540 frame at 12 samples takes 10 to
@@ -136,7 +136,14 @@ markings for the pictures only; the game paints its own from the model's `marks`
 
 ## Not done yet
 
-- Sound cue names are placeholders (`naval_gun_heavy`, `aircraft_guns` and so on) until the sound director names them.
+- Sound: events are keyed to the sound director's names where a real recording exists (`ship_gun_heavy`,
+  `ship_gun_medium`, `ship_guns`, `magazine_explosion`, `fire_loop`, `depth_charge`, `ship_wash_loop`,
+  `ship_engine_loop`, `plane_guns`, `gunner_burst`, `plane_down`, `plane_explode`, `b17_drone_loop`,
+  `bomber_heavy_loop`, `stuka_drone_loop`; table in `/mnt/project-files/sound/battle-pack/README.md`). No sound file
+  goes into the game until Brian has judged it (ruling 144). Still placeholders, waiting for recordings:
+  `aero_engine_loop` (fighters), `aero_engine_idle`, `bomb_release`, `aircraft_hit`, `aircraft_fire`,
+  `aircraft_break_up`, `parachute_open`, `explosion`, `ship_sinking`, `torpedo_launch`, `depth_charge_roll`,
+  `depth_charge_thrower`, `dive_alarm`, `surfacing`, `lift_motor`, `craft_grounds`, `ramp_drop`, `ramp_winch`.
 - Effects are named in events but not built for the game; the pictures use Blender-only effects from `stage.py`.
 - Aircraft control surfaces do not move, bombers' turrets do not turn, bomb doors do not open.
 - One plain mesh (`far`) per model; no third level of detail.

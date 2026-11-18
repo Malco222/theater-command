@@ -375,10 +375,12 @@ def clips_for_plane(m, f):
     big = f.half > 9.0
     # -- flying --
     long = 4.0
+    # (the sound director's loops: the heavy bombers and the Stuka have real ones; a fighter's steady note is still to come)
+    engine_cue = "b17_drone_loop" if len(eng) >= 4 else ("bomber_heavy_loop" if f.role == "bomber" else ("stuka_drone_loop" if f.name == "Stuka" else "aero_engine_loop"))
     C["fly"] = {"long": long, "loop": True, "about": "Under way: every airscrew a turning disc, and she rides the air a little. The game flies her; this only lives on top.",
                 "tracks": [{"part": "plane", "rot": rot_keys(lambda t: q_of(roll=(0.6 if big else 1.4) * math.sin(2 * math.pi * t / long), pitch=(0.25 if big else 0.5) * math.sin(4 * math.pi * t / long + 0.7)), long, 0.25)}]
                 + props(m, f, "fast")(long),
-                "events": [{"t": 0.0, "fx": "engine_loop", "socket": eng[0], "cue": "aero_engine_loop"}]}
+                "events": [{"t": 0.0, "fx": "engine_loop", "socket": eng[0], "cue": engine_cue}]}
     C["idle"] = {"long": 2.5, "loop": True, "about": "Engines ticking over on the ground or the deck: the blades are seen going round.",
                  "tracks": props(m, f, "slow")(2.5), "events": [{"t": 0.0, "fx": "engine_loop", "socket": eng[0], "cue": "aero_engine_idle"}]}
     C["stopped"] = {"long": 0.1, "loop": False, "after": "hold", "about": "Engines stopped: blades still, no disc. For a parked machine.", "tracks": props(m, f, "dead")(0.1), "events": []}
@@ -394,11 +396,11 @@ def clips_for_plane(m, f):
     if guns:
         C["fire"] = {"long": 0.5, "loop": True, "about": "Her fixed guns firing: a flicker at each muzzle, and she shakes with it.",
                      "tracks": [{"part": "plane", "move": [[0.0, 0, 0, 0], [0.06, -0.012, 0, 0.004], [0.12, 0, 0, 0], [0.18, -0.012, 0, -0.004], [0.25, 0, 0, 0], [0.31, -0.012, 0, 0.004], [0.37, 0, 0, 0], [0.43, -0.012, 0, -0.004], [0.5, 0, 0, 0]]}],
-                     "events": [{"t": round(0.08 * k, 2), "fx": "muzzle_flash_small", "socket": g, "cue": "aircraft_guns" if k == 0 else ""} for k in range(6) for g in guns]}
+                     "events": [{"t": round(0.08 * k, 2), "fx": "muzzle_flash_small", "socket": g, "cue": "plane_guns" if k == 0 else ""} for k in range(6) for g in guns]}
     turrets = [s_["name"] for s_ in m.sockets if s_["name"].startswith("turret.")]
     if turrets:
         C["fire.turrets"] = {"long": 0.6, "loop": True, "about": "Her gunners firing back: a flicker at each gunner's muzzle.", "tracks": [],
-                             "events": [{"t": round(0.1 * k + 0.03 * i, 2), "fx": "muzzle_flash_small", "socket": g, "cue": "aircraft_gunner" if k == 0 and i == 0 else ""} for k in range(5) for i, g in enumerate(turrets)]}
+                             "events": [{"t": round(0.1 * k + 0.03 * i, 2), "fx": "muzzle_flash_small", "socket": g, "cue": "gunner_burst" if k == 0 and i == 0 else ""} for k in range(5) for i, g in enumerate(turrets)]}
     if f.has_bombs or f.role in ("bomber", "dive bomber", "attack"):
         tracks = []
         if f.has_bombs:
@@ -419,7 +421,7 @@ def clips_for_plane(m, f):
                       "tracks": [{"part": "plane", "rot": rot_keys(lambda t: q_of(roll=-(18.0 * smooth(t / 2.0) + 50.0 * (t / long) ** 2 * (1.0 if not big else 0.6)), pitch=-(8.0 * smooth(t / 1.5) + 52.0 * smooth((t - 1.0) / 6.0)), yaw=10.0 * smooth(t / long)), long, 0.2)}]
                       + props(m, f, "slow")(long)[:2] + props(m, f, "fast")(long)[2:],
                       "events": [{"t": 0.0, "fx": "engine_fire", "socket": eng[0], "cue": "aircraft_fire"}, {"t": 0.0, "fx": "smoke_trail_black", "socket": eng[0], "cue": ""},
-                                 {"t": 2.5, "fx": "fire", "socket": "stub.port" if len(eng) == 1 else "tank.port", "cue": ""}, {"t": 0.0, "fx": "engine_dying", "socket": eng[0], "cue": "aero_engine_dying"}]}
+                                 {"t": 2.5, "fx": "fire", "socket": "stub.port" if len(eng) == 1 else "tank.port", "cue": ""}, {"t": 0.0, "fx": "engine_dying", "socket": eng[0], "cue": "plane_down"}]}
     # (a wing gone: she rolls hard toward the missing wing and whirls down; the wing flutters away behind)
     long = 8.0
     spin_q = lambda t: q_of(yaw=-70.0 * t * smooth(t / 1.5)) @ q_of(pitch=-72.0 * smooth(t / 1.8)) @ q_of(roll=-(200.0 if not big else 110.0) * t * smooth(t / 1.0))
@@ -427,7 +429,7 @@ def clips_for_plane(m, f):
             "The game carries her down.",
             "tracks": [{"part": "plane", "rot": rot_keys(spin_q, long, 0.05)}] + props(m, f, "slow")(long),
             "events": [{"t": 0.0, "fx": "hit_flash", "socket": "break.wing.port", "cue": "aircraft_break_up"}, {"t": 0.05, "fx": "fire", "socket": "stub.port", "cue": ""},
-                       {"t": 0.05, "fx": "smoke_trail_black", "socket": "stub.port", "cue": ""}, {"t": 0.1, "fx": "smoke_trail_thin", "socket": "break.wing.port", "cue": ""}]}
+                       {"t": 0.05, "fx": "smoke_trail_black", "socket": "stub.port", "cue": "plane_down"}, {"t": 0.1, "fx": "smoke_trail_thin", "socket": "break.wing.port", "cue": ""}]}
     drag = (26.0 if not big else 18.0)
     loose(m, clip, "wing.port", spin_q,
           lambda t: q_of(roll=40.0 * t + 260.0 * t * smooth(t / 2.0), pitch=25.0 * math.sin(t * 2.2), yaw=-95.0 * t),
@@ -439,7 +441,7 @@ def clips_for_plane(m, f):
     clip = {"long": long, "loop": False, "after": "gone", "about": "Blown up: a burst of fire amidships, both wings and the tail fly off and the pieces tumble away, burning. "
             "The game carries the wreck down and takes it away at the end.",
             "tracks": [{"part": "plane", "rot": rot_keys(body_q, long, 0.05)}] + props(m, f, "dead")(long),
-            "events": [{"t": 0.0, "fx": "explode", "socket": "fuel", "cue": "aircraft_explode"}, {"t": 0.0, "fx": "debris", "socket": "fuel", "cue": ""},
+            "events": [{"t": 0.0, "fx": "explode", "socket": "fuel", "cue": "plane_explode"}, {"t": 0.0, "fx": "debris", "socket": "fuel", "cue": ""},
                        {"t": 0.1, "fx": "fire", "socket": "fuel", "cue": ""}, {"t": 0.1, "fx": "smoke_trail_black", "socket": "fuel", "cue": ""},
                        {"t": 0.15, "fx": "fire", "socket": "tank.starboard", "cue": ""}, {"t": 0.15, "fx": "smoke_trail_thin", "socket": "break.wing.port", "cue": ""},
                        {"t": 0.15, "fx": "smoke_trail_thin", "socket": "break.tail", "cue": ""}]}

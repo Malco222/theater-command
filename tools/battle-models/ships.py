@@ -213,12 +213,18 @@ def radar(yard, name, x, z, wide, high, y=0.0, parent=None, spin=True):
     m.use(rn)
     m.rod((x, y, z), (x, y, z + 0.6), 0.12, "upper", sides=5)
     c = Vector((x, y, z + 0.6 + high / 2))
-    m.box(c, (0.12, wide, high), "steel")
-    if m.fine:
-        for k in range(5):
-            m.box(c + Vector((0.1, (k - 2) * wide / 5.0, 0)), (0.06, 0.06, high), "upper")
-        for k in range(3):
-            m.box(c + Vector((0.1, 0, (k - 1) * high / 3.0)), (0.06, wide, 0.06), "upper")
+    # an open frame in the pale grey of her upperworks: bars with the sky between them (the art director's review of
+    # 2026-11-18: a solid dark sheet read as a black flag at every masthead)
+    b = 0.09 if m.fine else 0.12
+    for sy in (-1, 1):
+        m.box(c + Vector((0, sy * (wide - b) / 2.0, 0)), (b, b, high), "upper")
+    for sz in (-1, 1):
+        m.box(c + Vector((0, 0, sz * (high - b) / 2.0)), (b, wide, b), "upper")
+    nv, nh = (5, 2) if m.fine else (1, 1)
+    for k in range(nv):
+        m.box(c + Vector((0, (k + 1) * wide / (nv + 1.0) - wide / 2.0, 0)), (0.06, 0.06, high), "upper")
+    for k in range(nh):
+        m.box(c + Vector((0, 0, (k + 1) * high / (nh + 1.0) - high / 2.0)), (0.06, wide, 0.06), "upper")
     return rn
 
 
@@ -410,7 +416,7 @@ def clips_for_ship(m, yard, mains, cls):
     big = {"battleship": 1.0, "cruiser": 0.7, "carrier": 0.9, "destroyer": 0.45, "submarine": 0.35, "merchant": 0.6, "liner": 0.8, "landing": 0.25}.get(cls, 0.6)
     small = cls == "landing"
     heavy = cls in ("battleship", "carrier")
-    gun_cue = {"battleship": "naval_gun_heavy", "cruiser": "naval_gun_medium"}.get(cls, "naval_gun_light")
+    gun_cue = {"battleship": "ship_gun_heavy", "cruiser": "ship_gun_medium"}.get(cls, "ship_guns")      # (the sound director's names)
     screws = [p.name for p in m.parts if p.name.startswith("screw.")]
     radars = [p.name for p in m.parts if p.name.startswith("radar.") and p.kind == "spin"]
 
@@ -423,7 +429,7 @@ def clips_for_ship(m, yard, mains, cls):
                                    "move": move_keys(long, lambda t: (0.0, 0.0, wave(t, long, heave, 0.45, 2)))}]
                        + [{"part": s, "turn": [[0.0, 0.0], [long, 360.0 * revs]]} for s in screws]
                        + [{"part": r, "turn": [[0.0, 0.0], [long, 360.0 * 2]]} for r in radars],
-                       "events": [{"t": 0.0, "fx": "wake", "socket": "wake.stern"}, {"t": 0.0, "fx": "bow_wave", "socket": "wake.bow"}]
+                       "events": [{"t": 0.0, "fx": "wake", "socket": "wake.stern", "cue": "ship_wash_loop"}, {"t": 0.0, "fx": "bow_wave", "socket": "wake.bow", "cue": "ship_engine_loop"}]
                        + ([{"t": 0.0, "fx": "funnel_smoke", "socket": "funnel.1"}] if any(s["name"] == "funnel.1" for s in m.sockets) else [])}
 
     # a turret fires: each gun runs back and comes out again; the flash and the brown smoke are the game's own effects
@@ -446,7 +452,7 @@ def clips_for_ship(m, yard, mains, cls):
             guns = [q.name for q in m.parts if q.name.startswith(p.name + ".gun.")]
             m.clips[f"fire.{p.name}"] = {"long": 0.9, "loop": False, "about": "a secondary turret fires",
                                          "tracks": [{"part": g, "slide": [[0.0, 0.0], [0.05, 0.35], [0.6, 0.0], [0.9, 0.0]]} for g in guns],
-                                         "events": [{"t": 0.0, "fx": "muzzle_flash", "socket": f"muzzle.{p.name}.1", "cue": "naval_gun_light"}, {"t": 0.0, "fx": "muzzle_flash", "socket": f"muzzle.{p.name}.2"}]}
+                                         "events": [{"t": 0.0, "fx": "muzzle_flash", "socket": f"muzzle.{p.name}.1", "cue": "ship_guns"}, {"t": 0.0, "fx": "muzzle_flash", "socket": f"muzzle.{p.name}.2"}]}
 
     # she is hit: a shudder
     m.clips["hit"] = {"long": 1.6, "loop": False, "about": "a shell or a bomb strikes: she shudders; put the burst at the nearest fire socket (a torpedo: the column of water at a hit socket)",
@@ -461,7 +467,7 @@ def clips_for_ship(m, yard, mains, cls):
         m.clips[f"list.{side}"] = {"long": 8.0, "loop": False, "after": "hold", "about": "she takes a list and settles a little: hold the last pose (a ship out of the fight, burning)",
                                    "tracks": [{"part": "ship", "rot": quat_keys(8.0, lambda t, s=sgn: (s * settle(t, 8.0, 9.0), 0.4 * smooth(t / 8.0), 0)),
                                                "move": move_keys(8.0, lambda t: (0, 0, -settle(t, 8.0, 0.9 * big + 0.3)))}],
-                                   "events": [{"t": 0.0, "fx": "fire", "socket": "fire.2", "cue": "ship_burning_loop"}]}
+                                   "events": [{"t": 0.0, "fx": "fire", "socket": "fire.2", "cue": "fire_loop"}]}
 
     deep = h.D + (26.0 if heavy else (6.0 if small else 16.0))
     # she goes down by the bow: the stern lifts clear, the screws still turning, and she slides under
@@ -751,7 +757,7 @@ def destroyer(tag, fine=True, hull_hex=None):
     m.clips["depth_charges"] = {"long": 6.0, "loop": False, "about": "a pattern of depth charges: two roll off the stern, the throwers fire one to each side; the sea heaves white astern some seconds after",
                                 "tracks": [], "events": [{"t": 0.0, "fx": "depth_charge", "socket": "depth.1", "cue": "depth_charge_roll"}, {"t": 0.6, "fx": "depth_charge", "socket": "depth.thrower.port", "cue": "depth_charge_thrower"},
                                                          {"t": 0.6, "fx": "depth_charge", "socket": "depth.thrower.starboard"}, {"t": 1.6, "fx": "depth_charge", "socket": "depth.2"},
-                                                         {"t": 5.0, "fx": "depth_charge_burst", "socket": "wake.stern", "cue": "depth_charge_explosion"}]}
+                                                         {"t": 5.0, "fx": "depth_charge_burst", "socket": "wake.stern", "cue": "depth_charge"}]}
     return m, yard
 
 
