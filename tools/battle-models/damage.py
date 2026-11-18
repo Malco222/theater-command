@@ -25,11 +25,21 @@ order that spreads them over her), `damage.bullets` and `damage.flak` (the same 
 other). At rest every hit shows. An aircraft not hit simply has no overlay.
 
 The file's `damage` lists every hit: its part, kind, the part of her it is on, where, and which way it faces.
+
+    overlay("B17", what="engines")  ->  the model "B17EngineOut"
+
+An engine that is out (the air battles' straggler, 2026-11-18: "a bomber losing an engine slows and falls out of
+formation") is a second model of the same kind, for an aircraft with two or more airscrews (MANY_ENGINED). For each
+engine N it has `feather.N`, her airscrew with its blades turned edge on to the wind and still (hide her own `prop.N`
+and `prop.N.blur` on the aircraft herself), and `scorch.N`, soot laid back over the nacelle and the wing behind it.
+At rest all of them show. Clips `feather.N` and `scorch.N` hide or show one part each: held at 0 it is hidden, at 1
+shown. Hold each engine's two clips always (at 0 for a sound engine), or scale the parts yourself; no two clips touch
+the same part, so they may be laid over each other and over anything. The file's `engines` lists them.
 """
 import math
 import random
 
-from mathutils import Vector
+from mathutils import Quaternion, Vector
 from mathutils.bvhtree import BVHTree
 
 import planes
@@ -42,6 +52,7 @@ LAID = {"line", "rivet", "rivet_under", "stain", "soot", "patch"}     # what lie
 
 PAINTS = {"hole": "0A0A0B", "torn": "7E8287", "lip": "7E8287", "bent": "2B2D2F", "soot": "2A2622", "soot_thin": "2A2622"}
 CLEAR = {"lip": 0.4, "soot": 0.35, "soot_thin": 0.17}       # how much of each see-through paint shows over her own
+MANY_ENGINED = ("Amerikabomber", "B17", "B29", "Betty", "Bomber", "He111", "Lancaster", "Nell")    # two airscrews or more: each has an <Name>EngineOut
 
 
 def look(paint, mat, nt, bsdf, mix, **kw):
@@ -55,8 +66,9 @@ def look(paint, mat, nt, bsdf, mix, **kw):
         bsdf.inputs["Alpha"].default_value = CLEAR[paint]
 
 
-def overlay(name, fine=True, model=None):
-    """The damage model for the aircraft `name` (`model`: hers, if it is already built)."""
+def overlay(name, fine=True, model=None, what="holes"):
+    """The damage model for the aircraft `name` (`model`: hers, if it is already built): her bullet and flak holes
+    ("holes": <name>Damage), or her engines out ("engines": <name>EngineOut; None if she has only one airscrew)."""
     m = model if model is not None else planes.BUILDERS[name](fine)[0]
     rng = random.Random(sum(ord(c) * (i + 3) for i, c in enumerate(name)))
     tree = BVHTree.FromPolygons([tuple(v) for v in m.verts], [tuple(f) for f in m.faces])
@@ -85,7 +97,14 @@ def overlay(name, fine=True, model=None):
     r_hole = 0.036 * (0.8 + 0.25 * big)
     r_tear = 0.15 * (0.55 + 0.45 * big) * 1.25
 
-    d = Model(name + "Damage", m.title + ": battle damage", "damage", dict(PAINTS), fine)
+    airscrews = sorted((int(p.name.split(".")[1]), i) for i, p in enumerate(m.parts) if p.name.startswith("prop.") and p.name.count(".") == 1)
+    if what == "engines":
+        if len(airscrews) < 2:
+            return None
+        d = Model(name + "EngineOut", m.title + ": an engine out", "damage",
+                  {"blade": m.paints.get("blade", "1B1C1E"), "soot": PAINTS["soot"], "soot_thin": PAINTS["soot_thin"]}, fine)
+    else:
+        d = Model(name + "Damage", m.title + ": battle damage", "damage", dict(PAINTS), fine)
     d.parts = [Part(p.name, p.parent, p.pivot, axis=p.axis, limits=p.limits, slide=p.slide, slide_limits=p.slide_limits, kind=p.kind, note=p.note) for p in m.parts]
     d.part_at = dict(m.part_at)
     d.clips = {k: dict(c, events=[]) for k, c in m.clips.items()}          # (what she does, it does; her sounds and effects stay hers)
@@ -293,14 +312,105 @@ def overlay(name, fine=True, model=None):
             (flak, flank, -1, 0.32), (bullets, wing, 1, 0.75), (flak, flank, 1, 0.7), (bullets, flank, -1, 0.62)]
     if big > 1.3:
         plan += [(flak, wing, 1, 0.62), (bullets, wing, -1, 0.8), (flak, fin, 1, 0.0), (bullets, flank, 1, 0.2), (flak, wing, -1, 0.22)]
-    for make, where, side, frac in plan:
+    for make, where, side, frac in (plan if what == "holes" else []):
         for _ in range(8):                                   # (a place that runs off her, or onto her glass, is tried again a little way off)
             h = where(side, min(max(frac + rng.uniform(-0.05, 0.05), 0.05), 0.95))
             if h is not None and make(h):
                 break
 
+    # ---- an engine that is out: her airscrew feathered and still, her nacelle scorched ----------------
+    rng2 = random.Random(977 * len(name) + sum(ord(c) for c in name))      # (its own dice: the hits above stay as they were)
+    engines = {}
+    if what == "engines":
+        for k, pi in airscrews:
+            hub = Vector(m.parts[pi].pivot)
+            mine = [f for f, fp in zip(m.faces, m.fpart) if fp == pi]
+            root = {}                                        # (each blade is a piece of its own: find them)
+
+            def find(v):
+                while root.setdefault(v, v) != v:
+                    root[v] = root[root[v]]
+                    v = root[v]
+                return v
+
+            for f in mine:
+                for v in f[1:]:
+                    root[find(v)] = find(f[0])
+            blades = {}
+            for f in mine:
+                blades.setdefault(find(f[0]), []).append(f)
+            part = d.part(f"feather.{k}", m.parts[m.parts[pi].parent].name, pivot=tuple(hub), kind="fixed",
+                          note=f"engine {k}'s airscrew feathered: her blades edge on to the wind, and still")
+            d.use(part)
+            for faces in blades.values():
+                ids = sorted({v for f in faces for v in f})
+                pts = [Vector(m.verts[v]) - hub for v in ids]
+                tip = max(pts, key=lambda p: math.hypot(p.y, p.z))
+                along = Vector((0.0, tip.y, tip.z)).normalized()
+                across = X.cross(along)
+
+                def width(th):                               # (how broad the blade is seen from dead ahead)
+                    q = Quaternion(along, th)
+                    w = [(q @ p).dot(across) for p in pts]
+                    return max(w) - min(w)
+
+                q = Quaternion(along, min((math.radians(a) for a in range(0, 180, 2)), key=width))
+                at = {v: i for i, v in enumerate(ids)}
+                d.add([hub + q @ p for p in pts], [tuple(at[v] for v in f) for f in faces], "blade", smooth=True)
+            engines[k] = {"engine": k, "feather": part, "on": m.parts[m.parts[pi].parent].name}
+        chord_e = 0.11 * span
+        for sk in m.sockets:
+            if not sk["name"].startswith("engine.") or abs(sk["at"].y) < 0.6:
+                continue
+            k, e = int(sk["name"].split(".")[1]), sk["at"]
+            long_e, w0, w1 = 0.95 * chord_e, 0.085 * chord_e, 0.18 * chord_e
+            nx, half = 11, 3
+            grid, on = {}, None
+            for i in range(nx):
+                t = i / (nx - 1.0)
+                for j in range(-half, half + 1):
+                    reach = (w0 + (w1 - w0) * t) * (j / half) * (rng2.uniform(0.7, 1.15) if abs(j) == half else 1.0)
+                    x = e.x + 0.15 - long_e * t * (rng2.uniform(0.9, 1.08) if i == nx - 1 else 1.0)
+                    h = cast((x, e.y + reach, e.z + 3.0), -Z)
+                    if good(h) and h[1].z > 0.35:
+                        grid[i, j] = h[0] + h[1] * 0.009
+                        on = on or h[2]
+            if len(grid) < 12:
+                continue
+            part = d.part(f"scorch.{k}", on, pivot=tuple(e), kind="fixed", note=f"engine {k} has burned: soot laid back over her nacelle and the wing behind it")
+            d.use(part)
+            keys = list(grid)
+            at = {key: n for n, key in enumerate(keys)}
+            faces = {"soot": [], "soot_thin": []}
+            for i in range(nx - 1):
+                t = i / (nx - 1.0)
+                for j in range(-half, half):
+                    q4 = [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)]
+                    if not all(c in grid for c in q4):
+                        continue
+                    zs = [grid[c].z for c in q4]
+                    if max(zs) - min(zs) > 0.3 or (j in (-half, half - 1) and rng2.random() < (0.25 if t < 0.65 else 0.6)):
+                        continue                             # (not across the step of a nacelle's side; and ragged edges, raggedest at its end)
+                    a, b, c, e4 = (at[c] for c in q4)
+                    thick = (j in (-2, -1, 0, 1) and t < 0.38) or (j in (-1, 0) and t < 0.78)     # (blackest on the nacelle, a streak of it on over the wing)
+                    faces["soot" if thick else "soot_thin"] += [(a, b, c), (a, c, e4)]
+            for paint in ("soot_thin", "soot"):
+                if faces[paint]:
+                    d.add([grid[key] for key in keys], faces[paint], paint, smooth=False, out=lambda mid: Z)
+            engines.setdefault(k, {"engine": k, "on": on})["scorch"] = part
+    extras = [v[key] for v in engines.values() for key in ("feather", "scorch") if key in v]
+
     def shows(parts):
         return [{"part": p, "scale": [[0.0, 0.001], [i + 0.999, 0.001], [i + 1.0, 1.0]]} for i, p in enumerate(parts)]
+
+    if what == "engines":
+        for p in extras:
+            n = p.split(".")[1]
+            words = (f"her airscrew feathered and still (hide `prop.{n}` and `prop.{n}.blur` on the aircraft herself)" if p.startswith("feather") else "her nacelle scorched")
+            d.clips[p] = {"long": 1.0, "loop": False, "after": "hold", "tracks": [{"part": p, "scale": [[0.0, 0.001], [0.999, 0.001], [1.0, 1.0]]}], "events": [],
+                          "about": f"Engine {n}: {words}. Held at 0 it is hidden, at 1 shown; hold it always, at 0 while that engine is sound. It touches no other part."}
+        d.info = {"file": {"for": name, "engines": [engines[k] for k in sorted(engines)], "clear": {k: CLEAR[k] for k in ("soot", "soot_thin")}}}
+        return d
 
     every = [h["part"] for h in hits]
     for clip, kind in (("damage", None), ("damage.bullets", "bullets"), ("damage.flak", "flak")):

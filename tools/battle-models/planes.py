@@ -742,6 +742,29 @@ class Facts:
     """What the clips and the films need to know about a machine."""
 
 
+def rudder_flag(m):
+    """Where her owner's flag goes on a plain machine's rudder, both sides of it. The art director, 2026-11-18, for
+    Brian's "have the country logo show on the tanks and planes just like the major nations": the game paints the
+    stripes the unit table gives the country (`fin`: dir h, bands from top to bottom; dir v, from the leading edge
+    back). `quad` is the flag's four corners on the rudder's side in x and z (leading-bottom, trailing-bottom,
+    trailing-top, leading-top): most of the rudder, clear of its edges and of its tip. `at` and `radius` are its
+    middle and half its height, for a game that only draws a square there. It rides the part `rudder`."""
+    pi = m.part_at["rudder"]
+    edges = [(Vector(m.verts[f[i]]), Vector(m.verts[f[(i + 1) % len(f)]])) for f, fp in zip(m.faces, m.fpart) if fp == pi for i in range(len(f))]
+    z0, z1 = min(min(a.z, b.z) for a, b in edges), max(max(a.z, b.z) for a, b in edges)
+
+    def across(z):                                           # (her rudder's leading and trailing edge at this height)
+        xs = [a.x + (b.x - a.x) * (z - a.z) / (b.z - a.z) for a, b in edges if (a.z - z) * (b.z - z) < 0.0]
+        return max(xs), min(xs)
+
+    zb, zt = z0 + 0.1 * (z1 - z0), z0 + 0.84 * (z1 - z0)
+    (lead_b, trail_b), (lead_t, trail_t) = across(zb), across(zt)
+    edge = 0.03
+    quad = [[lead_b - edge, zb], [trail_b + edge, zb], [trail_t + edge, zt], [lead_t - edge, zt]]
+    return {"tag": "*FIN", "place": "fin", "part": "rudder", "at": [round(sum(q[0] for q in quad) / 4.0, 3), 0.05, round(0.5 * (zb + zt), 3)],
+            "radius": round(0.5 * (zt - zb), 3), "quad": [[round(q[0], 3), round(q[1], 3)] for q in quad], "facing": [0.0, 1.0, 0.0], "curve": 0.0, "both": True}
+
+
 def convert(name, fine=True):
     G = game()
     s = G["PLANES"][name]
@@ -936,17 +959,20 @@ def convert(name, fine=True):
         turrets.append((k, c, radii))
         parent = "tail" if c.x < x_cut else "plane"
         at_end = c.x > hull.front - 1.2 or c.x < hull.back + 1.2
-        m.part(f"turret.{k}", parent, port(c), axis=(0, 0, -1), kind="turn", limits=(-75, 75) if at_end else (-180, 180),
+        belly = c.z < hull.z(-c.x) - 0.3 * hull.h(-c.x)
+        # (a turret in her nose or her tail sweeps a little past each beam and points well below her: the air battles
+        #  asked, 2026-11-18, since a tail gunner's work is the fighter climbing at him from below. The figures are
+        #  the usual ones for a British nose or tail turret, from memory: the historian's word replaces them.)
+        m.part(f"turret.{k}", parent, port(c), axis=(0, 0, -1), kind="turn", limits=((-75, 75) if belly else (-95, 95)) if at_end else (-180, 180),
                note="a gun turret: its dome, its frames, its gunner; plus trains it clockwise seen from above")
         way = sum((port(rods[i][1] - rods[i][0]) for i in mine), Vector())
         way.z = 0.0
         way = way.normalized() if way.length > 1e-6 else X.copy()
-        belly = c.z < hull.z(-c.x) - 0.3 * hull.h(-c.x)
         if belly and name in fitout.BALL and min(radii) > 0.9 * max(radii):
             balls.add(k)                                    # (a round one under her belly is a steel ball, not a glass dome: see fitout.ball_turret)
         elif belly or name in REMOTE:
             remote.add(k)                                   # (a low one under her is worked from inside her: nobody sits in it)
-        m.part(f"turret.{k}.guns", f"turret.{k}", port(c), axis=tuple(way.cross(Z).normalized()), kind="turn", limits=(-85, 10) if belly else (-10, 80), note="its guns; plus lifts them")
+        m.part(f"turret.{k}.guns", f"turret.{k}", port(c), axis=tuple(way.cross(Z).normalized()), kind="turn", limits=(-85, 10) if belly else (-45, 60) if at_end else (-10, 80), note="its guns; plus lifts them")
         for i in mine:
             gun_part[i] = f"turret.{k}.guns"
     flex = []
@@ -1274,6 +1300,8 @@ def convert(name, fine=True):
     for i, mk in enumerate(m.marks):
         mk["place"] = ("side" if i < len(s.get("side_marks", [])) else "code" if i >= len(m.marks) - n_code
                        else "fin" if i >= len(m.marks) - n_code - n_fin else "wing")
+    if s.get("nation_paint") and "rudder" in m.part_at and any(mk["tag"] == "*" for mk in m.marks):
+        m.marks.insert(len(m.marks) - n_code, rudder_flag(m))        # (a plain machine wears her owner's flag on her rudder)
     m.tally = tally_of(name, s, hull, role, G, fins)
     m.info.update({"rust": "9A9C98", "soot": colours["soot"], "wear_show": 0.3,
                    "file": {"nation_paint": bool(s.get("nation_paint")), "number_ink": colours["ink"], "span": round(2.0 * half, 3),

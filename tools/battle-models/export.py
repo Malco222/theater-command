@@ -1,6 +1,6 @@
 """Writes the battle models out for the game.
 
-    python export.py <out folder> [name,name,...|ships|planes|damage|all] [json|glb|fbx ...]
+    python export.py <out folder> [name,name,...|ships|planes|damage|engines|all] [json|glb|fbx ...]
 
 For each model: <name>.json (the game's own model file: a fine mesh and a plain one, with `part`, `parts`, `sockets`
 and `clips` added), and <name>.glb and <name>.fbx (the fine mesh on its skeleton, every clip an action) for Unreal's
@@ -29,6 +29,8 @@ AIR["Bomb"] = lambda fine=True: (planes.bomb(fine), None)
 AIR["Torpedo"] = lambda fine=True: (planes.torpedo(fine), None)
 # (each aircraft's battle damage, a model of its own that lies on her: <Name>Damage, see damage.py)
 AIR.update({n + "Damage": (lambda fine=True, n=n: (damage.overlay(n, fine), None)) for n in planes.BUILDERS})
+# (and, for an aircraft with two airscrews or more, her engines out: <Name>EngineOut, feathered blades and a scorched nacelle for each)
+AIR.update({n + "EngineOut": (lambda fine=True, n=n: (damage.overlay(n, fine, what="engines"), None)) for n in damage.MANY_ENGINED})
 
 
 def one(name, out, kinds):
@@ -70,7 +72,7 @@ def main():
     out = sys.argv[1]
     which = sys.argv[2] if len(sys.argv) > 2 else "all"
     kinds = sys.argv[3:] or ["json", "glb", "fbx"]
-    names = {"ships": list(ships.BUILDERS) + list(deckpark.BUILDERS), "planes": list(AIR), "parks": list(deckpark.BUILDERS), "damage": [n for n in AIR if n.endswith("Damage")],
+    names = {"ships": list(ships.BUILDERS) + list(deckpark.BUILDERS), "planes": list(AIR), "parks": list(deckpark.BUILDERS), "damage": [n for n in AIR if n.endswith("Damage")], "engines": [n for n in AIR if n.endswith("EngineOut")],
              "all": list(ships.BUILDERS) + list(deckpark.BUILDERS) + list(AIR)}.get(which) or which.split(",")
     import json
     index_path = os.path.join(out, "index-sea-air.json")

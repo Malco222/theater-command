@@ -75,6 +75,40 @@ def star(r, col, inner=0.382, points=5):
     return out
 
 
+def layers(insignia):
+    """A country's own marking as the art director's unit table gives it (`insignia`: layers lowest first in a square
+    from -1 to 1, each a ring [r0, r1], a star [r, inner, points], a rect [u0, u1, v0, v1] or a tri [r, turn], with
+    its colour c), as the layers `shapes` gives for a great power's."""
+    out = []
+    for one in insignia:
+        c = one["c"]
+        if "ring" in one:
+            out.append(ring(one["ring"][0], one["ring"][1], c))
+        elif "star" in one:
+            r, inner, points = one["star"]
+            out.append(star(r, c, inner, int(points)))
+        elif "rect" in one:
+            out.append(rect(*one["rect"], c))
+        elif "tri" in one:
+            r, turn = one["tri"]
+            out.append(poly([(r * math.sin(math.radians(turn + 120.0 * k)), r * math.cos(math.radians(turn + 120.0 * k))) for k in range(3)], c))
+    return out
+
+
+def flag(mk, fin):
+    """A flag's stripes on a rudder (a mark of place `fin` with a `quad`: the four corners of the flag on her rudder's
+    side, in x and z, leading-bottom, trailing-bottom, trailing-top, leading-top), cut into the bands the unit table
+    gives the country (`fin`: dir h, bands from top to bottom; dir v, bands from the leading edge back)."""
+    lb, tb, tt, lt = (Vector((q[0], q[1])) for q in mk["quad"])
+    r, at, n = mk["radius"], mk["at"], len(fin["bands"])
+    out = []
+    for i, c in enumerate(fin["bands"]):
+        box = [(0.0, 1.0 - (i + 1) / n), (1.0, 1.0 - (i + 1) / n), (1.0, 1.0 - i / n), (0.0, 1.0 - i / n)] if fin["dir"] == "h" else [(i / n, 0.0), ((i + 1) / n, 0.0), ((i + 1) / n, 1.0), (i / n, 1.0)]
+        pts = [lb.lerp(tb, s_).lerp(lt.lerp(tt, s_), t_) for s_, t_ in box]
+        out += poly([((p.x - at[0]) / r, (p.y - at[2]) / r) for p in pts], c)
+    return [out]
+
+
 def shapes(tag):
     """The layers of a marking, lowest first, in a square from -1 to 1 (v is up on a side, forward on a wing)."""
     if tag == "GER":
@@ -166,10 +200,11 @@ def record(model, rec):
     return out
 
 
-def put(model, ob, arm, rec=None, own=None):
+def put(model, ob, arm, rec=None, own=None, fin=None):
     """Lays the model's markings on its skin (as it stands at rest), each riding the part it is on, and her record if
     one is given (see `record`). Returns the objects made. `own` is what a plain machine wears where her file says
-    the owner's own marking (`*`): a tag, or a function of the mark's facing that gives one (for the pictures)."""
+    the owner's own marking (`*`): a tag, the unit table's `insignia` layers, or a function of the mark's facing that
+    gives one (for the pictures). `fin` is the unit table's `fin` for her owner: the flag on her rudder (`*FIN`)."""
     todo = list(model.marks or []) + (record(model, rec) if "wing.port" in model.part_at else [])
     if not todo:
         return []
@@ -204,7 +239,11 @@ def put(model, ob, arm, rec=None, own=None):
             tag = mk["tag"]
             if tag == "*" and own:
                 tag = own(n) if callable(own) else own
-            for layer, polys in enumerate(shapes(tag)):
+            if tag == "*FIN":                                                    # (her owner's flag on her rudder; nothing if nobody says whose she is)
+                if not fin or not mk.get("quad"):
+                    continue
+                flip = 1.0 if u.x > 0 else -1.0
+            for layer, polys in enumerate(flag(mk, fin) if tag == "*FIN" else layers(tag) if isinstance(tag, list) else shapes(tag)):
                 for col, poly in polys:
                     # (cut small before it is laid on her: a big flat piece dips under a round fuselage in its middle,
                     #  and her skin comes through it)

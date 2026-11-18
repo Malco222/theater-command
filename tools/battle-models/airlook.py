@@ -1,6 +1,6 @@
 """A close look at one aircraft, for judging her detail.
 
-    python airlook.py <name> <out folder> [view,view,...] [WxHxSPP] [clip=name@t ...] [record=JSON] [tag=word] [scheme=YYYY-MM]
+    python airlook.py <name> <out folder> [view,view,...] [WxHxSPP] [clip=name@t ...] [record=JSON] [tag=word] [scheme=YYYY-MM] [owner=<unit-table.json>#TAG]
 
 views:  front   from ahead and to port, a little above (the sheet's view, closer)
         hood    close on her hood and nose, from ahead and above
@@ -9,10 +9,12 @@ views:  front   from ahead and to port, a little above (the sheet's view, closer
         under   from below and ahead
         tail, waist, belly   close on a bomber's tail guns, her waist windows, her ball turret
         side    square on her port side
+        quarter her whole port side from astern and above: her wing, side and fin marks together
         record  close on the record painted on her port side (kills, missions); rudder: on a German fighter's rudder;
                 nose: a bomber's port nose from a little further off; ace: a fighter's pilot and his score together
 record= is what she has done, e.g. record='{"kills": [["GER", 14], ["ITA", 3]], "missions": 32, "lead": [12, 19]}'
 (see marks.record); tag= is added to the pictures' names; scheme=YYYY-MM shows her as she is in that month: her coat of paint and her markings then.
+owner=<unit-table.json>#TAG shows a plain machine as that country flies her: its paint and paint2, its insignia, its rudder flag.
 A clip named after the views is laid over `fly` at the time given (bank.port@0.9, watch@2.0, flaps.down@1.5).
 """
 import json
@@ -42,7 +44,11 @@ def main():
     A = Air(clouds=12.0)
     stage.render_setup(w, h, spp)
     scheme = next((a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("scheme=")), None)
-    p = Plane(A, name, record=rec, scheme=scheme)
+    owner = next((a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("owner=")), None)      # (owner=<unit-table.json>#TAG: a plain machine in that country's coat, marking and rudder flag)
+    if owner:
+        table, country = owner.split("#")
+        owner = json.load(open(table))["countries"][country]
+    p = Plane(A, name, record=rec, scheme=scheme, owner=owner)
     for c in extra:
         if c.startswith("load."):                        # (clip=load.bombs@0: she is seen with that load, not her usual one)
             p.carry(c.split("@")[0][5:])
@@ -61,7 +67,8 @@ def main():
              "waist": ((-L * 0.22 - 3.2, 6.4, 1.5), (-L * 0.22, 0, 0.2), 50.0),
              "belly": ((-L * 0.17 + 4.6, 5.2, -3.4), (-L * 0.17, 0, -0.9), 50.0),
              "under": ((s * 0.5, s * 0.42, -s * 0.4), (0, 0, -0.1), 50.0),
-             "side": ((0.0, s * 1.0, 0.6), (-L * 0.06, 0, 0.2), 50.0)}
+             "side": ((0.0, s * 1.0, 0.6), (-L * 0.06, 0, 0.2), 50.0),
+             "quarter": ((-s * 0.7, s * 0.6, s * 0.32), (-L * 0.1, 0, 0.15), 35.0)}      # (her whole port side from astern: wing, side and fin marks together)
     back = p.f.hull.back
     front = p.f.hull.front
     shots["glass"] = ((front + 3.2, 3.6, 1.7), (front - 1.7, 0, 0.25), 50.0)          # (into a glass nose, at the men in it)

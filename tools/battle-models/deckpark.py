@@ -168,7 +168,7 @@ def standing(kind):
     # her markings, as her own file gives them, on what shows from above and abeam
     marks = []
     for mk in pm.marks or []:
-        if mk["tag"] == "#":
+        if mk["tag"] in ("#", "*FIN"):                       # (her number; and a small nation's rudder flag: small nations have no carriers)
             continue
         for hand in ((1.0, -1.0) if mk.get("both") else (1.0,)):
             p = Vector((mk["at"][0], -mk["at"][1] * hand, mk["at"][2]))

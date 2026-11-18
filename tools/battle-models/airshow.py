@@ -122,10 +122,13 @@ class Air:
 
 
 class Plane:
-    def __init__(self, air, name, at=(0, 0, 0), badges=True, record=None, scheme=None):
+    def __init__(self, air, name, at=(0, 0, 0), badges=True, record=None, scheme=None, owner=None):
         self.air, self.name = air, name
         self.m, self.f = air.model(name)
         gloss = False
+        if owner:                                            # (a plain machine as a small nation flies her: the unit table's row for the country,
+            #  its paint and paint2 for her coat, its insignia where her marks say the owner's own, its fin on her rudder)
+            self.m.paints.update({k: owner[v] for k, v in (("upper", "paint"), ("upper2", "paint2")) if owner.get(v)})
         if scheme:                                           # (as she is seen in a month, YYYY-MM: her coat of paint and her markings then)
             coats = [c for c in self.m.info["file"].get("schemes", []) if c["from"] <= scheme]
             if coats:
@@ -135,13 +138,14 @@ class Plane:
                 mk["tag"] = planes.mark_in(mk["tag"], scheme, mk.get("place"))
         bare = self.m.info["file"].get("finish") == "bare metal"
         self.ob, self.arm = rigid.to_blender(self.m, (lambda *a: plane_look(*a, bare=bare, gloss=gloss)), crease=50.0)
-        self.badges = marks.put(self.m, self.ob, self.arm, record) if badges else []      # (record: what she has done, painted on her)
+        self.badges = marks.put(self.m, self.ob, self.arm, record, own=(owner or {}).get("insignia"), fin=(owner or {}).get("fin")) if badges else []      # (record: what she has done, painted on her)
         self.at, self.q, self.pose = Vector(at), Quaternion(), {}
         self.vel = Vector()                                  # (against the formation)
         self.v_air = air.speed
         self.clip = self.m.clips
         self.load = {}
         self.holes = None                                    # (her battle damage, once she has been hit: see `hurt`)
+        self.dead, self.stopped = None, {}                   # (her engines out: their feathered airscrews and scorched nacelles; and her own blades there hidden)
         self.carry("bombs" if self.f.role == "bomber" else "torpedo")      # (a land bomber is seen with her bombs, a torpedo bomber with her torpedo)
         self.put(self.at)
 
@@ -157,21 +161,24 @@ class Plane:
             self.at = Vector(at)
         if q is not None:
             self.q = q
-        self.pose = rigid.merge(self.load, *poses)
+        self.pose = rigid.merge(self.load, *poses, self.stopped)
         rigid.apply_pose(self.arm, self.pose, model=self.m)
         self.arm.location = self.at
         self.arm.rotation_mode = "QUATERNION"
         self.arm.rotation_quaternion = self.q
-        if self.holes:                                       # (her holes lie on her, and go where her parts go)
-            dm, arm, shown = self.holes
-            rigid.apply_pose(arm, rigid.merge(self.pose, shown), model=dm)
-            arm.location = self.at
-            arm.rotation_mode = "QUATERNION"
-            arm.rotation_quaternion = self.q
+        for layer in (self.holes, self.dead):                # (her holes lie on her, and go where her parts go; so do her dead engines)
+            if layer:
+                dm, arm, shown = layer
+                rigid.apply_pose(arm, rigid.merge(self.pose, shown), model=dm)
+                arm.location = self.at
+                arm.rotation_mode = "QUATERNION"
+                arm.rotation_quaternion = self.q
 
-    def hurt(self, bullets=0, flak=0):
+    def hurt(self, bullets=0, flak=0, out=()):
         """She is seen with this many bullet hits and flak hits on her (Brian, 2026-11-18: "if a plane gets hit show
-        the bullet holes or flak holes"): the first so many of each kind in her damage model (`damage.py`)."""
+        the bullet holes or flak holes"): the first so many of each kind in her damage model (`damage.py`). `out`:
+        the numbers of her engines that are out, each with its airscrew feathered and its nacelle scorched (her own
+        blades and disc there are for the clip to hide: prop.N, prop.N.blur)."""
         if self.holes is None:
             key = self.name + "Damage"
             if key not in self.air.models:
@@ -181,6 +188,18 @@ class Plane:
             self.holes = [dm, arm, {}]
         dm = self.holes[0]
         self.holes[2] = rigid.merge(rigid.pose_of(dm, dm.clips["damage.bullets"], float(bullets)), rigid.pose_of(dm, dm.clips["damage.flak"], float(flak)))
+        if out and self.name in damage.MANY_ENGINED:
+            if self.dead is None:
+                key = self.name + "EngineOut"
+                if key not in self.air.models:
+                    self.air.models[key] = damage.overlay(self.name, True, self.m, what="engines")
+                em = self.air.models[key]
+                _, arm = rigid.to_blender(em, damage.look, crease=50.0)
+                self.dead = [em, arm, {}]
+            em = self.dead[0]
+            self.dead[2] = rigid.merge(*[rigid.pose_of(em, c, 1.0 if int(n.split(".")[1]) in out else 0.0) for n, c in em.clips.items() if n.startswith(("feather.", "scorch."))])
+            away = Vector((0.001, 0.001, 0.001))
+            self.stopped = {f"prop.{k}{end}": (Quaternion(), Vector(), away.copy()) for k in out for end in ("", ".blur")}
 
     def spot(self, socket):
         p, d = rigid.place(self.m, self.pose, socket)

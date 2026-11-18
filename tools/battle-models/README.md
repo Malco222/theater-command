@@ -444,8 +444,46 @@ has not been hit has none, so nothing changes for a game that does not use it.
   `soot`, `soot_thin`. Three are see-through, and the file says how much under `clear` (lip 0.4, soot 0.35,
   soot_thin 0.17), as an aircraft's file does for her glass. The art director's rule: a whole bright ring round a
   hole reads as a washer on olive drab, and even bright petals round a tear as a paper flower.
-- In the clips: `Plane.hurt(bullets, flak)` (`airshow.py`).
+- In the clips: `Plane.hurt(bullets, flak, out=(2,))` (`airshow.py`); `out` names the engines that are out (below).
 - Made again with `python export.py <out> damage json glb` (six seconds an aircraft).
+
+### An engine out: a feathered airscrew and a scorched nacelle
+
+The air battles, 2026-11-18, for Brian's "if a bomber loses and engine it goes slower and falls out of formation".
+Each aircraft with two airscrews or more (`damage.MANY_ENGINED`) has a second layer of the same kind,
+`<Name>EngineOut` (`damage.overlay(name, what="engines")`; `air/<Name>EngineOut.json` and `.glb`): lay it on her and
+play on it whatever she plays.
+
+- `feather.N`: engine N's airscrew with its blades turned edge on to the wind, and still (her own blades, each turned
+  about its own length until it is thinnest seen from dead ahead). On the aircraft herself scale `prop.N` and
+  `prop.N.blur` away. A windmilling airscrew needs no model: her own blades, without the disc, turning slowly.
+- `scorch.N`: soot laid back over nacelle N and the wing behind it, in the see-through paints `soot` and `soot_thin`
+  (`clear`), so that nothing has to change the aircraft's own soot at run time. Her upper side only.
+- At rest every part shows. Clips `feather.N` and `scorch.N` touch one part each: held at 0 it is hidden, at 1 shown.
+  Hold them always, at 0 for a sound engine; or scale the parts yourself. The file's `engines` lists them.
+- Why not in `<Name>Damage`: poses laid over each other multiply their scales (point 6 above), so a part must be
+  touched by one clip only. (`damage.bullets` and `damage.flak` are safe for the same reason.)
+- Made again with `python export.py <out> engines json glb`. 800 to 1,600 triangles.
+
+### Firing arcs, and a small nation's flag
+
+- A turret's limits are in its file (`turret.N` trains, `turret.N.guns` lifts). A turret in her nose or tail trains
+  95 degrees each way and its guns lift from -45 to 60 (the Lancaster's two; from memory, the historian's word
+  replaces it); one under her belly -85 to 10; any other -10 to 80.
+- A hand-held gun (`flexgun.N`, `kind: free`) has no limits in its file. `gunarcs.py <air folder> <out.json>
+  <out.md>` reads every one off the exported files and gives each a placeholder arc by where it is and which way it
+  points at rest (waist, nose cheek, nose, tail, rear cockpit, under the fuselage): `air/gun-arcs.json`. They are the
+  modeller's estimates, not sourced figures.
+- The five plain machines a small nation flies (Fighter, Bomber, CarrierFighter, TorpedoBomber, DiveBomber) carry a
+  mark of place `fin` and tag `*FIN` on the part `rudder`, both sides (`planes.rudder_flag`): the art director, for
+  Brian's "have the country logo show on the tanks and planes just like the major nations". Its `quad` is the flag's
+  four corners on the rudder's side in x and z (leading-bottom, trailing-bottom, trailing-top, leading-top); `at` and
+  `radius` are its middle and half its height. The game paints there the stripes the unit table gives the country
+  (`fin`: dir h, bands top to bottom; dir v, from the leading edge back), as it paints the country's `insignia` where
+  a mark's tag is `*`. Their second upper colour (`upper2`, the unit table's `paint2`) covers 36 to 44 percent of the
+  upper surfaces in soft-edged blotches; the under surface is its own paint.
+- To see one as a country flies her: `python airlook.py Fighter <out> quarter 1280x720x16
+  owner=<unit-table.json>#ARG` (her coat, her marking, her rudder flag, from the art director's unit table).
 
 ## Making them again, and the pictures
 
@@ -457,7 +495,7 @@ python show.py Battleship_UK turn <out>        # ship clips: turn, broadside, si
 python airshow.py shot_down <out>              # aircraft clips: flypast (plane=Me262 for another machine), shot_down, ways_down, b17_head_on, b17_escort, b17_flak
 python airshow.py b17_flak <out> frames=none   # no pictures: only the clip's sound log, <out>/air-b17_flak-sound.json (seconds)
 python soundtrack.py <log.json> <sound pack's wav folder> <mix.json> <out.wav> [<video.mp4> <out.mp4>]   # mix a clip's sound, and lay it under the picture
-python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, glass, rear, over, under, side, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; clip=load.bombs@0; record=JSON)
+python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, glass, rear, over, under, side, quarter, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; clip=load.bombs@0; record=JSON)
 python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
 python export.py <out> parks                   # the three deck ranges alone (they are also in `ships` and `all`)
 python show.py Carrier_USA turn <out> month=1942-06   # a carrier in a month: her range and its paint are that month's
