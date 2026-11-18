@@ -7112,7 +7112,11 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		const FString Garrison = GarrisonSays();
 		if (!Garrison.IsEmpty())
 		{
-			Tray.Hint = FText::FromString(Garrison + GarrisonWhere() + TEXT(" Esc puts them down."));
+			// (The UI director, 18 November 2026: the card's line above already says whose garrison they are. Where the
+			// card carries TAKE THE FIELD, the foot says only what to do.)
+			Tray.Hint = FText::FromString(!Tray.FieldButton.IsEmpty()
+				? FString(TEXT("To march, TAKE THE FIELD first. Right-click the town for its orders. Esc puts them down."))
+				: Garrison + GarrisonWhere() + TEXT(" Esc puts them down."));
 		}
 	}
 	if (FCampaignSession* Rules = GetSession())
@@ -7135,7 +7139,11 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		if (!Garrison.IsEmpty())
 		{
 			Tray.HintLead = FText::GetEmpty();
-			Tray.Hint = FText::FromString(Garrison + GarrisonWhere() + TEXT(" Esc puts them down."));
+			// (The UI director, 18 November 2026: the card's line above already says whose garrison they are. Where the
+			// card carries TAKE THE FIELD, the foot says only what to do.)
+			Tray.Hint = FText::FromString(!Tray.FieldButton.IsEmpty()
+				? FString(TEXT("To march, TAKE THE FIELD first. Right-click the town for its orders. Esc puts them down."))
+				: Garrison + GarrisonWhere() + TEXT(" Esc puts them down."));
 		}
 	}
 	if (StandingRoad.Num() > 0 && !bBySea && !bByRail)
