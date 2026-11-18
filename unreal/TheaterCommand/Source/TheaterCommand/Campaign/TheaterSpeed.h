@@ -118,6 +118,13 @@ class APlayerController;
  *                         sheet stands the coarse sheet's tiles round it afresh and hands them and its own to the draw
  *                         thread: 25 to 30 ms, and two stood in one frame made a 45 ms one (the same capture). 0: every
  *                         ready sheet in the same frame, as before. The same picture either way.
+ *   tc.Speed.TidyAside    1 (default): Unreal clears out what is no longer used every five minutes, and at once behind
+ *                         any pause of a tenth of a second the game already has (a load, a month's end), where it did
+ *                         every 61.1 s in one frame of 40 to 63 ms wherever the eye was: eleven such frames in the five
+ *                         runs of the same capture. Read once, as the table is laid (gc.TimeBetweenPurgingPendingKill-
+ *                         Objects). 0: every 61.1 s, as before. The same picture either way. A test's run
+ *                         ("-unattended") keeps its 61.1 s, which is what finds an object held too loosely, and is
+ *                         cleared out behind its loads as well; a timing run asks for the five minutes by -TheaterSet.
  * And two for measuring only, which change the picture and are not to be left off without the art director:
  *   tc.Speed.TownShadows  1 (default): the near towns throw shadows. 0: they do not.
  *   tc.Speed.TrainShadows 1 (default): the trains throw shadows. 0: they do not.

@@ -6,6 +6,7 @@
 #include "Campaign/TheaterStillMesh.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "Engine/Engine.h" // (GEngine->ForceGarbageCollection: tc.Speed.TidyAside)
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
@@ -16,6 +17,7 @@
 #include "HAL/PlatformMemory.h"
 #include "Misc/ScopeLock.h"
 #include "Misc/ScopeRWLock.h" // (FRWLock)
+#include "Misc/App.h" // (FApp::IsUnattended: a test's run keeps the engine's clear-out every minute, tc.Speed.TidyAside)
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "ProceduralMeshComponent.h"
@@ -102,6 +104,9 @@ namespace
 	TAutoConsoleVariable<int32> CVarStandOne(
 		TEXT("tc.Speed.StandOne"), 1,
 		TEXT("1 stands one ready fine sheet a frame, the next the frame after; 0 stands every ready one in the same frame, as before. The same picture either way."));
+	TAutoConsoleVariable<int32> CVarTidyAside(
+		TEXT("tc.Speed.TidyAside"), 1,
+		TEXT("1 has Unreal clear out what is no longer used every five minutes, where it did every 61 s in one frame of 40 to 63 ms, and at once behind any pause of a tenth of a second that the game already has (a load, a month's end); 0 leaves it every 61 s, as before. A test's run (-unattended) keeps its 61 s and has the second half only. Read as the table is laid. The same picture either way."));
 
 	FRWLock HoldersGuard; // (tc.Speed.HoldersLock: see TheaterSpeed::FHoldersRead)
 
@@ -115,6 +120,10 @@ namespace
 	int32 WindowModelling = 0; // (frames of the five seconds in which a sheet was being modelled)
 	int32 WindowSlowModelling = 0; // (...and how many of the frames over 33 ms those were, not beside the step player's look)
 	uint64 GarbageBegan = 0; // (when the engine began clearing out what is no longer used, while logging)
+	double TidiedAt = 0.0; // (tc.Speed.TidyAside: when the engine last cleared out, or was last asked to, by the machine's clock)
+	double FrameSeenAt = 0.0; // (...and when the last frame was counted, by the same clock: a pause is told by the clock, not by the game's time)
+	double TidyWeighedAt = 0.0; // (...when the game's memory was last read for it, once a second)
+	double TidyLowMB = 0.0; // (...and the least the game has held since the engine last cleared out)
 	FCriticalSection KindsGuard;
 	TMap<FName, FIntPoint> KindsNow; // (still models handed over since the last frame's count, by kind: how many, and their points)
 
@@ -612,6 +621,54 @@ namespace TheaterSpeed
 		}
 	}
 
+	// (Speed: tc.Speed.TidyAside, the second half.) The clear-out is a frame of 40 to 63 ms. Behind a pause the game
+	// already has (a frame of over a tenth of a second: a load, a month's end) it is not seen, and the engine then
+	// counts its five minutes from there. So after such a frame it is asked for at once, for the frame that follows,
+	// unless it was done or asked for in the last half minute: a month's end is several long frames, and one clear-out
+	// serves them all. It only sets the engine's own flag (UEngine::ForceGarbageCollection, no full purge): the engine
+	// does it in its own place in the next frame, as it does when its clock runs out.
+	static void TidyBehind(double FrameTook)
+	{
+		if (FrameTook > 0.1 && CVarTidyAside.GetValueOnGameThread() != 0 && GEngine && FPlatformTime::Seconds() - TidiedAt > 30.0)
+		{
+			TidiedAt = FPlatformTime::Seconds(); // (asked: not asked again for half a minute, whatever comes of it)
+			GEngine->ForceGarbageCollection(false);
+			if (bLogging)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Speed: the engine's clear-out is asked for behind a pause of %.0f ms (tc.Speed.TidyAside)"), FrameTook * 1000.0);
+			}
+		}
+	}
+
+	// (...and its bound.) What waits to be cleared out is held in memory until it is. In the builder's capture 2 of
+	// 18 November (build 1684, run F) a journey that stood 6,900 tiles and handed 8,440 models over in three minutes
+	// with no clear-out held 600 MB more at its end than the same journey cleared every minute: about 200 MB a
+	// minute, at a pace no player keeps. So the wait is not left to the clock alone. The game's memory is read once
+	// a second, and when it stands half a gigabyte over the least it has been since the last clear-out, one is asked
+	// for: a long journey is cleared about every two minutes, and a quiet half hour every five.
+	static void TidyWhenHeavy(double Now)
+	{
+		if (Now - TidyWeighedAt < 1.0)
+		{
+			return;
+		}
+		TidyWeighedAt = Now;
+		const double HoldsMB = static_cast<double>(FPlatformMemory::GetStats().UsedPhysical) / (1024.0 * 1024.0);
+		if (TidyLowMB <= 0.0 || HoldsMB < TidyLowMB)
+		{
+			TidyLowMB = HoldsMB;
+		}
+		else if (HoldsMB - TidyLowMB > 500.0 && CVarTidyAside.GetValueOnGameThread() != 0 && GEngine && Now - TidiedAt > 30.0)
+		{
+			TidiedAt = Now;
+			GEngine->ForceGarbageCollection(false);
+			if (bLogging)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Speed: the engine's clear-out is asked for with the game holding %.0f MB, %.0f over its least since the last (tc.Speed.TidyAside)"), HoldsMB, HoldsMB - TidyLowMB);
+			}
+		}
+	}
+
 	void ApplyCommandLineSets()
 	{
 		// ("-TheaterSet=tc.Speed.SheetShelf=0,tc.Speed.QuietModel=1": console variables set from the command line, once,
@@ -672,12 +729,62 @@ namespace TheaterSpeed
 					UE_LOG(LogTheater, Warning, TEXT("Speed: tc.Speed.FontRoom found no console variable called %s"), PagesName);
 				}
 			}
+			// (Speed: tc.Speed.TidyAside, the first half.) Every 61.1 s exactly Unreal clears out what is no longer used,
+			// all in one frame, and under the editor's program that is every object the editor has as well as the game's:
+			// a frame of 40 to 63 ms wherever the eye is and whatever the player is doing, eleven times in the five runs
+			// of the builder's capture of 18 November (build 1680; "EngineClearOut" in the long-frame line). A hundred and
+			// eighty stutters in a three-hour evening. It is asked for every five minutes here. What waits longer to be
+			// cleared is what a journey drops: at most the pictures of the fine sheets dropped from the shelf in those
+			// minutes, 15 to 20 MB each. The second half is in NoteFrame.
+			// (Not in a test's run, "-unattended": there the clear-out every minute is what finds an object held too
+			// loosely, as it found the effects kit's materials on 18 November, and a two-minute run with the wait at
+			// five minutes would never clear out at all. A test keeps its minute, and by the second half clears out
+			// behind its loads as well, which is more often than before. A timing run that wants an evening's wait
+			// asks for it: -TheaterSet=gc.TimeBetweenPurgingPendingKillObjects=300.)
+			if (CVarTidyAside.GetValueOnGameThread() != 0 && !FApp::IsUnattended())
+			{
+				static const TCHAR* const EveryName = TEXT("gc.TimeBetweenPurgingPendingKillObjects");
+				const float Every = 300.0f;
+				if (IConsoleVariable* Between = IConsoleManager::Get().FindConsoleVariable(EveryName))
+				{
+					if (Between->GetFloat() < Every)
+					{
+						Between->Set(Every, ECVF_SetByCode);
+						UE_LOG(LogTheater, Display, TEXT("Speed: %s set to %.0f (tc.Speed.TidyAside)"), EveryName, Between->GetFloat());
+					}
+				}
+				else
+				{
+					UE_LOG(LogTheater, Warning, TEXT("Speed: tc.Speed.TidyAside found no console variable called %s"), EveryName);
+				}
+			}
 		}
 	}
 
 	void NoteFrame(float DeltaSeconds, UWorld* World)
 	{
 		ApplyCommandLineSets(); // (in case no table was laid first: it is done once)
+		// (Speed: tc.Speed.TidyAside, the second half. The frame just ended by the machine's own clock, which the game's
+		// speed and its pauses do not stretch; and when the engine last cleared out, whoever asked.)
+		const double SeenNow = FPlatformTime::Seconds();
+		const double FrameTook = FrameSeenAt > 0.0 ? SeenNow - FrameSeenAt : 0.0;
+		FrameSeenAt = SeenNow;
+		{
+			static bool bTidyHooked = false;
+			if (!bTidyHooked)
+			{
+				bTidyHooked = true;
+				FCoreUObjectDelegates::GetPostGarbageCollect().AddLambda([]()
+				{
+					if (IsInGameThread())
+					{
+						TidiedAt = FPlatformTime::Seconds();
+						TidyLowMB = 0.0; // (the least is found afresh: what was cleared goes over the frames that follow)
+					}
+				});
+			}
+			TidyWhenHeavy(SeenNow);
+		}
 		// (a change of tc.Speed.StillMeshes is seen at once: every still mesh's proxy is made again, of the kind now asked for)
 		{
 			static int32 StillWas = -1;
@@ -709,6 +816,7 @@ namespace TheaterSpeed
 				MadeWindow[Index] = 0;
 			}
 			WindowModelling = WindowSlowModelling = 0;
+			TidyBehind(FrameTook); // (with no log there is no telling the step player's looks apart: a test's pause serves as well)
 			return;
 		}
 		// (The second speed detective's, 18 November 2026. The engine clears out what is no longer used about once a
@@ -775,6 +883,9 @@ namespace TheaterSpeed
 		const bool bLookedNow = Each.IsValidIndex(LookSlot) && Each[LookSlot].Frame > 0;
 		const bool bBeside = bLookedNow || bLookedBefore;
 		bLookedBefore = bLookedNow;
+		// (A pause that is the step player's own look is not one a player has: with the log on, where the looks are
+		// known, the clear-out is not hidden behind them, so that a measured run tells what an evening's play will.)
+		TidyBehind(bBeside ? 0.0 : FrameTook);
 		{
 			uint64 Longest = 0;
 			for (const FSlot& Slot : Each)
