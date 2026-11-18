@@ -11,7 +11,8 @@ import { createGame } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { prizeOf } from '../src/campaign/towns';
-import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
+import { beginHuman, humanUp, orderDesk, stepAI } from '../src/campaign/turn';
+import { staffRuns } from '../src/campaign/depth';
 import type { Game } from '../src/campaign/types';
 import { warFooting, warWorkLeft } from '../src/campaign/world';
 import brianSave from './ahead/saves/brian-usa-1940-12.json?raw';
@@ -86,7 +87,14 @@ describe('the cities version, as reviewed', () => {
     const g = playing('USA');
     expect(g.nations.USA.align).not.toBe('allies');
     g.flags['court:GER:ARG'] = g.turn;
-    const desk = commandView(g)?.desks.find((d) => d.id === 'diplomacy');
-    expect(desk?.state).toMatch(/^The Axis is courting Argentina: your envoys court it back each month, at no cost\./);
+    const desk = (): string | undefined => commandView(g)?.desks.find((d) => d.id === 'diplomacy')?.state;
+    const rest = ' Only a member of the Axis or the Allies courts other neutrals.';
+    // (The UI director's words: who courts back, the staff or the player by hand.)
+    expect(desk()).toBe(staffRuns(g, 'USA', 'diplomacy')
+      ? `German envoys are courting Argentina. Your staff courts it back each month, at no cost.${rest}`
+      : `German envoys are courting Argentina. Courting it back costs nothing: Court back, on its row under Powers.${rest}`);
+    orderDesk(g, 'diplomacy', !staffRuns(g, 'USA', 'diplomacy'));
+    g.flags['court:GER:MEX'] = g.turn;
+    expect(desk()).toMatch(/^German envoys are courting Mexico and Argentina\. (Your staff courts them back|Courting them back costs nothing: Court back, on their rows under Powers\.)/);
   });
 });

@@ -539,8 +539,14 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
       const b = bloc(n);
       if (!b || b === 'league') {
         // (Out of the blocs, the backer of the Americas still courts back, at no cost, the neighbours the Axis courts: ruling 223(d).)
-        const back = Object.values(g.nations).filter((T) => T.id !== nat && freeCourt(g, nat, T.id)).map(the);
-        if (back.length) return `The Axis is courting ${back.length > 1 ? `${back.slice(0, -1).join(', ')} and ${back[back.length - 1]}` : back[0]}: your envoys court ${back.length > 1 ? 'them' : 'it'} back each month, at no cost. Only a member of the Axis or the Allies courts other neutrals.`;
+        // (The UI director's words, words-ruling-223.md: the envoys named as the other 223 lines name them, and who courts back.)
+        const back = Object.values(g.nations).filter((T) => T.id !== nat && freeCourt(g, nat, T.id));
+        if (back.length) {
+          const names = back.map(the), list = names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+          const it = back.length > 1 ? 'them' : 'it';
+          const how = staffRuns(g, nat, 'diplomacy') ? `Your staff courts ${it} back each month, at no cost.` : `Courting ${it} back costs nothing: Court back, on ${back.length > 1 ? 'their rows' : 'its row'} under Powers.`;
+          return `${envoysWord(g, back.map((T) => T.id))} envoys are courting ${list}. ${how} Only a member of the Axis or the Allies courts other neutrals.`;
+        }
         return 'Only a member of the Axis or the Allies courts neutrals.';
       }
       const open = Object.values(g.nations).filter((T) => T.id !== nat && courtable(T)).length;
