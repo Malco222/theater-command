@@ -1215,7 +1215,7 @@ export const MEN_PER_DIV = 15000;
 
 export const KIND: Record<Kind, { label: string; atk: number; def: number; move: number; mobile: boolean }> = {
   inf: { label: 'Infantry', atk: 10, def: 14, move: 2, mobile: false },
-  mot: { label: 'Motorized', atk: 12, def: 12, move: 1, mobile: true },
+  mot: { label: 'Motorised', atk: 12, def: 12, move: 1, mobile: true },
   arm: { label: 'Armor', atk: 24, def: 11, move: 1, mobile: true },
   cav: { label: 'Cavalry', atk: 8, def: 8, move: 1, mobile: true },
   mtn: { label: 'Mountain', atk: 9, def: 15, move: 2, mobile: false },

@@ -25,7 +25,7 @@ import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules,
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { lineAny, lineGives, lineLeaves, lineShut } from './line';
 import { hashString } from '../core/rng';
-import { SIEGE, arrive, besieged, feeders, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
+import { SIEGE, arrive, besieged, feeders, fieldCtrl, garrison, garrisonOf, greatCity, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
@@ -188,9 +188,11 @@ function campaign(g: Game, nat: string): void {
 /**
  * The grand campaign: who stands in the towns. With the month's moves made, a city or a capital the enemy has
  * reached is given a garrison from the infantry standing there, as long as a corps is left in the field; a
- * fortress town gets one too. At the start of the month a garrison with no enemy within two marches comes out.
+ * fortress town gets one too. A great city of the nation's own (ruling 139: its capital, or a city with great works)
+ * is filled to its room first, infantry before the rest, even if nobody is left in the field: a lone corps goes in.
+ * At the start of the month a garrison with no enemy within two marches comes out.
  */
-function garrisons(g: Game, nat: string, post: boolean): void {
+export function garrisons(g: Game, nat: string, post: boolean): void {
   if (!siegeRules(g) || !g.nations[nat].atWar.length) return;
   const near = (r: Region, far: number): boolean => {
     let ring = [r.id];
@@ -213,9 +215,20 @@ function garrisons(g: Game, nat: string, post: boolean): void {
       if (inside.length && !near(r, 2)) for (const c of [...inside]) takeField(g, c);
       continue;
     }
-    const want = SIEGE.ai.hold[townSize(g, r)] ?? (r.fort ? 1 : 0);
+    const great = r.owner === nat && greatCity(g, r);
+    const want = great ? roomIn(g, r) : SIEGE.ai.hold[townSize(g, r)] ?? (r.fort ? 1 : 0);
     // (A place the staff stepped out of this month, because the ring was closing round it, is left no garrison.)
     if (inside.length >= want || !near(r, 1) || sacks.has(r.id)) continue;
+    if (great) {
+      const all = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined);
+      const first = (c: Corps): number => (c.kind === 'inf' ? 0 : 1);
+      let have = inside.length;
+      for (const c of all.sort((a, b) => first(a) - first(b) || corpsBase(g, a) - corpsBase(g, b))) {
+        if (have >= want) break;
+        if (garrison(g, c)) have++;
+      }
+      continue;
+    }
     const foot = r.units.filter((c) => c.nat === nat && !c.dead && c.kind === 'inf' && c.joint === undefined).sort((a, b) => corpsBase(g, a) - corpsBase(g, b));
     let field = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng').length, have = inside.length;
     for (const c of foot) {
@@ -2222,10 +2235,16 @@ function defend(g: Game, nat: string, line = true): void {
     const pool = cut.length ? footBeside(g, cut, near, r) ?? [] : [];
     // Overseas a local counter-stroke sends two corps in to hold what it wins: the rest keep the door open behind them.
     // (The grand campaign: an army goes to the relief of a town at shorter odds than it would counter-attack, and of its capital at shorter still.)
-    const bar = shut && siegeRules(g) ? (townSize(g, r) === 'capital' ? SIEGE.ai.relief.capital : SIEGE.ai.relief.other) : 1.8;
+    const bar = shut && siegeRules(g) ? reliefBar(g, r) : 1.8;
     if (pool.length && assess(g, pool, r).odds >= bar) resolveBattle(g, pool, r, scope ? { occupy: 2 } : {});
   }
 }
+
+/**
+ * The grand campaign: the odds at which a staff goes to the relief of a besieged town of its own side, the garrison's
+ * sortie counted in them: a capital's, and a great city's like a capital's (ruling 139), are the shorter.
+ */
+export const reliefBar = (g: Game, r: Region): number => (townSize(g, r) === 'capital' || greatCity(g, r) ? SIEGE.ai.relief.capital : SIEGE.ai.relief.other);
 
 /**
  * True for ground the enemy has abandoned altogether: an island of his behind the front with none of his troops

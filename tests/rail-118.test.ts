@@ -117,7 +117,7 @@ describe('a break he can act on is marked, and an aside is not (the art director
     const c = corps(g, 'POL', 'inf', town);
     expect(garrison(g, c)).toBe(true);
     expect(besieged(g, town)).toBe(false);
-    expect(whyNoTrain(g, c)).toEqual({ code: 'town', line: `${c.name} is inside the town at Lodz. Take the field first: the train leaves from the country round it.`, at: town.id });
+    expect(whyNoTrain(g, c)).toEqual({ code: 'town', line: 'A garrison does not take the train: TAKE THE FIELD first.', at: town.id });
     relocate(g, corps(g, 'GER', 'inf', g.byName['Upper Silesia']), town);
     expect(besieged(g, town)).toBe(true);
     expect(whyNoTrain(g, c)!.line).toBe(`${c.name} is shut in the town at Lodz. No train leaves a siege.`);

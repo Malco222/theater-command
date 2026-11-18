@@ -43,10 +43,11 @@ const isKind = (k: string): k is RaidKind => (KINDS as string[]).includes(k);
 const ids = (s: string | undefined): number[] => (s ? s.split('.').map(Number).filter((n) => Number.isFinite(n)) : []);
 const BACK: PageButton = { label: 'BACK TO THE AIRFIELD', act: 'open:airfield', ok: true, tip: '' };
 
-function groupLines(x: GroupRow): string[] {
+/** A group's lines. On its airfield's own page the crowding is said once, in the page's head, so its rows leave it out (the UI director, build 1668). */
+export function groupLines(x: GroupRow, crowd = true): string[] {
   return [
     `${craft(x)}${x.command ? `, of ${x.command}` : ''}${x.leader ? `. ${x.leader} commands` : ''}. Reaches ${num(x.range)} km. Readiness ${pct(x.ready)}.`,
-    `${x.doing}.${x.crowd < 1 ? ` The airfield is crowded: only ${pct(x.crowd)} of it can fly.` : ''}`,
+    `${x.doing}.${crowd && x.crowd < 1 ? ` The airfield is crowded: only ${pct(x.crowd)} of it can fly.` : ''}`,
   ];
 }
 
@@ -55,7 +56,7 @@ function airfieldPage(g: Game, region: number): Page | null {
   if (!c) return null;
   const up = humanUp(g);
   const rows: PageRow[] = c.rows.map((x) => ({
-    nat: x.nat, title: x.name, lines: groupLines(x),
+    nat: x.nat, title: x.name, lines: groupLines(x, false),
     buttons: x.mine ? [{ label: 'ORDERS', act: `open:group:${x.id}`, ok: true, tip: 'Its standing orders, the raids it can fly, a reconnaissance, or a move to another airfield.' }] : [],
   }));
   return {

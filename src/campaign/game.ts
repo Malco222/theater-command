@@ -1265,7 +1265,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     const broken = breachOf(g, target), place = townName(target);
     lines.push({ label: 'Forces', value: `${attackers.length} corps, ${sum(attackers)} men, against ${defenders.length ? `${defenders.length} corps, ${sum(defenders)} men` : watch > 0 ? 'no army' : '0 corps, 0 men'}${watch > 0 ? `${defenders.length ? ', and' : ':'} the town guard of about ${guardMen(g, target).toLocaleString('en-US')}` : ''}` });
     lines.push({
-      label: 'The town', value: `${TOWNS.words[townSize(g, target)]} of ${place}${target.fort ? `, with fortress works of level ${target.fort.lv}` : ''}`,
+      // ("Panama City, Panama's capital", not "Capital of Panama City": the UI director, build 1668.)
+      label: 'The town', value: `${townSize(g, target) === 'capital' ? `${place}, ${theWords(`${theName(g.nations[target.owner])}'s`)} capital` : `${TOWNS.words[townSize(g, target)]} of ${place}`}${target.fort ? `, with fortress works of level ${target.fort.lv}` : ''}`,
       effect: `Its defenders fight ${Math.round((walls - 1) * 100)}% stronger in the streets${broken > 0 ? `: bombardment has already broken down ${Math.round(broken * 100)}% of its works` : ''}`,
     });
   } else {
@@ -2385,7 +2386,7 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   const mended = (r: number): string => (hastyLeft(g, r) > 0 ? `the railwaymen have it running, in ${turnToDate(g.turn + hastyLeft(g, r)).label}, or engineers relay it sooner` : 'engineers relay the track');
   if (c.kind === 'fort') return { code: 'fort', line: 'Fortress troops do not go by train.' };
   // (A garrison in a town nobody besieges is not shut in: it takes the field first, and rides from the country outside.)
-  if (c.town) return { code: 'town', line: besieged(g, from) ? `${c.name} is shut in the town at ${from.name}. No train leaves a siege.` : `${c.name} is inside the town at ${from.name}. Take the field first: the train leaves from the country round it.`, at: from.id };
+  if (c.town) return { code: 'town', line: besieged(g, from) ? `${c.name} is shut in the town at ${from.name}. No train leaves a siege.` : 'A garrison does not take the train: TAKE THE FIELD first.', at: from.id };
   // The test is four weeks of movement in hand. A corps that has moved, fought or worked has spent part of its month;
   // one slowed for want of fuel opens its month with three and has spent nothing (ruling 118(c); the art director's
   // lines). A fast corps with five may march a week and still ride.
@@ -3617,12 +3618,22 @@ export function startPhase(g: Game, nat: string): void {
   checkCollapse(g, nat, n.atWar[0] ?? nat);
 }
 
-/** The Red Army moves into eastern Poland once the Polish front is breaking, as the 1939 pact arranged. */
+/**
+ * The Red Army moves into eastern Poland once the Polish front is breaking, as the 1939 pact arranged. In the grand
+ * campaign, if Poland has already fallen and the pact has handed its zone over, the Red Army marches into it all the
+ * same (the design director's b502): the same corps to the same six places, so the zone is never handed over empty.
+ * (The historical scenarios are left as they were.)
+ */
 export function sovietEvent(g: Game): void {
-  if (g.flags.sovietMove || !g.nations.POL.alive || !g.nations.SOV.alive || g.turn > 3) return;
-  if (atWar(g, 'SOV', 'GER') || !atWar(g, 'GER', 'POL')) return;
-  const lost = g.regions.filter((r) => r.owner === 'POL' && r.ctrl !== 'POL').length;
-  if (lost < 5) return;
+  if (g.flags.sovietMove || !g.nations.SOV.alive || g.turn > 3 || atWar(g, 'SOV', 'GER')) return;
+  const fallen = !g.nations.POL.alive;
+  if (fallen) {
+    if (g.flags.open !== 1 || !g.regions.some((r) => r.sov && r.owner === 'POL' && r.ctrl === 'SOV')) return;
+  } else {
+    if (!atWar(g, 'GER', 'POL')) return;
+    const lost = g.regions.filter((r) => r.owner === 'POL' && r.ctrl !== 'POL').length;
+    if (lost < 5) return;
+  }
   g.flags.sovietMove = 1;
   g.week = 3;
   for (const r of g.regions) {
@@ -3636,5 +3647,5 @@ export function sovietEvent(g: Game): void {
   g.supplyDirty = true;
   headline(g, 'event', 'The Red Army crosses into eastern Poland under the pact with Germany.', 'SOV');
   g.week = 4;
-  checkCollapse(g, 'POL', 'GER');
+  if (!fallen) checkCollapse(g, 'POL', 'GER');
 }
