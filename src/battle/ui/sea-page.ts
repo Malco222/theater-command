@@ -188,7 +188,7 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   app.innerHTML = `<div class="battle tc sea">
     <header class="bbar">
       <div class="btitle"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data">${facts([esc(t.date), `${fleetNames('att')} against ${fleetNames('def')}`])}</span></div>
-      <div class="bclock" title="At ${mmss(t.limit)} the action is done, and the fleet with the better of it holds the sea."><span class="tc-label" id="clockState">Paused</span><span class="tc-data" id="time">0:00</span></div>
+      <div class="bclock" title="At ${mmss(t.limit)} the action is done, and the fleet with the better of it holds the sea."><span class="tc-label" id="clockState">Paused</span><span class="tc-label room" aria-hidden="true">Action over</span><span class="tc-label room room-live" aria-hidden="true">Running</span><span class="tc-data" id="time">0:00</span></div>
       <div class="bspeed" role="group" aria-label="Clock">
         <button class="tc-btn tc-btn--sm" data-clock="0" title="Pause (Space)"><span id="pauseWord">Paused</span> <span class="tc-key">Space</span></button>
         <button class="tc-btn tc-btn--sm" data-clock="1" title="Normal speed (1)">×1 <span class="tc-key">1</span></button>
@@ -395,6 +395,7 @@ const LET_GO_ASK = { text: 'End the chase? The action ends here and the sea is y
 const WITHDRAW_WORD = 'Withdraw', END_CHASE_WORD = 'End the chase';
 /** WITHDRAW while the player's own fleet is breaking off: there is nothing left to withdraw, so the button stands down. */
 const ALREADY_GOING = 'Your fleet is already breaking off.';
+const ACTION_OVER = 'The action is over.';
 
 /** Puts a question to the player and stops the clock while it stands; the answer that changes nothing starts it again. */
 function ask(which: 'asking' | 'handing'): void {
@@ -427,8 +428,10 @@ function updateTop(force = false): void {
   // The time only, as the air's clock: actions end long before the limit, which the hover names (sea newcomer 4).
   el('time').textContent = mmss(sim.t);
   // The clock says what it is doing (ruling 226, 8): PAUSED or RUNNING over the time, the first segment Paused when lit.
-  const paused = S.clock.speed === 0, state = el('clockState');
-  const sw = paused ? 'Paused' : 'Running';
+  // Once the result is in it says ACTION OVER, as the tray does, over the time the action ended at, and nothing is lit
+  // (the design director, b476: both fields end the same way).
+  const over = !!sim.over, paused = !over && S.clock.speed === 0, state = el('clockState');
+  const sw = over ? 'Action over' : paused ? 'Paused' : 'Running';
   if (state.textContent !== sw) { state.textContent = sw; state.classList.toggle('is-paused', paused); }
   const pw = paused ? 'Paused' : 'Pause';
   if (el('pauseWord').textContent !== pw) el('pauseWord').textContent = pw;
@@ -438,20 +441,30 @@ function updateTop(force = false): void {
   // campaign counts them, and under it each side's share at those odds, ours from the left, with the card's mark.
   // Now is the card's odds moved by what each side has lost, as the staff reckons it when asked to take over (the
   // whole wear, aircraft included), so before a shot the two agree and the bar and the staff's chance tell one story.
-  const k = sim.ticket.reckoning.odds, nowOdds = (k * (1 - sim.lostShare('att'))) / Math.max(1e-6, 1 - sim.lostShare('def'));
-  const share = (o: number): number => (me === 'att' ? o : 1) / (1 + o);
-  el('balMe').style.width = `${(share(nowOdds) * 100).toFixed(1)}%`;
-  el('balThem').style.width = `${((1 - share(nowOdds)) * 100).toFixed(1)}%`;
-  el('balMark').style.left = `${(share(k) * 100).toFixed(1)}%`;
-  // Where the middle of the bar is narrow, the two odds fold at their dot, and the dot goes (the fold rule).
-  const ratio = facts([`Card ${odds(k)} to 1`, `now ${odds(nowOdds)} to 1`]);
-  if (el('ratio').dataset.was !== ratio) { el('ratio').dataset.was = ratio; el('ratio').innerHTML = ratio; }
+  // Once the result is in, the odds and the bar keep the last figure they showed (b476).
+  if (!over || !el('ratio').dataset.was) {
+    const k = sim.ticket.reckoning.odds, nowOdds = (k * (1 - sim.lostShare('att'))) / Math.max(1e-6, 1 - sim.lostShare('def'));
+    const share = (o: number): number => (me === 'att' ? o : 1) / (1 + o);
+    el('balMe').style.width = `${(share(nowOdds) * 100).toFixed(1)}%`;
+    el('balThem').style.width = `${((1 - share(nowOdds)) * 100).toFixed(1)}%`;
+    el('balMark').style.left = `${(share(k) * 100).toFixed(1)}%`;
+    // Where the middle of the bar is narrow, the two odds fold at their dot, and the dot goes (the fold rule).
+    const ratio = facts([`Card ${odds(k)} to 1`, `now ${odds(nowOdds)} to 1`]);
+    if (el('ratio').dataset.was !== ratio) { el('ratio').dataset.was = ratio; el('ratio').innerHTML = ratio; }
+  }
   el('brkMe').style.width = `${(sim.nearBreak(me) * 100).toFixed(1)}%`;
   el('brkThem').style.width = `${(sim.nearBreak(them) * 100).toFixed(1)}%`;
   // While a rush runs no speed button is lit: the chip over the sea is the one sign of the clock's speed (the UI
   // director, b467). The pause lights as ever; 1, 2 or 3 in the chase ends the rush and lights its button.
+  // Once the action is over the speed buttons go off, and say why on the hover (b476).
   const rushing = S.clock.speed > 0 && S.clock.rush > 1;
-  document.querySelectorAll<HTMLElement>('[data-clock]').forEach((x) => x.classList.toggle('is-lit', !rushing && Number(x.dataset.clock) === S.clock.speed));
+  document.querySelectorAll<HTMLButtonElement>('[data-clock]').forEach((x) => {
+    x.classList.toggle('is-lit', !over && !rushing && Number(x.dataset.clock) === S.clock.speed);
+    if (x.disabled !== over) {
+      if (over) { x.dataset.title = x.title; x.title = ACTION_OVER; } else x.title = x.dataset.title ?? x.title;
+      x.disabled = over;
+    }
+  });
   (el('wask') as HTMLElement).hidden = !S.asking;
   // While the player's own fleet is breaking off WITHDRAW has nothing to do, so it is greyed and says why.
   const wd = document.querySelector<HTMLButtonElement>('[data-act="withdraw"]')!, going = sim.brokenSide === me;
@@ -511,8 +524,10 @@ function updateTop(force = false): void {
  */
 function fitTitle(): void {
   const bar = document.querySelector<HTMLElement>('.sea .bbar'), title = bar?.querySelector<HTMLElement>('.btitle'), acts = bar?.querySelector<HTMLElement>('.bacts');
-  if (!bar || !title || !acts) return;
+  const clock = bar?.querySelector<HTMLElement>('.bclock');
+  if (!bar || !title || !acts || !clock) return;
   title.classList.remove('is-folded', 'is-small');
+  clock.classList.remove('is-folded');
   const pad = parseFloat(getComputedStyle(bar).paddingRight) || 0;
   const over = (): boolean => acts.getBoundingClientRect().right > bar.getBoundingClientRect().right - pad + 0.5;
   // First the facts fold; then, for a sea with a long name ("the Central Mediterranean"), the title takes the type
@@ -523,6 +538,12 @@ function fitTitle(): void {
   // short after that stands (the UI director, b467). The button already holds its longer word's width (.wdbtn).
   const gauge = bar.querySelector<HTMLElement>('.bbar2')?.getBoundingClientRect().width ?? Infinity;
   if (gauge < GAUGE_FLOOR) title.classList.add('is-folded');
+  // Last, the clock's box gives up the room it holds for ACTION OVER on one line (b476) wherever that room would push the
+  // buttons off the bar or, on a narrow window, lay the bar in one more row; it keeps RUNNING's width, the widest word
+  // while the action runs, and the ending's two words fold onto two lines over the time.
+  const short = over(), tall = bar.getBoundingClientRect().height;
+  clock.classList.add('is-folded');
+  if (!short && bar.getBoundingClientRect().height >= tall) clock.classList.remove('is-folded');
 }
 /** The thinnest a break gauge should be before the title's facts fold to give it room (the UI director, b467). */
 const GAUGE_FLOOR = 56;
@@ -868,7 +889,7 @@ const APPROACH = 8;
 
 /** Sets the clock, and as it starts from stopped says so for a moment: "RUNNING ×2" (ruling 226, 8). */
 function setClock(to: Speed | 'toggle'): void {
-  if (S.asking || S.handing) return;
+  if (S.asking || S.handing || S.sim?.over) return;
   const was = S.clock.speed, hand = S.chaseByHand || S.approachByHand;
   // Choosing a speed takes the chase in hand; a pause does not, however it is given (button or Space).
   if (to !== 'toggle' && to !== 0 && S.sim?.brokenSide) S.chaseByHand = true;

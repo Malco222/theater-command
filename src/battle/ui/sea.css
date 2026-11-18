@@ -68,6 +68,15 @@
 /* The clock says what it is doing (ruling 226, 8): RUNNING in paper, PAUSED in brass. */
 .sea .bclock .tc-label { color: var(--paper-300); }
 .sea .bclock .tc-label.is-paused { color: var(--brass-300); }
+/* The clock's box holds its widest word, ACTION OVER, from the first second, so neither the clock starting nor the
+   action ending moves the bar: it is laid once (the UI director, b467; the design director, b476). */
+.sea .bclock #clockState, .sea .bclock .room { grid-area: 1 / 1; }
+.sea .bclock .room { visibility: hidden; }
+.sea .bclock #time { grid-area: 2 / 1; }
+/* Where even the title's fold and its smaller size leave the buttons short of room, the box keeps only RUNNING's width
+   and ACTION OVER folds onto two lines over the time (fitTitle, the fold rule). */
+.sea .bclock.is-folded .room:not(.room-live) { display: none; }
+.sea .bclock.is-folded #clockState { width: 0; min-width: 100%; }
 
 /* ---- The top of the sea: our fleet's warning, then the dispatch, at the centre; the clock's tag at the top left, at
    the zoom group's height and mirroring it (the UI director, sea-226 mend 1) ---- */
