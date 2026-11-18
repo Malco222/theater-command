@@ -101,7 +101,7 @@ import { markFor as markOfRules, monthCard as cardOfRules, monthMark, monthOrder
 import { keepsStores } from '../../../src/campaign/resources';
 import { newsSide } from '../../../src/campaign/turn';
 import type { RaidKind, RaidPlan, RaidWay } from '../../../src/campaign/airwar';
-import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSack } from '../../../src/campaign/turn';
+import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts } from '../../../src/campaign/turn';
 import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
@@ -960,7 +960,7 @@ function shellingSince(s: Game, since: number): { regions: number[]; notes: stri
 }
 
 /** The fights at sea since a report (by its id): the seas they were in, a line on each, and whether the player's ships were in one. */
-function seaFightsSince(s: Game, since: number): { zones: number[]; notes: string[]; mine: boolean } {
+function seaFightsSince(s: Game, since: number): { zones: number[]; notes: string[]; mine: boolean; sunk: { zone: number; nat: string; cls: string; n: number }[] } {
   const fresh = s.seaReports.filter((r) => r.id > since);
   const adj = (nat: string): string => s.nations[nat]?.adj ?? nat;
   // (release 1) Ships seen to sink: in a fight the player's side took part in he knows what went down, on both
