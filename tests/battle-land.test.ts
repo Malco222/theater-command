@@ -490,6 +490,42 @@ describe('the hand-off with a real campaign', () => {
     }
     throw new Error('no attack');
   };
+  it('Sedan is crossed where the record has it: three bridges over the Meuse, the road\'s by the town and two more (b439)', () => {
+    const g = playing();
+    const sedan = g.regions.find((x) => x.name === 'Sedan')!, ard = g.regions.find((x) => x.name === 'Ardennes')!;
+    const c = g.corps.find((x) => x.nat === 'GER' && !x.dead && x.kind === 'inf' && !x.town)!;
+    c.reg = ard.id; c.ap = Math.max(c.ap, 1);
+    if (!hostileUnits(g, sedan, 'GER').length) return;
+    const t = landTicket(g, [c], sedan);
+    if (!t) return;
+    expect(t.place.river).toBe('Meuse');
+    expect(t.place.crossings).toEqual([0.12, 0.85]);
+    const f = buildField(t.place, t.seed), BRIDGE = GROUNDS.indexOf(t.place.bridgeDown ? 'blown' : 'bridge');
+    // Spans of bridge across the field, apart from one another.
+    const cols = [...new Set([...f.ground.keys()].filter((i) => f.ground[i] === BRIDGE).map((i) => i % f.cols))].sort((a, b) => a - b);
+    const spans = cols.filter((x, k) => k === 0 || x - cols[k - 1] > 2).length;
+    expect(spans).toBeGreaterThanOrEqual(3);
+  });
+  it('the record\'s crossings give a bridge with its road at each, and nowhere else (b439)', () => {
+    const t = sampleTicket('forest', 1.3, { river: true, seed: 5 });
+    const plain = buildField(t.place, t.seed), more = buildField({ ...t.place, crossings: [0.12, 0.85] }, t.seed);
+    const BRIDGE = GROUNDS.indexOf('bridge'), ROAD = GROUNDS.indexOf('road');
+    for (const x of [0.12, 0.85]) {
+      const c = Math.floor((x * more.w) / more.cell);
+      const col = [...Array(more.rows).keys()].map((r) => more.ground[r * more.cols + c]);
+      expect(col.filter((k) => k === BRIDGE).length).toBeGreaterThan(0);
+      expect(col.filter((k) => k === ROAD).length).toBeGreaterThan(8);
+      // The river is crossed by the bridge from road to road: nothing else in that column is water.
+      expect(col.some((k) => k === GROUNDS.indexOf('water'))).toBe(false);
+    }
+    // Elsewhere the field is as it was.
+    let other = 0;
+    for (let i = 0; i < plain.ground.length; i++) {
+      const c = i % plain.cols;
+      if (Math.abs(c - Math.floor((0.12 * plain.w) / plain.cell)) > 1 && Math.abs(c - Math.floor((0.85 * plain.w) / plain.cell)) > 1 && plain.ground[i] !== more.ground[i]) other++;
+    }
+    expect(other).toBe(0);
+  });
   it('the ticket carries the card\'s own reckoning and the province', () => {
     const g = playing();
     const { c, r } = anAttack(g);

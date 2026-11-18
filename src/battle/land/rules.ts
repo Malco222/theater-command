@@ -65,6 +65,12 @@ export const LAND = {
   /** Metres a second two blocks standing in each other's ground are eased apart, and the metres enemies keep between their fronts. */
   spread: 4,
   apart: 10,
+  /**
+   * A queue, not a pile (the art director, b418): within 'near' metres of ground a block keeps 'hard' of its pace on or
+   * less (at a bridge, a pass), a friend in the way of a marching block makes way for it rather than both being eased
+   * apart, so a jam reads as one block behind another, each on its own ground. In the open, blocks are eased apart as before.
+   */
+  queue: { hard: 0.2, near: 75 },
   /** Mountain troops on rough ground and rock keep this much more of their pace. */
   mountainFoot: 1.6,
   /** Higher ground: blows from above strike harder, blows from below land softer, past this many metres of rise. */
@@ -82,9 +88,10 @@ export const LAND = {
    * frontage, blows a sixth slower, and tanks and lorries find their way round rivers, rock and marsh: mountains held
    * at 1.43 only because the tanks there stood for good at the first outcrop): over five sets of 160 battles a ground,
    * every ground lands within 4 points of its card, about 2 in the attack's favour; the test's own seeds run about 5
-   * under that.
+   * under that. 'river' 1.51 to 1.5 for b439, once blocks at a bridge made way for each other rather than shove at its
+   * foot to a standstill (Sedan's panzers ran out the clock there one fight in eleven).
    */
-  hold: { take: { plains: 0.94, forest: 1.005, hills: 0.96, mountain: 1.12, marsh: 1.245, urban: 0.995, desert: 0.97 } as Record<string, number>, within: 300, river: 1.51, works: [1, 1.02, 1.06, 1.07] },
+  hold: { take: { plains: 0.94, forest: 1.005, hills: 0.96, mountain: 1.12, marsh: 1.245, urban: 0.995, desert: 0.97 } as Record<string, number>, within: 300, river: 1.5, works: [1, 1.02, 1.06, 1.07] },
   /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
   dug: { keep: 30 },
   nerve: {

@@ -206,6 +206,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * straight to (b418: tanks and lorries never crossed rivers, and stood for good at rock and marsh).
    */
   private ways = new Map<number, Way>();
+  /** By how it moves: the cells within a few of ground it can hardly cross or not at all (a river, rock, marsh). */
+  private hardNear: Partial<Record<Motion, Uint8Array>> = {};
   private route(u: LandUnit, x: number, y: number): [number, number][] {
     const m = MOTION[u.kind], f = this.field;
     if (m === 'fixed') return [[x, y]];
@@ -415,9 +417,10 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private spread(): void {
     const us = this.units.filter((u) => fighting(u) && u.kind !== 'fort');
+    const can = (u: LandUnit, ux: number, uy: number, push: number): boolean =>
+      LAND.pace[MOTION[u.kind]][groundAt(this.field, clamp(u.x + ux * push, 5, this.field.w - 5), clamp(u.y + uy * push, 5, this.field.h - 5))] > 0;
     const go = (u: LandUnit, ux: number, uy: number, push: number): void => {
-      const nx = clamp(u.x + ux * push, 5, this.field.w - 5), ny = clamp(u.y + uy * push, 5, this.field.h - 5);
-      if (LAND.pace[MOTION[u.kind]][groundAt(this.field, nx, ny)] > 0) { u.x = nx; u.y = ny; }
+      if (can(u, ux, uy, push)) { u.x = clamp(u.x + ux * push, 5, this.field.w - 5); u.y = clamp(u.y + uy * push, 5, this.field.h - 5); }
     };
     for (let i = 0; i < us.length; i++) for (let j = i + 1; j < us.length; j++) {
       const a = us[i], b = us[j];
@@ -430,7 +433,26 @@ export class LandBattle implements BattleSim<LandUnit> {
       const pl = a.w / 2 + (b.w / 2) * c + (b.d / 2) * s - Math.abs(lat);
       const pd = a.d / 2 + (b.w / 2) * s + (b.d / 2) * c + (a.side === b.side ? 0 : LAND.apart) - Math.abs(dep);
       if (pl <= 0 || pd <= 0) continue;
-      const along = pl < pd;
+      // A queue, not a pile (the art director, b418): at a bridge or a pass, a block marching into a friend's ground
+      // has it make way, away from it by whichever way the ground lets it, so the one goes on and the other gives ground
+      // and comes on behind, each on its own ground. Two marching into each other: the one with less to go goes on.
+      if (a.side === b.side && (this.narrows(a, a.x, a.y) || this.narrows(b, b.x, b.y))) {
+        const into = (u: LandUnit, ox: number, oy: number): boolean => u.pressing !== undefined && ox * Math.sin(u.pressing) + oy * Math.cos(u.pressing) > 0;
+        const pa = into(a, dx, dy), pb = into(b, -dx, -dy);
+        if (pa || pb) {
+          const goA = pa && (!pb || this.toGo(a) < this.toGo(b) || (this.toGo(a) === this.toGo(b) && a.id < b.id));
+          const mover = goA ? a : b, y = goA ? b : a, sy = goA ? 1 : -1;
+          const p = Math.min(Math.min(pl, pd), (mover.speed + LAND.spread) * DT);
+          const sl = Math.sign(lat) || 1, sd = Math.sign(dep) || 1, d1 = Math.hypot(dx, dy) || 1;
+          const ways: [number, number][] = pl < pd ? [[rx * sl, ry * sl], [fx * sd, fy * sd]] : [[fx * sd, fy * sd], [rx * sl, ry * sl]];
+          ways.push([dx / d1, dy / d1]);
+          const w = ways.find(([wx, wy]) => can(y, wx * sy, wy * sy, p));
+          if (w) { go(y, w[0] * sy, w[1] * sy, p); continue; }
+        }
+      }
+      // Side by side where neither can step aside (on a bridge, in a gap): one behind the other instead.
+      let along = pl < pd;
+      if (along) { const sl = Math.sign(lat) || (a.id < b.id ? 1 : -1), p = Math.min(pl / 2, LAND.spread * DT); if (!can(a, -rx * sl, -ry * sl, p) && !can(b, rx * sl, ry * sl, p)) along = false; }
       const sg = Math.sign(along ? lat : dep) || (a.id < b.id ? 1 : -1);
       const ux = (along ? rx : fx) * sg, uy = (along ? ry : fy) * sg;
       const push = Math.min((along ? pl : pd) / 2, LAND.spread * DT);
@@ -529,6 +551,7 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   private move(u: LandUnit): void {
     const k = u.kind;
+    u.pressing = undefined;
     let to: [number, number] | null = null, run = false;
     if (u.state === 'routing') { to = [u.x, u.side === 'att' ? -50 : this.field.h + 50]; run = true; }
     else if (u.order?.kind === 'withdraw') {
@@ -615,6 +638,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     u.x = clamp(nx, 5, this.field.w - 5);
     u.y = run ? ny : clamp(ny, 5, this.field.h - 5);
     u.speed = stepLen / DT;
+    if (!run) u.pressing = head;
     u.act = run ? 'rout' : v > LAND.speed[k] * 1.05 ? 'run' : 'march';
     u.cover = groundAt(this.field, u.x, u.y);
     if (d <= Math.max(6, stepLen + 0.01)) {
@@ -628,12 +652,35 @@ export class LandBattle implements BattleSim<LandUnit> {
         this.say({ what: 'gone', unit: u.id, side: u.side, text: `${this.named(u)} has fled the field.` });
       } else if (u.order?.kind === 'withdraw') {
         u.state = 'withdrawn'; u.act = 'down';
-        this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.named(u)} has withdrawn.` });
+        this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.named(u)} has fallen back off the field.` });
       }
     } else if (u.order?.kind === 'withdraw' && (u.side === 'att' ? u.y <= 6 : u.y >= this.field.h - 6)) {
       u.state = 'withdrawn'; u.act = 'down';
-      this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.named(u)} has withdrawn.` });
+      this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.named(u)} has fallen back off the field.` });
     }
+  }
+
+  /** Within LAND.queue.near metres of ground this block can hardly cross or not at all: at a bridge, a pass, a gap. */
+  private narrows(u: LandUnit, x: number, y: number): boolean {
+    const m = MOTION[u.kind], f = this.field, C = f.cols, R = f.rows;
+    let near = this.hardNear[m];
+    if (!near) {
+      near = this.hardNear[m] = new Uint8Array(C * R);
+      const n = Math.round(LAND.queue.near / f.cell), pace = LAND.pace[m];
+      for (let i = 0; i < C * R; i++) {
+        if (pace[GROUNDS[f.ground[i]]] > LAND.queue.hard) continue;
+        const c0 = i % C, r0 = Math.floor(i / C);
+        for (let r = Math.max(0, r0 - n); r <= Math.min(R - 1, r0 + n); r++) for (let c = Math.max(0, c0 - n); c <= Math.min(C - 1, c0 + n); c++) near[r * C + c] = 1;
+      }
+    }
+    return near[this.cellAt(x, y)] === 1;
+  }
+
+  /** How far a block has still to go on its way. */
+  private toGo(u: LandUnit): number {
+    let d = 0, x = u.x, y = u.y;
+    for (const [px, py] of u.path) { d += dist(x, y, px, py); x = px; y = py; }
+    return d;
   }
 
   /**

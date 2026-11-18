@@ -36,6 +36,17 @@ function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number):
   return { nat, adj: N?.adj ?? nat, color: N?.color ?? '#888888', human: nat === g.human, forces, general: lead ? { name: lead.name, level: lead.level } : null };
 }
 
+/**
+ * Where the record has the attack over its river at more places than the road's own bridge by the town, as far as
+ * the field's three kilometres allow: each a share of the field's width, west to east. Sedan, 13 May 1940: the Meuse
+ * was crossed at Donchery (2nd Panzer, late in the day), at Gaulier and Glaire by the town (1st Panzer: the road's
+ * bridge) and at Wadelincourt (10th Panzer), the infantry first in assault boats and the bridges built by nightfall
+ * (the design director, b439).
+ */
+const CROSSINGS: Record<string, { river: string; at: number[] }> = {
+  Sedan: { river: 'Meuse', at: [0.12, 0.85] },
+};
+
 /** The ticket for an attack the player could order now, or null where there is no attack to fight. */
 export function landTicket(g: Game, corps: Corps[], target: Region): FieldTicket<LandPlace> | null {
   const a = previewAttack(g, corps, target);
@@ -52,6 +63,7 @@ export function landTicket(g: Game, corps: Corps[], target: Region): FieldTicket
     town: townName(target), townSize: townSize(g, target),
     fort: target.fort && target.fort.vs.includes(from.owner) ? target.fort.lv : 0,
     mines: minesAt(g, target),
+    ...(crossing && CROSSINGS[target.name]?.river === riverName(crossing) ? { crossings: CROSSINGS[target.name].at } : {}),
   };
   const date = turnToDate(g.turn);
   return {

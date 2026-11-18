@@ -141,17 +141,26 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
     x.filter = `blur(${(cs * 0.12).toFixed(1)}px)`; x.drawImage(lv, 0, 0); x.filter = 'none';
   }
 
-  // 2. Hill shade, lit from the north-west, faint: the map's relief is in its contours.
+  // 2. Hill shade, faint, one light from the north-west: faces turned to the north-west lit warm, faces turned to the
+  // south-east shaded, as the 3D map's relief (the art director, b418 review: it was lit from the south-east, darker
+  // than it was lit, and taken cell by cell, so the mountains' slopes read as smoke). Slopes are read across five cells,
+  // so the shade follows the hills and not every knoll. The map's relief is in its contours.
   const shade = document.createElement('canvas');
   shade.width = f.cols; shade.height = f.rows;
   const sh = shade.getContext('2d')!;
   let relief = 0;
   for (let i = 0; i < f.height.length; i++) relief = Math.max(relief, f.height[i]);
   const k = 2.2 / Math.max(6, f.cell);
+  const slope = (c: number, r: number, dc: number, dr: number): number => {
+    let s = 0;
+    for (let j = -1; j <= 1; j++) s += (hgt(c + 2 * dc + j * dr, r + 2 * dr + j * dc) - hgt(c - 2 * dc + j * dr, r - 2 * dr + j * dc)) / 4;
+    return s / 3;
+  };
   for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) {
-    const dx = (hgt(c + 1, r) - hgt(c - 1, r)) / 2, dy = (hgt(c, r + 1) - hgt(c, r - 1)) / 2;
-    const lit = Math.max(-1, Math.min(1, (-dx + dy) * k));
-    sh.fillStyle = lit > 0 ? `rgba(255,250,235,${(lit * 0.32).toFixed(3)})` : `rgba(60,46,30,${(-lit * 0.34).toFixed(3)})`;
+    const dx = slope(c, r, 1, 0), dy = slope(c, r, 0, 1);
+    // Rising to the east (dx > 0) the face turns west; rising to the north (dy > 0) it turns south.
+    const lit = Math.max(-1, Math.min(1, (dx - dy) * k));
+    sh.fillStyle = lit > 0 ? `rgba(255,246,220,${(lit * 0.34).toFixed(3)})` : `rgba(84,66,44,${(-lit * 0.24).toFixed(3)})`;
     sh.fillRect(c, f.rows - 1 - r, 1, 1);
   }
   x.drawImage(shade, 0, 0, W, H);

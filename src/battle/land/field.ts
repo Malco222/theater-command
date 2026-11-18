@@ -34,6 +34,12 @@ export interface LandPlace {
   fort: number;
   /** Minefields on the ground, 0 up. */
   mines: number;
+  /**
+   * Where the record has the attack over its river at more places than the road's own bridge by the town: each a
+   * share of the field's width, west to east, a bridge with its road down to either bank (b439). Where its bridges are
+   * down they are down here too.
+   */
+  crossings?: number[];
 }
 
 export interface LandField {
@@ -199,6 +205,7 @@ export function buildField(place: LandPlace, seed: number): LandField {
   if (place.river) {
     const base = h * (0.46 + 0.04 * rng.next()), amp = 60 + 50 * rng.next(), ph = rng.range(0, 6);
     riverMid = [];
+    const over = new Set((place.crossings ?? []).map((x) => Math.min(cols - 1, Math.max(0, Math.floor((x * w) / cell)))));
     for (let c = 0; c < cols; c++) {
       const yc = base + Math.sin((c / cols) * 7 + ph) * amp + Math.sin((c / cols) * 17 + ph * 2) * amp * 0.3;
       riverMid.push(yc);
@@ -207,9 +214,10 @@ export function buildField(place: LandPlace, seed: number): LandField {
         const y = r * cell + cell / 2;
         if (Math.abs(y - yc) <= half) {
           const i = at(c, r);
-          ground[i] = ground[i] === G.road ? (place.bridgeDown ? G.blown : G.bridge) : G.water;
+          ground[i] = ground[i] === G.road || over.has(c) ? (place.bridgeDown ? G.blown : G.bridge) : G.water;
           height[i] = Math.min(height[i], 0) - 2;
-        } else if (Math.abs(y - yc) <= half + 40 && ground[at(c, r)] === G.open && place.terrain !== 'desert') ground[at(c, r)] = G.field;
+        } else if (over.has(c) && Math.abs(y - yc) <= half + 200) ground[at(c, r)] = G.road;
+        else if (Math.abs(y - yc) <= half + 40 && ground[at(c, r)] === G.open && place.terrain !== 'desert') ground[at(c, r)] = G.field;
       }
     }
   }
