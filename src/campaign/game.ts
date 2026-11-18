@@ -2926,6 +2926,28 @@ function warBegan(g: Game, w: string[]): number {
   return first === Infinity ? g.turn : first;
 }
 
+/** The rows another row's 'unless' names: the month each of them lands is kept (the grand campaign, ruling 229, 1c). */
+const UNLESS = new Set<string>(((setup as any).expeditions as any[] ?? []).map((row) => row[6]?.unless).filter((x): x is string => !!x));
+/** True once the row of that name has landed in this game. */
+const rowLanded = (g: Game, name: string): boolean => ((setup as any).expeditions as any[] ?? []).some((row, i) => row[2] === name && g.flags[`came:${i}`] !== undefined);
+
+/**
+ * The grand campaign: where a dated formation lands when its side no longer holds the place meant for it (ruling 229,
+ * 1c, as ruling 221's F lands troops lifted off a coast): the nearest harbour its side holds on that front, clear of
+ * the enemy and with room; in the same side theatre, or else in the same country. Null where there is none.
+ */
+function fallbackHarbour(g: Game, nat: string, at: Region): Region | null {
+  const k = THEATRE_OF.get(at.name) ?? -1;
+  let best: Region | null = null, bd = Infinity;
+  for (const r of g.regions) {
+    if (!r.port || r.id === at.id || (k >= 0 ? THEATRE_OF.get(r.name) !== k : r.owner !== at.owner)) continue;
+    if (!allied(g, nat, r.ctrl) || hostileUnits(g, r, nat).length || friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= STACK) continue;
+    const d = Math.hypot(r.x - at.x, r.y - at.y);
+    if (d < bd || (d === bd && best && r.id < best.id)) { bd = d; best = r; }
+  }
+  return best;
+}
+
 function expeditions(g: Game, nat: string): void {
   const gone: Corps[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
@@ -2947,6 +2969,7 @@ function expeditions(g: Game, nat: string): void {
     }
     let reg = g.byName[row[5]];
     let due = row[0];
+    let fell = false;
     // The wider world: a computer-run country that ships its own army across the ocean (world.ts, 'overseas') is sent
     // none of history's dated formations as well: the corps it raises and ships take their place.
     if (shipsItsOwn(g, nat)) return;
@@ -2967,6 +2990,12 @@ function expeditions(g: Game, nat: string): void {
       if (reg && reg.owner === nat && !allied(g, nat, reg.ctrl) && cap >= 0) reg = g.regions[cap];
       // Nor is it put down in a friendly country that is at peace: it forms at home instead.
       if (reg && reg.ctrl !== nat && allied(g, nat, reg.ctrl) && !sharesWar(g, nat, reg.ctrl) && cap >= 0) reg = g.regions[cap];
+      // A place its side no longer holds: it lands at the nearest harbour its side holds on that front, and is not
+      // cancelled for the loss (ruling 229, 1c). It holds nothing in place there: the place it was to hold is gone.
+      if (reg && !allied(g, nat, reg.ctrl) && !o.joins && row[3] !== 'fort') {
+        const h = fallbackHarbour(g, nat, reg);
+        if (h) { reg = h; fell = true; }
+      }
       // The wider world: a player whose homeland lies across the ocean has such an army form at home, and shipping
       // it is his business. (A computer's staff ships the corps it raises itself, and is sent none of these: above.)
       if (worldOn(g) && nat === g.human && cap >= 0 && beyondEurope(cap) && g.regions[cap].ctrl === nat && reg && reg.owner !== nat && !o.from && !o.joins && row[3] !== 'fort')
@@ -2978,6 +3007,8 @@ function expeditions(g: Game, nat: string): void {
     // An army put together out of a defeat forms only once the ground is really lost: while the nation or an ally
     // still holds any place named, the formations it would be made from fight on where they stand.
     if (o.ifLost && (o.ifLost as string[]).some((nm) => { const r = g.byName[nm]; return !r || allied(g, nat, r.ctrl); })) return;
+    // (A row that stands in for another, in a war where that other has already landed, never comes: ruling 229, 1c.)
+    if (o.unless && g.flags.open === 1 && rowLanded(g, o.unless)) { g.flags[`sent:${i}`] = 1; return; }
     const old = o.joins ? g.corps.find((x) => x.nat === nat && x.name === o.joins && !x.dead) : undefined;
     if (old) {
       g.flags[`sent:${i}`] = 1;
@@ -3000,7 +3031,8 @@ function expeditions(g: Game, nat: string): void {
       for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       g.supplyDirty = true;
     }
-    const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, o);
+    const c = addCorps(g, nat, row[2], row[3], g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, fell ? { ...o, hold: undefined } : o);
+    if (g.flags.open === 1 && UNLESS.has(row[2])) g.flags[`came:${i}`] = g.turn;
     if (o.from && !Array.isArray(o.from)) {
       // A formation put together where it stands, out of the army around it, is not itself broken up for the next one.
       const here = theatreName(reg) === o.from;

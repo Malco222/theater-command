@@ -1,0 +1,178 @@
+// Ruling 229, part 1: the British staff answers the push on Egypt. A floor at home from the record binds every corps
+// that leaves Britain by sea, and at the looser stops of the history dial the staff sails its spare field corps to
+// Egypt while the desert's threat outweighs home's. 1c: the desert's Commonwealth rows of the grand campaign.
+import { describe, expect, it } from 'vitest';
+import { addCorps, capture, createGame, declareWar, removeCorps, startPhase } from '../src/campaign/game';
+import { runAI } from '../src/campaign/ai';
+import { setStop } from '../src/campaign/history';
+import { MIDDLE_EAST, homeFloor, homeThreat, homeland, mayLeave, theatreFront } from '../src/campaign/middleeast';
+import { startOpen } from '../src/campaign/staff';
+import setup from '../data/campaign/setup-1939.json';
+import theatres from '../data/campaign/theatres.json';
+import type { Corps, Game, Region } from '../src/campaign/types';
+
+const field = (g: Game, c: Corps): boolean => c.nat === 'UK' && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !c.hold;
+const atHome = (g: Game): Corps[] => g.corps.filter((c) => field(g, c) && homeland(g.regions[c.reg], 'UK'));
+const inEgypt = (g: Game): Corps[] => g.corps.filter((c) => c.nat === 'UK' && !c.dead && ['Alexandria', 'Port Said'].includes(g.regions[c.reg].name));
+
+/** A grand campaign at a stop of the history dial, at war with Italy, in the month given, with an army raised at home. */
+function grand(stop: number, turn = 12, seed = 3, italy = true): Game {
+  const g = startOpen(createGame(seed, null));
+  setStop(g, stop, true);
+  g.turn = turn;
+  if (italy) declareWar(g, 'ITA', 'UK');
+  ['Kent', 'Hampshire', 'London', 'Wales', 'Lancashire', 'Northumbria'].forEach((nm, i) => addCorps(g, 'UK', `Home Corps ${i + 1}`, 'inf', 2, nm, {}));
+  return g;
+}
+
+/** Runs a test with the crossing's danger allowed up to this (the Mediterranean made safe for the troopships). */
+function safeSea<T>(risk: number, fn: () => T): T {
+  const R = MIDDLE_EAST.reinforce.UK, was = R.risk;
+  R.risk = risk;
+  try { return fn(); } finally { R.risk = was; }
+}
+
+/** Hands a region to someone else for a test: whoever stood there is taken off the map first. */
+function hand(g: Game, r: Region, nat: string): void {
+  for (const c of [...r.units]) removeCorps(g, c);
+  capture(g, r, nat);
+}
+
+/** Puts an Italian army at Egypt's door: next to Mersa Matruh, the British ground nearest Libya. */
+function push(g: Game, n = 4): void {
+  const at = g.byName['Sidi Barrani'];
+  if (at.ctrl !== 'ITA') hand(g, at, 'ITA');
+  for (let i = 0; i < n; i++) addCorps(g, 'ITA', `Test Corps ${i + 1}`, 'inf', 3, at.id, {});
+}
+
+describe('the floor at home (ruling 229, 1b)', () => {
+  it('is the record: a third of the field corps from June 1940 to June 1941, a quarter to the end of 1942, none outside', () => {
+    expect(MIDDLE_EAST.floor.UK.map((f) => [f.from, f.to])).toEqual([[10, 22], [23, 40]]);
+    const g = grand(3);
+    const F = g.corps.filter((c) => field(g, c)).length;
+    for (const [turn, want] of [[9, 0], [10, Math.ceil(F / 3)], [22, Math.ceil(F / 3)], [23, Math.ceil(F / 4)], [40, Math.ceil(F / 4)], [41, 0]]) {
+      g.turn = turn;
+      expect(homeFloor(g, 'UK'), `turn ${turn}`).toBe(want);
+    }
+  });
+
+  it('counts the field corps at home against it; nothing binds a player, another country or a history campaign', () => {
+    const g = grand(3, 12);
+    expect(mayLeave(g, 'UK')).toBe(Math.max(0, atHome(g).length - homeFloor(g, 'UK')));
+    expect(mayLeave(g, 'GER')).toBe(Infinity);
+    const p = startOpen(createGame(3, 'UK'));
+    p.turn = 12;
+    expect(mayLeave(p, 'UK')).toBe(Infinity);
+    const h = createGame(3, null);
+    h.turn = 12;
+    expect(mayLeave(h, 'UK')).toBe(Infinity);
+  });
+
+  it('the five home commands hold in place and are counted on neither side of it', () => {
+    const g = grand(3, 12);
+    const commands = g.corps.filter((c) => c.nat === 'UK' && c.hold && homeland(g.regions[c.reg], 'UK'));
+    expect(commands.map((c) => c.name).sort()).toEqual(['Eastern Command', 'London District', 'Northern Command', 'Scottish Command', 'Southern Command']);
+  });
+});
+
+describe('the sailing to Egypt (ruling 229, 1a)', () => {
+  it('weighs the desert by the enemy at its edge, and home by what can cross to it', () => {
+    const g = grand(3, 12);
+    const ground = new Set<number>((theatres as any).desert.regions.map((nm: string) => g.byName[nm].id));
+    const ports = ['Alexandria', 'Port Said'].map((nm) => g.byName[nm]);
+    const before = theatreFront(g, 'UK', ground, ports)!;
+    expect(before.at.name).toBe('Alexandria');
+    expect(before.on.has(g.byName['Mersa Matruh'].id)).toBe(true);
+    push(g, 2);
+    const after = theatreFront(g, 'UK', ground, ports)!;
+    // (Sidi Barrani is Italian now: the two corps there are at the edge of the British ground, and count.)
+    expect(after.on.has(g.byName['Sidi Barrani'].id)).toBe(false);
+    expect(after.threat).toBeGreaterThanOrEqual(6);
+    expect(after.held).toBeCloseTo(before.held - 0, 6);
+    // Home: the five commands and the army at home stand against what Germany's ships could carry from his harbours
+    // in reach, two months of them.
+    const h = homeThreat(g, 'UK', 2);
+    expect(h.held).toBeCloseTo(7 + 12, 6);
+    expect(h.threat).toBeGreaterThanOrEqual(0);
+  });
+
+  it('at stop 3, with Italy at Egypt\'s door and the sea safe, spare corps sail from home to Egypt, and never below the floor', () => {
+    const g = grand(3, 12);
+    push(g, 5);
+    const home = atHome(g).map((c) => c.id), there = inEgypt(g).length;
+    safeSea(1, () => runAI(g, 'UK'));
+    const came = inEgypt(g).filter((c) => home.includes(c.id));
+    expect(came.length).toBeGreaterThan(0);
+    expect(inEgypt(g).length - there).toBe(came.length);
+    expect(atHome(g).length).toBeGreaterThanOrEqual(homeFloor(g, 'UK'));
+    expect(came.length).toBeLessThanOrEqual(g.nations.UK.sealift);
+  });
+
+  it('no corps sails over a crossing too dangerous for the staff, and none goes round the Cape (no harbour of Egypt is on that way)', () => {
+    const g = grand(3, 12);
+    push(g, 5);
+    const home = atHome(g).map((c) => c.id);
+    runAI(g, 'UK');
+    expect(inEgypt(g).filter((c) => home.includes(c.id))).toEqual([]);
+    // (The way by the Cape ends in the Gulf of Aden, which has no coast: Suez is no harbour.)
+    expect(g.byName['Suez'].port).toBe(false);
+  });
+
+  it('nobody sails at stops 1 and 2, nor while the desert is quiet (Italy at peace)', () => {
+    for (const stop of [1, 2]) {
+      const g = grand(stop, 12);
+      push(g, 5);
+      const home = atHome(g).map((c) => c.id);
+      safeSea(1, () => runAI(g, 'UK'));
+      expect(inEgypt(g).filter((c) => home.includes(c.id)), `stop ${stop}`).toEqual([]);
+    }
+    const g = grand(3, 12, 3, false);
+    expect(g.nations.UK.atWar).toContain('GER');
+    const home = atHome(g).map((c) => c.id);
+    safeSea(1, () => runAI(g, 'UK'));
+    expect(inEgypt(g).filter((c) => home.includes(c.id))).toEqual([]);
+  });
+
+  it('a floor that leaves nobody spare sends nobody', () => {
+    const g = grand(3, 12);
+    push(g, 5);
+    // Every field corps at home but the floor's share is struck off: none may leave.
+    const spare = atHome(g).length - homeFloor(g, 'UK');
+    for (const c of atHome(g).slice(0, spare)) removeCorps(g, c);
+    while (mayLeave(g, 'UK') > 0) removeCorps(g, atHome(g)[0]);
+    const home = atHome(g).map((c) => c.id);
+    expect(home.length).toBeGreaterThan(0);
+    safeSea(1, () => runAI(g, 'UK'));
+    expect(inEgypt(g).filter((c) => home.includes(c.id))).toEqual([]);
+  });
+});
+
+describe('the desert rows of the grand campaign (ruling 229, 1c)', () => {
+  const rows = (setup as any).expeditions as any[];
+  const row = (name: string): any[] => rows.find((r) => r[2] === name)!;
+
+  it('are the historian\'s: the South Africans, the New Zealanders unless W Force sailed, the Indians of 1942', () => {
+    expect(row('1st South African Division').slice(0, 6)).toEqual([21, 'UK', '1st South African Division', 'inf', 1, 'Alexandria']);
+    expect(row('2nd South African Division').slice(0, 6)).toEqual([22, 'UK', '2nd South African Division', 'inf', 1, 'Alexandria']);
+    expect(row('2nd New Zealand Division')[6].unless).toBe('W Force (New Zealand Division and 1st Armoured Brigade)');
+    expect(row('5th Indian Division')[0]).toBe(32);
+    expect(row('10th Indian Division').slice(4, 6)).toEqual([1, 'Mersa Matruh']);
+    for (const nm of ['1st South African Division', '2nd South African Division', '2nd New Zealand Division', '5th Indian Division', '10th Indian Division']) expect(row(nm)[6]).toMatchObject({ open: 1, war: ['UK', 'ITA'] });
+    // The 9th Australian comes once: by the Tobruk row, which falls back to a harbour of Egypt when Tobruk is lost.
+    expect(rows.filter((r) => r[1] === 'UK' && /9th Australian/.test(r[2]) && r[0] < 30)).toHaveLength(1);
+    // XIII and XXX Corps bring 1 division each in the grand campaign, 2 in history's.
+    expect(row('XIII Corps, Eighth Army')[6].openDivs).toBe(1);
+    expect(row('XXX Corps, Eighth Army')[6].openDivs).toBe(1);
+  });
+
+  it('the Tobruk garrison lands at the nearest harbour its side holds when Tobruk is lost, and holds nothing in place there', () => {
+    const g = grand(1, 18);
+    expect(g.byName['Tobruk'].ctrl).toBe('ITA');
+    startPhase(g, 'UK');
+    const c = g.corps.find((x) => x.name === 'Tobruk garrison (9th Australian Division)' && !x.dead);
+    expect(c).toBeDefined();
+    expect(g.regions[c!.reg].port).toBe(true);
+    expect(g.regions[c!.reg].ctrl).toBe('UK');
+    expect(c!.hold).toBe(false);
+  });
+});
