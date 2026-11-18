@@ -259,11 +259,13 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
   });
 
   // The plain attack honours the card (mark 4, after the retest): at the telling odds, where the card gives neither
-  // side a sure thing, on every ground and behind a river and fortress works, 40 battles at each odds.
+  // side a sure thing, on every ground and behind a river and fortress works, 40 battles at each odds. And dug in: the
+  // card counts a defence's fieldworks in its strength, so the field gives them no cover on top (b407).
   const TELLING = [1.1, 1.2, 1.3, 1.4];
   const telling: Record<string, { gap: number; bias: number }> = {};
-  const EVERY: { key: string; ground: (typeof GROUNDS7)[number]; river?: boolean; fort?: number }[] = [
+  const EVERY: { key: string; ground: (typeof GROUNDS7)[number]; river?: boolean; fort?: number; dug?: boolean }[] = [
     ...GROUNDS7.map((g) => ({ key: g, ground: g })), { key: 'a river crossing', ground: 'plains', river: true }, { key: 'fortress works', ground: 'hills', fort: 2 },
+    { key: 'dug in on open ground', ground: 'plains', dug: true },
   ];
   for (const e of EVERY) {
     it(`the plain attack honours the card at the telling odds: ${e.key} (mark 4)`, () => {
@@ -271,7 +273,7 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
       for (const odds of TELLING) {
         let won = 0;
         for (let s = 1; s <= 40; s++) {
-          const b = new LandBattle(sampleTicket(e.ground, odds, { seed: s * 7919 + 13, humanAtt: true, river: e.river, fort: e.fort }));
+          const b = new LandBattle(sampleTicket(e.ground, odds, { seed: s * 7919 + 13, humanAtt: true, river: e.river, fort: e.fort, dug: e.dug }));
           b.ai.att = false; b.ai.def = true;
           plainAttack(b);
           runOut(b);

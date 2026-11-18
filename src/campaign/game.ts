@@ -621,7 +621,11 @@ export function corpsBase(g: Game, c: Corps): number {
 }
 
 /** Share of the usual losses a defender takes when the attack is beaten off. */
-const HELD_LOSS = 0.6;
+export const HELD_LOSS = 0.6;
+/** The share of its strength an attack loses at the ratio R, before who pays and the works (the battle's bill). */
+export const attackLoss = (R: number): number => clamp(0.14 / R, 0.02, 0.2);
+/** The share of its strength a defence loses at the ratio R, before the push of tanks, the desert and holding its ground. */
+export const defenceLoss = (R: number): number => clamp(0.07 + 0.1 * R, 0.06, 0.45);
 /** How much stronger troops defend from trenches they have had a month to dig. */
 export const DUG_IN = 1.25;
 /** Prepared defences (the grand campaign): who digs in, and how the day's luck runs against an attack on a line that is ready for it. */
@@ -766,7 +770,7 @@ export interface FieldBill { corps: Record<number, number>; att: number; def: nu
  * measure and must agree within a fifth (the design director, after the UI director's slice 3 review). Held a little
  * inside the fifth, so the whole numbers the card prints agree too.
  */
-const FIELD_HOLD = 1.15;
+export const FIELD_HOLD = 1.15;
 
 /** Scales a side's planned loss shares so its whole bill stands within FIELD_HOLD of the field's (1 with no field). */
 function fieldScale(cs: Corps[], planned: number[], share: number | undefined, whole: boolean): number {
@@ -1485,8 +1489,8 @@ export function battleCost(g: Game, a: Assessment, attackers: Corps[], target: R
   const weight = odds === a.odds ? a.weight : g.flags.open === 1 && !town ? Math.min(1, odds / DEFENCE.wear.fullAt) : 1;
   const all = a.defenders.reduce((s, c) => s + men(c), 0);
   const at = (R: number, win: boolean): CostOf => {
-    const attFrac = clamp(0.14 / R, 0.02, 0.2) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
-    const defFrac = clamp(0.07 + 0.1 * R, 0.06, 0.45);
+    const attFrac = attackLoss(R) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
+    const defFrac = defenceLoss(R);
     const stood = win ? 1 : HELD_LOSS;
     const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
     let ours = 0, theirs = 0;
@@ -1554,11 +1558,11 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const attU = attackers.map(reportUnit), defU = defenders.map(reportUnit);
   const attGens = attackers.map((c) => generalOf(g, c)), defGens = defenders.map((c) => generalOf(g, c));
   const mobile = attackers.some((c) => KIND[c.kind].mobile);
-  const defFrac = clamp(0.07 + 0.1 * R, 0.06, 0.45);
+  const defFrac = defenceLoss(R);
   // Fighting from house to house costs the attackers more.
   // Men who go at trenches pay for it, and the men in them are harder to hit (the grand campaign).
   const ready = town ? 0 : a.prepared;
-  const attFrac = clamp(0.14 / R, 0.02, 0.2) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
+  const attFrac = attackLoss(R) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
   let attLost = 0, defLost = 0, prisoners = 0;
   // True if the field is won but the town holds out (the grand campaign), and if it gave itself up at the summons.
   let held = false, gates = false;

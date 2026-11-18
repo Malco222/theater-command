@@ -100,12 +100,34 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
   const s = small.getContext('2d')!;
   for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) {
     const k = g(c, r);
-    // Woods are drawn as their canopy below, so they leave no halo in the wash; fields as their own soft patches.
-    s.fillStyle = wash(k === 'water' || k === 'blown' || k === 'bridge' || k === 'woods' ? 'open' : k);
+    // Woods are drawn as their canopy below, so they leave no halo in the wash; marsh and rough ground as their own
+    // soft-edged patches just after, so their edges wander and never follow the grid (the art director, b408 review).
+    s.fillStyle = wash(k === 'water' || k === 'blown' || k === 'bridge' || k === 'woods' || k === 'marsh' || k === 'rough' ? 'open' : k);
     s.fillRect(c, f.rows - 1 - r, 1, 1);
   }
   x.imageSmoothingEnabled = true;
   x.drawImage(small, 0, 0, W, H);
+  // Blur the grid, cut it at half, then soften: the same edge the fields have. A lone cell or a pair would blur away
+  // under the cut, so each cell also keeps a small round floor of its own: the ground is never there and unseen.
+  const soft = (k: Ground): HTMLCanvasElement => {
+    const m = smoothMask(f, W, H, (c, r) => g(c, r) === k, cs * 0.55), mc = m.getContext('2d')!;
+    mc.fillStyle = '#fff'; mc.beginPath();
+    for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) {
+      if (g(c, r) !== k) continue;
+      const X = px(c) + cs / 2, Y = py(r) + cs / 2;
+      mc.moveTo(X + cs * 0.36, Y); mc.arc(X, Y, cs * 0.36, 0, Math.PI * 2);
+    }
+    mc.fill();
+    return m;
+  };
+  const masks: Partial<Record<Ground, HTMLCanvasElement>> = { marsh: soft('marsh'), rough: soft('rough') };
+  for (const k of ['marsh', 'rough'] as Ground[]) {
+    const [lv, l2] = sheet(W, H);
+    l2.fillStyle = wash(k); l2.fillRect(0, 0, W, H);
+    l2.globalCompositeOperation = 'destination-in';
+    l2.drawImage(masks[k]!, 0, 0);
+    x.filter = `blur(${(cs * 0.12).toFixed(1)}px)`; x.drawImage(lv, 0, 0); x.filter = 'none';
+  }
 
   // 2. Hill shade, lit from the north-west, faint: the map's relief is in its contours.
   const shade = document.createElement('canvas');
@@ -124,7 +146,12 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
 
   // 3. Woods: one soft canopy for each wood of five cells or more, a muted green with a slightly darker scalloped
   // edge, drawn on a layer of its own so overlaps do not darken (the art director, 2). Strays show only from closer in.
-  const isWood = (c: number, r: number): boolean => g(c, r) === 'woods';
+  // A lone cell of other ground inside a wood (a clearing of one cell, or a hidden bunker) is not cut out of the
+  // canopy: an empty star with nothing in it reads as a mark (the art director, b408 review). Roads, water and
+  // buildings still cut it, and a bunker that shows has its sign.
+  const woody = (c: number, r: number): boolean => g(c, r) === 'woods';
+  const isWood = (c: number, r: number): boolean => woody(c, r) || (!['road', 'water', 'bridge', 'blown', 'buildings'].includes(g(c, r))
+    && c > 0 && r > 0 && c < f.cols - 1 && r < f.rows - 1 && woody(c - 1, r) && woody(c + 1, r) && woody(c, r - 1) && woody(c, r + 1));
   const woods = patches(f, isWood, 5);
   const canopy = (color: string, rad: number): HTMLCanvasElement => {
     const [cv, cx2] = sheet(W, H);
@@ -157,6 +184,7 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
     dx.drawImage(hv, 0, 0);
   }
   // Ornament by cell: single crowns (detail only, no ring and no glow), tussocks, reeds, scree.
+  const [stipple, st] = sheet(W, H);
   for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) {
     const kd = g(c, r), X = px(c), Y = py(r);
     if (kd === 'woods') {
@@ -165,18 +193,24 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
         dx.fillStyle = 'rgba(104,116,68,.42)'; dx.beginPath(); dx.arc(tx, ty, tr, 0, Math.PI * 2); dx.fill();
       }
     } else if (kd === 'rough') {
-      x.fillStyle = 'rgba(80,66,46,.27)';
-      for (let i = 0; i < 5; i++) { x.beginPath(); x.arc(X + rnd() * cs, Y + rnd() * cs, 1.1, 0, Math.PI * 2); x.fill(); }
+      // Its stipple on a sheet of its own, cut to the patch's soft edge below: no soft squares.
+      st.fillStyle = 'rgba(80,66,46,.27)';
+      for (let i = 0; i < 5; i++) { st.beginPath(); st.arc(X + (rnd() * 1.4 - 0.2) * cs, Y + (rnd() * 1.4 - 0.2) * cs, 1.1, 0, Math.PI * 2); st.fill(); }
     } else if (kd === 'marsh') {
-      x.strokeStyle = 'rgba(63,110,140,.55)'; x.lineWidth = 1.1;
-      for (let i = 0; i < 3; i++) { const mx = X + 3 + rnd() * (cs - 12), my = Y + 4 + rnd() * (cs - 8); x.beginPath(); x.moveTo(mx, my); x.lineTo(mx + 8, my); x.stroke(); }
-      x.strokeStyle = 'rgba(70,84,50,.5)';
-      const mx = X + rnd() * cs, my = Y + rnd() * cs; x.beginPath(); x.moveTo(mx, my); x.lineTo(mx - 2, my - 5); x.moveTo(mx, my); x.lineTo(mx + 2, my - 5); x.stroke();
+      // At the whole-field view the marsh is its wash alone; its water and tufts come in with the detail, a sparse
+      // scatter rather than a mark in every cell, so no rows show (the art director, b408 review).
+      const roll = rnd(), mx = X + 3 + rnd() * (cs - 12), my = Y + 5 + rnd() * (cs - 10);
+      if (roll < 0.22) { dx.strokeStyle = 'rgba(63,110,140,.5)'; dx.lineWidth = 1.1; dx.beginPath(); dx.moveTo(mx, my); dx.lineTo(mx + 7, my); dx.stroke(); }
+      else if (roll < 0.4) { dx.strokeStyle = 'rgba(70,84,50,.45)'; dx.lineWidth = 1.1; dx.beginPath(); dx.moveTo(mx, my); dx.lineTo(mx - 2, my - 5); dx.moveTo(mx, my); dx.lineTo(mx + 2, my - 5); dx.stroke(); }
     } else if (kd === 'rock') {
       x.strokeStyle = 'rgba(70,64,56,.42)'; x.lineWidth = 1;
       for (let i = 0; i < 4; i++) { const mx = X + rnd() * cs, my = Y + rnd() * cs; x.beginPath(); x.moveTo(mx, my); x.lineTo(mx + 3, my - 4); x.lineTo(mx + 6, my); x.stroke(); }
     }
   }
+
+  st.globalCompositeOperation = 'destination-in';
+  st.drawImage(masks.rough!, 0, 0);
+  x.drawImage(stipple, 0, 0);
 
   // 4. Contours from the heights: every few metres, every fifth one heavier.
   const step = relief > 120 ? 25 : relief > 40 ? 10 : 4;

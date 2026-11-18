@@ -1,12 +1,12 @@
 // A ticket made by hand, for tests, the fairness table and the page's practice field: two armies of the usual make
 // on any ground, at any odds. Not a campaign battle: nothing is handed back from it.
 
-import { DESERT, FIELD_DICE, GUNS, evenOdds } from '../../campaign/game';
+import { DEFENCE, DESERT, FIELD_DICE, FIELD_HOLD, GUNS, HELD_LOSS, attackLoss, defenceLoss, evenOdds } from '../../campaign/game';
 import { combinedArms, groundAttack, groundDefence, isFoot } from '../../campaign/ground';
 import { ENGINEERING } from '../../campaign/rivers';
-import { antiTank } from '../../campaign/support';
+import { antiTank, snipedIn, tollFor, tollOf, type Facing } from '../../campaign/support';
 import { FORT_MUL, KIND, TERRAIN_DEF, type Corps, type Game, type Kind, type Region } from '../../campaign/types';
-import type { FieldTicket, ForceTicket, SideTicket } from '../core/types';
+import type { FieldTicket, ForceTicket, Side, SideTicket } from '../core/types';
 import type { LandPlace, Terrain } from './field';
 import { LAND } from './rules';
 
@@ -26,6 +26,9 @@ type Corps5 = [string, Kind, number, number, number];
 const ATT: Corps5[] = [['I Corps', 'inf', 3, 0.38, 1], ['II Corps', 'inf', 3, 0.34, 4], ['III Armoured Corps', 'arm', 2, 0.28, 1]];
 const DEF: Corps5[] = [['X Corps', 'inf', 3, 0.45, 21], ['XI Corps', 'inf', 3, 0.4, 24], ['Artillery Corps', 'art', 1, 0.15, 1]];
 
+/** The ticket's corps ids: the attack's from 1, the defence's from 11, in the order their corps are listed. */
+const attId = (i: number): number => i + 1, defId = (i: number): number => 11 + i;
+
 export function sampleTicket(terrain: Terrain, odds: number, o: SampleOpts = {}): FieldTicket<LandPlace> {
   const A = 100;
   return made(terrain, { A, D: A / odds, odds, dice: [0.8, 1.2], even: 1.2 }, o);
@@ -34,11 +37,11 @@ export function sampleTicket(terrain: Terrain, odds: number, o: SampleOpts = {})
 function made(terrain: Terrain, reckoning: FieldTicket<LandPlace>['reckoning'], o: SampleOpts, defence: Corps5[] = DEF, defStr = 0.9): FieldTicket<LandPlace> {
   const att: SideTicket = {
     nat: 'RED', adj: 'Your', color: '#7d6a4f', human: !!o.humanAtt, general: { name: 'General Hale', level: 2 },
-    forces: ATT.map(([name, kind, divs, share, first], i) => force(i + 1, name, 'RED', kind, divs, share, false, first)),
+    forces: ATT.map(([name, kind, divs, share, first], i) => force(attId(i), name, 'RED', kind, divs, share, false, first)),
   };
   const def: SideTicket = {
     nat: 'BLU', adj: 'Enemy', color: '#5a6f86', human: false, general: { name: 'General Vane', level: 2 },
-    forces: defence.map(([name, kind, divs, share, first], i) => force(11 + i, name, 'BLU', kind, divs, share, !!o.dug && kind !== 'art', first, defStr)),
+    forces: defence.map(([name, kind, divs, share, first], i) => force(defId(i), name, 'BLU', kind, divs, share, !!o.dug && kind !== 'art', first, defStr)),
   };
   return {
     domain: 'land', kind: 'field', seed: o.seed ?? 7, turn: 1, date: 'September 1939', title: o.title ?? 'A practice field',
@@ -62,9 +65,9 @@ export interface PracticeGround { terrain: Terrain; river?: boolean; fort?: numb
  * over 120 battles (the field's result also leans on the defence's make-up, not only on the odds: see b406's note).
  */
 export const PRACTICE_GROUNDS: PracticeGround[] = [
-  { terrain: 'plains', def: [3, 3], str: 1 }, { terrain: 'forest', def: [4, 3], str: 0.65 }, { terrain: 'hills', def: [3, 3], str: 0.8 },
-  { terrain: 'mountain', def: [3, 3], str: 0.5 }, { terrain: 'marsh', def: [4, 3], str: 0.5 }, { terrain: 'urban', def: [3, 3], str: 0.55 },
-  { terrain: 'desert', def: [4, 3], guns: 3, kind: 'mot' },
+  { terrain: 'plains', def: [4, 3], str: 0.85 }, { terrain: 'forest', def: [4, 3], str: 0.65 }, { terrain: 'hills', def: [3, 3], str: 0.8 },
+  { terrain: 'mountain', def: [3, 3], str: 0.5 }, { terrain: 'marsh', def: [3, 3], str: 0.6 }, { terrain: 'urban', def: [3, 3], str: 0.55 },
+  { terrain: 'desert', def: [4, 3], guns: 3, kind: 'mot', str: 0.85 },
   { terrain: 'plains', river: true, def: [3, 3], guns: 2 }, { terrain: 'hills', fort: 2, def: [2, 2], guns: 0, kind: 'mot' },
 ];
 
@@ -74,8 +77,25 @@ function defenceOn(p: PracticeGround): Corps5[] {
   const guns = p.guns ?? 1;
   const k: Kind = p.kind ?? 'inf', word = k === 'mot' ? ' Motorized' : '';
   const rows: [string, Kind, number, number][] = [[`X${word} Corps`, k, x, 21], [`XI${word} Corps`, k, xi, 21 + x], ...(guns > 0 ? [['Artillery Corps', 'art', guns, 1] as [string, Kind, number, number]] : [])];
-  const worth = rows.reduce((a, r) => a + r[2] * KIND[r[1]].def, 0);
-  return rows.map(([name, kind, divs, first]) => [name, kind, divs, (divs * KIND[kind].def) / worth, first]);
+  const kept = rows.filter((r) => r[2] > 0);
+  const worth = kept.reduce((a, r) => a + r[2] * KIND[r[1]].def, 0);
+  return kept.map(([name, kind, divs, first]) => [name, kind, divs, (divs * KIND[kind].def) / worth, first]);
+}
+
+/** The practice armies on a ground as the campaign's own sums see them: a stub game, the ground, both sides' corps, and what the attack faces there. */
+function practiceArmies(p: PracticeGround) {
+  // Only the grand campaign's ground rules ('open') are switched on: no nation, no technology, no flags beyond them.
+  const g = { flags: { open: 1 }, turn: 1, nations: {} } as unknown as Game;
+  const target = { id: -1, name: 'Practice ground', terrain: p.terrain, fort: null } as unknown as Region;
+  const corps = (nat: string, [name, kind, divs]: Corps5, str = 0.9): Corps =>
+    ({ nat, name, kind, divs, str, org: 0.85, xp: 0.3, mor: 0.65, supplied: true, dug: false, reg: -2 }) as unknown as Corps;
+  const att = ATT.map((x) => corps('RED', x)), def = defenceOn(p).map((x) => corps('BLU', x, p.str ?? 0.9));
+  const fort = p.fort ?? 0;
+  const armsA = combinedArms(g, att, target, false), armsD = combinedArms(g, def, target, true);
+  const gunsD = def.reduce((s, c) => s + (c.kind === 'art' ? c.divs * c.str : 0), 0);
+  const facing = { works: () => 0, guns: gunsD, mines: 0, sappers: 0, fort, foot: armsA ? armsA.foot : 0, tanks: armsA ? armsA.tanks : 0 } as Facing;
+  const at = antiTank(g, att, def, target, facing);
+  return { g, target, att, def, fort, armsA, armsD, gunsD, facing, at };
 }
 
 /**
@@ -86,17 +106,8 @@ function defenceOn(p: PracticeGround): Corps5[] {
  * no air, no technology of their own (September 1939), fed, fresh, attacking from one place. The bridges stand.
  */
 export function practiceReckoning(p: PracticeGround): FieldTicket<LandPlace>['reckoning'] {
-  // Only the grand campaign's ground rules ('open') are switched on: no nation, no technology, no flags beyond them.
-  const g = { flags: { open: 1 }, turn: 1, nations: {} } as unknown as Game;
-  const target = { id: -1, name: 'Practice ground', terrain: p.terrain, fort: null } as unknown as Region;
-  const corps = (nat: string, [name, kind, divs]: Corps5, str = 0.9): Corps =>
-    ({ nat, name, kind, divs, str, org: 0.85, xp: 0.3, mor: 0.65, supplied: true, dug: false, reg: -2 }) as unknown as Corps;
-  const att = ATT.map((x) => corps('RED', x)), def = defenceOn(p).map((x) => corps('BLU', x, p.str ?? 0.9));
-  const fort = p.fort ?? 0;
-  const armsA = combinedArms(g, att, target, false), armsD = combinedArms(g, def, target, true);
-  const gunsD = def.reduce((s, c) => s + (c.kind === 'art' ? c.divs * c.str : 0), 0);
+  const { g, target, att, def, fort, armsA, armsD, gunsD, at } = practiceArmies(p);
   const thicken = gunsD ? Math.min(GUNS.thickenMost, GUNS.thicken * gunsD) : 0;
-  const at = antiTank(g, att, def, target, { works: () => 0, guns: gunsD, mines: 0, sappers: 0, fort, foot: armsA ? armsA.foot : 0, tanks: armsA ? armsA.tanks : 0 });
   const openDesert = p.terrain === DESERT.terrain && !fort && att.some((c) => KIND[c.kind].mobile);
   // The strength both share (corpsBase less its divisions, and heart) is left out: it is the same for every corps here.
   let A = 0;
@@ -127,6 +138,41 @@ export function practiceReckoning(p: PracticeGround): FieldTicket<LandPlace>['re
   }
   const dice: [number, number] = [FIELD_DICE[0], FIELD_DICE[1]];
   return { A, D, odds: A / D, dice, even: evenOdds(dice) };
+}
+
+/**
+ * What the staff's settlement of a practice battle costs each side (the design director, b410): the campaign's own
+ * bill at the ratio R for these armies on this ground, as resolveBattle books it (game.ts): the attack's share by R and
+ * who pays it, the defence's by R, with the push of tanks when the ground is won, foot caught in the open desert, the
+ * lighter loss of a defence that holds, and the weight of the blow. What the field had already cost a side counts
+ * inside the bill, as on a campaign hand-over (FIELD_HOLD), not on top of it. Shares of each side's men, 0..1.
+ */
+export function practiceBill(p: PracticeGround, R: number, field: Record<Side, number> = { att: 0, def: 0 }, corps?: Record<number, number>): Record<Side, number> {
+  const { g, target, att, def, at, facing } = practiceArmies(p);
+  const toll = tollOf(g, att, def, at, facing, snipedIn(target, false));
+  const k = practiceReckoning(p);
+  // (One general each with no traits, and no works dug: those parts of the campaign's bill fall at 1 here.)
+  const win = R >= 1.2, mobile = att.some((c) => KIND[c.kind].mobile);
+  const caught = win && mobile && p.terrain === DESERT.terrain && !p.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
+  const weight = Math.min(1, k.odds / DEFENCE.wear.fullAt);
+  // A side's share of its men, from each corps' share (men go by divisions and strength, as men() in game.ts).
+  const share = (cs: Corps[], part: (c: Corps, i: number) => number): number => {
+    const w = cs.reduce((a, c) => a + c.divs * c.str, 0);
+    return w > 0 ? cs.reduce((a, c, i) => a + c.divs * c.str * part(c, i), 0) / w : 0;
+  };
+  // Each corps' part of its side's bill as the field split it, as splitWeights in game.ts: its field loss over its side's.
+  const split = (cs: Corps[], id: (i: number) => number): number[] => {
+    const mean = corps ? share(cs, (_c, i) => corps[id(i)] ?? 0) : 0;
+    return cs.map((_c, i) => (corps && mean > 1e-6 && corps[id(i)] !== undefined ? Math.min(3, corps[id(i)] / mean) : 1));
+  };
+  const wA = split(att, attId), wD = split(def, defId);
+  const attPart = (c: Corps, i: number): number => attackLoss(R) * wA[i] * tollFor(toll, c);
+  const defPart = (c: Corps, i: number): number => defenceLoss(R) * wD[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * (win ? 1 : HELD_LOSS);
+  // Held near what the field cost each side, never less than it would have bled there (fieldScale in game.ts, on a hand-over).
+  const scale = (now: number, lost: number): number => (now <= 1e-9 ? 1 : Math.max(lost / FIELD_HOLD, now) / now);
+  const kA = scale(share(att, (c, i) => Math.min(0.6, attPart(c, i))), field.att);
+  const kD = scale(share(def, (c, i) => Math.min(0.8, defPart(c, i)) * weight), field.def);
+  return { att: share(att, (c, i) => Math.min(0.6, attPart(c, i) * kA)), def: share(def, (c, i) => Math.min(0.8, defPart(c, i) * kD) * weight) };
 }
 
 /** A practice ground's ticket: the practice armies on that ground, at the odds their own card gives them there. */

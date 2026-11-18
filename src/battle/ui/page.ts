@@ -10,11 +10,11 @@
 import type { Game } from '../../campaign/types';
 import { Clock, type Speed } from '../core/clock';
 import { diceChance } from '../core/parity';
-import { RATIO } from '../core/result';
+import { RATIO, levelOf } from '../core/result';
 import { lineUp, unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import type { LandPlace, Terrain } from '../land/field';
-import { PRACTICE_GROUNDS, practiceTicket, type PracticeGround } from '../land/sample';
+import { PRACTICE_GROUNDS, practiceBill, practiceTicket, type PracticeGround } from '../land/sample';
 import { LandBattle } from '../land/sim';
 import type { LandUnit } from '../land/units';
 import { newCampaign, offers, settle, type Offer } from './campaign';
@@ -36,7 +36,7 @@ const practiceTitle = (p: PracticeGround): string => `Practice: ${practiceName(p
  * How worn a practice defence stands, against the attack's 90 in 100 (b408): the card says so, so the enemy's lower
  * strength on the field is no surprise. Nothing where it stands as the attack does.
  */
-const wornWords = (s: number): string => (s >= 0.95 ? 'theirs fresh, at full strength' : s >= 0.85 ? '' : s >= 0.75 ? 'theirs worn to four fifths strength' : s >= 0.6 ? 'theirs worn to two thirds strength' : 'theirs worn to half strength');
+const wornWords = (s: number): string => (s >= 0.95 ? 'the defence at full strength' : s >= 0.85 ? '' : s >= 0.75 ? 'the defence worn to four fifths strength' : s >= 0.6 ? 'the defence worn to two thirds strength' : 'the defence worn to half strength');
 /** What the staff makes of a card's chance, as the offer and practice cards say it. */
 const staffSays = (c: number): string => (c >= 0.995 ? 'the staff is sure of it' : c <= 0.005 ? 'the staff gives it no chance' : `the staff gives it about ${Math.round(c * 100)}%`);
 /** The ground in the province card's own word (data/campaign/ground.json, 'says'). */
@@ -50,6 +50,8 @@ interface State {
   g: Game;
   screen: 'choose' | 'battle' | 'after';
   offer: Offer | null;
+  /** The practice ground being fought, or null on a campaign battle. */
+  ground: PracticeGround | null;
   b: LandBattle | null;
   field: Painted | null;
   clock: Clock;
@@ -81,7 +83,7 @@ interface State {
 
 const app = document.getElementById('app')!;
 const S: State = {
-  g: newCampaign(), screen: 'choose', offer: null, b: null, field: null, clock: new Clock(),
+  g: newCampaign(), screen: 'choose', offer: null, ground: null, b: null, field: null, clock: new Clock(),
   scene: { cam: { x: 1500, y: 1000, z: 0.3 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null, colours: null },
   guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, resume: null, last: 0, trayAt: 0,
   holding: new Set(), trayFrom: 0, tag: null, wasRunning: false, met: false, before: null, colours: { att: '#888', def: '#888' },
@@ -106,7 +108,7 @@ const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
 // ---- Choosing a battle --------------------------------------------------------------------------------------------
 
 function showChooser(): void {
-  S.screen = 'choose'; S.b = null; S.offer = null;
+  S.screen = 'choose'; S.b = null; S.offer = null; S.ground = null;
   guard();
   const g = S.g;
   const list = offers(g);
@@ -153,7 +155,7 @@ function showChooser(): void {
   app.querySelectorAll<HTMLElement>('[data-ground]').forEach((el) => el.addEventListener('click', () => {
     const p = PRACTICE_GROUNDS[Number(el.dataset.ground)];
     const t = practiceTicket(p, { humanAtt: true, seed: 1 + Math.floor(Math.random() * 1e6), title: practiceTitle(p) });
-    startBattle(t, null);
+    startBattle(t, null, p);
   }));
   app.querySelector('[data-act="restart"]')?.addEventListener('click', () => { S.g = newCampaign(S.g.seed + 1); S.before = null; showChooser(); });
 }
@@ -196,9 +198,9 @@ function since(now: Offer[]): string {
 let canvas: HTMLCanvasElement;
 let ctx: CanvasRenderingContext2D;
 
-function startBattle(t: FieldTicket<LandPlace>, o: Offer | null): void {
+function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: PracticeGround | null = null): void {
   const b = new LandBattle(t);
-  S.b = b; S.offer = o; S.screen = 'battle';
+  S.b = b; S.offer = o; S.ground = o ? null : ground; S.screen = 'battle';
   S.field = paintField(b.field, t.place.terrain, t.seed);
   S.scene.me = t.att.human ? 'att' : 'def';
   S.scene.sel = new Set(); S.scene.hover = null; S.scene.box = null; S.scene.line = null; S.scene.ping = null;
@@ -655,7 +657,8 @@ function ask(kind: 'withdraw' | 'staff'): void {
     // A practice ground is not a place to take (the UI director, after the retest).
     const odds = c >= 0.995 ? 'They are sure of it.' : c <= 0.005 ? 'They give it no chance.' : `They give you about ${Math.round(c * 100)}% to ${S.offer ? `take ${esc(where)}` : 'win it'}.`;
     document.getElementById('saskText')!.innerHTML = b.contactAt === null
-      ? `Hand the battle to the staff? No shot has been fired: they settle the whole battle at once. ${odds}`
+      // True whether or not the guns have opened before the lines meet (b409, the UI director's words).
+      ? `Hand the battle to the staff? The armies have not met yet: they settle the whole battle at once. ${odds}`
       : `Hand the battle to the staff? They settle the rest at once, from where it stands now. ${odds}`;
   }
   S.asking = kind;
@@ -799,10 +802,18 @@ function showAfter(): void {
     S.before.heavier = !!rep && share(rep.defenders) > share(rep.attackers);
   }
   const won = rep ? rep.taken || !!rep.siege : r.winner === 'att';
-  const level = rep ? rep.level : r.level;
+  // A practice battle handed to the staff is billed as the campaign would bill it, the guns' losses before it inside
+  // the bill, and the stamp follows that bill (the design director, b410).
+  // (The verdict's side of the line is the battle's own: R is rounded for the card, and may round onto the line.)
+  const R = r.winner === 'att' ? Math.max(r.R, RATIO.carry) : Math.min(r.R, RATIO.carry - 1e-6);
+  const bill = !rep && r.how === 'objective' && S.ground ? practiceBill(S.ground, R, r.lost, Object.fromEntries(r.forces.map((x) => [x.corps, x.lost]))) : null;
+  const menOf = (s: Side): number => t[s].forces.reduce((a, f) => a + f.men, 0);
+  const level = rep ? rep.level : bill ? levelOf(R, menOf('att') * bill.att > menOf('def') * bill.def) : r.level;
   const chance = diceChance(k.odds, k.dice);
   const A = t.att.adj, D = t.def.adj;
-  const fieldLines = r.lines.map((l) => `<li>${esc(l)}</li>`).join('');
+  const pct = (x: number): string => (x < 1e-4 ? 'none' : x < 0.005 ? 'less than 1%' : `about ${Math.round(x * 100)}%`);
+  const shown = bill ? [r.lines[0], `Your attack lost ${pct(bill.att)} of its strength, the defence ${pct(bill.def)}.`, ...r.lines.slice(1)] : r.lines;
+  const fieldLines = shown.map((l) => `<li>${esc(l)}</li>`).join('');
   let told = '', price = '', sides = '';
   if (rep) {
     const place = rep.regionName;

@@ -316,7 +316,6 @@ export class LandBattle implements BattleSim<LandUnit> {
     const [am, nm] = LAND.aspect[aspect];
     let take = LAND.cover[gt];
     if (t.kind === 'arm' && LAND.tanksClose.ground.includes(gt)) take *= LAND.tanksClose.take;
-    if (t.dug && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.dug.keep) take *= LAND.dug.take;
     if (t.side === 'def' && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake;
     const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
     const dmg = p * am * take * luck * (u.side === 'att' ? this.fortune : 1 / this.fortune) * DT;
@@ -620,7 +619,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   private staffLine(): string {
     // A practice ground is not a place: the staff settle the battle there, not the attack on it (b408).
     const what = this.practice ? 'battle' : `attack on ${this.ticket.place.name}`;
-    if (this.contactAt === null) return `The staff settled the whole ${what}: no shot had been fired.`;
+    // Before the armies met: true whether or not the guns had opened (b409, the UI director's words).
+    if (this.contactAt === null) return `The staff settled the whole ${what}: the armies had not met.`;
     const me: Side = this.ticket.def.human && !this.ticket.att.human ? 'def' : 'att';
     const bal = this.standing(), tot = this.power.att + this.power.def;
     // Moved his way by five points of the balance's share or more (the design director, 20:51): a point's drift is not a gain.

@@ -59,6 +59,12 @@ export interface LandUnit extends UnitBase {
    * field is counted as a runner's, as before, so the field's figures and the fairness tests do not move.
    */
   fellBack?: boolean;
+  /**
+   * A defence's reserve (the design director, b407): 'held' behind the line until the line is struck, then 'sent' at
+   * marching pace to where it is struck hardest. A line block from a quiet stretch that closes on the fight is 'sent' too.
+   * A block that is sent no longer goes back to the ground it was drawn up on.
+   */
+  reserve?: 'held' | 'sent';
 }
 
 const ORD = (n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
@@ -153,7 +159,8 @@ export function deploy(units: LandUnit[], side: Side, f: LandField): void {
   const cx = side === 'def' && f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2;
   const lines: LandUnit[][] = [mine.filter((u) => FRONT.includes(u.kind)), mine.filter((u) => MOBILE.includes(u.kind)), mine.filter((u) => u.kind === 'art')];
   if (!lines[0].length && lines[1].length) lines[0] = lines[1].splice(0, Math.ceil(lines[1].length / 2));
-  const place = (row: LandUnit[], y: number, wings: boolean): void => {
+  /** Draws a row up at depth y; says whether it stood on the wings (false: centred). */
+  const place = (row: LandUnit[], y: number, wings: boolean): boolean => {
     const gap = 40;
     if (wings) {
       // Half on each wing, beyond the ends of the front line; where a wing would run off the field (a big army's long
@@ -162,15 +169,30 @@ export function deploy(units: LandUnit[], side: Side, f: LandField): void {
       const at = row.map((u, i) => { const left = i % 2 === 0, k = Math.floor(i / 2); return cx + (left ? -1 : 1) * (span + 60 + k * (u.w + gap)); });
       if (row.every((u, i) => at[i] - u.w / 2 >= 10 && at[i] + u.w / 2 <= f.w - 10)) {
         row.forEach((u, i) => { u.x = at[i]; u.y = y; });
-        return;
+        return true;
       }
     }
     const width = row.reduce((s, u) => s + u.w + gap, -gap);
     let x = cx - width / 2;
     for (const u of row) { u.x = x + u.w / 2; u.y = y; x += u.w + gap; }
+    return false;
   };
+  // A defence of four blocks or more in its line keeps a quarter of them back as a reserve, centred between its tanks
+  // on the wings (b407). Each is the last division of whichever corps has most in the line, so every corps' first
+  // divisions stand in the line. Where the tanks could not stand on the wings and are centred behind the line, the
+  // reserve stands a row further back.
+  const held: LandUnit[] = [];
+  if (side === 'def' && lines[0].length >= 4) {
+    for (let n = Math.max(1, Math.floor(lines[0].length / 4)); n > 0; n--) {
+      const count = (c: number): number => lines[0].filter((u) => u.corps === c).length;
+      let at = -1;
+      for (let i = lines[0].length - 1; i >= 0; i--) if (at < 0 || count(lines[0][i].corps) > count(lines[0][at].corps)) at = i;
+      held.unshift(...lines[0].splice(at, 1));
+    }
+  }
   place(lines[0], front, false);
-  place(lines[1], front - dir * 110, true);
+  const wide = place(lines[1], front - dir * 110, true);
+  if (held.length) { place(held, front - dir * (wide || !lines[1].length ? 110 : 170), false); for (const u of held) u.reserve = 'held'; }
   place(lines[2], front - dir * 230, false);
   for (const u of mine) {
     u.x = Math.min(f.w - u.w / 2 - 10, Math.max(u.w / 2 + 10, u.x));

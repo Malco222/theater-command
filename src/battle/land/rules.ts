@@ -35,8 +35,14 @@ export const LAND = {
   guns: { punch: 0.35, nerve: 1.5, close: 0.3, closeAt: 160 },
   /** Damage and nerve by where a blow lands: [damage, nerve]. */
   aspect: { front: [1, 1], flank: [1.5, 2], rear: [2, 3] } as Record<'front' | 'flank' | 'rear', [number, number]>,
-  /** The damage a block takes on this ground (cover), and the speed it keeps on it, by how it moves. */
-  cover: { open: 1, field: 0.95, woods: 0.7, rough: 0.85, marsh: 1, water: 1.25, road: 1.05, bridge: 1.2, buildings: 0.55, rock: 0.75, bunker: 0.4, works: 0.6, blown: 1.25 } as Record<Ground, number>,
+  /**
+   * The damage a block takes on this ground (cover), and the speed it keeps on it, by how it moves. Fieldworks
+   * ('works', dug where a block stood dug in) give no cover: the card counts them in the defence's strength already,
+   * and the field shares out the card's own strength (ruling 217). Counted twice, the plain attack carried 23 points
+   * less often than the card said in the campaign's dug-in battles, four in five of all it fights; counted once it
+   * lands within 3 (b407, 356 campaign battles).
+   */
+  cover: { open: 1, field: 0.95, woods: 0.7, rough: 0.85, marsh: 1, water: 1.25, road: 1.05, bridge: 1.2, buildings: 0.55, rock: 0.75, bunker: 0.4, works: 1, blown: 1.25 } as Record<Ground, number>,
   pace: {
     foot: { open: 1, field: 0.9, woods: 0.6, rough: 0.7, marsh: 0.35, water: 0.15, road: 1.1, bridge: 1, buildings: 0.7, rock: 0.4, bunker: 0.5, works: 0.8, blown: 0.15 },
     wheels: { open: 0.9, field: 0.8, woods: 0.3, rough: 0.4, marsh: 0, water: 0, road: 1.5, bridge: 1.2, buildings: 0.5, rock: 0, bunker: 0, works: 0.5, blown: 0 },
@@ -60,10 +66,12 @@ export const LAND = {
    * two computer generals stay fair to it too (ruling 217(3)). Above 1 where the field's own cover (woods, marsh, rock)
    * already gives the defence more than the campaign's odds, which count the ground already, mean it to have. 'river'
    * multiplies it where the defence stands behind a river, 'works' by the works' level: the card counts both already.
+   * Level 2 sits between the telling-odds works (an infantry line that keeps a reserve back out of its bunkers) and the
+   * practice works (motorized, no reserve): each lands within a tenth of its card (b407).
    */
-  hold: { take: { plains: 0.85, forest: 0.906, hills: 0.91, mountain: 1.237, marsh: 1.07, urban: 0.91, desert: 0.909 } as Record<string, number>, within: 300, river: 1.58, works: [1, 1.08, 1.13, 1.19] },
-  /** Dug in: the damage taken while it stays within this many metres of where it began. */
-  dug: { take: 0.65, keep: 30 },
+  hold: { take: { plains: 0.875, forest: 1, hills: 0.935, mountain: 1.3, marsh: 1.13, urban: 0.91, desert: 0.925 } as Record<string, number>, within: 300, river: 1.66, works: [1, 1.02, 1.09, 1.1] },
+  /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
+  dug: { keep: 30 },
   nerve: {
     /** Below 'waver' it fights worse; below 'rout' it runs; a runner rallies at 'rally' when clear of the enemy for 'quiet' seconds. */
     waver: 0.4, rout: 0.2, rally: 0.35, quiet: 15, clear: 450,
@@ -110,6 +118,11 @@ export const LAND = {
    * as the card's chance does, so a plain attack at the card's odds wins about as often as the card says.
    */
   fortune: 1,
+  /**
+   * A stretch of the defence's line is quiet when no enemy stands within this many metres of a block's own lane, left or
+   * right, anywhere on the field: that block closes on the fight once the line is struck elsewhere (b407).
+   */
+  quiet: 350,
   /** Metres a block pressing an attack will go to take the next enemy when its own breaks. */
   press: 600,
   /** Seconds of battle time before the defender is counted as having held. */
