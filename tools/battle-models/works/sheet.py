@@ -44,7 +44,7 @@ CAPS = {"Fieldworks": ("FieldworksEnd_start", "FieldworksEnd"), "FieldworksCorne
 # pictures of several pieces joined as the game joins them: the pieces in order along the line, from its start
 LINES = {"FieldworksLine": ["FieldworksEnd_start", "Fieldworks", "FieldworksCorner", "FieldworksDugout", "FieldworksEnd"]}
 # their views: (bearing, metres off, how high it looks down, lens, how far along the line from its middle the camera aims)
-LINE_VIEW = {"FieldworksLine": (-152.0, 42.0, 26.0, 35, -3.5)}
+LINE_VIEW = {"FieldworksLine": (-152.0, 36.5, 25.0, 35, -3.0)}
 # (bearing, how far in spans, how high it looks down, lens) where the usual three-quarter view does not suit
 VIEW = {"LightFlak": (-28.0, 2.7, 14.0, 50), "HeavyFlak": (-28.0, 2.25, 15.0, 50), "HeavyFlakTwin": (-28.0, 2.3, 15.0, 50), "FlakTower": (-32.0, 1.5, 10.0, 50), "CoastalBattery": (-30.0, 1.5, 14.0, 50), "Bunker": (-30.0, 1.5, 15.0, 50), "CamoNet": (-28.0, 1.5, 22.0, 50),
         "Fieldworks": (-140.0, 1.8, 30.0, 50), "FieldworksCorner": (-140.0, 1.8, 30.0, 50), "FieldworksDugout": (-140.0, 1.8, 30.0, 50), "Foxhole": (-150.0, 1.4, 32.0, 50),
@@ -222,7 +222,12 @@ def page(images, out, cols, names, notes, title):
         y = top + r * (h + label_h + pad)
         S.paste(im, (x, y))
         d.text((x + 6, y + h + int(w / 26 * 0.12)), names[k], fill=(40, 34, 28), font=name_f)
-        d.text((x + 6, y + h + int(w / 26 * 1.3)), notes[k], fill=(104, 94, 80), font=note_f)
+        f, size = note_f, w // 44
+        while d.textlength(notes[k], font=f) > w - 12 and size > 10:
+            # (a long note is set smaller, never over its neighbour's)
+            size -= max(1, size // 20)
+            f = kit._font(size)
+        d.text((x + 6, y + h + int(w / 26 * 1.3)), notes[k], fill=(104, 94, 80), font=f)
     S.save(out, quality=90)
     S.resize((W // 2, H // 2), Image.LANCZOS).save(out[:-4] + "-half.jpg", quality=88)
     return out
@@ -246,6 +251,7 @@ def sheets(out, index=None):
             bit = [f"{meta[n]['triangles']:,} triangles"] if n in meta else []
             if n in LINES:
                 bit.append("an end, a fire bay, a corner, a dugout and an end, joined as the game joins them")
+                bit[0] += " in all"
             if n in CAPS:
                 bit.append("shown with the line's two end pieces")
             if n in meta and meta[n]["parts"] > 1:
