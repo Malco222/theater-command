@@ -9927,7 +9927,19 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		}
 	}
 	ShowVictorFlags(); // (a capital that has changed hands flies its new holder's flag, or its own country's is home again)
-	BuildFrontLine(); // (and the front is drawn where it now runs)
+	// (Speed, ruling b414: the press that takes a province did 24 to 44 ms of its work here, and at times far more,
+	// drawing the front where it now runs, and as much again on the frontier lines below. Once the table is laid
+	// they are drawn in the two frames after the press instead: the order answers first. "-TheaterLinesAtOnce"
+	// draws them in the press's own frame, as before.)
+	static const bool bLinesLater = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLinesAtOnce"));
+	if (bLinesLater && bLandLaid)
+	{
+		FrontLineDue = 1;
+	}
+	else
+	{
+		BuildFrontLine(); // (and the front is drawn where it now runs)
+	}
 
 	// Ink that spreads: what is on the table now is kept as the old paint, and the new is let in over a second from
 	// the frontier each province shares with ground its new holder held already. (Changes of the same moment run
@@ -9965,7 +9977,14 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	{
 		CampaignTextures::UpdateBoxAll(TintPicture, Paint.Tint, I0, J0, I1, J1);
 		CampaignTextures::UpdateBoxAll(OccupiedPicture, Paint.Occupied, I0, J0, I1, J1);
-		BuildBorders();
+		if (bLinesLater && bLandLaid)
+		{
+			BordersDue = 2; // (the frame after the front line's)
+		}
+		else
+		{
+			BuildBorders();
+		}
 		return;
 	}
 	for (const int32 Region : Taken)
@@ -13312,6 +13331,15 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus)
 {
 	THEATER_SPEED_SCOPE(MapUpdate);
+	// (lines put off by a press that changed whose ground is whose: see SetHolders)
+	if (FrontLineDue > 0 && --FrontLineDue == 0)
+	{
+		BuildFrontLine();
+	}
+	if (BordersDue > 0 && --BordersDue == 0)
+	{
+		BuildBorders();
+	}
 	if (bVictorsMoving)
 	{
 		DrawVictorFlags(); // (a flag on its way up or down a captured capital's pole)

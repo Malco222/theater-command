@@ -75,5 +75,7 @@ private:
 	FString ShownBefore, ShownLast;
 	TArray<FString> Screens; // (a month's end) each screen that came up on the way
 	bool bPan = false; // ten seconds of pan and zoom, for the frame rate
+	bool bLook = false; // the eye goes to a place and the picture waits for its fine ground ("look-at")
+	float LookSettled = 0.0f;
 	int32 OnScreen = -1; // (a press) 1 where the whole button lay inside the window, 0 where part of it lay beyond the edge, -1 for no button
 };
