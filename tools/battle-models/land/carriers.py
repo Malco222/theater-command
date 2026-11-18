@@ -643,7 +643,7 @@ def m3_halftrack(fine=True, tag="USA", fit="troops", name="M3Halftrack", title="
     """The half-track M3: 6.2 m long with her roller, 2.2 m wide, 2.0 m to her windscreen's head. A driver and two
     beside him, ten men on the benches, a heavy machine gun on a pedestal. fit: "troops", or anything else for a
     bare body with no benches, pedestal or clips, which whoever fits her out gives her."""
-    v = CarrierWorks(name, title, "carrier", tag, fine)
+    v = CarrierWorks(name, title, "carrier", tag, fine, paints={"canvas.seat": "5A5B40"})       # (her cushions are olive canvas, not pale)
     troops = fit == "troops"
     v.root(hull_pivot=(0.0, 0.0, 0.85), rock=(-4.0, 4.0))
     R, W, RR = 0.48, 0.21, 0.27
@@ -737,12 +737,12 @@ def m3_halftrack(fine=True, tag="USA", fit="troops", name="M3Halftrack", title="
         # inside: the fuel tank behind the cab, the bench, its back
         v.slab((-0.12, s * 0.5, zs), (0.12, s * (hw - 0.02), zs + 0.62), coat, 0.012, 2)
         if troops:
-            v.slab((bx0 + 0.1, s * 0.56, zs + 0.36), (-0.16, s * (hw - 0.03), zs + 0.44), "canvas", 0.02, 2)
-            v.slab((bx0 + 0.1, s * (hw - 0.09), zs + 0.46), (-0.16, s * (hw - 0.03), zs + 0.76), "canvas", 0.02, 2)
+            v.slab((bx0 + 0.1, s * 0.56, zs + 0.36), (-0.16, s * (hw - 0.03), zs + 0.44), "canvas.seat", 0.02, 2)
+            v.slab((bx0 + 0.1, s * (hw - 0.09), zs + 0.46), (-0.16, s * (hw - 0.03), zs + 0.76), "canvas.seat", 0.02, 2)
             for x in (bx0 + 0.3, -1.5, -0.4):
                 v.slab((x - 0.015, s * 0.58, zs), (x + 0.015, s * 0.62, zs + 0.36), "shade")
-        v.slab((0.22, s * 0.2, zs + 0.3), (0.62, s * 0.7, zs + 0.4), "canvas", 0.03, 2)                                        # the cab's seats
-        v.slab((0.16, s * 0.2, zs + 0.4), (0.24, s * 0.7, zs + 0.8), "canvas", 0.03, 2)
+        v.slab((0.22, s * 0.2, zs + 0.3), (0.62, s * 0.7, zs + 0.4), "canvas.seat", 0.03, 2)                                   # the cab's seats
+        v.slab((0.16, s * 0.2, zs + 0.4), (0.24, s * 0.7, zs + 0.8), "canvas.seat", 0.03, 2)
         v.lathe((bx0 - 0.002, s * 0.86, zs + 0.08), -X, [(0.03, 0.0), (0.03, 0.04), (0.0, 0.045), (0.0, 0.0)], "red", 10)
         v.slab((bx0 - 0.1, s * 0.5, 0.66), (bx0 - 0.02, s * 0.9, 0.78), coat, 0.01)                                            # the bumperette
     # the stern plate, and the door in it

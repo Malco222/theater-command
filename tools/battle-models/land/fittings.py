@@ -269,7 +269,8 @@ class Fittings:
             self.m.use(part)
         sides = self.n(16, 8)
         self.lathe(at + Z * stalk, f, [(r * 0.5, r * 0.96), (r * 0.5, r), (0.0, r), (-r * 0.6, r * 0.78), (-r * 0.95, r * 0.35), (-r * 1.0, 0.0)], paint, sides)
-        self.lathe(at + Z * stalk, f, [(r * 0.5, 0.0), (r * 0.5, r * 0.96)], "upper" if cover else "lamp", sides)
+        # (the glass is a shallow dome of dark glass: a flat bright one mirrors the sky and reads as a lit white disc)
+        self.lathe(at + Z * stalk, f, [(r * 0.64, 0.0), (r * 0.62, r * 0.36), (r * 0.57, r * 0.7), (r * 0.5, r * 0.96)], "upper" if cover else "lamp", sides)
         if cover and self.fine:
             self.box((0.004, r * 1.0, r * 0.12), at + Z * stalk + f * (r * 0.5 + 0.002), "lamp", turn=rot(math.degrees(math.atan2(f.y, f.x))))
         if stalk > 0 and self.fine:

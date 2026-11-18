@@ -379,7 +379,12 @@ def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.45, burn=None
 
     def look(paint, mat, nt, bsdf, mix):
         key = paint.split(".")[0]
-        if key in ("glass", "lamp"):
+        if key == "lamp":                                  # a lamp's glass, unlit: dark, with a soft shine (never the sky's mirror)
+            bsdf.inputs["Roughness"].default_value = 0.34
+            if "Specular IOR Level" in bsdf.inputs:
+                bsdf.inputs["Specular IOR Level"].default_value = 0.3
+            return
+        if key == "glass":
             bsdf.inputs["Roughness"].default_value = 0.06
             if "Specular IOR Level" in bsdf.inputs:
                 bsdf.inputs["Specular IOR Level"].default_value = 0.9

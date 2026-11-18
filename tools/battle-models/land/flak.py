@@ -190,7 +190,7 @@ def light_flak(v, at, parent="hull", lift=0.0, shield="wide", low=-5.0):
 
 
 # =====================================================================================================================
-def quad_mount(v, at, parent="hull", high=0.28, low=-5.0):
+def quad_mount(v, at, parent="hull", high=0.28, low=-5.0, seat="canvas.seat"):
     """Four heavy machine guns in a powered mount, stood on a floor at `at`, looking forward: the gunner sits between
     two side plates that carry the trunnions; outboard of each a round plate turns with the guns, with two guns and
     their chests on it; a plate before him lifts with them. Makes the parts turret > gun > barrel and the sockets
@@ -221,8 +221,8 @@ def quad_mount(v, at, parent="hull", high=0.28, low=-5.0):
     v.tube([p(-0.7, -0.14, 0.5), p(-0.76, -0.14, 0.56), p(-0.82, -0.14, 0.5), p(-0.82, -0.14, 0.2)], 0.014, "steel", 6)                # its exhaust
     if fine:
         v.louvres(p(-0.762, 0.0, 0.2), (0.3, 0.2), -X, count=6, down=-Z)
-    v.box((0.34, 0.40, 0.05), p(-0.2, 0.0, 0.3), "canvas", 0.018)                                                                   # his seat
-    v.box((0.05, 0.40, 0.34), p(-0.37, 0.0, 0.55), "canvas", 0.018)
+    v.box((0.34, 0.40, 0.05), p(-0.2, 0.0, 0.3), seat, 0.018)                                                                       # his seat
+    v.box((0.05, 0.40, 0.34), p(-0.37, 0.0, 0.55), seat, 0.018)
     v.rod(p(0.2, 0.0, 0.04), p(0.12, 0.0, 0.6), 0.016, "steel", 8)                                                                  # the column with the two grips he steers her by
     v.rod(p(0.12, -0.13, 0.6), p(0.12, 0.13, 0.6), 0.012, "steel", 6)
     for s in (LEFT, RIGHT):

@@ -218,6 +218,10 @@ def sheet(name, out, opt, w, h, spp):
     if S.carrier:        # a carrier: her last picture is the way down thrown open for the men
         shots[-1] = ("open", "The way down thrown open", (cx - L * 1.02, -L * 0.8, H * 1.25), (cx - L * 0.16, 0, H * 0.4), 50, -30.0,
                      rigid.merge(S.play("dismount", 1.2), rigid.aim(m, "mg_mount", 24.0) if "mg_mount" in m.part_at else {}))
+    if m.kind == "aa":   # a flak wagon: the battle camera sees her guns lifted, and her last picture is her mount from behind, laid on the sky
+        pv = m.parts[m.part_at["turret"]].pivot
+        shots[3] = shots[3][:6] + (S.train(bearing, 35.0),)
+        shots[-1] = ("trained", "Her guns laid on the sky", (pv.x - 3.3, -2.5, pv.z + 1.7), (pv.x + 0.1, 0.0, pv.z + 0.55), 50, 60.0, S.train(-38.0, 52.0))
     only = opt.get("views", "").split(",") if opt.get("views") else None
     files, labels = [], []
     for key, label, eye, tgt, lens, sun, pose in shots:
