@@ -32,17 +32,17 @@ MH = os.path.join(HERE, "makehuman_cc0")
 # The battle soldier's skeleton: (bone, parent, the MakeHuman bones merged into it). Any MakeHuman bone not named here
 # (the face, the eyes, the tongue, the toes' joints) goes to its nearest named ancestor.
 SKELETON = [
-    ("pelvis", "root", ["root", "pelvis.L", "pelvis.R"]),
-    ("spine_01", "pelvis", ["spine05", "spine04"]),
-    ("spine_02", "spine_01", ["spine03"]),
-    ("chest", "spine_02", ["spine02", "spine01", "breast.L", "breast.R"]),
+    ("pelvis", "root", ["root", "pelvis.L", "pelvis.R", "spine05"]),
+    ("spine_01", "pelvis", ["spine04"]),
+    ("spine_02", "spine_01", ["spine03", "spine02"]),
+    ("chest", "spine_02", ["spine01", "breast.L", "breast.R"]),
     ("neck", "chest", ["neck01", "neck02", "neck03"]),
     ("head", "neck", ["head"]),
 ]
 for _s, _S in (("l", "L"), ("r", "R")):
     SKELETON += [
         (f"clavicle_{_s}", "chest", [f"clavicle.{_S}"]),
-        (f"upperarm_{_s}", f"clavicle_{_s}", [f"shoulder01.{_S}", f"upperarm01.{_S}", f"upperarm02.{_S}"]),
+        (f"upperarm_{_s}", f"clavicle_{_s}", [f"upperarm01.{_S}", f"upperarm02.{_S}"]),
         (f"lowerarm_{_s}", f"upperarm_{_s}", [f"lowerarm01.{_S}", f"lowerarm02.{_S}"]),
         (f"hand_{_s}", f"lowerarm_{_s}", [f"wrist.{_S}"] + [f"metacarpal{k}.{_S}" for k in range(1, 5)]),
         (f"thumb_{_s}", f"hand_{_s}", [f"finger1-{k}.{_S}" for k in range(1, 4)]),
@@ -52,6 +52,12 @@ for _s, _S in (("l", "L"), ("r", "R")):
         (f"foot_{_s}", f"calf_{_s}", [f"foot.{_S}"]),
         (f"ball_{_s}", f"foot_{_s}", [f"toe{t}-{k}.{_S}" for t in range(1, 6) for k in range(1, 4)]),
     ]
+# MakeHuman bones shared between two of ours. shoulder01 is MakeHuman's helper over the top of the shoulder, from the
+# clavicle's end to the arm's own joint: half rides the clavicle, half the arm, so the deltoid turns with the arm
+# but the top of the shoulder does not swing round a point inside the chest. (Changed 2026-11-18 for the soldier's
+# clips: the arm turns at the real shoulder joint, three quarters of the way along shoulder01.)
+SHARED = {f"shoulder01.{_S}": [(f"clavicle_{_s}", 0.5), (f"upperarm_{_s}", 0.5)] for _s, _S in (("l", "L"), ("r", "R"))}
+ARM_PIVOT = 0.75          # where along shoulder01 the arm turns
 
 # Faces by army: the mix of MakeHuman's three regional base shapes (a plain average, not a portrait of anyone).
 NATION_MIX = {"JAP": (0.1, 0.05, 0.85), "CHN": (0.1, 0.05, 0.85), "THA": (0.1, 0.05, 0.85), "IND": (0.6, 0.2, 0.2), "_default": (0.75, 0.12, 0.13)}
@@ -153,8 +159,11 @@ def _mesh(name, verts, faces_uv, UV, keep=None):
     return ob, used
 
 
-def build(seed=0, nation="_default", height=1.75, look=None, name="man"):
-    """Builds one man in the current scene. Returns a dict of his objects and joint places (see the module note)."""
+def build(seed=0, nation="_default", height=1.75, look=None, name="man", stand=0.0, curl=None, eye_res=(16, 10)):
+    """Builds one man in the current scene. Returns a dict of his objects and joint places (see the module note).
+    `stand` lifts him (and everything with him) by so many metres, as boot soles do. `curl` bends the four fingers'
+    three joints by so many degrees each in the rest mesh, e.g. (30, 45, 25) for a hand half shut, ready to hold a
+    rifle (the thumb bends a third as much); None leaves the hand open. `eye_res` is the eyeballs' (segments, rings)."""
     V, UV, groups = _load_obj()
     w = look_for(seed, nation)
     if look:
@@ -164,17 +173,22 @@ def build(seed=0, nation="_default", height=1.75, look=None, name="man"):
     feet = min(S[i].y for f, _ in body_faces for i in f)
     crown = max(S[i].y for f, _ in body_faces for i in f)
     k = height / ((crown - feet) * 0.1)
-    lift = Vector((0, 0, -feet * 0.1 * k))
+    lift = Vector((0, 0, -feet * 0.1 * k + stand))
     P = [_bl(v, k) + lift for v in S]
 
     # ---- the skeleton's joints, where MakeHuman says they are on this man
     skel = json.load(open(os.path.join(MH, "default.mhskel")))
     joints = {n: sum((P[i] for i in idx), Vector()) / len(idx) for n, idx in skel["joints"].items()}
     mh = skel["bones"]
+    mhw = json.load(open(os.path.join(MH, "default_weights.mhw")))["weights"]
+    if curl:
+        P, joints = _curl(P, joints, mhw, curl, len(groups["body"]))
     owner = {}
     for b, _, members in SKELETON:
         for m in members:
             owner[m] = b
+    for m, shares in SHARED.items():
+        owner[m] = shares[0][0]
 
     def owner_of(m):
         while m not in owner:
@@ -191,6 +205,10 @@ def build(seed=0, nation="_default", height=1.75, look=None, name="man"):
     root = eb.new("root")
     root.head, root.tail = Vector((0, 0, 0)), Vector((0.25, 0, 0))
     heads = {b: joints[members[0] + "____head"] for b, _, members in SKELETON}
+    heads["pelvis"] = (joints["upperleg01.L____head"] + joints["upperleg01.R____head"]) / 2 + Vector((0, 0, 0.025))
+    for _S in ("L", "R"):
+        a, b = joints[f"shoulder01.{_S}____head"], joints[f"shoulder01.{_S}____tail"]
+        heads[f"upperarm_{_S.lower()}"] = a + (b - a) * ARM_PIVOT
     children = {}
     for b, p, _ in SKELETON:
         children.setdefault(p, []).append(b)
@@ -230,7 +248,7 @@ def build(seed=0, nation="_default", height=1.75, look=None, name="man"):
         idx = sorted({i for f, _ in g for i in f})
         c = sum((P[i] for i in idx), Vector()) / len(idx)
         r = max((P[i] - c).length for i in idx) * 0.98
-        bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=10, radius=r, location=c)
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=eye_res[0], ring_count=eye_res[1], radius=r, location=c)
         e = bpy.context.object
         e.name = f"{name}_eye_{side}"
         e.rotation_euler = (0, math.pi / 2, 0)                  # the sphere's pole looks forward, for the iris
@@ -239,13 +257,13 @@ def build(seed=0, nation="_default", height=1.75, look=None, name="man"):
         eyes.append(e)
 
     # ---- the weights: MakeHuman's own, merged onto our bones
-    mhw = json.load(open(os.path.join(MH, "default_weights.mhw")))["weights"]
     per_vertex = {}
     for mb, pairs in mhw.items():
-        b = owner_of(mb) if mb in mh else "head"
+        shares = SHARED.get(mb) or [(owner_of(mb) if mb in mh else "head", 1.0)]
         for vi, wt in pairs:
-            per_vertex.setdefault(vi, {}).setdefault(b, 0.0)
-            per_vertex[vi][b] += wt
+            for b, share in shares:
+                per_vertex.setdefault(vi, {}).setdefault(b, 0.0)
+                per_vertex[vi][b] += wt * share
     kd = KDTree(len(used))
     for n, vi in enumerate(used):
         kd.insert(P[vi], n)
@@ -299,7 +317,47 @@ def build(seed=0, nation="_default", height=1.75, look=None, name="man"):
         if wgt > 0.01:
             sc.add([n], wgt, "REPLACE")
     return {"armature": arm, "body": body, "eyes": eyes, "tights": shells["tights"][0], "skirt": shells["skirt"][0],
-            "joints": {b: heads[b].copy() for b in heads}, "scale": k, "look": w}
+            "joints": {b: heads[b].copy() for b in heads}, "scale": k, "look": w,
+            "mh_joints": {n: v.copy() for n, v in joints.items()}}
+
+
+def _curl(P, joints, mhw, angles, n_body):
+    """The fingers bent in the rest mesh: each finger's three joints turn toward the palm by `angles` (degrees), the
+    thumb's by a third as much; MakeHuman's own finger weights carry the skin. Returns the new points and joints."""
+    from mathutils import Matrix
+    P = list(P)
+    joints = dict(joints)
+    for S in ("L", "R"):
+        J = lambda b, end="head": joints[f"{b}.{S}____{end}"]
+        wrist = J("wrist")
+        a = (J("finger3-1") - wrist).normalized()
+        t = J("finger2-1") - J("finger5-1")
+        t = (t - a * a.dot(t)).normalized()
+        n = a.cross(t) if S == "L" else t.cross(a)               # out of the palm
+        for f in range(1, 6):
+            scale = 1.0 / 3.0 if f == 1 else 1.0
+            M = Matrix.Identity(4)
+            mats = []
+            for kk in range(1, 4):
+                b = f"finger{f}-{kk}"
+                d = (J(b, "tail") - J(b)).normalized()
+                axis = d.cross(n).normalized()                    # turning about it by + bends toward the palm
+                R = Matrix.Rotation(math.radians(angles[kk - 1] * scale), 4, axis)
+                M = M @ Matrix.Translation(J(b)) @ R @ Matrix.Translation(-J(b))
+                mats.append((b, M.copy()))
+            moved = {}
+            for b, M_ in mats:
+                for vi, wt in mhw.get(f"{b}.{S}", []):
+                    if vi < n_body:
+                        moved.setdefault(vi, Vector())
+                        moved[vi] += (M_ @ P[vi] - P[vi]) * wt
+            for vi, dv in moved.items():
+                P[vi] = P[vi] + dv
+            for kk, (b, M_) in enumerate(mats):
+                prev = mats[kk - 1][1] if kk else Matrix.Identity(4)
+                joints[f"{b}.{S}____head"] = prev @ joints[f"{b}.{S}____head"]
+                joints[f"{b}.{S}____tail"] = M_ @ joints[f"{b}.{S}____tail"]
+    return P, joints
 
 
 def skin_material(name="skin", tone="C59A7C", seed=0):
