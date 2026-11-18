@@ -92,7 +92,7 @@ oil slick.
 
 ## Aircraft
 
-The fifteen are built by the game's own sculptor (`game/build_plane.py`, copied from the `unreal` branch) and
+All are built by the game's own sculptor (`game/build_plane.py`, copied from the `unreal` branch) and
 then taken apart. Her shape, colours, camouflage blend and markings are exactly the game's. For a battle the
 sculptor is run at a finer grain (`FINER` in `planes.py`: 40 points round the fuselage, a ring every 15 cm, 16
 points along the chord), so that her skin is smooth with the camera a wing's length away, and `fitout.py` then
@@ -103,7 +103,8 @@ adds what is seen at that distance:
 - exhaust stubs or pipes with their stain down the cowling, gun ports (doped red patches on British wings),
   muzzles, cowling fasteners, wingtip and tail lamps;
 - rows of rivets along frames, stringers, spars and ribs (small dark squares, the fine model only);
-- a bomb bay behind two doors with the bombs on their racks (`He111`, `Lancaster`, `B17`, `Bomber`);
+- a bomb bay behind two doors with the bombs on their racks (`BAYS` in `planes.py`: the bombers, and the
+  torpedo bombers that carry their torpedo inside);
 - the black rubber along the leading edges of the `B17`, her two open waist windows with a gunner standing at each
   gun (`WAIST` in `planes.py` cuts them out of her skin);
 - her tail gunner in a closed position: three small framed panes in each side and a glazed panel over his guns
@@ -121,6 +122,49 @@ airscrew off and skin the pods; `fitout.jets` adds the intake lips and bullets, 
 She has no `prop.N` parts and no flaps; her sockets add `jet.N` (each tailpipe). Her file says `year` 1944 and
 `tech` "jets": by the art director's unit table Germany flies her only once jet fighters are researched (the rules'
 tech `jets`), and whether a battle mixes her in among the Fw 190s is the air battle builder's call.
+
+**The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, twelve more entries in
+`EXTRA_PLANES`. Paints and first years are the art director's rulings of that day; the file's `year` is the first
+year a nation flies her (none: from the start), `tech` the rules' technology she needs, `tag` the model tag the
+design director gave her.
+
+| file | what she is | year, tech | crew | she carries |
+| --- | --- | --- | --- | --- |
+| `Hellcat` | US Navy carrier fighter, three blues over white | 1943 | 1 | a belly tank |
+| `CarrierFighter` | carrier fighter for any other nation (`nation_paint`) | | 1 | |
+| `Kate` | Japan's carrier torpedo bomber, pale grey | 1937 | 3 | a torpedo, or one heavy bomb for bombing from high up |
+| `Avenger` | US Navy torpedo bomber, blue-grey over light grey | 1942 | 3 | a torpedo or bombs, in her bay |
+| `TorpedoBomber` | carrier torpedo bomber for any other nation | | 3 | a torpedo or bombs, in her bay |
+| `Val` | Japan's carrier dive bomber, fixed undercarriage | 1940 | 2 | a bomb on its crutch |
+| `Dauntless` | US Navy dive bomber, holed dive flaps | 1941 | 2 | a bomb on its crutch |
+| `DiveBomber` | carrier dive bomber for any other nation | | 2 | a bomb on its crutch |
+| `Nell` | Japan's land-based bomber of the early war: two engines, two fins | | 7 | a torpedo or one heavy bomb, under her |
+| `Betty` | Japan's land-based bomber: two engines, a glass cone in her tail | 1941 | 7 | a torpedo or bombs, in her bay |
+| `Amerikabomber` | Germany's very long range heavy: four engines, two fins | `verylongrange`, tag `amerikabomber` | 8 | bombs |
+| `B29` | America's very long range heavy: four engines, bare metal | `verylongrange`, tag `b29` | 11 | bombs |
+
+What they add to the form:
+
+- **A torpedo is a second load.** Part `torpedo` (a slide, like `bombs`), socket `torpedo`, clip `torpedo_away` (a
+  bay's doors open first). A machine that can carry either says so in her file (`loads`: `["torpedo", "bombs"]`), and
+  she carries one or the other, never both: play `load.torpedo` or `load.bombs` first (each scales the other load
+  away) and leave it applied. Extras painted `torpedo` are her torpedo; `BAY_TORPEDO` puts one in a bay. The new
+  `Torpedo` model is for the game to drop and run: clips `drop` and `run` (its wooden air fins, part `box`, are
+  scaled away in the water; part `screws` turns), sockets `nose` and `wake`.
+- **A coat graded down her sides** (`graded` in the numbers, patched in by `GRADED`): the Hellcat's sea blue on top,
+  a paler blue down her sides and on her fin, white beneath.
+- **Dive flaps full of holes** (`HOLED` in `fitout.py`): the Dauntless.
+- **Blisters.** A dome off her middle line is fixed to her and never a turret; a gun in it is a `flexgun.N`. On the
+  machines in `BLISTER_CREW` a man is seen at each one (the Betty's and the Nell's waist gunners; the B-29's three
+  gunners, who sight through theirs for turrets they do not sit in).
+- **Turrets with nobody in them** (`REMOTE` in `planes.py`): the B-29's four are low steel domes, parts `turret.N`
+  and `turret.N.guns` like any other.
+- **A nose of glass with no step** (`windows_back`): the windows over the pilots, behind the part that is glass all
+  round, are framed like the nose. Both pilots and the bomb aimer are seen in it (`NOSE_CREW`).
+- **Bare metal** (`bare` in the numbers; the file says `finish: "bare metal"`): draw her painted skin (`upper`,
+  `upper2`, `under`, `nose`) as metal. The pictures use metallic 0.85, roughness 0.4.
+- The B-29 has two bomb bays. The model opens the forward one; the rear one's doors are scribed in her belly
+  (`SHUT_BAYS`).
 
 **Her record, painted on her** (Brian, 2026-11-18: an ace's kills by his cockpit, a bomber's missions as rows of
 small yellow bombs, a star over a mission she led). Each aircraft file carries a `tally`: lists of slots, each slot a
@@ -156,7 +200,7 @@ Japanese machines); drawn as one even grey disc it reads as a plastic plate.
 
 Parts: `plane` (root: the fuselage), `wing.port`, `wing.starboard` (each wing outboard of the fuselage with its
 engines and guns), `tail` (rear fuselage, tailplane, fins), `prop.N` (blades, numbered from the port side),
-`prop.N.blur`, and `bombs` where something hangs under her or in her bay. Both ends of every break are closed.
+`prop.N.blur`, `bombs` where something hangs under her or in her bay, and `torpedo` where she can carry one. Both ends of every break are closed.
 Moving surfaces, each a `turn` part with limits: `aileron.port/starboard`, `flap.port/starboard` (machines with
 no engines on the wing), `elevator.port/starboard`, `rudder` (or `rudder.port/starboard`), `bay.port/starboard`
 (bomb doors, plus opens). Plus on an aileron, flap or elevator is trailing edge down; plus on a rudder is
@@ -164,11 +208,12 @@ trailing edge to starboard. Guns: `turret.N` (plus trains it clockwise seen from
 `turret.N.guns` (plus lifts them), and `flexgun.N` (a gun on a free mounting, keyed by rotation).
 
 Sockets: `engine.N`, `jet.N` (a jet's tailpipe), `gun.N` and `gun.nose` (fixed guns), `turret.N` (gunners' muzzles, riding their guns),
-`bombs`, `hatch`, `hatch.belly`, `wingtip.*`, `tank.*`, `stub.*`, `break.wing.*`, `break.tail`, `fuel`, `trail`.
+`bombs`, `torpedo`, `hatch`, `hatch.belly`, `wingtip.*`, `tank.*`, `stub.*`, `break.wing.*`, `break.tail`, `fuel`, `trail`.
 
 Clips: `fly` (loop: discs turning, a little life, the controls working), `idle`, `stopped`,
 `bank.port/starboard` (ailerons over, elevators up), `peel_off` (fighters), `flaps.down`, `fire`, `fire.turrets`,
-`watch` (loop: gunners sweeping the sky), `bombs_away` (the doors open first, then the bombs go), `doors.close`,
+`watch` (loop: gunners sweeping the sky), `bombs_away` (the doors open first, then the bombs go), `torpedo_away`,
+`load.torpedo` and `load.bombs` (which of two loads she is seen with), `doors.close`,
 `hit`, `smoking`, and the three ways down: `fall_burn`, `fall_spin` (the port wing shot off), `fall_explode`
 (wings and tail fly off); `bail_out` (one `chute` event for each of the crew who get out: spawn a `Parachute`
 there and play its `open`, then `drift`).
@@ -180,7 +225,7 @@ A piece that has broken away is still a child of the fuselage in the file; its t
 fuselage's own turning, so it flutters away rightly if the tracks are simply played.
 
 `Parachute`: parts `chute` (root, the harness point), `canopy` (scaled from a streamer to full), `airman`
-(swings). Clips `open`, `drift` (loop), `collapse`. `Bomb`: clip `fall`.
+(swings). Clips `open`, `drift` (loop), `collapse`. `Bomb`: clip `fall`. `Torpedo`: clips `drop`, `run`.
 
 ## Making them again, and the pictures
 
@@ -190,7 +235,7 @@ python export.py <out> all                     # every model: .json, .glb, .fbx,
 python look.py Freighter <out> close,aft       # quick stills while building (small craft: small,smallaft)
 python show.py Battleship_UK turn <out>        # ship clips: turn, broadside, sink, capsize
 python airshow.py shot_down <out>              # aircraft clips: flypast (plane=Me262 for another machine), shot_down, ways_down
-python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, rear, over, under, side, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; record=JSON)
+python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, glass, rear, over, under, side, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; clip=load.bombs@0; record=JSON)
 python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
 ```
 
@@ -203,7 +248,7 @@ Two lessons of the close fly-past, kept in `airshow.py`. The camera goes nearly 
 somewhere it looks up-sun, and there the sun's glare off the wings washed the camouflage out to cream: the sun now
 stands so that the glare falls in the gap the camera never visits (`SUN`), and a painted skin shines a little less
 (`SKIN`). A machine that only comes late in the war carries its `year` in its file, and its sheet label says
-"from 1944".
+"from 1944"; one that needs a technology and has no year says "by research".
 
 ## Not done yet
 
@@ -214,10 +259,16 @@ stands so that the glare falls in the gap the camera never visits (`SUN`), and a
   `stuka_drone_loop`; list in `/mnt/project-files/sound/battle-pack/sound-list.json`). No sound file goes into the
   game until Brian has judged it (ruling 144). Names with no recording yet, which stay silent: `bomb_release`,
   `bomb_doors`, `jet_engine_loop`, `aircraft_fire`, `aircraft_break_up`, `parachute_open`, `ship_sinking`, `torpedo_launch`,
+  `torpedo_run_loop`,
   `depth_charge_roll`, `depth_charge_thrower`, `dive_alarm`, `surfacing`, `lift_motor`, `craft_grounds`,
   `ramp_drop`, `ramp_winch`.
 - Effects are named in events but not built for the game; the pictures use Blender-only effects from `stage.py`.
-- Aircraft have no undercarriage that lowers; a carrier's deck park uses the plain models.
+- Aircraft have no undercarriage that lowers; a carrier's deck park uses the plain models. No wings that fold and
+  no arrester hook that drops.
+- The carrier planes and the Japanese bombers are each in the scheme of their first year. The art director's
+  `carrier_paint` table gives the later schemes by year (the US Navy's three blues from 1943 and sea blue from
+  mid-1944, Japan's dark green over grey from 1942-43): the game can repaint by `colours`, or the models can be
+  written out again per scheme.
 - Camouflage patches are blended from point to point of the skin, so their edges are as soft as the skin's grain is
   coarse. The art director would like the 1940 British and German schemes tight-edged (a hand's width); that needs
   the skin cut along the patch edges, or the patches drawn in the game's shader. Soft is right for the Soviet

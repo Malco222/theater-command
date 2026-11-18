@@ -51,19 +51,23 @@ CHORDS_PLAIN = [0.0, 0.1, 0.35, 0.62, 0.75, 0.9, 1.0]
 BATTLE = {"hull": 0.15, "wing": 0.24, "tail": 0.22, "fin": 0.2}        # (how far apart the rings stand; set for each machine)
 FLAP, AILERON, ELEVATOR, RUDDER = (0.1, 0.5, 0.76), (0.54, 0.93, 0.74), (0.08, 0.95, 0.62), (0.06, 1.0, 0.60)
 # Where a bomber's bay is: from, to along her (its doors are the strip of her belly BAY_HALF degrees each side of her keel).
-BAYS = {"He111": (3.3, 1.3), "Lancaster": (6.4, -3.0), "B17": (1.6, -1.0), "Bomber": (2.0, -0.8), "Avenger": (2.3, -2.0), "TorpedoBomber": (2.0, -1.9)}
+BAYS = {"He111": (3.3, 1.3), "Lancaster": (6.4, -3.0), "B17": (1.6, -1.0), "Bomber": (2.0, -0.8), "Avenger": (2.3, -2.0), "TorpedoBomber": (2.0, -1.9),
+        "Betty": (2.8, -2.7), "Amerikabomber": (2.6, -2.2), "B29": (6.4, 2.9)}
 # The machines whose bay holds a torpedo, or bombs instead (the loads are parts `torpedo` and `bombs`: one is hidden).
-BAY_TORPEDO = {"Avenger": (4.1, 0.28), "TorpedoBomber": (3.8, 0.24)}       # (how long it is, half as thick)
+BAY_TORPEDO = {"Avenger": (4.1, 0.28), "TorpedoBomber": (3.8, 0.24), "Betty": (5.3, 0.225)}       # (how long it is, half as thick)
 BAY_HALF = 27.0
 # Open windows in a bomber's sides where a gunner stands at his gun: (from, to along her; from, to in degrees above the
 # level of her middle). They are cut on the lines of her skin's own rings, on the fine model only.
-WAIST = {"B17": (-4.5, -5.3, 0.0, 27.0)}
+WAIST = {"B17": (-4.5, -5.3, 0.0, 27.0), "Amerikabomber": (-5.0, -5.8, 0.0, 27.0)}
 # Windows the game's numbers give a machine, made larger where a battle looks in at a man: (from, to, half its height).
 GLASS = {"B17": [(0.85, 0.35, 0.16)]}
 # A closed gun position's windows: panes of glass set in her skin, each (from, to along her; from, to round her side
 # in degrees up from level), on both sides alike; a pane that runs up to 90 is one panel across her back. They are
 # framed by fitout.tail_gunner. (The art director, 2026-11-18: one clear band round her tail read as a missing panel.)
-PANES = {"B17": [(-13.2, -13.9, 0.0, 36.0), (-13.67, -14.36, 45.0, 90.0)]}
+PANES = {"B17": [(-13.2, -13.9, 0.0, 36.0), (-13.67, -14.36, 45.0, 90.0)], "B29": [(-18.04, -18.74, 0.0, 36.0), (-18.51, -19.2, 45.0, 90.0)],
+         "Betty": [(-10.45, -11.4, -27.0, 90.0)]}                           # (the Betty's tail is a cone of glass round her gunner)
+# The machines whose every turret is aimed from somewhere else in her: nobody sits in one.
+REMOTE = {"B29"}
 LINE = 0.4                                                                # (how wide a scribed line is drawn, as a share of the map's)
 
 # The game's sculptor at a battle's grain: each line of it that sets a grain, and what stands there instead.
@@ -87,6 +91,20 @@ FINER = [
 GRADED = [
     ('    def field(p):\n        return noise.noise(', '    def field(p):\n        if s.get("graded"):\n            return s["graded"](p)\n        return noise.noise('),
     ('        if p.x > nose_back:\n            return "nose"', '        if p.x > nose_back and not s.get("graded"):\n            return "nose"'),
+]
+
+
+# A nose of glass with no step (`windows_back`): behind the part that is glass all round, the windows over the pilots
+# are framed as the nose is, down to where her metal belly begins.
+NOSES = [
+    ("            parts.strip(frames, [hull.at(x, a) for x in xs], [hull.out(x, a) for x in xs], 0.016, 0.008)\n",
+     "            parts.strip(frames, [hull.at(x, a) for x in xs], [hull.out(x, a) for x in xs], 0.016, 0.008)\n"
+     "            if s.get('windows_back') and hull.out(glazed[1], a).z > -0.5:\n"
+     "                more = [glazed[0] - (glazed[0] - glazed[1]) * j / 6.0 for j in range(7)]\n"
+     "                parts.strip(frames, [hull.at(x, a) for x in more], [hull.out(x, a) for x in more], 0.02, 0.008)\n"),
+    ("            parts.strip(frames, [hull.at(x, a) for a in angles], [hull.out(x, a) for a in angles], 0.018, 0.008)\n",
+     "            ring = angles if x >= glazed[0] - 0.01 else [math.radians(-30.0 + 240.0 * k / 30.0) for k in range(31)]\n"
+     "            parts.strip(frames, [hull.at(x, a) for a in ring], [hull.out(x, a) for a in ring], 0.018 if x >= glazed[0] - 0.01 else 0.024, 0.008)\n"),
 ]
 
 
@@ -305,6 +323,102 @@ EXTRA_PLANES["TorpedoBomber"] = {
 }
 
 
+# ---- the big bombers of 2026-11-18 (Brian: "the japanese also had a high level bomber we should add"; "the germans should
+#      also in their tech tree have a 4 engine heavy bomber which they were actually thinking of making to attack the US").
+#      The design director's b441: the very long range heavy is one technology any nation can research (`tech`); the German
+#      model answers to the tag amerikabomber, America's to b29. ----
+# The Japanese navy's land-based bombers of the early war: green and brown over grey (the art director).
+_LAND = {"upper": "3F4A36", "upper2": "6B5A3F", "under": "A3A69C", "nose": "3F4A36", "boss": "2A2B2D"}
+EXTRA_PLANES["Betty"] = {
+    "title": "G4M Betty (our own model)", "year": 1941,
+    # (a fat cigar of a fuselage, round all the way to the glass cone in her tail)
+    "hull": [(8.6, -0.1, 0.14, 0.14), (8.35, -0.1, 0.46, 0.48), (7.8, -0.06, 0.76, 0.8), (7.0, -0.02, 0.92, 1.0), (5.6, 0.0, 1.0, 1.14), (3.0, 0.0, 1.03, 1.2), (0.0, 0.0, 1.03, 1.2),
+             (-3.0, 0.02, 1.0, 1.14), (-6.0, 0.08, 0.86, 0.98), (-8.6, 0.16, 0.66, 0.76), (-10.3, 0.2, 0.5, 0.58), (-11.0, 0.2, 0.42, 0.48), (-11.4, 0.2, 0.27, 0.31)],
+    "square": 2.0, "screw": 1.7, "blades": 3, "glazed": (7.7, 7.7), "nose_frames": ((8.2,), 8),
+    "hoods": [([(6.5, 1.0, 0.42, 0.06), (5.9, 1.3, 0.6, 0.3), (4.4, 1.38, 0.62, 0.34), (3.2, 1.3, 0.5, 0.22), (2.5, 1.18, 0.32, 0.05)], (5.9, 5.4, 4.9, 4.4, 3.8, 3.2), True)],
+    "wing": [(0.0, 2.5, -2.4, -0.15, 0.8), (3.3, 2.25, -2.3, -0.08, 0.7), (9.6, 1.2, -1.2, 0.2, 0.3), (11.6, 0.78, -0.72, 0.3, 0.16), (12.3, 0.42, -0.42, 0.33, 0.07), (12.45, 0.1, -0.2, 0.34, 0.01)],
+    "tail": [(0.0, -8.3, -10.3, 0.5, 0.3), (3.7, -9.0, -10.2, 0.5, 0.16), (4.3, -9.5, -10.05, 0.5, 0.03)],
+    "fin": [(0.0, -7.4, -10.7, 0.6, 0.2), (0.0, -8.5, -10.85, 1.8, 0.26), (0.0, -9.4, -10.9, 3.0, 0.18), (0.0, -10.0, -10.8, 3.7, 0.08), (0.0, -10.4, -10.6, 3.9, 0.01)],
+    "patch": 3.4, "colours": dict(_LAND), "engines": [(3.3, 2.25, -0.2, True, 3.6)], "well": (3.3, 0.45, 0.5), "pitot": True,
+    "tailwheel": (-9.6, -0.6), "mast": (1.6, 1.2, 1.75),
+    # (the gun in her nose; the blister on her back and its gun; a blister each side at her waist and its gun; the cannon in her tail)
+    "extras": [("rod", ((8.55, 0.0, -0.1), (9.2, 0.0, -0.13), 0.02, 0.016, "steel")),
+               ("dome", ((-2.6, 0.0, 1.2), (0.55, 0.42, 0.36))), ("rod", ((-2.75, 0.0, 1.32), (-3.55, 0.0, 1.6), 0.02, 0.016, "steel")),
+               ("dome", ((-4.9, 0.9, 0.3), (0.5, 0.27, 0.36))), ("dome", ((-4.9, -0.9, 0.3), (0.5, 0.27, 0.36))),
+               ("rod", ((-5.0, 1.0, 0.32), (-5.5, 1.7, 0.26), 0.02, 0.016, "steel")),
+               ("rod", ((-11.3, 0.0, 0.2), (-12.2, 0.0, 0.2), 0.03, 0.022, "steel"))],
+    "side_marks": [(-6.9, 0.52, "JAP-PLAIN")], "wing_marks": [(9.0, 0.1, 0.95, "JAP-PLAIN", "JAP-PLAIN", True, True)], "code": (-8.3, 0.36),
+}
+EXTRA_PLANES["Nell"] = {
+    "title": "G3M Nell (our own model)",
+    # (slim, with a solid nose and two fins: the bomber Japan began the war with)
+    "hull": [(7.2, -0.12, 0.1, 0.1), (6.95, -0.12, 0.34, 0.36), (6.3, -0.06, 0.56, 0.62), (5.2, 0.0, 0.68, 0.8), (3.5, 0.0, 0.72, 0.9), (0.0, 0.0, 0.72, 0.9), (-3.0, 0.05, 0.64, 0.8),
+             (-6.0, 0.14, 0.42, 0.52), (-8.2, 0.22, 0.2, 0.28), (-9.25, 0.26, 0.05, 0.1)],
+    "square": 2.2, "screw": 1.6, "blades": 3,
+    "hoods": [([(5.5, 0.74, 0.34, 0.06), (4.9, 1.02, 0.46, 0.26), (3.8, 1.06, 0.46, 0.27), (3.0, 0.92, 0.34, 0.06)], (4.9, 4.35, 3.8), True)],
+    "wing": [(0.0, 2.1, -2.3, -0.4, 0.62), (3.0, 1.9, -2.15, -0.32, 0.56), (9.5, 0.95, -1.05, 0.02, 0.24), (11.6, 0.6, -0.65, 0.13, 0.13), (12.3, 0.3, -0.35, 0.17, 0.06), (12.5, 0.05, -0.15, 0.18, 0.01)],
+    "tail": [(0.0, -7.2, -8.8, 0.42, 0.22), (3.2, -7.5, -8.7, 0.42, 0.12), (3.4, -7.75, -8.6, 0.42, 0.03)],
+    "fins": [([(0.0, -7.95, -8.45, -0.4, 0.02), (0.0, -7.55, -8.85, 0.0, 0.1), (0.0, -7.4, -9.05, 0.6, 0.13), (0.0, -7.55, -9.0, 1.2, 0.1), (0.0, -7.85, -8.8, 1.65, 0.05), (0.0, -8.15, -8.55, 1.82, 0.01)], 3.3)],
+    "patch": 3.2, "colours": dict(_LAND), "engines": [(3.0, 1.9, -0.42, True, 3.2)], "well": (3.0, 0.45, 0.5), "pitot": True,
+    "tailwheel": (-8.0, -0.3), "mast": (2.4, 0.9, 1.5),
+    # (her torpedo, or the one heavy bomb she carried instead, slung under her: she has no bay; the small turret on her back
+    #  and the big one behind it with its cannon; a blister each side at her waist and its gun)
+    "extras": _torpedo(0.3, -1.15) + [
+        ("body", ([(1.9, -1.12, 0.03, 0.03), (1.6, -1.12, 0.17, 0.17), (1.1, -1.12, 0.205, 0.205), (0.2, -1.12, 0.19, 0.19), (-0.4, -1.12, 0.07, 0.07), (-0.55, -1.12, 0.03, 0.03)], 0.0, 2.0, "bomb")),
+        ("rod", ((-0.25, 0.0, -1.12), (-0.55, 0.0, -1.12), 0.2, 0.2, "bomb")),
+        ("dome", ((1.2, 0.0, 0.95), (0.36, 0.36, 0.3))), ("rod", ((1.1, 0.0, 1.05), (0.4, 0.0, 1.3), 0.02, 0.016, "steel")),
+        ("dome", ((-2.4, 0.0, 0.92), (0.52, 0.46, 0.42))), ("rod", ((-2.6, 0.0, 1.06), (-3.7, 0.0, 1.42), 0.03, 0.022, "steel")),
+        ("dome", ((-4.3, 0.56, 0.3), (0.48, 0.26, 0.34))), ("dome", ((-4.3, -0.56, 0.3), (0.48, 0.26, 0.34))),
+        ("rod", ((-4.4, 0.66, 0.32), (-4.9, 1.35, 0.26), 0.02, 0.016, "steel"))],
+    "side_marks": [(-5.9, 0.34, "JAP-PLAIN")], "wing_marks": [(9.0, 0.0, 0.85, "JAP-PLAIN", "JAP-PLAIN", True, True)], "code": (-7.0, 0.24),
+}
+EXTRA_PLANES["Amerikabomber"] = {
+    "title": "Very long range heavy bomber, the Amerika kind (our own model)", "tech": "verylongrange", "tag": "amerikabomber",
+    # (a long round fuselage with a nose of glass and no step, a long narrow wing on her shoulders, two fins)
+    "hull": [(9.5, -0.1, 0.16, 0.16), (9.25, -0.1, 0.52, 0.52), (8.7, -0.06, 0.84, 0.84), (7.9, -0.02, 1.02, 1.03), (6.8, 0.0, 1.09, 1.1), (4.0, 0.0, 1.1, 1.12), (0.0, 0.0, 1.1, 1.12),
+             (-4.0, 0.03, 1.02, 1.05), (-7.0, 0.12, 0.8, 0.86), (-9.5, 0.24, 0.5, 0.58), (-10.8, 0.32, 0.26, 0.34), (-11.4, 0.35, 0.06, 0.12)],
+    "square": 2.0, "screw": 1.75, "blades": 3, "glazed": (7.9, 6.9), "nose_frames": ((9.0, 8.45, 7.9, 7.4, 6.92), 12), "windows_back": True,
+    "wing": [(0.0, 2.8, -2.4, 0.5, 0.92), (4.9, 2.35, -2.2, 0.56, 0.78), (9.5, 1.9, -1.75, 0.64, 0.58), (17.5, 1.0, -0.8, 0.8, 0.26), (20.5, 0.6, -0.4, 0.87, 0.13), (21.3, 0.3, -0.2, 0.89, 0.05),
+             (21.5, 0.05, -0.05, 0.9, 0.01)],
+    "tail": [(0.0, -8.9, -10.9, 0.7, 0.3), (5.3, -9.45, -10.8, 0.7, 0.16), (5.55, -9.75, -10.7, 0.7, 0.04)],
+    "fins": [([(0.0, -10.3, -10.75, -0.55, 0.02), (0.0, -9.75, -11.15, -0.05, 0.13), (0.0, -9.5, -11.3, 0.8, 0.18), (0.0, -9.7, -11.25, 1.8, 0.14), (0.0, -10.1, -11.05, 2.5, 0.07),
+               (0.0, -10.5, -10.8, 2.75, 0.01)], 5.45)],
+    # (two greens over pale blue: the art director)
+    "patch": 3.6, "colours": {"upper": "3A4234", "upper2": "525E48", "under": "8FB0BF", "nose": "3A4234", "boss": "2E332A"},
+    "engines": [(4.9, 2.35, 0.42, True, 4.3), (9.5, 1.9, 0.52, True, 3.3)], "well": (4.9, 0.5, 0.6), "pitot": True, "mast": (2.0, 1.12, 1.7),
+    # (a turret on her back behind the cockpit and another behind the wing; a low one under her, aimed from inside; a gun at each waist window)
+    "extras": [("dome", ((4.4, 0.0, 1.16), (0.46, 0.46, 0.38))), ("rod", ((4.5, 0.0, 1.32), (5.4, 0.0, 1.6), 0.024, 0.018, "steel")),
+               ("dome", ((-3.6, 0.0, 1.1), (0.5, 0.5, 0.4))), ("rod", ((-3.75, 0.0, 1.24), (-4.75, 0.0, 1.55), 0.03, 0.022, "steel")),
+               ("ball", ((-3.3, 0.0, -1.06), (0.5, 0.42, 0.26), "under")), ("rod", ((-3.4, 0.1, -1.18), (-4.3, 0.1, -1.42), 0.022, 0.018, "steel")),
+               ("rod", ((-5.4, 0.9, 0.3), (-6.0, 1.8, 0.2), 0.022, 0.018, "steel"))],
+    "side_marks": [(-7.5, 0.48, "GER")], "wing_marks": [(15.0, 0.1, 0.9, "GER", "GER", True, True)], "code": (-3.6, 0.5),
+}
+EXTRA_PLANES["B29"] = {
+    "title": "B-29 Superfortress (our own model)", "tech": "verylongrange", "tag": "b29", "bare": True,
+    # (a round tube of a fuselage, glass at its nose with no step; her skin is left bare metal)
+    "hull": [(11.0, -0.15, 0.2, 0.2), (10.78, -0.15, 0.62, 0.62), (10.25, -0.1, 1.0, 1.0), (9.45, -0.04, 1.27, 1.28), (8.3, 0.0, 1.42, 1.44), (6.5, 0.0, 1.45, 1.45), (0.0, 0.0, 1.45, 1.45),
+             (-6.0, 0.0, 1.45, 1.45), (-10.0, 0.1, 1.22, 1.26), (-14.0, 0.3, 0.84, 0.92), (-17.0, 0.45, 0.58, 0.64), (-18.5, 0.5, 0.47, 0.52), (-19.2, 0.5, 0.32, 0.36)],
+    "square": 2.0, "screw": 2.5, "blades": 4, "glazed": (9.4, 8.35), "nose_frames": ((10.3, 9.85, 9.4, 8.88, 8.37), 12), "windows_back": True,
+    "wing": [(0.0, 2.7, -2.5, -0.2, 1.0), (5.9, 2.2, -1.95, 0.1, 0.82), (11.4, 1.72, -1.35, 0.4, 0.58), (19.0, 1.05, -0.5, 0.8, 0.26), (20.8, 0.85, -0.25, 0.9, 0.14), (21.4, 0.6, -0.05, 0.93, 0.06),
+             (21.52, 0.35, 0.1, 0.94, 0.01)],
+    "tail": [(0.0, -14.6, -17.5, 0.75, 0.42), (5.8, -15.9, -17.4, 0.75, 0.18), (6.4, -16.3, -17.3, 0.75, 0.1), (6.55, -16.6, -17.1, 0.75, 0.03)],
+    "fin": [(0.0, -9.6, -18.2, 1.0, 0.2), (0.0, -13.4, -18.4, 1.6, 0.36), (0.0, -15.3, -18.5, 3.3, 0.32), (0.0, -16.3, -18.55, 5.1, 0.22), (0.0, -16.9, -18.4, 5.8, 0.1), (0.0, -17.4, -18.1, 6.0, 0.02)],
+    "patch": 0.0, "colours": {"upper": "B6B9BB", "upper2": "B6B9BB", "under": "AEB1B3", "nose": "B6B9BB", "boss": "2A2B2D"},
+    "engines": [(5.9, 2.2, -0.12, True, 5.2), (11.4, 1.72, 0.2, True, 3.8)], "well": (5.9, 0.5, 0.7), "pitot": True,
+    # (four low turrets, two on her back and two under her, all aimed from the sighting blisters: one on top and one each
+    #  side behind her wing; the gunner's pair of guns in her tail)
+    "extras": [("ball", ((6.7, 0.0, 1.42), (0.56, 0.56, 0.26), "upper")),
+               ("rod", ((6.85, 0.1, 1.56), (7.85, 0.1, 1.66), 0.024, 0.02, "steel")), ("rod", ((6.85, 0.27, 1.56), (7.85, 0.27, 1.66), 0.024, 0.02, "steel")),
+               ("ball", ((7.0, 0.0, -1.42), (0.5, 0.5, 0.24), "under")), ("rod", ((7.15, 0.12, -1.54), (8.15, 0.12, -1.64), 0.024, 0.02, "steel")),
+               ("ball", ((-8.6, 0.0, 1.38), (0.5, 0.5, 0.24), "upper")), ("rod", ((-8.75, 0.12, 1.5), (-9.75, 0.12, 1.64), 0.024, 0.02, "steel")),
+               ("ball", ((-8.9, 0.0, -1.24), (0.5, 0.5, 0.24), "under")), ("rod", ((-9.05, 0.12, -1.36), (-10.05, 0.12, -1.48), 0.024, 0.02, "steel")),
+               ("dome", ((-6.9, 0.0, 1.4), (0.4, 0.4, 0.3))),
+               ("dome", ((-7.0, 1.38, 0.35), (0.44, 0.28, 0.42))), ("dome", ((-7.0, -1.38, 0.35), (0.44, 0.28, 0.42))),
+               ("rod", ((-19.15, 0.09, 0.5), (-20.0, 0.09, 0.5), 0.026, 0.02, "steel"))],
+    "side_marks": [(-11.6, 0.6, "USA-BAR")], "wing_marks": [(16.0, 0.3, 1.1, "USA-BAR", "USA-BAR", False, False)], "code": (-13.8, 0.5),
+}
+
+
 def battle_us(wing, step, shares=()):
     """Where a flying surface's rings stand along its span: the game's own, closer, and one exactly at each given share
     of the span (the ends of its control surfaces)."""
@@ -324,7 +438,7 @@ def game():
     if _G is None:
         path = os.path.join(HERE, "game", "build_plane.py")
         src = open(path).read().split("\ndef main():")[0]
-        for old, new in FINER + JETS + GRADED:
+        for old, new in FINER + JETS + GRADED + NOSES:
             if src.count(old) != 1:
                 raise ValueError("the game's sculptor has changed here: " + old)
             src = src.replace(old, new)
@@ -342,9 +456,9 @@ def names():
 
 
 # What kind of machine each is, and how many are aboard (the parachutes a lost one can leave).
-CREW = {"Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
+CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
         "Stuka": 2, "Sturmovik": 2, "He111": 5, "Lancaster": 7, "B17": 10, "Bomber": 5}
-ROLE = {"Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber"}
+ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber"}
 
 
 # ---- her record, painted on her ----------------------------------------------------------------------------
@@ -361,8 +475,8 @@ ROLE = {"Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bombe
 #   role: (rows of kills, rows of missions, marks to a row, half a kill mark, half a bomb's height)
 TALLY = {"fighter": (3, 0, 10, 0.05, 0.0), "dive bomber": (1, 2, 12, 0.05, 0.06), "attack": (1, 2, 12, 0.05, 0.06), "torpedo bomber": (1, 2, 12, 0.05, 0.06),
          "bomber": (2, 3, 20, 0.05, 0.06)}
-TALLY_ROW = {"He111": 16, "Bomber": 16}      # (a medium bomber's nose is shorter)
-TALLY_AT = {"He111": 4.45}                   # (her cockpit is her glass nose: her record goes on the first solid skin behind it)
+TALLY_ROW = {"He111": 16, "Bomber": 16, "Betty": 16, "Nell": 16}      # (a medium bomber's nose is shorter)
+TALLY_AT = {"He111": 4.45, "Amerikabomber": 6.8, "B29": 8.25}                   # (her cockpit is her glass nose: her record goes on the first solid skin behind it)
 LEAD = 0.026                                 # (half the star over a mission flown as leader)
 BAR = 0.045                                  # (half the height of a white bar on a rudder)
 
@@ -669,10 +783,13 @@ def convert(name, fine=True):
                 rods.append((Vector((a_.x, a_.y * hand, a_.z)), Vector((b_.x, b_.y * hand, b_.z))))
     turrets, gun_part = [], {}                           # (number, middle, radii) of each turret; the part of each gun
     balls, remote = set(), set()                         # (the numbers of the turrets that are steel balls, and of those with nobody in them)
+    windows = []
     for c, radii in domes:
-        mine = [i for i, (a_, b_) in enumerate(rods) if (a_ - c).length < max(radii) + 0.5 and i not in gun_part]
+        # (a blister on her side is fixed to her: a gun in it is on a free mounting, and the blister never trains)
+        mine = [] if abs(c.y) > 1e-6 else [i for i, (a_, b_) in enumerate(rods) if (a_ - c).length < max(radii) + 0.5 and i not in gun_part]
         if not mine:
-            continue                                     # (a dome with no guns is a window: an astrodome, a bomb-aimer's blister)
+            windows.append((c, radii))                   # (a dome with no guns is a window: an astrodome, a blister a man looks out of)
+            continue
         k = len(turrets) + 1
         turrets.append((k, c, radii))
         parent = "tail" if c.x < x_cut else "plane"
@@ -685,7 +802,7 @@ def convert(name, fine=True):
         belly = c.z < hull.z(-c.x) - 0.3 * hull.h(-c.x)
         if belly and name in fitout.BALL and min(radii) > 0.9 * max(radii):
             balls.add(k)                                    # (a round one under her belly is a steel ball, not a glass dome: see fitout.ball_turret)
-        elif belly:
+        elif belly or name in REMOTE:
             remote.add(k)                                   # (a low one under her is worked from inside her: nobody sits in it)
         m.part(f"turret.{k}.guns", f"turret.{k}", port(c), axis=tuple(way.cross(Z).normalized()), kind="turn", limits=(-85, 10) if belly else (-10, 80), note="its guns; plus lifts them")
         for i in mine:
@@ -996,12 +1113,15 @@ def convert(name, fine=True):
     m.tally = tally_of(name, s, hull, role, G, fins)
     m.info.update({"rust": "9A9C98", "soot": colours["soot"], "wear_show": 0.3,
                    "file": {"nation_paint": bool(s.get("nation_paint")), "number_ink": colours["ink"], "span": round(2.0 * half, 3),
-                            "role": role, "crew": CREW.get(name, 1), "engines": len(hubs) + len(pods), "jets": len(pods), "year": s.get("year"), "tech": s.get("tech"),
+                            "role": role, "crew": CREW.get(name, 1), "engines": len(hubs) + len(pods), "jets": len(pods), "year": s.get("year"), "tech": s.get("tech"), "tag": s.get("tag"),
                             "clear": {"glass": 0.3, "blur": 0.07, "blur_tip": 0.3}, "tally": m.tally}})
     f = Facts()
     f.name, f.spec, f.hull, f.wing, f.half, f.y_cut, f.x_cut, f.hubs, f.screw = name, s, hull, wing, half, y_cut, x_cut, [port(h) for h in hubs], screw
     f.role, f.crew, f.has_bombs, f.long = role, CREW.get(name, 1), has_bombs or bool(bay), hull.front - hull.back
     f.has_torpedo = has_torpedo
+    f.windows = [(port(c), radii) for c, radii in windows]
+    if s.get("bare"):
+        m.info["file"]["finish"] = "bare metal"             # (her skin is unpainted: it shines as metal does)
     if has_torpedo:
         m.info["file"]["loads"] = (["torpedo", "bombs"] if has_bombs else ["torpedo"])
     f.bay, f.bay_half, f.rings_x = (bay if fine else None), BAY_HALF, rings_x
@@ -1325,5 +1445,47 @@ def bomb(fine=True):
     return m
 
 
+def torpedo(fine=True):
+    """An air-dropped torpedo as it falls and runs: 5.3 m of steel, its two screws, its rudders, and the box of wooden
+    fins on its tail that held it steady in the air and broke off when it struck the water."""
+    m = Model("Torpedo", "Aerial torpedo (our own model)", "torpedo", {"case": "6C7174", "head": "4A4D50", "screw": "8C7A46", "wood": "8B7350"}, fine)
+    m.part("torpedo", None, (0, 0, 0), kind="root", note="the game drops it and runs it; the clip tips its nose down for the water")
+    m.part("screws", "torpedo", (-2.5, 0, 0), axis=(1, 0, 0), kind="spin", note="its two screws; they turn once it is in the water")
+    m.part("box", "torpedo", (-2.3, 0, 0), kind="free", note="the wooden fins for the air: scale them away when it enters the water")
+    sides = 16 if fine else 8
+    prof = [(2.65, 0.0), (2.6, 0.08), (2.45, 0.17), (2.15, 0.225), (-1.6, 0.225), (-2.2, 0.12), (-2.5, 0.05)]
+    rings = [[Vector((x, r * math.cos(2 * math.pi * k / sides), r * math.sin(2 * math.pi * k / sides))) for k in range(sides)] for x, r in prof]
+    m.use("torpedo")
+    m.skin(rings, lambda c, n: "head" if c.x > 1.55 else "case", caps=(True, True))
+    for k in range(4):                                   # (its rudders)
+        a = k * math.pi / 2
+        d = Vector((0, math.cos(a), math.sin(a)))
+        m.add([Vector((-1.9, 0, 0)) + d * 0.16, Vector((-2.42, 0, 0)) + d * 0.05, Vector((-2.42, 0, 0)) + d * 0.225, Vector((-2.1, 0, 0)) + d * 0.225], [(0, 1, 2, 3)], "case", False)
+    m.use("screws")
+    for x, turn in ((-2.52, 0.0), (-2.6, 0.5)):
+        for k in range(4 if fine else 2):
+            a = turn + k * math.pi / 2
+            d, e = Vector((0, math.cos(a), math.sin(a))), Vector((0, -math.sin(a), math.cos(a)))
+            m.add([Vector((x, 0, 0)) + d * 0.04 - e * 0.02, Vector((x + 0.03, 0, 0)) + d * 0.17 - e * 0.05, Vector((x - 0.03, 0, 0)) + d * 0.17 + e * 0.05, Vector((x, 0, 0)) + d * 0.04 + e * 0.02],
+                  [(0, 1, 2, 3)], "screw", False)
+    m.use("box")
+    for a in (0.0, math.pi / 2):                         # (two boards across and two up and down: a box open fore and aft)
+        d, e = Vector((0, math.cos(a), math.sin(a))), Vector((0, -math.sin(a), math.cos(a)))
+        for off in (-0.24, 0.24):
+            m.add([Vector((-1.95, 0, 0)) + e * off - d * 0.24, Vector((-1.95, 0, 0)) + e * off + d * 0.24, Vector((-2.65, 0, 0)) + e * off + d * 0.24, Vector((-2.65, 0, 0)) + e * off - d * 0.24],
+                  [(0, 1, 2, 3)], "wood", False)
+    m.socket("nose", (2.65, 0, 0), X, note="it strikes here")
+    m.socket("wake", (-2.6, 0, 0), -X, note="its track of bubbles starts here")
+    m.clips["drop"] = {"long": 3.0, "loop": False, "after": "hold", "about": "Released level and low, its nose drops a little so that it enters the water cleanly (the game carries it forward and down).",
+                       "tracks": [{"part": "torpedo", "rot": rot_keys(lambda t: q_of(pitch=-16.0 * smooth(t / 2.4)), 3.0, 0.25)}],
+                       "events": []}
+    m.clips["run"] = {"long": 1.0, "loop": True, "after": "loop", "about": "In the water: the air fins gone, the screws turning. The game runs it to its mark.",
+                      "tracks": [{"part": "box", "scale": [[0.0, 0.001]]},
+                                 {"part": "screws", "turn": [[0.0, 0.0], [1.0, 1440.0]]}],
+                      "events": [{"t": 0.0, "fx": "torpedo_wake", "socket": "wake", "cue": "torpedo_run_loop"}]}
+    return m
+
+
 BUILDERS = {n: (lambda fine=True, n=n: convert(n, fine)) for n in ("Bf109", "Spitfire", "Zero", "Mustang", "Yak", "Fw190", "Me262", "Hurricane", "Warhawk", "Hellcat", "Fighter", "CarrierFighter",
-                                                                  "Stuka", "Sturmovik", "Val", "Dauntless", "DiveBomber", "Kate", "Avenger", "TorpedoBomber", "He111", "Lancaster", "B17", "Bomber")}
+                                                                  "Stuka", "Sturmovik", "Val", "Dauntless", "DiveBomber", "Kate", "Avenger", "TorpedoBomber", "He111", "Nell", "Betty", "Lancaster", "B17",
+                                                                  "Amerikabomber", "B29", "Bomber")}

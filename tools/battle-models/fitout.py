@@ -33,9 +33,12 @@ SEATS = {"Kate": [(0, 0.85, 0.0, 0.0), (0, -0.45, 0.0, 0.0), (0, -1.75, 0.0, 180
          "DiveBomber": [(0, 0.7, 0.0, 0.0), (0, -1.3, 0.0, 180.0)], "TorpedoBomber": [(0, 1.15, 0.0, 0.0), (0, -0.3, 0.0, 0.0), (0, -1.7, 0.0, 180.0)],
          "Stuka": [(0, 0.75, 0.0, 0.0), (0, -1.55, 0.0, 180.0)], "Sturmovik": [(0, 0.7, 0.0, 0.0), (0, -1.25, 0.0, 180.0)],
          "He111": [(0, -0.45, 0.0, 180.0)], "Lancaster": [(0, 7.45, 0.3, 0.0), (0, 6.95, -0.3, 0.0), (0, 5.6, 0.0, 0.0)],
-         "B17": [(0, 6.05, 0.34, 0.0), (0, 6.05, -0.34, 0.0)], "Bomber": [(0, 3.75, 0.28, 0.0), (0, 3.75, -0.28, 0.0)]}
+         "B17": [(0, 6.05, 0.34, 0.0), (0, 6.05, -0.34, 0.0)], "Bomber": [(0, 3.75, 0.28, 0.0), (0, 3.75, -0.28, 0.0)],
+         "Betty": [(0, 5.4, 0.3, 0.0), (0, 5.4, -0.3, 0.0), (0, 3.9, 0.0, 0.0)], "Nell": [(0, 4.45, 0.24, 0.0), (0, 4.45, -0.24, 0.0)]}
 # Who is seen through a glass nose: (forward, to port, height above the fuselage's middle or None for 'up under the glass', looks).
-NOSE_CREW = {"He111": [(5.15, 0.3, None, 0.0), (6.25, -0.12, -0.05, 0.0)], "B17": [(7.72, 0.0, 0.05, 0.0)], "Bomber": [(5.65, 0.0, 0.0, 0.0)]}
+NOSE_CREW = {"He111": [(5.15, 0.3, None, 0.0), (6.25, -0.12, -0.05, 0.0)], "B17": [(7.72, 0.0, 0.05, 0.0)], "Bomber": [(5.65, 0.0, 0.0, 0.0)],
+             "Betty": [(7.95, 0.0, -0.05, 0.0)], "Amerikabomber": [(7.35, 0.38, None, 0.0), (7.35, -0.38, None, 0.0), (8.7, 0.0, -0.25, 0.0)],
+             "B29": [(8.75, 0.5, None, 0.0), (8.75, -0.5, None, 0.0), (9.95, 0.0, -0.3, 0.0)]}
 
 
 def port(v):
@@ -67,7 +70,7 @@ def body_top(body, x, y=0.0):
     return body.z(-x) + h * (1.0 - t ** e) ** (1.0 / e)
 
 
-def figure(m, head, face=0.0, vest=True, mask=True):
+def figure(m, head, face=0.0, vest=True, mask=True, chest=True):
     """An airman as he is seen through glass: his head in its helmet and goggles, his shoulders and his chest. `head`
     is the middle of his head; `face` the way he looks, in degrees to port of ahead. Returns a function that gives a
     place beside him: (ahead of his head, to his left, above it)."""
@@ -83,8 +86,11 @@ def figure(m, head, face=0.0, vest=True, mask=True):
     u, v = (10, 6) if m.fine else (6, 4)
     m.ball(at(0, 0, 0), r(0.105, 0.098, 0.118), "leather", u, v)
     m.ball(at(0.05, 0, -0.012), r(0.072, 0.076, 0.09), "skin", u, v)
-    m.ball(at(-0.02, 0, -0.33), r(0.15, 0.235, 0.2), "suit", u, v)
-    if vest:
+    if chest:
+        m.ball(at(-0.02, 0, -0.33), r(0.15, 0.235, 0.2), "suit", u, v)
+    else:
+        m.ball(at(-0.02, 0, -0.24), r(0.11, 0.2, 0.12), "suit", u, v)                     # (only his shoulders, where there is no room for more of him)
+    if vest and chest:
         m.ball(at(0.075, 0, -0.31), r(0.09, 0.165, 0.15), "vest", u, v)
     if m.fine:
         for sy in (-1.0, 1.0):
@@ -661,7 +667,7 @@ def waist(m, f, s, G, hull):
 
 
 # A gunner who sits in her tail behind his windows: (how far along her, how high above her middle).
-REAR_CREW = {"B17": (-13.72, 0.11)}
+REAR_CREW = {"B17": (-13.72, 0.11), "B29": (-18.56, 0.12), "Betty": (-10.85, 0.05)}
 
 
 def tail_gunner(m, f, s, G, hull):
@@ -693,8 +699,78 @@ def tail_gunner(m, f, s, G, hull):
         if base.x < x - 0.3 and abs(base.y) < 0.3 and m.fine:
             m.use(nm)
             dn = (tip - base).normalized()
-            for sy in (-1.0, 1.0):
-                m.rod(base - dn * 0.3 + Y * 0.09 * sy, base + dn * 0.04 + Y * 0.09 * sy, 0.04, "gunmetal", sides=6)
+            for sy in ((0.0,) if f.name in ONE_GUN else (-1.0, 1.0)):
+                m.rod(base - dn * 0.3 + Y * 0.09 * sy, base + dn * 0.04 + Y * 0.09 * sy, 0.04 if sy else 0.055, "gunmetal", sides=6)
+    m.use("plane")
+
+
+ONE_GUN = {"Betty"}                                       # (her tail gunner has one cannon, not a pair of guns)
+# The machines with a man at each of their blisters: a waist gunner at his gun, or a gunner who sights through it for
+# turrets he does not sit in.
+BLISTER_CREW = {"Betty", "Nell", "B29"}
+
+
+def blisters(m, f, s, G, hull):
+    """A blister on her side or her back that someone looks out of: the dark of her compartment behind its glass, the
+    man's head and shoulders in it, and the breech of his gun if he has one."""
+    if f.name not in BLISTER_CREW:
+        return
+    for c, radii in f.windows:
+        if c.z < hull.z(-c.x) or radii[2] < 0.25:
+            continue
+        m.use("tail" if c.x < f.x_cut else "plane")
+        if abs(c.y) < 1e-6:
+            figure(m, (c.x, 0.0, c.z + 0.06), 0.0, vest=False, chest=False)
+            continue
+        hand = 1.0 if c.y > 0.0 else -1.0                # (to port is plus here)
+
+        def skin(x, z, lift=0.0):
+            t = max(-0.97, min(0.97, (z - hull.z(-x)) / hull.h(-x)))
+            a = math.asin(math.copysign(abs(t) ** (1.0 / hull.power), t))
+            return port(hull.at(x, math.pi - a if hand > 0.0 else a, lift))
+        rings, around = 4, 20
+        pts = [skin(c.x, c.z, 0.012)]
+        for i in range(1, rings + 1):
+            for k in range(around):
+                a = 2.0 * math.pi * k / around
+                pts.append(skin(c.x + 0.86 * radii[0] * i / rings * math.cos(a), c.z + 0.86 * radii[2] * i / rings * math.sin(a), 0.012))
+        faces = [(0, 1 + k, 1 + (k + 1) % around) for k in range(around)]
+        for i in range(1, rings):
+            a0, b0 = 1 + (i - 1) * around, 1 + i * around
+            faces += [(a0 + k, b0 + k, b0 + (k + 1) % around, a0 + (k + 1) % around) for k in range(around)]
+        m.add(pts, faces, "inside", True, lambda q: Vector((0.0, hand, 0.0)))
+        at = skin(c.x, c.z + 0.08)
+        head = Vector((c.x, at.y + 0.115 * hand, c.z + 0.08))
+        face = 90.0 * hand
+        for nm, base, tip in f.flex:
+            if (base - c).length < 0.8:
+                d = tip - base
+                face = math.degrees(math.atan2(d.y, d.x))
+                head = head + Vector((0.12, 0.0, 0.0))
+                if m.fine:
+                    m.use(nm)
+                    dn = d.normalized()
+                    m.rod(base - dn * 0.3, base + dn * 0.04, 0.04, "gunmetal", sides=6)
+                    m.use("tail" if c.x < f.x_cut else "plane")
+        figure(m, head, face, vest=False, chest=False)
+    m.use("plane")
+
+
+# A second bay whose doors the model does not open: they are scribed in her belly.
+SHUT_BAYS = {"B29": [(-2.9, -6.3)]}
+
+
+def shut_bays(m, f, s, G, hull):
+    half = math.radians(f.bay_half)
+    lo, mid, hi = 1.5 * math.pi - half, 1.5 * math.pi, 1.5 * math.pi + half
+    for x0, x1 in SHUT_BAYS.get(f.name, []) if m.fine else []:
+        m.use("tail" if 0.5 * (x0 + x1) < f.x_cut else "plane")
+        xs = [x0 + (x1 - x0) * k / 16.0 for k in range(17)]
+        for a in (lo, mid, hi):
+            m.strip([port(hull.at(x, a)) for x in xs], [port(hull.out(x, a)) for x in xs], 0.006, "line", lift=0.005)
+        arc = [lo + (hi - lo) * k / 6.0 for k in range(7)]
+        for x in (x0, x1):
+            m.strip([port(hull.at(x, a)) for a in arc], [port(hull.out(x, a)) for a in arc], 0.006, "line", lift=0.005)
     m.use("plane")
 
 
@@ -747,6 +823,8 @@ def fit(m, f, s, G, hull):
     gunners(m, f)
     ball_turret(m, f)
     waist(m, f, s, G, hull)
+    blisters(m, f, s, G, hull)
+    shut_bays(m, f, s, G, hull)
     tail_gunner(m, f, s, G, hull)
     exhausts(m, f, s, G, hull)
     guns(m, f, s, G, hull)

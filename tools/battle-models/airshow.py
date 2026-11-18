@@ -35,8 +35,9 @@ X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
 SKIN = [0.38, 0.35]                                          # (roughness and shine of a painted skin)
 
 
-def plane_look(paint, mat, nt, bsdf, mix):
-    """What the pictures add to a paint: the disc of a turning airscrew is nearly clear, glass shines."""
+def plane_look(paint, mat, nt, bsdf, mix, bare=False):
+    """What the pictures add to a paint: the disc of a turning airscrew is nearly clear, glass shines; a skin left
+    unpainted (the file's `finish`) is metal."""
     if paint in ("blur", "blur_tip"):                        # (how clear: as the file says under `clear`)
         bsdf.inputs["Alpha"].default_value = 0.07 if paint == "blur" else 0.3
         bsdf.inputs["Roughness"].default_value = 0.6
@@ -44,6 +45,9 @@ def plane_look(paint, mat, nt, bsdf, mix):
     if paint in ("upper", "upper2", "under", "nose", "rivet", "rivet_under"):
         bsdf.inputs["Roughness"].default_value = SKIN[0]     # (a doped and polished skin: it takes a soft light along its curves)
         bsdf.inputs["Specular IOR Level"].default_value = SKIN[1]
+        if bare:
+            bsdf.inputs["Metallic"].default_value = 0.85
+            bsdf.inputs["Roughness"].default_value = 0.4
     if paint == "glass":                                     # (clear, so that her crew are seen: the file says so under `clear`)
         bsdf.inputs["Alpha"].default_value = 0.3
         bsdf.inputs["Roughness"].default_value = 0.04
@@ -82,14 +86,15 @@ class Plane:
     def __init__(self, air, name, at=(0, 0, 0), badges=True, record=None):
         self.air, self.name = air, name
         self.m, self.f = air.model(name)
-        self.ob, self.arm = rigid.to_blender(self.m, plane_look, crease=50.0)
+        bare = self.m.info["file"].get("finish") == "bare metal"
+        self.ob, self.arm = rigid.to_blender(self.m, (lambda *a: plane_look(*a, bare=True)) if bare else plane_look, crease=50.0)
         self.badges = marks.put(self.m, self.ob, self.arm, record) if badges else []      # (record: what she has done, painted on her)
         self.at, self.q, self.pose = Vector(at), Quaternion(), {}
         self.vel = Vector()                                  # (against the formation)
         self.v_air = air.speed
         self.clip = self.m.clips
         self.load = {}
-        self.carry("torpedo")
+        self.carry("bombs" if self.f.role == "bomber" else "torpedo")      # (a land bomber is seen with her bombs, a torpedo bomber with her torpedo)
         self.put(self.at)
 
     def carry(self, load):
@@ -488,10 +493,11 @@ SHOTS = {"flypast": flypast, "shot_down": shot_down, "ways_down": ways_down}
 SUN = {"flypast": 122.0}
 
 
-def label(title, span, parts, year=None):
-    """The line under a machine on the sheet; a machine that only comes late in the war says from which year."""
+def label(title, span, parts, year=None, tech=None):
+    """The line under a machine on the sheet; a machine that only comes late in the war says from which year, and one
+    that has to be researched says so."""
     return (f"{title.replace(' (our own model)', '')} · span {span:.1f} m · {parts} parts"
-            + (f" · from {year}" if year else ""))
+            + (f" · from {year}" if year else " · by research" if tech else ""))
 
 
 def sheet(argv):
@@ -514,7 +520,7 @@ def sheet(argv):
         path = os.path.join(tmp, name + ".png")
         kit.still(path)
         pics.append(path)
-        labels.append(label(p.m.title, span, len(p.m.parts), p.f.year))
+        labels.append(label(p.m.title, span, len(p.m.parts), p.f.year, p.m.info["file"].get("tech")))
         print(name, "done", flush=True)
         for o in [p.ob, p.arm] + p.badges:
             bpy.data.objects.remove(o, do_unlink=True)

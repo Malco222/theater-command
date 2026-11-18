@@ -24,6 +24,7 @@ import stage  # noqa: E402
 AIR = dict(planes.BUILDERS)
 AIR["Parachute"] = lambda fine=True: (planes.parachute(fine), None)
 AIR["Bomb"] = lambda fine=True: (planes.bomb(fine), None)
+AIR["Torpedo"] = lambda fine=True: (planes.torpedo(fine), None)
 
 
 def one(name, out, kinds):

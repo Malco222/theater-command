@@ -62,6 +62,8 @@ def main():
              "under": ((s * 0.5, s * 0.42, -s * 0.4), (0, 0, -0.1), 50.0),
              "side": ((0.0, s * 1.0, 0.6), (-L * 0.06, 0, 0.2), 50.0)}
     back = p.f.hull.back
+    front = p.f.hull.front
+    shots["glass"] = ((front + 3.2, 3.6, 1.7), (front - 1.7, 0, 0.25), 50.0)          # (into a glass nose, at the men in it)
     shots["tailside"] = ((back + 0.9, 3.4, 0.75), (back + 0.75, 0, 0.36), 50.0)      # (abeam of a tail gunner's windows)
     for k, c, radii in p.f.turrets:                      # (straight in at the window of a ball turret, from where its guns point)
         if k in p.f.balls:
