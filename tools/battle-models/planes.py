@@ -179,6 +179,7 @@ def convert(name, fine=True):
     paints = {k: colours.get(k, "808080") for k in paint_names}
     paints["torn"] = "2B2825"
     paints["blur"] = "3A3A36"
+    paints["blur_tip"] = "D9B224"
     paints["line"] = rigid.mix_hex(paints["line"], paints["upper"], 0.3)      # (scribed lines seen close: finer and softer than the map's)
     paints.update(fitout.paints_for(s))
     paints.update(fitout.rivet_paints(paints))
@@ -557,12 +558,28 @@ def convert(name, fine=True):
             m.add(ring + [mid], fan, "line", False, lambda q, o=away: -o)
 
     # ---- the disc of each airscrew ---------------------------------------------------------------
+    # (The art director, 2026-11-18: one even disc "reads as a grey plastic plate" close up. So: a faint disc that
+    #  leaves her spinner clear, over it the smear of each blade, a little denser, and, where her blades have yellow
+    #  tips, a thin ring of yellow near its rim.)
+    n_blades = int(s.get("blades", 3))
+    tips = fitout.nation(s) in ("UK", "USA", "JAP")
     for k, h in enumerate(hubs):
         m.use(f"prop.{k + 1}.blur")
         c = port(h) + X * 0.02
-        steps = 28 if fine else 14
-        ring = [c + Vector((0.0, math.cos(2 * math.pi * i / steps), math.sin(2 * math.pi * i / steps))) * screw for i in range(steps)]
-        m.add(ring + [c], [(i, (i + 1) % steps, steps) for i in range(steps)], "blur", True, lambda q: X)
+        steps = 36 if fine else 14
+
+        def band(r0, r1, paint, dx=0.0, a0=0.0, a1=2.0 * math.pi, n=steps, c=c):
+            rim = [[c + X * dx + Vector((0.0, math.cos(a0 + (a1 - a0) * i / n), math.sin(a0 + (a1 - a0) * i / n))) * (screw * r) for i in range(n + 1)] for r in (r0, r1)]
+            m.add(rim[0] + rim[1], [(i, i + 1, n + 2 + i, n + 1 + i) for i in range(n)], paint, True, lambda q: X)
+        band(0.13, 0.95 if tips else 1.0, "blur")
+        if tips:
+            band(0.95, 0.985, "blur_tip")
+            band(0.985, 1.0, "blur")
+        if fine:
+            for b in range(n_blades):
+                a = 2.0 * math.pi * b / n_blades + 0.4 + 0.7 * k
+                band(0.15, 0.93, "blur", dx=0.004, a0=a - 0.3, a1=a + 0.3, n=6)
+                band(0.15, 0.9, "blur", dx=0.008, a0=a - 0.13, a1=a + 0.13, n=4)
 
     # ---- sockets ---------------------------------------------------------------------------------
     for k, h in enumerate(hubs):
@@ -649,7 +666,7 @@ def convert(name, fine=True):
     m.info.update({"rust": "9A9C98", "soot": colours["soot"], "wear_show": 0.3,
                    "file": {"nation_paint": bool(s.get("nation_paint")), "number_ink": colours["ink"], "span": round(2.0 * half, 3),
                             "role": role, "crew": CREW.get(name, 1), "engines": len(hubs) + len(pods), "jets": len(pods), "year": s.get("year"), "tech": s.get("tech"),
-                            "clear": {"glass": 0.3, "blur": 0.14}}})
+                            "clear": {"glass": 0.3, "blur": 0.07, "blur_tip": 0.3}}})
     f = Facts()
     f.name, f.spec, f.hull, f.wing, f.half, f.y_cut, f.x_cut, f.hubs, f.screw = name, s, hull, wing, half, y_cut, x_cut, [port(h) for h in hubs], screw
     f.role, f.crew, f.has_bombs, f.long = role, CREW.get(name, 1), has_bombs or bool(bay), hull.front - hull.back

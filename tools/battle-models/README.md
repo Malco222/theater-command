@@ -124,8 +124,11 @@ tech `jets`), and whether a battle mixes her in among the Fw 190s is the air bat
 
 Paints added after the game's own: `torn` (the inside of a torn-off end), `blur` (the disc of a turning airscrew),
 and the fit-out's (`inside`, `leather`, `skin`, `suit`, `vest`, `goggles`, `exhaust`, `gunmetal`, `patch`, `lens`,
-`boot`, `rivet`, `rivet_under`, three lamps). **Draw `glass` and `blur` clear**: the file gives how clear under
-`file.clear` (`glass` 0.3, `blur` 0.14), and then her crew are seen through the hood.
+`boot`, `rivet`, `rivet_under`, `blur_tip`, three lamps). **Draw `glass`, `blur` and `blur_tip` clear**: the file
+gives how clear under `clear` (`glass` 0.3, `blur` 0.07, `blur_tip` 0.3), and then her crew are seen through the
+hood. The disc of a turning airscrew (`prop.N.blur`) is a faint disc that leaves the spinner clear, the smear of
+each blade over it, and a thin yellow ring near the rim where the blades have yellow tips (British, American and
+Japanese machines); drawn as one even grey disc it reads as a plastic plate.
 
 Parts: `plane` (root: the fuselage), `wing.port`, `wing.starboard` (each wing outboard of the fuselage with its
 engines and guns), `tail` (rear fuselage, tailplane, fins), `prop.N` (blades, numbered from the port side),

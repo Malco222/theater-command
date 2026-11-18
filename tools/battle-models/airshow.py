@@ -37,9 +37,10 @@ SKIN = [0.38, 0.35]                                          # (roughness and sh
 
 def plane_look(paint, mat, nt, bsdf, mix):
     """What the pictures add to a paint: the disc of a turning airscrew is nearly clear, glass shines."""
-    if paint == "blur":
-        bsdf.inputs["Alpha"].default_value = 0.14
-        bsdf.inputs["Roughness"].default_value = 0.3
+    if paint in ("blur", "blur_tip"):                        # (how clear: as the file says under `clear`)
+        bsdf.inputs["Alpha"].default_value = 0.07 if paint == "blur" else 0.3
+        bsdf.inputs["Roughness"].default_value = 0.6
+        bsdf.inputs["Specular IOR Level"].default_value = 0.1
     if paint in ("upper", "upper2", "under", "nose", "rivet", "rivet_under"):
         bsdf.inputs["Roughness"].default_value = SKIN[0]     # (a doped and polished skin: it takes a soft light along its curves)
         bsdf.inputs["Specular IOR Level"].default_value = SKIN[1]
