@@ -21,10 +21,10 @@ LIST = {x['name']: x for x in json.load(open(PACK + 'sound-list.json'))}
 T = 10.0
 N = int(T * SR)
 FPS = 30
-CAM_H = 20.0                                   # the battle camera's height over its focus, metres
+CAM_H = 12.0                                   # the art director's reference camera: 12 m up, 15 degrees down, 28 mm
 LIS = (0.0, 0.0, MIX['listener']['heightFactor'] * CAM_H)
 ROLL = MIX['distance']['rolloff']
-MASTER_DB = 3.7                                # about -18 LUFS, where the battle preview sits; the limiter at -1 dB takes the tops
+MASTER_DB = 4.0                                # about -21 LUFS: one close blast sets the peak; the limiter at -1 dB takes about 1 dB off its first crack
 rng = random.Random(105)
 
 def load(name):
@@ -59,7 +59,8 @@ def gain_db(d, fam):
     return g
 
 def pan(mono, x, y):
-    az = max(-90.0, min(90.0, math.degrees(math.atan2(x - LIS[0], y - LIS[1]))))
+    az = math.degrees(math.atan2(x - LIS[0], y - LIS[1]))       # 0 ahead, + right
+    az = max(-90.0, min(90.0, az if abs(az) <= 90 else math.copysign(180 - abs(az), az)))   # behind folds to the front
     p = (az + 90) / 180 * math.pi / 2
     return np.stack([mono * math.cos(p), mono * math.sin(p)], axis=1)
 
@@ -75,7 +76,7 @@ def put(bus, sig, t0):
 
 FAR_TAKES = {'shell_impact_far', 'explosion_far_01', 'explosion_far_02'}
 
-def place(name, t, x, y, fam, bus='close', extra_db=0.0, pitch=True, src=None, what=''):
+def place(name, t, x, y, fam, bus='close', extra_db=0.0, pitch=True, src=None, what='', part=None, fade_in=0.0, fade_out=0.0):
     d = dist(x, y)
     F = MIX['distance'][fam]
     g = gain_db(d, fam) + extra_db
@@ -86,6 +87,12 @@ def place(name, t, x, y, fam, bus='close', extra_db=0.0, pitch=True, src=None, w
     if fam in fb['families'] and d > fb['from']:
         delay = min(d / fb['metresPerSecond'], fb['maxSeconds'])
     mono = (load(name) if src is None else src).mean(axis=1)
+    if part:                                   # only a stretch of the take, from part[0] to part[1] s
+        mono = mono[int(part[0] * SR):int(part[1] * SR)].copy()
+        if fade_in:
+            k = int(fade_in * SR); mono[:k] *= np.linspace(0, 1, k)
+        if fade_out:
+            k = int(fade_out * SR); mono[-k:] *= np.linspace(1, 0, k)
     pv = MIX['variety']['pitchPercent'].get(fam, 0) if pitch else 0
     if pv:
         r = 1 + rng.uniform(-pv, pv) / 100
@@ -95,7 +102,7 @@ def place(name, t, x, y, fam, bus='close', extra_db=0.0, pitch=True, src=None, w
     st = pan(mono, x, y)
     put(BUS[bus], st, t + delay)
     put(SEND, st * interp(F['reverb'], d), t + delay)
-    LOG.append({'what': what, 'sound': name, 'flash': round(t, 3), 'heard': round(t + delay, 3), 'metres': round(d, 1),
+    LOG.append({'what': what, 'sound': name + ('@%g-%g' % tuple(part) if part else ''), 'flash': round(t, 3), 'heard': round(t + delay, 3), 'metres': round(d, 1),
                 'db': round(g, 1), 'lowPassHz': int(fc), 'bus': bus})
     return t + delay
 
@@ -123,24 +130,41 @@ def bed(name, gain):
 I = MIX['impacts']
 size = I['bySize']['howitzer_105']
 bed('rifles_far_loop', MIX['beds']['list'][0]['gainDb'])
-loop('tank_idle_loop', 6, 2, 'engines', 'loops')                     # the Panzer IV ticking over at the focus
+loop('tank_idle_loop', 0, 1, 'engines', 'loops')                     # the Panzer IV ticking over at the focus
 
-SHELLS = [  # (flash at, x, y, band)   x right, y away from the camera, metres from its focus
-    (1.50, -150, 200, 'far'),
-    (3.40, 55, 58, 'middle'),
-    (5.00, -17, 18, 'near'),
+# Where the fortifications thread's picture puts the shells (x right of the view line, y beyond the focus, metres).
+SHELLS = [  # (flash at, x, y, band)
+    (1.50, 45, 242, 'far'),
+    (3.40, 8, 81, 'middle'),
+    (5.00, 8, -23, 'near'),      # on the camera's side of the focus: right foreground
 ]
+# The close hit is shell_impact_near_02, the punchiest close take (0.1 s after it starts it is 4 dB over the others),
+# with its earth brought forward to land when the picture's does (impacts.debris): the blast plays to 2.3 s, and its
+# own falling part (2.3 to 4.9 s, earth from 2.5 s) starts 0.7 s after the flash, so the clods land 0.9 to 3.0 s
+# after it, thickest 1.4 to 2.9 s; the picture's land 0.9 to 3.1 s, thickest 1.5 to 2.5 s. The middle hit is
+# shell_impact_near, the far one shell_impact_far.
 TAKE = {'far': 'shell_impact_far', 'middle': 'shell_impact_near', 'near': 'shell_impact_near_02'}
+DEB = I['debris']
 heard = {}
 for t, x, y, band in SHELLS:
     near = band == 'near' and dist(x, y) <= size['bigWithin']
-    heard[band] = place(TAKE[band], t, x, y, 'explosions', bus='big' if near else 'close', extra_db=size['db'],
-                        pitch=not near, what='105 mm shell, ' + band)
+    name = TAKE[band]
+    cut = DEB['cutAt'].get(name) if near else None
+    heard[band] = place(name, t, x, y, 'explosions', bus='big' if near else 'close', extra_db=size['db'],
+                        pitch=not near, what='105 mm shell, ' + band,
+                        part=(0, cut) if cut else None, fade_out=DEB['cutFade'] if cut else 0.0)
+    if near and name in DEB['for']:
+        place(DEB['take'], t + 0.7, x, y, 'explosions', bus='big', extra_db=size['db'] + DEB['db'], pitch=False,
+              part=(DEB['from'], DEB['to']), fade_in=DEB['fadeIn'], what='earth coming down')
 
-# The squad leader shouts after the first shell; the men go down (kit and canteens) before the second.
-place('german_schnell', 2.55, -3, 5, 'voices', bus='voices', extra_db=MIX['buses']['voices']['gainDb'], what='squad leader')
+# The men start to drop as the far shell's bang reaches them (2.22 s) and are down by 3.32 s; the squad leader shouts.
+# The fight is calm here (the meter well under 0.3), so the shout is not lifted (buses.voices.calmGainDb).
+place('german_schnell', 2.45, -3, 4, 'voices', bus='voices', extra_db=MIX['buses']['voices']['calmGainDb'], what='squad leader')
 for t, x, y in ((2.95, -5, 4), (3.05, 2, 6), (3.18, -1, 3), (3.30, 4, 5)):
     place(rng.choice(['kit_rattle_01', 'kit_rattle_02', 'kit_rattle_03']), t, x, y, 'body', what='a man drops')
+# One of the three crouching by the tank is knocked flat by the close shell, down at about 5.6 s: part of the moment.
+place('body_fall_04', 5.58, 3, -1, 'body', bus='big', extra_db=4, what='a man knocked flat')
+place('kit_rattle_02', 5.62, 3, -1, 'body', bus='big', extra_db=2, what='his kit')
 
 # ---------------------------------------------------------------- the big moment ducks the rest
 B = MIX['big']
@@ -177,7 +201,8 @@ info = {
     'shells': [{'band': b, 'flashSeconds': t, 'flashFrame': round(t * FPS), 'x': x, 'y': y,
                 'metresFromListener': round(dist(x, y), 1), 'bangSeconds': round(heard[b], 3), 'bangFrame': round(heard[b] * FPS)}
                for t, x, y, b in SHELLS],
-    'squad': {'shout': 2.55, 'menDown': [2.95, 3.3], 'note': 'the squad leader shouts "Schnell!" after the first shell and the men drop before the second'},
+    'squad': {'shout': 2.45, 'menDown': [2.95, 3.3], 'knockedFlat': 5.58, 'note': 'the men start down as the far bang reaches them (2.22 s) and are down by 3.32 s; the squad leader shouts "Schnell!"; one man by the tank is knocked flat by the close shell'},
+    'earthComingDown': 'from 0.9 s after the close flash (5.9 s), thickest about 6.4 to 7.9 s, done by 8.0 s',
     'incoming': 'none: no real recording of a shell coming in yet (mix.json impacts.incoming)',
     'sounds': LOG,
 }
