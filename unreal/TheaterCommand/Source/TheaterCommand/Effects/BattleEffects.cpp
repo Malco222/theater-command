@@ -49,7 +49,7 @@ void FBattleFxRecipe::Walk(const TSharedPtr<FJsonValue>& Value, const std::strin
 		const TSharedPtr<FJsonObject> Object = Value->AsObject();
 		if (Object.IsValid())
 		{
-			for (const TPair<FString, TSharedPtr<FJsonValue>>& Field : Object->Values)
+			for (const auto& Field : Object->Values) // (keyed by FString or, in newer engines, FSharedString)
 			{
 				const std::string Name(TCHAR_TO_UTF8(*Field.Key));
 				Walk(Field.Value, Path.empty() ? Name : Path + "." + Name);
@@ -250,12 +250,18 @@ bool FBattleEffects::IsReady() const
 	return Mesh.IsValid() && Ink.IsValid();
 }
 
+std::string FBattleEffects::Named(const FString& Text)
+{
+	// (the recipe's rows are lower case and its look-ups exact: "Earth" or "HMG" from a caller finds its row)
+	return std::string(TCHAR_TO_UTF8(*Text.ToLower()));
+}
+
 void FBattleEffects::Shell(const FVector& WorldAt, const FString& Calibre, const FString& Ground, bool bOnArmour)
 {
 	if (IsReady())
 	{
-		const std::string Size = Core.SizeOfCalibre(TCHAR_TO_UTF8(*Calibre));
-		Core.Shell(Time(), ToFx(WorldAt), Size.c_str(), TCHAR_TO_UTF8(*Ground), bOnArmour);
+		const std::string Size = Core.SizeOfCalibre(Named(Calibre).c_str());
+		Core.Shell(Time(), ToFx(WorldAt), Size.c_str(), Named(Ground).c_str(), bOnArmour);
 	}
 }
 
@@ -263,8 +269,7 @@ void FBattleEffects::ShellOfSize(const FVector& WorldAt, const FString& Size, co
 {
 	if (IsReady())
 	{
-		const std::string SizeName(TCHAR_TO_UTF8(*Size));
-		Core.Shell(Time(), ToFx(WorldAt), SizeName.c_str(), TCHAR_TO_UTF8(*Ground), bOnArmour);
+		Core.Shell(Time(), ToFx(WorldAt), Named(Size).c_str(), Named(Ground).c_str(), bOnArmour);
 	}
 }
 
@@ -272,7 +277,7 @@ void FBattleEffects::Skip(const FVector& WorldAt, const FVector& Heading, const 
 {
 	if (IsReady())
 	{
-		Core.Skip(Time(), ToFx(WorldAt), ToFxWay(Heading), TCHAR_TO_UTF8(*Ground));
+		Core.Skip(Time(), ToFx(WorldAt), ToFxWay(Heading), Named(Ground).c_str());
 	}
 }
 
@@ -280,7 +285,7 @@ void FBattleEffects::Muzzle(const FVector& WorldAt, const FVector& Facing, const
 {
 	if (IsReady())
 	{
-		Core.Muzzle(Time(), ToFx(WorldAt), ToFxWay(Facing), TCHAR_TO_UTF8(*Gun));
+		Core.Muzzle(Time(), ToFx(WorldAt), ToFxWay(Facing), Named(Gun).c_str());
 	}
 }
 
@@ -288,7 +293,24 @@ void FBattleEffects::Shots(int32 Gun, const FVector& From, const FVector& To, co
 {
 	if (IsReady())
 	{
-		Core.Shots(Time(), Gun, ToFx(From), ToFx(To), TCHAR_TO_UTF8(*Weapon), Rounds, PerSecond);
+		Core.Shots(Time(), Gun, ToFx(From), ToFx(To), Named(Weapon).c_str(), Rounds, PerSecond);
+	}
+}
+
+void FBattleEffects::AirGun(double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& ShooterVelocity, const FString& Kind, float RatePerMinute, float MuzzleSpeed)
+{
+	if (IsReady())
+	{
+		// (velocities are world units a second, as places are: the same ToFx turns both to metres)
+		Core.AirGun(Now, Gun, ToFx(Muzzle), ToFx(Aim), ToFx(ShooterVelocity), Named(Kind).c_str(), RatePerMinute, MuzzleSpeed / UnitsPerMetre);
+	}
+}
+
+void FBattleEffects::AirGunStop(int32 Gun)
+{
+	if (IsReady())
+	{
+		Core.AirGunStop(Gun);
 	}
 }
 

@@ -142,6 +142,16 @@ namespace TheaterFx
 		/** Rounds fired by one gun (Gun: any number that is the same for the same gun) from From toward To, PerSecond:
 		 * every fifth is a tracer (tracer.one_in), out of step between guns; machine guns flicker at the muzzle. */
 		void Shots(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond);
+		/** A gun on an aircraft firing, called every frame while its trigger is down. Muzzle is where the gun is now;
+		 * Aim the point this gun is laid on (the battle decides lead and convergence, so wing guns converge where it
+		 * says); Carry the aircraft's own velocity (metres a second). Kind is an air_guns row ("rifle", "hmg",
+		 * "cannon20"); RatePerMin and MuzzleMps of 0 take the row's. The kit keeps each gun's next round and lays the
+		 * rounds fired since the last call along the muzzle's path, so the stream stays on the gun however the
+		 * aircraft turns. Every round flickers at the muzzle; one in five (the row's tracer_every) is a tracer, the
+		 * same streak as on the ground, flying at the gun's speed plus the aircraft's, slowing and falling. */
+		void AirGun(double Now, int Gun, const Vec& Muzzle, const Vec& Aim, const Vec& Carry, const char* Kind, double RatePerMin = 0.0, double MuzzleMps = 0.0);
+		/** The trigger let go: the gun's next AirGun starts a new burst (its belt goes on where it was). */
+		void AirGunStop(int Gun);
 		/** Something burning at At, about Across metres wide, flames for Seconds, then a thinning grey column. */
 		void Burn(double Now, const Vec& At, double Across, double Seconds);
 
@@ -192,6 +202,22 @@ namespace TheaterFx
 			double A = 0.0, B = 0.0;
 			double Pick(Dice& D) const { return D.U(A, B); }
 		};
+		/** An air_guns row, read from the recipe once a kind. */
+		struct AirRow
+		{
+			std::string Name;
+			double Rate = 800.0, Mps = 870.0, Flash = 0.45, Strike = 0.8, Drag = 0.36, Drop = 9.81, TracerS = 2.4, Spread = 0.004;
+			double SmokeS = 0.8, SmokeAlpha = 0.1, Lamp = 0.0;
+			int OneIn = 5, SmokeEvery = 3, Licks = 0;
+		};
+		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */
+		struct Firing
+		{
+			int Gun = 0, Count = 0;
+			bool bOn = false;
+			double Last = 0.0, Next = 0.0, RateK = 1.0;
+			Vec Muzzle, Dir, Carry;
+		};
 		struct Flash
 		{
 			Vec At;
@@ -238,6 +264,11 @@ namespace TheaterFx
 		std::vector<Knock> Knocks;
 		std::vector<Source> Sources;
 		std::vector<int> GunRounds; // rounds fired by each gun so far
+		std::vector<AirRow> AirRows;
+		std::vector<Firing> Firings; // the air guns
+		// (the tracer's look, read at Setup: one streak for every gun, on the ground and in the air)
+		double TracerHalf = 8.0, TracerLeast = 3.0;
+		Rgb TracerCol, TracerPale, FlameCol, FlashCoreCol, GunSmokeCol;
 		std::vector<Vec> Out;
 		std::vector<uint8_t> OutRgba;
 		struct Order
@@ -263,6 +294,11 @@ namespace TheaterFx
 		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D);
 		void Scar(double T0, const Vec& At, double Across, const Paint& P, bool bSnow, Dice& D);
 		void Armour(double T0, const Vec& At, double Scale, Dice& D);
+		/** A tracer's streak (two layers, paler along its middle), its tail at Start when born, flying at Vel along Way;
+		 * Drag and Drop (gravity) slow and bend it, for the air guns' long flights. */
+		void Tracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, double For, double Drag, double Drop);
+		const AirRow& AirRowOf(const std::string& Kind);
+		void AirRound(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, double Mps, bool bTracer, bool bSmoke, Dice& D);
 		void Run(double Now); // the steady sources: fire, smouldering
 		void Prune(double Now);
 
