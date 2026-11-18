@@ -1,5 +1,5 @@
 {
- "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The last fourteen (a submarine's, a carrier's, a landing craft's and an aircraft's cues) are brought in and wait for the sound director's mix to say where they play.",
+ "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The fourteen cues of a submarine, a carrier, a landing craft and an aircraft, and the three beds of wind, woods and rain at the end, are brought in and wait for the sound director's mix to say where they play.",
  "sounds": [
   {
    "moment": "bomber_drone",
@@ -53,14 +53,28 @@
   {
    "moment": "rifles",
    "recording": "rifles",
-   "what": "Rifle fire along a line",
+   "what": "A line of riflemen fires",
    "sources": [
     {
-     "title": "U.S. Marines and Singapore Armed Forces Rifle and Machine Gun Range (B-Roll)",
+     "title": "gun lee enfield 303 rifle clean shot",
      "creator": "",
-     "licence": "Public domain",
-     "page": "https://commons.wikimedia.org/wiki/File:U.S._Marines_and_Singapore_Armed_Forces_Rifle_and_Machine_Gun_Range_(B-Roll).ogv",
-     "archive": "Wikimedia Commons"
+     "licence": "CC0",
+     "page": "https://freesound.org/people/kyles/sounds/450853/",
+     "archive": "Freesound"
+    },
+    {
+     "title": "gun lee enfield 303 rifle fire shot",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/kyles/sounds/450854/",
+     "archive": "Freesound"
+    },
+    {
+     "title": "gun lee enfield 303 rifle fire shot loud badass",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/kyles/sounds/450851/",
+     "archive": "Freesound"
     }
    ]
   },
@@ -305,6 +319,20 @@
      "creator": "",
      "licence": "CC0",
      "page": "https://freesound.org/people/Alnotreally/sounds/801348/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "hammer",
+   "recording": "hammer",
+   "what": "A hammer on an anvil",
+   "sources": [
+    {
+     "title": "Large Anvil & Steel Hammer 2",
+     "creator": "Benboncan",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Benboncan/sounds/103630/",
      "archive": "Freesound"
     }
    ]
@@ -620,6 +648,48 @@
      "creator": "brunoboselli",
      "licence": "CC BY 4.0",
      "page": "https://freesound.org/people/brunoboselli/sounds/488335/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "wind_loop",
+   "recording": "wind_loop",
+   "what": "Wind over open ground (loop)",
+   "sources": [
+    {
+     "title": "Wind is blowing in the grass of a patagonian plain. Wind is blowing in the trees in background. (Tierra del fuego, Argentina).",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/felix.blume/sounds/139337/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "woods_loop",
+   "recording": "woods_loop",
+   "what": "A wood in the wind (loop)",
+   "sources": [
+    {
+     "title": "Forest, close up of trees rustling in the wind",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Anya_Media/sounds/523389/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "rain_loop",
+   "recording": "rain_loop",
+   "what": "Steady rain (loop)",
+   "sources": [
+    {
+     "title": "Steady Rain",
+     "creator": "Benboncan",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Benboncan/sounds/119784/",
      "archive": "Freesound"
     }
    ]

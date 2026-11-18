@@ -54,12 +54,15 @@ namespace
 	 * (click, stamp, tick, coins, pickup, bell), the newsreel's (projector, newsreel, radio), drums, victory and
 	 * defeat have their recordings too, under the same names; and the train its own (train_loop, of the first
 	 * approved batch). Nothing keeps a synthesised stand-in any more.
-	 * CUT BY BRIAN at the same check, and silent until a new take passes his ear: the hammer, the horses, the bugle
-	 * and the ship's horn. They have no stand-in either: see Silent below.
+	 * CUT BY BRIAN at the same check, and silent until a new take passes his ear: the horses, the bugle and the
+	 * ship's horn. They have no stand-in either: see Silent below. (The hammer was cut with them; at his third
+	 * check, 15:51 UTC the same day, a steel hammer on an anvil passed, and the rifles became a line of real
+	 * Lee-Enfields under the same name. The horses and the ship's horn were cut again.)
 	 * The pack's cues for a submarine, a carrier, a landing craft and an aircraft (dive_alarm, surfacing,
 	 * torpedo_launch, torpedo_run_loop, ship_sinking, depth_charge_roll, depth_charge_thrower, lift_motor,
-	 * aircraft_break_up, bomb_release, parachute_open, ramp_winch, ramp_drop, craft_grounds) are brought in with the
-	 * rest and wait for the sound director's mix to say where they play.
+	 * aircraft_break_up, bomb_release, parachute_open, ramp_winch, ramp_drop, craft_grounds) and its three beds for
+	 * under a battle (wind_loop, woods_loop, rain_loop) are brought in with the rest and wait for the sound
+	 * director's mix to say where they play.
 	 */
 	struct FRealSound
 	{
@@ -88,6 +91,7 @@ namespace
 		{ TEXT("tick"), TEXT("tick"), 0.0f },
 		{ TEXT("coins"), TEXT("coins"), 0.0f },
 		{ TEXT("pickup"), TEXT("pickup"), 0.0f },
+		{ TEXT("hammer"), TEXT("hammer"), 0.0f }, // something is built or set to work (round six)
 		{ TEXT("bell"), TEXT("bell"), 0.0f },
 		{ TEXT("projector"), TEXT("projector"), 0.0f },
 		{ TEXT("newsreel"), TEXT("newsreel"), 0.0f },
@@ -99,7 +103,7 @@ namespace
 	};
 
 	/** The moments Brian cut on 18 November 2026: they play nothing, neither a recording nor a stand-in, until a new take passes his ear. */
-	const TCHAR* const Silent[] = { TEXT("hammer"), TEXT("horses"), TEXT("bugle"), TEXT("ship_horn") };
+	const TCHAR* const Silent[] = { TEXT("horses"), TEXT("bugle"), TEXT("ship_horn") };
 
 	/** The real recording for one of the game's names, and how long it plays: nothing where there is none, or it has not been brought in. */
 	USoundBase* FindReal(const TCHAR* Name, float& OutSeconds)
