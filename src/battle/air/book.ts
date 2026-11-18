@@ -93,14 +93,23 @@ export const SKY = {
      * take; a model with no recording of its own keeps 'fighter_pass'. No Thunderbolt is drawn yet.
      */
     pass: { Spitfire: 'spitfire_pass', Fw190: 'fw190_pass', Mustang: 'p51_pass', P47: 'p47_pass' } as Record<string, string>,
-    /** Engines, one per formation while it flies (the bridge's 'loop'). */
-    loops: { bmr: 'bomber_heavy_loop', ftr: 'fighter_engine_loop' },
     /**
-     * The flak ring has no loop: inside it the guns fire one of 'drops' every 'every' seconds (at random between the two),
-     * and each shot bursts as one of 'then.takes' 'then.after' seconds later, among the bombers. The timings are the
-     * sound director's (mix.json "rename", air) as of 18 November: if mix.json moves them, mix.json wins.
+     * Engines, one per formation while it flies (the bridge's 'loop'): its kind's plain loop, mix.json "air"."loops"
+     * twinEngined for bombers (every bomber drawn before the B-17 and the Lancaster has two engines) and fighter for
+     * fighters. The 3D game plays its model's own instead, by 'engines'.
      */
-    flak: { drops: ['flak_heavy_fire_01', 'flak_light_fire'], every: [0.8, 2.5], then: { after: [1.5, 4], takes: ['flak_burst_01'] } },
+    loops: { bmr: 'bomber_medium_loop', ftr: 'fighter_engine_loop' },
+    /**
+     * Which mix.json "air"."loops" entry a formation's engines take, by the model the 3D game draws for it
+     * (FMiniatureMesh::MainBomberOf, MainFighterOf; '*' is any other, such as the plain twin-engined 'Bomber:<tag>').
+     */
+    engines: { bmr: { B17: 'B-17', Lancaster: 'fourEngined', He111: 'twinEngined', '*': 'twinEngined' }, ftr: { '*': 'fighter' } } as Record<'ftr' | 'bmr', Record<string, string>>,
+    /**
+     * What the mix plays with no event of its own, as paths into mix.json (the sound director's, never copied here):
+     * the flak ring has no loop, its guns fire and their shells burst by "air"."flak"; the formations' engines are
+     * "air"."loops", by 'engines'.
+     */
+    mix: { flak: 'air.flak', engines: 'air.loops' },
   },
 
   /**
