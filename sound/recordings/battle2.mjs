@@ -74,14 +74,8 @@ export default function battle2(def) {
 
   // ---- Bugles and whistles ------------------------------------------------------------------------------
   const CALLS = 'Bugles and whistles';
-  def('bugle_charge', {
-    family: 'calls', group: CALLS, title: 'A bugle sounds the charge', finish: { fadeOut: 0.5 }, battle: 'An attack goes in',
-    about: 'A bugle playing the cavalry charge, from an old effects library given away free (craigsmith).',
-  }, (take) => clean(eased(fs(take, 438633, 0.2, 8.3), 0.02, 0.5), { low: 120 }));
-  def('bugle_call', {
-    family: 'calls', group: CALLS, title: 'A bugle calls the men to action', finish: { fadeOut: 0.6 }, battle: 'A battle begins',
-    about: 'A military bugle calling to action, recorded in South America (Boscoricardo17).',
-  }, (take) => clean(eased(fs(take, 868980, 0.2, 9.0), 0.02, 0.8), { low: 120 }));
+  // bugle_charge: cut by Brian on the listening board, 18 Nov 14:49Z (file kept in battle-pack/cut-by-brian/)
+  // bugle_call: cut by Brian on the listening board, 18 Nov 14:49Z (file kept in battle-pack/cut-by-brian/)
   def('whistle_long', {
     family: 'calls', group: CALLS, lufs: -22, title: 'An officer blows one long blast', finish: { fadeOut: 0.1 }, battle: 'Over the top: an attack starts',
     about: 'An old army whistle of the kind officers blew in the First World War: one long blast.',
@@ -234,10 +228,7 @@ export default function battle2(def) {
     family: 'sea', group: SEA, loop: true, ch: 2, title: 'The bow wave of a ship under way', battle: 'A ship under way (loop)',
     about: 'The heavy bow wave of a ship, from an old effects library given away free (craigsmith). Cut to one swell, so that it goes round with the sea.',
   }, (take) => cleanLoop(loopFrom(fs(take, 438837, 0, 40), { from: 18, seconds: 13.3, overlap: 2.5 }), 30));
-  def('ship_horn', {
-    family: 'sea', group: SEA, title: 'A ship sounds its horn', finish: { fadeOut: 0.8 }, battle: 'A fleet sails or signals',
-    about: 'A big ship\'s fog horn heard on deck at night (a modern liner\'s: the closest real horn found).',
-  }, (take) => clean(eased(fs(take, 636075, 0, 6.04), 0.01, 1.2), { low: 30 }));
+  // ship_horn: cut by Brian on the listening board, 18 Nov 14:49Z (file kept in battle-pack/cut-by-brian/)
   def('ship_bell', {
     family: 'sea', group: SEA, lufs: -22, title: 'A ship\'s bell is struck', finish: { fadeOut: 0.6 }, battle: 'Action stations, or a watch changes',
     about: 'A real ship\'s bell cast in 1936, struck once and left to ring.',

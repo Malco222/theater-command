@@ -146,11 +146,7 @@ export default function battle5(def) {
     about: 'Coins dropped into a wooden money box (public domain).',
   }, (take) => clean(fade(take('desk_coins_wooden_box', { from: 0.26, to: 1.3 }), 0.002, 0.2), { low: 90 }));
 
-  def('hammer', {
-    family: 'desk', bus: 'interface', group: DESK, title: 'A hammer drives a nail',
-    battle: 'Something built: a factory, a fort, a ship laid down',
-    about: 'A hammer driving a nail, a tap and then the blow, the nail ringing (Antti Luode, CC BY 3.0).',
-  }, (take) => clean(fade(take('desk_hammer_nails', { from: 4.95, to: 6.4 }), 0.002, 0.3), { low: 60 }));
+  // hammer: cut by Brian on the listening board, 18 Nov 14:49Z; new takes in battle6.mjs
 
   def('bell', {
     family: 'desk', bus: 'interface', group: DESK, title: 'A tower clock strikes',
@@ -182,11 +178,7 @@ export default function battle5(def) {
     about: 'A military side drum and bass drum playing a cadence (public domain).',
   }, (take) => clean(fade(take('drums_cadence_a', { from: 0.35, to: 2.45 }), 0.002, 0.35), { low: 40 }));
 
-  def('horses', {
-    family: 'ground', bus: 'world', group: DESK, title: 'Cavalry galloping',
-    battle: 'Cavalry taken in hand',
-    about: 'Six real horses galloping past (CC0).',
-  }, (take) => clean(fade(take('horses_six_galloping', { from: 6.5, to: 9.3 }), 0.3, 0.6), { low: 40 }));
+  // horses: cut by Brian on the listening board, 18 Nov 14:49Z; new takes in battle6.mjs
 
   def('victory', {
     ch: 2, family: 'calls', bus: 'calls', group: DESK, title: 'Victory: To the Colors',
