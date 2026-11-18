@@ -9085,6 +9085,7 @@ void ACampaignPlayerController::CloseWarPrompt()
 
 void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom, bool bPictureFirst)
 {
+	StormFavourKey.Reset(); // (something was ordered: the staff's forecast of a storm is asked afresh for the army in hand)
 	THEATER_SPEED_SCOPE(ShowWar);
 	if (Map.IsValid())
 	{
