@@ -120,12 +120,16 @@ describe('the air forces raised against Germany form on history\'s schedule', ()
 });
 
 describe('across an ocean an air group goes by sea, one a month', () => {
-  it('at peace America has no friendly field across the ocean; in the war, Britain\'s are offered by sea', () => {
+  it('at peace America has no friendly field across the ocean, only its own far islands; in the war, Britain\'s are offered by sea', () => {
     const g = seat('USA');
     const grp = at(g, 'New York')[0], london = g.byName.London;
-    expect(overOcean(grp, london)).toBe(true);
+    expect(overOcean(g, grp, london)).toBe(true);
     expect(whyNotMoveAir(g, grp, london)).toBe('That ground is not in friendly hands.');
-    expect(airGroupBases(g, grp.id).some((b) => b.sea)).toBe(false);
+    // (Since Version 85.1 its own far islands are reached by sea too, the Canal Zone among them: the code checker's
+    // America find 2. Nothing of anyone else's.)
+    const isles = airGroupBases(g, grp.id).filter((b) => b.sea);
+    expect(isles.map((b) => b.name)).toContain('Canal Zone');
+    expect(isles.every((b) => g.regions[b.region].owner === 'USA' && g.regions[b.region].overseas)).toBe(true);
     // Inside America nothing changes: a field in a month's flight is flown to, a far one is too far.
     expect(whyNotMoveAir(g, grp, g.byName.Boston)).toBeNull();
     expect(km(g, grp.base, g.byName['Los Angeles'].id)).toBeGreaterThan(AIR.ferry);
@@ -165,7 +169,7 @@ describe('across an ocean an air group goes by sea, one a month', () => {
     expect(orderAirBase(g, b.id, kent.id)).toBe(true);
     // And home again the same way: from Britain, America's fields are across the ocean.
     nextMonth(g);
-    expect(overOcean(a, g.byName['New York'])).toBe(true);
+    expect(overOcean(g, a, g.byName['New York'])).toBe(true);
     expect(whyNotMoveAir(g, a, g.byName['New York'])).toBeNull();
   });
 
@@ -180,9 +184,12 @@ describe('across an ocean an air group goes by sea, one a month', () => {
     const res = airAct(g, row.buttons[0].act)!;
     expect(res.ok).toBe(true);
     expect(res.note).toBe(`The group is shipped across the ocean to ${row.title}.`);
-    expect(overOcean(grp, g.byName['New York'])).toBe(true);
-    // At peace the page has no such heading.
+    expect(overOcean(g, grp, g.byName['New York'])).toBe(true);
+    // At peace the heading lists America's own far islands alone.
     const p = seat('USA');
-    expect(airPage(p, `rebase:${at(p, 'New York')[0].id}`)!.sections.map((s) => s.heading)).toEqual(['AIRFIELDS']);
+    const peace = airPage(p, `rebase:${at(p, 'New York')[0].id}`)!;
+    expect(peace.sections.map((s) => s.heading)).toEqual(['AIRFIELDS', 'ACROSS THE OCEAN, BY SEA']);
+    expect(peace.sections[1].rows.length).toBeGreaterThan(0);
+    expect(peace.sections[1].rows.every((r) => p.byName[r.title]?.owner === 'USA')).toBe(true);
   });
 });

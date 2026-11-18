@@ -7,7 +7,7 @@
 // card put down, a line of it followed).
 import {
   BOMBING, CLOSING, FIRST_COMMAND, LESSONS, LESSON_DOOR, LESSON_GROUPS, LESSON_SETTING, TIPS, allDone, bringBack, closingOwed, currentLesson,
-  doneCount, firstCommand, isDone, lessonDeed, lessonWords, lessonsAgain, lessonsOn, pickupPlace, putAway, readNotebook, showAgain, siegeOf,
+  doneCount, firstCommand, isDone, lessonDeed, lessonWords, lessonsAgain, lessonsOn, notesWanted, pickupPlace, putAway, readNotebook, showAgain, siegeOf,
   trainGround, waitingCount, type Deed, type Lesson, type Moment, type Notebook,
 } from '../lessons';
 import { markFor, monthCard } from '../monthcard';
@@ -197,6 +197,9 @@ export function lessonsBegun(first: boolean): void {
   if (first) {
     g.flags.firstCommand = 1;
     if (allDone(book)) lessonsAgain(book);
+    // (A player who had switched the notes off and comes back through FIRST COMMAND has them in its campaign again,
+    // and in no other until he says so.)
+    if (!book.on) book.set = false;
     book.on = true;
     save();
   }
@@ -653,10 +656,17 @@ function guideButton(): void {
 
 const WORD = ['None', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
 
+/** A note asked for from the Guide in a campaign where the notes stand aside switches the setting on: he asked for it. */
+function wantNotes(): void {
+  if (notesWanted(page.game(), book)) return;
+  book.on = true;
+  book.set = true;
+}
+
 /** The Guide's first page: the ten lessons, each done, waiting or to come, and the setting. */
 export function guideCard(): string {
   const g = page.game(), esc = page.esc;
-  const first = firstCommand(g);
+  const first = firstCommand(g), wanted = notesWanted(g, book);
   const cur = lessonsOn(g, book) ? currentLesson(g, book, moment())?.id ?? '' : '';
   const waiting = LESSONS.filter((l) => !isDone(book, l.id) && (book.later.includes(l.id) || l.id === cur));
   const done = doneCount(book);
@@ -676,7 +686,7 @@ export function guideCard(): string {
   }).join('');
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The Guide${first ? ' · First command' : ''}</div><h2>The ten lessons</h2></header>
     <div class="body fh-guidebody"><p class="fh-state">${esc(state)}</p>${groups}
-      <div class="fh-setting"><span>${esc(LESSON_SETTING)}</span><span class="fh-seg" role="group" aria-label="${esc(LESSON_SETTING)}"><button class="${book.on ? 'on' : ''}" data-act="fhset" data-on="1" aria-pressed="${book.on}">On</button><button class="${book.on ? '' : 'on'}" data-act="fhset" data-on="0" aria-pressed="${!book.on}">Off</button></span></div>
+      <div class="fh-setting"><span>${esc(LESSON_SETTING)}</span><span class="fh-seg" role="group" aria-label="${esc(LESSON_SETTING)}"><button class="${wanted ? 'on' : ''}" data-act="fhset" data-on="1" aria-pressed="${wanted}">On</button><button class="${wanted ? '' : 'on'}" data-act="fhset" data-on="0" aria-pressed="${!wanted}">Off</button></span></div>
       <p class="fh-rules"><button class="link" data-act="fhrules">How a month works ›</button> <small>The typed page of rules, on the Region page when no province is picked.</small></p></div>
     <footer><button class="btn go" data-act="close">Back to the war</button></footer>`;
 }
@@ -711,9 +721,9 @@ function onClick(e: MouseEvent): void {
     case 'fhtipoff': tip = null; redraw(); break;
     case 'fhclose': if (!book.done.includes(CLOSING.id)) book.done.push(CLOSING.id); save(); redraw(); break;
     case 'fhguide': page.openModal({ kind: 'guide' }); break;
-    case 'fhback': bringBack(book, id); save(); page.openModal(null); page.refresh(); break;
-    case 'fhagain': showAgain(book, id); save(); redrawGuide(); break;
-    case 'fhset': book.on = t.dataset.on === '1'; save(); redrawGuide(); break;
+    case 'fhback': bringBack(book, id); wantNotes(); save(); page.openModal(null); page.refresh(); break;
+    case 'fhagain': showAgain(book, id); wantNotes(); save(); redrawGuide(); break;
+    case 'fhset': book.on = t.dataset.on === '1'; book.set = true; save(); redrawGuide(); break;
     case 'fhrules': {
       page.openModal(null);
       // (A sea picked would show its own page, not the rules.)

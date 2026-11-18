@@ -59,8 +59,13 @@ export const WORDS_MOST = 30, WORDS_MOST_RAID = 36;
 
 /** What the player has learnt, kept with the player and not with the save. */
 export interface Notebook {
-  /** "Staff notes for a new commander": on by default until the ten lessons are done. */
+  /** "Staff notes for a new commander", as the player last set it in the Guide (see 'set'). */
   on: boolean;
+  /**
+   * True once the player has set the setting himself. Until then the notes open by themselves only in the campaign
+   * FIRST COMMAND began (b434, ruling 141's design): a setting switched on brings them into any other.
+   */
+  set: boolean;
   /** Lessons stamped DONE, and the closing note once it has been closed. */
   done: string[];
   /** Lessons put away with LATER: they wait in the Guide. */
@@ -68,14 +73,15 @@ export interface Notebook {
   /** Tips already shown once. */
   tips: string[];
 }
-export const freshNotebook = (): Notebook => ({ on: true, done: [], later: [], tips: [] });
+export const freshNotebook = (): Notebook => ({ on: true, set: false, done: [], later: [], tips: [] });
 /** A notebook read back from storage, made whole: anything missing is as a new player's. */
 export function readNotebook(raw: unknown): Notebook {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Partial<Notebook>;
   // (Only names the list knows: a lesson taken out of a later list is forgotten, not counted.)
   const known = new Set([...LESSONS.map((l) => l.id), CLOSING.id]), tips = new Set(TIPS.map((t) => t.id));
   const ids = (x: unknown, of: Set<string>): string[] => (Array.isArray(x) ? [...new Set(x.filter((s): s is string => typeof s === 'string' && of.has(s)))] : []);
-  return { on: o.on !== false, done: ids(o.done, known), later: ids(o.later, known), tips: ids(o.tips, tips) };
+  // (A notebook kept before b434 with the notes off was switched off by its player: the setting stays his.)
+  return { on: o.on !== false, set: o.set === true || o.on === false, done: ids(o.done, known), later: ids(o.later, known), tips: ids(o.tips, tips) };
 }
 
 /** What only an interface can see: whether a month card is open, and the corps the player has in hand. */
@@ -91,11 +97,14 @@ export const doneCount = (book: Notebook): number => LESSONS.filter((l) => isDon
 /** Notes put away with LATER and not done since: the count on the Guide's button. */
 export const waitingCount = (book: Notebook): number => book.later.filter((id) => !isDone(book, id)).length;
 
-/** The notes teach in a grand campaign with a player at the controls, while the setting is on (ruling 129(a)). */
-export const lessonsOn = (g: Game, book: Notebook): boolean => book.on && isOpen(g) && !!g.human;
-
 /** True in the campaign FIRST COMMAND opened (the flag main.ts has been waiting for, ruling 204's rider). */
 export const firstCommand = (g: Game): boolean => g.flags.firstCommand === 1;
+
+/** Whether the setting stands on in this campaign: as the player set it, or, until he has, in FIRST COMMAND's campaign alone (b434). */
+export const notesWanted = (g: Game, book: Notebook): boolean => (book.set ? book.on : firstCommand(g));
+
+/** The notes teach in a grand campaign with a player at the controls, while the setting is on (ruling 129(a), b434). */
+export const lessonsOn = (g: Game, book: Notebook): boolean => notesWanted(g, book) && isOpen(g) && !!g.human;
 /** The month the player took the campaign over, from which the lessons' months count. */
 const seat = (g: Game): number => g.flags.seat ?? 1;
 

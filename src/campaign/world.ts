@@ -161,6 +161,9 @@ export function attachWorld(g: Game, fresh = true): void {
       if (h.align) n.align = h.align as typeof n.align;
     }
   }
+  // A campaign begun after the first day: the colonies of a country already fallen in Europe (Iceland and Greenland
+  // in a 1941 start) are not left to it, frozen, but go where they would have gone on the day it fell.
+  if (fresh) settleFallen(g, WORLD_FIRST);
   // Every nation's distances to its capital are counted again on the wider map.
   for (const n of Object.values(g.nations)) if (n.capital >= 0) g.capDist[n.id] = capitalDistances(g, n.capital);
   // The supply picture keeps every country's place in it, widened to the new provinces: they are unsupplied until
@@ -207,13 +210,7 @@ export function settleNewGround(g: Game, from: number): void {
     const p = g.regions[of];
     if (p && p.ctrl !== r.ctrl) { r.ctrl = p.ctrl; r.since = p.since; }
   }
-  for (let i = Math.max(from, WORLD_FIRST); i < g.regions.length; i++) {
-    const r = g.regions[i], n = g.nations[r.ctrl];
-    if (n?.alive || !n?.fellOn) continue;
-    const by = n.fellOn.to;
-    r.ctrl = (r.overseas ? protectorOf(g, by) : null) ?? (g.nations[by]?.alive ? by : r.ctrl);
-    r.since = g.turn;
-  }
+  settleFallen(g, from);
   const fresh = (name: string | null | undefined): boolean => !!name && !!g.byName[name] && g.byName[name].id >= from;
   for (const [nat, name, kind, divs, at, o] of WORLD.corps) {
     if (!fresh(at) || !g.nations[nat]?.alive || g.byName[at].ctrl !== nat) continue;
@@ -234,6 +231,21 @@ export function settleNewGround(g: Game, from: number): void {
   }
   for (const n of Object.values(g.nations)) if (n.alive) n.armyPeak = Math.max(n.armyPeak, armySize(g, n.id));
   g.supplyDirty = true;
+}
+
+/**
+ * Ground from 'from' on still held by a country that has fallen goes where a fallen country's ground overseas goes
+ * (game.ts, on the day of the fall): into the keeping of a sea power still fighting the victor, or failing that to the
+ * victor. For ground the chart did not yet have on that day: a save laid over a wider chart, or a campaign begun late.
+ */
+function settleFallen(g: Game, from: number): void {
+  for (let i = Math.max(from, WORLD_FIRST); i < g.regions.length; i++) {
+    const r = g.regions[i], n = g.nations[r.ctrl];
+    if (n?.alive || !n?.fellOn) continue;
+    const by = n.fellOn.to;
+    r.ctrl = (r.overseas ? protectorOf(g, by) : null) ?? (g.nations[by]?.alive ? by : r.ctrl);
+    r.since = g.turn;
+  }
 }
 
 /**

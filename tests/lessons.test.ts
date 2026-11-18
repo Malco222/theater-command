@@ -93,8 +93,10 @@ describe('the list', () => {
 
 describe('the notebook', () => {
   it('is kept with the player: it reads what was saved and mends what was not', () => {
-    expect(readNotebook(null)).toEqual({ on: true, done: [], later: [], tips: [] });
-    expect(readNotebook({ on: false, done: ['month', 7, 'nonsense'], later: 'x' })).toEqual({ on: false, done: ['month'], later: [], tips: [] });
+    expect(readNotebook(null)).toEqual({ on: true, set: false, done: [], later: [], tips: [] });
+    // (One kept before b434 with the notes off was switched off by its player.)
+    expect(readNotebook({ on: false, done: ['month', 7, 'nonsense'], later: 'x' })).toEqual({ on: false, set: true, done: ['month'], later: [], tips: [] });
+    expect(readNotebook({ on: true, set: true })).toEqual({ on: true, set: true, done: [], later: [], tips: [] });
   });
 
   it('puts a note away and brings it back; the GUIDE counts what waits', () => {
@@ -125,9 +127,10 @@ describe('FIRST COMMAND, played', () => {
     expect(firstCommand(g)).toBe(true);
     expect(g.turn).toBe(1);
     expect(lessonsOn(g, book())).toBe(true);
-    expect(lessonsOn(g, { ...book(), on: false })).toBe(false);
-    expect(currentLesson(g, { ...book(), on: false }, { card: true })).toBeNull();
-    expect(lessonDeed(g, { ...book(), on: false }, 'card', { card: true })).toEqual([]);
+    const off = { ...book(), on: false, set: true };
+    expect(lessonsOn(g, off)).toBe(false);
+    expect(currentLesson(g, off, { card: true })).toBeNull();
+    expect(lessonDeed(g, off, 'card', { card: true })).toEqual([]);
   });
 
   it('opens with lesson 1 on the month card, and its deed is putting the card down', () => {

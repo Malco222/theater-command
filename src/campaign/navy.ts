@@ -1161,6 +1161,14 @@ export function crossingsOf(g: Game, nat: string, o: { short?: boolean } = {}): 
  * the month can embark, so the report always comes a month before the landing can. A coast the attacker's own
  * army could march to is not watched for this: the war there is a land war already.
  */
+/** True when a nation has landed from the sea on another's homeland since their war began, and holds or stands on some of it still. */
+function landedOn(g: Game, att: string, d: string): boolean {
+  const since = g.flags[`war:${att}:${d}`] ?? g.flags[`war:${d}:${att}`] ?? 0;
+  const home = g.regions.filter((r) => r.owner === d && !r.overseas);
+  return home.some((r) => r.seas.some((z) => (g.flags[`landed:${z}:${att}`] ?? -1) >= since))
+    && home.some((r) => r.ctrl === att || r.units.some((u) => u.nat === att && !u.dead));
+}
+
 export function coastReport(g: Game, att: string): void {
   const W = NAVY.watch;
   const n = g.nations[att];
@@ -1191,6 +1199,9 @@ export function coastReport(g: Game, att: string): void {
     if (g.flags[key] === seen.quay.id + 1 && g.turn - (g.flags[at] ?? -99) < W.every) continue;
     g.flags[key] = seen.quay.id + 1;
     g.flags[at] = g.turn;
+    // A warning never comes after its event (ruling 229(e)): once this attacker has come ashore from the sea on the
+    // enemy's homeland in this war and stands on it still, the landing is not news to come, and nobody is told.
+    if (landedOn(g, att, d)) continue;
     const force = seen.corps === 1 ? 'one corps' : `${seen.corps} corps`;
     if (d === g.human) warning(g, 'Coast watch', `The coast watch reports ${n.adj} shipping gathering at ${seen.quay.name}, with troops on the quays: enough to carry ${force}. ${seen.coast.name} is within their reach, and a landing could come as soon as next month.`, d, seen.coast.id, att);
     else if (att === g.human) headline(g, 'info', `${x.adj} coast watchers have seen your shipping and troops gather at ${seen.quay.name}: ${x.name} expects a landing and is manning its harbours.`, att, seen.quay.id);

@@ -343,7 +343,7 @@ export function groupBases(g: Game, id: number, nat: string | null = g.human): B
   for (const r of g.regions) {
     const holds = airfieldsHold(g, r.id);
     if (holds <= 0 || r.id === f.base || !allied(g, f.nat, r.ctrl)) continue;
-    const d = kmTo(g, f, r.id), sea = overOcean(f, r);
+    const d = kmTo(g, f, r.id), sea = overOcean(g, f, r);
     if (!sea && d > AIR.ferry) continue;
     const there = g.airFleets.reduce((s, x) => s + (x.base === r.id && !afloat(x) ? x.ftr + x.bmr : 0), 0);
     const o: BaseOption = { region: r.id, name: r.name, km: d, word: fieldWord(holds).word, holds, free: Math.max(0, holds - there), why: sea ? whyNotShipAir(g, f, r) : whyNotBase(g, f, r) };

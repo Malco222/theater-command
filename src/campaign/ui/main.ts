@@ -68,7 +68,7 @@ import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import {
-  AIR, CARRIERS, MISSION, carrierRules, groupAt, airBases, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowding, forecastAir, isOffensive,
+  AIR, CARRIERS, MISSION, carrierRules, groupAt, moveTargets, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowding, forecastAir, isOffensive,
   km as airKm, overOcean, seaKm, skyOver, whyNotMoveAir, whyNotMission, type AirOrder,
 } from '../air';
 import {
@@ -560,7 +560,7 @@ function boardWing(f: AirFleet, fleet: number): void {
 }
 
 /** Where the picked group could be based this month: for a wing aboard, the airfields it could fly ashore to (ruling 175(b)). */
-const basesFor = (f: AirFleet): Region[] => (f.ship !== undefined ? airGroupBases(g, f.id).filter((b) => !b.why).map((b) => g.regions[b.region]) : airBases(g, f));
+const basesFor = (f: AirFleet): Region[] => (f.ship !== undefined ? airGroupBases(g, f.id).filter((b) => !b.why).map((b) => g.regions[b.region]) : moveTargets(g, f));
 const whyNotBaseFor = (f: AirFleet, r: Region): string | null => (f.ship !== undefined ? whyNotAshore(g, f, r) : whyNotMoveAir(g, f, r));
 /** What the page says of a base change just ordered: a wing flies ashore, a group moves, or (across an ocean) is shipped. */
 const movedLine = (name: string, deck: boolean, sea: boolean, to: string): string => (deck ? `${name} flies ashore to ${to}.` : sea ? `${name} is shipped across the ocean to the airfield at ${to}.` : `${name} moves to the airfield at ${to}.`);
@@ -1669,7 +1669,7 @@ function rightClickElse(id: number, x: number, y: number): boolean {
   }
   const af = ui.tab === 'air' && !ui.airMode && !(ui.raid && ui.raid !== 'menu') ? myAir() : null;
   if (af) {
-    const r = g.regions[id], why = whyNotBaseFor(af, r), deck = af.ship !== undefined, name = af.name, sea = overOcean(af, r);
+    const r = g.regions[id], why = whyNotBaseFor(af, r), deck = af.ship !== undefined, name = af.name, sea = overOcean(g, af, r);
     if (why) ui.msg = `${name} cannot ${deck ? 'fly ashore' : sea ? 'be shipped' : 'move'} to ${r.name}. ${why}`;
     else if (orderAirBase(g, af.id, id)) { ui.msg = movedLine(name, deck, sea, r.name); if (airWar(g)) ui.field = id; }
     refresh();
@@ -2761,6 +2761,12 @@ function alertList(): Alert[] {
     if (gv.head) out.push({ kind: 'cabinethead', text: `The war cabinet wants ${gv.head.name} dismissed: ${gv.head.left <= 1 ? 'it wants your answer this month' : 'it awaits your answer'}` });
     if (gv.promise && gv.promise.left <= 1) out.push({ kind: 'promise', text: `The last month for your promise: ${gv.promise.title}` });
   }
+  // The Axis courting a neutral of the Americas that his America may court back at no cost this month (ruling 223(b), b434).
+  const back = Object.values(g.nations).filter((T) => freeCourt(g, me, T.id) && canCourt(g, me, T.id).ok);
+  if (back.length) {
+    const names = back.map((T) => theName(T.id)), list = names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    out.push({ kind: 'courtback', text: `${envoysWord(g, back.map((T) => T.id))} envoys are courting ${list}: courting ${back.length === 1 ? 'it' : 'them'} back costs nothing`, tab: 'powers' });
+  }
   const cited = unseen(g).length;
   if (cited) out.push({ kind: 'honours', text: `${cited} honour${cited === 1 ? '' : 's'} earned: read the citation${cited === 1 ? '' : 's'}` });
   // The war between the alliances is decided and the player has not yet said what comes next.
@@ -2778,7 +2784,7 @@ function alertList(): Alert[] {
     });
   }
   // What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
-  const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy' };
+  const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy', courtback: 'diplomacy' };
   return out.filter((a) => !(theirs[a.kind] && staffRunsDesk(g, theirs[a.kind])));
 }
 
@@ -8887,7 +8893,7 @@ function onClick(e: MouseEvent): void {
     case 'basepick': {
       const f = myAir();
       if (!f) break;
-      const why = whyNotBaseFor(f, g.regions[id]), sea = overOcean(f, g.regions[id]), deck = f.ship !== undefined, name = f.name;
+      const why = whyNotBaseFor(f, g.regions[id]), sea = overOcean(g, f, g.regions[id]), deck = f.ship !== undefined, name = f.name;
       if (why) ui.msg = `${name} cannot ${sea ? 'be shipped' : 'move'} to ${g.regions[id].name}. ${why}`;
       else if (orderAirBase(g, f.id, id)) { ui.msg = movedLine(name, deck, sea, g.regions[id].name); ui.airMode = ''; ui.field = id; }
       refresh(); break;
@@ -8960,7 +8966,12 @@ function onClick(e: MouseEvent): void {
     case 'cancelbuild': orderCancelBuild(g, id); refresh(); break;
     case 'teams': orderTeams(g, t.dataset.field as Field, Number(t.dataset.n)); refresh(); break;
     case 'bureau': orderBureau(g); refresh(); break;
-    case 'court': { const h = g.headlines.length; orderCourt(g, t.dataset.nat!); ui.unread += g.headlines.length - h; refresh(); break; }
+    case 'court': {
+      const h = g.headlines.length, T = g.nations[t.dataset.nat!], free = !!T && freeCourt(g, g.human!, T.id), envoys = T ? envoysWord(g, [T.id]) : '';
+      // (The press says what it did on the paper, as every order does: the feel check of Version 85.)
+      if (T && orderCourt(g, T.id)) ui.msg = free ? `You courted ${theName(T.id)} back against the ${envoys} envoys, at no cost.` : `You courted ${theName(T.id)}, for ${DIPLOMACY.court.cost} political capital.`;
+      ui.unread += g.headlines.length - h; refresh(); break;
+    }
     case 'evac': {
       // Each corps in hand is lifted or it is not, and the paper says which and why: the ones left stay in hand.
       const cs = pickedCorps();
@@ -9423,7 +9434,7 @@ function onRegion(id: number): void {
   const af = ui.tab === 'air' ? myAir() : null;
   if (af && ui.airMode) {
     if (ui.airMode === 'base') {
-      const why = whyNotBaseFor(af, r), sea = overOcean(af, r), deck = af.ship !== undefined, name = af.name;
+      const why = whyNotBaseFor(af, r), sea = overOcean(g, af, r), deck = af.ship !== undefined, name = af.name;
       if (why) ui.msg = `${name} cannot ${sea ? 'be shipped' : 'move'} to ${r.name}. ${why}`;
       else if (orderAirBase(g, af.id, id)) { ui.msg = movedLine(name, deck, sea, r.name); ui.airMode = ''; if (airWar(g)) ui.field = id; }
     } else if (ui.airMode === 'strike') ui.msg = 'A strike on shipping needs a sea: click one of the ringed seas.';

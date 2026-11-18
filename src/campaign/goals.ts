@@ -49,6 +49,10 @@ const warSince = (g: Game, a: string, b: string): number | undefined => g.flags[
  * The last month that counts toward a goal in this campaign: the book's, unless its clock is a war (see Goal.war) that
  * came later than history's, or has not come at all (Infinity: nothing is decided yet).
  */
+/** True when the war a goal's clock runs from has come and gone: the foe has fallen, or made peace. */
+const warOver = (g: Game, nat: string, goal: Goal): boolean =>
+  !!goal.war && warSince(g, nat, goal.war.with) !== undefined && !g.nations[nat].atWar.includes(goal.war.with);
+
 export function goalEndsIn(g: Game, nat: string, goal: Goal): number {
   if (!goal.war || goal.until === undefined) return goalEnds(goal);
   const since = warSince(g, nat, goal.war.with);
@@ -138,7 +142,8 @@ export function judgeGoals(g: Game, nat: string): { key: GoalKey; goal: Goal; wo
       else if (g.nations[nat].alive && weeksThrough(g, nat) >= goal.outlast) won = ok;
     }
     else if (!g.nations[nat].alive) won = false;
-    else if (goal.until !== undefined) { if (g.turn > goalEndsIn(g, nat, goal)) won = ok; }
+    // (A goal whose clock runs from a war is judged the month that war ends, if it ends first: b434.)
+    else if (goal.until !== undefined) { if (g.turn > goalEndsIn(g, nat, goal) || warOver(g, nat, goal)) won = ok; }
     // A goal that asks for an army ashore when the enemy falls is settled the day he falls: arriving afterwards is no victory.
     else if (goal.ashore && goal.beaten?.length && goal.beaten.every((id) => { const x = g.nations[id]; return !!x && !x.alive && !x.dormant; })) won = ok && g.turn <= goalEnds(goal) + 1;
     // What stands when the month after the last one opens still counts: an ally may have finished the job.
