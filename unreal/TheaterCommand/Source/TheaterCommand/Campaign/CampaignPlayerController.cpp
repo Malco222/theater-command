@@ -6619,7 +6619,7 @@ void ACampaignPlayerController::RefreshOrders()
 	EnemyReach = TSet<int32>(Danger);
 	FarMonths = MoveTemp(Far);
 	StandingRoad = MoveTemp(Road);
-	Map->SetReach(Reach, bByRail || bBySea);
+	Map->SetReach(Reach, bByRail || bBySea, bOrdersInSteps); // (in steps, the enemy's old reach stands until its own step below)
 	// (Rulings 110, 112, 118; the art director's railway brief.) The second reach, with no switch to press: where a
 	// train would take the army this month beyond its march, shown as light on the railway itself.
 	RailBeyond.Reset();
