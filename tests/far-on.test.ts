@@ -16,6 +16,7 @@ import farWorld from '../data/campaign/far-world.json';
 import grandData from '../data/campaign/grand.json';
 import leagueData from '../data/campaign/league.json';
 import nationsData from '../data/campaign/nations.json';
+import setupData from '../data/campaign/setup-1939.json';
 import worldData from '../data/campaign/world.json';
 import { monthlyDiplomacy, signPeace } from '../src/campaign/diplomacy';
 import { tieBars, tieWar, tiedPair } from '../src/campaign/far';
@@ -113,6 +114,44 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
       if (o.str !== undefined) expect(c!.str, name).toBeLessThanOrEqual(Math.max(o.str, o.est ?? 1) + 1e-9);
       if (o.est !== undefined && o.est < 1) expect(c!.full, name).toBe(o.est);
     }
+  });
+
+  it("holds and stays the rows of the book's own operations where the war does not follow the book (ruling b423)", () => {
+    const list = (setupData as any).bookOnly as { stops: number[]; rows: [string, string][] };
+    expect(list.stops).toEqual([3, 4, 5]);
+    expect(list.rows.length).toBe(7);
+    // Every row named is a dated row of Japan's that the far side lays, once.
+    const dated = (setupData as any).expeditions as [number, string, string, string, number, string, any][];
+    for (const [nat, name] of list.rows) expect(dated.filter((r) => r[1] === nat && r[2] === name).length, name).toBe(1);
+    // The 5th Division is brought to Formosa in month 2 for the landing at Pakhoi, an operation of the book alone.
+    const raise = (stop: number, human: string | null) => {
+      const g = grand(human);
+      setStop(g, stop, true);
+      g.turn = 2;
+      startPhase(g, 'JAP');
+      const c = g.corps.find((x) => x.nat === 'JAP' && x.name === '21st Army (5th Division)');
+      expect(c, `stop ${stop}`).toBeDefined();
+      expect(g.regions[c!.reg].name).toBe('Taihoku');
+      // The row it is made from is struck off either way.
+      expect(g.corps.some((x) => x.nat === 'JAP' && x.name === '12th Army (5th Division)')).toBe(false);
+      return c!;
+    };
+    for (const stop of [3, 4, 5]) { const c = raise(stop, null); expect([c.hold, !!c.stay], `stop ${stop}`).toEqual([true, true]); }
+    // By the book the landing takes it: it comes as the row is written.
+    for (const stop of [1, 2]) { const c = raise(stop, null); expect([c.hold, !!c.stay], `stop ${stop}`).toEqual([false, false]); }
+    // A hold binds Japan's staff, never a player's own corps.
+    const own = raise(3, 'JAP');
+    expect([own.hold, !!own.stay]).toEqual([false, false]);
+    // A row that carried a hold already keeps it at every stop, and is stayed only where the book is not followed.
+    const south = (stop: number) => {
+      const g = grand();
+      setStop(g, stop, true);
+      g.turn = 27;
+      startPhase(g, 'JAP');
+      return g.corps.find((x) => x.nat === 'JAP' && x.name === '25th Army (18th Division)')!;
+    };
+    expect([south(3).hold, !!south(3).stay]).toEqual([true, true]);
+    expect([south(1).hold, !!south(1).stay]).toEqual([true, false]);
   });
 
   it("moves a computer navy's base in its month, where it holds the place, and leaves a player's fleet to him", () => {

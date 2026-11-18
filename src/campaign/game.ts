@@ -2973,11 +2973,21 @@ function roomNear(g: Game, nat: string, at: Region): Region | null {
   return null;
 }
 
+/**
+ * Ruling b423 (a rider on 221): a dated row that serves only an operation of the book comes held and stayed where the
+ * war does not follow the book, at the stops its list names ('bookOnly' in setup-1939.json; the far side lays the
+ * list, china-stop3.json). A hold binds a staff, never a player's own corps.
+ */
+function bookOnly(g: Game, nat: string, name: string): boolean {
+  const list = (setup as { bookOnly?: { stops: number[]; rows: [string, string][] } }).bookOnly;
+  return !!list && nat !== g.human && list.stops.includes(stopOf(g)) && list.rows.some(([n, nm]) => n === nat && nm === name);
+}
+
 function expeditions(g: Game, nat: string): void {
   const gone: Corps[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
     if (row[1] !== nat || g.turn < row[0]) return;
-    const o = row[6] ?? {};
+    const o = bookOnly(g, nat, row[2]) ? { ...(row[6] ?? {}), hold: 1, stay: 1 } : row[6] ?? {};
     // A row marked 'open' belongs to the grand campaign alone: history's campaigns keep the order of battle they were measured with.
     if (o.open && g.flags.open !== 1) return;
     if (g.flags[`sent:${i}`]) {

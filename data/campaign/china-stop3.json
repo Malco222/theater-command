@@ -19,5 +19,20 @@
   ["JAP", "21st Army detachment (Swatow)", "Swatow"],
   ["JAP", "Amoy naval garrison", "Amoy"],
   ["JAP", "Hainan garrison (naval landing forces)", "Hainan"]
- ]
+ ],
+ "_b423": "Ruling b423 (the design director, 18 November 2026, 01:13Z), a rider on 221: at stops 3 to 5 the dated rows that serve only the book's operations come held and stayed. They are the record's rows for the South Kwangsi landing (the 5th Division, brought to Formosa in month 2), Hong Kong (the 38th Division), the coast landings of 1941 (three forces) and the strike south (the 25th Army's 5th and 18th Divisions, which JAP:south takes when it is built). At stops 1 and 2 nothing changes: the book's landings use them. A hold binds Japan's staff, never a player's own corps (b417). The rows are named in 'setup-1939'.bookOnly as [nation, row name]; game.ts reads it where a dated row is raised.",
+ "setup-1939": {
+  "bookOnly": {
+   "stops": [3, 4, 5],
+   "rows": [
+    ["JAP", "21st Army (5th Division)"],
+    ["JAP", "38th Division (Canton)"],
+    ["JAP", "23rd Army (48th Division)"],
+    ["JAP", "13th Army (Chekiang landing force)"],
+    ["JAP", "13th Army (Wenchow detachment)"],
+    ["JAP", "25th Army (5th Division)"],
+    ["JAP", "25th Army (18th Division)"]
+   ]
+  }
+ }
 }
