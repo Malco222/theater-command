@@ -9,6 +9,7 @@ import type { BombLaw } from '../../campaign/airfought';
 import type { Side, UnitBase } from '../core/types';
 import type { Band } from './book';
 import type { AirGround } from './ground';
+import type { Form, Pass, Style, When } from './doctrine';
 
 export type AirKind = 'ftr' | 'bmr';
 
@@ -79,6 +80,41 @@ export interface AirUnit extends UnitBase {
   /** Where its airfield is on the board (defenders), or where it came on (attackers). */
   homeX: number;
   homeY: number;
+  /**
+   * What the 3D game acts out (presentation only: none of it moves a count, ruling 237): the aircraft it draws for this
+   * group (doctrine.ts fighterOf, bomberOf) and its side's way of flying.
+   */
+  model: string;
+  form: Form | 'box';
+  style: Style | null;
+  /** Fighters: each contact's fire this tick, in aircraft owed per air second, and the pass it flies at a bomber group. */
+  fire: { on: number; rate: number; pass?: Pass }[];
+  /** Bombers: aircraft of the box that have fallen out of formation (the design's 1.6), oldest first; those that limped home. */
+  strag: Straggler[];
+  away: number;
+}
+
+/**
+ * A bomber that has lost an engine, slowed and fallen out of its box (Brian, 19:38Z: "it goes slower and falls out of
+ * formation which makes it an easier target"). It is one of its box's count, not a unit: the box's next loss is the
+ * straggler's, so the raid loses no more than the card says (ruling 237.1).
+ */
+export interface Straggler {
+  id: number;
+  /** The dead engines (engine.1 to engine.N on the model), and whether the airscrew is feathered or windmills. */
+  eng: number[];
+  prop: 'feather' | 'windmill';
+  /** What hit it: fighters or the guns, and which group ('flak' for the guns). */
+  why: 'ftr' | 'flak';
+  by: number | 'flak';
+  /** Air seconds since it fell out; metres it is behind and below its box; how fast it drops back and sinks. */
+  age: number;
+  back: number;
+  down: number;
+  rate: number;
+  sink: number;
+  /** The escort group one of whose pairs weaves over it, if any. */
+  cover: number | null;
 }
 
 /** What the campaign hands the air battle as the place: the raid, its target, and what the raid card forecast. */
@@ -122,6 +158,9 @@ export interface AirPlace {
    * by this law (b397). Absent for a fight for the sky.
    */
   bombs?: BombLaw | null;
+  /** When it is fought, and the aircraft each nation's fighters and bombers are (doctrine.ts): absent, September 1939 and the plain models. */
+  when?: When;
+  models?: Record<string, { ftr: string; bmr: string }>;
   /** Where each campaign group comes on: board position, height, fuel, and whether it waits on the ground. */
   starts: Record<number, { x: number; y: number; band: Band; fuel: number; wait: boolean }>;
   /** Where the raiders fly from: their own airfields, carriers at sea (the Home Fleet's aircraft), or both. */

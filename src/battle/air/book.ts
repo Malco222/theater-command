@@ -131,6 +131,20 @@ export const SKY = {
     /** Crew of a bomber, for the parachutes. TODO(polish): by the type each country flies. */
     crew: 5,
   },
+
+  /**
+   * The straggler (the design's 1.6; the design director's ruling 237.1: shown, never counted twice). While a box is
+   * hit, each tick one of its bombers may lose an engine and fall out, at k times what the box was owed that tick, at
+   * most 'most' at a time and never its last aircraft in formation. The box's next loss is its oldest straggler that
+   * has been out at least 'seen' air seconds (so it is seen to leave before it falls) and has no escort over it. A twin
+   * on one engine makes three quarters of its speed or less and cannot hold height (B39): it drops back at 'twin.back'
+   * of the box's speed and sinks. A four-engined straggler has one engine windmilling or two out (B38, B39; one cleanly
+   * feathered could keep its place, FB12): it drops back 4.5 to 9 m/s. Before its box bombs it keeps within 'held'
+   * metres (its bombs are in the box's drop); after, it falls back freely and is clear of the fight, and gets home,
+   * past 'clear' metres. k is tuned so that about half the bombers lost were stragglers first, until the historian
+   * answers (ruling 237.1). Sink rates are placeholders.
+   */
+  strag: { k: 1, most: 2, seen: 10, twin: { back: 0.25, sink: 2 }, four: { back: [4.5, 9] as [number, number], sink: 1 }, held: 1_500, clear: 3_000 },
 };
 
 export type Band = 0 | 1 | 2;

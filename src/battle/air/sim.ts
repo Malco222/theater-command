@@ -12,8 +12,9 @@ import { fieldRatio } from '../core/result';
 import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, FieldTicket, Side, UnitState, Zone } from '../core/types';
 import { DT } from '../core/types';
 import { SKY, type Band } from './book';
+import { enginesOf, fighterWay, passesOn, pickPass, type Pass, type When } from './doctrine';
 import { drawFall, fallWords } from './falls';
-import type { AirJob, AirOutcome, AirPlace, AirUnit } from './types';
+import type { AirJob, AirOutcome, AirPlace, AirUnit, Straggler } from './types';
 import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow } from '../../campaign/airfought';
 import type { VictoryLevel } from '../../core/ticket';
 export { peopleOf } from '../../campaign/airfought';
@@ -88,14 +89,35 @@ export class AirSim implements BattleSim<AirUnit> {
   private flakIn: number;
   /** The campaign's bomber-loss law as the raid card weighed it: the defenders' weight, the escort's weight per bomber, the bombers' own guns. */
   private law = { D: 0, B: 0, ePer: 0, guns: 0, met: 0 };
+  /**
+   * What the 3D game acts out beyond the counts (the design's section 1; ruling 237): who shot whom, the pass each
+   * fighter flies at a bomber group, the stragglers, ammunition, the formation's state, an escort breaking off and
+   * rejoining. None of it moves a count, the bombs or the verdict: its throws come from streams of their own (a fork
+   * never moves its parent), and the tests run every battle with it on and off and find the same result.
+   */
+  readonly show: boolean;
+  private when: When;
+  private stragRng: Rng;
+  private passRng: Rng;
+  /** The pass each fighter group is flying at each bomber group it is on ('fighter:bomber'). */
+  private passes = new Map<string, Pass>();
+  /** This tick, what each group was owed and by whom ('flak' for the guns): who shot down whom. */
+  private owedBy = new Map<number, Map<number | 'flak', number>>();
+  private stragId = 1;
+  /** The enemy group each close escort has broken off to engage, if any. */
+  private chasing = new Map<number, number | null>();
 
-  constructor(ticket: FieldTicket<AirPlace>) {
+  constructor(ticket: FieldTicket<AirPlace>, opts: { show?: boolean } = {}) {
     this.ticket = ticket;
     this.place = ticket.place;
+    this.show = opts.show ?? true;
+    this.when = ticket.place.when ?? { year: 1939, month: 8 };
     this.rng = new Rng(ticket.seed);
     this.fallRng = this.rng.fork(7);
     this.lossRng = this.rng.fork(11);
     this.rolls = { rail: this.rng.fork(13).next(), ruin: this.rng.fork(17).next() };
+    this.stragRng = this.rng.fork(19);
+    this.passRng = this.rng.fork(23);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
     const T = SKY.target;
     this.zones = [
@@ -115,6 +137,8 @@ export class AirSim implements BattleSim<AirUnit> {
         if (!s) continue;
         const kind = f.kind === 'bmr' ? 'bmr' : 'ftr';
         const mor = clamp01(SKY.morale.base + SKY.morale.ready * f.org);
+        const model = this.place.models?.[f.nat]?.[kind] ?? (kind === 'bmr' ? `Bomber:${f.nat}` : `Fighter:${f.nat}`);
+        const way = kind === 'ftr' ? fighterWay(f.nat, this.when) : { form: 'box' as const, style: null };
         const u: AirUnit = {
           id: id++, side, corps: f.corps, nat: f.nat, kind, name: f.name,
           x: s.x + (kind === 'bmr' ? 0 : 1_500 * (side === 'att' ? 1 : 0)), y: s.y,
@@ -125,6 +149,7 @@ export class AirSim implements BattleSim<AirUnit> {
           job: s.wait ? { do: 'wait' } : side === 'att' && kind === 'bmr' ? { do: 'route' } : { do: 'patrol', x: s.x, y: s.y },
           q: kind === 'bmr' ? 1 : this.place.worth[side], bounce: 0, run: 0, dropped: 0, jettisoned: false, shot: 0, owed: 0, back: 0,
           contacts: [], vig: 1, kit: { ftr: 0, bmr: 0 }, kit0: 0, luck: 1, lane: 0, homeX: s.x, homeY: side === 'att' ? -5_000 : s.y,
+          model, form: way.form, style: way.style, fire: [], strag: [], away: 0,
         };
         this.units.push(u);
       }
@@ -341,6 +366,7 @@ export class AirSim implements BattleSim<AirUnit> {
         if (j.close) {
           // A close escort turns on any enemy fighter that comes at its bombers, and otherwise keeps its place by them.
           const e = this.nearest(u, (v) => v.air === 'ftr' && v.job.do !== 'home' && v.state !== 'routing' && dist(v.x, v.y, b.x, b.y) <= SKY.escort.near);
+          this.chasing.set(u.id, e ? e.id : null);
           if (e) return [e.x, e.y];
           const k = this.units.filter((f) => f.job.do === 'escort' && f.job.on === b.id).indexOf(u);
           const side = k % 2 ? 1 : -1, row = Math.floor(k / 2);
@@ -355,6 +381,15 @@ export class AirSim implements BattleSim<AirUnit> {
     }
   }
 
+  /** A close escort breaking off from its bombers to engage attackers, and coming back to them (shown, the design's 1.8). */
+  private engaging(u: AirUnit, was: number | null): void {
+    const j = u.job;
+    if (j.do !== 'escort' || !j.close) { this.chasing.delete(u.id); return; }
+    const now = this.chasing.get(u.id) ?? null;
+    if (now !== null && was === null) this.say('air:engage', u, '', { on: now, box: j.on });
+    else if (now === null && was !== null) this.say('air:rejoin', u, '', { box: j.on });
+  }
+
   private fly(u: AirUnit, dt: number): void {
     if (u.job.do === 'wait') return;
     // Height: climbing takes time, diving little.
@@ -365,7 +400,9 @@ export class AirSim implements BattleSim<AirUnit> {
       u.alt = a0 + (a1 - a0) * Math.min(1, u.climbT / need);
       if (u.climbT >= need) { u.band = (u.band + (up ? 1 : -1)) as Band; u.climbT = 0; u.alt = SKY.bands.alt[u.band]; }
     } else u.alt = SKY.bands.alt[u.band];
+    const was = this.chasing.get(u.id) ?? null;
     const [tx, ty] = this.aim(u);
+    if (this.show) this.engaging(u, was);
     const d = dist(u.x, u.y, tx, ty);
     const climbing = u.to > u.band;
     const v = (u.air === 'bmr' ? SKY.speed.bmr : SKY.speed.ftr) * (climbing ? SKY.speed.climbing : 1) * dt;
@@ -419,6 +456,8 @@ export class AirSim implements BattleSim<AirUnit> {
         a.contacts.push(d.id); d.contacts.push(a.id);
         this.fired = true;
         if (before.get(a.id)?.has(d.id)) continue;
+        // A new run at a bomber group: the fighters fly the pass their doctrine gives against that bomber (doctrine.ts).
+        if (this.show && a.air === 'bmr') this.passes.set(`${d.id}:${a.id}`, pickPass(this.passRng, passesOn(d.nat, this.when, a.model, a.nat)));
         // A new contact: the higher group dives on the lower one and strikes first.
         const hi = a.band > d.band ? a : d.band > a.band ? d : null;
         if (hi) {
@@ -431,7 +470,10 @@ export class AirSim implements BattleSim<AirUnit> {
           x.luck = this.rng.range(1 - SKY.wear.luck, 1 + SKY.wear.luck);
           // A bomber group's contact names the fighters on it, so the 3D game can play their model's own pass (SKY.cues.pass).
           const other = x === a ? d : a;
-          this.say('contact', x, told(this.called(x), '{N} [is|are] in a fight.'), x.air === 'bmr' ? { with: other.id } : undefined, x.air === 'bmr' ? C.onBombers : C.dogfight);
+          const pass = this.show ? this.passes.get(x.air === 'bmr' ? `${other.id}:${x.id}` : `${x.id}:${other.id}`) : undefined;
+          const how = this.show ? { form: x.form, style: x.style, ...(pass ? { pass } : {}) } : {};
+          const extra = x.air === 'bmr' ? { with: other.id, ...how } : this.show ? { with: other.id, ...how } : undefined;
+          this.say('contact', x, told(this.called(x), '{N} [is|are] in a fight.'), extra, x.air === 'bmr' ? C.onBombers : C.dogfight);
         }
       }
     }
@@ -500,6 +542,16 @@ export class AirSim implements BattleSim<AirUnit> {
     const sum = (xs: AirUnit[]): number => xs.reduce((s, v) => s + v.n, 0);
     const burn = 1 - Math.exp(-dt / SKY.tire);
     const covers = new Map<number, number>();
+    // Who owed what this tick (shown only): each group's debts by creditor, and each fighter's fire.
+    const show = this.show;
+    if (show) { this.owedBy.clear(); for (const u of live) u.fire = []; }
+    const owe = (v: AirUnit, by: number | 'flak', k: number): void => {
+      v.owed += k;
+      if (!show || k <= 0) return;
+      const m = this.owedBy.get(v.id) ?? new Map<number | 'flak', number>();
+      m.set(by, (m.get(by) ?? 0) + k);
+      this.owedBy.set(v.id, m);
+    };
     for (const u of live) {
       if (u.air !== 'ftr' || !u.contacts.length || u.kit0 <= 0 || away(u)) continue;
       const F = foes(u, 'ftr'), Bs = foes(u, 'bmr');
@@ -508,7 +560,11 @@ export class AirSim implements BattleSim<AirUnit> {
         const spend = u.kit.ftr * burn;
         u.kit.ftr -= spend;
         const nF = sum(F);
-        for (const v of F) v.owed += spend * (v.n / Math.max(1, nF)) * Math.min(2, this.edge(u) / this.place_(v));
+        for (const v of F) {
+          const k = spend * (v.n / Math.max(1, nF)) * Math.min(2, this.edge(u) / this.place_(v));
+          owe(v, u.id, k);
+          if (show) u.fire.push({ on: v.id, rate: k / dt });
+        }
       }
       // On bombers: the same, and harder on a box with less than its share of the escort by it.
       if (Bs.length && u.kit.bmr > 0) {
@@ -520,7 +576,9 @@ export class AirSim implements BattleSim<AirUnit> {
           if (most <= 0) continue;
           const cover = covers.get(b.id) ?? this.cover(b, live);
           covers.set(b.id, cover);
-          b.owed += Math.min(most, spend * (b.n / Math.max(1, nB)) * cover * Math.min(2, this.edge(u)));
+          const k = Math.min(most, spend * (b.n / Math.max(1, nB)) * cover * Math.min(2, this.edge(u)));
+          owe(b, u.id, k);
+          if (show) u.fire.push({ on: b.id, rate: k / dt, ...(this.passes.has(`${u.id}:${b.id}`) ? { pass: this.passes.get(`${u.id}:${b.id}`) } : {}) });
           if (cover > 1.2) b.mor = clamp01(b.mor - SKY.morale.alone * dt);
         }
       }
@@ -535,10 +593,11 @@ export class AirSim implements BattleSim<AirUnit> {
       if (u.side !== 'att' || dist(u.x, u.y, SKY.target.x, SKY.target.y) > SKY.flakR) continue;
       if (u.air === 'bmr') {
         if (u.dropped || u.jettisoned) continue;
-        u.owed += (u.n * P.gunLoss * SKY.flak.band[u.band] * dt) / this.flakIn;
+        owe(u, 'flak', (u.n * P.gunLoss * SKY.flak.band[u.band] * dt) / this.flakIn);
         u.shot = Math.min(1, u.shot + dt / this.flakIn);
-      } else if (SKY.flak.fighters > 0) u.owed += (u.n * P.gunLoss * SKY.flak.fighters * SKY.flak.band[u.band] * dt) / this.flakT;
+      } else if (SKY.flak.fighters > 0) owe(u, 'flak', (u.n * P.gunLoss * SKY.flak.fighters * SKY.flak.band[u.band] * dt) / this.flakT);
     }
+    if (show) for (const b of live) if (b.air === 'bmr' && b.owed > 0) this.straggle(b);
     // Whole aircraft fall.
     this.fall(live);
   }
@@ -555,15 +614,106 @@ export class AirSim implements BattleSim<AirUnit> {
       u.owed = 0;
       for (; k > 0 && u.n > 0; k -= 1) {
         if (k < 1 && this.lossRng.next() >= k) break;
+        // Shown only: which group brought it down, and whether it was a straggler (the box's next loss is its straggler's).
+        const by = this.show ? this.creditor(u) : undefined;
+        const s = this.show && u.air === 'bmr' ? this.nextDown(u) : null;
         u.n--;
         u.mor = clamp01(u.mor - SKY.morale.perLoss / u.n0);
         const over = u.side === 'att' ? 'enemy' : 'own';
         const fall = drawFall(this.fallRng, u.air, over, P.saved[u.side]);
         if (fall.back) u.back++;
-        this.say('air:lost', u, fallWords(this.called(u), fall), { ...fall, air: u.air, alt: u.alt, ...(fall.chutes ? { chuteCue: C.chutes } : {}) }, fall.kind === 'explode' ? C.explode : C.down);
+        const who = by !== undefined ? { by, ...(s ? { strag: s.id, eng: s.eng, ...this.stragAt(u, s) } : {}) } : {};
+        this.say('air:lost', u, fallWords(this.called(u), fall), { ...fall, air: u.air, alt: s ? Math.max(0, u.alt - s.down) : u.alt, ...(fall.chutes ? { chuteCue: C.chutes } : {}), ...who }, fall.kind === 'explode' ? C.explode : C.down);
         u.figures = Math.max(u.n > 0 ? 1 : 0, Math.ceil(u.n / u.per));
       }
     }
+  }
+
+  /** The group that owed a group the most this tick takes the next aircraft it loses ('flak' for the guns). */
+  private creditor(u: AirUnit): number | 'flak' | null {
+    const m = this.owedBy.get(u.id);
+    if (!m || !m.size) return null;
+    let best: number | 'flak' = 'flak', most = -Infinity;
+    for (const [by, k] of m) if (k > most) { most = k; best = by; }
+    m.set(best, most - 1);
+    return best;
+  }
+
+  /**
+   * A box hit this tick may have one of its bombers lose an engine and fall out of formation (the design's 1.6, ruling
+   * 237.1): a chance of strag.k times what the box was owed, never more than strag.most at a time, never its last
+   * aircraft in formation. The engine, and whether its airscrew is feathered or windmills, by the battle's own stream
+   * for stragglers.
+   */
+  private straggle(b: AirUnit): void {
+    const G = SKY.strag;
+    if (b.n <= 0 || b.strag.length >= G.most || b.n - b.strag.length <= 1) return;
+    if (this.stragRng.next() >= G.k * b.owed) return;
+    const m = this.owedBy.get(b.id);
+    let by: number | 'flak' = 'flak', most = -Infinity;
+    if (m) for (const [k, v] of m) if (v > most) { most = v; by = k; }
+    const four = enginesOf(b.model) === 4;
+    const one = 1 + this.stragRng.int(four ? 4 : 2);
+    // Four engines: one dead and windmilling, or two out and feathered (B38, B39); two: one out, feathered.
+    const two = four && this.stragRng.next() < 0.5;
+    const eng = two ? [one, one % 4 + 1].sort((x, y) => x - y) : [one];
+    const s: Straggler = {
+      id: this.stragId++, eng, prop: four && !two ? 'windmill' : 'feather', why: by === 'flak' ? 'flak' : 'ftr', by, age: 0, back: 0, down: 0,
+      rate: four ? this.stragRng.range(G.four.back[0], G.four.back[1]) : G.twin.back * SKY.speed.bmr, sink: four ? G.four.sink : G.twin.sink, cover: null,
+    };
+    b.strag.push(s);
+    this.say('air:straggle', b, '', { id: s.id, box: b.id, eng: s.eng, prop: s.prop, why: s.why, by: s.by });
+  }
+
+  /** The aircraft a box loses next: its oldest straggler that has been seen to leave and has no escort over it; failing that, one in formation; failing that, any straggler. */
+  private nextDown(b: AirUnit): Straggler | null {
+    const G = SKY.strag;
+    const k = b.strag.findIndex((s) => s.age >= G.seen && s.cover === null);
+    const at = k >= 0 ? k : b.n > b.strag.length ? -1 : 0;
+    return at >= 0 ? b.strag.splice(at, 1)[0] : null;
+  }
+
+  /** Where a straggler is: behind its box along its heading, and below it. */
+  private stragAt(b: AirUnit, s: Straggler): { x: number; y: number } {
+    return { x: b.x - Math.sin(b.face) * s.back, y: b.y - Math.cos(b.face) * s.back };
+  }
+
+  /** A straggler that got clear of the fight and is on its way home. */
+  private limped(b: AirUnit, s: Straggler): void {
+    b.away++;
+    this.say('air:limped', b, '', { id: s.id, box: b.id, ...this.stragAt(b, s) });
+  }
+
+  /**
+   * Each tick, what the 3D game reads beyond the counts (the design's 1.5 to 1.8; the bridge passes 'extra' on): the
+   * aircraft and tactics, a fighter's ammunition (1 full, 0 spent: its fight left above the share at which it breaks
+   * off), fuel for the raid's fighters and its fire; a box's state (tight while steady, loose while wavering, broken
+   * while routing) and its stragglers, each drifting back and down, one covered by a pair of its close escort.
+   */
+  private shown(u: AirUnit, dt: number): void {
+    if (u.air === 'ftr') {
+      const ammo = u.kit0 > 0 ? clamp01((u.vig - SKY.spent) / (1 - SKY.spent)) : 1;
+      u.extra = {
+        model: u.model, form: u.form, style: u.style, ammo: Math.round(ammo * 1000) / 1000,
+        ...(u.side === 'att' && u.fuel0 < SKY.fuel.home ? { fuel: Math.round(clamp01(u.fuel / Math.max(1, u.fuel0)) * 1000) / 1000 } : {}),
+        fire: u.fire.map((f) => ({ ...f, rate: Math.round(f.rate * 10_000) / 10_000 })),
+      };
+      return;
+    }
+    const G = SKY.strag, done = u.dropped > 0 || u.jettisoned;
+    for (const s of [...u.strag]) {
+      s.age += dt;
+      s.back += s.rate * dt;
+      s.down += s.sink * dt;
+      if (!done) s.back = Math.min(s.back, G.held);
+      else if (s.back > G.clear) { u.strag.splice(u.strag.indexOf(s), 1); this.limped(u, s); }
+    }
+    const guard = this.units.find((f) => f.job.do === 'escort' && f.job.on === u.id && f.job.close && flying(f) && !away(f) && !f.contacts.length);
+    u.strag.forEach((s, k) => { s.cover = k === 0 && guard ? guard.id : null; });
+    u.extra = {
+      model: u.model, form: u.form, box: u.state === 'routing' ? 'broken' : u.state === 'wavering' ? 'loose' : 'tight', away: u.away,
+      strag: u.strag.map((s) => ({ id: s.id, eng: s.eng, prop: s.prop, why: s.why, cover: s.cover ?? -1, back: Math.round(s.back), down: Math.round(s.down) })),
+    };
   }
 
   /** Morale, leaving the board, and the end of a group. */
@@ -584,6 +734,7 @@ export class AirSim implements BattleSim<AirUnit> {
     // For the models: what it is doing, and whom it is fighting.
     u.engaged = u.contacts[0];
     u.act = u.job.do === 'wait' ? 'idle' : u.state === 'routing' ? 'rout' : u.contacts.length ? 'fight' : 'march';
+    if (this.show) this.shown(u, dt);
     // Off the board: a raider past its own edge, a defender down at its airfield.
     if (u.job.do === 'home' || (u.job.do === 'route' && (u.dropped || u.jettisoned))) {
       const gone = u.side === 'att' ? u.y <= 0 : dist(u.x, u.y, u.homeX, u.homeY) <= 1_500;
@@ -595,6 +746,7 @@ export class AirSim implements BattleSim<AirUnit> {
     if (u.state === s) return;
     u.state = s;
     if (s === 'gone' || s === 'withdrawn') { u.act = 'down'; u.speed = 0; u.engaged = undefined; u.contacts = []; if (s === 'gone') u.figures = 0; }
+    if (s === 'withdrawn') for (const st of u.strag.splice(0)) this.limped(u, st);
     this.say(what ?? (s === 'steady' ? 'rallied' : s), u, text);
   }
 
@@ -912,6 +1064,8 @@ export class AirSim implements BattleSim<AirUnit> {
       }),
       extra: { air: out },
     };
+    // Stragglers still out when it ends are on their way home.
+    for (const u of this.units) for (const st of u.strag.splice(0)) this.limped(u, st);
     // The end is told without the bill: the campaign books it (the after card, airfought.ts), and a dispatch with the
     // battle's own count beside the card's would read as a second bill (the design director, 18:39Z).
     this.say('end', null, `${this.ticket.title} is over.`);
@@ -919,4 +1073,4 @@ export class AirSim implements BattleSim<AirUnit> {
 }
 
 /** A battle from a ticket. */
-export const airBattle = (t: FieldTicket<AirPlace>): AirSim => new AirSim(t);
+export const airBattle = (t: FieldTicket<AirPlace>, opts?: { show?: boolean }): AirSim => new AirSim(t, opts);
