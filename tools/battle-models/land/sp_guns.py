@@ -407,7 +407,7 @@ def m7(fine=True, tag="USA"):
     v.jerrycan((0.42, -0.95, zs), 0.0)
     v.crate((0.74, 1.08, zs), (0.5, 0.3, 0.24), 0.0)     # a box of fuzes under the wireless, a tarpaulin folded on it
     v.tarp((0.74, 1.08, zs + 0.245), (0.46, 0.3, 0.08), 0.0, "canvas.tarp")
-    for x, y, yaw in ((-0.50, -0.36, 60.0), (-0.55, -0.02, -25.0)):     # two empty cases thrown down behind the breech, clear of the men's feet
+    for x, y, yaw in ((0.40, -0.52, 60.0), (-0.15, 0.0, -25.0)):        # two empty cases thrown down behind the breech, clear of the men's feet (and far enough forward for the battle camera to see them over the back wall)
         v.spent((x, y, fl), yaw, 0.06, 0.372)
     if fine:
         v.rod((0.62, sw - 0.09, 1.72), (0.62, sw - 0.09, 1.98), 0.05, "red", 12)                       # the fire extinguisher on the wall
@@ -476,7 +476,7 @@ def sexton(fine=True, tag="UK"):
     v.crate((0.74, -1.08, zs + 0.2), (0.5, 0.3, 0.2), 4.0, "upper")
     v.jerrycan((0.92, 1.12, zs), 0.0)                     # water, ahead of the left rack
     v.tarp((1.36, 1.02, zs), (0.46, 0.4, 0.12), 90.0, "canvas.tarp")
-    for x, y, yaw in ((-0.42, -0.52, 70.0), (-0.82, -0.30, -15.0)):     # two empty cases thrown down behind the breech, clear of the men's feet
+    for x, y, yaw in ((0.22, -0.58, 75.0), (0.10, 0.20, -20.0)):        # two empty cases thrown down behind the breech, clear of the men's feet (and far enough forward for the battle camera to see them over the back wall)
         v.spent((x, y, fl), yaw, 0.046, 0.292)
     if fine:
         v.rod((0.9, sw - 0.09, 1.80), (0.9, sw - 0.09, 2.06), 0.05, "red", 12)
