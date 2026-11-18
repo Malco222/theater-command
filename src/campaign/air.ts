@@ -34,7 +34,7 @@ import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
 import { beyondEurope } from './world';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
-import { nightGunShare, whyNotField, wrecked } from './airversion';
+import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
 import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretwar';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 
@@ -2258,6 +2258,63 @@ export function foundShare(g: Game, a: AirAssess, nat: string): number {
  * What a mission is likely to do, without the dice, for the player to see before he gives the order:
  * the fighter odds going in, the share of the bombers likely to be lost, and what those that get through should achieve.
  */
+/**
+ * Aircraft come down whole: the flight rounds each group's share of a loss up or down by its own dice. The chance of
+ * each whole number of aircraft lost in all, `total` spread over groups by `shares`.
+ */
+function whole(total: number, shares: number[]): Map<number, number> {
+  let out = new Map<number, number>([[0, 1]]);
+  for (const s of shares.length ? shares : [1]) {
+    const x = Math.max(0, total * s), n = Math.floor(x), f = x - n, next = new Map<number, number>();
+    for (const [k, p] of out) {
+      next.set(k + n, (next.get(k + n) ?? 0) + p * (1 - f));
+      if (f > 0) next.set(k + n + 1, (next.get(k + n + 1) ?? 0) + p * f);
+    }
+    out = next;
+  }
+  return out;
+}
+
+/**
+ * A night raid's chance as the flight throws it (the night guns' switch). The flight throws three dice of luck: on the
+ * bombers brought down, on the defenders' fighters lost and on the escort's. Each is spread evenly over its range, and
+ * at every throw the raid is weighed, with and without a cut railway and a wrecked factory, by the reckoning fly() uses
+ * to call it won.
+ */
+function nightChance(g: Game, a: AirAssess, target: number, nat: string, escortLoss: number, foeFighters: number): number {
+  const C = AIR.combat, N = AIR.damage.industry, r = g.regions[target];
+  const gunsStop = a.aa ? a.aa * WORKS.aa.cut : 0;
+  const spread = (n: number): number[] => Array.from({ length: n }, (_, i) => 1 - C.luck + (2 * C.luck * (i + 0.5)) / n);
+  const bombers = spread(12), fighters = foeFighters > 0 || escortLoss > 0 ? spread(4) : [1];
+  const bmrShares = a.att.filter((x) => x.bmr > 0).map((x) => x.bmr / Math.max(1, a.B));
+  const defShares = a.D > 0 ? a.def.map((x) => (x.f.ftr * x.w) / a.D) : [];
+  let won = 0, throws = 0;
+  for (const lb of bombers) {
+    const lost = a.B * Math.min(mostBomberLoss(g, true), a.bomberLoss * lb);
+    const through = Math.max(0, a.B - lost) * C.night.accuracy * techMul(g, nat, 'bombers') * a.aim;
+    const cut = Math.min(N.max, through / N.scale) * (1 - gunsStop);
+    const pr = groundRules(g) ? railBombChance(g, target, through, gunsStop) : 0;
+    const pf = groundRules(g) ? ruinChance(g, r, cut) : 0;
+    const worth = outputWorth(g, r, cut) + 10, guns = gunsDown(g, a, true, lost);
+    for (const ld of fighters) {
+      for (const le of fighters) {
+        // Aircraft come down whole: each side's losses are rounded up or down by the flight's own dice.
+        let p = 0;
+        for (const [down, pd] of whole(foeFighters * ld + guns, defShares)) {
+          for (const [gone, pg] of whole(lost, bmrShares)) {
+            const esc = escortLoss * le;
+            const wins = (more: number): number => (down + worth + more >= gone + esc + 10 ? 1 : 0);
+            p += pd * pg * ((1 - pr) * (1 - pf) * wins(0) + (pr * (1 - pf) + (1 - pr) * pf) * wins(300) + pr * pf * wins(600));
+          }
+        }
+        won += p;
+        throws++;
+      }
+    }
+  }
+  return won / throws;
+}
+
 export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number): AirForecast {
   const C = AIR.combat, I = intensity(m);
   const nat = a.att[0]?.f.nat ?? '';
@@ -2334,6 +2391,9 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
   const beats = (worth: number): number => { const x = Math.pow((foeLoss + worth + 10) / cost, k); return x / (1 + x); };
   const pr = rail ?? 0, pf = ruin ?? 0;
   let success = (1 - pr) * (1 - pf) * beats(value) + pr * (1 - pf) * beats(value + 300) + (1 - pr) * pf * beats(value + 300) + pr * pf * beats(value + 600);
+  // With the night guns' switch (ruling 107(b); 133(c)(4), b491): by night the luck of a raid lies almost all in the
+  // bombers brought down, a narrower spread than the day's, so the card weighs that luck as the flight throws it.
+  if (m === 'night' && airPiece(g, 'night')) success = nightChance(g, a, target, nat, ftrLoss, foeLoss - foeGuns);
   if (lumps) {
     // A strike on ships is weighed over every way the dice can fall, class by class.
     success = 0;
