@@ -30,6 +30,7 @@
  * of ground, sea and air together, and a light ground item (a count, or a battle that cost less than a corps) never
  * takes the picture from a fleet action or a great ship sunk. The rows keep land first, then sea and air.
  */
+import airNames from '../../data/campaign/air-names.json';
 import { turnToDate } from '../core/ticket';
 import { staffRuns, type DeskId } from './depth';
 import { CAPITAL_BESIEGED, fallWarning, withinReach } from './danger';
@@ -67,8 +68,9 @@ export interface MonthMark {
 }
 
 /**
- * A band: classes 1 and 2 of the ranking, red; and NEWS, brass and never red, for a line of news with a title of
- * its own that is no war and no fall (Britain stays out of Canada's war: ruling 211(b)).
+ * A band: class 1 of the ranking, the dated warning, red; class 2 (WAR, FALLEN, FREED) brass on the dark ground, since red
+ * is the warning's alone (ruling 160); and NEWS, brass too, for a line of news with a title of its own that is no war
+ * and no fall (Britain stays out of Canada's war: ruling 211(b)).
  */
 export interface CardBand {
   word: 'WAR' | 'WARNING' | 'FALLEN' | 'FREED' | 'NEWS';
@@ -86,7 +88,7 @@ export interface CardBand {
   when: string;
   /** A place on the map to show: the news's own, or the capital of the country it names. */
   region?: number;
-  /** FREED by his own side: the band's left edge takes the rows' good-news green, and its field stays red. */
+  /** FREED by his own side: the band's field and left edge take the rows' good-news green (the art director, 82.1). */
   good?: boolean;
   /**
    * A country in danger whose warning ends with the help of his home ground's first alarm (ruling 211(c)): SHOW ON MAP
@@ -123,7 +125,7 @@ export interface CardBox {
 
 /** A row of the player's fronts. The lead story is a row too, drawn large. */
 export interface CardRow {
-  /** Ruling 64's class: 2 for a red item that found no band, 3 ground, 4 sea and air, 5 goals and honours. */
+  /** Ruling 64's class: 2 for a band's item that found no band (red for a warning, else brass), 3 ground, 4 sea and air, 5 goals and honours. */
   cls: number;
   arm: 'land' | 'sea' | 'air' | null;
   picture: CardPicture | null;
@@ -221,13 +223,22 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n =
 const WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
 const count = (n: number): string => WORDS[n] ?? String(n);
 /** The first sentence of a line of news, without its full stop. */
-// (A full stop after an abbreviation or an initial ends no sentence: "No. 1 Bomber Group bombs Hamburg." The Playtester, Version 82.1.)
-const ABBR = /(?:^|[\s(])(?:Nos?|St|Mt|Ft|Gen|Lt|Col|Maj|Capt|Adm|Dr|Mr|Mrs)\.$|(?:^|[\s.(])[A-Z]\.$/;
+// (A full stop after an abbreviation or an initial ends no sentence: "No. 1 Bomber Group bombs Hamburg." The Playtester, Version 82.1.
+// Nor does a German ordinal at the head of a name, "2. Fliegerdivision bombs Rotterdam": the third playtester, 84.3.1. It is
+// taken for one at the head of the line, after "the" or in a bracket, or wherever the word after it is one that follows
+// a number in the air forces' names (ruling 220's ladders: Fliegerdivision, Jagddivision, Dywizjon...), so "3. Fliegerdivision
+// and 1. Jagddivision strike..." holds together and "reduced to 2. The army..." still ends there.)
+const ABBR = /(?:^|[\s(])(?:Nos?|St|Mt|Ft|Gen|Lt|Col|Maj|Capt|Adm|Dr|Mr|Mrs)\.$|(?:^|[\s.(])[A-Z]\.$|(?:^|\b[Tt]he |\()\d{1,2}\.$/;
+const reEsc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const ORDINAL_WORDS = [...new Set(Object.values((airNames as unknown as { ladders: Record<string, { form: { ftr: string; bmr: string } }[]> }).ladders)
+  .flat().flatMap((r) => [r.form.ftr, r.form.bmr]).map((f) => /^\{n\}\. (\S+)/.exec(f)?.[1]).filter((w): w is string => !!w))];
+const ORDINAL_NEXT = new RegExp(`^ (?:${ORDINAL_WORDS.map(reEsc).join('|')})(?=[\\s,.;:)]|$)`);
 const first = (text: string): string => {
   const stop = /[.!?](?=\s|$)/g;
   for (let m = stop.exec(text); m; m = stop.exec(text)) {
     const head = text.slice(0, m.index + 1);
-    if (m[0] !== '.' || !ABBR.test(head)) return head.replace(/[.!]$/, '');
+    const ordinal = /\b\d{1,2}\.$/.test(head) && ORDINAL_NEXT.test(text.slice(m.index + 1));
+    if (m[0] !== '.' || !(ABBR.test(head) || ordinal)) return head.replace(/[.!]$/, '');
   }
   return text.replace(/[.!]$/, '');
 };
@@ -340,10 +351,20 @@ export function staffShort(desk: string, text: string): string {
 /** Other names a line of news gives a country. */
 const ALSO_CALLED: Record<string, RegExp> = { UK: /\bBritain\b/, USA: /\bAmerica\b/, SOV: /\bRussia\b/ };
 
+/** The room a band's head has, in letters. */
+const BAND_ROOM = 76;
 /** The room a row has for its sentence, in letters: less beside two figures. */
 const ROW_ROOM = { one: 54, two: 44 };
 /** "A", "A and B", "A, B and C". */
 const listOf = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+/** A list cut to the room a band's sentence leaves it, before the verb is added: "A, B and 3 more", never a sentence with its verb cut off. */
+const listIn = (xs: string[], room: number): string => {
+  if (listOf(xs).length <= room) return listOf(xs);
+  for (let k = xs.length - 1; k > 1; k--) { const s = `${xs.slice(0, k).join(', ')} and ${xs.length - k} more`; if (s.length <= room) return s; }
+  return `${xs[0]} and ${xs.length - 1} more`;
+};
+/** A country's name as it reads after the first word of a sentence: "The Dominican Republic" becomes "the Dominican Republic". */
+const midName = (s: string): string => s.replace(/^The /, 'the ');
 const CLASS_WORD = /\b(?:sinks?|torpedoes) (\d+) ([A-Z][a-z]+) (submarines?|destroyers?|cruisers?|battleships?|carriers?|ships?|transports?)/;
 /** A fleet's name as it reads in a sentence. */
 const the = (name: string): string => (/^the /i.test(name) ? name.replace(/^The /, 'the ') : `the ${name}`);
@@ -974,7 +995,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const on = [...new Set([m[2], ...more.map((x) => DECLARES.exec(x.band.head)![2]), ...echo.map((h) => DECLARES.exec(first(h.text))![2])])];
     const own = on.findIndex((x) => x.includes(N.name));
     if (own > 0) on.unshift(...on.splice(own, 1));
-    b.band.head = `${m[1]} declares war on ${listOf(on)}`;
+    b.band.head = `${m[1]} declares war on ${listIn(on, BAND_ROOM - `${m[1]} declares war on `.length)}`;
     b.rank = Math.min(b.rank, ...more.map((x) => x.rank));
     b.band.text = [...[b, ...more].map((x) => x.band.text), ...echo.map((h) => h.text)].join(' ');
     b.band.nats = [...new Set([...b.band.nats, ...more.flatMap((x) => x.band.nats)])].slice(0, 2);
@@ -984,14 +1005,15 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const onHim = banded.filter((b) => b.h.kind === 'war' && !mine(b.h.nat) && DECLARES.exec(b.band.head)?.[2].replace(/^the /, '') === N.name);
   if (onHim.length > 1) {
     const [keep, ...rest] = onHim;
-    keep.band.head = `${listOf(onHim.map((b) => DECLARES.exec(b.band.head)![1]))} declare war on ${theName(N)}`;
+    const at = ` declare war on ${theName(N)}`;
+    keep.band.head = `${listIn(onHim.map((b, i) => (i ? midName(DECLARES.exec(b.band.head)![1]) : DECLARES.exec(b.band.head)![1])), BAND_ROOM - at.length)}${at}`;
     keep.band.nats = onHim.map((b) => b.h.nat!).slice(0, 2);
     keep.band.text = onHim.map((b) => b.band.text).join(' ');
     keep.rank = Math.min(...onHim.map((b) => b.rank));
     for (const b of rest) banded.splice(banded.indexOf(b), 1);
   }
   for (const b of banded) {
-    b.band.head = brief(b.band.head, 76);
+    b.band.head = brief(b.band.head, BAND_ROOM);
     // A declaration or a fall has a place to show too: the capital of the first country it names that is not his
     // own; and of an invasion, the country invaded.
     if (b.band.region !== undefined || b.band.word === 'WARNING') continue;
@@ -1012,7 +1034,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const nearness = (b: (typeof banded)[number]): number => (b.onHim || (!mine(b.h.nat) && nameAt(me, b.band.head) >= 0) ? 0 : mine(b.h.nat) ? 1 : 2);
   banded.sort((a, b) => a.rank - b.rank || nearness(a) - nearness(b));
   card.bands = banded.slice(0, 2).map((b) => b.band);
-  // An item that finds no band stays red and sits above the first battle row.
+  // An item that finds no band keeps its class's colour (red for a warning, brass for the rest) and sits above the first
+  // battle row.
   for (const b of banded.slice(2)) {
     const row = blank();
     row.cls = 2;

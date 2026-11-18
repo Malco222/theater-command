@@ -30,7 +30,7 @@ import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
 import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
 import { raiseMorale } from './morale';
-import { armyIdle, peaceFooting, warFooting, warWorkLeft } from './world';
+import { WORLD_MAP, armyIdle, peaceFooting, warFooting, warWorkLeft } from './world';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -114,6 +114,31 @@ export interface Yield { land: number; port: number; oil: number; fac: number; c
 export const landFactor = (r: Region): number => BUDGET.landFactor[r.first ?? r.owner] ?? 1;
 
 /**
+ * Ruling 210(a) and (e): a cut moves worth and never adds it. A province and the cities cut out of it since the first
+ * chart (the chart's 'of') pay together in land what the province pays alone, each by its own ground: Baltimore's and
+ * Maryland's land add up to Maryland's. Where ruling 214's factor is set, the pay does not take the share again: the
+ * historian set those sixteen factors on the chart with every city paying in full, to Italy's rate and no lower. Trade
+ * reads every country's land with the share (`always`), so that no country's trade moves with the factor (214(c)).
+ */
+let shares: Map<number, number> | null = null;
+export function landShare(r: Region, always = false): number {
+  if (!always && landFactor(r) !== 1) return 1;
+  if (!shares) {
+    shares = new Map();
+    const rows = WORLD_MAP.regions as { id: number; terrain: Terrain; of?: number }[];
+    const rate = new Map(rows.map((x) => [x.id, BUDGET.land[x.terrain] ?? 0]));
+    const families = new Map<number, number[]>();
+    for (const x of rows) if (x.of !== undefined) families.set(x.of, [...(families.get(x.of) ?? [x.of]), x.id]);
+    for (const [p, ids] of families) {
+      const all = ids.reduce((s, id) => s + (rate.get(id) ?? 0), 0);
+      const f = all > 0 ? (rate.get(p) ?? 0) / all : 1;
+      for (const id of ids) shares.set(id, f);
+    }
+  }
+  return shares.get(r.id) ?? 1;
+}
+
+/**
  * What a province gives the nation that holds it. Conquered ground and colonies give less than the home country.
  * `whole` leaves a siege out of account: what the province is worth to its holder once the roads are open again.
  * `bare` leaves out ruling 214's factor: trade reads a country's land as it was before the factor, so that no great
@@ -129,7 +154,7 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   const fac = own ? works : works * (PRODUCTION.occupiedIncome + lift);
   const k = !own ? BUDGET.occupied + lift : r.overseas ? BUDGET.overseas : 1;
   const worth = bare || !budgeted(g) ? 1 : landFactor(r);
-  const land = BUDGET.land[r.terrain] * k * worth;
+  const land = BUDGET.land[r.terrain] * k * worth * landShare(r, bare);
   // A harbour blocked pays nothing until it is mended (prizes.ts), and an oilfield alight pays only for the wells still at work.
   const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * worth : 0;
   const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) : 0;

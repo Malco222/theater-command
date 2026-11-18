@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { ARSENAL } from '../src/campaign/arsenal';
 import { fieldClass } from '../src/campaign/air';
 import { commandView } from '../src/campaign/desks';
-import { BUDGET, provinceYield } from '../src/campaign/economy';
+import { BUDGET, landFactor, provinceYield } from '../src/campaign/economy';
+import { WORLD_MAP } from '../src/campaign/world';
 import { createGame } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -77,9 +78,34 @@ describe('the cities version, as reviewed', () => {
       const money = p?.items.find((x) => x.key === 'income')?.text ?? '';
       expect(money, r.name).not.toMatch(/(land|harbour|oilfield|factory|factories|seat of government) 0\b/);
       if (/under 1/.test(money)) under++;
+      // And they add up to the total beside them: exactly, unless a part is under one.
+      const said = [...(/\((.+)\)/.exec(money)?.[1] ?? '').matchAll(/(?<!under) (\d+)(?=,|$)/g)].reduce((s, m) => s + Number(m[1]), 0);
+      if (p && /\(/.test(money)) {
+        if (/under 1/.test(money)) expect(said, `${r.name}: ${money}`).toBeLessThanOrEqual(p.income);
+        else expect(said, `${r.name}: ${money}`).toBe(p.income);
+      }
     }
     expect(small).toBeGreaterThan(0);
     expect(under).toBeGreaterThan(0);
+  });
+
+  it('a city takes its land pay from its province: a province and its cities pay what the province paid alone (ruling 210(a))', () => {
+    const g = startOpen(createGame(3, null));
+    const families = new Map<number, number[]>();
+    for (const x of WORLD_MAP.regions as { id: number; of?: number }[]) if (x.of !== undefined) families.set(x.of, [...(families.get(x.of) ?? [x.of]), x.id]);
+    expect(families.size).toBeGreaterThan(100);
+    let unlisted = 0;
+    for (const [p, ids] of families) {
+      const P = g.regions[p];
+      if (landFactor(P) !== 1) continue;
+      unlisted++;
+      const pays = ids.reduce((s, id) => s + provinceYield(g, g.regions[id], g.regions[id].owner).land, 0);
+      expect(pays, P.name).toBeCloseTo(BUDGET.land[P.terrain] * (P.overseas ? BUDGET.overseas : 1), 10);
+    }
+    expect(unlisted).toBeGreaterThan(50);
+    // America's land pays on the first day what it paid before the cities were cut: 987 a month (Version 84.3.3).
+    const usa = g.regions.filter((r) => r.owner === 'USA').reduce((s, r) => s + provinceYield(g, r, 'USA').land, 0);
+    expect(Math.round(usa * BUDGET.scale)).toBe(987);
   });
 
   it("Canada at peace after the fall of France counts its months to full war work from where a new war would start them", () => {

@@ -16,7 +16,7 @@ import wholeMap from '../generated/world-whole.json';
 import { FAR_STAGE } from './stage';
 import type { Game, Region } from './types';
 import { allied, atWar, theName } from './game';
-import { BUDGET, budgeted, landFactor, provinceYield } from './economy';
+import { BUDGET, budgeted, landFactor, landShare, provinceYield } from './economy';
 import { workLevel, yardLevel } from './arsenal';
 import { railsAt, workingFactories } from './rails';
 import { fieldYield, resRules } from './resources';
@@ -116,7 +116,7 @@ export function worthOf(g: Game, r: Region): number {
   // Ruling 214: a smaller power's land and harbours pay by its worth, and the town shows what it truly pays: never
   // nothing where it pays something.
   const f = landFactor(r);
-  const pays = BUDGET.land[r.terrain] * k * f + (r.port ? BUDGET.port * k * f : 0) + (r.oil ? BUDGET.oil * k : 0) + r.fac + capital;
+  const pays = BUDGET.land[r.terrain] * k * f * landShare(r) + (r.port ? BUDGET.port * k * f : 0) + (r.oil ? BUDGET.oil * k : 0) + r.fac + capital;
   return pays > 0 ? Math.max(1, Math.round(pays * BUDGET.scale)) : 0;
 }
 
@@ -223,10 +223,13 @@ export function prizeOf(g: Game, region: number, nat: string | null = g.human): 
   const whose = to === nat ? 'your treasury' : `${theName(g.nations[to])}'s treasury`;
   if (budgeted(g) || factories) {
     const y = provinceYield(g, r, to);
-    // (Its parts as the province card words them: a part under one says so, and the parts never add up past the total.)
-    const part = (v: number): string => (Math.round(v * scale) < 1 ? 'under 1' : String(Math.round(v * scale)));
-    const parts = [y.land ? `land ${part(y.land)}` : '', y.port ? `harbour ${part(y.port)}` : '', y.oil ? `oilfield ${part(y.oil)}` : '',
-      y.fac ? `${plural(factories, 'factory', 'factories')} ${part(y.fac)}` : '', y.capital ? `seat of government ${part(y.capital)}` : ''].filter(Boolean);
+    // (Its parts add up to the total beside them: each is rounded down and the units left go to the largest remainders,
+    // never to a part under a half; a part left under one says so, as the province card does.)
+    const named = ([['land', y.land], ['harbour', y.port], ['oilfield', y.oil], [plural(factories, 'factory', 'factories'), y.fac], ['seat of government', y.capital]] as [string, number][]).filter(([, v]) => v > 0);
+    const exact = named.map(([, v]) => v * scale), whole = exact.map(Math.floor);
+    let left = income - whole.reduce((a, b) => a + b, 0);
+    for (const i of exact.map((_, i) => i).filter((i) => exact[i] >= 0.5).sort((a, b) => exact[b] - whole[b] - (exact[a] - whole[a]) || a - b)) { if (left <= 0) break; whole[i]++; left--; }
+    const parts = named.map(([word], i) => `${word} ${whole[i] < 1 ? 'under 1' : whole[i]}`);
     items.push({ key: 'income', label: 'Money', text: `${income} a month to ${whose}${parts.length ? ` (${parts.join(', ')})` : ''}${to !== r.owner ? '. Conquered ground pays less than it pays its own country' : ''}` });
   }
   if (r.fac > 0) items.push({ key: 'factory', label: 'Industry', text: `${plural(r.fac, 'factory', 'factories')}${factories < r.fac ? `, ${r.fac - factories} wrecked by bombing` : ''}${to !== r.owner ? '. Working for a conqueror they turn out less, and heavy equipment can only be built at home' : ''}` });

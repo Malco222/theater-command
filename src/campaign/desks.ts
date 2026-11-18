@@ -33,7 +33,7 @@ import { STACK, type AirReport, type Build, type Game, type Nation, type Region 
 const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 /** A list cut to its first few, with the rest counted. */
 const some = (xs: string[], most = 3): string => (xs.length <= most ? listAnd(xs) : `${xs.slice(0, most).join(', ')} and ${xs.length - most} more`);
-const the = (n: Nation): string => (/^(United|Soviet|Netherlands)/.test(n.name) ? `the ${n.name}` : n.name);
+const the = (n: Nation): string => (/^(United|Soviet|Netherlands|Dominican Republic)/.test(n.name) ? `the ${n.name}` : n.name);
 const months = (k: number): string => `${k} month${k === 1 ? '' : 's'}`;
 const plural = (k: number, one: string, many = `${one}s`): string => `${k === 1 ? (/^[aeiou]/i.test(one) ? 'an' : 'a') : k} ${k === 1 ? one : many}`;
 

@@ -282,7 +282,7 @@ const barred = (a: string, b: string): boolean => TRADE.never.some(([x, y]) => (
 /** Why two countries cannot sign a trade agreement now; null when they can. Written for the first of the two. */
 export function whyNoTrade(g: Game, a: string, b: string, ctx: TradeCtx = new Map(), ownHouse = true): string | null {
   const A = g.nations[a], B = g.nations[b];
-  const the = (n: Nation): string => (/^(United|Soviet|Netherlands)/.test(n.name) ? `the ${n.name}` : n.name);
+  const the = (n: Nation): string => (/^(United|Soviet|Netherlands|Dominican Republic)/.test(n.name) ? `the ${n.name}` : n.name);
   const The = (n: Nation): string => { const s = the(n); return s[0].toUpperCase() + s.slice(1); };
   if (!tradeRules(g)) return 'Trade agreements are signed in the grand campaign.';
   if (!A || !B || a === b) return 'There is nobody to sign with.';
