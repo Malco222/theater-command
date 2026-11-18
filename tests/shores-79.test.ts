@@ -189,7 +189,7 @@ describe('Canada\'s corps are the island\'s guard', () => {
     // Britain's own harbours are its base at any time.
     for (const name of ['Northumbria', 'Hampshire', 'Kent']) expect(joinsOn(g, 'CAN', R(g, name)), name).toBe(true);
     // A colony overseas is open to her at any time on the older chart. With the whole world on it the island's guard
-    // holds against that too (ruling 231, 3): in December 1942 Tripoli is no harbour of hers, whoever holds it.
+    // holds against that too (ruling 231, 3, and its rider b462): Tripoli is no harbour of hers, whoever holds it.
     expect(joinsOn(g, 'CAN', R(g, 'Tripoli'))).toBe(!FAR_STAGE);
     expect(joinsOn(g, 'CAN', R(g, 'Tripoli'), 'UK')).toBe(!FAR_STAGE);
     expect(joinsOn(g, 'USA', R(g, 'Tripoli'))).toBe(true);
@@ -216,9 +216,10 @@ describe('Canada\'s corps are the island\'s guard', () => {
     removeCorps(g, c);
     expect(joinsOn(g, 'CAN', brest)).toBe(false);
     // Ground that was never on its list stays off it, and a colony overseas is open as before (with the whole world on
-    // the chart, behind an ally as on any shore).
+    // the chart it stays shut to her for good, in 1943 as before it: her army never went to Africa as a formation).
     expect(joinsOn(g, 'CAN', R(g, 'Bergen'), 'UK')).toBe(false);
-    expect(joinsOn(g, 'CAN', R(g, 'Tripoli'), FAR_STAGE ? 'UK' : undefined)).toBe(true);
+    expect(joinsOn(g, 'CAN', R(g, 'Tripoli'))).toBe(!FAR_STAGE);
+    expect(joinsOn(g, 'CAN', R(g, 'Tripoli'), 'UK')).toBe(!FAR_STAGE);
   });
 
   it('at the two loosest stops Canada keeps no date, and goes only into a British or American landing that is ashore to stay (Version 83)', () => {

@@ -527,11 +527,22 @@ describe('a colony on the far side (ruling 231)', () => {
       expect(joinsOn(g, 'CAN', g.byName['Alexandria']), `month ${turn}`).toBe(false);
       expect(joinsOn(g, 'USA', tripoli(g)), `month ${turn}`).toBe(true);
     }
-    // From 1943 she goes on behind a British or an American army, there as anywhere on her list.
+    // From 1943 she goes on to the continent behind a British or an American army. A colony across an ocean stays
+    // shut to her for good (the rider, b462), on the old chart and on the far side, whoever holds it or landed there.
     g.turn = 41;
-    expect(joinsOn(g, 'CAN', tripoli(g))).toBe(false);
-    expect(joinsOn(g, 'CAN', tripoli(g), 'UK')).toBe(true);
-    expect(joinsOn(g, 'CAN', g.byName['Alexandria'])).toBe(true);
+    for (const name of ['Tripoli', 'Alexandria', 'Mombasa']) {
+      expect(g.byName[name].overseas, name).toBe(true);
+      expect(joinsOn(g, 'CAN', g.byName[name]), name).toBe(false);
+      expect(joinsOn(g, 'CAN', g.byName[name], 'UK'), name).toBe(false);
+      expect(joinsOn(g, 'USA', g.byName[name]), name).toBe(true);
+    }
+    // Home ground out there is on her list or it is not, as anywhere: Abadan is Iran's, and no country of her list.
+    // A colony on her own side of the ocean is open to her as it always was (Trinidad): no ocean is crossed for it.
+    expect(g.byName['Abadan']).toMatchObject({ owner: 'IRN', overseas: false });
+    expect(joinsOn(g, 'CAN', g.byName['Abadan'], 'UK')).toBe(false);
+    expect(g.byName['Trinidad']).toMatchObject({ owner: 'UK', overseas: true });
+    expect(shoreOf(g.byName['Trinidad'])).toBe(1);
+    for (const turn of [10, 40, 41, 60]) { g.turn = turn; expect(joinsOn(g, 'CAN', g.byName['Trinidad']), `month ${turn}`).toBe(true); }
     // At the two loosest stops the staff keeps its own rules.
     for (const stop of [4, 5]) {
       const h = grand();
