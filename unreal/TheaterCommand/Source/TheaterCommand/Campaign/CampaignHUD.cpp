@@ -12946,7 +12946,9 @@ namespace
 		 * rather than read from their last painting. (The UI director's review of build 1628, items 4 and 5.) The list
 		 * shows no half row: where it runs on, it stands as high as the lines that fit whole above the plate's band, and
 		 * the plate sits in that band under the last of them; what room is over stands under the plate. A line is each
-		 * of the list's own parts: a heading, a row of cards, a line of the controls.
+		 * of the list's own parts: a heading, a row of cards, a line of the controls. (09:18) A heading travels with the
+		 * line under it, as one: it never ends the list above the plate, and the list never rests on that line with the
+		 * heading scrolled away above it.
 		 */
 		void LookAtList()
 		{
@@ -12977,6 +12979,19 @@ namespace
 				const FGeometry& Each = Arranged[Index].Geometry;
 				ListTops.Add(static_cast<float>(Along.AbsoluteToLocal(Each.GetAbsolutePosition()).Y));
 				ListFeet.Add(static_cast<float>(Along.AbsoluteToLocal(Each.LocalToAbsolute(FVector2D(0.0, Each.GetLocalSize().Y))).Y));
+			}
+			// (The UI director, 09:18.) Which lines are headings: each travels with the line under it, as one.
+			ListHeadAt.Init(false, Arranged.Num());
+			for (int32 Index = 0; Index < Arranged.Num(); ++Index)
+			{
+				for (const TWeakPtr<SWidget>& Head : ListHeads)
+				{
+					if (Head.Pin().Get() == &Arranged[Index].Widget.Get())
+					{
+						ListHeadAt[Index] = true;
+						break;
+					}
+				}
 			}
 			// (The UI director, 03:53 and 07:10.) What the card needs: all it holds outside the list, and the list down to
 			// the foot of the first row of the smaller nations, on the grand campaign's page (the great powers above it),
@@ -13066,15 +13081,23 @@ namespace
 			// fits in the list's area: then it shows all of it, and there is no plate.
 			double Top = FMath::Max(static_cast<double>(Along.AbsoluteToLocal(View.GetAbsolutePosition()).Y), 0.0);
 			const double End = ListFeet.Num() > 0 ? static_cast<double>(ListFeet.Last()) : 0.0;
-			// (The checker's fault 1.) The list's last stop: the first line's top from which the rest fits whole in the
-			// list's area. The list never rests below it, so its foot is never pulled up into a line. (Kept from the last
-			// frame while a list just laid out still measures as nothing.)
+			// Where the list rests: with a line's top at the top of its view, the list's very top for the first line, and
+			// never with a heading's line alone above it (09:18). (The checker's fault 1.) The list's last stop: the first
+			// from which the rest fits whole in the list's area. The list never rests below it, so its foot is never
+			// pulled up into a line. (Both kept from the last frame while a list just laid out still measures as nothing.)
 			if (End > 0.5)
 			{
-				ListLastStop = 0.0f;
+				ListStops.Reset();
 				for (int32 Index = 0; Index < ListTops.Num(); ++Index)
 				{
-					const float Stop = ListStop(Index);
+					if (Index == 0 || !ListHeadAt[Index - 1])
+					{
+						ListStops.Add(Index == 0 ? 0.0f : ListTops[Index]);
+					}
+				}
+				ListLastStop = 0.0f;
+				for (const float Stop : ListStops)
+				{
 					ListLastStop = Stop;
 					if (End - static_cast<double>(Stop) <= Area + 0.5)
 					{
@@ -13087,12 +13110,12 @@ namespace
 			// the frames after a laying out either, while new rows may not yet have their sizes: a list measured as
 			// nothing would send the view back to the top on every pick.)
 			const bool bHeld = FSlateApplication::Get().GetPressedMouseButtons().Contains(EKeys::LeftMouseButton);
-			if (!bHeld && OpeningSettle == 0 && End > 0.5 && ListTops.Num() > 0 && StartsScroll.IsValid())
+			if (!bHeld && OpeningSettle == 0 && End > 0.5 && ListStops.Num() > 0 && StartsScroll.IsValid())
 			{
 				float On = 0.0f;
-				for (int32 Index = 0; Index < ListTops.Num() && ListStop(Index) <= static_cast<float>(Top) + 0.5f; ++Index)
+				for (int32 Index = 0; Index < ListStops.Num() && ListStops[Index] <= static_cast<float>(Top) + 0.5f; ++Index)
 				{
-					On = ListStop(Index);
+					On = ListStops[Index];
 				}
 				On = FMath::Min(On, ListLastStop);
 				if (!FMath::IsNearlyEqual(static_cast<double>(On), Top, 0.5))
@@ -13115,8 +13138,9 @@ namespace
 			double Fit = 0.0;
 			for (int32 Index = 0; Index < ListFeet.Num(); ++Index)
 			{
+				// (09:18: a heading never ends the list; the room it would take stays under the plate)
 				const double Foot = static_cast<double>(ListFeet[Index]) - Top;
-				if (Foot > 0.5 && Foot <= Room + 0.5)
+				if (Foot > 0.5 && Foot <= Room + 0.5 && !ListHeadAt[Index])
 				{
 					Fit = FMath::Max(Fit, Foot);
 				}
@@ -13152,7 +13176,9 @@ namespace
 			{
 				if (ListFeet[Index] - ListViewTop > ListViewHigh + 0.5f)
 				{
-					To = ListViewTop + (ListFeet[Index] - (ListViewTop + ListViewHigh));
+					// (a heading comes into sight with the line under it)
+					const int32 Whole = ListHeadAt.IsValidIndex(Index) && ListHeadAt[Index] && ListFeet.IsValidIndex(Index + 1) ? Index + 1 : Index;
+					To = ListViewTop + (ListFeet[Whole] - (ListViewTop + ListViewHigh));
 					break;
 				}
 			}
@@ -13160,7 +13186,7 @@ namespace
 			{
 				return;
 			}
-			for (const float Line : ListTops)
+			for (const float Line : ListStops)
 			{
 				if (Line > ListViewTop + 0.5f && Line >= To - 0.5f)
 				{
@@ -13175,11 +13201,6 @@ namespace
 			ListWheelAt = 0.0;
 		}
 
-		/** Where the list rests with its line Index at the top: the line's top, and the list's very top for the first. */
-		float ListStop(int32 Index) const
-		{
-			return Index <= 0 || !ListTops.IsValidIndex(Index) ? 0.0f : ListTops[Index];
-		}
 
 		/**
 		 * (Items 4 and 5.) A scroll by the wheel or the bar comes to rest with a line's top at the list's top, so that the
@@ -13191,7 +13212,7 @@ namespace
 		 */
 		void SnapList(float Offset)
 		{
-			if (!StartsScroll.IsValid() || ListTops.Num() == 0)
+			if (!StartsScroll.IsValid() || ListStops.Num() == 0)
 			{
 				return;
 			}
@@ -13200,12 +13221,12 @@ namespace
 			if (FSlateApplication::Get().GetPressedMouseButtons().Contains(EKeys::LeftMouseButton))
 			{
 				float Nearest = TNumericLimits<float>::Max();
-				for (int32 Index = 0; Index < ListTops.Num() && ListStop(Index) <= Last + 0.5f; ++Index)
+				for (const float Stop : ListStops)
 				{
-					if (FMath::Abs(ListStop(Index) - Offset) < Nearest)
+					if (Stop <= Last + 0.5f && FMath::Abs(Stop - Offset) < Nearest)
 					{
-						Nearest = FMath::Abs(ListStop(Index) - Offset);
-						To = ListStop(Index);
+						Nearest = FMath::Abs(Stop - Offset);
+						To = Stop;
 					}
 				}
 				ListOwed = 0.0f;
@@ -13223,11 +13244,11 @@ namespace
 				{
 					// (the next line down, not past the last stop)
 					float Next = -1.0f;
-					for (int32 Index = 0; Index < ListTops.Num(); ++Index)
+					for (const float Stop : ListStops)
 					{
-						if (ListStop(Index) > Rest + 0.5f)
+						if (Stop > Rest + 0.5f)
 						{
-							Next = ListStop(Index);
+							Next = Stop;
 							break;
 						}
 					}
@@ -13245,11 +13266,11 @@ namespace
 				{
 					// (the line above)
 					float Above = -1.0f;
-					for (int32 Index = ListTops.Num() - 1; Index >= 0; --Index)
+					for (int32 Index = ListStops.Num() - 1; Index >= 0; --Index)
 					{
-						if (ListStop(Index) < Rest - 0.5f)
+						if (ListStops[Index] < Rest - 0.5f)
 						{
-							Above = ListStop(Index);
+							Above = ListStops[Index];
 							break;
 						}
 					}
@@ -13399,6 +13420,14 @@ namespace
 			{
 				return SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass);
 			};
+			// (The UI director, 09:18.) A heading of the list travels with the line under it, as one: it never ends the
+			// list above the plate (see LookAtList).
+			auto ListHead = [this, &Heading](const FString& Text) -> TSharedRef<SWidget>
+			{
+				const TSharedRef<SWidget> Made = Heading(Text);
+				ListHeads.Add(TWeakPtr<SWidget>(Made));
+				return Made;
+			};
 
 			// The tabs.
 			OpeningTabs->ClearChildren();
@@ -13420,6 +13449,7 @@ namespace
 
 			Starts->ClearChildren();
 			ListRows.Reset();
+			ListHeads.Reset();
 			OpeningSettle = 3; // (see LookAtList)
 			// (The checker's note: a new page opens at its top, not at the last page's place.)
 			if (Opening.Tab != ListTab && StartsScroll.IsValid())
@@ -13478,7 +13508,7 @@ namespace
 				AddGrid(Cells, 2);
 				Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 6.0f)
 				[
-					Heading(TEXT("THE CONTROLS"))
+					ListHead(TEXT("THE CONTROLS"))
 				];
 				const TCHAR* Controls[][2] =
 				{
@@ -13572,17 +13602,17 @@ namespace
 				// (The UI director, on build 1596.) The great powers in one row of seven compact cards, in the list's own
 				// order; the smaller nations after them in the same cards, eight to a row. (03:53: the label and the row
 				// about 120 in all.)
-				Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 4.0f)[Heading(TEXT("THE GREAT POWERS"))];
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 4.0f)[ListHead(TEXT("THE GREAT POWERS"))];
 				AddGrid(Great, 7);
 				if (Small.Num() > 0)
 				{
 					// (03:53: the label says it; the note that was under it is gone.)
-					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 8.0f)[Heading(TEXT("OR A SMALLER NATION \u00B7 CHOOSE YOUR OWN PATH"))];
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 8.0f)[ListHead(TEXT("OR A SMALLER NATION \u00B7 CHOOSE YOUR OWN PATH"))];
 					AddGrid(Small, 8);
 				}
 				if (Rest.Num() > 0)
 				{
-					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 8.0f)[Heading(TEXT("OTHER COUNTRIES"))];
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 8.0f)[ListHead(TEXT("OTHER COUNTRIES"))];
 					AddGrid(Rest, 8);
 				}
 				if (!Opening.GrandNote.IsEmpty())
@@ -13839,7 +13869,7 @@ namespace
 			{
 				Starts->AddSlot().AutoHeight().Padding(0.0f, GroupIndex == 0 ? 0.0f : 14.0f, 0.0f, 8.0f)
 				[
-					Heading(Opening.Groups[GroupIndex].Title.ToString().ToUpper())
+					ListHead(Opening.Groups[GroupIndex].Title.ToString().ToUpper())
 				];
 				TArray<TSharedRef<SWidget>> Cells;
 				for (int32 SideIndex = 0; SideIndex < Opening.Groups[GroupIndex].Sides.Num(); ++SideIndex)
@@ -14548,6 +14578,9 @@ namespace
 		float ListViewHigh = -1.0f;
 		float ListViewTop = 0.0f;
 		TArray<float> ListTops, ListFeet;
+		TArray<float> ListStops; // (where the list may rest: see LookAtList)
+		TArray<bool> ListHeadAt; // (which of the list's lines are headings)
+		TArray<TWeakPtr<SWidget>> ListHeads; // (the headings, as laid out)
 		float ListLastStop = 0.0f; // (the lowest the list rests: from there the rest fits whole)
 		float ListRest = 0.0f; // (the line's top the list rests on, as the wheel last left it)
 		float ListOwed = 0.0f; // (what the wheel has moved and the list not yet: see SnapList)
