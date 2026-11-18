@@ -37507,7 +37507,9 @@ ${next.text}` : ""}` : next ? next.also : "";
     const steepNames = new Set(GROUND.steep.regions);
     return {
       // (rules version 74: on the wider chart, its rivers, crossings and lines follow Europe's, which keep their numbers)
-      rivers: riversOf(s).map((r) => ({ name: r.name, pts: r.pts })),
+      // (`into`: what the wider chart's file says each river runs into, another river or a sea; the game joins a
+      // tributary's ribbon only to the river it names)
+      rivers: riversOf(s).map((r) => ({ name: r.name, pts: r.pts, into: r.into ?? "" })),
       crossings: crossingsOf(s).map((c) => [c.a, c.b, c.river, c.x, c.y]),
       rails: railLinks(s).map((l) => [l.a, l.b, l.x, l.y]),
       steep: s.regions.filter((r) => steepNames.has(r.name)).map((r) => r.id)
