@@ -49,7 +49,7 @@ function placeOf(g: Game, kind: RaidKind, target: number, viewer: string | null 
     if (!t) return 'a fleet';
     return fleetKnown(g, t, viewer) === 'exact' ? `the ${t.name}` : `${g.nations[t.nat].adj} ships in the ${g.seas[t.zone].name}`;
   }
-  if (kind === 'harbour') return `the harbour of ${g.regions[target]?.name ?? ''}`;
+  if (kind === 'harbour') { const p = g.regions[target]?.name ?? ''; return /\bHarbou?r$/.test(p) ? p : `the harbour of ${p}`; }
   if (kind === 'town') return g.regions[target] ? `the defences of ${townName(g.regions[target])}` : '';
   return g.regions[target]?.name ?? '';
 }
