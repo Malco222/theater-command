@@ -5277,10 +5277,7 @@ void ACampaignMapActor::BuildWaterways()
 			}
 			if (OpenSeaAt(Mine.Last()))
 			{
-				// (The art director, 18 November 2026, at Quebec: a river that ends in open water ends there. The St
-				// Lawrence, whose line stops in its estuary, was taken for a tributary of a small river twenty-eight
-				// units off and carried on to it, across the estuary and the far shore.)
-				continue;
+				continue; // (a river that ends in open water ends there: it is no tributary)
 			}
 			// (the river it ends on, if it ends on one: the one whose line lies nearest its last point. The rules give a
 			// great river a score of points, and the curve drawn through them lies a good way off the straight line
@@ -5288,10 +5285,16 @@ void ACampaignMapActor::BuildWaterways()
 			// of the Amazon. Within thirty units it is one, and the tributary is carried on to it.)
 			int32 Joined = INDEX_NONE;
 			double Nearest = 30.0;
+			// (The art director, 18 November 2026, at Quebec, the cause found: the St Lawrence's line stops in its estuary,
+			// and the St John's, thirty units off over the hills, was the nearest: the great river was carried on to it
+			// across the far shore as its tributary. The rules' file says what each river of the wider chart runs
+			// into. Where it says, a river is carried on only to the river it names, and one that runs into a sea
+			// or a lake to none.)
+			const FString& Into = Land.Rivers[Index].Into;
 			for (int32 Other = 0; Other < RiverLaid.Num(); ++Other)
 			{
 				const TArray<FVector2D>& Theirs = RiverLaid[Other];
-				if (Other == Index || Theirs.Num() < 6)
+				if (Other == Index || Theirs.Num() < 6 || (!Into.IsEmpty() && Land.Rivers[Other].Name != Into))
 				{
 					continue;
 				}

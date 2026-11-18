@@ -1619,6 +1619,7 @@ struct FLandRiver
 {
 	FString Name;
 	TArray<FVector2D> Course;
+	FString Into; // what it runs into, as the wider chart's file names it: another river, a lake or a sea. Empty where the rules do not say (Europe's)
 };
 
 /** Where a road and railway cross a river between two regions. */

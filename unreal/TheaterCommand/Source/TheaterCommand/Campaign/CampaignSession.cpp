@@ -3177,6 +3177,7 @@ FLandFeatures FCampaignSession::Land()
 			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
 			FLandRiver& River = Out.Rivers.AddDefaulted_GetRef();
 			Entry->TryGetStringField(TEXT("name"), River.Name);
+			Entry->TryGetStringField(TEXT("into"), River.Into);
 			const TArray<TSharedPtr<FJsonValue>>* Points = nullptr;
 			if (Entry->TryGetArrayField(TEXT("pts"), Points))
 			{
