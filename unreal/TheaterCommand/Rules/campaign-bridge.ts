@@ -2902,9 +2902,11 @@ function railShow(ids: number[], march: number[], army = '', armyIds: number[] =
       const seat = townSiege(s, cs[0].reg);
       const inTown = cs.every((c) => !!(c as { town?: boolean }).town || !!(c as { garrison?: unknown }).garrison);
       if (said && !said.can && seat && !seat.by && inTown && / is shut in the town /.test(said.line)) {
-        const who = army || (cs.length === 1 ? cs[0].name : 'The garrison');
+        // (one corps by its own name, as the banner that sent it in names it; several as the army in hand is named)
+        const named = whoOf(cs, army, armyIds);
+        const who = named.who.charAt(0).toUpperCase() + named.who.slice(1);
         const stronger = /fights? (\d+)% stronger/.exec(seat.lines.join(' '))?.[1];
-        line = `${who} ${cs.length === 1 || army ? 'is' : 'are'} ${seat.town}'s garrison${stronger ? `: inside the town it fights ${stronger}% stronger` : ''}. TAKE THE FIELD brings it out.`;
+        line = `${who} ${named.many ? 'are' : 'is'} ${seat.town}'s garrison${stronger ? `: inside the town ${named.many ? 'they fight' : 'it fights'} ${stronger}% stronger` : ''}. TAKE THE FIELD brings ${named.many ? 'them' : 'it'} out.`;
       }
     } catch { /* the rules' own line stands */ }
     return {
