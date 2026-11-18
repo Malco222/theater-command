@@ -378,9 +378,11 @@ namespace
 		// (Speed, b414 mark 1: "stands", "province" and "railShow" too, which the army in hand asks after every order
 		// and the order given aside asks ahead. Each was checked against the rules as the six were. And "garrisonWhy",
 		// whyNotOrderGarrison's sentence, which the tray asks before those three when a town's guard shares it: asked as
-		// an order it threw away the three answers kept ahead.)
+		// an order it threw away the three answers kept ahead. And "gateLeft", gateLeft's line of what a gate's holder
+		// leaves behind, which the tray asks before the province's card: in build 1590 it threw away the province kept
+		// ahead after every order, 2 to 14 ms of the frame after.)
 		static const TSet<FString> Questions = { TEXT("previewAttack"), TEXT("takeOutlook"), TEXT("reach"), TEXT("marchPlan"), TEXT("railTip"), TEXT("lead"),
-			TEXT("stands"), TEXT("province"), TEXT("railShow"), TEXT("garrisonWhy") };
+			TEXT("stands"), TEXT("province"), TEXT("railShow"), TEXT("garrisonWhy"), TEXT("gateLeft") };
 		return Questions.Contains(Function);
 	}
 }

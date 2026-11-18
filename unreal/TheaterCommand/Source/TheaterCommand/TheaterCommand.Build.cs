@@ -6,6 +6,11 @@ public class TheaterCommand : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
+		// Each file is compiled by itself. Unreal otherwise glues a module's files together once there are 32 of
+		// them, and thirteen small helpers that several files each keep for themselves (FromHex, White, Brass and
+		// the like) would then clash.
+		bUseUnity = false;
+
 		// Lets files include each other by their path inside the module, e.g. "Campaign/CampaignMapData.h".
 		PublicIncludePaths.Add(ModuleDirectory);
 

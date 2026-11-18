@@ -615,6 +615,7 @@ void ACampaignMapActor::FindSharedEdges()
 
 void ACampaignMapActor::BuildFrontLine()
 {
+	FrontLineDue = 0; // (a line put off by a press is this one: where a war begins in the same answer it is laid at once, and not again)
 	THEATER_SPEED_SCOPE(BuildFrontLine);
 	// (Speed, 18 November 2026: tc.Speed.FrontWeights. The line is laid in two weights, and only one is ever shown:
 	// 47 ms for both on the take of Buffalo, in the frame of the take, most of it the barbs, which all move along the
@@ -10185,7 +10186,9 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	static const bool bLinesLater = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLinesAtOnce"));
 	if (bLinesLater && bLandLaid)
 	{
-		FrontLineDue = 1;
+		// (By the frame's number, not by a count of the map's own ticks: an order's answer is laid on the table in the
+		// player's tick, and the map's comes later in the same frame, so "the next tick" was this very frame.)
+		FrontLineDue = GFrameCounter + 1;
 	}
 	else
 	{
@@ -10230,7 +10233,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		CampaignTextures::UpdateBoxAll(OccupiedPicture, Paint.Occupied, I0, J0, I1, J1);
 		if (bLinesLater && bLandLaid)
 		{
-			BordersDue = 2; // (the frame after the front line's)
+			BordersDue = GFrameCounter + 3; // (two frames after the front line's: its second weight lands in the frame between)
 		}
 		else
 		{
@@ -10446,7 +10449,7 @@ void ACampaignMapActor::UpdateOwnershipPaint()
 	}
 }
 
-void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail)
+void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail, bool bKeepEnemyReach)
 {
 	THEATER_SPEED_SCOPE(SetReach);
 	if (RailLight.Tracks.Num() + RailLight.Tint.Num() + RailLight.Bars.Num() + RailLight.Dots.Num() + RailLight.Ringed.Num() > 0)
@@ -10455,10 +10458,15 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 	}
 	bReachShown = Reach.Num() > 0;
 	OrdersMesh->ClearMeshSection(0);
-	OrdersMesh->ClearMeshSection(9); // (the enemy's reach goes with the army's own)
-	if (EnemyReachMesh)
+	// (The enemy's reach goes with the army's own; unless the ShowEnemyReach that replaces it comes a frame or two
+	// later, when the old wash stands until then rather than blink out between the two: the checker's note on b414.)
+	if (!bKeepEnemyReach)
 	{
-		EnemyReachMesh->ClearAllMeshSections();
+		OrdersMesh->ClearMeshSection(9);
+		if (EnemyReachMesh)
+		{
+			EnemyReachMesh->ClearAllMeshSections();
+		}
 	}
 	if (Reach.Num() == 0)
 	{
@@ -13588,12 +13596,14 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 {
 	THEATER_SPEED_SCOPE(MapUpdate);
 	// (lines put off by a press that changed whose ground is whose: see SetHolders)
-	if (FrontLineDue > 0 && --FrontLineDue == 0)
+	if (FrontLineDue != 0 && GFrameCounter >= FrontLineDue)
 	{
+		FrontLineDue = 0;
 		BuildFrontLine();
 	}
-	if (BordersDue > 0 && --BordersDue == 0)
+	if (BordersDue != 0 && GFrameCounter >= BordersDue)
 	{
+		BordersDue = 0;
 		BuildBorders();
 	}
 	if (bVictorsMoving)

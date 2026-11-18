@@ -176,8 +176,12 @@ public:
 	/** The given nation's piece in a region, if it has one there. */
 	AArmyPiece* FindPiece(int32 RegionId, const FString& Nation) const;
 
-	/** Tints the regions a picked-up army could go to: its own colour for a march, red for an attack. An empty list clears it. */
-	void SetReach(const TArray<FReachRegion>& Reach, bool bByRail = false);
+	/**
+	 * Tints the regions a picked-up army could go to: its own colour for a march, red for an attack. An empty list clears it.
+	 * The enemy's reach goes with it, unless bKeepEnemyReach: then the enemy's wash and its dashed line stand until the
+	 * ShowEnemyReach that follows replaces them (the controller's orders laid out over frames).
+	 */
+	void SetReach(const TArray<FReachRegion>& Reach, bool bByRail = false, bool bKeepEnemyReach = false);
 	/**
 	 * (release 1) With an army in hand: the regions the enemy the player can see could strike next month. They take a
 	 * faint wash, and a dashed red line is drawn where that ground ends inside the player's own country (the front
@@ -1126,7 +1130,7 @@ private:
 	mutable float KeptPointsScale = 0.0f;
 	/** A fine sheet has stood up or been taken away over Box: the points kept on and around it are worked out again. */
 	void ForgetKeptPoints(const FBox2D& Box);
-	int32 FrontLineDue = 0, BordersDue = 0; // (speed) frames until the front line and the frontier lines, put off by a press, are drawn
+	uint64 FrontLineDue = 0, BordersDue = 0; // (speed) the frame (GFrameCounter) in which the front line and the frontier lines, put off by a press, are drawn; 0 none
 	TArray<int32> BorderAcross; // (for each edge of each outline, in the order the frontier lines are built: the province across it)
 	int32 BorderAcrossFor = 0; // (how many provinces the map had when that was found: another map, and it is found again)
 	double InkBegan = 0.0, PaintStepped = 0.0;

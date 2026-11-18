@@ -760,6 +760,7 @@ void ACampaignPlayerController::EnterCampaign()
 	HumanLaid = Session->GetView().Human;
 	// A clean table: nothing in hand, nothing picked, no old news.
 	Afterwards.Reset(); // (what was left of an order's answer belonged to the war before; the session dropped its own)
+	PendingEnemyReach.Reset();
 	Opening.bVisible = false;
 	FaceOff = FFaceOff();
 	CloseDocument();
@@ -6335,6 +6336,15 @@ void ACampaignPlayerController::RefreshOrders()
 {
 	THEATER_SPEED_SCOPE(RefreshOrders);
 	FCampaignSession* Session = GetSession();
+	if (PendingEnemyReach.IsSet())
+	{
+		// (an enemy's reach put off by LaterOrders and not yet shown: it is shown first, as it was before the steps)
+		if (Map.IsValid())
+		{
+			Map->ShowEnemyReach(PendingEnemyReach.GetValue());
+		}
+		PendingEnemyReach.Reset();
+	}
 	++Tray.Revision;
 	Tray.bVisible = false;
 	if (Map.IsValid() && ArmyRegion == INDEX_NONE)
@@ -6609,7 +6619,7 @@ void ACampaignPlayerController::RefreshOrders()
 	EnemyReach = TSet<int32>(Danger);
 	FarMonths = MoveTemp(Far);
 	StandingRoad = MoveTemp(Road);
-	Map->SetReach(Reach, bByRail || bBySea);
+	Map->SetReach(Reach, bByRail || bBySea, bOrdersInSteps); // (in steps, the enemy's old reach stands until its own step below)
 	// (Rulings 110, 112, 118; the art director's railway brief.) The second reach, with no switch to press: where a
 	// train would take the army this month beyond its march, shown as light on the railway itself.
 	RailBeyond.Reset();
@@ -6634,7 +6644,24 @@ void ACampaignPlayerController::RefreshOrders()
 		Tray.RailLine = Trains.Line;
 		Map->SetRailLight(Trains.Light);
 	}
-	Map->ShowEnemyReach(Danger); // (how far the enemy could strike next month: only for an army that marches)
+	// (how far the enemy could strike next month: only for an army that marches)
+	if (bOrdersInSteps)
+	{
+		// (Speed, b414 mark 2: after an order's answer, a frame of its own. See LaterOrders.)
+		PendingEnemyReach = Danger;
+		Later([this]()
+		{
+			if (PendingEnemyReach.IsSet() && Map.IsValid())
+			{
+				Map->ShowEnemyReach(PendingEnemyReach.GetValue());
+			}
+			PendingEnemyReach.Reset();
+		});
+	}
+	else
+	{
+		Map->ShowEnemyReach(Danger);
+	}
 	RingedPiece = Map->FindPiece(ArmyRegion, View.Human);
 	if (RingedPiece.IsValid())
 	{
@@ -7368,10 +7395,9 @@ void ACampaignPlayerController::AfterMarch(int32 RegionId, const TArray<FCorpsMo
 	}
 	ArmyRegion = RegionId;
 	const bool bArrived = Marches.ContainsByPredicate([RegionId](const FCorpsMove& Each) { return Each.Path.Num() > 0 && Each.Path.Last() == RegionId; });
-	Later([this, RegionId, bUnseenTown = MarchMeets == TEXT("unknown") && bArrived]()
+	LaterOrders([this, RegionId, bUnseenTown = MarchMeets == TEXT("unknown") && bArrived]()
 	{
 		FCampaignSession* Now = GetSession();
-		RefreshOrders();
 		SelectRegion(RegionId);
 		if (Now && bUnseenTown)
 		{
@@ -7423,9 +7449,8 @@ void ACampaignPlayerController::AfterFarMarch(const TArray<FCorpsMove>& Marches,
 			ArmyRegion = Marches[0].Path.Last();
 		}
 	}
-	Later([this]()
+	LaterOrders([this]()
 	{
-		RefreshOrders();
 		SelectRegion(ArmyRegion);
 	});
 }
@@ -7454,6 +7479,17 @@ void ACampaignPlayerController::Later(TFunction<void()>&& Step)
 		return;
 	}
 	Afterwards.Add(MoveTemp(Step));
+}
+
+void ACampaignPlayerController::LaterOrders(TFunction<void()>&& Then)
+{
+	Later([this]()
+	{
+		bOrdersInSteps = true;
+		RefreshOrders();
+		bOrdersInSteps = false;
+	});
+	Later(MoveTemp(Then));
 }
 
 void ACampaignPlayerController::FinishAnswer()
@@ -7888,9 +7924,8 @@ void ACampaignPlayerController::AfterLanding(int32 RegionId, const FLandingResul
 		ArmyRegion = RegionId;
 	}
 	bBySea = false;
-	Later([this, RegionId, bTaken = Result.bTaken, Note = Result.Note]()
+	LaterOrders([this, RegionId, bTaken = Result.bTaken, Note = Result.Note]()
 	{
-		RefreshOrders();
 		SelectRegion(bTaken ? RegionId : ArmyRegion);
 		Notify(Note, 9.0);
 	});
@@ -8555,9 +8590,8 @@ void ACampaignPlayerController::AfterSiege(int32 RegionId, const FAttackResult& 
 	{
 		Notify(Result.Note, 9.0);
 	}
-	Later([this, RegionId]()
+	LaterOrders([this, RegionId]()
 	{
-		RefreshOrders();
 		SelectRegion(RegionId);
 	});
 }
@@ -8772,9 +8806,8 @@ void ACampaignPlayerController::AfterFight(int32 RegionId, bool bMarch, bool bSt
 			{
 				Notify(Result.Note, 9.0);
 			}
-			Later([this, RegionId]()
+			LaterOrders([this, RegionId]()
 			{
-				RefreshOrders();
 				SelectRegion(RegionId);
 			});
 			return;
@@ -8855,9 +8888,8 @@ void ACampaignPlayerController::AfterFight(int32 RegionId, bool bMarch, bool bSt
 		}
 		ArmyRegion = RegionId;
 	}
-	Later([this, RegionId]()
+	LaterOrders([this, RegionId]()
 	{
-		RefreshOrders();
 		SelectRegion(RegionId);
 	});
 }

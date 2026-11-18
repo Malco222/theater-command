@@ -1049,6 +1049,16 @@ private:
 	 */
 	TArray<TFunction<void()>> Afterwards;
 	void Later(TFunction<void()>&& Step);
+	/**
+	 * (Speed, b414 mark 2.) The last of an order's answer, a frame each: the army in hand's orders (RefreshOrders), then
+	 * Then (the province's card and the paper line), then the enemy's reach. Build 1590 had all three in one frame of 35 to
+	 * 79 ms.
+	 */
+	void LaterOrders(TFunction<void()>&& Then);
+	/** Set while LaterOrders' RefreshOrders runs: the enemy's reach is then shown a step later. */
+	bool bOrdersInSteps = false;
+	/** The enemy's reach so put off, until shown: any RefreshOrders before then shows it first, as it would have been. */
+	TOptional<TArray<int32>> PendingEnemyReach;
 	/** Everything still to come of an order's answer, now: before a campaign is put away. */
 	void FinishAnswer();
 	/** The nation's adjective as the army in hand's tray names it, for the rules' thread, which reads no map. */
