@@ -1,13 +1,15 @@
 // The field battle page: choose one of the campaign's attacks (or a practice ground), fight it on the field, and see
-// the campaign's own report of what it made of the result. The first slice of the played battles (ruling 217): a
-// browser page of its own, with no press on the campaign screen until the play version ships.
+// the campaign's own report of what it made of the result. The first slice of the played battles (ruling 217) was a
+// browser page of its own (standalone.ts boots it so); the campaign screen's FIGHT IT YOURSELF opens the same field
+// over the campaign for the attack on its card (fightOnField), in a layer of its own so neither page's looks touch
+// the other's, and hands the result back through the campaign's own attack order (the design director, b439).
 //
 // Mouse: left picks up (drag for a box, Shift adds), right orders (on the ground to march, on an enemy to attack, drag
 // to draw a line). Keys: Space pause, 1 2 3 speed, H hold, R fall back off the field (the divisions in hand; WITHDRAW
 // is the whole army), Tab next, Esc puts down. A plain left click never gives an order, and Enter does nothing. The clock stops
 // while a question stands on the field (the design director, b358).
 
-import type { Game } from '../../campaign/types';
+import type { BattleReport, Game } from '../../campaign/types';
 import { Clock, type Speed } from '../core/clock';
 import { diceChance } from '../core/parity';
 import { RATIO, levelOf } from '../core/result';
@@ -74,14 +76,22 @@ interface State {
   resume: Speed | null;
   last: number;
   trayAt: number;
+  /** The page is showing and takes the keys: always on its own page; over the campaign, while the field is open. */
+  active: boolean;
+  /** Opened over the campaign: what CONTINUE on the after card goes back to, with the campaign's report. */
+  home: ((report: BattleReport | null) => void) | null;
 }
 
-const app = document.getElementById('app')!;
+/** Where the page draws: its own page's #app, or the field's layer over the campaign. */
+let app: HTMLElement;
+let root: Document | ShadowRoot = document;
+const byId = (id: string): HTMLElement | null => root.getElementById(id);
 const S: State = {
-  g: newCampaign(), screen: 'choose', offer: null, ground: null, b: null, field: null, clock: new Clock(),
+  g: null as unknown as Game, screen: 'choose', offer: null, ground: null, b: null, field: null, clock: new Clock(),
   scene: { cam: { x: 1500, y: 1000, z: 0.3 }, W: 800, H: 600, me: 'att', sel: new Set(), hover: null, box: null, line: null, now: 0, ping: null, colours: null },
   guardUntil: 0, dispatch: null, dispatchAge: 0, asking: false, resume: null, last: 0, trayAt: 0,
   holding: new Set(), trayFrom: 0, tag: null, wasRunning: false, met: false, before: null, colours: { att: '#888', def: '#888' },
+  active: false, home: null,
 };
 /**
  * The two sides' colours as the campaign paints them, but where a pair stands too near to tell apart (under 20 by
@@ -240,7 +250,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
     <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', '<span class="tc-key">R</span> fall back off the field', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round'])}</div>
     <footer class="tray${grouped(b) ? ' is-grouped' : ''}" id="tray"><button class="tc-card is-press tmore" data-page="-1" hidden></button>${grouped(b) ? groups(b) : b.units.filter((u) => u.side === S.scene.me).map((u) => card(u, col[S.scene.me])).join('')}<button class="tc-card is-press tmore" data-page="1" hidden></button></footer>
   </div>`;
-  canvas = document.getElementById('field') as HTMLCanvasElement;
+  canvas = byId('field') as HTMLCanvasElement;
   ctx = canvas.getContext('2d')!;
   fit();
   wireBattle();
@@ -311,7 +321,7 @@ const MORE_W = 112 + 8, MORE_CORPS_W = 156 + 8;
 
 /** The tray's items (cards, or corps' groups), their widths, and the room they have. */
 function trayItems(): { tray: HTMLElement; items: HTMLElement[]; ws: number[]; room: number; more: number } | null {
-  const tray = document.getElementById('tray');
+  const tray = byId('tray');
   if (!tray) return null;
   const items = [...tray.querySelectorAll<HTMLElement>('[data-item]')];
   return { tray, items, ws: items.map((i) => Number(i.dataset.w)), room: tray.clientWidth - 24 + 8, more: tray.classList.contains('is-grouped') ? MORE_CORPS_W : MORE_W };
@@ -371,7 +381,7 @@ function updateTray(force = false): void {
   const t = now();
   if (!force && t - S.trayAt < 0.15) return;
   S.trayAt = t;
-  for (const el of document.querySelectorAll<HTMLElement>('#tray [data-unit]')) {
+  for (const el of root.querySelectorAll<HTMLElement>('#tray [data-unit]')) {
     const u = b.unit(Number(el.dataset.unit));
     if (!u) continue;
     const gone = u.state === 'gone' || u.state === 'withdrawn';
@@ -410,7 +420,7 @@ function updateTray(force = false): void {
     st.className = `ustate tc-data${u.fellBack ? ' muted' : u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
   }
   // A corps' header is lit while every block of it that can take orders is in hand.
-  for (const h of document.querySelectorAll<HTMLElement>('#tray .ghead')) {
+  for (const h of root.querySelectorAll<HTMLElement>('#tray .ghead')) {
     const us = b.units.filter((u) => u.side === S.scene.me && u.corps === Number(h.dataset.corps) && orderable(u));
     h.classList.toggle('is-on', us.length > 0 && us.every((u) => S.scene.sel.has(u.id)));
     h.closest('.ugroup')!.classList.toggle('is-off', us.length === 0);
@@ -419,7 +429,7 @@ function updateTray(force = false): void {
 
 function updateTop(force = false): void {
   const b = S.b!;
-  const el = (id: string): HTMLElement => document.getElementById(id)!;
+  const el = (id: string): HTMLElement => byId(id)!;
   el('time').textContent = `${mmss(b.t)} of ${mmss(b.ticket.limit)}`;
   const bal = b.standing();
   const share = bal.att / Math.max(1e-6, bal.att + bal.def);
@@ -430,7 +440,7 @@ function updateTop(force = false): void {
   // Both shares are of the same whole, so their ratio is the odds standing now (the card's at the start).
   el('ratio').textContent = `Card ${odds(k.odds)} to 1 · now ${odds(bal.att / Math.max(1e-6, bal.def))} to 1`;
   const sp = S.clock.speed;
-  document.querySelectorAll<HTMLElement>('[data-speed]').forEach((x) => x.classList.toggle('is-lit', Number(x.dataset.speed) === sp));
+  root.querySelectorAll<HTMLElement>('[data-speed]').forEach((x) => x.classList.toggle('is-lit', Number(x.dataset.speed) === sp));
   // Paused means paused (ruling 226(8)): the clock's label is the state, and the first segment reads Paused when lit.
   const cs = el('clockState');
   cs.textContent = sp === 0 ? 'Paused' : 'Running';
@@ -442,8 +452,8 @@ function updateTop(force = false): void {
   el('brkMe').style.width = `${(Math.min(1, v[me]) * 100).toFixed(1)}%`;
   el('brkThem').style.width = `${(Math.min(1, v[them]) * 100).toFixed(1)}%`;
   el('fwarn').hidden = !!b.over || v[me] < 0.75 || S.screen !== 'battle';
-  (document.getElementById('wask') as HTMLElement).hidden = S.asking !== 'withdraw';
-  (document.getElementById('sask') as HTMLElement).hidden = S.asking !== 'staff';
+  (byId('wask') as HTMLElement).hidden = S.asking !== 'withdraw';
+  (byId('sask') as HTMLElement).hidden = S.asking !== 'staff';
   // The tag on the field: PAUSED with its key while stopped, or a passing word; never while a question stands.
   const tag = el('ftag');
   const passing = S.tag && now() < S.tag.until ? S.tag.text : '';
@@ -591,7 +601,6 @@ function wireBattle(): void {
     if (e.ctrlKey || notched) zoomAt(px, py, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)));
     else { sc.cam.x += e.deltaX / sc.cam.z; sc.cam.y -= e.deltaY / sc.cam.z; clampCam(); }
   }, { passive: false });
-  window.onresize = (): void => { if (S.screen !== 'choose') { fit(); pageTray(); } };
 
   app.querySelectorAll<HTMLElement>('[data-speed]').forEach((el) => el.addEventListener('click', () => { if (S.asking) return; S.clock.set(Number(el.dataset.speed) as Speed); updateTop(); }));
   app.querySelectorAll<HTMLElement>('[data-zoom]').forEach((el) => el.addEventListener('click', () => {
@@ -605,7 +614,7 @@ function wireBattle(): void {
   app.querySelectorAll<HTMLElement>('[data-act="stay"]').forEach((el) => el.addEventListener('click', () => { answered(); updateTop(); }));
   app.querySelector('[data-act="sgo"]')!.addEventListener('click', () => { if (now() < S.guardUntil) return; S.asking = false; S.resume = null; give({ do: 'dice' }); });
   app.querySelector('[data-act="wgo"]')!.addEventListener('click', () => { if (now() < S.guardUntil) return; S.asking = false; S.resume = null; give({ do: 'withdrawAll', side: sc.me }); });
-  const tray = document.getElementById('tray')!;
+  const tray = byId('tray')!;
   tray.addEventListener('click', (e) => {
     const more = (e.target as HTMLElement).closest<HTMLElement>('[data-page]');
     if (more) {
@@ -651,7 +660,7 @@ function ask(kind: 'withdraw' | 'staff'): void {
     const b = S.b, c = b.chanceNow(), where = b.ticket.place.name;
     // A practice ground is not a place to take (the UI director, after the retest).
     const odds = c >= 0.995 ? 'They are sure of it.' : c <= 0.005 ? 'They give it no chance.' : `They give you about ${Math.round(c * 100)}% to ${S.offer ? `take ${esc(where)}` : 'win it'}.`;
-    document.getElementById('saskText')!.innerHTML = b.contactAt === null
+    byId('saskText')!.innerHTML = b.contactAt === null
       // True whether or not the guns have opened before the lines meet (b409, the UI director's words).
       ? `Hand the battle to the staff? The armies have not met yet: they settle the whole battle at once. ${odds}`
       : `Hand the battle to the staff? They settle the rest at once, from where it stands now. ${odds}`;
@@ -688,7 +697,12 @@ function orderAt(px: number, py: number): void {
   else if (give({ do: 'move', units: ids, x: fx, y: fy })) sc.ping = { x: fx, y: fy, at: now(), kind: 'move' };
 }
 
+window.addEventListener('resize', () => { if (S.active && S.b && S.screen !== 'choose') { fit(); pageTray(); } });
+
+// Keys go to the field first, and over the campaign no further: Enter would end its month, Tab pick its next army.
 window.addEventListener('keydown', (e) => {
+  if (!S.active) return;
+  if (S.home) e.stopPropagation();
   if (e.key === 'Enter') { e.preventDefault(); return; }
   if (now() < S.guardUntil) { if (e.key === 'Tab' || e.key === ' ') e.preventDefault(); return; }
   if (S.screen !== 'battle' || !S.b) return;
@@ -725,11 +739,17 @@ window.addEventListener('keydown', (e) => {
     default: return;
   }
   updateTop(); updateTray(true);
-});
+}, true);
 
 // ---- The loop -----------------------------------------------------------------------------------------------------
 
+let looping = false;
+function startLoop(): void {
+  if (!looping) { looping = true; requestAnimationFrame(frame); }
+}
+
 function frame(): void {
+  if (!S.active) { looping = false; return; }
   requestAnimationFrame(frame);
   if (S.screen === 'choose' || !S.b || !S.field) return;
   const t = now();
@@ -784,7 +804,7 @@ function showAfter(): void {
   guard();
   // The after card is the one voice: the dispatch strip steps aside (the UI director, 3).
   S.dispatch = null;
-  document.getElementById('dispatch')!.innerHTML = '';
+  byId('dispatch')!.innerHTML = '';
   updateTray(true);
   const t = b.ticket, k = t.reckoning;
   const g = S.g;
@@ -838,12 +858,51 @@ function showAfter(): void {
     ${sides}
     <div class="afoot"><button class="tc-btn tc-btn--primary tc-btn--lg" data-act="continue">Continue</button></div>
   </div>`;
-  document.body.appendChild(veil);
-  veil.querySelector('[data-act="continue"]')!.addEventListener('click', () => { if (now() < S.guardUntil) return; veil.remove(); showChooser(); });
+  (S.home ? app : document.body).appendChild(veil);
+  veil.querySelector('[data-act="continue"]')!.addEventListener('click', () => {
+    if (now() < S.guardUntil) return;
+    veil.remove();
+    if (S.home) S.home(rep); else showChooser();
+  });
 }
 
-// A handle for the page's own checks (screenshots, the playtester's harness). Not used by the page itself.
-(window as unknown as { __field: unknown }).__field = { state: S, give, showChooser };
+/** The page of its own: the chooser over a fresh campaign of the slice's own. */
+export function bootPage(): void {
+  app = document.getElementById('app')!;
+  root = document;
+  S.g = newCampaign();
+  S.active = true;
+  // A handle for the page's own checks (screenshots, the playtester's harness). Not used by the page itself.
+  (window as unknown as { __field: unknown }).__field = { state: S, give, showChooser };
+  showChooser();
+  startLoop();
+}
 
-showChooser();
-requestAnimationFrame(frame);
+/**
+ * FIGHT IT YOURSELF on the campaign's attack card (the design director, b439): the field for that attack, opened over
+ * the campaign in a layer of its own (its own looks inside, the campaign's untouched outside). The field's result goes
+ * back through the campaign's own attack order (settle), and CONTINUE on the after card closes the layer and hands the
+ * campaign its report. 'css' is the field's own stylesheet (the campaign's build carries it).
+ */
+export function fightOnField(g: Game, offer: Offer, css: string, done: (report: BattleReport | null) => void): void {
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;inset:0;z-index:2000;';
+  document.body.appendChild(host);
+  const shadow = host.attachShadow({ mode: 'open' });
+  // The stylesheet was written for a page of its own: its page-wide rules apply to the layer instead.
+  const local = css.replace(/:root/g, ':host').replace(/html,\s*body\s*\{/g, ':host {').replace(/(^|\n)body\s*\{/g, '$1:host {');
+  shadow.innerHTML = `<style>${local}</style><div id="app"></div>`;
+  root = shadow;
+  app = shadow.getElementById('app')!;
+  S.g = g; S.before = null; S.active = true;
+  S.home = (report) => {
+    S.active = false; S.home = null; S.b = null; S.screen = 'choose';
+    host.remove();
+    root = document;
+    done(report);
+  };
+  // The same handle as the page of its own, for the page's checks (screenshots, the playtester's harness).
+  (window as unknown as { __field: unknown }).__field = { state: S, give };
+  startBattle(offer.ticket, offer);
+  startLoop();
+}

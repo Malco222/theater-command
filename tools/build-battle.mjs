@@ -7,7 +7,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 mkdirSync('dist', { recursive: true });
 const out = await build({
-  entryPoints: ['src/battle/ui/page.ts'],
+  entryPoints: ['src/battle/ui/standalone.ts'],
   bundle: true,
   format: 'iife',
   target: 'es2020',

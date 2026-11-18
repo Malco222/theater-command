@@ -2418,6 +2418,8 @@ svg#map:not(.near) .raillit { stroke-width: 1.35; }
 .whyoff { display: inline-flex; gap: 6px; align-items: flex-start; font-size: 12.5px; line-height: 1.35; color: var(--ink-2); text-align: left; }
 .whyoff svg { flex: none; margin-top: 2px; color: var(--ink-3); }
 .card footer .whyoff { align-self: center; margin-right: auto; max-width: 62%; }
+/* The attack card with FIGHT IT YOURSELF: three buttons keep one row, and the reason wraps in the room left of them. */
+.card footer.atkfoot .whyoff { flex: 1 1 0; min-width: 0; max-width: none; }
 /* An order's card in brief: who leads, the count in one line, each corps a chip. */
 .fside.brief { gap: 6px; padding: 9px 10px; }
 .fline { font-size: 13px; color: var(--ink-2); }

@@ -67,6 +67,8 @@ import { WORLD, beyondEurope, lakesOf, motherLine, patronOf, peaceFooting, warFo
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
+import { ON_CAMPAIGN, landTicket, staffOnly } from '../../battle/land';
+import { fightOnField } from '../../battle/ui/page';
 import {
   AIR, CARRIERS, MISSION, carrierRules, groupAt, airBases, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowding, forecastAir, isOffensive,
   km as airKm, overOcean, seaKm, skyOver, whyNotMoveAir, whyNotMission, type AirOrder,
@@ -7311,6 +7313,16 @@ function softenFold(target: Region, chosen: Corps[], look: Outlook | null): stri
   return foldBlock('attack:soften', 'Soften the line first', can.length ? can.join(', ') : 'nothing can be done to it this month', `<div class="softbody">${s?.html ?? ''}${scout ? `<div class="softopt">${scout}</div>` : ''}</div>`, open);
 }
 
+/** The field battle's own stylesheet, carried in by the campaign's build (build.mjs) for FIGHT IT YOURSELF. */
+declare const FIELD_CSS: string;
+/**
+ * FIGHT IT YOURSELF on the attack card (the design director, b439): the same attack fought on the land field, its
+ * result handed back through the campaign's own attack order. Behind ruling 226's gate (ON_CAMPAIGN in the field's
+ * offered.ts) until the design director opens it; a page opened with ?field shows it for the directors' review.
+ */
+const fieldShown = (): boolean => ON_CAMPAIGN || /[?&]field(=|&|$)/.test(location.search);
+const FIELD_HOVER = 'Fight this battle yourself on the field. Its result stands in the campaign as the staff\'s would.';
+
 function attackCard(): string {
   const m = ui.modal!;
   const target = g.regions[m.target];
@@ -7389,9 +7401,15 @@ function attackCard(): string {
   const said = a && look ? verdictOf(look) : null;
   const dark = said?.tone === 'loss';
   const calloff = dark ? ` data-say="${esc(`Called off: ${lowerFirst(said!.word)}. To attack all the same, give the order again and click SEND THEM IN.`)}"` : '';
+  // FIGHT IT YOURSELF stays on the card where the field cannot fight this battle at the card's odds, off, with the
+  // staff's sentence at the foot's left; where SEND THEM IN is off too, only its reason is said (the UI director, b439).
+  const fieldT = fieldShown() && a ? landTicket(g, cands.filter((c) => m.chosen.has(c.id)), target) : null;
+  const staff = fieldT ? staffOnly(fieldT) ?? '' : '';
+  const fieldOn = !!fieldT && !staff;
+  const field = fieldShown() && (fieldT || !a) ? `<button class="btn" data-act="field" ${fieldOn ? '' : 'disabled'} title="${esc(fieldOn ? FIELD_HOVER : off || staff)}">Fight it yourself</button>` : '';
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The attack · ${date(g.turn)}</div><h2>The attack on ${esc(target.name)}</h2></header>
     <div class="body atk"><div class="faceoff">${sidePanel(ours, 'att', true)}<div class="fmid"><span class="against">against</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def', true)}</div>${peaceNote(target)}${verdict}${faceBlock(look?.face)}${fog}${prizeStrip(target)}${massNote}${soft || ticket ? `<div class="tcfolds">${soft}${ticket}</div>` : ''}</div>
-    <footer>${whyOff(off)}<button class="btn${dark ? ' go' : ''}" data-act="${dark ? 'calloff' : 'close'}"${calloff} title="Call the attack off. Nothing is spent.">Call it off</button><button class="btn${dark ? '' : ' go'}" data-act="attack" ${a ? '' : 'disabled'} title="${a ? 'The battle is settled at once from the Battle Ticket.' : esc(off)}">Send them in</button></footer>`;
+    <footer${field ? ' class="atkfoot"' : ''}>${whyOff(off || staff)}<button class="btn${dark ? ' go' : ''}" data-act="${dark ? 'calloff' : 'close'}"${calloff} title="Call the attack off. Nothing is spent.">Call it off</button>${field}<button class="btn${dark ? '' : ' go'}" data-act="attack" ${a ? '' : 'disabled'} title="${a ? 'The battle is settled at once from the Battle Ticket.' : esc(off)}">Send them in</button></footer>`;
 }
 
 /** The news that changes the war, a declaration or a fall, set out as a card of its own. */
@@ -9280,6 +9298,32 @@ function onClick(e: MouseEvent): void {
         }
         tellResult(rep, was);
       } else openModal(null);
+      break;
+    }
+    case 'field': {
+      // The attack fought on the field: the same corps, the same ticket, and the result back through the attack order.
+      const m = ui.modal!;
+      const target = g.regions[m.target];
+      const corps = g.corps.filter((c) => m.chosen.has(c.id));
+      const ticket = fieldShown() ? landTicket(g, corps, target) : null;
+      if (!ticket || staffOnly(ticket)) break;
+      const h = g.headlines.length;
+      const before = g.regions.map((r) => r.ctrl);
+      const was = beforeBattle(m.look ?? null, 'attack', target.id);
+      const css = typeof FIELD_CSS === 'string' ? FIELD_CSS : '';
+      fightOnField(g, { target, corps, odds: ticket.reckoning.odds, ticket }, css, (rep) => {
+        ui.unread += g.headlines.length - h;
+        ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
+        if (rep) {
+          ui.seenReports = g.reports.length;
+          if (rep.taken) {
+            const own = target.units.filter((c) => canOrder(g, c)), fresh = own.filter((c) => c.ap > 0);
+            ui.sel = target.id;
+            ui.picked = new Set((fresh.length ? fresh : own.filter((c) => c.kind !== 'fort')).map((c) => c.id));
+          }
+          tellResult(rep, was);
+        } else { refresh(); openModal(null); }
+      });
       break;
     }
   }

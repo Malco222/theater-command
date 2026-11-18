@@ -25,7 +25,7 @@ describe('the battle doorway for the 3D game', () => {
     const { g, TC } = rig();
     const o = offers(g)[0];
     const ids = o.corps.map((c) => c.id);
-    expect(TC.battleLook(ids, o.target.id)!.ticket.reckoning.odds).toBeCloseTo(o.odds);
+    expect(TC.battleLook(ids, o.target.id)!.ticket!.reckoning.odds).toBeCloseTo(o.odds);
     const st = TC.battleStart(ids, o.target.id)!;
     expect(st.field.ground.length).toBe(st.field.cols * st.field.rows);
     expect(st.view.speed).toBe(0);
