@@ -186,7 +186,8 @@ void ACampaignPlayerController::LoadGrandNations()
 		Out.Name = FText::FromString(Nation.Name);
 		Out.Blurb = FText::FromString(Nation.Blurb);
 		Out.Standing = FText::FromString(Nation.Standing);
-		Out.Strength = FText::FromString(FString::Printf(TEXT("%d corps, %d %s"), Nation.Corps, Nation.Regions, Nation.Regions == 1 ? TEXT("territory") : TEXT("territories")));
+		// (the UI director, 10:57 on build 1638: provinces, as the brief of round 1 asked, not territories)
+		Out.Strength = FText::FromString(FString::Printf(TEXT("%d corps, %d %s"), Nation.Corps, Nation.Regions, Nation.Regions == 1 ? TEXT("province") : TEXT("provinces")));
 		Out.bMajor = Nation.bMajor;
 		Out.bSmall = Nation.bSmall;
 		Out.Abilities = Nation.Abilities;

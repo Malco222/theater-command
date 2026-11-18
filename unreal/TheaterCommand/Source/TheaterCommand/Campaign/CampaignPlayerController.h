@@ -176,7 +176,7 @@ struct FOpeningNation
 	FText Name;
 	FText Blurb;
 	FText Standing; // "At peace", or who it is at war with
-	FText Strength; // "28 corps, 36 territories"
+	FText Strength; // "30 corps, 36 provinces"
 	bool bMajor = false;
 	bool bSmall = false; // a small country whose path is its own to choose
 	TArray<FString> Abilities; // what the country does in its own way, a line each

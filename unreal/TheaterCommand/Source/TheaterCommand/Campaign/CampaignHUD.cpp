@@ -13852,10 +13852,12 @@ namespace
 							SNew(STextBlock).Text(Nation.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).WrapTextAt_Lambda(Wide)
 						];
 					}
+					// The facts: the date and what the country has, "September 1939 · 30 corps, 36 provinces". (The UI director,
+					// 10:57 on build 1638: the war is said once, in the italic status above, and not again here.)
 					Part->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 					[
 						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Brass).WrapTextAt_Lambda(Wide)
-						.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s  \u00B7  %s"), *Year.Title.ToString(), *Nation.Standing.ToString(), *Nation.Strength.ToString())))
+						.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s"), *Year.Title.ToString(), *Nation.Strength.ToString())))
 					];
 					// What the country does in its own way: its abilities and its special formation, by name.
 					// What each one does is said when the mouse rests on the line, and in the game's own guide.
