@@ -183,3 +183,197 @@ pack 24910 page 1: 12 sounds, 0 kept
 438335: G26-16-Truck Crash into Car.wav | craigsmith | CC0 | ? s
 487143: R29-28-Large Metal Vehicle Crashes.wav | craigsmith | CC0 | ? s
 DONE: 101 fetched, 0 failed, 101 asked for
+
+
+# Last round, fetched on Brian's Mac, 2026-11-18 08:42 EST: the same command again; sounds already here are skipped.
+
+pack 24916 page 1: 12 sounds, 12 kept
+  438737	G45-35-Distant Explosions Underwater.wav
+  438736	G45-34-Reverberant Torpedos.wav
+  438735	G45-33-Interior Forward Torpedo Room.wav
+  438734	G45-32-Submarine Big Interior.wav
+  438733	G45-31-Submarine Churn Underwater.wav
+  438732	G45-30-Submarine Hatch Opening.wav
+  438731	G45-29-Submarine Engine Start.wav
+  438730	G45-28-Submarine Annunciator.wav
+  438729	G45-27-Submarine Interior Control.wav
+  438728	G45-26-Submarine Motor Start Up.wav
+  438727	G45-25-Submarine Battery Charger.wav
+  438726	G45-24-Submarine Interior Engine Room.wav
+pack 37713 page 1: 12 sounds, 2 kept
+  675700	S06-04 Old mechanical police siren.wav
+  675699	S24-16 European siren by with Doppler effect.wav
+  675698	S32-03 Two tone fog horn.wav
+  675697	S32-02 Fog horn with echo.wav
+  675696	S32-01 Fog horn in LA Harbor; motor in foreground.wav
+  675695	S29-01 Submarine signal bell.wav
+  675694	S29-12 Ship’s time bells.wav
+  675693	S29-19 Bell buoy.wav
+  675692	S03-05 Glass bell; medium size.wav
+  675691	S24-14 Single air raid siren.wav
+  675690	S24-15 Hand Cranked siren.wav
+  675689	S41-24 French police siren.wav
+pack 24904 page 1: 12 sounds, 4 kept
+  438538	G33-32-Distant Bomb Explosion.wav
+  438537	G33-31-Distorted Explosion.wav
+  438536	G33-30-Blasts with Short Decay.wav
+  438535	G33-29-Mortar Gun.wav
+  438534	G33-28-Multiple Explosions.wav
+  438533	G33-27-Sutomatic Gun Fire.wav
+  438532	G33-26-Constant Bombardment.wav
+  438531	G33-25-Bazooka.wav
+  438530	G33-24-Atomic Bomb.wav
+  438529	G33-23-Explosion with Sharp Wood Crack.wav
+  438528	G33-22-Falling Debris and Explosion.wav
+  438527	G33-21-Medium Explosion with Debris.wav
+pack 24899 page 1: 12 sounds, 2 kept
+  438346	G26-27-Huge Storm Sequence.wav
+  438345	G26-26-Crowbar Prying Squeaky Wood.wav
+  438344	G26-25-Christmas Tree Crash.wav
+  438343	G26-24-Tree Crashes.wav
+  438342	G26-23-Fight Scuffle.wav
+  438341	G26-22-Low rumble and Crash.wav
+  438340	G26-21-Crash with Approaching Sirens.wav
+  438339	G26-20-Car Crash with Distorted Tire Squeal.wav
+  438338	G26-19-Long Motor Revving and Crash.wav
+  438337	G26-18-Car Crash with Siren.wav
+  438336	G26-17-Car Crashing into Trash Cans.wav
+  438335	G26-16-Truck Crash into Car.wav
+pack 27528 page 1: 12 sounds, 1 kept
+  487146	R29-34-Big Object Falls and Crashes in Room.wav
+  487145	R29-32-Large Quick Interior Crash.wav
+  487144	R29-29-Throwing Junk at Doors.wav
+  487143	R29-28-Large Metal Vehicle Crashes.wav
+  487142	R29-04-Crashing Collapse of Wood Building.wav
+  487141	R29-02-Long Constant Crash of Destruction.wav
+  487140	R28-14-Glass Bottles Roll and Break.wav
+  487139	R28-13-Glass Windows Smashed.wav
+  487138	R28-12-Glass Windows Break.wav
+  487137	R28-11-Glass Windows Break.wav
+  487136	R28-10-Many Bottles Break.wav
+  487135	R28-09-Big Glass Breaks.wav
+pack 24910 page 1: 12 sounds, 0 kept
+  438648	G39-31-Low Pitched Oscillator.wav
+  438647	G39-30-Oscillator Flutter.wav
+  438646	G39-29-15 Croaks-new.wav
+  438645	G39-28-13 White Noise Effects.wav
+  438644	G39-27 - Oscillator Beeps with Reverb.wav
+  438643	G39-26-Submarine Beeps and Thumps.wav
+  438642	G39-25-Oil Boil.wav
+  438641	G39-24-Steam Hiss.wav
+  438640	G39-23-Steam Hiss.wav
+  438639	G39-22-Rain on Concrete.wav
+  438638	G39-21-Tire Squeals.wav
+  438637	G39-20-Whip Cracks.wav
+72853: already here
+138976: already here
+811077: already here
+346856: already here
+36390: already here
+437155: already here
+69177: already here
+69158: already here
+61685: already here
+201169: already here
+436401: already here
+488335: already here
+269061: already here
+31574: already here
+432217: already here
+512215: already here
+35531: already here
+377770: already here
+546119: already here
+801348: already here
+792572: already here
+733927: already here
+555190: already here
+438703: already here
+438704: already here
+438705: already here
+438706: already here
+438707: already here
+438708: already here
+438709: already here
+438710: already here
+438711: already here
+438712: already here
+438714: already here
+438715: already here
+438716: already here
+438717: already here
+438718: already here
+438719: already here
+438720: already here
+438721: already here
+438722: already here
+438723: already here
+438724: already here
+438725: already here
+438507: already here
+438508: already here
+438509: already here
+438510: already here
+438511: already here
+438512: already here
+438513: already here
+438514: already here
+438515: already here
+438516: already here
+438517: already here
+438518: already here
+438519: already here
+438520: already here
+438521: already here
+438522: already here
+438523: already here
+438524: already here
+438525: already here
+438526: already here
+438318: already here
+438319: already here
+438320: already here
+438321: already here
+438322: already here
+438323: already here
+438324: already here
+438325: already here
+438326: already here
+438327: already here
+438328: already here
+438329: already here
+438330: already here
+438331: already here
+438332: already here
+438701: G45-01-Sub Alarm.wav | craigsmith | CC0 | ? s
+438702: G45-02-Short Bursts Sub Alarms.wav | craigsmith | CC0 | ? s
+438527: G33-21-Medium Explosion with Debris.wav | craigsmith | CC0 | ? s
+438529: G33-23-Explosion with Sharp Wood Crack.wav | craigsmith | CC0 | ? s
+438531: G33-25-Bazooka.wav | craigsmith | CC0 | ? s
+438533: G33-27-Sutomatic Gun Fire.wav | craigsmith | CC0 | ? s
+438534: G33-28-Multiple Explosions.wav | craigsmith | CC0 | ? s
+438535: G33-29-Mortar Gun.wav | craigsmith | CC0 | ? s
+438536: G33-30-Blasts with Short Decay.wav | craigsmith | CC0 | ? s
+438537: G33-31-Distorted Explosion.wav | craigsmith | CC0 | ? s
+438737: already here
+438736: already here
+438735: already here
+438734: already here
+438733: already here
+438732: already here
+438731: already here
+438730: already here
+438729: already here
+438728: already here
+438727: already here
+438726: already here
+675695: already here
+675694: already here
+438538: already here
+438532: already here
+438530: already here
+438528: already here
+438341: already here
+438335: already here
+487143: already here
+DONE: 10 fetched, 0 failed, 111 asked for
