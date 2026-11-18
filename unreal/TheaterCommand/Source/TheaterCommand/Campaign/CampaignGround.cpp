@@ -457,7 +457,22 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// (The number is also how wholly the country is square-field country, from 1 at its edge to 255 well inside:
 			// from high up its fields are drawn toward their own gold by that much, so that the gold comes in over a
 			// distance and no ruled line shows where one manner of field ends.)
-			const float SquareShare = Shares[WorldLook::Prairie] + (bNorthAmerica ? Shares[WorldLook::Temperate] : 0.0f);
+			// (The art director's world-detail order, item 2, 17 November 2026: "the strict square grid stays only on the
+			// North American plains, where it is true". The square mile was surveyed over the Middle West and all the
+			// West; the old colonies, the mountains and the old South were never ruled, and their fields lie crooked as
+			// Europe's do. It comes in over a degree, and the land's paint brings the squares' gold in from that edge.
+			// "-TheaterOldFields" lays the squares over all temperate North America again, as before.)
+			static const bool bOldFields = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldFields"));
+			// (the chart may count the New World's longitudes on past 180 east: they are brought back to west of Greenwich)
+			const float WestLongitude = Longitude > 180.0f ? Longitude - 360.0f : Longitude;
+			const float WestOfThePlains = 1.0f - FMath::SmoothStep(-101.0f, -99.0f, WestLongitude);
+			// (The Middle West: north of the Ohio, which runs from Pittsburgh down to Cairo, and west of the Mississippi
+			// north of Missouri's southern line; from Ohio's eastern line westward. Kentucky, Tennessee and the old
+			// South below them were settled before the survey and were never ruled.)
+			const float OhioRiver = FMath::Max(40.6f + 0.414f * (WestLongitude + 80.5f), 36.5f);
+			const float MiddleWest = FMath::SmoothStep(OhioRiver - 0.5f, OhioRiver + 0.5f, Latitude) * (1.0f - FMath::SmoothStep(-81.2f, -80.0f, WestLongitude));
+			const float Surveyed = bOldFields ? 1.0f : FMath::Max(WestOfThePlains, MiddleWest);
+			const float SquareShare = Shares[WorldLook::Prairie] + (bNorthAmerica ? Shares[WorldLook::Temperate] * Surveyed : 0.0f);
 			LookSquare[Idx] = Out > 0.5f && SquareShare > 0.5f ? static_cast<uint8>(1 + FMath::RoundToInt32(254.0f * FMath::SmoothStep(0.5f, 0.8f, SquareShare))) : 0;
 			if (Id < 0)
 			{
@@ -1650,6 +1665,22 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// slant of twenty degrees elsewhere. "No turn at all", to the last figure, is what tells the land's
 			// paint to lay squares.)
 			const bool bSquare = LookSquare.IsValidIndex(Idx) && LookSquare[Idx] != 0;
+			// (Item 2 again: where the fields are not squares, a province beyond Europe turns its fields by an angle of
+			// its own and makes them a little larger or smaller than its neighbour's, as every province of Europe does.
+			// They all lay at one slant of twenty degrees, and the land read as one ruled board from Maine to Chile.)
+			static const bool bOldLie = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldFields"));
+			if (!bSquare && Id >= 0 && bBeyond && !bOldLie)
+			{
+				const uint32 Own = static_cast<uint32>(Id) * 2654435761u;
+				const float Turn = ((Own >> 8) & 0xFFFF) / 65535.0f * UE_PI;
+				const float Size = 0.5f + 0.5f * ((((Own >> 3) & 0xFF) / 255.0f) * 2.0f - 1.0f) * 0.6f;
+				Lie[Idx] = FColor(ToByte(0.5f + 0.5f * FMath::Cos(Turn)), ToByte(0.5f + 0.5f * FMath::Sin(Turn)), ToByte(Size), NotTropic);
+				if (Lie[Idx].R == 255 && Lie[Idx].G == 128)
+				{
+					Lie[Idx].G = 129; // (exactly no turn is the sign for squares)
+				}
+				continue;
+			}
 			// (a square's blue is not its size, which is fixed: it is how wholly the country is square-field country)
 			Lie[Idx] = bSquare ? FColor(255, 128, LookSquare[Idx], NotTropic) : (bBeyond ? FColor(247, 171, 128, NotTropic) : FColor(255, 129, 128, NotTropic));
 			continue;

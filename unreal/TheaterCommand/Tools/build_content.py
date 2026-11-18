@@ -672,6 +672,15 @@ def build_land():
     # (From high up the squares are smaller than a point of the screen and their crops only speckle it: there they
     # are drawn toward the plain's own mean, to about a third of their contrast.)
     grain = lerp(m, lerp(m, vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), 3750, 3500), vector(m, "CoolFieldMean", (0.98, 0.98, 0.94, 1.0), 3750, 3560), cool_paint, 3800, 3530), grain, lerp(m, 0.33, 1.0, work, 3850, 3500), 3950, 3400)
+    # (The art director's world-detail order, item 2: the squares now end where the survey ended, across open
+    # farmland, and their gold stopped there at a ruled line. A square's blue is how wholly the country is
+    # square-field country, from nought at its edge to one well inside: at the edge a square's crops are taken back
+    # to the ground's own colour (their tones kept, the plain's gold taken out), and the gold comes in with the blue.)
+    square_mean = lerp(m, vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), 3950, 3620), vector(m, "CoolFieldMean", (0.98, 0.98, 0.94, 1.0), 3950, 3680), cool_paint, 4000, 3650)
+    plain_grain = node(m, unreal.MaterialExpressionDivide, 4150, 3550)
+    _feed(m, plain_grain, "A", grain)
+    _feed(m, plain_grain, "B", square_mean)
+    grain = lerp(m, plain_grain, grain, one_in(m, unreal.MaterialExpressionSaturate, times(m, (lie, "B"), scalar(m, "SquareGoldIn", 1.0, 4150, 3700), 4250, 3700), 4350, 3700), 4450, 3550)
     tone = lerp(m, tone, grain, square, -80, 1700)
     # The section roads: a pale line on the squares' own grid, about a point of the screen wide at working height.
     back_u = one_in(m, unreal.MaterialExpressionOneMinus, cell_u, -550, 2920)
