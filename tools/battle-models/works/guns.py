@@ -177,7 +177,9 @@ def heavy_gun(m, parent, at=(0.0, 0.0, 0.0), shield=False, twin=False):
         m.lathe(fz + Vector((-0.17, dy, 1.08)), Vector((-1, 0, 0.35)), [(0.0, 0.075), (0.10, 0.075), (0.10, 0.058), (0.02, 0.05)], "steel", 14, (False, False))
         m.disc(fz + Vector((-0.17, dy, 1.08)) + Vector((-1, 0, 0.35)).normalized() * 0.022, Vector((-1, 0, 0.35)), 0.05, "void", 12)
     bits.handwheel(m, fz + Vector((0.0, 0.235, 1.06)), Y, 0.11, "steel", 4)
-    bits.crew(m, "fuze", fz + Vector((-0.55, 0.0, 0.0)), (1, 0, 0), "stand", "mount", "standing on the platform, setting fuzes: he puts each round nose first into a cup")
+    # (on the twin he stands 0.3 m further out, or the left gun's loader, stepping back with his round, walks into him)
+    bits.crew(m, "fuze", fz + Vector((-0.55, 0.296 if twin else 0.0, 0.0)), (1, 0, 0), "stand", "mount",
+              "standing on the platform, setting fuzes: he puts each round nose first into a cup" + (" (the setter is ahead and 0.3 m to his right, so the left gun's loader passes clear of him)" if twin else ""))
     for y0, tag in bores:
         # (he stands clear of the breech, which runs 0.66 m back when she fires: 0.3 m to his own right of the place
         # behind it on the single gun, 0.3 m outboard on the twin; he steps in to load)
@@ -189,7 +191,7 @@ def heavy_gun(m, parent, at=(0.0, 0.0, 0.0), shield=False, twin=False):
     for k in range(3):
         base = Vector((O.x - 1.42, O.y - 0.62 - w * 1.6 - 0.14 * k, deck_z))
         if k == 0:
-            m.part("round.ready", "mount", base, kind="free", note="the ready rack's nearest round, standing on its base: the loader lifts his round from exactly here, so the game hides this one while his is out of the rack (clip fire does it on the single gun)")
+            m.part("round.ready", "mount", base, kind="free", note="the ready rack's nearest round, standing on its base: the loader lifts his round from exactly here, so the game hides this one while his is out of the rack (clip fire does it; on the twin it is the right gun's loader who takes it)")
             m.use("round.ready")
         shell(m, base, Z, 0.09, 0.86)
         m.use("mount")
@@ -379,7 +381,11 @@ def HeavyFlakTwin(fine=True, nation="_default", name="HeavyFlakTwin"):
                                   {"part": "barrel.r", "slide": [[0.0, 0.0]] + [[t + late, v] for t, v in one["tracks"][0]["slide"]]},
                                   {"part": "cradle", "turn": [[0.0, 0.0], [0.05, -0.5], [0.15, 0.1], [0.2, -0.45], [0.33, 0.25], [0.55, -0.08], [0.85, 0.0]]},
                                   {"part": "breech.l", "slide": one["tracks"][2]["slide"]},
-                                  {"part": "breech.r", "slide": [[0.0, 0.0]] + [[t + late, v] for t, v in one["tracks"][2]["slide"][1:]]}],
+                                  {"part": "breech.r", "slide": [[0.0, 0.0]] + [[t + late, v] for t, v in one["tracks"][2]["slide"][1:]]},
+                                  # (the rack's nearest round is the right gun's loader's: in his arms at the shot, the rack
+                                  # filled again at 0.7, lifted out from 2.7; the left gun's loader is handed his from the crate)
+                                  {"part": "round.ready", "scale": [[0.0, 0.001, 0.001, 0.001], [0.6 + late - 0.01, 0.001, 0.001, 0.001], [0.6 + late, 1.0, 1.0, 1.0],
+                                                                    [2.6 + late - 0.01, 1.0, 1.0, 1.0], [2.6 + late, 0.001, 0.001, 0.001], [3.3, 0.001, 0.001, 0.001]]}],
                        "events": [{"t": 0.0, "fx": "muzzle_flash_big", "socket": "muzzle.l", "cue": "flak_heavy_fire_01"},
                                   {"t": 0.0, "fx": "muzzle_smoke", "socket": "muzzle.l", "cue": ""},
                                   {"t": late, "fx": "muzzle_flash_big", "socket": "muzzle.r", "cue": "flak_heavy_fire_01"},

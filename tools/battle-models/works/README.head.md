@@ -55,7 +55,9 @@ Our own plain designs throughout: no army's emblem, no lettering, nothing copied
    the layers' grips are on the handwheels' two handles and belong to the `handwheel.*` parts, so they turn with the
    wheel; the loader's socket is beside the breech's path, clear of the recoil; and the ready rack's nearest round
    is a part of its own, `round.ready`, which `fire` hides while the loader's own round (the crew pack's prop) is
-   out of the rack.
+   out of the rack. On the twin that round is the right gun's loader's (hidden to 0.7 s and from 2.7 s; the left
+   gun's loader is handed his from the crate), and the man at `crew.fuze` stands 0.3 m further out than on the
+   single gun, so the left gun's loader passes clear of him.
 4. **`idle` is the rest pose, not the bind pose.** A piece that can be broken keeps its rubble, craters or broken
    glass as parts hidden at scale 0, and `idle` holds them there: play `idle` (or apply its first key) whenever the
    piece stands unharmed. `knocked_out`, `breach`, `crush.N`, `detonate.N` and the like are one-shot clips with
