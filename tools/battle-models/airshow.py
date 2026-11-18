@@ -230,12 +230,15 @@ def trail(fx, where, start, end=1e9, kind="black", size=1.0):
     def black(t, at, facing):
         v, flow = going()
         c = g.uniform(0.03, 0.09)
-        big = g.uniform(0.6, 1.25)
+        big = g.uniform(0.75, 1.2)
         # (it gathers a few metres behind the fire, so the flame is seen against the sky and not through its own smoke)
         # (each puff is drawn out along the stream, so that near her they run together into one rope and never stand as a row of balls)
-        p = fx.puff(t, at + flow * 3.2 * size + Vector((g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5))) * size, vel=(g.uniform(-5, 5), g.uniform(-3.5, 3.5), g.uniform(-3.5, 3.5)),
-                    life=g.uniform(4.5, 7.5), r=(0.6 * size, g.uniform(4.6, 7.6) * size * big), col=(c * 1.9, c * 1.2, c), col2=(c * 1.7, c * 1.7, c * 1.7), alpha=g.uniform(0.45, 0.7), drag=0.45,
-                    fade_in=0.08, grow=0.6, hold=0.25, wind=1.0, squash=(g.uniform(1.9, 2.7), 1.0, g.uniform(0.8, 1.1)))
+        # (the art director, 2026-11-18: seen from near by, seconds later, the trail "breaks into a chain of separate
+        #  ovals". Puffs that died at odd times and drifted apart left the rest standing alone. So: all of an age live
+        #  as long as each other, they drift less, they are rounder, and the column thins as one.)
+        p = fx.puff(t, at + flow * 3.2 * size + Vector((g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5), g.uniform(-0.5, 0.5))) * size, vel=(g.uniform(-2.5, 2.5), g.uniform(-2, 2), g.uniform(-2, 2)),
+                    life=g.uniform(8.6, 9.4), r=(0.6 * size, g.uniform(5.2, 7.6) * size * big), col=(c * 1.9, c * 1.2, c), col2=(c * 1.7, c * 1.7, c * 1.7), alpha=g.uniform(0.5, 0.66), drag=0.45,
+                    fade_in=0.08, grow=0.6, hold=0.2, wind=1.0, squash=(g.uniform(1.5, 2.0), 1.0, g.uniform(0.85, 1.1)))
         p["ob"].rotation_euler = ((flow + across(flow, g.uniform(0.0, 0.25))).normalized().to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
 
     def thin(t, at, facing):
@@ -328,7 +331,20 @@ def strikes(fx, plane, t0, t1, sockets=("fuel", "engine.1", "tank.port")):
     g = fx.rng
 
     def make(t, at, facing):
-        fx.puff(t, at + Vector((g.uniform(-1.5, 1.5), g.uniform(-1.0, 1.0), g.uniform(-0.3, 0.6))), vel=plane.vel, life=0.09, r=(0.2, 0.45), col=(0.9, 0.7, 0.4), alpha=1.0, kind="glow", wind=0.0, fade_in=0.005)
+        # (a spit of orange sparks and a torn bit flung off; a round glowing ball here was "a smooth white bead")
+        p0 = at + Vector((g.uniform(-1.5, 1.5), g.uniform(-1.0, 1.0), g.uniform(-0.3, 0.6)))
+        for i in range(4):
+            d = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-1, 1)))
+            d = d.normalized() if d.length > 0.05 else Z.copy()
+            long = g.uniform(0.45, 1.0)
+            wide = long * g.uniform(0.28, 0.42)
+            k = g.uniform(0.8, 1.2)
+            p = fx.puff(t, p0 + d * long * 0.4, vel=plane.vel + d * g.uniform(3, 9), life=g.uniform(0.07, 0.12), r=(0.6, 1.0), col=(0.4 * k, 0.13 * k, 0.014), col2=(0.16, 0.03, 0.004), alpha=0.92,
+                        kind="tongue" if i % 2 else "lick", drag=3.0, wind=0.0, squash=(0.5 * long, 0.5 * wide, 0.5 * wide), fade_in=0.006, grow=0.5, hold=0.4, cool=1.0)
+            p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
+        if g.random() < 0.6:
+            v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-0.4, 1))).normalized() * g.uniform(8, 22)
+            fx.puff(t, p0, vel=plane.vel + v, life=g.uniform(0.5, 1.0), r=(0.1, 0.06), col=(0.08, 0.07, 0.06), alpha=1.0, drag=0.5, gravity=9.8, wind=0.4, fade_in=0.01)
     for k, nm in enumerate(sockets):
         fx.stream(plane.where(nm), 0.13, make, start=t0 + 0.04 * k, end=t1)
 

@@ -359,6 +359,11 @@ lit, to about half as bright again as the day, for a frame or two, one light for
 shines in the water. At a hundred times that the whole ship went near-white and a glittering road of light ran down
 the sea, like a low sun.
 
+Smoke seen later and from near by (`trail` in `airshow.py`, `_place` in `stage.py`). A trail's puffs of one age
+all live as long as each other and drift little, or those that die early leave the rest standing as a chain of
+separate ovals; and a puff thins away as the camera comes up to it, or its rim shows like a flat glass plate. Bullet
+strikes are a spit of small orange tongues and a dark scrap, never a round glowing bead.
+
 Two lessons of the close fly-past, kept in `airshow.py`. The camera goes nearly all the way round the machine, so
 somewhere it looks up-sun, and there the sun's glare off the wings washed the camouflage out to cream: the sun now
 stands so that the glare falls in the gap the camera never visits (`SUN`), and a painted skin shines a little less

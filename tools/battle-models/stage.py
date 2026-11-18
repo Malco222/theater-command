@@ -605,6 +605,12 @@ class Effects:
         rad = p["r"][0] + (p["r"][1] - p["r"][0]) * f ** p["grow"]
         ob.scale = (rad * p["squash"][0], rad * p["squash"][1], rad * p["squash"][2])
         fade = min(1.0, a / max(p["fade_in"], 1e-3)) * (1.0 if f < p["hold"] else (1 - (f - p["hold"]) / max(1 - p["hold"], 1e-6)) ** 1.4)
+        cam = bpy.context.scene.camera
+        if cam is not None and p["kind"] in ("smoke", "water"):
+            # (a puff the camera is in, or nearly in, shows its rim "like a flat glass plate": it thins away as the
+            #  camera comes up to it)
+            reach = rad * max(p["squash"])
+            fade *= min(1.0, max(0.0, ((pos - cam.location).length - 1.1 * reach) / (1.4 * reach)))
         c = p["col"].lerp(p["col2"], min(1.0, f * p["cool"]))
         ob.color = (c[0], c[1], c[2], p["alpha"] * fade)
         return True
