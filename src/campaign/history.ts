@@ -170,8 +170,11 @@ export function leash(g: Game, nat: string, opId: string): Leash {
  * The book's word on the second front: while it stands no computer staff lands an army from the sea on a shore
  * before history's first landing there. `owner` is the country whose ground it is, `overseas` true for a colony.
  */
-export function shoreOpen(g: Game, owner: string, overseas: boolean): boolean {
+export function shoreOpen(g: Game, owner: string, overseas: boolean, pacific = false): boolean {
   const S = stopDef(g);
+  // (Ruling 200, finding 2: the second front's row reads no ground in Asia and the Pacific. There the Pacific's own
+  // rows decide, under the Pacific's theatre, `pacific`: pacific.ts, and no second front is opened while its book stands.)
+  if (pacific) return !S.book || !onBook(g, 'pacific');
   if (!S.book || !onBook(g, 'second')) return true;
   const rule = (overseas ? undefined : HISTORY.shores.find((s) => s.owners.includes(owner))) ?? HISTORY.shores.find((s) => s.owners.includes('*'));
   if (!rule) return true;

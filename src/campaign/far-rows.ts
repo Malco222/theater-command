@@ -59,6 +59,7 @@ import pacificWar from '../../data/campaign/far-pacific-war.json';
 import chinaLine from '../../data/campaign/china-line.json';
 import chinaSetup from '../../data/campaign/china-setup.json';
 import chinaStop3 from '../../data/campaign/china-stop3.json';
+import southLine from '../../data/campaign/far-south-line.json';
 
 type Obj = Record<string, any>;
 
@@ -73,6 +74,8 @@ const FILES: [string, Obj][] = [
   // (Before the China front's: both give Japan great choices under "JAP+", and the strike south has the first call.)
   ['far-pacific-war', pacificWar],
   ['china-line', chinaLine], ['china-setup', chinaSetup], ['china-stop3', chinaStop3],
+  // (The record's line in the south, ruling 234(a): after China's, whose line stands first in the list.)
+  ['far-south-line', southLine],
 ];
 
 /** The first day beyond the old chart, as the seats files give it. */

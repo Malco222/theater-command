@@ -8,6 +8,7 @@
   "historian/manpower-213.json": "2026-11-17T18:10Z",
   "pacific-planner/runs-219/levy218-seats.json": "2026-11-17T18:57Z",
   "pacific-planner/20-trial/base-seats.json": "2026-11-17T17:59Z",
+  "map-tables/burma-front-forces.json": "2026-11-17T12:15Z",
   "pacific-planner/far-yards.md": "2026-11-18T03:46Z",
   "pacific-planner/far-oil.md": "2026-11-18T07:05Z",
   "pacific-planner/21-whole-world-data-gaps.md": "2026-11-18T07:06Z"
@@ -1058,6 +1059,41 @@
     {
      "xp": 0.3,
      "str": 0.8
+    }
+   ],
+   [
+    "UK",
+    "Burma Army (the Burma Rifles; the 1st Burma Division from July 1941)",
+    "inf",
+    1,
+    "Rangoon",
+    {
+     "xp": 0.1,
+     "str": 0.4
+    }
+   ],
+   [
+    "UK",
+    "Eastern Command (Presidency and Assam District)",
+    "inf",
+    1,
+    "Calcutta",
+    {
+     "xp": 0.1,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "UK",
+    "Ceylon Garrison (the Ceylon Defence Force)",
+    "inf",
+    1,
+    "Colombo",
+    {
+     "xp": 0.05,
+     "str": 0.3,
+     "hold": 1
     }
    ]
   ],
@@ -3196,6 +3232,559 @@
      "war": [
       "JAP",
       "USA"
+     ]
+    }
+   ],
+   [
+    29,
+    "UK",
+    "17th Indian Division",
+    "inf",
+    1,
+    "Rangoon",
+    {
+     "gen": "John Smyth",
+     "xp": 0.15,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    29,
+    "UK",
+    "34th Indian Division (Ceylon)",
+    "inf",
+    1,
+    "Colombo",
+    {
+     "xp": 0.1,
+     "hold": 1,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    30,
+    "UK",
+    "7th Armoured Brigade",
+    "arm",
+    1,
+    "Rangoon",
+    {
+     "xp": 0.45,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    30,
+    "UK",
+    "Chinese 6th Army (49th, 55th and 93rd Divisions)",
+    "inf",
+    1,
+    "Lashio",
+    {
+     "gen": "Kan Li-chu",
+     "xp": 0.1,
+     "until": 34,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    31,
+    "UK",
+    "Chinese 5th Army (200th, 22nd and 96th Divisions)",
+    "inf",
+    1,
+    "Mandalay",
+    {
+     "gen": "Tu Yu-ming",
+     "xp": 0.2,
+     "until": 34,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    31,
+    "UK",
+    "70th British Division",
+    "inf",
+    1,
+    "Calcutta",
+    {
+     "xp": 0.4,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    32,
+    "UK",
+    "Chinese 66th Army (38th, 28th and 29th Divisions)",
+    "inf",
+    1,
+    "Lashio",
+    {
+     "gen": "Chang Chen",
+     "xp": 0.15,
+     "until": 34,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    33,
+    "UK",
+    "IV Corps (23rd Indian Division)",
+    "inf",
+    1,
+    "Imphal",
+    {
+     "gen": "Geoffry Scoones",
+     "xp": 0.15,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    33,
+    "UK",
+    "XV Corps (14th Indian Division)",
+    "inf",
+    1,
+    "Chittagong",
+    {
+     "gen": "William Slim",
+     "xp": 0.15,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    34,
+    "UK",
+    "2nd British Division",
+    "inf",
+    1,
+    "Calcutta",
+    {
+     "gen": "John Grover",
+     "xp": 0.3,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    43,
+    "UK",
+    "26th Indian Division",
+    "inf",
+    1,
+    "Chittagong",
+    {
+     "xp": 0.1,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    47,
+    "UK",
+    "20th Indian Division",
+    "inf",
+    1,
+    "Imphal",
+    {
+     "gen": "Douglas Gracey",
+     "xp": 0.15,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    50,
+    "UK",
+    "7th Indian Division",
+    "inf",
+    1,
+    "Chittagong",
+    {
+     "gen": "Frank Messervy",
+     "xp": 0.2,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    50,
+    "UK",
+    "Chinese Army in India (22nd and 38th Divisions), with America's 5307th from February 1944",
+    "inf",
+    2,
+    "Dibrugarh",
+    {
+     "gen": "Joseph Stilwell",
+     "xp": 0.25,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    51,
+    "UK",
+    "5th Indian Division",
+    "inf",
+    1,
+    "Chittagong",
+    {
+     "gen": "Harold Briggs",
+     "xp": 0.4,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    52,
+    "UK",
+    "81st West African Division",
+    "inf",
+    1,
+    "Chittagong",
+    {
+     "xp": 0.1,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    54,
+    "UK",
+    "Special Force (3rd Indian Division, the Chindits)",
+    "inf",
+    2,
+    "Dibrugarh",
+    {
+     "gen": "Orde Wingate",
+     "airborne": 1,
+     "xp": 0.3,
+     "from": [
+      "70th British Division"
+     ],
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    55,
+    "UK",
+    "25th Indian Division",
+    "inf",
+    1,
+    "Dacca",
+    {
+     "xp": 0.15,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    55,
+    "UK",
+    "36th Indian Division",
+    "inf",
+    1,
+    "Gauhati",
+    {
+     "gen": "Francis Festing",
+     "xp": 0.15,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    56,
+    "UK",
+    "Chinese 14th and 50th Divisions",
+    "inf",
+    1,
+    "Dibrugarh",
+    {
+     "xp": 0.1,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    60,
+    "UK",
+    "11th East African Division",
+    "inf",
+    1,
+    "Imphal",
+    {
+     "xp": 0.25,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    63,
+    "UK",
+    "19th Indian Division",
+    "inf",
+    1,
+    "Kohima",
+    {
+     "gen": "Pete Rees",
+     "xp": 0.2,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    63,
+    "UK",
+    "254th and 255th Indian Tank Brigades",
+    "arm",
+    1,
+    "Imphal",
+    {
+     "xp": 0.25,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    63,
+    "UK",
+    "82nd West African Division",
+    "inf",
+    1,
+    "Dacca",
+    {
+     "xp": 0.1,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    63,
+    "UK",
+    "Mars Task Force (America's 475th Infantry and 124th Cavalry)",
+    "inf",
+    1,
+    "Dibrugarh",
+    {
+     "gen": "John Willey",
+     "xp": 0.25,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    28,
+    "JAP",
+    "15th Army (33rd and 55th Divisions)",
+    "inf",
+    2,
+    "Bangkok",
+    {
+     "gen": "Shojiro Iida",
+     "xp": 0.35,
+     "war": [
+      "JAP",
+      "UK"
+     ],
+     "from": [
+      "11th Army (33rd Division)"
+     ]
+    }
+   ],
+   [
+    31,
+    "JAP",
+    "56th Division",
+    "inf",
+    1,
+    "Rangoon",
+    {
+     "xp": 0.25,
+     "war": [
+      "JAP",
+      "UK"
+     ],
+     "from": [
+      "Sakaguchi Detachment (56th Mixed Infantry Group)"
+     ]
+    }
+   ],
+   [
+    32,
+    "JAP",
+    "18th Division",
+    "inf",
+    1,
+    "Rangoon",
+    {
+     "gen": "Renya Mutaguchi",
+     "xp": 0.45,
+     "war": [
+      "JAP",
+      "UK"
+     ],
+     "from": [
+      "25th Army (18th Division)",
+      "Kawaguchi Detachment (35th Brigade, of the 18th Division)"
+     ]
+    }
+   ],
+   [
+    46,
+    "JAP",
+    "31st Division",
+    "inf",
+    1,
+    "Mandalay",
+    {
+     "gen": "Kotoku Sato",
+     "xp": 0.25,
+     "war": [
+      "JAP",
+      "UK"
+     ]
+    }
+   ],
+   [
+    52,
+    "JAP",
+    "54th Division",
+    "inf",
+    1,
+    "Akyab",
+    {
+     "xp": 0.2,
+     "war": [
+      "JAP",
+      "UK"
+     ]
+    }
+   ],
+   [
+    54,
+    "JAP",
+    "15th Division",
+    "inf",
+    1,
+    "Mandalay",
+    {
+     "gen": "Masafumi Yamauchi",
+     "xp": 0.25,
+     "war": [
+      "JAP",
+      "UK"
+     ],
+     "from": [
+      "13th Army (15th Division, Nanking)"
+     ]
+    }
+   ],
+   [
+    56,
+    "JAP",
+    "53rd Division",
+    "inf",
+    1,
+    "Toungoo",
+    {
+     "xp": 0.1,
+     "war": [
+      "JAP",
+      "UK"
+     ]
+    }
+   ],
+   [
+    58,
+    "JAP",
+    "2nd Division",
+    "inf",
+    1,
+    "Rangoon",
+    {
+     "xp": 0.3,
+     "war": [
+      "JAP",
+      "UK"
+     ],
+     "from": [
+      "16th Army (2nd Division)"
+     ]
+    }
+   ],
+   [
+    59,
+    "JAP",
+    "49th Division",
+    "inf",
+    1,
+    "Rangoon",
+    {
+     "xp": 0.1,
+     "war": [
+      "JAP",
+      "UK"
      ]
     }
    ]

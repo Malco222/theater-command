@@ -25,6 +25,7 @@ import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
+import { hopAims } from './pacific';
 import { stopOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
@@ -1839,7 +1840,45 @@ function crossings(g: Game, nat: string): { off: Set<number>; way: Set<number> }
     if (!path) continue;
     path.forEach((z, i) => (i === path.length - 1 ? off : way).add(z));
   }
+  // (And the Pacific's hops, each a crossing of its own: pacific.ts. None while the far side is off.)
+  for (const { from, to } of hopAims(g, nat)) {
+    const path = seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: true });
+    if (path) path.forEach((z, i) => (i === path.length - 1 ? off : way).add(z));
+  }
   return { off, way };
+}
+
+/**
+ * The cover of the Pacific's hops (ruling 200; the shores a staff has named are pacific.ts's, `hopAims`). A sea on
+ * the way to a named shore that is closed to the nation's troopships is opened by its patrol fleets together: of
+ * those fit for sea, with no order from the plan and the sea in reach, the strongest go there until the enemy is
+ * no longer much the stronger (navy.json 'closed'), and none goes where all of them together would not do it. The
+ * seas are taken in the order the shores were named, the sea off the beach last on each way. Returns the fleets
+ * sent: the admirals' own rule leaves them where they were put. Nothing while the far side is off (no shore is named).
+ */
+function coverHops(g: Game, nat: string, orders?: { fleet: string }[]): Set<number> {
+  const sent = new Set<number>();
+  const aims = hopAims(g, nat);
+  if (!aims.length) return sent;
+  const seas: number[] = [];
+  for (const { from, to } of aims) for (const z of seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: true }) ?? []) if (!seas.includes(z)) seas.push(z);
+  const free = fleetsOf(g, nat).filter((f) => f.duty === 'patrol' && !f.tied && shipCount(f.ships) > 0 && !orders?.some((o) => o.fleet === f.name) && f.ready >= 0.5 && (atSea(f) || f.ready >= NAVY.ready.sortieAt));
+  for (const z of seas) {
+    if (!closedTo(g, z, nat)) continue;
+    const need = seaSide(g, z, nat, true).total / NAVY.closed.ratio;
+    let own = seaSide(g, z, nat, false).total;
+    const there = (f: Fleet): boolean => f.zone === z && atSea(f);
+    const can = free.filter((f) => !sent.has(f.id) && !there(f) && fleetReach(g, f).includes(z)).sort((a, b) => fleetPower(g, b) - fleetPower(g, a) || a.id - b.id);
+    if (own + can.reduce((t, f) => t + fleetPower(g, f), 0) <= need) continue;
+    for (const f of can) {
+      if (own > need) break;
+      const w = fleetPower(g, f);
+      if (sail(g, f, z, 'patrol')) { own += w; sent.add(f.id); }
+    }
+    // (The fleets already there stay for the crossing.)
+    for (const f of free) if (there(f)) sent.add(f.id);
+  }
+  return sent;
 }
 
 /** Orders for one computer-run nation's fleets. Named orders from the plan come first. */
@@ -1848,11 +1887,13 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
   if (byHand(g, nat, 'navy')) return;
   const n = g.nations[nat];
   let cross: { off: Set<number>; way: Set<number> } | null = null;
+  const covering = n.atWar.length ? coverHops(g, nat, orders) : null;
   for (const f of fleetsOf(g, nat)) {
     const home = (): void => { sail(g, f, f.home, 'port'); };
     if (!n.atWar.length || !shipCount(f.ships)) { home(); continue; }
     const o = orders?.find((x) => x.fleet === f.name);
     if (o) { if (!sail(g, f, zoneOf(g, o.zone), o.stance)) home(); continue; }
+    if (covering?.has(f.id)) continue;
     // A worn fleet stays in harbour until it is fit for sea again.
     if (f.ready < 0.5 || (!atSea(f) && f.ready < NAVY.ready.sortieAt)) { home(); continue; }
     if (f.duty === 'raid') { if (!sail(g, f, f.station, 'raid')) home(); continue; }

@@ -34,6 +34,7 @@ import { SIEGE, besieged, besiegerOf, breachOf, fieldCtrl, hitTown, planTownHit,
 import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
 import { beyondEurope } from './world';
+import { hopAims } from './pacific';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 import { mapDist } from './wrap';
 
@@ -1954,7 +1955,8 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
   // friendly airfield nearest the beach.
   // (A player who has named his crossing and handed over the air war has the sky over his beach fought for whenever it is not his: it keeps the enemy's ships and aircraft off his troopships.)
   const wanted = (t: number): boolean => { if (skyDenies(g, nat, t)) return true; const sky = skyOver(g, t); return nat === g.human && !(sky !== null && allied(g, sky, nat)); };
-  const beaches = ['', ':o'].map((s) => (g.flags[`st:aim:${nat}${s}`] ?? 0) - 1).filter((t, i, a) => t >= 0 && a.indexOf(t) === i && !!g.regions[t] && atWar(g, nat, g.regions[t].ctrl) && wanted(t));
+  // (The Pacific's hops are beaches too, each named a month ahead: pacific.ts. None while the far side is off.)
+  const beaches = [...['', ':o'].map((s) => (g.flags[`st:aim:${nat}${s}`] ?? 0) - 1), ...hopAims(g, nat).map((h) => h.to.id)].filter((t, i, a) => t >= 0 && a.indexOf(t) === i && !!g.regions[t] && atWar(g, nat, g.regions[t].ctrl) && wanted(t));
   // (A player's air staff, for the crossing he has named: it brings up to 'monthly' fighter groups forward each
   // month until 'groups' of them can reach the beach or the airfields in reach of it are full, from the homeland
   // too while more than 'home' groups still guard it.)

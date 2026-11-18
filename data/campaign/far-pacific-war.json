@@ -1,5 +1,5 @@
 {
-  "_about": "The Pacific war's rows (a seats file, laid by src/campaign/far-rows.ts while the far side's switch is on). Ruling 197, the offer of war (the Pacific planner's paper 12): the entry of December 1941 as the far side reads it. 'pearl-harbor-world' takes the place of the row of that name: the same month and the same conditions, read as the month closes ('when': 'close'), after every country has moved, so that Japan's blow comes before Germany's declaration as it did, and both of the month's first blows fall on countries at peace. Its words name Pearl Harbor only where Japan has struck America ('says'), and the republics that follow America are read the day it fires ('then'), as they were when the entry stood at the month's opening. 'pact-binds' is the same entry come sooner (the ruling's second tie): the month after Japan and America go to war, once a pact binds Germany and Italy to Japan and only for a war begun since it did ('pact:JAP,USA', src/campaign/pacific.ts; the months are in pacific.json). The ties that are no events (Britain and America with each other, the dominions and the Dutch with Britain, Japan beside the Axis, China with the Allies, the freeze, the Soviet month) are pacific.ts's, on pacific.json. Ruling 200 (the staffs' plans, the planner's paper 14, sections 2 and 10) and paper 18: Japan's opening by the book. 'open'.ops under 'JAP+' (a code followed by '+' lays over what stands under the code: the China front's choices are china-line.json's) is the great choice 'south', The strike south: it declares on America first, then Britain and the Dutch, dated December 1941 ('history'.dates), with the ten named landings of paper 18 in the order the lift of six serves them, and 'quays', the harbours Japan holds without owning them from which they may sail (Hainan; Cam Ranh is Japan's own after the demand). Off the book it waits on 'flag:pac:strike', which the readiness test raises when it is built (ruling 200, section 6). 'history': the Pacific's theatre, which comes after the west, with its marks (the four of the opening, the fourth told three ways so that the news names the fortress that stands; and Pearl Harbor and Brisbane, which close the book for America's roads; the reasons' words are the UI director's, ui-director/words-pacific-news.md; 'expect' is how the dial words a mark beforehand where the reason would not read in that sentence, and an empty one keeps a mark off the dial's list), and Siam among the countries that really joined. The event 'siam-beside-japan' (ruling 200(b), with the rider to 202; the seat's name in the game is Thailand, and the news says so): at the stops that keep the book Siam joins the Axis and declares on Britain the day Japan is at war with Britain ('when': 'war', read at a declaration), so the army for Malaya lands at Singora that month. 'navy'.moves: the carrier striking force gathers at Etorofu in November 1941 and is home at Kure in January 1942, as it was by the last week of December. 'strikes' on the great choice: in the month it goes the carrier striking force puts to sea and its wing flies at Pearl Harbor and what lies in it that month (ruling 200(c): a fleet that is not there is not struck there; after the strike the admirals' own rule decides; src/campaign/carriers.ts, plannedStrike), and the strike once flown the force makes for Kure that same month ('home' on the row: the record has it in the Inland Sea by 23 December, and Japan moves last in a month; the row of January 1942 under 'navy'.moves brings it home where no strike was flown). The file is laid before china-line.json, so that the strike south stands first in Japan's list and has the first call of a month.",
+  "_about": "The Pacific war's rows (a seats file, laid by src/campaign/far-rows.ts while the far side's switch is on). Ruling 197, the offer of war (the Pacific planner's paper 12): the entry of December 1941 as the far side reads it. 'pearl-harbor-world' takes the place of the row of that name: the same month and the same conditions, read as the month closes ('when': 'close'), after every country has moved, so that Japan's blow comes before Germany's declaration as it did, and both of the month's first blows fall on countries at peace. Its words name Pearl Harbor only where Japan has struck America ('says'), and the republics that follow America are read the day it fires ('then'), as they were when the entry stood at the month's opening. 'pact-binds' is the same entry come sooner (the ruling's second tie): the month after Japan and America go to war, once a pact binds Germany and Italy to Japan and only for a war begun since it did ('pact:JAP,USA', src/campaign/pacific.ts; the months are in pacific.json). The ties that are no events (Britain and America with each other, the dominions and the Dutch with Britain, Japan beside the Axis, China with the Allies, the freeze, the Soviet month) are pacific.ts's, on pacific.json. Ruling 200 (the staffs' plans, the planner's paper 14, sections 2 and 10) and paper 18: Japan's opening by the book. 'open'.ops under 'JAP+' (a code followed by '+' lays over what stands under the code: the China front's choices are china-line.json's) is the great choice 'south', The strike south: it declares on America first, then Britain and the Dutch, dated December 1941 ('history'.dates), with the ten named landings of paper 18 in the order the lift of six serves them and, last, the eleventh crossing of its point 4 (Hong Kong touches only ground China holds on today's chart, so the 38th Division crosses from Canton by sea, one sea, until the map builder cuts that coast finer; a corps the plan names comes out of its town to sail), and 'quays', the harbours Japan holds without owning them from which they may sail (Hainan and Canton; Cam Ranh is Japan's own after the demand). Off the book it waits on 'flag:pac:strike', which the readiness test raises when it is built (ruling 200, section 6). 'history': the Pacific's theatre, which comes after the west, with its marks (the four of the opening, the fourth told three ways so that the news names the fortress that stands; and Pearl Harbor and Brisbane, which close the book for America's roads; the reasons' words are the UI director's, ui-director/words-pacific-news.md; 'expect' is how the dial words a mark beforehand where the reason would not read in that sentence, and an empty one keeps a mark off the dial's list), and Siam among the countries that really joined. The event 'siam-beside-japan' (ruling 200(b), with the rider to 202; the seat's name in the game is Thailand, and the news says so): at the stops that keep the book Siam joins the Axis and declares on Britain the day Japan is at war with Britain ('when': 'war', read at a declaration), so the army for Malaya lands at Singora that month. 'navy'.moves: the carrier striking force gathers at Etorofu in November 1941 and is home at Kure in January 1942, as it was by the last week of December. 'strikes' on the great choice: in the month it goes the carrier striking force puts to sea and its wing flies at Pearl Harbor and what lies in it that month (ruling 200(c): a fleet that is not there is not struck there; after the strike the admirals' own rule decides; src/campaign/carriers.ts, plannedStrike), and the strike once flown the force makes for Kure that same month ('home' on the row: the record has it in the Inland Sea by 23 December, and Japan moves last in a month; the row of January 1942 under 'navy'.moves brings it home where no strike was flown). 'frees' on the great choice: the corps that come off hold the month it goes (the Imperial Guards, who march through Siam to Malaya, and the naval landing forces kept for Menado, Kendari and Ambon: the planner's paper 18); 'freesAfter': two months after, its own landing forces that still wait on a quay are the staff's to use (ai.ts hop). The file is laid before china-line.json, so that the strike south stands first in Japan's list and has the first call of a month. 'history'.'hops' (ruling 200, finding 2 and clause (i), with ruling 202(e); the planner's plan-test.md, sections 1 and 3): the Pacific's own shores rows, read by src/campaign/pacific.ts while the Pacific's book stands at a stop that keeps one. Each row is a place and the month it opens (1 = September 1939). 'axis': where Japan's staff may land of its own accord, in the record's order (the named landings of the great choice are not bound by it). 'allies': America's thirty-six places and Britain's thirteen, each with its earliest month; while the book stands their staffs land on nothing else that history's Japan held, and ground Japan's side takes that is not among 'axis' is open to them from the month it is lost. With the book closed, or at a stop that keeps none, every enemy shore of the Pacific's ground is open (pacific.json 'shores' says which ground that is). 'slides': at a stop with slack the rows' months move with the month of the great choice named, by that choice's own draw.",
   "diplomacy": {
     "events": [
       {"id": "pearl-harbor-world", "from": 28, "to": 99, "mode": "open", "when": "close", "if": ["flag:world", "alive:GER", "alive:USA", "openTo:USA,allies", "anyPeace:USA,GER,ITA", "binds:USA"], "enter": {"nations": ["USA"], "align": "allies"}, "war": [["USA", "GER"], ["USA", "ITA"]], "then": ["usa-italy", "cuba-war", "isthmus-war"], "text": "America has entered the war: Germany and Italy declare war on the United States, and the greatest industry on earth is behind the Allies.", "says": [{"if": ["flag:war:JAP:USA"], "text": "Japan attacks the American fleet at Pearl Harbor, and Germany and Italy declare war on the United States. America is in the war, with the greatest industry on earth behind it."}]},
@@ -13,6 +13,53 @@
     "theatres": {"pacific": {"name": "the Pacific", "after": ["west"]}},
     "bookIf": {"JAP:south": ["alive:JAP"]},
     "joined": {"axis": ["THA"]},
+    "hops": {
+      "theatre": "pacific", "slides": "JAP:south",
+      "axis": [
+        ["Singora", 28], ["Kota Bharu", 28], ["Guam", 28], ["Wake", 28], ["Hong Kong", 28], ["Aparri", 28], ["Lingayen", 28], ["Legaspi", 28], ["Davao", 28], ["Jolo", 28], ["Kuching", 28], ["Brunei", 28],
+        ["Manila", 29], ["Penang", 29], ["Ipoh", 29], ["Kuantan", 29], ["Kuala Lumpur", 29], ["Johore", 29], ["Jesselton", 29], ["Sandakan", 29], ["Pontianak", 29], ["Tarakan", 29], ["Menado", 29], ["Balikpapan", 29], ["Kendari", 29], ["Ambon", 29], ["Rabaul", 29], ["Mergui", 29], ["Moulmein", 29],
+        ["Singapore", 30], ["Mindoro", 30], ["Palembang", 30], ["Bandjermasin", 30], ["Makassar", 30], ["Palu", 30], ["Bali", 30], ["Koepang", 30], ["Dili", 30],
+        ["Batavia", 31], ["Bandoeng", 31], ["Semarang", 31], ["Soerabaja", 31], ["Oosthaven", 31], ["Djambi", 31], ["Padang", 31], ["Pakanbaru", 31], ["Medan", 31], ["Atjeh", 31], ["Rangoon", 31], ["Toungoo", 31], ["Prome", 31], ["Lae", 31], ["Cape Gloucester", 31], ["Bougainville", 31],
+        ["Bataan", 32], ["Cebu", 32], ["Panay", 32], ["Admiralty Islands", 32], ["Halmahera", 32], ["Morotai", 32], ["Vogelkop", 32], ["Biak", 32], ["Sarmi", 32], ["Hollandia", 32], ["Yenangyaung", 32], ["Mandalay", 32],
+        ["Leyte", 33], ["Del Monte", 33], ["Zamboanga", 33], ["Palawan", 33], ["Flores", 33], ["Guadalcanal", 33], ["Lashio", 33], ["Myitkyina", 33], ["Kalewa", 33], ["Akyab", 33],
+        ["Attu", 34], ["Kiska", 34],
+        ["Buna", 35],
+        ["Nauru", 36], ["Mimika", 36],
+        ["New Georgia", 39],
+        ["Madang", 40], ["Wewak", 40]
+      ],
+      "allies": [
+        ["Guadalcanal", 36],
+        ["Buna", 40], ["Akyab", 40],
+        ["Attu", 45],
+        ["New Georgia", 46],
+        ["Kiska", 48],
+        ["Lae", 49],
+        ["Myitkyina", 50],
+        ["Bougainville", 51], ["Tarawa", 51],
+        ["Cape Gloucester", 52],
+        ["Kwajalein", 53],
+        ["Eniwetok", 54], ["Admiralty Islands", 54],
+        ["Madang", 56], ["Hollandia", 56],
+        ["Biak", 57],
+        ["Saipan", 58],
+        ["Guam", 59], ["Vogelkop", 59],
+        ["Kalewa", 60],
+        ["Morotai", 61], ["Palau", 61], ["Ulithi", 61],
+        ["Leyte", 62],
+        ["Mindoro", 64],
+        ["Lingayen", 65], ["Mandalay", 65], ["Lashio", 65],
+        ["Manila", 66], ["Iwo Jima", 66], ["Palawan", 66], ["Yenangyaung", 66],
+        ["Zamboanga", 67], ["Panay", 67], ["Cebu", 67],
+        ["Jolo", 68], ["Okinawa", 68], ["Toungoo", 68],
+        ["Davao", 69], ["Tarakan", 69], ["Prome", 69], ["Rangoon", 69],
+        ["Brunei", 70],
+        ["Balikpapan", 71],
+        ["Kuala Lumpur", 73], ["Penang", 73],
+        ["Johore", 74],
+        ["Singapore", 76]
+      ]
+    },
     "marks": [
       {"theatre": "pacific", "until": 28, "if": ["peace:JAP,USA", "peace:JAP,UK"], "why": "war came there before its time", "expect": "Japan goes to war with America or Britain before its time"},
       {"theatre": "pacific", "by": 24, "if": ["holds:JAP,Saigon"], "why": "Japan has stayed out of Indochina"},
@@ -28,7 +75,7 @@
     "ops": {
       "JAP+": [
         {
-          "id": "south", "name": "The strike south", "declare": ["USA", "UK", "NED"], "if": ["flag:pac:strike"], "from": 1, "to": 99, "chance": 1, "side": true, "push": 6, "quays": ["Hainan", "Cam Ranh"], "strikes": [{"fleet": "Mobile Fleet", "harbour": "Pearl Harbor", "home": {"base": "Hiroshima", "port": "Kure", "home": "inland", "words": "The carrier striking force comes home to Kure"}}],
+          "id": "south", "name": "The strike south", "declare": ["USA", "UK", "NED"], "if": ["flag:pac:strike"], "from": 1, "to": 99, "chance": 1, "side": true, "push": 6, "quays": ["Hainan", "Cam Ranh", "Canton"], "frees": ["25th Army (Imperial Guards Division)", "Naval landing forces (Sasebo 1st and 2nd, Yokosuka 1st)"], "freesAfter": 2, "strikes": [{"fleet": "Mobile Fleet", "harbour": "Pearl Harbor", "home": {"base": "Hiroshima", "port": "Kure", "home": "inland", "words": "The carrier striking force comes home to Kure"}}],
           "landings": [
             {"corps": "25th Army (5th Division)", "to": ["Singora", "Kota Bharu"]},
             {"corps": "25th Army (18th Division)", "to": ["Kota Bharu", "Singora"]},
@@ -39,7 +86,8 @@
             {"corps": "Kawaguchi Detachment (35th Brigade, of the 18th Division)", "to": ["Brunei", "Kuching"]},
             {"corps": "Sakaguchi Detachment (56th Mixed Infantry Group)", "to": ["Davao"]},
             {"corps": "14th Army (48th Division)", "to": ["Lingayen", "Aparri"]},
-            {"corps": "Naval landing forces (Kure 1st and 2nd)", "to": ["Jolo", "Davao"]}
+            {"corps": "Naval landing forces (Kure 1st and 2nd)", "to": ["Jolo", "Davao"]},
+            {"corps": "38th Division (Canton)", "to": ["Hong Kong"]}
           ]
         }
       ]

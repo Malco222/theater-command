@@ -62,6 +62,10 @@ export interface Op {
   landings?: PlanPhase['landings'];
   /** Harbours its country holds without owning them, from which these landings may sail as from a home port. */
   quays?: string[];
+  /** Corps that come off hold the month the choice goes: the plan's own reserves, named (far-pacific-war.json: the Guards for Malaya, the naval landing forces for the Indies). */
+  frees?: string[];
+  /** So many months after it goes, the corps it named for its own landings that still wait on a quay come off hold too: they are the staff's own from then. */
+  freesAfter?: number;
   /** Strikes its carriers fly at an enemy harbour in the month it goes (ai.ts and carriers.ts, `plannedStrike`). */
   strikes?: PlanPhase['strikes'];
   staging?: Record<string, number>;
@@ -1275,6 +1279,23 @@ export function heedsCard(to: Region, wave = false): boolean {
   const H = OPEN.descent?.heed;
   return !!H && (wave ? H.wave : to.nb.length ? H.mainland : H.island);
 }
+/**
+ * The corps a nation's great choices take off hold this month, by name: those a choice frees the month it goes
+ * ('frees'), and, so many months after ('freesAfter'), the ones it named for its own landings.
+ */
+export function freed(g: Game, nat: string): string[] {
+  const out: string[] = [];
+  for (const o of ops(nat)) {
+    if (!o.frees && o.freesAfter === undefined) continue;
+    const at = flag(g, `st:done:${nat}:${o.id}`);
+    if (!at) continue;
+    if (at === g.turn) out.push(...(o.frees ?? []));
+    if (o.freesAfter !== undefined && g.turn - at === o.freesAfter) out.push(...(o.landings ?? []).flatMap((L) => [L.corps, ...(L.with ?? [])]));
+  }
+  return out;
+}
+/** What a staff's own landing asks (open.json, 'descent'): the odds on a defended beach, and the most risk it takes on the crossing. Null where no staff lands of its own accord. */
+export const descentAsks = (): { odds: number; risk: number } | null => (OPEN.descent ? { odds: OPEN.descent.odds, risk: OPEN.descent.risk } : null);
 /** How many corps a staff sends ashore in a landing (open.json, 'descent.force'). */
 export const landingForce = (): number => OPEN.descent?.force ?? 3;
 

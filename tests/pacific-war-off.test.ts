@@ -6,11 +6,12 @@ import { plannedStrike } from '../src/campaign/carriers';
 import { DIPLOMACY, closeDiplomacy, holds, monthlyDiplomacy, warDiplomacy } from '../src/campaign/diplomacy';
 import { FAR_LAID, lay } from '../src/campaign/far-rows';
 import { atWar, capitulate, createGame, declareWar, setWar } from '../src/campaign/game';
-import { HISTORY } from '../src/campaign/history';
+import { HISTORY, shoreOpen } from '../src/campaign/history';
+import { frontArmys, lines, neverHis } from '../src/campaign/line';
 import { NAVY } from '../src/campaign/navy';
-import { PACIFIC, demand, demandInstead, freezeAt, keepersOf, keptForces, mayDemand, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds } from '../src/campaign/pacific';
+import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind, keepersOf, keptForces, mayDemand, pacificGround, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds } from '../src/campaign/pacific';
 import { FAR_STAGE } from '../src/campaign/stage';
-import { ops, startOpen } from '../src/campaign/staff';
+import { freed, ops, startOpen } from '../src/campaign/staff';
 import open from '../data/campaign/open.json';
 
 describe('the Pacific war with the far side off', () => {
@@ -78,6 +79,32 @@ describe("Japan's opening with the far side off (rulings 199 and 200)", () => {
     expect(g.nations.VIC.alive).toBe(true);
     expect(g.corps.some((c) => c.nat === 'FRA' && !c.dead)).toBe(false);
     expect(g.flags['pac:demand']).toBeUndefined();
+  });
+});
+
+describe('the months after December 1941 with the far side off (ruling 200, finding 2, and ruling 234(a))', () => {
+  it('has no row of them and reads no rule of them: no shores of the Pacific, no line in the south, nobody freed, no shore named', () => {
+    expect((HISTORY as { hops?: unknown }).hops).toBeUndefined();
+    expect(lines().some((L) => L.id === 'south' || L.lands !== undefined)).toBe(false);
+    const g = startOpen(createGame(3, null));
+    setWar(g, 'GER', 'UK');
+    setWar(g, 'GER', 'FRA');
+    g.turn = 40;
+    expect(hopsBind(g)).toBe(false);
+    for (const nat of ['GER', 'UK', 'USA', 'ITA', 'FRA']) {
+      expect(hopShores(g, nat), nat).toBeNull();
+      expect(hopAims(g, nat), nat).toEqual([]);
+      expect(freed(g, nat), nat).toEqual([]);
+    }
+    expect(g.regions.some((r) => pacificGround(g, r) || neverHis(g, r) || frontArmys(g, 'GER', r) || frontArmys(g, 'UK', r))).toBe(false);
+    // A flag left by a far-side war names no shore here.
+    g.flags['st:hop:UK:0'] = g.byName['Calais'].id + 1;
+    g.flags['st:hopQ:UK:0'] = g.byName['Kent'].id + 1;
+    expect(hopAims(g, 'UK')).toEqual([]);
+    // The second front's own rule is asked as it always was: its fourth word is never true here.
+    expect(shoreOpen(g, 'FRA', false, false)).toBe(shoreOpen(g, 'FRA', false));
+    // And no great choice of anybody's frees a corps.
+    expect(Object.values(open.ops as Record<string, { frees?: unknown; freesAfter?: unknown }[]>).flat().some((op) => op.frees !== undefined || op.freesAfter !== undefined)).toBe(false);
   });
 });
 

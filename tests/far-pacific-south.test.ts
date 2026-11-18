@@ -46,16 +46,17 @@ const france = (stop: number, turn = 10, human: string | null = null): Game => {
 };
 
 describe("Japan's opening (ruling 200): the rows", () => {
-  it('gives Japan the strike south first in its list: December 1941 by the book, ten landings, two quays, the strike on Pearl Harbor', () => {
+  it('gives Japan the strike south first in its list: December 1941 by the book, ten landings and Hong Kong\'s crossing, three quays, the strike on Pearl Harbor', () => {
     const list = ops('JAP');
     expect(list[0].id).toBe('south');
     const op = SOUTH();
     expect(op.declare).toEqual(['USA', 'UK', 'NED']);
     expect(op.side).toBe(true);
     expect(op.if).toEqual(['flag:pac:strike']);
-    expect(op.landings!.length).toBe(10);
-    expect(op.landings!.map((l) => l.to[0])).toEqual(['Singora', 'Kota Bharu', 'Guam', 'Aparri', 'Legaspi', 'Wake', 'Brunei', 'Davao', 'Lingayen', 'Jolo']);
-    expect(op.quays).toEqual(['Hainan', 'Cam Ranh']);
+    // (The eleventh is Hong Kong's crossing from Canton, paper 18, point 4: far-pacific-hops.test.ts.)
+    expect(op.landings!.length).toBe(11);
+    expect(op.landings!.map((l) => l.to[0])).toEqual(['Singora', 'Kota Bharu', 'Guam', 'Aparri', 'Legaspi', 'Wake', 'Brunei', 'Davao', 'Lingayen', 'Jolo', 'Hong Kong']);
+    expect(op.quays).toEqual(['Hainan', 'Cam Ranh', 'Canton']);
     expect(op.strikes).toEqual([{ fleet: 'Mobile Fleet', harbour: 'Pearl Harbor', home: { base: 'Hiroshima', port: 'Kure', home: 'inland', words: 'The carrier striking force comes home to Kure' } }]);
     expect(HISTORY.dates.JAP?.south).toBe(28);
     expect(HISTORY.theatre['JAP:south']).toBe('pacific');
@@ -290,6 +291,8 @@ describe("Japan's month of December 1941", () => {
     };
     for (const l of SOUTH().landings!) {
       const c = corps(g, l.corps);
+      // (The 38th Division comes to Canton by a dated row of October 1939, which this made-up war never calls.)
+      if (!c && l.corps === '38th Division (Canton)') continue;
       expect(c, l.corps).toBeDefined();
       const r = g.regions[c!.reg];
       expect(r.port && r.ctrl === 'JAP', l.corps).toBe(true);

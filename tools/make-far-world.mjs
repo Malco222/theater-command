@@ -18,6 +18,8 @@
 //   the far side's oilfields and the Soviet home row (rulings 194 and 231; the planner's far-oil.md, the same way)
 //   two towns of the old chart that share a name with a far-side province, and the oil mark the far side takes off
 //     the old chart (the planner's paper 21)
+//   the armies on both sides of the frontier between India and Burma, by date (ruling 202; the clerk's
+//     burma-front-forces.json), with the corps each of Japan's is formed from (the planner's paper 18, section 8)
 //
 //   node tools/make-far-world.mjs            write the file
 //   node tools/make-far-world.mjs --check    exit 1 if the file on disk is not what the sources give today
@@ -42,6 +44,7 @@ const men = src('historian/manpower-213.json');
 const levy = src('pacific-planner/runs-219/levy218-seats.json');
 const pacific = src('pacific-planner/pacific-fleets.json');
 const rig = src('pacific-planner/20-trial/base-seats.json');
+const burma = src('map-tables/burma-front-forces.json');
 // Ruling b445: "a Japan that can lay no keel is a fault, not a balance choice". The planner's paper carries the list as
 // the inside of a JSON object, between ```json marks: province on the chart, level (1 destroyers, submarines and
 // troopships; 2 cruisers too; 3 carriers and battleships too).
@@ -104,6 +107,41 @@ for (const row of [...opening.by_date, ...opening.japan_by_date, ...opening.japa
   dated[list].push(datedRow(row));
 }
 for (const l of Object.values(dated)) l.sort((a, b) => a[0] - b[0]);
+
+// Ruling 202: the armies on both sides of the frontier between India and Burma (the clerk's rows, in the game's own
+// form). The first-day rows stand with the old powers' garrisons; the rows by date go at the END of the expeditions,
+// in the clerk's order (a saved game remembers an expedition by its place in the list). Five of Japan's are formed
+// from corps that already stand in the game (the planner's paper 18, section 8): the row names them, and the game
+// strikes those off the day the new one forms (game.ts, 'from'), so no division is counted twice.
+const BURMA_FROM = {
+  '15th Army (33rd and 55th Divisions)': ['11th Army (33rd Division)'],
+  '18th Division': ['25th Army (18th Division)', 'Kawaguchi Detachment (35th Brigade, of the 18th Division)'],
+  '15th Division': ['13th Army (15th Division, Nanking)'],
+  '2nd Division': ['16th Army (2nd Division)'],
+  '56th Division': ['Sakaguchi Detachment (56th Mixed Infantry Group)'],
+};
+const burmaFirst = burma.world_corps.map(firstRow);
+for (const row of burmaFirst) {
+  need(owner.has(row[4]), `Burma's first-day row "${row[1]}": ${row[4]} is not a province of the chart`);
+  need(!garrisons.some((x) => x[0] === row[0] && x[1] === row[1]), `Burma's first-day row "${row[1]}" is laid already`);
+}
+garrisons.push(...burmaFirst);
+const standing = new Set([...japan, ...garrisons].map((r) => r[1]).concat(dated.expeditions.map((r) => r[2])));
+const fromLeft = new Set(Object.keys(BURMA_FROM));
+const burmaDated = burma.expeditions.map(datedRow).map((row) => {
+  need(owner.has(row[5]), `Burma's row by date "${row[2]}": ${row[5]} is not a province of the chart`);
+  need(!dated.expeditions.some((x) => x[1] === row[1] && x[2] === row[2]), `Burma's row by date "${row[2]}" is laid already`);
+  const from = row[1] === 'JAP' ? BURMA_FROM[row[2]] : undefined;
+  if (from) {
+    for (const nm of from) need(standing.has(nm), `Burma's row "${row[2]}" is formed from "${nm}", which no row lays`);
+    need(row[6].from === undefined, `Burma's row "${row[2]}" names its own 'from' now: take it out of BURMA_FROM`);
+    row[6].from = from;
+    fromLeft.delete(row[2]);
+  }
+  return row;
+});
+need(fromLeft.size === 0, `no row of Burma's for: ${[...fromLeft].join('; ')}`);
+dated.expeditions.push(...burmaDated);
 
 // ---- The fleets (the planner's paper 11, section 7, with the historian's first-day destroyers; names and admirals
 // ruling 208(f) and the planner's paper 16; Britain's and the Dutch rows the historian's, pacific-allied-fleet-rows.md)
@@ -283,7 +321,7 @@ notes.push(`oil: home ${Object.entries(oilHome).map(([n, v]) => `${n} ${v} (was 
 // ---- The file ----------------------------------------------------------------------------------------
 const out = {
   _about: "The far side's rows that are nobody's seat, written by tools/make-far-world.mjs from the Pacific planner's, the historian's and the clerk's files and never by hand. Keyed by the data file each block belongs in, as the seat builders' files are; the game lays it over its data only where the far side's switch is on (src/campaign/far-rows.ts). Japan is the seventh great power (ruling 141(a)): quality 1.0 (ruling 215), outside both blocs and leaning to the Axis (ruling 197), a sea lift of 6 (ruling 200). Its army is the planner's paper 17 (the historian's weights), its fleets paper 11 section 7 as ruling 189 amended them, with the names and admirals of ruling 208(f). The garrisons of Britain, the Netherlands, France, the Soviet Far East and America are paper 18's. America's fleets in the Pacific, the ships that join and leave them, and the bases by date of the Pacific Fleet and of Japan's battle line are the planner's pacific-fleets.json (rulings 185, 189, 208(f)); a fleet that forms later is a row of navy.json. 'manpower' is rulings 213(b), 216(b) and 218; China's row under 'traits' is the seat's with the levy of ruling 218. 'setup.held' is the clerk's held_1939 where it is not the owner.",
-  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'pacific-planner/pacific-fleets.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json', 'pacific-planner/20-trial/base-seats.json', 'pacific-planner/far-yards.md', 'pacific-planner/far-oil.md', 'pacific-planner/21-whole-world-data-gaps.md'].map((p) => [p, stamp(p)])),
+  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'pacific-planner/pacific-fleets.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json', 'pacific-planner/20-trial/base-seats.json', 'map-tables/burma-front-forces.json', 'pacific-planner/far-yards.md', 'pacific-planner/far-oil.md', 'pacific-planner/21-whole-world-data-gaps.md'].map((p) => [p, stamp(p)])),
   _draft: "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
   grand: {
     nations: [{

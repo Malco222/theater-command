@@ -55,12 +55,26 @@
 //     Indies' garrison and the Dutch squadron fight on under British colours with their own names. Ground a fallen
 //     keeper only kept passes on by the same list.
 
+//
+//   THE PACIFIC'S SHORES (ruling 200, finding 2 and clause (i); ruling 202(e); the planner's paper 14, section 10,
+//     places 1 and 2). The book's row for every other shore is the second front's, and it reads no ground in Asia
+//     and the Pacific: there the Pacific's own rows decide, under the Pacific's theatre (far-pacific-war.json,
+//     'history'.'hops'). While the Pacific's book stands at a stop that keeps one, the staff's second front is not
+//     opened on the Pacific's ground at all (history.ts shoreOpen), and a computer staff lands of its own accord
+//     (ai.ts hop) only on its side's rows whose month has come: Japan's side on the places of the record's opening,
+//     in the record's order; America's and Britain's on their roads back, each place from its earliest month, and
+//     on nothing else that history's Japan held. Ground Japan's side takes that the record never gave it (the line
+//     in the south names every province it did: line.ts) is open to them from the month it is lost. The great
+//     choice's named landings are not bound by the rows. With the book closed, or at a stop that keeps none, every
+//     enemy shore of the Pacific's ground is open to the same routine, and the staff ranks them itself.
+
 import data from '../../data/campaign/pacific.json';
 import { FAR_STAGE } from './stage';
 import type { Game, Nation, Region } from './types';
-import { atWar, bloc, declareWar, headline, joinedSide, newsName, removeCorps, sameSide, setWar, theName } from './game';
-import { WORLD, farOn, shoreOf, standWithAllies } from './world';
-import { onBook, stopDef } from './history';
+import { allied, atWar, bloc, declareWar, headline, joinedSide, newsName, removeCorps, sameSide, setWar, theName } from './game';
+import { FAR_FIRST, WORLD, WORLD_FIRST, WORLD_MAP, farOn, shoreOf, standWithAllies } from './world';
+import { HISTORY, bookDate, onBook, stopDef } from './history';
+import { neverHis } from './line';
 import { ownPath } from './league';
 
 interface Rules {
@@ -72,6 +86,7 @@ interface Rules {
   north: { nat: string; fallen: string; months: number; book: number; while: string[] };
   demand: { of: string; key: string; theatre: string; book: number; war: [string, string]; fallen: string; months: number; never: string };
   keepers: string[];
+  shores?: { slice: number; seas: string[] };
   says: Record<string, string>;
 }
 
@@ -324,3 +339,83 @@ export function keptForces(g: Game, nat: string, by: string, leave?: (r: Region)
   for (const f of g.airFleets) if (f.nat === nat && kept.has(f.base)) f.nat = kept.get(f.base)!;
   return kept;
 }
+
+// ---- The Pacific's shores ---------------------------------------------------------------------------------
+
+/** How many of the Pacific's shores a staff names at once for its fleet and its fighters (ai.ts hop keeps them in the flags `st:hop:` and `st:hopQ:`, the beach and the quay; navy.ts and air.ts read them). */
+export const HOP_AIMS = 6;
+
+/** The crossings a staff has named for its hops this month: the quay and the beach of each. */
+export function hopAims(g: Game, nat: string): { from: Region; to: Region }[] {
+  const out: { from: Region; to: Region }[] = [];
+  if (!PACIFIC) return out;
+  for (let i = 0; i < HOP_AIMS; i++) {
+    const to = g.regions[(g.flags[`st:hop:${nat}:${i}`] ?? 0) - 1], from = g.regions[(g.flags[`st:hopQ:${nat}:${i}`] ?? 0) - 1];
+    if (to && from && atWar(g, nat, to.ctrl)) out.push({ from, to });
+  }
+  return out;
+}
+
+/** The Pacific's own shores rows (far-pacific-war.json, 'history'.'hops'): a place and the month it opens, for each side. */
+interface HopRows { theatre: string; slides?: string; axis: [string, number][]; allies: [string, number][] }
+const hopRows = (): HopRows | null => (PACIFIC ? (HISTORY as unknown as { hops?: HopRows }).hops ?? null : null);
+
+/** The province a far-side city was cut out of; a province is its own. */
+const provinceOf = (id: number): number => (WORLD_MAP.regions[id - WORLD_FIRST] as { of?: number } | undefined)?.of ?? id;
+
+/**
+ * True for the Pacific's ground (pacific.json, 'shores'): the far side's first slice, from Pearl Harbor to Dunedin,
+ * with its cities, and any province with a coast on one of the seas named (the Bay of Bengal and Ceylon's waters:
+ * ruling 202(h)). Never while the far side is off, nor on a chart that does not reach it.
+ */
+export function pacificGround(g: Game, r: Region): boolean {
+  const S = PACIFIC?.shores;
+  if (!S || !farOn(g)) return false;
+  const id = provinceOf(r.id);
+  return (id >= FAR_FIRST && id < FAR_FIRST + S.slice) || r.seas.some((z) => S.seas.includes(g.seas[z].key));
+}
+
+/** True while the Pacific's rows are what a computer staff's landings on the Pacific's ground go by: a stop that keeps the book, and the Pacific's book open. */
+export function hopsBind(g: Game): boolean {
+  const H = hopRows();
+  return !!H && farOn(g) && !!stopDef(g).book && onBook(g, H.theatre);
+}
+
+/** How many months the Pacific's calendar has slid in this war: the draw of the great choice it slides with (a stop with slack). */
+function hopSlide(g: Game, H: HopRows): number {
+  if (!H.slides) return 0;
+  const [nat, op] = H.slides.split(':');
+  const date = HISTORY.dates[nat]?.[op], now = bookDate(g, nat, op);
+  return date === undefined || now === null ? 0 : now - date;
+}
+
+/**
+ * The shores of the Pacific's ground a computer staff may land on of its own accord. `open`: this month, in the
+ * order it takes them while the book stands (the rows' own); `soon`: those that open next month, named a month
+ * ahead so that the fleet is off the beach and the fighters over it in time. `book` says whether the rows bind.
+ * Null for the player, for a country in neither camp of the Pacific's war, and wherever the far side is off.
+ */
+export function hopShores(g: Game, nat: string): { book: boolean; open: Region[]; soon: Region[] } | null {
+  const P = PACIFIC, H = hopRows();
+  if (!P?.shores || !H || !farOn(g) || nat === g.human || !g.nations[P.power]?.alive) return null;
+  const mine = nat === P.power || allied(g, nat, P.power);
+  if (!mine && !atWar(g, nat, P.power)) return null;
+  const foe = (r: Region): boolean => r.seas.length > 0 && atWar(g, nat, r.ctrl);
+  if (!hopsBind(g)) return { book: false, open: g.regions.filter((r) => foe(r) && pacificGround(g, r)), soon: [] };
+  const side: 'axis' | 'allies' = mine ? P.bloc : P.bloc === 'axis' ? 'allies' : 'axis';
+  const d = hopSlide(g, H);
+  const open: Region[] = [], soon: Region[] = [];
+  const listed = new Set<number>();
+  for (const [name, month] of H[side]) {
+    const r = g.byName[name];
+    if (!r) continue;
+    listed.add(r.id);
+    if (!foe(r)) continue;
+    if (g.turn >= month + d) open.push(r);
+    else if (g.turn === month + d - 1) soon.push(r);
+  }
+  // (Ruling 200(i): what the power's side takes that the record never gave it is open to the other side at once.)
+  if (!mine) for (const r of g.regions) if (!listed.has(r.id) && foe(r) && (r.ctrl === P.power || allied(g, r.ctrl, P.power)) && neverHis(g, r)) open.push(r);
+  return { book: true, open, soon };
+}
+
