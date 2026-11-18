@@ -42,6 +42,7 @@ def one(name, out, kinds):
     far = rigid.gather(far_m, far_ob)
     kit.fresh()
     m, _ = build(True)
+    stage.PICTURES = False                               # (the files take their paints plain: see stage.ship_look)
     ob, arm = rigid.to_blender(m, None if air or park else stage.ship_look, crease=crease)
     near = rigid.gather(m, ob)
     sizes = {}

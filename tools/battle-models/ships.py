@@ -1137,7 +1137,9 @@ def submarine(tag, fine=True, hull_hex=None):
     def key(v):
         return (round(v.x, 3), round(v.y, 3), round(v.z, 3))
     BOOT = 0.55                                              # (the top of her boot topping: her freeboard is too low for the ships' rule)
-    yard.hull("deck", frames=72 if fine else 32, boot=BOOT, above=[0.16, 0.33, 0.5, 0.67, 0.84, 1.0] if fine else None)
+    ABOVE = [0.16, 0.33, 0.5, 0.67, 0.84, 1.0]               # (the rows of points up her side above the boot, as shares of it)
+    FRAMES = 72
+    yard.hull("deck", frames=FRAMES if fine else 32, boot=BOOT, above=ABOVE if fine else None)
     x0, x1, th = c["tower"]
     Z0 = yard.deck((x0 + x1) * 0.5)
 
@@ -1306,17 +1308,23 @@ def submarine(tag, fine=True, hull_hex=None):
         # She is the most streaked ship in the fleet (the art director, 08:15 UTC on 18 November): rust weeps down from
         # her slots, salt dries in pale runs under her deck's edge, along her casing and down her tower. A streak is a
         # ribbon lying on her skin in her skin's own paint, three points across: its middle points carry the rust or the
-        # salt (most at its head), its edges none, so it fades away to either side and has no outline.
+        # salt (most at its head), its edges none, so it fades away to either side; and it takes the skin's own shading
+        # (`lay_on_skin` in rigid.py), so it has no outline. It must not lie across a ridge of the skin: a streak down
+        # her side has its points at the heights of her side's own rows, a run along her side is laid on those rows and
+        # frames themselves, and a run down her tower keeps within one flat of its wall.
         rng = random.Random(len(c["name"]) * 97 + 5)
 
         def streak(x_, z_top, hand, long, wide, rust=0.0, salt=0.0):
+            zd = h.side(x_, 99.0, hand)[0].z                 # (her deck's edge here)
             z_bot = max(z_top - long, BOOT + 0.04)
             if z_top - z_bot < 0.1:
                 return
-            line = [h.side(x_, z_top + (z_bot - z_top) * i / 5.0, hand) for i in range(6)]
-            mids = yard.on(x_).ribbon([q for q, _ in line], [d for _, d in line], wide, "hull", 0.007, taper=lambda s_: 1.0 - 0.6 * s_)
-            for i, v in enumerate(mids):
-                fade = (1.0 - i / 5.0) ** 1.3
+            heights = [BOOT + (zd - BOOT) * a for a in ABOVE]
+            zs = [z_top] + [z for z in reversed(heights) if z_bot + 0.03 < z < z_top - 0.03] + [z_bot]
+            line = [h.side(x_, z, hand) for z in zs]
+            mids = yard.on(x_).ribbon([q for q, _ in line], [d for _, d in line], wide, "hull", 0.008, taper=lambda s_: 1.0 - 0.6 * s_)
+            for z, v in zip(zs, mids):
+                fade = ((z - z_bot) / (z_top - z_bot)) ** 1.3
                 if rust:
                     stains[key(v)] = rust * fade
                 if salt:
@@ -1333,46 +1341,69 @@ def submarine(tag, fine=True, hull_hex=None):
         while x < L * 0.47:
             for hand in (PORT, STBD):
                 if rng.random() < 0.25:
-                    streak(x, yard.deck(x) - 0.03, hand, rng.uniform(0.2, 0.5), rng.uniform(0.12, 0.22), salt=rng.uniform(0.25, 0.45))
+                    streak(x, yard.deck(x) - 0.03, hand, rng.uniform(0.2, 0.5), rng.uniform(0.12, 0.22), salt=rng.uniform(0.2, 0.38))
             x += rng.uniform(0.35, 0.8)
-        # (and bleached runs along the shoulder of her casing, each a few metres long, swelling and dying away)
+        # (and bleached runs along her casing, each a few metres long, swelling and dying away: laid on her side's own
+        #  net of points, a row for its middle and the rows above and below for its edges)
+        ub = h.u_of(yard.break_x)
+        net = sorted(set([u for u in (-1.0 + 2.0 * k / FRAMES for k in range(FRAMES + 1)) if abs(u - ub) > 0.6 / FRAMES] + [ub]))
+        shares = [0.0] + ABOVE
+
+        def knot(u, j, hand):
+            zd = h.deck_z(h.frame_x(u) + h.lean(u))
+            wt = min(BOOT / zd, 0.6)
+            return h.point(u, wt + (1.0 - wt) * shares[j], hand)
         for hand in (PORT, STBD):
-            x = -L * 0.45
-            while x < L * 0.44:
-                run_long = rng.uniform(2.5, 8.0)
-                n_ = max(4, int(run_long / 0.5))
-                down = rng.uniform(0.12, 0.3)
-                peak = rng.uniform(0.25, 0.45)
-                swell = [rng.uniform(0.55, 1.0) * max(0.0, math.sin(math.pi * i / n_)) ** 0.6 for i in range(n_ + 1)]
-                for part, keep in (("aft", lambda v: v <= yard.break_x), ("fore", lambda v: v >= yard.break_x)):
-                    xs = [x + run_long * i / n_ for i in range(n_ + 1)]
-                    line = [(i, h.side(v, yard.deck(v) - down, hand)) for i, v in enumerate(xs) if keep(v) and v <= L * 0.46]
-                    if len(line) > 1:
+            i = 3
+            while i < len(net) - 8:
+                count = rng.randint(3, 8)                    # (so many frames long)
+                j = rng.choice((3, 4))
+                peak = rng.uniform(0.2, 0.38)
+                swell = [rng.uniform(0.55, 1.0) for _ in range(2 * count + 1)]
+                for part, keep in (("aft", lambda u: u <= ub), ("fore", lambda u: u >= ub)):
+                    lines, values = ([], [], []), []
+                    for k in range(2 * count + 1):           # (a place at every frame and one half way between each two)
+                        ua, ub_ = net[min(i + k // 2, len(net) - 1)], net[min(i + (k + 1) // 2, len(net) - 1)]
+                        if not (keep(ua) and keep(ub_)):
+                            continue
+                        for row, jj in zip(lines, (j + 1, j, j - 1)):
+                            row.append((knot(ua, jj, hand) + knot(ub_, jj, hand)) * 0.5)
+                        values.append(peak * swell[k] * max(0.0, math.sin(math.pi * k / (2 * count))) ** 0.6)
+                    if len(values) > 1:
                         m.use(part)
-                        mids = m.ribbon([q for _, (q, _) in line], [d for _, (_, d) in line], 0.17, "hull", 0.007)
-                        for (i, _), v in zip(line, mids):
-                            pale[key(v)] = peak * swell[i]
-                x += run_long + rng.uniform(1.0, 3.5)
+                        mids = m.band(lines[0], lines[1], lines[2], [Vector((0, hand, 0))] * len(values), "hull", 0.008)
+                        for v, value in zip(mids, values):
+                            pale[key(v)] = value
+                i += count + rng.randint(1, 4)
         for bx in (L * 0.36, L * 0.24, -L * 0.27, -L * 0.38):               # (under her bollards)
             for hand in (PORT, STBD):
                 for d in (-0.2, 0.15):
                     streak(bx + d, yard.deck(bx) - 0.05, hand, rng.uniform(0.5, 0.9), 0.1, rust=rng.uniform(0.6, 0.9))
         for d in (-0.3, 0.0, 0.25):                                           # (and under her anchor's bed)
             streak(L * 0.4 + d, yard.deck(L * 0.4) * 0.5 - 0.24, STBD, rng.uniform(0.5, 1.0), 0.11, rust=0.9)
-        # salt down her tower from the screen's lip
-        total, at = walk(Model.round_rect(x0, x1, -half, half, rnd, 6))
-        s_ = 0.0
-        while s_ < total:
-            q, out = at(s_)
-            if rng.random() < 0.5 and q.x > xb + 0.2:
+        # salt down her tower from the screen's lip: each run within one flat of the wall
+        plan = Model.round_rect(x0, x1, -half, half, rnd, 6)
+        m.use(yard.half(x0))
+        for i in range(len(plan)):
+            a, b = Vector((plan[i][0], plan[i][1], 0.0)), Vector((plan[(i + 1) % len(plan)][0], plan[(i + 1) % len(plan)][1], 0.0))
+            leg = (b - a).length
+            if leg < 0.2:
+                continue
+            out = Vector((b.y - a.y, a.x - b.x, 0.0)).normalized()
+            if out.dot((a + b) * 0.5 - Vector(((x0 + x1) * 0.5, 0.0, 0.0))) < 0:
+                out = -out
+            for k in range(max(1, int(leg / 0.55))):
+                wide = min(rng.uniform(0.08, 0.15), leg * 0.5 - 0.03)
+                at_ = (k + rng.uniform(0.3, 0.7)) / max(1, int(leg / 0.55))
+                q = a + (b - a) * min(max(at_, (wide + 0.02) / leg), 1.0 - (wide + 0.02) / leg)
+                if rng.random() < 0.5 or q.x < xb + 0.25:      # (abaft the screen's end there is no lip to run down from)
+                    continue
                 long = rng.uniform(0.4, 1.2)
                 top_ = t1 + screen - 0.24
-                peak = rng.uniform(0.2, 0.4)
-                m.use(yard.half(x0))
-                mids = m.ribbon([q + Z * (top_ - long * i / 4.0) for i in range(5)], [out] * 5, rng.uniform(0.08, 0.15), "upper", 0.003, taper=lambda t_: 1.0 - 0.6 * t_)
-                for i, v in enumerate(mids):
-                    pale[key(v)] = peak * (1.0 - i / 4.0) ** 1.2
-            s_ += rng.uniform(0.3, 0.7)
+                peak = rng.uniform(0.16, 0.32)
+                mids = m.ribbon([q + Z * (top_ - long * n_ / 4.0) for n_ in range(5)], [out] * 5, wide, "upper", 0.003, taper=lambda t_: 1.0 - 0.6 * t_)
+                for n_, v in enumerate(mids):
+                    pale[key(v)] = peak * (1.0 - n_ / 4.0) ** 1.2
 
         # her deck is laid in slats along her length: thin seams, a hand's breadth apart in life, here every 0.4 m
         def on_deck(u, y):
@@ -1437,11 +1468,14 @@ def submarine(tag, fine=True, hull_hex=None):
     plain_weather = weather_for(yard)
 
     def weather(p, n_, paint, part):
+        if paint.endswith(Model.ON):                          # (what lies on a skin weathers as the skin does, and carries its own besides)
+            paint = paint[:-len(Model.ON)]
         wear, soot = plain_weather(p, n_, paint, part)
         salt = 0.0
-        if paint == "hull":
+        if paint == "hull" or (paint == "boot" and p.z > BOOT - 0.02):
             # (her side's own weather is kept broad, nothing finer than a few metres: a streak's edge carries only this,
-            #  worked out at its own place, and must not be told from the skin under it, whose points are a metre apart)
+            #  worked out at its own place, and must not be told from the skin under it, whose points are a metre apart.
+            #  The row of points along the top of her boot topping is shared by the faces above it, so it takes this too.)
             up = min(max((p.z - BOOT) / max(h.deck_z(p.x) - BOOT, 0.3), 0.0), 1.0)
             wear = (0.1 + 0.06 * math.sin(p.x * 0.45 + 1.3) + 0.04 * math.sin(p.x * 0.17 + 0.4)) * (1.0 - 0.75 * up)
             soot = max(0.05, 0.5 * min(1.0, max(0.0, 1.0 - (p.z - BOOT) / 0.6)))      # the dark band where the sea washes her, fading up her side

@@ -138,6 +138,18 @@ class Model:
         self.info = {}
         self.cur = 0
         self.weather = None                              # f(point, facing, paint name, part name) -> (wear, soot) or (wear, soot, salt), each 0..1
+        self.lying = {}                                  # the points that lie on a skin (a ribbon's), and how far off it: see `lay_on_skin`
+
+    ON = ".on"                                           # (what a ribbon's paint is called: the skin's own, with this after it)
+
+    def on_paint(self, paint):
+        """The paint of what lies on a skin of `paint`: the same colour under its own name, so that the pictures (and
+        the game) can treat what lies on a skin differently from the skin: it stops no light on its way to it."""
+        name = paint + Model.ON
+        if name not in self.paints:
+            self.paints[name] = self.paints[paint]
+            self.paint_at[name] = len(self.paints) - 1
+        return name
 
     # ---- parts -------------------------------------------------------------------------------------
     def part(self, name, parent=None, pivot=(0, 0, 0), **kw):
@@ -392,13 +404,33 @@ class Model:
         fn = [Vector(n).normalized() for n in facings]
         self.add(verts, faces, paint, True, lambda m: fn[min(range(len(pts)), key=lambda i: (pts[i] - m).length_squared)])
 
-    def ribbon(self, points, facings, half, paint, lift=0.01, taper=None):
-        """A strip three points across (edge, middle, edge), so that what its middle points carry (rust, dried salt: see
-        `weather`) fades away to its edges. Returns its middle points, in order along it."""
+    def band(self, left, mid, right, facings, paint, lift=0.004):
+        """A ribbon lying on a skin, three points across (edge, middle, edge) at every place along it, so that what its
+        middle points carry (rust, dried salt: see `weather`) fades away to its edges. Its points are `lying`: when the
+        mesh is made they are brought down onto the skin under them and take its shading (`lay_on_skin`), so nothing
+        tells the ribbon from the skin but what it carries. `paint` is the skin's; the ribbon's own is that with ".on"
+        after it (`on_paint`). Returns its middle points, in order along it."""
+        fn = [Vector(n).normalized() for n in facings]
+        mids = [Vector(q) for q in mid]
+        if len(mids) < 2:
+            return []
+        verts, faces = [], []
+        for a, b, c, n in zip(left, mids, right, fn):
+            verts += [Vector(a) + n * lift, b + n * lift, Vector(c) + n * lift]
+        for k in range(len(mids) - 1):
+            faces += [(3 * k, 3 * k + 1, 3 * k + 4, 3 * k + 3), (3 * k + 1, 3 * k + 2, 3 * k + 5, 3 * k + 4)]
+        base = len(self.verts)
+        self.add(verts, faces, self.on_paint(paint), True, lambda m: fn[min(range(len(mids)), key=lambda i: (mids[i] - m).length_squared)])
+        for i in range(len(verts)):
+            self.lying[base + i] = lift
+        return [verts[3 * k + 1] for k in range(len(mids))]
+
+    def ribbon(self, points, facings, half, paint, lift=0.004, taper=None):
+        """A `band` along a row of points, so far to either side of them (`taper`: f(0..1 along it) -> a share of that)."""
         pts = [Vector(p) for p in points]
         if len(pts) < 2:
             return []
-        verts, faces = [], []
+        left, right = [], []
         for k, (p, n) in enumerate(zip(pts, facings)):
             n = Vector(n).normalized()
             along = pts[min(k + 1, len(pts) - 1)] - pts[max(k - 1, 0)]
@@ -407,12 +439,9 @@ class Model:
                 side = Y.copy()
             side.normalize()
             w = half * (taper(k / (len(pts) - 1)) if taper else 1.0)
-            verts += [p + n * lift + side * w, p + n * lift, p + n * lift - side * w]
-        for k in range(len(pts) - 1):
-            faces += [(3 * k, 3 * k + 1, 3 * k + 4, 3 * k + 3), (3 * k + 1, 3 * k + 2, 3 * k + 5, 3 * k + 4)]
-        fn = [Vector(n).normalized() for n in facings]
-        self.add(verts, faces, paint, True, lambda m: fn[min(range(len(pts)), key=lambda i: (pts[i] - m).length_squared)])
-        return [verts[3 * k + 1] for k in range(len(pts))]
+            left.append(p + side * w)
+            right.append(p - side * w)
+        return self.band(left, pts, right, facings, paint, lift)
 
     def tub(self, at, r, high, paint, wall=0.08, sides=14, floor=None):
         """A gun tub: a low round wall, open at the top."""
@@ -447,7 +476,7 @@ def material(model, paint, look=None):
     nt = m.node_tree
     bsdf = nt.nodes["Principled BSDF"]
     rgb = hex_rgb(model.paints[paint])
-    key = paint.split(".")[0]
+    key = paint.split(".")[0]                             # (so "hull.on", what lies on the hull, is as rough as the hull)
     bsdf.inputs["Roughness"].default_value = ROUGH.get(key, 0.62)
     bsdf.inputs["Metallic"].default_value = METAL.get(key, 0.0)
     col = nt.nodes.new("ShaderNodeRGB")
@@ -488,6 +517,70 @@ def tint_of(model, wear, soot, paint_idx, face_idx=None, blend=None, salt=None):
     return np.clip(worn / np.maximum(base, 1e-4), 0.0, 8.0)
 
 
+def lay_on_skin(model, me):
+    """The points that lie on a skin (`Model.lying`: a ribbon's) are brought down onto the nearest face of that skin
+    (the skin of the paint they are named for), stood off it by their lift, and given its shading there. (Left to
+    itself a ribbon faces a degree or two away from the skin under it, which a low sun shows as a panel, and it hovers
+    wherever the skin runs flat between its own points, which shows as a line of shadow.) The skin is taken as the
+    triangles it is drawn with, for a four-sided face that is not flat is two faces. A ribbon should not lie across
+    a ridge of the skin deeper than its lift: the ridge would stand through it."""
+    from mathutils.bvhtree import BVHTree
+    from mathutils.interpolate import poly_3d_calc
+    lying = model.lying
+    nl = len(me.loops)
+    cn = np.zeros(nl * 3)
+    me.corner_normals.foreach_get("vector", cn)
+    cn = cn.reshape(-1, 3)
+    names = list(model.paints)
+    skin_of, own = {}, {}
+    for i, f in enumerate(model.faces):
+        name = names[model.fpaint[i]]
+        if any(v in lying for v in f):
+            for v in f:
+                own[v] = name[:-len(Model.ON)] if name.endswith(Model.ON) else name
+        else:
+            skin_of[i] = name
+    me.calc_loop_triangles()
+    skins = {}
+    for tri in me.loop_triangles:
+        name = skin_of.get(tri.polygon_index)
+        if name is not None:
+            skins.setdefault(name, []).append((tuple(tri.vertices), tuple(tri.loops)))
+    points = [tuple(v) for v in model.verts]
+    trees, facing = {}, {}
+    for v, lift in lying.items():
+        pa = own.get(v)
+        if pa not in skins:
+            continue
+        if pa not in trees:
+            trees[pa] = BVHTree.FromPolygons(points, [t[0] for t in skins[pa]])
+        # (the nearest face that looks the way the ribbon does: by a deck's edge the deck itself may be as near as the side)
+        own_way = me.vertices[v].normal
+        near = [hit for hit in trees[pa].find_nearest_range(model.verts[v], lift + 0.05) if hit[1].dot(own_way) > 0.5]
+        loc, _, idx, dist = min(near, key=lambda hit: hit[3]) if near else trees[pa].find_nearest(model.verts[v])
+        if loc is None or dist > 0.25:               # (nothing of its own paint under it: it stays as it was made)
+            continue
+        corners, loops = skins[pa][idx]
+        w = poly_3d_calc([model.verts[j] for j in corners], loc)
+        n = Vector()
+        for l, share in zip(loops, w):
+            n += Vector(cn[l]) * share
+        if n.length < 1e-9:
+            continue
+        n.normalize()
+        me.vertices[v].co = loc + n * lift
+        facing[v] = n
+    if facing:
+        lv = np.zeros(nl, dtype=np.int32)
+        me.loops.foreach_get("vertex_index", lv)
+        for l in range(nl):
+            n = facing.get(int(lv[l]))
+            if n is not None:
+                cn[l] = n
+        me.normals_split_custom_set([tuple(n) for n in cn])
+        me.update()
+
+
 def to_blender(model, look=None, crease=38.0, collection=None):
     """The model as one mesh on an armature, a bone for every part. Returns (mesh object, armature object)."""
     me = bpy.data.meshes.new(model.name)
@@ -522,6 +615,8 @@ def to_blender(model, look=None, crease=38.0, collection=None):
             wear[i], soot[i] = min(max(w, 0.0), 1.0), min(max(max(s, soot[i]), 0.0), 1.0)
             if len(got) > 2:
                 salt[i] = min(max(got[2], 0.0), 1.0)
+    if model.lying:
+        lay_on_skin(model, me)
     # corner by corner: the paint (the face's own, or the point's where the coat is sprayed), and the tint that shows it
     nl = len(me.loops)
     lv = np.zeros(nl, dtype=np.int32)

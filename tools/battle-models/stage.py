@@ -43,9 +43,24 @@ def _math(nt, op, a=None, b=None, clamp=False):
     return n.outputs[0]
 
 
+PICTURES = True          # (export.py clears it: the .glb and .fbx take their paints plain)
+
+
 def ship_look(paint, mat, nt, bsdf, mix):
     """What the pictures add to a paint that the numbers do not carry: planks on a wooden deck, a sheen on glass."""
     key = paint.split(".")[0]
+    if paint.endswith(".on") and PICTURES:
+        # What lies on a skin (a streak of rust or salt: rigid.Model.band) is seen by the camera and by nothing else:
+        # it stands a few millimetres off the skin, and if it stopped any light its edge would draw a hairline of
+        # shadow beside it, and the skin seen under its near edge would be dark.
+        out = nt.nodes["Material Output"]
+        path = nt.nodes.new("ShaderNodeLightPath")
+        clear = nt.nodes.new("ShaderNodeBsdfTransparent")
+        ms = nt.nodes.new("ShaderNodeMixShader")
+        nt.links.new(_math(nt, "SUBTRACT", 1.0, path.outputs["Is Camera Ray"]), ms.inputs[0])
+        nt.links.new(bsdf.outputs[0], ms.inputs[1])
+        nt.links.new(clear.outputs[0], ms.inputs[2])
+        nt.links.new(ms.outputs[0], out.inputs["Surface"])
     if key == "planks":
         tc = nt.nodes.new("ShaderNodeTexCoord")
         mp = nt.nodes.new("ShaderNodeMapping")
@@ -456,7 +471,7 @@ class Effects:
             p.use_smooth = True
         bpy.data.objects.remove(ball)
         self.meshes = {}
-        for k in ("smoke", "water", "glow", "flat"):       # one ball for each kind of puff, in its own stuff
+        for k in ("smoke", "water", "glow", "flat", "foam"):       # one ball for each kind of puff, in its own stuff
             self.meshes[k] = self.mesh.copy()
             self.meshes[k].materials.append(self._mat(k))
         # a tongue of flame: the ball drawn out along x, blunt at its root (x = -1) and tapering to a point (x = +1),
@@ -485,7 +500,45 @@ class Effects:
         nz.inputs["Scale"].default_value = 1.6 if kind != "flat" else 2.4
         nz.inputs["Detail"].default_value = 4.0
         nt.links.new(tc.outputs["Object"], nz.inputs["Vector"])
-        if kind == "flat":       # a patch lying on the water: thick in the middle, ragged at the edge
+        col_out = info.outputs["Color"]
+        if kind == "foam":
+            # Churned water lying on the sea (the art director, 2026-11-18: the foam a splash left was "a smooth white
+            # ellipse with a crisp rim, like a plate laid on the sea"). Broken foam: holes and streaks all through it,
+            # thick and greenish-white at its heart, thinning to nothing at its edge, no two patches alike; and as it
+            # dies its holes open and it breaks up, rather than only growing paler.
+            sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+            nt.links.new(tc.outputs["Object"], sep.inputs[0])
+            r = _math(nt, "SQRT", _math(nt, "ADD", _math(nt, "MULTIPLY", sep.outputs[0], sep.outputs[0]), _math(nt, "MULTIPLY", sep.outputs[1], sep.outputs[1])))
+            own = _math(nt, "MULTIPLY", info.outputs["Random"], 61.0)
+            big = nt.nodes.new("ShaderNodeTexNoise")              # (the patch's broad shape: bays and tongues)
+            big.noise_dimensions = "4D"
+            big.inputs["Scale"].default_value = 2.3
+            big.inputs["Detail"].default_value = 2.0
+            nt.links.new(tc.outputs["Object"], big.inputs["Vector"])
+            nt.links.new(own, big.inputs["W"])
+            mp = nt.nodes.new("ShaderNodeMapping")                 # (the lace: drawn out one way, so it lies in streaks)
+            mp.inputs["Scale"].default_value = (1.0, 2.7, 1.0)
+            nt.links.new(tc.outputs["Object"], mp.inputs["Vector"])
+            lace = nt.nodes.new("ShaderNodeTexNoise")
+            lace.noise_dimensions = "4D"
+            lace.inputs["Scale"].default_value = 4.5
+            lace.inputs["Detail"].default_value = 6.0
+            lace.inputs["Roughness"].default_value = 0.72
+            lace.inputs["Distortion"].default_value = 0.8
+            nt.links.new(mp.outputs["Vector"], lace.inputs["Vector"])
+            nt.links.new(own, lace.inputs["W"])
+            live = _math(nt, "MULTIPLY", info.outputs["Alpha"], 1.3, clamp=True)            # 1 while it is fresh, falling as it dies
+            thick = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 1.0, r, clamp=True), 1.2)
+            thick = _math(nt, "ADD", thick, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", big.outputs[0], 0.5), 2.2))
+            thick = _math(nt, "ADD", thick, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", lace.outputs[0], 0.5), 1.6))
+            thick = _math(nt, "SUBTRACT", thick, _math(nt, "ADD", 0.16, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 1.0, live), 0.75)))
+            thick = _math(nt, "MULTIPLY", thick, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 1.0, r, clamp=True), 5.0, clamp=True))     # (nothing at all at its rim)
+            soft = _math(nt, "MULTIPLY", _math(nt, "MULTIPLY", thick, 1.5, clamp=True), _math(nt, "MULTIPLY", live, 1.8, clamp=True))
+            _, g_fac, g_a, g_b, col_out = _mix(nt, "MULTIPLY")
+            nt.links.new(info.outputs["Color"], g_a)
+            g_b.default_value = (0.74, 0.95, 0.87, 1.0)
+            nt.links.new(_math(nt, "SUBTRACT", _math(nt, "MULTIPLY", thick, 1.4), 0.15, clamp=True), g_fac)
+        elif kind == "flat":     # a patch lying on the water: thick in the middle, ragged at the edge
             sep = nt.nodes.new("ShaderNodeSeparateXYZ")
             nt.links.new(tc.outputs["Object"], sep.inputs[0])
             r = _math(nt, "SQRT", _math(nt, "ADD", _math(nt, "MULTIPLY", sep.outputs[0], sep.outputs[0]), _math(nt, "MULTIPLY", sep.outputs[1], sep.outputs[1])))
@@ -497,7 +550,7 @@ class Effects:
             face = _math(nt, "SUBTRACT", 1.0, lw.outputs["Facing"], clamp=True)
             soft = _math(nt, "POWER", face, {"smoke": 2.4, "water": 1.9, "glow": 1.3}[kind])
             soft = _math(nt, "MULTIPLY", soft, _math(nt, "SUBTRACT", _math(nt, "MULTIPLY", nz.outputs[0], 1.9), 0.35, clamp=True), clamp=True)
-        alpha = _math(nt, "MULTIPLY", soft, info.outputs["Alpha"], clamp=True)
+        alpha = _math(nt, "MULTIPLY", soft, 0.85 if kind == "foam" else info.outputs["Alpha"], clamp=True)
         if kind == "glow":
             body = nt.nodes.new("ShaderNodeEmission")
             body.inputs["Strength"].default_value = 7.0
@@ -512,7 +565,7 @@ class Effects:
         else:
             body = nt.nodes.new("ShaderNodeBsdfDiffuse")
         if kind != "water":
-            nt.links.new(info.outputs["Color"], body.inputs["Color"])
+            nt.links.new(col_out, body.inputs["Color"])
         clear = nt.nodes.new("ShaderNodeBsdfTransparent")
         ms = nt.nodes.new("ShaderNodeMixShader")
         nt.links.new(alpha, ms.inputs[0])
@@ -582,7 +635,7 @@ class Effects:
             ob = bpy.data.objects.new("puff", self.meshes[kind])
             self.coll.objects.link(ob)
             ob.visible_shadow = False                    # (far cheaper; the sun still shades each puff by its own roundness)
-        ob.rotation_euler = (self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28)) if kind != "flat" else (0, 0, self.rng.uniform(0, 6.28))
+        ob.rotation_euler = (self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28)) if kind not in ("flat", "foam") else (0, 0, self.rng.uniform(0, 6.28))
         ob.hide_render = False
         p = dict(ob=ob, kind=kind, t0=t0, at=Vector(at), vel=Vector(vel), life=life, r=r, col=Vector(col), col2=Vector(col2 if col2 is not None else col), alpha=alpha,
                  drag=drag, rise=rise, gravity=gravity, wind=wind, squash=Vector(squash), fade_in=fade_in, grow=grow, hold=hold, cool=cool)
@@ -722,8 +775,26 @@ class Effects:
                 self.light(t, at + facing * 4.0 * k + Vector((0, 0, 1.5)), 1.0e4 * k * k, 0.14)
         self.once(t0, where, make)
 
+    def foam(self, t, at, r, life=8.0, n=14):
+        """Churned water where something fell or went under: a patch at its heart and a scatter of smaller ones about
+        it, drawn out into streaks, each ragged and holed, spreading and drifting a little apart, each dying in its
+        own time. (One broad patch alone reads as a plate laid on the sea, however ragged its stuff.)"""
+        g = self.rng
+        at = Vector((at[0], at[1], 0.0))
+        col = (0.84, 0.9, 0.88)
+        self.puff(t, at + Vector((0, 0, 0.3)), life=life * g.uniform(0.85, 1.0), r=(r * 1.0, r * 3.0), col=col, alpha=0.7, kind="foam", wind=0.03,
+                  squash=(1.0, g.uniform(0.75, 0.95), 0.03), fade_in=0.3, grow=0.5, hold=0.15)
+        for i in range(n):
+            a = g.uniform(0, 2 * math.pi)
+            d = r * g.uniform(0.8, 3.3)
+            way = Vector((math.cos(a), math.sin(a), 0.0))
+            self.puff(t + g.uniform(0.1, 0.8), at + way * d + Vector((0, 0, 0.31 + 0.012 * i)), vel=way * g.uniform(0.5, 1.6), drag=0.5, life=life * g.uniform(0.5, 1.0),
+                      r=(r * 0.4, r * g.uniform(0.9, 1.9)), col=col, alpha=g.uniform(0.45, 0.75), kind="foam", wind=0.03,
+                      squash=(g.uniform(1.0, 1.8), g.uniform(0.5, 0.9), 0.03), fade_in=0.35, grow=0.5, hold=0.12)
+
     def splash(self, t0, at, high=50.0, r=5.0):
-        """A heavy shell falls in the sea: a tall white column that stands a moment and falls back, and a ring of foam."""
+        """A heavy shell falls in the sea: a tall white column that stands a moment and falls back, and the churned
+        water it leaves."""
         g = self.rng
         at = Vector(at)
 
@@ -735,7 +806,7 @@ class Effects:
                 self.puff(t + 0.006 * i, p0 + Vector((g.uniform(-1, 1), g.uniform(-1, 1), 0.5)), vel=(g.uniform(-2.5, 2.5) * (1 - f), g.uniform(-2.5, 2.5) * (1 - f), v0), life=g.uniform(3.4, 4.6),
                           r=(r * 0.4, r * g.uniform(0.7, 1.15) * (1.3 - 0.6 * f)), col=(0.95, 0.97, 0.97), col2=(0.88, 0.92, 0.92), alpha=0.75, kind="water", gravity=9.8, wind=0.06,
                           squash=(1.0, 1.0, 2.3), fade_in=0.04, grow=0.3, hold=0.4)
-            self.puff(t, p0 + Vector((0, 0, 0.35)), life=7.0, r=(r * 1.4, r * 4.5), col=(0.92, 0.95, 0.95), alpha=0.75, kind="flat", wind=0.0, squash=(1.0, 1.0, 0.04), fade_in=0.2, grow=0.5, hold=0.3)
+            self.foam(t, p0, r)
         self.once(t0, (at, Vector((0, 0, 1))), make)
 
     def bow_spray(self, where, start=-2.0, end=1e9):
@@ -817,7 +888,7 @@ class Effects:
 
         def make(t, at, facing):
             self.puff(t, Vector((at[0] + g.uniform(-r, r) * 1.5, at[1] + g.uniform(-r, r), 0.3)), life=g.uniform(3.5, 5.5), r=(r * 0.5, r * g.uniform(1.1, 1.8)), col=(0.9, 0.93, 0.93), alpha=0.8,
-                      kind="flat", wind=0.0, squash=(1.0, 1.0, 0.05), fade_in=0.4, grow=0.6, hold=0.3)
+                      kind="foam", wind=0.0, squash=(1.0, 1.0, 0.05), fade_in=0.4, grow=0.6, hold=0.3)
         self.stream(where, 0.3, make, start=start, end=end)
 
     def slick(self, t0, at, r=40.0):

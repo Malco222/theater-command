@@ -87,16 +87,32 @@ Her tower is plated (seams round it and up it, a row of rivets beside each: `pla
 flooding holes above its foot, and the foot curves out to the casing. She is the most streaked ship in the fleet (the
 art director, 2026-11-18): rust weeps down from her slots, her bollards and her anchor's bed; salt dries in pale runs
 along the shoulder of her casing and down her tower; a dark band lies above her boot topping where the sea washes
-her. Weather in these files is a number at each point (`wear` toward rust, `soot` toward black, and on a submarine
-`salt` toward a pale grey, `info.salt`, D2D5CF if it is not given), so a streak is a ribbon lying on her skin with
-points of its own, three across (`Model.ribbon`), in the skin's own paint: its middle points carry the rust or the
-salt, most at its head, and its edges none, so it fades to either side and has no outline. Her side's own weather is
-kept broad (nothing finer than a few metres), so that a ribbon's edge cannot be told from the skin under it. A file
-has the list `salt` (0 to 100 at each point, like `wear` and `soot`) only where a model carries any; the .glb and
-.fbx carry it already in their point colours. Her boot topping's top is level at 0.55 m (`boot` of `Yard.hull`: the
-ships' rule by the height of the deck does not suit so low a side). Her torpedo doors lie under water (they had been
-drawn at the waterline: `Hull.side` serves only above it), and the `torpedo.bow.*` and `torpedo.stern.*` sockets
-with them.
+her. Her boot topping's top is level at 0.55 m (`boot` of `Yard.hull`: the ships' rule by the height of the deck
+does not suit so low a side). Her torpedo doors lie under water (they had been drawn at the waterline: `Hull.side`
+serves only above it), and the `torpedo.bow.*` and `torpedo.stern.*` sockets with them.
+
+**Streaks: what lies on a skin.** Weather in these files is a number at each point (`wear` toward rust, `soot`
+toward black, and where a model carries any, `salt` toward a pale grey: `info.salt`, D2D5CF if it is not given), so
+a streak finer than the skin's own points needs points of its own. It is a ribbon lying on the skin, three points
+across (`Model.band`, or `Model.ribbon` along a line): its middle points carry the rust or the salt, most at its
+head, and its edges none, so it fades to either side. Four things keep it from showing as a panel, and each was
+found by a picture from 6 m:
+
+- Its paint is the skin's own colour under the skin's name with `.on` after it (`hull.on`, `upper.on`:
+  `Model.on_paint`), so that pictures and the game can treat it apart. In the pictures it is seen by the camera
+  and by nothing else (`stage.ship_look`), so it stops no light: otherwise its edge draws a hairline of shadow
+  and the skin seen under its near edge is dark. In the game give `.on` paints no shadow and a small depth bias.
+- When the mesh is made its points are brought down onto the skin's drawn triangles and take the skin's shading
+  there (`lay_on_skin` in `rigid.py`). A ribbon's own facing differs from the skin's by a degree or two, and a low
+  sun shows that as a panel.
+- The skin's own weather is kept broad where streaks lie (nothing finer than a few metres on a submarine's side),
+  so a ribbon's edge, which carries only that, cannot be told from the skin under it.
+- It must not lie across a ridge of the skin deeper than its lift (8 mm on her side, 3 mm on her tower, under the
+  seams): a streak down her side has its points at the heights of her side's own rows, a run along her side is laid
+  on those rows and frames themselves, and a run down her tower keeps within one flat of its wall.
+
+A file has the list `salt` (0 to 100 at each point, like `wear` and `soot`) only where a model carries any; the
+.glb and .fbx carry it already in their point colours.
 
 The convoy's ships are ships like the rest (`ship`, `fore`, `aft`, a screw, a rudder, every ending), with the guns
 such ships were given: `turret.A` in the bows and `turret.Y` on the stern (clips `fire.A`, `fire.Y`), light guns at
@@ -392,6 +408,14 @@ Smoke seen later and from near by (`trail` in `airshow.py`, `_place` in `stage.p
 all live as long as each other and drift little, or those that die early leave the rest standing as a chain of
 separate ovals; and a puff thins away as the camera comes up to it, or its rim shows like a flat glass plate. Bullet
 strikes are a spit of small orange tongues and a dark scrap, never a round glowing bead.
+
+Foam on the sea (`foam` and the kind "foam" in `stage.py`; a splash's foot and the froth where a ship goes under).
+One broad flat patch, however ragged its stuff, reads as a white plate laid on the sea. Churned water is a patch at
+the heart and a scatter of smaller ones about it, each drawn out into a streak, each with its own life, drifting a
+little apart; the stuff has holes and lace all through it and thins to nothing at its rim, pale green where it is
+thick and white where thin (faint: pushed harder it reads as paint), and as a patch dies its holes open rather than
+the whole growing paler. Kept off pure white (about 0.84, 0.9, 0.88 in the sun). The oil slick keeps the plain
+"flat" stuff.
 
 Two lessons of the close fly-past, kept in `airshow.py`. The camera goes nearly all the way round the machine, so
 somewhere it looks up-sun, and there the sun's glare off the wings washed the camouflage out to cream: the sun now
