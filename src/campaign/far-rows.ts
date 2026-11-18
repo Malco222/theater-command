@@ -10,10 +10,10 @@
 //                                          the far side's shipyards (ruling b445), its oilfields (rulings 194, 231),
 //                                          two towns of the old chart renamed
 //                                          (written by tools/make-far-world.mjs from the planner's and the historian's files)
-//   data/campaign/far-pacific-war.json     rulings 197 and 200: the Pacific war's events, Japan's great choice and its marks
 //   data/campaign/china-line.json          ruling 215: the record's line in China
 //   data/campaign/china-setup.json         the dated rows its raids need
 //   data/campaign/china-stop3.json         ruling 221: what Szechwan costs when history is loose
+//   data/campaign/far-pacific-war.json     rulings 197 and 200: the Pacific war's events, Japan's great choice and its marks
 //
 // While the far side's switch is off (stage.ts) nothing here happens and the game reads its data files as they are.
 // With it on, each block is laid over the data file it names, in place and once, as this module loads: objects by
@@ -22,7 +22,9 @@
 // the far-side rig's rules (tools/trial/seats.mjs on the seat builders' branch), so a seats file that played there
 // plays here unchanged. One rule is this file's own: a nation's code followed by "+" ("JAP+") lays its value over
 // what stands under that code, by the same rules, in place of replacing it: so two files can each give Japan great
-// choices, and the one laid first has the first call in a month (staff.ts takes one a month, in the list's order).
+// choices. Their choices stand in the list in the order the files are laid, and staff.ts takes one a month, in the
+// list's order: so far-pacific-war.json, whose strike south must not wait behind a raid in China, is laid before
+// china-line.json.
 //
 // Every module that reads one of those data files imports this one first ("import './far-rows';"), so the rows are
 // in before anything reads them. This file imports nothing of the game but the switch.
@@ -68,7 +70,9 @@ const TARGETS: Record<string, Obj> = {
 /** The seats files, in the order they are laid. */
 const FILES: [string, Obj][] = [
   ['far-seats-globe', globe], ['far-seats-pacific', pacific], ['far-world', farWorld],
-  ['far-pacific-war', pacificWar], ['china-line', chinaLine], ['china-setup', chinaSetup], ['china-stop3', chinaStop3],
+  // (Before the China front's: both give Japan great choices under "JAP+", and the strike south has the first call.)
+  ['far-pacific-war', pacificWar],
+  ['china-line', chinaLine], ['china-setup', chinaSetup], ['china-stop3', chinaStop3],
 ];
 
 /** The first day beyond the old chart, as the seats files give it. */

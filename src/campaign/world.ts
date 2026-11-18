@@ -23,6 +23,7 @@ import data from '../../data/campaign/world.json';
 import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, standsBy, theName } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
 import { clientMonth, farCountries, farGround, farSettle } from './far';
+import { keepersOf } from './pacific';
 import { fieldClass, seedClass, seedFields } from './air';
 import { newLab, researches } from './research';
 import type { Game, Region } from './types';
@@ -315,7 +316,7 @@ function settleFallen(g: Game, from: number): void {
     const r = g.regions[i], n = g.nations[r.ctrl];
     if (n?.alive || !n?.fellOn) continue;
     const by = n.fellOn.to;
-    r.ctrl = (r.overseas ? protectorOf(g, by) : null) ?? (g.nations[by]?.alive ? by : r.ctrl);
+    r.ctrl = (r.overseas ? protectorOf(g, by, r) : null) ?? (g.nations[by]?.alive ? by : r.ctrl);
     r.since = g.turn;
   }
 }
@@ -578,9 +579,10 @@ export function acrossOcean(ocean: string, r: Region): boolean {
  * victor's armies. The first power on the list that is alive, lives by its ships and is at war with the victor;
  * null where there is none, and the ground goes with the rest.
  */
-export function protectorOf(g: Game, by: string): string | null {
+export function protectorOf(g: Game, by: string, r?: Region): string | null {
   if (!worldOn(g)) return null;
-  for (const id of WORLD.protector) {
+  // (Ground on the far side of the world has keepers of its own, ruling 199(c): pacific.ts.)
+  for (const id of (r && keepersOf(g, r)) || WORLD.protector) {
     const n = g.nations[id];
     if (n?.alive && n.seaSupply && n.atWar.includes(by)) return id;
   }

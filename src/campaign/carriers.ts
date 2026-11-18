@@ -666,6 +666,41 @@ function bestBlow(g: Game, nat: string, lead: AirFleet, escorts: AirFleet[], hit
 }
 
 /**
+ * A strike the staff's plan orders by name (the far side, ruling 200(c): the carrier striking force on Pearl Harbor
+ * in the month Japan's blow falls). The fleet puts to sea, to the nearest sea in its reach from which its strike wing
+ * can fly at the harbour, and the wing goes for what lies there that month, with the fleet's fighters where fighters
+ * will come up. None of the admirals' sums is asked: the plan orders it. A harbour with no ship of an enemy's in it
+ * is not struck and nothing sails; afterwards the admirals' own rule decides. A player's fleets are his own.
+ */
+export function plannedStrike(g: Game, nat: string, fleet: string, harbour: string): boolean {
+  if (!carrierRules(g) || nat === g.human) return false;
+  const c = fleetsOf(g, nat).find((f) => f.name === fleet), r = g.byName[harbour];
+  if (!c || !r || c.ships.cv <= 0 || !atWar(g, nat, r.ctrl) || !shipsInPort(g, r.id, nat).length) return false;
+  const lead = wingOf(g, c.id, 'bmr'), cap = wingOf(g, c.id, 'ftr');
+  if (!lead || lead.bmr <= 0 || lead.flew === g.turn || lead.mission !== 'support') return false;
+  const can = (): boolean => whyNotMission(g, lead, 'harbour', r.id) === null && !assessAir(g, [lead], 'harbour', r.id).why;
+  const keep = { zone: c.zone, stance: c.stance };
+  let at = atSea(c) && can() ? c.zone : -1;
+  if (at < 0) {
+    // (The reach is told nearest first.)
+    for (const z of fleetReach(g, c)) {
+      c.zone = z; c.stance = 'patrol';
+      const ok = can();
+      c.zone = keep.zone; c.stance = keep.stance;
+      if (ok) { at = z; break; }
+    }
+    if (at < 0 || !sail(g, c, at, 'patrol')) return false;
+  }
+  let fleets = [lead];
+  const a = assessAir(g, fleets, 'harbour', r.id);
+  if (a.why) return false;
+  if (a.D >= 1 && cap && cap.ftr > 0 && cap.flew !== g.turn && cap.mission === 'support' && whyNotMission(g, cap, 'harbour', r.id) === null) fleets = [lead, cap];
+  const rep = fly(g, nat, 'harbour', r.id, fleets, ':plan');
+  if (rep) for (const f of fleets) { f.mission = 'harbour'; f.target = r.id; f.flew = g.turn; }
+  return !!rep;
+}
+
+/**
  * The computer's strikes on ships for one nation, flown at once as the player's are. Each carrier fleet's strike
  * wing goes for the best fleet its side has found in reach, or for ships in a harbour; a carrier fleet lying in
  * harbour with nothing in reach puts to sea for the month to strike, where its side would be much the stronger.

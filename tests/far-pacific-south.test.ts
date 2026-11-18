@@ -1,0 +1,391 @@
+// Japan's opening with the far side's switch on (ruling 200, the staffs' plans: the Pacific planner's papers 14 and
+// 18; and ruling 199, a fallen country's far ground: paper 07). The great choice 'south' and what it carries (the ten
+// landings, the quays, the strike on Pearl Harbor), the demand on Indochina, Siam's entry, the keeping of the Dutch
+// and French far ground, and the Pacific's page of history's book. The states are set by hand on the first day's
+// chart and the month's readings are called as the game calls them; one month of Japan's own is played, a made-up
+// December 1941, to see the blow fall. No war is played here.
+import { vi } from 'vitest';
+vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
+
+import { describe, expect, it } from 'vitest';
+import { plannedStrike } from '../src/campaign/carriers';
+import { bookMonth } from '../src/campaign/claims';
+import { DIPLOMACY, holds, monthlyDiplomacy } from '../src/campaign/diplomacy';
+import { allied, atWar, bloc, capitulate, createGame, declareWar, startPhase } from '../src/campaign/game';
+import { HISTORY, onBook, setStop } from '../src/campaign/history';
+import { NAVY } from '../src/campaign/navy';
+import { PACIFIC, demand, freezeAt, keepersOf, mayDemand, pacificOpening } from '../src/campaign/pacific';
+import { ops, startOpen } from '../src/campaign/staff';
+import { runTurnAI } from '../src/campaign/turn';
+import type { Corps, Game } from '../src/campaign/types';
+
+/** A grand campaign on the whole world at a stop of the dial, moved by hand to a month of the war. */
+const war = (stop: number, turn: number, human: string | null = null, seed = 3): Game => {
+  const g = startOpen(createGame(seed, human));
+  if (stop !== 3) setStop(g, stop, true);
+  g.turn = turn;
+  return g;
+};
+const news = (g: Game, turn: number, part: string): boolean => g.headlines.some((h) => h.turn === turn && h.text.includes(part));
+const fell = (g: Game, id: string, turn: number, to: string): void => {
+  const n = g.nations[id];
+  n.alive = false;
+  n.fellOn = { turn, week: 1, to };
+  for (const x of Object.values(g.nations)) x.atWar = x.atWar.filter((e) => e !== id);
+  n.atWar = [];
+};
+const corps = (g: Game, name: string): Corps | undefined => g.corps.find((c) => c.name === name && !c.dead);
+const at = (g: Game, name: string): string | undefined => { const c = corps(g, name); return c && g.regions[c.reg].name; };
+const SOUTH = () => ops('JAP').find((op) => op.id === 'south')!;
+/** France beaten by Germany in a month of the war (June 1940 unless told). */
+const france = (stop: number, turn = 10, human: string | null = null): Game => {
+  const g = war(stop, turn, human);
+  capitulate(g, 'FRA', 'GER');
+  return g;
+};
+
+describe("Japan's opening (ruling 200): the rows", () => {
+  it('gives Japan the strike south first in its list: December 1941 by the book, ten landings, two quays, the strike on Pearl Harbor', () => {
+    const list = ops('JAP');
+    expect(list[0].id).toBe('south');
+    const op = SOUTH();
+    expect(op.declare).toEqual(['USA', 'UK', 'NED']);
+    expect(op.side).toBe(true);
+    expect(op.if).toEqual(['flag:pac:strike']);
+    expect(op.landings!.length).toBe(10);
+    expect(op.landings!.map((l) => l.to[0])).toEqual(['Singora', 'Kota Bharu', 'Guam', 'Aparri', 'Legaspi', 'Wake', 'Brunei', 'Davao', 'Lingayen', 'Jolo']);
+    expect(op.quays).toEqual(['Hainan', 'Cam Ranh']);
+    expect(op.strikes).toEqual([{ fleet: 'Mobile Fleet', harbour: 'Pearl Harbor' }]);
+    expect(HISTORY.dates.JAP?.south).toBe(28);
+    expect(HISTORY.theatre['JAP:south']).toBe('pacific');
+    expect(HISTORY.theatres.pacific.after).toEqual(['west']);
+    expect(HISTORY.bookIf?.['JAP:south']).toEqual(['alive:JAP']);
+    expect(HISTORY.joined.axis).toContain('THA');
+    expect(HISTORY.marks.filter((m) => m.theatre === 'pacific').map((m) => m.why)).toEqual([
+      'the Pacific is at war before its time', 'Japan has stayed out of Indochina', 'Japan has not struck', 'Singapore or Manila still stands', 'Pearl Harbor is lost', 'Brisbane is lost',
+    ]);
+    // Every beach and quay is on the chart, on a sea.
+    const g = war(1, 1);
+    for (const name of [...op.landings!.flatMap((l) => l.to), ...op.quays!, 'Pearl Harbor']) { expect(g.byName[name], name).toBeDefined(); expect(g.byName[name].seas.length, name).toBeGreaterThan(0); }
+  });
+
+  it("reads Siam's row at a declaration of war, and moves the carrier striking force to Etorofu and home again by date", () => {
+    const siam = DIPLOMACY.events.find((e) => e.id === 'siam-beside-japan')!;
+    expect(siam.when).toBe('war');
+    expect(siam.if).toContain('book');
+    const moves = (NAVY.moves ?? []).filter((m) => m.nat === 'JAP' && m.fleet === 'Mobile Fleet');
+    expect(moves.map((m) => [m.turn, m.base, m.home])).toEqual([[27, 'Etorofu', 'kurile'], [29, 'Hiroshima', 'inland']]);
+    expect(moves.every((m) => JSON.stringify(m.stops) === '[1,2]')).toBe(true);
+  });
+});
+
+describe("a fallen country's far ground (ruling 199)", () => {
+  it("names Britain, then Australia, then America for the far side's ground, and leaves the near side's keeper as it was", () => {
+    const g = war(1, 9);
+    expect(PACIFIC?.keepers).toEqual(['UK', 'AUS', 'USA']);
+    expect(keepersOf(g, g.byName['Batavia'])).toEqual(['UK', 'AUS', 'USA']);
+    expect(keepersOf(g, g.byName['Curacao'])).toBeNull();
+  });
+
+  it("the Netherlands fall: the Indies are in Britain's keeping, and their garrison and fleet stay and answer to Britain", () => {
+    const g = war(1, 9);
+    declareWar(g, 'GER', 'NED');
+    capitulate(g, 'NED', 'GER');
+    expect(g.nations.NED.alive).toBe(false);
+    for (const name of ['Batavia', 'Soerabaja', 'Palembang', 'Balikpapan']) expect(g.byName[name].ctrl, name).toBe('UK');
+    const knil = corps(g, 'KNIL 1st Division (West Java)')!;
+    expect(knil.nat).toBe('UK');
+    expect(knil.hold).toBe(true);
+    expect(at(g, 'KNIL 1st Division (West Java)')).toBe('Batavia');
+    const fleet = g.fleets.find((f) => f.name === 'Dutch East Indies Fleet')!;
+    expect(fleet.nat).toBe('UK');
+    expect(g.regions[fleet.base].name).toBe('Soerabaja');
+    // No German soldier or flag reaches the Indies.
+    expect(g.regions.some((r) => r.owner === 'NED' && r.overseas && r.ctrl === 'GER')).toBe(false);
+  });
+
+  it('Australia keeps it where Britain is beaten', () => {
+    const g = war(1, 9);
+    fell(g, 'UK', 8, 'GER');
+    expect(atWar(g, 'AUS', 'GER')).toBe(true);
+    declareWar(g, 'GER', 'NED');
+    capitulate(g, 'NED', 'GER');
+    expect(g.byName['Batavia'].ctrl).toBe('AUS');
+    expect(corps(g, 'KNIL 1st Division (West Java)')!.nat).toBe('AUS');
+  });
+
+  it("France falls: Indochina is Vichy's with its garrison, and New Caledonia is in Britain's keeping", () => {
+    const g = france(1);
+    expect(g.nations.VIC.alive).toBe(true);
+    for (const name of ['Saigon', 'Cam Ranh', 'Hanoi']) { expect(g.byName[name].owner, name).toBe('VIC'); expect(g.byName[name].ctrl, name).toBe('VIC'); }
+    expect(corps(g, 'Cochinchina and Cambodia Division')!.nat).toBe('VIC');
+    expect(at(g, 'Cochinchina and Cambodia Division')).toBe('Saigon');
+    expect(g.byName['New Caledonia'].ctrl).toBe('UK');
+  });
+});
+
+describe('the demand on Indochina (ruling 199)', () => {
+  it('by the book: July 1941, one step and no war, and the garrison stands down; the freeze follows on its date', () => {
+    const g = france(1);
+    g.turn = 22;
+    pacificOpening(g);
+    expect(g.byName['Saigon'].ctrl).toBe('VIC');
+    expect(mayDemand(g)).toBe(true);
+    g.turn = 23;
+    pacificOpening(g);
+    for (const name of ['Saigon', 'Cam Ranh', 'Hanoi', 'Phnom Penh', 'Vientiane']) { expect(g.byName[name].owner, name).toBe('JAP'); expect(g.byName[name].ctrl, name).toBe('JAP'); }
+    expect(g.flags['pac:demand']).toBe(23);
+    expect(atWar(g, 'JAP', 'VIC')).toBe(false);
+    expect(g.nations.VIC.alive).toBe(true);
+    expect(g.corps.some((c) => c.nat === 'VIC' && !c.dead && g.regions[c.reg].owner === 'JAP')).toBe(false);
+    expect(corps(g, 'Cochinchina and Cambodia Division')).toBeUndefined();
+    expect(news(g, 23, 'demands Indochina of Vichy France')).toBe(true);
+    expect(holds(g, 'holds:JAP,Saigon')).toBe(true);
+    expect(mayDemand(g)).toBe(false);
+    expect(freezeAt(g)).toBe(0);
+    g.turn = 24;
+    pacificOpening(g);
+    expect(freezeAt(g)).toBe(24);
+    // It is made once.
+    expect(demand(g)).toBe(false);
+  });
+
+  it('where history is loose: the month after Germany and the Soviet Union go to war, and the freeze the month after that', () => {
+    const g = france(3, 12);
+    g.turn = 20;
+    declareWar(g, 'GER', 'SOV');
+    pacificOpening(g);
+    expect(g.byName['Saigon'].ctrl).toBe('VIC');
+    g.turn = 21;
+    pacificOpening(g);
+    expect(g.byName['Saigon'].ctrl).toBe('JAP');
+    expect(g.flags['pac:demand']).toBe(21);
+    expect(freezeAt(g)).toBe(0);
+    g.turn = 22;
+    pacificOpening(g);
+    expect(freezeAt(g)).toBe(22);
+  });
+
+  it('where history is loose and the east is quiet: the thirteenth month after France fell, and never once Germany is beaten', () => {
+    const g = france(3, 12);
+    g.turn = 24;
+    pacificOpening(g);
+    expect(g.byName['Saigon'].ctrl).toBe('VIC');
+    g.turn = 25;
+    pacificOpening(g);
+    expect(g.byName['Saigon'].ctrl).toBe('JAP');
+    const h = france(3, 12);
+    fell(h, 'GER', 20, 'SOV');
+    h.turn = 30;
+    pacificOpening(h);
+    expect(h.byName['Saigon'].ctrl).toBe('VIC');
+    expect(h.flags['pac:demand']).toBeUndefined();
+  });
+
+  it("a player's Japan is asked nothing by date: the step is his, and a declaration on Vichy is answered by the handing-over", () => {
+    const g = france(1, 10, 'JAP');
+    g.turn = 23;
+    pacificOpening(g);
+    expect(g.byName['Saigon'].ctrl).toBe('VIC');
+    expect(mayDemand(g)).toBe(true);
+    declareWar(g, 'JAP', 'VIC');
+    expect(atWar(g, 'JAP', 'VIC')).toBe(false);
+    expect(g.byName['Saigon'].owner).toBe('JAP');
+    expect(g.byName['Cam Ranh'].ctrl).toBe('JAP');
+    expect(g.flags['pac:demand']).toBe(23);
+    expect(mayDemand(g)).toBe(false);
+  });
+
+  it('none where France stands', () => {
+    const g = war(1, 23);
+    expect(mayDemand(g)).toBe(false);
+    pacificOpening(g);
+    expect(g.byName['Saigon'].ctrl).toBe('FRA');
+    expect(g.flags['pac:demand']).toBeUndefined();
+    expect(demand(g)).toBe(false);
+  });
+});
+
+describe('Siam beside Japan (ruling 200(b))', () => {
+  it('at the stops that keep the book: the day Japan is at war with Britain, Siam joins the Axis and declares on Britain', () => {
+    for (const stop of [1, 2]) {
+      const g = war(stop, 28);
+      expect(bloc(g.nations.THA)).toBeNull();
+      declareWar(g, 'JAP', 'UK');
+      expect(bloc(g.nations.THA), `stop ${stop}`).toBe('axis');
+      expect(atWar(g, 'THA', 'UK')).toBe(true);
+      expect(atWar(g, 'THA', 'JAP')).toBe(false);
+      expect(allied(g, 'JAP', 'THA')).toBe(true);
+      expect(g.flags['event:siam-beside-japan']).toBe(28);
+      expect(news(g, 28, 'Siam stands with Japan')).toBe(true);
+      // Read again at the next declaration, and as the month opens: once is all.
+      declareWar(g, 'JAP', 'USA');
+      monthlyDiplomacy(g);
+      expect(g.headlines.filter((h) => h.text.includes('Siam stands with Japan')).length).toBe(1);
+    }
+  });
+
+  it("not where history is loose, and never a player's Siam", () => {
+    const g = war(3, 28);
+    declareWar(g, 'JAP', 'UK');
+    expect(bloc(g.nations.THA)).toBeNull();
+    expect(atWar(g, 'THA', 'UK')).toBe(false);
+    const h = war(1, 28, 'THA');
+    declareWar(h, 'JAP', 'UK');
+    expect(bloc(h.nations.THA)).toBeNull();
+    expect(atWar(h, 'THA', 'UK')).toBe(false);
+  });
+});
+
+/**
+ * A made-up December 1941: the Netherlands and France struck down by hand in their months, the opening read month by
+ * month from June 1941, Japan's dated rows taken in, America's fleet put at Pearl Harbor as its row of May 1940 puts
+ * it, the China front's dated choices counted as taken; then Japan's own month is played.
+ */
+const december = (stop: number): Game => {
+  const g = war(stop, 9, null, 17);
+  declareWar(g, 'GER', 'NED');
+  capitulate(g, 'NED', 'GER');
+  g.turn = 10;
+  capitulate(g, 'FRA', 'GER');
+  for (const t of [22, 23, 24, 25, 27]) { g.turn = t; bookMonth(g); monthlyDiplomacy(g); if (t === 24 || t === 27) startPhase(g, 'JAP'); }
+  for (const op of ops('JAP')) if (op.id !== 'south') g.flags[`st:done:JAP:${op.id}`] = 1;
+  const f = g.fleets.find((x) => x.nat === 'USA' && x.name === 'Pacific Fleet')!, sea = g.seas.findIndex((z) => z.key === 'hawaii');
+  f.base = g.byName['Pearl Harbor'].id; f.port = 'Pearl Harbor'; f.home = sea; f.zone = sea; f.station = sea; f.stance = 'port';
+  g.turn = 28;
+  bookMonth(g);
+  monthlyDiplomacy(g);
+  return g;
+};
+
+describe("Japan's month of December 1941", () => {
+  it('by the book: the armies wait on their quays in November, and the carrier striking force lies at Etorofu', () => {
+    const g = december(1);
+    expect(g.byName['Saigon'].ctrl).toBe('JAP');
+    expect(freezeAt(g)).toBe(24);
+    expect(onBook(g, 'pacific')).toBe(true);
+    const quay: Record<string, string> = {
+      '25th Army (5th Division)': 'Hainan', '25th Army (18th Division)': 'Hainan', 'South Seas Detachment': 'Chichi Jima', '14th Army (16th Division)': 'Okinawa',
+      'Kawaguchi Detachment (35th Brigade, of the 18th Division)': 'Cam Ranh', 'Sakaguchi Detachment (56th Mixed Infantry Group)': 'Palau', '14th Army (48th Division)': 'Formosa',
+    };
+    for (const l of SOUTH().landings!) {
+      const c = corps(g, l.corps);
+      expect(c, l.corps).toBeDefined();
+      const r = g.regions[c!.reg];
+      expect(r.port && r.ctrl === 'JAP', l.corps).toBe(true);
+      if (quay[l.corps]) expect(r.name, l.corps).toBe(quay[l.corps]);
+    }
+    const fleet = g.fleets.find((x) => x.nat === 'JAP' && x.name === 'Mobile Fleet')!;
+    expect(g.regions[fleet.base].name).toBe('Etorofu');
+    expect(g.seas[fleet.zone].key).toBe('kurile');
+  });
+
+  it('by the book: Japan declares on America and Britain, Siam joins, the carriers strike Pearl Harbor, the armies land, and Germany follows as the month closes', () => {
+    const g = december(1);
+    const before = g.fleets.find((x) => x.nat === 'USA' && x.name === 'Pacific Fleet')!;
+    const afloat = before.ships.bb + before.ships.cv + before.ships.ca + before.ships.dd;
+    g.phase = g.order.indexOf('JAP');
+    runTurnAI(g);
+    expect(g.turn).toBe(29);
+    expect(g.flags['st:done:JAP:south']).toBe(28);
+    expect(g.flags['war:JAP:USA']).toBe(28);
+    expect(g.flags['war:JAP:UK']).toBe(28);
+    expect(atWar(g, 'JAP', 'USA') && atWar(g, 'JAP', 'UK') && atWar(g, 'JAP', 'AUS')).toBe(true);
+    expect(bloc(g.nations.JAP)).toBe('axis');
+    expect(g.flags['event:siam-beside-japan']).toBe(28);
+    expect(atWar(g, 'THA', 'UK')).toBe(true);
+    // The strike: flown the month the blow falls, without warning, at what lay in the harbour.
+    expect(news(g, 28, 'raid the harbour of Pearl Harbor without warning')).toBe(true);
+    const after = g.fleets.find((x) => x.nat === 'USA' && x.name === 'Pacific Fleet')!;
+    expect(after.ships.bb + after.ships.cv + after.ships.ca + after.ships.dd).toBeLessThan(afloat);
+    // The quays: the two divisions on Hainan, which Japan holds and does not own, have sailed.
+    expect(at(g, '25th Army (5th Division)')).toBe('Singora');
+    expect(at(g, '25th Army (18th Division)')).toBe('Kota Bharu');
+    expect(at(g, 'Kawaguchi Detachment (35th Brigade, of the 18th Division)')).toBe('Brunei');
+    // The lift of six is all that sails in the month.
+    const sailed = SOUTH().landings!.filter((l) => l.to.includes(at(g, l.corps) ?? '')).length;
+    expect(sailed).toBeGreaterThanOrEqual(5);
+    expect(sailed).toBeLessThanOrEqual(6);
+    // The month closes: Germany and Italy declare on America, and the news names Pearl Harbor.
+    expect(g.flags['event:pearl-harbor-world']).toBe(28);
+    expect(atWar(g, 'USA', 'GER')).toBe(true);
+    expect(news(g, 28, 'Japan attacks the American fleet at Pearl Harbor')).toBe(true);
+    expect(onBook(g, 'pacific')).toBe(true);
+  });
+
+  it("where history is loose the strike south waits for the staff's word, and no date sends it", () => {
+    const g = december(3);
+    g.phase = g.order.indexOf('JAP');
+    runTurnAI(g);
+    expect(g.flags['st:done:JAP:south']).toBeUndefined();
+    expect(atWar(g, 'JAP', 'USA')).toBe(false);
+    expect(atWar(g, 'JAP', 'UK')).toBe(false);
+    expect(bloc(g.nations.THA)).toBeNull();
+  });
+});
+
+describe("the plan's strike (ruling 200(c))", () => {
+  it('a harbour with no ship of an enemy in it is not struck, and nothing sails', () => {
+    const g = war(1, 28);
+    declareWar(g, 'JAP', 'UK');
+    expect(atWar(g, 'JAP', 'AUS')).toBe(true);
+    const fleet = g.fleets.find((x) => x.nat === 'JAP' && x.name === 'Mobile Fleet')!;
+    const was = [fleet.zone, fleet.stance];
+    expect(plannedStrike(g, 'JAP', 'Mobile Fleet', 'Brisbane')).toBe(false);
+    expect([fleet.zone, fleet.stance]).toEqual(was);
+    // Nor a harbour of a country at peace, nor by a fleet that is not there.
+    expect(plannedStrike(g, 'JAP', 'Mobile Fleet', 'Pearl Harbor')).toBe(false);
+    expect(plannedStrike(g, 'JAP', 'No Such Fleet', 'Singapore')).toBe(false);
+  });
+
+  it("a player's fleets are his own", () => {
+    const g = war(1, 28, 'JAP');
+    declareWar(g, 'JAP', 'UK');
+    expect(plannedStrike(g, 'JAP', 'Mobile Fleet', 'Singapore')).toBe(false);
+  });
+});
+
+/** A state set by hand has fought none of Europe's war: what the book asks of the other theatres by a month counts as asked, so the Pacific's own marks are read alone. */
+const pacificOnly = (g: Game): Game => {
+  HISTORY.marks.forEach((m, k) => { if (m.theatre !== 'pacific' && m.by !== undefined) g.flags[`hist:mk:${k}`] = 1; });
+  return g;
+};
+
+describe("the Pacific's page of history's book", () => {
+  it("closes when the Pacific is at war before its time, and leaves the west's page open", () => {
+    const g = pacificOnly(war(1, 20));
+    declareWar(g, 'JAP', 'USA');
+    const failed = bookMonth(g);
+    expect(failed.map((m) => m.why)).toContain('the Pacific is at war before its time');
+    expect(onBook(g, 'pacific')).toBe(false);
+    expect(onBook(g, 'west')).toBe(true);
+    expect(news(g, 20, "History's book is closed in the Pacific: the Pacific is at war before its time.")).toBe(true);
+  });
+
+  it('closes when Japan has stayed out of Indochina, and when Japan has not struck', () => {
+    const g = pacificOnly(war(1, 24));
+    expect(bookMonth(g).length).toBe(0);
+    g.turn = 25;
+    expect(bookMonth(g).map((m) => m.why)).toEqual(['Japan has stayed out of Indochina']);
+    expect(onBook(g, 'pacific')).toBe(false);
+    const h = pacificOnly(france(1));
+    h.turn = 23;
+    pacificOpening(h);
+    h.turn = 25;
+    expect(bookMonth(h).length).toBe(0);
+    h.turn = 29;
+    expect(bookMonth(h).length).toBe(0);
+    h.turn = 30;
+    expect(bookMonth(h).map((m) => m.why)).toEqual(['Japan has not struck']);
+  });
+
+  it('closes when America loses Pearl Harbor, or Australia Brisbane', () => {
+    for (const [place, why] of [['Pearl Harbor', 'Pearl Harbor is lost'], ['Brisbane', 'Brisbane is lost']] as const) {
+      const g = pacificOnly(war(1, 20));
+      expect(bookMonth(g).length).toBe(0);
+      g.byName[place].ctrl = 'JAP';
+      expect(bookMonth(g).map((m) => m.why), place).toEqual([why]);
+      expect(onBook(g, 'pacific')).toBe(false);
+    }
+  });
+});

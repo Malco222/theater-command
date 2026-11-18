@@ -56,7 +56,9 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
     expect((leagueData as any).never).toContain('JAP');
     for (const id of ['MAN', 'MGL']) { expect((leagueData as any).never, id).not.toContain(id); expect(small(id), id).toBe(true); }
     expect(small('JAP')).toBe(false);
-    expect(NAVY.moves!.length).toBe(FW.navy.moves.length);
+    // (The far world's fleet bases by date, and the carrier striking force's two of the Pacific war file.)
+    expect(NAVY.moves!.length).toBe(FW.navy.moves.length + 2);
+    expect(NAVY.moves!.filter((m) => m.fleet === 'Mobile Fleet' && m.nat === 'JAP').map((m) => m.base).slice(-2)).toEqual(['Etorofu', 'Hiroshima']);
   });
 
   it('puts Japan on the door as the seventh great power, and the fourteen seats on its second row', () => {

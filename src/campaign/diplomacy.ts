@@ -17,7 +17,7 @@ import { techMonth } from './tech';
 import { fleetsOnFall, gateShutSince } from './navy';
 import { airOnFall } from './air';
 import { recordFall } from './liberation';
-import { mayJoin, stopDef, stopOf } from './history';
+import { mayJoin, onBook, stopDef, stopOf } from './history';
 import { hashString } from '../core/rng';
 import worldData from '../../data/campaign/world.json';
 import { pressData, warWorkMonth, worldMonth } from './world';
@@ -65,8 +65,10 @@ export interface DiploEvent {
   /**
    * 'close': read as a month closes, once every country has moved, and dated that month (closeDiplomacy). The far
    * side's entry of December 1941 is: Japan moves last in a month, and its blow came before Germany's declaration.
+   * 'war': read the day any war is declared as well as when a month opens (warDiplomacy): Siam lets Japan's army
+   * pass the day Japan strikes Britain, before the landings of that month sail.
    */
-  when?: 'close';
+  when?: 'close' | 'war';
   /** Other words for the news: the first row whose conditions hold as the event fires gives them in place of 'text'. */
   says?: { if: string[]; text: string }[];
   /** Events that follow from this one: each is read the day this one fires, where its own month and conditions have come. */
@@ -590,6 +592,8 @@ export function holds(g: Game, cond: string): boolean {
     case 'momentum<=': return momentum(g) <= Number(a[0]);
     case 'holds': return g.byName[a[1]]?.ctrl === a[0] && g.byName[a[1]]?.owner === a[0];
     case 'flag': return !!g.flags[rest];
+    // 'book': the dial stands at a stop that keeps history's calendar. 'book:pacific': and the book is still open in that theatre.
+    case 'book': return !!stopDef(g).book && (rest === '' || onBook(g, rest));
     // 'since:event:x,2': that flag was raised at least two months ago.
     case 'since': return !!g.flags[a[0]] && g.turn - g.flags[a[0]] >= Number(a[1] ?? 1);
     case 'war': return !!N(a[0]) && !!N(a[1]) && atWar(g, a[0], a[1]);
@@ -930,6 +934,28 @@ export function closeDiplomacy(g: Game): void {
     if (fire(g, e)) { g.flags[`event:${e.id}`] = g.turn; if (e.then) thenRead(g, e, open); }
   }
   pacificSides(g);
+}
+
+/** The events read the day a war is declared. None while the far side's switch is off. */
+const AT_WAR: DiploEvent[] = DIPLOMACY.events.filter((e) => e.when === 'war');
+let readingWar = false;
+
+/**
+ * The day a war is declared (game.ts declareWar, once the war and its ties are set): the events marked for it are
+ * read as the month's opening reads them. A war such an event brings does not read them again from within.
+ */
+export function warDiplomacy(g: Game): void {
+  if (!AT_WAR.length || readingWar || (g.flags.dom ?? 0) > 0) return;
+  const open = g.flags.open === 1;
+  readingWar = true;
+  try {
+    for (const e of AT_WAR) {
+      if (e.mode && (e.mode === 'open') !== open) continue;
+      if (g.flags[`event:${e.id}`] || g.turn < e.from || (g.turn > e.to && !open)) continue;
+      if (!(e.if ?? []).every((c) => holds(g, c))) continue;
+      if (fire(g, e)) { g.flags[`event:${e.id}`] = g.turn; if (e.then) thenRead(g, e, open); }
+    }
+  } finally { readingWar = false; }
 }
 
 /** The events an event names under 'then' are read the day it fires: the republics follow America the month it enters, whenever in the month that is. */

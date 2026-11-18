@@ -2,12 +2,16 @@
 // December 1941 stands at its month's opening as it always did, the month's close reads nothing, and the rule that
 // lets two seats files give one country rows ("JAP+") is the far-side rig's rule with one more key.
 import { describe, expect, it } from 'vitest';
-import { DIPLOMACY, closeDiplomacy, holds, monthlyDiplomacy } from '../src/campaign/diplomacy';
+import { plannedStrike } from '../src/campaign/carriers';
+import { DIPLOMACY, closeDiplomacy, holds, monthlyDiplomacy, warDiplomacy } from '../src/campaign/diplomacy';
 import { FAR_LAID, lay } from '../src/campaign/far-rows';
-import { atWar, createGame, declareWar, setWar } from '../src/campaign/game';
-import { PACIFIC, freezeAt, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds } from '../src/campaign/pacific';
+import { atWar, capitulate, createGame, declareWar, setWar } from '../src/campaign/game';
+import { HISTORY } from '../src/campaign/history';
+import { NAVY } from '../src/campaign/navy';
+import { PACIFIC, demand, demandInstead, freezeAt, keepersOf, keptForces, mayDemand, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds } from '../src/campaign/pacific';
 import { FAR_STAGE } from '../src/campaign/stage';
-import { startOpen } from '../src/campaign/staff';
+import { ops, startOpen } from '../src/campaign/staff';
+import open from '../data/campaign/open.json';
 
 describe('the Pacific war with the far side off', () => {
   it('reads no rule of it and lays no row of it', () => {
@@ -41,6 +45,39 @@ describe('the Pacific war with the far side off', () => {
     const wars = g.nations.UK.atWar.length;
     declareWar(g, 'USA', 'ITA');
     expect(g.nations.UK.atWar.length).toBe(wars);
+  });
+});
+
+describe("Japan's opening with the far side off (rulings 199 and 200)", () => {
+  it('has no row of it: no great choice of Japan, no page of the book for the Pacific, no event read at a declaration, no strike or quay on any plan', () => {
+    expect(ops('JAP')).toEqual([]);
+    expect(HISTORY.theatres.pacific).toBeUndefined();
+    expect(HISTORY.marks.some((m) => m.theatre === 'pacific')).toBe(false);
+    expect(DIPLOMACY.events.some((e) => e.when === 'war' || e.id === 'siam-beside-japan')).toBe(false);
+    expect(Object.values(open.ops as Record<string, { strikes?: unknown; quays?: unknown }[]>).flat().some((op) => op.strikes !== undefined || op.quays !== undefined)).toBe(false);
+    expect((NAVY.moves ?? []).some((m) => m.fleet === 'Mobile Fleet')).toBe(false);
+  });
+
+  it('makes no demand, keeps nothing for a fallen country by the far rule, and a declaration of war reads no event', () => {
+    const g = startOpen(createGame(3, null));
+    g.turn = 23;
+    expect(mayDemand(g)).toBe(false);
+    expect(demand(g)).toBe(false);
+    expect(demandInstead(g, 'GER', 'FRA')).toBe(false);
+    expect(g.regions.every((r) => keepersOf(g, r) === null)).toBe(true);
+    expect(keptForces(g, 'FRA', 'GER').size).toBe(0);
+    expect(plannedStrike(g, 'UK', 'Home Fleet', 'Kiel')).toBe(false);
+    const before = JSON.stringify([g.flags, g.headlines.length]);
+    warDiplomacy(g);
+    pacificOpening(g);
+    expect(JSON.stringify([g.flags, g.headlines.length])).toBe(before);
+    // France falls as it always did: the armistice, and its far ground in Britain's keeping with no soldier of France left on it.
+    setWar(g, 'GER', 'FRA');
+    setWar(g, 'GER', 'UK');
+    capitulate(g, 'FRA', 'GER');
+    expect(g.nations.VIC.alive).toBe(true);
+    expect(g.corps.some((c) => c.nat === 'FRA' && !c.dead)).toBe(false);
+    expect(g.flags['pac:demand']).toBeUndefined();
   });
 });
 

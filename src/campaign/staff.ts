@@ -60,6 +60,10 @@ export interface Op {
   /** A side operation: no build-up, and the main army is not taken for it. */
   side?: boolean;
   landings?: PlanPhase['landings'];
+  /** Harbours its country holds without owning them, from which these landings may sail as from a home port. */
+  quays?: string[];
+  /** Strikes its carriers fly at an enemy harbour in the month it goes (ai.ts and carriers.ts, `plannedStrike`). */
+  strikes?: PlanPhase['strikes'];
   staging?: Record<string, number>;
   join?: 'allies' | 'axis';
   /**
@@ -1072,10 +1076,11 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   const main = live[0] ?? null;
   const phase: PlanPhase = { name: '', from: g.turn, to: g.turn, posture: 'defend' } as PlanPhase;
   if (declare.length) phase.declare = declare;
-  if (went?.landings) { phase.landings = went.landings; phase.to = flag(g, `st:go:${nat}`) + 6; }
+  if (went?.strikes && flag(g, `st:go:${nat}`) === g.turn) phase.strikes = went.strikes;
+  if (went?.landings) { phase.landings = went.landings; phase.to = flag(g, `st:go:${nat}`) + 6; if (went.quays) phase.quays = went.quays; }
   // (By the book: the landings of a side-show launched the month before the great blow fell are still going ashore.)
   const ashore = !went?.landings && flag(g, `st:landAt:${nat}`) && g.turn - flag(g, `st:landAt:${nat}`) <= 1 ? list[flag(g, `st:landOp:${nat}`) - 1] ?? null : null;
-  if (ashore?.landings) { phase.landings = ashore.landings; phase.to = flag(g, `st:landAt:${nat}`) + 6; }
+  if (ashore?.landings) { phase.landings = ashore.landings; phase.to = flag(g, `st:landAt:${nat}`) + 6; if (ashore.quays) phase.quays = ashore.quays; }
   if (live.length) {
     phase.enemies = [...new Set(live.flatMap((f) => f.enemies))];
     phase.objectives = [...new Set(live.flatMap((f) => objectives(g, f)))];

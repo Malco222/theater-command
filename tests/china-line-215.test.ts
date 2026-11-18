@@ -546,10 +546,10 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
   const L = D.history.lines[0];
 
   it('dates Japan\'s offensive of 1944 to April 1944, in its own theatre, with the key that makes its front wait', () => {
-    expect(D.history.dates.JAP.ichigo).toBe(56);
+    expect(D.history.dates['JAP+'].ichigo).toBe(56);
     expect(D.history.theatre['JAP:ichigo']).toBe('china');
     expect(D.history.theatres.china).toBeTruthy();
-    const op = D.open.ops.JAP.find((o) => o.id === 'ichigo')!;
+    const op = D.open.ops['JAP+'].find((o) => o.id === 'ichigo')!;
     expect(op).toMatchObject({ wait: true, from: 56, to: 66, push: 8 });
     expect(op.declare).toBeUndefined();
     expect(op.side).toBeUndefined();
@@ -584,7 +584,7 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
   it('dates the record\'s raids of 1939 to 1941 as great choices of the book alone, Nanning landing from a home port (219(3), b375)', () => {
     const raids = ['nanning', 'wuyuan', 'ichang', 'coast41', 'yencheng', 'changsha41'];
     for (const id of raids) {
-      const op = D.open.ops.JAP.find((o) => o.id === id)!;
+      const op = D.open.ops['JAP+'].find((o) => o.id === id)!;
       expect(op, id).toBeTruthy();
       // A great choice in a war already on: no side-show, nobody to declare on, so it opens the China front (216(a)).
       expect(op.side, id).toBeUndefined();
@@ -593,24 +593,24 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
       // Off the book its own conditions can never hold; the book reads its own.
       expect(op.if, id).toEqual(['war:JAP,CHN', 'peace:JAP,CHN']);
       expect(D.history.bookIf[`JAP:${id}`], id).toEqual(['war:JAP,CHN', 'alive:CHN']);
-      const date = D.history.dates.JAP[id];
+      const date = D.history.dates['JAP+'][id];
       expect(op.from, id).toBe(date);
       expect(op.to!, id).toBeGreaterThan(date);
     }
     // No two on one date: one great choice a month at most.
-    expect(new Set(raids.map((id) => D.history.dates.JAP[id])).size).toBe(raids.length);
+    expect(new Set(raids.map((id) => D.history.dates['JAP+'][id])).size).toBe(raids.length);
     // Nanning: ashore at Pakhoi, the historian's raid span, from Taihoku, where the 5th Division is brought the month before.
     expect(L.spans.Pakhoi).toEqual([{ from: 3, to: 15, kind: 'raid' }]);
-    const nanning = D.open.ops.JAP.find((o) => o.id === 'nanning')!;
+    const nanning = D.open.ops['JAP+'].find((o) => o.id === 'nanning')!;
     expect(nanning.landings).toEqual([{ corps: '21st Army (5th Division)', with: ['Formosa Army'], to: ['Pakhoi'] }]);
     const row = (setupRows as unknown as { 'setup-1939': { expeditions: [number, string, string, string, number, string, Record<string, unknown>][] } })['setup-1939'].expeditions.find((r) => r[2] === '21st Army (5th Division)')!;
     expect(row.slice(0, 6)).toEqual([2, 'JAP', '21st Army (5th Division)', 'inf', 1, 'Taihoku']);
-    expect(row[0]).toBeLessThan(D.history.dates.JAP.nanning);
+    expect(row[0]).toBeLessThan(D.history.dates['JAP+'].nanning);
   });
 
   it('lands the 1941 coast raid from Japan\'s own ports, each force alone, in the month every span opens (224, b375)', () => {
-    const coast = D.open.ops.JAP.find((o) => o.id === 'coast41')!;
-    expect(D.history.dates.JAP.coast41).toBe(20);
+    const coast = D.open.ops['JAP+'].find((o) => o.id === 'coast41')!;
+    expect(D.history.dates['JAP+'].coast41).toBe(20);
     for (const nm of ['Foochow', 'Ningpo', 'Wenchow']) expect(L.spans[nm][0].from, nm).toBe(20);
     expect(coast.landings).toEqual([
       { corps: '23rd Army (48th Division)', to: ['Foochow', 'Wenchow'] },
@@ -622,7 +622,7 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
     expect(rows.map((r) => r[2])).toEqual(['21st Army (5th Division)', ...coast.landings!.map((l) => l.corps)]);
     for (const l of coast.landings!) {
       const r = rows.find((x) => x[2] === l.corps)!;
-      expect(r[0], l.corps).toBe(D.history.dates.JAP.coast41 - 1);
+      expect(r[0], l.corps).toBe(D.history.dates['JAP+'].coast41 - 1);
       expect(r[1], l.corps).toBe('JAP');
       expect(['Formosa', 'Taihoku'], l.corps).toContain(r[5]);
       expect(r[6].war, l.corps).toEqual(['JAP', 'CHN']);

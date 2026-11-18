@@ -43,9 +43,13 @@ describe('the offer of war (ruling 197): the first day', () => {
     expect(entry[0].when).toBe('close');
     expect(entry[0].from).toBe(28);
     expect(DIPLOMACY.events.some((e) => e.id === 'pact-binds')).toBe(true);
-    // Japan's great choices in China are still its own (the "+" rule: a later file lays over what stands).
+    // Japan's great choices in China are still its own (the "+" rule: a later file lays over what stands), and the
+    // strike south stands before them: it has the first call of a month.
     expect(ops('JAP').some((op) => op.id === 'ichigo')).toBe(true);
     expect(HISTORY.dates.JAP?.ichigo).toBe(56);
+    expect(ops('JAP')[0].id).toBe('south');
+    expect(ops('JAP').length).toBe(8);
+    expect(HISTORY.dates.JAP?.south).toBe(28);
   });
 
   it('puts Japan outside both blocs leaning to the Axis, at war with China, and every country wanted on its list', () => {
@@ -215,6 +219,8 @@ describe('the offer of war (ruling 197): who follows whom', () => {
   it('an American player declares on Japan in March 1940: America alone until December 1941', () => {
     const g = war(1, 7, 'USA');
     declareWar(g, 'USA', 'JAP');
+    // The surprise is one rule for every country (b499): Japan, at war with no country of America's side, is caught.
+    expect(sneakOn(g, 'USA', 'JAP')).toBe(true);
     // Japan, struck by a country outside both blocs, joins nobody, and nobody joins America.
     expect(bloc(g.nations.JAP)).toBeNull();
     expect(bloc(g.nations.USA)).toBeNull();

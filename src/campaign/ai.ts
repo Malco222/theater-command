@@ -17,6 +17,7 @@ import { SUPPORT } from './support';
 import { aiBridges, aiEngineers } from './engineers';
 import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, useLift } from './navy';
 import { shoreAI } from './fleets';
+import { plannedStrike } from './carriers';
 import { shoreOpen } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
@@ -478,6 +479,8 @@ function mainCampaign(g: Game, nat: string): void {
     if (go) for (const e of ph.declare) declareWar(g, nat, e);
     if (open) afterDeclaring(g, nat);
   }
+  // (The strikes the plan orders of its carriers fall with the declaration, before the admirals read the month.)
+  for (const s of ph?.strikes ?? []) plannedStrike(g, nat, s.fleet, s.harbour);
   navalAI(g, nat, ph?.fleets);
   shoreAI(g, nat);
   airAI(g, nat, ph);
@@ -1014,7 +1017,9 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
     if (!c) continue;
     const from = g.regions[c.reg];
     // Only a corps still waiting in port: one already overseas has made its landing.
-    const waiting = from.port && (within ? within.has(from.id) && allied(g, nat, from.ctrl) && !L.to.includes(from.name) : from.owner === nat);
+    // (The main plan may name harbours the nation holds without owning them: its quays, where the plan has any.)
+    const waiting = from.port && (within ? within.has(from.id) && allied(g, nat, from.ctrl) && !L.to.includes(from.name)
+      : from.owner === nat || (!!ph.quays?.includes(from.name) && from.ctrl === nat && !L.to.includes(from.name)));
     if (!waiting) continue;
     // Others the plan sends in the same lift, if they are standing on the same quay. (No more than the floor at home
     // lets go: ruling 229, 1b.)

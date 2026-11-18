@@ -11,7 +11,7 @@ import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { BUDGET, PRODUCTION, budgeted, canBuildYet, corpsName, deliver, farShare, firstCorpsNumber, gunsWanted, income, specOf, upkeepTotal } from './economy';
-import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, pcIncome, sneakOn, wouldSurprise } from './diplomacy';
+import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, pcIncome, sneakOn, warDiplomacy, wouldSurprise } from './diplomacy';
 import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
 import { AIR, airOnFall, airUpkeep, setupAir, skyByNumbers, skyOnLand, skyOver } from './air';
@@ -52,7 +52,7 @@ import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
 import { clientWar, tiedPair } from './far';
-import { pacificWar } from './pacific';
+import { demandInstead, keepersOf, keptForces, pacificWar } from './pacific';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -363,6 +363,8 @@ export function sidesAtPeace(g: Game): void {
 export function declareWar(g: Game, a: string, b: string): void {
   const A = g.nations[a], B = g.nations[b];
   if (!A.alive || !B.alive || atWar(g, a, b) || sameSide(g, a, b)) return;
+  // The far side (ruling 199(e)): Japan's declaration on Vichy France while it holds Saigon is answered by the handing-over of Indochina, and there is no war.
+  if (demandInstead(g, a, b)) return;
   const tied = tiedPair(g, a, b); // a client turning on its patron, or the patron on it (far.ts): read before the war is set
   // The grand campaign: a blow against a country at peace is a surprise this month, and when the player strikes a
   // country outside both blocs the neutral world takes note. Both are read off before anything changes.
@@ -412,6 +414,8 @@ export function declareWar(g: Game, a: string, b: string): void {
   honour(g, a, b, sideWas);
   // The far side: the dominions and the Dutch are at war with Japan the day Britain is (ruling 197; pacific.ts).
   pacificWar(g, a, b);
+  // The events that are read the day a war is declared (the far side's: Siam beside Japan, ruling 200(b)).
+  warDiplomacy(g);
   if (A.blitz && !g.flags[`tempo:${a}:${g.turn}`]) {
     g.flags[`tempo:${a}:${g.turn}`] = 1;
     for (const c of g.corps) if (c.nat === a && KIND[c.kind].mobile && g.order[g.phase] === a) { c.ap += 1; c.apMax += 1; }
@@ -2684,6 +2688,8 @@ export function capitulate(g: Game, nat: string, by: string): void {
   // France that had been liberated and falls a second time.
   const armistice = nat === 'FRA' && !g.flags.dom && !X.freedOn;
   delete X.freedOn;
+  // The far side (ruling 199(b)): its forces on far ground that passes into keeping stay at their posts and answer to the keeper.
+  const keeping = keptForces(g, nat, by, armistice ? (r) => r.vichy : undefined);
   for (const c of g.corps.filter((c) => c.nat === nat)) {
     const at = g.regions[c.reg];
     // The Army of Africa stays at its posts and answers to the new government.
@@ -2704,10 +2710,12 @@ export function capitulate(g: Game, nat: string, by: string): void {
       else if (r.ctrl === nat) {
         // Ground still held by the fallen nation's allies stays in their hands until it is taken.
         // (An ally's garrison holds its town the same way.)
-        const holder = r.units.find((u) => u.nat !== nat && atWar(g, u.nat, by)) ?? garrisonOf(r).find((u) => u.nat !== nat && atWar(g, u.nat, by));
+        // (The far side: ground whose garrison has just passed to its keeper is in that keeper's keeping.)
+        const inKeeping = keeping.get(r.id);
+        const holder = inKeeping ? undefined : r.units.find((u) => u.nat !== nat && atWar(g, u.nat, by)) ?? garrisonOf(r).find((u) => u.nat !== nat && atWar(g, u.nat, by));
         // An island or colony out in the ocean, beyond the old chart, is not the victor's for the asking: a sea power
         // still fighting him takes it into its keeping (the wider world).
-        const keeper = !holder && r.overseas && beyondEurope(r) ? protectorOf(g, by) : null;
+        const keeper = inKeeping ?? (!holder && r.overseas && beyondEurope(r) ? protectorOf(g, by, r) : null);
         if (keeper) { r.ctrl = keeper; r.since = g.turn; kept.push(r); }
         else r.ctrl = holder ? holder.nat : by;
       }
@@ -2718,7 +2726,10 @@ export function capitulate(g: Game, nat: string, by: string): void {
       // over the heads of the troops who hold it.
       const keeps = (u: Corps): boolean => u.nat !== nat && !u.dead && (atWar(g, u.nat, r.owner) || atWar(g, u.nat, by));
       const stays = g.flags.open === 1 ? r.units.find(keeps) ?? garrisonOf(r).find(keeps) : undefined;
-      r.ctrl = stays ? stays.nat : g.nations[r.owner].alive ? r.owner : by;
+      // (The far side, ruling 199(c): ground a fallen keeper only kept passes on to the next keeper, as its own ground does.)
+      const next = !stays && !g.nations[r.owner].alive && r.overseas && keepersOf(g, r) ? protectorOf(g, by, r) : null;
+      r.ctrl = stays ? stays.nat : g.nations[r.owner].alive ? r.owner : next ?? by;
+      if (next) kept.push(r);
     }
   }
   if (armistice) {
@@ -2735,7 +2746,9 @@ export function capitulate(g: Game, nat: string, by: string): void {
   if (kept.length) {
     const K = g.nations[kept[0].ctrl];
     const names = kept.map((r) => r.name);
-    headline(g, 'event', `${K.adj} forces take ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`} into their keeping: ${theName(X)} has fallen, and ${names.length === 1 ? 'the place is' : 'they are'} not to be ${g.nations[by].adj} for the asking.`, K.id, kept[0].id);
+    // (A whole colonial empire is not read out place by place: the first few, and how many more.)
+    const told = names.length > 6 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} other places` : names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    headline(g, 'event', `${K.adj} forces take ${told} into their keeping: ${theName(X)} has fallen, and ${names.length === 1 ? 'the place is' : 'they are'} not to be ${g.nations[by].adj} for the asking.`, K.id, kept[0].id);
   }
   for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((e) => e !== nat);
   X.atWar = [];

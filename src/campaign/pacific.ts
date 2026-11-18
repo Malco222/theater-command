@@ -40,13 +40,27 @@
 //     the others the month after Japan's troops hold Saigon or Cam Ranh; at every stop the month after Japan is at
 //     war with Britain or the Dutch. It does not lift. It is Japan's clock: the oil book reads it when it is laid
 //     (rulings 194 and 195), and the staff's month at the looser stops is counted from it (ruling 200).
+//
+//   INDOCHINA (ruling 199(e); the planner's paper 07). Japan may demand Indochina of Vichy France while Vichy holds
+//     Saigon and the two are at peace: all the ground Vichy holds that joins Saigon by land passes to Japan with no
+//     war, in the form of an ultimatum (diplomacy.json 'bessarabia'), and the French garrison stands down. The
+//     computer's Japan makes it in July 1941 while the Pacific's book stands; where no book dates it, in the first of
+//     two months, the month after Germany and the Soviet Union go to war or the thirteenth after France fell, and
+//     never once Germany is beaten. A declaration of war on Vichy France while it holds Saigon is answered by the
+//     handing-over (game.ts declareWar): a player's Japan makes its demand so.
+//
+//   A FALLEN COUNTRY'S FAR GROUND (ruling 199(b), (c)). The keepers of far ground are Britain, then Australia, then
+//     America (world.ts protectorOf). The fallen country's corps on ground that passes into keeping, and its
+//     squadrons and aircraft based there, stay at their posts and answer to the keeper (game.ts capitulate): the
+//     Indies' garrison and the Dutch squadron fight on under British colours with their own names. Ground a fallen
+//     keeper only kept passes on by the same list.
 
 import data from '../../data/campaign/pacific.json';
 import { FAR_STAGE } from './stage';
-import type { Game, Nation } from './types';
-import { atWar, bloc, declareWar, headline, joinedSide, newsName, sameSide, setWar, theName } from './game';
-import { WORLD, farOn, standWithAllies } from './world';
-import { stopDef } from './history';
+import type { Game, Nation, Region } from './types';
+import { atWar, bloc, declareWar, headline, joinedSide, newsName, removeCorps, sameSide, setWar, theName } from './game';
+import { WORLD, farOn, shoreOf, standWithAllies } from './world';
+import { onBook, stopDef } from './history';
 import { ownPath } from './league';
 
 interface Rules {
@@ -56,6 +70,8 @@ interface Rules {
   pact: { with: string; book: number; fallen: string; months: number };
   freeze: { book: number; places: string[]; wars: string[]; seller: string; south: string[] };
   north: { nat: string; fallen: string; months: number; book: number; while: string[] };
+  demand: { of: string; key: string; theatre: string; book: number; war: [string, string]; fallen: string; months: number; never: string };
+  keepers: string[];
   says: Record<string, string>;
 }
 
@@ -145,6 +161,8 @@ export function pacificOpening(g: Game): void {
     if (at !== null && g.turn >= at) g.flags[PACT] = at;
   }
   freezeMonth(g);
+  // (The demand on Vichy France is made once the freeze has been read: where no date brings the freeze, it follows the demand a month on.)
+  demandMonth(g);
   // Britain and America with each other, read from the state as the month opens: an entry into the war this month
   // (history's events come after) brings the other in next month.
   const [x, y] = P.pair;
@@ -205,4 +223,104 @@ export function pacificSides(g: Game): void {
     headline(g, 'event', fill(P.says.china, { China: theName(C, true), power: theName(J) }), C.id);
   }
   if (g.human && g.human !== J.id && atWar(g, g.human, J.id)) standWithAllies(g, g.human);
+}
+
+// ---- Indochina: the demand on Vichy France (ruling 199(e)) ------------------------------------------------
+
+/** The ground a demand would bring: all that Vichy France holds, its own, that joins the key place by land. Empty where none can be made. */
+function demanded(g: Game): Region[] {
+  const P = PACIFIC;
+  if (!P || !reads(g)) return [];
+  const D = P.demand, J = live(g, P.power), V = live(g, D.of), key = g.byName[D.key];
+  const his = (r: Region): boolean => r.owner === D.of && r.ctrl === D.of;
+  if (!J || !V || !key || !his(key) || atWar(g, J.id, D.of)) return [];
+  const seen = new Set<number>([key.id]), out = [key];
+  for (let i = 0; i < out.length; i++) for (const j of out[i].nb) {
+    const r = g.regions[j];
+    if (!seen.has(j) && his(r)) { seen.add(j); out.push(r); }
+  }
+  return out;
+}
+
+/** True where Japan may demand Indochina of Vichy France: Vichy holds Saigon and the two are at peace. */
+export const mayDemand = (g: Game): boolean => demanded(g).length > 0;
+
+/**
+ * The demand: the ground passes to Japan with no war, and the French garrison, with no ground of Vichy's to
+ * withdraw to, stands down. Its aircraft and ships based there go with it. True if it was made.
+ */
+export function demand(g: Game): boolean {
+  const ground = demanded(g);
+  if (!ground.length) return false;
+  const P = PACIFIC!, D = P.demand, J = g.nations[P.power], V = g.nations[D.of];
+  const ids = new Set(ground.map((r) => r.id));
+  for (const c of g.corps.filter((c) => c.nat === D.of && ids.has(c.reg))) removeCorps(g, c);
+  g.airFleets = g.airFleets.filter((f) => !(f.nat === D.of && ids.has(f.base)));
+  g.fleets = g.fleets.filter((f) => !(f.nat === D.of && ids.has(f.base)));
+  for (const r of ground) { r.owner = J.id; r.ctrl = J.id; r.cap = false; r.since = g.turn; }
+  g.flags['pac:demand'] = g.turn;
+  g.supplyDirty = true;
+  headline(g, 'event', fill(P.says.demand, { Power: theName(J, true), power: theName(J), of: theName(V), Of: theName(V, true), key: D.key }), J.id, g.byName[D.key].id);
+  return true;
+}
+
+/** A declaration of war on Vichy France while it holds Saigon is answered by the handing-over, and there is no war (game.ts declareWar). */
+export function demandInstead(g: Game, a: string, b: string): boolean {
+  const P = PACIFIC;
+  return !!P && a === P.power && b === P.demand.of && demand(g);
+}
+
+/** The month the computer's Japan makes its demand. */
+function demandMonth(g: Game): void {
+  const P = PACIFIC!, D = P.demand;
+  if (P.power === g.human || g.flags['pac:demand'] !== undefined || !mayDemand(g)) return;
+  let due: boolean;
+  if (onBook(g, D.theatre)) due = g.turn >= D.book;
+  else {
+    const never = g.nations[D.never], F = g.nations[D.fallen];
+    const east = Math.max(g.flags[`war:${D.war[0]}:${D.war[1]}`] ?? 0, g.flags[`war:${D.war[1]}:${D.war[0]}`] ?? 0);
+    due = !!never?.alive && ((east > 0 && g.turn > east) || (!!F && !F.alive && !!F.fellOn && g.turn >= F.fellOn.turn + D.months));
+  }
+  if (due) demand(g);
+}
+
+// ---- A fallen country's far ground (ruling 199(b), (c)) ---------------------------------------------------
+
+/** The keepers of ground on the far side of the world, in their order; null for ground anywhere else, which keeps the world's own list. */
+export function keepersOf(g: Game, r: Region): string[] | null {
+  return PACIFIC !== null && reads(g) && shoreOf(r) === 2 ? PACIFIC.keepers : null;
+}
+
+/** The first keeper of this ground still fighting the victor, as protectorOf reads its list (world.ts). */
+function keeperAt(g: Game, by: string, r: Region): string | null {
+  for (const id of keepersOf(g, r) ?? []) {
+    const n = g.nations[id];
+    if (n?.alive && n.seaSupply && n.atWar.includes(by)) return id;
+  }
+  return null;
+}
+
+/**
+ * As a country falls (game.ts capitulate, before its forces are struck off): its corps on far ground that is about
+ * to pass into keeping, and its squadrons and aircraft based on such ground, stay at their posts and answer to the
+ * keeper. A corps keeps its post (a player who is the keeper commands it as his own). Returns the keeper of each
+ * province so kept. `leave` names ground that passes to someone else by the fall's own terms (Vichy's, under the
+ * armistice): nothing there is kept.
+ */
+export function keptForces(g: Game, nat: string, by: string, leave?: (r: Region) => boolean): Map<number, string> {
+  const kept = new Map<number, string>();
+  if (!PACIFIC || !reads(g)) return kept;
+  // (Ground an ally's troops stand on is that ally's, as built: nothing passes into keeping there.)
+  const held = new Set<number>();
+  for (const u of g.corps) if (!u.dead && u.nat !== nat && atWar(g, u.nat, by)) held.add(u.reg);
+  for (const r of g.regions) {
+    if (r.owner !== nat || r.ctrl !== nat || !r.overseas || shoreOf(r) !== 2 || held.has(r.id) || leave?.(r)) continue;
+    const keeper = keeperAt(g, by, r);
+    if (keeper) kept.set(r.id, keeper);
+  }
+  if (!kept.size) return kept;
+  for (const c of g.corps) if (c.nat === nat && !c.dead && kept.has(c.reg)) { c.nat = kept.get(c.reg)!; c.hold = true; }
+  for (const f of g.fleets) if (f.nat === nat && kept.has(f.base)) f.nat = kept.get(f.base)!;
+  for (const f of g.airFleets) if (f.nat === nat && kept.has(f.base)) f.nat = kept.get(f.base)!;
+  return kept;
 }
