@@ -33,7 +33,7 @@ def panzer4(fine=True, tag="GER"):
 
     # ---- the hull: a tub between the tracks, a superstructure over them -----------------------------
     hw = 0.925
-    tub = [(-2.62, 0.44), (-2.74, 0.66), (-2.74, 1.10), (1.72, 1.10), (2.56, 1.03), (2.67, 0.88), (2.60, 0.62), (2.28, 0.40), (-2.40, 0.40)]
+    tub = [(-2.62, 0.44), (-2.74, 0.66), (-2.74, 1.10), (1.72, 1.10), (2.52, 1.00), (2.62, 0.64), (2.25, 0.40), (-2.40, 0.40)]
     v.hull([(x, hw, z) for x, z in tub], coat, bevel=0.014)
     sw = 1.31
     v.hull([(1.67, sw, 1.72), (1.74, sw, 1.10), (-0.95, sw, 1.72), (-2.72, sw, 1.60), (-2.72, sw, 1.10)], coat, bevel=0.014)
@@ -49,10 +49,10 @@ def panzer4(fine=True, tag="GER"):
             # the lip along the outer edge
             v.slab((-2.80, s * 1.425, 1.06), (2.62, s * 1.44, 1.10), "upper")
     # the nose: bolted brake and gearbox hatches on the glacis, spare links across the lower plate
-    gl = Vector((2.56 - 1.72, 0, 1.03 - 1.10)).normalized()
+    gl = Vector((2.52 - 1.72, 0, 1.00 - 1.10)).normalized()
     gn = Vector((-gl.z, 0, gl.x))
     for y in (-0.52, 0.52):
-        c = Vector((2.12, y, 1.10 + (2.12 - 1.72) * (1.03 - 1.10) / (2.56 - 1.72)))
+        c = Vector((2.12, y, 1.10 + (2.12 - 1.72) * (1.00 - 1.10) / (2.52 - 1.72)))
         v.put(bm_box((0.5, 0.44, 0.022), c + gn * 0.011, rot(0, math.degrees(math.atan2(gl.z, gl.x)))), "upper", 0.006)
         if fine:
             v.bolts(c + gn * 0.022, gn, 0.0, 1, r=0.012)
@@ -60,16 +60,17 @@ def panzer4(fine=True, tag="GER"):
                 for dy in (-0.17, 0.17):
                     v.bolt(c + gl * dx + Y * dy + gn * 0.022, gn, 0.012)
             v.vent(c + gl * 0.02 + gn * 0.02, 0.07, 0.035)
-    c = Vector((2.18, 0.0, 1.10 + (2.18 - 1.72) * (1.03 - 1.10) / (2.56 - 1.72)))
+    c = Vector((2.18, 0.0, 1.10 + (2.18 - 1.72) * (1.00 - 1.10) / (2.52 - 1.72)))
     v.put(bm_box((0.42, 0.5, 0.02), c + gn * 0.01, rot(0, math.degrees(math.atan2(gl.z, gl.x)))), "upper", 0.006)
     if fine:
         for dx in (-0.17, 0.17):
             for dy in (-0.2, 0.0, 0.2):
                 v.bolt(c + gl * dx + Y * dy + gn * 0.02, gn, 0.012)
         v.handle(c + Y * -0.08 + gn * 0.02, c + Y * 0.08 + gn * 0.02, gn, 0.007, 0.03, "steel")
-    # (lower nose plate runs from (2.67, 0.88) down to (2.60, 0.62))
-    nf = Vector((0.26, 0, 0.07)).normalized()
-    v.spare_links((2.655, -0.72, 0.76), (2.655, 0.72, 0.76), 12, 0.12, 0.2, Vector((0.97, 0, 0.12)).normalized())
+    # the nose plate stands nearly upright from (2.62, 0.64) to (2.52, 1.00): a run of spare links across it
+    nf = Vector((0.36, 0, 0.10)).normalized()
+    v.spare_links(Vector((2.57, -0.78, 0.82)) + nf * 0.002, Vector((2.57, 0.78, 0.82)) + nf * 0.002, 13, 0.12, 0.34, nf,
+                  style={"kind": "plate", "grouser": 0.014})
     for y in (-0.62, 0.62):
         v.hook((2.50, y, 0.50), Vector((0.8, 0, -0.5)).normalized(), 0.085)
         v.hook((-2.72, y, 0.62), -X, 0.085)
@@ -165,6 +166,8 @@ def panzer4(fine=True, tag="GER"):
 
     # ---- the turret -----------------------------------------------------------------------------------
     x0, zt = 0.18, 1.72
+    v.use("hull")
+    v.ring_well((x0, 0.0, zt), 0.80)
     v.part("turret", "hull", (x0, 0.0, zt), axis=(0, 0, -1), kind="turn", note="trains all round: + to the right, clockwise seen from above; the game turns it")
     base = [(1.02, 0.60), (0.22, 0.93), (-0.72, 0.86), (-1.06, 0.50)]
     roof = [(0.92, 0.48, 2.21), (0.24, 0.65, 2.27), (-0.62, 0.61, 2.29), (-0.93, 0.40, 2.29)]

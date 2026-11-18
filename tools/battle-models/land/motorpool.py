@@ -298,8 +298,10 @@ class Shop:
         self.fine, self.tag, self.name = fine, tag, name
         self.rng = random.Random(zlib.crc32(name.encode()))
         self.m.info["tag"] = tag
+        self.m.info["rust"] = "8E897C"        # (what `wear` goes toward: on a vehicle, paint rubbed thin over worn metal)
         self.wheels = []          # (part, radius): what the game turns as she rolls
         self.fedge = []           # for every face of the model: is it a plate's cut-back edge (where paint wears first)
+        self.m.fedge = self.fedge
         self.belts = {}           # side letter -> what the track clip needs
         self.marks = []
 

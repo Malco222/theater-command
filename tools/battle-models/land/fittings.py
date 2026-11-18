@@ -444,33 +444,32 @@ class Fittings:
                 ring = [c + d * (math.cos(t) * 0.06) + side * (math.sin(t) * 0.04) for t in (2 * math.pi * k / 10 for k in range(10))]
                 self.tube(ring, r * 1.25, paint, 5, closed=True)
 
-    def spare_links(self, a, b, count, pitch, wide, facing, paint="track", thick=0.03, part=None, horn=True):
-        """A row of spare track links lying on a plate from a toward b, their backs to the plate."""
+    def spare_links(self, a, b, count, pitch, wide, facing, paint="track", thick=0.03, part=None, horn=False, style=None, bar=True):
+        """A run of spare track links lying on a plate from a toward b, their backs to the plate, held by a flat bar
+        across them. The links are the same links the track is made of."""
         if not self.fine:
             return
         a, b = Vector(a), Vector(b)
         f = Vector(facing).normalized()
         along = (b - a).normalized()
         across = f.cross(along)
+        st = dict(style or {})
+        st.setdefault("paint", paint)
+        if not horn:
+            st["horn"] = None
+        shape = self.link_shape(st, pitch, wide, thick)
         if part:
             self.m.use(part)
         for k in range(count):
-            c = a + along * (pitch * (k + 0.5))
+            c = a + along * (pitch * (k + 0.5)) + f * 0.004
+            for vs, fs, pa in shape:
+                self.m.add([c + along * u + across * v + f * w for u, v, w in vs], fs, "track" if pa == "bright" else pa, False, None, part)
+        if bar:
             m = Matrix((along, across, f)).transposed()
-            bm = bm_box((pitch * 0.9, wide, thick), (0, 0, 0))
-            bm_move(bm, at=c + f * (thick / 2), turn=m)
-            self.put(bm, paint)
-            bm = bm_box((pitch * 0.4, wide - 0.03, 0.012), (0, 0, 0))
-            bm_move(bm, at=c + f * (thick + 0.006), turn=m)
-            self.put(bm, paint)
-            if horn:
-                bm = bm_box((pitch * 0.4, 0.03, 0.05), (0, 0, 0))
-                bm_move(bm, at=c + f * (thick + 0.03), turn=m)
-                self.put(bm, paint)
-        # the bar that holds them
-        self.rod(a + f * (thick + 0.02) - across * (wide * 0.3), b + f * (thick + 0.02) - across * (wide * 0.3), 0.009, "steel", 5)
-
-    # ---- engines: silencers, grilles -----------------------------------------------------------------
+            for off in (-wide * 0.3, wide * 0.3):
+                bm = bm_box((pitch * count + 0.05, 0.03, 0.006), (0, 0, 0))
+                bm_move(bm, at=a + along * (pitch * count / 2) + across * off + f * (thick + 0.02), turn=m)
+                self.put(bm, "upper", part=part)
     def silencer(self, a, b, r, paint="rust", bands=2, pipe=None, part=None, tail=None, sides=20):
         """A silencer drum from a to b; `pipe` the points of its inlet pipe; `tail` (point, way) of its outlet stub."""
         a, b = Vector(a), Vector(b)

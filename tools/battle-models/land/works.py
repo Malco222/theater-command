@@ -16,6 +16,7 @@ PARTS of a tracked vehicle (names the game can rely on):
 import math
 
 import bpy
+import numpy as np
 from mathutils import Quaternion, Vector
 
 import rigid
@@ -32,6 +33,12 @@ class Works(Shop, Gear, Fittings):
         return self
 
     # ---- clips every tracked or wheeled vehicle has -------------------------------------------------
+    def ring_well(self, at, r, part="hull"):
+        """What is under a turret: the race it turns on and the dark of the fighting compartment (seen only when the
+        turret has been blown off her)."""
+        self.lathe(at, Z, [(0.0, r - 0.05), (0.014, r - 0.05), (0.014, r), (0.0, r)], "steel", self.n(40, 12), part=part)
+        self.lathe(at, Z, [(0.003, 0.0), (0.003, r - 0.05)], "black", self.n(40, 12), part=part)
+
     def spring(self, t, kick, freq=2.4, damp=3.2):
         """How a sprung hull answers a knock at t = 0: a rocking that dies away."""
         return kick * math.exp(-damp * t) * math.sin(2 * math.pi * freq * t)
@@ -228,6 +235,7 @@ def _ramp(nt, fac, lo, hi, a=0.0, b=1.0):
 
 
 DUST = "8A7A5C"
+EDGE_WEAR = 0.4          # how far a plate's cut-back edge goes toward bare worn metal (the file's `wear`, 0..100)
 
 
 def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.35):
@@ -253,50 +261,67 @@ def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.35):
         geo = nt.nodes.new("ShaderNodeNewGeometry")
         nsep = nt.nodes.new("ShaderNodeSeparateXYZ")
         nt.links.new(geo.outputs["Normal"], nsep.inputs[0])
-        big = _noise(nt, pos, 1.3, 5.0)
+        big = _noise(nt, pos, 0.9, 1.5, 0.45)
         fine = _noise(nt, pos, 22.0, 6.0, 0.6)
         col = mix.outputs[2]
+        at = nt.nodes.new("ShaderNodeAttribute")
+        at.attribute_name = "Edge"
+        edge_at = at.outputs["Fac"]
+        # how shut-in a place is: dirt gathers in corners and under fittings, and nothing rubs it out
+        ao = nt.nodes.new("ShaderNodeAmbientOcclusion")
+        ao.samples = 4
+        ao.inputs["Distance"].default_value = 0.14
+        nook = _ramp(nt, ao.outputs["AO"], 0.55, 0.95, 1.0, 0.0)
         if key in ("upper", "upper2", "shade", "white", "red", "yellow", "blue", "wood", "canvas", "rubber", "track", "rust", "cloth", "rope", "leather"):
             # how dusty: thick by the ground, thinning to the height of the track guards; thin on anything that looks up
             mid = _noise(nt, pos, 4.5, 4.0)
             low = _ramp(nt, sep.outputs[2], 0.15, dust_top, 1.0, 0.0)
             low = _math(nt, "MULTIPLY", _math(nt, "POWER", low, 1.5), _ramp(nt, mid, 0.3, 0.7, 0.6, 1.0))
-            up = _math(nt, "MULTIPLY", _ramp(nt, nsep.outputs[2], 0.45, 0.98, 0.0, 0.26), _ramp(nt, mid, 0.3, 0.7, 0.5, 1.0))
-            grime = _math(nt, "MULTIPLY", _math(nt, "MAXIMUM", low, up), dust * (1.0 if key != "track" else 1.15), clamp=True)
+            up = _math(nt, "MULTIPLY", _ramp(nt, nsep.outputs[2], 0.45, 0.98, 0.0, 0.13), _ramp(nt, mid, 0.3, 0.7, 0.35, 1.0))
+            grime = _math(nt, "MAXIMUM", low, up)
+            grime = _math(nt, "ADD", grime, _math(nt, "MULTIPLY", nook, 0.34))
+            grime = _math(nt, "MULTIPLY", grime, dust * (1.0 if key != "track" else 1.15), clamp=True)
             base = col
             if key in ("upper", "upper2", "shade"):
                 # the coat is never one colour: faded here, darker there; rain has run down it
                 _, _, a, b, o = _mix(nt, "MULTIPLY", 1.0)
                 nt.links.new(base, a)
                 tone = nt.nodes.new("ShaderNodeValToRGB")
-                tone.color_ramp.elements[0].position, tone.color_ramp.elements[0].color = 0.3, (0.88, 0.88, 0.87, 1)
-                tone.color_ramp.elements[1].position, tone.color_ramp.elements[1].color = 0.72, (1.08, 1.08, 1.07, 1)
+                tone.color_ramp.elements[0].position, tone.color_ramp.elements[0].color = 0.25, (0.90, 0.90, 0.89, 1)
+                tone.color_ramp.elements[1].position, tone.color_ramp.elements[1].color = 0.75, (1.06, 1.06, 1.05, 1)
                 nt.links.new(big, tone.inputs["Fac"])
                 nt.links.new(tone.outputs["Color"], b)
                 streak = _noise(nt, pos, 1.0, 3.0, 0.5, stretch=(26.0, 26.0, 1.6))
                 side_on = _ramp(nt, _math(nt, "ABSOLUTE", nsep.outputs[2]), 0.0, 0.55, 1.0, 0.0)
                 _, f2, a2, b2, o2 = _mix(nt, "MULTIPLY")
-                nt.links.new(_math(nt, "MULTIPLY", side_on, 0.55 * wear), f2)
+                nt.links.new(_math(nt, "MULTIPLY", side_on, 0.38 * wear), f2)
                 nt.links.new(o, a2)
                 st = nt.nodes.new("ShaderNodeValToRGB")
-                st.color_ramp.elements[0].position, st.color_ramp.elements[0].color = 0.38, (0.72, 0.70, 0.66, 1)
+                st.color_ramp.elements[0].position, st.color_ramp.elements[0].color = 0.36, (0.80, 0.78, 0.75, 1)
                 st.color_ramp.elements[1].position, st.color_ramp.elements[1].color = 0.62, (1.06, 1.06, 1.05, 1)
                 nt.links.new(streak, st.inputs["Fac"])
                 nt.links.new(st.outputs["Color"], b2)
                 base = o2
-                # edges: paint rubbed thin, then through to dark steel where it is knocked
-                edge = _ramp(nt, geo.outputs["Pointiness"], 0.515, 0.60, 0.0, 1.0)
-                chip = _math(nt, "MULTIPLY", edge, _ramp(nt, fine, 0.42, 0.62, 0.0, 1.0), clamp=True)
+                # crevices keep their dirt: a dark wash in every corner
+                _, f5, a5, b5, o5 = _mix(nt, "MULTIPLY")
+                nt.links.new(_math(nt, "MULTIPLY", nook, 0.5), f5)
+                nt.links.new(base, a5)
+                b5.default_value = (0.42, 0.38, 0.33, 1.0)
+                base = o5
+                # edges: paint rubbed thin and pale all along, then knocked through to dark steel in places
+                rub = _math(nt, "MULTIPLY", edge_at, _ramp(nt, mid, 0.25, 0.75, 0.25, 1.0))
+                chip = _math(nt, "MULTIPLY", edge_at, _ramp(nt, fine, 0.50, 0.60, 0.0, 1.0), clamp=True)
                 _, f3, a3, b3, o3 = _mix(nt, "MIX")
-                nt.links.new(_math(nt, "MULTIPLY", edge, 0.22 * wear), f3)
+                nt.links.new(_math(nt, "MULTIPLY", rub, 0.34 * wear, clamp=True), f3)
                 nt.links.new(base, a3)
-                b3.default_value = (0.62, 0.62, 0.58, 1.0)
+                b3.default_value = (0.50, 0.50, 0.47, 1.0)
                 _, f4, a4, b4, o4 = _mix(nt, "MIX")
-                nt.links.new(_math(nt, "MULTIPLY", chip, 0.75 * wear, clamp=True), f4)
+                nt.links.new(_math(nt, "MULTIPLY", chip, 0.7 * wear, clamp=True), f4)
                 nt.links.new(o3, a4)
-                b4.default_value = (0.045, 0.04, 0.038, 1.0)
+                b4.default_value = (0.07, 0.065, 0.06, 1.0)
                 base = o4
-                rough = _math(nt, "ADD", _ramp(nt, big, 0.2, 0.8, 0.52, 0.68), _math(nt, "MULTIPLY", grime, 0.3), clamp=True)
+                rough = _math(nt, "ADD", _ramp(nt, big, 0.2, 0.8, 0.46, 0.6), _math(nt, "MULTIPLY", grime, 0.4), clamp=True)
+                rough = _math(nt, "SUBTRACT", rough, _math(nt, "MULTIPLY", chip, 0.2), clamp=True)
                 nt.links.new(rough, bsdf.inputs["Roughness"])
             elif key == "track":
                 # steel links: dark, rusty in the hollows, polished where they meet the ground and the wheels
@@ -304,7 +329,7 @@ def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.35):
                 nt.links.new(_ramp(nt, fine, 0.35, 0.7, 0.0, 0.55), f2)
                 nt.links.new(base, a2)
                 b2.default_value = (*hex_rgb("5A3A28"), 1.0)
-                edge = _ramp(nt, geo.outputs["Pointiness"], 0.52, 0.62, 0.0, 1.0)
+                edge = edge_at
                 _, f3, a3, b3, o3 = _mix(nt, "MIX")
                 nt.links.new(_math(nt, "MULTIPLY", edge, 0.8), f3)
                 nt.links.new(o2, a3)
@@ -354,7 +379,7 @@ def land_look(model, dust=1.0, wear=1.0, dust_hex=DUST, dust_top=1.35):
                 bsdf.inputs["Roughness"].default_value = 0.9
             # the dust goes on last, over everything
             _, f9, a9, b9, o9 = _mix(nt, "MIX")
-            nt.links.new(_math(nt, "MULTIPLY", grime, 0.86, clamp=True), f9)
+            nt.links.new(_math(nt, "MULTIPLY", grime, 0.8, clamp=True), f9)
             nt.links.new(base, a9)
             b9.default_value = (*dust_rgb, 1.0)
             nt.links.new(o9, bsdf.inputs["Base Color"])
@@ -377,6 +402,20 @@ def to_scene(model, look="land", crease=50.0, weighted=True, **look_kw):
     its cut-back edge carries all the rounding, which is what makes an edge look rolled rather than drawn."""
     lk = land_look(model, **look_kw) if look == "land" else look
     ob, arm = rigid.to_blender(model, lk, crease=crease)
+    me = ob.data
+    fe = list(getattr(model, "fedge", []))[:len(model.faces)]
+    fe += [0.0] * (len(model.faces) - len(fe))
+    total = np.zeros(len(me.polygons), dtype=np.int32)
+    me.polygons.foreach_get("loop_total", total)
+    model._ledge = np.repeat(np.array(fe, dtype=float), total)
+    me.attributes.new("Edge", "FLOAT", "CORNER").data.foreach_set("value", model._ledge)
+    if look != "land" and model._ledge.any():
+        # (the pictures' look draws edge wear itself; without it, the wear goes into the corner colours the .glb carries)
+        lv = np.zeros(len(me.loops), dtype=np.int32)
+        me.loops.foreach_get("vertex_index", lv)
+        lface = np.repeat(np.array(model.fpaint, dtype=np.int32), total)
+        tint = rigid.tint_of(model, np.maximum(model._wear[lv], model._ledge * EDGE_WEAR), model._soot[lv], model._lpaint, lface, model._lblend)
+        me.color_attributes["Col"].data.foreach_set("color", np.concatenate([tint, np.ones((len(tint), 1))], axis=1).ravel())
     if weighted:
         mod = ob.modifiers.new("wn", "WEIGHTED_NORMAL")
         mod.keep_sharp = True
@@ -388,3 +427,77 @@ def to_scene(model, look="land", crease=50.0, weighted=True, **look_kw):
             bpy.ops.object.modifier_move_up(modifier="wn")
         bpy.ops.object.modifier_apply(modifier="wn")
     return ob, arm
+
+
+def gather_land(model, ob):
+    """rigid.gather, with the wear of every corner on a plate's cut-back edge raised: the mesh as the game reads it.
+    (A point on an edge is two points in the file, one for the flat face and one for the edge, so the wear stays a
+    thin line and does not spread over the plate.)"""
+    me = ob.data
+    lv = np.zeros(len(me.loops), dtype=np.int32)
+    me.loops.foreach_get("vertex_index", lv)
+    ledge = getattr(model, "_ledge", None)
+    if ledge is None or not ledge.any():
+        return rigid.gather(model, ob)
+    me.calc_loop_triangles()
+    nl = len(me.loops)
+    co = np.zeros(len(me.vertices) * 3)
+    me.vertices.foreach_get("co", co)
+    co = co.reshape(-1, 3)
+    cn = np.zeros(nl * 3)
+    me.corner_normals.foreach_get("vector", cn)
+    cn = cn.reshape(-1, 3)
+    tris = np.zeros(len(me.loop_triangles) * 3, dtype=np.int32)
+    me.loop_triangles.foreach_get("loops", tris)
+    pos, nor = np.round(co[lv], 3), np.round(cn, 2)
+    part, paint = model._vpart[lv], model._lpaint
+    wear = np.round(np.maximum(model._wear[lv], ledge * EDGE_WEAR) * 100)
+    soot, blend = np.round(model._soot[lv] * 100), np.round(model._lblend * 100)
+    key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None]], axis=1)
+    _, first, inverse = np.unique(key, axis=0, return_index=True, return_inverse=True)
+    inverse = inverse.ravel()
+    order = np.argsort(first)
+    rank = np.empty_like(order)
+    rank[order] = np.arange(len(order))
+    first = first[order]
+    index = rank[inverse]
+    p, n = pos[first].copy(), nor[first].copy()
+    p[:, 1] *= -1.0
+    n[:, 1] *= -1.0
+    t = index[tris].reshape(-1, 3)[:, [0, 2, 1]]
+
+    def flat(a, digits):
+        return [round(float(x), digits) if digits else int(x) for x in a.ravel()]
+    return {"points": flat(p, 3), "facings": flat(n, 2), "paints": flat(paint[first], 0), "triangles": flat(t, 0),
+            "blend": flat(blend[first], 0), "soot": flat(soot[first], 0), "wear": flat(wear[first], 0), "part": flat(part[first], 0)}
+
+
+def bake_actions(model, arm, fps=30):
+    """rigid.bake_actions, but a clip that runs a track on by one link (it has a `stride`) ends on its last pose and
+    does not come back to its first: looped, every link has become the next, and nothing is seen to jump."""
+    arm.animation_data_create()
+    made = []
+    for name, clip in model.clips.items():
+        act = bpy.data.actions.new(name)
+        act.use_fake_user = True
+        arm.animation_data.action = act
+        moved = {tr["part"] for tr in clip["tracks"]}
+        n = max(1, int(round(clip["long"] * fps)))
+        for f in range(n + 1):
+            last = f == n
+            t = min(f / fps, clip["long"])
+            if clip.get("loop"):
+                t = (clip["long"] - 1e-6) if (last and "stride" in clip) else (0.0 if last else t)
+            pose = rigid.pose_of(model, clip, t)
+            for part in moved:
+                pb = arm.pose.bones[part]
+                q, mv, sc = pose[part]
+                pb.rotation_quaternion, pb.location, pb.scale = q, mv, sc
+                pb.keyframe_insert("rotation_quaternion", frame=f + 1)
+                pb.keyframe_insert("location", frame=f + 1)
+                pb.keyframe_insert("scale", frame=f + 1)
+        made.append(act)
+    for pb in arm.pose.bones:
+        pb.rotation_quaternion, pb.location, pb.scale = Quaternion(), Vector(), Vector((1, 1, 1))
+    arm.animation_data.action = None
+    return made

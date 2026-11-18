@@ -241,8 +241,8 @@ class Gear:
                 if style.get("cleats"):
                     for vv in (-W * 0.3, W * 0.3):
                         box(-L * 0.46, L * 0.46, vv - 0.02, vv + 0.02, thick, thick + g * 0.7, paint, taper=0.2)
-                for vv in (-W / 2, W / 2):
-                    box(L / 2 - 0.02, L / 2 + pitch * 0.06, vv - 0.016 if vv > 0 else vv, vv if vv > 0 else vv + 0.016, 0.005, thick - 0.004, paint)
+                # the pin and its eyes, closing the gap to the next link
+                box(L / 2 - 0.004, pitch - L / 2 + 0.004, -W / 2, W / 2, 0.003, thick - 0.002, paint)
         elif kind == "block":
             # a rubber block on two pins, joined to the next by steel end connectors
             box(-L / 2, L / 2, -W / 2 + 0.035, W / 2 - 0.035, 0.0, thick, "rubber")
