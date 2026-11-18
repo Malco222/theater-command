@@ -95,7 +95,7 @@
     { "nat": "UK", "name": "No. 12 Group", "base": "East Anglia", "leader": "Trafford Leigh-Mallory", "start": [120, 0], "est": [[1, 140, 0], [9, 190, 0]] },
     { "nat": "UK", "name": "No. 10 Group", "base": "Hampshire", "from": 10, "leader": "Quintin Brand", "start": [60, 0], "est": [[10, 100, 0]] },
     { "nat": "UK", "name": "No. 13 Group", "base": "Northumbria", "leader": "Richard Saul", "start": [70, 0], "est": [[1, 100, 0]] },
-    { "nat": "UK", "name": "Bomber Command", "base": "Lincolnshire", "leader": "Charles Portal", "start": [0, 280], "est": [[1, 0, 300], [9, 0, 450], [22, 0, 600], [34, 0, 800], [46, 0, 1100], [55, 0, 1400]] },
+    { "nat": "UK", "name": "Bomber Command", "base": "Lincolnshire", "leader": "Arthur Harris", "start": [0, 280], "est": [[1, 0, 300], [9, 0, 450], [22, 0, 600], [34, 0, 800], [46, 0, 1100], [55, 0, 1400]] },
 
     { "nat": "FRA", "name": "Northern Air Zone", "base": "Lille", "leader": "Francois d'Astier", "est": [[1, 300, 150]] },
     { "nat": "FRA", "name": "Eastern Air Zone", "base": "Lorraine", "leader": "Marcel Tetu", "est": [[1, 250, 100]] },
