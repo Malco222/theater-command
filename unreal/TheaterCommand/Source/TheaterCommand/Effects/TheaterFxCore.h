@@ -250,7 +250,7 @@ namespace TheaterFx
 
 		void Wink(double T0, const Vec& At, double Scale, Dice& D);
 		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D);
-		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, Dice& D);
+		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, const std::string& Size, Dice& D);
 		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D);
 		void Scar(double T0, const Vec& At, double Across, const Paint& P, bool bSnow, Dice& D);
 		void Armour(double T0, const Vec& At, double Scale, Dice& D);
