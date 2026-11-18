@@ -1086,12 +1086,15 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   // (Seven rows; six beside the lead story; and a second band takes the room of one more.)
   card.show = (card.lead ? 6 : 7) - (card.bands.length > 1 ? 1 : 0);
   // A ring that closes on a corps or more of his is never under the fold (ruling 106): it takes the last row that
-  // shows, and the lightest item that is no such ring becomes the first under the fold.
+  // shows, and the lightest item that is no such ring becomes the first under the fold. That may be a row of war and
+  // peace that found no band (the ring is the weightier news: b444, on seed 31's French May 1940 under ruling 227),
+  // so the rows keep their classes' order above the fold and below it. Never a warning: a dated warning needs his
+  // decision (ruling 64's first class), and a ring that finds nothing else to take stays where it falls.
   const rings = new Set(ranked.filter((x) => x.ring).map((x) => x.row));
   for (let i = card.show; i < card.rows.length; i++) {
     if (!rings.has(card.rows[i])) continue;
     let out = -1;
-    for (let j = card.show - 1; j >= 0 && out < 0; j--) if (!rings.has(card.rows[j])) out = j;
+    for (let j = card.show - 1; j >= 0 && out < 0; j--) if (!rings.has(card.rows[j]) && card.rows[j].tag !== 'WARNING') out = j;
     if (out < 0) break;
     const ring = card.rows.splice(i, 1)[0], gone = card.rows.splice(out, 1)[0];
     card.rows.splice(card.show - 1, 0, ring);
