@@ -4081,7 +4081,9 @@ function fleetInHand(id: number) {
     return {
       ok: true, grand, id, name: card.name, admiral: card.admiral ? `${card.admiral.name}, level ${card.admiral.level}` : '', doing: card.doing, order: card.order, stance: card.stance,
       ready: card.ready, guns: Math.round(card.guns), screen: card.screen.gap > 0 ? `${cap1(card.screen.word)}: ${card.screen.have} destroyers where ${card.screen.need} are needed.` : '', shelled: card.shelled,
-      cards: card.cards.map((c) => ({ cls: c.cls, label: c.label, count: c.count, lost: c.lost, role: c.role, brief: c.brief })),
+      // Battle stars (b477): the row as the rules count it (stars.ts starRow: most, silver, bronze, each, battles,
+      // words), or null where no ship of the class has one. The 3D card draws it as it comes, without recounting.
+      cards: card.cards.map((c) => ({ cls: c.cls, label: c.label, count: c.count, lost: c.lost, role: c.role, brief: c.brief, stars: c.stars ?? null })),
       seas: (o?.seas ?? []).map((z) => ({ zone: z.zone, name: z.name, surface: z.surface, subs: z.subs, meet: z.meet, hunt: z.hunt, torpedo: z.torpedo, reported: z.reported ?? 0, search: z.search ?? '' })),
       coasts: o?.coasts ?? [], merge: o?.merge ?? [], split: !!o?.split, canOrder: !!o,
       wings: wingsOfFleet(s, id).map((w) => ({ id: w.id, label: w.label, aircraft: Math.round(w.aircraft), doing: w.doing, flew: w.flew })),
@@ -4111,7 +4113,7 @@ function fleetPage(s: Game, id: number): Page | null {
         buttons.push({ label: `SPLIT OFF ${half}`, act: `fleetsplit:${id}:${c.cls}:${half}`, ok: up && !whyHalf, tip: whyHalf ?? 'Half of them leave as a fleet of their own.' });
       }
     }
-    return { nat: card.nat, title: `${c.count} ${SHIP_WORD[c.cls]?.[c.count === 1 ? 0 : 1] ?? c.label.toLowerCase()}`, lines: [c.role, c.lost ? `${c.lost} lost since the war began.` : ''].filter(Boolean), buttons };
+    return { nat: card.nat, title: `${c.count} ${SHIP_WORD[c.cls]?.[c.count === 1 ? 0 : 1] ?? c.label.toLowerCase()}`, lines: [c.role, c.lost ? `${c.lost} lost since the war began.` : '', c.stars?.words[0] ?? ''].filter(Boolean), buttons };
   });
   const seas: PageRow[] = (o?.seas ?? []).map((z) => {
     const meet = z.meet === 'clear' ? 'A patrol would meet no enemy fleet.' : z.meet === 'battle' ? 'A patrol would bring the enemy fleet to battle.' : 'The enemy there is too strong: a patrol would not face him.';

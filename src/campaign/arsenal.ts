@@ -18,6 +18,7 @@ import { atWar, headline } from './game';
 import { majorsOf } from './diplomacy';
 import { turnToDate } from '../core/ticket';
 import { NAVY, fleetsOf, foundFleet, liftLeft, shipCount } from './navy';
+import { mendStars } from './stars';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
 
 export type Wing = 'ftr' | 'bmr';
@@ -616,6 +617,8 @@ export function deliverArsenal(g: Game, nat: string, b: Build): void {
     let f = joinsFleet(g, nat, hull, r.id);
     if (!f && isHome(g, nat, r) && r.port && r.seas.length) f = foundFleet(g, nat, r, `${r.name} Fleet`);
     if (!f) { tell(`With no port left to take them, the ${NAVY.classes[hull].many} building at ${r.name} are lost.`); return; }
+    // New ships join at the back of their class, with no battle stars (stars.ts).
+    mendStars(f, hull);
     f.ships[hull] += count;
     // A new carrier joins with its aircraft aboard (the grand campaign).
     const decks = hull === 'cv' && carrierRules(g);

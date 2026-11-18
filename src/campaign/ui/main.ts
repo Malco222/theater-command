@@ -2322,11 +2322,19 @@ function shipPlate(nat: string, cls: string, w = 22, h = 16): string {
   return `<svg width="${w}" height="${h}" viewBox="-1 -1 26 19" class="ctr"><rect class="box" x="0" y="0" width="24" height="15" rx="1.5" fill="${g.nations[nat].color}"/><path class="symf" d="${d}" transform="translate(12 7.5) scale(${k})"/></svg>`;
 }
 
+/**
+ * A card's battle stars (b477) as one plain line of text, the most decorated ship's: silver stars first (pale), then
+ * bronze (brass). Pointing at it lists the actions by name and month. The test kitchen's plain row: the look is the 3D game's.
+ */
+const starLine = (c: ShipCard): string => (c.stars
+  ? `<span class="um starrow" title="${esc(c.stars.words.join('\n'))}" aria-label="${esc(c.stars.words[0])}">${c.stars.silver ? `<b>${'\u2605'.repeat(c.stars.silver)}</b>` : ''}${'\u2605'.repeat(c.stars.bronze)}</span>`
+  : '');
+
 /** One class of a fleet's ships as a card: how many, a plate for each of the first few, and what they are for. */
 function shipCardHtml(card: FleetCard, c: ShipCard): string {
   const shown = Math.min(c.count, 10);
   return `<div class="ucard corpsbox shipbox" style="--n:3" title="${esc(c.label)}: ${esc(c.role)}">
-    <span class="utop"><b>${esc(c.label)}</b><span class="shipn">${c.count}</span></span>
+    <span class="utop"><b>${esc(c.label)}</b><span class="shipn">${c.count}</span></span>${starLine(c)}
     <span class="um vet">${esc(c.brief)}</span>
     <span class="hulls">${shipPlate(card.nat, c.cls, 26, 19).repeat(shown)}${c.count > shown ? `<i>+${c.count - shown}</i>` : ''}</span>
     ${c.lost ? `<span class="tags"><span class="tag bad" title="Sunk since the war began">${c.lost} lost</span></span>` : ''}</div>`;
