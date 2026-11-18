@@ -217,8 +217,8 @@ export function liberate(g: Game, nat: string, by: string, after?: string): bool
   }
   X.atWar = [];
   for (const e of [...H.atWar]) if (e !== nat && g.nations[e]?.alive && !allied(g, nat, e)) setWar(g, nat, e);
-  // It rejoins the war of those who freed it (ruling 115(c)), once their chief enemy has fallen: until then it fights
-  // its liberator's wars and no others, as it always has.
+  // It rejoins the war of those who freed it (ruling 115(c)). (Where the data makes that wait for their chief enemy's
+  // fall, it fights its liberator's wars and no others until then, as it always did.)
   if (LIB.finish?.before || chiefFallen(g, by)) rejoinWars(g, nat, by);
   // Its ground: whatever its new allies hold of it is its own again.
   cap.cap = true;

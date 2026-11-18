@@ -17,17 +17,16 @@
  *  - The staffs press what is left: on the chief enemy's fall the great powers still standing that they are at war
  *    with already are named an offensive at once, and the war newly declared is pressed from its first month.
  *
- *  - Vichy does not outlive Germany. Once Germany has fallen and France is free again in its own capital, at that
- *    month's end Vichy's ground at home and overseas is France's and its troops answer to France, unless a player is
- *    playing it.
+ *  - Vichy does not outlive Germany, nor a France that is free again in its own capital (it ended so in August
+ *    1944, with Germany standing). At that month's end its ground at home and overseas is France's and its troops
+ *    answer to France, unless a player is playing it.
  *
- *  - A freed country takes up the wars it was in when it fell, beside those who freed it: in the month their chief
- *    enemy falls, or as it returns if he has fallen already (liberation.ts).
+ *  - A freed country takes up the wars it was in when it fell, beside those who freed it, as it returns
+ *    (liberation.ts).
  *
- * Nothing here acts before the chief enemy's fall, so a war nobody plays goes as it did until then. (The dial
- * 'before' in the data lets Vichy end with a free France in Paris, and a freed country take up its old wars as it
- * returns, while the chief enemy still stands: the letter of ruling 115(b) and (c), which moved Berlin a month or two
- * earlier in three wars of twenty-four and so waits on the design director.)
+ * (The dial 'before' in the data, set false, makes Vichy's end and a freed country's old wars wait for the chief
+ * enemy's fall, so that a war nobody plays goes as it did until then. The design director ruled for the letter, b498:
+ * read on twenty-four wars nobody plays it ends three a month or two earlier and leaves the middle war where it was.)
  * The numbers are in data/campaign/liberation.json, 'finish'.
  */
 import { turnToDate } from '../core/ticket';
@@ -83,7 +82,8 @@ export function finishMonthEnd(g: Game): void {
   for (const x of majors) {
     const X = g.nations[x];
     if (!X || X.alive || X.fellOn?.turn !== g.turn) continue;
-    // A country freed before its liberators' chief enemy fell takes up its old wars now (ruling 115(c)).
+    // A country freed before its liberators' chief enemy fell takes up now any old war it has not taken up already
+    // (ruling 115(c): all of them, where the data made them wait for this month).
     for (const N of Object.values(g.nations)) {
       if (!N.alive || !N.freedOn || N.id === g.human || !sideOf(g, N.id) || DIPLOMACY.leaders[sideOf(g, N.id) === 'allies' ? 'axis' : 'allies'] !== x) continue;
       const on = rejoinWars(g, N.id, N.freedOn.by);
@@ -133,15 +133,14 @@ export function finishMonthOpen(g: Game): void {
 }
 
 /**
- * Vichy's end (ruling 115(b)): a government and not a country, and it does not outlive Germany. Once Germany has
- * fallen and France is free again and holds its own capital, what Vichy holds at home and overseas is France's, its
- * troops answer to France, its wars are over, and it is struck off as the fallen are. Never while a player is
- * playing it.
+ * Vichy's end (ruling 115(b)): a government and not a country. Once France is free again and holds its own capital,
+ * what Vichy holds at home and overseas is France's, its troops answer to France, its wars are over, and it is
+ * struck off as the fallen are. Never while a player is playing it.
  */
 function endVichy(g: Game): void {
   const V = g.nations.VIC, F = g.nations.FRA;
   if (!V?.alive || V.dormant || g.human === 'VIC' || !F?.alive || !F.freedOn || F.capital < 0 || g.regions[F.capital].ctrl !== 'FRA') return;
-  // (Not before Germany has fallen, unless the data lets it end with a free France alone.)
+  // (Where the data makes it wait for the chief enemy's fall: not while Germany stands.)
   if (!LIB.finish.before && g.nations[DIPLOMACY.leaders.axis]?.alive) return;
   V.alive = false;
   V.fellOn = { turn: g.turn, week: g.week, to: 'FRA', how: 'annexed' };
