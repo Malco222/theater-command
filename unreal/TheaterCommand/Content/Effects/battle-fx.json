@@ -1,0 +1,1005 @@
+{
+ "what": "The battle effects recipe: every number an explosion, smoke, fire, tracer, muzzle flash and dust needs, for the preview clips and for the 3D game. The 3D game should read this file, not copy its numbers into code, so the effects can be tuned without a code change (as the sound mix's mix.json).",
+ "version": 1,
+ "made": "2026-11-18, the effects artist, from the art director's sheet art-director/explosions/explosions-look.md (15:43Z), the sound mix sound/mix/mix.json and the tracer rule in tools/battle-models/airshow.py",
+ "units": "metres, seconds, degrees. Frames are at 30 a second. Colours in [r, g, b] 0 to 255 are what the FINISHED picture should measure (the art director measures pixels), not shader inputs.",
+ "rulings": {
+  "brian": "2026-11-18 15:39Z: 'i want the explosions to be very dramatic and life like... mimic this look and feel as much as possible'; 15:40Z: 'i love how it makes me feel like im in it and watching a movie at the same time'",
+  "own_design": "The feeling only. Every effect, texture, sound and camera move is our own; nothing copied from any game (ruling 217, game-direction).",
+  "gore": "None: no bodies torn apart (art director's default; Brian may rule otherwise)."
+ },
+ "burst": {
+  "_how": "A high-explosive shell, mortar bomb, grenade or bomb landing on ground. Times are seconds after it lands (frame 0). Sizes scale by sizes.<kind>.scale (1 = 105 mm); the crown's height, crater, linger and shake come straight from the sizes table. On land the EARTH is the star: mostly thrown soil and smoke, almost no fire.",
+  "incoming": {
+   "from": -0.8,
+   "to": 0.0,
+   "by": "sound",
+   "_note": "Played only where a real recording exists (mix.json impacts.incoming). Mortars a shorter flutter; tank and anti-tank guns none."
+  },
+  "flash": {
+   "frames": [
+    0,
+    1
+   ],
+   "core_max_m": 1.5,
+   "core_colour": [
+    236,
+    168,
+    72
+   ],
+   "light": {
+    "radius_m": 50,
+    "lift": [
+     1.1,
+     1.3
+    ],
+    "lasts_frames": 1,
+    "gone_by_frame": 3,
+    "colour": [
+     255,
+     196,
+     140
+    ],
+    "_rule": "a real light on the men, vehicles and ground within the radius; lifts the lower third of the frame 1.1 to 1.3x, never a white-out; checked by measuring the frame against the one before",
+    "height_m": 16,
+    "_passed": "The fortifications 105 mm burst passed 17:11Z with its lamp 16 m up: ground lifted 1.24x at 3 m, 1.19x at 10 m, 1.12x at 15 m, a tank's side 1.10x at 28 m, gone by frame 3. Height scales by the square root of the size's scale. (Its second, low lamp that lit only the men and the tank is left out: the game has two lamps for all the flashes.)"
+   },
+   "dusk_inner_glow_frames": 4,
+   "_dusk": "At dusk and night the flash lights the young smoke from inside for 3 or 4 frames: the most cinematic moment we have.",
+   "_core": "Not a pale heart: yellow, blue channel under 110 (the fortifications burst passed 17:11Z with the pale heart at frame 0 left for the kit to fix)."
+  },
+  "shock_ring": {
+   "frames": [
+    1,
+    4
+   ],
+   "reach_m": 15,
+   "height_m": 1.2,
+   "colour_from_ground": 0.85,
+   "skirt": {
+    "puffs_outer": 70,
+    "puffs_inner": 110,
+    "inner_speed": 0.6,
+    "end_radius_m": 1.8,
+    "start_radius_m": 0.7,
+    "stretch_along_ring": 1.7,
+    "flatten": 0.75,
+    "alpha": [
+     0.55,
+     0.7
+    ],
+    "drag": 8.0,
+    "life_s": [
+     2.5,
+     3.5
+    ],
+    "upright": true,
+    "rise_mps": 0.8,
+    "haze_by_s": 1.0,
+    "haze_alpha": 0.2,
+    "grow": 0.25,
+    "front_billow": 1.35,
+    "shade": 1.8,
+    "_shade": "how strongly the skirt is lit on top and shadowed at its foot (1 is every other puff), so it shows its height (art director 17:09Z)"
+   },
+   "grass": "flattens outward, springs back over 0.6 s",
+   "heat_shimmer_frames": 2,
+   "_note": "One continuous low skirt in the ground's own dust colour, racing out and thinning (art director 16:31Z), with height and a soft billowing top, settling to a low haze by frame 30 (16:53Z). Neighbours overlap by about half; each puff is an upright card, long along the ring, so its foot never cuts into the ground.",
+   "_why_085": "the skirt's tops face the sun and the ground is seen edge-on, so the ground's own dust drawn at full brightness reads paler than the ground; 0.85 matches it"
+  },
+  "crown": {
+   "frames": [
+    2,
+    12
+   ],
+   "fan_deg": 100,
+   "heavy_jets": [
+    5,
+    8
+   ],
+   "heavy_reach": [
+    0.3,
+    1.0
+   ],
+   "jet_foot_r": 0.05,
+   "jet_tip_r": 0.012,
+   "heavy_thick": [
+    0.7,
+    2.6
+   ],
+   "heavy_shade": [
+    0.55,
+    0.85
+   ],
+   "stretch_along_jet": 1.6,
+   "lump_chance": 0.35,
+   "drag": 6.5,
+   "tilt_deg": [
+    4,
+    14
+   ],
+   "colour_from_ground": 0.55,
+   "clods_at_tips": true,
+   "tip_clod_m": [
+    0.05,
+    0.12
+   ],
+   "body": {
+    "from_frame": 3,
+    "puffs": 50,
+    "height": 0.22,
+    "width": 0.3,
+    "puff_r": [
+     0.06,
+     0.11
+    ],
+    "shade": [
+     0.6,
+     0.9
+    ],
+    "alpha": [
+     0.85,
+     0.95
+    ],
+    "_note": "A dense dark mound of earth and dust at the crown's foot from frame 4, so the hit has weight; it slumps into the smoke."
+   },
+   "foot_glow": {
+    "frames": [
+     2,
+     6
+    ],
+    "colour": [
+     184,
+     100,
+     3
+    ],
+    "half_hidden": true
+   },
+   "rise_time_s": 0.35,
+   "hang_s": 0.25,
+   "then": "collapses into the smoke and rains back as a veil",
+   "_note": "A wide torn fan (about 100 degrees) thrown outward from the point (art director 16:31Z and 16:53Z): a few heavy dark jets, very uneven in length and width, overlapping and bunched, never spaced like fingers; the gaps filled with lighter dust (fill_jets) so the silhouette is one torn fan; each heavy jet thinnest and torn at its tip, drawn to a point (tip_point), never rounded, with clods flying on beyond it (tip_clod_speed); a dense dark body at the foot from frame 4. Jet thickness is a share of the crown's height (jet_foot_r, jet_tip_r) and puffs are stepped along a jet by their own length (overlap), so a bomb's jets do not bead.",
+   "tip_clods": [
+    3,
+    5
+   ],
+   "tip_breakup": 0.6,
+   "overlap": 0.9,
+   "heavy_lean": [
+    0.35,
+    1.0
+   ],
+   "azimuth": "random round the compass, never evenly spaced: jets overlap and bunch",
+   "fill_jets": [
+    10,
+    16
+   ],
+   "fill_reach": [
+    0.3,
+    0.75
+   ],
+   "fill_thick": [
+    1.6,
+    3.0
+   ],
+   "fill_alpha": [
+    0.3,
+    0.5
+   ],
+   "tip_stretch": 2.6,
+   "tip_point": 0.9,
+   "tip_alpha": 0.55,
+   "tip_clod_speed": [
+    0.9,
+    1.05
+   ],
+   "edge_jitter": 0.9,
+   "_edges": "edge_jitter: how far each puff along a jet strays sideways, as a share of the jet's width; lump_chance: how many puffs are lumps half again or twice as wide. Ragged, clumpy sides, never smooth blades or leaves (art director 17:09Z)."
+  },
+  "debris": {
+   "frames": [
+    6,
+    45
+   ],
+   "gravity": 9.8,
+   "clods": {
+    "count": [
+     80,
+     110
+    ],
+    "size_m": [
+     0.02,
+     0.18
+    ],
+    "big_bounce_once": true,
+    "landing_puff": true,
+    "_passed": "With the clods thrown from the jets' tips, about 130 in all for a 105, landing 0.9 to 3.1 s after the flash, the big ones bouncing once (the fortifications burst, passed 17:11Z)."
+   },
+   "grit": {
+    "streaks": true,
+    "count": [
+     60,
+     120
+    ]
+   },
+   "lens": {
+    "within_m": 40,
+    "pieces": [
+     3,
+     7
+    ],
+    "out_of_focus": true,
+    "dust_settles_s": 1.0,
+    "_rule": "on a hit close to the camera a few clods and a veil of grit cross the foreground: what puts the player in the hole"
+   },
+   "_note": "True gravity sells weight: a clod thrown 10 m up comes down about 2.8 s later.",
+   "clod_r_m": [
+    0.015,
+    0.09
+   ]
+  },
+  "smoke": {
+   "frames": [
+    10,
+    90
+   ],
+   "colour": [
+    72,
+    62,
+    52
+   ],
+   "colour_far": [
+    96,
+    90,
+    84
+   ],
+   "foot_warm_frames": [
+    10,
+    16
+   ],
+   "rise_mps": [
+    1.0,
+    2.6
+   ],
+   "lean": "downwind, with the battle's wind",
+   "build": "many small puffs, never a few big balls; volumes in the preview renders",
+   "shades_ground": true,
+   "blocks_sight": true,
+   "puff_r": [
+    [
+     0.5,
+     0.9
+    ],
+    [
+     1.2,
+     2.6
+    ]
+   ],
+   "merge": "neighbours overlap; sizes vary 1 to 3 times; soft rims, no firm cores: never separate round balls like grapes (art director 16:53Z)",
+   "grow": 0.3,
+   "alpha": [
+    0.35,
+    0.6
+   ]
+  },
+  "linger": {
+   "seconds": "sizes.<kind>.linger_s",
+   "spreads_downwind_mps": [
+    0.8,
+    2.0
+   ],
+   "dust_veil_falls": true,
+   "crater_smoulders_s": 8,
+   "_rule": "never vanishes in 2 s"
+  },
+  "scar": {
+   "crater": "sizes.<kind>.crater_m across",
+   "ring_of_thrown_earth": 1.8,
+   "scorched_edge": true,
+   "clods_round_it": true,
+   "persists": "whole battle",
+   "overlap": "craters overlap where hits overlap: a barrage ploughs a green field"
+  }
+ },
+ "sizes": {
+  "_how": "Rough figures, already about 1.3 times real so they read at the battle camera (art director). Check in the scene against a known-size fitting: a man, 1.75 m. scale is for the puff and clod counts and sizes; shake is camera shake within shake_within_m.",
+  "grenade": {
+   "scale": 0.2,
+   "crown_m": [
+    1.5,
+    2.0
+   ],
+   "crater_m": 0.0,
+   "scuff": true,
+   "linger_s": [
+    3,
+    5
+   ],
+   "shake_within_m": 10,
+   "mostly": "dust",
+   "cue_size": "grenade"
+  },
+  "light": {
+   "scale": 0.3,
+   "crown_m": [
+    2.0,
+    3.0
+   ],
+   "crater_m": 0.5,
+   "linger_s": [
+    4,
+    7
+   ],
+   "shake_within_m": 15,
+   "calibres": [
+    "37 mm",
+    "45 mm",
+    "47 mm",
+    "50 mm",
+    "57 mm"
+   ],
+   "cue_size": "grenade",
+   "_proposed": "the effects artist 16:55Z, for the field battle's 'light' shells (37 to 57 mm); the art director to confirm"
+  },
+  "mortar": {
+   "scale": 0.5,
+   "crown_m": [
+    4.0,
+    6.0
+   ],
+   "crater_m": 0.8,
+   "linger_s": [
+    8,
+    12
+   ],
+   "shake_within_m": 25,
+   "calibres": [
+    "81 mm",
+    "82 mm"
+   ],
+   "cue_size": "mortar"
+  },
+  "gun75": {
+   "scale": 0.7,
+   "crown_m": [
+    5.0,
+    8.0
+   ],
+   "crater_m": 1.0,
+   "linger_s": [
+    10,
+    15
+   ],
+   "shake_within_m": 30,
+   "calibres": [
+    "75 mm",
+    "76 mm",
+    "25-pounder"
+   ],
+   "cue_size": "gun"
+  },
+  "how105": {
+   "scale": 1.0,
+   "crown_m": [
+    8.0,
+    12.0
+   ],
+   "crater_m": 1.7,
+   "linger_s": [
+    15,
+    25
+   ],
+   "shake_within_m": 40,
+   "calibres": [
+    "105 mm"
+   ],
+   "cue_size": "howitzer"
+  },
+  "how150": {
+   "scale": 1.6,
+   "crown_m": [
+    12.0,
+    20.0
+   ],
+   "crater_m": 3.0,
+   "linger_s": [
+    25,
+    40
+   ],
+   "shake_within_m": 60,
+   "calibres": [
+    "150 mm",
+    "155 mm"
+   ],
+   "cue_size": "heavy"
+  },
+  "bomb250": {
+   "scale": 3.4,
+   "crown_m": [
+    30.0,
+    45.0
+   ],
+   "crater_m": 7.0,
+   "linger_s": [
+    45,
+    90
+   ],
+   "shake_within_m": 120,
+   "calibres": [
+    "250 kg",
+    "500 lb"
+   ],
+   "push": true,
+   "cue_size": "bomb"
+  },
+  "bomb500": {
+   "scale": 4.6,
+   "crown_m": [
+    45.0,
+    60.0
+   ],
+   "crater_m": 10.0,
+   "linger_s": [
+    60,
+    120
+   ],
+   "shake_within_m": 180,
+   "calibres": [
+    "500 kg",
+    "1,000 lb"
+   ],
+   "push": true,
+   "cue_size": "bomb"
+  }
+ },
+ "grounds": {
+  "_how": "The ground under the hit decides the look. thrown is the crown's colour against the ground's own (or a fixed colour where given); smoke tints the cloud. The 3D field's ground kinds (open, field, woods, rough, marsh, water, road, bridge, buildings, rock, bunker, works, blown) map to these by ground_of.",
+  "earth": {
+   "thrown_from_ground": 0.55,
+   "clods": 1.0,
+   "dust": 0.6,
+   "smoke": [
+    72,
+    62,
+    52
+   ],
+   "extra": "a turf tear",
+   "paint": {
+    "soil": [
+     66,
+     55,
+     44
+    ],
+    "heavy": [
+     50,
+     41,
+     33
+    ],
+    "dust": [
+     150,
+     134,
+     108
+    ],
+    "clod": [
+     40,
+     33,
+     26
+    ],
+    "smoke": [
+     72,
+     62,
+     52
+    ]
+   }
+  },
+  "sand": {
+   "thrown_from_ground": 0.95,
+   "clods": 0.15,
+   "dust": 1.8,
+   "smoke": [
+    176,
+    152,
+    118
+   ],
+   "crown_slow": 1.5,
+   "haze_lingers": 1.6,
+   "extra": "pale, tall, slow dust cloud; glows when backlit",
+   "core": "darker damp sand in the heavy jets, inside the pale slow column, so it reads as a hit",
+   "paint": {
+    "soil": [
+     150,
+     128,
+     95
+    ],
+    "heavy": [
+     96,
+     78,
+     55
+    ],
+    "dust": [
+     196,
+     174,
+     135
+    ],
+    "clod": [
+     120,
+     100,
+     72
+    ],
+    "smoke": [
+     176,
+     152,
+     118
+    ]
+   }
+  },
+  "snow": {
+   "thrown_first": [
+    236,
+    238,
+    240
+   ],
+   "thrown_then_from_ground": 0.4,
+   "clods": 0.7,
+   "dust": 0.5,
+   "smoke": [
+    58,
+    54,
+    50
+   ],
+   "crater": "a black star on white with a grey-brown spatter ring",
+   "extra": "white snow thrown up first, dark earth under it",
+   "paint": {
+    "soil": [
+     52,
+     45,
+     38
+    ],
+    "heavy": [
+     46,
+     40,
+     34
+    ],
+    "dust": [
+     222,
+     226,
+     232
+    ],
+    "clod": [
+     48,
+     42,
+     36
+    ],
+    "smoke": [
+     58,
+     54,
+     50
+    ],
+    "first": [
+     236,
+     238,
+     240
+    ]
+   }
+  },
+  "mud": {
+   "thrown_from_ground": 0.45,
+   "clods": 1.4,
+   "clod_kind": "wet clumps that splash, not spray",
+   "dust": 0.15,
+   "smoke": [
+    64,
+    56,
+    48
+   ],
+   "crater": "black-brown spatter, water shining in it",
+   "ground_shine": "matt: wet earth, not a glaze",
+   "paint": {
+    "soil": [
+     46,
+     38,
+     30
+    ],
+    "heavy": [
+     38,
+     31,
+     25
+    ],
+    "dust": [
+     96,
+     83,
+     66
+    ],
+    "clod": [
+     34,
+     28,
+     22
+    ],
+    "smoke": [
+     64,
+     56,
+     48
+    ]
+   }
+  },
+  "town": {
+   "thrown": [
+    186,
+    180,
+    168
+   ],
+   "clods": 0.0,
+   "rubble": 1.0,
+   "tiles": true,
+   "sparks": [
+    3,
+    8
+   ],
+   "dust": 2.0,
+   "smoke": [
+    150,
+    146,
+    138
+   ],
+   "extra": "grey-white masonry dust is the cloud's main colour and hangs in the street",
+   "paint": {
+    "soil": [
+     150,
+     145,
+     136
+    ],
+    "heavy": [
+     112,
+     106,
+     98
+    ],
+    "dust": [
+     186,
+     180,
+     168
+    ],
+    "clod": [
+     160,
+     154,
+     144
+    ],
+    "smoke": [
+     150,
+     146,
+     138
+    ]
+   }
+  },
+  "woods": {
+   "thrown_from_ground": 0.55,
+   "clods": 0.6,
+   "splinters": 1.0,
+   "leaves_fall_s": [
+    3,
+    8
+   ],
+   "dust": 0.4,
+   "smoke": [
+    70,
+    64,
+    56
+   ],
+   "tree_burst": "the trunk left torn and pale where it split",
+   "paint": {
+    "soil": [
+     60,
+     50,
+     40
+    ],
+    "heavy": [
+     48,
+     40,
+     32
+    ],
+    "dust": [
+     130,
+     115,
+     95
+    ],
+    "clod": [
+     56,
+     46,
+     36
+    ],
+    "smoke": [
+     70,
+     64,
+     56
+    ],
+    "splinter": [
+     205,
+     186,
+     150
+    ]
+   }
+  },
+  "water": {
+   "rule": "the splash column already passed: rises in 2 frames, dark foot ring, never cotton wool",
+   "paint": {
+    "soil": [
+     214,
+     222,
+     226
+    ],
+    "heavy": [
+     190,
+     202,
+     208
+    ],
+    "dust": [
+     200,
+     210,
+     214
+    ],
+    "clod": [
+     214,
+     222,
+     226
+    ],
+    "smoke": [
+     180,
+     190,
+     196
+    ]
+   }
+  },
+  "ground_of": {
+   "open": "earth",
+   "field": "earth",
+   "rough": "earth",
+   "road": "earth",
+   "blown": "earth",
+   "works": "earth",
+   "bunker": "town",
+   "rock": "town",
+   "buildings": "town",
+   "woods": "woods",
+   "marsh": "mud",
+   "water": "water",
+   "bridge": "town"
+  },
+  "by_month": {
+   "snow": "the campaign month and weather say snow",
+   "mud": "the autumn and spring thaw (rasputitsa) in the east, and marsh",
+   "sand": "North Africa and the desert fields"
+  },
+  "_paint": "paint: the game's unlit colours for each ground, as the finished picture should show them (sRGB 0-255): soil the lighter jets, heavy the dark heavy jets and the body, dust the skirt and veil, clod the lumps, smoke the cloud, first (snow) what is thrown first, splinter (woods) the wood."
+ },
+ "on_armour": {
+  "_how": "A shell that hits a tank and does not go in.",
+  "sparks": [
+   12,
+   24
+  ],
+  "spark_colour": [
+   255,
+   214,
+   140
+  ],
+  "puff": "grey, small, gone in 2 s",
+  "scar": "a bright scar on the armour that stays",
+  "no_earth_crown": true,
+  "brew_up": "uses the fire rules below and the passed brew-up (turret-sized ragged jets, no cotton wool); then the b477 burning wreck to the end of the fight"
+ },
+ "fire": {
+  "_how": "Only where something burns: fuel, an ammunition load, a fuel dump, a plane, a burning room, a wreck. Never a big orange ball on a ground hit.",
+  "flame_colour": [
+   207,
+   134,
+   56
+  ],
+  "heart": "yellow, short tongues, blue channel under 110",
+  "never": "peach (about 230, 177, 140)",
+  "shape": "long, ragged, tapering tongues rooted where it burns; they die by being eaten away, never by thinning",
+  "render_note": "In the preview renders flame emission stays about (0.16, 0.042, 0.0) at the puff material's strength 7, or the AgX tone curve bleaches it peach whatever its hue (fortifications thread). Measure every flame.",
+  "blast_cloud": "warm only at its foot, charcoal above",
+  "light_lift_max": 1.15,
+  "wreck": "orange tongues from the hatches, then a thinning grey column to the end of the fight; at night a hatch glow (b477)",
+  "_passed": "Flame 207, 134, 56 at frame 0 and the crown's foot glow 184, 100, 3 at frame 2, gone by frame 6: both passed in the fortifications 105 mm burst, 17:11Z."
+ },
+ "camera": {
+  "shake": {
+   "_how": "A short jolt on hits inside sizes.<kind>.shake_within_m, scaled by size and nearness: strength = scale * (1 - distance / within)^2. Hits beyond the radius never shake it. A setting turns shake off.",
+   "seconds": [
+    0.25,
+    0.5
+   ],
+   "decay": "fast (exponential, half gone in 0.08 s)",
+   "up_down_m_at_full": 0.35,
+   "side_m_at_full": 0.12,
+   "roll_deg_max": 0.5,
+   "push_m": {
+    "bomb250": 0.4,
+    "bomb500": 0.7,
+    "_note": "big bombs add a slight push away from the blast"
+   },
+   "setting": "Options: Camera shake on or off (default on)"
+  },
+  "lens_dirt": {
+   "within_m": 40,
+   "_note": "see burst.debris.lens"
+  }
+ },
+ "movie": {
+  "backlight": "with a low sun behind the smoke, dust and cloud edges glow with a warm rim and the earth crown goes dark against it; keep the sun itself out of the camera's eye",
+  "depth": {
+   "near": "big, crisp, dark; debris passes the lens",
+   "middle": "the hit itself in full colour",
+   "far": "bursts small, softened and greyed by haze; flashes on the horizon; tall smoke columns standing over the far side of the field",
+   "far_from_m": 400,
+   "haze": "battle_set's haze: starts 60 m, most at 700 m"
+  },
+  "weight": "big clouds climb slowly, debris on true gravity, dust settles for seconds; nothing pops in or out",
+  "the_field_remembers": "craters, scorch, smoke columns, burning wrecks and drifting haze build up over the battle"
+ },
+ "variety": {
+  "versions_per_size": 4,
+  "never_same_within_s": 1.0,
+  "turn": "each version turned at random about the upright and leaned with the slope",
+  "barrage_spacing_s": [
+   0.2,
+   1.5
+  ],
+  "_rule": "a barrage's shells never land in step"
+ },
+ "muzzle": {
+  "_how": "A gun firing. The flame is a ragged tongue along the bore with licks thrown sideways, under one frame; its lamp lights the gun and its pit, out before the next frame. Then grey-brown smoke rolls out, hangs and drifts. Big guns throw a ring of dust off the ground in front.",
+  "rifle": {
+   "flame_m": 0.25,
+   "light": false,
+   "smoke": "a wisp",
+   "smoke_s": 1.5
+  },
+  "mg": {
+   "flame_m": 0.35,
+   "light": "small, every 3rd round",
+   "flicker_each_round": true,
+   "smoke": "a thin haze over the gun while it fires",
+   "smoke_s": 3
+  },
+  "tank_gun": {
+   "flame_m": 1.3,
+   "light_w": 9000,
+   "dust_ring_m": 6,
+   "smoke_s": [
+    4,
+    7
+   ],
+   "case": "ejected 0.7 s later (sound only within 40 m)"
+  },
+  "at_gun": {
+   "flame_m": 1.1,
+   "light_w": 7000,
+   "dust_ring_m": 8,
+   "smoke_s": [
+    4,
+    7
+   ],
+   "_note": "fires flat from low down: the dust it throws off the ground in front can hide the gun for a moment, as it really did"
+  },
+  "howitzer": {
+   "flame_m": 2.0,
+   "light_w": 14000,
+   "dust_ring_m": 10,
+   "smoke_s": [
+    6,
+    10
+   ]
+  },
+  "mortar": {
+   "flame_m": 0.4,
+   "light": "small",
+   "smoke": "a short puff up the tube's line",
+   "smoke_s": 2.5
+  }
+ },
+ "tracer": {
+  "_how": "Brian 2026-11-18: 'i want tracer fire shown as well. 1 out of every 5 bullets with yellow'. As a belt was loaded: every fifth round of a gun is a tracer; the four between are not seen. Out of step between guns.",
+  "one_in": 5,
+  "colour": [
+   213,
+   199,
+   104
+  ],
+  "streak_m": 16,
+  "core": "paler along its middle",
+  "tail": "thinning toward the gun",
+  "least_px": 3,
+  "life_s": 0.6,
+  "bloom": "mild",
+  "speed_mps": 760,
+  "ricochet": {
+   "chance": 0.18,
+   "deflect_deg": [
+    10,
+    50
+   ],
+   "slower": 0.5,
+   "_note": "a tracer striking the ground or armour sometimes skips up at an angle: a real sight in films and footage"
+  },
+  "render_note": "airshow.py TRACER: radiance (0.15, 0.133, 0.0) at puff strength, as built for the air clips"
+ },
+ "dust": {
+  "vehicles": {
+   "when": "dry ground and roads, not snow, mud or wet weather",
+   "colour_from_ground": 1.25,
+   "trail_m": [
+    8,
+    20
+   ],
+   "rise_m": [
+    1,
+    3
+   ],
+   "linger_s": [
+    4,
+    6
+   ],
+   "tracks_more_than_wheels": true
+  },
+  "men_going_down": {
+   "puff": "a small low puff at each man who throws himself flat",
+   "linger_s": 1.5
+  },
+  "shell_veil": "see burst.linger"
+ },
+ "sound": {
+  "_how": "The sound side lives in sound/mix/mix.json (impacts, flashToBang, big, shellShock). Effects and sound share one clock: the flash shows at once; the bang comes distance / 343 s later past 150 m.",
+  "mix": "/mnt/project-files/sound/mix/mix.json"
+ },
+ "never": [
+  "a smooth ball, egg, dome or cotton wool, in smoke, dust or fire",
+  "a big orange fireball on a ground hit",
+  "peach; a flat orange smear painted on a surface",
+  "flat cards showing their edges, or a sprite turned square to the camera so it reads as a picture",
+  "smoke that vanishes in seconds; a crater that disappears",
+  "a white-out: the flash lifts the scene, never bleaches it",
+  "camera shake from far hits"
+ ],
+ "from_shell_cal": {
+  "_how": "The land field battle's 'shell' event names a calibre (unreal/TheaterCommand/Rules/battle-bridge.ts, Explosions); this is the size row each one draws. A hit on armour (armour: true) draws on_armour at that size and leaves no crater. The event's ground is already one of the grounds keys.",
+  "light": "light",
+  "mortar": "mortar",
+  "field": "gun75",
+  "howitzer": "how105",
+  "heavy": "how150"
+ },
+ "ap_miss": {
+  "_how": "An armour-piercing round that misses and strikes the ground: a single low spurt of earth and a skip, no crown, no crater (art director 16:53Z).",
+  "spurt_m": [
+   1.2,
+   2.0
+  ],
+  "puffs": [
+   5,
+   8
+  ],
+  "skip_tracer": true
+ },
+ "game": {
+  "_how": "Numbers only the 3D game's effects kit uses (Source/TheaterCommand/Effects). Tune here, not in code.",
+  "max_puffs": 3000,
+  "max_lamps": 2,
+  "lamp_candela_at_full": 400.0,
+  "_lamp": "A flash's lamp at full strength (a 105 mm is 1), in candelas at 100 world units a metre (the kit scales it for other scales). 400 is worked out from the map's key light of about 7 lux so that the ground 3 m from a 105 lifts about 1.24 times; set it on the Mac by measuring frames until the ground within 15 m lifts 1.1 to 1.3 times.",
+  "shade_lit": 0.18,
+  "shade_dark": 0.28,
+  "_shade": "puffs are unlit: each is lightened toward the sun and darkened away from it by these shares, so a cloud has a lit and a shadowed side",
+  "clod_least_px": 1.2,
+  "draw_beyond_m": 1500,
+  "muzzle_smoke": [
+   150,
+   140,
+   126
+  ],
+  "spark_life_s": [
+   0.12,
+   0.3
+  ]
+ }
+}
