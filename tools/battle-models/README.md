@@ -488,6 +488,25 @@ the whole growing paler. Kept off pure white (about 0.84, 0.9, 0.88 in the sun).
 "flat" stuff: dark and matt but for a tenth of dull shine, and how far a patch reaches differs all the way round it,
 so its rim is bays and tongues (a round rim showed from the battle camera as a smooth curve).
 
+A shell's splash (`splash` and the kinds "jet" and "ring" in `stage.py`). It goes up fast and narrow. Built of soft
+puffs thrown up under gravity alone, its first half second was "a soft white cotton-wool mound swelling at the
+waterline, like steam from a kettle" (the art director, 2026-11-18). A column is jets of solid water, each a ball
+drawn out tall and stood upright, thrown to its own height against a strong drag, so it is at four fifths of its
+height in two frames: a dense core that narrows upward, thin streaks close in along its sides, a feathered head of
+thin jets each at its own height and lean, drops falling out of it, and a dark ragged ring of disturbed water
+spreading at its foot. The soft puffs come in slowly after it and are only the mist at its base and the curtain that
+falls. Three things that went wrong on the way: jets out of the top that stand parallel read as a fork; thin jets
+that are fat and splayed read as petals; and stuff that tears only at its very rim reads as a wax candle (it tears in
+from the outer quarter now, and most toward its upper end).
+
+Mending a clip by frames. A clip need not be rendered again for one fault: `show.py` and `airshow.py` take
+`frames=43,44,45`, `stage.film` skips a frame that is already on disk and still steps every effect through it, and
+`kit.encode` joins the folder. Render the mended frames from a copy of the code the clip was made with, changed only
+where the mend is. For a thing added (the splash's column), give it dice of its own and names of its own (`rng` and
+`name` of `puff`): the other puffs then keep their throws and their names, and a puff's name decides its pattern, so
+the first frame after the mend comes out as it was. Check that by subtracting the two. For a thing moved (a bomber
+stepped clear of another's smoke), find the frames it is in by projecting it into the camera.
+
 Two lessons of the close fly-past, kept in `airshow.py`. The camera goes nearly all the way round the machine, so
 somewhere it looks up-sun, and there the sun's glare off the wings washed the camouflage out to cream: the sun now
 stands so that the glare falls in the gap the camera never visits (`SUN`), and a painted skin shines a little less

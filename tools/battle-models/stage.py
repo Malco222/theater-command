@@ -509,6 +509,9 @@ class Effects:
         for k in ("tongue", "lick"):
             self.meshes[k] = lick.copy()
             self.meshes[k].materials.append(self._flame_mat(k == "tongue"))
+        for k in ("jet", "ring"):                # (made last, so that nothing made before them is named differently)
+            self.meshes[k] = self.mesh.copy()
+            self.meshes[k].materials.append(self._jet_mat() if k == "jet" else self._ring_mat())
 
     def _mat(self, kind):
         m = bpy.data.materials.new("fx_" + kind)
@@ -622,6 +625,83 @@ class Effects:
         nt.links.new(ms.outputs[0], out.inputs["Surface"])
         return m
 
+    def _jet_mat(self):
+        """Solid water thrown up by a shell: dense and white at its heart, its edge torn into streaks that run
+        along it (the ball is drawn out tall and stood upright), no two alike."""
+        m = bpy.data.materials.new("fx_jet")
+        m.use_nodes = True
+        nt = m.node_tree
+        nt.nodes.remove(nt.nodes["Principled BSDF"])
+        out = nt.nodes["Material Output"]
+        info = nt.nodes.new("ShaderNodeObjectInfo")
+        tc = nt.nodes.new("ShaderNodeTexCoord")
+        mp = nt.nodes.new("ShaderNodeMapping")
+        mp.inputs["Scale"].default_value = (4.6, 4.6, 0.6)                                   # (streaks lie along the column)
+        nt.links.new(tc.outputs["Object"], mp.inputs["Vector"])
+        nz = nt.nodes.new("ShaderNodeTexNoise")
+        nz.noise_dimensions = "4D"
+        nz.inputs["Scale"].default_value = 1.0
+        nz.inputs["Detail"].default_value = 5.0
+        nz.inputs["Roughness"].default_value = 0.65
+        nt.links.new(mp.outputs["Vector"], nz.inputs["Vector"])
+        nt.links.new(_math(nt, "MULTIPLY", info.outputs["Random"], 61.0), nz.inputs["W"])
+        lw = nt.nodes.new("ShaderNodeLayerWeight")
+        lw.inputs["Blend"].default_value = 0.5
+        face = _math(nt, "SUBTRACT", 1.0, lw.outputs["Facing"], clamp=True)                  # 1 looking into it, 0 at its edge
+        heart = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", face, 0.1), 2.4)                  # (over 1 in its heart: opaque there; the outer quarter of it can tear)
+        torn = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", nz.outputs[0], 0.5), 2.8)
+        sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+        nt.links.new(tc.outputs["Object"], sep.inputs[0])
+        head = _math(nt, "MULTIPLY", _math(nt, "MAXIMUM", sep.outputs[2], 0.0), 0.9)          # (and its upper end tears most: a feathered head, never a rounded one)
+        soft = _math(nt, "SUBTRACT", _math(nt, "ADD", heart, torn), head, clamp=True)
+        alpha = _math(nt, "MULTIPLY", soft, info.outputs["Alpha"], clamp=True)
+        d1, d2 = nt.nodes.new("ShaderNodeBsdfDiffuse"), nt.nodes.new("ShaderNodeBsdfTranslucent")
+        nt.links.new(info.outputs["Color"], d1.inputs["Color"])
+        nt.links.new(info.outputs["Color"], d2.inputs["Color"])
+        body = nt.nodes.new("ShaderNodeMixShader")
+        body.inputs[0].default_value = 0.4
+        nt.links.new(d1.outputs[0], body.inputs[1])
+        nt.links.new(d2.outputs[0], body.inputs[2])
+        clear = nt.nodes.new("ShaderNodeBsdfTransparent")
+        ms = nt.nodes.new("ShaderNodeMixShader")
+        nt.links.new(alpha, ms.inputs[0])
+        nt.links.new(clear.outputs[0], ms.inputs[1])
+        nt.links.new(body.outputs[0], ms.inputs[2])
+        nt.links.new(ms.outputs[0], out.inputs["Surface"])
+        return m
+
+    def _ring_mat(self):
+        """A ring of disturbed water lying on the sea round the foot of a column: dark, ragged, nothing in its middle."""
+        m = bpy.data.materials.new("fx_ring")
+        m.use_nodes = True
+        nt = m.node_tree
+        nt.nodes.remove(nt.nodes["Principled BSDF"])
+        out = nt.nodes["Material Output"]
+        info = nt.nodes.new("ShaderNodeObjectInfo")
+        tc = nt.nodes.new("ShaderNodeTexCoord")
+        sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+        nt.links.new(tc.outputs["Object"], sep.inputs[0])
+        r = _math(nt, "SQRT", _math(nt, "ADD", _math(nt, "MULTIPLY", sep.outputs[0], sep.outputs[0]), _math(nt, "MULTIPLY", sep.outputs[1], sep.outputs[1])))
+        nz = nt.nodes.new("ShaderNodeTexNoise")
+        nz.noise_dimensions = "4D"
+        nz.inputs["Scale"].default_value = 3.0
+        nz.inputs["Detail"].default_value = 4.0
+        nt.links.new(tc.outputs["Object"], nz.inputs["Vector"])
+        nt.links.new(_math(nt, "MULTIPLY", info.outputs["Random"], 61.0), nz.inputs["W"])
+        band = _math(nt, "SUBTRACT", 1.0, _math(nt, "DIVIDE", _math(nt, "ABSOLUTE", _math(nt, "SUBTRACT", r, 0.68)), 0.3), clamp=True)
+        soft = _math(nt, "MULTIPLY", _math(nt, "ADD", band, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", nz.outputs[0], 0.5), 1.1)), 1.5, clamp=True)
+        soft = _math(nt, "MULTIPLY", soft, _math(nt, "MULTIPLY", band, 4.0, clamp=True), clamp=True)                # (nothing where the band is not)
+        alpha = _math(nt, "MULTIPLY", soft, info.outputs["Alpha"], clamp=True)
+        body = nt.nodes.new("ShaderNodeBsdfDiffuse")
+        nt.links.new(info.outputs["Color"], body.inputs["Color"])
+        clear = nt.nodes.new("ShaderNodeBsdfTransparent")
+        ms = nt.nodes.new("ShaderNodeMixShader")
+        nt.links.new(alpha, ms.inputs[0])
+        nt.links.new(clear.outputs[0], ms.inputs[1])
+        nt.links.new(body.outputs[0], ms.inputs[2])
+        nt.links.new(ms.outputs[0], out.inputs["Surface"])
+        return m
+
     def _flame_mat(self, hot):
         """Flame as tongues: ragged (eaten away by noise, more toward the tip), streaked along its length, each one
         different; deep orange, darkening to red at the tip, and with `hot` a yellow heart at the root."""
@@ -677,13 +757,17 @@ class Effects:
 
     # -- one puff
     def puff(self, t0, at, vel=(0, 0, 0), life=6.0, r=(2.0, 8.0), col=(0.5, 0.5, 0.5), col2=None, alpha=0.6, kind="smoke", drag=0.0, rise=0.0,
-             gravity=0.0, wind=1.0, squash=(1.0, 1.0, 1.0), fade_in=0.15, grow=0.6, hold=0.0, cool=1.6):
+             gravity=0.0, wind=1.0, squash=(1.0, 1.0, 1.0), fade_in=0.15, grow=0.6, hold=0.0, cool=1.6, name="puff", rng=None):
+        """`name`, `rng`: its object's name and the dice it is turned by. Something added to a clip that is already
+        rendered takes its own of both, so that every other puff keeps the name and the turn it had (a puff's
+        name decides the pattern of its stuff), and the frames it is not in come out as they were."""
         ob = self.spare[kind].pop() if self.spare.get(kind) else None
         if ob is None:
-            ob = bpy.data.objects.new("puff", self.meshes[kind])
+            ob = bpy.data.objects.new(name, self.meshes[kind])
             self.coll.objects.link(ob)
             ob.visible_shadow = False                    # (far cheaper; the sun still shades each puff by its own roundness)
-        ob.rotation_euler = (self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28)) if kind not in ("flat", "foam") else (0, 0, self.rng.uniform(0, 6.28))
+        dice = rng or self.rng
+        ob.rotation_euler = (dice.uniform(0, 6.28), dice.uniform(0, 6.28), dice.uniform(0, 6.28)) if kind not in ("flat", "foam", "ring") else (0, 0, dice.uniform(0, 6.28))
         ob.hide_render = False
         p = dict(ob=ob, kind=kind, t0=t0, at=Vector(at), vel=Vector(vel), life=life, r=r, col=Vector(col), col2=Vector(col2 if col2 is not None else col), alpha=alpha,
                  drag=drag, rise=rise, gravity=gravity, wind=wind, squash=Vector(squash), fade_in=fade_in, grow=grow, hold=hold, cool=cool)
@@ -842,18 +926,70 @@ class Effects:
 
     def splash(self, t0, at, high=50.0, r=5.0):
         """A heavy shell falls in the sea: a tall white column that stands a moment and falls back, and the churned
-        water it leaves."""
+        water it leaves.
+
+        It goes up fast and narrow. (The art director, 11:31 UTC on 18 November 2026: built of soft puffs thrown up
+        under gravity alone, its first five or six frames were "a soft white cotton-wool mound swelling at the
+        waterline, like steam from a kettle". A heavy shell's splash is at most of its height in two or three frames,
+        its core dense and opaque, its edges streaked with jets and falling drops, a dark ring of disturbed water at
+        its foot; the soft mist belongs at its base after it peaks and in the curtain that falls.) So: jets of solid
+        water, upright, each thrown to its own height against a strong drag, which sag and are gone in a second and
+        a third; thin jets and drops about them; the ring; and the soft puffs as before but coming in slowly, the
+        mist the column leaves. The column has dice of its own and its puffs names of their own (see `puff`), so
+        a clip rendered before it was built can have it put in: the frames after it is gone come out as they were."""
         g = self.rng
         at = Vector(at)
+        q = random.Random(int(at.x * 131.0 + at.y * 17.0) + 4099)
+        k = 9.0                                  # (the drag on a jet: it is at four fifths of its height in a sixth of a second)
+
+        def jet(t, foot, top, rad, tall, life, lean=(0.0, 0.0), alpha=1.0, fall=7.0):
+            p = self.puff(t, foot, vel=(lean[0] * k, lean[1] * k, top * k), life=life, r=(rad * 0.75, rad), col=(0.97, 0.98, 0.98), col2=(0.9, 0.93, 0.93), alpha=alpha,
+                          kind="jet", drag=k, gravity=fall, wind=0.05, squash=(1.0, 1.0, tall), fade_in=0.03, grow=0.25, hold=0.5, name="jet", rng=q)
+            # (it leans the way it is thrown: the spin about its own length first, then the lean)
+            away = Vector((lean[0], lean[1], 0.0))
+            tilt = Quaternion((-away.y, away.x, 0.0), min(0.3, math.atan2(away.length, max(top, 1.0)) * 1.4)) if away.length > 1e-4 else Quaternion()
+            wob = Quaternion((1.0, 0.0, 0.0), q.uniform(-0.05, 0.05)) @ Quaternion((0.0, 1.0, 0.0), q.uniform(-0.05, 0.05))
+            p["ob"].rotation_euler = (tilt @ wob @ Quaternion((0.0, 0.0, 1.0), q.uniform(0, 6.28))).to_euler()
+
+        def column(t, p0):
+            H = high * 0.72
+            for j in range(7):                   # its core, from the foot up, narrowing
+                c = (j + 0.5) / 7.0
+                jet(t + 0.008 * j, p0 + Vector((q.uniform(-0.9, 0.9), q.uniform(-0.9, 0.9), 0.3)), H * (0.1 + 0.8 * c), r * (0.62 - 0.3 * c) * q.uniform(0.8, 1.15), q.uniform(2.6, 3.6), q.uniform(1.15, 1.3))
+            for j in range(13):                  # thin jets on its edge, splayed: the streaks down its sides
+                c = q.uniform(0.2, 0.92)
+                a = q.uniform(0, 2 * math.pi)
+                out = Vector((math.cos(a), math.sin(a), 0.0))
+                far = q.uniform(0.6, 2.4) * (0.5 + 1.2 * c)
+                jet(t + q.uniform(0.0, 0.07), p0 + out * (r * q.uniform(0.35, 0.7)) + Vector((0, 0, 0.3)), H * c, r * q.uniform(0.05, 0.11), q.uniform(9.0, 18.0), q.uniform(0.9, 1.25),
+                    lean=(out.x * far, out.y * far), alpha=0.85)
+            for j in range(5):                   # and out of its top, a moment after it: a ragged crown, each its own way
+                c = (0.9, 1.0, 1.06, 1.12, 1.17)[j] + q.uniform(-0.03, 0.03)
+                a = 2 * math.pi * (j * 0.4 + q.uniform(-0.12, 0.12))
+                out = Vector((math.cos(a), math.sin(a), 0.0))
+                far = q.uniform(0.5, 3.2)
+                jet(t + q.uniform(0.03, 0.11), p0 + out * (r * q.uniform(0.05, 0.3)) + Vector((0, 0, 0.3)), H * c, r * q.uniform(0.05, 0.12), q.uniform(8.0, 16.0), q.uniform(0.85, 1.2),
+                    lean=(out.x * far, out.y * far), alpha=0.85)
+            for j in range(12):                  # drops falling out of it
+                a = q.uniform(0, 2 * math.pi)
+                out = Vector((math.cos(a), math.sin(a), 0.0))
+                p = self.puff(t + q.uniform(0.2, 0.5), p0 + out * (r * q.uniform(0.3, 0.7)) + Vector((0, 0, H * q.uniform(0.3, 1.0))), vel=out * q.uniform(1.0, 4.0) + Vector((0, 0, q.uniform(-2.0, 4.0))),
+                              life=q.uniform(0.65, 0.85), r=(r * 0.07, r * q.uniform(0.09, 0.15)), col=(0.97, 0.98, 0.98), alpha=0.9, kind="jet", gravity=9.8, wind=0.1, squash=(1.0, 1.0, 1.7),
+                              fade_in=0.03, grow=0.4, hold=0.6, name="jet", rng=q)
+                p["ob"].rotation_euler = (0.0, 0.0, q.uniform(0, 6.28))
+            # the ring of disturbed water at its foot, spreading
+            self.puff(t, Vector((p0.x, p0.y, 0.26)), life=1.3, r=(r * 1.5, r * 3.4), col=(0.03, 0.075, 0.095), alpha=0.6, kind="ring", wind=0.03, squash=(1.0, 1.0, 0.004),
+                      fade_in=0.08, grow=0.6, hold=0.4, name="jet", rng=q)
 
         def make(t, p0, facing):
+            column(t, p0)
             n = 20
             for i in range(n):
                 f = (i + 0.5) / n
                 v0 = math.sqrt(2 * 9.8 * high * f) * g.uniform(0.92, 1.05)
                 self.puff(t + 0.006 * i, p0 + Vector((g.uniform(-1, 1), g.uniform(-1, 1), 0.5)), vel=(g.uniform(-2.5, 2.5) * (1 - f), g.uniform(-2.5, 2.5) * (1 - f), v0), life=g.uniform(3.4, 4.6),
                           r=(r * 0.4, r * g.uniform(0.7, 1.15) * (1.3 - 0.6 * f)), col=(0.95, 0.97, 0.97), col2=(0.88, 0.92, 0.92), alpha=0.75, kind="water", gravity=9.8, wind=0.06,
-                          squash=(1.0, 1.0, 2.3), fade_in=0.04, grow=0.3, hold=0.4)
+                          squash=(1.0, 1.0, 2.3), fade_in=0.8, grow=0.3, hold=0.4)
             self.foam(t, p0, r)
         self.once(t0, (at, Vector((0, 0, 1))), make)
 
