@@ -376,9 +376,11 @@ namespace
 	bool IsQuestion(const FString& Function)
 	{
 		// (Speed, b414 mark 1: "stands", "province" and "railShow" too, which the army in hand asks after every order
-		// and the order given aside asks ahead. Each was checked against the rules as the six were.)
+		// and the order given aside asks ahead. Each was checked against the rules as the six were. And "garrisonWhy",
+		// whyNotOrderGarrison's sentence, which the tray asks before those three when a town's guard shares it: asked as
+		// an order it threw away the three answers kept ahead.)
 		static const TSet<FString> Questions = { TEXT("previewAttack"), TEXT("takeOutlook"), TEXT("reach"), TEXT("marchPlan"), TEXT("railTip"), TEXT("lead"),
-			TEXT("stands"), TEXT("province"), TEXT("railShow") };
+			TEXT("stands"), TEXT("province"), TEXT("railShow"), TEXT("garrisonWhy") };
 		return Questions.Contains(Function);
 	}
 }

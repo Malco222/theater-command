@@ -4418,8 +4418,9 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	const bool bBusy = IsTableBusy();
 	// (Speed, b414 mark 1.) An order still being answered: the map takes no other order, and the pointer asks the rules
-	// nothing, until it is on the table. (The ground under the pointer stays lit: that asks nothing.)
-	const bool bAnswering = IsAnswering();
+	// nothing, until it is on the table. (The ground under the pointer stays lit: that asks nothing.) It is asked afresh at
+	// each gate, never kept from the top of the tick: a march given by this very tick's release must already hush this
+	// tick's road and tip, or their questions would wait out the whole order on the frame of the press.
 
 	// (The UI director's 84.3 check, item 3.) An army picked up by a hand: once the view is still and its tray is laid out,
 	// the map is framed so the ground it can reach lies clear of the tray, the chips and every other panel. A press that
@@ -4511,7 +4512,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	if (bRightHeld && !IsInputKeyDown(EKeys::RightMouseButton))
 	{
-		if (!bTurning && !bBusy && !bAnswering && !bRightGameOnPanel)
+		if (!bTurning && !bBusy && !IsAnswering() && !bRightGameOnPanel)
 		{
 			// (the order itself is RightClickOn, so that the playtester's hook gives exactly the order the mouse gives)
 			RightClickOn(AimedRegion, (FleetInHand != INDEX_NONE && bOnTable && bPointerOnWater) ? SeaNear(PointerMap) : INDEX_NONE, bOnTable);
@@ -4532,13 +4533,13 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		HeldPiece.Reset();
 		bHeldWasInHand = false;
 		bAgentHeld = false;
-		if (!bBusy && !bAnswering && PointedAgent != INDEX_NONE)
+		if (!bBusy && !IsAnswering() && PointedAgent != INDEX_NONE)
 		{
 			// (Ruling 153.) A press on an agent's piece picks him up, as a press on a flag picks up an army.
 			bAgentWasInHand = AgentInHand == PointedAgent;
 			bAgentHeld = bAgentWasInHand || PickUpAgent(PointedAgent);
 		}
-		else if (!bBusy && !bAnswering)
+		else if (!bBusy && !IsAnswering())
 		{
 			const bool bAlreadyInHand = PointedPiece && ArmyRegion != INDEX_NONE && RingedPiece.Get() == PointedPiece;
 			bHeldWasInHand = Hold(PointedPiece) && bAlreadyInHand;
@@ -4631,7 +4632,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			}
 			// Otherwise a plain click on the flag has already picked the army up.
 		}
-		else if (!bDragging && !bBusy && !bAnswering)
+		else if (!bDragging && !bBusy && !IsAnswering())
 		{
 			// A second click on the same ground straight after the first goes there: the view centres on it, a little closer.
 			const double ClickedAt = FPlatformTime::Seconds();
@@ -4720,7 +4721,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	if (!bScripted && !bTurning && (!bDragging || HeldPiece.IsValid()))
 	{
 		Map->SetHoveredRegion(bBusy || bPointerOverPanel ? INDEX_NONE : AimedRegion); // (nor is the ground behind a panel lit)
-		if (ArmyRegion != INDEX_NONE && !bBusy && !bAnswering)
+		if (ArmyRegion != INDEX_NONE && !bBusy && !IsAnswering())
 		{
 			ShowRouteTo(AimedRegion);
 		}
@@ -4794,7 +4795,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		bTipHushed = false;
 	}
 	// (while pictures are being taken the real pointer, wherever it happens to lie, says nothing)
-	const int32 TipRegion = bStagedTip ? StagedHover : (bScripted || bBusy || bAnswering || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel || bTipHushed) ? INDEX_NONE : AimedRegion;
+	const int32 TipRegion = bStagedTip ? StagedHover : (bScripted || bBusy || IsAnswering() || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel || bTipHushed) ? INDEX_NONE : AimedRegion;
 	const int32 TipField = TipRegion == INDEX_NONE ? INDEX_NONE : bStagedTip ? (bStagedField ? StagedHover : INDEX_NONE) : PointedField;
 	const int32 TipHand = ArmyRegion * 4 + (bByRail ? 1 : 0) + (bBySea ? 2 : 0) + (AgentInHand + 1) * 100003;
 	if (TipRegion != HoverTipRegion || TipField != HoverTipField || TipHand != HoverTipHand)
@@ -7536,7 +7537,8 @@ void ACampaignPlayerController::RightClickOn(int32 RegionId, int32 Sea, bool bOn
 
 bool ACampaignPlayerController::IsBusyForSteps() const
 {
-	return bWatching || Newsreel.bOn || Announcements.Num() > 0 || EndAsk.bVisible;
+	// (an order still being answered, or its picture still being laid, counts as the table moving: see MoveAside)
+	return bWatching || Newsreel.bOn || Announcements.Num() > 0 || EndAsk.bVisible || IsAnswering();
 }
 
 void ACampaignPlayerController::StepThroughMonth()
@@ -8888,6 +8890,9 @@ void ACampaignPlayerController::CloseFaceOff()
 
 void ACampaignPlayerController::EndMonth()
 {
+	// (Speed, b414 mark 1.) An order still being answered is finished, and its picture laid, before anything else: the
+	// END THE MONTH button is not gated as the keys are, and the answer's follow-up must not land on the next month's table.
+	FinishAnswer();
 	FCampaignSession* Session = GetSession();
 	// (Rulings 134(f) and 138(1): before a saved campaign is replaced, Enter keeps the campaign. And with a card up
 	// the key never ends the month behind it: it presses the card's lit button, below.)
