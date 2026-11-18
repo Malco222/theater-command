@@ -14,6 +14,7 @@ import stop3 from '../data/campaign/china-stop3.json';
 import { release } from '../src/campaign/ai';
 import { EASTERN, addCorps, computeSupply, createGame, declareWar, evacuate, frozen, lineDrag, lineOwner, lineOwners, lineStrength, refuge, removeCorps } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
+import { FAR_STAGE } from '../src/campaign/stage';
 import { railheadAt } from '../src/campaign/rails';
 import { fronts, startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -58,14 +59,19 @@ describe('221 H: a garrison marked to stay keeps its hold when an offensive rele
 
   it('leaves Europe as it was: no row of the game carries the mark', () => {
     const g = grand();
-    expect(g.corps.filter((c) => c.stay)).toEqual([]);
+    const marked = g.corps.filter((c) => c.stay);
+    // (With the far side's switch on the ruling's own rows are laid, and the mark is on Japan's garrisons alone.)
+    expect(marked.filter((c) => c.nat !== 'JAP')).toEqual([]);
+    if (!FAR_STAGE) expect(marked).toEqual([]);
+    else expect(marked.length).toBe(stop3._stay.length);
   });
 });
 
 describe('221 L: the long line on the ground of the owners named, at the stops named', () => {
   it('is off on main\'s data: the long line is the Soviet Union\'s alone', () => {
     const g = grand();
-    expect(lineOwners(g)).toEqual(EASTERN.deepOwners);
+    // (With the far side's switch on the ruling's data is laid: China's ground is the one owner more.)
+    expect(lineOwners(g)).toEqual(FAR_STAGE ? [...EASTERN.deepOwners, ...stop3.east.lineOwners] : EASTERN.deepOwners);
     expect(lineOwner(g, 'POL')).toBe(false);
   });
 
@@ -128,6 +134,8 @@ describe('221 S: a staff reckons the long line as it reckons the winter', () => 
     polandLong();
     const deep = grand();
     deepInPoland(deep);
+    // (Set off by hand first: with the far side's switch on the ruling's data has it on already.)
+    E.lineReckon = false;
     const plain = polishFront(deep).atk;
     E.lineReckon = true;
     const reckoned = polishFront(deep).atk;
@@ -165,7 +173,8 @@ describe('221 F: troops lifted off an enemy\'s coast land at the nearest harbour
 
   it('is off on main\'s data: they are taken home', () => {
     const { g, c, from } = norway();
-    expect(refuge(g, c, from).name).toBe(g.regions[g.nations.GER.capital].name);
+    // (With the far side's switch on the ruling's data has it on, in the grand campaign: the nearest harbour held.)
+    expect(refuge(g, c, from).name).toBe(FAR_STAGE ? 'Oslo' : g.regions[g.nations.GER.capital].name);
   });
 
   it('lands them at the nearest of their own harbours on that ground, then the next when it is full or taken', () => {
