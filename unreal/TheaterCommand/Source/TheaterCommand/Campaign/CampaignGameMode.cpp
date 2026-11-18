@@ -303,7 +303,9 @@ void ACampaignGameMode::BeginPlay()
 	// The music: original pieces on a loop, quiet enough to think over. They are made by Tools/build_music.sh
 	// and are not kept in the repository, so a copy of the game without them simply plays in silence.
 	// "-TheaterQuiet" plays them too softly to hear: for checking that they play without disturbing anyone.
-	MusicVolume = FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet")) ? 0.0005f : 0.55f;
+	// (The design director's rulings 142 and 144, b478, 18 November 2026: with the real recorded sounds in, the music
+	// comes down to about 0.15, so that the guns and engines are heard over it. It stood at 0.55.)
+	MusicVolume = FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet")) ? 0.0005f : 0.15f;
 	const TPair<const TCHAR*, const TCHAR*> Made[] = {
 		{ TEXT("theme"), TEXT("/Game/Campaign/Music/Theme.Theme") },
 		{ TEXT("battle"), TEXT("/Game/Campaign/Music/Battle.Battle") },
@@ -377,7 +379,7 @@ void ACampaignGameMode::DuckMusic(bool bDown)
 void ACampaignGameMode::SetMusicLevel(int32 Level)
 {
 	MusicLevel = FMath::Clamp(Level, 0, 2);
-	const float Loud[] = { 0.26f, 0.55f, 0.9f };
+	const float Loud[] = { 0.08f, 0.15f, 0.3f }; // (quiet, as ruled, loud: they stood at 0.26, 0.55 and 0.9 before the real sounds)
 	MusicVolume = FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet")) ? 0.0005f : Loud[MusicLevel];
 	if (Music && bMusicOn)
 	{

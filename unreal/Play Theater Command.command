@@ -33,7 +33,8 @@ if [ ! -f Content/Campaign/Music/Theme.uasset ] || [ ! -f Content/Campaign/Music
 fi
 
 # The sound effects the same way: made the first time, and again when they have been rewritten.
-EFFECTS="$(shasum Tools/make_sounds.mjs | cut -d' ' -f1)"
+# (and when a real recording has been added to Sounds/Real: the stamp covers the synthesiser and every recording)
+EFFECTS="$(./Tools/build_sounds.sh --stamp 2> /dev/null)"
 if [ ! -d Content/Campaign/Sounds ] || [ "$(cat Saved/Sounds/made-from.txt 2> /dev/null)" != "$EFFECTS" ]; then
   echo "Making the sound effects (only when they are new)..."
   ./Tools/build_sounds.sh > /tmp/theater-command-sounds.log 2>&1 || true
