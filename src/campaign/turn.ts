@@ -655,7 +655,7 @@ export const prizesOf = (g: Game, region: number): PrizesView | null => prizesAt
 /** Provinces to mark on the map: a prize wrecked there (burning), or in the hands of an army that has not taken the town (seized). Under the fog, only ground the player can see. */
 export function prizesOnMap(g: Game): PrizeMark[] {
   const all = prizeMarks(g);
-  if (g.human === null || !fogOn(g, g.human)) return all;
+  if (!all.length || g.human === null || !fogOn(g, g.human)) return all;
   const sight = sightOf(g, g.human);
   return all.filter((m) => sight[m.region] !== SIGHT.none || allied(g, g.human!, g.regions[m.region].ctrl));
 }
@@ -926,7 +926,7 @@ export function guardOnly(g: Game, region: number): GuardOnly | null {
 /** Every siege the player knows of: his own, his allies', and any other on ground he can see. */
 export function siegesInSight(g: Game): SiegeView[] {
   const all = siegesNow(g);
-  if (g.human === null || !fogOn(g, g.human)) return all;
+  if (!all.length || g.human === null || !fogOn(g, g.human)) return all;
   const sight = sightOf(g, g.human);
   return all.filter((v) => allied(g, g.human!, v.holder) || (v.by !== null && allied(g, g.human!, v.by)) || sight[v.region] !== SIGHT.none);
 }

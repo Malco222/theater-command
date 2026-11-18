@@ -18,7 +18,7 @@ import { ARSENAL, aiArsenal, liftView, offers, orderOffer, type Wing } from './a
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { monthsFor, staffTeams, techById, techOf, teamsOf } from './tech';
-import { TRADE, bestPartner, dealsOf, endTrade, housesOf, signTrade, tradeRules, wealthOf } from './trade';
+import { TRADE, bestPartner, dealsOf, endTrade, housesFull, housesOf, signTrade, tradeRules, wealthOf } from './trade';
 import { DIPLOMACY, canCourt, court, courtable, envoysWord, freeCourt, receptive, step } from './diplomacy';
 import { INTEL, abroad, agentsOf, atWork, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, whyNotMission, whyNotRecruit, whyNotSend } from './intel';
 import { cabinetOff, officeSecure, setCabinet, setCanFall } from './government';
@@ -211,7 +211,7 @@ function build(g: Game, nat: string): string | null {
       if (endTrade(g, d.a, d.b)) did.push(`gave up the trade agreement with ${the(o)}, which nothing was getting through`);
     }
     const signed: string[] = [];
-    for (let k = 0; k < 2 && dealsOf(g, nat).length < housesOf(g, nat) && n.pc >= TRADE.sign.pc; k++) {
+    for (let k = 0; k < 2 && !housesFull(g, nat) && n.pc >= TRADE.sign.pc; k++) {
       const b = bestPartner(g, nat, ctx);
       if (!b || !signTrade(g, nat, b, ctx)) break;
       signed.push(the(g.nations[b]));

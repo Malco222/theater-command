@@ -25,7 +25,7 @@ import { tradeTick } from './trade';
 import { numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { armyOf, jointHold, jointMonth } from './joint';
-import { closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
+import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
@@ -573,8 +573,9 @@ export function computeSupply(g: Game): void {
   const active = new Set(g.corps.map((c) => c.nat));
   // The seas each nation's supply ships can still use, worked out once: an ally's overseas ports feed its friends too.
   const lanes = new Map<string, Uint8Array | null>();
+  const seasNow = new SeaPicture(g);
   const lanesOf = (id: string): Uint8Array | null => {
-    if (!lanes.has(id)) { const n = g.nations[id]; lanes.set(id, n && (n.seaSupply || n.sealift > 0) ? openSeas(g, id) : null); }
+    if (!lanes.has(id)) { const n = g.nations[id]; lanes.set(id, n && (n.seaSupply || n.sealift > 0) ? openSeas(g, id, seasNow) : null); }
     return lanes.get(id)!;
   };
   const withShips = Object.values(g.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
@@ -589,6 +590,9 @@ export function computeSupply(g: Game): void {
   const size = g.regions.length;
   const holders: string[] = [], holderNo = new Map<string, number>();
   const road = new Int16Array(size), deep = new Uint8Array(size), sand = new Uint8Array(size);
+  // The provinces that can be anybody's source of supply at all, in order: a port, or a capital, a big industrial
+  // province or a depot standing on its owner's own ground. Every other province only carries the line.
+  const sources: number[] = [];
   for (const r of g.regions) {
     const who = field ? field[r.id] : r.ctrl;
     let k = holderNo.get(who);
@@ -596,6 +600,7 @@ export function computeSupply(g: Game): void {
     road[r.id] = k;
     if (EASTERN.deepOwners.includes(r.owner)) deep[r.id] = 1;
     if (inDesert(r)) sand[r.id] = 1;
+    if (r.port || (r.ctrl === r.owner && (r.cap || r.fac >= 3 || !!g.flags['depot:' + r.id]))) sources.push(r.id);
   }
   for (const id of active) {
     const friend = new Uint8Array(holders.length);
@@ -608,7 +613,8 @@ export function computeSupply(g: Game): void {
     const sunk = convoyDrag(g, id);
     // A nation with ships can also be fed through any friendly port its supply ships can still reach.
     const open = lanesOf(id);
-    for (let at = 0; at < size; at++) {
+    let mates: string[] | null = null;
+    for (const at of sources) {
       if (!friend[road[at]]) continue;
       const r = g.regions[at];
       // An army round a town it has not taken holds the beaches beside the harbour and no more: ships can still
@@ -621,7 +627,7 @@ export function computeSupply(g: Game): void {
       // Overseas, an ally's working port feeds the troops who came to fight beside him.
       if (!quay && !shut && r.overseas && r.port && r.ctrl !== id) { const theirs = lanesOf(r.ctrl); quay = !!theirs && r.seas.some((z) => theirs[z]); }
       // In a side theatre the allies share their shipping: a port any of them can still reach feeds them all.
-      if (!quay && r.theatre >= 0 && r.port) quay = shippers(id).some((a) => { const theirs = lanesOf(a); return !!theirs && r.seas.some((z) => theirs[z]); });
+      if (!quay && r.theatre >= 0 && r.port) quay = (mates ??= shippers(id)).some((a) => { const theirs = lanesOf(a); return !!theirs && r.seas.some((z) => theirs[z]); });
       // A fortified port overseas keeps stores: with the sea behind it closed, it feeds its garrison a while longer.
       if (!shut && r.overseas && r.port && r.fort) {
         if (quay) g.flags[`stores:${r.id}`] = g.turn;

@@ -21,12 +21,13 @@ import { armyCard } from './armies';
 import { specOf } from './economy';
 import { COLLAPSE, allied, armySize, atWar, capitalLost, exhausted, fights, gunsRule, homeLost, railReachFor, theName, victorOf } from './game';
 import { armyOf } from './joint';
+import { sightOf } from './intel';
 import { standsFreed } from './liberation';
-import { planMarch } from './marches';
+import { farGround, planMarch, type GroundOf } from './marches';
 import { willLost } from './resources';
 import { SIEGE, besieged, besiegerOf, investedOn, ringClosed, siegeRules, siegeView, whyNotStorm } from './siege';
 import { townName } from './towns';
-import { current, reach } from './turn';
+import { current, reach, type Reach } from './turn';
 import type { Corps, Game, Region } from './types';
 
 /** The title of the warning: the band's own name on the card. */
@@ -348,9 +349,9 @@ const monthsWord = (m: number): string => `${m} ${m === 1 ? 'month' : 'months'}`
  * guns" where its kind is known, "A Canadian corps", "2 Canadian corps", "A Canadian army of 3 corps" by its count,
  * "A Canadian army" where not even that is seen. `many` for a plural verb.
  */
-function enemyWords(g: Game, region: number, by: string, viewer: string, town: boolean): { who: string; many: boolean } {
+function enemyWords(g: Game, region: number, by: string, viewer: string, town: boolean, seen?: Uint8Array): { who: string; many: boolean } {
   const adj = g.nations[by]?.adj ?? 'Enemy';
-  const card = armyCard(g, region, by, viewer, town);
+  const card = armyCard(g, region, by, viewer, town, seen);
   if (!card) return { who: `A ${adj} army`, many: false };
   const n = card.corpsCount;
   if (n === 1) {
@@ -394,7 +395,22 @@ function helperName(g: Game, nat: string, h: Helper): string {
  * takes this month to his ground beside it (1 month by rail); else the march the game plans to his ground beside it,
  * in its own count of months. Ties go to the train, then to the nearer.
  */
-function nearestHelp(g: Game, nat: string, target: number, all: Helper[], rails: Map<number, Set<number>>, walkIn = false): HomeAlarm['help'] {
+/**
+ * Each corps' reach this month and its ground for a kept march (farGround), and what the player can see (sightOf), as
+ * the war stands: worked out once while the home ground's alarms are read, since nothing in the war moves meanwhile,
+ * and only for what is asked about.
+ */
+interface Kept { reach: (c: Corps) => () => Map<number, Reach>; ground: (c: Corps) => GroundOf; sight: (viewer: string) => Uint8Array }
+function keptNow(g: Game): Kept {
+  const reaches = new Map<Corps, Map<number, Reach>>(), grounds = new Map<Corps, ReturnType<GroundOf>>(), sights = new Map<string, Uint8Array>();
+  return {
+    sight: (viewer) => { let m = sights.get(viewer); if (!m) { m = sightOf(g, viewer); sights.set(viewer, m); } return m; },
+    reach: (c) => () => { let m = reaches.get(c); if (!m) { m = reach(g, c); reaches.set(c, m); } return m; },
+    ground: (c) => () => { let m = grounds.get(c); if (!m) { m = farGround(g, c); grounds.set(c, m); } return m; },
+  };
+}
+
+function nearestHelp(g: Game, nat: string, target: number, all: Helper[], rails: Map<number, Set<number>>, walkIn = false, kept: Kept = keptNow(g)): HomeAlarm['help'] {
   const t = g.regions[target];
   const mine = (id: number): boolean => allied(g, nat, g.regions[id].ctrl) && !g.regions[id].units.some((u) => !u.dead && atWar(g, u.nat, nat));
   const goals = [...(mine(target) ? [target] : []), ...t.nb.filter(mine)];
@@ -417,8 +433,10 @@ function nearestHelp(g: Game, nat: string, target: number, all: Helper[], rails:
     !best || months < best.months || (months === best.months && ((rail && !best.rail) || (rail === best.rail && h.hops < best.h.hops)));
   const turnOf = current(g) === nat;
   for (const h of near) {
+    // (Help in reach this month is the best there is, and the nearest first: none further off can be better.)
+    if (best?.months === 0) break;
     // This month: a fighting corps beside it with a move in hand (or, onto empty ground, the moves to walk in).
-    if (turnOf && h.fighters.some((c) => { const e = reach(g, c).get(target); return !!e && (e.attack || (walkIn && c.reg !== target)); })) { if (better(h, 0, false)) best = { h, months: 0, rail: false, to: target }; continue; }
+    if (turnOf && h.fighters.some((c) => { const e = kept.reach(c)().get(target); return !!e && (e.attack || (walkIn && c.reg !== target)); })) { if (better(h, 0, false)) best = { h, months: 0, rail: false, to: target }; continue; }
     // By rail, this month, to his ground beside it.
     let r = rails.get(h.region);
     if (!r) { r = railReachFor(g, h.corps); rails.set(h.region, r); }
@@ -427,13 +445,13 @@ function nearestHelp(g: Game, nat: string, target: number, all: Helper[], rails:
   }
   // By road: the three nearest armies, each to the nearest of his provinces beside it.
   for (const h of near.slice(0, 3)) {
-    if (h.hops >= 99) break;
+    if (h.hops >= 99 || best?.months === 0) break;
     let months = Infinity, to = -1, steps = Infinity;
     for (const goal of goals) {
       if (h.region === goal) { months = 1; to = goal; break; }
       let worst = 0, road = 0;
       for (const c of h.corps) {
-        const p = planMarch(g, c, goal);
+        const p = planMarch(g, c, goal, { ground: kept.ground(c), reach: kept.reach(c) });
         if (!p.ok) { worst = Infinity; break; }
         worst = Math.max(worst, Math.max(1, p.months));
         road = Math.max(road, p.road.length);
@@ -480,6 +498,7 @@ export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
   const foe = (u: Corps): boolean => !u.dead && u.kind !== 'fort' && atWar(g, u.nat, nat);
   let all: Helper[] | null = null;
   const rails = new Map<number, Set<number>>();
+  const kept = keptNow(g);
   const out: HomeAlarm[] = [], empty: Region[] = [];
   for (const r of g.regions) {
     if (r.owner !== nat || r.overseas) continue;
@@ -507,9 +526,9 @@ export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
     const reachIds = fighting ? r.nb.filter((j) => { const x = g.regions[j]; return x.owner === nat && !x.overseas && allied(g, nat, x.ctrl); }) : [];
     reachIds.sort((a, b) => Number(b === cap) - Number(a === cap) || far(a) - far(b) || a - b);
     if (!all) all = helpers(g, nat);
-    const help = nearestHelp(g, nat, r.id, all, rails);
+    const help = nearestHelp(g, nat, r.id, all, rails, false, kept);
     // The words.
-    const { who, many } = enemyWords(g, r.id, by, nat, inTown);
+    const { who, many } = enemyWords(g, r.id, by, nat, inTown, kept.sight(nat));
     const town = townName(r);
     let s1: string;
     if (kase === 'stands') s1 = `${who} ${many ? 'stand' : 'stands'} at ${r.name}, on your home ground.`;
@@ -537,7 +556,7 @@ export function homeAlarms(g: Game, nat: string | null = g.human): HomeAlarm[] {
   empty.sort((a, b) => far(a.id) - far(b.id) || a.id - b.id);
   for (const r of empty) {
     if (!all) all = helpers(g, nat);
-    const help = nearestHelp(g, nat, r.id, all, rails, true);
+    const help = nearestHelp(g, nat, r.id, all, rails, true, kept);
     const adj = g.nations[r.ctrl]?.adj ?? 'enemy';
     const s1 = `${r.name}, on your home ground, is still in ${adj} hands, with no troops in it.`;
     const who = help ? `${help.name[0].toUpperCase()}${help.name.slice(1)}` : '';
