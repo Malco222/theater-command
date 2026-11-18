@@ -14781,14 +14781,15 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				// 225, 150, 60, an orange body of about 205, 110, 45, and red-brown only at the torn edge, about
 				// 180, 75, 35. Each is laid a little cleaner than it is to be seen, for the smoke that veils it.)
 				// (Measured again on build 1690, held and with the smoke thin: the body 190 to 209, 94 to 117, 38 to 58 and
-				// the edge 171, 77, 48, both as asked; the heart 223 to 242, 136 to 172, 5 to 10, its blue all but gone:
-				// what is laid dark in one colour comes out darker still. She set it at 21:27Z: the heart about
+				// the edge 171, 77, 48, both as asked. The heart seemed to have lost its blue (5 to 10), but that was
+				// the fighters' yellow tracer crossing the flash in the stills. She set it at 21:27Z: the heart about
 				// 225, 150, 60 "with blue at least 45, about a quarter of the flash's width", then the body, the edge,
-				// "then grey-brown smoke, with no red rim". So the heart is laid with far more blue than it is to
-				// show and is a quarter of the width; the edge is a little smaller and ends more sharply, so that no
-				// thin red ring stands round the fire. "-TheaterFlakHeart=E89E5E" lays the heart in another colour,
-				// to find the one that is seen as hers.)
-				static FColor HeartLaid(232, 158, 94);
+				// "then grey-brown smoke, with no red rim". The same flash was then photographed with its heart laid
+				// two ways: laid 232, 158, 70 it is seen as 214, 148, 53, a yellow-orange; laid 232, 160, 120 it is
+				// seen as 220, 153, 92, a peach, which she ruled out. So it is laid a little above her figures and is
+				// a quarter of the width; the edge is a little smaller and ends more sharply, so that no thin red
+				// ring stands round the fire. "-TheaterFlakHeart=ECA04A" lays the heart in another colour, for a picture.)
+				static FColor HeartLaid(236, 160, 74);
 				static bool bHeartAsked = false;
 				if (!bHeartAsked)
 				{
