@@ -373,7 +373,7 @@ EXTRA_PLANES["Nell"] = {
     "side_marks": [(-5.9, 0.34, "JAP-PLAIN")], "wing_marks": [(9.0, 0.0, 0.85, "JAP-PLAIN", "JAP-PLAIN", True, True)], "code": (-7.0, 0.24),
 }
 EXTRA_PLANES["Amerikabomber"] = {
-    "title": "Very long range heavy bomber, the Amerika kind (our own model)", "tech": "verylongrange", "tag": "amerikabomber",
+    "title": "Amerika heavy bomber (our own model)", "tech": "verylongrange", "tag": "amerikabomber",
     # (a long round fuselage with a nose of glass and no step, a long narrow wing on her shoulders, two fins)
     "hull": [(9.5, -0.1, 0.16, 0.16), (9.25, -0.1, 0.52, 0.52), (8.7, -0.06, 0.84, 0.84), (7.9, -0.02, 1.02, 1.03), (6.8, 0.0, 1.09, 1.1), (4.0, 0.0, 1.1, 1.12), (0.0, 0.0, 1.1, 1.12),
              (-4.0, 0.03, 1.02, 1.05), (-7.0, 0.12, 0.8, 0.86), (-9.5, 0.24, 0.5, 0.58), (-10.8, 0.32, 0.26, 0.34), (-11.4, 0.35, 0.06, 0.12)],
