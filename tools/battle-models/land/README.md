@@ -30,6 +30,7 @@ It all runs in Blender as a Python module (`bpy`), with no Blender window:
 | `carriers.py` | wheels on tyres, steering, burst fire (`CarrierWorks`); the lorry, the Sd.Kfz. 251, the M3 half-track |
 | `armoured_cars.py` | Sd.Kfz. 222, M8, and every other army's armoured car |
 | `flak.py` | the light flak mounts, and the three wagons that carry them |
+| `camo.py` | camouflage: the coat's second colour laid in soft-edged blotches over about a third of a vehicle (`Works.camouflage`, the last call of a builder) |
 | `vehicles.py` | every vehicle by name, whose it is, and the faces it showed through the war |
 | `ground.py` | the stage (`Battle`: the field battle's own ground and trees; `Field`: a plain meadow) and the effects (`Air`) |
 | `landmarks.py` | each nation's plain period marking, laid on the skin; a crew's name or rings too, for a proof picture (`landlook.py <Name> <out> side 14 960x540 name=WORD` or `rings=3`); and the few soft marks where rain has run down her sides (`rain_marks`: pictures only) |
@@ -58,6 +59,23 @@ the vehicles whose nation is `any`, each our own design and no one maker's:
 
 A generic carries no name place (b477 is for the named types) and its marking is the army's own (`tag`). The two
 built on `medium_hull` share her running gear, so one track and one set of wheels serve three vehicles.
+
+**Each small nation's own mark** (Brian, 18 November: "have the country logo show on the tanks and planes just like
+the major nations"). The marks' tag is `_`: the game paints the owner's own mark there. `LightTank` carries one on
+each turret side behind the pistol port (radius 0.13; her hull side is left for her number). `MediumTank` carries
+four, as the Sherman does: hull sides 0.2, turret sides 0.15. `AssaultGun` and `SelfPropelledGun`: hull sides 0.2.
+`Truck`: her doors. Every place is checked for a flat plate under the whole disc and a clear view from the side and
+from the game's camera.
+
+**Camouflage that fits their ground** (Brian, the same day: "make the camoflage reflect their terrian"). All nine
+generics are camouflaged (`camo.py`): the second coat colour lies in uneven soft-edged blotches over about a third
+of the coat, running on over the joints between hull, turret and mudguards, and the file carries it point by point
+as `blend`. The game fills `upper` with a nation's `paint` and `upper2` with its `paint2` (unit-table.json): sand
+with brown for a desert army, green with black-green for a jungle one. **A nation with one colour must fill
+`upper2` with `upper`** (the lorry serves great powers too), or its vehicles show blotches in a darker shade of
+their coat; the file says so under `camouflage.how`. Wheels, tracks, canvas, the barrel, the inside of an open body
+and the hull's wall behind the wheels stay in the first colour. `Gun75` is France's own gun as well: built for
+France her second colour is her first, and she stays one coat.
 
 ## The model file (`<Name>.json`)
 

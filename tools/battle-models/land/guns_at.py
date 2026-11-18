@@ -62,6 +62,7 @@ def anti_tank_gun(fine=True, tag="_"):
     v.socket("dust.muzzle", (2.1, 0.0, 0.03), X, part="vehicle", note="the ground under the muzzle: the blast lifts the dust here")
     crew(v, (-0.7, 0.5, 0.0), (-1.5, -0.45, 0.0), (-2.3, 1.4, 0.0), (-2.0, -1.4, 0.0), (-1.4, -0.2, 0.0))
     v.gun_clips(0.75, E.x, lift=0.045, close=close, eye_z=0.2, track=T, low=-5.0)
+    v.camouflage()
     return v
 
 

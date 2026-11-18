@@ -858,4 +858,7 @@ def gun75(fine=True, tag="FRA"):
     v.socket("dust.muzzle", (1.8, 0.0, 0.03), X, part="vehicle", note="the ground under the muzzle: the blast lifts the dust here")
     crew(v, (-0.75, 0.55, 0.0), (-1.7, -0.5, 0.0), (-2.6, 1.5, 0.0), (-2.2, -1.5, 0.0), (-1.6, -0.2, 0.0))
     v.gun_clips(1.14, -2.6, lift=0.03, close=None, eye_z=0.2, track=T, low=-11.0)
+    v.camouflage()                                        # (for the small nations that field her, each in its own two colours)
+    if tag == "FRA":                                      # (the art director, 2026-11-18: France has no second paint, so her own 75 stays one coat)
+        v.m.paints["upper2"] = v.m.paints["upper"]
     return v

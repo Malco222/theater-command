@@ -191,7 +191,7 @@ def light_tank(fine=True, tag="_"):
     v.periscope((x0 + 0.28, -0.26, roof), X, (0.06, 0.11, 0.06))
     if fine:
         for s in (LEFT, RIGHT):
-            v.port(Vector((x0 - 0.02, s * 0.565, zt + 0.28)), Vector((0, s, 0.17)), 0.04)
+            v.port(Vector((x0 + 0.10, s * 0.563, zt + 0.28)), Vector((0, s, 0.17)), 0.04)
         v.lift_eye((x0 + 0.38, 0.0, roof), Z, Y, 0.028)
 
     # ---- the gun: a 37 mm in a boxed mantlet, its recoil cylinder under it, a machine gun on its right -----
@@ -223,10 +223,11 @@ def light_tank(fine=True, tag="_"):
     v.socket("hit.rear", (-2.2, 0.0, 0.9), -X, part="hull")
     v.socket("hit.turret", (x0, 0.6, zt + 0.25), Y, part="turret")
     v.socket("case", (x0 - 0.3, -0.6, zt + 0.3), -Y, part="turret", note="where the empty case is thrown out")
-    for s in (LEFT, RIGHT):
-        v.mark(tag, (0.42, s * side_y(1.24), 1.24), Vector((0, s, 0.08)), 0.15, part="hull")
+    for s in (LEFT, RIGHT):                              # her nation's mark on each side of the turret, behind the port (her hull side is the number's)
+        v.mark(tag, (x0 - 0.17, s * 0.571, zt + 0.26), Vector((0.03, s, 0.19)), 0.13, part="turret")
     v.tank_clips(recoil=0.16, kick=0.5, gun_low=-8.0, hatches=["hatch_commander", "hatch_driver"],
                  traverse=18.0, idle_cue="tank_idle_loop", drive_cue="light_tank_loop", gun_cue="tank_gun_01", blow=(-0.7, 2.2, 0.32, 165.0))
+    v.camouflage(cell=0.62)
     return v
 
 
@@ -374,10 +375,12 @@ def medium_tank(fine=True, tag="_"):
     v.socket("hit.rear", (-2.8, 0.0, 0.9), -X, part="hull")
     v.socket("hit.turret", (x0, 0.82, zt + 0.3), Y, part="turret")
     v.socket("case", (x0 - 0.4, -0.82, zt + 0.3), -Y, part="turret", note="where the empty case is thrown out")
-    for s in (LEFT, RIGHT):
-        v.mark(tag, (-0.25, s * (sw + 0.002), 1.28), Y * s, 0.16, part="hull")
+    for s in (LEFT, RIGHT):                              # four marks, as the great powers' tanks carry them: hull sides, turret sides
+        v.mark(tag, (0.9, s * (sw + 0.002), 1.28), Y * s, 0.2, part="hull")
+        v.mark(tag, (x0 - 0.28, s * 0.787, zt + 0.30), Vector((0.02, s, 0.33)), 0.15, part="turret")
     v.tank_clips(recoil=0.26, kick=0.7, gun_low=-9.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver", "hatch_radio"],
                  traverse=16.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.8, 2.6, 0.4, 168.0))
+    v.camouflage()
     return v
 
 
@@ -448,7 +451,8 @@ def assault_gun(fine=True, tag="_"):
     v.socket("hit.turret", (0.5, y_at(1.75), 1.75), sn[0], part="hull", note="the fighting box's side")
     v.socket("case", (-0.28, 0.40, zc + 0.1), Y, part="hull", note="where the empty case is thrown out")
     for s, n in ((LEFT, sn[0]), (RIGHT, sn[1])):
-        v.mark(tag, (-0.25, s * (y_at(1.5) + 0.002), 1.5), n, 0.16, part="hull")
+        v.mark(tag, (0.3, s * (y_at(1.46) + 0.002), 1.46), n, 0.2, part="hull")
     v.tank_clips(recoil=0.3, kick=0.8, gun_low=-6.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver"], traverse=6.0,
                  idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", has_turret=False, mg=None)
+    v.camouflage()
     return v

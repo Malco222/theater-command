@@ -149,6 +149,18 @@ class Works(Shop, Gear, Fittings):
             self.m.info.setdefault("file", {})["mark_months"] = {"how": "paint the mark whose months hold the campaign's month (from and to are both counted in); `none` is bare paint.",
                                                                  tag: MARK_MONTHS[tag]}
 
+    def camouflage(self, **kw):
+        """The coat's second colour (`upper2`) sprayed over about a third of her in big uneven soft-edged blotches
+        (camo.py): for the vehicles every small nation shares, which the game paints in each nation's own two colours.
+        The last thing a builder does: nothing may be added to her after it."""
+        import camo
+        from motorpool import NATION
+        self.m.camo = camo.lay(self.m, **kw)
+        if self.tag != "_" and NATION.get(self.tag, (None, None))[1] is None:
+            # (built for a nation with one coat colour, France's own 75 among them: the second is the first, and she stays one coat)
+            self.m.paints["upper2"] = self.m.paints["upper"]
+        return self.m.camo
+
     # ---- the crew's name, or their rings (b477) -----------------------------------------------------------------
     def _skin(self, part=None):
         """The mesh as she stands, to cast rays at (one part's faces only, if a part is named)."""
@@ -935,7 +947,11 @@ def to_scene(model, look="land", crease=50.0, weighted=True, **look_kw):
         lface = np.repeat(np.array(model.fpaint, dtype=np.int32), total)
         tint = rigid.tint_of(model, model._wear[lv], np.maximum(model._soot[lv], model._ledge * EDGE_DARK), model._lpaint, lface, model._lblend)
         me.color_attributes["Col"].data.foreach_set("color", np.concatenate([tint, np.ones((len(tint), 1))], axis=1).ravel())
-    if weighted:
+    laid = getattr(model, "fnormal", None)
+    if weighted and laid is not None and len(laid) == len(model.faces) and abs(getattr(model, "fnormal_crease", -1.0) - crease) < 1e-6:
+        # (camouflage cut her plates finer: the corners' facings were read before the cutting and carried onto the new points)
+        me.normals_split_custom_set([n for f in laid for n in f])
+    elif weighted:
         mod = ob.modifiers.new("wn", "WEIGHTED_NORMAL")
         mod.keep_sharp = True
         mod.weight = 50

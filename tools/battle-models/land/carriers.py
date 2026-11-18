@@ -433,12 +433,15 @@ def truck(fine=True, tag="_", tilt=True, fit="troops", name="Truck", title="3-to
     v.socket("hit.rear", (bx0 - 0.03, 0.0, fl + 0.3), -X, part="hull")
     for s in (LEFT, RIGHT):
         v.mark(tag, (0.62, s * (hw_c + 0.007), 1.14), Y * s, 0.15, part="hull")
+    # (the second colour is sprayed on her from outside: the inside of her body, and what rides in it, stay plain)
+    v.body_inside = body_inside = lambda p: bx0 - 0.005 < p.x < bx1 - 0.025 and abs(p.y) < bw - 0.025 and fl - 0.01 < p.z < fl + side_h + 0.02      # noqa: E731
     if not troops:
-        return v                                           # (a bare floor: whoever fits her out gives her her clips)
+        return v                                           # (a bare floor: whoever fits her out gives her her clips, and her camouflage)
     v.carrier_clips("lorry_idle_loop", "lorry_drive_loop", dismount=[("tailboard", 176.0, 0.05)], soft=1.25)
     v.m.info.setdefault("file", {})["swaps"] = {
         "how": "tilt: off scales the part `tilt` to nothing (a part scaled to nothing is not drawn), and her benches and riders are seen. The coat is the nation's own paint.",
         "tilt": {"default": "on", "choices": {"on": {"what": "under her canvas tilt", "parts": ["tilt"]}, "off": {"what": "the tilt stowed: an open body", "parts": []}}}}
+    v.camouflage(plain=body_inside)
     return v
 
 

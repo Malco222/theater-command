@@ -618,4 +618,5 @@ def armoured_car(fine=True, tag="_"):
     v.socket("case", (x0 - 0.2, -0.5, zr + 0.25), -Y, part="turret", note="where the empty case is thrown out")
     v.car_clips(recoil=0.15, kick=0.5, gun_low=-8.0, hatches=["hatch_commander"], traverse=18.0, idle_cue="lorry_idle_loop", drive_cue="lorry_drive_loop",
                 gun_cue="tank_gun_01", blow=(-0.6, 2.0, 0.3, 165.0), mg="coax")
+    v.camouflage()
     return v

@@ -388,4 +388,5 @@ def flak_truck(fine=True, tag="_"):
             v.handle((-0.32, y, fl + 0.241), (-0.22, y, fl + 0.241), Z, r=0.006, reach=0.022, paint="steel")
     v.car_clips(burst=6, every=0.14, recoil=0.05, kick=0.35, gun_low=-5.0, hatches=[], traverse=45.0, idle_cue="lorry_idle_loop", drive_cue="lorry_drive_loop",
                 has_turret=False, mg=None)
+    v.camouflage(plain=v.body_inside)
     return v

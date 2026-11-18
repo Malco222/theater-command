@@ -966,7 +966,7 @@ def sp_gun(fine=True, tag="_"):
                 v.bolt((xe + 0.2 + 0.29 * i, s * (y_at(zg + 0.05) + 0.001), zg + 0.05), n, 0.011, 0.007)
             v.handle(Vector((-0.70, s * y_at(1.56), 1.56)), Vector((-0.34, s * y_at(1.56), 1.56)), n, 0.011, 0.05)
             v.port(Vector((0.95, s * (y_at(1.74) + 0.001), 1.74)), n, 0.04)
-        v.mark(tag, (0.0, s * (y_at(1.60) + 0.002), 1.60), n, 0.17, part="hull")
+        v.mark(tag, (0.15, s * (y_at(1.54) + 0.002), 1.54), n, 0.2, part="hull")
     px, zt, slot = 1.26, 1.80, 0.30                        # the pintle and the trunnions; half the notch
     bn = (zt - 0.31 - zn) / sl.z
     sheet(v, [(-y_at(zn), 0.0), (y_at(zn), 0.0), (y_at(zw), Hs), (slot, Hs), (slot, bn), (-slot, bn), (-slot, Hs), (-y_at(zw), Hs)], [], (xn, 0.0, zn), Y, sl, th, coat, 0.004)
@@ -1042,6 +1042,8 @@ def sp_gun(fine=True, tag="_"):
     v.socket("hit.turret", Vector((xn, -0.65, zn)) + sl * (Hs * 0.55), sf, part="hull", note="the box's face")
     v.tank_clips(recoil=0.65, kick=0.8, gun_low=-5.0, hatches=["hatch_driver"], traverse=5.0, idle_cue="tank_idle_loop", drive_cue="tank_loop",
                  gun_cue="field_gun_fire", has_turret=False, mg=None)
+    # (the second colour is sprayed on her from outside: the inside of the fighting box and what stands in it stay plain)
+    v.camouflage(plain=lambda p: p.z > zg - 0.02 and xe + 0.02 < p.x < (xn if p.z < zn else xn + (xf - xn) * (p.z - zn) / (zw - zn)) - 0.02 and abs(p.y) < y_at(p.z) - 0.02)
     return v
 
 
