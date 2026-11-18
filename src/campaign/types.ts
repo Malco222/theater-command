@@ -95,6 +95,27 @@ export interface Nation {
   res?: Stores;
   /** The player's government (the grand campaign): his war cabinet, his decrees, the cabinet's trust and its directive. */
   gov?: GovState;
+  /** The nation's footing (ruling 172, the grand campaign with the lever switched on): see footing.ts. */
+  foot?: Footing;
+}
+
+/**
+ * The nation's footing, where it differs from the one that comes of itself (ruling 172; footing.ts). Absent for a
+ * country that has never touched the lever: it earns exactly what it always did.
+ */
+export interface Footing {
+  /** The footing ordered above the one that comes of itself: Rearmament at peace, All-out war at war. */
+  step?: 'rearm' | 'allout';
+  /** How far the climb has come: the share of industry on war work, all of it on one shift = 1. */
+  share?: number;
+  /** The month the climb was ordered. */
+  since?: number;
+  /** No footing may be raised again before this month (a step down, by choice or for want of political capital). */
+  wait?: number;
+  /** The share of the will to fight all-out war has worn away: its own count, above what shortage takes. */
+  worn?: number;
+  /** The month the worn share first reached the amber mark in this war, so that the month card says it once. */
+  amber?: number;
 }
 
 /** A job the war cabinet, or an ally, has set the player (the grand campaign): optional, with a deadline and a reward. */

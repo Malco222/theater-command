@@ -7,6 +7,8 @@ import { ORDER_SIGN, ORDER_STAR } from './ordersigns';
 import { markFor, monthCard, monthOrders, opensCampaign, type MonthCard, type MonthMark } from '../monthcard';
 import { gunsAlone, homeAlarms } from '../danger';
 import { monthCardHtml } from './monthview';
+import { footingCard, footingStrip } from './footingui';
+import { footingWord, type FootingId } from '../footing';
 import { NO_MOVES, aboutMonths, advanceMarches, forgetMarch, marchState, orderMarch, planMarch, settleMarches, type MarchPlan } from '../marches';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../round';
 import { gateBar, gateSpot, gateViews, onLand } from '../gates';
@@ -27,7 +29,7 @@ import {
   fieldworksLeft, foldChoicesAt, orderFold, orderProbe, orderSwap, softenOptions, swapChoices,
   joinOffers, jointForce, lending, orderJoin, orderJoinAll, orderSendBack,
   fleetOptions, fleetView, lanesToGuard, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit,
-  cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
+  footingOf, orderFootingTo, cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
   garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, stormChoice, guardOnly, gateLeft, type GateLeft, gateQuestion, orderGate, whyNotGate, whyNotOrder, whyNotOrderGarrison, verdictAt, verdictOf, asForecast, FAVOURED, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
@@ -3800,8 +3802,10 @@ function buildPane(): string {
     <div class="facts"><div class="fact"><span>In the treasury</span><b${L.treasury < 0 ? ' style="color:var(--red)"' : ''}>${inHand(L.treasury)}</b></div><div class="fact"><span>${L.budget ? 'After upkeep, a month' : 'Each month'}</span><b${L.net < 0 ? ' style="color:var(--red)"' : ''}>${cash(L.net, true)}</b></div><div class="fact"><span>On order</span><b>${n.queue.length}</b></div></div>
     <div class="acts"><button class="btn small" data-act="ledger">Open the ledger</button>${L.budget && hasTraits(me) ? '<button class="btn small" data-act="traits">National abilities</button>' : ''}</div>`;
   if (L.treasury < 0) out += `<div class="note"><b>The treasury is in debt.</b> Nothing new can be ordered and no replacements go out until the books balance. Unpaid troops rest badly and men drift away.</div>`;
-  const footing = n.atWar.length ? null : peaceFooting(g, me);
-  if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> ${footing === null ? 'Industry runs at half speed until the nation is at war' : `${Math.round(footing * 100)} in 100 of your industry is on war work${L.budget ? ', and the forces cost half as much to keep' : ''}. Once the nation is at war the share climbs step by step, and all of it is on war work in about ${warWorkLeft(g, me)} months`}${footing === null && L.budget ? ', and the forces cost half as much to keep' : ''}.</div>`;
+  const footing = n.atWar.length ? null : peaceFooting(g, me), fv = footingOf(g, me);
+  // (With the nation's footing switched on, its strip stands here in every month: ruling 172. A tip shows in its first month.)
+  if (fv) { const tip = fv.tip ? `foottip:${fv.tip}` : ''; if (tip && g.flags[tip] === undefined) g.flags[tip] = g.turn; out += footingStrip(fv, !!tip && g.flags[tip] === g.turn); }
+  else if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> ${footing === null ? 'Industry runs at half speed until the nation is at war' : `${Math.round(footing * 100)} in 100 of your industry is on war work${L.budget ? ', and the forces cost half as much to keep' : ''}. Once the nation is at war the share climbs step by step, and all of it is on war work in about ${warWorkLeft(g, me)} months`}${footing === null && L.budget ? ', and the forces cost half as much to keep' : ''}.</div>`;
 
   const shelf = (k: Offer['group'], quiet = false): string => list.filter((o) => o.group === k).map((o) => offerButton(o, quiet)).join('');
   const army = (): string => {
@@ -5079,7 +5083,7 @@ function powersPane(): string {
       const form = gv ? ` <button class="btn tiny" data-act="cabinet" data-nat="${n.id}" title="${esc(gv.form.name)}. ${esc(gv.form.blurb)}">${FORM_WORD[gv.form.id]}</button>` : '';
       // Its general staff: the character it has in this war, and its main effort where the player may know it.
       const staff = rivalStaff(g, n.id);
-      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(theName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(theName).join(', ')}</small></div>${staff ? staffRow(staff) : ''}</div>`;
+      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(theName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}${footingWord(g, n.id) ? ` · ${esc(footingWord(g, n.id)!)}` : ''}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(theName).join(', ')}</small></div>${staff ? staffRow(staff) : ''}</div>`;
     } else {
       const f = fallen.find((x) => x.nat === n.id);
       const how = f?.fell.how === 'annexed' ? `Annexed by ${theName(n.fellOn!.to)}` : f?.fell.how === 'terms' ? `Left the war by treaty with ${theName(n.fellOn!.to)}` : `Asked ${theName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}`;
@@ -6268,6 +6272,11 @@ function openModal(m: typeof ui.modal): void {
     if (!paths(g).length) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = pathCard(m.ask ?? '');
   }
+  else if (m.kind === 'footing') {
+    const v = footingOf(g);
+    if (!v) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = footingCard(v, cash, Math.floor(g.nations[v.nat].pc));
+  }
   else if (m.kind === 'ledger') {
     const nat = m.nat || g.human;
     if (!nat || !g.nations[nat]) { ui.modal = null; veil.classList.remove('open'); return; }
@@ -6765,7 +6774,7 @@ function cabinetCard(nat: string): string {
   const tabs = `<div class="seg gvtabs">${page('now', 'Business', hd ? 'a question' : d && d.left <= 2 ? 'due' : '')}${page('table', 'Ministers', `${filled} of ${v.seats.length}`)}${page('decrees', 'Decrees', inForce ? `${inForce} in force` : '')}${page('minutes', 'Minutes')}</div>`;
   const comes = `<h3>What your government comes to</h3>${sums}`;
   const shown = tab === 'table' ? `<h3>The war cabinet <span class="inhand">an appointment costs ${v.appointCost} political capital, and the office then stays ${months(GOV.appoint.wait)}</span></h3>${table}<div class="gvseats">${seats}</div>${comes}`
-    : tab === 'decrees' ? `<h3>Decrees <span class="inhand">paid for in political capital, one step at a time</span></h3>${tracks}${comes}`
+    : tab === 'decrees' ? `<h3>Decrees <span class="inhand">paid for in political capital, one step at a time</span></h3>${tracks}${footingOf(g) ? '<p class="sub">The economy is set by the nation\'s footing: the line under the arsenal, where you buy. <button class="btn small" data-act="footing">The footing</button></p>' : ''}${comes}`
     : tab === 'minutes' ? (log || '<h3>The cabinet\'s minutes</h3><p class="sub">Nothing has been minuted yet.</p>')
     : `<h3>The directive</h3>${dir}${wants}
     <h3 id="gvvow">Your word to the cabinet <span class="inhand">a promise of your own, once every ${months(GOV.promise.every)}</span></h3>${vow}`;
@@ -7606,7 +7615,7 @@ function storesCard(nat: string): string {
   return `${head}<div class="body ledger stores">
     <p class="sub">${story}</p>
     <div class="lcols">${bookBlock(v.oil)}${bookBlock(v.sup)}</div>
-    ${v.willLost > 0.005 ? `<div class="note bad"><b>Privation at home.</b> Months of empty depots have worn away ${Math.round(v.willLost * 100)}% of the nation's will to fight. It counts toward surrender beside lost ground and a broken army, and it mends only slowly once the depots are filled again.</div>` : ''}
+    ${v.footWorn > 0.005 ? `<div class="note"><b>The will to fight: ${Math.round(v.willLost * 100)}% worn away.</b> All-out war has worn away ${Math.round(v.footWorn * 100)}%${v.hungerLost > 0.005 ? ` and months of shortage ${Math.round(v.hungerLost * 100)}%` : ''}. It counts toward surrender beside lost ground and a broken army. Stepping down from all-out war mends its share.</div>` : v.willLost > 0.005 ? `<div class="note bad"><b>Privation at home.</b> Months of empty depots have worn away ${Math.round(v.willLost * 100)}% of the nation's will to fight. It counts toward surrender beside lost ground and a broken army, and it mends only slowly once the depots are filled again.</div>` : ''}
     <h3>Shipping lanes and deals <span class="inhand">what comes from abroad</span></h3>
     <div class="lanes">${laneList}</div>
     <h3>How the other powers stand <span class="inhand">as far as it shows from outside</span></h3>
@@ -8483,6 +8492,14 @@ function onClick(e: MouseEvent): void {
       break;
     }
     case 'govkeep': if (ui.modal) { ui.modal.ask = ''; openModal(ui.modal); } break;
+    case 'footing': openModal({ kind: 'footing' }); break;
+    case 'footingdo': {
+      const h = g.headlines.length;
+      if (orderFootingTo(g, t.dataset.to as FootingId)) { ui.unread += g.headlines.length - h; queueSave(); }
+      refresh();
+      openModal({ kind: 'footing' });
+      break;
+    }
     case 'govpromise': {
       // Call your shot: from a province, or from the cabinet room, to the list of towns, to the terms, to the word given.
       const reg = t.dataset.id ?? '', mo = t.dataset.months ?? '';

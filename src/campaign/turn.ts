@@ -63,6 +63,7 @@ import {
   appoint, cabinetBill, cabinetOff, decree, govMul, government, headAsked, headGiven, headOf, noteReadings, officeSecure, promise, promiseTargets, promiseTerms, setAside, setCabinet, setCanFall, standBy, takeBack,
   whyNotAppoint, whyNotDecree, whyNotPromise, whyNotSetAside, whyNotStandBy, whyNotTakeBack, type GovView, type PromiseTarget, type PromiseTerms,
 } from './government';
+import { footingView, orderFooting, whyNotFooting, type FootingId, type FootingView } from './footing';
 import { MANPOWER, callEarly, classGapUntil, classNow, earlyClass, earlyGap, manpower, menWords, raisable, whyNotEarly, type MenView } from './manpower';
 import { commandView, crossingWord, handOver, setDepth, setStaffCap, staffMonth, type CommandView, type CrossingWord } from './desks';
 import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from './history';
@@ -834,6 +835,26 @@ export function whyNotOrderDecree(g: Game, track: string, step: number): string 
 /** The player carries a decree, one step up for its price in political capital, or relaxes one, free. */
 export function orderDecree(g: Game, track: string, step: number): boolean {
   return g.human !== null && humanUp(g) && decree(g, g.human, track, step);
+}
+
+// ---- The nation's footing (ruling 172; the grand campaign with the lever switched on) ----------------------------
+
+/**
+ * A country's footing as both games show it: the ledger's line, the four footings as a tally with their locks, and
+ * the one move the card asks about (one step up, or back down). With no nation named, the player's own. Null with the
+ * lever switched off.
+ */
+export const footingOf = (g: Game, nat: string | null = g.human): FootingView | null => footingView(g, nat);
+
+/** Why the player cannot put his country on this footing now, or null if he can. */
+export function whyNotOrderFooting(g: Game, to: FootingId): string | null {
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  return whyNotFooting(g, g.human, to);
+}
+
+/** The player puts his country on a footing: one step up, for its price in political capital, or back down, at once and free. */
+export function orderFootingTo(g: Game, to: FootingId): boolean {
+  return g.human !== null && humanUp(g) && orderFooting(g, g.human, to);
 }
 
 /** Why the player cannot set his directive aside, or null if he can. */

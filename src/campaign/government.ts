@@ -35,6 +35,7 @@ import { agentCost, agentsOf, homeBase, mostAgents, oddsBand, INTEL } from './in
 import { armyOf } from './joint';
 import { prizeOf, prizesInReach, townName, townSize, type Prize, type TownSize } from './towns';
 import { dealsOf, whyNoTrade } from './trade';
+import { LADDER_GONE, footTrust, replacesLadder } from './footing';
 
 export type FormId = 'democracy' | 'oneparty' | 'authoritarian';
 /** What a minister or a decree can change: multipliers on income, replacements, the price of new corps, research, trade and the class of men that comes of age each month. */
@@ -343,6 +344,7 @@ export function whyNotDecree(g: Game, nat: string, track: string, step: number):
   if (!st) return 'Only your own government takes your decrees, in the grand campaign.';
   const t = GOV.tracks.find((x) => x.id === track);
   if (!t || !t.steps[step]) return 'There is no such decree.';
+  if (t.id === 'economy' && replacesLadder(g)) return LADDER_GONE;
   const at = st.steps[track] ?? 0;
   if (step === at) return 'That is the law already.';
   if (step === at - 1) return null;
@@ -1269,11 +1271,12 @@ export function govMonth(g: Game, nat: string): void {
     ['The capital under siege', n.capital >= 0 && g.regions[n.capital].ctrl === nat && besieged(g, g.regions[n.capital]) ? -T.ringed : 0],
   ];
   // What his ministers and decrees cost in trust is felt in full under every form of government.
-  const own = govAdd(st, 'trust');
+  // (And, with the nation's footing switched on, what holding the country to rearmament or all-out war costs: ruling 172.)
+  const own = govAdd(st, 'trust'), foot = footTrust(g, nat);
   const drift = (restOf(st) - st.trust) * T.drift;
   const news = causes.reduce((s, c) => s + c[1], 0);
-  st.last = [...causes.map(([label, x]) => ({ label, amount: x * form.swing })), { label: 'Ministers and decrees', amount: own }, { label: drift < 0 ? 'Yesterday\'s good news fades' : 'Yesterday\'s bad news fades', amount: drift }].filter((c) => Math.abs(c.amount) >= 0.05);
-  st.trust = clamp(st.trust + news * form.swing + own + drift, 0, 100);
+  st.last = [...causes.map(([label, x]) => ({ label, amount: x * form.swing })), { label: 'Ministers and decrees', amount: own }, { label: 'The nation\'s footing', amount: foot }, { label: drift < 0 ? 'Yesterday\'s good news fades' : 'Yesterday\'s bad news fades', amount: drift }].filter((c) => Math.abs(c.amount) >= 0.05);
+  st.trust = clamp(st.trust + news * form.swing + own + foot + drift, 0, 100);
   st.mark = { held, home, caps, report: lastReport(g) };
   // A decree that takes political capital to keep lapses a step when there is none left to pay for it.
   for (let guard = 0; guard < 4; guard++) {
@@ -1520,7 +1523,8 @@ export function government(g: Game, nat: string | null = g.human): GovView | nul
     id: s.id, name: s.name, minister: mv(ministerIn(st, s.id)),
     options: GOV.ministers.filter((m) => (m.seat === s.id || m.seat === '*') && m.id !== ministerIn(st, s.id).id).map((m) => ({ ...mv(m), why: whyNotAppoint(g, nat, s.id, m.id) })),
   }));
-  const tracks: TrackView[] = GOV.tracks.map((t) => {
+  // (With the nation's footing switched on the economy is set under the arsenal, and the cabinet keeps the call-up: ruling 172.)
+  const tracks: TrackView[] = GOV.tracks.filter((t) => !(t.id === 'economy' && replacesLadder(g))).map((t) => {
     const at = st.steps[t.id] ?? 0;
     return { id: t.id, name: t.name, at, steps: t.steps.map((x, i) => ({ id: x.id, name: x.name, text: x.text, cost: x.cost ?? 0, on: i === at, why: i === at ? null : whyNotDecree(g, nat, t.id, i) })) };
   });

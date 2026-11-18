@@ -13,6 +13,7 @@ import { workingFactories } from './rails';
 import { prizeTaker } from './prizes';
 import { TECH } from './tech';
 import { oilAtHome } from './world';
+import { footWorn } from './footing';
 
 export type Good = 'oil' | 'sup';
 
@@ -332,8 +333,11 @@ export interface Book {
 
 export interface StoresView {
   nat: string; oil: Book; sup: Book; lanes: Lane[];
-  /** The share of the nation's will to fight that privation at home has worn away, 0 to 1. */
+  /** The share of the nation's will to fight that privation at home has worn away, 0 to 1: all of it, whatever the cause. */
   willLost: number;
+  /** Of that, what shortage took, and what all-out war took (the nation's footing, ruling 172; 0 with it switched off). */
+  hungerLost: number;
+  footWorn: number;
 }
 
 function incomeLines(g: Game, nat: string, good: Good, lanes: Lane[]): ResLine[] {
@@ -424,7 +428,7 @@ export function stores(g: Game, nat: string): StoresView | null {
     const met = good === 'oil' ? st.oilMet : st.supMet;
     return { good, stock: st[good], cap, income, spend, made, need, net, months: net < -1e-9 ? st[good] / -net : Infinity, met, effects: met < 0.995 ? (good === 'oil' ? SHORT_OIL(met) : SHORT_SUP(met)) : [] };
   };
-  return { nat, oil: book('oil'), sup: book('sup'), lanes, willLost: willLost(g, nat) };
+  return { nat, oil: book('oil'), sup: book('sup'), lanes, willLost: willLost(g, nat), hungerLost: hungerLost(g, nat), footWorn: footWorn(g, nat) };
 }
 
 /** Opens the stocks of every power that keeps them, once, when a grand campaign begins. */
@@ -475,7 +479,7 @@ export function resourcesTick(g: Game, nat: string): void {
   const W = RES.will, lack = W.sup * (1 - st.supMet) + W.oil * (1 - st.oilMet);
   const hunger = lack > 1e-9 ? hungryBefore + lack : Math.max(0, hungryBefore - W.heal);
   if (hunger > 0) st.hunger = hunger; else delete st.hunger;
-  if (nat === g.human && willLost(g, nat) >= 0.1 && hungryBefore * W.per < 0.1) {
+  if (nat === g.human && hungerLost(g, nat) >= 0.1 && hungryBefore * W.per < 0.1) {
     headline(g, 'info', `Rationing bites at home. The longer the depots stay empty the less the nation will bear: its will to fight is falling, and a country that is starved long enough asks for terms. Open Powers to see how much fight is left.`, nat);
   }
 }
@@ -485,6 +489,12 @@ export function resourcesTick(g: Game, nat: string): void {
  * a lost capital, lost ground and a broken army. This is how a blockade chokes a country that cannot feed itself.
  */
 export function willLost(g: Game, nat: string): number {
+  // (All-out war wears it too, with the nation's footing switched on: a count of its own above what shortage takes, ruling 172.)
+  return hungerLost(g, nat) + footWorn(g, nat);
+}
+
+/** What privation alone has taken from a nation's will to fight: what shortage takes, up to its own ceiling. */
+export function hungerLost(g: Game, nat: string): number {
   if (g.flags.open !== 1) return 0;
   const h = g.nations[nat]?.res?.hunger ?? 0;
   return h > 0 ? Math.min(RES.will.most, h * RES.will.per) : 0;

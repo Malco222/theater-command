@@ -21,6 +21,7 @@ import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, head
 import { addFleet, chartSeas, type FleetRow } from './navy';
 import { fieldClass, seedClass, seedFields } from './air';
 import { newLab, researches } from './research';
+import { rearmedAt } from './footing';
 import type { Game, Region } from './types';
 
 interface WorldMap {
@@ -316,7 +317,8 @@ export function warFooting(g: Game, nat: string): number | null {
  * for a named month (Canada's, world.json 'climbFrom'), as far up as the calendar has it by then.
  */
 function climbStart(g: Game, id: string): number {
-  const table = peaceFooting(g, id) ?? 1, from = WORLD.climbFrom?.[id], step = WORLD.warWork[id] ?? 0;
+  // (A country that rearmed at peace starts its climb from where rearmament left it: footing.ts, ruling 172.)
+  const table = Math.max(peaceFooting(g, id) ?? 1, rearmedAt(g, id)), from = WORLD.climbFrom?.[id], step = WORLD.warWork[id] ?? 0;
   return from === undefined ? table : table + step * Math.max(0, g.turn - from);
 }
 

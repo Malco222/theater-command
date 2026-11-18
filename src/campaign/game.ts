@@ -41,6 +41,7 @@ import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, rai
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
 import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
+import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
@@ -3348,7 +3349,8 @@ export function startPhase(g: Game, nat: string): void {
   const credit = BUDGET.debt.floor * Math.max(1, earned);
   const owed = budgeted(g) && n.pp < 0 ? Math.min(1, -n.pp / credit) : 0;
   // What the player's decrees take to keep can outrun what comes in (the grand campaign): the capital in hand pays for it.
-  const pcNet = pcIncome(nat, g) + civicSum(g, nat).pc + govCapital(g, nat);
+  // (And, with the nation's footing switched on, what holding rearmament or all-out war takes: ruling 172.)
+  const pcBase = pcIncome(nat, g) + civicSum(g, nat).pc + govCapital(g, nat), pcNet = pcBase + footHold(g, nat, pcBase);
   n.pc = Math.max(0, Math.min(Math.max(n.pc, DIPLOMACY.pcCap), n.pc + (g.flags.open === 1 ? pcNet : Math.max(0, pcNet))));
   const perDiv = PRODUCTION.replacementCost;
   const tempo = freshOffensive(g, nat);
