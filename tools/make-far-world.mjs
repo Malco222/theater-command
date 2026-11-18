@@ -13,6 +13,7 @@
 //     bases by date of Japan's battle line (the planner's pacific-fleets.json)
 //   the men of rulings 213(b), 216(b) and 218 (pool and class), and China's last levy
 //   who holds what on 1 September 1939 where that is not the owner (the clerk's held_1939)
+//   Japan's character as a staff: where its budget leans (paper 14, ruled with 181 to 202; the planner's base-seats.json)
 //
 //   node tools/make-far-world.mjs            write the file
 //   node tools/make-far-world.mjs --check    exit 1 if the file on disk is not what the sources give today
@@ -36,6 +37,7 @@ const generals = src('historian/generals-usa-japan.json');
 const men = src('historian/manpower-213.json');
 const levy = src('pacific-planner/runs-219/levy218-seats.json');
 const pacific = src('pacific-planner/pacific-fleets.json');
+const rig = src('pacific-planner/20-trial/base-seats.json');
 const chinaSetup = read(path.join(ROOT, 'data/campaign/china-setup.json'));
 const stop3 = read(path.join(ROOT, 'data/campaign/china-stop3.json'));
 const chart = read(path.join(ROOT, 'src/generated/world-whole.json'));
@@ -185,10 +187,15 @@ for (const [nat, name, , , at] of [...japan, ...garrisons]) {
   need(by === nat || (TIES[nat] ?? []).includes(by), `first-day row "${name}" stands at ${at}, which ${by} holds`);
 }
 
+// Japan's temper is ruling 202(l)'s row. The record's line laid it (china-line.json); the rig's base seats must agree.
+const chinaLine = read(path.join(ROOT, 'data/campaign/china-line.json'));
+need(JSON.stringify(chinaLine.open?.temper?.JAP) === JSON.stringify(rig.open.temper.JAP), "Japan's temper in china-line.json is not the planner's base-seats.json row");
+need(Array.isArray(rig.rivals?.lean?.JAP) && rig.rivals.lean.JAP.length === 3, "the planner's base-seats.json has no rivals.lean.JAP row of three");
+
 // ---- The file ----------------------------------------------------------------------------------------
 const out = {
   _about: "The far side's rows that are nobody's seat, written by tools/make-far-world.mjs from the Pacific planner's, the historian's and the clerk's files and never by hand. Keyed by the data file each block belongs in, as the seat builders' files are; the game lays it over its data only where the far side's switch is on (src/campaign/far-rows.ts). Japan is the seventh great power (ruling 141(a)): quality 1.0 (ruling 215), outside both blocs and leaning to the Axis (ruling 197), a sea lift of 6 (ruling 200). Its army is the planner's paper 17 (the historian's weights), its fleets paper 11 section 7 as ruling 189 amended them, with the names and admirals of ruling 208(f). The garrisons of Britain, the Netherlands, France, the Soviet Far East and America are paper 18's. America's fleets in the Pacific, the ships that join and leave them, and the bases by date of the Pacific Fleet and of Japan's battle line are the planner's pacific-fleets.json (rulings 185, 189, 208(f)); a fleet that forms later is a row of navy.json. 'manpower' is rulings 213(b), 216(b) and 218; China's row under 'traits' is the seat's with the levy of ruling 218. 'setup.held' is the clerk's held_1939 where it is not the owner.",
-  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'pacific-planner/pacific-fleets.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json'].map((p) => [p, stamp(p)])),
+  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'pacific-planner/pacific-fleets.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json', 'pacific-planner/20-trial/base-seats.json'].map((p) => [p, stamp(p)])),
   _draft: "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
   grand: {
     nations: [{
@@ -210,6 +217,9 @@ const out = {
     building: pacific.building,
     moves: pacific.moves,
   },
+  // Japan's character as a staff (paper 14, section 8, item 13; ruled with 181 to 202): where its budget leans. Its temper
+  // (ruling 202(l)) is laid by china-line.json already; the two files must say the same thing.
+  rivals: { lean: { JAP: rig.rivals.lean.JAP } },
   // A great power founds and joins no League. The two clients are barred by their tie (league.ts), and keep a small country's own path.
   league: { never: ['JAP'] },
   traits: {

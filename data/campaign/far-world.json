@@ -1,12 +1,13 @@
 {
  "_about": "The far side's rows that are nobody's seat, written by tools/make-far-world.mjs from the Pacific planner's, the historian's and the clerk's files and never by hand. Keyed by the data file each block belongs in, as the seat builders' files are; the game lays it over its data only where the far side's switch is on (src/campaign/far-rows.ts). Japan is the seventh great power (ruling 141(a)): quality 1.0 (ruling 215), outside both blocs and leaning to the Axis (ruling 197), a sea lift of 6 (ruling 200). Its army is the planner's paper 17 (the historian's weights), its fleets paper 11 section 7 as ruling 189 amended them, with the names and admirals of ruling 208(f). The garrisons of Britain, the Netherlands, France, the Soviet Far East and America are paper 18's. America's fleets in the Pacific, the ships that join and leave them, and the bases by date of the Pacific Fleet and of Japan's battle line are the planner's pacific-fleets.json (rulings 185, 189, 208(f)); a fleet that forms later is a row of navy.json. 'manpower' is rulings 213(b), 216(b) and 218; China's row under 'traits' is the seat's with the levy of ruling 218. 'setup.held' is the clerk's held_1939 where it is not the owner.",
  "_sources": {
-  "pacific-planner/first-day-corps.json": "2026-11-17T18:06Z",
+  "pacific-planner/first-day-corps.json": "2026-11-17T23:51Z",
   "pacific-planner/opening-armies.json": "2026-11-17T20:08Z",
   "pacific-planner/pacific-fleets.json": "2026-11-17T23:11Z",
   "historian/generals-usa-japan.json": "2026-11-17T14:38Z",
   "historian/manpower-213.json": "2026-11-17T18:10Z",
-  "pacific-planner/runs-219/levy218-seats.json": "2026-11-17T18:57Z"
+  "pacific-planner/runs-219/levy218-seats.json": "2026-11-17T18:57Z",
+  "pacific-planner/20-trial/base-seats.json": "2026-11-17T17:59Z"
  },
  "_draft": "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
  "grand": {
@@ -77,7 +78,8 @@
     "Osaka",
     {
      "xp": 0.3,
-     "str": 0.6
+     "str": 0.6,
+     "hold": 1
     }
    ],
    [
@@ -88,7 +90,8 @@
     "Osaka",
     {
      "xp": 0.3,
-     "str": 0.6
+     "str": 0.6,
+     "hold": 1
     }
    ],
    [
@@ -504,7 +507,8 @@
     "Mutankiang",
     {
      "xp": 0.15,
-     "str": 0.9
+     "str": 0.9,
+     "hold": 1
     }
    ],
    [
@@ -515,7 +519,8 @@
     "Mutankiang",
     {
      "xp": 0.15,
-     "str": 0.9
+     "str": 0.9,
+     "hold": 1
     }
    ],
    [
@@ -526,7 +531,8 @@
     "Kiamusze",
     {
      "xp": 0.15,
-     "str": 0.9
+     "str": 0.9,
+     "hold": 1
     }
    ],
    [
@@ -537,7 +543,8 @@
     "Heiho",
     {
      "xp": 0.15,
-     "str": 0.9
+     "str": 0.9,
+     "hold": 1
     }
    ],
    [
@@ -548,7 +555,8 @@
     "Hailar",
     {
      "xp": 0.3,
-     "str": 0.7
+     "str": 0.7,
+     "hold": 1
     }
    ],
    [
@@ -1985,6 +1993,15 @@
     ]
    }
   ]
+ },
+ "rivals": {
+  "lean": {
+   "JAP": [
+    4,
+    1,
+    3
+   ]
+  }
  },
  "league": {
   "never": [
