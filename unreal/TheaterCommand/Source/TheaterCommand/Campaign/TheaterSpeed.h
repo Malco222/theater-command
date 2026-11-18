@@ -56,6 +56,16 @@ class APlayerController;
  *   tc.Speed.DressSteps   1 (default): a fine sheet built on another thread is dressed (its pictures and paints made)
  *                         a little at a time, about 8 ms a frame and one sheet at a time, before its tiles are stood up
  *                         out of sight as ever. 0: every sheet that is ready is dressed whole in one frame, as before.
+ *   tc.Speed.BordersKept  1 (default): the frontier and province lines' points are kept from one drawing to the next
+ *                         (ACampaignMapActor::BuildBordersKept), laid again only where a fine sheet has changed the
+ *                         ground under them, and only the kinds of line that changed are handed to the graphics chip
+ *                         again. 0: every line of the world is laid and handed over again each time, as before. Needs
+ *                         tc.Speed.KeptHeights. The same lines either way.
+ *   tc.Speed.PictureOnce  1 (default): a picture that is read without smoothing (the lie of the land, the fields) is
+ *                         made that way from the first. 0: it is made smoothed and then made again unsmoothed, as
+ *                         before, and the second making waits for the drawing thread to catch up with the frames it
+ *                         has in hand (DressPaint, about 32 ms of every fine sheet in the builder's logs). The same
+ *                         picture either way.
  * And two for measuring only, which change the picture and are not to be left off without the art director:
  *   tc.Speed.TownShadows  1 (default): the near towns throw shadows. 0: they do not.
  *   tc.Speed.TrainShadows 1 (default): the trains throw shadows. 0: they do not.
@@ -89,6 +99,8 @@ namespace TheaterSpeed
 	bool RegionGrid();
 	bool RiverInks();
 	bool FrontWeights();
+	bool PictureOnce();
+	bool BordersKept();
 
 	/**
 	 * (tc.Speed.HoldersLock.) Whose each province is (its holder, its lawful owner and the League's members) is changed

@@ -19,8 +19,11 @@ namespace CampaignTextures
 	 * Makes a picture from pixels, with the smaller copies the chip uses when it is seen from far off.
 	 * bColour says the pixels are colours as the eye sees them (sRGB); otherwise they are plain numbers.
 	 * bTile says the picture repeats; otherwise its edge is held.
+	 * bSharp says it is read without smoothing between its pixels (each pixel is a value of its own, not a shade
+	 * between neighbours). (Speed, tc.Speed.PictureOnce: set here, the picture is made once. Set on the picture after
+	 * it is made, it has to be made again, and that second making waits for the drawing thread.)
 	 */
-	UTexture2D* Create(int32 Width, int32 Height, const TArray<FColor>& Pixels, bool bColour, bool bTile, const FName& Name);
+	UTexture2D* Create(int32 Width, int32 Height, const TArray<FColor>& Pixels, bool bColour, bool bTile, const FName& Name, bool bSharp = false);
 
 	/**
 	 * (Speed, 17 November 2026.) A picture's every level worked out ahead, on any thread: the full size first, then each
@@ -38,7 +41,7 @@ namespace CampaignTextures
 		bool Fits(int32 InWidth, int32 InHeight, bool bInColour, const TArray<FColor>& Pixels) const;
 	};
 	void MakeLevels(int32 Width, int32 Height, const TArray<FColor>& Pixels, bool bColour, FLevels& Out);
-	UTexture2D* CreateFromLevels(const FLevels& Levels, bool bTile, const FName& Name);
+	UTexture2D* CreateFromLevels(const FLevels& Levels, bool bTile, const FName& Name, bool bSharp = false);
 
 	/** Paints new pixels into a picture made by Create. The size must be the same. */
 	void Update(UTexture2D* Texture, const TArray<FColor>& Pixels);

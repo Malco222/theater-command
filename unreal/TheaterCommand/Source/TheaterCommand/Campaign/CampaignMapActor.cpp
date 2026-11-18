@@ -1647,6 +1647,7 @@ FVector ACampaignMapActor::SurfacePointKept(double X, double Y, double Lift) con
 
 void ACampaignMapActor::ForgetKeptPoints(const FBox2D& Box)
 {
+	ForgetBorderEdges(Box); // (the frontier lines kept on those points: tc.Speed.BordersKept)
 	if (KeptPoints.Num() == 0 || !Box.bIsValid)
 	{
 		return;
@@ -1966,10 +1967,14 @@ void ACampaignMapActor::PaintGround()
 	ReliefPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Relief, false, false, TEXT("TableRelief"));
 	MasksPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Masks, false, false, TEXT("TableMasks"));
 	CoverPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Cover, false, false, TEXT("TableCover"));
-	LiePicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Lie, false, false, TEXT("TableLie"));
-	if (LiePicture)
+	// (an angle half way between two provinces' angles is neither's: no smoothing)
+	// (Speed, tc.Speed.PictureOnce: made unsmoothed from the first, not made and then made again, which waits for the
+	// drawing thread. The same picture either way.)
+	const bool bPictureOnce = TheaterSpeed::PictureOnce();
+	LiePicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Lie, false, false, TEXT("TableLie"), bPictureOnce);
+	if (LiePicture && !bPictureOnce)
 	{
-		LiePicture->Filter = TF_Nearest; // (an angle half way between two provinces' angles is neither's: no smoothing)
+		LiePicture->Filter = TF_Nearest;
 		LiePicture->UpdateResource();
 	}
 	{
@@ -2001,8 +2006,8 @@ void ACampaignMapActor::PaintGround()
 		const double Share = Pixels.Num() > 0 ? 2.0 / (255.0 * Pixels.Num()) : 0.0;
 		QuiltMean = Pixels.Num() > 0 ? FLinearColor(Sum[0] * Share, Sum[1] * Share, Sum[2] * Share) : FLinearColor::White;
 	}
-	FieldsPicture = CampaignTextures::Create(CampaignTextures::FieldsSize, CampaignTextures::FieldsSize, Pixels, false, true, TEXT("TableFields"));
-	if (FieldsPicture)
+	FieldsPicture = CampaignTextures::Create(CampaignTextures::FieldsSize, CampaignTextures::FieldsSize, Pixels, false, true, TEXT("TableFields"), bPictureOnce);
+	if (FieldsPicture && !bPictureOnce)
 	{
 		FieldsPicture->Filter = TF_Nearest;
 		FieldsPicture->UpdateResource();
@@ -2666,14 +2671,15 @@ void ACampaignMapActor::BuildWorld()
 		});
 	}
 	WorldPictures.Reset();
-	auto Picture = [this](const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour, const TCHAR* Name)
+	auto Picture = [this](const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour, const TCHAR* Name, bool bSharp = false)
 	{
-		UTexture2D* Made = CampaignTextures::Create(Wide, High, Pixels, bColour, false, Name);
+		UTexture2D* Made = CampaignTextures::Create(Wide, High, Pixels, bColour, false, Name, bSharp);
 		WorldPictures.Add(Made);
 		return Made;
 	};
-	UTexture2D* Lie = Picture(WorldPaint.Lie, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldLie"));
-	if (Lie)
+	const bool bPictureOnce = TheaterSpeed::PictureOnce(); // (speed: see PaintGround)
+	UTexture2D* Lie = Picture(WorldPaint.Lie, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldLie"), bPictureOnce);
+	if (Lie && !bPictureOnce)
 	{
 		Lie->Filter = TF_Nearest;
 		Lie->UpdateResource();
@@ -3034,15 +3040,15 @@ void ACampaignMapActor::PrepareFineSheet(FFineSheet& Sheet, const TSet<int32>& H
 void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 {
 	THEATER_SPEED_SCOPE(DressFineSheet);
-	auto Picture = [this, &Sheet](const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour, const TCHAR* Name)
+	auto Picture = [this, &Sheet](const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour, const TCHAR* Name, bool bSharp = false)
 	{
 		// (Speed.) Made with the sheet where that is still this very picture: the same size and kind, and the same pixels
 		// at full size, which the repaint of ground that changed hands may have changed since. Otherwise made here.
 		const FName Called(*FString::Printf(TEXT("Fine%s_%d_%d"), Name, Sheet.Key.X, Sheet.Key.Y));
 		const CampaignTextures::FLevels* Ready = Sheet.Ahead.Find(FName(Name));
 		UTexture2D* Made = Ready && Ready->Fits(Wide, High, bColour, Pixels)
-			? CampaignTextures::CreateFromLevels(*Ready, false, Called)
-			: CampaignTextures::Create(Wide, High, Pixels, bColour, false, Called);
+			? CampaignTextures::CreateFromLevels(*Ready, false, Called, bSharp)
+			: CampaignTextures::Create(Wide, High, Pixels, bColour, false, Called, bSharp);
 		Sheet.Kept.Add(Made);
 		FineKeep.Add(Made);
 		return Made;
@@ -3058,11 +3064,18 @@ void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 	if (Sheet.DressStage == 0)
 	{
 		THEATER_SPEED_SCOPE(DressPaint);
-		UTexture2D* Lie = Picture(Painted.Lie, Painted.NX, Painted.NY, false, TEXT("Lie"));
-		if (Lie)
+		// (Speed, tc.Speed.PictureOnce: made unsmoothed from the first. Made smoothed and then again unsmoothed, the
+		// second making waited for the drawing thread: about 32 ms of every sheet in the builder's logs, 110 at worst.)
+		const bool bPictureOnce = TheaterSpeed::PictureOnce();
+		UTexture2D* Lie = nullptr;
 		{
-			Lie->Filter = TF_Nearest;
-			Lie->UpdateResource();
+			THEATER_SPEED_SCOPE(DressLie);
+			Lie = Picture(Painted.Lie, Painted.NX, Painted.NY, false, TEXT("Lie"), bPictureOnce);
+			if (Lie && !bPictureOnce)
+			{
+				Lie->Filter = TF_Nearest;
+				Lie->UpdateResource();
+			}
 		}
 		Sheet.LandPaint = UMaterialInstanceDynamic::Create(LandMaterial->Parent, this);
 		Sheet.LandPaint->CopyParameterOverrides(LandMaterial);
@@ -3351,6 +3364,19 @@ void ACampaignMapActor::BuildSeaMesh()
 void ACampaignMapActor::BuildBorders()
 {
 	THEATER_SPEED_SCOPE(BuildBorders);
+	// (Speed, ruling b414, build 1596: this took 22 to 100 ms each time the ink arrived, laying every line of the world
+	// again for the few edges whose kind had changed. tc.Speed.BordersKept keeps the lines' points and hands over only
+	// the kinds of line that changed: BuildBordersKept. The same lines either way. It reads the points SurfacePointKept
+	// keeps, so with tc.Speed.KeptHeights off the lines are laid here, as before.)
+	if (TheaterSpeed::BordersKept() && TheaterSpeed::KeptHeights())
+	{
+		BuildBordersKept();
+		return;
+	}
+	for (bool& bStale : bBorderLineStale)
+	{
+		bStale = true; // (laid here whole: the kept way hands every line over again next time)
+	}
 	BorderMesh->ClearAllMeshSections();
 
 	// All the map's lines are dark brown ink, never pure black, and each kind has one weight. A frontier is inked
@@ -3494,6 +3520,260 @@ void ACampaignMapActor::BuildBorders()
 		FaintPale.Commit(BorderMesh, 2, ProvincePaleInk);
 	}
 	UE_LOG(LogTheater, Log, TEXT("Borders: %d frontier edges, %d region edges"), NationalCount, RegionCount);
+}
+
+void ACampaignMapActor::LearnBorderEdges()
+{
+	THEATER_SPEED_SCOPE(LearnBorderEdges);
+	// (The edges BuildBorders draws, found the way it finds them, in the order it draws them: the same outlines, the same
+	// teeth left out, the same province across each edge. Only the edges a line is drawn along are kept.)
+	BorderEdges.Reset();
+	for (int32 RegionIndex = 0; RegionIndex < Data.Regions.Num(); ++RegionIndex)
+	{
+		const FCampaignRegion& Region = Data.Regions[RegionIndex];
+		for (const TArray<FVector2D>& Outline : Region.Polygons)
+		{
+			double SignedArea = 0.0;
+			for (int32 i = 0, n = Outline.Num(); i < n; ++i)
+			{
+				SignedArea += Outline[i].X * Outline[(i + 1) % n].Y - Outline[(i + 1) % n].X * Outline[i].Y;
+			}
+			const double Outward = SignedArea >= 0.0 ? 1.0 : -1.0;
+
+			// (the teeth left out of the line: see BuildBorders)
+			TArray<FVector2D> Ring = Outline;
+			for (int32 Pass = 0; Pass < 4; ++Pass)
+			{
+				bool bCut = false;
+				for (int32 i = 0; i < Ring.Num() && Ring.Num() > 4; ++i)
+				{
+					const int32 Count = Ring.Num();
+					const FVector2D Into = Ring[i] - Ring[(i + Count - 1) % Count], Onward = Ring[(i + 1) % Count] - Ring[i];
+					const double LongIn = Into.Size(), LongOn = Onward.Size();
+					if (LongIn > 1e-6 && LongOn > 1e-6 && LongIn < 2.6 && LongOn < 2.6 && FVector2D::DotProduct(Into, Onward) / (LongIn * LongOn) < -0.4)
+					{
+						Ring.RemoveAt(i);
+						--i;
+						bCut = true;
+					}
+				}
+				if (!bCut)
+				{
+					break;
+				}
+			}
+			const bool bTrimmed = Ring.Num() != Outline.Num();
+
+			for (int32 i = 0, n = Ring.Num(); i < n; ++i)
+			{
+				const FVector2D A = Ring[i];
+				const FVector2D B = Ring[(i + 1) % n];
+				const double Length = FVector2D::Distance(A, B);
+				if (Length < 0.05)
+				{
+					continue;
+				}
+				const FVector2D Dir = (B - A) / Length;
+				const FVector2D Side = FVector2D(Dir.Y, -Dir.X) * Outward;
+				const FVector2D Probe = (A + B) * 0.5 + Side * 0.35;
+				int32 Other = Data.FindRegionAt(Probe.X, Probe.Y);
+				for (const double Further : { 0.8, 1.3 })
+				{
+					if (bTrimmed && Other == Region.Id)
+					{
+						Other = Data.FindRegionAt(Probe.X + Side.X * (Further - 0.35), Probe.Y + Side.Y * (Further - 0.35));
+					}
+				}
+				if (Other == INDEX_NONE || Other == Region.Id || Other < Region.Id)
+				{
+					continue; // coast, or a line the neighbour draws
+				}
+				FBorderEdge& Edge = BorderEdges.AddDefaulted_GetRef();
+				Edge.Region = RegionIndex;
+				Edge.Other = Other;
+				Edge.A = A;
+				Edge.Dir = Dir;
+				Edge.Side = Side;
+				Edge.Length = Length;
+				Edge.Steps = FMath::Max(1, FMath::CeilToInt32(Length / 1.4));
+				Edge.Bounds = FBox2D(ForceInit);
+				Edge.Bounds += A;
+				Edge.Bounds += B;
+				Edge.Bounds = Edge.Bounds.ExpandBy(0.5); // (the widest ribbon is 0.2 either side, and runs on 0.12 at each end)
+			}
+		}
+	}
+	BorderEdgesFor = Data.Regions.Num();
+	for (bool& bStale : bBorderLineStale)
+	{
+		bStale = true;
+	}
+}
+
+void ACampaignMapActor::BuildBordersKept()
+{
+	// (The same inks, widths and steps as BuildBorders; see there.)
+	const FColor NationalInk = FromHex(TEXT("1E1612")).ToFColor(true);
+	const FColor RegionInk = FromHex(TEXT("1E1814")).ToFColor(false);
+	const FColor RegionInkPale = FromHex(TEXT("F4E8CC")).ToFColor(false);
+	const double Lift = 0.13;
+
+	if (BorderEdgesFor != Data.Regions.Num())
+	{
+		LearnBorderEdges();
+	}
+	const float GroundScale = VerticalScale * UnitScale;
+	if (BorderEdgesScale != GroundScale)
+	{
+		// (the ground is laid at another height: SurfacePointKept forgets every point it kept, and every ribbon goes too)
+		for (FBorderEdge& Edge : BorderEdges)
+		{
+			Edge.Laid[0].Empty();
+			Edge.Laid[1].Empty();
+		}
+		for (bool& bStale : bBorderLineStale)
+		{
+			bStale = true;
+		}
+		BorderEdgesScale = GroundScale;
+	}
+
+	// Which line each edge is now. An edge that has become another kind of line takes both its old section and its new
+	// one to be handed over again.
+	int32 NationalCount = 0, RegionCount = 0;
+	TArray<int8> DarkOf;
+	DarkOf.Init(-1, Data.Regions.Num());
+	for (FBorderEdge& Edge : BorderEdges)
+	{
+		const FCampaignRegion& Region = Data.Regions[Edge.Region];
+		const bool bNational = Data.Regions[Edge.Other].Owner != Region.Owner;
+		int32 Line = 0;
+		if (!bNational)
+		{
+			int8& Dark = DarkOf[Edge.Region];
+			if (Dark < 0)
+			{
+				const FCampaignNation* Whose = Data.FindNation(Region.Owner);
+				Dark = Whose && (0.30f * Whose->Color.R + 0.59f * Whose->Color.G + 0.11f * Whose->Color.B) / 255.0f < 0.42f ? 1 : 0;
+			}
+			Line = Dark ? 2 : 1;
+		}
+		(bNational ? NationalCount : RegionCount)++;
+		if (Edge.Line != Line)
+		{
+			if (Edge.Line != INDEX_NONE)
+			{
+				bBorderLineStale[Edge.Line] = true;
+			}
+			bBorderLineStale[Line] = true;
+			Edge.Line = Line;
+		}
+	}
+
+	for (int32 Line = 0; Line < 3; ++Line)
+	{
+		if (!bBorderLineStale[Line])
+		{
+			continue; // (no edge of this kind has changed, nor the ground under one: it stands as it was handed over)
+		}
+		bBorderLineStale[Line] = false;
+		const bool bNational = Line == 0;
+		const double HalfWidth = bNational ? 0.2 : 0.12;
+		const FColor Ink = bNational ? NationalInk : Line == 2 ? RegionInkPale : RegionInk;
+		FCampaignMeshBuffers Into;
+		{
+			int32 Points = 0, Faces = 0;
+			for (const FBorderEdge& Edge : BorderEdges)
+			{
+				if (Edge.Line == Line)
+				{
+					Points += 2 * (Edge.Steps + 1);
+					Faces += 2 * Edge.Steps;
+				}
+			}
+			Into.Vertices.Reserve(Points);
+			Into.Normals.Reserve(Points);
+			Into.Colors.Reserve(Points);
+			Into.UVs.Reserve(Points);
+			Into.Tangents.Reserve(Points);
+			Into.Triangles.Reserve(Faces * 3);
+		}
+		for (FBorderEdge& Edge : BorderEdges)
+		{
+			if (Edge.Line != Line)
+			{
+				continue;
+			}
+			TArray<FVector>& Laid = Edge.Laid[bNational ? 1 : 0];
+			if (Laid.Num() != 2 * (Edge.Steps + 1))
+			{
+				// Lay the line over the relief as a ribbon, a short step at a time (as BuildBorders does, point for point).
+				Laid.SetNumUninitialized(2 * (Edge.Steps + 1));
+				for (int32 k = 0; k <= Edge.Steps; ++k)
+				{
+					const double T = k == 0 ? -HalfWidth * 0.6 : (k == Edge.Steps ? Edge.Length + HalfWidth * 0.6 : Edge.Length * k / Edge.Steps);
+					const FVector2D P = Edge.A + Edge.Dir * T;
+					const FVector2D L = P + Edge.Side * HalfWidth;
+					const FVector2D R = P - Edge.Side * HalfWidth;
+					Laid[2 * k] = SurfacePointKept(L.X, L.Y, Lift);
+					Laid[2 * k + 1] = SurfacePointKept(R.X, R.Y, Lift);
+				}
+			}
+			int32 PrevLeft = INDEX_NONE, PrevRight = INDEX_NONE;
+			for (int32 k = 0; k <= Edge.Steps; ++k)
+			{
+				const int32 Left = Into.AddVertex(Laid[2 * k], FVector::UpVector, Ink);
+				const int32 Right = Into.AddVertex(Laid[2 * k + 1], FVector::UpVector, Ink);
+				if (PrevLeft != INDEX_NONE)
+				{
+					Into.AddTriangleFacingUp(PrevLeft, PrevRight, Left);
+					Into.AddTriangleFacingUp(PrevRight, Left, Right);
+				}
+				PrevLeft = Left;
+				PrevRight = Right;
+			}
+		}
+		THEATER_SPEED_SCOPE(BordersCommit);
+		if (!Into.Commit(BorderMesh, Line, bNational ? InkMaterial : Line == 2 ? ProvincePaleInk : ProvinceInk))
+		{
+			BorderMesh->ClearMeshSection(Line); // (no edge of this kind is left)
+		}
+	}
+	UE_LOG(LogTheater, Log, TEXT("Borders: %d frontier edges, %d region edges"), NationalCount, RegionCount);
+}
+
+void ACampaignMapActor::ForgetBorderEdges(const FBox2D& Box)
+{
+	if (BorderEdges.Num() == 0 || !Box.bIsValid)
+	{
+		return;
+	}
+	// (SurfacePointKept forgets the squares of KeptSquare units that come within a unit of Box, in the turn of the world
+	// they are kept in. Every ribbon with a point that may be among them is laid again; one laid again where its points
+	// are all still kept is laid the same.)
+	const double Slack = KeptSquare + 2.0;
+	const bool bRound = Data.bWorld && Data.WorldWidth > 0.0;
+	for (FBorderEdge& Edge : BorderEdges)
+	{
+		if ((Edge.Laid[0].Num() == 0 && Edge.Laid[1].Num() == 0)
+			|| Edge.Bounds.Max.Y + Slack < Box.Min.Y || Edge.Bounds.Min.Y - Slack > Box.Max.Y)
+		{
+			continue;
+		}
+		// (round a world, Box a whole number of turns east or west of the edge is over it too: is there such a number?)
+		const bool bOver = bRound
+			? FMath::CeilToDouble((Edge.Bounds.Min.X - Slack - Box.Max.X) / Data.WorldWidth) <= FMath::FloorToDouble((Edge.Bounds.Max.X + Slack - Box.Min.X) / Data.WorldWidth)
+			: Edge.Bounds.Max.X + Slack >= Box.Min.X && Edge.Bounds.Min.X - Slack <= Box.Max.X;
+		if (bOver)
+		{
+			Edge.Laid[0].Empty();
+			Edge.Laid[1].Empty();
+			if (Edge.Line != INDEX_NONE)
+			{
+				bBorderLineStale[Edge.Line] = true;
+			}
+		}
+	}
 }
 
 void ACampaignMapActor::SetLand(const FLandFeatures& InLand)

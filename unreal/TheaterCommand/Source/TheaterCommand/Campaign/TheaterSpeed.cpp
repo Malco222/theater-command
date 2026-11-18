@@ -66,6 +66,12 @@ namespace
 	TAutoConsoleVariable<int32> CVarFrontWeights(
 		TEXT("tc.Speed.FrontWeights"), 1,
 		TEXT("1 draws the weight of the front line the eye is at when the front changes, and the other weight a frame after; 0 draws both at once, as before."));
+	TAutoConsoleVariable<int32> CVarBordersKept(
+		TEXT("tc.Speed.BordersKept"), 1,
+		TEXT("1 keeps the frontier lines' points from one drawing to the next and hands only the kinds of line that changed to the graphics chip again; 0 lays and hands over every line each time, as before. The same lines either way."));
+	TAutoConsoleVariable<int32> CVarPictureOnce(
+		TEXT("tc.Speed.PictureOnce"), 1,
+		TEXT("1 makes a picture read without smoothing that way from the first; 0 makes it smoothed and then again unsmoothed, waiting for the drawing thread, as before. The same picture either way."));
 	TAutoConsoleVariable<int32> CVarFogAside(
 		TEXT("tc.Speed.FogAside"), 1,
 		TEXT("1 lays the haze beyond the map on another thread when it moves and puts it on the table a picture a frame after; 0 lays it all in the frame of the press, as before."));
@@ -337,6 +343,16 @@ namespace TheaterSpeed
 	bool FrontWeights()
 	{
 		return CVarFrontWeights.GetValueOnGameThread() != 0;
+	}
+
+	bool PictureOnce()
+	{
+		return CVarPictureOnce.GetValueOnGameThread() != 0;
+	}
+
+	bool BordersKept()
+	{
+		return CVarBordersKept.GetValueOnGameThread() != 0;
 	}
 
 	FHoldersRead::FHoldersRead()

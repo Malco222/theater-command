@@ -1134,6 +1134,32 @@ private:
 	uint64 FrontLineDue = 0, BordersDue = 0; // (speed) the frame (GFrameCounter) in which the front line and the frontier lines, put off by a press, are drawn; 0 none
 	TArray<int32> BorderAcross; // (for each edge of each outline, in the order the frontier lines are built: the province across it)
 	int32 BorderAcrossFor = 0; // (how many provinces the map had when that was found: another map, and it is found again)
+	/**
+	 * (Speed, tc.Speed.BordersKept.) One edge of a province's outline that a line is drawn along, learned once: the
+	 * outlines never change, only who holds the ground either side of them, and with it which of the three lines the
+	 * edge is (the frontier, the province line, the pale province line on dark ground) and how wide.
+	 */
+	struct FBorderEdge
+	{
+		int32 Region = INDEX_NONE; // (where in the map's provinces the one whose outline it is stands: of the two, the one with the lower number)
+		int32 Other = INDEX_NONE; // (the province across it)
+		FVector2D A = FVector2D::ZeroVector;
+		FVector2D Dir = FVector2D::ZeroVector;
+		FVector2D Side = FVector2D::ZeroVector;
+		double Length = 0.0;
+		int32 Steps = 1;
+		FBox2D Bounds = FBox2D(ForceInit); // (where its ribbon's points lie, and a little more)
+		int32 Line = INDEX_NONE; // (the section it was last laid in: 0 the frontier, 1 the province line, 2 the pale one)
+		TArray<FVector> Laid[2]; // (its ribbon's points as laid, at a province line's width [0] and a frontier's [1]: made when first wanted, and again when the ground under them changes)
+	};
+	TArray<FBorderEdge> BorderEdges;
+	int32 BorderEdgesFor = -1; // (how many provinces the map had when they were learned)
+	float BorderEdgesScale = 0.0f; // (the height the ground was laid at then: another, and every ribbon is laid again)
+	bool bBorderLineStale[3] = { true, true, true }; // (a section to be handed to the graphics chip again)
+	void LearnBorderEdges();
+	void BuildBordersKept();
+	/** A fine sheet has stood up or been taken away over Box: the frontier lines over and around it are laid again next time. */
+	void ForgetBorderEdges(const FBox2D& Box);
 	double InkBegan = 0.0, PaintStepped = 0.0;
 	bool bInkBorders = false; // the frontier's lines are still to be drawn in their new place
 	FIntRect InkBox = FIntRect(0, 0, 0, 0);
