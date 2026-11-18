@@ -85,5 +85,10 @@
     "Rio de Janeiro": 1, "Buenos Aires": 1, "Santiago": 1, "Lima": 1
   },
   "guns": { "soften": 0.15, "softenMost": 0.6, "thicken": 0.05, "thickenMost": 0.2 },
-  "ai": { "aaAfterRaid": true, "guns": { "per": 6, "most": 10, "facing": 3, "fit": 0.9 } }
+  "ai": {
+    "aaAfterRaid": true,
+    "guns": { "per": 6, "most": 10, "facing": 3, "fit": 0.9 },
+    "_programme": "Rulings 68(b) and 70(a): a computer staff's own orders of ships and aircraft, in the grand campaign from stop 'fromStop' of the history dial (below it history's schedules are the whole of its building). It buys from this arsenal as a player does, at these prices and under the same rules of yard, factory and technology, after its corps, guns and works, one order a month for its navy and one for its air force. It pays in two ways: with its share ('rate' of the month's income set aside for the navy, and as much for the air force, while there is something the arsenal would build for it; never taking the treasury below the staff's reserve nor holding more than the dearest thing it wants costs), and with idle money (what the treasury holds over the price of a corps of infantry and the reserve, or over the reserve alone while it has no men for a corps). By its war and its character: destroyers when a convoy route that feeds it lost 'bled' of its cargo last month; fighters first while its factories are being bombed; submarines when it is at war with a nation a convoy route feeds and has submarines out raiding; a carrier when its navy has carriers; and wings of fighters and bombers until what it has bought stands at 'share' of its air force's own establishment. 'each' is the most of a kind it has on order at a time.",
+    "programme": { "fromStop": 3, "bled": 0.1, "share": 0.5, "rate": { "ship": 0.06, "air": 0.06 }, "each": { "dd": 1, "ss": 1, "cv": 1, "ftr": 1, "bmr": 1 } }
+  }
 }
