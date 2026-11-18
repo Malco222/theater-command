@@ -451,8 +451,11 @@ class Clip:
         self.ch.append((part, kind, axis, fn))
         return self
 
-    def event(self, t, fx, socket, cue=None):
-        self.events.append({"t": round(t, 3), "fx": fx, "socket": socket, "cue": cue})
+    def event(self, t, fx, socket, cue=None, cue_loop=False):
+        e = {"t": round(t, 3), "fx": fx, "socket": socket, "cue": cue}
+        if cue_loop:
+            e["cue_loop"] = True                # (the cue loops from t until the model is taken away)
+        self.events.append(e)
         return self
 
     def times(self):
@@ -1111,10 +1114,10 @@ class FieldGun:
         c.add("carriage", "turn", lambda t: _damped(t, rad(0.18), 0.22, 0.12) * (1.0 - smoothstep(0.6, 0.9, t)))
         bo = self.BO
         c.add("breech", "slide", lambda t: bo * (smoothstep(1.2, 1.3, t) - smoothstep(2.05, 2.2, t)))
-        c.event(0.0, "muzzle_flash_big", "socket_muzzle", None)
+        c.event(0.0, "muzzle_flash_big", "socket_muzzle", "field_gun_fire")
         c.event(0.0, "muzzle_blast_dust", "socket_muzzle", None)
-        c.event(1.2, "case_eject", "socket_breech", None)
-        c.event(2.05, "breech_close", "socket_breech", None)
+        c.event(1.2, "case_eject", "socket_breech", "tank_shell_case")
+        c.event(2.05, "breech_close", "socket_breech", "field_gun_breech")
         C.append(c)
 
         tow, up, close = self.TOW, self.TRAVEL_UP, self.CLOSE
@@ -1989,7 +1992,7 @@ class Lorry:
         D, LOOP = self.DRIVE_M, self.DRIVE_LOOP
         wheels = [f"wheel_{a}{b}" for a in "fr" for b in "lr"]
 
-        c = Clip("idle", 2.0, True, None, "engine running, standing still")
+        c = Clip("idle", 2.0, True, "lorry_idle_loop", "engine running, standing still")
         c.add("body", "turn", lambda t: rad(0.05) * sin_(6, t, 0.5) + rad(0.02) * sin_(11.5, t))
         c.add("body", "turn", lambda t: rad(0.12) * sin_(3, t) + rad(0.05) * sin_(6, t, 2.0), axis=(1, 0, 0))
         c.add("body", "slide", lambda t: 0.0018 * sin_(6, t) + 0.0008 * sin_(11.5, t, 1.0), axis=(0, 0, 1))
@@ -1997,7 +2000,7 @@ class Lorry:
         c.event(0.0, "exhaust_idle", "socket_exhaust")
         C.append(c)
 
-        c = Clip("drive", LOOP, True, None, f"driving forward: {D:.3f} m a loop", metres=D)
+        c = Clip("drive", LOOP, True, "lorry_drive_loop", f"driving forward: {D:.3f} m a loop", metres=D)
         c.travel = lambda t: D * t / LOOP
         for wname in wheels:
             c.add(wname, "spin", lambda t: D * t / LOOP / self.R)
@@ -2046,9 +2049,9 @@ class Lorry:
         c.add("bonnet_r", "turn", keys([(0.0, 0.0), (0.12, 0.0), (0.3, 1.75), (0.42, 1.3), (0.55, 1.62), (0.66, 1.45), (0.78, 1.55), (0.9, 1.5)]))
         c.add("door_l", "turn", keys([(0.0, 0.0), (0.5, 0.0), (0.85, 1.2), (1.0, 1.05), (1.15, 1.15), (1.3, 1.12)]))
         c.add("tilt", "slide", lambda t: _damped(t, 0.02, 0.3, 0.3))
-        c.event(0.0, "hit", None, "tank_knocked_out")
+        c.event(0.0, "hit", None, "shell_impact_near")
         c.event(0.12, "smoke_burst", "socket_engine")
-        c.event(1.0, "fire_loop", "socket_cab_fire")
+        c.event(1.0, "fire_loop", "socket_cab_fire", "fire_small_loop", cue_loop=True)
         c.event(1.6, "smoke_loop", "socket_engine")
         C.append(c)
         return C
@@ -2804,14 +2807,14 @@ class HalfTrack:
         rad = math.radians
         C = []
         D, LOOP = self.DRIVE_M, self.DRIVE_LOOP
-        c = Clip("idle", 2.0, True, None, "engine running, standing still")
+        c = Clip("idle", 2.0, True, "halftrack_idle_loop", "engine running, standing still")
         c.add("body", "turn", lambda t: rad(0.05) * sin_(6, t, 0.5) + rad(0.02) * sin_(11.5, t))
         c.add("body", "turn", lambda t: rad(0.1) * sin_(3, t) + rad(0.04) * sin_(6, t, 2.0), axis=(1, 0, 0))
         c.add("body", "slide", lambda t: 0.0015 * sin_(6, t) + 0.0007 * sin_(11.5, t, 1.0), axis=(0, 0, 1))
         c.event(0.0, "exhaust_idle", "socket_exhaust")
         C.append(c)
 
-        c = Clip("drive", LOOP, True, None, f"driving forward: {D:.3f} m a loop", metres=D)
+        c = Clip("drive", LOOP, True, "halftrack_drive_loop", f"driving forward: {D:.3f} m a loop", metres=D)
         self.rolling(c, lambda t: D * t / LOOP)
         c.add("body", "turn", lambda t: rad(0.45) * sin_(0.5, t) + rad(0.2) * sin_(1.5, t, 0.7) + rad(0.05) * sin_(8, t))
         c.add("body", "turn", lambda t: rad(0.5) * sin_(0.5, t, 1.9) + rad(0.2) * sin_(2.0, t, 0.4), axis=(1, 0, 0))
@@ -2851,9 +2854,9 @@ class HalfTrack:
         c.add("bonnet_l", "turn", keys([(0.0, 0.0), (0.1, 0.0), (0.28, 1.6), (0.4, 1.15), (0.52, 1.45), (0.64, 1.3), (0.76, 1.38), (0.9, 1.35)]))
         c.add(self.DOORS[0], "turn", keys([(0.0, 0.0), (0.45, 0.0), (0.8, 1.55), (0.95, 1.35), (1.1, 1.5), (1.25, 1.45)]))
         c.add("mg", "turn", lambda t: _ease(t, 0.05, 0.4, 0.0, rad(14.0)) + _damped(t, rad(4.0), 0.35, 0.2, 0.4))
-        c.event(0.0, "hit", None, "tank_knocked_out")
+        c.event(0.0, "hit", None, "shell_impact_near")
         c.event(0.1, "smoke_burst", "socket_engine")
-        c.event(1.0, "fire_loop", "socket_fire")
+        c.event(1.0, "fire_loop", "socket_fire", "fire_small_loop", cue_loop=True)
         c.event(1.6, "smoke_loop", "socket_engine")
         C.append(c)
         return C
@@ -3097,8 +3100,9 @@ class HalfTrack:
                     rivet_row(g, fold_a + Vector((0.05, side * 0.008, 0.03)), fold_b + Vector((-0.05, side * 0.008, 0.03)), 22, Vector((0, side, 0)), "body", 0.011, "paint")
                     rivet_row(g, Vector((B0 + 0.05, side * (self.YT + 0.008), self.ZT - 0.04)), Vector((self.TOPF - 0.05, side * (self.YT + 0.008), self.ZT - 0.04)), 22,
                               Vector((0, side, 0)), "body", 0.011, "paint")
-                    for x in (B0 + 0.03, B1 - 0.03):
-                        rivet_row(g, Vector((x, side * (self.YF + 0.008), self.ZF + 0.05)), Vector((x, side * (self.YT + 0.008), self.ZT - 0.08)), 6,
+                    # (up the back edge, and up the front edge as it leans back with the visor plate)
+                    for x0, x1 in ((B0 + 0.03, B0 + 0.03), (self.front_x(self.ZF + 0.05) - 0.03, self.front_x(self.ZT - 0.08) - 0.03)):
+                        rivet_row(g, Vector((x0, side * (self.YF + 0.008), self.ZF + 0.05)), Vector((x1, side * (self.YT + 0.008), self.ZT - 0.08)), 6,
                                   Vector((0, side, 0)), "body", 0.011, "paint")
                 else:
                     weld(g, fold_a, fold_b, outn, "body")
@@ -3948,7 +3952,7 @@ def field_gun_shot(fx, t0, where, ground, bore=0.075):
             fx.puff(t + 0.02 + 0.012 * u, Vector((p.x, p.y, z + 0.25)), vel=out * g.uniform(3.0, 7.0) + Vector((0, 0, g.uniform(0.6, 2.2))),
                     life=g.uniform(4.0, 6.0), r=(0.3, g.uniform(1.4, 2.5)), col=DUST, col2=DUST2, alpha=0.55, drag=1.8, rise=0.15, fade_in=0.05,
                     grow=0.5, wind=0.85, squash=(1.0, 1.0, 0.7))
-        fx.light(t, at + facing * 1.2 + Vector((0, 0, 0.5)), 5.0e3 * k, 0.1)
+        fx.light(t + 0.02, at + facing * 1.2 + Vector((0, 0, 0.5)), 1.8e3 * k, 0.08)     # (with the flash, not before it; daylight)
     fx.once(t0, where, make)
 
 
@@ -4068,11 +4072,13 @@ GUN_HEADING = 225.0                           # degrees from +x: firing toward t
 FILM_SHOTS = (0.5, 3.3)                       # seconds into the film
 
 
-def gun_film(unit, w=960, h=540, samples=8, frames=None, seconds=6.0, tag="firing", fps=24):
+def gun_film(unit, w=960, h=540, samples=8, frames=None, seconds=6.0, tag="firing", fps=24, fresh=False):
     """The field gun, crew-less, on the battle stage, firing two rounds: the muzzle blast, the smoke cloud, dust blown up
     in front of the muzzle, the gun jumping on its spades and settling, the breech opening and the case flung out.
     `frames` (a list) renders only those frames, for a look. Writes pictures/<tag>.mp4 and .gif at `fps` frames a second (the
-    clip's keys are at 30 a second; frames between are read between them)."""
+    clip's keys are at 30 a second; frames between are read between them). Frames already on disk are passed over (the
+    scene is still stepped through them, since the smoke remembers), so a run that was stopped carries on; `fresh` clears
+    them first."""
     import battle_set
     t_start = time.time()
     st = Stage(unit, ground=False)
@@ -4145,10 +4151,10 @@ def gun_film(unit, w=960, h=540, samples=8, frames=None, seconds=6.0, tag="firin
     sc.cycles.diffuse_bounces = 1
     sc.cycles.glossy_bounces = 1
     folder = os.path.join(WORK, "clip_" + tag)
-    shutil.rmtree(folder, ignore_errors=True)
+    if fresh or frames is not None:
+        shutil.rmtree(folder, ignore_errors=True)
     os.makedirs(folder, exist_ok=True)
     n = int(round(seconds * fps))
-    k = 1
     for f in range(n):
         t = f / fps
         shake = Vector((0, 0, 0))
@@ -4165,9 +4171,11 @@ def gun_film(unit, w=960, h=540, samples=8, frames=None, seconds=6.0, tag="firin
             c.at(t)
         if frames is not None and f not in frames:
             continue
+        path = os.path.join(folder, f"{f + 1:04d}.png" if frames is None else f"f{f:04d}.png")
+        if frames is None and os.path.exists(path) and os.path.getsize(path) > 0:
+            continue
         tick = time.time()
-        kit.still(os.path.join(folder, f"{k:04d}.png" if frames is None else f"f{f:04d}.png"))
-        k += 1
+        kit.still(path)
         print(f"frame {f}: {time.time() - tick:.1f} s", flush=True)
     if frames is None:
         kit.encode(folder, pic_path(unit, tag), fps=fps)
@@ -4227,11 +4235,11 @@ def _unit_tables(u, w):
     w("")
     w("**Clips** (every clip that moves a bone is an action in the .glb and a take in the .fbx; events and sockets are only in the .json):")
     w("")
-    w("| clip | seconds | loops | metres a loop | events (time: effect at socket, sound cue) | what it is |")
-    w("| --- | ---: | --- | ---: | --- | --- |")
+    w("| clip | seconds | loops | loop cue | metres a loop | events (time: effect at socket, sound cue) | what it is |")
+    w("| --- | ---: | --- | --- | ---: | --- | --- |")
     for c in u.clips():
-        ev = "; ".join(f"{e['t']:.2f}: {e['fx']}" + (f" at {e['socket']}" if e["socket"] else "") + (f", cue `{e['cue']}`" if e["cue"] else "") for e in c.events) or "-"
-        w(f"| `{c.name}` | {c.long} | {'yes' if c.loop else 'no (after: hold)'} | {f'{c.metres:.3f}' if c.metres else '-'} | {ev} | {c.about} |")
+        ev = "; ".join(f"{e['t']:.2f}: {e['fx']}" + (f" at {e['socket']}" if e["socket"] else "") + (f", cue `{e['cue']}`" + (" (loops)" if e.get("cue_loop") else "") if e["cue"] else "") for e in c.events) or "-"
+        w(f"| `{c.name}` | {c.long} | {'yes' if c.loop else 'no (after: hold)'} | {f'`{c.loop_cue}`' if c.loop_cue else '-'} | {f'{c.metres:.3f}' if c.metres else '-'} | {ev} | {c.about} |")
     w("")
 
 
@@ -4260,9 +4268,14 @@ def write_readme(folder):
         w("1. `pictures/sheet.png`: front and rear three-quarter, a close look at the breech, sight and shield, and the game's camera.")
         w("2. `pictures/firing.mp4` (or `.gif`): the gun with no crew on the battle stage, firing two rounds: blast, smoke, dust, the jump, the case.")
         w("3. `pictures/before-after.png`: today's campaign Gun75 beside the battle gun, same light and camera.")
+    elif folder == "lorry":
+        w("1. `pictures/sheet.png`: front and rear three-quarter, a close look at the wing, lamp, cab and tyre, and the game's camera.")
+        w("2. `pictures/before-after.png`: today's campaign Truck beside the battle lorry, same light and camera.")
     else:
-        w("1. `pictures/sheet.png` (one for each model): front and rear three-quarter, a close look, and the game's camera.")
-        w("2. `pictures/before-after.png`: today's campaign model beside the battle one, same light and camera.")
+        w("1. `pictures/sheet_Hanomag.png` and `pictures/sheet_M3Halftrack.png`: front and rear three-quarter, a close look at the "
+          "running gear and belt, and the game's camera.")
+        w("2. `pictures/before-after_Hanomag.png` and `pictures/before-after_M3Halftrack.png`: today's campaign model beside the "
+          "battle one, same light and camera (German paint for the Hanomag, American for the M3).")
     w("")
     w("## The models")
     w("")
@@ -4278,8 +4291,9 @@ def write_readme(folder):
           "range needs, within -5 to +40 degrees. Spin `handwheel_traverse` 30 times and `handwheel_elevate` 40 times as fast as the turns "
           "they make, while they turn (the .json's `controls`).")
         w("- **Fire.** Play `fire` laid over the aim (its turns are small and added to the laid ones). Its events: `muzzle_flash_big` "
-          "and `muzzle_blast_dust` at `socket_muzzle` at 0.0, `case_eject` at `socket_breech` at 1.2 (the breech opens; throw a spent case "
-          "out along the socket's facing), `breech_close` at 2.05. The next round may be fired when the clip ends (2.5 s), or at 2.2 at the "
+          "(sound `field_gun_fire`; the game picks `field_gun_fire_02` at random too) and `muzzle_blast_dust` at `socket_muzzle` at 0.0, "
+          "`case_eject` at `socket_breech` at 1.2 (sound `tank_shell_case`, a stand-in; the breech opens; throw a spent case "
+          "out along the socket's facing), `breech_close` at 2.05 (sound `field_gun_breech`). The next round may be fired when the clip ends (2.5 s), or at 2.2 at the "
           f"soonest. The barrel recoils {g.RL:.2f} m (0.0-0.1 s) and runs out by 0.7; the gun jumps on its spades and settles by 1.25.")
         w("- **Deploy and travel.** `unlimber` (2.0 s): from the towed pose to the firing pose, the spades bite at 2.0 (`dust_puff` "
           f"at each spade). `limber` (2.0 s): the reverse; ends with the legs shut ({-g.CLOSE:.4f} rad), the barrel level for the road "
@@ -4291,9 +4305,9 @@ def write_readme(folder):
         w("- The gun has no engine: `idle` is a still pose (it exists so every unit has one).")
     elif folder == "lorry":
         L = u0
-        w(f"- **Drive.** Play `drive` (loops, {L.DRIVE_M:.3f} m a loop) at a rate of speed (m/s) x {L.DRIVE_LOOP} / {L.DRIVE_M:.3f}; it turns "
+        w(f"- **Drive.** Play `drive` (loops, {L.DRIVE_M:.3f} m a loop; sound `lorry_drive_loop`) at a rate of speed (m/s) x {L.DRIVE_LOOP} / {L.DRIVE_M:.3f}; it turns "
           "the wheels and bobs and rolls the body. When it stops, play `stop` (0.8 s: the body pitches forward on its springs and back), "
-          "then `idle` (loops; the engine shakes the body).")
+          "then `idle` (loops; the engine shakes the body; sound `lorry_idle_loop`).")
         w(f"- **Steer.** Turn `steer_l` and `steer_r` (+ steers right, clockwise seen from above; limits +-0.6 rad), the inner wheel more "
           f"than the outer (Ackermann: tan inner = W / (T - t/2), tan outer = W / (T + t/2), W = {L.FX - L.RX:.2f} m wheelbase, "
           f"t = {2 * (L.FY - 0.12):.2f} m between the king pins, T the turning radius).")
@@ -4302,13 +4316,14 @@ def write_readme(folder):
         w("- **Tow.** A gun hooks on at `socket_tow` (the pintle, 0.70 m up, at the back): see the gun's README.")
         w("- **Knocked out.** Play `knocked_out` (3.0 s, holds its last pose): the lorry jolts, the right front tyre goes flat (the "
           "body settles and lists that way), the bonnet's right half springs open and the driver's (left) door swings open; fire takes hold in the cab at 1.0 (`fire_loop` at "
-          "`socket_cab_fire`), smoke from the engine at 1.6. Sound cue `tank_knocked_out` at 0.0 (placeholder name).")
+          "`socket_cab_fire`, sound `fire_small_loop` looping from then), smoke from the engine at 1.6. Sound `shell_impact_near` at 0.0.")
         w("- The `tilt` (canvas cover) bone breathes a little while driving (a slide of a few millimetres): no need to drive it.")
     else:
         H = u0
         w(f"- **Drive.** Play `drive` (loops) at a rate of speed (m/s) x 2.0 / metres_per_loop (Hanomag {units[0].DRIVE_M:.3f} m, M3 "
-          f"{units[1].DRIVE_M:.3f} m a loop: whole links, so the belt's pattern loops cleanly). It turns the front wheels, the road "
-          "wheels, sprocket and idler, and bobs and rolls the body. Then `stop` (0.8 s) and `idle`.")
+          f"{units[1].DRIVE_M:.3f} m a loop: whole links, so the belt's pattern loops cleanly; sound `halftrack_drive_loop`). It turns "
+          "the front wheels, the road wheels, sprocket and idler, and bobs and rolls the body. Then `stop` (0.8 s) and `idle` "
+          "(sound `halftrack_idle_loop`).")
         w("- **Belts.** The belts (`track_l`, `track_r`, kind `scroll`) are never moved as bones. Each belt's U runs once round it, forward "
           "along the bottom (0 to 1; V across): scroll the track material's U by (metres travelled) / metres_per_u (the .json's `track`; "
           f"Hanomag {units[0].PATH.length:.3f} m, {units[0].PATH.links} links; M3 {units[1].PATH.length:.3f} m, {units[1].PATH.links} "
@@ -4321,7 +4336,7 @@ def write_readme(folder):
           "door(s) (`door_rl`/`door_rr` on the Hanomag, `door_rear` on the M3: + opens) to `socket_door`.")
         w("- **Knocked out.** `knocked_out` (3.0 s, holds): it rocks, settles nose down and lists, the bonnet's left half flies "
           "open, a rear door swings open, the machine-gun is knocked round; `smoke_burst` at the engine at 0.1, `fire_loop` in the "
-          "compartment at 1.0, `smoke_loop` at the engine at 1.6. Sound cue `tank_knocked_out` at 0.0.")
+          "compartment at 1.0 (sound `fire_small_loop` looping from then), `smoke_loop` at the engine at 1.6. Sound `shell_impact_near` at 0.0.")
     w("")
     w("## The file, and how it fits the other battle models")
     w("")
@@ -4342,7 +4357,9 @@ def write_readme(folder):
     w("- Nothing here breaks away, so no part is of kind `free`.")
     w("- LOD1 and LOD2 are skinned to the same skeleton (same bone names) but carry no clips of their own: play LOD0's.")
     w("- Effects named in events (`muzzle_flash_big`, `case_eject`, `dust_trail`, `fire_loop` ...) are names for the game's own "
-      "effects; nothing here builds them. Sound cues are placeholders until the sound director names them.")
+      "effects; nothing here builds them. Sound cues are the sound director's names (keys only; no sound files ship here): an "
+      "event's `cue` plays once at its time, unless the event says `cue_loop` (then it loops from that time until the model "
+      "is taken away); a clip's `loop_cue` plays looping while that clip loops. `stop`, `limber`, `unlimber` and `towed` have no cue.")
     w("")
     w("## Honest notes")
     w("")
@@ -4411,16 +4428,18 @@ def main():
     done_readmes = set()
     for key in models:
         unit = make_unit(key)
+        # (a folder holding more than one model names each one's pictures after it)
+        label = f"_{unit.name}" if sum(1 for k in FOLDER_UNITS.get(unit.folder, ()) if k != "ammo") > 1 else ""
         for step in steps:
             t0 = time.time()
             if step == "export":
                 (export_static if getattr(unit, "static", False) else export_unit)(unit)
             elif step == "before_after" and hasattr(unit, "campaign") and not getattr(unit, "static", False):
-                before_after(unit)
-                deliver_pictures(unit, "before-after.png")
+                before_after(unit, label)
+                deliver_pictures(unit, f"before-after{label}.png")
             elif step == "sheet" and hasattr(unit, "views"):
-                sheet(unit, only=a[a.index("--views") + 1].split(",") if "--views" in a else None)
-                deliver_pictures(unit, "sheet.png")
+                sheet(unit, label, only=a[a.index("--views") + 1].split(",") if "--views" in a else None)
+                deliver_pictures(unit, f"sheet{label}.png")
             elif step == "clip" and hasattr(unit, "battle_clip"):
                 unit.battle_clip()
             elif step == "readme" and not getattr(unit, "static", False):

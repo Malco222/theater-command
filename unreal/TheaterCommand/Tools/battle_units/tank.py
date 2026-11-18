@@ -3027,7 +3027,26 @@ class BattleScene:
         st.sc.cycles.diffuse_bounces = 1
         st.sc.cycles.glossy_bounces = 1
         folder = os.path.join(WORK, "clip_" + out_name)
-        shutil.rmtree(folder, ignore_errors=True)
+        done = set()
+        if frames is None and os.path.isdir(folder):
+            # (resuming after an interruption: keep the frames already made at this size, whole; the scene is still
+            # stepped through them in order, since the smoke remembers)
+            from PIL import Image
+            for fn in sorted(os.listdir(folder)):
+                path = os.path.join(folder, fn)
+                try:
+                    with Image.open(path) as im:
+                        im.load()
+                        good = fn[:4].isdigit() and im.size == (st.sc.render.resolution_x, st.sc.render.resolution_y)
+                except Exception:
+                    good = False
+                if good:
+                    done.add(fn)
+                else:
+                    os.remove(path)
+            print(f"resuming: {len(done)} frames already made", flush=True)
+        else:
+            shutil.rmtree(folder, ignore_errors=True)
         os.makedirs(folder, exist_ok=True)
         n = 1
         for f in range(0, st.sc.frame_end + 1):
@@ -3036,9 +3055,12 @@ class BattleScene:
             self.fx.at(self.now)
             if frames is not None and f not in frames:
                 continue
-            t = time.time()
-            kit.still(os.path.join(folder, f"{n:04d}.png" if frames is None else f"f{f:04d}.png"))
+            name = f"{n:04d}.png" if frames is None else f"f{f:04d}.png"
             n += 1
+            if name in done:
+                continue
+            t = time.time()
+            kit.still(os.path.join(folder, name))
             print(f"frame {f}: {time.time() - t:.1f} s", flush=True)
         if frames is None:
             kit.encode(folder, pic_path(out_name), fps=FPS)
