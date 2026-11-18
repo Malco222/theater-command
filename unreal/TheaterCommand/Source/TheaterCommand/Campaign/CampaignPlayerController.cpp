@@ -2130,6 +2130,30 @@ void ACampaignPlayerController::PressToDo(int32 Index)
 			SetProvinceTab(2);
 		}
 	}
+	else if (Screen.StartsWith(TEXT("siege:")) && Map.IsValid())
+	{
+		// (Brian, 18 November 2026.) A town he besieges: the view goes there and the army round it is taken in hand,
+		// so that its tray, with STORM lit on it, is what he sees. With no army to take up, the province's orders.
+		const int32 Where = FCString::Atoi(*Screen.Mid(6));
+		if (Map->GetData().Regions.IsValidIndex(Where))
+		{
+			if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+			{
+				const FVector2D At = Map->GetData().Regions[Where].Center;
+				Eye->GoTo(Map->MapToWorld(At.X, At.Y), 0.3f);
+			}
+			PutDownFleet();
+			SelectRegion(Where);
+			if (PickUpArmyIn(Where))
+			{
+				CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
+			}
+			else
+			{
+				SetProvinceTab(2);
+			}
+		}
+	}
 	else if (Screen.StartsWith(TEXT("field:")) && Map.IsValid())
 	{
 		// (Version 86: a crowded airfield's row. The view goes to the field and its page is opened, as OPEN THE AIRFIELD does.)
@@ -6998,6 +7022,52 @@ void ACampaignPlayerController::LayOutLook()
 	}
 }
 
+void ACampaignPlayerController::TrayTownOrder(int32 Which)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || ArmyRegion == INDEX_NONE || PickedCorps.Num() == 0 || IsAnswering())
+	{
+		return;
+	}
+	if (Which == 0)
+	{
+		// (Ruling 182: no storm is fought without its card. The card says why where the storm cannot be made.)
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+		OpenStormCard(ArmyRegion, true);
+		return;
+	}
+	// (copies: the tray is set out again as each order is carried out)
+	const TArray<FString> Actions = Which == 1 ? Tray.GarrisonActions : Tray.FieldActions;
+	const int32 Here = ArmyRegion;
+	FString Said;
+	bool bAny = false;
+	for (const FString& Action : Actions)
+	{
+		FString Note;
+		if (Session->OrderInProvince(Action, Here, Note))
+		{
+			bAny = true;
+			Said = Note;
+		}
+		else if (Said.IsEmpty())
+		{
+			Said = Note;
+		}
+	}
+	if (bAny)
+	{
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
+		CampaignSounds::Play(this, TEXT("marching"), 0.5f);
+	}
+	RefreshOrders();
+	RefreshRegionPanel(Here);
+	if (!Said.IsEmpty())
+	{
+		Notify(Said, 6.0);
+	}
+}
+
 void ACampaignPlayerController::SetPending(int32 RegionId)
 {
 	PendingTarget = RegionId;
@@ -7007,6 +7077,12 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		: bByRail
 		? TEXT("Click ground tinted blue, then click it again to send them by rail. Esc, or a click on their flag, puts them down.")
 		: TEXT("Right-click where they should go, or drag the flag there. Esc puts them down."));
+	if (!bBySea && !bByRail && !Tray.StormButton.IsEmpty())
+	{
+		// (an army that stands round an enemy town is told how the town is attacked)
+		Tray.Hint = FText::FromString(Tray.StormButton.ToString().Left(1) + Tray.StormButton.ToString().Mid(1).ToLower()
+			+ TEXT(": press its button above, or right-click the town, to attack it. A right-click elsewhere marches them away. Esc puts them down."));
+	}
 	{
 		const FString Garrison = GarrisonSays();
 		if (!Garrison.IsEmpty())
@@ -7514,6 +7590,47 @@ void ACampaignPlayerController::RefreshOrders()
 	if (const FString* Could = View.Joins.Find(ArmyRegion))
 	{
 		Tray.JoinButton = FText::FromString(FString::Printf(TEXT("ASK %s CORPS TO JOIN"), *Could->ToUpper()));
+	}
+	// The town's orders for the army in hand, on its own tray (Brian, 18 November 2026): storm the town it stands
+	// round, go into the town of the province it stands in, or come out of it. They are the province's own orders,
+	// offered by the rules; a storm still opens its card first (ruling 182).
+	Tray.StormButton = Tray.StormTip = Tray.GarrisonButton = Tray.GarrisonTip = Tray.FieldButton = FText::GetEmpty();
+	Tray.GarrisonActions.Reset();
+	Tray.FieldActions.Reset();
+	if (ArmyRegion != INDEX_NONE && PickedCorps.Num() > 0 && View.bHumanUp)
+	{
+		FString Town;
+		for (const FProvinceOption& Option : Session->Province(ArmyRegion).Options)
+		{
+			if (!Option.bEnabled)
+			{
+				continue;
+			}
+			if (Option.Action == TEXT("work:storm"))
+			{
+				Tray.StormButton = FText::FromString(Option.Label.ToUpper()); // ("Storm Panama City")
+				Tray.StormTip = FText::FromString(Option.Detail + TEXT(" Its card shows the odds first, and KEEP UP THE SIEGE leaves it be."));
+			}
+			else if (Option.Action.StartsWith(TEXT("work:garrison:")) && PickedCorps.Contains(FCString::Atoi(*Option.Action.Mid(14))))
+			{
+				Tray.GarrisonActions.Add(Option.Action);
+				FString Who;
+				Option.Label.Split(TEXT(": into "), &Who, &Town); // ("First Army: into New York")
+			}
+			else if (Option.Action.StartsWith(TEXT("work:field:")) && PickedCorps.Contains(FCString::Atoi(*Option.Action.Mid(11))))
+			{
+				Tray.FieldActions.Add(Option.Action);
+			}
+		}
+		if (Tray.GarrisonActions.Num() > 0)
+		{
+			Tray.GarrisonButton = FText::FromString(Town.IsEmpty() ? FString(TEXT("GARRISON THE TOWN")) : TEXT("GARRISON ") + Town.ToUpper());
+			Tray.GarrisonTip = FText::FromString(TEXT("The corps in hand go into the town and hold its walls. A town with troops inside does not fall to an army that only marches in: it must be besieged or stormed. Inside, they neither march nor attack until they TAKE THE FIELD again."));
+		}
+		if (Tray.FieldActions.Num() > 0)
+		{
+			Tray.FieldButton = FText::FromString(TEXT("TAKE THE FIELD"));
+		}
 	}
 	// (Version 64) Two corps of the army worn thin, which could be folded into one.
 	Tray.FoldButton = FText::GetEmpty();

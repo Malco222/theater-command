@@ -8365,6 +8365,44 @@ namespace
 						]
 					];
 				}
+				// (Brian, 18 November 2026.) The town's orders, on the army's own tray: storm the town it stands round (the
+				// one lit button: it is the attack he was looking for), go into the town it stands in, or come out again.
+				if (!Army.StormButton.IsEmpty())
+				{
+					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+						.ToolTipText(Army.StormTip)
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->TrayTownOrder(0); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(Army.StormButton).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
+						]
+					];
+				}
+				if (!Army.GarrisonButton.IsEmpty())
+				{
+					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+						.ToolTipText(Army.GarrisonTip)
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->TrayTownOrder(1); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(Army.GarrisonButton).Font(SmallCaps()).ColorAndOpacity(Muted)
+						]
+					];
+				}
+				if (!Army.FieldButton.IsEmpty())
+				{
+					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+						.ToolTipText(FText::FromString(TEXT("The corps in hand leave the town and stand in the open country of the province again, where they can march and attack.")))
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->TrayTownOrder(2); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(Army.FieldButton).Font(SmallCaps()).ColorAndOpacity(BrightBrass)
+						]
+					];
+				}
 				// (Version 64) Two corps of the army worn thin: the card that makes one of them.
 				if (!Army.FoldButton.IsEmpty())
 				{

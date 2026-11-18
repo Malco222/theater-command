@@ -3754,7 +3754,9 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
     const lone = new Set(gunsAloneOf(s).map((a) => a.region));
     const mine = all.filter((v) => v.holder === me.id), theirs = all.filter((v) => v.by === me.id && !lone.has(v.region));
     if (mine.length) out.push({ k: `goto:${mine[0].region}`, t: mine.length === 1 ? `${mine[0].town.toUpperCase()} IS BESIEGED` : `${mine.length} OF YOUR TOWNS ARE BESIEGED`, tip: `${mine.map((v) => v.town).slice(0, 4).join(', ')}: ${mine[0].lines[mine[0].lines.length - 1]} Attack the army round it to raise the siege, or let the garrison sally out.` });
-    if (theirs.length) out.push({ k: `goto:${theirs[0].region}`, t: theirs.length === 1 ? `YOU BESIEGE ${theirs[0].town.toUpperCase()}` : `YOU BESIEGE ${theirs.length} TOWNS`, tip: `${theirs.map((v) => v.town).slice(0, 4).join(', ')}. Starve it out, or storm it: pick the province and look under ORDERS.` });
+    // (Brian, 18 November 2026: he had beaten an army into its town and found no way to attack it again. A press takes the
+    // besieging army in hand at the town, where its own card carries STORM <TOWN>.)
+    if (theirs.length) out.push({ k: `siege:${theirs[0].region}`, t: theirs.length === 1 ? `YOU BESIEGE ${theirs[0].town.toUpperCase()}` : `YOU BESIEGE ${theirs.length} TOWNS`, tip: `${theirs.map((v) => v.town).slice(0, 4).join(', ')}. Starve it out, or storm it: a press takes your army there in hand, and STORM on its card attacks the town.` });
   } catch { /* a campaign from history has no sieges */ }
   // Trade: a route cut, or a trading house idle with a country ready to sign.
   const book = pictureTrade(s);

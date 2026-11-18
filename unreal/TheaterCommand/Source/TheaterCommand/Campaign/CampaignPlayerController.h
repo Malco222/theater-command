@@ -143,6 +143,13 @@ struct FArmyTray
 	bool bLean = false; // the picked corps take no drafts
 	FText JoinButton; // "ASK 1 SLOVAK CORPS TO JOIN": allied corps beside the army that could march with it. Empty when there are none
 	FText FoldButton, FoldTip; // (Version 64) two corps of the army are worn thin and could be folded into one. Empty when there are none
+	// (Brian, 18 November 2026: "troops should be able to garrison a city", and of an army beaten into its town, "im not
+	// able to attack them again".) The town's orders for the army in hand, as plain buttons on its own tray: until
+	// then they stood only under ORDERS on the province's card, and a right-click on the town.
+	FText StormButton, StormTip; // "STORM PANAMA CITY": the army stands round that town and may assault it. Empty when it may not
+	FText GarrisonButton, GarrisonTip; // "GARRISON NEW YORK": corps in hand may go into the town of the province they stand in
+	FText FieldButton; // "TAKE THE FIELD": corps in hand are inside a town and may leave it
+	TArray<FString> GarrisonActions, FieldActions; // the province's own orders that do it, one for each corps
 	FText PendingButton; // "MARCH TO LODZ": the place clicked once, waiting for the word. Empty when there is none
 	FText Hint; // what to do next, in a line
 	FText HintLead; // (ruling 87) and what is said before it, in brass: "No moves left this month."
@@ -840,6 +847,8 @@ public:
 	void StopLooking();
 	/** Joint armies: asks the allied corps beside the army in hand to march with it; sends one of them home. */
 	void AskAlliesToJoin();
+	/** A town order from the army's own tray: 0 storms the town it besieges (its card first), 1 sends the corps in hand into the town, 2 brings them out. */
+	void TrayTownOrder(int32 Which);
 	void SendBackCorps(int32 CorpsId);
 	/** The nation the player leads; empty when nobody is led. */
 	FString GetPlayerTag() const;
