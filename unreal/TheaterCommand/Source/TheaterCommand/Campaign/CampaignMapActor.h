@@ -176,8 +176,12 @@ public:
 	/** The given nation's piece in a region, if it has one there. */
 	AArmyPiece* FindPiece(int32 RegionId, const FString& Nation) const;
 
-	/** Tints the regions a picked-up army could go to: its own colour for a march, red for an attack. An empty list clears it. */
-	void SetReach(const TArray<FReachRegion>& Reach, bool bByRail = false);
+	/**
+	 * Tints the regions a picked-up army could go to: its own colour for a march, red for an attack. An empty list clears it.
+	 * The enemy's reach goes with it, unless bKeepEnemyReach: then the enemy's wash and its dashed line stand until the
+	 * ShowEnemyReach that follows replaces them (the controller's orders laid out over frames).
+	 */
+	void SetReach(const TArray<FReachRegion>& Reach, bool bByRail = false, bool bKeepEnemyReach = false);
 	/**
 	 * (release 1) With an army in hand: the regions the enemy the player can see could strike next month. They take a
 	 * faint wash, and a dashed red line is drawn where that ground ends inside the player's own country (the front

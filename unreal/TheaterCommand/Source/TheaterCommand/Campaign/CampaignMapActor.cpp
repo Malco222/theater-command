@@ -10437,7 +10437,7 @@ void ACampaignMapActor::UpdateOwnershipPaint()
 	}
 }
 
-void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail)
+void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail, bool bKeepEnemyReach)
 {
 	THEATER_SPEED_SCOPE(SetReach);
 	if (RailLight.Tracks.Num() + RailLight.Tint.Num() + RailLight.Bars.Num() + RailLight.Dots.Num() + RailLight.Ringed.Num() > 0)
@@ -10446,10 +10446,15 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 	}
 	bReachShown = Reach.Num() > 0;
 	OrdersMesh->ClearMeshSection(0);
-	OrdersMesh->ClearMeshSection(9); // (the enemy's reach goes with the army's own)
-	if (EnemyReachMesh)
+	// (The enemy's reach goes with the army's own; unless the ShowEnemyReach that replaces it comes a frame or two
+	// later, when the old wash stands until then rather than blink out between the two: the checker's note on b414.)
+	if (!bKeepEnemyReach)
 	{
-		EnemyReachMesh->ClearAllMeshSections();
+		OrdersMesh->ClearMeshSection(9);
+		if (EnemyReachMesh)
+		{
+			EnemyReachMesh->ClearAllMeshSections();
+		}
 	}
 	if (Reach.Num() == 0)
 	{

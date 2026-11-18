@@ -4887,9 +4887,10 @@ namespace
 														KeyCap(TEXT("ESC"), Cream)
 													]
 												]
-												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
 												[
-													// (CONTINUE takes Enter and Space)
+													// (CONTINUE takes Enter and Space. The builder's night picture 41b: its key cap stands clear of
+													// the word, as every other cap does.)
 													SNew(SBox).Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bResolved ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 													[
 														KeyCap(TEXT("ENTER"), Cream)
