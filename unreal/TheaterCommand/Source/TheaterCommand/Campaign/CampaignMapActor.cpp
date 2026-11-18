@@ -2488,6 +2488,7 @@ UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(FLandSheet& Sheet, in
 	Buffers.Commit(Mesh, 0, Sheet.Material);
 	Mesh->SetRelativeLocation(FVector(0.0, Sheet.WrapMode == 2 ? Sheet.Turn * Data.WorldWidth * UnitScale : 0.0, 0.0));
 	Mesh->SetVisibility(!Sheet.bHidden);
+	TheaterSpeed::NoteMade(TheaterSpeed::EMade::Tiles);
 	return Mesh;
 }
 
@@ -2554,6 +2555,18 @@ bool ACampaignMapActor::UpdateLand(FLandSheet& Sheet, float CameraDistance, cons
 	// Stand up the tiles that are wanted and not there yet: all of them when asked, otherwise a few each frame,
 	// so that sweeping across the table never stalls.
 	int32 Budget = bAllAtOnce ? MAX_int32 : 5;
+	// (Speed, 18 November 2026: tc.Speed.TileTime. "A few" was five for every sheet, whatever they took: the world's
+	// sheet, the map's own and each fine sheet that stands or is standing up, so thirty or more in a frame of a zoom,
+	// and 30 ms of one frame in the builder's sweep of build 1634. Now each sheet's first tile of the frame is always
+	// stood up, so every sheet moves on every frame, and its others only while all the frame's tiles together have
+	// taken less than the switch's ms. The rest come next frame; what they replace stays until they do, as ever.)
+	const double TileLimit = bAllAtOnce ? 0.0 : TheaterSpeed::TileTime() * 0.001;
+	if (TileTimeFrame != GFrameCounter)
+	{
+		TileTimeFrame = GFrameCounter;
+		TileTimeSpent = 0.0;
+	}
+	bool bFirstTile = true;
 	TSet<uint64> Missing;
 	for (const uint64 Key : Wanted)
 	{
@@ -2561,11 +2574,18 @@ bool ACampaignMapActor::UpdateLand(FLandSheet& Sheet, float CameraDistance, cons
 		{
 			continue;
 		}
+		if (Budget > 0 && TileLimit > 0.0 && !bFirstTile && TileTimeSpent >= TileLimit)
+		{
+			Budget = 0; // (the frame's time for tiles is spent)
+		}
 		if (Budget > 0)
 		{
 			--Budget;
+			bFirstTile = false;
+			const double TileBegan = FPlatformTime::Seconds();
 			const int32 Level = static_cast<int32>(Key >> 48), TileX = static_cast<int32>((Key >> 24) & 0xFFFFFF), TileY = static_cast<int32>(Key & 0xFFFFFF);
 			Sheet.Tiles.Add(Key, BuildLandTile(Sheet, Level, TileX, TileY)); // null for a tile with nothing in it: remembered, so it is not tried again
+			TileTimeSpent += FPlatformTime::Seconds() - TileBegan;
 		}
 		else
 		{
@@ -2923,6 +2943,13 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 			if (const TSharedPtr<FFineSheet, ESPMode::ThreadSafe>* Standing = FineSheets.Find(Key))
 			{
 				(*Standing)->LastWanted = Now;
+				if ((*Standing)->bShelved)
+				{
+					// (Speed: tc.Speed.SheetShelf.) Wanted again: off the shelf. Its tiles are stood up out of sight a few
+					// each frame by the lines below, as a new sheet's are once it is dressed, and then it stands.
+					(*Standing)->bShelved = false;
+					TheaterSpeed::NoteMade(TheaterSpeed::EMade::SheetsFromShelf);
+				}
 				bStillComing |= !(*Standing)->bStanding;
 				continue;
 			}
@@ -2959,8 +2986,13 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 			// lies now; the frame that dresses it takes them where they are still what it would make itself.
 			const bool bAside = TheaterSpeed::FineAside();
 			TSet<int32> Haze = bAside ? HazeSet : TSet<int32>();
-			Sheet->Building = Async(EAsyncExecution::ThreadPool, [Sheet, Map, Box, Scale, bAside, HazeThen = MoveTemp(Haze)]()
+			// (Speed: tc.Speed.QuietModel, for measuring. How its loops run: spread over the cores as before, on this one
+			// thread alone, or spread at the background's priority.)
+			const int32 Quiet = TheaterSpeed::QuietModel();
+			Sheet->Building = Async(EAsyncExecution::ThreadPool, [Sheet, Map, Box, Scale, bAside, Quiet, HazeThen = MoveTemp(Haze)]()
 			{
+				const double Began = FPlatformTime::Seconds();
+				const TheaterSpeed::FQuietModelling QuietHere(Quiet);
 				const double Apron = 36.0;
 				Sheet->Shape.BuildOver(*Map, Box.Min.X - Apron, Box.Min.Y - Apron, Box.GetSize().X + 2.0 * Apron, Box.GetSize().Y + 2.0 * Apron, 1.5, true);
 				Sheet->Paint.Build(*Map, Sheet->Shape, Scale);
@@ -2968,6 +3000,7 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 				{
 					PrepareFineSheet(*Sheet, HazeThen);
 				}
+				Sheet->ModelSeconds = FPlatformTime::Seconds() - Began; // (for the speed log: read only once bBuilt is seen)
 				Sheet->bBuilt = true;
 			});
 		}
@@ -2984,6 +3017,19 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 		if (!Sheet.bBuilt)
 		{
 			continue;
+		}
+		if (!Sheet.bModelNoted)
+		{
+			Sheet.bModelNoted = true;
+			TheaterSpeed::NoteMade(TheaterSpeed::EMade::SheetsModelled);
+			if (TheaterSpeed::IsLogging())
+			{
+				UE_LOG(LogTheater, Display, TEXT("Speed: fine sheet %d,%d was modelled in %.2f s on other threads (%d by %d points)"), Sheet.Key.X, Sheet.Key.Y, Sheet.ModelSeconds, Sheet.Shape.NX, Sheet.Shape.NY);
+			}
+		}
+		if (Sheet.bShelved)
+		{
+			continue; // (speed: tc.Speed.SheetShelf) on the shelf, with nothing of it on the table
 		}
 		// (each stands a turn of the world east or west of where it is kept, whichever is nearest the eye)
 		Sheet.Land.Turn = TurnFor(Sheet.Box.GetCenter().X, Focus.X);
@@ -3019,6 +3065,14 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 		}
 		else if (!Sheet.bStanding)
 		{
+			if (Sheet.HoldersChanged.bIsValid)
+			{
+				// (Speed: tc.Speed.SheetShelf. Ground changed hands while it lay on the shelf, which did not paint it
+				// then: that ground is painted again now, before any of it is seen, as RepaintBeyond would have.)
+				const FBox2D Changed = Sheet.HoldersChanged;
+				Sheet.HoldersChanged = FBox2D(ForceInit);
+				RepaintBeyond(Changed, &Sheet);
+			}
 			// Its tiles are stood up a few each frame, out of sight; when the view has all it wants of them, the
 			// sheet is shown and that box of the coarse sheet is taken away, in the same frame.
 			if (!UpdateLand(Sheet.Land, CameraDistance, CameraFocus, false))
@@ -3038,10 +3092,35 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 			}
 		}
 	}
+	// (Speed, 18 November 2026: tc.Speed.SheetShelf. A sheet the eye had left was dropped whole here, and modelled again
+	// from nothing when the eye came back: some seconds on every spare core each time, and every sheet in view each
+	// time the eye went up past the height they are for and came down again. It is now stood down just the same (the
+	// coarse sheet lies there again at once, as before) with its modelling kept, up to the shelf's number of sheets.)
+	const int32 Shelf = TheaterSpeed::SheetShelf();
 	for (const FIntPoint& Key : Gone)
 	{
-		DropFineSheet(*FineSheets[Key]);
-		FineSheets.Remove(Key);
+		if (Shelf > 0)
+		{
+			ShelveFineSheet(*FineSheets[Key]);
+		}
+		else
+		{
+			DropFineSheet(*FineSheets[Key]);
+			FineSheets.Remove(Key);
+			TheaterSpeed::NoteMade(TheaterSpeed::EMade::SheetsDropped);
+		}
+	}
+	TrimSheetShelf(Shelf); // (and all of the shelf, if the switch has been turned off since)
+	if (TheaterSpeed::IsLogging())
+	{
+		int32 Modelling = 0, Standing = 0, Shelved = 0;
+		for (const auto& Pair : FineSheets)
+		{
+			Modelling += Pair.Value->bBuilt ? 0 : 1;
+			Standing += Pair.Value->bStanding ? 1 : 0;
+			Shelved += Pair.Value->bShelved ? 1 : 0;
+		}
+		TheaterSpeed::NoteSheets(Modelling, Standing, Shelved);
 	}
 }
 
@@ -3327,6 +3406,19 @@ void ACampaignMapActor::DropFineSheet(FFineSheet& Sheet)
 	{
 		Sheet.Building.Wait();
 	}
+	TakeSheetOffTable(Sheet);
+	for (UObject* Kept : Sheet.Kept)
+	{
+		FineKeep.Remove(Kept);
+	}
+	Sheet.Kept.Reset();
+	Sheet.LandPaint = nullptr;
+	Sheet.SeaPaint = nullptr;
+	Sheet.bShelved = false;
+}
+
+void ACampaignMapActor::TakeSheetOffTable(FFineSheet& Sheet)
+{
 	for (const auto& Tile : Sheet.Land.Tiles)
 	{
 		if (UProceduralMeshComponent* Mesh = Tile.Value)
@@ -3342,19 +3434,55 @@ void ACampaignMapActor::DropFineSheet(FFineSheet& Sheet)
 		Sheet.Sea->DestroyComponent();
 		Sheet.Sea = nullptr;
 	}
-	for (UObject* Kept : Sheet.Kept)
-	{
-		FineKeep.Remove(Kept);
-	}
-	Sheet.Kept.Reset();
-	Sheet.LandPaint = nullptr;
-	Sheet.SeaPaint = nullptr;
 	if (Sheet.bStanding)
 	{
 		Sheet.bStanding = false;
 		ForgetKeptPoints(Sheet.Box); // (speed: the ground here is the coarse sheet's again)
 		WorldLand.Holes.RemoveAll([&Sheet](const FBox2D& Hole) { return Hole.Min.Equals(Sheet.Box.Min, 0.01) && Hole.Max.Equals(Sheet.Box.Max, 0.01); });
 		RetileWorld(Sheet.Box);
+	}
+}
+
+void ACampaignMapActor::ShelveFineSheet(FFineSheet& Sheet)
+{
+	THEATER_SPEED_SCOPE(ShelveFineSheet);
+	// (Speed: tc.Speed.SheetShelf.) Off the table exactly as a dropped sheet goes: its tiles to the spares, its water
+	// away, its box of the coarse sheet closed and stood up again in the same frame. What is kept is what took the
+	// seconds to make: its heights (Shape), its paint (Paint), its pictures and paints (Kept, which FineKeep holds), its
+	// levels of heights (Land) and its place in FineSheets, where the haze (FogBeyond), the seasons (LandScalar and the
+	// rest) and the sky (UpdateSky) still find it. Ground that changes hands is painted when it comes off the shelf.
+	TakeSheetOffTable(Sheet);
+	Sheet.Land.bHidden = true; // (its tiles are stood up out of sight again when it is wanted, and then it stands)
+	Sheet.bShelved = true;
+	TheaterSpeed::NoteMade(TheaterSpeed::EMade::SheetsShelved);
+}
+
+void ACampaignMapActor::TrimSheetShelf(int32 KeepAtMost)
+{
+	for (;;)
+	{
+		int32 Shelved = 0;
+		FIntPoint Oldest = FIntPoint::ZeroValue;
+		double OldestWanted = TNumericLimits<double>::Max();
+		for (const auto& Pair : FineSheets)
+		{
+			if (Pair.Value->bShelved)
+			{
+				++Shelved;
+				if (Pair.Value->LastWanted < OldestWanted)
+				{
+					OldestWanted = Pair.Value->LastWanted;
+					Oldest = Pair.Key;
+				}
+			}
+		}
+		if (Shelved <= FMath::Max(KeepAtMost, 0))
+		{
+			return;
+		}
+		DropFineSheet(*FineSheets[Oldest]);
+		FineSheets.Remove(Oldest);
+		TheaterSpeed::NoteMade(TheaterSpeed::EMade::SheetsDropped);
 	}
 }
 
@@ -10188,6 +10316,13 @@ void ACampaignMapActor::RepaintBeyond(const FBox2D& Changed, FFineSheet* Only)
 	for (const auto& Pair : FineSheets)
 	{
 		FFineSheet& Sheet = *Pair.Value;
+		if (Sheet.bShelved)
+		{
+			// (Speed: tc.Speed.SheetShelf. Nothing of it is on the table: the ground that changed is kept, and painted
+			// when the sheet comes off the shelf, before any of it is seen. See UpdateFineSheets.)
+			Sheet.HoldersChanged += Changed;
+			continue;
+		}
 		if (Sheet.bBuilt)
 		{
 			// (one built and not yet dressed has no pictures: its paint is done again, and its pictures are made from that)

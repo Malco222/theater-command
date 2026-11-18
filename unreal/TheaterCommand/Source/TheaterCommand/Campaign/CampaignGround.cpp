@@ -494,7 +494,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				Dry[Idx] = Shares[WorldLook::Desert] * Out;
 			}
 		}
-	});
+	}, TheaterSpeed::ModelLoop());
 	const int32 Soften = FMath::RoundToInt32(4.0 / Terrain.Cell);
 	FCampaignTerrain::Smooth(Woods, NX, NY, FMath::RoundToInt32(9.0 / Terrain.Cell), 2); // the edge of a wood does not follow a frontier
 	FCampaignTerrain::Smooth(Dry, NX, NY, Soften, 2);
@@ -1216,7 +1216,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			GroundG[Idx] = C.G;
 			GroundB[Idx] = C.B;
 		}
-	});
+	}, TheaterSpeed::ModelLoop());
 
 	// Points just off the shore take the region of the land beside them, so the stain runs to the water's edge.
 	ShoreRegion = Terrain.Region;
@@ -1329,7 +1329,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					}
 				}
 			}
-		});
+		}, TheaterSpeed::ModelLoop());
 		// (a thrown shadow's edge is spread over two cells each way: no stair step is to be counted along it)
 		FCampaignTerrain::Smooth(Thrown, NX, NY, 2, 2);
 	}
@@ -1495,7 +1495,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			Relief[Idx] = FColor(ToByte(Normal.X * 0.5f + 0.5f), ToByte(Normal.Y * 0.5f + 0.5f), ToByte(Shade * 0.5f), 255);
 			Masks[Idx] = FColor(ToByte(Rock * (1.0f - FMath::Max(JungleRoof, Roof * Wooded))), ToByte(Snow), ToByte(Sand), ToByte(Dry[Idx]));
 		}
-	});
+	}, TheaterSpeed::ModelLoop());
 
 	{
 		// ("-TheaterProbe=2056,840" writes what the painter made of the ground round a place to the log)
@@ -1547,7 +1547,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				Wet[At] = FColor(ToByte(0.5f + 0.5f * FMath::Clamp(FinerDx[At] / WetReach, -1.0f, 1.0f)), ToByte(0.5f + 0.5f * FMath::Clamp(FinerDy[At] / WetReach, -1.0f, 1.0f)),
 					ToByte(FMath::Min(FinerAt[At] / WetReach, 1.0f)), ToByte(Half / 2.5f));
 			}
-		});
+		}, TheaterSpeed::ModelLoop());
 	}
 
 	if (Terrain.Cell > 3.0)
@@ -1658,7 +1658,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			const float Fir = FMath::Max(FMath::Lerp(Boreal, bBeyond ? LookFir[Idx] : 0.0f, Beyond), FMath::SmoothStep(700.0f, 1300.0f, Metres[Idx]) * (1.0f - 0.7f * Beyond));
 			Cover[Idx] = FColor(ToByte(Arable), ToByte(Big), ToByte(Rim), ToByte(Fir));
 		}
-	});
+	}, TheaterSpeed::ModelLoop());
 
 	// How the fields lie in each province: turned by an angle of the province's own, and a little larger or smaller.
 	Lie.SetNumUninitialized(Count);
@@ -1840,7 +1840,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			}
 			Water[J * WaterNX + I] = FColor(ToByte(C.R), ToByte(C.G), ToByte(C.B), ToByte(FMath::Clamp(OffShore / 6.0f, 0.0f, 1.0f)));
 		}
-	});
+	}, TheaterSpeed::ModelLoop());
 	if (WaterStep > 2.5)
 	{
 		// A coarse sheet's sea is smoothed once it is painted, so that the sea floor's relief shows as shading and
@@ -1869,7 +1869,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					FColor& Here = Water[J * WaterNX + I];
 					Here = FColor(static_cast<uint8>(R / Weight), static_cast<uint8>(G / Weight), static_cast<uint8>(B / Weight), Here.A);
 				}
-			});
+			}, TheaterSpeed::ModelLoop());
 		}
 	}
 }

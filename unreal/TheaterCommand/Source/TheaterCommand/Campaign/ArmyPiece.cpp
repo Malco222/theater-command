@@ -2,6 +2,7 @@
 
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
+#include "Campaign/TheaterSpeed.h"
 #include "Campaign/TheaterStillMesh.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -1054,6 +1055,7 @@ void AArmyPiece::SetShadows(bool bCast)
 		if (Body)
 		{
 			Body->SetCastShadow(bCast);
+			TheaterSpeed::NoteMade(TheaterSpeed::EMade::ShadowFlips); // (speed log: its whole model is handed to the draw thread again)
 		}
 	}
 }
