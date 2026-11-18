@@ -691,11 +691,13 @@ def SandbagRing(fine=True, nation="_default", name="SandbagRing"):
 
 # ---- 3. the gun pit ---------------------------------------------------------------------------------------------
 
-def GunPit(fine=True, nation="_default", name="GunPit"):
-    """A pit for a towed anti-tank or field gun: a horseshoe sunk 0.4 m, the spoil thrown up as a parapet in front and
-    at the sides, its inside face revetted with bags; a ramp out at the back, logs for the trail spades, a slit for
-    the crew at each rear corner, an ammunition niche, the ground in front cleared and scorched."""
-    m = bits.model(name, "Gun pit (our own model)", "works", nation, fine, MORE)
+def GunPit(fine=True, nation="_default", name="GunPit", low_front=False):
+    """A pit for a towed field gun: a horseshoe sunk 0.4 m, the spoil thrown up as a parapet in front and at the
+    sides, its inside face revetted with bags; a ramp out at the back, logs for the trail spades, a slit for the crew
+    at each rear corner, an ammunition niche, the ground in front cleared and scorched. `low_front` makes it an
+    anti-tank gun's: such a gun fires flat, its bore under a metre up, so the parapet is cut down across its front
+    and the bags stepped down to it, and cut boughs are laid over the parapet to hide the position."""
+    m = bits.model(name, "Anti-tank gun pit (our own model)" if low_front else "Gun pit (our own model)", "works", nation, fine, MORE)
     m.part("pit", None, (0, 0, 0), kind="root")
     m.use("pit")
     g = rnd(23)
@@ -716,14 +718,21 @@ def GunPit(fine=True, nation="_default", name="GunPit"):
     NA, NH = 92.0, 0.5
     nh = math.degrees(math.asin(NH / (R + 0.135)))
 
+    NOTCH = 22.0                  # (half the width of an anti-tank gun's low front, in degrees)
+
     def keep(t, c, f):
         a = -ARM + 2 * ARM * f
+        if low_front and abs(a) < NOTCH + 8.0 and c >= 5 + min(2, int(max(0.0, abs(a) - NOTCH) / 4.0)):
+            return False             # (five courses across the front, stepping up to eight at its shoulders)
         return not (abs(a - NA) < nh + 1.5 and c < 4)
     bag_wall(m, bits.arc(0, 0, R + 0.135, -ARM, ARM, 50), 8, -D, seed=7, batter=0.016, thick=1, inward=-1.0, keep=keep, q=(6, 10), tie=0.3)
     # the parapet: the spoil, in front and at the sides
     def taper(x, y):
         a = abs(math.degrees(math.atan2(y, x)))
-        return smooth((ARM + 10 - a) / 16.0)
+        k = smooth((ARM + 10 - a) / 16.0)
+        if low_front:
+            k *= 1.0 - 0.72 * smooth((NOTCH + 10.0 - a) / 10.0)
+        return k
     ring_bank(m, RO - 0.02, [(0.0, 0.47), (0.2, 0.53), (0.5, 0.5), (0.9, 0.33), (1.3, 0.13), (1.6, 0.03), (1.8, 0.0)], seed=9, lump=0.04, step=2.0, cut=taper, turf=0.4, a0=-ARM - 12, a1=ARM + 12)
     niche(m, NA, R + 0.01, -D, 0.07, NH, 0.85, seed=3)
     # two logs at the back for the trail spades, each pinned by stakes
@@ -759,7 +768,24 @@ def GunPit(fine=True, nation="_default", name="GunPit"):
             case(m, p, Vector((math.cos(ya), math.sin(ya), 0.0)), 0.044, 0.42, 8)
     ammo_box(m, V2(115, 1.95) + Z * -D, 115 + 90, (0.72, 0.3, 0.16), 4, lid=True, rounds=3, cal=0.075, long=0.6)
     m.rod(V2(-60, 3.1) + Z * 0.5, V2(-25, 3.2) + Z * 0.55, 0.02, "timber", sides=8)
-    m.socket("gun", (0.0, 0.0, -D), (1, 0, 0), note="the gun stands on the pit floor's middle facing the enemy. Room: 4.8 m across inside the bags, the parapet top 0.9 m above the floor; two logs lie 2.8 m behind, 0.7 m apart: a single trail's spade (Gun75, 25pdr) beds between them, a split trail's legs (ZiS3, leFH18, Howitzer105, up to 3.9 m wide and 3.55 m back) pass outside their ends into the open rear. All five of the vehicle modeller's towed guns have room")
+    if low_front and fine:
+        # cut boughs laid over the parapet either side of the gun's front: the position is hidden, not announced
+        for k in range(34):
+            a = g.uniform(NOTCH + 5.0, ARM - 8.0) * g.choice((-1, 1))
+            r = RO + g.uniform(0.05, 0.85)
+            p = V2(a, r) + Z * (0.5 * (1.0 - 0.45 * (r - RO)) - 0.02)
+            way = (V2(a + g.uniform(-50, 50), 1.0) * g.uniform(0.5, 0.9) - Z * g.uniform(0.1, 0.3))
+            bits.log(m, p - way * 0.35, p + way * 0.65, 0.014, "timber.dark", g.randrange(999), sides=5, taper=0.4)
+            for j in range(52):          # its leaves: a spray of small blades about the outer part of the stick
+                c = p + way * g.uniform(-0.1, 0.65) + Vector((g.uniform(-0.14, 0.14), g.uniform(-0.14, 0.14), g.uniform(0.0, 0.24)))
+                u = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-0.5, 0.5))).normalized()
+                v = u.cross(Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(-1, 1)))).normalized()
+                long, wide = g.uniform(0.07, 0.12), g.uniform(0.03, 0.055)
+                m.add([c - u * long, c + v * wide, c + u * long, c - v * wide], [(0, 1, 2, 3)], g.choice(("garnish", "garnish", "garnish.3", "garnish.2")), False, None)
+    if low_front:
+        m.socket("gun", (0.0, 0.0, -D), (1, 0, 0), note="the anti-tank gun stands on the pit floor's middle facing the enemy. Room: 4.8 m across inside the bags; across the front 44 degrees the bags stand five courses (0.56 m above the floor) and the earth beyond is lower still, so a bore 0.8 m up or more fires flat over it and traverses 20 degrees either way; at the sides the parapet top is 0.9 m above the floor. Two logs lie 2.8 m behind, 0.7 m apart: split trails (up to 4.0 m wide, 3.1 m back) pass outside their ends into the open rear. Of the vehicle modeller's guns: Pak40 (bore 0.96 m up) and AntiTankGun (0.86 m) both have room")
+    else:
+        m.socket("gun", (0.0, 0.0, -D), (1, 0, 0), note="the gun stands on the pit floor's middle facing the enemy. Room: 4.8 m across inside the bags, the parapet top 0.9 m above the floor; two logs lie 2.8 m behind, 0.7 m apart: a single trail's spade (Gun75, 25pdr) beds between them, a split trail's legs (ZiS3, leFH18, Howitzer105, up to 3.9 m wide and 3.55 m back) pass outside their ends into the open rear. All five of the vehicle modeller's towed field guns have room. An anti-tank gun fires flat with its bore at the height of this parapet (Pak40 0.96 m, AntiTankGun 0.86 m): stand those in the AntiTankPit, whose front is cut down for them")
     m.socket("hit", (3.3, 0.0, 0.4), (1, 0, 0), note="where a shell strikes the parapet")
     m.socket("ground", (4.0, 0.0, 0.05), (1, 0, 0), note="where the muzzle blast lifts dust off the scorched ground")
     bits.crew(m, "ammo", V2(NA, R - 0.4) + Z * -D, V2(NA), "kneel", "pit", "kneeling at the ammunition niche, passing rounds to the loader")
@@ -1409,6 +1435,7 @@ BUILDERS = {
     "FlakPit": FlakPit,
     "SandbagRing": SandbagRing,
     "GunPit": GunPit,
+    "AntiTankPit": lambda fine=True, nation="_default": GunPit(fine, nation, "AntiTankPit", low_front=True),
     "Mortar": Mortar,
     "MortarPit": MortarPit,
     "CamoNet": CamoNet,

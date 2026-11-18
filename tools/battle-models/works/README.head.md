@@ -39,7 +39,9 @@ Our own plain designs throughout: no army's emblem, no lettering, nothing copied
    knocked out by itself. A socket named `gun` with no entry in `takes` is for the vehicle modeller's towed gun
    (`Gun75`, `25pdr`, `ZiS3`, `leFH18`, `Howitzer105` under `../land/`: origin on the ground under the axle, x toward
    the muzzle). The `GunPit` has room for all five; the `Bunker` takes `Gun75`, `25pdr` and `ZiS3` freely and the
-   `leFH18` with its spades at the back wall, but not the `Howitzer105` (0.4 m too long). A `GunPit` or a `Bunker` is
+   `leFH18` with its spades at the back wall, but not the `Howitzer105` (0.4 m too long). The anti-tank guns
+   (`Pak40`, `AntiTankGun`) fire flat with their bores under a metre up: they stand in the `AntiTankPit`, whose
+   front is cut down for them, or in the `Bunker`, not in the `GunPit`. A `GunPit` or a `Bunker` is
    never shown empty: the pictures stand `Gun75` at the socket in its owner's paint, and so should the game.
    The heavy and the light flak gun are built to stand in a pit, a sandbag ring or the tower, never bare on open
    ground (the art director's note of review 2).
@@ -74,7 +76,8 @@ Our own plain designs throughout: no army's emblem, no lettering, nothing copied
 
 wire: `Wire`, `WireFence`. Anti-tank ditch: `AntiTankDitch`. Dragon's teeth: `DragonsTeeth`. Gun pit: `GunPit`.
 Pillbox: `Pillbox`. Concrete fort: `Bunker`. Minefield strip: `Minefield`. Machine-gun post: `MGNest`. Mortar pit:
-`MortarPit`. Anti-tank gun: `GunPit` with the vehicle modeller's gun at its `gun` socket. The field battle's ground
+`MortarPit`. Anti-tank gun: `AntiTankPit` (a gun pit with its front cut down, hidden under cut boughs) with the
+vehicle modeller's `Pak40` or `AntiTankGun` at its `gun` socket. The field battle's ground
 kinds `works` and `bunker` (fort level 0 to 3): `Foxhole` and `Fieldworks*` for the lower levels, `Pillbox` and
 `Bunker` for the upper.
 

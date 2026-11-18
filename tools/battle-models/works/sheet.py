@@ -30,7 +30,7 @@ import bits  # noqa: E402  (after the others: it puts the folder above first on 
 GROUPS = [
     ("Guns and lights", [("HeavyFlak", "Heavy flak gun"), ("HeavyFlakTwin", "Twin heavy flak gun"), ("LightFlak", "Light flak gun"), ("Searchlight", "Searchlight"),
                          ("MachineGun", "Machine gun, air-cooled"), ("MachineGun_water", "Machine gun, water-cooled"), ("Mortar", "Mortar")]),
-    ("Posts and pits", [("MGNest", "Machine-gun post"), ("FlakPit", "Heavy flak pit"), ("SandbagRing", "Sandbag ring, light flak"), ("GunPit", "Gun pit"), ("MortarPit", "Mortar pit"),
+    ("Posts and pits", [("MGNest", "Machine-gun post"), ("FlakPit", "Heavy flak pit"), ("SandbagRing", "Sandbag ring, light flak"), ("GunPit", "Gun pit"), ("AntiTankPit", "Anti-tank gun pit"), ("MortarPit", "Mortar pit"),
                         ("SandbagWall", "Sandbag wall"), ("ObservationPost", "Observation post"), ("CamoNet", "Camouflage net")]),
     ("Concrete", [("Pillbox", "Pillbox"), ("Bunker", "Bunker, gun casemate"), ("CoastalBattery", "Coastal battery"), ("FlakTower", "Flak tower"), ("DragonsTeeth", "Dragon's teeth")]),
     ("Wire and obstacles", [("Wire", "Wire belt"), ("WireFence", "Wire fence"), ("Hedgehogs", "Hedgehogs"), ("Minefield", "Minefield, marked"), ("RoadBar", "Road bar")]),
@@ -48,7 +48,7 @@ LINE_VIEW = {"FieldworksLine": (-152.0, 36.5, 25.0, 35, -3.0)}
 # (bearing, how far in spans, how high it looks down, lens) where the usual three-quarter view does not suit
 VIEW = {"LightFlak": (-28.0, 2.7, 14.0, 50), "HeavyFlak": (-28.0, 2.25, 15.0, 50), "HeavyFlakTwin": (-28.0, 2.3, 15.0, 50), "FlakTower": (-32.0, 1.5, 10.0, 50), "CoastalBattery": (-30.0, 1.5, 14.0, 50), "Bunker": (-30.0, 1.5, 15.0, 50), "CamoNet": (-28.0, 1.5, 22.0, 50),
         "Fieldworks": (-140.0, 1.8, 30.0, 50), "FieldworksCorner": (-140.0, 1.8, 30.0, 50), "FieldworksDugout": (-140.0, 1.8, 30.0, 50), "Foxhole": (-150.0, 1.4, 32.0, 50),
-        "AntiTankDitch": (-40.0, 1.75, 28.0, 50), "MortarPit": (-150.0, 1.95, 30.0, 50), "GunPit": (-150.0, 1.5, 28.0, 50)}
+        "AntiTankDitch": (-40.0, 1.75, 28.0, 50), "MortarPit": (-150.0, 1.95, 30.0, 50), "GunPit": (-150.0, 1.5, 28.0, 50), "AntiTankPit": (-150.0, 1.5, 28.0, 50)}
 # a pose that shows the piece better than rest: {part: degrees}
 # (the guns are trained across the picture, never at the camera: a barrel seen end on is a thin rod standing up)
 LAID = {"HeavyFlak": {"mount": -54.0, "cradle": 40.0}, "HeavyFlakTwin": {"mount": -54.0, "cradle": 42.0}, "LightFlak": {"mount": -52.0, "cradle": 36.0}, "Searchlight": {"mount": 30.0, "drum": 40.0}}
@@ -68,6 +68,7 @@ def _guest(*files):
 # (WEARS): the British pit a 25-pounder; the 75 is the gun of France and of armies with none of their own, and stood
 # in German casemates as a captured piece.
 GUESTS = {"GunPit": ("gun", _guest("vehicles/25pdr.glb", "vehicles/Gun75.glb", "gun/Gun75.glb")),
+          "AntiTankPit": ("gun", _guest("vehicles/Pak40.glb", "vehicles/AntiTankGun.glb", "vehicles/Gun75.glb")),
           "Bunker": ("gun", _guest("vehicles/Gun75.glb", "gun/Gun75.glb"))}
 # lamps lit inside a work for its picture: (place in the work's own axes, watts), so what stands in the dark shows
 LAMPS = {"Bunker": [((1.35, 0.9, 1.1), 14.0), ((1.35, -0.9, 1.1), 14.0), ((-0.4, 0.0, 1.3), 22.0)]}
@@ -77,7 +78,7 @@ SUN = {}
 
 # whose paint a piece wears in its picture (in the game every piece takes its owner's: see nations.json)
 WEARS = {"HeavyFlak": "GER", "HeavyFlakTwin": "GER:1943-06", "LightFlak": "UK", "FlakTower": "GER", "FlakPit": "USA", "SandbagRing": "SOV",
-         "CoastalBattery": "GER:1943-06", "Bunker": "GER", "GunPit": "UK", "Searchlight": "UK", "MortarPit": "USA", "Mortar": "USA"}
+         "CoastalBattery": "GER:1943-06", "Bunker": "GER", "GunPit": "UK", "AntiTankPit": "GER:1943-06", "Searchlight": "UK", "MortarPit": "USA", "Mortar": "USA"}
 # the armies shown side by side in the paint picture
 ARMIES = [("GER", "Germany, to 1943"), ("GER:1943-06", "Germany, from 1943"), ("UK", "Britain"), ("USA", "United States"),
           ("SOV", "Soviet Union"), ("JAP", "Japan"), ("ITA", "Italy"), ("FRA", "France")]
