@@ -14,7 +14,7 @@ import mapData from '../generated/campaign-map.json';
 import worldMap from '../generated/world-americas.json';
 import type { Game, Region } from './types';
 import { allied, atWar, theName } from './game';
-import { BUDGET, budgeted, landFactor, provinceYield } from './economy';
+import { BUDGET, budgeted, landFactor, landShare, provinceYield } from './economy';
 import { workLevel, yardLevel } from './arsenal';
 import { railsAt, workingFactories } from './rails';
 import { fieldYield, resRules } from './resources';
@@ -111,7 +111,7 @@ export function worthOf(g: Game, r: Region): number {
   // Ruling 214: a smaller power's land and harbours pay by its worth, and the town shows what it truly pays: never
   // nothing where it pays something.
   const f = landFactor(r);
-  const pays = BUDGET.land[r.terrain] * k * f + (r.port ? BUDGET.port * k * f : 0) + (r.oil ? BUDGET.oil * k : 0) + r.fac + capital;
+  const pays = BUDGET.land[r.terrain] * k * f * landShare(r) + (r.port ? BUDGET.port * k * f : 0) + (r.oil ? BUDGET.oil * k : 0) + r.fac + capital;
   return pays > 0 ? Math.max(1, Math.round(pays * BUDGET.scale)) : 0;
 }
 

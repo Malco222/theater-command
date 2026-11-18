@@ -5,7 +5,7 @@
 // campaigns are untouched.
 import { describe, expect, it } from 'vitest';
 import { ARSENAL, aircraftTag, factoriesHeld, factoryCeiling, factoryTag, worksOpening, firstFactories, greatPower, offers, openSmallAir, orderOffer, smallAirMonth, whyNoFactory, whyNoWorks, worksFrom, worksRate, type Offer } from '../src/campaign/arsenal';
-import { BUDGET, income, landFactor, provinceYield } from '../src/campaign/economy';
+import { BUDGET, income, landFactor, landShare, provinceYield } from '../src/campaign/economy';
 import { createGame, setWar } from '../src/campaign/game';
 import { majorsOf } from '../src/campaign/diplomacy';
 import { startOpen } from '../src/campaign/staff';
@@ -41,16 +41,18 @@ describe('ruling 214: a smaller power\'s land pays by its worth', () => {
       for (const r of home(g, code)) {
         const y = provinceYield(g, r, code), bare = provinceYield(g, r, code, false, true);
         expect(landFactor(r)).toBe(k);
-        expect(y.land).toBeCloseTo(bare.land * k, 10);
+        // (Trade reads the land as ruling 210 holds it, a city sharing its province's pay; the factor scales the full
+        // pay of each piece of ground, as the historian measured it.)
+        expect(y.land).toBeCloseTo((bare.land / landShare(r, true)) * k, 10);
         expect(y.port).toBeCloseTo(bare.port * k, 10);
         expect(y.oil).toBe(bare.oil);
         expect(y.fac).toBe(bare.fac);
         expect(y.capital).toBe(bare.capital);
       }
     }
-    // Canada pays a fifth of what its twenty provinces paid.
+    // Canada pays a fifth of what its provinces and cities pay in full.
     const can = home(g, 'CAN');
-    const land = can.reduce((s, r) => s + provinceYield(g, r, 'CAN').land, 0), bare = can.reduce((s, r) => s + provinceYield(g, r, 'CAN', false, true).land, 0);
+    const land = can.reduce((s, r) => s + provinceYield(g, r, 'CAN').land, 0), bare = can.reduce((s, r) => s + provinceYield(g, r, 'CAN', false, true).land / landShare(r, true), 0);
     expect(land).toBeCloseTo(bare * 0.2, 10);
     expect(income(g, 'CAN')).toBeLessThan(withoutFactors(() => income(g, 'CAN')));
   });
