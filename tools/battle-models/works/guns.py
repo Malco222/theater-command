@@ -184,7 +184,7 @@ def heavy_gun(m, parent, at=(0.0, 0.0, 0.0), shield=False, twin=False):
         face = Vector((1, 0.15 if not twin else 0.0, 0)).normalized()
         clear = Vector((face.y, -face.x, 0.0)) * 0.3 if not twin else Vector((0.0, 0.3 if y0 > 0 else -0.3, 0.0))
         bits.crew(m, "loader" + tag, Vector((O.x - 1.25, O.y + y0 - (0.20 if not twin else 0.0), deck_z)) + clear, tuple(face), "stand", "mount",
-                  "standing on the platform beside the breech's path, clear of the recoil (the breech's line is 0.3 m to his " + ("left" if not twin or y0 < 0 else "right") + "): he takes a round, steps in and throws it home")
+                  "standing on the platform beside the breech's path, clear of the recoil (the breech's line is " + ("0.5" if not twin else "0.3") + " m to his " + ("left" if not twin or y0 < 0 else "right") + (", and he faces 8.5 degrees in toward it" if not twin else "") + "): he takes a round, steps in and throws it home")
     # three rounds ready in a rack on the platform; the nearest is a part of its own, for the loader takes it
     for k in range(3):
         base = Vector((O.x - 1.42, O.y - 0.62 - w * 1.6 - 0.14 * k, deck_z))
@@ -205,12 +205,12 @@ def heavy_gun(m, parent, at=(0.0, 0.0, 0.0), shield=False, twin=False):
         m.part("handwheel." + what, "mount", c, axis=(-1, 0, 0), kind="spin", note="the game spins it while the gun " + ("trains" if sy > 0 else "elevates"))
         m.use("handwheel." + what)
         hub = c + Vector((-0.02, 0, 0))
-        bits.handwheel(m, hub, -X, 0.17, "steel", 4, 0.012)
-        # a second handle opposite the first: the layer winds with both hands. His fists close round the handles 3 cm
-        # nearer him than the rim (as on a crank), and the grips turn with the wheel
-        m.rod(hub - Y * 0.17, hub - Y * 0.17 - X * 0.07, 0.012 * 1.3, "timber.dark", sides=6)
+        bits.handwheel(m, hub, -X, 0.17, "steel", 4, 0.012, knob=False)
+        # two handles on the rim, one each side: the layer winds with both hands. Each stands 9.5 cm toward him (a
+        # fist's width), and its grip is the fist's middle, 4.5 cm from the rim's line; the grips turn with the wheel
         for hand, gy in (("l", 0.17), ("r", -0.17)):
-            m.socket("grip.layer." + what + "." + hand, hub + Vector((-0.03, gy, 0.0)), (1, 0, 0), part="handwheel." + what,
+            m.rod(hub + Y * gy, hub + Y * gy - X * 0.095, 0.012 * 1.3, "timber.dark", sides=6)
+            m.socket("grip.layer." + what + "." + hand, hub + Vector((-0.045, gy, 0.0)), (1, 0, 0), part="handwheel." + what,
                      note=("left" if hand == "l" else "right") + " hand of the layer." + what + ": on the handwheel's handle at the rim, turning with the wheel")
     # ---- the cradle: lifts on the trunnions
     m.part("cradle", "mount", T, axis=(0, -1, 0), limits=[-3.0, 85.0], kind="turn", note="elevation: plus lifts the muzzle, from 3 below level to 85 degrees")
