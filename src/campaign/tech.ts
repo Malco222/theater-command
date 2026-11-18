@@ -147,6 +147,24 @@ export function teamsOf(g: Game, nat: string): number {
 
 export const hasTech = (g: Game, nat: string, id: string): boolean => !!techOf(g, nat)?.done.includes(id);
 
+/**
+ * The year a nation's tank designs have reached, as campaign-bridge.ts's designs gives it to the 3D game, which draws
+ * its tanks by it: in the grand campaign by the research tree (no medium tanks, 1939; medium tanks, 1942; heavy tanks,
+ * 1943 or the year now if later), elsewhere by its design teams' clock. Null where it keeps no designs of its own (the
+ * game draws by the calendar). Read only: unlike techOf it never opens research. The battle's shells read it (b496,
+ * explosions), so a tank's blast is the gun it is drawn with; keep it in step with campaign-bridge.ts.
+ */
+export function armourYear(g: Game, nat: string): number | null {
+  const n = g.nations[nat];
+  if (!n?.alive) return null;
+  if (techRules(g)) {
+    const done = n.tech?.done ?? TECH.start[nat] ?? [];
+    return !done.includes('mediums') ? 1939 : !done.includes('heavies') ? 1942 : Math.max(1939 + Math.floor((Math.max(1, g.turn) + 7) / 12), 1943);
+  }
+  if (!n.lab) return null;
+  return 1939 + Math.floor((Math.max(1, g.turn + Math.round(n.lab.clock.armour - n.lab.months)) + 7) / 12);
+}
+
 // ---- Starting and stopping work ---------------------------------------------------------------------
 
 /** Months one team needs for a technology begun in this month: longer for every year it is ahead of its time. */

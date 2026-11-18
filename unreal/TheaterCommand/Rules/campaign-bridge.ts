@@ -639,7 +639,8 @@ function drawView() {
       id: f.id, nat: f.nat, name: f.name, base: f.base, ftr: Math.round(f.ftr), bmr: Math.round(f.bmr), mission: f.mission,
     })),
     // The year each nation's own designers have reached for tanks, fighters and bombers: a nation that pushes a
-    // branch fields its later models early, and one that neglects it keeps the old ones longer.
+    // branch fields its later models early, and one that neglects it keeps the old ones longer. The tanks' year is
+    // also armourYear in src/campaign/tech.ts, which the field battle's shells read: keep the two in step.
     designs: Object.fromEntries(Object.values(s.nations).filter((n) => n.alive && (n.lab || techOf(s, n.id))).map((n) => {
       const year = 1939 + Math.floor((Math.max(1, s.turn) + 7) / 12);
       if (techOf(s, n.id)) {

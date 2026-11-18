@@ -55,14 +55,14 @@ export function kindsOf(t: FieldTicket<LandPlace>): PlaceKind[] {
 /**
  * Each kind in running text after "every battle" (the UI director, 18 November): a river or works first, then the
  * ground, then the defence's size, worded from the defence's side so it reads true from either seat. The split
- * crossing's words stand in until the UI director gives them, and come last, as they end on "a close card".
+ * crossing's words are the UI director's (18 November, 16:37Z), and come last, as they end on the odds.
  */
 const SAID: Record<PlaceKind, string> = {
   river: 'across a river', works: 'against fortress works',
   plains: 'in open country', forest: 'in the forests', hills: 'in hill country', mountain: 'in the mountains',
   marsh: 'in the marshes', urban: 'in city streets', desert: 'in the open desert',
   smallest: 'where two divisions or fewer defend', middle: 'where three to ten divisions defend', largest: 'where eleven or more divisions defend',
-  'river-split-close': 'where only part of the attack must cross a river, on a close card',
+  'river-split-close': 'where only part of the attack must cross a river and the odds are 1.7 to 1 or less',
 };
 const ORDER: PlaceKind[] = ['river', 'works', 'plains', 'forest', 'hills', 'mountain', 'marsh', 'urban', 'desert', 'smallest', 'middle', 'largest', 'river-split-close'];
 

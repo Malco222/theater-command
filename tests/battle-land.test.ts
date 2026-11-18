@@ -681,7 +681,7 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     const g = gave[0];
     expect(g.bar).toBeCloseTo(0.99, 6);
     expect(g.str < LAND.fresh.str || !g.steady).toBe(true);
-    expect(g.text).toBe(`${g.u.name} gives ground.`);
+    expect(g.text).toBe(`${g.u.name} is worn out and falls back; the rest of its army holds.`);
     expect(g.u.gives).toBe(true);
     expect(g.u.order?.kind === 'withdraw' || g.u.state === 'withdrawn').toBe(true);
     // Mark 2 as before: the army broke only once another regiment was worn, most of it having fought.

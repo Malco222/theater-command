@@ -7,7 +7,7 @@
 // card's odds are the field's.
 
 import type { CrewMarks } from './crews';
-import type { ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
+import type { Calibre, ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
 import { BEND, digWorks, type Bend, type LandField } from './field';
 import { LAND, type Kind } from './rules';
 
@@ -81,6 +81,11 @@ export interface LandUnit extends UnitBase {
   tray: number;
   /** A tank block's crews' own marks, names or kill rings, as data for the 3D game and the hover (b477); none on the rest. */
   crew?: CrewMarks;
+  /**
+   * What its guns throw, as the explosions sheet sizes it (shells.ts): data for the 3D game, never read by the fight.
+   * None where it has only small arms.
+   */
+  cal?: Calibre;
   /** The way it stepped this tick, if it marched: at a bridge or a pass, a friend in its way makes way (LAND.queue). */
   pressing?: number;
   /** The friend it made way for this tick (LAND.queue): next tick it waits rather than step back into that friend's way. */

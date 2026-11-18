@@ -5,6 +5,7 @@
 // battle from the campaign's own attack, runs the shared clock, passes the player's orders, hands plain pictures of
 // the field back as JSON, and settles the battle through the campaign's own attack order with the field's R in place
 // of the dice. The 3D game draws the pictures: the models, their walk and fire, the sounds the events name.
+// It draws every explosion too, by the art director's sheet (land: "Explosions" below).
 //
 // Wiring (two lines in campaign-bridge.ts, for the 3D builder):
 //   1. its attack(ids, to) takes two more arguments, fought?: number and field?: FieldBill (src/campaign/game.ts), and
@@ -53,7 +54,7 @@
 // (how near each army is to breaking, 0 to 1, for the two army bars; an army breaks at 1, ruling 226(3)), breakingBy:
 // { att, def } (what drives each bar as it stands, below) and contact (battle seconds of the first contact, null before
 // it). Each unit: { id, side, kind, name, x, y, face, str, mor, state, figures0, figures, w, d, act, speed, engaged,
-// cover, loop, order }. Field metres, x east, y north,
+// cover, loop, order }, and cal where a land block has one ("Explosions" below). Field metres, x east, y north,
 // the attacker from the south; face in radians, 0 north, clockwise. 'loop' is the sound it plays while it does what it
 // does (its engine or its march; a block in a fight carries no fight loop of its own, as its shots by its nation's
 // weapons and the shared beds are the fight, in the sound director's plan /mnt/project-files/sound/mix/mix.json, which
@@ -90,7 +91,49 @@
 // side, at, unit }, one for each tank a block has lost, where she stood, from battle second 'at' to the end of the
 // fight. Draw her as the model of block 'unit', knocked out (her knocked_out clip, then burn), burning at first and
 // then smoking to the end, never cut off (the art director's b477 look). Men on foot within r metres take light cover
-// in the rules already; nothing more to draw for it.
+// in the rules already; nothing more to draw for it. The zones also hold its craters (below).
+// Explosions (Brian, 18 November: "very dramatic and life like"; his own look, copying no game's effects): the 3D game
+// draws every burst, its flash and light, shock, earth crown, debris, smoke, the camera's jolt and the scar it leaves,
+// by the art director's sheet (/mnt/project-files/art-director/explosions/explosions-look.md) and the ground under it.
+// The rules give it what it cannot work out for itself (src/battle/land/shells.ts); none of it moves the fight:
+//   cal, on a land unit: what its guns throw, as the sheet's size classes: 'mortar' 81 or 82 mm, 'field' 75 or 76 mm,
+//     'howitzer' 105 mm, 'heavy' 150 or 155 mm, and 'light' for a 37 to 57 mm tank or anti-tank gun (the sheet has no
+//     row for it yet: draw it at its hand grenade row). Guns by the model the unit table draws them with in the
+//     battle's year, tanks in the year their nation's designs have reached (DesignYears; armourYear in
+//     src/campaign/tech.ts, set at TC.battleStart), so a tank's blast is the gun it is drawn with; foot, mountain and lorried infantry 'mortar', their own battalions' (they land no shells:
+//     their blows count as small arms); cavalry, engineers and fortress troops carry no cal. The mix plan's
+//     impacts.bySize (sound/mix/mix.json) reads light as grenade, mortar as mortar, field as field_gun, howitzer as
+//     howitzer_105 and heavy as howitzer_150.
+//   A 'shell' event each time a gun's or a tank's blow costs a block one of its models (figures falls in the same
+//     view): { t, what: 'shell', text: '', x, y, cal, by, on, armour, ground, reach }, with no words and no cue: keep
+//     it out of the dispatches strip (the after card's log never has it). x, y: where it landed, the lost model's place
+//     within block 'on': take off the model standing nearest it. armour: true where 'on' is tanks: it struck the tank
+//     it knocked out, whose wreck zone (unit 'on', from the same second) lies at x, y: sparks and a bright scar on her
+//     armour, then her brew-up, no earth crown and no crater. cal: the firing block's. by: the block that fired, left
+//     out where the player does not know that block (b464(2)): then it is always guns firing from far back, unseen.
+//     ground: the field's ground under it, a name from field.grounds, which picks the sheet's look: woods a tree burst;
+//     buildings, bunker, road and bridge town and stone; marsh mud; water and blown the splash column; the rest earth,
+//     or sand where place.terrain is desert, and snow or mud as the weather the 3D game shows on the field. reach:
+//     metres from x, y within which men drop or are knocked flat and vehicles rock on their springs (the sheet's
+//     "Things react"; men a little beyond it flinch and duck). It is the blast's, not the camera shake's radius, which
+//     stays the sheet's: light 4, mortar 9, field 11, howitzer 15, heavy 23.
+//   A crater for each shell on the ground (none on armour, none in the river), as a zone beside the wrecks: { id, kind:
+//     'crater', x, y, r, until, at, cal }, r half the sheet's crater across for its class, ids -1, -2 and on, from
+//     battle second 'at' to the end of the fight. Draw the sheet's scar for the ground there, smoking faintly for about
+//     8 s from 'at', overlapping where hits overlap, never removed. Looks only: a crater gives no cover and slows no
+//     one.
+//   How they fit the mix plan's fireModel: the sims fight block against block with no single shots, so the plan times
+//     each block's firing (guns every 6 to 20 s, the impact 2 to 5 s later at the block engaged; tanks' guns every 6 to
+//     12 s). Those shots stay as they are, the near misses round the block engaged. A 'shell' event is the shot that
+//     hit: land it at once at x, y, as fired before by block 'by' (fire no gun again for it), and let it stand in for
+//     the next impact the plan has timed for that block, so the plan's pace holds. Its sound is the plan's impacts
+//     (near, middle or far by the listener's distance, sized by impacts.bySize), and its incoming the plan's artillery,
+//     mortar or tankGun by block 'by' (no 'by': artillery). A fight lands few shells (the six cold-check campaign
+//     fights 0 to 5, the nine practice grounds 2.6 a fight, 6 at most, twenty river crossings 6.2 a fight, 27 at
+//     most), one block's two seldom closer than 7 s apart (as little as 2.7 s in a river crossing), so the plan's
+//     shots are most of what is seen and heard, and every model that falls to a gun or a tank falls under a shell. A
+//     big blow could cost a block two models in one tick: then two land in the same second.
+//   The browser page draws none of it (Brian: no look work in the browser).
 // A tank block may also carry crew (b477, Brian's pick: tank crews name their tanks): { mark: 'name', names } or
 // { mark: 'rings', rings }, one entry per tank in the block's model order. names[i] is { name, en } or null (that tank is
 // plain); paint it from the model's entry under that name in battle-models/land/names-fit.json (its rows, in Russian
@@ -150,6 +193,8 @@ import type { BattleSim, BattleView, BreakCause, Command, FieldResult, Side, Uni
 import { GROUNDS } from '../../../src/battle/land/field';
 import { cardKnows, fieldBill, landTicket, pursuitLine } from '../../../src/battle/land/ticket';
 import { LandBattle } from '../../../src/battle/land/sim';
+import { calFor } from '../../../src/battle/land/shells';
+import { armourYear } from '../../../src/campaign/tech';
 import { staffOnly } from '../../../src/battle/land/offered';
 import { LAND, MOTION, type Kind } from '../../../src/battle/land/rules';
 import type { LandUnit } from '../../../src/battle/land/units';
@@ -215,6 +260,8 @@ export function unitOut(u: UnitBase): Record<string, unknown> {
     ...(land.short ? { short: land.short, parent: land.parent } : {}),
     // A tank block's crews' own marks (b477): names, with their English meaning, or Germany's kill rings, per tank.
     ...(land.crew ? { crew: land.crew } : {}),
+    // What its guns throw, as the art director's explosions sheet sizes it (src/battle/land/shells.ts).
+    ...(land.cal ? { cal: land.cal } : {}),
     order: land.order ? { kind: land.order.kind, x: land.order.x, y: land.order.y, target: land.order.target ?? -1, path: land.path } : null,
     ...(extra ? { extra } : {}),
   };
@@ -295,6 +342,9 @@ export function battleCalls(h: BattleHooks) {
       const t = landTicket(g, corps, target);
       if (!t || staffOnly(t)) return null;
       const sim = new LandBattle(t);
+      // A tank's shells by the model the game draws it with: its nation's design year where the campaign keeps one
+      // (armourYear, as this game's DesignYears), not the calendar's. Looks only: nothing in the fight reads cal.
+      for (const u of sim.units) if (u.kind === 'arm') { const c = calFor('arm', u.nat, t.turn, armourYear(g, u.nat)); if (c) u.cal = c; }
       // A defence the attack card did not know (b453), by the card's own outlook: its blocks show only where they stand
       // until one of the player's has fought them (b464(2)).
       const look = attackOutlook(g, corps, target);

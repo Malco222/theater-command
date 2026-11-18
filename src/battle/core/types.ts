@@ -203,6 +203,8 @@ export interface Zone {
   at?: number;
   /** The unit it came from, where it is one's (a wreck: the block whose tank it was, so it is drawn as her model). */
   unit?: number;
+  /** A crater's: the class of the shell that made it (Calibre). */
+  cal?: Calibre;
 }
 
 /** Orders every domain understands. Unit ids are the field's own. */
@@ -231,11 +233,23 @@ export interface DomainCommand { do: `${Domain}:${string}`; units?: number[]; [k
 
 export type Command = CoreCommand | DomainCommand;
 
+/**
+ * What a gun throws, as a size class of the art director's explosions sheet (art-director/explosions/explosions-look.md,
+ * "Sizes"): 'mortar' 81 or 82 mm, 'field' 75 or 76 mm, 'howitzer' 105 mm, 'heavy' 150 or 155 mm, and 'light' for the
+ * small tank and anti-tank guns, 37 to 57 mm, which the sheet has no row for: drawn and heard at its hand grenade row
+ * until it gives them one. src/battle/land/shells.ts says which block throws which.
+ */
+export type Calibre = 'light' | 'mortar' | 'field' | 'howitzer' | 'heavy';
+
 /** Something that happened, for the dispatches strip, the sound and the camera. */
 export interface FieldEvent {
   t: number;
-  /** The core's kinds; a domain may add its own as '<domain>:<kind>' ('sea:sunk', 'air:lost'). */
-  what: 'contact' | 'flanked' | 'wavering' | 'routing' | 'rallied' | 'gone' | 'withdrawn' | 'broken' | 'nearBreak' | 'objective' | 'ability' | 'end' | `${Domain}:${string}`;
+  /**
+   * The core's kinds; a domain may add its own as '<domain>:<kind>' ('sea:sunk', 'air:lost'). 'shell' is a shell that
+   * cost a block one of its models, landing at x, y: it carries no words and no cue, and the fields below marked
+   * 'shell' say what landed, on what and on which ground (src/battle/land/shells.ts).
+   */
+  what: 'contact' | 'flanked' | 'wavering' | 'routing' | 'rallied' | 'gone' | 'withdrawn' | 'broken' | 'nearBreak' | 'objective' | 'ability' | 'end' | 'shell' | `${Domain}:${string}`;
   unit?: number;
   side?: Side;
   text: string;
@@ -252,6 +266,21 @@ export interface FieldEvent {
   /** Where on the field it happened, for the camera and for placing the sound. */
   x?: number;
   y?: number;
+  /** 'shell': what landed, the firing block's class (Calibre). */
+  cal?: Calibre;
+  /** 'shell': the block that fired it; left out where the player does not know that block (b464(2)). */
+  by?: number;
+  /** 'shell': the block it cost a model, at x, y within that block's ground. */
+  on?: number;
+  /**
+   * 'shell': true where that block is tanks: it struck the tank lost, whose wreck lies at x, y. Sparks and a bright scar
+   * on her armour, no earth crown, no crater.
+   */
+  armour?: boolean;
+  /** 'shell': the field's ground at x, y (a name from GROUNDS in src/battle/land/field.ts): what the burst throws up. */
+  ground?: string;
+  /** 'shell': metres from x, y within which men drop or are knocked flat and vehicles rock (the class's blast reach). */
+  reach?: number;
 }
 
 /**

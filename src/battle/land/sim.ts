@@ -13,6 +13,7 @@ import { DT, type BattleSim, type BattleView, type BreakCause, type Command, typ
 import { thinkFor } from './ai';
 import { buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt, zonesOf, type Ground, type LandField, type LandPlace } from './field';
 import { crewFor } from './crews';
+import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
 import { LAND, MOTION, type Kind, type Motion } from './rules';
 import { bendAt, deploy, makeBlocks, type LandUnit } from './units';
 
@@ -45,7 +46,7 @@ export function breakLine(why: BreakCause, who: string, past = false): string {
   if (why.by === 'running') return past ? `${who} broke: half of it was running or gone, and the rest would not stand alone.` : `${who} breaks: half of it is running or gone, and the rest will not stand alone.`;
   const pays = why.side === 'att' ? 'as much as an attack will pay before it is called off' : 'as much as a defence will pay before it gives up the ground';
   const still = why.stillSteady === 'all' ? ', though every part of it was still steady' : why.stillSteady === 'most' ? ', though most of it was still steady' : '';
-  return `${who} ${past ? 'broke: it had lost' : 'breaks: it has lost'} about ${Math.round(why.worn * 100)}% of its men along the whole line, ${pays}${still}.`;
+  return `${who} ${past ? 'broke when it had lost' : 'breaks: it has lost'} about ${Math.round(why.worn * 100)}% of its men along the whole line, ${pays}${still}.`;
 }
 
 /**
@@ -82,6 +83,11 @@ export class LandBattle implements BattleSim<LandUnit> {
   contactAt: number | null = null;
   /** The tanks knocked out on the field, where each stands, to the end of the fight (b477): what the view sends as zones. */
   wrecks: Zone[] = [];
+  /**
+   * The craters the shells have left on the ground, to the end of the fight (shells.ts): sent as zones beside the wrecks.
+   * Looks only: nothing in the fight reads them. Numbered -1, -2 and on, so no crater has a wreck's id.
+   */
+  craters: Zone[] = [];
   /** The player has been warned that their army is near breaking (ruling 226(3)). */
   private warned: Record<Side, boolean> = { att: false, def: false };
   /** Each army's bar, how near breaking it stands, as last judged: what a withdrawal after contact pays by (b474). */
@@ -109,6 +115,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.freshHold = { att: att.filter((u) => u.kind !== 'fort').length <= LAND.fresh.upTo, def: !works && def.filter((u) => u.kind !== 'fort').length <= LAND.fresh.upTo };
     // Tank crews name their tanks after their unit's third battle (b477): data only, nothing in the fight reads it.
     for (const u of this.units) { const c = crewFor(u, ticket[u.side].forces.find((f) => f.corps === u.corps)?.battles ?? 0); if (c) u.crew = c; }
+    // What each block's guns throw, from the model the 3D game draws it with (shells.ts): data only, as the crews'
+    // marks are.
+    for (const u of this.units) { const c = calFor(u.kind, u.nat, ticket.turn); if (c) u.cal = c; }
     // Where some of the attack's corps cross the river and some come on over dry ground, the river lies only before
     // those that cross: it bends away from the lanes of the others, at their end of the field (the design director,
     // b464(5)). Where all cross, or there is no river, the field is as it always was.
@@ -487,7 +496,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
     // Blows first, from where everyone stands, then nerve, then movement: no block gets to strike first by its place in the list.
-    const hurt = new Map<number, { dmg: number; nerve: number }>();
+    const hurt = new Map<number, { dmg: number; nerve: number; by: LandUnit; most: number }>();
     for (const u of this.units) {
       if (!fighting(u)) continue;
       const t = this.targetOf(u);
@@ -499,8 +508,11 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (this.ticket[u.side].human || u.kind !== 'art' || this.gap(u, t) < LAND.guns.closeAt) { u.found = true; t.found = true; }
       if (!u.met) { u.met = true; if (u.side === 'att' || !t.met) this.say({ what: 'contact', unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y }); }
       const blow = this.blow(u, t);
-      const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0 };
+      const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, by: u, most: 0 };
       h.dmg += blow.dmg; h.nerve += blow.nerve;
+      // Whose blow cost a model this tick, where one is lost: the striker that did the most (shells.ts). Never read by
+      // the fight.
+      if (blow.dmg > h.most) { h.most = blow.dmg; h.by = u; }
       hurt.set(t.id, h);
       if (blow.front) t.pinned = true;
       if (blow.aspect !== 'front' && this.t - t.flankedAt > 20) {
@@ -508,7 +520,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         if (t.side === 'att' ? this.ticket.att.human : this.ticket.def.human) this.say({ what: 'flanked', unit: t.id, side: t.side, text: `${this.named(t)} is hit from the ${blow.aspect === 'rear' ? 'rear' : 'flank'}.`, x: t.x, y: t.y });
       }
     }
-    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve);
+    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.by);
     for (const u of this.units) if (live(u)) this.nerve(u);
     for (const u of this.units) if (live(u)) this.move(u);
     this.spread();
@@ -645,7 +657,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect };
   }
 
-  private suffer(t: LandUnit, dmg: number, nerveMul: number): void {
+  /** 'by' is the striker that did the most to it this tick: a gun or a tank that costs it a model lands a shell there. */
+  private suffer(t: LandUnit, dmg: number, nerveMul: number, by?: LandUnit): void {
     // Damage is in power: as a share of what the block came with, it comes off its strength meter.
     const share = dmg / Math.max(1e-9, t.power0);
     const before = t.str, had = t.figures;
@@ -655,19 +668,52 @@ export class LandBattle implements BattleSim<LandUnit> {
     t.mor = Math.max(0, t.mor - lost * LAND.nerve.perLoss[t.side] * nerveMul * Math.max(0.3, steady));
     t.still = 0;
     t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
-    if (t.kind === 'arm') for (let k = t.figures; k < had; k++) this.wreck(t);
+    const shells = by !== undefined && SHELLS_FROM.includes(by.kind);
+    for (let k = t.figures; k < had; k++) {
+      const w = t.kind === 'arm' ? this.wreck(t) : null;
+      if (shells) this.shell(by!, t, k, w);
+    }
+  }
+
+  /**
+   * A shell that cost a block its model k (counted from 0 in its models' order): it lands at that model's place within
+   * the block's frontage and depth, or on the tank it knocked out, at her wreck (shells.ts). Fixed by the block and the
+   * model, never drawn from the battle's random stream. A 'shell' event for the 3D game, sent once and never logged: it
+   * says nothing, and names the block that fired only where the player knows it (b464(2); a block he does not know that
+   * lands a shell on his is always guns firing from far back, since any other striker is known by the blow).
+   */
+  private shell(by: LandUnit, t: LandUnit, k: number, w: Zone | null): void {
+    let x: number, y: number;
+    if (w) { x = w.x; y = w.y; }
+    else {
+      const across = (mix(t.id * 787 + k * 271 + 11) - 0.5) * t.w * 0.9, along = (mix(t.id * 449 + k * 523 + 5) - 0.5) * t.d * 0.8;
+      const c = Math.cos(t.face), s = Math.sin(t.face);
+      x = Math.round(clamp(t.x + across * c + along * s, 2, this.field.w - 2) * 10) / 10;
+      y = Math.round(clamp(t.y - across * s + along * c, 2, this.field.h - 2) * 10) / 10;
+    }
+    const cal = by.cal ?? 'field', at = Math.round(this.t * 10) / 10, armour = t.kind === 'arm';
+    const ground = groundAt(this.field, x, y);
+    const ev: FieldEvent = { t: at, what: 'shell', text: '', x, y, cal, on: t.id, armour, ground, reach: REACH[cal] };
+    if (this.known(by)) ev.by = by.id;
+    this.events.push(ev);
+    // On the ground it leaves its crater to the end of the fight; on armour, or in the river, none.
+    if (!armour && !inRiver(ground)) {
+      this.craters.push({ id: -(this.craters.length + 1), kind: 'crater', x, y, r: CRATER[cal] / 2, until: this.ticket.limit, at, cal });
+    }
   }
 
   /**
    * A tank knocked out: her wreck stays where she stood, within the block's frontage, to the end of the fight (b477). Where
    * on the tray is fixed by the block and the count, never by the battle's dice, so the fight's own luck does not move.
    */
-  private wreck(t: LandUnit): void {
+  private wreck(t: LandUnit): Zone {
     const n = this.wrecks.filter((z) => z.unit === t.id).length;
     const across = (mix(t.id * 977 + n * 131 + 7) - 0.5) * t.w * 0.9, along = (mix(t.id * 613 + n * 389 + 3) - 0.5) * t.d * 0.8;
     const c = Math.cos(t.face), s = Math.sin(t.face);
     const x = clamp(t.x + across * c + along * s, 2, this.field.w - 2), y = clamp(t.y - across * s + along * c, 2, this.field.h - 2);
-    this.wrecks.push({ id: this.wrecks.length + 1, kind: 'wreck', x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, r: LAND.wreck.r, until: this.ticket.limit, side: t.side, at: Math.round(this.t * 10) / 10, unit: t.id });
+    const z: Zone = { id: this.wrecks.length + 1, kind: 'wreck', x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, r: LAND.wreck.r, until: this.ticket.limit, side: t.side, at: Math.round(this.t * 10) / 10, unit: t.id };
+    this.wrecks.push(z);
+    return z;
   }
 
   /** The share of a block on foot that wrecks shelter: one model's worth for each within its frontage or beside it (b477). */
@@ -1100,7 +1146,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (u.order?.kind === 'withdraw') continue;
       this.send(u, { kind: 'withdraw', x: u.x, y: s === 'att' ? 0 : this.field.h });
       u.engaged = undefined;
-      this.say({ what: 'land:gives', unit: u.id, side: s, text: `${this.named(u)} gives ground.`, x: u.x, y: u.y });
+      // The UI director's words (16:37Z): "gives ground" read as ground lost.
+      this.say({ what: 'land:gives', unit: u.id, side: s, text: `${this.named(u)} is worn out and falls back; the rest of its army holds.`, x: u.x, y: u.y });
     }
   }
 
@@ -1190,12 +1237,14 @@ export class LandBattle implements BattleSim<LandUnit> {
               : this.staffLine(),
     ];
     // Broken, why, in the past: straight after the line that says when (the UI director, 14:44Z). So after a rout the
-    // strength line is the third, and the pursuit's line comes after it.
-    if (how === 'rout' && why && why.by !== 'none') lines.push(breakLine(why, this.whose(loser), true));
+    // strength line is the third, and the pursuit's line comes after it. Its figure is at the break, the strength line's
+    // at the end, so the strength line opens "In all," under it (the UI director, 16:37Z).
+    const told = how === 'rout' && why && why.by !== 'none';
+    if (told) lines.push(breakLine(why, this.whose(loser), true));
     // Handed over, the field's figure is only the part before the staff took it: it says so, as it reads beside the
     // campaign's bill for the whole day (the design director, b356). Handed over before a shot, the staff's line says so
     // already, and there is no figure to give (the UI director, after the retest).
-    if (how !== 'objective') lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? 'Neither side lost any of its strength.' : `${cap(this.sideOf('att', 'attack'))} lost ${pct(lost.att)} of its strength, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
+    if (how !== 'objective') lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? 'Neither side lost any of its strength.' : `${told ? `In all, ${this.sideOf('att', 'attack')}` : cap(this.sideOf('att', 'attack'))} lost ${pct(lost.att)} of its strength, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
     else if (this.contactAt !== null) lines.push(`Before you handed the battle to the staff, ${this.sideOf('att', 'attack')} had lost ${pct(lost.att)} of its strength on the field, and ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
     // The battle is over: nothing marches on (the blocks' cards and the 3D models alike), and none is left standing in the
     // river: one still wading it is set on the nearer bank (b464(5)). The figures above are already counted.
@@ -1288,7 +1337,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ev = this.events;
     this.events = [];
     void as; // Every block on the field is in sight: what the player knows of each is known() (b464(2)).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt };
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt };
   }
 }
 
