@@ -40,7 +40,7 @@ def inside(poly, x, y):
 
 class Ground:
     def __init__(self, digs=(), worn=(), seed=3, flat=34.0, fine=26.0, cell=0.25, sun_turn=150.0, sun_elev=40.0, trees=True, grass=True, kind="grass",
-                 sky_level=0.55, sun=3.2, grass_area=42.0, grass_count=52000, clear=()):
+                 sky_level=0.55, sun=3.2, grass_area=38.0, grass_count=120000, clear=()):
         self.digs = [[(p[0], p[1]) for p in d] for d in digs]
         self.worn = list(worn)                       # (x, y, r[, strength]) circles of trodden earth
         self.clear = [[(p[0], p[1]) for p in d] for d in clear]      # outlines where no grass stands (under a work)
@@ -156,9 +156,9 @@ class Ground:
             dry = ramp(mid.outputs["Fac"], "CDBB90", "B49C6C", 0.45, 0.7)
             earth = ramp(mid.outputs["Fac"], "A8946A", "BCA67A", 0.3, 0.7)
         else:
-            grass = ramp(big.outputs["Fac"], "6F7B42", "8D8650")
-            dry = ramp(mid.outputs["Fac"], "7A8048", "9C8C5E", 0.45, 0.7)
-            earth = ramp(mid.outputs["Fac"], "6A5843", "86724F", 0.3, 0.7)
+            grass = ramp(big.outputs["Fac"], "66753E", "86834C")
+            dry = ramp(mid.outputs["Fac"], "66733C", "948A58", 0.42, 0.68)
+            earth = ramp(mid.outputs["Fac"], "75624A", "93805C", 0.3, 0.7)
         base = mix(grass.outputs["Color"], dry.outputs["Color"], 0.45)
         worn = nt.nodes.new("ShaderNodeVertexColor")
         worn.layer_name = "worn"
@@ -175,36 +175,139 @@ class Ground:
         return battle_set.haze(m, start=70.0, end=800.0)
 
     def _trees(self):
+        """Woods' edges and lone trees well back from the works: each crown many lumpy clumps of leaf on a trunk and limbs,
+        all one mesh, the leaves shaded from deep green in the hollows to sunlit yellow-green."""
         rnd = random.Random(self.seed)
-        mats = {
-            "bark": battle_set.haze(kit.material("bark", kit.hex_rgb("4A3F33"), rough=0.95, noise=0.5, noise_scale=8, bump=0.5)),
-            "leaf": battle_set.haze(kit.material("leaf", kit.hex_rgb("4F6034"), rough=0.85, noise=0.55, noise_scale=3.0, bump=0.8)),
-        }
-        # a wood's edge behind the works (the defender's side) and a few lone trees
+        bm = bmesh.new()
+        ball = bmesh.new()
+        bmesh.ops.create_icosphere(ball, subdivisions=2, radius=1.0)
+        bverts = [v.co.copy() for v in ball.verts]
+        bfaces = [[v.index for v in f.verts] for f in ball.faces]
+        ball.free()
+        leaf_faces, bark_faces = [], []
+
+        def clump(c, r, squash, sd):
+            vs = []
+            for w in bverts:
+                k = 1.0 + 0.34 * noise.noise(w * 1.4 + Vector((sd, sd * 0.37, 0.0))) + 0.14 * noise.noise(w * 4.1 + Vector((0.0, sd, 1.0)))
+                vs.append(bm.verts.new(c + Vector((w.x * r * k, w.y * r * k, w.z * r * k * squash))))
+            for f in bfaces:
+                leaf_faces.append(bm.faces.new([vs[i] for i in f]))
+
+        def limb(a, b_, ra, rb, sides=7):
+            ax = (b_ - a).normalized()
+            u = ax.cross(Vector((0.3, 0.2, 1.0))).normalized()
+            v = ax.cross(u)
+            ra_, rb_ = [], []
+            for i in range(sides):
+                t = 2 * math.pi * i / sides
+                d = u * math.cos(t) + v * math.sin(t)
+                ra_.append(bm.verts.new(a + d * ra))
+                rb_.append(bm.verts.new(b_ + d * rb))
+            for i in range(sides):
+                j = (i + 1) % sides
+                bark_faces.append(bm.faces.new((ra_[i], ra_[j], rb_[j], rb_[i])))
+
+        def tree(at, h, sd):
+            g = random.Random(sd)
+            trunk = h * g.uniform(0.3, 0.42)
+            lean = Vector((g.uniform(-0.05, 0.05), g.uniform(-0.05, 0.05), 1.0)).normalized()
+            top = at + lean * trunk
+            limb(at - Z_ * 0.3, top, 0.035 * h, 0.022 * h)
+            crown_c = at + lean * (trunk + h * 0.3)
+            rx, rz = h * g.uniform(0.3, 0.4), h * g.uniform(0.3, 0.36)
+            for k in range(g.randint(4, 6)):
+                a = g.uniform(0, 2 * math.pi)
+                tip = crown_c + Vector((math.cos(a) * rx * 0.6, math.sin(a) * rx * 0.6, g.uniform(-0.3, 0.2) * rz))
+                limb(top - lean * g.uniform(0.0, 0.25) * trunk, tip, 0.016 * h, 0.006 * h, 5)
+            for k in range(g.randint(18, 26)):
+                # (clumps spread through the crown's egg, bigger at its heart, smaller and lower at its skirts)
+                a, e = g.uniform(0, 2 * math.pi), math.asin(g.uniform(-0.75, 1.0))
+                d = g.random() ** 0.5
+                c = crown_c + Vector((math.cos(a) * math.cos(e) * rx * d, math.sin(a) * math.cos(e) * rx * d, math.sin(e) * rz * d))
+                clump(c, h * g.uniform(0.1, 0.17) * (1.15 - 0.4 * d), g.uniform(0.7, 0.95), sd * 3.1 + k * 7.7)
+
+        Z_ = Vector((0, 0, 1))
         placed = 0
-        for k in range(400):
-            if placed >= 70:
+        for k in range(2600):
+            if placed >= 230:
                 break
             a = rnd.uniform(0, 2 * math.pi)
-            r = rnd.uniform(95.0, 240.0)
+            r = rnd.uniform(self.flat + 55.0, self.flat + 250.0)
             x, y = math.cos(a) * r, math.sin(a) * r
-            dense = 0.5 + 0.5 * noise.noise(Vector((x / 90.0, y / 90.0, 9.0 + self.seed)))
-            if dense < 0.52:
+            dense = 0.5 + 0.5 * noise.noise(Vector((x / 110.0, y / 110.0, 9.0 + self.seed)))
+            if dense < 0.6:
                 continue
-            battle_set._tree(f"tree{k}", Vector((x, y, self.height(x, y))), rnd.uniform(9, 16), self.seed * 100 + k, mats)
+            tree(Vector((x, y, self.height(x, y))), rnd.uniform(9, 17), self.seed * 100 + k)
             placed += 1
+        me = bpy.data.meshes.new("trees")
+        leaf_idx = {f.index for f in leaf_faces}
+        bm.faces.index_update()
+        leaf_idx = {f.index for f in leaf_faces}
+        bm.to_mesh(me)
+        bm.free()
+        me.polygons.foreach_set("use_smooth", [True] * len(me.polygons))
+        me.polygons.foreach_set("material_index", [0 if i in leaf_idx else 1 for i in range(len(me.polygons))])
+        me.update()
+        leaf = bpy.data.materials.new("leaf")
+        leaf.use_nodes = True
+        nt = leaf.node_tree
+        bsdf = nt.nodes["Principled BSDF"]
+        tc = nt.nodes.new("ShaderNodeTexCoord")
+        geo = nt.nodes.new("ShaderNodeNewGeometry")
+        n1 = nt.nodes.new("ShaderNodeTexNoise")
+        n1.inputs["Scale"].default_value, n1.inputs["Detail"].default_value, n1.inputs["Roughness"].default_value = 1.6, 8.0, 0.7
+        nt.links.new(tc.outputs["Object"], n1.inputs["Vector"])
+        n2 = nt.nodes.new("ShaderNodeTexNoise")
+        n2.inputs["Scale"].default_value, n2.inputs["Detail"].default_value = 0.09, 3.0
+        nt.links.new(tc.outputs["Object"], n2.inputs["Vector"])
+        r = nt.nodes.new("ShaderNodeValToRGB")
+        e = r.color_ramp.elements
+        e[0].position, e[0].color = 0.3, (*kit.hex_rgb("2F3D22"), 1)
+        e[1].position, e[1].color = 0.72, (*kit.hex_rgb("6F8040"), 1)
+        mid = e.new(0.5)
+        mid.color = (*kit.hex_rgb("47592D"), 1)
+        nt.links.new(n1.outputs[0], r.inputs["Fac"])
+        r2 = nt.nodes.new("ShaderNodeValToRGB")
+        r2.color_ramp.elements[0].position, r2.color_ramp.elements[0].color = 0.35, (0.82, 0.9, 0.8, 1)
+        r2.color_ramp.elements[1].position, r2.color_ramp.elements[1].color = 0.65, (1.12, 1.05, 0.85, 1)
+        nt.links.new(n2.outputs[0], r2.inputs["Fac"])
+        mx = nt.nodes.new("ShaderNodeMix")
+        mx.data_type, mx.blend_type = "RGBA", "MULTIPLY"
+        mx.inputs[0].default_value = 1.0
+        nt.links.new(r.outputs["Color"], mx.inputs[6])
+        nt.links.new(r2.outputs["Color"], mx.inputs[7])
+        nt.links.new(mx.outputs[2], bsdf.inputs["Base Color"])
+        bsdf.inputs["Roughness"].default_value = 0.8
+        bump = nt.nodes.new("ShaderNodeBump")
+        bump.inputs["Strength"].default_value = 1.0
+        bump.inputs["Distance"].default_value = 0.5
+        nt.links.new(n1.outputs[0], bump.inputs["Height"])
+        nt.links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+        bark = kit.material("bark", kit.hex_rgb("4A3F33"), rough=0.95, noise=0.5, noise_scale=8, bump=0.5)
+        ob = bpy.data.objects.new("trees", me)
+        bpy.context.scene.collection.objects.link(ob)
+        ob.data.materials.append(battle_set.haze(leaf, start=70.0, end=800.0))
+        ob.data.materials.append(battle_set.haze(bark, start=70.0, end=800.0))
+        return ob
 
     def _grass(self, area, count):
+        """Tufts of late-summer grass: each a handful of bent blades, short where it is trodden, long and going to straw
+        in patches, every tuft its own shade (carried on the blades as a colour, darker at the root)."""
         rnd = random.Random(self.seed + 5)
-        bm = bmesh.new()
         boxes = [(min(p[0] for p in d) - 0.2, max(p[0] for p in d) + 0.2, min(p[1] for p in d) - 0.2, max(p[1] for p in d) + 0.2) for d in self.digs + self.clear]
         polys = self.digs + self.clear
+        verts, faces, cols = [], [], []
+        green, straw, deep = Vector(kit.hex_rgb("7F8E4A")), Vector(kit.hex_rgb("BDB274")), Vector(kit.hex_rgb("66743C"))
+        if self.kind == "sand":
+            green, straw, deep = Vector(kit.hex_rgb("8E8A52")), Vector(kit.hex_rgb("B9A870")), Vector(kit.hex_rgb("6F6C42"))
         for _ in range(count):
             # (thicker toward the middle, where the camera looks)
-            r = area * rnd.random() ** 0.75
+            r = area * rnd.random() ** 0.8
             a = rnd.uniform(0, 2 * math.pi)
             x, y = math.cos(a) * r, math.sin(a) * r
-            if rnd.random() < self.wear(x, y) * 1.25:
+            w = self.wear(x, y)
+            if rnd.random() < w * 1.3:
                 continue
             skip = False
             for d, (x0, x1, y0, y1) in zip(polys, boxes):
@@ -214,20 +317,59 @@ class Ground:
             if skip:
                 continue
             z = self.height(x, y)
-            tall = 0.6 + 0.8 * (0.5 + 0.5 * noise.noise(Vector((x / 6.0, y / 6.0, 2.0))))
-            for b in range(4):
+            patchy = 0.5 + 0.5 * noise.noise(Vector((x / 5.0, y / 5.0, 2.0)))
+            clump = 0.5 + 0.5 * noise.noise(Vector((x / 1.3, y / 1.3, 7.0)))
+            if rnd.random() > 0.35 + 0.9 * clump:
+                continue
+            tall = (0.4 + 0.75 * patchy * patchy) * (1.0 - 0.6 * w) * (0.7 + 0.5 * clump)
+            dry = min(1.0, max(0.0, 0.15 + 0.9 * noise.noise(Vector((x / 9.0, y / 9.0, 4.0))) + rnd.uniform(-0.2, 0.3)))
+            shade = rnd.uniform(0.8, 1.15)
+            tip = (green.lerp(straw, dry)) * shade
+            root = (deep.lerp(green, 0.4)) * shade * 0.92
+            for b in range(rnd.randint(5, 8)):
                 ang = rnd.uniform(0, 2 * math.pi)
-                h = rnd.uniform(0.12, 0.34) * tall
-                lean = Vector((math.cos(ang), math.sin(ang), 0)) * rnd.uniform(0.03, 0.13)
-                side = Vector((-math.sin(ang), math.cos(ang), 0)) * 0.011
-                base = Vector((x + rnd.uniform(-0.05, 0.05), y + rnd.uniform(-0.05, 0.05), z - 0.02))
-                bm.faces.new((bm.verts.new(base - side), bm.verts.new(base + side), bm.verts.new(base + lean + Vector((0, 0, h)))))
+                h = rnd.uniform(0.07, 0.22) * tall
+                out = Vector((math.cos(ang), math.sin(ang), 0))
+                side = Vector((-math.sin(ang), math.cos(ang), 0)) * rnd.uniform(0.006, 0.012)
+                base = Vector((x + rnd.uniform(-0.07, 0.07), y + rnd.uniform(-0.07, 0.07), z - 0.02))
+                lean = rnd.uniform(0.15, 0.6) * h
+                mid = base + out * lean * 0.35 + Vector((0, 0, h * 0.6))
+                top = base + out * lean + Vector((0, 0, h))
+                k = len(verts)
+                verts += [base - side, base + side, mid + side * 0.7, mid - side * 0.7, top]
+                faces += [(k, k + 1, k + 2, k + 3), (k + 3, k + 2, k + 4)]
+                mc = root.lerp(tip, 0.7)
+                cols += [root, root, mc, mc, tip]
         me = bpy.data.meshes.new("grass")
-        bm.to_mesh(me)
-        bm.free()
+        me.from_pydata([tuple(v) for v in verts], [], faces)
+        me.update()
+        ca = me.color_attributes.new("tint", "FLOAT_COLOR", "POINT")
+        flat = np.ones((len(verts), 4))
+        flat[:, 0:3] = np.array([tuple(c) for c in cols]) if cols else 0.0
+        ca.data.foreach_set("color", flat.ravel())
         ob = bpy.data.objects.new("grass", me)
         bpy.context.scene.collection.objects.link(ob)
-        mat = kit.material("grasstuft", kit.hex_rgb("7C8448" if self.kind != "sand" else "A89C62"), rough=0.8, noise=0.5, noise_scale=1.5)
+        mat = bpy.data.materials.new("grasstuft")
+        mat.use_nodes = True
+        nt = mat.node_tree
+        bsdf = nt.nodes["Principled BSDF"]
+        at = nt.nodes.new("ShaderNodeVertexColor")
+        at.layer_name = "tint"
+        nt.links.new(at.outputs["Color"], bsdf.inputs["Base Color"])
+        bsdf.inputs["Roughness"].default_value = 0.75
+        if "Specular IOR Level" in bsdf.inputs:
+            bsdf.inputs["Specular IOR Level"].default_value = 0.2
+        # (blades are lit from both sides: face the light's side)
+        geo = nt.nodes.new("ShaderNodeNewGeometry")
+        up = nt.nodes.new("ShaderNodeVectorMath")
+        up.operation = "NORMALIZE"
+        mixn = nt.nodes.new("ShaderNodeMix")
+        mixn.data_type = "VECTOR"
+        mixn.inputs[0].default_value = 0.7
+        nt.links.new(geo.outputs["Normal"], mixn.inputs[4])
+        mixn.inputs[5].default_value = (0.0, 0.0, 1.0)
+        nt.links.new(mixn.outputs[1], up.inputs[0])
+        nt.links.new(up.outputs["Vector"], bsdf.inputs["Normal"])
         ob.data.materials.append(battle_set.haze(mat, start=70.0, end=800.0))
         ob.visible_shadow = False
         return ob

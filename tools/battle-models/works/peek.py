@@ -33,6 +33,10 @@ def main():
     t = time.time()
     m = works.BUILDERS[name](True)
     ob, arm = look.stand(m)
+    pose = [a for a in sys.argv if a.startswith("pose=")]
+    clip, at = (pose[0][5:].split("@") + ["0"])[:2] if pose else ("idle", "0")
+    if clip in m.clips:
+        rigid.apply_pose(arm, rigid.pose_of(m, m.clips[clip], float(at)), model=m)
     print(f"{name}: {m.triangles()} triangles, {len(m.parts)} parts, {len(m.sockets)} sockets, {len(m.clips)} clips, built in {time.time() - t:.1f}s", flush=True)
     t = time.time()
     ground.Ground(digs=m.info.get("dig", []), worn=m.info.get("worn", []), clear=m.info.get("clear", []), trees="notrees" not in sys.argv)

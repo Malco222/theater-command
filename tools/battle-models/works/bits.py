@@ -24,8 +24,8 @@ from rigid import X, Y, Z, Model  # noqa: E402
 
 # The paints of the works (the game gives `upper` and `upper2` each nation's own field paint; the rest are what they are).
 PAINTS = {
-    "concrete": "A3A29A", "concrete.in": "55554F", "concrete.old": "8F8D82",
-    "earth": "6A5843", "earth.dry": "86724F", "turf": "6C7741",
+    "concrete": "8F8D83", "concrete.in": "55554F", "concrete.old": "7E7B6E",
+    "earth": "6A5843", "earth.dry": "86724F", "turf": "5F6C3A",
     "sandbag": "B39A6D", "sandbag.2": "A39068", "sandbag.3": "948766",
     "timber": "77604A", "timber.end": "A68C66", "timber.dark": "4B3E33", "planks": "8A7254",
     "steel": "3B3D3F", "steel.worn": "7C7E7E", "rust": "6B4631", "wire": "4B4037", "iron": "2B2B2C",
@@ -345,7 +345,7 @@ def bag_wall(m, pts, courses, z0=0.0, seed=0, batter=0.012, thick=1, size=BAG, t
 
 # ---- earth ------------------------------------------------------------------------------------------------
 
-def bank(m, pts, profile, paint="earth", seed=0, lump=0.05, closed=False, step=0.35, paint_fn=None, ends=True):
+def bank(m, pts, profile, paint="earth", seed=0, lump=0.05, closed=False, step=0.35, paint_fn=None, ends=True, turf=None):
     """Thrown-up earth along a line of points: `profile` is (offset to the line's left, height) pairs across it.
     Lumpy, never a smooth extrusion."""
     path = []
@@ -382,7 +382,31 @@ def bank(m, pts, profile, paint="earth", seed=0, lump=0.05, closed=False, step=0
         rows.append(row)
     if closed:
         rows.append(rows[0])
+    if turf is not None:
+        k = len(rows[0])
+        turfed(m, [q for row in rows for q in row], [(r * k + j, r * k + j + 1, (r + 1) * k + j + 1, (r + 1) * k + j) for r in range(len(rows) - 1) for j in range(k - 1)],
+               turf, paint, seed=seed)
+        return
     m.sheet(rows, paint_fn or paint, Z, True)
+
+
+def turfed(m, verts, faces, amount=0.5, base="earth", over="turf", seed=0.0, part=None, low=0.05, scale=1.5, smooth=True):
+    """Earth grown over with turf in soft-edged patches, as thrown earth is after a season: every POINT is earth or turf by
+    a broad noise (more turf with `amount`; none below `low` metres, where boots keep it bare), and the paint runs
+    smoothly from point to point, so there is never a hard-edged square of green. Faces are turned to look upward.
+    Wants points no more than about 0.3 m apart where the patches' edges should look natural."""
+    vs = [Vector(v) for v in verts]
+    coat = []
+    for q in vs:
+        n = 0.5 + 0.5 * fbm((q.x / scale + seed * 3.1, q.y / scale - seed, 0.37), 1.0, 3)
+        fine = 0.12 * fbm((q.x * 2.3, q.y * 2.3, 5.0 + seed), 1.0, 2)
+        coat.append(over if (q.z > low and n + fine < amount) else None)
+    fs = []
+    for f in faces:
+        a, b, c = vs[f[0]], vs[f[1]], vs[f[2]]
+        fs.append(tuple(f) if (b - a).cross(c - a).z >= 0.0 else tuple(reversed(f)))
+    name = part if part is not None else m.parts[m.cur].name
+    m.raw(vs, fs, [base] * len(fs), name, coat=coat, by_point=[True] * len(fs), smooth=smooth)
 
 
 def patch(m, cx, cy, r, paint="earth", seed=0, n=28, lift=0.012, ragged=0.22, oval=1.0, yaw=0.0):

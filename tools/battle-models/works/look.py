@@ -88,27 +88,51 @@ def works_look(paint, mat, nt, bsdf, mix):
     col = mix.outputs[2]
     tc = nt.nodes.new("ShaderNodeTexCoord")
     if key == "concrete":
-        # the marks of the shuttering boards (level lines about 0.18 m apart), blotches, and rain streaks down the face
+        # the marks of the shuttering boards (level lines about 0.18 m apart, each board a shade of its own), blotches,
+        # rain streaks down the face, damp and green at the foot
         mp = nt.nodes.new("ShaderNodeMapping")
-        mp.inputs["Scale"].default_value = (0.0, 0.0, 5.6)
+        mp.inputs["Scale"].default_value = (0.0, 0.0, 1.745)
         nt.links.new(tc.outputs["Object"], mp.inputs["Vector"])
         wave = nt.nodes.new("ShaderNodeTexWave")
         wave.wave_type, wave.bands_direction = "BANDS", "Z"
         wave.inputs["Scale"].default_value = 1.0
-        wave.inputs["Distortion"].default_value = 0.0
+        wave.inputs["Distortion"].default_value = 0.25
+        wave.inputs["Detail"].default_value = 1.0
+        wave.inputs["Detail Scale"].default_value = 0.6
         nt.links.new(mp.outputs["Vector"], wave.inputs["Vector"])
-        boards = _ramp(nt, wave.outputs[1], 0.72, 1.0, 0.0, 0.07)
-        blot = _ramp(nt, _noise(nt, tc, 0.9, 6.0), 0.72, 1.14, 0.3, 0.7)
-        streak = _ramp(nt, _noise(nt, tc, 1.0, 4.0, 0.6, (5.0, 5.0, 0.35)), 0.74, 1.08, 0.35, 0.7)
+        boards = _ramp(nt, wave.outputs[1], 0.62, 1.0, 0.0, 0.05)
+        # (each board its own shade: a noise that only changes with height, in board-high steps)
+        each = _ramp(nt, _noise(nt, tc, 1.0, 0.0, 0.5, (0.0, 0.0, 5.6)), 0.86, 1.1, 0.3, 0.7)
+        blot = _ramp(nt, _noise(nt, tc, 0.9, 6.0), 0.66, 1.16, 0.3, 0.7)
+        streak = _ramp(nt, _noise(nt, tc, 1.0, 5.0, 0.62, (3.2, 3.2, 0.15)), 0.66, 1.08, 0.36, 0.68)
+        pit = _ramp(nt, _noise(nt, tc, 38.0, 2.0, 0.5), 0.55, 1.0, 0.24, 0.36)
         grit = _noise(nt, tc, 55.0, 3.0)
-        col = _times(nt, col, boards, 0.55 if paint != "concrete.in" else 0.2)
+        quiet = paint == "concrete.in"
+        col = _times(nt, col, boards, 0.2 if quiet else 0.6)
+        col = _times(nt, col, each, 0.3 if quiet else 0.8)
         col = _times(nt, col, blot, 0.9)
-        col = _times(nt, col, streak, 0.8)
-        col = _edges(nt, col, (0.66, 0.66, 0.62), 0.5, radius=0.03)
+        col = _times(nt, col, streak, 0.9)
+        col = _times(nt, col, pit, 0.5)
+        if not quiet:
+            # damp and moss creeping up from the ground, broken by the blotches
+            sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+            nt.links.new(tc.outputs["Object"], sep.inputs[0])
+            foot = nt.nodes.new("ShaderNodeMapRange")
+            foot.inputs["From Min"].default_value, foot.inputs["From Max"].default_value = 0.05, 0.75
+            foot.inputs["To Min"].default_value, foot.inputs["To Max"].default_value = 1.0, 0.0
+            nt.links.new(sep.outputs["Z"], foot.inputs["Value"])
+            damp = _math(nt, "MULTIPLY", foot.outputs["Result"], _ramp(nt, _noise(nt, tc, 1.7, 5.0), 0.2, 1.0, 0.3, 0.65), clamp=True)
+            _, f, a, b2, o = _mix(nt)
+            nt.links.new(_math(nt, "MULTIPLY", damp, 0.62), f)
+            nt.links.new(col, a)
+            b2.default_value = (0.105, 0.115, 0.07, 1.0)
+            col = o
+        col = _edges(nt, col, (0.62, 0.62, 0.58), 0.45, radius=0.03)
         nt.links.new(col, bsdf.inputs["Base Color"])
         bsdf.inputs["Roughness"].default_value = 0.93
-        h = _math(nt, "ADD", _math(nt, "MULTIPLY", grit, 0.25), _math(nt, "MULTIPLY", wave.outputs[1], -0.15))
-        _bump(nt, bsdf, h, 0.5, 0.012)
+        h = _math(nt, "ADD", _math(nt, "MULTIPLY", grit, 0.25), _math(nt, "MULTIPLY", wave.outputs[1], -0.2))
+        h = _math(nt, "ADD", h, _math(nt, "MULTIPLY", pit, 0.5))
+        _bump(nt, bsdf, h, 0.55, 0.012)
     elif key == "sandbag":
         # sacking: a coarse weave, each bag a little different, darker where it is damp underneath
         weave = nt.nodes.new("ShaderNodeTexWave")
