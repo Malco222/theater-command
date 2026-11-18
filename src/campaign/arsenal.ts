@@ -5,6 +5,7 @@
 // same list. The numbers live in data/campaign/arsenal.json. The historical scenarios offer only the four
 // classic corps and fortifications, as they always did.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
 import { AIRWAR, airFleetsOf, airPool, airWar, carrierRules, foundAirFleet, hasAirfield } from './air';

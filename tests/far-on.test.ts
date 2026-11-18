@@ -18,6 +18,7 @@ import leagueData from '../data/campaign/league.json';
 import nationsData from '../data/campaign/nations.json';
 import setupData from '../data/campaign/setup-1939.json';
 import worldData from '../data/campaign/world.json';
+import { ARSENAL, offers, yardLevel } from '../src/campaign/arsenal';
 import { monthlyDiplomacy, signPeace } from '../src/campaign/diplomacy';
 import { tieBars, tieWar, tiedPair } from '../src/campaign/far';
 import { FAR_LAID, FAR_PATHS, FAR_SETUP } from '../src/campaign/far-rows';
@@ -152,6 +153,35 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
     };
     expect([south(3).hold, !!south(3).stay]).toEqual([true, true]);
     expect([south(1).hold, !!south(1).stay]).toEqual([true, false]);
+  });
+
+  it("gives the far side's navies their yards, so that Japan can lay a keel (ruling b445)", () => {
+    // The director's ruling of 18 November 2026: "a Japan that can lay no keel is a fault, not a balance choice". The
+    // arsenal's 47 yards ended at the Americas; the eleven of the planner's far-yards.md are laid with them.
+    const yards = FW.arsenal.yards as Record<string, number>;
+    expect(yards).toEqual({ Hiroshima: 3, Yokohama: 3, Nagasaki: 3, Osaka: 3, Kyoto: 1, Sydney: 1, Melbourne: 1, Auckland: 1, Bangkok: 1, Abadan: 1, Vladivostok: 1 });
+    const g = grand();
+    const HOME: Record<string, string> = { Hiroshima: 'JAP', Yokohama: 'JAP', Nagasaki: 'JAP', Osaka: 'JAP', Kyoto: 'JAP', Sydney: 'AUS', Melbourne: 'AUS', Auckland: 'NZL', Bangkok: 'THA', Abadan: 'IRN', Vladivostok: 'SOV' };
+    for (const [name, level] of Object.entries(yards)) {
+      const r = g.byName[name];
+      expect(r, name).toBeDefined();
+      expect(r.id, name).toBeGreaterThanOrEqual(FAR_FIRST);
+      expect([r.port, r.owner, r.ctrl, yardLevel(g, r)], name).toEqual([true, HOME[name], HOME[name], level]);
+    }
+    // The older chart's yards stand as they were.
+    expect([ARSENAL.yards.Hamburg, ARSENAL.yards.Norfolk, ARSENAL.yards.Lima]).toEqual([3, 3, 1]);
+    expect(Object.keys(ARSENAL.yards).length).toBe(47 + 11);
+    // Main's own rule (arsenal.test.ts), on the whole world: every nation with a navy on the first day has somewhere to
+    // build a destroyer. It failed on Japan, Australia, New Zealand, Thailand and Iran.
+    const offer = (nat: string, key: string) => offers(g, nat).find((o) => o.key === key)!;
+    const navies = [...new Set(g.fleets.filter((f) => f.base >= 0).map((f) => f.nat))];
+    for (const nat of ['JAP', 'AUS', 'NZL', 'THA', 'IRN']) expect(navies, nat).toContain(nat);
+    for (const nat of navies) expect(offer(nat, 'ship:dd').at, nat).toBeGreaterThanOrEqual(0);
+    // Japan can lay every hull down, a carrier among them, at one of its four great yards; Australia a destroyer and
+    // troopships, and no cruiser until Sydney's yard is enlarged.
+    for (const hull of ['dd', 'ss', 'tp', 'ca', 'cv', 'bb']) expect(['Hiroshima', 'Yokohama', 'Nagasaki', 'Osaka'], hull).toContain(g.regions[offer('JAP', `ship:${hull}`).at]?.name);
+    expect(['Sydney', 'Melbourne']).toContain(g.regions[offer('AUS', 'ship:tp').at]?.name);
+    expect(offer('AUS', 'ship:ca').at).toBe(-1);
   });
 
   it("moves a computer navy's base in its month, where it holds the place, and leaves a player's fleet to him", () => {
