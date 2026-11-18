@@ -20,6 +20,7 @@ sys.path.insert(0, HERE)
 import bpy  # noqa: E402
 from mathutils import Quaternion, Vector  # noqa: E402
 
+import deckpark  # noqa: E402
 import kit  # noqa: E402
 import rigid  # noqa: E402
 import ships  # noqa: E402
@@ -35,10 +36,11 @@ def fade(pose, w):
 
 
 class Show:
-    def __init__(self, name, tmp, speed=12.0, wind=None, **sea):
+    def __init__(self, name, tmp, speed=12.0, wind=None, month=None, **sea):
         kit.fresh()
         self.m, self.yard = ships.BUILDERS[name](True)
         self.ob, self.arm = rigid.to_blender(self.m, stage.ship_look)
+        self.park = deckpark.range_on(self.m, self.arm, month)      # (a carrier's aircraft, ranged on her deck)
         h = self.yard.h
         self.L, self.B = h.L, h.B
         self.sea = stage.Sea(speed=speed, **sea)
@@ -210,7 +212,7 @@ def main():
     folder = os.path.join(out, f"{name}-{shot}")
     os.makedirs(folder, exist_ok=True)
     slow = shot in ("sink", "capsize")
-    S = Show(name, folder, speed=12.0, wind=(-7.0, 2.0, 0.0) if slow else None)
+    S = Show(name, folder, speed=12.0, wind=(-7.0, 2.0, 0.0) if slow else None, month=opt.get("month"))
     stage.render_setup(w, h, int(opt.get("samples", 16)))
     T, step = SHOTS[shot](S, out, opt)
     only = {int(v) - 1 for v in opt["frames"].split(",")} if "frames" in opt else None

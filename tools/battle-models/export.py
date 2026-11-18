@@ -15,6 +15,7 @@ sys.path.insert(0, HERE)
 
 import bpy  # noqa: E402
 
+import deckpark  # noqa: E402
 import kit  # noqa: E402
 import planes  # noqa: E402
 import rigid  # noqa: E402
@@ -29,18 +30,19 @@ AIR["Torpedo"] = lambda fine=True: (planes.torpedo(fine), None)
 
 def one(name, out, kinds):
     air = name in AIR
-    build = AIR[name] if air else ships.BUILDERS[name]
+    park = name in deckpark.BUILDERS                         # (a range of aircraft for a carrier's deck: painted as aircraft are, kept with the ships)
+    build = AIR[name] if air else deckpark.BUILDERS[name] if park else ships.BUILDERS[name]
     folder = os.path.join(out, "air" if air else "sea")
     os.makedirs(folder, exist_ok=True)
     t = time.time()
-    crease = 50.0 if air else 38.0
+    crease = 50.0 if air or park else 38.0
     kit.fresh()
     far_m, _ = build(False)
     far_ob, _ = rigid.to_blender(far_m, None, crease=crease)
     far = rigid.gather(far_m, far_ob)
     kit.fresh()
     m, _ = build(True)
-    ob, arm = rigid.to_blender(m, None if air else stage.ship_look, crease=crease)
+    ob, arm = rigid.to_blender(m, None if air or park else stage.ship_look, crease=crease)
     near = rigid.gather(m, ob)
     sizes = {}
     if "json" in kinds:
@@ -64,7 +66,8 @@ def main():
     out = sys.argv[1]
     which = sys.argv[2] if len(sys.argv) > 2 else "all"
     kinds = sys.argv[3:] or ["json", "glb", "fbx"]
-    names = {"ships": list(ships.BUILDERS), "planes": list(AIR), "all": list(ships.BUILDERS) + list(AIR)}.get(which) or which.split(",")
+    names = {"ships": list(ships.BUILDERS) + list(deckpark.BUILDERS), "planes": list(AIR), "parks": list(deckpark.BUILDERS),
+             "all": list(ships.BUILDERS) + list(deckpark.BUILDERS) + list(AIR)}.get(which) or which.split(",")
     import json
     index_path = os.path.join(out, "index-sea-air.json")
     index = json.load(open(index_path)) if os.path.exists(index_path) else {}

@@ -764,28 +764,6 @@ def destroyer(tag, fine=True, hull_hex=None):
     return m, yard
 
 
-def parked(m, x, y, z, bearing=0.0, span=10.6):
-    """An aircraft standing on a flight deck, tail down: enough of a shape to read from a fighting camera."""
-    a = math.radians(bearing)
-    f, sd = Vector((math.cos(a), math.sin(a), 0)), Vector((-math.sin(a), math.cos(a), 0))
-    L = span * 0.82
-    o = Vector((x, y, z))
-    nose, tail = o + f * (L * 0.45) + Z * 2.05, o - f * (L * 0.5) + Z * 0.75
-    ax = tail - nose
-    u = ax.normalized()
-    m.lathe(nose, ax, [(0.0, 0.2), (0.3, 0.6), (L * 0.3, 0.66), (L * 0.62, 0.4), (ax.length, 0.07)], "plane", 8 if m.fine else 6)
-    root = nose + u * (L * 0.3) - Z * 0.4
-    m.box(root, (L * 0.25, span, 0.15), "plane", yaw=bearing)
-    m.box(tail - u * 0.55 + Z * 0.12, (L * 0.12, span * 0.34, 0.08), "plane", yaw=bearing)
-    m.box(tail - u * 0.5 + Z * 0.7, (L * 0.14, 0.08, 1.15), "plane", yaw=bearing)
-    m.ball(nose + u * (L * 0.34) + Z * 0.5, (1.0, 0.36, 0.34), "glass", 8, 4, top_only=True)
-    m.box(nose - u * 0.12, (0.08, 0.14, 2.8), "black", yaw=bearing)
-    for hand in (1, -1):
-        w = root + sd * hand * 1.5
-        m.rod(w, w + f * 0.25 - Z * 1.25, 0.07, "steel", sides=4)
-        m.box(w + f * 0.25 - Z * 1.3, (0.6, 0.16, 0.6), "black", yaw=bearing)
-
-
 def carrier(tag, fine=True, hull_hex=None):
     """An aircraft carrier: a hull, a hangar the length of her, a flight deck over all, an island on the starboard side."""
     # the plain carrier (and Britain's): 230 m by 28.5; a closed bow, an armoured steel deck, the funnel in the island; two lifts
@@ -969,12 +947,12 @@ def carrier(tag, fine=True, hull_hex=None):
     yard.rails(-L * 0.485, hx1 - 1.5)
     yard.portholes(-L * 0.4, L * 0.42, 2.0, every=3.4)
     yard.portholes(-L * 0.36, L * 0.4, 4.4, every=3.4)
-    dp = m.part("deckpark", "aft", (-L * 0.38, 0, iz), kind="fixed", note="aircraft ranged aft: hide this part when her air group is in the air")
-    m.use(dp)
-    n_rows = 4 if fine else 2
-    for r_ in range(n_rows):
-        for j, yy in enumerate((-w * 0.52, 0.0, w * 0.52)):
-            parked(m, -L * 0.3 - r_ * 9.4 - (4.2 if j == 1 else 0.0), yy, iz + 0.05, 0.0)
+    # the aircraft ranged aft are models of their own (deckpark.py): which one she wears, by the month, is in her file,
+    # and it stands at this part's pivot, the deck under its foremost row
+    m.part("deckpark", "aft", (-L * 0.26, 0, iz), kind="fixed",
+           note="where her aircraft are ranged: the range named in `deck_park` stands at this pivot (its x forward) and rides with this part")
+    m.info.setdefault("file", {})["deck_park"] = ([{"model": "DeckPark_CarrierFighter"}, {"from": "1943-01", "model": "DeckPark_Hellcat"}] if tag == "USA"
+                                                  else [{"model": "DeckPark_Zero"}] if tag in ("JAP", "JPN") else [{"model": "DeckPark_CarrierFighter"}])
     m.socket("launch", (L * 0.42, 0, iz + 1.5), (1, 0, 0), "fore", "an aircraft leaves the deck here, climbing ahead")
     m.socket("land", (-L * 0.43, 0, iz + 2.5), (-1, 0, 0.1), "aft", "an aircraft comes in over the stern here")
     m.socket("ensign", (head.x - 1.0, yc, head.z - 3.0), (-1, 0, 0), yard.half(head.x), "the battle ensign flies from the island's mast")

@@ -19,7 +19,9 @@ one format, described here.
 Ships: `Battleship_UK/GER/USA/JAP/ITA/FRA`, `Battleship`, `Cruiser_UK/GER/USA/JAP/ITA`, `Cruiser`, `Destroyer`,
 `Destroyer_GER/USA/JAP`, `Carrier`, `Carrier_USA/JAP`, `Submarine`, `Submarine_GER/USA` (the plain name is the
 layout for any other navy). For convoys and landings (`merchants.py`): `Freighter`, `Tanker`, `Troopship`,
-`LandingCraft` (an infantry boat, 36 men in her well) and `TankLandingCraft` (three tanks on her deck). Aircraft: the game's own fifteen (`Bf109`, `Spitfire`, `Zero`, `Mustang`, `Yak`, `Fw190`,
+`LandingCraft` (an infantry boat, 36 men in her well) and `TankLandingCraft` (three tanks on her deck). The aircraft a
+carrier ranges on her deck are models of their own, kept with the ships: `DeckPark_CarrierFighter`, `DeckPark_Hellcat`,
+`DeckPark_Zero` (see "A carrier's deck" below). Aircraft: the game's own fifteen (`Bf109`, `Spitfire`, `Zero`, `Mustang`, `Yak`, `Fw190`,
 `Hurricane`, `Warhawk`, `Fighter`, `Stuka`, `Sturmovik`, `He111`, `Lancaster`, `B17`, `Bomber`), the jet `Me262`
 (a battle's own, from 1944), plus `Parachute` and `Bomb`.
 
@@ -83,6 +85,39 @@ and the clips `beach` (she takes the ground), `ramp.down` and `ramp.up`. What th
 the game can hide it or stand its own models there: `troops.1`, `troops.2` in the infantry boat (stand-in figures),
 `cargo.1…3` in the tank landing craft (stand-in tanks, each with a socket of the same name facing the ramp). A
 landing: `sail` while she runs in, then `beach`, then `ramp.down`; unload; `ramp.up` and she backs off.
+
+### A carrier's deck
+
+A carrier's own mesh has no aircraft on it. Her part `deckpark` is empty: its pivot is the deck under the foremost
+row of her range, about a quarter of her length abaft her middle. Her file says which range stands there, by the
+battle's month:
+
+```
+"deck_park": [{"model": "DeckPark_CarrierFighter"}, {"from": "1943-01", "model": "DeckPark_Hellcat"}]
+```
+
+Take the last entry whose month has come (the first has no `from`). `Carrier_USA` wears the generic carrier fighter
+until 1943 and then the Hellcat, `Carrier_JAP` the Zero, `Carrier` (Britain and every other navy) the generic
+carrier fighter. Stand the range's origin at the pivot of `deckpark`, x forward and z up as the ship's are, and let
+it ride that part, so it rolls and goes down with her. When her air group is up, hide it.
+
+A range (`deckpark.py`) is eleven machines, two abreast and one between, noses forward. Each is that aircraft's own
+plain mesh (the `far` mesh of her own file: the same shape, paints, camouflage blend and marks as the one that
+flies) with her airscrew stopped and nobody in her, standing on her undercarriage with her tail down and a wooden
+chock (`chock`) before and behind each main wheel. A Hellcat is ranged without the tank under her middle. Parts:
+`park` (root) and `plane.1` … `plane.11` (fixed, pivot on the deck under the machine), so the game can take them
+off the deck one at a time. In the file: `machine` (the aircraft it is made of), `places` (where each stands),
+`pitch` (how far her nose is up, degrees), and the aircraft's own `schemes`, `mark_months`, `nation_paint`,
+`number_ink` and `finish`, so a range is painted by the month exactly as the aircraft is: the Hellcats go from the
+three blues to gloss sea blue in 1944-07, the Zeros from pale grey to dark green over grey in 1942-07, and the
+American star changes with the rest. The generic fighter is painted for her owner as the flying one is
+(`nation_paint`): on the American carrier in 1942, blue-grey over light grey with the plain star.
+
+Two keys on a range's `marks` that an aircraft's do not have: `part` (the machine the mark is on) and `up` (which
+way is up for the mark, since she stands nose-high). The range's plain mesh (`far`) is a simple stand-in shape per
+machine, about 2,000 triangles for the eleven; the fine one is 37,000 to 42,000.
+
+### Using them in a battle
 
 How a battle would use them: train turrets by setting each turret's turn to (bearing to target - rest bearing)
 inside its limits, lift guns by range, then play `fire.<turret>` on each salvo. Damage lights fires at `fire.N`
@@ -282,7 +317,16 @@ python show.py Battleship_UK turn <out>        # ship clips: turn, broadside, si
 python airshow.py shot_down <out>              # aircraft clips: flypast (plane=Me262 for another machine), shot_down, ways_down
 python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, glass, rear, over, under, side, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; clip=load.bombs@0; record=JSON)
 python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
+python export.py <out> parks                   # the three deck ranges alone (they are also in `ships` and `all`)
+python show.py Carrier_USA turn <out> month=1942-06   # a carrier in a month: her range and its paint are that month's
+python shipcheck.py loose all                  # every piece of every ship that touches nothing else of her
+python shipcheck.py boxes Battleship_JAP       # her largest plain boxes and bars, to see that none is out of scale
 ```
+
+Run both checks after a change to `ships.py` or `shipyard.py`. A picture shows one corner of a ship; these look at
+all of her. `boxes` is the one that finds a fitting built far too large (the aerial over the Japanese towers was once
+a solid sheet 20 m wide, because a loop had reused the name of the tower's size: never name a loop's counter after a
+size that is wanted after the loop).
 
 Rendering is Cycles on the CPU (EEVEE cannot start without a display). A 960x540 frame at 12 samples takes 10 to
 25 seconds on four cores. `stage.py` holds the sea (swell, whitecaps, haze, a painted wake), the sky, a cloud
@@ -301,19 +345,16 @@ stands so that the glare falls in the gap the camera never visits (`SUN`), and a
   `ship_gun_medium`, `ship_guns`, `shell_impact_near`, `magazine_explosion`, `fire_loop`, `depth_charge`,
   `ship_wash_loop`, `ship_engine_loop`, `plane_guns`, `gunner_burst`, `ricochet_01`, `plane_down`, `plane_explode`,
   `fighter_engine_loop`, `aero_engine_idle_loop`, `b17_drone_loop`, `b24_drone_loop`, `bomber_medium_loop`,
-  `stuka_drone_loop`; list in `/mnt/project-files/sound/battle-pack/sound-list.json`). No sound file goes into the
+  `stuka_drone_loop`, `jet_engine_loop`; list in `/mnt/project-files/sound/battle-pack/sound-list.json`). No sound file goes into the
   game until Brian has judged it (ruling 144). Names with no recording yet, which stay silent: `bomb_release`,
-  `bomb_doors`, `jet_engine_loop`, `aircraft_fire`, `aircraft_break_up`, `parachute_open`, `ship_sinking`, `torpedo_launch`,
+  `bomb_doors`, `aircraft_fire`, `aircraft_break_up`, `parachute_open`, `ship_sinking`, `torpedo_launch`,
   `torpedo_run_loop`,
   `depth_charge_roll`, `depth_charge_thrower`, `dive_alarm`, `surfacing`, `lift_motor`, `craft_grounds`,
   `ramp_drop`, `ramp_winch`.
 - Effects are named in events but not built for the game; the pictures use Blender-only effects from `stage.py`.
-- Aircraft have no undercarriage that lowers; a carrier's deck park uses the plain models. No wings that fold and
-  no arrester hook that drops.
-- The carrier planes and the Japanese bombers are each in the scheme of their first year. The art director's
-  `carrier_paint` table gives the later schemes by year (the US Navy's three blues from 1943 and sea blue from
-  mid-1944, Japan's dark green over grey from 1942-43): the game can repaint by `colours`, or the models can be
-  written out again per scheme.
+- Aircraft that fly have no undercarriage that lowers (the machines of a deck range stand on fixed legs of their
+  own). No wings that fold and no arrester hook that drops, so a range is spread wings and all.
+- A deck range is fighters only. The torpedo and dive bombers of an air group are not ranged yet.
 - Camouflage patches are blended from point to point of the skin, so their edges are as soft as the skin's grain is
   coarse. The art director would like the 1940 British and German schemes tight-edged (a hand's width); that needs
   the skin cut along the patch edges, or the patches drawn in the game's shader. Soft is right for the Soviet

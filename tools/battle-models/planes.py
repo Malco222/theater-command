@@ -1341,7 +1341,7 @@ def clips_for_plane(m, f):
     long = 4.0
     # (the sound director's real loops, by the kind of machine)
     engine_cue = "jet_engine_loop" if f.pods else ("b17_drone_loop" if f.name == "B17" else "b24_drone_loop" if len(eng) >= 4 else "bomber_medium_loop" if f.role == "bomber"
-                  else "stuka_drone_loop" if f.name == "Stuka" else "fighter_engine_loop")       # (no jet is recorded yet: `jet_engine_loop` stays silent)
+                  else "stuka_drone_loop" if f.name == "Stuka" else "fighter_engine_loop")       # (the jet's own loop is on the sound director's board now, for Brian's ear)
     C["fly"] = {"long": long, "loop": True, "about": "Under way: every airscrew a turning disc, and she rides the air a little. The game flies her; this only lives on top.",
                 "tracks": [{"part": "plane", "rot": rot_keys(lambda t: q_of(roll=(0.6 if big else 1.4) * math.sin(2 * math.pi * t / long), pitch=(0.25 if big else 0.5) * math.sin(4 * math.pi * t / long + 0.7)), long, 0.25)}]
                 + props(m, f, "fast")(long) + stick(roll=[[0.0, 1.2], [1.0, 0.0], [2.0, -1.2], [3.0, 0.0], [4.0, 1.2]], pitch=[[0.0, 0.6], [1.0, 0.0], [2.0, -0.6], [3.0, 0.0], [4.0, 0.6]]),

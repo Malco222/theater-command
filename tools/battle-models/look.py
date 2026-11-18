@@ -10,6 +10,7 @@ sys.path.insert(0, HERE)
 import bpy  # noqa: E402
 from mathutils import Vector  # noqa: E402
 
+import deckpark  # noqa: E402
 import kit  # noqa: E402
 import rigid  # noqa: E402
 import ships  # noqa: E402
@@ -23,6 +24,7 @@ def main():
     t = time.time()
     m, yard = ships.BUILDERS[name](True)
     ob, arm = rigid.to_blender(m, stage.ship_look)
+    deckpark.range_on(m, arm)
     print(f"{name}: {m.triangles()} triangles, {len(m.parts)} parts, {len(m.sockets)} sockets, {len(m.clips)} clips, built in {time.time() - t:.1f}s")
     stage.sea_and_sky(calm=True)
     kit.render_setup(1280, 720, samples=int(os.environ.get("LOOK_SPP", "24")))

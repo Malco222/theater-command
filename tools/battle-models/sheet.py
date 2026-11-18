@@ -10,6 +10,7 @@ sys.path.insert(0, HERE)
 
 import bpy  # noqa: E402
 
+import deckpark  # noqa: E402
 import kit  # noqa: E402
 import rigid  # noqa: E402
 import ships  # noqa: E402
@@ -34,6 +35,7 @@ def main():
             print("FAILED", name, e, flush=True)
             continue
         ob, arm = rigid.to_blender(m, stage.ship_look)
+        deckpark.range_on(m, arm)                # (a carrier's aircraft, ranged on her deck)
         stage.Sea(wave=1.2, cells=360, fine=3.0)
         stage.render_setup(w, h, spp)
         cam = kit.camera("cam", 40.0)

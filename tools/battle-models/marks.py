@@ -164,10 +164,11 @@ def record(model, rec):
     return out
 
 
-def put(model, ob, arm, rec=None):
+def put(model, ob, arm, rec=None, own=None):
     """Lays the model's markings on its skin (as it stands at rest), each riding the part it is on, and her record if
-    one is given (see `record`). Returns the objects made."""
-    todo = list(model.marks or []) + record(model, rec)
+    one is given (see `record`). Returns the objects made. `own` is what a plain machine wears where her file says
+    the owner's own marking (`*`): a tag, or a function of the mark's facing that gives one (for the pictures)."""
+    todo = list(model.marks or []) + (record(model, rec) if "wing.port" in model.part_at else [])
     if not todo:
         return []
     # (only her painted skin: a mark whose corner landed on a scribed line or a rivet stood proud there, and its lower
@@ -175,8 +176,9 @@ def put(model, ob, arm, rec=None):
     names = list(model.paints)
     skin = [f for k, f in enumerate(model.faces) if names[model.fpaint[k]] in ("upper", "upper2", "under", "nose", "boss") or (k < len(model.fcoat) and model.fcoat[k])]
     tree = BVHTree.FromPolygons([tuple(v) for v in model.verts], [tuple(f) for f in skin])
-    y_cut = abs(model.parts[model.part_at["wing.port"]].pivot.y)
-    x_cut = model.parts[model.part_at["tail"]].pivot.x
+    whole = "wing.port" in model.part_at                                         # (an aircraft; or a range of them on a deck, each mark naming its part)
+    y_cut = abs(model.parts[model.part_at["wing.port"]].pivot.y) if whole else 0.0
+    x_cut = model.parts[model.part_at["tail"]].pivot.x if whole else 0.0
     verts, faces, cols, groups = [], [], [], []
     for mk in todo:
         if mk["tag"] == "#":
@@ -188,14 +190,19 @@ def put(model, ob, arm, rec=None):
             at = Vector((mk["at"][0], -mk["at"][1] * hand, mk["at"][2]))            # (the file's y is to the right)
             n = Vector((mk["facing"][0], -mk["facing"][1] * hand, mk["facing"][2])).normalized()
             up = Vector((1, 0, 0)) if abs(n.z) > 0.7 else Vector((0, 0, 1))
+            if mk.get("up"):                                                     # (a machine that is not level says which way is up)
+                up = Vector((mk["up"][0], -mk["up"][1] * hand, mk["up"][2]))
             v = (up - n * up.dot(n)).normalized()
             u = v.cross(n)
             flip = -1.0 if (mk["tag"] == "UK-FIN" and u.x < 0) else 1.0
-            part = "tail" if at.x < x_cut else ("wing.port" if at.y > y_cut else "wing.starboard" if at.y < -y_cut else "plane")
+            part = ("tail" if at.x < x_cut else ("wing.port" if at.y > y_cut else "wing.starboard" if at.y < -y_cut else "plane")) if whole else mk.get("part")
             if mk.get("part") in model.part_at:
                 part = mk["part"]
             r = mk["radius"]
-            for layer, polys in enumerate(shapes(mk["tag"])):
+            tag = mk["tag"]
+            if tag == "*" and own:
+                tag = own(n) if callable(own) else own
+            for layer, polys in enumerate(shapes(tag)):
                 for col, poly in polys:
                     # (cut small before it is laid on her: a big flat piece dips under a round fuselage in its middle,
                     #  and her skin comes through it)
