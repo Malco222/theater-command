@@ -14045,8 +14045,11 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const double RoundsASecond = 13.0;
 			static const int32 BeltStarts[7] = { 0, 3, 1, 4, 2, 0, 3 };
 			// (the fighters fire in bursts, and the gunners back at them in the gaps and a little over)
-			auto FightersFireAt = [](double When) { return FMath::Frac(When * 0.9) < 0.6; };
-			auto GunnersFireAt = [](double When) { return FMath::Frac(When * 0.9 + 0.5) < 0.6; };
+			// (The modeller on the first pictures of the streams: a stream should last half a second of fire or more. The
+			// bursts were two thirds of a second in every second and a bit; they are a second and a third in every two
+			// and a bit, three or four tracers a gun.)
+			auto FightersFireAt = [](double When) { return FMath::Frac(When * 0.45) < 0.6; };
+			auto GunnersFireAt = [](double When) { return FMath::Frac(When * 0.45 + 0.5) < 0.6; };
 			const FTransform Pair = Flight.Rivals ? Flight.Rivals->GetComponentTransform() : FTransform(Flight.RivalAt);
 			const FTransform Vic = Flight.Formation ? Flight.Formation->GetComponentTransform() : FTransform(Flight.At);
 			const FVector Fighters[2] = { Pair.TransformPosition(FVector::ZeroVector), Pair.TransformPosition(FVector(10.0, 9.0, 1.5) * Small) };
@@ -14153,7 +14156,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	// within a wingspan of the bombers, would join gun to mark in one line. First drawn at eight tenths of a unit,
 	// as the old streaks were, it could hardly be seen beside a bomber. It is three units, under a third of a wingspan.)
 	{
-		const FLinearColor TracerYellow(0.665f, 0.571f, 0.138f), TracerPale(0.87f, 0.80f, 0.42f);
+		const FLinearColor TracerYellow(0.665f, 0.571f, 0.138f), TracerPale(0.87f, 0.80f, 0.42f), TracerEdge(0.09f, 0.06f, 0.02f);
 		bDrawingLight = true;
 		for (int32 K = TracerRounds.Num() - 1; K >= 0; --K)
 		{
@@ -14167,14 +14170,18 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const FVector Head = Round.From + Round.Velocity * Age;
 			const FVector Flies = Round.Velocity.GetSafeNormal();
 			const double Pixel = FMath::Max(FVector::Distance(EyeAt, Head), 1.0) / PixelsAtOne; // (what one pixel of the window spans there)
-			const double HalfWide = FMath::Max(0.09 * Table, 2.0 * Pixel);
+			// (The modeller on the first pictures: over a pale place, an army's sand-coloured base, the dashes were
+			// faint. The pale heart is a full three pixels across at the least, the yellow round it wider, and a thin
+			// dark edge lies under both, as a bright thing has against a bright ground.)
+			const double HalfWide = FMath::Max(0.09 * Table, 2.6 * Pixel);
 			// (and no longer than it has yet flown: it grows out of the muzzle)
 			const double Long = FMath::Min(FMath::Max(3.0 * Table, 9.0 * HalfWide), FMath::Max(Round.Velocity.Size() * Age, 2.0 * HalfWide));
 			// (it dwindles over the last two fifths of its flight, and is out at the end)
 			const float Burning = static_cast<float>(1.0 - FMath::SmoothStep(0.6 * TracerBurns, TracerBurns, Age));
+			DrawSmear(Head - Flies * (0.42 * Long), Flies, 0.46 * Long, 1.5 * HalfWide, TracerEdge, 0.5f * Burning, 0.8, 0.42f * Burning); // the dark edge under it
 			DrawSmear(Head - Flies * (0.9 * Long), Flies, 0.6 * Long, 0.55 * HalfWide, TracerYellow, 0.6f * Burning, 0.5); // the tail, thinning
 			DrawSmear(Head - Flies * (0.4 * Long), Flies, 0.4 * Long, HalfWide, TracerYellow, 1.0f * Burning, 0.75, 0.95f * Burning); // the streak, solid
-			DrawSmear(Head - Flies * (0.25 * Long), Flies, 0.2 * Long, 0.45 * HalfWide, TracerPale, 0.9f * Burning, 0.6, 0.7f * Burning); // its paler heart
+			DrawSmear(Head - Flies * (0.25 * Long), Flies, 0.2 * Long, FMath::Max(0.5 * HalfWide, 1.5 * Pixel), TracerPale, 0.9f * Burning, 0.6, 0.7f * Burning); // its paler heart
 		}
 		bDrawingLight = false;
 	}
