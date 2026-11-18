@@ -185,6 +185,18 @@ describe('FIRST COMMAND, played', () => {
     expect(lessonReady(g, b, build)).toBe(true);
   });
 
+  it('brings lesson 8 only where the map lights a railway: never for an army with a corps short of its month', () => {
+    const g = firstHour();
+    const b = book(upTo('rail'));
+    const rail = LESSONS.find((l) => l.id === 'rail')!;
+    // (An army as a click on its flag picks it up: every corps of his there with moves left.)
+    const armies = g.regions.map((r) => r.units.filter((c) => c.nat === 'GER' && c.ap > 0 && !c.dead)).filter((cs) => cs.length);
+    const rides = armies.find((cs) => lessonDue(g, b, rail, { inHand: cs.map((c) => c.id) }));
+    expect(rides).toBeDefined();
+    rides![0].ap = 3;
+    expect(lessonDue(g, b, rail, { inHand: rides!.map((c) => c.id) })).toBe(false);
+  });
+
   it('owes the closing note once all ten are done, and only once', () => {
     const g = firstHour();
     const b = book(ids);

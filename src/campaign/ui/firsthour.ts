@@ -19,7 +19,7 @@ import type { Corps, Game } from '../types';
 /** What the page lends the notes. */
 export interface Page {
   game(): Game;
-  ui: { sel: number; picked: Set<number>; tab: string; modal: null | { kind: string; [k: string]: any }; mark: any; lastCard: any; live: boolean; menu: string };
+  ui: { sel: number; sea: number; picked: Set<number>; tab: string; modal: null | { kind: string; [k: string]: any }; mark: any; lastCard: any; live: boolean; menu: string };
   /** The corps the player has in hand. */
   held(): Corps[];
   /** True while a desk's tab is tucked away because the staff runs it. */
@@ -76,7 +76,7 @@ export function initFirstHour(p: Page): void {
   load();
   // (Capture: the notes' own buttons are theirs alone, and a line of the month card is read before the page acts on it.)
   document.addEventListener('click', onClick, true);
-  addEventListener('resize', () => placeSlip());
+  addEventListener('resize', () => redraw());
   requestAnimationFrame(follow);
 }
 
@@ -140,19 +140,34 @@ function readDeeds(): void {
         if (rail) lessonDone('rail', {});
       }
     }
-    // A line of his cut for the first time.
-    if (cutsOf(g) > (s.cuts ?? 0)) tipDue('cut');
+    // A line of his cut for the first time, found in his own month: a cut made while the others move is counted
+    // against the lines as he last saw them, so that its tip comes when he can read it.
+    if (up && cutsOf(g) > s.cuts) tipDue('cut');
   }
   if (up && page.ui.tab === 'region' && page.held().length && lessonsOn(g, book)) lessonDone('pick');
   const hand = up && page.ui.tab === 'region' ? page.held().map((c) => ({ id: c.id, reg: c.reg, reach: new Set([...reach(g, c)].filter(([id, x]) => id !== c.reg && !x.attack).map(([id]) => id)), rail: railReach(g, c) })) : [];
   snap = {
     g, turn: g.turn, up, reports: g.reports.length, air: g.airReports.length, queue: new Set((me ? g.nations[me]?.queue ?? [] : []).map((b) => b.id)),
-    hand, kept: new Set(Object.keys(g.flags).filter((k) => k.startsWith('march:'))), cuts: cutsOf(g),
+    hand, kept: new Set(Object.keys(g.flags).filter((k) => k.startsWith('march:'))), cuts: up || !s || s.g !== g ? cutsOf(g) : s.cuts,
     // (His own month as it last stood open, carried through the other nations' moves.)
     upTurn: up ? g.turn : s && s.g === g && g.turn >= s.upTurn ? s.upTurn : -1,
     siegeUp: up ? siegeOf(g) !== null : s && s.g === g ? s.siegeUp : false,
   };
 }
+/**
+ * The staff's own work, done at once as he hands it a desk in the middle of his month (orderDesk, orderDepth): the
+ * raids it flies and the orders it places are taken into the picture as they stand, never read as his deeds.
+ */
+export function lessonsAside(): void {
+  const g = page?.game();
+  if (!snap || !g || snap.g !== g) return;
+  const me = g.human;
+  snap.reports = g.reports.length;
+  snap.air = g.airReports.length;
+  snap.queue = new Set((me ? g.nations[me]?.queue ?? [] : []).map((b) => b.id));
+  snap.kept = new Set(Object.keys(g.flags).filter((k) => k.startsWith('march:')));
+}
+
 /** How many of the player's provinces have their railway cut by bombers where no guns stood: the moment of the tip that says so. */
 const cutsOf = (g: Game): number => (g.human ? g.regions.filter((r) => r.ctrl === g.human && cutThroughGuns(g, r.id) === 0).length : 0);
 
@@ -211,7 +226,7 @@ export function cardChanging(was: Page['ui']['modal'], next: Page['ui']['modal']
 
 /** Called once a card is drawn: the door's button, lesson 1 laid on the first month's card, a slip in the margin. */
 export function cardDrawn(card: HTMLElement, m: NonNullable<Page['ui']['modal']>): void {
-  if (m.kind === 'start') { doorButton(card); return; }
+  if (m.kind === 'start') { doorButton(card); laid = false; redraw(); return; }
   const g = page.game();
   laid = false;
   if (m.kind === 'news' && m.card && !quiet()) {
@@ -309,16 +324,28 @@ function arrive(el: HTMLElement, id: string): void {
   // (A new note in a panel scrolled down: the panel goes back to its top, where the note is, on the next frame.)
   if (el.parentElement?.id === 'pane') toTop = true;
 }
-/** The slip stands in the card's left margin, never on the card: where the margin is too narrow, there is none. */
+/**
+ * The slip stands in the card's left margin, never on the card. Where the margin is too narrow for it (the month
+ * card on any screen under about 1,550 px), the note is laid in the card instead, under its heading, as lesson 1 is:
+ * a strip across a wide card, the note itself in a narrow one. It is never hidden.
+ */
 function placeSlip(): void {
   const el = document.querySelector<HTMLElement>('#veil > .fh-slip');
   const card = document.getElementById('card');
   if (!el || !card) return;
   const r = card.getBoundingClientRect();
   const room = r.left - 14;
-  el.style.display = room < 112 ? 'none' : '';
-  el.style.width = `${Math.min(148, room)}px`;
-  el.style.top = `${Math.max(14, r.top)}px`;
+  if (room >= 112) {
+    el.style.width = `${Math.min(148, room)}px`;
+    el.style.top = `${Math.max(14, r.top)}px`;
+    return;
+  }
+  el.classList.remove('fh-slip', 'tc-note--slip');
+  el.classList.add('fh-inlaid', r.width >= 900 && !el.classList.contains('tc-note--tip') ? 'tc-note--laid' : 'tc-note--inlaid');
+  el.removeAttribute('style');
+  const head = card.querySelector('.fh-laid') ?? card.querySelector('.mc-head');
+  if (head) head.insertAdjacentElement('afterend', el);
+  else (card.querySelector(':scope > .body') ?? card).prepend(el);
 }
 
 // ---- The pointer -----------------------------------------------------------------------------------------------
@@ -355,7 +382,7 @@ function target(d: ReturnType<typeof onDesk>): typeof aimAt {
   const q = (s: string): Element | null => document.querySelector(s);
   const vis = (e: Element | null): Element | null => (e && (e as HTMLElement).getClientRects().length ? e : null);
   const g = page.game();
-  if (laid) return pick(q('#card .mc-fly'));
+  if (laid && monthCardOpen()) return pick(q('#card .mc-fly'));
   if (!d || d.kind !== 'lesson' || stamped) return null;
   const id = d.lesson!.id, open = cardOpen(), kind = page.ui.modal?.kind;
   // (Of the lit ground, the province nearest the army in hand, at a point of it he can see and click: not off the
@@ -381,7 +408,7 @@ function target(d: ReturnType<typeof onDesk>): typeof aimAt {
     if (id === 'card' && kind === 'news') return pick(q('#card .mc-go:not(.none)'));
     if (id === 'attack' && kind === 'attack') return pick(q('#card footer [data-act="attack"]'));
     if (id === 'city' && kind === 'siege') return pick(q('#card footer [data-act="dosiege"], #card footer [data-act="dotake"]'));
-    if (id === 'raid' && kind === 'raid') return pick(q('#card footer .btn.go[data-act="doraid"], #card footer [data-act="doraid"]'));
+    if (id === 'raid' && kind === 'raid' && BOMBING.includes(page.ui.modal?.raid)) return pick(q('#card footer .btn.go[data-act="doraid"], #card footer [data-act="doraid"]'));
     return null;
   }
   const inHand = page.ui.tab === 'region' && page.held().length > 0;
@@ -406,8 +433,10 @@ function target(d: ReturnType<typeof onDesk>): typeof aimAt {
     case 'raid': {
       if (page.tucked('air')) return page.ui.tab === 'staff' ? pick(q('#pane [data-act="desk"][data-desk="air"][data-on="0"]')) : pick(tab('staff'));
       if (page.ui.tab !== 'air') return pick(tab('air'));
-      // The planner: PLAN A RAID, then the bombing raid, then a target.
-      return pick(vis(q('#pane .planner [data-act="raidtarget"]')) ?? vis(q('#pane .planner [data-act="raidkind"][data-kind="bomb"]:not([disabled]):not(.on)')) ?? vis(q('#pane .btn.go[data-act="raidmenu"][data-id="-1"]:not([disabled])')));
+      // The planner: PLAN A RAID, then the bombing raid, then a target. (Another kind open, Fight for the sky: back
+      // to the bombing raid, since only a bombing raid earns the lesson.)
+      const open = (q('#pane .planner [data-act="raidkind"].on') as HTMLElement | null)?.dataset.kind ?? '';
+      return pick((BOMBING.includes(open) ? vis(q('#pane .planner [data-act="raidtarget"]')) : null) ?? vis(q('#pane .planner [data-act="raidkind"][data-kind="bomb"]:not([disabled]):not(.on)')) ?? vis(q('#pane .btn.go[data-act="raidmenu"][data-id="-1"]:not([disabled])')));
     }
     case 'build': {
       if (page.ui.tab === 'build') return pick(vis(q('#pane button[data-act="arsenal"]:not([disabled])')));
@@ -463,9 +492,14 @@ function drawPointer(): void {
   if (!aimAt) return;
   const r = aimAt.el.getBoundingClientRect();
   if (!r.width && !r.height) { hidePointer(); return; }
-  const box = `${aimAt.map ? 'm' : 'p'}${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}`;
+  // (Scrolled out of its panel or card, it is not pointed at: the clamps would hang over the tabs round nothing.)
+  const frame = aimAt.map ? null : aimAt.el.closest('#pane, #card')?.getBoundingClientRect();
+  const mid = r.top + r.height / 2;
+  const away = !!frame && (mid < frame.top || mid > frame.bottom);
+  const box = `${aimAt.map ? 'm' : 'p'}${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}${away ? 'x' : ''}`;
   if (box === lastBox) return;
   lastBox = box;
+  if (away) { const p = document.getElementById('fhpointer'); if (p) p.style.display = 'none'; return; }
   if (aimAt.map) { mapPointer(r, aimAt.spot); const p = document.getElementById('fhpointer'); if (p) p.style.display = 'none'; return; }
   document.getElementById('fhground')?.remove();
   let p = document.getElementById('fhpointer');
@@ -578,7 +612,8 @@ function onClick(e: MouseEvent): void {
     case 'fhset': book.on = t.dataset.on === '1'; save(); redrawGuide(); break;
     case 'fhrules': {
       page.openModal(null);
-      page.ui.sel = -1; page.ui.picked.clear(); page.ui.tab = 'region';
+      // (A sea picked would show its own page, not the rules.)
+      page.ui.sel = -1; page.ui.sea = -1; page.ui.picked.clear(); page.ui.tab = 'region';
       page.refresh();
       const h = [...document.querySelectorAll('#pane h3')].find((x) => x.textContent === 'How a month works');
       h?.scrollIntoView({ block: 'start' });

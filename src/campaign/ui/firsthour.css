@@ -147,3 +147,13 @@ body.has-pointer .btn.go.lit, body.has-pointer .freeme, body.has-pointer .sgi, b
 @media (prefers-reduced-motion: reduce) {
   .fh-in, .fh-slip.fh-in, .tc-note .tc-stamp, .tc-pointer, .fh-door.is-lit { animation: none; }
 }
+
+/* the note laid in a card whose margin has no room for the slip (the month card on a laptop): never hidden */
+.tc-note.fh-inlaid::before { display: none; }
+.tc-note--inlaid { margin: 0 0 14px; box-shadow: none; border: 1px solid rgba(92, 80, 64, .35); }
+.tc-note--laid.fh-inlaid { min-height: 0; }
+.tc-note--laid.fh-inlaid .tc-note__head { flex-wrap: wrap; row-gap: 2px; }
+.tc-note--laid.fh-inlaid .tc-deed { grid-column: 2; grid-row: 3; margin: 8px 0 0 28px; padding-top: 8px; }
+.tc-note--laid.fh-inlaid.is-done { padding-bottom: 11px; }
+@media (max-width: 760px) { .tc-note--laid.fh-inlaid .tc-deed { grid-column: 1; grid-row: 4; margin-left: 0; } }
+.tc-note--laid.fh-inlaid .tc-note__head .tc-micro { white-space: nowrap; }

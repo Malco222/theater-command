@@ -91,11 +91,11 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { tenthPct } from '../../core/math';
 import { turnToDate } from '../../core/ticket';
-import { cardChanging, cardDrawn as lessonCard, guideCard, initFirstHour, lessonsBegun, lessonsDrawn } from './firsthour';
+import { cardChanging, cardDrawn as lessonCard, guideCard, initFirstHour, lessonsAside, lessonsBegun, lessonsDrawn } from './firsthour';
 
 let g: Game;
 /** The month after the last one the historical plans cover: February 1945, when the Bulge has been closed. */
@@ -1467,7 +1467,7 @@ function refresh(): void {
     for (const c of picked) { const m = reach(g, c); reaches.push({ from: c.reg, ap: c.ap, map: m }); for (const [id, rc] of m) if (id !== c.reg) goes.set(id, (goes.get(id) ?? false) || rc.attack); }
     for (const [id, attack] of goes) marks += `<path class="mk ${attack ? 'hit' : 'move'}" d="${pathOf(g.regions[id].polys)}"/>`;
     // Beyond the march, in a second and quieter tint: every province the army in hand could ride to this month (ruling 110(b)).
-    if (ui.tab === 'region') { trainTo = trainReach(heldCorps(), goes); for (const id of trainTo) marks += `<path class="mk railfar" d="${pathOf(g.regions[id].polys)}"/>`; }
+    if (ui.tab === 'region') { trainTo = trainReachFor(g, heldCorps(), goes); for (const id of trainTo) marks += `<path class="mk railfar" d="${pathOf(g.regions[id].polys)}"/>`; }
     // Neutral ground next to the picked armies: marching in means war, and the game asks first.
     for (const id of invasions(g, picked).keys()) if (!goes.has(id)) marks += `<path class="mk war" d="${pathOf(g.regions[id].polys)}"/>`;
     // Ground the picked tanks cannot enter, where they stand next to it or to somewhere they can reach.
@@ -1808,23 +1808,6 @@ function cutTip(id: number): string {
 
 function railTargets(c: Corps): Region[] {
   return [...railReach(g, c)].map((id) => g.regions[id]);
-}
-
-/**
- * Where the army in hand can go by train and not by road this month: ground every corps of it can ride to, with room
- * for it, that none of them can march to. Empty unless every corps has its whole month, since a train takes all of it.
- */
-function trainReach(held: Corps[], goes: Map<number, boolean>): Set<number> {
-  const out = new Set<number>();
-  if (!held.length || held.some((c) => c.ap < 4)) return out;
-  let common: number[] | null = null;
-  for (const c of held) {
-    const m = railReach(g, c);
-    common = common ? common.filter((id) => m.has(id)) : [...m];
-    if (!common.length) return out;
-  }
-  for (const id of common ?? []) if (!goes.has(id) && held.every((c) => c.reg !== id) && roomForAll(g, g.regions[id], held)) out.add(id);
-  return out;
 }
 
 /** The line a train would take from a corps to a province, province by province, for drawing; the two ends alone where it cannot be traced. */
@@ -8077,6 +8060,7 @@ function startTour(): void {
   const stops = tourStops(card);
   if (!stops.length) return;
   dropTour();
+  cardChanging(ui.modal, null);
   ui.modal = null;
   $('#veil').classList.remove('open');
   cardDrawn(null);
@@ -8314,7 +8298,7 @@ function onClick(e: MouseEvent): void {
       $('#card').scrollTop = keep;
       break;
     }
-    case 'continue': if (continueGame()) openModal(null); else openModal({ kind: 'start' }); break;
+    case 'continue': if (continueGame()) { openModal(null); lessonsBegun(false); } else openModal({ kind: 'start' }); break;
     case 'new': stopAuto(); endPassing(); ui.menu = 'grand'; openModal({ kind: 'start' }); break;
     case 'skip': if (tour) endTour(true); else endPassing(); break;
     case 'alert': followAlert(t.dataset.kind!); break;
@@ -8980,12 +8964,13 @@ function onClick(e: MouseEvent): void {
       const id = t.dataset.depth ?? '', to = DEPTH.depths.find((d) => d.id === id);
       // A depth with no cabinet, picked while the cabinet has business open, is asked twice: the bill is shown first.
       if (g.human && to && !to.cabinet && t.dataset.sure !== '1' && !cabinetIsOff(g) && cabinetBillOf(g).length) { openModal({ kind: 'level', ask: 'depthoff', depth: id }); document.querySelector('#card #setdepth')?.scrollIntoView({ block: 'start' }); break; }
-      if (g.human && orderDepth(g, id)) { queueSave(); const keep = $('#card').scrollTop; refresh(); openModal({ kind: 'level' }); $('#card').scrollTop = keep; }
+      if (g.human && orderDepth(g, id)) { lessonsAside(); queueSave(); const keep = $('#card').scrollTop; refresh(); openModal({ kind: 'level' }); $('#card').scrollTop = keep; }
       break;
     }
     case 'desk': {
       const d = t.dataset.desk as DeskId, on = t.dataset.on === '1';
       if (!g.human || !orderDesk(g, d, on)) break;
+      lessonsAside();
       queueSave();
       const name = lowFirst(deskDef(d)?.name ?? '');
       ui.msg = on ? `Your staff now runs ${name}.` : `${upFirst(name)} ${/ and /.test(name) ? 'are' : 'is'} on your own desk again.`;

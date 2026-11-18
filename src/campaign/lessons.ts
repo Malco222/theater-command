@@ -13,7 +13,7 @@
 // teach them again unless he asks. Nothing here moves a piece or takes a control: a note waits until its deed is done.
 
 import data from '../../data/campaign/lessons.json';
-import { hostileUnits, railReach } from './game';
+import { hostileUnits, trainReachFor } from './game';
 import { besiegers } from './siege';
 import { townName } from './towns';
 import { armyRound } from './round';
@@ -138,11 +138,17 @@ const THE = new Set(['Ruhr', 'Rhineland', 'Saar', 'Tyrol', 'Somme', 'Riviera', '
 export const placeThe = (name: string): string => (THE.has(name) ? `the ${name}` : name);
 const capital = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** The corps in hand that a train could take somewhere this month, with no enemy beside them: lesson 8's moment. */
+/**
+ * The army in hand, with no enemy beside it, and railway lit on the map that a train could take it to this month:
+ * lesson 8's moment. The map's own test (trainReachFor), so the note never asks for blue ground that is not drawn.
+ */
 export function trainInHand(g: Game, m: Moment): boolean {
   const cs = held(g, m);
   const me = g.human;
-  return !!me && cs.length > 0 && cs.every((c) => !foesBeside(g, g.regions[c.reg], me)) && cs.some((c) => railReach(g, c).size > 0);
+  if (!me || !cs.length || cs.some((c) => foesBeside(g, g.regions[c.reg], me))) return false;
+  const goes = new Set<number>();
+  for (const c of cs) for (const id of reach(g, c).keys()) if (id !== c.reg) goes.add(id);
+  return trainReachFor(g, cs, goes).size > 0;
 }
 
 // (A raid's targets are worked out from the whole air war: asked once a month and kept.)
