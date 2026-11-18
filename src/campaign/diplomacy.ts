@@ -47,6 +47,11 @@ export interface DiploEvent {
   tell?: 'war';
   /** Its news is a band of its own, under this nation's flag, for that nation's player and its friends: the first sentence is its head. */
   band?: string;
+  /**
+   * Countries of the event whose computer-run corps keep to their own ground from the day it fires: a declaration,
+   * not a front (Turkey, February 1945; ruling 228, b528). A player's country is never bound.
+   */
+  stay?: string[];
   /** Countries that have stood aside until now and enter the story here, at this place on the alignment track. */
   wake?: { nations: string[]; align: Align };
   /**
@@ -597,6 +602,14 @@ export function holds(g: Game, cond: string): boolean {
     // 'since:event:x,2': that flag was raised at least two months ago.
     case 'since': return !!g.flags[a[0]] && g.turn - g.flags[a[0]] >= Number(a[1] ?? 1);
     case 'war': return !!N(a[0]) && !!N(a[1]) && atWar(g, a[0], a[1]);
+    // No army of that alliance on the country's ground or on ground bordering it (Turkey, 1945: b528).
+    case 'noArmyNear': {
+      const near = new Set<number>();
+      for (const r of g.regions) if (r.owner === a[1]) { near.add(r.id); for (const j of r.nb) near.add(j); }
+      return !g.corps.some((c) => !c.dead && c.kind !== 'fort' && near.has(c.reg) && !!N(c.nat) && bloc(N(c.nat)!) === a[0]);
+    }
+    // An army of that alliance stands on the country's home ground (b528: the Allies on German soil).
+    case 'armyOn': return g.corps.some((c) => !c.dead && c.kind !== 'fort' && g.regions[c.reg].owner === a[1] && !g.regions[c.reg].overseas && !!N(c.nat) && bloc(N(c.nat)!) === a[0]);
     case 'dormant': return !!N(a[0])?.dormant;
     // "anyHeld:allies,Oran,Algiers": some place on the list is in the hands of that bloc.
     case 'allHeld': return a.slice(1).every((nm) => { const r = g.byName[nm]; return !!r && !!N(r.ctrl) && bloc(N(r.ctrl)!) === a[0]; });
@@ -766,6 +779,7 @@ function fire(g: Game, e: DiploEvent): boolean {
     }
     if (!did) return false;
   }
+  for (const id of e.stay ?? []) if (!barred.has(id) && g.nations[id]?.alive) g.flags[`stay:${id}`] = g.turn;
   if (e.partition) {
     const X = g.nations[e.partition.nation];
     if (!X?.alive) return false;

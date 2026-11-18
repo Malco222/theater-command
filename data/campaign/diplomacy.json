@@ -195,6 +195,26 @@
       "text": "Ecuador, Paraguay, Peru, Uruguay and Venezuela declare war on the Axis: only a country at war by March has a seat at the founding conference of the United Nations."
     },
     {
+      "id": "turkey-war-1945", "from": 66, "to": 66, "mode": "open",
+      "_note": "Ruling 228 item 17, b528: a declaration, not a front. Turkey declared on 23 February 1945 to sit at the founding conference, with Germany beaten and no Axis army near its frontier; no Turkish soldier fought. At stops 1 and 2 it fires in that month if no Axis army stands on Turkish ground or ground bordering it; a computer Turkey's corps then keep to Turkish ground ('stay'). A player's Turkey is never moved.",
+      "if": ["stop:1,2", "by:66", "alive:GER", "alive:TUR", "peace:TUR,GER", "openTo:TUR,allies", "noArmyNear:axis,TUR"],
+      "enter": { "nations": ["TUR"], "align": "allies" },
+      "war": [["TUR", "GER"], ["TUR", "JAP"]],
+      "tell": "war",
+      "stay": ["TUR"],
+      "text": "Turkey declares war on Germany and Japan. No Turkish army will march: the declaration buys Ankara a seat at the founding conference of the United Nations."
+    },
+    {
+      "id": "turkey-war-late", "from": 66, "to": 99, "mode": "open",
+      "_note": "b528 at stops 3 to 5: the same declaration, from February 1945 in the first month when, as well, Allied armies stand on Germany's home ground (the reason the record gives).",
+      "if": ["stop:3,4,5", "alive:GER", "alive:TUR", "peace:TUR,GER", "openTo:TUR,allies", "noArmyNear:axis,TUR", "armyOn:allies,GER"],
+      "enter": { "nations": ["TUR"], "align": "allies" },
+      "war": [["TUR", "GER"], ["TUR", "JAP"]],
+      "tell": "war",
+      "stay": ["TUR"],
+      "text": "Turkey declares war on Germany and Japan. No Turkish army will march: the declaration buys Ankara a seat at the founding conference of the United Nations."
+    },
+    {
       "id": "argentina-war", "from": 67, "to": 99, "mode": "open",
       "if": ["flag:world", "alive:GER", "alive:ARG", "war:USA,GER", "peace:ARG,GER", "openTo:ARG,allies"],
       "enter": { "nations": ["ARG"], "align": "allies" },
