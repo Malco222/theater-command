@@ -7,6 +7,8 @@
 /* ---- The chooser ---- */
 .sea .nw { white-space: nowrap; }
 .sea .offer .otop .tc-data { white-space: nowrap; }
+/* A card's title wraps in balance, so "The action in the North Sea" never leaves one word alone (the UI director, b467). */
+.sea .offer .otop .tc-title-3 { text-wrap: balance; }
 .sea .offer .oside { display: block; }
 /* Every card's parts on the same lines as its neighbours': the name, what it is, then the fleets and the staff's chance,
    however the names wrap. Up to three cards a row at 1280 and up: five practice actions lie three and two. */

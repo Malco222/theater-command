@@ -137,9 +137,9 @@ function showChooser(): void {
   };
   const names = (fleets: { side: Side; name: string }[], side: Side): string => esc(andList(fleets.filter((f) => f.side === side).map((f) => f.name)));
   app.innerHTML = `<div class="choose tc sea">
-    <header class="chead"><div><div class="tc-label">Fleet actions · first slice</div><h1 class="tc-title-1">Choose an action to fight</h1></div></header>
+    <header class="chead"><div><div class="tc-label">Fleet actions</div><h1 class="tc-title-1">Choose an action to fight</h1></div></header>
     <div class="cbody">
-      <section class="tc-paper intro"><p><b>The campaign settles every fleet action from the strength of the fleets until you choose to fight one here.</b> Each battleship, carrier and cruiser sails alone, and destroyers sail in fours. The two fleets meet at exactly the odds the campaign counts. What happens here goes back to the campaign as the ships each side lost and who holds the sea, and you can hand the rest to the staff at any moment, and every ship already sunk stays sunk.</p></section>
+      <section class="tc-paper intro"><p><b>The campaign settles every fleet action from the strength of the fleets until you choose to fight one here.</b> Each battleship, carrier and cruiser sails alone, and destroyers sail in fours. The two fleets meet at exactly the odds the campaign counts. What happens here goes back to the campaign as the ships each side lost and who holds the sea. You can hand the rest to the staff at any moment, and every ship already sunk stays sunk.</p></section>
       <h2 class="tc-label shead">${facts(['From the campaign', ...(t ? [esc(t.date)] : [])])}</h2>
       <div class="offers">${t ? `<button class="tc-card is-press offer" data-from="1">
         <span class="otop"><b class="tc-title-3">${esc(t.title)}</b><span class="tc-data"><b>${odds(t.reckoning.odds)}</b> to 1</span></span>
@@ -276,12 +276,13 @@ function updateTray(force = false): void {
       if (said) what.title = said; else what.removeAttribute('title');
     }
     const st = el.querySelector<HTMLElement>('.ustate')!;
-    // Once the action is over nothing is under way: the card says so (the design director, b356, b368). A piece that was
-    // wavering or breaking off says only that the action is over: the fight its nerve was in has ended (b467 snag c).
-    const over = !!S.sim!.over, shaken = over && (u.state === 'wavering' || u.state === 'routing');
-    const doing = over ? (live(u) && !shaken ? 'action over' : '') : live(u) && u.state !== 'routing' ? ORDER_WORD[S.sim!.orderOf(u.id)?.kind ?? ''] ?? '' : '';
+    // Once the action is over nothing is under way, and the card says only that, in one form however the action ended:
+    // every piece afloat reads "Action over" in plain colour, and a sunk one keeps "Lost" (the design director, b356,
+    // b368; the UI director, b467 "For Brian" 2).
+    const over = !!S.sim!.over, afloatOver = over && u.state !== 'gone';
+    const doing = over ? '' : live(u) && u.state !== 'routing' ? ORDER_WORD[S.sim!.orderOf(u.id)?.kind ?? ''] ?? '' : '';
     // Where the line will not fit, the chip keeps the state in words and lets the order go (it shows in the chip's title).
-    const word = shaken ? 'Action over' : STATE_WORD[u.state];
+    const word = afloatOver ? 'Action over' : STATE_WORD[u.state];
     const full = `<b>${word}</b>${doing ? `<span class="act"> · ${doing}</span>` : ''}`;
     if (st.dataset.full !== full) {
       st.dataset.full = full;
@@ -289,7 +290,7 @@ function updateTray(force = false): void {
       if (doing && st.scrollWidth > st.clientWidth + 0.5) st.innerHTML = `<b>${word}</b>`;
       el.title = `${u.name}: ${word}${doing ? ` · ${doing}` : ''}`;
     }
-    st.className = `ustate tc-data${shaken ? '' : u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
+    st.className = `ustate tc-data${afloatOver ? '' : u.state === 'routing' ? ' bad' : u.state === 'wavering' ? ' warn' : ''}`;
   }
   trayMore();
 }
@@ -954,7 +955,9 @@ function showAfter(): void {
   const list = (x.toDice ? [staffLine, r.lines[0], ...repair, lossLine] : [staffLine, r.lines[0], lossLine, ...repair]).filter((l): l is string => !!l);
   const sides = rep ? `<div class="aside2">${(['att', 'def'] as const).map((sd) => `<div><h3 class="tc-label">${esc(t[sd].adj)} fleet</h3><ul>${rep![sd].map((s) => `<li><b>${esc(s.fleet)}</b> <span>lost ${esc(andList(shipBits(s.sunk)) || 'no ships')}</span></li>`).join('')}</ul></div>`).join('')}</div>` : '';
   const veil = document.createElement('div');
-  veil.className = 'veil';
+  // In the kit's type like the page it lies over: appended to the body, outside the app, it took the body's face (the UI
+  // director, b467 "For Brian" 1: the handed-over card read in a sans face in the published page).
+  veil.className = 'veil tc';
   veil.innerHTML = `<div class="after tc-paper" role="dialog" aria-label="Action result">
     <div class="tc-label kick">${rep ? `Fleet action · ${esc(t.date)}` : 'Practice action'}</div>
     <h2 class="tc-title-2">${esc(t.title)}</h2>
