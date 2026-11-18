@@ -19,11 +19,11 @@ import nationsData from '../data/campaign/nations.json';
 import setupData from '../data/campaign/setup-1939.json';
 import worldData from '../data/campaign/world.json';
 import { ARSENAL, offers, yardLevel } from '../src/campaign/arsenal';
-import { BUDGET, PRODUCTION, aiProduction, canRaise, colonyPurse, farColony, farShare, landFactor, landShare, lineFactories, provinceYield } from '../src/campaign/economy';
+import { BUDGET, PRODUCTION, aiProduction, canRaise, colonyPurse, farColony, farGuard, farShare, landFactor, landShare, lineFactories, provinceYield } from '../src/campaign/economy';
 import { monthlyDiplomacy, signPeace } from '../src/campaign/diplomacy';
 import { tieBars, tieWar, tiedPair } from '../src/campaign/far';
 import { FAR_LAID, FAR_PATHS, FAR_SETUP } from '../src/campaign/far-rows';
-import { allied, atWar, bloc, capitulate, capture, createGame, declareWar, industryHeld, sameSide, setWar, startPhase } from '../src/campaign/game';
+import { allied, armySize, atWar, bloc, capitulate, capture, createGame, declareWar, industryHeld, sameSide, setWar, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { small, threatened } from '../src/campaign/league';
 import { MANPOWER, classNow, homeShare } from '../src/campaign/manpower';
@@ -31,8 +31,9 @@ import { NAVY } from '../src/campaign/navy';
 import { RES, fieldOverseas, fieldYield, stores } from '../src/campaign/resources';
 import { blocked } from '../src/campaign/rivers';
 import { loadGame, saveGame } from '../src/campaign/save';
+import { SIEGE, guardOf } from '../src/campaign/siege';
 import { joinsOn, stalemates, startOpen } from '../src/campaign/staff';
-import { prizeOf, townAt, townName, worthOf } from '../src/campaign/towns';
+import { prizeOf, townAt, townName, townSize, worthOf } from '../src/campaign/towns';
 import { TRAITS, traitMoney } from '../src/campaign/traits';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
@@ -657,6 +658,49 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
       expect(farColony(r), name).toBe(true);
       expect(provinceYield(g, r, 'USA').port, name).toBeCloseTo(BUDGET.port * BUDGET.overseas * 0.1, 9);
     }
+  });
+
+  it("a far post's guard is its record garrison, counted once; other far colonial towns keep a tenth of a town's guard; home ground keeps it whole (ruling 234's rider b547)", () => {
+    const g = grand();
+    expect(BUDGET.farColony.guard).toBe(0.1);
+    expect(BUDGET.farColony.posts).toEqual(['Guam', 'Kuching', 'Tarakan', 'Balikpapan', 'Rabaul', 'Ambon', 'Port Moresby']);
+    // A town's guard as siege.json reckons it for any town: by its size, capped by its country's army.
+    const whole = (name: string): number => { const r = g.byName[name], n = g.nations[r.owner]; return Math.min(SIEGE.guard[townSize(g, r)], SIEGE.guardShare * Math.max(n.armyPeak, armySize(g, n.id))); };
+    // The posts whose garrison the historian has given (ruling 234(b)1, rider b541): the record's figure is the whole
+    // defence, and the town keeps no guard beside it.
+    for (const name of BUDGET.farColony.posts!) {
+      const r = g.byName[name];
+      expect(r, name).toBeTruthy();
+      expect(farColony(r), name).toBe(true);
+      expect(farGuard(r), name).toBe(0);
+      expect(guardOf(g, r), name).toBe(0);
+    }
+    // Elsewhere on far colonial ground the guard takes the far side's one number, the tenth: Malaya, the Philippines,
+    // Hong Kong, Burma, India, America's forts in mid-ocean, and Japan's mandates alike.
+    for (const name of ['Kota Bharu', 'Legaspi', 'Hong Kong', 'Singapore', 'Rangoon', 'Manila', 'Wake', 'Midway', 'Calcutta', 'Saipan', 'Truk']) {
+      const r = g.byName[name];
+      expect(farColony(r), name).toBe(true);
+      expect(r.ctrl, name).toBe(r.owner);
+      expect(farGuard(r), name).toBe(0.1);
+      expect(whole(name), name).toBeGreaterThan(0.2);
+      expect(guardOf(g, r), name).toBeCloseTo(whole(name) * 0.1, 9);
+    }
+    // Home ground keeps its guard whole: Hawaii (home by ruling 234(e)3), Japan's own and Korea and Formosa,
+    // Australia's, China's and Siam's; and the near side's game is untouched.
+    for (const name of ['Honolulu', 'Pearl Harbor', 'Tokyo', 'Seoul', 'Formosa', 'Brisbane', 'Darwin', 'Chungking', 'Bangkok', 'London', 'Berlin', 'Paris', 'Moscow']) {
+      const r = g.byName[name];
+      expect(farColony(r), name).toBe(false);
+      expect(farGuard(r), name).toBe(1);
+      expect(whole(name), name).toBeGreaterThan(0);
+      expect(guardOf(g, r), name).toBeCloseTo(whole(name), 9);
+    }
+    // Everywhere: the share is under 1 on far colonial ground and nowhere else, the old chart's colonies included.
+    let near = 0;
+    for (const r of g.regions) {
+      expect(farGuard(r) < 1, r.name).toBe(farColony(r));
+      if (r.overseas && shoreOf(r) !== 2) { near++; expect(farGuard(r), r.name).toBe(1); }
+    }
+    expect(near).toBeGreaterThan(0);
   });
 
   it("one cut, not two: on a far colony the tenth stands in place of ruling 214's factor, which falls on the rest of that country's ground (ruling 234(e)3)", () => {
