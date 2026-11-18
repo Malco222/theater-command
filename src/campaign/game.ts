@@ -14,7 +14,7 @@ import { BUDGET, PRODUCTION, budgeted, canBuildYet, corpsName, deliver, firstCor
 import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, pcIncome, sneakOn, wouldSurprise } from './diplomacy';
 import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
-import { AIR, airOnFall, airUpkeep, setupAir, skyOver } from './air';
+import { AIR, airOnFall, airUpkeep, setupAir, skyByNumbers, skyOnLand, skyOver } from './air';
 import { syncWings } from './carriers';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
@@ -1199,12 +1199,17 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (watch > 0) { rawD += watch; cmdD += watch; D += watch; }
   const aAir = airOf(g, aN, dN), dAir = airOf(g, dN, aN);
   let airEdge = (aAir - dAir) / (aAir + dAir + 1);
-  // Whoever has won the sky over this ground in the air war has it in the land battle too.
-  const sky = skyOver(g, target.id);
-  const skyWon = sky !== null && [...aN].some((n) => allied(g, n, sky));
-  if (skyWon) airEdge = Math.min(1, airEdge + AIR.sky.land);
-  A *= 1 + 0.3 * airEdge;
-  D *= 1 - 0.2 * airEdge;
+  // Whoever has won the sky over this ground in the air war has it in the land battle too. In the grand campaign's air
+  // war it counts for whichever side holds it, and the whole air effect is fitted to the record (ruling 227, b433).
+  const sky = skyOver(g, target.id), S = skyOnLand(g);
+  // (And in the air war a side with overwhelming air over the battle holds its sky, unless it is fought for: b444.)
+  const byNumbers = sky === null && S.both ? skyByNumbers(g, aN, dN, target.id) : null;
+  const skyWon = byNumbers === 'att' || (sky !== null && [...aN].some((n) => allied(g, n, sky)));
+  const skyLost = byNumbers === 'def' || (S.both && sky !== null && !skyWon && [...dN].some((n) => allied(g, n, sky)));
+  if (skyWon) airEdge = Math.min(1, airEdge + S.land);
+  if (skyLost) airEdge = Math.max(-1, airEdge - S.land);
+  A *= 1 + S.attack * airEdge;
+  D *= 1 - S.defence * airEdge;
   D = Math.max(D, 0.01);
 
   const sum = (cs: Corps[]) => cs.reduce((s, c) => s + men(c), 0).toLocaleString('en-US');
@@ -1348,7 +1353,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   }
   const aUns = attackers.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
   lines.push({ label: 'Supply', value: `${aUns ? `${aUns} attacking corps cut off` : 'Attackers in supply'}; ${dUns ? `${dUns} defending corps cut off` : 'defenders in supply'}`, effect: aUns || dUns ? 'Corps that are cut off fight at half strength' : undefined });
-  lines.push({ label: 'Air', value: skyWon ? `The ${g.nations[sky!].adj} air force has won the sky here` : airEdge > 0.15 ? 'Attacker holds the sky' : airEdge < -0.15 ? 'Defender holds the sky' : 'Contested', effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * 30)}%` : undefined });
+  lines.push({ label: 'Air', value: byNumbers ? `The ${byNumbers === 'att' ? 'attacker' : 'defender'}'s air force holds the sky here by its numbers` : skyWon || skyLost ? `The ${g.nations[sky!].adj} air force has won the sky here` : airEdge > 0.15 ? 'Attacker holds the sky' : airEdge < -0.15 ? 'Defender holds the sky' : 'Contested', effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * S.attack * 100)}%` : undefined });
   const gens = commandersIn(g, attackers), dgens = commandersIn(g, defenders);
   if (gens || dgens) {
     const up = rawA > 0 ? Math.round((cmdA / rawA - 1) * 100) : 0, dup = rawD > 0 ? Math.round((cmdD / rawD - 1) * 100) : 0;

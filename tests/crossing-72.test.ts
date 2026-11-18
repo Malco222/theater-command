@@ -22,6 +22,11 @@ import { crossings, liftOf, orderCrossingPlan, runTurnAI } from '../src/campaign
 import type { AirFleet, Corps, Game, Region } from '../src/campaign/types';
 
 /** A war the computer plays on every side (or with one seat a player's), as it stands once Poland has fallen. */
+// The crossings and the beach rule are tried with the fighters where the opening months and each scenario put them: the
+// basing of fighters by the threat (ruling 227, b428) is held off in this file.
+const threatBasing = AIRWAR.ai.basing.better;
+beforeAll(() => { AIRWAR.ai.basing.better = Infinity; });
+afterAll(() => { AIRWAR.ai.basing.better = threatBasing; });
 const opened = (human: string | null = null): Game => {
   const g = startOpen(createGame(3, human));
   for (let k = 0; k < 8 && (k < 2 || g.nations.POL.alive); k++) runTurnAI(g);

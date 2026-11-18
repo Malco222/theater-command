@@ -812,6 +812,11 @@ export interface PlanPhase {
   targets?: string[];
   /** The grand campaign: this phase is a staff's main effort for the season, aimed at this province (its id). */
   effort?: number;
+  /**
+   * The grand campaign: the places the staff's named offensive is aimed at this month, on its main front alone
+   * (where 'targets' holds every live front's). Its air groups are based in reach of these battles (ruling 227, b447).
+   */
+  main?: string[];
   /** The grand campaign: the month a main effort is named. The army masses opposite the target and attacks nowhere. */
   massing?: boolean;
   /** The grand campaign: how many waves a staff pressing a won war will send at one place in a month (two otherwise). */

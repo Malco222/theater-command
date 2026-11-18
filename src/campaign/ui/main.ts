@@ -589,7 +589,7 @@ const movedLine = (name: string, deck: boolean, sea: boolean, to: string): strin
 /** The reach of the picked air fleet, and where its next order could send it. */
 function airMarks(f: AirFleet): string {
   const b = g.regions[f.base];
-  const R = airRange(f);
+  const R = airRange(f, g);
   const u = AIR.kmPerUnit;
   let out = '';
   if (ui.airMode === 'base') for (const r of basesFor(f)) out += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
@@ -5862,7 +5862,7 @@ function airRow(f: AirFleet, mine: boolean, whose = false): string {
 
 /** The orders the player can give the air fleet that is picked. */
 function airOrders(f: AirFleet): string {
-  const R = airRange(f);
+  const R = airRange(f, g);
   const war = g.nations[f.nat].atWar.length > 0;
   const btn = (m: AirMission): string => {
     const off = isOffensive(m);
@@ -5999,7 +5999,7 @@ function airWarMarks(): string {
     for (const t of raidTargetsFor(g, 'recon', f.id)) out += `<path class="mk scout" d="${pathOf(g.regions[t.id].polys)}"/>`;
   }
   if (f) {
-    const at = groupAt(g, f), R = airRange(f), u = AIR.kmPerUnit;
+    const at = groupAt(g, f), R = airRange(f, g), u = AIR.kmPerUnit;
     if (at.sea >= 0) {
       // A carrier wing at sea is anywhere in its sea: that sea is ringed, and the seas next door that it can reach.
       const z = g.seas[at.sea];

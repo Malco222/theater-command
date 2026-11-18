@@ -1112,7 +1112,9 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
     const way = axis(g, nat, main, true);
     const opening = phase.from === g.turn;
     phase.axis = way.slice(0, opening && n.blitz ? OPEN.thrust[0] : OPEN.thrust[1]);
-    phase.targets = [...new Set(live.flatMap((f) => bound(g, nat, f, f === main ? way : [], opening)))];
+    const blow = bound(g, nat, main, way, opening);
+    phase.targets = [...new Set(live.flatMap((f) => (f === main ? blow : bound(g, nat, f, [], opening))))];
+    phase.main = blow;
     // No army takes a capital deep in enemy country in its first bound: the opening month goes to breaking the front.
     if (opening) phase.haltOrder = g.regions.filter((r) => r.cap && main.depth[r.id] >= 3 && main.enemies.includes(r.owner)).map((r) => r.name);
     // The will to finish: with the numbers and no ground gained for months, shorter odds and a third wave.
