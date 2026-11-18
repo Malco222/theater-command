@@ -774,6 +774,8 @@ export class AirSim implements BattleSim<AirUnit> {
     u.extra = {
       model: u.model, form: u.form, box: u.state === 'routing' ? 'broken' : u.state === 'wavering' ? 'loose' : 'tight', away: u.away,
       strag: u.strag.map((s) => ({ id: s.id, eng: s.eng, prop: s.prop, why: s.why, cover: s.cover ?? -1, back: Math.round(s.back), down: Math.round(s.down) })),
+      // The guns firing at it: only over a defended target, on its way in, never once it turns for home (the brief).
+      flak: u.side === 'att' && this.place.gunLoss > 0 && !done && !away(u) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? SKY.flak.kinds[u.band] : [],
     };
   }
 

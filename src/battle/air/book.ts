@@ -65,8 +65,13 @@ export const SKY = {
   spent: 0.12,
   /** Bomber boxes fly as one stream, side by side this many metres apart. */
   stream: 1_500,
-  /** Flak by height: the low band takes the most, the high the least. Fighters take this share of what bombers do. */
-  flak: { band: [1.5, 1, 0.55], fighters: 0 },
+  /**
+   * Flak by height: the low band takes the most, the high the least. Fighters take this share of what bombers do.
+   * kinds (shown only): the guns that reach each band, for the effects kit's AirFlak bursts round a box on its run in
+   * (the art director's flak brief, sections 3 and 4): light guns reach the low band only, medium the low and middle,
+   * heavy all three.
+   */
+  flak: { band: [1.5, 1, 0.55], fighters: 0, kinds: [['light', 'medium', 'heavy'], ['medium', 'heavy'], ['heavy']] as string[][] },
   /** A defending fighter caught between escorts and bombers gives the escorts this share of its effort. */
   tied: 0.6,
   /** Fighting edges: diving from a higher band (for this many air seconds), caught climbing, wavering. A routing group does not fight back. */
