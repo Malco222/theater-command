@@ -1,6 +1,7 @@
 #include "Campaign/TheaterSpeed.h"
 
 #include "TheaterCommand.h"
+#include "Async/Async.h" // (AsyncThread: a fine sheet modelled on a thread of its own, tc.Speed.QuietModel)
 #include "CoreGlobals.h" // (IsInGameThread)
 #include "Campaign/TheaterStillMesh.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -13,6 +14,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
 #include "HAL/PlatformMemory.h"
+#include "Misc/ScopeLock.h"
 #include "Misc/ScopeRWLock.h" // (FRWLock)
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -22,6 +24,9 @@
 #include "UObject/UObjectGlobals.h" // (FCoreUObjectDelegates: the engine's clearing out of what is no longer used)
 #include "UObject/UObjectIterator.h"
 #include <atomic>
+#if PLATFORM_MAC
+#include <sys/resource.h> // (setpriority, PRIO_DARWIN_THREAD, PRIO_DARWIN_BG: tc.Speed.QuietModel 4)
+#endif
 
 CSV_DEFINE_CATEGORY(Theater, true);
 
@@ -83,14 +88,20 @@ namespace
 		TEXT("1 makes the smaller copies of a fine sheet's pictures on the thread that models it; 0 in the frame that dresses it, as before."));
 
 	TAutoConsoleVariable<int32> CVarSheetShelf(
-		TEXT("tc.Speed.SheetShelf"), 6,
+		TEXT("tc.Speed.SheetShelf"), 12,
 		TEXT("How many fine sheets of the world the eye has left are kept on a shelf (their modelling kept, their tiles taken down), to be stood up again without being modelled again; 0 drops them whole, as before. The same picture either way."));
 	TAutoConsoleVariable<int32> CVarTileTime(
 		TEXT("tc.Speed.TileTime"), 4,
 		TEXT("The ms of tiles of ground stood up in one frame, over every sheet together, after which the rest wait for the next frame (one is always stood up); 0 stands up five a sheet whatever they take, as before."));
 	TAutoConsoleVariable<int32> CVarQuietModel(
 		TEXT("tc.Speed.QuietModel"), 0,
-		TEXT("(for measuring first) 1 models each fine sheet on its one thread and leaves the other cores to the frame: the fine ground comes later; 2 spreads its loops as before but at the background's priority; 0 spreads them over every spare core, as before. The same ground whichever."));
+		TEXT("(for measuring first) How a fine sheet is modelled. 0: on the engine's pool with its loops spread over every spare core, as before. 1: its loops on its one pool thread. 2: its loops spread at the background's priority. 3: on a thread of its own at the lowest priority, its loops on that thread. 4: as 3, and on a Mac that thread is marked as background work, which the system keeps to the efficiency cores. The same ground whichever; it comes later the quieter it is made."));
+	TAutoConsoleVariable<int32> CVarFontRoom(
+		TEXT("tc.Speed.FontRoom"), 1,
+		TEXT("1 gives Unreal eight pages for the letters it has cut, where it had one and threw every letter away when a second was wanted; 0 leaves it at one, as before. Read as the table is laid. The same letters either way."));
+	TAutoConsoleVariable<int32> CVarStandOne(
+		TEXT("tc.Speed.StandOne"), 1,
+		TEXT("1 stands one ready fine sheet a frame, the next the frame after; 0 stands every ready one in the same frame, as before. The same picture either way."));
 
 	FRWLock HoldersGuard; // (tc.Speed.HoldersLock: see TheaterSpeed::FHoldersRead)
 
@@ -104,6 +115,8 @@ namespace
 	int32 WindowModelling = 0; // (frames of the five seconds in which a sheet was being modelled)
 	int32 WindowSlowModelling = 0; // (...and how many of the frames over 33 ms those were, not beside the step player's look)
 	uint64 GarbageBegan = 0; // (when the engine began clearing out what is no longer used, while logging)
+	FCriticalSection KindsGuard;
+	TMap<FName, FIntPoint> KindsNow; // (still models handed over since the last frame's count, by kind: how many, and their points)
 
 	/** The line of what was made: "5 tiles of ground stood up, 7 still models handed over (29575 points), ...". */
 	template <typename TCount>
@@ -417,7 +430,12 @@ namespace TheaterSpeed
 
 	int32 QuietModel()
 	{
-		return FMath::Clamp(CVarQuietModel.GetValueOnGameThread(), 0, 2);
+		return FMath::Clamp(CVarQuietModel.GetValueOnGameThread(), 0, 4);
+	}
+
+	bool StandOne()
+	{
+		return CVarStandOne.GetValueOnGameThread() != 0;
 	}
 
 	FQuietModelling::FQuietModelling(int32 How)
@@ -433,7 +451,30 @@ namespace TheaterSpeed
 
 	EParallelForFlags ModelLoop()
 	{
-		return QuietHere == 1 ? EParallelForFlags::ForceSingleThread : QuietHere == 2 ? EParallelForFlags::BackgroundPriority : EParallelForFlags::None;
+		// (1, 3 and 4 keep the loop to the thread it is on; 2 spreads it at the background's priority)
+		return QuietHere == 2 ? EParallelForFlags::BackgroundPriority : QuietHere != 0 ? EParallelForFlags::ForceSingleThread : EParallelForFlags::None;
+	}
+
+	TFuture<void> ModelAside(int32 How, TUniqueFunction<void()> Work)
+	{
+		if (How >= 3)
+		{
+			// A thread of its own for this one sheet, at the lowest priority the engine has, so that the frame's own
+			// threads are before it for the fast cores. (Its stack is given room: the engine's pool threads, where the
+			// modelling has always run, are not small.) With 4, on a Mac, the thread also tells the system that it is
+			// background work, which Apple's chips keep to their efficiency cores. Its loops run on it alone (ModelLoop).
+			return AsyncThread([How, Mine = MoveTemp(Work)]()
+			{
+#if PLATFORM_MAC
+				if (How == 4)
+				{
+					setpriority(PRIO_DARWIN_THREAD, 0, PRIO_DARWIN_BG);
+				}
+#endif
+				Mine();
+			}, 8 * 1024 * 1024, TPri_Lowest);
+		}
+		return Async(EAsyncExecution::ThreadPool, MoveTemp(Work)); // (as before)
 	}
 
 	void NoteMade(EMade What, int32 HowMany)
@@ -441,6 +482,17 @@ namespace TheaterSpeed
 		if (bLogging && What < EMade::Count)
 		{
 			MadeNow[static_cast<int32>(What)].fetch_add(HowMany, std::memory_order_relaxed);
+		}
+	}
+
+	void NoteStillKind(FName Kind, int32 Points)
+	{
+		if (bLogging)
+		{
+			FScopeLock Lock(&KindsGuard);
+			FIntPoint& Count = KindsNow.FindOrAdd(Kind, FIntPoint::ZeroValue);
+			++Count.X;
+			Count.Y += Points;
 		}
 	}
 
@@ -596,6 +648,30 @@ namespace TheaterSpeed
 					}
 				}
 			}
+			// (Speed: tc.Speed.FontRoom, after the command line's sets so that one of them can turn it off.) Unreal keeps
+			// the letters it has cut on pages 1024 points square and, with one page allowed, throws every letter away
+			// when a second page is wanted ("FontCache flush requested. Reason: Large atlases out of space; 2/1
+			// Textures"), then cuts them all again and lays every panel out afresh: a 25 to 45 ms frame about ten times
+			// in a two-minute journey over the world, in the builder's capture of 18 November (build 1680). The names
+			// lettered on the map at their two largest sizes do not fit one page with everything else. Eight pages are
+			// allowed here (8 MB at most). The pre-checker read the engine: the number is read each time a page is
+			// added (FontCache.cpp 30 to 55, TextureAtlas.cpp 446 to 475), so setting it here is in time.
+			if (CVarFontRoom.GetValueOnGameThread() != 0)
+			{
+				static const TCHAR* const PagesName = TEXT("Slate.MaxFontAtlasPagesBeforeFlush");
+				if (IConsoleVariable* Pages = IConsoleManager::Get().FindConsoleVariable(PagesName))
+				{
+					if (Pages->GetInt() < 8)
+					{
+						Pages->Set(8, ECVF_SetByCode);
+						UE_LOG(LogTheater, Display, TEXT("Speed: %s set to %d (tc.Speed.FontRoom)"), PagesName, Pages->GetInt());
+					}
+				}
+				else
+				{
+					UE_LOG(LogTheater, Warning, TEXT("Speed: tc.Speed.FontRoom found no console variable called %s"), PagesName);
+				}
+			}
 		}
 	}
 
@@ -664,6 +740,12 @@ namespace TheaterSpeed
 			MadeWindow[Index] += MadeFrame[Index];
 			bAnyMade |= MadeFrame[Index] > 0;
 		}
+		TMap<FName, FIntPoint> KindsFrame; // (...and the still models among it, by kind)
+		{
+			FScopeLock Lock(&KindsGuard);
+			KindsFrame = MoveTemp(KindsNow);
+			KindsNow.Reset();
+		}
 		// (Slate's tick, its laying out and painting of every panel, is timed from its own start and end.)
 		static bool bSlateHooked = false;
 		if (!bSlateHooked && FSlateApplication::IsInitialized())
@@ -725,6 +807,23 @@ namespace TheaterSpeed
 					const FString Made = MadeLine(MadeFrame);
 					UE_LOG(LogTheater, Display, TEXT("Speed: made in that frame: %s%s%d fine sheet%s being modelled on other threads"),
 						*Made, Made.IsEmpty() ? TEXT("") : TEXT("; "), SheetsModelling, SheetsModelling == 1 ? TEXT("") : TEXT("s"));
+				}
+				// (And which still models those were: in the capture of 18 November a jump of the eye handed 130 models
+				// of half a million points to the draw thread in one frame, 35 to 56 ms, and the log could not say whose.)
+				if (DeltaSeconds > 0.0334f && KindsFrame.Num() > 0)
+				{
+					KindsFrame.ValueSort([](const FIntPoint& A, const FIntPoint& B) { return A.Y > B.Y; });
+					FString Kinds;
+					int32 Shown = 0;
+					for (const TPair<FName, FIntPoint>& Kind : KindsFrame)
+					{
+						if (++Shown > 6)
+						{
+							break;
+						}
+						Kinds += FString::Printf(TEXT("%s%s %d (%d points)"), Kinds.IsEmpty() ? TEXT("") : TEXT(", "), *Kind.Key.ToString(), Kind.Value.X, Kind.Value.Y);
+					}
+					UE_LOG(LogTheater, Display, TEXT("Speed: still models of that frame by kind, the most points first: %s"), *Kinds);
 				}
 			}
 		}
