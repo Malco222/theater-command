@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0e42170 2026-11-18. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 38fd57b 2026-11-18. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -31648,7 +31648,8 @@
       nat: x.nat,
       title: j.label,
       lines: [j.forecast, j.why ?? ""].filter(Boolean),
-      buttons: [{ label: j.on ? "ITS ORDERS NOW" : "GIVE THIS ORDER", act: `job:${id}:${j.key}`, ok: up && !j.on && !j.why, tip: j.why ?? "" }]
+      // (A dim button says why: the order it has now, a reason from the rules, or that it is not the player's month.)
+      buttons: [{ label: j.on ? "ITS ORDERS NOW" : "GIVE THIS ORDER", act: `job:${id}:${j.key}`, ok: up && !j.on && !j.why, tip: j.on ? "This is its standing order now. Give it one of the others to change it." : j.why ?? (up ? "" : "It is not your month.") }]
     }));
     const menu = raidMenu(g2);
     const raids = menu.filter((k) => k.key !== "recon").map((k) => {
@@ -32036,9 +32037,9 @@
   var FOOT_ROOM = { home: 30, homeWide: 35, elsewhere: 36, staff: 44 };
   var DESK_WORD = { research: "Research", build: "Build", diplomacy: "Diplomacy", spies: "Spies", air: "Air", navy: "Navy" };
   var of = (place2) => /s$/i.test(place2) ? `${place2}'` : `${place2}'s`;
-  function staffShort(desk, text) {
+  function staffShort(desk, text, all = FOOT_ROOM.staff) {
     const word = DESK_WORD[desk] ?? `${desk.charAt(0).toUpperCase()}${desk.slice(1)}`;
-    const room2 = FOOT_ROOM.staff - word.length - 2;
+    const room2 = all - word.length - 2;
     const said = first(text).replace(/^Your (advisers|staff|air staff|admirals|envoys|secret service|engineers|generals) /, "");
     const fit3 = (...tries) => {
       const t = tries.find((x) => x.length <= room2) ?? tries[tries.length - 1];
@@ -32756,7 +32757,7 @@
       card.rows.splice(card.show - 1, 0, ring);
       card.rows.splice(card.show, 0, gone);
     }
-    for (const r of card.rows) r.line = sentence(r.line, r.figures.length > 1 ? ROW_ROOM.two : ROW_ROOM.one - Math.max(0, (r.figures[0]?.label.length ?? 0) - 14));
+    if (!opts.whole) for (const r of card.rows) r.line = sentence(r.line, r.figures.length > 1 ? ROW_ROOM.two : ROW_ROOM.one - Math.max(0, (r.figures[0]?.label.length ?? 0) - 14));
     card.quiet = fighting.length ? "" : opts.opening ? NOT_YET_FOUGHT : card.bands.length || all.some((r) => r.cls === 2) ? "There was no fighting on your fronts this month." : "A quiet month.";
     if (card.rows.length > card.show) card.count = `ALL ${all.length} REPORTS`;
     const tone = (good, bad) => good > bad ? "good" : bad > good ? "bad" : "plain";
@@ -32808,7 +32809,7 @@
       if (used.has(h) || !mine4(h.nat)) continue;
       if (h.kind === "letter") continue;
       if (h.desk) {
-        card.staff.push({ text: h.text, short: staffShort(h.desk, h.text), desk: h.desk, sign: h.desk === "build" ? buildSign(h.text) : DESK_SIGN[h.desk] ?? "star", mayTake: staffRuns(g2, me, h.desk) });
+        card.staff.push({ text: h.text, short: staffShort(h.desk, h.text, opts.whole ? Infinity : FOOT_ROOM.staff), desk: h.desk, sign: h.desk === "build" ? buildSign(h.text) : DESK_SIGN[h.desk] ?? "star", mayTake: staffRuns(g2, me, h.desk) });
         used.add(h);
         continue;
       }
@@ -32855,7 +32856,7 @@
       const dir = /^A directive from ([^:]+): /.exec(h.text), title = dir ? N.gov?.dir?.title : void 0;
       said.push({ text: dir && title ? `A directive from ${dir[1]}: ${title}` : first(fixed), full: fixed, hs: [h] });
     }
-    if (signed < slots) for (const f of fitFoot(said.map((s) => s.text), signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken2, Math.min(3, slots - signed))) {
+    if (signed < slots) for (const f of fitFoot(said.map((s) => s.text), opts.whole ? Infinity : signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken2, Math.min(3, slots - signed))) {
       card.also.push(f.text);
       card.alsoFull.push(said[f.at].full);
       for (const h of said[f.at].hs) used.add(h);
@@ -32874,7 +32875,7 @@
       seenNat.add(h.nat);
       abroad3.push(h);
     }
-    for (const f of fitFoot(abroad3.map((h) => first(h.text)), FOOT_ROOM.elsewhere, slots * 2, slots)) {
+    for (const f of fitFoot(abroad3.map((h) => first(h.text)), opts.whole ? Infinity : FOOT_ROOM.elsewhere, slots * 2, slots)) {
       const h = abroad3[f.at];
       card.elsewhere.push({ nat: h.nat, text: f.text, full: h.text, ...h.region !== void 0 ? { region: h.region } : {} });
       used.add(h);
@@ -36066,7 +36067,7 @@
     try {
       const freed = cards.filter((c) => c.kind === "freed").map((c) => ({ nat: c.nat, text: c.text, region: typeof c.region === "number" ? c.region : -1 }));
       void freed;
-      month2 = fallen || !s.human ? null : shownCard(s, monthCard(s, monthBook ?? markBackTo(s, month02)));
+      month2 = fallen || !s.human ? null : shownCard(s, monthCard(s, monthBook ?? markBackTo(s, month02), s.human, { whole: true }));
     } catch {
       month2 = null;
     }
@@ -39384,7 +39385,7 @@ ${standing5}`,
     const s = game();
     if (!s.human || !s.nations[s.human]) return { ok: false };
     try {
-      lastCard = { ...shownCard(s, monthCard(s, markFor(s), s.human, { opening: true })), opening: true };
+      lastCard = { ...shownCard(s, monthCard(s, markFor(s), s.human, { opening: true, whole: true })), opening: true };
     } catch {
       return { ok: false };
     }
