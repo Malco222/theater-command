@@ -12841,7 +12841,11 @@ void ACampaignMapActor::UpdateSorties()
 		{
 			// The models face -X, so the formation is turned half round from the way it is heading.
 			const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(Heading.Y, Heading.X)) + 180.0;
-			Flight.Formation->SetRelativeLocationAndRotation(Where + FVector(0.0, 0.0, Aloft), FRotator(0.0, Yaw, Bank));
+			// (The modeller's flak rule and the art director's limit on it, 18 November 2026: a burst close by bumps the
+			// bombers. A small jolt of a few degrees, a roll and a nod that settle in half a second; they do not hop.)
+			const double Jolted = GetWorld()->GetTimeSeconds() - Flight.JoltAt;
+			const double Jolt = Jolted >= 0.0 && Jolted < 0.5 ? (1.0 - FMath::SmoothStep(0.0, 0.5, Jolted)) * FMath::Cos(Jolted * 21.0) : 0.0;
+			Flight.Formation->SetRelativeLocationAndRotation(Where + FVector(0.0, 0.0, Aloft), FRotator(Flight.JoltPitch * Jolt, Yaw, Bank + Flight.JoltRoll * Jolt));
 		}
 		Flight.At = Where + FVector(0.0, 0.0, Aloft);
 		Flight.Dir = Heading;
@@ -14014,6 +14018,15 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				Burst.Born = Now - Ago;
 				Burst.Seed = Chance.RandRange(1, 1 << 20);
 				Burst.Wings = Wings;
+				// (a burst that goes off now, within about a wingspan and a quarter of the leader, jolts the formation:
+				// up to three and a half degrees of roll and one and a half of nod, the nearer the more)
+				const double Near = 1.0 - FMath::Clamp(FVector::Distance(Burst.At, Flight.At) / (1.25 * Wings), 0.0, 1.0);
+				if (Ago <= 0.0 && Near > 0.15)
+				{
+					Flight.JoltAt = Now;
+					Flight.JoltRoll = (Aside < 0.0 ? 1.0 : -1.0) * FMath::Lerp(1.2, 3.5, Near);
+					Flight.JoltPitch = (Rise < 0.0 ? 1.0 : -1.0) * FMath::Lerp(0.4, 1.5, Near);
+				}
 			};
 			if (Flight.NextFlak <= 0.0)
 			{
@@ -14330,7 +14343,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		int32 Shown = 0;
 		for (int32 B = FlakBursts.Num() - 1; B >= 0; --B)
 		{
-			const FFlakBurst& Burst = FlakBursts[B];
+			FFlakBurst& Burst = FlakBursts[B];
 			const double Age = Burst.Born < 0.0 ? -Burst.Born : Now - Burst.Born;
 			if (Age >= SmokeLife + 0.5 && Burst.Born >= 0.0)
 			{
@@ -14345,7 +14358,10 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				continue; // (from the top: three to five, the newest)
 			}
 			FRandomStream Shape(Burst.Seed);
-			const double W = Burst.Wings;
+			// (The modeller's flak rule, passed by the art director on 18 November 2026: no two bursts the same size.
+			// Each is between 0.65 and 1.35 of the size the brief gave them all; its dice are its own, so that the
+			// shapes the bursts had are the shapes they keep.)
+			const double W = Burst.Wings * (0.65 + 0.7 * FRandomStream(Burst.Seed * 31 + 7).FRand());
 			// (larger than life from playing height; and from the top never under about fourteen points by nine)
 			// (round 37: at 1.55 a burst was 40 by 34 px from playing height and eleven of them ran together; the brief's 28 by 21)
 			const double Held = FMath::Lerp(1.0, 1.1, Playing);
@@ -14379,7 +14395,12 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			// (Smoke of every age takes the hour's light as the bombers do: about half by night, and bluer. The painted
 			// shapes carry their own dark and grey. From playing height a burst is held a little darker.)
 			const float Held2 = static_cast<float>(FMath::Lerp(1.0, 0.6, Playing));
-			const FLinearColor Hour = SmokeHour * Held2;
+			// (The same rule: a burst far from the eye is lifted by the haze between, paler and thinner. Counted from the
+			// distance of what the eye looks at: nothing there, and all there is of it at twice as far.)
+			const float Hazed = static_cast<float>(FMath::Clamp((FVector::Distance(EyeAt, Burst.At) / FMath::Max(static_cast<double>(CameraDistance), 1.0) - 1.0), 0.0, 1.0));
+			const FLinearColor Hour = FMath::Lerp(SmokeHour * Held2, FLinearColor(SmokeHour.R, SmokeHour.G * 1.02f, SmokeHour.B * 1.06f).GetClamped(), 0.6f * Hazed);
+			// (and it ages from black through charcoal to a grey-brown: the painted greys of its middle and old age are warmed)
+			const FLinearColor Aged[3] = { Hour, FLinearColor(Hour.R, Hour.G * 0.95f, Hour.B * 0.88f), FLinearColor(Hour.R, Hour.G * 0.91f, Hour.B * 0.8f) };
 			// (flat to the eye, with the wind along it: across it is square to both the wind and the eye's own line)
 			const FVector Sight = FVector::CrossProduct(Right, Up);
 			FVector AcrossWind = FVector::CrossProduct(Downwind, Sight);
@@ -14430,30 +14451,36 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 					LightShape(Heartland, Downwind * Square, AcrossWind * Square, FirstShape, Row, 0.7f * 0.62f * InBeam * Remains * 2.0f * AgeShare[Row], bTurned);
 				}
 			}
+			const float Thinned = Remains * (1.0f - 0.3f * Hazed);
 			for (int32 Row = 0; Row < 3; ++Row)
 			{
 				const double Square = 0.5 * SmokeLong * SheetSquare[Row] / SheetSmoke[Row];
-				DrawShape(Heartland, Downwind * Square, AcrossWind * Square, FirstShape, Row, Hour, Remains * AgeShare[Row], bTurned);
+				DrawShape(Heartland, Downwind * Square, AcrossWind * Square, FirstShape, Row, Aged[Row], Thinned * AgeShare[Row], bTurned);
 				if (bTwo && !bTop)
 				{
 					DrawShape(Heartland + Downwind * (SecondAlong * SmokeLong) + AcrossWind * (SecondUp * SmokeLong), Downwind * (Square * SecondSize), AcrossWind * (Square * SecondSize),
-						SecondShape, Row, Hour, 0.85f * Remains * AgeShare[Row], !bTurned);
+						SecondShape, Row, Aged[Row], 0.85f * Thinned * AgeShare[Row], !bTurned);
 				}
 			}
 			const double Long = SmokeLong, Wide = SmokeLong * 0.6; // (for the flash, which is placed by the smoke's size)
-			// The flash: about a fifth of a second, soft, with no sparks, off the middle of the smoke; at full strength at every hour.
-			if (Age < 0.2 && !bTop)
+			// The flash: one frame or two and gone, lumpy, a deep orange-red; off the middle of the smoke, with no sparks.
+			// (The modeller's flak rule, with the art director's limit of 18 November 2026: "deep orange-red, never
+			// peach". It was a fifth of a second of two warm smears with a cream heart. It is three lumps of red and
+			// orange, a little off one another, the smallest the hottest and still orange; by dusk and night, when
+			// the eye is wide open, it is let down so that it does not bleach.)
+			if (Age < 0.25 && Burst.Born >= 0.0 && Burst.Flashed < 2 && !bTop)
 			{
-				// (The art director's round 37: at dusk one showed as a pale cream disc 85 to 90 px across. A flash is
-				// small, warm and uneven: two warm smears a little off one another and a small hot heart; and by dusk
-				// and night, when the eye is wide open, it is let down so that it does not bleach.)
-				const float Lit0 = static_cast<float>(1.0 - FMath::SmoothStep(0.1, 0.2, Age)) * FMath::Lerp(1.0f, 0.6f, Moonlit);
+				++Burst.Flashed;
+				const float Lit0 = FMath::Lerp(1.0f, 0.6f, Moonlit);
 				const FVector FlashAt = Heartland - Downwind * (0.12 * Long) + FVector(0.0, 0.0, 0.05 * Wide);
 				const double Skew = Shape.FRandRange(0.0f, 6.283f);
 				const FVector Lean = Right * FMath::Cos(Skew) + Up * FMath::Sin(Skew);
-				DrawSmear(FlashAt + Lean * (0.03 * W), Lean, 0.16 * W, 0.1 * W, FLinearColor(FColor(150, 70, 14)), 0.5f * Lit0);
-				DrawSmear(FlashAt - Lean * (0.02 * W), FVector::CrossProduct(Lean, FVector::CrossProduct(Right, Up)), 0.08 * W, 0.055 * W, FLinearColor(FColor(255, 160, 50)), 0.8f * Lit0);
-				Draw(FlashAt, 0.03 * W, FLinearColor(FColor(255, 222, 150)), 0.9f * Lit0);
+				const FVector Athwart = FVector::CrossProduct(Lean, FVector::CrossProduct(Right, Up));
+				bDrawingLight = true;
+				DrawSmear(FlashAt + Lean * (0.05 * W), Lean, 0.15 * W, 0.1 * W, FLinearColor(FColor(196, 52, 14)), 0.85f * Lit0, 0.6);
+				DrawSmear(FlashAt - Lean * (0.06 * W) + Athwart * (0.04 * W), Athwart, 0.1 * W, 0.075 * W, FLinearColor(FColor(222, 78, 18)), 0.9f * Lit0, 0.6);
+				Draw(FlashAt - Athwart * (0.03 * W), 0.05 * W, FLinearColor(FColor(240, 112, 26)), 0.95f * Lit0);
+				bDrawingLight = false;
 			}
 		}
 	}

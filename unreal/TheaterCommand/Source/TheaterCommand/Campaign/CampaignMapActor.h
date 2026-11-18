@@ -697,6 +697,9 @@ private:
 		// 6). When each fires its next round, and how many it has fired: every fifth round is a tracer.
 		double NextRound[7] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
 		int32 RoundsFired[7] = { 0, 0, 0, 0, 0, 0, 0 };
+		// A burst of flak close by jolts the formation: when, and by how many degrees it rolls and pitches. It settles in half a second.
+		double JoltAt = -10.0;
+		double JoltRoll = 0.0, JoltPitch = 0.0;
 		// (where the two sides were a frame ago, and when: for the speed a round leaves its gun with)
 		FVector SeenAt = FVector::ZeroVector, SeenRivalAt = FVector::ZeroVector;
 		double SeenWhen = 0.0;
@@ -1082,6 +1085,7 @@ private:
 		double Born = 0.0;
 		int32 Seed = 0; // no two alike
 		double Wings = 0.0; // a wingspan of the bombers it was fired at: every size of it is in these
+		int32 Flashed = 0; // how many frames its flash has been drawn: one or two, and no more
 	};
 	TArray<FFlakBurst> FlakBursts;
 	int32 FlakFired = 0;
