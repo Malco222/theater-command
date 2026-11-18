@@ -166,8 +166,7 @@ def heavy_gun(m, parent, at=(0.0, 0.0, 0.0), shield=False, twin=False):
         dial(m, col + Vector((-0.10, 0, 1.05)), Vector((-0.8, 0, 0.6)))
         dial(m, P + Vector((Tx + 0.30, sy * (0.48 + w), 0.80)), Y * sy, 0.09)
         m.rod(P + Vector((0.2, sy * (0.47 + w), 0.5)), col + Z * 0.86, 0.02, "upper", sides=6)                         # the shaft into the mounting
-        bits.crew(m, "layer." + what, s_at, (1, 0, 0), "sit", "mount", "sitting on the platform's seat, turning the " + what + " handwheel", seat_h=0.44,
-                  grips={"l": (col + Vector((-0.135, 0.12, 0.90)), (1, 0, 0), "mount"), "r": (col + Vector((-0.135, -0.12, 0.90)), (1, 0, 0), "mount")})
+        bits.crew(m, "layer." + what, s_at, (1, 0, 0), "sit", "mount", "sitting on the platform's seat, turning the " + what + " handwheel by its two handles (grip.layer." + what + ".l/r, which turn with the wheel)", seat_h=0.44)
         # the foot rest
         m.rod(Vector((O.x + 0.45, O.y + sy * (0.95 + w), deck_z + 0.02)), Vector((O.x + 0.45, O.y + sy * (1.25 + w), deck_z + 0.02)), 0.015, "upper", sides=6)
     # the fuze setter: a box with two cups, at the left rear where the loaders pass
@@ -180,12 +179,20 @@ def heavy_gun(m, parent, at=(0.0, 0.0, 0.0), shield=False, twin=False):
     bits.handwheel(m, fz + Vector((0.0, 0.235, 1.06)), Y, 0.11, "steel", 4)
     bits.crew(m, "fuze", fz + Vector((-0.55, 0.0, 0.0)), (1, 0, 0), "stand", "mount", "standing on the platform, setting fuzes: he puts each round nose first into a cup")
     for y0, tag in bores:
-        bits.crew(m, "loader" + tag, Vector((O.x - 1.25, O.y + y0 - (0.20 if not twin else 0.0), deck_z)), (1, 0.15 if not twin else 0.0, 0), "stand", "mount",
-                  "standing on the platform behind the breech: he takes a round and throws it home")
-    # three rounds ready in a rack on the platform
+        # (he stands clear of the breech, which runs 0.66 m back when she fires: 0.3 m to his own right of the place
+        # behind it on the single gun, 0.3 m outboard on the twin; he steps in to load)
+        face = Vector((1, 0.15 if not twin else 0.0, 0)).normalized()
+        clear = Vector((face.y, -face.x, 0.0)) * 0.3 if not twin else Vector((0.0, 0.3 if y0 > 0 else -0.3, 0.0))
+        bits.crew(m, "loader" + tag, Vector((O.x - 1.25, O.y + y0 - (0.20 if not twin else 0.0), deck_z)) + clear, tuple(face), "stand", "mount",
+                  "standing on the platform beside the breech's path, clear of the recoil (the breech's line is 0.3 m to his " + ("left" if not twin or y0 < 0 else "right") + "): he takes a round, steps in and throws it home")
+    # three rounds ready in a rack on the platform; the nearest is a part of its own, for the loader takes it
     for k in range(3):
         base = Vector((O.x - 1.42, O.y - 0.62 - w * 1.6 - 0.14 * k, deck_z))
+        if k == 0:
+            m.part("round.ready", "mount", base, kind="free", note="the ready rack's nearest round, standing on its base: the loader lifts his round from exactly here, so the game hides this one while his is out of the rack (clip fire does it on the single gun)")
+            m.use("round.ready")
         shell(m, base, Z, 0.09, 0.86)
+        m.use("mount")
         m.lathe(base, Z, [(0.0, 0.075), (0.12, 0.075)], "upper", 10, (False, False))
     m.box(Vector((O.x - 1.42, O.y - 0.76 - w * 1.6, deck_z + 0.5)), (0.03, 0.46, 0.03), "upper")
     m.rod(Vector((O.x - 1.42, O.y - 0.99 - w * 1.6, deck_z)), Vector((O.x - 1.42, O.y - 0.99 - w * 1.6, deck_z + 0.5)), 0.012, "upper", sides=6)
@@ -197,7 +204,14 @@ def heavy_gun(m, parent, at=(0.0, 0.0, 0.0), shield=False, twin=False):
         c = Vector((O.x + 0.20, O.y + sy * (0.80 + w), deck_z + 0.90)) + Vector((-0.115, 0, 0))
         m.part("handwheel." + what, "mount", c, axis=(-1, 0, 0), kind="spin", note="the game spins it while the gun " + ("trains" if sy > 0 else "elevates"))
         m.use("handwheel." + what)
-        bits.handwheel(m, c + Vector((-0.02, 0, 0)), -X, 0.17, "steel", 4, 0.012)
+        hub = c + Vector((-0.02, 0, 0))
+        bits.handwheel(m, hub, -X, 0.17, "steel", 4, 0.012)
+        # a second handle opposite the first: the layer winds with both hands. His fists close round the handles 3 cm
+        # nearer him than the rim (as on a crank), and the grips turn with the wheel
+        m.rod(hub - Y * 0.17, hub - Y * 0.17 - X * 0.07, 0.012 * 1.3, "timber.dark", sides=6)
+        for hand, gy in (("l", 0.17), ("r", -0.17)):
+            m.socket("grip.layer." + what + "." + hand, hub + Vector((-0.03, gy, 0.0)), (1, 0, 0), part="handwheel." + what,
+                     note=("left" if hand == "l" else "right") + " hand of the layer." + what + ": on the handwheel's handle at the rim, turning with the wheel")
     # ---- the cradle: lifts on the trunnions
     m.part("cradle", "mount", T, axis=(0, -1, 0), limits=[-3.0, 85.0], kind="turn", note="elevation: plus lifts the muzzle, from 3 below level to 85 degrees")
     m.use("cradle")
@@ -298,7 +312,10 @@ def heavy_fire_clip(low=True):
             "about": "One round: the barrel runs back and out, the breech throws the empty case, the next round goes in. Lies over whatever the game has laid (traverse and elevation).",
             "tracks": [{"part": "barrel", "slide": [[0.0, 0.0], [0.06, 0.62], [0.12, 0.66], [0.55, 0.20], [0.95, 0.02], [1.15, 0.0]]},
                        {"part": "cradle", "turn": [[0.0, 0.0], [0.05, -0.5], [0.18, 0.25], [0.4, -0.08], [0.7, 0.0]]},
-                       {"part": "breech", "slide": [[0.0, 0.0], [0.62, 0.0], [0.78, 0.19], [2.35, 0.19], [2.5, 0.0], [3.2, 0.0]]}],
+                       {"part": "breech", "slide": [[0.0, 0.0], [0.62, 0.0], [0.78, 0.19], [2.35, 0.19], [2.5, 0.0], [3.2, 0.0]]},
+                       # (the rack's nearest round is in the loader's arms at the shot; the rack is filled again at 0.6,
+                       # and he lifts the next one out from 2.6: the crew pack's stand_load_breech carries it as a prop)
+                       {"part": "round.ready", "scale": [[0.0, 0.001, 0.001, 0.001], [0.59, 0.001, 0.001, 0.001], [0.6, 1.0, 1.0, 1.0], [2.59, 1.0, 1.0, 1.0], [2.6, 0.001, 0.001, 0.001], [3.2, 0.001, 0.001, 0.001]]}],
             "events": [{"t": 0.0, "fx": "muzzle_flash_big", "socket": "muzzle", "cue": "flak_heavy_fire_01"},
                        {"t": 0.0, "fx": "muzzle_smoke", "socket": "muzzle", "cue": ""},
                        {"t": 0.05, "fx": "blast_dust", "socket": "ground", "cue": ""},
