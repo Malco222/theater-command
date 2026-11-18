@@ -6846,17 +6846,15 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 						// field gap". Where the greater town at its full size, with a row of green, would cover the
 						// lesser town's very middle, the lesser stands under it: Baltimore under Washington. It is then
 						// built small, and the greater gives the green. Where the lesser's middle stands clear, it
-						// keeps its own kit at its first size and builds away from the greater: Rotterdam, a small
-						// city on its river mouth, beside Amsterdam.)
+						// keeps its own kit and its size and builds away from the greater, leaving its side toward
+						// it unbuilt: Rotterdam, a city on its river mouth, beside Amsterdam.)
 						if (Theirs + Row + 0.8 >= Apart)
 						{
 							bUnder = true;
 							Radius = FMath::Min(Radius, FMath::Max((Apart - Theirs) / 1.5, Least));
 						}
-						else
-						{
-							Radius = FMath::Min(Radius, FMath::Max(Own, Least));
-						}
+						// (it keeps its size as well as its kit: seen at a city's first size, with its side toward
+						// Amsterdam left unbuilt, Rotterdam was a square, a church and a few sheds, no city)
 						Beside.Add(Greater.Id);
 						Names += (Names.IsEmpty() ? TEXT("") : TEXT(" and ")) + Greater.Name;
 					}
@@ -6894,7 +6892,7 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 				if (Gave <= 8)
 				{
 					Said += FString::Printf(TEXT("%s%s beside %s (%.1f to %.1f%s)"), Said.IsEmpty() ? TEXT("") : TEXT("; "), *Lesser.Name, *Names, Was, Radius,
-						TownHumbled[Lesser.Id] ? TEXT(", as a town") : bUnder ? TEXT("") : TEXT(", building away from it"));
+						TownHumbled[Lesser.Id] ? TEXT(", as a town") : bUnder ? TEXT("") : TEXT(": its size kept, building away from it"));
 				}
 			}
 			if (Gave > 0)

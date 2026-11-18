@@ -355,7 +355,7 @@ void ACampaignGameMode::BeginPlay()
 	Music = PieceFor(TEXT("theme"));
 	if (Music)
 	{
-		Music->FadeIn(4.0f, NowVolume());
+		StartPiece(4.0f);
 		UE_LOG(LogTheater, Display, TEXT("Music: %d made pieces and %d of the score's eight, the theme %s"), Pieces.Num(), ScorePlayers.Num(), Music->IsPlaying() ? TEXT("playing") : TEXT("not playing"));
 	}
 	else
@@ -377,6 +377,19 @@ UAudioComponent* ACampaignGameMode::PieceFor(const FString& Mood) const
 	return Made ? Made->Get() : nullptr;
 }
 
+void ACampaignGameMode::StartPiece(float FadeSeconds)
+{
+	if (!Music)
+	{
+		return;
+	}
+	Music->FadeIn(FadeSeconds, NowVolume());
+	// (Its end is reckoned by the clock and its own length, not by asking whether it still plays: played too softly
+	// to hear, as "-TheaterQuiet" plays it, a piece is put out at once by the engine, and the turn would spin.)
+	const float Long = Music->Sound ? Music->Sound->GetDuration() : 0.0f;
+	PieceEndsAt = FPlatformTime::Seconds() + (Long > 1.0f && Long < 3600.0f ? Long + 1.5 : 1.0e9);
+}
+
 float ACampaignGameMode::NowVolume() const
 {
 	// (The design director's ruling 142: in play the music sits at about 0.15, under the recorded guns and engines.
@@ -394,7 +407,7 @@ void ACampaignGameMode::SetMusicMood(const FString& InMood)
 	if (bHomePlaying)
 	{
 		// (The Long Walk Home is heard out, unless a battle begins)
-		if (Music && Music->IsPlaying() && Mood != TEXT("battle"))
+		if (Music && FPlatformTime::Seconds() <= PieceEndsAt && Mood != TEXT("battle"))
 		{
 			return;
 		}
@@ -404,14 +417,12 @@ void ACampaignGameMode::SetMusicMood(const FString& InMood)
 	if (Mood == MusicMood)
 	{
 		// (the score's pieces are not loops: when one has ended, the next of its mood takes its turn)
-		if (bMusicOn && Music && !Music->IsPlaying() && ScoreOf.Contains(Mood))
+		if (bMusicOn && Music && ScoreOf.Contains(Mood) && FPlatformTime::Seconds() > PieceEndsAt)
 		{
 			++ScoreTurn.FindOrAdd(Mood);
 			Music = PieceFor(Mood);
-			if (Music)
-			{
-				Music->FadeIn(2.0f, NowVolume());
-			}
+			UE_LOG(LogTheater, Verbose, TEXT("Music: the piece has ended; %s takes its turn"), Music && Music->Sound ? *Music->Sound->GetName() : TEXT("nothing"));
+			StartPiece(2.0f);
 		}
 		return;
 	}
@@ -434,6 +445,7 @@ void ACampaignGameMode::SetMusicMood(const FString& InMood)
 	{
 		return;
 	}
+	UE_LOG(LogTheater, Verbose, TEXT("Music: the mood is %s; %s begins, at %.2f"), *Mood, Next->Sound ? *Next->Sound->GetName() : TEXT("a piece"), NowVolume());
 	if (Music && bMusicOn)
 	{
 		Music->FadeOut(Mood == TEXT("battle") ? 0.8f : 2.5f, 0.0f);
@@ -441,7 +453,7 @@ void ACampaignGameMode::SetMusicMood(const FString& InMood)
 	Music = Next;
 	if (bMusicOn)
 	{
-		Music->FadeIn(Mood == TEXT("battle") ? 0.6f : 3.0f, NowVolume());
+		StartPiece(Mood == TEXT("battle") ? 0.6f : 3.0f);
 	}
 }
 
@@ -458,9 +470,10 @@ void ACampaignGameMode::PlayHomecoming()
 	}
 	bHomePlaying = true;
 	Music = Home;
+	UE_LOG(LogTheater, Verbose, TEXT("Music: a war of the player's has ended; The Long Walk Home begins"));
 	if (bMusicOn)
 	{
-		Music->FadeIn(2.5f, NowVolume());
+		StartPiece(2.5f);
 	}
 }
 
@@ -497,7 +510,7 @@ bool ACampaignGameMode::ToggleMusic()
 	bMusicOn = !bMusicOn;
 	if (bMusicOn)
 	{
-		Music->FadeIn(1.5f, NowVolume());
+		StartPiece(1.5f);
 	}
 	else
 	{

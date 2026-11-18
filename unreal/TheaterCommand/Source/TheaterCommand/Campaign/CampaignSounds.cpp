@@ -137,6 +137,8 @@ void CampaignSounds::Play(const UObject* World, const TCHAR* Name, float Volume,
 		// its moment asked of its stand-in, and never over its master's own level, so that with the music at 0.15 the
 		// guns and engines stand some 6 dB over it.)
 		const float Loud = bQuiet ? Volume * 0.001f : FMath::Min(Volume * 2.5f, 1.0f);
+		UE_LOG(LogTheater, Verbose, TEXT("Sound: %s plays its recording (%s), at %.2f%s"), Name, *Recording->GetName(), FMath::Min(Volume * 2.5f, 1.0f),
+			Seconds > 0.0f ? *FString::Printf(TEXT(", for %.1f s"), Seconds) : TEXT(", to its end"));
 		if (Seconds <= 0.0f)
 		{
 			UGameplayStatics::PlaySound2D(World, Recording, Loud, Pitch);

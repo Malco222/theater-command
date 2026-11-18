@@ -13326,6 +13326,13 @@ namespace
 				{
 					On = ListStops[Index];
 				}
+				// ("-TheaterOptionsEnd" rests the OPTIONS page on its last stop: for a picture of the credits at its end,
+				// which the replay tool cannot scroll to)
+				static const bool bFromEnd = FParse::Param(FCommandLine::Get(), TEXT("TheaterOptionsEnd"));
+				if (bFromEnd && Controller.IsValid() && Controller->GetOpening().Tab == 2)
+				{
+					On = ListLastStop;
+				}
 				On = FMath::Min(On, ListLastStop);
 				if (!FMath::IsNearlyEqual(static_cast<double>(On), Top, 0.5))
 				{
@@ -13868,12 +13875,6 @@ namespace
 							];
 						}
 					}
-				}
-				// ("-TheaterOptionsEnd" shows this page from its end: for a picture of the credits, which the replay tool cannot scroll to)
-				static const bool bFromEnd = FParse::Param(FCommandLine::Get(), TEXT("TheaterOptionsEnd"));
-				if (bFromEnd && StartsScroll.IsValid())
-				{
-					StartsScroll->ScrollToEnd();
 				}
 				return;
 			}

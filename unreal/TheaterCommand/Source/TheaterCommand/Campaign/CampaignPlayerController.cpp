@@ -3245,7 +3245,8 @@ bool ACampaignPlayerController::IsMarchSlipShown() const
 {
 	// (One voice after a press.) The first lesson for an army picked up with no moves left: never the result of an
 	// order, and any order to that army puts it away.
-	return bHandSpent && !bHandOrdered && !bMarchSlipDone && ArmyRegion != INDEX_NONE && !bBySea && !bByRail && Tray.bVisible && !Tray.bFleet && !Tray.bLook;
+	// (not for corps inside a town: they march nowhere, this month or next, until they take the field)
+	return bHandSpent && !bHandOrdered && !bMarchSlipDone && ArmyRegion != INDEX_NONE && !bBySea && !bByRail && Tray.bVisible && !Tray.bFleet && !Tray.bLook && Tray.FieldButton.IsEmpty();
 }
 
 void ACampaignPlayerController::DismissMarchSlip()
@@ -7104,8 +7105,8 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 	if (!bBySea && !bByRail && !Tray.StormButton.IsEmpty())
 	{
 		// (an army that stands round an enemy town is told how the town is attacked)
-		Tray.Hint = FText::FromString(Tray.StormButton.ToString().Left(1) + Tray.StormButton.ToString().Mid(1).ToLower()
-			+ TEXT(": press its button above, or right-click the town, to attack it. A right-click elsewhere marches them away. Esc puts them down."));
+		Tray.Hint = FText::FromString(TEXT("Press ") + Tray.StormButton.ToString()
+			+ TEXT(" above, or right-click the town, to attack it. A right-click elsewhere marches them away. Esc puts them down."));
 	}
 	{
 		const FString Garrison = GarrisonSays();

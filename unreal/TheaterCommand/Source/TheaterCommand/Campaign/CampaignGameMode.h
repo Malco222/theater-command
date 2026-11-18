@@ -90,6 +90,9 @@ private:
 	TMap<FString, int32> ScoreTurn;
 	int32 HomePiece = INDEX_NONE; // The Long Walk Home
 	bool bHomePlaying = false;
+	double PieceEndsAt = 0.0; // when the piece now playing will have run its length (a piece of the score is played once through)
+	/** Starts the piece now in hand, fading it in, and notes when it will end. */
+	void StartPiece(float FadeSeconds);
 	/** The piece a mood plays now: the score's, in its turn, or the made piece. Nothing where there is neither. */
 	UAudioComponent* PieceFor(const FString& Mood) const;
 	/** How loud the music is to be now: the player's setting, the opening screen's theme clearly heard, and the newsreel's voice over it. */
