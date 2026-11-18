@@ -151,20 +151,22 @@ def tower(yard, style, x, z, high, half_beam, k=1.0):
     elif style == "pagoda":         # many storeys, each a little smaller, with platforms standing out round it
         tiers = 7
         step = high / (tiers + 0.6)
-        for k in range(tiers):
-            f = 1.0 - k * 0.07
-            yard.house(x + 5.4 * f, x - 5.6 * f + k * 0.35, 4.7 * f, z + k * step, step - 0.35, r=1.0)
-            yard.house(x + (6.3 - (k % 2) * 0.9) * f, x - 6.4 * f + k * 0.35, (5.5 - (k % 2) * 0.5) * f, z + (k + 1) * step - 0.35, 0.35, paint="hull", r=0.8, top="deck")
-            if k in (2, 4, 5):
-                yard.windows(x + 5.4 * f, 4.7 * f, z + k * step + step * 0.42, 0.7, back=3.0)
-            if k in (1, 3) and fine:
+        for tier in range(tiers):   # (never `k`: that is the size of the whole tower, and is wanted after this loop)
+            f = 1.0 - tier * 0.07
+            yard.house(x + 5.4 * f, x - 5.6 * f + tier * 0.35, 4.7 * f, z + tier * step, step - 0.35, r=1.0)
+            yard.house(x + (6.3 - (tier % 2) * 0.9) * f, x - 6.4 * f + tier * 0.35, (5.5 - (tier % 2) * 0.5) * f, z + (tier + 1) * step - 0.35, 0.35, paint="hull", r=0.8, top="deck")
+            if tier in (2, 4, 5):
+                yard.windows(x + 5.4 * f, 4.7 * f, z + tier * step + step * 0.42, 0.7, back=3.0)
+            if tier in (1, 3) and fine:
                 for hand in (PORT, STBD):
-                    yard.searchlight(x - 2.0, hand * 5.0 * f, z + (k + 1) * step, 0.6, (0.3, hand, 0.0))
+                    yard.searchlight(x - 2.0, hand * 5.0 * f, z + (tier + 1) * step, 0.6, (0.3, hand, 0.0))
         top = z + tiers * step
         yard.director("director.fore", x - 0.4, top, 7.6, r=2.6, high=2.8)
         m.use(yard.half(x))
         head = yard.mast(x - 2.4, top + 2.8, high * 0.22, lean=0.0, yards=((0.6, 0.6),))
-        m.box((X(x - 0.4), 0, top + 4.6), (0.3, 3.4 * k, 2.2), "upper")                                      # the aerial frame over the rangefinder
+        # the aerial frame over the rangefinder: an open frame on a short post, a ship's cabin wide, never a solid sheet
+        m.rod((X(x - 0.4), 0, top + 2.8), (X(x - 0.4), 0, top + 3.4), 0.12, "upper", sides=5)
+        aerial_frame(m, Vector((X(x - 0.4), 0, top + 3.4 + 1.1)), 3.4 * k, 2.2)
     elif style == "cone":           # a low bridge round the conning tower and a tall fire-control tower abaft it
         yard.house(x + 8.0, x - 6.0, 5.4, z, 5.6, r=1.4)
         yard.windows(x + 8.0, 5.4, z + 3.6, 1.0, back=5.0)
@@ -212,20 +214,23 @@ def radar(yard, name, x, z, wide, high, y=0.0, parent=None, spin=True):
                 note="a radar aerial: turns steadily, about a turn in six seconds" if spin else "an aerial on its director")
     m.use(rn)
     m.rod((x, y, z), (x, y, z + 0.6), 0.12, "upper", sides=5)
-    c = Vector((x, y, z + 0.6 + high / 2))
-    # an open frame in the pale grey of her upperworks: bars with the sky between them (the art director's review of
-    # 2026-11-18: a solid dark sheet read as a black flag at every masthead)
+    aerial_frame(m, Vector((x, y, z + 0.6 + high / 2)), wide, high)
+    return rn
+
+
+def aerial_frame(m, c, wide, high):
+    """An open frame in the pale grey of her upperworks, its middle at `c`: bars with the sky between them (the art
+    director's review of 2026-11-18: a solid dark sheet read as a black flag at every masthead)."""
     b = 0.09 if m.fine else 0.12
     for sy in (-1, 1):
         m.box(c + Vector((0, sy * (wide - b) / 2.0, 0)), (b, b, high), "upper")
     for sz in (-1, 1):
         m.box(c + Vector((0, 0, sz * (high - b) / 2.0)), (b, wide, b), "upper")
     nv, nh = (5, 2) if m.fine else (1, 1)
-    for k in range(nv):
-        m.box(c + Vector((0, (k + 1) * wide / (nv + 1.0) - wide / 2.0, 0)), (0.06, 0.06, high), "upper")
-    for k in range(nh):
-        m.box(c + Vector((0, 0, (k + 1) * high / (nh + 1.0) - high / 2.0)), (0.06, wide, 0.06), "upper")
-    return rn
+    for i in range(nv):
+        m.box(c + Vector((0, (i + 1) * wide / (nv + 1.0) - wide / 2.0, 0)), (0.06, 0.06, high), "upper")
+    for i in range(nh):
+        m.box(c + Vector((0, 0, (i + 1) * high / (nh + 1.0) - high / 2.0)), (0.06, wide, 0.06), "upper")
 
 
 def capital(name, title, cls, tag, hull, guns, gun_size, gun_long, bore, funnels, funnel, tower_at, tower_high, tower_style,
