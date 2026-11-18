@@ -736,7 +736,7 @@ class Effects:
         alpha = _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", soft, gone), 3.0, clamp=True)
         # colour: the puff's own (deep orange) through most of it, red and dim toward the tip, yellow in the heart
         _, t_fac, t_a, t_b, col = _mix(nt)
-        t_b.default_value = (0.055, 0.006, 0.001, 1.0)
+        t_b.default_value = (0.032, 0.006, 0.0015, 1.0)
         nt.links.new(info.outputs["Color"], t_a)
         nt.links.new(_math(nt, "MULTIPLY", _math(nt, "SUBTRACT", _math(nt, "ADD", u, _math(nt, "MULTIPLY", _math(nt, "SUBTRACT", 1.0, n), 0.5)), 0.72), 2.2, clamp=True), t_fac)
         if hot:
@@ -1063,16 +1063,40 @@ class Effects:
             for i, (dt, high, n) in enumerate(((0.0, 5.0, 16), (0.1, 15.0, 14), (0.24, 27.0, 12))):
                 self.flames(t + dt, at + Vector((g.uniform(-4, 4), g.uniform(-3, 3), high)) * size, n, (11.0 * size, 22.0 * size), toward=(0, 0, 1.1), spread=0.95, life=(0.3, 0.75),
                             speed=(18.0 * size, 55.0 * size), wind=0.15, heart=(7.0 * size if i == 0 else 0.0))
+            # Its smoke is coloured by how high it is thrown: fire light only reaches a cloud's foot, so it is warm in
+            # its lower third while the fire burns, grey-brown in the middle and charcoal at the top, and the warm
+            # foot is gone in a second. (All tan to its top it read as "a dust cloud beside the black fire smoke".
+            # The dice are thrown in the order they always were, so the rest of a clip is as it was.)
+            def shade(h, c):
+                warm, mid, top = Vector((0.4, 0.23, 0.1)), Vector((0.17, 0.13, 0.1)), Vector((c * 0.8, c * 0.76, c * 0.72))
+                return warm.lerp(mid, min(1.0, h / 0.4)) if h < 0.4 else mid.lerp(top, min(1.0, (h - 0.4) / 0.35))
             for i in range(16):      # the pillar
                 c = g.uniform(0.03, 0.1)
-                self.puff(t + 0.05 + g.uniform(0, 0.5), at + Vector((g.uniform(-5, 5), g.uniform(-4, 4), 3.0)), vel=(g.uniform(-9, 9), g.uniform(-9, 9), g.uniform(60, 150) * size), life=g.uniform(12, 20),
-                          r=(6 * size, g.uniform(16, 28) * size), col=(0.55, 0.3, 0.12), col2=(c, c * 0.95, c * 0.9), alpha=0.75, drag=g.uniform(1.0, 1.5), rise=2.6, fade_in=0.08, grow=0.5,
-                          wind=0.75, hold=0.4, cool=6.0)
+                dt, ax, ay = g.uniform(0, 0.5), g.uniform(-5, 5), g.uniform(-4, 4)
+                vx, vy, vz = g.uniform(-9, 9), g.uniform(-9, 9), g.uniform(60, 150)
+                life, rr, dr = g.uniform(12, 20), g.uniform(16, 28), g.uniform(1.0, 1.5)
+                self.puff(t + 0.05 + dt, at + Vector((ax, ay, 3.0)), vel=(vx, vy, vz * size), life=life, r=(6 * size, rr * size), col=shade(0.25 + 0.75 * (vz - 60.0) / 90.0, c),
+                          col2=(c, c * 0.95, c * 0.9), alpha=0.75, drag=dr, rise=2.6, fade_in=0.3, grow=0.5, wind=0.75, hold=0.4, cool=life / 1.0)   # (it shows once it is up among the tongues, not at the deck over the heart)
             for i in range(26):      # the cloud that spreads from her
                 v = Vector((g.uniform(-1, 1), g.uniform(-1, 1), g.uniform(0.1, 1.2))).normalized() * g.uniform(18, 80) * size
                 c = g.uniform(0.05, 0.16)
-                self.puff(t + 0.05 + g.uniform(0, 0.4), at + Vector((g.uniform(-6, 6), g.uniform(-4, 4), 3.0)), vel=v, life=g.uniform(10, 18), r=(6 * size, g.uniform(18, 32) * size),
-                          col=(0.6, 0.33, 0.12), col2=(c, c * 0.95, c * 0.9), alpha=0.7, drag=g.uniform(1.0, 1.7), rise=2.0, fade_in=0.08, grow=0.5, wind=0.8, hold=0.35, cool=5.0)
+                dt, ax, ay = g.uniform(0, 0.4), g.uniform(-6, 6), g.uniform(-4, 4)
+                life, rr, dr = g.uniform(10, 18), g.uniform(18, 32), g.uniform(1.0, 1.7)
+                h = min(1.0, max(0.0, v.z / size) / 70.0)
+                # (the low smoke comes in slowly, or it hides the heart from the first frame)
+                self.puff(t + 0.05 + dt, at + Vector((ax, ay, 3.0)), vel=v, life=life, r=(6 * size, rr * size), col=shade(h, c),
+                          col2=(c, c * 0.95, c * 0.9), alpha=0.7, drag=dr, rise=2.0, fade_in=0.5 if h < 0.4 else 0.28, grow=0.5, wind=0.8, hold=0.35, cool=life / 1.0)
+            # a small yellow heart low at her deck while the magazine burns: short fat tongues, yellow where the
+            # tower above them is orange (dice and names of their own, as a splash's column has)
+            q = random.Random(int(at.x * 53.0 + at.y * 7.0) + 911)
+            for i in range(13):
+                d = Vector((q.uniform(-0.7, 0.7), q.uniform(-0.7, 0.7), 1.0)).normalized()
+                ln = q.uniform(6.0, 11.0) * size
+                wide = ln * q.uniform(0.45, 0.6)
+                p = self.puff(t + q.uniform(0.0, 0.6), at + Vector((q.uniform(-5, 5), q.uniform(-3, 3), 2.0)) * size + d * ln * 0.4, vel=d * q.uniform(4, 10), life=q.uniform(0.28, 0.45), r=(0.7, 1.0),
+                              col=(0.193, 0.111, 0.0), col2=(0.16, 0.05, 0.002), alpha=0.95, kind="lick", wind=0.15, squash=(0.5 * ln, 0.5 * wide, 0.5 * wide), fade_in=0.01, grow=0.5, hold=0.5,
+                              cool=1.0, name="heart", rng=q)
+                p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion((1.0, 0.0, 0.0), q.uniform(0, 6.283))).to_euler()
             self.light(t, at + Vector((0, 0, 18.0)), 6.0e4 * size * size, 0.17, r=10.0)
         self.once(t0, where, make)
 

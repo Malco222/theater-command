@@ -473,6 +473,15 @@ with a small paler heart. And a tongue that dies by going thin all over lets the
 again: it dies by being eaten away and stays solid where it is left. `flamemeasure`-style check: take the warm pixels
 of a frame (red well over blue) and read their middle.
 
+A magazine's blast (`blast`, big) throws smoke that is coloured by how high it is thrown: fire light only reaches a
+cloud's foot, so it is warm in its lower third while the fire burns, grey-brown in the middle and charcoal at the
+top, and the warm foot cools in a second. Tan to its top it read as a dust cloud beside the black fire smoke. The
+smoke born at the deck comes in over a third to half a second, so it does not cover the fire from the first frame.
+Low at the deck is a small yellow heart (thrown at about 1.3, 0.75, 0, which the tone curve gives as 225,187,104:
+blue stays low, so it is yellow and never peach), with dice and names of its own (`name="heart"`); the tongues'
+tips are a dark red-brown. The blast's old dice are thrown in the order they always were, so the frames after the
+blast has cleared match the ones rendered before the change (frame 62 of the sinking: mean difference 0.5 of 255).
+
 Smoke seen later and from near by (`trail` in `airshow.py`, `_place` in `stage.py`). A trail's puffs of one age
 all live as long as each other and drift little, or those that die early leave the rest standing as a chain of
 separate ovals; and a puff thins away as the camera comes up to it, or its rim shows like a flat glass plate. Bullet
