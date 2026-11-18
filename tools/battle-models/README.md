@@ -431,14 +431,19 @@ has not been hit has none, so nothing changes for a game that does not use it.
 - It has every part of the aircraft (same names, parents, pivots; no faces of their own) and every clip of hers
   (without her events). Put it where she is and play on it whatever she plays: it follows her, wing off and all.
 - Its faces are in parts `damage.1`, `damage.2`, ...: one hit each, hanging on the part of her it struck. A hit is
-  "bullets" (a raking row of five to eight holes, each a dark hole with a raised lip of bare torn metal) or "flak"
-  (a ragged tear 30 to 55 cm across with petals of torn metal bent outward, and a scatter of splinter holes). A
-  fighter has eight or nine hits, a heavy bomber fourteen; 1,200 to 1,800 triangles. Holes are larger than life
+  "bullets" (a raking row of five to eight holes, unevenly spaced, each a dark hole with bare metal on one stretch
+  of its rim only) or "flak" (a ragged tear 30 to 55 cm across, three to six petals of torn metal bent into it, most
+  of them dark and one or two catching the light, a halo of soot round it, and a scatter of splinter holes). A
+  fighter has eight or nine hits, a heavy bomber fourteen; 1,500 to 2,900 triangles. Holes are larger than life
   (8 to 10 cm) so that a battle camera sees them.
 - Three clips show them, with seconds standing for hits: `damage.bullets` held at k shows her first k bullet hits,
   `damage.flak` her first k flak hits (lay one over the other), `damage` the first k of all kinds. At rest all show.
 - The file's `damage` lists each hit: `part`, `kind`, `on` (her part), `at`, `facing`, `holes`.
-- The faces stand 3.5 to 12 mm off her skin, as her panel lines do. Two paints: `hole` and `torn`.
+- The faces stand 3.5 to 16 mm off her skin, as her panel lines do. Six flat paints: `hole`, `torn` (bare metal in
+  the light), `lip` (bare metal showing faintly through her paint), `bent` (torn metal in the dark of the hole),
+  `soot`, `soot_thin`. Three are see-through, and the file says how much under `clear` (lip 0.4, soot 0.35,
+  soot_thin 0.17), as an aircraft's file does for her glass. The art director's rule: a whole bright ring round a
+  hole reads as a washer on olive drab, and even bright petals round a tear as a paper flower.
 - In the clips: `Plane.hurt(bullets, flak)` (`airshow.py`).
 - Made again with `python export.py <out> damage json glb` (six seconds an aircraft).
 

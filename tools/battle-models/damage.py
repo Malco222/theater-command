@@ -9,8 +9,13 @@ of hers, so whatever poses her poses it: lay it on her at the same place and pla
 faces are in parts `damage.1`, `damage.2`, ...: each one hit, hanging on the part of her it struck (a wing, the
 tail), so it goes with that part when she breaks up. Each is either
 
-- "bullets": a raking row of holes, each a dark hole with a raised lip of bare torn metal; or
-- "flak": one ragged tear with petals of torn metal bent outward, and a scatter of small splinter holes round it.
+- "bullets": a raking row of holes, each a dark hole whose lip shows bare metal on one stretch of its rim only; or
+- "flak": one ragged tear, a few petals of torn metal bent into it (most dark, one or two catching the light), a
+  halo of soot round it, and a scatter of small splinter holes.
+
+Six flat paints: `hole`, `torn` (bare metal in the light), `lip` (bare metal seen faintly through her paint), `bent`
+(torn metal in the dark of the hole), `soot` and `soot_thin`. Three are see-through: the file says how much under
+`clear` (lip 0.4, soot 0.35, soot_thin 0.17), as an aircraft's file does for her glass.
 
 Holes are drawn larger than life (a real 13 mm hole is not seen from a battle camera): about 8 cm across on a
 fighter, 10 cm on a heavy bomber; a tear 30 to 55 cm.
@@ -35,13 +40,19 @@ SKIN = {"upper", "upper2", "under", "nose"}                  # her skin, and
 LAID = {"line", "rivet", "rivet_under", "stain", "soot", "patch"}     # what lies on it: a hole may lie over these too
 
 
+PAINTS = {"hole": "0A0A0B", "torn": "7E8287", "lip": "7E8287", "bent": "2B2D2F", "soot": "2A2622", "soot_thin": "2A2622"}
+CLEAR = {"lip": 0.4, "soot": 0.35, "soot_thin": 0.17}       # how much of each see-through paint shows over her own
+
+
 def look(paint, mat, nt, bsdf, mix, **kw):
-    """For the pictures: the hole is dead black, the torn metal bright and bare."""
-    if paint == "hole":
+    """For the pictures: the hole is dead black, the torn metal bare, the lip and the soot seen through."""
+    if paint in ("hole", "soot", "soot_thin"):
         bsdf.inputs["Roughness"].default_value = 1.0
     else:                                                    # (bright from every side: polished metal would mirror a dark sea)
         bsdf.inputs["Metallic"].default_value = 0.15
-        bsdf.inputs["Roughness"].default_value = 0.5
+        bsdf.inputs["Roughness"].default_value = 0.5 if paint != "bent" else 0.8
+    if paint in CLEAR:
+        bsdf.inputs["Alpha"].default_value = CLEAR[paint]
 
 
 def overlay(name, fine=True, model=None):
@@ -74,78 +85,132 @@ def overlay(name, fine=True, model=None):
     r_hole = 0.036 * (0.8 + 0.25 * big)
     r_tear = 0.15 * (0.55 + 0.45 * big) * 1.25
 
-    d = Model(name + "Damage", m.title + ": battle damage", "damage", {"hole": "0A0A0B", "torn": "7E8287"}, fine)
+    d = Model(name + "Damage", m.title + ": battle damage", "damage", dict(PAINTS), fine)
     d.parts = [Part(p.name, p.parent, p.pivot, axis=p.axis, limits=p.limits, slide=p.slide, slide_limits=p.slide_limits, kind=p.kind, note=p.note) for p in m.parts]
     d.part_at = dict(m.part_at)
     d.clips = {k: dict(c, events=[]) for k, c in m.clips.items()}          # (what she does, it does; her sounds and effects stay hers)
     hits = []
 
     def hole(c, n, r0, sides=9):
-        """One hole at c on her skin: (points, the dark faces, the torn faces), or None if it runs off her."""
+        """One hole at c on her skin: (points, {paint: faces}), or None if it runs off her."""
         u = n.orthogonal().normalized()
         v = n.cross(u)
         a0 = rng.uniform(0.0, 6.283)
         mid = on_skin(c, n, 0.004)
         if mid is None:
             return None
+        lit0, lit_n = rng.randrange(sides), (rng.choice((2, 2, 3)) if sides >= 7 else 1)     # (bare metal shows on one stretch of the rim: a whole ring of it was a washer stuck on her)
         inner, outer = [], []
         for i in range(sides):
             a = a0 + 6.283 * i / sides
             way = u * math.cos(a) + v * math.sin(a)
             r1 = r0 * rng.uniform(0.55, 1.1)
-            p1 = on_skin(c + way * r1, n, 0.009 * big ** 0.5)              # (its lip stands up: it catches the light)
-            p2 = on_skin(c + way * r0 * rng.uniform(1.25, 1.75), n, 0.0035)      # (a thin bright edge: a broad one was a white ring stuck on her)
+            lit = (i - lit0) % sides <= lit_n
+            p1 = on_skin(c + way * r1, n, 0.009 * big ** 0.5 if lit else 0.006)   # (where it is lit its lip stands up)
+            p2 = on_skin(c + way * (r1 + r0 * rng.uniform(0.2, 0.4)), n, 0.0035)
             if p1 is None or p2 is None:
                 return None
             inner.append(p1)
             outer.append(p2)
         pts = [mid] + inner + outer
-        dark = [(0, 1 + i, 1 + (i + 1) % sides) for i in range(sides)]
-        torn = []
+        faces = {"hole": [(0, 1 + i, 1 + (i + 1) % sides) for i in range(sides)], "torn": [], "lip": []}
         for i in range(sides):
             j = (i + 1) % sides
-            torn += [(1 + i, 1 + sides + i, 1 + sides + j), (1 + i, 1 + sides + j, 1 + j)]
-        return pts, dark, torn
+            faces["torn" if (i - lit0) % sides < lit_n else "lip"] += [(1 + i, 1 + sides + i, 1 + sides + j), (1 + i, 1 + sides + j, 1 + j)]
+        return pts, faces
 
-    def tear(c, n, R, sides=11):
-        """A ragged hole a shell splinter tore: its rim in teeth, a petal of torn metal bent out of the skin at each."""
+    def tear(c, n, R, sides=13, around=20):
+        """A ragged hole a shell splinter tore, longer one way than the other: a few petals of torn metal bent into
+        it, most of them in its dark and one or two catching the light, and a halo of soot round it."""
         u = n.orthogonal().normalized()
         v = n.cross(u)
-        a0 = rng.uniform(0.0, 6.283)
-        mid = on_skin(c, n, 0.01)
+        a0, turn, stretch = rng.uniform(0.0, 6.283), rng.uniform(0.0, 3.1416), rng.uniform(1.15, 1.5)
+        e = u * math.cos(turn) + v * math.sin(turn)
+        f = n.cross(e)
+        mid = on_skin(c, n, 0.011)
         if mid is None:
             return None
-        half, rim, tips = [], [], []
+
+        def way_of(a):
+            w = u * math.cos(a) + v * math.sin(a)
+            return e * (w.dot(e) * stretch) + f * (w.dot(f) / stretch ** 0.5)
+
+        half, rim, edge, radii = [], [], [], []
+        ph1, ph2 = rng.uniform(0.0, 6.283), rng.uniform(0.0, 6.283)
         for i in range(sides):
             a = a0 + 6.283 * i / sides
-            way = u * math.cos(a) + v * math.sin(a)
-            r = R * rng.uniform(0.6, 0.95)
-            a2 = a + 6.283 * 0.5 / sides
-            way2 = u * math.cos(a2) + v * math.sin(a2)
-            p0, p1 = on_skin(c + way * r * 0.5, n, 0.01), on_skin(c + way * r, n, 0.012)
-            p2 = on_skin(c + way2 * R * rng.uniform(1.0, 1.24), n, rng.uniform(0.012, 0.035) * big ** 0.5)   # (short teeth: long petals read as a paper flower)
+            way = way_of(a)
+            # (lobes and a few notches: every other point long and short made a star)
+            r = R * (0.8 + 0.13 * math.sin(2.0 * a + ph1) + 0.07 * math.sin(3.0 * a + ph2)) * (rng.uniform(0.62, 0.8) if rng.random() < 0.25 else rng.uniform(0.94, 1.06))
+            p0, p1 = on_skin(c + way * r * 0.5, n, 0.011), on_skin(c + way * r, n, 0.012)
+            p2 = on_skin(c + way * (r + R * rng.uniform(0.04, 0.08)), n, 0.0125)
             if p0 is None or p1 is None or p2 is None:
                 return None
             half.append(p0)
             rim.append(p1)
-            tips.append(p2)
-        pts = [mid] + half + rim + tips
-        dark, torn = [], []
+            edge.append(p2)
+            radii.append(r)
+        pts = [mid] + half + rim + edge
+        H, RM, E = 1, 1 + sides, 1 + 2 * sides
+        lip0, lip_n = rng.randrange(sides), rng.choice((3, 4, 5))
+        faces = {"hole": [], "lip": [], "bent": [], "torn": [], "soot": [], "soot_thin": []}
         for i in range(sides):
             j = (i + 1) % sides
-            dark += [(0, 1 + i, 1 + j), (1 + i, 1 + sides + i, 1 + sides + j), (1 + i, 1 + sides + j, 1 + j)]
-            k = (i - 1) % sides                              # (a petal from each stretch of the rim, and the gaps between petals closed with torn metal too)
-            torn += [(1 + sides + i, 1 + 2 * sides + i, 1 + sides + j), (1 + sides + i, 1 + 2 * sides + k, 1 + 2 * sides + i)] if i % 3 else [(1 + sides + i, 1 + 2 * sides + i, 1 + sides + j)]
-        return pts, dark, torn
+            faces["hole"] += [(0, H + i, H + j), (H + i, RM + i, RM + j), (H + i, RM + j, H + j)]
+            if (i - lip0) % sides < lip_n or rng.random() < 0.15:           # (a lip on part of the rim only: all round, it outlined the tear like a sticker)
+                faces["lip"] += [(RM + i, E + i, E + j), (RM + i, E + j, RM + j)]
+        # the petals: three to six of them, no two alike, folded in over the dark
+        count = rng.choice((3, 4, 4, 5, 6))
+        sides_with = sorted(rng.sample(range(sides), count))
+        lit = set(rng.sample(sides_with, rng.choice((1, 1, 2))))
+        for i in sides_with:
+            j = (i + 1) % sides
+            base = (rim[i] + rim[j]) * 0.5 - mid
+            reach = rng.uniform(0.28, 0.85)                                  # (how far in it is bent: no two the same)
+            skew = (rim[j] - rim[i]) * rng.uniform(-0.45, 0.45)
+            tip = mid + base * (1.0 - reach) + skew + n * 0.006
+            pts.append(tip)
+            faces["torn" if i in lit else "bent"].append((RM + i, len(pts) - 1, RM + j))
+        # the soot: two rings of it, the outer one thinner, each as far round her as her skin goes
+        def as_far(way, r, lift):
+            for k in (1.0, 0.85, 0.7):
+                p = on_skin(c + way * (r * k), n, lift)
+                if p is not None:
+                    return p
+            return None
+
+        aft = -X - n * (-X).dot(n)                           # (the wind lays the soot back along her)
+        aft = aft.normalized() if aft.length > 0.25 else None
+        rings = [[], [], []]
+        for i in range(around):
+            a = a0 + 6.283 * i / around
+            way = way_of(a)
+            r_rim = radii[int(round((i / around) * sides)) % sides]
+            blown = 1.0 + 0.8 * max(0.0, way.normalized().dot(aft)) ** 2 if aft is not None else 1.0
+            r1 = R * rng.uniform(1.15, 1.6) * blown
+            r2 = r1 + R * rng.uniform(0.25, 0.75) * blown
+            for ring, r, lift in ((0, r_rim * 0.9, 0.006), (1, r1, 0.008), (2, r2, 0.008)):
+                p = as_far(way, r, lift)
+                rings[ring].append(None if p is None else len(pts))
+                if p is not None:
+                    pts.append(p)
+        for i in range(around):
+            j = (i + 1) % around
+            for ring, paint in ((0, "soot"), (1, "soot_thin")):
+                q = (rings[ring][i], rings[ring + 1][i], rings[ring + 1][j], rings[ring][j])
+                if None not in q:
+                    faces[paint] += [(q[0], q[1], q[2]), (q[0], q[2], q[3])]
+        return pts, faces
 
     def lay(pieces, kind, c, n, on):
         """A hit made of `pieces`, as the next part."""
         k = len(hits) + 1
         part = d.part(f"damage.{k}", on, pivot=tuple(c), kind="fixed", note=kind)
         d.use(part)
-        for (pts, dark, torn), nn in pieces:
-            d.add(pts, dark, "hole", smooth=False, out=lambda mid, nn=nn: nn)
-            d.add(pts, torn, "torn", smooth=False, out=lambda mid, nn=nn: nn)
+        for (pts, faces), nn in pieces:
+            for paint in ("soot_thin", "soot", "hole", "lip", "bent", "torn"):         # (what lies lowest first)
+                if faces.get(paint):
+                    d.add(pts, faces[paint], paint, smooth=False, out=lambda mid, nn=nn: nn)
         hits.append({"part": part, "kind": kind, "on": on, "at": [round(x, 3) for x in c], "facing": [round(x, 3) for x in n], "holes": len(pieces)})
 
     def bullets(h):
@@ -158,9 +223,15 @@ def overlay(name, fine=True, model=None):
         along = fore * math.cos(turn) + side * math.sin(turn)
         across = n.cross(along)
         count, gap = rng.choice((5, 6, 6, 7, 8)), 0.27 * big ** 0.5
+        steps, far = [], 0.0                                 # (no two gaps alike, and the line wanders and bends: an even row looks stamped on her)
+        for j in range(count):
+            steps.append(far)
+            far += gap * rng.uniform(0.5, 1.6)
+        bend = rng.uniform(-0.06, 0.06)
         pieces = []
         for j in range(count):
-            p = c + along * ((j - 0.5 * (count - 1)) * gap * rng.uniform(0.8, 1.2)) + across * (gap * rng.uniform(-0.22, 0.22))
+            t = steps[j] - 0.5 * steps[-1]
+            p = c + along * t + across * (gap * rng.uniform(-0.42, 0.42) + bend * t * t / gap)
             hj = cast(p + n * 0.3, -n, 0.75)
             if not good(hj):
                 continue
@@ -237,6 +308,6 @@ def overlay(name, fine=True, model=None):
         d.clips[clip] = {"long": float(len(mine)), "loop": False, "after": "hold", "tracks": shows(mine), "events": [],
                          "about": ("Her hits, one after another: at second k the first k are there" + (" (all kinds, spread over her)." if kind is None else f" (the {kind} only; lay it over the other kind's).")
                                    + " Hold it at the count of hits she has taken; 0 shows none.")}
-    d.info = {"file": {"for": name, "damage": hits}}
+    d.info = {"file": {"for": name, "damage": hits, "clear": dict(CLEAR)}}
     d.hits = every
     return d
