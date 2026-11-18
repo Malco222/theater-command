@@ -24,6 +24,7 @@ from mathutils import Matrix, Quaternion, Vector
 
 import rigid
 from motorpool import LEFT, RIGHT, SIDES, X, Y, Z, frame
+from tanks_ger import GER_COATS, coats
 from works import Works
 
 coat = "upper"
@@ -672,10 +673,11 @@ def zis3(fine=True, tag="SOV"):
     return v
 
 
-def lefh18(fine=True, tag="GER"):
+def lefh18(fine=True, tag="GER", paint=None):
     """10.5 cm light field howitzer 18: a short thick barrel under its recuperator, big cast wheels with solid
-    tyres, a tall narrow shield between them, riveted box trail legs with folding spades."""
-    v = GunWorks("leFH18", "10.5 cm leFH 18", "gun", tag, fine)
+    tyres, a tall narrow shield between them, riveted box trail legs with folding spades. Dark grey to early 1943,
+    dark yellow after: one model, a paint swap."""
+    v = GunWorks("leFH18", "10.5 cm leFH 18", "gun", tag, fine, paint=GER_COATS[paint or "grey"][0])
     R, T = 0.65, 1.56
     v.gun_root(R)
     for letter, s in SIDES:
@@ -701,6 +703,7 @@ def lefh18(fine=True, tag="GER"):
     v.socket("dust.muzzle", (2.0, 0.0, 0.03), X, part="vehicle", note="the ground under the muzzle: the blast lifts the dust here")
     crew(v, (-0.7, 0.6, 0.0), (-1.6, -0.5, 0.0), (-2.7, 1.6, 0.0), (-2.2, -1.6, 0.0), (-1.5, -0.2, 0.0))
     v.gun_clips(1.1, E.x, lift=0.04, close=close, eye_z=0.22, track=T, low=-5.0)
+    v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names.", "paint": coats(v, paint or "grey")}
     return v
 
 

@@ -16,13 +16,10 @@ from tanks_ger import coat
 from works import Works
 
 
-def sherman(fine=True, tag="USA"):
-    """M4 Sherman, welded hull, 75 mm gun: 5.84 m long, 2.62 m wide, 2.74 m high, the muzzle no farther forward than
-    her nose."""
-    v = Works("Sherman", "M4 Sherman", "tank", tag, fine)
-    v.root(hull_pivot=(0.0, 0.0, 0.85))
-    hw, sw, zs, zr = 0.80, 1.31, 1.06, 1.74        # half-width between the tracks and over them; the sponson's floor; the roof
-
+def m4_tub(v, hw):
+    """The M4's lower hull, shared by everything built on it: the tub between the tracks and the rounded cast nose
+    that houses the drive, with the final drives and the towing hooks."""
+    fine = v.fine
     # ---- the tub between the tracks, ending forward in the rounded cast nose that houses the drive ----
     k = v.n(14, 5)
     nose = [(2.38 + 0.54 * max(0.0, math.cos(a)) ** (2 / 2.3), 0.74 + (0.33 if a > 0 else 0.31) * math.copysign(abs(math.sin(a)) ** (2 / 2.3), math.sin(a)))
@@ -36,6 +33,50 @@ def sherman(fine=True, tag="USA"):
     if fine:
         for i in range(15):                              # the bolts that hold the nose casting to the hull
             v.bolt((2.40, -0.74 + 1.48 * i / 14, 1.071), Vector((0.25, 0, 1)), 0.016, 0.012)
+
+
+def m4_gear(v, hw):
+    """The M4's running gear: three sprung pairs of wheels a side, a roller behind each pair, the drive at the front."""
+    fine = v.fine
+    # ---- the running gear: three sprung pairs of wheels a side, a roller behind each pair, the drive at the front ----
+    ty, r_w, up = 1.054, 0.254, 0.04               # (`up`: the wheels stand on the track's rubber, not on the ground)
+    pairs = [-1.45, 0.0, 1.45]
+    xs = [b + d for b in pairs for d in (-0.36, 0.36)]
+    rollers = [(b - 0.31, 0.835 + up, 0.095) for b in pairs]
+    v.running(xs, r_w, ty, (2.52, 0.67, 0.315), (-2.42, 0.62, 0.28), rollers=rollers, wheel_z=r_w + up,
+              wheel=dict(w=0.22, tyre=0.035, double=False, kind="dish", bolts=8, sides=30, hub=0.36, axle=0.02, ribs=6),
+              sprocket_kw=dict(teeth=13, wide=0.40, tooth=0.035, holes=0, bolts=8, sides=30, hub=0.46),
+              idler_kw=dict(wide=0.24, kind="spoke", spokes=6),
+              roller_kw=dict(wide=0.2, tyre=0.012, reach=0.1),
+              track=dict(pitch=0.152, wide=0.42, thick=0.045, sag=0.008, style={"kind": "block", "chevron": True, "horn": "ends", "horn_high": 0.07, "grouser": 0.012}))
+    v.use("vehicle")
+    for s in (LEFT, RIGHT):
+        yo, yi = s * (ty + 0.13), s * (ty - 0.13)
+        for b in pairs:
+            # the bracket between the two wheels that holds their spring, bolted to the hull's side; a skid on its top
+            v.extrude([(x, z + up) for x, z in [(b - 0.07, 0.25), (b + 0.07, 0.25), (b + 0.09, 0.50), (b + 0.20, 0.62), (b + 0.20, 0.79), (b + 0.13, 0.85), (b - 0.13, 0.85),
+                                                (b - 0.20, 0.79), (b - 0.20, 0.62), (b - 0.09, 0.50)]], min(yo, yi), max(yo, yi), "upper", bevel=0.012)
+            v.slab((b - 0.16, s * (hw - 0.01), 0.60 + up), (b + 0.16, yi, 0.82 + up), "shade", 0.008)
+            v.slab((b - 0.19, yi, 0.85 + up), (b + 0.21, yo, 0.885 + up), "upper", 0.012)
+            if fine:
+                v.bolts((b, yo + s * 0.001, 0.71 + up), Y * s, 0.075, 6, r=0.013)
+                for e in (-1.0, 1.0):                    # the arms down to each wheel, and the cap on its axle
+                    v.rod((b + e * 0.05, yo + s * 0.012, 0.36 + up), (b + e * 0.36, yo + s * 0.012, r_w + up), 0.034, "upper", 8)
+                    v.lathe((b + e * 0.36, yo - s * 0.01, r_w + up), Y * s, [(0.05, 0.0), (0.05, 0.045), (0.03, 0.07), (0.0, 0.075), (0.0, 0.0)], "upper", v.n(14, 6))
+                # the roller's arm, reaching back from the bracket
+                v.rod((b - 0.16, s * (ty - 0.02), 0.80 + up), (b - 0.31, s * (ty - 0.02), 0.835 + up), 0.03, "upper", 8)
+        v.lathe((-2.42, s * (hw + 0.04), 0.62), Y * s, [(0.10, 0.0), (0.10, 0.09), (0.0, 0.14), (0.0, 0.0)], "upper", v.n(16, 8))
+    v.use("hull")
+
+
+def sherman(fine=True, tag="USA"):
+    """M4 Sherman, welded hull, 75 mm gun: 5.84 m long, 2.62 m wide, 2.74 m high, the muzzle no farther forward than
+    her nose."""
+    v = Works("Sherman", "M4 Sherman", "tank", tag, fine)
+    v.root(hull_pivot=(0.0, 0.0, 0.85))
+    hw, sw, zs, zr = 0.80, 1.31, 1.06, 1.74        # half-width between the tracks and over them; the sponson's floor; the roof
+
+    m4_tub(v, hw)
 
     # ---- the upper hull: a welded box the full width of her, its front plate sloped back --------------------
     v.hull([(2.47, sw, zs), (1.37, sw, zr), (-1.60, sw, zr), (-2.58, sw, 1.66), (-2.76, sw, 1.18), (-2.76, sw, zs)], coat, bevel=0.014)
@@ -122,35 +163,7 @@ def sherman(fine=True, tag="USA"):
         for y in (-0.9, 0.9):
             v.lift_eye(r_at(0.40, y), rn, Y, 0.03)
 
-    # ---- the running gear: three sprung pairs of wheels a side, a roller behind each pair, the drive at the front ----
-    ty, r_w, up = 1.054, 0.254, 0.04               # (`up`: the wheels stand on the track's rubber, not on the ground)
-    pairs = [-1.45, 0.0, 1.45]
-    xs = [b + d for b in pairs for d in (-0.36, 0.36)]
-    rollers = [(b - 0.31, 0.835 + up, 0.095) for b in pairs]
-    v.running(xs, r_w, ty, (2.52, 0.67, 0.315), (-2.42, 0.62, 0.28), rollers=rollers, wheel_z=r_w + up,
-              wheel=dict(w=0.22, tyre=0.035, double=False, kind="dish", bolts=8, sides=30, hub=0.36, axle=0.02, ribs=6),
-              sprocket_kw=dict(teeth=13, wide=0.40, tooth=0.035, holes=0, bolts=8, sides=30, hub=0.46),
-              idler_kw=dict(wide=0.24, kind="spoke", spokes=6),
-              roller_kw=dict(wide=0.2, tyre=0.012, reach=0.1),
-              track=dict(pitch=0.152, wide=0.42, thick=0.045, sag=0.008, style={"kind": "block", "chevron": True, "horn": "ends", "horn_high": 0.07, "grouser": 0.012}))
-    v.use("vehicle")
-    for s in (LEFT, RIGHT):
-        yo, yi = s * (ty + 0.13), s * (ty - 0.13)
-        for b in pairs:
-            # the bracket between the two wheels that holds their spring, bolted to the hull's side; a skid on its top
-            v.extrude([(x, z + up) for x, z in [(b - 0.07, 0.25), (b + 0.07, 0.25), (b + 0.09, 0.50), (b + 0.20, 0.62), (b + 0.20, 0.79), (b + 0.13, 0.85), (b - 0.13, 0.85),
-                                                (b - 0.20, 0.79), (b - 0.20, 0.62), (b - 0.09, 0.50)]], min(yo, yi), max(yo, yi), "upper", bevel=0.012)
-            v.slab((b - 0.16, s * (hw - 0.01), 0.60 + up), (b + 0.16, yi, 0.82 + up), "shade", 0.008)
-            v.slab((b - 0.19, yi, 0.85 + up), (b + 0.21, yo, 0.885 + up), "upper", 0.012)
-            if fine:
-                v.bolts((b, yo + s * 0.001, 0.71 + up), Y * s, 0.075, 6, r=0.013)
-                for e in (-1.0, 1.0):                    # the arms down to each wheel, and the cap on its axle
-                    v.rod((b + e * 0.05, yo + s * 0.012, 0.36 + up), (b + e * 0.36, yo + s * 0.012, r_w + up), 0.034, "upper", 8)
-                    v.lathe((b + e * 0.36, yo - s * 0.01, r_w + up), Y * s, [(0.05, 0.0), (0.05, 0.045), (0.03, 0.07), (0.0, 0.075), (0.0, 0.0)], "upper", v.n(14, 6))
-                # the roller's arm, reaching back from the bracket
-                v.rod((b - 0.16, s * (ty - 0.02), 0.80 + up), (b - 0.31, s * (ty - 0.02), 0.835 + up), 0.03, "upper", 8)
-        v.lathe((-2.42, s * (hw + 0.04), 0.62), Y * s, [(0.10, 0.0), (0.10, 0.09), (0.0, 0.14), (0.0, 0.0)], "upper", v.n(16, 8))
-    v.use("hull")
+    m4_gear(v, hw)
 
     # ---- the turret: one rounded casting, its back standing out over the engine deck ---------------------------
     x0, zt, th = 0.15, zr, 0.80

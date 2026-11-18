@@ -5,6 +5,8 @@ field and which of the game's units wear it (the unit table's names, generic-uni
 """
 import carriers
 import guns
+import guns_at
+import tank_destroyers
 import tanks_any
 import tanks_fra
 import tanks_ger
@@ -29,11 +31,16 @@ BUILDERS = {
     "7TP": tanks_pol.tp7,
     "LightTank": tanks_any.light_tank,
     "MediumTank": tanks_any.medium_tank,
+    "StuG3": tank_destroyers.stug3,
+    "SU85": tank_destroyers.su85,
+    "M10": tank_destroyers.m10,
     "Gun75": guns.gun75,
     "leFH18": guns.lefh18,
     "25pdr": guns.pounder25,
     "Howitzer105": guns.howitzer105,
     "ZiS3": guns.zis3,
+    "Pak40": guns_at.pak40,
+    "AntiTankGun": guns_at.anti_tank_gun,
     "Truck": carriers.truck,
     "Hanomag": carriers.hanomag,
     "M3Halftrack": carriers.m3_halftrack,
@@ -53,11 +60,16 @@ ABOUT = {
     "7TP": {"nation": "POL", "role": "light tank", "years": "1937-39", "units": "armor (Poland)"},
     "LightTank": {"nation": "any", "role": "light tank", "years": "1936-42", "units": "armor (every nation without a tank of its own; the United States to 1942, the Soviet Union to 1941)"},
     "MediumTank": {"nation": "any", "role": "medium tank", "years": "1940-45", "units": "armor (every nation without a tank of its own, once it has researched medium tanks)"},
+    "StuG3": {"nation": "GER", "role": "assault gun", "years": "1942-45", "units": "assault guns beside Germany's armor and infantry"},
+    "SU85": {"nation": "SOV", "role": "tank destroyer", "years": "1943-45", "units": "tank destroyers beside the Soviet Union's armor"},
+    "M10": {"nation": "USA", "role": "tank destroyer", "years": "1942-45", "units": "tank destroyers beside the United States' armor (Britain and the Free French were lent her too)"},
     "Gun75": {"nation": "FRA", "role": "field gun", "years": "1897-1945", "units": "artillery (France, and every nation without a gun of its own)"},
     "leFH18": {"nation": "GER", "role": "field howitzer", "years": "1935-45", "units": "artillery (Germany)"},
     "25pdr": {"nation": "UK", "role": "field gun", "years": "1940-45", "units": "artillery (Britain and the Commonwealth)"},
     "Howitzer105": {"nation": "USA", "role": "field howitzer", "years": "1941-45", "units": "artillery (United States)"},
     "ZiS3": {"nation": "SOV", "role": "field gun", "years": "1942-45", "units": "artillery (Soviet Union)"},
+    "Pak40": {"nation": "GER", "role": "anti-tank gun", "years": "1942-45", "units": "anti-tank guns in a German line and its gun pits"},
+    "AntiTankGun": {"nation": "any", "role": "anti-tank gun", "years": "1941-45", "units": "anti-tank guns in every other army's line and gun pits"},
     "Truck": {"nation": "any", "role": "lorry", "years": "1936-45", "units": "carrier (every nation but Germany and the United States), and what tows the guns"},
     "Hanomag": {"nation": "GER", "role": "armoured half-track", "years": "1939-45", "units": "carrier (Germany)"},
     "M3Halftrack": {"nation": "USA", "role": "armoured half-track", "years": "1941-45", "units": "carrier (United States)"},
@@ -73,6 +85,9 @@ FACES = {
                  ("1943 on: the long gun, dark yellow", {"gun": "long", "paint": "yellow"})],
     "Tiger": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "Hanomag": [("1939 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
+    "leFH18": [("1939 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
+    "StuG3": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
+    "Pak40": [("1942 to early 1943: dark grey", {"paint": "grey"}), ("1943 on: dark yellow", {"paint": "yellow"})],
     "Truck": [("Under her tilt", {}), ("The tilt stowed: her benches", {"tilt": False})],
 }
 

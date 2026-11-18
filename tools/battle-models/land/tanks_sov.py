@@ -14,9 +14,10 @@ from tanks_ger import coat
 from works import Works
 
 
-def t34_hull(v, fine):
+def t34_hull(v, fine, bow_mg=True):
     """The hull the two T-34s share: 5.92 m long, 3.00 m wide, the roof 1.45 m up. Returns the places a turret needs:
-    the ring's middle, the roof's height, and the plates' own measures (for sockets)."""
+    the ring's middle, the roof's height, and the plates' own measures (for sockets). bow_mg: the machine gun in the
+    front plate (the assault guns built on this hull have their gun there)."""
     v.root(hull_pivot=(0.0, 0.0, 0.8))
     hw, sw, st, zf, zr = 0.92, 1.47, 0.95, 0.92, 1.56
     # ---- a tub between the tracks; over them a box whose every side leans in --------------------------
@@ -42,8 +43,9 @@ def t34_hull(v, fine):
             v.box((0.13, 0.12, 0.06), g_at(0.86, y) + gn * 0.075, "upper", 0.012, turn=turn, part="hatch_driver")
             v.box((0.012, 0.08, 0.022), g_at(0.86, y) + gn * 0.08 - gl * 0.066, "glass", turn=turn, part="hatch_driver")
     v.use("hull")
-    v.lathe(g_at(0.66, -0.52) - gn * 0.02, gn, [(0.12, 0.0), (0.12, 0.09), (0.07, 0.16), (0.0, 0.2), (0.0, 0.0)], "upper", v.n(24, 8))
-    v.mg_ball(g_at(0.66, -0.52) + gn * 0.10, gn, 0.085, socket="hull_mg", length=0.36, ring=False)
+    if bow_mg:
+        v.lathe(g_at(0.66, -0.52) - gn * 0.02, gn, [(0.12, 0.0), (0.12, 0.09), (0.07, 0.16), (0.0, 0.2), (0.0, 0.0)], "upper", v.n(24, 8))
+        v.mg_ball(g_at(0.66, -0.52) + gn * 0.10, gn, 0.085, socket="hull_mg", length=0.36, ring=False)
     for s in (LEFT, RIGHT):
         v.hook(Vector((2.99, s * 0.62, 0.74)), X, 0.1)
         v.hook(Vector((-2.95, s * 0.62, 0.72)), -X, 0.1)
