@@ -768,9 +768,11 @@ def m3_halftrack(fine=True, tag="USA", fit="troops", name="M3Halftrack", title="
         v.louvres(Vector((1.95, s * 0.58, 1.12)) + nrm * 0.003, (0.26, 0.8), nrm, count=11, down=along)
         v.mudguard((xf, R), R + 0.12, 2.0, 150.0, s * 0.62, s * 1.06, tail=[(cab_x + 0.05, 0.7)])
         v.headlamp((2.42, s * 0.78, 1.02), X, 0.085, stalk=0.14)
-        if fine:                                                                                                             # the lamp's brush guard
-            for dy in (-0.07, 0.0, 0.07):
-                v.tube([(2.4, s * 0.78 + dy, 1.06), (2.5, s * 0.78 + dy, 1.1), (2.52, s * 0.78 + dy, 1.2), (2.44, s * 0.78 + dy, 1.28)], 0.005, "shade", 4)
+        # the lamp's brush guard: two hoops of bar crossing over it, standing on the mudguard's curve (out: the curve's
+        # normal under the lamp; the feet sink a centimetre so that the pair along the curve does not stand off it)
+        lamp = Vector((2.42, s * 0.78, 1.16))
+        out = Vector((lamp.x - xf, 0.0, lamp.z - R)).normalized()
+        v.lamp_guard(lamp, 0.085, Vector((xf, s * 0.78, R)) + out * (R + 0.12 + 0.014 - 0.012), out, Y, Vector((out.z, 0.0, -out.x)))
 
     # ---- the body: flat plate all round, an armoured windscreen, doors with drop flaps -----------------------------
     v.slab((bx0, -hw, zs - 0.03), (cab_x, hw, zs), "shade", 0.0)                                                              # the floor

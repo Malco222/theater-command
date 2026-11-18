@@ -317,10 +317,7 @@ def m10(fine=True, tag="USA"):
         v.periscope(g_at(1.06, s * 0.50) + gn * 0.03, X, (0.07, 0.15, 0.07), part=lid, up=gn)
         v.use("hull")
         v.headlamp(g_at(0.40, s * 0.80) + gn * 0.07, X, 0.062, stalk=0.07)
-        if fine:
-            lamp = g_at(0.40, s * 0.80) + gn * 0.14
-            for e in (-0.075, 0.075):                    # the guard bent over each lamp
-                v.tube([lamp + Y * e - Z * 0.11 + X * 0.02, lamp + Y * e + Z * 0.075 + X * 0.06, lamp + Y * e + Z * 0.075 - X * 0.08, lamp + Y * e - Z * 0.02 - X * 0.2], 0.007, "upper", 5)
+        v.lamp_guard(g_at(0.40, s * 0.80) + gn * 0.07 + Z * 0.07, 0.062, g_at(0.40, s * 0.80), gn, Y, gl)      # the brush guard: two hoops of bar crossing over the lamp
         v.plate([(2.46, s * 0.84, zs + 0.004), (2.46, s * 1.31, zs + 0.004), (2.92, s * 1.31, zs - 0.02), (2.92, s * 0.84, zs - 0.02)][::int(s)], 0.008, "upper", 0.003)
         v.plate([(2.92, s * 0.84, zs - 0.02), (2.92, s * 1.31, zs - 0.02), (3.00, s * 1.31, zs - 0.10), (3.00, s * 0.84, zs - 0.10)][::int(s)], 0.008, "upper", 0.003)
     v.use("hull")
