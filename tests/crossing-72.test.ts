@@ -90,6 +90,13 @@ describe('the reckoning of a crossing', () => {
     expect(last.label).toBe('Caught at sea');
     expect(last.value).toBe(`${Math.round(acc.risk * 100)} in 100`);
     expect(last.effect).toContain(`${Math.round(acc.loss * 100)}%`);
+    // A share of the men that rounds to nothing is said in words, never "about 0%" (the UI director, build 1638).
+    const loss = NAVY.intercept.loss;
+    NAVY.intercept.loss = 0.001 / acc.risk;
+    try {
+      const few = crossingAccount(g, 'GER', x.path, x.to);
+      expect(few.lines[few.lines.length - 1].effect).toBe('almost none of the men lost');
+    } finally { NAVY.intercept.loss = loss; }
     // The fleets that would come out are named with their strength, and the sky over the beach with who holds it.
     const sortie = sortieAgainst(g, 'GER', x.path);
     expect(sortie).toBeGreaterThan(0);
