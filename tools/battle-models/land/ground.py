@@ -757,25 +757,42 @@ class Air(stage.Effects):
                 f["ob"].location = Vector(w[0]) + Z * 0.7
 
     def brew_up(self, t0, where, size=1.0, vents=()):
-        """Her ammunition goes: one frame of yellow-white at her heart, then ragged tongues of orange flame thrown up
-        and out of the turret ring and every open hatch (`vents`), burning scraps flung wide, black smoke wrapping the
-        fire within half a second and standing up as a pillar. Its light falls on the ground near her and no farther."""
+        """Her ammunition goes: one frame of yellow-orange at her heart, no bigger than her turret and ragged, with jets
+        bursting up out of the ring and the hatches; then ragged tongues of orange flame thrown up and out of the
+        turret ring and every open hatch (`vents`), burning scraps flung wide, black smoke wrapping the fire within
+        half a second and standing up as a pillar. Its light falls on the ground near her and no farther."""
         g = self.rng
 
-        def tongue(t, root, d, long, life, kind, kk, speed):
+        def tongue(t, root, d, long, life, kind, kk, speed, wide=0.17, dice=g):
             p = self.puff(t, root + d * (0.5 * long), vel=d * speed, life=life, r=(0.72, 1.0), col=(0.34 * kk, 0.1 * kk, 0.012), col2=(0.2, 0.04, 0.005), alpha=0.95, kind=kind, wind=0.1,
-                          squash=(0.5 * long, 0.17 * long, 0.17 * long), fade_in=0.006, grow=0.5, hold=0.5, cool=1.0)
-            p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
+                          squash=(0.5 * long, wide * long, wide * long), fade_in=0.006, grow=0.5, hold=0.5, cool=1.0)
+            p["ob"].rotation_euler = (d.to_track_quat("X", "Z") @ Quaternion(X, dice.uniform(0, 6.283))).to_euler()
 
         def make(t, at, facing):
             roots = [at]
             for w in vents:
                 w = w() if callable(w) else w
                 roots.append(Vector(w[0]))
-            for i in range(6):       # the core: one frame of yellow-white, bursting out round the ring and over it
-                a = 6.283 * (i + g.uniform(-0.3, 0.3)) / 6
-                self.puff(t, at + Vector((math.cos(a) * g.uniform(0.3, 1.0), math.sin(a) * g.uniform(0.3, 1.0), g.uniform(0.2, 1.7))) * size, life=0.085, r=(0.6 * size, g.uniform(1.0, 1.5) * size),
-                          col=(1.0, 0.9, 0.6), col2=(1.0, 0.62, 0.22), alpha=0.9, kind="glow", wind=0.0, fade_in=0.004, grow=0.4)
+            # The core, for one frame. Never a pale cloud of soft lobes (cotton wool): flame, yellow at its roots and
+            # orange beyond, in ragged tongues. It throws dice of its own, and the shared dice roll on by as many as
+            # the first core took, so a mend to the core moves nothing of the fire and smoke that follow it.
+            h = random.Random(1811 + int(t * 1000.0))
+            self.rng = h
+            for i in range(7):       # her heart: short fat tongues fanned up and out through the turret, about its size
+                a = 6.283 * (i + h.uniform(-0.3, 0.3)) / 7
+                d = (Z + Vector((math.cos(a), math.sin(a), 0.0)) * h.uniform(0.25, 0.95)).normalized()
+                tongue(t, at + Vector((h.uniform(-0.2, 0.2), h.uniform(-0.2, 0.2), 0.05)) * size, d, h.uniform(1.1, 1.7) * size, 0.085, "tongue", h.uniform(1.05, 1.45), 6.0, wide=0.3, dice=h)
+            for i, root in enumerate(roots):       # the jets: thin and bright, straight up out of the ring and each hatch
+                for j in range(2 if i else 3):
+                    d = (Z + Vector((h.uniform(-0.16, 0.16), h.uniform(-0.16, 0.16), 0.0))).normalized()
+                    tongue(t, root + Vector((h.uniform(-0.12, 0.12), h.uniform(-0.12, 0.12), 0.05)) * size, d, (h.uniform(1.6, 2.4) if i == 0 else h.uniform(0.9, 1.5)) * size, 0.085,
+                           "lick" if j % 2 else "tongue", h.uniform(1.1, 1.5), 10.0, wide=0.12, dice=h)
+            for i in range(4):       # the hottest of it, in the middle: short and fat, yellow at the root
+                d = (Z + Vector((h.uniform(-0.3, 0.3), h.uniform(-0.3, 0.3), 0.0))).normalized()
+                tongue(t, at + Vector((h.uniform(-0.3, 0.3), h.uniform(-0.3, 0.3), h.uniform(0.3, 0.5))) * size, d, h.uniform(0.8, 1.15) * size, 0.085, "tongue", h.uniform(1.4, 1.8), 5.0, wide=0.36, dice=h)
+            self.rng = g
+            for i in range(48):
+                g.random()
             for i in range(14):      # the jet: flame standing straight up out of the turret ring, in ragged tongues
                 d = (Z + Vector((g.uniform(-0.18, 0.18), g.uniform(-0.18, 0.18), 0.0))).normalized()
                 tongue(t + 0.022 * i, at + Vector((g.uniform(-0.35, 0.35), g.uniform(-0.35, 0.35), 0.1)) * size, d, g.uniform(1.6, 3.4) * size, g.uniform(0.22, 0.45),

@@ -55,7 +55,8 @@ class Show:
         belt = next(iter(self.v.belts.values())) if self.v.belts else None
         rut = abs(belt["y"]) if belt else 0.9
         self.towed = "carriage" in self.m.part_at        # (a towed gun)
-        self.carrier = "steer_l" in self.m.part_at       # (a lorry or a half-track)
+        self.carrier = "dismount" in self.m.clips        # (a lorry or a half-track: she has a way down for her men)
+        self.wheeled = "steer_l" in self.m.part_at       # (she steers on front wheels)
         if not belt:                                     # (no tank has run where she stands)
             rut = 400.0
         if field == "battle":
@@ -134,7 +135,8 @@ class Show:
     def train(self, bearing=0.0, lift=0.0):
         out = {}
         if "turret" in self.m.part_at:
-            out.update(rigid.aim(self.m, "turret", bearing))
+            lim = self.m.parts[self.m.part_at["turret"]].limits      # (a gun set in the hull trains only so far)
+            out.update(rigid.aim(self.m, "turret", max(lim[0], min(lim[1], bearing)) if lim else bearing))
         elif "traverse" in self.m.part_at:               # (a towed gun trains on her saddle, inside its limits)
             lo, hi = self.m.parts[self.m.part_at["traverse"]].limits
             out.update(rigid.aim(self.m, "traverse", max(lo, min(hi, bearing))))
@@ -211,8 +213,9 @@ def sheet(name, out, opt, w, h, spp):
             ("breech", "Breech and laying gear, close", (-L * 0.52, L * 0.38, H * 1.25), (-0.25, 0.05, H * 0.5), 50, 50.0, {}),
             ("road", "Closed up for the road, her trail on the hook", (cx - L * 0.9, -L * 1.2, H * 1.15), (cx, 0, H * 0.36), 50, -32.0, S.play("towed", 0.0)),
         ]
-    if S.carrier:        # a carrier: her wheels and tracks from a little further off; her last picture is the way down thrown open for the men
+    if S.wheeled:        # on wheels: her wheels and tracks from a little further off
         shots[4] = ("gear", "Wheels and running gear", (cx + L * 0.66, -L * 0.92, 1.05), (cx + L * 0.02, -0.8, 0.5), 50, 55.0, {})
+    if S.carrier:        # a carrier: her last picture is the way down thrown open for the men
         shots[-1] = ("open", "The way down thrown open", (cx - L * 1.02, -L * 0.8, H * 1.25), (cx - L * 0.16, 0, H * 0.4), 50, -30.0,
                      rigid.merge(S.play("dismount", 1.2), rigid.aim(m, "mg_mount", 24.0) if "mg_mount" in m.part_at else {}))
     only = opt.get("views", "").split(",") if opt.get("views") else None
@@ -385,6 +388,9 @@ def action(name, out, opt, w, h, spp, fps, only):
     # it comes on); a breath; the shot
     bearing, lift, ramp = float(opt.get("bearing", -18.0)), 2.5, 0.25
     rate = m.info.get("file", {}).get("controls", {}).get("turret", {}).get("degrees_per_second", 14.0)
+    lim = m.parts[m.part_at["turret"]].limits if "turret" in m.part_at else None
+    if lim:
+        bearing = max(lim[0] * 0.8, min(lim[1] * 0.8, bearing))
     t_train0 = t2 + 0.45
     t_train1 = t_train0 + abs(bearing) / rate + ramp
     t_lift0, t_lift1 = t_train1 - 0.5, t_train1 + 0.3
