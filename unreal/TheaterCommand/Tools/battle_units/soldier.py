@@ -3,19 +3,23 @@
 Run without Blender's window (Python 3.11 with the `bpy` module, Blender 5):
 
     python soldier.py                     everything: build, rig, animate, export, pictures
-    python soldier.py --only build,export (stages: build, export, pictures; --fast for small test pictures)
+    python soldier.py --only export,movies (steps: export, before_after, hero, turntable, movies, squad, readme;
+                                           --fast for small test pictures, --movies walk,prone for some movies)
 
-Nothing is drawn by hand and nothing is fetched. The man is sculpted from numbers as distance fields (sculpt.py):
-anatomical shapes (skull, jaw, brow, nose, ears, ribcage, limbs, hands as mitts with a free thumb) blended into one
-smooth body, and the clothes as layers over it (tunic with collar, four pockets and a skirt over the hips; trousers;
-tall boots, or ankle boots with gaiters), joined hard so that hems, cuffs and boot tops are true edges. The field is
-meshed and thinned to the triangle budget. His kit (belt and pouches, Y-straps, bread bag, water bottle, entrenching
-tool, gas-mask canister or pack), the helmets (twelve kinds, rigid) and the weapons (a bolt-action rifle and a light
-machine gun, our own designs) are their own meshes on the same skeleton.
+Nothing is drawn by hand and nothing is fetched. The man is MakeHuman's CC0 base man (human.py): his head, neck and
+hands are MakeHuman's mesh, and his uniform is made from MakeHuman's clothing shells read as distance fields
+(sculpt.py), each cloth a layer joined hard to the next so that hems, cuffs and boot tops are true edges (the tunic with
+its collar, four pockets and skirt; the trousers; tall boots, or ankle boots with gaiters), meshed and thinned to the
+triangle budget. His kit (belt and pouches, Y-straps, bread bag, water bottle, entrenching tool, gas-mask canister or
+pack), the helmets (twelve kinds, rigid) and the weapons (a bolt-action rifle and a light machine gun, our own designs)
+are their own meshes on the same skeleton.
 
-The clips are posed by this script: the feet are planted and the hands put on the weapon by two-bone IK solved here,
-and every frame is written as plain bone keys (no constraints are left in the file), so what Unreal reads is what
-the pictures show. Clips are in place: the walking ones state their stride.
+The body's movement in the locomotion, going prone, the falls and the crawl is motion capture: mocap.py's clips (CMU
+takes retargeted to human.py's rig, in mocap_cmu/clips.json) carried onto our rig by world turns, the rifle held over
+them by mocap.carry_rifle. The weapon work (firing, the bolt, the grenade, kneeling) is posed by this script: the feet
+are planted and the hands put on the weapon by two-bone IK solved here. Every frame is written as plain bone keys (no
+constraints are left in the file), so what Unreal reads is what the pictures show. Clips are in place: the moving
+ones state their stride.
 
 Conventions (kit.py): metres, the man faces +X, Z up, ground at 0; Blender's y is the man's LEFT, the game's JSON has
 y to the RIGHT (the writer flips it). Materials are named by paint (FIGURE_PAINTS in build_tank.py, plus `eye`).
@@ -36,6 +40,7 @@ import numpy as np  # noqa: E402
 from mathutils import Matrix, Quaternion, Vector  # noqa: E402
 
 import kit  # noqa: E402
+import mocap  # noqa: E402
 from sculpt import (Ellipsoid, Grid, HalfSpace, Layer, RoundBox, RoundCone, Sphere, Torus, Tube, frame_from,  # noqa: E402
                     on_surface, rot_euler, surface_nets)
 
@@ -1580,6 +1585,7 @@ class Rig:
         self.M0 = {b.name: b.matrix_local.copy() for b in arm.data.bones}
         self.hand0 = {s: tuple(np.array(v) for v in J["hand_axes_" + s]) for s in ("l", "r")}
         self.prev_q = {}
+        self.mrest, self.mo, self.weapon_kind = None, {}, "rifle"     # (human.py's rest, for the mocap clips; see mo_prepare)
         # the low poses (kneeling, lying) were set out on a man whose pelvis rests 0.95 m up and whose legs reach 0.822 m:
         # on another man the pelvis's drop and the feet's spread from it are scaled to his build (1 on the first man)
         reach = 0.99 * sum(np.linalg.norm(np.array(J[b]) - np.array(J[a])) for a, b in (("thigh_l", "calf_l"), ("calf_l", "foot_l")))
@@ -2544,6 +2550,7 @@ def assemble(nation, weapon="rifle", seed=None):
     else:
         gun, part = build_lmg()
         part_bone = "bipod"
+    mrest = mocap.Rest.of(man["armature"])                  # (human.py's own rest: the mocap clips are measured on it)
     for ob in (man["tights"], man["skirt"], man["armature"]):
         bpy.data.objects.remove(ob)
     print(f"  {nation}: dressed in {time.time() - t0:.1f} s ({tris_of(body)} triangles of body and uniform)")
@@ -2569,6 +2576,7 @@ def assemble(nation, weapon="rifle", seed=None):
     for ob in kit_objs + [helmet, gun, part]:
         mark_rest(ob)
     rig = Rig(arm, J)
+    rig.mrest, rig.weapon_kind = mrest, weapon
     g0 = np.array(arm.data.bones["weapon"].head_local)
     sockets = [add_socket(arm, "muzzle", "weapon", tuple(g0 + np.array(MUZZLE))),
                add_socket(arm, "hand_r", "hand_r", tuple(grip_point(J, "r")), tuple(rig.hand0["r"][0])),
@@ -3545,12 +3553,436 @@ def reset_pose(arm):
         pb.scale = (1.0, 1.0, 1.0)
 
 
+# ================================================================================================ the motion capture
+# The body's movement in the locomotion, going prone, the falls and the low crawl is real motion capture: mocap.py
+# (the mocap animator's) retargets CMU takes onto human.py's rig and keeps them in mocap_cmu/clips.json. Our rig has
+# the same joints but bone rolls of its own and its own weapon bone (a child of the root, so a dropped rifle can leave
+# the hand), so each clip is carried over by world turns: every bone's turn from its rest, measured on human.py's rest
+# (kept from the man's own armature when he is dressed), is given to the same bone here. Over the capture the rifle is
+# held by mocap.carry_rifle (both hands on it, at the port or at the ready) or rides the right hand at the agreed grip,
+# and our weapon bone is keyed to it. The weapon work (firing, the bolt, the grenade, kneeling) stays keyed by hand.
+MOCAP = {
+    # our clip: dict(src = the mocap clip, carry = the rifle carry laid over it, until/blend = when the arms go back to
+    # the capture and over how long, rifle = what the rifle does: rides the hand, is laid down, or is dropped)
+    "idle": dict(src="idle", carry="port"),
+    "walk": dict(src="walk", carry="port"),
+    "run": dict(src="run", carry="port"),
+    "advance": dict(src="advance", carry="ready"),
+    "creep": dict(src="creep", carry="ready"),
+    "crawl": dict(src="crawl"),                     # (the keyed low crawl holds the rifle in its own arms)
+    "go_prone": dict(src="go_prone", carry="ready", until=0.25, blend=0.45, rifle="lay"),
+    "die_forward": dict(src="fall_forward", carry="ready", until=0.06, blend=0.3, rifle="drop", release=0.13, throw=(0.7, -0.25, 0.5)),
+    "die_back": dict(src="fall_back", carry="ready", until=0.04, blend=0.25, rifle="drop", release=0.2, throw=(0.6, -0.3, 1.0)),
+}
+MO_DATA = mocap.load_clips()
+GUN_AXES = np.array(((0.0, -1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)))   # our gun's axes (x barrel, y left, z up) in mocap's rifle frame (x right, y barrel, z up)
+GRIP_CURL = 12.0          # (degrees more curl for the fingers of a hand round the stock)
+GUN_LIE = 0.024           # (the grip's height over the ground with the rifle lying on its left side)
+
+
+def _sm_arr(x):
+    x = np.clip(x, 0.0, 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def _quats(M):
+    """(F, 3, 3) -> (F, 4) quaternions, no sign flips from frame to frame."""
+    q = mocap.mat_to_quat(M)
+    for k in range(1, len(q)):
+        if np.dot(q[k], q[k - 1]) < 0:
+            q[k] = -q[k]
+    return q
+
+
+def _qmat(q):
+    return mocap.quat_to_mat(q / np.linalg.norm(q))
+
+
+def mo_prepare(rig, name):
+    """A mocap clip on this man, per capture frame: every bone's turn from its rest (world), the pelvis's head, our
+    gun's turn and grip, and how far each hand is round the stock. Kept on the rig."""
+    if name in rig.mo:
+        return rig.mo[name]
+    spec = MOCAP[name]
+    c = MO_DATA[spec["src"]]
+    r = rig.mrest
+    F, fps, loop = int(c["frames"]), int(c["fps"]), bool(c["loop"])
+    t = np.arange(F) / fps
+    k = 0.5 * (r.leg("l") + r.leg("r")) / c["leg"]
+    W = np.zeros((F, len(r.names), 3, 3))
+    for b, p in enumerate(r.parent):
+        n = r.names[b]
+        D = mocap.quat_to_mat(np.array(c["bones"][n])) if n in c["bones"] else np.eye(3)
+        W[:, b] = (W[:, p] if p >= 0 else np.eye(3)) @ D @ r.local(b)
+    m = mocap.Motion(r, W, r.head[r.i("pelvis")] + np.array(c["pelvis_loc"]) * k, fps)
+    held = {"r": np.zeros(F), "l": np.zeros(F)}
+    if spec.get("carry"):
+        mc, _, err = mocap.carry_rifle(m.copy(), spec["carry"], cyclic=loop)
+        held["r"][:] = 1.0
+        if "until" in spec:
+            w = _sm_arr((t - spec["until"]) / spec["blend"])
+            L = mocap.slerp_mats(mocap.to_local(mc), mocap.to_local(m), w[:, None])
+            m = mocap.from_local(r, L, m.H, fps)
+            held["l"] = 1.0 - w
+        else:
+            m = mc
+            held["l"][:] = 1.0
+    elif name == "crawl":
+        held["r"][:] = 1.0
+    hd = m.heads()
+    h = r.i("hand_r")
+    G, gl = mocap.hand_grips(r)["r"]
+    Dg = m.W[:, h] @ G.T @ GUN_AXES
+    Pg = hd[:, h] + np.einsum("fij,j->fi", m.W[:, h], gl)
+    out = {"F": F, "fps": fps, "loop": loop, "long": (F - 1) / fps, "k": k, "stride": float(c["stride"]) * k,
+           "end": [float(v) * k for v in c.get("end_offset", (0.0, 0.0, 0.0))], "events": []}
+    mode = spec.get("rifle", "hand")
+    if mode in ("drop", "lay"):
+        # (where he ends up: each bone as a segment, so the rifle can be put down clear of him)
+        bones = [b for b in range(len(r.names)) if r.parent[b] >= 0]
+        a_ = hd[-1, bones]
+        b_ = a_ + np.einsum("bij,bj->bi", m.W[-1, bones] @ np.swapaxes(r.R[bones], -1, -2), r.tail[bones] - r.head[bones])
+        body = (a_[:, :2], b_[:, :2])
+    if mode == "drop":
+        out["events"] = _gun_falls(Dg, Pg, held, t, spec["release"], fps, spec.get("throw", (0.0, 0.0, 0.0)), body)
+    elif mode == "lay":
+        _gun_laid(Dg, Pg, held, t, hd[:, h], spec["until"] + 0.5 * spec["blend"], fps, body)
+    out["Q"] = {n: _quats(m.W[:, b] @ r.R[b].T) for b, n in enumerate(r.names) if r.parent[b] >= 0}
+    out["H"] = m.H.copy()
+    out["Qg"], out["Pg"] = _quats(Dg), Pg
+    out["held"] = held
+    rig.mo[name] = out
+    return out
+
+
+def _clear_of(body, at, R, clear=0.24):
+    """Slide a rifle lying at `at` (x, y) turned R sideways (to his right first, then his left) until it is `clear`
+    of every bone of the body lying there (segments in plan)."""
+    A, B = body
+    xs = np.linspace(WEAPONS["rifle"]["butt"][0], MUZZLE[0], 12)
+
+    def gap(p):
+        P = np.asarray(p)[None, :] + np.outer(xs, R[:2, 0])                # points along the rifle
+        d = B - A
+        u = np.clip(np.einsum("pbi,bi->pb", P[:, None, :] - A[None], d) / np.maximum((d * d).sum(1), 1e-9), 0.0, 1.0)
+        q = A[None] + u[..., None] * d[None]
+        return float(np.linalg.norm(P[:, None, :] - q, axis=-1).min())
+
+    for k in range(25):
+        for side in ((-1.0,) if k == 0 else (-1.0, 1.0)):
+            p = np.array(at, float) + np.array((0.0, side * 0.05 * k))
+            if gap(p) >= clear:
+                return p
+    return np.array(at, float)
+
+
+def _gun_falls(Dg, Pg, held, t, t0, fps, throw, body):
+    """The rifle let go at t0: it flies on with the hand's speed and a throw, falls, turns over and lies on its left
+    side, clear of where he lands."""
+    i0 = int(round(t0 * fps))
+    v = (Pg[i0 + 1] - Pg[i0 - 1]) * fps / 2 + np.array(throw)
+    p0, R0 = Pg[i0].copy(), Dg[i0].copy()
+    g = 9.81
+    T = max((v[2] + math.sqrt(max(v[2] ** 2 + 2 * g * (p0[2] - GUN_LIE), 0.0))) / g, 0.25)
+    yaw = math.degrees(math.atan2(R0[1, 0], R0[0, 0]))
+    Rg = R_axis((0, 0, 1), yaw + 25.0) @ R_axis((1, 0, 0), -90.0)
+    land = _clear_of(body, p0[:2] + v[:2] * T * 0.7, Rg)
+    for f in range(i0 + 1, len(t)):
+        tau = t[f] - t[i0]
+        if tau < T:
+            u = tau / T
+            Pg[f, :2] = p0[:2] + (land - p0[:2]) * u
+            Pg[f, 2] = max(p0[2] + v[2] * tau - 0.5 * g * tau * tau, GUN_LIE)
+            Dg[f] = mocap.slerp_mats(R0, Rg, sm(u))
+        else:
+            Pg[f] = (land[0], land[1], GUN_LIE)
+            Dg[f] = Rg
+    held["r"] = held["r"] * (1.0 - _sm_arr((t - t0) / 0.1))
+    return [ev(round(t0 + T, 3), "rifle_drop", cue="kit_rattle")]
+
+
+def _gun_laid(Dg, Pg, held, t, hand, after, fps, body):
+    """The rifle rides the right hand until that hand comes down to the ground, then is laid on its left side along
+    his line, beside him."""
+    F = len(t)
+    i0 = next((f for f in range(F) if t[f] >= after and hand[f, 2] < 0.3), F - 1)
+    yaw = math.degrees(math.atan2(Dg[i0][1, 0], Dg[i0][0, 0]))
+    Rg = R_axis((0, 0, 1), 0.3 * yaw - 4.0) @ R_axis((1, 0, 0), -90.0)
+    p = _clear_of(body, (Pg[i0][0] - 0.05, Pg[i0][1] - 0.06), Rg, clear=0.17)
+    pg = np.array((p[0], p[1], GUN_LIE))
+    w = _sm_arr((t - t[i0]) / 0.3)
+    for f in range(i0, F):
+        Dg[f] = mocap.slerp_mats(Dg[f], Rg, w[f])
+        Pg[f] = Pg[f] + (pg - Pg[f]) * w[f]
+    held["r"] = held["r"] * (1.0 - w)
+
+
+def mo_state(rig, name, t, kind="rifle"):
+    """The solved pose (as Rig.solve gives it) of a mocap clip at time t (loops wrap, one-shots hold their end)."""
+    d = mo_prepare(rig, name)
+    F = d["F"]
+    u = t * d["fps"]
+    if d["loop"]:
+        u = u % (F - 1)
+    u = min(max(u, 0.0), F - 1.0)
+    i = min(int(u), F - 2)
+    a = u - i
+    st = {"D": {"root": np.eye(3)}, "H": {"root": np.zeros(3)}, "short": {}}
+    lerp = lambda X: X[i] + (X[i + 1] - X[i]) * a
+    H0 = rig.H0
+    for b in rig.names:
+        p = rig.parent[b]
+        if p is None:
+            continue
+        if b in d["Q"]:
+            D = _qmat(lerp(d["Q"][b]))
+        elif b == "weapon":
+            D = _qmat(lerp(d["Qg"]))
+        else:
+            D = st["D"][p]
+        s = b[-1]
+        if b.startswith("fingers_") or b.startswith("thumb_"):
+            a0, t0, n0 = rig.hand0[s]
+            ax = np.cross(a0, n0) if b.startswith("fingers_") else np.cross(rig.T0[b] - H0[b], n0)
+            D = D @ R_axis(ax, GRIP_CURL * float(lerp(d["held"][s])))
+        st["D"][b] = D
+        if b == "pelvis":
+            st["H"][b] = lerp(d["H"])
+        elif b == "weapon":
+            st["H"][b] = lerp(d["Pg"]) - D @ np.array(WEAPONS[kind]["grip_r"])
+        else:
+            st["H"][b] = st["H"][p] + st["D"][p] @ (H0[b] - H0[p])
+    st["W"] = M4(st["D"]["weapon"], st["H"]["weapon"])
+    return st
+
+
+def clip_state(rig, name, t, kind=None):
+    """Any clip's solved pose at time t: from the capture, or from our keyed poses through the solver."""
+    c = CLIPS[name]
+    if c.get("mocap"):
+        return mo_state(rig, name, t, kind or getattr(rig, "weapon_kind", "rifle"))
+    P = c["fn"](t)
+    P["weapon_kind"] = kind or P.get("weapon_kind", c["weapon"])
+    if c["weapon"] == "lmg":
+        P["weapon_kind"] = "lmg"
+    return rig.solve(P)
+
+
+def clip_stride(rig, name):
+    c = CLIPS[name]
+    return round(mo_prepare(rig, name)["stride"], 3) if c.get("mocap") else c["stride"]
+
+
+def mo_events(rig, name):
+    """The moments the sound and the effects need, read off the motion: each foot coming down (the heel or the ball
+    reaching the ground), a knee meeting the ground, the body landing, each elbow planted in the crawl."""
+    d = mo_prepare(rig, name)
+    F, fps = d["F"], d["fps"]
+    sts = [mo_state(rig, name, f / fps) for f in range(F)]
+    H = lambda b: np.array([s["H"][b] for s in sts])
+    D = lambda b: np.array([s["D"][b] for s in sts])
+    evs = []
+    n = F - 1 if d["loop"] else F
+
+    def onsets(z, tol, up=0.035):
+        # (down when within tol of its lowest, up again only when `up` clear: a heel and then a ball are one step)
+        base = z[:n].min()
+        on, out = bool(z[0] < base + tol), []
+        for i in range(2 * n if d["loop"] else n):
+            f = i % n
+            if not on and z[f] < base + tol:
+                on = True
+                if i >= n or not d["loop"]:
+                    out.append(f)
+            elif on and z[f] > base + up:
+                on = False
+        return sorted(out)
+
+    if name in ("walk", "run", "advance", "creep"):
+        for s in ("l", "r"):
+            fb, bb = "foot_" + s, "ball_" + s
+            heel = rig.H0[fb] + np.array((-0.061, 0.0, 0.0))
+            heel[2] = 0.0
+            sole_b = rig.H0[bb].copy()
+            sole_b[2] = 0.0
+            zh = (H(fb) + np.einsum("fij,j->fi", D(fb), heel - rig.H0[fb]))[:, 2]
+            zb = (H(fb) + np.einsum("fij,j->fi", D(fb), sole_b - rig.H0[fb]))[:, 2]
+            for f in onsets(np.minimum(zh, zb), 0.012):
+                evs.append(ev(round(f / fps, 3), "footstep", bone=fb))
+        if name in ("run", "advance"):
+            evs.append(ev(0.0, "kit_rattle", bone="chest", first_loop_only=True))
+    elif name == "crawl":
+        for s in ("l", "r"):
+            for f in onsets(H("lowerarm_" + s)[:, 2], 0.01, up=0.02):
+                evs.append(ev(round(f / fps, 3), "elbow_down", cue="footstep", bone="lowerarm_" + s))
+    elif name in ("go_prone", "die_forward", "die_back"):
+        knee = np.minimum(H("calf_l")[:, 2], H("calf_r")[:, 2])
+        zb = H("spine_02")[:, 2]
+        land = next((f for f in range(F) if zb[f] < zb[-1] + 0.05), F - 1)
+        kf = next((f for f in range(F) if knee[f] < 0.12), None)
+        if kf is not None and kf < land:
+            side = "l" if H("calf_l")[kf, 2] < H("calf_r")[kf, 2] else "r"
+            evs.append(ev(round(kf / fps, 3), "knee_down", bone="calf_" + side))
+        evs.append(ev(round(land / fps, 3), "body_fall", bone="spine_02"))
+    evs += d["events"]
+    return sorted(evs, key=lambda e: e["t"])
+
+
+def use_mocap():
+    """Put the mocap clips in CLIPS in place of our keyed ones (the keyed ones are kept as `keyed_fn`), in the game's
+    order."""
+    for name, spec in MOCAP.items():
+        c = MO_DATA[spec["src"]]
+        old = CLIPS.get(name, {})
+        CLIPS[name] = {"long": (c["frames"] - 1) / c["fps"], "loop": bool(c["loop"]), "stride": float(c["stride"]),
+                       "events": [], "fn": None, "weapon": "rifle", "mocap": spec, "keyed_fn": old.get("fn"),
+                       "end": list(c.get("end_offset", (0.0, 0.0, 0.0)))}
+    order = ["idle", "walk", "run", "advance", "creep", "flee", "crawl", "kneel_down", "stand_up", "go_prone",
+             "fire_stand", "fire_kneel", "fire_prone", "lmg_burst", "throw_grenade", "cower", "die_back", "die_forward",
+             "die_kneel"]
+    old = dict(CLIPS)
+    CLIPS.clear()
+    for n in order + [n for n in old if n not in order]:
+        CLIPS[n] = old[n]
+
+
+use_mocap()
+
+
+def fill_mocap_events(rig):
+    """The mocap clips' events and strides, read off this man (the export's)."""
+    for name in MOCAP:
+        c = CLIPS[name]
+        c["events"] = mo_events(rig, name)
+        d = mo_prepare(rig, name)
+        c["stride"] = round(d["stride"], 3)
+        c["end"] = [round(v, 3) for v in d["end"]]
+
+
+# ---- a man playing clips one after another (the movies and the hero clip)
+def blend_states(rig, A, B, w):
+    """Part way (w) from pose A to pose B: each bone's turn in its parent's frame slerped, the moving heads (pelvis,
+    weapon, bolt, root) slid, the rest placed by their parents."""
+    if w <= 0.0:
+        return A
+    if w >= 1.0:
+        return B
+    st = {"D": {}, "H": {}, "short": {}}
+    for b in rig.names:
+        p = rig.parent[b]
+        if p is None:
+            La, Lb = A["D"][b], B["D"][b]
+        else:
+            La, Lb = A["D"][p].T @ A["D"][b], B["D"][p].T @ B["D"][b]
+        L = mocap.slerp_mats(La, Lb, w)
+        st["D"][b] = L if p is None else st["D"][p] @ L
+        if p is None or b in MOVERS:
+            st["H"][b] = A["H"][b] + (B["H"][b] - A["H"][b]) * w
+        else:
+            st["H"][b] = st["H"][p] + st["D"][p] @ (rig.H0[b] - rig.H0[p])
+    st["W"] = M4(st["D"]["weapon"], st["H"]["weapon"])
+    return st
+
+
+def shifted(st, d):
+    """A pose moved over the ground by d (x, y)."""
+    v = np.array((d[0], d[1], 0.0))
+    out = {"D": st["D"], "H": {b: h + v for b, h in st["H"].items()}, "short": st.get("short", {})}
+    out["W"] = M4(st["D"]["weapon"], out["H"]["weapon"])
+    return out
+
+
+class Performance:
+    """A man playing clips one after another: segs = [dict(clip, at (s), rate=1, phase=0 (clip time at `at`),
+    blend=0.3 (s, into it from the one before))]. A one-shot holds its last pose until the next clip; each clip is set
+    on the ground where the one before left his pelvis; the root goes forward at a loop's stride over its length."""
+
+    def __init__(self, rig, segs, kind="rifle", until=10.0):
+        self.rig, self.segs, self.kind = rig, segs, kind
+        for k, s in enumerate(segs):
+            s.setdefault("rate", 1.0)
+            s.setdefault("phase", 0.0)
+            s.setdefault("blend", 0.3 if k else 0.0)
+            c = CLIPS[s["clip"]]
+            s["speed"] = clip_stride(rig, s["clip"]) / c["long"] * s["rate"] if c["loop"] else 0.0
+            s["shift"] = np.zeros(2)
+            if k:
+                prev = segs[k - 1]
+                a = self.raw(prev, s["at"])
+                b = self.raw(s, s["at"])
+                s["shift"] = prev["shift"] + a["H"]["pelvis"][:2] - b["H"]["pelvis"][:2]
+        dt = 1.0 / 240
+        self.ts = np.arange(0.0, until + dt, dt)
+        v = np.array([self._speed(t) for t in self.ts])
+        self.dist = np.concatenate([[0.0], np.cumsum(0.5 * (v[1:] + v[:-1]) * dt)])
+
+    def clip_time(self, s, t):
+        c = CLIPS[s["clip"]]
+        ct = s["phase"] + (t - s["at"]) * s["rate"]
+        return max(ct, 0.0) if c["loop"] else min(max(ct, 0.0), c["long"])
+
+    def raw(self, s, t):
+        return clip_state(self.rig, s["clip"], self.clip_time(s, t), self.kind)
+
+    def _active(self, t):
+        k = 0
+        for i, s in enumerate(self.segs):
+            if s["at"] <= t + 1e-9:
+                k = i
+        return k
+
+    def _weight(self, k, t):
+        s = self.segs[k]
+        return 1.0 if k == 0 or s["blend"] <= 0 else sm((t - s["at"]) / s["blend"])
+
+    def _speed(self, t):
+        k = self._active(t)
+        w = self._weight(k, t)
+        v = self.segs[k]["speed"]
+        return v if w >= 1.0 else (1 - w) * self.segs[k - 1]["speed"] + w * v
+
+    def state(self, t):
+        k = self._active(t)
+        s = self.segs[k]
+        st = shifted(self.raw(s, t), s["shift"])
+        w = self._weight(k, t)
+        if w < 1.0:
+            p = self.segs[k - 1]
+            st = blend_states(self.rig, shifted(self.raw(p, t), p["shift"]), st, w)
+        return st
+
+    def travel(self, t):
+        return float(np.interp(t, self.ts, self.dist))
+
+    def events(self, end):
+        """[(time, event, seg)] of every clip event while its clip plays (a loop's at every turn)."""
+        out = []
+        for k, s in enumerate(self.segs):
+            c = CLIPS[s["clip"]]
+            t_end = self.segs[k + 1]["at"] if k + 1 < len(self.segs) else end
+            for e in c["events"]:
+                n = 0
+                while True:
+                    ct = e["t"] + n * c["long"]
+                    T = s["at"] + (ct - s["phase"]) / s["rate"]
+                    if T >= t_end or (not c["loop"] and n):
+                        break
+                    if T >= s["at"] - 1e-6 and not (e.get("first_loop_only") and n):
+                        out.append((T, e, s))
+                    n += 1
+                    if not c["loop"]:
+                        break
+        return sorted(out, key=lambda x: x[0])
+
+
 def bake_clips(m, names=None):
     """Every clip as its own action on the man's armature: the pose solved at every 60th of a second and written as
     plain keys (linear between), frames 0..N, so the last frame of a loop is its first again."""
     arm, rig = m["arm"], m["rig"]
     arm.animation_data_create()
     acts, short = {}, {}
+    if rig.mrest is not None:
+        fill_mocap_events(rig)
     for name in (names or list(CLIPS)):
         c = CLIPS[name]
         act = bpy.data.actions.new(name)
@@ -3560,9 +3992,7 @@ def bake_clips(m, names=None):
         N = int(round(c["long"] * FPS))
         worst = 0.0
         for f in range(N + 1):
-            P = c["fn"](f / FPS)
-            P.setdefault("weapon_kind", c["weapon"])
-            st = rig.solve(P)
+            st = clip_state(rig, name, f / FPS, c["weapon"])
             worst = max([worst] + [abs(v) for v in st["short"].values()])
             rig.key(st, f)
         for fc in kit.fcurves_of(act):
@@ -3571,7 +4001,9 @@ def bake_clips(m, names=None):
         act.use_frame_range = True
         act.frame_start, act.frame_end = 0, N
         act["loop"] = c["loop"]
-        act["stride"] = c["stride"]
+        act["stride"] = clip_stride(rig, name)
+        if c.get("mocap") and not c["loop"]:
+            act["end_offset"] = c["end"]
         act["events"] = json.dumps(c["events"], separators=(",", ":"))
         acts[name] = act
         short[name] = round(worst, 3)
@@ -3591,11 +4023,12 @@ def play(arm, act):
 
 
 def pose_once(arm, rig, P, frame=0):
-    """One pose keyed on an armature of its own (for stills): a one-key action, so it holds whatever the frame."""
+    """One pose (a pose said in plain terms, or a solved state) keyed on an armature of its own (for stills): a
+    one-key action, so it holds whatever the frame."""
     if arm.animation_data:
         arm.animation_data.action = None
     rig.prev_q = {}
-    rig.key(rig.solve(P), frame)
+    rig.key(P if "D" in P else rig.solve(P), frame)
 
 
 # ================================================================================================ levels of detail
@@ -3717,9 +4150,7 @@ def clips_json(rig, rate=15):
         move = {b: [] for b in MOVERS}
         prev = {}
         for t in times:
-            P = c["fn"](t)
-            P.setdefault("weapon_kind", c["weapon"])
-            st = rig.solve(P)
+            st = clip_state(rig, name, t, c["weapon"])
             for b in rot:
                 p = rig.parent[b]
                 q = _flip_q(Matrix((st["D"][p].T @ st["D"][b]).tolist()).to_quaternion())
@@ -3750,7 +4181,14 @@ def clips_json(rig, rate=15):
                 if k not in d:
                     d[k] = v
             evs.append(d)
-        out[name] = {"long": L, "loop": c["loop"], "stride": c["stride"], "weapon": c["weapon"], "tracks": tracks, "events": evs}
+        out[name] = {"long": L, "loop": c["loop"], "stride": clip_stride(rig, name), "weapon": c["weapon"], "tracks": tracks, "events": evs}
+        if c.get("mocap"):
+            src = MOCAP[name]["src"]
+            out[name]["from"] = (f"motion capture: mocap.py's {src} ({MO_DATA[src]['source']})" if src != "crawl" else
+                                 "mocap.py's crawl, keyed by hand on the rig (CMU has no belly crawl)")
+            if not c["loop"]:
+                e = c["end"]
+                out[name]["end_offset"] = [round(e[0], 3), round(-e[1], 3), round(e[2], 3)]
     return out
 
 
@@ -3939,6 +4377,8 @@ def export_all(info):
         info.setdefault("tris", {})[nation] = n
         info.setdefault("parts", {})[nation] = {o.name.split(".")[0]: tris_of(o) for o in lods[0]}
         info.setdefault("short", {}).update(m["short"])
+        if nation == "GER":                           # (the mocap clips' events, strides and end offsets, for the README)
+            info["mocap"] = {n: {k: CLIPS[n][k] for k in ("events", "stride", "end")} for n in MOCAP}
         export_glb(stage_path(f"soldier_{nation}.glb"), [m["arm"]] + lods[0] + socks)
         for lod in (1, 2):
             export_glb(stage_path(f"soldier_{nation}_LOD{lod}.glb"), [m["arm"]] + lods[lod] + socks, anim=False)
@@ -4024,68 +4464,68 @@ def render_sequence(seq, folder, m, ground=None, fx=None):
     return folder, made
 
 
-def clip_frames(name, step=2, repeat=1, start_t=0.0, hold=0):
-    """(clip, frame, time) for each picture frame of `repeat` plays of a clip at 60/step a second (a loop's last frame,
-    its first again, is left out between plays), then `hold` more of the last pose while the time runs on."""
-    c = CLIPS[name]
-    N = int(round(c["long"] * FPS))
-    out = []
-    for r in range(repeat):
-        end = N if (r == repeat - 1 and not c["loop"]) else N - 1
-        for f in range(0, end + 1, step):
-            out.append((name, f, start_t + (r * N + f) / FPS))
-    last = out[-1]
-    out += [(last[0], last[1], last[2] + (k + 1) * step / FPS) for k in range(hold)]
-    return out
-
-
 MOVIES = {
-    # name: ([(clip, repeat, hold)], camera target, distance, pitch, yaw)
-    "walk": ([("walk", 2, 0)], (0.0, 0.0, 0.85), 6.5, 20.0, -40.0),
-    "run": ([("run", 3, 0)], (0.0, 0.0, 0.85), 6.5, 20.0, -40.0),
-    "fire_stand": ([("fire_stand", 2, 0)], (0.1, 0.0, 0.95), 5.5, 18.0, -55.0),
-    "prone": ([("go_prone", 1, 0), ("fire_prone", 2, 0)], (0.2, 0.0, 0.45), 6.0, 24.0, -50.0),
-    "die_back": ([("die_back", 1, 20), ], (-0.35, 0.0, 0.6), 6.0, 20.0, -70.0),
+    # name: ([(clip, plays, seconds held after)], camera target, distance, pitch, yaw)
+    "walk": ([("walk", 2, 0.0)], (0.0, 0.0, 0.85), 6.5, 20.0, -40.0),
+    "run": ([("run", 3, 0.0)], (0.0, 0.0, 0.85), 6.5, 20.0, -40.0),
+    "advance": ([("advance", 3, 0.0)], (0.0, 0.0, 0.75), 6.0, 16.0, -35.0),
+    "fire_stand": ([("fire_stand", 2, 0.0)], (0.1, 0.0, 0.95), 5.5, 18.0, -55.0),
+    "prone": ([("go_prone", 1, 0.0), ("fire_prone", 2, 0.0)], (0.45, 0.0, 0.45), 6.0, 24.0, -50.0),
+    "crawl": ([("crawl", 2, 0.0)], (0.35, 0.0, 0.25), 4.6, 22.0, -50.0),
+    "die_back": ([("die_back", 1, 0.7)], (-0.35, 0.0, 0.6), 6.0, 20.0, -70.0),
 }
 
 
+def movie_performance(rig, parts):
+    """The movie's clips one after another as a Performance, and how long it runs."""
+    segs, t = [], 0.0
+    for name, plays, hold in parts:
+        c = CLIPS[name]
+        segs.append({"clip": name, "at": t, "blend": 0.25 if segs else 0.0})
+        t += c["long"] * plays + hold
+    return Performance(rig, segs, until=t + 0.5), t
+
+
 def movie(m, key, ground, fast=False):
-    """One clip movie. Shots get the shared Effects' flash, light and smoke at the muzzle; a knee or a body meeting
-    the ground raises dust."""
+    """One clip movie at 30 frames a second: the man plays the clips (blended one into the next), the ground slides
+    under him at a loop's speed. Shots get the shared Effects' flash, light and smoke at the muzzle; a knee or a body
+    meeting the ground raises dust."""
     parts, target, dist, pitch, yaw = MOVIES[key]
     cam = bpy.context.scene.camera
     kit.orbit(cam, target, dist, pitch, yaw)
-    rig = m["rig"]
-    seq, t0 = [], 0.0
+    rig, arm = m["rig"], m["arm"]
+    perf, long = movie_performance(rig, parts)
+    act = bpy.data.actions.new("movie_" + key)
+    arm.animation_data_create()
+    arm.animation_data.action = act
+    rig.prev_q = {}
+    n = int(round(long * 30)) + 1
+    seq = []
+    for i in range(n):
+        t = i / 30
+        rig.key(perf.state(t), i)
+        seq.append((act, i, -perf.travel(t), t))
+    for fc in kit.fcurves_of(act):
+        for kp in fc.keyframe_points:
+            kp.interpolation = "LINEAR"
+    reset_pose(arm)
     fx = None
-    for name, rep, hold in parts:
-        c = CLIPS[name]
-        fr = clip_frames(name, 2, rep, t0, hold)
-        speed = c["stride"] / c["long"] if c["stride"] else 0.0
-        marks = [e for e in c["events"] if e["fx"] in ("muzzle_flash", "body_fall", "knee_down")]
-        seen = set()
-        for n_, (_, f, t) in enumerate(fr):
-            seq.append((m["actions"][name], f, -speed * t, t))
-            tl = f / FPS
-            for e in marks:
-                if 0.0 <= tl - e["t"] < 2 / FPS - 1e-6 and (round(t - tl, 4), e["t"]) not in seen:
-                    seen.add((round(t - tl, 4), e["t"]))
-                    if fx is None:
-                        fx = Effects(seed=3)
-                        fx.glare = 0.4
-                    P = c["fn"](tl)
-                    P.setdefault("weapon_kind", c["weapon"])
-                    st = rig.solve(P)
-                    if e["fx"] == "muzzle_flash":
-                        Mz = Matrix(st["W"].tolist()) @ Matrix.Translation(Vector(MUZZLE))
-                        where = (Mz.translation.copy(), (Mz.to_3x3() @ Vector((1.0, 0.0, 0.0))).normalized())
-                        fx.rifle(t, where)
-                    else:
-                        b = e.get("bone", "spine_02")
-                        at = Vector(st["H"][b].tolist())
-                        at.z = 0.0
-                        fx.dust(t, at, size=0.7 if e["fx"] == "body_fall" else 0.4)
-        t0 = fr[-1][2] + 2 / FPS
+    for T, e, sg in perf.events(long):
+        if e["fx"] not in ("muzzle_flash", "body_fall", "knee_down") or T > long:
+            continue
+        if fx is None:
+            fx = Effects(seed=3)
+            fx.glare = 0.4
+        st = perf.state(T)
+        tf = math.ceil(T * 30 - 1e-6) / 30           # (on the frame it falls on or the next, so it is seen)
+        if e["fx"] == "muzzle_flash":
+            Mz = Matrix(st["W"].tolist()) @ Matrix.Translation(Vector(MUZZLE))
+            where = (Mz.translation.copy(), (Mz.to_3x3() @ Vector((1.0, 0.0, 0.0))).normalized())
+            fx.rifle(tf, where)
+        else:
+            at = Vector(st["H"][e.get("bone", "spine_02")].tolist())
+            at.z = 0.0
+            fx.dust(tf, at, size=0.7 if e["fx"] == "body_fall" else 0.4)
     if fast:
         seq = seq[::2]
     folder = os.path.join(SCRATCH, "frames", key)
@@ -4111,7 +4551,7 @@ def pictures_movies(info, fast=False, keys=None):
     sc = kit.fresh(FPS)
     m = assemble("GER")
     studio_smooth(m)
-    bake_clips(m, sorted({n for k in MOVIES for n, _, _ in MOVIES[k][0]}))
+    fill_mocap_events(m["rig"])
     ground, cam = setup_field(m, fast)
     bpy.context.scene.cycles.transparent_max_bounces = 32
     times = info.setdefault("render", {})
@@ -4167,7 +4607,7 @@ def pictures_turntable(info, fast=False):
 SQUAD = [  # x (forward), y (left), turn (degrees), clip, time
     (3.4, -7.6, 4.0, "fire_prone", 0.3),
     (4.1, -1.8, -3.0, "lmg_burst", 0.35),
-    (3.0, 3.6, 7.0, "fire_prone", 0.75),
+    (2.7, 3.6, 7.0, "crawl", 0.75),
     (3.7, 8.2, -6.0, "fire_prone", 1.15),
     (0.9, -4.8, 9.0, "fire_kneel", 0.2),
     (0.4, 1.0, -7.0, "fire_kneel", 0.75),
@@ -4175,7 +4615,7 @@ SQUAD = [  # x (forward), y (left), turn (degrees), clip, time
     (-1.6, -8.6, 10.0, "fire_stand", 0.13),
     (-2.1, 2.9, -4.0, "throw_grenade", 0.86),
     (-3.1, -2.6, 2.0, "walk", 0.3),
-    (-4.2, 7.0, 12.0, "run", 0.2),
+    (-4.2, 7.0, 12.0, "advance", 0.2),
     (-1.0, 9.3, -9.0, "fire_stand", 0.8),
 ]
 
@@ -4200,16 +4640,30 @@ def clone_man(m, place, turn):
     return arm, pieces
 
 
+SQUAD_AT, SQUAD_FACING = (15.0, 8.0), 90.0          # (on the battle stage: east of the road, facing north to the wall)
+SQUAD_CAM = ((19.5, -3.5, 2.6), (14.5, 15.0, 0.6))    # behind the line's right, looking north-north-west
+
+
 def pictures_squad(info, fast=False):
+    """The squad still on the battle stage: twelve men facing north, each frozen in a moment of a clip, seen from
+    behind the right of the line, with depth behind them (the stone walls, the lone tree, the farm, the wood's edge)
+    and a thin haze of drifting smoke across the field between."""
+    import battle_set
     sc = kit.fresh(FPS)
+    kit.studio(sun_elev=30.0, sun_turn=-20.0)
+    stage = battle_set.build()
     m = assemble("GER")
     studio_smooth(m)
     for ob in (m["weapon"], m["weapon_part"]):
         ob.hide_render = True
     m["arm"].location = (0.0, 0.0, -50.0)          # (the pattern man is kept out of sight)
-    for x, y, turn, name, t in SQUAD:
-        arm, pieces = clone_man(m, (x, y, 0.0), turn)
-        mm = dict(m, arm=arm)
+    fx = Effects(seed=5)
+    face = math.radians(SQUAD_FACING)
+    Rf = Matrix.Rotation(face, 3, "Z")
+    for k, (x, y, turn, name, t) in enumerate(SQUAD):
+        w = Vector(SQUAD_AT + (0.0,)) + Rf @ Vector((x, y, 0.0))
+        w.z = stage.height(w.x, w.y)
+        arm, pieces = clone_man(m, tuple(w), SQUAD_FACING - 90.0 + turn)
         if name == "lmg_burst":
             gun, bipod = build_lmg()
             Wm = Matrix.Translation(Vector(arm.data.bones["weapon"].head_local))
@@ -4230,16 +4684,30 @@ def pictures_squad(info, fast=False):
                     if md.type == "ARMATURE":
                         md.object = arm
         rig = Rig(arm, m["J"])
-        c = CLIPS[name]
-        P = c["fn"](t)
-        P.setdefault("weapon_kind", c["weapon"])
-        pose_once(arm, rig, P, 0)
+        rig.mrest = m["rig"].mrest
+        rig.weapon_kind = "lmg" if name == "lmg_burst" else "rifle"
+        st = clip_state(rig, name, t)
+        pose_once(arm, rig, st, 0)
+        # the firing men's smoke drifting from their last shots; the gunner caught mid-burst
+        if name.startswith("fire_") or name == "lmg_burst":
+            A = Matrix.Translation(w) @ Matrix.Rotation(math.radians(SQUAD_FACING - 90.0 + turn), 4, "Z")
+            Mz = A @ Matrix(st["W"].tolist()) @ Matrix.Translation(Vector(MUZZLE))
+            where = (Mz.translation.copy(), (Mz.to_3x3() @ Vector((1.0, 0.0, 0.0))).normalized())
+            if name == "lmg_burst":
+                for j in range(6):
+                    fx.rifle(-0.01 - 0.1 * j, where, size=0.75, light=(j == 0))
+            else:
+                fx.rifle(-fx.rng.uniform(0.4, 1.4), where, light=False)
+    # the haze: across the field in front of the line, and further off toward the walls
+    ax, ay = SQUAD_AT
+    fx.haze(-9.0, 0.0, (ax - 22.0, ay + 9.0, 0.0), (ax + 18.0, ay + 13.0, 0.0), every=0.12, alpha=(0.08, 0.16))
+    fx.haze(-9.0, 0.0, (ax - 30.0, ay + 20.0, 0.0), (ax + 25.0, ay + 24.0, 0.0), every=0.18, r=(2.0, 4.5), alpha=(0.05, 0.1))
+    fx.at(0.0)
     sc.frame_set(0)
-    kit.studio(sun_elev=34.0, sun_turn=10.0)
-    kit.field_ground()
-    cam = kit.camera(lens=45)
-    kit.orbit(cam, (0.6, -0.9, 0.3), 25.0, 35.0, -150.0)            # (from behind the line, as the game's camera)
+    cam = kit.camera(lens=32)
+    kit.look_at(cam, Vector(SQUAD_CAM[0]), Vector(SQUAD_CAM[1]))
     shared_render(640 if fast else 1280, 360 if fast else 720, 16 if fast else 48)
+    sc.cycles.transparent_max_bounces = 48
     t = time.time()
     kit.still(stage_path("pictures", "squad.png"))
     info.setdefault("render", {})["squad"] = f"{time.time() - t:.0f} s"
@@ -4265,95 +4733,60 @@ HERO_SEEDS = [3, 11, 17, 23, 29, 31, 37, 41, 43, 47, 53, 59]    # (each man's fa
 
 
 def hero_plan(seed=11):
-    """The squad's eight seconds: twelve men (the gunner in the middle) advance north in two loose rows across the
-    stubble east of the road, each at his own pace and step; one by one they go to ground (three kneel) and open fire,
-    each when he is ready; the gunner unfolds his bipod and fires bursts."""
+    """The squad's eight seconds: twelve men (the gunner in the middle) advance north at the ready in two loose rows
+    across the stubble east of the road, each at his own pace and step. The machine-gun team (the gunner and his
+    number two) go to ground first and set up; two riflemen throw themselves down and fire; one man is hit and falls on
+    his face; three more drop to a knee and fire near the end; the rest keep on. Each man's clips as Performance
+    segments."""
     import random
     rnd = random.Random(seed)
     men = []
     for i in range(12):
         row = i % 2
-        man = {"i": i, "x": 6.2 + i * 1.42 + rnd.uniform(-0.35, 0.35), "y": -25.0 - 2.4 * row + rnd.uniform(-0.7, 0.7),
-               "turn": 90.0 + rnd.uniform(-6.0, 6.0), "pace": rnd.uniform(0.93, 1.07), "phase": rnd.uniform(0.0, 1.1),
-               "stop": rnd.uniform(3.2, 4.7), "delay": rnd.uniform(0.15, 1.1), "rate": rnd.uniform(0.92, 1.08),
-               "down": "kneel" if i in (2, 8, 11) else "prone", "weapon": "rifle"}
+        man = {"i": i, "x": 6.4 + i * 1.4 + rnd.uniform(-0.35, 0.35), "y": -33.0 - 2.6 * row + rnd.uniform(-0.8, 0.8),
+               "turn": 90.0 + rnd.uniform(-5.0, 5.0), "rate": rnd.uniform(0.94, 1.06), "phase": rnd.uniform(0.0, 0.8),
+               "weapon": "rifle"}
         men.append(man)
-    g = men[5]
-    g.update(weapon="lmg", pace=0.95, stop=3.6, delay=0.5, rate=1.0, down="prone")
+    men[5]["weapon"] = "lmg"
+    for man in men:
+        i, r = man["i"], rnd
+        segs = [{"clip": "advance", "at": 0.0, "rate": man["rate"], "phase": man["phase"]}]
+        if i in (5, 6):                                       # the machine-gun team
+            td = 1.9 if i == 5 else 2.15 + r.uniform(0.0, 0.2)
+            segs.append({"clip": "go_prone", "at": td, "rate": 1.2, "blend": 0.35})
+            up = td + CLIPS["go_prone"]["long"] / 1.2
+            if i == 5:
+                segs.append({"clip": "lmg_burst", "at": up - 0.1, "phase": -0.55, "blend": 0.6})
+            else:
+                segs.append({"clip": "fire_prone", "at": up - 0.1, "phase": -r.uniform(0.6, 1.0), "rate": r.uniform(0.95, 1.05), "blend": 0.45})
+            man["role"] = "gunner" if i == 5 else "number two"
+        elif i in (2, 10):                                    # down and firing
+            td = r.uniform(2.6, 3.4)
+            segs.append({"clip": "go_prone", "at": td, "rate": r.uniform(1.12, 1.25), "blend": 0.35})
+            up = td + CLIPS["go_prone"]["long"] / segs[-1]["rate"]
+            segs.append({"clip": "fire_prone", "at": up - 0.1, "phase": -r.uniform(0.2, 0.7), "rate": r.uniform(0.94, 1.06), "blend": 0.45})
+            man["role"] = "prone"
+        elif i == 9:                                          # hit
+            segs.append({"clip": "die_forward", "at": 3.7, "blend": 0.1})
+            man["role"] = "hit"
+        elif i in (0, 4, 7):                                  # to a knee, late
+            tk = r.uniform(4.9, 6.4)
+            segs.append({"clip": "kneel_down", "at": tk, "blend": 0.3})
+            segs.append({"clip": "fire_kneel", "at": tk + CLIPS["kneel_down"]["long"], "phase": -r.uniform(0.1, 0.5), "rate": r.uniform(0.94, 1.06), "blend": 0.1})
+            man["role"] = "kneel"
+        else:
+            man["role"] = "advance"
+        man["segs"] = segs
     return men
 
 
-BLEND = 0.3
+HERO_CAM = ((25.5, -18.0, 2.4), (26.5, -3.0, 2.6), (12.0, -34.0, 0.6), (12.0, -19.0, 0.4))    # eye and target, start and end
 
 
-def hero_pose(man, t):
-    """(pose, metres walked, mode, clip time) for a man at time t."""
-    walk = CLIPS["walk"]["fn"]
-    v = man["pace"] * WALK.stride / WALK.long
-    ts = man["stop"]
-    wk = man["weapon"]
-    if t < ts:
-        P = walk((man["phase"] + man["pace"] * t) % WALK.long)
-        P["weapon_kind"] = wk
-        return P, v * t, "walk", None
-    u = t - ts
-    uu = min(u, BLEND)
-    dist = v * ts + v * (uu - uu * uu / (2 * BLEND))
-    walkP = walk((man["phase"] + man["pace"] * (ts + uu - uu * uu / (2 * BLEND))) % WALK.long)
-    walkP["weapon_kind"] = wk
-    down_name = "go_prone" if man["down"] == "prone" else "kneel_down"
-    down = CLIPS[down_name]
-    if u < down["long"]:
-        D = down["fn"](u)
-        D["weapon_kind"] = wk
-        w = sm(u / BLEND)
-        P = D if w >= 1.0 else mix([walkP, D], [1 - w, w])
-        P["weapon_kind"] = wk
-        return P, dist, down_name, u
-    f = u - down["long"]
-    if wk == "lmg":
-        burst = CLIPS["lmg_burst"]["fn"]
-        end = CLIPS["go_prone"]["fn"](1.0)
-        end["weapon_kind"] = "lmg"
-        if f < 0.4:
-            P = mix([end, burst(0.0)], [1 - sm(f / 0.4), sm(f / 0.4)])
-        elif f < 0.4 + man["delay"]:
-            P = burst(0.0)
-        else:
-            c = (f - 0.4 - man["delay"]) * man["rate"]
-            P = burst(c % 1.2)
-            P["weapon_kind"] = "lmg"
-            return P, dist, "lmg_burst", c
-        P["weapon_kind"] = "lmg"
-        return P, dist, "aim", None
-    fire_name = "fire_prone" if man["down"] == "prone" else "fire_kneel"
-    fire = CLIPS[fire_name]["fn"]
-    if f < man["delay"]:
-        return fire(0.0), dist, "aim", None
-    c = (f - man["delay"]) * man["rate"]
-    return fire(c % 1.4), dist, fire_name, c
-
-
-def hero_events(man):
-    """The moments of each man's shots (and rounds), his knee and his body meeting the ground."""
-    ts, down = man["stop"], man["down"]
-    shots, dust = [], []
-    if down == "prone":
-        dust += [(ts + 0.32, "knee"), (ts + 0.75, "body")]
-        t0 = ts + 1.0
-    else:
-        dust += [(ts + 0.4, "knee")]
-        t0 = ts + 0.5
-    if man["weapon"] == "lmg":
-        start = t0 + 0.4 + man["delay"]
-        for n in range(4):
-            for j in range(8):
-                shots.append(start + (n * 1.2 + 0.1 + 0.1 * j) / man["rate"])
-    else:
-        start = t0 + man["delay"]
-        for n in range(6):
-            shots.append(start + (n * 1.4 + 0.1) / man["rate"])
-    return [s for s in shots if s < HERO_SECONDS], dust
+def hero_camera(t):
+    k = sm(t / HERO_SECONDS * 0.9 + 0.05)
+    e0, e1, g0, g1 = (Vector(v) for v in HERO_CAM)
+    return e0.lerp(e1, k), g0.lerp(g1, k)
 
 
 def _math(nt, op, a=None, b=None, clamp=False):
@@ -4500,34 +4933,66 @@ class Effects:
             p = self.puff(t, at + facing * 0.07 * size, vel=facing * 1.5, life=0.05, r=(0.035 * size, 0.08 * size), col=(1.0, 0.75, 0.35),
                           col2=(1.0, 0.45, 0.12), alpha=1.0, kind="glow", wind=0.0, squash=(2.2, 1.0, 1.0), fade_in=0.005, grow=0.4)
             p["ob"].rotation_euler = q.to_euler()
-            for i in range(4 if size >= 1.0 else 2):
-                v = facing * g.uniform(2.5, 6.5) * size + side * g.uniform(-0.6, 0.6) + up * g.uniform(-0.2, 0.6)
+            # the smoke: many small soft puffs, thrown out along the shot, slowing, spreading and drifting
+            for i in range(10 if size >= 1.0 else 6):
+                v = facing * g.uniform(1.0, 6.5) * size + side * g.uniform(-0.5, 0.5) + up * g.uniform(-0.15, 0.5)
                 c = g.uniform(0.7, 0.82)
-                self.puff(t + 0.01, at + facing * 0.05, vel=v, life=g.uniform(1.6, 2.6), r=(0.03 * size, g.uniform(0.22, 0.38) * size),
-                          col=(0.78, 0.74, 0.68), col2=(c, c * 0.98, c * 0.95), alpha=g.uniform(0.3, 0.45) * min(1.0, size + 0.2),
-                          drag=g.uniform(3.5, 4.5), rise=0.12, fade_in=0.04, grow=0.5, wind=1.0)
+                self.puff(t + g.uniform(0.0, 0.03), at + facing * 0.05 + side * g.uniform(-0.02, 0.02), vel=v,
+                          life=g.uniform(1.6, 3.0), r=(0.02 * size, g.uniform(0.12, 0.26) * size),
+                          col=(0.78, 0.74, 0.68), col2=(c, c * 0.98, c * 0.95), alpha=g.uniform(0.22, 0.36) * min(1.0, size + 0.2),
+                          drag=g.uniform(3.0, 4.5), rise=g.uniform(0.06, 0.16), fade_in=0.04, grow=0.5, wind=1.0)
             if light:
                 self.light(t, at + facing * 0.15 + up * 0.05, 45.0 * size * self.glare, 0.05)
         self.once(t0, where, make)
 
     def dust(self, t0, at, size=1.0):
-        """A man goes down on the dry ground: tan dust thrown out low and settling downwind."""
+        """A man goes down on the dry ground: tan dust in many small soft puffs, thrown out low and settling downwind."""
         g = self.rng
 
         def make(t, p0, facing):
-            for i in range(int(3 + 4 * size)):
+            for i in range(int(6 + 12 * size)):
                 a = g.uniform(0, 2 * math.pi)
-                v = Vector((math.cos(a), math.sin(a), 0.0)) * g.uniform(0.6, 1.6) * size + Vector((0, 0, g.uniform(0.15, 0.5)))
+                v = Vector((math.cos(a), math.sin(a), 0.0)) * g.uniform(0.3, 1.4) * size + Vector((0, 0, g.uniform(0.1, 0.45)))
                 c = g.uniform(0.6, 0.7)
-                self.puff(t + g.uniform(0.0, 0.06), p0 + Vector((g.uniform(-0.25, 0.25), g.uniform(-0.25, 0.25), 0.05)) * size, vel=v,
-                          life=g.uniform(1.6, 2.6), r=(0.1 * size, g.uniform(0.45, 0.75) * size), col=(0.66, 0.56, 0.42), col2=(c, c * 0.92, c * 0.8),
-                          alpha=g.uniform(0.45, 0.62), drag=2.6, rise=0.12, fade_in=0.05, grow=0.45, wind=0.6, squash=(1.0, 1.0, 0.65))
+                self.puff(t + g.uniform(0.0, 0.08), p0 + Vector((g.uniform(-0.3, 0.3), g.uniform(-0.3, 0.3), 0.03)) * size, vel=v,
+                          life=g.uniform(1.3, 2.4), r=(0.04 * size, g.uniform(0.14, 0.3) * size), col=(0.66, 0.56, 0.42), col2=(c, c * 0.92, c * 0.8),
+                          alpha=g.uniform(0.28, 0.42), drag=2.6, rise=0.1, fade_in=0.05, grow=0.45, wind=0.6, squash=(1.0, 1.0, 0.65))
         self.once(t0, (Vector(at), Vector((0, 0, 1))), make)
 
+    def kick(self, t0, at, fwd):
+        """A running foot on the dry ground: a wisp or two of dust kicked back."""
+        g = self.rng
 
-def pictures_hero(info, fast=False):
-    """The squad advancing over the battle stage, going to ground and opening fire: 8 s at 30 frames a second.
-    Returns the scene, the frame count and the effects (step them with fx.at(t) frame by frame)."""
+        def make(t, p0, back):
+            for i in range(2):
+                v = back * g.uniform(0.3, 0.8) + Vector((g.uniform(-0.2, 0.2), g.uniform(-0.2, 0.2), g.uniform(0.05, 0.25)))
+                c = g.uniform(0.62, 0.7)
+                self.puff(t + g.uniform(0.0, 0.03), p0 + Vector((0.0, 0.0, 0.02)), vel=v, life=g.uniform(0.8, 1.3),
+                          r=(0.02, g.uniform(0.07, 0.12)), col=(0.66, 0.56, 0.42), col2=(c, c * 0.92, c * 0.8),
+                          alpha=g.uniform(0.16, 0.24), drag=3.0, rise=0.05, fade_in=0.04, grow=0.5, wind=0.5, squash=(1.0, 1.0, 0.7))
+        self.once(t0, (Vector(at), -Vector(fwd)), make)
+
+    def haze(self, t0, t1, a, b, every=0.25, high=(0.6, 3.0), r=(1.2, 3.2), alpha=(0.06, 0.13)):
+        """A thin haze of drifting smoke across a stretch of the field (from a to b): big faint soft puffs born along it
+        from t0 to t1 and carried off by the wind. Born before 0, it is already there when the picture starts."""
+        g = self.rng
+        a, b = Vector(a), Vector(b)
+        k = 0
+        while t0 + k * every < t1:
+            t = t0 + k * every
+            p = a.lerp(b, g.random())
+            p.z += g.uniform(*high)
+            c = g.uniform(0.66, 0.78)
+            self.puff(t, p, vel=Vector((g.uniform(-0.1, 0.1), g.uniform(-0.1, 0.1), 0.0)), life=g.uniform(7.0, 11.0),
+                      r=(r[0] * 0.6, g.uniform(*r)), col=(c, c * 0.98, c * 0.95), alpha=g.uniform(*alpha), drag=0.0,
+                      rise=0.04, fade_in=1.5, grow=0.7, wind=1.0, hold=0.3)
+            k += 1
+
+
+def pictures_hero(info, fast=False, men_only=None):
+    """The squad advancing over the battle stage, going to ground and opening fire: 8 s at 30 frames a second, the
+    men's bodies moving by the motion capture (advance at the ready, go prone, the fall) and our keyed clips for the
+    weapon work. Returns the scene, the frame count and the effects (step them with fx.at(t) frame by frame)."""
     import battle_set
     sc = kit.fresh(HERO_FPS)
     kit.studio(sun_elev=30.0, sun_turn=-20.0)
@@ -4539,59 +5004,63 @@ def pictures_hero(info, fast=False):
     fx = Effects(seed=7)
     t0 = time.time()
     for man in men:
+        if men_only is not None and man["i"] not in men_only:
+            continue
         yaw = math.radians(man["turn"])
         fwd = Vector((math.cos(yaw), math.sin(yaw), 0.0))
         # each man his own: his face and build from his own seed, dressed and rigged on himself
         m = assemble("GER", weapon=man["weapon"], seed=HERO_SEEDS[man["i"]])
         studio_smooth(m)
-        fit_body(m["J"])                                # (his clips on his own legs' measures)
-        arm = m["arm"]
-        arm.location = (man["x"], man["y"], 0.0)
+        fit_body(m["J"])                                # (his keyed clips on his own legs' measures)
+        arm, rig = m["arm"], m["rig"]
+        fill_mocap_events(rig)
+        perf = Performance(rig, [dict(sg) for sg in man["segs"]], kind=man["weapon"], until=HERO_SECONDS + 0.5)
         arm.rotation_euler = (0.0, 0.0, yaw)
-        man["arm"] = arm
-        rig = m["rig"]
         arm.animation_data_create()
         arm.animation_data.action = bpy.data.actions.new(f"hero_{man['i']}")
-        shots, dusts = hero_events(man)
-        shot_at = {}
-        for sh in shots:
-            shot_at.setdefault(int(round(sh * HERO_FPS)), []).append(sh)
-        chest = {}
+        rig.prev_q = {}
+
+        def root_at(t):
+            d = perf.travel(t)
+            x, y = man["x"] + fwd.x * d, man["y"] + fwd.y * d
+            return Vector((x, y, stage.height(x, y)))
+
         for f in range(frames):
             t = f / HERO_FPS
-            P, dist, mode, c = hero_pose(man, t)
-            P.setdefault("weapon_kind", man["weapon"])
-            st = rig.solve(P)
-            rig.key(st, f)
-            x, y = man["x"] + fwd.x * dist, man["y"] + fwd.y * dist
-            arm.location = (x, y, stage.height(x, y))
+            rig.key(perf.state(t), f)
+            arm.location = root_at(t)
             arm.keyframe_insert("location", frame=f)
-            A = Matrix.Translation(arm.location) @ Matrix.Rotation(yaw, 4, "Z")
-            chest[f] = A @ Vector(st["H"]["chest"].tolist())
-            if f in shot_at:
-                Mz = A @ Matrix(st["W"].tolist()) @ Matrix.Translation(Vector(MUZZLE))
-                where = (Mz.translation.copy(), (Mz.to_3x3() @ Vector((1.0, 0.0, 0.0))).normalized())
-                lmg = man["weapon"] == "lmg"
-                for k in range(len(shot_at[f])):
-                    # (each shot on the frame it falls on, so its flash is seen)
-                    fx.rifle(f / HERO_FPS, where, size=0.75 if lmg else 1.0, light=True)
         for fc in kit.fcurves_of(arm.animation_data.action):
             for kp in fc.keyframe_points:
                 kp.interpolation = "LINEAR"
-        yaw_v = Vector((math.cos(yaw), math.sin(yaw), 0.0))
-        for s_, what in dusts:
-            f = min(int(round(s_ * HERO_FPS)), frames - 1)
-            at = chest[f] + yaw_v * (0.05 if what == "body" else -0.35)
+        # the effects at the clips' own events: shots, dust where a foot, a knee, a body or the dropped rifle lands
+        for T, e, sg in perf.events(HERO_SECONDS):
+            tf = math.ceil(T * HERO_FPS - 1e-6) / HERO_FPS     # (on the frame it falls on, so it is seen)
+            if tf >= HERO_SECONDS:
+                continue
+            st = perf.state(tf)
+            A = Matrix.Translation(root_at(tf)) @ Matrix.Rotation(yaw, 4, "Z")
+            if e["fx"] == "muzzle_flash":
+                Mz = A @ Matrix(st["W"].tolist()) @ Matrix.Translation(Vector(MUZZLE))
+                where = (Mz.translation.copy(), (Mz.to_3x3() @ Vector((1.0, 0.0, 0.0))).normalized())
+                fx.rifle(tf, where, size=0.75 if man["weapon"] == "lmg" else 1.0, light=True)
+                continue
+            size = {"footstep": 0.0, "knee_down": 0.55, "body_fall": 1.0, "rifle_drop": 0.3}.get(e["fx"])
+            if size is None:
+                continue
+            bone = e.get("bone") or "weapon"
+            at = A @ Vector(st["H"][bone].tolist())
             at.z = stage.height(at.x, at.y)
-            fx.dust(s_, at, size=1.0 if what == "body" else 0.55)
+            if size == 0.0:
+                fx.kick(tf, at, fwd)
+            else:
+                fx.dust(tf, at, size=size)
+        print(f"  man {man['i']} ({man['role']}, seed {HERO_SEEDS[man['i']]}) keyed", flush=True)
     print(f"  squad posed and keyed in {time.time() - t0:.0f} s")
-    # the camera: low, behind the right of the line, moving up with the men and easing to a stop as they go down
-    cam = kit.camera(lens=32)
+    # the camera: low, ahead and to the right of the line, easing back as the men come on
+    cam = kit.camera(lens=35)
     for f in range(frames):
-        t = f / HERO_FPS
-        k = sm(t / 4.6)
-        eye = Vector((27.2 - 0.8 * k, -36.0 + 5.4 * k, 2.4 - 0.3 * k))
-        tgt = Vector((13.6 - 0.2 * k, -21.0 + 3.6 * k, 0.55))
+        eye, tgt = hero_camera(f / HERO_FPS)
         kit.look_at(cam, eye, tgt)
         cam.keyframe_insert("location", frame=f)
         cam.keyframe_insert("rotation_euler", frame=f)
@@ -4633,22 +5102,25 @@ def render_hero(info, fast=False, only=None):
 
 # ================================================================================================ the notes
 CLIP_ABOUT = {
-    "idle": "standing at ease, rifle held across the body at port; breathes, shifts his weight, glances about",
-    "walk": "marching pace, rifle at port",
-    "run": "doubling forward, rifle at port, leaning in",
-    "flee": "running away in panic: rifle carried low in the right hand, left arm pumping, a look back over the shoulder",
-    "kneel_down": "from standing to kneeling on the right knee, rifle coming up to the aim",
-    "stand_up": "from kneeling (aimed) back to standing at port",
-    "fire_stand": "standing, aimed: shot, recoil, works the bolt, back on aim",
-    "fire_kneel": "kneeling, aimed: the same",
-    "go_prone": "from standing down onto the knees, the left hand, and flat on the belly, rifle to the aim",
-    "fire_prone": "lying, aimed, elbows on the ground: shot, recoil, works the bolt",
-    "lmg_burst": "the gunner prone behind the light machine gun on its bipod: a burst with the shoulder shaking (needs the LMG on the weapon bone)",
-    "throw_grenade": "rifle to the left hand, wind-up and overarm throw from the right, recover",
-    "cower": "crouched low behind the rifle held upright, head down, flinching (pinned)",
-    "die_back": "hit in front: thrown back, staggers, falls on his back; lies still",
-    "die_forward": "hit while advancing: buckles and falls on his face",
-    "die_kneel": "hit: doubles over, sinks to his knees, falls to the side",
+    "idle": "motion capture (CMU 77_02): standing, shifting his weight and looking about, rifle held across the body at the port",
+    "walk": "motion capture (CMU 35_01): an ordinary walk, rifle at the port",
+    "run": "motion capture (CMU 35_18): an easy jog, rifle at the port",
+    "advance": "motion capture (CMU 35_18 with a crouch laid over it): the fast crouched run at the ready, butt in the shoulder, muzzle forward",
+    "creep": "motion capture (CMU 136_09): a careful crouched walk at the ready",
+    "flee": "keyed: running away in panic, rifle carried low in the right hand, left arm pumping, a look back over the shoulder",
+    "crawl": "keyed by the mocap animator (mocap.py; CMU has no belly crawl): the low crawl under fire, rifle across the forearms",
+    "kneel_down": "keyed: from standing to kneeling on the right knee, rifle coming up to the aim",
+    "stand_up": "keyed: from kneeling (aimed) back to standing at port",
+    "go_prone": "motion capture (CMU 77_16, played backwards): from the ready down onto a knee, the hands, and flat on the belly; the rifle is laid down beside him as his hand reaches the ground (fire_prone takes it up)",
+    "fire_stand": "keyed: standing, aimed: shot, recoil, works the bolt, back on aim",
+    "fire_kneel": "keyed: kneeling, aimed: the same",
+    "fire_prone": "keyed: lying, aimed, elbows on the ground: shot, recoil, works the bolt",
+    "lmg_burst": "keyed: the gunner prone behind the light machine gun on its bipod: a burst with the shoulder shaking (needs the LMG on the weapon bone)",
+    "throw_grenade": "keyed: rifle to the left hand, wind-up and overarm throw from the right, recover",
+    "cower": "keyed: crouched low behind the rifle held upright, head down, flinching (pinned)",
+    "die_back": "motion capture (CMU 90_18): hit in front, the feet go from under him and he lands flat on his back; the rifle flies from his hands",
+    "die_forward": "motion capture (CMU 140_01, played backwards and faster): hit on the move, a jolt, the knees buckle and he falls on his face; the rifle is thrown ahead",
+    "die_kneel": "keyed: hit: doubles over, sinks to his knees, falls to the side",
 }
 
 
@@ -4658,9 +5130,8 @@ LIMITS = [
     "The uniform takes its weights from MakeHuman's clothing shells (the nearest place on the suit, or on the skirt for the "
     "tunic's skirt, evened along the cloth); the head, neck and hands keep MakeHuman's own. There is no cloth simulation: in "
     "the deepest poses (prone, the deaths) the tunic can crease at the armpits and the hips.",
-    "In a few transitions the two-bone IK cannot quite reach and a hand or foot trails its target for a moment: go_prone (the "
-    "right hand up to 5 cm off the grip for about 0.1 s, the feet 3 cm as he lands), die_back (the left hand 7 cm while the "
-    "arms fly), die_forward (3 cm), throw_grenade (the left foot 4 cm). Every other clip reaches exactly.",
+    "In the keyed clips the two-bone IK reaches its targets everywhere except throw_grenade (the left foot up to 4 cm "
+    "for a moment).",
     "Where a knee would go through the ground, the solver lifts the pelvis for that frame (no knee joint goes below 4.5 cm), "
     "so a man going down can sit a touch high for a moment.",
     "The clips' low poses (kneeling, lying) were set out on the first, sculpted man and are scaled to MakeHuman's man by the "
@@ -4680,8 +5151,16 @@ LIMITS = [
     "plain paint colours for the game to tint.",
     "lmg_burst only makes sense with the LMG (soldier_GER_lmg.glb); on a rifleman's file the rifle goes where the LMG would be.",
     "Only the German has a game JSON, as asked; the Pole's .glb has the same skeleton and clips.",
-    "The locomotion and the falls (idle, walk, run, flee, go_prone, cower, the deaths) are still ours: they are to be "
-    "swapped for the mocap animator's clips (mocap.py) when those arrive; the weapon actions stay ours.",
+    "The motion-capture clips are carried from human.py's rig to ours by world turns (the joints are the same; the bone "
+    "rolls differ), so they keep mocap.py's own flaws (see its README: the run is an easy jog, the advance is fast, the "
+    "falls are reversed or slip-like takes). The hands hold the rifle by mocap.py's grip, the fingers 12 degrees more "
+    "curled than at rest; up close the fingers do not wrap the stock exactly.",
+    "In die_forward and die_back the rifle leaves the hand and falls by a simple throw (its speed, gravity, a turn onto "
+    "its left side) and lies where it lands, put clear of where he lies; in go_prone it is laid down beside him. There "
+    "is no bounce, and it can lie a centimetre into or above uneven ground.",
+    "Going from a mocap clip to a keyed one (go_prone into fire_prone, the advance into kneel_down) the game blends the "
+    "two; the pictures blend 0.1 to 0.6 s. go_prone ends with the rifle on the ground and fire_prone takes it up in the "
+    "blend.",
     "The hero clip's men stand on the stage's rolling ground by their root only: on a slope a foot can float or sink a "
     "centimetre or two (the stubble hides most of it).",
 ]
@@ -4691,6 +5170,8 @@ def write_readme(info):
     """README.md beside the files."""
     tr = info.get("tris", {})
     parts = info.get("parts", {})
+    for n, v in info.get("mocap", {}).items():
+        CLIPS[n].update(v)
     L_ = []
     w = L_.append
     w("# The infantry soldier\n")
@@ -4805,10 +5286,20 @@ def write_readme(info):
     for name, bone, at, fc in info.get("sockets", []):
         w(f"| `{name}` | {bone} | {', '.join(f'{v + 0.0:g}' for v in at)} | {', '.join(f'{v + 0.0:g}' for v in fc)} | {use.get(name, '')} |")
     w("\n## Clips\n")
-    w("Sixteen, each its own action (glb: separate animations; fbx: separate takes; json: `clips`). Made at 60 frames a second "
-      "(frames 0..N, so a loop's last frame is its first again); soldier_GER.json samples them 15 times a second. Posed by the "
-      "script: feet planted and hands put on the weapon by two-bone IK solved in soldier.py, then baked to plain keys (no "
-      "constraints in the files).\n")
+    w(f"{len(CLIPS)}, each its own action (glb: separate animations; fbx: separate takes; json: `clips`), at 60 frames a "
+      "second (frames 0..N, so a loop's last frame is its first again); soldier_GER.json samples them 15 times a second. All "
+      "baked to plain keys (no constraints in the files).\n")
+    w("- **Motion capture** (" + ", ".join(f"`{n}`" for n in MOCAP) + "): the body's movement is the mocap animator's "
+      "(mocap.py and mocap_cmu/clips.json: CMU takes retargeted to human.py's rig, see the mocap README in "
+      "battle-models/land/soldier/mocap/), carried onto our rig by world turns and resampled from 30 to 60 frames a second. "
+      "Over it the rifle is held in both hands by mocap.carry_rifle (at the port in idle, walk and run; at the ready in "
+      "advance and creep, and at the start of go_prone and the falls), and our `weapon` bone is keyed to where the right "
+      "hand holds it. The low crawl holds the rifle in its own arms. In the falls the rifle leaves his hand, and in "
+      "go_prone it is laid down beside him.")
+    w("- **Keyed** (the weapon work and the rest: " + ", ".join(f"`{n}`" for n in CLIPS if n not in MOCAP) + "): posed "
+      "by the script, feet planted and hands put on the weapon by two-bone IK solved in soldier.py.")
+    w("- The motion capture credit: *The data used in this project was obtained from mocap.cs.cmu.edu. The database was "
+      "created with funding from NSF EIA-0196217.* (mocap_cmu/CREDITS.md lists the takes.)\n")
     w("| clip | seconds | loops | stride | what | events (t: fx @ socket, cue) |")
     w("|---|---|---|---|---|---|")
     for name, c in CLIPS.items():
@@ -4831,19 +5322,29 @@ def write_readme(info):
             evs = ["0.1: muzzle_flash @ socket_muzzle, **lmg_burst**; then a muzzle_flash every 0.1 s to 0.8 (cue null)"]
         stride = f"{c['stride']:g} m ({c['stride'] / c['long']:.2f} m/s)" if c["stride"] else "-"
         w(f"| `{name}` | {c['long']:g} | {'yes' if c['loop'] else 'no'} | {stride} | {CLIP_ABOUT.get(name, '')} | {'; '.join(evs) or '-'} |")
-    w("\n- **Strides**: one walk loop (two steps) covers **1.5 m in 1.1 s** (1.36 m/s, 0.75 m a step); one run loop **2.45 m in "
-      "0.7 s** (3.5 m/s); one flee loop **2.8 m in 0.65 s** (4.31 m/s). Play rate = the unit's speed / those speeds, so the "
-      "planted foot keeps still on the ground (it moves back at exactly stride / length while planted).")
+    w("\n- **Strides**: " + "; ".join(f"one {n} loop covers **{c['stride']:g} m in {c['long']:.3g} s** ({c['stride'] / c['long']:.2f} m/s)"
+      for n, c in CLIPS.items() if c["loop"] and c["stride"]) + ". Play rate = the unit's speed / those speeds, so the "
+      "planted foot keeps still on the ground. (The mocap strides are for this man's legs: mocap.py's for its 1.75 m "
+      "reference man scaled by leg length.)")
+    w("- **Where a one-shot leaves him**: go_prone, die_forward and die_back move his pelvis over the ground while the "
+      "root stays put; `end_offset` (in soldier_GER.json's clips and as an extra on the actions, metres, x forward, y to "
+      "his left on the actions and to his right in the JSON, as everywhere else) is where the pelvis ends (y left): " + "; ".join(f"{n} {', '.join(f'{v:g}' for v in CLIPS[n]['end'])}" for n in MOCAP
+      if not CLIPS[n]["loop"]) + ". Move the actor's root by its x and y when the clip ends (or blend into the next clip "
+      "from there).")
     w("- **Events and cues** (the sound director's names; no sound files ship): shots `rifle_shot` (the game may swap in "
       "a per-army shot) and `lmg_burst` (the first round of each burst; the other rounds are flashes with cue null); "
       "`footstep` (the game picks footstep_01 to _04), `knee_down`, `body_fall` (01 to 04), `bolt` while the bolt is worked "
-      "(from `t` to `until`; the game picks the nation's own, bolt_k98 for Germany), `kit_rattle` (01 or 02) as he stands up "
-      "and on the first step of a run (`first_loop_only`), `grenade_throw` at the start of the throw (pin and swish; the "
-      "blast is the game's). `grenade_release` (0.95) has no cue: it is where the game lets the grenade go. Each event names "
+      "(from `t` to `until`; the game picks the nation's own, bolt_k98 for Germany), `kit_rattle` (01 or 02) as he stands up, "
+      "on the first step of a run or advance (`first_loop_only`) and when a dropped rifle lands (`rifle_drop`), "
+      "`grenade_throw` at the start of the throw (pin and swish; the blast is the game's). `grenade_release` (0.95) has no "
+      "cue: it is where the game lets the grenade go. In the crawl each elbow planted is `elbow_down` with a footstep cue. "
+      "The mocap clips' footsteps, knees and falls are read off the motion (a heel or ball reaching the ground, a knee "
+      "joint below 12 cm, the mid-back within 5 cm of where it ends). Each event names "
       "its socket or its bone. The events are in soldier_GER.json's clips and on every animation of the .glb files as "
       "extras (`events`, a JSON string), with `loop` and `stride`.")
-    w("- Firing loops end where they start, so a man can fire round after round; go_prone ends on fire_prone's first frame, "
-      "kneel_down on fire_kneel's, and stand_up starts on fire_kneel's. The deaths end lying still: hold the last frame.")
+    w("- Firing loops end where they start, so a man can fire round after round; kneel_down ends on fire_kneel's first frame "
+      "and stand_up starts on it. go_prone ends lying with the rifle on the ground: blend into fire_prone (about 0.4 s) from "
+      "its end_offset. The deaths end lying still: hold the last frame.")
     w("- lmg_burst is made for the gunner (soldier_GER_lmg.glb): the weapon bone sits the gun on its bipod and the bipod bone "
       "unfolds it. On a rifleman it would put his rifle where the gun's should be.\n")
     w("## What the game plays when\n")
@@ -4855,7 +5356,8 @@ def write_readme(info):
     w("| idle | idle | idle; under fire, cower | flee |")
     w("| march | walk | walk | flee |")
     w("| run | run | run | flee |")
-    w("| fight, open ground | fire_stand (a few kneel: kneel_down, fire_kneel) | go_prone, fire_prone | flee |")
+    w("| advance (closing under fire) | advance; creep when slow | advance, or crawl in the open | flee |")
+    w("| fight, open ground | fire_stand (a few kneel: kneel_down, fire_kneel) | go_prone, fire_prone; crawl to move | flee |")
     w("| fight, in woods or buildings | kneel_down, fire_kneel | fire_kneel; go_prone, fire_prone at the edge | flee |")
     w("| fight, within 30 m of the enemy | throw_grenade now and then, then back to firing | the same, less often | flee |")
     w("| rout | flee | flee | flee |")
@@ -4865,7 +5367,7 @@ def write_readme(info):
     w("- Pinned (heavy fire, wavering, no cover): cower, a few men at a time.\n")
     w("## How to import into Unreal 5\n")
     w("- **One shared skeleton**: import `soldier_GER.glb` first (Interchange glTF importer: Skeletal Mesh, Import Animations on). "
-      "It makes the skeleton and the sixteen animation sequences. Import `soldier_POL.glb` and `soldier_GER_lmg.glb` choosing that "
+      "It makes the skeleton and the animation sequences. Import `soldier_POL.glb` and `soldier_GER_lmg.glb` choosing that "
       "same skeleton (their bones, hierarchy and rest pose are identical), and skip their animations (the clips are the same).")
     w("- **soldier.fbx** (classic importer): Skeletal Mesh, Import Animations on, *Use T0 As Reference Pose* off, import scale "
       "1.0 (the file carries its units: 1 m arrives as 100 units), X forward, Z up, primary bone axis Y.")
@@ -4883,21 +5385,26 @@ def write_readme(info):
       "and the new German on MakeHuman's man.")
     w("- `pictures/turntable.mp4/.gif`: the German and the Pole side by side, a full turn in 6 s at 15 frames a second "
       "(960x540, 16 samples, denoised).")
-    w("- `pictures/walk`, `run`, `fire_stand`, `prone` (go_prone then fire_prone twice), `die_back` (.mp4 and .gif, 30 frames "
-      "a second, 960x540, 16 samples): a close game camera 5.5 to 6.5 m away, 18 to 24 degrees down, on the field ground. "
-      "The clips are in place, so in walk and run the ground slides back under him at the clip's own speed (the planted foot "
-      "should stay put on it). The muzzle flash, light and smoke in fire_stand and prone, and the dust where he goes "
+    w("- `pictures/walk`, `run`, `advance`, `fire_stand`, `prone` (go_prone then fire_prone twice), `crawl`, `die_back` (.mp4 "
+      "and .gif, 30 frames a second, 960x540, 16 samples): a close game camera 4.6 to 6.5 m away, 16 to 24 degrees down, on the "
+      "field ground. The clips are in place, so in walk, run, advance and crawl the ground slides back under him at the "
+      "clip's own speed (the planted foot should stay put on it); one clip blends into the next as the game would. The muzzle flash, light and smoke in fire_stand and prone, and the dust where he goes "
       "down, are the shared Effects (below), studio stand-ins only; the game makes its own from the events.")
     w("- `pictures/squad_advance.mp4/.gif` (the hero clip, 8 s, 960x540, 30 frames a second, 16 samples): the squad of twelve "
-      "(the gunner in the middle), each with his own face and build from his own seed, advances north across the stubble "
-      "east of the road on the battle stage (battle_set.py), each man at his own pace and step; one by one they go to ground (three kneel) and open fire, each when he is ready, and "
-      "the gunner unfolds his bipod and fires bursts. A low game camera behind the right of the line moves up with them. "
-      "Muzzle flashes (a short flame and a brief light), small grey smoke puffs and tan dust where men drop are the sea and "
-      "air team's tested Effects (shared/sea-air/stage.py), copied into soldier.py and scaled down for small arms; they are "
-      "the pictures' stand-ins, the game makes its own from the events.")
-    w("- `pictures/squad.png` (1280x720, 48 samples): twelve men (eleven riflemen and the gunner) in a 20 x 10 m patch, each "
-      "frozen in a moment of a clip (prone and kneeling fire, standing fire, a grenade throw, the gunner, two moving up), "
-      "from 25 m behind the line, 35 degrees down.")
+      "(the gunner in the middle), each with his own face and build from his own seed, advances north at the ready (the "
+      "mocap advance) across the stubble east of the road on the battle stage (battle_set.py), each man at his own pace "
+      "and step. The machine-gun team goes to ground first and sets up (the bipod unfolds, then bursts); two riflemen throw "
+      "themselves down (the mocap go_prone) and fire; one man is hit and falls on his face, his rifle thrown ahead; late "
+      "on three drop to a knee and fire; the rest keep coming. A low camera ahead and to the right of the line eases back "
+      "as they come on. Muzzle flashes (a short flame and a brief light), grey smoke and tan dust (where feet, knees and "
+      "bodies meet the ground) as many small soft puffs are the sea and air team's tested Effects (shared/sea-air/stage.py), "
+      "copied into soldier.py and scaled down for small arms; they are the pictures' stand-ins, the game makes its own "
+      "from the events.")
+    w("- `pictures/squad.png` (1280x720, 48 samples): on the battle stage, twelve men (eleven riflemen and the gunner) in a 20 x 10 m patch east of the road, each "
+      "frozen in a moment of a clip (prone and kneeling fire, standing fire, the crawl, a grenade throw, the gunner, two "
+      "moving up, one walking and one at the advance), "
+      "seen low from behind the right of the line, looking north-north-west toward the stone walls, the lone tree, the "
+      "farm and the wood's edge, with the firing men's smoke and a thin haze of drifting smoke across the field.")
     rt = info.get("render", {})
     if rt:
         w("\nRender times (Cycles, CPU, two threads): " + "; ".join(f"{k} {v}" for k, v in rt.items()) + ".")
