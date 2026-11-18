@@ -145,6 +145,10 @@ export default function battle(def) {
     const m2 = (a, b) => eased(take('m2_browning_range', { from: a - 0.005, to: b + 0.5 }), 0.001, 0.4);
     return weight(away(punch(clean(layers([{ x: m2(62.845, 63.995) }, { x: m2(69.34, 70.485), at: 0.021, db: -2 }, { x: m2(103.72, 104.875), at: 0.047, db: -3 }]), { low: 50 }), 0.25), 120), { hz: 100, lift: 3, harmonics: -14 });
   });
+  def('gunner_burst', {
+    family: 'guns', lufs: -18, title: 'A bomber\'s gunner fires', finish: { fadeOut: 0.3 }, battle: 'A bomber\'s turret gunner fires at a fighter',
+    about: 'One real burst from a heavy machine gun of the kind in a bomber\'s turrets, heard from a little way off.',
+  }, (take) => weight(away(punch(clean(eased(take('m2_browning_range', { from: 75.505, to: 77.4 }), 0.001, 0.4), { low: 50 }), 0.25), 150), { hz: 100, lift: 3, harmonics: -14 }));
   def('plane_down', {
     family: 'air', title: 'A plane goes down', finish: { fadeIn: 0.02, fadeOut: 1 }, battle: 'A plane spins or burns down',
     about: 'A real pass of a P-38 and a B-25, its engines winding up higher and higher as the plane falls, and a real explosion far off as it hits the ground.',
@@ -176,6 +180,22 @@ export default function battle(def) {
     const one = eased(take('cannon_130mm_finnish', { from: 2.86, to: 5.5 }), 0.001, 1.2);
     const two = tuned(eased(take('barrage_usrok', { from: 94.825, to: 96.75 }), 0.001, 1.0), 0.9);   // the next gun of that battery fires at 96.8
     return weight(away(clean(layers([{ x: one }, { x: two, at: 0.05, db: -2 }]), { low: 28 }), 150), { hz: 65, lift: 4, harmonics: -12 });
+  });
+  def('ship_gun_medium', {
+    family: 'guns', title: 'A cruiser\'s guns fire', finish: { fadeOut: 0.7 }, battle: 'A cruiser fires',
+    about: 'A real heavy field gun lowered a little, with a real 130 mm gun laid a few hundredths of a second behind it: a cruiser\'s twin turret.',
+  }, (take) => {
+    const a = tuned(eased(take('barrage_usrok', { from: 120.25, to: 122.3 }), 0.001, 1.2), 0.85);
+    const b = eased(take('cannon_130mm_finnish', { from: 2.86, to: 5.5 }), 0.001, 1.2);
+    return weight(away(clean(layers([{ x: a }, { x: b, at: 0.035, db: -3 }]), { low: 25 }), 180), { hz: 58, lift: 4, harmonics: -12 });
+  });
+  def('magazine_explosion', {
+    family: 'guns', title: 'A ship\'s magazine blows up', finish: { fadeOut: 1.2 }, battle: 'A ship\'s magazine explodes',
+    about: 'The biggest real explosion in the recordings, lowered to make it heavier, with a string of real blasts rolling on under it as the ship\'s shells go up.',
+  }, (take) => {
+    const big = tuned(eased(take('explosions_ls100152', { from: 3.33, to: 7.1 }), 0.001, 1.8), 0.7);
+    const after = tuned(eased(take('explosions_ls100155', { from: 1.2, to: 9.6 }), 0.05, 2.5), 0.85);
+    return weight(away(clean(layers([{ x: big }, { x: after, at: 0.6, db: -7 }]), { low: 22 }), 400), { hz: 55, lift: 5, harmonics: -12 });
   });
   def('ship_gun_heavy', {
     family: 'guns', title: 'A battleship fires a broadside', finish: { fadeOut: 0.8 }, battle: 'A battleship fires',
