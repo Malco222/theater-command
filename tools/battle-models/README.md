@@ -154,7 +154,7 @@ pip install bpy==5.3.0 numpy pillow            # Blender as a Python module (Pyt
 python export.py <out> all                     # every model: .json, .glb, .fbx, and index-sea-air.json
 python look.py Freighter <out> close,aft       # quick stills while building (small craft: small,smallaft)
 python show.py Battleship_UK turn <out>        # ship clips: turn, broadside, sink, capsize
-python airshow.py shot_down <out>              # aircraft clips: flypast, shot_down, ways_down
+python airshow.py shot_down <out>              # aircraft clips: flypast (plane=Me262 for another machine), shot_down, ways_down
 python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, rear, over, under, side; clip=bombs_away@1.6)
 python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
 ```
@@ -163,6 +163,12 @@ Rendering is Cycles on the CPU (EEVEE cannot start without a display). A 960x540
 25 seconds on four cores. `stage.py` holds the sea (swell, whitecaps, haze, a painted wake), the sky, a cloud
 deck, and the effects (soft puffs: smoke, spray, flame, splashes, a magazine blast). `marks.py` draws national
 markings for the pictures only; the game paints its own from the model's `marks`.
+
+Two lessons of the close fly-past, kept in `airshow.py`. The camera goes nearly all the way round the machine, so
+somewhere it looks up-sun, and there the sun's glare off the wings washed the camouflage out to cream: the sun now
+stands so that the glare falls in the gap the camera never visits (`SUN`), and a painted skin shines a little less
+(`SKIN`). A machine that only comes late in the war carries its `year` in its file, and its sheet label says
+"from 1944".
 
 ## Not done yet
 

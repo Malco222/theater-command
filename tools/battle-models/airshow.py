@@ -32,13 +32,17 @@ from rigid import smooth  # noqa: E402
 X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
 
 
+SKIN = [0.38, 0.35]                                          # (roughness and shine of a painted skin)
+
+
 def plane_look(paint, mat, nt, bsdf, mix):
     """What the pictures add to a paint: the disc of a turning airscrew is nearly clear, glass shines."""
     if paint == "blur":
         bsdf.inputs["Alpha"].default_value = 0.14
         bsdf.inputs["Roughness"].default_value = 0.3
     if paint in ("upper", "upper2", "under", "nose", "rivet", "rivet_under"):
-        bsdf.inputs["Roughness"].default_value = 0.38       # (a doped and polished skin: it takes a soft light along its curves)
+        bsdf.inputs["Roughness"].default_value = SKIN[0]     # (a doped and polished skin: it takes a soft light along its curves)
+        bsdf.inputs["Specular IOR Level"].default_value = SKIN[1]
     if paint == "glass":                                     # (clear, so that her crew are seen: the file says so under `clear`)
         bsdf.inputs["Alpha"].default_value = 0.3
         bsdf.inputs["Roughness"].default_value = 0.04
@@ -208,7 +212,7 @@ def trail(fx, where, start, end=1e9, kind="black", size=1.0):
         p["ob"].rotation_euler = ((flow + across(flow, g.uniform(0.0, 0.25))).normalized().to_track_quat("X", "Z") @ Quaternion(X, g.uniform(0, 6.283))).to_euler()
 
     def thin(t, at, facing):
-        c = g.uniform(0.45, 0.62)
+        c = g.uniform(0.45, 0.62) if size > 0.5 else g.uniform(0.2, 0.3)       # (a jet's thread is darker than a leak of glycol)
         fx.puff(t, at, vel=(g.uniform(-2, 2), g.uniform(-1.5, 1.5), g.uniform(-1.5, 1.5)), life=g.uniform(2.6, 4.0), r=(0.4 * size, g.uniform(2.4, 4.0) * size), col=(c, c, c), alpha=0.38,
                 drag=0.5, fade_in=0.03, grow=0.6, wind=1.0)
 
@@ -302,6 +306,10 @@ def flypast(A, opt):
     lead = Plane(A, name, (0, 0, 0))
     mate = Plane(A, name, (-34.0, -24.0, -5.0))
     span = lead.f.half * 2.0
+    for p in (lead, mate):                                   # (a jet leaves a thin dark thread from each tailpipe)
+        for k in p.m.sockets:
+            if k["name"].startswith("jet."):
+                trail(A.fx, p.where(k["name"]), -1.5, kind="thin", size=0.2)
 
     def step(t):
         lead.put(None, lead.play("fly", t))
@@ -460,6 +468,15 @@ def ways_down(A, opt):
 
 
 SHOTS = {"flypast": flypast, "shot_down": shot_down, "ways_down": ways_down}
+# (the fly-past's camera goes nearly all the way round her and leaves a gap astern to starboard: the sun stands so that its
+#  glare off her wings falls in that gap, or her camouflage is washed out to cream where the camera looks up-sun)
+SUN = {"flypast": 122.0}
+
+
+def label(title, span, parts, year=None):
+    """The line under a machine on the sheet; a machine that only comes late in the war says from which year."""
+    return (f"{title.replace(' (our own model)', '')} · span {span:.1f} m · {parts} parts"
+            + (f" · from {year}" if year else ""))
 
 
 def sheet(argv):
@@ -482,7 +499,7 @@ def sheet(argv):
         path = os.path.join(tmp, name + ".png")
         kit.still(path)
         pics.append(path)
-        labels.append(f"{p.m.title.replace(' (our own model)', '')} · span {span:.1f} m · {len(p.m.parts)} parts")
+        labels.append(label(p.m.title, span, len(p.m.parts), p.f.year))
         print(name, "done", flush=True)
         for o in [p.ob, p.arm] + p.badges:
             bpy.data.objects.remove(o, do_unlink=True)
@@ -499,7 +516,9 @@ def main():
     w, h = (int(v) for v in opt.get("size", "960x540").split("x"))
     folder = os.path.join(out, f"air-{shot}")
     os.makedirs(folder, exist_ok=True)
-    A = Air()
+    if "skin" in opt:
+        SKIN[:] = [float(v) for v in opt["skin"].split(",")]
+    A = Air(sun_turn=float(opt.get("sun", SUN.get(shot, 148.0))))
     stage.render_setup(w, h, int(opt.get("samples", 12)))
     T, step = SHOTS[shot](A, opt)
     only = {int(v) - 1 for v in opt["frames"].split(",")} if "frames" in opt else None

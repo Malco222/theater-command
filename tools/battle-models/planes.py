@@ -625,6 +625,7 @@ def convert(name, fine=True):
     f.prop_parent = prop_parent
     f.fins = fins
     f.engines, f.pods = len(hubs) + len(pods), pods
+    f.year = s.get("year")                                   # (a machine that only comes late in the war)
     f.waist, f.around, f.waist_hole = waist, around, waist_hole
     f.surf = list(surf)
     f.turrets = [(k, port(c), radii) for k, c, radii in turrets]
