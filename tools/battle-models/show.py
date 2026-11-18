@@ -202,7 +202,7 @@ def sink(S, out, opt):
     for half in ("fore", "aft"):
         S.fx.froth(_goes_under(S, half), t_hit + 0.9, T + 2)
     S.fx.boil((bx, 0.0), t_hit + 2.4, T + 2, r=(40.0, 28.0), rise=2.2)
-    S.fx.slick(t_hit + 3.0, (bx, 0, 0), r=62.0)
+    S.fx.slick(t_hit + 1.8, (bx, 0, 0), r=85.0)
 
     def step(t):
         after = t - t_hit

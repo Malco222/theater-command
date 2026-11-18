@@ -562,9 +562,17 @@ class Effects:
             body.inputs[0].default_value = 0.45
             nt.links.new(d1.outputs[0], body.inputs[1])
             nt.links.new(d2.outputs[0], body.inputs[2])
+        elif kind == "flat":       # oil lying on the water: dark and smooth, with a dull shine where the sky lies in it
+            d1, d2 = nt.nodes.new("ShaderNodeBsdfDiffuse"), nt.nodes.new("ShaderNodeBsdfGlossy")
+            nt.links.new(info.outputs["Color"], d1.inputs["Color"])
+            d2.inputs["Roughness"].default_value = 0.3
+            body = nt.nodes.new("ShaderNodeMixShader")
+            body.inputs[0].default_value = 0.1
+            nt.links.new(d1.outputs[0], body.inputs[1])
+            nt.links.new(d2.outputs[0], body.inputs[2])
         else:
             body = nt.nodes.new("ShaderNodeBsdfDiffuse")
-        if kind != "water":
+        if kind not in ("water", "flat"):
             nt.links.new(col_out, body.inputs["Color"])
         clear = nt.nodes.new("ShaderNodeBsdfTransparent")
         ms = nt.nodes.new("ShaderNodeMixShader")
@@ -956,16 +964,17 @@ class Effects:
         self.stream(where, 0.035, make, start=start, end=end)
 
     def slick(self, t0, at, r=40.0):
-        """What she leaves: a dark sheen of oil that wells up where she went down and spreads out from there, ragged,
-        over the seconds that follow."""
+        """What she leaves: a dark sheen of oil that wells up where she broke and spreads out from there, ragged, quickly
+        at first and then slowly, over the seconds that follow. It lies under the foam, never over it. (From a camera
+        low over the sea a patch on the water is seen edge on, so it has to spread well clear of her side to be seen.)"""
         g = self.rng
 
         def make(t, p0, facing):
-            for i in range(11):
+            for i in range(13):
                 a = g.uniform(0, 2 * math.pi)
-                way = Vector((math.cos(a), math.sin(a) * 0.8, 0.0))
-                self.puff(t + i * 0.3, Vector((p0[0] + way.x * r * 0.1, p0[1] + way.y * r * 0.1, 0.25 - 0.004 * i)), vel=way * g.uniform(3.0, 7.0), drag=0.25, life=12.0,
-                          r=(r * 0.15, r * g.uniform(0.6, 1.0)), col=(0.03, 0.034, 0.04), alpha=0.7, kind="flat", wind=0.0, squash=(1.5, 1.0, 0.03), fade_in=1.2, grow=0.6, hold=0.9)
+                way = Vector((math.cos(a), math.sin(a), 0.0))
+                self.puff(t + i * 0.25, Vector((p0[0] + way.x * r * 0.08, p0[1] + way.y * r * 0.08, 0.22 - 0.003 * i)), vel=way * g.uniform(3.0, 8.0), drag=0.25, life=13.0,
+                          r=(r * 0.12, r * g.uniform(0.55, 0.95)), col=(0.03, 0.034, 0.04), alpha=0.72, kind="flat", wind=0.0, squash=(1.4, 1.0, 0.004), fade_in=1.0, grow=0.45, hold=0.9)
         self.once(t0, (Vector(at), Vector((0, 0, 1))), make)
 
 

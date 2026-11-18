@@ -107,7 +107,11 @@ core with a softer orange-brown edge, most of them running into the dark band at
 chalky bloom along the edge of her casing, on the lower third of her tower and in runs down from the lip of her
 bridge screen; a dark, rusty band lies above her boot topping where the sea washes her. (First built at about half
 this strength, she "read new from the yard" from the battle camera: judge weathering on the picture of the whole
-boat and on the sheet, not on the close looks.) Her rust is her own colour, 8A4E28: her file says so in `rust`, and
+boat and on the sheet, not on the close looks.) Two close-up lessons from the same review: a weep under every
+hole of a row, all of a length and crisp, reads as a dotted line of "little flowerpots", so the weeps under her
+tower's holes are narrower than the holes, taper to nothing, and vary (a few holes none, most a short run, one or two
+long ones out over the curve of the tower's foot); and salt alone is a broad soft tongue, palest a quarter of the
+way down its middle and thinning to nothing at its edge, never a wedge with straight sides. Her rust is her own colour, 8A4E28: her file says so in `rust`, and
 a file without the key takes the usual 6E4A34. Her boot topping's top is level at 0.55 m (`boot` of `Yard.hull`: the ships' rule by the height of the deck
 does not suit so low a side). Her torpedo doors lie under water (they had been drawn at the waterline: `Hull.side`
 serves only above it), and the `torpedo.bow.*` and `torpedo.stern.*` sockets with them.
@@ -443,7 +447,9 @@ at the places where the sea has climbed more than half way to her deck's edge (`
 pose). From a camera low over the sea a flat patch is a sliver a few pixels deep, so white water needs height:
 spouts against her side, and where the last of her went down domes of air bursting up several metres. And the
 heaviest of it belongs in the middle, where the broken ends went down, with the oil welling up there and spreading
-outward over the seconds; each half's own line is lighter.
+outward over the seconds; each half's own line is lighter. The oil is seen edge on from that camera too, so it starts
+as soon as she breaks, spreads fast at first and reaches well clear of her side (85 m in the battleship's clip), and
+it lies under the foam, never over it.
 
 Foam on the sea (`foam` and the kind "foam" in `stage.py`; a splash's foot and the froth where a ship goes under).
 One broad flat patch, however ragged its stuff, reads as a white plate laid on the sea. Churned water is a patch at
@@ -451,7 +457,7 @@ the heart and a scatter of smaller ones about it, each drawn out into a streak, 
 little apart; the stuff has holes and lace all through it and thins to nothing at its rim, pale green where it is
 thick and white where thin (faint: pushed harder it reads as paint), and as a patch dies its holes open rather than
 the whole growing paler. Kept off pure white (about 0.84, 0.9, 0.88 in the sun). The oil slick keeps the plain
-"flat" stuff.
+"flat" stuff: dark and matt but for a tenth of dull shine.
 
 Two lessons of the close fly-past, kept in `airshow.py`. The camera goes nearly all the way round the machine, so
 somewhere it looks up-sun, and there the sun's glare off the wings washed the camouflage out to cream: the sun now

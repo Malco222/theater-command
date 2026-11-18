@@ -1175,19 +1175,56 @@ def submarine(tag, fine=True, hull_hex=None):
         for v in m.verts[first:]:                             # (rust gathers where the foot meets the casing)
             stains[key(v)] = 0.6 * min(1.0, max(0.0, 1.0 - (v.z - Z0) / 0.24)) * (0.5 + 0.5 * math.sin(v.x * 2.3 + v.y * 1.7))
             pale[key(v)] = 0.3 + 0.12 * math.sin(v.x * 1.1 + v.y * 2.9)       # (and salt dries on it: see the tower's bloom below)
+        # The holes weep rust: down the wall under them and, the long ones, out over the curve of her tower's foot.
+        # (The art director, 10:16 UTC on 18 November: one under every hole, all of a length and crisp, they read as
+        # "little flowerpots", a dotted line. So: each narrower than its hole and tapering to nothing, a few holes
+        # with none, most a short run, one or two long, soft at the edge like the weeps under her slots.)
+        foot = [(0.0, 0.42), (0.0, 0.22), (0.025, 0.09), (0.07, 0.02), (0.14, -0.03)]      # (out from her wall, up from her casing)
+        legs = [math.hypot(b_[0] - a_[0], b_[1] - a_[1]) for a_, b_ in zip(foot, foot[1:])]
+        marks = [sum(legs[:i]) for i in range(len(foot))]
+
+        def down_foot(long_):
+            """Stations down that way, `long_` along it: [(out, up, (facing out, facing up), share of the way)]."""
+            long_ = min(long_, marks[-1] - 0.01)
+            ds = sorted(set([0.0, long_] + [d_ for d_ in marks if d_ < long_ - 0.012] + ([marks[1] + 0.006] if long_ > marks[1] + 0.03 else [])))
+            for i in range(1, 5):                             # (the bends of the way, a station just past where the foot begins, and enough between to fade on)
+                d_ = long_ * i / 5.0
+                if all(abs(d_ - f_) > 0.02 for f_ in ds):
+                    ds.append(d_)
+            ds.sort()
+            stations = []
+            for d_ in ds:
+                k = max(i for i in range(len(legs)) if marks[i] <= d_ + 1e-9)
+                t_ = (d_ - marks[k]) / legs[k]
+                (r0_, z0_), (r1_, z1_) = foot[k], foot[k + 1]
+                n_ = Vector((-(z1_ - z0_), r1_ - r0_)) / legs[k]
+                if t_ < 1e-6 and k > 0:                       # (at a bend: half way between the two facings)
+                    n_ = (n_ + Vector((-(foot[k][1] - foot[k - 1][1]), foot[k][0] - foot[k - 1][0])) / legs[k - 1]).normalized()
+                stations.append((r0_ + (r1_ - r0_) * t_, z0_ + (z1_ - z0_) * t_, n_, d_ / long_))
+            return stations
+
         hx_ = x1 + rnd + 0.35
         while hx_ < x0 - rnd - 0.1:
             if not any(a - 0.2 <= hx_ <= b + 0.2 for a, b in door):
                 for hand in (PORT, STBD):
                     slot(m, (hx_, hand * half, Z0 + 0.46), (0, hand, 0), 0.2, 0.07, lift=0.012)
-                    if (int(hx_ * 7.0) + hand) % 3:         # (most of them weep a little rust down the wall)
-                        top_, long_ = Z0 + 0.42, 0.16 + 0.1 * ((int(hx_ * 13.0) + hand) % 3)
-                        got = m.ribbon([(hx_, hand * half, top_ - long_ * i / 3.0) for i in range(4)], [(0, hand, 0)] * 4, 0.11, "upper", 0.003, taper=lambda s_: 1.0 - 0.4 * s_, core=0.6)
-                        for i in range(4):
-                            fade = 0.3 + 0.7 * (1.0 - i / 3.0) ** 0.7
-                            stains[key(got[2][i])], dark[key(got[2][i])] = fade, 0.8 * fade
-                            for j in (1, 3):
-                                stains[key(got[j][i])], dark[key(got[j][i])] = 0.9 * fade, 0.3 * fade
+                    own = random.Random(int(hx_ * 131.0) + (5 if hand > 0 else 2) + 17 * len(tag))
+                    luck = own.random()
+                    if luck < 0.24:
+                        continue
+                    way = down_foot(own.uniform(0.3, 0.5) if luck > 0.9 else own.uniform(0.06, 0.19))
+                    wide_, rust_, n_ = own.uniform(0.05, 0.085), own.uniform(0.55, 1.0), len(way)
+                    got = m.ribbon([(hx_, hand * (half + r_), Z0 + z_) for r_, z_, _, _ in way], [(0, hand * f_[0], f_[1]) for _, _, f_, _ in way], wide_, "upper", 0.003,
+                                   taper=lambda q_: max(0.06, (1.0 - way[min(int(round(q_ * (n_ - 1))), n_ - 1)][3]) ** 0.8), core=0.6)
+                    for i, (_, z_, _, s_) in enumerate(way):
+                        fade = rust_ * (1.0 - s_) ** 0.8
+                        for j, (wet, black) in enumerate(((0.0, 0.0), (0.9, 0.3), (1.0, 0.8), (0.9, 0.3), (0.0, 0.0))):
+                            v = got[j][i]
+                            # (over her tower's foot it lies on rusty, salted paint: its edge must carry the same)
+                            under = 0.6 * min(1.0, max(0.0, 1.0 - z_ / 0.24)) * (0.5 + 0.5 * math.sin(v.x * 2.3 + v.y * 1.7)) if z_ < 0.24 else 0.0
+                            stains[key(v)], dark[key(v)] = max(wet * fade, under), black * fade
+                            if z_ < 0.2195:
+                                pale[key(v)] = 0.3 + 0.12 * math.sin(v.x * 1.1 + v.y * 2.9)
             hx_ += 0.62
     else:
         yard.house(x0, xb, half, t1, screen, r=rnd, top="deck", rail=False, walls=False)
@@ -1331,6 +1368,9 @@ def submarine(tag, fine=True, hull_hex=None):
             as far and twice as wide as first built, so the longest reach the dark band at her waterline; a weep that
             reaches it runs into it at part strength rather than dying above it)."""
             zd = h.side(x_, 99.0, hand)[0].z                 # (her deck's edge here)
+            soft = bool(salt) and not rust                    # (salt alone: a broad, soft tongue; see below)
+            if soft:
+                wide *= 1.35
             low = BOOT + 0.02 if floor is None else floor
             z_bot = max(z_top - long, low)
             if z_top - z_bot < 0.1:
@@ -1345,10 +1385,24 @@ def submarine(tag, fine=True, hull_hex=None):
             runs_in = floor is None and z_top - long < low
             heights = [BOOT + (zd - BOOT) * a for a in ABOVE]
             zs = [z_top] + [z for z in reversed(heights) if z_bot + 0.03 < z < z_top - 0.03] + [z_bot]
+            shape = None
+            if soft:
+                # (salt dried under her deck's edge: the art director, 10:16 UTC on 18 November, "no straight sides,
+                # tapered and faded so no trapezoid shows at any distance": a tongue that narrows to nothing, on more
+                # stations than her side's own rows, each tongue its own shape; palest a quarter of the way down its
+                # middle and thinning from there to nothing at its edge, or it reads as a white tooth)
+                shape = random.Random(int(x_ * 100.0) + (7 if hand > 0 else 3)).uniform(0.6, 1.5)
+                for i in range(1, 7):
+                    z = z_top - (z_top - z_bot) * i / 7.0
+                    if all(abs(z - z_) > 0.03 for z_ in zs):
+                        zs.append(z)
+                zs.sort(reverse=True)
             line = [h.side(x_, z, hand) for z in zs]
-            got = yard.on(x_).ribbon([q for q, _ in line], [d for _, d in line], wide, "hull", 0.008, taper=lambda s_: 1.0 - 0.45 * s_, core=0.6)
+            n_ = len(zs)
+            taper = (lambda q_: 1.0 - 0.45 * q_) if shape is None else (lambda q_: max(0.05, ((zs[min(int(round(q_ * (n_ - 1))), n_ - 1)] - z_bot) / (z_top - z_bot)) ** shape))
+            got = yard.on(x_).ribbon([q for q, _ in line], [d for _, d in line], wide, "hull", 0.008, taper=taper, core=0.45 if soft else 0.6)
             for k, z in enumerate(zs):
-                fade = ((z - z_bot) / (z_top - z_bot)) ** 0.6
+                fade = ((z - z_bot) / (z_top - z_bot)) ** (0.6 if shape is None else 1.2)
                 if runs_in:
                     fade = 0.4 + 0.6 * fade
                 if rust:
@@ -1356,8 +1410,10 @@ def submarine(tag, fine=True, hull_hex=None):
                     for j in (1, 3):                          # (the core is dark brown out to its shoulders; from there to the edge it thins away orange-brown)
                         stains[key(got[j][k])], dark[key(got[j][k])] = 0.9 * rust * fade, 0.3 * rust * fade
                 if salt:
+                    if soft:
+                        fade *= 0.55 + 0.45 * min(1.0, (z_top - z) / (0.25 * (z_top - z_bot)))
                     pale[key(got[2][k])] = salt * fade
-                    pale[key(got[1][k])] = pale[key(got[3][k])] = 0.75 * salt * fade
+                    pale[key(got[1][k])] = pale[key(got[3][k])] = (0.4 if soft else 0.75) * salt * fade
         for drop, every, start, arch in rows:
             x = -L * 0.43 + start
             while x < L * 0.45:
