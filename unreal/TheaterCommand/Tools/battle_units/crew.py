@@ -913,10 +913,12 @@ def elbow_pole(rig, st, s, hand_at, elbow_at):
 
 @crew_clip("commander_hatch", 10.0, loop=True, anchor="feet", weapon="none",
            place=[("vehicle", "PanzerIV", "commander", (0.0, 0.0, CUPOLA["rim"] - RIM_Z - CUPOLA["socket_z"])),
-                  ("vehicle", "ArmouredCar", "commander", (0.0, 0.0, -0.92))],
+                  ("vehicle", "ArmouredCar", "commander", (0.0, 0.0, -0.92)),
+                  ("vehicle", "AssaultGun", "commander", (0.0, 0.0, -0.92))],
            about="The tank commander stood up in his hatch, chest out of it and forearms on the rim, the binoculars in his "
                  "hands; he looks about, and twice raises the glasses to his eyes. His feet are inside the turret: root "
-                 "0.92 m below the PanzerIV's `commander` socket (the rim 1.17 m over his feet).")
+                 "0.92 m below the PanzerIV's `commander` socket (the rim 1.17 m over his feet), and the ArmouredCar's "
+                 "and the AssaultGun's.")
 def c_commander(t):
     long = 10.0
     br = wave(t, long, 3, 0.2)
@@ -2772,7 +2774,8 @@ def slide_part(objs, part, move_game):
 
 
 MEASURED = ("M3Halftrack", "Truck", "Hanomag", "FlakHalftrack", "M16", "FlakTruck", "M7", "Sexton", "Hummel", "SU76", "M10",
-            "M8", "SdKfz222", "ArmouredCar", "PanzerIV", "25pdr", "Pak40", "ZiS3", "leFH18", "Howitzer105", "Gun75", "AntiTankGun")
+            "M8", "SdKfz222", "ArmouredCar", "PanzerIV", "SelfPropelledGun", "AssaultGun", "25pdr", "Pak40", "ZiS3", "leFH18",
+            "Howitzer105", "Gun75", "AntiTankGun")
 
 
 def measure_seats():
@@ -2885,11 +2888,12 @@ FITS = {
     "sit_cab": "the man beside a driver, his seat 0.40 over the floor (the M3's, the M16's, the Hanomag's and the "
                "FlakHalftrack's rider.cab: in the two Sd.Kfz. 251 his right calf goes 1.5 cm into the footwell's outer wall).",
     "commander_hatch": "a commander stood in a hatch, his forearms on its rim: the root (his feet) 1.17 m under that rim. "
-                       "PanzerIV and ArmouredCar commander: root_offset (0, 0, -0.92), his feet 0.92 under the socket (the "
-                       "ArmouredCar's lid open by its open_up clip; his chest 1.8 cm into the rim's front, see the issues). "
+                       "PanzerIV, ArmouredCar and AssaultGun commander: root_offset (0, 0, -0.92), his feet 0.92 under the "
+                       "socket (the ArmouredCar's and the AssaultGun's lids open by their open_up clips; at the ArmouredCar "
+                       "his chest 1.7 cm into the rim's front, see the issues). "
                        "Not the open turrets and fighting compartments (the M10, M8, SdKfz222, M16, FlakHalftrack, FlakTruck, "
-                       "M7, Sexton, Hummel and SU76): their walls are 0.65-1.0 m over a floor he stands on, so their "
-                       "commanders stand there by crew.pose (crew.json `posed`).",
+                       "M7, Sexton, Hummel, SU76 and SelfPropelledGun): their walls are 0.65-1.06 m over a floor he stands "
+                       "on, so their commanders stand there by crew.pose (crew.json `posed`).",
     "stand_mg": "a man stood at a pedestal or ring-mounted machine gun with spade grips 0.40 ahead of his feet and 1.08 up "
                 "(the M3's gunner and the M7's crew.mg on its raised pulpit, both with no root_offset; at the M7 his hips "
                 "go 1.8 cm into the pulpit's wall behind him, see the issues). Attach him to the gun's turning part.",
@@ -2902,7 +2906,8 @@ FITS = {
     "sit_handwheel_traverse": "a gunner seated on a turning mount, turning a handwheel whose hub is 0.365 ahead of his seat "
                               "point, 0.26 to his right and 0.46 up, by two handles at 9 and 3 o'clock, 0.17 out (the "
                               "HeavyFlak's and HeavyFlakTwin's traverse layer, seat 0.44 over the footrest). Attach him to the mount. Other seats and wheels (the FlakHalftrack's, "
-                              "FlakTruck's, M16's and SU76's crew.gunner): crew.pose(stance 'sit', seat_h, the grips), "
+                              "FlakTruck's, M16's, SU76's and SelfPropelledGun's crew.gunner, who have a hand on each of "
+                              "two wheels by the right knee): crew.pose(stance 'sit', seat_h, the grips), "
                               "crew.json `posed`.",
     "sit_handwheel_elevate": "as sit_handwheel_traverse, the hub 0.26 to his left (the HeavyFlak's elevation layer).",
     "stand_load_breech": "a loader stood beside a breech's path, the breech 0.59 ahead of his feet, 0.41 to his left and "
@@ -2952,8 +2957,10 @@ STAGES = {
                               "keep": lambda W: W[:, 2] > 2.63, "cupola": True},
     # (the armoured car's hull is solid: what is over the hatch's rim, 2.24, is his to clear; its lid open by its clip)
     ("vehicle", "ArmouredCar"): {"open_up": True, "keep": lambda W: W[:, 2] > 2.22},
+    # (the assault gun's fighting box is solid too, from its floor at 1.02 to its roof at 1.92: over its hatch's rim, 2.08)
+    ("vehicle", "AssaultGun"): {"open_up": True, "keep": lambda W: W[:, 2] > 2.06},
 }
-for _v in ("M7", "Sexton", "Hummel", "SU76", "M10", "M8", "SdKfz222"):
+for _v in ("M7", "Sexton", "Hummel", "SU76", "SelfPropelledGun", "M10", "M8", "SdKfz222"):
     STAGES[("vehicle", _v)] = {"open_up": True}
 CHECK_AT = {
     "sit_bench": [("vehicle", "M3Halftrack", "rider.1"), ("vehicle", "M3Halftrack", "rider.8"), ("vehicle", "Truck", "rider.2"),
@@ -3251,7 +3258,9 @@ def check_everything(only_kind=None):
 # The crew.pose call that puts a man at each vehicle socket no clip fits, as checked against the vehicle (its hatches
 # and screens open by its own open_up clip): stance, seat_h, the grips (sockets) his hands go on, root ("hips": the
 # socket is the floor under his hips), stool (the seat point seat_h up from a floor socket: a stool or box under him),
-# off (where he fits from the socket: ahead, right, up of its facing; 0 where the socket is right), look (a socket).
+# off (where he fits from the socket: ahead, right, up of its facing; 0 where the socket is right), look (a socket),
+# feet ({"l"/"r": (ahead, right, up)} from the socket along its facing: the floor under that ankle, where the stance's
+# own place for the boot is in something).
 SW = {"grips": ("grip.gunner.l", "grip.gunner.r")}
 LW = {"grips": ("grip.layer.l", "grip.layer.r")}
 ST = {"stance": "stand"}
@@ -3269,7 +3278,9 @@ POSED = {
                "crew.loader": dict(ST, look="breech"), "crew.loader2": dict(ST, look="breech")},
     "Hummel": {"crew.gunner": dict(SW, stance="stand"), "commander": dict(ST), "crew.loader": dict(ST, look="breech"),
                "crew.loader2": dict(ST, look="breech")},
-    "SU76": {"crew.gunner": dict(SW, stance="sit", seat_h=0.40), "commander": dict(ST), "crew.loader": dict(ST, look="breech")},
+    "SU76": {"crew.gunner": dict(SW, stance="sit", seat_h=0.39), "commander": dict(ST), "crew.loader": dict(ST, look="breech")},
+    "SelfPropelledGun": {"crew.gunner": dict(SW, stance="sit", seat_h=0.45), "commander": dict(ST),
+                         "crew.loader": dict(ST, look="breech")},
     "M10": {"commander": dict(ST, off=(-0.15, 0.0, 0.0)), "crew.gunner": dict(stance="sit", seat_h=0.28),
             "crew.loader": dict(ST, off=(0.0, -0.03, 0.0), look="breech")},
     "M8": {"commander": dict(ST), "crew.gunner": dict(stance="sit", seat_h=0.26)},
@@ -3304,8 +3315,11 @@ def posed_call(SK, sock, spec):
     gl = SK[g[0]]["at"] if g and g[0] in SK else None
     gr = SK[g[1]]["at"] if g and g[1] in SK else None
     look = SK[spec["look"]]["at"] if spec.get("look") in SK else None
+    a0 = np.asarray(s["at"], float)
+    feet = {k: [round(float(x), 4) for x in a0 + o[0] * f + o[1] * r + np.array((0.0, 0.0, o[2]))]
+            for k, o in spec.get("feet", {}).items()} or None
     return (spec["stance"], seat_h, gl, gr, s.get("facing", (1, 0, 0))), dict(at=[round(float(x), 4) for x in at], look=look,
-                                                                              root=spec.get("root", "feet"))
+                                                                              root=spec.get("root", "feet"), feet=feet)
 
 
 def posed_checks():
@@ -3328,7 +3342,7 @@ def posed_checks():
             call = {"stance": args[0], "seat_h": args[1], "grip_l": spec.get("grips", (None, None))[0] if spec.get("grips") else None,
                     "grip_r": spec.get("grips", (None, None))[1] if spec.get("grips") else None, "root": kw["root"],
                     "at": kw["at"], "root_offset": list(spec.get("off", (0.0, 0.0, 0.0))), "stool": bool(spec.get("stool")),
-                    "look": spec.get("look")}
+                    "look": spec.get("look"), "feet": kw["feet"]}
             res[sock] = {"call": call, "check": r}
             print(f"  posed {v} {sock}: {r}", flush=True)
         out[v] = res
@@ -3513,7 +3527,7 @@ def build_picture(name, fast=False):
 ISSUES = [
     "Vehicles: the sockets' `at` is the seat's top (the M3's, the Truck's, the Hanomag's, the FlakHalftrack's and the "
     "M16's benches, drivers' and cab seats: the ray-cast lands within a few millimetres of `at`; the FlakHalftrack's, "
-    "FlakTruck's, M16's and SU76's crew.gunner too); the stood men are on the floor at their feet, the M7's and the "
+    "FlakTruck's, M16's, SU76's and SelfPropelledGun's crew.gunner too); the stood men are on the floor at their feet, the M7's and the "
     "Sexton's kneeling crew.gunner on the floor under his hips. crew.json `measure` has every socket; `posed` has every "
     "socket no clip fits, with the crew.pose call that puts a man there and his check.",
     "M3Halftrack (the 17:10 export): `gunner` stands 0.77 behind the pedestal now, the spade grips 0.40 ahead of his "
@@ -3549,9 +3563,9 @@ ISSUES = [
     "stand_load_breech).",
     "Sexton (the 12:10 export): `crew.gunner` kneels (crew.pose stance 'kneel', root 'hips'), both hands on the grips, "
     "clear (1.0 cm). Hummel: `crew.gunner` stands and leans to the handles, both hands on them (1.3 cm, one point, his "
-    "hip). SU-76: `crew.gunner` seated (seat_h 0.40) is clear, but his right hand stops 4.2 cm short of grip.gunner.r "
-    "(0.16 ahead, 0.19 right, 0.09 over the seat, by his right knee) with his left on grip.gunner.l: the traversing "
-    "handle 0.05 higher or nearer his shoulder would do. Their commanders and loaders stand clear (crew.pose).",
+    "hip). SU-76 (the 20:27 export: its seat 0.39 over the floor's top, the traversing handle 0.05 higher and the "
+    "elevating 0.03 nearer him): `crew.gunner` seated (crew.pose, seat_h 0.39) is clear (0.1 cm) with both hands on "
+    "grip.gunner.l/r (0.0 cm short). Their commanders and loaders stand clear (crew.pose).",
     "M10 (the 17:10 export): `commander` stands with his toes under a shelf 0.23 over his floor (both shins 2.7 cm into "
     "its edge, 0.04 ahead of him): 0.15 further back he is clear (crew.json `posed` has him there). `crew.loader`'s hip "
     "is 2.5 cm in the turret's wall on his right: 0.03 to the left he is clear. `crew.gunner` (his seat 0.28 over the "
@@ -3564,8 +3578,20 @@ ISSUES = [
     "however his feet are set. SdKfz222: `commander` stands 7 cm over the floor under the socket's middle (1.62), and his "
     "left boot lands on a ledge 0.18 to his left, 2.3 cm into it: the socket down to 1.62, and the ledge, want a look. "
     "ArmouredCar: `commander` takes commander_hatch with root_offset (0, 0, -0.92) (his feet 0.92 under the socket, as "
-    "its note says; the lid open by its open_up clip), but his chest and right upper arm press 1.8 cm into the hatch's "
+    "its note says; the lid open by its open_up clip), but his chest and right upper arm press 1.7 cm into the hatch's "
     "rim at its front: the opening 2 cm wider mends it.",
+    "SelfPropelledGun (the 20:27 export: its seat 0.45 over the floor's top, the water can laid lengthways against the "
+    "left wall, the traversing handle 0.05 higher and the elevating 0.03 nearer him): `crew.gunner` seated (crew.pose, "
+    "seat_h 0.45, his boots where the stance puts them) is clear (0.1 cm), his left boot 11.6 cm from the can, with both "
+    "hands on grip.gunner.l/r (0.0 cm short). The HeavyFlak's sit_handwheel_traverse/elevate do not fit him: they turn "
+    "one wheel with both hands (its hub 0.365 ahead, 0.26 to the side, 0.46 up, facing him), and he has a hand on each "
+    "of two wheels lower down (the elevating hub 0.23 ahead, 0.23 right, 0.23 up, facing sideways; the traversing 0.16 "
+    "ahead, 0.29 right, 0.12 up, tilted): as the SU-76's layer. `commander` and `crew.loader` stand clear (0.1 cm), and "
+    "stay 8 and 12 cm clear of the gun at its full run back (0.65 m, the breech face to x -0.42).",
+    "AssaultGun (the 20:10 export): `commander` takes commander_hatch with root_offset (0, 0, -0.92) (his feet 0.92 "
+    "under the socket, as its note says; the lid open by its open_up clip): clear (1.2 cm at most, the left of his "
+    "chest against the rim at 2.08, 0.13 left of the socket). Its fighting box is solid, from its floor at 1.02 to its "
+    "roof at 1.92, as the ArmouredCar's hull: what is over the rim is tested.",
     "Towed guns (the 12:08 export; the ground not modelled, the trails on it): the loaders stand clear at every gun. "
     "`crew.layer` stands in the left trail at the Pak40, ZiS3, AntiTankGun, leFH18 and 105 mm howitzer (his legs 5-10 "
     "cm into trail_l at 0.33-0.55 up, kneeling or standing; at the leFH18 and the howitzer the left wheel too). Where "
@@ -3782,7 +3808,8 @@ def write_readme(path, data, pictures):
     for v, socks in data["posed"]["vehicles"].items():
         for sn, r in socks.items():
             c, k = r["call"], r["check"]
-            st = c["stance"] + (" on a stool" if c.get("stool") else "") + (", looks at the breech" if c.get("look") == "breech" else "")
+            st = c["stance"] + (" on a stool" if c.get("stool") else "") + (", looks at the breech" if c.get("look") == "breech" else "") + \
+                "".join(f", {'left' if fk == 'l' else 'right'} boot at {tuple(fv)}" for fk, fv in (c.get("feet") or {}).items())
             g = (c["grip_l"] + ", " + c["grip_r"]) if c.get("grip_l") else "-"
             off = tuple(round(x, 2) for x in c["root_offset"]) if any(c["root_offset"]) else "-"
             n = k["points_past_1_2cm"]
