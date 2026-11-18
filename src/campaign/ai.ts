@@ -16,14 +16,14 @@ import { SUPPORT } from './support';
 import { aiBridges, aiEngineers } from './engineers';
 import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, useLift } from './navy';
 import { shoreAI } from './fleets';
-import { shoreOpen } from './history';
+import { shoreOpen, stormHeldBy } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './world';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { hashString } from '../core/rng';
-import { SIEGE, besieged, feeders, fieldCtrl, garrison, garrisonOf, greatCity, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
+import { GREAT, SIEGE, besieged, feeders, fieldCtrl, garrison, garrisonOf, greatCity, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
@@ -188,7 +188,12 @@ function campaign(g: Game, nat: string): void {
  * At the start of the month a garrison with no enemy within two marches comes out.
  */
 export function garrisons(g: Game, nat: string, post: boolean): void {
-  if (!siegeRules(g) || !g.nations[nat].atWar.length) return;
+  if (!siegeRules(g)) return;
+  if (!g.nations[nat].atWar.length) {
+    // Ruling 139 as mended (b512(f)): a garrison put in for a war that has ended comes out with the peace.
+    if (GREAT.on && !post) for (const r of g.regions) if (r.ctrl === nat && !besieged(g, r)) for (const c of garrisonOf(r).filter((c) => c.nat === nat)) takeField(g, c);
+    return;
+  }
   const near = (r: Region, far: number): boolean => {
     let ring = [r.id];
     const seen = new Set(ring);
@@ -217,10 +222,23 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
     if (great) {
       const all = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined);
       const first = (c: Corps): number => (c.kind === 'inf' ? 0 : 1);
+      // The field first (b512(e)): while the field can be held against the enemy next door, only the corps it can
+      // spare go inside. Where it cannot be held, the city is filled to its room, a lone corps and all.
+      let threat = 0;
+      for (const j of r.nb) {
+        const e = g.regions[j];
+        if (!atWar(g, nat, ctl(g, e))) continue;
+        for (const p of hostileUnits(g, e, nat).filter((u) => u.kind !== 'fort').map((u) => atkPower(g, u)).sort((a, b) => b - a).slice(0, frontage(r))) threat += p;
+      }
+      const need = (SIEGE.ai.great?.field ?? 0) * threat;
+      let held = friendlyUnits(g, r, nat).reduce((s, u) => s + defPower(g, u, r), 0);
+      const holds = held >= need;
       let have = inside.length;
       for (const c of all.sort((a, b) => first(a) - first(b) || corpsBase(g, a) - corpsBase(g, b))) {
         if (have >= want) break;
-        if (garrison(g, c)) have++;
+        const worth = defPower(g, c, r);
+        if (holds && held - worth < need) continue;
+        if (garrison(g, c)) { have++; held -= worth; }
       }
       continue;
     }
@@ -276,6 +294,10 @@ function sieges(g: Game, nat: string, after = false): void {
     // Off the march it storms only what it is sure to carry; after a month round the place, what it probably will;
     // and when the siege has dragged on, it settles for less and at last for a gamble.
     const need = sat >= SIEGE.ai.last.after ? SIEGE.ai.last.odds : sat >= 2 ? SIEGE.ai.late : sat >= 1 ? SIEGE.ai.assault : SIEGE.ai.hasty;
+    // By the book (b509(c)): before Leningrad a computer Germany, and any computer ally round the town with it, keeps
+    // the ring and does not storm. Hunger may still take the place.
+    const heldBy = stormHeldBy(g, r.name);
+    const noStorm = heldBy !== null && (heldBy === nat || allied(g, nat, heldBy));
     // Allies standing round the same town go in with it: besiegers who each fall short alone storm together. The
     // player's own corps are his to order, and a corps lent to another army keeps to that army.
     const friends = (): Corps[] => r.units.filter((c) => c.nat !== nat && c.nat !== g.human && !c.dead && c.kind !== 'fort' && c.joint === undefined && c.leave === undefined && allied(g, c.nat, nat) && atWar(g, c.nat, r.ctrl));
@@ -293,7 +315,7 @@ function sieges(g: Game, nat: string, after = false): void {
     // three marches off come too, unless they stand on a front of their own, and are counted while on their way.
     const outside = (): number => mine().reduce((s, c) => s + c.divs * c.str, 0);
     const shut = (): boolean => ringClosed(g, r);
-    if (!after && prize && (now < need || !shut())) {
+    if (!after && prize && ((!noStorm && now < need) || !shut())) {
       const far = hops(g, r.id, (x) => within(x) && allied(g, nat, fieldCtrl(g, x)));
       const front = (x: Region): boolean => x.nb.some((j) => atWar(g, nat, fieldCtrl(g, g.regions[j])));
       const call = g.corps
@@ -305,7 +327,7 @@ function sieges(g: Game, nat: string, after = false): void {
       const a0 = force.length ? assess(g, force, r, { town: true }) : null;
       let coming = 0, power = 0, men = 0;
       for (const c of call) {
-        const enough = (a0 && a0.D > 0 ? Math.max(now, (a0.A + power) / a0.D) >= need : now >= need) && (shut() || outside() + men >= SIEGE.ring * inside);
+        const enough = (noStorm || (a0 && a0.D > 0 ? Math.max(now, (a0.A + power) / a0.D) >= need : now >= need)) && (shut() || outside() + men >= SIEGE.ring * inside);
         if (enough || mine().filter((u) => u.kind !== 'eng').length + coming >= STACK) break;
         if (far[c.reg] === 1) {
           if (!hasRoom(g, r, c)) continue;
@@ -318,7 +340,7 @@ function sieges(g: Game, nat: string, after = false): void {
       }
     }
     if (!besieged(g, r)) continue;
-    if (now >= need && storm(g, pool(), r)?.taken) continue;
+    if (!noStorm && now >= need && storm(g, pool(), r)?.taken) continue;
     if (!besieged(g, r) || after) continue;
     // Not stormed: the siege goes on. Round a prize every corps stays; round a small place held by its guard, enough to shut it in.
     // A port that ships can feed is not starved by waiting: after a season round one only the ring stays, and the
@@ -1495,7 +1517,7 @@ function objectivePull(g: Game, nat: string, objs: string[]): Float32Array {
   return pull;
 }
 
-const atkPower = (g: Game, c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk;
+export const atkPower = (g: Game, c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk;
 
 /** A corps that may go onto this enemy-held ground: guns and engineers follow a fighting corps there, they never lead (ruling 211(a), the grand campaign). */
 const mayEnter = (g: Game, c: Corps, to: Region): boolean => !gunsRule(g) || fights(c) || gunsMayFollow(g, c, to);
@@ -2041,7 +2063,7 @@ function redeploy(g: Game, nat: string, ph: PlanPhase, enemies: Set<string>): vo
 
 // ---- Defend ---------------------------------------------------------------------------
 
-function defPower(g: Game, c: Corps, r: Region): number {
+export function defPower(g: Game, c: Corps, r: Region): number {
   return corpsBase(g, c) * KIND[c.kind].def * TERRAIN_DEF[r.terrain];
 }
 

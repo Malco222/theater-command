@@ -18,6 +18,7 @@ import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Kind, type Region } from './types';
 import { barred, groundRules, whyBarred } from './ground';
 import { allied, atWar, headline } from './game';
+import { halted } from './history';
 
 export interface River { name: string; /** The course in map units. */ pts: [number, number][]; /** The same course as [latitude, longitude]. */ ll: [number, number][] }
 /** A river between two neighbouring regions (a is the lower id), and where on the map its bridge stands. */
@@ -82,7 +83,8 @@ export function downBetween(g: Game, a: number, b: number): boolean {
 export const noCrossing = (g: Game, kind: Kind, from: number, to: number): boolean => WHEELS.has(kind) && downBetween(g, from, to);
 
 /** Whether a corps cannot go from where it stands (or from another region) into a neighbour: ground too steep, or bridges down. */
-export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id);
+// (And ground a computer staff does not go into by the book: b512(h), history.json 'restraint'.)
+export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id) || halted(g, c.nat, to.name);
 
 /** The plain reason a corps cannot make that move, for either interface to show, or null if it can. */
 export function whyBlocked(g: Game, c: Corps, to: Region, from = c.reg): string | null {
