@@ -25,6 +25,7 @@ import type { SeaClass, SeaShips, SeaSpeed, SeaTicket, SeaUnit } from '../sea/ty
 import { andList, repairLines } from '../sea/words';
 import { toField, toScreen, type Camera } from './draw';
 import { aircraftOf, aircraftSaid, drawSea, layoutSea, live, PICK, pieceAt, piecesIn, shipSvg, shownName, sideColours, takeEvents, type SeaScene } from './sea-draw';
+import { seaWhere } from '../../campaign/sea-words';
 
 const KEY_GUARD = 0.5;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -180,7 +181,7 @@ function startBattle(t: SeaTicket, from: FromCampaign | null): void {
   sc.colours = sideColours(t.att.color, t.def.color);
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
   S.asking = false; S.handing = false; S.closing = true; S.chasing = false; S.chaseByHand = false; S.approachByHand = false; S.tag = null;
-  S.dispatch = { t: 0, what: 'contact', text: `Your fleet has the enemy in sight in the ${t.place.zoneName}: give your orders, then press Space to begin.` };
+  S.dispatch = { t: 0, what: 'contact', text: `Your fleet has the enemy in sight ${seaWhere(t.place.zoneName)}: give your orders, then press Space to begin.` };
   S.dispatchAge = 0;
   guard();
   const mine = t[sc.me], theirs = t[sc.me === 'att' ? 'def' : 'att'];

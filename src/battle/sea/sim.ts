@@ -24,6 +24,7 @@ import { SEA_CUES } from './cues';
 import { none, seaLevel, seaRatio, shipsIn, shipWords, sunkCaps } from './result';
 import { headCount, hurtAfloat, ofFleet, theFleet } from './words';
 import type { SeaClass, SeaCommand, SeaOrder, SeaShips, SeaSpeed, SeaTicket, SeaUnit } from './types';
+import { seaWhat, seaWhere } from '../../campaign/sea-words';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 const live = (u: SeaUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
@@ -906,7 +907,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const sunkOf = (side: Side): SeaShips => { const s = none(); for (const f of this.ticket.place.fleets) if (f.side === side) for (const c of ['bb', 'cv', 'ca', 'dd'] as SeaClass[]) s[c] += this.fleetLoss.sunk[f.id][c]; return s; };
     const sa = sunkOf('att'), sd = sunkOf('def'), a = this.ticket.att.adj, d = this.ticket.def.adj;
     const lines = [
-      `${this.adj(winner)} ships hold the ${this.ticket.place.zoneName}.`,
+      `${this.adj(winner)} ships hold ${seaWhat(this.ticket.place.zoneName)}.`,
       // Handed to the staff, the rules sink the rest as they settle it, so this line says only what went down in sight.
       !toDice ? `${a} losses: ${shipWords(sa)} sunk. ${d} losses: ${shipWords(sd)} sunk.`
         : shipsIn(sa) + shipsIn(sd) === 0 ? 'No ship had gone down on either side when the staff took over.'
@@ -916,12 +917,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
     // whole action before a shot told; "what you had won stays won" only where the field had moved the hander's way by
     // 5 points or more, their share of the balance at the hand-over against the card's (the design director, 20:51 UTC).
     if (toDice) {
-      const zone = this.ticket.place.zoneName, by = this.handedBy ?? 'att';
+      const zone = seaWhere(this.ticket.place.zoneName), by = this.handedBy ?? 'att';
       const k = this.ticket.reckoning.odds, now = (k * (1 - this.lostShare('att'))) / Math.max(1e-6, 1 - this.lostShare('def'));
       const share = (o: number): number => (by === 'att' ? o : 1) / (1 + o);
-      lines.push(!this.fired() ? `The staff settled the whole action in the ${zone}: no shot had been fired.`
-        : share(now) - share(k) >= 0.05 ? `The staff settled the rest of the action in the ${zone} from where it stood: what you had won stays won.`
-          : `The staff settled the rest of the action in the ${zone} from where it stood.`);
+      lines.push(!this.fired() ? `The staff settled the whole action ${zone}: no shot had been fired.`
+        : share(now) - share(k) >= 0.05 ? `The staff settled the rest of the action ${zone} from where it stood: what you had won stays won.`
+          : `The staff settled the rest of the action ${zone} from where it stood.`);
     }
     // The ships each fleet took home badly hurt (b458, 3): those that went out of the fight burning, and those still
     // afloat at half their hull or less, on the field or gone home.

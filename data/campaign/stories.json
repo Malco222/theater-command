@@ -162,7 +162,7 @@
     {
       "id": "seavictory", "for": "fleet", "name": "Battle honour", "title": "{place} {year}", "needs": ["capital", 1], "each": true,
       "edge": { "all": 0.04 }, "fame": 3, "ribbon": ["#12305a", "#f0f0f0"],
-      "cite": "{unit} brought an enemy fleet to action in the {place} and sank one of its great ships.",
+      "cite": "{unit} brought an enemy fleet to action {where} and sank one of its great ships.",
       "real": "In May 1941 the Royal Navy hunted the battleship Bismarck across the North Atlantic and sank her some three hundred miles off Brest. The ships that took part carry the battle honour 'Bismarck 1941'."
     },
     {

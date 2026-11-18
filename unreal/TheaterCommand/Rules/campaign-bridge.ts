@@ -119,6 +119,7 @@ import { turnToDate } from '../../../src/core/ticket';
 import { TRADE as TRADE_RULES, dealsOf as tradeDealsOf, housesOf as tradeHousesOf, tradePath as tradePathOf, tradeRules as tradeIsOn, whyNoTrade as whyNoTradeWith } from '../../../src/campaign/trade';
 import { civicSum as civicSumOf } from '../../../src/campaign/buildings';
 import type { BattleReport, Build, Corps, Game, Kind, Posture, Region } from '../../../src/campaign/types';
+import { seaWhere } from '../../../src/campaign/sea-words';
 
 let g: Game | null = null;
 /** The player's nation, once it has been beaten. The war goes on with nobody at the controls. */
@@ -994,7 +995,7 @@ function seaFightsSince(s: Game, since: number): { zones: number[]; notes: strin
   } catch { /* a fight whose losses cannot be read is told without them */ }
   return {
     zones: [...new Set(fresh.map((r) => r.zone))],
-    notes: fresh.map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.${lostIn.has(r.id) ? ` ${lostIn.get(r.id)}` : ''}`),
+    notes: fresh.map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight ${seaWhere(r.zoneName)}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.${lostIn.has(r.id) ? ` ${lostIn.get(r.id)}` : ''}`),
     mine: fresh.some((r) => r.attNat === s.human || r.defNat === s.human),
     sunk,
   };
@@ -2664,7 +2665,7 @@ function endMonth() {
       const adj = (nat: string): string => s.nations[nat]?.adj ?? nat;
       steps.push({
         nat: late[0].attNat, taken: [], battles: [], focus: [], seas: zones, sunk: all.sunk.filter((x) => zones.includes(x.zone)), mine: late.some((r) => r.attNat === s.human || r.defNat === s.human),
-        note: late.slice(0, 2).map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`).join(' ') || all.notes[0] || '',
+        note: late.slice(0, 2).map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight ${seaWhere(r.zoneName)}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`).join(' ') || all.notes[0] || '',
         view: view(),
       });
     }
@@ -4775,7 +4776,8 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
       const name = t?.name ?? fallback;
       if (kind !== 'fleet') return { title: name, who: '' };
       const sea = (s.seas[t?.zone ?? -1]?.name ?? '').replace(/^the /i, '');
-      const cut = name.indexOf(' in the ');
+      // ("Japanese ships in the Coral Sea", "... off the Azores", "... in Hudson Bay": the sea words' where forms.)
+      const cut = name.search(/ (?:in|off) /);
       return { title: sea || name, who: cut > 0 ? name.slice(0, cut) : name };
     };
     const card = {

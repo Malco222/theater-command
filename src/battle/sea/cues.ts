@@ -1,7 +1,8 @@
 // What a fleet action sounds like: the battle pack's real recordings (/mnt/project-files/sound/battle-pack/, approved by
 // Brian 18 November; its README's table "The sea" follows this file) that answer what happens at sea. The sim names
-// them on its events; the 3D game plays them. A ship going down has no recording yet: 'ship_sinking' stays named, and
-// silent, until one comes, as the ship models name it. A torpedo_hit waits for the torpedo run.
+// them on its events; the 3D game plays them. 'ship_sinking' passed Brian's ear at 14:49Z and now sounds. He cut
+// 'ship_horn', so a fleet breaking off, and the fleet's signal, name no sound until a new horn passes his ear. The
+// torpedo and depth charge sounds he passed then wait for orders the field does not have yet (the torpedo run).
 
 import type { Act, FieldEvent } from '../core/types';
 
@@ -13,8 +14,7 @@ export const SEA_CUES: Partial<Record<FieldEvent['what'], string>> = {
   'sea:air': 'bomb_stick_01',
   'sea:sunk': 'ship_sinking',
   'sea:burning': 'fire_start',
-  routing: 'ship_horn',
-  broken: 'ship_horn',
+  // A fleet breaking off: silent until a new horn passes Brian's ear (he cut 'ship_horn', 14:49Z).
   // The action ends: two bells (the README: "a fleet signals; action stations; the action ends").
   end: 'ship_bells_two',
 };

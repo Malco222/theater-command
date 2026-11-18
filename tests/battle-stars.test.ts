@@ -301,7 +301,7 @@ describe('the cards', () => {
         { name: 'The second action in the North Sea', month: 'May 1940', turn: 9, zone: nsea, ships: 1, of: 3, line: 'The second action in the North Sea, May 1940 (1 of 3 ships)' },
       ],
       words: [
-        'The most decorated of these ships has 2 battle stars, one for each sea battle it came through on the winning side.',
+        'The most decorated of these ships has 2 battle stars, one for each action it came through on the winning side.',
         'The action in the North Sea, May 1940 (2 of 3 ships)',
         'The second action in the North Sea, May 1940 (1 of 3 ships)',
       ],
@@ -314,15 +314,27 @@ describe('the cards', () => {
     home.stars = { bb: [[0, 1, 2, 3, 4, 5, 6]] };
     const bb = starRow(g, home, 'bb')!;
     expect([bb.most, bb.silver, bb.bronze]).toEqual([7, 1, 2]);
-    expect(bb.words[0]).toBe('This ship has 7 battle stars, one for each sea battle it came through on the winning side.');
-    expect(bb.words[1]).toBe('A silver star stands for 5 bronze stars.');
+    expect(bb.words[0]).toBe('This ship has 7 battle stars, one for each action it came through on the winning side.');
+    expect(bb.words[1]).toBe('A silver star stands for five bronze stars.');
     expect(bb.battles.map((b) => b.line)).toEqual([
       'The action in the Norwegian Sea, November 1939', 'The action in the Norwegian Sea, December 1939', 'The action in the Norwegian Sea, January 1940',
       'The action in the Norwegian Sea, February 1940', 'The action in the Norwegian Sea, March 1940', 'The action in the Norwegian Sea, April 1940',
       'The action in the Norwegian Sea, May 1940',
     ]);
     home.stars = { bb: [[0]] };
-    expect(starRow(g, home, 'bb')!.words[0]).toBe('This ship has 1 battle star, for a sea battle it came through on the winning side.');
+    expect(starRow(g, home, 'bb')!.words[0]).toBe('This ship has a battle star, for an action it came through on the winning side.');
+    // A best of one on a card of several ships (the UI director, 13:29Z): "a battle star", as on one ship.
+    home.ships.bb = 2;
+    home.stars = { bb: [[0], []] };
+    expect(starRow(g, home, 'bb')!.words[0]).toBe('The most decorated of these ships has a battle star, for an action it came through on the winning side.');
+    // A sea named for the land beside it is "off" that land, in the action's name and its line.
+    g.seas[norw] = { ...g.seas[norw], name: 'Azores Waters' };
+    expect(starRow(g, home, 'bb')!.battles[0].line).toBe('The action off the Azores, November 1939 (1 of 2 ships)');
+    g.stories.seaActions.push([3, norw]);
+    home.stars = { bb: [[0, 7], []] };
+    expect(starRow(g, home, 'bb')!.battles.map((b) => b.name)).toEqual(['The action off the Azores', 'The second action off the Azores']);
+    home.ships.bb = 1;
+    home.stars = { bb: [[0]] };
     // Nothing on the card is taken from the stars but the row itself: the fleet's strength is the same without them.
     const power = fleetCard(g, home).power;
     delete home.stars;

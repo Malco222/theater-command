@@ -16,6 +16,7 @@ import { capOver, deckWorth, syncWings } from './carriers';
 import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { bookSeaAction, loseStars, mendStars } from './stars';
+import { seaHead, seaIs, seaPlural, seaWhat, seaWhere } from './sea-words';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
@@ -372,7 +373,8 @@ export function opensAt(g: Game, z: number, nat: string): number {
 export function closedLine(g: Game, z: number, nat: string): string {
   const e = seaSide(g, z, nat, true), own = seaSide(g, z, nat, false);
   const foeCoast = g.seas[z].coast.some((id) => { const n = g.nations[g.regions[id].ctrl]; return !!n && n.alive && atWar(g, g.regions[id].ctrl, nat) && skyOver(g, id) === null; });
-  return `The ${g.seas[z].name} is closed to your troopships: the enemy has ${round(e.total)} there to your ${round(own.total)}, and ${opensAt(g, z, nat)} would open it. Put a fleet to sea there, or ${foeCoast && e.air >= 0.5 ? "win the sky over the enemy's coast on it" : "beat the enemy's fleets in it"}.`;
+  const sea = g.seas[z].name, it = seaPlural(sea) ? 'them' : 'it';
+  return `${seaHead(sea)} ${seaIs(sea)} closed to your troopships: the enemy has ${round(e.total)} there to your ${round(own.total)}, and ${opensAt(g, z, nat)} would open ${it}. Put a fleet to sea there, or ${foeCoast && e.air >= 0.5 ? `win the sky over the enemy's coast on ${it}` : `beat the enemy's fleets in ${it}`}.`;
 }
 
 /** Whether a nation's ships may pass between two neighbouring seas: most are open water, a few are straits someone holds. */
@@ -592,7 +594,7 @@ export function laneBar(g: Game, nat: string, from: Region, to: Region, surprise
 /** The lane's refusal in words. (The page gives a shut strait its own sentence, with its holder: gates.ts.) */
 function laneWhy(g: Game, nat: string, from: Region, to: Region, bar: LaneBar): string {
   if (bar.kind === 'sea') return closedLine(g, bar.sea, nat);
-  if (bar.kind === 'far') return `${to.name} is too far for a landing from ${from.name}: troopships cross ${NAVY.landing.range} seas at most, and ${bar.round !== undefined ? `the safe way round the ${g.seas[bar.round].name} is longer` : bar.seas > NAVY.landing.range ? `this is ${bar.seas}` : 'the safe way round is longer'}.`;
+  if (bar.kind === 'far') return `${to.name} is too far for a landing from ${from.name}: troopships cross ${NAVY.landing.range} seas at most, and ${bar.round !== undefined ? `the safe way round ${seaWhat(g.seas[bar.round].name)} is longer` : bar.seas > NAVY.landing.range ? `this is ${bar.seas}` : 'the safe way round is longer'}.`;
   if (bar.kind === 'gate') return `The ${g.gates[bar.gate].name} ${/s$/.test(g.gates[bar.gate].name) ? 'are' : 'is'} shut to your ships, and no other way leads to ${to.name}.`;
   return `No sea joins ${from.name} to ${to.name}.`;
 }
@@ -854,12 +856,12 @@ export function seaHold(g: Game, nat: string, path: number[], to: Region): SeaHo
   const months = monthsUnfed();
   const name = g.seas[sea].name;
   const lines: TicketLine[] = [];
-  if (e.ships >= 0.5) lines.push({ label: `Enemy ships in the ${name} now`, value: round(e.ships), effect: 'at sea there already' });
+  if (e.ships >= 0.5) lines.push({ label: `Enemy ships ${seaWhere(name)} now`, value: round(e.ships), effect: 'at sea there already' });
   if (come >= 0.5) lines.push({ label: 'Enemy fleets that could come', value: round(come), effect: 'at their full strength: every fleet within a month of that sea that his admirals would send' });
   if (kept >= 0.5) lines.push({ label: 'Enemy fleets your aircraft keep away', value: round(kept), effect: 'no admiral takes his fleet under your bombers, except to save his own homeland' });
   if (shy >= 0.5) lines.push({ label: 'Enemy fleets that will not risk it', value: round(shy), effect: 'none of them will face what you have in that sea, while it stays there' });
-  if (e.air >= 0.5) lines.push({ label: `Enemy aircraft over the ${name}`, value: round(e.air), effect: 'count against the supply ships too' });
-  lines.push({ label: `Your ships and aircraft in the ${name}`, value: `${round(own.ships)} and ${round(own.air)}`, effect: need <= 0 ? 'the enemy has too little in reach to close it' : contested ? `more than the ${round(need)} that keep it open today, and fewer than the ${round(foe)} he can bring` : open ? `more than the ${round(need)} that keep it open` : `${round(need)} would keep it open: one for every ${NAVY.closed.ratio} of his` });
+  if (e.air >= 0.5) lines.push({ label: `Enemy aircraft over ${seaWhat(name)}`, value: round(e.air), effect: 'count against the supply ships too' });
+  lines.push({ label: `Your ships and aircraft ${seaWhere(name)}`, value: `${round(own.ships)} and ${round(own.air)}`, effect: need <= 0 ? 'the enemy has too little in reach to close it' : contested ? `more than the ${round(need)} that keep it open today, and fewer than the ${round(foe)} he can bring` : open ? `more than the ${round(need)} that keep it open` : `${round(need)} would keep it open: one for every ${NAVY.closed.ratio} of his` });
   lines.push({
     label: 'The sea behind the beach', value: contested ? 'contested' : open ? 'stays open' : 'can be closed',
     effect: contested ? 'yours today, but he can bring enough to fight you for it' : open ? 'the supply ships reach the force' : island ? `cut off, the force can hold out for about ${numberWord(months)} months on what it carries` : 'the force ashore would be cut off from its supplies',
@@ -886,13 +888,13 @@ export function crossingAccount(g: Game, nat: string, path: number[], to: Region
   // Where the fight for the sky over the beach could be flown from, if anywhere.
   const fly = sky === 'ours' ? null : reach(to.id);
   const skyWon = fly ? withSky(g, to.id, nat, () => landingRisk(g, nat, path, to)) : null;
-  const lines: TicketLine[] = [{ label: 'The way', value: path.map((z, i) => (i ? `then the ${name(z)}` : `the ${name(z)}`)).join(', '), effect: path.length > 1 ? 'every sea crossed is a chance to be found' : undefined }];
+  const lines: TicketLine[] = [{ label: 'The way', value: path.map((z, i) => (i ? `then ${seaWhat(name(z))}` : seaWhat(name(z)))).join(', '), effect: path.length > 1 ? 'every sea crossed is a chance to be found' : undefined }];
   for (const d of ds) {
-    if (d.ships >= 0.5) lines.push({ label: `Enemy ships at sea in the ${name(d.z)}`, value: round(d.ships), effect: 'hunt the troopships' });
-    if (d.air >= 0.5) lines.push({ label: `Enemy aircraft over the ${name(d.z)}`, value: round(d.air), effect: 'count for half against ships under way' });
+    if (d.ships >= 0.5) lines.push({ label: `Enemy ships at sea ${seaWhere(name(d.z))}`, value: round(d.ships), effect: 'hunt the troopships' });
+    if (d.air >= 0.5) lines.push({ label: `Enemy aircraft over ${seaWhat(name(d.z))}`, value: round(d.air), effect: 'count for half against ships under way' });
     if (d.last && d.sortie >= 0.5) lines.push({ label: 'Enemy fleets that will come out', value: round(d.sortie), effect: 'from harbours on these seas and the seas next to them' });
     if (d.last) lines.push({ label: `The sky over ${to.name}`, value: sky === 'ours' ? 'yours' : sky === 'denied' ? 'held by enemy fighters' : 'nobody holds it', effect: sky === 'ours' ? `keeps ${Math.round((1 - AIR.sky.seaFoe) * 100)}% of them off the troopships` : sky === 'denied' ? 'no invasion fleet can cross under them' : fly ? 'no help to either side' : 'out of reach of your fighters from any airfield you hold' });
-    if (d.hunters > 0 || d.last) lines.push({ label: `Your ships and aircraft in the ${name(d.z)}`, value: `${round(d.own.ships)} and ${round(d.own.air)}`, effect: d.own.total >= 0.5 ? 'each counts double against the hunters' : 'nothing covers the troopships' });
+    if (d.hunters > 0 || d.last) lines.push({ label: `Your ships and aircraft ${seaWhere(name(d.z))}`, value: `${round(d.own.ships)} and ${round(d.own.air)}`, effect: d.own.total >= 0.5 ? 'each counts double against the hunters' : 'nothing covers the troopships' });
   }
   lines.push({ label: 'Caught at sea', value: `${Math.round(risk * 100)} in 100`, effect: risk > 0 ? `about ${Math.round(risk * NAVY.intercept.loss * 100)}% of the men lost` : 'nothing is in a position to stop the crossing' });
   const helps: CrossingHelp[] = [];
@@ -903,7 +905,7 @@ export function crossingAccount(g: Game, nat: string, path: number[], to: Region
     const foes = ds.some((d) => d.ships >= 0.5 || d.sortie >= 0.5);
     const tell = (id: CrossingHelp['id'], text: string, r: number): void => { if (r < risk - 0.005) helps.push({ id, text, risk: r }); };
     if (fly && skyWon !== null) tell('sky', fly.how === 'now' ? `Win the sky over ${to.name} with a fight for the sky flown by your fighters` : `Bring fighters up to the airfields of ${g.regions[fly.base].name} and win the sky over ${to.name}`, skyWon);
-    if (more >= 1) tell('sea', `Send ${cover.length === 1 ? cover[0].name : `your ${cover.length} fleets in reach`} to patrol the ${name(worst.z)}`, caughtIn(seaDangers(g, nat, path, to, { more, at: worst.z })));
+    if (more >= 1) tell('sea', `Send ${cover.length === 1 ? cover[0].name : `your ${cover.length} fleets in reach`} to patrol ${seaWhat(name(worst.z))}`, caughtIn(seaDangers(g, nat, path, to, { more, at: worst.z })));
     if (foes) tell('fleets', 'Beat the enemy fleets within reach, or strike them in harbour, so that none comes out', caughtIn(seaDangers(g, nat, path, to, { beaten: true })));
     if (helps.length > 1) {
       const rest = (): number => caughtIn(seaDangers(g, nat, path, to, { more: more >= 1 ? more : 0, at: worst.z, beaten: foes }));
@@ -1059,7 +1061,7 @@ function lookAcross(g: Game, nat: string, from: Region, to: Region, reach: Retur
   const account = crossingAccount(g, nat, path, to, reach);
   const barred = n.sealift <= 0 ? 'lift' : shut >= 0 ? 'sea' : account.sky === 'denied' ? 'sky' : null;
   const bar = barred === 'lift' ? `${n.name} has no shipping for a landing. Troopships are laid down in the shipyards.`
-    : barred === 'sea' ? `The ${g.seas[shut].name} is closed to your troopships: the enemy is much the stronger there.`
+    : barred === 'sea' ? `${seaHead(g.seas[shut].name)} ${seaIs(g.seas[shut].name)} closed to your troopships: the enemy is much the stronger there.`
     : barred === 'sky' ? `${g.nations[to.ctrl].adj} fighters hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`
     : null;
   return { from, to, path, bar, barred, account, ...(barred === 'sea' ? { shut } : {}) };
@@ -1440,7 +1442,7 @@ export function huntSubs(g: Game, nat: string): Record<number, number> {
     const who = groups.length ? `Destroyers of the ${groups[0].name}` : h.fleets.length ? `The escorts of the ${h.fleets[0].name}` : `${g.nations[nat].adj} aircraft`;
     const told = !g.human || g.human === nat || allied(g, g.human, nat) || quarry.some((f) => f.nat === g.human);
     const subsSunk = `${sunk} ${g.nations[quarry[0].nat].adj} submarine${sunk === 1 ? '' : 's'}`;
-    if (told) routineNews(g, `hunt:${nat}:${z}`, 'battle', `${who} sink ${subsSunk} in the ${zone.name}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? '' : 's'}` : ''}.`, `${subsSunk} sunk in the ${zone.name}`, nat, undefined, { arm: 'sea', won: nat, lost: quarry[0].nat });
+    if (told) routineNews(g, `hunt:${nat}:${z}`, 'battle', `${who} sink ${subsSunk} ${seaWhere(zone.name)}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? '' : 's'}` : ''}.`, `${subsSunk} sunk ${seaWhere(zone.name)}`, nat, undefined, { arm: 'sea', won: nat, lost: quarry[0].nat });
   }
   return out;
 }
@@ -1476,7 +1478,7 @@ function torpedoes(g: Game, nat: string): void {
     f.ships[cls]--; f.lost[cls]++;
     loseStars(f, cls, 1);
     f.ready = Math.max(0, f.ready - 0.05);
-    headline(g, 'battle', `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of the ${f.name} in the ${g.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, undefined, { arm: 'sea', lost: nat });
+    headline(g, 'battle', `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of the ${f.name} ${seaWhere(g.seas[f.zone].name)}: the fleet has too few destroyers to screen its heavy ships.`, nat, undefined, { arm: 'sea', lost: nat });
   }
 }
 
@@ -1507,7 +1509,7 @@ function airAttack(g: Game, f: Fleet): void {
   // Carrier fighters on patrol over the fleet keep a share of them off it (the grand campaign).
   const sunk = sinkShips(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer) * (1 - capOver(g, f)), seaRng(g, `air:${f.id}`), SURFACE);
   f.ready = Math.max(0, f.ready - 0.1);
-  if (shipCount(sunk)) headline(g, 'battle', `Bombers sink ${shipList(sunk)} of the ${f.name} in the ${g.seas[f.zone].name}.`, f.nat, undefined, { arm: 'air', lost: f.nat });
+  if (shipCount(sunk)) headline(g, 'battle', `Bombers sink ${shipList(sunk)} of the ${f.name} ${seaWhere(g.seas[f.zone].name)}.`, f.nat, undefined, { arm: 'air', lost: f.nat });
 }
 
 /** How much of its raiding strength a fleet at sea brings against cargoes: all of it when it is raiding, part when it is on patrol, none on other work. */
@@ -1714,7 +1716,7 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     const names = (fs: Fleet[]): string => { const l = fs.map((f) => `the ${f.name}`); return l.length === 1 ? l[0] : `${l.slice(0, -1).join(', ')} and ${l[l.length - 1]}`; };
     if (A >= NAVY.battle.evadeAt * D && rng.chance(NAVY.battle.evade)) {
       for (const f of met) sail(g, f, f.home, 'port');
-      headline(g, 'event', `${cap(names(met))} ${met.length === 1 ? 'declines' : 'decline'} battle in the ${zone.name} and ${met.length === 1 ? 'makes' : 'make'} for port.`, met[0].nat, undefined, { arm: 'sea', won: nat, lost: met[0].nat });
+      headline(g, 'event', `${cap(names(met))} ${met.length === 1 ? 'declines' : 'decline'} battle ${seaWhere(zone.name)} and ${met.length === 1 ? 'makes' : 'make'} for port.`, met[0].nat, undefined, { arm: 'sea', won: nat, lost: met[0].nat });
       continue;
     }
     const att = mine.map(sideOf), def = met.map(sideOf);
@@ -1761,7 +1763,7 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     // Battle stars (b477): every ship of the winning fleets still afloat earns this action, on the dice or on the field.
     // A record only: it draws no dice and changes nothing that is fought.
     bookSeaAction(g, z, win);
-    headline(g, 'battle', `${cap(names(win))} ${win.length === 1 ? 'defeats' : 'defeat'} ${names(lose)} in the ${zone.name}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ''}.`, win[0].nat, undefined, { arm: 'sea', won: win[0].nat, lost: lose[0].nat });
+    headline(g, 'battle', `${cap(names(win))} ${win.length === 1 ? 'defeats' : 'defeat'} ${names(lose)} ${seaWhere(zone.name)}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ''}.`, win[0].nat, undefined, { arm: 'sea', won: win[0].nat, lost: lose[0].nat });
   }
   return out;
 }

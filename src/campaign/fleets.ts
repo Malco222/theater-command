@@ -23,6 +23,7 @@ import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules
 import { townName } from './towns';
 import { joinStars, splitStars, starRow, type StarRow } from './stars';
 import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance } from './types';
+import { seaWhat, seaWhere } from './sea-words';
 
 // Read straight from the data, so that nothing here depends on the order the modules are loaded in.
 const B = (fleetData as unknown as typeof FLEETS).bombard;
@@ -93,12 +94,13 @@ export const gunWeight = (g: Game, f: Fleet): number => gunsRaw(f.ships) * quali
 
 /** What a fleet is doing, in a phrase. */
 export function fleetDoing(g: Game, f: Fleet): string {
-  const sea = g.seas[f.zone]?.name ?? 'the sea';
+  const sea = g.seas[f.zone]?.name;
+  const where = sea ? seaWhere(sea) : 'at sea', what = sea ? seaWhat(sea) : 'the sea';
   if (!atSea(f)) return `In harbour at ${f.port}`;
-  if (f.stance === 'raid') return `Raiding shipping in the ${sea}`;
-  if (f.stance === 'hunt') return `Hunting submarines in the ${sea}`;
+  if (f.stance === 'raid') return `Raiding shipping ${where}`;
+  if (f.stance === 'hunt') return `Hunting submarines ${where}`;
   if (f.stance === 'escort') return `Escorting ${seaRoutes(g).find((r) => r.id === f.lane)?.name ?? 'a shipping lane'}`;
-  return `Patrolling the ${sea}`;
+  return `Patrolling ${what}`;
 }
 
 /** A fleet as both interfaces show it: its admiral, where it is and what it is doing, and its ships as cards. */
@@ -287,7 +289,7 @@ export function whyNotBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, 
   if (!seaWar(g)) return 'Fleets shell a coast only in the grand campaign.';
   if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
   if (!atSea(f)) return `The ${f.name} is in harbour. Send it to sea off the coast first.`;
-  if (!r.seas.includes(f.zone)) return `${r.name} is not on the ${g.seas[f.zone].name}, where the ${f.name} is.`;
+  if (!r.seas.includes(f.zone)) return `The ${f.name} is ${seaWhere(g.seas[f.zone].name)}, and ${r.name} is not on that sea.`;
   if (!atWar(g, f.nat, r.ctrl)) return `${r.name} is not in enemy hands.`;
   if (gunsRaw(f.ships) < B.least) return `The ${f.name} has too few heavy guns to shell a coast: that is work for battleships and cruisers.`;
   if (f.shelled === g.turn) return `The ${f.name} has already shelled a coast this month.`;
@@ -420,8 +422,8 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
   g.shoreReports.push(rep);
   const adj = g.nations[defNat].adj;
   const news = what === 'troops'
-    ? `The ${f.name} shells the ${adj} troops at ${r.name} from the ${g.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
-    : what === 'town' ? `The ${f.name} shells the defences of ${townName(r)} from the ${g.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
+    ? `The ${f.name} shells the ${adj} troops at ${r.name} from ${seaWhat(g.seas[f.zone].name)}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
+    : what === 'town' ? `The ${f.name} shells the defences of ${townName(r)} from ${seaWhat(g.seas[f.zone].name)}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
     : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`;
   // The same ships shelling the same shore month after month are one line of the month's summary; a ship lost is news.
   if (shipCount(sunk)) headline(g, 'battle', news, f.nat, r.id, { arm: 'sea', won: defNat, lost: f.nat });

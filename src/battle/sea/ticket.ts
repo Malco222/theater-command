@@ -15,6 +15,7 @@ import type { ForceTicket, Side, SideTicket } from '../core/types';
 import { DICE, RULES_CLASSES, SEA } from './numbers';
 import { shipWords } from './result';
 import { SEA_CLASSES, SEA_KIND, type FleetTicket, type SeaShips, type SeaTicket } from './types';
+import { seaAction } from '../../campaign/sea-words';
 
 const surfaceOf = (f: Fleet): SeaShips => ({ bb: f.ships.bb, cv: f.ships.cv, ca: f.ships.ca, dd: f.ships.dd });
 
@@ -84,7 +85,8 @@ export function seaTicket(g: Game, m: SeaMeeting): SeaTicket {
     domain: 'sea', kind: SEA_KIND,
     seed: hashString(`seafield:${g.seed}:${g.turn}:${m.zone}:${m.nat}`),
     turn: g.turn, date: turnToDate(g.turn).label,
-    title: `The action in the ${zone.name}`,
+    // The second in the same sea this month is "The second action ...", as the battle stars name it.
+    title: seaAction(zone.name, 1 + g.seaReports.filter((r) => r.turn === g.turn && r.zone === m.zone).length),
     place: { zone: m.zone, zoneName: zone.name, fleets, air },
     att: sideTicket(attNat, nation(attNat).adj, nation(attNat).color, human('att'), fleets.filter((f) => f.side === 'att')),
     def: sideTicket(defNat, nation(defNat).adj, nation(defNat).color, human('def'), fleets.filter((f) => f.side === 'def')),
@@ -122,7 +124,7 @@ export function plainTicket(o: { att: PlainFleet[]; def: PlainFleet[]; air?: Par
   const nat = (side: Side): string => fleets.find((f) => f.side === side)?.nat ?? side;
   return {
     domain: 'sea', kind: SEA_KIND, seed: o.seed, turn: 0, date: 'September 1939',
-    title: o.title ?? `The action in the ${o.zoneName ?? 'North Sea'}`,
+    title: o.title ?? seaAction(o.zoneName ?? 'North Sea'),
     place: { zone: 0, zoneName: o.zoneName ?? 'North Sea', fleets, air },
     att: sideTicket(nat('att'), nat('att'), '#5577aa', o.human === 'att', fleets.filter((f) => f.side === 'att')),
     def: sideTicket(nat('def'), nat('def'), '#aa5544', o.human === 'def', fleets.filter((f) => f.side === 'def')),

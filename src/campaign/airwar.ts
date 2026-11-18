@@ -28,6 +28,7 @@ import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, wh
 import { DEFENCE, allied, atWar, headline, worksOf } from './game';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, atSea, shipList, surfaceShips } from './navy';
+import { seaWhat, seaWhere } from './sea-words';
 import { onNet, railCut, railsAt } from './rails';
 import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, type TownHit } from './siege';
 import { townName } from './towns';
@@ -41,11 +42,11 @@ const list = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.sli
 const kindRow = (k: RaidKind) => AIRWAR.raids.kinds.find((x) => x.key === k)!;
 /** What a raid goes for, in words. A fleet is named only to someone who has it identified. */
 function placeOf(g: Game, kind: RaidKind, target: number, viewer: string | null = null): string {
-  if (kind === 'strike') return `the ${g.seas[target]?.name ?? 'sea'}`;
+  if (kind === 'strike') return g.seas[target] ? seaWhat(g.seas[target].name) : 'the sea';
   if (kind === 'fleet') {
     const t = g.fleets.find((x) => x.id === target);
     if (!t) return 'a fleet';
-    return fleetKnown(g, t, viewer) === 'exact' ? `the ${t.name}` : `${g.nations[t.nat].adj} ships in the ${g.seas[t.zone].name}`;
+    return fleetKnown(g, t, viewer) === 'exact' ? `the ${t.name}` : `${g.nations[t.nat].adj} ships ${seaWhere(g.seas[t.zone].name)}`;
   }
   if (kind === 'harbour') return `the harbour of ${g.regions[target]?.name ?? ''}`;
   if (kind === 'town') return g.regions[target] ? `the defences of ${townName(g.regions[target])}` : '';

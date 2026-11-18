@@ -43,6 +43,7 @@ import { cityOrders } from './orders';
 import { besieged, garrisonOf, guardMen } from './siege';
 import { prizeOf, townName, townSize } from './towns';
 import { MEN_PER_DIV, type AirReport, type Game, type Headline, type SeaSide, type ShipClass, type Ships } from './types';
+import { seaSaid, seaWhere } from './sea-words';
 
 export type CardTone = 'good' | 'bad' | 'warn' | 'plain';
 /** The eight pictures both builds have (art-director/raid-card/targets). */
@@ -697,7 +698,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     row.line = good ? `${cap(the(ourFleet))} beat ${the(theirFleet)}.` : `${cap(the(theirFleet))} beat ${the(ourFleet)}.`;
     row.figures = good && shipCount(theirSunk) ? [{ n: String(shipCount(theirSunk)), label: `${classWord(theirSunk)} sunk` }] : shipCount(ourSunk) ? [{ n: String(shipCount(ourSunk)), label: `${classWord(ourSunk)} lost` }] : shipCount(theirSunk) ? [{ n: String(shipCount(theirSunk)), label: `${classWord(theirSunk)} sunk` }] : [];
     row.kind = 'FLEET ACTION';
-    row.head = good ? `Victory in the ${r.zoneName.replace(/^the /i, '')}` : `Defeat in the ${r.zoneName.replace(/^the /i, '')}`;
+    row.head = `${good ? 'Victory' : 'Defeat'} ${seaWhere(r.zoneName.replace(/^the /i, ''))}`;
     row.follows = shipCount(theirSunk) || shipCount(ourSunk) ? `${cap(shipCount(theirSunk) ? shipList(theirSunk) : 'no enemy ship')} sunk${shipCount(ourSunk) ? ` for the loss of ${shipList(ourSunk)}` : ', and no ship of yours lost'}.` : 'Neither side lost a ship.';
     row.facts = [{ n: String(shipCount(sumShips(us, 'ships'))), label: 'ships engaged' }, { n: String(shipCount(ourSunk)), label: 'lost' }, { n: String(shipCount(theirSunk)), label: 'of theirs sunk' }];
     // (A fleet action is never a light thing: it starts at a corps, and the ships sunk add their cost.)
@@ -749,8 +750,10 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.picture = pic; row.place = place;
       row.line = r.won ? (att ? hit : hit.replace(/^([\d,]+) (bombers|aircraft)/, 'Their $2')) : miss;
       const low = place.replace(/^The /, 'the ');
+      // Shipping is where the sea is, by the sea words: "Shipping off the Azores", "the strike on shipping in the North Sea".
+      const shipAt = g.seas[r.zone] ? seaWhere(g.seas[r.zone].name) : `in ${low}`;
       row.head = r.mission === 'fleet' || r.mission === 'strike'
-        ? (r.won ? `${r.mission === 'fleet' ? place : `Shipping in ${low}`} is struck from the air` : att ? `The strike on ${r.mission === 'fleet' ? low : `shipping in ${low}`} fails` : `The strike on ${r.mission === 'fleet' ? low : `shipping in ${low}`} is beaten off`)
+        ? (r.won ? `${r.mission === 'fleet' ? place : `Shipping ${shipAt}`} is struck from the air` : att ? `The strike on ${r.mission === 'fleet' ? low : `shipping ${shipAt}`} fails` : `The strike on ${r.mission === 'fleet' ? low : `shipping ${shipAt}`} is beaten off`)
         : r.won ? `${place} is bombed` : att ? `The raid on ${place} fails` : `${place} beats off the raid`;
     }
     row.follows = r.result;
@@ -818,11 +821,13 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     row.week = h.week;
     Object.assign(row, dated(h.turn));
     if (h.region !== undefined) row.region = h.region;
-    // (News from the sea names its sea: the row's place takes it, and the line is the shorter for it.)
-    const where = h.region === undefined ? / in (the [A-Z][A-Za-z' -]*?)(?= and |[.,:]|$)/.exec(h.text) : null;
-    row.place = h.region !== undefined ? g.regions[h.region].name : where ? cap(where[1].replace(/^the /, '')) : h.arm === 'sea' ? 'At sea' : 'In the air';
+    // (News from the sea names its sea, as the sea words say it: "in the North Sea", "off the Azores", "in Hudson Bay".
+    // The row's place takes the sea's map name, and the line is the shorter for it. Anything else "in the X" as before.)
+    const seaAt = h.region === undefined ? seaSaid(h.text, g.seas.map((z) => z.name)) : null;
+    const where = h.region === undefined && !seaAt ? / in (the [A-Z][A-Za-z' -]*?)(?= and |[.,:]|$)/.exec(h.text) : null;
+    row.place = h.region !== undefined ? g.regions[h.region].name : seaAt ? g.seas[seaAt.i].name : where ? cap(where[1].replace(/^the /, '')) : h.arm === 'sea' ? 'At sea' : 'In the air';
     // (A sea has a place on the chart: the row's pin goes there.)
-    const zone = where ? g.seas.findIndex((z) => z.name.replace(/^the /i, '') === where[1].replace(/^the /i, '')) : -1;
+    const zone = seaAt ? seaAt.i : where ? g.seas.findIndex((z) => z.name.replace(/^the /i, '') === where[1].replace(/^the /i, '')) : -1;
     if (zone >= 0) row.sea = zone;
     row.sign = h.arm === 'land' ? (bridges ? 'eng' : /airborne/.test(h.text) ? 'para' : 'inf') : h.arm === 'sea' ? (/submarine|torpedo|convoy|shipping/i.test(h.text) ? 'ss' : 'hull') : 'bmr';
     row.picture = h.arm === 'land' ? (bridges || /\b(town|city|garrison|siege)\b/.test(h.text) ? 'town' : 'troops') : h.arm === 'sea' ? 'fleet' : h.region !== undefined ? 'factories' : 'fleet';
@@ -833,11 +838,11 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     row.tone = blocked ? 'warn' : good ? 'good' : bad ? 'bad' : 'plain';
     const other = [h.won, h.lost, h.nat].find((x) => x !== undefined && x !== me && !!g.nations[x]);
     row.ours = me; row.theirs = other ?? null;
-    const said = first(where ? h.text.replace(where[0], '') : h.text);
+    const said = first(seaAt ? h.text.replace(seaAt.said, '') : where ? h.text.replace(where[0], '') : h.text);
     const river = bridges ? /bridges over (the [A-Z][A-Za-z' -]*?)(?= at | between | as | before |[.,]|$)/.exec(h.text) : null;
     const ships = sinking ? CLASS_WORD.exec(h.text) : null;
     // A heavy ship torpedoed out of its fleet: one ship, named by its class.
-    const torpedoed = sinking && !ships ? /\btorpedoes and sinks an? (battleship|carrier|cruiser|destroyer|submarine) of (the [^:.]+?) in the /.exec(h.text) : null;
+    const torpedoed = sinking && !ships ? /\btorpedoes and sinks an? (battleship|carrier|cruiser|destroyer|submarine) of (the [^:.]+?) (?:in|off) [^:.]+:/.exec(h.text) : null;
     // A row says it in one short sentence; the whole line of news is in the newsreel.
     row.line = river ? (/\bseize\b/.test(h.text) ? `The bridges over ${river[1]} were taken intact.` : /\bblow\b/.test(h.text) ? `The bridges over ${river[1]} are blown.` : `${said}.`) : `${said}.`;
     row.kind = h.arm === 'land' ? 'ON LAND' : h.arm === 'sea' ? 'AT SEA' : 'IN THE AIR';

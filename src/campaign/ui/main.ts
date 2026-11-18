@@ -98,6 +98,7 @@ import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type
 import { tenthPct } from '../../core/math';
 import { turnToDate } from '../../core/ticket';
 import { cardChanging, cardDrawn as lessonCard, guideCard, initFirstHour, lessonsAside, lessonsBegun, lessonsDrawn } from './firsthour';
+import { seaAction, seaHead, seaIs, seaPlural, seaWhat, seaWhere, seaWhereList } from '../sea-words';
 
 let g: Game;
 /** The month after the last one the historical plans cover: February 1945, when the Bulge has been closed. */
@@ -491,7 +492,7 @@ function fleetMarks(): string {
     const adj = g.nations[fs[0].nat].adj;
     const targets = fs.filter((f) => aim.has(f.id)).map((f) => f.id);
     const tipText = own ? `${fs.map((f) => `${f.name}: ${fleetDoing(g, f)}`).join(' · ')}. Click to pick ${fs.length > 1 ? 'one' : 'it'} up.`
-      : vague ? `${adj} ships reported ${where === 's' ? `in the ${g.seas[id].name}` : 'in harbour'}: ${fs.map((f) => (seen.get(f.id)?.size ?? 'ships').toLowerCase()).join(', and ')}. Not identified: search the sea with aircraft, or bring them to battle, to learn what they are.${targets.length ? ' Click to plan a strike on them.' : ''}`
+      : vague ? `${adj} ships reported ${where === 's' ? seaWhere(g.seas[id].name) : 'in harbour'}: ${fs.map((f) => (seen.get(f.id)?.size ?? 'ships').toLowerCase()).join(', and ')}. Not identified: search the sea with aircraft, or bring them to battle, to learn what they are.${targets.length ? ' Click to plan a strike on them.' : ''}`
       : fog ? `${fs.map((f) => `${f.name}: ${shipList(f.ships)}`).join(' · ')}.${targets.length ? ' Click to plan a strike.' : ''}` : '';
     // Carriers show their aircraft: a small aeroplane on the marker, where the fleet is one's own or identified.
     const decks = carrierRules(g) && !vague && fs.some((f) => f.ships.cv > 0);
@@ -4745,12 +4746,12 @@ function airTitle(r: AirReport): string {
   if (r.mission === 'fleet') return `Air strike on the ${r.ships?.[0]?.fleet ?? 'fleet'}`;
   if (r.mission === 'harbour') return `Raid on the harbour of ${r.place}`;
   if (r.mission === 'town') return `Bombing of the defences of ${r.region >= 0 ? townName(g.regions[r.region]) : r.place}`;
-  return r.mission === 'superiority' ? `The sky over ${r.place}` : r.mission === 'bomb' ? `Bombing of ${r.place}` : r.mission === 'night' ? `Night raids on ${r.place}` : r.mission === 'ground' ? `Raid on the troops at ${r.place}` : r.mission === 'line' ? `Bombing of the line at ${r.place}` : `Air strikes, ${r.place.replace(/^the /, '')}`;
+  return r.mission === 'superiority' ? `The sky over ${r.place}` : r.mission === 'bomb' ? `Bombing of ${r.place}` : r.mission === 'night' ? `Night raids on ${r.place}` : r.mission === 'ground' ? `Raid on the troops at ${r.place}` : r.mission === 'line' ? `Bombing of the line at ${r.place}` : `Air strikes, ${g.seas[r.zone]?.name ?? r.place.replace(/^the /, '')}`;
 }
 
 function airBrow(r: AirReport): string {
   const v = airVerdict(r);
-  return `<button class="brow" data-act="airreport" data-id="${r.id}"><b>${esc(airTitle(r))}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)} · ${airWar(g) ? 'air raid' : 'air campaign'}, ${g.nations[r.attNat].adj} against ${r.defNat ? g.nations[r.defNat].adj : 'enemy'} ${r.mission === 'strike' ? 'shipping' : r.mission === 'fleet' ? `ships in ${esc(r.place)}` : r.mission === 'harbour' ? 'ships in harbour' : r.mission === 'town' ? 'a town' : r.mission === 'superiority' ? 'fighters' : r.mission === 'ground' ? 'troops' : 'industry'}</span></button>`;
+  return `<button class="brow" data-act="airreport" data-id="${r.id}"><b>${esc(airTitle(r))}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)} · ${airWar(g) ? 'air raid' : 'air campaign'}, ${g.nations[r.attNat].adj} against ${r.defNat ? g.nations[r.defNat].adj : 'enemy'} ${r.mission === 'strike' ? 'shipping' : r.mission === 'fleet' ? `ships ${esc(g.seas[r.zone] ? seaWhere(g.seas[r.zone].name) : `in ${r.place}`)}` : r.mission === 'harbour' ? 'ships in harbour' : r.mission === 'town' ? 'a town' : r.mission === 'superiority' ? 'fighters' : r.mission === 'ground' ? 'troops' : 'industry'}</span></button>`;
 }
 
 function landRow(r: BattleReport): string {
@@ -5241,7 +5242,7 @@ const SHIP_CLASSES: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
 /** Ships that are reported and not identified, as a row: whose they are, where, and roughly how many. */
 function shipsReportRow(s: FleetSeen): string {
   return `<div class="corps fleet vague"><svg width="34" height="24" viewBox="-14 -9 28 18" class="ctr"><path class="hull" d="${HULL}" fill="${g.nations[s.nat].color}" opacity=".45"/><text x="0" y="3.2" class="qm">?</text></svg><span class="nm">${esc(s.name)}</span><span></span>
-    <span class="meta">${s.atSea ? `At sea in the ${esc(g.seas[s.zone].name)}` : `In harbour at ${esc(g.regions[s.base]?.name ?? 'their base')}`}</span>
+    <span class="meta">${s.atSea ? `At sea ${esc(seaWhere(g.seas[s.zone].name))}` : `In harbour at ${esc(g.regions[s.base]?.name ?? 'their base')}`}</span>
     <span class="meta">${esc(s.size)}. Not identified.</span></div>`;
 }
 
@@ -5364,7 +5365,7 @@ function shoreRow(r: ShoreReport): string {
 
 function shoreReportCard(r: ShoreReport): string {
   const v = shoreVerdict(r);
-  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle Ticket · shore bombardment · ${date(r.turn)}</div><h2>${esc(r.place)} shelled from the ${esc(g.seas[r.zone]?.name ?? 'sea')}</h2></header>
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle Ticket · shore bombardment · ${date(r.turn)}</div><h2>${esc(r.place)} shelled from ${esc(g.seas[r.zone] ? seaWhat(g.seas[r.zone].name) : 'the sea')}</h2></header>
     <div class="body"><div class="verdict ${v.cls}" style="font-size:24px">${v.text}</div><div class="sub">${esc(r.result)}</div>
     <h3>Battle Ticket</h3>${ticketTable(r.lines)}
     <h3>The ships that stood in</h3><ul class="ulist"><li><span>${esc(r.fleet)} <span style="color:var(--ink-3)">(${g.nations[r.nat].adj}${r.admiral ? `, ${esc(r.admiral)}` : ''})</span><br><span style="color:var(--ink-2)">${esc(capital(shipList(r.ships)))}</span></span><span>${shipCount(r.sunk) ? `lost ${esc(shipList(r.sunk))}` : 'no ships lost'}</span></li></ul></div>
@@ -5491,11 +5492,11 @@ function landWhy(plan: ReturnType<typeof previewLanding>, to: Region): string {
 
 /** The crossings list's word on the sea behind a beach: red where it can be closed, amber for a whole island or a contested sea. */
 function holdLine(h: SeaHold, to: Region): string {
-  const sea = esc(g.seas[h.sea].name);
+  const sea = esc(seaWhat(g.seas[h.sea].name)), is = seaIs(g.seas[h.sea].name), it = seaPlural(g.seas[h.sea].name) ? 'them' : 'it';
   if (!h.open) return h.island
-    ? `<div class="sub costwarn">Once ashore the force is on its own: it can take ${esc(to.name)}, but the enemy can close the ${sea} behind it. Cut off, it can hold out for about ${numberWord(h.months)} months on what it carries.</div>`
-    : `<div class="sub holdwarn">Once ashore, the enemy can close the ${sea} behind the force: he can bring more than twice your strength into it.</div>`;
-  return h.contested ? `<div class="sub costwarn">Once ashore, the ${sea} behind the force is contested: yours today, but the enemy can bring ships enough to fight you for it.</div>` : '';
+    ? `<div class="sub costwarn">Once ashore the force is on its own: it can take ${esc(to.name)}, but the enemy can close ${sea} behind it. Cut off, it can hold out for about ${numberWord(h.months)} months on what it carries.</div>`
+    : `<div class="sub holdwarn">Once ashore, the enemy can close ${sea} behind the force: he can bring more than twice your strength into ${it}.</div>`;
+  return h.contested ? `<div class="sub costwarn">Once ashore, ${sea} behind the force ${is} contested: yours today, but the enemy can bring ships enough to fight you for ${it}.</div>` : '';
 }
 
 /** Once ashore (Version 73): whether the sea behind the beach could be kept open, line by line like the crossing. */
@@ -5506,13 +5507,13 @@ function holdTicket(h: SeaHold): string {
 /** One way over the water: where from, where to, what it would cost today, and the button that makes it the plan. */
 function crossingRow(x: CrossingOutlook, order: boolean, again = false): string {
   const loss = lostAtSea(x.account.risk);
-  const route = x.path.map((z) => g.seas[z].name).join(', then the ');
+  const route = x.path.map((z) => seaWhat(g.seas[z].name)).join(', then ');
   // The short crossing a closed sea bars (ruling 207): one line under the way listed to the same shore, with the
   // sea, both strengths and what opens it. Said in full once for each sea, and by its name after that.
   if (x.short) {
-    const why = x.shut === undefined || !g.human ? x.bar ?? '' : again ? `The ${g.seas[x.shut].name} is closed to your troopships, as above.` : closedLine(g, x.shut, g.human);
+    const why = x.shut === undefined || !g.human ? x.bar ?? '' : again ? `${seaHead(g.seas[x.shut].name)} ${seaIs(g.seas[x.shut].name)} closed to your troopships, as above.` : closedLine(g, x.shut, g.human);
     return `<div class="cross short">
-    <div class="sub"><b style="color:var(--ink)">The short crossing</b>, from ${esc(x.from.name)} to ${esc(x.to.name)} by way of the ${esc(route)}, is barred today. ${esc(why)}</div>
+    <div class="sub"><b style="color:var(--ink)">The short crossing</b>, from ${esc(x.from.name)} to ${esc(x.to.name)} by way of ${esc(route)}, is barred today. ${esc(why)}</div>
     <div class="acts">${order ? `<button class="btn small" data-act="crossplan" data-id="${x.to.id}" data-from="${x.from.id}" title="Name this crossing as your plan. Staff you have handed the air war or the navy prepare it each month.">Make this the plan</button>` : ''}<button class="btn small" data-act="showmap" data-id="${x.to.id}">Show the beach</button></div>
   </div>`;
   }
@@ -5520,14 +5521,14 @@ function crossingRow(x: CrossingOutlook, order: boolean, again = false): string 
   const air = staffRunsDesk(g, 'air'), navy = staffRunsDesk(g, 'navy');
   const prep = !x.planned ? '' : `<p class="sub" style="margin-top:6px"><b style="color:var(--ink)">Your plan.</b> ${
     air && navy ? `Each month your air staff fights for the sky over ${esc(x.to.name)} and your admirals stand a fleet off the beach, where they judge they can.`
-    : air ? `Each month your air staff fights for the sky over ${esc(x.to.name)}. The fleets are yours to send: a fleet on patrol in the ${esc(g.seas[x.account.worst].name)} covers the troopships.`
+    : air ? `Each month your air staff fights for the sky over ${esc(x.to.name)}. The fleets are yours to send: a fleet on patrol ${esc(seaWhere(g.seas[x.account.worst].name))} covers the troopships.`
     : navy ? `Your admirals stand a fleet off the beach where they judge they can. The fight for the sky over ${esc(x.to.name)} is yours to fly, from the Air tab.`
-    : `The preparation is yours: fly a fight for the sky over ${esc(x.to.name)} from the Air tab, and send a fleet to patrol the ${esc(g.seas[x.account.worst].name)}. Hand the air war or the navy to your staff and they prepare the plan for you.`
+    : `The preparation is yours: fly a fight for the sky over ${esc(x.to.name)} from the Air tab, and send a fleet to patrol ${esc(seaWhat(g.seas[x.account.worst].name))}. Hand the air war or the navy to your staff and they prepare the plan for you.`
   } The landing is always your own order: stand the force on the quay at ${esc(x.from.name)}, and it can embark the month after.</p>`;
   return `<div class="cross${x.planned ? ' plan' : ''}">
     <div class="crhead"><b>${esc(natName(x.owner))}${x.owner !== x.foe ? `, held by ${esc(theName(x.foe))}` : ''}</b><span class="crloss ${x.bar ? 'bar' : loss >= 25 ? 'bad' : loss >= 10 ? 'mid' : 'ok'}">${x.bar ? 'Barred today' : loss > 0 ? `about ${loss}% lost at sea` : 'nothing in the way'}</span></div>
-    <div class="sub">From ${esc(x.from.name)} to ${esc(x.to.name)}, by way of the ${esc(route)}.${x.account.skyWon !== null ? ` <b style="color:var(--ink)">With the sky over ${esc(x.to.name)} won: ${lostAtSea(x.account.skyWon) > 0 ? `about ${lostAtSea(x.account.skyWon)}% lost` : 'almost nothing lost'}.</b>` : ''}${x.hope ? ' Your fighters can reach this beach: it would be the safest way once its sky is yours.' : ''}</div>
-    ${x.bar ? `<div class="note" style="margin-top:6px"><b>Barred.</b> ${esc(x.shut !== undefined && g.human ? (again ? `The ${g.seas[x.shut].name} is closed to your troopships, as above.` : closedLine(g, x.shut, g.human)) : x.bar)}</div>` : ''}
+    <div class="sub">From ${esc(x.from.name)} to ${esc(x.to.name)}, by way of ${esc(route)}.${x.account.skyWon !== null ? ` <b style="color:var(--ink)">With the sky over ${esc(x.to.name)} won: ${lostAtSea(x.account.skyWon) > 0 ? `about ${lostAtSea(x.account.skyWon)}% lost` : 'almost nothing lost'}.</b>` : ''}${x.hope ? ' Your fighters can reach this beach: it would be the safest way once its sky is yours.' : ''}</div>
+    ${x.bar ? `<div class="note" style="margin-top:6px"><b>Barred.</b> ${esc(x.shut !== undefined && g.human ? (again ? `${seaHead(g.seas[x.shut].name)} ${seaIs(g.seas[x.shut].name)} closed to your troopships, as above.` : closedLine(g, x.shut, g.human)) : x.bar)}</div>` : ''}
     ${holdLine(x.account.hold, x.to)}
     ${open ? crossingTicket(x.account) + holdTicket(x.account.hold) : ''}${prep}
     <div class="acts">${x.planned ? '' : `<button class="btn small" data-act="crosswhy" data-id="${x.to.id}">${open ? 'Hide the reckoning' : 'Why, and what would help'}</button>`}${order ? (x.planned ? '<button class="btn small" data-act="crossplan" data-id="-1" title="Your staff stops preparing this crossing.">Drop the plan</button>' : `<button class="btn small" data-act="crossplan" data-id="${x.to.id}" data-from="${x.from.id}" title="Name this crossing as your plan. Staff you have handed the air war or the navy prepare it each month.">Make this the plan</button>`) : ''}<button class="btn small" data-act="showmap" data-id="${x.to.id}">Show the beach</button></div>
@@ -5613,7 +5614,7 @@ function seaReportCard(r: SeaReport): string {
   const side = (ss: SeaSide[]): string => `<div class="big">${count(ss, 'ships')}</div><small>ships in ${ss.length} fleet${ss.length > 1 ? 's' : ''} · lost ${count(ss, 'sunk')}</small>`;
   const list = (ss: SeaSide[]): string => `<ul class="ulist">${ss.map((x) => `<li><span>${esc(x.fleet)} <span style="color:var(--ink-3)">(${g.nations[x.nat].adj}${x.admiral ? `, ${esc(x.admiral)}` : ''})</span><br><span style="color:var(--ink-2)">${esc(capital(shipList(x.ships)))}</span></span><span>${shipCount(x.sunk) ? `lost ${esc(shipList(x.sunk))}` : 'no ships lost'}</span></li>`).join('')}</ul>`;
   const beaten = g.nations[r.won ? r.defNat : r.attNat].adj;
-  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle Ticket · fleet action · ${date(r.turn)}</div><h2>Battle of the ${esc(r.zoneName)}</h2></header>
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle Ticket · fleet action · ${date(r.turn)}</div><h2>${esc(seaAction(r.zoneName, g.seaReports.filter((x) => x.turn === r.turn && x.zone === r.zone && x.id <= r.id).length))}</h2></header>
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
       <div class="sub">The ${beaten} ships broke off and made for port. Final odds ${r.odds.toFixed(2)} to 1.</div>
@@ -5646,7 +5647,7 @@ function landingCard(): string {
   else {
     const a = plan.assess;
     const air = !!plan.air;
-    const route = plan.path.map((z) => g.seas[z].name).join(', then the ');
+    const route = plan.path.map((z) => seaWhat(g.seas[z].name)).join(', then ');
     const loss = Math.round(plan.risk * NAVY.intercept.loss * 100);
     const crossing = plan.surprise
       ? `War has only just been declared, so the enemy is caught unready: no fleet can stop the crossing this month, and the troops go ashore at full strength.`
@@ -5655,17 +5656,17 @@ function landingCard(): string {
     // land and be cut off says so in red, a crossing that costs one man in four says so in amber, and the fight
     // for the beach then has a line of its own. A fight that is itself all but lost keeps the headline.
     const h = plan.hold ?? null;
-    const sea = h ? esc(g.seas[h.sea].name) : '';
+    const sea = h ? esc(seaWhat(g.seas[h.sea].name)) : '', is = h ? seaIs(g.seas[h.sea].name) : 'is', it = h && seaPlural(g.seas[h.sea].name) ? 'them' : 'it';
     // What applies, worst first (the design director's rulings 24, 36 and 37): a mainland beach that can be cut off, a
     // costly crossing, a whole island that can be cut off (the force lives a while on what it carries), a contested sea.
     const warns: { cls: 'loss' | 'costly'; warn: 'holdwarn' | 'costwarn'; head: string; text: string; also: string }[] = [];
-    if (h && !h.open && !h.island) warns.push({ cls: 'loss', warn: 'holdwarn', head: 'Ashore, then cut off', text: `The force can land, but the enemy can close the ${sea} behind it and the troops would be cut off from their supplies.`, also: `And a force that did get ashore could be cut off: the enemy can close the ${sea} behind it.` });
+    if (h && !h.open && !h.island) warns.push({ cls: 'loss', warn: 'holdwarn', head: 'Ashore, then cut off', text: `The force can land, but the enemy can close ${sea} behind it and the troops would be cut off from their supplies.`, also: `And a force that did get ashore could be cut off: the enemy can close ${sea} behind it.` });
     // (Ruling 134(d): third in the order, after the fight's own and the force cut off, a force his staff would not expect to be still ashore.)
     const out = ashoreSays(g, cs, target)?.warn;
     if (out) warns.push({ cls: 'loss', warn: 'holdwarn', head: out.head, text: esc(out.text), also: esc(out.also) });
     if (!plan.surprise && loss >= 25) warns.push({ cls: 'costly', warn: 'costwarn', head: 'A costly crossing', text: `About ${loss}% of the force would be lost at sea before it lands.`, also: `And about ${loss}% of the force would be lost at sea before it lands.` });
-    if (h && !h.open && h.island) warns.push({ cls: 'costly', warn: 'costwarn', head: 'Ashore, but on its own', text: `The force can take ${esc(target.name)}, but the enemy can close the ${sea} behind it. Cut off, it can hold out for about ${numberWord(h.months)} months on what it carries.`, also: `And a force that took ${esc(target.name)} would be on its own: the enemy can close the ${sea} behind it, and cut off it can hold out for about ${numberWord(h.months)} months on what it carries.` });
-    if (h && h.contested) warns.push({ cls: 'costly', warn: 'costwarn', head: 'Ashore, on a contested sea', text: `The force can land and the ${sea} behind it is yours today. But the enemy can bring ships enough to fight you for it, and if he wins the troops are cut off.`, also: `And the ${sea} behind the force is contested: yours today, but the enemy can bring ships enough to fight you for it.` });
+    if (h && !h.open && h.island) warns.push({ cls: 'costly', warn: 'costwarn', head: 'Ashore, but on its own', text: `The force can take ${esc(target.name)}, but the enemy can close ${sea} behind it. Cut off, it can hold out for about ${numberWord(h.months)} months on what it carries.`, also: `And a force that took ${esc(target.name)} would be on its own: the enemy can close ${sea} behind it, and cut off it can hold out for about ${numberWord(h.months)} months on what it carries.` });
+    if (h && h.contested) warns.push({ cls: 'costly', warn: 'costwarn', head: 'Ashore, on a contested sea', text: `The force can land and ${sea} behind it ${is} yours today. But the enemy can bring ships enough to fight you for ${it}, and if he wins the troops are cut off.`, also: `And ${sea} behind the force ${is} contested: yours today, but the enemy can bring ships enough to fight you for ${it}.` });
     const p = a ? chanceOn(a.odds, a.dice) : 1;
     const hopeless = !!a && p < 0.3;
     const fight = !a ? 'The coast is undefended' : p >= 0.95 ? 'Victory is all but certain' : p >= FAVOURED ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : air ? 'This assault will fail' : 'This landing will fail';
@@ -5684,10 +5685,10 @@ function landingCard(): string {
         <h3 class="fighthead">${air ? 'The fight on the ground' : 'The fight for the beach'}</h3><div class="fightline ${fightTone}">${fight}</div>${fightBody}`
       : `<div class="verdict ${fightTone}" style="font-size:24px">${fight}</div>${next ? `<div class="sub ${next.warn}">${next.also}</div>` : ''}${fightBody}`;
     body = `${odds}
-      ${air ? `<h3>The flight</h3><p class="lead" style="font-size:13px">Transport aircraft and gliders carry the force across the water. It needs no ships and no fleet can stop it, but the transports can mount only one assault a month${plan.sky ? ', and your air force holds the sky over the target' : ''}.</p>` : `<h3>The crossing</h3><p class="lead" style="font-size:13px">By way of the ${esc(route)}. ${crossing}</p>${plan.account && plan.account.risk > 0 ? crossingTicket(plan.account) : ''}${plan.hold ? holdTicket(plan.hold) : ''}`}
+      ${air ? `<h3>The flight</h3><p class="lead" style="font-size:13px">Transport aircraft and gliders carry the force across the water. It needs no ships and no fleet can stop it, but the transports can mount only one assault a month${plan.sky ? ', and your air force holds the sky over the target' : ''}.</p>` : `<h3>The crossing</h3><p class="lead" style="font-size:13px">By way of ${esc(route)}. ${crossing}</p>${plan.account && plan.account.risk > 0 ? crossingTicket(plan.account) : ''}${plan.hold ? holdTicket(plan.hold) : ''}`}
       ${a ? `<h3>Battle Ticket</h3><table class="ticket">${a.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>` : ''}
       <h3>${air ? 'Going in' : 'Going ashore'}</h3>${cs.map((c) => `<div class="pickrow pick">${icon(c)}<span class="grow"><b>${esc(c.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[c.reg].name)} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men</span></span></div>`).join('')}
-      <div class="note${h && !h.open ? (h.island ? ' holdamber' : ' holdbad') : h && h.contested ? ' holdamber' : ''}"><b>Once ${air ? 'down' : 'ashore'}</b> the force is supplied through a port you hold on a sea the enemy has not closed. ${h && !h.open && h.island ? `As things stand the enemy can close the ${sea} behind it. On an island the force can hold out for about ${numberWord(h.months)} months on what it carries: beat his fleets or bring more of your own ships and aircraft into that sea in that time.` : h && !h.open ? `As things stand the enemy can close the ${sea} behind it, and the troops would be cut off: beat his fleets or bring more of your own ships and aircraft into that sea first.` : h && h.contested ? `As things stand the ${sea} behind it is yours, but contested: the enemy can bring ships enough to fight you for it. More of your own ships and aircraft in that sea would make it safe.` : h ? `As things stand the enemy cannot close the ${sea} behind it.` : 'If your navy loses that sea, the troops are cut off.'}</div>${ashoreNote(cs, target)}`;
+      <div class="note${h && !h.open ? (h.island ? ' holdamber' : ' holdbad') : h && h.contested ? ' holdamber' : ''}"><b>Once ${air ? 'down' : 'ashore'}</b> the force is supplied through a port you hold on a sea the enemy has not closed. ${h && !h.open && h.island ? `As things stand the enemy can close ${sea} behind it. On an island the force can hold out for about ${numberWord(h.months)} months on what it carries: beat his fleets or bring more of your own ships and aircraft into that sea in that time.` : h && !h.open ? `As things stand the enemy can close ${sea} behind it, and the troops would be cut off: beat his fleets or bring more of your own ships and aircraft into that sea first.` : h && h.contested ? `As things stand ${sea} behind it ${is} yours, but contested: the enemy can bring ships enough to fight you for ${it}. More of your own ships and aircraft in that sea would make it safe.` : h ? `As things stand the enemy cannot close ${sea} behind it.` : 'If your navy loses that sea, the troops are cut off.'}</div>${ashoreNote(cs, target)}`;
   }
   const fromAir = byAir(cs);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${fromAir ? 'Airborne assault' : 'Landing from the sea'} · ${date(g.turn)}</div><h2>${fromAir ? 'Assault on' : 'Landing at'} ${esc(target.name)}</h2></header>
@@ -5707,14 +5708,14 @@ function myAir(): AirFleet | null {
 }
 
 function missionText(f: AirFleet): string {
-  const where = f.mission === 'strike' ? `the ${g.seas[f.target]?.name ?? 'sea'}` : f.mission === 'fleet' ? `the ${g.fleets.find((x) => x.id === f.target)?.name ?? 'fleet'}` : g.regions[f.target]?.name ?? '';
+  const where = f.mission === 'strike' ? (g.seas[f.target] ? seaWhat(g.seas[f.target].name) : 'the sea') : f.mission === 'fleet' ? `the ${g.fleets.find((x) => x.id === f.target)?.name ?? 'fleet'}` : g.regions[f.target]?.name ?? '';
   switch (f.mission) {
     case 'support': return 'supporting the armies and defending its sky';
     case 'rest': return 'resting and refitting';
     case 'superiority': return `fighting for the sky over ${where}`;
     case 'bomb': return `bombing ${where} by day`;
     case 'night': return `bombing ${where} by night`;
-    case 'strike': return `striking at shipping in ${where}`;
+    case 'strike': return `striking at shipping ${g.seas[f.target] ? seaWhere(g.seas[f.target].name) : 'at sea'}`;
     case 'ground': return `raiding the troops at ${where}`;
     case 'line': return `bombing the fieldworks at ${where}`;
     case 'fleet': return `striking ${where}`;
@@ -5781,7 +5782,7 @@ function airOrders(f: AirFleet): string {
 function airOrderText(o: AirOrder): string {
   const from = o.base?.length ? ` from ${o.base[0]}` : '';
   const sea = o.sea ? g.seas.find((z) => z.key === o.sea)?.name ?? 'sea' : '';
-  const what = o.mission === 'superiority' ? `fights for the sky over ${o.region}` : o.mission === 'bomb' ? `bombs ${o.region} by day` : o.mission === 'night' ? `bombs ${o.region} by night` : o.mission === 'strike' ? `strikes at shipping in the ${sea}` : o.mission === 'rest' ? 'rests' : 'supports the armies';
+  const what = o.mission === 'superiority' ? `fights for the sky over ${o.region}` : o.mission === 'bomb' ? `bombs ${o.region} by day` : o.mission === 'night' ? `bombs ${o.region} by night` : o.mission === 'strike' ? `strikes at shipping ${seaWhere(sea)}` : o.mission === 'rest' ? 'rests' : 'supports the armies';
   return `${o.fleet}${from} ${what}.`;
 }
 
@@ -6019,7 +6020,7 @@ function airWarPane(me: string): string {
       const fl = g.fleets.find((q) => q.id === id);
       if (!fl) continue;
       const here = groups.filter((x) => x.ship === id);
-      out += `<div class="afield deck${here.some((x) => x.id === ui.air) ? ' pick' : ''}"><button class="afhead" data-act="fleetgo" data-id="${id}" title="Pick the fleet up: its aircraft go where it goes."><b>${esc(fl.name)}</b><span>${fl.ships.cv} carrier${fl.ships.cv === 1 ? '' : 's'} · ${atSea(fl) ? `at sea in the ${esc(g.seas[fl.zone].name)}` : `in harbour at ${esc(fl.port)}`} · ${num(here.reduce((t, x) => t + x.aircraft, 0))} of ${num(here.reduce((t, x) => t + x.est, 0))} aircraft</span></button>
+      out += `<div class="afield deck${here.some((x) => x.id === ui.air) ? ' pick' : ''}"><button class="afhead" data-act="fleetgo" data-id="${id}" title="Pick the fleet up: its aircraft go where it goes."><b>${esc(fl.name)}</b><span>${fl.ships.cv} carrier${fl.ships.cv === 1 ? '' : 's'} · ${atSea(fl) ? `at sea ${esc(seaWhere(g.seas[fl.zone].name))}` : `in harbour at ${esc(fl.port)}`} · ${num(here.reduce((t, x) => t + x.aircraft, 0))} of ${num(here.reduce((t, x) => t + x.est, 0))} aircraft</span></button>
         ${here.map((x) => groupRowHtml(x, order) + (order && ui.air === x.id ? groupOrders(x) : '')).join('')}</div>`;
     }
   }
@@ -6146,8 +6147,8 @@ function airPlanCard(): string {
   const f = g.airFleets.find((x) => x.id === m.fleet)!;
   const mission = m.mission as AirMission;
   const sea = mission === 'strike';
-  const place = sea ? `the ${g.seas[m.target].name}` : g.regions[m.target].name;
-  const title = mission === 'superiority' ? `The sky over ${place}` : mission === 'bomb' ? `Bombing ${place}` : mission === 'night' ? `Night raids on ${place}` : `Strikes on shipping in ${place}`;
+  const place = sea ? seaWhat(g.seas[m.target].name) : g.regions[m.target].name;
+  const title = mission === 'superiority' ? `The sky over ${place}` : mission === 'bomb' ? `Bombing ${place}` : mission === 'night' ? `Night raids on ${place}` : `Strikes on shipping ${seaWhere(g.seas[m.target].name)}`;
   const a = previewAirOrder(g, f.id, mission, m.target);
   const why = whyNotMission(g, f, mission, m.target) ?? a?.why ?? (a ? null : 'Nothing can reach the target.');
   let body: string;
@@ -7584,7 +7585,7 @@ function bookBlock(b: Book): string {
   </section>`;
 }
 
-const seaNames = (zones: number[]): string => { const xs = zones.map((z) => `the ${g.seas[z].name}`); return xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`; };
+const seaNames = (zones: number[]): string => seaWhereList(zones.map((z) => g.seas[z].name));
 
 /** Who is escorting a lane, in a sentence for its row. */
 function laneGuards(id: string, own: boolean): string {
@@ -7600,7 +7601,7 @@ function laneRow(l: Lane, me: string | null): string {
   const carries = [l.full.oil > 0.05 ? `oil ${amt(l.oil)} of ${amt(l.full.oil)}` : '', l.full.sup > 0.05 ? `supplies ${amt(l.sup)} of ${amt(l.full.sup)}` : ''].filter(Boolean).join(' · ');
   const status = l.state === 'cut' ? 'Cut' : l.state === 'idle' ? 'Not running' : `${pct}% getting through`;
   const fight = l.kind === 'sea' && l.zones.length && l.state !== 'cut' && l.state !== 'idle' && g.nations[l.to].atWar.length
-    ? ` Raiders ${num(l.raid)} against escorts ${num(l.guard)} in ${seaNames(l.zones)}.` : '';
+    ? ` Raiders ${num(l.raid)} against escorts ${num(l.guard)} ${seaNames(l.zones)}.` : '';
   const advice = l.kind !== 'sea' || !l.zones.length || l.state === 'idle' ? ''
     : mine && l.state !== 'cut' ? (seaWar(g) ? laneGuards(l.id, l.to === me) : ` Fleets on patrol in those seas, and aircraft on the coasts, keep it open.`)
     : foe && l.state !== 'cut' ? ` Submarines and raiders sent into those seas bleed it.` : '';
@@ -8336,10 +8337,10 @@ function onSea(z: number): void {
     if (ui.raid === 'fleet') {
       const ts = raidTargetsFor(g, 'fleet', ui.lead).filter((x) => x.zone === z);
       if (ts.length === 1) { openModal({ kind: 'raid', raid: 'fleet', target: ts[0].id, ids: ui.lead >= 0 ? [ui.lead] : undefined }); return; }
-      ui.msg = ts.length ? `${ts.length} enemy forces have been found in the ${g.seas[z].name}: click the one to strike, or pick it from the list.` : `The ${g.seas[z].name}: no enemy fleet has been found there in reach. A fleet has to be found before it can be struck: search the sea first.`;
+      ui.msg = ts.length ? `${ts.length} enemy forces have been found ${seaWhere(g.seas[z].name)}: click the one to strike, or pick it from the list.` : `${seaHead(g.seas[z].name)}: no enemy fleet has been found there in reach. A fleet has to be found before it can be struck: search the sea first.`;
     } else if (ui.raid !== 'strike') ui.msg = ui.raid === 'harbour' ? 'A raid on a harbour needs a port: click one of the red provinces.' : 'This raid needs a province: click one of the red ones.';
     else if (raidTargetsFor(g, 'strike', ui.lead).some((x) => x.sea && x.id === z)) { openModal({ kind: 'raid', raid: 'strike', target: z, ids: ui.lead >= 0 ? [ui.lead] : undefined }); return; }
-    else ui.msg = `The ${g.seas[z].name}: ${previewRaid(g, 'strike', z, ui.lead >= 0 ? [ui.lead] : undefined).why || 'no enemy shipping is known there, or no bomber reaches it.'}`;
+    else ui.msg = `${seaHead(g.seas[z].name)}: ${previewRaid(g, 'strike', z, ui.lead >= 0 ? [ui.lead] : undefined).why || 'no enemy shipping is known there, or no bomber reaches it.'}`;
     refresh();
     return;
   }
@@ -8355,7 +8356,7 @@ function onSea(z: number): void {
     if (ui.airMode === 'strike') {
       const why = whyNotMission(g, af, 'strike', z);
       if (!why) { openModal({ kind: 'airplan', fleet: af.id, mission: 'strike', target: z }); return; }
-      ui.msg = `The ${g.seas[z].name}: ${why}`;
+      ui.msg = `${seaHead(g.seas[z].name)}: ${why}`;
     } else ui.msg = ui.airMode === 'base' ? 'Airfields are on land: click one of the blue regions.' : 'This mission needs a region: click one of the red ones.';
     refresh();
     return;
@@ -8364,13 +8365,13 @@ function onSea(z: number): void {
   if (fl) {
     if (ui.rebase) ui.msg = 'A base has to be a port: click one of the blue regions.';
     else if (!g.nations[fl.nat].atWar.length) ui.msg = 'At peace the fleet stays in harbour.';
-    else if (atSea(fl) && fl.zone === z && fl.stance === ui.stance) ui.msg = `The ${fl.name} is already in the ${g.seas[z].name}.`;
+    else if (atSea(fl) && fl.zone === z && fl.stance === ui.stance) ui.msg = `The ${fl.name} is already ${seaWhere(g.seas[z].name)}.`;
     else {
       const stayed = atSea(fl) && fl.zone === z;
-      if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = gateBar(g, fl, z)?.line ?? `The ${g.seas[z].name} is out of reach of the ${fl.name} from ${fl.port}.`;
+      if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = gateBar(g, fl, z)?.line ?? `${seaHead(g.seas[z].name)} ${seaIs(g.seas[z].name)} out of reach of the ${fl.name} from ${fl.port}.`;
       // The piece does not move when only its work changes, so the line says what was ordered.
-      else ui.msg = stayed ? `The ${fl.name} stays in the ${g.seas[z].name} and will ${ui.stance === 'raid' ? 'raid shipping' : ui.stance === 'hunt' ? 'hunt submarines' : 'patrol'} there.`
-        : `Ordered: the ${fl.name} sails to ${ui.stance === 'raid' ? 'raid shipping in' : ui.stance === 'hunt' ? 'hunt submarines in' : 'patrol'} the ${g.seas[z].name}.`;
+      else ui.msg = stayed ? `The ${fl.name} stays ${seaWhere(g.seas[z].name)} and will ${ui.stance === 'raid' ? 'raid shipping' : ui.stance === 'hunt' ? 'hunt submarines' : 'patrol'} there.`
+        : `Ordered: the ${fl.name} sails to ${ui.stance === 'raid' ? `raid shipping ${seaWhere(g.seas[z].name)}` : ui.stance === 'hunt' ? `hunt submarines ${seaWhere(g.seas[z].name)}` : `patrol ${seaWhat(g.seas[z].name)}`}.`;
     }
     refresh();
     return;
@@ -8767,7 +8768,7 @@ function onClick(e: MouseEvent): void {
       if (f && atSea(f) && f.stance !== 'escort') {
         // The piece does not move when only its work changes, so the line says what was ordered, as a click on its sea does.
         // (The order it is already under is the lit button: pressed again, it stands.)
-        if (f.stance !== ui.stance) ui.msg = orderFleet(g, f.id, f.zone, ui.stance) ? `The ${f.name} stays in the ${g.seas[f.zone].name} and will ${seaWork(ui.stance)} there.` : `The ${f.name} cannot ${seaWork(ui.stance)} in the ${g.seas[f.zone].name} now.`;
+        if (f.stance !== ui.stance) ui.msg = orderFleet(g, f.id, f.zone, ui.stance) ? `The ${f.name} stays ${seaWhere(g.seas[f.zone].name)} and will ${seaWork(ui.stance)} there.` : `The ${f.name} cannot ${seaWork(ui.stance)} ${seaWhere(g.seas[f.zone].name)} now.`;
       } else if (f) ui.msg = `Click a ringed sea: the ${f.name} will ${seaWork(ui.stance)} there.`;
       refresh(); break;
     }

@@ -25,6 +25,7 @@
 
 import { turnToDate } from '../core/ticket';
 import type { Fleet, Game, ShipClass, Ships } from './types';
+import { seaAction } from './sea-words';
 
 const CLASSES: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
 
@@ -135,11 +136,10 @@ export function starSplit(n: number): { silver: number; bronze: number } {
   return { silver: Math.floor(k / 5), bronze: k % 5 };
 }
 
-const ORDINAL = ['', '', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];
-
 /**
- * An action as the stars name it, as the field names a fleet action ("The action in the North Sea"); a second in
- * the same sea in the same month is "The second action in the North Sea". And its month, "May 1940".
+ * An action as the stars name it, as the field names a fleet action: "The action" and where the sea is, by the UI
+ * director's list ("The action in the North Sea", "The action off the Azores", "The action in Hudson Bay"); a second
+ * in the same sea in the same month is "The second action off the Azores". And its month, "May 1940".
  */
 export function seaActionName(g: Game, at: number): { name: string; month: string; turn: number; zone: number } {
   const actions = g.stories.seaActions ?? [];
@@ -147,8 +147,7 @@ export function seaActionName(g: Game, at: number): { name: string; month: strin
   let nth = 1;
   for (let i = 0; i < at; i++) if (actions[i][0] === turn && actions[i][1] === zone) nth++;
   const sea = g.seas[zone]?.name;
-  const which = nth <= 1 ? 'The action' : `The ${ORDINAL[nth] ?? `${nth}th`} action`;
-  return { name: sea ? `${which} in the ${sea}` : `${which} at sea`, month: turnToDate(turn).label, turn, zone };
+  return { name: seaAction(sea ?? null, nth), month: turnToDate(turn).label, turn, zone };
 }
 
 /** One action on a card's row of stars: its name and month, and how many of the card's ships came through it. */
@@ -160,7 +159,7 @@ export interface StarBattle {
   /** How many of the card's ships came through it, of how many the card has. */
   ships: number;
   of: number;
-  /** As the hover lists it: "The action in the North Sea, May 1940", with "(2 of 3 ships)" where not every ship came through it. */
+  /** As the hover lists it: "The action off the Azores, May 1940", with "(2 of 3 ships)" where not every ship came through it. */
   line: string;
 }
 
@@ -194,7 +193,8 @@ export function starRow(g: Game, f: Fleet, c: ShipClass): StarRow | null {
     return { name, month, turn, zone, ships, of, line: `${name}, ${month}${ships < of ? ` (${ships} of ${of} ships)` : ''}` };
   });
   const { silver, bronze } = starSplit(most);
-  // Counts inside a sentence stand as figures (the UI director, b476 3), "1 battle star" as "7 battle stars".
-  const head = `${of === 1 ? 'This ship has' : 'The most decorated of these ships has'} ${most} ${most === 1 ? 'battle star, for a sea battle' : 'battle stars, one for each sea battle'} it came through on the winning side.`;
-  return { most, silver, bronze, each, battles, words: [head, ...(silver ? ['A silver star stands for 5 bronze stars.'] : []), ...battles.map((b) => b.line)] };
+  // The UI director's words (13:29Z): a battle at sea is an action; a count the game fills in is a figure, and a count
+  // of one is "a"; a number the rules fix is a word ("five").
+  const head = `${of === 1 ? 'This ship has' : 'The most decorated of these ships has'} ${most === 1 ? 'a battle star, for an action' : `${most} battle stars, one for each action`} it came through on the winning side.`;
+  return { most, silver, bronze, each, battles, words: [head, ...(silver ? ['A silver star stands for five bronze stars.'] : []), ...battles.map((b) => b.line)] };
 }

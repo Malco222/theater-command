@@ -24,6 +24,7 @@ import { INTEL, abroad, agentsOf, atWork, intelRules, mostAgents, recruit, sendA
 import { cabinetOff, officeSecure, setCabinet, setCanFall } from './government';
 import { airAI, airFleetsOf } from './air';
 import { atSea, crossingsOf, fleetsOf, navalAI, numberWord, plannedCrossing } from './navy';
+import { seaHead, seaIs, seaPlural, seaWhat, seaWhere } from './sea-words';
 import { landingForce } from './staff';
 import { staysOut } from './history';
 import { shoreAI } from './fleets';
@@ -184,10 +185,10 @@ export function crossingWord(g: Game, nat: string): CrossingWord | null {
   if (wanting.length) return { ...plan, state: 'waiting', text: `Your staff is preparing ${way}. Still wanting: ${listAnd(wanting)}.` };
   const h = x.account.hold;
   if (!h.open) return { ...plan, state: 'warned', text: h.island
-    ? `Your staff has ${way} prepared, and it waits: the force can take ${plan.to.name}, but the enemy can close the ${g.seas[h.sea].name} behind it, and cut off it holds out for about ${numberWord(h.months)} months on what it carries. The order to sail under that warning is yours alone.`
-    : `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close the ${g.seas[h.sea].name} behind it. The order to sail under that warning is yours alone.` };
+    ? `Your staff has ${way} prepared, and it waits: the force can take ${plan.to.name}, but the enemy can close ${seaWhat(g.seas[h.sea].name)} behind it, and cut off it holds out for about ${numberWord(h.months)} months on what it carries. The order to sail under that warning is yours alone.`
+    : `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close ${seaWhat(g.seas[h.sea].name)} behind it. The order to sail under that warning is yours alone.` };
   const lost = Math.round(x.account.loss * 100);
-  return { ...plan, state: 'ready', text: `Your staff reports ${way} ready: the way is open, ${force} corps stand on the quay and the ships can carry ${Math.min(force, lift.lift)} of them in a month${lost > 0 ? `, with about ${lost} men in a hundred likely to be lost at sea` : ''}.${h.contested ? ` The ${g.seas[h.sea].name} behind the beach is yours today, but the enemy can bring ships enough to fight you for it.` : ''} The order to land is yours.` };
+  return { ...plan, state: 'ready', text: `Your staff reports ${way} ready: the way is open, ${force} corps stand on the quay and the ships can carry ${Math.min(force, lift.lift)} of them in a month${lost > 0 ? `, with about ${lost} men in a hundred likely to be lost at sea` : ''}.${h.contested ? ` ${seaHead(g.seas[h.sea].name)} behind the beach ${seaIs(g.seas[h.sea].name)} yours today, but the enemy can bring ships enough to fight you for ${seaPlural(g.seas[h.sea].name) ? 'them' : 'it'}.` : ''} The order to land is yours.` };
 }
 
 /** The month's report on the named crossing: said once in the news when it is ready, or prepared and held back by the card's warning. */
@@ -342,7 +343,7 @@ function spies(g: Game, nat: string): string | null {
 
 function raidWords(g: Game, r: AirReport): string {
   const at = r.region >= 0 ? g.regions[r.region] : null;
-  if (!at) return `ships in the ${g.seas[r.zone]?.name ?? r.place}`;
+  if (!at) return `ships ${g.seas[r.zone] ? seaWhere(g.seas[r.zone].name) : `in ${r.place}`}`;
   switch (r.mission) {
     case 'bomb': return at.fac > 0 ? `the factories at ${at.name}` : `the railway at ${at.name}`;
     case 'night': return `${at.name} by night`;
@@ -383,7 +384,7 @@ function navy(g: Game, nat: string): string | null {
   for (const f of fleetsOf(g, nat)) {
     const w = was.get(f.id);
     if (!w || (w.zone === f.zone && w.stance === f.stance)) continue;
-    if (atSea(f)) out.push(`the ${f.name} into the ${g.seas[f.zone].name}${f.stance === 'escort' ? ' with the convoys' : f.stance === 'raid' ? ' to raid' : ''}`);
+    if (atSea(f)) out.push(`the ${f.name} into ${seaWhat(g.seas[f.zone].name)}${f.stance === 'escort' ? ' with the convoys' : f.stance === 'raid' ? ' to raid' : ''}`);
     else if (w.stance !== 'port') back.push(`the ${f.name}`);
   }
   if (out.length) did.push(`sent ${some(out)}`);

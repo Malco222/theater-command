@@ -19,6 +19,7 @@ import { allied, atWar } from './game';
 import { fogOn } from './intel';
 import { CLASSES, NAVY, airOver, atSea, fleetPower, shipCount, surfaceShips } from './navy';
 import type { Fleet, Game, ShipClass, Ships } from './types';
+import { seaWhere } from './sea-words';
 
 /** One fleet on a forecast, as the viewer knows it. */
 export interface SeaPlanFleet {
@@ -153,7 +154,7 @@ export function planSeaBattle(g: Game, id: number, zone: number, viewer: string 
   };
   const unseen = `${reported === 1 ? 'One force is' : `${reported} forces are`} reported there and not identified: ${reported === 1 ? 'its' : 'their'} strength is not known.`;
   if (surfaceShips(f) <= 0) plan.why = 'Submarines fight no fleet action: they raid shipping, and escorts hunt them.';
-  else if (!met.length) plan.why = `No enemy fleet is known to be at sea in the ${sea.name}.${reported ? ` ${unseen}` : ''}`;
+  else if (!met.length) plan.why = `No enemy fleet is known to be at sea ${seaWhere(sea.name)}.${reported ? ` ${unseen}` : ''}`;
   if (plan.why) return plan;
 
   // The odds as the fight works them out, on what is known: A to D, the dice swinging them by a fifth either way.
