@@ -100,11 +100,16 @@ namespace TheaterFx
 		double HalfLength = 0.0; // (a tracer's streak: half its length in metres)
 		double Alpha = 1.0, FadeIn = 0.02, Hold = 0.2, Cool = 1.0;
 		double HazeBy = 0.0, HazeAlpha = 0.0; // (a skirt: settles to HazeAlpha by HazeBy seconds)
-		double Heart = 0.5, Rim = 0.0; // how thick it is at half its radius, and at its edge, as shares of its middle
+		double Heart = 0.5, Rim = 0.0; // how thick it is at its heart ring, and at its edge, as shares of its middle
+		double Inner = 0.5; // (where the heart ring sits, as a share of the radius: further out, a denser body with a thinner soft edge)
 		double LeastPx = 0.0;
 		double ShadeK = 1.0; // (how strongly it is lit on its sunward side and shadowed on the other: a skirt's lit top and dark foot)
 		double Rough = 0.0, Turn = 0.0, TurnRate = 0.0; // (a clod: how lumpy its outline is, and how it tumbles)
 		uint32_t LumpSeed = 0;
+		// (smoke: the middle of its cloud, so a puff on the cloud's sunward side is lit as a whole and one on the far
+		// side is in its shadow; the middle drifts with the wind and climbs at CentreRise)
+		Vec Centre;
+		double CloudShade = 0.0, CloudR = 1.0, CentreRise = 0.0;
 		Rgb Col, Col2;
 		bool bLight = false; // flame, flash, sparks, tracer: keeps its own colour by night and takes no shading
 		bool bHug = false; // rides the ground as it moves (skirts)
@@ -214,6 +219,7 @@ namespace TheaterFx
 		uint64_t Seeds = 1;
 		int MaxPuffs = 3000;
 		int Sides = 16, PointsPerPuff = 33;
+		std::vector<double> RingCos, RingSin, Ring2Cos, Ring2Sin, Ring3Cos, Ring3Sin, Ring5Cos, Ring5Sin; // (made once at Setup, so no puff works out a cosine a side each frame)
 		int LastDrawn = 0;
 		double ShadeLit = 0.18, ShadeDark = 0.28, ClodLeast = 1.2, Beyond = 1500.0;
 		Vec LastEye;
@@ -253,7 +259,7 @@ namespace TheaterFx
 
 		Vec Where(const Bit& B, double Age) const;
 		Vec Going(const Bit& B, double Age) const;
-		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Point, double Tail, double Shade, const View& Eye, double Rough = 0.0, uint32_t LumpSeed = 0, double Turn = 0.0);
+		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough = 0.0, uint32_t LumpSeed = 0, double Turn = 0.0);
 		bool LayBit(int Slot, const Bit& B, double Now, const View& Eye);
 	};
 }
