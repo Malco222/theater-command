@@ -359,7 +359,8 @@ describe('a fight, not a blink (the design director, ruling 226)', () => {
     }
     expect(pictures).toBeGreaterThan(30);
     // Before b439 these 36 pictures held 15 pairs of boxes on one another, mostly at the bridge, and two blocks stood in
-    // the river; now 2, each passing: a tank by a block wading out, the reserve going up behind the line.
+    // the river; now 3, each passing: the reserve going up behind the line (b453: a block finding no room within its
+    // reach presses in beside a friend, where before it stood off out of reach and never fired).
     expect(heaped / pictures).toBeLessThan(0.15);
     expect(wet).toBe(0);
   });

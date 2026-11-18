@@ -67,7 +67,7 @@ import { Clock, SPEEDS, type Speed } from '../../../src/battle/core/clock';
 import { LOOPS } from '../../../src/battle/core/cues';
 import type { BattleSim, BattleView, Command, FieldResult, Side, UnitBase } from '../../../src/battle/core/types';
 import { GROUNDS } from '../../../src/battle/land/field';
-import { fieldBill, goingIn, landTicket } from '../../../src/battle/land/ticket';
+import { fieldBill, landTicket } from '../../../src/battle/land/ticket';
 import { LandBattle } from '../../../src/battle/land/sim';
 import { staffOnly } from '../../../src/battle/land/offered';
 import { MOTION, type Kind } from '../../../src/battle/land/rules';
@@ -180,8 +180,9 @@ export function battleCalls(h: BattleHooks) {
       const t = landTicket(g, corps, target);
       if (!t || staffOnly(t)) return null;
       const sim = new LandBattle(t);
-      // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the card.
-      const going = goingIn(g, corps, target).map((c) => c.id);
+      // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the
+      // card. Those going in are the ticket's own, so a corps spent since it was picked is not shown going (b453).
+      const going = t.att.forces.map((f) => f.corps);
       const ses = begin(sim, (r) => h.attack(ids, to, r.R, fieldBill(r)));
       const f = sim.field;
       return {

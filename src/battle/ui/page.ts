@@ -252,6 +252,8 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
   </div>`;
   canvas = byId('field') as HTMLCanvasElement;
   ctx = canvas.getContext('2d')!;
+  // Every battle opens on the whole field, not where the last one was left zoomed in.
+  S.scene.W = 0; S.scene.H = 0;
   fit();
   wireBattle();
   updateTop(true);
@@ -608,6 +610,9 @@ function wireBattle(): void {
   };
   canvas.addEventListener('pointerup', up);
   canvas.addEventListener('pointercancel', () => { down = null; sc.box = null; sc.line = null; });
+  // The hover goes the moment the pointer leaves the field, as hovers do everywhere else in the game: one left standing
+  // over the tray reads as a fact about a division he is no longer pointing at (the UI director).
+  canvas.addEventListener('pointerleave', () => { if (!down) { sc.hover = null; canvas.style.cursor = 'default'; } });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const [px, py] = pos(e);
@@ -724,6 +729,8 @@ window.addEventListener('keydown', (e) => {
   if (!S.active) return;
   if (S.home) e.stopPropagation();
   if (e.key === 'Enter') { e.preventDefault(); return; }
+  // The browser's own shortcuts stay the browser's: Ctrl+H is History, not Hold (the review, b453).
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (now() < S.guardUntil) { if (e.key === 'Tab' || e.key === ' ') e.preventDefault(); return; }
   if (S.screen !== 'battle' || !S.b) return;
   const sc = S.scene, b = S.b;
@@ -841,6 +848,8 @@ function showAfter(): void {
   const g = S.g;
   const settled = S.offer ? settle(g, S.offer, r) : null;
   const rep = settled?.report ?? null;
+  // Booked: the campaign keeps it at once, so a page closed on this card comes back to the field's result (b453).
+  if (settled) booked?.();
   if (S.before && S.offer) {
     S.before.how = !rep ? 'the attack could not be ordered.' : rep.siege ? 'under siege.' : rep.taken ? 'taken.' : 'the attack was thrown back.';
     // Whether the defenders lost the larger share of their strength, for why the odds rose after a defeat.
@@ -915,10 +924,21 @@ export function bootPage(): void {
  * back through the campaign's own attack order (settle), and CONTINUE on the after card closes the layer and hands the
  * campaign its report. 'css' is the field's own stylesheet (the campaign's build carries it).
  */
-export function fightOnField(g: Game, offer: Offer, css: string, done: (report: BattleReport | null) => void): void {
+/** Whether a field is open over the campaign: the campaign takes no order of its own until it closes. */
+export const fieldOpen = (): boolean => S.active && S.home !== null;
+/** Called as the field's result is booked into the campaign, before the after card shows it. */
+let booked: (() => void) | null = null;
+
+export function fightOnField(g: Game, offer: Offer, css: string, done: (report: BattleReport | null) => void, onBooked?: () => void): void {
+  if (fieldOpen()) return;
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;inset:0;z-index:2000;';
   document.body.appendChild(host);
+  // The campaign under the layer is out of reach while it is up: no key or Tab reaches its buttons (the review, b453).
+  const shut = ([...document.body.children] as HTMLElement[]).filter((x) => x !== host && !x.inert);
+  for (const x of shut) x.inert = true;
+  (document.activeElement as HTMLElement | null)?.blur?.();
+  booked = onBooked ?? null;
   const shadow = host.attachShadow({ mode: 'open' });
   // The stylesheet was written for a page of its own: its page-wide rules apply to the layer instead.
   const local = css.replace(/:root/g, ':host').replace(/html,\s*body\s*\{/g, ':host {').replace(/(^|\n)body\s*\{/g, '$1:host {');
@@ -928,7 +948,9 @@ export function fightOnField(g: Game, offer: Offer, css: string, done: (report: 
   S.g = g; S.before = null; S.active = true;
   S.home = (report) => {
     S.active = false; S.home = null; S.b = null; S.screen = 'choose';
+    booked = null;
     host.remove();
+    for (const x of shut) x.inert = false;
     root = document;
     done(report);
   };

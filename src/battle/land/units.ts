@@ -73,6 +73,12 @@ export interface LandUnit extends UnitBase {
   yieldTo?: number;
   /** Where its attack has it stand, as last worked out: its own stretch, which a friend coming on later stands beside (b439). */
   stand?: [number, number];
+  /** What its stand was worked out for (its target, and its lane): the stand holds while it is still its own (b453). */
+  standFor?: string;
+  /** The way its stand was worked out facing: the friends beside it are reckoned the same way while it holds it. */
+  standFace?: number;
+  /** It came to its stand still out of reach of its target, which had stepped back: it closes straight on it. */
+  closing?: boolean;
 }
 
 const ORD = (n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };

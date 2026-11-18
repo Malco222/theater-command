@@ -196,8 +196,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     u.keepFace = o.face ?? null;
     // An attack's way is the one it will walk: to its place in the lane before its target, as the march works it out.
     const t = o.kind === 'attack' && o.target !== undefined ? this.unit(o.target) : undefined;
-    const [px, py] = t ? this.lanePoint(u, t, this.closeTo(u)) : [o.x, o.y];
-    u.path = this.route(u, px, py);
+    const at = t ? this.lanePoint(u, t, this.closeTo(u)) : [o.x, o.y];
+    u.path = at ? this.route(u, at[0], at[1]) : [];
   }
 
   /** How near a block closes on what it attacks before it stands and fights: well inside its reach. */
@@ -605,10 +605,9 @@ export class LandBattle implements BattleSim<LandUnit> {
         // Close until it is well in reach, then stand and fight.
         // Never stands in the water to fight, or on the bridge: it presses on to its own ground on the far bank.
         const want = this.closeTo(u);
-        if (this.gap(u, t) > want || this.wet(u, u.x, u.y)) {
-          const [ax, ay] = this.lanePoint(u, t, want);
-          u.path = this.route(u, ax, ay); to = u.path[0];
-        } else { u.path = []; to = null; }
+        const at = this.gap(u, t) > want || this.wet(u, u.x, u.y) ? this.lanePoint(u, t, want) : null;
+        if (at) { u.path = this.route(u, at[0], at[1]); to = u.path[0]; }
+        else { u.path = []; to = null; }
       }
     } else if (u.order && u.path.length) {
       // A block on the march stops when an enemy is on top of it, unless it is running or pulling out. One that can no
@@ -644,8 +643,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     const head = bearing(u.x, u.y, to[0], to[1]);
     // It made way for a friend with the road last tick: it waits, rather than step straight back into that friend's way
-    // (never in the river: there it presses on to the bank).
-    if (gave && !run && !this.wet(u, u.x, u.y) && Math.sin(head) * (gave.x - u.x) + Math.cos(head) * (gave.y - u.y) > 0) { u.speed = 0; u.act = 'idle'; return; }
+    // (never in the river: there it presses on to the bank). At a bridge's end it waits too: that is where the queue
+    // forms, and two blocks that shoved each other there without waiting stood locked till the battle ended (b453).
+    if (gave && !run && !this.wet(u, u.x, u.y, false) && Math.sin(head) * (gave.x - u.x) + Math.cos(head) * (gave.y - u.y) > 0) { u.speed = 0; u.act = 'idle'; return; }
     const off = turn(u.face, head);
     // Blocks wheel before they march; a runner just runs.
     if (!run && Math.abs(off) > 0.6) { this.turnTo(u, head); u.speed = 0; u.act = 'turn'; return; }
@@ -722,18 +722,37 @@ export class LandBattle implements BattleSim<LandUnit> {
   /**
    * Where a block in a lane makes for: in front of its target as the attack came on, out to the side by its lane, and
    * for a lane wider than the target's front, forward round its flank. With no lane, or once it stands at that point and
-   * is still out of reach, straight at the target.
+   * is still out of reach, straight at the target. Null once it stands at that point within reach: it stands and fights.
    */
-  private lanePoint(u: LandUnit, t: LandUnit, want: number): [number, number] {
+  private lanePoint(u: LandUnit, t: LandUnit, want: number): [number, number] | null {
     const o = u.order!;
     const lone = o.lane === undefined || o.axis === undefined;
     // A block with no lane makes straight for its target, to stand before it on the way it comes.
     const axis = lone ? bearing(u.x, u.y, t.x, t.y) : o.axis!, lane = lone ? 0 : o.lane!;
+    const key = lone ? `${t.id}` : `${t.id}/${lane}/${axis}`;
+    // How far off its target a block may stand, at its own stretch, and still fight: half way from where it closes to
+    // the end of its reach. A stand pushed further out by its friends, it never fires from (the review, b453).
+    const hold = want + (LAND.reach[u.kind] - want) / 2;
+    const off = (x: number, y: number): number => dist(x, y, t.x, t.y) - (Math.max(u.w, u.d) + Math.max(t.w, t.d)) / 4;
+    const there = (s: [number, number]): [number, number] | null => {
+      if (dist(u.x, u.y, s[0], s[1]) >= 12) return s;
+      // At its stand: in reach, it stands; still out of reach (its target has stepped back), it closes on the target from
+      // here on, and does not turn back for the stand a step later.
+      if (this.gap(u, t) <= hold && !this.wet(u, u.x, u.y)) return null;
+      u.closing = true;
+      return [t.x, t.y];
+    };
+    // The stand it worked out holds while it is still its own, dry and in reach: a step to one side, or a friend first in
+    // the list, does not send it off to another stretch (it flipped between two, and wheeled in place: the review, b453).
+    const old = u.stand && u.standFor === key ? u.stand : null;
+    if (old && u.closing) return [t.x, t.y];
+    const kept = !!old && off(old[0], old[1]) <= hold && !this.wet(u, old[0], old[1]);
+    if (old && kept && !this.claimed(u, old[0], old[1], u.standFace ?? bearing(old[0], old[1], t.x, t.y))) return there(old);
     const [fx, fy] = ahead(axis), [rx, ry] = ahead(axis + Math.PI / 2);
     const lim = t.w / 2 + u.w / 2;
-    const off = Math.min(Math.abs(lane), lim) * Math.sign(lane);
+    const side0 = Math.min(Math.abs(lane), lim) * Math.sign(lane);
     const back = Math.max(0, want * 0.8 + t.d / 2 + u.d / 2 - Math.max(0, Math.abs(lane) - lim));
-    let p: [number, number] = [t.x + rx * off - fx * back, t.y + ry * off - fy * back];
+    let p: [number, number] = [t.x + rx * side0 - fx * back, t.y + ry * side0 - fy * back];
     // Its own ground to stand on, never the river or the bridge: on into the far bank, short of the block it attacks;
     // else back to the nearer bank.
     if (this.wet(u, p[0], p[1])) {
@@ -744,18 +763,27 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (dry) p = dry;
     }
     // Its own stretch: where a friend already stands there, it stands beside it, on the side it comes from, a little
-    // room between the two (the art director, b439: no box drawn on another), never in the river.
+    // room between the two (the art director, b439: no box drawn on another), never in the river, and never so far out
+    // that it cannot fight from there: then the friend's other side, else as near as it can.
     const face = bearing(p[0], p[1], t.x, t.y), [sx, sy] = ahead(face + Math.PI / 2);
+    const fit = (q: [number, number]): boolean => off(q[0], q[1]) <= hold && !this.wet(u, q[0], q[1])
+      && !this.units.some((e) => e.side !== u.side && live(e) && dist(e.x, e.y, q[0], q[1]) < (Math.max(e.w, e.d) + Math.max(u.w, u.d)) / 2);
     for (let k = 0; k < 4; k++) {
       const f = this.claimed(u, p[0], p[1], face);
       if (!f) break;
-      const lat = (p[0] - f.x) * sx + (p[1] - f.y) * sy, side = Math.sign(lat) || Math.sign(lane) || (u.id < f.id ? -1 : 1);
-      const by = (u.w + f.w) / 2 + LAND.room - Math.abs(lat), q: [number, number] = [p[0] + sx * side * by, p[1] + sy * side * by];
-      if (this.wet(u, q[0], q[1]) || this.units.some((e) => e.side !== u.side && live(e) && dist(e.x, e.y, q[0], q[1]) < (Math.max(e.w, e.d) + Math.max(u.w, u.d)) / 2)) break;
+      const lat = (p[0] - f.x) * sx + (p[1] - f.y) * sy, mine = (u.x - f.x) * sx + (u.y - f.y) * sy;
+      const side = Math.abs(lat) >= 1 ? Math.sign(lat) : Math.sign(mine) || Math.sign(lane) || (u.id < f.id ? -1 : 1);
+      const by = (u.w + f.w) / 2 + LAND.room;
+      const near: [number, number] = [p[0] + sx * side * (by - Math.abs(lat)), p[1] + sy * side * (by - Math.abs(lat))];
+      const far: [number, number] = [p[0] - sx * side * (by + Math.abs(lat)), p[1] - sy * side * (by + Math.abs(lat))];
+      const q = fit(near) ? near : fit(far) ? far : null;
+      if (!q) break;
       p = q;
     }
-    u.stand = p;
-    return dist(u.x, u.y, p[0], p[1]) < 12 ? [t.x, t.y] : p;
+    // Nowhere free in reach: it keeps the stand it had, rather than hop each tick between two that are taken.
+    if (old && kept && this.claimed(u, p[0], p[1], face)) return there(old);
+    u.stand = p; u.standFor = key; u.standFace = face; u.closing = false;
+    return there(p);
   }
 
   /**

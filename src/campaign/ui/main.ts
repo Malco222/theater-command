@@ -68,7 +68,7 @@ import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import { ON_CAMPAIGN, landTicket, staffOnly } from '../../battle/land';
-import { fightOnField } from '../../battle/ui/page';
+import { fieldOpen, fightOnField } from '../../battle/ui/page';
 import {
   AIR, CARRIERS, MISSION, carrierRules, groupAt, airBases, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowding, forecastAir, isOffensive,
   km as airKm, overOcean, seaKm, skyOver, whyNotMoveAir, whyNotMission, type AirOrder,
@@ -8341,8 +8341,8 @@ function stopAuto(): void {
 // ---- Clicks -------------------------------------------------------------------------------
 
 function onClick(e: MouseEvent): void {
-  // While the other staffs work no order is taken.
-  if (working) return;
+  // While the other staffs work no order is taken, nor while a battle is fought on the field over the campaign.
+  if (working || fieldOpen()) return;
   const t = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
   if (!t) { if (e.target === $('#veil') && ui.modal && ui.modal.kind !== 'start') openModal(ui.modal.back ?? null); return; }
   const act = t.dataset.act!;
@@ -9301,12 +9301,14 @@ function onClick(e: MouseEvent): void {
       break;
     }
     case 'field': {
-      // The attack fought on the field: the same corps, the same ticket, and the result back through the attack order.
+      // The attack fought on the field: the army the card shows (the corps chosen that can still go in: one spent on a
+      // probe has dropped off it), the same ticket, and the result back through the attack order.
       const m = ui.modal!;
       const target = g.regions[m.target];
-      const corps = g.corps.filter((c) => m.chosen.has(c.id));
-      const ticket = fieldShown() ? landTicket(g, corps, target) : null;
+      const corps = candidates(g, target).filter((c) => m.chosen.has(c.id));
+      const ticket = fieldShown() && corps.length ? landTicket(g, corps, target) : null;
       if (!ticket || staffOnly(ticket)) break;
+      const ids = new Set(corps.map((c) => c.id));
       const h = g.headlines.length;
       const before = g.regions.map((r) => r.ctrl);
       const was = beforeBattle(m.look ?? null, 'attack', target.id);
@@ -9317,7 +9319,7 @@ function onClick(e: MouseEvent): void {
       if (ui.live) {
         try {
           const staffs = loadGame(saveGame(g));
-          if (staffs && orderAttack(staffs, staffs.corps.filter((c) => m.chosen.has(c.id)), staffs.regions[target.id])) {
+          if (staffs && orderAttack(staffs, staffs.corps.filter((c) => ids.has(c.id)), staffs.regions[target.id])) {
             if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
             localStorage.setItem(SAVE_KEY, saveGame(staffs));
           }
@@ -9325,6 +9327,13 @@ function onClick(e: MouseEvent): void {
       }
       // A defence the card did not know: the field shows the card's band, never its own odds, until the fight ends (b453).
       const look = m.look ?? null, band = look && !look.exact ? { lo: look.lo, hi: look.hi } : undefined;
+      // The field's result, once booked, is kept at once in place of the staff's: a page closed on the after card comes
+      // back to what that card said.
+      const keep = (): void => {
+        if (!ui.live) return;
+        if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
+        try { localStorage.setItem(SAVE_KEY, saveGame(g)); } catch { /* storage is off or full: the game still plays */ }
+      };
       fightOnField(g, { target, corps, odds: ticket.reckoning.odds, ticket, ...(band ? { band } : {}) }, css, (rep) => {
         ui.unread += g.headlines.length - h;
         ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
@@ -9337,7 +9346,7 @@ function onClick(e: MouseEvent): void {
           }
           tellResult(rep, was);
         } else { refresh(); openModal(null); }
-      });
+      }, keep);
       break;
     }
   }

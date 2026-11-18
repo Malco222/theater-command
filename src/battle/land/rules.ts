@@ -95,7 +95,7 @@ export const LAND = {
    * under that. 'river' 1.51 to 1.5 for b439, once blocks at a bridge made way for each other rather than shove at its
    * foot to a standstill (Sedan's panzers ran out the clock there one fight in eleven).
    */
-  hold: { take: { plains: 0.94, forest: 1.005, hills: 0.96, mountain: 1.12, marsh: 1.245, urban: 0.995, desert: 0.97 } as Record<string, number>, within: 300, river: 1.5, works: [1, 1.02, 1.06, 1.07] },
+  hold: { take: { plains: 0.97, forest: 1.035, hills: 0.99, mountain: 1.12, marsh: 1.32, urban: 1.025, desert: 1.045 } as Record<string, number>, within: 300, river: 1.4, works: [1, 1.02, 1.06, 1.07] },
   /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
   dug: { keep: 30 },
   nerve: {
