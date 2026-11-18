@@ -306,9 +306,11 @@ class GunWorks(Works):
         self.xb = xb
         return xb
 
-    def handwheels(self, at_e, at_t, r=0.11):
-        """The layer's two handwheels on the left of the saddle, each a part that spins."""
-        for name, at, ax in (("handwheel_elevate", at_e, Vector((0, 1, 0))), ("handwheel_traverse", at_t, Vector((-0.75, 0.25, 0.6)).normalized())):
+    def handwheels(self, at_e, at_t, r=0.11, grips="layer"):
+        """The layer's two handwheels on the left of the saddle, each a part that spins. grips: the man's name in
+        her sockets (crew.<name>): each hand gets its place on a wheel's handle, and goes round with the wheel
+        (grip.<name>.l on the elevating wheel, the outer one; grip.<name>.r on the traversing wheel, by the breech)."""
+        for name, at, ax, hand in (("handwheel_elevate", at_e, Vector((0, 1, 0)), "l"), ("handwheel_traverse", at_t, Vector((-0.75, 0.25, 0.6)).normalized(), "r")):
             at = Vector(at)
             self.use(self.mount)
             self.rod(at - ax * 0.22, at, 0.014, "steel", 8)
@@ -321,6 +323,9 @@ class GunWorks(Works):
                 self.rod(at, at + d * r, 0.008, "steel", 6, caps=False)
             self.lathe(at - ax * 0.015, ax, [(0.035, 0.0), (0.035, 0.022), (0.0, 0.026), (0.0, 0.0)], "steel", 8)
             self.rod(at + side * r, at + side * r + ax * 0.075, 0.012, "wood", 8)
+            if grips:
+                self.socket(f"grip.{grips}.{hand}", at + side * r + ax * 0.0375, tuple(ax), part=name,
+                            note="the layer's %s hand on the %s wheel's handle: it goes round with the wheel" % ("left" if hand == "l" else "right", "elevating" if hand == "l" else "traversing"))
         self.use(self.mount)
 
     def sight(self, at, high=0.3):

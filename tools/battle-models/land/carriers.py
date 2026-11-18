@@ -28,7 +28,7 @@ from mathutils import Matrix, Quaternion, Vector
 
 import rigid
 from guns import GunWorks, sheet
-from motorpool import LEFT, RIGHT, SIDES, X, Y, Z
+from motorpool import LEFT, RIGHT, SIDES, X, Y, Z, rot
 from tanks_any import rivets, turn_to
 from tanks_ger import GER_COATS, coat, coats
 
@@ -494,8 +494,17 @@ def hanomag(fine=True, tag="GER", paint=None, fit="troops", name="Hanomag", titl
     # on; the drivers sit lower still in a footwell, so that their eyes come level with the visors under the cab's roof)
     zbel, zfl, zfw, xw, yw = 0.44, (0.59 if troops else 0.74), 0.45, 0.05, 0.62      # her belly; the body's floor; the footwell's floor, where it starts, its half-width
     zseat = zfw + 0.40                                                                 # the top of a driver's seat
-    v.hull([(1.3, 0.5, 0.52), (1.3, 0.5, zg), (xa, 0.5, zg), (xa, 0.5, zbel)], "shade", 0.01)                                 # under the engine
-    v.slab((xw, -yw, zbel), (xa, yw, zfw), "shade", 0.006)                                                                   # the footwell's floor
+    xt, zt_toe = xa + 0.19, 0.62                           # the footwell runs on under the scuttle: where the drivers' boots reach the pedals
+    v.hull([(1.3, 0.5, 0.52), (1.3, 0.5, zg), (xt, 0.5, zg), (xt, 0.5, 0.48)], "shade", 0.01)                                 # under the engine
+    v.slab((xw, -yw, zbel), (xt, yw, zfw), "shade", 0.006)                                                                   # the footwell's floor
+    v.slab((xt, -yw, zbel), (xt + 0.02, yw, zt_toe + 0.02), "shade", 0.004)                                                  # the toe space's front,
+    v.slab((xa, -yw, zt_toe), (xt + 0.02, yw, zt_toe + 0.02), "shade", 0.004)                                                # and its roof under the engine's bulkhead
+    for s in (LEFT, RIGHT):
+        v.slab((xa, s * (yw - 0.03), zbel), (xt + 0.02, s * yw, zt_toe + 0.02), "shade")
+    if fine:
+        for y in (0.30, 0.43):                             # the driver's pedals
+            v.box((0.012, 0.07, 0.10), (xt - 0.05, y, zfw + 0.085), "steel", 0.004, turn=rot(0.0, -28.0))
+            v.rod((xt - 0.045, y, zfw + 0.06), (xt, y, zfw + 0.11), 0.008, "steel", 6)
     v.hull([(xw, 0.5, zbel), (xw, 0.5, zfl), (xr2, 0.5, zfl), (xr2 + 0.08, 0.5, zbel + 0.02)], "shade", 0.01)                 # the body's floor
     v.slab((xw - 0.03, -0.5, zfw), (xw, 0.5, zfl), "shade")                                                                  # the step up out of the footwell
     v.slab((xr2, -0.5, zfl - 0.01), (xr2 + 0.03, 0.5, zg), "shade")                                                          # the sill under the stern doors
@@ -592,7 +601,7 @@ def hanomag(fine=True, tag="GER", paint=None, fit="troops", name="Hanomag", titl
             v.lathe((xa - 0.06, y, 1.28), -X, [(0.006, 0.0), (0.006, r), (0.0, r * 1.1), (0.0, 0.0)], "black", 12)
     for s in (LEFT, RIGHT):
         v.slab((0.14, s * 0.17, zseat - 0.09), (0.5, s * 0.585, zseat), "leather", 0.03, 2)
-        v.slab((0.1, s * 0.17, zseat - 0.02), (0.18, s * 0.585, zseat + 0.4), "leather", 0.03, 2)
+        v.slab((0.065, s * 0.17, zseat - 0.02), (0.145, s * 0.585, zseat + 0.4), "leather", 0.03, 2)       # (its back 0.175 behind the seat's point: room for his hips)
         v.slab((0.2, s * 0.25, zfw), (0.44, s * 0.5, zseat - 0.085), "shade", 0.006)                                         # the seat's box
     wc, wn = Vector((0.76, 0.38, zseat + 0.16)), Vector((0.81, 0.0, -0.58))      # the wheel's middle (0.44 ahead of the seat's point, 0.16 over it, tilted 36 degrees back) and the way its column runs
     v.rod(wc, wc + wn * 0.28, 0.014, "steel", 6)

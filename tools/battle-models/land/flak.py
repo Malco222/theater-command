@@ -26,8 +26,9 @@ from motorpool import LEFT, RIGHT, X, Y, Z, frame
 from tanks_ger import coat, coats
 
 
-def ring_wheel(v, at, ax, r=0.1, grip=True):
-    """A handwheel: a rim on three spokes about a hub, on an axle along `ax`."""
+def ring_wheel(v, at, ax, r=0.1, grip=True, turn=0.0):
+    """A handwheel: a rim on three spokes about a hub, on an axle along `ax`. turn: where round the rim its handle
+    stands (degrees). Returns the middle of the handle, where a hand takes it."""
     at, ax = Vector(at), Vector(ax).normalized()
     _, side, up = frame(ax)
     n = v.n(18, 8)
@@ -38,7 +39,11 @@ def ring_wheel(v, at, ax, r=0.1, grip=True):
         v.rod(at, at + d * r, 0.007, "steel", 6, caps=False)
     v.lathe(at - ax * 0.012, ax, [(0.03, 0.0), (0.03, 0.02), (0.0, 0.024), (0.0, 0.0)], "steel", 8)
     if grip:
-        v.rod(at + side * r, at + side * r + ax * 0.07, 0.011, "wood", 8)
+        a = math.radians(turn)
+        g0 = at + (side * math.cos(a) + up * math.sin(a)) * r
+        v.rod(g0, g0 + ax * 0.07, 0.011, "wood", 8)
+        return g0 + ax * 0.035
+    return None
 
 
 def flash_barrel(v, base, length, bore=0.02, r0=0.03, r1=0.018):
@@ -111,13 +116,16 @@ def light_flak(v, at, parent="hull", lift=0.0, shield="wide", low=-5.0):
             v.handle(p(0.03, s * 0.35, 0.266), p(0.13, s * 0.35, 0.266), Z, r=0.006, reach=0.025, paint="steel")
     v.slab(p(0.08, -0.19, 0.03), p(0.29, 0.19, 0.16), coat, 0.01)                                                                  # the gear case between the cheeks
     v.rod(p(-0.22, 0.0, 0.08), p(-0.22, 0.0, 0.2), 0.03, coat, 8)
-    v.tube([p(-0.22, 0.0, 0.2), p(-0.42, 0.0, 0.26), p(-0.58, 0.0, 0.29)], 0.022, coat, 8)                                          # the seat's bracket
-    v.box((0.30, 0.34, 0.045), p(-0.60, 0.0, 0.315), "leather", 0.016)
-    v.tube([p(-0.74, 0.0, 0.3), p(-0.79, 0.0, 0.42), p(-0.8, 0.0, 0.56)], 0.016, coat, 6)
-    v.box((0.045, 0.30, 0.2), p(-0.785, 0.0, 0.6), "leather", 0.016)
-    ring_wheel(v, p(-0.10, -0.33, 0.44), -Y, r=0.1)                                                                                 # he lays her with one hand,
-    ring_wheel(v, p(-0.16, 0.17, 0.5) + Vector((-0.06, 0.16, 0.0)), Vector((-0.5, 0.86, 0.0)), r=0.1)                               # and trains her with the other
-    v.socket("crew.gunner", p(-0.60, 0.0, 0.34), X, part="turret", note="the gunner, seated behind the gun: he turns with the mount")
+    sx = -0.67                                             # the seat's point: a seated man's knees end short of the cradle, his boots stand between the cheeks
+    v.tube([p(-0.22, 0.0, 0.2), p(sx + 0.18, 0.0, 0.26), p(sx + 0.02, 0.0, 0.29)], 0.022, coat, 8)                                  # the seat's bracket
+    v.box((0.30, 0.34, 0.045), p(sx, 0.0, 0.315), "leather", 0.016)
+    v.tube([p(sx - 0.14, 0.0, 0.3), p(sx - 0.20, 0.0, 0.42), p(sx - 0.21, 0.0, 0.56)], 0.016, coat, 6)
+    v.box((0.045, 0.30, 0.2), p(sx - 0.195, 0.0, 0.6), "leather", 0.016)
+    grip_r = ring_wheel(v, p(-0.18, -0.33, 0.44), -Y, r=0.1)                                                                        # he lays her with one hand,
+    grip_l = ring_wheel(v, p(-0.27, 0.33, 0.5), Vector((-0.5, 0.86, 0.0)), r=0.1, turn=180.0)                                       # and trains her with the other
+    v.socket("crew.gunner", p(sx, 0.0, 0.34), X, part="turret", note="the gunner, seated behind the gun: the top of his seat, 0.31 over the platform his boots are on; he turns with the mount")
+    v.socket("grip.gunner.r", grip_r, -Y, part="turret", note="his right hand: the handle of the wheel he lays her by (its middle)")
+    v.socket("grip.gunner.l", grip_l, Vector((-0.5, 0.86, 0.0)), part="turret", note="his left hand: the handle of the wheel he trains her by (its middle)")
 
     # ---- her shield ------------------------------------------------------------------------------------------------
     if shield == "wide":
@@ -161,7 +169,7 @@ def light_flak(v, at, parent="hull", lift=0.0, shield="wide", low=-5.0):
         v.slab(g(-0.2, s * 0.075, -0.105), g(0.2, s * 0.095, 0.03), coat, 0.004)
     arc = [(T.x + 0.27 * math.cos(math.radians(a)), T.z + 0.27 * math.sin(math.radians(a))) for a in range(-150, -29, 12)]
     arc += [(T.x + 0.22 * math.cos(math.radians(a)), T.z + 0.22 * math.sin(math.radians(a))) for a in range(-30, -151, -12)]
-    v.extrude(arc, T.y - 0.165, T.y - 0.145, "steel", 0.002)                                                                       # the arc she is lifted by
+    v.extrude(arc, T.y - 0.187, T.y - 0.167, "steel", 0.002)                                                                       # the arc she is lifted by
     v.slab(g(-0.30, -0.05, -0.05), g(0.40, 0.05, 0.07), "steel", 0.012, 2)                                                         # the receiver
     v.slab(g(-0.22, -0.036, 0.07), g(0.22, 0.036, 0.092), "steel", 0.006)                                                          # its cover
     v.rod(g(-0.30, 0.0, 0.01), g(-0.38, 0.0, 0.01), 0.032, "steel", 10)                                                            # the buffer
@@ -234,12 +242,12 @@ def quad_mount(v, at, parent="hull", high=0.28, low=-5.0, seat="canvas.seat"):
     v.lathe(P, Z, [(0.04, 0.0), (0.04, 0.47), (0.0, 0.47), (0.0, 0.0)], coat, n_big)
     tz = 0.84
     T = p(0.0, 0.0, tz)
-    side = [(P.x - 0.42, P.z + 0.04), (P.x + 0.36, P.z + 0.04), (P.x + 0.36, P.z + 0.40), (P.x + 0.15, P.z + 0.97), (P.x - 0.15, P.z + 0.97), (P.x - 0.42, P.z + 0.56)]
+    side = [(P.x - 0.42, P.z + 0.04), (P.x + 0.49, P.z + 0.04), (P.x + 0.49, P.z + 0.40), (P.x + 0.15, P.z + 0.97), (P.x - 0.15, P.z + 0.97), (P.x - 0.42, P.z + 0.56)]
     for s in (LEFT, RIGHT):
         y0, y1 = sorted((s * 0.31, s * 0.33))
         v.extrude(side, P.y + y0, P.y + y1, coat, 0.004)
         v.lathe(T + Y * (s * 0.33), Y * s, [(0.035, 0.0), (0.035, 0.09), (0.0, 0.11), (0.0, 0.0)], coat, v.n(18, 8))                 # the trunnion's bearing
-    v.slab(p(0.34, -0.31, 0.04), p(0.36, 0.31, 0.40), coat, 0.003)                                                                  # the plate before his legs
+    v.slab(p(0.47, -0.31, 0.04), p(0.49, 0.31, 0.40), coat, 0.003)                                                                  # the plate before his legs (0.67 ahead of his seat's point: room for his boots)
     v.slab(p(-0.42, -0.31, 0.04), p(-0.40, 0.31, 0.56), coat, 0.003)                                                                # and behind his back
     v.slab(p(-0.76, -0.27, 0.04), p(-0.42, 0.27, 0.36), coat, 0.02, 2)                                                              # the power unit behind him: a little engine and its dynamo
     v.rod(p(-0.6, -0.2, 0.44), p(-0.6, 0.06, 0.44), 0.085, coat, v.n(16, 8))
@@ -248,12 +256,14 @@ def quad_mount(v, at, parent="hull", high=0.28, low=-5.0, seat="canvas.seat"):
     if fine:
         v.louvres(p(-0.762, 0.0, 0.2), (0.3, 0.2), -X, count=6, down=-Z)
     v.box((0.34, 0.40, 0.05), p(-0.2, 0.0, 0.3), seat, 0.018)                                                                       # his seat
-    v.box((0.05, 0.40, 0.34), p(-0.37, 0.0, 0.55), seat, 0.018)
+    v.box((0.04, 0.40, 0.34), p(-0.385, 0.0, 0.55), seat, 0.016)                                                                    # (its back 0.165 behind the seat's point)
     v.rod(p(0.2, 0.0, 0.04), p(0.12, 0.0, 0.6), 0.016, "steel", 8)                                                                  # the column with the two grips he steers her by
     v.rod(p(0.12, -0.13, 0.6), p(0.12, 0.13, 0.6), 0.012, "steel", 6)
     for s in (LEFT, RIGHT):
         v.rod(p(0.12, s * 0.13, 0.6), p(0.07, s * 0.13, 0.7), 0.016, "black", 8)
-    v.socket("crew.gunner", p(-0.2, 0.0, 0.33), X, part="turret", note="the gunner, seated between the guns: he turns with the mount")
+    v.socket("crew.gunner", p(-0.2, 0.0, 0.33), X, part="turret", note="the gunner, seated between the guns: the top of his seat, 0.29 over the turntable his boots are on; he turns with the mount")
+    for name, s in (("l", LEFT), ("r", RIGHT)):
+        v.socket(f"grip.gunner.{name}", p(0.095, s * 0.13, 0.65), X, part="turret", note="a hand on the column's grip (its middle): he trains and lays her by them")
 
     # ---- what lifts: the round plates, the guns and their chests on them, the plate before the gunner --------------
     v.part("gun", "turret", tuple(T), axis=(0, -1, 0), limits=[low, 85.0], kind="turn", note="the four guns lift together at the trunnions: + muzzles up, almost to the upright; the game lays them")
@@ -303,9 +313,13 @@ def quad_mount(v, at, parent="hull", high=0.28, low=-5.0, seat="canvas.seat"):
 # =====================================================================================================================
 def _flak_sockets(v, P, T, commander, loaders, fire):
     v.use("hull")
-    v.socket("commander", commander, X, part="hull", note="the gun's commander stands here, watching the sky")
-    for i, at in enumerate(loaders):
-        v.socket("crew.loader" + ("" if i == 0 else str(i + 1)), at, X, part="hull", note="a loader stands here, beside the mount, with the next box of rounds")
+    # (a place is where a man's feet are: (x, y, z), or ((x, y, z), the way he faces, a note))
+    place = lambda q, note: q if not isinstance(q[0], (int, float)) else (q, X, note)      # noqa: E731
+    at, facing, note = place(commander, "the gun's commander stands here, watching the sky")
+    v.socket("commander", at, facing, part="hull", note=note)
+    for i, q in enumerate(loaders):
+        at, facing, note = place(q, "a loader stands here, beside the mount, with the next box of rounds")
+        v.socket("crew.loader" + ("" if i == 0 else str(i + 1)), at, facing, part="hull", note=note)
     v.socket("ring", tuple(P), Z, part="hull", note="the foot of the gun's mount")
     v.socket("hit.turret", tuple(T + Y * 0.3), Y, part="turret")
     v.socket(fire, tuple(P + Z * 0.3), Z, part="hull", note="at the gun: her ready rounds burn")
@@ -319,7 +333,9 @@ def m16(fine=True, tag="USA"):
     v.m.kind = "aa"
     zs = 0.94
     P, T = quad_mount(v, (-1.6, 0.0, zs), "hull")
-    _flak_sockets(v, P, T, (-0.55, 0.0, zs), [(-1.5, 0.72, zs), (-1.5, -0.72, zs)], "fire.3")
+    stern = "a loader stands here at the stern corner, by the spare chests, clear of the mount as it turns"
+    _flak_sockets(v, P, T, ((-0.55, 0.0, zs), X, "the gun's commander stands here, between the two pairs of barrels, watching the sky"),
+                  [((-2.28, 0.78, zs), X, stern), ((-2.28, -0.78, zs), X, stern)], "fire.3")
     v.use("hull")
     for s in (LEFT, RIGHT):                                # spare chests in a row across her stern, clear of the mount as it turns
         for k, dx in enumerate((0.0, 0.018, -0.012)):
@@ -338,7 +354,10 @@ def flak_halftrack(fine=True, tag="GER", paint=None):
     v.m.kind = "aa"
     fl = 0.74
     P, T = light_flak(v, (-1.25, 0.0, fl), "hull", lift=0.42, shield="narrow", low=0.0)
-    _flak_sockets(v, P, T, (-0.3, 0.0, fl), [(-1.15, 0.42, fl), (-1.9, -0.3, fl)], "fire.3")
+    # (the mount's ring fills her floor from side to side: the men stand on the track guards, 0.20 over the floor)
+    _flak_sockets(v, P, T, ((-1.72, -0.68, 0.94), X, "the gun's commander stands here on the right track guard, behind the gun and clear of the falling cases, watching the sky"),
+                  [((-1.28, 0.70, 0.94), -Y, "a loader stands here on the left track guard beside the gun, facing it: the magazine goes in at his waist"),
+                   ((-1.80, 0.66, 0.94), -Y, "the second loader stands here on the left track guard behind the first, facing inboard, with the next magazines")], "fire.3")
     v.use("hull")
     for s in (LEFT, RIGHT):                                # the boxes of rounds on the track guards, inside her walls
         for x in (-0.45, -0.8):
@@ -359,7 +378,9 @@ def flak_truck(fine=True, tag="_"):
     v.m.kind = "aa"
     fl = 1.1
     P, T = light_flak(v, (-2.0, 0.0, fl), "hull", lift=0.0, shield="wide", low=-5.0)
-    _flak_sockets(v, P, T, (-0.5, -0.6, fl), [(-1.9, 0.78, fl), (-0.9, 0.5, fl)], "fire.3")
+    _flak_sockets(v, P, T, ((-0.70, -0.6, fl), X, "the gun's commander stands here, by the boxes of rounds, watching the sky"),
+                  [((-2.05, 0.76, fl), -Y, "a loader stands here on the gun's left, facing it: the magazine goes in at his thigh, he bends to it"),
+                   ((-0.9, 0.5, fl), X, "the second loader stands here, by the boxes of rounds, with the next magazines")], "fire.3")
     v.use("hull")
     for y in (-0.72, -0.36, 0.0):                         # the boxes of rounds against the headboard
         v.slab((-0.44, y - 0.16, fl), (-0.1, y + 0.16, fl + 0.24), coat, 0.012)

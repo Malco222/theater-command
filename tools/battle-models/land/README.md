@@ -71,10 +71,16 @@ ring: where the blast comes from), `hit.front/left/right/rear/turret`, `dust.lef
 
 **Where the men go.** A crew socket is a point and a facing. A seated man's socket (`driver`, `rider.cab`, `rider.N`)
 is the top of his seat under the middle of him: a bench is about 0.44 over the floor his boots are on, a driver's
-seat 0.40. Every other socket is the floor at his feet, with one exception: a tank
+seat 0.40; a gunner seated on his gun's mount (the flak wagons' `crew.gunner`) is the top of his seat too, and its
+note gives the seat's height over the platform. Every other socket is the floor at his feet (a kneeling man's, the
+M7's layer, the floor under his hips), with one exception: a tank
 commander's `commander` is 0.25 m under his hatch's rim, and the crew pack's `commander_hatch` clip puts his feet
 0.92 m under the socket. A man who serves a gun that turns is on the part that turns (the M3's `gunner` is on
-`mg_mount`). Tanks carry no driver's socket: he is shut in, and what shows under an opened lid is a dark panel, not a
+`mg_mount`). Where his hands hold something there is a socket for each, named after his own: `grip.gunner.l` and
+`grip.gunner.r` for `crew.gunner`, `grip.layer.l` and `grip.layer.r` for a towed gun's `crew.layer`. Each is the
+middle of a handle; on a handwheel it is on the wheel's own part, so it goes round with the wheel (the left hand
+elevates, the right traverses). A socket's note says anything else a man needs: which way a loader faces, how high
+a breech is, that a place wants a pose and not a clip. Tanks carry no driver's socket: he is shut in, and what shows under an opened lid is a dark panel, not a
 hole. The lorry's cab is shut too, its glass dark. The crew's clips: `../soldier/crew/` in the project's files.
 
 **`mark_months`.** Where a nation's marking changed with the months the file carries the table (Britain and the

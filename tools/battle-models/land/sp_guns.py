@@ -307,7 +307,7 @@ def m4_open_hull(v, zw, zb, xf, notch, pulpit=None, driver=LEFT, step=None, tag=
         cx, cy, r, zp = pulpit
         n = v.n(40, 14)
         v.lathe((cx, cy, zs), Z, [(zp - zs, r - th), (zp - zs, r), (0.0, r), (0.0, r - th), (zp - zs, r - th)], coat, n)
-        v.lathe((cx, cy, zs + 0.26), Z, [(0.012, 0.0), (0.012, r - th)], "shade", n)                      # the floor he stands on
+        v.lathe((cx, cy, zp - 0.892), Z, [(0.012, 0.0), (0.012, r - th)], "shade", n)                     # the floor he stands on, waist-deep: the gun's grips 1.08 over it
         v.tube([(cx + (r - 0.01) * math.cos(2 * math.pi * k / n), cy + (r - 0.01) * math.sin(2 * math.pi * k / n), zp + 0.015) for k in range(n)], 0.02, "steel", 6, closed=True)
         if fine:
             v.weld((cx - r - 0.001, cy, zs + 0.3), (cx - r - 0.001, cy, zp - 0.02), -X)                  # the seam up its back
@@ -330,7 +330,8 @@ def m4_open_hull(v, zw, zb, xf, notch, pulpit=None, driver=LEFT, step=None, tag=
         if fine:
             v.tube([pin + Z * 0.2 + X * -0.2, pin + Z * 0.2 + X * -0.3 + Y * 0.05, pin + Z * 0.14 + X * -0.3 + Y * 0.05], 0.01, "steel", 6)      # the grips
         v.socket("mg", pin + Z * 0.21 + X * 1.05, X, part="hull", note="the heavy machine gun on the pulpit's ring")
-        v.socket("crew.mg", (cx - 0.05, cy, zs + 0.27), X, part="hull", note="the machine-gunner stands here in the pulpit")
+        v.socket("crew.mg", (cx + r - 0.73, cy + 0.11, zp - 0.88), X, part="hull",
+                 note="the machine-gunner stands here on the pulpit's floor, waist-deep in it: the gun's spade grips are 0.40 ahead of his feet and 1.08 up")
         mg = "mg"
 
     # ---- the engine deck and the tail, as the tank's -------------------------------------------------------------
@@ -344,14 +345,16 @@ def m4_open_hull(v, zw, zb, xf, notch, pulpit=None, driver=LEFT, step=None, tag=
     return {"hw": hw, "sw": sw, "zs": zs, "zr": zr, "xe": xe, "floor": fl, "g_at": g_at, "gn": gn, "gl": gl, "Hc": Hc, "th": th, "zback": zback, "mg": mg, "driver_y": dy}
 
 
-def _open_sockets(v, h, zw, gunner, loaders, commander, case):
-    """The detachment's places in her open box, and what happens to her."""
+def _open_sockets(v, h, zw, gunner, loaders, commander, case, notes=None):
+    """The detachment's places in her open box, and what happens to her. notes: her own words for a place
+    ({"commander": ..., "crew.gunner": ..., "crew.loader": ...}) where the common ones do not fit."""
+    notes = notes or {}
     zs, zr, sw, xe, fl = h["zs"], h["zr"], h["sw"], h["xe"], h["floor"]
     g_at, gn = h["g_at"], h["gn"]
-    v.socket("commander", commander, X, part="hull", note="the gun's commander stands here in the open box")
-    v.socket("crew.gunner", gunner, X, part="turret", note="the layer, at the sight and the handwheels on the left of the breech")
+    v.socket("commander", commander, X, part="hull", note=notes.get("commander", "the gun's commander stands here in the open box"))
+    v.socket("crew.gunner", gunner, X, part="turret", note=notes.get("crew.gunner", "the layer, at the sight and the handwheels on the left of the breech"))
     for k, at in enumerate(loaders):
-        v.socket("crew.loader" if k == 0 else f"crew.loader{k + 1}", at, X, part="hull", note="a loader stands here, behind the breech")
+        v.socket("crew.loader" if k == 0 else f"crew.loader{k + 1}", at, X, part="hull", note=notes.get("crew.loader", "a loader stands here, behind the breech"))
     v.socket("case", case, -X, part="hull", note="where the empty case falls, on her floor")
     v.socket("engine", (-1.9, 0.0, 1.76), Z, part="hull", note="engine deck: smoke and the first fire")
     v.socket("fire.1", (-1.9, 0.4, 1.76), Z, part="hull")
@@ -379,10 +382,9 @@ def m7(fine=True, tag="USA"):
     v.saddle(px, zt, 0.22, (15.0, 30.0), rate=6.0, foot=0.32)
     v.cradle(-5.0, 35.0, 0.32, 0.2, 1.2, 0.55, 0.16, over=(-0.45, 1.25, 0.07, 0.235))
     xb = v.piece(2.36, 0.105, 0.78, 0.14, 0.1, 1.07, steps=((0.45, 0.118),), ring=(0.3, 0.36, 0.36), block="right", lug=0.5)
-    v.handwheels((px - 0.3, 0.42, zt - 0.14), (px - 0.42, 0.34, zt - 0.30), r=0.12)
+    v.handwheels((px - 0.3, 0.42, zt - 0.14), (px - 0.42, 0.34, zt - 0.30), r=0.12, grips="gunner")
     v.sight((px - 0.2, 0.32, zt + 0.04), high=0.26)
-    v.seat((px - 0.62, 0.50, zt - 0.34), 1.0, part="turret")
-    v.tube([(px - 0.62, 0.30, zt - 0.54), (px - 0.36, 0.26, zt - 0.56), (px - 0.12, 0.2, pz + 0.04)], 0.018, coat, 6)      # the arm that carries it from the saddle
+    # (her trunnions are only 0.73 over the floor: the layer kneels at the wheels, the sight at his eye; a seat would put the wheels in his lap)
     v.shift(here, (0.0, gy, 0.0))
     # ---- inside her: the rounds standing along each sponson, seats, the things a detachment lives with -----------
     v.rounds(-0.92, 0.36, 0.88, sw - 0.05, zs, 0.50)
@@ -423,7 +425,10 @@ def m7(fine=True, tag="USA"):
         v.shovel(r_at(0.30, -0.5) + rn * 0.02, 90.0, 0.95)
         v.axe(r_at(0.50, -0.38) + rn * 0.02, 90.0, 0.78)
     v.aerial("aerial", "hull", (0.95, sw - th / 2, zw), 2.4)
-    _open_sockets(v, h, zw, gunner=(px - 0.55, 0.50 + gy, fl), loaders=[(xb - 0.8, -0.3 + gy, fl), (xb - 0.55, 0.42 + gy, fl)], commander=(-0.72, 0.30, fl), case=(xb - 0.5, -0.2 + gy, fl))
+    _open_sockets(v, h, zw, gunner=(px - 0.57, 0.60 + gy, fl), loaders=[(xb - 0.8, -0.3 + gy, fl), (xb - 0.55, 0.42 + gy, fl)], commander=(-0.72, 0.30, fl), case=(xb - 0.5, -0.2 + gy, fl),
+                  notes={"crew.gunner": "the layer kneels here on her floor, left of the breech (the point is the floor under his hips): the handwheels' hubs are 0.43 and 0.60 over the floor, their handles 0.16 and 0.39 ahead of him, the sight 0.3 ahead at his eye (his hands: grip.gunner.l, grip.gunner.r)",
+                         "commander": "the gun's commander stands here in the open box: its sides come to his waist (0.92 over the floor), so he stands free",
+                         "crew.loader": "a loader stands here, behind the breech: it is 0.73 over the floor, at his waist, and he bends to it"})
     v.tank_clips(recoil=1.0, kick=0.7, gun_low=-5.0, hatches=["hatch_driver"], traverse=6.0, idle_cue="tank_idle_sherman_loop", drive_cue="tank_sherman_drive_loop",
                  gun_cue="field_gun_fire", has_turret=False, mg="mg")
     return v
@@ -443,7 +448,7 @@ def sexton(fine=True, tag="UK"):
     v.saddle(px - 0.05, zt, 0.2, (25.0, 15.0), rate=4.0, foot=0.3)
     v.cradle(-9.0, 40.0, 0.27, 0.19, 1.45, 0.45, 0.13)
     xb = v.piece(2.47, 0.0876, 0.8, 0.118, 0.07, 0.5, brake="double", steps=((0.5, 0.095),), ring=(0.27, 0.3, 0.31), block="down", lug=0.5)
-    v.handwheels((px - 0.37, 0.38, zt - 0.12), (px - 0.49, 0.31, zt - 0.26), r=0.11)
+    v.handwheels((px - 0.37, 0.38, zt - 0.12), (px - 0.49, 0.31, zt - 0.26), r=0.11, grips="gunner")
     v.sight((px - 0.29, 0.3, zt + 0.02), high=0.22)
     v.seat((px - 0.67, 0.44, zt - 0.42), 1.0, part="turret")
     v.tube([(px - 0.67, 0.24, zt - 0.62), (px - 0.4, 0.22, zt - 0.62), (px - 0.14, 0.18, pz + 0.04)], 0.018, coat, 6)       # the arm that carries it from the saddle
@@ -628,7 +633,7 @@ def hummel(fine=True, tag="GER"):
             for s in (LEFT, RIGHT):
                 v.rod((px + 0.55, s * 0.30, zt - 0.3), (px + 0.2, s * 0.2, zt - 0.3), 0.012, coat, 6)
     xb = v.piece(4.44, 0.149, 0.62, 0.19, 0.112, 1.1, steps=((0.35, 0.152),), ring=(0.4, 0.46, 0.46), block="right", lug=0.6)
-    v.handwheels((px - 0.34, 0.48, zt - 0.14), (px - 0.46, 0.40, zt - 0.30), r=0.13)
+    v.handwheels((px - 0.34, 0.48, zt - 0.14), (px - 0.46, 0.40, zt - 0.30), r=0.13, grips="gunner")
     v.sight((px - 0.22, 0.37, zt + 0.04), high=0.3)
     if fine:                                               # the two spring equilibrators, standing either side of the cradle
         v.use("turret")
@@ -823,7 +828,7 @@ def su76(fine=True, tag="SOV"):
             for d in (-0.2, 0.0, 0.2):
                 v.bolt((px + 0.64, e * 0.238, zt + d * 0.9), Vector((0.19, e, 0.0)), 0.012, 0.008)
     xb = v.piece(3.40, 0.0762, 1.02, 0.088, 0.052, 0.9, brake="double", steps=((0.34, 0.07),), ring=(0.26, 0.25, 0.27), block="down", lug=0.6)
-    v.handwheels((px - 0.34, 0.33, zt - 0.095), (px - 0.44, 0.27, zt - 0.255), r=0.1)
+    v.handwheels((px - 0.34, 0.33, zt - 0.095), (px - 0.44, 0.27, zt - 0.255), r=0.1, grips="gunner")
     v.sight((px - 0.22, 0.25, zt + 0.025), high=0.2)
     v.shift(here, (0.0, gy, 0.0))
     # ---- inside her: rounds along the right wall and at the back on the left, the layer's seat, the wireless, boxes
