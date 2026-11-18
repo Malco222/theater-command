@@ -12,7 +12,7 @@
 
 import data from '../../data/campaign/intel.json';
 import { Rng, hashString } from '../core/rng';
-import type { Agent, Corps, Game, IntelNote, Mission, Region } from './types';
+import type { Agent, Corps, FoeAgent, Game, IntelNote, Mission, Region, StolenOrder } from './types';
 import { allied, atWar, bloc, fieldArmy, headline } from './game';
 import { CAUSE_WORDS, cutCause, cutOn, cutRail, cutThroughGuns, hastyLeft, onNet, railCut, ruinMost, ruinedAt, workingFactories, wreckFactory, type RailCause } from './rails';
 import { turnToDate } from '../core/ticket';
@@ -20,6 +20,9 @@ import { levelIndex } from './difficulty';
 import { fieldOut, fireField, stores, type StoresView } from './resources';
 import { BUDGET, ledger } from './economy';
 import { TECH } from './tech';
+import { AIRV, airPiece, fieldWrecked, groupsOnField, wreckField } from './airversion';
+import { huntersOn, ordersKnown, ordersOn, pruneOrders } from './secretwar';
+import { fieldOrder } from './air';
 
 interface MissionRow { caught: number; success?: number; gain?: number; months?: number; cut?: number }
 
@@ -35,6 +38,7 @@ export const INTEL = data as unknown as {
   estimate: { round: number };
   reports: { fresh: number; keep: number; drift: number; widest: number; contact: number; unknown: number };
   names: string[];
+  secret: { hunters: { on: boolean; lead: number; here: number; near: number; skill: number }; orders: { on: boolean; ambush: number } };
 };
 
 /** True when spies and the fog of war are in the game. That is the grand campaign: a historical scenario shows the whole map. */
@@ -469,8 +473,15 @@ export function retire(g: Game, nat: string, id: number): boolean {
 
 // ---- Missions -------------------------------------------------------------------------------------------
 
-export const MISSIONS: Mission[] = ['watch', 'books', 'factory', 'rail', 'oil', 'guard'];
-const SABOTAGE: Mission[] = ['factory', 'rail', 'oil'];
+export const MISSIONS: Mission[] = ['watch', 'books', 'factory', 'rail', 'oil', 'airfield', 'orders', 'guard', 'hunt'];
+const SABOTAGE: Mission[] = ['factory', 'rail', 'oil', 'airfield'];
+/** The work an agent can have at home; everything else is work abroad. */
+const AT_HOME: Mission[] = ['guard', 'hunt'];
+/**
+ * The missions offered in this campaign, each piece of the air version and the secret war only with its switch on:
+ * wrecking an airfield (ruling 151(b)), stealing the orders (135), hunting enemy agents (151(c)).
+ */
+const missionsIn = (g: Game): Mission[] => MISSIONS.filter((m) => (m !== 'airfield' || airPiece(g, 'field')) && (m !== 'orders' || ordersOn(g)) && (m !== 'hunt' || huntersOn(g)));
 export const isSabotage = (m: Mission): boolean => SABOTAGE.includes(m);
 
 export const MISSION_TEXT: Record<Mission, { label: string; doing: string; text: string }> = {
@@ -479,6 +490,9 @@ export const MISSION_TEXT: Record<Mission, { label: string; doing: string; text:
   factory: { label: 'Wreck a factory', doing: 'preparing to wreck a factory', text: 'One working factory is put out of action until engineers rebuild it. Tried once, next month, and then the agent must lie low.' },
   rail: { label: 'Cut the railway', doing: 'preparing to cut the railway', text: 'The track is blown. No train runs through the province until engineers relay it. Tried once, next month, and then the agent must lie low.' },
   oil: { label: 'Fire the oilfield', doing: 'preparing to fire the oilfield', text: `The wells are set alight: the field gives ${Math.round((1 - (data as any).missions.oil.cut) * 100)}% of its oil for ${(data as any).missions.oil.months} months. Tried once, next month, and then the agent must lie low.` },
+  airfield: { label: 'Wreck the airfield', doing: 'preparing to wreck the airfield', text: 'Runways cratered and the fuel dump set alight: every enemy air group based on the field is grounded for the month. Tried once, next month, and then the agent must lie low.' },
+  orders: { label: 'Steal the orders', doing: 'stealing the orders', text: "Next month's orders of the bomber groups on this field: which groups, how many bombers, the target, by day or by night. Tried each month the agent stays on it. A stolen order is never false; the gamble is in getting it." },
+  hunt: { label: 'Hunt enemy agents', doing: 'hunting enemy agents', text: "Searches this province and the provinces around it for the other side's agents. One uncovered can be arrested before it strikes." },
   guard: { label: 'Guard against saboteurs', doing: 'on guard', text: 'Watches for enemy agents here and in the provinces around, and is some help everywhere at home.' },
 };
 
@@ -504,10 +518,17 @@ export function whyNotMission(g: Game, nat: string, id: number, m: Mission): str
   const r = g.regions[a.reg], host = g.nations[r.ctrl];
   if (!atWork(g, a)) return `${a.name} is not yet at work: ${waitWords(g, a)}.`;
   if (m === 'guard') return abroad(g, a) ? 'An agent can stand guard only on friendly ground.' : null;
+  if (m === 'hunt') return !huntersOn(g) ? 'Not in this campaign.' : abroad(g, a) ? 'An agent hunts enemy agents only on friendly ground.' : null;
   if (!abroad(g, a)) return `${a.name} is on friendly ground. Send the agent abroad first.`;
   if (m === 'watch') return null;
   if (m === 'books') {
     if (!host?.alive || host.capital !== r.id || r.owner !== r.ctrl) return 'A government keeps its books in its capital. Send the agent to one.';
+    return null;
+  }
+  if (m === 'orders') {
+    if (!ordersOn(g)) return 'Not in this campaign.';
+    if (!atWar(g, nat, r.ctrl)) return `You are at peace with ${host?.name ?? 'this country'}: its air staff has no orders against you.`;
+    if (!groupsOnField(g, r.id, (n) => atWar(g, nat, n)).some((f) => f.bmr > 0)) return `No enemy bomber group flies from ${r.name}.`;
     return null;
   }
   if (!atWar(g, nat, r.ctrl)) return `You are at peace with ${host?.name ?? 'this country'}. Sabotage is an act of war.`;
@@ -520,6 +541,12 @@ export function whyNotMission(g: Game, nat: string, id: number, m: Mission): str
   if (m === 'rail') {
     if (!onNet(r.id)) return `No railway runs through ${r.name}.`;
     if (railCut(g, r.id)) return `The railway at ${r.name} is already cut.`;
+    return null;
+  }
+  if (m === 'airfield') {
+    if (!airPiece(g, 'field')) return 'Not in this campaign.';
+    if (fieldWrecked(g, r.id)) return `The field at ${r.name} is already wrecked this month.`;
+    if (!groupsOnField(g, r.id, (n) => atWar(g, nat, n)).length) return `No enemy air group flies from ${r.name}.`;
     return null;
   }
   if (!r.oil) return `There is no oilfield at ${r.name}.`;
@@ -634,10 +661,16 @@ function attempt(g: Game, a: Agent): void {
   let done = false;
   if (ok && m === 'factory' && wreckFactory(g, r)) { done = true; text = `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.`; }
   else if (ok && m === 'rail' && cutRail(g, r.id, 'agent', a.nat)) { done = true; text = `Agent ${a.name} blows the railway at ${r.name}. No ${host.adj} train runs through until engineers relay the track.`; }
+  else if (ok && m === 'airfield' && wreckField(g, r.id, (n) => atWar(g, a.nat, n))) {
+    done = true;
+    const k = groupsOnField(g, r.id, (n) => atWar(g, a.nat, n)).length;
+    text = `Agent ${a.name}'s saboteurs wreck the field at ${r.name}. ${k === 1 ? `The ${host.adj} air group based there is` : `All ${k} ${host.adj} air groups based there are`} grounded this month.`;
+  }
   else if (ok && m === 'oil' && fireField(g, r, INTEL.missions.oil.months ?? 3, INTEL.missions.oil.cut ?? 0.5)) { done = true; text = `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`; }
   else text = m === 'factory' ? `Agent ${a.name}'s attempt on the factories at ${r.name} fails: the guards were too many.`
     : m === 'rail' ? `Agent ${a.name}'s charges on the railway at ${r.name} are found before they go off.`
-      : `Agent ${a.name} cannot get near the wells at ${r.name}.`;
+      : m === 'airfield' ? `Agent ${a.name} cannot get past the sentries on the field at ${r.name}.`
+        : `Agent ${a.name} cannot get near the wells at ${r.name}.`;
   note(g, a, r.id, done ? 'sabotage' : 'failed', text, done);
   headline(g, done ? 'event' : 'info', text, a.nat, r.id);
   a.mission = 'watch';
@@ -676,12 +709,202 @@ export function guardChance(g: Game, nat: string, reg: number): { chance: number
   return { chance: clamp(p, 0, E.most), by: near ?? [...guards].sort((x, y) => skillOf(y) - skillOf(x) || x.id - y.id)[0] };
 }
 
+// ---- The secret war: spy hunters (ruling 151(c)) and stolen orders (ruling 135) -------------------------------
+
+const SECRET = INTEL.secret;
+
+/**
+ * The month of the other side's agents on the player's ground, with spy hunters on (ruling 151(c)): his hunters
+ * search, the agents whose month has come strike (a guard can still stop them), and the services put in new agents
+ * at the rate their plots struck at before, so that in sum the blows come as often as they did.
+ */
+function foesMonth(g: Game, nat: string): void {
+  const foes = (g.intel.foes ??= []);
+  // His hunters search their province and the provinces around it.
+  for (const a of agentsOf(g, nat).filter((x) => x.mission === 'hunt' && atWork(g, x) && !abroad(g, x)).sort((x, y) => x.id - y.id)) {
+    const r = g.regions[a.reg];
+    for (const f of foes) {
+      if (f.found !== undefined) continue;
+      const base = f.reg === a.reg ? SECRET.hunters.here : r.nb.includes(f.reg) ? SECRET.hunters.near : 0;
+      if (base <= 0 || draw(g, g.turn, 'hunt', a.id, f.id) >= clamp(base + SECRET.hunters.skill * (skillOf(a) - 1), 0, 0.95)) continue;
+      f.found = g.turn;
+      const F = g.nations[f.nat], at = g.regions[f.reg];
+      const text = `Agent ${a.name} uncovers ${/^[AEIOU]/.test(F?.adj ?? '') ? 'an' : 'a'} ${F?.adj ?? 'enemy'} agent at ${at.name}. Arrest it before it strikes.`;
+      note(g, a, f.reg, 'uncovered', text, true);
+      headline(g, 'event', text, nat, f.reg);
+      learn(g, a, 1);
+    }
+  }
+  // The agents whose month has come strike, unless the province is no longer his or a guard stops them.
+  for (const f of foes.filter((x) => x.strike <= g.turn).sort((x, y) => x.id - y.id)) {
+    foes.splice(foes.indexOf(f), 1);
+    const r = g.regions[f.reg], F = g.nations[f.nat];
+    if (!F?.alive || r.ctrl !== nat || r.owner !== nat || !atWar(g, nat, f.nat)) continue;
+    const G = guardChance(g, nat, r.id);
+    const who = { name: G.by?.name ?? '', nat };
+    if (G.by && draw(g, g.turn, 'fguard', f.id) < G.chance) {
+      const text = `Agent ${G.by.name}'s watchers catch ${/^[AEIOU]/.test(F.adj) ? 'an' : 'a'} ${F.adj} sabotage ring${f.kind === 'airfield' ? ' on the field' : ''} at ${r.name} before it can strike.`;
+      note(g, who, r.id, 'foiled', text, true);
+      headline(g, 'info', text, nat, r.id);
+      learn(g, G.by, 1);
+      continue;
+    }
+    const mine = (n: string): boolean => n === nat;
+    const struck = f.kind === 'rail' ? cutRail(g, r.id, 'saboteurs') : f.kind === 'airfield' ? wreckField(g, r.id, mine) : wreckFactory(g, r);
+    if (!struck) continue;
+    const text = f.kind === 'rail'
+      ? `Saboteurs blow the railway at ${r.name}. Your police blame ${F.adj} agents. No train runs through until engineers relay the track.`
+      : f.kind === 'airfield' ? `Grounded this month: saboteurs wrecked the field at ${r.name}. Your police blame ${F.adj} agents.`
+        : `Saboteurs wreck a factory at ${r.name}. Your police blame ${F.adj} agents. It stands idle until engineers rebuild it.`;
+    note(g, who, r.id, 'struck', text, false);
+    headline(g, 'event', text, nat, r.id);
+  }
+  // New agents come in where the plots of old would have struck at once.
+  const T = threat(g, nat);
+  for (const foe of T.foes) {
+    if (draw(g, g.turn, 'plot', foe) >= T.each) continue;
+    const aim = plotAim(g, nat, foe);
+    if (!aim) continue;
+    const id = g.intel.foeNext ?? 1;
+    g.intel.foeNext = id + 1;
+    foes.push({ id, nat: foe, reg: aim.reg, kind: aim.kind, strike: g.turn + SECRET.hunters.lead });
+  }
+}
+
+/** Where a plot is aimed, as the services pick it: an airfield he flies from (with its switch), a railway or a factory. */
+function plotAim(g: Game, nat: string, foe: string): { reg: number; kind: FoeAgent['kind'] } | null {
+  const K = INTEL.enemy.kinds;
+  if (airPiece(g, 'field') && draw(g, g.turn, 'field', foe) < AIRV.field.enemyShare) {
+    const pool: Region[] = [];
+    for (const r of g.regions) if (r.ctrl === nat && r.owner === nat && !r.overseas) for (const _ of groupsOnField(g, r.id, (n) => n === nat)) pool.push(r);
+    if (pool.length) return { reg: pool[Math.floor(draw(g, g.turn, 'fieldwhere', foe) * pool.length) % pool.length].id, kind: 'airfield' };
+  }
+  const rail = draw(g, g.turn, 'kind', foe) < K.rail / (K.rail + K.factory);
+  const pool: Region[] = [];
+  for (const r of g.regions) {
+    if (r.ctrl !== nat || r.owner !== nat || r.overseas) continue;
+    if (rail) { if (onNet(r.id) && !railCut(g, r.id)) pool.push(r); }
+    else if (workingFactories(g, r) > 0 && ruinedAt(g, r) < ruinMost(r)) for (let k = 0; k < workingFactories(g, r); k++) pool.push(r);
+  }
+  if (!pool.length) return null;
+  return { reg: pool[Math.floor(draw(g, g.turn, 'where', foe) * pool.length) % pool.length].id, kind: rail ? 'rail' : 'factory' };
+}
+
+/** The other side's agents his hunters have uncovered and that are still at large: each can be arrested. */
+export const foesFound = (g: Game, nat: string | null = g.human): FoeAgent[] =>
+  nat && huntersOn(g) ? (g.intel.foes ?? []).filter((f) => f.found !== undefined && g.regions[f.reg].ctrl === nat) : [];
+
+/** Why an uncovered enemy agent cannot be arrested, or null. */
+export function whyNotArrest(g: Game, nat: string, id: number): string | null {
+  if (!huntersOn(g)) return 'Not in this campaign.';
+  const f = (g.intel.foes ?? []).find((x) => x.id === id);
+  if (!f) return 'No such agent is at large.';
+  if (f.found === undefined) return 'Nobody knows where that agent is.';
+  if (g.regions[f.reg].ctrl !== nat) return 'That ground is no longer yours.';
+  return null;
+}
+
+/** Arrests an uncovered enemy agent: it is ended, and nothing more is shown (ruling 151(c)). */
+export function arrest(g: Game, nat: string, id: number): boolean {
+  if (whyNotArrest(g, nat, id)) return false;
+  const foes = g.intel.foes!, f = foes.find((x) => x.id === id)!;
+  foes.splice(foes.indexOf(f), 1);
+  const F = g.nations[f.nat], r = g.regions[f.reg];
+  const text = `${/^[AEIOU]/.test(F?.adj ?? '') ? 'An' : 'A'} ${F?.adj ?? 'enemy'} agent is arrested at ${r.name}.`;
+  note(g, { name: '', nat }, r.id, 'arrested', text, true);
+  headline(g, 'info', text, nat, r.id);
+  return true;
+}
+
+/**
+ * An agent on STEAL THE ORDERS tries each month (ruling 135): on a success the strongest bomber group on the field
+ * that could fly has next month's order written now, and the player reads it. It does not always work: the agent may
+ * find nothing, or no raid is planned from there.
+ */
+function stealOrders(g: Game, a: Agent): void {
+  const r = g.regions[a.reg];
+  pruneOrders(g);
+  const ok = draw(g, g.turn, a.id, 'orders') < successChance(a, 'orders');
+  if (!ok) {
+    note(g, a, r.id, 'nothing', `Agent ${a.name} finds nothing at ${r.name} this month: the orders were not to be had.`, false);
+    return;
+  }
+  const host = r.ctrl;
+  const o = fieldOrder(g, host, r.id);
+  const H = g.nations[host];
+  if (!o) {
+    const text = `Agent ${a.name}, ${r.name}: no ${H.adj} raid is ordered from the field for next month.`;
+    note(g, a, r.id, 'orders', text, true);
+    headline(g, 'info', text, a.nat, r.id);
+    learn(g, a, INTEL.missions.orders.gain ?? 1);
+    return;
+  }
+  (g.intel.orders ??= []).push({ nat: host, field: r.id, groups: o.groups, target: o.target, mission: o.mission, bombers: o.bombers, turn: g.turn + 1, agent: a.name, by: a.nat });
+  const names = o.groups.map((id) => g.airFleets.find((f) => f.id === id)).filter((f) => f && f.bmr > 0).map((f) => f!.name);
+  const t = g.regions[o.target];
+  const text = `Agent ${a.name}, ${r.name}: ${names.join(' and ')} ${names.length > 1 ? 'fly' : 'flies'} against ${t.name} next month, ${o.mission === 'night' ? 'by night' : 'by day'}, about ${o.bombers.toLocaleString('en-US')} bombers.`;
+  note(g, a, r.id, 'orders', text, true);
+  headline(g, 'event', text, a.nat, o.target);
+  learn(g, a, INTEL.missions.orders.gain ?? 1);
+}
+
+/** An agent caught at the field: the enemy changes the orders it read there. The words for the line. */
+function cancelOrders(g: Game, a: Agent): string {
+  const read = (g.intel.orders ?? []).filter((o) => o.agent === a.name && o.by === a.nat && o.field === a.reg && o.turn > g.turn && !o.done);
+  for (const o of read) o.done = 'lapsed';
+  return read.length ? ` The enemy changes the orders ${a.name} had read.` : '';
+}
+
+/** THE ENEMY'S ORDERS, for the AIR tab (ruling 135(b)): what the player's agents have read and is still to come. */
+export function enemyOrders(g: Game, viewer: string | null = g.human): { text: string; target: number; turn: number; done?: string }[] {
+  return ordersKnown(g, viewer).map((o) => {
+    const t = g.regions[o.target], F = g.nations[o.nat];
+    const when = o.turn > g.turn ? 'next month' : 'this month';
+    const state = o.done === 'flown' ? ' Flown.' : o.done === 'lapsed' ? ' Cancelled.' : '';
+    return { text: `${F.adj} bombers from ${g.regions[o.field].name} against ${t.name} ${when}, ${o.mission === 'night' ? 'by night' : 'by day'}, about ${o.bombers.toLocaleString('en-US')}: read by Agent ${o.agent}.${state}`, target: o.target, turn: o.turn, done: o.done };
+  });
+}
+
+/**
+ * A plot against one of the player's airfields on home ground (ruling 151(b)), picked by how many of his air groups
+ * are based there; a guard can stop it as any other. False if he has no group based at home, so the plot goes as it
+ * always did.
+ */
+function plotField(g: Game, nat: string, foe: string): boolean {
+  const mine = (n: string): boolean => n === nat;
+  const pool: Region[] = [];
+  for (const r of g.regions) {
+    if (r.ctrl !== nat || r.owner !== nat || r.overseas || fieldWrecked(g, r.id)) continue;
+    for (const _ of groupsOnField(g, r.id, mine)) pool.push(r);
+  }
+  if (!pool.length) return false;
+  const F = g.nations[foe];
+  const r = pool[Math.floor(draw(g, g.turn, 'fieldwhere', foe) * pool.length) % pool.length];
+  const G = guardChance(g, nat, r.id);
+  const who = { name: G.by?.name ?? '', nat };
+  if (G.by && draw(g, g.turn, 'guard', foe) < G.chance) {
+    const text = `Agent ${G.by.name}'s watchers catch ${/^[AEIOU]/.test(F.adj) ? 'an' : 'a'} ${F.adj} sabotage ring on the field at ${r.name} before it can strike.`;
+    note(g, who, r.id, 'foiled', text, true);
+    headline(g, 'info', text, nat, r.id);
+    learn(g, G.by, 1);
+    return true;
+  }
+  if (!wreckField(g, r.id, mine)) return false;
+  const text = `Grounded this month: saboteurs wrecked the field at ${r.name}. Your police blame ${F.adj} agents.`;
+  note(g, who, r.id, 'struck', text, false);
+  headline(g, 'event', text, nat, r.id);
+  return true;
+}
+
 /** The other side's services at work against the player's home ground. */
 function plots(g: Game, nat: string): void {
+  if (huntersOn(g)) { foesMonth(g, nat); return; }
   const T = threat(g, nat);
   for (const foe of T.foes) {
     if (draw(g, g.turn, 'plot', foe) >= T.each) continue;
     const F = g.nations[foe], K = INTEL.enemy.kinds;
+    // With the field's switch on, a share of the plots go for an airfield the player flies from (ruling 151(b)).
+    if (airPiece(g, 'field') && draw(g, g.turn, 'field', foe) < AIRV.field.enemyShare && plotField(g, nat, foe)) continue;
     const rail = draw(g, g.turn, 'kind', foe) < K.rail / (K.rail + K.factory);
     // Factories are picked by how many a province has; a railway anywhere on home ground will do.
     const pool: Region[] = [];
@@ -722,22 +945,27 @@ export function intelTick(g: Game, nat: string): void {
   for (const a of [...agentsOf(g, nat)].sort((x, y) => x.id - y.id)) {
     if (!atWork(g, a)) continue;
     const r = g.regions[a.reg];
-    if (!abroad(g, a)) { a.mission = 'guard'; continue; }
+    if (!abroad(g, a)) { if (a.mission !== 'hunt' || !huntersOn(g)) a.mission = 'guard'; continue; }
     // Ground that has changed hands under an agent: a guard finds itself behind the lines, a reader's capital has fallen.
-    if (a.mission === 'guard' || (a.mission !== 'watch' && whyNotMission(g, nat, a.id, a.mission))) a.mission = 'watch';
+    if (AT_HOME.includes(a.mission) || (a.mission !== 'watch' && whyNotMission(g, nat, a.id, a.mission))) a.mission = 'watch';
     const was = a.mission;
     // The risk is the one the player was shown when the order was given: the alarm an attempt raises counts from next month.
     const risk = caughtChance(g, a, was);
     if (isSabotage(was)) attempt(g, a);
+    if (was === 'orders') stealOrders(g, a);
     if (draw(g, g.turn, a.id, 'caught') < risk) {
       const host = g.nations[r.ctrl];
-      lose(g, a, `Agent ${a.name} is caught at ${r.name} by ${host.adj} counter-intelligence. Nothing more is heard.${resent(g, a, r.ctrl)}`, 'caught');
+      // (Caught at the field: the enemy changes the orders it may have read.)
+      const changed = was === 'orders' ? cancelOrders(g, a) : '';
+      lose(g, a, `Agent ${a.name} is caught at ${r.name} by ${host.adj} counter-intelligence. Nothing more is heard.${changed}${resent(g, a, r.ctrl)}`, 'caught');
       continue;
     }
     a.months = (a.months ?? 0) + 1;
     if (a.months % INTEL.agents.watch === 0) learn(g, a, 1);
   }
   for (const k of Object.keys(g.intel.heat)) if (g.intel.heat[+k] <= g.turn) delete g.intel.heat[+k];
+  // (A field wrecked in an earlier month is mended: its mark goes.)
+  if (airPiece(g, 'field')) for (const k of Object.keys(g.flags)) if (k.startsWith('wreck:') && (g.flags[k] ?? 0) < g.turn) delete g.flags[k];
   plots(g, nat);
 }
 
@@ -777,11 +1005,15 @@ export interface SpyRoom {
   books: string[];
   /** The other side's services: the chance of a strike at home this month, and who is behind it. */
   threat: { chance: number; foes: string[]; guards: number };
+  /** With spy hunters (ruling 151(c)): the enemy agents uncovered and still at large, each with ARREST. */
+  found?: { id: number; nat: string; reg: number; where: string; text: string }[];
+  /** With stolen orders (ruling 135): THE ENEMY'S ORDERS. */
+  orders?: { text: string; target: number; turn: number; done?: string }[];
 }
 
 function viewOf(g: Game, a: Agent): AgentView {
   const r = g.regions[a.reg], out = abroad(g, a), work = atWork(g, a);
-  const offers: MissionOffer[] = (out ? MISSIONS.filter((m) => m !== 'guard') : (['guard'] as Mission[])).map((m) => {
+  const offers: MissionOffer[] = missionsIn(g).filter((m) => AT_HOME.includes(m) !== out).map((m) => {
     const why = whyNotMission(g, a.nat, a.id, m);
     return { id: m, label: MISSION_TEXT[m].label, text: MISSION_TEXT[m].text, ok: why === null, why: why ?? '', now: a.mission === m, caught: caughtChance(g, a, m), success: isSabotage(m) ? successChance(a, m) : null };
   });
@@ -800,7 +1032,7 @@ function viewOf(g: Game, a: Agent): AgentView {
   const T = INTEL.agents.skillAt;
   const training = !work && a.born + INTEL.agents.train === a.ready && a.xp === 0 && !a.months;
   const doing = !work ? `${training ? 'In training' : `On the road to ${r.name}`}: at work ${a.ready - g.turn <= 1 ? 'next month' : `in ${a.ready - g.turn} months`}`
-    : `${a.mission === 'guard' ? 'On guard' : a.mission === 'watch' ? 'Watching' : a.mission === 'books' ? 'Reading the books' : MISSION_TEXT[a.mission].label + ': tried next month'} at ${r.name}`;
+    : `${a.mission === 'guard' ? 'On guard' : a.mission === 'hunt' ? 'Hunting enemy agents' : a.mission === 'watch' ? 'Watching' : a.mission === 'books' ? 'Reading the books' : a.mission === 'orders' ? 'Stealing the orders: tried each month' : MISSION_TEXT[a.mission].label + ': tried next month'} at ${r.name}`;
   return {
     id: a.id, nat: a.nat, name: a.name, rank: rankOf(a), skill: skillOf(a), xp: a.xp, next: T[skillOf(a) - 1] ?? null,
     reg: a.reg, where: r.name, host: r.ctrl, abroad: out, atWork: work, wait: Math.max(0, a.ready - g.turn),
@@ -820,5 +1052,7 @@ export function spyRoom(g: Game, nat: string | null = g.human): SpyRoom | null {
     fog: fogOn(g, nat),
     books: Object.values(g.nations).filter((n) => n.alive && !allied(g, n.id, nat) && knowsBooks(g, n.id, nat)).map((n) => n.id),
     threat: { chance: T.chance, foes: T.foes, guards: mine.filter((a) => a.mission === 'guard' && atWork(g, a) && !abroad(g, a)).length },
+    ...(huntersOn(g) ? { found: foesFound(g, nat).map((f) => ({ id: f.id, nat: f.nat, reg: f.reg, where: g.regions[f.reg].name, text: `${/^[AEIOU]/.test(g.nations[f.nat]?.adj ?? '') ? 'An' : 'A'} ${g.nations[f.nat]?.adj ?? 'enemy'} agent at ${g.regions[f.reg].name}, uncovered ${f.found === g.turn ? 'this month' : 'earlier'}` })) } : {}),
+    ...(ordersOn(g) ? { orders: enemyOrders(g, nat) } : {}),
   };
 }
