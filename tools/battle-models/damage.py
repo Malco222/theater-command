@@ -74,7 +74,7 @@ def overlay(name, fine=True, model=None):
     r_hole = 0.036 * (0.8 + 0.25 * big)
     r_tear = 0.15 * (0.55 + 0.45 * big) * 1.25
 
-    d = Model(name + "Damage", m.title + ": battle damage", "damage", {"hole": "0A0A0B", "torn": "8F9397"}, fine)
+    d = Model(name + "Damage", m.title + ": battle damage", "damage", {"hole": "0A0A0B", "torn": "7E8287"}, fine)
     d.parts = [Part(p.name, p.parent, p.pivot, axis=p.axis, limits=p.limits, slide=p.slide, slide_limits=p.slide_limits, kind=p.kind, note=p.note) for p in m.parts]
     d.part_at = dict(m.part_at)
     d.clips = {k: dict(c, events=[]) for k, c in m.clips.items()}          # (what she does, it does; her sounds and effects stay hers)
@@ -122,8 +122,8 @@ def overlay(name, fine=True, model=None):
             r = R * rng.uniform(0.6, 0.95)
             a2 = a + 6.283 * 0.5 / sides
             way2 = u * math.cos(a2) + v * math.sin(a2)
-            p0, p1 = on_skin(c + way * r * 0.42, n, 0.01), on_skin(c + way * r * 0.8, n, 0.012)
-            p2 = on_skin(c + way2 * R * rng.uniform(1.05, 1.55), n, rng.uniform(0.02, 0.06) * big ** 0.5)
+            p0, p1 = on_skin(c + way * r * 0.5, n, 0.01), on_skin(c + way * r, n, 0.012)
+            p2 = on_skin(c + way2 * R * rng.uniform(1.0, 1.24), n, rng.uniform(0.012, 0.035) * big ** 0.5)   # (short teeth: long petals read as a paper flower)
             if p0 is None or p1 is None or p2 is None:
                 return None
             half.append(p0)
