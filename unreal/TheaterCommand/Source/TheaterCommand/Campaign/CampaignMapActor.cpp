@@ -272,7 +272,27 @@ bool ACampaignMapActor::BuildMap()
 			const FVector2D Under = WorldToMap(Over);
 			return SurfacePoint(Under.X, Under.Y, 0.0) - FVector(0.0, 0.0, Lowered);
 		});
-		UE_LOG(LogTheater, Display, TEXT("Effects: the test barrage is %s, a metre drawn as %.2f of a map unit"), bMade ? TEXT("made ready") : TEXT("NOT made (its recipe or its material is missing)"), MapUnitsAMetre);
+		// (The kit is told the sun and the wind: smoke is lit on the sun's side, glows at its thin edges against a low
+		// sun, and drifts with the wind. The campaign's sun is the room's key light, which does not move, and its wind
+		// is the map's own, from the west. "-TheaterBlastSun=8,250" hands the kit another sun for a picture: so many
+		// degrees up, and where on the compass it stands, here low in the west.)
+		FVector TowardSun = -FRotator(-42.0, 69.0, 0.0).Vector();
+		{
+			FString Asked;
+			TArray<FString> Parts;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastSun="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 2)
+			{
+				// (north is +X and east +Y: a compass bearing is a yaw from north round by east)
+				TowardSun = FRotator(FCString::Atod(*Parts[0]), FCString::Atod(*Parts[1]), 0.0).Vector();
+			}
+		}
+		if (bMade)
+		{
+			Blasts->SetSun(TowardSun);
+			Blasts->SetWind(FVector(0.25, 0.9, 0.0).GetSafeNormal() * 3.0);
+		}
+		UE_LOG(LogTheater, Display, TEXT("Effects: the test barrage is %s, a metre drawn as %.2f of a map unit; the sun stands %.0f degrees up"), bMade ? TEXT("made ready") : TEXT("NOT made (its recipe or its material is missing)"),
+			MapUnitsAMetre, FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(TowardSun.GetSafeNormal().Z, -1.0, 1.0))));
 	}
 
 	UE_LOG(LogTheater, Log, TEXT("Campaign table built in %.2f s: %d labels, %d army pieces"),
