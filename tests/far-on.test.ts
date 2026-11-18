@@ -22,7 +22,7 @@ import { ARSENAL, offers, yardLevel } from '../src/campaign/arsenal';
 import { monthlyDiplomacy, signPeace } from '../src/campaign/diplomacy';
 import { tieBars, tieWar, tiedPair } from '../src/campaign/far';
 import { FAR_LAID, FAR_PATHS, FAR_SETUP } from '../src/campaign/far-rows';
-import { allied, atWar, bloc, createGame, declareWar, sameSide, setWar, startPhase } from '../src/campaign/game';
+import { allied, atWar, bloc, capture, createGame, declareWar, sameSide, setWar, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { small } from '../src/campaign/league';
 import { NAVY } from '../src/campaign/navy';
@@ -32,7 +32,7 @@ import { stalemates, startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 import { FLAGS } from '../src/campaign/ui/flags';
-import { FAR_FIRST, WORLD, WORLD_FIRST, WORLD_REGIONS, farOn } from '../src/campaign/world';
+import { FAR_FIRST, WORLD, WORLD_FIRST, WORLD_REGIONS, enemyAtTheDoor, farOn, overseasOf, shoreOf } from '../src/campaign/world';
 
 const FW = farWorld as any;
 const WD = worldData as any;
@@ -337,5 +337,29 @@ describe("a client's tie: the riders (far.ts)", () => {
     signPeace(g, 'JAP', 'CHN');
     monthlyDiplomacy(g);
     expect(atWar(g, 'MAN', 'CHN')).toBe(true);
+  });
+});
+
+describe("the far side is not America's side of the water", () => {
+  it('counts no colony on the far side as an invader at her door, so that her army and Canada\'s still sail for Europe', () => {
+    const g = grand();
+    expect(farOn(g)).toBe(true);
+    expect([0, WORLD_FIRST - 1, WORLD_FIRST, FAR_FIRST - 1, FAR_FIRST, g.regions.length - 1].map((id) => shoreOf(id))).toEqual([0, 0, 1, 1, 2, 2]);
+    for (const nat of ['USA', 'CAN', 'BRA']) expect(shoreOf(g.nations[nat].capital), nat).toBe(1);
+    // Italy holds her colony on the Horn of Africa from the first day: ground beyond the old chart, held by a power
+    // whose capital stands on it, and no part of the Americas.
+    const horn = g.regions.filter((r) => r.ctrl === 'ITA' && r.id >= FAR_FIRST);
+    expect(horn.length).toBeGreaterThan(0);
+    expect(g.regions.filter((r) => r.ctrl === 'ITA' && shoreOf(r) === 1)).toEqual([]);
+    for (const nat of ['USA', 'CAN', 'BRA']) setWar(g, nat, 'ITA');
+    for (const nat of ['USA', 'CAN', 'BRA']) expect(enemyAtTheDoor(g, nat), nat).toBe(false);
+    expect(overseasOf(g, 'USA')).toBe(WORLD.overseas.USA);
+    expect(overseasOf(g, 'CAN')).toBe(WORLD.overseas.CAN);
+    // An Italian force ashore in the Americas is at the door, as it always was.
+    const isle = g.regions.find((r) => shoreOf(r) === 1 && r.owner === 'UK' && r.overseas && r.seas.length > 0)!;
+    expect(isle).toBeDefined();
+    capture(g, isle, 'ITA');
+    for (const nat of ['USA', 'CAN']) expect(enemyAtTheDoor(g, nat), nat).toBe(true);
+    expect(overseasOf(g, 'USA')).toBeNull();
   });
 });

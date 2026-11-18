@@ -129,6 +129,16 @@ export function pressData(patron: string): { europe: string[]; beside: string | 
 /** True for a province beyond the map of Europe. */
 export const beyondEurope = (r: Region | number): boolean => (typeof r === 'number' ? r : r.id) >= WORLD_FIRST;
 
+/**
+ * Which side of the oceans a province stands on: 0 the old chart, 1 the Americas and the Atlantic islands, 2 the far
+ * side of the world. (No province stands on the far side while its switch is off: every province beyond the old
+ * chart is then on the Americas' side, as it was.)
+ */
+export const shoreOf = (r: Region | number): number => {
+  const id = typeof r === 'number' ? r : r.id;
+  return id < WORLD_FIRST ? 0 : id < FAR_FIRST ? 1 : 2;
+};
+
 /** The great lakes cut out of the land: their names and where to write them. None is a sea. */
 export const lakesOf = (g: Game): WorldMap['lakes'] => (worldOn(g) ? WORLD_MAP.lakes : []);
 
@@ -449,9 +459,13 @@ export function enemyAtTheDoor(g: Game, nat: string): boolean {
     if (v === undefined) { v = neighbourByLand(g, nat, e); byMap.set(e, v); }
     return v;
   };
+  // Its side of the water is the side its capital stands on. (The far side of the world is beyond the old chart too,
+  // and it is not America's side: Italy's colony on the Horn of Africa, hers since 1936, is no invader at America's
+  // door, and with it counted no American, Canadian or Brazilian corps ever sailed for Europe.)
+  const side = n.capital >= WORLD_FIRST ? shoreOf(n.capital) : -1;
   for (let i = WORLD_FIRST; i < g.regions.length; i++) {
     const r = g.regions[i];
-    if (!n.atWar.includes(r.ctrl)) continue;
+    if (!n.atWar.includes(r.ctrl) || (side >= 0 && shoreOf(i) !== side)) continue;
     const cap = g.nations[r.ctrl]?.capital ?? -1;
     if (cap >= 0 && !beyondEurope(cap)) return true;
     if (r.nb.some((j) => g.regions[j].ctrl === nat && ((g.regions[j].owner === nat && !g.regions[j].overseas) || neighbour(r.ctrl)))) return true;
