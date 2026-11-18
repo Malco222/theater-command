@@ -178,7 +178,7 @@ export function pacificOpening(g: Game): void {
   if (S && N.nat !== g.human && !atWar(g, N.nat, J.id) && !sameSide(g, N.nat, J.id) && G && !G.alive && G.fellOn
     && g.turn >= G.fellOn.turn + N.months && (!stopDef(g).book || g.turn >= N.book)
     && N.while.some((e) => live(g, e) && atWar(g, J.id, e)) && !N.while.some((e) => atWar(g, N.nat, e))) {
-    headline(g, 'event', fill(P.says.north, { fallen: theName(G), nat: theName(S) }), N.nat);
+    headline(g, 'event', fill(P.says.north, { fallen: theName(G), nat: theName(S), power: theName(J) }), N.nat);
     declareWar(g, N.nat, J.id);
   }
 }

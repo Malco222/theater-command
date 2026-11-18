@@ -12,13 +12,13 @@
   "keepers": ["UK", "AUS", "USA"],
   "says": {
     "beside": "{Power} fights beside the Axis: it is at war with {foe}, and {foe} is at war with {axis}.",
-    "china": "{China} stands with the Allies: {power} fights beside the Axis, and their enemy is one.",
+    "china": "{China} stands with the Allies: {power}, its enemy, now fights beside the Axis.",
     "follow": "{Names} {are} at war with {power}, beside {lead}.",
     "freeze": "America has stopped selling oil and steel to Japan.",
     "freezeBoth": " Britain and the Dutch have done the same.",
     "freezeBritain": " Britain has done the same.",
     "freezeDutch": " The Dutch have done the same.",
-    "north": "Three months after {fallen}'s defeat {nat} turns east.",
+    "north": "Three months after {fallen}'s defeat, {nat} turns east and declares war on {power}.",
     "demand": "{Power} demands Indochina of {of}, and Vichy gives way: Japanese troops move into Saigon and Cam Ranh Bay, and the French garrison stands down."
   }
 }

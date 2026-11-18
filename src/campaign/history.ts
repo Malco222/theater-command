@@ -28,7 +28,12 @@ export interface Stop {
   share?: number; wait?: number;
 }
 /** What history's calendar expects in a theatre: these must hold before `until`, or from the month after `by`. */
-export interface Mark { theatre: string; until?: number; by?: number; if: string[]; why: string }
+/**
+ * One thing the book expects of a theatre. `why` is the reason the news gives when it fails; `expect`, where a mark
+ * has it, is how the dial words the expectation beforehand ("The book is closed in ... if {expect} ..."), and an
+ * empty one keeps the mark off the dial's list (one expectation told by several marks is listed once).
+ */
+export interface Mark { theatre: string; until?: number; by?: number; if: string[]; why: string; expect?: string }
 /** A claim on named ground: who claims it, from whom, and why. */
 export interface Ambition { id: string; nat: string; on: string; ground: string[]; name: string; why: string; stop?: number; if?: string[]; lift?: number }
 
@@ -198,12 +203,15 @@ export function bookExpects(g: Game): DialView['expects'] {
   HISTORY.marks.forEach((m, k) => {
     const t = HISTORY.theatres[m.theatre];
     if (!t || g.flags[`hist:off:${m.theatre}`]) return;
+    // (A mark may word what is expected apart from the reason the news gives when it fails; one worded with nothing is not listed.)
+    const why = m.expect ?? m.why;
+    if (!why) return;
     if (m.until !== undefined) {
       const last = m.until - slack;
-      if (g.turn < last) out.push({ theatre: m.theatre, name: t.name, turn: last, text: `The book is closed in ${t.name} if ${m.why}: that is, before ${turnToDate(last).label}.` });
+      if (g.turn < last) out.push({ theatre: m.theatre, name: t.name, turn: last, text: `The book is closed in ${t.name} if ${why}: that is, before ${turnToDate(last).label}.` });
     } else if (m.by !== undefined && !g.flags[`hist:mk:${k}`]) {
       const last = m.by + slack;
-      out.push({ theatre: m.theatre, name: t.name, turn: last, text: `The book is closed in ${t.name} if ${m.why} when ${turnToDate(last).label} is over.` });
+      out.push({ theatre: m.theatre, name: t.name, turn: last, text: `The book is closed in ${t.name} if ${why} when ${turnToDate(last).label} is over.` });
     }
   });
   return out.sort((a, b) => a.turn - b.turn);

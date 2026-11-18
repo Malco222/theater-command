@@ -52,7 +52,7 @@ describe("Japan's opening with the far side off (rulings 199 and 200)", () => {
   it('has no row of it: no great choice of Japan, no page of the book for the Pacific, no event read at a declaration, no strike or quay on any plan', () => {
     expect(ops('JAP')).toEqual([]);
     expect(HISTORY.theatres.pacific).toBeUndefined();
-    expect(HISTORY.marks.some((m) => m.theatre === 'pacific')).toBe(false);
+    expect(HISTORY.marks.some((m) => m.theatre === 'pacific' || m.expect !== undefined)).toBe(false);
     expect(DIPLOMACY.events.some((e) => e.when === 'war' || e.id === 'siam-beside-japan')).toBe(false);
     expect(Object.values(open.ops as Record<string, { strikes?: unknown; quays?: unknown }[]>).flat().some((op) => op.strikes !== undefined || op.quays !== undefined)).toBe(false);
     expect((NAVY.moves ?? []).some((m) => m.fleet === 'Mobile Fleet')).toBe(false);

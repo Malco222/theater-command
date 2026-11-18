@@ -12,7 +12,7 @@ import { plannedStrike } from '../src/campaign/carriers';
 import { bookMonth } from '../src/campaign/claims';
 import { DIPLOMACY, holds, monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { allied, atWar, bloc, capitulate, createGame, declareWar, startPhase } from '../src/campaign/game';
-import { HISTORY, onBook, setStop } from '../src/campaign/history';
+import { HISTORY, bookExpects, onBook, setStop } from '../src/campaign/history';
 import { NAVY } from '../src/campaign/navy';
 import { PACIFIC, demand, freezeAt, keepersOf, mayDemand, pacificOpening } from '../src/campaign/pacific';
 import { ops, startOpen } from '../src/campaign/staff';
@@ -62,7 +62,8 @@ describe("Japan's opening (ruling 200): the rows", () => {
     expect(HISTORY.bookIf?.['JAP:south']).toEqual(['alive:JAP']);
     expect(HISTORY.joined.axis).toContain('THA');
     expect(HISTORY.marks.filter((m) => m.theatre === 'pacific').map((m) => m.why)).toEqual([
-      'the Pacific is at war before its time', 'Japan has stayed out of Indochina', 'Japan has not struck', 'Singapore or Manila still stands', 'Pearl Harbor is lost', 'Brisbane is lost',
+      'war came there before its time', 'Japan has stayed out of Indochina', "Japan did not strike when history's Japan did",
+      'Singapore and Manila still stand', 'Singapore still stands', 'Manila still stands', 'Pearl Harbor has fallen', 'Brisbane has fallen',
     ]);
     // Every beach and quay is on the chart, on a sea.
     const g = war(1, 1);
@@ -217,11 +218,11 @@ describe('Siam beside Japan (ruling 200(b))', () => {
       expect(atWar(g, 'THA', 'JAP')).toBe(false);
       expect(allied(g, 'JAP', 'THA')).toBe(true);
       expect(g.flags['event:siam-beside-japan']).toBe(28);
-      expect(news(g, 28, 'Siam stands with Japan')).toBe(true);
+      expect(news(g, 28, 'Thailand stands with Japan')).toBe(true);
       // Read again at the next declaration, and as the month opens: once is all.
       declareWar(g, 'JAP', 'USA');
       monthlyDiplomacy(g);
-      expect(g.headlines.filter((h) => h.text.includes('Siam stands with Japan')).length).toBe(1);
+      expect(g.headlines.filter((h) => h.text.includes('Thailand stands with Japan')).length).toBe(1);
     }
   });
 
@@ -356,10 +357,10 @@ describe("the Pacific's page of history's book", () => {
     const g = pacificOnly(war(1, 20));
     declareWar(g, 'JAP', 'USA');
     const failed = bookMonth(g);
-    expect(failed.map((m) => m.why)).toContain('the Pacific is at war before its time');
+    expect(failed.map((m) => m.why)).toContain('war came there before its time');
     expect(onBook(g, 'pacific')).toBe(false);
     expect(onBook(g, 'west')).toBe(true);
-    expect(news(g, 20, "History's book is closed in the Pacific: the Pacific is at war before its time.")).toBe(true);
+    expect(news(g, 20, "History's book is closed in the Pacific: war came there before its time.")).toBe(true);
   });
 
   it('closes when Japan has stayed out of Indochina, and when Japan has not struck', () => {
@@ -376,11 +377,41 @@ describe("the Pacific's page of history's book", () => {
     h.turn = 29;
     expect(bookMonth(h).length).toBe(0);
     h.turn = 30;
-    expect(bookMonth(h).map((m) => m.why)).toEqual(['Japan has not struck']);
+    expect(bookMonth(h).map((m) => m.why)).toEqual(["Japan did not strike when history's Japan did"]);
+  });
+
+  it('by June 1942 asks for Singapore and Manila, and the news names the one that stands', () => {
+    const taken = (g: Game, ...places: string[]): Game => { for (const p of places) g.byName[p].ctrl = 'JAP'; return g; };
+    const asked = (...places: string[]): string[] => {
+      const g = taken(pacificOnly(war(1, 34)), 'Saigon', ...places);
+      g.nations.JAP.align = 'axis';
+      declareWar(g, 'JAP', 'USA');
+      // (The month before the reckoning nothing is asked of the two fortresses.)
+      HISTORY.marks.forEach((m, k) => { if (m.theatre === 'pacific' && m.by !== undefined && m.by < 34) g.flags[`hist:mk:${k}`] = 1; });
+      expect(bookMonth(g).length).toBe(0);
+      g.turn = 35;
+      return bookMonth(g).map((m) => m.why);
+    };
+    expect(asked()).toEqual(['Singapore and Manila still stand']);
+    expect(asked('Manila')).toEqual(['Singapore still stands']);
+    expect(asked('Singapore')).toEqual(['Manila still stands']);
+    expect(asked('Singapore', 'Manila')).toEqual([]);
+  });
+
+  it('tells on the dial what the book expects of the Pacific, each thing once', () => {
+    const g = war(1, 1);
+    expect(bookExpects(g).filter((x) => x.theatre === 'pacific').map((x) => x.text)).toEqual([
+      'The book is closed in the Pacific if Japan has stayed out of Indochina when August 1941 is over.',
+      'The book is closed in the Pacific if Japan is at war with America or Britain before its time: that is, before December 1941.',
+      'The book is closed in the Pacific if Japan has not struck when January 1942 is over.',
+      'The book is closed in the Pacific if Singapore or Manila still stands when June 1942 is over.',
+      'The book is closed in the Pacific if Pearl Harbor has fallen: that is, before August 1945.',
+      'The book is closed in the Pacific if Brisbane has fallen: that is, before August 1945.',
+    ]);
   });
 
   it('closes when America loses Pearl Harbor, or Australia Brisbane', () => {
-    for (const [place, why] of [['Pearl Harbor', 'Pearl Harbor is lost'], ['Brisbane', 'Brisbane is lost']] as const) {
+    for (const [place, why] of [['Pearl Harbor', 'Pearl Harbor has fallen'], ['Brisbane', 'Brisbane has fallen']] as const) {
       const g = pacificOnly(war(1, 20));
       expect(bookMonth(g).length).toBe(0);
       g.byName[place].ctrl = 'JAP';

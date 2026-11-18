@@ -47,7 +47,7 @@ import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarnin
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, dropSieges, fall, fieldCtrl, garrisonOf, guardAfter, guardMen, guardOf, guardPower, inPocket, joinTown, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
-import { TOWNS, townName, townSize } from './towns';
+import { TOWNS, townName, townSize, worthOf } from './towns';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
@@ -2746,8 +2746,9 @@ export function capitulate(g: Game, nat: string, by: string): void {
   if (kept.length) {
     const K = g.nations[kept[0].ctrl];
     const names = kept.map((r) => r.name);
-    // (A whole colonial empire is not read out place by place: the first few, and how many more.)
-    const told = names.length > 6 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} other places` : names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    // (A whole colonial empire is not read out place by place: the three of most worth, and how many more.)
+    const chief = (): string[] => [...kept].sort((x, y) => worthOf(g, y) - worthOf(g, x) || x.id - y.id).slice(0, 3).map((r) => r.name);
+    const told = names.length > 6 ? `${chief().join(', ')} and ${names.length - 3} other places` : names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
     headline(g, 'event', `${K.adj} forces take ${told} into their keeping: ${theName(X)} has fallen, and ${names.length === 1 ? 'the place is' : 'they are'} not to be ${g.nations[by].adj} for the asking.`, K.id, kept[0].id);
   }
   for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((e) => e !== nat);
