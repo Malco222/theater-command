@@ -1,5 +1,5 @@
 {
- "about": "The real recordings the 3D game plays, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it.",
+ "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The last fourteen (a submarine's, a carrier's, a landing craft's and an aircraft's cues) are brought in and wait for the sound director's mix to say where they play.",
  "sounds": [
   {
    "moment": "bomber_drone",
@@ -86,20 +86,6 @@
    ]
   },
   {
-   "moment": "ship_horn",
-   "recording": "ship_horn",
-   "what": "A ship sounds its horn",
-   "sources": [
-    {
-     "title": "Ship Horn - Fog Horn - Cruise Ship Grand Princess",
-     "creator": "",
-     "licence": "CC0",
-     "page": "https://freesound.org/people/coalcon/sounds/636075/",
-     "archive": "Freesound"
-    }
-   ]
-  },
-  {
    "moment": "battle",
    "recording": "battle_loop",
    "what": "A firefight",
@@ -130,20 +116,6 @@
      "creator": "Cheeseheadburger",
      "licence": "CC BY 4.0",
      "page": "https://freesound.org/people/Cheeseheadburger/sounds/170478/",
-     "archive": "Freesound"
-    }
-   ]
-  },
-  {
-   "moment": "bugle",
-   "recording": "bugle_call",
-   "what": "A bugle calls the men to action",
-   "sources": [
-    {
-     "title": "Corneta Militar",
-     "creator": "",
-     "licence": "CC0",
-     "page": "https://freesound.org/people/Boscoricardo17/sounds/868980/",
      "archive": "Freesound"
     }
    ]
@@ -264,6 +236,391 @@
      "licence": "CC BY 3.0",
      "page": "https://commons.wikimedia.org/wiki/File:M3_Halftrack_at_Ft_MacArthur,_CA_(M16A2_MGMC).ogv",
      "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "click",
+   "recording": "click",
+   "what": "A key struck",
+   "sources": [
+    {
+     "title": "WWS Typewriter",
+     "creator": "Work With Sounds / Konrad Gutkowski",
+     "licence": "CC BY 4.0",
+     "page": "https://commons.wikimedia.org/wiki/File:WWS_Typewriter.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "stamp",
+   "recording": "stamp",
+   "what": "A rubber stamp comes down",
+   "sources": [
+    {
+     "title": "Rubber seal dabbed on ink pad",
+     "creator": "Subhashish Panigrahi",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:Rubber_seal_dabbed_on_ink_pad.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "tick",
+   "recording": "tick",
+   "what": "A clock ticks once",
+   "sources": [
+    {
+     "title": "Clock ticking",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Clock_ticking.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "coins",
+   "recording": "coins",
+   "what": "Coins counted down",
+   "sources": [
+    {
+     "title": "Coins dropped in wooden moneybox",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Coins_dropped_in_wooden_moneybox.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "pickup",
+   "recording": "pickup",
+   "what": "An army taken in hand",
+   "sources": [
+    {
+     "title": "Chess piece sliding 1",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Alnotreally/sounds/801348/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bell",
+   "recording": "bell",
+   "what": "A tower clock strikes",
+   "sources": [
+    {
+     "title": "WWS Quarter-hourtowerclock",
+     "creator": "Work With Sounds / Museum of Municipal Engineering",
+     "licence": "CC BY 4.0",
+     "page": "https://commons.wikimedia.org/wiki/File:WWS_Quarter-hourtowerclock.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "projector",
+   "recording": "projector",
+   "what": "A cinema projector runs",
+   "sources": [
+    {
+     "title": "Cinema projector PROYECSON",
+     "creator": "Carlosjvives",
+     "licence": "CC BY 4.0",
+     "page": "https://commons.wikimedia.org/wiki/File:Cinema_projector_PROYECSON.mp3",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "newsreel",
+   "recording": "newsreel",
+   "what": "The newsreel's fanfare",
+   "sources": [
+    {
+     "title": "Ceremonial Fanfare - Concert Band - United States Air Force Heritage of America Band",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Ceremonial_Fanfare_-_Concert_Band_-_United_States_Air_Force_Heritage_of_America_Band.mp3",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "radio",
+   "recording": "radio",
+   "what": "A wireless message in Morse",
+   "sources": [
+    {
+     "title": "Psalm118CW",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://commons.wikimedia.org/wiki/File:Psalm118CW.wav",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "drums",
+   "recording": "drums",
+   "what": "The drums: two sides drawn up",
+   "sources": [
+    {
+     "title": "Drum - Cadence A",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Drum_-_Cadence_A.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "victory",
+   "recording": "victory",
+   "what": "Victory: To the Colors",
+   "sources": [
+    {
+     "title": "To the Colors - Concert Band - United States Air Force Band",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:To_the_Colors_-_Concert_Band_-_United_States_Air_Force_Band.mp3",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "defeat",
+   "recording": "defeat",
+   "what": "Defeat: Taps",
+   "sources": [
+    {
+     "title": "Taps on bugle",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Taps_on_bugle.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "train",
+   "recording": "train_loop",
+   "what": "A steam train running",
+   "sources": [
+    {
+     "title": "Steam Locomotive NKP Berkshire 765 near Toledo 07-28-12",
+     "creator": "Gary Hoover",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:Steam_Locomotive_NKP_Berkshire_765_near_Toledo_07-28-12.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "dive_alarm",
+   "recording": "dive_alarm",
+   "what": "A submarine's dive klaxon",
+   "sources": [
+    {
+     "title": "WWII submarine dive klaxon",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:WWII_submarine_dive_klaxon.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "surfacing",
+   "recording": "surfacing",
+   "what": "A submarine surfaces: three blasts",
+   "sources": [
+    {
+     "title": "WWII submarine dive klaxon",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:WWII_submarine_dive_klaxon.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "torpedo_launch",
+   "recording": "torpedo_launch",
+   "what": "A torpedo leaves its tube",
+   "sources": [
+    {
+     "title": "G45-13-Submarine Torpedo Fire",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/438715/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "torpedo_run_loop",
+   "recording": "torpedo_run_loop",
+   "what": "A torpedo running (loop)",
+   "sources": [
+    {
+     "title": "G45-20-Submarine Motor Underwater",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/438722/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ship_sinking",
+   "recording": "ship_sinking",
+   "what": "A ship goes down",
+   "sources": [
+    {
+     "title": "Moored Boat Metal Grinding, Groaning & Creaking",
+     "creator": "nebulousflynn",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/nebulousflynn/sounds/269061/",
+     "archive": "Freesound"
+    },
+    {
+     "title": "G45-35-Distant Explosions Underwater",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/438737/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "depth_charge_roll",
+   "recording": "depth_charge_roll",
+   "what": "A depth charge rolls off the stern rack",
+   "sources": [
+    {
+     "title": "Rolling Metal Barrel",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Mateusz_Chenc/sounds/512215/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "depth_charge_thrower",
+   "recording": "depth_charge_thrower",
+   "what": "A depth charge thrower fires",
+   "sources": [
+    {
+     "title": "G33-01-Mortar Firing",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/438507/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "lift_motor",
+   "recording": "lift_motor",
+   "what": "A carrier's aircraft lift runs",
+   "sources": [
+    {
+     "title": "JS Ise's aircraft lift goes down from the flight-deck, -17 Jun. 2012 a",
+     "creator": "FLYWITHMETOTHEMOON from Japan",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:JS_Ise%27s_aircraft_lift_goes_down_from_the_flight-deck,_-17_Jun._2012_a.ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "aircraft_break_up",
+   "recording": "aircraft_break_up",
+   "what": "An aircraft breaks up",
+   "sources": [
+    {
+     "title": "R29-28-Large Metal Vehicle Crashes",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/487143/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bomb_release",
+   "recording": "bomb_release",
+   "what": "Bombs fall away",
+   "sources": [
+    {
+     "title": "G33-08-Whistle and Small Impact",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/438514/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "parachute_open",
+   "recording": "parachute_open",
+   "what": "A parachute opens",
+   "sources": [
+    {
+     "title": "parachute 2",
+     "creator": "Huggy13ear",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Huggy13ear/sounds/138976/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ramp_winch",
+   "recording": "ramp_winch",
+   "what": "A landing craft's ramp winch lets go",
+   "sources": [
+    {
+     "title": "Hand Winch Quick Release",
+     "creator": "Benboncan",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Benboncan/sounds/69177/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ramp_drop",
+   "recording": "ramp_drop",
+   "what": "A landing craft's ramp drops",
+   "sources": [
+    {
+     "title": "Lowering Ramp",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Gingie/sounds/346856/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "craft_grounds",
+   "recording": "craft_grounds",
+   "what": "A landing craft runs aground",
+   "sources": [
+    {
+     "title": "Dragging Kayak",
+     "creator": "brunoboselli",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/brunoboselli/sounds/488335/",
+     "archive": "Freesound"
     }
    ]
   }
