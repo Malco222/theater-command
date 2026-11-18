@@ -1,6 +1,7 @@
-"""soundtrack.py <clip's sound log .json> <sound pack's wav folder> <mix.json> <out.wav> [<video.mp4> <out.mp4>]
+"""soundtrack.py <clip's sound log .json> <sound pack's wav folder> <mix.json> <out.wav> [<video.mp4> <out.mp4>] [ends=0.05,0.25]
 
-Mixes an air clip's sound track, and (given a video) lays it under the picture.
+Mixes an air clip's sound track, and (given a video) lays it under the picture. `ends`: the fade at its start and at
+its end in seconds (0.02,0.02 for a clip cut straight onto the next in a longer film).
 
 airshow.py writes the log beside a clip's frames: where the camera was on every frame, and every thing heard with its
 name in the sound pack, when, and where it was on every frame. This reads that, the approved pack's recordings where
@@ -36,6 +37,7 @@ import numpy as np
 
 SR = 48000
 SOUND = 343.0
+ENDS = [0.05, 0.25]      # the fade at a clip's two ends, seconds (so nothing starts or stops with a click)
 LEVEL = -17.0            # a clip's whole loudness, LUFS (the sound director, 2026-11-18: "where the battle preview sits")
 
 FAMILY = {"b17_drone_loop": "aircraft", "b24_drone_loop": "aircraft", "fighter_engine_loop": "aircraft", "plane_guns": "aircraft", "gunner_burst": "aircraft",
@@ -375,7 +377,7 @@ class Mix:
             cur = ahead[i] if ahead[i] < cur else 1.0 - (1.0 - cur) * rel
             g[i] = cur
         out = out * g[:, None]
-        fade = np.clip(self.t / 0.05, 0.0, 1.0) * np.clip((self.T - self.t) / 0.25, 0.0, 1.0)
+        fade = np.clip(self.t / ENDS[0], 0.0, 1.0) * np.clip((self.T - self.t) / ENDS[1], 0.0, 1.0)
         out = np.clip(out * fade[:, None], -ceil, ceil)
         self.trim_db = 20 * math.log10(trim)
         self.peak_db = 20 * math.log10(max(float(np.abs(out).max()), 1e-9))
@@ -391,6 +393,9 @@ class Mix:
 
 
 def main():
+    for a in [a for a in sys.argv if a.startswith("ends=")]:     # (ends=0.02,0.02: a clip that is cut straight onto the next in a longer film)
+        ENDS[:] = [float(v) for v in a[5:].split(",")]
+        sys.argv.remove(a)
     if len(sys.argv) < 5:
         raise SystemExit(__doc__)
     log_path, folder, rules_path, out_wav = sys.argv[1:5]
