@@ -202,7 +202,7 @@ describe('oilfields', () => {
     // Soviet Union has four fields more (Guryev, Krasnovodsk, Sterlitamak, North Sakhalin).
     const baku = g.byName[FAR_STAGE ? 'Baku' : 'Kirovabad'];
     const yields = RES.oil.fields[baku.name];
-    expect(yields).toBe(40);
+    expect(yields).toBe(46);
     expect(fieldYield(g, baku)).toBe(yields);
     expect(fieldYield(g, baku, 'GER')).toBeCloseTo(yields * RES.oil.occupied, 9);
     expect(fieldYield(g, g.byName['Berlin'])).toBe(0);

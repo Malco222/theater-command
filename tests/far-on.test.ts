@@ -177,7 +177,7 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
     }
     // The older chart's yards stand as they were.
     expect([ARSENAL.yards.Hamburg, ARSENAL.yards.Norfolk, ARSENAL.yards.Lima]).toEqual([3, 3, 1]);
-    expect(Object.keys(ARSENAL.yards).length).toBe(47 + 12);
+    expect(Object.keys(ARSENAL.yards).length).toBe(48 + 12);
     expect(ARSENAL.yards.Singapore).toBeUndefined();
     // Main's own rule (arsenal.test.ts), on the whole world: every nation with a navy on the first day has somewhere to
     // build a destroyer. It failed on Japan, Australia, New Zealand, Thailand and Iran.
@@ -425,7 +425,9 @@ describe("the whole world's oil (rulings 194 and 231)", () => {
     // Kirovabad stood for Baku while Baku was off the chart's edge: its mark is off, on a fresh game and on a load.
     expect(FAR_SETUP.unmark).toEqual(['Kirovabad']);
     expect([g.byName['Kirovabad'].oil, g.byName['Baku'].oil]).toEqual([false, true]);
-    expect([RES.oil.fields.Baku, RES.oil.fields.Kirovabad]).toEqual([40, 40]);
+    // (The realism audit, item 14: the Caspian 46, Grozny 6, Maikop 4; the home wells' 8 on the old chart are Guryev 2,
+    // Krasnovodsk 2, Sterlitamak 3 and the one at home here.)
+    expect([RES.oil.fields.Baku, RES.oil.fields.Kirovabad]).toEqual([46, 46]);
     expect(fieldYield(g, g.byName['Kirovabad'])).toBe(0);
     const again = loadGame(saveGame(g))!;
     expect([again.byName['Kirovabad'].oil, again.byName['Baku'].oil]).toEqual([false, true]);
@@ -438,7 +440,7 @@ describe("the whole world's oil (rulings 194 and 231)", () => {
   it("leaves each of the six powers the oil it makes at home on the old chart, to the unit, save the Soviet Union's one from North Sakhalin (194(j))", () => {
     const g = grand();
     // What each power's own fields and its wells at home gave on the first day with the far side off: fields, home.
-    const old: Record<string, [number, number]> = { GER: [0, 14], UK: [0, 0], FRA: [0, 1], ITA: [0, 2.5], SOV: [60, 4], USA: [100, 20] };
+    const old: Record<string, [number, number]> = { GER: [0, 14], UK: [0, 0], FRA: [0, 1], ITA: [0, 2.5], SOV: [56, 8], USA: [100, 20] };
     expect(Object.keys(old).sort()).toEqual([...RES.nations].sort());
     for (const [nat, [fields, home]] of Object.entries(old)) {
       const now = (line(g, nat, 'fields')?.amount ?? 0) + (line(g, nat, 'home')?.amount ?? 0);
@@ -466,13 +468,13 @@ describe("the whole world's oil (rulings 194 and 231)", () => {
     brunei.ctrl = 'GER';
     expect(stores(g, 'GER')!.oil.made).toBe(before);
     baku.ctrl = 'GER';
-    expect(stores(g, 'GER')!.oil.made).toBeCloseTo(before + 40 * RES.oil.occupied, 9);
+    expect(stores(g, 'GER')!.oil.made).toBeCloseTo(before + 46 * RES.oil.occupied, 9);
     // The prize card promises no oil for the depots from a colony's field, and still calls it an oilfield.
     const words = (name: string): string => prizeOf(g, g.byName[name].id, 'GER')!.items.find((i) => i.key === 'oil')!.text;
     brunei.ctrl = 'UK'; baku.ctrl = 'SOV';
     setWar(g, 'GER', 'UK'); setWar(g, 'GER', 'SOV');
     expect(words('Brunei')).toBe('An oilfield');
-    expect(words('Baku')).toMatch(/^An oilfield: 24 a month to your depots/);
+    expect(words('Baku')).toMatch(/^An oilfield: 27\.6 a month to your depots/);
   });
 });
 
