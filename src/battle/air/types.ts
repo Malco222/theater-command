@@ -107,7 +107,10 @@ export interface AirUnit extends UnitBase {
  */
 export interface Straggler {
   id: number;
-  /** The dead engines (engine.1 to engine.N on the model), and whether the airscrew is feathered or windmills. */
+  /**
+   * The dead engines (engine.1 to engine.N on the model), and whether the airscrew is feathered or windmills. A
+   * single-engined bomber's is engine 1, hit and running rough, its airscrew still turning ('windmill').
+   */
   eng: number[];
   prop: 'feather' | 'windmill';
   /** What hit it: fighters or the guns, and which group ('flak' for the guns). */
