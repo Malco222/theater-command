@@ -68,7 +68,7 @@ import { jobLine, minesAt, type JobKind } from '../engineers';
 import { briefTicket, minesKnown } from '../facing';
 import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
 import { nearX, wrapSpan } from '../wrap';
-import { WORLD, beyondEurope, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
+import { WORLD, beyondEurope, closedGround, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
@@ -280,6 +280,8 @@ function standingNote(r: Region): string {
     else if (me) line += ' This is your own ground, in their hands.';
     else line += ` The ground is ${g.nations[o].adj}.`;
   }
+  // (Closed ground says so itself: the high plateau, rider b632 to ruling 234.)
+  line = closedGround(g, r) ?? line;
   return `<div class="rel ${kind}" style="--side:${n.color}"><b>${word}</b><span>${esc(line)}</span></div>`;
 }
 const date = (t: number): string => turnToDate(t).label;

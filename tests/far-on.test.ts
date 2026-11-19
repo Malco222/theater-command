@@ -78,8 +78,11 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
     const g = grand();
     expect(farOn(g)).toBe(true);
     expect(g.regions.length).toBe(WORLD_FIRST + WORLD_REGIONS);
+    // (Tibet is the one bare country, by ruling: rider b632 to ruling 234 gives its five provinces the game's form
+    // for a neutral's ground, an owner's code with no row. far-tibet.test.ts holds it. No other code may be bare.)
     for (const id of new Set(g.regions.flatMap((r) => [r.owner, r.ctrl]))) {
       expect(g.nations[id], id).toBeDefined();
+      if (id === 'TIB') continue;
       expect((nationsData as any)[id] ?? (nationsData as any).nations?.[id] ?? WD.nations[id], `${id} has no row: it would be a bare stand-in`).toBeDefined();
     }
     const J = g.nations.JAP;

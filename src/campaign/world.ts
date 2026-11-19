@@ -243,13 +243,27 @@ const STAND_IN: Record<string, [string, string, string]> = {
   MGL: ['Mongolia', 'Mongolian', '#8c5a3c'], THA: ['Thailand', 'Thai', '#5b8c8a'], AUS: ['Australia', 'Australian', '#2f7d5b'],
   NZL: ['New Zealand', 'New Zealand', '#40507a'], SAF: ['South Africa', 'South African', '#d98a2b'], SAU: ['Saudi Arabia', 'Saudi', '#3f8f5a'],
   YEM: ['Yemen', 'Yemeni', '#b0563f'], AFG: ['Afghanistan', 'Afghan', '#6f7f4a'], NEP: ['Nepal', 'Nepalese', '#9c3d54'], LBR: ['Liberia', 'Liberian', '#4a6fa5'],
+  // (Tibet, governed from Lhasa and neutral throughout: rider b632 to ruling 234.)
+  TIB: ['Tibet', 'Tibetan', '#8f6f5a'],
 };
+
+/**
+ * Closed ground, by its owner's code: what its provinces say of themselves (rider b632 to ruling 234). The high
+ * plateau is a neutral's, and at the game's scale no army enters or crosses it: every border out of Tibet's five
+ * provinces is struck on the chart (far.mjs, PACIFIC_NO_BORDER), so no march, attack or supply line has a road
+ * there and the staffs see none. Aircraft fly over the ranges as they did. (The words are the builder's until the
+ * UI director's review.)
+ */
+const CLOSED_GROUND: Record<string, string> = { TIB: 'Tibet: neutral. No army can cross the high plateau.' };
+/** The line a province of closed ground carries on its page, or null: its owner's while it is still in its owner's hands. */
+export const closedGround = (g: Game, r: Region): string | null => (farOn(g) && r.ctrl === r.owner ? CLOSED_GROUND[r.owner] ?? null : null);
 
 /**
  * The far stage's guard: a bare country for every owner code on the chart that is still no country once the far
  * side's own rows are laid (far.ts). It stands at home, at peace and independent, with no army, so the map and every
  * page can name whoever owns a province. Where every code has its own row it does nothing; on a narrower chart it
- * is never reached.
+ * is never reached. Tibet is the one country that stands by it for good: a neutral with no row and no army, whose
+ * ground no army enters (rider b632 to ruling 234; `closedGround` above).
  */
 function standInCountries(g: Game): void {
   if (!farOn(g)) return;
