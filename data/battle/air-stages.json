@@ -133,8 +133,8 @@
      "id": "DD1",
      "cls": "bb",
      "name": "Pennsylvania",
-     "at": [-621.5, -1321.3],
-     "face": 165,
+     "at": [-675.6, -1367.6],
+     "face": 211,
      "open": 0.0,
      "note": "Dry Dock No. 1",
      "dock": true
@@ -143,8 +143,8 @@
      "id": "DD1a",
      "cls": "dd",
      "name": "Cassin",
-     "at": [-589.5, -1468.0],
-     "face": 165,
+     "at": [-757.8, -1490.8],
+     "face": 211,
      "open": 0.0,
      "note": "Dry Dock No. 1, ahead of Pennsylvania",
      "dock": true
@@ -153,8 +153,8 @@
      "id": "DD1b",
      "cls": "dd",
      "name": "Downes",
-     "at": [-575.9, -1464.3],
-     "face": 165,
+     "at": [-745.8, -1498.0],
+     "face": 211,
      "open": 0.0,
      "note": "Dry Dock No. 1, ahead of Pennsylvania",
      "dock": true

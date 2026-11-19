@@ -6,6 +6,7 @@
 # Units: metres, x east and y north of the stage's origin, z up from the sea. The game turns and places the stage
 # as the battle's ticket turns the map (stages.ts onBoard). Heights are kept in decimetres (whole numbers).
 import json, math, os, sys, random
+from yard import yard, DRAWN_FIELDS
 import numpy as np
 import shapely
 from shapely.geometry import Polygon, MultiPolygon, Point, box, LineString
@@ -31,6 +32,10 @@ PALETTE = [
     ('lagoon', '#5FB3B0'),     # 11 Midway's lagoon floor seen through clear water
 ]
 IDX = {n: i for i, (n, _) in enumerate(PALETTE)}
+# Oahu's own paint (the art director on build 1734: Pearl Harbor's land read as three plain colours, the shallows as a
+# mint band): the greens darker, the earth redder, the sand a duller band, the shallows a darker teal-green. Midway
+# keeps the palette above. The 3D game varies these point by point (Battle/AirGround.cpp).
+OAHU_PAINT = {'sand': '#CDBD95', 'cane': '#5D7934', 'pineapple': '#7D5A3C', 'forest': '#35512A', 'shallows': '#3A6E68', 'reef': '#6C9E8E'}
 
 
 def dm(v):
@@ -237,10 +242,13 @@ def runways(fields, mesh, zat, extra, L):
     return out
 
 
-def hangars(fields, zat):
-    """A row of hangars beside each field's runway: big at the bomber fields, fewer at the fighter strips."""
+def hangars(fields, zat, drawn=()):
+    """A row of hangars beside each field's runway: big at the bomber fields, fewer at the fighter strips (not where
+    the yard draws the field's own, yard.py)."""
     out = []
     for f in fields:
+        if f['name'] in drawn:
+            continue
         n = {'bombers': 6, 'navy': 3, 'fighters': 4}.get(f['kind'], 2)
         x, y = f['at']
         h = math.radians(f['runway'] or 90)
@@ -371,10 +379,11 @@ def build(key):
     out = {
         'key': key, 'name': st['name'], 'origin': st['origin'],
         'units': 'decimetres in v (x east, y north, z up from the sea, from the origin); metres everywhere else',
-        'palette': [{'name': n, 'hex': h} for n, h in PALETTE],
+        'palette': [{'name': n, 'hex': (OAHU_PAINT.get(n, h) if key == 'oahu' else h)} for n, h in PALETTE],
         'meshes': [land.out(), sea.out(), reef.out(), works.out()],
         'tanks': [[t['at'][0], t['at'][1], round(zat(*t['at']), 1), t['r'], round(min(14.0, max(6.0, t['r'] * 0.8)), 1)] for t in st['tanks'] if t['r'] >= 6],
-        'hangars': hangars(st['fields'], zat),
+        'hangars': hangars(st['fields'], zat, DRAWN_FIELDS.get(key, set())),
+        'yard': yard(key, zat),
         'runways': strips,
         'fields': [{'name': f['name'], 'kind': f['kind'], 'at': f['at']} for f in st['fields']],
         'palms': palms(L, zat, 420, 7, 900) if key == 'oahu' else palms(L, zat, 60, 11, 0),
@@ -391,7 +400,7 @@ def build(key):
     path = os.path.join(OUT, f'{key}-3d.json')
     json.dump(out, open(path, 'w'), separators=(',', ':'))
     tri = sum(len(m['t']) // 3 for m in out['meshes'])
-    print(key, 'triangles', tri, {m['name']: len(m['t']) // 3 for m in out['meshes']}, 'tanks', len(out['tanks']), 'hangars', len(out['hangars']), 'palms', len(out['palms']), 'bytes', os.path.getsize(path))
+    print(key, 'triangles', tri, {m['name']: len(m['t']) // 3 for m in out['meshes']}, 'tanks', len(out['tanks']), 'hangars', len(out['hangars']), 'yard', len(out['yard']), 'palms', len(out['palms']), 'bytes', os.path.getsize(path))
 
 
 if __name__ == '__main__':

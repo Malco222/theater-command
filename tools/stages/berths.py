@@ -42,10 +42,13 @@ add('F-5o', 'bb', 'Oklahoma', off(F5, OUT), 51, 1.0)
 add('F-4', 'ao', None, off(F4, IN), 51, 1.0, 'Neosho, an oiler: no campaign class')
 add('F-3', 'bb', 'California', off(F3, IN), 51, 1.0)
 # The Navy Yard (the historian places these; the docks and piers are today's).
-mouth = (-650.0, -1215.0); ax = math.radians(165); A = (math.sin(ax), math.cos(ax)); S = (math.sin(ax + math.pi / 2), math.cos(ax + math.pi / 2))
-add('DD1', 'bb', 'Pennsylvania', (mouth[0] + A[0] * 110, mouth[1] + A[1] * 110), 165, 0.0, 'Dry Dock No. 1', dock=True)
-add('DD1a', 'dd', 'Cassin', (mouth[0] + A[0] * 260 + S[0] * 7, mouth[1] + A[1] * 260 + S[1] * 7), 165, 0.0, 'Dry Dock No. 1, ahead of Pennsylvania', dock=True)
-add('DD1b', 'dd', 'Downes', (mouth[0] + A[0] * 260 - S[0] * 7, mouth[1] + A[1] * 260 - S[1] * 7), 165, 0.0, 'Dry Dock No. 1, ahead of Pennsylvania', dock=True)
+# Dry Dock No. 1 runs 211 degrees from its caisson on the water into the land, square to the yard's 31/121 grid (the
+# historian, 19 November: the mapped caisson lies along 121; along 165 the dock would run through Building 1456).
+# Pennsylvania (624 ft) bow first near the mouth, Cassin and Downes (341 ft) side by side at the dock's head.
+mouth = (-620.0, -1275.0); ax = math.radians(211); A = (math.sin(ax), math.cos(ax)); S = (math.sin(ax + math.pi / 2), math.cos(ax + math.pi / 2))
+add('DD1', 'bb', 'Pennsylvania', (mouth[0] + A[0] * 108, mouth[1] + A[1] * 108), 211, 0.0, 'Dry Dock No. 1', dock=True)
+add('DD1a', 'dd', 'Cassin', (mouth[0] + A[0] * 256 + S[0] * 7, mouth[1] + A[1] * 256 + S[1] * 7), 211, 0.0, 'Dry Dock No. 1, ahead of Pennsylvania', dock=True)
+add('DD1b', 'dd', 'Downes', (mouth[0] + A[0] * 256 - S[0] * 7, mouth[1] + A[1] * 256 - S[1] * 7), 211, 0.0, 'Dry Dock No. 1, ahead of Pennsylvania', dock=True)
 add('1010', 'ca', 'Helena', (-395.0, -990.0), 30, 0.8, '1010 Dock')
 add('1010o', 'cm', None, (-395.0 - 19 * math.sin(math.radians(60)), -990.0 + 19 * math.cos(math.radians(60))), 30, 1.0, 'Oglala, a minelayer, outboard of Helena: no campaign class')
 add('B-21', 'ca', 'Honolulu', L(21.3540, -157.9509), 51, 0.2)
