@@ -230,9 +230,10 @@ and a dark sheen of oil wells up there and spreads.
 
 ### The named Pacific capital ships
 
-Four named ships built to their real dimensions and drawings (measured off reference pictures; no mesh, texture or
+Named ships built to their real dimensions and drawings (measured off reference pictures; no mesh, texture or
 drawing is copied), at the B-17's level of detail, with every light gun manned (`capitals.py`, its small fittings in
-`fittings.py`):
+`fittings.py`; the 1941-42 carriers each in a module of their own, `yorktown.py`, `akagi.py`, `kaga.py`, `soryu.py`,
+loaded through `capitals.NAMED_MODULES`):
 
 | File | Ship, as she was | Stands in for | Triangles fine / plain |
 |---|---|---|---|
@@ -240,17 +241,27 @@ drawing is copied), at the B-17's level of detail, with every light gun manned (
 | `Yamato` | Yamato, April 1945, triple 46 cm, 25 mm nests everywhere | `Battleship_JAP` | 237k / 29k |
 | `Shokaku` | Shokaku-class carrier, 1941-42, bent funnels to starboard | `Carrier_JAP` | 109k / 14k |
 | `Essex` | Essex-class carrier, 1944, Measure 21, deck-edge lift to port | `Carrier_USA` | 136k / 19k |
+| `Arizona` | Pennsylvania-class battleship, Pearl Harbor, December 1941, Measure 1 | `Battleship_USA` | 71k / 13k |
+| `Yorktown` | Yorktown (CV-5) at Midway, June 1942, Measure 12 graded | `Carrier_USA` | 149k / 17k |
+| `Akagi` | Akagi, 1941-42: island to port, the great downturned funnel to starboard, 20 cm casemates | `Carrier_JAP` | 150k / 19k |
+| `Kaga` | Kaga, 1941-42: island forward to starboard, ten 20 cm casemates | `Carrier_JAP` | 142k / 20k |
+| `Soryu` | Soryu, 1941-42: island forward to starboard | `Carrier_JAP` | 127k / 15k |
+| `Hiryu` | Hiryu, 1941-42: her sister with the island amidships to port | `Carrier_JAP` | 121k / 15k |
+
+The Pearl Harbor and Midway stages take the 1941-42 ships; the Iowa, Yamato and Essex stand for the later war.
 
 Each is a drop-in for the plain ship it names in `info.file.stands_for`: the same parts, sockets and clips, so a
 battle can swap one for the other. What they add: more `sec.*` mounts (`sec.P1…/sec.S1…`, and Yamato's two centre-line
 15.5 cm turrets `sec.C1`, `sec.C2`), every 40 mm / 25 mm mount its own turn part (`bofors.N`, `aa25.N`, each with its
-`.guns` lifting), `aa.N` sockets on every light gun, and the clip `fire.aa` (the light guns firing in a ripple, for a
-raid). A carrier's lifts are `lift.N` slide parts; the Essex's second lift is out on the port deck edge, on girders,
+`.guns` lifting; Yorktown's 1.1-inch quads are `aa28.N`; the prefixes are `capitals.AA_TRAINS`), `aa.N` sockets on
+every light gun, and the clip `fire.aa` (the light guns firing in a ripple, for a raid). Casemate guns (the Arizona's
+5-inch/51, the 20 cm of Akagi and Kaga) are `sec.*` too: they train across their ports. A carrier's lifts are `lift.N` slide parts; the Essex's second lift is out on the port deck edge, on girders,
 with no well under it. The deck park's markings follow the kind a carrier stands for (`deckpark.stands_for`).
 
-Make one again with `python3 export.py <out> Essex` (or Iowa, Yamato, Shokaku); check with
+Make one again with `python3 export.py <out> Essex` (or any name in the table); check with
 `python3 shipcheck.py loose Essex` (0 loose pieces, 0 points in no face) and `boxes`. Pictures:
-`sea/close/<Name>-*.png`, and all four side by side in `sea/sheets/pacific-capitals.png`.
+`sea/close/<Name>-*.png`; the first four side by side in `sea/sheets/pacific-capitals.png`, the 1941-42 ships in
+`sea/sheets/pacific-1941-42.png`.
 
 ## Aircraft
 

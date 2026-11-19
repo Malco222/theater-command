@@ -2053,12 +2053,16 @@ def arizona(fine=True):
     return m, yard
 
 
+# the light mountings that train and lift as parts: `<kind>.N` turns, `<kind>.N.guns` lifts (40 mm, 25 mm, 1.1-inch)
+AA_TRAINS = ("bofors.", "aa25.", "aa28.")
+
+
 def aa_clip(m):
     """Every light mounting that trains: they swing onto a bearing and fire in short bursts (the game aims each by its
     own part; this clip only shows them working)."""
     tracks, events = [], []
     for p in m.parts:
-        if p.name.endswith(".guns") and (p.name.startswith("bofors.") or p.name.startswith("aa25.")):
+        if p.name.endswith(".guns") and p.name.startswith(AA_TRAINS):
             ph = (sum(map(ord, p.name)) % 7) * 0.05     # (a steady hash: Python's own changes every run)
             tracks.append({"part": p.name, "turn": [[0.0, 0.0], [0.6, 28.0], [1.0 + ph, 30.0], [1.15 + ph, 29.2], [1.3 + ph, 30.0], [1.45 + ph, 29.2], [1.6 + ph, 30.0], [3.0, 30.0]]})
     for s in m.sockets:
