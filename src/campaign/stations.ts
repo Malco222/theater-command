@@ -130,6 +130,12 @@ function calendar(g: Game, B: Stations): { slide: number; date: number; went: bo
   return now === null ? null : { slide: now - date, date, went: went > 0 };
 }
 
+/** True in a war where the book dates this country's rows at all, whatever the month (the stations themselves bind only while the table runs). */
+export function bookKept(g: Game, nat: string): boolean {
+  const B = stations();
+  return !!B && nat !== g.human && g.human !== B.taker && !!stopDef(g).book && onBook(g, B.theatre);
+}
+
 /** True while the stations bind this country's corps this month. */
 export function stationsBind(g: Game, nat: string): boolean {
   const B = stations();

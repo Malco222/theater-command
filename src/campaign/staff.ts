@@ -40,6 +40,7 @@ import { runQuays } from './pacific';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather } from './game';
 import { openWinter, winterOver } from './winter';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
+import type { PlanFront } from './planfronts';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
 
@@ -72,6 +73,8 @@ export interface Op {
   freesAfter?: number;
   /** Strikes its carriers fly at an enemy harbour in the month it goes (ai.ts and carriers.ts, `plannedStrike`). */
   strikes?: PlanPhase['strikes'];
+  /** The fronts of a plan taken from the record: whose each row is, where each front ends, and the follow-ons by month (planfronts.ts, rider b633 to ruling 234). Read only where no book dates the rows. */
+  fronts?: PlanFront[];
   staging?: Record<string, number>;
   join?: 'allies' | 'axis';
   /**

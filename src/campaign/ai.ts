@@ -11,7 +11,7 @@ import { aiProduction, armyWorn, gunsWanted, income } from './economy';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { aiArsenal, aiFortify } from './arsenal';
-import { blocked, blowBridges } from './rivers';
+import { blocked as groundBars, blowBridges } from './rivers';
 import { groundRules, isFoot } from './ground';
 import { SUPPORT } from './support';
 import { aiBridges, aiEngineers } from './engineers';
@@ -28,6 +28,7 @@ import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules,
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { frontArmys, lineAny, lineGives, lineLeaves, lineShut } from './line';
 import { alongside, bookAttacks, bookFleets, bookSails, bookStations, ceilinged, goesWith, ridersOf } from './stations';
+import { byThePlan, followKey, frontsAgain, frontsClear, frontsNow, frontsTick, offFront, onFront, planWaits, plansHold, sailedKey, walkedKey, type FollowOn, type FrontsNow } from './planfronts';
 import { hashString } from '../core/rng';
 import { GREAT, SIEGE, arrive, besieged, feeders, fieldCtrl, garrison, garrisonOf, greatCity, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
@@ -40,7 +41,11 @@ import {
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
 
 /** A computer staff's march: by the book none goes into ground the record's line shuts to it this month (line.ts). */
-const moveCorps = (g: Game, c: Corps, to: Region): boolean => !lineShut(g, c.nat, to) && moveTo(g, c, to);
+const moveCorps = (g: Game, c: Corps, to: Region): boolean => !lineShut(g, c.nat, to) && !offFront(g, c, to) && moveTo(g, c, to);
+// (A row on a live front of its plan goes nowhere that takes it off that front, by road or by rail: planfronts.ts,
+// rider b633 to ruling 234. No plan names fronts with the far side off.)
+const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => groundBars(g, c, to, from) || offFront(g, c, to);
+const railCorps = (g: Game, c: Corps, to: Region): boolean => !offFront(g, c, to) && railMove(g, c, to);
 
 function phases(nat: string): PlanPhase[] {
   const p = PLAN[nat];
@@ -190,7 +195,7 @@ function campaign(g: Game, nat: string): void {
   garrisons(g, nat, false);
   sacks = new Set();
   rested = [];
-  try { campaignMoves(g, nat); } finally { if (n.alive) garrisons(g, nat, true); sacks = new Set(); for (const c of rested) c.hold = false; rested = []; }
+  try { campaignMoves(g, nat); } finally { if (n.alive) garrisons(g, nat, true); sacks = new Set(); for (const c of rested) c.hold = false; rested = []; frontsClear(); }
 }
 
 /**
@@ -245,7 +250,8 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
     // (A place the staff stepped out of this month, because the ring was closing round it, is left no garrison.)
     if (inside.length >= want || !near(r, 1) || sacks.has(r.id)) continue;
     if (great) {
-      const all = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined);
+      // (A row on a live front of its plan is that front's and not the garrison rule's: planfronts.ts.)
+      const all = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && !onFront(c));
       const first = (c: Corps): number => (c.kind === 'inf' ? 0 : 1);
       // The field first (b512(e)): while the field can be held against the enemy next door, only the corps it can
       // spare go inside. Where it cannot be held, the city is filled to its room, a lone corps and all.
@@ -267,7 +273,8 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
       }
       continue;
     }
-    const foot = r.units.filter((c) => c.nat === nat && !c.dead && c.kind === 'inf' && c.joint === undefined).sort((a, b) => corpsBase(g, a) - corpsBase(g, b));
+    // (A row on a live front of its plan is that front's and not the garrison rule's: the free staff garrisons with rows of its own. The director's note of 11:07Z on rider b631 (ii).)
+    const foot = r.units.filter((c) => c.nat === nat && !c.dead && c.kind === 'inf' && c.joint === undefined && !onFront(c)).sort((a, b) => corpsBase(g, a) - corpsBase(g, b));
     let field = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng').length, have = inside.length;
     for (const c of foot) {
       if (have >= want || field <= 1) break;
@@ -441,7 +448,7 @@ function campaignMoves(g: Game, nat: string): void {
  * garrison row marked to stay keeps it (ruling 221, H): an offensive does not empty the bases behind it.
  */
 export function release(g: Game, nat: string, names: string[]): void {
-  const held = (c: Corps): boolean => c.nat === nat && c.hold && !c.stay && c.kind !== 'fort' && names.includes(g.regions[c.reg].name);
+  const held = (c: Corps): boolean => c.nat === nat && c.hold && !c.stay && c.kind !== 'fort' && !planWaits(c) && names.includes(g.regions[c.reg].name);
   // (A row held for the corps it goes with is let go with that corps and not before it: rider b604 to ruling 234,
   // stations.ts. The tank regiments beside a division that waits on its quay wait with it. None with the far side off.)
   const riders = g.corps.filter((c) => held(c) && goesWith(g, c) !== null);
@@ -530,6 +537,10 @@ function mainCampaign(g: Game, nat: string): void {
   // (The far side: where no book dates Japan's strike south, the readiness test names its month before the great choices are read. readiness.ts.)
   if (open) readinessMonth(g, nat);
   if (open) decide(g, nat, (r) => aside(g, r, nat));
+  // (The fronts of a plan taken from the record, where no book dates its rows: whose each row is this month, read
+  // once the month's great choices are made. planfronts.ts, rider b633 to ruling 234. None with the far side off.)
+  if (open) plansHold(g, nat);
+  const FR = open ? frontsTick(g, nat) : null;
   const planned = phaseFor(g, nat);
   // Some phases wait on someone else's war: Germany's allies only march east if Germany does.
   const ph = planned?.ifAtWar && !atWar(g, planned.ifAtWar[0], planned.ifAtWar[1]) ? null : planned;
@@ -544,10 +555,12 @@ function mainCampaign(g: Game, nat: string): void {
   }
   // (The corps the plan takes off hold this month: its named reserves the month it goes, its own landing forces later. staff.ts.)
   // (A row that goes with a corps the plan lets go is let go with it: rider b604 to ruling 234, stations.ts.)
+  // (A row the plan has waiting, for its road or a follow-on, is not let go: planfronts.ts, rider b633. A row on a
+  // live front that is let go from its quay is still its front's: it fights there and goes nowhere else.)
   if (open) for (const nm of freed(g, nat)) {
-    for (const x of ridersOf(g, nat, nm)) if (x.hold && !x.stay) x.hold = false;
+    for (const x of ridersOf(g, nat, nm)) if (x.hold && !x.stay && !planWaits(x)) x.hold = false;
     const c = g.corps.find((x) => x.nat === nat && x.name === nm && !x.dead);
-    if (c && c.hold && !c.stay) c.hold = false;
+    if (c && c.hold && !c.stay && !planWaits(c)) c.hold = false;
   }
   // (The strikes the plan orders of its carriers fall with the declaration, before the admirals read the month.)
   for (const s of ph?.strikes ?? []) plannedStrike(g, nat, s.fleet, s.harbour, s.home);
@@ -563,7 +576,12 @@ function mainCampaign(g: Game, nat: string): void {
   bookAttacks(g, nat);
   // (And the landings of the book's great blow sail on the record's own shipping, as the table's do: rider b626.)
   if (ph?.landings) { if (bookSails(g, nat)) onOwnShipping(nat, () => landings(g, nat, ph)); else landings(g, nat, ph); }
-  if (open) { descent(g, nat); hop(g, nat, ph); ferry(g, nat); reinforce(g, nat); }
+  // (The plan's fronts: a landing of its own still owed when its two months are over stays the plan's while its
+  // row's front lives; then the moves by land and the follow-ons by month. The ships are told what is still to come.)
+  const owed = FR && !ph?.landings ? owedLandings(g, nat, FR) : null;
+  if (owed) landings(g, nat, owed);
+  const sea = FR ? frontsMonth(g, nat, FR, ph?.landings ? ph : owed, ph) : ph;
+  if (open) { descent(g, nat); hop(g, nat, sea); ferry(g, nat); reinforce(g, nat); }
   if (ph?.release) release(g, nat, ph.release);
   const posture = ph?.posture ?? 'defend';
   entrusted = handedOver(g, nat, ph);
@@ -775,14 +793,14 @@ function mass(g: Game, nat: string, ph: PlanPhase | null, watchOnly = false): vo
       for (const c of far) {
         if (have >= count || friendlyUnits(g, r, nat).length >= STACK) break;
         if (!spare(c, 2)) continue;
-        if (railMove(g, c, r)) { massed.add(c.id); have++; }
+        if (railCorps(g, c, r)) { massed.add(c.id); have++; }
         else if (railToward(g, c, r)) have++;
       }
     } else if (have < count && !pool.length && ph.watch?.includes(name) && friendlyUnits(g, r, nat).length < STACK) {
       const far = g.corps
         .filter((c) => c.nat === nat && !c.dead && !c.hold && c.kind === 'inf' && c.ap >= 4 && !massed.has(c.id) && d[c.reg] > 3 && own(g.regions[c.reg]).length >= 3)
         .sort((a, b) => d[a.reg] - d[b.reg] || a.id - b.id);
-      const got = far.slice(0, 12).find((c) => railMove(g, c, r));
+      const got = far.slice(0, 12).find((c) => railCorps(g, c, r));
       if (got) { massed.add(got.id); have++; }
       else if (far[0]) railToward(g, far[0], r);
     }
@@ -1128,9 +1146,176 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
         if (res.ok && !res.taken) break; // beaten off: the corps is back in port and has had its month
       }
       // Once ashore the corps stays overseas for as long as the plan's operation runs.
-      if (ok) { for (const x of force) { x.hold = false; g.flags[`exp:${x.id}`] = ph.to; } break; }
+      // (Where the plan names fronts, the landing made is marked on the row: its follow-ons come after it. planfronts.ts.)
+      if (ok) { for (const x of force) { x.hold = false; g.flags[`exp:${x.id}`] = ph.to; if (frontsNow()) g.flags[sailedKey(x)] = g.turn; } break; }
     }
   }
+}
+
+/** The plan's own landings its fronts still owe: those of rows on a live front that have not sailed. Null with none. */
+function owedLandings(g: Game, nat: string, N: FrontsNow): PlanPhase | null {
+  const list = (N.plan.op.landings ?? []).filter((L) => {
+    const c = g.corps.find((x) => x.nat === nat && x.name === L.corps && !x.dead);
+    return !!c && N.rows.has(c.id) && g.flags[sailedKey(c)] === undefined;
+  });
+  if (!list.length) return null;
+  const ph = { name: '', from: g.turn, to: g.turn + 6, posture: 'defend', landings: list } as PlanPhase;
+  if (N.plan.op.quays) ph.quays = N.plan.op.quays;
+  return ph;
+}
+
+/** For the measuring harness: told of what a plan's fronts do with their rows. Nothing in the game listens. */
+export const frontWatch: { tell: ((e: { nat: string; what: 'walk' | 'stage' | 'land' | 'wait'; front: string; force: Corps[]; to: Region; from: Region; taken?: boolean; why?: string }) => void) | null } = { tell: null };
+
+/**
+ * The month of a plan's fronts (planfronts.ts; rider b633 to ruling 234, the director's notes of 11:17Z and 11:28Z).
+ * The rows the plan has waiting are held where they stand; a row that joins its front by road walks there; and the
+ * follow-ons are made by their months, in the table's order:
+ *   when        from its month, counted from the month the plan went, and once every place it names in `after` is its
+ *               side's (the hop before). Until then its row waits as the plan's.
+ *   from where  where the row stands, if the shore is within a landing's reach of it. Otherwise the row is shipped,
+ *               from the month before its date, to the harbour the record staged it at (`from`) or the nearest its
+ *               side holds within reach of the shore, and lands a month later. A row that stands in no harbour walks
+ *               to one first.
+ *   how         by the landing rules as the plan's own landings are: the month's lift, the lane, the sky, and on a
+ *               defended shore the plan's odds (1.2). One landing a month for a row; a second where the table gives
+ *               both the same month, sailing from where the first left it.
+ * It returns the month's orders as the ships are to read them: with the landings the plan still has to make, so
+ * that the fleet covers them and the staff's own hops leave their shores alone.
+ */
+function frontsMonth(g: Game, nat: string, N: FrontsNow, plans: PlanPhase | null, ph: PlanPhase | null): PlanPhase | null {
+  const { plan } = N;
+  let now = N;
+  const range = NAVY.landing.range;
+  const corps = (nm: string): Corps | null => g.corps.find((c) => c.nat === nat && c.name === nm && !c.dead) ?? null;
+  const mine = (r: Region | undefined): r is Region => !!r && allied(g, nat, r.ctrl);
+  const harbour = (r: Region): boolean => r.port && r.seas.length > 0 && allied(g, nat, r.ctrl) && !hostileUnits(g, r, nat).length;
+  const inReach = (p: Region, shore: Region): boolean => !!seaPath(g, nat, p, shore, { max: range, surprise: true });
+  const room = (p: Region, k: number): boolean => friendlyUnits(g, p, nat).length + k <= STACK;
+  // The plan's rows come out of their towns, are no longer the ships' to bring up, and wait where the plan has them wait.
+  for (const row of now.rows.values()) {
+    const c = row.c;
+    delete g.flags[`st:hopUp:${c.id}`];
+    if (c.town !== undefined && pacificGround(g, g.regions[c.reg])) takeField(g, c);
+    if (row.waits && !c.hold) c.hold = true;
+  }
+  // A row that stands in no harbour walks to the nearest its side holds, one the shore can be reached from if there is one.
+  const toQuay = (c: Corps, front: string, shore: Region): void => {
+    const d = hops(g, c.reg, (r) => allied(g, nat, ctl(g, r)));
+    const near = g.regions.filter((p) => harbour(p) && d[p.id] > 0).sort((a, b) => d[a.id] - d[b.id] || a.id - b.id);
+    const q = near.find((p) => inReach(p, shore)) ?? near.find((p) => !!seaPath(g, nat, p, shore)) ?? near[0];
+    if (!q) return;
+    const from = g.regions[c.reg];
+    byThePlan(() => walkToward(g, c, q));
+    frontWatch.tell?.({ nat, what: 'walk', front, force: [c], to: q, from });
+  };
+  // By sea to a harbour its side holds: the row's month, and a place in the month's lift.
+  const sail = (cs: Corps[], p: Region, front: string): boolean => {
+    const from = g.regions[cs[0].reg];
+    if (!room(p, cs.length) || liftLeft(g, nat) < cs.length || (leavesHome(g, nat, from) && mayLeave(g, nat) < cs.length)) return false;
+    const went = cs.filter((x) => shipMove(g, x, p));
+    for (const x of went) g.flags[sailedKey(x)] = g.turn;
+    if (went.length) frontWatch.tell?.({ nat, what: 'stage', front, force: went, to: p, from });
+    return went.length > 0;
+  };
+  // Moves by land: to the place named, once it is its side's. Arrived, the row is its front's in the field.
+  for (let k = 0; k < plan.fronts.length; k++) {
+    if (!now.live[k]) continue;
+    for (const m of plan.fronts[k].land ?? []) {
+      const to = g.byName[m.to];
+      if (!mine(to)) continue;
+      for (const nm of [m.corps, ...(m.with ?? [])]) {
+        const c = corps(nm), row = c ? now.rows.get(c.id) : undefined;
+        if (!c || !row || row.k !== k || row.next || g.flags[walkedKey(c)] !== undefined) continue;
+        const from = g.regions[c.reg];
+        if (c.reg !== to.id) { byThePlan(() => walkToward(g, c, to)); frontWatch.tell?.({ nat, what: 'walk', front: plan.fronts[k].id, force: [c], to, from }); }
+        // (Arrived, the plan has taken the row up, as its landings take theirs: a row held for the book alone is the plan's now. Rider b423 to ruling 221.)
+        if (c.reg === to.id) { g.flags[walkedKey(c)] = g.turn; c.hold = false; }
+      }
+    }
+  }
+  now = frontsAgain(g) ?? now;
+  // The follow-ons.
+  const made = new Map<number, number>();
+  const firstOwed = (c: Corps): boolean => (plan.op.landings ?? []).some((L) => L.corps === c.name) && g.flags[sailedKey(c)] === undefined;
+  for (let k = 0; k < plan.fronts.length; k++) {
+    if (!now.live[k]) continue;
+    const F = plan.fronts[k], T = F.then ?? [];
+    for (let i = 0; i < T.length; i++) {
+      const f: FollowOn = T[i], key = followKey(nat, k, i);
+      if (g.flags[key] !== undefined) continue;
+      const lead = corps(f.corps), row = lead ? now.rows.get(lead.id) : undefined;
+      // (Its turn: the row's follow-on next in the table, and its own first landing made.)
+      if (!lead || !row?.next || row.next.k !== k || row.next.i !== i || firstOwed(lead)) continue;
+      const done = (): void => { g.flags[key] = g.turn; now = frontsAgain(g) ?? now; };
+      const here = g.regions[lead.reg];
+      const places = f.to.map((nm) => g.byName[nm]).filter((r): r is Region => !!r);
+      const group = [lead, ...(f.with ?? []).map(corps).filter((x): x is Corps => !!x && now.rows.get(x.id)?.next?.k === k && now.rows.get(x.id)?.next?.i === i)];
+      // (A row that goes with the lead and is not with it comes to it: by road to a harbour, by sea to the lead's.)
+      for (const x of group.slice(1)) {
+        if (x.reg === lead.reg || g.flags[sailedKey(x)] === g.turn) continue;
+        if (!g.regions[x.reg].port) toQuay(x, F.id, here);
+        else if (harbour(here)) sail([x], here, F.id);
+      }
+      const force = group.filter((x) => x.reg === lead.reg);
+      const due = g.turn >= plan.at + f.month, early = g.turn >= plan.at + f.month - 1;
+      const sailed = g.flags[sailedKey(lead)] === g.turn;
+      // (One landing a month for a row; a second where the table gives both the same month, as the record's force made them.)
+      const again = sailed && made.get(lead.id) === f.month;
+      if (sailed && !again) continue;
+      if (f.stage) {
+        // A move to a harbour its side holds, by its date.
+        const dest = places.find(mine);
+        if (!due || !dest) continue;
+        if (lead.reg === dest.id) { done(); continue; }
+        if (!here.port || !here.seas.length) { for (const x of force) toQuay(x, F.id, dest); continue; }
+        if (sail(force, dest, F.id) && lead.reg === dest.id) done();
+        continue;
+      }
+      // A landing: on the first of its places still the enemy's; a place already its side's is a hop made.
+      if (places.length && mine(places[0])) { done(); continue; }
+      const shore = places.find((r) => atWar(g, nat, r.ctrl));
+      if (!shore) continue;
+      if (!here.port || !here.seas.length) { if (early) for (const x of force) toQuay(x, F.id, shore); continue; }
+      if (!inReach(here, shore)) {
+        if (!early || sailed) continue;
+        const staged = (f.from ?? []).map((nm) => g.byName[nm]).filter((p): p is Region => !!p && harbour(p) && inReach(p, shore));
+        const others = g.regions.filter((p) => harbour(p) && pacificGround(g, p) && inReach(p, shore) && !staged.includes(p))
+          .map((p) => ({ p, far: seaPath(g, nat, p, shore, { max: range, surprise: true })!.length }))
+          .sort((a, b) => a.far - b.far || a.p.id - b.p.id).map((x) => x.p);
+        for (const p of [...staged, ...others]) if (p.id === here.id || sail(force, p, F.id)) break;
+        continue;
+      }
+      const waits = (why: string): void => frontWatch.tell?.({ nat, what: 'wait', front: F.id, force, to: shore, from: here, why });
+      if (!due) continue;
+      const hop = (f.after ?? []).find((nm) => !mine(g.byName[nm]));
+      if (hop) { waits(`the hop before, ${hop}`); continue; }
+      if (leavesHome(g, nat, here) && mayLeave(g, nat) < force.length) { waits('the floor at home'); continue; }
+      const odds = hostileUnits(g, shore, nat).length ? assess(g, force, shore, landingOpts(g, force, shore)).odds : Infinity;
+      if (odds < (f.minOdds ?? 1.2)) { waits(`the odds, ${odds.toFixed(2)}`); continue; }
+      const spent = force.map((x) => x.ap);
+      if (again) for (const x of force) x.ap = Math.max(x.ap, Math.min(4, x.apMax));
+      const res = landCorps(g, force, shore);
+      if (!res.ok) { force.forEach((x, j) => { x.ap = spent[j]; }); waits(res.why ?? 'the landing could not sail'); continue; }
+      for (const x of force) g.flags[sailedKey(x)] = g.turn;
+      made.set(lead.id, f.month);
+      frontWatch.tell?.({ nat, what: 'land', front: F.id, force, to: shore, from: here, taken: !!res.taken });
+      if (!res.taken) continue; // beaten off: back in port, and it has had its month
+      for (const x of force) if (!x.dead) { g.flags[`exp:${x.id}`] = g.turn + 6; x.hold = false; }
+      done();
+      // (Ashore, the row waits there as the plan's if it has another follow-on to make.)
+      for (const x of force) if (!x.dead && now.rows.get(x.id)?.waits) x.hold = true;
+    }
+  }
+  // What the plan still has to land, for the ships: its own landings, and the follow-ons whose rows stand in a harbour.
+  const still: NonNullable<PlanPhase['landings']> = [...(plans?.landings ?? [])];
+  for (const row of now.rows.values()) {
+    const f = row.next?.f;
+    if (!f || f.stage || g.turn < plan.at + f.month - 1 || f.corps !== row.c.name) continue;
+    still.push({ corps: f.corps, to: f.to });
+  }
+  if (!still.length) return ph;
+  return { ...(ph ?? ({ name: '', from: g.turn, to: g.turn, posture: 'defend' } as PlanPhase)), landings: still };
 }
 
 /**
@@ -1156,7 +1341,7 @@ export const landingWatch: { tell: ((e: { nat: string; to: Region; force: Corps[
 function homeAgain(g: Game, nat: string): void {
   const n = g.nations[nat];
   if (nat === g.human || !keepsDoor(g, nat)) return;
-  const away = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.town && c.joint === undefined && beyondEurope(c.reg) && g.regions[c.reg].owner !== nat;
+  const away = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.town && c.joint === undefined && beyondEurope(c.reg) && g.regions[c.reg].owner !== nat && !onFront(c);
   const abroad = g.corps.filter((c) => away(c) && !!g.flags[`sf:${c.id}`]).sort((a, b) => a.id - b.id);
   const walked = g.corps
     .filter((c) => away(c) && !g.flags[`sf:${c.id}`] && !g.nations[g.regions[c.reg].owner]?.alive && g.regions[c.reg].nb.some((j) => g.regions[j].owner === nat))
@@ -1292,7 +1477,7 @@ export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
   }
   const waits = (c: Corps): boolean => g.flags[`st:hopUp:${c.id}`] !== undefined;
   const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !c.airborne && !c.town && c.joint === undefined && (!c.hold || waits(c))
-    && c.supplied && c.str >= 0.7 * (c.full ?? 1) && c.ap >= c.apMax && !planned.has(c);
+    && c.supplied && c.str >= 0.7 * (c.full ?? 1) && c.ap >= c.apMax && !planned.has(c) && !onFront(c);
   // The harbours it holds on the Pacific's ground, and who stands ready in each (the weakest first). Nobody is taken
   // from a harbour anywhere else: the Pacific's landings are made by the forces sent there.
   const quays = new Map<number, Corps[]>();
@@ -1466,7 +1651,7 @@ function crossSea(g: Game, nat: string, slot: number): void {
   if (!quay) return;
   const sfx = slot ? ':o' : '';
   const ready = quay.units
-    .filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && u.supplied && u.str >= 0.7 && u.ap >= u.apMax)
+    .filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && u.supplied && u.str >= 0.7 && u.ap >= u.apMax && !onFront(u))
     // (The fighting corps take the boats first: guns land on no enemy shore by themselves, ruling 211(a).)
     .sort((a, b) => (gunsRule(g) ? Number(fights(b)) - Number(fights(a)) : 0) || atkPower(g, b) - atkPower(g, a) || a.id - b.id);
   // (From a quay at home, no more go than the floor at home lets go: ruling 229, 1b. The home commands that hold in
@@ -1603,7 +1788,7 @@ export function ferry(g: Game, nat: string): void {
   const O = overseasOf(g, nat);
   if (!O) return;
   const n = g.nations[nat];
-  const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !c.airborne && !c.town && c.joint === undefined && c.supplied && c.str >= 0.7 && c.ap >= c.apMax;
+  const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !c.airborne && !c.town && c.joint === undefined && c.supplied && c.str >= 0.7 && c.ap >= c.apMax && !onFront(c);
   const byWorth = (a: Corps, b: Corps): number => atkPower(g, b) - atkPower(g, a) || a.id - b.id;
   const went = (c: Corps): void => { c.hold = false; g.flags[`sf:${c.id}`] = 1; };
   // No corps is shipped to a full harbour, or over a crossing too dangerous for its staff ('risk'). A hop over a
@@ -1782,7 +1967,7 @@ function reinforce(g: Game, nat: string): void {
   const watch = coastWatch(g, nat);
   const lone = (c: Corps): boolean => g.regions[c.reg].name in watch && g.regions[c.reg].units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort').length < 2;
   const pool = g.corps
-    .filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !c.hold && !c.airborne && !c.town && c.joint === undefined && c.supplied && c.str >= 0.7 && c.ap >= c.apMax)
+    .filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !c.hold && !c.airborne && !c.town && c.joint === undefined && c.supplied && c.str >= 0.7 && c.ap >= c.apMax && !onFront(c))
     .filter((c) => homeland(g.regions[c.reg], nat) && c.reg !== quay && !lone(c))
     .sort((a, b) => atkPower(g, b) - atkPower(g, a) || a.id - b.id);
   // No harbour at home with a way open to the theatre: round the Cape (b460). Only while a harbour at home still
@@ -2599,7 +2784,7 @@ function defend(g: Game, nat: string, line = true): void {
     // Troops that have already fought this month are in no state to be thrown straight into another attack.
     // In free play the force a staff keeps at a place stays there: it is not thrown into a counter-attack next door.
     const kept = isOpen(g) ? massed : null;
-    const near = g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0 && !c.fought && c.org >= 0.6 && !kept?.has(c.id) && g.regions[c.reg].nb.includes(r.id));
+    const near = g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0 && !c.fought && c.org >= 0.6 && !kept?.has(c.id) && g.regions[c.reg].nb.includes(r.id) && !offFront(g, c, r));
     const cut = limitAttackers(g, near, r);
     // (The local commander's tanks do not go alone at a gunned line any more than the army's: the infantry next door goes in with them, or he waits.)
     const pool = cut.length ? footBeside(g, cut, near, r) ?? [] : [];
@@ -2637,7 +2822,7 @@ function forsaken(g: Game, nat: string, r: Region): boolean {
  * still run: the corps marches on from the end of the line next month.
  */
 function railToward(g: Game, c: Corps, to: Region): boolean {
-  if (railMove(g, c, to)) return true;
+  if (railCorps(g, c, to)) return true;
   if (!groundRules(g) || c.ap < 4) return false;
   const reach = railReach(g, c);
   if (!reach.size) return false;
@@ -2648,7 +2833,7 @@ function railToward(g: Game, c: Corps, to: Region): boolean {
     if (d[id] < 0 || d[id] >= bd || !hasRoom(g, r, c)) continue;
     best = r; bd = d[id];
   }
-  return !!best && railMove(g, c, best);
+  return !!best && railCorps(g, c, best);
 }
 
 function walkToward(g: Game, c: Corps, to: Region): void {
@@ -2668,7 +2853,7 @@ function walkToward(g: Game, c: Corps, to: Region): void {
 
 /** An expeditionary corps goes home when it is cut off, broken, or its host is collapsing. */
 export function wantsOut(g: Game, c: Corps): boolean {
-  if (g.regions[c.reg].owner === c.nat || c.dead) return false;
+  if (g.regions[c.reg].owner === c.nat || c.dead || onFront(c)) return false;
   // The men of a second front went ashore to stay: they come off only when cut off or broken.
   if (g.flags[`sf:${c.id}`]) return !c.supplied || c.org < 0.3;
   if (theatreOf(g, c) >= 0) {
