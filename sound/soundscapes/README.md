@@ -34,7 +34,8 @@ approved pack together. In the game the sim places each sound itself, by the rul
   with distance, sound arriving distance / 343 s after the flash, and Doppler on anything moving (set to 60% of the
   true shift).
 - **Two new distance families** for things farther than the current ones reach: `horizon` (full to 800 m, gone at
-  40 km, the low-pass down to 400 Hz at 30 km) and `air_far` (formations at height: full to 300 m, gone at 14 km).
+  40 km, the low-pass down to 400 Hz at 30 km) and `air_far` (formations at height: full to 300 m, gone at 14 km; for the game it is now the aircraft curve heard to
+  14 km, full to 100 m, so a loop never jumps where it would have changed family: `mix-proposal.md` item 4).
   **Two new places**: `sea_far` (a 4 s roll over open water) and `horizon` (a 3.2 s roll, guns beyond hills). The
   echo is a decaying noise tail built by the tool, as in `mix/preview/`; no recorded room.
 - **Loops** are built round in a circle (an engine held for the whole loop has its overrun crossfaded into its start), so the end runs into the start, and are not limited, so the join cannot
