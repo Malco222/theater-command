@@ -10652,12 +10652,12 @@ void ACampaignPlayerController::Remember(const TArray<FSinking>& Sinkings, bool 
 			}
 			const TCHAR* Kind = Hull.bPair ? TEXT("light carriers") : Hull.Class == TEXT("cv") ? TEXT("aircraft carrier") : TEXT("battleship");
 			const TCHAR* Her = Hull.bPair ? TEXT("their") : TEXT("her");
-			const TCHAR* WithHer = Hull.bPair ? TEXT("with them") : TEXT("with her");
 			const FString Men = FText::AsNumber(FMath::Max(Hull.Crew, 0)).ToString();
+			// (The two directors' single ruling, 19 November 2026: one wording for both sides, and the line ends at "lost".)
 			FString Loss;
 			if (Hull.Crew > 0 && Hull.Lost >= Hull.Crew)
 			{
-				Loss = FString::Printf(TEXT("Lost with all %s hands."), *Men);
+				Loss = FString::Printf(TEXT("All %s of %s men were lost."), *Men, Her);
 			}
 			else if (Hull.Crew > 0 && Hull.Lost <= 0)
 			{
@@ -10665,11 +10665,11 @@ void ACampaignPlayerController::Remember(const TArray<FSinking>& Sinkings, bool 
 			}
 			else if (Hull.Crew > 0 && Hull.Lost == 1)
 			{
-				Loss = FString::Printf(TEXT("One of %s %s men was lost %s."), Her, *Men, WithHer);
+				Loss = FString::Printf(TEXT("One of %s %s men was lost."), Her, *Men);
 			}
 			else if (Hull.Crew > 0)
 			{
-				Loss = FString::Printf(TEXT("%s of %s %s men were lost %s."), *FText::AsNumber(Hull.Lost).ToString(), Her, *Men, WithHer);
+				Loss = FString::Printf(TEXT("%s of %s %s men were lost."), *FText::AsNumber(Hull.Lost).ToString(), Her, *Men);
 			}
 			FMemorialShow::FRow& Row = Card.Rows.AddDefaulted_GetRef();
 			if (!Hull.Name.IsEmpty())
