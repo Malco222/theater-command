@@ -357,13 +357,14 @@ void ACampaignGameMode::BeginPlay()
 	// (Brian, 18 November 2026: "when i played the 3d game i didnt hear my sound tracks i added".) The score: his five
 	// songs and the three pieces written to go with them, placed as the music thread's README sets them out. The
 	// Final Salute is the opening screen's theme; at peace The Map Room, A Vigil at the Ridge and The Long Walk Home
-	// take turns; at war The Silent Front and Standing To; in battle The Advance and Trench Line At Twilight; and
+	// take turns; at war The Silent Front, Standing To and The Long Front (the third from 19 November 2026, with the
+	// sound director's mix 3); in battle The Advance and Trench Line At Twilight; and
 	// The Long Walk Home is played when one of the player's wars ends. They are brought in by Tools/build_music.sh
 	// from Music/Score in the game's folder (they are large, and are not kept in the repository).
 	const TPair<const TCHAR*, const TCHAR*> Scored[] = {
 		{ TEXT("theme"), TEXT("theme") },
 		{ TEXT("quiet"), TEXT("map_room") }, { TEXT("quiet"), TEXT("vigil") }, { TEXT("quiet"), TEXT("long_walk") },
-		{ TEXT("war"), TEXT("silent_front") }, { TEXT("war"), TEXT("standing_to") },
+		{ TEXT("war"), TEXT("silent_front") }, { TEXT("war"), TEXT("standing_to") }, { TEXT("war"), TEXT("long_front") },
 		{ TEXT("battle"), TEXT("advance") }, { TEXT("battle"), TEXT("trench_line") },
 	};
 	for (const TPair<const TCHAR*, const TCHAR*>& Piece : Scored)
@@ -386,7 +387,7 @@ void ACampaignGameMode::BeginPlay()
 	if (Music)
 	{
 		StartPiece(4.0f);
-		UE_LOG(LogTheater, Display, TEXT("Music: %d made pieces and %d of the score's eight, the theme %s"), Pieces.Num(), ScorePlayers.Num(), Music->IsPlaying() ? TEXT("playing") : TEXT("not playing"));
+		UE_LOG(LogTheater, Display, TEXT("Music: %d made pieces and %d of the score's nine, the theme %s"), Pieces.Num(), ScorePlayers.Num(), Music->IsPlaying() ? TEXT("playing") : TEXT("not playing"));
 	}
 	else
 	{
