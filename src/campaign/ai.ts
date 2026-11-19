@@ -1125,9 +1125,33 @@ function descent(g: Game, nat: string): void {
 }
 
 /** For the measuring harness: told of every hop a staff makes (a landing, or a corps brought up to a harbour nearer its shore). Nothing in the game listens. */
-export const hopWatch: { tell: ((e: { nat: string; kind: 'land' | 'bring' | 'aim'; to: Region; from: Region; force: Corps[]; taken?: boolean; why?: string }) => void) | null } = { tell: null };
+export const hopWatch: { tell: ((e: { nat: string; kind: 'land' | 'bring' | 'aim' | 'aside'; to: Region; from: Region; force: Corps[]; taken?: boolean; why?: string }) => void) | null } = { tell: null };
 /** How many months a corps the ships brought up waits at its harbour for its shore before the army has it back. */
 const HOP_WAIT = 3;
+/**
+ * The queue's turn (rider b599 to ruling 234, (ii)): a shore aimed at three months running whose crossing stays over
+ * the staff's risk limit gives its place to the next for three months, then comes back with its count begun again.
+ */
+const HOP_STUCK = 3;
+
+/**
+ * Whether a shore is the army's business and not the ships' this month, for a staff's hops (rider b599 to ruling 234,
+ * (ii)). A shore its side already stands on is the army's. One beside the army is the army's only if corps of its own
+ * beside it can attack it this month: they can go in this month (on their feet, in order, with the steps for it, by a
+ * way they can take, inside the record's line), and against a defended shore they have the odds the staff's own
+ * attacks ask (the phase's, 1.3 by default). Otherwise it stays the ships'.
+ */
+export function armysShore(g: Game, nat: string, r: Region, ph: PlanPhase | null): boolean {
+  if (friendlyUnits(g, r, nat).length > 0) return true;
+  if (lineShut(g, nat, r)) return false;
+  const goesIn = (c: Corps): boolean => c.nat === nat && !c.dead && fights(c) && !c.hold && !spared(g, c) && c.joint === undefined && c.leave === undefined
+    && c.org >= 0.35 && c.ap > 0 && c.ap >= Math.min(moveCost(g, c, r), 4) && !blocked(g, c, r);
+  const beside = r.nb.map((j) => g.regions[j]).filter((x) => allied(g, nat, x.ctrl)).flatMap((x) => x.units.filter(goesIn));
+  if (!beside.length) return false;
+  if (!hostileUnits(g, r, nat).length) return true;
+  const force = limitAttackers(g, beside, r);
+  return force.some(fights) && assess(g, force, r).odds >= (ph?.oddsFor?.[r.name] ?? ph?.minOdds ?? 1.3);
+}
 
 /**
  * The Pacific's hops (ruling 200, finding 2, and places 1 and 2 of the planner's paper 14, section 10; the shores
@@ -1153,7 +1177,7 @@ const HOP_WAIT = 3;
  *                months are over: one still waiting on its quay comes off hold (staff.ts, `freed`).
  * The player's own landings are his own; a staff with no shores to read (pacific.ts) does nothing here.
  */
-function hop(g: Game, nat: string, ph: PlanPhase | null): void {
+export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
   for (let i = 0; i < HOP_AIMS; i++) { delete g.flags[`st:hop:${nat}:${i}`]; delete g.flags[`st:hopQ:${nat}:${i}`]; }
   const n = g.nations[nat], D = descentAsks();
   if (!D || !n.alive || n.sealift <= 0 || !n.atWar.length) return;
@@ -1218,8 +1242,8 @@ function hop(g: Game, nat: string, ph: PlanPhase | null): void {
   };
   const worth = (r: Region): number => (2 + r.vp + r.fac + (r.cap ? 6 : 0)) * (hostileUnits(g, r, nat).length ? 1 : 1.5);
   const rank = S.book ? S.open : [...S.open].sort((a, b) => worth(b) - worth(a) || a.id - b.id);
-  // The shores in the staff's own hands this month: not the plan's, not the army's.
-  const armys = (r: Region): boolean => friendlyUnits(g, r, nat).length > 0 || r.nb.some((j) => allied(g, nat, g.regions[j].ctrl) && friendlyUnits(g, g.regions[j], nat).some((u) => u.kind !== 'fort'));
+  // The shores in the staff's own hands this month: not the plan's, not the army's (`armysShore`).
+  const armys = (r: Region): boolean => armysShore(g, nat, r, ph);
   const mine = (r: Region, ahead: boolean): boolean => atWar(g, nat, r.ctrl) && !plans.has(r.id) && (ahead || !lineShut(g, nat, r)) && !armys(r);
   // The nearest harbour with a force that will do, and that force. With `now`, only one that can sail this month.
   const pickFor = (r: Region, now: boolean): { q: Region; w: Corps[]; far: number; warned: boolean; sea: number } | null => {
@@ -1260,17 +1284,41 @@ function hop(g: Game, nat: string, ph: PlanPhase | null): void {
     hopWatch.tell?.({ nat, kind: 'land', to: r, from: pick.q, force: pick.w, taken: !!res.taken });
   }
   // Then the shores still to open are named, each with the force kept for it: the fleet and the fighters have a month to clear the way.
+  // A shore open now whose crossing has stayed over the risk limit three months running gives its place to the next
+  // for three months, and the force it kept is free for them meanwhile (HOP_STUCK). It may still land if its way clears.
+  const aside = (r: Region): boolean => {
+    const k = `st:hopOff:${nat}:${r.id}`, t = g.flags[k];
+    if (t === undefined) return false;
+    if (g.turn - t < HOP_STUCK) return true;
+    delete g.flags[k];
+    return false;
+  };
   const wanting: Region[] = [];
   for (const r of [...rank, ...S.soon]) {
     if (aims >= HOP_AIMS) break;
-    if (done.has(r.id) || !mine(r, S.soon.includes(r))) continue;
+    const ahead = S.soon.includes(r);
+    if (done.has(r.id) || !mine(r, ahead) || aside(r)) continue;
     const pick = pickFor(r, false);
     if (!pick) { wanting.push(r); continue; }
+    const plan = ahead ? null : planLanding(g, pick.w, r);
+    const cnt = `st:hopStuck:${nat}:${r.id}`, at = `st:hopStuckAt:${nat}:${r.id}`;
+    if (plan && !plan.why && plan.risk > D.risk) {
+      const k = g.flags[at] === g.turn - 1 ? g.flags[cnt] ?? 0 : 0;
+      if (k >= HOP_STUCK) {
+        delete g.flags[cnt];
+        delete g.flags[at];
+        g.flags[`st:hopOff:${nat}:${r.id}`] = g.turn;
+        hopWatch.tell?.({ nat, kind: 'aside', to: r, from: pick.q, force: pick.w, why: `risk ${plan.risk.toFixed(2)}` });
+        continue;
+      }
+      g.flags[cnt] = k + 1;
+      g.flags[at] = g.turn;
+    } else { delete g.flags[cnt]; delete g.flags[at]; }
     aim(pick.q, r);
     taken(pick.w);
     if (hopWatch.tell) {
-      const plan = planLanding(g, pick.w, r);
-      hopWatch.tell({ nat, kind: 'aim', to: r, from: pick.q, force: pick.w, why: liftLeft(g, nat) < pick.w.length ? 'no lift' : plan.why ?? (plan.risk > D.risk ? `risk ${plan.risk.toFixed(2)}` : lineShut(g, nat, r) ? 'not its month' : 'the card') });
+      const p = plan ?? planLanding(g, pick.w, r);
+      hopWatch.tell({ nat, kind: 'aim', to: r, from: pick.q, force: pick.w, why: liftLeft(g, nat) < pick.w.length ? 'no lift' : p.why ?? (p.risk > D.risk ? `risk ${p.risk.toFixed(2)}` : lineShut(g, nat, r) ? 'not its month' : 'the card') });
     }
   }
   // Nobody in reach will do: corps standing ready farther off are brought up to the harbour nearest the shore.
