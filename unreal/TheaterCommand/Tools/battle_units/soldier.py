@@ -6199,7 +6199,12 @@ LIMITS = [
     "The cloth wear in the pictures (mottling, dust on knees and boots, darker folds) is a studio material; the exports carry "
     "plain paint colours for the game to tint.",
     "lmg_burst only makes sense with the LMG (soldier_GER_lmg.glb); on a rifleman's file the rifle goes where the LMG would be.",
-    "Only the German has a game JSON, as asked; the Pole's .glb has the same skeleton and clips.",
+    "Every army's man has a game JSON (soldier_GER.json, soldier_POL.json, ...), all on the same skeleton and clips.",
+    "The belt's ammunition pouches are skinned like the body under them. In the deepest folds at the hips (creep, going "
+    "prone, falling forward, cowering) the thigh comes up against the belly and the front pouches sink into that crease, "
+    "up to their whole depth for a moment: no weighting of the existing bones keeps them out (measured: the torso's, the "
+    "pelvis's, the thigh's and blends of them). A pouch bone per side that swings out of the fold is the fix, held for "
+    "after release 1.",
     "The motion-capture clips are carried from human.py's rig to ours by world turns (the joints are the same; the bone "
     "rolls differ), so they keep mocap.py's own flaws (see its README: the run is an easy jog, the advance is fast, the "
     "falls are reversed or slip-like takes). The hands hold the rifle by mocap.py's grip, the fingers 12 degrees more "
