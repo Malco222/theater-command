@@ -79,13 +79,15 @@ export interface Reckoning {
  * The reckoning for a force put down at a place. `follow` is the strength the ships can bring in after it within the
  * months, as it would defend the place (the caller knows the quay and the shipping: `followUp`). `seen`, when given,
  * says how much of an enemy corps the reckoning may count (0 for one its side knows nothing of): a player's card
- * counts what his side knows, a computer's staff counts them all. Null where the rules have no such test.
+ * counts what his side knows, a computer's staff counts them all. `also`: countries the staff means to go to war
+ * with, counted as its enemies already (the readiness test, readiness.ts). Null where the rules have no such test.
  */
-export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow = 0, seen?: (c: Corps) => number): Reckoning | null {
+export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow = 0, seen?: (c: Corps) => number, also?: ReadonlySet<string>): Reckoning | null {
   const S = STRENGTH;
   if (!S) return null;
   const N = g.regions.length, M = S.months;
   const ours = (c: string): boolean => c === nat || allied(g, nat, c);
+  const foe = (c: string): boolean => atWar(g, nat, c) || !!also?.has(c);
   const held = g.regions.map((r) => fieldCtrl(g, r));
   // Marches from the place, by land, over ground either side holds (neutral ground stops an army).
   const far = new Int16Array(N).fill(-1);
@@ -93,11 +95,11 @@ export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow 
   far[at.id] = 0;
   for (let i = 0; i < q.length; i++) {
     if (far[q[i]] >= M) continue;
-    for (const j of g.regions[q[i]].nb) if (far[j] < 0 && (ours(held[j]) || atWar(g, nat, held[j]))) { far[j] = far[q[i]] + 1; q.push(j); }
+    for (const j of g.regions[q[i]].nb) if (far[j] < 0 && (ours(held[j]) || foe(held[j]))) { far[j] = far[q[i]] + 1; q.push(j); }
   }
   // His ground in one piece with ground he holds within those marches: where his trains can bring a reserve from.
   const rail = new Uint8Array(N);
-  const w = q.filter((id) => atWar(g, nat, held[id]));
+  const w = q.filter((id) => foe(held[id]));
   for (const id of w) rail[id] = 1;
   // Whose own country lies within the marches, still in his hands: his reserves come to his own door in greater number.
   const door = new Set<string>();
@@ -105,9 +107,9 @@ export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow 
   // Who brings reserves from his own country (ruling 233(s)): the holder of the place, alone. Where the place is in
   // the hands of the force's own side there is no such holder: then whoever holds ground within the marches (it is his front).
   const host = new Set<string>();
-  if (atWar(g, nat, held[at.id])) host.add(held[at.id]);
+  if (foe(held[at.id])) host.add(held[at.id]);
   else for (const id of w) host.add(held[id]);
-  for (let i = 0; i < w.length; i++) for (const j of g.regions[w[i]].nb) if (!rail[j] && atWar(g, nat, held[j])) { rail[j] = 1; w.push(j); }
+  for (let i = 0; i < w.length; i++) for (const j of g.regions[w[i]].nb) if (!rail[j] && foe(held[j])) { rail[j] = 1; w.push(j); }
   const mine = new Set(force.map((c) => c.id));
   const out: Reckoning = { theirs: 0, near: 0, reserve: 0, corps: 0, behind: 0, ours: 0, force: 0, friends: 0, follow, chance: 1, divs: { theirs: 0, ours: 0 } };
   for (const c of force) { out.force += stands(g, c, at); out.divs.ours += c.divs * c.str; }
@@ -124,7 +126,7 @@ export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow 
     for (const u of r.units) {
       if (!field(u) || mine.has(u.id)) continue;
       if (ours(u.nat)) { if (far[id] >= 0) { out.friends += stands(g, u, r); out.divs.ours += u.divs * u.str; } continue; }
-      if (!atWar(g, nat, u.nat)) continue;
+      if (!foe(u.nat)) continue;
       const share = seen ? seen(u) : 1;
       if (share <= 0) continue;
       const p = strikes(g, u) * share, L = inLine(u, r);

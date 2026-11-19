@@ -28,7 +28,12 @@ export interface Stop {
   share?: number; wait?: number;
 }
 /** What history's calendar expects in a theatre: these must hold before `until`, or from the month after `by`. */
-export interface Mark { theatre: string; until?: number; by?: number; if: string[]; why: string }
+/**
+ * One thing the book expects of a theatre. `why` is the reason the news gives when it fails; `expect`, where a mark
+ * has it, is how the dial words the expectation beforehand ("The book is closed in ... if {expect} ..."), and an
+ * empty one keeps the mark off the dial's list (one expectation told by several marks is listed once).
+ */
+export interface Mark { theatre: string; until?: number; by?: number; if: string[]; why: string; expect?: string }
 /** A claim on named ground: who claims it, from whom, and why. 'op': the staff's own war for it (open.json): the claim is not pressed while that war may still come, and is put away once it has come (ruling 228). */
 export interface Ambition { id: string; nat: string; on: string; ground: string[]; name: string; why: string; stop?: number; if?: string[]; lift?: number; op?: string }
 
@@ -151,6 +156,26 @@ export const staysOut = (g: Game, id: string, side: 'allies' | 'axis'): boolean 
 export const theatreOf = (nat: string, opId: string): string | null => HISTORY.theatre[`${nat}:${opId}`] ?? null;
 /** True while the book is still open in a theatre: the stop keeps one, and nothing there has left it. */
 export const onBook = (g: Game, theatre: string | null): boolean => !!stopDef(g).book && theatre !== null && !g.flags[`hist:off:${theatre}`];
+
+/**
+ * By the book a row fights at the figure of the army that raised it, whoever's flag it stands under (rider b626 to
+ * ruling 234, with b628): the stations' `raised` table gives it by the row's name, as a figure (with a last month,
+ * where the record's army changed) or as the country whose own army's figure it takes, or for every corps a fallen
+ * country left in keeping (`armies`). Null where the
+ * book gives none or is shut: the corps then fights at the figure of the country it answers to, as it always did.
+ * Nothing is read with the far side off, or from the history dial's third stop on.
+ */
+interface Raised { armies?: Record<string, number>; rows?: Record<string, number | string | [figure: number, until: number]> }
+const RAISED = (): { theatre: string; raised?: Raised } | null => (HISTORY as unknown as { stations?: { theatre: string; raised?: Raised } }).stations ?? null;
+export function raisedQuality(g: Game, c: { name: string; raised?: string }): number | null {
+  const B = RAISED(), R = B?.raised;
+  if (!R) return null;
+  const row = R.rows?.[c.name];
+  // (A figure with a last month holds to that month: after it the row is again as its flag's are.)
+  const of = row !== undefined ? (typeof row === 'number' ? row : typeof row === 'string' ? g.nations[row]?.quality : g.turn <= row[1] ? row[0] : undefined)
+    : c.raised !== undefined ? R.armies?.[c.raised] : undefined;
+  return of === undefined || !onBook(g, B!.theatre) ? null : of;
+}
 /** The month the book was closed in a theatre, or 0. */
 export const bookClosed = (g: Game, theatre: string): number => g.flags[`hist:off:${theatre}`] ?? 0;
 
@@ -230,8 +255,11 @@ const shoreMonth = (g: Game, id: string, month: number, slack: number): number =
  * landing in Italy while an Axis army holds Tunis, Sfax or Mareth). The two loosest stops leave it all to the staff,
  * and so does every game that is not a grand campaign.
  */
-export function shoreOpen(g: Game, owner: string, overseas: boolean, where?: string): boolean {
+export function shoreOpen(g: Game, owner: string, overseas: boolean, where?: string, pacific = false): boolean {
   const S = stopDef(g);
+  // (Ruling 200, finding 2: the second front's row reads no ground in Asia and the Pacific. There the Pacific's own
+  // rows decide, under the Pacific's theatre, `pacific`: pacific.ts, and no second front is opened while its book stands.)
+  if (pacific) return !S.book || !onBook(g, 'pacific');
   const own = overseas ? undefined : SHORE.get(owner);
   if (S.book && onBook(g, 'second')) {
     const rule = own ?? HISTORY.shores.find((s) => s.owners.includes('*'));
@@ -281,12 +309,15 @@ export function bookExpects(g: Game): DialView['expects'] {
   HISTORY.marks.forEach((m, k) => {
     const t = HISTORY.theatres[m.theatre];
     if (!t || g.flags[`hist:off:${m.theatre}`]) return;
+    // (A mark may word what is expected apart from the reason the news gives when it fails; one worded with nothing is not listed.)
+    const why = m.expect ?? m.why;
+    if (!why) return;
     if (m.until !== undefined) {
       const last = m.until - slack;
-      if (g.turn < last) out.push({ theatre: m.theatre, name: t.name, turn: last, text: `The book is closed in ${t.name} if ${m.why}: that is, before ${turnToDate(last).label}.` });
+      if (g.turn < last) out.push({ theatre: m.theatre, name: t.name, turn: last, text: `The book is closed in ${t.name} if ${why}: that is, before ${turnToDate(last).label}.` });
     } else if (m.by !== undefined && !g.flags[`hist:mk:${k}`]) {
       const last = m.by + slack;
-      out.push({ theatre: m.theatre, name: t.name, turn: last, text: `The book is closed in ${t.name} if ${m.why} when ${turnToDate(last).label} is over.` });
+      out.push({ theatre: m.theatre, name: t.name, turn: last, text: `The book is closed in ${t.name} if ${why} when ${turnToDate(last).label} is over.` });
     }
   });
   // A theatre left waiting when one it comes after closed (b530).

@@ -11,7 +11,7 @@ import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { BUDGET, PRODUCTION, budgeted, canBuildYet, corpsName, deliver, farShare, firstCorpsNumber, gunsWanted, income, specOf, upkeepTotal } from './economy';
-import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, majorsOf, pcIncome, sneakOn, wouldSurprise } from './diplomacy';
+import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, majorsOf, pcIncome, sneakOn, warDiplomacy, wouldSurprise } from './diplomacy';
 import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
 import { AIR, airOnFall, airUpkeep, bookCloseAir, closeEdge, closeOf, closeRules, closeStrikes, setupAir, skyByNumbers, skyOnLand, skyOver, type CloseAir } from './air';
@@ -49,12 +49,13 @@ import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarnin
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
-import { TOWNS, townName, townSize } from './towns';
+import { TOWNS, townName, townSize, worthOf } from './towns';
 import { skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
-import { stopOf } from './history';
+import { raisedQuality, stopOf } from './history';
 import { clientWar, tiedPair } from './far';
+import { demandInstead, keepersOf, keptForces, pacificWar } from './pacific';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -159,6 +160,35 @@ export function createGame(seed: number, human: string | null): Game {
   return g;
 }
 
+/**
+ * A row's establishment in a given month. A number is the fullest the row ever gets. A list of [month, worth] is the
+ * record's size by date (rider b614 to ruling 234: Japan's island garrisons by half-year, the historian's table):
+ * the last line whose month has come, and the first line before any has.
+ */
+export function estAt(est: number | [number, number][] | undefined, turn: number): number | undefined {
+  if (!Array.isArray(est)) return est;
+  let now = est[0]?.[1];
+  for (const [m, w] of est) if (m <= turn) now = w;
+  return now;
+}
+
+/**
+ * A dated establishment's month (`estAt`): the row, while it stands on the ground its row put it on, takes the
+ * record's size for the month. The men of an increase arrive with it, as any row's do; a smaller size sends the
+ * rest home. A garrison that has fallen, or been shipped off its island, is not followed. No row has a dated
+ * establishment with the far side off.
+ */
+function estMonth(g: Game, nat: string, row: any[]): void {
+  const est = row[6]?.est;
+  if (!Array.isArray(est)) return;
+  const c = g.corps.find((x) => x.nat === nat && x.name === row[2] && !x.dead);
+  if (!c || g.regions[c.reg].name !== row[5]) return;
+  const was = c.full ?? 1, now = estAt(est, g.turn) ?? 1;
+  if (now === was) return;
+  c.str = now > was ? Math.min(now, c.str + (now - was)) : Math.min(c.str, now);
+  if (now < 1) c.full = now; else delete c.full;
+}
+
 export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: number, region: string | number, o: any): Corps {
   const reg = typeof region === 'number' ? g.regions[region] : g.byName[region];
   const c: Corps = {
@@ -169,7 +199,9 @@ export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: n
   if (o.stay) c.stay = true;
   // The fullest the row ever gets (the planner's paper 18, ruled 16:32Z on 17 November 2026): a garrison of a brigade
   // is a row of one division that never fills past its own size, for player and computer alike.
-  if (o.est !== undefined && o.est < 1) c.full = o.est;
+  // (A row whose record changes its size by date gives a list of month and worth, as the air rows do: `estAt`.)
+  const est = estAt(o.est, g.turn);
+  if (est !== undefined && est < 1) c.full = est;
   // Where and when it was raised: the first lines of its record.
   c.born = g.turn;
   if (reg.owner === nat) c.home = reg.id;
@@ -365,6 +397,8 @@ export function sidesAtPeace(g: Game): void {
 export function declareWar(g: Game, a: string, b: string): void {
   const A = g.nations[a], B = g.nations[b];
   if (!A.alive || !B.alive || atWar(g, a, b) || sameSide(g, a, b)) return;
+  // The far side (ruling 199(e)): Japan's declaration on Vichy France while it holds Saigon is answered by the handing-over of Indochina, and there is no war.
+  if (demandInstead(g, a, b)) return;
   const tied = tiedPair(g, a, b); // a client turning on its patron, or the patron on it (far.ts): read before the war is set
   // The grand campaign: a blow against a country at peace is a surprise this month, and when the player strikes a
   // country outside both blocs the neutral world takes note. Both are read off before anything changes.
@@ -414,6 +448,10 @@ export function declareWar(g: Game, a: string, b: string): void {
   clientWar(g, a, b, tied); // the far side: war on a client is war on its patron, and a tie broken parts the two
   // A guarantee the card names is kept (ruling 229, part 3): its computer-run guarantors declare war the same day.
   honour(g, a, b, sideWas);
+  // The far side: the dominions and the Dutch are at war with Japan the day Britain is (ruling 197; pacific.ts).
+  pacificWar(g, a, b);
+  // The events that are read the day a war is declared (the far side's: Siam beside Japan, ruling 200(b)).
+  warDiplomacy(g);
   if (A.blitz && !g.flags[`tempo:${a}:${g.turn}`]) {
     g.flags[`tempo:${a}:${g.turn}`] = 1;
     for (const c of g.corps) if (c.nat === a && KIND[c.kind].mobile && g.order[g.phase] === a) { c.ap += 1; c.apMax += 1; }
@@ -743,7 +781,7 @@ export function computeSupply(g: Game): void {
       // In a side theatre the allies share their shipping: a port any of them can still reach feeds them all.
       if (!quay && r.theatre >= 0 && r.port) quay = (mates ??= shippers(id)).some((a) => { const theirs = lanesOf(a); return !!theirs && r.seas.some((z) => theirs[z]); });
       // A fortified port overseas keeps stores: with the sea behind it closed, it feeds its garrison a while longer.
-      if (!shut && r.overseas && r.port && r.fort) {
+      if (!shut && r.overseas && r.port && worksKept(r)) {
         if (quay) g.flags[`stores:${r.id}`] = g.turn;
         else if (g.turn - (g.flags[`stores:${r.id}`] ?? -99) <= DESERT.stores) quay = true;
       }
@@ -840,6 +878,22 @@ function reachInto(g: Game, id: string, ok: Uint8Array): Float32Array {
   for (let i = 0; i < d.length; i++) if (d[i] >= 1e6) d[i] = 0;
   return d;
 }
+
+/**
+ * A place's works set aside for a fight being resolved (the book's record fights: stations.ts, rider b580). The
+ * set-aside holds for the fight only, never for supply or stores, at every place and stop (rider b628 to ruling 234):
+ * what feeds a garrison reads the works through `worksKept`, so a supply picture drawn in the middle of the fight
+ * still finds the stores of a fortified port behind them.
+ */
+let asideAt = -1, asideWorks: Region['fort'] = null;
+export function withWorksAside<T>(r: Region, f: () => T): T {
+  const fort = r.fort, wasAt = asideAt, wasWorks = asideWorks;
+  if (fort) { asideAt = r.id; asideWorks = fort; }
+  r.fort = null;
+  try { return f(); } finally { r.fort = fort; asideAt = wasAt; asideWorks = wasWorks; }
+}
+/** A place's works as its stores and its supply know them: its own, set aside for a fight or not. */
+export const worksKept = (r: Region): Region['fort'] => r.fort ?? (r.id === asideAt ? asideWorks : null);
 
 export function ensureSupply(g: Game): void {
   if (g.supplyDirty) computeSupply(g);
@@ -939,10 +993,16 @@ export function weekOf(c: Corps, cost: number): number {
   return clamp(Math.ceil(((c.apMax - c.ap + cost) / Math.max(1, c.apMax)) * 4), 1, 4);
 }
 
+/**
+ * What a corps' army is worth man for man: the figure of the country it answers to, or by the book that of the army
+ * that raised it, whoever's flag it stands under (history.ts raisedQuality; rider b626 to ruling 234).
+ */
+const armyQuality = (g: Game, c: Corps): number => raisedQuality(g, c) ?? g.nations[c.nat].quality;
+
 export function corpsBase(g: Game, c: Corps): number {
   // Tanks and lorries, or rifles and guns: a corps is as good as the designs it has been issued.
   const kit = techMul(g, c.nat, c.kind === 'arm' || c.kind === 'mot' ? 'armour' : 'infantry');
-  return c.divs * c.str * Math.sqrt(0.15 + 0.85 * c.org) * g.nations[c.nat].quality * (0.85 + 0.4 * c.xp) * (c.supplied ? 1 : cmdCutOff(g, c)) * kit;
+  return c.divs * c.str * Math.sqrt(0.15 + 0.85 * c.org) * armyQuality(g, c) * (0.85 + 0.4 * c.xp) * (c.supplied ? 1 : cmdCutOff(g, c)) * kit;
 }
 
 /** Share of the usual losses a defender takes when the attack is beaten off. */
@@ -1231,7 +1291,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // What the town is worth to those inside it, after the guns and the engineers of this assault have done their work.
   const walls = town ? townBonus(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften, served) : 1;
   let D = 0, thin = 1, readyD = 0, dugD = 0, worksD = 0, tiredD = 0, tiredMost = 0;
+  let coastOut = false;
   for (const d of defenders) {
+    // (By the book the record's figure for a place holds its fortress troops: they man the coast works, and add
+    // nothing to a field fight that comes round those works. Rider b579; stations.ts. None with the far side off.)
+    if (d.bookCoast && !town && opts.sea === undefined && target.fort && !fortFaced) { coastOut = true; continue; }
     // In the streets the country round about counts for nothing: the town is the ground.
     let p = corpsBase(g, d) * KIND[d.kind].def * (town ? walls : TERRAIN_DEF[target.terrain]);
     if (wide && !town) {
@@ -1362,7 +1426,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     // Training and experience decide as many fights as numbers do: said in words, division for division.
     const grade = (cs: Corps[]): { worth: number; army: number; xp: number } => {
       let w = 0, worth = 0, army = 0, xp = 0;
-      for (const c of cs) { const k = c.divs * c.str; w += k; worth += k * g.nations[c.nat].quality * (0.85 + 0.4 * c.xp); army += k * g.nations[c.nat].quality; xp += k * c.xp; }
+      for (const c of cs) { const k = c.divs * c.str; w += k; worth += k * armyQuality(g, c) * (0.85 + 0.4 * c.xp); army += k * armyQuality(g, c); xp += k * c.xp; }
       return w > 0 ? { worth: worth / w, army: army / w, xp: xp / w } : { worth: 1, army: 1, xp: 0 };
     };
     const ours = grade(attackers), theirs = grade(defenders);
@@ -1428,6 +1492,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (!served) lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}: ${worksName(target.fort.lv)}, dug by ${theName(g.nations[worksBy(target)])}`, effect: 'Works count only for the side that dug them: no help to the defence here' });
     else lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}: ${worksName(target.fort.lv)}`, effect: fortFaced === attackers.length ? `Attacked head-on: the attack is cut to ${Math.round(100 / FORT_MUL[target.fort.lv])}% strength` : fortFaced > 0 ? 'Partly outflanked: only the corps attacking head-on are slowed' : 'Outflanked: the works face the other way' });
   }
+  if (coastOut) lines.push({ label: 'Coast defences', value: 'The fortress troops man the works that face the sea', effect: 'They take no part in this fight' });
   // (The guns thicken the line of the corps beside them: where they stand alone there is nobody to say it of.)
   const beside = thicken > 0 && defenders.some((d) => d.kind !== 'art');
   if (soften || beside) lines.push({
@@ -1986,14 +2051,17 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (win) {
     const banned = new Set(attackers.map((c) => c.reg));
     defenders.forEach((c, i) => {
+      // A corps too far gone to fall back as a formation. (By the book only a share of a corps may be in a dated fight,
+      // and it is judged whole: stations.ts, rider b580. Nobody else has a share.)
+      const shattered = (c.bookPart ? c.bookPart[1] - c.bookPart[0] * (c.bookPart[1] - c.str) : c.str) < 0.15;
       // A garrison has nowhere to go.
-      const to = town || overrun || c.str < 0.15 ? null : retreatTarget(g, c, target, banned);
+      const to = town || overrun || shattered ? null : retreatTarget(g, c, target, banned);
       const N = g.nations[c.nat];
-      const away = !overrun && c.str >= 0.15 && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0 && seaOpenAt(g, c.nat, target);
+      const away = !overrun && !shattered && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0 && seaOpenAt(g, c.nat, target);
       // The grand campaign: beaten in the field with no way out, a corps falls back into the town if there is room,
       // and nobody leaves his own capital while it can still be held. Under ruling 232 a beaten field army never goes
       // into the town: it falls back to open country, or with nowhere to go and no ship to lift it, lays down its arms.
-      if (!town && !overrun && sieges && !driveOut(g) && c.str >= 0.15 && (to ? target.cap && c.nat === target.owner : !away) && canShelter(g, c, target)) {
+      if (!town && !overrun && sieges && !driveOut(g) && !shattered && (to ? target.cap && c.nat === target.owner : !away) && canShelter(g, c, target)) {
         target.units.splice(target.units.indexOf(c), 1);
         joinTown(g, target, c);
         defU[i].fate = 'sheltered';
@@ -2009,12 +2077,12 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${target.name} under fire${dest.cap ? '' : ` and taken to ${dest.name}`}.`, c.nat, target.id, { arm: 'land', lost: c.nat }); }
       } else {
         const left = men(c);
-        defU[i].fate = c.str < 0.15 ? 'destroyed' : 'surrendered';
+        defU[i].fate = shattered ? 'destroyed' : 'surrendered';
         // (Ruling 232: with no ground of its side to go to and no ship to lift it, a beaten field army lays down its arms.)
-        if (driveOut(g) && !town && !overrun && c.str >= 0.15) defU[i].cut = true;
+        if (driveOut(g) && !town && !overrun && !shattered) defU[i].cut = true;
         defU[i].lost += left;
         prisoners += left;
-        storyFallen(g, c, c.str < 0.15 ? 'destroyed' : 'surrendered', attNat, target.id);
+        storyFallen(g, c, shattered ? 'destroyed' : 'surrendered', attNat, target.id);
         removeCorps(g, c);
       }
     });
@@ -2807,6 +2875,8 @@ export function capitulate(g: Game, nat: string, by: string): void {
   // France that had been liberated and falls a second time.
   const armistice = nat === 'FRA' && !g.flags.dom && !X.freedOn;
   delete X.freedOn;
+  // The far side (ruling 199(b)): its forces on far ground that passes into keeping stay at their posts and answer to the keeper.
+  const keeping = keptForces(g, nat, by, armistice ? (r) => r.vichy : undefined);
   for (const c of g.corps.filter((c) => c.nat === nat)) {
     const at = g.regions[c.reg];
     // The Army of Africa stays at its posts and answers to the new government.
@@ -2827,10 +2897,12 @@ export function capitulate(g: Game, nat: string, by: string): void {
       else if (r.ctrl === nat) {
         // Ground still held by the fallen nation's allies stays in their hands until it is taken.
         // (An ally's garrison holds its town the same way.)
-        const holder = r.units.find((u) => u.nat !== nat && atWar(g, u.nat, by)) ?? garrisonOf(r).find((u) => u.nat !== nat && atWar(g, u.nat, by));
+        // (The far side: ground whose garrison has just passed to its keeper is in that keeper's keeping.)
+        const inKeeping = keeping.get(r.id);
+        const holder = inKeeping ? undefined : r.units.find((u) => u.nat !== nat && atWar(g, u.nat, by)) ?? garrisonOf(r).find((u) => u.nat !== nat && atWar(g, u.nat, by));
         // An island or colony out in the ocean, beyond the old chart, is not the victor's for the asking: a sea power
         // still fighting him takes it into its keeping (the wider world).
-        const keeper = !holder && r.overseas && beyondEurope(r) ? protectorOf(g, by) : null;
+        const keeper = inKeeping ?? (!holder && r.overseas && beyondEurope(r) ? protectorOf(g, by, r) : null);
         if (keeper) { r.ctrl = keeper; r.since = g.turn; kept.push(r); }
         else r.ctrl = holder ? holder.nat : by;
       }
@@ -2841,7 +2913,10 @@ export function capitulate(g: Game, nat: string, by: string): void {
       // over the heads of the troops who hold it.
       const keeps = (u: Corps): boolean => u.nat !== nat && !u.dead && (atWar(g, u.nat, r.owner) || atWar(g, u.nat, by));
       const stays = g.flags.open === 1 ? r.units.find(keeps) ?? garrisonOf(r).find(keeps) : undefined;
-      r.ctrl = stays ? stays.nat : g.nations[r.owner].alive ? r.owner : by;
+      // (The far side, ruling 199(c): ground a fallen keeper only kept passes on to the next keeper, as its own ground does.)
+      const next = !stays && !g.nations[r.owner].alive && r.overseas && keepersOf(g, r) ? protectorOf(g, by, r) : null;
+      r.ctrl = stays ? stays.nat : g.nations[r.owner].alive ? r.owner : next ?? by;
+      if (next) kept.push(r);
     }
   }
   if (armistice) {
@@ -2858,7 +2933,10 @@ export function capitulate(g: Game, nat: string, by: string): void {
   if (kept.length) {
     const K = g.nations[kept[0].ctrl];
     const names = kept.map((r) => r.name);
-    headline(g, 'event', `${K.adj} forces take ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`} into their keeping: ${theName(X)} has fallen, and ${names.length === 1 ? 'the place is' : 'they are'} not to be ${g.nations[by].adj} for the asking.`, K.id, kept[0].id);
+    // (A whole colonial empire is not read out place by place: the three of most worth, and how many more.)
+    const chief = (): string[] => [...kept].sort((x, y) => worthOf(g, y) - worthOf(g, x) || x.id - y.id).slice(0, 3).map((r) => r.name);
+    const told = names.length > 6 ? `${chief().join(', ')} and ${names.length - 3} other places` : names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    headline(g, 'event', `${K.adj} forces take ${told} into their keeping: ${theName(X)} has fallen, and ${names.length === 1 ? 'the place is' : 'they are'} not to be ${g.nations[by].adj} for the asking.`, K.id, kept[0].id);
   }
   for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((e) => e !== nat);
   X.atWar = [];
@@ -2887,8 +2965,8 @@ export function capitulate(g: Game, nat: string, by: string): void {
 }
 
 /** Sea transport: a nation with shipping can send a corps from one friendly port to another. It takes the whole month, and the enemy may find the convoy. */
-export function shipMove(g: Game, c: Corps, to: Region): boolean {
-  return shipCorps(g, c, to);
+export function shipMove(g: Game, c: Corps, to: Region, rides = false): boolean {
+  return shipCorps(g, c, to, rides);
 }
 
 /** Lifts a corps off the Continent from a port: to a haven of its theatre if there is one to go to, or else home. */
@@ -3315,7 +3393,11 @@ function expeditions(g: Game, nat: string): void {
     if (row[1] !== nat || (!fromWar && g.turn < row[0])) return;
     // A row marked 'open' belongs to the grand campaign alone: history's campaigns keep the order of battle they were measured with.
     if (o.open && g.flags.open !== 1) return;
+    // A row marked with stops is a row of the book's own record (ruling 234, riders b579 and b581): it comes only at those stops.
+    if (o.stops && !(o.stops as number[]).includes(stopOf(g))) return;
     if (g.flags[`sent:${i}`]) {
+      // (A row whose record changes its size by date takes the new size in its month: rider b614 to ruling 234.)
+      if (g.flags[`sent:${i}`] === 1) estMonth(g, nat, row);
       // The main army's order of battle already counts these formations: the campaign only had the loan of them.
       const id = g.flags[`lent:${i}`];
       if (o.until && g.turn >= o.until && id > 0) {
@@ -3527,6 +3609,13 @@ function digIn(g: Game, nat: string): void {
     }
     else { if (c.dug) delete c.dug; if (c.dugFor !== undefined) delete c.dugFor; if (c.digging !== undefined) delete c.digging; }
     if (c.pressed) delete c.pressed;
+  }
+  // (A corps the book has stationed keeps the record's works where it stands and digs no more: stations.ts, ruling
+  // 234's rider b568. No corps carries the mark with the far side off.)
+  for (const c of g.corps) {
+    if (c.bookWorks === undefined || c.dead || armyOf(c) !== nat) continue;
+    if (c.bookWorks <= 0) { if (c.dug) delete c.dug; if (c.dugFor !== undefined) delete c.dugFor; if (c.digging !== undefined) delete c.digging; }
+    else if (c.dug && (c.dugFor ?? 1) > c.bookWorks) c.dugFor = c.bookWorks;
   }
 }
 

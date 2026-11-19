@@ -40,7 +40,7 @@ import {
 import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
 import { phaseFor, runAI } from './ai';
-import { RELATIONS, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
+import { RELATIONS, closeDiplomacy, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
 import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour } from './stories';
@@ -98,6 +98,8 @@ function closePhase(g: Game, nat: string): void {
     // A fallen country whose capital its friends hold, with no enemy corps in or next to it, returns at the month's
     // end, dated the month that ends (ruling 229, part 2; the grand campaign).
     liberationMonth(g);
+    // History's events that are read as a month closes (the far side: America's entry follows Japan's blow, ruling 197).
+    closeDiplomacy(g);
     // An alliance finishes its war together (ruling 115): Vichy ends with a France that is free again, and a great
     // power's fall this month turns its conquerors on the great powers their allies still fight.
     finishMonthEnd(g);

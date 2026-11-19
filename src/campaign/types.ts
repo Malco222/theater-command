@@ -360,6 +360,21 @@ export interface Corps extends Storied {
   /** It took over fieldworks left on this ground this month (the grand campaign): it keeps them at the month's end though it marched. */
   relief?: boolean;
   /**
+   * The country that raised it, where it now answers to another: a fallen country's corps on far ground that passed
+   * into keeping (pacific.ts keptForces). By the book it still fights at the figure of the army that raised it
+   * (history.ts raisedQuality; rider b626 to ruling 234). No corps carries it with the far side off.
+   */
+  raised?: string;
+  /** The book has stationed it (stations.ts; ruling 234's rider b568): the months of works the record gives it where it stands, and it digs no more. No corps carries it with the far side off. */
+  bookWorks?: number;
+  /** The book counts it a coast work (stations.ts; rider b579): fortress troops whose figure is in the record's own for the place. It adds nothing to a field fight that outflanks the place's works. No corps carries it with the far side off. */
+  bookCoast?: true;
+  /**
+   * Set only while a dated fight of the book is fought at the record's figures (stations.ts, rider b580): the share
+   * of this corps that is in the fight, and its strength as it went in. The rest of it is not on the field.
+   */
+  bookPart?: [share: number, str: number];
+  /**
    * The weight of the attacks it has stood against since its own month began (the grand campaign): 1 for each
    * blow at full weight, less for a light one. Men who have fought all month fight the next blow tired.
    */
@@ -568,6 +583,8 @@ export interface Fleet extends Storied {
   port: string;
   /** The sea the base opens on. */
   home: number;
+  /** The book has moved its base forward for a dated cover (stations.ts; riders b575, b577): the base, port, home sea and station it goes back to. No fleet carries it with the far side off. */
+  bookBase?: [base: number, port: string, home: number, station: number];
   /** The sea the fleet is in. A fleet in harbour is counted in its home sea but takes no part there. */
   zone: number;
   stance: Stance;
@@ -598,6 +615,10 @@ export interface Fleet extends Storied {
    * share of their decks until the wing comes back aboard.
    */
   bare?: { ftr: number; bmr: number };
+  /** The far side (ruling 234(d)), from its row: [sea, chance, whose], where it may spend a month of peace at sea, and how likely, at a stop that keeps no book; 'whose', the country its peace is read against, where the row names one (navy.ts, navalUpkeep). */
+  cruise?: [string, number, string?];
+  /** The month it is at sea though its country is at peace, by the record or on such a cruise. */
+  cruised?: number;
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */
@@ -875,6 +896,15 @@ export interface PlanPhase {
   near?: number;
   /** Corps sent across the sea, each to the first place on its list it can reach: an enemy coast is assaulted, a friendly port reinforced. */
   landings?: { corps: string; with?: string[]; to: string[]; minOdds?: number }[];
+  /** Harbours the nation holds without owning them from which the main plan's named landings may also sail (the far side: Japan's quays on Hainan and in Indochina, ruling 200 and the planner's paper 18). */
+  quays?: string[];
+  /**
+   * Strikes the plan orders of a carrier fleet in the month the blow falls: the fleet by name and the enemy harbour its
+   * wing goes for (the far side: the carrier striking force on Pearl Harbor, ruling 200(c)). `home`, where the row
+   * has it, is the base the fleet makes for once the strike is flown, in the same month (a base, the harbour's name,
+   * its sea's key and the news line, as a row of navy.json 'moves').
+   */
+  strikes?: { fleet: string; harbour: string; home?: { base: string; port: string; home: string; words: string } }[];
   /**
    * An expedition on someone else's ground that leaves rather than be lost with it: once the enemy holds any of the
    * places in 'when', its corps make for a port and are taken off, to one of the theatre's havens or else home.
@@ -981,6 +1011,16 @@ export interface AirFleet extends Storied {
    * group, with its own aircraft, pilots and fitness, and keeps a carrier wing's reach and its crews' training.
    */
   ashore?: number;
+  /**
+   * The country that raised it, where it now answers to another: a fallen country's group on far ground that passed
+   * into keeping (ruling 199, pacific.ts keptForces). Its row in air.json is still read under the country that raised it.
+   */
+  raised?: string;
+  /**
+   * The far side (ruling 184): the months running that its field has not been fed, counted as its country's month in
+   * the air opens. A group on an unfed field counts nothing toward the air over a sea. Unset while it is fed.
+   */
+  unfed?: number;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */

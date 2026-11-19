@@ -17,9 +17,28 @@
 //                or from one. At a stop with slack a
 //                span's edges move by up to that many months, by the war's seed; the first and last months stay.
 // The data is history.json, 'lines' (one per theatre); with none, nothing here does anything.
+//
+// The line in the south (ruling 234(a); the far side's rows, far-south-line.json, from the Pacific planner's
+// south-line.json). The same two bounds, drawn on the ground of five countries at once, with four things China's
+// line does not need:
+//   lands    the countries invaded, in place of the one `land`. A player's own ground is never bound, nor is any
+//            ground while the player is the invader; the rest of the line stands (computer against computer).
+//   ground   Britain's and America's ground reaches round the world, and Germany and Italy fight beside Japan: the
+//            line is drawn only on the Pacific's ground (pacific.ts) and on the provinces it names, in a span or
+//            under `shut` (India's frontier lies beyond the Pacific's ground). A province it names is on the line
+//            whoever owns it (New Caledonia is France's; the rest of France's ground, Indochina, is not on it).
+//   back     the floor's month province by province: the road back's own month for each place (rulings 200(i) and
+//            202(e)). A province with none keeps the floor's last month: it was passed, or held to the end.
+//   stays    when a span ends the invader's corps keep what they hold: nobody marches home and nothing is handed
+//            back without a fight. The end of a span means only that the invader does not come again.
+//   field    the floor also covers a province where the invader's army holds the field and the town still holds
+//            out: on this branch a landing that wins the field does not yet take the province (ruling 232 does that).
+//   slides   at a stop with slack the whole calendar moves with the month of the great choice named (Japan's
+//            strike south), by that choice's own draw: the war's first landings are never shut out by their own line.
 
 import { allied, atWar } from './game';
-import { HISTORY, dialDraw, onBook, stopDef, stopOf } from './history';
+import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf } from './history';
+import { pacificGround } from './pacific';
 import type { Game, Region } from './types';
 
 /** The months the invader held a province, and how (the historian's kinds: 'day one', 'lasting', 'raid', 'ichigo'). */
@@ -37,17 +56,49 @@ export interface Line {
   floor: { until: number; kinds: string[] };
   /** For each province the invader ever held, the months he held it. A province not named was never his. */
   spans: Record<string, Span[]>;
+  /** The countries invaded, where the line is drawn on the ground of several: read in place of `land`. */
+  lands?: string[];
+  /** Where the line is not drawn on all the ground of the countries invaded: 'pacific' is the Pacific's ground and every province named in `spans` or `shut`. */
+  ground?: string;
+  /** Provinces beyond the Pacific's ground that the line is drawn on and leaves out. */
+  shut?: string[];
+  /** The floor's month province by province. One not named keeps the floor's own last month. */
+  back?: Record<string, number>;
+  /** True where the invader's corps keep what they hold when a span ends: nobody marches home, nothing is handed back. */
+  stays?: boolean;
+  /** The great choice ('JAP:south') whose month the whole calendar slides with at a stop with slack. */
+  slides?: string;
+  /** True where the floor reads who holds the field as well as who holds the province. */
+  field?: boolean;
 }
 
 const NONE: Line[] = [];
 /** The lines the book draws (history.json, 'lines'). */
 export const lines = (): Line[] => (HISTORY as { lines?: Line[] }).lines ?? NONE;
-/** The line drawn on a country's ground, if the book has one. */
-const lineOn = (land: string): Line | undefined => lines().find((L) => L.land === land);
+const landsOf = (L: Line): string[] => L.lands ?? [L.land];
+const shutSets = new WeakMap<Line, Set<string>>();
+const shutOf = (L: Line): Set<string> => { let set = shutSets.get(L); if (!set) shutSets.set(L, (set = new Set(L.shut ?? []))); return set; };
+/** True for ground a line is drawn on: a province of a country invaded, and within the line's own ground where it has one. */
+function onGround(g: Game, L: Line, r: Region): boolean {
+  // (A province a line with its own ground names is on it whoever owns it: New Caledonia, France's, under 'shut'.)
+  if (L.ground && (L.spans[r.name] || shutOf(L).has(r.name))) return true;
+  if (L.lands ? !L.lands.includes(r.owner) : L.land !== r.owner) return false;
+  return !L.ground || pacificGround(g, r);
+}
+/** The line drawn on a province, if the book has one there. (Never on the player's own ground: computer against computer.) */
+const lineOn = (g: Game, r: Region): Line | undefined => (r.owner === g.human ? undefined : lines().find((L) => onGround(g, L, r)));
 
 /** True while a line binds this month: a stop that keeps the book, the book open in its theatre, and the player on neither side. */
 export function lineBinds(g: Game, L: Line): boolean {
-  return !!stopDef(g).book && onBook(g, L.theatre) && g.turn <= L.until && g.human !== L.land && g.human !== L.taker;
+  return !!stopDef(g).book && onBook(g, L.theatre) && g.turn <= L.until && (!!L.lands || g.human !== L.land) && g.human !== L.taker;
+}
+
+/** How many months a line's whole calendar has slid in this war: the draw of the great choice it slides with. */
+function slide(g: Game, L: Line): number {
+  if (!L.slides) return 0;
+  const [nat, op] = L.slides.split(':');
+  const date = HISTORY.dates[nat]?.[op], now = bookDate(g, nat, op);
+  return date === undefined || now === null ? 0 : now - date;
 }
 
 // A span's months in this war, moved by the stop's slack (stop 2: a month either way) as a whole, so that a raid of a
@@ -60,9 +111,9 @@ function monthsOf(g: Game, L: Line, name: string): [number, number][] {
   const key = `${L.id}:${name}`;
   let out = memo.at.get(key);
   if (!out) {
-    const slack = stopDef(g).slack ?? 0;
+    const slack = stopDef(g).slack ?? 0, all = slide(g, L);
     out = (L.spans[name] ?? []).map((s, k) => {
-      const d = slack ? Math.floor(dialDraw(g, 'line', L.id, name, k) * (2 * slack + 1)) - slack : 0;
+      const d = L.slides ? all : slack ? Math.floor(dialDraw(g, 'line', L.id, name, k) * (2 * slack + 1)) - slack : 0;
       return [s.from <= 1 ? s.from : s.from + d, s.to >= L.until ? s.to : s.to + d];
     });
     memo.at.set(key, out);
@@ -79,6 +130,30 @@ export function inLine(g: Game, L: Line, r: Region, t: number, kinds?: string[])
 }
 
 const withSide = (g: Game, nat: string, side: string): boolean => nat === side || allied(g, nat, side);
+const withLands = (g: Game, nat: string, L: Line): boolean => landsOf(L).some((x) => withSide(g, nat, x));
+/** The month the floor lifts on a province: its own road-back month where the line gives one, else the floor's last. */
+const floorUntil = (g: Game, L: Line, r: Region): number => { const m = L.back?.[r.name]; return m === undefined ? L.floor.until : m + slide(g, L); };
+
+/**
+ * True for ground of a country invaded where the invader's own army of that front stands: a line that sends its
+ * corps home when a span ends (China's) is drawn on it, and `nat` is of the invader's side. The staff's ships take
+ * nobody from there for a war elsewhere (ai.ts hop): by the book that army keeps the record's line.
+ */
+export function frontArmys(g: Game, nat: string, r: Region): boolean {
+  if (!lines().length || nat === g.human) return false;
+  const L = lineOn(g, r);
+  return !!L && !L.stays && lineBinds(g, L) && withSide(g, nat, L.taker);
+}
+
+/**
+ * True for ground a line is drawn on that it never gives the invader to keep: no span of the floor's kinds names it
+ * (ruling 200(i): what his side takes there, Midway on its one try or ground beyond the book, is open to the other
+ * side from the month it is lost).
+ */
+export function neverHis(g: Game, r: Region): boolean {
+  const L = lineOn(g, r);
+  return !!L && !(L.spans[r.name] ?? []).some((s) => L.floor.kinds.includes(s.kind));
+}
 
 /**
  * True where the line shuts a province to a computer staff this month: it neither attacks the province nor marches
@@ -86,21 +161,22 @@ const withSide = (g: Game, nat: string, side: string): boolean => nat === side |
  */
 export function lineShut(g: Game, nat: string, r: Region): boolean {
   if (!lines().length || nat === g.human) return false;
-  const L = lineOn(r.owner);
+  const L = lineOn(g, r);
   if (!L || r.ctrl === g.human || !lineBinds(g, L)) return false;
   if (withSide(g, nat, L.taker)) return !inLine(g, L, r, g.turn);
-  if (withSide(g, nat, L.land) && withSide(g, r.ctrl, L.taker)) return g.turn < L.floor.until && inLine(g, L, r, g.turn, L.floor.kinds);
+  // (Where the line says so, the floor reads who holds the field: a province the invader's army stands in with its town still holding out is his ground for the floor, as it will be once a field won takes the province: ruling 232.)
+  const his = withSide(g, r.ctrl, L.taker) || (!!L.field && withLands(g, r.ctrl, L) && r.units.some((u) => !u.dead && withSide(g, u.nat, L.taker)));
+  if (withLands(g, nat, L) && his) return g.turn < floorUntil(g, L, r) && inLine(g, L, r, g.turn, L.floor.kinds);
   return false;
 }
 
 /** True for a corps of the invader's side standing on ground the line leaves out in month `t`: it goes back inside. */
 export function lineLeaves(g: Game, nat: string, r: Region, t: number): boolean {
   if (!lines().length || nat === g.human) return false;
-  const L = lineOn(r.owner);
-  return !!L && lineBinds(g, L) && t <= L.until && withSide(g, nat, L.taker) && !inLine(g, L, r, t);
+  const L = lineOn(g, r);
+  return !!L && !L.stays && lineBinds(g, L) && t <= L.until && withSide(g, nat, L.taker) && !inLine(g, L, r, t);
 }
 
-/** True if any line could bind this nation this month: a quick test before the march home is walked. */
 /**
  * Raids go back (ruling 219): the ground of the invaded country that the invader's side holds beyond the line in month
  * `t` with no corps of that side on it, in the field or in its town, and whom each province goes back to: whoever held
@@ -111,7 +187,7 @@ export function lineGives(g: Game, nat: string, t: number): { r: Region; to: str
   const out: { r: Region; to: string }[] = [];
   if (nat === g.human) return out;
   for (const L of lines()) {
-    if (!lineBinds(g, L) || t > L.until || !withSide(g, nat, L.taker)) continue;
+    if (L.stays || !lineBinds(g, L) || t > L.until || !withSide(g, nat, L.taker)) continue;
     for (const r of g.regions) {
       if (r.owner !== L.land || r.ctrl === g.human || !withSide(g, r.ctrl, L.taker) || inLine(g, L, r, t)) continue;
       if (r.units.some((c) => !c.dead && withSide(g, c.nat, L.taker)) || (r.garr ?? []).some((c) => !c.dead && withSide(g, c.nat, L.taker))) continue;
@@ -123,4 +199,5 @@ export function lineGives(g: Game, nat: string, t: number): { r: Region; to: str
   return out;
 }
 
-export const lineAny = (g: Game, nat: string): boolean => lines().some((L) => lineBinds(g, L) && nat !== g.human && withSide(g, nat, L.taker));
+/** True if any line could bind this nation this month: a quick test before the march home is walked. */
+export const lineAny = (g: Game, nat: string): boolean => lines().some((L) => !L.stays && lineBinds(g, L) && nat !== g.human && withSide(g, nat, L.taker));

@@ -38,8 +38,9 @@ import { openWeather } from './weather';
 import { openAirVersion } from './airversion';
 import { openSecretWar } from './secretwar';
 import { openManpower } from './manpower';
-import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, overseasOf, shoreOf } from './world';
+import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
 import { tieWar } from './far';
+import { runQuays } from './pacific';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
 import { openWinter, winterOver } from './winter';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
@@ -64,7 +65,17 @@ export interface Op {
   push?: number;
   /** A side operation: no build-up, and the main army is not taken for it. */
   side?: boolean;
+  /** Off the book its month is drawn elsewhere, by the test that raises the flag it waits on (readiness.ts): once its conditions hold it goes, with no second draw. */
+  sure?: boolean;
   landings?: PlanPhase['landings'];
+  /** Harbours its country holds without owning them, from which these landings may sail as from a home port. */
+  quays?: string[];
+  /** Corps that come off hold the month the choice goes: the plan's own reserves, named (far-pacific-war.json: the Guards for Malaya, the naval landing forces for the Indies). */
+  frees?: string[];
+  /** So many months after it goes, the corps it named for its own landings that still wait on a quay come off hold too: they are the staff's own from then. */
+  freesAfter?: number;
+  /** Strikes its carriers fly at an enemy harbour in the month it goes (ai.ts and carriers.ts, `plannedStrike`). */
+  strikes?: PlanPhase['strikes'];
   staging?: Record<string, number>;
   join?: 'allies' | 'axis';
   /**
@@ -1066,7 +1077,8 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
       if (!op.side && op.season && ![0, 1, 2].some((late) => inSeason(g, op, falls + late))) continue;
       // A staff thinks twice before a blow that would bring the whole League down on it.
       // (A front that has been quiet too long settles it: the plan is taken up without more waiting.)
-      if (L.kind === 'free' && !hurried(op) && monthly(g, nat, op.id, g.turn) >= op.chance * L.chance * deterred(g, nat, who)) continue;
+      // (Not one whose month another test has already drawn: 'sure'.)
+      if (L.kind === 'free' && !op.sure && !hurried(op) && monthly(g, nat, op.id, g.turn) >= op.chance * L.chance * deterred(g, nat, who)) continue;
       if (op.side || !(op.prep ?? 0) || first) {
         if (inSeason(g, op)) go(k, !!cur);
       } else {
@@ -1110,10 +1122,11 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   const main = live[0] ?? null;
   const phase: PlanPhase = { name: '', from: g.turn, to: g.turn, posture: 'defend' } as PlanPhase;
   if (declare.length) phase.declare = declare;
-  if (went?.landings) { phase.landings = went.landings; phase.to = flag(g, `st:go:${nat}`) + 6; }
+  if (went?.strikes && flag(g, `st:go:${nat}`) === g.turn) phase.strikes = went.strikes;
+  if (went?.landings) { phase.landings = went.landings; phase.to = flag(g, `st:go:${nat}`) + 6; if (went.quays) phase.quays = went.quays; }
   // (By the book: the landings of a side-show launched the month before the great blow fell are still going ashore.)
   const ashore = !went?.landings && flag(g, `st:landAt:${nat}`) && g.turn - flag(g, `st:landAt:${nat}`) <= 1 ? list[flag(g, `st:landOp:${nat}`) - 1] ?? null : null;
-  if (ashore?.landings) { phase.landings = ashore.landings; phase.to = flag(g, `st:landAt:${nat}`) + 6; }
+  if (ashore?.landings) { phase.landings = ashore.landings; phase.to = flag(g, `st:landAt:${nat}`) + 6; if (ashore.quays) phase.quays = ashore.quays; }
   if (live.length) {
     phase.enemies = [...new Set(live.flatMap((f) => f.enemies))];
     phase.objectives = [...new Set(live.flatMap((f) => objectives(g, f)))];
@@ -1359,6 +1372,23 @@ export function heedsCard(to: Region, wave = false): boolean {
   const H = OPEN.descent?.heed;
   return !!H && (wave ? H.wave : to.nb.length ? H.mainland : H.island);
 }
+/**
+ * The corps a nation's great choices take off hold this month, by name: those a choice frees the month it goes
+ * ('frees'), and, so many months after ('freesAfter'), the ones it named for its own landings.
+ */
+export function freed(g: Game, nat: string): string[] {
+  const out: string[] = [];
+  for (const o of ops(nat)) {
+    if (!o.frees && o.freesAfter === undefined) continue;
+    const at = flag(g, `st:done:${nat}:${o.id}`);
+    if (!at) continue;
+    if (at === g.turn) out.push(...(o.frees ?? []));
+    if (o.freesAfter !== undefined && g.turn - at === o.freesAfter) out.push(...(o.landings ?? []).flatMap((L) => [L.corps, ...(L.with ?? [])]));
+  }
+  return out;
+}
+/** What a staff's own landing asks (open.json, 'descent'): the odds on a defended beach, and the most risk it takes on the crossing. Null where no staff lands of its own accord. */
+export const descentAsks = (): { odds: number; risk: number } | null => (OPEN.descent ? { odds: OPEN.descent.odds, risk: OPEN.descent.risk } : null);
 /** How many corps a staff sends ashore in a landing (open.json, 'descent.force'). */
 export const landingForce = (): number => OPEN.descent?.force ?? 3;
 
@@ -2058,7 +2088,7 @@ function oceanBase(g: Game, nat: string, ocean: string, safe: (r: Region) => boo
   // (Nor is an army built up in a harbour the enemy could take from it: the base passes the test of strength as it stands.)
   const strong = new Map<number, boolean>();
   const holds = (p: Region): boolean => { let s = strong.get(p.id); if (s === undefined) { s = holdsAshore(g, nat, p, []); strong.set(p.id, s); } return s; };
-  const serves = (p: Region): boolean => p.port && p.seas.length > 0 && acrossOcean(ocean, p) && allied(g, nat, p.ctrl)
+  const serves = (p: Region): boolean => p.port && p.seas.length > 0 && acrossOcean(g, ocean, p) && allied(g, nat, p.ctrl)
     && (p.ctrl === nat || !!g.nations[p.ctrl]?.atWar.some((e) => n.atWar.includes(e))) && !hostileUnits(g, p, nat).length && safe(p)
     && (!waits || based(P!, p)) && holds(p);
   const kept = g.regions[flag(g, key) - 1];
@@ -2121,10 +2151,12 @@ export function oceanRuns(g: Game, nat: string): OceanRun[] {
   const safe = (r: Region): boolean => r.seas.some((z) => danger[z] <= O.risk);
   const front = frontAshore(g, nat);
   const out: OceanRun[] = [];
-  for (const [ocean, share] of Object.entries(O.oceans)) {
-    const to = front ? front.ports.filter((p) => acrossOcean(ocean, p) && safe(p)) : [];
+  for (const [ocean, share] of oceanShares(g, nat, O)) {
+    // (An ocean whose share has moved to the other has no run this month: ruling 190.)
+    if (share <= 0) continue;
+    const to = front ? front.ports.filter((p) => acrossOcean(g, ocean, p) && safe(p)) : [];
     const atFront = to.length > 0, ahead = to.length;
-    const rear = front ? front.rear.filter((p) => acrossOcean(ocean, p) && safe(p)) : [];
+    const rear = front ? front.rear.filter((p) => acrossOcean(g, ocean, p) && safe(p)) : [];
     const base = oceanBase(g, nat, ocean, safe);
     if (base) {
       // The ports within three marches of it over friendly ground, the nearest first.
@@ -2135,14 +2167,18 @@ export function oceanRuns(g: Game, nat: string): OceanRun[] {
         if (d[q[i]] >= 3) continue;
         for (const j of g.regions[q[i]].nb) if (d[j] < 0 && allied(g, nat, g.regions[j].ctrl)) { d[j] = d[q[i]] + 1; q.push(j); }
       }
+      // (A run of the Pacific's puts its army down only on its own lane and side of the equator, near its base too.)
       for (const id of q) {
         const p = g.regions[id];
-        if (p.port && p.seas.length > 0 && !hostileUnits(g, p, nat).length && safe(p) && !to.includes(p)) to.push(p);
+        if (p.port && p.seas.length > 0 && (ocean === 'atlantic' || acrossOcean(g, ocean, p)) && !hostileUnits(g, p, nat).length && safe(p) && !to.includes(p)) to.push(p);
       }
     }
     if (!to.length) continue;
     let from: Region | null = null, len = Infinity;
-    for (const r of quays) {
+    // (A run of the Pacific's sails from the first of its own quays with a way open: pacific.json, 'runs.from'.)
+    const own = runQuays(g, ocean);
+    if (own) from = own.find((r) => quays.includes(r) && !!seaPath(g, nat, r, to[0])) ?? null;
+    else for (const r of quays) {
       const path = seaPath(g, nat, r, to[0]);
       if (path && (path.length < len || (path.length === len && from !== null && r.fac > from.fac))) { from = r; len = path.length; }
     }

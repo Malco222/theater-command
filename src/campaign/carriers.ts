@@ -22,7 +22,7 @@ import {
 } from './air';
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
-import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
+import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, orderedTo, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
 import { weatherOn, whyNotSky, zoneOfSea } from './weather';
@@ -734,6 +734,46 @@ function bestBlow(g: Game, nat: string, lead: AirFleet, escorts: AirFleet[], hit
   for (const r of ports) if (shipsInPort(g, r, nat).length) weigh('harbour', r);
   if (trade) for (const z of g.seas) if (tradeIn(g, nat, z.id)) weigh('strike', z.id);
   return best;
+}
+
+/**
+ * A strike the staff's plan orders by name (the far side, ruling 200(c): the carrier striking force on Pearl Harbor
+ * in the month Japan's blow falls). The fleet puts to sea, to the nearest sea in its reach from which its strike wing
+ * can fly at the harbour, and the wing goes for what lies there that month, with the fleet's fighters where fighters
+ * will come up. None of the admirals' sums is asked: the plan orders it. A harbour with no ship of an enemy's in it
+ * is not struck and nothing sails; afterwards the admirals' own rule decides. A player's fleets are his own.
+ * `home`: the base the fleet makes for once the strike is flown, that same month (the force was back in the Inland Sea
+ * before December 1941 was out; its country moves last in a month, and left at its northern anchorage it would lie in
+ * reach of the fleet it had just struck through all of that fleet's January).
+ */
+export function plannedStrike(g: Game, nat: string, fleet: string, harbour: string, home?: { base: string; port: string; home: string; words: string }): boolean {
+  if (!carrierRules(g) || nat === g.human) return false;
+  const c = fleetsOf(g, nat).find((f) => f.name === fleet), r = g.byName[harbour];
+  if (!c || !r || c.ships.cv <= 0 || !atWar(g, nat, r.ctrl) || !shipsInPort(g, r.id, nat).length) return false;
+  const lead = wingOf(g, c.id, 'bmr'), cap = wingOf(g, c.id, 'ftr');
+  if (!lead || lead.bmr <= 0 || lead.flew === g.turn || lead.mission !== 'support') return false;
+  const can = (): boolean => whyNotMission(g, lead, 'harbour', r.id) === null && !assessAir(g, [lead], 'harbour', r.id).why;
+  const keep = { zone: c.zone, stance: c.stance };
+  let at = atSea(c) && can() ? c.zone : -1;
+  if (at < 0) {
+    // (The reach is told nearest first.)
+    for (const z of fleetReach(g, c)) {
+      c.zone = z; c.stance = 'patrol';
+      const ok = can();
+      c.zone = keep.zone; c.stance = keep.stance;
+      if (ok) { at = z; break; }
+    }
+    if (at < 0 || !sail(g, c, at, 'patrol')) return false;
+  }
+  let fleets = [lead];
+  const a = assessAir(g, fleets, 'harbour', r.id);
+  if (a.why) return false;
+  if (a.D >= 1 && cap && cap.ftr > 0 && cap.flew !== g.turn && cap.mission === 'support' && whyNotMission(g, cap, 'harbour', r.id) === null) fleets = [lead, cap];
+  const rep = fly(g, nat, 'harbour', r.id, fleets, ':plan');
+  if (!rep) return false;
+  for (const f of fleets) { f.mission = 'harbour'; f.target = r.id; f.flew = g.turn; }
+  if (home) orderedTo(g, c, home);
+  return true;
 }
 
 /**

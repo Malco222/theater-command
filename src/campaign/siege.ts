@@ -21,10 +21,11 @@
 
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, type Assessment } from './game';
+import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, worksKept, type Assessment } from './game';
 import { seat } from './commanders';
 import { bookFed } from './history';
 import { drawMen } from './manpower';
+import { farGuard } from './economy';
 import { armyOf } from './joint';
 import { closedTo, seaOpenAt } from './navy';
 import { storyFallen } from './stories';
@@ -156,13 +157,14 @@ export const townBonus = (g: Game, r: Region, eased = 0, works = worksFor(g, r, 
 
 /**
  * The town's own guard, in divisions' worth: depot troops, police and militia. It stands only while the place is
- * held by the country it belongs to, and a small country's towns have small guards.
+ * held by the country it belongs to, and a small country's towns have small guards. (On the far side's colonial
+ * ground the guard is a tenth, and none at a post whose record garrison is its whole defence: economy.ts farGuard.)
  */
 export function guardOf(g: Game, r: Region): number {
   if (g.flags.sieges !== 1 || r.ctrl !== r.owner) return 0;
   const n = g.nations[r.owner];
   if (!n || !n.alive) return 0;
-  const full = Math.min(SIEGE.guard[townSize(g, r)], SIEGE.guardShare * Math.max(n.armyPeak, armySize(g, n.id)));
+  const full = Math.min(SIEGE.guard[townSize(g, r)], SIEGE.guardShare * Math.max(n.armyPeak, armySize(g, n.id))) * farGuard(r);
   const left = full * (1 - clamp((g.flags[`guard:${r.id}`] ?? 0) / 100, 0, 1));
   return left > 0.02 ? left : 0;
 }
@@ -197,6 +199,9 @@ export function guardInField(g: Game, r: Region, nat: string, force?: Corps[]): 
   // town up after the field before ruling 232: only a city's or a capital's guard, which never opens at a summons,
   // fights the field battle behind its walls.)
   if (force?.length && opensTo(g, r, force)) return 0;
+  // (The book's dated attack fights the part of each side that met in the record's fight and no more: rider b580 to
+  // ruling 234. The town's guard was no part of that line, so it stays behind its walls and holds the town after.)
+  if (force?.some((c) => c.bookPart)) return 0;
   return guardOf(g, r);
 }
 
@@ -222,7 +227,8 @@ export const fieldWalls = (g: Game, r: Region, eased: number, open: number): num
 export const townHeld = (g: Game, r: Region): boolean => garrisonOf(r).length > 0 || guardOf(g, r) > 0;
 
 /** Months the town feeds its defenders once it is closely invested. */
-export const storesOf = (g: Game, r: Region): number => SIEGE.stores[townSize(g, r)] + (r.fort ? SIEGE.fortStores * r.fort.lv : 0);
+// (A place's works set aside for a fight still keep its stores: game.ts worksKept, rider b628 to ruling 234.)
+export const storesOf = (g: Game, r: Region): number => SIEGE.stores[townSize(g, r)] + (worksKept(r)?.lv ?? 0) * SIEGE.fortStores;
 
 /** Months the town has been closely invested. */
 export const monthsShut = (g: Game, r: Region): number => g.flags[`sgm:${r.id}`] ?? 0;
