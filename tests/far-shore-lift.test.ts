@@ -11,6 +11,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { hop } from '../src/campaign/ai';
 import { addCorps, atWar, createGame, declareWar } from '../src/campaign/game';
+import { liftDates } from '../src/campaign/lift';
 import { landCorps, liftLeft, whyNotLand } from '../src/campaign/navy';
 import { PACIFIC, hopAims, pacificGround, shoreLift } from '../src/campaign/pacific';
 import { startOpen } from '../src/campaign/staff';
@@ -21,6 +22,8 @@ const war = (turn: number, human: string | null = null): Game => {
   const g = startOpen(createGame(17, human));
   for (const foe of ['USA', 'UK', 'AUS', 'NZL']) if (!atWar(g, 'JAP', foe)) declareWar(g, 'JAP', foe);
   g.turn = turn;
+  // (The months jumped would have read the shipping the record dates: America's third sailing from January 1942, rider b630.)
+  for (const nat of Object.keys(g.nations)) liftDates(g, nat);
   return g;
 };
 const fresh = (c: Corps, str = 1): Corps => { c.supplied = true; c.ap = c.apMax; c.fought = false; c.org = 1; c.str = str; return c; };
