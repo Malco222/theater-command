@@ -118,11 +118,24 @@ Its five open calls:
    thread: render a rule where, in the air battle, a big moment farther than 1,000 m from the listener still plays
    but does not duck. It must keep 9 of 9 planes lost heard on the map; if it does not, it applies only with the
    camera within 300 m of what it looks at (no air master). **Result (07:07Z): taken, in every view.** The map and
-   the fighters keep 9 of 9; the duck falls from 13.9 s to 4.7 s of the 40 (35% to 12%); loudness range drops 0.4 to
-   1.0 LU. Its cost: a `plane_down` 311 m off that rode a far one's duck misses the line by 0.4 dB looking aft, and
+   the fighters keep 9 of 9; the duck falls from 13.9 s to 4.7 s of the 40 (35% to 12%); loudness range drops 0.5 to
+   1.1 LU and loudness rises 0.3 to 0.5 LU. Its cost: a `plane_down` 311 m off that rode a far one's duck misses the line by 0.4 dB looking aft, and
    close flak heard goes 18 to 16. The air battles thread folds it into its draft 5.
 4. **True peak:** item 6 above.
 5. **The 7.2 dB jump at 300 m:** item 4 above. Asked: one render with the camera at 3 km, where drones past 3.6 km
-   now rise instead of fading out. **Result (07:07Z):** at 3 km the render is sample-identical (the engines limit
-   gives all 8 slots to loops 1.6 to 1.9 km off); with the camera at 8 km the drones 4.6 to 4.9 km off rise 2.0 to
+   now rise instead of fading out. **Result (07:07Z):** at 3 km the render is sample-identical (every loop that
+   plays is under 3.6 km, where `air_far` and `aircraft` are the same); with the camera at 8 km the drones 4.6 to 4.9 km off rise 2.0 to
    2.8 dB, and nothing else moves.
+
+**Draft 5 (19 Nov 07:49Z), final for Brian's ear.** It carries the settled rows above, marked as the sound thread's.
+Two changes since: the air master is now `[[300, 0], [1500, 8], [2600, 12]]` (the air battle camera starts at 2,600
+m and zooms from 120 m to 20 km; there v2 measures -36.3 LUFS and v3 -20.5), and `closeView.masterDb` is 3.1
+(-11.7 LUFS; true peak -1.4 dBTP under the -1.5 ceiling). On the listening page as "The air battle mix".
+
+Two more calls, settled 19 Nov 07:55Z:
+- **The far bed past about 5 km.** With the camera at 8 km the bed hides 5 of 6 planes lost. Kept as it is: from
+  that far the raid is one far sound, as in call 3, and the picture shows the losses. Without the bed the battle at
+  8 km is near silent (-28 LUFS).
+- **`plane_down` and flash-to-bang.** It plays in family `aircraft`, so it is never delayed. Kept: flash-to-bang is
+  for point bangs (explosions, flak bursts, guns on the ground). `plane_down` is a long sound that follows a moving
+  plane and marks the moment the player sees it go, not a bang at a point.
