@@ -25,7 +25,7 @@ import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules,
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { lineAny, lineGives, lineLeaves, lineShut } from './line';
 import { hashString } from '../core/rng';
-import { GREAT, SIEGE, arrive, besieged, driveOut, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
+import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
@@ -182,7 +182,35 @@ function campaign(g: Game, nat: string): void {
   garrisons(g, nat, false);
   sacks = new Set();
   rested = [];
-  try { campaignMoves(g, nat); } finally { if (n.alive) garrisons(g, nat, true); sacks = new Set(); for (const c of rested) c.hold = false; rested = []; }
+  // (b544: a ringed capital or great city of the staff's side is relieved before the staff moves anyone, and the
+  // corps beside it stay there for the relief once half its stores are eaten.)
+  const kept = reliefFirst(g, nat);
+  try { campaignMoves(g, nat); } finally { if (n.alive) garrisons(g, nat, true); sacks = new Set(); for (const c of rested) c.hold = false; rested = []; for (const c of kept) c.hold = false; }
+}
+
+/**
+ * The design director's b544: the relief of a besieged capital or great city comes first in a computer staff's
+ * month, before the line, the reserves or the plan move anyone. (1) With the corps of its own next door that are
+ * fit to attack, it goes in if the odds reach the relief bar. (2) Short of that, once the town has eaten half its
+ * stores, those corps are held where they stand for the month, so the relief force gathers month on month instead
+ * of being sent to other fronts. A staff's habit at every stop, for its own side's towns; a player's corps are
+ * never held. Returns the corps held, for the month's end to free.
+ */
+export function reliefFirst(g: Game, nat: string): Corps[] {
+  const kept: Corps[] = [];
+  if (!siegeRules(g) || nat === g.human || !g.nations[nat].alive) return kept;
+  for (const r of g.regions) {
+    if (!besieged(g, r) || !allied(g, nat, r.ctrl) || !(townSize(g, r) === 'capital' || greatCity(g, r))) continue;
+    if (!atWar(g, nat, fieldCtrl(g, r)) || !hostileUnits(g, r, nat).length || lineShut(g, nat, r)) continue;
+    const near = g.corps.filter((c) => c.nat === nat && !c.dead && !c.hold && c.kind !== 'fort' && c.ap > 0 && !c.fought && c.org >= 0.6 && g.regions[c.reg].nb.includes(r.id));
+    if (!near.length) continue;
+    const cut = limitAttackers(g, near, r);
+    const pool = cut.length ? footBeside(g, cut, near, r) ?? [] : [];
+    if (pool.length && assess(g, pool, r).odds >= reliefBar(g, r)) { resolveBattle(g, pool, r, {}); continue; }
+    if (monthsShut(g, r) * 2 < storesOf(g, r)) continue;
+    for (const c of near) if (!c.dead && !c.hold) { c.hold = true; kept.push(c); }
+  }
+  return kept;
 }
 
 /**

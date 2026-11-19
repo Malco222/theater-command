@@ -38,7 +38,7 @@ export const SIEGE = data as unknown as {
   stores: Record<TownSize, number>; fortStores: number;
   ring: number; ringNear: number; pocket: { least: number; share: number }; summons: number; summonsNot: TownSize[]; stand: number;
   assault: { ap: number; loss: number; armour: number; hasty: Record<TownSize, number>; guardHit: number; dice: [number, number] };
-  breach: { gun: number; raid: number; shell: number; most: number; mend: number };
+  breach: { gun: number; raid: number; shell: number; most: number; air: number; mend: number };
   bombard: { raidFull: number; shellFull: number; org: number; floor: number; guard: number; intensity: number; value: number };
   sortie: number; pay: number;
   capital: number; capitalAfter: number; capitalYear: number;
@@ -995,11 +995,17 @@ export interface TownHit {
 /** The share of a bombardment in full that this weight comes to: bombers that get through, or the weight of a fleet's guns. */
 export const townShare = (kind: 'raid' | 'shell', weight: number): number => clamp(weight / (kind === 'raid' ? SIEGE.bombard.raidFull : SIEGE.bombard.shellFull), 0, 1);
 
+/**
+ * How far the works can be broken by bombs or by shells, in percent. Bombs stop at a fifth (ruling 139 rider b610: the
+ * record's bombing never broke a great city's lines); shells, like the siege guns, go on to the most.
+ */
+export const breachCeiling = (kind: 'raid' | 'shell'): number => (kind === 'raid' ? Math.min(SIEGE.breach.air, SIEGE.breach.most) : SIEGE.breach.most);
+
 /** What bombs or shells of this weight would do to a town. Nothing is changed. */
 export function planTownHit(g: Game, r: Region, kind: 'raid' | 'shell', share: number): TownHit {
   const B = SIEGE.bombard, s = clamp(share, 0, 1);
   const now = g.flags[`breach:${r.id}`] ?? 0;
-  const works = Math.max(0, Math.min(SIEGE.breach.most - now, SIEGE.breach[kind] * s));
+  const works = Math.max(0, Math.min(breachCeiling(kind) - now, SIEGE.breach[kind] * s));
   const inside = garrisonOf(r), guard = guardOf(g, r);
   return {
     share: s, works, broken: (now + works) / 100, bonus: townBonus(g, r), bonusAfter: 1 + wallsOf(g, r) * (1 - (now + works) / 100),
@@ -1026,7 +1032,7 @@ export function townHitText(g: Game, r: Region, hit: TownHit, by: 'bombs' | 'she
   if (hit.works >= 0.5) out.push(done
     ? `The ${by} broke down ${Math.round(hit.works)}% of the works of ${name}: troops inside now fight ${stronger(hit.bonusAfter)} stronger, not ${stronger(hit.bonus)}.`
     : `Should break down about ${Math.round(hit.works)}% of the works of ${name}: troops inside would then fight ${stronger(hit.bonusAfter)} stronger, not ${stronger(hit.bonus)}.`);
-  else out.push(hit.share > 0 && (g.flags[`breach:${r.id}`] ?? 0) >= SIEGE.breach.most - 0.5
+  else out.push(hit.share > 0 && (g.flags[`breach:${r.id}`] ?? 0) >= breachCeiling(by === 'bombs' ? 'raid' : 'shell') - 0.5
     ? `The works of ${name} are already broken down as far as ${by} can break them.`
     : done ? `The ${by} did little to the works of ${name}.` : `Too little weight to break down the works of ${name}.`);
   if (hit.corps && hit.org >= 0.005) out.push(done ? `The garrison lost ${Math.round(hit.org * 100)}% of its organisation.` : `The garrison should lose about ${Math.round(hit.org * 100)}% of its organisation.`);
