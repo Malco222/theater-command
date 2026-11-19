@@ -1694,7 +1694,7 @@
    "_what": "a damaged engine: thin and dark at the engine, widening (about three times by 2 s) and breaking into paler lumps",
    "life_s": 20,
    "thin_after_s": 7,
-   "thin_keep_one_in": 4,
+   "thin_keep_one_in": 6,
    "thin_grow": 5,
    "thin_alpha": 2.2,
    "thin_hold": 0.8,
@@ -1704,7 +1704,7 @@
    "spacing_m": 9,
    "r0_m": 0.4,
    "r1_m": 4.5,
-   "alpha": 0.5,
+   "alpha": 0.55,
    "colour": [
     92,
     90,
@@ -1728,13 +1728,20 @@
    "grow": 1.1,
    "lumpy": 0.7,
    "smear_s": 5,
-   "rise_mps": 0
+   "rise_mps": 0,
+   "join_from": 0.15,
+   "join_by": 0.45,
+   "keep_each_turn_deg": 26,
+   "drift": 0.7,
+   "ribbon": 1,
+   "core": 0.2,
+   "lumps_from": 0.8
   },
   "fire": {
    "_what": "an engine or tank on fire: ragged flame streaming aft from the root, black smoke rising from its tips",
    "life_s": 30,
    "thin_after_s": 8,
-   "thin_keep_one_in": 4,
+   "thin_keep_one_in": 6,
    "thin_grow": 5.5,
    "thin_alpha": 1.4,
    "thin_hold": 0.85,
@@ -1744,7 +1751,7 @@
    "spacing_m": 8,
    "r0_m": 1.2,
    "r1_m": 6.0,
-   "alpha": 0.9,
+   "alpha": 0.96,
    "colour": [
     44,
     41,
@@ -1800,7 +1807,14 @@
    "grow": 1.0,
    "lumpy": 0.6,
    "smear_s": 5,
-   "rise_mps": 1.2
+   "rise_mps": 1.2,
+   "join_from": 0.15,
+   "join_by": 0.45,
+   "keep_each_turn_deg": 26,
+   "drift": 0.7,
+   "ribbon": 1,
+   "core": 0.2,
+   "lumps_from": 0.8
   },
   "glycol": {
    "_what": "a holed radiator: a thin white vapour that soon thins out",
@@ -1828,13 +1842,18 @@
    "ramp_s": 0.4,
    "smear": 1.5,
    "carried": 0.05,
-   "flame_m": 0
+   "flame_m": 0,
+   "drift": 0.7,
+   "ribbon": 1,
+   "core": 0.2,
+   "lumps_from": 0.75
   },
   "_art_director": "21:27Z: 20 mm hits, glycol and the fire trail at distance PASS. Engine fire: ragged tongues tearing free of the cowl and streaming aft past the wing root, a pale yellow heart at the cowl and deep orange along the tongues, a new length and shape every frame, black smoke rising from the flame tips. Smoke: thin and dark at the engine, about three times wider by 2 s and still widening, breaking into uneven lumps, paler and thinner with age, each lump hanging where it was laid. 21:37Z: the smoke trail, the 10 s fire trail and the glycol start PASS. The fire's tongues stand off the skin as they stream aft (flame_lift_m, above or below), so a few break the outline; the heart hugs the cowl.",
   "_load": "Pre-check 21:34Z: puffs a trail are about life_s x speed / spacing_m (the lumpy rows lose about an eighth to their short-lived small puffs). At 120 m/s: smoke about 80, fire about 105, glycol about 35. The room is game.max_puffs, shared by everything; when it is short the farthest puffs go first, so a far trail loses length first.",
   "_art_director_0440": "Art director 04:40Z (Brian's air clip, feel-benchmark gap 3): smoke hangs, a sky full of hanging trails is the picture. A fire trail lives 30 s and a straggler's smoke 20 s; to fit the 3,000-puff room, past thin_after_s (the old life) only one puff in thin_keep_one_in hangs on, growing on as it did and thinning slowly, so an old trail is fewer, bigger lumps. A burning plane's flame is half its span (TrailStart's span; flame_of_span), at most flame_most_m 10 m, ragged and flickering, streaming back from the root, black smoke from its tips; from the strategy camera its heart is never under flame_least_px 4 px. Gun smoke stays short.",
   "_art_director_0459": "Art director 04:59Z on 299e504: the trails faded too pale too soon. Each kept puff (one in thin_keep_one_in) now thickens to thin_alpha times its opacity by thin_after_s as the three beside it go, so the young trail looks as it did; it hangs the whole of life_s (a small one going early left a gap), holds full to thin_hold of its life, and is drawn out along the path over the gap to the next one kept, so the old trail is one dark line of lumps that touch. Measured at 2.5 km off the beam (sky 212): fire head 61, first third 103, second third 110, old 109, oldest 105; straggler smoke head 131, first third 143, second third 147. Fire: by day a tongue off the skin must read as fire against the sky, so flame_alpha [at the cowl, at the tip] and flame_hold keep it opaque, flame_wide widens it, and it stands off the skin by flame_lift_of_length, licking out above and below the fuselage; tip_smoke lays black smoke right at each tongue's tip (that opacity, living tip_smoke_s, widening to tip_smoke_r_of_flame of the flame's length), above or below as the tongue is, so there is no gap between flame and smoke. Old recipes without these keys draw as before.",
-  "_art_director_0525": "Art director 05:25Z on 1295edc: trails PASS. Kept evenly the old trail read as a string of beads, so thin_ragged tears it: the gap to the next puff kept is thin_keep_one_in times 1 plus or minus thin_ragged, and the puff's size by up to half of it (fire at 2.5 km: 66 | 102 | 109 | 107 | 107). A tongue is fixed at its root and free at its tip: flame_lift_curve is the power of the way along it by which its stand-off comes, so it is rooted on the skin at the fire with the yellow-white heart there and only its tip licks out above or below, sweeping back, going orange to flame_tip_colour (dark red) into the black smoke laid at its tip."
+  "_art_director_0525": "Art director 05:25Z on 1295edc: trails PASS. Kept evenly the old trail read as a string of beads, so thin_ragged tears it: the gap to the next puff kept is thin_keep_one_in times 1 plus or minus thin_ragged, and the puff's size by up to half of it (fire at 2.5 km: 66 | 102 | 109 | 107 | 107). A tongue is fixed at its root and free at its tip: flame_lift_curve is the power of the way along it by which its stand-off comes, so it is rooted on the skin at the fire with the yellow-white heart there and only its tip licks out above or below, sweeping back, going orange to flame_tip_colour (dark red) into the black smoke laid at its tip.",
+  "_art_director_1413": "Art director 14:13Z on build 1722's air frames: the falling planes' trails read as beads on a string, the spacing seeming to depend on speed. Each puff was a lens drawn out behind it, so two neighbours met only at their thin faint tips, and past thin_after_s most were gone. With ribbon 1 a trail is one strip: each piece runs from its own point back to the piece laid before it, wherever that has drifted to, as wide and as dark at that edge as that piece is now, so the two share the edge with no overlap and no gap at any speed; the strip leaves each edge along the way the aircraft flew there, so it bends through a turn or a spin. core: the share of its half width that is dense, thinning to nothing at its sides. drift: how much of the sideways scatter it keeps; each piece takes most of the drift and rise of the one before it, so the strip meanders and never zig-zags, and its pieces all last as long, so it goes from its old end. One piece in thin_keep_one_in, and one wherever the path has turned keep_each_turn_deg, is also a long length that hangs the whole of life_s, growing thin_grow times wider; it comes into sight between join_from and join_by of thin_after_s as the short pieces go. From lumps_from of its life (a little sooner or later each, by thin_ragged) a length lets go of its neighbours, paling and narrowing to nothing at each end, then draws in to a soft lump: only the old end tears into lumps. Measured: room at 120 m/s, smoke 124 places (130 before) and fire 225 (225); close up on a 212 sky, fire 98 (101 before) and smoke 160 (158), with alpha raised a little (smoke 0.5 to 0.55, fire 0.9 to 0.96) since pieces no longer overlap. Recipes without ribbon draw as before."
  },
  "air_debris": {
   "_how": "A falling aircraft's debris row (AirFall once as the fall starts with its span and the deck height, AirFallMove every frame, AirFallStop when the model is gone). explode sheds fighter or bomber pieces at once (bomber at bomber_span_m or more), thrown throw_mps out and carried on at carry of its speed, with a short torn fireball; burn sheds burn_sheds over its fall, every_s apart, from first_s; spin sheds spin_sheds, the first a wing at wing_odds. A skin plate (plate_m across, painted face paint, bare metal inside bare) tumbles plate_tumble radians a second, so seen edge-on it thins and flutters, and glints when the sun catches it (glint, glint_power); it slows to sink at plate_sink_mps and drifts with the wind. A heavy piece (heavy_share of an explosion's, heavy_m, heavy_colour) drops at heavy_sink_mps. A wing (wing_chord_of_span) tumbles slowly down at wing_sink_mps. Every piece fades into the deck over its last enter_deck_m, at most most_s after it came loose; far off it shrinks to a speck under least_px and fades, never held up.",
