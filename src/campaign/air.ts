@@ -9,6 +9,8 @@
 // lists is split into air groups of one kind, fighters or bombers, and a group flies one raid a month, planned
 // from its target and flown the moment the order is given. A historical scenario keeps the fleets as they were.
 
+import { aaCut, loseShips, starHulls, writeFallen } from './hulls';
+import { SANDBOX_SHIPS } from './sandbox-data';
 import { byHand, staffRuns } from './depth';
 import data from '../../data/campaign/air.json';
 import warData from '../../data/campaign/airwar.json';
@@ -1652,9 +1654,11 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     struck = a.ships.map((x) => ({ nat: x.nat, fleet: x.name, admiral: x.admiral?.name ?? null, ships: { ...x.ships }, sunk: noShips() }));
     a.ships.forEach((x, i) => {
       for (const c of SHIPS) {
-        const k = have[c] > 0 ? Math.min(x.ships[c], rng.roll(exp.sunk[c] * (x.ships[c] / have[c]))) : 0;
-        x.ships[c] -= k; x.lost[c] += k; struck![i].sunk[c] = k; total[c] += k;
+        const k = have[c] > 0 ? Math.min(x.ships[c], rng.roll(exp.sunk[c] * (x.ships[c] / have[c]) * (1 - aaCut(x, SANDBOX_SHIPS.aaMost)))) : 0;
+        loseShips(x, c, k); struck![i].sunk[c] = k; total[c] += k;
       }
+      // Her named ships (the sandbox): the memorial for those lost, a battle star for those that came through.
+      writeFallen(g, x, m === 'harbour' ? 'to air attack in harbour' : 'to air attack'); starHulls(x);
       // Ships that are hit and not sunk limp home: the fleet is the less fit for sea.
       x.ready = Math.max(0, x.ready - Math.min(0.3, 0.05 + CARRIERS.strike.ready * (afloatBefore > 0 ? exp.hits / afloatBefore : 0)));
       x.struck = [g.turn, (x.struck && x.struck[0] === g.turn ? x.struck[1] : 0) + 1, atSea(x) ? x.zone : -1];

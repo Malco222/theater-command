@@ -21,6 +21,8 @@ import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
 import { skyAtSea, skySupport, weatherOn } from './weather';
 import { capOver, deckWorth, syncWings } from './carriers';
+import { aaCut, loseShips, lossWeight, moveHulls, starHulls, trim, worth, writeFallen } from './hulls';
+import { SANDBOX_SHIPS } from './sandbox-data';
 import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
@@ -319,7 +321,7 @@ const admiralMul = (f: Fleet): number => 1 + (f.admiral ? NAVY.admiral.perLevel 
 export function fleetPower(g: Game, f: Fleet): number {
   let p = 0;
   // A carrier is worth what it can fly: one whose aircraft are spent counts for much less (the grand campaign).
-  for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].power * (c === 'cv' ? deckWorth(g, f) : 1);
+  for (const c of CLASSES) p += worth(f, c, 'power') * (c === 'cv' ? deckWorth(g, f) : 1);
   return p * quality(g, f.nat) * fit(g, f) * admiralMul(f) * storyEdge(g, f) * traitFleet(g, f.nat);
 }
 
@@ -1411,7 +1413,7 @@ export function escortWorth(s: Ships): number {
 /** How hard an enemy's raiders are pressing these seas: what a lane's escorts are up against. */
 function raidersIn(g: Game, nat: string, z: number): number {
   let p = 0;
-  for (const f of g.fleets) if (f.zone === z && atSea(f) && atWar(g, f.nat, nat)) for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
+  for (const f of g.fleets) if (f.zone === z && atSea(f) && atWar(g, f.nat, nat)) for (const c of CLASSES) p += worth(f, c, 'raid');
   return p;
 }
 
@@ -1483,9 +1485,8 @@ export function rebase(g: Game, f: Fleet, r: Region): boolean {
 export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = CLASSES): Ships {
   const out = none();
   for (const c of list) {
-    const k = Math.min(f.ships[c], rng.roll(f.ships[c] * frac * NAVY.classes[c].tough));
-    f.ships[c] -= k;
-    f.lost[c] += k;
+    const k = Math.min(f.ships[c], rng.roll(lossWeight(f, c, frac)));
+    loseShips(f, c, k);
     out[c] = k;
   }
   return out;
@@ -1577,6 +1578,9 @@ export function navalUpkeep(g: Game, nat: string): void {
       } else came += f.ships[c] - was;
       if (dial?.waits && n > 0) fill(g, f, c, n);
     }
+    // Named ships (the sandbox) go with their count: those sent on to the fleet that takes them, those the record sinks to the memorial.
+    if (src) moveHulls(src, f);
+    trim(f);
     // A dial's row of ships lost that play has already sunk says nothing: the news has told it once; nor a move that
     // finds none of its ships. Nor does one read late: its month is past. (A waiting row's month is the one it is read in.)
     if ((dial && leaving && !gone) || ((src || dial?.most) && !came) || (turn < g.turn && !dial?.waits)) continue;
@@ -1838,6 +1842,7 @@ export function placeBoats(g: Game, nat: string): void {
     }
     if (pool) pool.ships.ss -= parts[i] - f.ships.ss;
     f.ships.ss = parts[i];
+    if (pool) { moveHulls(pool, f); moveHulls(f, pool); }
     if (beat[i] >= 0) f.station = beat[i];
     // A group formed here with no boats left stands down: they have gone to the others or home, and it forms again
     // when it has some (the Atlantic flotilla when Bordeaux is retaken).
@@ -1915,7 +1920,8 @@ export function huntSubs(g: Game, nat: string): Record<number, number> {
     let sunk = 0;
     for (const f of quarry) {
       const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * share));
-      f.ships.ss -= k; f.lost.ss += k; sunk += k;
+      loseShips(f, 'ss', k); sunk += k;
+      writeFallen(g, f, 'to the submarine hunters');
     }
     if (!sunk) continue;
     out[z] = sunk;
@@ -1925,7 +1931,8 @@ export function huntSubs(g: Game, nat: string): Record<number, number> {
     let cost = 0;
     for (const f of groups) {
       const k = Math.min(f.ships.dd, rng.roll(sunk * FLEETS.hunt.cost * (f.ships.dd / dd)));
-      f.ships.dd -= k; f.lost.dd += k; cost += k;
+      loseShips(f, 'dd', k); cost += k;
+      writeFallen(g, f, 'hunting submarines');
     }
     const who = groups.length ? `Destroyers of ${fleetName(groups[0])}` : h.fleets.length ? `The escorts of ${fleetName(h.fleets[0])}` : `${g.nations[nat].adj} aircraft`;
     const told = !g.human || g.human === nat || allied(g, g.human, nat) || quarry.some((f) => f.nat === g.human);
@@ -1963,7 +1970,8 @@ function torpedoes(g: Game, nat: string): void {
     let cls: ShipClass = 'ca';
     for (const c of heavy) { if (pick < f.ships[c]) { cls = c; break; } pick -= f.ships[c]; }
     if (f.ships[cls] <= 0) continue;
-    f.ships[cls]--; f.lost[cls]++;
+    loseShips(f, cls, 1);
+    writeFallen(g, f, 'to a submarine');
     f.ready = Math.max(0, f.ready - 0.05);
     headline(g, 'battle', `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of ${fleetName(f)} in the ${g.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, undefined, { arm: 'sea', lost: nat });
   }
@@ -1983,6 +1991,7 @@ function newBase(g: Game, f: Fleet): boolean {
     headline(g, 'event', `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
     return true;
   }
+  writeFallen(g, f, 'with no port left to make for', true);
   g.fleets.splice(g.fleets.indexOf(f), 1);
   if (shipCount(f.ships) >= 5) headline(g, 'event', `With no port left to it, ${fleetName(f)} is scuttled.`, f.nat, old.id, { arm: 'sea', lost: f.nat });
   return false;
@@ -1994,7 +2003,8 @@ function airAttack(g: Game, f: Fleet): void {
   const net = airOver(g, f.zone, f.nat, true) - airOver(g, f.zone, f.nat, false);
   if (net <= NAVY.air.safe) return;
   // Carrier fighters on patrol over the fleet keep a share of them off it (the grand campaign).
-  const sunk = sinkShips(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer) * (1 - capOver(g, f)), seaRng(g, `air:${f.id}`), SURFACE);
+  const sunk = sinkShips(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer) * (1 - capOver(g, f)) * (1 - aaCut(f, SANDBOX_SHIPS.aaMost)), seaRng(g, `air:${f.id}`), SURFACE);
+  writeFallen(g, f, 'to air attack');
   f.ready = Math.max(0, f.ready - 0.1);
   if (shipCount(sunk)) headline(g, 'battle', `Bombers sink ${shipList(sunk)} of ${fleetName(f)} in the ${g.seas[f.zone].name}.`, f.nat, undefined, { arm: 'air', lost: f.nat });
 }
@@ -2028,14 +2038,14 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>)
       if (atWar(g, f.nat, nat)) {
         if (!zones.includes(f.zone)) continue;
         let p = 0;
-        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
+        for (const c of CLASSES) p += worth(f, c, 'raid');
         p *= quality(g, f.nat) * fit(g, f) * raidShare(f);
         if (p > 0) { raid += p; raiders.push(f); }
       } else if (allied(g, f.nat, nat)) {
         const w = guardShare(g, f, zones, route.id);
         if (w <= 0) continue;
         let p = 0;
-        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort * (c === 'cv' ? deckWorth(g, f) : 1);
+        for (const c of CLASSES) p += worth(f, c, 'escort') * (c === 'cv' ? deckWorth(g, f) : 1);
         p *= quality(g, f.nat) * fit(g, f) * w;
         if (p > 0) { guard += p; escorts.push(f); }
       }
@@ -2058,13 +2068,15 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>)
         const hunt = NAVY.convoy.subBase + NAVY.convoy.subHunt * (G / (raid + G + NAVY.convoy.ocean));
         for (const f of raiders) {
           const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * hunt));
-          f.ships.ss -= k; f.lost.ss += k; subsLost += k;
+          loseShips(f, 'ss', k); subsLost += k;
+          writeFallen(g, f, 'attacking a convoy');
         }
       }
       const dd = escorts.reduce((s, f) => s + f.ships.dd, 0);
       for (const f of escorts) {
         const k = Math.min(f.ships.dd, rng.roll(raid * NAVY.convoy.escortLoss * (f.ships.dd / Math.max(1, dd))));
-        f.ships.dd -= k; f.lost.dd += k; escortsLost += k;
+        loseShips(f, 'dd', k); escortsLost += k;
+        writeFallen(g, f, 'guarding a convoy');
       }
     }
     g.convoys[route.id] = { turn: g.turn, raid, guard, tons, total: (g.convoys[route.id]?.total ?? 0) + tons, share: route.share * L, loss: L, subsLost, escortsLost };
@@ -2088,13 +2100,13 @@ export function laneLoss(g: Game, nat: string, zones: number[], lane?: string): 
     if (atWar(g, f.nat, nat)) {
       if (!zones.includes(f.zone)) continue;
       let p = 0;
-      for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
+      for (const c of CLASSES) p += worth(f, c, 'raid');
       raid += p * quality(g, f.nat) * fit(g, f) * raidShare(f);
     } else if (allied(g, f.nat, nat)) {
       const w = guardShare(g, f, zones, lane);
       if (w <= 0) continue;
       let p = 0;
-      for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort * (c === 'cv' ? deckWorth(g, f) : 1);
+      for (const c of CLASSES) p += worth(f, c, 'escort') * (c === 'cv' ? deckWorth(g, f) : 1);
       guard += p * quality(g, f.nat) * fit(g, f) * w;
     }
   }
@@ -2179,6 +2191,8 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     const hard = clamp(0.14 + 0.08 * edge, 0.18, 0.5), light = clamp(0.16 / edge, 0.03, 0.14);
     mine.forEach((f, i) => { att[i].sunk = sinkShips(f, won ? light : hard, rng); });
     met.forEach((f, i) => { def[i].sunk = sinkShips(f, won ? hard : light, rng); });
+    // The named ships of both sides (the sandbox): a battle star for each that came through, the memorial for the rest.
+    for (const f of [...mine, ...met]) { writeFallen(g, f, 'in a fleet action'); starHulls(f); }
     const total = (sides: SeaSide[]): Ships => { const t = none(); for (const s of sides) for (const c of CLASSES) t[c] += s.sunk[c]; return t; };
     const ships = (fs: SeaSide[]): number => fs.reduce((s, x) => s + shipCount(x.ships), 0);
     const lines: TicketLine[] = [

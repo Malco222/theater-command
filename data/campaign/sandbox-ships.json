@@ -1,0 +1,434 @@
+{
+  "_about": "The sandbox's ships (Brian, 19 November 2026: 'a sandbox to play and make your own history'; design paper https://claude.ai/artifact/LV5ZA8vXKtyuDvjRbazxhc). Read only with the sandbox switched on (g.flags.sandbox, classes.ts); with it off nothing here is used. The ship classes themselves are rows of classes.json ('of' a ship kind). 'aaMost' is the most a fleet's anti-aircraft ships cut its losses to an air strike. 'styles' is how each navy's computer staff leans when it may build a class of its own (history.json stops 'whatif'), and 'likes' the classes each style orders, best first. 'refits' are the changes a ship in harbour can be given at a yard of her kind's size: 'months' out of service, 'share' of a new ship's price, 'needs' a technology, 'kinds' the ships it fits; 'mul' multiplies her numbers, 'add' adds to them, 'to' rebuilds her as another class (its row, or for a cruiser hull 'light' the numbers given), and 'once' means she can have it only once. 'board' is the drawing board: six dials on one card, each step with what it takes of the hull's room and what it costs and gives (armour and speed take a share of the hull's room and price, a flight deck 'roomShare' and 'costShare'; a small hull is ordered four at a time, a flotilla); 'value' is the most a design may be worth for its price against the standard ship of its kind (1.1: a tenth better), and above that its price is raised until it is not. 'sub' is a submarine's own small card. 'names' says how new ships are named: capital ships and carriers after the nation's home provinces, cruisers after its cities, flotillas by number.",
+  "aaMost": 0.3,
+  "styles": {
+    "_default": "guns",
+    "GER": "trade",
+    "UK": "convoy",
+    "USA": "carrier",
+    "JAP": "carrier",
+    "ITA": "guns",
+    "FRA": "guns",
+    "SOV": "guns"
+  },
+  "likes": {
+    "guns": [
+      "superbb",
+      "battlecv",
+      "aacruiser"
+    ],
+    "carrier": [
+      "battlecv",
+      "escortcv",
+      "aacruiser"
+    ],
+    "trade": [
+      "raider",
+      "scoutsub",
+      "superbb"
+    ],
+    "convoy": [
+      "escortcv",
+      "aacruiser",
+      "raider"
+    ]
+  },
+  "refits": [
+    {
+      "id": "aa",
+      "label": "More anti-aircraft guns",
+      "months": 3,
+      "share": 0.1,
+      "kinds": [
+        "bb",
+        "cv",
+        "ca",
+        "dd"
+      ],
+      "add": {
+        "aa": 0.03,
+        "escort": 0.1
+      },
+      "once": true,
+      "blurb": "Every free stretch of deck gets a light gun: fewer losses when bombers find her fleet."
+    },
+    {
+      "id": "radar",
+      "label": "Radar",
+      "months": 2,
+      "share": 0.08,
+      "needs": "earlywarning",
+      "kinds": [
+        "bb",
+        "cv",
+        "ca",
+        "dd"
+      ],
+      "mul": {
+        "power": 1.05,
+        "escort": 1.1
+      },
+      "once": true,
+      "blurb": "Search and gunnery radar on her masts: she fights as well at night and in thick weather."
+    },
+    {
+      "id": "guns",
+      "label": "New main guns",
+      "months": 8,
+      "share": 0.3,
+      "needs": "firecontrol",
+      "kinds": [
+        "bb",
+        "ca"
+      ],
+      "mul": {
+        "power": 1.15,
+        "raid": 1.1
+      },
+      "once": true,
+      "blurb": "New turrets and directors of the latest pattern: her gun power goes up a step."
+    },
+    {
+      "id": "battlecv",
+      "label": "Rebuilt as a battle carrier",
+      "months": 10,
+      "share": 0.4,
+      "needs": "battlecarriers",
+      "kinds": [
+        "bb"
+      ],
+      "to": "battlecv",
+      "once": true,
+      "blurb": "Her after turrets come out and a hangar and flight deck go in their place: she keeps her forward guns and flies a strike of her own."
+    },
+    {
+      "id": "carrier",
+      "label": "Rebuilt as a carrier",
+      "months": 14,
+      "share": 0.6,
+      "needs": "carriers",
+      "kinds": [
+        "bb",
+        "ca"
+      ],
+      "to": "cv",
+      "light": {
+        "label": "Light carrier",
+        "power": 3.5,
+        "tough": 0.8,
+        "escort": 2,
+        "raid": 0.5,
+        "deck": 0.5
+      },
+      "once": true,
+      "blurb": "Cut down to her hull and built up again as a carrier: a battleship's hull makes a fleet carrier, a cruiser's a light carrier with half a wing."
+    }
+  ],
+  "board": {
+    "value": 1.1,
+    "weights": {
+      "power": 1,
+      "escort": 1,
+      "raid": 1
+    },
+    "hull": [
+      {
+        "label": "Small",
+        "room": 6,
+        "cost": 1.4,
+        "months": 6,
+        "yard": 1,
+        "tough": 0.88,
+        "deck": 0,
+        "oil": 0.5,
+        "escort": 0.75,
+        "count": 4
+      },
+      {
+        "label": "Medium",
+        "room": 14,
+        "cost": 4.5,
+        "months": 10,
+        "yard": 2,
+        "tough": 0.72,
+        "deck": 0.33,
+        "oil": 0.8,
+        "escort": 0,
+        "count": 1
+      },
+      {
+        "label": "Large",
+        "room": 26,
+        "cost": 13,
+        "months": 16,
+        "yard": 3,
+        "tough": 0.6,
+        "deck": 1,
+        "oil": 1,
+        "escort": 0,
+        "count": 1
+      },
+      {
+        "label": "Very large",
+        "room": 36,
+        "cost": 22,
+        "months": 22,
+        "yard": 3,
+        "tough": 0.5,
+        "deck": 1.25,
+        "oil": 1.4,
+        "escort": 0,
+        "count": 1,
+        "needs": "superbattleships"
+      }
+    ],
+    "guns": [
+      {
+        "label": "None",
+        "room": 0,
+        "cost": 0,
+        "months": 0,
+        "power": 0
+      },
+      {
+        "label": "Light",
+        "room": 0.8,
+        "cost": 0.4,
+        "months": 0,
+        "power": 0.3
+      },
+      {
+        "label": "Medium",
+        "room": 1.8,
+        "cost": 1.6,
+        "months": 0.5,
+        "power": 0.75
+      },
+      {
+        "label": "Heavy",
+        "room": 4.2,
+        "cost": 6.5,
+        "months": 2,
+        "power": 3.3
+      },
+      {
+        "label": "Very heavy",
+        "room": 5.8,
+        "cost": 8.5,
+        "months": 2.5,
+        "power": 3.5,
+        "needs": "superbattleships"
+      }
+    ],
+    "armour": [
+      {
+        "label": "Light",
+        "room": 0.05,
+        "cost": 0.05,
+        "months": 0,
+        "tough": 1.25
+      },
+      {
+        "label": "Medium",
+        "room": 0.12,
+        "cost": 0.2,
+        "months": 1,
+        "tough": 1
+      },
+      {
+        "label": "Heavy",
+        "room": 0.22,
+        "cost": 0.4,
+        "months": 4,
+        "tough": 0.75
+      }
+    ],
+    "speed": [
+      {
+        "label": "Slow",
+        "room": 0.08,
+        "cost": 0,
+        "oil": 0.85,
+        "raid": 0,
+        "escort": 0
+      },
+      {
+        "label": "Fleet",
+        "room": 0.15,
+        "cost": 0.05,
+        "oil": 1,
+        "raid": 0.15,
+        "escort": 0.1
+      },
+      {
+        "label": "Fast",
+        "room": 0.22,
+        "cost": 0.1,
+        "oil": 1.2,
+        "raid": 0.4,
+        "escort": 0.25
+      }
+    ],
+    "aa": [
+      {
+        "label": "Light",
+        "room": 0.5,
+        "cost": 0.2,
+        "aa": 0,
+        "escort": 0,
+        "power": 0
+      },
+      {
+        "label": "Medium",
+        "room": 1.2,
+        "cost": 0.8,
+        "aa": 0.02,
+        "escort": 0.1,
+        "power": 0.05
+      },
+      {
+        "label": "Heavy",
+        "room": 3,
+        "cost": 2.2,
+        "aa": 0.07,
+        "escort": 0.6,
+        "power": 0.1
+      }
+    ],
+    "air": [
+      {
+        "label": "None",
+        "room": 0,
+        "cost": 0,
+        "months": 0,
+        "deck": 0,
+        "escort": 0
+      },
+      {
+        "label": "A catapult seaplane",
+        "room": 0.6,
+        "cost": 0.4,
+        "months": 0,
+        "deck": 0,
+        "escort": 0.15
+      },
+      {
+        "label": "Half a flight deck",
+        "roomShare": 0.35,
+        "costShare": 0.7,
+        "months": 3,
+        "deck": 0.5,
+        "escort": 0,
+        "needs": "battlecarriers"
+      },
+      {
+        "label": "A full flight deck",
+        "roomShare": 0.68,
+        "costShare": 1.5,
+        "months": 5,
+        "deck": 1,
+        "escort": 0,
+        "needs": "carriers"
+      }
+    ],
+    "deck": {
+      "power": 7,
+      "escort": 3,
+      "raid": 1
+    },
+    "gunsRaid": 0.3,
+    "turrets": [
+      1,
+      4
+    ],
+    "sub": {
+      "size": [
+        {
+          "label": "Coastal",
+          "cost": 1.4,
+          "months": 6,
+          "yard": 1,
+          "count": 4,
+          "power": 0.2,
+          "tough": 0.32,
+          "raid": 0.8
+        },
+        {
+          "label": "Ocean-going",
+          "cost": 2,
+          "months": 7,
+          "yard": 1,
+          "count": 4,
+          "power": 0.25,
+          "tough": 0.3,
+          "raid": 1
+        },
+        {
+          "label": "Cruiser submarine",
+          "cost": 5,
+          "months": 10,
+          "yard": 2,
+          "count": 1,
+          "power": 0.4,
+          "tough": 0.35,
+          "raid": 1.2
+        }
+      ],
+      "tubes": [
+        {
+          "label": "Four",
+          "cost": 0,
+          "raid": 0
+        },
+        {
+          "label": "Six",
+          "cost": 0.2,
+          "raid": 0.1
+        },
+        {
+          "label": "Eight",
+          "cost": 0.5,
+          "raid": 0.2
+        }
+      ],
+      "range": [
+        {
+          "label": "Short",
+          "cost": 0,
+          "raid": -0.1,
+          "oil": 0.8
+        },
+        {
+          "label": "Long",
+          "cost": 0.2,
+          "raid": 0,
+          "oil": 1
+        },
+        {
+          "label": "Very long",
+          "cost": 0.5,
+          "raid": 0.15,
+          "oil": 1.2
+        }
+      ],
+      "hangar": [
+        {
+          "label": "None",
+          "cost": 0,
+          "eyes": 0
+        },
+        {
+          "label": "A seaplane hangar",
+          "cost": 1,
+          "months": 3,
+          "eyes": 1,
+          "needs": "aircraftsubs",
+          "size": 3
+        }
+      ]
+    }
+  },
+  "names": {
+    "flotilla": "{n} {label} Flotilla"
+  }
+}

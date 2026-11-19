@@ -18,6 +18,7 @@ import {
   CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
+import { moveHulls, worth } from './hulls';
 import { lanesTo } from './resources';
 import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules, siegeView, townHeld, townHitText, townShare, type TownHit } from './siege';
 import { townName } from './towns';
@@ -107,7 +108,7 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
   const need = Math.ceil(heavy * FLEETS.screen.per);
   const gap = screenGap(f);
   let escortW = 0;
-  for (const c of CLASSES) escortW += f.ships[c] * NAVY.classes[c].escort * (c === 'cv' ? deckWorth(g, f) : 1);
+  for (const c of CLASSES) escortW += worth(f, c, 'escort') * (c === 'cv' ? deckWorth(g, f) : 1);
   return {
     id: f.id, nat: f.nat, name: f.name, nick: f.nick ?? null,
     admiral: f.admiral ? { name: f.admiral.name, level: f.admiral.level } : null,
@@ -460,8 +461,11 @@ export function whyNotDetach(g: Game, f: Fleet, take: Partial<Ships>): string | 
   return null;
 }
 
-/** Splits ships off from a fleet as a new squadron, in the same place and under the same order. Returns it, or null. */
-export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string): Fleet | null {
+/**
+ * Splits ships off from a fleet as a new squadron, in the same place and under the same order. Returns it, or null.
+ * 'pick' names the ships of the fleet's own classes that are to go (the sandbox); without it the standard ships go first.
+ */
+export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string, pick: string[] = []): Fleet | null {
   if (whyNotDetach(g, f, take)) return null;
   const s = taken(take);
   for (const c of CLASSES) f.ships[c] -= s[c];
@@ -476,6 +480,7 @@ export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string): 
   if (f.seen) sq.seen = { ...f.seen };
   if (f.struck) sq.struck = [f.struck[0], f.struck[1], f.struck[2]];
   g.fleets.push(sq);
+  moveHulls(f, sq, pick);
   // Carriers that go take their aircraft with them.
   moveWings(g, f, sq, s.cv, f.ships.cv + s.cv);
   g.supplyDirty = true;
@@ -498,6 +503,8 @@ export function merge(g: Game, a: Fleet, b: Fleet): boolean {
   const na = shipCount(a.ships), nb = shipCount(b.ships);
   b.ready = nb + na > 0 ? (b.ready * nb + a.ready * na) / (nb + na) : b.ready;
   for (const c of CLASSES) { b.ships[c] += a.ships[c]; b.lost[c] += a.lost[c]; }
+  if (a.hulls) { (b.hulls ??= []).push(...a.hulls); delete a.hulls; }
+  if (a.fallen) { (b.fallen ??= []).push(...a.fallen); delete a.fallen; }
   if (!b.admiral && a.admiral) b.admiral = a.admiral;
   if (a.shelled !== undefined && (b.shelled ?? -1) < a.shelled) b.shelled = a.shelled;
   b.fought = Math.max(b.fought, a.fought);

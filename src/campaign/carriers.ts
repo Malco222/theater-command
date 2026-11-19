@@ -23,6 +23,7 @@ import {
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
 import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
+import { decks as deckCount, scouts } from './hulls';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
 import { weatherOn, whyNotSky, zoneOfSea } from './weather';
@@ -81,7 +82,7 @@ export function openCarriers(g: Game): void {
     for (const kind of KINDS) {
       if (size[kind] <= 0) continue;
       const w = newWing(g, c, kind);
-      w.est[kind] = w[kind] = c.ships.cv * size[kind];
+      w.est[kind] = w[kind] = deckCount(c) * size[kind];
     }
   }
   for (const nat of navies) {
@@ -118,7 +119,7 @@ export function syncWings(g: Game): void {
     const size = wingSize(c.nat);
     for (const kind of KINDS) {
       // Deck room whose wing was ordered ashore stands empty: no new wing is raised for it (ruling 175(b)).
-      const full = c.ships.cv * size[kind];
+      const full = deckCount(c) * size[kind];
       if (c.bare && c.bare[kind] > full) c.bare[kind] = full;
       const est = full - bareOf(c, kind);
       let w = wingOf(g, c.id, kind);
@@ -171,8 +172,8 @@ export function moveWings(g: Game, from: Fleet, to: Fleet, carriers: number, had
     a[kind] -= n;
     if (a.flew !== undefined && (b.flew ?? -1) < a.flew) b.flew = a.flew;
     if (a.scouted !== undefined && (b.scouted ?? -1) < a.scouted) b.scouted = a.scouted;
-    b.est[kind] = Math.max(0, to.ships.cv * size[kind] - bareOf(to, kind));
-    a.est[kind] = Math.max(0, from.ships.cv * size[kind] - bareOf(from, kind));
+    b.est[kind] = Math.max(0, deckCount(to) * size[kind] - bareOf(to, kind));
+    a.est[kind] = Math.max(0, deckCount(from) * size[kind] - bareOf(from, kind));
     if (share >= 1) g.airFleets.splice(g.airFleets.indexOf(a), 1);
   }
   trimBare(from);
@@ -435,7 +436,12 @@ export function searchOf(g: Game, nat: string, z: number): number {
   for (const f of g.fleets) {
     if (!atSea(f) || !(f.nat === nat || allied(g, f.nat, nat))) continue;
     if (f.zone === z) { for (const c of CLASSES) w += f.ships[c] * S.ships[c] * (c === 'cv' ? wingShare(g, f) : 1); }
-    else if (f.ships.cv > 0 && g.seas[f.zone]?.adj.includes(z)) w += f.ships.cv * S.next * wingShare(g, f);
+    else if (g.seas[f.zone]?.adj.includes(z)) {
+      if (f.ships.cv > 0) w += f.ships.cv * S.next * wingShare(g, f);
+      // A ship that flies a scout of her own (the sandbox: a scout submarine's seaplane) searches the next sea as a carrier's deck does.
+      const k = scouts(f);
+      if (k > 0) w += k * S.next;
+    }
   }
   w += airOver(g, z, nat) * S.air;
   const me = g.human;

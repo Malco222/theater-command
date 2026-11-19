@@ -16,6 +16,7 @@ import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
 import { AIR, airOnFall, airUpkeep, bookCloseAir, closeEdge, closeOf, closeRules, closeStrikes, setupAir, skyByNumbers, skyOnLand, skyOver, type CloseAir } from './air';
 import { syncWings } from './carriers';
+import { shipsMonth } from './sandbox';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
 import { liftDates } from './lift';
@@ -3608,6 +3609,8 @@ export function startPhase(g: Game, nat: string): void {
   navalUpkeep(g, nat);
   // Carriers that joined or went down this month: their wings follow (the grand campaign).
   syncWings(g);
+  // The sandbox's month at sea: named ships lost are written on the memorial, and the computer's navies draw (sandbox.ts).
+  shipsMonth(g, nat);
   airUpkeep(g, nat);
   researchTick(g, nat);
   techTick(g, nat);

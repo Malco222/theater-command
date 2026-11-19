@@ -19,6 +19,7 @@ import { seaIncomeLoss } from './navy';
 import { techMul } from './research';
 import { fallenOf, inherit, noteCorps, raisedXp, revivable } from './stories';
 import { airLine, deliverArsenal, worksUpkeep, type AirDelivery } from './arsenal';
+import { refitDone } from './sandbox';
 import { barredKind } from './ground';
 import { workingFactories } from './rails';
 import { incomeMul, levelOf } from './difficulty';
@@ -553,6 +554,8 @@ export function cancelBuild(g: Game, nat: string, id: number): boolean {
   else if (n.queue[i].elite) g.flags[`elite:${nat}`] = (g.flags[`elite:${nat}`] ?? 1) - 1;
   else if (n.queue[i].airborne) g.flags[`para:${nat}`] = (g.flags[`para:${nat}`] ?? 1) - 1;
   else if (n.queue[i].what === 'corps' && n.queue[i].revive === undefined) n.corpsNo--;
+  // A ship sent to the yard for a refit (the sandbox) goes back to her fleet as she was.
+  if (n.queue[i].refit) { const b = n.queue[i]; n.queue.splice(i, 1); refitDone(g, nat, b, true); return true; }
   n.queue.splice(i, 1);
   return true;
 }
