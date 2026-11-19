@@ -151,7 +151,8 @@ namespace TheaterFx
 		ClodShade = Num("burst.debris.clods.shade", 2.5);
 		TracerHalf = Num("tracer.streak_m", 16.0) * 0.5;
 		TracerLeast = Num("tracer.least_px", 3.0);
-		TracerMost = std::max(TracerLeast, Num("tracer.most_px", 5.0));
+		TracerMost = Num("tracer.most_px", 5.0);
+		TracerMost = TracerMost > 0.0 ? std::max(TracerLeast, TracerMost) : 0.0; // (0: no limit)
 		TracerCol = Picture("tracer.colour", Rgb::FromPicture(213, 199, 104));
 		TracerPale = TracerCol.Mix(Rgb(1.0f, 1.0f, 1.0f), 0.55);
 		TracerDayWide = Num("tracer.day_width", 1.5);
@@ -2442,7 +2443,7 @@ namespace TheaterFx
 	// ---------------------------------------------------------------------------------------------------------------
 	// Drawing
 
-	void Battle::Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough, uint32_t LumpSeed, double Turn, const Rgb& Floor, const Rgb& Through, const Vec& Outward, const Rgb& Lift, double Taper)
+	void Battle::Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough, uint32_t LumpSeed, double Turn, const Rgb& Floor, const Rgb& Through, const Vec& Outward, const Rgb& Lift, const Vec& TaperB)
 	{
 		const size_t First = static_cast<size_t>(Slot) * PointsPerPuff;
 		auto Put = [this](size_t I, const Vec& At, const Rgb& C, double A)
@@ -2482,11 +2483,13 @@ namespace TheaterFx
 		const double In = std::clamp(Inner, 0.1, 0.95);
 		const bool bThrough = Through.R + Through.G + Through.B > 1e-6f;
 		const double SunAcross = std::sqrt(std::max(0.0, 1.0 - Eye.Forward.Dot(Eye.Sun) * Eye.Forward.Dot(Eye.Sun))); // (how far the sun is off the eye's line, on the screen)
+		const bool bTaper = TaperB.Dot(TaperB) > 0.0;
 		for (int K = 0; K < Sides; ++K)
 		{
 			const size_t I = static_cast<size_t>(K);
 			const double Cs = RingCos[I], Sn = RingSin[I];
-			const Vec Dir = AxisA * Cs + AxisB * (Taper != 0.0 ? Sn * (1.0 + Taper * Cs) : Sn);
+			// (TaperB: a tracer's width running along it, so it is as wide on the screen from end to end)
+			const Vec Dir = bTaper ? AxisA * Cs + AxisB * Sn + TaperB * (Sn * Cs) : AxisA * Cs + AxisB * Sn;
 			double Reach = 1.0;
 			if (K == 0)
 			{
@@ -2644,7 +2647,7 @@ namespace TheaterFx
 		}
 		Vec AxA = Eye.Right * Rad, AxB = Eye.Up * Rad;
 		Vec Middle = P;
-		double Taper = 0.0; // (a tracer: how its width runs along it, so it is as wide on the screen at both ends)
+		Vec TaperB; // (a tracer: how its width runs along it, so it is as wide on the screen at both ends)
 		switch (B.Form)
 		{
 		case Bit::Shape::Puff:
@@ -2708,7 +2711,11 @@ namespace TheaterFx
 			// (a tracer keeps its own heading, but an air gun's, slowing and falling over a long flight, bends with it)
 			const Vec Way = B.HalfLength > 0.0 ? (B.Gravity > 0.0 ? Going(B, Age).Unit(B.Along) : B.Along) : Going(B, Age);
 			const double Speed = Way.Length();
-			const Vec OnScreen = Way - Eye.Forward * Way.Dot(Eye.Forward);
+			// (how far the middle is in front of the eye. A tracer's heading on the screen is taken by the picture's own
+			// perspective from there: taken square to the eye's forward line, one aimed close by the eye off the middle
+			// of the view drew 60 px long and then 11 as it turned. The pre-check, 01:57Z)
+			const double Deep = (P - Eye.Eye).Dot(Eye.Forward);
+			const Vec OnScreen = B.HalfLength > 0.0 && Deep > 1e-3 ? Way - (P - Eye.Eye) * (Way.Dot(Eye.Forward) / Deep) : Way - Eye.Forward * Way.Dot(Eye.Forward);
 			const double L = OnScreen.Length();
 			const Vec Ua = L > 1e-6 ? OnScreen * (1.0 / L) : Eye.Right;
 			const Vec Ub = Eye.Forward.Cross(Ua).Unit(Eye.Up);
@@ -2724,22 +2731,24 @@ namespace TheaterFx
 				}
 				Width = Least;
 			}
+			const double Ppr = std::max(Eye.PixelsPerRadian, 1.0);
 			if (B.MostPx > 0.0)
 			{
 				// (art director 01:31Z: a near streak stays thin, no wider or brighter than a far one. A tracer's glow is a
 				// few centimetres across, so passing a few metres off it drew 20 px wide or more, a beam; it is held here.
 				// Metres a pixel by how far in front of the eye, not how far off: off the middle of the screen the picture
 				// draws things wider)
-				const double Deep = (P - Eye.Eye).Dot(Eye.Forward);
-				const double PerPixel = Deep > 1e-3 ? std::min(MetresAPixel, Deep / std::max(Eye.PixelsPerRadian, 1.0)) : MetresAPixel;
+				const double PerPixel = Deep > 1e-3 ? std::min(MetresAPixel, Deep / Ppr) : MetresAPixel;
 				Width = std::min(Width, std::max(B.MostPx, B.LeastPx) * PerPixel * 0.5);
 			}
+			double Wide = 1.0;
 			if (B.Glow > 0)
 			{
 				// (by day a tracer widens and its core whitens, so a stream holds on a pale sky; by dusk it is as ruled.
 				// Day is read from the hour's smoke light: white by day, dim at dusk)
 				const double Day = DayOf(Eye.SmokeLight);
-				Width *= 1.0 + (TracerDayWide - 1.0) * Day;
+				Wide = 1.0 + (TracerDayWide - 1.0) * Day;
+				Width *= Wide;
 				if (B.Glow == 2)
 				{
 					Col = Col.Mix(TracerDayCore, Day);
@@ -2761,15 +2770,26 @@ namespace TheaterFx
 				const double Far = ToEye.Length();
 				if (Far > 1e-6 && Across.Length() > 0.05 * Far)
 				{
+					const Vec Bu = Across.Unit(Ub);
 					AxA = Heading * std::max(B.HalfLength, Width);
-					AxB = Across.Unit(Ub) * Width;
+					AxB = Bu * Width;
 					// (and as wide on the screen from end to end as at its middle: laid as wide in metres all along, the end
 					// nearer the eye drew wider, up to four times, a wedge. Its width in metres follows how far each point is
-					// in front of the eye, which runs straight along it, so the ring is narrowed toward the near end)
-					const double Deep = (P - Eye.Eye).Dot(Eye.Forward);
+					// in front of the eye, which runs straight along it. Held, the width stays in step with the depth, so the
+					// taper is never cut short: a round passing under half a metre off drew a wedge 50 px across for a frame.
+					// A point behind the eye takes a mirrored width, and the picture cuts it away)
+					const double Run = AxA.Dot(Eye.Forward);
 					if (Deep > 1e-3)
 					{
-						Taper = std::clamp(AxA.Dot(Eye.Forward) / Deep, -0.9, 0.9);
+						const double Tp = B.MostPx > 0.0 ? Run / Deep : std::clamp(Run / Deep, -0.9, 0.9);
+						TaperB = Bu * (Width * Tp);
+					}
+					else if (B.MostPx > 0.0)
+					{
+						// (its middle behind the eye with an end still in view: as wide in pixels as the limit, all along)
+						const double K = std::max(B.MostPx, B.LeastPx) * 0.5 / Ppr * Wide;
+						AxB = Bu * (K * Deep);
+						TaperB = Bu * (K * Run);
 					}
 				}
 			}
@@ -2796,7 +2816,7 @@ namespace TheaterFx
 			B.bShown = true;
 			return 2;
 		}
-		Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * B.Rim, B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, Turned, Floor, Through, Outward, Lift, Taper);
+		Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * B.Rim, B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, Turned, Floor, Through, Outward, Lift, TaperB);
 		B.bShown = true;
 		return 1;
 	}

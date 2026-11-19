@@ -1067,7 +1067,7 @@
   "tail": "thinning toward the gun",
   "least_px": 3,
   "most_px": 5,
-  "_most": "Art director 01:31Z: a near streak stays thin, no brighter than a far one, and is long on the screen for a frame or two (a whip, not a beam). A tracer is laid along its true heading, as wide on the screen from end to end, and never wider than most_px (times day_width by day: 7.5 px; a far one is 4.5). Passing a few metres off it drew 20 px and more before.",
+  "_most": "Art director 01:31Z: a near streak stays thin, no brighter than a far one, and is long on the screen for a frame or two (a whip, not a beam). A tracer is laid along its true heading, as wide on the screen from end to end, and no wider than most_px in the middle of the screen (times day_width by day: 7.5 px; a far one is 4.5; up to a sixth wider toward the edges, as the picture draws everything there). 0 takes the limit off. Passing a few metres off it drew 20 px and more before.",
   "life_s": 0.6,
   "bloom": "mild",
   "speed_mps": 760,
