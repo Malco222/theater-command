@@ -133,6 +133,25 @@ raises dust, and that dust hides things.
   man's eye still 2, 0, 0%). Unit markers and banners are drawn over the effects, never under.
 - The bleached, hazy horizon of a desert day is the grade's, not the kit's.
 
+## Gun cases on the ground
+
+Ground guns throw out their spent cases (`ground_cases`), with no new call: `Shots` and `Muzzle` lay them when the
+eye is within `within_m` (40) of the gun, and only for the guns named there.
+
+- A machine gun (`mg`, by `Shots` with weapon `mg`): each round flicks a small brass case (`case_m` 0.08 long) out of
+  its right side (`side`), a little behind the muzzle (`breech_back_m`), 2 to 4 m/s out and up, spinning fast, and it
+  lies 3 to 6 s in the grass.
+- Towed and field guns (`at_gun`, `howitzer`, by `Muzzle`): after the recoil (`after_s`, 0.8 and 1.5 s) the big case
+  (0.6 and 0.4 m) drops out of the breech behind the gun (`breech_back_m`), tumbles slowly and comes to rest lying
+  flat. It stays three to four minutes (`lie_s`), so a gun that has been firing sits on a growing pile of brass.
+- Tank cases stay inside the tank: `tank_gun` has no row.
+- Each case is a small brass cylinder lit by the sun (`colour` 196,156,82 into `dark` 140,104,52 as it turns), with a
+  thin glint along it (`glint`). Below `least_px` on screen it is not drawn. Cases take no room past three fifths of
+  it, and they use their own dice, so every other effect draws exactly as before.
+- The preview: `FX_MG_VIEW=behind ./fxpreview recipe.txt out mg earth 20 1280x720` (the MG from behind its right
+  shoulder); `FX_EVERY=4 FX_AHEAD=-3 FX_OFF=6 ./fxpreview recipe.txt out drive earth 0,30 960x540 gun` (an anti-tank gun
+  firing every 4 s, its pile building).
+
 ## Oil fires at sea
 
 ```cpp

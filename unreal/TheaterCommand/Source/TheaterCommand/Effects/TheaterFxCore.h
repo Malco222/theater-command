@@ -309,6 +309,15 @@ namespace TheaterFx
 			bool bHotFlash = false;
 			Rgb FlashHot, FlashOrange, FlashRim; // (FlashRim: the deeper orange its edges go to, so a rim over the sky stays orange)
 		};
+		/** A ground gun's spent case (ground_cases.<gun>): its size and how it is thrown and lies. */
+		struct CaseRow
+		{
+			double M = 0.08, D = 0.012, After = 0.0, Back = 0.0, Side = 1.0, Glint = 4.0, LeastPx = 0.8;
+			Span Throw{ 2.0, 4.0 }, Up{ 1.0, 2.5 }, Lie{ 2.0, 4.0 }, Tumble{ 15.0, 30.0 };
+			Rgb Col, Dark;
+		};
+		bool CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& Out_) const; // (false: none for this gun, too far off, or no room)
+		void GroundCase(double T, const Vec& Breech, const Vec& Away, const CaseRow& C, Dice& D);
 		/** A dust.vehicles row for one ground, read once a ground. */
 		struct DustRow
 		{
@@ -434,6 +443,7 @@ namespace TheaterFx
 		double RoundUp = 0.35;
 		RoundLight Round; // (while laying one oil column puff: each point lit as a point on a round column, by where it sits across it)
 		Rgb EdgeTo; // (while laying one bit: its rim's colour, EdgeK of the way; see Bit::Edge)
+		double LaySquare = 0.0; // (while laying one bit: 0 an ellipse; toward 1 its outline squared off, a gun case's cylinder seen side on)
 		double EdgeK = 0.0;
 		double SkyFill = 0.25, SunThrough = 1.5, SunThroughPow = 3.0;
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);

@@ -1261,6 +1261,90 @@
    "flatten": 0.6
   }
  },
+ "ground_cases": {
+  "_how": "The grit up close (art director): within within_m of the eye, a ground machine gun (Shots with weapon mg) throws its spent brass out of its right side every round, flicking, tumbling end over end and glinting, to lie a few seconds in the dirt beside it; a towed or field gun (Muzzle at_gun, howitzer) opens its breech after_s after each shot and throws its big brass case out behind, where it lies for minutes, so the cases pile up behind the gun through a fight. A tank's cases stay inside it. Drawn as a brass cylinder's outline from any side, with a line of sunlight along it. Each gun's cases use their own dice, so its rounds, strikes and smoke fall as they always did; a recipe without ground_cases draws none. They are left out when the screen is past three fifths full.",
+  "within_m": 40,
+  "colour": [
+   196,
+   156,
+   82
+  ],
+  "dark": [
+   140,
+   104,
+   52
+  ],
+  "glint": 4,
+  "least_px": 0.8,
+  "mg": {
+   "case_m": 0.08,
+   "case_d_m": 0.012,
+   "breech_back_m": 0.5,
+   "side": 1,
+   "throw_mps": [
+    2,
+    4
+   ],
+   "up_mps": [
+    1,
+    2.5
+   ],
+   "lie_s": [
+    3,
+    6
+   ],
+   "tumble": [
+    15,
+    30
+   ]
+  },
+  "at_gun": {
+   "case_m": 0.6,
+   "case_d_m": 0.1,
+   "after_s": 0.8,
+   "breech_back_m": 3.0,
+   "side": 0.3,
+   "throw_mps": [
+    1.5,
+    3
+   ],
+   "up_mps": [
+    0.8,
+    1.6
+   ],
+   "lie_s": [
+    180,
+    240
+   ],
+   "tumble": [
+    4,
+    8
+   ]
+  },
+  "howitzer": {
+   "case_m": 0.4,
+   "case_d_m": 0.12,
+   "after_s": 1.5,
+   "breech_back_m": 2.5,
+   "side": 0.2,
+   "throw_mps": [
+    1,
+    2
+   ],
+   "up_mps": [
+    0.5,
+    1.2
+   ],
+   "lie_s": [
+    180,
+    240
+   ],
+   "tumble": [
+    3,
+    6
+   ]
+  }
+ },
  "bullet_strike": {
   "_how": "Art director 21:16Z: small dust spurts where a burst's rounds strike the ground (Shots, given the ground). About three rounds in ten kick one (pre-check 21:34Z: at one in two a firing gun cost about 16 puffs): a quick upward spurt and a low puff in the ground's dust colour, gone in under a second, scattered about the aim point by spread_mil of the range.",
   "spurt_chance": 0.3,

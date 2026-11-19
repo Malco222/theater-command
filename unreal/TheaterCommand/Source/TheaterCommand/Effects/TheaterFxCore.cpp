@@ -1515,6 +1515,18 @@ namespace TheaterFx
 			F.bNightOnly = Num(M + "day_lamp", 0.0) <= 0.0; // (by day only the big guns light the ground)
 			Flashes.push_back(F);
 		}
+		// (a towed or field gun: after each shot the breech opens and throws its big brass case out behind, to lie there,
+		// so the cases pile up behind the gun through a fight. Its own dice)
+		{
+			CaseRow Cases;
+			if (CaseRowOf(GunIn ? GunIn : "", At, Cases) && RoomAsked() < static_cast<size_t>(MaxPuffs) * 3 / 5)
+			{
+				Dice DC(PlaceKey(At) * 0xD1B54A32D192ED03ull ^ static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)));
+				const Vec Flat_ = Vec(Fw.X, Fw.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
+				const Vec Out_ = (-Flat_ + Across * (Cases.Side * 0.25 + DC.Bell() * 0.15)).Unit(-Flat_);
+				GroundCase(Now + Cases.After, At - Fw * Cases.Back, Out_, Cases, DC);
+			}
+		}
 		// then grey-brown smoke rolls out, hangs and drifts
 		const double SmokeLo = Num(M + "smoke_s.0", Num(M + "smoke_s", 2.0));
 		const double SmokeHi = Num(M + "smoke_s.1", SmokeLo);
@@ -1643,6 +1655,64 @@ namespace TheaterFx
 				}
 			}
 		}
+	}
+
+	bool Battle::CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& C) const
+	{
+		const std::string P = "ground_cases." + Gun + ".";
+		if (Gun.empty() || !Has(P + "case_m") || !bEyeKnown || (LastEye - At).Length() > Num("ground_cases.within_m", 40.0))
+		{
+			return false;
+		}
+		C.M = std::max(0.005, Num(P + "case_m", 0.08));
+		C.D = std::max(0.003, Num(P + "case_d_m", 0.012));
+		C.After = std::max(0.0, Num(P + "after_s", 0.0));
+		C.Back = Num(P + "breech_back_m", 0.0);
+		C.Side = Num(P + "side", 1.0);
+		C.Throw = Range(P + "throw_mps", 2.0, 4.0);
+		C.Up = Range(P + "up_mps", 1.0, 2.5);
+		C.Lie = Range(P + "lie_s", 2.0, 4.0);
+		C.Tumble = Range(P + "tumble", 15.0, 30.0);
+		C.Glint = Num("ground_cases.glint", 4.0);
+		C.LeastPx = Num("ground_cases.least_px", 0.8);
+		C.Col = Picture("ground_cases.colour", Rgb::FromPicture(196, 156, 82));
+		C.Dark = Picture("ground_cases.dark", Rgb::FromPicture(140, 104, 52));
+		return true;
+	}
+
+	void Battle::GroundCase(double T, const Vec& Breech, const Vec& Away, const CaseRow& C, Dice& D)
+	{
+		// One spent case: a brass cylinder thrown out, tumbling end over end under gravity, landing and lying in the dirt
+		// (its axis level), then gone; drawn as a cylinder's outline from wherever the eye is, glinting as it turns
+		Bit B;
+		B.Form = Bit::Shape::Plate;
+		B.bThrown = true;
+		B.Born = T;
+		B.From = Breech;
+		B.Vel = Away * C.Throw.Pick(D) + ZUp * C.Up.Pick(D) + Vec(D.Bell(), D.Bell(), 0.0) * 0.25;
+		B.Gravity = 9.8;
+		B.R0 = B.R1 = 0.5 * C.D;
+		B.Stretch = std::max(1.0, C.M / C.D);
+		const double Yaw = D.U(0.0, 2.0 * Pi);
+		B.Along = Vec(std::cos(Yaw), std::sin(Yaw), 0.0);
+		B.Face = ZUp;
+		Throw(B);
+		// (so many half turns that it comes to rest lying level)
+		const double Stop = std::max(B.Land2, 1e-3);
+		const double Spin = C.Tumble.Pick(D);
+		B.Tumble = (D.U() < 0.5 ? -1.0 : 1.0) * std::max(1.0, std::round(Spin * Stop / Pi)) * Pi / Stop;
+		B.Life = Stop + std::max(0.1, C.Lie.Pick(D));
+		B.Hold = std::clamp((B.Life - 1.0) / B.Life, 0.0, 0.98); // (fading over its last second)
+		B.Col = C.Col * D.U(0.9, 1.1);
+		B.Col2 = C.Dark;
+		B.Alpha = 1.0;
+		B.FadeIn = 0.01;
+		B.Heart = 1.0;
+		B.Rim = 0.9;
+		B.Glint = C.Glint;
+		B.LeastPx = C.LeastPx;
+		B.LeastKeep = 0.6;
+		Bits.push_back(B);
 	}
 
 	const Battle::DustRow& Battle::DustRowOf(const std::string& Ground)
@@ -1833,10 +1903,21 @@ namespace TheaterFx
 		const double SpurtChance = bOnGround ? Num("bullet_strike.spurt_chance", 0.5) : 0.0;
 		const double Scatter = 0.4 + Dist * Num("bullet_strike.spread_mil", 12.0) * 0.001;
 		const double Reach = Dist / std::max(Speed, 1.0);
+		// (art director: the grit up close. Within ground_cases.within_m of the eye a machine gun throws its spent brass out
+		// of its right side every round, flicking, tumbling and glinting, to lie a moment in the dirt beside it. Its own
+		// dice, so the rounds and strikes fall as they always did)
+		CaseRow Cases;
+		const bool bCases = CaseRowOf(Weapon ? Weapon : "", From, Cases);
+		Dice DC(PlaceKey(From) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)));
+		const Vec CaseOut = (Dir.Cross(ZUp).Unit(Vec(0.0, -1.0, 0.0)) * Cases.Side - Dir * 0.3).Unit(Vec(0.0, -1.0, 0.0));
 		for (int R = 0; R < Rounds; ++R)
 		{
 			const double T = Now + R * Gap;
 			const int Which = Count++;
+			if (bCases && RoomAsked() < static_cast<size_t>(MaxPuffs) * 3 / 5)
+			{
+				GroundCase(T + Cases.After, From - Dir * Cases.Back, CaseOut, Cases, DC);
+			}
 			if (D.U() < SpurtChance)
 			{
 				Vec At = To + Vec(D.Bell(), D.Bell(), 0.0) * (Scatter * 0.5);
@@ -3996,7 +4077,14 @@ namespace TheaterFx
 		for (int K = 0; K < Sides; ++K)
 		{
 			const size_t I = static_cast<size_t>(K);
-			const double Cs = RingCos[I], Sn = RingSin[I];
+			double Cs = RingCos[I], Sn = RingSin[I];
+			if (LaySquare > 0.0)
+			{
+				// (a squared ring: each point pushed out toward the corners of its box, so the outline has straight sides)
+				const double Pw = 1.0 - std::min(LaySquare, 0.9);
+				Cs = std::copysign(std::pow(std::fabs(Cs), Pw), Cs);
+				Sn = std::copysign(std::pow(std::fabs(Sn), Pw), Sn);
+			}
 			// (TaperB: a tracer's width running along it, so it is as wide on the screen from end to end)
 			const Vec Dir = bTaper ? AxisA * Cs + AxisB * Sn + TaperB * (Sn * Cs) : AxisA * Cs + AxisB * Sn;
 			double Reach = 1.0;
@@ -4159,6 +4247,7 @@ namespace TheaterFx
 			}
 		}
 		Round.bOn = false;
+		LaySquare = 0.0;
 		EdgeK = B.EdgeK;
 		EdgeTo = B.Edge;
 		if (B.SunSide > 0.0 && !B.bLight && Dist > 1e-6)
@@ -4333,6 +4422,32 @@ namespace TheaterFx
 			// (a torn piece of a falling aircraft, tumbling about its long way: seen edge-on it thins to a sliver, so it
 			// flutters as it falls. Its painted face or the bare metal behind, lit by the sun, and a glint when the sun
 			// catches it as a mirror would toward the eye)
+			if (B.bThrown)
+			{
+				// (a ground gun's spent case: a brass cylinder tumbling end over end until it lands, then lying level. Drawn
+				// as a cylinder's outline from wherever the eye is, as wide as the case from any side, with a line of
+				// sunlight along it when the sun catches it toward the eye)
+				const double Th = B.Tumble * std::min(Age, B.Land2);
+				const Vec Axis = (B.Along * std::cos(Th) + B.Face * std::sin(Th)).Unit(B.Along);
+				const Vec ToEye = (Eye.Eye - P).Unit(-Eye.Forward);
+				const Vec Lv = Axis.Cross(ToEye).Unit(Eye.Up);
+				AxA = Axis * (Rad * B.Stretch);
+				AxB = Lv * Rad;
+				const Vec Sun = Eye.Sun.Unit(ZUp);
+				const double Lit = 0.45 + 0.55 * std::sqrt(std::max(0.0, 1.0 - Sun.Dot(Axis) * Sun.Dot(Axis)));
+				const Vec Half_ = (Sun + ToEye).Unit(ZUp);
+				const double Across_ = std::sqrt(std::max(0.0, 1.0 - Half_.Dot(Axis) * Half_.Dot(Axis)));
+				const double Spot = B.Glint * 0.05 * std::pow(Across_, 24.0); // (a cylinder's glint is a thin line: over its whole outline, a lift)
+				const Rgb Skin = B.Col.Mix(B.Col2, 0.5 - 0.5 * std::cos(Th * 2.0)); // (a flicker of dark as it turns)
+				Col = Rgb(static_cast<float>(Skin.R * Lit * Eye.SmokeLight.R + Spot * Eye.SunLight.R),
+					static_cast<float>(Skin.G * Lit * Eye.SmokeLight.G + Spot * Eye.SunLight.G),
+					static_cast<float>(Skin.B * Lit * Eye.SmokeLight.B + Spot * Eye.SunLight.B));
+				Floor = Rgb();
+				Through = Rgb();
+				Lift = Rgb();
+				LaySquare = 0.75; // (square ends and straight sides: a case, never a grain of rice)
+				break;
+			}
 			const double Th = B.Tumble * Age;
 			const Vec Lv = B.Face * std::cos(Th) + B.Along.Cross(B.Face) * std::sin(Th);
 			const Vec N = B.Along.Cross(Lv);
