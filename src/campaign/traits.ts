@@ -10,6 +10,7 @@ import { homeShare, levyMen, menLeft, menWords, poolAtStart } from './manpower';
 import { farShare, provinceYield } from './economy';
 import type { LedgerLine } from './economy';
 import { techTraits } from './tech';
+import { classOf } from './classes';
 import { beyondEurope } from './world';
 import type { Corps, Game, Kind, Region, Terrain } from './types';
 import { KIND, MEN_PER_DIV } from './types';
@@ -158,6 +159,14 @@ function edge(g: Game, c: Corps, target: Region, landing: boolean, side: 'attack
   const u = c.elite && row?.unit && row.unit.id === c.elite ? row.unit : null;
   const x = u?.[side];
   if (u && x !== undefined && holds(g, u.when, c, target, landing)) { m *= x; names?.add(u.label); }
+  // A corps of a sandbox class (classes.ts): what its machines are made for, read the same way.
+  const k = c.cls ? classOf(g, c) : null;
+  for (const e of k?.edges ?? []) {
+    const y = e[side];
+    if (y === undefined || y === 1 || !holds(g, e.when, c, target, landing)) continue;
+    m *= y;
+    names?.add(k!.label);
+  }
   return m;
 }
 

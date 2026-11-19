@@ -96,6 +96,8 @@ export interface Nation {
   tech?: TechState;
   /** Oil and supplies in the depots (the grand campaign), for a power that keeps stocks of its own. */
   res?: Stores;
+  /** The sandbox (classes.ts): classes of the nation's own design, rows of the same shape as classes.json with 'own'. */
+  designs?: import('./classes').ClassRow[];
   /** The player's government (the grand campaign): his war cabinet, his decrees, the cabinet's trust and its directive. */
   gov?: GovState;
   /** The nation's footing (ruling 172, the grand campaign with the lever switched on): see footing.ts. */
@@ -293,6 +295,10 @@ export interface Build {
   airborne?: boolean;
   /** A corps raised again round its cadre (the grand campaign): the id of the corps that was folded away. */
   cadre?: number;
+  /** The sandbox (classes.ts): the class ordered, a row of classes.json or one of the nation's own designs. */
+  cls?: string;
+  /** The sandbox's steel bill: supplies drawn each month the order is on the books, fixed when it was placed. */
+  steel?: number;
 }
 
 /** One line of a unit's diary: the month, what happened, where (a region, or a sea for a fleet), and a number that goes with it. */
@@ -380,6 +386,8 @@ export interface Corps extends Storied {
   heir?: number;
   /** One of its nation's special formations (the grand campaign): the id of the unit in traits.json. */
   elite?: string;
+  /** The sandbox (classes.ts): the class of the corps, a row of classes.json or one of its nation's own designs. */
+  cls?: string;
   /** Morale, 0 to 1 (the grand campaign). A corps in a historical scenario carries none. See morale.json. */
   mor?: number;
   /** Why its morale stands where it does: [reason, change, 0 for since its nation's last reckoning or 1 for the month before]. */
@@ -981,6 +989,8 @@ export interface AirFleet extends Storied {
    * group, with its own aircraft, pilots and fitness, and keeps a carrier wing's reach and its crews' training.
    */
   ashore?: number;
+  /** The sandbox (classes.ts): the class of aircraft the group flies, a row of classes.json. Unset, the kind's own. */
+  cls?: string;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */

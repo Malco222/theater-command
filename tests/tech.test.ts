@@ -23,6 +23,8 @@ const history = (human: string | null = null, seed = 3): Game => createGame(seed
 const JAN41 = 17, JAN42 = 29, DEC41 = 28;
 const FIELDS = Object.keys(RESEARCH.fields);
 const ORDERS = /^(corps:(inf|mtn|mot|arm|cav|art|eng)|work:(fort|aa)|ship:(dd|ss|ca|bb|cv|tp)|air:(ftr|bmr)|para)$/;
+// (The sandbox's what-if technologies open a class of classes.json: tests/sandbox.test.ts.)
+const CLASS = /^class:[a-z]+$/;
 
 /** Puts a team on a technology and lets the months it needs go by. */
 function research(g: Game, nat: string, id: string): void {
@@ -70,7 +72,7 @@ describe('the data', () => {
         for (const k of ['theft', 'guard'] as const) if (x[k] !== undefined) { expect(x[k], t.id).toBeGreaterThan(0); expect(x[k], t.id).toBeLessThanOrEqual(0.15); }
       }
       if (t.field) expect(FIELDS, t.id).toContain(t.field);
-      for (const k of t.unlock ?? []) expect(k, t.id).toMatch(ORDERS);
+      for (const k of t.unlock ?? []) expect(k, t.id).toMatch(t.whatif ? CLASS : ORDERS);
       for (const m of [t.attack, t.defence, t.drafts, t.fleet]) if (m !== undefined) { expect(m, t.id).toBeGreaterThan(1); expect(m, t.id).toBeLessThanOrEqual(1.25); }
       if (t.oil !== undefined) { expect(t.oil, t.id).toBeGreaterThan(0); expect(t.oil, t.id).toBeLessThan(1); }
       if (t.seaLoss !== undefined) { expect(t.seaLoss).toBeGreaterThanOrEqual(0.7); expect(t.seaLoss).toBeLessThan(1); }
@@ -252,7 +254,8 @@ describe('research', () => {
     startResearch(g, 'GER', 'antitank');
     techTick(g, 'GER');
     const v = techView(g, 'GER')!;
-    expect(v.total).toBe(TECH.techs.length);
+    // (With the sandbox off, as here, its what-if technologies are not on the tree: tests/sandbox.test.ts.)
+    expect(v.total).toBe(TECH.techs.filter((t) => !t.whatif).length);
     expect(v.done).toBe(TECH.start.GER.length);
     expect(v.teams).toBe(2);
     expect(v.busy).toBe(1);
