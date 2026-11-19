@@ -8,7 +8,7 @@
 
 import type { Rng } from '../../core/rng';
 import { SKY } from './book';
-import { oneOf, subjectOf, upFirst } from './names';
+import { aCraftOf, upFirst } from './names';
 import type { AirKind, Fall } from './types';
 
 const pick = (rng: Rng, w: number[]): number => {
@@ -40,13 +40,13 @@ export function drawFall(rng: Rng, kind: AirKind, over: Fall['over'], saved: num
 }
 
 /**
- * The words for the dispatch strip. Placeholders until the UI director and the design director pass them. 'name' is
- * the group as the battle calls it (the enemy's with its nation): 'An aircraft of KG 2', 'An aircraft of the Home
- * Fleet's strike wing', and for a group named for its aircraft 'One of the Shokaku and Zuikaku dive bombers' (oneOf).
+ * The words for the dispatch strip. Placeholders until the UI director and the design director pass them. The group's
+ * own name and the nation word the line adds ('' for one's own), which sits on the aircraft (the UI director, 14:26Z):
+ * 'An aircraft of KG 2', 'An American aircraft of the 15th Pursuit Group', 'An aircraft of the Home Fleet's strike
+ * wing', 'One of the Japanese Shokaku and Zuikaku dive bombers' (names.ts aCraftOf).
  */
-export function fallWords(name: string, f: Fall): string {
+export function fallWords(name: string, adj: string, f: Fall): string {
   const how = f.kind === 'explode' ? 'blows up in the air' : f.kind === 'burn' ? 'goes down burning' : 'spins down';
   const chutes = f.chutes === 0 ? '' : f.chutes === 1 ? ', one parachute' : `, ${f.chutes} parachutes`;
-  const s = subjectOf(name);
-  return `${s.many ? upFirst(oneOf(name)) : `An aircraft of ${s.whom}`} ${how}${chutes}.`;
+  return `${upFirst(aCraftOf(name, 'aircraft', adj))} ${how}${chutes}.`;
 }
