@@ -1,0 +1,195 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Effects/BattleEffects.h"
+#include "GameFramework/Actor.h"
+#include "AirStage.generated.h"
+
+class ACameraActor;
+class FJsonObject;
+class UMaterialInstanceDynamic;
+class UProceduralMeshComponent;
+class UTheaterStillMesh;
+
+/** One ship of a set piece, as the air battle's view gives it (view.ships.pieces, src/battle/air/ships.ts). */
+struct FStageShip
+{
+	int32 Id = 0;
+	FString Class;   // "bb", "cv", "ca", "dd", "ss" (the stage test also lays "ag", the old battleship Utah)
+	FString Nation;  // the navy's tag: "USA", "JAP", "UK"...
+	FString Name;    // the record's name in the record's month, else empty (ruling 238(4))
+	FVector2D At = FVector2D::ZeroVector; // on the board, in metres
+	double Face = 0.0; // the bow's heading on the board, radians, 0 up the board and clockwise (the sim's own)
+	bool bDock = false; // in a dry dock, on the stage's land
+};
+
+/**
+ * The ground of a set-piece air battle (ruling 238): Pearl Harbor on Oahu, 7 December 1941, and Midway, 4 June 1942.
+ * The island with its hills, the shallows, reef and lagoon, the piers, oil tanks, airfields and palms, built from
+ * Content/Data/Stages/<key>.json (tools/stages on the rules branch makes it from open map data); the ships of the
+ * battle at their berths or at sea; and what happens to them: a bomb or torpedo striking, and each way of going down
+ * (settling on the bottom, going down at sea, rolling over, blowing up, burning, breaking in two).
+ *
+ * The stage knows nothing of the air battle. The battle's scene raises it under the formations with Raise, lays the
+ * ships with SetShips (or SetShipsFromView), and passes on the battle's events: air:ship-hit to Hit, air:ship-sunk to
+ * Sink. It ticks it once a frame on the battle's own clock.
+ *
+ * Everything is in the actor's own frame: X is up the board (the board's y), Y across it (the board's x), Z up from
+ * the sea, UnitsPerMetre to a metre. A stage point (metres east and north of the stage's origin) lies on the board at
+ * Target + turn(p - Aim), as the battle's ticket turns the map (stages.ts onBoard).
+ *
+ * "-TheaterStage=oahu" (or "midway", or "midway-fleet") on the command line raises the stage alone, plays a strike on
+ * the record's ships, takes pictures into "-TheaterStageShots=<folder>" if given, and quits: frames for the art
+ * director before the air battle's scene exists.
+ */
+UCLASS()
+class THEATERCOMMAND_API AAirStage : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	AAirStage();
+
+	/**
+	 * Builds the stage. Key: "oahu" or "midway". Aim: the raid's aim in stage metres (stages.ts aim). Turn: the
+	 * ticket's turn, radians counter-clockwise. Target: the board's target in board metres. Effects: the scene's
+	 * battle effects, for the hits and the fires (not owned; null for none). False, with a warning, if the stage's
+	 * file is missing or unreadable.
+	 */
+	bool Raise(const FString& Key, const FVector2D& Aim, double Turn, const FVector2D& Target, double InUnitsPerMetre, FBattleEffects* InEffects);
+
+	/** The ships of the battle, as they lie at the start. A ship already laid is moved, not made again. */
+	void SetShips(const TArray<FStageShip>& Ships);
+	/** The same from the view's JSON: view.ships = { guns, pieces: [{ id, cls, nat, name, x, y, face, dock }] }. */
+	void SetShipsFromView(const TSharedPtr<FJsonObject>& ShipsView);
+
+	/** air:ship-hit: a bomb or torpedo strikes ship Id. Strike: "torpedo", "dive", "level" or "bomb". */
+	void Hit(int32 Id, const FString& Strike, double Now);
+	/** air:ship-sunk: ship Id goes down. How: "settle", "sink", "capsize", "explode", "burn" or "break". bBig: the
+	 * first battleship or carrier to blow up (the biggest blast of the battle: 238(5)). */
+	void Sink(int32 Id, const FString& How, bool bBig, double Now);
+
+	/** Once a frame, on the battle's clock (seconds). */
+	void Advance(double Now);
+
+	/** The ground's height (world units) under a world point: the land's, or the sea's. */
+	double GroundZ(const FVector& Where) const;
+	/** Where ship Id lies now (world), at her waterline amidships; false if there is no such ship. */
+	bool ShipAt(int32 Id, FVector& Out) const;
+	/** The way toward the sun at the hour of the record's attack, in world axes. */
+	FVector TowardSun() const;
+
+	bool IsRaised() const { return bRaised; }
+
+	/** -TheaterStage=<key> on the command line. */
+	static bool WantsTest(FString& OutKey);
+	/** The stage alone, a strike played on it, pictures taken: see the class's note. */
+	void BeginTest(const FString& Key);
+
+	virtual void Tick(float DeltaSeconds) override;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+
+private:
+	struct FMeshPart
+	{
+		FString Name;
+		TArray<FVector> Points; // stage metres
+		TArray<int32> Paints;
+		TArray<int32> Triangles;
+	};
+	struct FShip
+	{
+		FStageShip Given;
+		TObjectPtr<UProceduralMeshComponent> Hull = nullptr;
+		TObjectPtr<UProceduralMeshComponent> Fore = nullptr; // the bow's half, once she has broken in two
+		FVector Base = FVector::ZeroVector; // local, at her waterline amidships
+		double Yaw = 0.0;                   // degrees: her model's bow (-X) put along her heading
+		double Long = 100.0, Beam = 12.0, High = 20.0; // metres
+		bool bHarbour = true;
+		FString How;
+		double SunkAt = -1.0;
+		int32 Hits = 0;
+		bool bGone = false;
+	};
+
+	FString StageKey;
+	FVector2D StageAim = FVector2D::ZeroVector;
+	double StageTurn = 0.0;
+	FVector2D BoardTarget = FVector2D::ZeroVector;
+	double UnitsPerMetre = 100.0;
+	bool bRaised = false;
+	double Clock = 0.0;
+
+	TArray<FColor> Palette;
+	TArray<FMeshPart> Parts;
+	TArray<TArray<double>> Tanks, Hangars, Palms; // as the file gives them
+	double SunAzimuth = 120.0, SunElevation = 25.0;
+	// The ground's height on a coarse grid, in whole metres (stage metres east and north).
+	double GridE0 = 0.0, GridN0 = 0.0, GridCell = 100.0;
+	int32 GridCols = 0, GridRows = 0;
+	TArray<int16> GridZ;
+	TSharedPtr<FJsonObject> TestBook;
+
+	UPROPERTY()
+	TObjectPtr<USceneComponent> Root;
+	UPROPERTY()
+	TArray<TObjectPtr<UTheaterStillMesh>> StillMeshes;
+	UPROPERTY()
+	TArray<TObjectPtr<UProceduralMeshComponent>> ShipMeshes;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> GroundInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> SeaInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> SteelInk;
+
+	TMap<int32, FShip> Ships;
+	FBattleEffects* Effects = nullptr;
+	TUniquePtr<FBattleEffects> OwnEffects; // the stage test's own
+	FRandomStream Shown = FRandomStream(238);
+
+	bool ReadStage(const FString& Key);
+	void BuildGround();
+	void BuildWorks();
+	void BuildSea();
+	void LayShip(const FStageShip& Given);
+	void MoveShip(FShip& Ship, double Now);
+	void Blast(FShip& Ship, bool bBig);
+
+	FVector2D StageToBoard(const FVector2D& Stage) const;
+	FVector2D BoardToStage(const FVector2D& Board) const;
+	FVector BoardToLocal(const FVector2D& Board, double ZMetres) const;
+	FVector StageToLocal(const FVector& Stage) const;
+	FVector StageToWorld(const FVector& Stage) const;
+	double StageHeight(double East, double North) const;
+	double HeadingToYaw(double BoardHeading) const;
+
+	// The stage test.
+	struct FTestShot
+	{
+		FString Name;
+		double At = 0.0;
+		FVector Eye = FVector::ZeroVector, Look = FVector::ZeroVector; // stage metres
+		double Lens = 50.0;
+	};
+	struct FTestBeat
+	{
+		double At = 0.0;
+		int32 Ship = 0;
+		FString What, How;
+		bool bBig = false;
+	};
+	bool bTest = false;
+	FString PendingTest;
+	FString TestFolder;
+	double TestStart = -1.0;
+	TArray<FTestShot> TestShots;
+	TArray<FTestBeat> TestBeats;
+	int32 NextShot = 0, NextBeat = 0;
+	double ShotTakenAt = -1.0;
+	UPROPERTY()
+	TObjectPtr<ACameraActor> TestCamera;
+	void StartTest(const FString& Key);
+	void TestPlan();
+	void TestTick();
+};

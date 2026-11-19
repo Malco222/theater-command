@@ -1,0 +1,1120 @@
+#include "Battle/AirStage.h"
+
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "Campaign/ArmyPiece.h"
+#include "Campaign/CampaignEnvironment.h"
+#include "Campaign/CampaignMapActor.h"
+#include "Campaign/CampaignMiniatures.h"
+#include "Campaign/TheaterStillMesh.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/HUD.h"
+#include "GameFramework/PlayerController.h"
+#include "HAL/FileManager.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
+#include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Parse.h"
+#include "Misc/Paths.h"
+#include "ProceduralMeshComponent.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "TheaterCommand.h"
+#include "UnrealClient.h"
+
+namespace StageParts
+{
+	static double Ease(double X)
+	{
+		X = FMath::Clamp(X, 0.0, 1.0);
+		return X * X * (3.0 - 2.0 * X);
+	}
+
+	static double EaseIn(double X)
+	{
+		X = FMath::Clamp(X, 0.0, 1.0);
+		return X * X;
+	}
+
+	/** The model a campaign class is drawn with (the miniature kit's names: "Battleship:USA" and so on). */
+	static const TCHAR* KindOf(const FString& Class)
+	{
+		return Class == TEXT("bb") || Class == TEXT("ag") ? TEXT("Battleship") : Class == TEXT("cv") ? TEXT("Carrier") : Class == TEXT("dd") ? TEXT("Destroyer")
+			: Class == TEXT("ss") ? TEXT("Submarine") : TEXT("Cruiser");
+	}
+
+	static TArray<double> Numbers(const TSharedPtr<FJsonValue>& Value)
+	{
+		TArray<double> Out;
+		const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+		if (Value.IsValid() && Value->TryGetArray(List))
+		{
+			Out.Reserve(List->Num());
+			for (const TSharedPtr<FJsonValue>& Item : *List)
+			{
+				Out.Add(Item.IsValid() ? Item->AsNumber() : 0.0);
+			}
+		}
+		return Out;
+	}
+
+	static const FLinearColor TankPaint = FLinearColor(FColor::FromHex(TEXT("BDB6A2")));
+	static const FLinearColor HangarPaint = FLinearColor(FColor::FromHex(TEXT("8C8A80")));
+	static const FLinearColor RoofPaint = FLinearColor(FColor::FromHex(TEXT("6F6E68")));
+	static const FLinearColor TrunkPaint = FLinearColor(FColor::FromHex(TEXT("7A6A55")));
+	static const FLinearColor FrondPaint = FLinearColor(FColor::FromHex(TEXT("3F6A2E")));
+	static const FColor SeaPaint = FColor::FromHex(TEXT("24505F"));
+}
+
+AAirStage::AAirStage()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false; // (only the stage test ticks itself: a battle's scene calls Advance)
+	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	RootComponent = Root;
+}
+
+void AAirStage::EndPlay(const EEndPlayReason::Type Reason)
+{
+	if (OwnEffects.IsValid())
+	{
+		OwnEffects->End();
+		OwnEffects.Reset();
+	}
+	Effects = nullptr;
+	Super::EndPlay(Reason);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Where things are: stage metres, the board, this actor's frame, the world.
+
+FVector2D AAirStage::StageToBoard(const FVector2D& Stage) const
+{
+	const double DX = Stage.X - StageAim.X, DY = Stage.Y - StageAim.Y, C = FMath::Cos(StageTurn), S = FMath::Sin(StageTurn);
+	return FVector2D(BoardTarget.X + DX * C - DY * S, BoardTarget.Y + DX * S + DY * C);
+}
+
+FVector2D AAirStage::BoardToStage(const FVector2D& Board) const
+{
+	const double DX = Board.X - BoardTarget.X, DY = Board.Y - BoardTarget.Y, C = FMath::Cos(StageTurn), S = FMath::Sin(StageTurn);
+	return FVector2D(StageAim.X + DX * C + DY * S, StageAim.Y - DX * S + DY * C);
+}
+
+FVector AAirStage::BoardToLocal(const FVector2D& Board, double ZMetres) const
+{
+	// (up the board is the actor's X, across it its Y: the world's way, X ahead and Y to the right, seen from above)
+	return FVector(Board.Y, Board.X, ZMetres) * UnitsPerMetre;
+}
+
+FVector AAirStage::StageToLocal(const FVector& Stage) const
+{
+	return BoardToLocal(StageToBoard(FVector2D(Stage.X, Stage.Y)), Stage.Z);
+}
+
+FVector AAirStage::StageToWorld(const FVector& Stage) const
+{
+	return GetActorTransform().TransformPosition(StageToLocal(Stage));
+}
+
+double AAirStage::HeadingToYaw(double BoardHeading) const
+{
+	// A heading on the board (0 up it, clockwise) is the yaw of the same way in the actor's frame.
+	return FMath::RadiansToDegrees(BoardHeading);
+}
+
+double AAirStage::StageHeight(double East, double North) const
+{
+	if (GridCols <= 0 || GridRows <= 0 || GridCell <= 0.0)
+	{
+		return 0.0;
+	}
+	const int32 C = FMath::FloorToInt((East - GridE0) / GridCell), R = FMath::FloorToInt((North - GridN0) / GridCell);
+	if (C < 0 || R < 0 || C >= GridCols || R >= GridRows)
+	{
+		return 0.0;
+	}
+	return FMath::Max(0.0, static_cast<double>(GridZ[R * GridCols + C]));
+}
+
+double AAirStage::GroundZ(const FVector& Where) const
+{
+	const FVector Local = GetActorTransform().InverseTransformPosition(Where);
+	const FVector2D Stage = BoardToStage(FVector2D(Local.Y, Local.X) / UnitsPerMetre);
+	return GetActorTransform().TransformPosition(FVector(Local.X, Local.Y, StageHeight(Stage.X, Stage.Y) * UnitsPerMetre)).Z;
+}
+
+bool AAirStage::ShipAt(int32 Id, FVector& Out) const
+{
+	const FShip* Ship = Ships.Find(Id);
+	if (!Ship)
+	{
+		return false;
+	}
+	Out = GetActorTransform().TransformPosition(Ship->Hull ? Ship->Hull->GetRelativeLocation() : Ship->Base);
+	return true;
+}
+
+FVector AAirStage::TowardSun() const
+{
+	const double Heading = FMath::DegreesToRadians(SunAzimuth) - StageTurn, Up = FMath::DegreesToRadians(SunElevation);
+	const FVector Local(FMath::Cos(Up) * FMath::Cos(Heading), FMath::Cos(Up) * FMath::Sin(Heading), FMath::Sin(Up));
+	return GetActorRotation().RotateVector(Local).GetSafeNormal();
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The stage's file.
+
+bool AAirStage::ReadStage(const FString& Key)
+{
+	const FString Path = FPaths::ProjectContentDir() / TEXT("Data") / TEXT("Stages") / (Key + TEXT(".json"));
+	FString Text;
+	TSharedPtr<FJsonObject> File;
+	if (!FFileHelper::LoadFileToString(Text, *Path) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), File) || !File.IsValid())
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Stage: %s is missing or unreadable (tools/stages/mesh.py makes it)."), *Path);
+		return false;
+	}
+	Palette.Reset();
+	const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+	if (File->TryGetArrayField(TEXT("palette"), List))
+	{
+		for (const TSharedPtr<FJsonValue>& Item : *List)
+		{
+			const TSharedPtr<FJsonObject>* Paint = nullptr;
+			FString Hex;
+			Palette.Add(Item->TryGetObject(Paint) && (*Paint)->TryGetStringField(TEXT("hex"), Hex) ? FColor::FromHex(Hex) : FColor(128, 128, 128));
+		}
+	}
+	Parts.Reset();
+	if (File->TryGetArrayField(TEXT("meshes"), List))
+	{
+		for (const TSharedPtr<FJsonValue>& Item : *List)
+		{
+			const TSharedPtr<FJsonObject>* Mesh = nullptr;
+			if (!Item->TryGetObject(Mesh))
+			{
+				continue;
+			}
+			FMeshPart& Part = Parts.AddDefaulted_GetRef();
+			(*Mesh)->TryGetStringField(TEXT("name"), Part.Name);
+			const TArray<double> V = StageParts::Numbers((*Mesh)->TryGetField(TEXT("v")));
+			const TArray<double> C = StageParts::Numbers((*Mesh)->TryGetField(TEXT("c")));
+			const TArray<double> T = StageParts::Numbers((*Mesh)->TryGetField(TEXT("t")));
+			if (V.Num() != C.Num() * 3 || T.Num() % 3 != 0)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Stage: the %s mesh of %s does not add up; left out."), *Part.Name, *Key);
+				Parts.Pop();
+				continue;
+			}
+			// (decimetres in the file, to keep it small)
+			Part.Points.Reserve(C.Num());
+			for (int32 K = 0; K + 2 < V.Num(); K += 3)
+			{
+				Part.Points.Add(FVector(V[K], V[K + 1], V[K + 2]) * 0.1);
+			}
+			for (const double Paint : C)
+			{
+				Part.Paints.Add(FMath::Clamp(static_cast<int32>(Paint), 0, FMath::Max(Palette.Num() - 1, 0)));
+			}
+			for (const double Index : T)
+			{
+				const int32 I = static_cast<int32>(Index);
+				Part.Triangles.Add(Part.Points.IsValidIndex(I) ? I : 0);
+			}
+		}
+	}
+	auto Rows = [&File](const TCHAR* Field, TArray<TArray<double>>& Out)
+	{
+		Out.Reset();
+		const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+		if (File->TryGetArrayField(Field, Items))
+		{
+			for (const TSharedPtr<FJsonValue>& Item : *Items)
+			{
+				Out.Add(StageParts::Numbers(Item));
+			}
+		}
+	};
+	Rows(TEXT("tanks"), Tanks);
+	Rows(TEXT("hangars"), Hangars);
+	Rows(TEXT("palms"), Palms);
+	const TSharedPtr<FJsonObject>* Sun = nullptr;
+	if (File->TryGetObjectField(TEXT("sun"), Sun))
+	{
+		(*Sun)->TryGetNumberField(TEXT("azimuth"), SunAzimuth);
+		(*Sun)->TryGetNumberField(TEXT("elevation"), SunElevation);
+	}
+	const TSharedPtr<FJsonObject>* Ground = nullptr;
+	GridCols = GridRows = 0;
+	GridZ.Reset();
+	if (File->TryGetObjectField(TEXT("ground"), Ground))
+	{
+		(*Ground)->TryGetNumberField(TEXT("e0"), GridE0);
+		(*Ground)->TryGetNumberField(TEXT("n0"), GridN0);
+		(*Ground)->TryGetNumberField(TEXT("cell"), GridCell);
+		(*Ground)->TryGetNumberField(TEXT("cols"), GridCols);
+		(*Ground)->TryGetNumberField(TEXT("rows"), GridRows);
+		const TArray<double> Z = StageParts::Numbers((*Ground)->TryGetField(TEXT("z")));
+		if (Z.Num() == GridCols * GridRows)
+		{
+			GridZ.Reserve(Z.Num());
+			for (const double H : Z)
+			{
+				GridZ.Add(static_cast<int16>(FMath::Clamp(H, -32000.0, 32000.0)));
+			}
+		}
+		else
+		{
+			GridCols = GridRows = 0;
+		}
+	}
+	const TSharedPtr<FJsonObject>* Test = nullptr;
+	TestBook.Reset();
+	if (File->TryGetObjectField(TEXT("test"), Test))
+	{
+		TestBook = *Test;
+	}
+	return Parts.Num() > 0;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Building it.
+
+bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, const FVector2D& Target, double InUnitsPerMetre, FBattleEffects* InEffects)
+{
+	StageKey = Key;
+	StageAim = Aim;
+	StageTurn = Turn;
+	BoardTarget = Target;
+	UnitsPerMetre = FMath::Max(InUnitsPerMetre, 0.001);
+	Effects = InEffects;
+	if (!ReadStage(Key))
+	{
+		return false;
+	}
+	UMaterialInterface* Surface = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_MapSurface.M_MapSurface"));
+	if (!Surface)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Stage: M_MapSurface is missing (Tools/build_content.py makes it); the default material stands in."));
+		Surface = UMaterial::GetDefaultMaterial(MD_Surface);
+	}
+	auto Ink = [this, Surface](float Roughness, float Specular)
+	{
+		UMaterialInstanceDynamic* Made = UMaterialInstanceDynamic::Create(Surface, this);
+		Made->SetScalarParameterValue(TEXT("Roughness"), Roughness);
+		Made->SetScalarParameterValue(TEXT("Specular"), Specular);
+		Made->SetScalarParameterValue(TEXT("Grain"), 0.0f);
+		Made->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
+		return Made;
+	};
+	GroundInk = Ink(0.9f, 0.15f);
+	SeaInk = Ink(0.28f, 0.55f);
+	SteelInk = Ink(0.55f, 0.4f);
+	BuildSea();
+	BuildGround();
+	BuildWorks();
+	bRaised = true;
+	UE_LOG(LogTheater, Display, TEXT("Stage: %s raised, %d meshes, %d tanks, %d hangars, %d palms, the ground on a %d by %d grid."),
+		*Key, Parts.Num(), Tanks.Num(), Hangars.Num(), Palms.Num(), GridCols, GridRows);
+	return true;
+}
+
+void AAirStage::BuildSea()
+{
+	// The open sea: one sheet far past every edge of the stage, under the island and its painted shallows.
+	UTheaterStillMesh* Sea = UTheaterStillMesh::Make(this, TEXT("StageSea"));
+	Sea->SetupAttachment(Root);
+	Sea->bUseAsyncCooking = false;
+	Sea->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Sea->SetCastShadow(false);
+	Sea->RegisterComponent();
+	const double Far = 200000.0 * UnitsPerMetre;
+	const FVector Middle = BoardToLocal(BoardTarget, 0.0);
+	TArray<FVector> V = { Middle + FVector(-Far, -Far, 0.0), Middle + FVector(Far, -Far, 0.0), Middle + FVector(Far, Far, 0.0), Middle + FVector(-Far, Far, 0.0) };
+	TArray<FVector> N = { FVector::UpVector, FVector::UpVector, FVector::UpVector, FVector::UpVector };
+	TArray<FColor> C = { StageParts::SeaPaint, StageParts::SeaPaint, StageParts::SeaPaint, StageParts::SeaPaint };
+	TArray<int32> T;
+	// (each triangle the way round that faces up, as FMiniatureMesh::Face lays them)
+	for (const FIntVector& Tri : { FIntVector(0, 1, 2), FIntVector(0, 2, 3) })
+	{
+		const FVector Facing = (V[Tri.Y] - V[Tri.Z]) ^ (V[Tri.X] - V[Tri.Z]);
+		T.Append(Facing.Z >= 0.0 ? TArray<int32>{ Tri.X, Tri.Y, Tri.Z } : TArray<int32>{ Tri.X, Tri.Z, Tri.Y });
+	}
+	Sea->CreateMeshSection(0, V, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
+	Sea->SetMaterial(0, SeaInk);
+	StillMeshes.Add(Sea);
+}
+
+void AAirStage::BuildGround()
+{
+	for (const FMeshPart& Part : Parts)
+	{
+		UTheaterStillMesh* Mesh = UTheaterStillMesh::Make(this, *(TEXT("Stage_") + Part.Name));
+		Mesh->SetupAttachment(Root);
+		Mesh->bUseAsyncCooking = false;
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		// (the hills and the works cast shadows; what is painted on the water does not)
+		Mesh->SetCastShadow(Part.Name == TEXT("land") || Part.Name == TEXT("works"));
+		Mesh->RegisterComponent();
+		TArray<FVector> V;
+		TArray<FColor> C;
+		V.Reserve(Part.Points.Num());
+		C.Reserve(Part.Points.Num());
+		for (int32 K = 0; K < Part.Points.Num(); ++K)
+		{
+			V.Add(StageToLocal(Part.Points[K]));
+			C.Add(Palette.IsValidIndex(Part.Paints[K]) ? Palette[Part.Paints[K]] : FColor(128, 128, 128));
+		}
+		TArray<FVector> N;
+		N.Init(FVector::ZeroVector, V.Num());
+		TArray<int32> T;
+		T.Reserve(Part.Triangles.Num());
+		for (int32 K = 0; K + 2 < Part.Triangles.Num(); K += 3)
+		{
+			const int32 A = Part.Triangles[K], B = Part.Triangles[K + 1], D = Part.Triangles[K + 2];
+			const FVector Facing = (V[B] - V[D]) ^ (V[A] - V[D]);
+			const double Size = Facing.Size();
+			if (Size <= UE_DOUBLE_SMALL_NUMBER)
+			{
+				continue;
+			}
+			if (FMath::Abs(Facing.Z) < 0.2 * Size)
+			{
+				// A wall (a pier's side): laid both ways round, so it shows from either side.
+				T.Append({ A, B, D, A, D, B });
+				continue;
+			}
+			// (the side that faces up is the side drawn: FMiniatureMesh::Face's rule)
+			const FVector Up = Facing.Z >= 0.0 ? Facing : -Facing;
+			T.Append(Facing.Z >= 0.0 ? TArray<int32>{ A, B, D } : TArray<int32>{ A, D, B });
+			N[A] += Up;
+			N[B] += Up;
+			N[D] += Up;
+		}
+		for (FVector& Normal : N)
+		{
+			Normal = Normal.IsNearlyZero() ? FVector::UpVector : Normal.GetSafeNormal();
+		}
+		Mesh->CreateMeshSection(0, V, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(0, GroundInk);
+		StillMeshes.Add(Mesh);
+	}
+}
+
+void AAirStage::BuildWorks()
+{
+	// The oil tanks, the hangars and the palms: built with the miniature kit, in one mesh.
+	const double U = UnitsPerMetre;
+	FMiniatureMesh Model;
+	for (const TArray<double>& Tank : Tanks)
+	{
+		if (Tank.Num() < 5)
+		{
+			continue;
+		}
+		const FVector Foot = StageToLocal(FVector(Tank[0], Tank[1], Tank[2]));
+		Model.Pillar(Foot, Tank[3] * U, Tank[3] * U, Tank[4] * U, StageParts::TankPaint, 20);
+		Model.Disc(Foot + FVector(0.0, 0.0, Tank[4] * U), FVector::UpVector, Tank[3] * U, StageParts::TankPaint, 20);
+	}
+	for (const TArray<double>& Hangar : Hangars)
+	{
+		if (Hangar.Num() < 7)
+		{
+			continue;
+		}
+		// x, y, ground, length along the runway, width, height, the runway's compass heading
+		const FVector Foot = StageToLocal(FVector(Hangar[0], Hangar[1], Hangar[2]));
+		const double Yaw = HeadingToYaw(FMath::DegreesToRadians(Hangar[6]) - StageTurn);
+		Model.Box(Foot + FVector(0.0, 0.0, Hangar[5] * 0.4 * U), FVector(Hangar[3], Hangar[4], Hangar[5] * 0.8) * U, StageParts::HangarPaint, Yaw);
+		Model.Box(Foot + FVector(0.0, 0.0, Hangar[5] * 0.9 * U), FVector(Hangar[3], Hangar[4] * 0.8, Hangar[5] * 0.2) * U, StageParts::RoofPaint, Yaw);
+	}
+	FRandomStream Lean(Palms.Num());
+	for (const TArray<double>& Palm : Palms)
+	{
+		if (Palm.Num() < 4)
+		{
+			continue;
+		}
+		const FVector Foot = StageToLocal(FVector(Palm[0], Palm[1], Palm[2]));
+		const double High = Palm[3], Turn = Lean.FRandRange(0.0f, 360.0f);
+		// (the Asia thread's coconut palms where they are among the game's models, far detail: 375 triangles each;
+		// young 12.5 m, grown 19.5 m, tall shore palms 25 m, each scaled 0.85 to 1.15 to the height asked)
+		const TCHAR* Kind = High < 16.0 ? TEXT("CoconutPalmYoung") : High < 22.0 ? TEXT("CoconutPalm") : TEXT("CoconutPalmTall");
+		const double Grown = High < 16.0 ? 12.5 : High < 22.0 ? 19.5 : 25.0;
+		if (Model.Sculpted(Kind, FString(), Foot, U * FMath::Clamp(High / Grown, 0.85, 1.15), Turn, true))
+		{
+			continue;
+		}
+		const FVector Way = FRotator(0.0, Turn, 0.0).Vector();
+		const FVector Top = Foot + Way * (High * 0.12 * U) + FVector(0.0, 0.0, High * U);
+		Model.Limb(Foot, Top, 0.24 * U, 0.16 * U, StageParts::TrunkPaint, 6);
+		for (int32 K = 0; K < 7; ++K)
+		{
+			const FVector Out = FRotator(0.0, Turn + K * 360.0 / 7.0, 0.0).Vector();
+			Model.Limb(Top, Top + Out * (High * 0.28 * U) - FVector(0.0, 0.0, High * 0.12 * U), 0.5 * U, 0.08 * U, StageParts::FrondPaint, 4);
+		}
+	}
+	if (Model.Vertices.Num() == 0)
+	{
+		return;
+	}
+	UTheaterStillMesh* Mesh = UTheaterStillMesh::Make(this, TEXT("StageWorks"));
+	Mesh->SetupAttachment(Root);
+	Mesh->bUseAsyncCooking = false;
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh->SetCastShadow(true);
+	Mesh->RegisterComponent();
+	Mesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+	Mesh->SetMaterial(0, GroundInk);
+	StillMeshes.Add(Mesh);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The ships.
+
+void AAirStage::SetShips(const TArray<FStageShip>& Given)
+{
+	for (const FStageShip& Ship : Given)
+	{
+		LayShip(Ship);
+	}
+}
+
+void AAirStage::SetShipsFromView(const TSharedPtr<FJsonObject>& ShipsView)
+{
+	const TArray<TSharedPtr<FJsonValue>>* Pieces = nullptr;
+	if (!ShipsView.IsValid() || !ShipsView->TryGetArrayField(TEXT("pieces"), Pieces))
+	{
+		return;
+	}
+	TArray<FStageShip> Given;
+	for (const TSharedPtr<FJsonValue>& Item : *Pieces)
+	{
+		const TSharedPtr<FJsonObject>* Piece = nullptr;
+		if (!Item->TryGetObject(Piece))
+		{
+			continue;
+		}
+		FStageShip& Ship = Given.AddDefaulted_GetRef();
+		(*Piece)->TryGetNumberField(TEXT("id"), Ship.Id);
+		(*Piece)->TryGetStringField(TEXT("cls"), Ship.Class);
+		(*Piece)->TryGetStringField(TEXT("nat"), Ship.Nation);
+		(*Piece)->TryGetStringField(TEXT("name"), Ship.Name); // (null in the view for an unnamed ship: left empty)
+		(*Piece)->TryGetNumberField(TEXT("x"), Ship.At.X);
+		(*Piece)->TryGetNumberField(TEXT("y"), Ship.At.Y);
+		(*Piece)->TryGetNumberField(TEXT("face"), Ship.Face);
+		(*Piece)->TryGetBoolField(TEXT("dock"), Ship.bDock);
+	}
+	SetShips(Given);
+}
+
+void AAirStage::LayShip(const FStageShip& Given)
+{
+	FShip& Ship = Ships.FindOrAdd(Given.Id);
+	Ship.Given = Given;
+	Ship.Base = BoardToLocal(Given.At, 0.0);
+	// (a model is built with its bow toward -X: turned half round more, the bow lies along her heading)
+	Ship.Yaw = HeadingToYaw(Given.Face) + 180.0;
+	{
+		// In harbour if there is land within two kilometres of her: she settles on the bottom there, and at sea goes down.
+		const FVector2D Stage = BoardToStage(Given.At);
+		Ship.bHarbour = false;
+		const int32 Reach = GridCell > 0.0 ? FMath::CeilToInt(2000.0 / GridCell) : 0;
+		const int32 C0 = FMath::FloorToInt((Stage.X - GridE0) / FMath::Max(GridCell, 1.0)), R0 = FMath::FloorToInt((Stage.Y - GridN0) / FMath::Max(GridCell, 1.0));
+		for (int32 R = R0 - Reach; R <= R0 + Reach && !Ship.bHarbour; ++R)
+		{
+			for (int32 C = C0 - Reach; C <= C0 + Reach; ++C)
+			{
+				if (R >= 0 && C >= 0 && R < GridRows && C < GridCols && GridZ[R * GridCols + C] > 0)
+				{
+					Ship.bHarbour = true;
+					break;
+				}
+			}
+		}
+	}
+	if (!Ship.Hull)
+	{
+		FMiniatureMesh Model;
+		{
+			TGuardValue<uint8> Painted(Model.Finish, 128); // (ships are painted metal)
+			const FString Name = FString(StageParts::KindOf(Given.Class)) + TEXT(":") + Given.Nation;
+			if (!Model.Vehicle(Name, FVector::ZeroVector, UnitsPerMetre, 0.0) || Model.Vertices.Num() == 0)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Stage: no model for %s; ship %d is not drawn."), *Name, Given.Id);
+				Ships.Remove(Given.Id);
+				return;
+			}
+		}
+		FBox Bounds(ForceInit);
+		for (const FVector& Point : Model.Vertices)
+		{
+			Bounds += Point;
+		}
+		const FVector Size = Bounds.GetSize() / UnitsPerMetre;
+		Ship.Long = FMath::Max(Size.X, 10.0);
+		Ship.Beam = FMath::Max(Size.Y, 4.0);
+		Ship.High = FMath::Max(Bounds.Max.Z / UnitsPerMetre, 3.0);
+		UProceduralMeshComponent* Hull = NewObject<UProceduralMeshComponent>(this);
+		Hull->SetupAttachment(Root);
+		Hull->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Hull->SetCastShadow(true);
+		Hull->RegisterComponent();
+		Hull->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		Hull->SetMaterial(0, SteelInk);
+		Ship.Hull = Hull;
+		ShipMeshes.Add(Hull);
+	}
+	Ship.Hull->SetRelativeLocationAndRotation(Ship.Base, FRotator(0.0, Ship.Yaw, 0.0));
+}
+
+void AAirStage::Hit(int32 Id, const FString& Strike, double Now)
+{
+	FShip* Ship = Ships.Find(Id);
+	if (!Ship || Ship->bGone)
+	{
+		return;
+	}
+	Ship->Hits++;
+	if (!Effects)
+	{
+		return;
+	}
+	const double U = UnitsPerMetre;
+	const FRotator Turned(0.0, Ship->Yaw, 0.0);
+	const FVector Along = Turned.RotateVector(FVector::ForwardVector), Abeam = Turned.RotateVector(FVector::RightVector);
+	FVector Local = Ship->Base + Along * (Shown.FRandRange(-0.35f, 0.35f) * Ship->Long * U);
+	if (Strike == TEXT("torpedo"))
+	{
+		// A torpedo: the column of water at her side, the side the run came from.
+		Local += Abeam * ((Ship->Beam * 0.5 + 3.0) * U * (Shown.FRand() < 0.5f ? 1.0 : -1.0));
+		Effects->ShellOfSize(GetActorTransform().TransformPosition(Local), TEXT("bomb500"), TEXT("water"));
+		return;
+	}
+	// A bomb on her deck: the dive bombers' 250 kg, the level bombers' heavier armour-piercing bombs.
+	const double Deck = FMath::Min(Ship->High * 0.3, 9.0);
+	Local.Z += Deck * U;
+	const FVector Struck = GetActorTransform().TransformPosition(Local);
+	Effects->ShellOfSize(Struck, Strike == TEXT("dive") ? TEXT("bomb250") : TEXT("bomb500"), TEXT("town"), true);
+	if (Shown.FRand() < (Strike == TEXT("dive") ? 0.5f : 0.3f))
+	{
+		Effects->Burn(Struck, static_cast<float>(Ship->Beam * 0.5), 240.0f);
+	}
+}
+
+void AAirStage::Blast(FShip& Ship, bool bBig)
+{
+	if (!Effects)
+	{
+		return;
+	}
+	// The magazine forward: one blast on another, the biggest of the battle bigger again (ruling 238(5)).
+	const double U = UnitsPerMetre;
+	const FRotator Turned(0.0, Ship.Yaw, 0.0);
+	const FVector Along = Turned.RotateVector(FVector::ForwardVector);
+	const FVector Forward = Ship.Base - Along * (Ship.Long * 0.25 * U); // (her bow is toward the model's -X)
+	const int32 Blasts = bBig ? 7 : 3;
+	for (int32 K = 0; K < Blasts; ++K)
+	{
+		const FVector Spot = Forward + FVector(Shown.FRandRange(-1.0f, 1.0f) * Ship.Beam * 0.4 * U, Shown.FRandRange(-1.0f, 1.0f) * Ship.Beam * 0.4 * U, (Ship.High * 0.2 + K * 3.0) * U);
+		Effects->ShellOfSize(GetActorTransform().TransformPosition(Spot), TEXT("bomb500"), TEXT("water"), true);
+	}
+	Effects->Burn(GetActorTransform().TransformPosition(Forward + FVector(0.0, 0.0, Ship.High * 0.2 * U)), static_cast<float>(Ship.Beam * (bBig ? 2.0 : 1.2)), 1800.0f);
+}
+
+void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
+{
+	FShip* Ship = Ships.Find(Id);
+	if (!Ship || !Ship->How.IsEmpty())
+	{
+		return;
+	}
+	Ship->How = How;
+	Ship->SunkAt = Now;
+	const double U = UnitsPerMetre;
+	const FRotator Turned(0.0, Ship->Yaw, 0.0);
+	const FVector Along = Turned.RotateVector(FVector::ForwardVector);
+	if (How == TEXT("explode"))
+	{
+		Blast(*Ship, bBig);
+	}
+	else if (How == TEXT("burn") && Effects)
+	{
+		// Ablaze from end to end: fires along her length that burn for the rest of the battle and after.
+		for (const double Share : { -0.3, 0.0, 0.3 })
+		{
+			const FVector Spot = Ship->Base + Along * (Share * Ship->Long * U) + FVector(0.0, 0.0, FMath::Min(Ship->High * 0.3, 9.0) * U);
+			Effects->Burn(GetActorTransform().TransformPosition(Spot), static_cast<float>(Ship->Beam * 1.1), 1800.0f);
+		}
+	}
+	else if (How == TEXT("break"))
+	{
+		// Broken in two amidships: her model cut in halves, bow and stern, each going its own way.
+		FMiniatureMesh Model;
+		{
+			TGuardValue<uint8> Painted(Model.Finish, 128);
+			Model.Vehicle(FString(StageParts::KindOf(Ship->Given.Class)) + TEXT(":") + Ship->Given.Nation, FVector::ZeroVector, UnitsPerMetre, 0.0);
+		}
+		TArray<int32> Stern, Bow;
+		for (int32 K = 0; K + 2 < Model.Triangles.Num(); K += 3)
+		{
+			const double X = (Model.Vertices[Model.Triangles[K]].X + Model.Vertices[Model.Triangles[K + 1]].X + Model.Vertices[Model.Triangles[K + 2]].X) / 3.0;
+			(X < 0.0 ? Bow : Stern).Append({ Model.Triangles[K], Model.Triangles[K + 1], Model.Triangles[K + 2] });
+		}
+		if (Bow.Num() > 0 && Stern.Num() > 0 && Ship->Hull)
+		{
+			Ship->Hull->CreateMeshSection(0, Model.Vertices, Stern, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+			UProceduralMeshComponent* Fore = NewObject<UProceduralMeshComponent>(this);
+			Fore->SetupAttachment(Root);
+			Fore->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Fore->SetCastShadow(true);
+			Fore->RegisterComponent();
+			Fore->CreateMeshSection(0, Model.Vertices, Bow, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+			Fore->SetMaterial(0, SteelInk);
+			Fore->SetRelativeLocationAndRotation(Ship->Base, FRotator(0.0, Ship->Yaw, 0.0));
+			Ship->Fore = Fore;
+			ShipMeshes.Add(Fore);
+		}
+		if (Effects)
+		{
+			Effects->ShellOfSize(GetActorTransform().TransformPosition(Ship->Base + FVector(0.0, 0.0, 3.0 * U)), TEXT("bomb500"), TEXT("water"), true);
+			Effects->Burn(GetActorTransform().TransformPosition(Ship->Base), static_cast<float>(Ship->Beam), 400.0f);
+		}
+	}
+	else if (Effects)
+	{
+		// Settling, going down, rolling over: the water boiling white round her, and a little smoke.
+		Effects->ShellOfSize(GetActorTransform().TransformPosition(Ship->Base + Along * (Shown.FRandRange(-0.3f, 0.3f) * Ship->Long * U)), TEXT("bomb250"), TEXT("water"));
+		if (Shown.FRand() < 0.5f)
+		{
+			Effects->Burn(GetActorTransform().TransformPosition(Ship->Base + FVector(0.0, 0.0, Ship->High * 0.25 * U)), static_cast<float>(Ship->Beam * 0.6), 600.0f);
+		}
+	}
+	MoveShip(*Ship, Now);
+}
+
+void AAirStage::MoveShip(FShip& Ship, double Now)
+{
+	if (Ship.How.IsEmpty() || Ship.bGone || !Ship.Hull)
+	{
+		return;
+	}
+	const double T = FMath::Max(0.0, Now - Ship.SunkAt);
+	// (each ship lists to a side of her own)
+	const double Side = (Ship.Given.Id % 2) ? 1.0 : -1.0;
+	// How deep she settles in harbour: decks awash on the bottom, as at Battleship Row (about 12 m of water).
+	const double Settle = FMath::Min(Ship.High * 0.3, 11.0);
+	const double Under = Ship.High + 40.0;
+	double Depth = 0.0, Pitch = 0.0, Roll = 0.0, Break = 0.0;
+	if (Ship.How == TEXT("settle"))
+	{
+		Depth = Settle * StageParts::Ease(T / 45.0);
+		Roll = 7.0 * Side * StageParts::Ease(T / 45.0);
+		Pitch = 1.5 * StageParts::Ease(T / 45.0);
+	}
+	else if (Ship.How == TEXT("sink"))
+	{
+		// (bow or stern first, by the ship)
+		Pitch = 14.0 * Side * StageParts::Ease(T / 35.0);
+		Roll = 5.0 * Side * StageParts::Ease(T / 35.0);
+		Depth = Under * StageParts::EaseIn(T / 70.0);
+	}
+	else if (Ship.How == TEXT("capsize"))
+	{
+		Roll = (Ship.bHarbour ? 150.0 : 165.0) * Side * StageParts::Ease(T / 28.0);
+		Depth = Ship.Beam * 0.25 * StageParts::Ease(T / 28.0);
+		if (!Ship.bHarbour)
+		{
+			Depth += Under * StageParts::EaseIn((T - 28.0) / 60.0);
+		}
+	}
+	else if (Ship.How == TEXT("explode"))
+	{
+		// (the forward magazine: she goes down by the bow)
+		Pitch = (Ship.bHarbour ? 5.0 : 20.0) * StageParts::Ease(T / (Ship.bHarbour ? 14.0 : 20.0));
+		Depth = Ship.bHarbour ? Settle * 1.1 * StageParts::Ease(T / 14.0) : Under * StageParts::EaseIn(T / 30.0);
+	}
+	else if (Ship.How == TEXT("burn"))
+	{
+		Roll = 4.0 * Side * StageParts::Ease(T / 80.0);
+		Depth = (Ship.bHarbour ? 2.5 : 1.5) * StageParts::Ease(T / 200.0);
+	}
+	else if (Ship.How == TEXT("break"))
+	{
+		Break = (Ship.bHarbour ? 12.0 : 28.0) * StageParts::Ease(T / 25.0);
+		Depth = Ship.bHarbour ? 6.0 * StageParts::Ease(T / 20.0) : (Ship.High + 30.0) * StageParts::EaseIn(T / 40.0);
+	}
+	const FVector At = Ship.Base - FVector(0.0, 0.0, Depth * UnitsPerMetre);
+	if (Ship.Fore)
+	{
+		// The stern's half lifts its stern (+X up is a nose-up pitch), the bow's half its bow: a V, sinking at the break.
+		Ship.Hull->SetRelativeLocationAndRotation(At, FRotator(Break, Ship.Yaw, Roll));
+		Ship.Fore->SetRelativeLocationAndRotation(At, FRotator(-Break, Ship.Yaw, Roll));
+	}
+	else
+	{
+		// (a positive pitch lifts the model's +X, her stern: the bow goes down)
+		Ship.Hull->SetRelativeLocationAndRotation(At, FRotator(Pitch, Ship.Yaw, Roll));
+	}
+	if (Depth >= Ship.High + 25.0)
+	{
+		Ship.bGone = true;
+		Ship.Hull->SetVisibility(false);
+		if (Ship.Fore)
+		{
+			Ship.Fore->SetVisibility(false);
+		}
+	}
+}
+
+void AAirStage::Advance(double Now)
+{
+	Clock = Now;
+	for (TPair<int32, FShip>& Pair : Ships)
+	{
+		MoveShip(Pair.Value, Now);
+	}
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The stage test: "-TheaterStage=oahu" (or "midway", "midway-fleet"), "-TheaterStageShots=<folder>".
+
+bool AAirStage::WantsTest(FString& OutKey)
+{
+	return FParse::Value(FCommandLine::Get(), TEXT("TheaterStage="), OutKey) && !OutKey.IsEmpty();
+}
+
+void AAirStage::BeginTest(const FString& Key)
+{
+	// (begun two seconds in, once the table and the hour's light are up, so that they are put away after)
+	PendingTest = Key;
+	SetActorTickEnabled(true);
+}
+
+void AAirStage::StartTest(const FString& Key)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	const bool bFleet = Key == TEXT("midway-fleet");
+	const FString Stage = bFleet ? FString(TEXT("midway")) : Key;
+	FVector2D Aim = FVector2D::ZeroVector;
+	if (!Raise(Stage, Aim, 0.0, FVector2D::ZeroVector, 100.0, nullptr))
+	{
+		return;
+	}
+	if (bFleet && TestBook.IsValid())
+	{
+		// (off Midway the strike is on the Kido Butai at sea: the board is centred on its box)
+		const TArray<double> At = StageParts::Numbers(TestBook->TryGetField(TEXT("aim")));
+		if (At.Num() == 2)
+		{
+			StageAim = FVector2D(At[0], At[1]);
+			for (TObjectPtr<UTheaterStillMesh>& Mesh : StillMeshes)
+			{
+				Mesh->DestroyComponent();
+			}
+			StillMeshes.Reset();
+			BuildSea();
+			BuildGround();
+			BuildWorks();
+		}
+	}
+	StageKey = Key;
+	OwnEffects = MakeUnique<FBattleEffects>();
+	if (OwnEffects->Begin(Root, UnitsPerMetre, [this](const FVector& Point) { return FVector(Point.X, Point.Y, GroundZ(Point)); }))
+	{
+		Effects = OwnEffects.Get();
+		Effects->SetSun(TowardSun());
+		Effects->SetWind(FVector(-2.0, 3.0, 0.0)); // (the trade wind, from the north-east)
+	}
+	// The record's ships, numbered from 1 in the file's order (Pearl Harbor's berths; the Kido Butai's box).
+	if (Key != TEXT("midway") && TestBook.IsValid())
+	{
+		const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+		if (TestBook->TryGetArrayField(TEXT("ships"), List))
+		{
+			TArray<FStageShip> Given;
+			for (int32 K = 0; K < List->Num(); ++K)
+			{
+				const TSharedPtr<FJsonObject>* Item = nullptr;
+				if (!(*List)[K]->TryGetObject(Item))
+				{
+					continue;
+				}
+				FStageShip& Ship = Given.AddDefaulted_GetRef();
+				Ship.Id = K + 1;
+				(*Item)->TryGetStringField(TEXT("cls"), Ship.Class);
+				(*Item)->TryGetStringField(TEXT("nat"), Ship.Nation);
+				(*Item)->TryGetStringField(TEXT("name"), Ship.Name);
+				(*Item)->TryGetBoolField(TEXT("dock"), Ship.bDock);
+				const TArray<double> At = StageParts::Numbers((*Item)->TryGetField(TEXT("at")));
+				double Face = 0.0;
+				(*Item)->TryGetNumberField(TEXT("face"), Face);
+				if (At.Num() == 2)
+				{
+					Ship.At = StageToBoard(FVector2D(At[0], At[1]));
+				}
+				Ship.Face = FMath::DegreesToRadians(Face) - StageTurn;
+			}
+			SetShips(Given);
+		}
+	}
+	// The table and its armies are put out of sight; the light and the air are the hour's at the stage.
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (It->IsA<ACampaignMapActor>() || It->IsA<AArmyPiece>())
+		{
+			It->SetActorHiddenInGame(true);
+		}
+		if (ACampaignEnvironment* Environment = Cast<ACampaignEnvironment>(*It))
+		{
+			Environment->SetActorTickEnabled(false);
+			double Density = 0.0006, Falloff = 0.005;
+			FString Asked;
+			TArray<FString> Bits;
+			// ("-TheaterStageFog=density,falloff" tries other air)
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterStageFog="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(",")) == 2)
+			{
+				Density = FCString::Atod(*Bits[0]);
+				Falloff = FCString::Atod(*Bits[1]);
+			}
+			TArray<UExponentialHeightFogComponent*> Fogs;
+			Environment->GetComponents(Fogs);
+			for (UExponentialHeightFogComponent* Fog : Fogs)
+			{
+				Fog->SetStartDistance(0.0f);
+				Fog->SetFogDensity(static_cast<float>(Density));
+				Fog->SetFogHeightFalloff(static_cast<float>(Falloff));
+				Fog->SetFogMaxOpacity(0.85f);
+				Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.66f, 0.78f));
+			}
+			TArray<UDirectionalLightComponent*> Lights;
+			Environment->GetComponents(Lights);
+			UDirectionalLightComponent* Brightest = nullptr;
+			for (UDirectionalLightComponent* Light : Lights)
+			{
+				if (!Brightest || Light->Intensity > Brightest->Intensity)
+				{
+					Brightest = Light;
+				}
+			}
+			if (Brightest)
+			{
+				Brightest->SetWorldRotation((-TowardSun()).Rotation());
+			}
+		}
+	}
+	TestCamera = World->SpawnActor<ACameraActor>();
+	if (APlayerController* Controller = World->GetFirstPlayerController())
+	{
+		if (TestCamera)
+		{
+			Controller->SetViewTarget(TestCamera);
+		}
+		if (Controller->GetHUD())
+		{
+			Controller->GetHUD()->bShowHUD = false;
+		}
+	}
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterStageShots="), TestFolder);
+	if (!TestFolder.IsEmpty())
+	{
+		IFileManager::Get().MakeDirectory(*TestFolder, true);
+	}
+	TestPlan();
+	bTest = true;
+	TestStart = World->GetTimeSeconds();
+	SetActorTickEnabled(true);
+	const FString Where = TestFolder.IsEmpty() ? FString(TEXT(" (no folder: watch it)")) : TEXT(" into ") + TestFolder;
+	UE_LOG(LogTheater, Display, TEXT("Stage test: %s, %d ships, %d pictures%s."), *Key, Ships.Num(), TestShots.Num(), *Where);
+}
+
+void AAirStage::TestPlan()
+{
+	TestShots.Reset();
+	TestBeats.Reset();
+	auto IdOf = [this](const TCHAR* Name) -> int32
+	{
+		for (const TPair<int32, FShip>& Pair : Ships)
+		{
+			if (Pair.Value.Given.Name == Name)
+			{
+				return Pair.Key;
+			}
+		}
+		return 0;
+	};
+	auto Shot = [this](const TCHAR* Name, double At, const FVector& Eye, const FVector& Look, double Lens)
+	{
+		TestShots.Add({ Name, At, Eye, Look, Lens });
+	};
+	auto Beat = [this](double At, int32 Ship, const TCHAR* What, const TCHAR* How, bool bBig = false)
+	{
+		if (Ship > 0)
+		{
+			TestBeats.Add({ At, Ship, What, How, bBig });
+		}
+	};
+	if (StageKey == TEXT("oahu"))
+	{
+		// 7 December 1941, Battleship Row (the origin is berth F-6, the row runs south-west to north-east).
+		Beat(4.0, IdOf(TEXT("West Virginia")), TEXT("hit"), TEXT("torpedo"));
+		Beat(4.5, IdOf(TEXT("Oklahoma")), TEXT("hit"), TEXT("torpedo"));
+		Beat(5.0, IdOf(TEXT("California")), TEXT("hit"), TEXT("torpedo"));
+		Beat(6.0, IdOf(TEXT("Oklahoma")), TEXT("sink"), TEXT("capsize"));
+		Beat(9.0, IdOf(TEXT("Arizona")), TEXT("hit"), TEXT("level"));
+		Beat(9.3, IdOf(TEXT("Arizona")), TEXT("sink"), TEXT("explode"), true);
+		Beat(12.0, IdOf(TEXT("West Virginia")), TEXT("sink"), TEXT("settle"));
+		Beat(14.0, IdOf(TEXT("California")), TEXT("sink"), TEXT("settle"));
+		Beat(16.0, IdOf(TEXT("Nevada")), TEXT("hit"), TEXT("dive"));
+		Beat(18.0, IdOf(TEXT("Shaw")), TEXT("sink"), TEXT("explode"));
+		Beat(20.0, IdOf(TEXT("Cassin")), TEXT("sink"), TEXT("capsize"));
+		Beat(20.5, IdOf(TEXT("Downes")), TEXT("sink"), TEXT("burn"));
+		Shot(TEXT("01-approach"), 3.0, FVector(-9000, 26000, 3200), FVector(-1000, 0, 0), 45);
+		Shot(TEXT("02-torpedo-run"), 5.2, FVector(1100, -900, 18), FVector(0, 0, 8), 40);
+		Shot(TEXT("03-arizona"), 9.9, FVector(700, -350, 60), FVector(181, 115, 30), 45);
+		Shot(TEXT("04-row-from-ford-island"), 26.0, FVector(-230, 260, 14), FVector(300, -120, 12), 50);
+		Shot(TEXT("05-dive-view"), 30.0, FVector(-600, -2200, 3300), FVector(0, 0, 0), 35);
+		Shot(TEXT("06-aftermath"), 70.0, FVector(1500, -1500, 120), FVector(0, 0, 10), 40);
+	}
+	else if (StageKey == TEXT("midway-fleet"))
+	{
+		// 4 June 1942, the Kido Butai in its box (stage metres: the box is round the aim).
+		const FVector A(StageAim.X, StageAim.Y, 0.0);
+		Beat(4.0, IdOf(TEXT("Kaga")), TEXT("hit"), TEXT("dive"));
+		Beat(4.3, IdOf(TEXT("Kaga")), TEXT("hit"), TEXT("dive"));
+		Beat(4.6, IdOf(TEXT("Kaga")), TEXT("hit"), TEXT("dive"));
+		Beat(5.0, IdOf(TEXT("Akagi")), TEXT("hit"), TEXT("dive"));
+		Beat(5.2, IdOf(TEXT("Soryu")), TEXT("hit"), TEXT("dive"));
+		Beat(5.5, IdOf(TEXT("Soryu")), TEXT("hit"), TEXT("dive"));
+		Beat(6.0, IdOf(TEXT("Kaga")), TEXT("sink"), TEXT("burn"));
+		Beat(7.0, IdOf(TEXT("Soryu")), TEXT("sink"), TEXT("burn"));
+		Beat(8.0, IdOf(TEXT("Akagi")), TEXT("sink"), TEXT("burn"));
+		Beat(12.0, IdOf(TEXT("Hiryu")), TEXT("hit"), TEXT("dive"));
+		Beat(12.5, IdOf(TEXT("Hiryu")), TEXT("sink"), TEXT("explode"), true);
+		// (a destroyer of the screen breaking in two, to see it)
+		const int32 Screen = Ships.Num() > 0 ? Ships.Num() : 0;
+		Beat(14.0, Screen, TEXT("sink"), TEXT("break"));
+		Shot(TEXT("01-dive-view"), 3.0, A + FVector(-600, -900, 4200), A, 35);
+		Shot(TEXT("02-hits"), 4.8, A + FVector(-1800, -2400, 300), A + FVector(-1250, 1250, 10), 40);
+		if (const FShip* Last = Ships.Find(Screen))
+		{
+			const FVector2D Stage = BoardToStage(Last->Given.At);
+			Shot(TEXT("03-break"), 26.0, FVector(Stage.X + 300, Stage.Y - 400, 30), FVector(Stage.X, Stage.Y, 0), 45);
+		}
+		Shot(TEXT("04-carriers-burning"), 30.0, A + FVector(2500, -3500, 150), A, 40);
+		Shot(TEXT("05-far"), 60.0, A + FVector(-9000, -6000, 1500), A, 40);
+	}
+	else
+	{
+		// Midway's atoll: the oil tanks on Sand Island and the hangars on Eastern Island bombed and burning.
+		Shot(TEXT("01-atoll-approach"), 3.0, FVector(-9000, 8000, 3000), FVector(0, 0, 0), 45);
+		Shot(TEXT("02-sand-island-tanks"), 12.0, FVector(-900, -1200, 80), FVector(-1200, -10, 10), 45);
+		Shot(TEXT("03-eastern-island"), 14.0, FVector(1200, -600, 60), FVector(2256, 498, 5), 45);
+	}
+}
+
+void AAirStage::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (!PendingTest.IsEmpty() && GetWorld() && GetWorld()->GetTimeSeconds() > 2.0)
+	{
+		const FString Key = PendingTest;
+		PendingTest.Empty();
+		StartTest(Key);
+	}
+	if (bTest)
+	{
+		TestTick();
+	}
+}
+
+void AAirStage::TestTick()
+{
+	UWorld* World = GetWorld();
+	if (!World || !TestCamera)
+	{
+		return;
+	}
+	const double Now = World->GetTimeSeconds() - TestStart;
+	while (NextBeat < TestBeats.Num() && TestBeats[NextBeat].At <= Now)
+	{
+		const FTestBeat& Beat = TestBeats[NextBeat++];
+		if (Beat.What == TEXT("hit"))
+		{
+			Hit(Beat.Ship, Beat.How, Now);
+		}
+		else
+		{
+			Sink(Beat.Ship, Beat.How, Beat.bBig, Now);
+		}
+	}
+	if (StageKey == TEXT("midway") && NextBeat == 0 && Now >= 4.0 && Effects)
+	{
+		// (the atoll has no ships in the test: the bombs fall on its tanks and hangars)
+		NextBeat = 1;
+		for (const TArray<double>& Tank : Tanks)
+		{
+			const FVector Spot = StageToWorld(FVector(Tank[0], Tank[1], Tank[2] + Tank[4]));
+			Effects->ShellOfSize(Spot, TEXT("bomb250"), TEXT("sand"));
+			Effects->Burn(Spot, static_cast<float>(Tank[3] * 2.0), 1800.0f);
+		}
+		for (int32 K = 0; K < Hangars.Num(); K += 2)
+		{
+			const FVector Spot = StageToWorld(FVector(Hangars[K][0], Hangars[K][1], Hangars[K][2]));
+			Effects->ShellOfSize(Spot, TEXT("bomb250"), TEXT("sand"));
+			Effects->Burn(Spot, 20.0f, 900.0f);
+		}
+	}
+	Advance(Now);
+	// The camera stands at the next picture's place from the moment the last one was taken.
+	if (NextShot < TestShots.Num())
+	{
+		const FTestShot& Shot = TestShots[NextShot];
+		const FVector Eye = StageToWorld(Shot.Eye), Look = StageToWorld(Shot.Look);
+		TestCamera->SetActorLocationAndRotation(Eye, (Look - Eye).Rotation());
+		TestCamera->GetCameraComponent()->SetFieldOfView(static_cast<float>(Shot.Lens));
+		if (Now >= Shot.At && ShotTakenAt < 0.0)
+		{
+			if (!TestFolder.IsEmpty())
+			{
+				FScreenshotRequest::RequestScreenshot(FPaths::Combine(TestFolder, StageKey + TEXT("-") + Shot.Name + TEXT(".png")), false, false);
+			}
+			UE_LOG(LogTheater, Display, TEXT("Stage test: %s at %.1f s."), *Shot.Name, Now);
+			ShotTakenAt = Now;
+		}
+		else if (ShotTakenAt >= 0.0 && Now >= ShotTakenAt + 0.5)
+		{
+			// (half a second for the picture to be written before the camera moves on)
+			ShotTakenAt = -1.0;
+			++NextShot;
+		}
+	}
+	else if (!TestFolder.IsEmpty())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Stage test: done."));
+		bTest = false;
+		UKismetSystemLibrary::QuitGame(this, nullptr, EQuitPreference::Quit, false);
+		FPlatformMisc::RequestExit(false);
+	}
+	if (Effects)
+	{
+		int32 Wide = 1600, High = 1000;
+		if (APlayerController* Controller = World->GetFirstPlayerController())
+		{
+			Controller->GetViewportSize(Wide, High);
+		}
+		Effects->Tick(Now, TestCamera->GetActorLocation(), TestCamera->GetActorRotation(), TestCamera->GetCameraComponent()->FieldOfView, Wide);
+	}
+}

@@ -1,4 +1,5 @@
 #include "Campaign/CampaignGameMode.h"
+#include "Battle/AirStage.h"
 
 #include "Campaign/CampaignFlags.h"
 #include "ImageUtils.h"
@@ -178,6 +179,17 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 		if (ACampaignPhotographer* Photographer = World->SpawnActor<ACampaignPhotographer>())
 		{
 			Photographer->Begin(ShotFolder);
+		}
+	}
+
+	// "-TheaterStage=oahu" (or "midway", "midway-fleet") raises a set piece's stage alone and plays a strike on it
+	// (ruling 238): with "-TheaterStageShots=<folder>" it takes its pictures there and quits.
+	FString StageKey;
+	if (AAirStage::WantsTest(StageKey))
+	{
+		if (AAirStage* Stage = World->SpawnActor<AAirStage>(FVector::ZeroVector, FRotator::ZeroRotator))
+		{
+			Stage->BeginTest(StageKey);
 		}
 	}
 }
