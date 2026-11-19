@@ -186,6 +186,33 @@ def build_map_surface():
     tinted = times(m, tinted, lerp(m, 1.0, vector(m, "WakeTone", (1.0, 1.0, 1.0, 1.0), 600, -1250), on_water, 800, -1200), 900, -950)
     to_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
     to_property(times(m, chipped, 0.85, 750, -700), "", unreal.MaterialProperty.MP_METALLIC)
+    # (The art director, 19 November 2026: a rifleman seen with the sun behind him stood darker on his shaded side
+    # than the shadow he threw on the ground. What is not painted metal, the cloth and the flesh of a figure, gives
+    # back a little of its own colour on the side turned from the sun: "FigureFill". And the edge of it that is
+    # turned to the sun catches the light when the sun stands behind it: a thin rim, whose strength is
+    # "FigureSun"'s alpha. The way to the sun is "FigureSun"'s red, green and blue. Both are nothing unless C++
+    # says so, which only the pieces' material does: the land, the towns and the woods are as they were. No light
+    # is added to the scene and nothing throws a new shadow.)
+    figure_sun = vector(m, "FigureSun", (0.0, 0.0, 1.0, 0.0), 900, -2600)
+    facing = node(m, unreal.MaterialExpressionVertexNormalWS, 900, -2400)
+    to_sun = node(m, unreal.MaterialExpressionDotProduct, 1100, -2500)
+    connect(facing, "", to_sun, "A")
+    connect(figure_sun, "", to_sun, "B")
+    eye_way = node(m, unreal.MaterialExpressionCameraVectorWS, 900, -2250)
+    to_eye = node(m, unreal.MaterialExpressionDotProduct, 1100, -2300)
+    connect(facing, "", to_eye, "A")
+    connect(eye_way, "", to_eye, "B")
+    sun_behind = node(m, unreal.MaterialExpressionDotProduct, 1100, -2150)
+    connect(eye_way, "", sun_behind, "A")
+    connect(figure_sun, "", sun_behind, "B")
+    away = one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, to_sun, -3.0, 1300, -2500), 0.4, 1450, -2500), 1600, -2500)
+    edge = one_in(m, unreal.MaterialExpressionOneMinus, one_in(m, unreal.MaterialExpressionSaturate, to_eye, 1300, -2300), 1450, -2300)
+    edge = times(m, times(m, edge, edge, 1600, -2300), edge, 1750, -2300)
+    rim = times(m, times(m, edge, one_in(m, unreal.MaterialExpressionSaturate, to_sun, 1300, -2400), 1900, -2350),
+                times(m, one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, sun_behind, -1.0, 1300, -2150), 0.3, 1450, -2150), 1600, -2150), (figure_sun, "A"), 1750, -2150), 2050, -2250)
+    cloth = times(m, one_in(m, unreal.MaterialExpressionOneMinus, metal, 1300, -2700), one_in(m, unreal.MaterialExpressionOneMinus, on_water, 1300, -2800), 1450, -2750)
+    given = times(m, times(m, tinted, cloth, 2050, -2600), plus(m, times(m, away, scalar(m, "FigureFill", 0.0, 1600, -2650), 1750, -2600), rim, 2200, -2450), 2350, -2500)
+    to_property(given, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
 
     # Tooth: the engine's paper bump, laid flat and faded in by a strength.
     paper = unreal.load_asset("/Engine/EngineMaterials/PaperNormal")
@@ -555,6 +582,9 @@ def build_land():
     # of its own. The throw is now blended between a third and its neighbours, eased at the joins, so the place moves
     # smoothly across the ground and no third has an edge. Blended throws keep to the middle more than single ones,
     # so the reach is half as much again: "ReliefShakeReach". "ReliefShakeSmooth" at nought is the old square shake.)
+    # (Her ruling the same day: at that reach every edge of shade still showed a fine saw of steps from the usual
+    # height, three or four points each: the read was moved by up to three quarters of a cell across a third of
+    # one, and the edge folded back on itself. With no shake at all the land looked airbrushed. The reach is a half.)
     shake_place = times(m, uv, pair(m, (jitter, "B"), (jitter, "A"), -3250, 5200), -3150, 5200)
     shake_part = one_in(m, unreal.MaterialExpressionFrac, shake_place, -3050, 5200)
     shake_ease = times(m, times(m, shake_part, shake_part, -2950, 5200), plus(m, times(m, shake_part, -2.0, -2950, 5300), 3.0, -2850, 5300), -2750, 5250)
@@ -568,7 +598,7 @@ def build_land():
     throw_near = lerp(m, thrown(0, 0, -2500, 5400), thrown(1, 0, -2500, 5700), ease_x, -1700, 5550)
     throw_far = lerp(m, thrown(0, 1, -2500, 6000), thrown(1, 1, -2500, 6300), ease_x, -1700, 6150)
     throw = lerp(m, throw_near, throw_far, ease_y, -1550, 5850)
-    smooth_shake = times(m, times(m, plus(m, throw, -0.5, -1450, 5850), scalar(m, "ReliefShakeReach", 1.5, -1450, 5950), -1350, 5850),
+    smooth_shake = times(m, times(m, plus(m, throw, -0.5, -1450, 5850), scalar(m, "ReliefShakeReach", 0.5, -1450, 5950), -1350, 5850),
                          pair(m, (jitter, "R"), (jitter, "G"), -1450, 6050), -1250, 5900)
     shake = lerp(m, shake, smooth_shake, scalar(m, "ReliefShakeSmooth", 1.0, -1250, 6000), -1150, 5900)
     relief_uv = plus(m, uv, shake, -2800, 150)
