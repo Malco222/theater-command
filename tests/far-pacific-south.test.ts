@@ -407,14 +407,14 @@ describe("Japan's month of December 1941", () => {
     expect(news(g, 28, 'raid the harbour of Pearl Harbor without warning')).toBe(true);
     const after = g.fleets.find((x) => x.nat === 'USA' && x.name === 'Pacific Fleet')!;
     expect(after.ships.bb + after.ships.cv + after.ships.ca + after.ships.dd).toBeLessThan(afloat);
-    // The strike flown, the force stands off Wake before the month is out: by the book the carriers cover the landing
-    // that took Wake on the 23rd, from Kwajalein (rider b599 (i) to ruling 234: each dated landing's cover is a dated
-    // fleet move, and the game holds the striking force as one fleet).
+    // The strike flown, the force comes home to Kure, its admiral's again in home waters: the game holds the striking
+    // force as one fleet, and the row goes where most of it went. (Two of its six carriers stood off Wake for three
+    // days by the record; a part of the fleet is no row of the game's, and Wake's landing of the 23rd sails without it.)
     const force = g.fleets.find((x) => x.nat === 'JAP' && x.name === 'Mobile Fleet')!;
-    expect([g.regions[force.base].name, g.seas[force.zone].key, force.stance]).toEqual(['Kwajalein', 'wake', 'patrol']);
-    // (It came home to Kure first, and Kure is the base it goes back to when its months of cover are over.)
     expect(news(g, 28, 'The carrier striking force comes home to Kure.')).toBe(true);
-    expect(force.bookBase?.[1]).toBe('Kure');
+    expect(g.regions[force.base].name).toBe('Hiroshima');
+    expect(['inland', 'echina']).toContain(g.seas[force.zone].key);
+    expect(force.bookBase).toBeUndefined();
     // The quays: the two divisions on Hainan, which Japan holds and does not own, have sailed.
     // (The 5th lands at Singora, Siam's shore, and is carried down the west coast within the month by the record's dated
     // fights, Jitra and Kampar: far-pacific-war.json, 'attacks'.)

@@ -204,7 +204,6 @@
       ],
       "fleets": [
         {"month": 28, "fleet": "4th Fleet", "sea": "wake", "base": ["Kwajalein", "Truk"]},
-        {"month": 28, "fleet": "Mobile Fleet", "sea": "wake", "base": ["Kwajalein", "Truk"]},
         {"month": 29, "fleet": "Mobile Fleet", "sea": "bismarck", "base": ["Truk"]},
         {"month": 29, "fleet": "4th Fleet", "sea": "bismarck", "base": ["Truk"]},
         {"month": 29, "fleet": "3rd Fleet", "sea": "molucca", "base": ["Davao", "Jolo"]},

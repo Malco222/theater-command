@@ -98,7 +98,9 @@ describe("Japan's second ring by the book (rider b599 (i) to ruling 234)", () =>
   it("gives each landing its cover as dated fleet moves, and a fleet's months in order so it is home before its next", () => {
     const F = stations()!.fleets!;
     expect(F.filter((f) => (f.nat ?? 'JAP') === 'JAP').map((f) => [f.month, f.fleet, f.sea])).toEqual([
-      [28, '4th Fleet', 'wake'], [28, 'Mobile Fleet', 'wake'],
+      // (Wake's cover is the 4th Fleet alone: the game holds the carrier striking force as one fleet, most of it went
+      // home after Pearl Harbor, and so the whole row goes home; a part of it for Wake is no row of the game's.)
+      [28, '4th Fleet', 'wake'],
       [29, 'Mobile Fleet', 'bismarck'], [29, '4th Fleet', 'bismarck'], [29, '3rd Fleet', 'molucca'], [29, '2nd Fleet', 'makassar'],
       [30, '3rd Fleet', 'java'], [30, 'Southern Expeditionary Fleet', 'java'],
       [31, '4th Fleet', 'solomon'], [33, '4th Fleet', 'eastsol'], [35, '4th Fleet', 'eastsol'],
