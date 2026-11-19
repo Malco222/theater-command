@@ -33,8 +33,9 @@ namespace BattleLook
 	 * its haze over nothing: black behind it, darker the higher the eye looked, and a straight seam along the horizon
 	 * where the hazed sea ended (the art director, 19 November 2026). This is the engine's own air and sky, lit by the
 	 * battle's sun; the scene's other lamps are kept out of it. AirSkyEnd takes it away and puts the lamps back as they
-	 * were. "-TheaterAirSky=air,dust,far,haze" tries other numbers (how blue the air, how much dust in it, how fast
-	 * distance pales, how much of the haze lies over the sky); "-TheaterNoAirSky" leaves the sky as it was.
+	 * were. "-TheaterAirSky=air,dust,far,haze,bright" tries other numbers (how blue the air, how much dust in it, how
+	 * fast distance pales, how much of the haze lies over the sky, how bright the sky); "-TheaterNoAirSky" leaves the
+	 * sky as it was.
 	 */
 	void AirSkyBegin(AActor& Scene, UDirectionalLightComponent* Sun);
 	void AirSkyEnd();
