@@ -60,8 +60,10 @@ def paints_for(s):
 
 
 def rivet_paints(paints):
-    """A rivet is a shade under the paint it sits in, and the joint of two panels a shade under that. On a black coat
-    nothing is darker than the paint, so there they are a shade over it: worn edges and dust, as on a night machine."""
+    """A rivet is a faint shade under the paint it sits in (about a third as strong as a joint: the art director,
+    2026-11-19, of the Val seen close: "real rivets read as a faint dotted line", not as studs), and the joint of two
+    panels a full shade under it. On a black coat nothing is darker than the paint, so there they are a shade over it:
+    worn edges and dust, as on a night machine."""
     from rigid import mix_hex
 
     def shade(c, k):
@@ -69,7 +71,7 @@ def rivet_paints(paints):
         if 0.2126 * r + 0.7152 * g + 0.0722 * b < 44.0:
             return mix_hex(c, "A9A9A3", k * 0.6)
         return mix_hex(c, "000000", k)
-    return {"rivet": shade(paints["upper"], 0.3), "rivet_under": shade(paints["under"], 0.24),
+    return {"rivet": shade(paints["upper"], 0.13), "rivet_under": shade(paints["under"], 0.11),
             "seam": shade(paints["upper"], 0.36), "seam_under": shade(paints["under"], 0.3)}
 
 
@@ -912,7 +914,7 @@ def rivets(m, f, s, G, hull):
     if not m.fine:
         return
     big = bool(s.get("engines"))
-    r, gap = (0.009, 0.11) if big else (0.007, 0.08)
+    r, gap = (0.006, 0.11) if big else (0.0045, 0.08)       # (flush dots of paint 9 to 12 mm across; they were half as big again and read as studs)
     seam = 0.0034 if big else 0.0028                       # (half as wide as a joint is drawn)
     dots = {}
 
@@ -1140,8 +1142,11 @@ def rivets(m, f, s, G, hull):
         for side in ((fin_side, -fin_side) if fin_side else (0.0,)):
             rows(fin_sections, "fin", 0.54, (0.12, 0.3, 0.48), rib, True, side, joints=(0.3,))
 
-    # -- laid a part and a paint at a time: each one a small square on its corner, lying in the skin
+    # -- laid a part and a paint at a time: each one a small six-sided dot lying in the skin (four-sided underneath,
+    #    where nobody looks at her from a hand's breadth away)
     for (part, paint), each in dots.items():
+        sides = 4 if paint.endswith("_under") else 6
+        ring = [(math.cos(2.0 * math.pi * i / sides) * r, math.sin(2.0 * math.pi * i / sides) * r) for i in range(sides)]
         verts, faces = [], []
         for p, n, t in each:
             t = t - n * t.dot(n)
@@ -1150,8 +1155,8 @@ def rivets(m, f, s, G, hull):
             t.normalize()
             w = n.cross(t)
             k = len(verts)
-            verts += [p + t * r, p + w * r, p - t * r, p - w * r]
-            faces.append((k, k + 1, k + 2, k + 3))
+            verts += [p + t * c + w * d for c, d in ring]
+            faces.append(tuple(range(k, k + sides)))
         m.use(part)
         m.add(verts, faces, paint, False)
     m.use("plane")
