@@ -431,3 +431,16 @@ def install(wash=0.85, snow=0.8):
         return washed(base_look(model, **kw), model, wash, snow) if (wash > 0 or snow > 0) else base_look(model, **kw)
     ground.Field = field
     works.land_look = land_look
+    # Cycles draws black where a ray meets more see-through faces than it may pass; the kit allows 4, and a row of
+    # birches' twig haze stacks up far more than that: let it pass many (a winter picture only)
+    import kit
+    if "render_setup" not in _installed:
+        _installed["render_setup"] = kit.render_setup
+    base_setup = _installed["render_setup"]
+
+    def render_setup(*a, **kw):
+        sc = base_setup(*a, **kw)
+        sc = sc or bpy.context.scene
+        sc.cycles.transparent_max_bounces = max(sc.cycles.transparent_max_bounces, 64)
+        return sc
+    kit.render_setup = render_setup
