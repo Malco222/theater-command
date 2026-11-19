@@ -21,7 +21,7 @@
 
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { GUNS_ALONE, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, type Assessment } from './game';
+import { GUNS_ALONE, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, type Assessment } from './game';
 import { seat } from './commanders';
 import { bookFed } from './history';
 import { drawMen } from './manpower';
@@ -146,13 +146,13 @@ export function breach(g: Game, r: Region, pct: number): number {
 }
 
 /** What the town adds to its defenders before any bombardment: so much above 1. */
-const wallsOf = (g: Game, r: Region): number => SIEGE.bonus[townSize(g, r)] - 1 + (r.fort ? SIEGE.fortBonus[r.fort.lv] ?? 0 : 0);
+const wallsOf = (g: Game, r: Region, works = worksFor(g, r, r.ctrl)): number => SIEGE.bonus[townSize(g, r)] - 1 + (r.fort && works ? SIEGE.fortBonus[r.fort.lv] ?? 0 : 0);
 
 /**
  * How much stronger the defenders fight inside the town. `eased` is the share of the works the guns and engineers
  * of this assault put out of account, on top of what earlier bombardment has broken down.
  */
-export const townBonus = (g: Game, r: Region, eased = 0): number => 1 + wallsOf(g, r) * (1 - breachOf(g, r)) * (1 - clamp(eased, 0, 1));
+export const townBonus = (g: Game, r: Region, eased = 0, works = worksFor(g, r, r.ctrl)): number => 1 + wallsOf(g, r, works) * (1 - breachOf(g, r)) * (1 - clamp(eased, 0, 1));
 
 /**
  * The town's own guard, in divisions' worth: depot troops, police and militia. It stands only while the place is
@@ -216,7 +216,7 @@ export const guardWorth = (d: number): string => d >= 0.95 && d < 1.05 ? "1 divi
  * already slow in the field, so they are never counted twice.
  */
 export const fieldWalls = (g: Game, r: Region, eased: number, open: number): number =>
-  1 + (SIEGE.bonus[townSize(g, r)] - 1 + (r.fort ? (SIEGE.fortBonus[r.fort.lv] ?? 0) * clamp(open, 0, 1) : 0)) * (1 - breachOf(g, r)) * (1 - clamp(eased, 0, 1));
+  1 + (SIEGE.bonus[townSize(g, r)] - 1 + (r.fort && worksFor(g, r, r.ctrl) ? (SIEGE.fortBonus[r.fort.lv] ?? 0) * clamp(open, 0, 1) : 0)) * (1 - breachOf(g, r)) * (1 - clamp(eased, 0, 1));
 
 /** True while anybody holds the town: a garrison, or its guard. */
 export const townHeld = (g: Game, r: Region): boolean => garrisonOf(r).length > 0 || guardOf(g, r) > 0;
