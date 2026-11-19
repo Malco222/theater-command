@@ -665,7 +665,15 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		TSharedPtr<FRaw> Raw;
 		FString Text;
 		TSharedPtr<FJsonObject> File;
-		const FString Path = FPaths::ProjectContentDir() / TEXT("Models") / (Name + TEXT(".json"));
+		// ("-TheaterOldVehicles" stands the campaign's older miniature wherever one is kept beside the new one, in
+		// Models/Old: to show the two against each other and to time them. The parade can also name one outright,
+		// "Old/LightTank:BRA".)
+		static const bool bOldVehicles = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldVehicles"));
+		FString Path = FPaths::ProjectContentDir() / TEXT("Models") / (Name + TEXT(".json"));
+		if (bOldVehicles && FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Old") / (Name + TEXT(".json"))))
+		{
+			Path = FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Old") / (Name + TEXT(".json"));
+		}
 		if (FFileHelper::LoadFileToString(Text, *Path) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), File) && File.IsValid())
 		{
 			const TSharedPtr<FJsonObject>* Part = nullptr;
