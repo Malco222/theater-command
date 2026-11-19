@@ -998,6 +998,44 @@ def _unfold(body, rounds=12):
     return len(first), len(backs)
 
 
+def _hood_weights(m):
+    """The snow hood's drape follows the body, not the head: from the jaw down it takes, more and more, the body's own
+    weights where it lies (the nearest few body points, as kit lying on the body does), wholly by the shoulder line
+    (the neck joint's height). Weighted wholly to the head, the drape over the shoulders swung with it and cut up to
+    14 cm into the shoulders when he raised his head to aim lying down. Returns how many points are partly or wholly
+    on the body."""
+    hood = m["helmet"]
+    if not hood.name.startswith("helmet_snowhood"):
+        return 0
+    from mathutils import kdtree
+    body, J = m["body"], m["J"]
+    Wb, names = S.weights_of(body)
+    kd = kdtree.KDTree(len(body.data.vertices))
+    for v in body.data.vertices:
+        kd.insert(v.co, v.index)
+    kd.balance()
+    z_jaw, z_sh = J["head"][2] - 0.04, J["neck"][2]
+    Mi = hood.matrix_world
+    W = np.zeros((len(hood.data.vertices), len(names)))
+    head = names.index("head")
+    n = 0
+    for v in hood.data.vertices:
+        p = Mi @ v.co
+        t = float(np.clip((z_jaw - p.z) / (z_jaw - z_sh), 0.0, 1.0))
+        b = t * t * (3.0 - 2.0 * t)
+        W[v.index, head] = 1.0 - b
+        if b > 0.0:
+            n += 1
+            wb, tot = np.zeros(len(names)), 0.0
+            for co, j, d in kd.find_n(p, 4):
+                w = 1.0 / max(d, 1e-3)
+                wb += Wb[j] * w
+                tot += w
+            W[v.index] += b * wb / tot
+    S.set_weights(hood, W, names, 4, 0.03)
+    return n
+
+
 def _seat_buttons(m):
     """Sets the jacket's five buttons on the body's mesh as it came out (they were laid on the cloth's field, which the
     thinned mesh can lie some millimetres under, most at the throat where the front edge meets the collar): each moved
@@ -1046,6 +1084,8 @@ def assemble(nation, weapon="rifle", seed=None):
             print("  SOV folds seen from outside (before, after smoothing):", _unfold(m["body"]))
             S.mark_rest(m["body"], dusty=True)
             print("  SOV buttons set on the cloth (mm moved, top first):", _seat_buttons(m)[::-1])
+            if dress == "snow":
+                print("  SOV snow hood: points weighted toward the body below the jaw:", _hood_weights(m))
             m["body_uncut"] = m["body"].data.copy()          # (the mid and far are thinned from the body before its seams)
             m["shade"] = shade_dress(m["body"], m["J"], m["LM"], dress)
     finally:
