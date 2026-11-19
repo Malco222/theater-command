@@ -487,7 +487,7 @@ export class AirSim implements BattleSim<AirUnit> {
         u.run += dt;
         if (u.run >= SKY.run) {
           u.dropped = u.n;
-          this.say('air:bombs', u, `${told(this.called(u), '{N} [bombs|bomb]')} ${this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
+          this.say('air:bombs', u, `${told(this.called(u), '{N} [bombs|bomb]')} ${this.quarry() ?? this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
           this.bombsFall();
           if (this.sea) for (const x of this.sea.drop(this.droppedNow(), u.strike ?? 'bomb', this.t)) this.say(x.what, u, x.text, x.extra);
         }
@@ -793,6 +793,13 @@ export class AirSim implements BattleSim<AirUnit> {
       // The guns firing at it: only over a defended target, on its way in, never once it turns for home (the brief).
       flak: u.side === 'att' && this.place.gunLoss > 0 && !done && !away(u) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? SKY.flak.kinds[this.shownBand(u)] : [],
     };
+  }
+
+  /** A strike on a fleet at sea: the bombs fall on the fleet, as the ticket's title names it ("the Mobile Force"), not
+   * on the place; undefined for any other raid, a harbour's included. */
+  private quarry(): string | undefined {
+    const name = this.place.ships && !this.place.ships.law.harbour ? this.place.ships.law.fleets[0]?.name : undefined;
+    return name ? `the ${name}` : undefined;
   }
 
   /** The band a box is drawn at: a torpedo box flies its run in low, though it is counted in the middle (ships.ts BAND). */
@@ -1135,10 +1142,9 @@ export class AirSim implements BattleSim<AirUnit> {
     // the campaign's raid order writes the whole card from what it books (airpages.ts airAct).
     const me: Side = this.ticket.def.human && !this.ticket.att.human ? 'def' : 'att';
     const bill = (s: Side) => ({ ftr: count(s, 'ftr'), bmr: count(s, 'bmr') });
-    // A strike on a fleet at sea: the bombs fell on the fleet, as the ticket's title names it, not on the place.
-    const quarry = this.place.ships && !this.place.ships.law.harbour ? this.place.ships.law.fleets[0]?.name : undefined;
+    const quarry = this.quarry();
     const lines = afterWords({
-      place: this.place.name, ...(quarry ? { target: `the ${quarry}` } : {}), sky: this.place.mission === 'superiority', me, adj: { att: this.ticket.att.adj, def: this.ticket.def.adj },
+      place: this.place.name, ...(quarry ? { target: quarry } : {}), sky: this.place.mission === 'superiority', me, adj: { att: this.ticket.att.adj, def: this.ticket.def.adj },
       bombers: this.toStaff ? 0 : bombers0, dropped: out.dropped, jettisoned: Math.max(0, bombers0 - out.dropped - out.lostBefore), lostBefore: out.lostBefore, staff: this.toStaff,
       bill: this.toStaff ? null : { att: bill('att'), def: bill('def') }, before: this.before,
       ...(this.staff ? { how: staffHow(me, this.staff, this.place.chance) } : {}),
