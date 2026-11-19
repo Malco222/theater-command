@@ -1155,6 +1155,14 @@ int main(int Argc, char** Argv)
 		const Vec Square = Fire.Cross(Vec(0, 0, 1)).Unit();
 		Cam.Eye = std::string(MgView) == "behind" ? MgGun - Fire * 10.0 + Vec(0, 0, 3.0) : Mid - Square * 30.0 + Vec(0, 0, 6.0);
 		Cam.Forward = ((std::string(MgView) == "behind" ? Hit : Mid) - Cam.Eye).Unit();
+		if (std::string(MgView) == "gunner")
+		{
+			// (=gunner: a man kneeling beside the gun, 3 m behind it and 1.5 m to its right, 1.6 m up, looking at the ground
+			// under the gun's receiver: the heap of brass and the flash close to)
+			const Vec Under = MgGun - Fire * 0.6 - Vec(0, 0, 0.6);
+			Cam.Eye = MgGun - Fire * 3.0 - Square * 1.5 + Vec(0, 0, 1.0);
+			Cam.Forward = (Under + Fire * 0.7 + Vec(0, 0, 0.25) - Cam.Eye).Unit();
+		}
 		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
 		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
 	}

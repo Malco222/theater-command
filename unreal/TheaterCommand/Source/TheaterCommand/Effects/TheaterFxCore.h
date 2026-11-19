@@ -312,12 +312,20 @@ namespace TheaterFx
 		/** A ground gun's spent case (ground_cases.<gun>): its size and how it is thrown and lies. */
 		struct CaseRow
 		{
-			double M = 0.08, D = 0.012, After = 0.0, Back = 0.0, Side = 1.0, Glint = 4.0, LeastPx = 0.8;
+			double M = 0.08, D = 0.012, After = 0.0, Back = 0.0, Below = 0.0, Side = 1.0, Scatter = 0.25, Glint = 4.0, LeastPx = 0.8;
 			Span Throw{ 2.0, 4.0 }, Up{ 1.0, 2.5 }, Lie{ 2.0, 4.0 }, Tumble{ 15.0, 30.0 };
 			Rgb Col, Dark;
 		};
 		bool CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& Out_) const; // (false: none for this gun, too far off, or no room)
 		void GroundCase(double T, const Vec& Breech, const Vec& Away, const CaseRow& C, Dice& D);
+		int LayCase(int Slot, const Bit& B, double Age, const Vec& P, double A, const View& Eye, int Room); // (a spent case's shadow, tube and mouth: the places it took)
+		/** A ground gun's flash close to the eye (muzzle.hot, art director 07:08Z): lit from within, a yellow-white root
+		 *  and an orange body, as the air guns' close flash. */
+		struct HotFlash
+		{
+			Rgb Root, Root2, Hot, Orange, Rim;
+		};
+		bool HotOf(const Vec& At, HotFlash& Out_) const; // (false: no muzzle.hot in the recipe, or the gun past within_m of the eye)
 		/** A dust.vehicles row for one ground, read once a ground. */
 		struct DustRow
 		{
@@ -444,6 +452,21 @@ namespace TheaterFx
 		RoundLight Round; // (while laying one oil column puff: each point lit as a point on a round column, by where it sits across it)
 		Rgb EdgeTo; // (while laying one bit: its rim's colour, EdgeK of the way; see Bit::Edge)
 		double LaySquare = 0.0; // (while laying one bit: 0 an ellipse; toward 1 its outline squared off, a gun case's cylinder seen side on)
+		// (while laying a spent case's body: each point lit as a point on a metal tube, by where it sits across it. Art
+		// director 07:08Z: a bright band along the top, a shade side and underside, never a pale plank)
+		struct TubeLight
+		{
+			bool bOn = false;
+			Vec Mid, Across, Back, Sun, Half; // (the tube's middle; across it on the screen; toward the eye; the sun; half way between)
+			double R = 1.0, Shine = 8.0;
+			Rgb Shade, Lit, Spark; // (in shade; full sun; the glint's own light at its peak)
+		};
+		TubeLight Tube;
+		Rgb CaseMouth, CaseGlint; // (ground_cases: the dark inside of an open case's mouth; the colour of its glint)
+		double CaseShadow = 0.5, CaseShine = 8.0;
+		std::vector<double> CaseUntil; // (when each long-lying case goes: past ground_cases.most_lying, new ones lie only briefly)
+		size_t MostLying = 200;
+		double CaseFar = 150.0; // (ground_cases.draw_within_m: past it a case is neither counted nor laid)
 		double EdgeK = 0.0;
 		double SkyFill = 0.25, SunThrough = 1.5, SunThroughPow = 3.0;
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
@@ -508,6 +531,10 @@ namespace TheaterFx
 		// never drawn, holds no place: counted, far debris shut off the cases, gun smoke and showers beside the eye. The
 		// pre-check, 06:42Z)
 		size_t InSight = 0, HeldAtDraw = 0;
+		// (the vehicles' dust's own count: in sight at the last Draw and laid since; its gate takes the fuller of the room
+		// and dust.vehicles.most_of_room of it. The pre-check, 07:10Z)
+		size_t DustInSight = 0, DustSince = 0;
+		double DustRoom = 0.4, DustFullWithin = 120.0;
 		// (the steep high eye's thinning of dust near the units, worked out once a Draw: how much, and where the dust
 		// sockets are now; read at Setup from dust.vehicles.from_above)
 		double SteepThin = 0.0;

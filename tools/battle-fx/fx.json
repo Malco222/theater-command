@@ -1259,43 +1259,89 @@
    "hide_s": 2.2,
    "haze_alpha": 0.18,
    "flatten": 0.6
+  },
+  "hot": {
+   "_how": "Art director 07:08Z: close to the eye (within_m) a ground gun's flash, a machine gun's (Shots, mg) or a field gun's (Muzzle), is lit from within as the air guns' close flash: a yellow-white root at the muzzle (root to root_edge, its rim hot), an orange body (orange, its rim rim) with dense rims, shrinking rather than going see-through. Past within_m as before.",
+   "within_m": 50,
+   "root": [
+    255,
+    250,
+    232
+   ],
+   "root_edge": [
+    255,
+    240,
+    190
+   ],
+   "hot": [
+    255,
+    232,
+    150
+   ],
+   "orange": [
+    250,
+    140,
+    30
+   ],
+   "rim": [
+    230,
+    96,
+    16
+   ]
   }
  },
  "ground_cases": {
-  "_how": "The grit up close (art director): within within_m of the eye, a ground machine gun (Shots with weapon mg) throws its spent brass out of its right side every round, flicking, tumbling end over end and glinting, to lie a few seconds in the dirt beside it; a towed or field gun (Muzzle at_gun, howitzer) opens its breech after_s after each shot and throws its big brass case out behind, where it lies for minutes, so the cases pile up behind the gun through a fight. A tank's cases stay inside it. Drawn as a brass cylinder's outline from any side, with a line of sunlight along it. Each gun's cases use their own dice, so its rounds, strikes and smoke fall as they always did; a recipe without ground_cases draws none. They are left out when the screen is past three fifths full.",
+  "_how": "The grit up close (art director): within within_m of the eye, a ground machine gun (Shots with weapon mg) drops its spent brass out of the bottom of its receiver every round (as the war's machine guns did), falling with a little scatter to build a small heap under and beside the gun where the gunner lies; a towed or field gun (Muzzle at_gun, howitzer) opens its breech after_s after each shot and throws its big brass case out behind, where it lies for minutes, so the cases pile up behind the gun through a fight. A tank's cases stay inside it. Each case is a brass tube lit as metal (art director 07:08Z): a bright band toward the sun with a glint (glint, shine), a shade side and underside (shade), the dark open mouth (mouth) at one end when it is turned to the eye, and a soft contact shadow on the ground once it lies there (contact_shadow). Past most_lying cases lying at once, a new one lies only a moment. Each gun's cases use their own dice, so its rounds, strikes and smoke fall as they always did; a recipe without ground_cases draws none. They are left out when the screen is past three fifths full.",
   "within_m": 40,
   "colour": [
    196,
    156,
    82
   ],
-  "dark": [
-   140,
-   104,
-   52
+  "shade": [
+   112,
+   82,
+   37
+  ],
+  "mouth": [
+   46,
+   34,
+   18
   ],
   "glint": 4,
+  "glint_colour": [
+   255,
+   220,
+   140
+  ],
+  "shine": 8,
+  "contact_shadow": 0.5,
   "least_px": 0.8,
+  "most_lying": 200,
+  "draw_within_m": 150,
   "mg": {
-   "case_m": 0.08,
-   "case_d_m": 0.012,
-   "breech_back_m": 0.5,
-   "side": 1,
+   "_note": "art director 07:08Z: out of the bottom of the receiver (the MG 34 and 42, the Bren, the DP, the Browning, the Vickers), rifle-calibre cases about 6 cm; they lie long enough to heap up",
+   "case_m": 0.06,
+   "case_d_m": 0.011,
+   "breech_back_m": 0.6,
+   "below_m": 0.06,
+   "side": 0.15,
    "throw_mps": [
-    2,
-    4
+    0.05,
+    0.25
    ],
    "up_mps": [
-    1,
-    2.5
+    -0.4,
+    0.0
    ],
+   "scatter_mps": 0.18,
    "lie_s": [
-    3,
-    6
+    60,
+    120
    ],
    "tumble": [
-    15,
-    30
+    4,
+    12
    ]
   },
   "at_gun": {
@@ -1940,8 +1986,8 @@
     6
    ],
    "life_fast_s": [
-    7,
-    10
+    8,
+    11
    ],
    "r0_m": [
     0.5,
@@ -1952,8 +1998,8 @@
     2.5
    ],
    "r1_fast_m": [
-    5,
-    7
+    5.5,
+    7.5
    ],
    "flatten": [
     0.6,
@@ -1970,6 +2016,9 @@
    "haze_by_s": 3.5,
    "haze_alpha": 0.3,
    "tracked": 1.3,
+   "most_of_room": 0.4,
+   "full_within_m": 120,
+   "_most_of_room": "pre-check 07:10Z: the dust's gate takes the fuller of the whole room and the dust's own share of it (most_of_room), so dust alone never cuts a salvo behind the columns; a vehicle within full_within_m of the eye keeps its whole trail",
    "tracks_more_than_wheels": true,
    "low_skirt": {
     "_how": "Of every puff, share is a low dense skirt (flatten, wider by wide, thicker by thick): the trail's body, thick from the ground to a vehicle's height so what drives in it is hidden; the rest are the soft tall billows.",

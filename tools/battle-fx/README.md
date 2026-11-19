@@ -111,7 +111,10 @@ raises dust, and that dust hides things.
   grow from `r1_m` to `r1_fast_m`, `flatten` from 0.6 to 0.9 and `life_s` to `life_fast_s`. Half are low dense skirts
   (`low_skirt`), thick from the ground to a vehicle's height, under the soft tall billows. Tracks throw `tracked` times
   more than wheels. `by_ground` scales it: sand 1, earth 0.55, town 0.5, woods 0.25; snow, mud and water none. Standing
-  still, nothing. Past three fifths of the room a trail lays half as many; past `0.85` none.
+  still, nothing. Past three fifths of the room a trail lays half as many; past `0.85` none. The room here is the
+  fuller of the whole room and the dust's own share of it (`most_of_room`, 0.4; the pre-check, 07:10Z), so a long
+  column's dust never cuts a salvo behind it; a vehicle within `full_within_m` (120) of the eye keeps its whole
+  trail, so from a man's eye the column in front still hides what drives behind its lead (60 tanks: 9, 2, 0% seen).
 - Guns (`muzzle.veil`): `Muzzle(..., Ground)` on a ground in `veil.by_ground` (sand) raises a veil from a gun with a
   `dust_ring_m` (tank, anti-tank, howitzer; a towed gun's `muzzle` socket too), spread along the line of fire and
   round the gun, every other puff a low skirt. It hides the gun and its line of sight for `hide_s`, then thins to
@@ -138,19 +141,32 @@ raises dust, and that dust hides things.
 Ground guns throw out their spent cases (`ground_cases`), with no new call: `Shots` and `Muzzle` lay them when the
 eye is within `within_m` (40) of the gun, and only for the guns named there.
 
-- A machine gun (`mg`, by `Shots` with weapon `mg`): each round flicks a small brass case (`case_m` 0.08 long) out of
-  its right side (`side`), a little behind the muzzle (`breech_back_m`), 2 to 4 m/s out and up, spinning fast, and it
-  lies 3 to 6 s in the grass.
+- A machine gun (`mg`, by `Shots` with weapon `mg`): each round drops a rifle-calibre case (`case_m` 0.06 long) out of
+  the bottom of the receiver (`breech_back_m` behind the muzzle, `below_m` under it), as the war's machine guns did,
+  falling with a little scatter (`scatter_mps`) to build a small heap under and beside the gun where the gunner lies.
+  The heap lies a minute or two (`lie_s`).
 - Towed and field guns (`at_gun`, `howitzer`, by `Muzzle`): after the recoil (`after_s`, 0.8 and 1.5 s) the big case
   (0.6 and 0.4 m) drops out of the breech behind the gun (`breech_back_m`), tumbles slowly and comes to rest lying
   flat. It stays three to four minutes (`lie_s`), so a gun that has been firing sits on a growing pile of brass.
 - Tank cases stay inside the tank: `tank_gun` has no row.
-- Each case is a small brass cylinder lit by the sun (`colour` 196,156,82 into `dark` 140,104,52 as it turns), with a
-  thin glint along it (`glint`). Below `least_px` on screen it is not drawn. Cases take no room past three fifths of
-  it, and they use their own dice, so every other effect draws exactly as before.
-- The preview: `FX_MG_VIEW=behind ./fxpreview recipe.txt out mg earth 20 1280x720` (the MG from behind its right
-  shoulder); `FX_EVERY=4 FX_AHEAD=-3 FX_OFF=6 ./fxpreview recipe.txt out drive earth 0,30 960x540 gun` (an anti-tank gun
-  firing every 4 s, its pile building).
+- Each case is a brass tube lit as metal (art director 07:08Z), square-ended and straight-sided from any side: across
+  it a bright band toward the sun (`colour` 196,156,82) with a gold glint (`glint`, `glint_colour`, `shine`), down to a
+  shade side and underside (`shade` 112,82,37); a lying case spans about 130 levels of luma. The open mouth (`mouth`)
+  shows dark with a brass lip when that end is turned to the eye, and once it lies there a soft contact shadow
+  (`contact_shadow`) sits under it. Each case takes up to three places.
+- Past `most_lying` (200) cases lying at once, a new one lies only a moment. Past `draw_within_m` (150) a case is
+  neither counted nor drawn, fading over the last quarter. Below `least_px` on screen it is not drawn. Cases take no
+  room past three fifths of it, and they use their own dice, so every other effect draws exactly as before.
+- The preview: `FX_MG_VIEW=gunner ./fxpreview recipe.txt out mg earth 20,120 1280x720` (the MG from beside its
+  gunner: the brass falling, then the heap); `FX_EVERY=4 FX_AHEAD=-3 FX_OFF=6 ./fxpreview recipe.txt out drive earth
+  0,30 960x540 gun` (an anti-tank gun firing every 4 s, its pile building).
+
+## Close flashes of ground guns
+
+Art director 07:08Z: within `muzzle.hot.within_m` (50) of the eye a ground gun's flash, a machine gun's (`Shots`,
+`mg`) or a field gun's (`Muzzle`), is lit from within as the air guns' close flash: a yellow-white root at the muzzle
+(`root` to `root_edge`, luma 241 to 244) inside an orange body (`orange`, its rim `rim`) with dense rims, shrinking
+rather than going see-through. Farther off, and in a recipe without `muzzle.hot`, as before.
 
 ## Oil fires at sea
 
