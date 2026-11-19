@@ -4738,5 +4738,35 @@
   "file": "234317.ogg",
   "file_kind": "hq preview (Ogg Vorbis)",
   "bytes": 1108953
+ },
+ {
+  "item": "air_close",
+  "id": 437850,
+  "title": "G07-06_B-17 4 Engine Prop Ambience.wav",
+  "author": "craigsmith",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/",
+  "credit_owed": false,
+  "page": "https://freesound.org/people/craigsmith/sounds/437850/",
+  "duration_s": 166.6,
+  "description": "A B-17's four engines: about 58 s from inside the aircraft, then about 104 s from outside. Fetched on Brian's Mac, 19 Nov 2026 (air battle feel).",
+  "file": "437850.ogg",
+  "file_kind": "hq preview (Ogg Vorbis)",
+  "bytes": 1779903
+ },
+ {
+  "item": "air_close",
+  "id": 675951,
+  "title": "S31-15 Shooting gallery; hitting metal targets.wav",
+  "author": "craigsmith",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/",
+  "credit_owed": false,
+  "page": "https://freesound.org/people/craigsmith/sounds/675951/",
+  "duration_s": 35.3,
+  "description": "Rounds striking metal targets at a shooting gallery: about fifteen clean, ringing hits. Fetched on Brian's Mac, 19 Nov 2026 (rounds striking a plane).",
+  "file": "675951.ogg",
+  "file_kind": "hq preview (Ogg Vorbis)",
+  "bytes": 349414
  }
 ]
