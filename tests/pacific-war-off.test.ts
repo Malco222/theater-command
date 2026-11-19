@@ -15,6 +15,7 @@ import airData from '../data/campaign/air.json';
 import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind, keepersOf, keptForces, mayDemand, pacificGround, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds, skiesOn, skiesOver } from '../src/campaign/pacific';
 import { FAR_STAGE } from '../src/campaign/stage';
 import { freed, ops, startOpen } from '../src/campaign/staff';
+import { bookAttacks, bookFleets, bookStations, ceilinged, stations, stationsBind } from '../src/campaign/stations';
 import open from '../data/campaign/open.json';
 
 describe('the Pacific war with the far side off', () => {
@@ -181,6 +182,26 @@ describe("Japan's landing craft of ruling 234(b)2 with the far side off", () => 
     expect(NAVY.landing.craft).toEqual([[46, ['UK', 'USA'], 0.8]]);
     const g = startOpen(createGame(3, null));
     for (const t of [1, 28, 46, 70]) { g.turn = t; expect(assaultStrength(g, 'JAP'), `month ${t}`).toBe(NAVY.landing.assault); }
+  });
+});
+
+describe("the book's stations, strength and dated attacks of ruling 234 (riders b568 to b583) with the far side off", () => {
+  it('there is no table: nobody is stationed or cut, no attack is dated, no fleet is sent, and no corps is the book\'s', () => {
+    expect(stations()).toBeNull();
+    const g = startOpen(createGame(3, null));
+    setStopOff(g, 1, true);
+    g.turn = 28;
+    const read = (): string => JSON.stringify([g.flags, g.corps.map((c) => [c.reg, c.divs, c.str, c.hold, c.stay, c.dug, c.dugFor]), g.fleets.map((f) => [f.base, f.zone, f.stance])]);
+    const before = read();
+    for (const nat of Object.keys(g.nations)) {
+      expect(stationsBind(g, nat)).toBe(false);
+      bookStations(g, nat);
+      bookAttacks(g, nat);
+      expect(bookFleets(g, nat)).toEqual([]);
+    }
+    expect(read()).toBe(before);
+    expect(g.corps.some((c) => ceilinged(g, c) || c.bookWorks !== undefined || c.bookCoast !== undefined || c.bookPart !== undefined)).toBe(false);
+    expect(g.fleets.some((f) => f.bookBase !== undefined)).toBe(false);
   });
 });
 

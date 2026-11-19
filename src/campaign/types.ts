@@ -333,6 +333,15 @@ export interface Corps extends Storied {
   pressed?: boolean;
   /** It took over fieldworks left on this ground this month (the grand campaign): it keeps them at the month's end though it marched. */
   relief?: boolean;
+  /** The book has stationed it (stations.ts; ruling 234's rider b568): the months of works the record gives it where it stands, and it digs no more. No corps carries it with the far side off. */
+  bookWorks?: number;
+  /** The book counts it a coast work (stations.ts; rider b579): fortress troops whose figure is in the record's own for the place. It adds nothing to a field fight that outflanks the place's works. No corps carries it with the far side off. */
+  bookCoast?: true;
+  /**
+   * Set only while a dated fight of the book is fought at the record's figures (stations.ts, rider b580): the share
+   * of this corps that is in the fight, and its strength as it went in. The rest of it is not on the field.
+   */
+  bookPart?: [share: number, str: number];
   /**
    * The weight of the attacks it has stood against since its own month began (the grand campaign): 1 for each
    * blow at full weight, less for a light one. Men who have fought all month fight the next blow tired.
@@ -533,6 +542,8 @@ export interface Fleet extends Storied {
   port: string;
   /** The sea the base opens on. */
   home: number;
+  /** The book has moved its base forward for a dated cover (stations.ts; riders b575, b577): the base, port, home sea and station it goes back to. No fleet carries it with the far side off. */
+  bookBase?: [base: number, port: string, home: number, station: number];
   /** The sea the fleet is in. A fleet in harbour is counted in its home sea but takes no part there. */
   zone: number;
   stance: Stance;

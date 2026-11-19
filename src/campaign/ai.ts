@@ -26,6 +26,7 @@ import { beyondEurope, enemyAtTheDoor, overseasOf, shoreOf, type OverseasRules }
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { frontArmys, lineAny, lineGives, lineLeaves, lineShut } from './line';
+import { bookAttacks, bookFleets, bookStations, ceilinged } from './stations';
 import { hashString } from '../core/rng';
 import { SIEGE, arrive, besieged, feeders, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
@@ -162,9 +163,13 @@ export function theatrePhases(g: Game, nat: string): { theatre: string; phase: P
 
 /** Runs one nation's month. */
 export function runAI(g: Game, nat: string): void {
+  // (By the book its corps on a station take the record's place and posture for the month first: stations.ts. Nothing with the far side off.)
+  bookStations(g, nat);
   // The engineers go to their work before the staff moves anyone.
   aiEngineers(g, nat);
   campaign(g, nat);
+  // (And one of the book's attacks whose corps only came up to the door in this month's marching goes in now.)
+  bookAttacks(g, nat);
   // With the month's moves made, a defence on a river blows its bridges.
   aiBridges(g, nat, (x, from) => blowBridges(g, nat, x, from));
   aiProduction(g, nat);
@@ -484,12 +489,16 @@ function mainCampaign(g: Game, nat: string): void {
   if (open) for (const nm of freed(g, nat)) { const c = g.corps.find((x) => x.nat === nat && x.name === nm && !x.dead); if (c && c.hold && !c.stay) c.hold = false; }
   // (The strikes the plan orders of its carriers fall with the declaration, before the admirals read the month.)
   for (const s of ph?.strikes ?? []) plannedStrike(g, nat, s.fleet, s.harbour, s.home);
-  navalAI(g, nat, ph?.fleets);
+  // (By the book the record's covering fleets take their seas first: stations.ts. None with the far side off.)
+  const cover = bookFleets(g, nat);
+  navalAI(g, nat, cover.length ? [...cover, ...(ph?.fleets ?? [])] : ph?.fleets);
   shoreAI(g, nat);
   airAI(g, nat, ph);
   if (open) homeAgain(g, nat);
   // A nation at peace gives its army no orders, unless its staff is bringing it up for a war of its own choosing.
   if (!n.atWar.length && !(open && ph?.posture === 'redeploy')) return;
+  // (By the book the record's big attacks go in on their month, ahead of the plan's own landings and the staff's asks: stations.ts.)
+  bookAttacks(g, nat);
   if (ph?.landings) landings(g, nat, ph);
   if (open) { descent(g, nat); hop(g, nat, ph); ferry(g, nat); reinforce(g, nat); }
   if (ph?.release) release(g, nat, ph.release);
@@ -1879,8 +1888,16 @@ export function twoWaves(g: Game, avail: Corps[], pool: Corps[], target: Region,
   return a2.odds >= need * H.second ? { corps: first, then: a2.odds } : null;
 }
 
+/**
+ * For the measuring harness: told as a staff's month of attacks opens (`open`: what it asks and where it may go), and of
+ * every defended place it weighs, with the odds its force reads and the odds it asks (`sent`: it goes in). Nothing in
+ * the game listens.
+ */
+export const attackWatch: { tell: ((e: { nat: string; open?: { minOdds: number; only: string[] | null; halt: string[]; oddsFor: Record<string, number>; theatre: boolean }; target?: Region; pool?: Corps[]; odds?: number; need?: number; sent?: boolean; waves?: boolean }) => void) | null } = { tell: null };
+
 function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, minOdds: number, axisList: string[], axisOpen: boolean, follow: boolean, halt: Set<string>, only: Set<string> | null, oddsFor: Record<string, number> = {}): void {
   const failed = new Set<number>();
+  attackWatch.tell?.({ nat, open: { minOdds, only: only ? [...only] : null, halt: [...halt], oddsFor, theatre: !!scope } });
   // Places a first wave has gone in at this month, and how many: the main body follows, and nobody sends a third
   // (a staff pressing a won war sends one more where it has the corps).
   const waved = new Map<number, number>();
@@ -1967,7 +1984,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
             else {
               // Not at these odds in one blow: in two, if there are the corps for it.
               const two = single || (waved.get(j) ?? 0) >= waves - 1 ? null : twoWaves(g, avail, pool, target, need);
-              if (!two) continue;
+              if (!two) { attackWatch.tell?.({ nat, target, pool, odds, need, sent: false }); continue; }
               pick = two.corps; odds = two.then; wave = true;
             }
           }
@@ -1985,6 +2002,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
       if (!best) break;
       let taken: boolean;
       if (best.battle) {
+        attackWatch.tell?.({ nat, target: best.target, pool: best.corps, sent: true, waves: !!best.wave });
         taken = resolveBattle(g, best.corps, best.target).taken;
         // A slow command does not get a second assault organised in the same month, and some plans allow only one.
         // (Two waves laid on beforehand are one operation: the main body goes in behind the first wave.)
@@ -2121,6 +2139,8 @@ export function foldWorn(g: Game, nat: string): void {
     let best: { keep: Corps; gone: Corps; str: number } | null = null;
     for (const keep of here) for (const gone of here) {
       if (keep === gone || whyNotFold(g, keep, gone) !== null) continue;
+      // (A corps whose strength the book sets is folded into no other while the book is open: stations.ts, rider b579.)
+      if (ceilinged(g, gone)) continue;
       const v = foldView(g, keep, gone);
       if (v.back > 0) continue;
       if (!best || v.str > best.str || (v.str === best.str && (keep.xp > best.keep.xp || (keep.xp === best.keep.xp && keep.id < best.keep.id)))) best = { keep, gone, str: v.str };

@@ -663,7 +663,8 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
   it("a far post's guard is its record garrison, counted once; other far colonial towns keep a tenth of a town's guard; home ground keeps it whole (ruling 234's rider b547)", () => {
     const g = grand();
     expect(BUDGET.farColony.guard).toBe(0.1);
-    expect(BUDGET.farColony.posts).toEqual(['Guam', 'Kuching', 'Tarakan', 'Balikpapan', 'Rabaul', 'Ambon', 'Port Moresby']);
+    // (Riders b561(d) and b563: "counted once" reaches the far colonial cities whose defenders the rows already hold.)
+    expect(BUDGET.farColony.posts).toEqual(['Guam', 'Kuching', 'Tarakan', 'Balikpapan', 'Rabaul', 'Ambon', 'Port Moresby', 'Hong Kong', 'Manila', 'Rangoon', 'Batavia', 'Koepang', 'Palembang', 'Medan', 'Wake', 'Hanoi', 'Saigon', 'Hue', 'Vientiane', 'Colombo', 'Singapore']);
     // A town's guard as siege.json reckons it for any town: by its size, capped by its country's army.
     const whole = (name: string): number => { const r = g.byName[name], n = g.nations[r.owner]; return Math.min(SIEGE.guard[townSize(g, r)], SIEGE.guardShare * Math.max(n.armyPeak, armySize(g, n.id))); };
     // The posts whose garrison the historian has given (ruling 234(b)1, rider b541): the record's figure is the whole
@@ -676,8 +677,8 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
       expect(guardOf(g, r), name).toBe(0);
     }
     // Elsewhere on far colonial ground the guard takes the far side's one number, the tenth: Malaya, the Philippines,
-    // Hong Kong, Burma, India, America's forts in mid-ocean, and Japan's mandates alike.
-    for (const name of ['Kota Bharu', 'Legaspi', 'Hong Kong', 'Singapore', 'Rangoon', 'Manila', 'Wake', 'Midway', 'Calcutta', 'Saipan', 'Truk']) {
+    // Burma and India outside the cities named, Midway beside its fort, and Japan's mandates alike.
+    for (const name of ['Kota Bharu', 'Legaspi', 'Penang', 'Johore', 'Moulmein', 'Lingayen', 'Midway', 'Calcutta', 'Saipan', 'Truk']) {
       const r = g.byName[name];
       expect(farColony(r), name).toBe(true);
       expect(r.ctrl, name).toBe(r.owner);

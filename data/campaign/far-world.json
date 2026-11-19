@@ -11,7 +11,8 @@
   "map-tables/burma-front-forces.json": "2026-11-17T12:15Z",
   "pacific-planner/far-yards.md": "2026-11-18T03:46Z",
   "pacific-planner/far-oil.md": "2026-11-18T07:05Z",
-  "pacific-planner/21-whole-world-data-gaps.md": "2026-11-18T07:06Z"
+  "pacific-planner/21-whole-world-data-gaps.md": "2026-11-18T07:06Z",
+  "pacific-six/riders-234.json": "2026-11-18T23:54Z"
  },
  "_draft": "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
  "grand": {
@@ -596,7 +597,7 @@
      "str": 0.4,
      "hold": 1,
      "gen": "Lionel Bond",
-     "est": 0.5
+     "est": 0.8
     }
    ],
    [
@@ -1261,7 +1262,7 @@
     "duty": "patrol",
     "ships": {
      "bb": 0,
-     "cv": 1,
+     "cv": 0,
      "ca": 8,
      "dd": 9,
      "ss": 15
@@ -1905,6 +1906,15 @@
      "cv": 1
     },
     "the new carrier Bon Homme Richard"
+   ],
+   [
+    31,
+    "UK",
+    "China Fleet",
+    {
+     "cv": 1
+    },
+    "the carrier Indomitable"
    ]
   ],
   "building": [
@@ -2265,6 +2275,13 @@
    "JAP": [
     [
      1,
+     "Tadayoshi Sano",
+     2,
+     {},
+     []
+    ],
+    [
+     1,
      "Yasuji Okamura",
      3,
      {
@@ -2284,7 +2301,7 @@
      []
     ],
     [
-     27,
+     26,
      "Tomoyuki Yamashita",
      3,
      {
@@ -2313,6 +2330,15 @@
      [
       "iron_defender"
      ]
+    ]
+   ],
+   "UK+": [
+    [
+     23,
+     "Christopher Maltby",
+     1,
+     {},
+     []
     ]
    ]
   },
@@ -2462,7 +2488,9 @@
     1,
     "Canton",
     {
-     "str": 0.9
+     "str": 1,
+     "xp": 0.3,
+     "gen": "Tadayoshi Sano"
     }
    ],
    [
@@ -2612,7 +2640,7 @@
     1,
     "Hainan",
     {
-     "xp": 0.3,
+     "xp": 0.6,
      "str": 0.9,
      "gen": "Tomoyuki Yamashita",
      "hold": 1,
@@ -2629,7 +2657,7 @@
     1,
     "Hainan",
     {
-     "xp": 0.35,
+     "xp": 0.55,
      "str": 0.65,
      "est": 0.65,
      "hold": 1,
@@ -2646,7 +2674,7 @@
     1,
     "Cam Ranh",
     {
-     "xp": 0.35,
+     "xp": 0.55,
      "str": 0.25,
      "est": 0.25,
      "hold": 1
@@ -2660,7 +2688,7 @@
     1,
     "Formosa",
     {
-     "xp": 0.2,
+     "xp": 0.45,
      "str": 0.65,
      "est": 0.65,
      "gen": "Masaharu Homma",
@@ -2679,7 +2707,7 @@
     1,
     "Formosa",
     {
-     "xp": 0.2,
+     "xp": 0.45,
      "str": 0.25,
      "est": 0.25,
      "hold": 1
@@ -2693,7 +2721,7 @@
     1,
     "Okinawa",
     {
-     "xp": 0.3,
+     "xp": 0.45,
      "str": 0.9,
      "hold": 1,
      "from": [
@@ -3882,6 +3910,289 @@
      "war": [
       "JAP",
       "UK"
+     ]
+    }
+   ],
+   [
+    24,
+    "UK",
+    "China Command (Hong Kong garrison)",
+    "inf",
+    1,
+    "Hong Kong",
+    {
+     "xp": 0.05,
+     "str": 0.7,
+     "hold": 1,
+     "gen": "Christopher Maltby",
+     "est": 0.7,
+     "from": [
+      "China Command (Hong Kong garrison)"
+     ]
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "23rd Army artillery (1st Artillery Group)",
+    "art",
+    1,
+    "Canton",
+    {
+     "xp": 0.3,
+     "str": 0.4,
+     "hold": 1,
+     "est": 0.4,
+     "until": 34
+    }
+   ],
+   [
+    30,
+    "UK",
+    "Blackforce (2/3rd Machine Gun and 2/2nd Pioneer Battalions)",
+    "inf",
+    1,
+    "Batavia",
+    {
+     "str": 0.2,
+     "est": 0.2,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    30,
+    "UK",
+    "2nd Battalion, 131st Field Artillery (United States)",
+    "art",
+    1,
+    "Batavia",
+    {
+     "str": 0.1,
+     "est": 0.1,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    30,
+    "UK",
+    "18th British Division",
+    "inf",
+    1,
+    "Singapore",
+    {
+     "xp": 0,
+     "str": 0.85,
+     "est": 0.85,
+     "war": [
+      "UK",
+      "JAP"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    29,
+    "UK",
+    "45th Indian Infantry Brigade",
+    "inf",
+    1,
+    "Johore",
+    {
+     "xp": 0,
+     "str": 0.3,
+     "est": 0.3,
+     "war": [
+      "UK",
+      "JAP"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    31,
+    "JAP",
+    "14th Army (4th Division)",
+    "inf",
+    1,
+    "Lingayen",
+    {
+     "xp": 0.2,
+     "str": 0.9,
+     "est": 0.9,
+     "war": [
+      "JAP",
+      "USA"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    30,
+    "JAP",
+    "Shoji Detachment (230th Infantry, of the 38th Division)",
+    "inf",
+    1,
+    "Cam Ranh",
+    {
+     "xp": 0.3,
+     "str": 0.3,
+     "est": 0.3,
+     "hold": 1,
+     "war": [
+      "JAP",
+      "UK"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    29,
+    "UK",
+    "44th Indian Infantry Brigade (with Dalforce and the Jind battalion)",
+    "inf",
+    1,
+    "Singapore",
+    {
+     "xp": 0,
+     "str": 0.25,
+     "est": 0.25,
+     "war": [
+      "UK",
+      "JAP"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "1st Tank Regiment",
+    "arm",
+    1,
+    "Hainan",
+    {
+     "xp": 0.6,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1,
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "6th Tank Regiment",
+    "arm",
+    1,
+    "Hainan",
+    {
+     "xp": 0.6,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1,
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "14th Tank Regiment",
+    "arm",
+    1,
+    "Hainan",
+    {
+     "xp": 0.2,
+     "str": 0.2,
+     "est": 0.2,
+     "hold": 1,
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "4th Tank Regiment",
+    "arm",
+    1,
+    "Formosa",
+    {
+     "xp": 0.45,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1,
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "7th Tank Regiment",
+    "arm",
+    1,
+    "Formosa",
+    {
+     "xp": 0.45,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1,
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    30,
+    "JAP",
+    "Shoji Detachment's light tank company",
+    "arm",
+    1,
+    "Cam Ranh",
+    {
+     "xp": 0.3,
+     "str": 0.05,
+     "est": 0.05,
+     "hold": 1,
+     "war": [
+      "JAP",
+      "UK"
+     ],
+     "stops": [
+      1,
+      2
      ]
     }
    ]

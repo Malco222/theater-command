@@ -1179,7 +1179,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // What the town is worth to those inside it, after the guns and the engineers of this assault have done their work.
   const walls = town ? townBonus(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften) : 1;
   let D = 0, thin = 1, readyD = 0, dugD = 0, worksD = 0, tiredD = 0, tiredMost = 0;
+  let coastOut = false;
   for (const d of defenders) {
+    // (By the book the record's figure for a place holds its fortress troops: they man the coast works, and add
+    // nothing to a field fight that comes round those works. Rider b579; stations.ts. None with the far side off.)
+    if (d.bookCoast && !town && opts.sea === undefined && target.fort && !fortFaced) { coastOut = true; continue; }
     // In the streets the country round about counts for nothing: the town is the ground.
     let p = corpsBase(g, d) * KIND[d.kind].def * (town ? walls : TERRAIN_DEF[target.terrain]);
     if (wide && !town) {
@@ -1338,6 +1342,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (target.fort && !town) {
     lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}`, effect: fortFaced === attackers.length ? `Attacked head-on: the attack is cut to ${Math.round(100 / FORT_MUL[target.fort.lv])}% strength` : fortFaced > 0 ? 'Partly outflanked: only the corps attacking head-on are slowed' : 'Outflanked: the works face the other way' });
   }
+  if (coastOut) lines.push({ label: 'Coast defences', value: 'The fortress troops man the works that face the sea', effect: 'They take no part in this fight' });
   // (The guns thicken the line of the corps beside them: where they stand alone there is nobody to say it of.)
   const beside = thicken > 0 && defenders.some((d) => d.kind !== 'art');
   if (soften || beside) lines.push({
@@ -1886,13 +1891,16 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (win) {
     const banned = new Set(attackers.map((c) => c.reg));
     defenders.forEach((c, i) => {
+      // A corps too far gone to fall back as a formation. (By the book only a share of a corps may be in a dated fight,
+      // and it is judged whole: stations.ts, rider b580. Nobody else has a share.)
+      const shattered = (c.bookPart ? c.bookPart[1] - c.bookPart[0] * (c.bookPart[1] - c.str) : c.str) < 0.15;
       // A garrison has nowhere to go.
-      const to = town || overrun || c.str < 0.15 ? null : retreatTarget(g, c, target, banned);
+      const to = town || overrun || shattered ? null : retreatTarget(g, c, target, banned);
       const N = g.nations[c.nat];
-      const away = !overrun && c.str >= 0.15 && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0 && seaOpenAt(g, c.nat, target);
+      const away = !overrun && !shattered && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0 && seaOpenAt(g, c.nat, target);
       // The grand campaign: beaten in the field with no way out, a corps falls back into the town if there is room,
       // and nobody leaves his own capital while it can still be held.
-      if (!town && !overrun && sieges && c.str >= 0.15 && (to ? target.cap && c.nat === target.owner : !away) && canShelter(g, c, target)) {
+      if (!town && !overrun && sieges && !shattered && (to ? target.cap && c.nat === target.owner : !away) && canShelter(g, c, target)) {
         target.units.splice(target.units.indexOf(c), 1);
         joinTown(g, target, c);
         defU[i].fate = 'sheltered';
@@ -1908,10 +1916,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${target.name} under fire${dest.cap ? '' : ` and taken to ${dest.name}`}.`, c.nat, target.id, { arm: 'land', lost: c.nat }); }
       } else {
         const left = men(c);
-        defU[i].fate = c.str < 0.15 ? 'destroyed' : 'surrendered';
+        defU[i].fate = shattered ? 'destroyed' : 'surrendered';
         defU[i].lost += left;
         prisoners += left;
-        storyFallen(g, c, c.str < 0.15 ? 'destroyed' : 'surrendered', attNat, target.id);
+        storyFallen(g, c, shattered ? 'destroyed' : 'surrendered', attNat, target.id);
         removeCorps(g, c);
       }
     });
@@ -3179,6 +3187,8 @@ function expeditions(g: Game, nat: string): void {
     if (row[1] !== nat || (!fromWar && g.turn < row[0])) return;
     // A row marked 'open' belongs to the grand campaign alone: history's campaigns keep the order of battle they were measured with.
     if (o.open && g.flags.open !== 1) return;
+    // A row marked with stops is a row of the book's own record (ruling 234, riders b579 and b581): it comes only at those stops.
+    if (o.stops && !(o.stops as number[]).includes(stopOf(g))) return;
     if (g.flags[`sent:${i}`]) {
       // The main army's order of battle already counts these formations: the campaign only had the loan of them.
       const id = g.flags[`lent:${i}`];
@@ -3391,6 +3401,13 @@ function digIn(g: Game, nat: string): void {
     }
     else { if (c.dug) delete c.dug; if (c.dugFor !== undefined) delete c.dugFor; if (c.digging !== undefined) delete c.digging; }
     if (c.pressed) delete c.pressed;
+  }
+  // (A corps the book has stationed keeps the record's works where it stands and digs no more: stations.ts, ruling
+  // 234's rider b568. No corps carries the mark with the far side off.)
+  for (const c of g.corps) {
+    if (c.bookWorks === undefined || c.dead || armyOf(c) !== nat) continue;
+    if (c.bookWorks <= 0) { if (c.dug) delete c.dug; if (c.dugFor !== undefined) delete c.dugFor; if (c.digging !== undefined) delete c.digging; }
+    else if (c.dug && (c.dugFor ?? 1) > c.bookWorks) c.dugFor = c.bookWorks;
   }
 }
 

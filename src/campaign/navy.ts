@@ -1026,7 +1026,7 @@ export function planLanding(g: Game, cs: Corps[], to: Region): LandingPlan {
 export interface Landing { ok: boolean; why?: string; taken?: boolean; lostAtSea?: number; report?: BattleReport | null; surprise?: boolean; air?: boolean }
 
 /** Lands corps on an enemy coast. If it is defended they fight their way ashore, at a disadvantage unless the enemy is surprised. */
-export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
+export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[], to: Region) => BattleReport): Landing {
   const why = whyNotLand(g, cs, to);
   if (why) return { ok: false, why };
   const nat = cs[0].nat, from = g.regions[cs[0].reg];
@@ -1046,7 +1046,8 @@ export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
   let taken = true;
   let report: BattleReport | null = null;
   if (hostileUnits(g, to, nat).length) {
-    report = resolveBattle(g, cs, to, landingOpts(g, cs, to));
+    // (By the book a landing the record made on an empty beach meets its fight inland, at the record's figures: stations.ts, rider b580.)
+    report = fight ? fight(cs, to) : resolveBattle(g, cs, to, landingOpts(g, cs, to));
     taken = report.taken;
   } else {
     g.week = 1;
