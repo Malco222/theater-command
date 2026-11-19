@@ -8,7 +8,7 @@ import { SHEET, drawShip, drawSub, type Blueprint } from '../src/campaign/bluepr
 import { syncWings } from '../src/campaign/carriers';
 import { createGame } from '../src/campaign/game';
 import { atSea, fleetsOf, sail } from '../src/campaign/navy';
-import { PRESETS, type Dials, type SubDials } from '../src/campaign/sandbox';
+import { PRESETS, shipsMonth, type Dials, type SubDials } from '../src/campaign/sandbox';
 import { SANDBOX_SHIPS } from '../src/campaign/sandbox-data';
 import { fleetExtras, memorialDoor, seaAct, seaDoors, seaPage, type Page } from '../src/campaign/seapages';
 import { startOpen } from '../src/campaign/staff';
@@ -226,6 +226,24 @@ describe('named ships on their fleet\'s page, and the memorial', () => {
     expect(row.lines.join(' ')).toMatch(/Refitted: more anti-aircraft guns/);
     expect(row.buttons.map((b) => b.act)).toContain(`shiprefit:${f.id}:Swiftsure:radar`);
     expect(x.rows.some((r) => /of the standard pattern$/.test(r.title))).toBe(true);
+  });
+
+  it('a ship that has come through five battles gets her crew\'s name, on her card and in the news', () => {
+    const g = britain();
+    const f = fleetsOf(g, 'UK').find((x) => x.ships.ca > 0)!;
+    f.hulls = [hull({ name: 'Swiftsure', stars: 5 }), hull({ name: 'Tenacious', stars: 4 })];
+    const h0 = g.headlines.length;
+    shipsMonth(g, 'UK');
+    const [five, four] = f.hulls!;
+    expect(five.nick).toMatch(/^(Old|the Lucky) /);
+    expect(four.nick).toBeUndefined();
+    expect(g.headlines.slice(h0).map((h) => h.text).join(' ')).toContain(`the crew of the Swiftsure have a name for her: "${five.nick}"`);
+    expect(fleetExtras(g, f.id)!.rows[0].title).toBe(`Swiftsure, \u201C${five.nick}\u201D`);
+    // Once given, it is hers for good.
+    const nick = five.nick;
+    five.stars = 9;
+    shipsMonth(g, 'UK');
+    expect(five.nick).toBe(nick);
   });
 
   it('a carrier fleet\'s page opens its decks', () => {

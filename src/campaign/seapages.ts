@@ -97,7 +97,7 @@ export function fleetExtras(g: Game, fleetId: number): { rows: PageRow[]; top: P
     if (h.n <= 0) continue;
     const words = hullWords(h);
     rows.push({
-      nat: f.nat, title: h.n > 1 ? `${h.name} (${h.n} ${MANY(h.kind)})` : h.name, stars: h.stars ?? 0,
+      nat: f.nat, title: `${h.name}${h.nick ? `, “${h.nick}”` : ''}${h.n > 1 ? ` (${h.n} ${MANY(h.kind)})` : ''}`, stars: h.stars ?? 0,
       lines: [`${h.label}.${words ? ` ${words}` : ''}`, `Joined the fleet in ${dateOf(h.born)}. ${starWords(h.stars ?? 0)}`, ...(h.refits?.length ? [`Refitted: ${h.refits.map(REFIT_WORD).join(', ')}.`] : [])],
       buttons: buttons(h.name),
     });
@@ -132,7 +132,7 @@ function memorialPage(g: Game): Page | null {
     const year = turnToDate(Math.max(1, m.turn)).year;
     const where = m.sea >= 0 ? ` in the ${g.seas[m.sea]?.name ?? 'open sea'}` : '';
     (years.get(year) ?? years.set(year, []).get(year)!).push({
-      nat: g.human!, title: m.name, stars: m.stars,
+      nat: g.human!, title: `${m.name}${m.nick ? `, “${m.nick}”` : ''}`, stars: m.stars,
       lines: [`${m.label}. Lost${m.how ? ` ${m.how}` : ''}${where}, ${dateOf(m.turn)}.`, m.stars ? `${plural(m.stars, 'battle star')}.` : 'Lost before her first battle was done.'],
       buttons: [],
     });

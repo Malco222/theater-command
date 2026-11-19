@@ -670,6 +670,8 @@ export interface ShipHull {
   eyes?: number;
   /** Her oil at sea, times her kind's. */
   oil?: number;
+  /** What her crew call her, once she has come through enough battles (reputation.ts shipNick). */
+  nick?: string;
   /** The refits she has had, by id (classes.json 'refits'). */
   refits?: string[];
   /** Battles she has come through afloat: fleet actions and air strikes on her fleet. */
@@ -685,6 +687,8 @@ export interface ShipMemorial {
   turn: number;
   sea: number;
   stars: number;
+  /** What her crew called her, if she had earned a name. */
+  nick?: string;
   /** How she was lost, in a few words: 'in a fleet action', 'to air attack'. */
   how?: string;
   /** Set once the player has been told of her loss. */

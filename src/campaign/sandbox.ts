@@ -19,6 +19,7 @@ import { NAVY, foundFleet } from './navy';
 import { onPlans, whyNoPlans } from './plans';
 import { SANDBOX_SHIPS, type RefitDef, type Style } from './sandbox-data';
 import { locked, techById, techOf } from './tech';
+import { shipNick } from './reputation';
 import { priceOf } from './traits';
 import { Rng, hashString } from '../core/rng';
 import type { Build, Fleet, Game, ShipClass, ShipHull } from './types';
@@ -293,6 +294,14 @@ export function refitDone(g: Game, nat: string, b: Build, back = false): void {
 export function shipsMonth(g: Game, nat: string): void {
   if (!sandbox(g)) return;
   for (const f of g.fleets) if (f.nat === nat) { trim(f); writeFallen(g, f); }
+  // A ship that keeps coming through her battles is given a name by her crew (reputation.ts), once and for good.
+  for (const f of g.fleets) if (f.nat === nat) for (const h of f.hulls ?? []) {
+    if (h.nick) continue;
+    const nick = shipNick(g, nat, h.name, h.stars ?? 0);
+    if (!nick) continue;
+    h.nick = nick;
+    if (nat === g.human) headline(g, 'battle', `After ${plural(h.stars ?? 0, 'battle')} the crew of the ${h.name} have a name for her: "${nick}".`, nat, undefined, { arm: 'sea' });
+  }
   const n = g.nations[nat];
   if (nat === g.human) for (const m of n.memorial ?? []) {
     if (m.told || m.turn < g.turn - 1) continue;

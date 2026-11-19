@@ -205,7 +205,7 @@ export function writeFallen(g: Game, f: Fleet, how?: string, whole = false): Shi
   if (!out.length) return out;
   const n = g.nations[f.nat];
   if (n) for (const h of out) {
-    for (let i = 0; i < h.n; i++) (n.memorial ??= []).push({ name: h.name, label: h.label, kind: h.kind, turn: g.turn, sea: f.stance === 'port' ? -1 : f.zone, stars: h.stars ?? 0, ...(how ? { how } : {}) });
+    for (let i = 0; i < h.n; i++) (n.memorial ??= []).push({ name: h.name, label: h.label, kind: h.kind, turn: g.turn, sea: f.stance === 'port' ? -1 : f.zone, stars: h.stars ?? 0, ...(h.nick ? { nick: h.nick } : {}), ...(how ? { how } : {}) });
   }
   delete f.fallen;
   return out;
