@@ -272,6 +272,9 @@ def cockpit(m, f, s, G, hull):
     """Under each hood: the dark of the cockpit, and whoever sits there with his seat; a fighter's sight and coaming."""
     m.use("plane")
     for i, (stations, hoops, spine) in enumerate(s.get("hoods", [])):
+        if getattr(f, "cockpit", None):
+            open_cockpit(m, f, s, hull)                    # (her cockpit is open under her canopy: its own dark, and what is in it)
+            break
         hood = hood_body(G, s, i)
         n = 14 if m.fine else 6
         first = s["cabin"]["screen"][0] - 0.22 if i == 0 and s.get("cabin") else hood.front - 0.12      # (a cabin's windscreen stands well aft of its body's nose)
@@ -287,9 +290,15 @@ def cockpit(m, f, s, G, hull):
         if not m.fine:
             continue
         m.box(at(-0.2, 0, -0.3), (0.05, 0.42, 0.36), "inside", yaw=face)                    # the back of his seat
-        if single and face == 0.0:
+        if single and face == 0.0 and s.get("canopy"):
+            xa = x - 0.185                                                                  # the armour behind his head, clear of the glass
+            hi = min(z + 0.15, min(body_top(hood, xa, -y + d) for d in (-0.135, 0.0, 0.135)) - 0.035)
+            m.box((xa, y, 0.5 * (z - 0.15 + hi)), (0.02, 0.27, hi - z + 0.15), "gunmetal")
+            if first:
+                controls(m, at, x, z, hull)
+        elif single and face == 0.0:
             m.box(at(-0.185, 0, 0.0), (0.02, 0.27, 0.3), "gunmetal")                        # the armour behind his head
-        if single and first and face == 0.0:
+        if single and first and face == 0.0 and not getattr(f, "cockpit", None):
             sill = hull.at(x + 0.56, math.pi / 2.0).z
             if x + 0.75 < hood.front:
                 wide = min(0.85 * hood.w(-(x + 0.56)), 0.25)
@@ -297,6 +306,65 @@ def cockpit(m, f, s, G, hull):
                 m.box((x + 0.43, 0.0, z - 0.03), (0.06, 0.05, 0.08), "gunmetal")            # his sight, and its glass
                 m.box((x + 0.46, 0.0, z + 0.04), (0.008, 0.075, 0.085), "lens", pitch=-32.0)
         first = False
+
+
+def open_cockpit(m, f, s, hull):
+    """A fighter's cockpit, open under her canopy (planes.py cuts her skin away there: fighters.opening): her skin
+    again from inside, dark; her instrument panel across the front of it with its dials, and a bulkhead behind her
+    seat; a floor; and a padded rim round its edge (Brian, 2026-11-19: the crew "fully inside with their hands on
+    the controls")."""
+    x0, x1, edge = f.cockpit
+    liner(m, f, hull, x0, x1, lambda x, high: x1 < x < x0 and high > edge)
+    for x, way in ((x0, -X), (x1, X)):
+        m.disc((x, 0.0, hull.z(-x)), way, hull.h(-x) * 0.97, "inside", 24, oval=hull.w(-x) / hull.h(-x))
+    xm = 0.5 * (x0 + x1)
+    m.box((xm, 0.0, hull.z(-xm) - 0.36 * hull.h(-xm)), (x0 - x1, 1.5 * hull.w(-xm), 0.04), "inside")              # (her floor)
+    # (her instrument panel, black, its top under the coaming, with two rows of dials)
+    lip = hull.at(x0, math.radians(edge)).z
+    wide = hull.at(x0, math.radians(edge)).y
+    m.box((x0 - 0.03, 0.0, lip - 0.17), (0.025, 2.0 * wide - 0.04, 0.3), "gunmetal")
+    if m.fine:
+        for row, dz in enumerate((-0.09, -0.21)):
+            for k in range(4):
+                dy = (k - 1.5) * 0.105 + (0.03 if row else 0.0)
+                m.disc((x0 - 0.044, dy, lip + dz), -X, 0.036, "lens", 12)
+    # (the coaming over it, dark, back from the foot of her windscreen; her gunsight on it, and its glass)
+    foot = max(q[0] for q in s["hoods"][0][0])
+    cx = [x0 + (foot - x0) * k / 8.0 for k in range(9)]
+    m.strip([port(hull.at(x, math.pi / 2.0)) for x in cx], [port(hull.out(x, math.pi / 2.0)) for x in cx], 0.16, "inside", lift=0.008,
+            taper=lambda t: 1.0 - 0.45 * t)
+    if m.fine:
+        sx = x0 + 0.1
+        top = hull.at(sx, math.pi / 2.0).z
+        m.box((sx, 0.0, top + 0.045), (0.08, 0.055, 0.09), "gunmetal")
+        m.box((sx + 0.02, 0.0, top + 0.12), (0.008, 0.075, 0.085), "lens", pitch=-32.0)
+    # (the rim round its edge, padded)
+    xs = [x for x in sorted(f.rings_x, reverse=True) if x1 - 1e-4 <= x <= x0 + 1e-4]
+    for a in (edge, 180.0 - edge):
+        m.strip([port(hull.at(x, math.radians(a))) for x in xs], [port(hull.out(x, math.radians(a))) for x in xs], 0.026, "leather", lift=0.006)
+    arc = [edge + (180.0 - 2.0 * edge) * k / 8.0 for k in range(9)]
+    for x in (x0, x1):
+        m.strip([port(hull.at(x, math.radians(a))) for a in arc], [port(hull.out(x, math.radians(a))) for a in arc], 0.026, "leather", lift=0.006)
+
+
+def controls(m, at, x, z, hull):
+    """A fighter pilot in his seat with his hands on his controls: his right on the stick between his knees, his left
+    on the throttle at his left side; his seat under him and his thighs on it."""
+    floor = hull.z(-x) - 0.36 * hull.h(-x)
+    stick = at(0.38, -0.02, -0.52)
+    m.rod(Vector((stick.x + 0.03, stick.y, floor)), stick - Z * 0.03, 0.016, "gunmetal", sides=6)                 # the stick
+    m.box(stick + Z * 0.02, (0.035, 0.035, 0.1), "leather")                                                      # its grip
+    throttle = at(0.27, 0.25, -0.43)
+    m.box(at(0.2, 0.3, -0.5), (0.26, 0.05, 0.08), "gunmetal")                                                     # the throttle's quadrant on the wall
+    m.rod(at(0.18, 0.29, -0.48), throttle, 0.012, "gunmetal", sides=5)                                            # its lever
+    arms(m, at, (throttle, stick))
+    m.box(at(0.06, 0.0, -0.8), (0.42, 0.42, 0.05), "inside")                                                      # his seat
+    u, v = (8, 5) if m.fine else (6, 3)
+    for sy in (1.0, -1.0):
+        hip, knee = at(-0.02, 0.11 * sy, -0.72), at(0.38, 0.13 * sy, -0.62)
+        m.rod(hip, knee, 0.075, "suit", 0.062, sides=7)                                                          # his thighs
+        m.ball(knee, 0.064, "suit", u, v)
+        m.rod(knee, at(0.62, 0.14 * sy, -0.98), 0.058, "suit", 0.05, sides=7)                                     # his shins, to the rudder pedals
 
 
 def glazed_nose(m, f, s, G, hull):
