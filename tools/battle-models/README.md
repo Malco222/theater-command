@@ -360,6 +360,13 @@ numbers add:
   "tail": 0.11}`; with it the rings along the chord stand closer too, `CHORDS_CLOSE`). A coat is laid point by
   point, so a paint line narrower than the mesh comes out in steps: her lines are 12 cm of sprayed edge on a 12 cm
   mesh, and run straight. Any machine may take the key.
+- `lines`: (how wide her scribed lines are against the usual, how far their colour is toward her paler upper
+  colour). The art director, 2026-11-19, of her first lines, black and even on pale grey: "she reads like a
+  blueprint". The joints her fuselage was built in (`hull_lines`) keep the usual width.
+- her soot (in `weather`, as every machine's): each pipe has scorched the tail of its pod, a soft stain runs back
+  under her rear fuselage, both in streaks, and each cannon port draws a faint stain back along her nose. An entry
+  of `f.stains` may end with how strong it is and how broad against an exhaust's. A jet's soot lies over her rivets
+  too.
 
 **The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, twelve more entries in
 `EXTRA_PLANES`. Paints and first years are the art director's rulings of that day; the file's `year` is the first

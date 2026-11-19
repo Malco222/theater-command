@@ -1287,6 +1287,7 @@ def jets(m, f, s, G, hull):
         xs = [x + 0.02 - 0.34 * k / 5.0 for k in range(6)]
         m.strip([port(hull.at(q, a)) for q in xs], [port(hull.out(q, a)) for q in xs], 0.032, "engine", lift=0.004,
                 taper=lambda t: 0.35 + 0.65 * math.sin(math.pi * min(max(t, 0.0), 1.0)) ** 0.5)
+        f.stains.append((hull, x - 0.3, 1.0, a, 0.5, 0.75))        # (her cannon's smoke, drawn back from each port: fainter than an exhaust's stain, and narrower)
     if m.fine:
         # the gun bay's hatches (hinged along her spine), and the nosewheel's doors under her
         long = [3.9 - 1.6 * k / 10.0 for k in range(11)]

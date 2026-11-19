@@ -341,7 +341,7 @@ EXTRA_PLANES = {
                  (1.86, -5.42, -5.58, 0.63, 0.01)],
         "fin": [(0, -3.45, -6.14, 0.05, 0.14), (0, -3.77, -6.11, 0.3, 0.14), (0, -4.456, -6.01, 1.0, 0.12), (0, -4.946, -5.95, 1.5, 0.09),
                 (0, -5.22, -5.89, 1.78, 0.07), (0, -5.36, -5.8, 1.87, 0.05), (0, -5.5, -5.66, 1.91, 0.02)],
-        "patch": 1.0, "graded": _me262_coat, "grain": _ME262_GRAIN, "frames_paint": "upper",
+        "patch": 1.0, "graded": _me262_coat, "grain": _ME262_GRAIN, "frames_paint": "upper", "lines": (0.6, 0.45),
         "colours": {"upper": "4C5850", "upper2": "8B999E", "under": "A9B8C2", "nose": "4C5850", "boss": "2B2B2B"},
         "well": (1.05, 0.45, 0.36), "pitot": True, "hull_lines": [3.95, 2.95, 2.06, 1.2, -1.78, -2.75, -3.67, -4.9],
         "jets": [([(2.33, -0.862, 0.258, 0.258), (2.2, -0.85, 0.335, 0.335), (1.9, -0.835, 0.415, 0.415), (1.5, -0.82, 0.45, 0.45), (0.0, -0.815, 0.455, 0.455),
@@ -1033,7 +1033,10 @@ def paints_of(G, s, colours=None):
     paints["blur_tip"] = "D9B224"
     if fitout.nation(s) == "JAP":
         paints.update(NAVY_AIRSCREW)
-    paints["line"] = rigid.mix_hex(paints["line"], paints["upper"], 0.3)      # (scribed lines seen close: finer and softer than the map's)
+    if s.get("lines"):                                       # (a pale machine: her lines toward her paler upper colour, or she reads as a blueprint)
+        paints["line"] = rigid.mix_hex(paints["line"], paints["upper2"], s["lines"][1])
+    else:
+        paints["line"] = rigid.mix_hex(paints["line"], paints["upper"], 0.3)      # (scribed lines seen close: finer and softer than the map's)
     paints.update(fitout.paints_for(s))
     paints.update(fitout.rivet_paints(paints))
     return paints, c
@@ -1511,9 +1514,14 @@ def convert(name, fine=True):
         if kind == "lines":
             # (every scribed line is a ribbon whose points come in pairs, one each side of it: drawn in to LINE of its width)
             vs = list(bm.verts)
+            # (`lines` in her numbers: (how wide hers are against the usual, how far their colour is toward her paler
+            #  upper colour). The joints her fuselage was built in, `hull_lines`, keep the usual width.)
+            fine_line = LINE * s.get("lines", (1.0,))[0]
+            joints = s.get("hull_lines", []) if s.get("lines") else []
             for i in range(0, len(vs) - 1, 2):
                 mid = 0.5 * (vs[i].co + vs[i + 1].co)
-                vs[i].co, vs[i + 1].co = mid + (vs[i].co - mid) * LINE, mid + (vs[i + 1].co - mid) * LINE
+                k = LINE if any(abs(mid.x - x) < 0.012 for x in joints) and abs(mid.y) < hull.w(-mid.x) + 0.03 else fine_line
+                vs[i].co, vs[i + 1].co = mid + (vs[i].co - mid) * k, mid + (vs[i + 1].co - mid) * k
         bm.faces.ensure_lookup_table()
         layer = bm.faces.layers.int.get("paint")
         by_point = bm.verts.layers.int.get("coat")
@@ -1721,8 +1729,9 @@ def convert(name, fine=True):
 
     def weather(v, n, paint, part):
         w, y = 0.0, abs(v.y)
-        if paint not in ("upper", "upper2", "under", "nose"):
-            return 0.0, 0.0                                  # (only her paintwork wears)
+        skin = paint in ("upper", "upper2", "under", "nose")
+        if not skin and not (pods and paint.startswith(("rivet", "seam"))):
+            return 0.0, 0.0                                  # (only her paintwork wears; a jet's soot lies over her rivets too)
         if wide * 0.8 < y < wide + 0.9 and n[2] > 0.5 and abs(v.z) < 1.0:
             w = max(w, 0.70 * (1.0 - (y - wide * 0.8) / (0.9 + wide * 0.2)))
         if v.x > nose_back - 0.25:
@@ -1735,17 +1744,28 @@ def convert(name, fine=True):
         grain = noise.noise(Vector((v.x * 1.3 + 7.1, v.y * 1.3 - 3.3, v.z * 2.1 + 1.7)))
         soot = 0.09 * max(grain, 0.0)
         w = max(w, 0.22 * max(-grain - 0.25, 0.0))
-        for stained, start, reach, a in f.stains:
+        for stained, start, reach, a, *more in f.stains:     # (a stain may say how strong it is and how broad, against an exhaust's)
+            strong, spread = (more[0] if more else 0.95), (more[1] if len(more) > 1 else 1.0)
             along = (start - g.x) / reach
             if -0.04 < along < 1.0 and abs(g.y - stained.side) < 2.5:
                 away = (g - stained.at(g.x, a)).length
-                broad = 0.17 + 0.34 * max(along, 0.0)
-                soot = max(soot, 0.95 * max(0.0, 1.0 - away / broad) ** 1.1 * min(1.0, (along + 0.04) * 10.0) * (1.0 - max(along, 0.0)) ** 0.7)
+                broad = (0.17 + 0.34 * max(along, 0.0)) * spread
+                soot = max(soot, strong * max(0.0, 1.0 - away / broad) ** 1.1 * min(1.0, (along + 0.04) * 10.0) * (1.0 - max(along, 0.0)) ** 0.7)
+        # (a jet: her pipes have scorched the tail of each pod, and their smoke has drawn a soft grey stain back
+        #  under her rear fuselage; in streaks, never an even band)
+        streak = 0.75 + 0.5 * noise.noise(Vector((v.x * 0.35 + 3.0, v.y * 5.0, v.z * 5.0)))
+        for pod, out in pods:
+            back = (g.x - pod.back) / 1.7
+            if -0.1 < back < 1.0 and math.hypot(g.y - pod.side, g.z - pod.z(-g.x)) < pod.w(-g.x) + 0.04:
+                soot = max(soot, min(1.0, 1.25 * (1.0 - max(back, 0.0)) ** 1.3) * streak)
+        if pods and n[2] < -0.2 and y < hull.w(-v.x) and v.x < s["wing"][0][2]:
+            along = min(max((s["wing"][0][2] - v.x) / (s["wing"][0][2] - hull.back), 0.0), 1.0)
+            soot = max(soot, 0.75 * min(1.0, along * 6.0) * (1.0 - along) ** 0.5 * max(0.0, 1.0 - y / hull.w(-v.x)) ** 0.6 * streak)
         if not s.get("engines") and not jets and n[2] < -0.5 and y < 0.5 * wide:
             along = (nose_back - v.x) / 4.5
             if 0.0 < along < 1.0:
                 soot = max(soot, 0.4 * (1.0 - along) * (1.0 - y / (0.5 * wide)))
-        return w, soot
+        return (w if skin else 0.0), soot
     m.weather = weather
     m.marks = G["marks_of"](s, hull)
     n_code = 1 if s.get("code") else 0                       # (where each is: her sides first, then her wings, her fin, her number)
