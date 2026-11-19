@@ -333,10 +333,11 @@ describe('the record\'s line in the south (ruling 234(a))', () => {
 });
 
 describe('the strike south\'s other rows (rulings 200 and 234)', () => {
-  it('names an eleventh crossing, Hong Kong from Canton, and a third quay', () => {
+  it('names ten crossings and a third quay: Hong Kong has left the landing rows for the overland road (rider b572 to ruling 234)', () => {
     const op = SOUTH();
-    expect(op.landings!.length).toBe(11);
-    expect(op.landings![10]).toEqual({ corps: '38th Division (Canton)', to: ['Hong Kong'] });
+    expect(op.landings!.length).toBe(10);
+    expect(op.landings!.some((l) => l.to.includes('Hong Kong') || l.corps === '38th Division (Canton)')).toBe(false);
+    // (The 38th Division and the 23rd Army's guns stand at Tungkun on the eve, by the book's stations: far-stations.test.ts.)
     expect(op.quays).toEqual(['Hainan', 'Cam Ranh', 'Canton']);
     expect(op.frees).toEqual(['25th Army (Imperial Guards Division)', 'Naval landing forces (Sasebo 1st and 2nd, Yokosuka 1st)']);
     expect(op.freesAfter).toBe(2);
@@ -353,9 +354,9 @@ describe('the strike south\'s other rows (rulings 200 and 234)', () => {
     expect(freed(g, 'JAP')).toEqual([]);
     g.turn = 30;
     const later = freed(g, 'JAP');
-    expect(later.length).toBe(11);
+    expect(later.length).toBe(10);
     expect(later).toContain('South Seas Detachment');
-    expect(later).toContain('38th Division (Canton)');
+    expect(later).not.toContain('38th Division (Canton)');
     g.turn = 31;
     expect(freed(g, 'JAP')).toEqual([]);
     // Nobody else's great choices free anybody.

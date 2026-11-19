@@ -47,16 +47,16 @@ const france = (stop: number, turn = 10, human: string | null = null): Game => {
 };
 
 describe("Japan's opening (ruling 200): the rows", () => {
-  it('gives Japan the strike south first in its list: December 1941 by the book, ten landings and Hong Kong\'s crossing, three quays, the strike on Pearl Harbor', () => {
+  it('gives Japan the strike south first in its list: December 1941 by the book, ten landings (Hong Kong goes by the overland road), three quays, the strike on Pearl Harbor', () => {
     const list = ops('JAP');
     expect(list[0].id).toBe('south');
     const op = SOUTH();
     expect(op.declare).toEqual(['USA', 'UK', 'NED']);
     expect(op.side).toBe(true);
     expect(op.if).toEqual(['flag:pac:strike']);
-    // (The eleventh is Hong Kong's crossing from Canton, paper 18, point 4: far-pacific-hops.test.ts.)
-    expect(op.landings!.length).toBe(11);
-    expect(op.landings!.map((l) => l.to[0])).toEqual(['Singora', 'Kota Bharu', 'Guam', 'Aparri', 'Legaspi', 'Wake', 'Brunei', 'Davao', 'Lingayen', 'Jolo', 'Hong Kong']);
+    // (Hong Kong has left the landing rows for the overland road, rider b572 to ruling 234: far-pacific-hops.test.ts.)
+    expect(op.landings!.length).toBe(10);
+    expect(op.landings!.map((l) => l.to[0])).toEqual(['Singora', 'Kota Bharu', 'Guam', 'Aparri', 'Legaspi', 'Wake', 'Brunei', 'Davao', 'Lingayen', 'Jolo']);
     expect(op.quays).toEqual(['Hainan', 'Cam Ranh', 'Canton']);
     expect(op.strikes).toEqual([{ fleet: 'Mobile Fleet', harbour: 'Pearl Harbor', home: { base: 'Hiroshima', port: 'Kure', home: 'inland', words: 'The carrier striking force comes home to Kure' } }]);
     expect(HISTORY.dates.JAP?.south).toBe(28);
@@ -381,15 +381,18 @@ describe("Japan's month of December 1941", () => {
     expect(g.seas[force.home].key).toBe('inland');
     expect(news(g, 28, 'The carrier striking force comes home to Kure.')).toBe(true);
     // The quays: the two divisions on Hainan, which Japan holds and does not own, have sailed.
-    expect(at(g, '25th Army (5th Division)')).toBe('Singora');
+    // (The 5th lands at Singora, Siam's shore, and is carried down the west coast within the month by the record's dated
+    // fights, Jitra and Kampar: far-pacific-war.json, 'attacks'.)
+    expect(at(g, '25th Army (5th Division)')).toBe('Ipoh');
     expect(at(g, '25th Army (18th Division)')).toBe('Kota Bharu');
     // The lift of six is all that sails in the month, in the order of the ten. With Guam's garrison at the record's
     // size (ruling 234(b): some 750 men, not a brigade) the South Seas Detachment lands in December as it did, and the
     // sixth crossing is Wake's: the Kawaguchi Detachment waits at Cam Ranh for January's ships.
     expect(at(g, 'South Seas Detachment')).toBe('Guam');
     expect(at(g, 'Kawaguchi Detachment (35th Brigade, of the 18th Division)')).toBe('Cam Ranh');
+    // (Five stand on their beaches as the month closes; the sixth is the 5th Division, gone on from Singora.)
     const sailed = SOUTH().landings!.filter((l) => l.to.includes(at(g, l.corps) ?? '')).length;
-    expect(sailed).toBe(6);
+    expect(sailed).toBe(5);
     // The month closes: Germany and Italy declare on America, and the news names Pearl Harbor.
     expect(g.flags['event:pearl-harbor-world']).toBe(28);
     expect(atWar(g, 'USA', 'GER')).toBe(true);
