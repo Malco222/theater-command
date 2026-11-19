@@ -101,6 +101,40 @@ namespace
 	constexpr int32 TierFar = 1;
 	constexpr int32 TierNear = 2;
 	constexpr int32 TierMiddle = 3; // from the middle distance in: the places worth having, and what each is worth
+
+	/**
+	 * (The art director, 19 November 2026.) A rifleman seen with the sun behind him stood darker on his shaded side
+	 * (about 23 of 255) than the shadow he threw on the ground (30 to 40). The pieces' paint now gives back a little
+	 * of a figure's own colour on the side turned from the sun, and a thin rim on the edge turned to it when the sun
+	 * stands behind: cloth and flesh only, never painted metal, and no light is added to the scene. Both go out with
+	 * the day. "-TheaterFigureLight=0.3,0.6" tries another fill and rim.
+	 */
+	void LightFigures(UMaterialInstanceDynamic* Paint, float Moon)
+	{
+		if (!Paint)
+		{
+			return;
+		}
+		static float Fill = 0.3f, Rim = 0.6f;
+		static bool bRead = false;
+		if (!bRead)
+		{
+			bRead = true;
+			FString Asked;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterFigureLight="), Asked, false))
+			{
+				TArray<FString> Parts;
+				Asked.ParseIntoArray(Parts, TEXT(","));
+				Fill = Parts.IsValidIndex(0) ? FCString::Atof(*Parts[0]) : Fill;
+				Rim = Parts.IsValidIndex(1) ? FCString::Atof(*Parts[1]) : Rim;
+			}
+			UE_LOG(LogTheater, Display, TEXT("Figures: the side turned from the sun gives back %.2f of its colour, the rim %.2f"), Fill, Rim);
+		}
+		const FVector TowardSun = -FRotator(-42.0, 69.0, 0.0).Vector(); // (the table's lamp, as the environment hangs it)
+		const float Day = 1.0f - FMath::Clamp(Moon, 0.0f, 1.0f);
+		Paint->SetScalarParameterValue(TEXT("FigureFill"), Fill * Day);
+		Paint->SetVectorParameterValue(TEXT("FigureSun"), FLinearColor(static_cast<float>(TowardSun.X), static_cast<float>(TowardSun.Y), static_cast<float>(TowardSun.Z), Rim * Day));
+	}
 }
 
 ACampaignMapActor::ACampaignMapActor()
@@ -1980,6 +2014,7 @@ void ACampaignMapActor::LoadMaterials()
 	{
 		PieceMaterial = MakeSurface(0.5f, 0.38f, 0.0f, 0.0f); // as it was: smooth and a little shiny, like moulded plastic
 	}
+	LightFigures(PieceMaterial, 0.0f);
 	SceneryMaterial = MakeSurface(0.85f, 0.2f, 0.0f, 0.0f);
 	WoodsMaterial = MakeSurface(0.85f, 0.2f, 0.0f, 0.0f);
 
@@ -8463,6 +8498,7 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 			PieceMaterial->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.86f, 0.84f, 0.78f), Moon));
 			// (a ship's wake is paint on the water: by night it goes down with the sea, or it shone like a searchlight)
 			PieceMaterial->SetVectorParameterValue(TEXT("WakeTone"), FMath::Lerp(FLinearColor::White, FLinearColor(0.85f, 0.64f, 0.66f), Moon));
+			LightFigures(PieceMaterial, Moon); // (the figures' fill and rim are the day's)
 		}
 		if (WoodsMaterial)
 		{
@@ -13755,7 +13791,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 							Stood->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 							Stood->RegisterComponent();
 							Stood->CreateMeshSection(0, Crew.Vertices, Crew.Triangles, Crew.Normals, TArray<FVector2D>(), Crew.Colors, TArray<FProcMeshTangent>(), false);
-							Stood->SetMaterial(0, SceneryMaterial);
+							Stood->SetMaterial(0, PieceMaterial ? PieceMaterial : SceneryMaterial); // (the pieces' paint: they are figures, and take the figures' light)
 							BlastCrew = Stood;
 							UE_LOG(LogTheater, Display, TEXT("Effects: two riflemen stand at the test gun (%d points)"), Crew.Vertices.Num());
 						}
