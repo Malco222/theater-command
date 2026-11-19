@@ -106,9 +106,10 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> PlaneInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> PlainInk;
-	/** Each formation's engines, by group. */
+	/** Each formation's engines, by group, and the kind of loop each was chosen as (B-17, fourEngined, ...). */
 	UPROPERTY()
 	TMap<int32, TObjectPtr<UAudioComponent>> Engines;
+	TMap<int32, FName> EngineKind;
 	/** The mix's distance families, by name (mix.json distance). */
 	UPROPERTY()
 	TMap<FName, TObjectPtr<USoundAttenuation>> Families;
@@ -154,6 +155,7 @@ private:
 	TArray<TWeakObjectPtr<ACampaignEnvironment>> KeptRooms;
 	TArray<TWeakObjectPtr<AActor>> KeptPieces;
 	TWeakObjectPtr<ACampaignMapActor> Table;
+	TWeakObjectPtr<UDirectionalLightComponent> BattleKey;
 	bool bTableHidden = false;
 
 	// The picture run (-TheaterAirBattleShots).
@@ -172,6 +174,8 @@ private:
 	/** Every frame the battle is up: a piece the table stood again (its crowds unfolding under the pointer) is put away. */
 	void KeepTheTableHidden();
 	void ShowTheTable();
+	/** The battle's day light on the table's lamps, said again wherever the room has changed it. */
+	void LightTheBattle();
 	void Feed();
 	void Draw(double Real);
 	void Play(double Real);

@@ -735,17 +735,9 @@ void AAirBattle::HideTheTable()
 					}
 				}
 			}
-			for (UDirectionalLightComponent* Light : Lights)
-			{
-				Light->SetLightColor(FLinearColor::White);
-				Light->SetIntensity(Light == Key ? 7.0f : 0.75f);
-			}
 			if (Key)
 			{
-				if (!FMath::IsNearlyEqual(Key->Temperature, 4900.0f, 1.0f))
-				{
-					Key->SetTemperature(4900.0f);
-				}
+				BattleKey = Key;
 				const FVector Sun = Stage && Stage->IsRaised() ? Stage->TowardSun() : FRotator(30.0, 150.0, 0.0).Vector();
 				Key->SetWorldRotation((-Sun).Rotation());
 			}
@@ -757,9 +749,54 @@ void AAirBattle::HideTheTable()
 				Kept.Sky = Sky;
 				Kept.Intensity = Sky->Intensity;
 				Kept.Colour = Sky->GetLightColor();
-				Sky->SetIntensity(0.72f);
-				Sky->SetLightColor(FLinearColor::White);
 			}
+		}
+	}
+	LightTheBattle();
+}
+
+void AAirBattle::LightTheBattle()
+{
+	// The battle's day: every lamp white, the key (turned to the battle's sun) at the table's day strength and warmth
+	// and the others at the fill's, the sky's light the day's. Said again every frame where anything differs: the room
+	// can still light itself for the hour under the battle (a showpiece's picture retaken, a portrait, an answer
+	// changing the season), and the battle's light must stand (the review, 06:50Z).
+	for (const FKeptLamp& Kept : KeptLamps)
+	{
+		UDirectionalLightComponent* Light = Kept.Lamp.Get();
+		if (!Light)
+		{
+			continue;
+		}
+		const bool bKey = Light == BattleKey.Get();
+		const float Want = bKey ? 7.0f : 0.75f;
+		if (!Light->GetLightColor().Equals(FLinearColor::White, 0.002f))
+		{
+			Light->SetLightColor(FLinearColor::White);
+		}
+		if (!FMath::IsNearlyEqual(Light->Intensity, Want, 0.001f))
+		{
+			Light->SetIntensity(Want);
+		}
+		if (bKey && !FMath::IsNearlyEqual(Light->Temperature, 4900.0f, 1.0f))
+		{
+			Light->SetTemperature(4900.0f);
+		}
+	}
+	for (const FKeptSky& Kept : KeptSkies)
+	{
+		USkyLightComponent* Sky = Kept.Sky.Get();
+		if (!Sky)
+		{
+			continue;
+		}
+		if (!Sky->GetLightColor().Equals(FLinearColor::White, 0.002f))
+		{
+			Sky->SetLightColor(FLinearColor::White);
+		}
+		if (!FMath::IsNearlyEqual(Sky->Intensity, 0.72f, 0.001f))
+		{
+			Sky->SetIntensity(0.72f);
 		}
 	}
 }
@@ -784,6 +821,7 @@ void AAirBattle::KeepTheTableHidden()
 	{
 		Table->SetActorHiddenInGame(true);
 	}
+	LightTheBattle();
 }
 
 void AAirBattle::ShowTheTable()
@@ -854,6 +892,7 @@ void AAirBattle::ShowTheTable()
 			}
 		}
 	}
+	BattleKey.Reset();
 	KeptHazes.Reset();
 	KeptLamps.Reset();
 	KeptSkies.Reset();
@@ -1080,8 +1119,8 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 	static TMap<FString, FBuilt> Built;
 	const FString Name = ModelFor(Model, Nation, bFighter);
 	const bool bStandIn = Name.StartsWith(TEXT("Fighter:")) || Name.StartsWith(TEXT("Bomber:"));
-	const FString Made = bStandIn ? FString::Printf(TEXT("%s@%.1f"), *Name, Span) : Name;
-	FBuilt* Shape = Built.Find(Made);
+	const FString ShapeKey = bStandIn ? FString::Printf(TEXT("%s@%.1f"), *Name, Span) : Name;
+	FBuilt* Shape = Built.Find(ShapeKey);
 	if (!Shape)
 	{
 		FMiniatureMesh Made;
@@ -1103,7 +1142,7 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 			Fresh.Normals = Made.Normals;
 			Fresh.Colors = Made.Colors;
 		}
-		Shape = &Built.Add(Made, MoveTemp(Fresh));
+		Shape = &Built.Add(ShapeKey, MoveTemp(Fresh));
 	}
 	// (a name of its own: one made again for its own model must not take the name of the one just taken down)
 	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this, MakeUniqueObjectName(this, UProceduralMeshComponent::StaticClass(), *FString::Printf(TEXT("AirPlane_%d"), Key)));
@@ -2119,14 +2158,31 @@ void AAirBattle::EngineSounds()
 			{
 				(*Have)->FadeOut(2.0f, 0.0f);
 				Engines.Remove(G.Id);
+				EngineKind.Remove(G.Id);
 			}
 			continue;
 		}
+		const bool bFour = G.Model == "Lancaster" || G.Model == "Halifax" || G.Model == "B24";
+		const bool bTwin = G.Model == "He111" || G.Model == "Betty" || G.Model == "G4M" || G.Model == "Bomber";
+		const TCHAR* Kind = G.Model == "B17" ? TEXT("B-17") : bFour ? TEXT("fourEngined") : bTwin ? TEXT("twinEngined") : TEXT("fighter");
+		if (Have)
+		{
+			const FName* Was = EngineKind.Find(G.Id);
+			if (!Was || *Was != FName(Kind))
+			{
+				// (a group first seen with the place's stand-in model, its own named since: its own engines)
+				if (*Have)
+				{
+					(*Have)->FadeOut(1.0f, 0.0f);
+				}
+				Engines.Remove(G.Id);
+				EngineKind.Remove(G.Id);
+				Have = nullptr;
+			}
+		}
 		if (!Have)
 		{
-			const bool bFour = G.Model == "Lancaster" || G.Model == "Halifax" || G.Model == "B24";
-			const bool bTwin = G.Model == "He111" || G.Model == "Betty" || G.Model == "G4M" || G.Model == "Bomber";
-			const TCHAR* Kind = G.Model == "B17" ? TEXT("B-17") : bFour ? TEXT("fourEngined") : bTwin ? TEXT("twinEngined") : TEXT("fighter");
+			EngineKind.Add(G.Id, FName(Kind));
 			FString Loop;
 			Loops->TryGetStringField(Kind, Loop);
 			USoundBase* Played = Loop.IsEmpty() ? nullptr : SoundOf(*Loop, true);

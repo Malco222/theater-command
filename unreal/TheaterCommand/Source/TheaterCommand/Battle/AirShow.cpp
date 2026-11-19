@@ -175,6 +175,8 @@ namespace AirShow
 		while (Views.size() > 12 && Views[1].T <= ShownT) Views.pop_front();
 		// A group made from a view that named no model (the place's main one stood in) takes its own when a view names
 		// it: every model of the group still flying is made over, its shape and limits with it, where it is.
+		// The views kept and the groups as now shown take it too, so that what reads a group's model (its engines'
+		// sound, its formation's spacing) has its own from then on.
 		for (const Group& G : InGroups)
 		{
 			if (G.bModelGuessed || G.Model.empty()) continue;
@@ -183,6 +185,21 @@ namespace AirShow
 				Craft& C = Pair.second;
 				if (C.Group == G.Id && C.Model != G.Model && C.Doing != Role::Fall && C.Doing != Role::Gone) Fit(C, G);
 			}
+			auto Named = [&G](Group& Kept)
+			{
+				if (Kept.bModelGuessed)
+				{
+					Kept.Model = G.Model;
+					Kept.bModelGuessed = false;
+				}
+			};
+			for (View& Kept : Views)
+			{
+				auto It = Kept.Groups.find(G.Id);
+				if (It != Kept.Groups.end()) Named(It->second);
+			}
+			auto Drawn = Now.find(G.Id);
+			if (Drawn != Now.end()) Named(Drawn->second);
 		}
 		for (const Event& E : InEvents) Queue.push_back(E);
 		std::stable_sort(Queue.begin(), Queue.end(), [](const Event& A, const Event& B) { return A.T < B.T; });

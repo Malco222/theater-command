@@ -281,6 +281,36 @@ int main(int Argc, char** Argv)
 		if (!L.bOk) ++Failed;
 	}
 
+	// A live battle whose first view names no model (the bridge's opening view before the rules' mend): every group's
+	// first view carries a wrong stand-in, marked as a guess. The show takes it, then the next view a battle second
+	// ahead as the scene does, then draws: every aircraft, and every group as shown, must be its own model by then.
+	if (Rec.Views.size() >= 2)
+	{
+		AirShow::Show Live(Rec.Seed ? Rec.Seed : 238);
+		AirFeed::Apply(Rec.Board, Live);
+		std::vector<AirShow::Group> First = Rec.Views[0].Groups;
+		std::map<int, std::string> Own;
+		for (const AirShow::Group& G : Rec.Views[1].Groups) Own[G.Id] = G.Model;
+		for (AirShow::Group& G : First)
+		{
+			G.Model = G.bFighter ? "Bf109" : "B17";
+			G.bModelGuessed = true;
+		}
+		Live.Take(Rec.Views[0].Head.T, First, Rec.Views[0].Events, Rec.Views[0].Ships);
+		Live.Take(Rec.Views[1].Head.T, Rec.Views[1].Groups, Rec.Views[1].Events, Rec.Views[1].Ships);
+		Live.Advance(Rec.Views[0].Head.T + 1.0 / Fps);
+		int Wrong = 0, Planes = 0;
+		for (const AirShow::PlaneOut& P : Live.Planes())
+		{
+			++Planes;
+			Wrong += Own.count(P.Group) && Own[P.Group] != P.Model ? 1 : 0;
+		}
+		for (const auto& G : Live.Groups()) Wrong += Own.count(G.first) && Own[G.first] != G.second.Model ? 1 : 0;
+		const Limit L{ "a live battle's guessed models made over by the next view", Wrong == 0 && Planes > 0, std::to_string(Wrong) + " wrong (of " + std::to_string(Planes) + " aircraft and their groups)", "0 wrong" };
+		std::printf("  %s %-58s %s (%s)\n", L.bOk ? "ok  " : "FAIL", L.Name, L.Got.c_str(), L.Want);
+		if (!L.bOk) ++Failed;
+	}
+
 	// The screen, as the player sees it: the battle on the screen's clock at x1 (real time) from the start to the end,
 	// the words at a few moments, and the after card.
 	{

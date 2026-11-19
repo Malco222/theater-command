@@ -92,15 +92,15 @@ lines), and the scene keeps the pieces hidden itself.
 ```cpp
 // CampaignMapActor.h, public:
 /** (air battle) While a battle's scene is up, every piece stays off the table whatever the hover asks; cleared, the pieces stand again and the crowds fold up. */
-void SetPutAway(bool bAway) { if (bPutAway == bAway) { return; } bPutAway = bAway; if (!bAway) { const bool bWere = bPiecesShown; bPiecesShown = false; SetPiecesShown(bWere); } }
-bool IsPutAway() const { return bPutAway; }
-// CampaignMapActor.h, private, beside bPiecesShown:
-bool bPutAway = false;
+void SetPutAway(bool bAway) { if (bAwayForBattle == bAway) { return; } bAwayForBattle = bAway; if (!bAway) { const bool bWere = bPiecesShown; bPiecesShown = false; SetPiecesShown(bWere); } }
+bool IsPutAway() const { return bAwayForBattle; }
+// CampaignMapActor.h, private, beside bPiecesShown (a name of its own: ApplyCrowds has a local bPutAway):
+bool bAwayForBattle = false;
 
 // CampaignMapActor.cpp, the first line of ApplyCrowds():
-if (bPutAway) { return; }
+if (bAwayForBattle) { return; }
 // CampaignMapActor.cpp, the first line of SetPiecesShown(bool bShown):
-if (bPutAway && bShown) { return; }
+if (bAwayForBattle && bShown) { return; }
 
 // CampaignPlayerController.cpp, IsTableBusy(): add to what it returns
 || (Map.IsValid() && Map->IsPutAway())
