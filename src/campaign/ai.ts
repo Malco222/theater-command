@@ -30,7 +30,7 @@ import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   DEFENCE, EASTERN, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
-  hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
+  hasRoom, hostileUnits, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
@@ -1818,7 +1818,7 @@ export function gunsUp(g: Game, nat: string, enemies: Set<string>, targets: Set<
   if (g.flags.open !== 1) return;
   const guns = g.corps.filter((c) => c.nat === nat && !c.dead && c.kind === 'art' && !c.hold && !c.town && c.ap > 0 && c.joint === undefined && c.leave === undefined && !massed.has(c.id));
   if (!guns.length) return;
-  const works = (x: Region): boolean => enemies.has(ctl(g, x)) && atWar(g, nat, ctl(g, x)) && (worksAgainst(g, x, nat) || hostileUnits(g, x, nat).some((u) => u.dug));
+  const works = (x: Region): boolean => enemies.has(ctl(g, x)) && atWar(g, nat, ctl(g, x)) && (!!x.fort || hostileUnits(g, x, nat).some((u) => u.dug));
   const facing = (r: Region): number => {
     let best = 0;
     for (const j of r.nb) { const x = g.regions[j]; if (works(x)) best = Math.max(best, !targets || targets.has(x.name) ? 2 : 1); }
@@ -1940,7 +1940,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
           const main = axis.has(target.name);
           const fast = (c: Corps): number => (KIND[c.kind].mobile ? 1 : 0);
           // Against works the guns are brought into the attack first (the grand campaign): they are what breaks a dug-in line.
-          const works = g.flags.open === 1 && (worksAgainst(g, target, nat) || hostileUnits(g, target, nat).some((u) => u.dug));
+          const works = g.flags.open === 1 && (!!target.fort || hostileUnits(g, target, nat).some((u) => u.dug));
           const gun = (c: Corps): number => (works && c.kind === 'art' ? 1 : 0);
           pool.sort((a, b) => gun(b) - gun(a) || (main ? fast(b) - fast(a) : fast(a) - fast(b)) || atkPower(g, b) - atkPower(g, a));
           const least = main ? Math.max(1, pool.filter((c) => fast(c)).length) : 1;
@@ -2155,7 +2155,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
     for (const j of r.nb) {
       const t = g.regions[j];
       if (!enemies.has(ctl(g, t)) || !atWar(g, nat, ctl(g, t)) || halt.has(t.name)) continue; // a sector under a halt order draws no one
-      if (t.fort && t.fort.vs.includes(r.owner) && t.fort.lv >= 2 && worksAgainst(g, t, nat)) walled = true; else open = true;
+      if (t.fort && t.fort.vs.includes(r.owner) && t.fort.lv >= 2) walled = true; else open = true;
     }
     if (open) atFront[r.id] = 1;
     // A stretch of front already packed with troops needs no more: the columns behind look further along.

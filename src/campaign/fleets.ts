@@ -12,7 +12,7 @@ import type { TicketLine } from '../core/ticket';
 import fleetData from '../../data/campaign/fleets.json';
 import { AIRWAR, carrierRules, raid as stopOutput } from './air';
 import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPicture, wingCards, wingShare, wingsAshore, type WingCard } from './carriers';
-import { allied, atWar, headline, routineNews, worksFor } from './game';
+import { allied, atWar, headline, routineNews } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
   CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, openFleetRows, quality, screenGap, seaRng,
@@ -344,7 +344,7 @@ export function planBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, vi
   const town = siegeRules(g) && townHeld(g, r) ? planTownHit(g, r, 'shell', townShare('shell', guns)) : null;
   const total = g.regions.reduce((s, x) => s + (x.ctrl === r.ctrl ? x.fac : 0), 0);
   const output = r.fac > 0 ? Math.min(B.city.max, guns / B.city.scale) : 0;
-  const fort = r.fort && worksFor(g, r, r.ctrl) ? r.fort.lv : 0;
+  const fort = r.fort?.lv ?? 0;
   const plan: ShorePlan = {
     why: whyNotBombard(g, f, r, what ?? (can.troops || can.city || can.town ? pick : undefined), viewer), fleet: f.id, region: r.id, what: pick, can, town, guns,
     cut: shellCut(r, foes, guns), corps: foes.length, divs: foes.reduce((s, c) => s + c.divs, 0),

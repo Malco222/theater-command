@@ -95,7 +95,7 @@ export function regionOf(r: any): Region {
     id: r.id, name: r.name, owner: r.owner, ctrl: r.owner, first: r.owner, terrain: r.terrain, vp: r.vp, fac: r.fac,
     // A depot on the coast is a harbour too. One inland feeds an army but takes no ships.
     cap: !!r.flags.cap, port: !!r.flags.port || (!!r.flags.depot && (r.seas ?? []).length > 0),
-    fort: r.flags.fort ? { lv: r.flags.fort[0], vs: r.flags.fort.slice(1), by: r.owner } : null,
+    fort: r.flags.fort ? { lv: r.flags.fort[0], vs: r.flags.fort.slice(1) } : null,
     vichy: !!r.flags.vichy, sov: !!r.flags.sov, oil: !!r.flags.oil, overseas: !!r.flags.col, theatre: k >= 0 && THEATRE_LIST[k].opens === undefined ? k : -1,
     x: r.x, y: r.y, nb: r.nb, polys: r.polys, units: [], seas: r.seas ?? [], since: 0, prev: null,
   };
@@ -523,40 +523,6 @@ function reactionMoves(g: Game, aggressor: string, victim: string): void {
 }
 
 export const hostileUnits = (g: Game, r: Region, nat: string): Corps[] => r.units.filter((u) => atWar(g, u.nat, nat));
-
-/** Who dug a place's works: the nation that built them; the works on the map from the first day are their country's. */
-export const worksBy = (r: Region): string => r.fort?.by ?? r.owner;
-/**
- * True where a place's works count for `nat` (ruling 232 rider b624): works count only for the nation that dug them
- * and its side, never for its enemy against that nation's own attacks. A ring that has taken the ground behind a
- * city's lines does not stand in them backwards against the city's relief. Every nation, every stop.
- */
-export const worksFor = (g: Game, r: Region, nat: string): boolean => !!r.fort && (sideOf(g, nat, worksBy(r)) || (!!r.fort.held && sideOf(g, nat, r.fort.held)));
-const sideOf = (g: Game, nat: string, of: string): boolean => nat === of || allied(g, nat, of);
-/** True where a place's works count for whoever stands against `attNat` there: the army in its field, or with none, its holder. */
-/**
- * Works taken over (the variant put to the design director beside b624): a side that has held a place outright from one
- * month's end to the next (the place in its hands, no enemy army standing in it, no siege) takes over the works there
- * too (fort.held): Tobruk's Italian perimeter held by Britain in 1941, the French Mareth Line held by the Axis in 1943.
- * The works still count for the side that dug them, the day it takes them back (Kiev and Zhitomir in 1943). A ring
- * in a city's field never holds the place outright while the city's own garrison holds the town, so it never takes the
- * city's lines over (the Moscow case).
- */
-export function worksMonth(g: Game): void {
-  for (const r of g.regions) {
-    const key = `wkh:${r.id}`;
-    const holder = r.ctrl;
-    const outright = !!r.fort && !worksFor(g, r, holder) && !r.units.some((u) => !u.dead && atWar(g, u.nat, holder)) && !besieged(g, r);
-    if (!outright) { if (g.flags[key] !== undefined) delete g.flags[key]; continue; }
-    if (g.flags[key] === undefined) { g.flags[key] = g.turn; continue; }
-    if (g.turn > g.flags[key]) { r.fort = { ...r.fort!, held: holder }; delete g.flags[key]; }
-  }
-}
-export function worksAgainst(g: Game, r: Region, attNat: string): boolean {
-  if (!r.fort) return false;
-  const foes = hostileUnits(g, r, attNat);
-  return foes.length ? foes.some((u) => worksFor(g, r, u.nat)) : worksFor(g, r, r.ctrl);
-}
 export const friendlyUnits = (g: Game, r: Region, nat: string): Corps[] => r.units.filter((u) => allied(g, u.nat, nat));
 
 /** The army at home and on the Continent, in divisions. Troops in the colonies are not there to defend the homeland, and do not count. */
@@ -907,7 +873,7 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
     // Attacked from several sides at once a defence cannot cover every road: each side's roads carry more (the grand campaign).
     if (new Set(corps.filter((c) => !blocked(g, c, target)).map((c) => c.reg)).size >= DEFENCE.frontage.sides) cap += DEFENCE.frontage.extra;
     // Guns fire over the heads of the infantry: against works, a few artillery corps join without taking room on the roads.
-    if (worksAgainst(g, target, armyOf(corps[0])) || hostileUnits(g, target, armyOf(corps[0])).some((u) => u.dug)) {
+    if (target.fort || hostileUnits(g, target, armyOf(corps[0])).some((u) => u.dug)) {
       for (const c of ranked) if (c.kind === 'art' && guns.length < DEFENCE.frontage.guns && !blocked(g, c, target)) guns.push(c);
     }
   }
@@ -1099,8 +1065,6 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const lines: TicketLine[] = [];
   const aN = new Set(attackers.map((c) => c.nat)), dN = new Set(defenders.map((c) => c.nat));
   if (town && !dN.size) dN.add(target.ctrl);
-  // (Ruling 232 rider b624: a place's works count only where they stand with the side that dug them.)
-  const served = !!target.fort && (dN.size ? [...dN].some((d) => worksFor(g, target, d)) : worksFor(g, target, target.ctrl));
   const defHasArmor = defenders.some((d) => d.kind === 'arm');
   // Open desert has no flanks: infantry on foot outside prepared works can be driven round by anything on wheels or tracks.
   const openDesert = !town && target.terrain === DESERT.terrain && !target.fort && attackers.some((c) => KIND[c.kind].mobile);
@@ -1142,7 +1106,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const facing: Facing | null = wide && !town ? {
     works: (d) => (d.dug && d.supplied ? worksShare(worksNow(d)) : 0),
     guns: gunsD, mines: mineLv, sappers: sap,
-    fort: served && !opts.sally && attackers.some((c) => target.fort!.vs.includes(g.regions[c.reg].owner)) ? target.fort!.lv : 0,
+    fort: target.fort && !opts.sally && attackers.some((c) => target.fort!.vs.includes(g.regions[c.reg].owner)) ? target.fort.lv : 0,
     foot: armsA ? armsA.foot : 0, tanks: armsA ? armsA.tanks : 0,
   } : null;
   const at = facing ? antiTank(g, attackers, defenders, target, facing) : null;
@@ -1215,7 +1179,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     const eased = breach ? 1 - (1 - soften) * (1 - breach) : soften;
     // (In an assault on the town itself the works ring it: they are counted with the town, for its defenders.)
     pAll += p;
-    if (served && target.fort && !town && !opts.sally && target.fort.vs.includes(from.owner)) { pFaced += p; p /= eased ? 1 + (FORT_MUL[target.fort.lv] - 1) * (1 - eased) : FORT_MUL[target.fort.lv]; fortFaced++; }
+    if (target.fort && !town && !opts.sally && target.fort.vs.includes(from.owner)) { pFaced += p; p /= eased ? 1 + (FORT_MUL[target.fort.lv] - 1) * (1 - eased) : FORT_MUL[target.fort.lv]; fortFaced++; }
     // The player's honoured corps, a corps fighting for the place it was raised in, and one that has its old enemy in front of it.
     const proud = storyAttack(g, c, target, defenders);
     if (proud !== 1) { p *= proud; proudA = Math.max(proudA, proud); }
@@ -1229,7 +1193,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const flank = Math.min(1.3, 1 + 0.1 * (sources.size - 1));
   A *= flank;
   // What the town is worth to those inside it, after the guns and the engineers of this assault have done their work.
-  const walls = town ? townBonus(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften, served) : 1;
+  const walls = town ? townBonus(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften) : 1;
   let D = 0, thin = 1, readyD = 0, dugD = 0, worksD = 0, tiredD = 0, tiredMost = 0;
   for (const d of defenders) {
     // In the streets the country round about counts for nothing: the town is the ground.
@@ -1339,7 +1303,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     lines.push({
       // ("Panama City, Panama's capital", not "Capital of Panama City"; "Lodz, a city", not "City of Lodz": the UI director,
       // builds 1668 and 1678.)
-      label: 'The town', value: `${townSize(g, target) === 'capital' ? `${place}, ${theWords(`${theName(g.nations[target.owner])}'s`)} capital` : `${place}, a ${TOWNS.words[townSize(g, target)].toLowerCase()}`}${target.fort ? `, with fortress works of level ${target.fort.lv}${served ? '' : `, dug by ${theName(g.nations[worksBy(target)])}: they give its defenders no cover`}` : ''}`,
+      label: 'The town', value: `${townSize(g, target) === 'capital' ? `${place}, ${theWords(`${theName(g.nations[target.owner])}'s`)} capital` : `${place}, a ${TOWNS.words[townSize(g, target)].toLowerCase()}`}${target.fort ? `, with fortress works of level ${target.fort.lv}` : ''}`,
       effect: `Its defenders fight ${Math.round((walls - 1) * 100)}% stronger in the streets${broken > 0 ? `: bombardment has already broken down ${Math.round(broken * 100)}% of its works` : ''}`,
     });
   } else {
@@ -1425,8 +1389,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (breach && target.fort && fortFaced) lines.push({ label: 'Engineers', value: 'Assault engineers go in with the attack', effect: `They breach the works: the fortifications count for ${Math.round(breach * 100)}% less` });
   if (breach && town) lines.push({ label: 'Engineers', value: 'Assault engineers go in with the attack', effect: `They blow in the barricades: the town counts for ${Math.round(breach * 100)}% less` });
   if (target.fort && !town) {
-    if (!served) lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}: ${worksName(target.fort.lv)}, dug by ${theName(g.nations[worksBy(target)])}`, effect: 'Works count only for the side that dug them: no help to the defence here' });
-    else lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}: ${worksName(target.fort.lv)}`, effect: fortFaced === attackers.length ? `Attacked head-on: the attack is cut to ${Math.round(100 / FORT_MUL[target.fort.lv])}% strength` : fortFaced > 0 ? 'Partly outflanked: only the corps attacking head-on are slowed' : 'Outflanked: the works face the other way' });
+    lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}: ${worksName(target.fort.lv)}`, effect: fortFaced === attackers.length ? `Attacked head-on: the attack is cut to ${Math.round(100 / FORT_MUL[target.fort.lv])}% strength` : fortFaced > 0 ? 'Partly outflanked: only the corps attacking head-on are slowed' : 'Outflanked: the works face the other way' });
   }
   // (The guns thicken the line of the corps beside them: where they stand alone there is nobody to say it of.)
   const beside = thicken > 0 && defenders.some((d) => d.kind !== 'art');
@@ -3059,7 +3022,7 @@ function mobilise(g: Game, nat: string): void {
     const r = g.byName[place];
     const due = when === month || (g.flags.open === 1 && month >= 1 && month < when && !!r && close(r));
     if (!due || !r || r.ctrl !== nat || (r.fort?.lv ?? 0) >= lv) continue;
-    r.fort = { lv, vs: r.fort?.vs ?? [nat], by: nat };
+    r.fort = { lv, vs: r.fort?.vs ?? [nat] };
     headline(g, 'event', `Defence lines are dug around ${r.name}.`, nat, r.id);
   }
 }
@@ -3456,7 +3419,7 @@ function desertWorks(g: Game, nat: string, closing = false): void {
     // Nothing to do where the works already stand as the row wants them: the same level, facing the same way, the harbour built.
     const faces = o?.vs ?? r.fort?.vs ?? [r.owner];
     if ((r.fort?.lv ?? 0) === lv && (!o?.vs || (r.fort?.vs ?? []).join() === o.vs.join()) && (!o?.port || r.port)) continue;
-    r.fort = lv > 0 ? { lv, vs: [...faces], by: nat } : null;
+    r.fort = lv > 0 ? { lv, vs: [...faces] } : null;
     // A harbour built off an open beach: from now on ships can land troops and stores there.
     if (o?.port && !r.port) { r.port = true; g.flags[`harbour:${r.id}`] = g.turn; g.supplyDirty = true; }
     headline(g, 'event', news, nat, r.id);

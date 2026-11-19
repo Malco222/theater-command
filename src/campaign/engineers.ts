@@ -123,7 +123,7 @@ export function engineersMonth(g: Game, nat: string): void {
       if (rebuildFactory(g, r) && mine) { const left = ruinedAt(g, r); headline(g, 'info', `${c.name} has put a bombed factory at ${r.name} back to work${left ? `: ${left} still ${left > 1 ? 'lie' : 'lies'} in ruins` : ''}.`, nat, r.id); }
     } else if (job.what === 'works') {
       if ((r.fort?.lv ?? 0) < ENGINEERING.works.most) {
-        r.fort = { lv: (r.fort?.lv ?? 0) + 1, vs: facing(g, r), by: c.nat };
+        r.fort = { lv: (r.fort?.lv ?? 0) + 1, vs: facing(g, r) };
         if (mine) headline(g, 'info', `${c.name} has finished fortifying ${r.name}: fortifications, level ${r.fort.lv}.`, nat, r.id);
       }
     } else if (job.what === 'airfield') {
@@ -137,7 +137,7 @@ export function engineersMonth(g: Game, nat: string): void {
       g.flags[mineKey(r)] = lv;
       if (mine) headline(g, 'info', `${c.name} has laid minefields and booby traps round ${r.name}${lv > 1 ? ', two belts deep' : ''}.`, nat, r.id);
     } else if (job.what === 'demolish' && r.fort) {
-      r.fort = r.fort.lv <= 1 ? null : { ...r.fort, lv: r.fort.lv - 1 };
+      r.fort = r.fort.lv <= 1 ? null : { lv: r.fort.lv - 1, vs: r.fort.vs };
       if (mine) headline(g, 'info', `${c.name} has demolished ${r.fort ? 'part of the fortifications' : 'the fortifications'} at ${r.name}.`, nat, r.id);
     }
   }

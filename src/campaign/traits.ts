@@ -5,7 +5,7 @@
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/traits.json';
 import { turnToDate } from '../core/ticket';
-import { allied, atWar, headline, worksFor } from './game';
+import { allied, atWar, headline } from './game';
 import { homeShare, levyMen, menLeft, menWords, poolAtStart } from './manpower';
 import { farShare, provinceYield } from './economy';
 import type { LedgerLine } from './economy';
@@ -127,7 +127,7 @@ function holds(g: Game, w: When | undefined, c: Corps, target: Region, landing: 
   if (w.mobile && !KIND[c.kind].mobile) return false;
   if (w.terrain && !w.terrain.includes(target.terrain)) return false;
   if (w.home && target.owner !== c.nat) return false;
-  if (w.works && !worksFor(g, target, c.nat)) return false;
+  if (w.works && !target.fort) return false;
   if (w.landing && !landing) return false;
   if (w.winter || w.from !== undefined || w.until !== undefined) {
     const s = sceneOf(g);

@@ -575,7 +575,7 @@ export function deliver(g: Game, nat: string): void {
       const vs = new Set(r.fort?.vs ?? []);
       vs.add(r.owner);
       for (const j of r.nb) vs.add(g.regions[j].owner);
-      r.fort = { lv: Math.min(3, (r.fort?.lv ?? 0) + 1), vs: [...vs], by: nat };
+      r.fort = { lv: Math.min(3, (r.fort?.lv ?? 0) + 1), vs: [...vs] };
       if (nat === g.human) headline(g, 'info', `The new fortifications at ${r.name} are finished.`, nat, r.id);
       continue;
     }
