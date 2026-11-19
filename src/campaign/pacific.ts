@@ -76,6 +76,7 @@ import { FAR_FIRST, WORLD, WORLD_FIRST, WORLD_MAP, farOn, shoreOf, standWithAlli
 import { HISTORY, bookDate, onBook, stopDef } from './history';
 import { neverHis } from './line';
 import { ownPath } from './league';
+import openData from '../../data/campaign/open.json';
 
 /** A country's shipping in the Pacific (ruling 190; the Pacific planner's paper 05; pacific.json, 'runs'). */
 export interface RunRules {
@@ -128,6 +129,8 @@ interface Rules {
   skies?: { per: number; cover?: Record<string, number>; seas: string[] };
   /** The Allies' landing ships in the Pacific by the record (rider b614 to ruling 234): `shoreLift`. */
   lift?: LiftRules;
+  /** The month the power draws its ring by the book (paper 14, section 3; rider b599 (iii) to ruling 234): `ringDrawn`. */
+  ring?: { from: number };
   says: Record<string, string>;
 }
 
@@ -554,6 +557,30 @@ function hopSlide(g: Game, H: HopRows): number {
 }
 
 /**
+ * Whether the power has drawn its ring (the Pacific planner's paper 14, section 3, "The ring: Japan after the
+ * opening"; rider b599 (iii) to ruling 234). While the Pacific's book binds (stops 1 and 2), from the outer line's
+ * month by the book ('ring', May 1942), slid with the strike. At the other stops, from the first month its offensive
+ * has gone the staffs' own 'stall' months without gaining ground since its war with America began (section 3: "When
+ * its offensive has gained nothing for three months, Japan's staff draws its line"); once drawn it stays drawn. From
+ * then its carrier striking force and its battle line are kept together (navy.ts, `keptTogether`); before it the
+ * opening's own rule stands (section 2: the carriers and the lighter fleets cover the landings, the battle line stays
+ * in home waters). Never while the far side is off.
+ */
+export function ringDrawn(g: Game): boolean {
+  const P = PACIFIC, H = hopRows();
+  if (!P?.ring || !reads(g)) return false;
+  if (H && hopsBind(g)) return g.turn >= P.ring.from + hopSlide(g, H);
+  const key = `pac:ring:${P.power}`;
+  if (g.flags[key] !== undefined) return true;
+  const a = g.flags[`war:${P.power}:${P.pact.with}`], b = g.flags[`war:${P.pact.with}:${P.power}`];
+  if (!atWar(g, P.power, P.pact.with) || (a === undefined && b === undefined)) return false;
+  const since = Math.max(Math.min(a ?? Infinity, b ?? Infinity), g.flags[`st:gain:${P.power}`] ?? 0);
+  if (g.turn - since < (openData as { stall: number }).stall) return false;
+  g.flags[key] = g.turn;
+  return true;
+}
+
+/**
  * The shores of the Pacific's ground a computer staff may land on of its own accord. `open`: this month, in the
  * order it takes them while the book stands (the rows' own); `soon`: those that open next month, named a month
  * ahead so that the fleet is off the beach and the fighters over it in time. `book` says whether the rows bind.
@@ -660,13 +687,16 @@ export function pacificRuns(g: Game, nat: string): [string, number][] {
 
 /**
  * Whether a staff's fleets go to the beach they cover (ruling 200(j); the Pacific planner's paper 14, section 4,
- * "Which fleet goes where"; rider b585 to ruling 234, item 1(b)): a computer staff of the side against the power, at
- * war with it, while the far side is on. The power's own fleet answers a landing by its own rule (paper 14, section
- * 3). Never a player's fleets.
+ * "Which fleet goes where"; rider b585 to ruling 234, item 1(b)): every computer staff in the Pacific's war while the far
+ * side is on, since nothing belongs to one country (rider b599 (iii)): the power and its friends while they are at war
+ * with anybody, the side against the power while it is at war with the power. Where the power's own fleet rule differs
+ * it governs (paper 14, section 3: its carrier striking force and its battle line are kept together at the line's
+ * base; navy.ts `keptTogether`). Never a player's fleets.
  */
 export function coversBeaches(g: Game, nat: string): boolean {
   const P = PACIFIC;
-  return !!P && reads(g) && nat !== g.human && nat !== P.power && !allied(g, nat, P.power) && !!live(g, P.power) && atWar(g, nat, P.power);
+  if (!P || !reads(g) || nat === g.human || !live(g, P.power)) return false;
+  return nat === P.power || allied(g, nat, P.power) ? !!live(g, nat)?.atWar.length : atWar(g, nat, P.power);
 }
 
 /** The Pacific's share of a country's shipping once its war there is won (the power beaten that it fought): it joins the Atlantic's. 0 otherwise. */
