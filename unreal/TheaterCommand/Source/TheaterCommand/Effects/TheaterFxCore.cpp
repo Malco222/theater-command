@@ -2845,7 +2845,18 @@ namespace TheaterFx
 		size_t Start = Sorted.size();
 		for (size_t Need = 0; Start > 0; --Start)
 		{
-			const size_t Takes = Sorted[Start - 1].B->TwinPx > 0.0 ? 2u : 1u; // (a twin far off is laid once: then a slot is spare)
+			// (a twin counts two only if it may be big enough on the screen to be laid as two: its size now, at the most,
+			// against its depth, which is never more than its distance, so the count never comes short and seldom wastes
+			// a slot. One held up to its least size is never a twin, unless twin_px is under least_px)
+			const Bit& Piece = *Sorted[Start - 1].B;
+			bool bMayTwin = false;
+			if (Piece.TwinPx > 0.0)
+			{
+				const double Grown = Clamp01((Now - Piece.Born) / std::max(Piece.Life, 1e-6));
+				const double Most = std::max(Piece.R0, Piece.R0 + (Piece.R1 - Piece.R0) * std::pow(Grown, Piece.Grow));
+				bMayTwin = Piece.TwinPx <= Piece.LeastPx || 2.0 * Most * std::max(Eye.PixelsPerRadian, 1.0) >= Piece.TwinPx * Sorted[Start - 1].Deep;
+			}
+			const size_t Takes = bMayTwin ? 2u : 1u;
 			if (Need + Takes > Left)
 			{
 				break;
