@@ -146,6 +146,14 @@ namespace TheaterFx
 		SunThroughPow = std::max(0.5, Num("game.sun_through_power", 3.0));
 		SunThroughCol = Picture("game.sun_through_colour", Rgb::FromPicture(255, 205, 160));
 		ClodLeast = Num("game.clod_least_px", 1.2);
+		// (art director 17:52Z: smoke and dust one can see through fades out as it comes up to the eye, so it never fills
+		// the whole frame evenly. Without the key, as before)
+		NearGone = NearWhole = 0.0;
+		if (Has("game.near_eye_fade_m.0"))
+		{
+			NearGone = std::min(20.0, std::max(0.0, Num("game.near_eye_fade_m.0", 2.0)));
+			NearWhole = std::min(30.0, std::max(NearGone + 0.1, Num("game.near_eye_fade_m.1", 8.0)));
+		}
 		Beyond = Num("game.draw_beyond_m", 1500.0);
 		KeepBeyond = Num("oil_fires.draw_beyond_m", Beyond); // (a column on the horizon is drawn kilometres off)
 		RoundUp = Num("oil_fires.round_up", 0.35); // (the sun high: how much of an oil column it lights all round, not only on its sunward side)
@@ -1625,7 +1633,71 @@ namespace TheaterFx
 		const double SmokeLo = Num(M + "smoke_s.0", Num(M + "smoke_s", 2.0));
 		const double SmokeHi = Num(M + "smoke_s.1", SmokeLo);
 		const Rgb Grey = Picture("game.muzzle_smoke", Rgb::FromPicture(150, 140, 126));
-		const int NSmoke = Len < 0.5 ? 3 : static_cast<int>(10.0 + 6.0 * Len);
+		// (art director 17:52Z, build 1746's test, a tank gun firing 4 m from two riflemen: its smoke lay over them as one
+		// even gauze, fog and not dust. With muzzle.billows a field gun's shot raises a cloud in three layers instead,
+		// each a scatter of lumps of its own size and thickness with gaps between, never one sheet. Low: dense mounds of
+		// the ground's own dust on the ground under and ahead of the muzzle, as far as its dust ring reaches. Mid: lumps
+		// of dust and smoke over them, see-through. Top: the gun's own smoke at the muzzle's height, a few thin wisps.
+		// So it is heaviest low and near the muzzle and thins upward, and what stands behind it comes clear from the top
+		// down. The mid and top are gone in clear_s and top_s (the thick part in 1.5 to 2 s); of the low mounds,
+		// tuft_share thin to haze_alpha and drift on as tufts for tuft_s. Counts are a tank gun's: a wider ring and a
+		// longer flame throw more. Dust goes by the ground's own (grounds.<g>.dust against earth's). Its own dice:
+		// without the key a gun smokes as it did)
+		const bool bBillows = Len >= 0.5 && Has("muzzle.billows.low");
+		const std::string Bl = "muzzle.billows.";
+		Dice DB(PlaceKey(At) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) ^ 0xB111ull);
+		auto BillowCount = [&](const char* Key, double Usual, double Share) { return static_cast<int>(std::lround(std::min(40.0, std::max(0.0, Num(Bl + Key, Usual))) * std::min(4.0, std::max(0.0, Share)))); };
+		auto BillowSpan = [&](const char* Key, double Low, double High, double Least, double Most)
+		{
+			Span S = Range(Bl + Key, Low, High);
+			S.A = std::min(Most, std::max(Least, S.A));
+			S.B = std::min(Most, std::max(S.A, S.B));
+			return S;
+		};
+		const double BillowRough = std::min(0.8, std::max(0.0, Num(Bl + "rough", 0.5)));
+		const double BillowShade = std::min(2.0, std::max(0.0, Num(Bl + "shade", 0.4)));
+		const double BillowHeart = std::min(1.0, std::max(0.0, Num(Bl + "heart", 0.9))), BillowInner = std::min(0.9, std::max(0.1, Num(Bl + "inner", 0.7)));
+		const double BillowRest = 1.0 + 0.6 * BillowRough; // (clear of the ground by its radius and its outline's lumps)
+		if (bBillows)
+		{
+			const double Flame_ = std::min(Len, 4.0);
+			const int NTop = BillowCount("top", 12.0, (10.0 + 6.0 * Flame_) / 17.8);
+			const Span TopA = BillowSpan("top_alpha", 0.35, 0.7, 0.0, 0.95), TopS = BillowSpan("top_s", 1.6, 2.4, 0.2, 20.0), TopR = BillowSpan("top_r", 0.5, 1.3, 0.05, 3.0);
+			const double Scatter = std::min(8.0, std::max(0.0, Num(Bl + "scatter_mps", 2.0)));
+			const double PaleUp = std::min(1.0, std::max(0.0, Num(Bl + "pale_up", 0.6)));
+			for (int I = 0; I < NTop; ++I)
+			{
+				// (thrown along the bore and scattered off it: the further it flies and the higher it is thrown, the
+				// thinner it is and the sooner gone; the dense ones stay by the muzzle and sink)
+				const double Far = DB.U(), Up = DB.Bell() * 0.7, High = Clamp01(Up), Thin = (1.0 - 0.5 * Far) * (1.0 - PaleUp * High);
+				Bit B;
+				B.Born = Now + DB.U(0.0, 0.05);
+				B.From = At + Fw * (Flame_ * DB.U(0.3, 1.2));
+				B.Vel = Fw * ((3.0 + 7.0 * Far) * Flame_) + Across * (DB.Bell() * Scatter) + ZUp * (Up * Scatter);
+				B.Drag = 2.5;
+				B.Rise = -0.3 + 0.6 * High;
+				B.Windage = 0.8;
+				B.Life = TopS.Pick(DB) * (1.0 - 0.3 * High);
+				B.R0 = 0.15 * Flame_ + 0.05;
+				B.R1 = TopR.Pick(DB) * Flame_ + 0.2;
+				B.Col = Grey * DB.U(0.9, 1.1);
+				B.Col2 = B.Col;
+				B.Alpha = TopA.Pick(DB) * Thin;
+				B.FadeIn = 0.05;
+				B.Hold = 0.45;
+				B.Heart = BillowHeart;
+				B.Inner = BillowInner;
+				B.Rough = BillowRough;
+				B.LumpSeed = static_cast<uint32_t>(DB.U() * 1073741823.0);
+				B.Turn = DB.U(0.0, 2.0 * Pi);
+				B.Centre = At + Fw * (Flame_ * 2.5);
+				B.CloudShade = BillowShade;
+				B.CloudR = Flame_ * 1.5;
+				B.Rest = BillowRest;
+				Bits.push_back(B);
+			}
+		}
+		const int NSmoke = bBillows ? 0 : Len < 0.5 ? 3 : static_cast<int>(10.0 + 6.0 * std::min(Len, 4.0)); // (a wild flame is still a few puffs)
 		for (int I = 0; I < NSmoke; ++I)
 		{
 			Bit B;
@@ -1647,7 +1719,8 @@ namespace TheaterFx
 			Bits.push_back(B);
 		}
 		// big guns throw a ring of dust off the ground in front
-		const double Ring_ = Num(M + "dust_ring_m", 0.0);
+		const double RingIs = Num(M + "dust_ring_m", 0.0);
+		const double Ring_ = RingIs > 0.0 ? std::min(RingIs, 30.0) : 0.0; // (never wider than 30 m: a wild number stays a big gun's ring)
 		const std::string Ground = GroundIn && *GroundIn ? GroundIn : "earth";
 		if (Ring_ > 0.0)
 		{
@@ -1688,6 +1761,87 @@ namespace TheaterFx
 				B.HazeAlpha = 0.12 * Dusty;
 				B.Heart = 0.55;
 				Bits.push_back(B);
+			}
+			if (bBillows)
+			{
+				const double Reach_ = Ring_, DustK = std::min(1.0, Dusty), By = std::sqrt(Reach_ / 6.0);
+				const int NLow = BillowCount("low", 9.0, By), NMid = BillowCount("mid", 10.0, By);
+				const Span LowA = BillowSpan("low_alpha", 0.55, 0.8, 0.0, 0.95), MidA = BillowSpan("mid_alpha", 0.35, 0.6, 0.0, 0.95);
+				const Span LowR = BillowSpan("low_r", 0.14, 0.26, 0.01, 1.0), MidR = BillowSpan("mid_r", 0.15, 0.28, 0.01, 1.0);
+				const Span ClearS = BillowSpan("clear_s", 1.8, 2.4, 0.2, 20.0), TuftS = BillowSpan("tuft_s", 3.0, 5.0, 0.2, 30.0);
+				const Span Forth = BillowSpan("reach", -0.15, 1.1, -1.0, 2.0);
+				const double Wide = std::min(1.0, std::max(0.0, Num(Bl + "wide", 0.3)));
+				const double TuftShare = std::min(1.0, std::max(0.0, Num(Bl + "tuft_share", 0.4)));
+				const double HazeA = std::min(0.95, std::max(0.0, Num(Bl + "haze_alpha", 0.2))), HazeBy = std::min(20.0, std::max(0.1, Num(Bl + "haze_by_s", 1.8)));
+				const double SmokeMix = std::min(1.0, std::max(0.0, Num(Bl + "smoke_mix", 0.4)));
+				const Span MidUp = BillowSpan("mid_up_m", 0.8, 2.6, 0.0, 10.0);
+				const double PaleUp_ = std::min(1.0, std::max(0.0, Num(Bl + "pale_up", 0.6)));
+				const Vec Middle = Foot + FwFlat * (Reach_ * 0.45) + ZUp * 1.0;
+				for (int I = 0; I < NLow + NMid; ++I)
+				{
+					const bool bLow = I < NLow;
+					const double Side = DB.Bell();
+					Bit B;
+					B.Born = Now + DB.U(0.0, 0.06);
+					B.From = Foot + FwFlat * (Reach_ * Forth.Pick(DB)) + Across * (Side * Wide * Reach_);
+					B.Vel = FwFlat * DB.U(1.0, bLow ? 4.0 : 5.0) + Across * (Side * DB.U(0.0, 2.0));
+					B.Windage = 0.6;
+					B.FadeIn = 0.05;
+					B.Rough = BillowRough;
+					B.LumpSeed = static_cast<uint32_t>(DB.U() * 1073741823.0);
+					B.Turn = DB.U(0.0, 2.0 * Pi);
+					B.Centre = Middle;
+					B.CloudShade = BillowShade;
+					B.CloudR = Reach_ * 0.35;
+					B.CentreRise = 0.2;
+					B.Rest = BillowRest;
+					if (bLow)
+					{
+						// (a mound of the ground's dust lying on the ground, wider than it is high: thick until the thick part
+						// clears; some thin to a haze and drift on as tufts. It rests on the ground as it swells: see Bit::Rest)
+						const bool bTuft = DB.U() < TuftShare;
+						const double Heading = DB.U(0.0, 2.0 * Pi);
+						B.Drag = 2.0;
+						B.Life = bTuft ? TuftS.Pick(DB) : ClearS.Pick(DB) * 1.15;
+						B.R0 = 0.06 * Reach_;
+						B.R1 = LowR.Pick(DB) * Reach_;
+						B.Grow = 0.4;
+						B.Rise = 0.0;
+						B.Along = Vec(std::cos(Heading), std::sin(Heading), 0.0);
+						B.Stretch = DB.U(1.3, 1.8);
+						B.Col = P.Dust * (0.85 * DB.U(0.9, 1.05));
+						B.Col2 = B.Col;
+						B.Alpha = LowA.Pick(DB) * DustK;
+						B.Hold = 0.5;
+						if (bTuft)
+						{
+							B.HazeBy = HazeBy;
+							B.HazeAlpha = std::min(B.Alpha, HazeA * DustK);
+						}
+						B.Heart = BillowHeart;
+						B.Inner = BillowInner;
+					}
+					else
+					{
+						// (a lump of dust and smoke thrown up over them: see-through, and gone with the thick part)
+						const double High = DB.U();
+						B.From = B.From + ZUp * (MidUp.A + (MidUp.B - MidUp.A) * High);
+						B.Vel = B.Vel + ZUp * DB.U(0.5, 2.0);
+						B.Drag = 2.5;
+						B.Rise = DB.U(0.2, 0.5);
+						B.Life = ClearS.Pick(DB);
+						B.R0 = 0.08 * Reach_;
+						B.R1 = MidR.Pick(DB) * Reach_;
+						B.Col = (P.Dust * 0.85).Mix(Grey, static_cast<float>(SmokeMix)) * DB.U(0.9, 1.08);
+						B.Col2 = B.Col;
+						B.Alpha = MidA.Pick(DB) * (0.4 + 0.6 * DustK) * (1.0 - PaleUp_ * High);
+						B.Life *= 1.0 - 0.3 * High; // (the higher, the thinner and the sooner gone)
+						B.Hold = 0.45;
+						B.Heart = BillowHeart;
+						B.Inner = BillowInner;
+					}
+					Bits.push_back(B);
+				}
 			}
 			const double Veil = Num("muzzle.veil.by_ground." + Ground, 0.0);
 			if (Veil > 0.0)
@@ -2188,7 +2342,8 @@ namespace TheaterFx
 		const Span WispLife = Range("mg_smoke.life_s", 1.0, 2.0);
 		const Rgb WispCol = Picture("mg_smoke.colour", Rgb::FromPicture(168, 158, 142));
 		// (puff_share: one puff's share of alpha. Art director 16:30Z: where its puffs overlap the wisp reaches its cap)
-		const double WispShare = std::min(1.0, std::max(0.1, Num("mg_smoke.puff_share", 0.55)));
+		const double WispShareIs = Num("mg_smoke.puff_share", 0.55);
+		const double WispShare = WispShareIs == WispShareIs ? std::min(1.0, std::max(0.1, WispShareIs)) : 0.55; // (not a number: the usual share)
 		const double DustShare = bWisp && From.Z - Height(From.X, From.Y) < Num("mg_smoke.dust_under_m", 1.2) ? Clamp01(DustRowOf(Ground).Share) : 0.0;
 		for (int R = 0; R < Rounds; ++R)
 		{
@@ -4970,7 +5125,11 @@ namespace TheaterFx
 			Col = Rgb(Col.R * Eye.SmokeLight.R, Col.G * Eye.SmokeLight.G, Col.B * Eye.SmokeLight.B);
 			Floor = Col * SkyFill; // (art director 22:24Z: the sky lights smoke's shadow side too, so it is never a hole)
 		}
-		const Vec P = Where(B, Age);
+		Vec P = Where(B, Age);
+		if (B.Rest > 0.0)
+		{
+			P.Z = std::max(P.Z, Height(P.X, P.Y) + B.Rest * Rad);
+		}
 		const double Dist = (P - Eye.Eye).Length();
 		if (Dist > (B.bKeep ? KeepBeyond : Beyond))
 		{
@@ -4998,6 +5157,21 @@ namespace TheaterFx
 			if (A < 0.004)
 			{
 				return 0;
+			}
+		}
+		if (NearWhole > 0.0 && !B.bLight && !B.bThrown && !B.bKeep && B.Ribbon <= 0.0 && B.Smear <= 0.0 && (B.Form == Bit::Shape::Puff || B.Form == Bit::Shape::Upright))
+		{
+			// (smoke and dust thins out as it comes up to the eye, by its near edge, its long way counted: see NearGone.
+			// Never a light, a thrown clod, an aircraft's trail or an oil fire's column)
+			const double Edge = Dist - Rad * std::max(1.0, B.Stretch);
+			if (Edge < NearWhole)
+			{
+				const double T = Clamp01((Edge - NearGone) / (NearWhole - NearGone));
+				A *= T * T * (3.0 - 2.0 * T);
+				if (A < 0.004)
+				{
+					return 0;
+				}
 			}
 		}
 		double Outer = 1.0; // (how near the puff is to its cloud's edge: only a cloud's own fringe lets the sun through)

@@ -644,11 +644,14 @@ void FBattleEffects::RunTest(const FVector& Centre)
 	Add(11.0, 0, 40.0, 90.0, TEXT("bomb250"), TEXT("earth"));
 	Add(13.5, 1, -8.0, 14.0, TEXT("gun75"), TEXT("earth")); // on armour
 	Add(14.2, 2, 6.0, 12.0, TEXT(""), TEXT("earth")); // a skip
-	Add(15.0, 3, -40.0, -6.0, TEXT("tank_gun"), TEXT("")); // a tank gun firing toward the row
 	Add(15.5, 4, -36.0, -10.0, TEXT("mg"), TEXT("")); // a machine gun's burst, tracer
 	Add(16.0, 5, 24.0, 18.0, TEXT(""), TEXT("")); // a wreck burning
 	Add(18.0, 4, -36.0, -10.0, TEXT("mg"), TEXT(""));
 	Add(19.0, 6, 0.0, 60.0, TEXT("heavy"), TEXT("")); // a heavy flak burst hanging 60 m up over the far row
+	// (the tank gun fires after the machine gun's two bursts, so those are seen clean from every side: at 15.0 s its
+	// smoke lay over the gun's riflemen (build 1746). A third burst half a second after it shows the men in its dust)
+	Add(20.0, 3, -40.0, -6.0, TEXT("tank_gun"), TEXT("")); // a tank gun firing toward the row
+	Add(20.5, 4, -36.0, -10.0, TEXT("mg"), TEXT(""));
 	// (and behind it all, for the whole test, two oil fires already burning a minute and a half: a slick's black column
 	// 900 m off and a burning ship's 2.5 km off, as a sea battle's lost ships stand on its horizon)
 	auto Far = [this, &Centre](double X, double Y)

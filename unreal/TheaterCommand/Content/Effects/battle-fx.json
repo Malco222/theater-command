@@ -1261,8 +1261,69 @@
    "haze_alpha": 0.18,
    "flatten": 0.6
   },
+  "billows": {
+   "_how": "Art director 17:52Z on build 1746's test, where a tank gun fired 4 m from two riflemen and its smoke lay over them as one even beige gauze: a heavy gun blinding the men beside it is right, but it must read as dust, not fog. A field gun's shot (a row whose flame_m is 0.5 or more) raises a cloud in three layers, each a scatter of lumps of several sizes and thicknesses with gaps between, never one sheet. low: dense mounds of the ground's own dust resting on the ground under and ahead of the muzzle, over reach of its dust ring (shares of dust_ring_m, behind to ahead) and wide of it to each side, each low_r of the ring across. mid: lumps of dust and smoke (smoke_mix of game.muzzle_smoke) thrown up over them, mid_up_m above the ground, mid_r of the ring across, thinner by pale_up and sooner gone the higher they start. top: the gun's own smoke thrown along the bore from the muzzle and scattered off it at scatter_mps, top_r of the flame's length across (plus 0.2 m); the further it flies and the higher, the thinner. So the cloud is heaviest low and near the muzzle and thins upward, and men behind it come clear from the head down. Each layer is thick for a little under half its life, then thins: mid and low live clear_s, top top_s, so the thick part is gone in 1.5 to 2 s. Of the low mounds, tuft_share settle to haze_alpha by haze_by_s and drift on the wind for tuft_s as tufts. low, mid, top are a tank gun's counts (a wider ring and a longer flame throw more); dust goes by the ground's own (grounds.<g>.dust against earth's). heart, inner: how solid a lump is and how far out (a firm body with a short soft edge shows its lumpy outline, rough); shade: its sunward side lit and far side shadowed. A lump never sinks into the ground: its middle stays its own radius clear of it. Without low, a gun smokes as it did before (17 soft puffs along the bore). The gun's low dust ring (dust_ring_m) and the desert's veil (veil, sand only) are as they were.",
+   "low": 9,
+   "mid": 10,
+   "top": 12,
+   "low_alpha": [
+    0.55,
+    0.8
+   ],
+   "mid_alpha": [
+    0.35,
+    0.6
+   ],
+   "top_alpha": [
+    0.35,
+    0.7
+   ],
+   "low_r": [
+    0.14,
+    0.26
+   ],
+   "mid_r": [
+    0.15,
+    0.28
+   ],
+   "top_r": [
+    0.5,
+    1.3
+   ],
+   "clear_s": [
+    1.8,
+    2.4
+   ],
+   "top_s": [
+    1.6,
+    2.4
+   ],
+   "tuft_share": 0.4,
+   "tuft_s": [
+    3,
+    5
+   ],
+   "haze_alpha": 0.2,
+   "haze_by_s": 1.8,
+   "reach": [
+    -0.15,
+    1.1
+   ],
+   "wide": 0.3,
+   "mid_up_m": [
+    0.8,
+    2.6
+   ],
+   "scatter_mps": 2.0,
+   "pale_up": 0.6,
+   "smoke_mix": 0.4,
+   "heart": 0.9,
+   "inner": 0.7,
+   "rough": 0.5,
+   "shade": 0.4
+  },
   "hot": {
-   "_how": "Art director 07:08Z: close to the eye (within_m) a ground gun's flash, a machine gun's (Shots, mg) or a field gun's (Muzzle), is lit from within as the air guns' close flash: a yellow-white root at the muzzle (root to root_edge, its rim hot), an orange body (orange, its rim rim) with dense rims, shrinking rather than going see-through. Past within_m as before. Art director 13:54Z on the game's own frames (build 1720), where that read as a sticker: with tongues here, the close flash is instead a small white-yellow root right at the muzzle (root), melting into yellow, then the orange body, widest a third of the way out, which breaks into 3 to 5 ragged tongues with red only at their ends (red), and 2 to 4 short licks thrown sideways; its length is rolled between long x its usual length every round (mg_flame_m for a machine gun, 1.4 x flame_m for a gun), so no two match. Dense inside, its edge a pixel or two soft. glow: a thin glow glow_m past the flame, that opaque at dusk and glow_day_share of it by day. over: how far past white the root burns (see picture.lit_gain). wide: half its width, as a share of its usual length. Art director 16:30Z on build 1732's stills (root cream at 235,231,216, orange 230,152,4 with no blue: candy): these colours are WRITTEN values, aimed through the game's curve (picture._how). root at over 4 lands 253,250,234, luma 249, over a spot 5 to 9 px across on a 1600 still. orange lands about 234,141,41 (her 235,140,40; written 235,140,40 it landed 234,150,0). yellow_over: how far past white the yellow burns (1.175, as it did when over was 1.5; absent, a share of over). halo: a soft card of the root's colour round the root, that opaque at its inner edge and nothing halo_m further out, in place of the game's bloom (never over 0.25; 0 or absent: none). At 0.08 and 0.028 m it lifts the picture a quarter of the way to the root at most, 3 to 4.5 px out on a 1600 still.",
+   "_how": "Art director 07:08Z: close to the eye (within_m) a ground gun's flash, a machine gun's (Shots, mg) or a field gun's (Muzzle), is lit from within as the air guns' close flash: a yellow-white root at the muzzle (root to root_edge, its rim hot), an orange body (orange, its rim rim) with dense rims, shrinking rather than going see-through. Past within_m as before. Art director 13:54Z on the game's own frames (build 1720), where that read as a sticker: with tongues here, the close flash is instead a small white-yellow root right at the muzzle (root), melting into yellow, then the orange body, widest a third of the way out, which breaks into 3 to 5 ragged tongues with red only at their ends (red), and 2 to 4 short licks thrown sideways; its length is rolled between long x its usual length every round (mg_flame_m for a machine gun, 1.4 x flame_m for a gun), so no two match. Dense inside, its edge a pixel or two soft. glow: a thin glow glow_m past the flame, that opaque at dusk and glow_day_share of it by day. over: how far past white the root burns (see picture.lit_gain). wide: half its width, as a share of its usual length. Art director 16:30Z on build 1732's stills (root cream at 235,231,216, orange 230,152,4 with no blue: candy): these colours are WRITTEN values, aimed through the game's curve (picture._how). root at over 4 lands 253,250,234, luma 249, over a spot 5 to 9 px across on a 1600 still. orange lands about 234,141,41 (her 235,140,40; written 235,140,40 it landed 234,150,0). yellow_over: how far past white the yellow burns (1.175, as it did when over was 1.5; absent, a share of over). halo: a soft card of the root's colour round the root, that opaque at its inner edge and nothing halo_m further out, in place of the game's bloom (never over 0.25; 0 or absent: none). At 0.08 and 0.028 m it lifts the picture a quarter of the way to the root at most, 3 to 4.5 px out on a 1600 still. Art director 18:05Z on build 1746's stills (root 252,249,233, white for about 5 px along the bore, the glow down to the ground by about 8 px on a 1600 still): the game's own bloom already gives the glow, so the card is dropped (halo 0; halo_m kept for the day it is wanted again).",
    "within_m": 50,
    "root": [
     255,
@@ -1318,7 +1379,7 @@
    "glow_m": 0.035,
    "over": 4.0,
    "yellow_over": 1.175,
-   "halo": 0.08,
+   "halo": 0,
    "halo_m": 0.028
   }
  },
@@ -2204,6 +2265,11 @@
   ],
   "_backlight": "Art director 22:24Z (dusk salvo sheet): with the sun behind, smoke never falls below about a fifth of the ground's value, from sky fill, and its thin edges and tips glow warm where the sun shows through, so it reads as smoke against the light and not as a hole. sky_fill: a smoke puff's shadow side is never darker than this share of its own colour in the hour's light. sun_through: the warm light added at a puff's thin edge when the eye looks toward the sun (sun_through_colour times the sun's own light, View::SunLight, white by day and none at night), falling off as the cosine to the sun to the power sun_through_power. Smoke clouds and trails only, most at middle thickness (art director 22:36Z): a low sheet of dust along the ground takes none, so it never glows as a fog over the field.",
   "clod_least_px": 1.2,
+  "near_eye_fade_m": [
+   2,
+   8
+  ],
+  "_near_eye": "Art director 17:52Z: smoke and dust one can see through fades out as it comes up to the camera, so it never fills the whole frame evenly (a barrage's dust drifting downwind over the eye was a flat beige sheet for about 4 s). near_eye_fade_m: nothing of a piece whose near edge is within the first of these of the eye, all of it from the second on. Never a light, a thrown clod, an aircraft's trail or an oil fire's column. At 2 and 8 the passed bursts at the battle camera (18.75 m off) do not change: a 105's nearest puff edge is 8.4 m off; a mortar's and a 75's nearest drifting puffs (5.7 and 6.3 m) thin by a third at most. Absent: no fade.",
   "draw_beyond_m": 1500,
   "muzzle_smoke": [
    150,

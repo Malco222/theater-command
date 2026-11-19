@@ -170,7 +170,7 @@ namespace
 		return 0.5 + 0.3 * A * 0.5 + 0.2 * B;
 	}
 
-	void Paint(Canvas& C, const Camera& Cam, const Battle::Lamp* Lamps, int NLamps, const std::vector<Vec>& Men, bool bSnow, bool bSea = false, bool bSand = false)
+	void Paint(Canvas& C, const Camera& Cam, const Battle::Lamp* Lamps, int NLamps, const std::vector<Vec>& Men, bool bSnow, bool bSea = false, bool bSand = false, size_t DarkFrom = static_cast<size_t>(-1))
 	{
 		// (grass, or a snowfield under a snow hit, so that a white skirt is judged on white; or the open sea, flat, for
 		// the oil fires, its haze drawn out to kilometres; or a stony desert, for the desert dust)
@@ -236,8 +236,10 @@ namespace
 			}
 		}
 		// the men, 1.75 m: a pale figure, as the white soldiers in the Blender stills
-		for (const Vec& M : Men)
+		for (size_t Man = 0; Man < Men.size(); ++Man)
 		{
+			const Vec& M = Men[Man];
+			const double Paint_ = Man >= DarkFrom ? 0.2 : 1.0; // (the gun's own crew in field grey, to read against pale ground)
 			double Sx0, Sy0, Z0, Sx1, Sy1, Z1;
 			if (!Cam.Project(M, Sx0, Sy0, Z0) || !Cam.Project(M + Vec(0, 0, 1.75), Sx1, Sy1, Z1))
 			{
@@ -258,7 +260,7 @@ namespace
 					const size_t I = static_cast<size_t>(Y * C.W + X);
 					if (Z0 < C.Depth[I])
 					{
-						const double Shade = X < Sx0 ? 0.62 : 0.78;
+						const double Shade = (X < Sx0 ? 0.62 : 0.78) * Paint_;
 						C.R[I] = C.G[I] = C.B[I] = Shade;
 						C.Depth[I] = Z0;
 					}
@@ -1164,7 +1166,8 @@ int main(int Argc, char** Argv)
 	Battle Fx;
 	const char* SeedIs = std::getenv("FX_SEED"); // (FX_SEED=n: another throw of the dice, for the same hit seen several ways)
 	Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
-	Fx.SetWind(Vec(1.6, 0.4, 0.0));
+	auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+	Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0)); // (the game's own wind; FX_WIND_X, FX_WIND_Y m/s another)
 	const double Scale = Book.Numbers.count("sizes." + Size + ".scale") ? Book.Numbers["sizes." + Size + ".scale"] : 1.0;
 	const char* GrowIs = std::getenv("FX_FRAME_AS"); // (FX_FRAME_AS=size: frame the shot as for that size, so two sizes can be seen from one camera)
 	const double FrameScale = GrowIs && Book.Numbers.count(std::string("sizes.") + GrowIs + ".scale") ? Book.Numbers[std::string("sizes.") + GrowIs + ".scale"] : Scale;
@@ -1231,6 +1234,20 @@ int main(int Argc, char** Argv)
 		Men.push_back(Vec(M.X, M.Y, Swell(nullptr, M.X, M.Y)));
 	}
 
+	// (FX_CREW=1, the "mg" shot: two riflemen in field grey standing at the gun as the game's test has them, 0.7 m and
+	// 1.1 m behind it, 0.45 m to its left and 0.55 m to its right)
+	size_t DarkFrom = static_cast<size_t>(-1);
+	if (Size == "mg" && std::getenv("FX_CREW"))
+	{
+		const Vec Fire = (Hit - MgGun).Unit(), Square = Fire.Cross(Vec(0, 0, 1)).Unit();
+		DarkFrom = Men.size();
+		for (const Vec& Back_Side : { Vec(0.7, -0.45, 0.0), Vec(1.1, 0.55, 0.0) })
+		{
+			const Vec M = MgGun - Fire * Back_Side.X + Square * Back_Side.Y;
+			Men.push_back(Vec(M.X, M.Y, Swell(nullptr, M.X, M.Y)));
+		}
+	}
+
 	Battle::View View;
 	View.Eye = Cam.Eye;
 	View.Right = Cam.Right;
@@ -1258,6 +1275,24 @@ int main(int Argc, char** Argv)
 			View.SunLight = Rgb(R, G, B);
 		}
 	}
+	// (FX_TEST_TANK=seconds, the "mg" shot: the game's own test barrage (BattleEffects.cpp, RunTest) round the machine
+	// gun. Its tank gun fires that long before the machine gun's burst (0.5 s in the test): the muzzle 4 m south and 4 m
+	// east of the machine gun's and 1.4 m higher, firing on a bearing of 10 degrees where the machine gun fires on 28;
+	// and the test's wind, 3 m/s toward bearing 74. FX_TANK_ROW: its muzzle row (tank_gun). The test's four eyes with
+	// FX_MG_VIEW=game: FX_GAME_FROM=208 looks west (the eye east of the gun), 118 north, 28 east, -62 south)
+	if (const char* TankIs = std::getenv("FX_TEST_TANK"); Size == "mg" && TankIs)
+	{
+		const double Lead = std::max(0.0, std::atof(TankIs));
+		const Vec Fire = (Hit - MgGun).Unit(), Square = Fire.Cross(Vec(0, 0, 1)).Unit();
+		const double C28 = std::cos(28.0 * 3.14159265358979 / 180.0), S28 = std::sin(28.0 * 3.14159265358979 / 180.0);
+		const Vec North = Fire * C28 - Square * S28, East = Fire * S28 + Square * C28;
+		const Vec Muzzle = MgGun - North * 4.0 + East * 4.0 + Vec(0, 0, 1.4 + EnvNum("FX_TANK_UP", 0.0)); // (FX_TANK_UP: that much higher, as on a rise)
+		const Vec Way = (North * 52.0 + East * 9.0 - Vec(0, 0, 1.0)).Unit();
+		const char* Row = std::getenv("FX_TANK_ROW");
+		Fx.SetWind((North * 0.268 + East * 0.963) * 3.0);
+		Fx.Draw(-0.12 - Lead, View);
+		Fx.Muzzle(-0.02 - Lead, Muzzle, Way, Row ? Row : "tank_gun", Ground.c_str());
+	}
 	Fx.Draw(-0.1, View); // (the eye is known before the hit, as in the game)
 	if (Size == "mg")
 	{
@@ -1266,7 +1301,22 @@ int main(int Argc, char** Argv)
 		Fx.Muzzle(-0.02, Gun, (Hit - Gun).Unit(), "mg");
 		Fx.Shots(-0.02, 13, Gun, Hit + Vec(0.0, 0.0, 0.1), "mg", 25, 15.0, Ground.c_str());
 	}
-	else if (!std::getenv("FX_NOHIT")) // (FX_NOHIT: the same shot with no hit, the ground alone, to measure a burst against)
+	// (FX_BARRAGE=n: n shells in a row across the view, FX_BARRAGE_STEP m apart (5) and FX_BARRAGE_GAP s apart (1.5), the
+	// first at the hit's own moment: a barrage's dust hanging and drifting, as the game's test fires one. With FX_WIND_X,
+	// FX_WIND_Y toward the eye, the eye stands downwind in it)
+	const int Barrage = Size == "mg" ? 0 : std::max(0, static_cast<int>(EnvNum("FX_BARRAGE", 0.0)));
+	const double BarrageStep = EnvNum("FX_BARRAGE_STEP", 5.0), BarrageGap = std::max(0.05, EnvNum("FX_BARRAGE_GAP", 1.5));
+	int BarrageFired = 0;
+	auto FireDue = [&](double T)
+	{
+		for (; BarrageFired < Barrage && BarrageFired * BarrageGap - 0.02 <= T; ++BarrageFired)
+		{
+			Vec At = Hit + Cam.Right * (BarrageStep * (BarrageFired - (Barrage - 1) * 0.5));
+			At.Z = Swell(nullptr, At.X, At.Y);
+			Fx.Shell(BarrageFired * BarrageGap - 0.02, At, Size.c_str(), Ground.c_str(), false);
+		}
+	};
+	if (Size != "mg" && Barrage == 0 && !std::getenv("FX_NOHIT")) // (FX_NOHIT: the same shot with no hit, the ground alone, to measure a burst against)
 	{
 		Fx.Shell(-0.02, Hit, Size.c_str(), Ground.c_str(), false);
 	}
@@ -1277,10 +1327,12 @@ int main(int Argc, char** Argv)
 		// (every frame before the picture is drawn too, as the game draws every frame: a flash's lamp goes by frames)
 		for (; Drawn < Frame; ++Drawn)
 		{
+			FireDue(Drawn / 30.0);
 			Fx.Draw(Drawn / 30.0, View);
 		}
 		Drawn = Frame + 1;
 		const double Now = Frame / 30.0;
+		FireDue(Now);
 		const Battle::Jolt J = Fx.Shake(Now, Cam.Eye);
 		Camera Shot = Cam;
 		Shot.Eye = Cam.Eye + J.Offset;
@@ -1290,7 +1342,7 @@ int main(int Argc, char** Argv)
 		const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight)); // (a plain day: the lamp at its day share)
 		Canvas C;
 		C.Init(W, H);
-		Paint(C, Shot, Lamps, NL, Men, Ground == "snow", false, std::getenv("FX_PALE") != nullptr); // (FX_PALE: pale dry ground, as Idaho's in build 1720)
+		Paint(C, Shot, Lamps, NL, Men, Ground == "snow", false, std::getenv("FX_PALE") != nullptr, DarkFrom); // (FX_PALE: pale dry ground, as Idaho's in build 1720)
 		Puffs(C, Shot, Fx, N);
 		char Name[256];
 		std::snprintf(Name, sizeof(Name), "%s/%s-%s-f%03d.ppm", OutDir.c_str(), Size.c_str(), Ground.c_str(), Frame);
