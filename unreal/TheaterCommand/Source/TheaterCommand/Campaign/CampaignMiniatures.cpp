@@ -1136,13 +1136,16 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					{
 						continue;
 					}
+					// (The places were set on the close mesh. The far mesh the map stands is coarser, and on the medium tank's
+					// rounded turret half the mark lay under its skin: each is stood a few centimetres off the place.)
+					const FVector Off = Place.Facing.GetSafeNormal() * 0.035;
 					if (bTurret && Place.Part != TEXT("turret"))
 					{
-						Fresh.Numerals(Place.At, Place.Radius * 1.3, Number, Place.Facing);
+						Fresh.Numerals(Place.At + Off, Place.Radius * 1.3, Number, Place.Facing);
 					}
 					else
 					{
-						Fresh.Marking(Place.At, Place.Radius, Mark, Place.Facing);
+						Fresh.Marking(Place.At + Off, Place.Radius, Mark, Place.Facing);
 					}
 				}
 			}
