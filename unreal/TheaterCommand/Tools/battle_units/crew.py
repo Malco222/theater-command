@@ -1971,6 +1971,9 @@ COMFY_STAND = {"lim_lo": (-25.0, -40.0, -20.0, -0.25, -0.25, -0.10), "lim_hi": (
 # (clips whose body may step only a little: the mortar men in their pit, whose back and sides are close)
 COMFY_CLIP = {k: {"lim_lo": (-25.0, -40.0, -20.0, -0.04, -0.04, -0.10), "lim_hi": (35.0, 40.0, 20.0, 0.04, 0.04, 0.25)}
               for k in ("mortar_number1", "mortar_number3")}
+# (the loaders' lunge is placed with care between the recoil, the rail and the rack: the body's own step kept small)
+for _k in ("stand_load_breech", "stand_load_breech_twin", "stand_load_breech_twin_l"):
+    COMFY_CLIP[_k] = {"lim_lo": (-25.0, -40.0, -20.0, -0.04, -0.06, -0.05), "lim_hi": (35.0, 40.0, 20.0, 0.04, 0.06, 0.10)}
 COMFY_WIDE = ("stand_load_breech", "stand_load_breech_twin", "stand_load_breech_twin_l", "stand_ammo_give",
               "stand_ammo_crate_hand_up")
 
@@ -2467,17 +2470,49 @@ TWIN_T = {"r": {"dt": 0.1, "long": 3.3, "home": 2.3, "take": 2.7, "grab": 2.82, 
 # well clear of the recoil; ammo.1's clip is made for a hand-over at AMMO1_GIVE and played AMMO1_SHIFT later)
 AMMO1_GIVE = 2.75
 AMMO1_SHIFT = TWIN_T["l"]["grab"] - AMMO1_GIVE
-# (loader.l's stance while the guns fire, canonical, and his round's ready (base, axis): upright before his chest)
-TWIN_L = {"clear": dict(bend=6.0, turn=12.0, lean=-6.0, shift=(0.04, -0.08), drop=0.03, neck=(6.0, 30.0),
-                        feet={"l": (0.10, 0.06, 6.0), "r": (0.06, -0.20, -10.0)}),
-          "ready": ((0.24, -0.05, 0.5), (0.12, 0.05, 1.0)),
-          # (on his way to the rail and back: turning, taking the round from ammo.1, carrying it back)
-          "turn1": dict(bend=10.0, turn=20.0, drop=0.05, neck=(0.0, 10.0), feet={"l": (0.04, 0.10, 0.0), "r": (-0.04, -0.12, 0.0)},
-                        yaw=80.0, at=(-0.14, -0.08)),
+# (loader.l's walk to the rail behind him and back, canonical (the breech to his left: he works inboard of breech.l, on
+# the far side of it from the fuze setter's machine): turning, taking the round from ammo.1, carrying it back; the spots
+# where he takes and carries it are where they were when he worked outboard)
+TWIN_L = {"turn1": dict(bend=10.0, turn=20.0, drop=0.05, neck=(0.0, 10.0), feet={"l": (0.04, 0.10, 0.0), "r": (-0.04, -0.12, 0.0)},
+                        yaw=80.0, at=(-0.68, 0.30)),
           "take": dict(bend=8.0, turn=0.0, drop=0.05, neck=(-12.0, 0.0), feet={"l": (0.04, 0.10, 4.0), "r": (-0.06, -0.10, -6.0)},
-                       yaw=178.0, at=(-0.60, -0.20)),
-          "carry": dict(bend=8.0, turn=-10.0, drop=0.05, neck=(6.0, 0.0), feet={"l": (0.04, 0.08, -62.0), "r": (-0.04, -0.12, -70.0)},
-                        yaw=60.0, at=(-0.22, -0.10))}
+                       yaw=178.0, at=(-0.60, 0.60)),
+          "carry": dict(bend=8.0, turn=-10.0, drop=0.05, neck=(6.0, 0.0), feet={"l": (0.04, 0.10, 0.0), "r": (-0.04, -0.12, 0.0)},
+                        yaw=90.0, at=(-0.62, 0.35)),
+          # (back from the rail he stands on the breech's line behind the recoil while the guns fire, the round
+          # crosswise before his chest, its nose to his right as ammo.1 gave it him; then the lunge with his left fist
+          # on the base and his right foot leading, the brace's low end at his left)
+          "clear": dict(bend=6.0, turn=-6.0, lean=0.0, shift=(-0.62, 0.10), drop=0.03, neck=(8.0, -6.0),
+                        feet={"r": (-0.52, -0.04, -4.0), "l": (-0.76, 0.22, 10.0)}),
+          "line": dict(bend=6.0, turn=-4.0, lean=0.0, shift=(-0.68, 0.06), drop=0.03, neck=(-2.0, -4.0),
+                       feet={"r": (-0.50, -0.10, -4.0), "l": (-0.88, 0.16, 14.0)}),
+          "set": dict(bend=10.0, turn=-4.0, lean=0.0, shift=(-0.56, 0.06), drop=0.06, neck=(-4.0, -4.0),
+                      feet={"r": (-0.50, -0.10, -4.0), "l": (-0.66, 0.18, 14.0)}),
+          "lunge": dict(bend=22.0, turn=-8.0, lean=0.0, shift=(-0.12, 0.06), drop=0.14, neck=(-10.0, 0.0),
+                        feet={"r": (-0.04, -0.06, -2.0), "l": (-0.66, 0.18, 14.0)}),
+          "back": dict(bend=14.0, turn=20.0, lean=0.0, shift=(-0.18, 0.04), drop=0.10, neck=(0.0, 0.0),
+                       feet={"r": (-0.04, -0.06, -2.0), "l": (-0.66, 0.18, 14.0)}),
+          "ready": ((-0.32, 0.28, 1.16), (0.35, -0.94, 0.05))}
+# (the twin's loaders' lunge, canonical (his fit frame: the breech's face 0.57 ahead of him, 0.20 to his left, 1.59 up;
+# it recoils 0.75 back): while the guns fire he stands behind the recoil and to its right, the round crosswise on both
+# palms before his chest, its nose to his left; after the run-out he steps back half a pace onto the breech's line,
+# square to it, the round raised along it with its nose at the breech (`raised`, from the breech) and its base ahead of
+# his chest; sets, the nose in (`aligned`, the base's distance from the breech); lunges in on his left foot, trunk and
+# legs driving and both arms reaching, his right fist following the base home, drawn back clear as the breech closes)
+LUNGE = {"ready": ((-0.10, -0.56, 1.16), (0.25, 0.97, 0.06)),
+         "raised": ((-0.97, 0.0, -0.19), (0.975, 0.0, 0.221)),
+         "aligned": -0.72}
+LUNGE_POSE = {
+    "clear": dict(bend=6.0, turn=8.0, lean=0.0, shift=(-0.40, -0.38), drop=0.03, neck=(10.0, 24.0),
+                  feet={"l": (-0.30, -0.24, 6.0), "r": (-0.48, -0.54, -12.0)}),
+    "line": dict(bend=6.0, turn=4.0, lean=0.0, shift=(-0.68, 0.06), drop=0.03, neck=(-2.0, 10.0),
+                 feet={"l": (-0.50, -0.10, 4.0), "r": (-0.90, -0.16, -14.0)}),
+    "set": dict(bend=10.0, turn=0.0, lean=0.0, shift=(-0.56, 0.06), drop=0.06, neck=(-4.0, 8.0),
+                feet={"l": (-0.50, -0.10, 4.0), "r": (-0.66, -0.16, -14.0)}),
+    "lunge": dict(bend=22.0, turn=-4.0, lean=0.0, shift=(-0.12, 0.06), drop=0.14, neck=(-10.0, 6.0),
+                  feet={"l": (0.0, -0.06, 2.0), "r": (-0.66, -0.16, -14.0)}),
+    "back": dict(bend=14.0, turn=-20.0, lean=0.0, shift=(-0.18, 0.0), drop=0.10, neck=(0.0, 0.0),
+                 feet={"l": (0.0, -0.06, 2.0), "r": (-0.66, -0.16, -14.0)})}
 
 
 def twin():
@@ -2493,7 +2528,10 @@ def twin():
         pl1 = TWIN["ammo.1"]
         across = pl1.R @ _n(np.array((0.0, 1.0, 0.08)))       # (crosswise to number one, its nose to his left)
         TWIN["hand"] = bomb_frame(g2b(TWIN_HAND) - across * 0.465, across)
-        for k, side in (("r", 1.0), ("l", -1.0)):
+        for k in ("r", "l"):
+            # (both made with the breech to their left: loader.l works inboard of breech.l, on the far side of it from
+            # the fuze setter's machine, his work the mirror of what it was)
+            side = 1.0
             br = g("breech." + k)
             fwd = -np.asarray(fsock("HeavyFlakTwin", "breech." + k)["facing"], float)
             fit = Place(Place(br, fwd).world((-0.57, -0.20 * side, -1.59)), fwd)
@@ -2521,18 +2559,14 @@ def twin_round(t, k):
     S4, canon, _ = _canon(k)
     L = twin()["loader." + k]
     br = (S4 @ np.append(L["fit"].local(L["breech"]), 1.0))[:3]
-    ready = bomb_frame(LOADER_READY[0], _n(np.array(LOADER_READY[1])))
-    if k == "l":
-        # (upright before his chest: the fuze setter's machine stands at his outboard side, as high as his chest)
-        ready = bomb_frame(TWIN_L["ready"][0], _n(np.array(TWIN_L["ready"][1])))
-    aligned = bomb_frame(br + np.array((-0.74, 0.0, -0.03)), (1.0, 0.0, 0.0))
+    rd = LUNGE["ready"] if k == "r" else TWIN_L["ready"]
+    ready = bomb_frame(np.array(rd[0]), _n(np.array(rd[1])))
+    raised = bomb_frame(br + np.array(LUNGE["raised"][0]), _n(np.array(LUNGE["raised"][1])))
+    aligned = bomb_frame(br + np.array((LUNGE["aligned"], 0.0, -0.03)), (1.0, 0.0, 0.0))
     home = bomb_frame(br + np.array((0.02, 0.0, 0.0)), (1.0, 0.0, 0.0))
     W = T["ready"]
     if W <= t < T["home"] + 0.02:
-        # (loader.l's round, upright, has further to turn: he starts to lift it sooner)
-        keys = [(W, ready), (0.75 if k == "l" else 1.0 + dt, ready),
-                (1.45 + dt, bomb_frame(br + np.array((-1.1, -0.12, -0.3)), (0.95, 0.05, 0.25))),
-                (1.75 + dt, aligned), (T["home"], home)]
+        keys = [(W, ready), (0.95 + dt, ready), (1.45 + dt, raised), (1.75 + dt, aligned), (T["home"], home)]
         return slerp_frames(keys, t), True
     if W <= t < T["take"]:
         return home, False
@@ -2564,7 +2598,7 @@ def _twin_yaw(k, t):
         return 0.0
     T = TWIN_T["l"]
     tt = t + T["long"] if t < T["ready"] else t
-    return float(np.interp(tt, [2.35, 2.62, T["take"], T["grab"] + 0.04, T["carry"], T["carry"] + 0.3],
+    return float(np.interp(tt, [2.35, 2.62, T["take"], T["grab"] + 0.04, T["carry"], T["long"] + T["ready"]],
                            [0.0, TWIN_L["turn1"]["yaw"], TWIN_L["take"]["yaw"], TWIN_L["take"]["yaw"], TWIN_L["carry"]["yaw"], 0.0]))
 
 
@@ -2598,8 +2632,9 @@ def _sbm(side, bend=0.0, turn=0.0, lean=0.0, shift=(0.0, 0.0), drop=0.0, neck=(0
 
 
 def _twin_loader(t, k, name):
-    """stand_load_breech_twin (k "r") and stand_load_breech_twin_l (k "l"): the single gun's loader's work, at the
-    twin's breech, made canonically and mirrored for loader.l."""
+    """stand_load_breech_twin (k "r") and stand_load_breech_twin_l (k "l"): the lunge (LUNGE) at the twin's breech,
+    both made with the breech to their left; loader.r's next round from the ready rack, loader.l's from ammo.1's
+    hands over the rail behind him."""
     L = twin()["loader." + k]
     T = TWIN_T[k]
     dt, side = T["dt"], L["side"]
@@ -2608,6 +2643,9 @@ def _twin_loader(t, k, name):
     S4, canon, uncanon = _canon(k)
     near, far = ("r", "l") if side > 0 else ("l", "r")          # (the real hands holding the canonical right and left)
 
+    ram, sup = ("r", "l") if k == "r" else ("l", "r")    # (the hand that rams, and the one under the round's front)
+    pole_on = {"l": (-0.2, 1.0, -1.0), "r": (-0.4, -1.0, -0.6)}
+
     def dress(t, P):
         Bc, shown = twin_round(t, k)
         Bh = twin_round(T["take"] if k == "r" else T["grab"], k)[0] if T["home"] + 0.02 <= t < T["take"] + (0.0 if k == "r" else 0.1) else Bc
@@ -2615,112 +2653,85 @@ def _twin_loader(t, k, name):
         Ry = Rz(_twin_yaw(k, t))                                 # (his elbows' poles turn with him)
         tt = t + T["long"] if t < T["ready"] else t
         u = ramp(tt, T["grab"] + 0.03, T["long"] + 0.15) if tt >= T["take"] - 0.3 else 1.0
+        # (along the round from its base: the ramming hand nearer the base, the other nearer the nose)
         if k == "l":
-            xl, xr = 0.76 + (0.6 - 0.76) * u, 0.1 + (0.28 - 0.1) * u          # (outside ammo.1's hands, then to carry)
+            x_ram, x_sup = 0.1 + (0.28 - 0.1) * u, 0.76 + (0.6 - 0.76) * u      # (outside ammo.1's hands, then to carry)
         else:
-            xl, xr = 0.75 + (0.6 - 0.75) * u, 0.55 + (0.28 - 0.55) * u
-        on = {"l": on_rod("l", Bh, xl, 0.05, under, thumb=1.0, pole=Ry @ np.array((-0.2, 1.0, -1.0))),
-              "r": on_rod("r", Bh, xr, 0.055, under, thumb=1.0,
-                          pole=Ry @ np.array((-0.4, -1.0, -0.6) if k == "r" else (-0.6, -0.35, -1.0)))}   # (loader.l: the elbow in, off the machine)
+            x_ram, x_sup = 0.55 + (0.28 - 0.55) * u, 0.75 + (0.6 - 0.75) * u
+        # (as he raises it onto the breech's line: the ramming palm near the base, the other under its middle, sliding
+        # back along it as its nose goes into the breech, and letting go of it short of the face)
+        if 0.9 + dt <= t < T["home"] + 0.02:
+            g = ramp(t, 0.95 + dt, 1.4 + dt)
+            x_sup, x_ram = x_sup + (0.42 - x_sup) * g, x_ram + (0.12 - x_ram) * g
+            x_sup -= 0.2 * ramp(t, 1.6 + dt, 1.85 + dt)
+        on = {h: on_rod(h, Bh, x_ram if h == ram else x_sup, 0.05 if h == "l" else 0.055, under, thumb=1.0,
+                        pole=Ry @ np.array(pole_on[h])) for h in ("l", "r")}
         Bf = twin_round(T["home"], k)[0] if t >= T["home"] else Bc
-        base = Bf[:3, 3]
-        fist = {"at": tuple(base - Bf[:3, 0] * 0.03), "a": tuple(_n(np.array((0.0, 0.0, 1.0)) - Bf[:3, 0] * Bf[2, 0])), "n": tuple(Bf[:3, 0]),
-                "pole_world": (-0.3, -1.0, -0.8)}
-        if k == "r":
-            # (as the single gun's loader: the ramming hand from the breech straight on to the rack's round as he turns, the
-            # left hand from where it let go of the round to the rack's round)
-            rack_B = twin_round(T["take"], k)[0]
-            on_rack = {"l": on_rod("l", rack_B, 0.75, 0.05, under, thumb=1.0, pole=Ry @ np.array((-0.2, 1.0, -1.0))),
-                       "r": on_rod("r", rack_B, 0.55, 0.055, under, thumb=1.0, pole=Ry @ np.array((-0.4, -1.0, -0.6)))}
-            lg = LOADER["let_go"] + dt
-            let_go = on_rod("l", twin_round(lg, k)[0], 0.6, 0.05, under, thumb=1.0, pole=Ry @ np.array((-0.2, 1.0, -1.0)))
-            if T["home"] + 0.02 <= t < T["grab"]:
-                w = ramp(t, T["home"] + 0.02, T["grab"])
-                w_ram = 1.0 - w
-                hn = blend_hand([(1.0 - w, _mirror_hand(fist, side)), (w, _mirror_hand(on_rack["r"], side))])
-            else:
-                w_ram = ramp(t, 1.6 + dt, 1.9 + dt) if 1.0 <= t < T["home"] + 0.02 else 0.0
-                hn = blend_hand([(1.0 - w_ram, _mirror_hand(on["r"], side)), (w_ram, _mirror_hand(fist, side))])
-            if lg <= t < T["grab"]:
-                w = ramp(t, lg, T["grab"])
-                hf = blend_hand([(1.0 - w, _mirror_hand(let_go, side)), (w, _mirror_hand(on_rack["l"], side))])
-            else:
-                hf = _mirror_hand(on["l"], side)
-            P["hand_" + near], P["hand_" + far] = hn, hf
-            P["fingers_" + far], P["fingers_" + near] = 62.0, 62.0 - 30.0 * w_ram
-            P["props"] = {"flak_round": (uncanon(Bc), shown)}
-            return P
-        else:
-            # (both hands down while he turns round to the rail, up to the round as he faces it)
-            w_ram = ramp(t, 1.6, 1.9) * (1 - ramp(t, T["home"] + 0.02, T["home"] + 0.4))
-            back = ramp(t, T["take"] - 0.4, T["take"])
-            w_r_off = ramp(t, T["home"] + 0.02, T["home"] + 0.4) * (1 - back) if T["home"] <= t < T["take"] + 0.05 else 0.0
-            w_l_off = ramp(t, 1.85, 2.25) * (1 - back) if 1.85 <= t < T["take"] + 0.05 else 0.0
+        base, ax = Bf[:3, 3], Bf[:3, 0]
+        # (the fist on the case's base, its palm pushing along the bore; drawn straight back off it and down as the
+        # breech closes, turning palm down on the way (so that it goes on to his side without the wrist rolling over))
+        pull = 0.3 * ramp(t, T["home"] + 0.02, T["home"] + 0.18) if t >= T["home"] else 0.0
+        q = math.radians(90.0) * pull / 0.3
+        a0, n0 = _n(np.array((0.0, 0.0, 1.0)) - ax * ax[2]), ax
+        fist = {"at": tuple(base - ax * (0.03 + pull) - np.array((0.0, 0.0, 0.3 * pull))),
+                "a": tuple(math.cos(q) * a0 + math.sin(q) * n0), "n": tuple(math.cos(q) * n0 - math.sin(q) * a0),
+                "pole_world": (-0.3, -1.0 if ram == "r" else 1.0, -0.8)}
+        w_in = ramp(t, 1.55 + dt, 1.8 + dt) if 1.0 <= t < T["home"] + 0.02 else 0.0
         rest = hands_rest_pinned(rig, P)
-        if k == "l" and w_r_off > 0.0:
-            # (his outboard hand, on his way to the rail, kept before his thigh, not swinging out into the fuze
-            # setter's machine)
-            pc = np.asarray(rig.solve(dict(P, hand_l=rest["l"], hand_r=rest["r"]))["H"]["pelvis"], float)
-            yr = math.radians(_twin_yaw(k, t) * side)
-            rn = dict(rest[near])
-            a_ = np.asarray(rn["at"], float).copy()
-            a_[:2] += (pc[:2] - a_[:2]) * 0.4 + 0.12 * np.array((math.cos(yr), math.sin(yr)))
-            rn["at"] = tuple(a_)
-            rest = dict(rest, **{near: rn})
-        hn = blend_hand([(1 - w_ram - w_r_off, _mirror_hand(on["r"], side)), (w_ram, _mirror_hand(fist, side)), (w_r_off, rest[near])])
-        hf = blend_hand([(1 - w_l_off, _mirror_hand(on["l"], side)), (w_l_off, rest[far])])
-        P["hand_" + near], P["hand_" + far] = hn, hf
-        P["fingers_" + far], P["fingers_" + near] = 62.0, 62.0 - 30.0 * w_ram
+        lg = LOADER["let_go"] + dt
+        let_go = on_rod(sup, twin_round(lg, k)[0], 0.22, 0.05 if sup == "l" else 0.055, under, thumb=1.0, pole=Ry @ np.array(pole_on[sup]))
+        # (on the next round by T_end: loader.r's in the rack, loader.l's in ammo.1's hands; `on` holds it then)
+        T_end = T["grab"] if k == "r" else T["take"]
+        lead = 0.35 if k == "r" else 0.4
+        if T["home"] + 0.02 <= t < T_end + 0.05:
+            # (one hand's target blended with one other at a time: fist to his side, his side to the next round)
+            w_a = ramp(t, T["home"] + 0.15, T["home"] + 0.3)
+            w_b = ramp(t, max(T_end - lead, T["home"] + 0.32), T_end)
+            w_ram = (1.0 - w_a) * (1.0 - w_b)
+            hn = blend_hand([(w_ram, fist), (w_a * (1.0 - w_b), rest[ram]), (w_b, on[ram])])
+        else:
+            w_ram = w_in
+            hn = blend_hand([(1.0 - w_ram, on[ram]), (w_ram, fist)])
+        if lg <= t < T_end + 0.05:
+            w_a = ramp(t, lg, lg + 0.45)
+            w_b = ramp(t, max(T_end - lead, lg + 0.47), T_end)
+            hf = blend_hand([((1.0 - w_a) * (1.0 - w_b), let_go), (w_a * (1.0 - w_b), rest[sup]), (w_b, on[sup])])
+        else:
+            hf = on[sup]
+        P["hand_" + ram], P["hand_" + sup] = hn, hf
+        P["fingers_" + sup], P["fingers_" + ram] = 62.0, 62.0 - 30.0 * w_ram
         P["props"] = {"flak_round": (uncanon(Bc), shown)}
         return P
 
     sb = lambda **kw: _sbm(side, **kw)
-    if k == "l":
-        # (the fuze setter's machine stands 0.2 m outboard of loader.l, as high as his chest: he stands at his socket
-        # and keeps his feet inboard of it)
-        clear = sb(**TWIN_L["clear"])
-        lift = sb(bend=4.0, turn=-12.0, lean=4.0, shift=(-0.02, -0.06), drop=0.05, neck=(-8.0, 10.0),
-                  feet={"l": (0.12, 0.08, 6.0), "r": (-0.16, -0.18, -12.0)})
-        ram = sb(bend=18.0, turn=-24.0, lean=2.0, shift=(0.15, -0.06), drop=0.08, neck=(-4.0, 16.0),
-                 feet={"l": (0.22, 0.08, 4.0), "r": (-0.16, -0.18, -12.0)})
-        back = sb(bend=14.0, turn=-18.0, lean=0.0, shift=(0.06, -0.04), drop=0.08, neck=(0.0, 0.0),
-                  feet={"l": (0.16, 0.08, 4.0), "r": (-0.16, -0.18, -12.0)})
-    clear_s = sb(bend=8.0, turn=10.0, lean=-10.0, shift=(0.06, -0.27), drop=0.03, neck=(6.0, 18.0),
-               feet={"l": (0.10, -0.10, 6.0), "r": (0.05, -0.44, -14.0)})
+    poses = LUNGE_POSE if k == "r" else TWIN_L
+    clear, line, setp, lunge, back = (sb(**poses[n]) for n in ("clear", "line", "set", "lunge", "back"))
     if k == "r":
-        clear = clear_s
-        lift = sb(bend=4.0, turn=-12.0, lean=4.0, shift=(-0.02, -0.08), drop=0.05, neck=(-8.0, 10.0),
-                  feet={"l": (0.12, 0.08, 6.0), "r": (-0.16, -0.24, -16.0)})
-        ram = sb(bend=18.0, turn=-24.0, lean=2.0, shift=(0.15, -0.08), drop=0.08, neck=(-4.0, 16.0),
-                 feet={"l": (0.22, 0.08, 4.0), "r": (-0.16, -0.24, -16.0)})
-        back = sb(bend=14.0, turn=-30.0, lean=0.0, shift=(0.06, -0.1), drop=0.08, neck=(0.0, 0.0),
-                  feet={"l": (0.16, 0.08, 4.0), "r": (-0.16, -0.24, -16.0)})
         # (round.ready stands 0.31 further out than the single gun's: he stands out to it, in front of the rack)
-        rack = sb(bend=46.0, turn=-80.0, lean=-6.0, shift=(0.08, -0.36), drop=0.13, neck=(26.0, -30.0),
-                  feet={"l": (0.12, -0.22, 8.0), "r": (0.0, -0.54, -34.0)})
-        rise = sb(bend=28.0, turn=-62.0, lean=-4.0, shift=(0.06, -0.38), drop=0.07, neck=(16.0, -24.0),
-                  feet={"l": (0.12, -0.22, 8.0), "r": (0.0, -0.54, -34.0)})
-        keys = [(0.0 + dt, S.mix([rise, clear], [0.35, 0.65])), (T["ready"], clear), (0.9 + dt, clear), (1.35 + dt, lift),
-                (1.75 + dt, lift), (T["home"], ram), (2.35 + dt, back), (T["take"], rack), (T["grab"] + 0.02, rack), (3.0 + dt, rise)]
-        plan_c = {"l": [(0.9 + dt, 1.15 + dt, clear, lift, 0.05, None), (1.8 + dt, 2.15 + dt, lift, ram, 0.05, None),
-                        (2.25 + dt, 2.5 + dt, ram, rack, 0.05, "y"), (3.2 + dt, 3.45 + dt, rack, clear, 0.05, None)],
-                  "r": [(1.1 + dt, 1.4 + dt, clear, lift, 0.07, "y"), (2.45 + dt, 2.65 + dt, back, rack, 0.05, "y"),
-                        (2.98 + dt, 3.22 + dt, rack, clear, 0.07, "x")]}
+        rack = sb(bend=46.0, turn=-80.0, lean=-6.0, shift=(-0.02, -0.36), drop=0.13, neck=(26.0, -30.0),
+                  feet={"l": (0.08, -0.20, 8.0), "r": (-0.28, -0.50, -34.0)})
+        rise = sb(bend=28.0, turn=-62.0, lean=-4.0, shift=(-0.04, -0.38), drop=0.07, neck=(16.0, -24.0),
+                  feet={"l": (0.08, -0.20, 8.0), "r": (-0.28, -0.50, -34.0)})
+        keys = [(0.0 + dt, S.mix([rise, clear], [0.35, 0.65])), (T["ready"], clear), (0.95 + dt, clear), (1.4 + dt, line),
+                (1.5 + dt, line), (1.75 + dt, setp), (T["home"], lunge), (2.35 + dt, back), (T["take"], rack),
+                (T["grab"] + 0.02, rack), (3.0 + dt, rise)]
+        plan_c = {"l": [(0.9 + dt, 1.15 + dt, clear, line, 0.05, None), (1.8 + dt, 2.05 + dt, setp, lunge, 0.06, None),
+                        (2.35 + dt, 2.55 + dt, back, rack, 0.05, "y"), (3.2 + dt, 3.45 + dt, rack, clear, 0.05, None)],
+                  "r": [(1.0 + dt, 1.3 + dt, clear, line, 0.07, None), (1.5 + dt, 1.7 + dt, line, setp, 0.05, None),
+                        (2.45 + dt, 2.65 + dt, back, rack, 0.05, "x"), (2.98 + dt, 3.22 + dt, rack, clear, 0.07, None)]}
     else:
-        # (he turns round to his right (canonically) to the rail behind him, takes the round from ammo.1's hands at
-        # `grab`, and turns back with it)
-        # (inboard, to his left canonically, so as to keep clear of the fuze setter's machine; at his socket again
-        # before the next shot)
+        # (he turns round to his right to the rail behind him, takes the round from ammo.1's hands at `grab`, and comes
+        # back with it behind the recoil, to stand clear by `ready`)
         turn1, take, carry = (sb(**TWIN_L[n]) for n in ("turn1", "take", "carry"))
         L_ = T["long"]
-        keys = [(T["carry"] - L_, carry), (T["carry"] + 0.35 - L_, clear), (0.75, clear), (1.35, lift), (1.75, lift),
-                (T["home"], ram), (2.35, back), (2.62, turn1), (T["take"], take), (T["grab"] + 0.04, take)]
-        plan_c = {"r": [(1.1, 1.4, clear, lift, 0.07, "y"), (2.36, 2.54, back, turn1, 0.06, None),
-                        (2.70, 2.84, turn1, take, 0.10, None), (3.20, 3.38, take, carry, 0.14, None),
-                        (3.58, 3.74, carry, clear, 0.06, None)],
-                  "l": [(0.9, 1.15, clear, lift, 0.05, None), (1.8, 2.15, lift, ram, 0.05, None),
-                        (2.55, 2.69, ram, turn1, 0.06, None), (2.86, 3.0, turn1, take, 0.12, "y"),
-                        (3.40, 3.56, take, carry, 0.22, None), (3.75, 3.88, carry, clear, 0.05, None)]}
+        keys = [(T["carry"] - L_, carry), (T["ready"], clear), (0.95, clear), (1.4, line), (1.5, line), (1.75, setp),
+                (T["home"], lunge), (2.35, back), (2.62, turn1), (T["take"], take), (T["grab"] + 0.04, take)]
+        plan_c = {"r": [(0.9, 1.15, clear, line, 0.05, None), (1.8, 2.05, setp, lunge, 0.06, None),
+                        (2.36, 2.52, back, turn1, 0.06, None), (2.70, 2.84, turn1, take, 0.10, None),
+                        (3.20, 3.38, take, carry, 0.12, None), (3.58, 3.74, carry, clear, 0.06, None)],
+                  "l": [(1.0, 1.3, clear, line, 0.07, None), (1.5, 1.7, line, setp, 0.05, None),
+                        (2.45, 2.6, back, turn1, 0.06, None), (2.86, 3.0, turn1, take, 0.12, "y"),
+                        (3.40, 3.56, take, carry, 0.14, None), (3.75, 3.9, carry, clear, 0.05, None)]}
     if keys[0][0] > 0.0:
         # (looped wants a key at 0: the pose the loop passes through there)
         t0k = keys[0][0]
