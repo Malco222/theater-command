@@ -308,10 +308,15 @@ def of_carrier(ship, month=None):
     return plan[-1]["model"]
 
 
+def stands_for(ship):
+    """The kind a carrier is: her own name, or for a named ship (the Essex, the Shokaku) the kind she stands in for."""
+    return ship.info.get("file", {}).get("stands_for") or ship.name
+
+
 def own_for(ship, month=None):
     """For the pictures: the marking a plain machine wears on this carrier's deck where her file says the owner's
     own. America's star of the month on the American carrier; Britain's roundels on the plain one, which is hers."""
-    if ship.name == "Carrier_USA":
+    if stands_for(ship) == "Carrier_USA":
         return planes.mark_in("USA", month or "1942-06")
     return lambda n: "UK-B" if abs(n.z) > 0.7 else "UK"
 
@@ -330,9 +335,9 @@ def range_on(ship, ship_arm, month=None, own=None):
         return []
     m, _ = park(name[len("DeckPark_"):], True)
     gloss = in_month(m, month)
-    if ship.name == "Carrier_USA" and m.info["file"]["machine"] == "CarrierFighter":
+    if stands_for(ship) == "Carrier_USA" and m.info["file"]["machine"] == "CarrierFighter":
         m.paints.update(planes._BLUE_GREY)               # (the game paints a plain machine for her owner: America's blue-grey of 1941 and 1942)
-    if m.info["file"].get("blade_tip_for") and ship.name in ("Carrier_USA", "Carrier"):
+    if m.info["file"].get("blade_tip_for") and stands_for(ship) in ("Carrier_USA", "Carrier"):
         m.paints["blade_tip"] = TIP_YELLOW               # (America's and Britain's airscrews wear yellow tips)
     ob, arm = rigid.to_blender(m, (lambda *a: airshow.plane_look(*a, gloss=gloss)), crease=50.0)
     made = [ob, arm] + marks.put(m, ob, arm, own=own or own_for(ship, month))

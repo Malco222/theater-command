@@ -460,7 +460,8 @@ def clips_for_ship(m, yard, mains, cls):
             guns = [q.name for q in m.parts if q.name.startswith(p.name + ".gun.")]
             m.clips[f"fire.{p.name}"] = {"long": 0.9, "loop": False, "about": "a secondary turret fires",
                                          "tracks": [{"part": g, "slide": [[0.0, 0.0], [0.05, 0.35], [0.6, 0.0], [0.9, 0.0]]} for g in guns],
-                                         "events": [{"t": 0.0, "fx": "muzzle_flash", "socket": f"muzzle.{p.name}.1", "cue": "ship_guns"}, {"t": 0.0, "fx": "muzzle_flash", "socket": f"muzzle.{p.name}.2"}]}
+                                         "events": [dict({"t": 0.0, "fx": "muzzle_flash", "socket": f"muzzle.{p.name}.{i + 1}"}, **({"cue": "ship_guns"} if i == 0 else {}))
+                                                    for i in range(max(1, len(guns)))]}
 
     # she is hit: a shudder
     m.clips["hit"] = {"long": 1.6, "loop": False, "about": "a shell or a bomb strikes: she shudders; put the burst at the nearest fire socket (a torpedo: the column of water at a hit socket)",
@@ -1833,3 +1834,8 @@ def in_month(m, month=None):
 import merchants  # noqa: E402
 
 BUILDERS.update(merchants.BUILDERS)
+
+# the named Pacific capital ships (capitals.py: Iowa, and the others as they are built) also use this file's pieces
+import capitals  # noqa: E402
+
+BUILDERS.update(capitals.BUILDERS)
