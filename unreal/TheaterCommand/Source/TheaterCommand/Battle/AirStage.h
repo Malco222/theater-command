@@ -54,7 +54,8 @@ public:
 	 * Builds the stage. Key: "oahu" or "midway". Aim: the raid's aim in stage metres (stages.ts aim). Turn: the
 	 * ticket's turn, radians counter-clockwise. Target: the board's target in board metres. Effects: the scene's
 	 * battle effects, for the hits and the fires (not owned; null for none). False, with a warning, if the stage's
-	 * file is missing or unreadable.
+	 * file is missing or unreadable. Raised again (another battle), it first takes down the stage and ships it put up.
+	 * In a packaged build, Content/Data/Stages must be staged with the game, as Content/Effects is.
 	 */
 	bool Raise(const FString& Key, const FVector2D& Aim, double Turn, const FVector2D& Target, double InUnitsPerMetre, FBattleEffects* InEffects);
 
@@ -192,4 +193,6 @@ private:
 	void StartTest(const FString& Key);
 	void TestPlan();
 	void TestTick();
+	/** A picture run that cannot go on (no stage file, no camera): says why and quits rather than hang. */
+	void QuitTest(const FString& Why);
 };

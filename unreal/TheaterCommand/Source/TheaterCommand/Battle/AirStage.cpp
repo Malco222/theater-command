@@ -309,6 +309,25 @@ bool AAirStage::ReadStage(const FString& Key)
 
 bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, const FVector2D& Target, double InUnitsPerMetre, FBattleEffects* InEffects)
 {
+	// A second Raise on one actor (another battle, another stage) first takes down what the first one put up.
+	for (TObjectPtr<UTheaterStillMesh>& Mesh : StillMeshes)
+	{
+		if (Mesh)
+		{
+			Mesh->DestroyComponent();
+		}
+	}
+	StillMeshes.Reset();
+	for (TObjectPtr<UProceduralMeshComponent>& Mesh : ShipMeshes)
+	{
+		if (Mesh)
+		{
+			Mesh->DestroyComponent();
+		}
+	}
+	ShipMeshes.Reset();
+	Ships.Reset();
+	bRaised = false;
 	StageKey = Key;
 	StageAim = Aim;
 	StageTurn = Turn;
@@ -537,6 +556,14 @@ void AAirStage::SetShipsFromView(const TSharedPtr<FJsonObject>& ShipsView)
 
 void AAirStage::LayShip(const FStageShip& Given)
 {
+	if (const FShip* Going = Ships.Find(Given.Id))
+	{
+		if (Going->SunkAt >= 0.0 || Going->bGone)
+		{
+			// (a ship already going down is Advance's to move: laid again she would pop back to the waterline)
+			return;
+		}
+	}
 	FShip& Ship = Ships.FindOrAdd(Given.Id);
 	Ship.Given = Given;
 	Ship.Base = BoardToLocal(Given.At, 0.0);
@@ -839,6 +866,7 @@ void AAirStage::StartTest(const FString& Key)
 	FVector2D Aim = FVector2D::ZeroVector;
 	if (!Raise(Stage, Aim, 0.0, FVector2D::ZeroVector, 100.0, nullptr))
 	{
+		QuitTest(FString::Printf(TEXT("the stage %s could not be raised (is Content/Data/Stages/%s.json staged with the build?)"), *Stage, *Stage));
 		return;
 	}
 	if (bFleet && TestBook.IsValid())
@@ -956,6 +984,11 @@ void AAirStage::StartTest(const FString& Key)
 		}
 	}
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterStageShots="), TestFolder);
+	if (!TestCamera)
+	{
+		QuitTest(TEXT("the test camera did not spawn"));
+		return;
+	}
 	if (!TestFolder.IsEmpty())
 	{
 		IFileManager::Get().MakeDirectory(*TestFolder, true);
@@ -1066,6 +1099,17 @@ void AAirStage::Tick(float DeltaSeconds)
 	{
 		TestTick();
 	}
+}
+
+void AAirStage::QuitTest(const FString& Why)
+{
+	// A picture run that cannot go on says why and stops, rather than hang the builder's run.
+	UE_LOG(LogTheater, Error, TEXT("Stage test: %s; stopping."), *Why);
+	// (only the command line's -TheaterStage starts a test, so there is no game here to keep running)
+	bTest = false;
+	SetActorTickEnabled(false);
+	UKismetSystemLibrary::QuitGame(this, nullptr, EQuitPreference::Quit, false);
+	FPlatformMisc::RequestExit(false);
 }
 
 void AAirStage::TestTick()
