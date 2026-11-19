@@ -376,8 +376,10 @@ EXTRA_PLANES["Hellcat"] = {
     "side_marks": [(-2.75, 0.34, "USA-BAR")], "wing_marks": [(4.5, 0.05, 0.5, "USA-BAR", "USA-BAR", False, False)], "code": (-3.9, 0.3),
 }
 JETS = [
-    ('    boss_back = 1.0e9 if s.get("engines") else sorted(', '    boss_back = 1.0e9 if s.get("engines") or s.get("jets") else sorted('),
-    ('    if not s.get("engines"):\n        airscrew(parts, (hub_x, 0.0, hub_z)', '    if not s.get("engines") and not s.get("jets"):\n        airscrew(parts, (hub_x, 0.0, hub_z)'),
+    # (and `nose_engine`: a machine with engines on her wings that has one in her nose as well, a trimotor's: her nose
+    #  airscrew, spinner and cowling are seated as a single-engined machine's are)
+    ('    boss_back = 1.0e9 if s.get("engines") else sorted(', '    boss_back = 1.0e9 if (s.get("engines") and not s.get("nose_engine")) or s.get("jets") else sorted('),
+    ('    if not s.get("engines"):\n        airscrew(parts, (hub_x, 0.0, hub_z)', '    if (not s.get("engines") or s.get("nose_engine")) and not s.get("jets"):\n        airscrew(parts, (hub_x, 0.0, hub_z)'),
     ('    # The tailwheel, the aerial mast with its wire, and anything fixed under the machine.\n',
      '    for jet_stations, jet_out in s.get("jets", []):\n'
      '        for jet_side in (jet_out, -jet_out):\n'
@@ -1251,7 +1253,7 @@ def convert(name, fine=True):
     hubs = []
     jets = s.get("jets", [])
     pods = sorted(((G["Body"](st, 2.0, out * hand), out * hand) for st, out in jets for hand in (1.0, -1.0)), key=lambda q: q[1])     # (port first)
-    if not s.get("engines") and not jets:
+    if (not s.get("engines") or s.get("nose_engine")) and not jets:                 # (a trimotor's nose engine too)
         hub_x = sorted((r[0] for r in s["hull"]), reverse=True)[s.get("spinner", 2) - 1] + 0.06
         hubs.append(Vector((hub_x, 0.0, hull.z(-hub_x))))
     for (out, lead, z, is_radial, back) in s.get("engines", []):
@@ -1761,7 +1763,7 @@ def convert(name, fine=True):
         if pods and n[2] < -0.2 and y < hull.w(-v.x) and v.x < s["wing"][0][2]:
             along = min(max((s["wing"][0][2] - v.x) / (s["wing"][0][2] - hull.back), 0.0), 1.0)
             soot = max(soot, 0.75 * min(1.0, along * 6.0) * (1.0 - along) ** 0.5 * max(0.0, 1.0 - y / hull.w(-v.x)) ** 0.6 * streak)
-        if not s.get("engines") and not jets and n[2] < -0.5 and y < 0.5 * wide:
+        if (not s.get("engines") or s.get("nose_engine")) and not jets and n[2] < -0.5 and y < 0.5 * wide:
             along = (nose_back - v.x) / 4.5
             if 0.0 < along < 1.0:
                 soot = max(soot, 0.4 * (1.0 - along) * (1.0 - y / (0.5 * wide)))

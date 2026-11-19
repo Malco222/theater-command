@@ -704,7 +704,7 @@ def exhausts(m, f, s, G, hull):
             stub(body.at(x, a), body.out(x, a), part, long, 0.05)
             f.stains.append((body, x - long, 2.4, a))
 
-    if not s.get("engines"):
+    if not s.get("engines") or s.get("nose_engine"):                                 # (a trimotor's nose engine too)
         if s.get("stubs"):
             row(hull, s["stubs"][0], s["stubs"][1], s["stubs"][2], "plane")
         elif s.get("engine") == "radial" and s.get("nose_back") is not None:
