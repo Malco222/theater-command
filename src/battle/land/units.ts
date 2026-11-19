@@ -242,10 +242,14 @@ export function deploy(units: LandUnit[], side: Side, f: LandField): void {
     u.y = Math.min(f.h - 40, Math.max(40, u.y));
     // Never drawn up in a city's own river (b526): it lies behind the defence's rows and clear of the lanes either side
     // of it; should a row still reach it (a deep row in a narrow lane, a second river coming in behind), the block steps
-    // forward out of it, toward the enemy, and a few steps more to stand a stone's throw off its water and bridges.
+    // forward out of it, toward the enemy, and a few steps more to stand a stone's throw off its water and bridges where
+    // those steps take it clear and keep it in its zone (beside a river up the field they would only take it out of its
+    // line, so it stays where its row put it).
     if (f.stream) {
       for (let k = 0; k < 40 && wetUnder(f, u); k++) u.y += side === 'att' ? 10 : -10;
+      const y0 = u.y;
       for (let k = 0; k < 8 && wetUnder(f, u, STREAM.off); k++) u.y += side === 'att' ? 10 : -10;
+      if (wetUnder(f, u, STREAM.off) || (side === 'att' ? u.y > z[3] : u.y < z[1])) u.y = y0;
     }
     u.home = [u.x, u.y];
     if (u.dug) digWorks(f, u.x, u.y, u.w, u.d);
@@ -266,13 +270,15 @@ function wetUnder(f: LandField, u: LandUnit, off = 0): boolean {
 
 /**
  * A side drawn up beside a city's own river (field.stream, b526). One that runs up the field leaves two lanes, either
- * side of it and STREAM.clear beyond its water: each army stands in the heart's where its front line fits, else across
+ * side of it and a stone's throw beyond its water: each army stands in the heart's where its front line fits, else across
  * both, its blocks shared out by the room each has. A shore leaves one lane, off its water.
  */
 function streamLanes(mine: LandUnit[], side: Side, f: LandField): void {
-  const S = f.stream!, z = f.zones[side], clear = S.half + STREAM.clear;
-  // Over all the depth its rows may take: where the lanes are narrow, they run back toward the side's own edge.
-  const y0 = side === 'att' ? 0 : z[1] - 100, y1 = side === 'att' ? z[3] + 20 : f.h;
+  // Clear of its water at its widest, by a cell (the water is drawn by the cell) and the stone's throw.
+  const S = f.stream!, z = f.zones[side], clear = S.half * (1 + STREAM.wobble) + f.cell + STREAM.off;
+  // Over all the depth its rows may take, the stone's throw in front of them too: where the lanes are narrow, they run
+  // back toward the side's own edge.
+  const y0 = side === 'att' ? 0 : z[1] - 120, y1 = side === 'att' ? z[3] + 120 : f.h;
   const xs = S.course.filter(([, y]) => y >= y0 && y <= y1).map(([x]) => x);
   const lo = Math.min(...xs), hi = Math.max(...xs);
   const lane = (a: number, b: number): [number, number, number] => [a, b, Math.max(0, Math.min(b, z[2]) - Math.max(a, z[0]))];

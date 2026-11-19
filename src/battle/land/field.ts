@@ -171,8 +171,9 @@ export const BEND = { r: 180, swing: 30, wave: 520, clear: 130 };
  * further still (the defence's rows reach 230 m back and its guns stand 50 m deep, deeper where its lanes are narrow); the far bank it leaves at the
  * field's edge; how far either side of its line a block draws up clear of it; and how far it keeps from the roads up and
  * across the field, which it bridges and never runs along; and the stone's throw a block stands off its water and bridges.
+ * Its water reaches half its width and a little more as it goes (wobble: up to an eighth more).
  */
-export const STREAM = { great: 55, lesser: 35, swing: 45, shore: 230, behind: 330, joinBehind: 420, far: 60, clear: 75, road: 90, off: 60 };
+export const STREAM = { great: 55, lesser: 35, swing: 45, shore: 230, behind: 330, joinBehind: 420, far: 60, clear: 75, road: 90, off: 60, wobble: 0.12 };
 
 /** How each province's ground is made: relief in metres, and how much of it is each kind of cover. */
 const RECIPE: Record<Terrain, { relief: number; woods: number; fields: number; rough: number; marsh: number; rock: number }> = {
@@ -579,9 +580,10 @@ function layStream(
     }
   }
 
-  // The roads as they were before any water: those it crosses keep their way over.
-  const road0 = ground.map((k) => k === G.road);
   const lay = (pts: [number, number][], hw: number): void => {
+    // The roads as they were before this water: those it crosses keep their way over (a second river's too, the roads
+    // the first one's bridges were given among them).
+    const road0 = ground.map((k) => k === G.road);
     const wob = rng.range(0, Math.PI * 2), m = hw * 1.15 + 40;
     const along = [0];
     for (let k = 1; k < pts.length; k++) along.push(along[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
@@ -594,7 +596,7 @@ function layStream(
     for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
       const x = c * cell + cell / 2, y = r * cell + cell / 2, i = r * cols + c;
       // A second river stops where the first's water begins.
-      if (ground[i] === G.water || ground[i] === G.bridge) continue;
+      if (ground[i] === G.water) continue;
       let best = Infinity, sAt = 0, sd = 0;
       for (let k = 1; k < pts.length; k++) {
         const [ax, ay] = pts[k - 1], vx = pts[k][0] - ax, vy = pts[k][1] - ay;
@@ -604,7 +606,10 @@ function layStream(
       }
       if (best > m) continue;
       dist.set(i, best); bank.set(i, sd); sta.set(i, sAt);
-      if (best <= hw * (1 + 0.12 * Math.sin(sAt / 170 + wob))) wet.add(i);
+      // The first river's bridge: never a second's water, but a bank its roads come to (an avenue over the first river
+      // and on over the second keeps its way over both).
+      if (ground[i] === G.bridge) continue;
+      if (best <= hw * (1 + STREAM.wobble * Math.sin(sAt / 170 + wob))) wet.add(i);
       else if (best <= hw + 40 && ground[i] === G.open && terrain !== 'desert') ground[i] = G.field;
     }
     for (const i of wet) { ground[i] = G.water; height[i] = Math.min(height[i], 0) - 2; }
@@ -640,6 +645,8 @@ function layStream(
     // the water ends at its bank.
     const bridged: number[] = [];
     const seen = new Set<number>();
+    // Each joined piece of road the water took: the cells of its roads where they come to the water, run by run.
+    const pieces: number[][][] = [];
     for (const i0 of wet) {
       if (!road0[i0] || seen.has(i0)) continue;
       const ends: Record<number, Set<number>> = { 1: new Set(), [-1]: new Set() };
@@ -651,7 +658,7 @@ function layStream(
           const c = (i % cols) + dc, r = Math.floor(i / cols) + dr, j = r * cols + c;
           if ((!dc && !dr) || c < 0 || r < 0 || c >= cols || r >= rows) continue;
           if (wet.has(j)) { if (road0[j] && !seen.has(j)) { seen.add(j); stack.push(j); } }
-          else if (ground[j] === G.road && bank.has(j)) ends[bank.get(j)!].add(j);
+          else if ((ground[j] === G.road || ground[j] === G.bridge) && bank.has(j)) ends[bank.get(j)!].add(j);
         }
       }
       // Where along the river each bank's road comes to the water: its cells there, in runs along the bank.
@@ -666,6 +673,7 @@ function layStream(
         return out;
       };
       const right = runs(ends[-1]), left = runs(ends[1]);
+      pieces.push([...right, ...left].map((o) => o.cells));
       const pairs: [number, number, number][] = [];
       // A road over it slantwise comes to the far bank further along: one crossing down to about 20 degrees pairs too,
       // nearest first, so one that crosses square still pairs with the run straight over from it.
@@ -705,14 +713,73 @@ function layStream(
         });
       }
     }
-    if (!bridged.length && pts.length > 1) {
-      // No road over it: one bridge, nearest the heart.
-      let s1 = 0, d1 = Infinity;
-      for (let k = 0; k < pts.length; k++) {
-        const d = Math.hypot(pts[k][0] - heart.x, pts[k][1] - heart.y);
-        if (d < d1 && pts[k][0] > 0 && pts[k][0] < w && pts[k][1] > 0 && pts[k][1] < h) { d1 = d; s1 = along[k]; }
+    // Roads that met in the water, two avenues crossing or three roads meeting there, come to it in two or more places on
+    // each bank and are bridged pair by pair: each bridge leads on, but what joined one to the other was in the water.
+    // Where a piece's roads are no longer one road, the nearest of them are joined again over the land between them.
+    const deck = (i: number): boolean => ground[i] === G.road || ground[i] === G.bridge;
+    const label = (): Int32Array => {
+      const lab = new Int32Array(cols * rows).fill(-1);
+      let n = 0;
+      for (let i0 = 0; i0 < cols * rows; i0++) {
+        if (lab[i0] >= 0 || !deck(i0)) continue;
+        lab[i0] = n;
+        const todo = [i0];
+        while (todo.length) {
+          const i = todo.pop()!;
+          for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+            const c = (i % cols) + dc, r = Math.floor(i / cols) + dr, j = r * cols + c;
+            if (c < 0 || r < 0 || c >= cols || r >= rows || lab[j] >= 0 || !deck(j)) continue;
+            lab[j] = n; todo.push(j);
+          }
+        }
+        n++;
       }
-      span(s1);
+      return lab;
+    };
+    let lab: Int32Array | null = null;
+    for (const piece of pieces) {
+      if (piece.length < 2) continue;
+      for (let tries = 0; tries < piece.length; tries++) {
+        lab ??= label();
+        const L = lab, own = new Set(piece.map((cs) => L[cs[0]]));
+        if (own.size < 2) break;
+        // The shortest way over land (any ground but water) from the first of them to another: no further than a bridge
+        // would pair them.
+        const from = L[piece[0][0]], goal = new Set([...own].filter((k) => k !== from));
+        const prev = new Map<number, number>(), todo: number[] = [];
+        for (let i = 0; i < cols * rows; i++) if (L[i] === from) { prev.set(i, -1); todo.push(i); }
+        let hit = -1;
+        for (let q = 0, depth = 0; q < todo.length && hit < 0; depth++) {
+          const end = todo.length;
+          if (depth > Math.ceil((6 * hw + 2 * cell) / cell)) break;
+          for (; q < end && hit < 0; q++) {
+            const i = todo[q];
+            for (let dr = -1; dr <= 1 && hit < 0; dr++) for (let dc = -1; dc <= 1; dc++) {
+              const c = (i % cols) + dc, r = Math.floor(i / cols) + dr, j = r * cols + c;
+              if (c < 0 || r < 0 || c >= cols || r >= rows || prev.has(j) || ground[j] === G.water || ground[j] === G.blown) continue;
+              prev.set(j, i);
+              if (goal.has(L[j])) { hit = j; break; }
+              todo.push(j);
+            }
+          }
+        }
+        if (hit < 0) break;
+        for (let i = prev.get(hit)!; i >= 0 && L[i] !== from; i = prev.get(i)!) if (!deck(i)) ground[i] = G.road;
+        lab = null;
+      }
+    }
+    if (!bridged.length && pts.length > 1) {
+      // No road over it: one bridge, nearest the heart, where it is its own water and both its ends on land (a second
+      // river's nearest point is often where it meets the first, its bridge in the first one's water).
+      let s1 = 0, d1 = Infinity;
+      const dry = (x: number, y: number): boolean => { const j = cellOf(x, y); return j >= 0 && !wet.has(j) && ground[j] !== G.water; };
+      for (let k = 0; k < pts.length; k++) {
+        const d = Math.hypot(pts[k][0] - heart.x, pts[k][1] - heart.y), j = cellOf(pts[k][0], pts[k][1]);
+        const [ax, ay] = pts[Math.max(0, k - 1)], [bx, by] = pts[Math.max(1, k)], len = Math.hypot(bx - ax, by - ay) || 1, reach = hw * 1.15 + cell;
+        const nx = (by - ay) / len, ny = -(bx - ax) / len;
+        if (d < d1 && j >= 0 && wet.has(j) && dry(pts[k][0] + nx * reach, pts[k][1] + ny * reach) && dry(pts[k][0] - nx * reach, pts[k][1] - ny * reach)) { d1 = d; s1 = along[k]; }
+      }
+      if (d1 < Infinity) span(s1);
     }
   };
   lay(course, half);

@@ -97,10 +97,13 @@ describe("the city's river on the field (b526)", () => {
       for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) {
         if (near(c * f.cell + f.cell / 2, r * f.cell + f.cell / 2)) continue;
         far++;
-        if (f.ground[r * f.cols + c] === twin.ground[r * f.cols + c]) same++;
+        const i = r * f.cols + c;
+        if (f.ground[i] === twin.ground[i]) same++;
+        // Its ground may take a road the water's bridges lead on to; its lie of the land and its houses never change.
+        expect(f.height[i]).toBe(twin.height[i]);
+        expect(f.storeys?.[i]).toBe(twin.storeys?.[i]);
       }
       expect(same / far).toBeGreaterThan(0.995);
-      expect(f.height.length).toBe(twin.height.length);
     }
   });
   it('the same city and seed give the same river', () => {
@@ -139,7 +142,24 @@ describe("the city's river on the field (b526)", () => {
       const b = new LandBattle(cityTicket(size, terrain, seed * 101 + 7, s));
       const f = b.field;
       const at = (x: number, y: number): string => kind(f, Math.min(f.cols - 1, Math.max(0, Math.floor(x / f.cell))), Math.min(f.rows - 1, Math.max(0, Math.floor(y / f.cell))));
-      for (const u of b.units) for (let dx = -60; dx <= 60; dx += 20) for (let dy = -60; dy <= 60; dy += 20) expect(wet(at(u.x + dx, u.y + dy)), `${name} ${size} ${terrain} ${seed} ${u.name}`).toBe(false);
+      for (const u of b.units) {
+        for (let dx = -u.w / 2 - 60; dx <= u.w / 2 + 60; dx += 20) for (let dy = -u.d / 2 - 60; dy <= u.d / 2 + 60; dy += 20) expect(wet(at(u.x + dx, u.y + dy)), `${name} ${size} ${terrain} ${seed} ${u.name}`).toBe(false);
+        expect(u.side === 'att' ? u.y <= f.zones.att[3] : u.y >= f.zones.def[1], `${name} ${size} ${terrain} ${seed} ${u.name} in its zone`).toBe(true);
+      }
+    }
+  });
+  it('beside a river up the field a block keeps its place in its row: never stepped out in front of its zone (b526 review)', () => {
+    // A city, the defence one infantry division: its row stood flush against its lane's edge, and the stone's throw
+    // stepped its first regiment 80 m forward, out of its zone, and still beside the water.
+    const t = sampleTicket('urban', 1.2, { town: 'city', seed: 10726 });
+    const proto = t.def.forces[0];
+    t.def.forces = [{ ...proto, corps: 11, name: 'C0', kind: 'inf', divs: 1, men: 15000 * proto.str, share: 1, first: 1 }];
+    t.place.stream = stream('up');
+    const b = new LandBattle(t), f = b.field;
+    const at = (x: number, y: number): string => kind(f, Math.min(f.cols - 1, Math.max(0, Math.floor(x / f.cell))), Math.min(f.rows - 1, Math.max(0, Math.floor(y / f.cell))));
+    for (const u of b.units) {
+      expect(u.side === 'att' ? u.y <= f.zones.att[3] : u.y >= f.zones.def[1], u.name).toBe(true);
+      for (let dx = -u.w / 2 - 60; dx <= u.w / 2 + 60; dx += 10) for (let dy = -u.d / 2 - 60; dy <= u.d / 2 + 60; dy += 10) expect(wet(at(u.x + dx, u.y + dy)), u.name).toBe(false);
     }
   });
   it('a bridge on every avenue: the roads either side of it still meet, over its bridges', () => {
@@ -186,7 +206,13 @@ describe("the city's river on the field (b526)", () => {
       ['across, slantwise', 'urban', 'city', 263, stream('across'), 0],
       ['up, slantwise', 'urban', 'capital', 132, stream('up'), 0],
       ['up, dipping in and out', 'plains', 'capital', 1856, stream('up'), 0],
-      ['up, a second meeting it', 'plains', 'capital', 3214, stream('up', { join: { name: 'Second', side: 'east' } }), 5],
+      ['up, a second meeting it', 'plains', 'capital', 3214, stream('up', { join: { name: 'Second', side: 'east' } }), 0],
+      // The final review (b526): two avenues crossing in the water, bridged pair by pair and no longer joined; an avenue
+      // over the first river's bridge and on over a second, which gave it no bridge of its own.
+      ['across, two avenues crossing in the water', 'urban', 'capital', 182150, stream('across'), 0],
+      ['up, four roads meeting in the water', 'urban', 'capital', 4608083, stream('up'), 0],
+      ['up, over the first bridge and on over a second', 'urban', 'capital', 7959411, stream('up', { join: { name: 'Second', side: 'east' } }), 0],
+      ['across, over the first bridge and on over a second', 'urban', 'capital', 134636, stream('across', { join: { name: 'Second', side: 'west' } }), 0],
     ];
     const reach = (h: LandField): Set<number> => {
       const deck = (i: number): boolean => GROUNDS[h.ground[i]] === 'road' || GROUNDS[h.ground[i]] === 'bridge';
@@ -210,6 +236,18 @@ describe("the city's river on the field (b526)", () => {
       const cut = [...before].filter((i) => (GROUNDS[g.ground[i]] === 'road' || GROUNDS[g.ground[i]] === 'bridge') && !after.has(i)).length;
       expect(cut, name).toBeLessThanOrEqual(most);
     }
+  });
+  it('a second river with no road over it has its one bridge, over its own water and not the first one\'s', () => {
+    const t = sampleTicket('urban', 1.2, { town: 'city', seed: 7932 });
+    t.place.stream = stream('across', { join: { name: 'Second', side: 'east' } });
+    const f = buildField(t.place, t.seed), J = f.stream!.join!;
+    const from = (pts: [number, number][], x: number, y: number): number => Math.min(...pts.map(([px, py]) => Math.hypot(px - x, py - y)));
+    let deck = 0;
+    for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) {
+      const x = c * f.cell + f.cell / 2, y = r * f.cell + f.cell / 2;
+      if (kind(f, c, r) === 'bridge' && from(J.course, x, y) < from(f.stream!.course, x, y)) deck++;
+    }
+    expect(deck).toBeGreaterThan(0);
   });
   it('a narrow defence with its guns keeps clear of the water too (the front the river kept behind)', () => {
     const mk = (seed: number, def: [string, number][], s: Stream) => {
