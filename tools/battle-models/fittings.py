@@ -258,6 +258,32 @@ def oerlikon(yard, x, y, z, facing=0.0, crew=True, shield=True, tub=0.0, loader=
             sailor(m, o - f * 0.75 + l * 0.85, f + l * -0.4, "carry")
 
 
+
+def mg50(yard, x, y, z, facing=0.0, crew=True, part=None):
+    """A water-cooled .50 calibre machine gun on its pedestal, as the fleet carried them in 1941: the thick cooling
+    jacket, the receiver, the spade grips and the ammunition box; its gunner standing at the grips. Fixed (it does not
+    train in the model). Socket `aa.K` at the muzzle."""
+    m = yard.on(x) if part is None else yard.m.use(part)
+    o = Vector((x, y, z))
+    f, l, _ = frame((math.cos(math.radians(facing)), math.sin(math.radians(facing))))
+    m.lathe(o, Z, [(0.0, 0.22), (0.06, 0.2), (0.12, 0.07), (1.0, 0.06)], "upper", 8 if m.fine else 5)
+    up = math.radians(18.0)
+    g = (f * math.cos(up) + Z * math.sin(up)).normalized()
+    q = o + Z * 1.12
+    m.rod(q - g * 0.5, q + g * 0.15, 0.08, "gunmetal", sides=6 if m.fine else 4)            # the receiver
+    m.rod(q + g * 0.15, q + g * 1.05, 0.085, "gunmetal", sides=10 if m.fine else 5)         # the water jacket
+    m.rod(q + g * 1.05, q + g * 1.4, 0.022, "gunmetal", sides=5 if m.fine else 3)
+    k = sum(1 for s_ in m.sockets if s_["name"].startswith("aa.")) + 1
+    m.socket(f"aa.{k}", q + g * 1.45, g, part or yard.half(x), "a .50 calibre machine gun's muzzle: tracer starts here")
+    if not m.fine:
+        return
+    m.box(q + l * 0.2 - g * 0.15, (0.28, 0.12, 0.22), "steel", yaw=facing)                 # the ammunition box
+    for side in (1, -1):                                                                  # the spade grips
+        m.rod(q - g * 0.52 + l * side * 0.07, q - g * 0.62 + l * side * 0.07 - Z * 0.08, 0.025, "gunmetal", sides=4)
+    if crew:
+        hands = (q - g * 0.62 + l * 0.07 - Z * 0.04, q - g * 0.62 - l * 0.07 - Z * 0.04)
+        sailor(m, o - f * 0.85, f, "aim", hands=hands, lean=0.08)
+
 # ---- the American five-inch mounting and directors ------------------------------------------------------
 
 def twin_5in(yard, name, x, y, z, bearing, limits=(-150, 150), base=0.0):

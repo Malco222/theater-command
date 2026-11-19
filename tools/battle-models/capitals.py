@@ -338,10 +338,10 @@ def lattice_crane(yard, x, y, z, high, reach, bearing=0.0, lift=38.0):
     m.box(head - Z * (head.z - z - 3.2), (0.3, 0.3, 0.4), "steel")
 
 
-def kingfisher(yard, x, y, z, bearing=0.0):
+def kingfisher(yard, x, y, z, bearing=0.0, parent=None):
     """The battleship's scout floatplane on her catapult: a slim two-seat monoplane on one big float with a small float
     under each wingtip, two men under a long glazed hood (our own small model)."""
-    m = yard.on(x)
+    m = yard.on(x) if parent is None else yard.m.use(parent)
     a = math.radians(bearing)
     f = Vector((math.cos(a), math.sin(a), 0))
     s = Vector((-math.sin(a), math.cos(a), 0))
@@ -372,9 +372,10 @@ def kingfisher(yard, x, y, z, bearing=0.0):
         fit.sailor(m, P(c[0], c[1], 2.32), f, "sit", seat=0.1, hands=(P(c[0] + 0.4, 0.15, 2.95), P(c[0] + 0.4, -0.15, 2.95)), k=0.92)
 
 
-def catapult_us(yard, x, y, z, long, bearing, plane=True):
-    """A powder catapult on a turntable: a lattice girder track, its car at the after end with the floatplane on it."""
-    m = yard.on(x)
+def catapult_us(yard, x, y, z, long, bearing, plane=True, parent=None):
+    """A powder catapult on a turntable: a lattice girder track, its car at the after end with the floatplane on it.
+    `parent`: the part it rides (a turret's roof), else her half."""
+    m = yard.on(x) if parent is None else yard.m.use(parent)
     a = math.radians(bearing)
     f = Vector((math.cos(a), math.sin(a), 0))
     s = Z.cross(f)
@@ -391,7 +392,7 @@ def catapult_us(yard, x, y, z, long, bearing, plane=True):
             m.rod(p - s * 0.6 - Z * 0.3, p + s * 0.6 + Z * 0.3, 0.025, "upper", sides=3, smooth=False)
     m.box(c - f * long * 0.32 + Z * 0.55, (2.2, 1.4, 0.4), "steel", yaw=bearing)
     if plane:
-        kingfisher(yard, c.x - f.x * long * 0.18, c.y - f.y * long * 0.18, c.z + 0.2, bearing)
+        kingfisher(yard, c.x - f.x * long * 0.18, c.y - f.y * long * 0.18, c.z + 0.2, bearing, parent=parent)
 
 
 # ---- the Iowa ---------------------------------------------------------------------------------------------------
@@ -1436,11 +1437,11 @@ ESSEX_PAINT = {"hull": "3E4A5C", "upper": "3E4A5C", "deck": "3B4757", "planks": 
                "door": "4A5566", "seam": "35404D", "plane": "3E4A5C"}
 
 
-def open_5in(yard, name, x, y, z, bearing, limits):
+def open_5in(yard, name, x, y, z, bearing, limits, long=5.6, shield=True, rest_elev=8.0):
     """A single 5-inch/38 in an open mounting on the gallery: the gun on its pedestal behind a low shield, its loaders
-    and pointers standing round it. A `sec.*` turret."""
+    and pointers standing round it. A `sec.*` turret. (`long` 3.6 and no shield: the short 5-inch/25 of 1941.)"""
     m = yard.m
-    tn, guns = yard.turret(name, x, z, 3.4, 1, 5.6, bearing, 0.07, y=y, style="open", rate=15.0, elev=(-15, 85), rest_elev=8.0, limits=limits, floats=False)
+    tn, guns = yard.turret(name, x, z, 3.4, 1, long, bearing, 0.07, y=y, style="open", rate=15.0, elev=(-15, 85), rest_elev=rest_elev, limits=limits, floats=False)
     if m.fine:
         p = m.parts[m.part_at[tn]]
         m.use(tn)
@@ -1451,7 +1452,8 @@ def open_5in(yard, name, x, y, z, bearing, limits):
             return o + rot @ Vector((px, py, pz))
         f = rot @ X
         for side in (1, -1):
-            m.box(W(0.7, side * 0.9, 0.95), (0.08, 1.0, 1.3), "upper", yaw=bearing + side * 18.0)    # the low shield either side of the gun
+            if shield:
+                m.box(W(0.7, side * 0.9, 0.95), (0.08, 1.0, 1.3), "upper", yaw=bearing + side * 18.0)    # the low shield either side of the gun
             fit.sailor(m, W(-0.3, side * 1.15, 0.0), f, "aim", hands=(W(0.1, side * 0.75, 1.2), W(0.2, side * 0.75, 1.0)), navy="USA", lean=0.06)
         fit.sailor(m, W(-1.7, 0.4, 0.0), f, "load", navy="USA")
         fit.sailor(m, W(-2.4, -0.6, 0.0), f, "carry", navy="USA")
@@ -1688,6 +1690,369 @@ def essex(fine=True):
     return m, yard
 
 
+# ---- the standard-type battleship of 1941 ----------------------------------------------------------------------
+
+def us_turret14(yard, name, x, deck, bearing, raised=0.0, parent=None):
+    """An American 14-inch triple turret of the standard type: a plain gunhouse, its face a single plate sloped back,
+    straight sides, a rounded back over the barbette, the rangefinder's ears out each side at the rear, three sighting
+    hoods on the roof, the guns close together in their bloomers. Parts and sockets as the yard's turrets."""
+    m = yard.m
+    half = parent or yard.half(x)
+    fine = m.fine
+    base = deck + raised
+    m.use(half)
+    m.lathe((x, 0, deck - 0.6), Z, [(0.0, 4.75), (raised + 1.05, 4.75)], "upper", 28 if fine else 12, caps=(False, True))
+    piv = Vector((x, 0, base + 1.0))
+    rot = Matrix.Rotation(math.radians(bearing), 3, "Z")
+
+    def W(px, py, pz):
+        return piv + rot @ Vector((px, py, pz))
+    tname = m.part(name, half, tuple(piv), axis=(0, 0, -1), limits=[-150, 150], kind="turn",
+                   note=f"trains: plus turns it clockwise seen from above, so its bearing is its rest bearing plus the turn; rest bearing {int(bearing)}; about 4 degrees a second")
+    m.parts[m.part_at[tname]].rest = bearing
+    m.parts[m.part_at[tname]].rate = 4.0
+    m.use(tname)
+    H = 3.0
+    lo = [(6.1, 3.2), (5.9, 4.7), (-4.5, 4.7), (-5.2, 4.1), (-5.35, 0.0)]
+    hi = [(4.7, 3.1), (4.55, 4.55), (-4.4, 4.55), (-5.05, 4.0), (-5.2, 0.0)]
+    plan_lo = lo[:-1] + [lo[-1]] + [(px, -py) for px, py in reversed(lo[:-1])]
+    plan_hi = hi[:-1] + [hi[-1]] + [(px, -py) for px, py in reversed(hi[:-1])]
+    n = len(plan_lo)
+    vl = [W(px, py, 0.0) for px, py in plan_lo]
+    vh = [W(px, py, H) for px, py in plan_hi]
+    mid = W(0.5, 0, H * 0.5)
+    m.add(vl + vh, [(k, (k + 1) % n, n + (k + 1) % n, n + k) for k in range(n)], "upper", False, lambda q: q - mid)
+    tris = tessellate_polygon([[Vector((p[0], p[1], 0)) for p in plan_hi]])
+    m.add(vh, [tuple(t) for t in tris], "roof", False, lambda q: Z)
+    m.add(vl, [tuple(t) for t in tris], "steel", False, lambda q: -Z)
+    if fine:
+        for k in range(1, 5):                                   # the roof's plates
+            m.box(W(4.2 - k * 1.8, 0, H + 0.005), (0.03, 9.0, 0.012), "seam", yaw=bearing)
+        for sy in (-2.6, 0.0, 2.6):                             # the sighting hoods
+            m.box(W(3.6, sy, H + 0.28), (1.2, 0.85, 0.56), "roof", yaw=bearing)
+            m.box(W(4.21, sy, H + 0.3), (0.02, 0.55, 0.16), "glass", yaw=bearing)
+        for sy in (-1.6, 1.6):                                  # the hatches
+            m.lathe(W(-3.4, sy, H), Z, [(0.0, 0.4), (0.1, 0.4), (0.16, 0.33)], "roof", 10)
+        for side in (1, -1):                                    # the rangefinder's ears
+            m.box(W(-3.3, side * 5.0, H * 0.6), (1.5, 0.8, 0.95), "upper", yaw=bearing)
+            m.disc(W(-2.54, side * 5.2, H * 0.6), rot @ X, 0.16, "glass", 8)
+        from ships import ladder
+        back = W(-5.3, 1.0, 0.0)
+        ladder(m, back, back.z + H, rot @ Vector((-1, 0, 0)))
+    guns = []
+    fwd, lat = rot @ X, rot @ Y
+    gap = 2.35
+    for k in range(3):
+        off = (k - 1) * gap
+        p = W(4.1, off, 1.45)
+        gname = m.part(f"{name}.gun.{k + 1}", tname, tuple(p), axis=tuple(-lat), limits=[-5, 30], slide=tuple(-fwd), slide_limits=[0.0, 1.0], kind="turn",
+                       note="a gun: plus lifts the muzzle; slides back along its own length when it fires")
+        m.use(gname)
+        e = math.radians(2.0)
+        ax = (fwd * math.cos(e) + Z * math.sin(e)).normalized()
+        reach, long = 1.3, 13.6
+        prof = [(0.0, 0.52), (reach + 0.3, 0.5), (reach + 2.0, 0.46), (reach + 2.4, 0.42), (reach + long * 0.55, 0.35), (reach + long * 0.93, 0.29),
+                (reach + long * 0.95, 0.31), (reach + long, 0.3)]
+        m.lathe(p, ax, prof, "upper", 14 if fine else 8, caps=(True, False))
+        tip = p + ax * (reach + long)
+        m.disc(tip - ax * 0.02, ax, 0.3, "upper", 14 if fine else 8)
+        m.disc(tip + ax * 0.005, ax, 0.178, "black", 12 if fine else 6)
+        m.lathe(p + ax * (reach - 0.5), ax, [(0.0, 0.85), (0.4, 0.82), (1.1, 0.7), (2.3, 0.5)], "bag", 12 if fine else 6, caps=(False, False))
+        m.socket(f"muzzle.{name}.{k + 1}", tip, ax, gname, "flash, smoke and the shell leave here")
+        guns.append(gname)
+    m.use(half)
+    return tname, guns, W, H
+
+
+def casemate_5in(yard, name, x, y, z, bearing, limits=(-55, 55)):
+    """A 5-inch/51 of her broadside battery in its casemate: the gun on its pivot just inside the wall, a curved shield
+    closing the port round it, the barrel out through the shield. A `sec.*` turret (its bearing clockwise: -90 to
+    port): the shield and gun train across the port, the gun lifts and runs back."""
+    m = yard.m
+    half = yard.half(x)
+    hand = 1.0 if y > 0 else -1.0
+    piv = Vector((x, y - hand * 0.4, z))
+    m.use(half)
+    if m.fine:      # the port: a dark recess in the wall round the shield
+        out = Vector((0, hand, 0))
+        wy = y + hand * 0.02
+        m.add([Vector((x - 1.5, wy, z - 0.95)), Vector((x + 1.5, wy, z - 0.95)), Vector((x + 1.5, wy, z + 1.05)), Vector((x - 1.5, wy, z + 1.05))],
+              [(0, 1, 2, 3) if hand < 0 else (3, 2, 1, 0)], "black", False, lambda q, o=out: o)
+    tn = m.part(name, half, tuple(piv), axis=(0, 0, -1), limits=list(limits), kind="turn",
+                note=f"a casemate gun: trains across its port (plus clockwise); rest bearing {int(bearing)}")
+    m.parts[m.part_at[tn]].rest = bearing
+    m.parts[m.part_at[tn]].rate = 10.0
+    m.use(tn)
+    rot = Matrix.Rotation(math.radians(-bearing), 3, "Z")
+    f, lat = rot @ X, rot @ Y
+    rows = []
+    for t in (-1.0, -0.5, 0.0, 0.5, 1.0) if m.fine else (-1.0, 0.0, 1.0):
+        c = piv + f * (0.48 - 0.1 * t * t) + lat * (t * 1.25)
+        rows.append([c - Z * 0.85, c + Z * 0.95])
+    m.sheet(rows, "upper", f, smooth=True)
+    m.sheet([[p_ - f * 0.05 for p_ in r] for r in rows], "upper", -f, smooth=True)
+    gp = piv + f * 0.2 + Z * 0.05
+    gn = m.part(f"{name}.gun.1", tn, tuple(gp), axis=tuple(-lat), limits=[-10, 20], slide=tuple(-f), slide_limits=[0.0, 0.5], kind="turn",
+                note="the gun: plus lifts the muzzle; runs back when it fires")
+    m.use(gn)
+    m.lathe(gp - f * 0.9, f, [(0.0, 0.2), (1.2, 0.17), (1.5, 0.14), (5.6, 0.11), (5.8, 0.12), (6.0, 0.115)], "upper", 10 if m.fine else 6, caps=(True, False))
+    tip = gp + f * 5.1
+    m.disc(tip + f * 0.005, f, 0.064, "black", 8)
+    m.socket(f"muzzle.{name}.1", tip, f, gn, "flash and smoke leave here")
+    m.use(half)
+    return tn, [gn]
+
+
+# her hull's deck edge, after the class's plan (half widths as shares of 16.6 m): full and long, a round stern under a
+# short counter, a fine straight-sided bow
+ARIZONA_PLAN = [(-92.7, 0.0), (-92.4, 0.25), (-91.5, 0.4), (-89.0, 0.53), (-84.0, 0.66), (-76.0, 0.78), (-66.0, 0.88), (-56.0, 0.95),
+                (-44.0, 0.99), (-34.0, 1.0), (22.0, 1.0), (32.0, 0.98), (42.0, 0.93), (52.0, 0.85), (62.0, 0.73), (70.0, 0.61), (78.0, 0.46),
+                (84.0, 0.33), (88.0, 0.22), (91.0, 0.11), (92.7, 0.0)]
+# Measure 1 of 1941: dark grey 5-D on every side up to the bridge's top, light grey 5-L above (her masts and tops);
+# her decks pale wood (stained dark blue for the war, by the month: `schemes`)
+ARIZONA_PAINT = {"hull": "4E565E", "upper": "4E565E", "light": "879098", "deck": "5A6066", "planks": "C2AE88", "roof": "5A6066",
+                 "door": "545C64", "seam": "474E55", "plane": "6E7A86"}
+
+
+def arizona(fine=True):
+    """USS Arizona, of the Pennsylvania class, as she lay at Pearl Harbor in December 1941: 185.4 m by 32.4 over her
+    bulges, twelve 14-inch guns in four triple turrets, two tripod masts with their big spotting tops, one funnel,
+    twelve 5-inch/51 in casemates, eight 5-inch/25 on her boat deck, .50 calibre machine guns in her tops; a catapult on
+    her third turret and one on her fantail, each with its Kingfisher. Stands in for `Battleship_USA` in 1941-42."""
+    paints = livery("USA", "battleship")
+    paints.update(ARIZONA_PAINT)
+    paints = fit.crew_paints(paints, "USA")
+    m = Model("Arizona", "Battleship, Pennsylvania class, 1941 (our own model)", "ship", paints, fine)
+    # the forecastle deck runs from her stem to abaft her mainmast, the quarterdeck a deck lower; her bulges swell
+    # her sides below it
+    h = PlanHull(ARIZONA_PLAN, L=185.4, B=33.2, D=4.6, T=8.8, sheer=2.3, sheer_aft=0.3, rake=2.5, counter=3.5, flare=0.3, fine=1.6, full=0.72,
+                 wl_fore=0.62, bilge=5.0, step_at=-29.0, step=2.5, tumble=0.91)
+    yard = Yard(m, h, break_x=21.5)              # (where her forward magazines blew: just abaft her second turret)
+    yard.soot_at, yard.rust_at = [], []
+    yard.hull("planks")
+    D = h.deck_z
+    z0 = D(0.0)
+    z01, z02, z03, z04 = z0 + 2.6, z0 + 5.2, z0 + 7.8, z0 + 10.4
+    from ships import railing
+
+    # ---- the superstructure deck (her casemate battery in its sides) and the boat deck over it
+    p01 = sym([(27.0, 0.0), (26.0, 6.5), (23.0, 12.9), (-25.0, 12.9), (-27.5, 9.5), (-28.5, 0.0)])
+    p02 = sym([(21.5, 0.0), (20.5, 5.5), (18.0, 10.6), (-21.0, 10.6), (-23.0, 7.0), (-23.5, 0.0)])
+    for plan, za, zb in ((p01, z0 - 0.4, z01), (p02, z01, z02)):
+        m.use("aft")
+        slab(m, plan, za, zb)
+        walls_detail(yard, plan, za if za > z0 else z0, zb, scuttles=plan is p02)
+
+    # ---- the four triple turrets
+    mains = []
+    for name, tx, raised, bearing in (("turret.A", 44.4, 0.0, 0.0), ("turret.B", 29.4, 2.6, 0.0), ("turret.X", -38.0, 3.0, 180.0), ("turret.Y", -53.0, 0.3, 180.0)):
+        tn, gs, W, H = us_turret14(yard, name, tx, D(tx), bearing, raised=raised)
+        mains.append((tn, gs, tx, raised > 1.0))
+        yard.fire_points.append((tx, 0.0, D(tx) + raised + 2.5))
+    # the third turret's catapult and its Kingfisher ride its roof
+    px = m.parts[m.part_at["turret.X"]]
+    catapult_us(yard, -38.0, 0.0, px.pivot.z + 3.0 - 0.4, 14.0, 180.0, parent="turret.X")
+
+    # ---- the conning tower, the bridge over it, the chart house
+    m.use("aft")
+    ct = [(19.8 + math.cos(2 * math.pi * k / 20) * 3.0, math.sin(2 * math.pi * k / 20) * 2.6) for k in range(20)]
+    slab(m, ct, z01, z03 + 0.6, top="roof")
+    if fine:
+        ring = [Vector((px_, py_, z03 + 0.1)) for px_, py_ in ct]
+        for k in range(20):                                          # the vision slits round its top
+            a, b = ring[k], ring[(k + 1) % 20]
+            o_ = Vector(((a.x + b.x) * 0.5 - 19.8, (a.y + b.y) * 0.5, 0)).normalized()
+            if o_.x > -0.3:
+                m.add([a + o_ * 0.02, b + o_ * 0.02, b + o_ * 0.02 + Z * 0.2, a + o_ * 0.02 + Z * 0.2], [(0, 1, 2, 3)], "black", False, lambda q, o=o_: o)
+    house = sym([(17.5, 0.0), (17.0, 4.6), (15.5, 6.2), (12.5, 6.2), (12.5, 0.0)])
+    slab(m, house, z02, z03)
+    walls_detail(yard, house, z02, z03)
+    nav = sym([(24.8, 0.0), (24.0, 4.2), (21.5, 6.8), (14.0, 6.8), (14.0, 0.0)])
+    slab(m, nav, z03, z04)
+    if fine:   # the navigating bridge's windows round its front and sides
+        n_ = len(nav)
+        for k in range(n_):
+            a, b = Vector((*nav[k], 0)), Vector((*nav[(k + 1) % n_], 0))
+            if min(a.x, b.x) < 16.5:
+                continue
+            d = b - a
+            o_ = Vector((d.y, -d.x, 0)).normalized()
+            panes = max(1, int(d.length / 1.0))
+            for i in range(panes):
+                c = a + d * ((i + 0.5) / panes) + o_ * 0.03
+                u_ = d.normalized() * (d.length / panes * 0.5 - 0.08)
+                m.add([c - u_ + Z * (z03 + 1.15), c + u_ + Z * (z03 + 1.15), c + u_ + Z * (z03 + 2.05), c - u_ + Z * (z03 + 2.05)],
+                      [(0, 1, 2, 3)], "glass", False, lambda q, o=o_: o)
+    walls_detail(yard, nav, z03, z04, doors=False, scuttles=False)
+    for hand in (PORT, STBD):          # the bridge wings
+        m.box((18.5, hand * 8.9, z04 - 0.08), (3.6, 4.2, 0.16), "deck")
+        if fine:
+            railing(m, [(20.3, hand * 6.8, z04), (20.3, hand * 11.0, z04), (16.7, hand * 11.0, z04), (16.7, hand * 6.8, z04)], every=1.3)
+        for dx in (-1.4, 1.4):
+            m.rod((18.5 + dx, hand * 6.9, z03), (18.5 + dx, hand * 10.6, z04 - 0.15), 0.07, "upper", sides=4)
+    chart = Model.round_rect(21.0, 14.8, -4.4, 4.4, 1.0, 3 if fine else 1)
+    slab(m, chart, z04, z04 + 2.4)
+    walls_detail(yard, chart, z04, z04 + 2.4, doors=True, scuttles=True)
+    if fine:
+        yard.windows(21.0, 3.8, z04 + 1.0, 0.8, back=2.0)
+
+    # ---- the foremast: a tripod, its searchlight and machine-gun platforms, the two-level spotting top, the topmast
+    fx = 13.4
+    m.lathe((fx, 0, z02), Z, [(0.0, 0.62), (18.0, 0.5), (28.0, 0.32), (33.5, 0.16)], "light", 10 if fine else 5)
+    for hand in (PORT, STBD):
+        m.rod((fx - 6.0, hand * 4.0, z02), (fx, 0.0, 31.2), 0.42, "light", sides=8 if fine else 5)
+    zs = 26.6
+    m.box((fx - 0.4, 0, zs - 0.08), (3.6, 8.6, 0.16), "light")
+    if fine:
+        railing(m, [(fx + 1.4, 4.3, zs), (fx + 1.4, -4.3, zs)], every=1.4)
+    for hand in (PORT, STBD):
+        yard.searchlight(fx - 0.4, hand * 3.3, zs, 0.6, (1.0, hand * 0.4, 0))
+    zm = 30.0
+    plat = Model.round_rect(19.6, 7.6, -6.2, 6.2, 1.4, 3 if fine else 1)
+    m.prism(plat, zm - 0.18, zm, "light", top_paint="deck", bottom=True)
+    if fine:
+        railing(m, [Vector((px_, py_, zm)) for px_, py_ in plat] + [Vector((*plat[0], zm))], every=1.6)
+    for gx_, gy_, face in ((18.9, 5.4, 35.0), (18.9, -5.4, -35.0), (8.3, 5.4, 145.0), (8.3, -5.4, -145.0)):
+        fit.mg50(yard, gx_, gy_, zm, facing=face, part="aft")
+    tops = ((17.2, 9.6, 4.3, 2.4), (16.4, 10.6, 3.5, 2.4))
+    tz = zm
+    for xf, xa, hw, hh in tops:
+        pl = Model.round_rect(xf, xa, -hw, hw, 1.0, 3 if fine else 1)
+        slab(m, pl, tz, tz + hh, paint="light")
+        if fine:
+            for k in range(len(pl)):           # windows right round the top
+                a, b = Vector((*pl[k], 0)), Vector((*pl[(k + 1) % len(pl)], 0))
+                d = b - a
+                if d.length < 1.2:
+                    continue
+                o_ = Vector((d.y, -d.x, 0)).normalized()
+                panes = int(d.length / 1.1)
+                for i in range(panes):
+                    c = a + d * ((i + 0.5) / panes) + o_ * 0.03
+                    u_ = d.normalized() * (d.length / panes * 0.5 - 0.1)
+                    m.add([c - u_ + Z * (tz + 1.0), c + u_ + Z * (tz + 1.0), c + u_ + Z * (tz + 1.8), c - u_ + Z * (tz + 1.8)], [(0, 1, 2, 3)], "glass", False, lambda q, o=o_: o)
+        tz += hh
+    if fine:
+        pl = Model.round_rect(*tops[-1][:2], -tops[-1][2], tops[-1][2], 1.0, 3)
+        railing(m, [Vector((px_, py_, tz)) for px_, py_ in pl] + [Vector((*pl[0], tz))], every=1.5)
+    fit.rangefinder(yard, "director.fore", fx + 0.6, 0.0, tz, 2.8, bearing=0.0, house=1.1, parent="aft")
+    m.use("aft")
+    m.lathe((fx, 0, tz + 1.4), Z, [(0.0, 0.18), (9.5, 0.08)], "light", 6 if fine else 4)
+    m.rod((fx, -3.6, tz + 6.0), (fx, 3.6, tz + 6.0), 0.07, "light", sides=4)
+    head_fore = Vector((fx, 0, tz + 10.9))
+
+    # ---- the funnel and its searchlight platforms; the boat cranes and the boats
+    us_funnel(yard, -1.0, z02, 27.4, 8.2, 5.6, slope=0.4, platform=21.6)
+    m.use("aft")
+    slab(m, Model.round_rect(4.2, -6.2, -4.1, 4.1, 1.4, 3 if fine else 1), z02, z03)
+    for hand in (PORT, STBD):
+        yard.crane(-6.4, hand * 7.9, z02, 14.0, 12.5, bearing=180.0 + hand * 12.0)
+        yard.boat(-13.5, hand * 5.1, z02 + 0.55, 10.0)
+        yard.boat(-7.6, hand * 4.9, z02 + 0.5, 6.0)
+        if fine:
+            for bx_ in (-17.0, -10.0):
+                m.box((bx_, hand * 5.1, z02 + 0.27), (0.4, 2.0, 0.54), "upper")
+
+    # ---- the mainmast: tripod, machine-gun platform, spotting top, topmast and gaff
+    mx = -14.6
+    m.lathe((mx, 0, z02), Z, [(0.0, 0.55), (14.0, 0.44), (23.5, 0.28), (27.5, 0.15)], "light", 10 if fine else 5)
+    for hand in (PORT, STBD):
+        m.rod((mx - 5.4, hand * 3.6, z02), (mx, 0.0, 26.2), 0.36, "light", sides=8 if fine else 5)
+    zm2 = 26.4
+    plat2 = Model.round_rect(-9.6, -19.6, -5.4, 5.4, 1.2, 3 if fine else 1)
+    m.prism(plat2, zm2 - 0.18, zm2, "light", top_paint="deck", bottom=True)
+    if fine:
+        railing(m, [Vector((px_, py_, zm2)) for px_, py_ in plat2] + [Vector((*plat2[0], zm2))], every=1.6)
+    for gx_, gy_, face in ((-10.3, 4.5, 35.0), (-10.3, -4.5, -35.0), (-18.9, 4.5, 145.0), (-18.9, -4.5, -145.0)):
+        fit.mg50(yard, gx_, gy_, zm2, facing=face, part="aft")
+    top2 = Model.round_rect(-11.8, -17.4, -3.3, 3.3, 1.0, 3 if fine else 1)
+    slab(m, top2, zm2, zm2 + 2.4, paint="light")
+    if fine:
+        yard.windows(-11.8, 2.8, zm2 + 1.0, 0.8, back=2.0)
+    fit.rangefinder(yard, "director.aft", mx - 0.3, 0.0, zm2 + 2.4, 2.4, bearing=180.0, house=1.0, parent="aft")
+    m.use("aft")
+    m.lathe((mx, 0, zm2 + 3.6), Z, [(0.0, 0.16), (9.0, 0.07)], "light", 6 if fine else 4)
+    m.rod((mx, -3.2, zm2 + 7.4), (mx, 3.2, zm2 + 7.4), 0.06, "light", sides=4)
+    gaff0, gaff1 = Vector((mx - 0.2, 0, zm2 + 5.0)), Vector((mx - 4.4, 0, zm2 + 6.6))
+    m.rod(gaff0, gaff1, 0.07, "light", sides=4)
+    head_main = Vector((mx, 0, zm2 + 12.6))
+    yard.wire(head_fore, head_main, 0.025, sag=1.0)
+    yard.wire(head_main, (-h.L * 0.49, 0, D(-h.L * 0.49) + 6.0), 0.025)
+    yard.wire(head_fore, (h.L * 0.49, 0, D(h.L * 0.49) + 1.5), 0.025)
+    m.socket("ensign", tuple(gaff1), (-1, 0, 0), "aft", "the ensign flies from the mainmast's gaff")
+
+    # ---- twelve 5-inch/51 in her casemates, eight 5-inch/25 on her boat deck
+    n_p = n_s = 0
+    for cx in (21.0, 15.5, 10.0, -11.0, -16.5, -22.0):
+        for hand in (PORT, STBD):
+            if hand == PORT:
+                n_p += 1
+                nm = f"sec.P{n_p}"
+            else:
+                n_s += 1
+                nm = f"sec.S{n_s}"
+            casemate_5in(yard, nm, cx, hand * 12.9, z0 + 1.3, -90.0 * hand)
+    for ax_, bearing in ((15.0, 0.0), (8.5, 0.0), (-12.5, 180.0), (-19.0, 180.0)):
+        for hand in (PORT, STBD):
+            if hand == PORT:
+                n_p += 1
+                nm = f"sec.P{n_p}"
+                lim = (-165, 20) if bearing == 0.0 else (-20, 165)
+            else:
+                n_s += 1
+                nm = f"sec.S{n_s}"
+                lim = (-20, 165) if bearing == 0.0 else (-165, 20)
+            open_5in(yard, nm, ax_, hand * 9.2, z02, bearing, lim, long=3.6, shield=False, rest_elev=12.0)
+
+    # ---- the fantail: the catapult with its Kingfisher, the aircraft crane at her stern
+    catapult_us(yard, -84.0, 0.0, D(-84.0), 15.0, 180.0)
+    lattice_crane(yard, -89.6, 0.0, D(-89.6), 6.5, 11.0, bearing=0.0, lift=35.0)
+
+    # ---- forecastle and quarterdeck: anchors, bollards, rails, scuttles, vents, rafts, staffs; sailors about her decks
+    yard.anchor_gear(h.L * 0.47, 70.0, spread=2.4)
+    for bx_ in (80.0, 60.0, -62.0, -74.0, -88.0):
+        for hand in (PORT, STBD):
+            yard.bollards(bx_, hand * (h.half_at(bx_) - 1.0), D(bx_))
+    yard.rails(-h.L * 0.49, h.L * 0.485)
+    yard.portholes(-h.L * 0.44, h.L * 0.45, 1.9, every=3.4, skip=[(-31.0, -27.0)])
+    yard.portholes(-27.0, h.L * 0.43, 4.3, every=3.4)
+    if fine:
+        for fx_ in (3.0, -4.0):
+            for hand in (PORT, STBD):
+                fit.float_rack(yard, fx_, hand * 12.9, z01 - 1.6, (0, hand, 0), n=2)
+        for vx in (58.0, 52.0, -60.0, -70.0):
+            for hand in (PORT, STBD):
+                yard.vent(vx, hand * h.half_at(vx) * 0.5, D(vx), 0.45, 1.3)
+        rg = __import__("random").Random(1941)
+        for cx, cy, k_ in ((-70.0, 0.0, 6), (67.0, 0.0, 3), (-30.5, 9.0, 2), (35.0, -9.0, 2)):
+            for i in range(k_):
+                a = rg.uniform(0, 2 * math.pi)
+                foot = Vector((cx + rg.uniform(-3.0, 3.0), cy + rg.uniform(-3.0, 3.0), 0.0))
+                foot.z = D(foot.x) + 0.02
+                fit.sailor(m.use(yard.half(foot.x)), foot, Vector((math.cos(a), math.sin(a), 0)), "stand", navy="USA")
+    m.use("aft")
+    sx = -h.L * 0.497
+    m.rod((sx + 0.6, 0, D(sx + 0.6)), (sx - 0.3, 0, D(sx + 0.6) + 5.5), 0.07, "upper", sides=4)
+    m.use("fore")
+    jx = h.L * 0.494
+    m.rod((jx, 0, D(jx)), (jx + 0.3, 0, D(jx) + 3.2), 0.06, "upper", sides=4)
+    m.socket("jack", (jx + 0.3, 0, D(jx) + 3.2), (1, 0, 0), "fore")
+    yard.screws_and_rudder(screws=4, r=2.0, rudders=1)
+
+    # ---- where she burns: her bridge, the forward magazines, the funnel, the mainmast, the quarterdeck
+    yard.fire_points += [(18.0, 0.0, z04), (36.0, 0.0, D(36.0)), (-1.0, 0.0, z03), (-14.0, 0.0, z02), (-62.0, 0.0, D(-62.0)), (60.0, 0.0, D(60.0))]
+    from ships import DECK_STAIN, clips_for_ship, sockets_common
+    sockets_common(yard)
+    m.weather = weather_for(yard)
+    clips_for_ship(m, yard, mains, "battleship")
+    aa_clip(m)
+    when, what, stain = DECK_STAIN["USA"]
+    m.info.setdefault("file", {}).update({"class": "Pennsylvania", "navy": "USA", "year": 1941, "stands_for": "Battleship_USA",
+                                          "paint": "Measure 1: dark grey 5-D up to the bridge's top, light grey 5-L on her masts and tops; wooden decks",
+                                          "schemes": [{"from": when, "name": what, "colours": {"planks": stain}}]})
+    return m, yard
+
+
 def aa_clip(m):
     """Every light mounting that trains: they swing onto a bearing and fire in short bursts (the game aims each by its
     own part; this clip only shows them working)."""
@@ -1703,8 +2068,26 @@ def aa_clip(m):
 
 
 BUILDERS = {
+    "Arizona": lambda fine: arizona(fine),
     "Essex": lambda fine: essex(fine),
     "Iowa": lambda fine: iowa(fine),
     "Yamato": lambda fine: yamato(fine),
     "Shokaku": lambda fine: shokaku(fine),
 }
+
+
+# ---- named ships built in modules of their own (one file each, so they can be made side by side) ----------------
+NAMED_MODULES = ("yorktown", "akagi", "kaga", "soryu")
+
+
+def _load_named():
+    import importlib
+    for mod in NAMED_MODULES:
+        try:
+            BUILDERS.update(importlib.import_module(mod).BUILDERS)
+        except ModuleNotFoundError as e:
+            if e.name != mod:          # (a module that is there but fails to load is an error, not an absence)
+                raise
+
+
+_load_named()
