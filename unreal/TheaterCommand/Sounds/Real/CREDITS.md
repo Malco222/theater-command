@@ -62,19 +62,41 @@ The game is for personal use only.
 | `wind_loop` | `wind_loop.wav` | [Wind is blowing in the grass of a patagonian plain. Wind is blowing in the trees in background. (Tierra del fuego, Argentina).](https://freesound.org/people/felix.blume/sounds/139337/) | Freesound | CC0 | none |
 | `woods_loop` | `woods_loop.wav` | [Forest, close up of trees rustling in the wind](https://freesound.org/people/Anya_Media/sounds/523389/) | Freesound | CC0 | none |
 | `rain_loop` | `rain_loop.wav` | [Steady Rain](https://freesound.org/people/Benboncan/sounds/119784/) | Freesound | CC BY 4.0 | Benboncan |
+| `b17_drone_loop` | `b17_drone_loop.wav` | [G07-18_B-17 4 Engine Prop Steady Engine Noise](https://freesound.org/people/craigsmith/sounds/437862/) | Freesound | CC0 | none |
+| `bomber_heavy_loop` | `bomber_heavy_loop.wav` | [Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38](https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_Flying_Bulls_B-25_And_P-38.ogv) | Wikimedia Commons | CC BY 3.0 | LEJ.approach/dvldi |
+| `bomber_heavy_loop` | `bomber_heavy_loop.wav` | [Hahnweide Vintage Air Show 2011 - B-25 And P-38](https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_B-25_And_P-38.ogv) | Wikimedia Commons | CC BY 3.0 | LEJ.approach/dvldi |
+| `bomber_medium_loop` | `bomber_medium_loop.wav` | [B-25 Mitchell Flyby](https://freesound.org/people/Fight2FlyPhoto/sounds/142887/) | Freesound | CC BY 3.0 | Fight2FlyPhoto |
+| `fighter_engine_loop` | `fighter_engine_loop.wav` | [Spitfire 2 passes Military od](https://freesound.org/people/Cheeseheadburger/sounds/170477/) | Freesound | CC BY 4.0 | Cheeseheadburger |
+| `mg42_burst_01` | `mg42_burst_01.wav` | [MG 42 (Solo) WW2](https://freesound.org/people/Lubini/sounds/338242/) | Freesound | CC BY 4.0 | Lubini |
+| `mg42_burst_02` | `mg42_burst_02.wav` | [MG 42 (Solo) WW2](https://freesound.org/people/Lubini/sounds/338242/) | Freesound | CC BY 4.0 | Lubini |
+| `plane_guns` | `plane_guns.wav` | [M2 browning](https://commons.wikimedia.org/wiki/File:M2_browning.webm) | Wikimedia Commons | Public domain | none |
+| `gunner_burst` | `gunner_burst.wav` | [M2 browning](https://commons.wikimedia.org/wiki/File:M2_browning.webm) | Wikimedia Commons | Public domain | none |
+| `flak_light_fire` | `flak_light_fire.wav` | [Oerlikon 35mm - Romania Sends Air Defense Specialists to Poland, B-Roll](https://commons.wikimedia.org/wiki/File:Oerlikon_35mm_-_Romania_Sends_Air_Defense_Specialists_to_Poland,_B-Roll.ogv) | Wikimedia Commons | Public domain | none |
+| `flak_heavy_fire_01` | `flak_heavy_fire_01.wav` | [913363-U.S. Marines From 2nd ANGLICO and the Coastal Brigade, Finnish Navy Conduct Series Fires Using 130mm 53 TK Cannon](https://commons.wikimedia.org/wiki/File:913363-U.S._Marines_From_2nd_ANGLICO_and_the_Coastal_Brigade,_Finnish_Navy_Conduct_Series_Fires_Using_130mm_53_TK_Cannon.webm) | Wikimedia Commons | Public domain | none |
+| `flak_burst_01` | `flak_burst_01.wav` | [Explosions-LS100155](https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg) | Wikimedia Commons | Public domain | none |
+| `plane_explode` | `plane_explode.wav` | [Explosions-LS100155](https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg) | Wikimedia Commons | Public domain | none |
+| `plane_down` | `plane_down.wav` | [Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38](https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_Flying_Bulls_B-25_And_P-38.ogv) | Wikimedia Commons | CC BY 3.0 | LEJ.approach/dvldi |
+| `plane_down` | `plane_down.wav` | [Explosions-LS100152](https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg) | Wikimedia Commons | Public domain | none |
+| `explosion_far_02` | `explosion_far_02.wav` | [distant explosions](https://freesound.org/people/Kostrava/sounds/320788/) | Freesound | CC0 | none |
+| `bomb_stick_01` | `bomb_stick_01.wav` | [Explosions-LS100155](https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg) | Wikimedia Commons | Public domain | none |
+| `dogfight` | `dogfight.wav` | [A6M Zero Chasing P-51D Mustang](https://freesound.org/people/Fight2FlyPhoto/sounds/161120/) | Freesound | CC BY-NC 3.0 | Fight2FlyPhoto |
+| `aircraft_takeoff` | `aircraft_takeoff.wav` | [B-25 TAKEOFF 01](https://freesound.org/people/LOVEBURD/sounds/329616/) | Freesound | CC0 | none |
 
 ## Credits owed
 
 - **Benboncan** "Large Anvil & Steel Hammer 2", "Hand Winch Quick Release", "Steady Rain" · CC BY 4.0
 - **brunoboselli** "Dragging Kayak" · CC BY 4.0
 - **Carlosjvives** "Cinema projector PROYECSON" · CC BY 4.0
-- **Cheeseheadburger** "Distant WW2 Gunfire Kent" · CC BY 4.0
+- **Cheeseheadburger** "Distant WW2 Gunfire Kent", "Spitfire 2 passes Military od" · CC BY 4.0
+- **Fight2FlyPhoto** "B-25 Mitchell Flyby" · CC BY 3.0, "A6M Zero Chasing P-51D Mustang" · CC BY-NC 3.0
 - **FLYWITHMETOTHEMOON from Japan** "JS Ise's aircraft lift goes down from the flight-deck, -17 Jun. 2012 a" · CC BY 3.0
 - **Gary Hoover** "Steam Locomotive NKP Berkshire 765 near Toledo 07-28-12" · CC BY 3.0
 - **Huggy13ear** "parachute 2" · CC BY 4.0
 - **klankbeeld** "marching boots" · CC BY 4.0
 - **LEJ.approach/dvldi** "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38", "Hahnweide Vintage Air Show 2011 - B-25 And P-38" · CC BY 3.0
+- **Lubini** "MG 42 (Solo) WW2" · CC BY 4.0
 - **nebulousflynn** "Moored Boat Metal Grinding, Groaning & Creaking" · CC BY 4.0
+- **none** "G07-18_B-17 4 Engine Prop Steady Engine Noise" · CC0, "M2 browning" · Public domain, "Oerlikon 35mm - Romania Sends Air Defense Specialists to Poland, B-Roll" · Public domain, "913363-U.S. Marines From 2nd ANGLICO and the Coastal Brigade, Finnish Navy Conduct Series Fires Using 130mm 53 TK Cannon" · Public domain, "Explosions-LS100155" · Public domain, "Explosions-LS100152" · Public domain, "distant explosions" · CC0, "B-25 TAKEOFF 01" · CC0
 - **rafowell** "M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC)" · CC BY 3.0
 - **Subhashish Panigrahi** "Rubber seal dabbed on ink pad" · CC BY 3.0
 - **Work With Sounds / Konrad Gutkowski** "WWS Typewriter" · CC BY 4.0
