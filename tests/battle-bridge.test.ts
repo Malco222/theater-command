@@ -1,8 +1,8 @@
 // The 3D game's doorway to the field battles (unreal/TheaterCommand/Rules/battle-bridge.ts): a real campaign attack
 // fought through it, the way the game will call it, and settled through the campaign's own attack order.
 import { describe, expect, it } from 'vitest';
-import { battleCalls, unitOut } from '../unreal/TheaterCommand/Rules/battle-bridge';
-import { practiceTicket, PRACTICE_GROUNDS, LandBattle } from '../src/battle/land';
+import { battleCalls, planOut, unitOut } from '../unreal/TheaterCommand/Rules/battle-bridge';
+import { practiceTicket, PRACTICE_GROUNDS, LandBattle, sampleTicket } from '../src/battle/land';
 import { newCampaign, offers } from '../src/battle/ui/campaign';
 import { attackOutlook, orderAttack } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
@@ -117,5 +117,22 @@ describe('the battle doorway for the 3D game', () => {
     expect(said.find((e) => e.what === 'broken')!.brokeBy).toEqual(why);
     expect(v.breakingBy[why.side]).toEqual(why);
     expect((TC.battleEnd() as { brokeBy?: Cause }).brokeBy).toEqual(why);
+  });
+  it('sends the computer attack\'s plan for the pictures, never its style\'s name; a gun\'s aim; a lone tank\'s mark (ruling 239)', () => {
+    const b = new LandBattle(sampleTicket('plains', 1.3, { seed: 3, style: { att: 'bold', def: 'methodical' } }));
+    b.ai.att = b.ai.def = true;
+    for (let i = 0; i < 30 && !b.plan.att; i++) b.step();
+    const p = planOut(b.view().plan!) as Record<string, { phase: string; main: number[]; startY: number | null }>;
+    expect(Object.keys(p)).toEqual(['att']);
+    expect(Object.keys(p.att).sort()).toEqual(['main', 'phase', 'startY']);
+    expect(p.att.main.length).toBeGreaterThanOrEqual(1);
+    expect(p.att.main.length).toBeLessThanOrEqual(2);
+    expect(JSON.stringify(p)).not.toMatch(/bold|methodical|mass/);
+    const gun = b.units.find((u) => u.side === 'att')!, tank = b.units.find((u) => u.kind === 'arm')!;
+    gun.aim = p.att.main[0];
+    expect(unitOut(gun, b.t).aim).toBe(p.att.main[0]);
+    tank.aloneAt = b.t;
+    expect(unitOut(tank, b.t).alone).toBe(true);
+    expect(unitOut(tank, b.t + 2).alone).toBeUndefined();
   });
 });

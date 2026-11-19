@@ -10,7 +10,8 @@ import { ahead, aspectOf, bearing, clamp, dist, turn } from '../core/geometry';
 import { clampToDice, diceNow, fieldRatio, levelOf, RATIO } from '../core/result';
 import { lineUp } from '../core/select';
 import { DT, type AirFlown, type AirOnCall, type BattleSim, type BattleView, type BreakCause, type Command, type FieldEvent, type FieldResult, type FieldTicket, type Flight, type Side, type Zone } from '../core/types';
-import { thinkFor } from './ai';
+import { thinkFor, type AttackPlan } from './ai';
+import { STYLE, styleFor, type Style } from './styles';
 import { buildField, coverAt, FIELD, groundAt, GROUNDS, heightAt, slopeAt, streetsOf, builtShare, zonesOf, type Ground, type LandField, type LandPlace } from './field';
 import { crewFor } from './crews';
 import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
@@ -18,6 +19,28 @@ import { LAND, MOTION, type Kind, type Motion } from './rules';
 import { bendAt, deploy, makeBlocks, type LandUnit } from './units';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
+
+/**
+ * The tank blocks the card counted as covered by their own foot (item 7, never twice: b418): of each side's tank
+ * divisions (divs x str, as the card weighs them), as many as its foot divisions times LAND.alone.cover cover (one each
+ * on forest and urban cards, where ground.ts reckons it; support.json's figure elsewhere; a defence one each, its works'
+ * men counted as foot as the card counts them), the first blocks first, a regiment a third. None where a side has no foot.
+ */
+export function coveredTanks(t: FieldTicket<LandPlace>, units: LandUnit[]): Set<number> {
+  const A = LAND.alone, out = new Set<number>();
+  for (const s of ['att', 'def'] as Side[]) {
+    const fs = t[s].forces, w = (k: (kind: string) => boolean): number => fs.filter((f) => k(f.kind)).reduce((a, f) => a + f.divs * f.str, 0);
+    const foot = w((k) => A.foot.includes(k) || (s === 'def' && k === 'fort')), tanks = w((k) => k === 'arm');
+    if (foot <= 0 || tanks <= 0) continue;
+    const per = s === 'def' ? A.cover.def : A.cover.cards.includes(t.place.terrain) ? A.cover.close : A.cover.open;
+    const share = Math.min(1, (foot * per) / tanks);
+    const blocks = units.filter((u) => u.side === s && u.kind === 'arm').sort((a, c) => a.id - c.id);
+    const all = blocks.reduce((a, u) => a + (u.worth ?? 1), 0);
+    let got = 0;
+    for (const u of blocks) { if (got + (u.worth ?? 1) > share * all + 1e-9) break; got += u.worth ?? 1; out.add(u.id); }
+  }
+  return out;
+}
 /**
  * A block's way round ground it cannot enter: how it moves, the cell it was making for, the turning points, and whether
  * the way gets there or only as near as the block can go.
@@ -78,6 +101,13 @@ export class LandBattle implements BattleSim<LandUnit> {
   units: LandUnit[];
   over: FieldResult | null = null;
   ai: Record<Side, boolean>;
+  /**
+   * Each side's computer general's style (styles.ts; the tactics panel, item 1), read once from the ticket: null where
+   * the player commands the side, which, handed to the computer, fights as the plain general always has.
+   */
+  readonly style: Record<Side, Style | null>;
+  /** The attack's plan as its computer general set it at its first thought (ai.ts), for the fight and the 3D game. */
+  plan: Partial<Record<Side, AttackPlan>> = {};
   private rng: Rng;
   private events: FieldEvent[] = [];
   /** Everything said this battle, for the after-action card. */
@@ -142,12 +172,14 @@ export class LandBattle implements BattleSim<LandUnit> {
   constructor(ticket: FieldTicket<LandPlace>) {
     this.ticket = ticket;
     this.rng = new Rng(ticket.seed);
+    this.style = { att: styleFor(ticket, 'att'), def: styleFor(ticket, 'def') };
     // Each side's blocks share out exactly the power the card counted, so the odds on the field are the card's.
     const A = ticket.reckoning.A, D = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
     this.power = { att: A, def: D };
     const att = makeBlocks('att', ticket.att, A, 1);
     const def = makeBlocks('def', ticket.def, D, att.length + 1);
     this.units = [...att, ...def];
+    this.covered = coveredTanks(ticket, this.units);
     const works = ticket.place.fort >= 1 || def.some((u) => u.kind === 'fort');
     this.freshHold = { att: att.filter((u) => u.kind !== 'fort').length <= LAND.fresh.upTo, def: !works && def.filter((u) => u.kind !== 'fort').length <= LAND.fresh.upTo };
     // Tank crews name their tanks after their unit's third battle (b477): data only, nothing in the fight reads it.
@@ -301,6 +333,9 @@ export class LandBattle implements BattleSim<LandUnit> {
         // army sent at one block falls on their line there, block against block (the computer general's own way),
         // and never crowds one block while its neighbours take the attack in the flank (ruling 226(4)).
         const foes = this.units.filter((e) => e.side !== by && fighting(e));
+        // The computer general's groups go in together, its tanks keeping with their foot (ai.ts); and the player's group
+        // attack too (ruling 239(5), 7b), as the card's Combined arms line assumes. A block sent alone goes alone.
+        const together = c.together !== undefined ? { together: c.together } : us.length > 1 && LAND.together.player ? { together: ++this.groupIds } : {};
         across.forEach((u, i) => {
           const lane = (i - (us.length - 1) / 2) * step;
           if (us.length > 1 && Math.abs(lane) > t.w / 2 + u.w / 2) {
@@ -308,15 +343,15 @@ export class LandBattle implements BattleSim<LandUnit> {
             const e = foes.reduce((m, f) => (dist(f.x, f.y, px, py) < dist(m.x, m.y, px, py) ? f : m), t);
             // Still in its own lane, now before the block it falls on: each block its own stretch of their front (and
             // of the far bank, over a river), never every block on one enemy's middle (the art director, b439).
-            if (e !== t) { this.send(u, { kind: 'attack', x: e.x, y: e.y, target: e.id, press: true, lane: lane - ((e.x - t.x) * rx + (e.y - t.y) * ry), axis }); return; }
+            if (e !== t) { this.send(u, { kind: 'attack', x: e.x, y: e.y, target: e.id, press: true, lane: lane - ((e.x - t.x) * rx + (e.y - t.y) * ry), axis, ...together }); return; }
           }
-          this.send(u, { kind: 'attack', x: t.x, y: t.y, target: t.id, press: us.length > 1, ...(us.length > 1 ? { lane, axis } : {}) });
+          this.send(u, { kind: 'attack', x: t.x, y: t.y, target: t.id, press: us.length > 1, ...(us.length > 1 ? { lane, axis } : {}), ...together });
         });
         return true;
       }
       case 'hold': {
         const us = mine(c.units);
-        for (const u of us) { u.order = null; u.path = []; u.keepFace = null; }
+        for (const u of us) { u.order = null; u.path = []; u.keepFace = null; delete u.aim; }
         return us.length > 0;
       }
       case 'withdraw': {
@@ -349,6 +384,16 @@ export class LandBattle implements BattleSim<LandUnit> {
           const r = [c.x0, c.y0, c.x1, c.y1].map(Number);
           return r.every(Number.isFinite) && this.callAir(by, r as [number, number, number, number]);
         }
+        // Fire on, stay put (the design director, ruling 239(6)): { do: 'land:fire', units, target }. The player's guns
+        // fire on that block whenever it is in their reach, before whatever else is nearest, and stand where they are:
+        // the computer's aim given to the player, never aimed sharper than the player (b533). Other blocks are left be.
+        if (c.do === 'land:fire') {
+          const t = this.unit(Number(c.target));
+          const guns = mine((c.units ?? []) as number[]).filter((u) => u.kind === 'art');
+          if (!t || t.side === by || !live(t) || !guns.length) return false;
+          for (const u of guns) { u.order = null; u.path = []; u.keepFace = null; u.aim = t.id; }
+          return true;
+        }
         return false;
       }
     }
@@ -367,6 +412,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     u.order = o;
     u.keepFace = o.face ?? null;
+    // Any other order lifts a gun's aim (fire on, stay put).
+    delete u.aim;
     // An attack's way is the one it will walk: to its place in the lane before its target, as the march works it out.
     const t = o.kind === 'attack' && o.target !== undefined ? this.unit(o.target) : undefined;
     const at = t ? this.lanePoint(u, t, this.closeTo(u)) : [o.x, o.y];
@@ -693,6 +740,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.kind === 'art' && marching) return null;
     if (u.order?.kind === 'withdraw') return null;
     const reach = LAND.reach[u.kind];
+    // Guns told to fire on one block strike it whenever it is in their reach (ai.ts; ruling 239(6)).
+    if (u.aim !== undefined) { const a = this.unit(u.aim); if (a && live(a) && a.side !== u.side && this.gap(u, a) <= reach) return a; }
     let best: LandUnit | null = null, score = Infinity;
     for (const e of this.units) {
       if (e.side === u.side || !live(e)) continue;
@@ -705,6 +754,50 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     return best;
   }
+
+  /**
+   * How far a tank or lorry block stands ahead of its group's slowest foot block, toward the enemy (going in together);
+   * null where the group has no foot left fighting.
+   */
+  private aheadOfFoot(u: LandUnit, group: number): number | null {
+    const dir = u.side === 'att' ? 1 : -1;
+    let slow: number | null = null;
+    for (const f of this.units) {
+      if (f.side !== u.side || !fighting(f) || MOTION[f.kind] !== 'foot' || f.order?.together !== group) continue;
+      const p = dir * f.y;
+      if (slow === null || p < slow) slow = p;
+    }
+    return slow === null ? null : dir * u.y - slow;
+  }
+
+  /**
+   * Tanks alone (the tactics panel, item 7; LAND.alone): what a tank block takes of this foot block's blow for having
+   * left its own infantry on close ground, or against foot in fieldworks: the card's own figure for tanks alone there,
+   * or 1. Only a tank block the card counted as covered by its foot (covered), never one it already charged as alone.
+   */
+  alone(t: LandUnit, u: LandUnit): number {
+    const A = LAND.alone;
+    if (!this.covered.has(t.id) || !A.foot.includes(u.kind)) return 1;
+    const g = coverAt(this.field, t.x, t.y), gu = groundAt(this.field, u.x, u.y);
+    const works = A.works.includes(gu) || (u.dug && dist(u.x, u.y, u.home[0], u.home[1]) <= LAND.dug.keep);
+    const kind = A.streets.includes(g) ? 'streets' : A.woods.includes(g) ? 'woods' : works ? 'works' : null;
+    if (!kind) return 1;
+    const foot = (f: LandUnit): boolean => fighting(f) && A.foot.includes(f.kind);
+    // The foot it fights is already held by friendly foot: fixed, and the tank is on its flank.
+    if (this.units.some((f) => f.side === t.side && foot(f) && (f.engaged === u.id || u.engaged === f.id))) return 1;
+    // Friendly foot beside it.
+    if (this.units.some((f) => f.side === t.side && foot(f) && this.gap(t, f) <= A.near)) return 1;
+    this.bitten.add(t.id);
+    t.aloneAt = this.t;
+    return A.take[t.side][kind];
+  }
+
+  /** The player's group attacks' 'together' groups, numbered above the computer's (ai.ts uses block ids and 100000). */
+  private groupIds = 200000;
+  /** Tank blocks the card counted as covered by their foot (item 7): set when the armies are made. */
+  private covered = new Set<number>();
+  /** Tank blocks bitten for being alone this battle, for the tests and the 3D game's mark. */
+  readonly bitten = new Set<number>();
 
   /** Metres between two blocks' edges, roughly. */
   gap(a: LandUnit, b: LandUnit): number {
@@ -747,6 +840,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     const [am, nm] = LAND.aspect[aspect];
     const ground = this.groundTake(t);
     let take = ground;
+    // Tanks that have left their infantry on close ground take the card's own figure for tanks alone there (item 7).
+    if (t.kind === 'arm' && LAND.alone.on) take *= this.alone(t, u);
     if (t.side === 'def' && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u);
     const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
     const dmg = p * am * take * luck * (u.side === 'att' ? this.fortune : 1 / this.fortune) * DT;
@@ -935,6 +1030,13 @@ export class LandBattle implements BattleSim<LandUnit> {
     // (never in the river: there it presses on to the bank). At a bridge's end it waits too: that is where the queue
     // forms, and two blocks that shoved each other there without waiting stood locked till the battle ended (b453).
     if (gave && !run && !this.wet(u, u.x, u.y, false) && Math.sin(head) * (gave.x - u.x) + Math.cos(head) * (gave.y - u.y) > 0) { u.speed = 0; u.act = 'idle'; return; }
+    // Going in together (ai.ts; the tactics panel, item 1): a tank or lorry block keeps no more than STYLE.lead ahead of
+    // its group's slowest foot block until it has been in contact. It waits for them rather than step further ahead,
+    // never in the river or on a bridge.
+    if (!run && u.order?.together !== undefined && (k === 'arm' || k === 'mot') && !u.met && Math.cos(head) * (u.side === 'att' ? 1 : -1) > 0 && !this.wet(u, u.x, u.y, false)) {
+      const ahead0 = this.aheadOfFoot(u, u.order.together);
+      if (ahead0 !== null && ahead0 >= STYLE.lead) { this.turnTo(u, head); u.speed = 0; u.act = 'idle'; return; }
+    }
     const off = turn(u.face, head);
     // Blocks wheel before they march; a runner just runs, and one wading the river turns as it wades.
     if (!run && !wading && Math.abs(off) > 0.6) { this.turnTo(u, head); u.speed = 0; u.act = 'turn'; return; }
@@ -1851,11 +1953,23 @@ export class LandBattle implements BattleSim<LandUnit> {
     return out;
   }
 
+  /** Each computer general's style and its attack's plan, for the 3D game; nothing where neither side has a style. */
+  private planView(): Pick<BattleView<LandUnit>, 'plan'> {
+    const out: NonNullable<BattleView<LandUnit>['plan']> = {};
+    for (const s of ['att', 'def'] as Side[]) {
+      const st = this.style[s];
+      if (!st || !this.ai[s]) continue;
+      const P = this.plan[s];
+      out[s] = { style: st.id, ...(P ? { phase: P.phase, main: [...P.main], startY: P.startY } : {}) };
+    }
+    return Object.keys(out).length ? { plan: out } : {};
+  }
+
   view(as?: Side): BattleView<LandUnit> {
     const ev = this.events;
     this.events = [];
     void as; // Every block on the field is in sight: what the player knows of each is known() (b464(2)).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...this.airView() };
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...this.airView(), ...this.planView() };
   }
 
   /** Air support's part of the view, only where a side has fighters on call. */

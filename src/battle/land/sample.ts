@@ -19,6 +19,14 @@ export interface SampleOpts {
   air?: Partial<Record<Side, AirOnCall>>;
   /** The ticket's date, 'September 1939' where not said: the year the fighters fly in, and whether they carry bombs. */
   date?: string;
+  /**
+   * A computer general's style fixed by hand on either side ('bold', 'methodical', 'mass'; styles.ts): the fairness
+   * tables run every pairing so. Left out, the practice armies lean methodical, as any nation with no style of its own.
+   */
+  style?: Partial<Record<Side, string>>;
+  /** The armies' nations, for a sandbox's invented pairing (left out: RED and BLU, no nation's), and the history dial's stop. */
+  nat?: Partial<Record<Side, string>>;
+  hist?: number;
 }
 
 /** A corps of a hand-made army: its name, kind, divisions, share of its side's strength, and its first division's number. */
@@ -41,20 +49,21 @@ export function sampleTicket(terrain: Terrain, odds: number, o: SampleOpts = {})
 }
 
 function made(terrain: Terrain, reckoning: FieldTicket<LandPlace>['reckoning'], o: SampleOpts, defence: Corps5[] = DEF, defStr = 0.9): FieldTicket<LandPlace> {
+  const nA = o.nat?.att ?? 'RED', nD = o.nat?.def ?? 'BLU';
   const att: SideTicket = {
-    nat: 'RED', adj: 'Your', color: '#7d6a4f', human: !!o.humanAtt, general: { name: 'General Hale', level: 2 },
-    forces: ATT.map(([name, kind, divs, share, first], i) => force(attId(i), name, 'RED', kind, divs, share, false, first)),
-    ...(o.air?.att ? { air: o.air.att } : {}),
+    nat: nA, adj: 'Your', color: '#7d6a4f', human: !!o.humanAtt, general: { name: 'General Hale', level: 2 },
+    forces: ATT.map(([name, kind, divs, share, first], i) => force(attId(i), name, nA, kind, divs, share, false, first)),
+    ...(o.air?.att ? { air: o.air.att } : {}), ...(o.style?.att ? { style: o.style.att } : {}),
   };
   const def: SideTicket = {
-    nat: 'BLU', adj: 'Enemy', color: '#5a6f86', human: false, general: { name: 'General Vane', level: 2 },
-    forces: defence.map(([name, kind, divs, share, first], i) => force(defId(i), name, 'BLU', kind, divs, share, !!o.dug && kind !== 'art', first, defStr)),
-    ...(o.air?.def ? { air: o.air.def } : {}),
+    nat: nD, adj: 'Enemy', color: '#5a6f86', human: false, general: { name: 'General Vane', level: 2 },
+    forces: defence.map(([name, kind, divs, share, first], i) => force(defId(i), name, nD, kind, divs, share, !!o.dug && kind !== 'art', first, defStr)),
+    ...(o.air?.def ? { air: o.air.def } : {}), ...(o.style?.def ? { style: o.style.def } : {}),
   };
   return {
     domain: 'land', kind: 'field', seed: o.seed ?? 7, turn: 1, date: o.date ?? 'September 1939', title: o.title ?? 'A practice field',
     place: { region: -1, name: 'Practice ground', terrain, river: o.river ? 'Wend' : null, bridgeDown: !!o.bridgeDown, town: o.town === null ? null : 'Millbrook', townSize: o.town === undefined ? 'village' : o.town, fort: o.fort ?? 0, mines: 0 },
-    att, def, reckoning, lines: [], limit: LAND.limit,
+    att, def, reckoning, lines: [], limit: LAND.limit, ...(o.hist !== undefined ? { hist: o.hist } : {}),
   };
 }
 

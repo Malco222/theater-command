@@ -274,6 +274,15 @@
 // 'less').
 // Under fog (the card did not know the defence, b453) the enemy's breakingBy is only { side, bar } until the battle is
 // over: the rest would count blocks the player has not met.
+// The computer general's plan (the tactics panel, item 1; ruling 239): a land view carries plan: { att?, def? } for
+// each side the computer commands with a style, { phase, main, startY }: phase 'guns' while its guns fire on the main
+// effort and its foot waits at the start line, startY metres north (the foot down there, the shells on the main
+// stretch), 'assault' once it goes in (the fire lifts), 'hook' once its tanks wheel round the main target's flank; main
+// lists the enemy blocks of the main effort, the main target first (empty for a mass, which goes in all along the line).
+// For pictures only: never its style's name, which the player is not told (ruling 239(4)). A gun block told to fire on
+// one block and stay put carries aim (that block's id): the computer's main effort, or the player's own order
+// { do: 'land:fire', units, target } (ruling 239(6); its words are the UI director's). A tank block paying for having
+// left its foot on close ground (item 7) carries alone: true while it pays: buttoned up, close-assault teams at it.
 // An air group also carries extra: { n, n0, band, alt, job, per } (aircraft now and at the start, height band 0 to 2,
 // metres up, what it is doing, aircraft per model); /mnt/project-files/air-battles/3d-handoff.md says how to draw it.
 //
@@ -351,7 +360,7 @@ function airLoop(a: AirUnit): string {
 }
 
 /** One unit as the 3D game reads it: plain fields only. Exported for the tests. */
-export function unitOut(u: UnitBase): Record<string, unknown> {
+export function unitOut(u: UnitBase, t = 0): Record<string, unknown> {
   const land = u as LandUnit;
   const air = (u as AirUnit).air ? (u as AirUnit) : null;
   const motion = MOTION[u.kind as Kind] as string | undefined;
@@ -374,6 +383,11 @@ export function unitOut(u: UnitBase): Record<string, unknown> {
     ...(land.crew ? { crew: land.crew } : {}),
     // What its guns throw, as the art director's explosions sheet sizes it (src/battle/land/shells.ts).
     ...(land.cal ? { cal: land.cal } : {}),
+    // A tank block that has left its foot on close ground and is paying for it this second (item 7): buttoned up,
+    // close-assault teams at it.
+    ...(land.aloneAt !== undefined && t - land.aloneAt <= 1 ? { alone: true } : {}),
+    // Guns told to fire on one block and stay put (the computer's main effort, or the player's order): that block.
+    ...(land.aim !== undefined ? { aim: land.aim } : {}),
     order: land.order ? { kind: land.order.kind, x: land.order.x, y: land.order.y, target: land.order.target ?? -1, path: land.path } : null,
     ...(extra ? { extra } : {}),
   };
@@ -392,6 +406,13 @@ function hiddenOut(u: UnitBase): Record<string, unknown> {
   };
 }
 
+/** Each computer attack's plan as the 3D game shows it: phase, main stretch, start line; no style's name. Exported for the tests. */
+export function planOut(plan: NonNullable<BattleView['plan']>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [s, p] of Object.entries(plan)) if (p?.phase) out[s] = { phase: p.phase, main: p.main ?? [], startY: p.startY ?? null };
+  return out;
+}
+
 /** Each army's bar and what drives it, with the enemy's cut to its bar: under fog the player sees no more of it. */
 function fogged(by: Record<Side, BreakCause>, me: Side): Record<Side, Partial<BreakCause>> {
   const them: Side = me === 'att' ? 'def' : 'att';
@@ -401,12 +422,15 @@ function fogged(by: Record<Side, BreakCause>, me: Side): Record<Side, Partial<Br
 function viewOut(s: Session, v: BattleView): Record<string, unknown> {
   const land = s.sim instanceof LandBattle ? s.sim : null;
   return {
-    t: v.t, limit: v.limit, speed: s.clock.speed, units: v.units.map((u) => (land && !land.known(u as LandUnit) ? hiddenOut(u) : unitOut(u))), balance: v.balance, events: v.events, zones: v.zones, ai: v.ai, over: v.over, me: s.me,
+    t: v.t, limit: v.limit, speed: s.clock.speed, units: v.units.map((u) => (land && !land.known(u as LandUnit) ? hiddenOut(u) : unitOut(u, v.t))), balance: v.balance, events: v.events, zones: v.zones, ai: v.ai, over: v.over, me: s.me,
     ...(v.breaking ? { breaking: { att: Math.round(v.breaking.att * 1000) / 1000, def: Math.round(v.breaking.def * 1000) / 1000 } } : {}),
     // What drives each bar (b496(2)): plain numbers, to three places already. Under fog, of the enemy only its bar
     // until the battle is over, as its blocks are hidden (hiddenOut).
     ...(v.breakingBy ? { breakingBy: land?.fog && !v.over ? fogged(v.breakingBy, s.me) : v.breakingBy } : {}),
     ...(v.contact !== undefined ? { contact: v.contact } : {}),
+    // The computer general's attack plan, for the pictures ("The computer general's plan" above): never its style's
+    // name, which the player is not told (ruling 239(4)).
+    ...(v.plan ? { plan: planOut(v.plan) } : {}),
     // Air support ("Air support" above): only where a side has fighters on call.
     ...(v.flights ? { flights: v.flights } : {}),
     ...(v.air ? { air: v.air } : {}),

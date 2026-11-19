@@ -23,6 +23,12 @@ export interface LandOrder {
   axis?: number;
   /** Sent with others: when its block breaks or leaves, it carries the attack on to the nearest enemy still fighting. */
   press?: boolean;
+  /**
+   * Going in together (the tactics panel, item 1): a tank or lorry block with this group keeps no more than STYLE.lead
+   * metres ahead of the group's slowest foot block until it is in contact; the foot of the group carry it too, so their
+   * tanks can find them. A group with no foot ignores it.
+   */
+  together?: number;
 }
 
 export interface LandUnit extends UnitBase {
@@ -79,6 +85,8 @@ export interface LandUnit extends UnitBase {
   reserve?: 'held' | 'sent';
   /** Models on its tray at full strength: a division's, or a third of them for a regiment. */
   tray: number;
+  /** The divisions it carries, by their strength as the card weighs them (divs x str): a regiment a third (item 7's count). */
+  worth?: number;
   /** A tank block's crews' own marks, names or kill rings, as data for the 3D game and the hover (b477); none on the rest. */
   crew?: CrewMarks;
   /**
@@ -105,6 +113,16 @@ export interface LandUnit extends UnitBase {
   standFace?: number;
   /** It came to its stand still out of reach of its target, which had stepped back: it closes straight on it. */
   closing?: boolean;
+  /**
+   * Guns told to fire on one block and stay put (ai.ts, the computer's main effort; ruling 239(6), the player's order
+   * too): they strike it whenever it is in their reach, before whatever else is nearest.
+   */
+  aim?: number;
+  /**
+   * Battle time it last took the card's figure for tanks alone (item 7; sim.ts alone()): looks only, for the 3D game's
+   * mark (a tank buttoned up, close-assault teams at it). Nothing in the fight reads it.
+   */
+  aloneAt?: number;
   /**
    * Its corps comes on from ground with no river between it and the place (ForceTicket.cross false): the card counts it
    * attacking over dry ground, so it draws up in the lanes the river bends away from (the design director, b464(5);
@@ -184,6 +202,7 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
         figures0: Math.max(1, Math.ceil(full * str0)), figures: Math.max(1, Math.ceil(full * str0)), tray: full,
         w, d, act: 'idle', speed: 0,
         power0: power * f.share * share,
+        worth: weightOf(p),
         order: null, path: [], dug: !!f.dug, home: [0, 0], still: 99, clear: 99, pinned: false, flankedAt: -99, keepFace: null, met: false,
         ...(f.cross === false ? { dry: true } : {}),
       });
@@ -374,7 +393,8 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
   // A defence of four blocks or more in its line keeps a quarter of them back as a reserve, centred between its tanks
   // on the wings (b407). Each is the last division of whichever corps has most in the line, so every corps' first
   // divisions stand in the line. Where the tanks could not stand on the wings and are centred behind the line, the
-  // reserve stands a row further back.
+  // reserve stands a row further back. Every defence, whatever its general's style: the fit's reserve is part of what
+  // the card priced (the design director, ruling 239's rider, 21:57Z).
   const held: LandUnit[] = [];
   if (side === 'def' && lines[0].length >= 4) {
     for (let n = Math.max(1, Math.floor(lines[0].length / 4)); n > 0; n--) {

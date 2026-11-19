@@ -10,6 +10,8 @@ import { armyOf } from '../../campaign/joint';
 import { bridgeDown, riverBetween, riverName } from '../../campaign/rivers';
 import { minesAt } from '../../campaign/engineers';
 import { townName, townSize } from '../../campaign/towns';
+import { stopOf } from '../../campaign/history';
+import { techRules } from '../../campaign/tech';
 import { canOrder, jointForce, orderAttack, previewAttack } from '../../campaign/turn';
 import { corpsKnown, oddsBand } from '../../campaign/intel';
 import { KIND, type BattleReport, type Corps, type Game, type Region } from '../../campaign/types';
@@ -22,6 +24,9 @@ import { bearingOf, streamFor } from './stream';
 export function goingIn(g: Game, corps: Corps[], target: Region): Corps[] {
   return jointForce(g, limitAttackers(g, jointForce(g, corps, target), target), target);
 }
+
+/** The research a computer general's style grows by (data/battle/land-styles.json grow.tech). */
+const DOCTRINES = ['combined', 'deep'];
 
 function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number, crosses?: (c: Corps) => boolean): SideTicket {
   const N = g.nations[nat];
@@ -38,7 +43,13 @@ function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number, 
   }));
   // The general of the strongest corps commands on the field.
   const lead = cs.map((c) => generalOf(g, c)).filter((x) => !!x).sort((a, b) => b!.level - a!.level)[0] ?? null;
-  return { nat, adj: N?.adj ?? nat, color: N?.color ?? '#888888', human: nat === g.human, forces, general: lead ? { name: lead.name, level: lead.level } : null };
+  // What a computer general's style grows by besides its army's experience (styles.ts): the doctrines its nation holds.
+  // Read straight off the nation's record, never through techOf, which opens research on a first look: the ticket only reads.
+  const doctrine = techRules(g) ? DOCTRINES.filter((id) => !!N?.tech?.done.includes(id)) : [];
+  return {
+    nat, adj: N?.adj ?? nat, color: N?.color ?? '#888888', human: nat === g.human, forces, general: lead ? { name: lead.name, level: lead.level } : null,
+    ...(doctrine.length ? { doctrine } : {}),
+  };
 }
 
 /**
@@ -125,6 +136,8 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
     lines: a.lines, limit: LAND.limit,
     // The attacks already made on this place this month by this side: the same ground, a fresh day's luck.
     attempt: g.reports.filter((x) => x.turn === g.turn && x.region === target.id && x.attNat === attNat).length,
+    // The history dial's stop: at 1 to 3 the computer general fights in its nation's style, at 4 and 5 the situation's (styles.ts).
+    hist: stopOf(g),
   };
 }
 
