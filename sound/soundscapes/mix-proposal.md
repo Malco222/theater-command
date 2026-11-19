@@ -15,7 +15,7 @@ the game. The air battles thread is preparing its own asks for `mix.json` `air`;
   the dominant of The Advance's D minor.
 - War-map mood list: `silent_front`, `standing_to`, `long_front`, taking turns.
 
-## 2. Beds (needs `front_rumble_loop` and `naval_guns_far_loop` stamped)
+## 2. Beds (needs `front_rumble_loop`, `naval_guns_far_loop` and `air_battle_far_loop` stamped)
 
 Add to `beds.list`, same rules as the others (silent below `in`, full from `full` to `hold`, gone above `out`):
 
@@ -23,7 +23,9 @@ Add to `beds.list`, same rules as the others (silent below `in`, full from `full
 {"name": "front_rumble_loop", "in": 0.0, "full": 0.0, "hold": 1.0, "out": 1.01, "gainDb": -6, "land": true,
  "note": "the war beyond this battle, 3 to 14 km off; never leaves, so the battle has a low floor that never goes silent"},
 {"name": "naval_guns_far_loop", "in": 0.0, "full": 0.0, "hold": 0.4, "out": 0.7, "gainDb": -8, "sea": true,
- "note": "another fight beyond this one, 6 to 18 km off; rides on top of sea_day_loop"}
+ "note": "another fight beyond this one, 6 to 18 km off; rides on top of sea_day_loop"},
+{"name": "air_battle_far_loop", "in": 0.02, "full": 0.15, "hold": 1.0, "out": 1.01, "gainDb": -4, "air": true,
+ "note": "the air battle as the strategy camera hears it, 2 to 6.5 km off; rises with the meter (air battles thread, feel-benchmark gap 2)"}
 ```
 
 Why it never leaves: the art director's grit direction (19 Nov, from Brian's reference clips) asks for a low

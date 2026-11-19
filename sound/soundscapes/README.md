@@ -12,6 +12,7 @@ stamps them on the [listening page](https://claude.ai/artifact/EjLienLHJN29HKCPv
 |---|---|---|---|
 | `front_rumble_loop` | A new bed: batteries firing and shells landing 3 to 14 km off, rolling like thunder | 32 s, loops | -27 LUFS |
 | `naval_guns_far_loop` | A new bed: battleship and cruiser salvos 6 to 18 km off across water, with the sea's long echo | 32 s, loops | -26 LUFS |
+| `air_battle_far_loop` | A new bed (added 04:50Z, asked by the air battles thread): two bomber streams droning, fighters passing, gun bursts and heavy flak 2 to 6.5 km off, as the strategy camera hears an air battle | 32 s, loops | -26 LUFS |
 | `scene_horizon` | The guns on the horizon: behind the line before a battle; a battery 400 m left, its shells landing 4 km ahead, a column and a lorry, over the new rumble | 60 s | -21.1 LUFS |
 | `scene_bombers` | Bombers overhead: a flak site under a daylight raid; B-17s 3 km up passing over with Doppler, P-51 escorts, flak, one bomber hit | 72 s | -19.0 LUFS |
 | `scene_sea` | Gun duel at sea: a cruiser's deck; her salvos, enemy shells short, over, straddling, a hit aft, and the new far sea fight beyond | 70 s | -19.3 LUFS |
@@ -25,7 +26,7 @@ approved pack together. In the game the sim places each sound itself, by the rul
 
 ## How they were made
 
-- **Only real recordings from the approved pack** (`../battle-pack/`): 57 different ones across the six files,
+- **Only real recordings from the approved pack** (`../battle-pack/`): 59 different ones across the seven files,
   listed per file in `checks/credits.json`. All are already credited in the pack's credits; none carries a
   non-commercial-only licence. Nothing is synthesized, and nothing comes from films, series or games.
 - **The mix rules of `../mix/mix.json`**, applied by the tool `sound/tools/soundscape.py` (repository branch
@@ -36,7 +37,7 @@ approved pack together. In the game the sim places each sound itself, by the rul
   40 km, the low-pass down to 400 Hz at 30 km) and `air_far` (formations at height: full to 300 m, gone at 14 km).
   **Two new places**: `sea_far` (a 4 s roll over open water) and `horizon` (a 3.2 s roll, guns beyond hills). The
   echo is a decaying noise tail built by the tool, as in `mix/preview/`; no recorded room.
-- **Loops** are built round in a circle, so the end runs into the start, and are not limited, so the join cannot
+- **Loops** are built round in a circle (an engine held for the whole loop has its overrun crossfaded into its start), so the end runs into the start, and are not limited, so the join cannot
   click. Scenes go through a limiter at -1 dB.
 - Rebuild: `python3 -I sound/tools/soundscape.py <out folder> [names]` from the repository root, with the pack at
   `/mnt/project-files/sound/battle-pack/`. It needs `numpy scipy soundfile pyloudnorm` and ffmpeg.
@@ -47,6 +48,7 @@ approved pack together. In the game the sim places each sound itself, by the rul
 |---|---|---|---|---|---|
 | `front_rumble_loop` | -27.0 | 2.9 | 78% | 4.9 dB | 2.8 |
 | `naval_guns_far_loop` | -26.0 | 7.8 | 60% | 3.1 dB | 3.4 |
+| `air_battle_far_loop` | -26.0 | 2.0 | 52% | 2.5 dB | 7.7 |
 | `scene_horizon` | -21.1 | 9.5 | 69% | 3.4 dB | |
 | `scene_bombers` | -19.0 | 8.3 | 51% | 2.3 dB | |
 | `scene_sea` | -19.3 | 9.4 | 46% | 1.6 dB | |
@@ -67,6 +69,7 @@ the shares agree, the gap reads about 4 dB tighter than theirs.
 |---|---|---|---|---|
 | `front_rumble_loop` | 47% | 0.1% | 5.4 dB | A low wall that never stops: on target |
 | `naval_guns_far_loop` | 45% | 0.0% | 24.1 dB | Low enough, but silent between salvos: needs the sea beds under it |
+| `air_battle_far_loop` | 39% | 2.3% | 3.5 dB | A steady wall; a little under the clips' low share |
 | `scene_horizon` | 51% | 2.9% | 12.6 dB | Close |
 | `scene_bombers` | 40% | 1.6% | 10.6 dB | Close; a little light in the low end |
 | `scene_sea` | 35% | 10.6% | 11.1 dB | Too bright: three times the highs of the clips |

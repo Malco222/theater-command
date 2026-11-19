@@ -393,6 +393,68 @@ def naval_far(out):
     return S.render(out, lufs=-26.0)
 
 
+def circular_drone(S, name, p, fam, gain=0.0, place='open', swell_db=2.5, phase=0.0, xfade=3.0):
+    """A recorded engine loop held at point p for the whole loop, made circular: the take runs on past the loop's
+    length and its overrun is crossfaded (equal power) into the start, so the end runs into the start with no
+    step. A slow swell of +/- swell_db, one cycle a loop, keeps a stream moving without a seam."""
+    L = int(S.T * SR); X = int(xfade * SR)
+    src = load(name).mean(axis=1)
+    off = S.rng.randrange(len(src))
+    a = np.resize(np.roll(src, -off), L + X)
+    w = np.linspace(0, math.pi / 2, X)
+    a[:X] = a[:X] * np.sin(w) + a[L:L + X] * np.cos(w)
+    a = a[:L]
+    d = S.dist(p); F = FAMILIES[fam]
+    fc = interp_log(F['lpf'], d)
+    g = gain_db(d, fam) + gain
+    env = db(swell_db * np.sin(2 * math.pi * (np.arange(L) / L + phase)))
+    st = S._pan(lowpass(a[:, None], fc)[:, 0] * db(g) * env, S.az(p))
+    S.dry[:L] += st
+    S.send[place][:L] += st * interp(F['reverb'], d)
+    S.events.append({'t': 0, 'end': S.T, 'name': name, 'fam': fam, 'm': round(d), 'gainDb': round(g, 1), 'lpfHz': int(fc),
+                     'place': place, 'label': 'circular drone'})
+
+
+def air_far_bed(out):
+    """An air battle 2 to 6.5 km off, as the strategy camera hears it (listener at the boxes' height): two bomber streams droning, fighters
+    passing, the gunners' and fighters' bursts as a far crackle, heavy flak bursting round the boxes. 32 s, loops.
+    Asked by the air battles thread (feel-benchmark.md gap 2, 'from the strategy camera'): today the air battle
+    has no bed and the drone arrives at -40 dB. The heavy gun takes are cut to their firing (0 to 0.85 s): the
+    rest of each is a range's echo, which the air does not have."""
+    S = Scene('air_battle_far_loop', 32.0, seed=1944, height=3000.0, loop=True, title='An air battle, far off',
+              about='Bomber streams droning, fighters passing, gun bursts and flak 2 to 6.5 km off: the air war as the '
+                    'strategy camera hears it. Loops (32 s).')
+    # the streams: B-17s and a heavier group, 2.5 to 4 km off at about the camera's height
+    circular_drone(S, 'b17_drone_loop', (-1800, 2600, 4200), 'air_far', gain=8, phase=0.0)
+    circular_drone(S, 'bomber_heavy_loop', (1500, 3200, 3900), 'air_far', gain=6, phase=0.5)
+    circular_drone(S, 'b17_drone_loop', (300, 4000, 4600), 'air_far', gain=5, phase=0.25)
+    # engagements: a fighter pass with its bursts and the gunners answering, every 3 to 6 s somewhere round the boxes
+    passes = ['p51_pass', 'fw190_pass', 'p47_pass', 'spitfire_pass']
+    loudest = {'p51_pass': 3.7, 'spitfire_pass': 8.2, 'fw190_pass': 1.0, 'p47_pass': 4.4}   # each take's loudest 0.1 s
+    heavy = ['plane_guns', 'gunner_burst']
+    light = ['mg42_burst_01', 'mg42_burst_02']
+    t = 0.5
+    while t < S.T:
+        x = S.rng.uniform(-3500, 3500); y = S.rng.uniform(1200, 4500); z = S.rng.uniform(3600, 5200)
+        name = S.take(passes)
+        S.one(name, t - loudest[name], (x, y, z), 'air_far', place='open', gain=4, delay=True, pitch=3)
+        for b in range(S.rng.randint(2, 5)):
+            tb = t + S.rng.uniform(-1.2, 1.5)
+            gx, gy = x + S.rng.uniform(-300, 300), y + S.rng.uniform(-300, 300)
+            if S.rng.random() < 0.6:
+                S.one(S.take(heavy), tb, (gx, gy, z), 'air_far', place='open', gain=6, length=0.85, fade_out=0.08, pitch=4)
+            else:
+                S.one(S.take(light), tb, (gx, gy, z), 'air_far', place='open', gain=4, pitch=4)
+        t += S.rng.uniform(3.0, 6.0)
+    # heavy flak bursting round the boxes, 2.5 to 6 km off, one to three a second at its height
+    t = 0.2
+    while t < S.T:
+        S.one('flak_burst_01', t, (S.rng.uniform(-4000, 4000), S.rng.uniform(2000, 5500), S.rng.uniform(3800, 5200)),
+              'air_far', place='open', gain=5, delay=True, pitch=5)
+        t += S.rng.uniform(0.6, 2.2)
+    return S.render(out, lufs=-26.0)
+
+
 # ================================================================ the scenes
 
 def scene_horizon(out, rumble_path):
@@ -588,6 +650,8 @@ if __name__ == '__main__':
         res['front_rumble_loop'] = front_rumble(out)
     if run('naval_guns_far_loop'):
         res['naval_guns_far_loop'] = naval_far(out)
+    if run('air_battle_far_loop'):
+        res['air_battle_far_loop'] = air_far_bed(out)
     rumble = os.path.join(out, 'front_rumble_loop.wav'); naval = os.path.join(out, 'naval_guns_far_loop.wav')
     if run('scene_horizon'):
         res['scene_horizon'] = scene_horizon(out, rumble)
