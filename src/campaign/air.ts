@@ -42,6 +42,7 @@ import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretw
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 import { mapDist } from './wrap';
+import { classNum } from './classes';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
@@ -176,7 +177,7 @@ const dayRow = (table: Record<string, [number, number][]>, nat: string, turn: nu
  * row in air.json). In the air war a nation's fighters reach as far as the month allows (ruling 227: drop tanks, the
  * Zero, the Mustang), and a fleet's own longer reach stands.
  */
-const reach = (f: { nat: string; name: string; parent?: string; ship?: number; ashore?: number }, g?: Game): NatSpec => {
+const reach = (f: { nat: string; name: string; parent?: string; ship?: number; ashore?: number; cls?: string }, g?: Game): NatSpec => {
   // Carrier aircraft are built for the deck, not for range: ashore as aboard.
   if (deckBred(f)) return { quality: spec(f.nat).quality * (CARRIERS.quality[f.nat] ?? CARRIERS.quality._default), ftrRange: CARRIERS.range.ftr, bmrRange: CARRIERS.range.bmr };
   const own = AIR.fleets.find((x) => x.nat === f.nat && x.name === (f.parent ?? f.name))?.ftrRange;
@@ -184,7 +185,10 @@ const reach = (f: { nat: string; name: string; parent?: string; ship?: number; a
   const ftrRange = Math.max(own ?? 0, dated, spec(f.nat).ftrRange);
   // A nation with a weight row (ruling 227, b424) fights as that share of the air force it is measured against.
   const w = g ? airWeight(g, f.nat) : null;
-  return { ...spec(f.nat), ...(w === null ? {} : { quality: w * spec(AIRWAR.weight.against).quality }), ftrRange };
+  const out = { ...spec(f.nat), ...(w === null ? {} : { quality: w * spec(AIRWAR.weight.against).quality }), ftrRange };
+  // (A group of a sandbox class reaches its class's share further, or less far: classes.ts.)
+  const k = g && f.cls ? classNum(g, f, 'reach') : 1;
+  return k === 1 ? out : { ...out, ftrRange: out.ftrRange * k, bmrRange: out.bmrRange * k };
 };
 
 /**
@@ -197,7 +201,7 @@ export const airWeight = (g: Game, nat: string): number | null => {
   if (!rows || !airWar(g)) return null;
   return (row(rows, g.turn) ?? rows[0])[1];
 };
-export const airRange = (f: { nat: string; name: string; parent?: string; ship?: number }, g?: Game): { ftr: number; bmr: number } => ({ ftr: reach(f, g).ftrRange, bmr: reach(f, g).bmrRange });
+export const airRange = (f: { nat: string; name: string; parent?: string; ship?: number; cls?: string }, g?: Game): { ftr: number; bmr: number } => ({ ftr: reach(f, g).ftrRange, bmr: reach(f, g).bmrRange });
 
 /** What a nation's day bombers can do for themselves this month, formation, guns and turrets (ruling 227); by night, and outside the air war, the flat old figure. */
 export const bomberDefence = (g: Game, nat: string, night = false): number => (airWar(g) && !night ? dayRow(AIRWAR.day.defence, nat, g.turn) : AIR.combat.bomberDefence);
@@ -324,7 +328,7 @@ export const gunsStop = (level: number): number => Math.max(0, Math.min(1, level
 
 const leaderMul = (f: AirFleet): number => 1 + (f.leader ? AIR.leader.perLevel * (f.leader.level - 1) : 0);
 /** What one of a fleet's aircraft is worth in a fight. */
-const worth = (g: Game, f: AirFleet): number => reach(f, g).quality * leaderMul(f) * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters') * storyEdge(g, f) * fuelAir(g, f.nat);
+const worth = (g: Game, f: AirFleet): number => reach(f, g).quality * leaderMul(f) * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters') * storyEdge(g, f) * fuelAir(g, f.nat) * classNum(g, f, 'fight');
 
 /** Who holds the sky over a region, if anyone has won it lately. */
 export function skyOver(g: Game, region: number): string | null {
@@ -496,7 +500,7 @@ export function closeOf(g: Game, nats: Set<string>, enemies: Set<string>, region
     const reachOf = cover(kmTo(g, f, region), reach(f, g).ftrRange) * crowding(g, f);
     if (reachOf <= 0) continue;
     const planes = f.ftr * reachOf;
-    out.W += planes * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters') * fuelAir(g, f.nat);
+    out.W += planes * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters') * fuelAir(g, f.nat) * classNum(g, f, 'close');
     // (No dice: the air war never touches the land war's luck. Under the other side's sky more of them are lost.)
     const lose = Math.min(f.ftr, Math.round(planes * CLOSE.loss * (underFoe ? CLOSE.enemySky : 1)));
     out.groups.push({ id: f.id, name: f.name, nat: f.nat, planes: Math.round(planes), lose });
@@ -1333,6 +1337,11 @@ export interface AirAssess {
   sky: Sky;
   /** What cloud leaves of the bombs that find the target: 1 under a clear sky. */
   aim: number;
+  /**
+   * The sandbox (classes.ts): the weight of bombs the raid's bombers carry beside bombers of their kind, by their
+   * classes' 'bomb' (or 'sea', on ships and shipping): 1 with no class among them.
+   */
+  load?: number;
 }
 
 const SHIPS: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
@@ -1404,7 +1413,14 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.att.push(a);
     out.E += a.ftr;
     out.Epow += a.ftr * worth(g, f);
+    // (The sandbox: a bomber class that flies as escort in the formation, by day: classes.ts 'escort'.)
+    if (!night && a.bmr > 0 && f.cls) out.Epow += a.bmr * classNum(g, f, 'escort', 0) * worth(g, f);
     out.B += a.bmr;
+  }
+  // (The sandbox: what the bombers carry beside bombers of their kind.)
+  if (out.B > 0 && out.att.some((a) => a.f.cls)) {
+    const field = sea || m === 'harbour' ? 'sea' : 'bomb';
+    out.load = out.att.reduce((s, a) => s + a.bmr * classNum(g, a.f, field), 0) / out.B;
   }
   if (!out.att.length) { out.why = 'Nothing can reach the target.'; return out; }
   if (m !== 'superiority' && m !== 'ground' && out.B <= 0) { out.why = 'No bombers can reach the target.'; return out; }
@@ -1431,7 +1447,8 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const deck = f.ship !== undefined;
     if (sea && !deck) w *= C.seaCover;
     // (With the air campaigns on, the historian's dated row for the defender's nation, gated by Fighter control: b553(b), b558(2).)
-    if (night) w *= acOn(g) ? nightFighters(g, f.nat) : C.night.fighters;
+    // (The sandbox: a night-fighter class finds its share of the raid, where that is more than the nation's own.)
+    if (night) w *= Math.max(acOn(g) ? nightFighters(g, f.nat) : C.night.fighters, classNum(g, f, 'night', 0));
     if (!amb && !out.radar && !(deck && sea && d <= 0)) w *= AIR.radar.without;
     w *= unready;
     // Under cloud fewer of the defenders find the bombers.
@@ -1639,7 +1656,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     bomber(x.f, att[i], a.B > 0 ? bLoss * (x.bmr / a.B) : 0);
   });
   const lostB = att.reduce((s, x) => s + x.lostBmr, 0);
-  const through = Math.max(0, a.B - lostB) * (night ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim;
+  const through = Math.max(0, a.B - lostB) * (night ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim * (a.load ?? 1);
 
   // What the bombers did.
   let result = '', value = 0, ground = 0, shipsSunk = 0, notable = false;
@@ -2522,7 +2539,7 @@ function nightChance(g: Game, a: AirAssess, target: number, nat: string, escortL
   let won = 0, throws = 0;
   for (const lb of bombers) {
     const lost = a.B * Math.min(mostBomberLoss(g, true), a.bomberLoss * lb);
-    const through = Math.max(0, a.B - lost) * C.night.accuracy * techMul(g, nat, 'bombers') * a.aim;
+    const through = Math.max(0, a.B - lost) * C.night.accuracy * techMul(g, nat, 'bombers') * a.aim * (a.load ?? 1);
     const cut = Math.min(N.max, through / N.scale) * (1 - gunsStop);
     const pr = groundRules(g) ? railBombChance(g, target, through, gunsStop) : 0;
     const pf = groundRules(g) ? ruinChance(g, r, cut) : 0;
@@ -2549,7 +2566,7 @@ function nightChance(g: Game, a: AirAssess, target: number, nat: string, escortL
 export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number): AirForecast {
   const C = AIR.combat, I = intensity(m);
   const nat = a.att[0]?.f.nat ?? '';
-  const through = a.B * (1 - a.bomberLoss) * (m === 'night' ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim;
+  const through = a.B * (1 - a.bomberLoss) * (m === 'night' ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim * (a.load ?? 1);
   const odds = a.Dpow > 0 ? a.Epow / a.Dpow : 9;
   // The fighter battle as the flight settles it, at even luck.
   const se = Math.sqrt(a.Epow), sd = Math.sqrt(a.Dpow);

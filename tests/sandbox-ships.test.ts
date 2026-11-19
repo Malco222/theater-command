@@ -126,6 +126,10 @@ describe('the Navy column with the switch on', () => {
   it('lists each class under its kind, and a ship of one is laid down named and joins her fleet by name', () => {
     const g = sandbox();
     rich(g, 'UK');
+    // Each class waits on its own technology (tech.json, the naval what-ifs).
+    expect(offer(g, 'UK', 'ship:cv:escortcv')!.why).toMatch(/Escort carriers/);
+    expect(offer(g, 'UK', 'ship:cv:escortcv')!.blurb).toMatch(/33% of a fleet carrier's air wing/);
+    learn(g, 'UK', 'escortcarriers');
     const keys = offers(g, 'UK').map((o) => o.key);
     const cv = keys.indexOf('ship:cv');
     expect(keys.slice(cv + 1, cv + 3).sort()).toEqual(['ship:cv:battlecv', 'ship:cv:escortcv']);
@@ -150,6 +154,7 @@ describe('the Navy column with the switch on', () => {
   it('takes the player\'s own name for a ship, and never the same name twice', () => {
     const g = sandbox();
     rich(g, 'UK');
+    learn(g, 'UK', 'commerceraiders');
     const a = orderOffer(g, 'UK', 'ship:ca:raider', -1, 'Northern Star')!;
     expect(a.ship).toBe('Northern Star');
     const b = orderOffer(g, 'UK', 'ship:ca:raider')!;
@@ -173,6 +178,7 @@ describe('the Navy column with the switch on', () => {
     rich(g, 'GER');
     const std = offer(g, 'GER', 'ship:cv')!;
     expect(std.tech).toBe('carriers');
+    learn(g, 'GER', 'escortcarriers');
     expect(offer(g, 'GER', 'ship:cv:escortcv')!.why).toMatch(/Carrier aviation/);
     learn(g, 'GER', 'carriers');
     expect(offer(g, 'GER', 'ship:cv:escortcv')!.why).toBeNull();
@@ -302,6 +308,8 @@ describe('the computer\'s navies', () => {
       for (let t = 0; t < 36; t++) { g.turn = t; expect(aiClasses(g, 'GER', wants)).toEqual(wants); }
     }
     const g = sandbox(3, 5);
+    learn(g, 'GER', 'commerceraiders', 'aircraftsubs', 'carriers');
+    learn(g, 'USA', 'escortcarriers', 'battlecarriers');
     const seen = new Set<string>();
     for (let t = 0; t < 36; t++) { g.turn = t; for (const k of aiClasses(g, 'GER', wants)) seen.add(k); for (const k of aiClasses(g, 'USA', wants)) seen.add(`USA ${k}`); }
     // Germany leans to the trade war (a raider, a scout submarine), the United States to carriers.

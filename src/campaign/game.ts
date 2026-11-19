@@ -85,6 +85,7 @@ import {
   FORT_MUL, KIND, MEN_PER_DIV, STACK, TERRAIN_DEF,
   type BattleReport, type Corps, type Field, type Game, type Headline, type Kind, type Nation, type Region, type ReportUnit, type Voyage,
 } from './types';
+import { steelMonth } from './classes';
 
 const ORDER = ['GER', 'ITA', 'SVK', 'HUN', 'SOV', 'POL', 'FRA', 'UK', 'USA', 'BEL', 'NED', 'LUX', 'DEN', 'NOR'];
 const EAST = new Set(['POL', 'SOV', 'LIT', 'LAT', 'EST', 'ROM', 'FIN']);
@@ -3744,6 +3745,8 @@ export function startPhase(g: Game, nat: string): void {
       if (nat === g.human) headline(g, 'info', `The books balance again: the treasury is out of debt.`, nat);
     }
   }
+  // The sandbox (classes.ts): the steel for the orders on the books comes out of the supplies, or they slip a month.
+  steelMonth(g, nat);
   deliver(g, nat);
   engineersMonth(g, nat);
   if (nat !== g.human) n.pp = Math.min(n.pp, PRODUCTION.aiBank[canBuildYet(g, nat) ? 1 : 0]);

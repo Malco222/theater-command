@@ -12,7 +12,7 @@
 
 import { ARSENAL, isCity, joinsFleet, slipSite, yardLevel, type Hull } from './arsenal';
 import { BUDGET, isHome } from './economy';
-import { CLASS_ROWS, classById, classLocked, classesFor, computerDesigns, sandbox, whatifShare, type ClassRow } from './classes';
+import { CLASS_ROWS, classById, classLocked, classRule, classesFor, computerDesigns, sandbox, stampSteel, whatifShare, type ClassRow } from './classes';
 import { headline } from './game';
 import { listed, standard, trim, writeFallen } from './hulls';
 import { NAVY, foundFleet } from './navy';
@@ -50,7 +50,7 @@ export function classSpec(row: ClassRow): { kind: ShipClass; cost: number; month
 
 /** An offer of the arsenal, as arsenal.ts lists them (its type, without the import cycle). */
 export interface ClassOffer {
-  key: string; group: 'navy'; label: string; blurb: string; size: string; cost: number; months: number; upkeep: number; at: number; note: string; why: string | null; tech?: string;
+  key: string; group: 'navy'; cls: string; model?: string; label: string; blurb: string; size: string; cost: number; months: number; upkeep: number; at: number; note: string; why: string | null; tech?: string;
 }
 
 /**
@@ -70,10 +70,10 @@ export function shipClassOffers(g: Game, nat: string, sel: number, only?: ShipCl
       const cost = priceOf(g, nat, `ship:${kind}`, c.cost);
       // A class waits on its own technology, and on its kind's (a carrier class on carriers), as the standard line does.
       const plans = whyNoPlans(g, nat, kind);
-      const held = (row.own ? null : classLocked(g, nat, row.id)) ?? (onPlans(g, nat, kind) ? null : locked(g, nat, `ship:${kind}`));
+      const held = classLocked(g, nat, row) ?? (onPlans(g, nat, kind) ? null : locked(g, nat, `ship:${kind}`));
       const one = row.label.toLowerCase();
       out.push({
-        key: `ship:${kind}:${row.id}`, group: 'navy', label: row.label, blurb: String(row.blurb ?? ''),
+        key: `ship:${kind}:${row.id}`, group: 'navy', cls: row.id, model: row.model, label: row.label, blurb: `${row.blurb ?? ''} ${classRule(row)}`.trim(),
         size: c.count === 1 ? `one ${one}` : `a flotilla of ${plural(c.count, one)}`, cost, months: c.months,
         upkeep: c.count * BUDGET.upkeep.ships[kind], at,
         note: at < 0 ? '' : `Laid down at ${g.regions[at].name}. ${fleet ? `Joins the ${fleet.name}.` : 'Forms a new fleet there.'} She counts as a ${NAVY.classes[kind].one}.`,
@@ -234,6 +234,8 @@ export function orderRefit(g: Game, nat: string, fleetId: number, target: string
     id: g.nextBuild++, what: 'ship', item: t.kind, count: 1, name: `The ${hull.name}: ${r.label.toLowerCase()} at ${g.regions[f.base].name}`, region: f.base,
     ordered: g.turn, eta: g.turn + r.months, cost, refit: { id: r.id, fleet: f.id, hull },
   };
+  // A refit draws its steel as a new ship does (classes.ts).
+  stampSteel(g, b, 'ships');
   n.queue.push(b);
   return b;
 }
@@ -421,7 +423,7 @@ const isSub = (d: Dials | SubDials): d is SubDials => (d as SubDials).size !== u
 /** Signs for a design: it joins the nation's classes, to be ordered on the Navy column like any other. Returns its row, or null with the reason. */
 export function drawDesign(g: Game, nat: string, d: Dials | SubDials, name: string): { row: ClassRow | null; why: string | null } {
   if (!sandbox(g)) return { row: null, why: 'The drawing board is part of the sandbox.' };
-  const n = g.nations[nat] as typeof g.nations[string] & { designs?: ClassRow[] };
+  const n = g.nations[nat];
   const label = name.trim().slice(0, 32) || `Design ${(n.designs?.length ?? 0) + 1}`;
   if ([...CLASS_ROWS, ...(n.designs ?? [])].some((r) => r.label.toLowerCase() === label.toLowerCase())) return { row: null, why: `There is a class called ${label} already.` };
   const card = isSub(d) ? subCard(g, nat, d, label) : designCard(g, nat, d, label);
@@ -443,13 +445,13 @@ export const styleOf = (nat: string): Style => S.styles[nat] ?? S.styles._defaul
  * and its style's favourite class is wanted on its own. Below the dial's share it keeps history's ships.
  */
 export function aiClasses(g: Game, nat: string, wants: string[]): string[] {
-  const share = sandbox(g) ? whatifShare(g) : 0;
+  const share = whatifShare(g);
   if (share <= 0) return wants;
   const rng = new Rng(hashString(`classes:${g.seed}:${g.turn}:${nat}`));
-  const likes = [...S.likes[styleOf(nat)], ...((g.nations[nat] as unknown as { designs?: ClassRow[] }).designs ?? []).map((r) => r.id)];
+  const likes = [...S.likes[styleOf(nat)], ...(g.nations[nat].designs ?? []).map((r) => r.id)];
   const open = (id: string): ClassRow | undefined => {
     const row = classById(g, nat, id);
-    return row && (row.own || !classLocked(g, nat, id)) && !whyNoPlans(g, nat, row.of) && (onPlans(g, nat, row.of) || !locked(g, nat, `ship:${row.of}`)) ? row : undefined;
+    return row && !classLocked(g, nat, row) && !whyNoPlans(g, nat, row.of) && (onPlans(g, nat, row.of) || !locked(g, nat, `ship:${row.of}`)) ? row : undefined;
   };
   const out = wants.map((k) => {
     const [, kind, cls] = k.split(':');
@@ -468,7 +470,7 @@ export function aiClasses(g: Game, nat: string, wants: string[]): string[] {
 
 /** Once a year at the loosest stops, a great power's computer navy draws a class of its own: its style's favourite with one dial turned. */
 function aiDesign(g: Game, nat: string): void {
-  const n = g.nations[nat] as typeof g.nations[string] & { designs?: ClassRow[] };
+  const n = g.nations[nat];
   // Only the navies with a style of their own (the great powers) keep a design bureau.
   if (S.styles[nat] === undefined || !n.alive || !n.atWar.length || (g.turn % 12) !== 6 || (n.designs?.length ?? 0) >= 3) return;
   const rng = new Rng(hashString(`design:${g.seed}:${g.turn}:${nat}`));

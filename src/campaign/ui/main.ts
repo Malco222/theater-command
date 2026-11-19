@@ -3974,7 +3974,7 @@ function buildPane(): string {
     const any = list.filter((o) => o.group === 'army');
     if (!any.some((o) => o.at >= 0)) return `${s}<div class="empty">There is no home ground left to raise troops on.</div>`;
     s += `<p class="sub" style="margin:0 0 7px">${L.budget ? 'Infantry and mountain troops can be raised in any home province. Heavier equipment is built where there is industry: motorized troops and artillery need a factory in the province, tanks need two. ' : ''}${sel && canRaise(g, me, sel) ? `Raising at ${at(sel.name)} where it can be.` : 'Click one of your own home regions on the map to raise troops there.'}</p>${shelf('army')}`;
-    const lostOnes = any.filter((o) => o.key.startsWith('corps:')).flatMap((o) => revivable(g, me, o.key.split(':')[1])).sort((a, b) => b.turn - a.turn).slice(0, 6);
+    const lostOnes = any.filter((o) => o.key.startsWith('corps:') && !o.cls).flatMap((o) => revivable(g, me, o.key.split(':')[1])).sort((a, b) => b.turn - a.turn).slice(0, 6);
     if (lostOnes.length) {
       s += `<h3>Raise a lost corps again</h3><p class="sub" style="margin:0 0 7px">A formation on the memorial wall can be raised again under its old name. It costs what any new corps costs, and it carries the old colours, the name the army gave it and part of what the old corps knew.</p>`;
       for (const f of lostOnes) {

@@ -18,6 +18,8 @@ import { PLANS, planRules, whyNoTechPlans } from './plans';
 import type { Field, Game, Nation, TechState } from './types';
 import { controlFirst, radarWords } from './aircampaigns';
 import { techLift } from './lift';
+import { sandbox, unlockWords } from './classes';
+import { whatifShare } from './history';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine' | 'intel';
 
@@ -55,6 +57,8 @@ export interface Tech {
   seaLoss?: number;
   /** The Intelligence branch (rider b542 on ruling 235): what it does for the nation's agents (intel.ts). */
   spy?: Partial<SpyTech>;
+  /** A technology of the sandbox (classes.ts): on the tree only with the sandbox on. It opens a class ('class:<id>'). */
+  whatif?: boolean;
 }
 
 /** What the Intelligence branch has done for a nation's agents, all told. */
@@ -87,6 +91,9 @@ for (const t of TECH.techs) {
 export const techRules = (g: Game): boolean => g.flags.open === 1;
 
 export const techById = (id: string): Tech | undefined => BY_ID[id];
+
+/** True when this technology is on the tree in this war: a what-if one only with the sandbox on (classes.ts). */
+export const onTree = (g: Game, t: Tech): boolean => !t.whatif || sandbox(g);
 
 /** The technology an order waits on, whoever is asking: 'corps:arm' waits on the tank arm. */
 export const gateOf = (key: string): Tech | undefined => GATE[key];
@@ -211,7 +218,7 @@ const and = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slic
 export function whyNotResearch(g: Game, nat: string, id: string): string | null {
   const s = techOf(g, nat), t = BY_ID[id];
   if (!s) return 'The technology tree belongs to the grand campaign.';
-  if (!t) return 'There is no such technology.';
+  if (!t || !onTree(g, t)) return 'There is no such technology.';
   if (!g.nations[nat].alive) return 'The nation is out of the war.';
   if (s.done.includes(id)) return 'Already researched.';
   if (s.work.some((w) => w.id === id)) return 'A team is already at work on it.';
@@ -284,8 +291,11 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
   const skip = (id: string): boolean => A.skip._all.includes(id) || !!A.skip[nat]?.includes(id);
   let best: Tech | null = null, low = Infinity;
   const thirsty = oilMonths(g, nat) < RES.ai.synthAt;
+  // (The sandbox: a staff researches a what-if technology only where the history dial lets it build what-if classes,
+  // and the nearer history the dial, the later: classes.ts. The player picks for himself.)
+  const share = whatifShare(g), whatif = A.later * (1 - share);
   for (const t of TECH.techs) {
-    if (s.done.includes(t.id) || s.work.some((w) => w.id === t.id) || t.needs.some((x) => !s.done.includes(x))) continue;
+    if (!onTree(g, t) || (t.whatif && share <= 0) || s.done.includes(t.id) || s.work.some((w) => w.id === t.id) || t.needs.some((x) => !s.done.includes(x))) continue;
     // (Rider b542: the spy team works the Intelligence branch alone, in its order; the other teams never do, and
     // nobody's staff begins what only a great power's plans can give it.)
     if ((t.branch === 'intel') !== spy || whyNoTechPlans(g, nat, t.id)) continue;
@@ -298,7 +308,7 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
     const cold = t.winterKit && winterAhead(g, nat) ? A.winter ?? 0 : 0;
     // A staff at war with an army that has tanks wants the guns that stop them (ruling 152(g)).
     const guns = t.id === SUPPORT_TECH.antiTank && facesTanks(g, nat) ? A.guns ?? 0 : 0;
-    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold - guns;
+    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold - guns + (t.whatif ? whatif : 0);
     if (score < low) { low = score; best = t; }
   }
   return best ? best.id : null;
@@ -441,7 +451,7 @@ function supportWords(id: string): string | null {
 /** What a technology does, in plain words worked out from its numbers, so the words and the rule cannot drift apart. */
 export function techRule(t: Tech, g?: Game, nat?: string): string {
   const out: string[] = [];
-  for (const k of t.unlock ?? []) out.push(UNLOCK_RULE[k] ?? `Unlocks ${k}.`);
+  for (const k of t.unlock ?? []) out.push(UNLOCK_RULE[k] ?? unlockWords(k) ?? `Unlocks ${k}.`);
   if (t.field) out.push(FIELD_RULE[t.field](pct(RESEARCH.fields[t.field].per)));
   // (The two radar steps, with the air campaigns on: what the warning chain and fighter control do, rider b553.)
   const radar = g && nat ? radarWords(g, nat, t.id) : null;
@@ -508,7 +518,7 @@ export interface TechView {
 export function techView(g: Game, nat: string): TechView | null {
   const s = techOf(g, nat);
   if (!s) return null;
-  const nodes: TechNode[] = TECH.techs.map((t) => {
+  const nodes: TechNode[] = TECH.techs.filter((t) => onTree(g, t)).map((t) => {
     const w = s.work.find((x) => x.id === t.id);
     const done = s.done.includes(t.id);
     const open = t.needs.every((x) => s.done.includes(x));

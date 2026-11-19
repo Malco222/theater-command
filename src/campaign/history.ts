@@ -26,6 +26,8 @@ export interface Stop {
   ambitions?: boolean; bold?: boolean; early?: number; deal?: number;
   /** The share of the claims that anyone holds in a given war, and the most months a bold claimant lets go by before it first presses one. */
   share?: number; wait?: number;
+  /** The sandbox (classes.ts): the share of a computer staff's orders that may go to a what-if class, and whether its staffs draw classes of their own. */
+  whatif?: number; designs?: boolean;
 }
 /** What history's calendar expects in a theatre: these must hold before `until`, or from the month after `by`. */
 export interface Mark { theatre: string; until?: number; by?: number; if: string[]; why: string }
@@ -111,6 +113,17 @@ export function setStop(g: Game, n: number, fresh = false): boolean {
   if (most === FREE && g.flags.hist === undefined) delete g.flags.histMax; else g.flags.histMax = most;
   return true;
 }
+
+/** True where the sandbox is on (classes.ts): the grand campaign, with its switch set. Off, the game is what it was. */
+export const sandbox = (g: Game): boolean => g.flags.open === 1 && g.flags.sandbox === 1;
+
+/**
+ * The sandbox (classes.ts): the share of a computer staff's orders of a kind that may go to a what-if class it has
+ * researched, at this stop of the dial. 0 with the sandbox off. The player is never leashed.
+ */
+export const whatifShare = (g: Game): number => (sandbox(g) ? stopDef(g).whatif ?? 0 : 0);
+/** The sandbox: true at the stops where computer staffs draw classes of their own. */
+export const computerDesigns = (g: Game): boolean => sandbox(g) && stopDef(g).designs === true;
 
 /** A draw between 0 and 1 that depends only on the war's seed and what is being decided, never on the battle dice. */
 export const dialDraw = (g: Game, ...key: (string | number)[]): number => new Rng(hashString(`${g.seed}:hist:${key.join(':')}`)).next();
