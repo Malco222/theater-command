@@ -2017,6 +2017,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   let result = '', value = 0, ground = 0, shipsSunk = 0, notable = false;
   let struck: SeaSide[] | undefined;
   if (m === 'fleet' || m === 'harbour') {
+    // (The far side: a raid flown at a harbour is remembered, by who flew it and where, for the news that names it:
+    // the entry of December 1941 speaks of Pearl Harbor only where it was raided. Rider b641 (e) to ruling 234.)
+    if (m === 'harbour' && farOn(g)) g.flags[`harbour:${nat}:${g.regions[target].name}`] = g.turn;
     // A strike on ships: the hits fall on the classes the crews aim for, and each fleet under attack takes its share.
     const exp = shipHits(a, m, through, foundShare(g, a, nat));
     const have = noShips();

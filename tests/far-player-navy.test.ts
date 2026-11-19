@@ -98,6 +98,8 @@ describe("a player's Japan: the strike on Pearl Harbor", () => {
     expect(atWar(g, 'JAP', 'USA')).toBe(true);
     expect(news(g, 28, 'raid Pearl Harbor without warning')).toBe(true);
     expect(hulls(pacific)).toBeLessThan(afloat);
+    // The raid is remembered where it was flown, for the news that names the harbour (rider b641 (e)).
+    expect(g.flags['harbour:JAP:Pearl Harbor']).toBe(28);
     // The strike flown, the force is ordered home the same month, as the computer's is.
     expect(base(g, force)).toBe('Hiroshima');
     expect(force.port).toBe('Kure');
@@ -112,6 +114,7 @@ describe("a player's Japan: the strike on Pearl Harbor", () => {
     expect(orderDeclare(g, 'USA')).toBe(true);
     expect(news(g, 28, 'raid Pearl Harbor')).toBe(false);
     expect(hulls(pacific)).toBe(afloat);
+    expect(g.flags['harbour:JAP:Pearl Harbor']).toBeUndefined();
   });
 
   it('a declaration on a country whose harbour the plan does not name flies nothing', () => {

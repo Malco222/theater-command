@@ -95,12 +95,37 @@ describe('the offer of war (ruling 197): who follows whom', () => {
     expect(g.flags['event:pearl-harbor-world']).toBe(28);
     expect(bloc(g.nations.USA)).toBe('allies');
     expect(atWar(g, 'USA', 'GER')).toBe(true);
-    expect(news(g, 28, 'Pearl Harbor')).toBe(true);
+    // The words are true (rider b641 (e) to ruling 234): this war was declared by hand and no raid was flown at
+    // Pearl Harbor, so the entry speaks its plain words and does not name the harbour.
+    expect(g.flags['harbour:JAP:Pearl Harbor']).toBeUndefined();
+    expect(news(g, 28, 'America has entered the war: Germany and Italy declare war on the United States')).toBe(true);
+    expect(news(g, 28, 'Pearl Harbor')).toBe(false);
     // China stands with the Allies from the month Japan fights beside the Axis.
     expect(bloc(g.nations.CHN)).toBe('allies');
     expect(atWar(g, 'CHN', 'JAP')).toBe(true);
     // The freeze came on its date, in August.
     expect(freezeAt(g)).toBe(28); // (this war was moved by hand from the first day to November: the date had passed)
+  });
+
+  it("the entry names Pearl Harbor where Japan's aircraft raided it, and only there (rider b641 (e))", () => {
+    // The flag is the one every harbour raid leaves as it is flown (air.ts, `fly`; a real strike: far-player-navy.test.ts).
+    const g = war(1, 27);
+    turnMonth(g);
+    declareWar(g, 'JAP', 'USA');
+    g.flags['harbour:JAP:Pearl Harbor'] = 28;
+    closeDiplomacy(g);
+    expect(g.flags['event:pearl-harbor-world']).toBe(28);
+    expect(news(g, 28, 'Japan attacks the American fleet at Pearl Harbor, and Germany and Italy declare war on the United States')).toBe(true);
+    expect(news(g, 28, 'America has entered the war: Germany and Italy declare war')).toBe(false);
+    // A raid on another harbour, or another country's raid, is not Japan's on Pearl Harbor.
+    const h = war(1, 27);
+    turnMonth(h);
+    declareWar(h, 'JAP', 'USA');
+    h.flags['harbour:JAP:Manila'] = 28;
+    h.flags['harbour:GER:Pearl Harbor'] = 28;
+    closeDiplomacy(h);
+    expect(news(h, 28, 'America has entered the war: Germany and Italy declare war')).toBe(true);
+    expect(news(h, 28, 'Pearl Harbor')).toBe(false);
   });
 
   it('the Dutch, while they stand with the Allies, are at war with Japan the day Britain is', () => {
