@@ -1712,7 +1712,9 @@ export function armysShore(g: Game, nat: string, r: Region, ph: PlanPhase | null
  *                the force named for a shore is kept for it.
  *   brought up   where nobody in reach will do, corps standing ready farther off are shipped to the harbour of its
  *                side's nearest the shore, as many as would make the wave: next month they are in reach. A corps
- *                brought up stays where it was put for a quarter of a year.
+ *                brought up stays where it was put for a quarter of a year, and keeps the shore it came for as its
+ *                aim for those three months: no other shore takes it, unless that shore is struck off the queue
+ *                first (rider b599 to ruling 234, the Wake ruling's (b)).
  *   the plan's   the corps a great choice named for its own landings are the staff's to use once the plan's two
  *                months are over: one still waiting on its quay comes off hold (staff.ts, `freed`).
  * The player's own landings are his own; a staff with no shores to read (pacific.ts) does nothing here.
@@ -1752,6 +1754,7 @@ export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
     const at = g.flags[`st:hopUp:${c.id}`];
     if (c.nat !== nat || at === undefined || g.turn - at <= HOP_WAIT) continue;
     delete g.flags[`st:hopUp:${c.id}`];
+    delete g.flags[`st:hopFor:${c.id}`];
     if (!c.dead && !c.stay) c.hold = false;
   }
   const waits = (c: Corps): boolean => g.flags[`st:hopUp:${c.id}`] !== undefined;
@@ -1792,11 +1795,37 @@ export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
   // The shores in the staff's own hands this month: not the plan's, not the army's (`armysShore`).
   const armys = (r: Region): boolean => armysShore(g, nat, r, ph);
   const mine = (r: Region, ahead: boolean): boolean => atWar(g, nat, r.ctrl) && !plans.has(r.id) && (ahead || !lineShut(g, nat, r)) && !armys(r);
+  // A shore open now whose crossing has stayed over the risk limit three months running gives its place to the next
+  // for three months, and the force it kept is free for them meanwhile (HOP_STUCK). It may still land if its way clears.
+  const aside = (r: Region): boolean => {
+    const k = `st:hopOff:${nat}:${r.id}`, t = g.flags[k];
+    if (t === undefined) return false;
+    if (g.turn - t < HOP_STUCK) return true;
+    delete g.flags[k];
+    return false;
+  };
+  // A corps the ships brought up keeps the shore it came for as its aim while it waits at its harbour (three months,
+  // HOP_WAIT, the same three as the stuck aim's): no other shore takes it (rider b599 to ruling 234, the Wake ruling's
+  // (b)). Unless the shore is struck off the queue first: set aside (HOP_STUCK), taken, or no longer among its shores;
+  // the corps is then free for any shore while it waits. A month the shore is the plan's or the army's (`mine`) does
+  // not strike it off: the corps waits on for it.
+  const cameFor = new Map<number, number>();
+  const unbind = (id: number): void => { cameFor.delete(id); delete g.flags[`st:hopFor:${id}`]; };
+  for (const c of g.corps) {
+    const f = g.flags[`st:hopFor:${c.id}`];
+    if (c.nat !== nat || f === undefined) continue;
+    const r = g.regions[f - 1];
+    const struck = c.dead || !waits(c) || !r || !(S.open.includes(r) || S.soon.includes(r)) || !atWar(g, nat, r.ctrl) || aside(r);
+    if (struck) unbind(c.id);
+    else cameFor.set(c.id, r.id);
+  }
+  const forShore = (c: Corps, r: Region): boolean => { const f = cameFor.get(c.id); return f === undefined || f === r.id; };
   // The nearest harbour with a force that will do, and that force. With `now`, only one that can sail this month.
   const pickFor = (r: Region, now: boolean): { q: Region; w: Corps[]; far: number; warned: boolean; sea: number } | null => {
     const defended = fought(r);
     let pick: { q: Region; w: Corps[]; far: number; warned: boolean; sea: number } | null = null;
-    for (const [id, cs] of quays) {
+    for (const [id, all] of quays) {
+      const cs = cameFor.size ? all.filter((c) => forShore(c, r)) : all;
       if (!cs.length) continue;
       const q = g.regions[id];
       const path = seaPath(g, nat, q, r, { max: range, surprise: true });
@@ -1826,20 +1855,13 @@ export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
     done.add(r.id);
     const res = landCorps(g, pick.w, r);
     if (!res.ok) continue;
-    for (const c of pick.w) { c.hold = false; delete g.flags[`st:hopUp:${c.id}`]; }
+    for (const c of pick.w) { c.hold = false; delete g.flags[`st:hopUp:${c.id}`]; delete g.flags[`st:hopFor:${c.id}`]; }
     landingWatch.tell?.({ nat, to: r, force: pick.w, warned: pick.warned, sea: pick.sea, wave: false, taken: !!res.taken });
     hopWatch.tell?.({ nat, kind: 'land', to: r, from: pick.q, force: pick.w, taken: !!res.taken });
   }
+  // (A shore kept for corps that another force has taken this month frees them at once.)
+  for (const [id, rid] of cameFor) if (!atWar(g, nat, g.regions[rid].ctrl)) unbind(id);
   // Then the shores still to open are named, each with the force kept for it: the fleet and the fighters have a month to clear the way.
-  // A shore open now whose crossing has stayed over the risk limit three months running gives its place to the next
-  // for three months, and the force it kept is free for them meanwhile (HOP_STUCK). It may still land if its way clears.
-  const aside = (r: Region): boolean => {
-    const k = `st:hopOff:${nat}:${r.id}`, t = g.flags[k];
-    if (t === undefined) return false;
-    if (g.turn - t < HOP_STUCK) return true;
-    delete g.flags[k];
-    return false;
-  };
   const wanting: Region[] = [];
   for (const r of [...rank, ...S.soon]) {
     if (aims >= HOP_AIMS) break;
@@ -1878,35 +1900,44 @@ export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
     for (const [id, cs] of quays) {
       const q = g.regions[id];
       const inReach = !!seaPath(g, nat, q, r, { max: range, surprise: true });
-      for (const c of cs) { if (inReach) near.push(c); else if (fresh(c) && !(leavesHome(g, nat, q) && mayLeave(g, nat) < 1)) far.push(c); }
+      for (const c of cs) { if (inReach) { if (forShore(c, r)) near.push(c); } else if (fresh(c) && !(leavesHome(g, nat, q) && mayLeave(g, nat) < 1)) far.push(c); }
     }
     if (!far.length) continue;
     near.sort(byWorth); far.sort(byWorth);
-    // (One of them alone, the weakest that will do; failing that, as many of the strongest as make the wave with those in reach.)
-    // (Nobody is brought up for a shore the landing ships will not carry him to: `shipsFor`, as in `does`.)
-    let send: Corps[] | null = [...far].reverse().filter((c) => shipsFor(g, [c], r) && enough([c], r, defended) && holdsAshore(g, nat, r, [c])).slice(0, 1);
-    if (!send.length) {
-      send = null;
-      const w = near.slice(0, cap), add: Corps[] = [];
-      for (const c of far) {
-        if (w.length + add.length >= cap) break;
-        add.push(c);
-        if (shipsFor(g, [...w, ...add], r) && enough([...w, ...add], r, defended) && holdsAshore(g, nat, r, [...w, ...add])) { send = add; break; }
-      }
-    }
-    if (!send) continue;
     const havens = g.regions
       .filter((p) => p.port && p.seas.length > 0 && pacificGround(g, p) && allied(g, nat, p.ctrl) && !hostileUnits(g, p, nat).length && !hasFront(p) && !lineShut(g, nat, p) && !p.nb.some((j) => hostileUnits(g, g.regions[j], nat).length > 0))
       .map((p) => ({ p, far: seaPath(g, nat, p, r, { max: range, surprise: true })?.length ?? Infinity }))
       .filter((x) => x.far < Infinity)
       .sort((a, b) => a.far - b.far || a.p.id - b.p.id);
+    const room = (p: Region): number => STACK - friendlyUnits(g, p, nat).length;
+    // (One of them alone, the weakest that will do; failing that, as many of the strongest as make the wave with those
+    // in reach that stand at one harbour with room, the nearest such: a wave sails from one harbour, `pickFor`.)
+    // (Nobody is brought up for a shore the landing ships will not carry him to: `shipsFor`, as in `does`.)
+    let send: Corps[] | null = [...far].reverse().filter((c) => shipsFor(g, [c], r) && enough([c], r, defended) && holdsAshore(g, nat, r, [c])).slice(0, 1);
+    let at: Region | null = null;
+    if (!send.length) {
+      send = null;
+      for (const { p } of havens) {
+        const space = room(p);
+        if (space < 1) continue;
+        const w = near.filter((c) => c.reg === p.id).slice(0, cap), add: Corps[] = [];
+        for (const c of far) {
+          if (w.length + add.length >= cap || add.length >= space) break;
+          add.push(c);
+          if (shipsFor(g, [...w, ...add], r) && enough([...w, ...add], r, defended) && holdsAshore(g, nat, r, [...w, ...add])) { send = add; at = p; break; }
+        }
+        if (send) break;
+      }
+    }
+    if (!send) continue;
     for (const c of send) {
       if (liftLeft(g, nat) < 1) break;
       const from = g.regions[c.reg];
-      const to = havens.find((x) => friendlyUnits(g, x.p, nat).length < STACK && shipMove(g, c, x.p));
+      const to = at ? (room(at) > 0 && shipMove(g, c, at) ? at : null) : havens.find((x) => room(x.p) > 0 && shipMove(g, c, x.p))?.p;
       if (!to) continue;
       c.hold = true;
       g.flags[`st:hopUp:${c.id}`] = g.turn;
+      g.flags[`st:hopFor:${c.id}`] = r.id + 1;
       hopWatch.tell?.({ nat, kind: 'bring', to: r, from, force: [c] });
     }
     // (Those in reach wait for them: nobody takes them for another shore meanwhile.)
