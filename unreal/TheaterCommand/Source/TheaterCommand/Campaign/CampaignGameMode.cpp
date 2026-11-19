@@ -174,8 +174,13 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 	}
 
 	// "-TheaterShots=<folder>" on the command line takes a set of pictures of the table and quits.
+	// (A scene that takes its own pictures, "-TheaterAirBattle=" or "-TheaterStage=", leaves the photographer at home.
+	// Given beside them, "-TheaterShots=" still makes the run a picture run: its own save, the player's options and
+	// campaign left alone.)
 	FString ShotFolder;
-	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), ShotFolder))
+	const bool bSceneTakesThem = FCString::Strifind(FCommandLine::Get(), TEXT("TheaterAirBattle=")) != nullptr
+		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterStage=")) != nullptr;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), ShotFolder) && !bSceneTakesThem)
 	{
 		if (ACampaignPhotographer* Photographer = World->SpawnActor<ACampaignPhotographer>())
 		{
