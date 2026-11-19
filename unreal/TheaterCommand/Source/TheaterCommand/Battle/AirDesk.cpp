@@ -49,6 +49,11 @@ namespace AirDesk
 			Tag = "HELD WHILE THE QUESTION STANDS";
 			return 0.0;
 		}
+		if (bFlyover)
+		{
+			Tag = "SURVEYING THE FIELD \xC2\xB7 CLICK OR PRESS ANY KEY TO TAKE COMMAND";
+			return Real / std::max(Scale, 0.1);
+		}
 		if (Speed <= 0.0)
 		{
 			Tag = "HELD";
@@ -339,5 +344,151 @@ namespace AirDesk
 			}
 		}
 		return Best;
+	}
+
+	namespace
+	{
+		double Ease(double U)
+		{
+			U = std::clamp(U, 0.0, 1.0);
+			return U * U * (3.0 - 2.0 * U);
+		}
+
+		AirShow::Vec Level(const AirShow::Vec& V, const AirShow::Vec& Otherwise)
+		{
+			const AirShow::Vec Flat(V.X, V.Y, 0.0);
+			return Flat.Length() > 1e-6 ? Flat.Unit() : Otherwise;
+		}
+
+		bool Flying(const AirShow::Group& G)
+		{
+			return G.Doing != AirShow::Act::Down && G.Doing != AirShow::Act::Idle && G.Alt > 150.0;
+		}
+	}
+
+	bool Flyover::Begin(const std::map<int, AirShow::Group>& Groups, double InTargetX, double InTargetY)
+	{
+		TargetX = InTargetX;
+		TargetY = InTargetY;
+		Raid = Guard = -1;
+		Last.clear();
+		// (the raid: the raider's biggest bomber formation in the air; its biggest of any kind if it has no bombers up)
+		int MostRaid = -1, MostAny = -1, Any = -1;
+		for (const auto& Pair : Groups)
+		{
+			const AirShow::Group& G = Pair.second;
+			if (G.Side != 0 || !Flying(G)) continue;
+			const int Size = std::max(G.N, G.Figures);
+			if (!G.bFighter && Size > MostRaid)
+			{
+				MostRaid = Size;
+				Raid = G.Id;
+			}
+			if (Size > MostAny)
+			{
+				MostAny = Size;
+				Any = G.Id;
+			}
+		}
+		if (Raid < 0) Raid = Any;
+		if (Raid < 0) return false;
+		const AirShow::Group& R = Groups.at(Raid);
+		RaidAt = AirShow::Vec(R.X, R.Y, R.Alt);
+		Toward = Level(RaidAt - AirShow::Vec(TargetX, TargetY, 0.0), AirShow::Vec(0.0, 1.0, 0.0));
+		// (the guard: the defender's biggest fighter formation up)
+		int MostGuard = -1;
+		for (const auto& Pair : Groups)
+		{
+			const AirShow::Group& G = Pair.second;
+			if (G.Side != 1 || !G.bFighter || !Flying(G)) continue;
+			const int Size = std::max(G.N, G.Figures);
+			if (Size > MostGuard)
+			{
+				MostGuard = Size;
+				Guard = G.Id;
+			}
+		}
+		return true;
+	}
+
+	const AirShow::Group* Flyover::Find(const std::map<int, AirShow::Group>& Groups, int Id) const
+	{
+		const auto It = Groups.find(Id);
+		if (It != Groups.end() && It->second.Doing != AirShow::Act::Down)
+		{
+			Last[Id] = It->second;
+			return &It->second;
+		}
+		const auto Kept = Last.find(Id);
+		return Kept != Last.end() ? &Kept->second : nullptr;
+	}
+
+	Flyover::Shot Flyover::At(double T, const std::map<int, AirShow::Group>& Groups) const
+	{
+		// (once the shots are over, the last pose of the last one, for the scene's glide)
+		const bool bOver = T >= Length();
+		T = std::clamp(T, 0.0, Length() - 1e-3);
+		const AirShow::Vec Up(0.0, 0.0, 1.0);
+		const AirShow::Vec Target(TargetX, TargetY, 0.0);
+		Shot Out;
+		// What it comes for: from beyond the target, the far side from the raid, pushing in from 2.6 km to 1.9 km and
+		// down from 650 m to 520 m, the look lifting from the target toward the raid.
+		auto OverTarget = [&](double Into)
+		{
+			const double S = Ease(Into / TargetLong);
+			Out.Eye = Target - Toward * (2600.0 - 700.0 * S) + Up * (650.0 - 130.0 * S);
+			const AirShow::Vec From = Target + Up * 40.0;
+			const AirShow::Vec To = Target + Toward * 3500.0 + Up * std::clamp(RaidAt.Z * 0.35, 300.0, 1500.0);
+			Out.Look = From + (To - From) * S;
+			Out.Index = 1;
+		};
+		if (T < RaidLong)
+		{
+			// The raid coming on: from ahead of its formation and out to one side, a little under it, closing to just
+			// ahead of it and level with it; looked at a little ahead of its middle.
+			const AirShow::Group* R = Find(Groups, Raid);
+			const AirShow::Vec At = R ? AirShow::Vec(R->X, R->Y, R->Alt) : RaidAt;
+			const double Face = R ? R->Face : 0.0;
+			const AirShow::Vec Ahead(std::sin(Face), std::cos(Face), 0.0), Right(std::cos(Face), -std::sin(Face), 0.0);
+			const double Size = std::clamp(R ? std::max(R->W, R->D) : 400.0, 150.0, 1500.0);
+			const double S = Ease(T / RaidLong);
+			// (out to the side away from the target: the target, and the land round it, stay behind the formation)
+			const double Side = Right.Dot(Target - At) > 0.0 ? -1.0 : 1.0;
+			Out.Eye = At + Ahead * (Size * (1.7 - 1.2 * S) + 150.0) + Right * (Side * (Size * 0.6 + 120.0)) + Up * (-60.0 + 70.0 * S);
+			Out.Look = At + Ahead * (Size * 0.15);
+			Out.Index = 0;
+		}
+		else if (T < RaidLong + TargetLong)
+		{
+			OverTarget(T - RaidLong);
+		}
+		else
+		{
+			// The guard: from behind the defender's fighters and a little over them, looking out toward the raid (gone
+			// before its shot, the target's last pose stands).
+			const double Into = T - RaidLong - TargetLong;
+			const AirShow::Group* G = Find(Groups, Guard);
+			if (G)
+			{
+				const AirShow::Group* R = Find(Groups, Raid);
+				const AirShow::Vec At(G->X, G->Y, G->Alt);
+				const AirShow::Vec RaidNow = R ? AirShow::Vec(R->X, R->Y, R->Alt) : RaidAt;
+				const AirShow::Vec Way = Level(RaidNow - At, Toward);
+				const double Size = std::clamp(std::max(G->W, G->D), 120.0, 1000.0);
+				const double S = Ease(Into / GuardLong);
+				Out.Eye = At - Way * (Size * 1.1 + 220.0 - 80.0 * S) + Up * (45.0 - 15.0 * S);
+				Out.Look = At + Way * 1200.0 + Up * 20.0;
+				Out.Index = 2;
+			}
+			else
+			{
+				OverTarget(TargetLong);
+			}
+		}
+		if (bOver)
+		{
+			Out.Index = -1;
+		}
+		return Out;
 	}
 }

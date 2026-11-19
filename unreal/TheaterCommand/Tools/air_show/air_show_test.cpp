@@ -20,6 +20,7 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 
@@ -311,6 +312,63 @@ int main(int Argc, char** Argv)
 	for (const auto& P : Sounds) std::printf(" %s %d", P.first.c_str(), P.second);
 	std::printf("\n");
 
+	// The flyover before the battle (Brian's, approved 19 November): its shots over the battle's first groups as the
+	// scene plays them, the battle at x1 under them, a frame every thirtieth of a second.
+	int FlyNoLook = 0, FlyLow = 0, FlyJumps = 0, FlyIntoPlane = 0;
+	double FlyLeastRaidSeen = 1.0;
+	std::set<int> FlyShots;
+	bool bFlyBegun = false;
+	AirDesk::Flyover Flyover;
+	{
+		AirShow::Show Fly(Rec.Seed ? Rec.Seed : 238);
+		AirFeed::Apply(Rec.Board, Fly);
+		size_t FlyTaken = 0;
+		auto FlyTake = [&]()
+		{
+			const AirFeed::Frame& F = Rec.Views[FlyTaken++];
+			Fly.Take(F.Head.T, F.Groups, F.Events, F.Ships);
+		};
+		FlyTake();
+		if (FlyTaken < Rec.Views.size()) FlyTake();
+		double FlyT = Rec.Views.front().Head.T;
+		Fly.Advance(FlyT);
+		bFlyBegun = Flyover.Begin(Fly.Groups(), Rec.Board.TargetX, Rec.Board.TargetY);
+		const double Step = 1.0 / 30.0;
+		AirShow::Vec LastEye;
+		int LastIndex = -2;
+		for (double RT = 0.0; bFlyBegun && RT <= Flyover.Length() + 0.5; RT += Step)
+		{
+			FlyT += Step / std::max(Rec.Board.Scale, 0.1);
+			while (FlyTaken < Rec.Views.size() && Rec.Views[FlyTaken - 1].Head.T <= FlyT + 1e-9) FlyTake();
+			Fly.Advance(FlyT);
+			const AirDesk::Flyover::Shot Shot = Flyover.At(RT, Fly.Groups());
+			const AirShow::Vec Way = Shot.Look - Shot.Eye;
+			if (Way.Length() < 50.0) ++FlyNoLook;
+			if (Shot.Eye.Z < 60.0) ++FlyLow;
+			if (Shot.Index >= 0) FlyShots.insert(Shot.Index);
+			// (within a shot the eye glides: no more than 250 m a second, the formation's speed and the dolly's)
+			if (LastIndex == Shot.Index && (Shot.Eye - LastEye).Length() > 250.0 * Step) ++FlyJumps;
+			int RaidPlanes = 0, RaidInView = 0;
+			for (const AirShow::PlaneOut& P : Fly.Planes())
+			{
+				if (!P.bShown) continue;
+				const AirShow::Vec To = P.At - Shot.Eye;
+				if (To.Length() < 40.0) ++FlyIntoPlane;
+				if (P.Group == Flyover.RaidGroup())
+				{
+					++RaidPlanes;
+					// (within 30 degrees of the look: a 55 degree lens holds it)
+					if (To.Unit().Dot(Way.Unit()) > std::cos(30.0 * 3.14159265358979 / 180.0)) ++RaidInView;
+				}
+			}
+			// (the raid's shot: most of its formation in the picture, from its first second to its last)
+			if (Shot.Index == 0 && RT > 1.0 && RaidPlanes > 0) FlyLeastRaidSeen = std::min(FlyLeastRaidSeen, static_cast<double>(RaidInView) / RaidPlanes);
+			LastEye = Shot.Eye;
+			LastIndex = Shot.Index;
+		}
+	}
+	std::printf("  flyover: raid group %d, guard group %d, %.1f s of shots, %zu shots\n", Flyover.RaidGroup(), Flyover.GuardGroup(), Flyover.Length(), FlyShots.size());
+
 	std::vector<Limit> Limits = {
 		{ "no sliding sideways (degrees between nose and path)", C.MostSlip <= 1.0, Num(C.MostSlip, 2), "at most 1" },
 		{ "no turn tighter than 210 m", C.LeastRadius >= 205.0, Num(C.LeastRadius), "at least 205" },
@@ -573,6 +631,12 @@ int main(int Argc, char** Argv)
 		// clang on a busy machine; the mark is there to catch the next such step, and the Mac's cores are faster)
 		Limits.push_back({ "the sky turned to an eye within budget", WorstPaintMs < 5.0, Num(WorstPaintMs, 2) + " ms", "under 5 ms (the least of three middles of 15)" });
 		// (the shadows in their own room, none among the puffs: their mesh is drawn under the ground's fires and smoke)
+		Limits.push_back({ "the flyover shows the raid and what it comes for", bFlyBegun && FlyShots.count(0) && FlyShots.count(1) && FlyLeastRaidSeen >= 0.6 && Flyover.Length() <= 14.0,
+		                   std::to_string(FlyShots.size()) + " shots, " + Num(Flyover.Length()) + " s, at least " + Num(FlyLeastRaidSeen * 100.0, 0) + "% of the raid in view",
+		                   "the raid and the target shown, 60% of the raid in view, 14 s or less" });
+		Limits.push_back({ "the flyover's eye glides clear", FlyNoLook == 0 && FlyLow == 0 && FlyJumps == 0 && FlyIntoPlane == 0,
+		                   std::to_string(FlyJumps) + " jumps, " + std::to_string(FlyLow) + " low, " + std::to_string(FlyIntoPlane) + " in a plane, " + std::to_string(FlyNoLook) + " looks lost",
+		                   "0 of each" });
 		Limits.push_back({ "the cloud ink lifts only the sunlit tops", InkBrighter == 0 && InkTopsMoved == 0 && InkShadeOff == 0 && InkTops > 0 && InkShades > 0,
 		                   std::to_string(InkBrighter) + " brighter, " + std::to_string(InkTopsMoved) + " of " + std::to_string(InkTops) + " tops moved, " + std::to_string(InkShadeOff) + " of " + std::to_string(InkShades) + " shades off",
 		                   "0 brighter, tops as they were, shades the ink's share darker" });

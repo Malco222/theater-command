@@ -25,7 +25,8 @@ battle screen over it.
 
 1. `Tools/build_sounds.sh` brings the 17 new recordings into `/Game/Campaign/Sounds/Real`. Without it the battle plays silent and nothing fails.
 2. `-TheaterAirBattle=oahu` or `-TheaterAirBattle=midway-fleet` on the command line plays the recorded battle about two seconds after the table is up. The table is hidden while it plays.
-3. Adding `-TheaterAirBattleShots=<folder>` takes the art director's eight pictures and then quits:
+3. Adding `-TheaterAirBattleShots=<folder>` takes the art director's pictures and then quits:
+   - the flyover: the raid, the target, and the guard when there is one (`00-flyover-*`)
    - the approach
    - the meeting
    - riding a fighter
@@ -36,6 +37,7 @@ battle screen over it.
    - the after card
 
 Mouse and keys:
+- During the flyover, any click or key takes command: its shots end and a short glide brings the battle view.
 - Left click takes his group in hand. Shift adds another group.
 - Right click on an enemy tag attacks it. Right click on the sky patrols there.
 - Drag turns the camera. The wheel draws it in and out.
@@ -48,6 +50,23 @@ A recorded battle shows the orders strip greyed out: it plays as it was fought.
 **The clock (a reversible call, flagged to the design director).** In the 3D scene, ×1 is real time, so the aircraft fly at their true speeds (Brian: "not moving normal"). A battle second is `SKY.scale` (2) real seconds. The run-up and the run home go at ×10, and the clock is held while a question stands.
 
 At ×1 the Pearl Harbor raid lasts about 7 real minutes, with contact about 20 s in. Midway lasts about 5 minutes, with contact about 30 s in.
+
+**The flyover** (Brian's, approved 19 November 2026: before an air battle starts, a short cinematic flyover of both
+formations, like generals surveying the field). When the battle's first groups stand, the scene plays up to three shots
+on the real clock, cut one to the next, while the battle runs at ×1 under them (`AirDesk::Flyover`, in the cloud test):
+- **the raid**, 5 s: the raider's biggest bomber formation coming on, seen from ahead and out to the side away from the
+  target, from 60 m under it to 10 m over it as the eye closes from 1.7 to 0.5 of its size ahead;
+- **what it comes for**, 4.5 s: from beyond the target, the far side from the raid, pushing in from 2.6 km to 1.9 km
+  and down from 650 m to 520 m, the look lifting from the target toward where the raid comes from;
+- **the guard**, 3.5 s, when the defender has fighters up: from behind them and a little over, looking out toward the
+  raid.
+Then the eye glides into the strategy view over 2.5 s (0.8 s after a click or key). The screen stands in a film's
+frame while it plays, black above and below, with the raid's aim as its title and the line "SURVEYING THE FIELD · CLICK
+OR PRESS ANY KEY TO TAKE COMMAND"; the frame draws back over the glide and the battle's own screen returns. Each eye is
+kept 60 m over the stage's ground. Pearl Harbor (no American fighters up at the start) runs 9.5 s of shots, Midway
+(the carriers' fighter patrols up) 13 s. `-TheaterNoFlyover` goes straight to the battle. The cloud test checks the
+shots on each recording: the raid and the target shown, at least 60 per cent of the raid's aircraft in view through its
+shot, 14 s or less, and the eye never jumping within a shot, never under 60 m, never within 40 m of an aircraft.
 
 **The cameras** (the art director's notes on the first Mac run, build 1720). Both fill the whole window, whatever its
 shape (a camera actor keeps 16:9 and bars the rest; both have `bConstrainAspectRatio` off).

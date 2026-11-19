@@ -1220,6 +1220,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 	FAirBattleState& S = *State;
 	// The screen's clock: x1 is real time; the run-up and the run home at x10; held while a question stands or the card is up.
 	S.Clock.bQuestion = S.Question != 0 || S.bCard;
+	S.Clock.bFlyover = S.bFlying;
 	const double Run = S.Clock.Step(Real, S.Desk.Head(), S.Board.Scale, S.ClockTag);
 	const double End = S.bReplay ? S.Recording.Views.back().Head.T : 1e18;
 	S.BattleT = FMath::Min(End, S.BattleT + Run);
@@ -1234,6 +1235,20 @@ void AAirBattle::Tick(float DeltaSeconds)
 		S.Show.Eye = AirShow::Vec(At.Y, At.X, At.Z);
 	}
 	S.Show.Advance(S.BattleT);
+	if (!S.bFlyTried && !S.Show.Groups().empty())
+	{
+		// The flyover before the battle, once its first groups stand ("-TheaterNoFlyover" goes straight to the battle).
+		S.bFlyTried = true;
+		if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterNoFlyover")) && S.Fly.Begin(S.Show.Groups(), S.Board.TargetX, S.Board.TargetY))
+		{
+			S.bFlying = true;
+			S.FlyT = 0.0;
+			S.GlideT = -1.0;
+			S.FlyBars = 1.0;
+			UE_LOG(LogTheater, Display, TEXT("Air battle: the flyover, %.1f s: the raid (group %d), the target, %s"), S.Fly.Length(), S.Fly.RaidGroup(),
+				S.Fly.GuardGroup() >= 0 ? TEXT("the guard") : TEXT("no guard up"));
+		}
+	}
 	S.Desk.Reach(S.Show.Shown());
 	PlayEffects();
 	S.Desk.Write(Real, S.Show.Groups(), S.ClockTag, S.Words);
@@ -2002,6 +2017,32 @@ void AAirBattle::AimEye(double Real)
 	FAirBattleState& S = *State;
 	const double U = UnitsPerMetre;
 	UCameraComponent* Lens = Eye->GetCameraComponent();
+	// The flyover before the battle: its shots, each eye kept 60 m over the ground; then the glide (below, after the
+	// strategy camera has found its place).
+	if (S.bFlying && S.GlideT < 0.0)
+	{
+		S.FlyT += Real;
+		if (S.FlyT < S.Fly.Length())
+		{
+			const AirDesk::Flyover::Shot Shot = S.Fly.At(S.FlyT, S.Show.Groups());
+			FVector FlyEye = World(Shot.Eye.X, Shot.Eye.Y, Shot.Eye.Z);
+			const FVector FlyLook = World(Shot.Look.X, Shot.Look.Y, Shot.Look.Z);
+			if (Stage && Stage->IsRaised())
+			{
+				FlyEye.Z = FMath::Max(FlyEye.Z, Stage->GroundZ(FlyEye) + 60.0 * U);
+			}
+			FlyEye.Z = FMath::Max(FlyEye.Z, 40.0 * U);
+			Lens->SetFieldOfView(50.0f);
+			Lens->PostProcessSettings.MotionBlurAmount = 0.0f;
+			S.GlideEye = FlyEye;
+			S.GlideFacing = (FlyLook - FlyEye).Rotation();
+			Eye->SetActorLocationAndRotation(S.GlideEye, S.GlideFacing);
+			return;
+		}
+		S.GlideT = 0.0;
+		S.GlideLong = 2.5;
+		bLookSet = false;
+	}
 	// The close view (handoff 10, gap 1): it rides a plane of the group in hand, or with none in hand the busiest fighter
 	// near the middle of the picture; a fall, a straggle or a limp cuts to the next, never a swoop.
 	if (S.bClose)
@@ -2170,6 +2211,26 @@ void AAirBattle::AimEye(double Real)
 	}
 	From.Z = FMath::Max(From.Z, 40.0 * U);
 	Eye->SetActorLocationAndRotation(From, (LookAt - From).Rotation());
+	if (S.bFlying && S.GlideT >= 0.0)
+	{
+		// The glide from the flyover's last eye into the strategy view, eased in and out; the film's frame draws back.
+		S.GlideT += Real;
+		const double Into = FMath::Clamp(S.GlideT / FMath::Max(S.GlideLong, 0.1), 0.0, 1.0);
+		const double Eased = Into * Into * (3.0 - 2.0 * Into);
+		S.FlyBars = 1.0 - Eased;
+		if (Into >= 1.0)
+		{
+			S.bFlying = false;
+			S.FlyBars = 0.0;
+			S.FlyEndRealT = RealT;
+		}
+		else
+		{
+			const FQuat Toward = FQuat::Slerp(S.GlideFacing.Quaternion(), (LookAt - From).Rotation().Quaternion(), Eased);
+			Eye->SetActorLocationAndRotation(FMath::Lerp(S.GlideEye, From, Eased), Toward.Rotator());
+			Lens->SetFieldOfView(static_cast<float>(FMath::Lerp(50.0, 55.0, Eased)));
+		}
+	}
 }
 
 void AAirBattle::Orbit(const FVector2D& DeltaPixels)
@@ -2331,6 +2392,17 @@ bool AAirBattle::Order(const FString& Command)
 void AAirBattle::Press(const FString& Button)
 {
 	FAirBattleState& S = *State;
+	if (Button == TEXT("skip"))
+	{
+		// (a click or a key during the flyover: its shots end and a short glide takes the eye to the battle)
+		if (S.bFlying && S.GlideT < 0.0)
+		{
+			S.GlideT = 0.0;
+			S.GlideLong = 0.8;
+			bLookSet = false;
+		}
+		return;
+	}
 	if (S.bCard)
 	{
 		if (Button == TEXT("continue"))
@@ -2747,6 +2819,22 @@ void AAirBattle::TakeShots(double Real)
 		return;
 	}
 	FAirBattleState& S = *State;
+	// The flyover's own pictures, one in each of its shots, on its own clock.
+	if (S.bFlying && S.GlideT < 0.0)
+	{
+		const double RaidSeconds = AirDesk::Flyover::RaidLong, TargetSeconds = AirDesk::Flyover::TargetLong;
+		const struct { const TCHAR* Name; double At; bool bGuard; } FlyShots[] = {
+			{ TEXT("00-flyover-raid"), 3.0, false }, { TEXT("00-flyover-target"), RaidSeconds + 2.5, false }, { TEXT("00-flyover-guard"), RaidSeconds + TargetSeconds + 2.0, true } };
+		for (int32 K = 0; K < 3; ++K)
+		{
+			if ((S.FlyPictures & (1 << K)) == 0 && S.FlyT >= FlyShots[K].At && (!FlyShots[K].bGuard || S.Fly.GuardGroup() >= 0))
+			{
+				S.FlyPictures |= 1 << K;
+				FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, AirParts::Wide(S.Recording.Key) + TEXT("-") + FlyShots[K].Name + TEXT(".png")), true, false);
+				++ShotsTaken;
+			}
+		}
+	}
 	for (FShot& Shot : Shots)
 	{
 		if (Shot.bTaken)
@@ -2756,8 +2844,9 @@ void AAirBattle::TakeShots(double Real)
 		const double Base = Shot.bShips ? ShipRealT : MetRealT;
 		if (Base < 0.0)
 		{
-			// (the approach is taken before the formations meet: the clock's x10 brings them together in some 20 s)
-			if (Shot.At < 0.0 && !Shot.bShips && RealT >= 8.0)
+			// (the approach is taken before the formations meet: the clock's x10 brings them together in some 20 s;
+			// after the flyover, when there is one)
+			if (Shot.At < 0.0 && !Shot.bShips && !S.bFlying && RealT >= FMath::Max(8.0, S.FlyEndRealT + 4.0))
 			{
 				Shot.bTaken = true;
 				FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, AirParts::Wide(S.Recording.Key) + TEXT("-") + Shot.Name + TEXT(".png")), true, false);

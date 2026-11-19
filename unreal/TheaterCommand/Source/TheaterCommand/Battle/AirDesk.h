@@ -27,6 +27,8 @@ namespace AirDesk
 		double Speed = 1.0;
 		/** The staff's question or BREAK OFF ALL is standing. */
 		bool bQuestion = false;
+		/** The flyover before the battle is on: the battle runs at x1 under it, whatever the run-up would be. */
+		bool bFlyover = false;
 		/** Battle seconds to run for Real seconds; Tag is the field's top-left tag (empty for none). */
 		double Step(double Real, const AirFeed::Top& Head, double Scale, std::string& Tag);
 
@@ -142,4 +144,44 @@ namespace AirDesk
 	};
 	/** Picks the next subject (every 8 to 12 air seconds, or when the one followed falls): firing fighters first, near Near. */
 	Subject Choose(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<int>& Firing, const AirShow::Vec& Near, int Avoid);
+
+	/**
+	 * The flyover before an air battle (Brian, 19 November 2026, approved: before an air battle starts, a short cinematic
+	 * flyover of both formations, like generals surveying the field). Up to three shots on the real clock, with cuts
+	 * between them, while the battle runs at x1 under them:
+	 *  1. the raid: its biggest bomber formation coming on, seen from ahead and to one side, from a little below it to
+	 *     level with it as it closes;
+	 *  2. what it comes for: from beyond the target, the far side from the raid, pushing in over it while the look lifts
+	 *     from the target toward where the raid comes from;
+	 *  3. the guard, when the defender has fighters up: from behind them, looking out toward the raid.
+	 * Then the scene glides into its strategy view over Glide seconds. A click or a key ends it at once. Eyes and looks
+	 * are in the show's metres (X east, Y north, Z up from the sea); the scene keeps the eye over the ground.
+	 */
+	class Flyover
+	{
+	public:
+		struct Shot
+		{
+			AirShow::Vec Eye, Look;
+			int Index = -1; // 0 the raid, 1 what it comes for, 2 the guard; -1 when the shots are over
+		};
+		static constexpr double RaidLong = 5.0, TargetLong = 4.5, GuardLong = 3.5, Glide = 2.5;
+		/** Picks the raid's formation and the guard from the battle's first groups. False if there is no raid to show. */
+		bool Begin(const std::map<int, AirShow::Group>& Groups, double InTargetX, double InTargetY);
+		/** The shot T real seconds after Begin, on the groups as they are now. */
+		Shot At(double T, const std::map<int, AirShow::Group>& Groups) const;
+		/** When the shots end (the glide to the strategy view follows). */
+		double Length() const { return RaidLong + TargetLong + (Guard >= 0 ? GuardLong : 0.0); }
+		int RaidGroup() const { return Raid; }
+		int GuardGroup() const { return Guard; }
+
+	private:
+		int Raid = -1, Guard = -1;
+		double TargetX = 0.0, TargetY = 0.0;
+		AirShow::Vec RaidAt;   // where the raid was at Begin
+		AirShow::Vec Toward;   // level, from the target toward the raid at Begin
+		// (the last place each group was seen: a shot whose group has gone keeps its last framing)
+		mutable std::map<int, AirShow::Group> Last;
+		const AirShow::Group* Find(const std::map<int, AirShow::Group>& Groups, int Id) const;
+	};
 }
