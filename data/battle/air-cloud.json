@@ -1,6 +1,6 @@
 {
- "_about": "The chance that a raid day had a cloud deck (5/8 or more, broken to overcast, hiding most of the ground) under the bombers, by place and month (January first), with the deck's base and tops in metres above the sea. Raid days were chosen days, so the numbers sit below plain climatology where commanders could wait for weather. Take the first box that holds the target; no boxes overlap. Anywhere else uses the fallback. Read by src/battle/air/sky.ts; shown, never counted.",
- "_review": "Researched 19 Nov 2026 (wartime operational records first, climatology where none exist; values rounded to 0.05); WAITING the historian's review. Sources, the 42 pinned raid days and the open questions: /mnt/project-files/air-battles/cloud/air-cloud-table.md.",
+ "_about": "The chance that a raid day had a cloud deck (5/8 or more, broken to overcast, hiding most of the ground) under the bombers, by place and month (January first), with the deck's base and tops in metres above the sea (by place; three zones change them by season under `seasons`, months counted from 0 = January). Raid days were chosen days, so the numbers sit below plain climatology where commanders could wait for weather. Take the first box that holds the target; no boxes overlap. Anywhere else uses the fallback. Read by src/battle/air/sky.ts; shown, never counted.",
+ "_review": "Researched 19 Nov 2026 (wartime operational records first, climatology where none exist; values rounded to 0.05). Reviewed by the historian 19 Nov 08:08Z (/mnt/project-files/historian/air-cloud-review.md): Eastern Front and Volga-Urals rows raised, Greece's winter raised, the year rule moved to October 1943, Oslo to Fennoscandia, seasonal heights for three zones. Sources and pinned raid days: /mnt/project-files/air-battles/cloud/air-cloud-table.md.",
  "fallback": {
   "months": [0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35],
   "base_m": [400, 1500],
@@ -9,9 +9,9 @@
  "adjust": [
   {
    "zone": "Northwest and central Europe",
-   "before": 1944,
+   "before": 1943.75,
    "add": -0.1,
-   "_why": "Before routine radar bombing (1944) day raids over north-west Europe waited for clear weather more often than the late-war figures the table is built on (about 80% of Eighth Air Force missions bombed blind in late 1944). The researcher's rule; the historian to confirm."
+   "_why": "Before routine radar bombing day raids over north-west Europe waited for clear weather more often than the late-war figures the table rests on. The change came in autumn 1943: Emden, 27 Sep 1943, the first H2S pathfinder-led mission; Wilhelmshaven, 3 Nov 1943, the first H2X mission; most Eighth Air Force missions bombed blind that winter (the historian, 19 Nov 08:08Z). `before` is a date as the year plus the month over 12 (1943.75 = 1 October 1943, turn 50)."
   }
  ],
  "zones": [
@@ -24,11 +24,27 @@
    "confidence": "low"
   },
   {
-   "zone": "Norwegian Atlantic coast, northern British isles (Orkney, Shetland, Caithness), Faroes and Iceland",
-   "box": {"latS": 58, "latN": 66, "lonW": -25, "lonE": 14},
+   "zone": "Norwegian Atlantic coast, northern British isles (Orkney, Shetland, Caithness), Faroes and Iceland (box 1 of 2: south of 61N, west of 9E)",
+   "box": {"latS": 58, "latN": 61, "lonW": -25, "lonE": 9},
    "months": [0.7, 0.7, 0.65, 0.6, 0.55, 0.5, 0.5, 0.55, 0.6, 0.65, 0.7, 0.7],
    "base_m": [300, 1000],
    "tops_m": [1500, 3000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Norwegian Atlantic coast (box 2 of 2: 61-66N)",
+   "box": {"latS": 61, "latN": 66, "lonW": -25, "lonE": 14},
+   "months": [0.7, 0.7, 0.65, 0.6, 0.55, 0.5, 0.5, 0.55, 0.6, 0.65, 0.7, 0.7],
+   "base_m": [300, 1000],
+   "tops_m": [1500, 3000],
+   "confidence": "low"
+  },
+  {
+   "zone": "Fennoscandian interior (box 2 of 2: Oslo, the Oslofjord and Varmland, east of the mountains)",
+   "box": {"latS": 58, "latN": 61, "lonW": 9, "lonE": 14},
+   "months": [0.7, 0.6, 0.45, 0.45, 0.35, 0.3, 0.3, 0.3, 0.4, 0.55, 0.7, 0.75],
+   "base_m": [300, 1200],
+   "tops_m": [800, 2500],
    "confidence": "low"
   },
   {
@@ -194,7 +210,7 @@
   {
    "zone": "Greece, Albania, the Aegean, Crete, the Dodecanese, Istanbul and western Anatolia",
    "box": {"latS": 34.5, "latN": 42, "lonW": 19, "lonE": 30},
-   "months": [0.25, 0.25, 0.2, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.1, 0.2, 0.25],
+   "months": [0.35, 0.35, 0.2, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.1, 0.2, 0.35],
    "base_m": [600, 1500],
    "tops_m": [2500, 5000],
    "confidence": "low"
@@ -202,7 +218,7 @@
   {
    "zone": "Eastern Front South (Galicia, southern Poland, Ukraine, Crimea, Kuban, Don and lower Volga steppe, Saratov, Orenburg, north Caspian) (box 1 of 2: north of 48N)",
    "box": {"latS": 48, "latN": 52, "lonW": 19, "lonE": 60},
-   "months": [0.45, 0.45, 0.3, 0.15, 0.1, 0.1, 0.05, 0.05, 0.1, 0.2, 0.45, 0.5],
+   "months": [0.55, 0.5, 0.35, 0.2, 0.15, 0.1, 0.1, 0.1, 0.15, 0.3, 0.55, 0.6],
    "base_m": [200, 1000],
    "tops_m": [1000, 3000],
    "confidence": "medium"
@@ -210,7 +226,7 @@
   {
    "zone": "Eastern Front South (box 2 of 2: Black Sea and Caspian steppe)",
    "box": {"latS": 44, "latN": 48, "lonW": 29.5, "lonE": 60},
-   "months": [0.45, 0.45, 0.3, 0.15, 0.1, 0.1, 0.05, 0.05, 0.1, 0.2, 0.45, 0.5],
+   "months": [0.55, 0.5, 0.35, 0.2, 0.15, 0.1, 0.1, 0.1, 0.15, 0.3, 0.55, 0.6],
    "base_m": [200, 1000],
    "tops_m": [1000, 3000],
    "confidence": "medium"
@@ -218,7 +234,7 @@
   {
    "zone": "Volga-Urals (Kazan, Kuibyshev, Syzran, Ulyanovsk, Ufa, Perm)",
    "box": {"latS": 52, "latN": 60, "lonW": 45, "lonE": 60},
-   "months": [0.4, 0.35, 0.25, 0.2, 0.15, 0.15, 0.15, 0.15, 0.2, 0.35, 0.45, 0.45],
+   "months": [0.5, 0.4, 0.3, 0.25, 0.2, 0.2, 0.2, 0.2, 0.25, 0.45, 0.6, 0.6],
    "base_m": [200, 1000],
    "tops_m": [1000, 2500],
    "confidence": "low"
@@ -226,7 +242,7 @@
   {
    "zone": "Eastern Front North (Baltic states, Belarus, Poland north of 52N east of 19E, East Prussia, Smolensk, Moscow, Gorky)",
    "box": {"latS": 52, "latN": 58, "lonW": 19, "lonE": 45},
-   "months": [0.55, 0.45, 0.3, 0.2, 0.15, 0.15, 0.15, 0.15, 0.2, 0.35, 0.6, 0.6],
+   "months": [0.65, 0.55, 0.45, 0.3, 0.25, 0.25, 0.25, 0.25, 0.3, 0.5, 0.7, 0.75],
    "base_m": [200, 1000],
    "tops_m": [1200, 3000],
    "confidence": "medium"
@@ -429,7 +445,15 @@
    "months": [0.85, 0.8, 0.7, 0.6, 0.55, 0.6, 0.45, 0.4, 0.55, 0.75, 0.8, 0.85],
    "base_m": [400, 1500],
    "tops_m": [1500, 3500],
-   "confidence": "medium"
+   "confidence": "medium",
+   "seasons": [
+    {
+     "months": [4, 5, 6, 7, 8],
+     "base_m": [600, 1500],
+     "tops_m": [3000, 6000],
+     "_why": "summer convective cloud; the winter fog and stratus hid Chungking (the historian, M)"
+    }
+   ]
   },
   {
    "zone": "North Formosa and the Pescadores north of 24N (Kiirun, Taihoku, Shinchiku)",
@@ -533,7 +557,15 @@
    "months": [0.65, 0.75, 0.75, 0.6, 0.35, 0.45, 0.4, 0.45, 0.4, 0.35, 0.35, 0.4],
    "base_m": [150, 800],
    "tops_m": [1500, 3000],
-   "confidence": "medium"
+   "confidence": "medium",
+   "seasons": [
+    {
+     "months": [4, 5, 6, 7, 8, 9],
+     "base_m": [400, 1000],
+     "tops_m": [4000, 8000],
+     "_why": "summer monsoon cloud is towering, not crachin (the historian, M)"
+    }
+   ]
   },
   {
    "zone": "South China coast, Guangxi and Hainan (Hong Kong, Canton, Swatow, Amoy, Kweilin, Liuchow) (box 1 of 2: north of 23N)",
@@ -761,19 +793,51 @@
   },
   {
    "zone": "Pacific coast of North America (San Diego, Los Angeles, San Francisco, Oregon, Seattle, Vancouver)",
-   "box": {"latS": 32, "latN": 50, "lonW": -126, "lonE": -117.05},
+   "box": {"latS": 32, "latN": 42, "lonW": -126, "lonE": -117.05},
    "months": [0.5, 0.45, 0.4, 0.3, 0.3, 0.3, 0.25, 0.25, 0.2, 0.3, 0.45, 0.5],
-   "base_m": [200, 900],
-   "tops_m": [700, 3000],
-   "confidence": "medium"
+   "base_m": [400, 1200],
+   "tops_m": [2000, 4500],
+   "confidence": "medium",
+   "seasons": [
+    {
+     "months": [4, 5, 6, 7, 8],
+     "base_m": [150, 500],
+     "tops_m": [400, 1200],
+     "_why": "the summer marine layer (the historian, M)"
+    }
+   ]
   },
   {
-   "zone": "Pacific coast of North America (box 2 of 2: San Diego and its back country)",
+   "zone": "Pacific coast of North America (box 3 of 3: Oregon, Puget Sound and Vancouver, west of the Cascades)",
+   "box": {"latS": 42, "latN": 50, "lonW": -126, "lonE": -121},
+   "months": [0.5, 0.45, 0.4, 0.3, 0.3, 0.3, 0.25, 0.25, 0.2, 0.3, 0.45, 0.5],
+   "base_m": [400, 1200],
+   "tops_m": [2000, 4500],
+   "confidence": "medium",
+   "seasons": [
+    {
+     "months": [4, 5, 6, 7, 8],
+     "base_m": [150, 500],
+     "tops_m": [400, 1200],
+     "_why": "the summer marine layer (the historian, M)"
+    }
+   ]
+  },
+  {
+   "zone": "Pacific coast of North America (box 2 of 3: San Diego and its back country)",
    "box": {"latS": 32, "latN": 34.5, "lonW": -117.05, "lonE": -116.4},
    "months": [0.5, 0.45, 0.4, 0.3, 0.3, 0.3, 0.25, 0.25, 0.2, 0.3, 0.45, 0.5],
-   "base_m": [200, 900],
-   "tops_m": [700, 3000],
-   "confidence": "medium"
+   "base_m": [400, 1200],
+   "tops_m": [2000, 4500],
+   "confidence": "medium",
+   "seasons": [
+    {
+     "months": [4, 5, 6, 7, 8],
+     "base_m": [150, 500],
+     "tops_m": [400, 1200],
+     "_why": "the summer marine layer (the historian, M)"
+    }
+   ]
   },
   {
    "zone": "Pacific coast of Peru and northern Chile (stratocumulus deck) (box 1 of 4: north coast, Trujillo, Chiclayo)",

@@ -3,7 +3,8 @@
 // clear day scattered cumulus below instead. The campaign keeps no daily weather, so the chance comes from
 // data/battle/air-cloud.json by where the target lies and the month (the historian reviews the table); the draw hashes
 // the battle's own seed and touches no dice. Shown, never counted: nothing in the battle reads it. The table gives only a
-// deck's base and tops, by place (not by season): on a cumulus day the same draw stands in for the scattered cumulus.
+// deck's base and tops (by place, and for three zones by season): on a cumulus day the same draw stands in for the
+// scattered cumulus.
 // Heights are above the sea; on high ground (the Andes, Yunnan, Ethiopia, Anatolia) the 3D game lifts the cloud to at
 // least 300 m above the ground, as the table's note says.
 import cloudData from '../../../data/battle/air-cloud.json';
@@ -11,7 +12,8 @@ import { hashString } from '../../core/rng';
 
 /**
  * What the 3D game draws under the bombers: a deck of cloud, or scattered cumulus; and that day's cloud base and tops,
- * drawn once inside the table's ranges for the place (the deck's ranges, which stand in for the cumulus on a clear day).
+ * drawn once inside the table's ranges for the place and month (the deck's ranges, which stand in for the cumulus on a
+ * clear day).
  */
 export interface AirCloud {
   kind: 'deck' | 'cumulus';
@@ -26,10 +28,13 @@ export interface AirCloud {
   zone: string;
 }
 
-export interface CloudZone { zone: string; box: { latS: number; latN: number; lonW: number; lonE: number }; months: number[]; base_m: number[]; tops_m: number[] }
+/** A season's own heights in a zone: the months they hold for (0 = January), and the deck's base and tops there. */
+export interface CloudSeason { months: number[]; base_m: number[]; tops_m: number[] }
+export interface CloudZone { zone: string; box: { latS: number; latN: number; lonW: number; lonE: number }; months: number[]; base_m: number[]; tops_m: number[]; seasons?: CloudSeason[] }
 const ZONES = cloudData.zones as CloudZone[];
 const FALLBACK = cloudData.fallback as { months: number[]; base_m: number[]; tops_m: number[] };
-/** The table's year rules: a zone (by the start of its name) whose chance moves by `add` before a year. */
+/** The table's date rules: a zone (by the start of its name) whose chance moves by `add` before a date, given as the year
+ * plus the month over 12 (1943.75 is 1 October 1943). */
 const ADJUST = cloudData.adjust as { zone: string; before?: number; add: number }[];
 /** The thinnest a cloud is drawn: its tops at least this far above its base (metres). */
 export const CLOUD_THICK = 300;
@@ -64,11 +69,11 @@ function fraction(s: string): number {
   return (h >>> 0) / 4294967296;
 }
 
-/** The deck chance in a zone (null: the fallback) on a date, with the table's year rules, kept inside 0..1. */
+/** The deck chance in a zone (null: the fallback) on a date, with the table's date rules, kept inside 0..1. */
 export function deckChance(z: CloudZone | null, when: { year: number; month: number }): number {
   const row = z ?? FALLBACK;
   let p = row.months[((when.month % 12) + 12) % 12];
-  if (z) for (const a of ADJUST) if (z.zone.startsWith(a.zone) && (a.before === undefined || when.year < a.before)) p += a.add;
+  if (z) for (const a of ADJUST) if (z.zone.startsWith(a.zone) && (a.before === undefined || when.year + (((when.month % 12) + 12) % 12) / 12 < a.before - 1e-9)) p += a.add;
   return Math.max(0, Math.min(1, Math.round(p * 100) / 100));
 }
 
@@ -84,8 +89,10 @@ export function cloudOf(x: number, y: number, when: { year: number; month: numbe
   const z = cloudZone(lat, lon);
   const row = z ?? FALLBACK;
   const chance = deckChance(z, when);
-  const baseRange: [number, number] = [row.base_m[0], row.base_m[1]];
-  const topsRange: [number, number] = [row.tops_m[0], row.tops_m[1]];
+  const month = ((when.month % 12) + 12) % 12;
+  const h = (z?.seasons ?? []).find((s) => s.months.includes(month)) ?? row;
+  const baseRange: [number, number] = [h.base_m[0], h.base_m[1]];
+  const topsRange: [number, number] = [h.tops_m[0], h.tops_m[1]];
   const at = (r: [number, number], u: number): number => Math.round((r[0] + u * (r[1] - r[0])) / 10) * 10;
   const base = at(baseRange, fraction(`airsky:base:${seed}`));
   const top = Math.max(at(topsRange, fraction(`airsky:top:${seed}`)), base + CLOUD_THICK);

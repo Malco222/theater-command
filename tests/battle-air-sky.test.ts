@@ -33,6 +33,11 @@ describe('the cloud table', () => {
       expect(z.base_m[0]).toBeLessThanOrEqual(z.base_m[1]);
       expect(z.tops_m[0]).toBeLessThanOrEqual(z.tops_m[1]);
     }
+    for (const z of cloudData.zones) for (const x of z.seasons ?? []) {
+      for (const m of x.months) expect(Number.isInteger(m) && m >= 0 && m < 12, z.zone).toBe(true);
+      expect(x.base_m[0]).toBeLessThanOrEqual(x.base_m[1]);
+      expect(x.tops_m[0]).toBeLessThanOrEqual(x.tops_m[1]);
+    }
   });
   it('has no two boxes overlapping, so the order of the boxes only settles a shared edge', () => {
     for (let i = 0; i < zones.length; i++) for (let j = i + 1; j < zones.length; j++) {
@@ -118,8 +123,10 @@ describe('the sky drawn for a battle', () => {
         expect(deckChance(cloudZone(lat, lon), { year: 1944, month: m }), `${z.zone} month ${m}`).toBe(z.months[m]);
         const c = cloudOf(x, y, { year: 1944, month: m }, m);
         expect(c.chance).toBe(z.months[m]);
-        expect(c.baseRange).toEqual(z.base_m);
-        expect(c.topsRange).toEqual(z.tops_m);
+        // A season's own heights where the table gives them (three zones), else the zone's.
+        const h = z.seasons?.find((x) => x.months.includes(m)) ?? z;
+        expect(c.baseRange, `${z.zone} month ${m}`).toEqual(h.base_m);
+        expect(c.topsRange, `${z.zone} month ${m}`).toEqual(h.tops_m);
       }
     }
     const [ox, oy] = proj(40, -40);
@@ -129,9 +136,13 @@ describe('the sky drawn for a battle', () => {
       expect([c.baseRange, c.topsRange]).toEqual([cloudData.fallback.base_m, cloudData.fallback.tops_m]);
     }
   });
-  it('takes the year rules: north-west Europe before 1944 is a tenth less likely to be under a deck', () => {
+  it('takes the date rules: north-west Europe before October 1943 (blind bombing) is a tenth less likely to be under a deck', () => {
     const nw = cloudData.zones.find((z) => z.zone.startsWith('Northwest and central Europe'))!;
-    for (let m = 0; m < 12; m++) expect(deckChance(cloudZone(51.5, -0.1), { year: 1943, month: m })).toBeCloseTo(Math.max(0, nw.months[m] - 0.1), 6);
+    const at = (year: number, month: number) => deckChance(cloudZone(51.5, -0.1), { year, month });
+    for (let m = 0; m < 12; m++) expect(at(1942, m)).toBeCloseTo(Math.max(0, nw.months[m] - 0.1), 6);
+    for (let m = 0; m < 9; m++) expect(at(1943, m)).toBeCloseTo(Math.max(0, nw.months[m] - 0.1), 6);
+    for (let m = 9; m < 12; m++) expect(at(1943, m)).toBe(nw.months[m]);
+    for (let m = 0; m < 12; m++) expect(at(1944, m)).toBe(nw.months[m]);
     const t = cloudZone(35.7, 139.7);
     expect(deckChance(t, { year: 1943, month: 0 })).toBe(deckChance(t, { year: 1945, month: 0 }));
   });
