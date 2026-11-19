@@ -1157,7 +1157,8 @@ const HOP_STUCK = 3;
  * (ii)). A shore its side already stands on is the army's. One beside the army is the army's only if corps of its own
  * beside it can attack it this month: they can go in this month (on their feet, in order, with the steps for it, by a
  * way they can take, inside the record's line), and against a defended shore they have the odds the staff's own
- * attacks ask (the phase's, 1.3 by default), the guns beside counted as the army's own attacks bring them. Otherwise it
+ * attacks ask (the phase's, 1.3 by default), the guns beside counted as the army's own attacks bring them: against the
+ * corps in its field or, where only the town is held, against the town (rider b614, (2)). Otherwise it
  * stays the ships'. Its steps are read as its month gives them, not as the month has left them: the hops are planned
  * after the month's dated attacks and landings, and a corps that has just walked, landed or gone in beside the shore
  * is not out of the fight for it (seed 17 at stop 1: the Slim River spent the 5th Division's steps at Kuala Lumpur).
@@ -1169,9 +1170,12 @@ export function armysShore(g: Game, nat: string, r: Region, ph: PlanPhase | null
     && c.org >= 0.35 && c.apMax >= Math.min(moveCost(g, c, r), 4) && !blocked(g, c, r);
   const beside = r.nb.map((j) => g.regions[j]).filter((x) => allied(g, nat, x.ctrl)).flatMap((x) => x.units.filter(goesIn));
   if (!beside.some(fights)) return false;
-  if (!hostileUnits(g, r, nat).length) return true;
+  // What fights there (rider b614 to ruling 234, (2)): the corps in its field or, with nobody in the field, the town
+  // itself, its garrison and its guard. Only a shore with nothing that fights is the army's for the walking in.
+  const field = hostileUnits(g, r, nat).length > 0;
+  if (!field && !townHeld(g, r)) return true;
   const force = limitAttackers(g, beside, r);
-  return force.some(fights) && assess(g, force, r).odds >= (ph?.oddsFor?.[r.name] ?? ph?.minOdds ?? 1.3);
+  return force.some(fights) && assess(g, force, r, field ? {} : { town: true }).odds >= (ph?.oddsFor?.[r.name] ?? ph?.minOdds ?? 1.3);
 }
 
 /**

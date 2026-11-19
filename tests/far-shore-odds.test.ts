@@ -3,12 +3,13 @@
 // A staff reckons a shore's odds against whatever fights there: the corps in the field and, where nobody stands in
 // the field, the town itself, its garrison and its guard. An empty shore is one with nothing that fights. Before the
 // rider a shore with only a town's guard was read as empty: no odds were asked, and it was ranked as a free gift.
+// The army's-shore rule (rider b599, (ii)) reads a shore the same way.
 // The states are set by hand; no war is played here.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { hop } from '../src/campaign/ai';
+import { armysShore, hop } from '../src/campaign/ai';
 import { addCorps, assess, atWar, createGame, declareWar, hostileUnits } from '../src/campaign/game';
 import { landingOpts } from '../src/campaign/navy';
 import { guardOf, townHeld } from '../src/campaign/siege';
@@ -83,5 +84,27 @@ describe("the hop staff's odds count every defender (rider b614 to ruling 234, (
     expect([hostileUnits(open.g, rabaul, 'JAP').length, townHeld(open.g, rabaul)]).toEqual([0, false]);
     hop(open.g, 'JAP', null);
     expect(at(open.g, open.force[0])).toBe('Rabaul');
+  });
+
+  it("the army's shore is read the same way: beside a town that only its guard holds, it is the army's only with the army's odds on the town", () => {
+    const { g } = war(0, 0);
+    const cape = g.byName['Cape Gloucester'], rabaul = g.byName.Rabaul;
+    expect([cape.nb.includes(rabaul.id), hostileUnits(g, cape, 'JAP').length, guardOf(g, cape) > 0]).toEqual([true, 0, true]);
+    const c = addCorps(g, 'JAP', 'Test Detachment', 'inf', 1, 'Rabaul', { est: 0.05 });
+    c.supplied = true; c.ap = c.apMax; c.org = 1; c.hold = false;
+    // Too weak for the guard (the army's attacks ask 1.3): the ships' shore. Before the rider it was the army's for the walking in.
+    c.str = 0.02;
+    expect(onTown(g, [c], cape)).toBeLessThan(1.3);
+    expect(armysShore(g, 'JAP', cape, null)).toBe(false);
+    // With the odds on the town it is the army's, unless the phase asks more of its attacks.
+    c.str = 0.05;
+    expect(onTown(g, [c], cape)).toBeGreaterThanOrEqual(1.3);
+    expect(armysShore(g, 'JAP', cape, null)).toBe(true);
+    expect(armysShore(g, 'JAP', cape, { minOdds: 99 } as never)).toBe(false);
+    // The guard worn away, nothing fights there: the weakest corps beside it makes it the army's.
+    c.str = 0.02;
+    g.flags[`guard:${cape.id}`] = 100;
+    expect([guardOf(g, cape), townHeld(g, cape)]).toEqual([0, false]);
+    expect(armysShore(g, 'JAP', cape, null)).toBe(true);
   });
 });
