@@ -191,6 +191,5 @@ if __name__ == "__main__":
         sys.argv = ["export.py", sys.argv[2], names] + (sys.argv[3:] or ["json", "glb", "fbx"])
         import export  # noqa: F401,E402  (export.py runs as it is imported)
     else:
-        import airlook
         sys.argv = ["airlook.py"] + sys.argv[1:]
-        airlook.main()
+        import airlook  # noqa: F401,E402  (airlook.py renders as it is imported)
