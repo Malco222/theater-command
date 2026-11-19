@@ -5,7 +5,7 @@
 //   SRC=../../../unreal/TheaterCommand/Source/TheaterCommand
 //   clang++ -O2 -std=c++20 -I $SRC fxpreview.cpp $SRC/Effects/TheaterFxCore.cpp -o fxpreview
 //   ./fxpreview /tmp/recipe.txt <out folder> <size> <ground> <frames, e.g. 4,8,40> [WxH] [back up]
-//     (size "mg": a machine gun's burst from 30 m away into the ground there, in place of a shell)
+//     (size "mg": a machine gun's burst from 30 m away into the ground there, in place of a shell; FX_MG_VIEW=side|behind)
 //   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|far|target|hit|trail]
 //
 // The air shot: a fighter at 1,500 m and 150 m/s in a banked turn (FX_TURN=degrees a second, 3 by default) fires its
@@ -734,6 +734,18 @@ int main(int Argc, char** Argv)
 	Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
 	Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
 	Cam.Ppr = W / (2.0 * std::tan(std::atan(18.0 / 35.0))); // (a 35 mm lens, as the stills)
+	const Vec MgGun = Vec(-28.0, 12.0, Swell(nullptr, -28.0, 12.0) + 0.6); // (the "mg" shot's gun)
+	if (const char* MgView = std::getenv("FX_MG_VIEW"); Size == "mg" && MgView)
+	{
+		// (FX_MG_VIEW=side: square to the line of fire, 30 m off it; =behind: 10 m behind the gun and 3 m up, along it)
+		const Vec Fire = (Hit - MgGun).Unit();
+		const Vec Mid = (MgGun + Hit) * 0.5;
+		const Vec Square = Fire.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Eye = std::string(MgView) == "behind" ? MgGun - Fire * 10.0 + Vec(0, 0, 3.0) : Mid - Square * 30.0 + Vec(0, 0, 6.0);
+		Cam.Forward = ((std::string(MgView) == "behind" ? Hit : Mid) - Cam.Eye).Unit();
+		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+	}
 	std::vector<Vec> Men;
 	const double MenAt = 16.0 * std::max(1.0, std::pow(Scale, 0.6));
 	for (int I = 0; I < 5; ++I)
@@ -775,7 +787,7 @@ int main(int Argc, char** Argv)
 	if (Size == "mg")
 	{
 		// (a machine gun's burst from 30 m off to the left into the ground by the hit: close tracer and strikes)
-		const Vec Gun = Vec(-28.0, 12.0, Swell(nullptr, -28.0, 12.0) + 0.6);
+		const Vec Gun = MgGun;
 		Fx.Muzzle(-0.02, Gun, (Hit - Gun).Unit(), "mg");
 		Fx.Shots(-0.02, 13, Gun, Hit + Vec(0.0, 0.0, 0.1), "mg", 25, 15.0, Ground.c_str());
 	}

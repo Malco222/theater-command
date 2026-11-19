@@ -157,6 +157,7 @@ namespace TheaterFx
 		TracerPale = TracerCol.Mix(Rgb(1.0f, 1.0f, 1.0f), 0.55);
 		TracerDayWide = Num("tracer.day_width", 1.5);
 		WholePathBelow = Num("tracer.whole_path_below_m", 100.0);
+		WholeFor = std::max(0.001, Num("tracer.whole_path_s", 0.015));
 		DayFrom = Num("game.day_light_from", 0.38);
 		DayFull = std::max(DayFrom + 0.01, Num("game.day_light_full", 0.9));
 		DayLampShare = Num("game.day_lamp_share", 0.25);
@@ -1310,7 +1311,6 @@ namespace TheaterFx
 		}
 		Dice D(++Seeds * 32452843ull ^ PlaceKey(From));
 		const double Speed = Num("tracer.speed_mps", 760.0);
-		const double Half = TracerHalf;
 		const double Life = Num("tracer.life_s", 0.6);
 		const Rgb Flame = FlameCol;
 		const Vec Line = To - From;
@@ -1393,11 +1393,12 @@ namespace TheaterFx
 			if (Dist < WholePathBelow)
 			{
 				// (close in, a tracer crosses in under a frame or two: its whole path is drawn at once, muzzle to strike,
-				// fading toward the muzzle, for at least one frame; art director 21:16Z)
+				// fading toward the muzzle, for one frame (whole_path_s, under a frame at 60 a second; a frame is never
+				// missed), so it is a whip and never a standing line; art director 21:16Z and 02:13Z)
 				const double Third = Dist / 3.0;
 				for (int K = 0; K < 3; ++K)
 				{
-					Tracer(T, From + Aim * (Third * K), Aim, Vec(), Reach, 0.0, 0.0, Third * 0.5, 0.35 + 0.325 * K);
+					Tracer(T, From + Aim * (Third * K), Aim, Vec(), std::min(Reach, WholeFor), 0.0, 0.0, Third * 0.5, 0.35 + 0.325 * K, Third * K, Dist - Third * K);
 				}
 			}
 			else
@@ -1411,12 +1412,12 @@ namespace TheaterFx
 				const double Yaw = Radians(D.U(-25.0, 25.0));
 				const Vec Flat_ = Vec(Aim.X * std::cos(Yaw) - Aim.Y * std::sin(Yaw), Aim.X * std::sin(Yaw) + Aim.Y * std::cos(Yaw), 0.0).Unit(Vec(1.0, 0.0, 0.0));
 				const Vec Off = (Flat_ * std::cos(Up_) + ZUp * std::sin(Up_)).Unit();
-				Streak(T + Reach, From + Aim * Dist - Off * Half, Off, Speed * Num("tracer.ricochet.slower", 0.5), std::max(0.15, Life - Reach));
+				Streak(T + Reach, From + Aim * Dist, Off, Speed * Num("tracer.ricochet.slower", 0.5), std::max(0.15, Life - Reach)); // (from the strike point, never behind it)
 			}
 		}
 	}
 
-	void Battle::Tracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, double For, double Drag, double Drop, double Half, double AlphaK)
+	void Battle::Tracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, double For, double Drag, double Drop, double Half, double AlphaK, double Behind, double Until)
 	{
 		if (Half <= 0.0)
 		{
@@ -1433,6 +1434,8 @@ namespace TheaterFx
 			B.Gravity = Drop;
 			B.Life = For;
 			B.HalfLength = Half;
+			B.Origin = Start - Way * Behind; // (a piece of a whole path: the muzzle is Behind metres back from its start)
+			B.Until = Until > 0.0 ? Behind + Until : 0.0;
 			B.Along = Way;
 			B.R0 = B.R1 = Layer == 0 ? 0.045 : 0.018;
 			B.LeastPx = Layer == 0 ? TracerLeast : TracerLeast * 0.4;
@@ -2648,6 +2651,7 @@ namespace TheaterFx
 		Vec AxA = Eye.Right * Rad, AxB = Eye.Up * Rad;
 		Vec Middle = P;
 		Vec TaperB; // (a tracer: how its width runs along it, so it is as wide on the screen at both ends)
+		double PointNow = B.Point, TailNow = B.Tail; // (a tracer cut short at an end is blunter there)
 		switch (B.Form)
 		{
 		case Bit::Shape::Puff:
@@ -2719,7 +2723,10 @@ namespace TheaterFx
 			const double L = OnScreen.Length();
 			const Vec Ua = L > 1e-6 ? OnScreen * (1.0 / L) : Eye.Right;
 			const Vec Ub = Eye.Forward.Cross(Ua).Unit(Eye.Up);
-			const double Share = Speed > 1e-9 ? L / Speed : 0.0;
+			// (never more than its whole length: as the middle crosses the eye's plane far off to the side, the heading on
+			// the screen grows without end, and a tracer hundreds of metres away drew a line across the screen for a frame.
+			// The pre-check, 02:15Z)
+			const double Share = Speed > 1e-9 ? std::min(L / Speed, 1.0) : 0.0;
 			double Half = B.HalfLength > 0.0 ? B.HalfLength * Share : Rad + L / 60.0; // (a clod is seen as a streak along its flight)
 			double Width = Rad;
 			const double Least = B.LeastPx * MetresAPixel * 0.5;
@@ -2771,7 +2778,32 @@ namespace TheaterFx
 				if (Far > 1e-6 && Across.Length() > 0.05 * Far)
 				{
 					const Vec Bu = Across.Unit(Ub);
-					AxA = Heading * std::max(B.HalfLength, Width);
+					// (nothing is drawn behind where it was fired from: art director 02:13Z, build 1710, the machine gun's line
+					// ran on past the muzzle, its thinning tail reaching 7 m behind the gun. A close shot's whole path is never
+					// drawn past its strike either; its pieces still overlap where they meet, so the line is unbroken. Cut
+					// short, the streak keeps its shape: its point ahead, its thinning tail behind, fitted between)
+					double Long = std::max(B.HalfLength, Width);
+					const double Behind = Long * (1.0 + B.Tail), Ahead = Long * (1.0 + B.Point);
+					const double Gone = (P - B.Origin).Dot(Heading); // (how far its middle is along from where it was fired)
+					const double Back = std::max(0.0, Gone);
+					const double Front = B.Until > 0.0 ? std::min(Ahead, std::max(0.0, B.Until - Gone)) : Ahead;
+					if (Behind > Back || Ahead > Front)
+					{
+						// (an end cut short is blunt, so the line runs at its width right up to the muzzle flash or the strike,
+						// with no faint gap before it)
+						if (Behind > Back)
+						{
+							TailNow = std::min(TailNow, 0.1);
+						}
+						if (Ahead > Front)
+						{
+							PointNow = std::min(PointNow, 0.1);
+						}
+						const double From_ = -std::min(Behind, Back);
+						Long = (Front - From_) / (2.0 + PointNow + TailNow);
+						Middle = P + Heading * (Front - Long * (1.0 + PointNow));
+					}
+					AxA = Heading * Long;
 					AxB = Bu * Width;
 					// (and as wide on the screen from end to end as at its middle: laid as wide in metres all along, the end
 					// nearer the eye drew wider, up to four times, a wedge. Its width in metres follows how far each point is
@@ -2779,17 +2811,23 @@ namespace TheaterFx
 					// taper is never cut short: a round passing under half a metre off drew a wedge 50 px across for a frame.
 					// A point behind the eye takes a mirrored width, and the picture cuts it away)
 					const double Run = AxA.Dot(Eye.Forward);
-					if (Deep > 1e-3)
+					const double DeepM = (Middle - Eye.Eye).Dot(Eye.Forward);
+					if (B.MostPx > 0.0 && Deep > 1e-3)
 					{
-						const double Tp = B.MostPx > 0.0 ? Run / Deep : std::clamp(Run / Deep, -0.9, 0.9);
-						TaperB = Bu * (Width * Tp);
+						// (as wide in pixels all along as the width was set for at P)
+						AxB = Bu * (Width * DeepM / Deep);
+						TaperB = Bu * (Width * Run / Deep);
 					}
 					else if (B.MostPx > 0.0)
 					{
 						// (its middle behind the eye with an end still in view: as wide in pixels as the limit, all along)
 						const double K = std::max(B.MostPx, B.LeastPx) * 0.5 / Ppr * Wide;
-						AxB = Bu * (K * Deep);
+						AxB = Bu * (K * DeepM);
 						TaperB = Bu * (K * Run);
+					}
+					else if (DeepM > 1e-3)
+					{
+						TaperB = Bu * (Width * std::clamp(Run / DeepM, -0.9, 0.9));
 					}
 				}
 			}
@@ -2816,7 +2854,7 @@ namespace TheaterFx
 			B.bShown = true;
 			return 2;
 		}
-		Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * B.Rim, B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, Turned, Floor, Through, Outward, Lift, TaperB);
+		Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * B.Rim, B.Inner, PointNow, TailNow, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, Turned, Floor, Through, Outward, Lift, TaperB);
 		B.bShown = true;
 		return 1;
 	}

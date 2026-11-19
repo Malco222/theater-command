@@ -45,7 +45,8 @@ if (Blasts) { Blasts->End(); Blasts.Reset(); }
 Lamps and day: a flash's lamp is full on the first frame drawn after the flash, about half on the next, then out
 (Tick draws first, then lights; call Tick once a frame, or a lamp lasts a single frame). `HourLight` tells the kit how much it is day: by day a lamp is a quarter as strong and
 warm white, and small guns light no ground. A flash shorter than a frame is still drawn once, so 30 frames a second
-shows every one (and a slow frame shows a flak flash's pieces together, glow, spikes and heart, never the heart alone); a close tracer (under 100 m) is drawn whole, muzzle to strike.
+shows every one (and a slow frame shows a flak flash's pieces together, glow, spikes and heart, never the heart alone); a close tracer (under 100 m) is drawn whole, muzzle to strike, for one frame (`tracer.whole_path_s`).
+Nothing of a tracer is drawn behind the muzzle, or behind a ricochet's strike point.
 A tracer is laid along its true heading in the world, so its ends sit where they truly are; it is as wide on the
 screen from end to end, and no wider than `tracer.most_px` (times `day_width` by day) in the middle of the screen, so
 one passing close stays a thin whip; toward the screen's edges it draws up to about a sixth wider, as the picture
@@ -79,6 +80,8 @@ Blasts->AirGunStop(Gun);
 - Every round flickers at the muzzle; one in five is the ruled tracer. Cannon also throw licks and light the wing.
 - The preview draws it: `./fxpreview recipe.txt out air hmg 15,45 960x540 side` (shots `chase`, `side`, `far`,
   `target`, `hit`, `trail`; `FX_DUSK=1` for dusk, `FX_TURN=deg/s` for the turn, `FX_TRAIL=smoke|fire|glycol`).
+- A ground machine gun's close burst: `./fxpreview recipe.txt out mg earth 0,1 1280x720`, seen from `FX_MG_VIEW=side`
+  or `behind` the gun.
 
 ## Hits on aircraft and trails
 

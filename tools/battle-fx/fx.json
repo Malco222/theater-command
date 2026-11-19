@@ -1089,6 +1089,8 @@
   ],
   "_day": "Art director 21:07Z: by day only, the streak is 1.5 times wider and its pale core pushed toward 245,240,210, so a stream holds against a pale sky. Day is read from the hour's light (white by day); at dusk the streak is as ruled. One in five and 213,199,104 stay.",
   "whole_path_below_m": 100,
+  "whole_path_s": 0.015,
+  "_whole_path_s": "Art director 02:13Z (build 1710): the close shot's whole path is a whip, one frame and gone, never a standing line. Shown for whole_path_s, under one frame at 60 a second; a frame is never missed. Nothing of a tracer is drawn behind the muzzle (or behind a ricochet's strike), and a whole path stops at its strike.",
   "_close": "Art director 21:16Z (build 1690, a machine gun seen from 19 m showed no tracer line): below whole_path_below_m a tracer crosses in a frame or two, so its whole path is drawn at once, muzzle to strike, fading toward the muzzle (three lengths at 35, 68 and 100 per cent), for at least one frame."
  },
  "air_guns": {
