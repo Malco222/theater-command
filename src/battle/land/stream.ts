@@ -18,6 +18,9 @@ export interface CityRiver {
   /** Where two meet: the second, and the bearing from the meeting toward where it comes from. */
   join?: string;
   joinFrom?: number;
+  /** Its road bridges at the city in the war years, and the second river's (b596, the historian's record). */
+  bridges?: number;
+  joinBridges?: number;
   note?: string;
 }
 
@@ -29,15 +32,22 @@ const rel = (a: number, b: number): number => ((((a - b) % 360) + 540) % 360) - 
 /**
  * How a city's river lies to an attack heading the given compass bearing: the field's north is the way the attack goes,
  * its west the attack's left. A river within 45 degrees of the attack's line runs up the field; any other across it,
- * behind the defence. A shore lies on the side of the field its water is on as the attack faces the city.
+ * behind the defence. A shore lies on the side of the field its water is on as the attack faces the city; one whose water
+ * lies straight ahead of the attack (within 45 degrees) lies behind the defence, along the field's back edge, never
+ * between the armies (the Volga at Stalingrad's back, the design director's b595).
  */
 export function streamOf(r: CityRiver, heading: number): Stream {
   const side = (b: number): 'west' | 'east' => (rel(b, heading) < 0 ? 'west' : 'east');
   const f = rel(r.flows, heading), along = Math.abs(f) <= 45 || Math.abs(f) >= 135;
-  if (r.form === 'shore') return { name: r.river, lie: 'shore', flows: Math.abs(f) < 90 ? 'north' : 'south', side: side(r.water ?? r.flows + 90), great: r.great };
+  if (r.form === 'shore') {
+    const water = r.water ?? r.flows + 90;
+    if (Math.abs(rel(water, heading)) <= 45) return { name: r.river, lie: 'shore', flows: f > 0 ? 'east' : 'west', side: 'back', great: r.great };
+    return { name: r.river, lie: 'shore', flows: Math.abs(f) < 90 ? 'north' : 'south', side: side(water), great: r.great };
+  }
   return {
     name: r.river, lie: along ? 'up' : 'across', flows: along ? (Math.abs(f) < 90 ? 'north' : 'south') : f > 0 ? 'east' : 'west', great: r.great,
-    ...(r.form === 'meet' && r.join ? { join: { name: r.join, side: side(r.joinFrom ?? r.flows + 180) } } : {}),
+    ...(r.bridges !== undefined ? { bridges: r.bridges } : {}),
+    ...(r.form === 'meet' && r.join ? { join: { name: r.join, side: side(r.joinFrom ?? r.flows + 180), ...(r.joinBridges !== undefined ? { bridges: r.joinBridges } : {}) } } : {}),
   };
 }
 

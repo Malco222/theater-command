@@ -16,6 +16,7 @@ const LIES: [string, Stream][] = [
   ['up', stream('up')], ['up, a second meeting it', stream('up', { flows: 'south', join: { name: 'Second', side: 'west' } })],
   ['across', stream('across')], ['across, a second meeting it', stream('across', { flows: 'west', join: { name: 'Second', side: 'east' } })],
   ['a shore', stream('shore')], ['a lesser river up the field', stream('up', { great: false })],
+  ['a shore ahead, behind the defence', stream('shore', { side: 'back', flows: 'east' })],
 ];
 
 describe("the hand list follows the real city (b526)", () => {
@@ -49,6 +50,13 @@ describe('how the river lies to the attack: never between the armies (b526)', ()
     // Lisbon from the east: the Tagus along the field's west side, the attack's left.
     expect(streamOf(CITY_RIVERS.Lisbon, 250)).toMatchObject({ lie: 'shore', side: 'west' });
     expect(streamFor('Millbrook', 0)).toBeUndefined();
+    // A shore straight ahead of the attack lies behind the defence (b595): Stalingrad from the west, the Volga at its
+    // back; from the east, the water behind the attack, along a side edge as before.
+    expect(streamOf(CITY_RIVERS.Stalingrad, 90)).toMatchObject({ lie: 'shore', side: 'back' });
+    expect(streamOf(CITY_RIVERS.Stalingrad, 270).side).not.toBe('back');
+    // Each city's own road bridges, by the historian's record (b596): Belgrade one over each river, Gorky none over the Volga.
+    expect(streamOf(CITY_RIVERS.Belgrade, 0)).toMatchObject({ bridges: 1, join: { bridges: 1 } });
+    expect(streamOf(CITY_RIVERS.Gorky, 0).bridges).toBe(0);
   });
   it('the map\'s y runs south: a bearing is a compass bearing', () => {
     expect(bearingOf(0, 0, 0, -1)).toBeCloseTo(0);
@@ -120,10 +128,20 @@ describe("the city's river on the field (b526)", () => {
         for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) if (kind(f, c, r) === 'water') water.push([c * f.cell + f.cell / 2, r * f.cell + f.cell / 2]);
         expect(water.length, name).toBeGreaterThan(150);
         const def = b.units.filter((u) => u.side === 'def'), att = b.units.filter((u) => u.side === 'att');
-        if (s.lie === 'across') {
+        const from = (pts: [number, number][], [x, y]: [number, number]): number => Math.min(...pts.map(([px, py]) => Math.hypot(px - x, py - y)));
+        if (s.lie === 'across' || St.side === 'back') {
           // All of its water behind the defence's rearmost row, and nowhere near the attack.
           const back = Math.max(...def.map((u) => u.y + u.d / 2));
-          expect(Math.min(...water.map((p) => p[1])), name).toBeGreaterThan(back + 40);
+          const own = St.join ? water.filter((p) => from(St.course, p) <= from(St.join!.course, p)) : water;
+          expect(Math.min(...own.map((p) => p[1])), name).toBeGreaterThan(back + 40);
+        }
+        if (s.lie === 'across' && St.join) {
+          // A second comes in from its side edge beyond the defence's flank (b596): every defending block on the heart's
+          // side of it, and all its water beyond the attack's front.
+          const J = St.join, xs = J.course.map((p) => p[0]).filter((x) => x >= 0 && x <= f.w), west = J.course[0][0] < f.w / 2;
+          expect(J.course[0][0] < 0 || J.course[0][0] > f.w, name).toBe(true);
+          for (const u of def) expect(west ? u.x - u.w / 2 > Math.max(...xs) : u.x + u.w / 2 < Math.min(...xs), `${name} ${u.name}`).toBe(true);
+          expect(Math.min(...J.course.map((p) => p[1])), name).toBeGreaterThan(Math.max(...att.map((u) => u.y + u.d / 2)) + 300);
         }
         if (s.lie === 'up') {
           // It runs the field's length beside the heart, both armies on the heart's bank: never between them.
@@ -133,7 +151,7 @@ describe("the city's river on the field (b526)", () => {
           const heartWest = f.town!.x < xAt(f.town!.y);
           for (const side of [att, def]) expect(side.every((u) => (u.x < xAt(u.y)) === heartWest), name).toBe(true);
         }
-        if (s.lie === 'shore') expect(Math.max(...water.map((p) => p[0])), name).toBeLessThan(f.zones.att[0]);
+        if (s.lie === 'shore' && St.side !== 'back') expect(Math.max(...water.map((p) => p[0])), name).toBeLessThan(f.zones.att[0]);
       }
     }
   });
@@ -248,6 +266,44 @@ describe("the city's river on the field (b526)", () => {
       if (kind(f, c, r) === 'bridge' && from(J.course, x, y) < from(f.stream!.course, x, y)) deck++;
     }
     expect(deck).toBeGreaterThan(0);
+  });
+  it('bridges by the record (b596): no more than the city had, those nearest the heart, and none where it had none', () => {
+    const decks = (f: LandField): [number, number][][] => {
+      // Each bridge: its deck cells, joined.
+      const seen = new Set<number>(), out: [number, number][][] = [];
+      for (let i0 = 0; i0 < f.ground.length; i0++) {
+        if (seen.has(i0) || GROUNDS[f.ground[i0]] !== 'bridge') continue;
+        const todo = [i0], deck: [number, number][] = [];
+        seen.add(i0);
+        while (todo.length) {
+          const i = todo.pop()!;
+          deck.push([(i % f.cols) * f.cell + f.cell / 2, Math.floor(i / f.cols) * f.cell + f.cell / 2]);
+          for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+            const c = (i % f.cols) + dc, r = Math.floor(i / f.cols) + dr, j = r * f.cols + c;
+            if (c < 0 || r < 0 || c >= f.cols || r >= f.rows || seen.has(j) || GROUNDS[f.ground[j]] !== 'bridge') continue;
+            seen.add(j); todo.push(j);
+          }
+        }
+        out.push(deck);
+      }
+      return out;
+    };
+    for (const [name, s] of LIES) {
+      if (s.lie === 'shore' || s.join) continue;
+      for (const seed of [53, 106, 159]) {
+        const all = buildField(cityTicket('capital', 'urban', seed, s).place, seed);
+        const two = buildField(cityTicket('capital', 'urban', seed, { ...s, bridges: 2 }).place, seed);
+        const none = buildField(cityTicket('capital', 'urban', seed, { ...s, bridges: 0 }).place, seed);
+        expect(decks(all).length, name).toBeGreaterThan(2);
+        expect(decks(two).length, name).toBeGreaterThanOrEqual(1);
+        expect(decks(two).length, name).toBeLessThanOrEqual(2);
+        expect(decks(none).length, name).toBe(0);
+        // Those it keeps are the nearest the heart of those it would lay.
+        const near = (d: [number, number][]): number => Math.min(...d.map(([x, y]) => Math.hypot(x - all.town!.x, y - all.town!.y)));
+        const kept = decks(two).map(near).sort((a, b) => a - b), every = decks(all).map(near).sort((a, b) => a - b);
+        expect(kept[0], name).toBeLessThanOrEqual(every[1] + 1);
+      }
+    }
   });
   it('a narrow defence with its guns keeps clear of the water too (the front the river kept behind)', () => {
     const mk = (seed: number, def: [string, number][], s: Stream) => {

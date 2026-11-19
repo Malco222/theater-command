@@ -235,7 +235,8 @@ export function deploy(units: LandUnit[], side: Side, f: LandField): void {
       [mine.filter((u) => !u.dry), west ? inner(1) : 10, west ? f.w - 10 : inner(-1)],
     ];
     for (const [us, lo, hi] of lanes) if (us.length) drawUp(us, side, f, (Math.max(lo, z[0]) + Math.min(hi, z[2])) / 2, lo, hi);
-  } else if (f.stream && f.stream.lie !== 'across') streamLanes(mine, side, f);
+  } else if (f.stream && (f.stream.lie === 'up' || (f.stream.lie === 'shore' && f.stream.side !== 'back'))) streamLanes(mine, side, f);
+  else if (side === 'def' && f.stream?.lie === 'across' && f.stream.join && joinLane(mine, f)) { /* drawn up beside the second river */ }
   else drawUp(mine, side, f, side === 'def' && f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2);
   for (const u of mine) {
     u.x = Math.min(f.w - u.w / 2 - 10, Math.max(u.w / 2 + 10, u.x));
@@ -266,6 +267,22 @@ function wetUnder(f: LandField, u: LandUnit, off = 0): boolean {
     if (k === 'water' || k === 'bridge' || k === 'blown') return true;
   }
   return false;
+}
+
+/**
+ * The defence beside a second river that comes in from its side edge to meet one across the field behind it (b596, the
+ * Sava at Belgrade): drawn up on the heart's side of it, a stone's throw off its water, as near the heart as it fits.
+ * False where the second river does not reach the defence's depth (it stands as it would with no second river).
+ */
+function joinLane(mine: LandUnit[], f: LandField): boolean {
+  const J = f.stream!.join!, z = f.zones.def, y0 = z[1] - 120;
+  const xs = J.course.filter(([x, y]) => y >= y0 && x >= 0 && x <= f.w).map(([x]) => x);
+  if (!xs.length) return false;
+  const clear = J.half * (1 + STREAM.wobble) + f.cell + STREAM.off, west = J.course[0][0] < f.w / 2;
+  const [a, b] = west ? [Math.max(...xs) + clear, f.w - 10] : [10, Math.min(...xs) - clear];
+  const centre = f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2;
+  drawUp(mine, 'def', f, Math.min(b, Math.max(a, centre)), a, b);
+  return true;
 }
 
 /**

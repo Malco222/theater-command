@@ -171,12 +171,17 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (streetsOf(ticket.place)) this.ticket = { ...ticket, limit: Math.round(ticket.limit * (1 + LAND.city.clock * builtShare(this.field))) };
     deploy(this.units, 'att', this.field);
     deploy(this.units, 'def', this.field);
-    // A city's own river up the field with the whole defence drawn up on one bank of it: its line ends on the river.
-    const St = this.field.stream;
+    // A city's own river up the field with the whole defence drawn up on one bank of it, or a second river along the
+    // defence's flank to meet one across behind it (b596): its line ends on the river.
+    const St = this.field.stream, held = this.units.filter((u) => u.side === 'def');
     if (St?.lie === 'up') {
       const xAt = (y: number): number => St.course.reduce((m, p) => (Math.abs(p[1] - y) < Math.abs(m[1] - y) ? p : m))[0];
-      const def = this.units.filter((u) => u.side === 'def'), west = def.filter((u) => u.x < xAt(u.y)).length;
-      this.flankOnRiver = west === 0 || west === def.length;
+      const west = held.filter((u) => u.x < xAt(u.y)).length;
+      this.flankOnRiver = west === 0 || west === held.length;
+    } else if (St?.lie === 'across' && St.join) {
+      // The second comes in from a side edge and turns up to the first: the defence all beyond where it meets it.
+      const xs = St.join.course.map((p) => p[0]).filter((x) => x >= 0 && x <= this.field.w), west = St.join.course[0][0] < this.field.w / 2;
+      this.flankOnRiver = xs.length > 0 && held.every((u) => (west ? u.x > Math.max(...xs) : u.x < Math.min(...xs)));
     }
     for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
@@ -212,7 +217,7 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /** The share of the attack's tanks and lorries, by strength, that must cross the river: 0 where it has none (b494). */
   private readonly armourWet: number;
-  /** The defence's line ends on a city's own river up the field (b526), all of it on one bank: a flank not on the card. */
+  /** The defence's line ends on a city's own river up the field (b526), or a second river along its flank (b596), all of it on one bank: a flank not on the card. */
   private readonly flankOnRiver: boolean = false;
 
   private say(e: Omit<FieldEvent, 't'>): void {
