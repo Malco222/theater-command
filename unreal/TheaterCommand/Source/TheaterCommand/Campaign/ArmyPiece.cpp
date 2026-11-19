@@ -2,6 +2,8 @@
 
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
+#include "Campaign/CampaignUnitTable.h"
+#include "Misc/ScopeExit.h"
 #include "Campaign/TheaterSpeed.h"
 #include "Campaign/TheaterStillMesh.h"
 #include "Components/StaticMeshComponent.h"
@@ -132,6 +134,7 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	// The standard shows the army's strength to the nearest thousand, so it is remade when that changes.
 	NewSignature += FString::Printf(TEXT("|%dk"), FMath::RoundToInt32(Men / 1000.0f));
 	NewSignature += bGlimpsed ? TEXT("|glimpsed") : TEXT(""); // (how much of it is drawn is part of how it looks)
+	NewSignature += bOnSnow && UnitTable::WinterWash(Nation.Tag) ? TEXT("|snow") : TEXT(""); // (and whether its vehicles are whitewashed)
 	if (NewSignature != Signature)
 	{
 		Signature = NewSignature;
@@ -229,6 +232,10 @@ void AArmyPiece::SetAirFleet(ACampaignMapActor* Map, const FCampaignNation& Nati
 
 void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 {
+	// (An army standing on snow, of a country that whitewashes its vehicles: the painter is told for as long as this
+	// piece is built, and told again that it is over whichever way the building ends.)
+	UnitTable::SetWash(What == 0 && bOnSnow && UnitTable::WinterWash(Nation.Tag));
+	ON_SCOPE_EXIT { UnitTable::SetWash(false); };
 	for (UStaticMeshComponent* Part : Parts)
 	{
 		if (Part)

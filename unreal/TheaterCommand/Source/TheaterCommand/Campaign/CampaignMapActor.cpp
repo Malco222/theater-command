@@ -9005,7 +9005,12 @@ void ACampaignMapActor::BuildParade()
 			ParadeSpots.Add(WorldToMap(Flying));
 			continue;
 		}
-		if (!Model.Vehicle(Names[K], Spot, Metre, 0.0))
+		// ("-TheaterWash" shows the parade's vehicles whitewashed for the snow, where their country does so.)
+		static const bool bParadeWash = FParse::Param(FCommandLine::Get(), TEXT("TheaterWash"));
+		::UnitTable::SetWash(bParadeWash && ::UnitTable::WinterWash(FMiniatureMesh::VehicleNation(Names[K])));
+		const bool bStood = Model.Vehicle(Names[K], Spot, Metre, 0.0);
+		::UnitTable::SetWash(false);
+		if (!bStood)
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Parade: no model called %s"), *Names[K]);
 		}
@@ -9923,6 +9928,13 @@ AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& 
 	return Best;
 }
 
+/** How hard the winter lies in each month of the year: 0 is January. */
+static float WinterHardInMonth(int32 Month)
+{
+	static const float Winter[12] = { 1.0f, 0.92f, 0.5f, 0.12f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.08f, 0.42f, 0.86f };
+	return Winter[((Month % 12) + 12) % 12];
+}
+
 void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)
 {
 	THEATER_SPEED_SCOPE(ShowArmies);
@@ -10017,6 +10029,14 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		{
 			// (Ruling 154: a foreign army in a province he only glimpses is a flag and no more.)
 			Piece->SetGlimpsed(Group[0].Nation != View.Human && View.Glimpsed.Contains(Group[0].Region));
+			{
+				// (whether snow lies where it stands this month, for the whitewash of a winter army: the same snow the
+				// season lays, asked here because a campaign taken up again lays out its armies before its season)
+				int32 Held = 0;
+				const int32 TurnNow = FParse::Value(FCommandLine::Get(), TEXT("TheaterSeason="), Held) ? Held : View.Turn;
+				const float Hard = WinterHardInMonth(TurnNow + 7);
+				Piece->SetOnSnow(Data.Regions.IsValidIndex(Group[0].Region) && SnowLying(Data.Regions[Group[0].Region].Center, Hard) >= 0.5f);
+			}
 			Piece->SetArmy(this, *Nation, Group[0].Region, Group);
 			Piece->SetRestLocation(Spot);
 			Piece->SetSize(static_cast<float>(PieceSize.X));
@@ -11689,8 +11709,7 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 	}
 	ShownMonth = Month;
 	// How hard the winter lies in each month of the year.
-	static const float Winter[12] = { 1.0f, 0.92f, 0.5f, 0.12f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.08f, 0.42f, 0.86f };
-	const float Hard = Winter[Month];
+	const float Hard = WinterHardInMonth(Month);
 	{
 		// (The stripes of occupied ground are laid stronger where snow lies, so that they show as well in January as
 		// in July: the painter is told how far the snow takes each province toward white, and occupied ground is

@@ -55,6 +55,18 @@ namespace UnitTable
 	/** (Brian, the same day: "make the camoflage reflect their terrian".) The second colour of its camouflage, for the patches. False where it has one coat. */
 	bool Paint2(const FString& Tag, FLinearColor& Out);
 	/**
+	 * Whether the country whitewashes its vehicles on snow (the art director's "winter_wash": the Nordic and Baltic
+	 * countries, Hungary, Slovakia, Romania, Mongolia, Manchukuo, Germany and the Soviet Union, by the record).
+	 */
+	bool WinterWash(const FString& Tag);
+	/**
+	 * The painter is told that what it paints next stands on snow and is to be washed white: a worn, streaky wash of
+	 * about seven parts in ten over the coat of a vehicle or a gun. Whoever sets it puts it back. A washed model is
+	 * kept apart from the unwashed one.
+	 */
+	void SetWash(bool bOn);
+	bool Wash();
+	/**
 	 * Whose layout the country's battleship (its cruiser) takes: its own tag, another country's by the record (Vichy's
 	 * battleship is France's, a dominion's cruiser Britain's), or nothing for the plain hull, which is no navy's own.
 	 * A small nation's battleship, held only by a great power's captured or stolen plans, is the plain one until the

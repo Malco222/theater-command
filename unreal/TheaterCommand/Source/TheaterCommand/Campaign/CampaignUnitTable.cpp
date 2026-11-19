@@ -11,6 +11,7 @@ namespace
 	struct FLook
 	{
 		FString Head, Cloth, Paint, Paint2, Hull;
+		bool bWinterWash = false;
 		TArray<FString> Ring;
 		TArray<UnitTable::FInsigniaLayer> Insignia;
 		// (its dated marks: the month each stands from, counted in months from the year 0, and its layers)
@@ -93,6 +94,7 @@ namespace
 		// (a marking that is a list is a ring of the flag's colours; one that is words is drawn already, or is the default's note)
 		Told->TryGetStringArrayField(TEXT("marking"), Look.Ring);
 		Told->TryGetStringField(TEXT("paint2"), Look.Paint2);
+		Told->TryGetBoolField(TEXT("winter_wash"), Look.bWinterWash);
 		// (The art director's table of 20:59Z on 18 November 2026: a country's own mark in layers, bottom first. A layer
 		// is {"ring": [inner, outer]}, {"tri": [radius, degrees]}, {"star": [radius, inner share, points]} or
 		// {"rect": [across from, across to, up from, up to]}, with "c" its colour. A layer that is none of these is left out.)
@@ -294,6 +296,27 @@ bool UnitTable::Paint2(const FString& Tag, FLinearColor& Out)
 {
 	const FLook* Look = LookOf(Tag);
 	return Look && Colour(Look->Paint2, Out);
+}
+
+namespace
+{
+	bool bWashNow = false;
+}
+
+bool UnitTable::WinterWash(const FString& Tag)
+{
+	const FLook* Look = LookOf(Tag);
+	return Look && Look->bWinterWash;
+}
+
+void UnitTable::SetWash(bool bOn)
+{
+	bWashNow = bOn;
+}
+
+bool UnitTable::Wash()
+{
+	return bWashNow;
 }
 
 TArray<FLinearColor> UnitTable::Ring(const FString& Tag)

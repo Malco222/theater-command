@@ -798,7 +798,9 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	}
 	// (kept by its country and by which of the country's dated marks stands: see UnitTable::MarkEra)
 	const int32 Era = UnitTable::MarkEra(Tag);
-	const FString Key = Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag;
+	// (and by whether it is whitewashed for the snow: a vehicle or a gun only, never a figure, an aircraft or a piece of scenery)
+	const bool bWash = UnitTable::Wash() && !bFigure && !Raw->bAircraft && !Raw->bPiece;
+	const FString Key = (Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag) + (bWash ? TEXT("|wash") : TEXT(""));
 	FMiniatureMesh* Model = Painted.Find(Key);
 	if (!Model)
 	{
@@ -840,6 +842,9 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				PlanePaints[15] = FMath::Lerp(Paint, PlanePaints[11], 0.5f);
 			}
 		}
+		// (the whitewash of winter, where it is asked for: its streaks are a few to the vehicle's length)
+		const FLinearColor WashWhite(FColor(224, 224, 214));
+		const double WashGrain = 26.0 / FMath::Max(FBox(Raw->Points).GetSize().GetMax(), 0.01);
 		// (painted metal chips: upper and under surfaces, nose, spinner, guns, legs, a bomb. Glass, rubber, scribed lines and soot do not.)
 		static const bool bPlaneMetal[18] = { true, true, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false };
 		for (int32 K = 0; K < Raw->Points.Num(); ++K)
@@ -893,6 +898,19 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				// (a camouflage in fields: the plate's own colour, with the second and third mixed in as far as the point lies in each)
 				Coat = FMath::Lerp(Coat, Raw->FieldColourA, FMath::Clamp(Raw->FieldA[K], 0, 100) / 100.0f);
 				Coat = FMath::Lerp(Coat, Raw->FieldColourB, FMath::Clamp(Raw->FieldB[K], 0, 100) / 100.0f);
+			}
+			if (bWash && Kind <= 1)
+			{
+				// (Brian, 18 November 2026: "make the camoflage reflect their terrian"; the art director's winter wash: "on
+				// snow, lay a worn, streaky white wash at about 70% over the base coat". Brushed on by the crew: it runs
+				// in streaks along the hull, lies thinner in patches where it has worn, and thinner still on what
+				// faces the ground, where no brush went. The marks are painted round, and stay.)
+				const FVector& At = Raw->Points[K];
+				const double Run = 0.5 + 0.5 * FMath::Sin(At.Z * WashGrain * 1.4 + 1.7 * FMath::Sin(At.X * WashGrain * 0.6) + 0.9 * FMath::Sin(At.Y * WashGrain * 0.8));
+				const double Worn = 0.5 + 0.5 * FMath::Sin(At.X * WashGrain * 2.3 + At.Y * WashGrain * 1.9 + 1.3);
+				const float Brushed = FMath::Lerp(0.4f, 1.0f, FMath::Clamp(0.5f + 0.5f * static_cast<float>(Raw->Facings[K].Z) + 0.35f, 0.0f, 1.0f));
+				const float Much = 0.7f * (0.62f + 0.38f * static_cast<float>(0.6 * Run + 0.4 * Worn)) * Brushed;
+				Coat = FMath::Lerp(Coat, WashWhite, Much);
 			}
 			Fresh.Add(Raw->Points[K], Raw->Facings[K], Coat.ToFColor(true));
 		}
