@@ -58,7 +58,28 @@ NATION_KIT = {
     "POL": {"helmet": "round", "tall_boots": False, "pack": True, "roll": False, "canister": False, "chest_pouches": False},
     "UK": {"helmet": "brodie", "tall_boots": False, "pack": True, "roll": False, "canister": False, "chest_pouches": True},
     "SOV": {"helmet": "soviet", "tall_boots": True, "pack": False, "roll": True, "canister": False, "chest_pouches": False},
+    # Japan: the field cap with its sun flaps, ankle boots under puttees to below the knee, one big ammunition pouch
+    # either side of the buckle and one behind, no Y-straps: the haversack and water bottle hang on their own slings
+    # crossed over the chest; the pack.
+    "JAP": {"helmet": "cap", "tall_boots": False, "pack": True, "roll": False, "canister": False, "chest_pouches": False,
+            "puttees": {"top": None, "boot": "ankle"}, "y_straps": False, "pouches": {"front": 1, "rear": True},
+            "cross_straps": True},
+    # China (the Central Army): the soft field cap, cloth shoes under puttees, no belt pouches but a cloth bandolier
+    # over the left shoulder, a bag of stick grenades at the left hip, the blanket roll over the right shoulder.
+    "CHN": {"helmet": "fieldcap", "tall_boots": False, "pack": False, "roll": True, "canister": False, "chest_pouches": False,
+            "puttees": {"top": None, "boot": "shoe"}, "y_straps": False, "pouches": {"front": 0, "rear": False},
+            "bandolier": {"shoulder": "left", "pockets": 10}, "grenade_bag": True},
 }
+
+# The shared options any nation's kit may carry (each optional; a nation without them is drawn as before):
+#   "puttees": {"top": metres of wrap above the ankle joint, or None for just under the knee; "boot": "ankle" (leather
+#              ankle boots) or "shoe" (low cloth shoes); "colour": hex for the wrap, else LOOK's "lower"; "turns": how
+#              many turns of the spiral are pressed in as grooves (default 0: none; each costs triangles the tunic and
+#              the far man's face would have had, and they do not show at battle range)}. Painted "lower", the gaiters' paint, so the game colours it the same way.
+#   "bandolier": {"shoulder": "left" or "right" (the one it hangs from); "pockets": cells across the chest; "paint"}.
+#   "y_straps": False drops the Y-straps; "pouches": {"front": 3, 1 or 0 cells each side of the buckle, "rear": True
+#              for one behind}; "cross_straps": True hangs the haversack and bottle on slings crossed over the chest;
+#   "grenade_bag": True, a cloth bag of stick grenades at the left hip.
 
 # Studio colours for the pictures only (the game paints by number from its unit table).
 LOOK = {
@@ -67,6 +88,12 @@ LOOK = {
     "POL": {"tunic": "7C7450", "trousers": "746C4A", "boots": "3A2A1E", "lower": "5E4A34", "straps": "4A3624", "helmet": "5E6044",
             "pack": "7A7254", "skin": "BDA08E", "wood": "6B4429", "steel": "34363A", "eye": "2A2420", "leather": "3A2E25",
             "blanket": "5C5040"},
+    "JAP": {"tunic": "A08856", "trousers": "9A8452", "boots": "4A3626", "lower": "948052", "straps": "5A4632", "helmet": "9C8656",
+            "pack": "7E7050", "skin": "C2A07E", "wood": "6B4429", "steel": "34363A", "eye": "2A2420", "leather": "4A3626",
+            "blanket": "6A5E48"},
+    "CHN": {"tunic": "7F8A96", "trousers": "7A8590", "boots": "2E2C2A", "lower": "7A8490", "straps": "6E6450", "helmet": "727E8A",
+            "pack": "8A8070", "skin": "C2A07E", "wood": "6B4429", "steel": "34363A", "eye": "2A2420", "leather": "3A2E25",
+            "blanket": "6A6A5E"},
 }
 
 
@@ -984,26 +1011,73 @@ def build_kit(J, spec, body_ls, Z=None):
         else:
             g.box(p + nrm * 0.0005, (0.0022, 0.02, 0.0105), "lower", frame_from(nrm, (0.0, 0.0, 1.0)))
     out["details"] = (g.build("details"), None)
-    # ---- the ammunition pouches: three cells either side of the buckle, on the belt
+    # ---- the ammunition pouches: three cells either side of the buckle, on the belt (or one big one, or none; and
+    # one behind if the nation carried it)
+    po = dict(spec.get("pouches") or {})
+    cells = {3: ((0.06, 0.0195), (0.103, 0.0195), (0.143, 0.0195)), 1: ((0.095, 0.042),), 0: ()}[po.get("front", 3)]
     L = Layer("pouches", "straps")
     for side in (1.0, -1.0):
-        for k, y in enumerate((0.06, 0.103, 0.143)):
+        for k, (y, hw) in enumerate(cells):
             a = math.atan2(y * side, 0.12)
             p0, n0 = project(tunic, [(cx + math.cos(a) * 0.2, math.sin(a) * 0.2, zb - 0.012)])
             p0, n0 = p0[0], n0[0]
             R = frame_from(n0, (0.0, 0.0, 1.0))
             c = p0 + n0 * 0.028
-            L.add(RoundBox(c, (0.021, 0.0195, 0.04), 0.008, R), 0.0)
-            L.add(RoundBox(c + R @ np.array((0.004, 0.0, 0.03)), (0.019, 0.021, 0.016), 0.006, R), 0.003)
-    out["pouches"] = (mesh_from_layers("pouches", [L], 0.0025, 260), None)
+            L.add(RoundBox(c, (0.021, hw, 0.04), 0.008, R), 0.0)
+            L.add(RoundBox(c + R @ np.array((0.004, 0.0, 0.03)), (0.019, hw + 0.0015, 0.016), 0.006, R), 0.003)
+    if po.get("rear"):
+        p0, n0 = project(tunic, [(cx - 0.2, 0.0, zb - 0.012)])
+        p0, n0 = p0[0], n0[0]
+        R = frame_from(n0, (0.0, 0.0, 1.0))
+        c = p0 + n0 * 0.032
+        L.add(RoundBox(c, (0.026, 0.07, 0.045), 0.01, R), 0.0)
+        L.add(RoundBox(c + R @ np.array((0.005, 0.0, 0.034)), (0.024, 0.072, 0.017), 0.007, R), 0.003)
+    if cells or po.get("rear"):
+        out["pouches"] = (mesh_from_layers("pouches", [L], 0.0025, 260 if len(cells) != 1 else 200), None)
     # ---- the Y-straps: from the belt in front, over each shoulder, joining in the middle of the back
-    g = Geo()
-    for side in (1.0, -1.0):
-        ctrl = [(x, y * side, Z(z)) for x, y, z in ((0.13, 0.082, 1.03), (0.13, 0.09, 1.16), (0.125, 0.1, 1.28), (0.09, 0.112, 1.4),
-                (0.025, 0.12, 1.468), (-0.05, 0.112, 1.45), (-0.12, 0.085, 1.37), (-0.142, 0.045, 1.29), (-0.145, 0.006, 1.235))]
-        strap_on(g, tunic, spline(ctrl, 22), 0.032, 0.004)
-    strap_on(g, tunic, spline([(-0.145, 0.0, Z(1.245)), (-0.14, 0.0, Z(1.13)), (-0.13, 0.0, Z(1.03))], 7), 0.036, 0.004)
-    out["straps"] = (g.build("straps"), None)
+    if spec.get("y_straps", True):
+        g = Geo()
+        for side in (1.0, -1.0):
+            ctrl = [(x, y * side, Z(z)) for x, y, z in ((0.13, 0.082, 1.03), (0.13, 0.09, 1.16), (0.125, 0.1, 1.28), (0.09, 0.112, 1.4),
+                    (0.025, 0.12, 1.468), (-0.05, 0.112, 1.45), (-0.12, 0.085, 1.37), (-0.142, 0.045, 1.29), (-0.145, 0.006, 1.235))]
+            strap_on(g, tunic, spline(ctrl, 22), 0.032, 0.004)
+        strap_on(g, tunic, spline([(-0.145, 0.0, Z(1.245)), (-0.14, 0.0, Z(1.13)), (-0.13, 0.0, Z(1.03))], 7), 0.036, 0.004)
+        out["straps"] = (g.build("straps"), None)
+
+    def across(side, lo=0.95):
+        """A path from the top of one shoulder (side 1 = left) down across the chest to the other hip, and round the
+        back up to the shoulder again."""
+        pts = ((0.02, 0.12, 1.468), (0.1, 0.1, 1.4), (0.14, 0.04, 1.29), (0.15, -0.035, 1.17), (0.135, -0.105, 1.06),
+               (0.08, -0.16, lo + 0.02), (-0.02, -0.185, lo), (-0.12, -0.135, lo + 0.06), (-0.15, -0.04, 1.17),
+               (-0.14, 0.055, 1.31), (-0.08, 0.11, 1.42), (0.0, 0.124, 1.468))
+        return [(x, y * side, Z(z)) for x, y, z in pts]
+    if spec.get("cross_straps"):
+        # the haversack's sling over the left shoulder to the right hip, the water bottle's over the right to the left
+        g = Geo()
+        for side in (1.0, -1.0):
+            strap_on(g, tunic, spline(across(side, 0.9)[:7], 26), 0.022, 0.003)
+            strap_on(g, tunic, spline(across(side, 0.9)[6:], 22), 0.022, 0.003)
+        out["slings"] = (g.build("slings"), None)
+    bd = spec.get("bandolier")
+    if bd:
+        # a cloth bandolier: a tube of cloth sewn into pockets, over one shoulder, across the chest, round the back
+        bd = dict(bd) if isinstance(bd, dict) else {}
+        side = 1.0 if bd.get("shoulder", "left") == "left" else -1.0
+        paint = bd.get("paint", "pack")
+        g = Geo()
+        path = spline(across(side, 0.97), 46)
+        strap_on(g, tunic, path, 0.05, 0.007, paint)
+        out["bandolier"] = (g.build("bandolier"), None)
+        L = Layer("bandolier_pockets", paint)
+        P, N = project(tunic, path)
+        front = [i for i in range(len(P)) if P[i][0] > 0.04 and Z(1.02) < P[i][2] < Z(1.42)]
+        n = int(bd.get("pockets", 10))
+        for i in np.linspace(front[0], front[-1], n).astype(int) if front else []:
+            T_ = P[min(i + 1, len(P) - 1)] - P[max(i - 1, 0)]
+            R = frame_from(N[i], T_)
+            L.add(RoundBox(P[i] + N[i] * 0.014, (0.011, 0.02, 0.017), 0.007, R), 0.0)
+        if front:
+            out["bandolier_pockets"] = (mesh_from_layers("bandolier_pockets", [L], 0.0025, 30 * n), None)
     # ---- what hangs from the belt: bread bag (right hip), water bottle (behind it), entrenching tool (left hip)
     L = Layer("bread_bag", "pack")
     flap = Layer("bread_flap", "pack")
@@ -1047,6 +1121,21 @@ def build_kit(J, spec, body_ls, Z=None):
     hnd.add(Sphere(c + R @ np.array((0.0, 0.0, -0.205)), 0.0175), 0.005)
     out["shovel"] = (mesh_from_layers("shovel", [L, hnd], 0.0025, 170), "pelvis")
     # ---- by nation
+    if spec.get("grenade_bag"):
+        # a cloth bag at the left hip, in front of the entrenching tool, the wooden handles of four stick grenades
+        # standing out of its mouth
+        L = Layer("grenade_bag", "pack")
+        hnd = Layer("grenade_handles", "wood")
+        p0, n0 = project(tunic, [(0.12, 0.26, zb_ - 0.09)])
+        p0, n0 = p0[0], n0[0]
+        n0 = _n(n0 * np.array((1.0, 1.0, 0.0)))
+        R = frame_from(n0, (0.0, 0.0, 1.0)) @ rot_euler(-8.0, 0, 0)
+        c = p0 + n0 * 0.035
+        L.add(RoundBox(c, (0.03, 0.058, 0.068), 0.02, R))
+        for k, (u, v) in enumerate(((-0.03, -0.006), (-0.01, 0.008), (0.012, -0.004), (0.032, 0.006))):
+            base = c + R @ np.array((v, u, 0.04))
+            hnd.add(RoundCone(base, base + R @ np.array((0.004 * k - 0.006, 0.006 * (k - 1.5), 0.085)), 0.0105, 0.0095))
+        out["grenade_bag"] = (mesh_from_layers("grenade_bag", [L, hnd], 0.0025, 200), "pelvis")
     if spec["canister"]:
         # the gas-mask canister: upright, slung behind the right hip below the belt, tucked close
         L = Layer("canister", "helmet")
@@ -2122,9 +2211,10 @@ class Rig:
 SOLE = 0.02                        # the boots' soles lift him: made 1.73 m tall, he stands 1.75 m in his boots
 CURL = (34.0, 62.0, 38.0)          # his fingers half shut in the rest pose (the thumb a third as much), ready for a rifle
 GRIP_ALONG, GRIP_OUT = 0.78, 0.03  # a gripped stock's middle: so far from the wrist toward the knuckles, so far off the palm
-NATION_SEED = {"GER": 3, "POL": 7}  # whose face each army's exported man has (the squad's men get faces of their own)
+NATION_SEED = {"GER": 3, "POL": 7, "JAP": 11, "CHN": 13}  # whose face each army's exported man has (the squad's men get faces of their own)
 DETAIL = 0.005                                 # (how much the uniform's thinning spares its sharp places)
 BUDGET = {"uniform": 2450, "head": 1260, "hand": 520}       # (the uniform gains about 600 more where it is cut along its paints)
+BUDGET["puttees"] = 700                        # (more for a uniform whose puttees have grooved turns, which would take it from the tunic)
 
 
 def _axis_resample(G, q, lo, h, axis, far):
@@ -2431,8 +2521,19 @@ def neck_size(man, LM):
     return (float(x.max() - x.min()) / 2, float(np.abs(y).max())), mid, fwd
 
 
+def puttee_spec(spec):
+    """A nation's puttees option filled out (see NATION_KIT's notes), or None."""
+    p = spec.get("puttees")
+    if not p:
+        return None
+    p = dict(p) if isinstance(p, dict) else {}
+    for k, v in (("top", None), ("boot", "ankle"), ("colour", None), ("turns", 0)):
+        p.setdefault(k, v)
+    return p
+
+
 def uniform_layers(man, J, spec, LM):
-    """Tunic, trousers and boots (or ankle boots and gaiters), collar and cuffs, soles: the uniform as layers."""
+    """Tunic, trousers and boots (or ankle boots and gaiters, or puttees), collar and cuffs, soles: the uniform as layers."""
     t0 = time.time()
     tights, skirt = ShellField(man["tights"]), ShellField(man["skirt"])
     print(f"  shells read as fields in {time.time() - t0:.0f} s")
@@ -2523,8 +2624,11 @@ def uniform_layers(man, J, spec, LM):
             tunic.add(RoundBox(flap, (0.0075, half[1] + 0.004, 0.018), 0.006, R), 0.003)
             LM["pockets"].append((p, R, half))
     # ---- the trousers: the suit over the seat and legs, full in the thigh
-    boot_top = LM["knee"] - 0.075 if spec["tall_boots"] else LM["ankle"] + 0.045
-    tuck = boot_top if spec["tall_boots"] else LM["ankle"] + 0.22            # (where the trousers go into the boot or gaiter)
+    pt = puttee_spec(spec)
+    put_top = (LM["ankle"] + pt["top"] if pt["top"] else LM["knee"] - 0.07) if pt else None
+    shoe = bool(pt) and pt["boot"] == "shoe"
+    boot_top = LM["knee"] - 0.075 if spec["tall_boots"] else LM["ankle"] + (-0.012 if shoe else 0.045)
+    tuck = boot_top if spec["tall_boots"] else (put_top if pt else LM["ankle"] + 0.22)   # (where the trousers go into the boot, gaiter or puttee)
     trousers.add(tights.cloth({"pelvis": 0.012, "spine_01": 0.012, "thigh_l": 0.017, "thigh_r": 0.017, "calf_l": 0.009,
                                "calf_r": 0.009, "foot_l": 0.006, "foot_r": 0.006, "ball_l": 0.006, "ball_r": 0.006},
                               hi=(BIGBOX, BIGBOX, LM["belt"] + 0.04), default=OFF,
@@ -2542,7 +2646,31 @@ def uniform_layers(man, J, spec, LM):
                            hi=(BIGBOX, BIGBOX, boot_top + 0.02), default=OFF))
     T = np.array([v.co for v in man["tights"].data.vertices])
     lower = straps = None
-    if not spec["tall_boots"]:
+    lower_lo = LM["ankle"] + (-0.022 if shoe else 0.01)
+    lower_top = put_top if pt else LM["ankle"] + 0.22
+    if not spec["tall_boots"] and pt:
+        # puttees: a cloth band wound from the boot's top to under the knee, close on the leg, its turns showing as a
+        # spiral of low ridges, and the end tied off round the top
+        lower, straps = Layer("puttees", "lower"), None
+        layers += [lower]
+        lower.add(tights.cloth({b + s: 0.0105 for b in ("calf_", "foot_") for s in ("l", "r")}, lo=(-BIGBOX, -BIGBOX, lower_lo),
+                               hi=(BIGBOX, BIGBOX, lower_top + 0.012), default=OFF))
+        for s, side in (("l", 1.0), ("r", -1.0)):
+            # each turn's edge pressed in as a shallow slanting groove (cut, never added: nothing can stand proud of
+            # the leg where the calf narrows), and the tape round the top
+            n_t = int(pt["turns"])
+            axis = np.array(J["calf_" + s]) - np.array(J["foot_" + s])
+            for k in range(n_t):
+                z = lower_lo + 0.02 + (lower_top - lower_lo - 0.04) * (k + 0.5) / n_t
+                c = leg_point(J, s, z)
+                Rk = ring_frame(axis) @ rot_euler(9.0 * side, 0, 0)
+                rx, ry = ring_axes(lower, c, Rk)
+                lower.sub(Torus(c, rx + 0.0008, 0.0026, Rk, major_y=ry + 0.0008), 0.0015)
+            c = leg_point(J, s, lower_top - 0.014)
+            Rk = ring_frame(axis)
+            rx, ry = ring_axes(lower, c, Rk)
+            lower.add(Torus(c, rx - 0.0015, 0.003, Rk, major_y=ry - 0.0015), 0.003)                    # (the tape tied round)
+    elif not spec["tall_boots"]:
         lower, straps = Layer("gaiters", "lower"), Layer("gaiter_straps", "straps")
         layers += [lower, straps]
         lower.add(tights.cloth({b + s: 0.013 for b in ("calf_", "foot_") for s in ("l", "r")}, lo=(-BIGBOX, -BIGBOX, LM["ankle"] + 0.01),
@@ -2566,7 +2694,7 @@ def uniform_layers(man, J, spec, LM):
         soles.add(RoundBox(at(heel_u + 0.033, 0.0, 0.021), (0.042, half_w - 0.008, 0.02), 0.004, Ry), 0.004)   # the heel
         boots.add(Ellipsoid(at(toe_u - 0.035, 0.0, SOLE + 0.03), (0.062, half_w - 0.008, 0.032), Ry), 0.02)  # the toe cap
         boots.add(RoundBox(at(heel_u + 0.028, 0.0, SOLE + 0.03), (0.035, half_w - 0.014, 0.028), 0.014, Ry), 0.012)  # the heel's counter
-        if lower is not None:
+        if straps is not None:
             for z in (LM["ankle"] + 0.08, LM["ankle"] + 0.18):
                 c = leg_point(J, s, z)
                 rx, ry = ring_axes(lower, c, ring_frame((0.0, 0.0, 1.0)))
@@ -2574,13 +2702,14 @@ def uniform_layers(man, J, spec, LM):
     boots.cut(HalfSpace((0.0, 0.0, boot_top), (0.0, 0.0, 1.0)), 0.006)
     boots.cut(HalfSpace((0.0, 0.0, SOLE - 0.002), (0.0, 0.0, -1.0)), 0.0)                       # (standing on the sole)
     if lower is not None:
-        lower.cut(HalfSpace((0.0, 0.0, LM["ankle"] + 0.22), (0.0, 0.0, 1.0)), 0.005)
-        lower.cut(HalfSpace((0.0, 0.0, LM["ankle"] + 0.012), (0.0, 0.0, -1.0)), 0.0)
+        lower.cut(HalfSpace((0.0, 0.0, lower_top), (0.0, 0.0, 1.0)), 0.005)
+        lower.cut(HalfSpace((0.0, 0.0, lower_lo + 0.002), (0.0, 0.0, -1.0)), 0.0)
         for s, side in (("l", 1.0), ("r", -1.0)):
-            c = leg_point(J, s, LM["ankle"] + 0.245)
+            c = leg_point(J, s, lower_top + 0.025)
             rx, ry = ring_axes(trousers, c, ring_frame((0.0, 0.0, 1.0)))
             trousers.add(Torus(c, rx - 0.002, 0.016, major_y=ry - 0.002), 0.02)                            # bloused over the gaiter
     LM["boot_top"] = boot_top
+    LM["puttee_top"] = put_top
     print(f"  uniform laid out in {time.time() - t0:.0f} s")
     return layers
 
@@ -2878,13 +3007,17 @@ def assemble(nation, weapon="rifle", seed=None):
     Returns a dict of his objects and his Rig."""
     spec = NATION_KIT[nation]
     LOOK_NOW.update(LOOK.get(nation, LOOK["GER"]))
+    pt = puttee_spec(spec)
+    if pt and pt["colour"]:
+        LOOK_NOW["lower"] = pt["colour"]
     t0 = time.time()
     man = mh_body(nation, seed)
     J = joints_of(man)
     fit_body(J)
     LM = landmarks(J)
     ls = uniform_layers(man, J, spec, LM)
-    cloth = mesh_from_layers("uniform", ls, 0.0034, BUDGET["uniform"], cut_paints=True, detail=DETAIL)
+    cloth = mesh_from_layers("uniform", ls, 0.0034, BUDGET["uniform"] + (BUDGET["puttees"] if pt and pt["turns"] else 0), cut_paints=True,
+                             detail=DETAIL)
     uniform_weights(cloth, man, LM)
     parts = skin_parts(man, ls, nation)
     body = join_meshes([cloth] + parts, "body_" + nation)
@@ -4871,8 +5004,71 @@ def tris_of(ob):
     return sum(len(p.vertices) - 2 for p in ob.data.polygons)
 
 
+SKIN_FLOOR = {1: 200, 2: 60}          # (a far man keeps at least this many triangles of face and hands)
+SKIN_APART = {1: 300, 2: 80}          # (and when they are thinned apart to keep them, this many: the German's own share)
+SKIN_PAINTS = ("skin", "eye")
+
+
+def paint_tris(ob, paints):
+    names = [(mt.name.split(".")[0] if mt else "") for mt in ob.data.materials]
+    return sum(len(p.vertices) - 2 for p in ob.data.polygons if names and names[p.material_index] in paints)
+
+
+def _lod_decimate(c, r):
+    """Thin c by ratio r."""
+    # (where two cloths nearly touch the mesh has an edge shared by more than two faces, which the thinning will
+    # not pass: such edges are split first)
+    bm = bmesh.new()
+    bm.from_mesh(c.data)
+    nm = [e for e in bm.edges if not e.is_manifold and not e.is_boundary]
+    if nm:
+        bmesh.ops.split_edges(bm, edges=nm)
+        bm.to_mesh(c.data)
+    bm.free()
+    d = c.modifiers.new("lod", "DECIMATE")
+    d.ratio = r                                       # (not mirrored: MakeHuman's faces are not quite symmetric)
+    bpy.context.view_layer.objects.active = c
+    with bpy.context.temp_override(object=c, active_object=c):
+        bpy.ops.object.modifier_apply(modifier=d.name)
+    c.data.validate()                                 # (the thinning can leave a face doubled on itself: gone)
+
+
+def _drop_faces(ob, keep_skin):
+    """Delete ob's faces that are (keep_skin False) or are not (keep_skin True) face and hands, and loose points."""
+    names = [(mt.name.split(".")[0] if mt else "") for mt in ob.data.materials]
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    gone = [f for f in bm.faces if (names[f.material_index] in SKIN_PAINTS) != keep_skin]
+    bmesh.ops.delete(bm, geom=gone, context="FACES")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    bm.to_mesh(ob.data)
+    bm.free()
+
+
+def _lod_decimate_apart(c, r, want):
+    """Thin the face and hands apart from the cloth: the cloth by r, the skin to about `want` triangles; then one mesh
+    again (same paints, same bone groups)."""
+    sk = c.copy()
+    sk.data = c.data.copy()
+    bpy.context.scene.collection.objects.link(sk)
+    _drop_faces(c, keep_skin=False)
+    _drop_faces(sk, keep_skin=True)
+    _lod_decimate(c, r)
+    n = tris_of(sk)
+    _lod_decimate(sk, min(1.0, want / max(n, 1)))
+    for o in bpy.context.view_layer.objects:
+        o.select_set(False)
+    sk.select_set(True)
+    c.select_set(True)
+    bpy.context.view_layer.objects.active = c
+    with bpy.context.temp_override(active_object=c, selected_editable_objects=[c, sk], selected_objects=[c, sk]):
+        bpy.ops.object.join()
+
+
 def make_lods(m, lod):
-    """Thinned copies of the man's meshes for a level of detail, skinned to the same armature."""
+    """Thinned copies of the man's meshes for a level of detail, skinned to the same armature. Where the cloth's
+    sharp places (gaiter straps, puttee turns) would take the whole budget and leave a far man faceless, the face and
+    hands are thinned apart from the cloth instead, keeping SKIN_FLOOR triangles."""
     objs = [o for o in man_objects(m) if not (lod == 2 and o.name.split(".")[0] in LOD2_LEFT_OFF)]
     total = sum(tris_of(o) for o in objs)
     ratio = LOD_TARGET[lod] / total
@@ -4887,21 +5083,18 @@ def make_lods(m, lod):
         n = tris_of(c)
         r = min(1.0, max(ratio, 14.0 / max(n, 1)))
         if r < 0.98:
-            # (where two cloths nearly touch the mesh has an edge shared by more than two faces, which the thinning will
-            # not pass: such edges are split first)
-            bm = bmesh.new()
-            bm.from_mesh(c.data)
-            nm = [e for e in bm.edges if not e.is_manifold and not e.is_boundary]
-            if nm:
-                bmesh.ops.split_edges(bm, edges=nm)
-                bm.to_mesh(c.data)
-            bm.free()
-            d = c.modifiers.new("lod", "DECIMATE")
-            d.ratio = r                                   # (not mirrored: MakeHuman's faces are not quite symmetric)
-            bpy.context.view_layer.objects.active = c
-            with bpy.context.temp_override(object=c, active_object=c):
-                bpy.ops.object.modifier_apply(modifier=d.name)
-            c.data.validate()                             # (the thinning can leave a face doubled on itself: gone)
+            floor = min(SKIN_FLOOR[lod], paint_tris(c, SKIN_PAINTS))
+            src = c.data.copy() if floor else None
+            _lod_decimate(c, r)
+            if floor and paint_tris(c, SKIN_PAINTS) < floor:
+                old = c.data
+                c.data = src.copy()
+                bpy.data.meshes.remove(old)
+                _lod_decimate_apart(c, r, SKIN_APART[lod])
+            if src is not None:
+                bpy.data.meshes.remove(src)
+            if floor:
+                print(f"    {c.name}: {tris_of(c)} triangles, face and hands {paint_tris(c, SKIN_PAINTS)}")
         clean_weights(c)
         a = c.modifiers.new("skin", "ARMATURE")
         a.object = m["arm"]
@@ -5202,11 +5395,14 @@ def give_lmg(m, arm=None):
     return m
 
 
-def export_all(info):
+def export_all(info, nations=("GER", "POL")):
     """soldier_GER.glb, soldier_POL.glb (LOD0 with every clip), their LOD1 and LOD2 (.glb, the same skeleton, no clips),
     soldier.fbx (the German, LOD0, every clip a take), soldier_GER_lmg.glb (the German gunner with the LMG, every clip),
-    soldier_GER.json (the game's own form), and the rigid helmets and weapons."""
-    for nation in ("GER", "POL"):
+    soldier_GER.json (the game's own form), and the rigid helmets and weapons. `--nations JAP,CHN` makes only those
+    (their .glb, LODs and .json, and for the German also his .fbx and LMG man); the helmets and weapons are made when
+    both the German and the Pole are in the list."""
+    staged = []
+    for nation in nations:
         t0 = time.time()
         sc = kit.fresh(FPS)
         m = assemble(nation)
@@ -5221,8 +5417,14 @@ def export_all(info):
         if nation == "GER":                           # (the mocap clips' events, strides and end offsets, for the README)
             info["mocap"] = {n: {k: CLIPS[n][k] for k in ("events", "stride", "end")} for n in MOCAP}
         export_glb(stage_path(f"soldier_{nation}.glb"), [m["arm"]] + lods[0] + socks)
+        staged.append(f"soldier_{nation}.glb")
         for lod in (1, 2):
             export_glb(stage_path(f"soldier_{nation}_LOD{lod}.glb"), [m["arm"]] + lods[lod] + socks, anim=False)
+            staged.append(f"soldier_{nation}_LOD{lod}.glb")
+        if nation not in ("GER", "POL"):
+            data = write_game_json(stage_path(f"soldier_{nation}.json"), m, lods)
+            staged.append(f"soldier_{nation}.json")
+            info.setdefault("json_by_nation", {})[nation] = {k: len(data[k]["triangles"]) // 3 for k in ("near", "mid", "far")}
         if nation == "GER":
             export_fbx(stage_path("soldier.fbx"), [m["arm"]] + lods[0] + socks)
             data = write_game_json(stage_path("soldier_GER.json"), m, lods)
@@ -5235,15 +5437,15 @@ def export_all(info):
             give_lmg(m)
             info["tris"]["GER_lmg"] = sum(tris_of(o) for o in man_objects(m))
             export_glb(stage_path("soldier_GER_lmg.glb"), [m["arm"]] + man_objects(m) + socks)
+            staged += ["soldier.fbx", "soldier_GER.json", "soldier_GER_lmg.glb"]
         print(f"  {nation} exported in {time.time() - t0:.0f} s: {n}")
-    export_props(info)
-    names = ["soldier_GER.glb", "soldier_POL.glb", "soldier_GER_LOD1.glb", "soldier_GER_LOD2.glb", "soldier_POL_LOD1.glb",
-             "soldier_POL_LOD2.glb", "soldier.fbx", "soldier_GER_lmg.glb", "soldier_GER.json", "weapons/rifle.glb", "weapons/lmg.glb"]
-    names += [f"helmets/{k}.glb" for k in HELMETS]
-    for n_ in names:
+    if {"GER", "POL"} <= set(nations):                # (the props are the German's and the Pole's helmets and weapons)
+        export_props(info)
+        staged += ["weapons/rifle.glb", "weapons/lmg.glb"] + [f"helmets/{k}.glb" for k in HELMETS]
+    for n_ in staged:                                 # (everything made is delivered, so no file is left stale beside it)
         deliver(n_)
     with open(stage_path("export_info.json"), "w") as f:
-        json.dump(info, f, indent=1)
+        json.dump(info, f, indent=1, default=float)
     return info
 
 
@@ -6291,7 +6493,7 @@ def load_info():
 
 def save_info(info):
     with open(stage_path("export_info.json"), "w") as f:
-        json.dump(info, f, indent=1)
+        json.dump(info, f, indent=1, default=float)
 
 
 def main():
@@ -6304,7 +6506,7 @@ def main():
     for step in steps:
         t0 = time.time()
         if step == "export":
-            export_all(info)
+            export_all(info, tuple(a[a.index("--nations") + 1].split(",")) if "--nations" in a else ("GER", "POL"))
         elif step == "before_after":
             pictures_before_after(info, fast)
         elif step == "turntable":
