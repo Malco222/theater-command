@@ -42,7 +42,7 @@ import soldier as S  # noqa: E402  (imports bpy first)
 import bpy  # noqa: E402
 import numpy as np  # noqa: E402
 import kit  # noqa: E402
-from sculpt import HalfSpace, Layer, RoundBox, RoundCone, Sphere, frame_from, on_surface  # noqa: E402
+from sculpt import HalfSpace, Layer, RoundBox, RoundCone, Sphere, Torus, frame_from, on_surface  # noqa: E402
 from soldier import Blend, Both  # noqa: E402
 
 NATION = "SOV"
@@ -105,7 +105,8 @@ def uniform_layers(man, J, spec, LM):
     layers = _uniform_layers(man, J, spec, LM)
     if not _ours(spec):
         return layers
-    S.BUDGET["uniform"] = UNIFORM_BUDGET + (900 if spec.get("dress") else 0)    # (the quilting needs the faces to show)
+    # (the quilted channels need the faces to stay through the thinning; the snow suit over them is plain)
+    S.BUDGET["uniform"] = UNIFORM_BUDGET + {"winter": 4000, "snow": 900}.get(spec.get("dress"), 0)
     tunic, trousers, collar = layers[0], layers[1], layers[3]
     Z = LM["Z"]
     # ---- off: the button strip to the hem and the four pockets with their flaps (soldier.py's tunic)
@@ -124,7 +125,7 @@ def uniform_layers(man, J, spec, LM):
     # ---- the stand collar in the tunic's own cloth
     collar.paint = "tunic"
     if spec.get("dress"):
-        padded(man, J, LM, layers)
+        padded(man, J, LM, layers, spec["dress"])
         return layers
     # ---- the short placket: from the collar down to the breast, a little proud, its edge to the wearer's left
     nmid, nfwd, nrx, nry = LM["neck_ring"]
@@ -149,13 +150,94 @@ def uniform_layers(man, J, spec, LM):
 S.uniform_layers = uniform_layers
 
 PAD, PAD_LEGS = 0.023, 0.013               # (how much thicker the padded jacket and trousers stand than the summer cloth)
+# the quilting, laid into the padding's own thickness: the cloth stands up in round tubes side by side, each tube's
+# section a half-round, the stitched seams the creases between (on the body every 24 degrees round him, about 7 cm; down
+# the sleeves and the trousers by each limb's own axis). (Tubes laid on as shapes piled into lumps where they bent over
+# him, and grooves cut in read faint once the cloth was thinned to its faces: tubes in the thickness read as quilting.)
+QUILT = {"body": (math.radians(24.0), 0.012), "arm": (0.052, 0.008), "leg": (0.062, 0.009)}     # (spacing, height)
+QUILT_LIFT = 0.006                       # (the cloth under the tubes that much nearer the body, for the same bulk)
 
 
-def padded(man, J, LM, layers):
+def _tubes(u, spacing, height):
+    """A row of round tubes across u: zero at each seam (u a whole number of spacings), `height` between. (Smooth
+    through the seams: the cloth is pushed out face by face, and a sharp crease came out in steps.)"""
+    return height * (0.5 - 0.5 * np.cos(2.0 * np.pi * u / spacing))
+
+
+def _round_axis(P, a, b, side):
+    """For points P near the limb from a to b: how far along it (0 at a, 1 at b), and the angle round it (0 ahead,
+    rising outward), and how much each faces the body (1 straight at it)."""
+    d = (b - a) / np.linalg.norm(b - a)
+    t = ((P - a) @ d) / np.linalg.norm(b - a)
+    v = (P - a) - np.outer((P - a) @ d, d)
+    fwd = np.array((1.0, 0.0, 0.0)) - d * d[0]
+    fwd /= np.linalg.norm(fwd)
+    out = np.cross(d, fwd) * (1.0 if np.cross(d, fwd)[1] * side > 0 else -1.0)
+    ang = np.arctan2(v @ out, v @ fwd)
+    inner = np.array((0.0, -side, 0.0)) - d * (-side * d[1])
+    inner /= np.linalg.norm(inner)
+    facing = (v @ inner) / np.maximum(np.linalg.norm(v, axis=1), 1e-9)
+    return t, ang, facing
+
+
+def _quilting(shell, J, LM, parts, z_lo, z_hi):
+    """The quilting's extra thickness at each face of `shell` (a ShellField), on `parts` ("body", "arm", "leg"), each
+    face counted to the part its bones mostly are, kept between z_lo and z_hi and faded off at its edges."""
+    def more(Fc):
+        W = shell.Wf
+        names = list(shell.names)
+        col = lambda bones: np.sum([W[:, names.index(b)] for b in bones if b in names], axis=0) if any(b in names for b in bones) else np.zeros(len(Fc))
+        share = {"body": col(("pelvis", "spine_01", "spine_02", "chest", "spine_03")),
+                 "arm_l": col(("upperarm_l", "lowerarm_l")), "arm_r": col(("upperarm_r", "lowerarm_r")),
+                 "leg_l": col(("thigh_l", "calf_l")), "leg_r": col(("thigh_r", "calf_r"))}
+        keys = list(share)
+        stack = np.stack([share[k] for k in keys], axis=1)
+        best = np.argmax(stack, axis=1)
+        # (faded where a face is shared between parts, so the rows do not end in a step where one part meets the next)
+        sure = np.clip((stack.max(axis=1) / np.maximum(stack.sum(axis=1), 1e-9) - 0.6) / 0.3, 0.0, 1.0)
+        z = Fc[:, 2]
+        band = np.clip((z - z_lo) / 0.02, 0.0, 1.0) * np.clip((z_hi - z) / 0.02, 0.0, 1.0)
+        off = np.zeros(len(Fc))
+        if "body" in parts:
+            m = best == keys.index("body")
+            cx = J["spine_01"][0] + 0.03
+            phi = np.arctan2(Fc[m, 1], Fc[m, 0] - cx)
+            sp, h = QUILT["body"]
+            # none across the front edge, faded off under the arms
+            keep = np.clip((np.abs(phi) - 0.12) / 0.1, 0.0, 1.0) * np.clip((np.abs(np.cos(phi)) - 0.22) / 0.15, 0.0, 1.0)
+            off[m] = _tubes(phi, sp, h) * keep
+        for s_, side in (("l", 1.0), ("r", -1.0)):
+            if "arm" in parts:
+                m = best == keys.index("arm_" + s_)
+                sh, el, wr = (np.array(J[b + s_]) for b in ("upperarm_", "lowerarm_", "hand_"))
+                up = ((Fc[m] - sh) @ (el - sh)) / ((el - sh) @ (el - sh)) < 1.0
+                t1, a1, f1 = _round_axis(Fc[m], sh, el, side)
+                t2, a2, f2 = _round_axis(Fc[m], el, wr, side)
+                ang, fac = np.where(up, a1, a2), np.where(up, f1, f2)
+                r = np.where(up, 0.064, 0.052)
+                sp, h = QUILT["arm"]
+                keep = np.clip((0.62 - fac) / 0.2, 0.0, 1.0) * np.where(up, np.clip((t1 - 0.22) / 0.1, 0.0, 1.0), np.clip((0.86 - t2) / 0.06, 0.0, 1.0))
+                off[m] = _tubes(ang * r, sp, h) * keep
+            if "leg" in parts:
+                m = best == keys.index("leg_" + s_)
+                hip, knee = np.array(J["thigh_" + s_]), np.array(J["calf_" + s_])
+                t, ang, fac = _round_axis(Fc[m], hip, knee, side)
+                sp, h = QUILT["leg"]
+                keep = np.clip((0.5 - fac) / 0.2, 0.0, 1.0)
+                off[m] = _tubes(ang * 0.085, sp, h) * keep
+        return off * band * sure
+    return more
+
+
+def padded(man, J, LM, layers, dress):
     """The padded jacket over the tunic's shapes (which it buries): the same cut, standing PAD further out, quilted in
-    vertical channels, its front edge overlapping; padded trousers; felt boots, thick and round, to below the knee."""
+    vertical tubes on the body and down the sleeves, its front edge overlapping; padded trousers quilted the same
+    way; felt boots, thick and round, to below the knee. Under the snow suit (dress "snow") the same shapes, plain,
+    with the hood's cloth falling soft round the neck onto the shoulders."""
     tunic, trousers, boots = layers[0], layers[1], layers[2]
-    tights, skirt = S.ShellField(man["tights"]), S.ShellField(man["skirt"])
+    # (read out further than soldier.py's own: its fields are exact only within `band` of the shell, and the padded
+    # cloth stands up to 7 cm off it; past the band they are coarse, and the cloth there broke into shards)
+    tights, skirt = S.ShellField(man["tights"], band=0.08), S.ShellField(man["skirt"], band=0.08)
     Z = LM["Z"]
     BIG, OFF = 3.0, -0.06
     cuts = [op for op in tunic.ops if op[0] in ("cut", "sub")]          # (the hem, the neck and the wrists, laid again after)
@@ -163,23 +245,28 @@ def padded(man, J, LM, layers):
     loose = {"pelvis": 0.017, "spine_01": 0.017, "spine_02": 0.015, "chest": 0.012, "clavicle_l": 0.01, "clavicle_r": 0.01,
              "neck": 0.007, "upperarm_l": 0.011, "upperarm_r": 0.011, "lowerarm_l": 0.009, "lowerarm_r": 0.009,
              "hand_l": 0.008, "hand_r": 0.008}
-    fat = {b: v + (0.004 if b == "neck" else PAD * (0.8 if b.startswith(("lowerarm", "hand")) else 1.0)) for b, v in loose.items()}
-    tunic.add(tights.cloth(fat, lo=(-BIG, -BIG, LM["belt"] - 0.02), default=OFF), 0.02)
+    pad = PAD - (QUILT_LIFT if dress == "winter" else 0.0)
+    fat = {b: v + (0.004 if b == "neck" else pad * (0.8 if b.startswith(("lowerarm", "hand")) else 1.0)) for b, v in loose.items()}
+    quilt = dress == "winter"
+    q_top = _quilting(tights, J, LM, ("body", "arm"), LM["hem"], Z(1.45)) if quilt else (lambda P: 0.0)
+    q_skirt = _quilting(skirt, J, LM, ("body",), LM["hem"] + 0.005, Z(1.45)) if quilt else (lambda P: 0.0)
+    tunic.add(tights.cloth(fat, lo=(-BIG, -BIG, LM["belt"] - 0.02), default=OFF, more=q_top), 0.02)
     ARMS = {b + s_: OFF for b in ("upperarm_", "lowerarm_", "hand_", "fingers_", "thumb_") for s_ in ("l", "r")}
     LEGS = ("pelvis", "spine_01", "thigh_l", "thigh_r")
-    flare = lambda P: 0.026 + PAD + 0.02 * np.clip((LM["belt"] - P[:, 2]) / (LM["belt"] - LM["hem"]), 0.0, 1.0) ** 1.5
+    flare = lambda P: 0.026 + pad + 0.02 * np.clip((LM["belt"] - P[:, 2]) / (LM["belt"] - LM["hem"]), 0.0, 1.0) ** 1.5
     box = dict(lo=(-BIG, -BIG, LM["hem"] - 0.02), hi=(BIG, BIG, LM["belt"] + 0.03))
-    tunic.add(Blend(skirt.cloth(ARMS, more=flare, **box), tights.cloth({b: 0.0 for b in LEGS}, more=flare, default=OFF, **box), 0.05), 0.02)
-    # the quilting: channels stitched down the body every hand's breadth, front and back (none across the front edge)
-    cx = J["spine_01"][0] + 0.03
-    for deg in list(range(-72, 73, 18)) + list(range(108, 253, 18)):
-        if abs(deg) < 12:
-            continue
-        a = math.radians(deg)
-        aim = [np.array((cx + math.cos(a) * 0.32, math.sin(a) * 0.32, z)) for z in (LM["hem"] + 0.03, (LM["hem"] + Z(1.42)) / 2, Z(1.42))]
-        P_, N_ = S.project(tunic, aim)
-        for k in range(2):
-            tunic.sub(RoundCone(P_[k] + N_[k] * 0.0028, P_[k + 1] + N_[k + 1] * 0.0028, 0.0075, 0.0075), 0.004)
+    q_hips = _quilting(tights, J, LM, ("body",), LM["hem"] + 0.005, Z(1.45)) if quilt else (lambda P: 0.0)
+    tunic.add(Blend(skirt.cloth(ARMS, more=lambda P: flare(P) + q_skirt(P), **box),
+                    tights.cloth({b: 0.0 for b in LEGS}, more=lambda P: flare(P) + q_hips(P), default=OFF, **box), 0.05), 0.02)
+    if quilt:
+        print("  SOV quilting: tubes in the jacket's thickness, body and sleeves")
+    else:
+        # the hood's cloth gathered round the neck and lying on the shoulders, all round (the hood itself rides the head)
+        nmid, nfwd, nrx, nry = LM["neck_ring"]
+        up = np.array((0.0, 0.0, 1.0)) - nfwd * nfwd[2]
+        up /= np.linalg.norm(up)
+        Rn = np.stack([nfwd, np.cross(up, nfwd), up], axis=1)
+        tunic.add(Torus(nmid - up * 0.034, nrx + 0.046, 0.024, Rn, major_y=nry + 0.06), 0.022)
     tunic.ops += cuts
     # the front edge: the right side's edge lapped over the left, from the collar to the hem
     nmid, nfwd, nrx, nry = LM["neck_ring"]
@@ -193,9 +280,10 @@ def padded(man, J, LM, layers):
     bt = LM["boot_top"]
     legs = {"pelvis": 0.012, "spine_01": 0.012, "thigh_l": 0.017, "thigh_r": 0.017, "calf_l": 0.009, "calf_r": 0.009,
             "foot_l": 0.006, "foot_r": 0.006, "ball_l": 0.006, "ball_r": 0.006}
-    legs = {b: v + PAD_LEGS for b, v in legs.items()}
+    legs = {b: v + PAD_LEGS - (QUILT_LIFT if dress == "winter" else 0.0) for b, v in legs.items()}
+    q_legs = _quilting(tights, J, LM, ("leg",), bt + 0.03, LM["hem"] + 0.02) if quilt else (lambda P: 0.0)
     trousers.add(tights.cloth(legs, hi=(BIG, BIG, LM["belt"] + 0.04), default=OFF,
-                              more=lambda P: -(PAD_LEGS + 0.011) * np.clip((bt + 0.03 - P[:, 2]) / 0.05, 0.0, 1.0)), 0.02)
+                              more=lambda P: q_legs(P) - (PAD_LEGS + 0.011) * np.clip((bt + 0.03 - P[:, 2]) / 0.05, 0.0, 1.0)), 0.02)
     # ---- the felt boots: thick, soft, round in the toe, straight-topped just under the knee
     boots.add(tights.cloth({"calf_l": 0.027, "calf_r": 0.027, "foot_l": 0.016, "foot_r": 0.016, "ball_l": 0.015, "ball_r": 0.015},
                            hi=(BIG, BIG, bt + 0.02), default=OFF), 0.025)
@@ -313,17 +401,27 @@ def build_helmet(kind, J, sides=None):
         # the snow suit's hood, up: over the crown, framing the face, down to the throat at the sides and behind to the
         # shoulders, a little full at the back
         az = 0.152
-        edge = _by_angle(0.075, -0.175, -0.215)
+        edge = _by_angle(0.075, -0.19, -0.232)
 
         def at(f, t, inner=0.0):
             z = az + (edge(f) - az) * t
             sc = math.sqrt(max(0.0, 1.0 - (z / az) ** 2)) if z > 0 else 1.0
-            a = 0.024 + 0.035 * max(0.0, -math.cos(f)) * max(0.0, (-0.06 - z) / 0.15) - inner
+            back = max(0.0, -math.cos(f))
+            a = 0.024 + 0.035 * back * max(0.0, (-0.06 - z) / 0.15) - inner
+            a += 0.012 * back * max(0.0, z / az) ** 0.7 * max(0.0, 1.0 - z / az) * 2.0      # (fuller over the back of the head)
+            low = max(0.0, (-0.07 - z) / 0.16)                                               # (0 at the ears, 1 at the foot)
+            side = 1.0 - max(0.0, math.cos(f)) ** 4                                         # (none across the face)
+            a += side * (0.034 * low ** 1.6 + 0.006 * low * math.sin(7.0 * f + 0.6))       # (falling out, in soft folds)
             return sc, a, z
-        ts = (0.12, 0.25, 0.4, 0.55, 0.7, 0.85, 1.0)
+        ts = (0.12, 0.25, 0.4, 0.55, 0.66, 0.76, 0.85, 0.93, 1.0)
         rings = [lambda f, t=t: at(f, t) for t in ts] + [lambda f, t=t: at(f, t, 0.008) for t in ts[::-1]]
         C, rings = _lathe(J, 0.13, 0.122, rings)
         g.shell([[C + np.array((0.0, 0.0, az))]] + rings + [[C + np.array((0.0, 0.0, az - 0.008))]], "helmet")
+        # the edge round the face drawn in on its cord: a soft rolled hem from throat to throat over the brow
+        C, (rim,) = _lathe(J, 0.13, 0.122, [lambda f: at(f, 0.985, 0.004)])
+        n = len(rim)
+        for i in range(-n // 4 - 1, n // 4 + 1):
+            g.tube(rim[i % n], rim[(i + 1) % n], 0.0068, 0.0068, "helmet", 8)
     return g.build("helmet_" + kind, sharp=55.0)
 
 
