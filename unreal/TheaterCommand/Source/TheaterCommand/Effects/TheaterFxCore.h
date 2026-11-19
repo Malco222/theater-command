@@ -298,6 +298,9 @@ namespace TheaterFx
 			Rgb Soil, Heavy, Dust, Clod, Smoke, First, Splinter;
 			Rgb Ring, Foot, Stone; // (the dust ring's colour, the dark foot's, the shower's lumps': by default the dust, heavy and clod)
 			double FootDust = -1.0; // (how much of the ground's dust shows in the dark foot's veil and fill; under 0, the recipe's burst.foot shares)
+			Rgb Scar; // (the earth thrown round the crater's mark, where the ground gives it: snow's brown-black star)
+			bool bScar = false;
+			double ScarRays = 1.0; // (and how much longer those rays are drawn out)
 			bool bFirst = false, bSplinter = false;
 			double Grain = 1.0; // (the crown's puffs as a share of their size: under 1, broken and granular, as snow)
 			double FirstAtFoot = 1.0, FirstAtTip = 1.0; // (how much of a jet is the ground's first colour, foot to tip)

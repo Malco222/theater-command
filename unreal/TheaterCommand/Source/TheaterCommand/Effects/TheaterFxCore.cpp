@@ -272,6 +272,9 @@ namespace TheaterFx
 		Out_.Foot = Picture(P + "foot", Out_.Heavy);
 		Out_.Stone = Picture(P + "stone", Out_.Clod);
 		Out_.FootDust = Has(P + "foot_dust") ? Clamp01(Num(P + "foot_dust", 0.0)) : -1.0;
+		Out_.bScar = Has(P + "scar.0");
+		Out_.Scar = Picture(P + "scar", Out_.Heavy);
+		Out_.ScarRays = std::max(1.0, Num(P + "scar_rays", 1.0));
 		return Out_;
 	}
 
@@ -1021,17 +1024,24 @@ namespace TheaterFx
 		const Span ShowerShade = Range(Sh + "shade", 0.55, 0.9);
 		const Span ShowerRest = Range(Sh + "rest_s", 1.0, 2.5);
 		const double ShowerPuffR = Num(Sh + "landing_puff_r_m", 0.08);
+		// (a lump thrown past the lens lands beside the eye, where a dust puff fills a sixth of the screen as a flat slab:
+		// art director 03:40Z. The recipe can leave that puff out)
+		const bool bLensPuff = Num("burst.debris.lens.landing_puff", 1.0) > 0.5;
+		// (and it is a dark torn lump, never a flat pale slab: broken edges and earth's shade)
+		const bool bLensRough = Has("burst.debris.lens.rough.0"), bLensShade = Has("burst.debris.lens.shade.0");
+		const Span LensRough = Range("burst.debris.lens.rough", 0.6, 0.9), LensShade = Range("burst.debris.lens.shade", 0.5, 0.8);
 		// (a close hit throws a few lumps past the lens: what puts the player in the hole)
 		if (bEyeKnown && ClodK > 0.05)
 		{
 			const double Near = Num("burst.debris.lens.within_m", 40.0) * std::max(1.0, K);
 			if ((LastEye - At).Length() < Near)
 			{
+				const Span LensMiss = Range("burst.debris.lens.miss_m", 1.2, 3.0);
 				const int N = D.Whole(static_cast<int>(Num("burst.debris.lens.pieces.0", 3.0)), static_cast<int>(Num("burst.debris.lens.pieces.1", 7.0)));
 				for (int I = 0; I < N; ++I)
 				{
 					const double T = D.U(0.7, 1.4);
-					const Vec Miss = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-0.6, 0.4)).Unit() * D.U(1.2, 3.0);
+					const Vec Miss = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-0.6, 0.4)).Unit() * LensMiss.Pick(D); // (no nearer than this: one at a metre fills a sixth of the screen)
 					const Vec Aim = LastEye + Miss - At;
 					Launch.push_back((Aim + Vec(0.0, 0.0, 4.9 * T * T)) * (1.0 / T));
 					LaunchR.push_back(D.U(0.05, 0.12));
@@ -1057,6 +1067,18 @@ namespace TheaterFx
 			B.Rim = 0.6;
 			B.LeastPx = ClodLeast;
 			Chunk(B, D);
+			if (I >= ShowerTo)
+			{
+				if (bLensRough)
+				{
+					B.Rough = LensRough.Pick(D);
+				}
+				if (bLensShade)
+				{
+					B.Col = P.Foot * LensShade.Pick(D);
+					B.Col2 = B.Col;
+				}
+			}
 			Throw(B);
 			B.Life = B.Land2 + (bShower ? ShowerRest.Pick(D) : D.U(2.0, 4.0));
 			B.Hold = std::min(0.95, (B.Land2 + 1.0) / B.Life);
@@ -1064,7 +1086,7 @@ namespace TheaterFx
 			const double Down = B.Born + B.Land;
 			const double R = B.R0;
 			Bits.push_back(B);
-			if (R > (bShower ? ShowerPuffR * K : 0.04))
+			if (R > (bShower ? ShowerPuffR * K : 0.04) && (bLensPuff || I < ShowerTo))
 			{
 				Bit Puff;
 				Puff.Born = Down;
@@ -1247,13 +1269,14 @@ namespace TheaterFx
 			Marks.push_back(B);
 		};
 		const Rgb Hole = bSnow ? Rgb::FromPicture(30, 28, 26) : P.Heavy * 0.6;
-		const Rgb Thrown = bSnow ? P.Soil.Mix(P.Dust, 0.35) : P.Heavy;
+		const Rgb Thrown = P.bScar ? P.Scar : (bSnow ? P.Soil.Mix(P.Dust, 0.35) : P.Heavy); // (art director 03:40Z: on snow a brown-black star)
 		const int NRing = D.Whole(6, 9);
 		for (int I = 0; I < NRing; ++I)
 		{
 			const double A = 2.0 * Pi * (I + D.U(-0.3, 0.3)) / NRing;
 			const double Dist = D.U(0.8, 0.5 + 0.55 * Ring_) * R;
-			Mark(At + Vec(std::cos(A), std::sin(A), 0.0) * Dist, D.U(0.35, 0.6) * R, D.U(1.2, 1.8), A + Pi / 2.0, Thrown * D.U(0.8, 1.1), D.U(0.55, 0.8), 0.6, 0.3);
+			// (longer rays sit further out, so they reach out from the hole rather than across it)
+			Mark(At + Vec(std::cos(A), std::sin(A), 0.0) * (Dist + 0.7 * R * (P.ScarRays - 1.0)), D.U(0.35, 0.6) * R, D.U(1.2, 1.8) * P.ScarRays, P.bScar ? A : A + Pi / 2.0, Thrown * D.U(0.8, 1.1), D.U(0.55, 0.8), 0.6, 0.3);
 		}
 		Mark(At, R * 1.05, D.U(0.9, 1.15), D.U(0.0, 2.0 * Pi), Hole, 0.92, 0.9, 0.15);
 		const int NSpat = D.Whole(5, 8);

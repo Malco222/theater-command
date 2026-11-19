@@ -75,7 +75,11 @@ The mend round (art director 03:28Z): each spike is 3 to 5 lumps of unequal widt
 explosive smoke, snow's dark earth), `stone` (the shower's lumps) and `foot_dust` (how much of its dust shows in the
 foot; snow none). Water's mist is drawn out down the wind (`smoke_stretch`, 1.65 makes it about 1.5 times as wide for
 its height) and thins to half by `smoke_half_by_s`. Measured at 0.4 s, 25 m off: earth 22%, woods 19%, sand 6%, snow
-5% of the burst's box under luma 60 (snow's white ring covers some of its dark: 7.6% without it).
+5% of the burst's box under luma 60 (snow's white ring covers some of its dark: 7.6% without it; the art director
+accepts about 5% there). A lump flung past the lens on a close hit passes no nearer than `burst.debris.lens.miss_m`
+(3 to 6 m, so it never fills a sixth of the screen), dark and torn (`lens.rough`, `lens.shade` of the ground's foot),
+with no dust puff where it lands beside the eye (`lens.landing_puff` 0). A ground's `paint.scar` and `scar_rays` give
+the earth thrown round its crater mark: on snow a brown-black star.
 
 Sun and sky: `SetSun` gives the way toward the sun. Smoke's shadow side never falls below `game.sky_fill` of its own
 colour in the hour's light, and looking toward the sun the fringe of a smoke cloud or trail glows warm

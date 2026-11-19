@@ -336,6 +336,19 @@
    },
    "lens": {
     "within_m": 40,
+    "landing_puff": 0,
+    "miss_m": [
+     3,
+     6
+    ],
+    "rough": [
+     0.6,
+     0.9
+    ],
+    "shade": [
+     0.5,
+     0.8
+    ],
     "pieces": [
      3,
      7
@@ -871,7 +884,13 @@
      26,
      22
     ],
-    "foot_dust": 0.0
+    "foot_dust": 0.0,
+    "scar": [
+     46,
+     36,
+     28
+    ],
+    "scar_rays": 1.5
    },
    "_mend_1931": "Art director 19:31Z on the first in-game frames: the snow crown was smooth pure-white blades like a paper flower, ringed by cotton puffs. Now broken and granular (grain: its pieces half the size, twice as many, soft-edged, not drawn out), off-white (about 188,193,201 in shade; each grain its own shade) with dark earth showing in the jets (first_share: a third of the pieces snow at the jet's foot, four fifths at its tip)."
   },
