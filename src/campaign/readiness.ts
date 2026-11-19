@@ -50,6 +50,8 @@ export interface Readiness {
   strength: Record<string, boolean | null>;
   /** The wave the test weighed at each place it was asked for: the names of the rows that sail for its beach. */
   waves: Record<string, string[]>;
+  /** The plan's rows for its other beaches that the test weighed beside that wave, where they land on the ground theirs is counted from (rider b642). */
+  beside: Record<string, string[]>;
   ready: boolean;
 }
 
@@ -127,7 +129,7 @@ export function readiness(g: Game, nat: string): Readiness | null {
   // 3. The test of strength at the beaches that lead to the places the opening is for.
   const ask = strengthAsked(g, nat);
   const strength: Record<string, boolean | null> = {};
-  const waves: Record<string, string[]> = {};
+  const waves: Record<string, string[]> = {}, besides: Record<string, string[]> = {};
   for (const [place, beaches] of Object.entries(R.leads)) {
     const p = g.byName[place];
     const b = p && foe(p.ctrl) ? beaches.map((nm) => g.byName[nm]).find((r) => !!r && foe(r.ctrl)) : undefined;
@@ -135,11 +137,14 @@ export function readiness(g: Game, nat: string): Readiness | null {
     const wave = sailing(g, nat, op, onQuays.filter((x) => x.beach === b).map((x) => x.c));
     waves[place] = wave.map((c) => c.name);
     if (!wave.length) { strength[place] = false; continue; }
-    const K = ask === null ? null : reckon(g, nat, b, wave, followUp(g, nat, g.regions[wave[0].reg], wave, b), undefined, also);
+    // (One ground, both sides: the plan's rows for its other beaches, as they sail, count where theirs is counted from. Rider b642.)
+    const beside = onQuays.filter((x) => x.beach !== b).flatMap((x) => sailing(g, nat, op, [x.c]).filter((c) => !wave.includes(c)).map((c) => ({ c, at: x.beach })));
+    const K = ask === null ? null : reckon(g, nat, b, wave, followUp(g, nat, g.regions[wave[0].reg], wave, b, undefined, beside.map((x) => x.c)), undefined, also, beside);
+    besides[place] = K?.rows ?? [];
     strength[place] = !K || K.chance >= ask!;
   }
   const ready = fleet && onQuays.length >= asked && Object.values(strength).every((v) => v !== false);
-  return { month: g.turn - freeze, first, fleet, forces: onQuays.length, asked, strength, waves, ready };
+  return { month: g.turn - freeze, first, fleet, forces: onQuays.length, asked, strength, waves, beside: besides, ready };
 }
 
 /**

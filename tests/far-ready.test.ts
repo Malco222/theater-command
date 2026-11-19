@@ -6,7 +6,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { reckon } from '../src/campaign/ashore';
+import { STRENGTH, followUp, reckon, stands } from '../src/campaign/ashore';
 import { bookMonth } from '../src/campaign/claims';
 import { monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { atWar, bloc, capitulate, createGame, declareWar, relocate, startPhase } from '../src/campaign/game';
@@ -151,6 +151,40 @@ describe('the readiness test: the gathering and the three things', () => {
     // A place whose beaches are all Japan's has no wave: the test is not asked there.
     g.byName['Manila'].ctrl = 'JAP';
     expect(readiness(g, 'JAP')!.waves.Manila).toBeUndefined();
+  });
+
+  it("one ground, both sides: the plan's rows for its other beaches count in ours where theirs is counted from (rider b642)", () => {
+    const g = months(december(3), 4);
+    const now = readiness(g, 'JAP')!;
+    const tanaka = 'Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)';
+    // Luzon's other landings lie on the ground Lingayen's defenders are counted from: Aparri's and Legaspi's rows
+    // within the three marches, Davao's beyond them on the same enemy ground. Malaya's test has no other beach.
+    expect(now.beside.Manila).toEqual([tanaka, '14th Army (16th Division)', 'Sakaguchi Detachment (56th Mixed Infantry Group)']);
+    expect(now.beside.Singapore).toEqual([]);
+    const beach = g.byName['Lingayen'], also = new Set(['USA', 'PHI', 'UK', 'AUS', 'NED']);
+    const wave = now.waves.Manila.map((nm) => corps(g, nm)!), sixteenth = corps(g, '14th Army (16th Division)')!;
+    const weigh = (c: Corps, at: string) => reckon(g, 'JAP', beach, wave, 0, undefined, also, [{ c, at: g.byName[at] }])!;
+    const alone = reckon(g, 'JAP', beach, wave, 0, undefined, also)!;
+    expect(alone.beside).toBe(0);
+    // Within the marches a row counts in full, as it would defend its own beach. Theirs does not move.
+    const near = weigh(sixteenth, 'Legaspi');
+    expect(near.rows).toEqual(['14th Army (16th Division)']);
+    expect(near.beside).toBeCloseTo(stands(g, sixteenth, g.byName['Legaspi']), 9);
+    expect(near.ours).toBeCloseTo(alone.ours + near.beside, 9);
+    expect(near.theirs).toBe(alone.theirs);
+    expect(near.chance).toBeGreaterThan(alone.chance);
+    // Beyond the marches, on his ground in one piece with it, at the share his own reserves count for.
+    expect(weigh(sixteenth, 'Davao').beside).toBeCloseTo(STRENGTH!.reserve * stands(g, sixteenth, g.byName['Davao']), 9);
+    // On other ground it counts for nothing, and a row of the wave is not counted a second time.
+    expect(weigh(sixteenth, 'Kota Bharu').beside).toBe(0);
+    expect(weigh(wave[0], 'Aparri').rows).toEqual([]);
+    // Nor is a row counted beside the wave counted again among those the ships bring in after it.
+    const quay = g.regions[wave[0].reg], detachment = corps(g, tanaka)!;
+    detachment.str = 1;
+    expect(followUp(g, 'JAP', quay, wave, beach, undefined, [detachment])).toBeLessThan(followUp(g, 'JAP', quay, wave, beach));
+    // A row that stands on no quay is not weighed.
+    relocate(g, sixteenth, g.regions.find((r) => r.owner === 'JAP' && r.ctrl === 'JAP' && !r.port)!);
+    expect(readiness(g, 'JAP')!.beside.Manila).not.toContain('14th Army (16th Division)');
   });
 
   it('not ready with the fleet unfit or out of reach, or with fewer corps on the quays than the lift carries', () => {

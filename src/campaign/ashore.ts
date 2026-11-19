@@ -64,9 +64,12 @@ export interface Reckoning {
   /** How many of his field corps stand within the marches, and how many farther off were counted as reserves. */
   corps: number;
   behind: number;
-  /** What the staff will have there, as it would defend: the force, its side's corps already within the marches, and what the ships bring in after it. */
+  /** What the staff will have there, as it would defend: the force, the rows of the same plan landing beside it (a plan's test: `reckon`), its side's corps already within the marches, and what the ships bring in after it. */
   ours: number;
   force: number;
+  beside: number;
+  /** The rows counted beside the force, by name: those of `beside` whose beach lies on the ground theirs is counted from. */
+  rows: string[];
   friends: number;
   follow: number;
   /** ours / (ours + theirs): 1 where nothing of his can come. */
@@ -80,9 +83,14 @@ export interface Reckoning {
  * months, as it would defend the place (the caller knows the quay and the shipping: `followUp`). `seen`, when given,
  * says how much of an enemy corps the reckoning may count (0 for one its side knows nothing of): a player's card
  * counts what his side knows, a computer's staff counts them all. `also`: countries the staff means to go to war
- * with, counted as its enemies already (the readiness test, readiness.ts). Null where the rules have no such test.
+ * with, counted as its enemies already (the readiness test, readiness.ts). `beside`: the rows of the same plan that
+ * land on its other beaches, each with its beach (rider b642 to ruling 234: one ground, both sides; `theirs` counts
+ * every enemy corps within the marches of the place, those the plan's other landings are aimed at with them, so `ours`
+ * counts every row of the plan that lands within the ground theirs is counted from: in full on a beach within the
+ * marches, at the reserve's share on his ground beyond in one piece with it, as it would defend its own beach).
+ * Null where the rules have no such test.
  */
-export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow = 0, seen?: (c: Corps) => number, also?: ReadonlySet<string>): Reckoning | null {
+export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow = 0, seen?: (c: Corps) => number, also?: ReadonlySet<string>, beside?: { c: Corps; at: Region }[]): Reckoning | null {
   const S = STRENGTH;
   if (!S) return null;
   const N = g.regions.length, M = S.months;
@@ -111,8 +119,16 @@ export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow 
   else for (const id of w) host.add(held[id]);
   for (let i = 0; i < w.length; i++) for (const j of g.regions[w[i]].nb) if (!rail[j] && foe(held[j])) { rail[j] = 1; w.push(j); }
   const mine = new Set(force.map((c) => c.id));
-  const out: Reckoning = { theirs: 0, near: 0, reserve: 0, corps: 0, behind: 0, ours: 0, force: 0, friends: 0, follow, chance: 1, divs: { theirs: 0, ours: 0 } };
+  const out: Reckoning = { theirs: 0, near: 0, reserve: 0, corps: 0, behind: 0, ours: 0, force: 0, beside: 0, rows: [], friends: 0, follow, chance: 1, divs: { theirs: 0, ours: 0 } };
   for (const c of force) { out.force += stands(g, c, at); out.divs.ours += c.divs * c.str; }
+  for (const x of beside ?? []) {
+    const share = far[x.at.id] >= 0 ? 1 : rail[x.at.id] ? S.reserve : 0;
+    if (share <= 0 || mine.has(x.c.id)) continue;
+    mine.add(x.c.id);
+    out.rows.push(x.c.name);
+    out.beside += share * stands(g, x.c, x.at);
+    out.divs.ours += share * x.c.divs * x.c.str;
+  }
   // A corps is in the line where an enemy of its own holds ground next to it or stands in its province: `near` says
   // whether any of that ground lies within the marches (then it is this place's own front, and it counts in full).
   const inLine = (c: Corps, r: Region): { tied: boolean; here: boolean } => {
@@ -138,7 +154,7 @@ export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow 
     }
   }
   out.theirs = out.near + out.reserve;
-  out.ours = out.force + out.friends + out.follow;
+  out.ours = out.force + out.beside + out.friends + out.follow;
   out.chance = out.theirs > 0 ? out.ours / (out.ours + out.theirs) : 1;
   return out;
 }
@@ -148,12 +164,13 @@ export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow 
  * fit corps of the nation standing ready at the quay beside the wave, or a march from the quay on quiet ground of
  * its side (they are on the quay the month the wave has left it: a quay shared with an ally's corps holds no more
  * than a wave), as many as its shipping lifts in the months that are left and as the place has room for (and no more
- * than `most`, where a share of the shipping does the work).
+ * than `most`, where a share of the shipping does the work). `counted`: corps the reckoning counts already (the rows
+ * of a plan that land beside the wave), which are not counted a second time here.
  */
-export function followUp(g: Game, nat: string, quay: Region, wave: Corps[], at: Region, most = Infinity): number {
+export function followUp(g: Game, nat: string, quay: Region, wave: Corps[], at: Region, most = Infinity, counted: Corps[] = []): number {
   const S = STRENGTH;
   if (!S) return 0;
-  const gone = new Set(wave.map((c) => c.id));
+  const gone = new Set([...wave, ...counted].map((c) => c.id));
   const there = at.units.filter((u) => !u.dead && (u.nat === nat || allied(g, nat, u.nat))).length;
   const room = Math.max(0, Math.min((S.months - 1) * g.nations[nat].sealift, STACK - wave.length - there, most));
   if (room <= 0) return 0;
