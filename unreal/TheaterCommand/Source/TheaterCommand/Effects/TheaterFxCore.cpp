@@ -2802,7 +2802,10 @@ namespace TheaterFx
 		// The slick's own smoke: low, black and broad, rolling off the burning oil anywhere across it and drawn into the
 		// foot of the column, so the column stands on the whole fire and not on a stalk
 		const OilRow& R = S.Oil;
-		Dice D(S.Seed ^ (static_cast<uint64_t>(T * 1000.0) * 0xD6E8FEB86659FD93ull + 41ull));
+		// (every time seed goes through a signed number first: a fire lit with time already behind it is grown from
+		// before the clock's zero, and a negative number cast straight to an unsigned one is undefined; the Mac's chip
+		// gave 0, one puff copied up the whole column. The pre-check, 05:07Z)
+		Dice D(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(T * 1000.0)) * 0xD6E8FEB86659FD93ull + 41ull));
 		const double A = D.U(0.0, 2.0 * Pi), Out_ = std::sqrt(D.U()) * R.HeadSpread * S.Across;
 		const bool bFlat = R.BaseFlat < 0.999;
 		Bit B;
@@ -2851,7 +2854,7 @@ namespace TheaterFx
 		// One puff of the column: born over a head of the fire, black and thick, climbing at first fast and then slower
 		// as it cools, so with the wind carrying it all the while the column stands up from the sea and bends over
 		const OilRow& R = S.Oil;
-		Dice D(S.Seed ^ (static_cast<uint64_t>(T * 1000.0) * 0x2545F4914F6CDD1Dull + (bPall ? 83ull : 29ull)));
+		Dice D(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(T * 1000.0)) * 0x2545F4914F6CDD1Dull + (bPall ? 83ull : 29ull)));
 		const Vec& Head = S.Heads[static_cast<size_t>(D.Whole(0, static_cast<int>(S.Heads.size()) - 1))];
 		const double Big = std::pow(S.Across / 100.0, 0.4); // (a bigger fire's smoke climbs higher)
 		Bit B;
@@ -2944,7 +2947,7 @@ namespace TheaterFx
 				const Rgb OilHeart = R.Flame.Mix(Heart, 0.6);
 				while (S.Next <= Now && S.Next < S.Flames)
 				{
-					Dice D(S.Seed ^ (static_cast<uint64_t>(S.Next * 1000.0) * 0x9E3779B97F4A7C15ull + 7ull));
+					Dice D(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(S.Next * 1000.0)) * 0x9E3779B97F4A7C15ull + 7ull));
 					for (const Vec& Head : S.Heads)
 					{
 						if (R.FlameOdds < 1.0 && D.U() > R.FlameOdds)
@@ -3004,7 +3007,7 @@ namespace TheaterFx
 				// long ragged tongues rooted where it burns, dying by being eaten away; then a thinning grey column
 				while (S.Next <= Now && S.Next < S.Flames)
 				{
-					Dice D(S.Seed ^ static_cast<uint64_t>(S.Next * 1000.0));
+					Dice D(S.Seed ^ static_cast<uint64_t>(static_cast<int64_t>(S.Next * 1000.0)));
 					const int N = D.Whole(1, 2);
 					for (int I = 0; I < N; ++I)
 					{
@@ -3037,7 +3040,7 @@ namespace TheaterFx
 				}
 				while (S.NextSmoke <= Now && S.NextSmoke < S.End)
 				{
-					Dice D(S.Seed ^ (static_cast<uint64_t>(S.NextSmoke * 1000.0) + 17ull));
+					Dice D(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(S.NextSmoke * 1000.0)) + 17ull));
 					const bool bFlames = S.NextSmoke < S.Flames;
 					const double After = bFlames ? 0.0 : (S.NextSmoke - S.Flames) / std::max(S.End - S.Flames, 1.0);
 					Bit B;
@@ -3064,7 +3067,7 @@ namespace TheaterFx
 			{
 				while (S.NextSmoke <= Now && S.NextSmoke < S.End)
 				{
-					Dice D(S.Seed ^ static_cast<uint64_t>(S.NextSmoke * 1000.0));
+					Dice D(S.Seed ^ static_cast<uint64_t>(static_cast<int64_t>(S.NextSmoke * 1000.0)));
 					Bit B;
 					B.Born = S.NextSmoke;
 					B.From = S.At + Vec(D.U(-0.3, 0.3), D.U(-0.3, 0.3), 0.1) * S.Across;
