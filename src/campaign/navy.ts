@@ -26,7 +26,7 @@ import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { alongside, riding } from './stations';
-import { hopAims, skiesOver } from './pacific';
+import { coversBeaches, hopAims, pacificGround, skiesOver } from './pacific';
 import { HISTORY, bookDate, dialDraw, stopDef, stopOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
@@ -1951,13 +1951,15 @@ function crossings(g: Game, nat: string): { off: Set<number>; way: Set<number> }
  * seas are taken in the order the shores were named, the sea off the beach last on each way. Returns the fleets
  * sent: the admirals' own rule leaves them where they were put. Nothing while the far side is off (no shore is named).
  */
-function coverHops(g: Game, nat: string, orders?: { fleet: string }[]): Set<number> {
+function coverHops(g: Game, nat: string, orders?: { fleet: string }[], cover?: { covers: Set<number>; moved: Set<number> }): Set<number> {
   const sent = new Set<number>();
   const aims = hopAims(g, nat);
   if (!aims.length) return sent;
   const seas: number[] = [];
   for (const { from, to } of aims) for (const z of seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: true }) ?? []) if (!seas.includes(z)) seas.push(z);
-  const free = fleetsOf(g, nat).filter((f) => f.duty === 'patrol' && !f.tied && shipCount(f.ships) > 0 && !orders?.some((o) => o.fleet === f.name) && f.ready >= 0.5 && (atSea(f) || f.ready >= NAVY.ready.sortieAt));
+  // (A fleet that has gone to the beach it covers counts as a patrol fleet; one that moved its base this month lies in harbour: `coverBases`.)
+  const patrols = (f: Fleet): boolean => (f.duty === 'patrol' || !!cover?.covers.has(f.id)) && !cover?.moved.has(f.id);
+  const free = fleetsOf(g, nat).filter((f) => patrols(f) && !f.tied && shipCount(f.ships) > 0 && !orders?.some((o) => o.fleet === f.name) && f.ready >= 0.5 && (atSea(f) || f.ready >= NAVY.ready.sortieAt));
   for (const z of seas) {
     if (!closedTo(g, z, nat)) continue;
     const need = seaSide(g, z, nat, true).total / NAVY.closed.ratio;
@@ -1976,13 +1978,130 @@ function coverHops(g: Game, nat: string, orders?: { fleet: string }[]): Set<numb
   return sent;
 }
 
+/**
+ * The fleet goes to the beach it covers (ruling 200(j); the Pacific planner's paper 14, section 4, "Which fleet goes
+ * where"; rider b585 to ruling 234, item 1(b)). When the staff has named a shore of the Pacific's for a hop, the
+ * fleets of its own that could cover it and have the sea off the beach in their reach cover the crossing as patrol
+ * fleets do, whatever their own duty. Where the sea lies beyond the reach of every one of them, the strongest moves its
+ * base to the harbour of its side nearest the beach that can base a fleet within three seas of it (its reach from
+ * there takes in the sea off the beach); it spends that month in harbour there, and from the next it covers the
+ * crossing. Between landings, with no named beach of its own left in its reach, it goes back to the base it had (the
+ * fleet table's, by date: ruling 189). While a named beach is still in its reach it stays, a worn one resting in
+ * harbour there; an order of the plan or the book that month is carried out first, and a dated move of the book that
+ * takes it elsewhere meanwhile stands. One the enemy drives from its cover base covers from the harbour it is driven
+ * to, and still goes home when its beaches are done. A fleet that may cover: warships on the surface, fit for sea,
+ * free (no order of the plan or the book, not tied to a station, not a raider) and based on the Pacific's ground; a
+ * beach, a shore on the Pacific's ground (the plan's landings elsewhere are covered by the admirals there). Only for
+ * the side against the power, never a player's, and nothing while the far side is off (pacific.ts `coversBeaches`).
+ * Returns the fleets covering a beach, and those that moved their base this month.
+ */
+function coverBases(g: Game, nat: string, orders?: { fleet: string }[]): { covers: Set<number>; moved: Set<number> } {
+  const covers = new Set<number>(), moved = new Set<number>();
+  const mine = fleetsOf(g, nat);
+  const was = (f: Fleet): number | undefined => g.flags[`fl:cover:${f.id}`];
+  const forget = (f: Fleet): void => { delete g.flags[`fl:cover:${f.id}`]; delete g.flags[`fl:coverAt:${f.id}`]; };
+  const ordered = (f: Fleet): boolean => !!orders?.some((o) => o.fleet === f.name);
+  // A covering fleet the book moved meanwhile stands where the book put it: that is the fleet table's base now. One
+  // driven from its cover base (a harbour lost) covers from where it lies, and still goes home when its beaches are done.
+  for (const f of mine) {
+    const at = g.flags[`fl:coverAt:${f.id}`];
+    if (at === undefined || f.base === at - 1) continue;
+    if (bookMoved(g, nat, f)) forget(f);
+    else g.flags[`fl:coverAt:${f.id}`] = f.base + 1;
+  }
+  if (!coversBeaches(g, nat)) {
+    for (const f of mine) if (was(f) !== undefined && !ordered(f)) { const r = g.regions[was(f)! - 1]; forget(f); if (r && rebase(g, f, r)) moved.add(f.id); }
+    return { covers, moved };
+  }
+  const fit = (f: Fleet): boolean => surfaceShips(f) > 0 && f.duty !== 'raid' && !f.tied && !ordered(f) && f.ready >= 0.5 && f.base >= 0 && pacificGround(g, g.regions[f.base]);
+  // The sea off each named beach of the Pacific's, in the order the beaches were named, with the first beach named on it.
+  const beaches: { z: number; to: Region }[] = [];
+  for (const { from, to } of hopAims(g, nat)) {
+    if (!pacificGround(g, to)) continue;
+    const path = seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: true });
+    const z = path?.length ? path[path.length - 1] : -1;
+    if (z >= 0 && !beaches.some((b) => b.z === z)) beaches.push({ z, to });
+  }
+  for (const { z, to } of beaches) {
+    const can = mine.filter(fit);
+    const reaching = can.filter((f) => fleetReach(g, f).includes(z));
+    if (reaching.length) { for (const f of reaching) covers.add(f.id); continue; }
+    for (const f of can.filter((x) => !covers.has(x.id)).sort((a, b) => fleetPower(g, b) - fleetPower(g, a) || a.id - b.id)) {
+      const r = coverBase(g, f, z);
+      if (!r) continue;
+      const from = f.base;
+      if (!rebase(g, f, r)) continue;
+      if (was(f) === undefined) g.flags[`fl:cover:${f.id}`] = from + 1;
+      g.flags[`fl:coverAt:${f.id}`] = r.id + 1;
+      covers.add(f.id);
+      moved.add(f.id);
+      headline(g, 'info', `The ${f.name} moves its base to ${r.name} to cover the landing at ${to.name}.`, nat, r.id);
+      break;
+    }
+  }
+  // Between landings: a fleet with no named beach left in its reach goes back to the base it had.
+  for (const f of mine) {
+    const at = was(f);
+    if (at === undefined || covers.has(f.id) || ordered(f)) continue;
+    const reach = fleetReach(g, f);
+    if (beaches.some((b) => reach.includes(b.z))) continue;
+    const r = g.regions[at - 1];
+    forget(f);
+    if (r && r.id !== f.base && rebase(g, f, r)) { moved.add(f.id); headline(g, 'info', `The ${f.name} returns to ${r.name}.`, nat, r.id); }
+  }
+  return { covers, moved };
+}
+
+/**
+ * Whether the book moved the fleet's base this month (stations.ts, `bookFleets`): a row with a sea that took it to a
+ * harbour within reach of its sea (it keeps its own base to go back to), or a row that is a move of base (marked done
+ * this month).
+ */
+function bookMoved(g: Game, nat: string, f: Fleet): boolean {
+  if (f.bookBase) return true;
+  const key = `bf:${nat}:${f.name}:`;
+  for (const k in g.flags) if (k.startsWith(key) && g.flags[k] === g.turn) return true;
+  return false;
+}
+
+/**
+ * The harbour of the fleet's side nearest a beach's sea that can base it within three seas of it (the fleet's reach
+ * from there takes in the sea), nearest by sea and then on the map; null if there is none. A harbour the enemy stands
+ * in or besieges is no base.
+ */
+function coverBase(g: Game, f: Fleet, z: number): Region | null {
+  // Seas counted from the beach's own as one, through the waters the fleet may pass, out to the fleet's reach.
+  const d = new Int16Array(g.seas.length).fill(-1);
+  const q = [z];
+  d[z] = 1;
+  for (let i = 0; i < q.length; i++) {
+    if (d[q[i]] >= NAVY.range) continue;
+    for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, j, q[i], f.nat)) { d[j] = d[q[i]] + 1; q.push(j); }
+  }
+  const beach = g.seas[z];
+  let best: Region | null = null, bd = Infinity, bm = Infinity;
+  for (const r of g.regions) {
+    if (!r.port || !r.seas.length || r.id === f.base || !allied(g, f.nat, r.ctrl) || hostileUnits(g, r, f.nat).length || besieged(g, r)) continue;
+    const near = Math.min(...r.seas.map((s) => (d[s] < 0 ? Infinity : d[s])));
+    if (near === Infinity || near > bd) continue;
+    const m = mapDist(g, r.x, r.y, beach.x, beach.y);
+    if (near === bd && m >= bm) continue;
+    if (!canSailTo(g, f, r)) continue;
+    best = r; bd = near; bm = m;
+  }
+  return best;
+}
+
 /** Orders for one computer-run nation's fleets. Named orders from the plan come first. */
 export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: string; stance: Stance }[]): void {
   // The player's fleets are his own to order, unless he has handed the navy to his admirals (depth.ts).
   if (byHand(g, nat, 'navy')) return;
   const n = g.nations[nat];
   let cross: { off: Set<number>; way: Set<number> } | null = null;
-  const covering = n.atWar.length ? coverHops(g, nat, orders) : null;
+  // (The fleet goes to the beach it covers, and the cover of the hops: the Pacific's, none while the far side is off.)
+  const bases = coverBases(g, nat, orders);
+  const covering = n.atWar.length ? coverHops(g, nat, orders, bases) : null;
+  const duty = (f: Fleet): Stance => (bases.covers.has(f.id) ? 'patrol' : f.duty);
   for (const f of fleetsOf(g, nat)) {
     const home = (): void => { sail(g, f, f.home, 'port'); };
     // (A fleet on its month of peace at sea is not called home by its admiral: the month is the upkeep's, by the record
@@ -1990,7 +2109,7 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
     if (!n.atWar.length || !shipCount(f.ships)) { if (f.cruised !== g.turn) home(); continue; }
     const o = orders?.find((x) => x.fleet === f.name);
     if (o) { if (!sail(g, f, zoneOf(g, o.zone), o.stance)) home(); continue; }
-    if (covering?.has(f.id)) continue;
+    if (covering?.has(f.id) || bases.moved.has(f.id)) continue;
     // A worn fleet stays in harbour until it is fit for sea again.
     if (f.ready < 0.5 || (!atSea(f) && f.ready < NAVY.ready.sortieAt)) { home(); continue; }
     if (f.duty === 'raid') { if (!sail(g, f, f.station, 'raid')) home(); continue; }
@@ -2015,18 +2134,18 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       let quarry = 0;
       for (const x of g.fleets) if (x.zone === z && atSea(x) && surfaceShips(x) > 0 && atWar(g, x.nat, nat)) quarry += fleetPower(g, x);
       let v = 0;
-      if (f.duty === 'patrol' && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) v += quarry; // an enemy fleet that can be beaten
+      if (duty(f) === 'patrol' && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) v += quarry; // an enemy fleet that can be beaten
       if (landedLately(g, z, nat) && own >= e.total) v += 30; // cut the sea lane behind an enemy landing
       // Its own staff's second front: stand off the beach the army means to land on, and on the way to it.
-      if (f.duty === 'patrol' && own >= e.total && (cross.off.has(z) || cross.way.has(z))) v += cross.off.has(z) ? 40 : 25;
+      if (duty(f) === 'patrol' && own >= e.total && (cross.off.has(z) || cross.way.has(z))) v += cross.off.has(z) ? 40 : 25;
       if (invaded) v += 60;
       // A port the army stands round and cannot starve while ships reach it: close the sea off it, if the fleet can live there.
-      if (f.duty === 'patrol' && own >= NAVY.battle.seek * e.total && blockadeWanted(g, z, nat)) v += SIEGE.ai.sea.blockade;
-      if (z === f.station && f.duty === 'patrol' && (quarry <= 0 || own >= 0.7 * e.total)) v += 5; // the usual beat
+      if (duty(f) === 'patrol' && own >= NAVY.battle.seek * e.total && blockadeWanted(g, z, nat)) v += SIEGE.ai.sea.blockade;
+      if (z === f.station && duty(f) === 'patrol' && (quarry <= 0 || own >= 0.7 * e.total)) v += 5; // the usual beat
       if (v > bv) { bv = v; best = z; }
     }
     // With no enemy fleet to fight, a fleet whose beat is on a lane the raiders are bleeding guards the cargoes instead.
-    if (lane && f.duty === 'patrol' && bv <= 5 && laneLoss(g, lane.to, lane.zones, lane.id).raid > 0 && escort(g, f, lane.id)) continue;
+    if (lane && duty(f) === 'patrol' && bv <= 5 && laneLoss(g, lane.to, lane.zones, lane.id).raid > 0 && escort(g, f, lane.id)) continue;
     if (best < 0 || !sail(g, f, best, 'patrol')) home();
   }
 }

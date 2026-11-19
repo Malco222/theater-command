@@ -77,6 +77,24 @@ import { HISTORY, bookDate, onBook, stopDef } from './history';
 import { neverHis } from './line';
 import { ownPath } from './league';
 
+/** A country's shipping in the Pacific (ruling 190; the Pacific planner's paper 05; pacific.json, 'runs'). */
+export interface RunRules {
+  /** Whose shipping it is, and the share of its sea lift that works the Pacific each month, all runs together. */
+  of: string; share: number;
+  /** The equator on the chart (a province's y): a harbour below it is the southern run's, one above it the central run's. */
+  equator: number;
+  /** The run that has the whole share off the book while no beach is named on either road. */
+  idle: string;
+  /** The special formation (traits.json, 'unit') that sails on a Pacific run before any other corps. */
+  first?: string;
+  /** The runs' own quays at home, the first in the country's hands with a way open. */
+  from: string[];
+  /** The lane: countries on whose home ground a run may put an army down, and harbours named for it besides. */
+  lane: string[]; havens: string[];
+  /** Each run: the side of the equator it ends on; its share from each month on while the book stands; its share off the book while both roads have a beach named. */
+  roads: Record<string, { south: boolean; book: [number, number][]; both: number }>;
+}
+
 /** The readiness test's figures (pacific.json, 'ready'; read by readiness.ts). */
 export interface ReadyRules {
   /** The great choice it names the month of, and the flag that choice waits on. */
@@ -100,6 +118,8 @@ interface Rules {
   freeze: { book: number; places: string[]; wars: string[]; seller: string; south: string[] };
   north: { nat: string; fallen: string; months: number; book: number; while: string[] };
   demand: { of: string; key: string; theatre: string; book: number; war: [string, string]; fallen: string; months: number; never: string };
+  /** America's shipping in the Pacific (ruling 190): `pacificRuns`. */
+  runs?: RunRules;
   /** The readiness test (ruling 200(m)): the month the computer's Japan strikes where no book dates it. readiness.ts. */
   ready?: ReadyRules;
   keepers: string[];
@@ -416,7 +436,16 @@ export function hopAims(g: Game, nat: string): { from: Region; to: Region }[] {
 }
 
 /** The Pacific's own shores rows (far-pacific-war.json, 'history'.'hops'): a place and the month it opens, for each side. */
-interface HopRows { theatre: string; slides?: string; axis: [string, number][]; allies: [string, number][] }
+interface HopRows {
+  theatre: string; slides?: string; axis: [string, number][]; allies: [string, number][];
+  /**
+   * Whose road a row of the side against the power is (the planner's paper 14, section 4, points 4 and 8; paper 15):
+   * a place under `roads` is that country's and no other staff's; every other row is `lead`'s; a country under
+   * `behind` goes behind the lead's army and lands of its own accord only on the places named for it; any other
+   * country of that side reads none of the rows. With no `lead`, every staff of the side reads them all.
+   */
+  lead?: string; roads?: Record<string, string[]>; behind?: Record<string, string[]>;
+}
 const hopRows = (): HopRows | null => (PACIFIC ? (HISTORY as unknown as { hops?: HopRows }).hops ?? null : null);
 
 /** The province a far-side city was cut out of; a province is its own. */
@@ -465,11 +494,16 @@ export function hopShores(g: Game, nat: string): { book: boolean; open: Region[]
   const d = hopSlide(g, H);
   const open: Region[] = [], soon: Region[] = [];
   const listed = new Set<number>();
+  // (Whose road each row is: the side against the power only, and only where the rows name a lead.)
+  const roads = !mine && H.lead ? H.roads ?? {} : null;
+  const own = roads ? roads[nat] ?? H.behind?.[nat] ?? null : null;
+  const others = roads ? new Set(Object.values(roads).flat()) : null;
+  const reads = (name: string): boolean => !roads || (own ? own.includes(name) : nat === H.lead && !others!.has(name));
   for (const [name, month] of H[side]) {
     const r = g.byName[name];
     if (!r) continue;
     listed.add(r.id);
-    if (!foe(r)) continue;
+    if (!foe(r) || !reads(name)) continue;
     if (g.turn >= month + d) open.push(r);
     else if (g.turn === month + d - 1) soon.push(r);
   }
@@ -477,4 +511,96 @@ export function hopShores(g: Game, nat: string): { book: boolean; open: Region[]
   if (!mine) for (const r of g.regions) if (!listed.has(r.id) && foe(r) && (r.ctrl === P.power || allied(g, r.ctrl, P.power)) && neverHis(g, r)) open.push(r);
   return { book: true, open, soon };
 }
+
+// ---- America's two oceans (ruling 190) -------------------------------------------------------------------------
+//
+// The computer's America ships its army by shares of its sea lift (world.json 'overseas'; staff.ts `oceanRuns`).
+// The Atlantic's share is in that table. The Pacific's is here: one share for the ocean, on top of the Atlantic's,
+// worked by two runs, one for each road. The southern run ends on a harbour of its side's south of the equator
+// (Australia, New Zealand, New Caledonia, Fiji, Samoa, and what is taken beyond them); the central run on one north of
+// it, from Hawaii westward. Before America is at war with Japan there is no run and no share (190(d)).
+
+/** The run a harbour of the Pacific's ground is on, by the side of the equator it lies on; null off that ground and where the far side is off. */
+export function runOf(g: Game, r: Region): string | null {
+  const R = PACIFIC?.runs;
+  if (!R || !pacificGround(g, r)) return null;
+  const south = r.y > R.equator;
+  return Object.keys(R.roads).find((k) => R.roads[k].south === south) ?? null;
+}
+
+/**
+ * True for a harbour on the lane of the Pacific's runs: one the country itself holds, one on the home ground of a
+ * country the lane names, still in that country's hands, or one named for it (America's own line). Australia, New
+ * Zealand, New Caledonia, Fiji, Samoa, and what is taken beyond them: no army is put down in a harbour of a third
+ * country's colonies because the enemy is near it.
+ */
+const onLane = (R: RunRules, r: Region): boolean => r.ctrl === R.of || (R.lane.includes(r.owner) && r.ctrl === r.owner && !r.overseas) || R.havens.includes(r.name);
+
+/** Whether a province is where the named run's ships can put an army down: on its side of the equator, and on the lane. Null for an ocean that is no run of the Pacific's. */
+export const onRun = (g: Game, ocean: string, r: Region): boolean | null => (PACIFIC?.runs?.roads[ocean] ? runOf(g, r) === ocean && onLane(PACIFIC.runs, r) : null);
+
+/**
+ * Whether a corps standing in one harbour may be sent on by ship to another, as far as the Pacific's lane goes: a
+ * corps across the Pacific goes on only along the lane, and no corps is sent on to the Pacific's ground from
+ * anywhere else. True of every pair with the far side off, and for a country whose shipping the runs are not.
+ */
+export function laneOn(g: Game, nat: string, here: Region, to: Region): boolean {
+  const R = runsOf(g, nat);
+  if (!R) return true;
+  const a = runOf(g, here) !== null, b = runOf(g, to) !== null;
+  return a === b && (!b || onLane(R, to));
+}
+
+/** A run of the Pacific's own quays at home (pacific.json, 'runs.from'), in their order; null for any other ocean. */
+export const runQuays = (g: Game, ocean: string): Region[] | null =>
+  PACIFIC?.runs?.roads[ocean] ? PACIFIC.runs.from.map((nm) => g.byName[nm]).filter((r): r is Region => !!r) : null;
+
+/** The country whose shipping the Pacific's runs are, while they are its staff's to work: never a player's. */
+const runsOf = (g: Game, nat: string): RunRules | null => {
+  const R = PACIFIC?.runs;
+  return R && reads(g) && nat === R.of && nat !== g.human ? R : null;
+};
+
+/**
+ * The Pacific's runs this month, each with the share of the country's sea lift that works it: none before it is at
+ * war with the power, or once the power is beaten. While the book stands, the rows' shares by date (the southern
+ * run all of it until June 1943, then three parts in five), slid with the Pacific's calendar. Off the book the
+ * share follows the roads with a beach named for a hop: three to two when both have one, and all of it to the
+ * southern run, the lane to Australia, while neither has.
+ */
+export function pacificRuns(g: Game, nat: string): [string, number][] {
+  const R = runsOf(g, nat);
+  if (!R || !live(g, PACIFIC!.power) || !atWar(g, nat, PACIFIC!.power)) return [];
+  const roads = Object.entries(R.roads);
+  if (hopsBind(g)) {
+    const d = hopSlide(g, hopRows()!);
+    return roads.map(([k, row]) => [k, row.book.reduce((s, [t, x]) => (g.turn >= t + d ? x : s), 0)] as [string, number]).filter((x) => x[1] > 0);
+  }
+  const named = new Set<string>();
+  for (const a of hopAims(g, nat)) { const k = runOf(g, a.to); if (k) named.add(k); }
+  if (named.size > 1) return roads.filter(([k]) => named.has(k)).map(([k, row]) => [k, row.both]);
+  return [[[...named][0] ?? R.idle, R.share]];
+}
+
+/**
+ * Whether a staff's fleets go to the beach they cover (ruling 200(j); the Pacific planner's paper 14, section 4,
+ * "Which fleet goes where"; rider b585 to ruling 234, item 1(b)): a computer staff of the side against the power, at
+ * war with it, while the far side is on. The power's own fleet answers a landing by its own rule (paper 14, section
+ * 3). Never a player's fleets.
+ */
+export function coversBeaches(g: Game, nat: string): boolean {
+  const P = PACIFIC;
+  return !!P && reads(g) && nat !== g.human && nat !== P.power && !allied(g, nat, P.power) && !!live(g, P.power) && atWar(g, nat, P.power);
+}
+
+/** The Pacific's share of a country's shipping once its war there is won (the power beaten that it fought): it joins the Atlantic's. 0 otherwise. */
+export function pacificFreed(g: Game, nat: string): number {
+  const R = runsOf(g, nat);
+  if (!R) return 0;
+  const p = g.nations[PACIFIC!.power];
+  return p && !p.alive && (g.flags[`war:${nat}:${p.id}`] !== undefined || g.flags[`war:${p.id}:${nat}`] !== undefined) ? R.share : 0;
+}
+
+/** The special formation that sails on a Pacific run before any other corps (pacific.json, 'runs.first'), for the named run; null for any other ocean. */
+export const firstOnRun = (ocean: string): string | null => (PACIFIC?.runs?.roads[ocean] ? PACIFIC.runs.first ?? null : null);
 

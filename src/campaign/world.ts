@@ -23,7 +23,7 @@ import data from '../../data/campaign/world.json';
 import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, standsBy, theName } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
 import { clientMonth, farCountries, farGround, farSettle } from './far';
-import { keepersOf } from './pacific';
+import { keepersOf, onRun, pacificFreed, pacificRuns } from './pacific';
 import { fieldClass, seedClass, seedFields } from './air';
 import { newLab, researches } from './research';
 import type { Game, Region } from './types';
@@ -565,13 +565,36 @@ export function standWithAllies(g: Game, nat: string, was: string | null = null)
   return true;
 }
 
+/**
+ * The runs a country's shipping works this month, each with its share of the sea lift: the table's own ('oceans'),
+ * and with the far side on the Pacific's (ruling 190; pacific.ts `pacificRuns`: none before the country is at war
+ * there). A share moves to the other ocean when its own has no enemy left (190, point 4): with nobody alive across
+ * the Atlantic that the country is at war with, that ocean's share is added to the Pacific's runs in their own
+ * proportion; with the Pacific's power beaten first, the Pacific's share is added to the table's. With the far side
+ * off, the table as it stands.
+ */
+export function oceanShares(g: Game, nat: string, O: OverseasRules): [string, number][] {
+  const table = Object.entries(O.oceans);
+  const far = pacificRuns(g, nat), freed = far.length ? 0 : pacificFreed(g, nat);
+  if (!far.length && !freed) return table;
+  const sum = (xs: [string, number][]): number => xs.reduce((s, x) => s + x[1], 0);
+  const n = g.nations[nat];
+  // (An enemy across the Atlantic: one whose capital stands on the old chart.)
+  const east = n.atWar.some((e) => { const x = g.nations[e]; return !!x?.alive && x.capital >= 0 && !beyondEurope(x.capital); });
+  if (freed) { const k = east ? (sum(table) + freed) / sum(table) : 1; return table.map(([o, x]) => [o, x * k]); }
+  if (east) return [...table, ...far];
+  const k = (sum(table) + sum(far)) / sum(far);
+  return far.map(([o, x]) => [o, x * k]);
+}
+
 /** How many corps a month the country's shipping carries across its oceans, all runs together. */
-export const sailings = (g: Game, nat: string, O: OverseasRules): number => Object.values(O.oceans).reduce((s, x) => s + x, 0) * g.nations[nat].sealift;
+export const sailings = (g: Game, nat: string, O: OverseasRules): number => oceanShares(g, nat, O).reduce((s, x) => s + x[1], 0) * g.nations[nat].sealift;
 
 /** Whether a province lies across the named ocean from the Americas: where that run's ships can put an army down. */
-export function acrossOcean(ocean: string, r: Region): boolean {
-  // The Atlantic run ends on the old chart: Europe, Africa's northern shore and the Near East. (The Pacific's entry comes with its own slice.)
-  return ocean === 'atlantic' ? !beyondEurope(r) : false;
+export function acrossOcean(g: Game, ocean: string, r: Region): boolean {
+  // The Atlantic run ends on the old chart: Europe, Africa's northern shore and the Near East. A run of the Pacific's
+  // ends on its own side of the equator on the Pacific's ground (pacific.ts).
+  return ocean === 'atlantic' ? !beyondEurope(r) : onRun(g, ocean, r) ?? false;
 }
 
 /**
