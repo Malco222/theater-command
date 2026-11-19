@@ -1,0 +1,97 @@
+{
+  "_about": "The sandbox's classes (classes.ts): ships, aircraft and corps that history never built, and the player's own designs. Everything here is behind one switch, g.flags.sandbox, in the grand campaign only: off, the game is exactly as it was. Each row is a variant of a kind the arsenal already orders, named in 'of': ships 'bb' 'cv' 'ca' 'dd' 'ss', aircraft 'ftr' 'bmr', land the corps kinds ('arm', 'mot', ...) and 'para' for an airborne corps. It counts as that kind everywhere a kind is counted, and every field it does not state is its kind's own: 'cost' 'months' 'count' 'yard' from arsenal.json, 'cost' 'months' 'divs' from production.json or arsenal.json 'land' (or tech.json 'units' for 'para'). 'whatif' marks a class of the research tree: the technology that opens it lists 'class:<id>' in its 'unlock'. 'model' is its battle model in battle-models ('land/', 'air/', 'sea/'); 'glider' the glider that carries an airborne class. 'steel' is its own share of the steel bill (arsenal.json 'steel'). 'word' goes into a corps' name: XV Flame Tank Corps. Land fields: 'edges' is a list of what it is worth in battle, each an 'attack' and/or 'defence' multiplier under a 'when' read as for a national ability (traits.json): 'kinds', 'terrain', 'winter', 'works', 'landing' and the rest; 'most' is how many the nation can keep at once in the field and on order; 'oil' multiplies what its kind burns. Aircraft fields: 'fight' multiplies what each aircraft is worth in a fight in the air; 'reach' multiplies how far its fighters and bombers reach; 'night' is the share of its fighters that find a raid by night (in place of the nation's own figure when larger); 'close' multiplies what its fighters are worth on call over a land battle; 'escort' is what each of its bombers counts as escort, as a share of a fighter; 'bomb' multiplies the weight of bombs its bombers put on the land (factories, towns, troops, fieldworks), and 'sea' what they put on ships and shipping; 'oil' multiplies what its aircraft burn. Costs are in production points (shown times a hundred). Figures are a first pass, to be tuned against par after release 1.",
+  "classes": [
+    {
+      "id": "breaker", "of": "arm", "label": "Breakthrough tank corps", "word": "Breakthrough Tank", "whatif": true, "tech": "breakthroughtanks",
+      "blurb": "Seventy-ton tanks with two turrets: a short, heavy gun that blows bunkers apart and a long one for other tanks. Made to break a fortified line, and dear to build and to fuel.",
+      "model": "land/WhatIf_BreakthroughTank",
+      "cost": 90, "months": 9, "most": 3, "oil": 1.6,
+      "edges": [
+        { "attack": 1.4, "when": { "works": true }, "why": "against fortified ground" },
+        { "attack": 1.1, "defence": 1.2 }
+      ]
+    },
+    {
+      "id": "flametank", "of": "arm", "label": "Flame tank corps", "word": "Flame Tank", "whatif": true, "tech": "flametanks",
+      "blurb": "Medium tanks that carry a flame projector in place of a gun, with armoured fuel tanks on the rear deck. Terrible in streets, woods and trenches; the fuel they carry makes them a target.",
+      "model": "land/WhatIf_FlameTank",
+      "cost": 72, "months": 8, "oil": 1.2,
+      "edges": [
+        { "attack": 1.6, "when": { "terrain": ["urban"] }, "why": "in towns and cities" },
+        { "attack": 1.3, "when": { "terrain": ["forest"] }, "why": "in woods" },
+        { "attack": 1.25, "when": { "works": true }, "why": "against fortified ground" },
+        { "defence": 0.85 }
+      ]
+    },
+    {
+      "id": "amphtank", "of": "arm", "label": "Amphibious tank corps", "word": "Amphibious Tank", "whatif": true, "tech": "amphibioustanks",
+      "blurb": "Tanks with watertight boat hulls and propellers that swim ashore with the first wave. Armour thinned to keep them afloat.",
+      "model": "land/WhatIf_AmphibiousTank",
+      "cost": 74, "months": 8,
+      "edges": [
+        { "attack": 1.4, "when": { "landing": true }, "why": "in a landing" },
+        { "defence": 0.9 }
+      ]
+    },
+    {
+      "id": "snowtank", "of": "arm", "label": "Snow tank corps", "word": "Snow Tank", "whatif": true, "tech": "snowtanks",
+      "blurb": "Tanks on tracks twice the usual width, with engine heaters and sealed hatches, built for deep snow and bog. Where other tanks stick fast, they keep moving.",
+      "model": "land/WhatIf_SnowTank",
+      "cost": 74, "months": 8, "oil": 1.1,
+      "edges": [
+        { "attack": 1.25, "defence": 1.25, "when": { "winter": true }, "why": "in winter" },
+        { "attack": 1.4, "when": { "terrain": ["marsh"] }, "why": "in marsh" }
+      ]
+    },
+    {
+      "id": "tankhunter", "of": "mot", "label": "Tank hunter corps", "word": "Tank Hunter", "whatif": true, "tech": "tankhunters",
+      "blurb": "Eight-wheeled armoured cars carrying a long tank gun, fast on roads and quick to a threatened sector. Lightly armoured: they ambush tanks rather than duel them.",
+      "model": "land/WhatIf_TankHunterCar",
+      "cost": 58, "months": 6,
+      "edges": [
+        { "defence": 1.3 },
+        { "attack": 1.15, "when": { "terrain": ["plains", "desert"] }, "why": "on open ground" }
+      ]
+    },
+    {
+      "id": "glidertank", "of": "para", "label": "Glider tank corps", "word": "Glider Tank", "whatif": true, "tech": "assaultgliders",
+      "blurb": "Airborne troops with two-man light tanks, landed in heavy gliders whose noses swing open for the tanks to drive out. They hit harder where they land and hold on longer.",
+      "model": "land/WhatIf_GliderTank", "glider": "air/WhatIf_AssaultGlider",
+      "cost": 60, "months": 7,
+      "edges": [
+        { "attack": 1.3, "when": { "landing": true }, "why": "when they land" },
+        { "defence": 1.15 }
+      ]
+    },
+    {
+      "id": "escortftr", "of": "ftr", "label": "Escort fighter wing", "whatif": true, "tech": "escortfighters",
+      "blurb": "Twin-boom, push-pull fighters with drop tanks, built to fly all the way to the target and back with the bombers. A little heavy in a turning fight.",
+      "model": "air/WhatIf_EscortFighter",
+      "cost": 16, "months": 4, "reach": 1.6, "fight": 0.92, "oil": 1.5
+    },
+    {
+      "id": "nightftr", "of": "ftr", "label": "Night fighter wing", "whatif": true, "tech": "nightfighters",
+      "blurb": "Three-seat twin-engined fighters with radar in the nose and upward-firing cannon. By night they find the bombers that other fighters never see; by day they are slow.",
+      "model": "air/WhatIf_NightFighter",
+      "cost": 15, "months": 4, "night": 0.7, "fight": 0.85, "oil": 1.4
+    },
+    {
+      "id": "tankbuster", "of": "ftr", "label": "Tank-buster wing", "whatif": true, "tech": "tankbusters",
+      "blurb": "Armoured twin-engined attack aircraft with a long anti-tank gun under the nose, flown on call over the battle. Easy prey for enemy fighters.",
+      "model": "air/WhatIf_TankBuster",
+      "cost": 16, "months": 4, "close": 1.8, "fight": 0.55, "oil": 1.5
+    },
+    {
+      "id": "gunship", "of": "bmr", "label": "Gunship wing", "whatif": true, "tech": "gunships",
+      "blurb": "Four-engined bombers that carry guns instead of bombs: eight turrets and a magazine where the bomb bay was. They fly in the formation and shield the bombers around them.",
+      "model": "air/WhatIf_GunshipBomber",
+      "cost": 22, "months": 6, "escort": 0.8, "bomb": 0.1, "sea": 0.1, "oil": 2.5
+    },
+    {
+      "id": "seahunter", "of": "bmr", "label": "Sea hunter wing", "whatif": true, "tech": "seahunters",
+      "blurb": "Four-engined flying boats with search radar, torpedoes and depth charges, flown far out over the sea lanes. Little use over land.",
+      "model": "air/WhatIf_SeaHunter",
+      "cost": 20, "months": 6, "sea": 2.2, "reach": 1.6, "bomb": 0.4, "oil": 2.2
+    }
+  ]
+}

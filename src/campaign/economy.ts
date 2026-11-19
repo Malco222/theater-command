@@ -23,7 +23,7 @@ import { barredKind } from './ground';
 import { workingFactories } from './rails';
 import { incomeMul, levelOf } from './difficulty';
 import { eliteOf, priceOf, traitMoney, whyNoElite } from './traits';
-import { TECH, locked, whyNoPara } from './tech';
+import { TECH, facesTanks, locked, whyNoPara } from './tech';
 import { fieldOut, keepsStores, shortOfOil, supIncome } from './resources';
 import { SIEGE, besieged } from './siege';
 import { prizeIncome, prizeOut, prizeRules } from './prizes';
@@ -32,6 +32,7 @@ import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
 import { raiseMorale } from './morale';
 import { WORLD_MAP, armyIdle, peaceFooting, shoreOf, warFooting, warWorkLeft } from './world';
 import { footLabel, footLineStays, footShare } from './footing';
+import { classById, classCount, pickClass, stampSteel, whyNoClass, type ClassRow } from './classes';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -59,9 +60,12 @@ export function corpsKinds(g: Game): Kind[] {
   return kinds.sort((a, b) => Number(a === 'eng') - Number(b === 'eng') || needsOf(g, a) - needsOf(g, b) || (specOf(g, a)!.cost - specOf(g, b)!.cost));
 }
 
-/** What a corps of this kind costs this nation: the list price, less what its own abilities take off (the grand campaign). */
-export function corpsCost(g: Game, nat: string, kind: string): number {
-  const price = priceOf(g, nat, `corps:${kind}`, specOf(g, kind)?.cost ?? 0);
+/**
+ * What a corps of this kind costs this nation: the list price, less what its own abilities take off (the grand
+ * campaign). A class of the sandbox (classes.ts) has its own list price, and the same abilities apply to it.
+ */
+export function corpsCost(g: Game, nat: string, kind: string, cls?: ClassRow | null): number {
+  const price = priceOf(g, nat, `corps:${kind}`, cls?.cost ?? specOf(g, kind)?.cost ?? 0);
   // The player's Minister of Armaments drives the price down, or up (the grand campaign).
   const m = govMul(g, nat, 'cost');
   return m === 1 ? price : Math.round(price * m * 10) / 10;
@@ -412,24 +416,32 @@ export const canRaise = (g: Game, nat: string, r: Region): boolean => isHome(g, 
 
 /**
  * Orders a new corps. The points are paid now; the corps arrives in a few months. 'revive' names a destroyed
- * formation on the memorial wall: the new corps is raised under its name and carries its colours.
+ * formation on the memorial wall: the new corps is raised under its name and carries its colours. 'cls' names a
+ * class of the sandbox (classes.ts) of this kind: a Flame Tank Corps is ordered as a tank corps, at its own price,
+ * in its own months, once the technology that opens it is done.
  */
-export function orderCorps(g: Game, nat: string, kind: Kind, region: number, revive?: number): Build | null {
+export function orderCorps(g: Game, nat: string, kind: Kind, region: number, revive?: number, cls?: string): Build | null {
   const n = g.nations[nat];
+  const row = cls ? classById(g, nat, cls) : undefined;
+  if (cls && (!row || row.of !== kind || whyNoClass(g, nat, row) !== null)) return null;
   const spec = specOf(g, kind);
   const r = g.regions[region];
-  const cost = corpsCost(g, nat, kind);
+  const cost = corpsCost(g, nat, kind, row);
   if (!n.alive || !spec || !r || !canRaiseKind(g, nat, r, kind) || n.pp < cost) return null;
   // In the grand campaign tanks and lorried infantry wait on the technology that makes them.
   if (locked(g, nat, `corps:${kind}`)) return null;
+  const divs = row?.divs ?? spec.divs;
   // And every new corps is filled from the reserve of men: with none left, none is raised.
-  if (raisable(g, nat, spec.divs) < 1) return null;
+  if (raisable(g, nat, divs) < 1) return null;
   const old = revive !== undefined ? revivable(g, nat, kind).find((f) => f.id === revive) : undefined;
   if (revive !== undefined && !old) return null;
   n.pp -= cost;
-  drawMen(g, nat, spec.divs);
-  const b: Build = { id: g.nextBuild++, what: 'corps', kind, divs: spec.divs, name: old ? old.name : corpsName(nat, kind, n.corpsNo++), region, ordered: g.turn, eta: g.turn + spec.months, cost };
+  drawMen(g, nat, divs);
+  const name = old ? old.name : row?.word ? `${roman(n.corpsNo++)} ${row.word} Corps` : corpsName(nat, kind, n.corpsNo++);
+  const b: Build = { id: g.nextBuild++, what: 'corps', kind, divs, name, region, ordered: g.turn, eta: g.turn + (row?.months ?? spec.months), cost };
   if (old) b.revive = old.id;
+  if (row) b.cls = row.id;
+  stampSteel(g, b, 'land', row);
   n.queue.push(b);
   return b;
 }
@@ -448,25 +460,31 @@ export function orderElite(g: Game, nat: string, region: number): Build | null {
   const no = (g.flags[`elite:${nat}`] ?? 0) + 1;
   g.flags[`elite:${nat}`] = no;
   const b: Build = { id: g.nextBuild++, what: 'corps', kind: u.kind, divs: u.divs, name: `${roman(no)} ${u.word} Corps`, region, ordered: g.turn, eta: g.turn + u.months, cost: u.cost, elite: u.id };
+  stampSteel(g, b, 'land');
   n.queue.push(b);
   return b;
 }
 
 /**
  * Orders an airborne corps (the grand campaign), once the technology tree has given the nation airborne forces.
- * It is raised like infantry and goes into action by air.
+ * It is raised like infantry and goes into action by air. 'cls' names an airborne class of the sandbox (classes.ts,
+ * of 'para'): the Glider Tank Corps, at its own price and months.
  */
-export function orderPara(g: Game, nat: string, region: number): Build | null {
+export function orderPara(g: Game, nat: string, region: number, cls?: string): Build | null {
   const n = g.nations[nat];
+  const row = cls ? classById(g, nat, cls) : undefined;
+  if (cls && (!row || row.of !== 'para' || whyNoClass(g, nat, row) !== null)) return null;
   const u = TECH.units.para;
   const r = g.regions[region];
-  const cost = priceOf(g, nat, 'para', u.cost);
-  if (!n.alive || whyNoPara(g, nat) !== null || !r || !canRaiseKind(g, nat, r, 'inf') || n.pp < cost || raisable(g, nat, u.divs) < 1) return null;
+  const cost = priceOf(g, nat, 'para', row?.cost ?? u.cost), divs = row?.divs ?? u.divs;
+  if (!n.alive || whyNoPara(g, nat) !== null || !r || !canRaiseKind(g, nat, r, 'inf') || n.pp < cost || raisable(g, nat, divs) < 1) return null;
   n.pp -= cost;
-  drawMen(g, nat, u.divs);
+  drawMen(g, nat, divs);
   const no = (g.flags[`para:${nat}`] ?? 0) + 1;
   g.flags[`para:${nat}`] = no;
-  const b: Build = { id: g.nextBuild++, what: 'corps', kind: 'inf', divs: u.divs, name: `${roman(no)} ${u.word} Corps`, region, ordered: g.turn, eta: g.turn + u.months, cost, airborne: true };
+  const b: Build = { id: g.nextBuild++, what: 'corps', kind: 'inf', divs, name: `${roman(no)} ${row?.word ?? u.word} Corps`, region, ordered: g.turn, eta: g.turn + (row?.months ?? u.months), cost, airborne: true };
+  if (row) b.cls = row.id;
+  stampSteel(g, b, 'land', row);
   n.queue.push(b);
   return b;
 }
@@ -482,8 +500,11 @@ export const cadresOf = (g: Game, nat: string): Corps[] => [...(g.nations[nat]?.
 export function cadreTerms(g: Game, nat: string, c: Corps): { cost: number; months: number; divs: number } {
   const u = c.elite ? eliteOf(nat) : null, p = TECH.units.para;
   const kind = specOf(g, c.kind) ? c.kind : 'inf';
-  const list = u ? u.cost : c.airborne ? priceOf(g, nat, 'para', p.cost) : corpsCost(g, nat, kind);
-  return { cost: Math.round(list * MANPOWER.fold.price * 10) / 10, months: u ? u.months : c.airborne ? p.months : specOf(g, kind)!.months, divs: c.divs };
+  // (A corps of a sandbox class is raised again at its class's price and in its months.)
+  const row = c.cls ? classById(g, nat, c.cls) : undefined;
+  const list = u ? u.cost : c.airborne ? priceOf(g, nat, 'para', row?.cost ?? p.cost) : corpsCost(g, nat, kind, row);
+  const months = u ? u.months : row?.months ?? (c.airborne ? p.months : specOf(g, kind)!.months);
+  return { cost: Math.round(list * MANPOWER.fold.price * 10) / 10, months, divs: c.divs };
 }
 
 /** Why a cadre cannot be raised again now, apart from money and a place to raise it; null when it can. */
@@ -491,6 +512,9 @@ export function whyNoCadre(g: Game, nat: string, c: Corps): string | null {
   if (g.nations[nat].queue.some((b) => b.cadre === c.id)) return 'It is being raised again already.';
   if (c.elite) { const no = whyNoElite(g, nat); if (no) return no; }
   if (c.airborne) { const no = whyNoPara(g, nat); if (no) return no; }
+  // A class the nation can keep only so many of counts the cadre raised again with the rest.
+  const row = c.cls ? classById(g, nat, c.cls) : undefined;
+  if (row?.most !== undefined && classCount(g, nat, row.id) >= row.most) return `The nation can keep ${row.most} of these at once, in the field and on order.`;
   return null;
 }
 
@@ -507,6 +531,8 @@ export function orderCadre(g: Game, nat: string, id: number, region: number): Bu
   const b: Build = { id: g.nextBuild++, what: 'corps', kind: c.kind, divs: c.divs, name: c.name, region, ordered: g.turn, eta: g.turn + t.months, cost: t.cost, cadre: c.id };
   if (c.elite) b.elite = c.elite;
   if (c.airborne) b.airborne = true;
+  if (c.cls) b.cls = c.cls;
+  stampSteel(g, b, 'land', c.cls ? classById(g, nat, c.cls) : null);
   n.queue.push(b);
   return b;
 }
@@ -596,6 +622,7 @@ export function deliver(g: Game, nat: string): void {
     const c = addCorps(g, nat, b.name, b.kind!, b.divs!, at.id, { xp: (nat === g.human ? raisedXp(g, nat) : 0.05) + campXp(g, at.id), airborne: b.airborne });
     c.org = 0.7;
     if (b.elite) c.elite = b.elite;
+    if (b.cls) c.cls = b.cls;
     const old = b.revive !== undefined ? fallenOf(g, b.revive) : undefined;
     if (old && old.heir === undefined) inherit(g, c, old.id);
     if (nat === g.human) headline(g, 'info', old ? `${b.name} is raised again at ${at.name}, ${g.turn - old.turn} months after it was lost at ${g.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id);
@@ -696,12 +723,21 @@ export function aiProduction(g: Game, nat: string): void {
     let at = budgeted(g) ? raiseSite(g, nat, kind, cap.id) : cap.id;
     // A nation that has not researched the tank arm raises infantry instead, and so does one with no fuel to run more tanks.
     if (at < 0 || locked(g, nat, `corps:${kind}`) || (kind === 'arm' && shortOfOil(g, nat))) { kind = 'inf'; at = cap.id; }
-    if (n.pp < corpsCost(g, nat, kind) + PRODUCTION.aiReserve) break;
-    const cost = corpsUpkeep(kind, specOf(g, kind)!.divs);
+    // The sandbox (classes.ts): a staff building tanks may take a what-if class it has researched, as the history dial
+    // allows; and one at war with an army that has tanks may raise tank hunters in place of every third corps of infantry.
+    let row = kind === 'arm' ? pickClass(g, nat, 'arm', n.corpsNo) : null;
+    const hunt = !row && kind === 'inf' && n.corpsNo % 3 === 0 ? pickClass(g, nat, 'mot', n.corpsNo) : null;
+    if (hunt && facesTanks(g, nat) && !locked(g, nat, 'corps:mot') && !shortOfOil(g, nat)) {
+      const site = raiseSite(g, nat, 'mot', cap.id);
+      if (site >= 0) { kind = 'mot'; at = site; row = hunt; }
+    }
+    if (n.pp < corpsCost(g, nat, kind, row) + PRODUCTION.aiReserve) break;
+    const divs = row?.divs ?? specOf(g, kind)!.divs;
+    const cost = corpsUpkeep(kind, divs);
     if (spare < cost * BUDGET.debt.aiMargin) break;
     // Nor does it raise new corps with men its armies in the field are waiting for (the grand campaign).
-    if (menSpare(g, nat) < specOf(g, kind)!.divs) break;
-    if (!orderCorps(g, nat, kind, at)) break;
+    if (menSpare(g, nat) < divs) break;
+    if (!orderCorps(g, nat, kind, at, undefined, row?.id)) break;
     spare -= cost;
   }
 }

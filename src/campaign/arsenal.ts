@@ -23,6 +23,7 @@ import { turnToDate } from '../core/ticket';
 import { NAVY, fleetsOf, foundFleet, liftLeft, shipCount } from './navy';
 import { onPlans, whyNoPlans } from './plans';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
+import { classById, classCount, classLocked, classRule, classesFor, pickClass, stampSteel, whyNoClass, type ClassRow } from './classes';
 
 export type Wing = 'ftr' | 'bmr';
 export type Hull = ShipClass | 'tp';
@@ -312,6 +313,16 @@ export function canStation(g: Game, nat: string, r: Region | undefined): boolean
 
 const strongest = (fs: AirFleet[]): AirFleet | null => fs.reduce<AirFleet | null>((best, f) => (!best || f.ftr + f.bmr > best.ftr + best.bmr ? f : best), null);
 
+const nth = (k: number): string => `${k}${k % 100 >= 11 && k % 100 <= 13 ? 'th' : k % 10 === 1 ? 'st' : k % 10 === 2 ? 'nd' : k % 10 === 3 ? 'rd' : 'th'}`;
+/** A new air group of a sandbox class: "2nd Night Fighter Group", numbered by class, never a name the nation has. */
+function classGroupName(g: Game, nat: string, row: ClassRow): string {
+  const word = (row.word ?? row.label.replace(/\s+wing$/i, '')).replace(/\b\w/g, (x) => x.toUpperCase());
+  const key = `agn:${nat}:cls:${row.id}`;
+  let name: string;
+  do { g.flags[key] = (g.flags[key] ?? 0) + 1; name = `${nth(g.flags[key])} ${word} Group`; } while (g.airFleets.some((f) => f.nat === nat && f.name === name));
+  return name;
+}
+
 /** Where a new wing would be stationed: the region asked for if it has airfields, else with the nation's strongest air fleet, else on any airfield it has built. */
 export function stationSite(g: Game, nat: string, want = -1): number {
   if (canStation(g, nat, g.regions[want])) return want;
@@ -346,8 +357,10 @@ function roomNear(g: Game, nat: string, base: number): number {
  * The air fleet a wing stationed here would join, if one of the nation's is based here. In the air war a wing joins
  * an air group of its own kind that has room for it, and otherwise founds a new group.
  */
-const fleetAt = (g: Game, nat: string, region: number, wing?: Wing): AirFleet | null => strongest(airFleetsOf(g, nat).filter((f) => f.base === region && f.ship === undefined && f.ashore === undefined
-  && (!airWar(g) || !wing || (f.kind === wing && f.est[wing] + ARSENAL.air[wing].count <= AIRWAR.groups.most))));
+const fleetAt = (g: Game, nat: string, region: number, wing?: Wing, cls?: ClassRow | null): AirFleet | null => strongest(airFleetsOf(g, nat).filter((f) => f.base === region && f.ship === undefined && f.ashore === undefined
+  // (The sandbox: a wing of a class joins a group of its class, and a wing of its kind's own a group of no class, classes.ts.)
+  && f.cls === cls?.id
+  && (!airWar(g) || !wing || (f.kind === wing && f.est[wing] + (cls?.count ?? ARSENAL.air[wing].count) <= AIRWAR.groups.most))));
 
 /** True if a ship needing a yard of this level can be laid down here. */
 export const canLay = (g: Game, nat: string, r: Region | undefined, yard: number): boolean => !!r && isHome(g, nat, r) && r.port && yardLevel(g, r) >= yard;
@@ -390,7 +403,7 @@ export function liftView(g: Game, nat: string): LiftView {
 // ---- The offers -------------------------------------------------------------------------------------
 
 export interface Offer {
-  /** What it is: 'corps:inf', 'air:ftr', 'ship:dd', 'work:aa', 'work:fort', 'elite' (the special formation), 'para' (an airborne corps), 'cadre:<corps id>' (a folded corps raised again). Pass it to orderOffer. */
+  /** What it is: 'corps:inf', 'air:ftr', 'ship:dd', 'work:aa', 'work:fort', 'elite' (the special formation), 'para' (an airborne corps), 'cadre:<corps id>' (a folded corps raised again); with the sandbox, a class after its kind: 'corps:arm:breaker', 'air:ftr:nightftr', 'para:glidertank'. Pass it to orderOffer. */
   key: string;
   /** For a cadre: the kind of corps it is, for its picture. */
   kind?: Kind;
@@ -415,6 +428,9 @@ export interface Offer {
   tech?: string;
   /** The men it takes from the reserve (the grand campaign): set for a new corps. */
   men?: number;
+  /** The sandbox (classes.ts): the class this order is of ('corps:arm:breaker', 'air:ftr:nightftr', 'para:glidertank'), and its battle model. */
+  cls?: string;
+  model?: string;
 }
 
 const POOR = 'The treasury cannot cover it.';
@@ -481,6 +497,18 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       ...(held ? { tech: held.tech } : {}),
       ...menFor(spec.divs),
     });
+    // The sandbox (classes.ts): the classes of this kind, each listed whether or not the nation has researched it, saying what it waits on.
+    for (const row of classesFor(g, nat, kind)) {
+      const c = corpsCost(g, nat, kind, row), divs = row.divs ?? spec.divs, t = classLocked(g, nat, row);
+      out.push({
+        key: `corps:${kind}:${row.id}`, group: 'army', kind, cls: row.id, model: row.model, label: row.label, blurb: `${row.blurb ?? ''} ${classRule(row)}`.trim(), size: plural(divs, 'division'), cost: c, months: row.months ?? spec.months,
+        upkeep: budgeted(g) ? corpsUpkeep(kind, divs) : 0, at,
+        note: at < 0 ? '' : `Forms up at ${where}.${row.most !== undefined ? ` ${classCount(g, nat, row.id)} of ${row.most} in the field or on order.` : ''}`,
+        why: held?.why ?? whyNoClass(g, nat, row) ?? (at < 0 ? (need ? `Needs a home province with ${plural(need, 'factory', 'factories')}. Build factories in a city first.` : 'There is no home ground left to raise troops on.') : noMen(divs) ?? poor(c)),
+        ...(held ? { tech: held.tech } : t ? { tech: t.id } : {}),
+        ...menFor(divs),
+      });
+    }
   }
   // Airborne troops, once the tree has given the nation its airborne forces (the grand campaign).
   if (budgeted(g)) {
@@ -496,6 +524,18 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       ...(held ? { tech: held.tech } : {}),
       ...menFor(p.divs),
     });
+    // The sandbox: airborne classes (the Glider Tank Corps), counted with the airborne corps.
+    for (const row of classesFor(g, nat, 'para')) {
+      const c = priceOf(g, nat, 'para', row.cost ?? p.cost), divs = row.divs ?? p.divs, t = classLocked(g, nat, row);
+      out.push({
+        key: `para:${row.id}`, group: 'army', kind: 'inf', cls: row.id, model: row.model, label: row.label, blurb: `${row.blurb ?? ''} ${classRule(row)}`.trim(), size: plural(divs, 'division'), cost: c, months: row.months ?? p.months,
+        upkeep: corpsUpkeep('inf', divs), at,
+        note: at < 0 ? '' : `Forms up at ${g.regions[at].name}. ${paraCount(g, nat)} of ${p.most} airborne corps in the field or on order.${row.most !== undefined ? ` ${classCount(g, nat, row.id)} of ${row.most} of these.` : ''}`,
+        why: held?.why ?? whyNoClass(g, nat, row) ?? whyNoPara(g, nat) ?? (at < 0 ? 'There is no home ground left to raise troops on.' : noMen(divs) ?? poor(c)),
+        ...(held ? { tech: held.tech } : t ? { tech: t.id } : {}),
+        ...menFor(divs),
+      });
+    }
   }
   if (!budgeted(g)) {
     const cost = r ? fortCost(g, nat, r) : null;
@@ -518,6 +558,18 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       note: at < 0 ? '' : joins ? `Joins ${joins.name} at ${g.regions[at].name}.` : airWar(g) ? `Forms a new air group on the airfield at ${g.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g.regions[at].name}.`,
       why: none ?? (!built ? `Needs an aircraft industry: a home province with ${spec.factories} factories.` : at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(cost)),
     });
+    // The sandbox (classes.ts): the classes of this kind, built in the same works and flown as groups of their own.
+    for (const row of classesFor(g, nat, wing)) {
+      const c = priceOf(g, nat, `air:${wing}`, row.cost ?? spec.cost), count = row.count ?? spec.count, t = classLocked(g, nat, row);
+      const mine = at >= 0 ? fleetAt(g, nat, at, wing, row) : null;
+      out.push({
+        key: `air:${wing}:${row.id}`, group: 'air', cls: row.id, model: row.model, label: row.label, blurb: `${row.blurb ?? ''} ${classRule(row)}`.trim(), size: `${count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`, cost: c,
+        months: row.months ?? (small && built ? worksMonths(g, nat, wing) : spec.months), upkeep: count * BUDGET.upkeep.air[wing], at,
+        note: at < 0 ? '' : mine ? `Joins ${mine.name} at ${g.regions[at].name}.` : airWar(g) ? `Forms a new air group of its own on the airfield at ${g.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g.regions[at].name}.`,
+        why: none ?? whyNoClass(g, nat, row) ?? (!built ? `Needs an aircraft industry: a home province with ${spec.factories} factories.` : at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(c)),
+        ...(t ? { tech: t.id } : {}),
+      });
+    }
   }
 
   for (const hull of ['dd', 'ss', 'tp', 'ca', 'cv', 'bb'] as Hull[]) {
@@ -587,18 +639,21 @@ export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build |
   const n = g.nations[nat];
   const o = offers(g, nat, sel).find((x) => x.key === key);
   if (!n.alive || !o || o.why !== null || o.at < 0 || n.pp < o.cost) return null;
-  const [group, item] = key.split(':');
+  // (A class of the sandbox is the key's third part: 'corps:arm:breaker', 'air:ftr:nightftr'; an airborne class the second, 'para:glidertank'.)
+  const [group, item, cls] = key.split(':');
   if (group === 'elite') return orderElite(g, nat, o.at);
-  if (group === 'para') return orderPara(g, nat, o.at);
+  if (group === 'para') return orderPara(g, nat, o.at, item);
   if (group === 'cadre') return orderCadre(g, nat, Number(item), o.at);
-  if (group === 'corps') return orderCorps(g, nat, item as Kind, o.at);
+  if (group === 'corps') return orderCorps(g, nat, item as Kind, o.at, undefined, cls);
   if (key === 'work:fort') return orderFort(g, nat, o.at);
+  const row = cls ? classById(g, nat, cls) ?? null : null;
   const r = g.regions[o.at];
   n.pp -= o.cost;
   const b: Build = { id: g.nextBuild++, what: group as 'air' | 'ship' | 'work', item, name: '', region: o.at, ordered: g.turn, eta: g.turn + o.months, cost: o.cost };
-  if (group === 'air') { b.count = ARSENAL.air[item as Wing].count; b.name = `${o.label} for ${r.name}`; }
-  else if (group === 'ship') { b.count = ARSENAL.ships[item as Hull].count; b.name = `${o.label} at ${r.name}`; }
+  if (group === 'air') { b.count = row?.count ?? ARSENAL.air[item as Wing].count; b.name = `${o.label} for ${r.name}`; stampSteel(g, b, 'air', row); }
+  else if (group === 'ship') { b.count = row?.count ?? ARSENAL.ships[item as Hull].count; b.name = `${o.label} at ${r.name}`; stampSteel(g, b, 'ships', row); }
   else b.name = `${o.label}${item === 'factory' ? '' : `, ${o.size},`} at ${r.name}`;
+  if (row) b.cls = row.id;
   n.queue.push(b);
   return b;
 }
@@ -639,15 +694,19 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     const tellAir = (d: AirDelivery): void => { if (nat !== g.human) return; if (air) air.push(d); else headline(g, 'info', d.text, nat, d.region); };
     const wing = b.item as Wing, count = b.count ?? ARSENAL.air[wing].count;
     const word = `${count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`;
+    // (The sandbox: a wing of a class flies with a group of its class, or founds one of its own: classes.ts.)
+    const row = b.cls ? classById(g, nat, b.cls) ?? null : null;
     // The wing goes where it was ordered for; if that ground is lost, to the strongest fleet the nation has left.
     const war = airWar(g);
-    let f = canStation(g, nat, r) || r.ctrl === nat ? fleetAt(g, nat, r.id, wing) : null;
+    let f = canStation(g, nat, r) || r.ctrl === nat ? fleetAt(g, nat, r.id, wing, row) : null;
     if (!f && r.ctrl === nat && (!war || hasAirfield(g, r.id))) {
       f = foundAirFleet(g, nat, r, `${r.name} Air Command`, war ? wing : undefined, count);
+      if (row) { f.cls = row.id; f.name = classGroupName(g, nat, row); }
       tellAir({ text: war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`, region: r.id, wing, count, fleet: f.name, base: r.name, new: true, war });
     } else {
-      // The air war: the wing goes to the strongest group of its own kind.
-      f ??= strongest(airFleetsOf(g, nat).filter((x) => x.ship === undefined && x.ashore === undefined && (!war || x.kind === wing)));
+      // The air war: the wing goes to the strongest group of its own kind (and class, where one of its class is left).
+      const kin = airFleetsOf(g, nat).filter((x) => x.ship === undefined && x.ashore === undefined && (!war || x.kind === wing));
+      f ??= strongest(kin.filter((x) => x.cls === row?.id)) ?? strongest(kin);
       if (f) tellAir({ text: `${cap(word)} from the factories join ${f.name} at ${g.regions[f.base].name}.`, region: f.base, wing, count, fleet: f.name, base: g.regions[f.base].name, new: false, war });
     }
     if (!f) {
@@ -866,8 +925,14 @@ export function aiProgramme(g: Game, nat: string): void {
   let spare = inc - upkeepTotal(g, nat);
   // What the arsenal would build for it: an order it could place, or one that waits only for the money.
   const list = offers(g, nat).filter((o) => o.at >= 0 && (o.why === null || o.poor));
+  // The sandbox (classes.ts): an order may go to a what-if class the staff has researched, as the history dial allows.
+  const pick = (k: string): string => {
+    const [arm, of] = k.split(':');
+    const row = arm === 'air' || arm === 'ship' ? pickClass(g, nat, of, n.queue.length) : null;
+    return row && list.some((o) => o.key === `${k}:${row.id}`) ? `${k}:${row.id}` : k;
+  };
   for (const arm of ['ship', 'air'] as const) {
-    const mine = wants.filter((k) => k.startsWith(`${arm}:`)).map((k) => list.find((o) => o.key === k)).filter((o): o is Offer => !!o);
+    const mine = wants.filter((k) => k.startsWith(`${arm}:`)).map((k) => { const key = pick(k); return list.find((o) => o.key === key) ?? list.find((o) => o.key === k); }).filter((o): o is Offer => !!o);
     const key = purseKey(nat, arm);
     let purse = g.flags[key] ?? 0;
     if (mine.length) {

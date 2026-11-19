@@ -16,6 +16,7 @@ import { TECH } from './tech';
 import { oilAtHome } from './world';
 import { footWorn } from './footing';
 import { bombWorn, oilHeld } from './aircampaigns';
+import { classNum } from './classes';
 
 export type Good = 'oil' | 'sup';
 
@@ -121,10 +122,11 @@ function oilUse(g: Game, nat: string): { fast: number; fastDivs: number; foot: n
   const u = { fast: 0, fastDivs: 0, foot: 0, footDivs: 0, air: 0, planes: 0, sea: 0, atSea: 0, port: 0, inPort: 0 };
   for (const c of g.corps) {
     if (c.nat !== nat || c.dead) continue;
-    const rate = N.corps[c.kind] ?? N.corps._default;
+    // (A corps of a sandbox class burns its class's share more, or less, than its kind: classes.ts.)
+    const rate = (N.corps[c.kind] ?? N.corps._default) * classNum(g, c, 'oil');
     if (c.kind === 'arm' || c.kind === 'mot') { u.fast += rate * c.divs; u.fastDivs += c.divs; } else { u.foot += rate * c.divs; u.footDivs += c.divs; }
   }
-  for (const f of g.airFleets) if (f.nat === nat) { u.planes += f.ftr + f.bmr; u.air += (f.ftr + f.bmr) * N.air; }
+  for (const f of g.airFleets) if (f.nat === nat) { u.planes += f.ftr + f.bmr; u.air += (f.ftr + f.bmr) * N.air * classNum(g, f, 'oil'); }
   for (const f of g.fleets) {
     if (f.nat !== nat) continue;
     let burn = 0, hulls = 0;
