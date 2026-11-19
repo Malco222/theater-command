@@ -18,6 +18,7 @@ import { aiBridges, aiEngineers } from './engineers';
 import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, useLift } from './navy';
 import { shoreAI } from './fleets';
 import { plannedStrike } from './carriers';
+import { readinessMonth } from './readiness';
 import { shoreOpen } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, descentAsks, doorQuay, freed, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
@@ -472,6 +473,8 @@ function overseas(g: Game, nat: string): void {
 function mainCampaign(g: Game, nat: string): void {
   const n = g.nations[nat];
   const open = isOpen(g);
+  // (The far side: where no book dates Japan's strike south, the readiness test names its month before the great choices are read. readiness.ts.)
+  if (open) readinessMonth(g, nat);
   if (open) decide(g, nat, (r) => aside(g, r, nat));
   const planned = phaseFor(g, nat);
   // Some phases wait on someone else's war: Germany's allies only march east if Germany does.

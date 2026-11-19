@@ -77,6 +77,21 @@ import { HISTORY, bookDate, onBook, stopDef } from './history';
 import { neverHis } from './line';
 import { ownPath } from './league';
 
+/** The readiness test's figures (pacific.json, 'ready'; read by readiness.ts). */
+export interface ReadyRules {
+  /** The great choice it names the month of, and the flag that choice waits on. */
+  choice: string; flag: string;
+  /** The first and the last month after the freeze in which the staff may strike, and the chance in each month it is ready. */
+  window: [number, number]; chance: number;
+  /** The first month by the staff's character; an opportunist's while one of `of` has fought `with` on land of late. */
+  first: Record<string, number>;
+  busy: { first: number; of: string[]; with: string };
+  /** So many months after the freeze the striking fleet's base is moved, as the book's dated row moves it. */
+  gather: { after: number; fleet: string; base: string; port: string; home: string; words: string };
+  /** The places the opening is for, each with the beaches that lead to it, the nearest the record's first. */
+  leads: Record<string, string[]>;
+}
+
 interface Rules {
   power: string; bloc: 'axis' | 'allies'; china: string;
   pair: [string, string];
@@ -85,6 +100,8 @@ interface Rules {
   freeze: { book: number; places: string[]; wars: string[]; seller: string; south: string[] };
   north: { nat: string; fallen: string; months: number; book: number; while: string[] };
   demand: { of: string; key: string; theatre: string; book: number; war: [string, string]; fallen: string; months: number; never: string };
+  /** The readiness test (ruling 200(m)): the month the computer's Japan strikes where no book dates it. readiness.ts. */
+  ready?: ReadyRules;
   keepers: string[];
   africa?: [number, number];
   shores?: { slice: number; seas: string[] };
@@ -106,6 +123,8 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** The month the freeze came, or 0 while America still sells. */
 export const freezeAt = (g: Game): number => (reads(g) ? g.flags[FREEZE] ?? 0 : 0);
+/** The readiness test's figures where the Pacific's ties read, or null. */
+export const readyRules = (g: Game): ReadyRules | null => (reads(g) ? PACIFIC!.ready ?? null : null);
 /** The month from which a pact binds Germany and Italy to Japan's war with America, or 0 while none does. */
 export const pactAt = (g: Game): number => (reads(g) ? g.flags[PACT] ?? 0 : 0);
 

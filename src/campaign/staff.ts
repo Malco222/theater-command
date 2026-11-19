@@ -59,6 +59,8 @@ export interface Op {
   push?: number;
   /** A side operation: no build-up, and the main army is not taken for it. */
   side?: boolean;
+  /** Off the book its month is drawn elsewhere, by the test that raises the flag it waits on (readiness.ts): once its conditions hold it goes, with no second draw. */
+  sure?: boolean;
   landings?: PlanPhase['landings'];
   /** Harbours its country holds without owning them, from which these landings may sail as from a home port. */
   quays?: string[];
@@ -1036,7 +1038,8 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
       if (!op.side && op.season && ![0, 1, 2].some((late) => inSeason(g, op, falls + late))) continue;
       // A staff thinks twice before a blow that would bring the whole League down on it.
       // (A front that has been quiet too long settles it: the plan is taken up without more waiting.)
-      if (L.kind === 'free' && !hurried(op) && monthly(g, nat, op.id, g.turn) >= op.chance * L.chance * deterred(g, nat, who)) continue;
+      // (Not one whose month another test has already drawn: 'sure'.)
+      if (L.kind === 'free' && !op.sure && !hurried(op) && monthly(g, nat, op.id, g.turn) >= op.chance * L.chance * deterred(g, nat, who)) continue;
       if (op.side || !(op.prep ?? 0) || first) {
         if (inSeason(g, op)) go(k, !!cur);
       } else {
