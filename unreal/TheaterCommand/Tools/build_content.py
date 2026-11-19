@@ -550,6 +550,27 @@ def build_land():
         return one_in(m, unreal.MaterialExpressionFrac, times(m, inner, 52.9829189, x + 400, y), x + 500, y)
     shake = times(m, plus(m, pair(m, scattered(third_x, third_y, 0.0, -2850, 400), scattered(third_y, third_x, 0.37, -2850, 520), -2250, 460), -0.5, -2150, 460),
                   pair(m, (jitter, "R"), (jitter, "G"), -3150, 150), -2050, 200)
+    # (The art director, 19 November 2026: from the nearest eye each third of a cell showed as a square about ten
+    # points across, a checker along every edge of light and shade on Idaho's hills: its shading was read from a place
+    # of its own. The throw is now blended between a third and its neighbours, eased at the joins, so the place moves
+    # smoothly across the ground and no third has an edge. Blended throws keep to the middle more than single ones,
+    # so the reach is half as much again: "ReliefShakeReach". "ReliefShakeSmooth" at nought is the old square shake.)
+    shake_place = times(m, uv, pair(m, (jitter, "B"), (jitter, "A"), -3250, 5200), -3150, 5200)
+    shake_part = one_in(m, unreal.MaterialExpressionFrac, shake_place, -3050, 5200)
+    shake_ease = times(m, times(m, shake_part, shake_part, -2950, 5200), plus(m, times(m, shake_part, -2.0, -2950, 5300), 3.0, -2850, 5300), -2750, 5250)
+    ease_x = node_from(m, unreal.MaterialExpressionComponentMask, shake_ease, -2650, 5200, r=True, g=False, b=False, a=False)
+    ease_y = node_from(m, unreal.MaterialExpressionComponentMask, shake_ease, -2650, 5300, r=False, g=True, b=False, a=False)
+
+    def thrown(dx, dy, x, y):
+        cx = plus(m, third_x, float(dx), x, y) if dx else third_x
+        cy = plus(m, third_y, float(dy), x, y + 60) if dy else third_y
+        return pair(m, scattered(cx, cy, 0.0, x + 100, y), scattered(cy, cx, 0.37, x + 100, y + 120), x + 700, y + 60)
+    throw_near = lerp(m, thrown(0, 0, -2500, 5400), thrown(1, 0, -2500, 5700), ease_x, -1700, 5550)
+    throw_far = lerp(m, thrown(0, 1, -2500, 6000), thrown(1, 1, -2500, 6300), ease_x, -1700, 6150)
+    throw = lerp(m, throw_near, throw_far, ease_y, -1550, 5850)
+    smooth_shake = times(m, times(m, plus(m, throw, -0.5, -1450, 5850), scalar(m, "ReliefShakeReach", 1.5, -1450, 5950), -1350, 5850),
+                         pair(m, (jitter, "R"), (jitter, "G"), -1450, 6050), -1250, 5900)
+    shake = lerp(m, shake, smooth_shake, scalar(m, "ReliefShakeSmooth", 1.0, -1250, 6000), -1150, 5900)
     relief_uv = plus(m, uv, shake, -2800, 150)
     # (Tried and taken out: shaking the ground's own colour on the world's coarse sheet by the coarser detail, against
     # the straight valleys of New England seen from high up. It combed the coasts and the woods and left the valleys
