@@ -14,7 +14,7 @@ vi.mock('../src/campaign/navy', async (importOriginal) => {
 
 import { describe, expect, it } from 'vitest';
 import { armysShore, hop } from '../src/campaign/ai';
-import { atWar, createGame, declareWar, relocate } from '../src/campaign/game';
+import { addCorps, assess, atWar, createGame, declareWar, limitAttackers, relocate } from '../src/campaign/game';
 import { hopAims, hopShores } from '../src/campaign/pacific';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -116,12 +116,10 @@ describe("the hop staff's queue (rider b599 to ruling 234, (ii))", () => {
     expect(armysShore(g, 'JAP', rabaul, null)).toBe(true);
     // The phase may ask more of its attacks.
     expect(armysShore(g, 'JAP', rabaul, { minOdds: 99 } as never)).toBe(false);
-    // On hold, out of steps or out of order, it cannot go in this month: the ships' again.
+    // On hold or out of order, it cannot go in this month: the ships' again.
     jap.hold = true;
     expect(armysShore(g, 'JAP', rabaul, null)).toBe(false);
-    jap.hold = false; jap.ap = 0;
-    expect(armysShore(g, 'JAP', rabaul, null)).toBe(false);
-    jap.ap = jap.apMax; jap.org = 0.2;
+    jap.hold = false; jap.org = 0.2;
     expect(armysShore(g, 'JAP', rabaul, null)).toBe(false);
     jap.org = 1;
     // An empty shore with a corps beside that can walk in is the army's.
@@ -129,6 +127,44 @@ describe("the hop staff's queue (rider b599 to ruling 234, (ii))", () => {
     expect(armysShore(g, 'JAP', rabaul, null)).toBe(true);
     // Nobody of its own beside it: the ships'.
     relocate(g, jap, g.byName['Truk']);
+    expect(armysShore(g, 'JAP', rabaul, null)).toBe(false);
+  });
+
+  it("reads a corps' steps as its month gives them: one that has spent them this month beside the shore still makes it the army's", () => {
+    const g = pacificWar(30);
+    const rabaul = g.byName['Rabaul'], cape = g.byName['Cape Gloucester'];
+    cape.ctrl = 'JAP';
+    const aus = ready(g, g.corps.find((c) => c.nat === 'AUS' && !c.dead && c.kind === 'inf')!, rabaul);
+    aus.str = 0.1;
+    const jap = ready(g, corps(g, '13th Army (22nd Division, Hangchow)'), cape);
+    expect(armysShore(g, 'JAP', rabaul, null)).toBe(true);
+    // The month's dated attack on it has been made and thrown back, or the corps has just landed or walked in beside it:
+    // its steps are spent, and the shore is the army's still (the hops are planned after the month's attacks).
+    jap.ap = 0;
+    expect(armysShore(g, 'JAP', rabaul, null)).toBe(true);
+    // Broken by it, the corps is out of the fight: the ships'.
+    jap.org = 0.2;
+    expect(armysShore(g, 'JAP', rabaul, null)).toBe(false);
+  });
+
+  it("counts the guns beside in the odds, as the army's own attacks bring them, but never guns alone", () => {
+    const g = pacificWar(30);
+    const rabaul = g.byName['Rabaul'], cape = g.byName['Cape Gloucester'];
+    cape.ctrl = 'JAP';
+    const aus = ready(g, g.corps.find((c) => c.nat === 'AUS' && !c.dead && c.kind === 'inf')!, rabaul, 0.3);
+    const jap = ready(g, corps(g, '13th Army (22nd Division, Hangchow)'), cape, 0.6);
+    const guns = addCorps(g, 'JAP', 'Test guns', 'art', 1, cape.id, {});
+    // The infantry alone is short of the staff's 1.3; with the guns it is over.
+    expect(assess(g, limitAttackers(g, [jap], rabaul), rabaul).odds).toBeLessThan(1.3);
+    expect(assess(g, limitAttackers(g, [jap, guns], rabaul), rabaul).odds).toBeGreaterThanOrEqual(1.3);
+    expect(armysShore(g, 'JAP', rabaul, null)).toBe(true);
+    guns.hold = true;
+    expect(armysShore(g, 'JAP', rabaul, null)).toBe(false);
+    guns.hold = false;
+    // Guns with no infantry beside them do not take a shore, defended or empty.
+    relocate(g, jap, g.byName['Truk']);
+    expect(armysShore(g, 'JAP', rabaul, null)).toBe(false);
+    relocate(g, aus, g.byName['Port Moresby']);
     expect(armysShore(g, 'JAP', rabaul, null)).toBe(false);
   });
 });
