@@ -106,7 +106,7 @@ def uniform_layers(man, J, spec, LM):
     if not _ours(spec):
         return layers
     # (the quilted channels need the faces to stay through the thinning; the snow suit over them is plain)
-    S.BUDGET["uniform"] = UNIFORM_BUDGET + {"winter": 4000, "snow": 900}.get(spec.get("dress"), 0)
+    S.BUDGET["uniform"] = UNIFORM_BUDGET + {"winter": 3000, "snow": 900}.get(spec.get("dress"), 0)
     tunic, trousers, collar = layers[0], layers[1], layers[3]
     Z = LM["Z"]
     # ---- off: the button strip to the hem and the four pockets with their flaps (soldier.py's tunic)
