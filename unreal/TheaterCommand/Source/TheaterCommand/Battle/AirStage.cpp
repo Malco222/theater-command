@@ -1,5 +1,7 @@
 #include "Battle/AirStage.h"
 
+#include "Battle/AirGround.h"
+
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Campaign/ArmyPiece.h"
@@ -106,6 +108,11 @@ namespace StageParts
 	static const FLinearColor TankPaint = FLinearColor(FColor::FromHex(TEXT("BDB6A2")));
 	static const FLinearColor HangarPaint = FLinearColor(FColor::FromHex(TEXT("8C8A80")));
 	static const FLinearColor RoofPaint = FLinearColor(FColor::FromHex(TEXT("6F6E68")));
+	// The yard's (the historian's 1941 blocks): the pads, the apron and the docks' coping a weathered concrete, a
+	// drained dock's floor dark, the floating dock's steel the grey of the ships beside it.
+	static const FLinearColor ConcretePaint = FLinearColor(FColor::FromHex(TEXT("A09C93")));
+	static const FLinearColor DockFloorPaint = FLinearColor(FColor::FromHex(TEXT("4A4844")));
+	static const FLinearColor DockSteelPaint = FLinearColor(FColor::FromHex(TEXT("5C6062")));
 	static const FLinearColor TrunkPaint = FLinearColor(FColor::FromHex(TEXT("7A6A55")));
 	static const FLinearColor FrondPaint = FLinearColor(FColor::FromHex(TEXT("3F6A2E")));
 	// (darker than the first run's 24505F: looking down from 5 km the sea measured luma 100 to 118, the art director's
@@ -250,14 +257,21 @@ bool AAirStage::ReadStage(const FString& Key)
 		return false;
 	}
 	Palette.Reset();
+	PaletteNames.Reset();
 	const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
 	if (File->TryGetArrayField(TEXT("palette"), List))
 	{
 		for (const TSharedPtr<FJsonValue>& Item : *List)
 		{
 			const TSharedPtr<FJsonObject>* Paint = nullptr;
-			FString Hex;
-			Palette.Add(Item->TryGetObject(Paint) && (*Paint)->TryGetStringField(TEXT("hex"), Hex) ? FColor::FromHex(Hex) : FColor(128, 128, 128));
+			FString Hex, PaintName;
+			const bool bPaint = Item->TryGetObject(Paint);
+			Palette.Add(bPaint && (*Paint)->TryGetStringField(TEXT("hex"), Hex) ? FColor::FromHex(Hex) : FColor(128, 128, 128));
+			if (bPaint)
+			{
+				(*Paint)->TryGetStringField(TEXT("name"), PaintName);
+			}
+			PaletteNames.Add(PaintName);
 		}
 	}
 	Parts.Reset();
@@ -313,6 +327,7 @@ bool AAirStage::ReadStage(const FString& Key)
 	Rows(TEXT("tanks"), Tanks);
 	Rows(TEXT("hangars"), Hangars);
 	Rows(TEXT("palms"), Palms);
+	Rows(TEXT("yard"), Yard);
 	const TSharedPtr<FJsonObject>* Sun = nullptr;
 	if (File->TryGetObjectField(TEXT("sun"), Sun))
 	{
@@ -403,14 +418,22 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 		return Made;
 	};
 	GroundInk = Ink(0.9f, 0.15f);
+	// The ground's own grain, finer than its points are apart: the campaign map's noise at two sizes, one tile to
+	// 1,800 m and one to 260 m of the stage (AirGround paints the broader patches point by point; the art director's
+	// mottle at two scales on build 1734). -TheaterGroundGrain= tunes it, 0 for none.
+	float GroundGrain = 0.28f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterGroundGrain="), GroundGrain);
+	GroundInk->SetScalarParameterValue(TEXT("Grain"), FMath::Clamp(GroundGrain, 0.0f, 1.0f));
+	GroundInk->SetScalarParameterValue(TEXT("GrainTilingCoarse"), static_cast<float>(1.0 / (1800.0 * UnitsPerMetre)));
+	GroundInk->SetScalarParameterValue(TEXT("GrainTilingFine"), static_cast<float>(1.0 / (260.0 * UnitsPerMetre)));
 	SeaInk = Ink(0.2f, 0.5f); // (a tighter sun path on the water)
 	SteelInk = Ink(0.55f, 0.4f);
 	BuildSea();
 	BuildGround();
 	BuildWorks();
 	bRaised = true;
-	UE_LOG(LogTheater, Display, TEXT("Stage: %s raised, %d meshes, %d tanks, %d hangars, %d palms, the ground on a %d by %d grid."),
-		*Key, Parts.Num(), Tanks.Num(), Hangars.Num(), Palms.Num(), GridCols, GridRows);
+	UE_LOG(LogTheater, Display, TEXT("Stage: %s raised, %d meshes, %d tanks, %d hangars, %d yard blocks, %d palms, the ground on a %d by %d grid."),
+		*Key, Parts.Num(), Tanks.Num(), Hangars.Num(), Yard.Num(), Palms.Num(), GridCols, GridRows);
 	return true;
 }
 
@@ -509,31 +532,82 @@ void AAirStage::BuildSea()
 
 void AAirStage::BuildGround()
 {
+	// The ground as painted (AirGround, the same code the cloud test runs): the grass varied and here and there turned
+	// toward red earth, the sand kept to the water's edge, the shallows darkening into the sea's own paint, the runways
+	// lifted clear of the land. (The file's names are plain letters: copied across one by one.)
+	auto Plain = [](const FString& Text)
+	{
+		std::string Out;
+		Out.reserve(static_cast<size_t>(Text.Len()));
+		for (int32 K = 0; K < Text.Len(); ++K)
+		{
+			Out.push_back(static_cast<char>(Text[K]));
+		}
+		return Out;
+	};
+	std::vector<AirGround::Part> Given;
+	Given.reserve(static_cast<size_t>(Parts.Num()));
 	for (const FMeshPart& Part : Parts)
 	{
-		UTheaterStillMesh* Mesh = UTheaterStillMesh::Make(this, *(TEXT("Stage_") + Part.Name));
+		AirGround::Part& Into = Given.emplace_back();
+		Into.Name = Plain(Part.Name);
+		Into.X.reserve(static_cast<size_t>(Part.Points.Num()));
+		Into.Y.reserve(static_cast<size_t>(Part.Points.Num()));
+		Into.Z.reserve(static_cast<size_t>(Part.Points.Num()));
+		for (const FVector& Point : Part.Points)
+		{
+			Into.X.push_back(Point.X);
+			Into.Y.push_back(Point.Y);
+			Into.Z.push_back(Point.Z);
+		}
+		Into.Paints.assign(Part.Paints.GetData(), Part.Paints.GetData() + Part.Paints.Num());
+		Into.Tris.assign(Part.Triangles.GetData(), Part.Triangles.GetData() + Part.Triangles.Num());
+	}
+	std::vector<std::string> Names;
+	std::vector<AirGround::Rgb8> Colours;
+	for (int32 K = 0; K < Palette.Num(); ++K)
+	{
+		Names.push_back(PaletteNames.IsValidIndex(K) ? Plain(PaletteNames[K]) : std::string());
+		Colours.push_back({ Palette[K].R, Palette[K].G, Palette[K].B });
+	}
+	const FColor SeaNow = StageParts::SeaPaintUnder(SunElevation);
+	AirGround::Tally Count;
+	const std::vector<AirGround::Drawn> Painted = AirGround::Paint(Given, Names, Colours, { SeaNow.R, SeaNow.G, SeaNow.B }, &Count);
+	UE_LOG(LogTheater, Display, TEXT("Stage: the ground painted, %d sand points laid, shallows %d faded and %d kept%s, %d earth, %d runway points lifted."),
+		Count.SandSplit, Count.ShoreFaded, Count.ShoreKept, Count.bLagoon ? TEXT(" (a lagoon: the edge kept)") : TEXT(""), Count.Earth, Count.RunwayRaised);
+
+	for (const AirGround::Drawn& Part : Painted)
+	{
+		const FString PartName(Part.Name.c_str());
+		UTheaterStillMesh* Mesh = UTheaterStillMesh::Make(this, *(TEXT("Stage_") + PartName));
 		Mesh->SetupAttachment(Root);
 		Mesh->bUseAsyncCooking = false;
 		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		// (the hills and the works cast shadows; what is painted on the water does not)
-		Mesh->SetCastShadow(Part.Name == TEXT("land") || Part.Name == TEXT("works"));
+		Mesh->SetCastShadow(PartName == TEXT("land") || PartName == TEXT("works"));
 		Mesh->RegisterComponent();
+		const int32 Points = static_cast<int32>(FMath::Min(Part.X.size(), Part.Colours.size()));
 		TArray<FVector> V;
 		TArray<FColor> C;
-		V.Reserve(Part.Points.Num());
-		C.Reserve(Part.Points.Num());
-		for (int32 K = 0; K < Part.Points.Num(); ++K)
+		V.Reserve(Points);
+		C.Reserve(Points);
+		for (int32 K = 0; K < Points; ++K)
 		{
-			V.Add(StageToLocal(Part.Points[K]));
-			C.Add(Palette.IsValidIndex(Part.Paints[K]) ? Palette[Part.Paints[K]] : FColor(128, 128, 128));
+			const size_t I = static_cast<size_t>(K);
+			V.Add(StageToLocal(FVector(Part.X[I], Part.Y[I], Part.Z[I])));
+			C.Add(FColor(Part.Colours[I].R, Part.Colours[I].G, Part.Colours[I].B));
 		}
 		TArray<FVector> N;
 		N.Init(FVector::ZeroVector, V.Num());
 		TArray<int32> T;
-		T.Reserve(Part.Triangles.Num());
-		for (int32 K = 0; K + 2 < Part.Triangles.Num(); K += 3)
+		T.Reserve(static_cast<int32>(Part.Tris.size()));
+		for (size_t K = 0; K + 2 < Part.Tris.size(); K += 3)
 		{
-			const int32 A = Part.Triangles[K], B = Part.Triangles[K + 1], D = Part.Triangles[K + 2];
+			const int32 A = Part.Tris[K], B = Part.Tris[K + 1], D = Part.Tris[K + 2];
+			if (!V.IsValidIndex(A) || !V.IsValidIndex(B) || !V.IsValidIndex(D))
+			{
+				continue;
+			}
 			const FVector Facing = (V[B] - V[D]) ^ (V[A] - V[D]);
 			const double Size = Facing.Size();
 			if (Size <= UE_DOUBLE_SMALL_NUMBER)
@@ -565,7 +639,7 @@ void AAirStage::BuildGround()
 
 void AAirStage::BuildWorks()
 {
-	// The oil tanks, the hangars and the palms: built with the miniature kit, in one mesh.
+	// The oil tanks, the hangars, the yard's blocks and the palms: built with the miniature kit, in one mesh.
 	const double U = UnitsPerMetre;
 	FMiniatureMesh Model;
 	for (const TArray<double>& Tank : Tanks)
@@ -589,6 +663,50 @@ void AAirStage::BuildWorks()
 		const double Yaw = HeadingToYaw(FMath::DegreesToRadians(Hangar[6]) - StageTurn);
 		Model.Box(Foot + FVector(0.0, 0.0, Hangar[5] * 0.4 * U), FVector(Hangar[3], Hangar[4], Hangar[5] * 0.8) * U, StageParts::HangarPaint, Yaw);
 		Model.Box(Foot + FVector(0.0, 0.0, Hangar[5] * 0.9 * U), FVector(Hangar[3], Hangar[4] * 0.8, Hangar[5] * 0.2) * U, StageParts::RoofPaint, Yaw);
+	}
+	for (const TArray<double>& Block : Yard)
+	{
+		if (Block.Num() < 8)
+		{
+			continue;
+		}
+		// The historian's 1941 yard (tools/stages/yard.py): x, y, ground, length, width, height, the length's compass
+		// heading, kind. Each piece goes 1.5 m down into the ground, so uneven land under it leaves no gap.
+		const FVector Foot = StageToLocal(FVector(Block[0], Block[1], Block[2]));
+		const double Yaw = HeadingToYaw(FMath::DegreesToRadians(Block[6]) - StageTurn);
+		const double Long = Block[3], Wide = Block[4], High = Block[5];
+		const FQuat Turned = FQuat(FRotator(0.0, Yaw, 0.0));
+		const FVector Along = Turned.RotateVector(FVector::ForwardVector), Across = Turned.RotateVector(FVector::RightVector);
+		// (a box from Low to Top metres about the ground, Ahead along the length and Aside across it)
+		auto Slab = [&Model, &Foot, &Along, &Across, Yaw, U](double Ahead, double Aside, double Length, double Width, double Low, double Top, const FLinearColor& Paint)
+		{
+			Model.Box(Foot + (Along * Ahead + Across * Aside) * U + FVector(0.0, 0.0, (Low + Top) * 0.5 * U), FVector(Length, Width, Top - Low) * U, Paint, Yaw);
+		};
+		switch (static_cast<int32>(Block[7]))
+		{
+		case 0: // a shop or a hangar on its pad
+			Slab(0.0, 0.0, Long + 24.0, Wide + 24.0, -1.5, 0.3, StageParts::ConcretePaint);
+			Slab(0.0, 0.0, Long, Wide, -1.0, High * 0.8, StageParts::HangarPaint);
+			Slab(0.0, 0.0, Long, Wide * 0.8, High * 0.8, High, StageParts::RoofPaint);
+			break;
+		case 1: // a dry dock, drained: its floor dark inside the coping, the caisson the end on the heading's side
+			Slab(0.0, 0.0, Long - 20.0, Wide - 15.0, -1.5, 0.2, StageParts::DockFloorPaint);
+			Slab(-(Long * 0.5 - 5.0), 0.0, 10.0, Wide, -1.5, 0.6, StageParts::ConcretePaint);
+			Slab(Long * 0.5 - 5.0, 0.0, 10.0, Wide, -1.5, 0.8, StageParts::DockSteelPaint);
+			Slab(0.0, -(Wide * 0.5 - 3.75), Long - 20.0, 7.5, -1.5, 0.6, StageParts::ConcretePaint);
+			Slab(0.0, Wide * 0.5 - 3.75, Long - 20.0, 7.5, -1.5, 0.6, StageParts::ConcretePaint);
+			break;
+		case 2: // a paved apron
+			Slab(0.0, 0.0, Long, Wide, -1.5, 0.3, StageParts::ConcretePaint);
+			break;
+		case 3: // a floating dry dock: the pontoon awash, the wing walls either side
+			Slab(0.0, 0.0, Long, Wide, -2.0, 1.5, StageParts::DockSteelPaint);
+			Slab(0.0, -(Wide * 0.5 - 1.5), Long, 3.0, 1.5, FMath::Max(High, 2.0), StageParts::DockSteelPaint);
+			Slab(0.0, Wide * 0.5 - 1.5, Long, 3.0, 1.5, FMath::Max(High, 2.0), StageParts::DockSteelPaint);
+			break;
+		default:
+			break;
+		}
 	}
 	FRandomStream Lean(Palms.Num());
 	for (const TArray<double>& Palm : Palms)

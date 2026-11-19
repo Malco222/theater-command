@@ -16,6 +16,7 @@ battle screen over it.
 | `AirBattle.h/.cpp` | `AAirBattle`, the scene. It feeds the core and draws what the core says: the planes, the small things, the effects kit, the stage and its ships, the cameras and the sound. |
 | `AirBattleScreen.h/.cpp` | `SAirBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
 | `AirStage.h/.cpp` | The Oahu and Midway stages (an earlier commit on this branch). |
+| `AirGround.h/.cpp` | The stage's ground as painted, plain C++ (the cloud test paints the same): the grass varied and patched with red earth, the sand kept to the water's edge, the shallows darkening into the sea, the runways lifted. |
 | `../../../Tools/air_show/` | The cloud test. It plays each recording through the core at 60 fps and checks the flight: g, turn radius, slip, roll, a fall for every loss, two gunners never at one window, the frame time. It also plays the screen's clock and words. `run.sh` builds and runs it; `air_show_frames.py` draws pictures of the flight. |
 | `Content/Data/AirBattles/*.json` | The two recorded battles, `oahu` and `midway-fleet`, written by `tools/air-record` on the rules branch `claude/project-thread-2bdb2m`. |
 | `Content/Data/Sound/mix.json` | The sound director's mix, read by the scene (it never copies the mix's numbers). |
@@ -146,6 +147,34 @@ than about one per cent of the picture at 250 or over, and the paint's top is al
 shaded sides, the bases and the shadows that much darker (`Painter::SetInk`), so only the sunlit tops rise: the bases
 already pass at 140 to 155 and the deck's troughs at 12 to 18 per cent darker (her 16:31Z). `-TheaterCloudBright=`
 tries another.
+
+**The harbour's ground and yard (the art director on build 1734, 16:55Z; the historian's blocks).** Pearl Harbor's
+land read as flat blocks in three plain colours with hard polygon bands, and the shallows as a mint band. The stage's
+meshes now go through `AirGround::Paint` before they are built (BuildGround):
+- the grass is varied in broad patches at two sizes (about 380 m and 140 m), and here and there turned toward the red
+  earth of the pineapple fields' paint in patches a few hundred metres across. Over the 6 km round the harbour the
+  grass's brightness spreads 5.6 luma, by the art director's measure;
+- the sand keeps to the water's edge: a sand point back from it takes the grass behind it, long shore edges get a point
+  10 m in, and a large all-sand triangle gets a greener middle by its distance from the coast;
+- the shallows' open-sea edge takes the sea's own paint (`SeaPaintUnder` at the stage's sun), so the band darkens from
+  the coast into the deep water. Midway, with its lagoon, keeps the band's edge;
+- the runways stand 0.8 m clear of the land (Ford Island's strip lay at the island's own height).
+Oahu's palette is also darker and less mint (`tools/stages/mesh.py`'s `OAHU_PAINT`: cane #5D7934, pineapple #7D5A3C,
+forest #35512A, sand #CDBD95, shallows #3A6E68, reef #6C9E8E). The mottle finer than the points are apart is the
+material's own grain (M_MapSurface's two noise samples at one tile to 1,800 m and one to 260 m, strength 0.28;
+`-TheaterGroundGrain=` tries another, 0 for none).
+
+The stage file's `yard` (from `tools/stages/yard.py`, the historian's table of 19 November) draws the 1941 Navy Yard
+and Ford Island's seaplane base as grey blocks in BuildWorks:
+- Dry Dock No. 1, drained and dark inside its coping, its caisson the steel end on the water. It runs 211° from the
+  mouth (the historian's correction), and Pennsylvania, Cassin and Downes lie in it along that line;
+- YFD-2 round Shaw;
+- eight shops on their concrete pads by the 1010 Dock;
+- the seaplane apron at Ford Island's south end with Hangars 79, 37 and 54. The three stand-in hangars by Ford
+  Island's runway are gone.
+The cloud test checks that each docked ship lies inside its dock and along it, and that no ship's middle is under a
+block. Its picture: `AIR_GROUND_DUMP=1 Tools/air_show/run.sh`, then
+`STAGE=Content/Data/Stages/oahu.json python3 Tools/air_show/ground_picture.py <out>/ground-oahu.bin harbour.png -1700 -1900 900 200 1.25`.
 
 **The battle look (the 3D builder's, `Campaign/CampaignBattleLook.h/.cpp`).** The scene calls it in five places: the
 art director's grade on the scene's own camera (`Grade`, when the eye is made); the air haze, which starts 15 km out
@@ -310,4 +339,7 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    with no ring of polygon corners. The fight's smoke and tracer over the clouds should lie on them. If the clouds glare
    or vanish against the sky, their brightness is the three colours at the top of `AirSky.cpp`. If they cost too much
    time, `Placing::MostPuffs` sets their room and `Painter(12)` the sides of each puff.
-5. **The sound.** Each formation's drone, the bursts by calibre, the flak bursts heard after their flash, and a fighter group's pass within 300 m. The loudness and distances come from mix.json's families.
+5. **Pearl Harbor's ground.** The grass mottled with patches of red earth, the beach a band along the water, the
+   shallows darkening into the sea, and the yard's grey blocks with Pennsylvania in her dry dock. If the grain shows as
+   a pattern, `-TheaterGroundGrain=0.15` softens it.
+6. **The sound.** Each formation's drone, the bursts by calibre, the flak bursts heard after their flash, and a fighter group's pass within 300 m. The loudness and distances come from mix.json's families.

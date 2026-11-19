@@ -9,6 +9,7 @@
 
 #include "Battle/AirDesk.h"
 #include "Battle/AirFeed.h"
+#include "Battle/AirGround.h"
 #include "Battle/AirShow.h"
 #include "Battle/AirSky.h"
 
@@ -637,6 +638,157 @@ int main(int Argc, char** Argv)
 		Limits.push_back({ "the flyover's eye glides clear", FlyNoLook == 0 && FlyLow == 0 && FlyJumps == 0 && FlyIntoPlane == 0,
 		                   std::to_string(FlyJumps) + " jumps, " + std::to_string(FlyLow) + " low, " + std::to_string(FlyIntoPlane) + " in a plane, " + std::to_string(FlyNoLook) + " looks lost",
 		                   "0 of each" });
+		// The stage's ground as the scene paints it (AirGround; the art director on build 1734): the grass varied and
+		// patched with red earth, the beach a band along the water, the shallows darkening into the deep (not where a
+		// lagoon is), the runways clear of the land; every triangle's points there.
+		{
+			const std::string Base = Path.substr(0, Path.rfind("/AirBattles/") == std::string::npos ? 0 : Path.rfind("/AirBattles/"));
+			const std::string GroundPath = Base + "/Stages/" + Rec.Board.StageKey + ".json";
+			std::ifstream GroundIn(GroundPath);
+			std::stringstream GroundText;
+			GroundText << GroundIn.rdbuf();
+			AirFeed::Json GroundJson;
+			std::string GroundWhy;
+			const bool bGround = !Rec.Board.StageKey.empty() && GroundIn && AirFeed::Parse(GroundText.str(), GroundJson, GroundWhy);
+			std::vector<std::string> PaintNames;
+			std::vector<AirGround::Rgb8> PaintColours;
+			const AirFeed::Json& PaletteJson = GroundJson["palette"];
+			for (size_t K = 0; bGround && K < PaletteJson.Count(); ++K)
+			{
+				PaintNames.push_back(PaletteJson.At(K)["name"].Str(""));
+				const unsigned long Packed = std::strtoul(PaletteJson.At(K)["hex"].Str("#808080").c_str() + 1, nullptr, 16);
+				PaintColours.push_back({ static_cast<uint8_t>((Packed >> 16) & 255u), static_cast<uint8_t>((Packed >> 8) & 255u), static_cast<uint8_t>(Packed & 255u) });
+			}
+			std::vector<AirGround::Part> GroundParts;
+			const AirFeed::Json& MeshesJson = GroundJson["meshes"];
+			for (size_t K = 0; bGround && K < MeshesJson.Count(); ++K)
+			{
+				const AirFeed::Json& M = MeshesJson.At(K);
+				AirGround::Part Part;
+				Part.Name = M["name"].Str("");
+				for (size_t I = 0; I + 2 < M["v"].Count(); I += 3)
+				{
+					Part.X.push_back(M["v"].At(I).Num() * 0.1);
+					Part.Y.push_back(M["v"].At(I + 1).Num() * 0.1);
+					Part.Z.push_back(M["v"].At(I + 2).Num() * 0.1);
+				}
+				for (size_t I = 0; I < M["c"].Count(); ++I) Part.Paints.push_back(M["c"].At(I).Int());
+				for (size_t I = 0; I < M["t"].Count(); ++I) Part.Tris.push_back(M["t"].At(I).Int());
+				GroundParts.push_back(std::move(Part));
+			}
+			AirGround::Tally GroundTally;
+			const auto GroundStart = std::chrono::steady_clock::now();
+			const std::vector<AirGround::Drawn> GroundDrawn = AirGround::Paint(GroundParts, PaintNames, PaintColours, { 0x1C, 0x44, 0x53 }, &GroundTally);
+			const double GroundMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - GroundStart).count();
+			const int CanePaint = static_cast<int>(std::find(PaintNames.begin(), PaintNames.end(), std::string("cane")) - PaintNames.begin());
+			int BadIndex = 0, GrewWrong = 0;
+			double SumL = 0.0, SumLL = 0.0;
+			int Grass = 0;
+			for (size_t K = 0; K < GroundDrawn.size() && K < GroundParts.size(); ++K)
+			{
+				const AirGround::Drawn& D = GroundDrawn[K];
+				for (const int I : D.Tris) BadIndex += I < 0 || static_cast<size_t>(I) >= D.X.size() || D.Colours.size() != D.X.size();
+				// (the land's rim the coast's alone: a point laid on an edge is shared by both its triangles, so no crack)
+				GrewWrong += D.Name == "land" ? AirGround::OpenEdges(D.X, D.Y, D.Tris) != AirGround::OpenEdges(GroundParts[K].X, GroundParts[K].Y, GroundParts[K].Tris) || D.Tris.size() < GroundParts[K].Tris.size()
+				                              : D.Tris.size() != GroundParts[K].Tris.size();
+				if (D.Name != "land") continue;
+				for (size_t I = 0; I < GroundParts[K].Paints.size(); ++I)
+				{
+					// (the grass within 6 km of the stage's aim: how much its brightness varies)
+					if (GroundParts[K].Paints[I] == CanePaint && std::hypot(D.X[I] - Rec.Board.StageAimX, D.Y[I] - Rec.Board.StageAimY) < 6000.0)
+					{
+						const double L = AirGround::Luma(D.Colours[I]);
+						SumL += L;
+						SumLL += L * L;
+						++Grass;
+					}
+				}
+			}
+			const double GrassSpread = Grass > 1 ? std::sqrt(std::max(0.0, SumLL / Grass - (SumL / Grass) * (SumL / Grass))) : 0.0;
+			if (std::getenv("AIR_GROUND_DUMP") && bGround)
+			{
+				// (the painted ground for Tools/air_show/ground_picture.py: a top-down picture of the stage as painted)
+				std::ofstream Dump(OutDir + "/ground-" + Rec.Board.StageKey + ".bin", std::ios::binary);
+				auto Word = [&Dump](uint32_t W) { Dump.write(reinterpret_cast<const char*>(&W), 4); };
+				Word(static_cast<uint32_t>(GroundDrawn.size()));
+				for (const AirGround::Drawn& D : GroundDrawn)
+				{
+					Word(static_cast<uint32_t>(D.Name.size()));
+					Dump.write(D.Name.data(), static_cast<std::streamsize>(D.Name.size()));
+					Word(static_cast<uint32_t>(D.X.size()));
+					for (size_t I = 0; I < D.X.size(); ++I)
+					{
+						const float Place[3] = { static_cast<float>(D.X[I]), static_cast<float>(D.Y[I]), static_cast<float>(D.Z[I]) };
+						Dump.write(reinterpret_cast<const char*>(Place), sizeof(Place));
+						const uint8_t Rgb[4] = { D.Colours[I].R, D.Colours[I].G, D.Colours[I].B, 255 };
+						Dump.write(reinterpret_cast<const char*>(Rgb), 4);
+					}
+					Word(static_cast<uint32_t>(D.Tris.size()));
+					Dump.write(reinterpret_cast<const char*>(D.Tris.data()), static_cast<std::streamsize>(D.Tris.size() * sizeof(int)));
+				}
+			}
+			// The yard (the historian's 1941 blocks, tools/stages/yard.py): each row whole; each ship in a dock inside its
+			// basin and along it, Shaw inside YFD-2's walls; no ship under a shop, a hangar or the apron.
+			int YardRows = 0, YardBad = 0, DockedIn = 0, DockedOut = 0, ShipUnder = 0;
+			const AirFeed::Json& YardJson = GroundJson["yard"];
+			struct YardBlock { double X, Y, Long, Wide, Heading; int Kind; };
+			std::vector<YardBlock> Blocks;
+			for (size_t K = 0; bGround && K < YardJson.Count(); ++K)
+			{
+				const AirFeed::Json& Row = YardJson.At(K);
+				const int Kind = Row.Count() >= 8 ? Row.At(7).Int() : -1;
+				YardBad += Row.Count() != 8 || Kind < 0 || Kind > 3 || Row.At(3).Num() <= 0.0 || Row.At(4).Num() <= 0.0;
+				if (Row.Count() >= 8) Blocks.push_back({ Row.At(0).Num(), Row.At(1).Num(), Row.At(3).Num(), Row.At(4).Num(), Row.At(6).Num(), Kind });
+				++YardRows;
+			}
+			{
+				// (the record's ships are on the board: turned back to the stage as AAirStage::BoardToStage does)
+				const double Ct = std::cos(Rec.Board.StageTurn), St = std::sin(Rec.Board.StageTurn);
+				for (const AirFeed::ShipRow& Row : Rec.Views.front().ShipRows)
+				{
+					const double Dx = Row.X - Rec.Board.TargetX, Dy = Row.Y - Rec.Board.TargetY;
+					const double Sx = Rec.Board.StageAimX + Dx * Ct + Dy * St, Sy = Rec.Board.StageAimY - Dx * St + Dy * Ct;
+					const double Heading = Row.Face + Rec.Board.StageTurn; // radians, the compass's way
+					const double ShipLong = Row.Class == "bb" ? 190.0 : Row.Class == "dd" ? 106.0 : Row.Class == "ss" ? 95.0 : 180.0;
+					const bool bDocked = Row.bDock || Row.Berth == "YFD-2";
+					bool bInside = false;
+					for (const YardBlock& Block : Blocks)
+					{
+						const double H = Block.Heading * 3.14159265358979 / 180.0;
+						const double Along = (Sx - Block.X) * std::sin(H) + (Sy - Block.Y) * std::cos(H), Across = (Sx - Block.X) * std::cos(H) - (Sy - Block.Y) * std::sin(H);
+						const double Skew = std::fabs(std::sin(Heading - H)); // (0 along the block, either way)
+						if (bDocked && (Block.Kind == 1 || Block.Kind == 3))
+						{
+							const double BasinLong = Block.Kind == 1 ? Block.Long - 20.0 : Block.Long, BasinWide = Block.Kind == 1 ? Block.Wide - 15.0 : Block.Wide - 6.0;
+							bInside = bInside || (std::fabs(Along) + ShipLong * 0.5 <= BasinLong * 0.5 + 1.0 && std::fabs(Across) <= BasinWide * 0.5 && Skew < std::sin(5.0 * 3.14159265358979 / 180.0));
+						}
+						else if (Block.Kind == 0 || Block.Kind == 2)
+						{
+							const double Pad = Block.Kind == 0 ? 12.0 : 0.0;
+							ShipUnder += std::fabs(Along) <= Block.Long * 0.5 + Pad && std::fabs(Across) <= Block.Wide * 0.5 + Pad;
+						}
+					}
+					if (bDocked)
+					{
+						(bInside ? DockedIn : DockedOut) += 1;
+					}
+				}
+			}
+			const bool bOahu = Rec.Board.StageKey == "oahu";
+			std::printf("  yard (%s): %d blocks, %d malformed, %d docked ships inside their docks and %d outside, %d ships under a building or the apron\n",
+			            Rec.Board.StageKey.c_str(), YardRows, YardBad, DockedIn, DockedOut, ShipUnder);
+			Limits.push_back({ "the yard's blocks whole, the docked ships in their docks", bGround && YardBad == 0 && DockedOut == 0 && ShipUnder == 0 && (!bOahu || (YardRows >= 10 && DockedIn == 4)),
+			                   std::to_string(YardRows) + " blocks, " + std::to_string(YardBad) + " malformed, " + std::to_string(DockedIn) + " docked in, " + std::to_string(DockedOut) + " out, " + std::to_string(ShipUnder) + " under a block",
+			                   "at Oahu Pennsylvania, Cassin and Downes in Dry Dock No. 1 along its 211 degrees and Shaw in YFD-2; no ship under a block" });
+			std::printf("  ground (%s): %d sand splits, shallows %d faded and %d kept, %d earth, %d runway points lifted, grass spread %.1f luma over %d points, %.0f ms%s\n",
+			            Rec.Board.StageKey.c_str(), GroundTally.SandSplit, GroundTally.ShoreFaded, GroundTally.ShoreKept, GroundTally.Earth, GroundTally.RunwayRaised, GrassSpread, Grass, GroundMs,
+			            GroundTally.bLagoon ? ", a lagoon: the shallows keep their edge" : "");
+			const bool bShore = GroundTally.bLagoon ? GroundTally.ShoreFaded == 0 : GroundTally.ShoreFaded > 0 && GroundTally.ShoreKept > 0 && GroundTally.ShoreFaded * 4 >= GroundTally.ShoreKept;
+			Limits.push_back({ "the stage's ground painted as the art director asked", bGround && BadIndex == 0 && GrewWrong == 0 && bShore && GroundTally.SandSplit > 0 && GroundTally.RunwayRaised > 0 && (!bOahu || (GroundTally.Earth > 0 && GrassSpread >= 5.0)),
+			                   bGround ? std::to_string(GroundTally.SandSplit) + " sand splits, " + std::to_string(GroundTally.ShoreFaded) + " shallows points faded, " + std::to_string(GroundTally.Earth) + " earth, grass spread " + Num(GrassSpread) + ", " + std::to_string(BadIndex) + " bad points, " + std::to_string(GrewWrong) + " cracked or lost"
+			                           : "no stage at " + GroundPath,
+			                   "sand split, shallows faded (kept at a lagoon), runways lifted; at Oahu earth patches and the grass varied by 5 luma or more, broadly (the material grain adds the fine); no cracks" });
+		}
 		Limits.push_back({ "the cloud ink lifts only the sunlit tops", InkBrighter == 0 && InkTopsMoved == 0 && InkShadeOff == 0 && InkTops > 0 && InkShades > 0,
 		                   std::to_string(InkBrighter) + " brighter, " + std::to_string(InkTopsMoved) + " of " + std::to_string(InkTops) + " tops moved, " + std::to_string(InkShadeOff) + " of " + std::to_string(InkShades) + " shades off",
 		                   "0 brighter, tops as they were, shades the ink's share darker" });

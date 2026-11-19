@@ -838,7 +838,12 @@ FReply SAirBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& E
 	const FKey Key = Event.GetKey();
 	if (S && S->bFlying)
 	{
-		Battle->Press(TEXT("skip")); // (any key during the flyover takes command)
+		// (any key pressed during the flyover takes command; a key still held from before it began only repeats, and
+		// keeps the film: the cloud pre-check's note on round 5)
+		if (!Event.IsRepeat())
+		{
+			Battle->Press(TEXT("skip"));
+		}
 		return FReply::Handled();
 	}
 	if (Key == EKeys::Escape)

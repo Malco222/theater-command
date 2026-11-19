@@ -125,8 +125,9 @@ private:
 	double Clock = 0.0;
 
 	TArray<FColor> Palette;
+	TArray<FString> PaletteNames; // (the ground pass finds its paints by name: AirGround)
 	TArray<FMeshPart> Parts;
-	TArray<TArray<double>> Tanks, Hangars, Palms; // as the file gives them
+	TArray<TArray<double>> Tanks, Hangars, Palms, Yard; // as the file gives them (the yard: the historian's 1941 blocks)
 	double SunAzimuth = 120.0, SunElevation = 25.0;
 	// The ground's height on a coarse grid, in whole metres (stage metres east and north).
 	double GridE0 = 0.0, GridN0 = 0.0, GridCell = 100.0;
