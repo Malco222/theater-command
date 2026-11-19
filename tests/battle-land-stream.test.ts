@@ -1,8 +1,8 @@
 // A capital's or a city's own river through its streets (Brian, 18 November: the battle's ground matches the map; the
-// design director, b526): the hand list of real cities, how the river lies to the attack, never between the armies, a
-// bridge on every avenue, one river a field, and the rest of the field as it was.
+// design director, b526): the hand list of real cities, how the river lies to the attack, never between the armies, its
+// bridges by the record (b596), one river a field, and the rest of the field as it was.
 import { describe, expect, it } from 'vitest';
-import { CITY_RIVERS, GROUNDS, LandBattle, bearingOf, buildField, sampleTicket, streamFor, streamOf, type LandField, type Stream } from '../src/battle/land';
+import { CITY_RIVERS, GROUNDS, LAND, LandBattle, bearingOf, buildField, sampleTicket, streamFor, streamOf, type LandField, type Stream } from '../src/battle/land';
 
 const kind = (f: LandField, c: number, r: number): string => GROUNDS[f.ground[r * f.cols + c]];
 const wet = (k: string): boolean => k === 'water' || k === 'bridge' || k === 'blown';
@@ -15,6 +15,7 @@ const cityTicket = (size: 'city' | 'capital', terrain: 'urban' | 'plains' | 'hil
 const LIES: [string, Stream][] = [
   ['up', stream('up')], ['up, a second meeting it', stream('up', { flows: 'south', join: { name: 'Second', side: 'west' } })],
   ['across', stream('across')], ['across, a second meeting it', stream('across', { flows: 'west', join: { name: 'Second', side: 'east' } })],
+  ['across, a second from the west', stream('across', { join: { name: 'Second', side: 'west' } })],
   ['a shore', stream('shore')], ['a lesser river up the field', stream('up', { great: false })],
   ['a shore ahead, behind the defence', stream('shore', { side: 'back', flows: 'east' })],
 ];
@@ -231,6 +232,11 @@ describe("the city's river on the field (b526)", () => {
       ['up, four roads meeting in the water', 'urban', 'capital', 4608083, stream('up'), 0],
       ['up, over the first bridge and on over a second', 'urban', 'capital', 7959411, stream('up', { join: { name: 'Second', side: 'east' } }), 0],
       ['across, over the first bridge and on over a second', 'urban', 'capital', 134636, stream('across', { join: { name: 'Second', side: 'west' } }), 0],
+      // The b596 review: a second river from the west edge met the road across the field at a shallow slant, its two
+      // ends further apart than a bridge paired, and the road from the west edge was cut off.
+      ['across, a second at a slant over the road across', 'urban', 'city', -4163177, stream('across', { join: { name: 'Second', side: 'west' } }), 0],
+      ['across, a second at a slant (2)', 'urban', 'city', 4722859, stream('across', { join: { name: 'Second', side: 'west' } }), 0],
+      ['across, a second at a slant (3)', 'urban', 'city', 223651, stream('across', { join: { name: 'Second', side: 'west' } }), 0],
     ];
     const reach = (h: LandField): Set<number> => {
       const deck = (i: number): boolean => GROUNDS[h.ground[i]] === 'road' || GROUNDS[h.ground[i]] === 'bridge';
@@ -301,7 +307,7 @@ describe("the city's river on the field (b526)", () => {
         // Those it keeps are the nearest the heart of those it would lay.
         const near = (d: [number, number][]): number => Math.min(...d.map(([x, y]) => Math.hypot(x - all.town!.x, y - all.town!.y)));
         const kept = decks(two).map(near).sort((a, b) => a - b), every = decks(all).map(near).sort((a, b) => a - b);
-        expect(kept[0], name).toBeLessThanOrEqual(every[1] + 1);
+        kept.forEach((k, i) => expect(k, `${name} ${seed} deck ${i}`).toBeLessThanOrEqual(every[i] + 25));
       }
     }
   });
@@ -332,5 +338,78 @@ describe("the city's river on the field (b526)", () => {
         expect(k === 'water' || k === 'blown', `${name} ${seed} ${u.name}`).toBe(false);
       }
     }
+  });
+  it("a defence whose line ends on the water is held as the river's (b526, b596(2)): up the field hold.stream, beside a second river hold.join", () => {
+    const at = (s?: Stream): { on: boolean; k: number } => {
+      const b = new LandBattle(cityTicket('city', 'urban', 4242, s)) as unknown as { flankOnRiver: boolean; flankHold: number };
+      return { on: b.flankOnRiver, k: b.flankHold };
+    };
+    expect(at()).toEqual({ on: false, k: 1 });
+    expect(at(stream('across'))).toEqual({ on: false, k: 1 });
+    expect(at(stream('across', { flows: 'west', join: { name: 'Second', side: 'east', bridges: 1 }, bridges: 2 }))).toEqual({ on: true, k: LAND.hold.join });
+    const up = at(stream('up', { bridges: 3 }));
+    expect(up.k).toBe(up.on ? LAND.hold.stream : 1);
+    expect(LAND.hold.join).toBeLessThan(LAND.hold.stream);
+  });
+  it("a defence's runner caught in the water at the end is booked as fled, an attack's runner in it as before (b608(3))", () => {
+    const b = new LandBattle(cityTicket('city', 'urban', 4242, stream('shore', { side: 'back', flows: 'east' })));
+    const f = b.field, water = f.ground.findIndex((k) => GROUNDS[k] === 'water');
+    const wx = (water % f.cols) * f.cell + f.cell / 2, wy = Math.floor(water / f.cols) * f.cell + f.cell / 2;
+    const lost = (u: (typeof b.units)[number], x: number, y: number): number => { [u.x, u.y] = [x, y]; return b.lostShares()[u.side]; };
+    for (const side of ['def', 'att'] as const) {
+      const u = b.units.find((v) => v.side === side && v.kind !== 'fort')!, [x0, y0] = [u.x, u.y];
+      u.state = 'routing';
+      const dry = lost(u, x0, y0), wet = lost(u, wx, wy);
+      const share = (r: number): number => (u.power0 * r * u.str) / u.str0 / (b as unknown as { power: Record<string, number> }).power[side];
+      if (side === 'def') expect(wet - dry).toBeCloseTo(share(LAND.count.gone.def - LAND.count.routing.def), 9);
+      else expect(wet).toBeCloseTo(dry, 12);
+      [u.x, u.y] = [x0, y0]; u.state = 'steady';
+    }
+  });
+});
+
+describe('a city along its shore as a strip (the art director, 19 November)', () => {
+  const back = stream('shore', { side: 'back', flows: 'east' });
+  const built = (k: string): boolean => k === 'buildings' || k === 'suburb' || k === 'industry' || k === 'park';
+  it('Stalingrad is one, its strip only where its Volga lies behind the defence', () => {
+    expect(CITY_RIVERS.Stalingrad.strip).toBe(true);
+    expect(streamOf(CITY_RIVERS.Stalingrad, 78)).toMatchObject({ lie: 'shore', side: 'back', strip: true });
+    expect(streamOf(CITY_RIVERS.Stalingrad, 198).strip).toBeUndefined();
+    expect(streamOf(CITY_RIVERS.Saratov, 117).strip).toBeUndefined();
+  });
+  it('strip cities by the design director (b619): marked only where the historian finds one bank and about 4 to 1', () => {
+    const marked = Object.entries(CITY_RIVERS).filter(([, r]) => r.strip).map(([n]) => n).sort();
+    expect(marked).toEqual(['Khabarovsk', 'Krasnoyarsk', 'Molotov', 'Stalingrad', 'Tbilisi']);
+    for (const n of ['Saratov', 'New York', 'Chungking', 'Zaporozhye']) if (CITY_RIVERS[n]) expect(CITY_RIVERS[n].strip, n).toBeUndefined();
+    // A shore city shows its strip only with its water straight ahead of the attack (behind the defence).
+    expect(streamOf(CITY_RIVERS.Molotov, 330)).toMatchObject({ lie: 'shore', side: 'back', strip: true });
+    expect(streamOf(CITY_RIVERS.Khabarovsk, 270)).toMatchObject({ lie: 'shore', side: 'back', strip: true });
+    expect(streamOf(CITY_RIVERS.Molotov, 150).strip).toBeUndefined();
+    // A river through the city lies up or across, never as a shore: the mark is carried, not drawn.
+    for (const n of ['Tbilisi', 'Krasnoyarsk']) for (let hd = 0; hd < 360; hd += 15) expect(streamOf(CITY_RIVERS[n], hd).strip, `${n} ${hd}`).toBeUndefined();
+  });
+  it('its streets run the whole width along the water and reach only a little way inland; a round town leaves open flanks', () => {
+    for (const seed of [11, 12, 13, 14]) {
+      const strip = buildField(cityTicket('city', 'urban', seed, { ...back, strip: true }).place, seed);
+      const round = buildField(cityTicket('city', 'urban', seed, back).place, seed);
+      const edge = strip.streetEdge!, flank = (f: LandField): number => [0, 1, 2, f.cols - 3, f.cols - 2, f.cols - 1].filter((c) => (f.streetEdge?.[c] ?? -1) >= 0).length;
+      expect(edge.filter((y) => y >= 0).length / strip.cols, `${seed}`).toBeGreaterThan(0.95);
+      expect(flank(strip), `${seed}`).toBe(6);
+      expect(flank(round), `${seed}`).toBe(0);
+      // Nothing built more than about 1100 m inland of the field's back edge, the water's side.
+      for (let r = 0; r < strip.rows; r++) for (let c = 0; c < strip.cols; c++) if (built(kind(strip, c, r))) expect(strip.h - r * strip.cell, `${seed} ${c},${r}`).toBeLessThan(1300);
+      // Its heart is in its streets, and no block is drawn up in the water.
+      expect(strip.landmark && strip.landmark.y > strip.h - 700).toBe(true);
+      const b = new LandBattle(cityTicket('city', 'urban', seed, { ...back, strip: true }));
+      for (const u of b.units) expect(kind(b.field, Math.floor(u.x / b.field.cell), Math.floor(u.y / b.field.cell)) === 'water', `${seed} ${u.name}`).toBe(false);
+    }
+  });
+  it('a capital, or a shore at the side, is laid as before', () => {
+    for (const s of [back, stream('shore')]) {
+      const t = cityTicket('capital', 'plains', 77, s), u = cityTicket('capital', 'plains', 77, { ...s, strip: true });
+      expect(buildField(u.place, 77).ground).toEqual(buildField(t.place, 77).ground);
+    }
+    const side = cityTicket('city', 'urban', 78, stream('shore')), sideS = cityTicket('city', 'urban', 78, { ...stream('shore'), strip: true });
+    expect(buildField(sideS.place, 78).ground).toEqual(buildField(side.place, 78).ground);
   });
 });

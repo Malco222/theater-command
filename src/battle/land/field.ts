@@ -7,8 +7,9 @@
 //
 // Frame (see core/types.ts): metres, x east, y north, the attacker comes on from the south.
 
-import { Rng } from '../../core/rng';
+import { hashString, Rng } from '../../core/rng';
 import { LAND } from './rules';
+import planData from '../../../data/battle/city-plans.json';
 
 /** Ground kinds, in the order their codes are stored in LandField.ground. Append only: saved fields keep their codes. */
 // (The art director's list of 17 November: open, field, woods, buildings, road, water with a bridge standing or blown,
@@ -70,6 +71,11 @@ export interface Stream {
   flows: 'north' | 'south' | 'east' | 'west';
   /** A shore's side of the field: 'back' along its far edge, behind the defence (b595). */
   side?: 'west' | 'east' | 'back';
+  /**
+   * A city that runs along its shore as a strip (Stalingrad along the Volga; the art director, 19 Nov): with the water
+   * behind the defence, its streets run the field's whole width along the bank and reach only a little way inland.
+   */
+  strip?: boolean;
   /** Wider than about 250 m at the city (the Danube at Budapest), drawn wider. */
   great: boolean;
   /** A second river meeting it at the city (the Sava at Belgrade): its name and the side of the field it comes in from. */
@@ -154,6 +160,8 @@ export interface FieldStream {
   lie: Stream['lie'];
   /** A shore's side of the field ('back': along the field's far edge, behind the defence). */
   side?: 'west' | 'east' | 'back';
+  /** Its city laid as a strip along it (Stream.strip): the field's whole width, shallow. */
+  strip?: boolean;
   great: boolean;
   half: number;
   course: [number, number][];
@@ -180,6 +188,12 @@ export const BEND = { r: 180, swing: 30, wave: 520, clear: 130 };
  * across the field, which it bridges and never runs along; and the stone's throw a block stands off its water and bridges.
  * Its water reaches half its width and a little more as it goes (wobble: up to an eighth more).
  */
+/**
+ * A city along its shore as a strip (Stream.strip), in metres inland from where its water begins: its core, then its
+ * terraces, then its suburbs. About 800 m in all against the field's 3000 m width, as Stalingrad ran 20 km along the Volga
+ * and 2 to 5 km deep.
+ */
+export const STRIP = { core: 380, terraces: 170, suburbs: 250 };
 export const STREAM = { great: 55, lesser: 35, swing: 45, shore: 230, behind: 330, joinBehind: 420, far: 60, clear: 75, road: 90, off: 60, wobble: 0.12 };
 
 /** How each province's ground is made: relief in metres, and how much of it is each kind of cover. */
@@ -275,13 +289,21 @@ export function buildField(place: LandPlace, seed: number, bend?: Bend): LandFie
   // (layCity below). An urban province is a city at least.
   let town: LandField['town'] = null;
   const size = streetsOf(place) ?? place.townSize;
+  // A real city's street plan is a fact of the place (the design director, b618): laid from the town's own seed, the
+  // same every time it is fought and never another city's: where it stands on the field, its streets, and the two roads
+  // through it. The battle's own draws are still taken, so everything else on the field draws as it did. A practice
+  // ground's town is no place on the map, and keeps the battle's seed.
+  const plan = planSeed(place, seed), own = plan !== seed && (size === 'capital' || size === 'city'), pr = new Rng(plan ^ 0x7a11);
   let built: Pick<LandField, 'storeys' | 'landmark' | 'streetEdge'> = {};
   if (size) {
     const rad = size === 'capital' ? 520 : size === 'city' ? 430 : size === 'town' ? 260 : 150;
-    const tx = w * (0.4 + 0.2 * rng.next()), ty = h * (0.7 + 0.06 * rng.next());
+    // A city along its shore as a strip has its heart near the water, in the middle of its depth.
+    const s = place.stream, strip = size === 'city' && s?.lie === 'shore' && s.side === 'back' && s.strip ? h - (s.great ? STREAM.shore : STREAM.shore * 0.7) : 0;
+    const ux = rng.next(), uy = rng.next();
+    const tx = w * (0.4 + 0.2 * (own ? pr.next() : ux)), ty0 = h * (0.7 + 0.06 * (own ? pr.next() : uy)), ty = strip ? strip - STRIP.core / 2 : ty0;
     town = { x: tx, y: ty, r: rad };
     const dense = fractal(rng, cols, rows, 3, 2);
-    if (size === 'capital' || size === 'city') built = layCity(size, tx, ty, cols, rows, ground, height, seed);
+    if (size === 'capital' || size === 'city') built = layCity(size, tx, ty, cols, rows, ground, height, plan, strip);
     else {
       for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
         const d = Math.hypot(c * cell + cell / 2 - tx, r * cell + cell / 2 - ty) / rad;
@@ -307,7 +329,7 @@ export function buildField(place: LandPlace, seed: number, bend?: Bend): LandFie
     }
   };
   const tx = town?.x ?? w / 2, ty = town?.y ?? h * 0.72;
-  const wob = rng.range(-1, 1);
+  const wob0 = rng.range(-1, 1), wob = own ? pr.range(-1, 1) : wob0;
   // The river's line, drawn from the seed here, before the roads are laid (they draw nothing from it, so every field draws
   // what it always did): its middle in each column, metres north of the attacker's edge, and its half-width there.
   const flow = place.river ? { base: h * (0.46 + 0.04 * rng.next()), amp: 60 + 50 * rng.next(), ph: rng.range(0, 6) } : null;
@@ -398,11 +420,13 @@ export function buildField(place: LandPlace, seed: number, bend?: Bend): LandFie
   }
   // A capital's or a city's own river (b526), laid over its streets after the roads, which it bridges; never where the
   // card prices a crossing (one river a field). Its own stream of draws, so the rest of the field is as it was.
-  let stream: FieldStream | undefined;
+  let stream: FieldStream | undefined, cityWater: boolean[] | undefined;
   if (place.stream && !flow && town && built.landmark) {
     const roadX = (y: number): number => w / 2 + (tx - w / 2) * Math.min(1, (y / h) * 1.4) + Math.sin((y / h) * 5 + wob) * 90;
     const roadY = (x: number): number => ty + Math.sin((x / w) * 4 + wob) * 70;
+    const dry = ground.map((k) => k !== G.water);
     stream = layStream(place.stream, seed, place.terrain, ground, height, built.landmark, town, built.streetEdge, roadX, roadY);
+    cityWater = dry.map((d, i) => d && ground[i] === G.water);
   }
   // A road on the slant steps from cell to cell corner to corner, and where both cells beside such a step are rock, marsh
   // or water a lorry cannot take it: the road takes one of them, over water the bridge does (b418: tanks and lorries
@@ -417,6 +441,8 @@ export function buildField(place: LandPlace, seed: number, bend?: Bend): LandFie
       const p = at(c + dc, r), q = at(c, r + 1);
       if (!hard(ground[p]) || !hard(ground[q])) continue;
       const k = ground[p] === G.water && ground[q] !== G.water ? q : p;
+      // A city's own river keeps the record's bridges (b596): no new deck over its water but one beside a bridge it has.
+      if (cityWater?.[k] && ![-1, 0, 1].some((a) => [-1, 0, 1].some((b) => ground[at(Math.min(cols - 1, Math.max(0, (k % cols) + a)), Math.min(rows - 1, Math.max(0, Math.floor(k / cols) + b)))] === G.bridge))) continue;
       ground[k] = ground[k] === G.water ? span : G.road;
     }
   }
@@ -476,10 +502,12 @@ function bezier(a: [number, number], k: [number, number], b: [number, number], s
  *   - 'across' it: through the core's back half, behind the defence's rows (a block inside the core's edge, b529) and
  *     the road across the field, the city's far quarter beyond it, as Praga across the Vistula or Buda across the Danube;
  *   - 'shore': along the city's edge at one side of the field, its water to the field's edge, never through it.
- * A second river meeting it (the Sava at Belgrade) comes in behind the defence too: from beyond an 'across' river, or
- * from its side of the field behind the defence's rows to meet one 'up' the field. Every road it crosses keeps its way
- * over by a bridge straight across the water where the road came to it: a bridge on every avenue; a road that only
- * comes down to the water ends at its bank. A river with no road over it gets one bridge, nearest the heart. Water is
+ * A second river meeting it (the Sava at Belgrade) never lies between the armies either: to meet one 'across', from its
+ * side edge to the heart's corner, beyond the defence's flank (b596(2)); to meet one 'up' the field, from its side of
+ * the field behind the defence's rows. A road it crosses keeps its way over by a bridge straight across the water where
+ * the road came to it, as many as the city had (b596(1), the record's count; none given, a bridge on every avenue),
+ * those nearest the heart; every other avenue ends at its quay, and a road that only comes down to the water ends at its
+ * bank. A river with no road over it gets one bridge, nearest the heart, unless the record says it had none. Water is
  * water in the rules (b526: what is drawn as a river is a river), but the card never prices it, so it lies where no
  * attack must cross it.
  */
@@ -515,7 +543,7 @@ function layStream(
       if (d >= 0) { ground[i] = G.water; height[i] = Math.min(height[i], 0) - 2; }
       else if (d > -40 && ground[i] === G.open && terrain !== 'desert') ground[i] = G.field;
     }
-    return { name: s.name, lie, side: 'back', great: s.great, half: 0, course, front };
+    return { name: s.name, lie, side: 'back', ...(s.strip ? { strip: true } : {}), great: s.great, half: 0, course, front };
   }
   if (lie === 'shore') {
     const west = s.side !== 'east', width = s.great ? STREAM.shore : STREAM.shore * 0.7;
@@ -726,6 +754,15 @@ function layStream(
         used.add(io);
         plan((o.s + p.s) / 2, { [sd]: o.cells, [-sd]: p.cells });
       });
+      // A road over it at a shallow slant (a second river meeting the road across the field) comes out on the far bank
+      // further along than a bridge pairs; where nothing above bridged this piece and its road reaches both banks, one
+      // bridge between the nearest run on each side.
+      if (!usedR.size && !usedL.size && right.length && left.length) {
+        let ia = 0, ib = 0;
+        right.forEach((a, i) => left.forEach((b, j) => { if (Math.abs(a.s - b.s) < Math.abs(right[ia].s - left[ib].s)) { ia = i; ib = j; } }));
+        usedR.add(ia); usedL.add(ib);
+        plan((right[ia].s + left[ib].s) / 2, { [-1]: right[ia].cells, 1: left[ib].cells });
+      }
       // What the water cut along one bank is joined again over the land: each run's cells in turn along it (a road that
       // dipped into the water and came out on the same bank), and a run left over, with no bridge, to another run on its
       // bank close by. Never a bridge: those are the record's (b596); where the land between is water, the repair below.
@@ -832,6 +869,27 @@ export function builtShare(f: LandField): number {
   return n / f.ground.length;
 }
 
+/**
+ * Each real city's kept street plan by its key (planKey: its town's name; data/battle/city-plans.json, b625): the first of its own
+ * sequence that keeps it within 7 points of its kind and no more than one fight in ten to the clock. Not listed: plan 1.
+ */
+export const CITY_PLANS: Record<string, number> = { ...(planData as { plans: Record<string, number> }).plans };
+/** A real city's own key: its town's name, or, where two share a name, the key its province gives it (city-plans.json). */
+export function planKey(place: LandPlace): string {
+  return (planData as { shared: Record<string, Record<string, string>> }).shared[place.town ?? '']?.[place.name] ?? place.town ?? '';
+}
+
+/**
+ * The seed a capital's or a city's street plan is laid from (b618): a real town's own, from its name and its kept plan
+ * number (b625), so it is the same every time it is fought and no two cities share one; the battle's seed for a practice
+ * ground (no place on the map).
+ */
+export function planSeed(place: LandPlace, seed: number): number {
+  if (!(place.region >= 0 && place.town)) return seed;
+  const key = planKey(place), n = CITY_PLANS[key] ?? 1;
+  return hashString(n > 1 ? `streets:${key}#${n}` : `streets:${key}`);
+}
+
 /** Whether the place is fought in a capital's or a city's streets (layCity): an urban province is a city at least. */
 export function streetsOf(place: LandPlace): 'capital' | 'city' | null {
   if (place.townSize === 'capital') return 'capital';
@@ -855,7 +913,7 @@ export function streetsOf(place: LandPlace): 'capital' | 'city' | null {
  * Roads, the river and fortress works are laid over it after, as on every field. Its own stream of draws, so the rest
  * of the field (its roads, its river) is as it was. Returns the storeys of what it built and its landmark.
  */
-function layCity(size: 'capital' | 'city', tx: number, ty: number, cols: number, rows: number, ground: number[], height: number[], seed: number): Pick<LandField, 'storeys' | 'landmark' | 'streetEdge'> {
+function layCity(size: 'capital' | 'city', tx: number, ty: number, cols: number, rows: number, ground: number[], height: number[], seed: number, strip = 0): Pick<LandField, 'storeys' | 'landmark' | 'streetEdge'> {
   const { w, h, cell } = FIELD, n = cols * rows;
   const cr = new Rng(seed ^ 0xc17e);
   const edge = fractal(cr, cols, rows, 6, 2), fill = fractal(cr, cols, rows, 2, 2);
@@ -876,6 +934,11 @@ function layCity(size: 'capital' | 'city', tx: number, ty: number, cols: number,
     if (capital) {
       const west = w * 0.05 + westSide(y) + e * 0.6, east = w - w * 0.05 - eastSide(y) - e * 0.6;
       ring = y >= front + coreFront(x) + e && x > west && x < east ? 3 : y >= front - 350 + termFront(x) + e ? 2 : y >= 90 ? 1 : 0;
+    } else if (strip) {
+      // Along its shore, 'strip' the line where its water begins (laid later, over the back of it): the whole width,
+      // shallow, its edges ragged.
+      const cf = strip - STRIP.core + coreFront(x) * 0.4 + e;
+      ring = y >= cf ? 3 : y >= cf - STRIP.terraces + termFront(x) * 0.4 ? 2 : y >= cf - STRIP.terraces - STRIP.suburbs + termFront(x) * 0.6 + e ? 1 : 0;
     } else {
       // Rounded boxes about the centre (|dx|^4 + |dy|^4 < 1); the suburbs reach back to the middle of the field.
       const box = (a: number, b: number): number => ((x - tx) / a) ** 4 + ((y - ty) / b) ** 4;

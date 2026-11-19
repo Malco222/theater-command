@@ -250,7 +250,9 @@ export function deploy(units: LandUnit[], side: Side, f: LandField): void {
       for (let k = 0; k < 40 && wetUnder(f, u); k++) u.y += side === 'att' ? 10 : -10;
       const y0 = u.y;
       for (let k = 0; k < 8 && wetUnder(f, u, STREAM.off); k++) u.y += side === 'att' ? 10 : -10;
-      if (wetUnder(f, u, STREAM.off) || (side === 'att' ? u.y > z[3] : u.y < z[1])) u.y = y0;
+      // Nor onto a block already drawn up there (a deep row in a narrow lane stepped onto the row in front of it).
+      const onTop = mine.some((o) => o !== u && Math.abs(o.x - u.x) < (o.w + u.w) / 2 && Math.abs(o.y - u.y) < (o.d + u.d) / 2);
+      if (wetUnder(f, u, STREAM.off) || (side === 'att' ? u.y > z[3] : u.y < z[1]) || onTop) u.y = y0;
     }
     u.home = [u.x, u.y];
     if (u.dug) digWorks(f, u.x, u.y, u.w, u.d);
@@ -271,8 +273,8 @@ function wetUnder(f: LandField, u: LandUnit, off = 0): boolean {
 
 /**
  * The defence beside a second river that comes in from its side edge to meet one across the field behind it (b596, the
- * Sava at Belgrade): drawn up on the heart's side of it, a stone's throw off its water, as near the heart as it fits.
- * False where the second river does not reach the defence's depth (it stands as it would with no second river).
+ * Sava at Belgrade): drawn up on the heart's side of where it meets the first, a stone's throw off its water, as near
+ * the heart as it fits. False where no part of it lies inside the field (it stands as it would with no second river).
  */
 function joinLane(mine: LandUnit[], f: LandField): boolean {
   const J = f.stream!.join!, z = f.zones.def, y0 = z[1] - 120;

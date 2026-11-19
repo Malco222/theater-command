@@ -178,10 +178,12 @@ export class LandBattle implements BattleSim<LandUnit> {
       const xAt = (y: number): number => St.course.reduce((m, p) => (Math.abs(p[1] - y) < Math.abs(m[1] - y) ? p : m))[0];
       const west = held.filter((u) => u.x < xAt(u.y)).length;
       this.flankOnRiver = west === 0 || west === held.length;
+      if (this.flankOnRiver) this.flankHold = LAND.hold.stream;
     } else if (St?.lie === 'across' && St.join) {
       // The second comes in from a side edge and turns up to the first: the defence all beyond where it meets it.
       const xs = St.join.course.map((p) => p[0]).filter((x) => x >= 0 && x <= this.field.w), west = St.join.course[0][0] < this.field.w / 2;
       this.flankOnRiver = xs.length > 0 && held.every((u) => (west ? u.x > Math.max(...xs) : u.x < Math.min(...xs)));
+      if (this.flankOnRiver) this.flankHold = LAND.hold.join;
     }
     for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
@@ -212,13 +214,15 @@ export class LandBattle implements BattleSim<LandUnit> {
   private holdTake(u: LandUnit): number {
     const p = this.ticket.place, H = LAND.hold;
     const streets = streetsOf(p);
-    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * (this.flankOnRiver ? H.stream : 1);
+    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
   }
 
   /** The share of the attack's tanks and lorries, by strength, that must cross the river: 0 where it has none (b494). */
   private readonly armourWet: number;
   /** The defence's line ends on a city's own river up the field (b526), or a second river along its flank (b596), all of it on one bank: a flank not on the card. */
   private readonly flankOnRiver: boolean = false;
+  /** What the held defence's take is multiplied by for that flank: LAND.hold.stream up the field, LAND.hold.join beside a second river. */
+  private readonly flankHold: number = 1;
 
   private say(e: Omit<FieldEvent, 't'>): void {
     const ev = { t: Math.round(this.t * 10) / 10, ...e } as FieldEvent;
@@ -1298,11 +1302,22 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (this.t >= this.ticket.limit) this.finish('def', 'time');
   }
 
+  /**
+   * What a block keeps of its strength in the day's count: the fled leave LAND.count.gone behind them, runners and those
+   * that fell back in order LAND.count.routing. A defence's runner caught in the water at the end is booked as fled (the
+   * design director, b608(3)): it has not got back in order, and a stand with the water at its back carries its price at
+   * the break. An attack's runner back in a river it came over counts as before: the card's crossing prices that.
+   */
+  private kept(u: LandUnit): number {
+    const caught = u.side === 'def' && u.state === 'routing' && inRiver(groundAt(this.field, u.x, u.y));
+    return u.state === 'gone' || caught ? u.str * (1 - LAND.count.gone[u.side]) : u.state === 'routing' || u.fellBack ? u.str * (1 - LAND.count.routing[u.side]) : u.str;
+  }
+
   /** Each side's share of its starting power lost: strength worn away, and what runners and the fled leave behind them. */
   lostShares(): Record<Side, number> {
     const lost = { att: 0, def: 0 };
     for (const u of this.units) {
-      const kept = u.state === 'gone' ? u.str * (1 - LAND.count.gone[u.side]) : u.state === 'routing' || u.fellBack ? u.str * (1 - LAND.count.routing[u.side]) : u.str;
+      const kept = this.kept(u);
       lost[u.side] += u.power0 * (1 - kept / u.str0);
     }
     return { att: lost.att / this.power.att, def: lost.def / this.power.def };
@@ -1317,7 +1332,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Men counted as the shares are, with what the runners and the fled leave behind, so the two never tell two stories.
     const men = { att: 0, def: 0 };
     for (const u of this.units) {
-      const kept = u.state === 'gone' ? u.str * (1 - LAND.count.gone[u.side]) : u.state === 'routing' || u.fellBack ? u.str * (1 - LAND.count.routing[u.side]) : u.str;
+      const kept = this.kept(u);
       men[u.side] += Math.round(u.men0 * (1 - kept / u.str0));
     }
     const k = this.ticket.reckoning;

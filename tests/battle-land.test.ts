@@ -3,11 +3,13 @@
 // through the rules' own attack order. The design director's rulings 217 and 217(2)(a) of 2026-11-17.
 import { describe, expect, it } from 'vitest';
 import { diceChance, runOut, type BreakCause } from '../src/battle/core';
-import { BEND, buildField, coverAt, groundAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, streetsOf, wornWords, type LandPlace, type LandUnit, type PracticeGround } from '../src/battle/land';
+import { BEND, buildField, CITY_PLANS, coverAt, groundAt, GROUNDS, LAND, LandBattle, MOTION, PRACTICE_GROUNDS, blocksFor, handBack, landTicket, practiceReckoning, practiceTicket, pursuitLine, sampleTicket, goingIn, planKey, streetsOf, wornWords, type LandPlace, type LandUnit, type PracticeGround } from '../src/battle/land';
 import { ENGINEERING, riverBetween } from '../src/campaign/rivers';
 import { createGame, hostileUnits, type FieldBill } from '../src/campaign/game';
 import { blocked } from '../src/campaign/rivers';
 import { startOpen } from '../src/campaign/staff';
+import { townName, townSize } from '../src/campaign/towns';
+import { attachWorld } from '../src/campaign/world';
 import { beginHuman, candidates, humanUp, orderAttack, previewAttack, stepAI } from '../src/campaign/turn';
 import { FORT_MUL, type Corps, type Game, type Region } from '../src/campaign/types';
 
@@ -62,6 +64,45 @@ describe('the field is built from the province', () => {
     expect(Math.max(...cap.storeys!)).toBe(5);
     // The new grounds come after the old, whose codes saved fields keep.
     expect(GROUNDS.slice(13)).toEqual(['suburb', 'industry', 'park']);
+  });
+  const at = (town: string, region: number, seed: number) => {
+    const t = sampleTicket('urban', 1.2, { town: 'city', seed });
+    return buildField({ ...t.place, region, town, name: town }, seed);
+  };
+  it("a real city's street plan is its own (the design director, b618): the same every battle, never another city's", () => {
+    const plan = (f: ReturnType<typeof buildField>) => JSON.stringify([f.town, f.landmark, f.storeys]);
+    // Warsaw is laid out alike however the battle falls; Lodz is not Warsaw.
+    expect(plan(at('Warsaw', 36, 11))).toBe(plan(at('Warsaw', 36, 12)));
+    expect(plan(at('Warsaw', 36, 11))).not.toBe(plan(at('Lodz', 37, 11)));
+    // Its streets and the roads through it are the same cells every time; everything else is the battle's own: the
+    // ground before the city differs from battle to battle.
+    const roads = (f: ReturnType<typeof buildField>) => f.ground.map((k) => +(GROUNDS[k] === 'road')).join('');
+    expect(roads(at('Warsaw', 36, 11))).toBe(roads(at('Warsaw', 36, 12)));
+    const front = (f: ReturnType<typeof buildField>) => f.ground.slice(0, f.cols * 10).filter((k) => GROUNDS[k] !== 'road').join(',');
+    expect(front(at('Warsaw', 36, 11))).not.toBe(front(at('Warsaw', 36, 12)));
+    // A practice ground's town is no place on the map: it keeps the battle's plan, a new one each fight.
+    expect(plan(at('Millbrook', -1, 11))).not.toBe(plan(at('Millbrook', -1, 12)));
+  });
+  it('each real city keeps its own plan by its own key, picked by rule (the design director, b625)', () => {
+    const g = createGame(1, 'GER'); attachWorld(g);
+    const keys: string[] = [];
+    for (const r of g.regions) {
+      let size: ReturnType<typeof townSize>; try { size = townSize(g, r); } catch { continue; }
+      if (!streetsOf({ townSize: size, terrain: r.terrain } as LandPlace)) continue;
+      keys.push(planKey({ region: r.id, name: r.name, town: townName(r) } as LandPlace));
+    }
+    // No two real cities share a key (the two Birminghams have one each), so none shares a plan.
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys).toContain('Birmingham'); expect(keys).toContain('Birmingham, Alabama');
+    // Every kept plan belongs to a real city and is one of the first ten of its sequence.
+    for (const [k, n] of Object.entries(CITY_PLANS)) { expect(keys, k).toContain(k); expect(Number.isInteger(n) && n >= 2 && n <= 10, `${k} ${n}`).toBe(true); }
+    // A kept plan number lays another plan from the same name.
+    const was = CITY_PLANS.Warsaw;
+    try {
+      CITY_PLANS.Warsaw = 1; const one = JSON.stringify(at('Warsaw', 36, 11).storeys);
+      CITY_PLANS.Warsaw = 2; const two = JSON.stringify(at('Warsaw', 36, 11).storeys);
+      expect(two).not.toBe(one);
+    } finally { if (was === undefined) delete CITY_PLANS.Warsaw; else CITY_PLANS.Warsaw = was; }
   });
 });
 
