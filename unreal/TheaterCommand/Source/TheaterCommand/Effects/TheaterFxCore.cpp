@@ -2342,6 +2342,7 @@ namespace TheaterFx
 			R.ThinGrow = std::max(1.0, Num(P + "thin_grow", 1.0));
 			R.ThinAlpha = std::max(0.0, Num(P + "thin_alpha", 1.0));
 			R.ThinHold = Num(P + "thin_hold", -1.0);
+			R.ThinRagged = Clamp01(Num(P + "thin_ragged", 0.0));
 			R.LeastPx = std::max(0.0, Num(P + "least_px", 0.0));
 			R.LeastKeep = Clamp01(Num(P + "least_keep", 0.0));
 			R.SmokeStart = std::max(0.0, Num(P + "smoke_start", 1.0));
@@ -2356,6 +2357,9 @@ namespace TheaterFx
 			R.FlameHold = Clamp01(Num(P + "flame_hold", 0.45));
 			R.FlameWide = std::max(0.1, Num(P + "flame_wide", 1.0));
 			R.LickAlpha = Clamp01(Num(P + "lick_alpha", 0.9));
+			R.FlameLiftCurve = std::max(0.0, Num(P + "flame_lift_curve", 0.0));
+			R.bFlameTip = Has(P + "flame_tip_colour.0");
+			R.FlameTip = Picture(P + "flame_tip_colour", Rgb::FromPicture(120, 34, 18));
 			R.TipSmoke = Clamp01(Num(P + "tip_smoke", 0.0));
 			R.TipSmokeR = std::max(0.0, Num(P + "tip_smoke_r_of_flame", 0.3));
 			R.TipSmokeLife = Range(P + "tip_smoke_s", 0.3, 0.6);
@@ -2469,13 +2473,27 @@ namespace TheaterFx
 			// thin_keep_one_in hangs on that long, wider by thin_grow to fill the gaps; the rest go as they did, by
 			// thin_after_s, and the old trail is fewer, bigger lumps. Each puff keeps its look over those first seconds)
 			const double Early = Row.ThinAfter / Row.Life; // (the share of its life the old trail lived)
-			if (Tr.Puffs++ % static_cast<unsigned>(Row.ThinKeep) == 0)
+			const bool bKept = Tr.Puffs == Tr.NextKept;
+			++Tr.Puffs;
+			if (bKept)
 			{
+				// (art director 05:25Z: kept evenly the old trail read as a string of beads; thin_ragged tears it, the gaps
+				// and sizes uneven, so it reads as a torn ribbon)
+				const unsigned Behind = Tr.KeptGap > 0 ? Tr.KeptGap : static_cast<unsigned>(Row.ThinKeep);
+				unsigned Gap = static_cast<unsigned>(Row.ThinKeep);
+				double Torn = 1.0;
+				if (Row.ThinRagged > 0.0)
+				{
+					Gap = static_cast<unsigned>(std::clamp(static_cast<int>(std::lround(Row.ThinKeep * (1.0 + Row.ThinRagged * D.U(-1.0, 1.0)))), 1, 2 * Row.ThinKeep));
+					Torn = 1.0 + Row.ThinRagged * D.U(-0.5, 0.6);
+				}
+				Tr.NextKept = Tr.Puffs - 1 + Gap;
+				Tr.KeptGap = Gap;
 				// (a lump that hangs on: it grows as it did over the first seconds and on after, thin_grow times more, and
 				// starts thinning when it did, but slowly, over the whole of life_s)
 				// (art director 04:59Z: it grows but holds its density. It ends thin_grow times as wide as the old smoke
 				// did, on a curve that reaches the old size at thin_after_s, so the young trail looks as it did)
-				B.R1 = B.R0 + (B.R1 - B.R0) * Row.ThinGrow;
+				B.R1 = B.R0 + (B.R1 - B.R0) * Row.ThinGrow * Torn;
 				if (Row.ThinGrow > 1.0)
 				{
 					B.Grow = std::clamp(std::log(Row.ThinGrow) / -std::log(std::max(Early, 1e-3)), 0.2, 3.0);
@@ -2487,7 +2505,7 @@ namespace TheaterFx
 				B.Hold = Row.ThinHold >= 0.0 ? Row.ThinHold : B.Hold * Early;
 				// (and it is drawn out along the path over the gap to the next one kept, shrinking as slowly, so the old
 				// trail stays one dark line of lumps that touch, never a dotted line)
-				B.Smear *= Row.ThinKeep;
+				B.Smear *= Behind;
 				B.SmearFor /= Early;
 				B.Life /= Lasts; // (every one kept hangs the whole of life_s: a small one going early left a gap)
 			}
@@ -2587,7 +2605,10 @@ namespace TheaterFx
 					const Vec Way = (Back * Len + Curl * (2.0 * At_)).Unit(Back);
 					Bit B;
 					B.Born = T;
-					B.From = Root + Back * (Len * At_) + Curl * (At_ * At_) + Spill * std::min(1.0, 1.4 * At_) + Ragged;
+					// (art director 05:25Z: a tongue is fixed at its root and free at its tip: rooted on the skin at the fire,
+					// only its tip licks out above or below. flame_lift_curve: how late along it the stand-off comes)
+					const double Outward_ = Row.FlameLiftCurve > 0.0 ? std::pow(At_, Row.FlameLiftCurve) : std::min(1.0, 1.4 * At_);
+					B.From = Root + Back * (Len * At_) + Curl * (At_ * At_) + Spill * Outward_ + Ragged;
 					B.Vel = Vel + Back * (Len * D.U(3.0, 6.0)); // (streaming aft off the cowl)
 					B.Life = D.U(0.045, 0.075);
 					B.R0 = Len * (0.12 - 0.065 * At_) * D.U(0.85, 1.15) * Row.FlameWide;
@@ -2599,6 +2620,12 @@ namespace TheaterFx
 					B.Tail = 0.5;
 					B.Col = At_ < 0.5 ? HeartCol.Mix(FlameCol, 0.35 + 1.3 * At_) : FlameCol.Mix(DeepCol, (At_ - 0.5) * 2.0);
 					B.Col2 = DeepCol * 0.7;
+					if (Row.bFlameTip && At_ > 0.6)
+					{
+						// (yellow-white at the root, orange along it, dark red at the tip going into the black smoke)
+						B.Col = B.Col.Mix(Row.FlameTip, (At_ - 0.6) / 0.4);
+						B.Col2 = Row.FlameTip.Mix(Row.ColFull, 0.4);
+					}
 					// (art director 04:59Z: by day a tongue off the skin must read as fire against the sky, not a pale smear)
 					B.Alpha = Row.FlameAlphaRoot - Row.FlameAlphaFall * At_;
 					B.FadeIn = 0.002;

@@ -19,7 +19,8 @@
 // FX_DUSK=1 darkens the sky and the smoke to dusk. The hit and trail shots turn it round: the aircraft is struck by
 // that kind of gun along its wing and nose from 0.2 s to 1 s, and its engine trails FX_TRAIL (smoke, fire, glycol)
 // from 0.3 s; hit looks from the side, trail from above and behind, wake at the whole trail from FX_DIST m off the beam
-// (2500). FX_SPAN=metres gives TrailStart the aircraft's span (a fire's flame is sized by it). map is the strategy
+// (2500). FX_SPAN=metres gives TrailStart the aircraft's span (a fire's flame is sized by it); FX_FIRE_X=metres forward
+// of the middle puts the trail's point (2.9, the cowl; 1, the wing root). map is the strategy
 // camera: the guns firing seen from FX_DIST metres (1400) high abeam, where flashes are held at their pixel floor.
 //
 // It draws what the game's mesh would carry: the same puffs, in the same order, with the same colours and alphas,
@@ -662,7 +663,7 @@ namespace
 						const Vec Spot(Spots.U(-1.0, 3.5), Spots.U(-0.5, 4.5), Spots.U(-0.2, 0.4));
 						Fx.AirHit(T, Place(F, Spot), (F.Up + F.Right * 0.3).Unit(), F.Fw * Speed, Kind.c_str());
 					}
-					const Vec Engine = Place(F, Vec(2.9, 0.75, -0.35)); // (an exhaust on the cowling's near side)
+					const Vec Engine = Place(F, Vec(EnvNum("FX_FIRE_X", 2.9), 0.75, -0.35)); // (an exhaust on the cowling's near side; FX_FIRE_X=1 a wing root)
 					if (Step == 18)
 					{
 						Fx.TrailStart(T, 1, Engine, F.Fw * Speed, TrailKind.c_str(), EnvNum("FX_SPAN", 0.0)); // (FX_SPAN: the aircraft's span, metres)

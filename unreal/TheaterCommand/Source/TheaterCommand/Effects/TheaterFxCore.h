@@ -272,12 +272,14 @@ namespace TheaterFx
 			std::string Name;
 			double Life = 6.0, Spacing = 8.0, R0 = 0.5, R1 = 3.5, Alpha = 0.5, DarkenS = 4.0, RampS = 1.5, Smear = 1.5, Carried = 0.05, Flame = 0.0;
 			double Grow = 0.5, Lumpy = 0.0, SmearS = 0.0, Rise = 0.0;
-			double ThinAfter = 0.0, ThinGrow = 1.0, ThinAlpha = 1.0, ThinHold = -1.0; int ThinKeep = 1; // (an old trail thinned: past ThinAfter s only one puff in ThinKeep hangs on to Life, ThinGrow times wider, ThinAlpha times denser, full until ThinHold of its life)
+			double ThinAfter = 0.0, ThinGrow = 1.0, ThinAlpha = 1.0, ThinHold = -1.0, ThinRagged = 0.0; int ThinKeep = 1; // (an old trail thinned: past ThinAfter s only one puff in ThinKeep hangs on to Life, ThinGrow times wider, ThinAlpha times denser, full until ThinHold of its life)
 			double LeastPx = 0.0, LeastKeep = 0.0; // (a far trail held at least LeastPx across, keeping LeastKeep of its opacity)
 			double SmokeStart = 1.0; // (fire: where along the flame its smoke starts, a share of the flame's length)
 			Span FlameLiftOfLen{ 0.0, 0.0 }; // (fire: how far each tongue stands off the skin as a share of its length; 0: flame_lift_m)
 			double LicksPerFrame = 0.4; // (fire: tongues torn free of the tip and streaming away aft, a frame)
 			double FlameAlphaRoot = 0.92, FlameAlphaFall = 0.2, FlameHold = 0.45, FlameWide = 1.0, LickAlpha = 0.9; // (fire: a tongue's opacity at the cowl and how much it loses to its tip; how long it holds full, a share of its life; how wide; a torn-free lick's opacity)
+			double FlameLiftCurve = 0.0; // (fire: a tongue's stand-off grows along it as this power of the way to its tip, so it is rooted on the skin; 0: off the skin from near its root)
+			bool bFlameTip = false; Rgb FlameTip; // (fire: the colour a tongue's tip goes to, into its smoke)
 			double TipSmoke = 0.0, TipSmokeR = 0.3; // (fire: black smoke laid at each tongue's tip at this opacity, widening to TipSmokeR of the flame's length; 0: none)
 			Span TipSmokeLife{ 0.3, 0.6 };
 			double FlameOfSpan = 0.0, FlameMost = 0.0, FlameLeastPx = 0.0; // (a fire's flame: this share of the aircraft's span, at most FlameMost m; never under FlameLeastPx on the screen)
@@ -293,7 +295,7 @@ namespace TheaterFx
 			double Born = 0.0, KindBorn = 0.0, Last = 0.0, Owed = 0.0, LastPuff = 0.0, NextFlame = 0.0;
 			double Tip = 0.0; // (fire: how far aft of the point its smoke starts, at the flame's tips)
 			double Span = 0.0; // (the aircraft's span, metres, as TrailStart was told: a fire's flame is sized by it)
-			unsigned Puffs = 0; // (puffs laid, counted only when the row thins its old puffs)
+			unsigned Puffs = 0, NextKept = 0, KeptGap = 0; // (puffs laid, counted only when the row thins its old puffs; the next to hang on, and how many back the last one kept was)
 			Vec At, Carry, LastPuffAt;
 		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */

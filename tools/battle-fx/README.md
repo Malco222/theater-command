@@ -160,12 +160,16 @@ Blasts->TrailStop(EngineId);
 - By day the flame must read as fire off the skin (art director 04:59Z): its tongues stand off by
   `flame_lift_of_length`, licking out above and below the fuselage, opaque (`flame_alpha` at the cowl and the tip,
   `flame_hold`, `flame_wide`, `lick_alpha`), and `tip_smoke` lays black smoke right at each tongue's tip, so flame and
-  smoke join with no gap (about 27 more puffs a burning aircraft).
+  smoke join with no gap (about 27 more puffs a burning aircraft). A tongue is rooted on the skin at the fire, with the
+  yellow-white heart there; only its tip licks out (`flame_lift_curve`, 05:25Z) and goes orange to `flame_tip_colour`
+  (dark red) into the smoke. Put the trail's point at the fire: the engine's exhaust, or the wing root for a tank fire,
+  whose tongues sweep back past the tail.
 - Smoke hangs (art director 04:40Z): a fire trail lives 30 s and a straggler's smoke 20 s. To fit the room, past
   `thin_after_s` only one puff in `thin_keep_one_in` (4) hangs on, growing on to `thin_grow` times, so an old trail is
   fewer, bigger lumps: about 250 puffs for a fighter's fire trail at 150 m/s, 170 for its smoke. Each kept puff
   thickens to `thin_alpha` times its opacity by `thin_after_s`, holds full to `thin_hold` of its life and is drawn out
-  over the gap to the next, so the old trail stays one dark line (04:59Z: a fire trail 110 or darker for two thirds of
+  over the gap to the next, so the old trail stays one dark line (`thin_ragged` makes the gaps and sizes uneven, a
+  torn ribbon, never a string of beads) (04:59Z: a fire trail 110 or darker for two thirds of
   its length on a 212 sky, its oldest part no paler than 150; a straggler's head about 130). A hit's puff hangs 3 to 4 s.
 - When the room (`game.max_puffs`) is short, every light (flames, flashes, tracers) is counted first, as an oil fire's
   kept column is, and the farthest smoke goes: a dozen trailing aircraft fill about 2,900 of 3,000 slots, and past that
