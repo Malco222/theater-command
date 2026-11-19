@@ -42,7 +42,13 @@ const snap: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; owner: string; corps: number; warned: boolean; wave: boolean }[] = [];
 const months: { turn: number; inCol: number; inVen: number; abroadOnOwnSide: number; across: number; col: boolean; ven: boolean; ashoreFlags: number; atWarWithGermany: boolean; atWar: boolean; door: boolean; sails: boolean }[] = [];
 {
-  const g = startOpen(createGame(25, null));
+  // Seed 25 until the ship candidate of ruling 233, whose rules (the works rule taken over, b629; the record garrisons;
+  // the boats rows) moved the war again: in seed 25 three French corps now stand in the Saar in September 1940, so
+  // France's date lapses and America's list opens Nantes that month. Of seeds 1 to 30 under the ship candidate, 1, 2,
+  // 3, 4, 5, 7, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 22, 23, 27 and 28 tell this story in full (in 9 the French
+  // stand in the Saar too, and in 6, 8, 19, 20, 24, 26, 29 and 30 fewer than three staffs would choose an enemy across
+  // the sea when asked for the quay). Seed 1 is the first; in it France has fallen by September 1940.
+  const g = startOpen(createGame(1, null));
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, corps: e.force.length, warned: e.warned, wave: e.wave }); };
   while (g.turn < END) {
     const t = g.turn;
