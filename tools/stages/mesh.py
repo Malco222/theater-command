@@ -42,7 +42,7 @@ class Mesh:
         self.name, self.v, self.c, self.t, self.key = name, [], [], [], {}
 
     def add(self, x, y, z, col):
-        k = (round(x, 1), round(y, 1), col)
+        k = (round(x, 1), round(y, 1), round(z, 1), col)
         if k in self.key:
             return self.key[k]
         self.key[k] = len(self.c)
@@ -88,18 +88,14 @@ def ground(stage, L, colour_of, cell=None):
     PL = prep(L)
     edge = L.boundary
     if not H['cols']:
-        # Midway: flat coral islands a few metres high, rising from the coast to their middle.
+        # Midway: flat coral islands a few metres high, on a fine grid of their own; the coast ramps them down.
+        minx, miny, maxx, maxy = L.bounds
+        cs = 40.0
+        e0, n0 = minx - cs, miny - cs
+        cols, rows = int((maxx - minx) // cs) + 3, int((maxy - miny) // cs) + 3
         flatz = H.get('flat', 3)
-        for p in polys(L):
-            inner = p.buffer(-40)
-            for tr in triangles(p):
-                ids = []
-                for x, y in tr:
-                    d = edge.distance(Point(x, y))
-                    z = 0.4 + (flatz - 0.4) * min(1.0, d / 40.0)
-                    ids.append(m.add(x, y, z, colour_of(x, y, z, 0.0, d)))
-                m.tri(*ids)
-        return m
+        H = {'e0': e0, 'n0': n0, 'cell': cs, 'cols': cols, 'rows': rows,
+             'data': [[flatz if PL.contains(Point(e0 + (c + .5) * cs, n0 + (r + .5) * cs)) else -2 for c in range(cols)] for r in range(rows)]}
     e0, n0, cs, cols, rows = H['e0'], H['n0'], H['cell'], H['cols'], H['rows']
     g = np.array(H['data'], dtype=float)
     # The heights at the cells' corners: the mean of the land cells round each corner.
@@ -223,7 +219,8 @@ def piers(stage, L, mesh, zat):
                 mesh.tri(a0, b1, a1)
 
 
-def runways(fields, mesh, zat, extra):
+def runways(fields, mesh, zat, extra, L):
+    """The runways as dark strips on the ground, cut to the land (a strip never runs out over the water)."""
     out = []
     for f in fields + extra:
         if not f.get('len'):
@@ -234,10 +231,8 @@ def runways(fields, mesh, zat, extra):
         v = (u[1], -u[0])
         half, w = f['len'] / 2, f.get('width', 60) / 2
         z = zat(x, y) + 0.3
-        corners = [(x + u[0] * a + v[0] * b, y + u[1] * a + v[1] * b) for a, b in ((-half, -w), (half, -w), (half, w), (-half, w))]
-        ids = [mesh.add(cx, cy, z, IDX['runway']) for cx, cy in corners]
-        mesh.tri(ids[0], ids[1], ids[2])
-        mesh.tri(ids[0], ids[2], ids[3])
+        strip = Polygon([(x + u[0] * a + v[0] * b, y + u[1] * a + v[1] * b) for a, b in ((-half, -w), (half, -w), (half, w), (-half, w))]).intersection(L.buffer(10))
+        flat(mesh, strip, z, IDX['runway'])
         out.append({'name': f['name'], 'at': [round(x, 1), round(y, 1)], 'heading': f['runway'], 'len': f['len'], 'z': round(z, 1)})
     return out
 
@@ -280,6 +275,51 @@ def palms(L, zat, n, seed, near, within=None):
     return out
 
 
+def ground_grid(st, L, zat):
+    """The height of the ground in whole metres on a coarse grid (0 on the water), for whatever stands on it or
+    lands on it in the 3D game: bombs, wrecks, the camera."""
+    H = st['heights']
+    if H['cols']:
+        e0, n0, cell, cols, rows = H['e0'], H['n0'], H['cell'], H['cols'], H['rows']
+    else:
+        minx, miny, maxx, maxy = L.bounds
+        cell = 50.0
+        e0, n0 = minx - 200, miny - 200
+        cols, rows = int((maxx - minx + 400) // cell) + 1, int((maxy - miny + 400) // cell) + 1
+    P = prep(L)
+    z = []
+    for r in range(rows):
+        for c in range(cols):
+            x, y = e0 + (c + .5) * cell, n0 + (r + .5) * cell
+            z.append(int(round(zat(x, y))) if P.contains(Point(x, y)) else 0)
+    return {'e0': e0, 'n0': n0, 'cell': cell, 'cols': cols, 'rows': rows, 'z': z}
+
+
+def test_ships(key):
+    """The record's ships for the 3D game's stage test (-TheaterStage): Pearl Harbor's berths, and the Kido Butai
+    in its box off Midway. The battle itself lays its own ships from the campaign's fleets."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(here, '..', '..', 'data', 'battle', 'air-stages.json')
+    if not os.path.exists(path):
+        return None
+    S = json.load(open(path))['stages'][key]
+    if key == 'oahu':
+        ships = [{'cls': b['cls'], 'nat': 'USA', 'name': b['name'] or '', 'at': b['at'], 'face': b['face'], **({'dock': True} if b.get('dock') else {})} for b in S['berths'] if b['cls'] in ('bb', 'ca', 'dd', 'ss', 'ag')]
+        return {'aim': S['aim']['harbour'], 'ships': ships}
+    ax, ay = S['aim']['fleet']
+    J = S['fleets']['JAP']
+    ships = []
+    for k, n in enumerate(J['cv']):
+        ships.append({'cls': 'cv', 'nat': 'JAP', 'name': n, 'at': [ax + (k % 2 - .5) * 2500, ay + (k // 2 - .5) * 2500], 'face': 135})
+    for k, n in enumerate(J['bb'] + J['ca']):
+        a = 2 * math.pi * k / 5
+        ships.append({'cls': 'bb' if n in J['bb'] else 'ca', 'nat': 'JAP', 'name': n, 'at': [ax + 4000 * math.sin(a), ay + 4000 * math.cos(a)], 'face': 135})
+    for k in range(8):
+        a = 2 * math.pi * (k + .5) / 8
+        ships.append({'cls': 'dd', 'nat': 'JAP', 'name': '', 'at': [ax + 6500 * math.sin(a), ay + 6500 * math.cos(a)], 'face': 135})
+    return {'aim': [ax, ay], 'ships': ships}
+
+
 def build(key):
     st = json.load(open(os.path.join(OUT, f'{key}.json')))
     L = unary_union([Polygon(r['outer'], r['holes']).buffer(0) for r in st['land']])
@@ -294,32 +334,40 @@ def build(key):
         i = int(np.argmin((V[:, 0] - x) ** 2 + (V[:, 1] - y) ** 2))
         return max(0.4, V[i, 2])
 
-    sea = Mesh('shallows')
-    # The shallows: a pale band round the coast, painted on the sea a little above its plane.
+    # The water painted on the sea a little above its plane: the shallows round the coast, the reef just awash, and
+    # (Midway) the lagoon inside the barrier reef. The three never overlap, so none fights another for the eye.
     near = 160 if key == 'oahu' else 260
+    R = unary_union([Polygon(r['outer'], r['holes']).buffer(0) for r in st['reef']]).difference(L) if st['reef'] else Polygon()
     band = L.buffer(near, join_style=2).difference(L)
     if key == 'oahu':
         lochs = box(-9000, -2600, 2600, 6500)
         band = band.difference(lochs).union(L.buffer(35, join_style=2).difference(L).intersection(lochs))
-    flat(sea, band.simplify(8), 0.15, IDX['shallows'])
+    band = band.difference(R)
+    sea = Mesh('shallows')
+    flat(sea, band.simplify(8), 0.3, IDX['shallows'])
     reef = Mesh('reef')
-    for r in st['reef']:
-        p = Polygon(r['outer'], r['holes']).buffer(0)
-        flat(reef, p.difference(L).simplify(6), 0.25, IDX['reef'])
-    if key == 'midway':
-        # The lagoon inside the barrier reef: clear water over white coral.
-        R = unary_union([Polygon(r['outer'], r['holes']).buffer(0) for r in st['reef']])
-        if not R.is_empty:
-            flat(reef, unary_union([R, L]).convex_hull.difference(R).difference(L.buffer(near)).simplify(6), 0.2, IDX['lagoon'])
+    flat(reef, R.simplify(6), 0.3, IDX['reef'])
+    if key == 'midway' and not R.is_empty:
+        lagoon = unary_union([R, L]).convex_hull.difference(R).difference(L).difference(band)
+        flat(reef, lagoon.simplify(6), 0.3, IDX['lagoon'])
     works = Mesh('works')
     piers(st, L, works, zat)
     extra = []
     if key == 'midway':
-        # Eastern Island's three runways of 1942, crossing near the island's middle (the historian checks).
+        # Eastern Island's three runways of 1942: the long one down the island's length, two across it in a
+        # triangle (the historian checks).
         x, y = st['fields'][0]['at']
-        extra = [{'name': 'Eastern Island NW-SE', 'at': [x - 150, y + 60], 'runway': 135, 'len': 1300, 'width': 50},
-                 {'name': 'Eastern Island N-S', 'at': [x + 120, y - 40], 'runway': 5, 'len': 1000, 'width': 50}]
-    strips = runways(st['fields'], works, zat, extra)
+        east = min(polys(L), key=lambda p: p.centroid.distance(Point(x, y)))
+        rect = list(east.minimum_rotated_rectangle.exterior.coords)
+        sides = [(rect[k], rect[k + 1]) for k in range(4)]
+        (a, b) = max(sides, key=lambda e: math.dist(*e))
+        along = math.degrees(math.atan2(b[0] - a[0], b[1] - a[1])) % 180
+        c = east.centroid
+        st['fields'][0]['at'] = [round(c.x, 1), round(c.y, 1)]
+        st['fields'][0]['runway'] = round(along)
+        extra = [{'name': 'Eastern Island, the second', 'at': [c.x - 150, c.y + 40], 'runway': round(along + 50) % 180, 'len': 1300, 'width': 50},
+                 {'name': 'Eastern Island, the third', 'at': [c.x + 150, c.y - 40], 'runway': round(along - 50) % 180, 'len': 1300, 'width': 50}]
+    strips = runways(st['fields'], works, zat, extra, L)
     out = {
         'key': key, 'name': st['name'], 'origin': st['origin'],
         'units': 'decimetres in v (x east, y north, z up from the sea, from the origin); metres everywhere else',
@@ -336,6 +384,10 @@ def build(key):
         # Sand Island's oil tanks (set burning on 4 June): a row of tanks by the seaplane base.
         x, y = st['fields'][1]['at']
         out['tanks'] = [[round(x + 260 + 34 * k, 1), round(y + 210, 1), round(zat(x + 260 + 34 * k, y + 210), 1), 12.0, 9.0] for k in range(6)]
+    out['ground'] = ground_grid(st, L, zat)
+    # The sun at the hour of the record's attack (azimuth from north, clockwise; elevation): the historian checks.
+    out['sun'] = {'azimuth': 125, 'elevation': 18, 'when': '7 December 1941, 07:55'} if key == 'oahu' else {'azimuth': 85, 'elevation': 45, 'when': '4 June 1942, 10:20'}
+    out['test'] = test_ships(key)
     path = os.path.join(OUT, f'{key}-3d.json')
     json.dump(out, open(path, 'w'), separators=(',', ':'))
     tri = sum(len(m['t']) // 3 for m in out['meshes'])
