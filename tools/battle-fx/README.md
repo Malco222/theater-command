@@ -203,7 +203,7 @@ the view's new fields: an older recipe, or a caller that does not give the view'
   while its true width is over `full_px`, gone under `gone_px`. `nearer_m` (0.05): laid that much nearer the eye in
   the same place on the screen, so the game's flat-faced ground never buries it. Close to, a case is as before.
 - **White that lands white.** The game's tone curve holds plain white down to about 224 of 255. `picture.lit_gain`
-  (1.5): the wrapper sets the material's `Brightness` to it and the kit writes every colour that much darker, so all
+  (1.5 then; 4 since build 1732, see the game's own picture below): the wrapper sets the material's `Brightness` to it and the kit writes every colour that much darker, so all
   looks as it did; the hottest lights (`muzzle.hot.over`, `tracer.day_over`) are written up to that much past white.
 
 By day a tracer is now a solid pale core (`tracer.day_core`, `day_core_px` 2) inside a warm edge (`day_edge`),
@@ -213,6 +213,30 @@ ground where build 1720 had 25. At dusk as before.
 Preview: `FX_PALE=1 FX_MG_VIEW=game FX_LENS=42 ./fxpreview recipe.txt out mg sand 0,2,4,60,120 1072x670` is the game's
 own camera on the machine gun (18.75 m off, 22 degrees down, a 42 degree lens, the drawn size, pale dry ground).
 `FX_NOCULL=1` lays everything in range, as before the view's width was known.
+
+## The game's own picture (build 1732)
+
+The game does not show a colour as the kit writes it. Every pixel goes through Unreal's film curve and the grade set
+in `Campaign/CampaignCameraPawn.cpp` (a fixed exposure, saturation 1.07, contrast 1.08, warm highlights, cool shadows,
+film toe 0.6). Plain white shows as about 226; grey 60 shows as 31, so dark paints sink toward black (a clod's
+40,33,26 shows as 11,3,3); a strong orange loses its blue (235,140,40 shows as 234,155,0, candy). The art director's
+ruling of 16:30Z: the game-wide curve and bloom stay as they are, and the kit's colours are written to land.
+
+- `tools/battle-fx/game_curve.py` is that road in numbers (numpy), checked against build 1732's stills to about five
+  levels. `python3 game_curve.py lands 235 140 40` says what a written colour shows as; `lands 250 240 200 x1.5` the
+  same for a light written past white; `write 235 140 40` what to write, and how far past white, to land on it;
+  `show out/mg-sand-f002.ppm.f32 1072 670 shown.png` puts a preview frame through it. `FX_FLOAT=1 ./fxpreview ...`
+  saves each frame's light beside its picture (`.ppm.f32`, three floats a pixel, unclipped) for that.
+- `picture.lit_gain` is now 4, so the flash's root (`muzzle.hot.root` 255,233,158 at `over` 4) lands a warm white,
+  253,250,234, over a spot 5 to 9 px across on a 1600 still, where it was cream at 235,231,216. `muzzle.hot.halo`
+  (0.08) and `halo_m` (0.028): a soft card of the root's colour round it, in place of bloom. `yellow_over` (1.175)
+  keeps the yellow as it was. `muzzle.hot.orange` 236,131,71 lands 234,141,41.
+- `tracer.day_core` 255,241,151 at `day_over` 2.72 lands the core on 245,240,210 and over.
+- `mg_smoke.colour` 228,232,238 and `puff_share` (0.63): the wisp reaches the whole 0.25 where its puffs overlap.
+- Colours are written in 8 bits of linear light, each `lit_gain` times darker. At 4 the darkest paints keep fewer
+  steps; through the game's curve a howitzer burst, a burning fall and an oil fire moved by 2 to 5 levels in their
+  darks, 12 at most. Should dark smoke ever band in the game, the cure is in the material (bytes written with a
+  gamma and squared there), not a lower gain.
 
 ## Oil fires at sea
 

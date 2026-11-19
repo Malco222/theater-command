@@ -126,6 +126,17 @@ namespace
 				const unsigned char Px[3] = { static_cast<unsigned char>(ToPicture(R[I])), static_cast<unsigned char>(ToPicture(G[I])), static_cast<unsigned char>(ToPicture(B[I])) };
 				F.write(reinterpret_cast<const char*>(Px), 3);
 			}
+			if (std::getenv("FX_FLOAT"))
+			{
+				// (FX_FLOAT=1: the picture's linear light too, three 32-bit floats a pixel in <name>.f32, unclipped, so
+				// that ../game_curve.py can show the frame as the game's own tone curve and grade would)
+				std::ofstream Raw(Path + ".f32", std::ios::binary);
+				for (size_t I = 0; I < R.size(); ++I)
+				{
+					const float Px[3] = { static_cast<float>(R[I]), static_cast<float>(G[I]), static_cast<float>(B[I]) };
+					Raw.write(reinterpret_cast<const char*>(Px), sizeof(Px));
+				}
+			}
 		}
 	};
 
