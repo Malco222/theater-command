@@ -2,8 +2,9 @@
 #   AIR_GROUND_DUMP=1 Tools/air_show/run.sh Content/Data/AirBattles/oahu.json
 #   python3 Tools/air_show/ground_picture.py $TMPDIR/air_show/ground-oahu.bin out.png [x0 y0 x1 y1 metres-a-pixel]
 # Colours as painted point by point (no light, no grain): what the art director asked to see of the harbour.
-# STAGE=Content/Data/Stages/oahu.json lays the stage's yard blocks (seen from above: roofs, pads, the docks, the
-# apron, in AirStage's paints) and its test ships (grey outlines) over the ground.
+# The dump's last part is the yard's paving (the pads and the apron as AirStage lays them, AirGround::Paving).
+# STAGE=Content/Data/Stages/oahu.json lays the stage's yard blocks (seen from above: roofs, the docks, the quays, in
+# AirStage's paints) and its test ships (grey outlines) over the ground.
 import json, math, os, struct, sys
 import numpy as np
 from PIL import Image
@@ -27,7 +28,7 @@ for _ in range(word()):
     tris = np.frombuffer(b, dtype='<i4', count=nt, offset=o).reshape(-1, 3); o += nt * 4
     P, C = rec['p'].astype(np.float64), rec['c'][:, :3].astype(np.float32)
     # (the shallows and reef a little over the sea, the land over them: drawn by height, as the scene's depth would)
-    lift = {'shallows': 0.0, 'reef': 0.1, 'land': 1.0, 'works': 2.0}.get(name, 0.0)
+    lift = {'shallows': 0.0, 'reef': 0.1, 'land': 1.0, 'works': 2.0, 'paving': 3.0}.get(name, 0.0)
     px = (P[:, 0] - x0) / mpp
     py = (y1 - P[:, 1]) / mpp
     for a, bb, c in tris:
@@ -65,20 +66,17 @@ if os.environ.get('STAGE'):
         pts = [(cx + u[0] * length * a + v[0] * width * b, cy + u[1] * length * a + v[1] * width * b) for a, b in ((-.5, -.5), (.5, -.5), (.5, .5), (-.5, .5))]
         return [((px - x0) / mpp, (y1 - py) / mpp) for px, py in pts]
 
-    concrete, floor, steel, walls, roof = (0xA0, 0x9C, 0x93), (0x4A, 0x48, 0x44), (0x5C, 0x60, 0x62), (0x8C, 0x8A, 0x80), (0x6F, 0x6E, 0x68)
+    concrete, floor, steel, walls, roof = (0x8F, 0x8B, 0x83), (0x4A, 0x48, 0x44), (0x5C, 0x60, 0x62), (0x8C, 0x8A, 0x80), (0x6F, 0x6E, 0x68)
     yard = stage.get('yard', [])
     for x, y, g, l, w, hh, hd, kind in yard:
-        if kind == 2:
-            draw.polygon(rect(x, y, l, w, hd), fill=concrete)
-    for x, y, g, l, w, hh, hd, kind in yard:
-        if kind == 0:
-            draw.polygon(rect(x, y, l + 24, w + 24, hd), fill=concrete)
-        elif kind == 1:
+        if kind == 1:
             draw.polygon(rect(x, y, l, w, hd), fill=concrete)
             draw.polygon(rect(x, y, l - 20, w - 15, hd), fill=floor)
             draw.polygon(rect(x, y, 10, w, hd, ahead=l / 2 - 5), fill=steel)
         elif kind == 3:
             draw.polygon(rect(x, y, l, w, hd), fill=steel)
+        elif kind == 4:
+            draw.polygon(rect(x, y, l, w, hd), fill=concrete, outline=(0x50, 0x50, 0x4C))
     for s_ in (stage.get('test') or {}).get('ships', []):
         long_, beam = {'bb': (190, 32), 'ca': (180, 19), 'dd': (106, 10), 'ss': (95, 8), 'ag': (160, 27)}.get(s_['cls'], (150, 18))
         draw.polygon(rect(s_['at'][0], s_['at'][1], long_, beam, s_['face']), fill=(0x7E, 0x82, 0x84), outline=(0x30, 0x30, 0x30))

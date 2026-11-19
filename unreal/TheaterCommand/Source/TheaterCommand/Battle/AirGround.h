@@ -21,6 +21,16 @@
  *   (not where the stage has a lagoon, as Midway has: there the band meets the bright lagoon, and keeps its edge);
  * - lifts the runways 0.8 m, clear of the land under them (Ford Island's strip lay at the island's own height).
  * The mottle finer than the points are apart is the ground material's own grain (AAirStage sets it).
+ *
+ * The art director on the first picture (19 November, 17:45Z): the mottle and the shallows' tint spread across big
+ * triangles showed as stars and wedges, the thin sand edge read as a drawn outline round the harbour's natural shores,
+ * and the paving was a blank card. So near the battle (Focus) the land and the shallows are first split until no edge
+ * there is longer than some tens of metres, each new point painted for its own place; the shallows fade by how far a
+ * point lies between the coast and the band's open-sea edge; a shore in sheltered water (the band there narrow) is the
+ * grass to the water and not sand; and the piers' concrete is worn (Worn, which the yard's paving uses too).
+ *
+ * On the second picture (18:47Z): by the quays, piers and seawalls the deep water runs to the wall (a berth was
+ * dredged), and along the natural shores the band's width wanders, so it no longer reads as an outline glow.
  */
 namespace AirGround
 {
@@ -55,14 +65,47 @@ namespace AirGround
 		int Earth = 0;        // grass points turned some way toward red earth
 		int RunwayRaised = 0; // runway points lifted
 		bool bLagoon = false; // the stage has a lagoon: the shallows keep their edge
+		int Refined = 0;      // points laid by splitting the triangles near the focus
+		int Sheltered = 0;    // shore points in sheltered water, painted the grass and not sand
+		int Worn = 0;         // concrete points worn
+		int Walled = 0;       // shallows points by a quay, pier or seawall, painted the deep sea's
+	};
+
+	/** Where the battle is, and how fine the ground is split round it (no splitting with no radius). */
+	struct Focus
+	{
+		double X = 0.0, Y = 0.0, Radius = 0.0;
+		double LandEdge = 80.0, WaterEdge = 30.0; // metres: the longest edge left within the radius
 	};
 
 	/** How many edges of a mesh only one triangle uses, points at one place counted as one: its rim, and any crack. */
 	size_t OpenEdges(const std::vector<double>& X, const std::vector<double>& Y, const std::vector<int>& Tris);
 
+	/** The length of those edges, metres: a mesh split without a crack keeps its rim's length. */
+	double RimLength(const std::vector<double>& X, const std::vector<double>& Y, const std::vector<int>& Tris);
+
+	/** Concrete as it wears at a place (stage metres): patches a few per cent lighter or darker, and darker stains. */
+	Rgb8 Worn(const Rgb8& Base, double X, double Y);
+
+	/** One panel of a paved block's top: its middle (stage metres), its size along and across the block, its colour. */
+	struct Panel
+	{
+		double X = 0.0, Y = 0.0, Long = 0.0, Wide = 0.0;
+		Rgb8 Colour;
+	};
+
+	/**
+	 * A paved block's top (the yard's pads and the seaplane apron, tools/stages/yard.py) as panels about Cell metres
+	 * square, each its own shade of the concrete: Worn at its middle, and each a little lighter or darker than the next,
+	 * as poured slabs and their patching read from the air (the art director, 17:45Z: the paving about 140 luma, not a
+	 * flat card, with stains and patching of 6 to 10). Heading: the compass heading of the block's length, degrees.
+	 */
+	std::vector<Panel> Paving(double X, double Y, double Long, double Wide, double Heading, const Rgb8& Base, double Cell = 10.0);
+
 	/** Luma of a colour as the art director measures it (0.299, 0.587, 0.114 of the picture's bytes). */
 	double Luma(const Rgb8& C);
 
 	/** The stage's meshes painted for the scene, in the order given. Names: the palette's names, in its order. */
-	std::vector<Drawn> Paint(const std::vector<Part>& Parts, const std::vector<std::string>& Names, const std::vector<Rgb8>& Palette, const Rgb8& Sea, Tally* Out = nullptr);
+	std::vector<Drawn> Paint(const std::vector<Part>& Parts, const std::vector<std::string>& Names, const std::vector<Rgb8>& Palette, const Rgb8& Sea, Tally* Out = nullptr,
+		const Focus& Near = Focus());
 }

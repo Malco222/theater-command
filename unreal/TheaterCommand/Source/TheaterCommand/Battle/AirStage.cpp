@@ -110,9 +110,10 @@ namespace StageParts
 	static const FLinearColor RoofPaint = FLinearColor(FColor::FromHex(TEXT("6F6E68")));
 	// The yard's (the historian's 1941 blocks): the pads, the apron and the docks' coping a weathered concrete, a
 	// drained dock's floor dark, the floating dock's steel the grey of the ships beside it.
-	static const FLinearColor ConcretePaint = FLinearColor(FColor::FromHex(TEXT("A09C93")));
+	static const FLinearColor ConcretePaint = FLinearColor(FColor::FromHex(TEXT("8F8B83"))); // (about 140 luma: the art director, 17:45Z)
 	static const FLinearColor DockFloorPaint = FLinearColor(FColor::FromHex(TEXT("4A4844")));
 	static const FLinearColor DockSteelPaint = FLinearColor(FColor::FromHex(TEXT("5C6062")));
+	static constexpr double YardSkirt = -4.5; // metres under a yard block's ground its sides reach down to
 	static const FLinearColor TrunkPaint = FLinearColor(FColor::FromHex(TEXT("7A6A55")));
 	static const FLinearColor FrondPaint = FLinearColor(FColor::FromHex(TEXT("3F6A2E")));
 	// (darker than the first run's 24505F: looking down from 5 km the sea measured luma 100 to 118, the art director's
@@ -202,6 +203,29 @@ double AAirStage::StageHeight(double East, double North) const
 	return FMath::Max(0.0, static_cast<double>(GridZ[R * GridCols + C]));
 }
 
+double AAirStage::DockFloor(const FVector2D& Stage) const
+{
+	// A dry dock's basin (the yard's kind 1: drawn drained, its floor 0.2 m over the ground) or a floating dock's
+	// pontoon (kind 3: 1.5 m up), as tools/stages/yard.py lays them; the cloud test finds the docked ships inside.
+	for (const TArray<double>& Block : Yard)
+	{
+		const int32 Kind = Block.Num() >= 8 ? static_cast<int32>(Block[7]) : -1;
+		if (Kind != 1 && Kind != 3)
+		{
+			continue;
+		}
+		const double Compass = FMath::DegreesToRadians(Block[6]);
+		const double Dx = Stage.X - Block[0], Dy = Stage.Y - Block[1];
+		const double Ahead = Dx * FMath::Sin(Compass) + Dy * FMath::Cos(Compass), Aside = Dx * FMath::Cos(Compass) - Dy * FMath::Sin(Compass);
+		const double BasinLong = Kind == 1 ? Block[3] - 20.0 : Block[3], BasinWide = Kind == 1 ? Block[4] - 15.0 : Block[4] - 6.0;
+		if (FMath::Abs(Ahead) <= BasinLong * 0.5 && FMath::Abs(Aside) <= BasinWide * 0.5)
+		{
+			return Kind == 1 ? Block[2] + 0.2 : 1.5;
+		}
+	}
+	return 0.0;
+}
+
 double AAirStage::GroundZ(const FVector& Where) const
 {
 	const FVector Local = GetActorTransform().InverseTransformPosition(Where);
@@ -289,7 +313,7 @@ bool AAirStage::ReadStage(const FString& Key)
 			const TArray<double> V = StageParts::Numbers((*Mesh)->TryGetField(TEXT("v")));
 			const TArray<double> C = StageParts::Numbers((*Mesh)->TryGetField(TEXT("c")));
 			const TArray<double> T = StageParts::Numbers((*Mesh)->TryGetField(TEXT("t")));
-			if (V.Num() != C.Num() * 3 || T.Num() % 3 != 0)
+			if (V.Num() != C.Num() * 3 || T.Num() % 3 != 0 || (T.Num() > 0 && C.Num() == 0)) // (triangles with no points: the pre-check on round 6)
 			{
 				UE_LOG(LogTheater, Warning, TEXT("Stage: the %s mesh of %s does not add up; left out."), *Part.Name, *Key);
 				Parts.Pop();
@@ -426,6 +450,9 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 	GroundInk->SetScalarParameterValue(TEXT("Grain"), FMath::Clamp(GroundGrain, 0.0f, 1.0f));
 	GroundInk->SetScalarParameterValue(TEXT("GrainTilingCoarse"), static_cast<float>(1.0 / (1800.0 * UnitsPerMetre)));
 	GroundInk->SetScalarParameterValue(TEXT("GrainTilingFine"), static_cast<float>(1.0 / (260.0 * UnitsPerMetre)));
+	// (the shallows and the reef take no grain: their open-sea edge is painted the sea's colour to vanish into it, and
+	// the sea has none; the cloud pre-check on round 6)
+	WaterInk = Ink(0.9f, 0.15f);
 	SeaInk = Ink(0.2f, 0.5f); // (a tighter sun path on the water)
 	SteelInk = Ink(0.55f, 0.4f);
 	BuildSea();
@@ -572,9 +599,14 @@ void AAirStage::BuildGround()
 	}
 	const FColor SeaNow = StageParts::SeaPaintUnder(SunElevation);
 	AirGround::Tally Count;
-	const std::vector<AirGround::Drawn> Painted = AirGround::Paint(Given, Names, Colours, { SeaNow.R, SeaNow.G, SeaNow.B }, &Count);
-	UE_LOG(LogTheater, Display, TEXT("Stage: the ground painted, %d sand points laid, shallows %d faded and %d kept%s, %d earth, %d runway points lifted."),
-		Count.SandSplit, Count.ShoreFaded, Count.ShoreKept, Count.bLagoon ? TEXT(" (a lagoon: the edge kept)") : TEXT(""), Count.Earth, Count.RunwayRaised);
+	// (split finer within 4 km of the battle's aim, so the mottle and the shallows' fade show no fans there)
+	AirGround::Focus Near;
+	Near.X = StageAim.X;
+	Near.Y = StageAim.Y;
+	Near.Radius = 4000.0;
+	const std::vector<AirGround::Drawn> Painted = AirGround::Paint(Given, Names, Colours, { SeaNow.R, SeaNow.G, SeaNow.B }, &Count, Near);
+	UE_LOG(LogTheater, Display, TEXT("Stage: the ground painted, %d points laid near the battle, %d sand points laid, shallows %d faded and %d kept%s, %d sheltered shore points, %d earth, %d runway points lifted."),
+		Count.Refined, Count.SandSplit, Count.ShoreFaded, Count.ShoreKept, Count.bLagoon ? TEXT(" (a lagoon: the edge kept)") : TEXT(""), Count.Sheltered, Count.Earth, Count.RunwayRaised);
 
 	for (const AirGround::Drawn& Part : Painted)
 	{
@@ -632,7 +664,7 @@ void AAirStage::BuildGround()
 			Normal = Normal.IsNearlyZero() ? FVector::UpVector : Normal.GetSafeNormal();
 		}
 		Mesh->CreateMeshSection(0, V, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
-		Mesh->SetMaterial(0, GroundInk);
+		Mesh->SetMaterial(0, PartName == TEXT("shallows") || PartName == TEXT("reef") ? WaterInk : GroundInk);
 		StillMeshes.Add(Mesh);
 	}
 }
@@ -671,7 +703,8 @@ void AAirStage::BuildWorks()
 			continue;
 		}
 		// The historian's 1941 yard (tools/stages/yard.py): x, y, ground, length, width, height, the length's compass
-		// heading, kind. Each piece goes 1.5 m down into the ground, so uneven land under it leaves no gap.
+		// heading, kind. The ground is the highest land under the block, and each piece goes 4.5 m down, so the land
+		// falling away under it (3.4 m at most at Pearl Harbor) leaves no gap (the cloud pre-check on round 6).
 		const FVector Foot = StageToLocal(FVector(Block[0], Block[1], Block[2]));
 		const double Yaw = HeadingToYaw(FMath::DegreesToRadians(Block[6]) - StageTurn);
 		const double Long = Block[3], Wide = Block[4], High = Block[5];
@@ -682,27 +715,47 @@ void AAirStage::BuildWorks()
 		{
 			Model.Box(Foot + (Along * Ahead + Across * Aside) * U + FVector(0.0, 0.0, (Low + Top) * 0.5 * U), FVector(Length, Width, Top - Low) * U, Paint, Yaw);
 		};
+		// (a paved top 0.3 m up as slabs some 10 m square, each its own shade of worn concrete, over a box 5 cm lower:
+		// the art director's fourth note of 17:45Z; AirGround::Paving, which the cloud test draws too)
+		auto Paved = [this, &Model, &Block, &Slab](double PadLong, double PadWide)
+		{
+			Slab(0.0, 0.0, PadLong, PadWide, StageParts::YardSkirt, 0.25, StageParts::ConcretePaint);
+			const FColor Grey = StageParts::ConcretePaint.ToFColor(true);
+			const double Compass = FMath::DegreesToRadians(Block[6]);
+			const FVector2D LengthWay(FMath::Sin(Compass), FMath::Cos(Compass)), WidthWay(FMath::Cos(Compass), -FMath::Sin(Compass));
+			const double PavedAt = Block[2] + 0.3;
+			for (const AirGround::Panel& Square : AirGround::Paving(Block[0], Block[1], PadLong, PadWide, Block[6], { Grey.R, Grey.G, Grey.B }))
+			{
+				const FVector2D Middle(Square.X, Square.Y), HalfLong = LengthWay * (Square.Long * 0.5), HalfWide = WidthWay * (Square.Wide * 0.5);
+				const FVector P0 = StageToLocal(FVector(Middle - HalfLong - HalfWide, PavedAt)), P1 = StageToLocal(FVector(Middle + HalfLong - HalfWide, PavedAt));
+				const FVector P2 = StageToLocal(FVector(Middle + HalfLong + HalfWide, PavedAt)), P3 = StageToLocal(FVector(Middle - HalfLong + HalfWide, PavedAt));
+				Model.Quad(P0, P1, P2, P3, FVector::UpVector, FColor(Square.Colour.R, Square.Colour.G, Square.Colour.B));
+			}
+		};
 		switch (static_cast<int32>(Block[7]))
 		{
 		case 0: // a shop or a hangar on its pad
-			Slab(0.0, 0.0, Long + 24.0, Wide + 24.0, -1.5, 0.3, StageParts::ConcretePaint);
+			Paved(Long + 24.0, Wide + 24.0);
 			Slab(0.0, 0.0, Long, Wide, -1.0, High * 0.8, StageParts::HangarPaint);
 			Slab(0.0, 0.0, Long, Wide * 0.8, High * 0.8, High, StageParts::RoofPaint);
 			break;
 		case 1: // a dry dock, drained: its floor dark inside the coping, the caisson the end on the heading's side
-			Slab(0.0, 0.0, Long - 20.0, Wide - 15.0, -1.5, 0.2, StageParts::DockFloorPaint);
-			Slab(-(Long * 0.5 - 5.0), 0.0, 10.0, Wide, -1.5, 0.6, StageParts::ConcretePaint);
-			Slab(Long * 0.5 - 5.0, 0.0, 10.0, Wide, -1.5, 0.8, StageParts::DockSteelPaint);
-			Slab(0.0, -(Wide * 0.5 - 3.75), Long - 20.0, 7.5, -1.5, 0.6, StageParts::ConcretePaint);
-			Slab(0.0, Wide * 0.5 - 3.75, Long - 20.0, 7.5, -1.5, 0.6, StageParts::ConcretePaint);
+			Slab(0.0, 0.0, Long - 20.0, Wide - 15.0, StageParts::YardSkirt, 0.2, StageParts::DockFloorPaint);
+			Slab(-(Long * 0.5 - 5.0), 0.0, 10.0, Wide, StageParts::YardSkirt, 0.6, StageParts::ConcretePaint);
+			Slab(Long * 0.5 - 5.0, 0.0, 10.0, Wide, StageParts::YardSkirt, 0.8, StageParts::DockSteelPaint);
+			Slab(0.0, -(Wide * 0.5 - 3.75), Long - 20.0, 7.5, StageParts::YardSkirt, 0.6, StageParts::ConcretePaint);
+			Slab(0.0, Wide * 0.5 - 3.75, Long - 20.0, 7.5, StageParts::YardSkirt, 0.6, StageParts::ConcretePaint);
 			break;
 		case 2: // a paved apron
-			Slab(0.0, 0.0, Long, Wide, -1.5, 0.3, StageParts::ConcretePaint);
+			Paved(Long, Wide);
 			break;
 		case 3: // a floating dry dock: the pontoon awash, the wing walls either side
 			Slab(0.0, 0.0, Long, Wide, -2.0, 1.5, StageParts::DockSteelPaint);
 			Slab(0.0, -(Wide * 0.5 - 1.5), Long, 3.0, 1.5, FMath::Max(High, 2.0), StageParts::DockSteelPaint);
 			Slab(0.0, Wide * 0.5 - 1.5, Long, 3.0, 1.5, FMath::Max(High, 2.0), StageParts::DockSteelPaint);
+			break;
+		case 4: // a mooring quay standing in the water, its top the height above the sea
+			Slab(0.0, 0.0, Long, Wide, -0.5, FMath::Max(High, 0.5), StageParts::ConcretePaint);
 			break;
 		default:
 			break;
@@ -800,7 +853,12 @@ void AAirStage::LayShip(const FStageShip& Given)
 	}
 	FShip& Ship = Ships.FindOrAdd(Given.Id);
 	Ship.Given = Given;
-	Ship.Base = BoardToLocal(Given.At, 0.0);
+	{
+		// (a ship in a dock stands on its floor, not in the sea under it: the cloud pre-check on round 6)
+		const double Floor = DockFloor(BoardToStage(Given.At));
+		Ship.Base = BoardToLocal(Given.At, Floor);
+		Ship.bDocked = Floor > 0.0;
+	}
 	// (a model is built with its bow toward -X: turned half round more, the bow lies along her heading)
 	Ship.Yaw = HeadingToYaw(Given.Face) + 180.0;
 	{
@@ -1066,6 +1124,11 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 	{
 		Break = (Ship.bHarbour ? 12.0 : 28.0) * StageParts::Ease(T / 25.0);
 		Depth = Ship.bHarbour ? 6.0 * StageParts::Ease(T / 20.0) : (Ship.High + 30.0) * StageParts::EaseIn(T / 40.0);
+	}
+	if (Ship.bDocked)
+	{
+		// (on a dock's floor she goes no lower: Cassin and Downes burned out where they lay, Cassin rolled onto Downes)
+		Depth = FMath::Min(Depth, 0.5);
 	}
 	const FVector At = Ship.Base - FVector(0.0, 0.0, Depth * UnitsPerMetre);
 	if (Ship.Fore)

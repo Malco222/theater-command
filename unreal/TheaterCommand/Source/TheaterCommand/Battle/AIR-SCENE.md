@@ -16,7 +16,7 @@ battle screen over it.
 | `AirBattle.h/.cpp` | `AAirBattle`, the scene. It feeds the core and draws what the core says: the planes, the small things, the effects kit, the stage and its ships, the cameras and the sound. |
 | `AirBattleScreen.h/.cpp` | `SAirBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
 | `AirStage.h/.cpp` | The Oahu and Midway stages (an earlier commit on this branch). |
-| `AirGround.h/.cpp` | The stage's ground as painted, plain C++ (the cloud test paints the same): the grass varied and patched with red earth, the sand kept to the water's edge, the shallows darkening into the sea, the runways lifted. |
+| `AirGround.h/.cpp` | The stage's ground as painted, plain C++ (the cloud test paints the same): the grass varied and patched with red earth, the sand kept to the water's edge, the shallows darkening into the sea, the runways lifted, the ground split finer near the battle, the yard's paving as worn slabs. |
 | `../../../Tools/air_show/` | The cloud test. It plays each recording through the core at 60 fps and checks the flight: g, turn radius, slip, roll, a fall for every loss, two gunners never at one window, the frame time. It also plays the screen's clock and words. `run.sh` builds and runs it; `air_show_frames.py` draws pictures of the flight. |
 | `Content/Data/AirBattles/*.json` | The two recorded battles, `oahu` and `midway-fleet`, written by `tools/air-record` on the rules branch `claude/project-thread-2bdb2m`. |
 | `Content/Data/Sound/mix.json` | The sound director's mix, read by the scene (it never copies the mix's numbers). |
@@ -82,7 +82,8 @@ shape (a camera actor keeps 16:9 and bars the rest; both have `bConstrainAspectR
   it in and out (120 m to 20 km). For "the ships" picture it cuts to the first ship that went down, 1.6 km off and 24
   degrees above her in harbour, and back to the fight after it. At sea (the art director on build 1734, Midway 06) she
   fills about a third of the picture's width: a 35-degree lens from her sunlit side, 35 degrees forward of her beam,
-  13 degrees above her, so her smoke stands up over her (`AAirStage::ShipLie` gives her length, bow and harbour).
+  9 degrees above her, so her smoke stands up over her against the sky (`AAirStage::ShipLie` gives her length, bow
+  and harbour).
   Depth of field is off in the whole game (the campaign's light trims), so it was not what made that picture soft:
   the scene is drawn at the campaign map's pixel budget (about 1077 by 668 on Brian's 2881 by 1786 window) and filled
   out by Unreal's upscaler. `-TheaterAirSize=85` draws the battle at 85 hundredths of the window's points each way, for
@@ -158,9 +159,21 @@ meshes now go through `AirGround::Paint` before they are built (BuildGround):
   10 m in, and a large all-sand triangle gets a greener middle by its distance from the coast;
 - the shallows' open-sea edge takes the sea's own paint (`SeaPaintUnder` at the stage's sun), so the band darkens from
   the coast into the deep water. Midway, with its lagoon, keeps the band's edge;
-- the runways stand 0.8 m clear of the land (Ford Island's strip lay at the island's own height).
+- the runways stand 0.8 m clear of the land (Ford Island's strip lay at the island's own height);
+- within 4 km of the battle's aim (`Focus`) the land is split until no edge is longer than 80 m and the shallows 30 m,
+  each new point painted for its own place, so the mottle and the shallows' fade no longer spread across big triangles
+  as stars and wedges (the art director on the first picture, 17:45Z). About 62,000 triangles more, 215,000 in all;
+- the shallows fade by how far a point lies between the coast and the band's open-sea edge;
+- a shore on sheltered water (the open sea's edge within 130 m: the harbour's natural shores) is the grass to the water,
+  not a thin line of sand that read as a drawn outline; quays and seawalls keep their grey;
+- the piers' concrete is worn (`Worn`: patches of 6 per cent at 40 m, stains to 7 per cent darker at 16 m), and there
+  is no reef inside the lochs (today's mapped shoals there read as mint patches);
+- by the quays, piers and seawalls (within 10 m of the works, coming back over 40 m) the shallows take the deep sea's
+  paint, since a berth was dredged to the wall; along the natural shores the band's fade wanders in width (its curve's
+  power 0.55 to 1.55 on 260 m noise), so it no longer reads as a glow drawn round the land (the art director on the
+  second picture, 18:47Z). A sand point back from the coast, by height or past 8 m, fades to the grass as painted there.
 Oahu's palette is also darker and less mint (`tools/stages/mesh.py`'s `OAHU_PAINT`: cane #5D7934, pineapple #7D5A3C,
-forest #35512A, sand #CDBD95, shallows #3A6E68, reef #6C9E8E). The mottle finer than the points are apart is the
+forest #35512A, sand #CDBD95, shallows #3A6E68, reef #6C9E8E, concrete #8F8B83). The mottle finer than the points are apart is the
 material's own grain (M_MapSurface's two noise samples at one tile to 1,800 m and one to 260 m, strength 0.28;
 `-TheaterGroundGrain=` tries another, 0 for none).
 
@@ -168,12 +181,23 @@ The stage file's `yard` (from `tools/stages/yard.py`, the historian's table of 1
 and Ford Island's seaplane base as grey blocks in BuildWorks:
 - Dry Dock No. 1, drained and dark inside its coping, its caisson the steel end on the water. It runs 211° from the
   mouth (the historian's correction), and Pennsylvania, Cassin and Downes lie in it along that line;
-- YFD-2 round Shaw;
+- YFD-2 round Shaw, off the beach west of the dry dock where Nevada beached (the historian from three 1941 photo
+  captions), Shaw bow west;
 - eight shops on their concrete pads by the 1010 Dock;
 - the seaplane apron at Ford Island's south end with Hangars 79, 37 and 54. The three stand-in hangars by Ford
-  Island's runway are gone.
-The cloud test checks that each docked ship lies inside its dock and along it, and that no ship's middle is under a
-block. Its picture: `AIR_GROUND_DUMP=1 Tools/air_show/run.sh`, then
+  Island's runway are gone;
+- Maryland's two 1941 mooring quays at F-5 (kind 4), where today's F-5 pier stands in the map: that pier, its two
+  S378 pieces and S382 at F-12 are cut from the works (`yard.py`'s `CUT`), as later than 1941 (Maryland's and
+  Raleigh's hulls lay on them).
+A block's ground is the highest land under it (a shop's with its pad), and its sides go 4.5 m down (`YardSkirt`), so no
+land shows through a pad and none hangs under it (the land falls 3.4 m at most under one). The pads and the apron are
+paved as slabs some 10 m square, each a shade of the worn concrete (`AirGround::Paving`, about 140 luma). A ship in a
+dock stands on its floor (`DockFloor`: the dry dock's ground and 0.2 m, YFD-2's pontoon at 1.5 m) and goes no lower
+however she is hit. The shallows and the reef take an ink without the ground's grain (`WaterInk`).
+The cloud test checks that each docked ship lies inside its dock and along it; that no hull (its outline every 5 m)
+is on a block, on the land or on a pier's top, the docked ships aside; that the land under each block lies between its
+skirt and its top; and that the paving's luma is 134 to 146 with a spread of 3 to 9. Its picture, with the paving:
+`AIR_GROUND_DUMP=1 Tools/air_show/run.sh`, then
 `STAGE=Content/Data/Stages/oahu.json python3 Tools/air_show/ground_picture.py <out>/ground-oahu.bin harbour.png -1700 -1900 900 200 1.25`.
 
 **The battle look (the 3D builder's, `Campaign/CampaignBattleLook.h/.cpp`).** The scene calls it in five places: the
@@ -340,6 +364,7 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    or vanish against the sky, their brightness is the three colours at the top of `AirSky.cpp`. If they cost too much
    time, `Placing::MostPuffs` sets their room and `Painter(12)` the sides of each puff.
 5. **Pearl Harbor's ground.** The grass mottled with patches of red earth, the beach a band along the water, the
-   shallows darkening into the sea, and the yard's grey blocks with Pennsylvania in her dry dock. If the grain shows as
-   a pattern, `-TheaterGroundGrain=0.15` softens it.
+   shallows darkening into the sea, and the yard's grey blocks with Pennsylvania standing on her dry dock's floor and
+   Shaw in YFD-2 off the beach. No pad's edge floating over the land or sunk under it; the paving in slabs, not a flat
+   card. If the grain shows as a pattern, `-TheaterGroundGrain=0.15` softens it.
 6. **The sound.** Each formation's drone, the bursts by calibre, the flak bursts heard after their flash, and a fighter group's pass within 300 m. The loudness and distances come from mix.json's families.

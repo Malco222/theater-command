@@ -110,6 +110,7 @@ private:
 		double Yaw = 0.0;                   // degrees: her model's bow (-X) put along her heading
 		double Long = 100.0, Beam = 12.0, High = 20.0; // metres
 		bool bHarbour = true;
+		bool bDocked = false; // on a dock's floor (DockFloor): she may burn or roll there, and goes no lower
 		FString How;
 		double SunkAt = -1.0;
 		int32 Hits = 0;
@@ -144,6 +145,8 @@ private:
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> GroundInk;
 	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WaterInk; // (the shallows and reef: the ground's ink without its grain)
+	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> SeaInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> SteelInk;
@@ -170,6 +173,8 @@ private:
 	FVector StageToLocal(const FVector& Stage) const;
 	FVector StageToWorld(const FVector& Stage) const;
 	double StageHeight(double East, double North) const;
+	/** The floor a ship lies on at a stage point if it is inside a dock's basin (metres up from the sea), else 0. */
+	double DockFloor(const FVector2D& Stage) const;
 	double HeadingToYaw(double BoardHeading) const;
 
 	// The stage test.
