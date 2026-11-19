@@ -1775,6 +1775,9 @@ namespace TheaterFx
 			H.GlowDay = Clamp01(Num("muzzle.hot.glow_day_share", 0.5));
 			H.GlowM = std::max(0.0, Num("muzzle.hot.glow_m", 0.035));
 			H.Over = std::max(1.0, Num("muzzle.hot.over", 1.0));
+			H.YellowOver = std::max(0.0, Num("muzzle.hot.yellow_over", 0.0));
+			H.Halo = std::min(0.25, std::max(0.0, Num("muzzle.hot.halo", 0.0)));
+			H.HaloM = std::min(0.5, std::max(0.0, Num("muzzle.hot.halo_m", 0.0))); // (never a card wider than a flash: a wild number stays a small glow)
 		}
 		return true;
 	}
@@ -1855,10 +1858,28 @@ namespace TheaterFx
 			Bits.push_back(Body);
 			Bit Yellow = Piece(At + Fw * (L * 0.23), Fw, L * 0.23, W * 0.62, H.Yellow, H.Orange, 1.0, 0.3, 0.55, 0.0, 1.2 * W);
 			Yellow.Rough = 0.15;
-			Yellow.Over = 1.0 + (H.Over - 1.0) * 0.35;
+			Yellow.Over = H.YellowOver > 0.0 ? std::max(1.0, H.YellowOver) : 1.0 + (H.Over - 1.0) * 0.35;
 			Bits.push_back(Yellow);
 			Bit Root = Piece(At + Fw * (L * 0.1), Fw, L * 0.11, W * 0.34, H.Root, H.Yellow, 1.0, 0.3, 0.6, 0.0, 1.8 * W);
 			Root.Over = H.Over;
+			if (H.Halo > 0.0 && H.HaloM > 0.0)
+			{
+				// (the root's glow: a soft halo of the root's own colour under it, that opaque at the root's edge and fading
+				// to nothing halo_m out. A copy of the root, so the dice fall as they did and every flash keeps its shape)
+				Bit Halo = Root;
+				const double RootWide = Root.R0, RootLong = Root.R0 * Root.Stretch;
+				Halo.R0 = RootWide + H.HaloM;
+				Halo.R1 = Halo.R0 * 0.8;
+				Halo.Stretch = std::max(1.0, (RootLong + H.HaloM) / Halo.R0);
+				Halo.Edge = H.Root;
+				Halo.EdgeK = 0.0;
+				Halo.EdgeIn = 0.0;
+				Halo.Inner = std::clamp(RootWide / Halo.R0, 0.1, 0.95);
+				Halo.Alpha = H.Halo;
+				Halo.Over = std::min(H.Over, 2.0);
+				Halo.Nearer = 1.5 * W;
+				Bits.push_back(Halo);
+			}
 			Bits.push_back(Root);
 		}
 		const int NLicks = std::max(0, static_cast<int>(std::lround(H.Licks.Pick(D))));
@@ -2166,6 +2187,8 @@ namespace TheaterFx
 		const int WispEvery = std::max(1, static_cast<int>(Num("mg_smoke.every_rounds", 4.0)));
 		const Span WispLife = Range("mg_smoke.life_s", 1.0, 2.0);
 		const Rgb WispCol = Picture("mg_smoke.colour", Rgb::FromPicture(168, 158, 142));
+		// (puff_share: one puff's share of alpha. Art director 16:30Z: where its puffs overlap the wisp reaches its cap)
+		const double WispShare = std::min(1.0, std::max(0.1, Num("mg_smoke.puff_share", 0.55)));
 		const double DustShare = bWisp && From.Z - Height(From.X, From.Y) < Num("mg_smoke.dust_under_m", 1.2) ? Clamp01(DustRowOf(Ground).Share) : 0.0;
 		for (int R = 0; R < Rounds; ++R)
 		{
@@ -2187,7 +2210,7 @@ namespace TheaterFx
 				B.Grow = 0.6;
 				B.Col = WispCol;
 				B.Col2 = WispCol;
-				B.Alpha = WispAlpha * 0.55;
+				B.Alpha = WispAlpha * WispShare;
 				B.FadeIn = 0.06;
 				B.Hold = 0.25;
 				B.Heart = 0.8;
@@ -3449,6 +3472,8 @@ namespace TheaterFx
 					Tr.Kept.RMid = C.RMid;
 					Tr.Kept.R1 = C.R1;
 					Tr.Kept.Grow = C.Grow;
+					Tr.Kept.GrowBy = C.GrowBy;
+					Tr.Kept.GrowEarly = C.GrowEarly;
 					Tr.Kept.Life = C.Life;
 					Tr.Kept.Alpha = C.Alpha; // (its own opacity: the next bar's far end takes it)
 					Tr.Kept.LumpsFrom = C.SmearHold;
@@ -3530,6 +3555,8 @@ namespace TheaterFx
 			Tr.Prev.RMid = B.RMid;
 			Tr.Prev.R1 = B.R1;
 			Tr.Prev.Grow = B.Grow;
+			Tr.Prev.GrowBy = B.GrowBy;
+			Tr.Prev.GrowEarly = B.GrowEarly;
 			Tr.Prev.Life = B.Life;
 			Tr.Prev.Alpha = B.Alpha; // (its own opacity: the next piece's far end takes it)
 			Tr.Prev.LumpsFrom = B.SmearHold;
@@ -4863,13 +4890,13 @@ namespace TheaterFx
 		const double F = Shown / B.Life;
 		double Rad = B.R0 + (B.R1 - B.R0) * std::pow(F, B.Grow);
 		// (a ribbon's piece, in two stages: see Bit::GrowBy)
-		auto RadTwo = [&B](double R0_, double RMid_, double R1_, double Age_, double Life_)
+		auto RadTwo = [](double R0_, double RMid_, double R1_, double Age_, double Life_, double By_, double Early_, double Late_)
 		{
-			return R0_ + (RMid_ - R0_) * std::pow(Clamp01(Age_ / B.GrowBy), B.GrowEarly) + (R1_ - RMid_) * std::pow(Clamp01((Age_ - B.GrowBy) / std::max(Life_ - B.GrowBy, 1e-6)), B.Grow);
+			return R0_ + (RMid_ - R0_) * std::pow(Clamp01(Age_ / By_), Early_) + (R1_ - RMid_) * std::pow(Clamp01((Age_ - By_) / std::max(Life_ - By_, 1e-6)), Late_);
 		};
 		if (B.GrowBy > 0.0)
 		{
-			Rad = RadTwo(B.R0, B.RMid, B.R1, Shown, B.Life);
+			Rad = RadTwo(B.R0, B.RMid, B.R1, Shown, B.Life, B.GrowBy, B.GrowEarly, B.Grow);
 		}
 		const double Fade = std::min(1.0, Shown / std::max(B.FadeIn, 1e-3)) * (F < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (F - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4));
 		double A = B.Alpha * Fade;
@@ -5143,7 +5170,9 @@ namespace TheaterFx
 					const double AgeT = Now - T.Born;
 					const double GoT = B.Drag > 1e-6 ? (1.0 - std::exp(-B.Drag * AgeT)) / B.Drag : AgeT;
 					const Vec Far = T.From + T.Vel * GoT + Wind * (B.Windage * AgeT) + Vec(0.0, 0.0, T.Rise * AgeT);
-					double RadT = B.GrowBy > 0.0 ? RadTwo(T.R0, T.RMid, T.R1, AgeT, T.Life) : T.R0 + (T.R1 - T.R0) * std::pow(Clamp01(AgeT / std::max(T.Life, 1e-6)), T.Grow);
+					// (the far edge is the piece before's own near edge: by that piece's own clock, which is another row's where the
+					// trail changed kind at this join, glycol to fire. Pre-check 16:22Z)
+					double RadT = T.GrowBy > 0.0 ? RadTwo(T.R0, T.RMid, T.R1, AgeT, T.Life, T.GrowBy, T.GrowEarly, T.Grow) : T.R0 + (T.R1 - T.R0) * std::pow(Clamp01(AgeT / std::max(T.Life, 1e-6)), T.Grow);
 					if (B.LeastPx > 0.0)
 					{
 						// (held up far off and thinned to match, as that piece holds itself)

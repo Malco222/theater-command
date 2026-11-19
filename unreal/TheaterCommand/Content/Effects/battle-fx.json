@@ -1261,12 +1261,12 @@
    "flatten": 0.6
   },
   "hot": {
-   "_how": "Art director 07:08Z: close to the eye (within_m) a ground gun's flash, a machine gun's (Shots, mg) or a field gun's (Muzzle), is lit from within as the air guns' close flash: a yellow-white root at the muzzle (root to root_edge, its rim hot), an orange body (orange, its rim rim) with dense rims, shrinking rather than going see-through. Past within_m as before. Art director 13:54Z on the game's own frames (build 1720), where that read as a sticker: with tongues here, the close flash is instead a small white-yellow root right at the muzzle (root), melting into yellow, then the orange body, widest a third of the way out, which breaks into 3 to 5 ragged tongues with red only at their ends (red), and 2 to 4 short licks thrown sideways; its length is rolled between long x its usual length every round (mg_flame_m for a machine gun, 1.4 x flame_m for a gun), so no two match. Dense inside, its edge a pixel or two soft. glow: a thin glow glow_m past the flame, that opaque at dusk and glow_day_share of it by day. over: how far past white the root burns (see picture.lit_gain). wide: half its width, as a share of its usual length.",
+   "_how": "Art director 07:08Z: close to the eye (within_m) a ground gun's flash, a machine gun's (Shots, mg) or a field gun's (Muzzle), is lit from within as the air guns' close flash: a yellow-white root at the muzzle (root to root_edge, its rim hot), an orange body (orange, its rim rim) with dense rims, shrinking rather than going see-through. Past within_m as before. Art director 13:54Z on the game's own frames (build 1720), where that read as a sticker: with tongues here, the close flash is instead a small white-yellow root right at the muzzle (root), melting into yellow, then the orange body, widest a third of the way out, which breaks into 3 to 5 ragged tongues with red only at their ends (red), and 2 to 4 short licks thrown sideways; its length is rolled between long x its usual length every round (mg_flame_m for a machine gun, 1.4 x flame_m for a gun), so no two match. Dense inside, its edge a pixel or two soft. glow: a thin glow glow_m past the flame, that opaque at dusk and glow_day_share of it by day. over: how far past white the root burns (see picture.lit_gain). wide: half its width, as a share of its usual length. Art director 16:30Z on build 1732's stills (root cream at 235,231,216, orange 230,152,4 with no blue: candy): these colours are WRITTEN values, aimed through the game's curve (picture._how). root at over 4 lands 253,250,234, luma 249, over a spot 5 to 9 px across on a 1600 still. orange lands about 234,141,41 (her 235,140,40; written 235,140,40 it landed 234,150,0). yellow_over: how far past white the yellow burns (1.175, as it did when over was 1.5; absent, a share of over). halo: a soft card of the root's colour round the root, that opaque at its inner edge and nothing halo_m further out, in place of the game's bloom (never over 0.25; 0 or absent: none). At 0.08 and 0.028 m it lifts the picture a quarter of the way to the root at most, 3 to 4.5 px out on a 1600 still.",
    "within_m": 50,
    "root": [
-    250,
-    240,
-    200
+    255,
+    233,
+    158
    ],
    "root_edge": [
     255,
@@ -1279,9 +1279,9 @@
     150
    ],
    "orange": [
-    235,
-    140,
-    40
+    236,
+    131,
+    71
    ],
    "rim": [
     230,
@@ -1315,7 +1315,10 @@
    "glow": 0.5,
    "glow_day_share": 0.5,
    "glow_m": 0.035,
-   "over": 1.5
+   "over": 4.0,
+   "yellow_over": 1.175,
+   "halo": 0.08,
+   "halo_m": 0.028
   }
  },
  "ground_cases": {
@@ -1461,9 +1464,9 @@
   "render_note": "airshow.py TRACER: radiance (0.15, 0.133, 0.0) at puff strength, as built for the air clips",
   "day_width": 1.5,
   "day_core": [
-   245,
-   240,
-   210
+   255,
+   241,
+   151
   ],
   "day_px": 3.4,
   "day_core_px": 2.0,
@@ -1472,8 +1475,8 @@
    180,
    70
   ],
-  "day_over": 1.5,
-  "_day_solid": "Art director 13:54Z on the game's own frames (build 1720), where a day tracer was a faint hairline 25 luma over pale ground: by day a tracer is a solid pale core (day_core, day_core_px across, day_over past white: see picture.lit_gain) inside a warm edge (day_edge), day_px across in all, straight-sided and at its whole opacity along its whole length. Pixels are drawn pixels: the art director's 3 and 5 px on a 1600 frame are 2 and 3.4 where the game draws 1072 across. At dusk as before.",
+  "day_over": 2.72,
+  "_day_solid": "Art director 13:54Z on the game's own frames (build 1720), where a day tracer was a faint hairline 25 luma over pale ground: by day a tracer is a solid pale core (day_core, day_core_px across, day_over past white: see picture.lit_gain) inside a warm edge (day_edge), day_px across in all, straight-sided and at its whole opacity along its whole length. Pixels are drawn pixels: the art director's 3 and 5 px on a 1600 frame are 2 and 3.4 where the game draws 1072 across. At dusk as before. Art director 16:30Z (build 1732, core 231,226,212): day_core and day_over are written values aimed through the game's curve (picture._how); 255,241,151 at 2.72 times white lands 249,247,222 on a flat patch, and a core this thin measures some 5 to 13 lower, so on her 245,240,210.",
   "_day": "Art director 21:07Z: by day only, the streak is 1.5 times wider and its pale core pushed toward 245,240,210, so a stream holds against a pale sky. Day is read from the hour's light (white by day); at dusk the streak is as ruled. One in five and 213,199,104 stay.",
   "whole_path_below_m": 100,
   "whole_path_s": 0.015,
@@ -1481,7 +1484,7 @@
   "_close": "Art director 21:16Z (build 1690, a machine gun seen from 19 m showed no tracer line): below whole_path_below_m a tracer crosses in a frame or two, so its whole path is drawn at once, muzzle to strike, fading toward the muzzle (three lengths at 35, 68 and 100 per cent), for at least one frame."
  },
  "mg_smoke": {
-  "_how": "Art director 13:54Z: close to the eye (muzzle.hot.within_m), a machine gun's burst of 3 rounds or more leaves a thin wisp, a little paler and cooler than the ground (art director 14:26Z: a faint veil on pale and dark ground alike) at the muzzle, one puff every every_rounds rounds, living life_s and drifting on the wind; on dry ground (dust.vehicles.by_ground) with the muzzle under dust_under_m up, also a low puff of the ground's own dust kicked up just in front of it. alpha: the most the whole wisp is ever opaque, never over 0.25.",
+  "_how": "Art director 13:54Z: close to the eye (muzzle.hot.within_m), a machine gun's burst of 3 rounds or more leaves a thin wisp, a little paler and cooler than the ground (art director 14:26Z: a faint veil on pale and dark ground alike) at the muzzle, one puff every every_rounds rounds, living life_s and drifting on the wind; on dry ground (dust.vehicles.by_ground) with the muzzle under dust_under_m up, also a low puff of the ground's own dust kicked up just in front of it. alpha: the most the whole wisp is ever opaque, never over 0.25. Art director 16:30Z (build 1732, where the wisp lifted Idaho's pale ground by 6 luma and was not seen): colour 228,232,238, and the wisp reaches the full 0.25 where its puffs overlap. puff_share: one puff's opacity as a share of alpha (0.55 before, and absent). At 0.63 the overlaps peak at 0.25 (measured over 100 rounds; 0.75 passed it, 0.30).",
   "alpha": 0.25,
   "every_rounds": 4,
   "life_s": [
@@ -1489,15 +1492,16 @@
    2.0
   ],
   "colour": [
-   195,
-   192,
-   185
+   228,
+   232,
+   238
   ],
-  "dust_under_m": 1.2
+  "dust_under_m": 1.2,
+  "puff_share": 0.63
  },
  "picture": {
-  "_how": "The game's tone curve holds plain white (255) down to about 224, so no colour alone reaches the art director's 235 for a flash's root or a day tracer's core. lit_gain: the game's material multiplies every colour by this (the wrapper sets M_Highlight's Brightness to it) and the kit writes every colour that much darker, so all looks as before; but the hottest lights (muzzle.hot.over, tracer.day_over) are written up to that much past white. 1 or absent: nothing changes.",
-  "lit_gain": 1.5
+  "_how": "The game's picture (CampaignCameraPawn.cpp: Unreal's film curve, saturation 1.07, contrast 1.08, warm highlights, film toe 0.6) holds plain white (255) down to about 226, darkens and warms the darks (grey 60 shows as 31) and takes the blue out of a strong orange. tools/battle-fx/game_curve.py is that road in numbers: `lands` says what a written colour shows as in the game, `write` what to write to land on a number. lit_gain: the game's material multiplies every colour by this (the wrapper sets M_Highlight's Brightness to it) and the kit writes every colour that much darker, so all looks as before; but the hottest lights (muzzle.hot.over, tracer.day_over) are written up to that much past white. 1 or absent: nothing changes. Art director 16:30Z (build 1732): the game-wide curve and bloom stay as they are, and a flash's root burns near white by the kit's own gain; 4 times white lands a warm white at 253,250,236, where 1.5 landed cream at 238,234,222. Colours are written in 8 bits of linear light, so at 4 the darkest paints keep fewer steps: dark smoke and clods through the game's curve moved by 2 to 5 levels at most 12 (checked on a howitzer burst, a burning fall and an oil fire).",
+  "lit_gain": 4.0
  },
  "air_guns": {
   "_how": "Brian 2026-11-18 19:35Z: 'make the gun fire very realistic and the tracer fire too'. Guns on aircraft (AirGun, called every frame while a trigger is down). The battle sends where each gun is, the point it is laid on (lead and convergence are the battle's), and the aircraft's own velocity; the kit lays each round from where the muzzle was at that moment. A round flies at muzzle_mps plus the aircraft's speed, slows (drag, a share of its speed lost a second) and falls (drop). Every round flickers at the muzzle; one in tracer_every is the ruled tracer (tracer.colour, tracer.streak_m), burning for tracer_s. The sound director's air.gunsByCalibre uses the same three families: rifle, heavy, 20 mm cannon.",

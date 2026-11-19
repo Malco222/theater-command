@@ -122,6 +122,7 @@ namespace TheaterFx
 		{
 			Vec From, Vel, Way;
 			double Rise = 0.0, Born = 0.0, R0 = 0.0, RMid = 0.0, R1 = 0.0, Grow = 1.0, Life = 1.0, Alpha = 1.0, LumpsFrom = -1.0;
+			double GrowBy = 0.0, GrowEarly = 1.0; // (that piece's own widening clock: a trail may change kind at this join)
 			bool bOn = false;
 		};
 		double Ribbon = 0.0, ShowFrom = 0.0, ShowBy = 0.0, SmearHold = -1.0;
@@ -364,6 +365,10 @@ namespace TheaterFx
 			Rgb Yellow, Red;
 			Span Tongues, Licks, Long;
 			double Wide = 0.2, Glow = 0.0, GlowDay = 0.5, GlowM = 0.035, Over = 1.0;
+			// (art director 16:30Z, build 1732: the root alone burns near white, so the yellow has its own number
+			// (yellow_over; 0: a share of the root's, as before), and the root's glow is the kit's own soft halo, HaloM
+			// past the root all round and Halo opaque at the root's edge, never the game's bloom)
+			double YellowOver = 0.0, Halo = 0.0, HaloM = 0.0;
 		};
 		/** A close gun flash as the art director ruled it from the game's own frames: a small white-yellow root right at
 		 *  the muzzle, melting into a yellow then orange body widest a third of the way out, which breaks into ragged
