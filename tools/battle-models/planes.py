@@ -35,6 +35,7 @@ import bmesh
 import bpy
 from mathutils import Quaternion, Vector, noise
 
+import fighters
 import fitout
 import rigid
 from rigid import Model, smooth
@@ -549,6 +550,9 @@ EXTRA_PLANES["B17"] = {
     "side_marks": [(-3.72, 0.5, "USA-BAR")], "wing_marks": [(11.6, 0.75, 0.95, "USA-BAR", "USA-BAR", False, False)], "code": (-7.3, 0.5),
 }
 
+# The single-seat fighters, laid out again to measured drawings with framed glazing of their own (fighters.py).
+EXTRA_PLANES.update(fighters.FIGHTERS)
+
 
 def cabin_angle(hood, p):
     """Where round a hood a point of its skin is: degrees up from level on its own side (90 at its top)."""
@@ -720,13 +724,14 @@ def game():
     if _G is None:
         path = os.path.join(HERE, "game", "build_plane.py")
         src = open(path).read().split("\ndef main():")[0]
-        for old, new in FINER + JETS + GRADED + NOSES + GILLS + CABIN:
+        for old, new in FINER + JETS + GRADED + NOSES + GILLS + CABIN + fighters.CANOPY:
             if src.count(old) != 1:
                 raise ValueError("the game's sculptor has changed here: " + old)
             src = src.replace(old, new)
         _G = {"__file__": path, "__name__": "build_plane", "BATTLE": BATTLE, "BATTLE_CHORDS": {True: CHORDS, False: CHORDS_PLAIN}, "battle_us": battle_us,
               "BATTLE_FLAP": FLAP, "BATTLE_AILERON": AILERON, "BATTLE_ELEVATOR": ELEVATOR, "BATTLE_RUDDER": RUDDER, "LINE_DRAWN": LINE,
-              "battle_cabin_paint": cabin_paint, "battle_cabin_frames": cabin_frames, "battle_cabin_body": fitout.cabin_body}
+              "battle_cabin_paint": cabin_paint, "battle_cabin_frames": cabin_frames, "battle_cabin_body": fitout.cabin_body,
+              "battle_canopy": fighters.canopy, "battle_glare": fighters.glare}
         exec(compile(src, path, "exec"), _G)
         _G["PAINTS"]["torpedo"] = len(_G["PAINTS"])        # (a paint of a battle's own: what a torpedo bomber carries)
         _G["COMMON"]["torpedo"] = "6C7174"
@@ -1091,6 +1096,8 @@ def convert(name, fine=True):
         grid = 360.0 / around
         waist = (min(rings_x, key=lambda r: abs(r - wx0)), min(rings_x, key=lambda r: abs(r - wx1)), round(wa0 / grid) * grid, round(wa1 / grid) * grid)
 
+    cockpit = fighters.opening(s, rings_x) if fine else None          # (a fighter's cockpit, open under her canopy: fighters.opening)
+
     def waist_hole(c, slack=0.0):
         """Whether a point of her side lies in an open window (either side)."""
         if not waist or not (waist[1] - slack < c.x < waist[0] + slack):
@@ -1252,6 +1259,8 @@ def convert(name, fine=True):
             return bay_door(c)
         if kind in ("hull", "lines") and waist_hole(c):
             return None                                     # (an open window: see fitout.waist)
+        if kind in ("hull", "lines") and fighters.in_opening(cockpit, hull, c):
+            return None                                     # (her cockpit, open under her canopy: see fitout.cockpit)
         if kind == "lines" and pane_at(c):
             return None                                     # (no panel line is scribed across a pane of glass)
         if kind == "hull":
@@ -1578,6 +1587,7 @@ def convert(name, fine=True):
     f.engines, f.pods = len(hubs) + len(pods), pods
     f.year = s.get("year")                                   # (a machine that only comes late in the war)
     f.waist, f.around, f.waist_hole = waist, around, waist_hole
+    f.cockpit = cockpit
     f.panes, f.pane_at, f.balls, f.remote = panes, pane_at, balls, remote
     f.surf = list(surf)
     f.turrets = [(k, port(c), radii) for k, c, radii in turrets]
