@@ -6,7 +6,7 @@
 # Units: metres, x east and y north of the stage's origin, z up from the sea. The game turns and places the stage
 # as the battle's ticket turns the map (stages.ts onBoard). Heights are kept in decimetres (whole numbers).
 import json, math, os, sys, random
-from yard import yard, DRAWN_FIELDS
+from yard import yard, DRAWN_FIELDS, CUT
 import numpy as np
 import shapely
 from shapely.geometry import Polygon, MultiPolygon, Point, box, LineString
@@ -35,7 +35,8 @@ IDX = {n: i for i, (n, _) in enumerate(PALETTE)}
 # Oahu's own paint (the art director on build 1734: Pearl Harbor's land read as three plain colours, the shallows as a
 # mint band): the greens darker, the earth redder, the sand a duller band, the shallows a darker teal-green. Midway
 # keeps the palette above. The 3D game varies these point by point (Battle/AirGround.cpp).
-OAHU_PAINT = {'sand': '#CDBD95', 'cane': '#5D7934', 'pineapple': '#7D5A3C', 'forest': '#35512A', 'shallows': '#3A6E68', 'reef': '#6C9E8E'}
+OAHU_PAINT = {'sand': '#CDBD95', 'cane': '#5D7934', 'pineapple': '#7D5A3C', 'forest': '#35512A', 'shallows': '#3A6E68', 'reef': '#6C9E8E',
+              'concrete': '#8F8B83'}  # (the concrete about 140 luma, worn in the game: her second note of 17:45Z)
 
 
 def dm(v):
@@ -207,13 +208,16 @@ def midway_colour(x, y, z, s, d, cell=False):
     return IDX['sand'] if d < 35 else IDX['scrub']
 
 
-def piers(stage, L, mesh, zat):
-    """The piers and quays as slabs two metres above the water, with their sides down to it."""
+def piers(stage, L, mesh, zat, cut=()):
+    """The piers and quays as slabs two metres above the water, with their sides down to it (not today's piers that
+    stand where 1941 ships lay: yard.py's CUT)."""
     for ring in stage['piers']:
         p = Polygon(ring)
         if not p.is_valid:
             p = p.buffer(0)
         for q in polys(p):
+            if any(q.centroid.distance(Point(c)) < 20.0 for c in cut):
+                continue
             top = 2.0
             flat(mesh, q, top, IDX['concrete'])
             pts = list(q.exterior.coords)
@@ -349,6 +353,9 @@ def build(key):
     band = L.buffer(near, join_style=2).difference(L)
     if key == 'oahu':
         lochs = box(-9000, -2600, 2600, 6500)
+        # No reef awash inside the lochs in 1941 (today's mapped shoals there read as mint patches by Ford Island and
+        # along Battleship Row: the art director, 19 November 17:45Z): the shallows' band runs on there instead.
+        R = R.difference(lochs)
         band = band.difference(lochs).union(L.buffer(35, join_style=2).difference(L).intersection(lochs))
     band = band.difference(R)
     sea = Mesh('shallows')
@@ -359,7 +366,7 @@ def build(key):
         lagoon = unary_union([R, L]).convex_hull.difference(R).difference(L).difference(band)
         flat(reef, lagoon.simplify(6), 0.3, IDX['lagoon'])
     works = Mesh('works')
-    piers(st, L, works, zat)
+    piers(st, L, works, zat, CUT.get(key, ()))
     extra = []
     if key == 'midway':
         # Eastern Island's three runways of 1942: the long one down the island's length, two across it in a

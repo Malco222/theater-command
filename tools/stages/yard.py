@@ -8,19 +8,23 @@
 #     dark; the caisson is the coping's end on the heading's side
 #   2 a paved apron, flat
 #   3 a floating dry dock: its pontoon at the water and two wing walls the height high
-# The ground under a slab is the highest of the land under it, under a building the lowest (the walls go down
-# into the higher side), as mesh.py's zat finds them.
+#   4 a mooring quay: a concrete block standing in the water, its top the height above the sea
+# The ground under a block is the highest of the land under its footprint (a shop's with its pad), found every 10 m
+# by mesh.py's zat: the slab's top clears the land and its skirt reaches down where the land falls (the 3D game
+# takes the skirts 4.5 m down; the cloud pre-check on round 6 found pads under the land when the ground was the
+# lowest of a few points).
 import math
 
-SHOP, DOCK, APRON, FLOATING = 0, 1, 2, 3
+SHOP, DOCK, APRON, FLOATING, QUAY = 0, 1, 2, 3, 4
 
 OAHU = [
     # name, x, y, length, width, height, heading, kind
     # Dry Dock No. 1: the record's basin of 1,001 by 138 ft inside its coping; its axis 31/211 (the historian's
     # correction to berths.py). Pennsylvania, Cassin and Downes lie in it. Dry Docks 2 and 3 were building: left out.
     ('Dry Dock No. 1', -700.0, -1410.0, 330, 60, 0, 31, DOCK),
-    # YFD-2 round Shaw at her berth (position and size L).
-    ('YFD-2', 570.2, -1298.7, 160, 40, 12, 141, FLOATING),
+    # YFD-2 round Shaw, off the beach west of Dry Dock No. 1 where Nevada beached, parallel to it (the historian on
+    # 19 November from three 1941 photo captions; place and size L/M). Shaw lies in it bow west.
+    ('YFD-2', -985.0, -1250.0, 160, 40, 12, 95, FLOATING),
     # The shop rows by the 1010 Dock (1919-41; one or two may be post-war rebuilds on the same footprints).
     ('Shipfitting and welding shop', -180.0, -1290.0, 170, 100, 18, 121, SHOP),
     ('Inside/Outside Machine Shop', -330.0, -1160.0, 160, 70, 15, 121, SHOP),
@@ -36,21 +40,35 @@ OAHU = [
     ('Hangar 79', -1140.0, -580.0, 100, 70, 20, 141, SHOP),
     ('Hangar 37', -1020.0, -450.0, 70, 50, 15, 123, SHOP),
     ('Hangar 54', -1280.0, -680.0, 120, 50, 18, 157, SHOP),
+    # Maryland's two 1941 mooring quays at F-5, like Arizona's and Tennessee's (size M), in place of today's piers there.
+    ('F-5 quay, north', -135.0, -113.0, 15, 8, 2.0, 55, QUAY),
+    ('F-5 quay, south', -202.0, -166.0, 15, 8, 2.0, 55, QUAY),
 ]
+
+# Today's mapped piers that stand where 1941 ships lay, left out of the stage's works (mesh.py's piers skips a pier
+# whose middle is within 20 m of one of these): the historian, 19 November.
+CUT = {'oahu': [
+    (-150.8, -151.3),  # the F-5 pier (Missouri's today): Maryland's hull lies on it
+    (-135.2, -113.2),  # the two S378 pieces beside it, where the 1941 quays go back
+    (-201.6, -165.9),
+    (-836.1, 746.4),   # S382 at F-12: Raleigh's hull lies on it (and 5% of Detroit's)
+]}
 
 # The airfields whose hangars the yard draws (mesh.py lays no row of stand-in hangars there).
 DRAWN_FIELDS = {'oahu': {'Ford Island'}}
 
 
-def corners(x, y, length, width, heading):
+def footprint(x, y, length, width, heading, step=10.0):
+    """Points over a block's footprint, every step metres, its edges and corners among them."""
     h = math.radians(heading)
     u = (math.sin(h), math.cos(h))
     v = (u[1], -u[0])
-    out = [(x, y)]
-    for a in (-0.5, 0.5):
-        for b in (-0.5, 0.5):
-            out.append((x + u[0] * length * a + v[0] * width * b, y + u[1] * length * a + v[1] * width * b))
-            out.append((x + u[0] * length * a * 0.5 + v[0] * width * b * 0.5, y + u[1] * length * a * 0.5 + v[1] * width * b * 0.5))
+    na, nb = max(1, math.ceil(length / step)), max(1, math.ceil(width / step))
+    out = []
+    for i in range(na + 1):
+        for j in range(nb + 1):
+            a, b = length * (i / na - 0.5), width * (j / nb - 0.5)
+            out.append((x + u[0] * a + v[0] * b, y + u[1] * a + v[1] * b))
     return out
 
 
@@ -60,10 +78,10 @@ def yard(key, zat):
         return []
     out = []
     for _, x, y, length, width, height, heading, kind in OAHU:
-        if kind == FLOATING:
+        if kind in (FLOATING, QUAY):
             ground = 0.0
         else:
-            under = [zat(px, py) for px, py in corners(x, y, length, width, heading)]
-            ground = min(under) if kind == SHOP else max(under)
+            pad = 24 if kind == SHOP else 0
+            ground = max(zat(px, py) for px, py in footprint(x, y, length + pad, width + pad, heading))
         out.append([round(x, 1), round(y, 1), round(ground, 1), length, width, height, heading, kind])
     return out
