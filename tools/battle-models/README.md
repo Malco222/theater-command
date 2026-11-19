@@ -437,7 +437,8 @@ is hers:
   (`_he111_canopy`; `opening_plain`: an open position with no instrument panel), both hands on his gun. The bath
   under her has four round windows a side and a gun out of each end; the men who lay in it are not modelled, since
   nothing of them was seen from outside.
-- her coat is a splinter of two dark greens parted by straight lines (`splinter`, as the Me 262's wedges: bands
+- her coat is a splinter of two dark greens close together (343A2E, 404A36: the art director, "one very dark green, with
+  the splinter showing only up close or in raking light"), parted by straight lines (`splinter`, as the Me 262's wedges: bands
   across her fuselage, wedges out along each wing and tailplane, one line across her fin) over pale blue, which
   begins low on her sides (`under_from`). Crosses on her wings and fuselage only, and a plain fin (the art
   director). No names, code letters or unit marks; no aerial wire.

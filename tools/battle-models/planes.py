@@ -1007,7 +1007,9 @@ EXTRA_PLANES["He111"] = {
             (0, -6.756, -8.622, 2.0, 0.14), (0, -6.871, -8.543, 2.2, 0.12), (0, -7.023, -8.44, 2.4, 0.1), (0, -7.12, -8.373, 2.5, 0.09), (0, -7.235, -8.295, 2.6, 0.075),
             (0, -7.386, -8.167, 2.7, 0.055), (0, -7.495, -8.077, 2.75, 0.04), (0, -7.671, -7.901, 2.8, 0.01)],
     "patch": 1.0, "graded": _he111_coat, "grain": {"wing": 0.2, "tail": 0.2}, "under_from": -0.5,
-    "colours": {"upper": "3E4638", "upper2": "56604A", "under": "8FB0BF", "nose": "3E4638", "boss": "2E332A"},
+    # (her two greens close together and dark: the art director, 2026-11-19, "her upper coat reads as one very dark
+    #  green, with the splinter showing only up close or in raking light")
+    "colours": {"upper": "343A2E", "upper2": "404A36", "under": "8FB0BF", "nose": "343A2E", "boss": "2A2F26"},
     # (each engine: its airscrew 2.58 out and 0.4 below her middle line; the nacelle from its spinner back over and
     #  under her wing to her trailing edge, deepest where its wheel's doors are)
     "engines": [(2.583, 4.23, -0.4, False, 4.3)],
