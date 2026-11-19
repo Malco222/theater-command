@@ -105,6 +105,52 @@ three pieces written here are built from those sixteen bars:
 desk in every section (`*_balance.txt`), a picture of each piece (`*_picture.png`), `summary.json` and
 `brian_songs.json`. Brian's ear is the test.
 
+## Four more cues (19 November 2026): a battle's end, before contact, the war map
+
+Made in the thread "Add music and richer battle sound", on Brian's "all 4" to the coordinator's list (item 4: a
+second pass on battle sound plus original score cues). Same orchestra, same tools, all built on The Final Salute.
+To listen and stamp: the [listening page](https://claude.ai/artifact/EjLienLHJN29HKCPve1W4U) (it also has the
+new battle sound). Not wired into either game until Brian stamps them.
+
+| File | Title | Plays | Key, tempo | Length | Loudness |
+|---|---|---|---|---|---|
+| `battle_won` | The Field Is Ours | Once, when a battle is won (battle-mix.md section 6, the end) | F major; 100 slowing to 80 | 0:16 with its ring | -14 LUFS |
+| `battle_lost` | The Line Gives Way | Once, when a battle is lost | F minor; 72 slowing to 54 | 0:15 with its ring | -17 LUFS |
+| `zero_hour` | Zero Hour | Before contact in a battle, looping, until the first shot; then The Advance or Trench Line | A minor, 84 | 1:31, loops | -16.7 LUFS |
+| `long_front` | The Long Front | Campaign map at war, taking turns with The Silent Front and Standing To | C minor, 66 | 2:25, loops | -16.8 LUFS |
+
+How each grows from The Final Salute:
+
+- **The Field Is Ours:** a drum roll on C, then horns with trumpets an octave above play the call turned to the
+  major on dotted beats (C, F, E, D). The tune's long D flat, which sighs to C in Brian's song, here climbs: D flat
+  to E flat to F, over D flat and E flat chords into F major, everyone at full strength.
+- **The Line Gives Way:** one horn plays the call slowly (C, F, E, D flat), the trombones an octave under, and stops
+  on C without going home. The violins come in on the long D flat and let it sigh to C, as in Brian's song, over
+  a chord that does not rest. One plucked F closes it.
+- **Zero Hour:** a slow heartbeat on bass drum and timpani, cellos and basses ticking in threes, threes and twos, a
+  thin high tremolo. Muted horns (trombones an octave under) play the call in A minor (E, A, G sharp, F); the
+  cellos take the head of the tune, open horns answer with its close, four chords climb to E with the drums
+  hammering, then it drops back to the heartbeat and a clarinet plays the call low. It waits on A, the dominant of
+  The Advance's D minor, so first contact resolves into it.
+- **The Long Front:** a harp over low strings; the cellos play the tune in C minor, low; the horns take it an
+  octave up with the violins answering; the whole orchestra plays it broad in E flat major (the long note on a
+  bright C flat chord, as The Map Room turns it); then a clarinet and an oboe play the call quietly and the harp
+  brings it round. No drums.
+
+What was measured (in `checks/`: `<name>_balance.txt`, `<name>_picture.png`, `<name>.json`):
+
+- Harmony and range checker: no warnings on any of the four.
+- The tune leads in every section. The Field Is Ours: trumpets -15.4 and horns -16.0 LUFS against strings -19.5 to
+  -21. The Line Gives Way: the single horn -21.5, the violins next at -25.6.
+- Limiter: none on the stingers; 1.1 dB on Zero Hour (its four chords only), 0.7 dB on The Long Front (the major
+  section). True peaks -1.1 dB or lower.
+- Loop joins (`seamcheck.py`, where a click scores above 9): Zero Hour 5.6, The Long Front 3.6.
+- The victory is 3 dB louder than the defeat, on purpose.
+
+Rebuild one with `python3 source/pieces/<name>.py <out folder>` (they are not in `make_all.py`); the stingers
+render without looping and with a 4.5 s tail. The muted horn in Zero Hour uses the sample library's
+`FHornMute.sfz`, set up in the piece itself.
+
 ## Folders
 
 - `mp3/`: for listening (the three written here at 192 kbps, Brian's five at 320 kbps); `the_salute.mp3`
@@ -133,3 +179,8 @@ Nothing here is in either game yet. When Brian passes the pieces:
    Standing To; fighting The Advance then Trench Line.
 3. Volume (ruling 142, music near -27 LUFS under play): these files are about 6 dB quieter than the old
    theme, so `MusicVolume` near 0.28 rather than 0.15; the opening screen louder.
+4. The four cues of 19 November, once stamped: `battle_won.wav` and `battle_lost.wav` become the battle's end
+   stingers in place of the pack's `victory` and `defeat` (`mix.json` `music.end.stinger`); `zero_hour.wav` plays
+   before contact and crossfades into `advance` or `trench_line` over 3 s at first contact; `long_front.wav` joins
+   the war-map list after `silent_front` and `standing_to`. The proposal is in
+   `../sound/soundscapes/mix-proposal.md`; `mix.json` is not changed until Brian approves.
