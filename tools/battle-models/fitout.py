@@ -878,6 +878,30 @@ def holed_flaps(m, f, s, G, hull):
                     m.disc(port(p) + port(out) * 0.005, port(out), 0.032, "engine", 8)
 
 
+def dive_brakes(m, f, s, G, hull):
+    """A dive bomber's brakes, from `brakes` in her numbers (from, to out along her wing; where along its chord the
+    slat's middle lies; half its breadth; how far it hangs below her skin): a slat under each wing on its brackets.
+    It lay edge on to the air until the dive, then turned square to it."""
+    if not s.get("brakes"):
+        return
+    y0, y1, c, half, drop = s["brakes"]
+    n = 6 if m.fine else 2
+    for hand in (-1.0, 1.0):
+        W = G["Wing"](s["wing"], hand)
+        m.use(("wing.port" if hand < 0.0 else "wing.starboard") if y0 > f.y_cut else "plane")
+        rings = []
+        for k in range(n + 1):
+            y = y0 + (y1 - y0) * k / n
+            p, out = port(W.at(y, c, False)), port(W.out(y, c, False))
+            mid = p + out * drop
+            rings.append([mid + X * half - out * 0.012, mid - X * half - out * 0.012, mid - X * half + out * 0.012, mid + X * half + out * 0.012])
+            if m.fine and k % 3 == (1 if k < n else 0) or k in (0, n):
+                for dx in (0.6 * half, -0.6 * half):
+                    m.rod(p + X * dx - out * 0.01, mid + X * dx, 0.013, "under", sides=5)
+        m.skin(rings, "under", (True, True), False)
+    m.use("plane")
+
+
 def rivets(m, f, s, G, hull):
     """Her skin's panels: rows of rivets, as small dark dots a shade under her paint, and the joints between panels, as
     fine lines a shade under that. Round the fuselage at every frame and along her stringers; along the spars and the
@@ -1419,5 +1443,6 @@ def fit(m, f, s, G, hull):
     fasteners(m, f, s, G, hull)
     rivets(m, f, s, G, hull)
     holed_flaps(m, f, s, G, hull)
+    dive_brakes(m, f, s, G, hull)
     boots(m, f, s, G, hull)
     lamps(m, f, s, G, hull)

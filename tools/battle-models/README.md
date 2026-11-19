@@ -368,6 +368,28 @@ numbers add:
   of `f.stains` may end with how strong it is and how broad against an exhaust's. A jet's soot lies over her rivets
   too.
 
+**The `Val`** (the D3A1, Japan's carrier dive bomber) is laid out again to the same standard, the first of the
+carrier machines. Her numbers stand in `planes.py` where her old ones did, measured from a three-view (Wikimedia
+Commons, "Aichi D3A1 Val - 3 vistas.svg", MMK-Draw, CC BY-SA 4.0; measured, not traced; nothing of the drawing is
+kept but its measures). 43,000 triangles. What is hers:
+
+- a round cowling a little broader than the fuselage behind it, the oil cooler's bath under it, the bare boss of
+  her airscrew (she had no spinner); a deep fuselage with a level deck; the elliptical wing, flat out to her legs
+  and rising beyond them, its trailing edge run into her side in a fillet; the long low fillet ahead of her fin (the
+  first sections of `fin`, each a little higher and beginning further aft); a tailplane as rounded as her wing.
+- her greenhouse (`_val_canopy`, in the fighters' `canopy` form): a windscreen with a flat pane between two posts
+  and the tube of her bomb sight through it; the pilot's hood, the fixed middle with her mast, and the gunner's hood,
+  each a step lower than the one before, as they slid one under the other; a glazed end that falls to his gun. One
+  `opening` runs under all of it, from the pilot's panel to behind the gunner. The glazed end is kept as wide as the
+  cockpit's rim until the opening ends, or the rim's padding shows outside the glass.
+- her legs are fixed: each a trouser and a long spat (`extras` bodies in her coat), the tyre showing under it.
+- `brakes` (`fitout.dive_brakes`; any machine may take the key): the slat under each wing that held her speed in
+  the dive, (from, to out along her wing; where along its chord its middle lies; half its breadth; how far it hangs
+  below her skin), on brackets.
+- her pilot has his hands on stick and throttle; her gunner faces aft with both hands on his gun's grips
+  (`fitout.rear_gunner`, the fighters thread's: every seat that faces aft with a free gun behind it).
+- her pale grey, black cowling and plain red discs are as they were. No names, numbers or unit marks; no aerial wire.
+
 **The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, twelve more entries in
 `EXTRA_PLANES`. Paints and first years are the art director's rulings of that day; the file's `year` is the first
 year a nation flies her (none: from the start), `tech` the rules' technology she needs, `tag` the model tag the

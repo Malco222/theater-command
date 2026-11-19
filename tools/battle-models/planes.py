@@ -432,8 +432,8 @@ EXTRA_PLANES["Kate"] = {
 _VAL_HOOD = [(1.28, 0.60, 0.378, 0.908, 0.994), (0.99, 0.594, 0.378, 0.908, 0.994), (0.70, 0.588, 0.378, 0.905, 0.994)]
 _VAL_MID = [(0.72, 0.588, 0.375, 0.88, 0.950), (0.40, 0.584, 0.375, 0.88, 0.950), (0.13, 0.58, 0.375, 0.88, 0.950)]
 _VAL_REAR = [(0.15, 0.578, 0.372, 0.835, 0.927), (-0.058, 0.576, 0.372, 0.835, 0.927), (-0.245, 0.573, 0.372, 0.835, 0.927), (-0.49, 0.57, 0.372, 0.835, 0.925)]
-_VAL_END = [(-0.47, 0.57, 0.369, None, 0.90), (-0.60, 0.575, 0.36, None, 0.867), (-0.70, 0.58, 0.345, None, 0.796), (-0.80, 0.585, 0.32, None, 0.729),
-            (-0.87, 0.59, 0.25, None, 0.68), (-0.92, 0.595, 0.14, None, 0.645), (-0.945, 0.60, 0.04, None, 0.625)]
+_VAL_END = [(-0.47, 0.57, 0.369, None, 0.90), (-0.60, 0.575, 0.366, None, 0.867), (-0.70, 0.58, 0.36, None, 0.796), (-0.80, 0.585, 0.348, None, 0.729),
+            (-0.87, 0.59, 0.27, None, 0.68), (-0.92, 0.595, 0.16, None, 0.645), (-0.945, 0.60, 0.04, None, 0.625)]
 _VAL_SCREEN = (1.56, 0.13, 1.33, 0.985)                     # (the foot of her windscreen's front pane, half its width, its head, and the top there)
 _VAL_POST = 0.15                                            # (her windscreen's posts stand this far out at its head)
 
@@ -494,7 +494,7 @@ EXTRA_PLANES["Val"] = {
     "hoods": fighters.hood_of([(_VAL_SCREEN[0], 0.72, _VAL_SCREEN[1], 0.01), (_VAL_SCREEN[2], 0.62, 0.366, _VAL_SCREEN[3] - 0.62)]
                               + [(x, sl, w, t - sl) for x, sl, w, sh, t in _VAL_HOOD[:2] + _VAL_MID[:2] + _VAL_REAR + _VAL_END[1:]]),
     "canopy": _val_canopy,
-    "opening": (1.33, -0.8, 52.0),                          # (her cockpit, open under the glass from her panel to behind her gunner)
+    "opening": (1.28, -0.75, 52.0),                         # (her cockpit, open under the glass from her panel to behind her gunner)
     "frames_paint": "upper", "lines": (0.6, 0.45),
     # (her wing: an ellipse, like no other dive bomber's; flat out to her legs, six and a half degrees of dihedral beyond
     #  them; sixteen per cent thick at the root, ten at the fold; its trailing edge swept back into her side in the fillet)
@@ -508,6 +508,7 @@ EXTRA_PLANES["Val"] = {
              (6.6, 1.299, 0.137, 0.11, 0.136), (6.8, 1.209, 0.246, 0.133, 0.112), (6.9, 1.164, 0.317, 0.145, 0.097), (7.0, 1.111, 0.403, 0.156, 0.078),
              (7.05, 1.087, 0.459, 0.162, 0.066), (7.1, 1.059, 0.53, 0.168, 0.05), (7.15, 1.014, 0.635, 0.174, 0.03), (7.183, 0.88, 0.78, 0.177, 0.01)],
     "aileron": (0.5, 0.92, 0.8), "flap": (0.14, 0.5, 0.815),
+    "brakes": (2.47, 4.2, 0.3, 0.13, 0.09),                  # (the slat under each wing, outboard of her legs, that held her speed in the dive)
     "tail": [(0.0, -4.3, -6.1, 0.0, 0.17), (0.3, -4.337, -6.116, 0.0, 0.165), (0.6, -4.43, -6.139, 0.0, 0.155), (0.9, -4.516, -6.113, 0.0, 0.142),
              (1.2, -4.614, -6.068, 0.0, 0.126), (1.5, -4.749, -6.008, 0.0, 0.108), (1.8, -4.929, -5.921, 0.0, 0.086), (1.98, -5.056, -5.832, 0.0, 0.07),
              (2.1, -5.165, -5.727, 0.0, 0.055), (2.14, -5.217, -5.674, 0.0, 0.045), (2.18, -5.277, -5.584, 0.0, 0.03), (2.212, -5.4, -5.47, 0.0, 0.01)],
@@ -532,7 +533,7 @@ EXTRA_PLANES["Val"] = {
                # (her bomb, and the crutch that swung it clear of her airscrew)
                ("body", ([(1.73, -0.93, 0.03, 0.03), (1.62, -0.93, 0.13, 0.13), (1.45, -0.93, 0.19, 0.19), (1.2, -0.93, 0.2, 0.2), (0.75, -0.93, 0.2, 0.2),
                           (0.5, -0.93, 0.14, 0.14), (0.2, -0.93, 0.06, 0.06), (0.0, -0.93, 0.03, 0.03)], 0.0, 2.0, "bomb")),
-               ("rod", ((0.34, 0.0, -0.93), (-0.05, 0.0, -0.93), 0.19, 0.19, "bomb")),
+               ("rod", ((0.26, 0.0, -0.93), (-0.03, 0.0, -0.93), 0.16, 0.16, "bomb")),
                ("rod", ((1.5, 0.14, -0.69), (1.05, 0.2, -0.9), 0.016, 0.016, "leg")),
                # (her rear gunner's gun, out through the end of his glass)
                ("rod", ((-0.72, 0.0, 0.665), (-1.42, 0.0, 0.7), 0.022, 0.018, "steel"))],
