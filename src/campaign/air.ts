@@ -25,6 +25,7 @@ import { hasTech } from './tech';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { storyAir, storyEdge } from './stories';
+import { nameLosses, nameSide } from './hulls';
 import { groundRules } from './ground';
 import { bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
 import { bombingFor, raidsMul, seat } from './difficulty';
@@ -1482,6 +1483,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       (x.seen ??= {})[nat] = g.turn;
       for (const y of a.att) { const c = carrierOf(g, y.f); if (c && atSea(c)) (c.seen ??= {})[x.nat] = g.turn; }
     });
+    // The battleships and carriers that went down, by name, for the card that marks them (a record only).
+    struck.forEach((x, i) => nameSide(g, x, `air:${(g.flags.airBattles ?? 0) + 1}:${i}`));
     shipsSunk = shipCount(total);
     value += SHIPS.reduce((s, c) => s + total[c] * CARRIERS.strike.value[c], 0);
     const whom = a.ships.length === 1 ? `the ${a.ships[0].name}` : `the ${a.ships.length} fleets`;
@@ -1579,6 +1582,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     for (const f of g.fleets) {
       if (f.zone !== target || !atSea(f) || !atWar(g, nat, f.nat) || !surfaceShips(f)) continue;
       const s = sinkShips(f, frac, rng, [...SURFACE]);
+      nameLosses(g, f.nat, f.name, s, `shipping:${(g.flags.airBattles ?? 0) + 1}:${f.id}`); // their names are gone with them (a record only)
       f.ready = Math.max(0, f.ready - 0.1);
       for (const c of SURFACE) sunk[c] += s[c];
     }
