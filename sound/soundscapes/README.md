@@ -2,9 +2,10 @@
 
 Made 19 November 2026 in the thread "Add music and richer battle sound", on Brian's "all 4" to the coordinator's
 list (item 4: a second pass on battle sound plus original score cues; the brief asked for distant artillery
-rumble, aircraft flybys and ship guns). **Not wired into either game, and `mix.json` is unchanged**, until Brian
-stamps them on the [listening page](https://claude.ai/artifact/EjLienLHJN29HKCPve1W4U). What would change in
-`mix.json` if he passes them is in `mix-proposal.md`.
+rumble, aircraft flybys and ship guns). **Approved:** Brian stamped all seven Good on the
+[listening page](https://claude.ai/artifact/EjLienLHJN29HKCPve1W4U), 19 Nov 13:01 to 13:03Z. The three beds are in
+`../battle-pack/` and play by `../mix/mix.json` v3; the four scenes are mock-ups for the ear and are not used in a
+game. What changed in `mix.json` is in `mix-proposal.md`.
 
 ## What is here
 

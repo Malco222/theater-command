@@ -1,4 +1,12 @@
-# Mix proposal: the new cues and layers (not applied)
+# Mix proposal: the new cues and layers (APPLIED as mix.json v3, 19 Nov 2026)
+
+**Applied 19 November.** Brian stamped all thirteen Good on the listening page (12:59 to 13:03Z) and wrote "ok all
+good to go". `../mix/mix.json` is now v3 with items 1 to 4 and 6, item 5's debris timing, and the air battles
+thread's draft 5. The three beds are in `../battle-pack/` (221 files). Not done: item 5's first ask, a heavier real
+take for the pack's `battle_loop` (it needs a recording; the front rumble now sits under it). v2 is kept beside it
+as `../mix/mix-v2.json`.
+
+The proposal as written, for the record:
 
 Written 19 November 2026 in the thread "Add music and richer battle sound". **Nothing here is in `../mix/mix.json`
 yet.** Each item goes in only if Brian stamps the sound it uses Good on the
