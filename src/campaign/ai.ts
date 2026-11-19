@@ -22,7 +22,7 @@ import { shoreOpen } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, descentAsks, doorQuay, freed, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { HOP_AIMS, firstOnRun, hopAims, hopShores, laneOn, pacificGround } from './pacific';
-import { beyondEurope, enemyAtTheDoor, overseasOf, shoreOf, type OverseasRules } from './world';
+import { beyondEurope, enemyAtTheDoor, oceanShares, overseasOf, shoreOf, type OverseasRules } from './world';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { frontArmys, lineAny, lineGives, lineLeaves, lineShut } from './line';
@@ -511,8 +511,11 @@ function mainCampaign(g: Game, nat: string): void {
   bound = ph?.strict ? new Set(ph.targets ?? []) : null;
   // (By the book, a raid whose months are over comes back inside the record's line, before the month's fighting and after it.)
   lineHome(g, nat, g.turn);
-  try { fight(g, nat, ph, posture); lineHome(g, nat, g.turn + 1); } finally { entrusted = new Set(); massed = new Set(); given = new Set(); quiet = false; single = false; waves = 2; bound = null; }
+  try { fight(g, nat, ph, posture); lineHome(g, nat, g.turn + 1); } finally { endStaffMonth(); }
 }
+
+/** The staff's month is over: the corps it massed, entrusted and gave are free again, and the phase's manner is forgotten. */
+export function endStaffMonth(): void { entrusted = new Set(); massed = new Set(); given = new Set(); quiet = false; single = false; waves = 2; bound = null; }
 
 /**
  * By the book, when a raid's months are over its corps go back inside the record's line (ruling 215(c)): every corps
@@ -1461,7 +1464,7 @@ function crossSea(g: Game, nat: string, slot: number): void {
  * the way to them too dangerous, to the harbour where the army is built up; and the next to sail are brought to the quay by
  * rail. It runs after the month's landings (`descent`), which have first call on the ships.
  */
-function ferry(g: Game, nat: string): void {
+export function ferry(g: Game, nat: string): void {
   const O = overseasOf(g, nat);
   if (!O) return;
   const n = g.nations[nat];
@@ -1526,15 +1529,18 @@ function ferry(g: Game, nat: string): void {
   // The force for an enemy on its own side of the ocean is no part of the army that sails: the corps at that quay, up
   // to the landing force, stay there (Version 81).
   const door = doorQuay(g, nat);
+  // (The formation a run of the Pacific's names is that run's, never the door's: ruling 190, point 5. None with the far side off.)
+  const reserved = new Set(oceanShares(g, nat, O).filter(([o, s]) => s > 0 && o !== 'atlantic').map(([o]) => firstOnRun(o)).filter((x): x is string => !!x));
+  const free = (c: Corps): boolean => !c.elite || !reserved.has(c.elite);
   if (door) {
     const want = seaFoe(g, nat)?.L.force ?? 0;
-    const kept = door.units.filter((x) => x.nat === nat && !x.dead && x.kind !== 'fort' && x.kind !== 'eng').sort(byWorth).slice(0, want);
+    const kept = door.units.filter((x) => x.nat === nat && !x.dead && x.kind !== 'fort' && x.kind !== 'eng' && free(x)).sort(byWorth).slice(0, want);
     for (const u of kept) massed.add(u.id);
     // And it has first call on the army at home: before any corps is brought down to the ocean quay, the infantry
     // it still wants comes to its own quay by rail (never a corps that stands alone in a harbour on the coast watch).
     const watch = coastWatch(g, nat);
     const lone = (c: Corps): boolean => g.regions[c.reg].name in watch && g.regions[c.reg].units.filter((u) => u.nat === nat && u.kind !== 'fort').length < 2;
-    const pool = home().filter((c) => c.kind === 'inf' && !c.hold && c.reg !== door.id && !c.airborne && !c.town && c.joint === undefined && c.str >= 0.6 && c.ap >= 4 && !massed.has(c.id)).sort(byWorth);
+    const pool = home().filter((c) => c.kind === 'inf' && !c.hold && c.reg !== door.id && !c.airborne && !c.town && c.joint === undefined && c.str >= 0.6 && c.ap >= 4 && !massed.has(c.id) && free(c)).sort(byWorth);
     let have = kept.length;
     for (const c of pool) {
       if (have >= want || friendlyUnits(g, door, nat).length >= STACK) break;
@@ -1545,6 +1551,7 @@ function ferry(g: Game, nat: string): void {
   // before any other corps, and on no other run while that one is worked: the Marines. None with the far side off.)
   const runs = oceanRuns(g, nat);
   const leads = new Set(runs.map((r) => firstOnRun(r.ocean)).filter((x): x is string => !!x));
+  const quays = new Set(runs.map((r) => r.from.id));
   for (const run of runs) {
     const key = `fy:${nat}:${run.ocean}`, at = `fyAt:${nat}:${run.ocean}`;
     if (g.flags[at] !== g.turn) { g.flags[at] = g.turn; g.flags[key] = Math.min(O.bank, (g.flags[key] ?? 0) + run.share * n.sealift); }
@@ -1567,21 +1574,27 @@ function ferry(g: Game, nat: string): void {
       spare--;
       more--;
       went(c);
-      // The first to cross is news for everyone; after that, for the player whose war they have come to.
-      const first = !g.flags[`fy:first:${nat}`];
-      g.flags[`fy:first:${nat}`] = 1;
+      // The first to cross is news for everyone; after that, for the player whose war they have come to. (Only a crossing
+      // of the Atlantic sends the fleet after the army, `follow`: one to the Pacific's lane marks itself apart.)
+      const first = !g.flags[`fy:first:${nat}`] && !g.flags[`fy:pac:${nat}`];
+      g.flags[run.ocean === 'atlantic' ? `fy:first:${nat}` : `fy:pac:${nat}`] = 1;
       if (first) headline(g, 'event', `The first ${n.adj} troops to cross the ocean come ashore at ${to.name}: ${c.name}. More will follow as fast as the ships can carry them.`, nat, to.id);
       else if (g.human !== null && (allied(g, g.human, nat) || atWar(g, g.human, nat)) && allied(g, g.human, to.ctrl)) headline(g, 'info', `${c.name} of the ${n.adj} army has landed at ${to.name}.`, nat, to.id);
     }
     // The next to sail come down to the quay: as many as the run will carry in the next two months, and never the guard.
+    // (A corps of another run's own formation is not this quay's: it is neither counted nor kept here, and its own
+    // run brings it to its quay. The formation a run of the Pacific's names comes down first, whoever already stands
+    // on the quay, until one of it is there: ruling 190, point 5.)
     const want = Math.min(spare, Math.ceil(2 * run.share * n.sealift));
-    let have = run.from.units.filter((u) => u.nat === nat && !u.dead && !u.hold && u.kind !== 'fort' && u.kind !== 'eng').length;
-    for (const u of run.from.units) if (u.nat === nat && !u.hold) massed.add(u.id);
-    if (have >= want) continue;
-    const pool = home().filter((c) => !c.hold && c.reg !== run.from.id && !c.airborne && !c.town && c.joint === undefined && c.str >= 0.6 && c.ap >= 4 && !massed.has(c.id) && !theirs(c)).sort(inOrder);
+    let have = run.from.units.filter((u) => u.nat === nat && !u.dead && !u.hold && u.kind !== 'fort' && u.kind !== 'eng' && !theirs(u)).length;
+    for (const u of run.from.units) if (u.nat === nat && !u.hold && !theirs(u)) massed.add(u.id);
+    let lacks = !!lead && !run.from.units.some((u) => u.nat === nat && !u.dead && u.elite === lead);
+    if (have >= want && !lacks) continue;
+    // (Nor is a corps taken from another run's quay, but for this run's own formation: one run's corps are not the other's.)
+    const pool = home().filter((c) => !c.hold && c.reg !== run.from.id && (!quays.has(c.reg) || (!!lead && c.elite === lead)) && !c.airborne && !c.town && c.joint === undefined && c.str >= 0.6 && c.ap >= 4 && !massed.has(c.id) && !theirs(c)).sort(inOrder);
     for (const c of pool) {
-      if (have >= want || friendlyUnits(g, run.from, nat).length >= STACK) break;
-      if (railToward(g, c, run.from) && c.reg === run.from.id) { massed.add(c.id); have++; }
+      if (friendlyUnits(g, run.from, nat).length >= STACK || (have >= want && !(lacks && c.elite === lead))) break;
+      if (railToward(g, c, run.from) && c.reg === run.from.id) { massed.add(c.id); have++; if (c.elite === lead) lacks = false; }
     }
   }
   if (g.flags[`fy:first:${nat}`]) follow(g, nat, O);

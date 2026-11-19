@@ -1956,9 +1956,10 @@ export function oceanRuns(g: Game, nat: string): OceanRun[] {
         if (d[q[i]] >= 3) continue;
         for (const j of g.regions[q[i]].nb) if (d[j] < 0 && allied(g, nat, g.regions[j].ctrl)) { d[j] = d[q[i]] + 1; q.push(j); }
       }
+      // (A run of the Pacific's puts its army down only on its own lane and side of the equator, near its base too.)
       for (const id of q) {
         const p = g.regions[id];
-        if (p.port && p.seas.length > 0 && !hostileUnits(g, p, nat).length && safe(p) && !to.includes(p)) to.push(p);
+        if (p.port && p.seas.length > 0 && (ocean === 'atlantic' || acrossOcean(g, ocean, p)) && !hostileUnits(g, p, nat).length && safe(p) && !to.includes(p)) to.push(p);
       }
     }
     if (!to.length) continue;

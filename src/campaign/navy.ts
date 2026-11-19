@@ -1966,32 +1966,44 @@ function coverHops(g: Game, nat: string, orders?: { fleet: string }[], cover?: {
 
 /**
  * The fleet goes to the beach it covers (ruling 200(j); the Pacific planner's paper 14, section 4, "Which fleet goes
- * where"; rider b585 to ruling 234, item 1(b)). When the staff has named a shore of the Pacific's for a hop and the sea
- * off it lies beyond the reach of every fleet of its own that could cover it, the strongest of those moves its base to
- * the harbour of its side nearest the beach that can base a fleet within three seas of it (its reach from there takes
- * in the sea off the beach). It spends that month in harbour there, and from the next it covers the crossing as a
- * patrol fleet does. Between landings, with no named beach of its own left in its reach, it goes back to the base it
- * had (the fleet table's, by date: ruling 189); a dated move of the book that takes it elsewhere meanwhile stands.
- * A fleet that may cover: warships on the surface, fit for sea, free (no order of the plan or the book, not tied to a
- * station, not a raider) and based on the Pacific's ground. Only for the side against the power, never a player's,
- * and nothing while the far side is off (pacific.ts `coversBeaches`). Returns the fleets covering a beach, and those
- * that moved their base this month.
+ * where"; rider b585 to ruling 234, item 1(b)). When the staff has named a shore of the Pacific's for a hop, the
+ * fleets of its own that could cover it and have the sea off the beach in their reach cover the crossing as patrol
+ * fleets do, whatever their own duty. Where the sea lies beyond the reach of every one of them, the strongest moves its
+ * base to the harbour of its side nearest the beach that can base a fleet within three seas of it (its reach from
+ * there takes in the sea off the beach); it spends that month in harbour there, and from the next it covers the
+ * crossing. Between landings, with no named beach of its own left in its reach, it goes back to the base it had (the
+ * fleet table's, by date: ruling 189). While a named beach is still in its reach it stays, a worn one resting in
+ * harbour there; an order of the plan or the book that month is carried out first, and a dated move of the book that
+ * takes it elsewhere meanwhile stands. One the enemy drives from its cover base covers from the harbour it is driven
+ * to, and still goes home when its beaches are done. A fleet that may cover: warships on the surface, fit for sea,
+ * free (no order of the plan or the book, not tied to a station, not a raider) and based on the Pacific's ground; a
+ * beach, a shore on the Pacific's ground (the plan's landings elsewhere are covered by the admirals there). Only for
+ * the side against the power, never a player's, and nothing while the far side is off (pacific.ts `coversBeaches`).
+ * Returns the fleets covering a beach, and those that moved their base this month.
  */
 function coverBases(g: Game, nat: string, orders?: { fleet: string }[]): { covers: Set<number>; moved: Set<number> } {
   const covers = new Set<number>(), moved = new Set<number>();
   const mine = fleetsOf(g, nat);
   const was = (f: Fleet): number | undefined => g.flags[`fl:cover:${f.id}`];
   const forget = (f: Fleet): void => { delete g.flags[`fl:cover:${f.id}`]; delete g.flags[`fl:coverAt:${f.id}`]; };
-  // (A dated move of the book that took a covering fleet elsewhere stands: it is the fleet table's base now.)
-  for (const f of mine) { const at = g.flags[`fl:coverAt:${f.id}`]; if (at !== undefined && f.base !== at - 1) forget(f); }
+  const ordered = (f: Fleet): boolean => !!orders?.some((o) => o.fleet === f.name);
+  // A covering fleet the book moved meanwhile stands where the book put it: that is the fleet table's base now. One
+  // driven from its cover base (a harbour lost) covers from where it lies, and still goes home when its beaches are done.
+  for (const f of mine) {
+    const at = g.flags[`fl:coverAt:${f.id}`];
+    if (at === undefined || f.base === at - 1) continue;
+    if (bookMoved(g, nat, f)) forget(f);
+    else g.flags[`fl:coverAt:${f.id}`] = f.base + 1;
+  }
   if (!coversBeaches(g, nat)) {
-    for (const f of mine) if (was(f) !== undefined) { const r = g.regions[was(f)! - 1]; forget(f); if (r && rebase(g, f, r)) moved.add(f.id); }
+    for (const f of mine) if (was(f) !== undefined && !ordered(f)) { const r = g.regions[was(f)! - 1]; forget(f); if (r && rebase(g, f, r)) moved.add(f.id); }
     return { covers, moved };
   }
-  const fit = (f: Fleet): boolean => surfaceShips(f) > 0 && f.duty !== 'raid' && !f.tied && !orders?.some((o) => o.fleet === f.name) && f.ready >= 0.5 && f.base >= 0 && pacificGround(g, g.regions[f.base]);
-  // The sea off each named beach, in the order the beaches were named, with the first beach named on it.
+  const fit = (f: Fleet): boolean => surfaceShips(f) > 0 && f.duty !== 'raid' && !f.tied && !ordered(f) && f.ready >= 0.5 && f.base >= 0 && pacificGround(g, g.regions[f.base]);
+  // The sea off each named beach of the Pacific's, in the order the beaches were named, with the first beach named on it.
   const beaches: { z: number; to: Region }[] = [];
   for (const { from, to } of hopAims(g, nat)) {
+    if (!pacificGround(g, to)) continue;
     const path = seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: true });
     const z = path?.length ? path[path.length - 1] : -1;
     if (z >= 0 && !beaches.some((b) => b.z === z)) beaches.push({ z, to });
@@ -1999,7 +2011,7 @@ function coverBases(g: Game, nat: string, orders?: { fleet: string }[]): { cover
   for (const { z, to } of beaches) {
     const can = mine.filter(fit);
     const reaching = can.filter((f) => fleetReach(g, f).includes(z));
-    if (reaching.length) { for (const f of reaching) if (was(f) !== undefined) covers.add(f.id); continue; }
+    if (reaching.length) { for (const f of reaching) covers.add(f.id); continue; }
     for (const f of can.filter((x) => !covers.has(x.id)).sort((a, b) => fleetPower(g, b) - fleetPower(g, a) || a.id - b.id)) {
       const r = coverBase(g, f, z);
       if (!r) continue;
@@ -2013,15 +2025,29 @@ function coverBases(g: Game, nat: string, orders?: { fleet: string }[]): { cover
       break;
     }
   }
-  // Between landings: a fleet whose beaches are all taken or given up goes back to the base it had.
+  // Between landings: a fleet with no named beach left in its reach goes back to the base it had.
   for (const f of mine) {
     const at = was(f);
-    if (at === undefined || covers.has(f.id)) continue;
+    if (at === undefined || covers.has(f.id) || ordered(f)) continue;
+    const reach = fleetReach(g, f);
+    if (beaches.some((b) => reach.includes(b.z))) continue;
     const r = g.regions[at - 1];
     forget(f);
     if (r && r.id !== f.base && rebase(g, f, r)) { moved.add(f.id); headline(g, 'info', `The ${f.name} returns to ${r.name}.`, nat, r.id); }
   }
   return { covers, moved };
+}
+
+/**
+ * Whether the book moved the fleet's base this month (stations.ts, `bookFleets`): a row with a sea that took it to a
+ * harbour within reach of its sea (it keeps its own base to go back to), or a row that is a move of base (marked done
+ * this month).
+ */
+function bookMoved(g: Game, nat: string, f: Fleet): boolean {
+  if (f.bookBase) return true;
+  const key = `bf:${nat}:${f.name}:`;
+  for (const k in g.flags) if (k.startsWith(key) && g.flags[k] === g.turn) return true;
+  return false;
 }
 
 /**

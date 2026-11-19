@@ -7,13 +7,14 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { atWar, createGame, declareWar } from '../src/campaign/game';
+import { endStaffMonth, ferry } from '../src/campaign/ai';
+import { atWar, createGame, declareWar, relocate } from '../src/campaign/game';
 import { HISTORY, setStop } from '../src/campaign/history';
 import { NAVY, fleetReach, navalAI, seaPath } from '../src/campaign/navy';
 import { PACIFIC, coversBeaches, firstOnRun, hopShores, laneOn, onRun, pacificFreed, pacificRuns, runOf, runQuays } from '../src/campaign/pacific';
-import { startOpen } from '../src/campaign/staff';
+import { oceanRuns, startOpen } from '../src/campaign/staff';
 import { acrossOcean, oceanShares, overseasOf, sailings } from '../src/campaign/world';
-import type { Fleet, Game, Region } from '../src/campaign/types';
+import type { Corps, Fleet, Game, Region } from '../src/campaign/types';
 
 /** A grand campaign on the whole world at a stop of the dial, moved by hand to a month of the war. */
 const war = (stop: number, turn: number, human: string | null = null, seed = 3): Game => {
@@ -217,20 +218,74 @@ describe('the fleet goes to the beach it covers (ruling 200(j); rider b585 (b))'
     expect(g.regions[pf.base].name).toBe('Pearl Harbor');
     expect(g.headlines.some((h) => h.turn === 37 && h.text === 'The Pacific Fleet returns to Pearl Harbor.')).toBe(true);
     expect(Object.keys(g.flags).filter((k) => k.startsWith('fl:cover'))).toEqual([]);
-    // Away again; then the book moves it to Espiritu Santo: that is its base now, and it is not sent back.
+    // Away again; then the book moves it to Espiritu Santo (a row that is a move of base, done this month): that is
+    // its base now, and it is not sent back.
     const { g: h } = august();
     const hf = fleet(h, 'USA', 'Pacific Fleet');
     navalAI(h, 'USA');
     const es = h.byName['Espiritu Santo'];
-    hf.base = es.id; hf.port = es.name;
-    delete h.flags['st:hop:USA:0'];
     h.turn = 37;
+    hf.base = es.id; hf.port = es.name;
+    h.flags['bf:USA:Pacific Fleet:37'] = 37;
+    delete h.flags['st:hop:USA:0'];
     navalAI(h, 'USA');
     expect(h.regions[hf.base].name).toBe('Espiritu Santo');
     expect(Object.keys(h.flags).filter((k) => k.startsWith('fl:cover'))).toEqual([]);
   });
 
-  it('moves nothing where a fleet of its own already reaches the beach, nor for a player, nor with no beach named', () => {
+  it('keeps a covering fleet at its cover base while the beach is still named: worn, it rests there; given an order, it carries it out', () => {
+    const { g, beach } = august();
+    const pf = fleet(g, 'USA', 'Pacific Fleet');
+    navalAI(g, 'USA');
+    g.turn = 37;
+    pf.ready = 0.3;
+    navalAI(g, 'USA');
+    expect(g.regions[pf.base].name).toBe('Samoa');
+    expect(pf.stance).toBe('port');
+    expect(g.flags[`fl:cover:${pf.id}`]).toBe(g.byName['Pearl Harbor'].id + 1);
+    expect(g.headlines.some((h) => h.text === 'The Pacific Fleet returns to Pearl Harbor.')).toBe(false);
+    // An order of the plan or the book that month: carried out from where it lies, and not sent home first.
+    g.turn = 38;
+    pf.ready = 1;
+    navalAI(g, 'USA', [{ fleet: 'Pacific Fleet', zone: g.seas[beach].key!, stance: 'patrol' }]);
+    expect(g.regions[pf.base].name).toBe('Samoa');
+    expect(pf.zone).toBe(beach);
+    expect(g.flags[`fl:cover:${pf.id}`]).toBe(g.byName['Pearl Harbor'].id + 1);
+  });
+
+  it('covers from the harbour the enemy drives it to, and still goes home when its beaches are done', () => {
+    const { g } = august();
+    const pf = fleet(g, 'USA', 'Pacific Fleet');
+    navalAI(g, 'USA');
+    // Samoa lost: the fleet makes for New Caledonia (no row of the book moved it).
+    const nc = g.byName['New Caledonia'];
+    pf.base = nc.id; pf.port = nc.name; pf.home = nc.seas[0]; pf.zone = pf.home;
+    g.turn = 37;
+    navalAI(g, 'USA');
+    expect(g.flags[`fl:cover:${pf.id}`]).toBe(g.byName['Pearl Harbor'].id + 1);
+    expect(g.flags[`fl:coverAt:${pf.id}`]).toBe(pf.base + 1);
+    delete g.flags['st:hop:USA:0'];
+    g.turn = 38;
+    navalAI(g, 'USA');
+    expect(g.regions[pf.base].name).toBe('Pearl Harbor');
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('fl:cover'))).toEqual([]);
+  });
+
+  it("covers only the Pacific's beaches: a landing the plan names elsewhere moves no fleet of the Pacific's", () => {
+    const { g } = august();
+    delete g.flags['st:hop:USA:0'];
+    delete g.flags['st:hopQ:USA:0'];
+    declareWar(g, 'GER', 'USA');
+    const brittany = g.byName['Brittany'], lancs = g.byName['Lancashire'];
+    brittany.ctrl = 'GER';
+    g.flags['st:hop:USA:0'] = brittany.id + 1;
+    g.flags['st:hopQ:USA:0'] = lancs.id + 1;
+    navalAI(g, 'USA');
+    for (const nm of ['Pacific Fleet', 'Pacific Carrier Fleet']) expect(g.regions[fleet(g, 'USA', nm).base].name).toBe('Pearl Harbor');
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('fl:cover'))).toEqual([]);
+  });
+
+  it('moves nothing where a fleet of its own already reaches the beach, and that fleet covers it from where it lies; nothing for a player, nor with no beach named', () => {
     const { g, beach } = august();
     const cf = fleet(g, 'USA', 'Pacific Carrier Fleet');
     const samoa = g.byName['Samoa'];
@@ -238,6 +293,11 @@ describe('the fleet goes to the beach it covers (ruling 200(j); rider b585 (b))'
     expect(fleetReach(g, cf)).toContain(beach);
     navalAI(g, 'USA');
     expect(g.regions[fleet(g, 'USA', 'Pacific Fleet').base].name).toBe('Pearl Harbor');
+    // A fleet whose own duty is the harbour stands off the beach all the same.
+    expect(cf.duty).toBe('port');
+    expect(g.regions[cf.base].name).toBe('Samoa');
+    expect(cf.zone).toBe(beach);
+    expect(cf.stance).toBe('patrol');
     const { g: p } = august('USA');
     navalAI(p, 'USA');
     expect(p.regions[fleet(p, 'USA', 'Pacific Fleet').base].name).toBe('Pearl Harbor');
@@ -247,3 +307,54 @@ describe('the fleet goes to the beach it covers (ruling 200(j); rider b585 (b))'
     expect(q.regions[fleet(q, 'USA', 'Pacific Fleet').base].name).toBe('Pearl Harbor');
   });
 });
+
+describe('the Marines first on the run south, and the Atlantic Fleet after the Atlantic army only (review of rider b585 (a))', () => {
+  /** August 1942 by hand, America at war with Germany and Japan, its army at home fit to sail. */
+  const ready = (): { g: Game; us: (nm: string) => Corps } => {
+    const g = pacificWar(1, 36);
+    if (!atWar(g, 'USA', 'GER')) declareWar(g, 'GER', 'USA');
+    g.turn = 36;
+    for (const c of g.corps) if (c.nat === 'USA') { c.str = 1; c.supplied = true; c.ap = c.apMax; }
+    endStaffMonth();
+    return { g, us: (nm) => g.corps.find((c) => c.nat === 'USA' && c.name === nm)! };
+  };
+
+  it('brings a Marine corps down to the Pacific quay though another corps already stands on it', () => {
+    const { g, us } = ready();
+    expect(names(oceanRuns(g, 'USA').map((r) => r.from))).toContain('San Francisco');
+    const m = us('Second Army');
+    m.elite = 'marines';
+    relocate(g, m, g.byName['Sacramento']);
+    ferry(g, 'USA');
+    expect(g.regions[m.reg].name).toBe('San Francisco');
+  });
+
+  it('keeps no Marine corps on the Atlantic quay while the run south is worked: its own run brings it west', () => {
+    const { g, us } = ready();
+    const quay = oceanRuns(g, 'USA').find((r) => r.ocean === 'atlantic')!.from;
+    const m = us('First Army');
+    m.elite = 'marines';
+    relocate(g, m, quay);
+    ferry(g, 'USA');
+    expect(g.regions[m.reg].name).not.toBe(quay.name);
+  });
+
+  it("marks a crossing of the Pacific's run apart: the first is news, and the Atlantic Fleet waits for the Atlantic army", () => {
+    const { g } = ready();
+    g.flags['fy:USA:south'] = 1.5;
+    g.flags['fyAt:USA:south'] = g.turn;
+    ferry(g, 'USA');
+    expect(g.flags['fy:pac:USA']).toBe(1);
+    expect(g.flags['fy:first:USA']).toBeUndefined();
+    expect(g.headlines.some((h) => h.text.startsWith('The first American troops to cross the ocean come ashore at'))).toBe(true);
+    expect(fleet(g, 'USA', 'Atlantic Fleet').port).toBe('Norfolk');
+  });
+
+  it("puts the run south's army down only on its lane, near its base too", () => {
+    for (const t of [30, 36, 42]) {
+      const g = pacificWar(1, t);
+      for (const run of oceanRuns(g, 'USA')) if (run.ocean !== 'atlantic') for (const p of run.to) expect(acrossOcean(g, run.ocean, p), `${t} ${p.name}`).toBe(true);
+    }
+  });
+});
+
