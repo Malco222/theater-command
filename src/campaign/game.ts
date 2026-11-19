@@ -14,7 +14,7 @@ import { BUDGET, PRODUCTION, budgeted, canBuildYet, corpsName, deliver, farShare
 import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, majorsOf, pcIncome, sneakOn, wouldSurprise } from './diplomacy';
 import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
-import { AIR, airOnFall, airUpkeep, setupAir, skyByNumbers, skyOnLand, skyOver } from './air';
+import { AIR, airOnFall, airUpkeep, bookCloseAir, closeEdge, closeOf, closeRules, closeStrikes, setupAir, skyByNumbers, skyOnLand, skyOver, type CloseAir } from './air';
 import { syncWings } from './carriers';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
@@ -37,17 +37,19 @@ import defenceData from '../../data/campaign/defence.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot, whyBarred } from './ground';
 import { SUPPORT, antiTank, assaultFire, footShare, machineGuns, mortars, snipedIn, tollFor, tollOf, whoPaid, type Faced, type Facing } from './support';
-import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName } from './rivers';
+import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName, worksName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
 import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
+import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
 import { TOWNS, townName, townSize } from './towns';
+import { skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
@@ -1018,6 +1020,11 @@ export interface Assessment {
    * card tells before the attack and after.
    */
   faced: Faced | null;
+  /**
+   * Close air support (the grand campaign, air.json 'close'): the air edge after it, and each side's on-call air, its
+   * share of that side's strength, its air strikes and the groups that fly them. Unset where nobody is on call.
+   */
+  air?: CloseAir;
 }
 
 /** How an attack arrives: over land, or (sea) from landing craft at that share of its strength. */
@@ -1037,6 +1044,11 @@ export interface AttackOpts {
    * grand campaign): the defenders that much more tired, their works worn by that many months. A staff planning two waves reads it.
    */
   after?: { blows: number; wear: number };
+  /**
+   * Close air support flown over a battle fought on the field (the land field's bill): the air strikes each group
+   * flew, by group id. Unset, each group flies the strikes the battle card gave its side.
+   */
+  closeSorties?: Record<number, number>;
 }
 
 /** Works out both sides' strength for an attack. Auto-resolve and the odds preview share it. */
@@ -1254,6 +1266,29 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const skyLost = byNumbers === 'def' || (S.both && sky !== null && !skyWon && [...dN].some((n) => allied(g, n, sky)));
   if (skyWon) airEdge = Math.min(1, airEdge + S.land);
   if (skyLost) airEdge = Math.max(-1, airEdge - S.land);
+  // Weather (ruling 127): a closed sky over the battle grounds both air forces, and cloud halves what they lend.
+  const wxSky = weatherOn(g) ? skyAt(g, target.id) : 'clear';
+  if (wxSky !== 'clear') airEdge *= skySupport(wxSky);
+  // Close air support (Brian's ask of 2026-11-18): each side's fighter groups on ground support within reach of the
+  // battle add to its side of the air edge. Only this term reaches past the sky's clamp at 1 (the design director's
+  // b536): ground attack paid most where the sky was already won. Off, or with nobody on call, nothing here changes.
+  let close: CloseAir | undefined;
+  // (Who holds the sky is said from the air war alone: the groups on call over the battle do not change it.)
+  const skyEdge = airEdge;
+  if (closeRules(g)) {
+    const att = closeOf(g, aN, dN, target.id, skyLost), def = closeOf(g, dN, aN, target.id, skyWon);
+    if (att.groups.length || def.groups.length) {
+      const cA = closeEdge(att.W), cD = closeEdge(def.W);
+      const e = airEdge + cA - cD;
+      // (Each side's share is what its own on-call air adds to its strength, against the edge without it.)
+      att.share = cA > 0 ? Math.max(0, 1 - (1 + S.attack * (e - cA)) / (1 + S.attack * e)) : 0;
+      def.share = cD > 0 ? Math.max(0, 1 - (1 - S.defence * (e + cD)) / (1 - S.defence * e)) : 0;
+      att.strikes = closeStrikes(att);
+      def.strikes = closeStrikes(def);
+      airEdge = e;
+      close = { edge: e, att, def };
+    }
+  }
   A *= 1 + S.attack * airEdge;
   D *= 1 - S.defence * airEdge;
   D = Math.max(D, 0.01);
@@ -1345,13 +1380,13 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     });
   }
   if (mineLv) lines.push({
-    label: 'Minefields', value: mineLv > 1 ? 'Two belts of mines and booby traps on every road in' : 'Mines and booby traps on every road in',
+    label: 'Minefields', value: mineLv > 1 ? 'Two belts of minefields and booby traps on every road in' : 'Minefields and booby traps on every road in',
     effect: mined === 1 ? 'The engineers clear lanes: the mines cost the attack nothing' : `Attack cut to ${Math.round(mined * 100)}%${sap ? ', the engineers clearing what lanes they can' : ''}`,
   });
   if (breach && target.fort && fortFaced) lines.push({ label: 'Engineers', value: 'Assault engineers go in with the attack', effect: `They breach the works: the fortifications count for ${Math.round(breach * 100)}% less` });
   if (breach && town) lines.push({ label: 'Engineers', value: 'Assault engineers go in with the attack', effect: `They blow in the barricades: the town counts for ${Math.round(breach * 100)}% less` });
   if (target.fort && !town) {
-    lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}`, effect: fortFaced === attackers.length ? `Attacked head-on: the attack is cut to ${Math.round(100 / FORT_MUL[target.fort.lv])}% strength` : fortFaced > 0 ? 'Partly outflanked: only the corps attacking head-on are slowed' : 'Outflanked: the works face the other way' });
+    lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}: ${worksName(target.fort.lv)}`, effect: fortFaced === attackers.length ? `Attacked head-on: the attack is cut to ${Math.round(100 / FORT_MUL[target.fort.lv])}% strength` : fortFaced > 0 ? 'Partly outflanked: only the corps attacking head-on are slowed' : 'Outflanked: the works face the other way' });
   }
   // (The guns thicken the line of the corps beside them: where they stand alone there is nobody to say it of.)
   const beside = thicken > 0 && defenders.some((d) => d.kind !== 'art');
@@ -1406,7 +1441,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   }
   const aUns = attackers.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
   lines.push({ label: 'Supply', value: `${aUns ? `${aUns} attacking corps cut off` : 'Attackers in supply'}; ${dUns ? `${dUns} defending corps cut off` : 'defenders in supply'}`, effect: aUns || dUns ? 'Corps that are cut off fight at half strength' : undefined });
-  lines.push({ label: 'Air', value: byNumbers ? `The ${byNumbers === 'att' ? 'attacker' : 'defender'}'s air force holds the sky here by its numbers` : skyWon || skyLost ? `The ${g.nations[sky!].adj} air force has won the sky here` : airEdge > 0.15 ? 'Attacker holds the sky' : airEdge < -0.15 ? 'Defender holds the sky' : 'Contested', effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * S.attack * 100)}%` : undefined });
+  const wxLine = wxSky !== 'clear' ? skyBattleLine(g, zoneOfRegion(g, target.id), target.name) : null;
+  if (wxLine) lines.push({ label: 'The sky', value: wxLine });
+  const onCall = (n: number, who: string): string => (n ? `; ${n === 1 ? 'an air strike' : `${n} air strikes`} on call for the ${who}` : '');
+  const closeWords = close ? onCall(close.att.strikes, 'attack') + onCall(close.def.strikes, 'defence') : '';
+  if (wxSky !== 'closed') lines.push({ label: 'Air', value: (byNumbers ? `The ${byNumbers === 'att' ? 'attacker' : 'defender'}'s air force holds the sky here by its numbers` : skyWon || skyLost ? `The ${g.nations[sky!].adj} air force has won the sky here` : skyEdge > 0.15 ? 'Attacker holds the sky' : skyEdge < -0.15 ? 'Defender holds the sky' : 'Contested') + closeWords, effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * S.attack * 100)}%` : undefined });
   const gens = commandersIn(g, attackers), dgens = commandersIn(g, defenders);
   if (gens || dgens) {
     const up = rawA > 0 ? Math.round((cmdA / rawA - 1) * 100) : 0, dup = rawD > 0 ? Math.round((cmdD / rawD - 1) * 100) : 0;
@@ -1521,7 +1560,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // (The town's guard fighting beside them (ruling 232) stands in front of them.)
   const overrun = gunsRule(g) && !town && !guarded && defenders.some((c) => c.kind === 'art') && defenders.every((c) => c.kind === 'art' || c.kind === 'eng');
   if (overrun) lines.push(GUNS_OVERRUN);
-  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}) };
+  return { A, D, odds: overrun ? Math.max(A / D, OVERRUN_ODDS / dice[0]) : A / D, lines, defenders, dice, prepared, works, wear, weight, tired, faced, ...(overrun ? { overrun } : {}), ...(guarded > 0 ? { guard: guarded } : {}), ...(close ? { air: close } : {}) };
 }
 
 function reportUnit(c: Corps): ReportUnit {
@@ -2006,6 +2045,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     g.flags['tip:guns'] = g.turn;
     headline(g, 'info', `Your staff on the loss of ${target.name}: the line was dug in and it still broke. Artillery standing in a line makes every corps beside it fight up to ${Math.round(GUNS.thickenMost * 100)}% stronger, and the enemy's staff thinks twice before attacking guns. An artillery corps behind each threatened sector would help the next one hold.`, defNat, target.id);
   }
+  // Close air support: the groups that flew over the battle pay for it, once (air.json 'close').
+  if (a.air) { bookCloseAir(g, a.air, opts.closeSorties); rep.air = { att: a.air.att.strikes, def: a.air.def.strikes }; }
   g.reports.push(rep);
   // The generals' luck on the main fronts is counted off the main fronts' own battles, for the same reason.
   if (aside) g.flags.asideBattles = (g.flags.asideBattles ?? 0) + 1;
@@ -3499,7 +3540,8 @@ export function startPhase(g: Game, nat: string): void {
   const credit = BUDGET.debt.floor * Math.max(1, earned);
   const owed = budgeted(g) && n.pp < 0 ? Math.min(1, -n.pp / credit) : 0;
   // What the player's decrees take to keep can outrun what comes in (the grand campaign): the capital in hand pays for it.
-  const pcNet = pcIncome(nat, g) + civicSum(g, nat).pc + govCapital(g, nat);
+  // (And, with the nation's footing switched on, what holding rearmament or all-out war takes: ruling 172.)
+  const pcBase = pcIncome(nat, g) + civicSum(g, nat).pc + govCapital(g, nat), pcNet = pcBase + footHold(g, nat, pcBase);
   n.pc = Math.max(0, Math.min(Math.max(n.pc, DIPLOMACY.pcCap), n.pc + (g.flags.open === 1 ? pcNet : Math.max(0, pcNet))));
   const perDiv = PRODUCTION.replacementCost;
   const tempo = freshOffensive(g, nat);

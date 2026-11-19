@@ -22,6 +22,7 @@ import { lanesTo } from './resources';
 import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules, siegeView, townHeld, townHitText, townShare, type TownHit } from './siege';
 import { townName } from './towns';
 import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance } from './types';
+import { skyAtSea, skyBattleLine, zoneOfSea } from './weather';
 
 // Read straight from the data, so that nothing here depends on the order the modules are loaded in.
 const B = (fleetData as unknown as typeof FLEETS).bombard;
@@ -82,6 +83,8 @@ export interface FleetCard {
   bare: string;
   /** The same line in few words, for a card with one short line. */
   bareBrief: string;
+  /** Weather (ruling 143(e)): at sea under a closed sky, "The sky is closed over the North Sea this month: no aircraft will fly for either side." Only then. */
+  sky?: string;
 }
 
 const gunsRaw = (s: Ships): number => CLASSES.reduce((n, c) => n + s[c] * B.guns[c], 0);
@@ -122,6 +125,7 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
     wings: wingCards(g, f), decks: wingShare(g, f),
     aboard: wingCards(g, f).reduce((s, w) => s + w.aircraft, 0), deckRoom: wingCards(g, f).reduce((s, w) => s + w.est, 0) + bareOf(f, 'ftr') + bareOf(f, 'bmr'),
     ashore: wingsAshore(g, f.id).map((w) => ({ id: w.id, name: w.name, kind: w.kind === 'bmr' ? 'bmr' as const : 'ftr' as const, label: w.kind === 'bmr' ? 'Strike aircraft' : 'Carrier fighters', at: g.regions[w.base].name, aircraft: w.ftr + w.bmr })), bare: bareLine(g, f), bareBrief: bareBrief(g, f),
+    ...(atSea(f) && skyAtSea(g, f.zone) === 'closed' ? { sky: skyBattleLine(g, zoneOfSea(g, f.zone), `the ${g.seas[f.zone].name}`)! } : {}),
   };
 }
 

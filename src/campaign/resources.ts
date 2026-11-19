@@ -14,6 +14,8 @@ import { workingFactories } from './rails';
 import { prizeTaker } from './prizes';
 import { TECH } from './tech';
 import { oilAtHome } from './world';
+import { footWorn } from './footing';
+import { bombWorn, oilHeld } from './aircampaigns';
 
 export type Good = 'oil' | 'sup';
 
@@ -78,7 +80,10 @@ export interface ResLine { key: string; label: string; amount: number; count?: n
 /** What an oilfield yields a month to whoever holds it: less to a conqueror than to its owner. */
 export function fieldYield(g: Game, r: Region, nat: string = r.ctrl): number {
   if (!r.oil) return 0;
-  return (RES.oil.fields[r.name] ?? RES.oil.fields._default) * (r.owner === nat ? 1 : RES.oil.occupied) * (1 - fieldOut(g, r));
+  const y = (RES.oil.fields[r.name] ?? RES.oil.fields._default) * (r.owner === nat ? 1 : RES.oil.occupied) * (1 - fieldOut(g, r));
+  // Air campaigns (ruling 236.2): a refinery the bombers keep coming back to gives that much less.
+  const bombed = oilHeld(g, r);
+  return bombed > 0 ? y * (1 - bombed) : y;
 }
 
 /**
@@ -105,7 +110,8 @@ function treeOil(g: Game, nat: string): { amount: number; factories: number } {
   for (const id of g.nations[nat].tech?.done ?? []) rate += TECH.techs.find((t) => t.id === id)?.oil ?? 0;
   if (!rate) return { amount: 0, factories: 0 };
   let fac = g.nations[nat].offmap?.industry ?? 0;
-  for (const r of g.regions) if (r.owner === nat && r.ctrl === nat && !r.overseas) fac += workingFactories(g, r);
+  // (Air campaigns, ruling 236.2: the fuel plants of a province bombed for its oil make that much less.)
+  for (const r of g.regions) if (r.owner === nat && r.ctrl === nat && !r.overseas) { const b = oilHeld(g, r); fac += b > 0 ? workingFactories(g, r) * (1 - b) : workingFactories(g, r); }
   return { amount: rate * fac, factories: fac };
 }
 
@@ -359,8 +365,11 @@ export interface Book {
 
 export interface StoresView {
   nat: string; oil: Book; sup: Book; lanes: Lane[];
-  /** The share of the nation's will to fight that privation at home has worn away, 0 to 1. */
+  /** The share of the nation's will to fight that privation at home has worn away, 0 to 1: all of it, whatever the cause. */
   willLost: number;
+  /** Of that, what shortage took, and what all-out war took (the nation's footing, ruling 172; 0 with it switched off). */
+  hungerLost: number;
+  footWorn: number;
 }
 
 function incomeLines(g: Game, nat: string, good: Good, lanes: Lane[]): ResLine[] {
@@ -452,7 +461,7 @@ export function stores(g: Game, nat: string): StoresView | null {
     const met = good === 'oil' ? st.oilMet : st.supMet;
     return { good, stock: st[good], cap, income, spend, made, need, net, months: net < -1e-9 ? st[good] / -net : Infinity, met, effects: met < 0.995 ? (good === 'oil' ? SHORT_OIL(met) : SHORT_SUP(met)) : [] };
   };
-  return { nat, oil: book('oil'), sup: book('sup'), lanes, willLost: willLost(g, nat) };
+  return { nat, oil: book('oil'), sup: book('sup'), lanes, willLost: willLost(g, nat), hungerLost: hungerLost(g, nat), footWorn: footWorn(g, nat) };
 }
 
 /** Opens the stocks of every power that keeps them, once, when a grand campaign begins. */
@@ -503,7 +512,7 @@ export function resourcesTick(g: Game, nat: string): void {
   const W = RES.will, lack = W.sup * (1 - st.supMet) + W.oil * (1 - st.oilMet);
   const hunger = lack > 1e-9 ? hungryBefore + lack : Math.max(0, hungryBefore - W.heal);
   if (hunger > 0) st.hunger = hunger; else delete st.hunger;
-  if (nat === g.human && willLost(g, nat) >= 0.1 && hungryBefore * W.per < 0.1) {
+  if (nat === g.human && hungerLost(g, nat) >= 0.1 && hungryBefore * W.per < 0.1) {
     headline(g, 'info', `Rationing bites at home. The longer the depots stay empty the less the nation will bear: its will to fight is falling, and a country that is starved long enough asks for terms. Open Powers to see how much fight is left.`, nat);
   }
 }
@@ -513,6 +522,13 @@ export function resourcesTick(g: Game, nat: string): void {
  * a lost capital, lost ground and a broken army. This is how a blockade chokes a country that cannot feed itself.
  */
 export function willLost(g: Game, nat: string): number {
+  // (All-out war wears it too, with the nation's footing switched on: a count of its own above what shortage takes, ruling 172.)
+  // (And the bombing of its cities, with the air campaigns on: a small count of its own, ruling 236.2, b549.)
+  return hungerLost(g, nat) + footWorn(g, nat) + bombWorn(g, nat);
+}
+
+/** What privation alone has taken from a nation's will to fight: what shortage takes, up to its own ceiling. */
+export function hungerLost(g: Game, nat: string): number {
   if (g.flags.open !== 1) return 0;
   const h = g.nations[nat]?.res?.hunger ?? 0;
   return h > 0 ? Math.min(RES.will.most, h * RES.will.per) : 0;

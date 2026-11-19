@@ -8,6 +8,7 @@
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
+import { worksName } from './rivers';
 import { AIRWAR, airFleetsOf, airPool, airWar, airfieldsHold, carrierRules, foundAirFleet, hasAirfield } from './air';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
@@ -568,11 +569,11 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
   return out;
 }
 
-const FORT_BLURB = 'Defenders behind works fight far harder, and the works face every direction. A line only helps if the enemy has to come through it.';
+const FORT_BLURB = 'Defenders behind works fight far harder, and the works face every direction: barbed wire, gun pits and an anti-tank ditch, then pillboxes and dragon\'s teeth, then a line of concrete forts. A line only helps if the enemy has to come through it.';
 
 function fortOffer(g: Game, nat: string, r: Region, cost: number, why: string | null): Omit<Offer, 'poor'> {
   const lv = (r.fort?.lv ?? 0) + g.nations[nat].queue.filter((b) => b.what === 'fort' && b.region === r.id).length + 1;
-  return { key: 'work:fort', group: 'works', label: 'Fortifications', blurb: FORT_BLURB, size: `level ${lv}`, cost, months: PRODUCTION.fort.months, upkeep: 0, at: r.id, note: `${r.name} has ${r.fort ? `level ${r.fort.lv}` : 'none'}${lv - 1 > (r.fort?.lv ?? 0) ? `, level ${lv - 1} building` : ''}.`, why };
+  return { key: 'work:fort', group: 'works', label: 'Fortifications', blurb: FORT_BLURB, size: `level ${lv}`, cost, months: PRODUCTION.fort.months, upkeep: 0, at: r.id, note: `Level ${lv} is ${worksName(lv)}. ${r.name} has ${r.fort ? `level ${r.fort.lv}` : 'none'}${lv - 1 > (r.fort?.lv ?? 0) ? `, level ${lv - 1} building` : ''}.`, why };
 }
 
 /** Places an order from the list of offers. The price is paid now; what was ordered arrives when its months are up. */

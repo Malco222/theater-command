@@ -15,6 +15,7 @@ import { RES, keepsStores, oilMonths } from './resources';
 import { researchSpeed } from './buildings';
 import { govMul } from './government';
 import type { Field, Game, Nation, TechState } from './types';
+import { controlFirst, radarWords } from './aircampaigns';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine';
 
@@ -194,7 +195,7 @@ function finish(g: Game, n: Nation, id: string, quiet: boolean): void {
   s.done.push(id);
   if (t.sealift) n.sealift += t.sealift;
   // (With the laboratories in his advisers' hands the free team is theirs to set to work: desks.ts.)
-  if (!quiet && n.id === g.human) headline(g, 'info', `Research complete: ${t.name}. ${techRule(t)}${staffRuns(g, n.id, 'research') ? '' : ' A research team is free for new work.'}`, n.id);
+  if (!quiet && n.id === g.human) headline(g, 'info', `Research complete: ${t.name}. ${techRule(t, g, n.id)}${staffRuns(g, n.id, 'research') ? '' : ' A research team is free for new work.'}`, n.id);
 }
 
 /**
@@ -223,6 +224,9 @@ export function facesTanks(g: Game, nat: string): boolean {
 export function staffPick(g: Game, nat: string, turn = g.turn): string | null {
   const s = techOf(g, nat);
   if (!s) return null;
+  // With the air campaigns on, a staff bombed by night takes Fighter control first (b569(2)).
+  const first = controlFirst(g, nat);
+  if (first && !s.done.includes(first) && !s.work.some((w) => w.id === first) && BY_ID[first].needs.every((x) => s.done.includes(x))) return first;
   const A = TECH.ai, order = A.order[nat] ?? A.order._default, year = yearOf(turn);
   const skip = (id: string): boolean => A.skip._all.includes(id) || !!A.skip[nat]?.includes(id);
   let best: Tech | null = null, low = Infinity;
@@ -375,10 +379,13 @@ function supportWords(id: string): string | null {
 }
 
 /** What a technology does, in plain words worked out from its numbers, so the words and the rule cannot drift apart. */
-export function techRule(t: Tech): string {
+export function techRule(t: Tech, g?: Game, nat?: string): string {
   const out: string[] = [];
   for (const k of t.unlock ?? []) out.push(UNLOCK_RULE[k] ?? `Unlocks ${k}.`);
   if (t.field) out.push(FIELD_RULE[t.field](pct(RESEARCH.fields[t.field].per)));
+  // (The two radar steps, with the air campaigns on: what the warning chain and fighter control do, rider b553.)
+  const radar = g && nat ? radarWords(g, nat, t.id) : null;
+  if (radar) out.push(radar);
   const kit = supportWords(t.id);
   if (kit) out.push(kit);
   const rest = traitRule({ id: t.id, name: t.name, text: t.text, attack: t.attack, defence: t.defence, when: t.when, drafts: t.drafts, cost: t.cost, sealift: t.sealift, fleet: t.fleet, seaLoss: t.seaLoss });
@@ -434,7 +441,7 @@ export function techView(g: Game, nat: string): TechView | null {
     const done = s.done.includes(t.id);
     const open = t.needs.every((x) => s.done.includes(x));
     return {
-      id: t.id, branch: t.branch, tier: t.tier, name: t.name, text: t.text, rule: techRule(t), year: t.year,
+      id: t.id, branch: t.branch, tier: t.tier, name: t.name, text: t.text, rule: techRule(t, g, nat), year: t.year,
       needs: t.needs.map((x) => ({ id: x, name: BY_ID[x]?.name ?? x, done: s.done.includes(x) })),
       state: done ? 'done' : w ? 'work' : open ? 'ready' : 'locked',
       months: monthsFor(t, g.turn), base: t.months ?? TECH.months[t.tier],
