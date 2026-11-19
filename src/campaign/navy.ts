@@ -1502,12 +1502,23 @@ export const gapOf = (g: Game, f: Fleet, c: ShipClass): number => f.lost[c] - (g
 const fill = (g: Game, f: Fleet, c: ShipClass, n: number): void => { g.flags[`fill:${f.nat}:${f.name}:${c}`] = (g.flags[`fill:${f.nat}:${f.name}:${c}`] ?? 0) + n; };
 
 /** The start of a nation's month at sea: new ships, lost bases, refits, bombers, and the convoy war. */
+/**
+ * The first month of a grand campaign begun after September 1939 (rider b639 to ruling 234). Its start is the record's
+ * for every navy, the player's included: the dial's rows dated before the start, and in its first month, are the
+ * start position, facts of the day and not the dial moving a player's ships. From then on the dial leashes the
+ * computer's navies only, and a player moves his own ships; arrivals with no date of the dial come to him as before.
+ */
+export const startMonth = (g: Game): boolean => g.flags.open === 1 && g.flags.openFrom !== undefined && g.flags.openFrom === g.turn;
+/** True where the history dial's rows are read for this navy this month: a computer's always, a player's in the start month alone. */
+const dialRuns = (g: Game, nat: string): boolean => nat !== g.human || startMonth(g);
+
 export function navalUpkeep(g: Game, nat: string): void {
   const n = g.nations[nat];
   for (const given of NAVY.fleets) {
-    // A row with a book of its own forms by it at the book's stops, for the computer's navy (Force H in June 1940).
+    // A row with a book of its own forms by it at the book's stops, for the computer's navy (Force H in June 1940),
+    // and for a player's in the start month of a campaign begun later (rider b639).
     const b = given.book;
-    const booked = !!b && g.flags.open === 1 && b.stops.includes(stopOf(g)) && nat !== g.human;
+    const booked = !!b && g.flags.open === 1 && b.stops.includes(stopOf(g)) && dialRuns(g, nat);
     const row = booked ? { ...given, from: b!.from, ships: b!.ships } : given;
     const due = booked ? b!.from <= g.turn && g.turn <= Math.max(b!.from, given.from ?? 1) : (row.from ?? 1) === g.turn;
     if (row.nat !== nat || !due || g.turn <= 1 || g.fleets.some((f) => f.nat === nat && f.name === row.name)) continue;
@@ -1522,7 +1533,8 @@ export function navalUpkeep(g: Game, nat: string): void {
   const mine = NAVY.arrivals.filter((r) => r[1] === nat);
   for (const [turn, who, fleet, ships, what, dial] of [...mine.filter((r) => !r[5]?.waits), ...mine.filter((r) => r[5]?.waits)]) {
     // A row dated by the history dial (Force H's carriers, ruling 233 rider b564) is read only at its stops of the
-    // grand campaign, and like every row of the dial it leashes the computer's navies and never the player's. It is
+    // grand campaign, and like every row of the dial it leashes the computer's navies and never the player's after
+    // his start month (a campaign begun later opens with the record's ships for every navy: rider b639). It is
     // read once, in the first month at one of its stops on or after its date, so a grand campaign begun later, or a
     // dial turned to the book later, still has the record's ships; a row from before this month changes them without
     // news. A row with no date of the dial is read in its month, except at the stops where a dated row stands in its
@@ -1531,7 +1543,7 @@ export function navalUpkeep(g: Game, nat: string): void {
     const key = `arr:${turn}:${who}:${fleet}${from ? `<${from}` : ''}`;
     // A row that lapses ('lapse') is closed for good from that turn: the record's window for that posting has closed.
     const due = (dial?.lapse === undefined || g.turn < dial.lapse) && (dial?.stops
-      ? turn <= g.turn && g.flags.open === 1 && dial.stops.includes(stopOf(g)) && nat !== g.human && !g.flags[key]
+      ? turn <= g.turn && g.flags.open === 1 && dial.stops.includes(stopOf(g)) && dialRuns(g, nat) && !g.flags[key]
       : turn === g.turn && !(dial?.not && g.flags.open === 1 && dial.not.includes(stopOf(g)) && nat !== g.human));
     const f = who === nat && due ? named(fleet) : undefined;
     // A waiting row is read only once play has taken from the fleet a ship of each kind it brings that no waiting
@@ -1741,7 +1753,8 @@ export function foeBasedOn(g: Game, nat: string, seas: string[]): boolean {
  */
 export function placeBoats(g: Game, nat: string): void {
   const B = NAVY.beats?.[nat];
-  if (!B || !seaWar(g) || nat === g.human || !g.nations[nat]?.alive) return;
+  // (A player's boats are placed by the rows in his start month alone: rider b639. From then on they are his to move.)
+  if (!B || !seaWar(g) || !dialRuns(g, nat) || !g.nations[nat]?.alive) return;
   const stop = stopOf(g);
   let row: number[] | undefined;
   for (const r of B.rows) if (r[0] <= g.turn) row = r;
