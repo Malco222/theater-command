@@ -106,6 +106,7 @@ namespace TheaterFx
 		double Smear = 0.0; // (an aircraft trail's puff: drawn this many metres longer behind it, against Along, so puffs metres apart join in one line)
 		double SmearFor = 0.0; // (and that length shrinks to under a third over this many seconds, so an old trail breaks into lumps; 0 keeps it)
 		double LeastPx = 0.0; // (a streak: never thinner than this on the screen; a puff: never smaller across its long way, and thinner to match)
+		double MostPx = 0.0; // (a tracer's streak: never wider than this on the screen, so one passing close stays a thin line; 0: no limit)
 		double ShadeK = 1.0; // (how strongly it is lit on its sunward side and shadowed on the other: a skirt's lit top and dark foot)
 		double Rough = 0.0, Turn = 0.0, TurnRate = 0.0; // (a clod: how lumpy its outline is, and how it tumbles)
 		uint32_t LumpSeed = 0;
@@ -325,7 +326,7 @@ namespace TheaterFx
 		std::vector<TrailRow> TrailRows;
 		std::vector<Trailing> Trails; // the aircraft trails being laid
 		// (the tracer's look, read at Setup: one streak for every gun, on the ground and in the air)
-		double TracerHalf = 8.0, TracerLeast = 3.0, TracerDayWide = 1.5, WholePathBelow = 100.0;
+		double TracerHalf = 8.0, TracerLeast = 3.0, TracerMost = 5.0, TracerDayWide = 1.5, WholePathBelow = 100.0;
 		double DayFrom = 0.38, DayFull = 0.9, DayLampShare = 0.25;
 		Rgb DayLampCol;
 		int FrameNo = 0; // (frames drawn: flashes' lamps go by frames, not seconds)
@@ -370,7 +371,7 @@ namespace TheaterFx
 
 		Vec Where(const Bit& B, double Age) const;
 		Vec Going(const Bit& B, double Age) const;
-		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough = 0.0, uint32_t LumpSeed = 0, double Turn = 0.0, const Rgb& Floor = Rgb(), const Rgb& Through = Rgb(), const Vec& Outward = Vec(), const Rgb& Lift = Rgb());
+		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough = 0.0, uint32_t LumpSeed = 0, double Turn = 0.0, const Rgb& Floor = Rgb(), const Rgb& Through = Rgb(), const Vec& Outward = Vec(), const Rgb& Lift = Rgb(), double Taper = 0.0);
 		int LayBit(int Slot, const Bit& B, double Now, const View& Eye, int Room); // (how many slots it took: 0, 1, or 2 for a twin)
 	};
 }
