@@ -1,5 +1,5 @@
 {
- "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The fourteen cues of a submarine, a carrier, a landing craft and an aircraft, and the three beds of wind, woods and rain at the end, are brought in and wait for the sound director's mix to say where they play.",
+ "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The fourteen cues of a submarine, a carrier, a landing craft and an aircraft, and the three beds of wind, woods and rain at the end, are brought in and wait for the sound director's mix to say where they play. The air battle's own recordings (engines by model, guns by calibre, flak, the falls) follow them, for the air battle scene (ruling 238), played by the mix's air section.",
  "sounds": [
   {
    "moment": "bomber_drone",
@@ -690,6 +690,258 @@
      "creator": "Benboncan",
      "licence": "CC BY 4.0",
      "page": "https://freesound.org/people/Benboncan/sounds/119784/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "b17_drone_loop",
+   "recording": "b17_drone_loop",
+   "what": "A B-17's four engines drone",
+   "sources": [
+    {
+     "title": "G07-18_B-17 4 Engine Prop Steady Engine Noise",
+     "creator": "none",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/437862/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bomber_heavy_loop",
+   "recording": "bomber_heavy_loop",
+   "what": "Heavy bombers overhead",
+   "sources": [
+    {
+     "title": "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38",
+     "creator": "LEJ.approach/dvldi",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_Flying_Bulls_B-25_And_P-38.ogv",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Hahnweide Vintage Air Show 2011 - B-25 And P-38",
+     "creator": "LEJ.approach/dvldi",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_B-25_And_P-38.ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "bomber_medium_loop",
+   "recording": "bomber_medium_loop",
+   "what": "Twin-engined bombers overhead",
+   "sources": [
+    {
+     "title": "B-25 Mitchell Flyby",
+     "creator": "Fight2FlyPhoto",
+     "licence": "CC BY 3.0",
+     "page": "https://freesound.org/people/Fight2FlyPhoto/sounds/142887/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "fighter_engine_loop",
+   "recording": "fighter_engine_loop",
+   "what": "A fighter's engine in flight",
+   "sources": [
+    {
+     "title": "Spitfire 2 passes Military od",
+     "creator": "Cheeseheadburger",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Cheeseheadburger/sounds/170477/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mg42_burst_01",
+   "recording": "mg42_burst_01",
+   "what": "A German machine gun rips (MG 42, take 1)",
+   "sources": [
+    {
+     "title": "MG 42 (Solo) WW2",
+     "creator": "Lubini",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Lubini/sounds/338242/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mg42_burst_02",
+   "recording": "mg42_burst_02",
+   "what": "A German machine gun rips (MG 42, take 2)",
+   "sources": [
+    {
+     "title": "MG 42 (Solo) WW2",
+     "creator": "Lubini",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Lubini/sounds/338242/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "plane_guns",
+   "recording": "plane_guns",
+   "what": "A fighter fires its guns",
+   "sources": [
+    {
+     "title": "M2 browning",
+     "creator": "none",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:M2_browning.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "gunner_burst",
+   "recording": "gunner_burst",
+   "what": "A bomber's gunner fires",
+   "sources": [
+    {
+     "title": "M2 browning",
+     "creator": "none",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:M2_browning.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "flak_light_fire",
+   "recording": "flak_light_fire",
+   "what": "A light anti-aircraft gun fires",
+   "sources": [
+    {
+     "title": "Oerlikon 35mm - Romania Sends Air Defense Specialists to Poland, B-Roll",
+     "creator": "none",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Oerlikon_35mm_-_Romania_Sends_Air_Defense_Specialists_to_Poland,_B-Roll.ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "flak_heavy_fire_01",
+   "recording": "flak_heavy_fire_01",
+   "what": "A heavy anti-aircraft gun fires",
+   "sources": [
+    {
+     "title": "913363-U.S. Marines From 2nd ANGLICO and the Coastal Brigade, Finnish Navy Conduct Series Fires Using 130mm 53 TK Cannon",
+     "creator": "none",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:913363-U.S._Marines_From_2nd_ANGLICO_and_the_Coastal_Brigade,_Finnish_Navy_Conduct_Series_Fires_Using_130mm_53_TK_Cannon.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "flak_burst_01",
+   "recording": "flak_burst_01",
+   "what": "A shell bursts high among the bombers",
+   "sources": [
+    {
+     "title": "Explosions-LS100155",
+     "creator": "none",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "plane_explode",
+   "recording": "plane_explode",
+   "what": "A plane blows up in the air",
+   "sources": [
+    {
+     "title": "Explosions-LS100155",
+     "creator": "none",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "plane_down",
+   "recording": "plane_down",
+   "what": "A plane goes down",
+   "sources": [
+    {
+     "title": "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38",
+     "creator": "LEJ.approach/dvldi",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_Flying_Bulls_B-25_And_P-38.ogv",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Explosions-LS100152",
+     "creator": "none",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "explosion_far_02",
+   "recording": "explosion_far_02",
+   "what": "An explosion a long way off (take 2)",
+   "sources": [
+    {
+     "title": "distant explosions",
+     "creator": "none",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Kostrava/sounds/320788/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "bomb_stick_01",
+   "recording": "bomb_stick_01",
+   "what": "A stick of bombs walks across the target",
+   "sources": [
+    {
+     "title": "Explosions-LS100155",
+     "creator": "none",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "dogfight",
+   "recording": "dogfight",
+   "what": "Fighters tangle overhead",
+   "sources": [
+    {
+     "title": "A6M Zero Chasing P-51D Mustang",
+     "creator": "Fight2FlyPhoto",
+     "licence": "CC BY-NC 3.0",
+     "page": "https://freesound.org/people/Fight2FlyPhoto/sounds/161120/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "aircraft_takeoff",
+   "recording": "aircraft_takeoff",
+   "what": "Aircraft take off",
+   "sources": [
+    {
+     "title": "B-25 TAKEOFF 01",
+     "creator": "none",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/LOVEBURD/sounds/329616/",
      "archive": "Freesound"
     }
    ]

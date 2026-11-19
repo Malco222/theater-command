@@ -401,6 +401,19 @@ namespace
 	}
 }
 
+bool FCampaignSession::CallBattle(const FString& Function, const FString& ArgumentsJson, FString& OutJson, FString& OutError)
+{
+	Settle(); // (an order still being answered on the rules' thread comes first)
+	if (!bRunning)
+	{
+		OutError = TEXT("no war is running");
+		return false;
+	}
+	THEATER_SPEED_SCOPE(Rules);
+	RulesMemo.Reset();
+	return Host->Call(Function, ArgumentsJson, OutJson, OutError);
+}
+
 bool FCampaignSession::CallRules(const FString& Function, const FString& ArgumentsJson, TSharedPtr<FJsonObject>& OutObject)
 {
 	Settle(); // (an order still being answered on the rules' thread comes first: see MoveAside)

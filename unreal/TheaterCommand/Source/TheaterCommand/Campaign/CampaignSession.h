@@ -329,6 +329,13 @@ public:
 	/** Once a frame, from the player's controller: where the answer is in, it is taken and its Then is run. bWait: waited for, where it is still being worked out. */
 	void Deliver(bool bWait = false);
 
+	/**
+	 * (Ruling 238, the air battle scene.) A battle's own call on the rules (land's battle-bridge.ts: TC.airStart,
+	 * battleTick, battleSpeed, battleOrder, battleView, battleEnd), its answer handed back as JSON text for the scene's
+	 * own reader. Every such call may change the war, so the kept answers to questions are forgotten.
+	 */
+	bool CallBattle(const FString& Function, const FString& ArgumentsJson, FString& OutJson, FString& OutError);
+
 private:
 	bool CallRules(const FString& Function, const FString& ArgumentsJson, TSharedPtr<FJsonObject>& OutObject);
 	struct FAside;
