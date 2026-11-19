@@ -57,6 +57,16 @@ describe('the Soviet call-up trim (b481, b627)', () => {
     expect(menLeft(b, 'SOV') - menLeft(a, 'SOV')).toBeCloseTo(2 * plan.divs, 6);
   });
 
+  it('with a first month, cuts nothing before it and its share from it on', () => {
+    plan.trim = { stops: [3, 4, 5], cut: 0.4, from: 31 };
+    const g = standing();
+    expect(callUpCut(g, 'SOV')).toBe(0);
+    expect(months(g, 1)).toEqual([plan.after]);
+    g.turn = 31;
+    expect(callUpCut(g, 'SOV')).toBeCloseTo(0.4, 9);
+    expect(months(g, 1)).toEqual([3]);
+  });
+
   it('cuts nothing at a stop it does not name, nor outside the grand campaign, nor for a nation without a trim', () => {
     plan.trim = { stops: [3, 4, 5], cut: 0.5 };
     expect(callUpCut(standing(1), 'SOV')).toBe(0);
