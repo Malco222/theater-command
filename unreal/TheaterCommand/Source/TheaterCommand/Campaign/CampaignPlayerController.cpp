@@ -10634,12 +10634,11 @@ void ACampaignPlayerController::Remember(const TArray<FSinking>& Sinkings, bool 
 	{
 		return;
 	}
-	// (The coordinator, 19 November 2026: the names are the rules builder's draft until the historian has checked the
-	// roster, and the plate stays silent in play until that passes. A picture's own names show, and
-	// "-TheaterMemorial" shows the rules' names for a look at them. When the roster passes, this is the one word to turn.)
-	static const bool bRosterPassed = false;
-	static const bool bAskedFor = FParse::Param(FCommandLine::Get(), TEXT("TheaterMemorial"));
-	if (!bHold && !bRosterPassed && !bAskedFor)
+	// (The names were the rules builder's draft until the historian had checked the roster; the plate was silent in
+	// play until then. The historian's corrections were cleared at 20:02Z on 19 November 2026 and the coordinator
+	// gave the word: the plate shows. "-TheaterNoMemorial" keeps it away, for a picture that wants the sea clear.)
+	static const bool bKeptAway = FParse::Param(FCommandLine::Get(), TEXT("TheaterNoMemorial"));
+	if (!bHold && bKeptAway)
 	{
 		return;
 	}
