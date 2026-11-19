@@ -59,9 +59,23 @@ blow-up. Past that, a blow-up gets the older torn flame and a burning fall keeps
 Midway gives all 32 falls their debris. Pearl Harbor gives 37 of 52 (10 of its 13 blow-ups), at most 685 puffs at
 once. On an older kit without `AirFall`, every blow-up gets the older flame and the scene still builds.
 
+**Smoke trails.** The scene lights up to 24 trails at once on the newer effects kit (the one whose `TrailStart`
+takes a span), and 10 on an older one. A burning aircraft's own trail comes first: when the room is full, it takes the
+place of the oldest piece's trail. In the cloud test at 24, no burning aircraft loses its trail in either battle
+(`AirShow::TrailRoom`).
+
+**The table while a battle is up.** The scene keeps the table's lamps and haze as they were, gives the battle the
+day's light, and puts all of it back on CONTINUE. The campaign's controller still ticks under the battle. When the
+pointer's province changes, the map unfolds its crowds and would stand its pieces again, at the world's origin where
+the battle is. So every frame the scene puts away any piece that came back. On CONTINUE the map stands its pieces
+again itself, with the crowds folded.
+
 ## Hook lines for the 3D builder
 
-The scene needs no lines in CampaignMapActor or CampaignPlayerController. It needs one in **CampaignHUD**, so that the campaign's frame is hidden while a battle is up. Until this line is added, the frame stays under the battle's screen. The scene finds the line by itself (a `requires` check), so it builds either way.
+The scene builds and plays without any of these lines. It finds each one by itself (a `requires` check).
+
+**CampaignHUD**, so that the campaign's frame is hidden while a battle is up. Until this line is added, the frame
+stays under the battle's screen.
 
 ```cpp
 // CampaignHUD.h, public:
@@ -69,6 +83,28 @@ void ShowFrame(bool bShow) { if (Overlay.IsValid()) { Overlay->SetVisibility(bSh
 ```
 
 (Use the visibility the overlay has now in place of `SelfHitTestInvisible` if it is a different one.)
+
+**CampaignMapActor and CampaignPlayerController**, so that the table stays quiet under a battle. With these lines, its
+pieces stay put away whatever the pointer does, and its hover, its tips and its right button stand idle. Until they
+are added, the table's hover keeps running under the battle (each province change rebuilds its highlight and gun
+lines), and the scene keeps the pieces hidden itself.
+
+```cpp
+// CampaignMapActor.h, public:
+/** (air battle) While a battle's scene is up, every piece stays off the table whatever the hover asks; cleared, the pieces stand again and the crowds fold up. */
+void SetPutAway(bool bAway) { if (bPutAway == bAway) { return; } bPutAway = bAway; if (!bAway) { const bool bWere = bPiecesShown; bPiecesShown = false; SetPiecesShown(bWere); } }
+bool IsPutAway() const { return bPutAway; }
+// CampaignMapActor.h, private, beside bPiecesShown:
+bool bPutAway = false;
+
+// CampaignMapActor.cpp, the first line of ApplyCrowds():
+if (bPutAway) { return; }
+// CampaignMapActor.cpp, the first line of SetPiecesShown(bool bShown):
+if (bPutAway && bShown) { return; }
+
+// CampaignPlayerController.cpp, IsTableBusy(): add to what it returns
+|| (Map.IsValid() && Map->IsPutAway())
+```
 
 The lines already made on this branch:
 - `CampaignGameMode.cpp`: the `-TheaterAirBattle` hook, beside the stage's.

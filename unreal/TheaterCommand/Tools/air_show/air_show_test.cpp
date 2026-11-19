@@ -112,6 +112,16 @@ int main(int Argc, char** Argv)
 	AirShow::DebrisRoom Debris;
 	std::map<int, std::string> FallsOpen;
 	int FallStarts = 0, FallStrays = 0, MostDebris = 0;
+	// The scene's room for trails, as on the newer kit (24) and an older one (10), a burning aircraft's own first.
+	AirShow::TrailRoom Trails24, Trails10;
+	Trails24.Most = 24;
+	Trails10.Most = 10;
+	int PieceTrails = 0, OwnTrails = 0;
+	// No group still flies the place's stand-in once a view has named its model.
+	int Guessed = 0;
+	for (const AirFeed::Frame& F : Rec.Views)
+		for (const AirShow::Group& G : F.Groups)
+			Guessed += G.bModelGuessed ? 1 : 0;
 	for (const AirFeed::Frame& F : Rec.Views)
 		for (const AirShow::Event& E : F.Events)
 			if (E.What == "air:lost") { ++EventsLost; EventsChutes += E.Chutes; }
@@ -156,6 +166,20 @@ int main(int Argc, char** Argv)
 			}
 			if (E.Kind == AirShow::FxKind::FallMove && !FallsOpen.count(E.Key)) ++FallStrays;
 			if (E.Kind == AirShow::FxKind::FallStop && FallsOpen.erase(E.Key) == 0) ++FallStrays;
+			if (E.Kind == AirShow::FxKind::TrailStart)
+			{
+				const bool bPiece = E.Text == "piece";
+				PieceTrails += bPiece ? 1 : 0;
+				OwnTrails += bPiece ? 0 : 1;
+				int Out = 0;
+				Trails24.Start(E.Key, bPiece, Out);
+				Trails10.Start(E.Key, bPiece, Out);
+			}
+			if (E.Kind == AirShow::FxKind::TrailStop)
+			{
+				Trails24.Stop(E.Key);
+				Trails10.Stop(E.Key);
+			}
 			if (E.Kind != AirShow::FxKind::Gun && E.Kind != AirShow::FxKind::TrailMove && E.Kind != AirShow::FxKind::FallMove && E.Kind != AirShow::FxKind::Hit)
 			{
 				std::string Text = E.What;
@@ -213,6 +237,17 @@ int main(int Argc, char** Argv)
 	std::printf("  gun frames %d, hits %d, flak bursts %d, bombs %d\n", C.GunFrames, C.Hits, C.FlakBursts, C.Bombs);
 	std::printf("  debris: %d falls given it, %d left without (%d of them blown apart; room %d puffs, most held at once %d)\n",
 	            Debris.Given, Debris.Refused, Debris.RefusedBlasts, Debris.Most, MostDebris);
+	std::printf("  trails: %d an aircraft's own, %d pieces'; room 24: most lit %d, refused %d (%d an aircraft's own), pieces put out %d;"
+	            " room 10: refused %d (%d an aircraft's own)\n",
+	            OwnTrails, PieceTrails, Trails24.Peak, Trails24.Refused, Trails24.RefusedOwn, Trails24.PutOut, Trails10.Refused, Trails10.RefusedOwn);
+	{
+		// Each group's model as the scene makes it: the first view's, which the feed now fills from the next view to name it.
+		std::map<std::string, int> Made;
+		for (const AirShow::PlaneOut& P : Show.Planes()) ++Made[std::to_string(P.Group) + ":" + P.Model];
+		std::printf("  models still flying at the end:");
+		for (const auto& P : Made) std::printf(" %s x%d", P.first.c_str(), P.second);
+		std::printf("\n");
+	}
 	std::printf("  effects:");
 	for (const auto& P : FxCount) std::printf(" %s %d", P.first.c_str(), P.second);
 	std::printf("\n  sounds:");
@@ -231,6 +266,8 @@ int main(int Argc, char** Argv)
 		{ "a model falls for every aircraft lost", C.Falls >= EventsLost - 2 && C.Falls <= EventsLost + 2, std::to_string(C.Falls), "the battle's count, within 2" },
 		{ "the kit told of every fall, its moves only while it falls", FallStarts == C.Falls && FallStrays == 0, std::to_string(FallStarts) + " starts, " + std::to_string(FallStrays) + " stray", "a start a fall, 0 stray" },
 		{ "debris within its room", MostDebris <= Debris.Most, std::to_string(MostDebris), "at most the room" },
+		{ "every burning aircraft keeps its trail (room 24)", Trails24.RefusedOwn == 0 && Trails24.Peak <= 24, std::to_string(Trails24.RefusedOwn), "0 refused" },
+		{ "no group left on the stand-in model", Guessed == 0, std::to_string(Guessed), "0 views" },
 		{ "parachutes as the battle says", C.Chutes >= EventsChutes * 8 / 10, std::to_string(C.Chutes), "at least 8 in 10 of the battle's" },
 		{ "guns within the effects budget", MostLiveGuns <= Show.MostGuns, std::to_string(MostLiveGuns), "at most MostGuns" },
 		{ "flak bursts round the boxes", C.FlakBursts > 0, std::to_string(C.FlakBursts), "some" },

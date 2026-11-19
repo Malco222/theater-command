@@ -15,6 +15,7 @@
 #include "Components/AudioComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/SkyLightComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/Engine.h"
@@ -84,6 +85,49 @@ namespace AirParts
 		else
 		{
 			Kit->TrailStart(Now, Id, At, Velocity, Kind);
+		}
+	}
+
+	/** The kit from 1295edc (TrailStart with a span) keeps every flame on a full screen and sheds the farthest smoke
+	 * first, so the scene may light 24 trails at once on it; 10 on an older kit (the pre-check, 06:08Z). */
+	template <typename TKit>
+	static constexpr bool HasTrailSpan(const TKit*)
+	{
+		return requires(TKit* K) { K->TrailStart(0.0, 0, FVector::ZeroVector, FVector::ZeroVector, FString(), 0.0f); };
+	}
+
+	/** The table's put-away (hook lines for CampaignMapActor in Battle/AIR-SCENE.md): while it is set, every piece stays
+	 * off the table whatever the hover asks, and the table is busy, so the hover falls quiet. False where the map has
+	 * none yet; the scene then keeps the pieces hidden itself. */
+	template <typename TMap>
+	static bool PutAway(TMap* Map, bool bAway)
+	{
+		if constexpr (requires(TMap* M) { M->SetPutAway(true); })
+		{
+			if (Map)
+			{
+				Map->SetPutAway(bAway);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** A haze's colour, by the name this engine gives it. */
+	template <typename TFog>
+	static FLinearColor HazeColour(const TFog* Fog, const FLinearColor& Else)
+	{
+		if constexpr (requires(const TFog* F) { FLinearColor(F->FogInscatteringLuminance); })
+		{
+			return Fog->FogInscatteringLuminance;
+		}
+		else if constexpr (requires(const TFog* F) { FLinearColor(F->FogInscatteringColor); })
+		{
+			return Fog->FogInscatteringColor;
+		}
+		else
+		{
+			return Else;
 		}
 	}
 
@@ -378,6 +422,7 @@ bool AAirBattle::Open(const FString& Why)
 	else
 	{
 		AirParts::UseAirDistance(Effects.Get());
+		S.Trails.Most = AirParts::HasTrailSpan(Effects.Get()) ? 24 : 10;
 		Effects->SetWind(FVector(-2.0, 3.0, 0.0) * UnitsPerMetre / 100.0);
 	}
 	Raise();
@@ -617,44 +662,203 @@ void AAirBattle::LayGround()
 
 void AAirBattle::HideTheTable()
 {
-	// The table and its armies are put out of sight; the air and the light are the battle's.
+	// The table and its armies are put out of sight; the air and the light are the battle's, by day. What the table
+	// had is kept first, and put back by ShowTheTable (the pre-check, 06:08Z: the lamp's turn and strength and the
+	// haze stayed the battle's after CONTINUE, since the room sets some of them only once).
+	if (bTableHidden)
+	{
+		return;
+	}
+	bTableHidden = true;
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
+		if (ACampaignMapActor* Map = Cast<ACampaignMapActor>(*It))
+		{
+			Table = Map;
+			AirParts::PutAway(Map, true);
+		}
 		if (It->IsA<ACampaignMapActor>() || It->IsA<AArmyPiece>())
 		{
+			if (It->IsA<AArmyPiece>() && !It->IsHidden())
+			{
+				KeptPieces.Add(*It);
+			}
 			It->SetActorHiddenInGame(true);
 		}
 		if (ACampaignEnvironment* Environment = Cast<ACampaignEnvironment>(*It))
 		{
+			KeptRooms.Add(Environment);
 			Environment->SetActorTickEnabled(false);
 			// Haze from 2 km (the art director, 19 November 04:40Z): a clear sky over the sea, the far formations soft.
 			TArray<UExponentialHeightFogComponent*> Fogs;
 			Environment->GetComponents(Fogs);
 			for (UExponentialHeightFogComponent* Fog : Fogs)
 			{
+				FKeptHaze& Kept = KeptHazes.AddDefaulted_GetRef();
+				Kept.Haze = Fog;
+				Kept.Start = Fog->StartDistance;
+				Kept.Density = Fog->FogDensity;
+				Kept.Falloff = Fog->FogHeightFalloff;
+				Kept.MostOpacity = Fog->FogMaxOpacity;
+				Kept.Colour = AirParts::HazeColour(Fog, FLinearColor(0.80f, 0.84f, 0.88f));
 				Fog->SetStartDistance(2000.0f * static_cast<float>(UnitsPerMetre));
 				Fog->SetFogDensity(0.0005f);
 				Fog->SetFogHeightFalloff(0.004f);
 				Fog->SetFogMaxOpacity(0.8f);
 				Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.66f, 0.78f));
 			}
+			// The lamps: the key turned to the battle's sun, every lamp at its day strength and white (a battle opened
+			// in the table's night kept the moon's), the sky's light the day's.
 			TArray<UDirectionalLightComponent*> Lights;
 			Environment->GetComponents(Lights);
-			UDirectionalLightComponent* Brightest = nullptr;
+			UDirectionalLightComponent* Key = nullptr;
 			for (UDirectionalLightComponent* Light : Lights)
 			{
-				if (!Brightest || Light->Intensity > Brightest->Intensity)
+				FKeptLamp& Kept = KeptLamps.AddDefaulted_GetRef();
+				Kept.Lamp = Light;
+				Kept.Rotation = Light->GetRelativeRotation();
+				Kept.Intensity = Light->Intensity;
+				Kept.Colour = Light->GetLightColor();
+				Kept.Temperature = Light->Temperature;
+				if (Light->GetFName() == TEXT("KeyLight") || (!Key && Lights.Num() == 1))
 				{
-					Brightest = Light;
+					Key = Light;
 				}
 			}
-			if (Brightest)
+			if (!Key)
 			{
+				for (UDirectionalLightComponent* Light : Lights)
+				{
+					if (!Key || Light->Intensity > Key->Intensity)
+					{
+						Key = Light;
+					}
+				}
+			}
+			for (UDirectionalLightComponent* Light : Lights)
+			{
+				Light->SetLightColor(FLinearColor::White);
+				Light->SetIntensity(Light == Key ? 7.0f : 0.75f);
+			}
+			if (Key)
+			{
+				if (!FMath::IsNearlyEqual(Key->Temperature, 4900.0f, 1.0f))
+				{
+					Key->SetTemperature(4900.0f);
+				}
 				const FVector Sun = Stage && Stage->IsRaised() ? Stage->TowardSun() : FRotator(30.0, 150.0, 0.0).Vector();
-				Brightest->SetWorldRotation((-Sun).Rotation());
+				Key->SetWorldRotation((-Sun).Rotation());
+			}
+			TArray<USkyLightComponent*> Skies;
+			Environment->GetComponents(Skies);
+			for (USkyLightComponent* Sky : Skies)
+			{
+				FKeptSky& Kept = KeptSkies.AddDefaulted_GetRef();
+				Kept.Sky = Sky;
+				Kept.Intensity = Sky->Intensity;
+				Kept.Colour = Sky->GetLightColor();
+				Sky->SetIntensity(0.72f);
+				Sky->SetLightColor(FLinearColor::White);
 			}
 		}
 	}
+}
+
+void AAirBattle::KeepTheTableHidden()
+{
+	// (the campaign's controller still ticks under the battle, before it: when the province under the pointer changes,
+	// the map unfolds its crowds and stands every piece not folded into one, at the world's origin where the battle
+	// stands. Until the map's put-away hook lines are in, each such piece is put away again before the frame is drawn)
+	if (!bTableHidden)
+	{
+		return;
+	}
+	for (TActorIterator<AArmyPiece> It(GetWorld()); It; ++It)
+	{
+		if (!It->IsHidden())
+		{
+			It->SetActorHiddenInGame(true);
+		}
+	}
+	if (Table.IsValid() && !Table->IsHidden())
+	{
+		Table->SetActorHiddenInGame(true);
+	}
+}
+
+void AAirBattle::ShowTheTable()
+{
+	// The table as it was: its haze, its lamps, its own tick, and its pieces stood again with the crowds folded up.
+	if (!bTableHidden)
+	{
+		return;
+	}
+	bTableHidden = false;
+	for (const FKeptHaze& Kept : KeptHazes)
+	{
+		if (UExponentialHeightFogComponent* Fog = Kept.Haze.Get())
+		{
+			Fog->SetStartDistance(Kept.Start);
+			Fog->SetFogDensity(Kept.Density);
+			Fog->SetFogHeightFalloff(Kept.Falloff);
+			Fog->SetFogMaxOpacity(Kept.MostOpacity);
+			Fog->SetFogInscatteringColor(Kept.Colour);
+		}
+	}
+	for (const FKeptLamp& Kept : KeptLamps)
+	{
+		if (UDirectionalLightComponent* Light = Kept.Lamp.Get())
+		{
+			Light->SetRelativeRotation(Kept.Rotation);
+			Light->SetIntensity(Kept.Intensity);
+			Light->SetLightColor(Kept.Colour);
+			if (!FMath::IsNearlyEqual(Light->Temperature, Kept.Temperature, 1.0f))
+			{
+				Light->SetTemperature(Kept.Temperature);
+			}
+		}
+	}
+	for (const FKeptSky& Kept : KeptSkies)
+	{
+		if (USkyLightComponent* Sky = Kept.Sky.Get())
+		{
+			Sky->SetIntensity(Kept.Intensity);
+			Sky->SetLightColor(Kept.Colour);
+		}
+	}
+	for (const TWeakObjectPtr<ACampaignEnvironment>& Room : KeptRooms)
+	{
+		if (Room.IsValid())
+		{
+			Room->SetActorTickEnabled(true);
+		}
+	}
+	if (ACampaignMapActor* Map = Table.Get())
+	{
+		Map->SetActorHiddenInGame(false);
+		// (the map's own way of standing its pieces again, which folds the crowds up: its put-away where the hook lines
+		// are in, else its bare-ground switch off and on)
+		if (!AirParts::PutAway(Map, false))
+		{
+			Map->SetPiecesShown(false);
+			Map->SetPiecesShown(true);
+		}
+	}
+	else
+	{
+		for (const TWeakObjectPtr<AActor>& Piece : KeptPieces)
+		{
+			if (Piece.IsValid())
+			{
+				Piece->SetActorHiddenInGame(false);
+			}
+		}
+	}
+	KeptHazes.Reset();
+	KeptLamps.Reset();
+	KeptSkies.Reset();
+	KeptRooms.Reset();
+	KeptPieces.Reset();
 }
 
 FVector AAirBattle::World(double X, double Y, double Z) const
@@ -680,6 +884,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 		}
 		return;
 	}
+	KeepTheTableHidden();
 	const double Real = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
 	RealT += Real;
 	if (QuitAt >= 0.0 && RealT >= QuitAt)
@@ -851,9 +1056,20 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 {
 	if (TObjectPtr<UProceduralMeshComponent>* Found = Planes.Find(Key))
 	{
-		return Found->Get();
+		const FPlaneMade* Was = PlaneMade.Find(Key);
+		if (*Found && Was && Was->Model == Model && Was->Span == Span)
+		{
+			return Found->Get();
+		}
+		// (made before a view named its model, the place's main one standing in: made again as its own)
+		if (*Found)
+		{
+			(*Found)->DestroyComponent();
+		}
+		Planes.Remove(Key);
 	}
 	// Each model is built once, at its true size, its middle at its own origin; each aircraft has its own mesh of it.
+	// A stand-in is sized to the battle's span, so each span is a shape of its own (a Kate is not a Val's size).
 	struct FBuilt
 	{
 		TArray<FVector> Points;
@@ -863,7 +1079,9 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 	};
 	static TMap<FString, FBuilt> Built;
 	const FString Name = ModelFor(Model, Nation, bFighter);
-	FBuilt* Shape = Built.Find(Name);
+	const bool bStandIn = Name.StartsWith(TEXT("Fighter:")) || Name.StartsWith(TEXT("Bomber:"));
+	const FString Made = bStandIn ? FString::Printf(TEXT("%s@%.1f"), *Name, Span) : Name;
+	FBuilt* Shape = Built.Find(Made);
 	if (!Shape)
 	{
 		FMiniatureMesh Made;
@@ -875,7 +1093,7 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 			const FBox Box(Made.Vertices);
 			const FVector Middle = Box.GetCenter();
 			const double Across = FMath::Max(1.0, Box.GetSize().Y);
-			const double Fit = Name.StartsWith(TEXT("Fighter:")) || Name.StartsWith(TEXT("Bomber:")) ? Span * UnitsPerMetre / Across : 1.0;
+			const double Fit = bStandIn ? Span * UnitsPerMetre / Across : 1.0;
 			Fresh.Points.Reserve(Made.Vertices.Num());
 			for (const FVector& Point : Made.Vertices)
 			{
@@ -885,9 +1103,10 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 			Fresh.Normals = Made.Normals;
 			Fresh.Colors = Made.Colors;
 		}
-		Shape = &Built.Add(Name, MoveTemp(Fresh));
+		Shape = &Built.Add(Made, MoveTemp(Fresh));
 	}
-	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this, *FString::Printf(TEXT("AirPlane_%d"), Key));
+	// (a name of its own: one made again for its own model must not take the name of the one just taken down)
+	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this, MakeUniqueObjectName(this, UProceduralMeshComponent::StaticClass(), *FString::Printf(TEXT("AirPlane_%d"), Key)));
 	Mesh->SetupAttachment(Root);
 	Mesh->SetMobility(EComponentMobility::Movable);
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -900,6 +1119,7 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 		Mesh->SetMaterial(0, PlaneInk);
 	}
 	Planes.Add(Key, Mesh);
+	PlaneMade.Add(Key, FPlaneMade{ Model, Span });
 	return Mesh;
 }
 
@@ -1070,21 +1290,28 @@ void AAirBattle::PlayEffects()
 			}
 			break;
 		case AirShow::FxKind::TrailStart:
-			// (the kit has room for about a dozen burning aircraft: past MostTrails a new trail is not lit)
-			if (Effects && (TrailsOn.Contains(E.Key) || TrailsOn.Num() < MostTrails))
+		{
+			// (the scene's room for trails, S.Trails: 24 on the newer kit, 10 on an older; a burning aircraft's own
+			// trail first, taking the place of the oldest piece's when the room is full)
+			int PutOut = 0;
+			if (Effects && S.Trails.Start(E.Key, E.Text == "piece", PutOut))
 			{
-				TrailsOn.Add(E.Key);
+				if (PutOut != 0)
+				{
+					Effects->TrailStop(PutOut);
+				}
 				AirParts::TrailStart(Effects.Get(), Now, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What), static_cast<float>(E.Size));
 			}
 			break;
+		}
 		case AirShow::FxKind::TrailMove:
-			if (Effects && TrailsOn.Contains(E.Key))
+			if (Effects && S.Trails.On(E.Key))
 			{
 				Effects->TrailMove(Now, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z));
 			}
 			break;
 		case AirShow::FxKind::TrailStop:
-			if (Effects && TrailsOn.Remove(E.Key) > 0)
+			if (Effects && S.Trails.Stop(E.Key))
 			{
 				Effects->TrailStop(E.Key);
 			}
@@ -1624,23 +1851,17 @@ void AAirBattle::Finish()
 		AirParts::ShowFrame(Cast<ACampaignHUD>(Controller->GetHUD()), true);
 		Controller->SetViewTarget(Controller->GetPawn());
 	}
-	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
-	{
-		if (It->IsA<ACampaignMapActor>() || It->IsA<AArmyPiece>())
-		{
-			It->SetActorHiddenInGame(false);
-		}
-		if (ACampaignEnvironment* Environment = Cast<ACampaignEnvironment>(*It))
-		{
-			Environment->SetActorTickEnabled(true);
-		}
-	}
+	ShowTheTable();
 	Destroy();
 }
 
 void AAirBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
 	HideScreen();
+	if (Reason == EEndPlayReason::Destroyed)
+	{
+		ShowTheTable(); // (taken down without CONTINUE: the table still comes back as it was)
+	}
 	for (TPair<int32, TObjectPtr<UAudioComponent>>& Pair : Engines)
 	{
 		if (Pair.Value)
@@ -1697,7 +1918,11 @@ void AAirBattle::HideScreen()
 		bOwnInput = false;
 		if (APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
 		{
-			Controller->SetInputMode(FInputModeGameAndUI());
+			// (the campaign's own mode: the pointer stays in sight while a drag turns the table, and is never locked in)
+			FInputModeGameAndUI Mode;
+			Mode.SetHideCursorDuringCapture(false);
+			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			Controller->SetInputMode(Mode);
 		}
 	}
 }

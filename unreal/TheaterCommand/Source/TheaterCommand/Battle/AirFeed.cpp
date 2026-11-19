@@ -480,6 +480,7 @@ namespace AirFeed
 			G.Model = X["model"].Str("");
 			if (G.Model.empty())
 			{
+				G.bModelGuessed = true;
 				auto M = S.Models.find(G.Nation + (G.bFighter ? ":ftr" : ":bmr"));
 				if (M != S.Models.end()) G.Model = M->second;
 			}
@@ -645,7 +646,7 @@ namespace AirFeed
 		}
 		Out = Recording();
 		Out.Key = Root["key"].Str("");
-		Out.Seed = static_cast<uint64_t>(Root["seed"].Num(0.0));
+		Out.Seed = static_cast<uint64_t>(static_cast<int64_t>(Root["seed"].Num(0.0))); // (through a signed number: a negative seed is the same on every chip)
 		if (!ReadSky(Root["sky"], Out.Board))
 		{
 			OutError = "the recording has no sky";
@@ -656,6 +657,28 @@ namespace AirFeed
 		{
 			Frame F;
 			if (ReadView(V, Out.Board, F)) Out.Views.push_back(std::move(F));
+		}
+		// A view that named no model for a group (the first, written before the battle's first second) takes the model
+		// the next view to name one gives it: every aircraft is made from the first view, and the place's main bomber
+		// standing in turned torpedo and level bombers into dive bombers (the pre-check, 06:08Z).
+		for (size_t K = 0; K < Out.Views.size(); ++K)
+		{
+			for (AirShow::Group& G : Out.Views[K].Groups)
+			{
+				if (!G.bModelGuessed) continue;
+				for (size_t Later = K + 1; Later < Out.Views.size() && G.bModelGuessed; ++Later)
+				{
+					for (const AirShow::Group& N : Out.Views[Later].Groups)
+					{
+						if (N.Id == G.Id && !N.bModelGuessed && !N.Model.empty())
+						{
+							G.Model = N.Model;
+							G.bModelGuessed = false;
+							break;
+						}
+					}
+				}
+			}
 		}
 		ReadAfter(Root["after"], Out.Card);
 		if (Out.Views.empty())

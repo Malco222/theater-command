@@ -173,6 +173,17 @@ namespace AirShow
 		if (!Views.empty() && T <= Views.back().T) Views.back() = V; // (the same moment again: the newer word stands)
 		else Views.push_back(V);
 		while (Views.size() > 12 && Views[1].T <= ShownT) Views.pop_front();
+		// A group made from a view that named no model (the place's main one stood in) takes its own when a view names
+		// it: every model of the group still flying is made over, its shape and limits with it, where it is.
+		for (const Group& G : InGroups)
+		{
+			if (G.bModelGuessed || G.Model.empty()) continue;
+			for (auto& Pair : Crafts)
+			{
+				Craft& C = Pair.second;
+				if (C.Group == G.Id && C.Model != G.Model && C.Doing != Role::Fall && C.Doing != Role::Gone) Fit(C, G);
+			}
+		}
 		for (const Event& E : InEvents) Queue.push_back(E);
 		std::stable_sort(Queue.begin(), Queue.end(), [](const Event& A, const Event& B) { return A.T < B.T; });
 		if (!InShips.empty()) ShipsNow = InShips;
@@ -327,16 +338,23 @@ namespace AirShow
 		C.Group = G.Id;
 		C.Side = G.Side;
 		C.bFighter = G.bFighter;
-		C.Model = G.Model;
 		C.Nation = G.Nation;
-		C.Form = ShapeOf(G.Model, G.bFighter);
+		Fit(C, G);
 		C.P = At;
 		C.Hdg = Hdg;
 		C.Spd = Spd;
 		C.Doing = Doing;
 		C.Hand = Roll.U() < 0.5 ? -1.0 : 1.0;
 		C.Weave = Roll.U(0.0, 2.0 * Pi);
-		if (G.bFighter)
+		C.LastP = At;
+		return Crafts[C.Key] = C;
+	}
+
+	void Show::Fit(Craft& C, const Group& G)
+	{
+		C.Model = G.Model;
+		C.Form = ShapeOf(G.Model, C.bFighter);
+		if (C.bFighter)
 		{
 			C.VMin = 80.0; C.VMax = 153.0; C.VTop = 200.0; C.RMin = 210.0; C.GMax = 6.0; C.RollMax = 120.0 * Deg;
 		}
@@ -345,8 +363,6 @@ namespace AirShow
 			C.VMin = 65.0; C.VMax = 110.0; C.VTop = 150.0; C.RMin = 500.0; C.GMax = 2.0; C.RollMax = 40.0 * Deg;
 			if (C.Form.bDive) { C.GMax = 5.0; C.RMin = 300.0; C.RollMax = 90.0 * Deg; C.VTop = 165.0; }
 		}
-		C.LastP = At;
-		return Crafts[C.Key] = C;
 	}
 
 	void Show::Reconcile(const Group& G, Band& B)
@@ -998,6 +1014,55 @@ namespace AirShow
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
+	// The scene's room for trails.
+
+	bool TrailRoom::On(int Key) const
+	{
+		for (const One& L : Lit) if (L.Key == Key) return true;
+		return false;
+	}
+
+	bool TrailRoom::Start(int Key, bool bPiece, int& OutPutOut)
+	{
+		OutPutOut = 0;
+		if (On(Key)) return true;
+		if (static_cast<int>(Lit.size()) >= Most && !bPiece)
+		{
+			for (size_t K = 0; K < Lit.size(); ++K)
+			{
+				if (!Lit[K].bPiece) continue;
+				OutPutOut = Lit[K].Key;
+				Lit.erase(Lit.begin() + static_cast<long>(K));
+				++PutOut;
+				break;
+			}
+		}
+		if (static_cast<int>(Lit.size()) >= Most)
+		{
+			++Refused;
+			RefusedOwn += bPiece ? 0 : 1;
+			return false;
+		}
+		One L;
+		L.Key = Key;
+		L.bPiece = bPiece;
+		Lit.push_back(L);
+		Peak = std::max(Peak, static_cast<int>(Lit.size()));
+		return true;
+	}
+
+	bool TrailRoom::Stop(int Key)
+	{
+		for (size_t K = 0; K < Lit.size(); ++K)
+		{
+			if (Lit[K].Key != Key) continue;
+			Lit.erase(Lit.begin() + static_cast<long>(K));
+			return true;
+		}
+		return false;
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
 	// The effects kit's room for debris.
 
 	int DebrisRoom::Holding(double T)
@@ -1103,7 +1168,7 @@ namespace AirShow
 				Small.push_back(P);
 				// (the biggest trails fire and the next smoke; the rest fall bare: a trail holds about 240 of the
 				// effects kit's 3,000 puffs, and the kit's debris row is the small pieces)
-				if (K < 2) { Fx& T = Emit(FxKind::TrailStart, P.At, K == 0 ? "fire" : "smoke", P.Key); T.Vel = P.Vel; T.Size = P.Size; }
+				if (K < 2) { Fx& T = Emit(FxKind::TrailStart, P.At, K == 0 ? "fire" : "smoke", P.Key); T.Vel = P.Vel; T.Size = P.Size; T.Text = "piece"; }
 			}
 			C.bShown = false;
 		}

@@ -25,8 +25,9 @@ struct FAirBattleState
 	AirDesk::Clock Clock;
 	AirDesk::Words Words;
 	AirDesk::Card Card;
-	/** The effects kit's room for falling debris (the kit's AirFall). */
+	/** The effects kit's room for falling debris (the kit's AirFall), and the scene's room for smoke trails. */
 	AirShow::DebrisRoom Debris;
+	AirShow::TrailRoom Trails;
 
 	/** A recorded battle (Content/Data/AirBattles/<key>.json), played back: no orders are taken. */
 	bool bReplay = true;

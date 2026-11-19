@@ -85,6 +85,8 @@ namespace AirShow
 		int Side = 0; // 0 the raider, 1 the defender
 		bool bFighter = true;
 		std::string Name, Model, Nation, State, Form, Style, Box, Role, Strike, Job;
+		/** The view named no model: the place's main one of its kind stands in until a view names it. */
+		bool bModelGuessed = false;
 		double X = 0.0, Y = 0.0, Alt = 0.0, Face = 0.0, W = 400.0, D = 300.0, Speed = 0.0;
 		double Ammo = 1.0, Run = 0.0;
 		int Figures = 0, Per = 1, N = 0;
@@ -134,7 +136,8 @@ namespace AirShow
 		Gun,        // a gun firing this frame: Key, At (muzzle), Aim, Vel (the shooter's), What (kind), Text (mount), Rate, Mv
 		GunStop,    // Key
 		Hit,        // rounds striking an aircraft: At, Normal, Vel (the aircraft's), What (the gun's kind)
-		TrailStart, // Key, At, Vel, What: smoke, fire, glycol; Size the burning aircraft's span (or the piece's size)
+		TrailStart, // Key, At, Vel, What: smoke, fire, glycol; Size the burning aircraft's span (or the piece's size);
+		            //   Text "piece" for a piece of a blown-apart aircraft, else the aircraft's own trail
 		TrailMove,  // Key, At, Vel
 		TrailStop,  // Key
 		Flak,       // At, What: light, medium, heavy
@@ -190,6 +193,34 @@ namespace AirShow
 			int Puffs = 0;
 		};
 		std::vector<Lot> Lots;
+	};
+
+	/**
+	 * The scene's room for smoke trails (the pre-check, 06:08Z). A trail lit holds about 240 of the effects kit's
+	 * puffs; the kit from 1295edc keeps every flame on a full screen and sheds the farthest smoke first, so the scene
+	 * lights up to 24 at once on that kit, 10 on an older one. A burning aircraft's own trail comes first: with the
+	 * room full it takes the place of the oldest piece's trail (that piece's smoke stops and hangs), so no aircraft
+	 * the dispatch says goes down burning falls without its flame. Plain C++, played by the cloud test too.
+	 */
+	struct TrailRoom
+	{
+		int Most = 10;
+		int Peak = 0, Refused = 0, RefusedOwn = 0, PutOut = 0;
+		/** A TrailStart. True if it is lit (or was already); OutPutOut: the key of a piece's trail put out to make room
+		 * for it (to stop in the kit), else 0. */
+		bool Start(int Key, bool bPiece, int& OutPutOut);
+		bool On(int Key) const;
+		/** A TrailStop: true if it was lit. */
+		bool Stop(int Key);
+		int Count() const { return static_cast<int>(Lit.size()); }
+
+	private:
+		struct One
+		{
+			int Key = 0;
+			bool bPiece = false;
+		};
+		std::vector<One> Lit; // in the order they were lit
 	};
 
 	/** One aircraft as it is to be drawn. */
@@ -396,6 +427,8 @@ namespace AirShow
 		void FlakRound(double Dt);
 		void SmallThings(double Dt);
 		void StartFall(Craft& C, const Event& E);
+		/** The model, its shape and its limits, from its group (as made, or when a view first names its model). */
+		void Fit(Craft& C, const Group& G);
 		int PickToFall(const Event& E);
 		void Drop(Craft& C, bool bTorpedo);
 		void Leave(Craft& C);

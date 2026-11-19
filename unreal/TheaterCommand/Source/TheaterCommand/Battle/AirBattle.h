@@ -6,14 +6,19 @@
 #include "AirBattle.generated.h"
 
 class AAirStage;
+class ACampaignEnvironment;
+class ACampaignMapActor;
 class FJsonObject;
 class ACameraActor;
 class FCampaignSession;
 class SAirBattleScreen;
 class UAudioComponent;
+class UDirectionalLightComponent;
+class UExponentialHeightFogComponent;
 class UMaterialInstanceDynamic;
 class UProceduralMeshComponent;
 class USceneComponent;
+class USkyLightComponent;
 class USoundAttenuation;
 class USoundBase;
 struct FAirBattleState;
@@ -86,9 +91,11 @@ private:
 	TObjectPtr<AAirStage> Stage;
 	UPROPERTY()
 	TObjectPtr<ACameraActor> Eye;
-	/** One mesh an aircraft, by the flight core's key. */
+	/** One mesh an aircraft, by the flight core's key, and the model and span it was made as. */
 	UPROPERTY()
 	TMap<int32, TObjectPtr<UProceduralMeshComponent>> Planes;
+	struct FPlaneMade { FString Model; double Span = 0.0; };
+	TMap<int32, FPlaneMade> PlaneMade;
 	/** Parachutes, pieces and bombs: one mesh, laid afresh each frame. */
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Small;
@@ -119,9 +126,6 @@ private:
 	bool bLookSet = false;
 	FVector CloseEye = FVector::ZeroVector;
 	FRotator CloseFacing = FRotator::ZeroRotator;
-	// The trails running (the kit has room for about a dozen burning aircraft: handoff, the effects kit 05:25Z).
-	TSet<int32> TrailsOn;
-	static constexpr int32 MostTrails = 10;
 	/** Falls the kit is shedding debris for (burning or spinning), and blow-ups whose blast the kit's AirFall drew. */
 	TSet<int32> FallsOn;
 	TSet<int32> BlastsTaken;
@@ -139,6 +143,19 @@ private:
 	TArray<FTorn> Torn;
 	int32 TornNext = 0;
 
+	// What the table had before the battle took its place, put back by Finish: its lamps, its haze, its own tick and
+	// its pieces (the pre-check, 06:08Z).
+	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; };
+	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; };
+	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
+	TArray<FKeptLamp> KeptLamps;
+	TArray<FKeptSky> KeptSkies;
+	TArray<FKeptHaze> KeptHazes;
+	TArray<TWeakObjectPtr<ACampaignEnvironment>> KeptRooms;
+	TArray<TWeakObjectPtr<AActor>> KeptPieces;
+	TWeakObjectPtr<ACampaignMapActor> Table;
+	bool bTableHidden = false;
+
 	// The picture run (-TheaterAirBattleShots).
 	FString ShotFolder;
 	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; };
@@ -152,6 +169,9 @@ private:
 	void Raise();
 	void LayGround();
 	void HideTheTable();
+	/** Every frame the battle is up: a piece the table stood again (its crowds unfolding under the pointer) is put away. */
+	void KeepTheTableHidden();
+	void ShowTheTable();
 	void Feed();
 	void Draw(double Real);
 	void Play(double Real);
