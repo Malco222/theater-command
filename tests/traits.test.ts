@@ -364,15 +364,17 @@ describe('what things cost', () => {
 describe('the rest', () => {
   it('counts the merchant fleets into the shipping, once', () => {
     const g = grand('NOR');
-    expect(traitSealift('NOR')).toBe(2);
-    expect(g.nations.NOR.sealift).toBe(2);
-    expect(g.nations.GRE.sealift).toBe(2);
-    expect(g.nations.DEN.sealift).toBe(1);
+    // (Ruling 234, rider b630: Norway's and Greece's fleets sailed for the Allies and carried one force of their own at
+    // most; Denmark moved none by sea before the occupation.)
+    expect(traitSealift('NOR')).toBe(1);
+    expect(g.nations.NOR.sealift).toBe(1);
+    expect(g.nations.GRE.sealift).toBe(1);
+    expect(g.nations.DEN.sealift).toBe(0);
     expect(g.nations.GER.sealift).toBe(4);
     openTraits(g);
     startOpen(g);
-    expect(g.nations.NOR.sealift).toBe(2);
-    expect(loadGame(saveGame(g))!.nations.NOR.sealift).toBe(2);
+    expect(g.nations.NOR.sealift).toBe(1);
+    expect(loadGame(saveGame(g))!.nations.NOR.sealift).toBe(1);
   });
 
   it('lets nobody catch Poland by surprise', () => {

@@ -286,7 +286,7 @@
     "resilience": 1,
     "align": "leaning_allies",
     "seaSupply": true,
-    "sealift": 3,
+    "sealift": 2,
     "dormant": true,
     "offmap": {
       "sea": "natl",
