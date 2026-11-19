@@ -31,7 +31,7 @@ battle screen over it.
    - riding a fighter
    - the thick of it
    - riding again
-   - the ships
+   - the ships (the overview cut to the first ship that went down)
    - the fight going on
    - the after card
 
@@ -48,6 +48,41 @@ A recorded battle shows the orders strip greyed out: it plays as it was fought.
 **The clock (a reversible call, flagged to the design director).** In the 3D scene, ×1 is real time, so the aircraft fly at their true speeds (Brian: "not moving normal"). A battle second is `SKY.scale` (2) real seconds. The run-up and the run home go at ×10, and the clock is held while a question stands.
 
 At ×1 the Pearl Harbor raid lasts about 7 real minutes, with contact about 20 s in. Midway lasts about 5 minutes, with contact about 30 s in.
+
+**The cameras** (the art director's notes on the first Mac run, build 1720). Both fill the whole window, whatever its
+shape (a camera actor keeps 16:9 and bars the rest; both have `bConstrainAspectRatio` off).
+- **The overview** starts 1.1 km behind his own raid and 14 degrees above it, looking along its way (from 2.6 km the
+  aircraft were specks). It follows the group in hand, else the fight, else his raid; drag turns it and the wheel draws
+  it in and out (120 m to 20 km). For "the ships" picture it cuts to the first ship that went down, 1.6 km off and 24
+  degrees above her, and back to the fight after it.
+- **The close view** rides one aircraft: of the group in hand, else the busiest of his own side's fighters near the
+  middle of the picture, else the other side's. After 10 seconds on one it moves to another of his, but stays if that
+  one is the only aircraft of his still up. A fighter is seen from 22 m behind along its path and 6 m above it,
+  looking 80 m past it, so its back, its fin and the tops of its wings face the eye. A bomber is seen from 1.8 spans
+  behind it, 0.55 out on the side the attack comes from and 0.45 above, looking 1.2 spans past its nose: the whole
+  bomber in the lower middle of the picture, both wingtips inside it. The eye is set from the
+  aircraft every frame (never eased toward it, so it cannot fall behind or swing past a turning one); only the way it
+  trails is eased, over a third of a second. The horizon rolls a quarter of the bank, never past 15 degrees. A little
+  motion blur (0.12). A fall, a straggle or a limp cuts to the next aircraft.
+
+**The aircraft.** A sculpted model (`Content/Models`) has two shapes: its far one (a few thousand points) for every
+aircraft, and its near one (tens of thousands) made only for an aircraft within 300 m of the eye, or the one ridden,
+and shown until it is 450 m off. The stand-ins have both shapes too (the plain Fighter and Bomber models carry far
+parts). The eye is set before the aircraft are drawn, so a cut to a new aircraft shows it at its near shape on the
+very frame of the cut. A stand-in (the nation's plain fighter or bomber, sized to the battle's span) wears
+its navy's paint where the country's map colour would be: the Japanese navy's grey (A9B19F), and the American navy's
+blue-grey (566A78) on the Wildcat, Dauntless, Devastator and Avenger (by either name the recording uses: "F4F" or
+"Wildcat", and so on). The army's machines keep theirs. The battle
+models' Kate, Val and Dauntless (`battle-models/air/*.json`) are in the same form as `Content/Models`: put there, they
+replace the stand-ins with no change to the scene.
+
+**The sea** (the stage). Round the battle, 48 km a side, the sea is a grid of 250 m squares whose colour wanders in
+patches drawn out along the trade wind (from about 070, turned with the stage, so off Midway too), 3 km by 1 km and
+1.5 km by 600 m (none smaller than two squares across, or the grid would draw it as speckle), and whose surface tilts
+up to some 5 degrees, so the sun's
+path on the water breaks into glitter; the patches fade out over the grid's last 4 km. Past it, a plain sheet in four
+bands. Its colour is darker than before (1C4453), with a tighter sun path (roughness 0.2): looking down from 5 km the
+first run's sea measured 100 to 118 of brightness, and the art director's mark is 80 or under before the grade.
 
 **Falling aircraft.** Every loss hands the effects kit its fall (`AirFall`, kit head 44af184). An aircraft blown apart
 throws its debris row at once round the kit's torn fireball. One going down burning or spinning sheds pieces as it
@@ -86,15 +121,33 @@ while a drawn cloud's lift over high ground is still easing, for each metre the 
   soft lit body, which fades in as the rest fade out, so the clouds run on small toward the horizon with no empty band.
   The painter's room is 4,000 puffs (`MostPuffs`); the two battles draw about 2,800 at most. With no room, the farthest
   puffs are left out.
-- **Cumulus** cover about three eighths of the sky. Each is a flat grey base, a lit, lumpy dome wider than it is tall,
-  a few turrets and a faint veil that holds it together (no deeper than 120 m under the base at its faded rim, so a
-  flat base stays flat). Most are shallow, and a few reach the day's tops. They drift
-  with the battle's wind. Over the target there is a clearing that stays put as they drift: a cloud carried into it
-  thins away, and one carried out of it fills in, so the ships or the town stay in sight.
+- **Cumulus** cover about three eighths of the sky: a trade-wind sky (the art director), many small ones (300 to 600 m),
+  some middling and a few big (1.5 to 2.5 km), in loose clusters with gaps and in rows along the wind about 4 km
+  apart. Each is a flat grey base, a lit, lumpy dome wider than it is tall, a few turrets and a faint veil that holds
+  it together (within the body, so it lays no pale disc on the sea; no deeper than 120 m under the base at its faded
+  rim, so a flat base stays flat). Most are shallow, and a few reach the day's tops. They drift with the battle's wind.
+  Over the target there is a clearing that stays put as they drift: a cloud carried into it thins away, and one
+  carried out of it fills in, so the ships or the town stay in sight.
+- **Light and shade** come from each cloud's shape: every point of a puff is lit as the point of the cloud's rounded
+  body it stands for. Sunlit tops come out about 242 of brightness, down-sun sides about 165, the base from under it
+  150 to 155 with a straight, crisp underside (from above, the dome hides it). The sunlit tops and sides are crisp
+  over their outer fifth; the base and the far body stay soft. On a clear day each cloud of 600 m or more lays its
+  shadow within 10 km of the eye, down-sun, about 27 per cent darker in the picture than what it falls on (half the
+  light off at its middle: the blend is in light, and 27 per cent of light was only 13 of brightness; on the open sea
+  of the low picture, 42 to 44 against 57 to 59): on the sea, and over land too (the art director, on build 1722),
+  draped over the ground as a soft patch, each point of it laid 25 m over the highest ground under it and its
+  neighbours so the hills do not cut through. The shadows are a mesh of their own, drawn before every other
+  see-through thing whichever way the eye is (sort -40), so the ground's fires and smoke and the air fight stand in
+  front of them (the review: in the clouds' mesh they were laid over the harbour's fires). The haze is Unreal's
+  height fog at density 0.00045 and falloff 0.006 from 2 km (the picture tool follows the same formula).
 - **A deck** covers most of the sky, with a few holes. It sits 1.5 to 2.5 km under the lowest bombers above 2,000 m
   (the art director). It is moved up or down to that and keeps its thickness. Over the lowest band (1,800 m) it lies
-  above the bombers instead, its base 600 m over them. A strike at ships keeps a hole over the ships. A deck does not
-  drift (from bomber height its drift could not be seen), so the hole stays over the ships.
+  above the bombers instead, its base 600 m over them. It reads as a floor of cells: each tile darker at its rim where
+  it meets the next, with lumps of mixed size over it. A strike at ships keeps a ragged hole over the ships: its edge
+  3.6 km out, give or take three tenths, in lobes and longer along the wind, the tiles thinning and breaking up over a
+  kilometre across the edge, and a few small scraps of cloud in it, none within 2.4 km of the ships (falls pass
+  through the scraps). A deck does not drift (from bomber height its drift could not be seen), so the hole stays over
+  the ships.
 - Cloud never sits lower than 300 m over the ground under it, so a cloud over a mountain is lifted with it where it
   is drawn: 300 m over the ground under its puffs' hearts, 200 m under their faded rims. The ground is looked at on a
   lattice 120 m apart (finer than the stage's 150 m cells) out past the rims, so no cell under a cloud is missed. As a
@@ -116,12 +169,15 @@ while a drawn cloud's lift over high ground is still easing, for each metre the 
   of the base before it changes kits, so nothing flickers between them; a trail carries on in the other kit at its
   full look, as of when its kind began, and does not light again). See-through things are drawn one after another,
   not by depth, so the order follows the eye. With the eye over the clouds' base under it, the ground's kit is drawn
-  first, then the clouds, then the air: every cloud between the eye and something under the base hides it. Under the
-  base, the clouds come first (they are the sky behind), then the ground's kit, then the air. The order turns 50 m
-  either side of the base.
+  first, then the clouds, then the air: every cloud between the eye and something under the base hides it. The
+  clouds' shadows come before all of them. Under the
+  base, the air's kit comes first (what it draws there is above the base, behind the clouds), then the clouds (they
+  are the sky behind), then the ground's kit. The order turns 50 m either side of the base.
 - The cloud test checks the sky too: the day as read, the heights, the cover (0.31 to 0.45), the clearing kept as the
   clouds drift (when the bombs fall, at the end and two hours on), cloud round the falls far from the target, the room,
-  the same sky every time, the far-to-near order and the painter's time (under 4 ms; about 1.4). It checks the clearing
+  the same sky every time, the far-to-near order and the painter's time (under 4 ms; 3.0 to 3.7 with the look round's lumps and the
+  shadows over land, the ground asked once for each of a shadow's points). It checks that the shadows are laid apart
+  from the puffs (none dark among them; some on a cumulus day). It checks the clearing
   on what the painter draws as well. On a cumulus day no fall or parachute ends in the air. It lays a deck under a
   4,500 m band, a deck raised to the band, a deck over the lowest band, a strike's hole, three kinds of high ground (a
   broad 2,000 m mountain, a steep ridge as steep as the Koolau, a 3,800 m peak) and a ticket with no sky. Over each
@@ -129,14 +185,15 @@ while a drawn cloud's lift over high ground is still easing, for each metre the 
   wind carries them for 20 minutes: every puff's heart 150 m over the ground under it, its rim 30 m, each cloud's foot
   300 m, and no cloud's lift changing faster than 8 m a second. An eye flying round the harbour for a minute asks for
   no more paints over the island than over the sea. It flies the battle again twice: under a test deck over the sea,
-  and under the lowest band's deck lifted over high ground beside where the falls are thickest, so that tiles side by
+  its hole laid over the middle of where the falls begin (so some falls from above go down through it and the rest end
+  in the tiles round it, whatever the day's tiles happen to leave open), and under the lowest band's deck lifted over high ground beside where the falls are thickest, so that tiles side by
   side lifted unlike are where falls are. Every end is judged against the drawn tiles found one by one: in a tile,
   under its hiding height; or on the sea or the ground; never in clear air, nothing left falling in cloud, and no
   debris row shedding in clear air. A third flight puts a sharp step in the deck where falls begin (a tile higher than
   any fall on one side, a thick low one on the other): falls that drift across must end in the low tile, and no plane,
   piece or parachute is left falling inside it. `AIR_SKY_PICTURES=1
   Tools/air_show/run.sh` also draws each battle's clouds from four eyes (one where the battle opens, far from the
-  target), plus a deck day, with a small software painter (`air_sky_picture.cpp`). Unreal's light and haze are only
+  target), steeply down from 5 km, and a deck day, with a small software painter (`air_sky_picture.cpp`). Unreal's light and haze are only
   stood in for there.
 
 ## Hook lines for the 3D builder
@@ -190,8 +247,8 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
 ## On the first build, look at
 
 1. **Bank direction.** A plane turning right should have its right wing down. If every bank reads backwards, negate `P.Bank` in `AAirBattle::Draw` and in the close camera.
-2. **Nose direction and size.** Each model is built nose toward -X and turned half round before its heading. The carrier aircraft (Kate, Val, Dauntless, Devastator, Wildcat) use the sculpted models where `Content/Models` has them. Otherwise each is the nation's plain fighter or bomber, scaled to the battle's span.
-3. **The tags.** They should sit over their formations and fan out instead of stacking, his own in cream and the enemy's in muted paper. The near line should be amber.
+2. **Nose direction and size.** Each model is built nose toward -X and turned half round before its heading. (On build 1720 the close view's aircraft were far and nearly level with the eye, and read as seen from ahead; the stars on the P-40's wings show it was from behind. The close view now looks down on its back from 22 m.) The carrier aircraft (Kate, Val, Dauntless, Devastator, Wildcat) use the sculpted models where `Content/Models` has them. Otherwise each is the nation's plain fighter or bomber, scaled to the battle's span, in its navy's paint.
+3. **The tags.** They sit over their formations, his own in cream and the enemy's in muted paper. Tags that would touch join one block: it shows two (the groups in hand, then his own, then the largest) and a "+N more groups" line, never a column. A block moved off its formation keeps a thin line to it. The near line and "x10 UNTIL THE FORMATIONS MEET" are amber on a dark plate; the aim slip and the after card wrap their lines.
 4. **The clouds.** They should be white on their sunlit tops, grey under their flat bases, and soft at the edges,
    with no ring of polygon corners. The fight's smoke and tracer over the clouds should lie on them. If the clouds glare
    or vanish against the sky, their brightness is the three colours at the top of `AirSky.cpp`. If they cost too much

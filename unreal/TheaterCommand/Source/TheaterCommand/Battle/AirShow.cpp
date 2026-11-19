@@ -67,6 +67,9 @@ namespace AirShow
 		else if (Model == "SBD" || Model == "SB2C" || Model == "Skua") { S.Span = 12.7; S.Long = 10.1; Engines({ 0.0 }, 4.3, 0.0); Bomber(10.1, 1.2); S.bDive = true; }
 		else if (Model == "TBD" || Model == "TBF" || Model == "Swordfish" || Model == "Barracuda") { S.Span = 15.2; S.Long = 10.7; Engines({ 0.0 }, 4.5, 0.0); Bomber(10.7, 1.2); }
 		else if (Model == "Stuka") { S.Span = 13.8; S.Long = 11.1; Engines({ 0.0 }, 4.6, 0.0); Bomber(11.1, 1.2); S.bDive = true; }
+		// (the plain carrier models, "Dive:ITA" or "Torpedo:FRA": single-engined, as every carrier aircraft of the war was)
+		else if (Model.rfind("Dive", 0) == 0) { S.Span = 13.0; S.Long = 10.2; Engines({ 0.0 }, 4.3, 0.0); Bomber(10.2, 1.2); S.bDive = true; }
+		else if (Model.rfind("Torpedo", 0) == 0) { S.Span = 15.0; S.Long = 10.6; Engines({ 0.0 }, 4.5, 0.0); Bomber(10.6, 1.2); }
 		else if (!bFighter) { S.Span = 19.8; S.Long = 16.0; Engines({ -3.0, 3.0 }, 1.5, 0.0); Bomber(16.0, 1.6); }
 		else
 		{

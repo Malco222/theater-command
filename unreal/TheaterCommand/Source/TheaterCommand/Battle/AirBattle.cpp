@@ -411,7 +411,9 @@ bool AAirBattle::Open(const FString& Why)
 		PlaneInk = Ink(0.5f, 0.45f);
 		PlainInk = Ink(0.85f, 0.2f);
 	}
-	// The effects: the kit's own, drawn out to the air distance, on the air clock.
+	// The effects: the kit's own, drawn out to the air distance, on the air clock (its mesh, the one it hangs on Root,
+	// drawn behind the clouds while the eye is under them: DrawSky).
+	const TArray<TObjectPtr<USceneComponent>> BeforeAir = Root->GetAttachChildren();
 	Effects = MakeUnique<FBattleEffects>();
 	if (!Effects->Begin(Root, UnitsPerMetre, [this](const FVector& Point)
 		{
@@ -423,6 +425,14 @@ bool AAirBattle::Open(const FString& Why)
 	}
 	else
 	{
+		for (const TObjectPtr<USceneComponent>& Child : Root->GetAttachChildren())
+		{
+			UProceduralMeshComponent* Found = Cast<UProceduralMeshComponent>(Child.Get());
+			if (Found && !BeforeAir.Contains(Child))
+			{
+				AirFxMesh = Found;
+			}
+		}
 		AirParts::UseAirDistance(Effects.Get());
 		S.Trails.Most = AirParts::HasTrailSpan(Effects.Get()) ? 24 : 10;
 		Effects->SetWind(WorldVector(AirSky::Wind.X, AirSky::Wind.Y, 0.0) * (1.0 / 100.0));
@@ -473,6 +483,8 @@ bool AAirBattle::Open(const FString& Why)
 	if (Eye)
 	{
 		Eye->GetCameraComponent()->SetFieldOfView(55.0f);
+		// (the whole window, whatever its shape: a camera actor keeps 16:9 and bars the rest)
+		Eye->GetCameraComponent()->bConstrainAspectRatio = false;
 		Eye->GetCameraComponent()->PostProcessSettings.bOverride_MotionBlurAmount = true;
 		Eye->GetCameraComponent()->PostProcessSettings.MotionBlurAmount = 0.0f;
 	}
@@ -736,9 +748,12 @@ void AAirBattle::HideTheTable()
 				Kept.Falloff = Fog->FogHeightFalloff;
 				Kept.MostOpacity = Fog->FogMaxOpacity;
 				Kept.Colour = AirParts::HazeColour(Fog, FLinearColor(0.80f, 0.84f, 0.88f));
+				// (thick low down and thin high up: looking down from bomber height the sea stays dark under the bright
+				// cloud floor, the art director's 19 November 12:59Z; the horizon and the low air far off soft. The sky's
+				// pictures, Tools/air_show/air_sky_picture.cpp, take the same numbers)
 				Fog->SetStartDistance(2000.0f * static_cast<float>(UnitsPerMetre));
-				Fog->SetFogDensity(0.0005f);
-				Fog->SetFogHeightFalloff(0.004f);
+				Fog->SetFogDensity(0.00045f);
+				Fog->SetFogHeightFalloff(0.006f);
 				Fog->SetFogMaxOpacity(0.8f);
 				Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.66f, 0.78f));
 			}
@@ -971,11 +986,20 @@ void AAirBattle::LaySky()
 	Clouds->RegisterComponent();
 	CloudInk = UMaterialInstanceDynamic::Create(Highlight, this);
 	CloudInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+	CloudShadows = NewObject<UProceduralMeshComponent>(this, TEXT("AirCloudShadows"));
+	CloudShadows->bUseAsyncCooking = false;
+	CloudShadows->SetupAttachment(Root);
+	CloudShadows->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	CloudShadows->SetCastShadow(false);
+	// (under everything see-through, whichever way DrawSky turns the rest: the air kit is at 0 or -30, the clouds at -10
+	// or -20, the ground's kit at -20 or -10)
+	CloudShadows->SetTranslucentSortPriority(-40);
+	CloudShadows->RegisterComponent();
 	SkyOrder = 0;
 	// The first turn of the puffs, to an eye behind the raid; after that DrawSky turns them as the eye moves.
 	const AirSky::Vec Drift = S.Sky.DriftAt(S.Show.AirNow());
 	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
-	S.SkyPainter.Paint(S.Sky, AirSky::Vec(S.Board.TargetX, S.Board.TargetY - 6000.0, 5000.0), Drift, S.SkyPlace.Sun, Light, S.SkyPoints, S.SkyRgba);
+	S.SkyPainter.Paint(S.Sky, AirSky::Vec(S.Board.TargetX, S.Board.TargetY - 6000.0, 5000.0), Drift, S.SkyPlace.Sun, Light, S.SkyPoints, S.SkyRgba, &S.SkyShadows, &S.SkyShadowRgba);
 	// (the painter's room, fixed: each slot keeps its triangles, only its points move as the eye does)
 	const std::vector<int> Made = S.SkyPainter.Triangles(S.Sky.MostPuffs);
 	TArray<int32> Triangles;
@@ -998,6 +1022,29 @@ void AAirBattle::LaySky()
 	Clouds->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
 	Clouds->CreateMeshSection(0, CloudPoints, Triangles, Normals, TArray<FVector2D>(), CloudColours, TArray<FProcMeshTangent>(), false);
 	Clouds->SetMaterial(0, CloudInk);
+	{
+		const std::vector<int> ShadowsMade = S.SkyPainter.Triangles(AirSky::Painter::MostShadows);
+		TArray<int32> ShadowTriangles;
+		ShadowTriangles.Reserve(static_cast<int32>(ShadowsMade.size()));
+		for (const int Index : ShadowsMade)
+		{
+			ShadowTriangles.Add(Index);
+		}
+		ShadowPoints.SetNum(static_cast<int32>(S.SkyShadows.size()));
+		ShadowColours.SetNum(static_cast<int32>(S.SkyShadows.size()));
+		for (int32 Index = 0; Index < ShadowPoints.Num(); ++Index)
+		{
+			const AirSky::Vec& P = S.SkyShadows[static_cast<size_t>(Index)];
+			ShadowPoints[Index] = World(P.X, P.Y, P.Z);
+			const size_t C = static_cast<size_t>(Index) * 4;
+			ShadowColours[Index] = FColor(S.SkyShadowRgba[C], S.SkyShadowRgba[C + 1], S.SkyShadowRgba[C + 2], S.SkyShadowRgba[C + 3]);
+		}
+		TArray<FVector> ShadowNormals;
+		ShadowNormals.Init(FVector::UpVector, ShadowPoints.Num());
+		CloudShadows->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
+		CloudShadows->CreateMeshSection(0, ShadowPoints, ShadowTriangles, ShadowNormals, TArray<FVector2D>(), ShadowColours, TArray<FProcMeshTangent>(), false);
+		CloudShadows->SetMaterial(0, CloudInk);
+	}
 	// (drawn: now the deck is where falls pass out of sight; the field outlives the flight core's hold on it, both
 	// being the battle state's)
 	if (S.Sky.DeckTop > 0.0)
@@ -1028,12 +1075,18 @@ void AAirBattle::DrawSky()
 	// smoke does (a deck stays where it was laid).
 	const AirSky::Vec Drift = S.Sky.DriftAt(S.Show.AirNow());
 	Clouds->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
+	if (CloudShadows)
+	{
+		CloudShadows->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
+	}
 	const FVector At = Eye->GetActorLocation() / UnitsPerMetre;
 	const AirSky::Vec Seen(At.Y, At.X, At.Z);
 	// See-through things are drawn one after another, not by depth. Seen from over the clouds' base, the ground's bursts
-	// and fires lie under every cloud between, and the air fight over them; seen from under, the clouds are the sky
-	// behind both. The base under the eye is the one the kits are split at (KitAt), with 50 m either side before the
-	// order turns, so it does not flicker.
+	// and fires lie under every cloud between, and the air fight over them; seen from under, the air fight (all of it
+	// over the base: what is under it is the ground kit's) lies behind every cloud between, a gap showing it, and the
+	// ground's over both (the pre-check, 19 November 13:07Z: tracer, flak and smoke showed in front of the clouds that
+	// hid their aircraft). The base under the eye is the one the kits are split at (KitAt), with 50 m either side
+	// before the order turns, so it does not flicker.
 	const double UnderEye = S.Show.Ground ? S.Show.Ground(Seen.X, Seen.Y) : 0.0;
 	const double EyeBase = FMath::Max(S.Sky.Base, UnderEye + 300.0) + (SkyOrder == 1 ? -50.0 : SkyOrder == 2 ? 50.0 : 0.0);
 	const int32 Want = Seen.Z > EyeBase ? 1 : 2;
@@ -1045,13 +1098,17 @@ void AAirBattle::DrawSky()
 		{
 			GroundFxMesh->SetTranslucentSortPriority(Want == 1 ? -20 : -10);
 		}
+		if (AirFxMesh.IsValid())
+		{
+			AirFxMesh->SetTranslucentSortPriority(Want == 1 ? 0 : -30);
+		}
 	}
 	if (!S.SkyPainter.Stale(Seen, Drift))
 	{
 		return;
 	}
 	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
-	S.SkyPainter.Paint(S.Sky, Seen, Drift, S.SkyPlace.Sun, Light, S.SkyPoints, S.SkyRgba);
+	S.SkyPainter.Paint(S.Sky, Seen, Drift, S.SkyPlace.Sun, Light, S.SkyPoints, S.SkyRgba, &S.SkyShadows, &S.SkyShadowRgba);
 	const int32 Count = FMath::Min(CloudPoints.Num(), static_cast<int32>(S.SkyPoints.size()));
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
@@ -1061,6 +1118,18 @@ void AAirBattle::DrawSky()
 		CloudColours[Index] = FColor(S.SkyRgba[C], S.SkyRgba[C + 1], S.SkyRgba[C + 2], S.SkyRgba[C + 3]);
 	}
 	Clouds->UpdateMeshSection(0, CloudPoints, TArray<FVector>(), TArray<FVector2D>(), CloudColours, TArray<FProcMeshTangent>());
+	if (CloudShadows)
+	{
+		const int32 ShadowCount = FMath::Min(ShadowPoints.Num(), static_cast<int32>(S.SkyShadows.size()));
+		for (int32 Index = 0; Index < ShadowCount; ++Index)
+		{
+			const AirSky::Vec& P = S.SkyShadows[static_cast<size_t>(Index)];
+			ShadowPoints[Index] = World(P.X, P.Y, P.Z);
+			const size_t C = static_cast<size_t>(Index) * 4;
+			ShadowColours[Index] = FColor(S.SkyShadowRgba[C], S.SkyShadowRgba[C + 1], S.SkyShadowRgba[C + 2], S.SkyShadowRgba[C + 3]);
+		}
+		CloudShadows->UpdateMeshSection(0, ShadowPoints, TArray<FVector>(), TArray<FVector2D>(), ShadowColours, TArray<FProcMeshTangent>());
+	}
 }
 
 FBattleEffects* AAirBattle::KitAt(const FVector& WorldAt, const FBattleEffects* InNow) const
@@ -1154,8 +1223,9 @@ void AAirBattle::Tick(float DeltaSeconds)
 	{
 		MetRealT = RealT;
 	}
-	Draw(Real);
+	// (the eye first: a cut to a new aircraft must draw it at its near shape on the very frame of the cut)
 	AimEye(Real);
+	Draw(Real);
 	DrawSky();
 	if (Effects && Eye)
 	{
@@ -1287,6 +1357,81 @@ FString AAirBattle::ModelFor(const FString& Model, const FString& Nation, bool b
 	return Out;
 }
 
+namespace AirParts
+{
+	/** An aircraft's shape, built once at its true size with its middle at its own origin; each aircraft has its own
+	 * mesh of it. */
+	struct FShape
+	{
+		TArray<FVector> Points;
+		TArray<int32> Triangles;
+		TArray<FVector> Normals;
+		TArray<FColor> Colors;
+	};
+
+	static TMap<FString, FShape>& Shapes()
+	{
+		static TMap<FString, FShape> Kept;
+		return Kept;
+	}
+
+	static FShape ShapeOf(const FMiniatureMesh& Made, const FVector& Middle, double Fit)
+	{
+		FShape Fresh;
+		Fresh.Points.Reserve(Made.Vertices.Num());
+		for (const FVector& Point : Made.Vertices)
+		{
+			Fresh.Points.Add((Point - Middle) * Fit);
+		}
+		Fresh.Triangles = Made.Triangles;
+		Fresh.Normals = Made.Normals;
+		Fresh.Colors = Made.Colors;
+		return Fresh;
+	}
+
+	/**
+	 * A stand-in's coat in the paint its navy flew (the art director's note on the first Mac run: three orange-yellow
+	 * aircraft over Oahu, whose side could not be told). The plain machines wear their country's colour on the map; the
+	 * carrier aircraft of 1941-42 wore the Japanese navy's grey, or the American navy's blue-grey. Every point whose
+	 * colour is the coat's, or the coat's shaded, is painted the same shade of the new one; marks, glass, metal and the
+	 * undersides keep theirs.
+	 */
+	static void Recoat(TArray<FColor>& Colors, const FColor& From, const FColor& To)
+	{
+		for (FColor& C : Colors)
+		{
+			const double R = C.R / FMath::Max(1.0, static_cast<double>(From.R));
+			const double G = C.G / FMath::Max(1.0, static_cast<double>(From.G));
+			const double B = C.B / FMath::Max(1.0, static_cast<double>(From.B));
+			const double Mean = (R + G + B) / 3.0;
+			if (Mean < 0.4 || Mean > 1.3 || FMath::Abs(R - Mean) > 0.07 || FMath::Abs(G - Mean) > 0.07 || FMath::Abs(B - Mean) > 0.07)
+			{
+				continue;
+			}
+			auto Shade = [Mean](uint8 Channel) { return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Channel * Mean), 0, 255)); };
+			C = FColor(Shade(To.R), Shade(To.G), Shade(To.B), C.A);
+		}
+	}
+
+	/** The navy paint a stand-in wears, by its nation and model; false if it keeps its own. */
+	static bool NavyCoat(const FString& Nation, const FString& Model, FColor& Out)
+	{
+		if (Nation == TEXT("JAP") || Nation == TEXT("JPN"))
+		{
+			Out = FColor::FromHex(TEXT("A9B19F")); // (the Japanese navy's grey, as the battle models' Zero, Kate and Val)
+			return true;
+		}
+		// (the recordings name them either way: "F4F" or "Wildcat", "SBD" or "Dauntless")
+		static const TSet<FString> Carried = { TEXT("F4F"), TEXT("Wildcat"), TEXT("SBD"), TEXT("Dauntless"), TEXT("TBD"), TEXT("Devastator"), TEXT("TBF"), TEXT("Avenger") };
+		if (Nation == TEXT("USA") && Carried.Contains(Model))
+		{
+			Out = FColor::FromHex(TEXT("566A78")); // (the American navy's blue-grey, as the battle models' Dauntless)
+			return true;
+		}
+		return false;
+	}
+}
+
 UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model, const FString& Nation, bool bFighter, double Span)
 {
 	if (TObjectPtr<UProceduralMeshComponent>* Found = Planes.Find(Key))
@@ -1302,26 +1447,21 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 			(*Found)->DestroyComponent();
 		}
 		Planes.Remove(Key);
+		PlaneMade.Remove(Key);
 	}
-	// Each model is built once, at its true size, its middle at its own origin; each aircraft has its own mesh of it.
-	// A stand-in is sized to the battle's span, so each span is a shape of its own (a Kate is not a Val's size).
-	struct FBuilt
-	{
-		TArray<FVector> Points;
-		TArray<int32> Triangles;
-		TArray<FVector> Normals;
-		TArray<FColor> Colors;
-	};
-	static TMap<FString, FBuilt> Built;
+	// A sculpted model has two shapes: its far one (a few thousand points) for every aircraft, and its near one (tens
+	// of thousands) made only for those that come near the eye (PlaneNear): two hundred aircraft at the near shape were
+	// millions of points. A stand-in is sized to the battle's span, so each span is a shape of its own (a Kate is not a
+	// Val's size), and wears its navy's paint.
 	const FString Name = ModelFor(Model, Nation, bFighter);
 	const bool bStandIn = Name.StartsWith(TEXT("Fighter:")) || Name.StartsWith(TEXT("Bomber:"));
-	const FString ShapeKey = bStandIn ? FString::Printf(TEXT("%s@%.1f"), *Name, Span) : Name;
-	FBuilt* Shape = Built.Find(ShapeKey);
-	if (!Shape)
+	const FString ShapeKey = bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name;
+	TMap<FString, AirParts::FShape>& Shapes = AirParts::Shapes();
+	if (!Shapes.Contains(ShapeKey))
 	{
 		FMiniatureMesh Made;
 		Made.Vehicle(Name, FVector::ZeroVector, UnitsPerMetre, 0.0, true);
-		FBuilt Fresh;
+		AirParts::FShape Near;
 		if (Made.Vertices.Num() > 0)
 		{
 			// (to the battle's span: a stand-in's own size is the plain machine's, not this one's)
@@ -1329,17 +1469,33 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 			const FVector Middle = Box.GetCenter();
 			const double Across = FMath::Max(1.0, Box.GetSize().Y);
 			const double Fit = bStandIn ? Span * UnitsPerMetre / Across : 1.0;
-			Fresh.Points.Reserve(Made.Vertices.Num());
-			for (const FVector& Point : Made.Vertices)
+			Near = AirParts::ShapeOf(Made, Middle, Fit);
+			FColor Navy;
+			const bool bNavy = bStandIn && AirParts::NavyCoat(Nation, Model, Navy);
+			if (bNavy)
 			{
-				Fresh.Points.Add((Point - Middle) * Fit);
+				AirParts::Recoat(Near.Colors, FMiniatureMesh::VehicleColour(Nation).ToFColor(true), Navy);
 			}
-			Fresh.Triangles = Made.Triangles;
-			Fresh.Normals = Made.Normals;
-			Fresh.Colors = Made.Colors;
+			// (the stand-ins too: the plain Fighter and Bomber models have far parts, and they are half of each battle)
+			FString Kind, Whose;
+			Name.Split(TEXT(":"), &Kind, &Whose);
+			FMiniatureMesh Far;
+			if (Far.Sculpted(Kind, Whose, FVector::ZeroVector, UnitsPerMetre, 0.0, true) && Far.Vertices.Num() > 0 && Far.Vertices.Num() < Made.Vertices.Num())
+			{
+				// (about the same middle and the same size as the near shape's, so that the change from one to the
+				// other does not jump)
+				AirParts::FShape Away = AirParts::ShapeOf(Far, Middle, Fit);
+				if (bNavy)
+				{
+					AirParts::Recoat(Away.Colors, FMiniatureMesh::VehicleColour(Nation).ToFColor(true), Navy);
+				}
+				Shapes.Add(ShapeKey + TEXT("|far"), MoveTemp(Away));
+			}
 		}
-		Shape = &Built.Add(ShapeKey, MoveTemp(Fresh));
+		Shapes.Add(ShapeKey, MoveTemp(Near));
 	}
+	const AirParts::FShape* Far = Shapes.Find(ShapeKey + TEXT("|far"));
+	const AirParts::FShape* First = Far ? Far : Shapes.Find(ShapeKey);
 	// (a name of its own: one made again for its own model must not take the name of the one just taken down)
 	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this, MakeUniqueObjectName(this, UProceduralMeshComponent::StaticClass(), *FString::Printf(TEXT("AirPlane_%d"), Key)));
 	Mesh->SetupAttachment(Root);
@@ -1348,14 +1504,42 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 	Mesh->SetCastShadow(true);
 	Mesh->bUseAsyncCooking = false;
 	Mesh->RegisterComponent();
-	if (Shape->Points.Num() > 0)
+	if (First && First->Points.Num() > 0)
 	{
-		Mesh->CreateMeshSection(0, Shape->Points, Shape->Triangles, Shape->Normals, TArray<FVector2D>(), Shape->Colors, TArray<FProcMeshTangent>(), false);
+		Mesh->CreateMeshSection(0, First->Points, First->Triangles, First->Normals, TArray<FVector2D>(), First->Colors, TArray<FProcMeshTangent>(), false);
 		Mesh->SetMaterial(0, PlaneInk);
 	}
 	Planes.Add(Key, Mesh);
-	PlaneMade.Add(Key, FPlaneMade{ Model, Span });
+	FPlaneMade Made;
+	Made.Model = Model;
+	Made.Span = Span;
+	Made.Shape = ShapeKey;
+	Made.bTwoShapes = Far != nullptr;
+	PlaneMade.Add(Key, Made);
 	return Mesh;
+}
+
+void AAirBattle::PlaneNear(int32 Key, UProceduralMeshComponent* Mesh, bool bNear)
+{
+	FPlaneMade* Made = PlaneMade.Find(Key);
+	if (!Mesh || !Made || !Made->bTwoShapes || Made->bNear == bNear)
+	{
+		return;
+	}
+	if (bNear && !Made->bNearMade)
+	{
+		const AirParts::FShape* Near = AirParts::Shapes().Find(Made->Shape);
+		if (!Near || Near->Points.Num() == 0)
+		{
+			return;
+		}
+		Mesh->CreateMeshSection(1, Near->Points, Near->Triangles, Near->Normals, TArray<FVector2D>(), Near->Colors, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(1, PlaneInk);
+		Made->bNearMade = true;
+	}
+	Mesh->SetMeshSectionVisible(0, !bNear);
+	Mesh->SetMeshSectionVisible(1, bNear);
+	Made->bNear = bNear;
 }
 
 void AAirBattle::Draw(double Real)
@@ -1364,6 +1548,8 @@ void AAirBattle::Draw(double Real)
 	// Every aircraft where the flight core has it: its nose along its path, banked into its turn. The models are built
 	// nose toward -X with the right hand at -Y, so each is turned half round before its heading, climb and bank.
 	const FQuat HalfRound = FRotator(0.0, 180.0, 0.0).Quaternion();
+	const double U = UnitsPerMetre;
+	const FVector EyeAt = Eye ? Eye->GetActorLocation() : FVector::ZeroVector;
 	TSet<int32> Seen;
 	for (const AirShow::PlaneOut& P : S.Show.Planes())
 	{
@@ -1384,7 +1570,15 @@ void AAirBattle::Draw(double Real)
 		}
 		Mesh->SetVisibility(true);
 		const FQuat Attitude = FRotator(P.Pitch, P.Heading, P.Bank).Quaternion() * HalfRound;
-		Mesh->SetWorldLocationAndRotation(World(P.At.X, P.At.Y, P.At.Z), Attitude);
+		const FVector Where = World(P.At.X, P.At.Y, P.At.Z);
+		Mesh->SetWorldLocationAndRotation(Where, Attitude);
+		// The near shape within 300 m of the eye (and for the ridden aircraft), the far one past 450 m.
+		if (const FPlaneMade* Made = PlaneMade.Find(P.Key); Made && Made->bTwoShapes)
+		{
+			const double Away = FVector::Dist(Where, EyeAt) / U;
+			const bool bRidden = S.bClose && S.Subject.Plane == P.Key;
+			PlaneNear(P.Key, Mesh, bRidden || Away < (Made->bNear ? 450.0 : 300.0));
+		}
 	}
 	for (TPair<int32, TObjectPtr<UProceduralMeshComponent>>& Pair : Planes)
 	{
@@ -1396,7 +1590,6 @@ void AAirBattle::Draw(double Real)
 	// The small things, laid afresh each frame in one mesh: a parachute's canopy and its airman, a torn piece of a
 	// wreck tumbling, a bomb or a torpedo falling.
 	FMiniatureMesh Things;
-	const double U = UnitsPerMetre;
 	for (const AirShow::Thing& T : S.Show.Things())
 	{
 		const FVector At = World(T.At.X, T.At.Y, T.At.Z);
@@ -1768,6 +1961,7 @@ void AAirBattle::PlayEffects()
 			if (ShipRealT < 0.0)
 			{
 				ShipRealT = RealT;
+				FirstSunk = E.Key;
 			}
 			break;
 		case AirShow::FxKind::Smoke:
@@ -1827,7 +2021,24 @@ void AAirBattle::AimEye(double Real)
 			}
 			if (Next.Plane < 0)
 			{
-				Next = AirDesk::Choose(Out, std::vector<int>(), S.Show.Eye, bLost ? -1 : S.Subject.Plane);
+				// (his own side's aircraft first: the picture rides with his men; the other side's when his have none up)
+				std::vector<AirShow::PlaneOut> Ours;
+				for (const AirShow::PlaneOut& P : Out)
+				{
+					if (P.Side == S.Desk.MySideIndex())
+					{
+						Ours.push_back(P);
+					}
+				}
+				Next = AirDesk::Choose(Ours, std::vector<int>(), S.Show.Eye, bLost ? -1 : S.Subject.Plane);
+				if (Next.Plane < 0 && !bLost && Rider->Side == S.Desk.MySideIndex())
+				{
+					S.Subject.Since = 0.0; // (his only aircraft up: the picture stays with it)
+				}
+				else if (Next.Plane < 0)
+				{
+					Next = AirDesk::Choose(Out, std::vector<int>(), S.Show.Eye, bLost ? -1 : S.Subject.Plane);
+				}
 			}
 			if (Next.Plane >= 0)
 			{
@@ -1838,33 +2049,47 @@ void AAirBattle::AimEye(double Real)
 		}
 		if (Rider)
 		{
+			// (the art director's rules from the first Mac run: the ridden aircraft always in the picture and seen from
+			// behind, the horizon never rolled past 15 degrees, little blur)
 			const FQuat Attitude = FRotator(Rider->Pitch, Rider->Heading, Rider->Bank).Quaternion();
-			const FVector Ahead = Attitude.GetForwardVector(), Right = Attitude.GetRightVector(), Up = Attitude.GetUpVector();
+			const FVector Ahead = Attitude.GetForwardVector();
 			const FVector Body = World(Rider->At.X, Rider->At.Y, Rider->At.Z);
 			const AirShow::PlaneOut* Foe = Find(Rider->Target >= 0 ? Rider->Target : S.Subject.Other);
+			// The way the eye trails: the aircraft's path, eased over a third of a second so that a jink or a snap roll
+			// does not whip the picture round. The eye is set at its place from the aircraft each frame (never eased
+			// toward it), so a fast aircraft does not draw away from it, nor a turning one swing past it.
+			const bool bCut = CloseEye.IsZero();
+			CloseAhead = bCut || CloseAhead.IsNearlyZero() ? Ahead : (CloseAhead + (Ahead - CloseAhead) * AirParts::Smooth(Real, 0.33)).GetSafeNormal();
+			FVector Flat(CloseAhead.X, CloseAhead.Y, 0.0);
+			Flat = Flat.IsNearlyZero() ? FVector(Ahead.X, Ahead.Y, 0.0).GetSafeNormal() : Flat.GetSafeNormal();
+			const FVector FlatRight = FVector::CrossProduct(FVector::UpVector, Flat).GetSafeNormal();
 			FVector Want, Look;
 			if (Rider->bFighter)
 			{
-				// A fighter from 15 to 20 m behind, 3 m up and to one side, looking along its nose.
-				Want = Body - Ahead * 17.0 * U + Up * 3.0 * U + Right * 1.5 * U;
-				Look = Body + Ahead * 220.0 * U;
+				// A fighter from 22 m behind along its path and 6 m above it, looking 80 m past it: the aircraft a little
+				// under the middle of the picture, its back, its fin and the tops of its wings toward the eye.
+				Want = Body - CloseAhead * 22.0 * U + FVector::UpVector * 6.0 * U;
+				Look = Body + CloseAhead * 80.0 * U;
 			}
 			else
 			{
-				// A bomber from 10 m off its waist on the side the attack comes from, 3 m up, looking toward the attack.
-				const FVector Toward = Foe ? (World(Foe->At.X, Foe->At.Y, Foe->At.Z) - Body).GetSafeNormal() : -Ahead;
-				const double Side = FVector::DotProduct(Toward, Right) >= 0.0 ? 1.0 : -1.0;
-				Want = Body + Right * Side * (Rider->Span * 0.5 + 10.0) * U + Up * 3.0 * U - Ahead * 2.0 * U;
-				Look = Want + Toward * 300.0 * U;
+				// A bomber from behind its tail and above it, a little out on the side the attack comes from, looking
+				// a little past its nose: the whole bomber in the lower middle of the picture, both wingtips inside it,
+				// the sky its attackers come through beyond it.
+				const FVector Toward = Foe ? (World(Foe->At.X, Foe->At.Y, Foe->At.Z) - Body).GetSafeNormal() : FlatRight;
+				const double Hand = FVector::DotProduct(Toward, FlatRight) >= 0.0 ? 1.0 : -1.0;
+				const double Size = FMath::Max(12.0, Rider->Span);
+				Want = Body - CloseAhead * Size * 1.8 * U + FlatRight * Hand * Size * 0.55 * U + FVector::UpVector * Size * 0.45 * U;
+				Look = Body + CloseAhead * Size * 1.2 * U;
 			}
-			const double Blend = CloseEye.IsZero() ? 1.0 : AirParts::Smooth(Real, 0.25);
-			CloseEye = CloseEye.IsZero() ? Want : FMath::Lerp(CloseEye, Want, Blend);
+			CloseEye = Want;
 			FRotator Facing = (Look - CloseEye).Rotation();
-			Facing.Roll = FMath::Clamp(Rider->Bank / 3.0, -25.0, 25.0);
-			CloseFacing = Blend >= 1.0 ? Facing : FMath::RInterpTo(CloseFacing, Facing, static_cast<float>(Real), 4.0f);
+			Facing.Roll = FMath::Clamp(Rider->Bank * 0.25, -15.0, 15.0);
+			CloseFacing = bCut ? Facing : FMath::RInterpTo(CloseFacing, Facing, static_cast<float>(Real), 6.0f);
 			Eye->SetActorLocationAndRotation(CloseEye, CloseFacing);
-			Lens->SetFieldOfView(70.0f);
-			Lens->PostProcessSettings.MotionBlurAmount = 0.4f;
+			Lens->SetFieldOfView(62.0f);
+			Lens->PostProcessSettings.bOverride_MotionBlurAmount = true;
+			Lens->PostProcessSettings.MotionBlurAmount = 0.12f;
 			return;
 		}
 		S.bClose = false;
@@ -1905,11 +2130,22 @@ void AAirBattle::AimEye(double Real)
 	{
 		Focus = Sum * (1.0 / Count);
 	}
-	const FVector Wanted = World(Focus.X, Focus.Y, Focus.Z);
-	LookAt = bLookSet ? FMath::Lerp(LookAt, Wanted, AirParts::Smooth(Real, 1.2)) : Wanted;
+	FVector Wanted = World(Focus.X, Focus.Y, Focus.Z);
+	double Away = Distance, Down = Pitch;
+	// "The ships" picture: the overview cut to the ship that went down, from 1.6 km off and above, her neighbours and
+	// the water round her in the frame (the art director's note: the first run framed the hills, no ship in sight).
+	FVector ShipWorld;
+	const bool bOnShip = ShipsLook >= 0 && Stage && Stage->IsRaised() && Stage->ShipAt(ShipsLook, ShipWorld);
+	if (bOnShip)
+	{
+		Wanted = ShipWorld;
+		Away = 1600.0;
+		Down = -24.0;
+	}
+	LookAt = bLookSet && !bOnShip ? FMath::Lerp(LookAt, Wanted, AirParts::Smooth(Real, 1.2)) : Wanted;
 	bLookSet = true;
-	const FRotator Facing(Pitch, Yaw, 0.0);
-	FVector From = LookAt - Facing.Vector() * Distance * U;
+	const FRotator Facing(Down, Yaw, 0.0);
+	FVector From = LookAt - Facing.Vector() * Away * U;
 	if (Stage && Stage->IsRaised())
 	{
 		From.Z = FMath::Max(From.Z, Stage->GroundZ(From) + 40.0 * U);
@@ -1944,8 +2180,8 @@ void AAirBattle::PlaceTags()
 		GEngine->GameViewport->GetViewportSize(Size);
 		S.ViewportPixels = Size;
 	}
-	struct FPlaced { int Id; FVector2D At; };
-	TArray<FPlaced> Placed;
+	// Each tag's place over its formation. Groups never stack (b384(d)): the screen, which knows how wide each tag is
+	// drawn, gathers tags that would touch into one block (SAirBattleScreen::OnPaint).
 	for (const AirDesk::Tag& T : S.Words.Tags)
 	{
 		AirShow::Vec Middle;
@@ -1958,30 +2194,22 @@ void AAirBattle::PlaceTags()
 		if (Controller->ProjectWorldLocationToScreen(World(Middle.X, Middle.Y, Middle.Z + 80.0), OnScreen, false)
 			&& OnScreen.X >= 0.0 && OnScreen.Y >= 0.0 && OnScreen.X <= S.ViewportPixels.X && OnScreen.Y <= S.ViewportPixels.Y)
 		{
-			Placed.Add({ T.Id, OnScreen });
+			S.TagAt[T.Id] = OnScreen;
 		}
-	}
-	// Groups never stack (b384(d)): tags within 40 px of one another fan out downward, each in its own row.
-	Placed.Sort([](const FPlaced& A, const FPlaced& B) { return A.At.Y < B.At.Y; });
-	for (int32 K = 1; K < Placed.Num(); ++K)
-	{
-		for (int32 J = 0; J < K; ++J)
-		{
-			if (FMath::Abs(Placed[K].At.X - Placed[J].At.X) < 160.0 && FMath::Abs(Placed[K].At.Y - Placed[J].At.Y) < 40.0)
-			{
-				Placed[K].At.Y = Placed[J].At.Y + 40.0;
-			}
-		}
-	}
-	for (const FPlaced& P : Placed)
-	{
-		S.TagAt[P.Id] = P.At;
 	}
 }
 
 int32 AAirBattle::TagUnder(const FVector2D& Pixel) const
 {
 	const FAirBattleState& S = *State;
+	// A tag as drawn (a block's last line is its first tag's); else the formation nearest the click.
+	for (auto Box = S.TagBoxes.rbegin(); Box != S.TagBoxes.rend(); ++Box)
+	{
+		if (S.TagAt.count(Box->Id) && Pixel.X >= Box->Min.X && Pixel.X <= Box->Max.X && Pixel.Y >= Box->Min.Y && Pixel.Y <= Box->Max.Y)
+		{
+			return Box->Id;
+		}
+	}
 	int32 Best = -1;
 	double BestD = 60.0;
 	for (const auto& Pair : S.TagAt)
@@ -2204,6 +2432,7 @@ void AAirBattle::EndPlay(const EEndPlayReason::Type Reason)
 		GroundFx.Reset();
 	}
 	GroundFxMesh.Reset();
+	AirFxMesh.Reset();
 	if (Eye)
 	{
 		Eye->Destroy();
@@ -2519,9 +2748,23 @@ void AAirBattle::TakeShots(double Real)
 			continue;
 		}
 		const double Due = Base + Shot.At;
+		if (Shot.bClose && ShipsLook >= 0 && RealT >= Due - 1.5)
+		{
+			// (the ships picture holds the eye: a ride picture due now waits until two seconds after it)
+			Shot.At = RealT + 2.0 - Base;
+			continue;
+		}
 		if (Shot.bClose && !S.bClose && RealT >= Due - 1.5)
 		{
 			Press(TEXT("ride"));
+		}
+		if (Shot.bShips && ShipsLook < 0 && FirstSunk >= 0 && RealT >= Due - 2.0)
+		{
+			if (S.bClose)
+			{
+				Press(TEXT("ride"));
+			}
+			ShipsLook = FirstSunk;
 		}
 		if (RealT >= Due)
 		{
@@ -2532,7 +2775,17 @@ void AAirBattle::TakeShots(double Real)
 			{
 				CloseOffAt = RealT + 0.5;
 			}
+			if (Shot.bShips)
+			{
+				ShipsLookOffAt = RealT + 0.5;
+			}
 		}
+	}
+	if (ShipsLookOffAt >= 0.0 && RealT >= ShipsLookOffAt)
+	{
+		ShipsLookOffAt = -1.0;
+		ShipsLook = -1;
+		bLookSet = false; // (a cut back to the fight)
 	}
 	if (CloseOffAt >= 0.0 && RealT >= CloseOffAt)
 	{

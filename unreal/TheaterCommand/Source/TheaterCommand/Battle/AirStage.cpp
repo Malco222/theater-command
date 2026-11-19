@@ -108,7 +108,9 @@ namespace StageParts
 	static const FLinearColor RoofPaint = FLinearColor(FColor::FromHex(TEXT("6F6E68")));
 	static const FLinearColor TrunkPaint = FLinearColor(FColor::FromHex(TEXT("7A6A55")));
 	static const FLinearColor FrondPaint = FLinearColor(FColor::FromHex(TEXT("3F6A2E")));
-	static const FColor SeaPaint = FColor::FromHex(TEXT("24505F"));
+	// (darker than the first run's 24505F: looking down from 5 km the sea measured luma 100 to 118, the art director's
+	// mark is 80 or under before the grade)
+	static const FColor SeaPaint = FColor::FromHex(TEXT("1C4453"));
 }
 
 AAirStage::AAirStage()
@@ -373,7 +375,7 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 		return Made;
 	};
 	GroundInk = Ink(0.9f, 0.15f);
-	SeaInk = Ink(0.28f, 0.55f);
+	SeaInk = Ink(0.2f, 0.5f); // (a tighter sun path on the water)
 	SteelInk = Ink(0.55f, 0.4f);
 	BuildSea();
 	BuildGround();
@@ -386,24 +388,90 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 
 void AAirStage::BuildSea()
 {
-	// The open sea: one sheet far past every edge of the stage, under the island and its painted shallows.
+	// The open sea, under the island and its painted shallows. Round the battle, 48 km a side, it is a grid of 250 m
+	// squares whose colour wanders in patches drawn out along the trade wind (cat's-paws and slicks) and whose
+	// surface tilts a few degrees, so the sun's path on the water breaks into glitter; past it, one plain sheet to
+	// far beyond every edge. (The art director's note on the first Mac run: over open water the picture showed haze,
+	// "no sea".)
 	UTheaterStillMesh* Sea = UTheaterStillMesh::Make(this, TEXT("StageSea"));
 	Sea->SetupAttachment(Root);
 	Sea->bUseAsyncCooking = false;
 	Sea->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Sea->SetCastShadow(false);
 	Sea->RegisterComponent();
-	const double Far = 200000.0 * UnitsPerMetre;
+	const double U = UnitsPerMetre;
+	const double Far = 200000.0 * U, Inner = 24000.0 * U, Cell = 250.0 * U;
 	const FVector Middle = BoardToLocal(BoardTarget, 0.0);
-	TArray<FVector> V = { Middle + FVector(-Far, -Far, 0.0), Middle + FVector(Far, -Far, 0.0), Middle + FVector(Far, Far, 0.0), Middle + FVector(-Far, Far, 0.0) };
-	TArray<FVector> N = { FVector::UpVector, FVector::UpVector, FVector::UpVector, FVector::UpVector };
-	TArray<FColor> C = { StageParts::SeaPaint, StageParts::SeaPaint, StageParts::SeaPaint, StageParts::SeaPaint };
-	TArray<int32> T;
-	// (each triangle the way round that faces up, as FMiniatureMesh::Face lays them)
-	for (const FIntVector& Tri : { FIntVector(0, 1, 2), FIntVector(0, 2, 3) })
+	// (the trade wind from about 070, so its streaks run 070 to 250: a true heading, turned into the stage's own axes
+	// as the sun's and the hangars' are)
+	const double WindYaw = FMath::DegreesToRadians(HeadingToYaw(FMath::DegreesToRadians(250.0) - StageTurn));
+	const FVector2D Along(FMath::Cos(WindYaw), FMath::Sin(WindYaw)), Across(-Along.Y, Along.X);
+	auto Height = [&Along, &Across](double X, double Y)
 	{
-		const FVector Facing = (V[Tri.Y] - V[Tri.Z]) ^ (V[Tri.X] - V[Tri.Z]);
-		T.Append(Facing.Z >= 0.0 ? TArray<int32>{ Tri.X, Tri.Y, Tri.Z } : TArray<int32>{ Tri.X, Tri.Z, Tri.Y });
+		// (metres; long patches 3 km by 1 km, and smaller ones 1.5 km by 600 m: no smaller than two of the grid's
+		// squares across, or the grid draws them as speckle)
+		const double A = (X * Along.X + Y * Along.Y), B = (X * Across.X + Y * Across.Y);
+		return FMath::PerlinNoise2D(FVector2D(A / 3000.0, B / 1000.0)) + 0.45 * FMath::PerlinNoise2D(FVector2D(A / 1500.0 + 17.3, B / 600.0 - 4.1));
+	};
+	const FLinearColor Deep(StageParts::SeaPaint);
+	TArray<FVector> V;
+	TArray<FVector> N;
+	TArray<FColor> C;
+	TArray<int32> T;
+	auto Lay = [&V, &T](int32 A, int32 B, int32 D)
+	{
+		// (each triangle the way round that faces up, as FMiniatureMesh::Face lays them)
+		const FVector Facing = (V[B] - V[D]) ^ (V[A] - V[D]);
+		T.Append(Facing.Z >= 0.0 ? TArray<int32>{ A, B, D } : TArray<int32>{ A, D, B });
+	};
+	const int32 Count = FMath::RoundToInt32(2.0 * Inner / Cell);
+	for (int32 Row = 0; Row <= Count; ++Row)
+	{
+		for (int32 Col = 0; Col <= Count; ++Col)
+		{
+			const double X = -Inner + Col * Cell, Y = -Inner + Row * Cell;
+			const double Mx = X / U, My = Y / U;
+			// (the patches fade to the plain sea over the grid's last 4 km, so its edge does not show)
+			const double Edge = FMath::Clamp((Inner / U - FMath::Max(FMath::Abs(Mx), FMath::Abs(My))) / 4000.0, 0.0, 1.0);
+			const double H = Height(Mx, My) * Edge;
+			const double Step = 0.5 * Cell / U;
+			const double Dx = (Height(Mx + Step, My) - Height(Mx - Step, My)) * Edge / (2.0 * Step);
+			const double Dy = (Height(Mx, My + Step) - Height(Mx, My - Step)) * Edge / (2.0 * Step);
+			// (a tilt of up to some 5 degrees, as before the smaller patches were made broader and their slopes gentler)
+			const double Tilt = 60.0;
+			V.Add(Middle + FVector(X, Y, 0.0));
+			N.Add(FVector(-Dx * Tilt, -Dy * Tilt, 1.0).GetSafeNormal());
+			const float Shade = static_cast<float>(1.0 + 0.11 * H);
+			C.Add(FLinearColor(Deep.R * Shade, Deep.G * Shade, Deep.B * Shade * 1.02f).ToFColor(true));
+		}
+	}
+	for (int32 Row = 0; Row < Count; ++Row)
+	{
+		for (int32 Col = 0; Col < Count; ++Col)
+		{
+			const int32 A = Row * (Count + 1) + Col, B = A + 1, D = A + Count + 1, E = D + 1;
+			Lay(A, B, E);
+			Lay(A, E, D);
+		}
+	}
+	// The plain sheet beyond, in four bands round the grid (never under it: two sheets at one height flicker).
+	const FVector2D Bands[4][2] = {
+		{ FVector2D(-Far, -Far), FVector2D(Far, -Inner) },
+		{ FVector2D(-Far, Inner), FVector2D(Far, Far) },
+		{ FVector2D(-Far, -Inner), FVector2D(-Inner, Inner) },
+		{ FVector2D(Inner, -Inner), FVector2D(Far, Inner) },
+	};
+	for (const auto& Band : Bands)
+	{
+		const int32 First = V.Num();
+		for (const FVector2D& Corner : { Band[0], FVector2D(Band[1].X, Band[0].Y), Band[1], FVector2D(Band[0].X, Band[1].Y) })
+		{
+			V.Add(Middle + FVector(Corner.X, Corner.Y, 0.0));
+			N.Add(FVector::UpVector);
+			C.Add(StageParts::SeaPaint);
+		}
+		Lay(First, First + 1, First + 2);
+		Lay(First, First + 2, First + 3);
 	}
 	Sea->CreateMeshSection(0, V, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
 	Sea->SetMaterial(0, SeaInk);
@@ -1017,6 +1085,11 @@ void AAirStage::StartTest(const FString& Key)
 		}
 	}
 	TestCamera = World->SpawnActor<ACameraActor>();
+	if (TestCamera)
+	{
+		// (the whole window, whatever its shape: the first pictures had black bars above and below)
+		TestCamera->GetCameraComponent()->bConstrainAspectRatio = false;
+	}
 	if (APlayerController* Controller = World->GetFirstPlayerController())
 	{
 		if (TestCamera)

@@ -9,9 +9,10 @@
 //
 // Four eyes: behind the raid as the strategy camera opens (6 km back, 5 km up), low over the sea under the cloud
 // base as a torpedo bomber sees it, high over the field looking down on it, and behind the raid's first group where
-// the battle opens, far from the target (the clouds lie wherever the fight is); then a deck day from above. A few
-// dark aircraft are drawn at the raid's height for the contrast the art director asked for (a bright cloud floor
-// under dark aircraft).
+// the battle opens, far from the target (the clouds lie wherever the fight is); then a deck day from above, and last
+// the day's own clouds looked steeply down on from 5 km, 60 degrees down (the sea dark under them). A few dark
+// aircraft are drawn at the raid's height for the contrast the art director asked for (a bright cloud floor under
+// dark aircraft).
 
 #include "Battle/AirFeed.h"
 #include "Battle/AirSky.h"
@@ -69,13 +70,23 @@ namespace
 		}
 	};
 
-	// The haze, roughly as the scene sets it: none within 2 km, at most 0.8, thicker low down.
+	// The haze as the scene sets Unreal's height fog (AirBattle.cpp, LaySky: density 0.00045, height falloff 0.006, from
+	// 2 km, at most 0.8), by the engine's own line integral, the fog's height at the sea: thick low down and thin high
+	// up, so that looking down from bomber height the sea stays dark (the art director, 19 November 12:59Z) while the
+	// horizon and the low air far off are soft. (The engine's scale: its density and falloff a thousandth a unit, 100
+	// units a metre.)
 	const double HazeCol[3] = { 0.55, 0.66, 0.78 };
+	constexpr double HazeDensity = 0.00045 / 1000.0 * 100.0, HazeFalloff = 0.006 / 1000.0 * 100.0, HazeStart = 2000.0, HazeMost = 0.8;
 	double HazeOf(const Vec& Eye, const Vec& P)
 	{
 		const double D = (P - Eye).Length();
-		const double Low = std::exp(-std::min(Eye.Z, P.Z) / 3000.0) * 0.6 + 0.4;
-		return 0.8 * (1.0 - std::exp(-std::max(0.0, D - 2000.0) / 30000.0 * Low));
+		if (D <= HazeStart) return 0.0;
+		const Vec Way = (P - Eye) * (1.0 / D);
+		const double Z0 = Eye.Z + Way.Z * HazeStart, Rise = P.Z - Z0, Long = D - HazeStart;
+		const double X = HazeFalloff * Rise;
+		const double Line = std::fabs(X) < 1e-6 ? 1.0 : (1.0 - std::exp2(-X)) / X;
+		const double Depth = HazeDensity * std::exp2(-HazeFalloff * Z0) * Long * Line;
+		return std::min(HazeMost, 1.0 - std::exp2(-Depth));
 	}
 
 	struct Canvas
@@ -235,42 +246,48 @@ int main(int Argc, char** Argv)
 	const AirSky::Field Deck = AirSky::Lay(DeckDay, DeckAt);
 	AirSky::Painter Paint;
 	int N = 0;
-	for (int Pass = 0; Pass < 5; ++Pass)
+	for (int Pass = 0; Pass < 6; ++Pass)
 	{
-		const Shot S = Pass < 4 ? Shots[Pass] : Shot{ "a deck day, from above", Vec(TX, TY - 7000.0, 5500.0), Vec(TX, TY + 3000.0, 2600.0), 55.0 };
-		const AirSky::Field& Sky = Pass < 4 ? Day : Deck;
+		const Shot S = Pass < 4 ? Shots[Pass] : Pass == 4 ? Shot{ "a deck day, from above", Vec(TX, TY - 7000.0, 5500.0), Vec(TX, TY + 3000.0, 2600.0), 55.0 }
+		                                              : Shot{ "steeply down from 5 km", Vec(TX - 9000.0, TY - 9000.0, 5000.0), Vec(TX - 9000.0, TY - 9000.0 + 5000.0 / std::tan(60.0 * 3.14159265358979 / 180.0), 0.0), 55.0 };
+		const AirSky::Field& Sky = Pass == 4 ? Deck : Day;
 		Camera Cam;
 		Cam.Look(S.From, S.To, S.Fov);
 		Canvas C;
 		C.Init(Cam.W, Cam.H);
 		Backdrop(C, Cam);
-		std::vector<Vec> Points;
-		std::vector<uint8_t> Rgba;
-		Paint.Paint(Sky, Cam.Eye, Vec(), At.Sun, Rgb(1.0f, 1.0f, 1.0f), Points, Rgba);
-		const std::vector<int> Tris = Paint.Triangles(Sky.MostPuffs);
-		// (one face of each pair: the painter lays both, the software painter needs one)
-		for (size_t K = 0; K + 2 < Tris.size(); K += 6)
+		std::vector<Vec> Points, Shadows;
+		std::vector<uint8_t> Rgba, ShadowRgba;
+		// (as the scene lays them: the shadows apart, drawn first, under everything)
+		Paint.Paint(Sky, Cam.Eye, Vec(), At.Sun, Rgb(1.0f, 1.0f, 1.0f), Points, Rgba, &Shadows, &ShadowRgba);
+		auto DrawAll = [&C, &Cam](const std::vector<Vec>& Pts, const std::vector<uint8_t>& Cols, const std::vector<int>& Tris)
 		{
-			Corner V[3];
-			bool bIn = true;
-			for (int J = 0; J < 3; ++J)
+			// (one face of each pair: the painter lays both, the software painter needs one)
+			for (size_t K = 0; K + 2 < Tris.size(); K += 6)
 			{
-				const size_t I = static_cast<size_t>(Tris[K + static_cast<size_t>(J)]);
-				double Z = 0.0;
-				if (!Cam.Project(Points[I], V[J].X, V[J].Y, Z)) { bIn = false; break; }
-				const double F = HazeOf(Cam.Eye, Points[I]);
-				V[J].R = (Rgba[I * 4] / 255.0) * (1.0 - F) + HazeCol[0] * F;
-				V[J].G = (Rgba[I * 4 + 1] / 255.0) * (1.0 - F) + HazeCol[1] * F;
-				V[J].B = (Rgba[I * 4 + 2] / 255.0) * (1.0 - F) + HazeCol[2] * F;
-				V[J].A = Rgba[I * 4 + 3] / 255.0;
+				Corner V[3];
+				bool bIn = true;
+				for (int J = 0; J < 3; ++J)
+				{
+					const size_t I = static_cast<size_t>(Tris[K + static_cast<size_t>(J)]);
+					double Z = 0.0;
+					if (!Cam.Project(Pts[I], V[J].X, V[J].Y, Z)) { bIn = false; break; }
+					const double F = HazeOf(Cam.Eye, Pts[I]);
+					V[J].R = (Cols[I * 4] / 255.0) * (1.0 - F) + HazeCol[0] * F;
+					V[J].G = (Cols[I * 4 + 1] / 255.0) * (1.0 - F) + HazeCol[1] * F;
+					V[J].B = (Cols[I * 4 + 2] / 255.0) * (1.0 - F) + HazeCol[2] * F;
+					V[J].A = Cols[I * 4 + 3] / 255.0;
+				}
+				if (bIn) Triangle(C, V[0], V[1], V[2]);
 			}
-			if (bIn) Triangle(C, V[0], V[1], V[2]);
-		}
-		for (const Vec& P : Raid) Dot(C, Cam, Pass < 4 ? P : Vec(P.X, P.Y, 4500.0), 14.0);
+		};
+		DrawAll(Shadows, ShadowRgba, Paint.Triangles(AirSky::Painter::MostShadows));
+		DrawAll(Points, Rgba, Paint.Triangles(Sky.MostPuffs));
+		for (const Vec& P : Raid) Dot(C, Cam, Pass != 4 ? P : Vec(P.X, P.Y, 4500.0), 14.0);
 		const std::string Path = std::string(Argv[2]) + "/" + Rec.Key + "-sky-" + std::to_string(++N) + ".ppm";
 		C.Save(Path);
-		std::printf("%s: %s (%s, from %.0f to %.0f m, %zu clouds, %d puffs drawn) -> %s\n", Rec.Key.c_str(), S.Name, Sky.Sky.bDeck ? "deck" : "cumulus", Sky.Base, Sky.Top,
-		            Sky.Clouds.size(), Paint.Drawn(), Path.c_str());
+		std::printf("%s: %s (%s, from %.0f to %.0f m, %zu clouds, %d puffs and %d shadows drawn) -> %s\n", Rec.Key.c_str(), S.Name, Sky.Sky.bDeck ? "deck" : "cumulus", Sky.Base, Sky.Top,
+		            Sky.Clouds.size(), Paint.Drawn(), Paint.ShadowsDrawn(), Path.c_str());
 	}
 	return 0;
 }

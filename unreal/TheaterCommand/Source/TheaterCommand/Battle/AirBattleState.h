@@ -34,6 +34,8 @@ struct FAirBattleState
 	AirSky::Painter SkyPainter;
 	std::vector<AirSky::Vec> SkyPoints;
 	std::vector<uint8_t> SkyRgba;
+	std::vector<AirSky::Vec> SkyShadows;
+	std::vector<uint8_t> SkyShadowRgba;
 
 	/** A recorded battle (Content/Data/AirBattles/<key>.json), played back: no orders are taken. */
 	bool bReplay = true;
@@ -53,6 +55,15 @@ struct FAirBattleState
 	int Question = 0;
 	/** Each tag's place on the screen this frame, in the viewport's pixels; off the screen or behind the eye: absent. */
 	std::map<int, FVector2D> TagAt;
+	/** The tags as the screen last drew them, in the viewport's pixels: a click inside one takes its group. A block of
+	 * tags that touched shows two and a line for the rest; that line is its first tag's. */
+	struct FTagBox
+	{
+		int Id = -1;
+		FVector2D Min = FVector2D::ZeroVector;
+		FVector2D Max = FVector2D::ZeroVector;
+	};
+	mutable std::vector<FTagBox> TagBoxes;
 	FVector2D ViewportPixels = FVector2D(1600.0, 1000.0);
 	/** A line the screen shows for a moment (an order the battle would not take). */
 	std::string Note;
