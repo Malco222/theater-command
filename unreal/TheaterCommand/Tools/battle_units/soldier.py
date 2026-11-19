@@ -4916,11 +4916,15 @@ def bone_list(rig):
 
 def json_mesh(objs, bone_index):
     """Meshes in the game's form (build_tank.gather's: points, facings, paints, triangles; y to the RIGHT), each point
-    with its bone (`part`), a second bone (`part2`) and how much of the second it takes (`w2`, 0 to 0.5)."""
-    pts, fac, pai, tri, part, part2, w2 = [], [], [], [], [], [], []
+    with its bone (`part`), a second bone (`part2`) and how much of the second it takes (`w2`, 0 to 0.5). A mesh with a
+    colour attribute (the wear and seam shade, glTF's COLOR_0: grey, 1.0 clean, 0.75 a seam) adds `shade` per point,
+    0 to 1, by which the game multiplies the paint's colour; with no such mesh there is no `shade` (all 1)."""
+    pts, fac, pai, tri, part, part2, w2, shd = [], [], [], [], [], [], [], []
     seen = {}
     for ob in objs:
         me = ob.data
+        ca = me.color_attributes[0] if len(me.color_attributes) else None
+        by_loop = ca is not None and ca.domain == "CORNER"
         Mw = ob.matrix_world.copy()
         Nw = Mw.to_3x3().inverted().transposed()
         normals = [cn.vector.copy() for cn in me.corner_normals]
@@ -4944,7 +4948,8 @@ def json_mesh(objs, bone_index):
                 vi = me.loops[li].vertex_index
                 p = Mw @ me.vertices[vi].co
                 n = (Nw @ normals[li]).normalized()
-                key = (round(p.x, 4), round(-p.y, 4), round(p.z, 4), round(n.x, 3), round(-n.y, 3), round(n.z, 3), paint) + vb[vi]
+                sh = 1.0 if ca is None else round(min(1.0, max(0.0, ca.data[li if by_loop else vi].color[0])), 2)
+                key = (round(p.x, 4), round(-p.y, 4), round(p.z, 4), round(n.x, 3), round(-n.y, 3), round(n.z, 3), paint) + vb[vi] + (sh,)
                 i = seen.get(key)
                 if i is None:
                     i = len(pai)
@@ -4955,8 +4960,12 @@ def json_mesh(objs, bone_index):
                     part.append(key[7])
                     part2.append(key[8])
                     w2.append(key[9])
+                    shd.append(sh)
                 tri.append(i)
-    return {"points": pts, "facings": fac, "paints": pai, "triangles": tri, "part": part, "part2": part2, "w2": w2}
+    out = {"points": pts, "facings": fac, "paints": pai, "triangles": tri, "part": part, "part2": part2, "w2": w2}
+    if any(v < 1.0 for v in shd):
+        out["shade"] = shd
+    return out
 
 
 def _flip_q(Q):
@@ -5048,7 +5057,8 @@ def write_game_json(path, m, lods):
                    "G_parent * q (q from the clip, identity at rest; G of a bone with no track is its parent's), its head "
                    "X = X_parent + G_parent * (head - head_parent + move), and a point p on it goes to X + G * (p - head). "
                    "Quaternions are [t, w, x, y, z] in these axes (as Unreal's FQuat). Clips are in place: `stride` is the metres "
-                   "one loop covers; the game moves the unit.",
+                   "one loop covers; the game moves the unit. A mesh may carry `shade` per point (0 to 1, the wear and seam "
+                   "darkening): its colour is the paint's colour times shade; with no `shade` every point is 1.",
         "long": round(max(xs) - min(xs), 3),
         "high": high,
         "marks": {"roof": high},
