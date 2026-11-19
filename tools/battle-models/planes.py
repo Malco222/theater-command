@@ -396,25 +396,6 @@ def _torpedo(x, z, long=5.3, r=0.225):
 
 
 _PALE = {"upper": "A9B19F", "upper2": "A9B19F", "under": "9DA593", "nose": "1E1F22", "boss": "8E9092"}      # (the Japanese navy's pale grey of the early war)
-EXTRA_PLANES["Kate"] = {
-    "title": "B5N Kate (our own model)", "year": 1937,
-    "hull": [(4.1, 0, 0.04, 0.04), (3.85, 0, 0.16, 0.16), (3.8, 0, 0.5, 0.5), (3.55, 0, 0.61, 0.62), (2.8, 0, 0.62, 0.66), (1.5, 0.02, 0.58, 0.72), (-0.5, 0.06, 0.54, 0.72),
-             (-2.6, 0.14, 0.4, 0.56), (-4.6, 0.26, 0.2, 0.34), (-5.8, 0.34, 0.07, 0.16), (-6.2, 0.36, 0.02, 0.07)],
-    "square": 2.1, "screw": 1.6, "blades": 3, "nose_back": 2.75, "spinner": 2, "engine": "radial", "lip": 3.8,
-    "hoods": [([(1.55, 0.74, 0.24, 0.05), (1.0, 0.98, 0.31, 0.24), (-0.4, 1.02, 0.32, 0.26), (-1.8, 0.98, 0.3, 0.22), (-2.7, 0.8, 0.18, 0.04)],
-               (1.0, 0.45, -0.1, -0.65, -1.2, -1.8, -2.3), True)],
-    "wing": [(0, 1.6, -1.4, -0.5, 0.46), (0.6, 1.6, -1.4, -0.5, 0.45), (1.6, 1.52, -1.38, -0.48, 0.42), (5.6, 0.95, -0.78, -0.05, 0.22), (7.0, 0.6, -0.5, 0.1, 0.12),
-             (7.6, 0.3, -0.28, 0.16, 0.06), (7.76, 0.02, -0.1, 0.18, 0.01)],
-    "tail": [(0, -4.6, -5.7, 0.42, 0.11), (1.9, -5.0, -5.65, 0.42, 0.07), (2.4, -5.3, -5.55, 0.42, 0.02)],
-    "fin": [(0, -4.4, -6.15, 0.36, 0.12), (0, -4.95, -6.2, 1.1, 0.09), (0, -5.4, -6.15, 1.7, 0.05), (0, -5.7, -6.05, 1.85, 0.01)],
-    "patch": 0.0, "colours": dict(_PALE), "well": (1.75, 0.4, 0.45), "pitot": True, "tailwheel": (-5.7, -0.15), "mast": (0.2, 1.24, 1.75),
-    # (her torpedo; the one heavy armour-piercing bomb she carried instead for bombing from high up; her rear gunner's gun)
-    "extras": _torpedo(-0.2, -0.99) + [
-        ("body", ([(1.3, -0.96, 0.03, 0.03), (1.0, -0.96, 0.17, 0.17), (0.5, -0.96, 0.205, 0.205), (-0.4, -0.96, 0.19, 0.19), (-1.0, -0.96, 0.07, 0.07), (-1.15, -0.96, 0.03, 0.03)], 0.0, 2.0, "bomb")),
-        ("rod", ((-0.85, 0.0, -0.96), (-1.15, 0.0, -0.96), 0.2, 0.2, "bomb")),
-        ("rod", ((-2.0, 0.0, 0.96), (-2.85, 0.0, 1.18), 0.022, 0.018, "steel"))],
-    "side_marks": [(-3.2, 0.32, "JAP-PLAIN")], "wing_marks": [(5.2, 0.1, 0.62, "JAP-PLAIN", "JAP-PLAIN", True, True)], "code": (-4.3, 0.34),
-}
 # ---- the D3A1 Val, laid out again to Brian's benchmark for all aircraft (2026-11-19) against "Aichi D3A1 Val - 3
 # vistas" (Wikimedia Commons, MMK-Draw, CC BY-SA 4.0) at 267 pixels to the metre along her and 265 across, her length
 # 10.195 m and her span 14.365 m: measured, not traced. What changed: a round cowling a little broader than the
@@ -438,15 +419,16 @@ _VAL_SCREEN = (1.56, 0.13, 1.33, 0.985)                     # (the foot of her w
 _VAL_POST = 0.15                                            # (her windscreen's posts stand this far out at its head)
 
 
-def _val_section(hull, x, sill, ys, shoulder, top, post=None):
+def _val_section(hull, x, sill, ys, shoulder, top, post=None, lean=0.886):
     """Half a section of her greenhouse: the metal rail it stands on (the first SKIRT points: its foot on her skin);
-    a flat side pane leaning in from the sill to the frame at its shoulder; and its roof, nearly flat, over a frame
-    0.19 out to her middle line. `post` adds a point where a windscreen's post meets it."""
+    a flat side pane leaning in from the sill to the frame at its shoulder (`lean`: how far out the shoulder is, as
+    a share of the sill's); and its roof, nearly flat, over a frame 0.19 out to her middle line. `post` adds a point
+    where a windscreen's post meets it."""
     yb = ys + 0.004
     zb = min(sill - 0.05, fitout.body_top(hull, x, yb) - 0.006)
     if shoulder is None:
         shoulder = sill + 0.78 * (top - sill)
-    ysh, yr = 0.886 * ys, min(0.19, 0.55 * ys)
+    ysh, yr = lean * ys, min(0.19, 0.55 * ys)
     zr = shoulder + 0.8 * (top - shoulder)
     pts = [(max(yb - 0.03, 0.0), zb - 0.06), (yb, zb), (ys, sill), (ysh, shoulder), (yr, zr)]
     if post is not None:
@@ -540,6 +522,113 @@ EXTRA_PLANES["Val"] = {
     "side_marks": [(-2.55, 0.34, "JAP-PLAIN")], "wing_marks": [(4.9, 0.55, 0.62, "JAP-PLAIN", "JAP-PLAIN", True, True)], "code": (-3.7, 0.3),
 }
 fitout.SEATS["Val"] = [(0, 0.88, 0.0, 0.0), (0, -0.2, 0.0, 180.0)]
+
+# ---- the B5N2 Kate, laid out again to Brian's benchmark for all aircraft (2026-11-19) against "Nakajima Kate"
+# (Wikimedia Commons, Kaboldy, CC BY-SA 3.0) at 257 pixels to the metre, her length 10.30 m and her span 15.518 m:
+# measured, not traced. What changed: a round cowling broader than the fuselage behind it; a fuselage as deep below
+# her airscrew's line as above it, slab-sided and slim to the tail; a long straight-tapered wing, flat out to 2.3 m
+# and rising beyond, its trailing edge run into her side in a fillet; a tall fin with a straight raked leading edge
+# and a rounded rudder; a small tailplane on her airscrew's line. Her greenhouse is seven framed pieces over one open
+# cockpit (the fighters' `canopy`): a windscreen, five hoods each a step lower and narrower than the one before
+# (they slid one under the other), and a glazed end that falls to the gunner's gun. Pilot, observer and gunner; the
+# gunner faces aft with both hands on his gun. Her wheels are up. Her torpedo hangs nose down under her, as it did;
+# the heavy bomb she carried instead is there too (the game shows one). Pale grey, black cowling, plain red discs.
+#
+# Her greenhouse, measured: (x, the height of its sill where the glass begins, how far out it is there, the height
+# of the frame at its shoulder (None in its glazed end), the height of its top).
+_KATE_HOODS = [
+    [(1.69, 0.62, 0.357, 0.893, 0.995), (1.36, 0.62, 0.357, 0.893, 0.995), (1.03, 0.62, 0.357, 0.893, 0.995)],
+    [(1.05, 0.625, 0.352, 0.872, 0.983), (0.75, 0.625, 0.352, 0.87, 0.977), (0.46, 0.625, 0.352, 0.868, 0.972)],
+    [(0.48, 0.65, 0.343, 0.86, 0.958), (0.17, 0.65, 0.343, 0.857, 0.951), (-0.14, 0.65, 0.343, 0.853, 0.944)],
+    [(-0.12, 0.66, 0.341, 0.836, 0.927), (-0.44, 0.66, 0.341, 0.83, 0.918), (-0.76, 0.66, 0.341, 0.825, 0.91)],
+    [(-0.74, 0.655, 0.339, 0.812, 0.895), (-1.03, 0.655, 0.339, 0.808, 0.89), (-1.33, 0.655, 0.339, 0.804, 0.886)]]
+_KATE_END = [(-1.31, 0.65, 0.337, None, 0.86), (-1.4, 0.65, 0.333, None, 0.835), (-1.5, 0.648, 0.32, None, 0.783), (-1.6, 0.645, 0.27, None, 0.724),
+             (-1.68, 0.642, 0.18, None, 0.68), (-1.73, 0.64, 0.08, None, 0.655), (-1.75, 0.64, 0.03, None, 0.645)]
+_KATE_SCREEN = (2.13, 0.14, 1.72, 0.99)                     # (the foot of her windscreen's front pane, half its width, its head, and the top there)
+_KATE_POST = 0.16                                           # (her windscreen's posts stand this far out at its head)
+_KATE_LEAN = 0.75                                           # (her side panes lean in further than the Val's)
+
+
+def _kate_canopy(hull):
+    skirt = fighters.SKIRT
+    foot_x, foot_half, head_x, head_top = _KATE_SCREEN
+    sec = lambda x, sl, w, sh, t, post=None: _val_section(hull, x, sl, w, sh, t, post, _KATE_LEAN)
+    x0, sill, ys, shoulder, top = _KATE_HOODS[0][0]
+    head = fighters.headed(sec(head_x, sill + 0.02, ys - 0.012, shoulder - 0.012, head_top), _KATE_POST)
+    post = len(head) - 2
+    foot = [fighters.deck(hull, foot_x, foot_half)] * (len(head) - 1) + [fighters.deck(hull, foot_x, 0.0)]
+    pieces = [{"sections": [(foot_x, foot), (head_x, head), (x0, sec(x0, sill, ys, shoulder, top, _KATE_POST))], "skirt": skirt,
+               "hoops": [1, 2], "rails": [post, skirt], "bar": 0.02}]
+    for k, rows in enumerate(_KATE_HOODS):                  # (a frame round each end and one between, the sills, the shoulder frames and the roof frames)
+        pieces.append({"sections": [(x, sec(x, sl, w, sh, t)) for x, sl, w, sh, t in rows], "skirt": skirt,
+                       "hoops": [1, 2] if k == 0 else [0, 1, 2], "rails": [skirt, 3, 4], "bar": 0.018})
+    pieces.append({"sections": [(x, sec(x, sl, w, sh, t)) for x, sl, w, sh, t in _KATE_END], "skirt": skirt, "hoops": [0], "rails": [skirt, 3],
+                   "bar": 0.016, "cap": True})
+    return pieces
+
+
+def _kate_torpedo(nose=3.25, tail=-2.22, r=0.225):
+    """Her torpedo, 5.47 m of it, hung nose down by two and a half degrees so that its tail clears her."""
+    z = lambda x: -0.975 - 0.0385 * (x - 0.3)
+    st = [(nose, 0.03), (nose - 0.22, 0.17), (nose - 0.55, r), (tail + 1.0, r), (tail + 0.35, 0.1), (tail, 0.03)]
+    return [("body", ([(x, z(x), w, w) for x, w in st], 0.0, 2.0, "torpedo")),
+            ("rod", ((tail + 0.02, 0.0, z(tail + 0.02)), (tail + 0.42, 0.0, z(tail + 0.42)), 0.24, 0.24, "torpedo")),
+            # (the braces that steady it)
+            ("rod", ((2.3, 0.1, -0.63), (2.3, 0.15, -0.9), 0.014, 0.014, "leg")), ("rod", ((1.2, 0.1, -0.7), (1.2, 0.15, -0.84), 0.014, 0.014, "leg"))]
+
+
+EXTRA_PLANES["Kate"] = {
+    "title": "B5N2 Kate (our own model)", "year": 1937,
+    "hull": [(4.1, 0.0, 0.03, 0.03), (4.075, 0.0, 0.075, 0.075), (3.92, 0.0, 0.08, 0.08), (3.9, 0.0, 0.12, 0.12), (3.74, 0.0, 0.12, 0.12), (3.72, 0.0, 0.06, 0.06),
+             (3.62, 0.0, 0.09, 0.09), (3.6, 0.0, 0.2, 0.2), (3.585, 0.0, 0.433, 0.433), (3.58, 0.0, 0.535, 0.535), (3.565, 0.0, 0.585, 0.585), (3.54, 0.0, 0.62, 0.62),
+             (3.5, 0.0, 0.662, 0.662), (3.45, 0.0, 0.701, 0.701), (3.4, 0.0, 0.727, 0.727), (3.3, 0.0, 0.751, 0.751), (3.2, 0.0, 0.747, 0.747), (3.0, 0.0, 0.719, 0.719),
+             (2.8, 0.0, 0.675, 0.675), (2.64, 0.0, 0.63, 0.63),
+             (2.61, -0.004, 0.555, 0.617), (2.4, 0.006, 0.573, 0.646), (2.2, 0.003, 0.59, 0.673), (2.13, 0.004, 0.59, 0.686), (2.0, 0.006, 0.59, 0.694),
+             (1.7, 0.001, 0.59, 0.699), (1.03, -0.013, 0.59, 0.703), (0.46, -0.017, 0.589, 0.699), (-0.14, -0.016, 0.585, 0.689), (-0.76, -0.014, 0.565, 0.674),
+             (-1.33, -0.008, 0.538, 0.657), (-1.5, -0.005, 0.529, 0.65), (-1.75, -0.001, 0.517, 0.641), (-2.0, 0.0, 0.5, 0.626), (-2.4, -0.002, 0.476, 0.597),
+             (-2.6, -0.002, 0.456, 0.581), (-3.0, -0.002, 0.421, 0.546), (-3.4, -0.002, 0.386, 0.503), (-3.8, -0.004, 0.343, 0.458), (-4.2, -0.006, 0.3, 0.406),
+             (-4.6, 0.011, 0.25, 0.364), (-5.0, 0.025, 0.2, 0.32), (-5.4, 0.053, 0.145, 0.277), (-5.8, 0.085, 0.09, 0.235), (-5.95, 0.05, 0.065, 0.17),
+             (-6.05, 0.005, 0.04, 0.094), (-6.15, 0.007, 0.02, 0.041), (-6.2, 0.02, 0.008, 0.01)],
+    "square": 2.2, "screw": 1.62, "blades": 3, "nose_back": 2.63, "spinner": 5, "engine": "radial", "lip": 3.585,
+    "hoods": fighters.hood_of([(_KATE_SCREEN[0], 0.7, _KATE_SCREEN[1], 0.01), (_KATE_SCREEN[2], 0.62, 0.345, _KATE_SCREEN[3] - 0.62)]
+                              + [(x, sl, w, t - sl) for rows in _KATE_HOODS for x, sl, w, sh, t in rows[:2]]
+                              + [(x, sl, w, t - sl) for x, sl, w, sh, t in _KATE_HOODS[-1][2:] + _KATE_END[1:]]),
+    "canopy": _kate_canopy,
+    "opening": (1.7, -1.5, 60.0),                           # (her cockpit, open under the glass from her panel to behind her gunner)
+    "frames_paint": "upper", "lines": (0.6, 0.45),
+    # (her wing: straight-tapered and long, flat out to 2.3 m and five degrees of dihedral beyond; seventeen per cent
+    #  thick at the root; its leading edge eased and its trailing edge swept back into her side)
+    "wing": [(0.0, 2.0, -2.33, -0.468, 0.68), (0.5, 2.0, -2.326, -0.468, 0.68), (0.55, 1.99, -2.143, -0.468, 0.68), (0.6, 1.968, -1.968, -0.468, 0.68),
+             (0.65, 1.945, -1.812, -0.468, 0.68), (0.7, 1.937, -1.692, -0.468, 0.679), (0.75, 1.933, -1.583, -0.468, 0.678), (0.8, 1.93, -1.493, -0.467, 0.677),
+             (0.9, 1.922, -1.365, -0.464, 0.67), (1.0, 1.914, -1.291, -0.46, 0.663), (1.2, 1.898, -1.252, -0.453, 0.649), (1.5, 1.875, -1.2, -0.442, 0.627),
+             (2.0, 1.832, -1.112, -0.426, 0.594), (2.3, 1.809, -1.06, -0.415, 0.572), (2.5, 1.793, -1.023, -0.393, 0.557), (2.7, 1.778, -0.988, -0.366, 0.544),
+             (3.0, 1.754, -0.937, -0.326, 0.517), (3.5, 1.712, -0.848, -0.26, 0.472), (4.0, 1.673, -0.758, -0.193, 0.431), (4.5, 1.634, -0.665, -0.125, 0.391),
+             (5.0, 1.591, -0.575, -0.06, 0.345), (5.5, 1.552, -0.482, 0.008, 0.305), (6.0, 1.513, -0.393, 0.071, 0.264), (6.5, 1.471, -0.299, 0.138, 0.222),
+             (6.8, 1.447, -0.218, 0.179, 0.197), (7.0, 1.43, -0.143, 0.205, 0.181), (7.16, 1.401, -0.062, 0.226, 0.167), (7.28, 1.369, 0.02, 0.242, 0.156),
+             (7.4, 1.327, 0.121, 0.258, 0.145), (7.52, 1.268, 0.253, 0.274, 0.13), (7.58, 1.229, 0.335, 0.281, 0.118), (7.64, 1.183, 0.436, 0.289, 0.1),
+             (7.7, 1.113, 0.584, 0.297, 0.075), (7.74, 1.03, 0.76, 0.302, 0.045), (7.759, 0.93, 0.9, 0.305, 0.01)],
+    "aileron": (0.545, 0.92, 0.73), "flap": (0.171, 0.454, 0.82),
+    "tail": [(0.0, -4.25, -6.0, -0.012, 0.2), (0.3, -4.306, -5.994, -0.012, 0.2), (0.5, -4.411, -5.971, -0.012, 0.2), (0.8, -4.508, -5.935, -0.012, 0.199),
+             (1.0, -4.574, -5.912, -0.012, 0.186), (1.5, -4.737, -5.854, -0.012, 0.145), (1.8, -4.831, -5.819, -0.012, 0.118), (2.0, -4.897, -5.795, -0.012, 0.1),
+             (2.2, -4.983, -5.768, -0.012, 0.082), (2.3, -5.064, -5.729, -0.012, 0.07), (2.4, -5.196, -5.644, -0.012, 0.05), (2.44, -5.29, -5.56, -0.012, 0.03),
+             (2.462, -5.4, -5.45, -0.012, 0.01)],
+    # (her fin from inside her fuselage up: a short fillet into its straight raked leading edge, the rudder rounded over its top)
+    "fin": [(0, -4.2, -5.88, 0.2, 0.1), (0, -4.22, -5.88, 0.38, 0.1), (0, -4.25, -5.9, 0.411, 0.1), (0, -4.3, -5.9, 0.446, 0.1), (0, -4.333, -5.896, 0.5, 0.1),
+            (0, -4.388, -5.884, 0.6, 0.098), (0, -4.446, -5.877, 0.7, 0.096), (0, -4.501, -5.865, 0.8, 0.093), (0, -4.559, -5.853, 0.9, 0.09),
+            (0, -4.614, -5.841, 1.0, 0.087), (0, -4.672, -5.83, 1.1, 0.083), (0, -4.727, -5.818, 1.2, 0.079), (0, -4.781, -5.806, 1.3, 0.074),
+            (0, -4.84, -5.779, 1.4, 0.068), (0, -4.898, -5.728, 1.5, 0.06), (0, -4.961, -5.651, 1.6, 0.05), (0, -5.011, -5.592, 1.65, 0.043),
+            (0, -5.085, -5.51, 1.7, 0.034), (0, -5.171, -5.413, 1.74, 0.022), (0, -5.25, -5.33, 1.755, 0.01)],
+    "patch": 0.0, "colours": dict(_PALE), "well": (1.5, 0.42, 0.42), "pitot": True, "tailwheel": (-5.74, -0.46), "mast": (-0.75, 0.9, 1.53, 0.0),
+    # (the oil cooler's mouth under her, behind the cowling)
+    "scoops": [([(2.72, -0.6, 0.08, 0.03), (2.62, -0.63, 0.14, 0.07), (2.42, -0.645, 0.14, 0.07), (2.26, -0.655, 0.07, 0.03)], 0.0, 2.6)],
+    # (her torpedo; the one heavy armour-piercing bomb she carried instead for bombing from high up; her rear gunner's gun)
+    "extras": _kate_torpedo() + [
+        ("body", ([(1.3, -0.96, 0.03, 0.03), (1.0, -0.96, 0.17, 0.17), (0.5, -0.96, 0.205, 0.205), (-0.4, -0.96, 0.19, 0.19), (-1.0, -0.96, 0.07, 0.07), (-1.15, -0.96, 0.03, 0.03)], 0.0, 2.0, "bomb")),
+        ("rod", ((-0.85, 0.0, -0.96), (-1.15, 0.0, -0.96), 0.2, 0.2, "bomb")),
+        ("rod", ((-1.58, 0.0, 0.7), (-2.3, 0.0, 0.78), 0.022, 0.018, "steel"))],
+    "side_marks": [(-2.9, 0.36, "JAP-PLAIN")], "wing_marks": [(5.4, 0.5, 0.7, "JAP-PLAIN", "JAP-PLAIN", True, True)], "code": (-3.9, 0.3),
+}
+fitout.SEATS["Kate"] = [(0, 1.27, 0.0, 0.0), (0, 0.15, 0.0, 0.0), (0, -0.95, 0.0, 180.0)]
 
 
 def one_coat(p):

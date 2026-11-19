@@ -247,9 +247,12 @@ adds what is seen at that distance:
 - her plating, over all her skin (`fitout.rivets`, the fine model only; Brian's benchmark of 2026-11-19, below): rows
   of rivets along her frames (every 42 to 56 cm) and fourteen stringers, along the ribs and spars of her wings, tail
   and fin, and in rings round each nacelle; and the joints of her panels, a thin dark strip beside every other frame
-  and rib, along four stringers and along two spars. A rivet is a small square (9 mm on a bomber, 7 on a fighter), a
-  joint 6 to 7 mm wide; paints `rivet`, `rivet_under`, `seam`, `seam_under`, each a shade under the coat it lies in.
-  They cost a fighter about 5,000 triangles and a heavy bomber about 17,000;
+  and rib, along four stringers and along two spars. A rivet is a flush dot of paint (12 mm across on a bomber, 9 on
+  a fighter; six-sided above, four-sided underneath), a joint 6 to 7 mm wide; paints `rivet`, `rivet_under`, `seam`,
+  `seam_under`. A rivet is a faint shade under the coat it lies in, about a third as strong as a joint (the art
+  director, 2026-11-19: seen close "real rivets read as a faint dotted line", and the first ones, half as big again
+  and dark, read as studs); the plain model has none, so they are gone beyond close range. They cost a fighter
+  about 10,000 triangles and a heavy bomber about 30,000;
 - a bomb bay behind two doors with the bombs on their racks (`BAYS` in `planes.py`: the bombers, and the
   torpedo bombers that carry their torpedo inside);
 - the black rubber along the leading edges of the `B17`, her two open waist windows with a gunner standing at each
@@ -389,6 +392,28 @@ kept but its measures). 43,000 triangles. What is hers:
 - her pilot has his hands on stick and throttle; her gunner faces aft with both hands on his gun's grips
   (`fitout.rear_gunner`, the fighters thread's: every seat that faces aft with a free gun behind it).
 - her pale grey, black cowling and plain red discs are as they were. No names, numbers or unit marks; no aerial wire.
+
+**The `Kate`** (the B5N2, Japan's carrier torpedo bomber) follows her, measured the same way (Wikimedia Commons,
+"Nakajima Kate.svg", Kaboldy, CC BY-SA 3.0; measured, not traced; nothing of the drawing is kept but its
+measures). 50,000 triangles. What is hers:
+
+- a round cowling broader than the fuselage behind it and the bare boss of her airscrew; a fuselage as deep below
+  her airscrew's line as above it; a long straight-tapered wing, flat out to 2.3 m and rising beyond, its trailing
+  edge run into her side in a fillet; a tall fin with a straight raked leading edge; a small tailplane on her
+  airscrew's line.
+- her greenhouse (`_kate_canopy`, built of the Val's sections with side panes that lean in further: `lean` of
+  `_val_section`): a windscreen, five hoods each a step lower and narrower than the one before, and a glazed end
+  that falls to the gunner's gun. One `opening` under all of it. Pilot, observer and gunner; the gunner faces aft
+  with both hands on his gun (its pivot 0.63 m aft of his seat).
+- her wheels are up. Her torpedo (`_kate_torpedo`) hangs nose down by two and a half degrees, as hers did, on two
+  braces; the heavy bomb she carried instead is in `bombs` (the game shows one of the two).
+- pale grey, black cowling, plain red discs, as the Val, so that one carrier's air group reads as one (the art
+  director). No names, numbers or unit marks; no aerial wire.
+
+The tools that read a three-view are not in the repository (they hold nothing but arithmetic on a picture): cut
+each view out and turn it to stand the usual way, rub out strokes too thin to be her outline (wires, a torpedo
+drawn in), find the paper by filling in from the edge, set the scales from her real length and span, and set the
+height of her airscrew's line by the middle of her cowling, not by the first ink at her nose.
 
 **The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, twelve more entries in
 `EXTRA_PLANES`. Paints and first years are the art director's rulings of that day; the file's `year` is the first
