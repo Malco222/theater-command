@@ -213,28 +213,31 @@ export function bomberGuns(model: string, nat: string, w: When): Loadout {
       return box('He 111H-16', [hand(G.mgffm, ['turret.1'], 180, nose, { drum: 60 }), hand(G.mg131, ['turret.2'], 1_000, dorsal), hand(G.mg81z, ['turret.3'], 850, gondola), hand(G.mg81, ['turret.4'], 500, fwd), hand(G.mg81, [], 500, about(90, 40, -30, 30)), hand(G.mg81, [], 500, about(270, 40, -30, 30))]);
     }
     case 'B17': {
-      // The model is a G (13 guns). About 500 rounds a gun at every position (question 2). Power turrets keep the file's
-      // limits; the hand-held arcs are the design's, the tail and the waist as the historian corrected them.
-      const tail = turret(G.m2, ['turret.7', 'turret.8'], 500, about(180, 30, -30, 30));
-      const waist = [hand(G.m2, ['turret.5'], 500, from(30, 150, -40, 50)), hand(G.m2, ['turret.6'], 500, from(210, 330, -40, 50))];
-      const top = turret(G.m2, ['turret.9', 'turret.10'], 500), ball = turret(G.m2, ['turret.11', 'turret.12'], 500);
-      const radio = hand(G.m2, ['turret.13'], 500, about(180, 40, 10, 70));
-      const cheeks = [hand(G.m2, ['turret.3'], 500, from(0, 60, -30, 30)), hand(G.m2, ['turret.4'], 500, from(300, 360, -30, 30))];
+      // The model is a G (13 guns), laid out again to the real B-17G on 19 November (the modeller, 01:17Z; Brian's
+      // benchmark): chin turret.1, .2; top turret.3, .4; ball turret.5, .6; cheeks turret.7 (starboard), .8; waist
+      // turret.9 (starboard), .10; radio hatch turret.11; tail turret.12, .13. About 500 rounds a gun at every position
+      // (question 2). Power turrets keep the file's limits; the hand-held arcs are the design's, the tail and the waist
+      // as the historian corrected them.
+      const tail = hand(G.m2, ['turret.12', 'turret.13'], 500, about(180, 30, -30, 30), { n: 2 });
+      const waist = [hand(G.m2, ['turret.9'], 500, from(30, 150, -40, 50)), hand(G.m2, ['turret.10'], 500, from(210, 330, -40, 50))];
+      const top = turret(G.m2, ['turret.3', 'turret.4'], 500), ball = turret(G.m2, ['turret.5', 'turret.6'], 500);
+      const radio = hand(G.m2, ['turret.11'], 500, about(180, 40, 10, 70));
+      const cheeks = [hand(G.m2, ['turret.7'], 500, from(0, 60, -30, 30)), hand(G.m2, ['turret.8'], 500, from(300, 360, -30, 30))];
       // The B-17E: a .30 in the nose (fired from the nose glazing; drawn at the starboard cheek) and no chin turret.
-      if (d < 1943) return box('B-17E', [hand(G.m1919, ['turret.3'], 500, from(320, 40, -30, 30)), top, ball, ...waist, radio, tail], ['turret.1', 'turret.2', 'turret.4']);
+      if (d < 1943) return box('B-17E', [hand(G.m1919, ['turret.7'], 500, from(320, 40, -30, 30)), top, ball, ...waist, radio, tail], ['turret.1', 'turret.2', 'turret.8']);
       // The B-17F of 1943: .50s in both cheeks from early 1943, still no chin turret.
       if (d < 1943 + 8 / 12) return box('B-17F', [...cheeks, top, ball, ...waist, radio, tail], ['turret.1', 'turret.2']);
       // The B-17G at the front from September 1943, with the chin turret; the radio gun often removed from mid-1944.
       const chin = turret(G.m2, ['turret.1', 'turret.2'], 500);
       if (d < 1944 + 5 / 12) return box('B-17G', [chin, ...cheeks, top, ball, ...waist, radio, tail]);
-      return box('B-17G', [chin, ...cheeks, top, ball, ...waist, tail], ['turret.13']);
+      return box('B-17G', [chin, ...cheeks, top, ball, ...waist, tail], ['turret.11']);
     }
     case 'Lancaster':
       // The FN5 nose and FN50 mid-upper turrets, two .303s each; the FN20 tail turret, four. No belly gun (high): a
-      // fighter from below draws no fire. Arcs, the historian's (21:19Z, medium): the nose 95 either side, 45 down to 60
-      // up; the mid-upper all round, level to 70 up (the file cuts out the fins and wings); the tail 95 either side, 60
-      // down to 60 up, the widest field of fire in the aircraft. Rounds unchecked: about 1,000 a gun forward and above,
-      // about 2,500 in the tail.
+      // fighter from below draws no fire. Arcs, the historian's (21:19Z, medium), in the model file since 21:22Z: the
+      // nose 95 either side, 45 down to 60 up; the mid-upper all round, level to 70 up (the file has no cut-out, so the
+      // 3D game keeps it off her own fins and wings); the tail 95 either side, 60 down to 60 up, the widest field of
+      // fire in the aircraft. Rounds unchecked: about 1,000 a gun forward and above, about 2,500 in the tail.
       return box('Lancaster I', [turret(G.browning303, ['turret.1', 'turret.2'], 1_000, about(0, 95, -45, 60)), turret(G.browning303, ['turret.3', 'turret.4'], 1_000, from(0, 360, 0, 70)), turret(G.browning303, ['turret.5', 'turret.6', 'turret.7', 'turret.8'], 2_500, about(180, 95, -60, 60))]);
   }
   return plainBomber(nat, d);

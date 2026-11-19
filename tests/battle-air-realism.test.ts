@@ -266,7 +266,11 @@ describe('the guns (guns.ts; the design\'s section 3 with the historian\'s revie
     expect(count(fighterGuns('Mustang', 'USA', { year: 1944, month: 5 }))).toBe(6);
     expect(count(bomberGuns('He111', 'GER', { year: 1939, month: 8 }))).toBe(3);
     expect(count(bomberGuns('B17', 'USA', { year: 1942, month: 7 }))).toBe(10);
-    expect(count(bomberGuns('B17', 'USA', { year: 1943, month: 9 }))).toBe(13);
+    const g = bomberGuns('B17', 'USA', { year: 1943, month: 9 });
+    expect(count(g)).toBe(13);
+    // The B-17G as the modeller laid her out again on 19 November: the tail pair at turret.12 and .13, the radio gun at .11.
+    expect(g.guns.find((x) => x.arc?.yaw[0] === 150)!.at).toEqual(['turret.12', 'turret.13']);
+    expect(bomberGuns('B17', 'USA', { year: 1944, month: 6 }).silent).toEqual(['turret.11']);
     expect(count(bomberGuns('Bomber:FRA', 'FRA', { year: 1939, month: 8 }))).toBe(3);
     expect(fighterGuns('Fighter:ITA', 'ITA', { year: 1940, month: 5 }).guns.map((g) => g.kind)).toEqual(['hmg']);
   });
