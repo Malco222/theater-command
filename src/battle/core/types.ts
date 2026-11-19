@@ -103,6 +103,16 @@ export interface SideTicket {
    * its own and is exactly as it was (no draw, no word, no picture).
    */
   air?: AirOnCall;
+  /**
+   * Land: the research doctrines the nation holds that a computer general's style grows by ('combined', 'deep'; the
+   * tactics panel, item 1): read only, never priced on the field (the card prices them already, b418).
+   */
+  doctrine?: string[];
+  /**
+   * Land: the computer general's style fixed by hand, for tests, the fairness tables and a sandbox's invented pairings:
+   * 'bold', 'methodical' or 'mass' (data/battle/land-styles.json). The campaign never sets it. Never the player's.
+   */
+  style?: string;
 }
 
 /**
@@ -172,6 +182,11 @@ export interface FieldTicket<P = unknown> {
    * ground) but draws a fresh day's luck, as the campaign's own dice would.
    */
   attempt?: number;
+  /**
+   * Land: the history dial's stop (1 to 5) the campaign is played at (campaign/history.ts stopOf): at 1 to 3 a computer
+   * general fights in its nation's own style, at 4 and 5 the situation picks it (styles.ts). Absent, 3.
+   */
+  hist?: number;
 }
 
 /** What a unit is doing. */
@@ -262,7 +277,7 @@ export type CoreCommand =
   /** Draw a line from (x0, y0) to (x1, y1): the units spread along it, facing away from their own edge. */
   | { do: 'line'; units: number[]; x0: number; y0: number; x1: number; y1: number }
   /** Close with that enemy unit and wear it down. */
-  | { do: 'attack'; units: number[]; target: number }
+  | { do: 'attack'; units: number[]; target: number; together?: number }
   /** Stop and stand where they are. */
   | { do: 'hold'; units: number[] }
   /** Leave the field by their own edge, to fight another day: what leaves is not lost, but the ground is. */
@@ -464,6 +479,12 @@ export interface BattleView<U extends UnitBase = UnitBase> {
    * on the way).
    */
   air?: Partial<Record<Side, { ready: number; left: number; nextIn: number | null; eta: number | null }>>;
+  /**
+   * Land: each computer general's style and its attack's plan, for the 3D game (the tactics panel, item 1): the phase
+   * ('guns' firing for the main effort before it goes in, 'assault', the tanks' 'hook'), the
+   * enemy blocks of the main effort, and where its start line stands (metres north). Left out for a side with no style.
+   */
+  plan?: Partial<Record<Side, { style: string; phase?: 'guns' | 'assault' | 'hook'; main?: number[]; startY?: number | null }>>;
 }
 
 /** What a domain's sim offers the clock, the screens and the hand-back. */

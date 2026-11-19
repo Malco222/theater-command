@@ -5,6 +5,12 @@
 // own power, the ground and which side it hits; nerve drains with losses. No weapons, rounds or ballistics.
 
 import type { Ground } from './field';
+import ground from '../../../data/campaign/ground.json';
+import support from '../../../data/campaign/support.json';
+
+/** The card's own figures for tanks with no infantry beside them (ground.json arms; support.json alone). */
+const ARMS = (ground as unknown as { arms: { foot: string[]; alone: Record<string, number>; defence: { alone: Record<string, number> } } }).arms;
+const SUPPORT_COVER = (support as unknown as { antiTank: { alone: { cover: number } } }).antiTank.alone.cover;
 
 export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort' | 'art' | 'eng';
 export type Motion = 'foot' | 'wheels' | 'tracks' | 'guns' | 'fixed';
@@ -62,6 +68,37 @@ export const LAND = {
    * again (b418). Priced twice, the panzers at Sedan carried the Meuse 21 points less often than their card said.
    */
   tanksClose: { punch: 0.6, take: 1.3, ground: ['buildings', 'industry'] as Ground[] },
+  /**
+   * Tanks that leave their infantry on close ground (the tactics panel, item 7; the design director, ruling 239(5)):
+   * tanks see little in woods and streets, and hidden guns and close-assault teams kill those that come on alone. A
+   * tank block in contact with enemy foot (the card's foot: 'foot'), with no friendly foot block within 'near' metres
+   * (edge to edge), standing in woods or streets or fighting foot in fieldworks, takes that foot's blows times 'take',
+   * the card's own figure for tanks alone there (1 over ground.json's arms.alone: forest for woods and fieldworks,
+   * urban for streets; a defending tank the card's defence figures), on top of tanksClose. Not where that foot is
+   * already in contact with friendly foot: the enemy is fixed, and a tank on its flank is the hook.
+   * Never twice (b418): only the tank divisions the card counted as covered by their foot, and paid the attack for
+   * fighting together, can be bitten: the card's foot divisions times 'cover' (1 on forest and urban cards, where
+   * ground.ts covers a tank division with one of foot; support.json's 2 elsewhere; a defence 1), a regiment a third,
+   * the first blocks first. A side with no foot has none covered: the card charged it already.
+   */
+  alone: {
+    on: false,
+    near: 200,
+    foot: ARMS.foot,
+    woods: ['woods'] as Ground[],
+    streets: ['buildings', 'industry', 'suburb'] as Ground[],
+    works: ['works', 'bunker'] as Ground[],
+    take: {
+      att: { woods: 1 / ARMS.alone.forest, streets: 1 / ARMS.alone.urban, works: 1 / ARMS.alone.forest },
+      def: { woods: 1 / ARMS.defence.alone.forest, streets: 1 / ARMS.defence.alone.urban, works: 1 / ARMS.defence.alone.forest },
+    } as Record<'att' | 'def', { woods: number; streets: number; works: number }>,
+    cover: { close: 1, open: SUPPORT_COVER, def: 1, cards: ['forest', 'urban'] },
+  },
+  /**
+   * Going in together (item 1; ruling 239(5), 7b): the player's group attack carries 'together', so its tanks and lorries
+   * keep pace with its foot as the card's Combined arms line assumes. A block ordered alone goes alone.
+   */
+  together: { player: false },
   /** Metres a second two blocks standing in each other's ground are eased apart, and the metres enemies keep between their fronts. */
   spread: 4,
   apart: 10,
