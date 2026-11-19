@@ -51,6 +51,25 @@ namespace StageParts
 			: Class == TEXT("ss") ? TEXT("Submarine") : TEXT("Cruiser");
 	}
 
+	/**
+	 * (The effects thread's oil fires at sea, passed by the art director 19 November 04:48Z, kit 5cd0115.) Oil burning
+	 * where a ship went down, or on a burning ship's deck: one column for each ship lost, until the scene ends. Written
+	 * so that it builds before the kit's OilFire reaches unreal and after: the call is made only where the kit has it.
+	 */
+	template <typename TKit>
+	static bool OilFire(TKit* Kit, int32 Id, const FVector& WorldAt, float ReachMetres, const TCHAR* Kind)
+	{
+		if constexpr (requires(TKit* K, int32 I, const FVector& At, float R, const FString& W, double Until, float Since) { K->OilFire(I, At, R, W, Until, Since); })
+		{
+			if (Kit)
+			{
+				Kit->OilFire(Id, WorldAt, ReachMetres, FString(Kind), 0.0, 0.0f);
+				return true;
+			}
+		}
+		return false;
+	}
+
 	static TArray<double> Numbers(const TSharedPtr<FJsonValue>& Value)
 	{
 		TArray<double> Out;
@@ -697,6 +716,15 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 		{
 			Effects->Burn(GetActorTransform().TransformPosition(Ship->Base + FVector(0.0, 0.0, Ship->High * 0.25 * U)), static_cast<float>(Ship->Beam * 0.6), 600.0f);
 		}
+	}
+	// Her oil burning on the water where she lies (a fat black column off the slick), or, ablaze from end to end, on her
+	// own deck (a greyer column, the flames on her): one fire a ship, its reach 0.6 of her length, until the scene ends.
+	// A submarine going down leaves none.
+	if (Ship->Given.Class != TEXT("ss"))
+	{
+		const bool bOnDeck = How == TEXT("burn");
+		const FVector Oil = Ship->Base + FVector(0.0, 0.0, bOnDeck ? FMath::Min(Ship->High * 0.3, 9.0) * U : 0.0);
+		StageParts::OilFire(Effects, 238000 + Id, GetActorTransform().TransformPosition(Oil), static_cast<float>(Ship->Long * 0.6), bOnDeck ? TEXT("burning") : TEXT("sunk"));
 	}
 	MoveShip(*Ship, Now);
 }
