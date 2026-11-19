@@ -39,6 +39,9 @@
 //              owed, and goes in the first month its force stands at the door, while the table runs.
 //   sea        a landing: the force sails from the first port on its list from which the shore can be reached, by
 //              the landing rules (the lift, the lane, the sky), ahead of the plan's own landings (rider b575).
+//              Within a month the landings go in the record's date order (rider b599 (i): Japan's second ring), and a
+//              force that made one earlier in the month sails again on its next, as the record's did every one to two
+//              weeks from the place just taken; a row whose port has not fallen waits a month.
 //   met        the record's fight (rider b580): `[attacker, defender]`, the fighting worth of each side that met in
 //              it. The record's attacks never met a province's whole defence: they struck one part of a thin line
 //              with the part of the force that had come up. So the fight is fought between those parts and no more:
@@ -426,7 +429,11 @@ export function bookAttacks(g: Game, nat: string): void {
   const cal = calendar(g, B)!;
   if (!cal.went) return;
   const riders = B.rows.filter((r) => r.nat === nat && r.beside);
-  B.attacks.forEach((row, i) => {
+  // (By their months, and within a month in the table's order, which is the record's date order: a row owed from an
+  // earlier month goes in before the month's own, as the record's did: rider b599 (i).)
+  const order = B.attacks.map((_, i) => i).sort((a, b) => B.attacks![a].month - B.attacks![b].month || a - b);
+  order.forEach((i) => {
+    const row = B.attacks![i];
     const key = `ba:${i}`;
     if (g.flags[key] || g.turn < row.month + cal.slide || !g.nations[nat].alive) return;
     // A fight at the record's figures that was lost this month is not tried again in it.
@@ -453,17 +460,28 @@ export function bookAttacks(g: Game, nat: string): void {
     if (row.sea) {
       // Each landing sails from its own port: the first of the row's its side holds from which the shore can be reached.
       const quays = (row.from ?? []).map((nm) => g.byName[nm]).filter((r): r is Region => !!r && r.port && allied(g, nat, r.ctrl) && main.every((c) => door(g, c, r)));
+      // (The record's pace, rider b599 (i): a landing every one to two weeks, each from the place just taken. A corps
+      // that made one of the book's landings earlier in its month sails again on its next one, from the port it took
+      // or the one it was thrown back to: Menado and then Kendari, Tarakan and then Balikpapan, Wake's try and then
+      // its taking. Only for the landing it sails on: refused, it has had its month.)
+      // Never one that landed elsewhere: it is not taken from there to another port in the same month.
+      const again = main.filter((c) => g.flags[`bsl:${c.id}`] === g.turn);
+      const spent = again.map((c) => c.ap);
+      const ready = (on: boolean): void => again.forEach((c, k) => { c.ap = on ? Math.max(spent[k], Math.min(4, c.apMax)) : spent[k]; });
       let why = 'none of its ports is its side\'s';
       for (const q of quays) {
+        if (again.some((c) => c.reg !== q.id)) { why = 'a corps of it has made its landing elsewhere this month'; continue; }
         if (!main.every((c) => bring(g, c, q))) { why = 'a corps of it is shut in'; break; }
+        ready(true);
         const no = whyNotLand(g, main, to);
-        if (no) { why = no; continue; }
+        if (no) { ready(false); why = no; continue; }
         // (The tanks sail with their divisions, and take no shipping of their own.)
         const aboard = tanks.filter((c) => door(g, c, q) && bring(g, c, q));
         bookWatch.tell?.({ row, what: 'due', to, force: [...main, ...aboard] });
         // (A landing with the record's figures came ashore on an empty beach: its fight is inland, with no cut for the shore.)
         const res = landCorps(g, main, to, row.met ? (cs, at) => fightMet(g, [...cs, ...aboard], at, row, { sea: 1 }) : undefined, true);
-        if (!res.ok) { why = res.why ?? 'the landing could not sail'; continue; }
+        if (!res.ok) { ready(false); why = res.why ?? 'the landing could not sail'; continue; }
+        for (const c of main) g.flags[`bsl:${c.id}`] = g.turn;
         const won = !!res.taken;
         if (won) for (const c of aboard) if (!c.dead && c.reg !== to.id && door(g, c, to)) relocate(g, c, to);
         if (won || !row.met) for (const c of main) if (!c.dead) c.hold = false;
@@ -471,7 +489,7 @@ export function bookAttacks(g: Game, nat: string): void {
         bookWatch.tell?.({ row, what: 'made', to, force: [...main, ...aboard], odds: oddsOf(res.report), taken: won, report: res.report ?? undefined });
         return;
       }
-      if (quays.length) main.every((c) => bring(g, c, quays[0]));
+      if (quays.length && !again.length) main.every((c) => bring(g, c, quays[0]));
       return owed(why);
     }
     const next = (c: Corps): boolean => c.town === undefined && to.nb.includes(c.reg);

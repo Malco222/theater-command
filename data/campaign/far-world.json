@@ -13,7 +13,8 @@
   "pacific-planner/far-oil.md": "2026-11-18T07:05Z",
   "pacific-planner/21-whole-world-data-gaps.md": "2026-11-18T07:06Z",
   "pacific-six/riders-234.json": "2026-11-18T23:54Z",
-  "pacific-six/riders-234-b591.json": "2026-11-19T06:25Z"
+  "pacific-six/riders-234-b591.json": "2026-11-19T06:25Z",
+  "pacific-six/riders-234-b599.json": "2026-11-19T09:08Z"
  },
  "_draft": "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
  "grand": {
@@ -4591,6 +4592,94 @@
      "est": 0.33,
      "hold": 1,
      "stay": 1
+    }
+   ],
+   [
+    29,
+    "JAP",
+    "Ito Detachment (228th Infantry and the 1st Kure landing force)",
+    "inf",
+    1,
+    "Canton",
+    {
+     "xp": 0.3,
+     "str": 0.35,
+     "est": 0.35,
+     "hold": 1,
+     "war": [
+      "JAP",
+      "UK"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    30,
+    "JAP",
+    "229th Infantry (of the 38th Division)",
+    "inf",
+    1,
+    "Cam Ranh",
+    {
+     "xp": 0.3,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1,
+     "war": [
+      "JAP",
+      "UK"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    33,
+    "JAP",
+    "Naval landing force (Kure 3rd, for Tulagi)",
+    "inf",
+    1,
+    "Truk",
+    {
+     "xp": 0.1,
+     "str": 0.03,
+     "est": 0.03,
+     "hold": 1,
+     "war": [
+      "JAP",
+      "UK"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    35,
+    "JAP",
+    "Naval landing force (the Guadalcanal airfield party)",
+    "inf",
+    1,
+    "Truk",
+    {
+     "xp": 0.1,
+     "str": 0.03,
+     "est": 0.03,
+     "hold": 1,
+     "war": [
+      "JAP",
+      "UK"
+     ],
+     "stops": [
+      1,
+      2
+     ]
     }
    ]
   ],
