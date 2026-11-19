@@ -18,6 +18,7 @@ import { FAR_STAGE } from '../src/campaign/stage';
 import { freed, ops, startOpen } from '../src/campaign/staff';
 import { bookAttacks, bookFleets, bookStations, ceilinged, stations, stationsBind } from '../src/campaign/stations';
 import open from '../data/campaign/open.json';
+import setup from '../data/campaign/setup-1939.json';
 
 describe('the Pacific war with the far side off', () => {
   it('reads no rule of it and lays no row of it', () => {
@@ -220,6 +221,17 @@ describe('the readiness test of ruling 200(m) (rider b586 to ruling 234) with th
     }
     expect(read()).toBe(before);
     expect(ops('JAP').some((op) => op.sure)).toBe(false);
+  });
+});
+
+describe("a corps' own establishment in a fold (rider b594 to ruling 234) with the far side off", () => {
+  it('no corps has one, on the first day or by a dated row, so worn reads as it always did', () => {
+    const g = startOpen(createGame(3, null));
+    expect(g.corps.length).toBeGreaterThan(100);
+    expect(g.corps.filter((c) => c.full !== undefined)).toEqual([]);
+    const rows = (setup as any).expeditions as any[];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.filter((r) => r[r.length - 1]?.est !== undefined)).toEqual([]);
   });
 });
 

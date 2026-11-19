@@ -496,7 +496,10 @@ export function cadreTerms(g: Game, nat: string, c: Corps): { cost: number; mont
   const u = c.elite ? eliteOf(nat) : null, p = TECH.units.para;
   const kind = specOf(g, c.kind) ? c.kind : 'inf';
   const list = u ? u.cost : c.airborne ? priceOf(g, nat, 'para', p.cost) : corpsCost(g, nat, kind);
-  return { cost: Math.round(list * MANPOWER.fold.price * 10) / 10, months: u ? u.months : c.airborne ? p.months : specOf(g, kind)!.months, divs: c.divs };
+  // (A corps its row keeps small comes back at its own establishment, for that share of the price and of the men:
+  // rider b594 to ruling 234. No corps has one with the far side off.)
+  const size = c.full ?? 1;
+  return { cost: Math.round(list * MANPOWER.fold.price * size * 10) / 10, months: u ? u.months : c.airborne ? p.months : specOf(g, kind)!.months, divs: c.divs * size };
 }
 
 /** Why a cadre cannot be raised again now, apart from money and a place to raise it; null when it can. */
@@ -526,7 +529,7 @@ export function orderCadre(g: Game, nat: string, id: number, region: number): Bu
 
 /** A cadre takes the field again: the same corps, with its number, its diary and its ribbons, filled with new men. */
 function reform(g: Game, c: Corps, at: Region): void {
-  c.dead = false; c.str = 1; c.org = 0.7; c.ap = c.apMax; c.fought = false; c.supplied = true; c.general = null; c.reg = at.id; c.hold = false; c.dyle = null;
+  c.dead = false; c.str = c.full ?? 1; c.org = 0.7; c.ap = c.apMax; c.fought = false; c.supplied = true; c.general = null; c.reg = at.id; c.hold = false; c.dyle = null;
   c.xp = Math.max((c.nat === g.human ? raisedXp(g, c.nat) : 0.05) + campXp(g, at.id), c.xp * MANPOWER.fold.xp);
   for (const k of ['dug', 'dugFor', 'digging', 'pressed', 'blows', 'relief', 'yields', 'gaveWay', 'digs', 'joint', 'leave', 'town', 'job', 'rival'] as const) delete c[k];
   raiseMorale(g, c);
@@ -701,7 +704,7 @@ export function aiProduction(g: Game, nat: string): void {
     if (old) {
       const t = cadreTerms(g, nat, old), up = corpsUpkeep(old.kind, old.divs);
       const site = budgeted(g) ? raiseSite(g, nat, old.kind, cap.id) : cap.id;
-      if (n.pp >= t.cost + PRODUCTION.aiReserve && spare >= up * BUDGET.debt.aiMargin && menSpare(g, nat) >= old.divs && orderCadre(g, nat, old.id, site >= 0 ? site : cap.id)) { spare -= up; continue; }
+      if (n.pp >= t.cost + PRODUCTION.aiReserve && spare >= up * BUDGET.debt.aiMargin && menSpare(g, nat) >= t.divs && orderCadre(g, nat, old.id, site >= 0 ? site : cap.id)) { spare -= up; continue; }
     }
     let kind: Kind = wantsGuns() ? 'art' : home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
     // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the

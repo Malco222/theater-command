@@ -2135,10 +2135,12 @@ export function foldWorn(g: Game, nat: string): void {
   if (!rivalRules(g) || !foldRules(g) || nat === g.human) return;
   const worn = RIVALS.fold.worn;
   const seen = new Set<number>();
+  // (Worn is read against a corps' own establishment, as the fold itself reads it: fold.ts, rider b594 to ruling 234.)
+  const thin = (c: Corps): boolean => c.str < worn * (c.full ?? 1);
   for (const c of [...g.corps]) {
-    if (c.nat !== nat || c.dead || c.str >= worn || seen.has(c.reg)) continue;
+    if (c.nat !== nat || c.dead || !thin(c) || seen.has(c.reg)) continue;
     seen.add(c.reg);
-    const here = g.regions[c.reg].units.filter((u) => u.nat === nat && !u.dead && u.str < worn);
+    const here = g.regions[c.reg].units.filter((u) => u.nat === nat && !u.dead && thin(u));
     let best: { keep: Corps; gone: Corps; str: number } | null = null;
     for (const keep of here) for (const gone of here) {
       if (keep === gone || whyNotFold(g, keep, gone) !== null) continue;
