@@ -276,6 +276,10 @@ bool ACampaignMapActor::BuildMap()
 		// sun, and drifts with the wind. The campaign's sun is the room's key light, which does not move, and its wind
 		// is the map's own, from the west. "-TheaterBlastSun=8,250" hands the kit another sun for a picture: so many
 		// degrees up, and where on the compass it stands, here low in the west.)
+		// (EVERY SCENE THAT MAKES A KIT MUST MAKE THESE TWO CALLS, the effects artist, 00:19Z on 19 November 2026: without
+		// SetSun the smoke's lit side and its copper fringe follow the kit's own sun, 55 degrees up toward 218, whatever
+		// the scene's is. The way toward the sun is minus the sun light's forward vector. Today the test barrage's is
+		// the only kit the campaign makes: the map's own smoke and flak do not go through it.)
 		FVector TowardSun = -FRotator(-42.0, 69.0, 0.0).Vector();
 		{
 			FString Asked;
