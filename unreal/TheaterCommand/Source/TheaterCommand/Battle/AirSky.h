@@ -259,8 +259,15 @@ namespace AirSky
 		int ShadowsDrawn() const { return LastShadows; }
 		/** A cloud's lift as last drawn (metres; -1 before it is first drawn). */
 		double ShownLift(int CloudIndex) const;
+		/**
+		 * The brightness the scene's cloud ink lays over the colours painted (1 for a plain picture). The sunlit top
+		 * takes it; the shaded side, the base and the shadows are painted that much darker, so that they stand where
+		 * they were (the art director, 19 November 16:31Z: "only the sunlit tops rise").
+		 */
+		void SetInk(double InInk) { Ink = InInk > 0.1 ? InInk : 1.0; }
 
 	private:
+		double Ink = 1.0;
 		int SideCount = 16;
 		std::vector<double> Cos, Sin;
 		// (the rim's lumps round a puff: two and three to a turn; and each puff's ring turned by its own part of a side,

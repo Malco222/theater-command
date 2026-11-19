@@ -77,6 +77,9 @@ public:
 	double GroundZ(const FVector& Where) const;
 	/** Where ship Id lies now (world), at her waterline amidships; false if there is no such ship. */
 	bool ShipAt(int32 Id, FVector& Out) const;
+	/** Ship Id's length (metres), the level way her bow points (world), and whether she lies in harbour (land within
+	 * two kilometres); false if there is no such ship. */
+	bool ShipLie(int32 Id, double& OutLong, FVector& OutBow, bool& bOutHarbour) const;
 	/** The way toward the sun at the hour of the record's attack, in world axes. */
 	FVector TowardSun() const;
 
@@ -122,8 +125,9 @@ private:
 	double Clock = 0.0;
 
 	TArray<FColor> Palette;
+	TArray<FString> PaletteNames; // (the ground pass finds its paints by name: AirGround)
 	TArray<FMeshPart> Parts;
-	TArray<TArray<double>> Tanks, Hangars, Palms; // as the file gives them
+	TArray<TArray<double>> Tanks, Hangars, Palms, Yard; // as the file gives them (the yard: the historian's 1941 blocks)
 	double SunAzimuth = 120.0, SunElevation = 25.0;
 	// The ground's height on a coarse grid, in whole metres (stage metres east and north).
 	double GridE0 = 0.0, GridN0 = 0.0, GridCell = 100.0;

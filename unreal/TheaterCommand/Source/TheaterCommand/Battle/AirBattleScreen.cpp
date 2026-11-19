@@ -226,6 +226,21 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		return X + Wd + 6.0;
 	};
 
+	// ---- The flyover before the battle (Brian's, approved 19 November 2026): the picture in a film's frame, black above
+	// and below, the raid's aim as its title and how to take command; nothing else until the frame has drawn back. ----
+	if (S.FlyBars > 0.0)
+	{
+		const double Band = FMath::RoundToDouble(Size.Y * 0.11 * FMath::Clamp(S.FlyBars, 0.0, 1.0));
+		Fill(0.0, 0.0, Size.X, Band, FLinearColor::Black, 0);
+		Fill(0.0, Size.Y - Band, Size.X, Band, FLinearColor::Black, 0);
+		if (S.FlyBars >= 0.999)
+		{
+			Centred(Wide(W.AimTarget), Size.X * 0.5, Size.Y - Band + Band * 0.18, Serif(TEXT("Bold"), 20.0f), Cream, 1);
+			Centred(Wide(S.ClockTag), Size.X * 0.5, Size.Y - Band + Band * 0.60, Typed(10.0f, true, 30), Muted, 1);
+		}
+		return LayerId + 2;
+	}
+
 	// ---- The top bar (land's form, b384): the sides, the chance, the balance, the bars, the clock. ----
 	const double BarH = 66.0;
 	Fill(0.0, 0.0, Size.X, BarH, Leather, 0);
@@ -741,6 +756,11 @@ void SAirBattleScreen::Do(const FString& Action)
 
 FReply SAirBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event)
 {
+	if (Battle.IsValid() && Battle->GetState() && Battle->GetState()->bFlying)
+	{
+		Battle->Press(TEXT("skip")); // (any click during the flyover takes command)
+		return FReply::Handled();
+	}
 	const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
 	if (const FButton* Hit = ButtonAt(Local))
 	{
@@ -816,6 +836,16 @@ FReply SAirBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& E
 	}
 	const FAirBattleState* S = Battle->GetState();
 	const FKey Key = Event.GetKey();
+	if (S && S->bFlying)
+	{
+		// (any key pressed during the flyover takes command; a key still held from before it began only repeats, and
+		// keeps the film: the cloud pre-check's note on round 5)
+		if (!Event.IsRepeat())
+		{
+			Battle->Press(TEXT("skip"));
+		}
+		return FReply::Handled();
+	}
 	if (Key == EKeys::Escape)
 	{
 		if (S && S->Question != 0)

@@ -71,6 +71,22 @@ struct FAirBattleState
 	/** The close view is on (C), and what it rides. */
 	bool bClose = false;
 	AirDesk::Subject Subject;
+	/**
+	 * The flyover before the battle (Brian's, approved 19 November 2026): its shots, the real seconds into them, then
+	 * the glide into the strategy view. While it is on the battle runs at x1 and the screen stands in a film's frame,
+	 * black above and below, which draws back over the glide (FlyBars, 1 to 0).
+	 */
+	AirDesk::Flyover Fly;
+	bool bFlying = false;
+	bool bFlyTried = false;     // looked for once, when the battle's first groups stand
+	double FlyT = 0.0;
+	double GlideT = -1.0;       // real seconds into the glide; -1 before it
+	double GlideLong = 2.5;     // 0.8 when a click or a key cut the shots short
+	double FlyBars = 0.0;
+	double FlyEndRealT = -1.0;  // the scene's real clock when it ended
+	int FlyPictures = 0;        // (the picture run: the flyover's shots taken, one bit each)
+	FVector GlideEye = FVector::ZeroVector;
+	FRotator GlideFacing = FRotator::ZeroRotator;
 
 	/** His side's own groups of one kind, as shown now. */
 	std::vector<int> MineOf(bool bFighter) const

@@ -27,6 +27,7 @@
 #include "GameFramework/HUD.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Materials/Material.h"
@@ -45,6 +46,7 @@
 #include "TheaterCommand.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
+#include "Widgets/Layout/SDPIScaler.h"
 
 #include <algorithm>
 #include <cmath>
@@ -490,6 +492,23 @@ bool AAirBattle::Open(const FString& Why)
 		Eye->GetCameraComponent()->PostProcessSettings.MotionBlurAmount = 0.0f;
 		// (the 3D builder, 19 November 2026: the art director's battle grade, on battle cameras only)
 		BattleLook::Grade(Eye->GetCameraComponent()->PostProcessSettings);
+	}
+	{
+		// The scene's own drawing size, for timing (build 1734: on Brian's 2881 by 1786 window the scene is drawn at the
+		// campaign map's budget, some 1077 by 668, and filled out 2.7 times each way by Unreal's upscaler, which is the
+		// softness of the Midway ships picture; the words are drawn at every pixel, which is why they stay sharp).
+		// "-TheaterAirSize=85" draws the scene at 85 hundredths of the window's points each way while the battle
+		// stands; without it the map's budget holds. The size it had comes back when the scene ends.
+		int32 AirSize = 0;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterAirSize="), AirSize) && AirSize >= 40 && AirSize <= 100)
+		{
+			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))
+			{
+				KeptScreenPercent = Variable->GetFloat();
+				Variable->Set(static_cast<float>(AirSize), ECVF_SetByCode);
+				UE_LOG(LogTheater, Display, TEXT("Air battle: the scene drawn at %d hundredths of the window's points (the map's %.0f)"), AirSize, KeptScreenPercent);
+			}
+		}
 	}
 	if (APlayerController* Controller = Here->GetFirstPlayerController())
 	{
@@ -994,7 +1013,16 @@ void AAirBattle::LaySky()
 	Clouds->SetCastShadow(false);
 	Clouds->RegisterComponent();
 	CloudInk = UMaterialInstanceDynamic::Create(Highlight, this);
-	CloudInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+	// (the clouds' sunlit tops a third brighter than their paint: on build 1732, through the battle grade, they read 226
+	// to 231 at the 99.5th percentile of the picture, the art director's mark 238 to 245 with no more than about one
+	// per cent of it at 250 or over (16:21Z). The paint's top, AirSky.cpp's SunSide, is already 252, so the lift is the
+	// ink's; the painter paints the shaded sides, the bases and the shadows that much darker, so that they stand where
+	// they were (her 16:31Z). "-TheaterCloudBright=1.2" tries another)
+	float CloudBright = 1.3f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterCloudBright="), CloudBright);
+	CloudBright = FMath::Clamp(CloudBright, 0.5f, 3.0f);
+	CloudInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
+	S.SkyPainter.SetInk(CloudBright);
 	CloudShadows = NewObject<UProceduralMeshComponent>(this, TEXT("AirCloudShadows"));
 	CloudShadows->bUseAsyncCooking = false;
 	CloudShadows->SetupAttachment(Root);
@@ -1211,6 +1239,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 	FAirBattleState& S = *State;
 	// The screen's clock: x1 is real time; the run-up and the run home at x10; held while a question stands or the card is up.
 	S.Clock.bQuestion = S.Question != 0 || S.bCard;
+	S.Clock.bFlyover = S.bFlying;
 	const double Run = S.Clock.Step(Real, S.Desk.Head(), S.Board.Scale, S.ClockTag);
 	const double End = S.bReplay ? S.Recording.Views.back().Head.T : 1e18;
 	S.BattleT = FMath::Min(End, S.BattleT + Run);
@@ -1225,6 +1254,20 @@ void AAirBattle::Tick(float DeltaSeconds)
 		S.Show.Eye = AirShow::Vec(At.Y, At.X, At.Z);
 	}
 	S.Show.Advance(S.BattleT);
+	if (!S.bFlyTried && !S.Show.Groups().empty())
+	{
+		// The flyover before the battle, once its first groups stand ("-TheaterNoFlyover" goes straight to the battle).
+		S.bFlyTried = true;
+		if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterNoFlyover")) && S.Fly.Begin(S.Show.Groups(), S.Board.TargetX, S.Board.TargetY))
+		{
+			S.bFlying = true;
+			S.FlyT = 0.0;
+			S.GlideT = -1.0;
+			S.FlyBars = 1.0;
+			UE_LOG(LogTheater, Display, TEXT("Air battle: the flyover, %.1f s: the raid (group %d), the target, %s"), S.Fly.Length(), S.Fly.RaidGroup(),
+				S.Fly.GuardGroup() >= 0 ? TEXT("the guard") : TEXT("no guard up"));
+		}
+	}
 	S.Desk.Reach(S.Show.Shown());
 	PlayEffects();
 	S.Desk.Write(Real, S.Show.Groups(), S.ClockTag, S.Words);
@@ -1993,9 +2036,37 @@ void AAirBattle::AimEye(double Real)
 	FAirBattleState& S = *State;
 	const double U = UnitsPerMetre;
 	UCameraComponent* Lens = Eye->GetCameraComponent();
+	// The flyover before the battle: its shots, each eye kept 60 m over the ground; then the glide (below, after the
+	// strategy camera has found its place).
+	if (S.bFlying && S.GlideT < 0.0)
+	{
+		S.FlyT += Real;
+		if (S.FlyT < S.Fly.Length())
+		{
+			const AirDesk::Flyover::Shot Shot = S.Fly.At(S.FlyT, S.Show.Groups());
+			FVector FlyEye = World(Shot.Eye.X, Shot.Eye.Y, Shot.Eye.Z);
+			const FVector FlyLook = World(Shot.Look.X, Shot.Look.Y, Shot.Look.Z);
+			if (Stage && Stage->IsRaised())
+			{
+				FlyEye.Z = FMath::Max(FlyEye.Z, Stage->GroundZ(FlyEye) + 60.0 * U);
+			}
+			FlyEye.Z = FMath::Max(FlyEye.Z, 40.0 * U);
+			Lens->SetFieldOfView(50.0f);
+			Lens->PostProcessSettings.MotionBlurAmount = 0.0f;
+			S.GlideEye = FlyEye;
+			S.GlideFacing = (FlyLook - FlyEye).Rotation();
+			Eye->SetActorLocationAndRotation(S.GlideEye, S.GlideFacing);
+			return;
+		}
+		S.GlideT = 0.0;
+		S.GlideLong = 2.5;
+		bLookSet = false;
+	}
 	// The close view (handoff 10, gap 1): it rides a plane of the group in hand, or with none in hand the busiest fighter
-	// near the middle of the picture; a fall, a straggle or a limp cuts to the next, never a swoop.
-	if (S.bClose)
+	// near the middle of the picture; a fall, a straggle or a limp cuts to the next, never a swoop. (Not while the
+	// flyover's glide runs, which is at this function's end: a ride asked for during the flyover, a C pressed while the
+	// battle loaded or a ride picture come due, starts when the glide is done. The cloud pre-check's catch, 17:05Z.)
+	if (S.bClose && !S.bFlying)
 	{
 		const std::vector<AirShow::PlaneOut>& Out = S.Show.Planes();
 		auto Find = [&Out](int Key) -> const AirShow::PlaneOut*
@@ -2140,7 +2211,7 @@ void AAirBattle::AimEye(double Real)
 		Focus = Sum * (1.0 / Count);
 	}
 	FVector Wanted = World(Focus.X, Focus.Y, Focus.Z);
-	double Away = Distance, Down = Pitch;
+	double Away = Distance, Down = Pitch, Heading = Yaw;
 	// "The ships" picture: the overview cut to the ship that went down, from 1.6 km off and above, her neighbours and
 	// the water round her in the frame (the art director's note: the first run framed the hills, no ship in sight).
 	FVector ShipWorld;
@@ -2150,10 +2221,34 @@ void AAirBattle::AimEye(double Real)
 		Wanted = ShipWorld;
 		Away = 1600.0;
 		Down = -24.0;
+		// At sea (the art director on build 1734, Midway 06: the carrier a small soft shape in a teal field): she fills
+		// about a third of the picture's width, seen from her sunlit side and 35 degrees forward of her beam, through a
+		// longer lens (35 degrees) from low enough that her smoke stands up above her; the look a little over her
+		// waterline, so that she sits under the middle with her column over her. In harbour the wide picture stands
+		// (Pearl Harbor 06: its columns across the harbour are what it is for).
+		double Long = 0.0;
+		FVector Bow;
+		bool bHarbour = true;
+		if (Stage->ShipLie(ShipsLook, Long, Bow, bHarbour) && !bHarbour)
+		{
+			const double LensDegrees = 35.0;
+			const FVector Abeam = FVector::CrossProduct(FVector::UpVector, Bow).GetSafeNormal();
+			FVector Sun = Stage->TowardSun();
+			Sun.Z = 0.0;
+			const double Hand = FVector::DotProduct(Abeam, Sun) >= 0.0 ? 1.0 : -1.0;
+			const FVector Out = (Abeam * Hand * FMath::Cos(FMath::DegreesToRadians(35.0)) + Bow * FMath::Sin(FMath::DegreesToRadians(35.0))).GetSafeNormal();
+			// (seen 35 degrees off her beam she shows some 0.82 of her length; the frame is 2 tan(lens/2) of the way wide)
+			const double Shown = 0.82 * Long;
+			Away = FMath::Clamp(3.0 * Shown / (2.0 * FMath::Tan(FMath::DegreesToRadians(LensDegrees * 0.5))), 450.0, 1600.0);
+			Down = -13.0;
+			Heading = (-Out).Rotation().Yaw;
+			Wanted = ShipWorld + FVector::UpVector * (0.12 * Long * U);
+			Lens->SetFieldOfView(static_cast<float>(LensDegrees));
+		}
 	}
 	LookAt = bLookSet && !bOnShip ? FMath::Lerp(LookAt, Wanted, AirParts::Smooth(Real, 1.2)) : Wanted;
 	bLookSet = true;
-	const FRotator Facing(Down, Yaw, 0.0);
+	const FRotator Facing(Down, Heading, 0.0);
 	FVector From = LookAt - Facing.Vector() * Away * U;
 	if (Stage && Stage->IsRaised())
 	{
@@ -2161,6 +2256,26 @@ void AAirBattle::AimEye(double Real)
 	}
 	From.Z = FMath::Max(From.Z, 40.0 * U);
 	Eye->SetActorLocationAndRotation(From, (LookAt - From).Rotation());
+	if (S.bFlying && S.GlideT >= 0.0)
+	{
+		// The glide from the flyover's last eye into the strategy view, eased in and out; the film's frame draws back.
+		S.GlideT += Real;
+		const double Into = FMath::Clamp(S.GlideT / FMath::Max(S.GlideLong, 0.1), 0.0, 1.0);
+		const double Eased = Into * Into * (3.0 - 2.0 * Into);
+		S.FlyBars = 1.0 - Eased;
+		if (Into >= 1.0)
+		{
+			S.bFlying = false;
+			S.FlyBars = 0.0;
+			S.FlyEndRealT = RealT;
+		}
+		else
+		{
+			const FQuat Toward = FQuat::Slerp(S.GlideFacing.Quaternion(), (LookAt - From).Rotation().Quaternion(), Eased);
+			Eye->SetActorLocationAndRotation(FMath::Lerp(S.GlideEye, From, Eased), Toward.Rotator());
+			Lens->SetFieldOfView(static_cast<float>(FMath::Lerp(50.0, 55.0, Eased)));
+		}
+	}
 }
 
 void AAirBattle::Orbit(const FVector2D& DeltaPixels)
@@ -2322,6 +2437,17 @@ bool AAirBattle::Order(const FString& Command)
 void AAirBattle::Press(const FString& Button)
 {
 	FAirBattleState& S = *State;
+	if (Button == TEXT("skip"))
+	{
+		// (a click or a key during the flyover: its shots end and a short glide takes the eye to the battle)
+		if (S.bFlying && S.GlideT < 0.0)
+		{
+			S.GlideT = 0.0;
+			S.GlideLong = 0.8;
+			bLookSet = false;
+		}
+		return;
+	}
 	if (S.bCard)
 	{
 		if (Button == TEXT("continue"))
@@ -2414,6 +2540,14 @@ void AAirBattle::Finish()
 void AAirBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
 	HideScreen();
+	if (KeptScreenPercent > 0.0f)
+	{
+		if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))
+		{
+			Variable->Set(KeptScreenPercent, ECVF_SetByCode);
+		}
+		KeptScreenPercent = -1.0f;
+	}
 	if (Reason == EEndPlayReason::Destroyed)
 	{
 		ShowTheTable(); // (taken down without CONTINUE: the table still comes back as it was)
@@ -2457,7 +2591,15 @@ void AAirBattle::ShowScreen()
 		return;
 	}
 	Screen = SNew(SAirBattleScreen).Battle(this);
-	GEngine->GameViewport->AddViewportWidgetContent(Screen.ToSharedRef(), 20);
+	// The words and the name tags a quarter larger than Unreal's own game-screen size, which already grows with the
+	// window's height (the art director on build 1734: they were small at Brian's window; 1.3 at 1440 high and 1.24 at
+	// his, so one number between). Everything on the screen grows together, so the dark plates still fit their words.
+	// "-TheaterAirTextScale=" tunes it.
+	float Lettering = 1.25f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterAirTextScale="), Lettering);
+	Lettering = FMath::Clamp(Lettering, 0.75f, 2.0f);
+	ScreenFrame = SNew(SDPIScaler).DPIScale(Lettering)[Screen.ToSharedRef()];
+	GEngine->GameViewport->AddViewportWidgetContent(ScreenFrame.ToSharedRef(), 20);
 	if (APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
 	{
 		FInputModeUIOnly Mode;
@@ -2471,10 +2613,11 @@ void AAirBattle::ShowScreen()
 
 void AAirBattle::HideScreen()
 {
-	if (Screen.IsValid() && GEngine && GEngine->GameViewport)
+	if (ScreenFrame.IsValid() && GEngine && GEngine->GameViewport)
 	{
-		GEngine->GameViewport->RemoveViewportWidgetContent(Screen.ToSharedRef());
+		GEngine->GameViewport->RemoveViewportWidgetContent(ScreenFrame.ToSharedRef());
 	}
+	ScreenFrame.Reset();
 	Screen.Reset();
 	if (bOwnInput)
 	{
@@ -2738,6 +2881,22 @@ void AAirBattle::TakeShots(double Real)
 		return;
 	}
 	FAirBattleState& S = *State;
+	// The flyover's own pictures, one in each of its shots, on its own clock.
+	if (S.bFlying && S.GlideT < 0.0)
+	{
+		const double RaidSeconds = AirDesk::Flyover::RaidLong, TargetSeconds = AirDesk::Flyover::TargetLong;
+		const struct { const TCHAR* Name; double At; bool bGuard; } FlyShots[] = {
+			{ TEXT("00-flyover-raid"), 3.0, false }, { TEXT("00-flyover-target"), RaidSeconds + 2.5, false }, { TEXT("00-flyover-guard"), RaidSeconds + TargetSeconds + 2.0, true } };
+		for (int32 K = 0; K < 3; ++K)
+		{
+			if ((S.FlyPictures & (1 << K)) == 0 && S.FlyT >= FlyShots[K].At && (!FlyShots[K].bGuard || S.Fly.GuardGroup() >= 0))
+			{
+				S.FlyPictures |= 1 << K;
+				FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, AirParts::Wide(S.Recording.Key) + TEXT("-") + FlyShots[K].Name + TEXT(".png")), true, false);
+				++ShotsTaken;
+			}
+		}
+	}
 	for (FShot& Shot : Shots)
 	{
 		if (Shot.bTaken)
@@ -2747,8 +2906,9 @@ void AAirBattle::TakeShots(double Real)
 		const double Base = Shot.bShips ? ShipRealT : MetRealT;
 		if (Base < 0.0)
 		{
-			// (the approach is taken before the formations meet: the clock's x10 brings them together in some 20 s)
-			if (Shot.At < 0.0 && !Shot.bShips && RealT >= 8.0)
+			// (the approach is taken before the formations meet: the clock's x10 brings them together in some 20 s;
+			// after the flyover, when there is one)
+			if (Shot.At < 0.0 && !Shot.bShips && !S.bFlying && RealT >= FMath::Max(8.0, S.FlyEndRealT + 4.0))
 			{
 				Shot.bTaken = true;
 				FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, AirParts::Wide(S.Recording.Key) + TEXT("-") + Shot.Name + TEXT(".png")), true, false);

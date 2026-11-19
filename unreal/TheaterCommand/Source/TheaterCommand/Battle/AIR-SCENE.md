@@ -16,6 +16,7 @@ battle screen over it.
 | `AirBattle.h/.cpp` | `AAirBattle`, the scene. It feeds the core and draws what the core says: the planes, the small things, the effects kit, the stage and its ships, the cameras and the sound. |
 | `AirBattleScreen.h/.cpp` | `SAirBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
 | `AirStage.h/.cpp` | The Oahu and Midway stages (an earlier commit on this branch). |
+| `AirGround.h/.cpp` | The stage's ground as painted, plain C++ (the cloud test paints the same): the grass varied and patched with red earth, the sand kept to the water's edge, the shallows darkening into the sea, the runways lifted. |
 | `../../../Tools/air_show/` | The cloud test. It plays each recording through the core at 60 fps and checks the flight: g, turn radius, slip, roll, a fall for every loss, two gunners never at one window, the frame time. It also plays the screen's clock and words. `run.sh` builds and runs it; `air_show_frames.py` draws pictures of the flight. |
 | `Content/Data/AirBattles/*.json` | The two recorded battles, `oahu` and `midway-fleet`, written by `tools/air-record` on the rules branch `claude/project-thread-2bdb2m`. |
 | `Content/Data/Sound/mix.json` | The sound director's mix, read by the scene (it never copies the mix's numbers). |
@@ -25,7 +26,8 @@ battle screen over it.
 
 1. `Tools/build_sounds.sh` brings the 17 new recordings into `/Game/Campaign/Sounds/Real`. Without it the battle plays silent and nothing fails.
 2. `-TheaterAirBattle=oahu` or `-TheaterAirBattle=midway-fleet` on the command line plays the recorded battle about two seconds after the table is up. The table is hidden while it plays.
-3. Adding `-TheaterAirBattleShots=<folder>` takes the art director's eight pictures and then quits:
+3. Adding `-TheaterAirBattleShots=<folder>` takes the art director's pictures and then quits:
+   - the flyover: the raid, the target, and the guard when there is one (`00-flyover-*`)
    - the approach
    - the meeting
    - riding a fighter
@@ -36,6 +38,7 @@ battle screen over it.
    - the after card
 
 Mouse and keys:
+- During the flyover, any click or key takes command: its shots end and a short glide brings the battle view.
 - Left click takes his group in hand. Shift adds another group.
 - Right click on an enemy tag attacks it. Right click on the sky patrols there.
 - Drag turns the camera. The wheel draws it in and out.
@@ -49,12 +52,41 @@ A recorded battle shows the orders strip greyed out: it plays as it was fought.
 
 At ×1 the Pearl Harbor raid lasts about 7 real minutes, with contact about 20 s in. Midway lasts about 5 minutes, with contact about 30 s in.
 
+**The flyover** (Brian's, approved 19 November 2026: before an air battle starts, a short cinematic flyover of both
+formations, like generals surveying the field). When the battle's first groups stand, the scene plays up to three shots
+on the real clock, cut one to the next, while the battle runs at ×1 under them (`AirDesk::Flyover`, in the cloud test):
+- **the raid**, 5 s: the raider's biggest bomber formation coming on, seen from ahead and out to the side away from the
+  target, from 60 m under it to 10 m over it as the eye closes from 1.7 to 0.5 of its size ahead;
+- **what it comes for**, 4.5 s: from beyond the target, the far side from the raid, pushing in from 2.6 km to 1.9 km
+  and down from 650 m to 520 m, the look lifting from the target toward where the raid comes from;
+- **the guard**, 3.5 s, when the defender has fighters up: from behind them and a little over, looking out toward the
+  raid.
+Then the eye glides into the strategy view over 2.5 s (0.8 s after a click or key). The screen stands in a film's
+frame while it plays, black above and below, with the raid's aim as its title and the line "SURVEYING THE FIELD · CLICK
+OR PRESS ANY KEY TO TAKE COMMAND"; the frame draws back over the glide and the battle's own screen returns. Each eye is
+kept 60 m over the stage's ground. Pearl Harbor (no American fighters up at the start) runs 9.5 s of shots, Midway
+(the carriers' fighter patrols up) 13 s. `-TheaterNoFlyover` goes straight to the battle. The cloud test checks the
+shots on each recording: the raid and the target shown, at least 60 per cent of the raid's aircraft in view through its
+shot, 14 s or less, and the eye never jumping within a shot, never under 60 m, never within 40 m of an aircraft.
+
+**The size of the words** (the art director on build 1734: the tags and the running words were small at Brian's
+window). Unreal draws its game screen at the window's height over 1080; the battle's screen is drawn 1.25 times that
+(an `SDPIScaler` round it, in `ShowScreen`), so it keeps the same size against the window at every size and everything
+on it grows together, the dark plates with their words. `-TheaterAirTextScale=` tunes it (0.75 to 2); the UI director
+has the last word on the type.
+
 **The cameras** (the art director's notes on the first Mac run, build 1720). Both fill the whole window, whatever its
 shape (a camera actor keeps 16:9 and bars the rest; both have `bConstrainAspectRatio` off).
 - **The overview** starts 1.1 km behind his own raid and 14 degrees above it, looking along its way (from 2.6 km the
   aircraft were specks). It follows the group in hand, else the fight, else his raid; drag turns it and the wheel draws
   it in and out (120 m to 20 km). For "the ships" picture it cuts to the first ship that went down, 1.6 km off and 24
-  degrees above her, and back to the fight after it.
+  degrees above her in harbour, and back to the fight after it. At sea (the art director on build 1734, Midway 06) she
+  fills about a third of the picture's width: a 35-degree lens from her sunlit side, 35 degrees forward of her beam,
+  13 degrees above her, so her smoke stands up over her (`AAirStage::ShipLie` gives her length, bow and harbour).
+  Depth of field is off in the whole game (the campaign's light trims), so it was not what made that picture soft:
+  the scene is drawn at the campaign map's pixel budget (about 1077 by 668 on Brian's 2881 by 1786 window) and filled
+  out by Unreal's upscaler. `-TheaterAirSize=85` draws the battle at 85 hundredths of the window's points each way, for
+  timing a sharper scene; without it nothing changes.
 - **The close view** rides one aircraft: of the group in hand, else the busiest of his own side's fighters near the
   middle of the picture, else the other side's. After 10 seconds on one it moves to another of his, but stays if that
   one is the only aircraft of his still up. A fighter is seen from 22 m behind along its path and 6 m above it,
@@ -105,6 +137,44 @@ day's light, and puts all of it back on CONTINUE. The campaign's controller stil
 pointer's province changes, the map unfolds its crowds and would stand its pieces again, at the world's origin where
 the battle is. So every frame the scene puts away any piece that came back. On CONTINUE the map stands its pieces
 again itself, with the crowds folded.
+
+**The sea and the clouds' brightness (the art director on build 1732, 16:21Z).** The stage's sea paint (#1C4453)
+stands as it is under a sun up to 20 degrees high and darkens as the sun climbs, to 0.65 of it at 45 degrees and over,
+its hue kept (`SeaPaintUnder` in AirStage.cpp): Pearl Harbor's morning sun at 18 degrees leaves it as it was, and
+Midway's at 45 takes the open sea from 78 to 90 of brightness toward her 55 to 60. The clouds' ink is 1.3 times their
+paint (`CloudBright` in LaySky): through the grade the sunlit tops read 226 to 231, her mark is 238 to 245 with no more
+than about one per cent of the picture at 250 or over, and the paint's top is already 252. The painter paints the
+shaded sides, the bases and the shadows that much darker (`Painter::SetInk`), so only the sunlit tops rise: the bases
+already pass at 140 to 155 and the deck's troughs at 12 to 18 per cent darker (her 16:31Z). `-TheaterCloudBright=`
+tries another.
+
+**The harbour's ground and yard (the art director on build 1734, 16:55Z; the historian's blocks).** Pearl Harbor's
+land read as flat blocks in three plain colours with hard polygon bands, and the shallows as a mint band. The stage's
+meshes now go through `AirGround::Paint` before they are built (BuildGround):
+- the grass is varied in broad patches at two sizes (about 380 m and 140 m), and here and there turned toward the red
+  earth of the pineapple fields' paint in patches a few hundred metres across. Over the 6 km round the harbour the
+  grass's brightness spreads 5.6 luma, by the art director's measure;
+- the sand keeps to the water's edge: a sand point back from it takes the grass behind it, long shore edges get a point
+  10 m in, and a large all-sand triangle gets a greener middle by its distance from the coast;
+- the shallows' open-sea edge takes the sea's own paint (`SeaPaintUnder` at the stage's sun), so the band darkens from
+  the coast into the deep water. Midway, with its lagoon, keeps the band's edge;
+- the runways stand 0.8 m clear of the land (Ford Island's strip lay at the island's own height).
+Oahu's palette is also darker and less mint (`tools/stages/mesh.py`'s `OAHU_PAINT`: cane #5D7934, pineapple #7D5A3C,
+forest #35512A, sand #CDBD95, shallows #3A6E68, reef #6C9E8E). The mottle finer than the points are apart is the
+material's own grain (M_MapSurface's two noise samples at one tile to 1,800 m and one to 260 m, strength 0.28;
+`-TheaterGroundGrain=` tries another, 0 for none).
+
+The stage file's `yard` (from `tools/stages/yard.py`, the historian's table of 19 November) draws the 1941 Navy Yard
+and Ford Island's seaplane base as grey blocks in BuildWorks:
+- Dry Dock No. 1, drained and dark inside its coping, its caisson the steel end on the water. It runs 211° from the
+  mouth (the historian's correction), and Pennsylvania, Cassin and Downes lie in it along that line;
+- YFD-2 round Shaw;
+- eight shops on their concrete pads by the 1010 Dock;
+- the seaplane apron at Ford Island's south end with Hangars 79, 37 and 54. The three stand-in hangars by Ford
+  Island's runway are gone.
+The cloud test checks that each docked ship lies inside its dock and along it, and that no ship's middle is under a
+block. Its picture: `AIR_GROUND_DUMP=1 Tools/air_show/run.sh`, then
+`STAGE=Content/Data/Stages/oahu.json python3 Tools/air_show/ground_picture.py <out>/ground-oahu.bin harbour.png -1700 -1900 900 200 1.25`.
 
 **The battle look (the 3D builder's, `Campaign/CampaignBattleLook.h/.cpp`).** The scene calls it in five places: the
 art director's grade on the scene's own camera (`Grade`, when the eye is made); the air haze, which starts 15 km out
@@ -190,8 +260,9 @@ while a drawn cloud's lift over high ground is still easing, for each metre the 
   are the sky behind), then the ground's kit. The order turns 50 m either side of the base.
 - The cloud test checks the sky too: the day as read, the heights, the cover (0.31 to 0.45), the clearing kept as the
   clouds drift (when the bombs fall, at the end and two hours on), cloud round the falls far from the target, the room,
-  the same sky every time, the far-to-near order and the painter's time (under 4 ms; 3.0 to 3.7 with the look round's lumps and the
-  shadows over land, the ground asked once for each of a shadow's points). It checks that the shadows are laid apart
+  the same sky every time, the far-to-near order and the painter's time (under 5 ms for the worst eye, the least of three middles of 15 paints so that one slow stretch
+  of a shared machine does not fail it; 2.9 to 3.7 with the look round's lumps and the shadows over land, about 1.8
+  times what it was when the mark was 4 ms). It checks that the shadows are laid apart
   from the puffs (none dark among them; some on a cumulus day). It checks the clearing
   on what the painter draws as well. On a cumulus day no fall or parachute ends in the air. It lays a deck under a
   4,500 m band, a deck raised to the band, a deck over the lowest band, a strike's hole, three kinds of high ground (a
@@ -268,4 +339,7 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    with no ring of polygon corners. The fight's smoke and tracer over the clouds should lie on them. If the clouds glare
    or vanish against the sky, their brightness is the three colours at the top of `AirSky.cpp`. If they cost too much
    time, `Placing::MostPuffs` sets their room and `Painter(12)` the sides of each puff.
-5. **The sound.** Each formation's drone, the bursts by calibre, the flak bursts heard after their flash, and a fighter group's pass within 300 m. The loudness and distances come from mix.json's families.
+5. **Pearl Harbor's ground.** The grass mottled with patches of red earth, the beach a band along the water, the
+   shallows darkening into the sea, and the yard's grey blocks with Pennsylvania in her dry dock. If the grain shows as
+   a pattern, `-TheaterGroundGrain=0.15` softens it.
+6. **The sound.** Each formation's drone, the bursts by calibre, the flak bursts heard after their flash, and a fighter group's pass within 300 m. The loudness and distances come from mix.json's families.
