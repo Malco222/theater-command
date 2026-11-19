@@ -54,12 +54,12 @@ void BattleLook::AirSkyBegin(AActor& Scene, UDirectionalLightComponent* Sun)
 	// (The sixth number is how dark the world is beyond the scene's own sea, which is a flat sheet that ends short of
 	// the round world's horizon: past its edge the air's own ground shows, and at the engine's pale grey it made a
 	// line along the horizon five levels brighter than the sea. It is the sea's colour, at this share of it.)
-	// (And the seventh is how many kilometres out the engine reckons the air's paling. It stops at 96 unless told, and
-	// the sea's far end, 150 to 200 km off, then took the air of 96 km where the sky above it took all of it: that,
-	// and paling cut to four tenths, each left a line along the horizon four or five levels deep. So the air is thinner
-	// (which is what kept the distance from whiting out), it pales at its true rate as far as the sea reaches, and
-	// sky and paling are brightened together.)
-	double Air = 0.45, Dust = 0.35, Far = 1.0, HazeOver = 1.0, Bright = 2.2, Beyond = 1.0, Deep = 300.0;
+	// (And the seventh is how many kilometres out the engine reckons the air's paling: it stops at 96 unless told.
+	// Eleven tries on Pearl Harbor's first frames, 19 November 2026: the air's own paling at four tenths, sky and
+	// paling brightened together by three tenths. A line four or five levels deep stayed along the horizon whatever
+	// the air was given; it went when the scene's haze was made to swallow the far sea and the sky's foot alike: see
+	// AirHaze.)
+	double Air = 1.0, Dust = 1.0, Far = 0.4, HazeOver = 1.0, Bright = 1.3, Beyond = 1.0, Deep = 300.0;
 	Asked(TEXT("TheaterAirSky="), { &Air, &Dust, &Far, &HazeOver, &Bright, &Beyond, &Deep });
 	if (IConsoleVariable* Depth = IConsoleManager::Get().FindConsoleVariable(TEXT("r.SkyAtmosphere.AerialPerspectiveLUT.Depth")))
 	{
@@ -173,9 +173,12 @@ void BattleLook::Grade(FPostProcessSettings& Lens)
 void BattleLook::AirHaze(UExponentialHeightFogComponent& Haze, double UnitsPerMetre)
 {
 	// (The scene's own haze began 2 km from the eye. Looking steeply down from the strategy camera the sea under the
-	// clouds then sat almost at the clouds' own brightness: it begins farther off, beyond what lies under the eye.)
-	// (and it is half as dense as the scene first set it, now that the sky's own air pales the distance as well)
-	double Start = 7000.0, Density = 0.5 * Haze.FogDensity, Falloff = Haze.FogHeightFalloff, Most = Haze.FogMaxOpacity;
+	// clouds then sat almost at the clouds' own brightness. It begins 15 km off, beyond everything under the eye, and
+	// from there it is twice as thick and hides wholly what is far enough: the far sea and the foot of the sky sink
+	// into one haze with no line between them, the far cloud keeps under half its contrast, and the near sea is as
+	// dark under its clouds as the day makes it. Her figures on the five first frames with it: span 171 to 188,
+	// blue over red 4 to 16, saturation 0.07 to 0.14.)
+	double Start = 15000.0, Density = 2.0 * Haze.FogDensity, Falloff = Haze.FogHeightFalloff, Most = 1.0;
 	Asked(TEXT("TheaterAirHaze="), { &Start, &Density, &Falloff, &Most });
 	Haze.SetStartDistance(static_cast<float>(Start * UnitsPerMetre));
 	Haze.SetFogDensity(static_cast<float>(Density));
