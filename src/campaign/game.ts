@@ -70,7 +70,7 @@ export const EASTERN = eastData as unknown as {
   lineOwners?: string[]; lineStops?: number[]; lineReckon?: boolean; nearRefuge?: boolean;
   mud: number[]; lineDefence: number; stepFresh: number; stepConverted: number; convertAfter: number; badWeather: number;
   bands: [number, number][]; drag: [number, number][]; roads: number; winter: { months: number[]; attack: number; defence: number; attrition: number; rest: number; hardy: string[] };
-  mobilisation: Record<string, { perMonth: number[]; after: number; divs: number; kind: Kind; xp: number; name: string; works?: [number, string, number][] }>;
+  mobilisation: Record<string, { perMonth: number[]; after: number; divs: number; kind: Kind; xp: number; name: string; trim?: { stops: number[]; cut: number }; works?: [number, string, number][] }>;
   works?: [number, string, number, string[], string, { taken?: boolean; port?: boolean; vs?: string[] }?][];
 };
 /** Rules for campaigning in the desert. See data/campaign/desert.json. */
@@ -2914,7 +2914,18 @@ export function standingCallUp(g: Game, nat: string): { held: boolean; corps: nu
   if (g.flags.open !== 1 || !plan || !n?.alive || !greatWar(g, nat)) return null;
   const began = g.flags[`mobilised:${nat}`];
   const wave = began === undefined ? 0 : g.turn + 1 - began - (g.flags[`mphn:${nat}`] ?? 0);
-  return { held: callUpHeld(g, nat), corps: plan.perMonth[wave] ?? plan.after, divs: plan.divs };
+  return { held: callUpHeld(g, nat), corps: Math.floor((plan.perMonth[wave] ?? plan.after) * (1 - callUpCut(g, nat)) + (g.flags[`mtr:${nat}`] ?? 0) + 1e-9), divs: plan.divs };
+}
+
+/**
+ * The one trim of the free call-up (ruling 228, rider b481; sized on the tree that ships, b627): the share of the corps
+ * a nation's call-up would raise each month that are not raised, at the dial's stops its plan names (the grand
+ * campaign only). Their men stay in the reserve, where the depots' drafts can still reach them. The call-up only: the
+ * factories are never touched. 0 where there is no trim, or the stop is not one of its.
+ */
+export function callUpCut(g: Game, nat: string): number {
+  const t = EASTERN.mobilisation[nat]?.trim;
+  return g.flags.open === 1 && t && t.cut > 0 && t.stops.includes(stopOf(g)) ? Math.min(1, t.cut) : 0;
 }
 
 /**
@@ -2962,6 +2973,9 @@ function mobilise(g: Game, nat: string): void {
   // The grand campaign: every corps of the call-up is filled from the reserve of men, and when that is spent the waves stop.
   // The first waves take whatever there is; the standing call-up after them takes only what the armies in the field do not need.
   if (g.flags.open === 1) count = Math.min(count, wave < plan.perMonth.length ? raisable(g, nat, plan.divs) : Math.max(0, Math.floor(menSpare(g, nat) / plan.divs)));
+  // The one trim (b481, b627): a share of the corps the month would raise are not raised, the fraction carried to the next month.
+  const cut = held ? 0 : callUpCut(g, nat);
+  if (cut > 0 && count > 0) { const want = count * (1 - cut) + (g.flags[`mtr:${nat}`] ?? 0); count = Math.floor(want + 1e-9); g.flags[`mtr:${nat}`] = Math.max(0, want - count); }
   // Held, the wave is not raised: its men go to the corps in the field as this month's extra drafts (startPhase).
   if (held) { g.flags[`mphw:${nat}`] = Math.min(plan.perMonth[wave] ?? plan.after, raisable(g, nat, plan.divs)) * plan.divs; count = 0; }
   else if (g.flags[`mphw:${nat}`] !== undefined) delete g.flags[`mphw:${nat}`];
