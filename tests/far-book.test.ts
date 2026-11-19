@@ -326,20 +326,24 @@ describe("the record's covering fleets (ruling 234, riders b575 and b577)", () =
     // (Indomitable is in no row before March 1942: the China Fleet starts without a carrier.)
     expect([g.regions[china.base].name, china.ships.cv]).toEqual(['Singapore', 0]);
     for (const nm of ['Balikpapan', 'Cam Ranh']) g.byName[nm].ctrl = 'JAP';
-    // Before the blow, and before its month, the book gives no admiral an order.
+    // Before the blow the book gives no admiral an order.
     g.turn = 30;
     expect(bookFleets(g, 'JAP')).toEqual([]);
     strike(g);
+    // January is the second ring's month (rider b599): the carriers and the 4th Fleet cover Rabaul from Truk. The Java
+    // Sea's cover is not ordered before its own month, and the Molucca and Makassar rows wait on Davao or Jolo.
     g.turn = 29;
-    expect(bookFleets(g, 'JAP')).toEqual([]);
+    const ring = [{ fleet: 'Mobile Fleet', zone: 'bismarck', stance: 'patrol' }, { fleet: '4th Fleet', zone: 'bismarck', stance: 'patrol' }];
+    expect(bookFleets(g, 'JAP')).toEqual(ring);
     g.turn = 30;
     const cover = [{ fleet: '3rd Fleet', zone: 'java', stance: 'patrol' }, { fleet: 'Southern Expeditionary Fleet', zone: 'java', stance: 'patrol' }];
     expect(bookFleets(g, 'JAP')).toEqual(cover);
     expect([g.regions[f3.base].name, !!f3.bookBase]).toEqual(['Balikpapan', true]);
     expect(bookFleets(g, 'UK')).toEqual([]);
     expect(g.regions[china.base].name).toBe('Colombo');
+    // March: the Java Sea's cover stands a second month, and the 4th Fleet covers Lae and Salamaua on the Solomon Sea.
     g.turn = 31;
-    expect(bookFleets(g, 'JAP')).toEqual(cover);
+    expect(bookFleets(g, 'JAP')).toEqual([...cover, { fleet: '4th Fleet', zone: 'solomon', stance: 'patrol' }]);
     g.turn = 32;
     expect(bookFleets(g, 'JAP')).toEqual([]);
     expect([g.regions[f3.base].name, f3.bookBase]).toEqual([home, undefined]);

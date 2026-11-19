@@ -70,10 +70,10 @@
 // rule, line.ts: computer against computer). Nor is a dated attack made on ground he holds. Stops 3 to 5 as before.
 // The data is history.json, 'stations' (the far side's rows: far-pacific-war.json); with none, nothing here happens.
 
-import { DEFENCE, allied, atWar, friendlyUnits, hostileUnits, limitAttackers, men, relocate, removeCorps, resolveBattle, type AttackOpts } from './game';
+import { DEFENCE, allied, atWar, friendlyUnits, hostileUnits, limitAttackers, men, relocate, removeCorps, resolveBattle, withWorksAside, type AttackOpts } from './game';
 import { HISTORY, bookDate, onBook, stopDef } from './history';
 import { appoint, generalOf } from './commanders';
-import { NAVY, canPass, fleetReach, landCorps, rebase, whyNotLand, zoneOf } from './navy';
+import { NAVY, canPass, fleetReach, landCorps, onOwnShipping, rebase, whyNotLand, zoneOf } from './navy';
 import { arrive, fieldCtrl, takeField } from './siege';
 import { STACK, type BattleReport, type Corps, type Game, type Region, type Stance, type Terrain } from './types';
 
@@ -91,6 +91,15 @@ export interface Attack {
   ground?: Terrain;
   /** Where the record's line stood next inside the month, and with what works: won, the rows it broke go there (rider b580). */
   back?: [place: string, works?: number];
+  /**
+   * Whether the record's fight met prepared works (riders b626 and b628 to ruling 234; the historian's mark on each
+   * dated landing). Works count only for the defenders the record has fighting from them: `true` where the landing
+   * met the place's own works (they cut the attack in full, and every defender's fieldworks count); a list names
+   * the defending rows whose fieldworks it met, the place's works and every other row's fieldworks being set aside
+   * (an empty list: it landed where the works were not). With none a landing is read as rider b580 built it: the
+   * place's works set aside, the defenders' fieldworks counted.
+   */
+  works?: true | string[];
 }
 /** A covering fleet by the record: from `month` to `until` (that month alone with none) it patrols the sea named. */
 interface Cover { nat?: string; month: number; until?: number; fleet: string; sea?: string; base?: string[] }
@@ -127,6 +136,18 @@ export function stationsBind(g: Game, nat: string): boolean {
   if (!B || nat === g.human || g.human === B.taker || !stopDef(g).book || !onBook(g, B.theatre)) return false;
   const cal = calendar(g, B);
   return !!cal && g.turn <= B.until + cal.slide;
+}
+
+/**
+ * True while the plan's own landings are the book's (rider b626 to ruling 234): the invader's computer staff, in the
+ * month its great blow fell by the book and the month after, while that blow's landings are still going ashore
+ * (staff.ts). They sail on the record's own shipping, as the table's dated landings do (navy.ts onOwnShipping).
+ */
+export function bookSails(g: Game, nat: string): boolean {
+  const B = stations();
+  if (!B || nat !== B.taker || !stationsBind(g, nat)) return false;
+  const went = g.flags[`st:done:${B.slides}`] ?? 0;
+  return went > 0 && g.turn - went <= 1;
 }
 
 /** The record's works on a corps where it stands: none, or so many months of them. */
@@ -366,15 +387,22 @@ function fightMet(g: Game, pool: Corps[], to: Region, row: Attack, opts: AttackO
     for (const c of defs) was.push({ c, f: line.includes(c) ? fd : 1e-6, divs: c.divs, str: c.str, org: c.org, mor: c.mor, men: men(c) });
   }
   for (const w of was) { w.c.divs *= w.f; w.c.bookPart = [w.f, w.str]; }
-  const ground = to.terrain, fort = to.fort;
+  const ground = to.terrain;
   if (row.ground) to.terrain = row.ground;
-  // (A landing the record made on an empty beach fought inland: the works on the shore are no part of that fight.)
-  if (opts.sea !== undefined) to.fort = null;
+  // (A landing the record made on an empty beach fought inland: the works on the shore are no part of that fight.
+  // By the historian's mark the works count only for the defenders the record has fighting from them: riders b626
+  // and b628. Set aside, they are out of the fight alone, never of the place's supply or stores: game.ts.)
+  const aside = row.works === true ? false : row.works !== undefined || opts.sea !== undefined;
+  const named = Array.isArray(row.works) ? row.works : null;
+  const unmet = named ? defs.filter((c) => c.dug && !named.includes(c.name)).map((c) => ({ c, dugFor: c.dugFor })) : [];
+  for (const w of unmet) { delete w.c.dug; delete w.c.dugFor; }
+  const fight = (): BattleReport => resolveBattle(g, pool, to, opts);
   let report: BattleReport;
-  try { report = resolveBattle(g, pool, to, opts); }
+  try { report = aside ? withWorksAside(to, fight) : fight(); }
   finally {
     to.terrain = ground;
-    to.fort = fort;
+    // (Fieldworks that were no part of the fight stand as they stood, where their corps still holds them.)
+    for (const w of unmet) if (!w.c.dead && w.c.reg === to.id && w.c.town === undefined) { w.c.dug = true; if (w.dugFor !== undefined) w.c.dugFor = w.dugFor; }
     for (const w of was) {
       const c = w.c;
       c.divs = w.divs;
@@ -473,13 +501,15 @@ export function bookAttacks(g: Game, nat: string): void {
         if (again.some((c) => c.reg !== q.id)) { why = 'a corps of it has made its landing elsewhere this month'; continue; }
         if (!main.every((c) => bring(g, c, q))) { why = 'a corps of it is shut in'; break; }
         ready(true);
-        const no = whyNotLand(g, main, to);
+        // (On the record's own shipping: a dated landing draws nothing from the month's lift, and waits on nothing but
+        // its own force and its date. Rider b626.)
+        const no = onOwnShipping(nat, () => whyNotLand(g, main, to));
         if (no) { ready(false); why = no; continue; }
         // (The tanks sail with their divisions, and take no shipping of their own.)
         const aboard = tanks.filter((c) => door(g, c, q) && bring(g, c, q));
         bookWatch.tell?.({ row, what: 'due', to, force: [...main, ...aboard] });
         // (A landing with the record's figures came ashore on an empty beach: its fight is inland, with no cut for the shore.)
-        const res = landCorps(g, main, to, row.met ? (cs, at) => fightMet(g, [...cs, ...aboard], at, row, { sea: 1 }) : undefined, true);
+        const res = onOwnShipping(nat, () => landCorps(g, main, to, row.met ? (cs, at) => fightMet(g, [...cs, ...aboard], at, row, { sea: 1 }) : undefined, true));
         if (!res.ok) { ready(false); why = res.why ?? 'the landing could not sail'; continue; }
         for (const c of main) g.flags[`bsl:${c.id}`] = g.turn;
         const won = !!res.taken;

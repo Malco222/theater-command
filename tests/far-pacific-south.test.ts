@@ -407,26 +407,30 @@ describe("Japan's month of December 1941", () => {
     expect(news(g, 28, 'raid the harbour of Pearl Harbor without warning')).toBe(true);
     const after = g.fleets.find((x) => x.nat === 'USA' && x.name === 'Pacific Fleet')!;
     expect(after.ships.bb + after.ships.cv + after.ships.ca + after.ships.dd).toBeLessThan(afloat);
-    // The strike flown, the force is based at Kure again before the month is out (Japan moves last in a month); where
-    // it goes from there is the admirals' own.
+    // The strike flown, the force stands off Wake before the month is out: by the book the carriers cover the landing
+    // that took Wake on the 23rd, from Kwajalein (rider b599 (i) to ruling 234: each dated landing's cover is a dated
+    // fleet move, and the game holds the striking force as one fleet).
     const force = g.fleets.find((x) => x.nat === 'JAP' && x.name === 'Mobile Fleet')!;
-    expect(g.regions[force.base].name).toBe('Hiroshima');
-    expect(force.port).toBe('Kure');
-    expect(g.seas[force.home].key).toBe('inland');
+    expect([g.regions[force.base].name, g.seas[force.zone].key, force.stance]).toEqual(['Kwajalein', 'wake', 'patrol']);
+    // (It came home to Kure first, and Kure is the base it goes back to when its months of cover are over.)
     expect(news(g, 28, 'The carrier striking force comes home to Kure.')).toBe(true);
+    expect(force.bookBase?.[1]).toBe('Kure');
     // The quays: the two divisions on Hainan, which Japan holds and does not own, have sailed.
     // (The 5th lands at Singora, Siam's shore, and is carried down the west coast within the month by the record's dated
     // fights, Jitra and Kampar: far-pacific-war.json, 'attacks'.)
     expect(at(g, '25th Army (5th Division)')).toBe('Ipoh');
     expect(at(g, '25th Army (18th Division)')).toBe('Kota Bharu');
-    // The lift of six is all that sails in the month, in the order of the ten. With Guam's garrison at the record's
-    // size (ruling 234(b): some 750 men, not a brigade) the South Seas Detachment lands in December as it did, and the
-    // sixth crossing is Wake's: the Kawaguchi Detachment waits at Cam Ranh for January's ships.
+    // By the book the ten landings of the great blow sail on the record's own shipping, each in its record month, and
+    // draw nothing from the month's lift of six (rider b626 to ruling 234: the record shows the shipping sufficed).
+    // With Guam's garrison at the record's size (ruling 234(b): some 750 men, not a brigade) the South Seas
+    // Detachment lands in December as it did, and the Kawaguchi Detachment is at Brunei, as on the 16th.
     expect(at(g, 'South Seas Detachment')).toBe('Guam');
-    expect(at(g, 'Kawaguchi Detachment (35th Brigade, of the 18th Division)')).toBe('Cam Ranh');
-    // (Five stand on their beaches as the month closes; the sixth is the 5th Division, gone on from Singora.)
-    const sailed = SOUTH().landings!.filter((l) => l.to.includes(at(g, l.corps) ?? '')).length;
-    expect(sailed).toBe(5);
+    expect(at(g, 'Kawaguchi Detachment (35th Brigade, of the 18th Division)')).toBe('Brunei');
+    // All ten are ashore in December: nine stand on their own shores, and the 5th Division, landed at Singora, has been
+    // carried on to Ipoh. The month's lift of six is not spent on them.
+    const ashore = SOUTH().landings!.filter((l) => l.to.includes(at(g, l.corps) ?? '')).map((l) => l.corps);
+    expect(SOUTH().landings!.map((l) => l.corps).filter((c) => !ashore.includes(c))).toEqual(['25th Army (5th Division)']);
+    expect(g.flags['lift:JAP:28'] ?? 0).toBeLessThan(6);
     // The month closes: Germany and Italy declare on America, and the news names Pearl Harbor.
     expect(g.flags['event:pearl-harbor-world']).toBe(28);
     expect(atWar(g, 'USA', 'GER')).toBe(true);
