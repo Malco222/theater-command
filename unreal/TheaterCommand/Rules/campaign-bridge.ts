@@ -969,7 +969,7 @@ function shellingSince(s: Game, since: number): { regions: number[]; notes: stri
 }
 
 /** The fights at sea since a report (by its id): the seas they were in, a line on each, and whether the player's ships were in one. */
-function seaFightsSince(s: Game, since: number): { zones: number[]; notes: string[]; mine: boolean; sunk: { zone: number; nat: string; cls: string; n: number; ships?: { name: string | null; cls: string; crew: number; lost: number; pair?: boolean }[] }[] } {
+function seaFightsSince(s: Game, since: number): { zones: number[]; notes: string[]; mine: boolean; sunk: { zone: number; nat: string; cls: string; n: number; ships?: { name: string | null; cls: string; crew: number; lost: number; pair?: boolean; type?: 'battlecruiser' }[] }[] } {
   const fresh = s.seaReports.filter((r) => r.id > since);
   const adj = (nat: string): string => s.nations[nat]?.adj ?? nat;
   // (release 1) Ships seen to sink: in a fight the player's side took part in he knows what went down, on both
@@ -978,7 +978,7 @@ function seaFightsSince(s: Game, since: number): { zones: number[]; notes: strin
   const me = s.human;
   const ours = (nat: string): boolean => !!me && (nat === me || allied(s, nat, me));
   const nats = Object.keys(s.nations);
-  const sunk: { zone: number; nat: string; cls: string; n: number; ships?: { name: string | null; cls: string; crew: number; lost: number; pair?: boolean }[] }[] = [];
+  const sunk: { zone: number; nat: string; cls: string; n: number; ships?: { name: string | null; cls: string; crew: number; lost: number; pair?: boolean; type?: 'battlecruiser' }[] }[] = [];
   const lostIn = new Map<number, string>();
   try {
     for (const r of fresh) {
@@ -1012,10 +1012,10 @@ function seaFightsSince(s: Game, since: number): { zones: number[]; notes: strin
 }
 
 /** (Brian's memorial card) The ships sunk by strikes from the air since a report (by its id): carrier battles and raids on a harbour, where the player's side was in it, as the sea fights give them (a harbour's by its province, 'region', with 'zone' -1). */
-function strikeLossesSince(s: Game, since: number): { zone: number; region?: number; nat: string; cls: string; n: number; ships?: { name: string | null; cls: string; crew: number; lost: number; pair?: boolean }[] }[] {
+function strikeLossesSince(s: Game, since: number): { zone: number; region?: number; nat: string; cls: string; n: number; ships?: { name: string | null; cls: string; crew: number; lost: number; pair?: boolean; type?: 'battlecruiser' }[] }[] {
   const me = s.human;
   const ours = (nat: string): boolean => !!me && (nat === me || allied(s, nat, me));
-  const out: { zone: number; region?: number; nat: string; cls: string; n: number; ships?: { name: string | null; cls: string; crew: number; lost: number; pair?: boolean }[] }[] = [];
+  const out: { zone: number; region?: number; nat: string; cls: string; n: number; ships?: { name: string | null; cls: string; crew: number; lost: number; pair?: boolean; type?: 'battlecruiser' }[] }[] = [];
   try {
     for (const r of s.airReports) {
       if (r.id <= since || !r.ships?.length || !(ours(r.attNat) || r.ships.some((x) => ours(x.nat)))) continue;
