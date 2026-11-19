@@ -3,7 +3,7 @@
 // and the ratio handed back.
 import { describe, expect, it } from 'vitest';
 import { runOut } from '../src/battle/core/clock';
-import { DT, type FieldEvent } from '../src/battle/core/types';
+import { DT, type FieldEvent, type Zone } from '../src/battle/core/types';
 import { drawUp, groupSizes } from '../src/battle/sea/pieces';
 import { RULES_CLASSES, SEA } from '../src/battle/sea/numbers';
 import { diceRange, lossShares, seaChance, seaLevel, seaRatio, shipWords, sunkCaps } from '../src/battle/sea/result';
@@ -490,6 +490,40 @@ describe("the rules' own scale", () => {
 });
 
 describe('what the 3D game and the sound read', () => {
+  it('every ship lost leaves her smoke where she went, to the end of the fight; drawn only, the same every time', () => {
+    const run = (seed: number) => {
+      const sim = battle(seed, { human: null });
+      const lost: FieldEvent[] = [];
+      let zones: Zone[] = [];
+      while (!sim.over) {
+        sim.step();
+        const v = sim.view();
+        lost.push(...v.events.filter((e) => e.what === 'sea:sunk' || e.what === 'sea:burning'));
+        zones = v.zones;
+      }
+      return { sim, lost, zones };
+    };
+    let some = 0;
+    for (const seed of [4, 7, 11]) {
+      const { sim, lost, zones } = run(seed);
+      // One zone a ship lost, of its kind, its piece and side, from the second she went; none other.
+      expect(zones.length).toBe(lost.length);
+      some += zones.length;
+      const F = SEA.field.size;
+      lost.forEach((e, i) => {
+        const z = zones[i], u = sim.units.find((x) => x.id === e.unit)!;
+        expect(z).toMatchObject({ id: i + 1, kind: e.what === 'sea:sunk' ? 'sunk' : 'burning', unit: e.unit, side: e.side, until: sim.ticket.limit, at: Math.round(e.t * 10) / 10 });
+        expect(z.r).toBe(Math.round(SEA.classes[u.extra.cls as SeaClass].len * 0.6));
+        expect(z.x >= 2 && z.x <= F - 2 && z.y >= 2 && z.y <= F - 2).toBe(true);
+      });
+      // The same seed lays the same smoke, and the fight comes out the same.
+      const again = run(seed);
+      expect(again.zones).toEqual(zones);
+      expect(again.sim.over).toEqual(sim.over);
+    }
+    expect(some).toBeGreaterThan(0);
+  });
+
   it('each piece shows one figure a ship afloat, its way, and what it is doing; events say where and what sounds', () => {
     const sim = battle(4, { human: null });
     const seen = new Set<string>(), cues = new Set<string>();

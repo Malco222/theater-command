@@ -28,6 +28,8 @@ import { seaWhat, seaWhere } from '../../campaign/sea-words';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 const live = (u: SeaUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
+/** A number from 0 to under 1 fixed by a whole number: where a lost ship's smoke lies, never drawn from the battle's dice. */
+const mix = (n: number): number => { let h = n >>> 0; h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
 /** Pieces that still answer orders and fight as told: not running for home. */
 const steady = (u: SeaUnit): boolean => u.state === 'steady' || u.state === 'wavering';
 
@@ -762,6 +764,22 @@ export class SeaSim implements BattleSim<SeaUnit> {
     while (u.extra.ships > afloat) this.loseShip(u);
   }
 
+  /**
+   * Where a ship lost leaves her smoke, for the 3D game (the art director's grit direction, 19 November: black oil smoke
+   * from burning ships, standing to the end of the fight, as the burning wrecks on land do): a zone at her place in her
+   * piece's line, from this second to the end. 'sunk' is the oil burning on the water where she went down; 'burning' is
+   * where she left the line on fire, making for port. Drawn only: nothing in the rules reads it, and it draws no dice.
+   */
+  private smoke(u: SeaUnit, kind: 'sunk' | 'burning'): void {
+    const n = this.zones.filter((z) => z.unit === u.id).length, F = SEA.field.size;
+    const along = (mix(u.id * 613 + n * 389 + 3) - 0.5) * u.d * 0.8;
+    const x = clamp(u.x + along * Math.sin(u.face), 2, F - 2), y = clamp(u.y + along * Math.cos(u.face), 2, F - 2);
+    this.zones.push({
+      id: this.zones.length + 1, kind, x: Math.round(x), y: Math.round(y), r: Math.round(SEA.classes[u.extra.cls as SeaClass].len * 0.6),
+      until: this.ticket.limit, side: u.side, at: Math.round(this.t * 10) / 10, unit: u.id,
+    });
+  }
+
   /** One ship of a piece goes: down, or out of the fight burning once its side has lost all the dice allow of its class. */
   private loseShip(u: SeaUnit): void {
     const c = u.extra.cls as SeaClass, side = u.side, fleet = this.info.get(u.id)!.fleet.id;
@@ -772,6 +790,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       u.extra.sunk++;
       this.fleetLoss.sunk[fleet][c]++;
       this.say({ what: 'sea:sunk', unit: u.id, side, text: `A ${one} ${ofFleet(u.extra.fleet)} goes down.`, extra: { cls: c, fleet } });
+      this.smoke(u, 'sunk');
       // A ship going down shakes the pieces near it by the weight it carried, measured against its side's: a destroyer
       // lost shakes less than a battleship, and a fleet of many light ships no more for the same weight lost (b438).
       const shake = (SEA.nerve.near * this.info.get(u.id)!.weight) / Math.max(1e-6, this.weight0[side]);
@@ -780,6 +799,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.fleetLoss.burnt[fleet][c]++;
       u.extra.burnt = ((u.extra.burnt as number | undefined) ?? 0) + 1;
       this.say({ what: 'sea:burning', unit: u.id, side, text: `A ${one} ${ofFleet(u.extra.fleet)} is out of the fight, burning, and makes for port.`, extra: { cls: c, fleet } });
+      this.smoke(u, 'burning');
     }
     if (u.extra.ships <= 0) {
       // A piece whose last ship went out of the fight burning has left the field; one whose last ship sank is gone.

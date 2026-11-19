@@ -109,6 +109,12 @@
 // reaches that action, and stands in for the dice there (navy.ts seaField). An action not fought, or one that comes
 // out of the month with other fleets in it, rolls the dice as before. Each sea unit's extra carries its class (cls),
 // its ships afloat and sunk, and its fleet; 'loop' comes from src/battle/sea/cues.ts.
+// A sea view's zones are the ships it has lost (the art director's grit direction, 19 Nov: black oil smoke from
+// burning ships, standing to the end of the fight): { id, kind: 'sunk' | 'burning', x, y, r, until, side, at, unit },
+// one for each ship lost, at her place in her piece's line, from battle second 'at' to the end. 'sunk' is the oil
+// burning on the water where she went down: flame first, then a tall black column. 'burning' is where she left the
+// line on fire for port: her smoke trailing off. Lean every column the same way with one wind; r is the oil's reach in
+// metres. The rules never read them. The horizon's far columns, the camera, spray, debris and grade are the 3D game's.
 
 import { Clock, SPEEDS, type Speed } from '../../../src/battle/core/clock';
 import { DROPS, LOOPS, TOWN } from '../../../src/battle/core/cues';
