@@ -468,8 +468,10 @@ nothing that flies her changes. What is hers:
 - her gunners sit inside their turrets with both hands on their guns, as the B-17's do. Her tail turret has four
   guns: a handle each side joins the upper gun's grip to the lower's, and he has a hand on each
   (`fitout.gunners`).
-- her night colours are the game's own: dark green and dark earth above, black from high on her sides down, black
-  fins. By the art director's ruling there is no rivet at all on her black (`rivets_under`: False), where the
+- her night colours: dark green and dark earth above, black from high on her sides down, black fins. The green
+  and the earth are a little darker than the game's day pair and closer together (434A33 and 685A42, about 22 luma
+  steps apart: the art director, so that the brown stays brown but sits down into the night scheme and does not
+  read as tan). By the art director's ruling there is no rivet at all on her black (`rivets_under`: False), where the
   joints between panels carry the wear instead. Plain roundels and a fin flash; no names, code letters or serials;
   no aerial wire (the drawing shows them; the mast stands without one).
 

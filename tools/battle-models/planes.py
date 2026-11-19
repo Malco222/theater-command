@@ -1120,7 +1120,7 @@ EXTRA_PLANES["Lancaster"] = {
     "fins": [([(0.0, -7.85, -8.1, -0.98, 0.02), (0.0, -7.6, -8.38, -0.85, 0.1), (0.0, -7.4, -8.62, -0.6, 0.15), (0.0, -7.25, -8.82, -0.2, 0.18), (0.0, -7.2, -8.92, 0.4, 0.2),
                (0.0, -7.22, -8.9, 1.1, 0.2), (0.0, -7.3, -8.82, 1.7, 0.18), (0.0, -7.42, -8.7, 2.2, 0.15), (0.0, -7.6, -8.5, 2.6, 0.11), (0.0, -7.8, -8.25, 2.85, 0.06),
                (0.0, -7.95, -8.08, 2.92, 0.01)], 5.07)],
-    "patch": 3.4, "colours": {"upper": "4A5237", "upper2": "7A6748", "under": "1B1C1E", "nose": "4A5237", "boss": "171717"},
+    "patch": 3.4, "colours": {"upper": "434A33", "upper2": "685A42", "under": "1B1C1E", "nose": "434A33", "boss": "171717"},
     # (each engine: its airscrew's line, the inner pair lower and further forward; the nacelles and their radiators' mouths)
     "engines": [(3.52, 4.8, -0.17, False, 5.2), (7.76, 4.18, 0.1, False, 3.8)],
     "nacelles": {3.52: _LANC_INNER, 7.76: _LANC_OUTER}, "nacelle_square": 2.6,
