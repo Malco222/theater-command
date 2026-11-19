@@ -415,29 +415,130 @@ EXTRA_PLANES["Kate"] = {
         ("rod", ((-2.0, 0.0, 0.96), (-2.85, 0.0, 1.18), 0.022, 0.018, "steel"))],
     "side_marks": [(-3.2, 0.32, "JAP-PLAIN")], "wing_marks": [(5.2, 0.1, 0.62, "JAP-PLAIN", "JAP-PLAIN", True, True)], "code": (-4.3, 0.34),
 }
+# ---- the D3A1 Val, laid out again to Brian's benchmark for all aircraft (2026-11-19) against "Aichi D3A1 Val - 3
+# vistas" (Wikimedia Commons, MMK-Draw, CC BY-SA 4.0) at 267 pixels to the metre along her and 265 across, her length
+# 10.195 m and her span 14.365 m: measured, not traced. What changed: a round cowling a little broader than the
+# fuselage behind it, with the oil cooler's bath under it; a deep fuselage with a level deck and a slim tail; her
+# elliptical wing, flat between the legs and rising outboard of them, its trailing edge run into her side in a long
+# fillet; the long low fillet ahead of her fin; a tall round-topped rudder; a tailplane as rounded as her wing. Her
+# greenhouse is four framed pieces over an open cockpit (the fighters' `canopy`: fighters.py): a windscreen with a
+# flat pane between two posts and the tube of her bomb sight through it, the pilot's hood, the fixed middle with
+# the mast, the gunner's hood a step lower each time (they slid one under the other), and a glazed end that falls
+# to his gun. Her legs are fixed, in trousers and long spats; a brake under each wing outboard of them. Her pale
+# grey and black cowling and her plain red discs are as they were.
+#
+# Her greenhouse, measured: (x, the height of its sill where the glass begins, how far out it is there, the height
+# of the frame at its shoulder (None in its glazed end), the height of its top).
+_VAL_HOOD = [(1.28, 0.60, 0.378, 0.908, 0.994), (0.99, 0.594, 0.378, 0.908, 0.994), (0.70, 0.588, 0.378, 0.905, 0.994)]
+_VAL_MID = [(0.72, 0.588, 0.375, 0.88, 0.950), (0.40, 0.584, 0.375, 0.88, 0.950), (0.13, 0.58, 0.375, 0.88, 0.950)]
+_VAL_REAR = [(0.15, 0.578, 0.372, 0.835, 0.927), (-0.058, 0.576, 0.372, 0.835, 0.927), (-0.245, 0.573, 0.372, 0.835, 0.927), (-0.49, 0.57, 0.372, 0.835, 0.925)]
+_VAL_END = [(-0.47, 0.57, 0.369, None, 0.90), (-0.60, 0.575, 0.36, None, 0.867), (-0.70, 0.58, 0.345, None, 0.796), (-0.80, 0.585, 0.32, None, 0.729),
+            (-0.87, 0.59, 0.25, None, 0.68), (-0.92, 0.595, 0.14, None, 0.645), (-0.945, 0.60, 0.04, None, 0.625)]
+_VAL_SCREEN = (1.56, 0.13, 1.33, 0.985)                     # (the foot of her windscreen's front pane, half its width, its head, and the top there)
+_VAL_POST = 0.15                                            # (her windscreen's posts stand this far out at its head)
+
+
+def _val_section(hull, x, sill, ys, shoulder, top, post=None):
+    """Half a section of her greenhouse: the metal rail it stands on (the first SKIRT points: its foot on her skin);
+    a flat side pane leaning in from the sill to the frame at its shoulder; and its roof, nearly flat, over a frame
+    0.19 out to her middle line. `post` adds a point where a windscreen's post meets it."""
+    yb = ys + 0.004
+    zb = min(sill - 0.05, fitout.body_top(hull, x, yb) - 0.006)
+    if shoulder is None:
+        shoulder = sill + 0.78 * (top - sill)
+    ysh, yr = 0.886 * ys, min(0.19, 0.55 * ys)
+    zr = shoulder + 0.8 * (top - shoulder)
+    pts = [(max(yb - 0.03, 0.0), zb - 0.06), (yb, zb), (ys, sill), (ysh, shoulder), (yr, zr)]
+    if post is not None:
+        pts.append((post, zr + (top - zr) * (yr - post) / yr))
+    return pts + [(0.0, top)]
+
+
+def _val_canopy(hull):
+    skirt = fighters.SKIRT
+    foot_x, foot_half, head_x, head_top = _VAL_SCREEN
+    x0, sill, ys, shoulder, top = _VAL_HOOD[0]
+    # her windscreen: the flat front pane from its foot on her deck up to its head between the posts, and a side pane
+    # each side from the foot of its post back and out to the rail; its roof on to the hood's front frame
+    head = fighters.headed(_val_section(hull, head_x, sill + 0.02, ys - 0.012, shoulder - 0.012, head_top), _VAL_POST)
+    post = len(head) - 2
+    foot = [fighters.deck(hull, foot_x, foot_half)] * (len(head) - 1) + [fighters.deck(hull, foot_x, 0.0)]
+    screen = {"sections": [(foot_x, foot), (head_x, head), (x0, _val_section(hull, x0, sill, ys, shoulder, top, _VAL_POST))], "skirt": skirt,
+              "hoops": [1, 2], "rails": [post, skirt], "bar": 0.02}
+
+    def run(rows):
+        return [(x, _val_section(hull, x, sl, w, sh, t)) for x, sl, w, sh, t in rows]
+    # the pilot's hood, the fixed middle and the gunner's hood: a frame round each end and one between, the sills, the
+    # shoulder frames and the roof frames; the gunner's has one frame more across its roof
+    hood = {"sections": run(_VAL_HOOD), "skirt": skirt, "hoops": [1, 2], "rails": [skirt, 3, 4], "bar": 0.018}
+    mid = {"sections": run(_VAL_MID), "skirt": skirt, "hoops": [0, 1, 2], "rails": [skirt, 3, 4], "bar": 0.018}
+    rear = {"sections": run(_VAL_REAR), "skirt": skirt, "hoops": [0, 1, 3], "bars": [(2, 3, 5)], "rails": [skirt, 3, 4], "bar": 0.018}
+    # its glazed end, falling to his gun
+    end = {"sections": run(_VAL_END), "skirt": skirt, "hoops": [0], "rails": [skirt, 3], "bar": 0.016, "cap": True}
+    return [screen, hood, mid, rear, end]
+
+
+_VAL_LEG = 1.69                                             # (her legs stand this far out)
 EXTRA_PLANES["Val"] = {
-    "title": "D3A Val (our own model)", "year": 1940,
-    "hull": [(4.0, 0, 0.04, 0.04), (3.78, 0, 0.15, 0.15), (3.74, 0, 0.5, 0.5), (3.5, 0, 0.62, 0.62), (2.75, 0, 0.63, 0.66), (1.4, 0.02, 0.56, 0.7), (-0.6, 0.06, 0.5, 0.68),
-             (-2.7, 0.14, 0.36, 0.52), (-4.7, 0.26, 0.17, 0.3), (-5.85, 0.33, 0.06, 0.14), (-6.2, 0.35, 0.02, 0.07)],
-    "square": 2.1, "screw": 1.5, "blades": 3, "nose_back": 2.7, "spinner": 2, "engine": "radial", "lip": 3.74,
-    "hoods": [([(1.45, 0.72, 0.24, 0.05), (0.9, 0.96, 0.3, 0.24), (-0.5, 1.0, 0.31, 0.25), (-1.6, 0.95, 0.28, 0.2), (-2.4, 0.76, 0.17, 0.04)], (0.9, 0.4, -0.1, -0.6, -1.1, -1.6), True)],
-    # (her wing is an ellipse, like no other dive bomber's)
-    "wing": [(0, 1.4, -1.7, -0.5, 0.48), (0.6, 1.4, -1.7, -0.5, 0.47), (2.0, 1.35, -1.63, -0.43, 0.43), (4.0, 1.18, -1.39, -0.3, 0.34), (5.6, 0.91, -1.03, -0.18, 0.24),
-             (6.6, 0.61, -0.61, -0.1, 0.14), (7.05, 0.35, -0.24, -0.07, 0.07), (7.18, 0.14, 0.04, -0.06, 0.01)],
-    "tail": [(0, -4.6, -5.65, 0.4, 0.1), (1.9, -4.95, -5.6, 0.4, 0.06), (2.35, -5.25, -5.5, 0.4, 0.02)],
-    # (the long fillet ahead of her fin)
-    "fin": [(0, -3.4, -6.1, 0.36, 0.1), (0, -4.75, -6.18, 1.0, 0.09), (0, -5.25, -6.15, 1.65, 0.05), (0, -5.6, -6.05, 1.85, 0.01)],
-    "patch": 0.0, "colours": dict(_PALE), "pitot": True, "tailwheel": (-5.75, -0.15), "mast": (0.2, 1.2, 1.7),
-    # (her fixed undercarriage in its spats; the dive brakes under her wings; her bomb on its crutch; her rear gunner's gun)
-    "extras": [("rod", ((0.72, 1.55, -0.55), (0.78, 1.55, -1.42), 0.17, 0.14, "under")),
-               ("ball", ((0.7, 1.55, -1.58), (0.62, 0.17, 0.29), "under")),
-               ("rod", ((0.74, 1.47, -1.74), (0.74, 1.63, -1.74), 0.27, 0.27, "tyre")),
-               ("rod", ((0.45, 2.3, -0.64), (0.45, 3.6, -0.5), 0.035, 0.035, "under")),
-               ("body", ([(1.3, -0.93, 0.03, 0.03), (1.0, -0.93, 0.16, 0.16), (0.2, -0.93, 0.18, 0.18), (-0.5, -0.92, 0.07, 0.07), (-0.7, -0.92, 0.03, 0.03)], 0.0, 2.0, "bomb")),
-               ("rod", ((-0.45, 0.0, -0.92), (-0.7, 0.0, -0.92), 0.17, 0.17, "bomb")),
-               ("rod", ((-1.8, 0.0, 0.94), (-2.6, 0.0, 1.14), 0.022, 0.018, "steel"))],
-    "side_marks": [(-3.2, 0.3, "JAP-PLAIN")], "wing_marks": [(5.0, 0.1, 0.6, "JAP-PLAIN", "JAP-PLAIN", True, True)], "code": (-4.3, 0.32),
+    "title": "D3A1 Val (our own model)", "year": 1940,
+    # (the boss of her airscrew, which had no spinner; the mouth of her cowling and its rounded lip; her cowling to its gills; then her fuselage)
+    "hull": [(4.0, 0.0, 0.03, 0.03), (3.975, 0.0, 0.055, 0.055), (3.86, 0.0, 0.06, 0.06), (3.84, 0.0, 0.1, 0.1), (3.64, 0.0, 0.1, 0.1), (3.62, 0.0, 0.17, 0.17),
+             (3.52, 0.0, 0.2, 0.2), (3.49, 0.0, 0.47, 0.47), (3.475, 0.0, 0.5, 0.505), (3.45, 0.0, 0.54, 0.548), (3.4, 0.0, 0.567, 0.581), (3.3, -0.005, 0.59, 0.622),
+             (3.2, -0.01, 0.594, 0.635), (3.0, -0.012, 0.597, 0.65), (2.8, -0.01, 0.598, 0.655), (2.63, -0.009, 0.598, 0.656),
+             (2.6, -0.012, 0.545, 0.648), (2.4, 0.0, 0.552, 0.688), (2.2, 0.008, 0.554, 0.702), (2.0, 0.015, 0.555, 0.714), (1.8, 0.017, 0.554, 0.725),
+             (1.56, 0.012, 0.552, 0.728), (1.28, 0.012, 0.547, 0.73), (0.7, 0.008, 0.537, 0.727), (0.13, 0.002, 0.521, 0.723), (-0.49, -0.009, 0.5, 0.709),
+             (-0.75, -0.024, 0.492, 0.689), (-0.95, -0.043, 0.487, 0.671), (-1.2, -0.052, 0.484, 0.655), (-1.6, -0.064, 0.471, 0.629), (-2.0, -0.069, 0.457, 0.6),
+             (-2.4, -0.077, 0.435, 0.562), (-3.0, -0.086, 0.392, 0.512), (-3.6, -0.09, 0.34, 0.447), (-4.2, -0.088, 0.28, 0.372), (-4.8, -0.072, 0.21, 0.278),
+             (-5.2, -0.064, 0.16, 0.21), (-5.6, -0.055, 0.1, 0.134), (-5.9, -0.047, 0.055, 0.072), (-6.1, -0.04, 0.025, 0.03), (-6.19, -0.03, 0.008, 0.01)],
+    "square": 2.2, "screw": 1.53, "blades": 3, "nose_back": 2.62, "spinner": 5, "engine": "radial", "lip": 3.49,
+    "hoods": fighters.hood_of([(_VAL_SCREEN[0], 0.72, _VAL_SCREEN[1], 0.01), (_VAL_SCREEN[2], 0.62, 0.366, _VAL_SCREEN[3] - 0.62)]
+                              + [(x, sl, w, t - sl) for x, sl, w, sh, t in _VAL_HOOD[:2] + _VAL_MID[:2] + _VAL_REAR + _VAL_END[1:]]),
+    "canopy": _val_canopy,
+    "opening": (1.33, -0.8, 52.0),                          # (her cockpit, open under the glass from her panel to behind her gunner)
+    "frames_paint": "upper", "lines": (0.6, 0.45),
+    # (her wing: an ellipse, like no other dive bomber's; flat out to her legs, six and a half degrees of dihedral beyond
+    #  them; sixteen per cent thick at the root, ten at the fold; its trailing edge swept back into her side in the fillet)
+    "wing": [(0.0, 2.25, -1.45, -0.455, 0.57), (0.45, 2.25, -1.45, -0.455, 0.57), (0.5, 2.25, -1.43, -0.455, 0.57), (0.55, 2.248, -1.25, -0.455, 0.57),
+             (0.6, 2.247, -1.107, -0.455, 0.57), (0.65, 2.24, -0.994, -0.455, 0.57), (0.7, 2.235, -0.901, -0.455, 0.57), (0.8, 2.232, -0.796, -0.455, 0.57),
+             (0.9, 2.228, -0.736, -0.455, 0.568), (1.0, 2.224, -0.706, -0.455, 0.565), (1.2, 2.217, -0.71, -0.455, 0.56), (1.5, 2.202, -0.71, -0.455, 0.55),
+             (1.7, 2.19, -0.71, -0.455, 0.54), (2.1, 2.164, -0.71, -0.409, 0.506), (2.4, 2.138, -0.706, -0.374, 0.481), (2.7, 2.112, -0.702, -0.34, 0.456),
+             (3.0, 2.078, -0.687, -0.305, 0.43), (3.3, 2.04, -0.665, -0.271, 0.405), (3.6, 1.999, -0.635, -0.236, 0.38), (3.9, 1.958, -0.597, -0.201, 0.357),
+             (4.2, 1.909, -0.552, -0.167, 0.334), (4.5, 1.857, -0.496, -0.132, 0.311), (4.8, 1.804, -0.436, -0.098, 0.288), (5.1, 1.744, -0.365, -0.063, 0.265),
+             (5.4, 1.677, -0.29, -0.028, 0.242), (5.7, 1.602, -0.204, 0.006, 0.218), (6.0, 1.52, -0.123, 0.041, 0.193), (6.3, 1.418, 0.002, 0.075, 0.166),
+             (6.6, 1.299, 0.137, 0.11, 0.136), (6.8, 1.209, 0.246, 0.133, 0.112), (6.9, 1.164, 0.317, 0.145, 0.097), (7.0, 1.111, 0.403, 0.156, 0.078),
+             (7.05, 1.087, 0.459, 0.162, 0.066), (7.1, 1.059, 0.53, 0.168, 0.05), (7.15, 1.014, 0.635, 0.174, 0.03), (7.183, 0.88, 0.78, 0.177, 0.01)],
+    "aileron": (0.5, 0.92, 0.8), "flap": (0.14, 0.5, 0.815),
+    "tail": [(0.0, -4.3, -6.1, 0.0, 0.17), (0.3, -4.337, -6.116, 0.0, 0.165), (0.6, -4.43, -6.139, 0.0, 0.155), (0.9, -4.516, -6.113, 0.0, 0.142),
+             (1.2, -4.614, -6.068, 0.0, 0.126), (1.5, -4.749, -6.008, 0.0, 0.108), (1.8, -4.929, -5.921, 0.0, 0.086), (1.98, -5.056, -5.832, 0.0, 0.07),
+             (2.1, -5.165, -5.727, 0.0, 0.055), (2.14, -5.217, -5.674, 0.0, 0.045), (2.18, -5.277, -5.584, 0.0, 0.03), (2.212, -5.4, -5.47, 0.0, 0.01)],
+    # (her fin from inside her fuselage up: the long low fillet that runs into its leading edge, then the fin, and the rudder rounded over its top)
+    "fin": [(0, -2.38, -5.97, 0.2, 0.1), (0, -2.38, -5.97, 0.5, 0.1), (0, -2.5, -5.97, 0.52, 0.1), (0, -2.62, -5.97, 0.535, 0.1), (0, -2.8, -5.97, 0.55, 0.1),
+            (0, -3.0, -5.97, 0.565, 0.1), (0, -3.4, -5.97, 0.585, 0.1), (0, -3.8, -5.965, 0.609, 0.105), (0, -4.0, -5.965, 0.62, 0.11), (0, -4.1, -5.96, 0.64, 0.115),
+            (0, -4.2, -5.96, 0.66, 0.12), (0, -4.3, -5.955, 0.751, 0.125), (0, -4.4, -5.945, 0.908, 0.125), (0, -4.5, -5.92, 1.095, 0.12), (0, -4.6, -5.905, 1.256, 0.112),
+            (0, -4.7, -5.88, 1.394, 0.104), (0, -4.8, -5.84, 1.522, 0.094), (0, -4.9, -5.79, 1.634, 0.083), (0, -5.0, -5.715, 1.731, 0.07), (0, -5.1, -5.62, 1.813, 0.055),
+            (0, -5.2, -5.52, 1.866, 0.04), (0, -5.3, -5.44, 1.888, 0.025), (0, -5.36, -5.4, 1.892, 0.01)],
+    "patch": 0.0, "colours": dict(_PALE), "pitot": True, "tailwheel": (-5.33, -0.56), "mast": (0.16, 0.94, 1.42, 0.02),
+    # (the oil cooler's bath under the after part of her cowling)
+    "scoops": [([(2.95, -0.66, 0.1, 0.03), (2.86, -0.7, 0.18, 0.09), (2.76, -0.715, 0.2, 0.1), (2.4, -0.71, 0.2, 0.1), (2.2, -0.7, 0.17, 0.085), (2.06, -0.67, 0.09, 0.03)], 0.0, 2.6)],
+    "extras": [  # (each leg in its trouser, the long spat round the wheel, the tyre showing under it)
+               ("body", ([(2.14, -0.88, 0.02, 0.27), (2.05, -0.88, 0.075, 0.29), (1.92, -0.88, 0.085, 0.29), (1.8, -0.88, 0.06, 0.28), (1.72, -0.88, 0.015, 0.26)], _VAL_LEG, 2.6, "coat")),
+               ("body", ([(2.48, -1.56, 0.02, 0.03), (2.44, -1.562, 0.07, 0.17), (2.4, -1.565, 0.095, 0.25), (2.3, -1.57, 0.135, 0.35), (2.2, -1.56, 0.153, 0.39),
+                          (2.05, -1.515, 0.16, 0.405), (1.8, -1.525, 0.16, 0.395), (1.6, -1.53, 0.155, 0.36), (1.4, -1.53, 0.14, 0.31), (1.2, -1.53, 0.115, 0.245),
+                          (1.0, -1.544, 0.075, 0.153), (0.9, -1.555, 0.04, 0.08), (0.87, -1.555, 0.01, 0.02)], _VAL_LEG, 2.3, "coat")),
+               ("rod", ((1.93, _VAL_LEG - 0.09, -1.79), (1.93, _VAL_LEG + 0.09, -1.79), 0.35, 0.35, "tyre")),
+               # (the tube of her bomb sight, through her windscreen, on its two feet)
+               ("rod", ((2.06, 0.0, 0.81), (1.42, 0.0, 0.81), 0.02, 0.02, "engine")),
+               ("rod", ((1.87, 0.0, 0.73), (1.87, 0.0, 0.8), 0.012, 0.012, "engine")), ("rod", ((1.64, 0.0, 0.725), (1.64, 0.0, 0.8), 0.012, 0.012, "engine")),
+               # (her bomb, and the crutch that swung it clear of her airscrew)
+               ("body", ([(1.73, -0.93, 0.03, 0.03), (1.62, -0.93, 0.13, 0.13), (1.45, -0.93, 0.19, 0.19), (1.2, -0.93, 0.2, 0.2), (0.75, -0.93, 0.2, 0.2),
+                          (0.5, -0.93, 0.14, 0.14), (0.2, -0.93, 0.06, 0.06), (0.0, -0.93, 0.03, 0.03)], 0.0, 2.0, "bomb")),
+               ("rod", ((0.34, 0.0, -0.93), (-0.05, 0.0, -0.93), 0.19, 0.19, "bomb")),
+               ("rod", ((1.5, 0.14, -0.69), (1.05, 0.2, -0.9), 0.016, 0.016, "leg")),
+               # (her rear gunner's gun, out through the end of his glass)
+               ("rod", ((-0.72, 0.0, 0.665), (-1.42, 0.0, 0.7), 0.022, 0.018, "steel"))],
+    "side_marks": [(-2.55, 0.34, "JAP-PLAIN")], "wing_marks": [(4.9, 0.55, 0.62, "JAP-PLAIN", "JAP-PLAIN", True, True)], "code": (-3.7, 0.3),
 }
+fitout.SEATS["Val"] = [(0, 0.88, 0.0, 0.0), (0, -0.2, 0.0, 180.0)]
 
 
 def one_coat(p):
