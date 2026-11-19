@@ -3384,6 +3384,9 @@ function landVoyages(g: Game, nat: string): void {
   if (!g.atSea.length) delete g.atSea;
 }
 
+/** For the measuring harness: told of each dated row struck off unsent when its half year is out. Nothing in the game listens. */
+export const struckWatch: { tell: ((e: { turn: number; due: number; nat: string; name: string; kind: string; divs: number; place: string; owner: string | null; holder: string | null; to: string | null; toHolder: string | null; war: boolean; until: boolean; ifLost: boolean; joins: string | null; hold: boolean }) => void) | null } = { tell: null };
+
 function expeditions(g: Game, nat: string): void {
   const gone: Corps[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
@@ -3449,7 +3452,14 @@ function expeditions(g: Game, nat: string): void {
       // A full province sends it on to the nearest ground with room.
       if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = roomNear(g, nat, reg) ?? reg;
     }
-    if (g.turn - due > 6 || (o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) { if (g.turn - due > 6) g.flags[`sent:${i}`] = g.flags.open === 1 ? 2 : 1; return; }
+    if (g.turn - due > 6 || (o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) {
+      if (g.turn - due > 6) {
+        g.flags[`sent:${i}`] = g.flags.open === 1 ? 2 : 1;
+        const at = g.byName[row[5]];
+        struckWatch.tell?.({ turn: g.turn, due, nat, name: row[2], kind: row[3], divs: row[4], place: row[5], owner: at?.owner ?? null, holder: at?.ctrl ?? null, to: reg?.name ?? null, toHolder: reg?.ctrl ?? null, war: !!o.war && !warOn(g, o.war), until: !!o.until && g.turn >= o.until, ifLost: !!o.ifLost, joins: o.joins ?? null, hold: !!o.hold });
+      }
+      return;
+    }
     // An army put together out of a defeat forms only once the ground is really lost: while the nation or an ally
     // still holds any place named, the formations it would be made from fight on where they stand.
     if (o.ifLost && (o.ifLost as string[]).some((nm) => { const r = g.byName[nm]; return !r || allied(g, nat, r.ctrl); })) return;
