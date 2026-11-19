@@ -126,7 +126,16 @@ interface Rules {
   africa?: [number, number];
   shores?: { slice: number; seas: string[] };
   skies?: { per: number; cover?: Record<string, number>; seas: string[] };
+  /** The Allies' landing ships in the Pacific by the record (rider b614 to ruling 234): `shoreLift`. */
+  lift?: LiftRules;
   says: Record<string, string>;
+}
+
+interface LiftRules {
+  /** The last month the count is read; after it the ordinary sea lift binds alone. */
+  until: number;
+  /** By country: from the month of a line to the country's next line, so many divisions' worth may be put ashore. */
+  by: Record<string, [number, number][]>;
 }
 
 /** The Pacific's rules. None while the far side's switch is off. */
@@ -461,6 +470,40 @@ export function pacificGround(g: Game, r: Region): boolean {
   if (!S || !farOn(g)) return false;
   const id = provinceOf(r.id);
   return (id >= FAR_FIRST && id < FAR_FIRST + S.slice) || r.seas.some((z) => S.seas.includes(g.seas[z].key));
+}
+
+const liftFlag = (nat: string, from: number): string => `shorelift:${nat}:${from}`;
+/** What `shoreLift` reads: what is `left` of the stretch's worth `of`, the stretch's first month `from` and the month
+ * after its last (`next`), the month more comes or the count ends (`due`), and whether the country has had none yet. */
+export interface ShoreLift { left: number; of: number; from: number; next: number; due: number; first: boolean }
+/**
+ * The landing ships in the Pacific for a country's troops bound for an enemy shore there (rider b614 to ruling 234;
+ * the historian's count, historian/allied-lift-pacific-1941-43-b593.md). A second count beside the month's sea lift
+ * (navy.ts), read for a landing from the sea on an enemy shore of the Pacific's ground and for nothing else: in each
+ * stretch of the record, a half-year mostly, a country puts ashore there no more than the record did, in divisions'
+ * worth (size times strength). The record's count is a country's own troops landed on an enemy-held shore, in
+ * anyone's ships, since there is no boarding here. It is a fact of the day: it binds player and computer alike, by
+ * the date, at every stop of the dial and whenever the war began. A country the rows do not name has none; Japan and
+ * those who fight beside it are not counted (ruling 200's six a month). After the rows' last month the ordinary lift
+ * binds alone. Null where the count is not read.
+ */
+export function shoreLift(g: Game, nat: string, to: Region): ShoreLift | null {
+  const L = reads(g) ? PACIFIC!.lift : undefined;
+  if (!L || g.turn > L.until || nat === PACIFIC!.power || allied(g, nat, PACIFIC!.power)) return null;
+  if (!atWar(g, nat, to.ctrl) || !pacificGround(g, to)) return null;
+  let from = 0, of = 0, next = 0, due = 0, first = true;
+  for (const [m, w] of L.by[nat] ?? []) {
+    if (m <= g.turn) { from = m; of = w; first = first && w <= 0; continue; }
+    next ||= m;
+    if (w > 0) { due = m; break; }
+  }
+  return { left: Math.max(0, of - (g.flags[liftFlag(nat, from)] ?? 0) / 1000), of, from, next: next || L.until + 1, due: due || L.until + 1, first };
+}
+
+/** A landing on such a shore has sailed: what it loaded is taken off the stretch's count, thrown back or not. */
+export function useShoreLift(g: Game, nat: string, to: Region, worth: number): void {
+  const S = shoreLift(g, nat, to);
+  if (S) g.flags[liftFlag(nat, S.from)] = (g.flags[liftFlag(nat, S.from)] ?? 0) + Math.round(worth * 1000);
 }
 
 /** True while the Pacific's rows are what a computer staff's landings on the Pacific's ground go by: a stop that keeps the book, and the Pacific's book open. */

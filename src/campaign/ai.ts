@@ -15,7 +15,7 @@ import { blocked, blowBridges } from './rivers';
 import { groundRules, isFoot } from './ground';
 import { SUPPORT } from './support';
 import { aiBridges, aiEngineers } from './engineers';
-import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, useLift } from './navy';
+import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, shipsFor, useLift } from './navy';
 import { shoreAI } from './fleets';
 import { plannedStrike } from './carriers';
 import { readinessMonth } from './readiness';
@@ -1249,7 +1249,8 @@ export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
   const taken = (cs: Corps[]): void => { for (const at of quays.values()) for (const c of cs) { const i = at.indexOf(c); if (i >= 0) at.splice(i, 1); } };
   const most = (q: Region, have: number): number => Math.min(have, cap, leavesHome(g, nat, q) ? mayLeave(g, nat) : Infinity);
   const enough = (w: Corps[], r: Region, defended: boolean): boolean => w.some(fights) && (!defended || assess(g, w, r, landingOpts(g, w, r)).odds >= D.odds);
-  const does = (w: Corps[], q: Region, r: Region, defended: boolean): boolean => enough(w, r, defended) && holdsAshore(g, nat, r, w, followUp(g, nat, q, w, r));
+  // (A wave is one the Pacific's landing ships will carry: the Allies' count by the record, rider b614 to ruling 234, navy.ts.)
+  const does = (w: Corps[], q: Region, r: Region, defended: boolean): boolean => shipsFor(g, w, r) && enough(w, r, defended) && holdsAshore(g, nat, r, w, followUp(g, nat, q, w, r));
   const waveFrom = (q: Region, cs: Corps[], r: Region, defended: boolean): Corps[] | null => {
     const k = most(q, cs.length);
     if (k < 1) return null;
@@ -1354,14 +1355,15 @@ export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
     if (!far.length) continue;
     near.sort(byWorth); far.sort(byWorth);
     // (One of them alone, the weakest that will do; failing that, as many of the strongest as make the wave with those in reach.)
-    let send: Corps[] | null = [...far].reverse().filter((c) => enough([c], r, defended) && holdsAshore(g, nat, r, [c])).slice(0, 1);
+    // (Nobody is brought up for a shore the landing ships will not carry him to: `shipsFor`, as in `does`.)
+    let send: Corps[] | null = [...far].reverse().filter((c) => shipsFor(g, [c], r) && enough([c], r, defended) && holdsAshore(g, nat, r, [c])).slice(0, 1);
     if (!send.length) {
       send = null;
       const w = near.slice(0, cap), add: Corps[] = [];
       for (const c of far) {
         if (w.length + add.length >= cap) break;
         add.push(c);
-        if (enough([...w, ...add], r, defended) && holdsAshore(g, nat, r, [...w, ...add])) { send = add; break; }
+        if (shipsFor(g, [...w, ...add], r) && enough([...w, ...add], r, defended) && holdsAshore(g, nat, r, [...w, ...add])) { send = add; break; }
       }
     }
     if (!send) continue;

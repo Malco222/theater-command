@@ -26,7 +26,7 @@ import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { alongside, riding } from './stations';
-import { coversBeaches, hopAims, pacificGround, skiesOver } from './pacific';
+import { coversBeaches, hopAims, pacificGround, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
 import { HISTORY, bookDate, dialDraw, stopDef, stopOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
@@ -34,7 +34,7 @@ import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siege
 import { harbourOpen, prizeOut } from './prizes';
 import { RES, fuelFleet, laneStopped } from './resources';
 import {
-  STACK, type BattleReport, type Corps, type Fleet, type Game, type Gate, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
+  MEN_PER_DIV, STACK, type BattleReport, type Corps, type Fleet, type Game, type Gate, type Nation, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
 } from './types';
 
 interface ClassSpec { label: string; one: string; many: string; power: number; tough: number; escort: number; raid: number }
@@ -707,10 +707,33 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (cs.length > STACK) return `No more than ${STACK} corps can go ashore in one place.`;
   // (A row that goes with a corps of the force sails in that corps' lift: rider b604 to ruling 234, stations.ts.)
   if (liftLeft(g, nat) < cs.length - riding(g, cs).length) return liftLeft(g, nat) ? `There is shipping for only ${liftLeft(g, nat)} more corps this month.` : 'All the shipping is in use this month.';
+  // (The landing ships in the Pacific carry no more of a country's troops to an enemy shore there than the record's did:
+  // a second count, read for the Pacific's ground alone. Rider b614 to ruling 234; pacific.ts shoreLift. Not read with
+  // the far side off.)
+  if (!shipsFor(g, cs, to)) return shoreLiftWhy(n, shoreLift(g, nat, to)!, worthOf(cs));
   if (!seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: surpriseOn(g, nat, to) })) return laneWhy(g, nat, from, to, laneBar(g, nat, from, to, surpriseOn(g, nat, to)));
   // Troopships cannot cross under an enemy sky. Only surprise, or winning the sky over the beach, gets them there.
   if (!surpriseOn(g, nat, to) && skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`;
   return null;
+}
+
+/** What a force is worth in divisions: size times strength. */
+const worthOf = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs * c.str, 0);
+/** True when the Pacific's landing ships will carry a force to a shore, or are not asked (pacific.ts shoreLift). */
+export function shipsFor(g: Game, cs: Corps[], to: Region): boolean {
+  const ships = cs.length ? shoreLift(g, cs[0].nat, to) : null;
+  return !ships || worthOf(cs) <= ships.left + 1e-6;
+}
+/** Why the landing ships will not carry a force to an enemy shore of the Pacific's ground (pacific.ts shoreLift), in
+ * plain words: the UI director's lines (ui-director/words-pacific-news.md, the landing ships' refusal). */
+function shoreLiftWhy(n: Nation, ships: ShoreLift, worth: number): string {
+  const due = turnToDate(ships.due).label;
+  const menOf = (w: number): string => (Math.round((w * MEN_PER_DIV) / 100) * 100).toLocaleString('en-US');
+  if (ships.of <= 0) return ships.first
+    ? `There are no landing ships in these waters for ${n.adj} troops yet. The first are due in ${due}.`
+    : `There are no landing ships in these waters for ${n.adj} troops now. More are due in ${due}.`;
+  if (ships.left * MEN_PER_DIV < 50) return `The landing ships in these waters have carried all the ${n.adj} troops they can for now. More are due in ${due}.`;
+  return `This force has ${menOf(worth)} men, and the landing ships in these waters can carry only ${menOf(ships.left)} more ${n.adj} troops before ${turnToDate(ships.next).label}.`;
 }
 
 /** True when a force is airborne troops and nothing else: it goes in by air, with no ships and no sea lane. */
@@ -1051,6 +1074,8 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
   if (air) g.flags[dropKey(g, nat)] = 1;
   else {
     const path = seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise })!;
+    // (What the Pacific's landing ships loaded is counted as it sailed, before the crossing's losses: pacific.ts.)
+    useShoreLift(g, nat, to, worthOf(cs));
     lostAtSea = crossing(g, cs, path, surprise, to);
     g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + cs.length - rode.length;
     for (const z of to.seas) g.flags[`landed:${z}:${nat}`] = g.turn;

@@ -8,11 +8,11 @@ import { FAR_LAID, lay } from '../src/campaign/far-rows';
 import { addCorps, atWar, capitulate, createGame, declareWar, setWar } from '../src/campaign/game';
 import { HISTORY, setStop as setStopOff, shoreOpen } from '../src/campaign/history';
 import { frontArmys, lines, neverHis } from '../src/campaign/line';
-import { NAVY, airOver, assaultStrength, atSea, landCorps, liftLeft, navalUpkeep, whyNotLand } from '../src/campaign/navy';
+import { NAVY, airOver, assaultStrength, atSea, landCorps, liftLeft, navalUpkeep, shipsFor, whyNotLand } from '../src/campaign/navy';
 import { AIR, airQuality, airRange, airUpkeep } from '../src/campaign/air';
 import { ARSENAL, smallAirMonth } from '../src/campaign/arsenal';
 import airData from '../data/campaign/air.json';
-import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind, keepersOf, keptForces, mayDemand, pacificGround, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds, readyRules, skiesOn, skiesOver } from '../src/campaign/pacific';
+import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind, keepersOf, keptForces, mayDemand, pacificGround, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds, readyRules, shoreLift, skiesOn, skiesOver } from '../src/campaign/pacific';
 import { readiness, readinessMonth } from '../src/campaign/readiness';
 import { FAR_STAGE } from '../src/campaign/stage';
 import { freed, ops, startOpen } from '../src/campaign/staff';
@@ -263,6 +263,27 @@ describe('a row that lands in the lift of the corps it goes with (rider b604 to 
     expect(landCorps(g, [cs[0]], shore).ok).toBe(true);
     expect(liftLeft(g, 'UK')).toBe(0);
     expect(g.regions[cs[1].reg]).toBe(quay);
+  });
+});
+
+describe("the Allies' landing ships in the Pacific and the islands' garrisons (rider b614 to ruling 234) with the far side off", () => {
+  it('there is no second count: every landing asks the month\'s sea lift and nothing else, in any month and on any shore', () => {
+    const g = startOpen(createGame(3, null));
+    for (const turn of [10, 30, 34, 52, 60]) {
+      g.turn = turn;
+      for (const nat of ['USA', 'UK', 'AUS', 'JAP']) for (const r of g.regions) if (r.seas.length && shoreLift(g, nat, r) !== null) throw new Error(`a count for ${nat} at ${r.name} in month ${turn}`);
+    }
+    const quay = g.regions.find((r) => r.port && r.owner === 'UK' && r.ctrl === 'UK' && r.seas.length > 0 && !r.units.length)!;
+    const cs = ['Test Corps A', 'Test Corps B'].map((nm) => addCorps(g, 'UK', nm, 'inf', 1, quay.id, {}));
+    for (const r of g.regions) expect(shipsFor(g, cs, r)).toBe(true);
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('shorelift:'))).toEqual([]);
+  });
+
+  it('no row has a size by the month, and no place is a post', () => {
+    const rows = (setup as any).expeditions as any[];
+    expect(rows.filter((r) => Array.isArray(r[r.length - 1]?.est))).toEqual([]);
+    const g = startOpen(createGame(3, null));
+    expect(g.corps.filter((c) => c.full !== undefined)).toEqual([]);
   });
 });
 
