@@ -256,6 +256,8 @@ namespace
 		}
 	}
 
+	double PictureGain = 1.0; // (what the game's material multiplies the kit's colours by: Battle::PictureGain)
+
 	void Triangle(Canvas& C, const Camera& Cam, const Vec P[3], const unsigned char* Rgba[3])
 	{
 		double Sx[3], Sy[3], Z[3];
@@ -298,9 +300,9 @@ namespace
 				{
 					continue;
 				}
-				const double Cr = (W0 * Rgba[0][0] + W1 * Rgba[1][0] + W2 * Rgba[2][0]) / 255.0;
-				const double Cg = (W0 * Rgba[0][1] + W1 * Rgba[1][1] + W2 * Rgba[2][1]) / 255.0;
-				const double Cb = (W0 * Rgba[0][2] + W1 * Rgba[1][2] + W2 * Rgba[2][2]) / 255.0;
+				const double Cr = (W0 * Rgba[0][0] + W1 * Rgba[1][0] + W2 * Rgba[2][0]) / 255.0 * PictureGain;
+				const double Cg = (W0 * Rgba[0][1] + W1 * Rgba[1][1] + W2 * Rgba[2][1]) / 255.0 * PictureGain;
+				const double Cb = (W0 * Rgba[0][2] + W1 * Rgba[1][2] + W2 * Rgba[2][2]) / 255.0 * PictureGain;
 				C.R[I] = C.R[I] * (1.0 - A) + Cr * A;
 				C.G[I] = C.G[I] * (1.0 - A) + Cg * A;
 				C.B[I] = C.B[I] * (1.0 - A) + Cb * A;
@@ -361,6 +363,7 @@ namespace
 		const std::vector<Vec>& P = Fx.Points();
 		const std::vector<uint8_t>& Rgba = Fx.Colours();
 		const int Rim = Fx.Ring();
+		PictureGain = Fx.PictureGain();
 		for (int Each = 0; Each < N; ++Each)
 		{
 			const int First = Each * Fx.PerPuff();
@@ -423,6 +426,11 @@ namespace
 		View.Up = Cam.Up;
 		View.Forward = Cam.Forward;
 		View.PixelsPerRadian = Cam.Ppr;
+		if (!std::getenv("FX_NOCULL")) // (as the game: what is off the screen takes no place. FX_NOCULL: everything in range is laid)
+		{
+			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		}
 		if (const char* SunIs = std::getenv("FX_SUN")) // (FX_SUN=x,y,z: the way toward the sun)
 		{
 			double X = 0.0, Y = 0.0, Z = 1.0;
@@ -739,6 +747,11 @@ namespace
 			V.Up = C.Up;
 			V.Forward = C.Forward;
 			V.PixelsPerRadian = C.Ppr;
+			if (!std::getenv("FX_NOCULL")) // (as the game: what is off the screen takes no place. FX_NOCULL: everything in range is laid)
+			{
+				V.HalfAcross = C.W / (2.0 * C.Ppr);
+				V.HalfUp = C.H / (2.0 * C.Ppr);
+			}
 			V.Sun = AirSun;
 			if (bDusk)
 			{
@@ -842,6 +855,11 @@ namespace
 			View.Up = Cam.Up;
 			View.Forward = Cam.Forward;
 			View.PixelsPerRadian = Cam.Ppr;
+			if (!std::getenv("FX_NOCULL")) // (as the game: what is off the screen takes no place. FX_NOCULL: everything in range is laid)
+			{
+				View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+				View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+			}
 			View.Sun = AirSun;
 			if (bDusk)
 			{
@@ -999,6 +1017,11 @@ namespace
 		View.Up = Cam.Up;
 		View.Forward = Cam.Forward;
 		View.PixelsPerRadian = Cam.Ppr;
+		if (!std::getenv("FX_NOCULL")) // (as the game: what is off the screen takes no place. FX_NOCULL: everything in range is laid)
+		{
+			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		}
 		const double Every = EnvNum("FX_EVERY", 0.0); // (the gun fires again every this many seconds; 0: once)
 		const bool bFire = Shot == "gun" || std::getenv("FX_FIRE") != nullptr;
 		std::sort(Frames.begin(), Frames.end());
@@ -1146,6 +1169,10 @@ int main(int Argc, char** Argv)
 	Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
 	Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
 	Cam.Ppr = W / (2.0 * std::tan(std::atan(18.0 / 35.0))); // (a 35 mm lens, as the stills)
+	if (const char* LensIs = std::getenv("FX_LENS")) // (FX_LENS=degrees: the view's angle across, as the game's 42)
+	{
+		Cam.Ppr = W / (2.0 * std::tan(std::clamp(std::atof(LensIs), 5.0, 170.0) * 3.14159265358979 / 360.0));
+	}
 	const Vec MgGun = Vec(-28.0, 12.0, Swell(nullptr, -28.0, 12.0) + 0.6); // (the "mg" shot's gun)
 	if (const char* MgView = std::getenv("FX_MG_VIEW"); Size == "mg" && MgView)
 	{
@@ -1162,6 +1189,18 @@ int main(int Argc, char** Argv)
 			const Vec Under = MgGun - Fire * 0.6 - Vec(0, 0, 0.6);
 			Cam.Eye = MgGun - Fire * 3.0 - Square * 1.5 + Vec(0, 0, 1.0);
 			Cam.Forward = (Under + Fire * 0.7 + Vec(0, 0, 0.25) - Cam.Eye).Unit();
+		}
+		if (std::string(MgView) == "game")
+		{
+			// (=game: the game's own battle camera as build 1720 photographed it: the eye 18.75 m from the gun and pitched
+			// 22 degrees down, looking at the ground under it from square to the line of fire. Use with FX_LENS=42 and a
+			// picture 1072x670, the size the game draws at. FX_GAME_FROM=degrees turns the eye round the gun)
+			const double Turn = (std::getenv("FX_GAME_FROM") ? std::atof(std::getenv("FX_GAME_FROM")) : 0.0) * 3.14159265358979 / 180.0;
+			const Vec Level = (Square * -std::cos(Turn) + Fire * -std::sin(Turn)).Unit();
+			const Vec Foot = MgGun - Vec(0, 0, 0.6);
+			const double Down = 22.0 * 3.14159265358979 / 180.0;
+			Cam.Eye = Foot + Level * (18.75 * std::cos(Down)) + Vec(0, 0, 18.75 * std::sin(Down));
+			Cam.Forward = (Foot - Cam.Eye).Unit();
 		}
 		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
 		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
@@ -1187,6 +1226,11 @@ int main(int Argc, char** Argv)
 	View.Up = Cam.Up;
 	View.Forward = Cam.Forward;
 	View.PixelsPerRadian = Cam.Ppr;
+	if (!std::getenv("FX_NOCULL")) // (as the game: what is off the screen takes no place. FX_NOCULL: everything in range is laid)
+	{
+		View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+		View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+	}
 	if (const char* SunIs = std::getenv("FX_SUN")) // (FX_SUN=x,y,z: the way toward the sun; by default high behind the eye's left)
 	{
 		double X = 0.0, Y = 0.0, Z = 1.0;
@@ -1235,7 +1279,7 @@ int main(int Argc, char** Argv)
 		const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight)); // (a plain day: the lamp at its day share)
 		Canvas C;
 		C.Init(W, H);
-		Paint(C, Shot, Lamps, NL, Men, Ground == "snow");
+		Paint(C, Shot, Lamps, NL, Men, Ground == "snow", false, std::getenv("FX_PALE") != nullptr); // (FX_PALE: pale dry ground, as Idaho's in build 1720)
 		Puffs(C, Shot, Fx, N);
 		char Name[256];
 		std::snprintf(Name, sizeof(Name), "%s/%s-%s-f%03d.ppm", OutDir.c_str(), Size.c_str(), Ground.c_str(), Frame);

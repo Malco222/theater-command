@@ -147,6 +147,9 @@ namespace TheaterFx
 		// and the clump reads as a lump of fire, never a flat cut-out; 0 keeps one colour across it)
 		Rgb Edge;
 		double EdgeK = 0.0;
+		double EdgeIn = 0.25; // (and how much of that its heart ring takes: more, and the colour turns sooner from its middle)
+		double DayAlpha = 1.0; // (by day its opacity is this share of what it is at dusk: a flash's glow, thin in daylight)
+		double Over = 1.0; // (a light: how far past white it burns, up to picture.lit_gain; see Battle::PictureGain)
 		double Nearer = 0.0; // (sorted as if this many metres nearer the eye: a fire's white heart drawn over its own clumps)
 		// (dust that may hide a unit: from a high steep eye it thins near the units, so a player always finds his own.
 		// 1: a vehicle's trail, near any vehicle laying dust; 2: a gun's blast veil, near Origin, the gun)
@@ -246,6 +249,10 @@ namespace TheaterFx
 			Rgb SmokeLight = Rgb(1.0f, 1.0f, 1.0f);
 			Vec Sun = Vec(-0.45, -0.35, 0.82);
 			Rgb SunLight = Rgb(1.0f, 1.0f, 1.0f); // (the sun's own light, its colour and strength: none at night)
+			// (how wide the view is: the tangent of half its angle across, and up (0: a quarter more than across). Given,
+			// what is wholly off the screen is neither laid nor takes a place, so smoke behind the eye never crowds out
+			// what is in front of it. 0 across: not known, and everything in range is laid, as before)
+			double HalfAcross = 0.0, HalfUp = 0.0;
 		};
 		/** Lays everything alive at Now for this eye into Points and Colours (PerPuff points a puff, far to near).
 		 * Returns how many puffs; the rest of the room up to the last frame's count is folded away. */
@@ -253,6 +260,8 @@ namespace TheaterFx
 		/** Each puff is a middle and two rings of Ring() points (game.puff_sides, 16 unless the recipe says less), so
 		 * PerPuff() points; it is fixed at Setup, so the mesh's triangles never change. */
 		int Ring() const { return Sides; }
+		/** What the picture must multiply the colours by (the material's brightness): picture.lit_gain, 1 by default. */
+		double PictureGain() const { return LitGain; }
 		int PerPuff() const { return PointsPerPuff; }
 		int Room() const { return MaxPuffs; }
 		const std::vector<Vec>& Points() const { return Out; }
@@ -324,7 +333,29 @@ namespace TheaterFx
 		struct HotFlash
 		{
 			Rgb Root, Root2, Hot, Orange, Rim;
+			// (art director 13:54Z, build 1720: the flame graded from its root out and ragged, new every round. Only when
+			// the recipe has muzzle.hot.tongues: see HotFlame)
+			bool bRagged = false;
+			Rgb Yellow, Red;
+			Span Tongues, Licks, Long;
+			double Wide = 0.2, Glow = 0.0, GlowDay = 0.5, GlowM = 0.035, Over = 1.0;
 		};
+		/** A close gun flash as the art director ruled it from the game's own frames: a small white-yellow root right at
+		 *  the muzzle, melting into a yellow then orange body widest a third of the way out, which breaks into ragged
+		 *  tongues, red-orange only at their ends, with short licks thrown sideways and a thin glow round it. Its length
+		 *  and every piece are rolled anew each call, so no two flashes match. Len: its usual length in metres. */
+		void HotFlame(double Born, const Vec& At, const Vec& Fw, double Len, double Life, const HotFlash& H, Dice& D);
+		/** A burst's close flames to come: each is laid when its round fires (Run), so a long burst never holds hundreds
+		 *  of pieces waiting and the room is asked only for the one flame burning. */
+		struct FlameDue
+		{
+			double Born = 0.0;
+			Vec At, Fw;
+			double Len = 0.5, Life = 0.025;
+			HotFlash H;
+			uint64_t Seed = 1;
+		};
+		std::vector<FlameDue> FlamesDue;
 		bool HotOf(const Vec& At, HotFlash& Out_) const; // (false: no muzzle.hot in the recipe, or the gun past within_m of the eye)
 		/** A dust.vehicles row for one ground, read once a ground. */
 		struct DustRow
@@ -451,6 +482,16 @@ namespace TheaterFx
 		double RoundUp = 0.35;
 		RoundLight Round; // (while laying one oil column puff: each point lit as a point on a round column, by where it sits across it)
 		Rgb EdgeTo; // (while laying one bit: its rim's colour, EdgeK of the way; see Bit::Edge)
+		double EdgeIn = 0.25; // (and the share of it the heart ring takes; see Bit::EdgeIn)
+		// (while laying one bit: over 0, the heart ring sits this share of the way out along the bit's long way, and
+		// Inner only across it. A day tracer: solid to within a pixel of its edge all round, the last pixel fading out,
+		// so a thin line a frame long is one straight line and never a stair of steps. Art director 14:26Z)
+		double LayInnerAlong = 0.0;
+		// (picture.lit_gain: the game's picture multiplies every colour by this (the wrapper sets the material's
+		// brightness to it), and every colour is written that much darker, so all looks as before; but a light's hottest
+		// parts (Bit::Over) are written up to that much brighter than white, so they land white-hot after the game's
+		// tone curve, which holds plain white down to about 224 of 255. 1: nothing changes)
+		double LitGain = 1.0, PutK = 1.0;
 		double LaySquare = 0.0; // (while laying one bit: 0 an ellipse; toward 1 its outline squared off, a gun case's cylinder seen side on)
 		// (while laying a spent case's body: each point lit as a point on a metal tube, by where it sits across it. Art
 		// director 07:08Z: a bright band along the top, a shade side and underside, never a pale plank)
@@ -469,6 +510,13 @@ namespace TheaterFx
 		double CaseFar = 150.0; // (ground_cases.draw_within_m: past it a case is neither counted nor laid)
 		double CaseDetailPx = 3.0; // (ground_cases.detail_px: a case narrower on the screen is laid as its tube alone)
 		bool CaseDetailed(double Rad, double Deep, const View& Eye) const { return 2.0 * Rad * std::max(Eye.PixelsPerRadian, 1.0) >= CaseDetailPx * std::max(Deep, 1e-3); }
+		// (art director 14:03Z, build 1720: from the game's own camera, 19 m off, a 6 cm case is under a pixel across and
+		// its lit and shade sides average out to the ground's own tone. ground_cases.hold_px: a case is never narrower on
+		// the screen than this, and held so its glint is brighter (far_glint) and wider (far_shine) and its shade side darker (far_shade),
+		// a speck of brass with a dark underside; it keeps its whole opacity while its true width is over full_px and is
+		// gone under gone_px. nearer_m: laid this many metres nearer the eye, in the same place on the screen, so the
+		// game's flat-faced ground never buries it. 0: none of it, as before)
+		double CaseHoldPx = 0.0, CaseFullPx = 0.6, CaseGonePx = 0.2, CaseFarGlint = 1.0, CaseFarShade = 1.0, CaseFarShine = 0.0, CaseNearer = 0.0;
 		double EdgeK = 0.0;
 		double SkyFill = 0.25, SunThrough = 1.5, SunThroughPow = 3.0;
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
@@ -506,6 +554,11 @@ namespace TheaterFx
 		std::vector<Falling> Falls;
 		// (the tracer's look, read at Setup: one streak for every gun, on the ground and in the air)
 		double TracerHalf = 8.0, TracerLeast = 3.0, TracerMost = 5.0, TracerDayWide = 1.5, WholePathBelow = 100.0, WholeFor = 0.015;
+		// (art director 13:54Z, build 1720: by day a tracer is a solid pale core, tracer.day_core_px across, inside a warm
+		// edge (tracer.day_edge), tracer.day_px across in all, at its whole opacity along its whole length, so it stands
+		// 60 luma over pale ground and is never a faint hairline. 0: by day it widens by day_width, as before)
+		double TracerDayPx = 0.0, TracerDayCorePx = 0.0, TracerDayOver = 1.0; // (day_over: its core that far past white by day; see LitGain)
+		Rgb TracerDayEdge;
 		double GlintPow = 30.0; // (a falling piece's glint: how tight the sun's mirror spot on it is, air_debris.glint_power)
 		double DayFrom = 0.38, DayFull = 0.9, DayLampShare = 0.25;
 		Rgb DayLampCol;
@@ -533,6 +586,7 @@ namespace TheaterFx
 		// never drawn, holds no place: counted, far debris shut off the cases, gun smoke and showers beside the eye. The
 		// pre-check, 06:42Z)
 		size_t InSight = 0, HeldAtDraw = 0;
+		size_t SeenBits = 0, SeenTwin = 0; // (of InSight and TwinBits, what was on the screen: see RoomSeen)
 		// (the vehicles' dust's own count: in sight at the last Draw and laid since; its gate takes the fuller of the room
 		// and dust.vehicles.most_of_room of it. The pre-check, 07:10Z)
 		size_t DustInSight = 0, DustSince = 0;
@@ -544,6 +598,12 @@ namespace TheaterFx
 		Span ThinAbove{ 15.0, 25.0 }, ThinSteep{ 0.3, 0.5 }, ThinNear{ 6.0, 12.0 };
 		double ThinKeep = 0.25;
 		size_t RoomAsked() const { return InSight + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + TwinBits; }
+		/** The room asked for on the screen alone: what the last frame laid, and what has been made since. The close
+		 *  grit (spent cases) goes by this: build 1720's test barrage, off the screen behind the eye, held the room over
+		 *  three fifths full, and the machine gun in front of the eye threw no brass at all. The same as RoomAsked when
+		 *  the view's width is not known. */
+		size_t RoomSeen() const { return SeenBits + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + SeenTwin; }
+		bool OffScreen(const Bit& B, const Vec& At, const View& Eye) const; // (wholly outside the view, with room to spare for its size and the eye's shake)
 		std::vector<Bit> Roots; // (each frame: the young end of each trail, from its point back to its newest hanging puff)
 
 		double Num(const std::string& Path, double Fallback) const;

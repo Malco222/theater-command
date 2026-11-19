@@ -169,6 +169,51 @@ Art director 07:08Z: within `muzzle.hot.within_m` (50) of the eye a ground gun's
 (`root` to `root_edge`, luma 241 to 244) inside an orange body (`orange`, its rim `rim`) with dense rims, shrinking
 rather than going see-through. Farther off, and in a recipe without `muzzle.hot`, as before.
 
+Art director 13:54Z, on the game's own frames (build 1720), where that flash read as a sticker (one flat orange fill
+with a cut edge and a white oval laid on it). With `muzzle.hot.tongues` in the recipe the close flash is built anew
+each round (`HotFlame`): a small white-yellow root right at the muzzle (`root`), melting into `yellow`, then the
+`orange` body, widest a third of the way out, which breaks into 3 to 5 ragged tongues with `red` only at their ends,
+and 2 to 4 short licks thrown sideways. Its length is rolled between `long` (0.6 to 1.3) times its usual length
+(`mg_flame_m` for a machine gun, 1.4 x `flame_m` for a gun), so no two flashes match. Dense inside, its edge a pixel
+or two soft; a thin glow (`glow`, `glow_m` past the body, `glow_day_share` of it by day). A burst's flames are laid one
+at a time as each round fires, so a long burst never holds hundreds of pieces waiting.
+
+After a burst of 3 rounds or more, close to the eye, `mg_smoke` leaves a thin pale wisp at the muzzle (never over a
+quarter opaque) drifting on the wind for a second or two, and on dry ground a low puff of the ground's own dust just
+in front of the muzzle.
+
+## What the game's camera showed (build 1720)
+
+Four things the kit learned from the first machine gun frames out of the real game. All are behind recipe keys or
+the view's new fields: an older recipe, or a caller that does not give the view's width, draws as before.
+
+- **Pixels are drawn pixels.** The game draws the 3D map smaller than its window (1072 across on a 1600 still, about
+  1080 across on a 2881 window) and scales it up. Give `Tick` the *drawn* width, so `least_px`, `detail_px` and the
+  tracer's widths count pixels that are really drawn, and a thing held at 2 px is 2 px on every screen. The art
+  director's pixel numbers are measured on 1600-wide stills: two thirds of them in kit pixels.
+- **What is off the screen takes no place.** `View::HalfAcross` (the tangent of half the view across; the wrapper sets
+  it) lets `Draw` leave out what is wholly outside the view, with room to spare for its size and the eye's shake. It is
+  still counted in the room asked (`RoomAsked`), so nothing more is made than the whole field has room for; but the
+  close grit goes by the room on the screen (`RoomSeen`). In build 1720 the test barrage, off the screen behind the
+  eye, held the room three quarters full and the machine gun in front of the eye threw no brass at all.
+  `preview/barrage.cpp` replays that barrage and prints the room and the cases thrown.
+- **Brass that reads from 19 m.** There a 6 cm case is under a pixel across and its lit and shade sides average to
+  the ground's own tone. `ground_cases.hold_px` (1.6): never narrower on the screen; held, its glint is brighter and
+  wider and its shade side darker (`far_glint`, `far_shine`, `far_shade`), 40 luma over and under pale ground; whole
+  while its true width is over `full_px`, gone under `gone_px`. `nearer_m` (0.05): laid that much nearer the eye in
+  the same place on the screen, so the game's flat-faced ground never buries it. Close to, a case is as before.
+- **White that lands white.** The game's tone curve holds plain white down to about 224 of 255. `picture.lit_gain`
+  (1.5): the wrapper sets the material's `Brightness` to it and the kit writes every colour that much darker, so all
+  looks as it did; the hottest lights (`muzzle.hot.over`, `tracer.day_over`) are written up to that much past white.
+
+By day a tracer is now a solid pale core (`tracer.day_core`, `day_core_px` 2) inside a warm edge (`day_edge`),
+`day_px` (3.4) across in all, straight-sided and at its whole opacity along its whole length: 90 luma over pale
+ground where build 1720 had 25. At dusk as before.
+
+Preview: `FX_PALE=1 FX_MG_VIEW=game FX_LENS=42 ./fxpreview recipe.txt out mg sand 0,2,4,60,120 1072x670` is the game's
+own camera on the machine gun (18.75 m off, 22 degrees down, a 42 degree lens, the drawn size, pale dry ground).
+`FX_NOCULL=1` lays everything in range, as before the view's width was known.
+
 ## Oil fires at sea
 
 ```cpp

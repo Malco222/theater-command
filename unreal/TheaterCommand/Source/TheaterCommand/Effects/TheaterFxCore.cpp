@@ -167,6 +167,12 @@ namespace TheaterFx
 		DayLampShare = Num("game.day_lamp_share", 0.25);
 		DayLampCol = Picture("game.day_lamp_colour", Rgb::FromPicture(255, 240, 215));
 		TracerDayCore = Picture("tracer.day_core", Rgb::FromPicture(245, 240, 210));
+		LitGain = std::clamp(Num("picture.lit_gain", 1.0), 1.0, 4.0);
+		PutK = 1.0;
+		TracerDayPx = std::max(0.0, Num("tracer.day_px", 0.0));
+		TracerDayCorePx = std::clamp(Num("tracer.day_core_px", TracerDayPx * 0.6), 0.0, TracerDayPx);
+		TracerDayEdge = Picture("tracer.day_edge", Rgb::FromPicture(235, 180, 70));
+		TracerDayOver = std::max(1.0, Num("tracer.day_over", 1.0));
 		CannonHeartCol = Picture("air_guns.flash_heart", Rgb::FromPicture(240, 220, 150));
 		FlameCol = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
 		FlashCoreCol = Picture("burst.flash.core_colour", Rgb::FromPicture(236, 168, 72));
@@ -187,6 +193,13 @@ namespace TheaterFx
 		MostLying = static_cast<size_t>(std::clamp(Num("ground_cases.most_lying", 200.0), 0.0, 5000.0));
 		CaseFar = std::max(1.0, Num("ground_cases.draw_within_m", 150.0));
 		CaseDetailPx = std::max(0.0, Num("ground_cases.detail_px", 3.0));
+		CaseHoldPx = std::max(0.0, Num("ground_cases.hold_px", 0.0));
+		CaseFullPx = std::max(0.0, Num("ground_cases.full_px", 0.6));
+		CaseGonePx = std::clamp(Num("ground_cases.gone_px", 0.2), 0.0, CaseFullPx);
+		CaseFarGlint = std::max(0.0, Num("ground_cases.far_glint", 1.0));
+		CaseFarShade = Clamp01(Num("ground_cases.far_shade", 1.0));
+		CaseFarShine = std::max(0.0, Num("ground_cases.far_shine", 0.0));
+		CaseNearer = std::max(0.0, Num("ground_cases.nearer_m", 0.0));
 		Sides = std::max(6, std::min(24, static_cast<int>(Num("game.puff_sides", 16.0))));
 		PointsPerPuff = 2 * Sides + 1;
 		std::vector<double>* Tables[8] = { &RingCos, &RingSin, &Ring2Cos, &Ring2Sin, &Ring3Cos, &Ring3Sin, &Ring5Cos, &Ring5Sin };
@@ -224,7 +237,9 @@ namespace TheaterFx
 		Trails.clear();
 		Falls.clear();
 		Dusts.clear();
+		FlamesDue.clear();
 		InSight = HeldAtDraw = TwinBits = 0;
+		SeenBits = SeenTwin = 0;
 		DustInSight = DustSince = 0;
 		CaseUntil.clear();
 		for (size_t I = 0; I < OutRgba.size(); ++I)
@@ -1461,6 +1476,7 @@ namespace TheaterFx
 		// with dense rims, shrinking rather than going see-through; far off as before)
 		HotFlash H;
 		const bool bHot = HotOf(At, H);
+		const bool bRagged = bHot && H.bRagged;
 		// the flame: a ragged tongue along the bore with licks thrown sideways, under one frame
 		{
 			Bit B;
@@ -1497,8 +1513,17 @@ namespace TheaterFx
 				B.EdgeK = 0.4;
 				B.Hold = 0.8;
 			}
-			Bits.push_back(B);
-			if (bHot)
+			if (bRagged)
+			{
+				// (art director 13:54Z: graded from its root out and ragged, new every shot; the same dice go on as before)
+				Dice DF(PlaceKey(At) * 0xD6E8FEB86659FD93ull ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0x52ull));
+				HotFlame(Now, At, Fw, Len * 1.4, B.Life, H, DF);
+			}
+			else
+			{
+				Bits.push_back(B);
+			}
+			if (bHot && !bRagged)
 			{
 				// (the root: white-yellow at the muzzle, laid over the tongue)
 				Bit R = B;
@@ -1557,7 +1582,10 @@ namespace TheaterFx
 				B.EdgeK = 0.4;
 				B.Hold = 0.8;
 			}
-			Bits.push_back(B);
+			if (!bRagged)
+			{
+				Bits.push_back(B);
+			}
 		}
 		if (Has(M + "light_w"))
 		{
@@ -1582,7 +1610,7 @@ namespace TheaterFx
 		// so the cases pile up behind the gun through a fight. Its own dice)
 		{
 			CaseRow Cases;
-			if (CaseRowOf(GunIn ? GunIn : "", At, Cases) && RoomAsked() < static_cast<size_t>(MaxPuffs) * 3 / 5)
+			if (CaseRowOf(GunIn ? GunIn : "", At, Cases) && RoomSeen() < static_cast<size_t>(MaxPuffs) * 3 / 5)
 			{
 				Dice DC(PlaceKey(At) * 0xD1B54A32D192ED03ull ^ static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)));
 				const Vec Flat_ = Vec(Fw.X, Fw.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
@@ -1731,7 +1759,116 @@ namespace TheaterFx
 		H.Hot = Picture("muzzle.hot.hot", Rgb::FromPicture(255, 232, 150));
 		H.Orange = Picture("muzzle.hot.orange", Rgb::FromPicture(250, 140, 30));
 		H.Rim = Picture("muzzle.hot.rim", Rgb::FromPicture(230, 96, 16));
+		H.bRagged = Has("muzzle.hot.tongues.0");
+		if (H.bRagged)
+		{
+			H.Yellow = Picture("muzzle.hot.yellow", Rgb::FromPicture(240, 200, 90));
+			H.Red = Picture("muzzle.hot.red", Rgb::FromPicture(200, 80, 30));
+			H.Tongues = Range("muzzle.hot.tongues", 3.0, 5.0);
+			H.Licks = Range("muzzle.hot.licks", 2.0, 4.0);
+			H.Long = Range("muzzle.hot.long", 0.6, 1.3);
+			H.Wide = std::clamp(Num("muzzle.hot.wide", 0.2), 0.02, 1.0);
+			H.Glow = Clamp01(Num("muzzle.hot.glow", 0.0));
+			H.GlowDay = Clamp01(Num("muzzle.hot.glow_day_share", 0.5));
+			H.GlowM = std::max(0.0, Num("muzzle.hot.glow_m", 0.035));
+			H.Over = std::max(1.0, Num("muzzle.hot.over", 1.0));
+		}
 		return true;
+	}
+
+	void Battle::HotFlame(double Born, const Vec& At, const Vec& Fw, double Len, double Life, const HotFlash& H, Dice& D)
+	{
+		// Art director 13:54Z on the game's own frames (build 1720), where the close flash read as a sticker: one flat
+		// orange fill with a cut edge and a white oval laid on it. Now, back to front: a thin glow; three to five ragged
+		// tongues the body breaks into, orange with red-orange ends; the orange body, widest a third of the way out,
+		// its outline lumpy; a yellow inside it and a small white-yellow root right at the muzzle, each melting into
+		// the one under it; and two to four short licks thrown sideways. Dense inside with an edge a pixel or two soft.
+		// Its length (muzzle.hot.long) and every piece are rolled anew, so no two flashes match.
+		const double L = Len * std::max(0.1, H.Long.Pick(D));
+		const double W = Len * H.Wide * D.U(0.85, 1.15) * (0.55 + 0.45 * L / std::max(Len, 1e-6)); // (half its width where it is widest: a short flame is a thinner one)
+		const Vec Side = Fw.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+		const Vec Over_ = Side.Cross(Fw).Unit(ZUp);
+		auto Leaning = [&](double Degrees, double Round_)
+		{
+			const double A = Radians(Degrees);
+			return (Fw * std::cos(A) + (Side * std::cos(Round_) + Over_ * std::sin(Round_)) * std::sin(A)).Unit(Fw);
+		};
+		// (one piece: an oval from From_ along Way, HalfLong and HalfWide, shrinking a little as it dies)
+		auto Piece = [&](const Vec& Mid, const Vec& Way, double HalfLong, double HalfWide, const Rgb& Col, const Rgb& Edge, double EdgeK_, double EdgeIn_, double Inner, double Rim, double Nearer)
+		{
+			Bit B;
+			B.Born = Born;
+			B.Life = Life;
+			B.From = Mid;
+			B.Along = Way;
+			B.R0 = std::max(HalfWide, 1e-3);
+			B.R1 = B.R0 * 0.8;
+			B.Grow = 1.0;
+			B.Stretch = std::max(1.0, HalfLong / B.R0);
+			B.Col = Col;
+			B.Col2 = Col;
+			B.Alpha = 1.0;
+			B.FadeIn = 0.002;
+			B.Hold = 0.8;
+			B.Heart = 1.0;
+			B.Rim = Rim;
+			B.Inner = Inner;
+			B.Edge = Edge;
+			B.EdgeK = EdgeK_;
+			B.EdgeIn = EdgeIn_;
+			B.Nearer = Nearer;
+			B.bLight = true;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			return B;
+		};
+		if (H.Glow > 0.0 && H.GlowM > 0.0)
+		{
+			// (the glow: thin, a few centimetres past the flame all round, and by day a share of what it is at dusk)
+			// (round the body alone: round the tongues too, it was a see-through wash between them)
+			Bit G = Piece(At + Fw * (L * 0.33), Fw, L * 0.36 + H.GlowM, W + H.GlowM, H.Orange, H.Orange, 0.0, 0.0, std::clamp(W / (W + H.GlowM), 0.1, 0.95), 0.0, -0.5 * W);
+			G.Alpha = H.Glow;
+			G.DayAlpha = H.GlowDay;
+			Bits.push_back(G);
+		}
+		const int NTongues = std::max(1, static_cast<int>(std::lround(H.Tongues.Pick(D))));
+		const double Round0 = D.U(0.0, 2.0 * Pi);
+		for (int I = 0; I < NTongues; ++I)
+		{
+			// (the tongues: fanned a little off the bore all round it, the longest reaching the flame's whole length)
+			const Vec Way = Leaning(I == 0 ? D.U(0.0, 4.0) : D.U(5.0, 16.0), Round0 + (I + D.U(-0.3, 0.3)) * 2.0 * Pi / NTongues);
+			const double S0 = L * D.U(0.25, 0.36), S1 = L * (I == 0 ? 1.0 : D.U(0.7, 0.98));
+			const double HalfWide = W * D.U(0.2, 0.34);
+			// (art director 14:26Z: ragged and blunt at its end, as gas is; a needle point read as a drawn comic flame)
+			const double Point = 0.6, HalfLong = (S1 - S0) / (2.0 + Point);
+			Bit T = Piece(At + Way * (S0 + HalfLong), Way, HalfLong, HalfWide, H.Orange, H.Red, 0.9, 0.45, 0.85, 0.3, 0.0);
+			T.Point = Point;
+			T.Rough = 0.3;
+			Bits.push_back(T);
+		}
+		{
+			Bit Body = Piece(At + Fw * (L * 0.29), Fw, L * 0.3, W, H.Orange, H.Orange.Mix(H.Red, 0.5), 0.7, 0.2, 0.85, 0.15, 0.6 * W);
+			Body.Point = 0.45;
+			Body.Rough = 0.22;
+			Bits.push_back(Body);
+			Bit Yellow = Piece(At + Fw * (L * 0.23), Fw, L * 0.23, W * 0.62, H.Yellow, H.Orange, 1.0, 0.3, 0.55, 0.0, 1.2 * W);
+			Yellow.Rough = 0.15;
+			Yellow.Over = 1.0 + (H.Over - 1.0) * 0.35;
+			Bits.push_back(Yellow);
+			Bit Root = Piece(At + Fw * (L * 0.1), Fw, L * 0.11, W * 0.34, H.Root, H.Yellow, 1.0, 0.3, 0.6, 0.0, 1.8 * W);
+			Root.Over = H.Over;
+			Bits.push_back(Root);
+		}
+		const int NLicks = std::max(0, static_cast<int>(std::lround(H.Licks.Pick(D))));
+		for (int I = 0; I < NLicks; ++I)
+		{
+			// (the licks: short, thrown out of the body's flanks well off the bore)
+			const Vec Way = Leaning(D.U(35.0, 70.0), D.U(0.0, 2.0 * Pi));
+			const double Long = Len * D.U(0.14, 0.24), HalfWide = W * D.U(0.16, 0.28);
+			Bit K = Piece(At + Fw * (L * D.U(0.14, 0.42)) + Way * (W * 0.55 + Long * 0.3), Way, Long * 0.42, HalfWide, H.Orange, H.Red, 0.9, 0.35, 0.82, 0.3, 0.3 * W);
+			K.Point = 0.5;
+			K.Rough = 0.3;
+			Bits.push_back(K);
+		}
 	}
 
 	bool Battle::CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& C) const
@@ -2015,11 +2152,64 @@ namespace TheaterFx
 		const bool bCases = CaseRowOf(Weapon ? Weapon : "", From, Cases);
 		Dice DC(PlaceKey(From) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)));
 		const Vec CaseOut = (Dir.Cross(ZUp).Unit(Vec(0.0, -1.0, 0.0)) * Cases.Side - Dir * 0.3).Unit(Vec(0.0, -1.0, 0.0));
+		// (the close flame and the burst's smoke have dice of their own too)
+		Dice DF(PlaceKey(From) * 0xD6E8FEB86659FD93ull ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0x51ull));
+		const double MgFlame = Num("muzzle.hot.mg_flame_m", 0.5);
+		// (art director 13:54Z: close to the eye, a burst of three rounds or more leaves a thin pale grey-brown wisp at
+		// the muzzle, drifting off on the wind for a second or two, and on dry ground a low puff of the ground's own
+		// dust kicked up just in front of the muzzle. Never more than a quarter opaque, however long the burst)
+		const bool bWisp = bHotMg && Rounds >= 3 && Has("mg_smoke.alpha");
+		const double WispAlpha = std::clamp(Num("mg_smoke.alpha", 0.25), 0.0, 0.25);
+		const int WispEvery = std::max(1, static_cast<int>(Num("mg_smoke.every_rounds", 4.0)));
+		const Span WispLife = Range("mg_smoke.life_s", 1.0, 2.0);
+		const Rgb WispCol = Picture("mg_smoke.colour", Rgb::FromPicture(168, 158, 142));
+		const double DustShare = bWisp && From.Z - Height(From.X, From.Y) < Num("mg_smoke.dust_under_m", 1.2) ? Clamp01(DustRowOf(Ground).Share) : 0.0;
 		for (int R = 0; R < Rounds; ++R)
 		{
 			const double T = Now + R * Gap;
 			const int Which = Count++;
-			if (bCases && RoomAsked() < static_cast<size_t>(MaxPuffs) * 3 / 5)
+			if (bWisp && R % WispEvery == WispEvery - 1)
+			{
+				// (overlapping two or three deep as they drift, so each is under half the most the whole may be)
+				Bit B;
+				B.Born = T;
+				B.From = From + Dir * DF.U(0.25, 0.45);
+				B.Vel = Dir * DF.U(1.5, 3.0) + Vec(DF.Bell() * 0.3, DF.Bell() * 0.3, DF.U(0.2, 0.6));
+				B.Drag = 3.0;
+				B.Rise = 0.25;
+				B.Windage = 1.0;
+				B.Life = WispLife.Pick(DF);
+				B.R0 = 0.08;
+				B.R1 = DF.U(0.35, 0.6);
+				B.Grow = 0.6;
+				B.Col = WispCol;
+				B.Col2 = WispCol;
+				B.Alpha = WispAlpha * 0.55;
+				B.FadeIn = 0.06;
+				B.Hold = 0.25;
+				B.Heart = 0.8;
+				B.Rim = 0.0;
+				B.Rough = 0.3;
+				B.LumpSeed = static_cast<uint32_t>(DF.U() * 1073741823.0);
+				Bits.push_back(B);
+				if (DustShare > 0.0)
+				{
+					Bit Du = B;
+					Du.From = From + Dir * DF.U(0.6, 1.1);
+					Du.From.Z = Height(Du.From.X, Du.From.Y) + 0.08;
+					Du.Vel = Dir * DF.U(0.6, 1.4) + Vec(DF.Bell() * 0.4, DF.Bell() * 0.4, DF.U(0.1, 0.3));
+					Du.Rise = 0.0;
+					Du.Windage = 0.8;
+					Du.R0 = 0.1;
+					Du.R1 = DF.U(0.4, 0.7);
+					Du.Col = Dust;
+					Du.Col2 = Dust;
+					Du.Alpha = WispAlpha * 0.55 * DustShare;
+					Du.LumpSeed = static_cast<uint32_t>(DF.U() * 1073741823.0);
+					Bits.push_back(Du);
+				}
+			}
+			if (bCases && RoomSeen() < static_cast<size_t>(MaxPuffs) * 3 / 5)
 			{
 				GroundCase(T + Cases.After, From - Dir * Cases.Back, CaseOut, Cases, DC);
 			}
@@ -2052,7 +2242,19 @@ namespace TheaterFx
 					Bits.push_back(B);
 				}
 			}
-			if (bFlicker)
+			if (bHotMg && HotMg.bRagged)
+			{
+				FlameDue Due;
+				Due.Born = T;
+				Due.At = From;
+				Due.Fw = Dir;
+				Due.Len = MgFlame;
+				Due.Life = 0.025;
+				Due.H = HotMg;
+				Due.Seed = static_cast<uint64_t>(DF.U() * 9.0e15) + 1ull;
+				FlamesDue.push_back(Due);
+			}
+			else if (bFlicker)
 			{
 				Bit B;
 				B.Born = T;
@@ -2173,6 +2375,7 @@ namespace TheaterFx
 			B.Tail = 0.7; // (thinning toward the gun)
 			B.bLight = true;
 			B.Glow = static_cast<uint8_t>(Layer + 1);
+			B.Nearer = Layer == 1 && TracerDayPx > 0.0 ? 0.01 : 0.0; // (solid by day, the core must lie over its edge)
 			Bits.push_back(B);
 		}
 	}
@@ -2449,7 +2652,7 @@ namespace TheaterFx
 			L.bNightOnly = true;
 			Flashes.push_back(L);
 		}
-		if (Row.CaseM > 0.0 && bEyeKnown && (LastEye - At).Length() < Row.CasesWithin && RoomAsked() < static_cast<size_t>(MaxPuffs) * 3 / 5)
+		if (Row.CaseM > 0.0 && bEyeKnown && (LastEye - At).Length() < Row.CasesWithin && RoomSeen() < static_cast<size_t>(MaxPuffs) * 3 / 5)
 		{
 			Spent(T, At, Dir, Carry, Row, D); // (the close view only, and the first thing left out when the room fills)
 		}
@@ -3985,6 +4188,25 @@ namespace TheaterFx
 
 	void Battle::Run(double Now)
 	{
+		// (a burst's close flames whose rounds have fired by now: a flame shorter than a frame is still laid once)
+		if (!FlamesDue.empty())
+		{
+			size_t Left = 0;
+			for (size_t I = 0; I < FlamesDue.size(); ++I)
+			{
+				const FlameDue& Due = FlamesDue[I];
+				if (Due.Born > Now)
+				{
+					FlamesDue[Left++] = Due;
+				}
+				else if (Now - Due.Born < 0.5)
+				{
+					Dice D(Due.Seed);
+					HotFlame(Due.Born, Due.At, Due.Fw, Due.Len, Due.Life, Due.H, D);
+				}
+			}
+			FlamesDue.resize(Left);
+		}
 		const Rgb Flame = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
 		const Rgb Heart = Rgb::FromPicture(250, 196, 110);
 		const Rgb Ember = Rgb::FromPicture(110, 35, 15);
@@ -4159,7 +4381,7 @@ namespace TheaterFx
 	bool Battle::Busy(double Now) const
 	{
 		(void)Now;
-		return !Bits.empty() || !Marks.empty() || !Sources.empty() || !Flashes.empty();
+		return !Bits.empty() || !Marks.empty() || !Sources.empty() || !Flashes.empty() || !FlamesDue.empty();
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -4171,9 +4393,9 @@ namespace TheaterFx
 		auto Put = [this](size_t I, const Vec& At, const Rgb& C, double A)
 		{
 			Out[I] = At;
-			OutRgba[I * 4 + 0] = Byte(C.R);
-			OutRgba[I * 4 + 1] = Byte(C.G);
-			OutRgba[I * 4 + 2] = Byte(C.B);
+			OutRgba[I * 4 + 0] = Byte(C.R * PutK);
+			OutRgba[I * 4 + 1] = Byte(C.G * PutK);
+			OutRgba[I * 4 + 2] = Byte(C.B * PutK);
 			OutRgba[I * 4 + 3] = Byte(A);
 		};
 		// (Lift: the sunlit face of smoke seen with the sun behind the eye. Art director 23:59Z: each lobe a dome, its
@@ -4292,7 +4514,7 @@ namespace TheaterFx
 			if (EdgeK > 0.0)
 			{
 				Shaded = Shaded.Mix(EdgeTo, EdgeK);
-				HeartShaded = HeartShaded.Mix(EdgeTo, 0.25 * EdgeK);
+				HeartShaded = HeartShaded.Mix(EdgeTo, EdgeIn * EdgeK);
 			}
 			if (bThrough)
 			{
@@ -4308,37 +4530,68 @@ namespace TheaterFx
 				Shaded = Rgb(Shaded.R + Lit.R, Shaded.G + Lit.G, Shaded.B + Lit.B);
 				HeartShaded = Rgb(HeartShaded.R + 0.1f * Lit.R, HeartShaded.G + 0.1f * Lit.G, HeartShaded.B + 0.1f * Lit.B);
 			}
-			Put(First + 1 + I, Middle + Dir * (In * Reach), HeartShaded, HeartAlpha);
+			if (LayInnerAlong > 0.0)
+			{
+				const Vec Within = bTaper ? AxisA * (Cs * LayInnerAlong) + (AxisB * Sn + TaperB * (Sn * Cs)) * In : AxisA * (Cs * LayInnerAlong) + AxisB * (Sn * In);
+				Put(First + 1 + I, Middle + Within * Reach, HeartShaded, HeartAlpha);
+			}
+			else
+			{
+				Put(First + 1 + I, Middle + Dir * (In * Reach), HeartShaded, HeartAlpha);
+			}
 			Put(First + 1 + static_cast<size_t>(Sides) + I, Middle + Dir * Reach, Shaded, RimAlpha);
 		}
 	}
 
-	int Battle::LayCase(int Slot, const Bit& B, double Age, const Vec& P, double A, const View& Eye, int Room)
+	int Battle::LayCase(int Slot, const Bit& B, double Age, const Vec& Seen, double A, const View& Eye, int Room)
 	{
 		// A ground gun's spent case (art director 07:08Z): a brass tube tumbling end over end until it lands, then lying
 		// level. Laid as up to three fans, back to front: a soft shadow on the ground under it once it lies there; the
 		// tube, its outline square-ended and straight-sided from wherever the eye is, lit across it as metal is (a bright
 		// band toward the sun with a glint, a shade side and underside); and the dark open mouth at one end when that end
 		// is turned toward the eye, its brass lip round it
-		const double Rad = B.R0;
+		double Rad = B.R0;
 		const double Th = B.Tumble * std::min(Age, B.Land2);
 		const Vec Axis = (B.Along * std::cos(Th) + B.Face * std::sin(Th)).Unit(B.Along);
-		const Vec ToEye = (Eye.Eye - P).Unit(-Eye.Forward);
+		const Vec ToEye = (Eye.Eye - Seen).Unit(-Eye.Forward);
 		const Vec Lv = Axis.Cross(ToEye).Unit(Eye.Up);
 		const Vec Back = (ToEye - Axis * ToEye.Dot(Axis)).Unit(ToEye);
 		const Vec Sun = Eye.Sun.Unit(ZUp);
-		const double Long = Rad * B.Stretch;
+		double Long = Rad * B.Stretch;
 		auto Times = [](const Rgb& X, const Rgb& Y) { return Rgb(X.R * Y.R, X.G * Y.G, X.B * Y.B); };
-		A *= Clamp01((CaseFar - (P - Eye.Eye).Length()) / (0.25 * CaseFar)); // (fading out over the last quarter of draw_within_m)
+		const double Off = (Seen - Eye.Eye).Length();
+		A *= Clamp01((CaseFar - Off) / (0.25 * CaseFar)); // (fading out over the last quarter of draw_within_m)
+		// (held: 0 close to, where it is as the art director passed it at 07:25Z; 1 at its least width)
+		double Held = 0.0;
+		if (CaseHoldPx > 0.0)
+		{
+			const double Px = 2.0 * Rad * std::max(Eye.PixelsPerRadian, 1.0) / std::max(Off, 1e-3); // (its true width on the screen)
+			Held = CaseDetailPx > CaseHoldPx ? Clamp01((CaseDetailPx - Px) / (CaseDetailPx - CaseHoldPx)) : (Px < CaseHoldPx ? 1.0 : 0.0);
+			if (Px < CaseHoldPx)
+			{
+				A *= Clamp01((Px - CaseGonePx) / std::max(CaseFullPx - CaseGonePx, 1e-6));
+				Rad = 0.5 * CaseHoldPx * Off / std::max(Eye.PixelsPerRadian, 1.0);
+				Long = std::max(Long, 2.5 * Rad); // (still longer than it is wide: a case, never a dot)
+			}
+		}
 		if (A < 0.004)
 		{
 			return 0;
+		}
+		Vec P = Seen;
+		if (CaseNearer > 0.0 && Off > 4.0 * CaseNearer)
+		{
+			// (nearer the eye along its own line of sight and smaller to match: the same picture, in front of the ground)
+			const double K = 1.0 - CaseNearer / Off;
+			P = Eye.Eye + (Seen - Eye.Eye) * K;
+			Rad *= K;
+			Long *= K;
 		}
 		int Used = 0;
 		LaySquare = 0.0;
 		Tube.bOn = false;
 		EdgeK = 0.0;
-		const bool bDetail = CaseDetailed(Rad, (P - Eye.Eye).Dot(Eye.Forward), Eye); // (under detail_px across, the tube alone)
+		const bool bDetail = CaseDetailed(B.R0, (Seen - Eye.Eye).Dot(Eye.Forward), Eye); // (under detail_px across, the tube alone)
 		if (bDetail && Age >= B.Land2 && CaseShadow > 0.0 && Room - Used >= 3)
 		{
 			// (the contact shadow: on the ground under the case, a little away from the sun, soft-edged)
@@ -4362,10 +4615,10 @@ namespace TheaterFx
 		Tube.Sun = Sun;
 		Tube.Half = (Sun + ToEye).Unit(ZUp);
 		Tube.R = Rad;
-		Tube.Shine = CaseShine;
-		Tube.Shade = Times(B.Col2, Eye.SmokeLight);
+		Tube.Shine = CaseFarShine > 0.0 ? CaseShine + (CaseFarShine - CaseShine) * Held : CaseShine;
+		Tube.Shade = Times(B.Col2, Eye.SmokeLight) * (1.0 + (CaseFarShade - 1.0) * Held);
 		Tube.Lit = Times(B.Col, Eye.SmokeLight);
-		Tube.Spark = Times(Eye.SunLight, CaseGlint) * (B.Glint * 0.12); // (brass is a metal: its glint takes its own gold)
+		Tube.Spark = Times(Eye.SunLight, CaseGlint) * (B.Glint * 0.12 * (1.0 + (CaseFarGlint - 1.0) * Held)); // (brass is a metal: its glint takes its own gold)
 		LaySquare = 0.75; // (square ends and straight sides: a case, never a grain of rice)
 		Lay(Slot + Used, P, Axis * Long, Lv * Rad, B.Col, A, A * B.Heart, A * B.Rim, B.Inner, 0.0, 0.0, 0.0, Eye, 0.0, 0u, 0.0, Rgb(), Rgb(), Vec(), Rgb());
 		++Used;
@@ -4399,6 +4652,10 @@ namespace TheaterFx
 		double Rad = B.R0 + (B.R1 - B.R0) * std::pow(F, B.Grow);
 		const double Fade = std::min(1.0, Shown / std::max(B.FadeIn, 1e-3)) * (F < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (F - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4));
 		double A = B.Alpha * Fade;
+		if (B.DayAlpha != 1.0)
+		{
+			A *= 1.0 + (B.DayAlpha - 1.0) * DayOf(Eye.SmokeLight);
+		}
 		if (B.HazeBy > 0.0)
 		{
 			const double T = Clamp01(Age / B.HazeBy);
@@ -4477,8 +4734,11 @@ namespace TheaterFx
 		}
 		Round.bOn = false;
 		LaySquare = 0.0;
+		LayInnerAlong = 0.0;
 		EdgeK = B.EdgeK;
 		EdgeTo = B.Edge;
+		EdgeIn = B.EdgeIn;
+		PutK = (B.bLight ? std::clamp(B.Over, 1.0, LitGain) : 1.0) / LitGain;
 		if (B.SunSide > 0.0 && !B.bLight && Dist > 1e-6)
 		{
 			// (art director 03:59Z: an oil column reads round, never a flat ink cut-out: each lobe's sunward side lit up
@@ -4588,6 +4848,7 @@ namespace TheaterFx
 		Vec Middle = P;
 		Vec TaperB; // (a tracer: how its width runs along it, so it is as wide on the screen at both ends)
 		double PointNow = B.Point, TailNow = B.Tail; // (a tracer cut short at an end is blunter there)
+		double RimNow = B.Rim, InnerNow = B.Inner, HeartUp = 0.0; // (a tracer by day is solid across: its edge and heart brought up)
 		switch (B.Form)
 		{
 		case Bit::Shape::Puff:
@@ -4716,13 +4977,38 @@ namespace TheaterFx
 				const double PerPixel = Deep > 1e-3 ? std::min(MetresAPixel, Deep / Ppr) : MetresAPixel;
 				Width = std::min(Width, std::max(B.MostPx, B.LeastPx) * PerPixel * 0.5);
 			}
-			double Wide = 1.0;
+			double Wide = 1.0, DayRamp = 0.0;
 			if (B.Glow > 0)
 			{
 				// (by day a tracer widens and its core whitens, so a stream holds on a pale sky; by dusk it is as ruled.
 				// Day is read from the hour's smoke light: white by day, dim at dusk)
 				const double Day = DayOf(Eye.SmokeLight);
 				Wide = 1.0 + (TracerDayWide - 1.0) * Day;
+				if (TracerDayPx > 0.0 && Width > 1e-9)
+				{
+					// (by day its width is its own, in pixels where it is: the warm edge's whole width, or the core's)
+					// (laid half a pixel wider each side, solid to half a pixel inside its width and fading out over that
+					// one pixel: each pixel takes the share of it the line covers, so it is one straight line at any slope)
+					const double PerPixel = Deep > 1e-3 ? std::min(MetresAPixel, Deep / Ppr) : MetresAPixel;
+					const double Px = std::max(1.0, B.Glow == 2 ? TracerDayCorePx : TracerDayPx);
+					const double ByDay = 0.5 * (Px + 1.0) * PerPixel;
+					Wide = 1.0 + (ByDay / Width - 1.0) * Day;
+					// (and solid: its whole opacity all along, its heart full)
+					A += (std::min(1.0, A / std::max(B.Alpha, 1e-6)) - A) * Day;
+					HeartUp = Day;
+					LaySquare = 0.8 * Day; // (and as wide from end to end: straight-sided, never a long thin lens)
+					RimNow = B.Rim * (1.0 - Day);
+					InnerNow = B.Inner + ((Px - 1.0) / (Px + 1.0) - B.Inner) * Day;
+					DayRamp = PerPixel * Day; // (the same pixel's fade at its ends)
+					if (B.Glow == 1)
+					{
+						Col = Col.Mix(TracerDayEdge, Day);
+					}
+					else
+					{
+						PutK = (1.0 + (std::min(TracerDayOver, LitGain) - 1.0) * Day) / LitGain; // (the core white-hot by day)
+					}
+				}
 				Width *= Wide;
 				if (B.Glow == 2)
 				{
@@ -4732,6 +5018,10 @@ namespace TheaterFx
 			Half = std::max(Half, Width);
 			AxA = Ua * Half;
 			AxB = Ub * Width;
+			if (DayRamp > 0.0)
+			{
+				LayInnerAlong = std::clamp(1.0 - DayRamp / std::max(B.HalfLength > 0.0 ? B.HalfLength : Half, 1e-6), InnerNow, 0.999);
+			}
 			if (B.HalfLength > 0.0 && Speed > 1e-9)
 			{
 				// (a tracer is laid along its true heading in the world, turned about it to face the eye, so the picture's
@@ -4806,7 +5096,8 @@ namespace TheaterFx
 		{
 			return 0;
 		}
-		const double Heart = B.HeartEnd >= 0.0 ? B.Heart + (B.HeartEnd - B.Heart) * F : B.Heart;
+		const double HeartOwn = B.HeartEnd >= 0.0 ? B.Heart + (B.HeartEnd - B.Heart) * F : B.Heart;
+		const double Heart = HeartOwn + (1.0 - HeartOwn) * HeartUp;
 		const double Turned = B.Turn + B.TurnRate * Age;
 		if (B.Form == Bit::Shape::Plate && B.bThrown)
 		{
@@ -4826,7 +5117,7 @@ namespace TheaterFx
 			B.bShown = true;
 			return 2;
 		}
-		Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * B.Rim, B.Inner, PointNow, TailNow, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, Turned, Floor, Through, Outward, Lift, TaperB);
+		Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * RimNow, InnerNow, PointNow, TailNow, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, Turned, Floor, Through, Outward, Lift, TaperB);
 		B.bShown = true;
 		return 1;
 	}
@@ -4947,6 +5238,8 @@ namespace TheaterFx
 		Spans.clear();
 		TwinBits = 0;
 		DustInSight = 0;
+		SeenTwin = 0;
+		size_t OffSight = 0;
 		const Vec RightLevel = Vec(Eye.Right.X, Eye.Right.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
 		for (const Bit& B : Bits)
 		{
@@ -4968,13 +5261,21 @@ namespace TheaterFx
 				// minutes of lying cases held places as specks. The pre-check, 07:20Z)
 				continue;
 			}
-			TwinBits += B.TwinPx > 0.0 ? 1u : 0u; // (a far twin is not counted either)
-			TwinBits += bCase ? 2u : 0u; // (a spent case's shadow and mouth)
+			const size_t Twins = (B.TwinPx > 0.0 ? 1u : 0u) + (bCase ? 2u : 0u); // (a far twin is not counted either; a spent case's shadow and mouth)
+			TwinBits += Twins;
 			DustInSight += B.Thin == 1 ? 1u : 0u;
+			// (wholly off the screen: counted in the room asked, as ever, so nothing is made that the whole field has no
+			// room for; but neither laid nor given a place, so what is in front of the eye is never cut for it)
+			const bool bOff = OffScreen(B, At, Eye);
+			OffSight += bOff ? 1u : 0u;
+			SeenTwin += bOff ? 0u : Twins;
 			// (counted first when the room is short: an oil fire's kept column, and every light: flames, flashes and
 			// tracers are few and are what an air fight is read by from far off, so its smoke is what goes. The
 			// pre-check, 05:14Z: by depth alone the far side of a fight went bare, flames and all)
-			Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward) - B.Nearer, B.bKeep || B.bLight });
+			if (!bOff)
+			{
+				Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward) - B.Nearer, B.bKeep || B.bLight });
+			}
 			if (B.OilId >= 0)
 			{
 				// (an oil column's puff, not yet faded far: how far across the screen the column reaches at its height)
@@ -5006,7 +5307,8 @@ namespace TheaterFx
 			}
 			Spans.resize(Put + 1);
 		}
-		InSight = Sorted.size();
+		SeenBits = Sorted.size();
+		InSight = SeenBits + OffSight;
 		HeldAtDraw = Bits.size();
 		DustSince = 0;
 		for (const Bit& B : Roots)
@@ -5084,6 +5386,27 @@ namespace TheaterFx
 		}
 		LastDrawn = Slot;
 		return Slot;
+	}
+
+	bool Battle::OffScreen(const Bit& B, const Vec& At, const View& Eye) const
+	{
+		if (Eye.HalfAcross <= 0.0)
+		{
+			return false;
+		}
+		// (a ball round it that holds all it can be laid as: its long way, its point and tail, its lumps, a trail's
+		// smear, a tracer's length, a low skirt's height, a size held up in pixels; then a quarter more and half a
+		// metre, and the view a tenth wider, for the eye's own shake)
+		const Vec D = At - Eye.Eye;
+		const double Z = D.Dot(Eye.Forward), X = std::fabs(D.Dot(Eye.Right)), Y = std::fabs(D.Dot(Eye.Up));
+		const double Ends = 1.0 + std::max({ B.Point, B.Tail, 0.0 });
+		const double Big = std::max(B.R0, B.R1);
+		double R = Big * std::max(1.0, B.Stretch) * Ends * (1.0 + 1.2 * std::max(0.0, B.Rough));
+		R += std::max(0.0, B.Smear) + std::max(0.0, B.HalfLength) * Ends + Big * std::max(0.0, B.Flatten);
+		R += (std::max(B.LeastPx, B.MostPx) + 2.0) * D.Length() / std::max(Eye.PixelsPerRadian, 1.0);
+		R = R * 1.25 + 0.5;
+		const double Ta = Eye.HalfAcross * 1.1, Tu = (Eye.HalfUp > 0.0 ? Eye.HalfUp : Eye.HalfAcross * 1.25) * 1.1;
+		return Z < -R || X - Ta * Z > R * (1.0 + Ta) || Y - Tu * Z > R * (1.0 + Tu);
 	}
 
 	double Battle::DayOf(const Rgb& HourLight) const
