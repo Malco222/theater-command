@@ -1016,15 +1016,23 @@ def build_kit(J, spec, body_ls, Z=None):
     po = dict(spec.get("pouches") or {})
     cells = {3: ((0.06, 0.0195), (0.103, 0.0195), (0.143, 0.0195)), 1: ((0.095, 0.042),), 0: ()}[po.get("front", 3)]
     L = Layer("pouches", "straps")
+    for k_ in [k_ for k_ in J if k_.startswith("pouch_pivot_")]:
+        del J[k_]
     for side in (1.0, -1.0):
+        hang = []
         for k, (y, hw) in enumerate(cells):
             a = math.atan2(y * side, 0.12)
             p0, n0 = project(tunic, [(cx + math.cos(a) * 0.2, math.sin(a) * 0.2, zb - 0.012)])
             p0, n0 = p0[0], n0[0]
+            hang.append(p0 + n0 * 0.012 + np.array((0.0, 0.0, 0.034)))
             R = frame_from(n0, (0.0, 0.0, 1.0))
             c = p0 + n0 * 0.028
             L.add(RoundBox(c, (0.021, hw, 0.04), 0.008, R), 0.0)
             L.add(RoundBox(c + R @ np.array((0.004, 0.0, 0.03)), (0.019, hw + 0.0015, 0.016), 0.006, R), 0.003)
+        if hang:
+            # (where this side's pouches hang from the belt: their bone's head, the hinge they swing out on; see seat_pouches)
+            J["pouch_pivot_" + ("l" if side > 0 else "r")] = tuple(float(v) for v in np.mean(hang, axis=0))
+            J["waist_centre"] = (float(cx), 0.0, float(zb))
     if po.get("rear"):
         p0, n0 = project(tunic, [(cx - 0.2, 0.0, zb - 0.012)])
         p0, n0 = p0[0], n0[0]
@@ -1460,6 +1468,10 @@ def bone_table(J):
     T += [("bolt", tuple(bolt), tuple(bolt + np.array((0.06, 0.0, 0.0))), "weapon")]
     hinge = g + np.array(WEAPONS["lmg"]["hinge"])
     T += [("bipod", tuple(hinge), tuple(hinge + np.array((-0.2, 0.0, 0.0))), "weapon")]
+    for s in ("l", "r"):
+        if "pouch_pivot_" + s in J:              # (each side's belt pouches, hung from the belt; see seat_pouches)
+            pv = np.array(J["pouch_pivot_" + s])
+            T += [("pouch_" + s, tuple(pv), tuple(pv + np.array((0.0, 0.0, -0.08))), "pelvis")]
     return T
 
 
@@ -1583,6 +1595,37 @@ def skin_like(piece, body, k=4):
             tot += w
         Wp[v.index] /= tot
     set_weights(piece, Wp, names, 4, 0.03)
+
+
+def pin_pouches(piece, J):
+    """The belt's front pouches ride their own bone, one a side (pouch_l, pouch_r: see seat_pouches), wholly; a pouch
+    behind (Japan's) keeps the body's weights."""
+    if "pouch_pivot_l" not in J and "pouch_pivot_r" not in J:
+        return
+    cx = J["waist_centre"][0]
+    groups, follow = {}, {}
+    names = {g.index: g.name for g in piece.vertex_groups}
+    for v in piece.data.vertices:
+        co = piece.matrix_world @ v.co
+        if co.x < cx - 0.05:
+            continue
+        s = "l" if co.y > 0.0 else "r"
+        if "pouch_pivot_" + s not in J:
+            continue
+        acc = follow.setdefault(s, {})
+        for g in v.groups:
+            acc[names[g.group]] = acc.get(names[g.group], 0.0) + g.weight
+        for gi in [g.group for g in v.groups]:
+            piece.vertex_groups[gi].remove([v.index])
+        if s not in groups:
+            groups[s] = piece.vertex_groups.get("pouch_" + s) or piece.vertex_groups.new(name="pouch_" + s)
+        groups[s].add([v.index], 1.0, "REPLACE")
+    # (how the body's own weights carried each side's pouches, on the whole: the bone's base, which pouch_base follows,
+    # so in an easy step they ride as before and only a fold moves them on from there)
+    for s, acc in follow.items():
+        top = sorted(acc.items(), key=lambda kv: -kv[1])[:3]
+        tot = sum(w for _, w in top)
+        J["pouch_follow_" + s] = {b: round(w / tot, 4) for b, w in top}
 
 
 def skin_rigid(piece, bone):
@@ -2076,6 +2119,9 @@ class Rig:
             dt = self.T0["thumb_" + s] - self.H0["thumb_" + s]
             kt = _n(np.cross(dt, n0))
             self._child(st, "thumb_" + s, R_axis(kt, P.get("thumb_" + s, 0.0)))
+        for s in ("l", "r"):                         # (the belt pouches ride the pelvis here; a clip seats them: seat_pouches)
+            if "pouch_" + s in self.H0:
+                self._child(st, "pouch_" + s)
         return st
 
     def arm_place(self, st, arm, side):
@@ -2193,7 +2239,7 @@ class Rig:
             pb.rotation_quaternion = q
             pb.location = basis.translation
             pb.keyframe_insert("rotation_quaternion", frame=frame, group=b)
-            if b in ("pelvis", "weapon", "bolt", "root"):
+            if b in ("pelvis", "weapon", "bolt", "root", "pouch_l", "pouch_r"):
                 pb.keyframe_insert("location", frame=frame, group=b)
         return W
 
@@ -3043,6 +3089,8 @@ def assemble(nation, weapon="rifle", seed=None):
             skin_rigid(ob, bone)
         else:
             skin_like(ob, body)
+            if name == "pouches":
+                pin_pouches(ob, J)
         attach(ob, arm)
         kit_objs.append(ob)
     skin_rigid(helmet, "head")
@@ -3104,6 +3152,8 @@ def assemble_sculpted(nation, weapon="rifle", J=None):
             skin_rigid(ob, bone)
         else:
             skin_like(ob, body)
+            if name == "pouches":
+                pin_pouches(ob, J)
         attach(ob, arm)
         kit_objs.append(ob)
     skin_rigid(helmet, "head")
@@ -4707,7 +4757,7 @@ def clip_state(rig, name, t, kind=None):
     """Any clip's solved pose at time t: from the capture, or from our keyed poses through the solver."""
     c = CLIPS[name]
     if c.get("mocap"):
-        return mo_state(rig, name, t, kind or getattr(rig, "weapon_kind", "rifle"))
+        return seat_apply(rig, mo_state(rig, name, t, kind or getattr(rig, "weapon_kind", "rifle")), name, t)
     P = c["fn"](t)
     P["weapon_kind"] = kind or P.get("weapon_kind", c["weapon"])
     if c["weapon"] == "lmg":
@@ -4723,7 +4773,7 @@ def clip_state(rig, name, t, kind=None):
         st["D"]["weapon"], st["H"]["weapon"], st["W"] = W[:3, :3], W[:3, 3].copy(), W
         st["D"]["bolt"] = st["D"]["weapon"]
         st["H"]["bolt"] = st["H"]["weapon"] + st["D"]["weapon"] @ (rig.H0["bolt"] - rig.H0["weapon"])
-    return st
+    return seat_apply(rig, st, name, t)
 
 
 def clip_stride(rig, name):
@@ -4939,6 +4989,223 @@ class Performance:
         return sorted(out, key=lambda x: x[0])
 
 
+# ================================================================================================ the belt pouches
+# The belt's front pouches hang from the belt on loops. In the deepest folds at the hips (creeping, kneeling, going
+# prone, cowering, the falls) the thigh comes up to the belly just where they hang; skinned like the body they sank
+# into it, up to their whole depth, and no weighting of the body's own bones keeps them out (soldier_GER measured,
+# 19 November: the torso's, the pelvis's, the thigh's and blends of them all left 7-10 cm). So each side's pouches
+# ride a bone of their own on the pelvis (pouch_l, pouch_r, its head at the belt above them), and every clip seats
+# them: through each clip the pouches of a side take one way out (one of POUCH_PATHS, the one that keeps them out of
+# him with the least going), and at each moment only as far along it as keeps no point of them more than POUCH_BAR
+# into his trunk and legs, and none deeper into an arm than it was. His arms do not push them: a hand going to a pouch
+# must not push it away, and a forearm that swings through one is the clip's to mend (arms_check and fit_check show
+# it), not the pouch's to dodge; but a pouch is not moved into an arm either. The
+# ways: tilted out on the belt (the bottom forward and up, as a thigh coming up pushes it), slid round the waist
+# toward the hip (squeezed out of the fold), the tilt and then the slide, or both at once. One way a clip, so
+# the pouches swing smoothly out and back: every point of the way is one the search tried.
+POUCH_PATHS = {                                  # s, 0 to 1 -> (tilt out on the belt, deg; slide toward the hip, deg; push out, m)
+    "tilt": lambda s: (90.0 * s, 0.0, 0.0),
+    "slide": lambda s: (0.0, 35.0 * s, 0.0),
+    "tilt_then_slide": lambda s: (90.0 * min(1.0, 2.0 * s), 35.0 * max(0.0, 2.0 * s - 1.0), 0.0),
+    "together": lambda s: (60.0 * s, 30.0 * s, 0.0),
+}
+# (No further: a pouch tipped past 90 degrees (lying on the thigh), slid past 35 round the waist or pushed off the belt
+# reads as torn loose, which is worse than one half pressed into the fold at the deepest moment of a cower, a fall or
+# a dive to the ground; there the step that leaves it least deep is taken.)
+POUCH_STEPS = tuple(k / 12.0 for k in range(13))
+POUCH_BAR = 0.012                                # (a point may sit this far into him: the fit check's misfit line)
+POUCH_RATE = 30                                  # seated this many times a second, linear between
+POUCH_PASS = ("clavicle", "upperarm", "lowerarm", "hand", "fingers", "thumb")   # (his arms are left out: see above)
+
+
+def pouch_move(rig, s, tilt, slide, push):
+    """(turn, head) of the pouch bone on side s, in the pelvis's rest frame, for a seat (degrees, degrees, metres)."""
+    pv = rig.H0["pouch_" + s]
+    c = np.array(rig.J["waist_centre"], float)
+    c[2] = pv[2]
+    out = pv - c
+    out[2] = 0.0
+    out = _n(out)
+    tang = _n(np.cross((0.0, 0.0, 1.0), out))
+    Rs = R_axis((0.0, 0.0, 1.0), slide * (1.0 if s == "l" else -1.0))
+    return Rs @ R_axis(tang, -tilt), c + Rs @ (pv + out * push - c)
+
+
+def pouch_base(rig, st, s):
+    """(turn, head) of the pouch bone on side s before any seat: as the body's weights carried those pouches on the
+    whole (J["pouch_follow_" + s], mostly the pelvis and the spine, a little of the thigh), made rigid."""
+    pv = rig.H0["pouch_" + s]
+    follow = rig.J.get("pouch_follow_" + s) or {"pelvis": 1.0}
+    M, H = np.zeros((3, 3)), np.zeros(3)
+    for b, w in follow.items():
+        M += w * st["D"][b]
+        H += w * (st["D"][b] @ (pv - rig.H0[b]) + st["H"][b])
+    U, _, Vt = np.linalg.svd(M)
+    D = U @ Vt
+    if np.linalg.det(D) < 0.0:
+        U[:, -1] *= -1.0
+        D = U @ Vt
+    return D, H
+
+
+def seat_apply(rig, st, name, t):
+    """A solved pose with the belt pouches on their base (pouch_base) and seated as the clip's seat says."""
+    seat = getattr(rig, "pouch_seat", {}).get(name, {})
+    for s in ("l", "r"):
+        if "pouch_" + s not in rig.H0:
+            continue
+        v = [float(np.interp(t, seat["t"], seat[s][:, k])) for k in range(3)] if s in seat else (0.0, 0.0, 0.0)
+        L, head = pouch_move(rig, s, *v)
+        D, H = pouch_base(rig, st, s)
+        st["D"]["pouch_" + s] = D @ L
+        st["H"]["pouch_" + s] = H + D @ (head - rig.H0["pouch_" + s])
+    return st
+
+
+def seat_pouches(m, names=None):
+    """Seat the belt pouches through the clips (see above): POUCH_RATE times a second, each side's pouches as far
+    along their clip's way as keeps no point of them more than POUCH_BAR inside his trunk and legs, then a step
+    early and a step late and eased, so they swing out before the fold closes and back after it opens. Kept on the rig
+    (rig.pouch_seat), which clip_state reads. Returns {clip: ({side: (way, how far along it at most)}, deepest left
+    in him as seated, cm)}. (Between the moments sampled a point can sit a little deeper: fit_check.py measures.)"""
+    from mathutils.bvhtree import BVHTree
+    rig = m["rig"]
+    pou = next((o for o in m["kit"] if o.name.split(".")[0] == "pouches"), None)
+    sides = [s for s in ("l", "r") if "pouch_" + s in rig.H0]
+    if pou is None or not sides:
+        return {}
+    body, bn = m["body"], rig.names
+    bi = {b: i for i, b in enumerate(bn)}
+    mw = np.array(body.matrix_world)
+    V0 = np.array([tuple(v.co) for v in body.data.vertices]) @ mw[:3, :3].T + mw[:3, 3]
+    W = np.zeros((len(V0), len(bn)))
+    gname = {g.index: g.name for g in body.vertex_groups}
+    for v in body.data.vertices:
+        for g in v.groups:
+            if gname[g.group] in bi:
+                W[v.index, bi[gname[g.group]]] += g.weight
+    W /= np.maximum(W.sum(1, keepdims=True), 1e-9)
+    used = [j for j in range(len(bn)) if W[:, j].any()]
+    tris = []
+    for p_ in body.data.polygons:
+        vs = list(p_.vertices)
+        tris += [(vs[0], vs[i], vs[i + 1]) for i in range(1, len(vs) - 1)]
+    tris = np.array(tris)
+    passing = np.array([bn[int(np.argmax(W[i]))].startswith(POUCH_PASS) for i in range(len(V0))])
+    passing = passing[tris].sum(1) >= 2
+    pw = np.array(pou.matrix_world)
+    gp = {g.index: g.name for g in pou.vertex_groups}
+    P = {s: [] for s in sides}
+    for v in pou.data.vertices:
+        for g in v.groups:
+            n = gp[g.group]
+            if n.startswith("pouch_") and n[-1] in P and g.weight > 0.5:
+                P[n[-1]].append(pw[:3, :3] @ np.array(tuple(v.co)) + pw[:3, 3])
+    P = {s: np.array(P[s]) for s in sides if P[s]}
+    moves = {s: {w: [pouch_move(rig, s, *f(x)) for x in POUCH_STEPS] for w, f in POUCH_PATHS.items()} for s in P}
+    rays = [Vector(d).normalized() for d in ((1.0, 0.013, 0.007), (0.011, 1.0, 0.017), (0.009, 0.014, 1.0))]   # (fit_check's)
+
+    def deepest(tree, Q):
+        """How deep the points sit in his trunk and legs, and in his arms (m)."""
+        worst = [0.0, 0.0]
+        for q in Q:
+            q = Vector(q)
+            loc, nrm, fi, d = tree.find_nearest(q, 0.3)
+            if loc is None or d <= POUCH_BAR or ((q - loc).dot(nrm) > 0.0 and d > 0.02):
+                continue
+            votes = 0
+            for r in rays:
+                k, x = 0, q.copy()
+                for _ in range(48):
+                    hit = tree.ray_cast(x, r)[0]
+                    if hit is None:
+                        break
+                    k, x = k + 1, hit + r * 1e-5
+                votes += k % 2
+            if votes >= 2:
+                k = 1 if passing[fi] else 0
+                worst[k] = max(worst[k], d)
+        return worst
+
+    seat, report = {}, {}
+    for name in (names or list(CLIPS)):
+        c = CLIPS[name]
+        L = c["long"]
+        ts = [k / POUCH_RATE for k in range(int(math.floor(L * POUCH_RATE + 1e-6)) + 1)]
+        if ts[-1] < L - 1e-6:
+            ts.append(L)
+        # every moment's flesh, and how far along each way each side's pouches must go (12 = the way's end; 13 = not
+        # even there, with how deep they stay)
+        need = {s: {w: [] for w in POUCH_PATHS} for s in P}
+        trees = []
+        for t in ts:
+            st = clip_state(rig, name, t, c["weapon"])
+            Vt = np.zeros_like(V0)
+            for j in used:
+                b = bn[j]
+                Vt += W[:, j:j + 1] * ((V0 - rig.H0[b]) @ st["D"][b].T + st["H"][b])
+            tree = BVHTree.FromPolygons([tuple(v) for v in Vt], tris.tolist())
+            frame_ = (tree, {s: pouch_base(rig, st, s) for s in P})
+            trees.append(frame_)
+            for s, pts in P.items():
+                Db, Hb = frame_[1][s]
+                pv = rig.H0["pouch_" + s]
+                at = lambda i, w: deepest(tree, ((pts - pv) @ moves[s][w][i][0].T + moves[s][w][i][1] - pv) @ Db.T + Hb)
+                d0, arms0 = at(0, "tilt")
+                if d0 <= POUCH_BAR:
+                    for w in POUCH_PATHS:
+                        need[s][w].append((0, 0.0))
+                    continue
+                for w in POUCH_PATHS:
+                    # out of his trunk and legs; then, within three steps more, out of the way of an arm if that can be
+                    # had (else the arm's to mend)
+                    # (where no step gets them out, the step that leaves them least deep, the base included)
+                    got, first, least = None, None, (d0, 0)
+                    for i in range(1, len(POUCH_STEPS)):
+                        if first is not None and i > first + 3:
+                            break
+                        d, da = at(i, w)
+                        least = min(least, (d, i))
+                        if d <= POUCH_BAR:
+                            first = i if first is None else first
+                            if da <= max(POUCH_BAR, arms0 + 0.002):
+                                got = (i, 0.0)
+                                break
+                    need[s][w].append(got or ((first, 0.0) if first is not None else (-1 - least[1], least[0])))
+        out, how, left = {"t": np.array(ts)}, {}, 0.0
+        for s in P:
+            # the way that leaves the least in him, then the shortest going
+            step = lambda i: i if i >= 0 else -1 - i
+            score = {w: (sum(1 for i, _ in need[s][w] if i < 0), max(d for _, d in need[s][w]),
+                         sum(step(i) for i, _ in need[s][w])) for w in POUCH_PATHS}
+            w = min(POUCH_PATHS, key=lambda k: score[k])
+            A = np.array([POUCH_STEPS[step(i)] for i, _ in need[s][w]])
+            n = len(A)
+            nb = lambda k: A[(k % n) if c["loop"] else min(max(k, 0), n - 1)]
+            A = np.array([max(nb(k - 1), nb(k), nb(k + 1)) for k in range(n)])                   # (out a step early, back a step late)
+            nb = lambda k: A[(k % n) if c["loop"] else min(max(k, 0), n - 1)]
+            A = np.maximum(A, np.array([0.25 * nb(k - 1) + 0.5 * nb(k) + 0.25 * nb(k + 1) for k in range(n)]))
+            if c["loop"]:
+                A[-1] = A[0] = max(A[0], A[-1])
+            out[s] = np.array([POUCH_PATHS[w](float(x)) for x in A])
+            how[s] = (w, float(A.max()))
+            # what is left in him as seated (at the moments sampled)
+            pv = rig.H0["pouch_" + s]
+            for k, (tree, base) in enumerate(trees):
+                Lm, head = pouch_move(rig, s, *out[s][k])
+                Db, Hb = base[s]
+                if A[k] > 0.0:
+                    left = max(left, deepest(tree, ((P[s] - pv) @ Lm.T + head - pv) @ Db.T + Hb)[0])
+        seat[name] = out
+        report[name] = ({s: (how[s][0], round(how[s][1], 2)) for s in how if how[s][1] > 0.0}, round(left * 100, 1))
+    rig.__dict__.setdefault("pouch_seat", {}).update(seat)
+    moved = {k: v for k, v in report.items() if v[0]}
+    print(f"    pouches seated: {len(moved)} of {len(report)} clips move them; " +
+          "; ".join(f"{k} " + ", ".join(f"{s} {w} {x}" for s, (w, x) in v[0].items()) + (f" (left {v[1]} cm)" if v[1] > POUCH_BAR * 100 else "")
+                    for k, v in moved.items()))
+    return report
+
+
 def bake_clips(m, names=None):
     """Every clip as its own action on the man's armature: the pose solved at every 60th of a second and written as
     plain keys (linear between), frames 0..N, so the last frame of a loop is its first again."""
@@ -4947,6 +5214,11 @@ def bake_clips(m, names=None):
     acts, short = {}, {}
     if rig.mrest is not None:
         fill_mocap_events(rig)
+    want = [n for n in (names or list(CLIPS)) if n not in getattr(rig, "pouch_seat", {})]
+    if want and any(b.startswith("pouch_") for b in rig.names):
+        t0 = time.time()
+        seat_pouches(m, want)
+        print(f"    (seated in {time.time() - t0:.0f} s)")
     for name in (names or list(CLIPS)):
         c = CLIPS[name]
         act = bpy.data.actions.new(name)
@@ -5165,14 +5437,15 @@ def _flip_q(Q):
     return np.array((Q.w, -Q.x, Q.y, -Q.z))
 
 
-MOVERS = ("pelvis", "weapon", "bolt")
+MOVERS = ("pelvis", "weapon", "bolt", "pouch_l", "pouch_r")     # (the bones whose heads move; the pouches': see seat_pouches)
 
 
 def clips_json(rig, rate=15):
     """Every clip sampled `rate` times a second from the same solver that keyed the actions: each bone's turn in its
     parent's frame (identity at rest) as a quaternion [t, w, x, y, z] in the game's axes, and for the bones that move
-    (pelvis, weapon, bolt) the shift of their head [t, x, y, z] in the parent's frame."""
+    (pelvis, weapon, bolt, the belt pouches) the shift of their head [t, x, y, z] in the parent's frame."""
     index = {b: i for i, b in enumerate(rig.names)}
+    movers = [b for b in MOVERS if b in rig.parent]
     out = {}
     for name, c in CLIPS.items():
         L = c["long"]
@@ -5180,7 +5453,7 @@ def clips_json(rig, rate=15):
         if times[-1] < L - 1e-6:
             times.append(L)
         rot = {b: [] for b in rig.names if rig.parent[b]}
-        move = {b: [] for b in MOVERS}
+        move = {b: [] for b in movers}
         prev = {}
         for t in times:
             st = clip_state(rig, name, t, c["weapon"])
@@ -5191,7 +5464,7 @@ def clips_json(rig, rate=15):
                     q = -q
                 prev[b] = q
                 rot[b].append([round(t, 4)] + [round(float(v), 5) for v in q])
-            for b in MOVERS:
+            for b in movers:
                 p = rig.parent[b]
                 d = st["D"][p].T @ (st["H"][b] - st["H"][p]) - (rig.H0[b] - rig.H0[p])
                 move[b].append([round(t, 4), round(float(d[0]), 4), round(float(-d[1]), 4), round(float(d[2]), 4)])
@@ -5203,7 +5476,7 @@ def clips_json(rig, rate=15):
             tr = {"part": index[b], "part_name": b}
             if not still:
                 tr["rot"] = rot[b]
-            if b in MOVERS and any(max(abs(v) for v in k[1:]) > 1e-4 for k in move[b]):
+            if b in movers and any(max(abs(v) for v in k[1:]) > 1e-4 for k in move[b]):
                 tr["move"] = move[b]
             if len(tr) > 2:
                 tracks.append(tr)
@@ -6200,11 +6473,13 @@ LIMITS = [
     "plain paint colours for the game to tint.",
     "lmg_burst only makes sense with the LMG (soldier_GER_lmg.glb); on a rifleman's file the rifle goes where the LMG would be.",
     "Every army's man has a game JSON (soldier_GER.json, soldier_POL.json, ...), all on the same skeleton and clips.",
-    "The belt's ammunition pouches are skinned like the body under them. In the deepest folds at the hips (creep, going "
-    "prone, falling forward, cowering) the thigh comes up against the belly and the front pouches sink into that crease, "
-    "up to their whole depth for a moment: no weighting of the existing bones keeps them out (measured: the torso's, the "
-    "pelvis's, the thigh's and blends of them). A pouch bone per side that swings out of the fold is the fix, held for "
-    "after release 1.",
+    "The belt's front pouches ride a bone a side (pouch_l, pouch_r) hinged at the belt, and each clip tips them out on it "
+    "(and slides them a little round the waist) as the thigh comes up, so kneeling, creeping and standing up they stay "
+    "out of him (the German 1.2 cm at most, the Pole 1.8 cm at a few points). At the deepest moment of cowering, going prone and falling forward the "
+    "thigh meets the belly where they hang: they tip as far as a pouch on a belt can (90 degrees, lying on the thigh) "
+    "and the rest is pressed into the fold for that moment (fewer points than when they were skinned like the body, "
+    "but a rigid pouch measures deeper there, up to 7 cm on the German and 8.4 cm on the Pole). A forearm still crosses a pouch in die_kneel, die_back, flee "
+    "and idle, as before: the clips' to mend.",
     "The motion-capture clips are carried from human.py's rig to ours by world turns (the joints are the same; the bone "
     "rolls differ), so they keep mocap.py's own flaws (see its README: the run is an easy jog, the advance is fast, the "
     "falls are reversed or slip-like takes). The hands hold the rifle by mocap.py's grip, the fingers 12 degrees more "
