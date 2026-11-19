@@ -57,10 +57,27 @@ def extra(put):
             for slot in getattr(o, "material_slots", []):
                 m = slot.material
                 hexc = look.get(m.name.split(".")[0]) if m else None
-                if hexc and m.node_tree:
-                    b = m.node_tree.nodes.get("Principled BSDF")
-                    b.inputs["Base Color"].default_value = (*hex_rgb(hexc), 1.0)
+                if hexc and m.node_tree and not m.node_tree.nodes.get("look_done"):
+                    nt = m.node_tree
+                    b = nt.nodes.get("Principled BSDF")
+                    base = b.inputs["Base Color"]
+                    if base.is_linked:
+                        # (a winter dress's near model carries COLOR_0, its seams' and wear's darkening, which the
+                        #  importer wires in as the base colour: the paint's colour times it)
+                        src = base.links[0].from_socket
+                        rgb = nt.nodes.new("ShaderNodeRGB")
+                        rgb.outputs[0].default_value = (*hex_rgb(hexc), 1.0)
+                        mul = nt.nodes.new("ShaderNodeMix")
+                        mul.data_type = "RGBA"
+                        mul.blend_type = "MULTIPLY"
+                        mul.inputs["Factor"].default_value = 1.0
+                        nt.links.new(rgb.outputs[0], mul.inputs["A"])
+                        nt.links.new(src, mul.inputs["B"])
+                        nt.links.new(mul.outputs["Result"], base)
+                    else:
+                        base.default_value = (*hex_rgb(hexc), 1.0)
                     b.inputs["Roughness"].default_value = 0.4 if m.name.startswith(("steel", "eye")) else 0.85
+                    nt.nodes.new("NodeFrame").name = "look_done"
         a.location = (x, y, 0.0)
         a.rotation_euler = (0.0, 0.0, math.radians(2.0 * (x % 3)))
         act = bpy.data.actions.get(clip) or next(ac for ac in bpy.data.actions if ac.name.startswith(clip))
