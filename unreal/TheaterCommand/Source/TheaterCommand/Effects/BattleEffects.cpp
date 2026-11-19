@@ -615,12 +615,14 @@ bool FBattleEffects::WantsTest()
 	return FParse::Param(FCommandLine::Get(), TEXT("TheaterBlastTest"));
 }
 
-void FBattleEffects::RunTest(const FVector& Centre)
+void FBattleEffects::RunTest(const FVector& Centre, const FString& GroundKind)
 {
 	// The test barrage, laid out in metres round Centre and played again every 24 s: each calibre on earth in a row
 	// across the view, then sand, snow and mud, a bomb further off, a hit on armour, a skip, guns firing tracer and a
-	// wreck burning.
+	// wreck burning. GroundKind: the kit's ground under Centre, which the tank gun's and the machine gun's dust take
+	// (art director 18:28Z: dust takes the colour of the ground it rose from); the shells keep their own grounds.
 	TestCentre = Centre;
+	TestGround = GroundKind.IsEmpty() ? FString(TEXT("earth")) : GroundKind;
 	TestStart = Time();
 	TestShots.Reset();
 	auto Add = [this](double When, int32 Kind, double X, double Y, const TCHAR* Size, const TCHAR* Ground)
@@ -695,14 +697,14 @@ void FBattleEffects::PlayTest(double Now)
 		{
 			const FVector Gun = Where + FVector(0.0, 0.0, 2.0 * UnitsPerMetre);
 			const FVector Target = TestCentre + FVector(12.0, 3.0, 1.0) * UnitsPerMetre;
-			Muzzle(Gun, (Target - Gun).GetSafeNormal(), Shot.Size);
+			Muzzle(Gun, (Target - Gun).GetSafeNormal(), Shot.Size, TestGround);
 			break;
 		}
 		case 4:
 		{
 			const FVector Gun = Where + FVector(0.0, 0.0, 0.6 * UnitsPerMetre);
 			const FVector Target = TestCentre + FVector(20.0, 20.0, 0.5) * UnitsPerMetre;
-			Shots(13, Gun, Target, Shot.Size, 25, 15.0f, TEXT("earth")); // (gun 13's belt starts on a tracer, so the first frames show one)
+			Shots(13, Gun, Target, Shot.Size, 25, 15.0f, TestGround); // (gun 13's belt starts on a tracer, so the first frames show one)
 			break;
 		}
 		case 5:

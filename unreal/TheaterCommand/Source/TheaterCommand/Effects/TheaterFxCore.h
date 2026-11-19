@@ -477,7 +477,7 @@ namespace TheaterFx
 			double BaseEvery = 0.0; // (the low black smoke rolling off the whole slick before it joins the column; 0: none)
 			double BaseFlat = 1.0; // (under 1: that roll hugs the water, this high for its width)
 			Span PallLife, PallR1, PallWindage, PallAlpha;
-			double PallEvery = 0.0, PallStretch = 1.0, PallStretchBy = 0.0, PallHold = 0.15, PallDrift = 0.0, PallRough = 0.0; Span PallLevel{ 1.0, 1.0 }; // (the long flat pall run out down the wind from the column's top; 0: none)
+			double PallEvery = 0.0, PallStretch = 1.0, PallStretchBy = 0.0, PallHold = 0.15, PallDrift = 0.0, PallRough = 0.0, PallRest = 0.0; Span PallLevel{ 1.0, 1.0 }; // (the long flat pall run out down the wind from the column's top; 0: none)
 			double SlickLong = 0.0, SlickWide = 0.0; // (over 0: the burning slick an oval, these shares of Reach long and wide, its heads all over it)
 			double FlameOdds = 1.0, FlamePoint = 0.9; // (flame_point: how sharp each tongue's tip, 1 a spike; each head's chance of a tongue each flame_every_s: a broken line of low flames)
 			double SunSide = 0.0; // (its sunward side lit toward Lit, so the column reads round)

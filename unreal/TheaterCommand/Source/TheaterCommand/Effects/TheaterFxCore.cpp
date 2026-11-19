@@ -1854,7 +1854,78 @@ namespace TheaterFx
 				const Span Life = Range(V + "life_s", 5.0, 8.0), R1 = Range(V + "r1_of_ring", 0.45, 0.65), Rise = Range(V + "rise_mps", 0.3, 0.7), Alpha = Range(V + "alpha", 0.7, 0.9);
 				const double Reach = Num(V + "reach_of_ring", 0.9), HideS = Num(V + "hide_s", 1.8), Haze = Num(V + "haze_alpha", 0.18), Flatten = Num(V + "flatten", 0.6);
 				const int NVeil = std::clamp(static_cast<int>(std::lround(std::clamp(Num(V + "puffs", 10.0), 0.0, 64.0) * std::sqrt(std::clamp(Ring_ / 6.0, 0.0, 16.0)))), 1, 160);
-				for (int I = 0; I < NVeil; ++I)
+				// (art director 18:28Z: the veil as the tank gun's cloud, in lumps and never in upright sheets. muzzle.veil.lumps
+				// times as many pieces, each a lump of its own size and thickness with a firm heart and a rough outline, lit as
+				// one cloud: every other one a mound lying on the ground, the rest thrown up to lump_up_m over it, thinner the
+				// higher, each lump_thick of the veil's own thickness. lump_tuft_share of them thin to the haze by hide_s and
+				// linger as the veil did; the others are gone soon after it. Its own dice. 0, or no such key: the sheets, piece
+				// for piece as before)
+				const double LumpsIs = Num(V + "lumps", 0.0);
+				const double LumpsBy = LumpsIs == LumpsIs ? std::min(4.0, std::max(0.0, LumpsIs)) : 0.0;
+				const int NLumps = LumpsBy > 0.0 ? std::clamp(static_cast<int>(std::lround(NVeil * LumpsBy)), 1, 200) : 0;
+				if (NLumps > 0)
+				{
+					auto Safe = [](double Is, double Least, double Most, double Usual) { return Is == Is ? std::min(Most, std::max(Least, Is)) : Usual; };
+					Dice DV(PlaceKey(At) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) ^ 0x5A2Dull);
+					const double SizeA = Safe(Num(V + "lump_r.0", 0.25), 0.05, 2.0, 0.25), SizeB = std::max(SizeA, Safe(Num(V + "lump_r.1", 0.5), 0.05, 2.0, 0.5));
+					const double UpA = Safe(Num(V + "lump_up_m.0", 0.2), 0.0, 10.0, 0.2), UpB = std::max(UpA, Safe(Num(V + "lump_up_m.1", 1.2), 0.0, 10.0, 1.2));
+					const double PaleUpV = Safe(Num(V + "lump_pale_up", 0.5), 0.0, 1.0, 0.5), TuftV = Safe(Num(V + "lump_tuft_share", 0.45), 0.0, 1.0, 0.45);
+					const double ThickA = Safe(Num(V + "lump_thick.0", 0.3), 0.0, 1.0, 0.3), ThickB = std::max(ThickA, Safe(Num(V + "lump_thick.1", 0.9), 0.0, 1.0, 0.9));
+					const double HideV = Safe(HideS, 0.2, 20.0, 1.8), LifeA = Safe(Life.A, 0.2, 60.0, 5.0), LifeB = std::max(LifeA, Safe(Life.B, 0.2, 60.0, 8.0));
+					const double R1A = Safe(R1.A, 0.01, 2.0, 0.45), R1B = std::max(R1A, Safe(R1.B, 0.01, 2.0, 0.65));
+					const double ReachV = Safe(Reach, -0.3, 3.0, 0.9), HazeV = Safe(Haze, 0.0, 0.95, 0.18), VeilK = Safe(Veil, 0.0, 4.0, 1.0);
+					const Vec MiddleV = Foot + FwFlat * (Ring_ * 0.3) + ZUp * 1.0;
+					for (int I = 0; I < NLumps; ++I)
+					{
+						const bool bLow = I % 2 == 0;
+						const double Forth = Ring_ * DV.U(-0.3, ReachV);
+						const double Wide = DV.Bell() * Ring_ * 0.4;
+						const double High = bLow ? 0.0 : DV.U();
+						const bool bTuft = DV.U() < TuftV;
+						const double Thick = ThickA + (ThickB - ThickA) * DV.U();
+						Bit B;
+						B.Born = Now + DV.U(0.0, 0.06);
+						B.From = Foot + FwFlat * Forth + Across * Wide + ZUp * (bLow ? 0.0 : UpA + (UpB - UpA) * High);
+						B.Vel = (FwFlat * 1.0 + Across * (Wide / std::max(Ring_, 1.0))).Unit(FwFlat) * DV.U(2.0, 5.0) + ZUp * (bLow ? 0.0 : DV.U(0.3, 1.5));
+						B.Drag = bLow ? 1.5 : 2.0;
+						B.Rise = bLow ? 0.0 : Safe(Rise.Pick(DV), 0.0, 5.0, 0.3);
+						B.Windage = Sand.Windage;
+						B.Life = bTuft ? LifeA + (LifeB - LifeA) * DV.U() : HideV * DV.U(1.0, 1.4) * (1.0 - 0.3 * High);
+						B.R0 = 0.1 * Ring_;
+						B.R1 = Ring_ * (R1A + (R1B - R1A) * DV.U()) * (SizeA + (SizeB - SizeA) * DV.U());
+						B.Grow = 0.3;
+						if (bLow)
+						{
+							const double Heading = DV.U(0.0, 2.0 * Pi);
+							B.Along = Vec(std::cos(Heading), std::sin(Heading), 0.0);
+							B.Stretch = DV.U(1.3, 1.8);
+						}
+						B.Col = Sand.Low * DV.U(0.92, 1.06);
+						B.Col2 = Sand.High * DV.U(0.95, 1.05);
+						B.Alpha = std::min(0.95, Safe(Alpha.Pick(DV), 0.0, 0.95, 0.8) * VeilK * Thick * (1.0 - PaleUpV * High));
+						B.FadeIn = 0.04;
+						B.Hold = bTuft ? 0.25 : 0.5;
+						if (bTuft)
+						{
+							B.HazeBy = HideV;
+							B.HazeAlpha = std::min(B.Alpha, HazeV * VeilK);
+						}
+						B.Heart = BillowHeart;
+						B.Inner = BillowInner;
+						B.Rough = BillowRough;
+						B.LumpSeed = static_cast<uint32_t>(DV.U() * 1073741823.0);
+						B.Turn = DV.U(0.0, 2.0 * Pi);
+						B.Centre = MiddleV;
+						B.CloudShade = BillowShade;
+						B.CloudR = Ring_ * 0.4;
+						B.CentreRise = 0.2;
+						B.Rest = BillowRest;
+						B.Thin = 2;
+						B.Origin = At - FwFlat * 1.5; // (the gun's body, behind its muzzle)
+						Bits.push_back(B);
+					}
+				}
+				for (int I = 0; I < NVeil && NLumps == 0; ++I)
 				{
 					const double Forth = Ring_ * D.U(-0.3, Reach);
 					const double Wide = D.Bell() * Ring_ * 0.4;
@@ -4295,6 +4366,7 @@ namespace TheaterFx
 		R.PallLevel = Range(P + "pall_level", 1.0, 1.0);
 		R.PallDrift = std::max(0.0, Num(P + "pall_drift_mps", 0.0));
 		R.PallRough = std::max(0.0, Num(P + "pall_rough", 0.0));
+		R.PallRest = std::min(2.0, std::max(0.0, Num(P + "pall_rest", 0.0)));
 		R.SlickLong = Num(P + "slick_long", 0.0);
 		R.SlickWide = Num(P + "slick_wide", 0.0);
 		R.FlameOdds = Clamp01(Num(P + "flame_odds", 1.0));
@@ -4532,6 +4604,8 @@ namespace TheaterFx
 			{
 				B.Rough = R.PallRough;
 			}
+			// (seen from the air, a wide old puff that has wandered down would be cut by the sea along a straight line)
+			B.Rest = R.PallRest;
 		}
 		Bits.push_back(B);
 	}
@@ -4560,6 +4634,10 @@ namespace TheaterFx
 		const Rgb Flame = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
 		const Rgb Heart = Rgb::FromPicture(250, 196, 110);
 		const Rgb Ember = Rgb::FromPicture(110, 35, 15);
+		// (fire.smoke_rest: a fire's smoke rests on the ground or the sea under it, see Bit::Rest. A big fire's puffs grow
+		// far wider than they stand high (a 40 m fire's to 160 m, 40 m up): from the air the sea cut each along a straight
+		// level line, build 1746's Pearl Harbor. 0, or no such key: as before)
+		const double SmokeRest = std::min(2.0, std::max(0.0, Num("fire.smoke_rest", 0.0)));
 		for (Source& S : Sources)
 		{
 			// (after a long pause, such as the game being paused, only the last second is made up)
@@ -4684,6 +4762,7 @@ namespace TheaterFx
 					B.FadeIn = 0.3;
 					B.Hold = 0.1;
 					B.Heart = 0.45;
+					B.Rest = SmokeRest;
 					Bits.push_back(B);
 					S.NextSmoke += bFlames ? 0.12 : 0.35;
 				}
@@ -4707,6 +4786,7 @@ namespace TheaterFx
 					B.FadeIn = 0.4;
 					B.Hold = 0.1;
 					B.Heart = 0.45;
+					B.Rest = SmokeRest;
 					Bits.push_back(B);
 					S.NextSmoke += 0.5;
 				}

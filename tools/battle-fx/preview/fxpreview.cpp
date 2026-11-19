@@ -427,7 +427,17 @@ namespace
 		{
 			// (one fire, Shot its kind, FX_REACH metres of oil, seen from FX_DIST metres off at FX_EYE_H metres)
 			const double Reach = EnvNum("FX_REACH", 100.0), Dist = EnvNum("FX_DIST", 1200.0);
-			Fx.OilFire(0.0, 1, Vec(0.0, 0.0, 0.0), Reach, Shot.c_str(), 0.0, Since);
+			if (const char* BurnIs = std::getenv("FX_BURN"))
+			{
+				// (FX_BURN=metres across: a plain fire of that size in place of the oil (Burn, as a ship hit's in the air
+				// battle), its base FX_BURN_UP m over the sea. It has no Since: ask for a frame late enough, 450 is 15 s)
+				Fx.Burn(0.0, Vec(0.0, 0.0, EnvNum("FX_BURN_UP", 0.0)), std::atof(BurnIs), 900.0);
+				Fx.SetDrawBeyond(Fx.AirBeyond()); // (as the air scene does: UseAirDistance)
+			}
+			else
+			{
+				Fx.OilFire(0.0, 1, Vec(0.0, 0.0, 0.0), Reach, Shot.c_str(), 0.0, Since);
+			}
 			Cam.Eye = Vec(-0.3, -1.0, 0.0).Unit() * Dist + Vec(0.0, 0.0, EnvNum("FX_EYE_H", 8.0));
 			Cam.Forward = (Vec(0.0, 0.0, EnvNum("FX_LOOK_H", 150.0)) - Cam.Eye).Unit();
 		}

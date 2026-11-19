@@ -272,6 +272,35 @@ before the burst, with the test's wind (`FX_TANK_UP=1` lifts its muzzle a metre,
 that many in a row across the view, `FX_BARRAGE_STEP` m and `FX_BARRAGE_GAP` s apart; with the wind (`FX_WIND_X`,
 `FX_WIND_Y`) toward the eye, the eye stands downwind in their dust.
 
+## Lighter burst dirt, smoke that stands on the sea, the desert veil in lumps (after build 1746)
+
+The art director's round of 18:28Z, on build 1746's stills.
+
+- **A burst that reads as earth.** From 60 m, on its shadow side, a 105's cloud read as an ink blot (smoke 36,30,24).
+  It was not `lit_gain`'s steps (the crops held 40 to 48 levels, and the kit gave the same dark means at gain 1.5):
+  it was the paints sinking through the grade. The dark grounds' `paint.soil` and `paint.smoke` (earth, snow, mud,
+  woods) and the cloud's top (`burst.smoke.colour_top`) are now written values, as the clods are, aimed with
+  `game_curve.py write` to show as they were painted; `paint.heavy` stays, so a dark heart sits inside lighter brown
+  dust. Through the game's curve the cloud's dense half on the shadow side goes from 44,37,28 to 61,53,44 at 2 s and
+  from 58,48,35 to 77,67,55 at 6 s. The burst-black share at 0.4 s (under luma 60, the art director's 15% rule),
+  through the curve: earth 41% (was 46%), woods 38%, mud 38%, sand 17%; snow 8% (was 12%).
+- **Smoke that stands on the sea.** `fire.smoke_rest` (1): a plain fire's smoke (`Burn`) rests on the ground or sea
+  under it (`Bit::Rest`). Its puffs grow to two to four times the fire's width while climbing only 20 to 30 m, so a
+  40 m ship fire's stood half under the sea, and from the air the sea cut each along a straight level line (Pearl
+  Harbor, build 1746). A small fire's smoke already rides higher than it is wide and does not move.
+  `oil_fires.<kind>.pall_rest` (1.3): the same for the oil fire's pall, should a puff wander down.
+- **The desert veil in lumps.** `muzzle.veil.lumps` (1): the veil's ten upright sheets become as many lumps, each
+  `lump_r` of a sheet's radius across and `lump_thick` of its thickness, with the billows' firm heart and rough
+  outline; every other one a mound on the ground, the rest up to `lump_up_m` over it and thinner the higher.
+  `lump_tuft_share` of them thin to the haze and linger as the veil did. Twice the count and size made a pale wash
+  over the lower frame.
+- **The test's ground.** `RunTest(Centre, GroundKind)`: the test barrage's tank gun and machine gun raise the dust of
+  the ground they stand on (pale on Idaho's dry plain, "sand"); the shells keep their own test grounds.
+
+Each is behind its recipe key: the last recipe draws as before on this code, frame for frame. Preview:
+`FX_BURN=40 FX_DIST=1462 FX_EYE_H=651 FX_LOOK_H=0 ./fxpreview recipe.txt out oil sunk 450 1440x893` is a 40 m plain
+fire on the sea from the air battle's eye (`FX_BURN_UP` m its base over the sea).
+
 ## Oil fires at sea
 
 ```cpp
