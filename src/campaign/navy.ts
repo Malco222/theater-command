@@ -576,6 +576,20 @@ export const liftLeft = (g: Game, nat: string): number => Math.max(0, g.nations[
 /** Counts corps a nation's shipping has carried this month. */
 export const useLift = (g: Game, nat: string, n = 1): void => { g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + n; };
 
+/**
+ * By the book a dated landing sails on the record's own shipping (rider b626 to ruling 234): the record shows the
+ * shipping sufficed, since those landings were made on those dates. What this country ships or lands inside the call
+ * draws nothing from the month's lift and is not refused for want of it; its staff's own landings use the lift as
+ * before. Asked by the book's table (stations.ts) and for the landings of the book's great blow (ai.ts), at the
+ * history dial's first two stops; by nothing else.
+ */
+let ownShips: string | null = null;
+export function onOwnShipping<T>(nat: string, f: () => T): T {
+  const was = ownShips;
+  ownShips = nat;
+  try { return f(); } finally { ownShips = was; }
+}
+
 /** Takes corps across the given seas and returns the men lost to enemy ships and aircraft on the way. */
 function crossing(g: Game, cs: Corps[], path: number[], surprise: boolean, landingAt?: Region): number {
   if (surprise) return 0;
@@ -617,7 +631,7 @@ export function whyNotShip(g: Game, c: Corps, to: Region, rides = false): string
   if (steep) return steep;
   if (friendlyUnits(g, to, c.nat).length >= STACK) return `${to.name} has no room for another corps.`;
   // (A row that goes with a corps already shipped there this month sails in that corps' lift: `rides`, rider b604 to ruling 234.)
-  if (!rides && liftLeft(g, c.nat) < 1) return 'All the shipping is in use this month.';
+  if (!rides && ownShips !== c.nat && liftLeft(g, c.nat) < 1) return 'All the shipping is in use this month.';
   if (!seaPath(g, c.nat, from, to)) return 'The enemy holds the sea between.';
   return null;
 }
@@ -627,7 +641,7 @@ export function shipCorps(g: Game, c: Corps, to: Region, rides = false): boolean
   if (whyNotShip(g, c, to, rides)) return false;
   const path = seaPath(g, c.nat, g.regions[c.reg], to)!;
   const lost = crossing(g, [c], path, false);
-  if (!rides) g.flags[liftKey(g, c.nat)] = (g.flags[liftKey(g, c.nat)] ?? 0) + 1;
+  if (!rides && ownShips !== c.nat) g.flags[liftKey(g, c.nat)] = (g.flags[liftKey(g, c.nat)] ?? 0) + 1;
   relocate(g, c, to);
   c.ap = 0;
   g.week = 2;
@@ -711,7 +725,8 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (allied(g, nat, to.ctrl) || !atWar(g, nat, to.ctrl)) return `${to.name} is not enemy ground.`;
   if (cs.length > STACK) return `No more than ${STACK} corps can go ashore in one place.`;
   // (A row that goes with a corps of the force sails in that corps' lift: rider b604 to ruling 234, stations.ts.)
-  if (liftLeft(g, nat) < cs.length - riding(g, cs).length) return liftLeft(g, nat) ? `There is shipping for only ${liftLeft(g, nat)} more corps this month.` : 'All the shipping is in use this month.';
+  // (Nor is a dated landing of the book, on the record's own shipping: rider b626.)
+  if (ownShips !== nat && liftLeft(g, nat) < cs.length - riding(g, cs).length) return liftLeft(g, nat) ? `There is shipping for only ${liftLeft(g, nat)} more corps this month.` : 'All the shipping is in use this month.';
   // (The landing ships in the Pacific carry no more of a country's troops to an enemy shore there than the record's did:
   // a second count, read for the Pacific's ground alone. Rider b614 to ruling 234; pacific.ts shoreLift. Not read with
   // the far side off.)
@@ -1082,7 +1097,7 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
     // (What the Pacific's landing ships loaded is counted as it sailed, before the crossing's losses: pacific.ts.)
     useShoreLift(g, nat, to, worthOf(cs));
     lostAtSea = crossing(g, cs, path, surprise, to);
-    g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + cs.length - rode.length;
+    if (ownShips !== nat) g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + cs.length - rode.length;
     for (const z of to.seas) g.flags[`landed:${z}:${nat}`] = g.turn;
     // (And the ground itself, for the coast watch: a landing on this enemy's homeland is not news to come.)
     g.flags[`landedAt:${to.id}:${nat}`] = g.turn;

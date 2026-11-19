@@ -50,7 +50,7 @@ import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dr
 import { TOWNS, townName, townSize, worthOf } from './towns';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
-import { stopOf } from './history';
+import { raisedQuality, stopOf } from './history';
 import { clientWar, tiedPair } from './far';
 import { demandInstead, keepersOf, keptForces, pacificWar } from './pacific';
 
@@ -742,7 +742,7 @@ export function computeSupply(g: Game): void {
       // In a side theatre the allies share their shipping: a port any of them can still reach feeds them all.
       if (!quay && r.theatre >= 0 && r.port) quay = (mates ??= shippers(id)).some((a) => { const theirs = lanesOf(a); return !!theirs && r.seas.some((z) => theirs[z]); });
       // A fortified port overseas keeps stores: with the sea behind it closed, it feeds its garrison a while longer.
-      if (!shut && r.overseas && r.port && r.fort) {
+      if (!shut && r.overseas && r.port && worksKept(r)) {
         if (quay) g.flags[`stores:${r.id}`] = g.turn;
         else if (g.turn - (g.flags[`stores:${r.id}`] ?? -99) <= DESERT.stores) quay = true;
       }
@@ -839,6 +839,22 @@ function reachInto(g: Game, id: string, ok: Uint8Array): Float32Array {
   for (let i = 0; i < d.length; i++) if (d[i] >= 1e6) d[i] = 0;
   return d;
 }
+
+/**
+ * A place's works set aside for a fight being resolved (the book's record fights: stations.ts, rider b580). The
+ * set-aside holds for the fight only, never for supply or stores, at every place and stop (rider b628 to ruling 234):
+ * what feeds a garrison reads the works through `worksKept`, so a supply picture drawn in the middle of the fight
+ * still finds the stores of a fortified port behind them.
+ */
+let asideAt = -1, asideWorks: Region['fort'] = null;
+export function withWorksAside<T>(r: Region, f: () => T): T {
+  const fort = r.fort, wasAt = asideAt, wasWorks = asideWorks;
+  if (fort) { asideAt = r.id; asideWorks = fort; }
+  r.fort = null;
+  try { return f(); } finally { r.fort = fort; asideAt = wasAt; asideWorks = wasWorks; }
+}
+/** A place's works as its stores and its supply know them: its own, set aside for a fight or not. */
+export const worksKept = (r: Region): Region['fort'] => r.fort ?? (r.id === asideAt ? asideWorks : null);
 
 export function ensureSupply(g: Game): void {
   if (g.supplyDirty) computeSupply(g);
@@ -938,10 +954,16 @@ export function weekOf(c: Corps, cost: number): number {
   return clamp(Math.ceil(((c.apMax - c.ap + cost) / Math.max(1, c.apMax)) * 4), 1, 4);
 }
 
+/**
+ * What a corps' army is worth man for man: the figure of the country it answers to, or by the book that of the army
+ * that raised it, whoever's flag it stands under (history.ts raisedQuality; rider b626 to ruling 234).
+ */
+const armyQuality = (g: Game, c: Corps): number => raisedQuality(g, c) ?? g.nations[c.nat].quality;
+
 export function corpsBase(g: Game, c: Corps): number {
   // Tanks and lorries, or rifles and guns: a corps is as good as the designs it has been issued.
   const kit = techMul(g, c.nat, c.kind === 'arm' || c.kind === 'mot' ? 'armour' : 'infantry');
-  return c.divs * c.str * Math.sqrt(0.15 + 0.85 * c.org) * g.nations[c.nat].quality * (0.85 + 0.4 * c.xp) * (c.supplied ? 1 : cmdCutOff(g, c)) * kit;
+  return c.divs * c.str * Math.sqrt(0.15 + 0.85 * c.org) * armyQuality(g, c) * (0.85 + 0.4 * c.xp) * (c.supplied ? 1 : cmdCutOff(g, c)) * kit;
 }
 
 /** Share of the usual losses a defender takes when the attack is beaten off. */
@@ -1330,7 +1352,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     // Training and experience decide as many fights as numbers do: said in words, division for division.
     const grade = (cs: Corps[]): { worth: number; army: number; xp: number } => {
       let w = 0, worth = 0, army = 0, xp = 0;
-      for (const c of cs) { const k = c.divs * c.str; w += k; worth += k * g.nations[c.nat].quality * (0.85 + 0.4 * c.xp); army += k * g.nations[c.nat].quality; xp += k * c.xp; }
+      for (const c of cs) { const k = c.divs * c.str; w += k; worth += k * armyQuality(g, c) * (0.85 + 0.4 * c.xp); army += k * armyQuality(g, c); xp += k * c.xp; }
       return w > 0 ? { worth: worth / w, army: army / w, xp: xp / w } : { worth: 1, army: 1, xp: 0 };
     };
     const ours = grade(attackers), theirs = grade(defenders);

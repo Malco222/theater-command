@@ -21,7 +21,7 @@
 
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { GUNS_ALONE, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, type Assessment } from './game';
+import { GUNS_ALONE, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksKept, type Assessment } from './game';
 import { farGuard } from './economy';
 import { armyOf } from './joint';
 import { closedTo, seaOpenAt } from './navy';
@@ -214,7 +214,8 @@ export const fieldWalls = (g: Game, r: Region, eased: number, open: number): num
 export const townHeld = (g: Game, r: Region): boolean => garrisonOf(r).length > 0 || guardOf(g, r) > 0;
 
 /** Months the town feeds its defenders once it is closely invested. */
-export const storesOf = (g: Game, r: Region): number => SIEGE.stores[townSize(g, r)] + (r.fort ? SIEGE.fortStores * r.fort.lv : 0);
+// (A place's works set aside for a fight still keep its stores: game.ts worksKept, rider b628 to ruling 234.)
+export const storesOf = (g: Game, r: Region): number => SIEGE.stores[townSize(g, r)] + (worksKept(r)?.lv ?? 0) * SIEGE.fortStores;
 
 /** Months the town has been closely invested. */
 export const monthsShut = (g: Game, r: Region): number => g.flags[`sgm:${r.id}`] ?? 0;

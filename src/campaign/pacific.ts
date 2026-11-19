@@ -391,7 +391,8 @@ export function keptForces(g: Game, nat: string, by: string, leave?: (r: Region)
     if (keeper) kept.set(r.id, keeper);
   }
   if (!kept.size) return kept;
-  for (const c of g.corps) if (c.nat === nat && !c.dead && kept.has(c.reg)) { c.nat = kept.get(c.reg)!; c.hold = true; }
+  // (A kept corps is still its own army's: by the book it fights at that army's figure. Rider b626 to ruling 234.)
+  for (const c of g.corps) if (c.nat === nat && !c.dead && kept.has(c.reg)) { c.raised ??= nat; c.nat = kept.get(c.reg)!; c.hold = true; }
   for (const f of g.fleets) if (f.nat === nat && kept.has(f.base)) f.nat = kept.get(f.base)!;
   // (A kept air group still reads its own country's row for what it is kept at and how it flies: air.ts rowOf.)
   for (const f of g.airFleets) if (f.nat === nat && kept.has(f.base)) { f.raised ??= nat; f.nat = kept.get(f.base)!; }

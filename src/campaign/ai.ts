@@ -15,7 +15,7 @@ import { blocked, blowBridges } from './rivers';
 import { groundRules, isFoot } from './ground';
 import { SUPPORT } from './support';
 import { aiBridges, aiEngineers } from './engineers';
-import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, shipsFor, useLift } from './navy';
+import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, onOwnShipping, planLanding, rebase, seaPath, shipCount, shipsFor, useLift } from './navy';
 import { shoreAI } from './fleets';
 import { plannedStrike } from './carriers';
 import { readinessMonth } from './readiness';
@@ -27,7 +27,7 @@ import { beyondEurope, enemyAtTheDoor, oceanShares, overseasOf, shoreOf, type Ov
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { frontArmys, lineAny, lineGives, lineLeaves, lineShut } from './line';
-import { alongside, bookAttacks, bookFleets, bookStations, ceilinged, goesWith, ridersOf } from './stations';
+import { alongside, bookAttacks, bookFleets, bookSails, bookStations, ceilinged, goesWith, ridersOf } from './stations';
 import { hashString } from '../core/rng';
 import { GREAT, SIEGE, arrive, besieged, feeders, fieldCtrl, garrison, garrisonOf, greatCity, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
@@ -561,7 +561,8 @@ function mainCampaign(g: Game, nat: string): void {
   if (!n.atWar.length && !(open && ph?.posture === 'redeploy')) return;
   // (By the book the record's big attacks go in on their month, ahead of the plan's own landings and the staff's asks: stations.ts.)
   bookAttacks(g, nat);
-  if (ph?.landings) landings(g, nat, ph);
+  // (And the landings of the book's great blow sail on the record's own shipping, as the table's do: rider b626.)
+  if (ph?.landings) { if (bookSails(g, nat)) onOwnShipping(nat, () => landings(g, nat, ph)); else landings(g, nat, ph); }
   if (open) { descent(g, nat); hop(g, nat, ph); ferry(g, nat); reinforce(g, nat); }
   if (ph?.release) release(g, nat, ph.release);
   const posture = ph?.posture ?? 'defend';

@@ -333,6 +333,12 @@ export interface Corps extends Storied {
   pressed?: boolean;
   /** It took over fieldworks left on this ground this month (the grand campaign): it keeps them at the month's end though it marched. */
   relief?: boolean;
+  /**
+   * The country that raised it, where it now answers to another: a fallen country's corps on far ground that passed
+   * into keeping (pacific.ts keptForces). By the book it still fights at the figure of the army that raised it
+   * (history.ts raisedQuality; rider b626 to ruling 234). No corps carries it with the far side off.
+   */
+  raised?: string;
   /** The book has stationed it (stations.ts; ruling 234's rider b568): the months of works the record gives it where it stands, and it digs no more. No corps carries it with the far side off. */
   bookWorks?: number;
   /** The book counts it a coast work (stations.ts; rider b579): fortress troops whose figure is in the record's own for the place. It adds nothing to a field fight that outflanks the place's works. No corps carries it with the far side off. */
