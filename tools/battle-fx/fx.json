@@ -1661,5 +1661,179 @@
    "lamp": 0.35,
    "lamp_reach_m": 60
   }
+ },
+ "oil_fires": {
+  "_how": "Art director's grit direction (19 November): ships burn black oil smoke; 2 to 4 dark columns on the horizon. Pearl Harbor and Midway mornings were mostly clear, so their grit is this smoke. One fire to each ship lost in a sea battle (the zone's kind: sunk = the oil burning where she went down, burning = where she left the line on fire), fixed where it is, to the fight's end, with the scene's one wind for every column. Its column is kept when the screen is full (keep), so a far column never blinks out.",
+  "draw_beyond_m": 20000,
+  "sunk": {
+   "_rule": "a slick of burning oil on the sea: low ragged flames on a few heads of the slick, and over them one fat black column standing up from the water, bending over down the wind as it climbs and cools, browner and thinner aloft",
+   "heads": [
+    3,
+    5
+   ],
+   "head_spread": 0.6,
+   "head_r": [
+    0.15,
+    0.3
+   ],
+   "flame_up_m": 0.0,
+   "flame_every_s": 0.1,
+   "flame_r_m": [
+    2.0,
+    4.5
+   ],
+   "flame_tall": [
+    2.0,
+    3.5
+   ],
+   "flame_life_s": [
+    0.35,
+    0.7
+   ],
+   "column_every_s": 0.6,
+   "column_life_s": [
+    60,
+    80
+   ],
+   "rise_mps": [
+    4,
+    6
+   ],
+   "burst_mps": [
+    22,
+    30
+   ],
+   "burst_drag": 0.1,
+   "slow_mps2": 0.03,
+   "base_every_s": 0.5,
+   "base_life_s": [
+    8,
+    12
+   ],
+   "base_rise_mps": [
+    2.5,
+    4.0
+   ],
+   "base_r": [
+    0.15,
+    0.3
+   ],
+   "base_alpha": [
+    0.8,
+    0.95
+   ],
+   "windage": [
+    1.0,
+    1.6
+   ],
+   "r0": [
+    0.25,
+    0.4
+   ],
+   "r1": [
+    0.6,
+    1.0
+   ],
+   "grow": 0.6,
+   "alpha": [
+    0.75,
+    0.95
+   ],
+   "hold": 0.5,
+   "heart": 0.7,
+   "rough": 0.35,
+   "cool": 1.0,
+   "colour": [
+    24,
+    22,
+    21
+   ],
+   "colour_top": [
+    64,
+    60,
+    57
+   ],
+   "lamp": 0.25,
+   "lamp_reach": 2.0,
+   "twin_px": 160,
+   "keep": 1
+  },
+  "burning": {
+   "_rule": "a ship on fire leaving the line, as the sea battle's 'burning' zone marks it: fires on the water where she went (or on her deck, if the caller gives the deck's height) and one narrower black column, a little greyer than burning oil",
+   "heads": [
+    2,
+    4
+   ],
+   "head_spread": 0.35,
+   "head_r": [
+    0.1,
+    0.2
+   ],
+   "flame_up_m": 0.0,
+   "flame_every_s": 0.1,
+   "flame_r_m": [
+    2.5,
+    5.0
+   ],
+   "flame_tall": [
+    2.5,
+    4.0
+   ],
+   "flame_life_s": [
+    0.35,
+    0.7
+   ],
+   "column_every_s": 0.7,
+   "column_life_s": [
+    50,
+    70
+   ],
+   "rise_mps": [
+    3.5,
+    5
+   ],
+   "burst_mps": [
+    14,
+    20
+   ],
+   "burst_drag": 0.12,
+   "slow_mps2": 0.03,
+   "base_every_s": 0.0,
+   "windage": [
+    1.0,
+    1.5
+   ],
+   "r0": [
+    0.18,
+    0.28
+   ],
+   "r1": [
+    0.45,
+    0.8
+   ],
+   "grow": 0.6,
+   "alpha": [
+    0.7,
+    0.9
+   ],
+   "hold": 0.5,
+   "heart": 0.65,
+   "rough": 0.35,
+   "cool": 1.0,
+   "colour": [
+    32,
+    30,
+    29
+   ],
+   "colour_top": [
+    78,
+    75,
+    72
+   ],
+   "lamp": 0.2,
+   "lamp_reach": 1.5,
+   "twin_px": 160,
+   "keep": 1
+  }
  }
 }

@@ -90,6 +90,26 @@ Names given to the kit (size, ground, calibre, gun, weapon, air gun kind) are ma
 `howitzer`, `snow`, `bomb250`, `hmg`. The wrapper lowers them, so `Snow` finds snow; a name the recipe does not have
 falls back (an unknown ground to earth, an unknown size to how105, an unknown air gun to hmg).
 
+## Oil fires at sea
+
+```cpp
+// a ship lost in a sea battle: one call for each smoke zone (id, x, y, r) when the scene opens or she goes down
+Blasts->OilFire(Zone.Id, ZoneWorld, Zone.R, TEXT("sunk"), /*Until*/ FightEnd, /*Since*/ BattleNow - Zone.At);
+Blasts->OilStop(Zone.Id); // only if it should go out before the fight ends
+```
+
+- `sunk`: oil burning on the sea where she went down. A few heads of low ragged flame on the slick, low black smoke
+  rolling off the whole slick, and one fat black column standing up off the water, bending over down the wind as it
+  climbs and cools, browner and thinner aloft (about 500 m tall for a 100 m slick). `burning`: where a ship on fire
+  left the line, a narrower, greyer column; give WorldAt her deck's height to put the flames on her.
+- One wind for every column: `SetWind`. `Since` grows the column at once for a scene that opens mid-fight.
+- The column is kept when the screen is full (`oil_fires.<kind>.keep`) and drawn out to `oil_fires.draw_beyond_m`
+  (20 km), so 2 to 4 far columns stay on the horizon. About 130 puffs for a sunk ship's column, 85 for a burning one.
+- At night the flames light the sea round them (`lamp`, `lamp_reach`).
+- The preview: `./fxpreview recipe.txt out oil sunk 45 1280x720` with `FX_SINCE=90 FX_DIST=1300 FX_LOOK_H=200`;
+  `oil burning`; `oil horizon` (three fires 3, 6 and 9 km off from an 8 m eye).
+- `-TheaterBlastTest` also lights two, already burning: a slick 900 m off and a burning ship 2.5 km off.
+
 ## Guns on aircraft
 
 ```cpp

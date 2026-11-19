@@ -146,6 +146,7 @@ namespace TheaterFx
 		SunThroughCol = Picture("game.sun_through_colour", Rgb::FromPicture(255, 205, 160));
 		ClodLeast = Num("game.clod_least_px", 1.2);
 		Beyond = Num("game.draw_beyond_m", 1500.0);
+		KeepBeyond = Num("oil_fires.draw_beyond_m", Beyond); // (a column on the horizon is drawn kilometres off)
 		ClodRough = Range("burst.debris.clods.rough", 0.25, 0.45);
 		ClodTurns = Range("burst.debris.clods.tumble_turns_a_second", 0.5, 2.0);
 		ClodShade = Num("burst.debris.clods.shade", 2.5);
@@ -2605,6 +2606,174 @@ namespace TheaterFx
 		Sources.push_back(S);
 	}
 
+	Battle::OilRow Battle::OilRowOf(const std::string& Kind) const
+	{
+		const std::string P = "oil_fires." + (Has("oil_fires." + Kind + ".column_life_s.0") ? Kind : std::string("sunk")) + ".";
+		OilRow R;
+		R.Heads = Range(P + "heads", 3.0, 5.0);
+		R.HeadSpread = Num(P + "head_spread", 0.6);
+		R.HeadR = Range(P + "head_r", 0.15, 0.3);
+		R.FlameUp = Num(P + "flame_up_m", 0.0);
+		R.FlameEvery = std::max(0.02, Num(P + "flame_every_s", 0.1));
+		R.FlameR = Range(P + "flame_r_m", 2.0, 4.5);
+		R.FlameTall = Range(P + "flame_tall", 2.0, 3.5);
+		R.FlameLife = Range(P + "flame_life_s", 0.35, 0.7);
+		R.ColumnEvery = std::max(0.1, Num(P + "column_every_s", 1.0));
+		R.ColumnLife = Range(P + "column_life_s", 50.0, 70.0);
+		R.Rise = Range(P + "rise_mps", 6.0, 9.0);
+		R.Burst = Range(P + "burst_mps", 0.0, 0.0);
+		R.BaseEvery = Num(P + "base_every_s", 0.0);
+		R.BaseLife = Range(P + "base_life_s", 10.0, 15.0);
+		R.BaseRise = Range(P + "base_rise_mps", 1.5, 3.0);
+		R.BaseR = Range(P + "base_r", 0.15, 0.3);
+		R.BaseAlpha = Range(P + "base_alpha", 0.8, 0.95);
+		R.BurstDrag = std::max(0.01, Num(P + "burst_drag", 0.1));
+		R.Slow = Num(P + "slow_mps2", 0.06);
+		R.Windage = Range(P + "windage", 1.0, 1.6);
+		R.R0 = Range(P + "r0", 0.2, 0.35);
+		R.R1 = Range(P + "r1", 0.8, 1.4);
+		R.Grow = Num(P + "grow", 0.6);
+		R.Alpha = Range(P + "alpha", 0.85, 0.95);
+		R.Hold = Num(P + "hold", 0.5);
+		R.Heart = Num(P + "heart", 0.7);
+		R.Rough = Num(P + "rough", 0.3);
+		R.Cool = Num(P + "cool", 1.0);
+		R.Lamp = Num(P + "lamp", 0.25);
+		R.LampReach = Num(P + "lamp_reach", 2.0);
+		R.TwinPx = Num(P + "twin_px", 0.0);
+		R.bKeep = Num(P + "keep", 1.0) > 0.5;
+		R.Col = Picture(P + "colour", Rgb::FromPicture(24, 22, 21));
+		R.Col2 = Picture(P + "colour_top", Rgb::FromPicture(64, 60, 57));
+		R.Flame = Picture(P + "flame_colour", Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56)));
+		return R;
+	}
+
+	void Battle::OilFire(double Now, int Id, const Vec& AtIn, double Reach, const char* Kind, double Until, double Since)
+	{
+		OilStop(Now, Id); // (one fire to an Id: a second call starts it afresh)
+		Source S;
+		S.Kind = 2;
+		S.Id = Id;
+		S.At = Vec(AtIn.X, AtIn.Y, std::max(AtIn.Z, Height(AtIn.X, AtIn.Y))); // (on the sea, or on a burning ship's deck if given)
+		S.Across = std::max(5.0, Reach);
+		S.Oil = OilRowOf(Kind && *Kind ? Kind : "sunk");
+		S.Seed = static_cast<uint64_t>(static_cast<uint32_t>(Id)) * 2654435761ull ^ PlaceKey(S.At) ^ 0x9e3779b97f4a7c15ull;
+		S.Start = Now - std::max(0.0, Since);
+		S.Flames = S.End = Until > Now ? Until : 1e12;
+		// (where on the slick it burns hardest: a few heads, fixed by the fire, never by the frame)
+		Dice D(S.Seed);
+		const int NHeads = std::max(1, static_cast<int>(std::lround(S.Oil.Heads.Pick(D))));
+		for (int I = 0; I < NHeads; ++I)
+		{
+			const double A = D.U(0.0, 2.0 * Pi), Out_ = I == 0 ? 0.0 : std::sqrt(D.U()) * S.Oil.HeadSpread * S.Across;
+			const Vec H = S.At + Vec(std::cos(A), std::sin(A), 0.0) * Out_;
+			S.Heads.push_back(Vec(H.X, H.Y, S.At.Z));
+		}
+		// (a fire that has burned a while already stands as a grown column)
+		const double Back = std::min(std::max(0.0, Since), S.Oil.ColumnLife.B);
+		double T = Now - Back;
+		for (; T < Now; T += S.Oil.ColumnEvery)
+		{
+			OilColumn(S, T);
+		}
+		S.NextSmoke = T;
+		if (S.Oil.BaseEvery > 0.0)
+		{
+			for (T = Now - std::min(std::max(0.0, Since), S.Oil.BaseLife.B); T < Now; T += S.Oil.BaseEvery)
+			{
+				OilBase(S, T);
+			}
+		}
+		S.NextBase = T;
+		S.Next = Now;
+		Sources.push_back(S);
+	}
+
+	void Battle::OilStop(double Now, int Id)
+	{
+		for (Source& S : Sources)
+		{
+			if (S.Kind == 2 && S.Id == Id && S.End > Now)
+			{
+				S.Flames = S.End = Now;
+			}
+		}
+	}
+
+	void Battle::OilBase(Source& S, double T)
+	{
+		// The slick's own smoke: low, black and broad, rolling off the burning oil anywhere across it and drawn into the
+		// foot of the column, so the column stands on the whole fire and not on a stalk
+		const OilRow& R = S.Oil;
+		Dice D(S.Seed ^ (static_cast<uint64_t>(T * 1000.0) * 0xD6E8FEB86659FD93ull + 41ull));
+		const double A = D.U(0.0, 2.0 * Pi), Out_ = std::sqrt(D.U()) * R.HeadSpread * S.Across;
+		Bit B;
+		B.Born = T;
+		B.Life = R.BaseLife.Pick(D);
+		B.R0 = R.BaseR.Pick(D) * S.Across;
+		B.R1 = B.R0 * D.U(1.6, 2.2);
+		B.Grow = 0.5;
+		B.From = S.At + Vec(std::cos(A), std::sin(A), 0.0) * Out_ + ZUp * (R.FlameUp + 0.4 * B.R0);
+		B.Vel = (S.At - B.From) * 0.08 + ZUp * D.U(4.0, 8.0); // (drawn in toward the column's foot as it rises)
+		B.Drag = 0.25;
+		B.Rise = R.BaseRise.Pick(D);
+		B.Windage = R.Windage.A;
+		B.Col = R.Col * D.U(0.85, 1.05);
+		B.Col2 = R.Col * D.U(1.0, 1.3);
+		B.Cool = 1.0;
+		B.Alpha = R.BaseAlpha.Pick(D);
+		B.FadeIn = 0.5;
+		B.Hold = 0.4;
+		B.Heart = R.Heart;
+		B.Inner = 0.6;
+		B.Rough = R.Rough;
+		B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+		B.Turn = D.U(0.0, 2.0 * Pi);
+		B.TwinPx = R.TwinPx;
+		B.bKeep = R.bKeep;
+		Bits.push_back(B);
+	}
+
+	void Battle::OilColumn(Source& S, double T)
+	{
+		// One puff of the column: born over a head of the fire, black and thick, climbing at first fast and then slower
+		// as it cools, so with the wind carrying it all the while the column stands up from the sea and bends over
+		const OilRow& R = S.Oil;
+		Dice D(S.Seed ^ (static_cast<uint64_t>(T * 1000.0) * 0x2545F4914F6CDD1Dull + 29ull));
+		const Vec& Head = S.Heads[static_cast<size_t>(D.Whole(0, static_cast<int>(S.Heads.size()) - 1))];
+		const double Big = std::pow(S.Across / 100.0, 0.4); // (a bigger fire's smoke climbs higher)
+		Bit B;
+		B.Born = T;
+		B.Life = R.ColumnLife.Pick(D);
+		B.R0 = R.R0.Pick(D) * S.Across;
+		B.R1 = R.R1.Pick(D) * S.Across;
+		B.Grow = R.Grow;
+		B.From = Head + Vec(D.Bell(), D.Bell(), 0.0) * (R.HeadR.Pick(D) * S.Across * 0.5) + ZUp * (R.FlameUp + 0.5 * B.R0);
+		// (hot at first: it shoots up off the fire and the push dies away over burst_drag's seconds, then it climbs slowly
+		// as it cools; so the column stands nearly upright off the water and bends over down the wind higher up)
+		B.Vel = Vec(D.Bell(), D.Bell(), 0.0) * 0.6 + ZUp * (R.Burst.Pick(D) * Big);
+		B.Drag = R.BurstDrag;
+		B.Rise = R.Rise.Pick(D) * Big;
+		B.Gravity = std::min(R.Slow, 0.8 * B.Rise / std::max(B.Life, 1.0)); // (slowing, never sinking)
+		B.Windage = R.Windage.Pick(D);
+		B.Col = R.Col * D.U(0.85, 1.1);
+		B.Col2 = R.Col2 * D.U(0.9, 1.1);
+		B.Cool = R.Cool;
+		B.Alpha = R.Alpha.Pick(D);
+		B.FadeIn = 0.15; // (thick from the first: the column's foot is never a thin stalk)
+		B.Hold = R.Hold;
+		B.Heart = R.Heart;
+		B.HeartEnd = R.Heart * 0.5; // (the old smoke aloft loses its dark core and thins)
+		B.Inner = 0.6;
+		B.Rim = 0.0;
+		B.Rough = R.Rough;
+		B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+		B.Turn = D.U(0.0, 2.0 * Pi);
+		B.TwinPx = R.TwinPx;
+		B.bKeep = R.bKeep;
+		Bits.push_back(B);
+	}
+
 	void Battle::Run(double Now)
 	{
 		const Rgb Flame = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
@@ -2615,6 +2784,58 @@ namespace TheaterFx
 			// (after a long pause, such as the game being paused, only the last second is made up)
 			S.Next = std::max(S.Next, Now - 1.0);
 			S.NextSmoke = std::max(S.NextSmoke, Now - 1.0);
+			if (S.Kind == 2)
+			{
+				// burning oil on the sea: low ragged flames on each head of the slick, and the column over them
+				const OilRow& R = S.Oil;
+				const Rgb OilHeart = R.Flame.Mix(Heart, 0.6);
+				while (S.Next <= Now && S.Next < S.Flames)
+				{
+					Dice D(S.Seed ^ (static_cast<uint64_t>(S.Next * 1000.0) * 0x9E3779B97F4A7C15ull + 7ull));
+					for (const Vec& Head : S.Heads)
+					{
+						const double Rf = R.FlameR.Pick(D);
+						const bool bShort = D.U() < 0.25;
+						Bit B;
+						B.Born = S.Next;
+						B.From = Head + Vec(D.Bell(), D.Bell(), 0.0) * (R.HeadR.Pick(D) * S.Across * 0.35) + ZUp * (R.FlameUp + 0.3 * Rf);
+						B.Vel = ZUp * D.U(1.5, 3.5);
+						B.Drag = 0.8;
+						B.Windage = 0.4;
+						B.Life = R.FlameLife.Pick(D) * (bShort ? 0.5 : 1.0);
+						B.R0 = Rf * (bShort ? 0.6 : 1.0);
+						B.R1 = Rf * 0.35;
+						B.Grow = 1.0;
+						B.Along = ZUp;
+						B.Stretch = R.FlameTall.Pick(D);
+						B.Point = 0.9;
+						B.Col = bShort ? OilHeart : R.Flame;
+						B.Col2 = Ember;
+						B.Alpha = 0.95;
+						B.FadeIn = 0.03;
+						B.Hold = 0.3;
+						B.Heart = 0.75;
+						B.Rim = 0.1;
+						B.Rough = 0.25;
+						B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+						B.bLight = true;
+						Bits.push_back(B);
+					}
+					S.Next += R.FlameEvery;
+				}
+				while (S.NextSmoke <= Now && S.NextSmoke < S.End)
+				{
+					OilColumn(S, S.NextSmoke);
+					S.NextSmoke += R.ColumnEvery;
+				}
+				S.NextBase = std::max(S.NextBase, Now - 1.0);
+				while (R.BaseEvery > 0.0 && S.NextBase <= Now && S.NextBase < S.End)
+				{
+					OilBase(S, S.NextBase);
+					S.NextBase += R.BaseEvery;
+				}
+				continue;
+			}
 			if (S.Kind == 0)
 			{
 				// long ragged tongues rooted where it burns, dying by being eaten away; then a thinning grey column
@@ -2859,7 +3080,7 @@ namespace TheaterFx
 		}
 		const Vec P = Where(B, Age);
 		const double Dist = (P - Eye.Eye).Length();
-		if (Dist > Beyond)
+		if (Dist > (B.bKeep ? KeepBeyond : Beyond))
 		{
 			return 0;
 		}
@@ -3205,40 +3426,58 @@ namespace TheaterFx
 				continue;
 			}
 			TwinBits += B.TwinPx > 0.0 ? 1u : 0u;
-			Sorted.push_back(Order{ &B, (Where(B, Now - B.Born) - Eye.Eye).Dot(Eye.Forward) });
+			Sorted.push_back(Order{ &B, (Where(B, Now - B.Born) - Eye.Eye).Dot(Eye.Forward), B.bKeep });
 		}
 		for (const Bit& B : Roots)
 		{
-			Sorted.push_back(Order{ &B, (B.From - Eye.Eye).Dot(Eye.Forward) });
+			Sorted.push_back(Order{ &B, (B.From - Eye.Eye).Dot(Eye.Forward), false });
 		}
 		std::sort(Sorted.begin(), Sorted.end(), [](const Order& L, const Order& R) { return L.Deep > R.Deep; });
 		// (out of room: the farthest go. Counted from the nearest back, a twin taking two slots, so the nearest are never
 		// the ones left out)
 		const size_t Left = static_cast<size_t>(std::max(0, MaxPuffs - Slot));
-		size_t Start = Sorted.size();
-		for (size_t Need = 0; Start > 0; --Start)
+		// (a twin counts two only if it may be big enough on the screen to be laid as two: its size now, at the most,
+		// against its depth, which is never more than its distance, so the count never comes short and seldom wastes
+		// a slot. One held up to its least size is never a twin, unless twin_px is under least_px)
+		auto Takes = [&](const Order& O) -> size_t
 		{
-			// (a twin counts two only if it may be big enough on the screen to be laid as two: its size now, at the most,
-			// against its depth, which is never more than its distance, so the count never comes short and seldom wastes
-			// a slot. One held up to its least size is never a twin, unless twin_px is under least_px)
-			const Bit& Piece = *Sorted[Start - 1].B;
+			const Bit& Piece = *O.B;
 			bool bMayTwin = false;
 			if (Piece.TwinPx > 0.0)
 			{
 				const double Grown = Clamp01((Now - Piece.Born) / std::max(Piece.Life, 1e-6));
 				const double Most = std::max(Piece.R0, Piece.R0 + (Piece.R1 - Piece.R0) * std::pow(Grown, Piece.Grow));
-				bMayTwin = Piece.TwinPx <= Piece.LeastPx || 2.0 * Most * std::max(Eye.PixelsPerRadian, 1.0) >= Piece.TwinPx * Sorted[Start - 1].Deep;
+				bMayTwin = Piece.TwinPx <= Piece.LeastPx || 2.0 * Most * std::max(Eye.PixelsPerRadian, 1.0) >= Piece.TwinPx * O.Deep;
 			}
-			const size_t Takes = bMayTwin ? 2u : 1u;
-			if (Need + Takes > Left)
+			return bMayTwin ? 2u : 1u;
+		};
+		// (what is kept, an oil fire's column, is counted first, so a far column on the horizon never blinks out)
+		size_t Kept = 0;
+		for (const Order& O : Sorted)
+		{
+			Kept += O.bKeep ? Takes(O) : 0u;
+		}
+		Kept = std::min(Kept, Left);
+		size_t Start = Sorted.size();
+		for (size_t Need = Kept; Start > 0; --Start)
+		{
+			if (Sorted[Start - 1].bKeep)
+			{
+				continue;
+			}
+			const size_t Take = Takes(Sorted[Start - 1]);
+			if (Need + Take > Left)
 			{
 				break;
 			}
-			Need += Takes;
+			Need += Take;
 		}
-		for (size_t I = Start; I < Sorted.size() && Slot < MaxPuffs; ++I)
+		for (size_t I = 0; I < Sorted.size() && Slot < MaxPuffs; ++I)
 		{
-			Slot += LayBit(Slot, *Sorted[I].B, Now, Eye, MaxPuffs - Slot);
+			if (I >= Start || Sorted[I].bKeep)
+			{
+				Slot += LayBit(Slot, *Sorted[I].B, Now, Eye, MaxPuffs - Slot);
+			}
 		}
 		// fold away what was drawn last frame and is not now
 		for (int S = Slot; S < LastDrawn; ++S)
@@ -3293,6 +3532,18 @@ namespace TheaterFx
 		const Rgb Flame = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
 		for (const Source& S : Sources)
 		{
+			if (S.Kind == 2 && Now >= S.Start && Now <= S.Flames && S.Oil.Lamp > 0.0)
+			{
+				// (burning oil lights the sea round it: weak by day, and the night's strongest lamp after a big flash)
+				const double Seed = static_cast<double>(S.Seed % 1000ull);
+				Lamp L;
+				L.At = S.At + ZUp * (S.Oil.FlameUp + 4.0);
+				L.Strength = ByDay * S.Oil.Lamp * std::sqrt(S.Across) * (0.8 + 0.2 * std::sin(Now * 11.0 + Seed) * std::sin(Now * 4.1 + Seed * 0.5));
+				L.Col = S.Oil.Flame.Mix(DayLampCol, Day);
+				L.Radius = S.Oil.LampReach * S.Across;
+				All.push_back(L);
+				continue;
+			}
 			if (S.Kind != 0 || Now < S.Start || Now > S.Flames)
 			{
 				continue;

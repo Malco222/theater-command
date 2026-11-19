@@ -7,6 +7,12 @@
 //   ./fxpreview /tmp/recipe.txt <out folder> <size> <ground> <frames, e.g. 4,8,40> [WxH] [back up]
 //     (size "mg": a machine gun's burst from 30 m away into the ground there, in place of a shell; FX_MG_VIEW=side|behind)
 //   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|far|target|hit|trail]
+//   ./fxpreview /tmp/recipe.txt <out folder> oil <sunk|burning|horizon> <frames> [WxH]
+//
+// The oil shot: one oil fire on a flat sea (FX_REACH metres of oil, 100; seen from FX_DIST metres off, 1200, at
+// FX_EYE_H metres, 8, looking at FX_LOOK_H metres up its column, 150), or "horizon": three fires 3, 6 and 9 km off.
+// Frames count from when it was lit; FX_SINCE=s opens with it already burning that long. The wind is FX_WIND_X,
+// FX_WIND_Y metres a second (3, 0.8). FX_DUSK=1 dims the sea and the smoke's light, so the fire's lamp shows.
 //
 // The air shot: a fighter at 1,500 m and 150 m/s in a banked turn (FX_TURN=degrees a second, 3 by default) fires its
 // wing guns, laid to meet 300 m ahead, from the first frame; AirGun is called sixty times a second as the game would.
@@ -136,11 +142,12 @@ namespace
 		return 0.5 + 0.3 * A * 0.5 + 0.2 * B;
 	}
 
-	void Paint(Canvas& C, const Camera& Cam, const Battle::Lamp* Lamps, int NLamps, const std::vector<Vec>& Men, bool bSnow)
+	void Paint(Canvas& C, const Camera& Cam, const Battle::Lamp* Lamps, int NLamps, const std::vector<Vec>& Men, bool bSnow, bool bSea = false)
 	{
-		// (grass, or a snowfield under a snow hit, so that a white skirt is judged on white)
-		const double GrassA[3] = { ToLinear(bSnow ? 226 : 124), ToLinear(bSnow ? 230 : 132), ToLinear(bSnow ? 236 : 74) };
-		const double GrassB[3] = { ToLinear(bSnow ? 196 : 98), ToLinear(bSnow ? 202 : 96), ToLinear(bSnow ? 212 : 60) };
+		// (grass, or a snowfield under a snow hit, so that a white skirt is judged on white; or the open sea, flat, for
+		// the oil fires, its haze drawn out to kilometres)
+		const double GrassA[3] = { ToLinear(bSea ? 58 : bSnow ? 226 : 124), ToLinear(bSea ? 80 : bSnow ? 230 : 132), ToLinear(bSea ? 98 : bSnow ? 236 : 74) };
+		const double GrassB[3] = { ToLinear(bSea ? 44 : bSnow ? 196 : 98), ToLinear(bSea ? 64 : bSnow ? 202 : 96), ToLinear(bSea ? 82 : bSnow ? 212 : 60) };
 		const double Haze[3] = { ToLinear(206), ToLinear(214), ToLinear(222) };
 		for (int Y = 0; Y < C.H; ++Y)
 		{
@@ -153,13 +160,13 @@ namespace
 				{
 					// march to the ground: plane first, then two corrections for the swell
 					double T = -Cam.Eye.Z / D.Z;
-					for (int K = 0; K < 3; ++K)
+					for (int K = 0; K < 3 && !bSea; ++K)
 					{
 						const Vec P = Cam.Eye + D * T;
 						T = (Swell(nullptr, P.X, P.Y) - Cam.Eye.Z) / D.Z;
 					}
 					const Vec P = Cam.Eye + D * T;
-					const double N = Noise(P.X * 0.35, P.Y * 0.35) * 0.7 + Noise(P.X * 3.0, P.Y * 3.0) * 0.3;
+					const double N = bSea ? Noise(P.X * 0.02, P.Y * 0.08) * 0.6 + Noise(P.X * 0.3, P.Y * 0.9) * 0.4 : Noise(P.X * 0.35, P.Y * 0.35) * 0.7 + Noise(P.X * 3.0, P.Y * 3.0) * 0.3;
 					for (int K = 0; K < 3; ++K)
 					{
 						Col[K] = GrassA[K] + (GrassB[K] - GrassA[K]) * N;
@@ -179,7 +186,7 @@ namespace
 							Lift[2] += F * Lamps[L].Col.B / std::max(0.01f, Lamps[L].Col.G);
 						}
 					}
-					const double Fog = 1.0 - std::exp(-std::max(0.0, T - 60.0) / 700.0);
+					const double Fog = 1.0 - std::exp(-std::max(0.0, T - 60.0) / (bSea ? 6000.0 : 700.0));
 					for (int K = 0; K < 3; ++K)
 					{
 						Col[K] = Col[K] * Lift[K] * (1.0 - Fog) + Haze[K] * Fog;
@@ -358,6 +365,85 @@ namespace
 
 namespace
 {
+	double FlatSea(void*, double, double) { return 0.0; }
+
+	/** The oil fires (see the top of the file). */
+	int Oil(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Shot, std::vector<int> Frames, int W, int H)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		Battle Fx;
+		Fx.Setup(&Book, &FlatSea, nullptr, 3u);
+		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", 0.8), 0.0));
+		const double Since = EnvNum("FX_SINCE", 0.0);
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(std::atan(18.0 / 35.0)));
+		if (Shot == "horizon")
+		{
+			// (three fires far off, as the sea battle's low camera sees the ships lost: two slicks and one ship afire)
+			Fx.OilFire(0.0, 1, Vec(-900.0, 3000.0, 0.0), 110.0, "sunk", 0.0, Since);
+			Fx.OilFire(0.0, 2, Vec(1400.0, 6000.0, 0.0), 80.0, "sunk", 0.0, Since);
+			Fx.OilFire(0.0, 3, Vec(2900.0, 9000.0, 0.0), 70.0, "burning", 0.0, Since);
+			Cam.Eye = Vec(0.0, 0.0, EnvNum("FX_EYE_H", 8.0));
+			Cam.Forward = Vec(0.0, 1.0, 0.06).Unit();
+		}
+		else
+		{
+			// (one fire, Shot its kind, FX_REACH metres of oil, seen from FX_DIST metres off at FX_EYE_H metres)
+			const double Reach = EnvNum("FX_REACH", 100.0), Dist = EnvNum("FX_DIST", 1200.0);
+			Fx.OilFire(0.0, 1, Vec(0.0, 0.0, 0.0), Reach, Shot.c_str(), 0.0, Since);
+			Cam.Eye = Vec(-0.3, -1.0, 0.0).Unit() * Dist + Vec(0.0, 0.0, EnvNum("FX_EYE_H", 8.0));
+			Cam.Forward = (Vec(0.0, 0.0, EnvNum("FX_LOOK_H", 150.0)) - Cam.Eye).Unit();
+		}
+		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+		Battle::View View;
+		View.Eye = Cam.Eye;
+		View.Right = Cam.Right;
+		View.Up = Cam.Up;
+		View.Forward = Cam.Forward;
+		View.PixelsPerRadian = Cam.Ppr;
+		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
+		if (bDusk)
+		{
+			View.SmokeLight = Rgb(0.22f, 0.2f, 0.24f);
+		}
+		std::sort(Frames.begin(), Frames.end());
+		int Drawn = 0;
+		const std::vector<Vec> Nobody;
+		for (int Frame : Frames)
+		{
+			for (; Drawn < Frame; ++Drawn)
+			{
+				Fx.Draw(Drawn / 30.0, View);
+			}
+			Drawn = Frame + 1;
+			const double Now = Frame / 30.0;
+			const int N = Fx.Draw(Now, View);
+			Battle::Lamp Lamps[2];
+			const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight));
+			Canvas C;
+			C.Init(W, H);
+			Paint(C, Cam, Lamps, NL, Nobody, false, true);
+			if (bDusk)
+			{
+				for (size_t I = 0; I < C.R.size(); ++I)
+				{
+					C.R[I] *= 0.22;
+					C.G[I] *= 0.2;
+					C.B[I] *= 0.26;
+				}
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/oil-%s-f%04d.ppm", OutDir.c_str(), Shot.c_str(), Frame);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs, %d lamps\n", Frame, N, NL);
+		}
+		return 0;
+	}
+
 	/** The air shot (see the top of the file). */
 	int Air(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Kind, std::vector<int> Frames, int W, int H, const std::string& ShotName)
 	{
@@ -708,6 +794,10 @@ int main(int Argc, char** Argv)
 	if (Argc > 6)
 	{
 		std::sscanf(Argv[6], "%dx%d", &W, &H);
+	}
+	if (Size == "oil")
+	{
+		return Oil(Book, OutDir, Ground, Frames, W, H);
 	}
 	if (Size == "air")
 	{

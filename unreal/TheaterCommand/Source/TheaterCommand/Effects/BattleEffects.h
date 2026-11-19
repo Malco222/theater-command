@@ -118,6 +118,16 @@ public:
 	void AirFlak(double Now, const FVector& At, const FString& Kind = TEXT("heavy"));
 	/** Something burning, about AcrossMetres wide: flames for Seconds, then a thinning grey column. */
 	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds);
+	/** Oil burning on the sea where a ship went down (Kind "sunk"), or where a ship on fire left the line ("burning"):
+	 * low flames on the water and a tall black column leaning down the wind (SetWind; one wind for every column),
+	 * kept even when the screen is full and drawn kilometres off, so the far columns stay on the horizon. One call for
+	 * each smoke zone of the sea battle (its id, x, y and r): ReachMetres is its r (0.6 of her length). UntilSeconds is
+	 * when it stops, on Tick's clock (the fight's end; 0: until OilStop); SinceSeconds, how long it has already burned
+	 * when the scene opens (the battle's second now minus the zone's at), so the column stands grown. A WorldAt above
+	 * the sea (a burning ship's deck) puts the flames there. Calling again with the same Id starts it afresh. */
+	void OilFire(int32 Id, const FVector& WorldAt, float ReachMetres, const FString& Kind = TEXT("sunk"), double UntilSeconds = 0.0, float SinceSeconds = 0.0f);
+	/** That oil fire goes out: no new flame or smoke, and its column thins away on its own. */
+	void OilStop(int32 Id);
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);
 	/** The way toward the sun (world axes): each puff is lightened on that side, and looking toward it smoke's thin

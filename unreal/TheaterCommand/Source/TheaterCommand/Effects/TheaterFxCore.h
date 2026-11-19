@@ -127,6 +127,7 @@ namespace TheaterFx
 		bool bWhole = false; // (a light: however late its first frame comes, that frame shows it whole, as one shorter than a frame is)
 		uint8_t Glow = 0; // (a tracer's streak: 1 its body, 2 its pale core; by day both widen and the core whitens, to hold on a pale sky)
 		bool bHug = false; // rides the ground as it moves (skirts)
+		bool bKeep = false; // (an oil fire's column: never left out when the screen is full, the near ones going first)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
 		bool bThrown = false;
 		double Land = 1e9, Land2 = 1e9;
@@ -185,6 +186,15 @@ namespace TheaterFx
 		void AirFlak(double Now, const Vec& At, const char* Kind = "heavy");
 		/** Something burning at At, about Across metres wide, flames for Seconds, then a thinning grey column. */
 		void Burn(double Now, const Vec& At, double Across, double Seconds);
+		/** Oil burning on the sea where a ship went down (Kind "sunk"), or a ship on fire where she left the line
+		 * ("burning"): low flames across the slick and a tall black column leaning down the wind, kept even when the
+		 * screen is full, so a far column on the horizon never blinks out. Reach is the oil's reach in metres (the sea
+		 * battle's zone r); Until, when it stops (the fight's end; 0: until OilStop); Since, how long it has already
+		 * burned, so a scene that opens later shows the column grown. Id: any number that stays the same for that
+		 * fire. Kinds live in the recipe's oil_fires. */
+		void OilFire(double Now, int Id, const Vec& At, double Reach, const char* Kind = "sunk", double Until = 0.0, double Since = 0.0);
+		/** That oil fire goes out: no new flame or smoke; what is in the air thins away on its own. */
+		void OilStop(double Now, int Id);
 
 		/** What the eye is: where it is, which way its screen's right, up and forward point, and how many pixels a
 		 * radian across the screen is (the screen's width / (2 tan(field of view / 2))). Smoke takes SmokeLight (the
@@ -286,12 +296,26 @@ namespace TheaterFx
 			Vec At;
 			double Born = 0.0, Strength = 0.0, Within = 0.0, Push = 0.0;
 		};
+		/** An oil_fires row, read when a fire starts. */
+		struct OilRow
+		{
+			Span Heads, HeadR, FlameR, FlameTall, FlameLife, ColumnLife, Rise, Burst, Windage, R0, R1, Alpha;
+			Span BaseLife, BaseRise, BaseR, BaseAlpha;
+			double BaseEvery = 0.0; // (the low black smoke rolling off the whole slick before it joins the column; 0: none)
+			double BurstDrag = 0.1, HeadSpread = 0.6, FlameUp = 0.0, FlameEvery = 0.1, ColumnEvery = 1.0, Slow = 0.06, Hold = 0.5, Heart = 0.6, Rough = 0.3;
+			double Cool = 1.0, Lamp = 0.25, LampReach = 2.0, TwinPx = 0.0, Grow = 0.6;
+			bool bKeep = true;
+			Rgb Col, Col2, Flame;
+		};
 		struct Source
 		{
 			Vec At;
-			double Start = 0.0, Flames = 0.0, End = 0.0, Across = 1.0, Next = 0.0, NextSmoke = 0.0;
-			int Kind = 0; // 0 a burning thing, 1 a smouldering crater
+			double Start = 0.0, Flames = 0.0, End = 0.0, Across = 1.0, Next = 0.0, NextSmoke = 0.0, NextBase = 0.0;
+			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea
+			int Id = -1; // (an oil fire: the caller's number for it)
 			uint64_t Seed = 1;
+			OilRow Oil; // (an oil fire: its row)
+			std::vector<Vec> Heads; // (an oil fire: where on the slick it burns hardest, fixed when it starts)
 		};
 		struct Paint
 		{
@@ -315,7 +339,7 @@ namespace TheaterFx
 		int Sides = 16, PointsPerPuff = 33;
 		std::vector<double> RingCos, RingSin, Ring2Cos, Ring2Sin, Ring3Cos, Ring3Sin, Ring5Cos, Ring5Sin; // (made once at Setup, so no puff works out a cosine a side each frame)
 		int LastDrawn = 0;
-		double ShadeLit = 0.18, ShadeDark = 0.28, ClodLeast = 1.2, Beyond = 1500.0;
+		double ShadeLit = 0.18, ShadeDark = 0.28, ClodLeast = 1.2, Beyond = 1500.0, KeepBeyond = 1500.0;
 		double SkyFill = 0.25, SunThrough = 1.5, SunThroughPow = 3.0;
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
@@ -344,6 +368,7 @@ namespace TheaterFx
 		{
 			const Bit* B;
 			double Deep;
+			bool bKeep;
 		};
 		std::vector<Order> Sorted;
 		size_t TwinBits = 0; // (twins alive at the last Draw: each takes a second slot)
@@ -374,6 +399,9 @@ namespace TheaterFx
 		const TrailRow& TrailRowOf(const std::string& Kind);
 		void TrailPuff(double T, const Vec& At, const Vec& Carry, const Trailing& Tr, const TrailRow& Row, Dice& D);
 		void Run(double Now); // the steady sources: fire, smouldering
+		void OilColumn(Source& S, double T); // one puff of an oil fire's column, born at T
+		void OilBase(Source& S, double T); // one puff of the low smoke rolling off the slick, born at T
+		OilRow OilRowOf(const std::string& Kind) const;
 		void Prune(double Now);
 
 		Vec Where(const Bit& B, double Age) const;
