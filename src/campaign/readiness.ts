@@ -16,8 +16,8 @@
 //     2. landing forces stand on quays within a landing's range of the first month's beaches, as many corps as the
 //        sea lift carries: the corps the choice names for its landings, each in a harbour its side holds;
 //     3. the test of strength passes at the beaches that lead to Singapore and to Manila: for each, at the first of
-//        its beaches in enemy hands, with the choice's own corps for that beach and what the ships can bring in after
-//        them. The reckoning counts as enemies the countries the choice declares on and those that follow them
+//        its beaches in enemy hands, with the choice's own corps for that beach, every row that sails in their lift
+//        (rider b631 (i)), and what the ships can bring in after them. The reckoning counts as enemies the countries the choice declares on and those that follow them
 //        (ashore.ts, `also`): at peace it would otherwise find nobody to count.
 //   THE DRAW. From its first month, in each month it is ready, the staff strikes with a chance of one half, drawn
 //     from the war's seed as its other great choices are. In the window's last month it strikes, ready or not: its
@@ -36,6 +36,7 @@ import { FLEETS, NAVY, fleetReach, fleetsOf, orderedTo, seaPath, shipCount } fro
 import { followUp, reckon } from './ashore';
 import { WORLD } from './world';
 import { allied, atWar } from './game';
+import { alongside } from './stations';
 
 /** What the test reads in one month. */
 export interface Readiness {
@@ -47,6 +48,8 @@ export interface Readiness {
   forces: number; asked: number;
   /** The test of strength for each place the opening is for: null where it is not asked (no beach of it in enemy hands). */
   strength: Record<string, boolean | null>;
+  /** The wave the test weighed at each place it was asked for: the names of the rows that sail for its beach. */
+  waves: Record<string, string[]>;
   ready: boolean;
 }
 
@@ -85,6 +88,21 @@ function forces(g: Game, nat: string, op: Op, foe: (id: string) => boolean): { c
   return out;
 }
 
+/**
+ * A beach's wave as it sails (rider b631 (i) to ruling 234): each corps the choice names for it, with the rows the
+ * choice sends in its lift and the rows that go with it, standing with it on its quay. It is the landing's own force
+ * (ai.ts, `landings`): the test weighs what the ships put ashore, a division's tank regiments with the division.
+ */
+function sailing(g: Game, nat: string, op: Op, named: Corps[]): Corps[] {
+  const out: Corps[] = [];
+  for (const c of named) {
+    const L = (op.landings ?? []).find((l) => l.corps === c.name);
+    const group = [c, ...(L?.with ?? []).map((nm) => g.corps.find((x) => x.nat === nat && x.name === nm && !x.dead && x.reg === c.reg)).filter((x): x is Corps => !!x)];
+    for (const x of [...group, ...alongside(g, group)]) if (!out.includes(x)) out.push(x);
+  }
+  return out;
+}
+
 /** What the readiness test reads this month for a staff whose month it is to choose; null for every other. */
 export function readiness(g: Game, nat: string): Readiness | null {
   const X = testFor(g, nat), freeze = freezeAt(g);
@@ -109,17 +127,19 @@ export function readiness(g: Game, nat: string): Readiness | null {
   // 3. The test of strength at the beaches that lead to the places the opening is for.
   const ask = strengthAsked(g, nat);
   const strength: Record<string, boolean | null> = {};
+  const waves: Record<string, string[]> = {};
   for (const [place, beaches] of Object.entries(R.leads)) {
     const p = g.byName[place];
     const b = p && foe(p.ctrl) ? beaches.map((nm) => g.byName[nm]).find((r) => !!r && foe(r.ctrl)) : undefined;
     if (!b) { strength[place] = null; continue; }
-    const wave = onQuays.filter((x) => x.beach === b).map((x) => x.c);
+    const wave = sailing(g, nat, op, onQuays.filter((x) => x.beach === b).map((x) => x.c));
+    waves[place] = wave.map((c) => c.name);
     if (!wave.length) { strength[place] = false; continue; }
     const K = ask === null ? null : reckon(g, nat, b, wave, followUp(g, nat, g.regions[wave[0].reg], wave, b), undefined, also);
     strength[place] = !K || K.chance >= ask!;
   }
   const ready = fleet && onQuays.length >= asked && Object.values(strength).every((v) => v !== false);
-  return { month: g.turn - freeze, first, fleet, forces: onQuays.length, asked, strength, ready };
+  return { month: g.turn - freeze, first, fleet, forces: onQuays.length, asked, strength, waves, ready };
 }
 
 /**

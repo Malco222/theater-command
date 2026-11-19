@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { reckon } from '../src/campaign/ashore';
 import { bookMonth } from '../src/campaign/claims';
 import { monthlyDiplomacy } from '../src/campaign/diplomacy';
-import { atWar, bloc, capitulate, createGame, declareWar, startPhase } from '../src/campaign/game';
+import { atWar, bloc, capitulate, createGame, declareWar, relocate, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { navalUpkeep } from '../src/campaign/navy';
 import { PACIFIC, freezeAt, readyRules } from '../src/campaign/pacific';
@@ -128,6 +128,29 @@ describe('the readiness test: the gathering and the three things', () => {
     expect(now.strength.Singapore).not.toBeNull();
     expect(now.strength.Manila).not.toBeNull();
     expect(now.ready).toBe(now.strength.Singapore === true && now.strength.Manila === true);
+  });
+
+  it("the wave at a beach is every row that sails for it: a division's tank regiments are weighed with it while they stand with it on its quay (rider b631 (i))", () => {
+    const g = months(december(3), 4);
+    const now = readiness(g, 'JAP')!;
+    // The 48th Division's lift for Lingayen is three rows, and the two divisions for Kota Bharu sail with the 5th's regiments.
+    expect(now.waves.Manila).toEqual(['14th Army (48th Division)', '4th Tank Regiment', '7th Tank Regiment']);
+    expect(now.waves.Singapore).toEqual(['25th Army (5th Division)', '1st Tank Regiment', '6th Tank Regiment', '25th Army (18th Division)']);
+    // The three rows weigh more at the beach than the division alone does: the test reads what the ships put ashore.
+    const beach = g.byName['Lingayen'], also = new Set(['USA', 'PHI', 'UK', 'AUS', 'NED']);
+    const wave = now.waves.Manila.map((nm) => corps(g, nm)!);
+    const alone = reckon(g, 'JAP', beach, [wave[0]], 0, undefined, also)!, whole = reckon(g, 'JAP', beach, wave, 0, undefined, also)!;
+    expect(alone.theirs).toBeGreaterThan(0);
+    expect(whole.ours).toBeGreaterThan(alone.ours);
+    expect(whole.chance).toBeGreaterThan(alone.chance);
+    // A regiment that is not on the division's quay does not sail with it, and one let go is its staff's own.
+    relocate(g, corps(g, '4th Tank Regiment')!, g.byName['Tokyo']);
+    expect(readiness(g, 'JAP')!.waves.Manila).toEqual(['14th Army (48th Division)', '7th Tank Regiment']);
+    corps(g, '7th Tank Regiment')!.hold = false;
+    expect(readiness(g, 'JAP')!.waves.Manila).toEqual(['14th Army (48th Division)']);
+    // A place whose beaches are all Japan's has no wave: the test is not asked there.
+    g.byName['Manila'].ctrl = 'JAP';
+    expect(readiness(g, 'JAP')!.waves.Manila).toBeUndefined();
   });
 
   it('not ready with the fleet unfit or out of reach, or with fewer corps on the quays than the lift carries', () => {
