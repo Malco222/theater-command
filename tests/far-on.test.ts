@@ -665,7 +665,12 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
   it("a far post's guard is its record garrison, counted once; other far colonial towns keep a tenth of a town's guard; home ground keeps it whole (ruling 234's rider b547)", () => {
     const g = grand();
     expect(BUDGET.farColony.guard).toBe(0.1);
-    expect(BUDGET.farColony.posts).toEqual(['Guam', 'Kuching', 'Tarakan', 'Balikpapan', 'Rabaul', 'Ambon', 'Port Moresby']);
+    // (Riders b561(d) and b563: "counted once" reaches the far colonial cities whose defenders the rows already hold.)
+    // (Rider b614: Japan's island garrisons are rows at the record's worth, so her islands are posts too; three of them
+    // are her own home ground. tests/far-garrisons.test.ts has the rows.)
+    const HOME_POSTS = ['Marcus Island', 'Iwo Jima', 'Chichi Jima'];
+    expect(BUDGET.farColony.posts).toEqual(['Guam', 'Kuching', 'Tarakan', 'Balikpapan', 'Rabaul', 'Ambon', 'Port Moresby', 'Hong Kong', 'Manila', 'Rangoon', 'Batavia', 'Koepang', 'Palembang', 'Medan', 'Wake', 'Hanoi', 'Saigon', 'Hue', 'Vientiane', 'Colombo', 'Singapore',
+      'Truk', 'Palau', 'Saipan', 'Kwajalein', 'Eniwetok', 'Eastern Marshalls', 'Ulithi', 'Yap', 'Ponape', ...HOME_POSTS]);
     // A town's guard as siege.json reckons it for any town: by its size, capped by its country's army.
     const whole = (name: string): number => { const r = g.byName[name], n = g.nations[r.owner]; return Math.min(SIEGE.guard[townSize(g, r)], SIEGE.guardShare * Math.max(n.armyPeak, armySize(g, n.id))); };
     // The posts whose garrison the historian has given (ruling 234(b)1, rider b541): the record's figure is the whole
@@ -673,13 +678,13 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
     for (const name of BUDGET.farColony.posts!) {
       const r = g.byName[name];
       expect(r, name).toBeTruthy();
-      expect(farColony(r), name).toBe(true);
+      expect(farColony(r), name).toBe(!HOME_POSTS.includes(name));
       expect(farGuard(r), name).toBe(0);
       expect(guardOf(g, r), name).toBe(0);
     }
     // Elsewhere on far colonial ground the guard takes the far side's one number, the tenth: Malaya, the Philippines,
-    // Hong Kong, Burma, India, America's forts in mid-ocean, and Japan's mandates alike.
-    for (const name of ['Kota Bharu', 'Legaspi', 'Hong Kong', 'Singapore', 'Rangoon', 'Manila', 'Wake', 'Midway', 'Calcutta', 'Saipan', 'Truk']) {
+    // Burma and India outside the cities named, and Midway beside its fort.
+    for (const name of ['Kota Bharu', 'Legaspi', 'Penang', 'Johore', 'Moulmein', 'Lingayen', 'Midway', 'Calcutta']) {
       const r = g.byName[name];
       expect(farColony(r), name).toBe(true);
       expect(r.ctrl, name).toBe(r.owner);
@@ -689,17 +694,18 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
     }
     // Home ground keeps its guard whole: Hawaii (home by ruling 234(e)3), Japan's own and Korea and Formosa,
     // Australia's, China's and Siam's; and the near side's game is untouched.
-    for (const name of ['Honolulu', 'Pearl Harbor', 'Tokyo', 'Seoul', 'Formosa', 'Brisbane', 'Darwin', 'Chungking', 'Bangkok', 'London', 'Berlin', 'Paris', 'Moscow']) {
+    for (const name of ['Honolulu', 'Pearl Harbor', 'Tokyo', 'Okinawa', 'Seoul', 'Formosa', 'Brisbane', 'Darwin', 'Chungking', 'Bangkok', 'London', 'Berlin', 'Paris', 'Moscow']) {
       const r = g.byName[name];
       expect(farColony(r), name).toBe(false);
       expect(farGuard(r), name).toBe(1);
       expect(whole(name), name).toBeGreaterThan(0);
       expect(guardOf(g, r), name).toBeCloseTo(whole(name), 9);
     }
-    // Everywhere: the share is under 1 on far colonial ground and nowhere else, the old chart's colonies included.
+    // Everywhere: the share is under 1 on far colonial ground and at the three home posts, and nowhere else, the old
+    // chart's colonies included.
     let near = 0;
     for (const r of g.regions) {
-      expect(farGuard(r) < 1, r.name).toBe(farColony(r));
+      expect(farGuard(r) < 1, r.name).toBe(farColony(r) || HOME_POSTS.includes(r.name));
       if (r.overseas && shoreOf(r) !== 2) { near++; expect(farGuard(r), r.name).toBe(1); }
     }
     expect(near).toBeGreaterThan(0);

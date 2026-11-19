@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { wantsOut } from '../src/campaign/ai';
 import { plannedStrike } from '../src/campaign/carriers';
 import { bookMonth } from '../src/campaign/claims';
-import { DIPLOMACY, holds, monthlyDiplomacy } from '../src/campaign/diplomacy';
+import { DIPLOMACY, holds, monthlyDiplomacy, step } from '../src/campaign/diplomacy';
 import { allied, atWar, bloc, capitulate, createGame, declareWar, startPhase } from '../src/campaign/game';
 import { HISTORY, bookExpects, onBook, setStop } from '../src/campaign/history';
 import { NAVY, assaultStrength, navalUpkeep } from '../src/campaign/navy';
@@ -47,16 +47,16 @@ const france = (stop: number, turn = 10, human: string | null = null): Game => {
 };
 
 describe("Japan's opening (ruling 200): the rows", () => {
-  it('gives Japan the strike south first in its list: December 1941 by the book, ten landings and Hong Kong\'s crossing, three quays, the strike on Pearl Harbor', () => {
+  it('gives Japan the strike south first in its list: December 1941 by the book, ten landings (Hong Kong goes by the overland road), three quays, the strike on Pearl Harbor', () => {
     const list = ops('JAP');
     expect(list[0].id).toBe('south');
     const op = SOUTH();
     expect(op.declare).toEqual(['USA', 'UK', 'NED']);
     expect(op.side).toBe(true);
     expect(op.if).toEqual(['flag:pac:strike']);
-    // (The eleventh is Hong Kong's crossing from Canton, paper 18, point 4: far-pacific-hops.test.ts.)
-    expect(op.landings!.length).toBe(11);
-    expect(op.landings!.map((l) => l.to[0])).toEqual(['Singora', 'Kota Bharu', 'Guam', 'Aparri', 'Legaspi', 'Wake', 'Brunei', 'Davao', 'Lingayen', 'Jolo', 'Hong Kong']);
+    // (Hong Kong has left the landing rows for the overland road, rider b572 to ruling 234: far-pacific-hops.test.ts.)
+    expect(op.landings!.length).toBe(10);
+    expect(op.landings!.map((l) => l.to[0])).toEqual(['Singora', 'Kota Bharu', 'Guam', 'Aparri', 'Legaspi', 'Wake', 'Brunei', 'Davao', 'Lingayen', 'Jolo']);
     expect(op.quays).toEqual(['Hainan', 'Cam Ranh', 'Canton']);
     expect(op.strikes).toEqual([{ fleet: 'Mobile Fleet', harbour: 'Pearl Harbor', home: { base: 'Hiroshima', port: 'Kure', home: 'inland', words: 'The carrier striking force comes home to Kure' } }]);
     expect(HISTORY.dates.JAP?.south).toBe(28);
@@ -76,7 +76,13 @@ describe("Japan's opening (ruling 200): the rows", () => {
   it("reads Siam's row at a declaration of war, and moves the carrier striking force to Etorofu and home again by date", () => {
     const siam = DIPLOMACY.events.find((e) => e.id === 'siam-beside-japan')!;
     expect(siam.when).toBe('war');
-    expect(siam.if).toContain('book');
+    // (At stops 1 to 3 of the dial, not the book's stops alone: riders b591 and b593 to ruling 234. A second row is read at stops 4 and 5.)
+    expect(siam.if).toContain('stop:1,2,3');
+    expect(siam.if).not.toContain('book');
+    const own = DIPLOMACY.events.find((e) => e.id === 'siam-chooses-japan')!;
+    expect(own.when).toBe('war');
+    expect(own.if).toEqual(siam.if!.map((c) => (c === 'stop:1,2,3' ? 'stop:4,5' : c)).flatMap((c) => (c === 'stop:4,5' ? [c, 'step>=:THA,1'] : [c])));
+    expect([own.enter, own.war, own.text]).toEqual([siam.enter, siam.war, siam.text]);
     const moves = (NAVY.moves ?? []).filter((m) => m.nat === 'JAP' && m.fleet === 'Mobile Fleet');
     expect(moves.map((m) => [m.turn, m.base, m.home])).toEqual([[27, 'Etorofu', 'kurile'], [29, 'Hiroshima', 'inland']]);
     expect(moves.every((m) => JSON.stringify(m.stops) === '[1,2]')).toBe(true);
@@ -274,9 +280,9 @@ describe('the demand on Indochina (ruling 199)', () => {
   });
 });
 
-describe('Siam beside Japan (ruling 200(b))', () => {
-  it('at the stops that keep the book: the day Japan is at war with Britain, Siam joins the Axis and declares on Britain', () => {
-    for (const stop of [1, 2]) {
+describe('Siam beside Japan (ruling 200(b); riders b591 and b593 to ruling 234)', () => {
+  it('at stops 1 to 3 of the dial: the day Japan is at war with Britain, Siam joins the Axis and declares on Britain (it let Japan pass within hours, a fact of the day)', () => {
+    for (const stop of [1, 2, 3]) {
       const g = war(stop, 28);
       expect(bloc(g.nations.THA)).toBeNull();
       declareWar(g, 'JAP', 'UK');
@@ -293,11 +299,39 @@ describe('Siam beside Japan (ruling 200(b))', () => {
     }
   });
 
-  it("not where history is loose, and never a player's Siam", () => {
+  it("at stops 4 and 5 it chooses by its character: beside Japan only while it leans to the Axis that day, and never a player's Siam", () => {
+    for (const stop of [4, 5]) {
+      // As it opens the war, in neither camp and leaning to neither: it stays neutral, whatever Japan does.
+      const g = war(stop, 28);
+      expect(step(g.nations.THA)).toBe(0);
+      declareWar(g, 'JAP', 'UK');
+      expect(bloc(g.nations.THA), `stop ${stop}`).toBeNull();
+      expect(atWar(g, 'THA', 'UK')).toBe(false);
+      expect(g.flags['event:siam-beside-japan']).toBeUndefined();
+      expect(g.flags['event:siam-chooses-japan']).toBeUndefined();
+      // Courted to Japan's side since: the next declaration finds it leaning, and it stands with Japan.
+      g.nations.THA.align = 'leaning_axis';
+      declareWar(g, 'JAP', 'USA');
+      expect(bloc(g.nations.THA), `stop ${stop}`).toBe('axis');
+      expect(atWar(g, 'THA', 'UK')).toBe(true);
+      expect(g.flags['event:siam-chooses-japan']).toBe(28);
+      expect(g.flags['event:siam-beside-japan']).toBeUndefined();
+      expect(g.headlines.filter((h) => h.text.includes('Thailand stands with Japan')).length).toBe(1);
+      // Leaning on the day of the blow itself: that day.
+      const w = war(stop, 28);
+      w.nations.THA.align = 'leaning_axis';
+      declareWar(w, 'JAP', 'UK');
+      expect(bloc(w.nations.THA), `stop ${stop}`).toBe('axis');
+      // Leaning to the Allies: neutral.
+      const a = war(stop, 28);
+      a.nations.THA.align = 'leaning_allies';
+      declareWar(a, 'JAP', 'UK');
+      expect(bloc(a.nations.THA), `stop ${stop}`).toBeNull();
+    }
+    // (The second row is not read at stops 1 to 3, nor the first at 4 and 5: one row a stop.)
     const g = war(3, 28);
     declareWar(g, 'JAP', 'UK');
-    expect(bloc(g.nations.THA)).toBeNull();
-    expect(atWar(g, 'THA', 'UK')).toBe(false);
+    expect([g.flags['event:siam-beside-japan'], g.flags['event:siam-chooses-japan']]).toEqual([28, undefined]);
     const h = war(1, 28, 'THA');
     declareWar(h, 'JAP', 'UK');
     expect(bloc(h.nations.THA)).toBeNull();
@@ -381,15 +415,18 @@ describe("Japan's month of December 1941", () => {
     expect(g.seas[force.home].key).toBe('inland');
     expect(news(g, 28, 'The carrier striking force comes home to Kure.')).toBe(true);
     // The quays: the two divisions on Hainan, which Japan holds and does not own, have sailed.
-    expect(at(g, '25th Army (5th Division)')).toBe('Singora');
+    // (The 5th lands at Singora, Siam's shore, and is carried down the west coast within the month by the record's dated
+    // fights, Jitra and Kampar: far-pacific-war.json, 'attacks'.)
+    expect(at(g, '25th Army (5th Division)')).toBe('Ipoh');
     expect(at(g, '25th Army (18th Division)')).toBe('Kota Bharu');
     // The lift of six is all that sails in the month, in the order of the ten. With Guam's garrison at the record's
     // size (ruling 234(b): some 750 men, not a brigade) the South Seas Detachment lands in December as it did, and the
     // sixth crossing is Wake's: the Kawaguchi Detachment waits at Cam Ranh for January's ships.
     expect(at(g, 'South Seas Detachment')).toBe('Guam');
     expect(at(g, 'Kawaguchi Detachment (35th Brigade, of the 18th Division)')).toBe('Cam Ranh');
+    // (Five stand on their beaches as the month closes; the sixth is the 5th Division, gone on from Singora.)
     const sailed = SOUTH().landings!.filter((l) => l.to.includes(at(g, l.corps) ?? '')).length;
-    expect(sailed).toBe(6);
+    expect(sailed).toBe(5);
     // The month closes: Germany and Italy declare on America, and the news names Pearl Harbor.
     expect(g.flags['event:pearl-harbor-world']).toBe(28);
     expect(atWar(g, 'USA', 'GER')).toBe(true);
@@ -399,6 +436,8 @@ describe("Japan's month of December 1941", () => {
 
   it("where history is loose the strike south waits for the staff's word, and no date sends it", () => {
     const g = december(3);
+    // (The staff's word is the readiness test's, far-ready.test.ts: here the freeze is a month old and its window is not open.)
+    g.flags['pac:freeze'] = 27;
     g.phase = g.order.indexOf('JAP');
     runTurnAI(g);
     expect(g.flags['st:done:JAP:south']).toBeUndefined();

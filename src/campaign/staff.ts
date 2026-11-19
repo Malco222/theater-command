@@ -34,8 +34,9 @@ import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
-import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, overseasOf, shoreOf } from './world';
+import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
 import { tieWar } from './far';
+import { runQuays } from './pacific';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather } from './game';
 import { openWinter, winterOver } from './winter';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
@@ -60,6 +61,8 @@ export interface Op {
   push?: number;
   /** A side operation: no build-up, and the main army is not taken for it. */
   side?: boolean;
+  /** Off the book its month is drawn elsewhere, by the test that raises the flag it waits on (readiness.ts): once its conditions hold it goes, with no second draw. */
+  sure?: boolean;
   landings?: PlanPhase['landings'];
   /** Harbours its country holds without owning them, from which these landings may sail as from a home port. */
   quays?: string[];
@@ -1060,7 +1063,8 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
       if (!op.side && op.season && ![0, 1, 2].some((late) => inSeason(g, op, falls + late))) continue;
       // A staff thinks twice before a blow that would bring the whole League down on it.
       // (A front that has been quiet too long settles it: the plan is taken up without more waiting.)
-      if (L.kind === 'free' && !hurried(op) && monthly(g, nat, op.id, g.turn) >= op.chance * L.chance * deterred(g, nat, who)) continue;
+      // (Not one whose month another test has already drawn: 'sure'.)
+      if (L.kind === 'free' && !op.sure && !hurried(op) && monthly(g, nat, op.id, g.turn) >= op.chance * L.chance * deterred(g, nat, who)) continue;
       if (op.side || !(op.prep ?? 0) || first) {
         if (inSeason(g, op)) go(k, !!cur);
       } else {
@@ -1912,7 +1916,7 @@ function oceanBase(g: Game, nat: string, ocean: string, safe: (r: Region) => boo
   // (Nor is an army built up in a harbour the enemy could take from it: the base passes the test of strength as it stands.)
   const strong = new Map<number, boolean>();
   const holds = (p: Region): boolean => { let s = strong.get(p.id); if (s === undefined) { s = holdsAshore(g, nat, p, []); strong.set(p.id, s); } return s; };
-  const serves = (p: Region): boolean => p.port && p.seas.length > 0 && acrossOcean(ocean, p) && allied(g, nat, p.ctrl)
+  const serves = (p: Region): boolean => p.port && p.seas.length > 0 && acrossOcean(g, ocean, p) && allied(g, nat, p.ctrl)
     && (p.ctrl === nat || !!g.nations[p.ctrl]?.atWar.some((e) => n.atWar.includes(e))) && !hostileUnits(g, p, nat).length && safe(p)
     && (!waits || based(P!, p)) && holds(p);
   const kept = g.regions[flag(g, key) - 1];
@@ -1975,10 +1979,12 @@ export function oceanRuns(g: Game, nat: string): OceanRun[] {
   const safe = (r: Region): boolean => r.seas.some((z) => danger[z] <= O.risk);
   const front = frontAshore(g, nat);
   const out: OceanRun[] = [];
-  for (const [ocean, share] of Object.entries(O.oceans)) {
-    const to = front ? front.ports.filter((p) => acrossOcean(ocean, p) && safe(p)) : [];
+  for (const [ocean, share] of oceanShares(g, nat, O)) {
+    // (An ocean whose share has moved to the other has no run this month: ruling 190.)
+    if (share <= 0) continue;
+    const to = front ? front.ports.filter((p) => acrossOcean(g, ocean, p) && safe(p)) : [];
     const atFront = to.length > 0, ahead = to.length;
-    const rear = front ? front.rear.filter((p) => acrossOcean(ocean, p) && safe(p)) : [];
+    const rear = front ? front.rear.filter((p) => acrossOcean(g, ocean, p) && safe(p)) : [];
     const base = oceanBase(g, nat, ocean, safe);
     if (base) {
       // The ports within three marches of it over friendly ground, the nearest first.
@@ -1989,14 +1995,18 @@ export function oceanRuns(g: Game, nat: string): OceanRun[] {
         if (d[q[i]] >= 3) continue;
         for (const j of g.regions[q[i]].nb) if (d[j] < 0 && allied(g, nat, g.regions[j].ctrl)) { d[j] = d[q[i]] + 1; q.push(j); }
       }
+      // (A run of the Pacific's puts its army down only on its own lane and side of the equator, near its base too.)
       for (const id of q) {
         const p = g.regions[id];
-        if (p.port && p.seas.length > 0 && !hostileUnits(g, p, nat).length && safe(p) && !to.includes(p)) to.push(p);
+        if (p.port && p.seas.length > 0 && (ocean === 'atlantic' || acrossOcean(g, ocean, p)) && !hostileUnits(g, p, nat).length && safe(p) && !to.includes(p)) to.push(p);
       }
     }
     if (!to.length) continue;
     let from: Region | null = null, len = Infinity;
-    for (const r of quays) {
+    // (A run of the Pacific's sails from the first of its own quays with a way open: pacific.json, 'runs.from'.)
+    const own = runQuays(g, ocean);
+    if (own) from = own.find((r) => quays.includes(r) && !!seaPath(g, nat, r, to[0])) ?? null;
+    else for (const r of quays) {
       const path = seaPath(g, nat, r, to[0]);
       if (path && (path.length < len || (path.length === len && from !== null && r.fac > from.fac))) { from = r; len = path.length; }
     }

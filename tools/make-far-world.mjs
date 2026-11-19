@@ -204,8 +204,9 @@ for (const b of pacific.building) need(fleetNames.has(`${b.nat}|${b.fleet}`), `b
 // Ruling 234(d): a move with 'sea' in place of a base is the record's month at sea in a month of peace (the Pacific
 // Fleet's carriers in December 1941, at the stops that keep the book). The script's own marks beside it: 'with', the
 // great choice whose month it keeps where that month is drawn (Japan's strike south: the carriers are at sea in the
-// strike's month, whenever the draw puts it); and on the fleet's row 'cruise', [that sea, CRUISE]: at a stop that
-// keeps no book the fleet is at sea in a month of peace on that chance by the seed (the ruling's one in two).
+// strike's month, whenever the draw puts it); and on the fleet's row 'cruise', [that sea, CRUISE, the choice's nation]:
+// at a stop that keeps no book the fleet is at sea in a month of peace on that chance by the seed (the ruling's one in
+// two), and peace is peace with that nation (rider b593: America is at war with Germany from the close of December 1941).
 const CRUISE = 0.5;
 const STRIKE = 'JAP:south';
 const usMoves = pacific.moves.map((m) => (m.sea !== undefined ? { ...m, with: STRIKE } : m));
@@ -215,7 +216,7 @@ for (const m of usMoves) {
     need(seas.has(m.sea) && m.base === undefined && m.home === undefined, `move "${m.words}": the sea "${m.sea}" is not on the chart, or the row names a base as well`);
     const f = usFleets.find((x) => x.nat === m.nat && x.name === m.fleet);
     need(f && !f.cruise, `move "${m.words}": "${m.fleet}" is not one of these fleets, or has two months at sea`);
-    f.cruise = [m.sea, CRUISE];
+    f.cruise = [m.sea, CRUISE, STRIKE.split(':')[0]];
   } else need(owner.has(m.base) && seas.has(m.home), `move "${m.words}": ${m.base} or the sea "${m.home}" is not on the chart`);
 }
 
@@ -334,7 +335,7 @@ notes.push(`oil: home ${Object.entries(oilHome).map(([n, v]) => `${n} ${v} (was 
 // ---- The file ----------------------------------------------------------------------------------------
 const out = {
   _about: "The far side's rows that are nobody's seat, written by tools/make-far-world.mjs from the Pacific planner's, the historian's and the clerk's files and never by hand. Keyed by the data file each block belongs in, as the seat builders' files are; the game lays it over its data only where the far side's switch is on (src/campaign/far-rows.ts). Japan is the seventh great power (ruling 141(a)): quality 1.0 (ruling 215), outside both blocs and leaning to the Axis (ruling 197), a sea lift of 6 (ruling 200). Its army is the planner's paper 17 (the historian's weights), its fleets paper 11 section 7 as ruling 189 amended them, with the names and admirals of ruling 208(f). The garrisons of Britain, the Netherlands, France, the Soviet Far East and America are paper 18's. America's fleets in the Pacific, the ships that join and leave them, and the bases by date of the Pacific Fleet and of Japan's battle line are the planner's pacific-fleets.json (rulings 185, 189, 208(f)); a fleet that forms later is a row of navy.json. 'manpower' is rulings 213(b), 216(b) and 218; China's row under 'traits' is the seat's with the levy of ruling 218. 'setup.held' is the clerk's held_1939 where it is not the owner.",
-  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'pacific-planner/pacific-fleets.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json', 'pacific-planner/20-trial/base-seats.json', 'map-tables/burma-front-forces.json', 'pacific-planner/far-yards.md', 'pacific-planner/far-oil.md', 'pacific-planner/21-whole-world-data-gaps.md'].map((p) => [p, stamp(p)])),
+  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'pacific-planner/pacific-fleets.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json', 'pacific-planner/20-trial/base-seats.json', 'map-tables/burma-front-forces.json', 'pacific-planner/far-yards.md', 'pacific-planner/far-oil.md', 'pacific-planner/21-whole-world-data-gaps.md', 'pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json'].map((p) => [p, stamp(p)])),
   _draft: "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
   grand: {
     nations: [{
@@ -391,6 +392,69 @@ const out = {
   setup: { held: Object.fromEntries(Object.entries(held).sort(([a], [b]) => (a < b ? -1 : 1))), unmark },
   'setup-1939': dated,
 };
+
+// ---- Ruling 234's riders ---------------------------------------------------------------------------------
+// The record's rows the opening was measured with (the design director's riders to ruling 234; the Pacific six's
+// builder keeps the files). They are laid last, over what the sources above give, one file after the other:
+//   riders-234.json        riders b552 to b583, the book's rows of the opening
+//   riders-234-b591.json   riders b591 to b614, the facts of the day at every stop of the dial (Japan's armour roster
+//                          and her island garrisons by half-year)
+// A 'set' names its row and what the row reads before it: a source that moves under a rider stops the build instead
+// of being written over. A word set to null is taken off the row. A 'move' gives a row by date another month or
+// another place, and the row keeps its place in the list. An 'add' row goes at the END of its list, in the file's
+// order (a saved game remembers an expedition by its place in the list).
+const sameWord = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+const setRow = (what, rows, words, r) => {
+  need(rows.length === 1, `rider: ${rows.length} ${what} named ${JSON.stringify(r.row)}`);
+  for (const [k, v] of Object.entries(r.was)) need(sameWord(words(rows[0])[k], v), `rider: ${what} ${JSON.stringify(r.row)} reads ${k} ${JSON.stringify(words(rows[0])[k])}, not ${JSON.stringify(v)}`);
+  for (const [k, v] of Object.entries(r.now)) { if (v === null) delete words(rows[0])[k]; else words(rows[0])[k] = v; }
+};
+const byDate = (r) => dated.expeditions.filter((x) => x[0] === r.row[0] && x[1] === r.row[1] && x[2] === r.row[2]);
+function layRiders(file) {
+  const riders = src(file);
+  const E = riders.expeditions ?? {}, C = riders.corps ?? {};
+  for (const r of E.set ?? []) setRow('row by date', byDate(r), (x) => x[6], r);
+  for (const r of E.move ?? []) {
+    const rows = byDate(r);
+    need(rows.length === 1, `rider: ${rows.length} rows by date named ${JSON.stringify(r.row)}`);
+    need(rows[0][5] === r.was.place, `rider: the row by date ${JSON.stringify(r.row)} stands at ${rows[0][5]}, not ${r.was.place}`);
+    if (r.place !== undefined) { need(owner.has(r.place), `rider: "${r.row[2]}": ${r.place} is not a province of the chart`); rows[0][5] = r.place; }
+    if (r.turn !== undefined) { need(!dated.expeditions.some((x) => x !== rows[0] && x[0] === r.turn && x[1] === r.row[1] && x[2] === r.row[2]), `rider: the row by date "${r.row[2]}" is laid already in turn ${r.turn}`); rows[0][0] = r.turn; }
+  }
+  for (const { row } of E.add ?? []) {
+    need(!dated.expeditions.some((x) => x[0] === row[0] && x[1] === row[1] && x[2] === row[2]), `rider: the row by date "${row[2]}" is laid already`);
+    need(owner.has(row[5]), `rider: "${row[2]}": ${row[5]} is not a province of the chart`);
+    dated.expeditions.push(row);
+  }
+  for (const r of C.set ?? []) setRow('first-day row', out.world.corps.filter((x) => x[0] === r.row[0] && x[1] === r.row[1]), (x) => x[5], r);
+  for (const { row } of C.add ?? []) {
+    need(!out.world.corps.some((x) => x[0] === row[0] && x[1] === row[1]), `rider: the first-day row "${row[1]}" is laid already`);
+    need(owner.has(row[4]), `rider: "${row[1]}": ${row[4]} is not a province of the chart`);
+    out.world.corps.push(row);
+  }
+  for (const r of riders.fleets?.set ?? []) setRow('fleet', out.world.fleets.filter((f) => f.nat === r.row[0] && f.name === r.row[1]), (f) => f.ships, r);
+  for (const { row } of riders.arrivals?.add ?? []) {
+    need(!out.navy.arrivals.some((x) => sameWord(x, row)), `rider: the arrival "${row[4]}" is laid already`);
+    need([...out.world.fleets, ...out.navy.fleets].some((f) => f.nat === row[1] && f.name === row[2]), `rider: the arrival "${row[4]}" names no fleet`);
+    out.navy.arrivals.push(row);
+  }
+  for (const [nat, r] of Object.entries(riders.roster ?? {})) {
+    if (nat === 'why') continue;
+    if (Array.isArray(r)) { need(out.commanders.roster[nat] === undefined, `rider: a roster for ${nat} is laid already`); out.commanders.roster[nat] = r; continue; }
+    const roster = out.commanders.roster[nat].map((x) => [...x]);
+    for (const [name, was, now] of r.month ?? []) {
+      const rows = roster.filter((x) => x[1] === name);
+      need(rows.length === 1 && rows[0][0] === was, `rider: ${name} is not rostered once, in turn ${was}`);
+      rows[0][0] = now;
+    }
+    for (const x of r.first ?? []) need(!roster.some((y) => y[1] === x[1]), `rider: ${x[1]} is rostered already`);
+    out.commanders.roster[nat] = [...(r.first ?? []), ...roster];
+  }
+  const n = (xs) => (xs ?? []).length, rosters = Object.keys(riders.roster ?? {}).filter((k) => k !== 'why');
+  notes.push(`ruling 234's riders (${path.basename(file)}): ${n(E.set)} rows by date changed, ${n(E.move)} moved and ${n(E.add)} added, ${n(C.set)} first-day rows changed and ${n(C.add)} added, ${n(riders.fleets?.set)} fleet, ${n(riders.arrivals?.add)} arrival${rosters.length ? `, the rosters of ${rosters.join(' and ')}` : ''}`);
+}
+const RIDERS = ['pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json'];
+for (const file of RIDERS) layRiders(file);
 
 const text = JSON.stringify(out, null, 1) + '\n';
 if (process.argv.includes('--check')) {

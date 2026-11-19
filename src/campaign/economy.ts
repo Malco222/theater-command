@@ -162,10 +162,17 @@ const FAR_POSTS = new Set(BUDGET.farColony.posts ?? []);
  * garrisons the rows already bring, not by a home town's division of depot troops, police and militia: a far post
  * whose garrison the historian has given (budget.json 'farColony.posts') keeps no guard beside it, so that the
  * record's figure is its whole defence, counted once; any other town there keeps the far side's one number, the tenth.
- * One rule for every power (rider b552): Wake and Midway are forts and not posts, and take the tenth beside the fort;
- * Japan's mandates are colonial ground, and Saipan and Truk take it too.
+ * One rule for every power (rider b552): Japan's mandates are colonial ground, and Saipan and Truk take the tenth.
+ * "Counted once" reaches the far colonial cities whose defenders the rows already hold (riders b561(d) and b563):
+ * Hong Kong, Manila, Rangoon, Batavia, the Indies' outposts, the four cities of Indochina, Colombo and Wake, whose
+ * fort row holds it; and Singapore, whose garrison row rose to the record's 0.8 as its guard came off. Midway, not yet
+ * checked against the record, keeps the tenth beside its fort; Hawaii is home ground.
+ * The post rule reaches home ground on the far side (rider b614 to ruling 234): Japan's island garrisons are rows at
+ * the record's worth by half-year, the Mandates' and the home islands' alike, so Marcus Island, Iwo Jima and Chichi
+ * Jima hold the record's worth and not a home town's whole guard. Only places the historian's table names are posts.
  */
-export const farGuard = (r: Region): number => (!farColony(r) ? 1 : FAR_POSTS.has(r.name) ? 0 : BUDGET.farColony.guard ?? 1);
+const farPost = (r: Region): boolean => FAR_POSTS.has(r.name) && shoreOf(r) === 2;
+export const farGuard = (r: Region): number => (farPost(r) ? 0 : !farColony(r) ? 1 : BUDGET.farColony.guard ?? 1);
 /**
  * The share at which a province counts (ruling b466): 1 everywhere but on a country's own home ground on the far side
  * of the world, where budget.json's 'farHome' names a share for it. It is one factor on the whole of what the ground
@@ -494,7 +501,10 @@ export function cadreTerms(g: Game, nat: string, c: Corps): { cost: number; mont
   const u = c.elite ? eliteOf(nat) : null, p = TECH.units.para;
   const kind = specOf(g, c.kind) ? c.kind : 'inf';
   const list = u ? u.cost : c.airborne ? priceOf(g, nat, 'para', p.cost) : corpsCost(g, nat, kind);
-  return { cost: Math.round(list * MANPOWER.fold.price * 10) / 10, months: u ? u.months : c.airborne ? p.months : specOf(g, kind)!.months, divs: c.divs };
+  // (A corps its row keeps small comes back at its own establishment, for that share of the price and of the men:
+  // rider b594 to ruling 234. No corps has one with the far side off.)
+  const size = c.full ?? 1;
+  return { cost: Math.round(list * MANPOWER.fold.price * size * 10) / 10, months: u ? u.months : c.airborne ? p.months : specOf(g, kind)!.months, divs: c.divs * size };
 }
 
 /** Why a cadre cannot be raised again now, apart from money and a place to raise it; null when it can. */
@@ -524,7 +534,7 @@ export function orderCadre(g: Game, nat: string, id: number, region: number): Bu
 
 /** A cadre takes the field again: the same corps, with its number, its diary and its ribbons, filled with new men. */
 function reform(g: Game, c: Corps, at: Region): void {
-  c.dead = false; c.str = 1; c.org = 0.7; c.ap = c.apMax; c.fought = false; c.supplied = true; c.general = null; c.reg = at.id; c.hold = false; c.dyle = null;
+  c.dead = false; c.str = c.full ?? 1; c.org = 0.7; c.ap = c.apMax; c.fought = false; c.supplied = true; c.general = null; c.reg = at.id; c.hold = false; c.dyle = null;
   c.xp = Math.max((c.nat === g.human ? raisedXp(g, c.nat) : 0.05) + campXp(g, at.id), c.xp * MANPOWER.fold.xp);
   for (const k of ['dug', 'dugFor', 'digging', 'pressed', 'blows', 'relief', 'yields', 'gaveWay', 'digs', 'joint', 'leave', 'town', 'job', 'rival'] as const) delete c[k];
   raiseMorale(g, c);
@@ -699,7 +709,7 @@ export function aiProduction(g: Game, nat: string): void {
     if (old) {
       const t = cadreTerms(g, nat, old), up = corpsUpkeep(old.kind, old.divs);
       const site = budgeted(g) ? raiseSite(g, nat, old.kind, cap.id) : cap.id;
-      if (n.pp >= t.cost + PRODUCTION.aiReserve && spare >= up * BUDGET.debt.aiMargin && menSpare(g, nat) >= old.divs && orderCadre(g, nat, old.id, site >= 0 ? site : cap.id)) { spare -= up; continue; }
+      if (n.pp >= t.cost + PRODUCTION.aiReserve && spare >= up * BUDGET.debt.aiMargin && menSpare(g, nat) >= t.divs && orderCadre(g, nat, old.id, site >= 0 ? site : cap.id)) { spare -= up; continue; }
     }
     let kind: Kind = wantsGuns() ? 'art' : home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
     // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the

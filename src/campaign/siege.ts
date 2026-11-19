@@ -192,7 +192,12 @@ export function guardInField(g: Game, r: Region, nat: string, force?: Corps[]): 
  * village's guard, against odds of SIEGE.summons or better. A city's or a capital's never does.
  */
 export const opensTo = (g: Game, r: Region, force: Corps[]): boolean =>
-  guardOf(g, r) > 0 && !SIEGE.summonsNot.includes(townSize(g, r)) && assess(g, force, r, { town: true }).odds >= SIEGE.summons;
+  guardOf(g, r) > 0 && !SIEGE.summonsNot.includes(townSize(g, r)) && assess(g, wholeOf(force), r, { town: true }).odds >= SIEGE.summons;
+/**
+ * The army at the gates, whole. (By the book only a share of a corps may be in a dated fight, stations.ts, rider b580:
+ * the guard reads the whole of each corps that stands before it, as it did before. Nobody else has a share.)
+ */
+const wholeOf = (force: Corps[]): Corps[] => (force.some((c) => c.bookPart) ? force.map((c) => (c.bookPart ? { ...c, divs: c.divs / c.bookPart[0] } : c)) : force);
 
 /** A guard's size in words: "1 division's worth", "2.4 divisions' worth", and below one, "part of a division's worth" (never 0). */
 export const guardWorth = (d: number): string => d >= 0.95 && d < 1.05 ? "1 division's worth" : d >= 1.05 ? `${(Math.round(d * 10) / 10).toFixed(1)} divisions' worth` : "part of a division's worth";

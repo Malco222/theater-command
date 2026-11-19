@@ -31,8 +31,11 @@ export function whyNotFold(g: Game, keep: Corps, gone: Corps): string | null {
   if (keep.joint || gone.joint) return 'A corps marching with an ally cannot be folded.';
   if (keep.leave !== undefined || gone.leave !== undefined) return 'A corps at home cannot be folded.';
   if (!keep.supplied || !gone.supplied) return 'Cut off, the cadre has no way home.';
+  // (A corps its row keeps small is read against its own establishment, `full`: a regiment at a quarter of a division's
+  // strength is whole, not worn. Rider b594 to ruling 234. No corps has an establishment with the far side off.)
+  for (const c of [keep, gone]) if (c.full !== undefined && c.str >= c.full) return `${c.name} is already at full strength for its size.`;
   const worn = MANPOWER.fold.worn;
-  if (keep.str >= worn || gone.str >= worn) return `Both corps must be under ${Math.round(worn * 100)}% of their strength.`;
+  if (keep.str >= worn * (keep.full ?? 1) || gone.str >= worn * (gone.full ?? 1)) return `Both corps must be under ${Math.round(worn * 100)}% of their strength.`;
   return null;
 }
 
@@ -67,7 +70,8 @@ export interface FoldView {
 /** What folding 'gone' into 'keep' would do, whether or not it is allowed. */
 export function foldView(g: Game, keep: Corps, gone: Corps): FoldView {
   const mine = keep.str * keep.divs, theirs = gone.str * gone.divs;
-  const fill = Math.min(keep.divs, mine + theirs), from = Math.max(0, fill - mine);
+  // (The kept corps is filled no fuller than its own establishment: rider b594 to ruling 234.)
+  const fill = Math.min(keep.divs * (keep.full ?? 1), mine + theirs), from = Math.max(0, fill - mine);
   const mix = (a: number, b: number): number => (fill > 0 ? (a * mine + b * from) / fill : a);
   const { lead, out } = command(g, keep, gone);
   const t = cadreTerms(g, gone.nat, gone);

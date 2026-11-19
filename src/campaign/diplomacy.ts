@@ -613,6 +613,9 @@ export function holds(g: Game, cond: string): boolean {
     case 'flag': return !!g.flags[rest];
     // 'book': the dial stands at a stop that keeps history's calendar. 'book:pacific': and the book is still open in that theatre.
     case 'book': return !!stopDef(g).book && (rest === '' || onBook(g, rest));
+    // 'stop:1,2,3': the dial stands at one of the stops named. (What the world was on the day belongs to more stops than
+    // the book's calendar does: rider b591 to ruling 234. Siam let Japan pass within hours on 8 December 1941.)
+    case 'stop': return a.map(Number).includes(stopOf(g));
     // 'since:event:x,2': that flag was raised at least two months ago.
     case 'since': return !!g.flags[a[0]] && g.turn - g.flags[a[0]] >= Number(a[1] ?? 1);
     case 'war': return !!N(a[0]) && !!N(a[1]) && atWar(g, a[0], a[1]);

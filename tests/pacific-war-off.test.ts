@@ -5,17 +5,20 @@ import { describe, expect, it } from 'vitest';
 import { plannedStrike } from '../src/campaign/carriers';
 import { DIPLOMACY, closeDiplomacy, holds, monthlyDiplomacy, warDiplomacy } from '../src/campaign/diplomacy';
 import { FAR_LAID, lay } from '../src/campaign/far-rows';
-import { atWar, capitulate, createGame, declareWar, setWar } from '../src/campaign/game';
+import { addCorps, atWar, capitulate, createGame, declareWar, setWar } from '../src/campaign/game';
 import { HISTORY, setStop as setStopOff, shoreOpen } from '../src/campaign/history';
 import { frontArmys, lines, neverHis } from '../src/campaign/line';
-import { NAVY, airOver, assaultStrength, atSea, navalUpkeep } from '../src/campaign/navy';
+import { NAVY, airOver, assaultStrength, atSea, landCorps, liftLeft, navalUpkeep, shipsFor, whyNotLand } from '../src/campaign/navy';
 import { AIR, airQuality, airRange, airUpkeep } from '../src/campaign/air';
 import { ARSENAL, smallAirMonth } from '../src/campaign/arsenal';
 import airData from '../data/campaign/air.json';
-import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind, keepersOf, keptForces, mayDemand, pacificGround, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds, skiesOn, skiesOver } from '../src/campaign/pacific';
+import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind, keepersOf, keptForces, mayDemand, pacificGround, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds, readyRules, shoreLift, skiesOn, skiesOver } from '../src/campaign/pacific';
+import { readiness, readinessMonth } from '../src/campaign/readiness';
 import { FAR_STAGE } from '../src/campaign/stage';
 import { freed, ops, startOpen } from '../src/campaign/staff';
+import { alongside, bookAttacks, bookFleets, bookStations, ceilinged, goesWith, ridersOf, riding, stations, stationsBind } from '../src/campaign/stations';
 import open from '../data/campaign/open.json';
+import setup from '../data/campaign/setup-1939.json';
 
 describe('the Pacific war with the far side off', () => {
   it('reads no rule of it and lays no row of it', () => {
@@ -172,6 +175,13 @@ describe('the carriers of ruling 234(d) with the far side off', () => {
         navalUpkeep(g, 'USA');
         for (const f of g.fleets) if (f.nat === 'USA') { expect(atSea(f), `${f.name} ${t}`).toBe(false); expect(f.cruised).toBeUndefined(); }
       }
+      // (Nor at war with Germany and at peace with everybody else, rider b593: no row names whose peace a month waits for.)
+      declareWar(g, 'GER', 'USA');
+      for (let t = 31; t <= 40; t++) {
+        g.turn = t;
+        navalUpkeep(g, 'USA');
+        for (const f of g.fleets) if (f.nat === 'USA') expect(f.cruised, `${f.name} ${t}`).toBeUndefined();
+      }
     }
   });
 });
@@ -181,6 +191,99 @@ describe("Japan's landing craft of ruling 234(b)2 with the far side off", () => 
     expect(NAVY.landing.craft).toEqual([[46, ['UK', 'USA'], 0.8]]);
     const g = startOpen(createGame(3, null));
     for (const t of [1, 28, 46, 70]) { g.turn = t; expect(assaultStrength(g, 'JAP'), `month ${t}`).toBe(NAVY.landing.assault); }
+  });
+});
+
+describe("the book's stations, strength and dated attacks of ruling 234 (riders b568 to b583) with the far side off", () => {
+  it('there is no table: nobody is stationed or cut, no attack is dated, no fleet is sent, and no corps is the book\'s', () => {
+    expect(stations()).toBeNull();
+    const g = startOpen(createGame(3, null));
+    setStopOff(g, 1, true);
+    g.turn = 28;
+    const read = (): string => JSON.stringify([g.flags, g.corps.map((c) => [c.reg, c.divs, c.str, c.hold, c.stay, c.dug, c.dugFor]), g.fleets.map((f) => [f.base, f.zone, f.stance])]);
+    const before = read();
+    for (const nat of Object.keys(g.nations)) {
+      expect(stationsBind(g, nat)).toBe(false);
+      bookStations(g, nat);
+      bookAttacks(g, nat);
+      expect(bookFleets(g, nat)).toEqual([]);
+    }
+    expect(read()).toBe(before);
+    expect(g.corps.some((c) => ceilinged(g, c) || c.bookWorks !== undefined || c.bookCoast !== undefined || c.bookPart !== undefined)).toBe(false);
+    expect(g.fleets.some((f) => f.bookBase !== undefined)).toBe(false);
+  });
+});
+
+describe('the readiness test of ruling 200(m) (rider b586 to ruling 234) with the far side off', () => {
+  it('there is no test: no figures, no reading, no gathering and no flag, in any month and for any country', () => {
+    const g = startOpen(createGame(3, null));
+    g.turn = 28;
+    g.flags['pac:freeze'] = 22;
+    expect(readyRules(g)).toBeNull();
+    const read = (): string => JSON.stringify([g.flags, g.fleets.map((f) => [f.base, f.zone, f.stance]), g.headlines.length]);
+    const before = read();
+    for (const nat of Object.keys(g.nations)) {
+      expect(readiness(g, nat)).toBeNull();
+      readinessMonth(g, nat);
+    }
+    expect(read()).toBe(before);
+    expect(ops('JAP').some((op) => op.sure)).toBe(false);
+  });
+});
+
+describe("a corps' own establishment in a fold (rider b594 to ruling 234) with the far side off", () => {
+  it('no corps has one, on the first day or by a dated row, so worn reads as it always did', () => {
+    const g = startOpen(createGame(3, null));
+    expect(g.corps.length).toBeGreaterThan(100);
+    expect(g.corps.filter((c) => c.full !== undefined)).toEqual([]);
+    const rows = (setup as any).expeditions as any[];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.filter((r) => r[r.length - 1]?.est !== undefined)).toEqual([]);
+  });
+});
+
+describe('a row that lands in the lift of the corps it goes with (rider b604 to ruling 234) with the far side off', () => {
+  it('no corps goes with another: every corps of a landing takes a lift of its own, and a staff takes nobody along', () => {
+    expect(stations()).toBeNull();
+    const g = startOpen(createGame(3, null));
+    expect(g.corps.filter((c) => goesWith(g, c) !== null)).toEqual([]);
+    expect(riding(g, g.corps)).toEqual([]);
+    expect(g.corps.flatMap((c) => ridersOf(g, c.nat, c.name))).toEqual([]);
+    // Two corps of Britain's in a home port, and a German shore: they ask for two lifts, as they always did.
+    const quay = g.regions.find((r) => r.port && r.owner === 'UK' && r.ctrl === 'UK' && r.seas.length > 0 && !r.units.length)!;
+    const cs = ['Test Corps A', 'Test Corps B'].map((nm) => addCorps(g, 'UK', nm, 'inf', 1, quay.id, {}));
+    for (const c of cs) { c.ap = c.apMax; c.supplied = true; }
+    expect(alongside(g, [cs[0]])).toEqual([]);
+    const shore = g.regions.find((r) => r.ctrl === 'GER' && r.seas.length > 0 && whyNotLand(g, cs, r) === null)!;
+    expect(shore).toBeDefined();
+    g.flags[`lift:UK:${g.turn}`] = g.nations.UK.sealift - 1;
+    expect(liftLeft(g, 'UK')).toBe(1);
+    expect(whyNotLand(g, cs, shore)).toMatch(/shipping for only 1 more corps/);
+    // And one corps sent alone goes alone, for its one lift.
+    expect(landCorps(g, [cs[0]], shore).ok).toBe(true);
+    expect(liftLeft(g, 'UK')).toBe(0);
+    expect(g.regions[cs[1].reg]).toBe(quay);
+  });
+});
+
+describe("the Allies' landing ships in the Pacific and the islands' garrisons (rider b614 to ruling 234) with the far side off", () => {
+  it('there is no second count: every landing asks the month\'s sea lift and nothing else, in any month and on any shore', () => {
+    const g = startOpen(createGame(3, null));
+    for (const turn of [10, 30, 34, 52, 60]) {
+      g.turn = turn;
+      for (const nat of ['USA', 'UK', 'AUS', 'JAP']) for (const r of g.regions) if (r.seas.length && shoreLift(g, nat, r) !== null) throw new Error(`a count for ${nat} at ${r.name} in month ${turn}`);
+    }
+    const quay = g.regions.find((r) => r.port && r.owner === 'UK' && r.ctrl === 'UK' && r.seas.length > 0 && !r.units.length)!;
+    const cs = ['Test Corps A', 'Test Corps B'].map((nm) => addCorps(g, 'UK', nm, 'inf', 1, quay.id, {}));
+    for (const r of g.regions) expect(shipsFor(g, cs, r)).toBe(true);
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('shorelift:'))).toEqual([]);
+  });
+
+  it('no row has a size by the month, and no place is a post', () => {
+    const rows = (setup as any).expeditions as any[];
+    expect(rows.filter((r) => Array.isArray(r[r.length - 1]?.est))).toEqual([]);
+    const g = startOpen(createGame(3, null));
+    expect(g.corps.filter((c) => c.full !== undefined)).toEqual([]);
   });
 });
 
