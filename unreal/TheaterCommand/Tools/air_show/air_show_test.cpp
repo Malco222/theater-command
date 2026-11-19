@@ -316,7 +316,15 @@ int main(int Argc, char** Argv)
 	// The flyover before the battle (Brian's, approved 19 November): its shots over the battle's first groups as the
 	// scene plays them, the battle at x1 under them, a frame every thirtieth of a second.
 	int FlyNoLook = 0, FlyLow = 0, FlyJumps = 0, FlyIntoPlane = 0;
-	double FlyLeastRaidSeen = 1.0;
+	// (the raid's and the guard's shots, the art director on build 1750: their lead three 120 to 180 pixels wide in the
+	// 2881 by 1786 picture at their pictures' moments, never fewer than three of the group in the picture after the
+	// shot's first second; and a harbour held in the target shot's lower third. The flyover's bars cover the picture's
+	// top and bottom 195 rows.)
+	const double FlyFocal = 1440.5 / std::tan(AirDesk::Flyover::Lens * 0.5 * 3.14159265358979 / 180.0);
+	const double FlyTop = 195.0, FlyFoot = 1591.0, FlyThird = FlyTop + (FlyFoot - FlyTop) * 2.0 / 3.0;
+	const bool bFlyHarbour = Rec.Board.PlaceKind == "harbour";
+	double FlyLeadLeast = 1e9, FlyLeadMost = 0.0, FlyHarbourRow = -1.0;
+	int FlyLeastInFrame = 1 << 30, FlyLeadPictures = 0;
 	std::set<int> FlyShots;
 	bool bFlyBegun = false;
 	AirDesk::Flyover Flyover;
@@ -333,8 +341,10 @@ int main(int Argc, char** Argv)
 		if (FlyTaken < Rec.Views.size()) FlyTake();
 		double FlyT = Rec.Views.front().Head.T;
 		Fly.Advance(FlyT);
-		bFlyBegun = Flyover.Begin(Fly.Groups(), Rec.Board.TargetX, Rec.Board.TargetY);
+		bFlyBegun = Flyover.Begin(Fly.Groups(), Rec.Board.TargetX, Rec.Board.TargetY, bFlyHarbour);
 		const double Step = 1.0 / 30.0;
+		const double FlyPictures[3] = { 3.0, AirDesk::Flyover::RaidLong + 2.5, AirDesk::Flyover::RaidLong + AirDesk::Flyover::TargetLong + 2.0 };
+		int FlyNextPicture = 0;
 		AirShow::Vec LastEye;
 		int LastIndex = -2;
 		for (double RT = 0.0; bFlyBegun && RT <= Flyover.Length() + 0.5; RT += Step)
@@ -342,28 +352,64 @@ int main(int Argc, char** Argv)
 			FlyT += Step / std::max(Rec.Board.Scale, 0.1);
 			while (FlyTaken < Rec.Views.size() && Rec.Views[FlyTaken - 1].Head.T <= FlyT + 1e-9) FlyTake();
 			Fly.Advance(FlyT);
-			const AirDesk::Flyover::Shot Shot = Flyover.At(RT, Fly.Groups());
+			const AirDesk::Flyover::Shot Shot = Flyover.At(RT, Fly.Groups(), Fly.Planes());
 			const AirShow::Vec Way = Shot.Look - Shot.Eye;
 			if (Way.Length() < 50.0) ++FlyNoLook;
 			if (Shot.Eye.Z < 60.0) ++FlyLow;
 			if (Shot.Index >= 0) FlyShots.insert(Shot.Index);
 			// (within a shot the eye glides: no more than 250 m a second, the formation's speed and the dolly's)
 			if (LastIndex == Shot.Index && (Shot.Eye - LastEye).Length() > 250.0 * Step) ++FlyJumps;
-			int RaidPlanes = 0, RaidInView = 0;
+			// (the picture as the scene takes it: the look's own right and up, the lens across the picture's width)
+			const AirShow::Vec Fw = Way.Unit();
+			const AirShow::Vec Rt = AirShow::Vec(Fw.Y, -Fw.X, 0.0).Unit();
+			const AirShow::Vec Hi(Rt.Y * Fw.Z - Rt.Z * Fw.Y, Rt.Z * Fw.X - Rt.X * Fw.Z, Rt.X * Fw.Y - Rt.Y * Fw.X);
+			auto Row = [&](const AirShow::Vec& P, double& OutX, double& OutY)
+			{
+				const AirShow::Vec D = P - Shot.Eye;
+				const double Z = D.Dot(Fw);
+				OutX = 1440.5 + FlyFocal * D.Dot(Rt) / std::max(Z, 1e-3);
+				OutY = 893.0 - FlyFocal * D.Dot(Hi) / std::max(Z, 1e-3);
+				return Z;
+			};
+			const bool bPicture = FlyNextPicture < 3 && RT + 1e-9 >= FlyPictures[FlyNextPicture];
+			const int Picture = bPicture ? FlyNextPicture++ : -1;
+			const int Close = Shot.Index == 0 ? Flyover.RaidGroup() : Shot.Index == 2 ? Flyover.GuardGroup() : -1;
+			const double ShotBegan = Shot.Index == 0 ? 0.0 : AirDesk::Flyover::RaidLong + AirDesk::Flyover::TargetLong;
+			int InFrame = 0;
+			std::vector<double> Spans;
 			for (const AirShow::PlaneOut& P : Fly.Planes())
 			{
 				if (!P.bShown) continue;
 				const AirShow::Vec To = P.At - Shot.Eye;
 				if (To.Length() < 40.0) ++FlyIntoPlane;
-				if (P.Group == Flyover.RaidGroup())
+				if (P.Group == Close && Close >= 0)
 				{
-					++RaidPlanes;
-					// (within 30 degrees of the look: a 55 degree lens holds it)
-					if (To.Unit().Dot(Way.Unit()) > std::cos(30.0 * 3.14159265358979 / 180.0)) ++RaidInView;
+					double X = 0.0, Y = 0.0;
+					const double Z = Row(P.At, X, Y);
+					if (Z > 1.0 && X >= 0.0 && X < 2881.0 && Y >= FlyTop && Y < FlyFoot)
+					{
+						++InFrame;
+						Spans.push_back(P.Span * FlyFocal / Z);
+					}
 				}
 			}
-			// (the raid's shot: most of its formation in the picture, from its first second to its last)
-			if (Shot.Index == 0 && RT > 1.0 && RaidPlanes > 0) FlyLeastRaidSeen = std::min(FlyLeastRaidSeen, static_cast<double>(RaidInView) / RaidPlanes);
+			if (Close >= 0 && RT > ShotBegan + 1.0) FlyLeastInFrame = std::min(FlyLeastInFrame, InFrame);
+			if (Close >= 0 && (Picture == 0 || Picture == 2))
+			{
+				std::sort(Spans.rbegin(), Spans.rend());
+				for (size_t K = 0; K < Spans.size() && K < 3; ++K)
+				{
+					FlyLeadLeast = std::min(FlyLeadLeast, Spans[K]);
+					FlyLeadMost = std::max(FlyLeadMost, Spans[K]);
+				}
+				if (Spans.size() < 3) FlyLeadLeast = 0.0;
+				++FlyLeadPictures;
+			}
+			if (Picture == 1 && bFlyHarbour)
+			{
+				double X = 0.0;
+				Row(AirShow::Vec(Rec.Board.TargetX, Rec.Board.TargetY, 0.0), X, FlyHarbourRow);
+			}
 			LastEye = Shot.Eye;
 			LastIndex = Shot.Index;
 		}
@@ -667,9 +713,16 @@ int main(int Argc, char** Argv)
 		// clang on a busy machine; the mark is there to catch the next such step, and the Mac's cores are faster)
 		Limits.push_back({ "the sky turned to an eye within budget", WorstPaintMs < 5.0, Num(WorstPaintMs, 2) + " ms", "under 5 ms (the least of three middles of 15)" });
 		// (the shadows in their own room, none among the puffs: their mesh is drawn under the ground's fires and smoke)
-		Limits.push_back({ "the flyover shows the raid and what it comes for", bFlyBegun && FlyShots.count(0) && FlyShots.count(1) && FlyLeastRaidSeen >= 0.6 && Flyover.Length() <= 14.0,
-		                   std::to_string(FlyShots.size()) + " shots, " + Num(Flyover.Length()) + " s, at least " + Num(FlyLeastRaidSeen * 100.0, 0) + "% of the raid in view",
-		                   "the raid and the target shown, 60% of the raid in view, 14 s or less" });
+		Limits.push_back({ "the flyover shows the raid and what it comes for", bFlyBegun && FlyShots.count(0) && FlyShots.count(1) && Flyover.Length() <= 14.0,
+		                   std::to_string(FlyShots.size()) + " shots, " + Num(Flyover.Length()) + " s", "the raid and the target shown, 14 s or less" });
+		Limits.push_back({ "the flyover's close shots hold their lead three near",
+		                   FlyLeadPictures >= 1 && FlyLeadLeast >= 120.0 && FlyLeadMost <= 180.0 && FlyLeastInFrame >= 3,
+		                   std::to_string(FlyLeadPictures) + " pictures, the lead three " + Num(FlyLeadLeast, 0) + " to " + Num(FlyLeadMost, 0) + " px wide, at least " +
+		                       std::to_string(FlyLeastInFrame) + " of the group in the picture",
+		                   "120 to 180 px of 2881 at the pictures (the art director, build 1750), at least 3 in the picture after each shot's first second" });
+		Limits.push_back({ "the flyover holds a harbour in its lower third", !bFlyHarbour || (FlyHarbourRow >= FlyThird && FlyHarbourRow < FlyFoot),
+		                   bFlyHarbour ? "the target at row " + Num(FlyHarbourRow, 0) : std::string("not a harbour"),
+		                   "the lower third, rows 1126 to 1591 of 1786, at the target's picture (the art director on Oahu, build 1750)" });
 		Limits.push_back({ "the flyover's eye glides clear", FlyNoLook == 0 && FlyLow == 0 && FlyJumps == 0 && FlyIntoPlane == 0,
 		                   std::to_string(FlyJumps) + " jumps, " + std::to_string(FlyLow) + " low, " + std::to_string(FlyIntoPlane) + " in a plane, " + std::to_string(FlyNoLook) + " looks lost",
 		                   "0 of each" });

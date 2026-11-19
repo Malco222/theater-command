@@ -198,7 +198,7 @@ private:
 
 	// What the table had before the battle took its place, put back by Finish: its lamps, its haze, its own tick and
 	// its pieces (the pre-check, 06:08Z).
-	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; };
+	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; };
 	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; };
 	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
 	TArray<FKeptLamp> KeptLamps;
@@ -240,6 +240,8 @@ private:
 	void ShowTheTable();
 	/** The battle's day light on the table's lamps, said again wherever the room has changed it. */
 	void LightTheBattle();
+	/** The sun a hard small disc while the battle stands (the art director, build 1750); the lamp kept, put back with the table. */
+	void TheSun(UDirectionalLightComponent& Key);
 	void Feed();
 	void Draw(double Real);
 	void Play(double Real);

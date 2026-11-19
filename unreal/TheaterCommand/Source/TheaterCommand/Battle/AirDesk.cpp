@@ -348,6 +348,8 @@ namespace AirDesk
 
 	namespace
 	{
+		constexpr double Pi = 3.14159265358979323846;
+
 		double Ease(double U)
 		{
 			U = std::clamp(U, 0.0, 1.0);
@@ -366,12 +368,14 @@ namespace AirDesk
 		}
 	}
 
-	bool Flyover::Begin(const std::map<int, AirShow::Group>& Groups, double InTargetX, double InTargetY)
+	bool Flyover::Begin(const std::map<int, AirShow::Group>& Groups, double InTargetX, double InTargetY, bool bHarbour)
 	{
 		TargetX = InTargetX;
 		TargetY = InTargetY;
+		bOverHarbour = bHarbour;
 		Raid = Guard = -1;
 		Last.clear();
+		Leads.clear();
 		// (the raid: the raider's biggest bomber formation in the air; its biggest of any kind if it has no bombers up)
 		int MostRaid = -1, MostAny = -1, Any = -1;
 		for (const auto& Pair : Groups)
@@ -423,7 +427,7 @@ namespace AirDesk
 		return Kept != Last.end() ? &Kept->second : nullptr;
 	}
 
-	Flyover::Shot Flyover::At(double T, const std::map<int, AirShow::Group>& Groups) const
+	Flyover::Shot Flyover::At(double T, const std::map<int, AirShow::Group>& Groups, const std::vector<AirShow::PlaneOut>& Planes) const
 	{
 		// (once the shots are over, the last pose of the last one, for the scene's glide)
 		const bool bOver = T >= Length();
@@ -432,7 +436,9 @@ namespace AirDesk
 		const AirShow::Vec Target(TargetX, TargetY, 0.0);
 		Shot Out;
 		// What it comes for: from beyond the target, the far side from the raid, pushing in from 2.6 km to 1.9 km and
-		// down from 650 m to 520 m, the look lifting from the target toward the raid.
+		// down from 650 m to 520 m, the look lifting from the target toward the raid. Over a harbour the look lifts no
+		// further than holds the target HarbourLow degrees under the picture's middle, in its lower third (the art
+		// director on build 1750's Oahu frame: the hills had pushed Ford Island and the ships off the picture's foot).
 		auto OverTarget = [&](double Into)
 		{
 			const double S = Ease(Into / TargetLong);
@@ -440,23 +446,94 @@ namespace AirDesk
 			const AirShow::Vec From = Target + Up * 40.0;
 			const AirShow::Vec To = Target + Toward * 3500.0 + Up * std::clamp(RaidAt.Z * 0.35, 300.0, 1500.0);
 			Out.Look = From + (To - From) * S;
+			if (bOverHarbour)
+			{
+				const AirShow::Vec Way = Out.Look - Out.Eye, ToTarget = Target - Out.Eye;
+				const double Flat = std::hypot(Way.X, Way.Y);
+				const double Most = std::atan2(ToTarget.Z, std::hypot(ToTarget.X, ToTarget.Y)) + HarbourLow * Pi / 180.0;
+				if (Flat > 1e-6 && std::atan2(Way.Z, Flat) > Most)
+				{
+					const double Far = Way.Length();
+					Out.Look = Out.Eye + AirShow::Vec(Way.X / Flat * std::cos(Most), Way.Y / Flat * std::cos(Most), std::sin(Most)) * Far;
+				}
+			}
 			Out.Index = 1;
+		};
+		// The raid's and the guard's shots: from above and just behind the formation's lead three, looking down
+		// LookDown degrees at them so the sea or the cloud deck is behind them, near enough that each of the three is
+		// about LeadShare of the picture's width; pushing in from 1.2 times that to 0.9 as the shot runs, and swinging in
+		// behind them from out on one side. The lead three are the group's plane furthest ahead as the shot begins and
+		// the two nearest it (they fly some 30 to 150 m behind the slots their group's place gives); with none of them
+		// up, the group's first three slots.
+		auto Behind = [&](const AirShow::Group& G, double Side, double S, int Index)
+		{
+			const AirShow::Vec Ahead(std::sin(G.Face), std::cos(G.Face), 0.0), Right(std::cos(G.Face), -std::sin(G.Face), 0.0);
+			std::vector<int>& Three = Leads[G.Id];
+			if (Three.empty())
+			{
+				// (the plane furthest ahead, and the two nearest it: its own element, a vic of three, not three planes
+				// strung across the formation's front)
+				const AirShow::PlaneOut* First = nullptr;
+				for (const AirShow::PlaneOut& P : Planes)
+				{
+					if (P.Group == G.Id && P.bShown && !P.bFalling && (!First || Ahead.Dot(P.At) > Ahead.Dot(First->At))) First = &P;
+				}
+				if (First)
+				{
+					std::vector<std::pair<double, int>> Order;
+					for (const AirShow::PlaneOut& P : Planes)
+					{
+						if (P.Group == G.Id && P.bShown && !P.bFalling) Order.push_back({ (P.At - First->At).Length(), P.Key });
+					}
+					std::sort(Order.begin(), Order.end());
+					for (size_t K = 0; K < Order.size() && K < 3; ++K) Three.push_back(Order[K].second);
+				}
+			}
+			AirShow::Vec Lead;
+			double Span = 0.0;
+			int Found = 0;
+			for (const AirShow::PlaneOut& P : Planes)
+			{
+				if (P.bShown && std::find(Three.begin(), Three.end(), P.Key) != Three.end())
+				{
+					Lead = Lead + P.At;
+					Span += P.Span;
+					++Found;
+				}
+			}
+			if (Found > 0)
+			{
+				Lead = Lead * (1.0 / Found);
+				Span /= Found;
+			}
+			else
+			{
+				Lead = (AirShow::SlotOf(G, 0) + AirShow::SlotOf(G, 1) + AirShow::SlotOf(G, 2)) * (1.0 / 3.0);
+				Span = AirShow::ShapeOf(G.Model, G.bFighter).Span;
+			}
+			const double Near = Span / (2.0 * std::tan(Lens * 0.5 * Pi / 180.0) * LeadShare);
+			const double Pull = Near * (1.2 - 0.3 * S), Down = LookDown * Pi / 180.0;
+			Out.Eye = Lead - Ahead * (Pull * std::cos(Down)) + Up * (Pull * std::sin(Down)) + Right * (Side * Near * 0.3 * (1.0 - S));
+			Out.Look = Lead;
+			Out.Index = Index;
 		};
 		if (T < RaidLong)
 		{
-			// The raid coming on: from ahead of its formation and out to one side, a little under it, closing to just
-			// ahead of it and level with it; looked at a little ahead of its middle.
+			// The raid (gone before its shot is over, its last pose stands); out on the side away from the target as the
+			// shot begins.
 			const AirShow::Group* R = Find(Groups, Raid);
-			const AirShow::Vec At = R ? AirShow::Vec(R->X, R->Y, R->Alt) : RaidAt;
-			const double Face = R ? R->Face : 0.0;
-			const AirShow::Vec Ahead(std::sin(Face), std::cos(Face), 0.0), Right(std::cos(Face), -std::sin(Face), 0.0);
-			const double Size = std::clamp(R ? std::max(R->W, R->D) : 400.0, 150.0, 1500.0);
-			const double S = Ease(T / RaidLong);
-			// (out to the side away from the target: the target, and the land round it, stay behind the formation)
-			const double Side = Right.Dot(Target - At) > 0.0 ? -1.0 : 1.0;
-			Out.Eye = At + Ahead * (Size * (1.7 - 1.2 * S) + 150.0) + Right * (Side * (Size * 0.6 + 120.0)) + Up * (-60.0 + 70.0 * S);
-			Out.Look = At + Ahead * (Size * 0.15);
-			Out.Index = 0;
+			if (R)
+			{
+				const AirShow::Vec Right(std::cos(R->Face), -std::sin(R->Face), 0.0);
+				const double Side = Right.Dot(Target - AirShow::Vec(R->X, R->Y, R->Alt)) > 0.0 ? -1.0 : 1.0;
+				Behind(*R, Side, Ease(T / RaidLong), 0);
+			}
+			else
+			{
+				Out.Eye = RaidAt - Toward * 600.0 + Up * 150.0;
+				Out.Look = RaidAt;
+				Out.Index = 0;
+			}
 		}
 		else if (T < RaidLong + TargetLong)
 		{
@@ -464,21 +541,11 @@ namespace AirDesk
 		}
 		else
 		{
-			// The guard: from behind the defender's fighters and a little over them, looking out toward the raid (gone
-			// before its shot, the target's last pose stands).
-			const double Into = T - RaidLong - TargetLong;
+			// The guard (gone before its shot, the target's last pose stands).
 			const AirShow::Group* G = Find(Groups, Guard);
 			if (G)
 			{
-				const AirShow::Group* R = Find(Groups, Raid);
-				const AirShow::Vec At(G->X, G->Y, G->Alt);
-				const AirShow::Vec RaidNow = R ? AirShow::Vec(R->X, R->Y, R->Alt) : RaidAt;
-				const AirShow::Vec Way = Level(RaidNow - At, Toward);
-				const double Size = std::clamp(std::max(G->W, G->D), 120.0, 1000.0);
-				const double S = Ease(Into / GuardLong);
-				Out.Eye = At - Way * (Size * 1.1 + 220.0 - 80.0 * S) + Up * (45.0 - 15.0 * S);
-				Out.Look = At + Way * 1200.0 + Up * 20.0;
-				Out.Index = 2;
+				Behind(*G, 1.0, Ease((T - RaidLong - TargetLong) / GuardLong), 2);
 			}
 			else
 			{

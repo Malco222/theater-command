@@ -149,11 +149,11 @@ namespace AirDesk
 	 * The flyover before an air battle (Brian, 19 November 2026, approved: before an air battle starts, a short cinematic
 	 * flyover of both formations, like generals surveying the field). Up to three shots on the real clock, with cuts
 	 * between them, while the battle runs at x1 under them:
-	 *  1. the raid: its biggest bomber formation coming on, seen from ahead and to one side, from a little below it to
-	 *     level with it as it closes;
+	 *  1. the raid: its biggest bomber formation, from above and just behind its lead three, looking down on them so the
+	 *     sea or the cloud deck is behind them, pushing in as the shot runs;
 	 *  2. what it comes for: from beyond the target, the far side from the raid, pushing in over it while the look lifts
-	 *     from the target toward where the raid comes from;
-	 *  3. the guard, when the defender has fighters up: from behind them, looking out toward the raid.
+	 *     from the target toward where the raid comes from (over a harbour the target held in the picture's lower third);
+	 *  3. the guard, when the defender has fighters up: the same as the raid's, on its lead three.
 	 * Then the scene glides into its strategy view over Glide seconds. A click or a key ends it at once. Eyes and looks
 	 * are in the show's metres (X east, Y north, Z up from the sea); the scene keeps the eye over the ground.
 	 */
@@ -166,10 +166,23 @@ namespace AirDesk
 			int Index = -1; // 0 the raid, 1 what it comes for, 2 the guard; -1 when the shots are over
 		};
 		static constexpr double RaidLong = 5.0, TargetLong = 4.5, GuardLong = 3.5, Glide = 2.5;
-		/** Picks the raid's formation and the guard from the battle's first groups. False if there is no raid to show. */
-		bool Begin(const std::map<int, AirShow::Group>& Groups, double InTargetX, double InTargetY);
-		/** The shot T real seconds after Begin, on the groups as they are now. */
-		Shot At(double T, const std::map<int, AirShow::Group>& Groups) const;
+		/** The lens of the shots, degrees across. */
+		static constexpr double Lens = 50.0;
+		/**
+		 * The raid's and the guard's shots (the art director on build 1750, 19 November 2026: the planes were 10 to 15
+		 * pixel specks in a white void): each of the lead three about this share of the picture's width (150 pixels of
+		 * the 2881 pixel picture, her 120 to 180), seen from this many degrees above.
+		 */
+		static constexpr double LeadShare = 150.0 / 2881.0, LookDown = 13.0;
+		/** Over a harbour, how far under the picture's middle the target is held while the look lifts (degrees). */
+		static constexpr double HarbourLow = 9.5;
+		/**
+		 * Picks the raid's formation and the guard from the battle's first groups. False if there is no raid to show.
+		 * bHarbour: the target is a harbour (its ships under the land's edge), held in the target shot's lower third.
+		 */
+		bool Begin(const std::map<int, AirShow::Group>& Groups, double InTargetX, double InTargetY, bool bHarbour = false);
+		/** The shot T real seconds after Begin, on the groups and their planes as they are now. */
+		Shot At(double T, const std::map<int, AirShow::Group>& Groups, const std::vector<AirShow::PlaneOut>& Planes) const;
 		/** When the shots end (the glide to the strategy view follows). */
 		double Length() const { return RaidLong + TargetLong + (Guard >= 0 ? GuardLong : 0.0); }
 		int RaidGroup() const { return Raid; }
@@ -178,10 +191,14 @@ namespace AirDesk
 	private:
 		int Raid = -1, Guard = -1;
 		double TargetX = 0.0, TargetY = 0.0;
+		bool bOverHarbour = false;
 		AirShow::Vec RaidAt;   // where the raid was at Begin
 		AirShow::Vec Toward;   // level, from the target toward the raid at Begin
 		// (the last place each group was seen: a shot whose group has gone keeps its last framing)
 		mutable std::map<int, AirShow::Group> Last;
+		// (each close shot's lead three, by plane, chosen as its shot begins: the planes fly a little behind the slots
+		// their group's place gives, and the shot frames the planes)
+		mutable std::map<int, std::vector<int>> Leads;
 		const AirShow::Group* Find(const std::map<int, AirShow::Group>& Groups, int Id) const;
 	};
 }

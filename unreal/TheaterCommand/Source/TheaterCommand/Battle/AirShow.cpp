@@ -333,6 +333,11 @@ namespace AirShow
 
 	Vec Show::SlotPlace(const Group& G, int Slot) const
 	{
+		return SlotOf(G, Slot);
+	}
+
+	Vec SlotOf(const Group& G, int Slot)
+	{
 		const Vec F = Ahead(G.Face), R = RightOf(G.Face);
 		double Rt = 0.0, Bk = 0.0, Hi = 0.0, Lat = 100.0, Back = 100.0, Step = 30.0;
 		const Shape S = ShapeOf(G.Model, G.bFighter);

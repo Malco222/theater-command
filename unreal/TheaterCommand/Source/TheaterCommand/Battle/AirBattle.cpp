@@ -16,6 +16,7 @@
 #include "Components/AudioComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -795,6 +796,8 @@ void AAirBattle::HideTheTable()
 				Kept.Intensity = Light->Intensity;
 				Kept.Colour = Light->GetLightColor();
 				Kept.Temperature = Light->Temperature;
+				Kept.SourceAngle = Light->LightSourceAngle;
+				Kept.SunDisc = Light->AtmosphereSunDiskColorScale;
 				if (Light->GetFName() == TEXT("KeyLight") || (!Key && Lights.Num() == 1))
 				{
 					Key = Light;
@@ -817,6 +820,7 @@ void AAirBattle::HideTheTable()
 				Key->SetWorldRotation((-Sun).Rotation());
 				// (the 3D builder, 19 November 2026: a sky behind the battle, lit by its sun; taken away in ShowTheTable)
 				BattleLook::AirSkyBegin(*this, Key);
+				TheSun(*Key);
 			}
 			TArray<USkyLightComponent*> Skies;
 			Environment->GetComponents(Skies);
@@ -830,6 +834,52 @@ void AAirBattle::HideTheTable()
 		}
 	}
 	LightTheBattle();
+}
+
+void AAirBattle::TheSun(UDirectionalLightComponent& Key)
+{
+	// The sun a hard small disc (the art director on build 1750's Midway 05, 19 November 2026: a core of 25 pixels
+	// or less, the glow back to the sky's colour within about 150). The table's lamp is a sun a degree and a half
+	// wide, kept soft for the table's shadows, and the sky drew all of its light into that disc: some two thousand
+	// times the picture's white, which the picture's bloom spread into a glow 700 pixels wide. The bloom spreads a
+	// share of what the disc holds, however wide the disc is drawn, so here the disc holds six thousandths of it
+	// (still near a hundred times the white, so a hard white disc, its glow under a hundredth of the white 150 pixels
+	// out) and is drawn the true sun's half degree wide (eleven pixels across the middle of the close camera's 62
+	// degrees). And the air's haze throws the sun's light less steeply forward: the engine's 0.8 made a bright ring
+	// some twelve degrees wide round the sun; at a half it is six times dimmer by the sun and the same elsewhere,
+	// where the haze's own light is a small share of the sky's. Game-wide curve and bloom stay as they are.
+	// "-TheaterSun=0.53,0.006,0.5" (the disc's width in degrees, the share of the light it holds, how steeply forward
+	// the haze throws the sun's light); each one given takes the place of its number here.
+	double DiscWide = 0.53, DiscShare = 0.006, HazeForward = 0.5;
+	FString SunAsked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSun="), SunAsked, false))
+	{
+		TArray<FString> Parts;
+		SunAsked.ParseIntoArray(Parts, TEXT(","), false);
+		double* const Into[] = { &DiscWide, &DiscShare, &HazeForward };
+		for (int32 K = 0; K < Parts.Num() && K < 3; ++K)
+		{
+			if (!Parts[K].TrimStartAndEnd().IsEmpty())
+			{
+				*Into[K] = FCString::Atod(*Parts[K]);
+			}
+		}
+	}
+	DiscWide = FMath::Clamp(DiscWide, 0.1, 5.0);
+	DiscShare = FMath::Clamp(DiscShare, 0.0, 1.0);
+	HazeForward = FMath::Clamp(HazeForward, 0.0, 0.999);
+	Key.LightSourceAngle = static_cast<float>(DiscWide);
+	Key.AtmosphereSunDiskColorScale = FLinearColor(static_cast<float>(DiscShare), static_cast<float>(DiscShare), static_cast<float>(DiscShare));
+	Key.MarkRenderStateDirty();
+	// (The battle's sky is the battle look's, made on this actor in AirSkyBegin and taken away with it.)
+	TArray<USkyAtmosphereComponent*> Atmospheres;
+	GetComponents(Atmospheres);
+	for (USkyAtmosphereComponent* Atmosphere : Atmospheres)
+	{
+		Atmosphere->SetMieAnisotropy(static_cast<float>(HazeForward));
+	}
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the sun a disc %.2f degrees wide holding %.4f of its light, the haze throwing it forward at %.2f (%d skies)"),
+		DiscWide, DiscShare, HazeForward, Atmospheres.Num());
 }
 
 void AAirBattle::LightTheBattle()
@@ -931,6 +981,12 @@ void AAirBattle::ShowTheTable()
 			if (!FMath::IsNearlyEqual(Light->Temperature, Kept.Temperature, 1.0f))
 			{
 				Light->SetTemperature(Kept.Temperature);
+			}
+			if (!FMath::IsNearlyEqual(Light->LightSourceAngle, Kept.SourceAngle) || !Light->AtmosphereSunDiskColorScale.Equals(Kept.SunDisc))
+			{
+				Light->LightSourceAngle = Kept.SourceAngle;
+				Light->AtmosphereSunDiskColorScale = Kept.SunDisc;
+				Light->MarkRenderStateDirty();
 			}
 		}
 	}
@@ -1297,7 +1353,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 	{
 		// The flyover before the battle, once its first groups stand ("-TheaterNoFlyover" goes straight to the battle).
 		S.bFlyTried = true;
-		if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterNoFlyover")) && S.Fly.Begin(S.Show.Groups(), S.Board.TargetX, S.Board.TargetY))
+		if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterNoFlyover")) && S.Fly.Begin(S.Show.Groups(), S.Board.TargetX, S.Board.TargetY, S.Board.PlaceKind == "harbour"))
 		{
 			S.bFlying = true;
 			S.FlyT = 0.0;
@@ -2082,7 +2138,7 @@ void AAirBattle::AimEye(double Real)
 		S.FlyT += Real;
 		if (S.FlyT < S.Fly.Length())
 		{
-			const AirDesk::Flyover::Shot Shot = S.Fly.At(S.FlyT, S.Show.Groups());
+			const AirDesk::Flyover::Shot Shot = S.Fly.At(S.FlyT, S.Show.Groups(), S.Show.Planes());
 			FVector FlyEye = World(Shot.Eye.X, Shot.Eye.Y, Shot.Eye.Z);
 			const FVector FlyLook = World(Shot.Look.X, Shot.Look.Y, Shot.Look.Z);
 			if (Stage && Stage->IsRaised())
@@ -2090,7 +2146,7 @@ void AAirBattle::AimEye(double Real)
 				FlyEye.Z = FMath::Max(FlyEye.Z, Stage->GroundZ(FlyEye) + 60.0 * U);
 			}
 			FlyEye.Z = FMath::Max(FlyEye.Z, 40.0 * U);
-			Lens->SetFieldOfView(50.0f);
+			Lens->SetFieldOfView(static_cast<float>(AirDesk::Flyover::Lens));
 			Lens->PostProcessSettings.MotionBlurAmount = 0.0f;
 			S.GlideEye = FlyEye;
 			S.GlideFacing = (FlyLook - FlyEye).Rotation();
@@ -2314,7 +2370,7 @@ void AAirBattle::AimEye(double Real)
 		{
 			const FQuat Toward = FQuat::Slerp(S.GlideFacing.Quaternion(), (LookAt - From).Rotation().Quaternion(), Eased);
 			Eye->SetActorLocationAndRotation(FMath::Lerp(S.GlideEye, From, Eased), Toward.Rotator());
-			Lens->SetFieldOfView(static_cast<float>(FMath::Lerp(50.0, 55.0, Eased)));
+			Lens->SetFieldOfView(static_cast<float>(FMath::Lerp(AirDesk::Flyover::Lens, 55.0, Eased)));
 		}
 	}
 }
