@@ -345,7 +345,8 @@ describe('the dispatches\' grammar (the UI director, air review 10)', () => {
     expect(told('Home Fleet carrier fighters', '{N} [is|are] in a fight.')).toBe("The Home Fleet's carrier fighters are in a fight.");
     expect(told('Jagdgeschwader 4', '{N} [is|are] in a fight.')).toBe('Jagdgeschwader 4 is in a fight.');
     expect(told('No. 11 Group', '{N} [breaks|break]: [it jettisons its|they jettison their] bombs and [turns|turn] for home.')).toBe('No. 11 Group breaks: it jettisons its bombs and turns for home.');
-    expect(told('Home Fleet strike wing', '{N} [lands|land].')).toBe('Home Fleet strike wing lands.');
+    // A strike wing is its fleet's too, and singular (the UI director's own form, words-pacific-news.md: "The Mobile Fleet's strike wing").
+    expect(told('Home Fleet strike wing', '{N} [lands|land].')).toBe("The Home Fleet's strike wing lands.");
   });
 
   it('a roster row spells a lone aircraft', () => {

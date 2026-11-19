@@ -12,6 +12,7 @@ import { fieldRatio } from '../core/result';
 import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, FieldTicket, Side, UnitState, Zone } from '../core/types';
 import { DT } from '../core/types';
 import { SKY, type Band } from './book';
+import { an, oneOf, subjectOf, told, upFirst } from './names';
 import { enginesOf, escortRoles, fighterWay, passesOn, pickPass, type Pass, type Role, type When } from './doctrine';
 import { drawFall, fallWords } from './falls';
 import { ShipBook, splitWings } from './ships';
@@ -30,22 +31,8 @@ const away = (u: AirUnit): boolean => u.job.do === 'home' || u.state === 'routin
 /** An escort's role: close, top cover or the sweep (a loose escort). */
 const roleOf = (j: { close: boolean; top?: boolean }): Role => (j.close ? 'close' : j.top ? 'top' : 'sweep');
 
-/**
- * A group's name as the subject of a dispatch, and whether it takes a plural verb (the UI director, air review 10):
- * "Jagdgeschwader 4 is in a fight", but "The Home Fleet's carrier fighters are in a fight". 'whom' is the name inside
- * a sentence.
- */
-export function subjectOf(name: string): { who: string; whom: string; many: boolean } {
-  const m = /^(.+?) (carrier [a-z]+s)$/.exec(name);
-  if (m) return { who: `The ${m[1]}'s ${m[2]}`, whom: `the ${m[1]}'s ${m[2]}`, many: true };
-  return { who: name, whom: name, many: /(^| )[a-z]+s$/.test(name) };
-}
-
-/** A line about a group, its verbs agreeing with the name: told(name, '{N} [is|are] in a fight.'). */
-export function told(name: string, text: string): string {
-  const s = subjectOf(name);
-  return text.replace(/\{N\}/g, s.who).replace(/\[([^|\]]*)\|([^\]]*)\]/g, (_, one: string, many: string) => (s.many ? many : one));
-}
+// The names in a dispatch (names.ts), as the tests and the battle's pages have them from here.
+export { oneOf, subjectOf, told };
 
 export class AirSim implements BattleSim<AirUnit> {
   readonly domain = 'air' as const;
@@ -704,7 +691,8 @@ export class AirSim implements BattleSim<AirUnit> {
    * A box hit this tick may have one of its bombers lose an engine and fall out of formation (the design's 1.6, ruling
    * 237.1): a chance of strag.k times what the box was owed, never more than strag.most at a time, never its last
    * aircraft in formation. The engine, and whether its airscrew is feathered or windmills, by the battle's own stream
-   * for stragglers.
+   * for stragglers. A single-engined bomber (a carrier or dive bomber) cannot lose its one engine and stay up: its
+   * engine is hit and runs rough, its airscrew still turning ('windmill', engine 1), and it falls back as a twin does.
    */
   private straggle(b: AirUnit): void {
     const G = SKY.strag;
@@ -713,22 +701,27 @@ export class AirSim implements BattleSim<AirUnit> {
     const m = this.owedBy.get(b.id);
     let by: number | 'flak' = 'flak', most = -Infinity;
     if (m) for (const [k, v] of m) if (v > most) { most = v; by = k; }
-    const four = enginesOf(b.model) === 4;
-    const one = 1 + this.stragRng.int(four ? 4 : 2);
-    // Two engines: one out, feathered. Four: one dead and windmilling, or two out and feathered (B38, B39); and before
-    // its bombs have gone, one cleanly feathered too, for a loaded heavy on three engines seldom held the box at height
-    // (the historian's review, question 6: after the drop most could keep up, so it does not fall out for that).
+    const engines = enginesOf(b.model), four = engines === 4, single = engines === 1;
+    // The same draws whatever the engines, so a box's stragglers fall out at the same moments whatever it flies.
+    const one = 1 + this.stragRng.int(four ? 4 : single ? 1 : 2);
+    // One engine: hit, still turning. Two engines: one out, feathered. Four: one dead and windmilling, or two out and
+    // feathered (B38, B39); and before its bombs have gone, one cleanly feathered too, for a loaded heavy on three
+    // engines seldom held the box at height (the historian's review, question 6: after the drop most could keep up, so
+    // it does not fall out for that).
     const loaded = b.dropped <= 0 && !b.jettisoned;
     const x = four ? this.stragRng.next() * (loaded ? 3 : 2) : 0;
     const two = four && x >= 1 && x < 2, wind = four && x < 1;
     const eng = two ? [one, one % 4 + 1].sort((p, q) => p - q) : [one];
     const s: Straggler = {
-      id: this.stragId++, eng, prop: wind ? 'windmill' : 'feather', why: by === 'flak' ? 'flak' : 'ftr', by, age: 0, back: 0, down: 0,
+      id: this.stragId++, eng, prop: wind || single ? 'windmill' : 'feather', why: by === 'flak' ? 'flak' : 'ftr', by, age: 0, back: 0, down: 0,
       rate: four ? this.stragRng.range(G.four.back[0], G.four.back[1]) : G.twin.back * SKY.speed.bmr, sink: four ? G.four.sink : G.twin.sink, cover: null,
     };
     b.strag.push(s);
-    // The UI director's words (ui-director/words-air-battle-dispatches.md, 21:19Z): both forms end alike.
-    const text = s.why === 'flak' ? `Flak has knocked out an engine on ${this.aBomberOf(b, false)}, and it is falling out of formation.` : `${this.aBomberOf(b, true)} has lost an engine and is falling out of formation.`;
+    // The UI director's words (ui-director/words-air-battle-dispatches.md, 21:19Z): both forms end alike. A
+    // single-engined bomber has no engine to lose and fly on: its one engine is hit (the Mac's first Pearl Harbor run).
+    const text = single
+      ? s.why === 'flak' ? `Flak has hit the engine of ${this.aBomberOf(b, false)}, and it is falling out of formation.` : `${this.aBomberOf(b, true)} has taken a hit in the engine and is falling out of formation.`
+      : s.why === 'flak' ? `Flak has knocked out an engine on ${this.aBomberOf(b, false)}, and it is falling out of formation.` : `${this.aBomberOf(b, true)} has lost an engine and is falling out of formation.`;
     this.say('air:straggle', b, text, { id: s.id, box: b.id, eng: s.eng, prop: s.prop, why: s.why, by: s.by });
   }
 
@@ -745,12 +738,16 @@ export class AirSim implements BattleSim<AirUnit> {
     return { x: b.x - Math.sin(b.face) * s.back, y: b.y - Math.cos(b.face) * s.back };
   }
 
-  /** 'A bomber of KG 2' for his own box, 'a German bomber of KG 2' for the enemy's (the UI director, 21:19Z). */
+  /**
+   * 'A bomber of KG 2' for his own box, 'a German bomber of KG 2' for the enemy's (the UI director, 21:19Z). A box named
+   * for its aircraft is 'one of the Shokaku and Zuikaku dive bombers' (oneOf), the enemy's 'one of the Japanese ...',
+   * and 'how' follows the name ('one of the ..., damaged,').
+   */
   private aBomberOf(b: AirUnit, first: boolean, how = ''): string {
-    const t = this.ticket, own = t[b.side].human || !(t.att.human || t.def.human);
-    const what = [how, own ? '' : t[b.side].adj, 'bomber'].filter(Boolean).join(' ');
-    const a = /^[AEIOU]/i.test(what) ? 'an' : 'a';
-    return `${first ? a[0].toUpperCase() + a.slice(1) : a} ${what} of ${subjectOf(b.name).whom}`;
+    const t = this.ticket, own = t[b.side].human || !(t.att.human || t.def.human), adj = own ? '' : t[b.side].adj;
+    const what = [how, adj, 'bomber'].filter(Boolean).join(' ');
+    const said = subjectOf(b.name).many ? `${oneOf(b.name, adj)}${how ? `, ${how},` : ''}` : `${an(what)} ${what} of ${subjectOf(b.name).whom}`;
+    return first ? upFirst(said) : said;
   }
 
   /** A straggler that got clear of the fight and is on its way home. */

@@ -59,8 +59,16 @@ export function bomberOf(nat: string, design: number): string {
   return `Bomber:${nat}`;
 }
 
-/** Engines on a bomber model: the B-17 and the Lancaster have four; the He 111 and the plain bomber two. */
-export const enginesOf = (model: string): number => (model === 'B17' || model === 'Lancaster' ? 4 : 2);
+/**
+ * The single-engined bomber models: the carrier aircraft by name (ships.ts deckModels: the B5N and B6N, D3A and D4Y,
+ * TBD and TBF, SBD and SB2C, Swordfish, Barracuda and Skua), the Stuka, and a nation's plain carrier torpedo or dive
+ * bomber ('Torpedo:ITA', 'Dive:FRA'), every one of them single-engined in the war.
+ */
+const SINGLE = new Set(['B5N', 'B6N', 'D3A', 'D4Y', 'TBD', 'TBF', 'SBD', 'SB2C', 'Swordfish', 'Barracuda', 'Skua', 'Stuka']);
+
+/** Engines on a bomber model: the B-17 and the Lancaster have four; the carrier and dive bombers one; the He 111 and the plain bomber two. */
+export const enginesOf = (model: string): number =>
+  model === 'B17' || model === 'Lancaster' ? 4 : SINGLE.has(model) || /^(Torpedo|Dive):/.test(model) ? 1 : 2;
 
 // ---- Fighters against fighters ---------------------------------------------------------------------------------
 

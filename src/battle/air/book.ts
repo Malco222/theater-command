@@ -157,10 +157,11 @@ export const SKY = {
    * on one engine makes three quarters of its speed or less and cannot hold height (B39): it drops back at 'twin.back'
    * of the box's speed and sinks. A four-engined straggler has one engine windmilling or two out (B38, B39), or, still
    * loaded, one cleanly feathered (the historian, question 6: loaded, it seldom held the box; after the drop most
-   * could, FB12): it drops back 4.5 to 9 m/s. The historian: about half is a fair figure for 1943 (low), less in 1944,
-   * when escorts covered the stragglers (as 'cover' does here). Before its box bombs it keeps within 'held'
-   * metres (its bombs are in the box's drop); after, it falls back freely and is clear of the fight, and gets home,
-   * past 'clear' metres. k is tuned so that about half the bombers lost were stragglers first, until the historian
+   * could, FB12): it drops back 4.5 to 9 m/s. A single-engined carrier or dive bomber has its one engine hit, running
+   * rough with its airscrew turning, and falls back and sinks as a twin does (a placeholder). The historian: about
+   * half is a fair figure for 1943 (low), less in 1944, when escorts covered the stragglers (as 'cover' does here).
+   * Before its box bombs it keeps within 'held' metres (its bombs are in the box's drop); after, it falls back freely
+   * and is clear of the fight, and gets home, past 'clear' metres. k is tuned so that about half the bombers lost were stragglers first, until the historian
    * answers (ruling 237.1). Sink rates are placeholders.
    */
   strag: { k: 1, most: 2, seen: 10, twin: { back: 0.25, sink: 2 }, four: { back: [4.5, 9] as [number, number], sink: 1 }, held: 1_500, clear: 3_000 },
