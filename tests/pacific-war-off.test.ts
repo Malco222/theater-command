@@ -2,6 +2,7 @@
 // December 1941 stands at its month's opening as it always did, the month's close reads nothing, and the rule that
 // lets two seats files give one country rows ("JAP+") is the far-side rig's rule with one more key.
 import { describe, expect, it } from 'vitest';
+import { planSkies } from '../src/campaign/ai';
 import { plannedStrike } from '../src/campaign/carriers';
 import { DIPLOMACY, closeDiplomacy, holds, monthlyDiplomacy, warDiplomacy } from '../src/campaign/diplomacy';
 import { FAR_LAID, lay } from '../src/campaign/far-rows';
@@ -289,6 +290,19 @@ describe("the Allies' landing ships in the Pacific and the islands' garrisons (r
     expect(rows.filter((r) => Array.isArray(r[r.length - 1]?.est))).toEqual([]);
     const g = startOpen(createGame(3, null));
     expect(g.corps.filter((c) => c.full !== undefined).map((c) => c.name).sort()).toEqual(SMALL);
+  });
+});
+
+describe("the plan holds the sky it lands under (rider b631 (iv) to ruling 234) with the far side off", () => {
+  it("no landing plan names a shore to its air staff: a corps waiting in port for an enemy's shore, and nothing is read", () => {
+    const g = startOpen(createGame(3, null));
+    // Germany is at war with Poland from the first day: a German corps on a German quay, and a Polish shore.
+    const quay = g.regions.find((r) => r.port && r.owner === 'GER' && r.ctrl === 'GER' && r.seas.length > 0)!;
+    const shore = g.regions.find((r) => r.ctrl === 'POL' && r.seas.length > 0)!;
+    expect(quay && shore && atWar(g, 'GER', 'POL')).toBe(true);
+    const c = addCorps(g, 'GER', 'A corps for the far shore', 'inf', 1, quay.id, {});
+    const ph = { name: 'a landing plan', from: 1, to: 6, posture: 'attack', landings: [{ corps: c.name, to: [shore.name] }] } as any;
+    expect(planSkies(g, 'GER', ph, null)).toEqual([]);
   });
 });
 

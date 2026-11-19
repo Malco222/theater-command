@@ -23,11 +23,11 @@ import { shoreOpen, stopOf, stormHeldBy } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff, descentAsks, freed } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { HOP_AIMS, firstOnRun, hopAims, hopShores, laneOn, pacificGround } from './pacific';
-import { beyondEurope, enemyAtTheDoor, oceanShares, overseasOf, shoreOf, type OverseasRules } from './world';
+import { beyondEurope, enemyAtTheDoor, farOn, oceanShares, overseasOf, shoreOf, type OverseasRules } from './world';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { frontArmys, lineAny, lineGives, lineLeaves, lineShut } from './line';
-import { alongside, bookAttacks, bookFleets, bookSails, bookStations, ceilinged, goesWith, ridersOf } from './stations';
+import { alongside, bookAttacks, bookFleets, bookKept, bookSails, bookStations, ceilinged, goesWith, ridersOf } from './stations';
 import { byThePlan, followKey, frontsAgain, frontsClear, frontsNow, frontsTick, offFront, onFront, planWaits, plansHold, sailedKey, walkedKey, type FollowOn, type FrontsNow } from './planfronts';
 import { hashString } from '../core/rng';
 import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
@@ -623,7 +623,8 @@ function mainCampaign(g: Game, nat: string): void {
   const cover = bookFleets(g, nat);
   navalAI(g, nat, cover.length ? [...cover, ...(ph?.fleets ?? [])] : ph?.fleets);
   shoreAI(g, nat);
-  airAI(g, nat, ph);
+  // (A landing plan holds the sky it lands under: its air staff is told the shores it still owes a landing on. Rider b631 (iv) to ruling 234.)
+  airAI(g, nat, ph, planSkies(g, nat, ph, FR));
   if (open) homeAgain(g, nat);
   // A nation at peace gives its army no orders, unless its staff is bringing it up for a war of its own choosing.
   if (!n.atWar.length && !(open && ph?.posture === 'redeploy')) return;
@@ -1285,6 +1286,52 @@ function owedLandings(g: Game, nat: string, N: FrontsNow): PlanPhase | null {
   const ph = { name: '', from: g.turn, to: g.turn + 6, posture: 'defend', landings: list } as PlanPhase;
   if (N.plan.op.quays) ph.quays = N.plan.op.quays;
   return ph;
+}
+
+/**
+ * The shores a landing plan still owes a landing on this month, in the plan's order, for its air staff: the plan
+ * holds the sky it lands under (air.ts, planSky; rider b631 (iv) to ruling 234, the design director's notes of
+ * 12:41Z and 13:57Z, 19 November 2026).
+ *   its own landings   every place still an enemy's on the list of a landing whose corps still waits in port, from
+ *                      the month the plan goes;
+ *   with fronts        the same of the landings its fronts still owe once the plan's two months are over, and the
+ *                      first place still an enemy's of each follow-on that is due: from the month before its
+ *                      date, its row's own landing made and the hop before it made. A move to a harbour is no landing.
+ * For a computer's staff in the grand campaign with the far side on, where no book dates the plan's rows (stop 3 and
+ * looser), as the plan's fronts are. None otherwise, and the air staff then reads nothing new.
+ */
+export function planSkies(g: Game, nat: string, ph: PlanPhase | null, N: FrontsNow | null): number[] {
+  if (!isOpen(g) || !farOn(g) || nat === g.human || bookKept(g, nat)) return [];
+  const out: number[] = [];
+  const add = (r: Region | undefined): void => { if (r && atWar(g, nat, r.ctrl) && !out.includes(r.id)) out.push(r.id); };
+  const corps = (nm: string): Corps | undefined => g.corps.find((x) => x.nat === nat && x.name === nm && !x.dead);
+  const plans = ph?.landings ? ph : N ? owedLandings(g, nat, N) : null;
+  for (const L of plans?.landings ?? []) {
+    const c = corps(L.corps), from = c ? g.regions[c.reg] : undefined;
+    // (A corps still waiting in port, as the landings themselves read it.)
+    if (!from || !from.port || !(from.owner === nat || (!!plans!.quays?.includes(from.name) && from.ctrl === nat && !L.to.includes(from.name)))) continue;
+    for (const nm of L.to) add(g.byName[nm]);
+  }
+  if (!N) return out;
+  const P = N.plan;
+  const mine = (r: Region | undefined): boolean => !!r && allied(g, nat, r.ctrl);
+  for (let k = 0; k < P.fronts.length; k++) {
+    if (!N.live[k]) continue;
+    const T = P.fronts[k].then ?? [];
+    for (let i = 0; i < T.length; i++) {
+      const f = T[i];
+      if (f.stage || g.flags[followKey(nat, k, i)] !== undefined || g.turn < P.at + f.month - 1) continue;
+      const lead = corps(f.corps), row = lead ? N.rows.get(lead.id) : undefined;
+      if (!lead || !row?.next || row.next.k !== k || row.next.i !== i) continue;
+      // (Its own first landing still owed, or the hop before it still to make: not yet.)
+      if ((P.op.landings ?? []).some((L) => L.corps === lead.name) && g.flags[sailedKey(lead)] === undefined) continue;
+      if ((f.after ?? []).some((nm) => !mine(g.byName[nm]))) continue;
+      const places = f.to.map((nm) => g.byName[nm]).filter((r): r is Region => !!r);
+      if (places.length && mine(places[0])) continue;
+      add(places.find((r) => atWar(g, nat, r.ctrl)));
+    }
+  }
+  return out;
 }
 
 /** For the measuring harness: told of what a plan's fronts do with their rows. Nothing in the game listens. */

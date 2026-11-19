@@ -781,8 +781,9 @@ export function plannedStrike(g: Game, nat: string, fleet: string, harbour: stri
  * wing goes for the best fleet its side has found in reach, or for ships in a harbour; a carrier fleet lying in
  * harbour with nothing in reach puts to sea for the month to strike, where its side would be much the stronger.
  * A few of the land bombers may go for ships too. A strike is flown only where the forecast says it should pay.
+ * 'not' are the land groups a landing plan has named for its sky this month: they fly nothing else (air.ts, planSky).
  */
-export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 'all'): void {
+export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 'all', not?: Set<number>): void {
   // The player's carriers go with his navy and his land bombers with his air force: each flies for him only where
   // he has handed that desk to his staff (depth.ts), and then it is asked for by itself.
   const his = what === 'decks' ? byHand(g, nat, 'navy') : what === 'land' ? byHand(g, nat, 'air') : nat === g.human;
@@ -793,7 +794,7 @@ export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 
   const trade = !!A.trade;
   const hit = new Set<string>();
   let flown = what === 'land' ? 100 : 0;
-  const fit = (f: AirFleet | undefined): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ready >= A.ready && !inCampaign(g, f);
+  const fit = (f: AirFleet | undefined): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ready >= A.ready && !inCampaign(g, f) && !not?.has(f.id);
   const send = (b: Blow): void => {
     const rep = fly(g, nat, b.m, b.t, b.fleets, `:sea${flown++}`);
     hit.add(`${b.m}:${b.t}`);
