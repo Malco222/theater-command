@@ -1601,7 +1601,7 @@ namespace TheaterFx
 		}
 		// gun smoke: a thin grey wisp left hanging in the air where the gun was, so a firing wing trails a short
 		// smoky line behind it
-		if (bSmoke && Row.SmokeAlpha > 0.0 && Bits.size() < static_cast<size_t>(MaxPuffs) * 4 / 5) // (the first thing shed when the room fills)
+		if (bSmoke && Row.SmokeAlpha > 0.0 && Bits.size() + TwinBits < static_cast<size_t>(MaxPuffs) * 4 / 5) // (the first thing shed when the room fills; a twin counts its two slots)
 		{
 			Bit B;
 			B.Born = T + 0.01;
@@ -1866,6 +1866,9 @@ namespace TheaterFx
 		const double LeastPx = Num(P + "least_px", 9.0);
 		const Rgb Young = Picture(P + "colour", Rgb::FromPicture(46, 43, 42));
 		const Rgb Old = Picture(P + "colour_old", Rgb::FromPicture(128, 122, 116));
+		const double FaceLit = std::max(0.0, Num(P + "face_lit", 0.0));
+		const Rgb LitCol = Picture(P + "lit_colour", Rgb::FromPicture(182, 176, 166));
+		const double TwinPx = std::max(0.0, Num(P + "twin_px", 40.0));
 		auto Smoke = [&](const Vec& From, double R, double R1, const Vec& Vel, double A, double Life)
 		{
 			Bit B;
@@ -1895,6 +1898,11 @@ namespace TheaterFx
 			B.Centre = At;
 			B.CloudShade = Shade;
 			B.CloudR = Half;
+			// (art director 00:03Z: each lobe its own lit weight, 0.6 to 1.0, so neighbours differ and the lit side breaks
+			// into lumps; taken from its lump seed, so the throw of the burst's dice is as before)
+			B.FaceLit = FaceLit * (0.6 + 0.4 * static_cast<double>((B.LumpSeed * 2654435761u) >> 22) / 1023.0);
+			B.LitCol = LitCol;
+			B.TwinPx = TwinPx;
 			return B;
 		};
 		// the lobes: a crooked chain down the wind, never a clump: spread along the wind, wandering across it and up
@@ -2432,7 +2440,7 @@ namespace TheaterFx
 	// ---------------------------------------------------------------------------------------------------------------
 	// Drawing
 
-	void Battle::Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough, uint32_t LumpSeed, double Turn, const Rgb& Floor, const Rgb& Through, const Vec& Outward)
+	void Battle::Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough, uint32_t LumpSeed, double Turn, const Rgb& Floor, const Rgb& Through, const Vec& Outward, const Rgb& Lift)
 	{
 		const size_t First = static_cast<size_t>(Slot) * PointsPerPuff;
 		auto Put = [this](size_t I, const Vec& At, const Rgb& C, double A)
@@ -2443,7 +2451,13 @@ namespace TheaterFx
 			OutRgba[I * 4 + 2] = Byte(C.B);
 			OutRgba[I * 4 + 3] = Byte(A);
 		};
-		Put(First, Middle, Rgb(std::max(Col.R, Floor.R), std::max(Col.G, Floor.G), std::max(Col.B, Floor.B)), Alpha);
+		// (Lift: the sunlit face of smoke seen with the sun behind the eye. Art director 23:59Z: each lobe a dome, its
+		// crown on the side toward the sun lit and its underside and edge darker, so the lobes count as lumps. The
+		// middle takes the ring's mean, so the crown is a smooth slope across the lobe and never a star of spokes)
+		const bool bLift = std::fabs(Lift.R) + std::fabs(Lift.G) + std::fabs(Lift.B) > 1e-6f;
+		const float KMid = 0.75f;
+		const Rgb Mid = bLift ? Rgb(Col.R + KMid * Lift.R, Col.G + KMid * Lift.G, Col.B + KMid * Lift.B) : Col;
+		Put(First, Middle, Rgb(std::max(Mid.R, Floor.R), std::max(Mid.G, Floor.G), std::max(Mid.B, Floor.B)), Alpha);
 		// (a clod's lumpy outline: a few waves round it, its own, turning as it tumbles. Each wave is
 		// cos(n * (Angle - Turn) + Pn), worked out from the ring's own table, so a puff costs six cosines, not three a side)
 		double C2 = 1.0, S2 = 0.0, C3 = 1.0, S3 = 0.0, C5 = 1.0, S5 = 0.0;
@@ -2497,6 +2511,17 @@ namespace TheaterFx
 				Shaded = Col * F;
 				HeartShaded = Col * (1.0 + 0.5 * (F - 1.0));
 			}
+			if (bLift)
+			{
+				const double Len2 = AA * Cs * Cs + BB * Sn * Sn + 2.0 * AB * Cs * Sn;
+				const double Toward = Len2 > 1e-18 ? (SunA * Cs + SunB * Sn) / std::sqrt(Len2) : 0.0;
+				const double Lean = Clamp01(0.5 + 0.5 * Toward / std::max(SunAcross, 0.05)); // (1 on the side toward the sun on the screen)
+				// (art director 00:03Z: the pale fades with the puff's own edge opacity, so the rim goes see-through grey)
+				const double HeartK = Clamp01(HeartAlpha / std::max(Alpha, 1e-6)), RimK = Clamp01(RimAlpha / std::max(Alpha, 1e-6));
+				const float KHeart = static_cast<float>((0.1 + 0.9 * Lean) * HeartK), KRim = static_cast<float>(0.1 * Lean * RimK);
+				HeartShaded = Rgb(HeartShaded.R + KHeart * Lift.R, HeartShaded.G + KHeart * Lift.G, HeartShaded.B + KHeart * Lift.B);
+				Shaded = Rgb(Shaded.R + KRim * Lift.R, Shaded.G + KRim * Lift.G, Shaded.B + KRim * Lift.B);
+			}
 			Shaded = Rgb(std::max(Shaded.R, Floor.R), std::max(Shaded.G, Floor.G), std::max(Shaded.B, Floor.B));
 			HeartShaded = Rgb(std::max(HeartShaded.R, Floor.R), std::max(HeartShaded.G, Floor.G), std::max(HeartShaded.B, Floor.B));
 			if (bThrough)
@@ -2518,12 +2543,12 @@ namespace TheaterFx
 		}
 	}
 
-	bool Battle::LayBit(int Slot, const Bit& B, double Now, const View& Eye)
+	int Battle::LayBit(int Slot, const Bit& B, double Now, const View& Eye, int Room)
 	{
 		const double Age = Now - B.Born;
 		if (Age < 0.0 || (Age > B.Life && !Unseen(B)))
 		{
-			return false;
+			return 0;
 		}
 		// (a light shorter than a frame that no frame has caught yet is laid now, where it is, at its full strength)
 		const double Shown = Unseen(B) && Age > B.Life * std::min(B.Hold, 0.5) ? B.Life * std::min(B.Hold, 0.5) : Age;
@@ -2538,10 +2563,10 @@ namespace TheaterFx
 		}
 		if (A < 0.004)
 		{
-			return false;
+			return 0;
 		}
 		Rgb Col = B.Col.Mix(B.Col2, F * B.Cool);
-		Rgb Floor, Through;
+		Rgb Floor, Through, Lift;
 		if (!B.bLight)
 		{
 			Col = Rgb(Col.R * Eye.SmokeLight.R, Col.G * Eye.SmokeLight.G, Col.B * Eye.SmokeLight.B);
@@ -2551,7 +2576,7 @@ namespace TheaterFx
 		const double Dist = (P - Eye.Eye).Length();
 		if (Dist > Beyond)
 		{
-			return false;
+			return 0;
 		}
 		double Outer = 1.0; // (how near the puff is to its cloud's edge: only a cloud's own fringe lets the sun through)
 		Vec Outward; // (and which way on the screen is out of its cloud)
@@ -2567,6 +2592,19 @@ namespace TheaterFx
 			{
 				const double Toward = FromMid.Dot(Eye.Sun) / Len * Clamp01(Len / std::max(B.CloudR, 1e-3));
 				Col = Col * std::max(0.3, 1.0 + B.CloudShade * (ShadeLit * std::max(0.0, Toward) - ShadeDark * std::max(0.0, -Toward)));
+				if (B.FaceLit > 0.0 && Dist > 1e-6)
+				{
+					// (art director 23:44Z: flak seen from above with the sun behind the eye shows its sunlit face in a
+					// light grey, dark only in its hollows, its far side and its young heart; seen side-on or against
+					// the sun it keeps the look she passed. Most on the cloud's thin outer lobes and wisps and on its
+					// sunward side; next to none in its dense young heart, where the lobes are still close in, nor on
+					// its far side. Laid by Lay: all of it at a lobe's middle, less toward its edge)
+					const double Face = (Eye.Eye - P).Dot(Eye.Sun) / Dist;
+					const double Day = (Eye.SunLight.R + Eye.SunLight.G + Eye.SunLight.B) / 3.0;
+					const double W = Clamp01(1.2 * Outer + 1.5 * Toward - 0.15);
+					const float L = static_cast<float>(Clamp01(B.FaceLit * std::max(0.0, Face) * W * std::sqrt(W) * Day));
+					Lift = Rgb((B.LitCol.R * Eye.SmokeLight.R - Col.R) * L, (B.LitCol.G * Eye.SmokeLight.G - Col.G) * L, (B.LitCol.B * Eye.SmokeLight.B - Col.B) * L);
+				}
 				Col = Rgb(std::max(Col.R, Floor.R), std::max(Col.G, Floor.G), std::max(Col.B, Floor.B));
 			}
 		}
@@ -2702,12 +2740,27 @@ namespace TheaterFx
 		}
 		if (A < 0.004)
 		{
-			return false;
+			return 0;
 		}
 		const double Heart = B.HeartEnd >= 0.0 ? B.Heart + (B.HeartEnd - B.Heart) * F : B.Heart;
-		Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * B.Rim, B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, B.Turn + B.TurnRate * Age, Floor, Through, Outward);
+		const double Turned = B.Turn + B.TurnRate * Age;
+		if (B.TwinPx > 0.0 && Room >= 2 && 2.0 * Rad >= B.TwinPx * MetresAPixel)
+		{
+			// (art director 00:03Z: a near flak puff is two fans, the second turned half a step round the same outline, so the
+			// two together have twice the sides and no straight facet shows. Each takes the opacity that makes the two
+			// together what one would be)
+			const double Step = Pi / Sides;
+			const Vec AxA2 = AxA * std::cos(Step) + AxB * std::sin(Step);
+			const Vec AxB2 = AxB * std::cos(Step) - AxA * std::sin(Step);
+			auto Half = [](double X) { return 1.0 - std::sqrt(1.0 - Clamp01(X)); };
+			Lay(Slot, Middle, AxA, AxB, Col, Half(A), Half(A * Heart), Half(A * B.Rim), B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, Turned, Floor, Through, Outward, Lift);
+			Lay(Slot + 1, Middle, AxA2, AxB2, Col, Half(A), Half(A * Heart), Half(A * B.Rim), B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, Turned - Step, Floor, Through, Outward, Lift);
+			B.bShown = true;
+			return 2;
+		}
+		Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * B.Rim, B.Inner, B.Point, B.Tail, B.bLight ? 0.0 : B.ShadeK, Eye, B.Rough, B.LumpSeed, Turned, Floor, Through, Outward, Lift);
 		B.bShown = true;
-		return true;
+		return 1;
 	}
 
 	int Battle::Draw(double Now, const View& Eye)
@@ -2732,10 +2785,7 @@ namespace TheaterFx
 			{
 				break;
 			}
-			if (LayBit(Slot, M, Now, Eye))
-			{
-				++Slot;
-			}
+			Slot += LayBit(Slot, M, Now, Eye, MaxPuffs - Slot);
 		}
 		// the young end of each trail this frame: from its point (or its flame's tips) back to its newest hanging puff,
 		// thin and dark, riding with the aircraft, so a trail starts at the engine and not a puff's spacing behind it
@@ -2774,12 +2824,14 @@ namespace TheaterFx
 		}
 		// then the rest, far to near, so that each is laid over what is behind it
 		Sorted.clear();
+		TwinBits = 0;
 		for (const Bit& B : Bits)
 		{
 			if (Now < B.Born || (Now > B.Born + B.Life && !Unseen(B)))
 			{
 				continue;
 			}
+			TwinBits += B.TwinPx > 0.0 ? 1u : 0u;
 			Sorted.push_back(Order{ &B, (Where(B, Now - B.Born) - Eye.Eye).Dot(Eye.Forward) });
 		}
 		for (const Bit& B : Roots)
@@ -2787,14 +2839,22 @@ namespace TheaterFx
 			Sorted.push_back(Order{ &B, (B.From - Eye.Eye).Dot(Eye.Forward) });
 		}
 		std::sort(Sorted.begin(), Sorted.end(), [](const Order& L, const Order& R) { return L.Deep > R.Deep; });
-		const size_t Left = static_cast<size_t>(MaxPuffs - Slot);
-		const size_t Start = Sorted.size() > Left ? Sorted.size() - Left : 0; // (out of room: the farthest go)
+		// (out of room: the farthest go. Counted from the nearest back, a twin taking two slots, so the nearest are never
+		// the ones left out)
+		const size_t Left = static_cast<size_t>(std::max(0, MaxPuffs - Slot));
+		size_t Start = Sorted.size();
+		for (size_t Need = 0; Start > 0; --Start)
+		{
+			const size_t Takes = Sorted[Start - 1].B->TwinPx > 0.0 ? 2u : 1u; // (a twin far off is laid once: then a slot is spare)
+			if (Need + Takes > Left)
+			{
+				break;
+			}
+			Need += Takes;
+		}
 		for (size_t I = Start; I < Sorted.size() && Slot < MaxPuffs; ++I)
 		{
-			if (LayBit(Slot, *Sorted[I].B, Now, Eye))
-			{
-				++Slot;
-			}
+			Slot += LayBit(Slot, *Sorted[I].B, Now, Eye, MaxPuffs - Slot);
 		}
 		// fold away what was drawn last frame and is not now
 		for (int S = Slot; S < LastDrawn; ++S)

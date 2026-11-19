@@ -103,9 +103,16 @@ Blasts->AirFlak(AirNow, BurstWorld, TEXT("heavy"));
   It hangs where it burst, drifts with the wind, greys and stretches, and is gone in about 9 s. It is never cut off.
 - The art director's brief sets where and how often: within about two wingspans of the formation, more behind than
   ahead; a new burst about every 2.5 s (light guns), 1.4 s (medium) or 0.9 s (heavy), ragged; none once they turn
-  for home. Each burst is about 12 to 19 puffs.
+  for home. Each burst is about 12 to 19 puffs; seen close, its smoke puffs take two slots each (16 to 26 slots).
 - The preview: `./fxpreview recipe.txt out air hmg 6,20,95,245 960x540 burst` (one burst, close) or `... 360 960x540
   flak` (heavy guns round a flying aircraft).
+  `... 6,12,35,95 960x540 above` is one burst 60 m over the fields as the campaign camera sees it: FX_DIST metres off (75),
+  looking down FX_PITCH degrees (50), facing FX_YAW degrees (90); FX_SUN=x,y,z sets the sun for every air shot.
+- Seen with the sun behind the eye (as from the campaign camera on a sunny day), a flak burst shows its sunlit face:
+  `face_lit` takes its outer lobes and wisps toward `lit_colour`, most on the sunward side, while its young heart and
+  far side stay dark. Facing the sun or at night it keeps the dark look; with the sun to the side it is partly lit. A flak
+  puff at least `twin_px` across on the screen is drawn as two fans, the second turned half a step, so it takes two slots
+  and its outline shows no facets. When the room is short the farthest go, counted by slots.
 
 `-TheaterBlastTest` on the command line plays a 24-second barrage of every size and kind round the point given to
 RunTest, again and again, for test pictures.

@@ -150,6 +150,7 @@ private:
 	TWeakObjectPtr<UPointLightComponent> LampLights[MostLamps];
 	int32 LampsInUse = 2;
 	double LampCandela = 400.0; // at full, already scaled for the world's units
+	int32 LampsLitBefore = 0; // (-TheaterFxLampLog: how many were lit the frame before, so the first frame with none is logged)
 	TFunction<FVector(const FVector&)> GroundUnder;
 	TWeakObjectPtr<USceneComponent> Holder;
 	double UnitsPerMetre = 100.0;
