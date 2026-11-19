@@ -129,6 +129,10 @@ namespace TheaterFx
 		uint8_t Glow = 0; // (a tracer's streak: 1 its body, 2 its pale core; by day both widen and the core whitens, to hold on a pale sky)
 		bool bHug = false; // rides the ground as it moves (skirts)
 		bool bKeep = false; // (an oil fire's column: never left out when the screen is full, the near ones going first)
+		double SunSide = 0.0; // (an oil column: its sunward side lifted toward LitCol, its far side kept dark, wherever the eye is)
+		double AxisWindage = 0.0; // (and the column's own axis: from Centre, carried by the wind at this share, so a puff knows which side of it it is)
+		int OilId = -1; // (a puff of an oil fire's column: the fire's id, so the column's width at its height is found each frame)
+		double StretchBy = 0.0; // (over 0: Stretch is reached only by this age, from round at birth: a pall drawn out as it runs)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
 		bool bThrown = false;
 		double Land = 1e9, Land2 = 1e9;
@@ -303,15 +307,22 @@ namespace TheaterFx
 			Span Heads, HeadR, FlameR, FlameTall, FlameLife, ColumnLife, Rise, Burst, Windage, R0, R1, Alpha;
 			Span BaseLife, BaseRise, BaseR, BaseAlpha;
 			double BaseEvery = 0.0; // (the low black smoke rolling off the whole slick before it joins the column; 0: none)
+			double BaseFlat = 1.0; // (under 1: that roll hugs the water, this high for its width)
+			Span PallLife, PallR1, PallWindage, PallAlpha;
+			double PallEvery = 0.0, PallStretch = 1.0, PallStretchBy = 0.0, PallHold = 0.15; // (the long flat pall run out down the wind from the column's top; 0: none)
+			double SlickLong = 0.0, SlickWide = 0.0; // (over 0: the burning slick an oval, these shares of Reach long and wide, its heads all over it)
+			double FlameOdds = 1.0, FlamePoint = 0.9; // (flame_point: how sharp each tongue's tip, 1 a spike; each head's chance of a tongue each flame_every_s: a broken line of low flames)
+			double SunSide = 0.0; // (its sunward side lit toward Lit, so the column reads round)
 			double BurstDrag = 0.1, HeadSpread = 0.6, FlameUp = 0.0, FlameEvery = 0.1, ColumnEvery = 1.0, Slow = 0.06, Hold = 0.5, Heart = 0.6, Rough = 0.3;
 			double Cool = 1.0, Lamp = 0.25, LampReach = 2.0, TwinPx = 0.0, Grow = 0.6;
 			bool bKeep = true;
-			Rgb Col, Col2, Flame;
+			Rgb Col, Col2, Flame, Lit;
 		};
 		struct Source
 		{
 			Vec At;
-			double Start = 0.0, Flames = 0.0, End = 0.0, Across = 1.0, Next = 0.0, NextSmoke = 0.0, NextBase = 0.0;
+			double Start = 0.0, Flames = 0.0, End = 0.0, Across = 1.0, Next = 0.0, NextSmoke = 0.0, NextBase = 0.0, NextPall = 0.0;
+			Vec SlickA, SlickB; // (an oil fire's oval slick: its half-axes, long and wide)
 			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea
 			int Id = -1; // (an oil fire: the caller's number for it)
 			uint64_t Seed = 1;
@@ -341,6 +352,15 @@ namespace TheaterFx
 		std::vector<double> RingCos, RingSin, Ring2Cos, Ring2Sin, Ring3Cos, Ring3Sin, Ring5Cos, Ring5Sin; // (made once at Setup, so no puff works out a cosine a side each frame)
 		int LastDrawn = 0;
 		double ShadeLit = 0.18, ShadeDark = 0.28, ClodLeast = 1.2, Beyond = 1500.0, KeepBeyond = 1500.0;
+		struct RoundLight
+		{
+			bool bOn = false;
+			Vec Right, Back, Sun; // (level: the screen's right, toward the eye, toward the sun)
+			double Mid = 0.0; // (the column's middle at the puff's height, along Right)
+			double R = 1.0, Gain = 0.0, Level = 1.0, Up = 0.0; // (the column's radius there; how strong; the sun's level and upward shares)
+		};
+		double RoundUp = 0.35;
+		RoundLight Round; // (while laying one oil column puff: each point lit as a point on a round column, by where it sits across it)
 		double SkyFill = 0.25, SunThrough = 1.5, SunThroughPow = 3.0;
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
@@ -372,6 +392,14 @@ namespace TheaterFx
 			bool bKeep;
 		};
 		std::vector<Order> Sorted;
+		struct ColumnSpan
+		{
+			int Id = 0, Bin = 0;
+			double Lo = 0.0, Hi = 0.0; // (along the screen's right, level)
+		};
+		std::vector<ColumnSpan> Spans; // (this frame: how far across the screen each oil column reaches, by fire and by ColumnBin metres of height)
+		static constexpr double ColumnBin = 20.0;
+		bool SpanAt(int Id, double Z, double& Mid, double& Half) const;
 		size_t TwinBits = 0; // (twins alive at the last Draw: each takes a second slot)
 		std::vector<Bit> Roots; // (each frame: the young end of each trail, from its point back to its newest hanging puff)
 
@@ -400,7 +428,8 @@ namespace TheaterFx
 		const TrailRow& TrailRowOf(const std::string& Kind);
 		void TrailPuff(double T, const Vec& At, const Vec& Carry, const Trailing& Tr, const TrailRow& Row, Dice& D);
 		void Run(double Now); // the steady sources: fire, smouldering
-		void OilColumn(Source& S, double T); // one puff of an oil fire's column, born at T
+		void OilColumn(Source& S, double T, bool bPall = false); // one puff of an oil fire's column (or its long pall), born at T
+		Vec OnSlick(const Source& S, Dice& D) const; // a point anywhere on an oil fire's slick
 		void OilBase(Source& S, double T); // one puff of the low smoke rolling off the slick, born at T
 		OilRow OilRowOf(const std::string& Kind) const;
 		void Prune(double Now);

@@ -404,10 +404,19 @@ namespace
 		View.Up = Cam.Up;
 		View.Forward = Cam.Forward;
 		View.PixelsPerRadian = Cam.Ppr;
+		if (const char* SunIs = std::getenv("FX_SUN")) // (FX_SUN=x,y,z: the way toward the sun)
+		{
+			double X = 0.0, Y = 0.0, Z = 1.0;
+			if (std::sscanf(SunIs, "%lf,%lf,%lf", &X, &Y, &Z) == 3)
+			{
+				View.Sun = Vec(X, Y, Z).Unit();
+			}
+		}
 		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
 		if (bDusk)
 		{
 			View.SmokeLight = Rgb(0.22f, 0.2f, 0.24f);
+			View.SunLight = Rgb(0.0f, 0.0f, 0.0f);
 		}
 		std::sort(Frames.begin(), Frames.end());
 		int Drawn = 0;

@@ -98,15 +98,20 @@ Blasts->OilFire(Zone.Id, ZoneWorld, Zone.R, TEXT("sunk"), /*Until*/ FightEnd, /*
 Blasts->OilStop(Zone.Id); // only if it should go out before the fight ends
 ```
 
-- `sunk`: oil burning on the sea where she went down. A few heads of low ragged flame on the slick, low black smoke
-  rolling off the whole slick, and one fat black column standing up off the water, bending over down the wind as it
-  climbs and cools, browner and thinner aloft (about 500 m tall for a 100 m slick). `burning`: where a ship on fire
-  left the line, a narrower, greyer column; give WorldAt her deck's height to put the flames on her.
+- `sunk`: oil burning on the sea where she went down. An oval slick (`slick_long`, `slick_wide` of Reach) with a
+  broken line of low ragged flames along it (`flame_odds`, `flame_point`), a low dark roll as wide as the slick hugging
+  the water (`base_flat`), and one fat black column standing up off it, about 350 m tall for a 100 m slick. Its top
+  never closes: from where the push gives out it runs nearly level down the wind as a widening sheet two to three
+  times the column's height long, thinning to nothing (`pall_*`). `burning`: where a ship on fire left the line, a
+  narrower, greyer column on a small grey roll; give WorldAt her deck's height to put the flames on her.
+- The column reads round: lit as a round column by where each point sits across it on the screen, its width measured
+  from its own puffs each frame. Sunward side brown-grey (`lit_colour`, `sun_side`), far side near black, a high sun
+  lighting a little all round (`oil_fires.round_up`); with the sun behind, dark with a warm fringe on its own edge only.
 - One wind for every column: `SetWind`. `Since` grows the column at once for a scene that opens mid-fight.
 - The column is kept when the screen is full (`oil_fires.<kind>.keep`) and drawn out to `oil_fires.draw_beyond_m`
-  (20 km), so 2 to 4 far columns stay on the horizon. About 130 puffs for a sunk ship's column, 85 for a burning one.
+  (20 km), so 2 to 4 far columns stay on the horizon. About 260 puffs for a sunk ship's fire, 190 for a burning one.
 - At night the flames light the sea round them (`lamp`, `lamp_reach`).
-- The preview: `./fxpreview recipe.txt out oil sunk 45 1280x720` with `FX_SINCE=90 FX_DIST=1300 FX_LOOK_H=200`;
+- The preview: `./fxpreview recipe.txt out oil sunk 45 1280x720` with `FX_SINCE=300 FX_DIST=1300 FX_LOOK_H=200` (`FX_SUN=x,y,z` the way toward the sun);
   `oil burning`; `oil horizon` (three fires 3, 6 and 9 km off from an 8 m eye).
 - `-TheaterBlastTest` also lights two, already burning: a slick 900 m off and a burning ship 2.5 km off.
 

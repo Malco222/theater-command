@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace TheaterFx
 {
@@ -147,6 +148,7 @@ namespace TheaterFx
 		ClodLeast = Num("game.clod_least_px", 1.2);
 		Beyond = Num("game.draw_beyond_m", 1500.0);
 		KeepBeyond = Num("oil_fires.draw_beyond_m", Beyond); // (a column on the horizon is drawn kilometres off)
+		RoundUp = Num("oil_fires.round_up", 0.35); // (the sun high: how much of an oil column it lights all round, not only on its sunward side)
 		ClodRough = Range("burst.debris.clods.rough", 0.25, 0.45);
 		ClodTurns = Range("burst.debris.clods.tumble_turns_a_second", 0.5, 2.0);
 		ClodShade = Num("burst.debris.clods.shade", 2.5);
@@ -2628,6 +2630,21 @@ namespace TheaterFx
 		R.BaseRise = Range(P + "base_rise_mps", 1.5, 3.0);
 		R.BaseR = Range(P + "base_r", 0.15, 0.3);
 		R.BaseAlpha = Range(P + "base_alpha", 0.8, 0.95);
+		R.BaseFlat = Num(P + "base_flat", 1.0);
+		R.PallEvery = Num(P + "pall_every_s", 0.0);
+		R.PallLife = Range(P + "pall_life_s", 150.0, 240.0);
+		R.PallR1 = Range(P + "pall_r1", 1.2, 2.0);
+		R.PallWindage = Range(P + "pall_windage", 1.3, 1.8);
+		R.PallAlpha = Range(P + "pall_alpha", 0.55, 0.75);
+		R.PallStretch = std::max(1.0, Num(P + "pall_stretch", 1.0));
+		R.PallStretchBy = Num(P + "pall_stretch_by_s", 0.0);
+		R.PallHold = Num(P + "pall_hold", 0.15);
+		R.SlickLong = Num(P + "slick_long", 0.0);
+		R.SlickWide = Num(P + "slick_wide", 0.0);
+		R.FlameOdds = Clamp01(Num(P + "flame_odds", 1.0));
+		R.FlamePoint = Clamp01(Num(P + "flame_point", 0.9));
+		R.SunSide = Num(P + "sun_side", 0.0);
+		R.Lit = Picture(P + "lit_colour", Rgb::FromPicture(118, 106, 94));
 		R.BurstDrag = std::max(0.01, Num(P + "burst_drag", 0.1));
 		R.Slow = Num(P + "slow_mps2", 0.06);
 		R.Windage = Range(P + "windage", 1.0, 1.6);
@@ -2664,11 +2681,25 @@ namespace TheaterFx
 		// (where on the slick it burns hardest: a few heads, fixed by the fire, never by the frame)
 		Dice D(S.Seed);
 		const int NHeads = std::max(1, static_cast<int>(std::lround(S.Oil.Heads.Pick(D))));
-		for (int I = 0; I < NHeads; ++I)
+		if (S.Oil.SlickLong > 0.0)
 		{
-			const double A = D.U(0.0, 2.0 * Pi), Out_ = I == 0 ? 0.0 : std::sqrt(D.U()) * S.Oil.HeadSpread * S.Across;
-			const Vec H = S.At + Vec(std::cos(A), std::sin(A), 0.0) * Out_;
-			S.Heads.push_back(Vec(H.X, H.Y, S.At.Z));
+			// (the slick an oval along her last heading, the fire's heads scattered all over it: a burning sea, not a chimney)
+			const double Heading = D.U(0.0, Pi);
+			S.SlickA = Vec(std::cos(Heading), std::sin(Heading), 0.0) * (0.5 * S.Oil.SlickLong * S.Across);
+			S.SlickB = Vec(-std::sin(Heading), std::cos(Heading), 0.0) * (0.5 * std::max(S.Oil.SlickWide, 0.05) * S.Across);
+			for (int I = 0; I < NHeads; ++I)
+			{
+				S.Heads.push_back(OnSlick(S, D));
+			}
+		}
+		else
+		{
+			for (int I = 0; I < NHeads; ++I)
+			{
+				const double A = D.U(0.0, 2.0 * Pi), Out_ = I == 0 ? 0.0 : std::sqrt(D.U()) * S.Oil.HeadSpread * S.Across;
+				const Vec H = S.At + Vec(std::cos(A), std::sin(A), 0.0) * Out_;
+				S.Heads.push_back(Vec(H.X, H.Y, S.At.Z));
+			}
 		}
 		// (a fire that has burned a while already stands as a grown column)
 		const double Back = std::min(std::max(0.0, Since), S.Oil.ColumnLife.B);
@@ -2686,6 +2717,14 @@ namespace TheaterFx
 			}
 		}
 		S.NextBase = T;
+		if (S.Oil.PallEvery > 0.0)
+		{
+			for (T = Now - std::min(std::max(0.0, Since), S.Oil.PallLife.B); T < Now; T += S.Oil.PallEvery)
+			{
+				OilColumn(S, T, true);
+			}
+		}
+		S.NextPall = T;
 		S.Next = Now;
 		Sources.push_back(S);
 	}
@@ -2701,6 +2740,13 @@ namespace TheaterFx
 		}
 	}
 
+	Vec Battle::OnSlick(const Source& S, Dice& D) const
+	{
+		const double A = D.U(0.0, 2.0 * Pi), Out_ = std::sqrt(D.U());
+		const Vec P = S.At + S.SlickA * (std::cos(A) * Out_) + S.SlickB * (std::sin(A) * Out_);
+		return Vec(P.X, P.Y, S.At.Z);
+	}
+
 	void Battle::OilBase(Source& S, double T)
 	{
 		// The slick's own smoke: low, black and broad, rolling off the burning oil anywhere across it and drawn into the
@@ -2708,14 +2754,29 @@ namespace TheaterFx
 		const OilRow& R = S.Oil;
 		Dice D(S.Seed ^ (static_cast<uint64_t>(T * 1000.0) * 0xD6E8FEB86659FD93ull + 41ull));
 		const double A = D.U(0.0, 2.0 * Pi), Out_ = std::sqrt(D.U()) * R.HeadSpread * S.Across;
+		const bool bFlat = R.BaseFlat < 0.999;
 		Bit B;
 		B.Born = T;
 		B.Life = R.BaseLife.Pick(D);
 		B.R0 = R.BaseR.Pick(D) * S.Across;
 		B.R1 = B.R0 * D.U(1.6, 2.2);
 		B.Grow = 0.5;
-		B.From = S.At + Vec(std::cos(A), std::sin(A), 0.0) * Out_ + ZUp * (R.FlameUp + 0.4 * B.R0);
-		B.Vel = (S.At - B.From) * 0.08 + ZUp * D.U(4.0, 8.0); // (drawn in toward the column's foot as it rises)
+		if (bFlat)
+		{
+			// (art director 03:59Z: a low dark roll as wide as the slick, hugging the water: it stands on the sea and
+			// turns about the upright only, so from a low eye it is a long low bank, never a chimney puff)
+			const Vec On = S.SlickA.Length() > 0.0 ? OnSlick(S, D) : S.At + Vec(std::cos(A), std::sin(A), 0.0) * Out_;
+			B.Form = Bit::Shape::Upright;
+			B.bHug = true;
+			B.Flatten = R.BaseFlat;
+			B.From = On;
+			B.Vel = (S.At - On) * 0.03;
+		}
+		else
+		{
+			B.From = S.At + Vec(std::cos(A), std::sin(A), 0.0) * Out_ + ZUp * (R.FlameUp + 0.4 * B.R0);
+			B.Vel = (S.At - B.From) * 0.08 + ZUp * D.U(4.0, 8.0); // (drawn in toward the column's foot as it rises)
+		}
 		B.Drag = 0.25;
 		B.Rise = R.BaseRise.Pick(D);
 		B.Windage = R.Windage.A;
@@ -2731,16 +2792,16 @@ namespace TheaterFx
 		B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 		B.Turn = D.U(0.0, 2.0 * Pi);
 		B.TwinPx = R.TwinPx;
-		B.bKeep = R.bKeep;
+		B.bKeep = R.bKeep && !bFlat; // (a low roll on the far horizon is under a pixel high: it may go when the screen is full)
 		Bits.push_back(B);
 	}
 
-	void Battle::OilColumn(Source& S, double T)
+	void Battle::OilColumn(Source& S, double T, bool bPall)
 	{
 		// One puff of the column: born over a head of the fire, black and thick, climbing at first fast and then slower
 		// as it cools, so with the wind carrying it all the while the column stands up from the sea and bends over
 		const OilRow& R = S.Oil;
-		Dice D(S.Seed ^ (static_cast<uint64_t>(T * 1000.0) * 0x2545F4914F6CDD1Dull + 29ull));
+		Dice D(S.Seed ^ (static_cast<uint64_t>(T * 1000.0) * 0x2545F4914F6CDD1Dull + (bPall ? 83ull : 29ull)));
 		const Vec& Head = S.Heads[static_cast<size_t>(D.Whole(0, static_cast<int>(S.Heads.size()) - 1))];
 		const double Big = std::pow(S.Across / 100.0, 0.4); // (a bigger fire's smoke climbs higher)
 		Bit B;
@@ -2772,6 +2833,32 @@ namespace TheaterFx
 		B.Turn = D.U(0.0, 2.0 * Pi);
 		B.TwinPx = R.TwinPx;
 		B.bKeep = R.bKeep;
+		B.SunSide = R.SunSide;
+		B.LitCol = R.Lit;
+		B.Centre = S.At;
+		B.AxisWindage = 0.5 * ((bPall ? R.PallWindage.A : R.Windage.A) + (bPall ? R.PallWindage.B : R.Windage.B));
+		B.OilId = bPall ? -1 : S.Id;
+		if (bPall)
+		{
+			// (art director 03:59Z: never close the top. The pall: fewer, longer-lived puffs that climb with the column to
+			// where its push gives out, then run nearly level down the wind as a widening, flattening sheet two or three
+			// times the column's height long, thinning to nothing)
+			B.Life = R.PallLife.Pick(D);
+			B.R1 = R.PallR1.Pick(D) * S.Across;
+			B.Grow = 0.8;
+			B.Windage = R.PallWindage.Pick(D);
+			B.Alpha = R.PallAlpha.Pick(D);
+			B.Hold = R.PallHold;
+			B.Rise = 0.0;
+			B.Gravity = 0.0;
+			const Vec Down = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
+			B.Along = Down;
+			B.Stretch = R.PallStretch * D.U(0.85, 1.15);
+			B.StretchBy = R.PallStretchBy;
+			B.Col2 = R.Col2 * D.U(0.95, 1.15);
+			B.SunSide = R.SunSide * 0.6; // (a thin sheet aloft: lit, but less than the column's thick sunward side)
+			B.Centre = S.At + ZUp * (0.5 * (R.Burst.A + R.Burst.B) * Big / std::max(R.BurstDrag, 1e-3)); // (the sheet's own height: where the push gives out)
+		}
 		Bits.push_back(B);
 	}
 
@@ -2795,6 +2882,10 @@ namespace TheaterFx
 					Dice D(S.Seed ^ (static_cast<uint64_t>(S.Next * 1000.0) * 0x9E3779B97F4A7C15ull + 7ull));
 					for (const Vec& Head : S.Heads)
 					{
+						if (R.FlameOdds < 1.0 && D.U() > R.FlameOdds)
+						{
+							continue;
+						}
 						const double Rf = R.FlameR.Pick(D);
 						const bool bShort = D.U() < 0.25;
 						Bit B;
@@ -2809,7 +2900,7 @@ namespace TheaterFx
 						B.Grow = 1.0;
 						B.Along = ZUp;
 						B.Stretch = R.FlameTall.Pick(D);
-						B.Point = 0.9;
+						B.Point = R.FlamePoint;
 						B.Col = bShort ? OilHeart : R.Flame;
 						B.Col2 = Ember;
 						B.Alpha = 0.95;
@@ -2834,6 +2925,12 @@ namespace TheaterFx
 				{
 					OilBase(S, S.NextBase);
 					S.NextBase += R.BaseEvery;
+				}
+				S.NextPall = std::max(S.NextPall, Now - 1.0);
+				while (R.PallEvery > 0.0 && S.NextPall <= Now && S.NextPall < S.End)
+				{
+					OilColumn(S, S.NextPall, true);
+					S.NextPall += R.PallEvery;
 				}
 				continue;
 			}
@@ -2960,7 +3057,15 @@ namespace TheaterFx
 		// crown on the side toward the sun lit and its underside and edge darker, so the lobes count as lumps. The
 		// middle takes the ring's mean, so the crown is a smooth slope across the lobe and never a star of spokes)
 		const bool bLift = std::fabs(Lift.R) + std::fabs(Lift.G) + std::fabs(Lift.B) > 1e-6f;
-		const float KMid = 0.75f;
+		// (Round: an oil column's puff is lit as a part of a round column, each point by the column's own surface where it
+		// sits across it on the screen, so the sunward side is lit and the far side stays dark however big the puff)
+		auto RoundK = [this](const Vec& Q)
+		{
+			const double S = std::clamp((Q.X * Round.Right.X + Q.Y * Round.Right.Y - Round.Mid) / Round.R, -1.0, 1.0);
+			const Vec N = Round.Right * S + Round.Back * std::sqrt(1.0 - S * S);
+			return Clamp01(Round.Gain * std::max(0.0, Round.Level * N.Dot(Round.Sun) + Round.Up));
+		};
+		const float KMid = Round.bOn ? static_cast<float>(0.9 * RoundK(Middle)) : 0.75f;
 		const Rgb Mid = bLift ? Rgb(Col.R + KMid * Lift.R, Col.G + KMid * Lift.G, Col.B + KMid * Lift.B) : Col;
 		Put(First, Middle, Rgb(std::max(Mid.R, Floor.R), std::max(Mid.G, Floor.G), std::max(Mid.B, Floor.B)), Alpha);
 		// (a clod's lumpy outline: a few waves round it, its own, turning as it tumbles. Each wave is
@@ -3025,7 +3130,14 @@ namespace TheaterFx
 				const double Lean = Clamp01(0.5 + 0.5 * Toward / std::max(SunAcross, 0.05)); // (1 on the side toward the sun on the screen)
 				// (art director 00:03Z: the pale fades with the puff's own edge opacity, so the rim goes see-through grey)
 				const double HeartK = Clamp01(HeartAlpha / std::max(Alpha, 1e-6)), RimK = Clamp01(RimAlpha / std::max(Alpha, 1e-6));
-				const float KHeart = static_cast<float>((0.1 + 0.9 * Lean) * HeartK), KRim = static_cast<float>(0.1 * Lean * RimK);
+				float KHeart = static_cast<float>((0.1 + 0.9 * Lean) * HeartK), KRim = static_cast<float>(0.1 * Lean * RimK);
+				if (Round.bOn)
+				{
+					// (each lobe still a little dome: a quarter of its light from its own sunward side)
+					const double Lobe = 0.75 + 0.25 * Lean;
+					KHeart = static_cast<float>(RoundK(Middle + Dir * (In * Reach)) * Lobe * HeartK);
+					KRim = static_cast<float>(0.5 * RoundK(Middle + Dir * Reach) * Lobe * RimK);
+				}
 				HeartShaded = Rgb(HeartShaded.R + KHeart * Lift.R, HeartShaded.G + KHeart * Lift.G, HeartShaded.B + KHeart * Lift.B);
 				Shaded = Rgb(Shaded.R + KRim * Lift.R, Shaded.G + KRim * Lift.G, Shaded.B + KRim * Lift.B);
 			}
@@ -3115,7 +3227,79 @@ namespace TheaterFx
 				Col = Rgb(std::max(Col.R, Floor.R), std::max(Col.G, Floor.G), std::max(Col.B, Floor.B));
 			}
 		}
-		if (!B.bLight && (B.CloudShade > 0.0 || B.Smear > 0.0) && SunThrough > 0.0 && Dist > 1e-6)
+		Round.bOn = false;
+		if (B.SunSide > 0.0 && !B.bLight && Dist > 1e-6)
+		{
+			// (art director 03:59Z: an oil column reads round, never a flat ink cut-out: each lobe's sunward side lit up
+			// toward a brown-grey, its shadow side kept near black. The more the sun is behind the eye, the more of the
+			// face is lit; against the sun next to none, and the warm fringe below shows instead. None at night)
+			const double Face = (Eye.Eye - P).Dot(Eye.Sun) / Dist;
+			const double Day = (Eye.SunLight.R + Eye.SunLight.G + Eye.SunLight.B) / 3.0;
+			// (which side of the column it is on: out from the column's axis, level, against the sun's way, in its radii)
+			Vec Off = P - (B.Centre + Wind * (B.AxisWindage * Age));
+			const double Rise = Off.Z;
+			Off.Z = 0.0;
+			if (B.StretchBy > 0.0)
+			{
+				Off = Off - B.Along * Off.Dot(B.Along); // (the pall runs along the wind: only how far it is off that line counts)
+			}
+			const Vec SunLevel = Vec(Eye.Sun.X, Eye.Sun.Y, 0.0).Unit(Vec());
+			// (only the column's own fringe lets the sun through, never every lobe's edge inside it: the column's by how
+			// near the puff is to its edge across the screen, the pall's by how near it is to its top or underside)
+			Outer = 0.0;
+			Outward = Vec();
+			if (B.StretchBy > 0.0)
+			{
+				if (Rise > -Rad)
+				{
+					Outer = Clamp01(1.5 * std::fabs(Rise) / std::max(Rad, 1e-3) - 0.6);
+					Outward = Rise >= 0.0 ? Eye.Up : Eye.Up * -1.0;
+				}
+			}
+			else
+			{
+				double SpanMid = 0.0, SpanHalf = 0.0;
+				if (SpanAt(B.OilId, P.Z, SpanMid, SpanHalf))
+				{
+					const double Across = (P.X * Eye.Right.X + P.Y * Eye.Right.Y) / std::max(std::hypot(Eye.Right.X, Eye.Right.Y), 1e-6) - SpanMid;
+					Outer = Clamp01(2.0 * std::fabs(Across) / std::max(SpanHalf, 1e-3) - 0.8);
+					Outward = Across >= 0.0 ? Eye.Right : Eye.Right * -1.0;
+				}
+			}
+			if (B.StretchBy > 0.0)
+			{
+				// (the pall: a thin sheet aloft, lit lobe by lobe on the side of it toward the sun)
+				const double Side = std::clamp(1.5 * Off.Dot(SunLevel) / std::max(Rad, 1e-3), -1.0, 1.0);
+				const double W = Clamp01(0.1 + Side);
+				const float L = static_cast<float>(Clamp01(B.SunSide * Day * W * (0.15 + 0.85 * Clamp01(0.65 + 0.6 * Face))));
+				Lift = Rgb((B.LitCol.R * Eye.SmokeLight.R - Col.R) * L, (B.LitCol.G * Eye.SmokeLight.G - Col.G) * L, (B.LitCol.B * Eye.SmokeLight.B - Col.B) * L);
+			}
+			else if (Day > 1e-6)
+			{
+				// (the column: lit as a round column, Lay lighting each point by the column's surface where it sits across it.
+				// Its sunward side lit, its far side dark, the sun high lighting a little all round; against the sun none)
+				Round.bOn = true;
+				Round.Right = Vec(Eye.Right.X, Eye.Right.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
+				Round.Back = Vec(-Eye.Forward.X, -Eye.Forward.Y, 0.0).Unit(Vec(0.0, -1.0, 0.0));
+				Round.Sun = SunLevel;
+				// (the column as the eye sees it: its middle and half its width at this height this frame, from all its
+				// puffs; failing that, its axis carried by the wind and this puff's own size)
+				const Vec Axis = B.Centre + Wind * (B.AxisWindage * Age);
+				Round.Mid = Axis.X * Round.Right.X + Axis.Y * Round.Right.Y;
+				Round.R = std::max(Rad, 1e-3);
+				double SpanMid = 0.0, SpanHalf = 0.0;
+				if (SpanAt(B.OilId, P.Z, SpanMid, SpanHalf))
+				{
+					Round.Mid = SpanMid;
+					Round.R = std::max(SpanHalf, 1e-3);
+				}
+				Round.Gain = B.SunSide * Day;
+				Round.Level = std::sqrt(std::max(0.0, 1.0 - Eye.Sun.Z * Eye.Sun.Z));
+				Round.Up = RoundUp * std::max(0.0, Eye.Sun.Z);
+				Lift = Rgb(B.LitCol.R * Eye.SmokeLight.R - Col.R, B.LitCol.G * Eye.SmokeLight.G - Col.G, B.LitCol.B * Eye.SmokeLight.B - Col.B);
+			}
+		}
+		if (!B.bLight && (B.CloudShade > 0.0 || B.Smear > 0.0 || B.SunSide > 0.0) && SunThrough > 0.0 && Dist > 1e-6)
 		{
 			// (smoke clouds and trails only: a low sheet of dust along the ground would glow as a fog over the field)
 			// (art director 22:24Z: with the sun behind it, smoke's thin edges glow warm where the sun shows through,
@@ -3130,15 +3314,16 @@ namespace TheaterFx
 			}
 		}
 		const double MetresAPixel = Dist / std::max(Eye.PixelsPerRadian, 1.0);
+		const double StretchNow = B.StretchBy > 0.0 ? 1.0 + (B.Stretch - 1.0) * Clamp01(Age / B.StretchBy) : B.Stretch; // (a pall drawn out as it runs)
 		if (B.Form == Bit::Shape::Puff && B.LeastPx > 0.0)
 		{
 			// (a puff never shrinks on the screen below LeastPx across its long way: far off it is held at that size and
 			// made thinner to match, so a far burst stays see-through smoke and never a solid dot. A drawn-out puff is
 			// held by its length, so a thin wisp stays thin and never outgrows the lobes it trails from)
 			double Long = 1.0;
-			if (B.Smear <= 0.0 && B.Stretch > 1.0001 && B.Along.Length() > 0.5)
+			if (B.Smear <= 0.0 && StretchNow > 1.0001 && B.Along.Length() > 0.5)
 			{
-				Long = 1.0 + (B.Stretch - 1.0) * (B.Along - Eye.Forward * B.Along.Dot(Eye.Forward)).Length();
+				Long = 1.0 + (StretchNow - 1.0) * (B.Along - Eye.Forward * B.Along.Dot(Eye.Forward)).Length();
 			}
 			const double Least = 0.5 * B.LeastPx * MetresAPixel;
 			if (Rad * Long < Least)
@@ -3169,14 +3354,14 @@ namespace TheaterFx
 					Middle = P - Ua * (Smear * 0.5 * L);
 				}
 			}
-			else if (B.Stretch > 1.0001 && B.Along.Length() > 0.5)
+			else if (StretchNow > 1.0001 && B.Along.Length() > 0.5)
 			{
 				const Vec OnScreen = B.Along - Eye.Forward * B.Along.Dot(Eye.Forward);
 				const double L = OnScreen.Length();
 				if (L > 1e-3)
 				{
 					const Vec Ua = OnScreen * (1.0 / L);
-					AxA = Ua * (Rad * (1.0 + (B.Stretch - 1.0) * L)); // (shorter when it points at the eye)
+					AxA = Ua * (Rad * (1.0 + (StretchNow - 1.0) * L)); // (shorter when it points at the eye)
 					AxB = Eye.Forward.Cross(Ua).Unit(Eye.Up) * Rad;
 				}
 			}
@@ -3358,6 +3543,40 @@ namespace TheaterFx
 		return 1;
 	}
 
+	bool Battle::SpanAt(int Id, double Z, double& Mid, double& Half) const
+	{
+		// (between the two nearest bins' middles, each bin's span drawn from the bins either side too, so the column's
+		// edge runs smooth up its height and a lone puff in a bin never narrows it)
+		if (Id < 0)
+		{
+			return false;
+		}
+		const double U = Z / ColumnBin - 0.5;
+		const int B0 = static_cast<int>(std::floor(U));
+		const double T = U - B0;
+		double SumMid = 0.0, SumHalf = 0.0, SumW = 0.0;
+		auto It = std::lower_bound(Spans.begin(), Spans.end(), std::make_pair(Id, B0 - 1), [](const ColumnSpan& C, const std::pair<int, int>& K) { return C.Id != K.first ? C.Id < K.first : C.Bin < K.second; });
+		for (; It != Spans.end() && It->Id == Id && It->Bin <= B0 + 2; ++It)
+		{
+			const ColumnSpan& C = *It;
+			const double W = C.Bin == B0 ? 1.0 - T : C.Bin == B0 + 1 ? T : (C.Bin == B0 - 1 ? 0.5 * (1.0 - T) : 0.5 * T);
+			if (W <= 0.0)
+			{
+				continue;
+			}
+			SumMid += W * 0.5 * (C.Lo + C.Hi);
+			SumHalf += W * 0.5 * (C.Hi - C.Lo);
+			SumW += W;
+		}
+		if (SumW <= 1e-9)
+		{
+			return false;
+		}
+		Mid = SumMid / SumW;
+		Half = SumHalf / SumW;
+		return true;
+	}
+
 	int Battle::Draw(double Now, const View& Eye)
 	{
 		LastEye = Eye.Eye;
@@ -3419,7 +3638,9 @@ namespace TheaterFx
 		}
 		// then the rest, far to near, so that each is laid over what is behind it
 		Sorted.clear();
+		Spans.clear();
 		TwinBits = 0;
+		const Vec RightLevel = Vec(Eye.Right.X, Eye.Right.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
 		for (const Bit& B : Bits)
 		{
 			if (Now < B.Born || (Now > B.Born + B.Life && !Unseen(B)))
@@ -3427,7 +3648,38 @@ namespace TheaterFx
 				continue;
 			}
 			TwinBits += B.TwinPx > 0.0 ? 1u : 0u;
-			Sorted.push_back(Order{ &B, (Where(B, Now - B.Born) - Eye.Eye).Dot(Eye.Forward), B.bKeep });
+			const Vec At = Where(B, Now - B.Born);
+			Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward), B.bKeep });
+			if (B.OilId >= 0)
+			{
+				// (an oil column's puff, not yet faded far: how far across the screen the column reaches at its height)
+				const double F = Clamp01((Now - B.Born) / std::max(B.Life, 1e-6));
+				if (F < B.Hold + 0.5 * (1.0 - B.Hold))
+				{
+					const double Rad = B.R0 + (B.R1 - B.R0) * std::pow(F, B.Grow);
+					const double X = At.X * RightLevel.X + At.Y * RightLevel.Y;
+					Spans.push_back(ColumnSpan{ B.OilId, static_cast<int>(std::floor(At.Z / ColumnBin)), X - Rad, X + Rad });
+				}
+			}
+		}
+		if (!Spans.empty())
+		{
+			// (one span per fire and bin: sorted, then each run of the same fire and bin folded into its first)
+			std::sort(Spans.begin(), Spans.end(), [](const ColumnSpan& L, const ColumnSpan& R) { return L.Id != R.Id ? L.Id < R.Id : L.Bin < R.Bin; });
+			size_t Put = 0;
+			for (size_t I = 1; I < Spans.size(); ++I)
+			{
+				if (Spans[I].Id == Spans[Put].Id && Spans[I].Bin == Spans[Put].Bin)
+				{
+					Spans[Put].Lo = std::min(Spans[Put].Lo, Spans[I].Lo);
+					Spans[Put].Hi = std::max(Spans[Put].Hi, Spans[I].Hi);
+				}
+				else
+				{
+					Spans[++Put] = Spans[I];
+				}
+			}
+			Spans.resize(Put + 1);
 		}
 		for (const Bit& B : Roots)
 		{

@@ -1665,11 +1665,13 @@
  "oil_fires": {
   "_how": "Art director's grit direction (19 November): ships burn black oil smoke; 2 to 4 dark columns on the horizon. Pearl Harbor and Midway mornings were mostly clear, so their grit is this smoke. One fire to each ship lost in a sea battle (the zone's kind: sunk = the oil burning where she went down, burning = where she left the line on fire), fixed where it is, to the fight's end, with the scene's one wind for every column. Its column is kept when the screen is full (keep), so a far column never blinks out.",
   "draw_beyond_m": 20000,
+  "round_up": 0.1,
   "sunk": {
    "_rule": "a slick of burning oil on the sea: low ragged flames on a few heads of the slick, and over them one fat black column standing up from the water, bending over down the wind as it climbs and cools, browner and thinner aloft",
+   "_mend_0359": "Art director 03:59Z: never close the top: from about 60% of its height it bends over and runs nearly level down the wind as a widening, flattening pall 2 to 3 times the column's height long, thinning to nothing (pall_*; the push burst_mps / burst_drag sets the height it levels at). It reads round: its sunward side lit to about 90 to 110 luma in a brown-grey, the shadow side kept at 24 to 35 (sun_side, lit_colour, oil_fires.round_up: lit as a round column, its width measured each frame); against the sun the warm fringe on its own edge only. Its base a low dark roll as wide as the slick, hugging the water, with a broken line of low flames along it (slick_long, slick_wide, flame_odds, flame_point, base_flat).",
    "heads": [
-    3,
-    5
+    9,
+    14
    ],
    "head_spread": 0.6,
    "head_r": [
@@ -1679,12 +1681,12 @@
    "flame_up_m": 0.0,
    "flame_every_s": 0.1,
    "flame_r_m": [
-    2.0,
-    4.5
+    3.0,
+    5.5
    ],
    "flame_tall": [
-    2.0,
-    3.5
+    1.5,
+    2.5
    ],
    "flame_life_s": [
     0.35,
@@ -1692,47 +1694,47 @@
    ],
    "column_every_s": 0.6,
    "column_life_s": [
-    60,
-    80
+    45,
+    60
    ],
    "rise_mps": [
-    4,
-    6
+    0.0,
+    0.0
    ],
    "burst_mps": [
-    22,
+    24,
     30
    ],
-   "burst_drag": 0.1,
-   "slow_mps2": 0.03,
-   "base_every_s": 0.5,
+   "burst_drag": 0.075,
+   "slow_mps2": 0.0,
+   "base_every_s": 0.25,
    "base_life_s": [
     8,
     12
    ],
    "base_rise_mps": [
-    2.5,
-    4.0
+    0.3,
+    0.8
    ],
    "base_r": [
-    0.15,
-    0.3
+    0.1,
+    0.18
    ],
    "base_alpha": [
-    0.8,
-    0.95
+    0.75,
+    0.9
    ],
    "windage": [
     1.0,
     1.6
    ],
    "r0": [
-    0.25,
-    0.4
+    0.18,
+    0.3
    ],
    "r1": [
-    0.6,
-    1.0
+    0.55,
+    0.9
    ],
    "grow": 0.6,
    "alpha": [
@@ -1740,7 +1742,7 @@
     0.95
    ],
    "hold": 0.5,
-   "heart": 0.7,
+   "heart": 0.85,
    "rough": 0.35,
    "cool": 1.0,
    "colour": [
@@ -1756,10 +1758,42 @@
    "lamp": 0.25,
    "lamp_reach": 2.0,
    "twin_px": 160,
-   "keep": 1
+   "keep": 1,
+   "slick_long": 1.0,
+   "slick_wide": 0.4,
+   "flame_odds": 0.5,
+   "flame_point": 0.55,
+   "base_flat": 0.6,
+   "pall_every_s": 2.5,
+   "pall_life_s": [
+    200,
+    300
+   ],
+   "pall_r1": [
+    1.1,
+    1.8
+   ],
+   "pall_windage": [
+    1.4,
+    1.9
+   ],
+   "pall_alpha": [
+    0.4,
+    0.6
+   ],
+   "pall_stretch": 2.2,
+   "pall_stretch_by_s": 90,
+   "pall_hold": 0.4,
+   "sun_side": 2.2,
+   "lit_colour": [
+    118,
+    106,
+    94
+   ]
   },
   "burning": {
    "_rule": "a ship on fire leaving the line, as the sea battle's 'burning' zone marks it: fires on the water where she went (or on her deck, if the caller gives the deck's height) and one narrower black column, a little greyer than burning oil",
+   "_mend_0359": "Art director 03:59Z: greyer than the sunk ship's column, its foot about 60 to 80 (colour, a small grey roll: base_*). Its top runs down the wind as the sunk one's does (pall_*).",
    "heads": [
     2,
     4
@@ -1785,20 +1819,20 @@
    ],
    "column_every_s": 0.7,
    "column_life_s": [
-    50,
-    70
+    45,
+    60
    ],
    "rise_mps": [
-    3.5,
-    5
+    0.0,
+    0.0
    ],
    "burst_mps": [
-    14,
-    20
+    20,
+    26
    ],
-   "burst_drag": 0.12,
-   "slow_mps2": 0.03,
-   "base_every_s": 0.0,
+   "burst_drag": 0.08,
+   "slow_mps2": 0.0,
+   "base_every_s": 0.4,
    "windage": [
     1.0,
     1.5
@@ -1817,23 +1851,66 @@
     0.9
    ],
    "hold": 0.5,
-   "heart": 0.65,
+   "heart": 0.8,
    "rough": 0.35,
    "cool": 1.0,
    "colour": [
-    32,
-    30,
-    29
+    58,
+    55,
+    52
    ],
    "colour_top": [
-    78,
-    75,
-    72
+    100,
+    96,
+    92
    ],
    "lamp": 0.2,
    "lamp_reach": 1.5,
    "twin_px": 160,
-   "keep": 1
+   "keep": 1,
+   "pall_every_s": 3.0,
+   "pall_life_s": [
+    170,
+    250
+   ],
+   "pall_r1": [
+    1.0,
+    1.6
+   ],
+   "pall_windage": [
+    1.4,
+    1.9
+   ],
+   "pall_alpha": [
+    0.35,
+    0.55
+   ],
+   "pall_stretch": 2.2,
+   "pall_stretch_by_s": 80,
+   "pall_hold": 0.35,
+   "sun_side": 1.5,
+   "lit_colour": [
+    140,
+    132,
+    124
+   ],
+   "base_life_s": [
+    6,
+    9
+   ],
+   "base_rise_mps": [
+    0.4,
+    1.0
+   ],
+   "base_r": [
+    0.14,
+    0.22
+   ],
+   "base_alpha": [
+    0.6,
+    0.75
+   ],
+   "base_flat": 0.75
   }
  }
 }
