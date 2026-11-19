@@ -145,6 +145,9 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> SteelInk;
 
 	TMap<int32, FShip> Ships;
+	/** The oil columns burning, by ship: how much each matters (StageParts::OilRank). */
+	TMap<int32, int32> OilLit;
+	static constexpr int32 MostOilFires = 8;
 	FBattleEffects* Effects = nullptr;
 	TUniquePtr<FBattleEffects> OwnEffects; // the stage test's own
 	FRandomStream Shown = FRandomStream(238);

@@ -70,6 +70,24 @@ namespace StageParts
 		return false;
 	}
 
+	template <typename TKit>
+	static void OilStop(TKit* Kit, int32 Id)
+	{
+		if constexpr (requires(TKit* K, int32 I) { K->OilStop(I); })
+		{
+			if (Kit)
+			{
+				Kit->OilStop(Id);
+			}
+		}
+	}
+
+	/** How much a ship's oil column matters to the picture: the capital ships first, then the cruisers, then the rest. */
+	static int32 OilRank(const FString& Class)
+	{
+		return Class == TEXT("bb") || Class == TEXT("cv") || Class == TEXT("ag") ? 3 : Class == TEXT("dd") ? 1 : 2;
+	}
+
 	static TArray<double> Numbers(const TSharedPtr<FJsonValue>& Value)
 	{
 		TArray<double> Out;
@@ -327,6 +345,7 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 	}
 	ShipMeshes.Reset();
 	Ships.Reset();
+	OilLit.Reset();
 	bRaised = false;
 	StageKey = Key;
 	StageAim = Aim;
@@ -746,12 +765,38 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 	}
 	// Her oil burning on the water where she lies (a fat black column off the slick), or, ablaze from end to end, on her
 	// own deck (a greyer column, the flames on her): one fire a ship, its reach 0.6 of her length, until the scene ends.
-	// A submarine going down leaves none.
-	if (Ship->Given.Class != TEXT("ss"))
+	// A submarine going down leaves none. At most MostOilFires columns (the effects kit, 05:25Z: at 24 the shell bursts
+	// get no room at all): past that a battleship's or a carrier's puts out a destroyer's, and a destroyer's is not lit.
+	if (Ship->Given.Class != TEXT("ss") && !OilLit.Contains(Id))
 	{
-		const bool bOnDeck = How == TEXT("burn");
-		const FVector Oil = Ship->Base + FVector(0.0, 0.0, bOnDeck ? FMath::Min(Ship->High * 0.3, 9.0) * U : 0.0);
-		StageParts::OilFire(Effects, 238000 + Id, GetActorTransform().TransformPosition(Oil), static_cast<float>(Ship->Long * 0.6), bOnDeck ? TEXT("burning") : TEXT("sunk"));
+		const int32 Rank = StageParts::OilRank(Ship->Given.Class);
+		bool bLight = OilLit.Num() < MostOilFires;
+		if (!bLight)
+		{
+			int32 Least = -1;
+			for (const TPair<int32, int32>& Lit : OilLit)
+			{
+				if (Lit.Value < Rank && (Least < 0 || Lit.Value < OilLit.FindRef(Least)))
+				{
+					Least = Lit.Key;
+				}
+			}
+			if (Least >= 0)
+			{
+				StageParts::OilStop(Effects, 238000 + Least);
+				OilLit.Remove(Least);
+				bLight = true;
+			}
+		}
+		if (bLight)
+		{
+			const bool bOnDeck = How == TEXT("burn");
+			const FVector Oil = Ship->Base + FVector(0.0, 0.0, bOnDeck ? FMath::Min(Ship->High * 0.3, 9.0) * U : 0.0);
+			if (StageParts::OilFire(Effects, 238000 + Id, GetActorTransform().TransformPosition(Oil), static_cast<float>(Ship->Long * 0.6), bOnDeck ? TEXT("burning") : TEXT("sunk")))
+			{
+				OilLit.Add(Id, Rank);
+			}
+		}
 	}
 	MoveShip(*Ship, Now);
 }
