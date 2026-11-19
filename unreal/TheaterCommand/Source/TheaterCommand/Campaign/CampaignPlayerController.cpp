@@ -8595,7 +8595,8 @@ bool ACampaignPlayerController::IsTableBusy() const
 {
 	// (Rules 84.3.3: the Guide's list of the ten lessons lies over the table as a paper does. The key guard, the hover
 	// and the right button read it here.)
-	return bWatching || Newsreel.bOn || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen || bLessonGuideOpen || Announcements.Num() > 0;
+	return bWatching || Newsreel.bOn || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen || bLessonGuideOpen || Announcements.Num() > 0
+		|| (Map.IsValid() && Map->IsPutAway()); // (air battle: the table stands idle under a battle's scene)
 }
 
 bool ACampaignPlayerController::IsAnswering() const

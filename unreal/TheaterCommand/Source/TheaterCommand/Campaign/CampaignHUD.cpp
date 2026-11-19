@@ -15048,6 +15048,15 @@ void ACampaignHUD::BeginPlay()
 	}
 }
 
+void ACampaignHUD::ShowFrame(bool bShow)
+{
+	// (the frame stands as the viewport gave it, open to the pointer: a battle's screen lies over it meanwhile)
+	if (Overlay.IsValid())
+	{
+		Overlay->SetVisibility(bShow ? EVisibility::Visible : EVisibility::Collapsed);
+	}
+}
+
 void ACampaignHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (Overlay.IsValid() && GEngine && GEngine->GameViewport)

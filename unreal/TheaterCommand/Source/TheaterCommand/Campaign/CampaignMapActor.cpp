@@ -1452,6 +1452,11 @@ void ACampaignMapActor::ShowChart(bool bOn, const TArray<int32>& Levels, const T
 
 void ACampaignMapActor::SetPiecesShown(bool bShown)
 {
+	// (air battle: nothing stands on the table again while a battle's scene is up)
+	if (bAwayForBattle && bShown)
+	{
+		return;
+	}
 	// (while they are off the table it is said again every frame: a piece stood meanwhile is lifted off with the rest)
 	if (bShown && bPiecesShown)
 	{
@@ -10561,6 +10566,10 @@ void ACampaignMapActor::BuildGunLines()
 void ACampaignMapActor::ApplyCrowds()
 {
 	THEATER_SPEED_SCOPE(ApplyCrowds);
+	if (bAwayForBattle)
+	{
+		return;
+	}
 	for (AArmyPiece* Piece : Pieces)
 	{
 		if (!Piece)
