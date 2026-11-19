@@ -21,7 +21,7 @@ def arc(name, part, pivot, f, parent, last_aft):
             return "under the nose, firing forward and down", [-25.0, 25.0], [-50.0, 0.0], "a cone forward and below"
         return "nose", [-30.0, 30.0], [-30.0, 25.0], "a cone about dead ahead"
     if fx < -0.7:
-        if (parent == "tail" or last_aft) and abs(fz) < 0.15:
+        if (parent == "tail" or last_aft and abs(pivot[0]) >= 3.0) and abs(fz) < 0.15:   # a rear cockpit's gun may rest level too: it is no tail gun
             return "tail", [-35.0, 35.0], [-35.0, 35.0], "a cone about dead astern"
         if fz < -0.15:
             return "under the fuselage, firing aft and down", [-35.0, 35.0], [-60.0, 0.0], "aft and below only"
