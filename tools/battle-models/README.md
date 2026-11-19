@@ -443,11 +443,45 @@ is hers:
   begins low on her sides (`under_from`). Crosses on her wings and fuselage only, and a plain fin (the art
   director). No names, code letters or unit marks; no aerial wire.
 
+**The `Lancaster`** (the B.I, Britain's heavy bomber) is laid out again the same way (Wikimedia Commons, "Avro
+Lancaster 3-view line drawings.png", Emoscopes, GFDL and CC BY 3.0; measured, not traced). Her numbers in
+`EXTRA_PLANES` stand in place of the game's own. 67,638 triangles; the same parts, sockets and clips as before, so
+nothing that flies her changes. What is hers:
+
+- a fuselage that is a deep slab, flat along its top from her cabin to her tail, its underside sweeping up behind
+  the bay; the bomb aimer's blister under her nose turret, an astrodome behind her cabin, the turret on her back in
+  its long fairing, and a tray under her tail turret.
+- her cabin is a long greenhouse of flat panes (`_lanc_canopy`): a raked windscreen, a fore part as wide as she is
+  whose side panes lean in to a frame at their shoulder, and an after part that narrows on a rising sill. Her skin
+  is open under it from her sills up (`opening`, low on her side: the greenhouse's own metal foot stands on the edge,
+  and under the after part runs up where her skin would), with her instrument panel across under the windscreen
+  (`opening_cabin`). That foot twists as it climbs, and showed dark patches: a rail's dark inner face was cut
+  into triangles across the other two corners from the painted face it backs, so its ridge stood through the
+  other's hollow. `fighters.finish` now cuts both across the same corners, for every canopy. Her pilot sits to port
+  with both hands on his wheel (`pilot_wheel`; `fitout.wheel`, which the He 111's pilot shares), the flight engineer
+  beside him and the navigator behind.
+- four Merlins, each in a deep nacelle of its own lines with its radiator's mouth under the spinner (`nacelles`: a
+  nacelle for each engine by how far out it is; `scoops`). The inner pair are lower and further forward and run back
+  past the trailing edge, where her wheels go; the outer pair end under the wing.
+- a wing whose middle is straight to just outside her inner engines, with outer panels that taper and rise; a
+  broad tailplane set high on her, and a tall oval fin at each tip, as much of it below the tailplane as above.
+- her gunners sit inside their turrets with both hands on their guns, as the B-17's do. Her tail turret has four
+  guns: a handle each side joins the upper gun's grip to the lower's, and he has a hand on each
+  (`fitout.gunners`).
+- her night colours are the game's own: dark green and dark earth above, black from high on her sides down, black
+  fins. By the art director's ruling there is no rivet at all on her black (`rivets_under`: False), where the
+  joints between panels carry the wear instead. Plain roundels and a fin flash; no names, code letters or serials;
+  no aerial wire (the drawing shows them; the mast stands without one).
+
 The tools that read a three-view are not in the repository (they hold nothing but arithmetic on a picture): cut
 each view out and turn it to stand the usual way, rub out strokes too thin to be her outline (wires, a torpedo
 drawn in), find the paper by filling in from the edge, set the scales from her real length and span, and set the
 height of her airscrew's line by the middle of her cowling, not by the first ink at her nose. Where a gun stands out
-of her nose, her nose is set by hand, and one scale serves the whole sheet (the He 111: her span).
+of her nose, her nose is set by hand, and one scale serves the whole sheet (the He 111: her span). A small
+or awkward sheet (the Lancaster's is 960 pixels wide) is enlarged four times and its faint strokes darkened first, so
+that the outlines close; a plan drawn at an angle is turned upright by the line through her wing tips; a side view
+drawn standing on her wheels is levelled by the slope of her back; and aerial wires, which are as heavy as her
+outline, are rubbed out along their own lines, found by reading the strokes at a few columns.
 
 **The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, twelve more entries in
 `EXTRA_PLANES`. Paints and first years are the art director's rulings of that day; the file's `year` is the first

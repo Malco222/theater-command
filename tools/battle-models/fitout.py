@@ -79,7 +79,12 @@ def nacelle_of(G, lead, z, is_radial, back, side, s=None):
     """An engine's nacelle on a wing, as the game's sculptor shapes it: round and stubby for an air-cooled engine, long
     and narrow for one in line. `nacelle` in her numbers is a nacelle of her own lines for an engine in line: stations
     (ahead of `lead`, above the airscrew's line, half its width, half its height), in the same frame as the game's
-    (the spinner's tip 2.55 ahead of `lead`, its back at 2.09, the airscrew at 2.16); `nacelle_square` its section."""
+    (the spinner's tip 2.55 ahead of `lead`, its back at 2.09, the airscrew at 2.16); `nacelle_square` its section.
+    `nacelles` gives each engine its own, by how far out it is: {out: stations} (the Lancaster's inner pair run back
+    past her wing's trailing edge with her wheels in them; her outer pair end under her wing)."""
+    if s and s.get("nacelles") and not is_radial:
+        own = s["nacelles"][min(s["nacelles"], key=lambda out: abs(out - abs(side)))]
+        return G["Body"]([(lead + dx, z + dz, w, h) for dx, dz, w, h in own], s.get("nacelle_square", 2.3), side)
     if s and s.get("nacelle") and not is_radial:
         return G["Body"]([(lead + dx, z + dz, w, h) for dx, dz, w, h in s["nacelle"]], s.get("nacelle_square", 2.3), side)
     if is_radial:
@@ -382,6 +387,8 @@ def cockpit(m, f, s, G, hull):
                 controls(m, at, x, z, hull)
         elif single and face == 0.0:
             m.box(at(-0.185, 0, 0.0), (0.02, 0.27, 0.3), "gunmetal")                        # the armour behind his head
+        if not single and first and face == 0.0 and s.get("pilot_wheel"):
+            wheel(m, at, hull.z(-x) - 0.36 * hull.h(-x))    # (a bomber's pilot in her open cabin: both his hands on his wheel)
         if single and first and face == 0.0 and not getattr(f, "cockpit", None):
             sill = hull.at(x + 0.56, math.pi / 2.0).z
             if x + 0.75 < hood.front:
@@ -408,6 +415,17 @@ def open_cockpit(m, f, s, hull, G=None):
     m.box((xm, 0.0, hull.z(-xm) - 0.36 * hull.h(-xm)), (x0 - x1, 1.5 * hull.w(-xm), 0.04), "inside")              # (her floor)
     if s.get("opening_plain"):
         open_rim(m, f, hull, x0, x1, edge)                 # (a gunner's position: no panel, no coaming, no sight)
+        return
+    if s.get("opening_cabin"):
+        # (a bomber's cabin, open under its greenhouse from her sills up: her instrument panel across under the foot
+        #  of her windscreen with its rows of dials; no sight, and no padded rim: the greenhouse's own rail stands on
+        #  the edge of her skin)
+        top = hull.at(x0, math.pi / 2.0).z
+        m.box((x0 - 0.03, 0.0, top - 0.2), (0.025, 1.24, 0.34), "gunmetal")
+        if m.fine:
+            for row, dz in enumerate((-0.11, -0.25)):
+                for k in range(8):
+                    m.disc((x0 - 0.044, (k - 3.5) * 0.13 + (0.04 if row else 0.0), top + dz), -X, 0.04, "lens", 12)
         return
     # (her instrument panel, black, its top under the coaming, with two rows of dials)
     lip = hull.at(x0, math.radians(edge)).z
@@ -468,6 +486,22 @@ def lap(m, at):
         m.rod(knee, at(0.62, 0.14 * sy, -0.98), 0.058, "suit", 0.05, sides=7)                                     # his shins, to the rudder pedals
 
 
+def wheel(m, at, floor):
+    """A bomber's pilot at his wheel: his seat on its frame, his legs, and both his hands on the wheel at the head of
+    his control column."""
+    lap(m, at)
+    seat = at(0.06, 0.0, -0.825)
+    if seat.z - floor > 0.08:
+        m.box((seat.x, seat.y, 0.5 * (seat.z + floor)), (0.3, 0.3, seat.z - floor), "inside")
+    hub = at(0.4, 0.0, -0.38)
+    m.rod(Vector((hub.x + 0.12, hub.y, floor)), hub, 0.02, "gunmetal", sides=6)
+    grips = [at(0.38, 0.15 * sy, -0.36) for sy in (1.0, -1.0)]
+    m.rod(grips[0], grips[1], 0.014, "gunmetal", sides=6)
+    for g in grips:
+        m.rod(g - Z * 0.02, g + Z * 0.07, 0.016, "leather", sides=6)
+    arms(m, at, [g + Z * 0.03 for g in grips])
+
+
 def glazed_nose(m, f, s, G, hull):
     """A bomber's glass nose: a bulkhead behind it and a floor in it, so that nobody looks through her, and the men seen in it."""
     glazed = s.get("glazed")
@@ -487,19 +521,7 @@ def glazed_nose(m, f, s, G, hull):
         if m.fine and high is None:
             m.box(at(-0.2, 0, -0.3), (0.05, 0.42, 0.36), "inside")
             if s.get("nose_wheel") and floor is not None:
-                # (her pilot flies her from inside her glass nose: his seat on its frame, his legs, and both his hands
-                #  on the wheel at the head of his control column)
-                lap(m, at)
-                seat = at(0.06, 0.0, -0.825)
-                if seat.z - floor > 0.08:
-                    m.box((seat.x, seat.y, 0.5 * (seat.z + floor)), (0.3, 0.3, seat.z - floor), "inside")
-                hub = at(0.4, 0.0, -0.38)
-                m.rod(Vector((hub.x + 0.12, hub.y, floor)), hub, 0.02, "gunmetal", sides=6)
-                grips = [at(0.38, 0.15 * sy, -0.36) for sy in (1.0, -1.0)]
-                m.rod(grips[0], grips[1], 0.014, "gunmetal", sides=6)
-                for g in grips:
-                    m.rod(g - Z * 0.02, g + Z * 0.07, 0.016, "leather", sides=6)
-                arms(m, at, [g + Z * 0.03 for g in grips])
+                wheel(m, at, floor)                        # (her pilot flies her from inside her glass nose)
         elif m.fine and s.get("nose_gunner"):
             hold_gun(m, f, s, hull, Vector((x, y, z)), face, at, legs=False)     # (the man at her nose gun: both his hands on it)
     m.use("plane")
@@ -542,6 +564,15 @@ def gunners(m, f):
                     continue
                 m.rod(grip - over * 0.05, grip + over * 0.05, 0.017, "gunmetal", sides=6)
                 grips.append(grip)
+        if len(grips) == 4:
+            # (four guns, a pair each side of him one over the other: a handle each side from the upper gun's grip
+            #  down to the lower's, and a hand on the middle of each)
+            left = at(0.0, 1.0, 0.0) - at(0.0, 0.0, 0.0)
+            grips.sort(key=lambda g: -(g - c).dot(left))
+            m.use(f"turret.{k}.guns")
+            for pair in (grips[:2], grips[2:]):
+                m.rod(pair[0], pair[1], 0.012, "gunmetal", sides=5)
+            grips = [0.5 * (grips[0] + grips[1]), 0.5 * (grips[2] + grips[3])]
         if len(grips) == 2:
             left = at(0.0, 1.0, 0.0) - at(0.0, 0.0, 0.0)
             grips.sort(key=lambda g: -(g - c).dot(left))
@@ -980,7 +1011,11 @@ def rivets(m, f, s, G, hull):
             piece.append(got)
         flush()
 
+    bare_under = s.get("rivets_under") is False            # (the art director, 2026-11-19: none at all on the Lancaster's black undersides)
+
     def dot(part, paint, p, n, t):
+        if bare_under and paint == "rivet_under":
+            return
         dots.setdefault((part, paint), []).append((port(p), port(n), port(t)))
     # -- the fuselage
     under_from = s.get("under_from", -0.3)
@@ -1003,6 +1038,9 @@ def rivets(m, f, s, G, hull):
             return None                                    # (under her hood)
         if f.bay and f.bay[1] - 0.06 <= x <= f.bay[0] + 0.06 and abs(deg - 270.0) < f.bay_half + 2.5:
             return None                                    # (her bomb doors)
+        cab = getattr(f, "cockpit", None)
+        if cab and cab[2] < 38.0 and cab[1] - 0.03 < x < cab[0] + 0.03 and math.degrees(math.asin(math.sin(a))) > cab[2] - 4.0:
+            return None                                    # (a bomber's cabin, open under its greenhouse from her sills up)
         p, n = hull.at(x, a, 0.003), hull.out(x, a)
         if f.waist_hole(p, 0.03) or f.pane_at(p, 0.03):
             return None                                    # (an open window, a pane of glass)
@@ -1151,7 +1189,7 @@ def rivets(m, f, s, G, hull):
             def put(u, c, t_of):
                 for upper in (True, False):
                     p, n = W.at(u, c, upper, 0.003), W.out(u, c, upper)
-                    dot(part_of(u), "rivet" if (upper or upright) else "rivet_under", p, n, t_of(u, c, upper))
+                    dot(part_of(u), "rivet" if (upper or upright) and not (upright and bare_under and s.get("fins_under")) else "rivet_under", p, n, t_of(u, c, upper))
             chordwise = lambda u, c, up: W.at(u, min(c + 0.02, 1.0), up) - W.at(u, max(c - 0.02, 0.0), up)
             spanwise = lambda u, c, up: W.at(min(u + 0.05, W.tip), c, up) - W.at(max(u - 0.05, W.root), c, up)
             n_ribs = max(1, int((u1 - u0) / rib_gap))

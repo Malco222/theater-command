@@ -1028,6 +1028,120 @@ fitout.SEATS["He111"] = [(0, 1.58, 0.0, 180.0)]
 fitout.NOSE_CREW["He111"] = [(4.95, 0.32, None, 0.0), (6.28, -0.1, 0.06, 0.0)]
 
 
+# The Lancaster again, to the lines of the real machine (Brian, 2026-11-19: "use this 3d model is our bench mark for all
+# airplanes"), measured from a three-view drawing (Wikimedia Commons, "Avro Lancaster 3-view line drawings", Emoscopes,
+# GFDL and CC BY 3.0; a small sheet, 21.6 px to the metre, set by her span of 31.09 m; the plan turned upright by her
+# wing tips and the tail-down side view levelled by the slope of her back; measured, not traced; no aerial wire). What
+# changed from the game's own numbers: her fuselage is a deep slab, flat along its top from her cabin to her tail with
+# its underside sweeping up behind the bay; her nose carries the bomb aimer's blister under the front turret; her
+# cabin is a long greenhouse of flat panes standing on her sills, open underneath, its after part narrower on a
+# rising sill, with the pilot to port at his wheel; her wing's middle is straight and its outer panels taper and rise;
+# her four engines hang in deep nacelles of their own lines with a radiator under each spinner (`nacelles`: the inner
+# pair run back past the trailing edge, the outer end under the wing); her fins are tall ovals at the tips of a broad
+# tailplane set high on her; and her tail turret has four guns, a hand of its gunner on each pair. Her night colours
+# are as they were, and by the art director's ruling there is no rivet on her black undersides (`rivets_under`).
+_LANC_EDGE = 27.0                                           # (her cabin is open from here up, round her from her beam: a ring of her skin's own)
+_LANC_CABIN = (0.70, 0.60, 1.35, 1.62)                      # (the sill of its side panes, how far out and how high their top frame, its roof)
+# (its after part: where along her, half the width at its sill, the sill, the frame at its shoulder (out, high), its roof)
+_LANC_AFTER = [(6.2, 0.62, 0.95, 0.5, 1.37, 1.62), (5.7, 0.52, 0.99, 0.43, 1.37, 1.6), (5.2, 0.38, 1.07, 0.32, 1.35, 1.54),
+               (4.92, 0.24, 1.15, 0.2, 1.31, 1.47), (4.72, 0.1, 1.21, 0.08, 1.27, 1.37)]
+
+
+def _lanc_section(hull, x, ys=None, sill=None, shoulder=None, top=None, fair=2):
+    """Half a section of her greenhouse: its foot on the edge of her skin where her cabin is open under it, metal from
+    there up to the sill where the glass begins (`fair` points between, lying where her skin would: over her cabin's
+    after part her skin runs in and up to a narrower sill), a flat side pane leaning in to the frame at its shoulder,
+    and its roof over a frame 0.19 out to her middle line. With no more than x: a section of the cabin's fore part."""
+    a0 = math.radians(_LANC_EDGE)
+    foot = hull.at(x, a0)
+    yb, zb = foot.y + 0.004, foot.z
+    if ys is None:
+        ys, (sill, out, high, top) = yb - 0.004, _LANC_CABIN
+        shoulder = (out, high)
+        between = [(yb + (ys - yb) * k / (fair + 1.0), zb + (sill - zb) * k / (fair + 1.0)) for k in range(1, fair + 1)]
+    else:
+        a1 = math.acos(min(ys / hull.w(-x), 1.0) ** (1.0 / hull.power))          # (where round her that sill is)
+        between = [hull.at(x, a0 + (a1 - a0) * k / (fair + 1.0), 0.004) for k in range(1, fair + 1)]
+        between = [(q.y, q.z) for q in between]
+    yr = min(0.19, 0.55 * shoulder[0])
+    return [(yb - 0.03, zb - 0.06), (yb, zb)] + between + [(ys, sill), shoulder, (yr, shoulder[1] + 0.8 * (top - shoulder[1])), (0.0, top)]
+
+
+def _lanc_canopy(hull):
+    skirt = fighters.SKIRT
+    # her windscreen: from its foot along the edge of her skin and across her deck, back to the cabin's first frame
+    x0 = 7.9
+    edge = hull.at(x0, math.radians(_LANC_EDGE))
+    foot = [(edge.y - 0.026, edge.z - 0.06), (edge.y + 0.004, edge.z), (edge.y, edge.z + 0.02),
+            fighters.deck(hull, x0, _LANC_CABIN[1]), fighters.deck(hull, x0, 0.19), fighters.deck(hull, x0, 0.0)]
+    screen = {"sections": [(x0, foot), (7.45, _lanc_section(hull, 7.45, fair=0))], "skirt": skirt, "hoops": [0, 1], "rails": [skirt, 3, 5], "bar": 0.022}
+    # her cabin: three frames round its fore part, a step in to its after part, which narrows on a rising sill to its
+    # end; her skin runs up under that sill (two more points of metal in each section's foot)
+    run = [(x, _lanc_section(hull, x)) for x in (7.45, 6.97, 6.25)]
+    run += [(x, _lanc_section(hull, x, ys, sill, (out, high), top)) for x, ys, sill, out, high, top in _LANC_AFTER]
+    cabin = {"sections": run, "skirt": skirt + 2, "hoops": [0, 1, 2, 4, 5, 6], "rails": [skirt + 2, 5, 6, 7], "bar": 0.02, "cap": True}
+    return [screen, cabin]
+
+
+# (one Merlin's nacelle from its spinner back to her wing's leading edge: the cowling, deep over the radiator under it)
+_LANC_EGG = [(2.55, 0.0, 0.04, 0.04), (2.42, 0.0, 0.19, 0.19), (2.27, 0.0, 0.28, 0.28), (2.1, 0.0, 0.34, 0.34), (2.05, -0.11, 0.42, 0.51), (1.8, -0.28, 0.48, 0.72),
+             (1.4, -0.34, 0.52, 0.8), (0.6, -0.35, 0.55, 0.83), (-0.2, -0.35, 0.56, 0.85)]
+_LANC_INNER = _LANC_EGG + [(-1.5, -0.36, 0.56, 0.86), (-2.8, -0.33, 0.52, 0.82), (-3.8, -0.2, 0.42, 0.65), (-4.6, -0.12, 0.25, 0.33), (-5.2, -0.1, 0.05, 0.05)]
+_LANC_OUTER = _LANC_EGG + [(-1.2, -0.28, 0.54, 0.78), (-2.0, -0.12, 0.46, 0.6), (-2.8, 0.05, 0.32, 0.38), (-3.5, 0.15, 0.12, 0.15), (-3.8, 0.18, 0.03, 0.03)]
+
+
+def _lanc_mouth(lead, z, out):
+    """The radiator's mouth under a spinner, dark, its lip a little proud of the cowling."""
+    return ([(lead + 2.02, z - 0.63, 0.33, 0.27), (lead + 1.94, z - 0.65, 0.385, 0.33), (lead + 1.6, z - 0.69, 0.4, 0.33), (lead + 1.2, z - 0.67, 0.36, 0.25)], out, 2.6)
+
+
+EXTRA_PLANES["Lancaster"] = {
+    "title": "Lancaster B.I (our own model)",
+    # (the bomb aimer's blister is a dome ahead of this; then her nose up to the deck ahead of the windscreen, her
+    #  cabin's sides (her skin is open above them), her slab of a fuselage, flat on top, its underside sweeping up
+    #  behind the bay, and the tray under her tail turret)
+    "hull": [(10.0, -0.42, 0.22, 0.25), (9.9, -0.42, 0.44, 0.47), (9.75, -0.42, 0.535, 0.56), (9.6, -0.43, 0.59, 0.6), (9.3, -0.415, 0.7, 0.715), (9.0, -0.225, 0.78, 0.965),
+             (8.8, -0.125, 0.82, 1.095), (8.4, -0.09, 0.86, 1.17), (8.1, -0.07, 0.88, 1.21), (7.9, -0.085, 0.885, 1.225), (7.4, -0.1, 0.885, 1.22), (6.2, -0.1225, 0.885, 1.2375),
+             (5.4, -0.13, 0.885, 1.21), (4.9, -0.08, 0.885, 1.25), (4.3, -0.005, 0.885, 1.315), (2.0, 0.0, 0.885, 1.315), (-2.4, 0.005, 0.885, 1.31), (-3.0, 0.04, 0.875, 1.275),
+             (-4.0, 0.08, 0.86, 1.235), (-5.1, 0.125, 0.82, 1.19), (-6.0, 0.205, 0.79, 1.11), (-6.9, 0.255, 0.76, 1.055), (-7.8, 0.31, 0.715, 0.99), (-9.0, 0.355, 0.64, 0.925),
+             (-9.6, 0.39, 0.6, 0.88), (-9.85, 0.4, 0.565, 0.86), (-10.0, -0.15, 0.5, 0.3), (-10.3, -0.12, 0.42, 0.22), (-10.5, -0.08, 0.3, 0.12), (-10.55, -0.06, 0.15, 0.05)],
+    "square": 2.8, "screw": 1.98, "blades": 3, "under_from": 0.45, "fins_under": True, "rivets_under": False,
+    "hoods": fighters.hood_of([(7.9, 0.7, 0.3, 0.44), (7.45, 0.7, 0.815, 0.92), (6.2, 0.7, 0.815, 0.92), (5.2, 0.9, 0.5, 0.64), (4.72, 1.1, 0.2, 0.27)]),
+    "canopy": _lanc_canopy, "opening": (7.9, 4.9, 30.0), "opening_cabin": True, "pilot_wheel": True, "frames_paint": "upper",
+    # (five small windows along each side behind her wing)
+    "windows": [(x, x - 0.28, 0.64, 0.76) for x in (0.05, -0.75, -1.55, -2.45, -3.25)],
+    # (straight to just outside her inner engines, then tapering and rising to her tips)
+    "wing": [(0.0, 4.66, -0.09, 0.04, 1.0), (4.35, 4.66, -0.09, 0.04, 1.0), (5.4, 4.52, 0.0, 0.16, 0.93), (6.6, 4.37, 0.125, 0.298, 0.84), (8.4, 4.14, 0.3, 0.482, 0.75),
+             (9.6, 3.99, 0.42, 0.62, 0.66), (10.8, 3.84, 0.54, 0.749, 0.587), (12.0, 3.685, 0.66, 0.883, 0.504), (13.2, 3.53, 0.78, 1.0, 0.431), (14.4, 3.375, 0.925, 1.135, 0.347),
+             (14.95, 3.24, 1.1, 1.19, 0.27), (15.3, 2.92, 1.43, 1.225, 0.17), (15.545, 2.35, 1.95, 1.25, 0.02)],
+    "aileron": (0.54, 0.86, 0.78), "flap": (0.06, 0.54, 0.8),
+    "tail": [(0.0, -7.07, -9.46, 0.8, 0.34), (0.95, -7.07, -9.46, 0.8, 0.33), (4.6, -7.2, -9.05, 0.8, 0.2), (5.0, -7.25, -8.95, 0.8, 0.16), (5.07, -7.3, -8.9, 0.8, 0.1)],
+    # (a tall oval fin at each tip of her tailplane, as much of it under the tailplane as will clear the ground)
+    "fins": [([(0.0, -7.85, -8.1, -0.98, 0.02), (0.0, -7.6, -8.38, -0.85, 0.1), (0.0, -7.4, -8.62, -0.6, 0.15), (0.0, -7.25, -8.82, -0.2, 0.18), (0.0, -7.2, -8.92, 0.4, 0.2),
+               (0.0, -7.22, -8.9, 1.1, 0.2), (0.0, -7.3, -8.82, 1.7, 0.18), (0.0, -7.42, -8.7, 2.2, 0.15), (0.0, -7.6, -8.5, 2.6, 0.11), (0.0, -7.8, -8.25, 2.85, 0.06),
+               (0.0, -7.95, -8.08, 2.92, 0.01)], 5.07)],
+    "patch": 3.4, "colours": {"upper": "4A5237", "upper2": "7A6748", "under": "1B1C1E", "nose": "4A5237", "boss": "171717"},
+    # (each engine: its airscrew's line, the inner pair lower and further forward; the nacelles and their radiators' mouths)
+    "engines": [(3.52, 4.8, -0.17, False, 5.2), (7.76, 4.18, 0.1, False, 3.8)],
+    "nacelles": {3.52: _LANC_INNER, 7.76: _LANC_OUTER}, "nacelle_square": 2.6,
+    "scoops": [_lanc_mouth(4.8, -0.17, 3.52), _lanc_mouth(4.18, 0.1, 7.76)],
+    "pitot": True, "tailwheel": (-7.7, -1.2), "mast": (6.3, 1.6, 2.0, 0.0),
+    "extras": [
+        # (her nose turret, the bomb aimer's blister under it, the astrodome behind her cabin, the turret on her back
+        #  in its fairing, her tail turret: and their guns in the order the battle knows them)
+        ("dome", ((9.3, 0.0, 0.55), (0.47, 0.45, 0.47))), ("dome", ((9.78, 0.0, -0.4), (0.44, 0.44, 0.44))), ("dome", ((4.45, 0.0, 1.3), (0.22, 0.22, 0.2))),
+        ("dome", ((-3.2, 0.0, 1.42), (0.52, 0.52, 0.54))), ("dome", ((-10.02, 0.0, 0.66), (0.53, 0.52, 0.62))),
+        ("body", ([(-2.17, 1.25, 0.05, 0.05), (-2.5, 1.27, 0.4, 0.15), (-2.9, 1.29, 0.6, 0.2), (-3.2, 1.29, 0.63, 0.22), (-3.7, 1.29, 0.58, 0.2), (-4.2, 1.27, 0.35, 0.13),
+                   (-4.6, 1.25, 0.05, 0.04)], 0.0, 2.0, "coat")),
+        ("rod", ((9.55, 0.1, 0.62), (10.33, 0.1, 0.63), 0.022, 0.018, "steel")), ("rod", ((-3.42, 0.13, 1.6), (-4.18, 0.13, 1.84), 0.022, 0.018, "steel")),
+        ("rod", ((-10.1, 0.31, 0.84), (-10.98, 0.31, 0.86), 0.022, 0.018, "steel")), ("rod", ((-10.1, 0.31, 0.46), (-10.98, 0.31, 0.44), 0.022, 0.018, "steel"))],
+    "side_marks": [(-5.6, 0.55, "UK-A1")], "wing_marks": [(11.5, 2.1, 1.0, "UK-B", None, True, False)], "fin_marks": [(-7.75, 1.5, 0.4, "UK-FIN")], "fin_marks_at": 5.07,
+    "code": (-3.9, 0.55),
+}
+fitout.SEATS["Lancaster"] = [(0, 7.0, 0.33, 0.0), (0, 6.55, -0.36, 0.0), (0, 5.55, 0.0, 0.0)]
+fitout.SEAT_DROP["Lancaster"] = 0.08
+
+
 # The single-seat fighters, laid out again to measured drawings with framed glazing of their own (fighters.py).
 EXTRA_PLANES.update(fighters.FIGHTERS)
 

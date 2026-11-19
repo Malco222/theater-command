@@ -157,7 +157,9 @@ def finish(obj, n, skirt, inner, mid_z, ring_faces):
         c = f.calc_center_median()
         if f.normal.dot(Vector((-1.0, 0.0, 0.0)) if cap else Vector((0.0, c.y, c.z - mid_z))) < 0.0:
             f.normal_flip()                                 # (each face of the rail looks out: its sides outward, its end aft)
-        back = bm.faces.new([bm.verts.new(v.co - f.normal * 0.008) for v in reversed(f.verts)])
+        ring = list(reversed(f.verts))
+        ring = ring[1:] + ring[:1]                          # (cut across the same corners as the face it backs: a twisted face's back cut the other way shows through it)
+        back = bm.faces.new([bm.verts.new(v.co - f.normal * 0.008) for v in ring])
         back[layer] = inner
     bmesh.ops.delete(bm, geom=gone, context="FACES_ONLY")
     bm.to_mesh(obj.data)
