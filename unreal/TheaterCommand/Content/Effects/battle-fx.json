@@ -1481,7 +1481,7 @@
   "_close": "Art director 21:16Z (build 1690, a machine gun seen from 19 m showed no tracer line): below whole_path_below_m a tracer crosses in a frame or two, so its whole path is drawn at once, muzzle to strike, fading toward the muzzle (three lengths at 35, 68 and 100 per cent), for at least one frame."
  },
  "mg_smoke": {
-  "_how": "Art director 13:54Z: close to the eye (muzzle.hot.within_m), a machine gun's burst of 3 rounds or more leaves a thin pale grey-brown wisp at the muzzle, one puff every every_rounds rounds, living life_s and drifting on the wind; on dry ground (dust.vehicles.by_ground) with the muzzle under dust_under_m up, also a low puff of the ground's own dust kicked up just in front of it. alpha: the most the whole wisp is ever opaque, never over 0.25.",
+  "_how": "Art director 13:54Z: close to the eye (muzzle.hot.within_m), a machine gun's burst of 3 rounds or more leaves a thin wisp, a little paler and cooler than the ground (art director 14:26Z: a faint veil on pale and dark ground alike) at the muzzle, one puff every every_rounds rounds, living life_s and drifting on the wind; on dry ground (dust.vehicles.by_ground) with the muzzle under dust_under_m up, also a low puff of the ground's own dust kicked up just in front of it. alpha: the most the whole wisp is ever opaque, never over 0.25.",
   "alpha": 0.25,
   "every_rounds": 4,
   "life_s": [
@@ -1489,9 +1489,9 @@
    2.0
   ],
   "colour": [
-   168,
-   158,
-   142
+   195,
+   192,
+   185
   ],
   "dust_under_m": 1.2
  },

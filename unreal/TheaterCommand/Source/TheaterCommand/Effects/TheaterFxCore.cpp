@@ -1838,9 +1838,11 @@ namespace TheaterFx
 			const Vec Way = Leaning(I == 0 ? D.U(0.0, 4.0) : D.U(5.0, 16.0), Round0 + (I + D.U(-0.3, 0.3)) * 2.0 * Pi / NTongues);
 			const double S0 = L * D.U(0.25, 0.36), S1 = L * (I == 0 ? 1.0 : D.U(0.7, 0.98));
 			const double HalfWide = W * D.U(0.2, 0.34);
-			Bit T = Piece(At + Way * (0.5 * (S0 + S1) - 0.2 * (S1 - S0)), Way, 0.5 * (S1 - S0) / 1.4, HalfWide, H.Orange, H.Red, 0.9, 0.45, 0.85, 0.3, 0.0);
-			T.Point = 1.2; // (a ragged point)
-			T.Rough = 0.2;
+			// (art director 14:26Z: ragged and blunt at its end, as gas is; a needle point read as a drawn comic flame)
+			const double Point = 0.6, HalfLong = (S1 - S0) / (2.0 + Point);
+			Bit T = Piece(At + Way * (S0 + HalfLong), Way, HalfLong, HalfWide, H.Orange, H.Red, 0.9, 0.45, 0.85, 0.3, 0.0);
+			T.Point = Point;
+			T.Rough = 0.3;
 			Bits.push_back(T);
 		}
 		{
@@ -1863,8 +1865,8 @@ namespace TheaterFx
 			const Vec Way = Leaning(D.U(35.0, 70.0), D.U(0.0, 2.0 * Pi));
 			const double Long = Len * D.U(0.14, 0.24), HalfWide = W * D.U(0.16, 0.28);
 			Bit K = Piece(At + Fw * (L * D.U(0.14, 0.42)) + Way * (W * 0.55 + Long * 0.3), Way, Long * 0.42, HalfWide, H.Orange, H.Red, 0.9, 0.35, 0.82, 0.3, 0.3 * W);
-			K.Point = 1.0;
-			K.Rough = 0.2;
+			K.Point = 0.5;
+			K.Rough = 0.3;
 			Bits.push_back(K);
 		}
 	}
@@ -4528,7 +4530,15 @@ namespace TheaterFx
 				Shaded = Rgb(Shaded.R + Lit.R, Shaded.G + Lit.G, Shaded.B + Lit.B);
 				HeartShaded = Rgb(HeartShaded.R + 0.1f * Lit.R, HeartShaded.G + 0.1f * Lit.G, HeartShaded.B + 0.1f * Lit.B);
 			}
-			Put(First + 1 + I, Middle + Dir * (In * Reach), HeartShaded, HeartAlpha);
+			if (LayInnerAlong > 0.0)
+			{
+				const Vec Within = bTaper ? AxisA * (Cs * LayInnerAlong) + (AxisB * Sn + TaperB * (Sn * Cs)) * In : AxisA * (Cs * LayInnerAlong) + AxisB * (Sn * In);
+				Put(First + 1 + I, Middle + Within * Reach, HeartShaded, HeartAlpha);
+			}
+			else
+			{
+				Put(First + 1 + I, Middle + Dir * (In * Reach), HeartShaded, HeartAlpha);
+			}
 			Put(First + 1 + static_cast<size_t>(Sides) + I, Middle + Dir * Reach, Shaded, RimAlpha);
 		}
 	}
@@ -4724,6 +4734,7 @@ namespace TheaterFx
 		}
 		Round.bOn = false;
 		LaySquare = 0.0;
+		LayInnerAlong = 0.0;
 		EdgeK = B.EdgeK;
 		EdgeTo = B.Edge;
 		EdgeIn = B.EdgeIn;
@@ -4966,7 +4977,7 @@ namespace TheaterFx
 				const double PerPixel = Deep > 1e-3 ? std::min(MetresAPixel, Deep / Ppr) : MetresAPixel;
 				Width = std::min(Width, std::max(B.MostPx, B.LeastPx) * PerPixel * 0.5);
 			}
-			double Wide = 1.0;
+			double Wide = 1.0, DayRamp = 0.0;
 			if (B.Glow > 0)
 			{
 				// (by day a tracer widens and its core whitens, so a stream holds on a pale sky; by dusk it is as ruled.
@@ -4976,15 +4987,19 @@ namespace TheaterFx
 				if (TracerDayPx > 0.0 && Width > 1e-9)
 				{
 					// (by day its width is its own, in pixels where it is: the warm edge's whole width, or the core's)
+					// (laid half a pixel wider each side, solid to half a pixel inside its width and fading out over that
+					// one pixel: each pixel takes the share of it the line covers, so it is one straight line at any slope)
 					const double PerPixel = Deep > 1e-3 ? std::min(MetresAPixel, Deep / Ppr) : MetresAPixel;
-					const double ByDay = 0.5 * (B.Glow == 2 ? TracerDayCorePx : TracerDayPx) * PerPixel;
+					const double Px = std::max(1.0, B.Glow == 2 ? TracerDayCorePx : TracerDayPx);
+					const double ByDay = 0.5 * (Px + 1.0) * PerPixel;
 					Wide = 1.0 + (ByDay / Width - 1.0) * Day;
-					// (and solid: its whole opacity all along, its heart full and its edge dense, the core's most of all)
+					// (and solid: its whole opacity all along, its heart full)
 					A += (std::min(1.0, A / std::max(B.Alpha, 1e-6)) - A) * Day;
 					HeartUp = Day;
 					LaySquare = 0.8 * Day; // (and as wide from end to end: straight-sided, never a long thin lens)
-					RimNow = B.Rim + ((B.Glow == 2 ? 0.75 : 0.3) - B.Rim) * Day;
-					InnerNow = B.Inner + ((B.Glow == 2 ? 0.7 : 0.62) - B.Inner) * Day;
+					RimNow = B.Rim * (1.0 - Day);
+					InnerNow = B.Inner + ((Px - 1.0) / (Px + 1.0) - B.Inner) * Day;
+					DayRamp = PerPixel * Day; // (the same pixel's fade at its ends)
 					if (B.Glow == 1)
 					{
 						Col = Col.Mix(TracerDayEdge, Day);
@@ -5003,6 +5018,10 @@ namespace TheaterFx
 			Half = std::max(Half, Width);
 			AxA = Ua * Half;
 			AxB = Ub * Width;
+			if (DayRamp > 0.0)
+			{
+				LayInnerAlong = std::clamp(1.0 - DayRamp / std::max(B.HalfLength > 0.0 ? B.HalfLength : Half, 1e-6), InnerNow, 0.999);
+			}
 			if (B.HalfLength > 0.0 && Speed > 1e-9)
 			{
 				// (a tracer is laid along its true heading in the world, turned about it to face the eye, so the picture's

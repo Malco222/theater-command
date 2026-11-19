@@ -483,6 +483,10 @@ namespace TheaterFx
 		RoundLight Round; // (while laying one oil column puff: each point lit as a point on a round column, by where it sits across it)
 		Rgb EdgeTo; // (while laying one bit: its rim's colour, EdgeK of the way; see Bit::Edge)
 		double EdgeIn = 0.25; // (and the share of it the heart ring takes; see Bit::EdgeIn)
+		// (while laying one bit: over 0, the heart ring sits this share of the way out along the bit's long way, and
+		// Inner only across it. A day tracer: solid to within a pixel of its edge all round, the last pixel fading out,
+		// so a thin line a frame long is one straight line and never a stair of steps. Art director 14:26Z)
+		double LayInnerAlong = 0.0;
 		// (picture.lit_gain: the game's picture multiplies every colour by this (the wrapper sets the material's
 		// brightness to it), and every colour is written that much darker, so all looks as before; but a light's hottest
 		// parts (Bit::Over) are written up to that much brighter than white, so they land white-hot after the game's
