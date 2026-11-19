@@ -7,12 +7,15 @@
 // and b603, which replace b598's interim): the sea of the list with the most British lane, or where none has any, the
 // nearest sea to the list that does; its dated beat only where no sea in its reach carries one. (4) The names and the
 // carriers are the rows, at every stop (rider b601): Bordeaux's and the German Mediterranean boats' commanders by date,
-// and the Mediterranean Fleet's Glorious and Eagle. (The Illustrious's row from turn 13 is held for the director: it
-// moves the history stop's wars, and without the record's departures it leaves that fleet three carriers from turn 16.)
+// and the Mediterranean Fleet's Glorious and Eagle. (5) At stops 1 and 2 each British fleet carrier's arrivals in and
+// departures from the Mediterranean, 1939 to 1942, are rows, one each way (the director's notes of 08:34Z and 08:38Z;
+// the historian's addendum to historian/bordeaux-med-subs-b598.md): a move between two fleets takes its ships from the
+// one and gives them to the other in the same month, a departure the record owed to battle is no row, and the arrival
+// that replaced her waits until play has taken a carrier from that fleet.
 import { describe, expect, it } from 'vitest';
 import { createGame, declareWar } from '../src/campaign/game';
 import {
-  NAVY, fleetReach, fleetsAnswer, foeBasedOn, huntBeat, lanesTo, navalAI, navalUpkeep, placeBoats, rebase, sail, seaRoutes, shippingIn, tieLapses, tiedNow, zoneOf,
+  NAVY, fleetReach, fleetsAnswer, foeBasedOn, gapOf, huntBeat, lanesTo, navalAI, navalUpkeep, placeBoats, rebase, sail, seaRoutes, shippingIn, tieLapses, tiedNow, zoneOf,
 } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import type { Fleet, Game } from '../src/campaign/types';
@@ -490,16 +493,17 @@ describe('(4) the names and the carriers are the rows, at every stop', () => {
   it('the Mediterranean Fleet\'s carrier: the Glorious on the first day, the Eagle from turn 9, at every stop', () => {
     for (const stop of [1, 2, 3, 4, 5]) {
       const g = wide(stop);
-      const med = named(g, 'Mediterranean Fleet')!, home = named(g, 'Home Fleet')!;
-      const cv: Record<number, [number, number]> = {};
+      const med = named(g, 'Mediterranean Fleet')!;
+      const cv: Record<number, number> = {};
       for (let turn = 2; turn <= 14; turn++) {
         g.turn = turn;
         navalUpkeep(g, 'UK');
-        cv[turn] = [med.ships.cv, home.ships.cv];
+        cv[turn] = med.ships.cv;
       }
       // The Glorious leaves for the Indian Ocean in October 1939 (b601) and the Eagle comes from the China Station in
-      // May 1940; the Home Fleet's Illustrious joins it in June, in every campaign, as before.
-      expect([cv[2], cv[8], cv[9], cv[10], cv[13]], `stop ${stop}`).toEqual([[0, 2], [0, 2], [1, 2], [1, 3], [1, 3]]);
+      // May 1940. (At stops 1 and 2 the Glorious is back from January to April 1940, and the Illustrious joins the
+      // Eagle in September: see (5).)
+      expect([cv[2], cv[9]], `stop ${stop}`).toEqual([0, 1]);
       expect(news(g, 2), `stop ${stop}`).toContain('The carrier Glorious leaves the Mediterranean Fleet for the Indian Ocean.');
       expect(news(g, 9), `stop ${stop}`).toContain('The carrier Eagle joins the Mediterranean Fleet.');
     }
@@ -516,6 +520,178 @@ describe('(4) the names and the carriers are the rows, at every stop', () => {
       }
       expect([med.ships.cv, home.ships.cv]).toEqual([1, 3]);
       expect(g.headlines.some((h) => /Glorious|Eagle/.test(h.text))).toBe(false);
+    }
+  });
+});
+
+describe('(5) the carriers\' rows at stops 1 and 2: each carrier in and out of the Mediterranean, one row each way', () => {
+  const FLEETS = ['Home Fleet', 'Mediterranean Fleet', 'Force H'];
+  const uk = (g: Game, name: string): Fleet | undefined => g.fleets.find((f) => f.nat === 'UK' && f.name === name);
+  /** Spans [from turn, Home Fleet, Mediterranean Fleet, Force H], laid out month by month to the last turn (-1: Force H not yet formed). */
+  function months(spans: number[][], to = 41): Record<number, number[]> {
+    const out: Record<number, number[]> = {};
+    for (let turn = 1; turn <= to; turn++) out[turn] = spans.filter((s) => s[0] <= turn).at(-1)!.slice(1);
+    return out;
+  }
+  /** Britain's carriers by fleet each month from the first day, with no battle; 'before' plays the month's losses ahead of its upkeep. */
+  function carriers(g: Game, to = 41, before?: (turn: number) => void): Record<number, number[]> {
+    const out: Record<number, number[]> = {};
+    for (let turn = 1; turn <= to; turn++) {
+      g.turn = turn;
+      before?.(turn);
+      navalUpkeep(g, 'UK');
+      out[turn] = FLEETS.map((name) => uk(g, name)?.ships.cv ?? -1);
+    }
+    return out;
+  }
+  /** Play sinks one of a fleet's carriers. */
+  const sink = (g: Game, name: string): void => { const f = uk(g, name)!; f.ships.cv -= 1; f.lost.cv += 1; };
+
+  // By the rows, with no battle: the Glorious out at 2, back at 5 and to the Home Fleet at 8; the Eagle in at 9 and out
+  // at 20; the Illustrious to the Home Fleet at 10 (every campaign) and on to the East at 13; the Ark Royal out of the
+  // Home Fleet at 11, as Force H forms with her; the Furious's ferry run at 21 and 22; Pedestal at 36 and 37; Torch at
+  // 39 and the Victorious home at 40. The Formidable waits for the Illustrious, and the Eagle in the West for the Ark Royal.
+  const BOOK = [
+    [1, 2, 1, -1], [2, 2, 0, -1], [5, 2, 1, -1], [8, 3, 0, -1], [9, 3, 1, -1], [10, 4, 1, -1], [11, 3, 1, 1], [13, 2, 2, 1],
+    [20, 2, 1, 1], [21, 2, 1, 2], [22, 3, 1, 1], [36, 1, 1, 3], [37, 3, 1, 1], [39, 1, 1, 4], [40, 2, 1, 3],
+  ];
+  // Stops 3 to 5 as before, b601's two rows apart: the Illustrious at 10, the Formidable at 16, the Victorious at 21.
+  const LOOSE = [[1, 2, 1, -1], [2, 2, 0, -1], [9, 2, 1, -1], [10, 3, 1, -1], [11, 3, 1, 1], [16, 3, 2, 1], [21, 4, 2, 1]];
+  // A history campaign and the player's own Britain: no row of the dial at all.
+  const HISTORY = [[1, 2, 1, -1], [10, 3, 1, -1], [11, 3, 1, 1], [16, 3, 2, 1], [21, 4, 2, 1]];
+
+  it('are in the data: one row each way, every move from a fleet on the chart, every key of its own, no record\'s sinking', () => {
+    const rows = NAVY.arrivals.filter((r) => r[1] === 'UK' && r[5]?.stops);
+    const keys = rows.map(([turn, who, fleet, , , d]) => `${turn}:${who}:${fleet}<${d!.from ?? ''}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    const g = wide(1);
+    forceH(g);
+    for (const [, , fleet, , what, d] of rows) {
+      expect(uk(g, fleet), what).toBeDefined();
+      if (d!.from) expect(uk(g, d!.from), what).toBeDefined();
+      expect(d!.sunk, what).toBeUndefined();
+    }
+    // Rows by date, so a campaign that reads them late reads each fleet's in the record's order.
+    const turns = rows.map((r) => r[0]);
+    expect(turns).toEqual([...turns].sort((a, b) => a - b));
+    // The two that wait, and the Formidable's undated row that the book's stand in for.
+    expect(rows.filter((r) => r[5]!.waits).map((r) => [r[0], r[2], r[4]])).toEqual([[19, 'Mediterranean Fleet', 'the carrier Formidable'], [30, 'Force H', 'the carrier Eagle']]);
+    expect(NAVY.arrivals.find((r) => r[0] === 16 && r[2] === 'Mediterranean Fleet')![5]).toEqual({ not: [1, 2] });
+    // Carriers on no fleet's roster have no row: the Indomitable at Pedestal, and the Argus at Gibraltar.
+    expect(NAVY.arrivals.some((r) => /Indomitable|Argus/.test(r[4]))).toBe(false);
+  });
+
+  it('each fleet\'s carriers month by month at stops 1 and 2, with no battle', () => {
+    for (const stop of [1, 2]) {
+      const g = wide(stop);
+      expect(carriers(g), `stop ${stop}`).toEqual(months(BOOK));
+      // The record's shape: never more than two in the East, and one in the West from Force H's first month to Pedestal
+      // (the Furious's ferry run apart).
+      const seen = months(BOOK);
+      for (let turn = 1; turn <= 41; turn++) expect(seen[turn][1]).toBeLessThanOrEqual(2);
+      for (let turn = 11; turn <= 35; turn++) expect(seen[turn][2], `turn ${turn}`).toBe(turn === 21 ? 2 : 1);
+      expect(news(g, 5)).toContain('The carrier Glorious, back from the Indian Ocean, joins the Mediterranean Fleet.');
+      expect(news(g, 8)).toContain('The carrier Glorious leaves the Mediterranean Fleet for the Home Fleet.');
+      expect(news(g, 11)).toEqual(expect.arrayContaining(['Force H forms at Gibraltar.', 'The carrier Ark Royal leaves the Home Fleet for Force H.']));
+      expect(news(g, 13)).toContain('The carrier Illustrious leaves the Home Fleet for the Mediterranean Fleet.');
+      expect(news(g, 20)).toContain('The carrier Eagle leaves the Mediterranean Fleet for the South Atlantic.');
+      expect(news(g, 21)).toContain('The carrier Furious leaves the Home Fleet for Force H.');
+      expect(news(g, 22)).toContain('The carrier Furious leaves Force H for the Home Fleet.');
+      expect(news(g, 36)).toContain('The carriers Victorious and Furious leave the Home Fleet for Force H.');
+      expect(news(g, 37)).toContain('The carriers Victorious and Furious leave Force H for the Home Fleet.');
+      expect(news(g, 39)).toEqual(expect.arrayContaining(['The carrier Formidable joins Force H.', 'The carriers Victorious and Furious leave the Home Fleet for Force H.']));
+      expect(news(g, 40)).toContain('The carrier Victorious leaves Force H for the Home Fleet.');
+      // The Formidable never came to the East (the Illustrious never left it): her undated row of turn 16 is not read
+      // here, and she comes to Torch from off the chart. The Eagle is counted once: in the East from 9 to 19, never West.
+      expect(g.headlines.filter((h) => /Formidable/.test(h.text)).map((h) => h.turn)).toEqual([39]);
+      expect(g.headlines.filter((h) => /Eagle/.test(h.text)).map((h) => h.turn)).toEqual([9, 20]);
+    }
+  });
+
+  it('no carrier is counted twice: the fleets together hold the carriers the rows have on the chart that month', () => {
+    // [carrier, on the chart from, until] by the rows: the first day's Ark Royal and Furious (Home Fleet) and Glorious
+    // (Mediterranean, away from 2 to 4); the Eagle from the China Station at 9, to the South Atlantic at 20; the
+    // Illustrious at 10, the Victorious at 21, the Formidable at Torch.
+    const roster: [string, number, number][] = [['Ark Royal', 1, 99], ['Furious', 1, 99], ['Glorious', 1, 1], ['Glorious', 5, 99], ['Eagle', 9, 19], ['Illustrious', 10, 99], ['Victorious', 21, 99], ['Formidable', 39, 99]];
+    const seen = carriers(wide(1));
+    for (let turn = 1; turn <= 41; turn++) {
+      const held = seen[turn].reduce((a, b) => a + Math.max(0, b), 0);
+      expect(held, `turn ${turn}`).toBe(roster.filter(([, a, b]) => a <= turn && turn <= b).length);
+    }
+  });
+
+  it('a Force H that play has robbed of its carrier has the Eagle, at turn 30 or the first month after with the gap', () => {
+    for (const stop of [1, 2]) {
+      // The Ark Royal sunk at 25: the Eagle at 30, not before.
+      const g = wide(stop);
+      const seen = carriers(g, 41, (turn) => { if (turn === 25) sink(g, 'Force H'); });
+      expect([24, 25, 29, 30, 35, 36, 37, 39, 40].map((t) => seen[t][2])).toEqual([1, 0, 0, 1, 1, 3, 1, 4, 3]);
+      expect(news(g, 30)).toContain('The carrier Eagle joins Force H.');
+      expect(g.headlines.filter((h) => /Eagle joins Force H/.test(h.text)).map((h) => h.turn)).toEqual([30]);
+      expect(gapOf(g, uk(g, 'Force H')!, 'cv')).toBe(0);
+      // Sunk at 33: the Eagle that month, with its news.
+      const late = wide(stop);
+      const later = carriers(late, 41, (turn) => { if (turn === 33) sink(late, 'Force H'); });
+      expect([30, 32, 33, 34].map((t) => later[t][2])).toEqual([1, 1, 1, 1]);
+      expect(late.headlines.filter((h) => /Eagle joins Force H/.test(h.text)).map((h) => h.turn)).toEqual([33]);
+    }
+  });
+
+  it('the Eagle comes West once: a second carrier lost brings no other', () => {
+    const g = wide(1);
+    const seen = carriers(g, 41, (turn) => { if (turn === 25 || turn === 31) sink(g, 'Force H'); });
+    expect([25, 30, 31, 35].map((t) => seen[t][2])).toEqual([0, 1, 0, 0]);
+    expect(g.headlines.filter((h) => /Eagle joins Force H/.test(h.text))).toHaveLength(1);
+  });
+
+  it('a Mediterranean Fleet that play has robbed of the Illustrious has the Formidable from turn 19, and sends her to Torch', () => {
+    for (const stop of [1, 2]) {
+      // Bombed and sunk at 17 (the record's Excess, which only put her out of action): the Formidable at 19.
+      const g = wide(stop);
+      const seen = carriers(g, 41, (turn) => { if (turn === 17) sink(g, 'Mediterranean Fleet'); });
+      expect([16, 17, 18, 19, 20, 38, 39, 40].map((t) => seen[t][1])).toEqual([2, 1, 1, 2, 1, 1, 0, 0]);
+      expect(seen[39][2]).toBe(4);
+      expect(news(g, 19)).toContain('The carrier Formidable joins the Mediterranean Fleet.');
+      expect(news(g, 39)).toContain('The carrier Formidable leaves the Mediterranean Fleet for Force H.');
+      // Lost after the Eagle has gone, at 25: the Formidable that month.
+      const late = wide(stop);
+      const later = carriers(late, 41, (turn) => { if (turn === 25) sink(late, 'Mediterranean Fleet'); });
+      expect([24, 25, 38, 39].map((t) => later[t][1])).toEqual([1, 1, 1, 0]);
+      expect(late.headlines.filter((h) => /Formidable joins/.test(h.text)).map((h) => [h.turn, h.text])).toEqual([[25, 'The carrier Formidable joins the Mediterranean Fleet.']]);
+    }
+  });
+
+  it('once the Formidable has come to Torch from off the chart, her row in the East is closed', () => {
+    const g = wide(1);
+    carriers(g, 41);
+    sink(g, 'Mediterranean Fleet');
+    for (let turn = 42; turn <= 45; turn++) {
+      g.turn = turn;
+      navalUpkeep(g, 'UK');
+    }
+    expect(uk(g, 'Mediterranean Fleet')!.ships.cv).toBe(0);
+    expect(g.headlines.filter((h) => /Formidable/.test(h.text)).map((h) => h.turn)).toEqual([39]);
+  });
+
+  it('a move finds the ships where they are, or brings none: no carrier comes out of a fleet that has lost hers', () => {
+    const g = wide(1);
+    // The Home Fleet's three carriers all sunk before the Illustrious sails for the East.
+    const seen = carriers(g, 14, (turn) => { if (turn === 12) for (let k = 0; k < 3; k++) sink(g, 'Home Fleet'); });
+    expect([seen[12], seen[13]]).toEqual([[0, 1, 1], [0, 1, 1]]);
+    expect(news(g, 13).some((t) => /Illustrious/.test(t))).toBe(false);
+  });
+
+  it('stops 3 to 5, a history campaign and the player\'s own Britain keep what they had, b601\'s two rows apart', () => {
+    for (const stop of [3, 4, 5]) {
+      const g = wide(stop);
+      expect(carriers(g), `stop ${stop}`).toEqual(months(LOOSE));
+      expect(news(g, 16)).toContain('The carrier Formidable joins the Mediterranean Fleet.');
+      expect(g.headlines.some((h) => /Ark Royal|Furious|Victorious and|leaves the Home Fleet|joins Force H/.test(h.text))).toBe(false);
+    }
+    for (const g of [createGame(1, null), wide(1, 'UK'), wide(2, 'UK')]) {
+      expect(carriers(g)).toEqual(months(HISTORY));
+      expect(news(g, 16)).toContain('The carrier Formidable joins the Mediterranean Fleet.');
+      expect(g.headlines.some((h) => /Glorious|Eagle|Ark Royal|Furious|leaves/.test(h.text))).toBe(false);
     }
   });
 });

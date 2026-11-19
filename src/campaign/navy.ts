@@ -41,8 +41,16 @@ export interface FleetRow {
   /** What the row says instead in the grand campaign (Force H's beat, ruling 233 rider b564). The history campaigns read the row as it stands. */
   open?: Partial<Pick<FleetRow, 'home' | 'zone' | 'tied'>>;
 }
-/** A single arrival's sixth entry: the history dial's stops it is read at (the grand campaign only, never the player's navy), and whether the ships that leave are lost. */
-export interface ArrivalDial { stops?: number[]; sunk?: boolean }
+/**
+ * A single arrival's sixth entry. 'stops': the history dial's stops it is read at (the grand campaign only, never the
+ * player's navy). 'sunk': the ships that leave are lost. 'from': a move, the ships coming from that fleet of the same
+ * navy, as many of them as it has. 'by': for a move, the turn of the waiting row of 'from' that brings those ships
+ * there; while that row has not been read they come from off the chart instead, and it is closed. 'waits': the row is
+ * read only once play has taken ships of its kind from the fleet that no waiting row has made good. 'not': for a row
+ * with no 'stops', the stops at which the computer's navy does not read it, a dated row standing in its place (the
+ * carriers' rows, ruling 233: the director's notes of 08:34Z and 08:38Z).
+ */
+export interface ArrivalDial { stops?: number[]; sunk?: boolean; from?: string; by?: number; waits?: boolean; not?: number[] }
 /**
  * One group of a navy's submarines on its beat (navy.json 'beats'; ruling 233 rider b564): a fleet row of its own, or
  * only the name of a fleet the navy already has. 'held': a place it sails from only while its own side holds it.
@@ -1447,6 +1455,14 @@ export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = 
 
 // ---- The month at sea -----------------------------------------------------------------------------
 
+/**
+ * Ships of a class that play has taken from a fleet and no waiting row has yet made good (the carriers' rows, ruling
+ * 233): its losses, less what the waiting rows read for it have brought. Counts, not names: the game knows how many
+ * carriers a fleet has lost, never which.
+ */
+export const gapOf = (g: Game, f: Fleet, c: ShipClass): number => f.lost[c] - (g.flags[`fill:${f.nat}:${f.name}:${c}`] ?? 0);
+const fill = (g: Game, f: Fleet, c: ShipClass, n: number): void => { g.flags[`fill:${f.nat}:${f.name}:${c}`] = (g.flags[`fill:${f.nat}:${f.name}:${c}`] ?? 0) + n; };
+
 /** The start of a nation's month at sea: new ships, lost bases, refits, bombers, and the convoy war. */
 export function navalUpkeep(g: Game, nat: string): void {
   const n = g.nations[nat];
@@ -1458,33 +1474,58 @@ export function navalUpkeep(g: Game, nat: string): void {
   }
   const named = (name: string): Fleet | undefined => g.fleets.find((f) => f.nat === nat && f.name === name);
   for (const b of NAVY.building) if (b.nat === nat && g.turn >= b.from && g.turn <= b.to) { const f = named(b.fleet); if (f) f.ships[b.cls] += b.perMonth; }
-  for (const [turn, who, fleet, ships, what, dial] of NAVY.arrivals) {
+  // The month's rows, a nation's own, those that wait for a gap after the others: the gap is judged once the month's
+  // comings and goings are in (the carriers' rows, ruling 233).
+  const mine = NAVY.arrivals.filter((r) => r[1] === nat);
+  for (const [turn, who, fleet, ships, what, dial] of [...mine.filter((r) => !r[5]?.waits), ...mine.filter((r) => r[5]?.waits)]) {
     // A row dated by the history dial (Force H's carriers, ruling 233 rider b564) is read only at its stops of the
     // grand campaign, and like every row of the dial it leashes the computer's navies and never the player's. It is
     // read once, in the first month at one of its stops on or after its date, so a grand campaign begun later, or a
     // dial turned to the book later, still has the record's ships; a row from before this month changes them without
-    // news.
-    const key = `arr:${turn}:${who}:${fleet}`;
+    // news. A row with no date of the dial is read in its month, except at the stops where a dated row stands in its
+    // place ('not'), for the computer's navy.
+    const from = dial?.from;
+    const key = `arr:${turn}:${who}:${fleet}${from ? `<${from}` : ''}`;
     const due = dial?.stops
       ? turn <= g.turn && g.flags.open === 1 && dial.stops.includes(stopOf(g)) && nat !== g.human && !g.flags[key]
-      : turn === g.turn;
+      : turn === g.turn && !(dial?.not && g.flags.open === 1 && dial.not.includes(stopOf(g)) && nat !== g.human);
     const f = who === nat && due ? named(fleet) : undefined;
-    if (!f) continue;
+    // A waiting row is read only once play has taken from the fleet a ship of each kind it brings that no waiting
+    // row has made good: the arrival that replaced her waits until the one she replaced has gone.
+    if (!f || (dial?.waits && !CLASSES.every((c) => (ships[c] ?? 0) <= 0 || gapOf(g, f, c) > 0))) continue;
+    // A move takes its ships from the fleet they sailed with, as many as are there, so no ship is in two fleets. Where
+    // they were to come there by a waiting row not yet read, they come from off the chart, and that row is closed.
+    let src: Fleet | undefined;
+    if (from) {
+      const brought = dial?.by !== undefined ? `arr:${dial.by}:${who}:${from}` : undefined;
+      if (brought && !g.flags[brought]) g.flags[brought] = g.turn;
+      else if (!(src = named(from))) continue;
+    }
     if (dial?.stops) g.flags[key] = g.turn;
     // A count below none is ships leaving for another fleet (the far side's rows): never more than are there, and the words say where they go.
     const leaving = CLASSES.some((c) => (ships[c] ?? 0) < 0);
-    let gone = 0;
+    let gone = 0, came = 0;
     for (const c of CLASSES) {
+      let n = ships[c] ?? 0;
+      if (src && n > 0) { n = Math.min(n, src.ships[c]); src.ships[c] -= n; }
       const was = f.ships[c];
-      f.ships[c] = Math.max(0, was + (ships[c] ?? 0));
-      if (was > f.ships[c]) { gone += was - f.ships[c]; if (dial?.sunk) f.lost[c] += was - f.ships[c]; }
+      f.ships[c] = Math.max(0, was + n);
+      if (was > f.ships[c]) {
+        gone += was - f.ships[c];
+        // The record's sinking is not play's: it leaves no gap for a waiting row.
+        if (dial?.sunk) { f.lost[c] += was - f.ships[c]; fill(g, f, c, was - f.ships[c]); }
+      } else came += f.ships[c] - was;
+      if (dial?.waits && n > 0) fill(g, f, c, n);
     }
-    // A dial's row of ships lost that play has already sunk says nothing: the news has told it once. Nor does one
-    // read late: its month is past.
-    if ((dial && leaving && !gone) || turn < g.turn) continue;
+    // A dial's row of ships lost that play has already sunk says nothing: the news has told it once; nor a move that
+    // finds none of its ships. Nor does one read late: its month is past. (A waiting row's month is the one it is read in.)
+    if ((dial && leaving && !gone) || (src && !came) || (turn < g.turn && !dial?.waits)) continue;
     // (Many ships take the plural, however the phrase opens: "More of the American destroyers join", the third playtester, 84.3.1.)
     const many = / and /.test(what) || /s$/.test(what.split(' ')[0]) || (/\bof\b/.test(what) && /s$/.test(what));
-    headline(g, 'info', leaving ? `${cap(what)}.` : `${cap(what)} ${many ? 'join' : 'joins'} ${fleetName(f)}.`, nat);
+    const words = leaving ? `${cap(what)}.`
+      : src ? `${cap(what)} ${many ? 'leave' : 'leaves'} ${fleetName(src)} for ${fleetName(f)}.`
+      : `${cap(what)} ${many ? 'join' : 'joins'} ${fleetName(f)}.`;
+    headline(g, 'info', words, nat);
   }
   for (const m of NAVY.moves ?? []) {
     if (m.nat !== nat || m.turn !== g.turn || nat === g.human || (m.stops && !m.stops.includes(stopOf(g)))) continue;

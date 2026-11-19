@@ -375,70 +375,74 @@ describe('Force H', () => {
     expect(hist.seas[named(loadGame(saveGame(hist))!, 'Force H')!.station].key).toBe('iberia');
   });
 
-  it('at stops 1 and 2 loses the Ark Royal in December 1941, has the Eagle from March 1942 and loses her in August', () => {
+  it('at stops 1 and 2 keeps the Ark Royal until play sinks her: the Eagle waits for that, and no row sinks a carrier', () => {
+    // (The record's Ark Royal of November 1941 and Eagle of August 1942 were sunk in battle, and the battle decides:
+    // the director's note of 08:38Z. b598.test.ts (5) has the carriers' rows month by month.)
     for (const stop of [1, 2]) {
       const g = wide(stop);
       const f = forceH(g);
-      g.turn = 28;
-      navalUpkeep(g, 'UK');
-      expect(f.ships.cv).toBe(0);
-      expect(f.lost.cv).toBe(1);
-      expect(news(g, 28)).toContain('The carrier Ark Royal is sunk off Gibraltar.');
-      g.turn = 31;
-      navalUpkeep(g, 'UK');
-      expect(f.ships.cv).toBe(1);
-      expect(news(g, 31)).toContain('The carrier Eagle joins Force H.');
-      g.turn = 36;
-      navalUpkeep(g, 'UK');
-      expect(f.ships.cv).toBe(0);
-      expect(f.lost.cv).toBe(2);
-      expect(news(g, 36)).toContain('The carrier Eagle is sunk in the Pedestal convoy.');
+      const cv: Record<number, number> = {};
+      for (let turn = 12; turn <= 37; turn++) {
+        g.turn = turn;
+        navalUpkeep(g, 'UK');
+        cv[turn] = f.ships.cv;
+      }
+      expect([cv[28], cv[31], cv[36], cv[37]]).toEqual([1, 1, 3, 1]);
+      expect(f.lost.cv).toBe(0);
+      expect(g.headlines.some((h) => /sunk|Eagle joins Force H/.test(h.text))).toBe(false);
       expect(f.ships.bb + f.ships.ca + f.ships.dd).toBe(13);
     }
   });
 
-  it('in a grand campaign begun in January 1942 at stop 1 has already lost the Ark Royal, and has the Eagle from March', () => {
+  it('in a grand campaign begun in January 1942 at stop 1 reads the rows of before without news, and keeps the Ark Royal', () => {
     const g = createGame(1, null);
-    const f = forceH(g);
-    // History is played to the month the grand campaign begins, and the record's row of December 1941 was not read in it.
+    // History is played to the month the grand campaign begins, and the record's rows were not read in it.
+    for (let turn = 2; turn <= 28; turn++) {
+      g.turn = turn;
+      navalUpkeep(g, 'UK');
+    }
+    const f = named(g, 'Force H')!;
     g.turn = 29;
     startOpen(g);
     g.flags.hist = 1;
     navalUpkeep(g, 'UK');
-    expect([f.ships.cv, f.lost.cv]).toEqual([0, 1]);
-    // Its month is past: it is not news.
-    expect(g.headlines.some((h) => /Ark Royal/.test(h.text))).toBe(false);
+    // The Furious's ferry run of May and June 1941 has come and gone: Force H has its one carrier, and lost none.
+    expect([f.ships.cv, f.lost.cv]).toEqual([1, 0]);
+    expect(named(g, 'Home Fleet')!.ships.cv).toBe(3);
+    // Their months are past: they are not news.
+    expect(news(g, 29).some((t) => /carrier/.test(t))).toBe(false);
     g.turn = 30;
     navalUpkeep(g, 'UK');
-    expect([f.ships.cv, f.lost.cv]).toEqual([0, 1]);
-    g.turn = 31;
-    navalUpkeep(g, 'UK');
-    expect(f.ships.cv).toBe(1);
-    expect(news(g, 31)).toContain('The carrier Eagle joins Force H.');
+    expect([f.ships.cv, f.lost.cv]).toEqual([1, 0]);
     g.turn = 36;
     navalUpkeep(g, 'UK');
-    expect([f.ships.cv, f.lost.cv]).toEqual([0, 2]);
+    expect(f.ships.cv).toBe(3);
+    expect(news(g, 36)).toContain('The carriers Victorious and Furious leave the Home Fleet for Force H.');
   });
 
   it('a dial turned to the book later brings Force H to the record\'s ships of that month, once', () => {
     const g = wide(3);
     const f = forceH(g);
-    g.turn = 33;
-    navalUpkeep(g, 'UK');
+    for (let turn = 12; turn <= 33; turn++) {
+      g.turn = turn;
+      navalUpkeep(g, 'UK');
+    }
     expect(f.ships.cv).toBe(1);
     g.flags.hist = 1;
     g.turn = 34;
     navalUpkeep(g, 'UK');
-    // The Ark Royal gone and the Eagle come: one carrier, and one lost.
-    expect([f.ships.cv, f.lost.cv]).toEqual([1, 1]);
-    expect(news(g, 34).some((t) => /Ark Royal|Eagle/.test(t))).toBe(false);
+    // The ferry run come and gone without news: one carrier, and none lost.
+    expect([f.ships.cv, f.lost.cv]).toEqual([1, 0]);
+    expect(news(g, 34).some((t) => /carrier/.test(t))).toBe(false);
     g.turn = 35;
     navalUpkeep(g, 'UK');
-    expect([f.ships.cv, f.lost.cv]).toEqual([1, 1]);
+    expect(f.ships.cv).toBe(1);
     g.turn = 36;
     navalUpkeep(g, 'UK');
-    expect([f.ships.cv, f.lost.cv]).toEqual([0, 2]);
-    expect(news(g, 36)).toContain('The carrier Eagle is sunk in the Pedestal convoy.');
+    expect(f.ships.cv).toBe(3);
+    g.turn = 37;
+    navalUpkeep(g, 'UK');
+    expect([f.ships.cv, f.lost.cv]).toEqual([1, 0]);
   });
 
   it('at stops 3 to 5, in a history campaign and under a player, its carrier goes only if play sinks it', () => {
@@ -455,15 +459,18 @@ describe('Force H', () => {
     }
   });
 
-  it('a carrier play has already sunk is not sunk again by the record', () => {
+  it('a carrier play has sunk is made good by the Eagle in March 1942, once', () => {
     const g = wide(1);
     const f = forceH(g);
     f.ships.cv = 0;
     f.lost.cv = 1;
-    g.turn = 28;
-    navalUpkeep(g, 'UK');
+    for (const [turn, cv] of [[28, 0], [29, 0], [30, 1], [31, 1]]) {
+      g.turn = turn;
+      navalUpkeep(g, 'UK');
+      expect(f.ships.cv, `turn ${turn}`).toBe(cv);
+    }
+    expect(news(g, 30)).toContain('The carrier Eagle joins Force H.');
     expect(f.lost.cv).toBe(1);
-    expect(news(g, 28).some((t) => /Ark Royal/.test(t))).toBe(false);
   });
 });
 
