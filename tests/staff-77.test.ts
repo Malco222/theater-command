@@ -41,11 +41,12 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; owner: string; island: boolean; overseas: boolean; wave: boolean; across: number }[] = [];
 const months: { turn: number; can: number; canHome: number; bra: number; usa: number }[] = [];
 {
-  // Seed 6: America's staff makes a landing of its own in this war, on Sardinia in October 1942, and Germany holds
+  // Seed 6 until ruling 232: America's staff made a landing of its own in that war, on Sardinia in October 1942, and Germany holds
   // Norway. Seed 7 until Version 84, whose rules of what an attack brings and faces moved every war; seed 8 until ruling
   // 227, whose air war moved them again (in seed 8 Germany now never takes Norway). Of seeds 1 to 13 under 227, 3, 6, 7,
-  // 9 and 12 tell this story in full.
-  const g = wide(6);
+  // 9 and 12 tell this story in full. Seed 4 since ruling 232 (Warsaw's garrison, b566) and Italy's boats on the
+  // record's seas (b564) moved the war again: of seeds 1 to 9 then, 4 and 5 tell it in full.
+  const g = wide(4);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, island: e.to.nb.length === 0, overseas: e.to.overseas, wave: e.wave, across: across(g, e.nat).length }); };
   while (g.turn < SEP_44) {
     runTurnAI(g);
