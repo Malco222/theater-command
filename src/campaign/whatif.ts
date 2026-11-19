@@ -133,14 +133,17 @@ const draw = (g: Game, ...key: (string | number)[]): number => new Rng(hashStrin
 
 /**
  * Sets the world of this war on its first day: the start's sides, and whether turning points come. Called once,
- * after the grand campaign is set up and before anybody's first move. History's start with no turning points
- * stores nothing at all. Returns false if it cannot be set.
+ * after the grand campaign is set up and before anybody's first move. It sets the one Sandbox switch
+ * (g.flags.sandbox); history's start with no turning points stores nothing more. Returns false if it cannot be set.
  */
 export function setSandbox(g: Game, start: string, sides: Record<string, string> = {}, turns = true): boolean {
   if (whyNotSandbox(g, start, sides)) return false;
   const S = WHATIF.starts.find((s) => s.id === start)!;
   const picked: Record<string, string> = S.dealt ? dealt(g) : S.custom ? { ...sides } : { ...S.sides };
   const moved = Object.entries(picked).filter(([nat, id]) => id !== 'history' && COUNTRY.get(nat)?.sides.some((s) => s.id === id));
+  // The one Sandbox switch (the shared sandbox shape, /mnt/project-files/sandbox/SHAPE.md section 1): choosing any
+  // start here is choosing the Sandbox, and it turns on every sandbox rule that asks for it.
+  g.flags.sandbox = 1;
   if (S.n === 0 && !turns) return true;
   g.flags.wi = 1;
   g.flags.wiStart = S.n;

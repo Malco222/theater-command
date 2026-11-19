@@ -213,6 +213,7 @@ const ui = {
   gcStart: 'history',
   gcSides: {} as Record<string, string>,
   gcTurns: false,
+  gcSandbox: false,
   /** The month the turning points card was last put up by itself, so it comes once a month. */
   tpShown: 0,
 };
@@ -6690,6 +6691,12 @@ const sidesText = (x: Record<string, string>): string => Object.entries(x).filte
 const sidesFrom = (s: string): Record<string, string> => Object.fromEntries(s.split(',').filter(Boolean).map((kv) => kv.split('=') as [string, string]));
 
 /** The starts side by side, the chosen one lit; under them what it means, the sheet for "Your Own World", and the turning points' switch. */
+/** The one Sandbox switch on the start card: history's war, or a war of your own making. */
+function sandboxSwitch(): string {
+  return `<div class="gclevels two"><button class="gclevel${ui.gcSandbox ? '' : ' on'}" data-act="gcsandbox" data-on="0" aria-pressed="${!ui.gcSandbox}"><b>History's war</b><span>The war as it was fought</span></button><button class="gclevel${ui.gcSandbox ? ' on' : ''}" data-act="gcsandbox" data-on="1" aria-pressed="${ui.gcSandbox}"><b>The Sandbox</b><span>Make your own history</span></button></div>
+    <div class="gclevelnote"><p>${ui.gcSandbox ? 'The Sandbox turns on everything that lets this war leave history: how it begins, the turning points along the way, and the sandbox\'s own ships, planes and tanks.' : 'The war begins as it did in September 1939, with history\'s sides and history\'s weapons.'}</p></div>`;
+}
+
 function sandboxPicker(): string {
   const starts = sandboxStartList();
   const on = starts.find((s) => s.id === ui.gcStart) ?? starts[0];
@@ -7097,7 +7104,7 @@ function startCard(): string {
     <div class="gcyears">${GRAND.years.map((y) => `<button class="gcyear${y.year === pick.year.year ? ' on' : ''}" data-act="gcyear" data-year="${y.year}" ${years.includes(y.year) ? '' : 'disabled'} aria-pressed="${y.year === pick.year.year}"><b>${y.year}</b><span>${y.turn === 1 ? 'The war begins' : esc(date(y.turn))}</span></button>`).join('')}</div>${under ? `<p class="gcunder">${esc(under)}</p>` : ''}
     ${pick.nat ? `<h3>Choose how hard a war</h3>${levelPicker(ui.gcLevel, 'gclevel')}<h3>Choose how deep you play</h3>${depthPicker(ui.gcDepth, 'gcdepth')}` : ''}
     <h3 id="gchist">Choose how close to history</h3>${dialPicker(ui.gcHist, 'gchist')}
-    ${sandboxShown() && pick.year.turn === 1 ? `<h3 id="gcworld">Choose how the war begins</h3>${sandboxPicker()}` : ''}
+    ${sandboxShown() && pick.year.turn === 1 ? `<h3 id="gcworld">Choose your war</h3>${sandboxSwitch()}${ui.gcSandbox ? `<h3 id="gcstarts">Choose how the war begins</h3>${sandboxPicker()}` : ''}` : ''}
     <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, natColor(pick.nat), 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</div><h4>${pick.nat ? esc(natName(pick.nat)) : 'A war nobody has seen'}</h4>
       <p>${esc(pick.year.text)}</p><p class="you">${esc(pick.text)}${FAR_PATHS[pick.nat] ? ` ${esc(FAR_PATHS[pick.nat])}` : smallPick ? ' Open <b>Your path</b> on the top bar to choose where you stand.' : ''}</p>${goals ? `<div class="gcgoals">${goals}</div>` : ''}
       ${pick.nat && hasTraits(pick.nat) ? `<div class="gctraits"><h5>What ${esc(theName(pick.nat))} does best</h5>${traitList(pick.nat)}</div>` : ''}
@@ -7105,7 +7112,7 @@ function startCard(): string {
     <h3>Historical scenarios</h3>
     <div class="sides"><button class="sidebtn wide" data-act="menu" data-menu="scenarios"><b>Play a turning point of the war</b><span>Fourteen shorter campaigns, from the Battle of Britain and Barbarossa to D-Day and Operation Bagration. Each starts at a turning point with the other nations following history's plan, or you can sit back and watch history unfold.</span></button></div>
     ${STEPS}</div>
-    <footer class="gcfoot"><span class="grow">${pick.nat ? flagIcon(pick.nat, natColor(pick.nat), 30) : ''}<span><b>${pick.nat ? esc(natName(pick.nat)) : 'A war nobody has seen'}</b><small>${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</small></span></span><button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}" data-depth="${pick.nat ? ui.gcDepth : ''}" data-hist="${ui.gcHist}"${sandboxShown() && pick.year.turn === 1 ? ` data-wistart="${esc(ui.gcStart)}" data-wisides="${esc(sidesText(ui.gcSides))}" data-witurns="${ui.gcTurns ? 1 : 0}"` : ''}>${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button></footer>`;
+    <footer class="gcfoot"><span class="grow">${pick.nat ? flagIcon(pick.nat, natColor(pick.nat), 30) : ''}<span><b>${pick.nat ? esc(natName(pick.nat)) : 'A war nobody has seen'}</b><small>${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</small></span></span><button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}" data-depth="${pick.nat ? ui.gcDepth : ''}" data-hist="${ui.gcHist}"${sandboxShown() && pick.year.turn === 1 && ui.gcSandbox ? ` data-wistart="${esc(ui.gcStart)}" data-wisides="${esc(sidesText(ui.gcSides))}" data-witurns="${ui.gcTurns ? 1 : 0}"` : ''}>${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button></footer>`;
 }
 
 function scenarioCard(): string {
@@ -8669,8 +8676,9 @@ function onClick(e: MouseEvent): void {
       $('#card').scrollTop = keep;
       break;
     }
-    case 'gcstart': case 'gcside': case 'gcturns': {
-      if (act === 'gcstart') { ui.gcStart = t.dataset.start ?? 'history'; ui.gcTurns = ui.gcStart !== 'history' || ui.gcTurns; }
+    case 'gcstart': case 'gcside': case 'gcturns': case 'gcsandbox': {
+      if (act === 'gcsandbox') ui.gcSandbox = t.dataset.on === '1';
+      else if (act === 'gcstart') { ui.gcStart = t.dataset.start ?? 'history'; ui.gcTurns = ui.gcStart !== 'history' || ui.gcTurns; }
       else if (act === 'gcside') ui.gcSides = { ...ui.gcSides, [t.dataset.nat ?? '']: t.dataset.side ?? 'history' };
       else ui.gcTurns = t.dataset.on === '1';
       const keep = $('#card').scrollTop;

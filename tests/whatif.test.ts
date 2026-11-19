@@ -39,15 +39,23 @@ describe('the sandbox switch', () => {
     expect(sandboxOffered()).toBe(false);
   });
 
-  it('stores nothing for history\'s start without turning points, and replays the war exactly', () => {
+  it('history\'s start without turning points sets only the Sandbox switch, and its own rules replay the war exactly', () => {
     for (const seed of [4, 11]) {
-      const plain = months(grand(seed), 6);
+      const plain = grand(seed);
+      plain.flags.sandbox = 1; // the one switch, as the start card sets it
+      months(plain, 6);
       const g = grand(seed);
       expect(orderSandbox(g, 'history', {}, false)).toBe(true);
+      expect(g.flags.sandbox).toBe(1);
       expect(Object.keys(g.flags).filter((k) => k.startsWith('wi') || k.startsWith('tp:'))).toEqual([]);
       expect(sandboxView(g)).toBeNull();
       expect(state(months(g, 6))).toBe(state(plain));
     }
+  });
+
+  it('every sandbox world turns on the one Sandbox switch', () => {
+    for (const start of ['nopact', 'grand', 'dealt']) expect(world(start).flags.sandbox).toBe(1);
+    expect(grand().flags.sandbox).toBeUndefined();
   });
 
   it('belongs to the first day of a grand campaign', () => {
