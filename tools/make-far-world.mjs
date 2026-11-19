@@ -204,8 +204,9 @@ for (const b of pacific.building) need(fleetNames.has(`${b.nat}|${b.fleet}`), `b
 // Ruling 234(d): a move with 'sea' in place of a base is the record's month at sea in a month of peace (the Pacific
 // Fleet's carriers in December 1941, at the stops that keep the book). The script's own marks beside it: 'with', the
 // great choice whose month it keeps where that month is drawn (Japan's strike south: the carriers are at sea in the
-// strike's month, whenever the draw puts it); and on the fleet's row 'cruise', [that sea, CRUISE]: at a stop that
-// keeps no book the fleet is at sea in a month of peace on that chance by the seed (the ruling's one in two).
+// strike's month, whenever the draw puts it); and on the fleet's row 'cruise', [that sea, CRUISE, the choice's nation]:
+// at a stop that keeps no book the fleet is at sea in a month of peace on that chance by the seed (the ruling's one in
+// two), and peace is peace with that nation (rider b593: America is at war with Germany from the close of December 1941).
 const CRUISE = 0.5;
 const STRIKE = 'JAP:south';
 const usMoves = pacific.moves.map((m) => (m.sea !== undefined ? { ...m, with: STRIKE } : m));
@@ -215,7 +216,7 @@ for (const m of usMoves) {
     need(seas.has(m.sea) && m.base === undefined && m.home === undefined, `move "${m.words}": the sea "${m.sea}" is not on the chart, or the row names a base as well`);
     const f = usFleets.find((x) => x.nat === m.nat && x.name === m.fleet);
     need(f && !f.cruise, `move "${m.words}": "${m.fleet}" is not one of these fleets, or has two months at sea`);
-    f.cruise = [m.sea, CRUISE];
+    f.cruise = [m.sea, CRUISE, STRIKE.split(':')[0]];
   } else need(owner.has(m.base) && seas.has(m.home), `move "${m.words}": ${m.base} or the sea "${m.home}" is not on the chart`);
 }
 

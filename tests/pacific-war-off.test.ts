@@ -175,6 +175,13 @@ describe('the carriers of ruling 234(d) with the far side off', () => {
         navalUpkeep(g, 'USA');
         for (const f of g.fleets) if (f.nat === 'USA') { expect(atSea(f), `${f.name} ${t}`).toBe(false); expect(f.cruised).toBeUndefined(); }
       }
+      // (Nor at war with Germany and at peace with everybody else, rider b593: no row names whose peace a month waits for.)
+      declareWar(g, 'GER', 'USA');
+      for (let t = 31; t <= 40; t++) {
+        g.turn = t;
+        navalUpkeep(g, 'USA');
+        for (const f of g.fleets) if (f.nat === 'USA') expect(f.cruised, `${f.name} ${t}`).toBeUndefined();
+      }
     }
   });
 });

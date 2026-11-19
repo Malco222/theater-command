@@ -571,8 +571,8 @@ export interface Fleet extends Storied {
    * share of their decks until the wing comes back aboard.
    */
   bare?: { ftr: number; bmr: number };
-  /** The far side (ruling 234(d)), from its row: [sea, chance], where it may spend a month of peace at sea, and how likely, at a stop that keeps no book (navy.ts, navalUpkeep). */
-  cruise?: [string, number];
+  /** The far side (ruling 234(d)), from its row: [sea, chance, whose], where it may spend a month of peace at sea, and how likely, at a stop that keeps no book; 'whose', the country its peace is read against, where the row names one (navy.ts, navalUpkeep). */
+  cruise?: [string, number, string?];
   /** The month it is at sea though its country is at peace, by the record or on such a cruise. */
   cruised?: number;
 }
