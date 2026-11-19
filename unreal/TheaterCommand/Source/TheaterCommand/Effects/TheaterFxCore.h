@@ -109,6 +109,23 @@ namespace TheaterFx
 		double Inner = 0.5; // (where the heart ring sits, as a share of the radius: further out, a denser body with a thinner soft edge)
 		double Smear = 0.0; // (an aircraft trail's puff: drawn this many metres longer behind it, against Along, so puffs metres apart join in one line)
 		double SmearFor = 0.0; // (and that length shrinks to under a third over this many seconds, so an old trail breaks into lumps; 0 keeps it)
+		// (a ribbon trail's piece, Ribbon over 0: a length of ribbon from its own point back to the piece laid before it,
+		// wherever that one has drifted to and as wide and as dark there as that one is now. Its far edge is that
+		// piece's own near edge, so the two share it exactly, as the links of one strip: no thin tips, no step, no
+		// overlap to darken and no gap, however fast the aircraft flew. Back: the piece behind, as it was laid (Way:
+		// the way the aircraft flew there, which the strip runs along at that edge, so it bends through its pieces as
+		// the path did and never turns a corner at a join; Alpha: its own opacity; LumpsFrom: its own SmearHold). Ribbon: the share of its half
+		// width that is its full dense core; from there it thins to nothing at its two sides. ShowFrom, ShowBy:
+		// seconds between which it comes into sight (a length that hangs on, as the short ones it stands in for go).
+		// SmearHold: the share of its life it stays a link; after that it draws in to a round lump of its own)
+		struct Reach
+		{
+			Vec From, Vel, Way;
+			double Rise = 0.0, Born = 0.0, R0 = 0.0, R1 = 0.0, Grow = 1.0, Life = 1.0, Alpha = 1.0, LumpsFrom = -1.0;
+			bool bOn = false;
+		};
+		double Ribbon = 0.0, ShowFrom = 0.0, ShowBy = 0.0, SmearHold = -1.0;
+		Reach Back;
 		double LeastPx = 0.0; // (a streak: never thinner than this on the screen; a puff: never smaller across its long way, and thinner to match)
 		double LeastKeep = 0.0; // (a puff held up to LeastPx keeps at least this share of its opacity: a light's twinkle, a far trail's dark line)
 		double MostPx = 0.0; // (a tracer's streak: never wider than this on the screen, so one passing close stays a thin line; 0: no limit)
@@ -375,6 +392,13 @@ namespace TheaterFx
 			double Grow = 0.5, Lumpy = 0.0, SmearS = 0.0, Rise = 0.0;
 			double ThinAfter = 0.0, ThinGrow = 1.0, ThinAlpha = 1.0, ThinHold = -1.0, ThinRagged = 0.0; int ThinKeep = 1; // (an old trail thinned: past ThinAfter s only one puff in ThinKeep hangs on to Life, ThinGrow times wider, ThinAlpha times denser, full until ThinHold of its life)
 			double LeastPx = 0.0, LeastKeep = 0.0; // (a far trail held at least LeastPx across, keeping LeastKeep of its opacity)
+			// (a ribbon, Core over 0: every piece a length of one strip back to the piece before it, sharing its edge,
+			// dense over Core of its half width and thinning to its sides; 0: the trail as it was, each puff a lens. The
+			// lengths that hang on, one in ThinKeep, reach back to the last of their own and come into sight between
+			// JoinFrom and JoinBy of thin_after_s as the short ones go; one is laid wherever the path has turned TurnCos
+			// since the last, so a spin's trail follows its curve. LumpsFrom: the share of its life after which a length
+			// draws in to a lump. Drift: the share of the lumpy scatter each piece is thrown with)
+			double Core = 0.0, JoinFrom = 0.15, JoinBy = 0.45, TurnCos = 0.9, LumpsFrom = 0.75, Drift = 0.35;
 			double SmokeStart = 1.0; // (fire: where along the flame its smoke starts, a share of the flame's length)
 			Span FlameLiftOfLen{ 0.0, 0.0 }; // (fire: how far each tongue stands off the skin as a share of its length; 0: flame_lift_m)
 			double LicksPerFrame = 0.4; // (fire: tongues torn free of the tip and streaming away aft, a frame)
@@ -399,6 +423,9 @@ namespace TheaterFx
 			unsigned Puffs = 0, NextKept = 0, KeptGap = 0; // (puffs laid, counted only when the row thins its old puffs; the next to hang on, and how many back the last one kept was)
 			Vec At, Carry, LastPuffAt;
 			Vec KeptAt; bool bKeptAt = false; // (where the last puff kept to hang was laid)
+			Vec PuffAt, KeptWay; bool bPuffAt = false; // (a ribbon: where the last puff was laid, and the way the path ran at the last one kept)
+			Bit::Reach Prev, Kept; // (a ribbon: the last piece laid and the last length that hangs on, for the next of each to reach back to)
+			Vec Wander; double RiseK = 1.0; bool bWander = false; // (a ribbon: the drift and rise its last piece took, which the next takes most of, so the strip meanders and never zig-zags)
 		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */
 		struct Firing
@@ -487,6 +514,12 @@ namespace TheaterFx
 		// Inner only across it. A day tracer: solid to within a pixel of its edge all round, the last pixel fading out,
 		// so a thin line a frame long is one straight line and never a stair of steps. Art director 14:26Z)
 		double LayInnerAlong = 0.0;
+		// (while laying one bit: a ribbon's piece. LayLong: from its middle to its near edge's middle; AxisB is half its
+		// near edge and LayFar half its far edge; LayBendFar, LayBendNear: how the strip's line bows off the straight
+		// run to leave each edge along the path there; LayTailAlpha: its far edge's opacity as a share of its near
+		// edge's; LayLump, LayLumpFar: how far its near and far ends have drawn in to a round lump, 0 a link of the
+		// strip and 1 a round puff)
+		Vec LayLong, LayFar, LayBendFar, LayBendNear; bool bLayLong = false; double LayTailAlpha = 1.0, LayLump = 0.0, LayLumpFar = 0.0;
 		// (picture.lit_gain: the game's picture multiplies every colour by this (the wrapper sets the material's
 		// brightness to it), and every colour is written that much darker, so all looks as before; but a light's hottest
 		// parts (Bit::Over) are written up to that much brighter than white, so they land white-hot after the game's
@@ -587,6 +620,12 @@ namespace TheaterFx
 		// pre-check, 06:42Z)
 		size_t InSight = 0, HeldAtDraw = 0;
 		size_t SeenBits = 0, SeenTwin = 0; // (of InSight and TwinBits, what was on the screen: see RoomSeen)
+		// (the eye given may be the frame before's: the campaign map reads the camera before it has moved for the frame.
+		// So what the eye moved and turned between the last two frames is allowed for again, twice over, before a bit
+		// is called off the screen. A still eye changes nothing. The pre-check, 14:55Z)
+		Vec EyeWas, AheadWas, UpWas;
+		bool bEyeWas = false;
+		double EyeMoved = 0.0, EyeTurned = 0.0;
 		// (the vehicles' dust's own count: in sight at the last Draw and laid since; its gate takes the fuller of the room
 		// and dust.vehicles.most_of_room of it. The pre-check, 07:10Z)
 		size_t DustInSight = 0, DustSince = 0;

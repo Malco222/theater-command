@@ -304,12 +304,23 @@ Blasts->TrailStop(EngineId);
   (dark red) into the smoke. Put the trail's point at the fire: the engine's exhaust, or the wing root for a tank fire,
   whose tongues sweep back past the tail.
 - Smoke hangs (art director 04:40Z): a fire trail lives 30 s and a straggler's smoke 20 s. To fit the room, past
-  `thin_after_s` only one puff in `thin_keep_one_in` (4) hangs on, growing on to `thin_grow` times, so an old trail is
+  `thin_after_s` only one puff in `thin_keep_one_in` (6) hangs on, growing on to `thin_grow` times, so an old trail is
   fewer, bigger lumps: about 250 puffs for a fighter's fire trail at 150 m/s, 170 for its smoke. Each kept puff
   thickens to `thin_alpha` times its opacity by `thin_after_s`, holds full to `thin_hold` of its life and is drawn out
   over the gap to the next, so the old trail stays one dark line (`thin_ragged` makes the gaps and sizes uneven, a
   torn ribbon, never a string of beads) (04:59Z: a fire trail 110 or darker for two thirds of
   its length on a 212 sky, its oldest part no paler than 150; a straggler's head about 130). A hit's puff hangs 3 to 4 s.
+- A trail is one strip (`ribbon` 1; art director 14:13Z, where the game's falling planes trailed beads on a string).
+  Each piece runs from its own point back to the piece laid before it, wherever that has drifted to, and is as wide
+  and as dark at that edge as that piece is: the two share the edge, with no overlap to darken a join and no gap, at
+  any speed. The strip leaves each edge along the way the aircraft flew there, so it bends through a turn and a spin's
+  trail is a smooth corkscrew; each piece takes most of the drift and rise of the one before, so it meanders and
+  never zig-zags (`drift`: how much of the scatter it keeps; `core`: the share of its half width that is dense). One
+  piece in `thin_keep_one_in` (6), and one wherever the path has turned `keep_each_turn_deg`, is also a long length
+  that hangs the whole of `life_s`, coming into sight between `join_from` and `join_by` of `thin_after_s` as the
+  short pieces go. From `lumps_from` of its life a length lets go of its neighbours, paling and narrowing to nothing
+  at each end, and draws in to a soft lump: only the old end tears into lumps. It takes no more room: at 120 m/s a
+  smoke trail 124 places and a fire trail 225. Recipes without `ribbon` draw as before.
 - When the room (`game.max_puffs`) is short, every light (flames, flashes, tracers) is counted first, as an oil fire's
   kept column is, and the farthest smoke goes: a dozen trailing aircraft fill about 2,900 of 3,000 slots, and past that
   the far trails shorten while no fire is lost (24 aircraft, half burning, seen from 1,200 m).

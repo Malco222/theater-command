@@ -485,7 +485,7 @@ void FBattleEffects::Hide()
 	}
 }
 
-FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight)
+FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight, int32 ViewHeight)
 {
 	FBattleJolt Jolt;
 	if (!IsReady())
@@ -515,7 +515,11 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 	Sight.Up = ToFxWay(Looking.GetUnitAxis(EAxis::Z));
 	const double HalfView = FMath::DegreesToRadians(FMath::Clamp(static_cast<double>(FieldOfViewDegrees), 5.0, 170.0) * 0.5);
 	Sight.PixelsPerRadian = FMath::Max(1, ViewWidth) / (2.0 * FMath::Tan(HalfView));
-	Sight.HalfAcross = FMath::Tan(HalfView); // (what is wholly off the screen takes no place; up and down a quarter more, whatever the window's shape)
+	Sight.HalfAcross = FMath::Tan(HalfView); // (what is wholly off the screen takes no place; up and down a quarter more, when the height is not given)
+	if (ViewHeight > 0 && ViewWidth > 0)
+	{
+		Sight.HalfUp = Sight.HalfAcross * static_cast<double>(ViewHeight) / static_cast<double>(ViewWidth); // (a window taller than wide lost pieces at its top and bottom. The pre-check, 15:02Z)
+	}
 	Sight.SmokeLight = TheaterFx::Rgb(HourLight.R, HourLight.G, HourLight.B);
 	Sight.Sun = ToFxWay(Sun);
 	const float SunUp = static_cast<float>(Core.DayOf(Sight.SmokeLight)); // (the sun's own light: full by day, none at night)

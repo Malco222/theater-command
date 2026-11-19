@@ -160,8 +160,10 @@ public:
 
 	/** Once a frame, with the world's time in seconds (what happens between ticks is stamped with the last tick's time)
 	 * and the eye. HourLight is what the hour does to smoke (white by day; the campaign map's night rule): flame,
-	 * flashes and tracer keep their own colour. Returns the camera's jolt. */
-	FBattleJolt Tick(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight = FLinearColor::White);
+	 * flashes and tracer keep their own colour. ViewHeight: the picture's height in the same pixels as ViewWidth, so
+	 * what is off its top or bottom is known exactly; left at 0, the view is taken as a quarter taller than wide, which
+	 * covers any window wider than it is tall. Returns the camera's jolt. */
+	FBattleJolt Tick(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight = FLinearColor::White, int32 ViewHeight = 0);
 
 	/** Camera shake on or off (Options: "Camera shake", default on). */
 	bool bShake = true;
