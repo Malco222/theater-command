@@ -46,6 +46,9 @@ Lamps and day: a flash's lamp is full on the first frame drawn after the flash, 
 (Tick draws first, then lights; call Tick once a frame, or a lamp lasts a single frame). `HourLight` tells the kit how much it is day: by day a lamp is a quarter as strong and
 warm white, and small guns light no ground. A flash shorter than a frame is still drawn once, so 30 frames a second
 shows every one (and a slow frame shows a flak flash's pieces together, glow, spikes and heart, never the heart alone); a close tracer (under 100 m) is drawn whole, muzzle to strike.
+A tracer is laid along its true heading in the world, so its ends sit where they truly are; it is as wide on the
+screen from end to end, and never wider than `tracer.most_px` (times `day_width` by day), so one passing close stays
+a thin whip. Test: a hmg tracer passing 3 to 20 m off is long on screen (over 150 px) for 1 to 3 frames at 30 a second.
 
 Sun and sky: `SetSun` gives the way toward the sun. Smoke's shadow side never falls below `game.sky_fill` of its own
 colour in the hour's light, and looking toward the sun the fringe of a smoke cloud or trail glows warm
