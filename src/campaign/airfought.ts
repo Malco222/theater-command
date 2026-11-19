@@ -12,7 +12,7 @@
 // field reports cut is the line the campaign cuts. Absent, fly() rolls its dice exactly as before.
 
 import type { VictoryLevel } from '../core/ticket';
-import type { AirFleet, AirReport, Game } from './types';
+import type { AirFleet, AirReport, Game, ShipClass } from './types';
 
 export interface FoughtAir {
   /** By campaign air group id: fighters and bombers lost, and downed fighter pilots who fly again. */
@@ -48,6 +48,12 @@ export interface FoughtAir {
    * that dropped, comes above the throw. fly() uses them in place of its own, so it books what the field showed.
    */
   rolls?: { rail?: number; ruin?: number };
+  /**
+   * A strike on ships (ruling 238): by fleet id, the ships of each class the field sank as the bombers dropped, drawn by
+   * the campaign's own law (shipHits). fly() books them in place of its own roll; handed to the staff, they stand and
+   * the staff's dice may add to them.
+   */
+  sunk?: Record<number, Partial<Record<ShipClass, number>>>;
 }
 
 /**
