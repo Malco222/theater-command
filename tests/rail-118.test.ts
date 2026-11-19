@@ -12,7 +12,7 @@
 //     is lit: every working track from its own province outward.
 import { describe, expect, it } from 'vitest';
 import { turnToDate } from '../src/core/ticket';
-import { addCorps, createGame, litTracks, relocate, setWar, nearestBreak, railReach, railReachFor, railSays, rideLines, roomForAll, whyNoTrain, whyNoTrainFor } from '../src/campaign/game';
+import { addCorps, allied, createGame, litTracks, relocate, setWar, nearestBreak, railReach, railReachFor, railSays, rideLines, roomForAll, whyNoTrain, whyNoTrainFor } from '../src/campaign/game';
 import { cutRail, mendRail, onNet, railsAt } from '../src/campaign/rails';
 import { besieged, garrison } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
@@ -216,8 +216,9 @@ describe('the lit railway: every working track the army in hand could ride (sect
     for (const [a, b] of lit) {
       expect(a).toBeLessThan(b);
       expect(railsAt(a)).toContain(b);
-      // Both ends are ground its train runs on: its own province, or a place the walk reaches.
-      for (const id of [a, b]) expect(id === c.reg || reach.has(id) || g.regions[id].ctrl === 'GER').toBe(true);
+      // Both ends are ground its train runs on: its own province, a place the walk reaches, or friendly ground it only
+      // runs through (a high pass where tanks are not unloaded: since ruling 233's Brenner line, Italy's Alto Adige too).
+      for (const id of [a, b]) expect(id === c.reg || reach.has(id) || allied(g, 'GER', g.regions[id].ctrl)).toBe(true);
     }
     // Every place it can ride to has a lit track into it, and so has its own province.
     const ends = new Set(lit.flat());

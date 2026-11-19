@@ -15,6 +15,7 @@ import { keepWards } from '../src/campaign/ai';
 import { leavings } from '../src/campaign/diplomacy';
 import { addCorps, allied, capture, createGame, declareWar, hasRoom, relocate } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
+import { cutRail } from '../src/campaign/rails';
 import { startOpen, staffPhase, wards } from '../src/campaign/staff';
 import type { Corps, Game, PlanPhase, Region } from '../src/campaign/types';
 
@@ -39,6 +40,11 @@ const landOnCalabria = (g: Game): Corps => {
 const guard = (g: Game): Corps | undefined => g.corps.find((c) => c.id === g.flags['ward:GER:Rome:0']);
 const germansIn = (g: Game, r: Region): Corps[] => r.units.filter((c) => c.nat === 'GER' && !c.dead);
 const onItalianGround = (g: Game): Corps[] => g.corps.filter((c) => c.nat === 'GER' && !c.dead && g.regions[c.reg].owner === 'ITA' && !g.regions[c.reg].overseas);
+/**
+ * The Brenner's line cut, as bombing cuts it (ruling 233, noted 10:33Z, laid the pass from Tyrol to Alto Adige): the
+ * board as it was before, when no line ran from Germany into Italy but through Switzerland, France or Slovenia.
+ */
+const cutBrenner = (g: Game): void => { expect(cutRail(g, g.byName['Alto Adige'].id, 'bombed')).toBe(true); };
 /** A new month for Germany's corps: every one has its marching time again. */
 const newMonth = (g: Game): void => { for (const c of g.corps) if (c.nat === 'GER') c.ap = c.apMax; };
 
@@ -132,10 +138,11 @@ describe('ruling 233, rider b627: the guard is named once and kept, and gets the
   it('it rides as far as the trains run and marches on: on Italian ground in the second month, at Rome in the third', () => {
     const g = italyAtWar();
     landOnCalabria(g);
+    cutBrenner(g);
     const rome = g.byName.Rome;
     keepWards(g, 'GER', WARD, new Set());
     const c = guard(g)!;
-    // (No line runs from Germany into Italy on the chart but through Switzerland, France or Slovenia: the trains set him down in Austria.)
+    // (With the Brenner cut no line runs from Germany into Italy but through Switzerland, France or Slovenia: the trains set him down in Austria.)
     expect(g.regions[c.reg].owner).toBe('GER');
     expect(c.ap).toBe(0);
     newMonth(g);
@@ -183,6 +190,8 @@ describe('ruling 233, rider b627: the guard is named once and kept, and gets the
   it('a corps within two marches of Italian ground is named before one the trains would only bring nearer, and walks in the first month', () => {
     const g = italyAtWar();
     landOnCalabria(g);
+    // (With the Brenner open the trains would set some corps down in Italy first: here it is cut, and they only bring one nearer.)
+    cutBrenner(g);
     // (Two corps in the Tyrol, so that the one taken leaves nobody alone: Alto Adige is the next province.)
     const pair = [1, 2].map((n) => { const c = addCorps(g, 'GER', `Test Tyrol Corps ${n}`, 'inf', 3, 'Berlin', {}); relocate(g, c, g.byName.Tyrol); return c; });
     keepWards(g, 'GER', WARD, new Set());
@@ -195,7 +204,8 @@ describe('ruling 233, rider b627: the guard is named once and kept, and gets the
   it('with a line open onto Italian ground the trains set the guard down on it in the first month', () => {
     const g = italyAtWar();
     landOnCalabria(g);
-    // (No line crosses the Alps from Germany on the chart: the one from Slovenia into Friuli is open once Slovenia is German.)
+    // (With the Brenner cut no line crosses the Alps from Germany: the one from Slovenia into Friuli is open once Slovenia is German.)
+    cutBrenner(g);
     capture(g, g.byName.Slovenia, 'GER');
     const pair = [1, 2].map((n) => { const c = addCorps(g, 'GER', `Test Slovenia Corps ${n}`, 'inf', 3, 'Berlin', {}); relocate(g, c, g.byName.Slovenia); c.ap = c.apMax; return c; });
     keepWards(g, 'GER', WARD, new Set());
