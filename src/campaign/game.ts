@@ -70,7 +70,7 @@ export const EASTERN = eastData as unknown as {
   lineOwners?: string[]; lineStops?: number[]; lineReckon?: boolean; nearRefuge?: boolean;
   mud: number[]; lineDefence: number; stepFresh: number; stepConverted: number; convertAfter: number; badWeather: number;
   bands: [number, number][]; drag: [number, number][]; roads: number; winter: { months: number[]; attack: number; defence: number; attrition: number; rest: number; hardy: string[] };
-  mobilisation: Record<string, { perMonth: number[]; after: number; divs: number; kind: Kind; xp: number; name: string; trim?: { stops: number[]; cut: number }; works?: [number, string, number][] }>;
+  mobilisation: Record<string, { perMonth: number[]; after: number; divs: number; kind: Kind; xp: number; name: string; trim?: { stops: number[]; cut: number; from?: number }; works?: [number, string, number][] }>;
   works?: [number, string, number, string[], string, { taken?: boolean; port?: boolean; vs?: string[] }?][];
 };
 /** Rules for campaigning in the desert. See data/campaign/desert.json. */
@@ -2917,11 +2917,11 @@ export function standingCallUp(g: Game, nat: string): { held: boolean; corps: nu
  * The one trim of the free call-up (ruling 228, rider b481; sized on the tree that ships, b627): the share of the corps
  * a nation's call-up would raise each month that are not raised, at the dial's stops its plan names (the grand
  * campaign only). Their men stay in the reserve, where the depots' drafts can still reach them. The call-up only: the
- * factories are never touched. 0 where there is no trim, or the stop is not one of its.
+ * factories are never touched. 0 where there is no trim, the stop is not one of its, or the month is before its 'from'.
  */
 export function callUpCut(g: Game, nat: string): number {
   const t = EASTERN.mobilisation[nat]?.trim;
-  return g.flags.open === 1 && t && t.cut > 0 && t.stops.includes(stopOf(g)) ? Math.min(1, t.cut) : 0;
+  return g.flags.open === 1 && t && t.cut > 0 && t.stops.includes(stopOf(g)) && g.turn >= (t.from ?? 0) ? Math.min(1, t.cut) : 0;
 }
 
 /**
