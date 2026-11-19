@@ -141,6 +141,35 @@ describe('a posted division comes ashore where its posting is lost (rider b642 p
     expect(ashoreFor(g, 'GER', [18, 'GER', 'Test light division', 'arm', 1, 'Tripoli', {}], tripoli)).toBeNull();
   });
 
+  it("a detachment cut from a corps on the board comes only once its sister row has made the cut (the director, 17:23Z)", () => {
+    const WHOLE = 'Tientsin-Pukow railway garrison (21st Division)', REST = 'Tientsin-Pukow railway garrison (21st Division, less its Bataan detachment)', PART = '21st Division detachment (for Bataan)';
+    expect(dated(PART)[6].cut).toBe(REST);
+    // Hsuchow held: the garrison is cut to 0.65 and the quarter for Bataan comes, ashore where Lingayen is not Japan's.
+    const g = war();
+    expect(g.regions[row(g, WHOLE)!.reg].name).toBe('Hsuchow');
+    month(g, 30);
+    const rest = row(g, REST)!, part = row(g, PART)!;
+    expect(row(g, WHOLE)).toBeUndefined();
+    expect([rest.str, part.str, g.regions[part.reg].ctrl, g.regions[part.reg].port, part.hold]).toEqual([0.65, 0.25, 'JAP', true, false]);
+    // Hsuchow lost on the date: the garrison stays whole where it stands, and no quarter is counted twice.
+    const h = war();
+    lose(h, 'Hsuchow', 'CHN', 'Tsinan');
+    for (const t of [30, 33, 37]) {
+      month(h, t);
+      expect(row(h, PART), `turn ${t}`).toBeUndefined();
+      expect(row(h, REST), `turn ${t}`).toBeUndefined();
+      expect(row(h, WHOLE), `turn ${t}`).toBeDefined();
+    }
+    // Hsuchow retaken inside the half year: the cut is made and the detachment comes then.
+    const k = war();
+    const hsuchow = lose(k, 'Hsuchow', 'CHN', 'Tsinan');
+    month(k, 30);
+    expect(row(k, PART)).toBeUndefined();
+    hsuchow.ctrl = 'JAP';
+    month(k, 32);
+    expect([row(k, REST)?.str, row(k, PART)?.str, row(k, WHOLE)]).toEqual([0.65, 0.25, undefined]);
+  });
+
   it("the historian's marks: Java's militia is a levy, China's armies for Burma came overland, and the KNIL comes ashore only in the Indies", () => {
     const all = (setup as any).expeditions as any[];
     const words = (name: string): any => all.find((r) => r[2] === name)![6];

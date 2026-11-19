@@ -3500,6 +3500,11 @@ function expeditions(g: Game, nat: string): void {
       }
       return;
     }
+    // (The far side: a detachment whose men a sister row releases, by cutting a corps on the board, comes only once
+    // that row has made the cut, at its posting or ashore, so that its men are never counted twice: the design
+    // director's of 17:23Z of 19 November 2026 on rider b642 part 2. The 21st Division's detachment for Bataan waits
+    // for the row that cuts Hsuchow's garrison; with Hsuchow lost it waits its half year and is struck.)
+    if (o.cut && farOn(g) && !rowLanded(g, o.cut)) return;
     // An army put together out of a defeat forms only once the ground is really lost: while the nation or an ally
     // still holds any place named, the formations it would be made from fight on where they stand.
     if (o.ifLost && (o.ifLost as string[]).some((nm) => { const r = g.byName[nm]; return !r || allied(g, nat, r.ctrl); })) return;
