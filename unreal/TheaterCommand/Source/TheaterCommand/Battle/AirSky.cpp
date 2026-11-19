@@ -11,8 +11,8 @@ namespace AirSky
 	// The art director's light and shade, 19 November 12:59Z: a down-sun side about 160 of brightness, a sunlit top 235
 	// to 245, a base 140 to 155, darker than the sky behind it; a cloud's shadow on the sea 25 to 30 per cent darker.
 	// The sunlit top's paint is above that mark on purpose: the haze and the game's exposure take it down (230 in game
-	// on build 1722, the art director, 14:13Z; the battle grade is to bring it to 235 to 245, and if it cannot, this is
-	// the colour to lift))
+	// on build 1722, the art director, 14:13Z; 226 to 231 through the battle grade on 1732, and at 252 there is no room
+	// left in the paint: the scene's cloud ink lifts all three colours together, AirBattle.cpp's CloudBright))
 	const Rgb SunSide = Rgb::FromPicture(252, 250, 245);
 	const Rgb ShadeSide = Rgb::FromPicture(162, 170, 184);
 	const Rgb BaseSide = Rgb::FromPicture(134, 141, 154);

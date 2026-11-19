@@ -111,6 +111,18 @@ namespace StageParts
 	// (darker than the first run's 24505F: looking down from 5 km the sea measured luma 100 to 118, the art director's
 	// mark is 80 or under before the grade)
 	static const FColor SeaPaint = FColor::FromHex(TEXT("1C4453"));
+	/**
+	 * The sea's paint under the day's sun: as it is up to a sun 20 degrees high, and darker as the sun climbs, to 0.65
+	 * of it at 45 degrees and over, its hue kept (the art director on build 1732: Midway's sun at 45 lit the open sea
+	 * to 78 to 90 of brightness and teal, against Pearl Harbor's 42 to 47 under its morning sun; her mark there is 55
+	 * to 60).
+	 */
+	static FColor SeaPaintUnder(double SunElevationDegrees)
+	{
+		const double Darker = 1.0 - 0.35 * FMath::Clamp((SunElevationDegrees - 20.0) / 25.0, 0.0, 1.0);
+		auto Byte = [Darker](uint8 Channel) { return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Channel * Darker), 0, 255)); };
+		return FColor(Byte(SeaPaint.R), Byte(SeaPaint.G), Byte(SeaPaint.B));
+	}
 }
 
 AAirStage::AAirStage()
@@ -413,7 +425,8 @@ void AAirStage::BuildSea()
 		const double A = (X * Along.X + Y * Along.Y), B = (X * Across.X + Y * Across.Y);
 		return FMath::PerlinNoise2D(FVector2D(A / 3000.0, B / 1000.0)) + 0.45 * FMath::PerlinNoise2D(FVector2D(A / 1500.0 + 17.3, B / 600.0 - 4.1));
 	};
-	const FLinearColor Deep(StageParts::SeaPaint);
+	const FColor Paint = StageParts::SeaPaintUnder(SunElevation);
+	const FLinearColor Deep(Paint);
 	TArray<FVector> V;
 	TArray<FVector> N;
 	TArray<FColor> C;
@@ -468,7 +481,7 @@ void AAirStage::BuildSea()
 		{
 			V.Add(Middle + FVector(Corner.X, Corner.Y, 0.0));
 			N.Add(FVector::UpVector);
-			C.Add(StageParts::SeaPaint);
+			C.Add(Paint);
 		}
 		Lay(First, First + 1, First + 2);
 		Lay(First, First + 2, First + 3);

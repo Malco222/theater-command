@@ -106,6 +106,14 @@ pointer's province changes, the map unfolds its crowds and would stand its piece
 the battle is. So every frame the scene puts away any piece that came back. On CONTINUE the map stands its pieces
 again itself, with the crowds folded.
 
+**The sea and the clouds' brightness (the art director on build 1732, 16:21Z).** The stage's sea paint (#1C4453)
+stands as it is under a sun up to 20 degrees high and darkens as the sun climbs, to 0.65 of it at 45 degrees and over,
+its hue kept (`SeaPaintUnder` in AirStage.cpp): Pearl Harbor's morning sun at 18 degrees leaves it as it was, and
+Midway's at 45 takes the open sea from 78 to 90 of brightness toward her 55 to 60. The clouds' ink is 1.3 times their
+paint (`CloudBright` in LaySky): through the grade the sunlit tops read 226 to 231, her mark is 238 to 245 with no more
+than about one per cent of the picture at 250 or over, and the paint's top is already 252. `-TheaterCloudBright=` tries
+another.
+
 **The battle look (the 3D builder's, `Campaign/CampaignBattleLook.h/.cpp`).** The scene calls it in five places: the
 art director's grade on the scene's own camera (`Grade`, when the eye is made); the air haze, which starts 15 km out
 at twice the scene's density (`AirHaze`, after the scene sets its haze, whose numbers it scales); a sky behind the
@@ -190,8 +198,9 @@ while a drawn cloud's lift over high ground is still easing, for each metre the 
   are the sky behind), then the ground's kit. The order turns 50 m either side of the base.
 - The cloud test checks the sky too: the day as read, the heights, the cover (0.31 to 0.45), the clearing kept as the
   clouds drift (when the bombs fall, at the end and two hours on), cloud round the falls far from the target, the room,
-  the same sky every time, the far-to-near order and the painter's time (under 4 ms; 3.0 to 3.7 with the look round's lumps and the
-  shadows over land, the ground asked once for each of a shadow's points). It checks that the shadows are laid apart
+  the same sky every time, the far-to-near order and the painter's time (under 5 ms for the worst eye, the least of three middles of 15 paints so that one slow stretch
+  of a shared machine does not fail it; 2.9 to 3.7 with the look round's lumps and the shadows over land, about 1.8
+  times what it was when the mark was 4 ms). It checks that the shadows are laid apart
   from the puffs (none dark among them; some on a cumulus day). It checks the clearing
   on what the painter draws as well. On a cumulus day no fall or parachute ends in the air. It lays a deck under a
   4,500 m band, a deck raised to the band, a deck over the lowest band, a strike's hole, three kinds of high ground (a
