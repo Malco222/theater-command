@@ -721,8 +721,15 @@ namespace AirSky
 			Sin.push_back(std::sin(A));
 			Cos3.push_back(std::cos(3.0 * A));
 			Sin3.push_back(std::sin(3.0 * A));
-			Cos5.push_back(std::cos(5.0 * A));
-			Sin5.push_back(std::sin(5.0 * A));
+			Cos2.push_back(std::cos(2.0 * A));
+			Sin2.push_back(std::sin(2.0 * A));
+		}
+		for (int K = 0; K < 97; ++K)
+		{
+			const double Golden = K * 0.6180339887;
+			const double A = (Golden - std::floor(Golden)) * 2.0 * Pi / SideCount;
+			TurnCos.push_back(std::cos(A));
+			TurnSin.push_back(std::sin(A));
 		}
 	}
 
@@ -921,10 +928,10 @@ namespace AirSky
 		};
 		auto Put = [&OutPoints, &OutRgba, &PutIn](size_t At, const Vec& Point, const Rgb& Col, double A) { PutIn(OutPoints, OutRgba, At, Point, Col, A); };
 		// (a cloud's colour for how much sun a point of it has: its grey base, its shaded side, its sunlit top, full from
-		// 0.85; by the hour's light)
+		// 0.9, so a sunlit top grades over its upper part (the art director, 15:17Z); by the hour's light)
 		auto Tone = [&Light](double L)
 		{
-			const Rgb B = L < 0.35 ? Blend(BaseSide, ShadeSide, Clamp(L, 0.0, 0.35) / 0.35) : Blend(ShadeSide, SunSide, (Clamp(L, 0.35, 0.85) - 0.35) / 0.5);
+			const Rgb B = L < 0.35 ? Blend(BaseSide, ShadeSide, Clamp(L, 0.0, 0.35) / 0.35) : Blend(ShadeSide, SunSide, (Clamp(L, 0.35, 0.9) - 0.35) / 0.55);
 			return Rgb(B.R * Light.R, B.G * Light.G, B.B * Light.B);
 		};
 		const Rgb Shade = Rgb(ShadowSide.R * Light.R, ShadowSide.G * Light.G, ShadowSide.B * Light.B);
@@ -996,12 +1003,15 @@ namespace AirSky
 			const Placed& Here = Where[static_cast<size_t>(O.Cloud)];
 			const Vec C = PlacedAt(O);
 			const size_t First = static_cast<size_t>(Spare + Slot) * Per;
-			// (a puff's own lumpiness: its rim pushed in and out a little, differently for each puff; a crisp edge more.
-			// The turn's sines from the tables, the puff's own phase added: sin(3t + p) = sin 3t cos p + cos 3t sin p)
+			// (a puff's own lumpiness: its rim pushed in and out a little, differently for each puff; a crisp edge a long
+			// swell more, two to a turn (five to a turn, at sixteen points, drew a zigzag of corners: the art director,
+			// 15:17Z). The turn's sines from the tables, the puff's own phase added: sin(3t + p) = sin 3t cos p + cos 3t
+			// sin p)
 			const size_t Phase = static_cast<size_t>(O.Index % 97);
 			const double SinP = PhaseSines(false)[Phase], CosP = PhaseSines(true)[Phase], SinP2 = 2.0 * SinP * CosP, CosP2 = CosP * CosP - SinP * SinP;
 			auto Lumps3 = [&](int K) { return Sin3[static_cast<size_t>(K)] * CosP + Cos3[static_cast<size_t>(K)] * SinP; };
-			auto Lumps5 = [&](int K) { return Sin5[static_cast<size_t>(K)] * CosP2 + Cos5[static_cast<size_t>(K)] * SinP2; };
+			auto Lumps2 = [&](int K) { return Sin2[static_cast<size_t>(K)] * CosP2 + Cos2[static_cast<size_t>(K)] * SinP2; };
+			const double TurnC = TurnCos[Phase], TurnS = TurnSin[Phase];
 			if (O.bShadow)
 			{
 				LayShadow(O, OutPoints, OutRgba, First);
@@ -1026,22 +1036,42 @@ namespace AirSky
 			const double Wide = std::max(60.0, 0.5 * Cl.W * (F.Sky.bDeck && !Cl.bScrap ? 1.25 : 1.0)), Deep = std::max(60.0, 0.5 * Here.Squash * Cl.H);
 			const double Below = Clamp((C.Z - Seen.Z) / (2.0 * Each.R), 0.0, 1.0);
 			const double ByWide = 1.0 / Wide, ByDeep = 1.0 / Deep;
-			auto LitAt = [&](const Vec& P, double Rim)
+			// (and, a third of it, as the point of the puff's own round lump it is: lit across the lump, the side toward
+			// the sun brighter, so a small cloud's sunlit cap is a matte gradient, not a white pearl: the art director,
+			// 15:17Z. Facing is how much the lump's middle, turned to the eye, faces the sun.)
+			const double Facing = -(Fwd.X * SunWay.X + Fwd.Y * SunWay.Y + Fwd.Z * SunWay.Z);
+			auto LitAt = [&](const Vec& P, double Rim, double Own)
 			{
 				const double Ox = (P.X - Mid.X) * ByWide, Oy = (P.Y - Mid.Y) * ByWide, Oz = (P.Z - Mid.Z) * ByDeep;
 				const double Long = std::sqrt(Ox * Ox + Oy * Oy + Oz * Oz);
-				const double Shape = 0.5 + 0.5 * (Long > 1e-9 ? (Ox * SunWay.X + Oy * SunWay.Y + Oz * SunWay.Z) / Long : SunWay.Z);
+				const double Body = Long > 1e-9 ? (Ox * SunWay.X + Oy * SunWay.Y + Oz * SunWay.Z) / Long : SunWay.Z;
+				const double Shape = 0.5 + 0.5 * (0.55 * Body + 0.45 * Own);
 				return Clamp(0.35 * Each.Lit + 0.65 * Shape - Each.Trough * Rim, 0.0, 1.0) * (1.0 - 0.6 * Below);
 			};
-			Put(First, C, Tone(LitAt(C, 0.0)), Alpha);
+			Put(First, C, Tone(LitAt(C, 0.0, Facing)), Alpha);
 			const bool bCrisp = Each.Soft < 0.3;
+			// (the sun's way across the picture of the puff: its edges toward the sun crisp, those away from it soft, so a
+			// lump's shaded edge melts into the cloud under it; little of it when the sun is behind the eye or the puff)
+			const double SunAcross = Right.X * SunWay.X + Right.Y * SunWay.Y + Right.Z * SunWay.Z;
+			const double SunUp = Up.X * SunWay.X + Up.Y * SunWay.Y + Up.Z * SunWay.Z;
+			const double SunInPicture = std::sqrt(SunAcross * SunAcross + SunUp * SunUp);
+			// (and never a crisp edge narrower than about six thousandths of a radian, some six pixels across a 1,280 wide
+			// picture: a small lump's crisp edge was a step of a hundred in a pixel or two, a "glossy pearl")
+			const double LeastSoft = Clamp(0.006 * Dist / std::max(1.0, Each.R), 0.0, 0.7);
 			// (how nearly level with the puff or under it the eye is: 1 level or under, 0 from a radius and a half above)
 			const double Level = Clamp(1.0 - (Seen.Z - C.Z) / (1.5 * Each.R), 0.0, 1.0);
 			for (int K = 0; K < SideCount; ++K)
 			{
-				Vec Way = Right * Cos[static_cast<size_t>(K)] + Up * Sin[static_cast<size_t>(K)];
-				double Soft = Each.Soft;
-				double Lump = 1.0 + (bCrisp ? 0.07 * Lumps3(K) + 0.035 * Lumps5(K) : 0.08 * Lumps3(K));
+				const double TurnedC = Cos[static_cast<size_t>(K)] * TurnC - Sin[static_cast<size_t>(K)] * TurnS;
+				const double TurnedS = Sin[static_cast<size_t>(K)] * TurnC + Cos[static_cast<size_t>(K)] * TurnS;
+				Vec Way = Right * TurnedC + Up * TurnedS;
+				double Soft = std::max(Each.Soft, LeastSoft);
+				if (bCrisp && SunInPicture > 1e-6)
+				{
+					const double Away = Clamp(0.75 - 0.75 * (TurnedC * SunAcross + TurnedS * SunUp) / SunInPicture, 0.0, 1.0);
+					Soft += (0.7 - Soft) * Away * Away * (3.0 - 2.0 * Away) * std::min(1.0, 2.0 * SunInPicture);
+				}
+				double Lump = 1.0 + (bCrisp ? 0.05 * Lumps3(K) + 0.04 * Lumps2(K) : 0.08 * Lumps3(K));
 				if (Each.bFlatFoot && Way.Z < 0.0 && Level > 0.0)
 				{
 					// (a base's underside: straight and crisp, seen from the side or under it; from above, the dome hides it)
@@ -1050,8 +1080,11 @@ namespace AirSky
 					Lump += (1.0 - Lump) * Level;
 				}
 				const Vec Heart = C + Way * ((1.0 - Soft) * Each.R * Lump), Rim = C + Way * (Each.R * Lump);
-				Put(First + 1 + K, Heart, Tone(LitAt(Heart, 0.5)), Alpha * (1.0 - 0.45 * Soft));
-				Put(First + 1 + SideCount + K, Rim, Tone(LitAt(Rim, 1.0)), 0.0);
+				// (the lump's own facing at the heart ring and at the rim: out along the way, and toward the eye less)
+				const double WaySun = Way.X * SunWay.X + Way.Y * SunWay.Y + Way.Z * SunWay.Z;
+				const double Out = 1.0 - Soft;
+				Put(First + 1 + K, Heart, Tone(LitAt(Heart, 0.5, Out * WaySun + std::sqrt(1.0 - Out * Out) * Facing)), Alpha * (1.0 - 0.45 * Soft));
+				Put(First + 1 + SideCount + K, Rim, Tone(LitAt(Rim, 1.0, WaySun)), 0.0);
 			}
 		}
 		LastShadows = 0;

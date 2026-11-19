@@ -131,7 +131,13 @@ while a drawn cloud's lift over high ground is still easing, for each metre the 
 - **Light and shade** come from each cloud's shape: every point of a puff is lit as the point of the cloud's rounded
   body it stands for. Sunlit tops come out about 242 of brightness, down-sun sides about 165, the base from under it
   150 to 155 with a straight, crisp underside (from above, the dome hides it). The sunlit tops and sides are crisp
-  over their outer fifth; the base and the far body stay soft. On a clear day each cloud of 600 m or more lays its
+  over their outer fifth; the base and the far body stay soft. (The art director, 15:17Z.) A third of each point's
+  light is from its own round lump as well, so a small cloud's sunlit cap grades rather than reading as a white
+  pearl, and the sun ramp ends at 0.9 rather than 0.85. A lump's edges away from the sun are soft (up to 0.7 of its
+  radius), those toward it crisp, and no crisp edge is narrower than about six thousandths of a radian (some six
+  pixels). Each puff's ring of 16 is turned by its own part of a side, so no two puffs' corners line up, and its
+  lumps are three and two to a turn (five to a turn drew a zigzag of corners). Tops in the previews 230 to 245
+  (99.5th percentile), brightest 240 to 249. On a clear day each cloud of 600 m or more lays its
   shadow within 10 km of the eye, down-sun, about 27 per cent darker in the picture than what it falls on (half the
   light off at its middle: the blend is in light, and 27 per cent of light was only 13 of brightness; on the open sea
   of the low picture, 42 to 44 against 57 to 59): on the sea, and over land too (the art director, on build 1722),

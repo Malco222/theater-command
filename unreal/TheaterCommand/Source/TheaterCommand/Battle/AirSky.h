@@ -263,8 +263,9 @@ namespace AirSky
 	private:
 		int SideCount = 16;
 		std::vector<double> Cos, Sin;
-		// (the rim's lumps round a puff: three and five to a turn)
-		std::vector<double> Cos3, Sin3, Cos5, Sin5;
+		// (the rim's lumps round a puff: two and three to a turn; and each puff's ring turned by its own part of a side,
+		// by its phase, so that no two puffs' corners line up: the art director, 15:17Z, "stacked polygons")
+		std::vector<double> Cos3, Sin3, Cos2, Sin2, TurnCos, TurnSin;
 		struct Order
 		{
 			int Index = 0;   // the puff; for a shadow, its cloud's top puff
