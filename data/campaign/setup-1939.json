@@ -274,6 +274,12 @@
     [46, "SOV", "3rd Guards Tank Army", "arm", 2, "Tula", {"gen": "Pavel Rybalko", "trait": "panzer", "xp": 0.4}],
     [46, "SOV", "4th Tank Army", "arm", 2, "Tula", {"gen": "Vasily Badanov", "xp": 0.3}]
   ],
+  "book": {
+    "_note": "Ruling 233, rider b612 (4). At these stops of the history dial, in the grand campaign, a computer's staff is sent the dated rows below ('expeditions') whose place is home ground of the second country named, though the theatre is a scripted one whose rows free play does not send: Germany's moves into Italy in 1943 and 1944 are the book's. Each row waits until an enemy holds or stands on one of the grounds Italy's armistice names (the ward's trigger, open.json), and then comes at its date, or at once if the date has passed: a quiet Italy draws no German corps. 'from' keeps anything from being counted twice (b609): a row named here breaks up the corps listed, where they still live, to find its divisions (the Hermann Goring Division of Tunisia and the 15th Panzer Division of the desert, re-formed in Sicily as XIV Panzer Corps's two).",
+    "stops": [1, 2],
+    "scripted": [["GER", "ITA"]],
+    "from": {"XIV Panzer Corps (Hermann Goring and 15th Panzergrenadier Divisions)": ["Hermann Goring Division", "15th Panzer Division"]}
+  },
   "expeditions": [
     [13, "UK", "6th Australian Division", "inf", 1, "Alexandria", {"xp": 0.2, "war": ["UK", "ITA"]}],
     [17, "UK", "2nd Armoured Division", "arm", 1, "Alexandria", {"xp": 0, "war": ["UK", "ITA"]}],
