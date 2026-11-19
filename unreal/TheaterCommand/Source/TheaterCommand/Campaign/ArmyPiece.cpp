@@ -48,6 +48,7 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	Men = 0;
 	General.Reset();
 	FString NewSignature = Nation.Tag;
+	bool bArmoured = false, bHeavyCorps = false;
 	for (const FViewCorps& Unit : Corps)
 	{
 		Divisions += Unit.Divisions;
@@ -57,6 +58,19 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 			General = Unit.General; // the first general named is the senior one
 		}
 		NewSignature += FString::Printf(TEXT("|%d%s%s%s"), Unit.Id, Unit.bDim ? TEXT("?") : TEXT(""), Unit.Stale > 0 ? TEXT("~") : TEXT(""), *Unit.Ally); // (what is known of it is part of how it looks)
+		bHeavyCorps |= Unit.Elite == TEXT("heavy");
+		bArmoured |= Unit.Kind == TEXT("arm") || Unit.Elite == TEXT("heavy");
+	}
+	// (Which tank its armour stands as is part of how it looks. The line tank changes with the years and with what
+	// its country has designed, and a heavy corps' own tank with the years: the KV-1 takes her cast turret in 1942.
+	// Without this a piece kept last year's tank until something else about it changed.)
+	if (bArmoured)
+	{
+		NewSignature += TEXT("|") + FMiniatureMesh::MainTankOf(Nation.Tag);
+		if (bHeavyCorps)
+		{
+			NewSignature += TEXT("|") + FMiniatureMesh::HeavyTankOf(Nation.Tag);
+		}
 	}
 	// What it is about, for the dressing round its base: entrenched or digging, in camp, supplied or cut off.
 	{

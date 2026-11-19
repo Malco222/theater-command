@@ -3528,6 +3528,7 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 		// Turned to be seen three-quarters on.
 		const FVector Where = On(-0.2, 0.45);
 		const double Turn = -24.0;
+		const FString HeavyModel = bHeavyTanks ? HeavyTankOf(Tag) : FString();
 		switch (Heavy)
 		{
 		case 0:
@@ -3538,7 +3539,7 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 			{
 				break;
 			}
-			if (!(bHeavyTanks && Tag == TEXT("GER") && Vehicle(TEXT("Tiger"), Where, Metre, Turn, false)) && !MainTank(Where, Metre, Tag, Turn, false))
+			if (!(!HeavyModel.IsEmpty() && Vehicle(HeavyModel, Where, Metre, Turn, false)) && !MainTank(Where, Metre, Tag, Turn, false))
 			{
 				Tank(Where, Metre * 2.3, Vehicles, Turn);
 			}

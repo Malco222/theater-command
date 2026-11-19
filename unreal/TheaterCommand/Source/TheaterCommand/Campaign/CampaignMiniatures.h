@@ -120,6 +120,8 @@ struct FMiniatureMesh
 
 	/** The tank a nation's armour is known by, or nothing if none is modelled yet for it. */
 	static FString MainTankOf(const FString& Tag);
+	/** The heavy tank a nation's heavy tank corps is known by in the campaign's year, or nothing: it then stands as the line tank. */
+	static FString HeavyTankOf(const FString& Tag);
 
 	/** The year the campaign has reached: an army's tanks are those its nation had by then (the Tiger from 1943). */
 	static int32 Year;

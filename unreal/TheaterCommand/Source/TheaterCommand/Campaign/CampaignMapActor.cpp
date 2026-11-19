@@ -12480,7 +12480,11 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 FString ACampaignMapActor::ModelFor(const FString& Nation, const FString& Kind)
 {
 	if (Kind == TEXT("arm")) { return FMiniatureMesh::MainTankOf(Nation); }
-	if (Kind == TEXT("heavy")) { return Nation == TEXT("GER") ? FString(TEXT("Tiger")) : FMiniatureMesh::MainTankOf(Nation); }
+	if (Kind == TEXT("heavy"))
+	{
+		const FString Own = FMiniatureMesh::HeavyTankOf(Nation);
+		return Own.IsEmpty() ? FMiniatureMesh::MainTankOf(Nation) : Own;
+	}
 	if (Kind == TEXT("art")) { return FMiniatureMesh::MainGunOf(Nation); }
 	if (Kind == TEXT("mot")) { return FMiniatureMesh::MainCarrierOf(Nation); }
 	if (Kind == TEXT("cav")) { return TEXT("Rider:") + Nation; }
