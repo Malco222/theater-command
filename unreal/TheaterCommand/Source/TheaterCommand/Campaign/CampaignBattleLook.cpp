@@ -6,6 +6,7 @@
 #include "Engine/Scene.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+#include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "TheaterCommand.h"
@@ -37,6 +38,8 @@ namespace
 	// The battle's sky while it stands, and the lamps that were told to keep out of it.
 	TWeakObjectPtr<USkyAtmosphereComponent> BattleSky;
 	TArray<TPair<TWeakObjectPtr<UDirectionalLightComponent>, bool>> LampsKeptOut;
+	// How far the engine reckoned the air's paling before the battle (it stops at 96 km unless told), to be put back.
+	float PalingDepthBefore = -1.0f;
 }
 
 void BattleLook::AirSkyBegin(AActor& Scene, UDirectionalLightComponent* Sun)
@@ -51,8 +54,18 @@ void BattleLook::AirSkyBegin(AActor& Scene, UDirectionalLightComponent* Sun)
 	// (The sixth number is how dark the world is beyond the scene's own sea, which is a flat sheet that ends short of
 	// the round world's horizon: past its edge the air's own ground shows, and at the engine's pale grey it made a
 	// line along the horizon five levels brighter than the sea. It is the sea's colour, at this share of it.)
-	double Air = 1.0, Dust = 1.0, Far = 0.4, HazeOver = 1.0, Bright = 1.5, Beyond = 1.0;
-	Asked(TEXT("TheaterAirSky="), { &Air, &Dust, &Far, &HazeOver, &Bright, &Beyond });
+	// (And the seventh is how many kilometres out the engine reckons the air's paling. It stops at 96 unless told, and
+	// the sea's far end, 150 to 200 km off, then took the air of 96 km where the sky above it took all of it: that,
+	// and paling cut to four tenths, each left a line along the horizon four or five levels deep. So the air is thinner
+	// (which is what kept the distance from whiting out), it pales at its true rate as far as the sea reaches, and
+	// sky and paling are brightened together.)
+	double Air = 0.45, Dust = 0.35, Far = 1.0, HazeOver = 1.0, Bright = 2.2, Beyond = 1.0, Deep = 300.0;
+	Asked(TEXT("TheaterAirSky="), { &Air, &Dust, &Far, &HazeOver, &Bright, &Beyond, &Deep });
+	if (IConsoleVariable* Depth = IConsoleManager::Get().FindConsoleVariable(TEXT("r.SkyAtmosphere.AerialPerspectiveLUT.Depth")))
+	{
+		PalingDepthBefore = Depth->GetFloat();
+		Depth->Set(static_cast<float>(Deep), ECVF_SetByCode);
+	}
 	// (Only the battle's sun lights the air: the table's other lamps are fills, and a second sun in the sky would show.)
 	LampsKeptOut.Reset();
 	if (UWorld* World = Scene.GetWorld())
@@ -86,12 +99,12 @@ void BattleLook::AirSkyBegin(AActor& Scene, UDirectionalLightComponent* Sun)
 	Made->SetMieScatteringScale(static_cast<float>(0.003996 * Dust));
 	Made->SetAerialPespectiveViewDistanceScale(static_cast<float>(Far));
 	Made->SetHeightFogContribution(static_cast<float>(HazeOver));
-	Made->SetSkyLuminanceFactor(FLinearColor(static_cast<float>(Bright), static_cast<float>(Bright), static_cast<float>(Bright)));
+	Made->SetSkyAndAerialPerspectiveLuminanceFactor(FLinearColor(static_cast<float>(Bright), static_cast<float>(Bright), static_cast<float>(Bright)));
 	Made->SetGroundAlbedo(FColor(static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(36.0 * Beyond), 0, 255)), static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(80.0 * Beyond), 0, 255)),
 		static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(95.0 * Beyond), 0, 255))));
 	BattleSky = Made;
-	UE_LOG(LogTheater, Display, TEXT("Battle look: a sky stands behind the air battle (air %.2f, dust %.2f, distance %.2f, haze over the sky %.2f, brightness %.2f); %d lamps were told to keep out of it or to light it"),
-		Air, Dust, Far, HazeOver, Bright, LampsKeptOut.Num());
+	UE_LOG(LogTheater, Display, TEXT("Battle look: a sky stands behind the air battle (air %.2f, dust %.2f, distance %.2f, haze over the sky %.2f, brightness %.2f, the world beyond the sea %.2f, paling reckoned to %.0f km); %d lamps were told to keep out of it or to light it"),
+		Air, Dust, Far, HazeOver, Bright, Beyond, Deep, LampsKeptOut.Num());
 }
 
 void BattleLook::AirSkyEnd()
@@ -101,6 +114,14 @@ void BattleLook::AirSkyEnd()
 		Sky->DestroyComponent();
 	}
 	BattleSky.Reset();
+	if (PalingDepthBefore > 0.0f)
+	{
+		if (IConsoleVariable* Depth = IConsoleManager::Get().FindConsoleVariable(TEXT("r.SkyAtmosphere.AerialPerspectiveLUT.Depth")))
+		{
+			Depth->Set(PalingDepthBefore, ECVF_SetByCode);
+		}
+		PalingDepthBefore = -1.0f;
+	}
 	for (const TPair<TWeakObjectPtr<UDirectionalLightComponent>, bool>& Kept : LampsKeptOut)
 	{
 		if (UDirectionalLightComponent* Lamp = Kept.Key.Get())
