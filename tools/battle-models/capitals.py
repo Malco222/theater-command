@@ -2075,12 +2075,12 @@ def az_break(yard, run=2.2):
     return xp
 
 
-def az_drum_director(yard, name, x, z, r, high, arm, bearing=180.0, parent="aft"):
-    """The main battery's after director in the top of her mainmast: a round windowed house that turns, the
-    rangefinder through it, its hooded ends standing out each side. A turn part (its pole runs up its middle)."""
+def az_drum_director(yard, name, x, z, r, high, arm, bearing=180.0, parent="aft", note="the after main battery director"):
+    """A main battery director on the roof of one of her tops: a round windowed house that turns, the rangefinder
+    through it, its hooded ends standing just out of each side. A turn part (the mainmast's pole runs up its middle)."""
     m = yard.m
     fine = m.fine
-    dn = m.part(name, parent, (x, 0.0, z), axis=(0, 0, -1), kind="turn", note=f"the after main battery director: turns with the guns; rest bearing {int(bearing)}")
+    dn = m.part(name, parent, (x, 0.0, z), axis=(0, 0, -1), kind="turn", note=f"{note}: turns with the guns; rest bearing {int(bearing)}")
     m.parts[m.part_at[dn]].rest = bearing
     m.use(dn)
     rot = Matrix.Rotation(math.radians(bearing), 3, "Z")
@@ -2144,26 +2144,109 @@ def az_windows(m, pl, z_lo, z_hi, pane=1.1, min_len=1.2, front_of=None):
             m.add([c - u_ + Z * z_lo, c + u_ + Z * z_lo, c + u_ + Z * z_hi, c - u_ + Z * z_hi], [(0, 1, 2, 3)], "glass", False, lambda q, o=o_: o)
 
 
-def az_tiers(yard, tiers, z, paint="light"):
-    """A spotting top of stacked houses, each [x fore, x aft, half width, height, windows (False, True or "slits")],
-    from height z up; returns the height of its roof."""
+def az_ring_windows(m, pl, z_lo, z_hi, front_of=None, pane=1.0, gap=0.16, min_len=0.3):
+    """Window panes round a plan's walls, curved or straight (one or more to each length of wall), or only on the
+    walls forward of `front_of`; the plan goes round anticlockwise seen from above."""
+    n = len(pl)
+    for k in range(n):
+        a, b = Vector((*pl[k], 0)), Vector((*pl[(k + 1) % n], 0))
+        d = b - a
+        L = d.length
+        if L < min_len or (front_of is not None and (a.x + b.x) * 0.5 < front_of):
+            continue
+        o_ = Vector((d.y, -d.x, 0)).normalized()
+        k_ = max(1, round(L / pane))
+        u_ = d.normalized() * max(0.06, L / k_ * 0.5 - gap * 0.5)
+        for i in range(k_):
+            c = a + d * ((i + 0.5) / k_) + o_ * 0.03
+            m.add([c - u_ + Z * z_lo, c + u_ + Z * z_lo, c + u_ + Z * z_hi, c - u_ + Z * z_hi], [(0, 1, 2, 3)], "glass", False, lambda q, o=o_: o)
+
+
+def az_dplan(xf, xa, hw, rf=None, ra=0.5, n=8):
+    """A round-fronted plan, anticlockwise seen from above: its fore end rounded on `rf` (by default its half width:
+    a half round), its sides straight back to `xa`, its after corners rounded on `ra`."""
+    rf = hw if rf is None else min(rf, hw)
+    ra = max(0.0, min(ra, hw, xf - xa - rf))
+    pts = []
+
+    def arc(cx, cy, r, a0, a1, k):
+        for i in range(k + 1):
+            a = math.radians(a0 + (a1 - a0) * i / k)
+            pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
+    arc(xf - rf, hw - rf, rf, 0.0, 90.0, n)
+    if ra > 1e-6:
+        arc(xa + ra, hw - ra, ra, 90.0, 180.0, max(1, n // 3))
+        arc(xa + ra, -hw + ra, ra, 180.0, 270.0, max(1, n // 3))
+    else:
+        pts += [(xa, hw), (xa, -hw)]
+    arc(xf - rf, -hw + rf, rf, 270.0, 360.0, n)
+    out = []
+    for p in pts:
+        if not out or math.hypot(p[0] - out[-1][0], p[1] - out[-1][1]) > 1e-4:
+            out.append(p)
+    if math.hypot(out[0][0] - out[-1][0], out[0][1] - out[-1][1]) < 1e-4:
+        out.pop()
+    return out
+
+
+def az_ha_director(yard, name, x, y, z, bearing=0.0, parent="aft", arm=1.45):
+    """One of her two high-angle directors (for the 5-inch/25s): a slab-sided housing with rounded corners on a short
+    pedestal, a band of sighting ports across its face and a hatch on its roof, its rangefinder through it with
+    hooded ends. A turn part."""
     m = yard.m
+    fine = m.fine
+    dn = m.part(name, parent, (x, y, z), axis=(0, 0, -1), kind="turn", note=f"a high-angle director: turns with the 5-inch/25s; rest bearing {int(bearing)}")
+    m.parts[m.part_at[dn]].rest = bearing
+    m.use(dn)
+    rot = Matrix.Rotation(math.radians(bearing), 3, "Z")
+    fwd, lat = rot @ X, rot @ Y
+    o = Vector((x, y, z))
+    m.lathe(o, Z, [(0.0, 0.5), (0.9, 0.42)], "light", 14 if fine else 6)
+    pl = [((o + rot @ Vector((px, py, 0.0))).x, (o + rot @ Vector((px, py, 0.0))).y) for px, py in Model.round_rect(1.0, -1.1, -0.95, 0.95, 0.35, 2 if fine else 1)]
+    m.prism(pl, z + 0.9, z + 2.95, "light", top_paint="roof", bottom=True)
+    if fine:
+        for s in (-0.5, 0.0, 0.5):                                     # the sighting ports in its face
+            c = o + rot @ Vector((1.015, s, 2.45))
+            m.add([c - lat * 0.18 - Z * 0.09, c + lat * 0.18 - Z * 0.09, c + lat * 0.18 + Z * 0.09, c - lat * 0.18 + Z * 0.09], [(0, 1, 2, 3)], "glass", False,
+                  lambda q, f=fwd: f)
+        m.box(o + rot @ Vector((-0.45, 0.0, 2.98)), (0.7, 0.6, 0.06), "light", yaw=bearing)      # the roof hatch
+    c = o + Z * 2.0
+    m.lathe(c - lat * arm, lat, [(0.0, 0.17), (0.22, 0.21), (arm * 2 - 0.22, 0.21), (arm * 2, 0.17)], "light", 10 if fine else 5)
+    for side in (1, -1):
+        m.box(c + lat * side * (arm - 0.2) + fwd * 0.12, (0.5, 0.4, 0.5), "light", yaw=bearing)
+        if fine:
+            m.disc(c + lat * side * (arm - 0.2) + fwd * 0.375, fwd, 0.11, "glass", 8)
+    m.use(parent)
+    return dn
+
+
+def az_tiers(yard, tiers, z, paint="light", under=0.25, shrink=0.45, rail=True):
+    """A spotting top of stacked round-fronted houses, each a little smaller than the one under it, each [x of its
+    middle, half length, half width, height, windows (False, True or "slits")] (oval in plan), from height z up; its
+    floor's underside (`under` deep, `shrink` in from the walls at its foot) bevelled up into the walls of the lowest.
+    Returns the height of its roof."""
+    m = yard.m
+    fine = m.fine
     from ships import railing
-    for xf, xa, hw, hh, win in tiers:
-        pl = Model.round_rect(xf, xa, -hw, hw, 1.0, 3 if m.fine else 1)
-        slab(m, pl, z, z + hh, paint=paint, top="roof")
-        if m.fine and win:
+    n = 36 if fine else 12
+    for i, (xc, a, b, hh, win) in enumerate(tiers):
+        pl = Model.oval(xc, 0.0, a, b, n)
+        if i == 0:                      # (the floor's underside: shallow, so men stand under it on the gallery)
+            m.prism(Model.oval(xc, 0.0, max(a - shrink, 0.6), max(b - shrink, 0.6), n), z - under, z, paint, top=pl, top_paint=paint, bottom=True, smooth=True)
+        m.prism(pl, z, z + hh, paint, top_paint="roof", smooth=True)
+        lip = Model.oval(xc, 0.0, a + 0.07, b + 0.07, n)          # its roof's edge, standing just proud
+        m.prism(lip, z + hh - 0.12, z + hh + 0.02, paint, top_paint="roof", bottom=True, smooth=True)
+        if fine and win:
             if win == "slits":
-                az_windows(m, pl, z + hh - 0.75, z + hh - 0.45, pane=0.8)
+                az_ring_windows(m, pl, z + hh - 0.75, z + hh - 0.45, pane=0.7, gap=0.3)
             else:
-                az_windows(m, pl, z + hh - 1.35, z + hh - 0.5)
-            m.strip([Vector((px_, py_, z + hh - 0.2)) for px_, py_ in pl] + [Vector((*pl[0], z + hh - 0.2))],
-                    [Vector((px_ - (xf + xa) * 0.5, py_, 0)).normalized() for px_, py_ in pl + [pl[0]]], 0.05, paint, 0.03)   # a drip strip
+                az_ring_windows(m, pl, z + hh - 1.15, z + hh - 0.4, pane=0.8, gap=0.2)
         z += hh
-    if m.fine:
-        pl = Model.round_rect(*tiers[-1][:2], -tiers[-1][2], tiers[-1][2], 1.0, 3)
-        railing(m, [Vector((px_, py_, z)) for px_, py_ in pl] + [Vector((*pl[0], z))], every=1.5, paint=paint)
-    return z
+    if fine and rail:
+        xc, a, b = tiers[-1][:3]
+        pl = Model.oval(xc, 0.0, a - 0.05, b - 0.05, 24)
+        railing(m, [Vector((px_, py_, z + 0.02)) for px_, py_ in pl] + [Vector((pl[0][0], pl[0][1], z + 0.02))], every=1.5, paint=paint)
+    return z + 0.02
 
 
 def blister_ledge(yard, x0, x1, z, proud=0.3, drop=0.65, step=1.5):
@@ -2242,7 +2325,7 @@ def arizona(fine=True):
     yard.hull("planks")
     D = h.deck_z
     z0 = D(0.0)
-    z01, z02, z03, z04, z05 = z0 + 2.6, z0 + 5.2, z0 + 7.8, z0 + 10.4, z0 + 13.0
+    z01, z02, z03, z04 = z0 + 2.6, z0 + 5.2, z0 + 7.8, z0 + 10.4
     zM1 = 22.5                                   # (Measure 1: dark 5-D on every upright surface up to the funnel's top)
     from ships import railing
     blister_ledge(yard, -70.0, 70.0, 1.3, proud=0.35, drop=0.7)
@@ -2295,61 +2378,101 @@ def arizona(fine=True):
     # open wings; the two AA directors in their tubs either side
     m.use("aft")
     ct = [(19.8 + math.cos(2 * math.pi * k / 20) * 3.0, math.sin(2 * math.pi * k / 20) * 2.6) for k in range(20)]
-    slab(m, ct, z01, z03 + 0.6, top="roof")
+    slab(m, ct, z01, z03 - 0.01, top="roof")
     if fine:
-        ring = [Vector((px_, py_, z03 + 0.1)) for px_, py_ in ct]
+        ring = [Vector((px_, py_, z03 - 0.5)) for px_, py_ in ct]
         for k in range(20):                                          # the vision slits round its top
             a, b = ring[k], ring[(k + 1) % 20]
             o_ = Vector(((a.x + b.x) * 0.5 - 19.8, (a.y + b.y) * 0.5, 0)).normalized()
             if o_.x > -0.3:
                 m.add([a + o_ * 0.02, b + o_ * 0.02, b + o_ * 0.02 + Z * 0.2, a + o_ * 0.02 + Z * 0.2], [(0, 1, 2, 3)], "black", False, lambda q, o=o_: o)
+    # (the house at the foremast's foot runs up to the pilot house's deck)
+    from ships import bulwark
+    zp = z03                                         # the pilot house's deck, on the conning tower's roof
+    zr = 17.9                                        # its roof: the open navigating bridge
+    zd = 20.6                                        # the signal platform, over the flag bridge's house
+    zb = 24.3                                        # the high-angle directors' platform, just under the foremast's searchlights
+    nq = 8 if fine else 3
     house = sym([(17.5, 0.0), (17.0, 4.4), (15.5, 5.8), (12.5, 5.8), (12.5, 0.0)])
-    slab(m, house, z02, z03)
-    az_walls_detail(yard, house, z02, z03)
-    nav = sym([(24.8, 0.0), (24.0, 4.2), (21.5, 6.8), (14.0, 6.8), (14.0, 0.0)])
-    slab(m, nav, z03, z04)
-    if fine:   # the navigating bridge's windows round its front and sides
-        az_windows(m, nav, z03 + 1.15, z03 + 2.05, pane=1.0, min_len=0.5, front_of=16.5)
-    az_walls_detail(yard, nav, z03, z04, doors=False, scuttles=False)
-    for hand in (PORT, STBD):          # its wings
-        m.box((18.5, hand * 8.9, z04 - 0.08), (3.6, 4.2, 0.16), "deck")
-        if fine:
-            railing(m, [(20.3, hand * 6.8, z04), (20.3, hand * 11.0, z04), (16.7, hand * 11.0, z04), (16.7, hand * 6.8, z04)], every=1.3)
-        for dx in (-1.4, 1.4):
-            m.rod((18.5 + dx, hand * 6.9, z03), (18.5 + dx, hand * 10.6, z04 - 0.15), 0.07, "upper", sides=4)
-    flag = sym([(23.4, 0.0), (22.8, 3.4), (20.8, 5.6), (14.2, 5.6), (14.2, 0.0)])
-    slab(m, flag, z04, z05)
+    slab(m, house, z02, zp)
+    az_walls_detail(yard, house, z02, zp, rail=False)
+    if fine:     # (its rail runs round the edge of its roof that the pilot house leaves open)
+        for hand in (PORT, STBD):
+            railing(m, [(17.06, hand * 3.85, zp), (17.0, hand * 4.4, zp), (15.5, hand * 5.8, zp), (12.5, hand * 5.8, zp), (12.5, hand * 3.85, zp)], every=1.5)
+    # the pilot house: round-fronted, standing out over the conning tower's front, windows all round its front
+    pr, pc = 3.8, 20.8
+    pil = az_dplan(pc + pr, 12.6, pr, ra=0.5, n=nq)
+    slab(m, pil, zp + 0.02, zr, bottom=True)
     if fine:
-        az_windows(m, flag, z04 + 1.0, z04 + 1.9, pane=1.0, min_len=0.5, front_of=17.0)
-    # (its rail stops at the directors' tubs, whose rims guard their own edges)
-    az_walls_detail(yard, flag, z04, z05, doors=True, scuttles=False, rail_cut=[(15.6, 6.7, 1.62), (15.6, -6.7, 1.62)])
-    for hand in (PORT, STBD):          # the flag bridge's open wings, and the AA directors' tubs abaft them
-        m.box((19.6, hand * 7.3, z05 - 0.08), (2.8, 3.4, 0.16), "deck")
-        if fine:
-            railing(m, [(21.0, hand * 5.6, z05), (21.0, hand * 9.0, z05), (18.2, hand * 9.0, z05), (18.2, hand * 5.6, z05)], every=1.2)
-        for dx in (-1.0, 1.0):
-            m.rod((19.6 + dx, hand * 5.65, z04 + 0.2), (19.6 + dx, hand * 8.7, z05 - 0.15), 0.06, "upper", sides=4)
-        dy = hand * 6.7
-        m.lathe((15.6, dy, z05 - 0.24), Z, [(0.0, 1.55), (0.2, 1.55)], "upper", 24 if fine else 8)
-        if fine:
-            for dx in (-0.8, 0.0, 0.8):
-                m.rod((15.6 + dx, hand * 5.62, z05 - 1.7), (15.6 + dx, dy + hand * 0.9, z05 - 0.25), 0.06, "upper", sides=4)
-        m.tub((15.6, dy, z05 - 0.04), 1.55, 0.85, "upper", sides=24 if fine else 8, floor="deck")
-        m.lathe((15.6, dy, z05), Z, [(0.0, 0.32), (0.6, 0.26)], "upper", 10 if fine else 6)
-        az_rangefinder(yard, "director.ha." + ("1" if hand == PORT else "2"), 15.6, dy, z05 + 0.6, 0.9, bearing=0.0, house=0.62, parent="aft")
+        az_ring_windows(m, pil, zp + 1.6, zp + 2.55, front_of=19.4, pane=0.9)
+    az_walls_detail(yard, pil, zp + 0.02, zr, doors=True, scuttles=True, rail=False)
+    for hand in (PORT, STBD):                                       # brackets under its overhang, from the tower's face
+        m.rod((22.55, hand * 1.1, zp - 0.9), (23.9, hand * 1.5, zp - 0.02), 0.08, "upper", sides=5 if fine else 4)
+    # the open bridge on its roof: wings each side, with signal lamps, an awning spread over its fore part
+    wing_x0, wing_x1, wing_y = 17.0, 18.8, 5.6
+    for hand in (PORT, STBD):
+        wing = [(wing_x0, hand * pr), (wing_x1, hand * pr), (wing_x1, hand * (wing_y - 0.7)), (wing_x1 - 0.7, hand * wing_y), (wing_x0 + 0.7, hand * wing_y),
+                (wing_x0, hand * (wing_y - 0.7))]
+        m.prism(wing, zr - 0.16, zr, "upper", top_paint="deck", bottom=True)
+        for bx_ in (wing_x0 + 0.4, wing_x1 - 0.4):                # its brackets
+            m.rod((bx_, hand * (pr + 0.02), zr - 1.5), (bx_, hand * (wing_y - 0.5), zr - 0.17), 0.06, "upper", sides=4)
+    m.box((20.6, 0.0, zr + 1.62), (3.2, 4.8, 0.05), "canvas")
+    for px_ in (19.2, 22.0):
+        for hand in (PORT, STBD):
+            m.rod((px_, hand * 2.25, zr), (px_, hand * 2.25, zr + 1.6), 0.04, "upper", sides=4, caps=(False, True))
+    if fine:
+        front = [(pc + pr * math.cos(math.radians(a)), pr * math.sin(math.radians(a))) for a in range(90, -91, -10)]
+        wing_p = [(wing_x0, pr + 0.02), (wing_x0, wing_y - 0.7), (wing_x0 + 0.7, wing_y), (wing_x1 - 0.7, wing_y), (wing_x1, wing_y - 0.7), (wing_x1, pr + 0.02)]
+        path = wing_p + front + [(x_, -y_) for x_, y_ in reversed(wing_p)]
+        railing(m, [(x_, y_, zr) for x_, y_ in path], every=1.4)
+        aft_p = [p for p in pil if p[0] < wing_x0 - 0.05]
+        aft_p = [(wing_x0, -pr)] + sorted([p for p in aft_p if p[1] < 0], key=lambda p: -p[0]) + sorted([p for p in aft_p if p[1] >= 0], key=lambda p: p[0]) + [(wing_x0, pr)]
+        railing(m, [(x_, y_, zr) for x_, y_ in aft_p], every=1.5)
+    # the flag bridge's house on it, the director trunk standing up through it to the top platform, and the signal
+    # platform on its roof, a screen round its front
+    flg = az_dplan(17.95, 13.1, 2.3, ra=0.4, n=nq)
+    slab(m, flg, zr, zd - 0.3, top=None)
+    if fine:
+        az_ring_windows(m, flg, zr + 1.1, zr + 1.85, front_of=15.4, pane=0.9)
+    az_walls_detail(yard, flg, zr, zd - 0.3, doors=True, scuttles=False, rail=False)
+    m.lathe((16.4, 0.0, zr), Z, [(0.0, 1.45), (zM1 - zr, 1.45)], "upper", 24 if fine else 10, caps=(False, False))
+    m.lathe((16.4, 0.0, zM1), Z, [(0.0, 1.45), (zb - 1.2 - zM1, 1.45)], "light", 24 if fine else 10, caps=(False, False))
+    pd = az_dplan(19.5, 12.6, 3.1, ra=0.5, n=nq)
+    m.prism(pd, zd - 0.3, zd, "upper", top_paint="deck", bottom=True)
+    bulwark(m, [(16.4 + 3.1 * math.cos(math.radians(a)), 3.1 * math.sin(math.radians(a))) for a in range(95, -96, -5 if fine else -19)], zd, zd + 1.2, 0.06, "upper")
+    if fine:
+        aft_d = [p for p in pd if p[0] < 16.0]
+        aft_d = [(16.0, -3.1)] + sorted([p for p in aft_d if p[1] < 0], key=lambda p: -p[0]) + sorted([p for p in aft_d if p[1] >= 0], key=lambda p: p[0]) + [(16.0, 3.1)]
+        railing(m, [(x_, y_, zd) for x_, y_ in aft_d], every=1.5)
+        for a in (-50.0, 0.0, 50.0):                                # brackets under its overhang
+            ca, sa = math.cos(math.radians(a)), math.sin(math.radians(a))
+            m.rod((16.4 + ca * 1.4, sa * 1.4, zd - 1.5), (16.4 + ca * 2.9, sa * 2.9, zd - 0.31), 0.06, "upper", sides=4)
+    # the directors' platform: the roof of a low round-fronted house on the trunk's head (two posts from the signal
+    # platform under its after end); the two high-angle directors side by side on it, each in its tub
+    zbh = zb - 1.3
+    pb = az_dplan(16.6 + 3.45, 14.4, 3.45, ra=0.4, n=nq)
+    slab(m, pb, zbh, zb, paint="light", bottom=True)
+    if fine:
+        az_ring_windows(m, pb, zbh + 0.55, zbh + 0.85, front_of=17.2, pane=0.7, gap=0.35)
+    for hand in (PORT, STBD):
+        m.rod((14.85, hand * 2.85, zd), (14.85, hand * 2.85, zbh), 0.09, "upper", sides=6 if fine else 4)
+    if fine:
+        railing(m, [(x_, y_, zb) for x_, y_ in pb] + [(pb[0][0], pb[0][1], zb)], every=1.5, paint="light")
+    for hand in (PORT, STBD):
+        dy = hand * 1.8
+        m.tub((16.6, dy, zb - 0.04), 1.45, 0.85, "light", sides=24 if fine else 8, floor="deck")
+        az_ha_director(yard, "director.ha." + ("1" if hand == PORT else "2"), 16.6, dy, zb, bearing=0.0, parent="aft")
         m.use("aft")
-    chart = Model.round_rect(20.6, 14.8, -4.0, 4.0, 1.0, 3 if fine else 1)
-    slab(m, chart, z05, z05 + 2.4)
-    az_walls_detail(yard, chart, z05, z05 + 2.4, doors=True, scuttles=True)
     if fine:
-        yard.windows(20.6, 3.4, z05 + 1.0, 0.8, back=2.0)
-        for k, (ox, oy, zz, face) in enumerate(((19.4, 9.6, z04, 0.4), (17.6, -10.2, z04, -0.6), (20.4, 8.0, z05, 0.2), (19.0, -7.6, z05, -0.3),
-                                                (16.4, 0.8, z05 + 2.4, 0.0), (19.6, -2.0, z05 + 2.4, 1.0))):
+        for ox, oy, zz, face in ((17.8, 4.8, zr, 0.6), (17.9, -4.9, zr, -0.8), (18.6, 2.9, zr, 0.0), (18.6, 1.6, zd, 0.3), (18.2, -2.0, zd, -0.4),
+                                 (14.85, 0.0, zb, 1.57)):
             fit.sailor(m.use("aft"), Vector((ox, oy, zz)), Vector((math.cos(face), math.sin(face), 0)), "stand", navy="USA")
     m.use("aft")
 
-    # ---- the foremast: a tripod, its searchlight platform, the gallery with two of her .50s, the three-tiered spotting
-    # top, the main battery's director on its roof, a short topmast
+    # ---- the foremast: a tripod; its searchlight platform; the gallery under the top, a screen round its fore side
+    # and two of her .50s behind it (her January 1941 photograph shows men standing on it under the top's floor); the
+    # top: two round-fronted tiers, each a little smaller than the one under it, windows round both; the forward main
+    # battery director, a windowed drum, on its roof; a short topmast stepped abaft the director
     fx = 13.4
     r_f = 0.62 - 0.12 * (zM1 - z02) / 18.0
     m.lathe((fx, 0, z02), Z, [(0.0, 0.62), (zM1 - z02, r_f)], "upper", 18 if fine else 5, caps=(True, False))
@@ -2359,30 +2482,36 @@ def arizona(fine=True):
         m.rod(a, c, 0.42, "upper", sides=14 if fine else 5, caps=(True, False))
         m.rod(c, b, 0.42, "light", sides=14 if fine else 5, caps=(False, True))
     zs = 26.6
-    m.box((fx - 0.4, 0, zs - 0.08), (3.6, 8.6, 0.16), "light")
+    m.box((fx - 0.6, 0, zs - 0.08), (3.6, 8.6, 0.16), "light")
     if fine:
-        railing(m, [(fx + 1.4, 4.3, zs), (fx + 1.4, -4.3, zs)], every=1.4, paint="light")
+        railing(m, [(fx + 1.2, 4.3, zs), (fx + 1.2, -4.3, zs)], every=1.4, paint="light")
     for hand in (PORT, STBD):
-        yard.searchlight(fx - 0.4, hand * 3.3, zs, 0.6, (1.0, hand * 0.4, 0))
+        yard.searchlight(fx - 0.6, hand * 3.3, zs, 0.6, (1.0, hand * 0.4, 0))
     m.use("aft")
-    zm = 30.0
-    plat = Model.round_rect(19.6, 7.6, -6.2, 6.2, 1.4, 3 if fine else 1)
-    m.prism(plat, zm - 0.18, zm, "light", top_paint="deck", bottom=True)
+    zg = 29.8
+    gal = Model.oval(fx + 0.4, 0.0, 4.2, 3.8, 36 if fine else 12)
+    m.prism(gal, zg - 0.18, zg, "light", top_paint="deck", bottom=True)
+    ng = len(gal)
+    jg = ng * 70 // 360
+    bulwark(m, [gal[k % ng] for k in range(-jg, jg + 1)], zg, zg + 1.15, 0.06, "light")
     if fine:
-        railing(m, [Vector((px_, py_, zm)) for px_, py_ in plat] + [Vector((*plat[0], zm))], every=1.6, paint="light")
+        railing(m, [Vector((gal[k][0], gal[k][1], zg)) for k in range(jg + 1, ng - jg)], every=1.5, paint="light")
     # (.50s: two on each mast and four on the funnel, says the memorial's own record (ussarizona.org); the 1940-41
     # refit put four on a platform at the very top of the mainmast (her refit record, and her action report's ".50
     # caliber machine guns in maintop"): so four at the main's head, two here, two on the funnel's platforms)
-    for gx_, gy_, face in ((18.9, 5.4, 35.0), (18.9, -5.4, -35.0)):
-        fit.mg50(yard, gx_, gy_, zm, facing=face, part="aft")
-    tz = az_tiers(yard, ((17.2, 9.6, 4.3, 2.4, True), (16.6, 10.2, 3.6, 2.3, True), (15.9, 10.9, 2.7, 2.0, "slits")), zm)
-    m.lathe((fx, 0, zM1), Z, [(0.0, r_f), (tz + 0.4 - zM1, 0.36)], "light", 18 if fine else 5, caps=(False, True))
-    az_rangefinder(yard, "director.fore", fx + 0.6, 0.0, tz, 2.8, bearing=0.0, house=1.1, parent="aft")
+    for gx_, gy_, face in ((fx + 2.8, 2.0, 40.0), (fx + 2.8, -2.0, -40.0)):
+        fit.mg50(yard, gx_, gy_, zg, facing=face, part="aft")
+    zt0 = 32.0
+    tz = az_tiers(yard, ((fx, 3.9, 3.55, 2.6, True), (fx, 3.4, 3.1, 2.1, True)), zt0, rail=False)
+    m.lathe((fx, 0, zM1), Z, [(0.0, r_f), (zt0 + 0.2 - zM1, 0.45)], "light", 18 if fine else 5, caps=(False, True))
+    az_drum_director(yard, "director.fore", fx, tz, 1.8, 1.9, 1.9, bearing=0.0, parent="aft", note="the forward main battery director")
     m.use("aft")
-    # (her topmast stood only some 6 m over the top in January 1941; the photographs show no radar's foundation)
-    m.lathe((fx, 0, tz + 0.4), Z, [(0.0, 0.2), (6.1, 0.08)], "light", 10 if fine else 4)
-    m.rod((fx, -3.2, tz + 4.4), (fx, 3.2, tz + 4.4), 0.07, "light", sides=4)
-    head_fore = Vector((fx, 0, tz + 6.4))
+    # (her topmast stood only some 7 m over the top in January 1941, abaft the director; the photographs show no
+    # radar's foundation)
+    tmx = fx - 2.5
+    m.lathe((tmx, 0, tz), Z, [(0.0, 0.2), (7.2, 0.08)], "light", 10 if fine else 4)
+    m.rod((tmx, -3.2, tz + 4.6), (tmx, 3.2, tz + 4.6), 0.07, "light", sides=4)
+    head_fore = Vector((tmx, 0, tz + 7.2))
 
     # ---- the funnel (its top under the foremast's searchlights, as the 1941 photographs show it) and its searchlight
     # platforms, with a .50 abaft each light
@@ -2415,20 +2544,22 @@ def arizona(fine=True):
     # ---- the mainmast: its pole on the quarterdeck, its legs on the forecastle deck forward of it; the lower
     # platform, the searchlight platform, the gallery, the two-tiered top, the after director's round house over it,
     # and on that the open box of four .50s; topmast and gaff
-    mx, mz = -26.8, 28.0
+    mx, mz = -26.8, 29.95                              # (the foot of the top's underside: it bowls up 1.2 m to its walls)
     leg = Vector((-19.2, 5.0, D(-19.2)))
-    zt = mz + 2.6 + 2.6                                # (the roof of the top's second tier)
-    zd = zt + 2.2                                      # (the director's roof)
-    zn = zd + 1.3                                      # (the box's floor: its rim is at 37.9 m, as in her 1941 photograph)
+    zw = mz + 1.2
+    main_tiers = ((mx + 0.05, 3.35, 3.05, 2.18, True), (mx - 0.1, 2.95, 2.65, 1.74, True))
+    zt = zw + 2.18 + 1.74 + 0.02                       # (the roof of the top's second tier)
+    zd = zt + 1.8                                      # (the director's roof)
+    zn = zd + 1.9                                      # (the box's floor: its rim is at 40.0 m, as in her 1941 photograph)
     r_m = lerp(0.55, 0.36, (zM1 - D(mx)) / (zn - D(mx)))
     m.lathe((mx, 0, D(mx)), Z, [(0.0, 0.55), (zM1 - D(mx), r_m)], "upper", 18 if fine else 5, caps=(True, False))
-    m.lathe((mx, 0, zM1), Z, [(0.0, r_m), (zn - zM1, 0.36)], "light", 18 if fine else 5, caps=(False, True))
+    m.lathe((mx, 0, zM1), Z, [(0.0, r_m), (zn - 0.05 - zM1, 0.36)], "light", 18 if fine else 5, caps=(False, True))     # (its head inside the box's floor)
     for hand in (PORT, STBD):
-        a, b = Vector((leg.x, hand * leg.y, leg.z)), Vector((mx, 0.0, mz - 0.1))
+        a, b = Vector((leg.x, hand * leg.y, leg.z)), Vector((mx, 0.0, mz + 0.25))
         c = a.lerp(b, (zM1 - a.z) / (b.z - a.z))
         m.rod(a, c, 0.36, "upper", sides=14 if fine else 5, caps=(True, False))
         m.rod(c, b, 0.36, "light", sides=14 if fine else 5, caps=(False, True))
-    zlo = 17.0                                         # the lower platform, across the legs, its lookouts' house at its after end
+    zlo = 18.8                                         # the lower platform, across the legs, its lookouts' house at its after end
     lo_p = Model.round_rect(mx + 5.0, mx - 2.8, -3.6, 3.6, 0.8, 3 if fine else 1)
     m.prism(lo_p, zlo - 0.16, zlo, "upper", top_paint="deck", bottom=True)
     m.box((mx - 1.85, 0.0, zlo + 1.0), (1.5, 2.6, 2.0), "upper")
@@ -2440,11 +2571,11 @@ def arizona(fine=True):
                    Vector((mx - 1.85 + 0.76, sy + 0.4, zlo + 1.75)), Vector((mx - 1.85 + 0.76, sy - 0.4, zlo + 1.75))], [(0, 1, 2, 3)], "glass", False, lambda q: X)
         fit.sailor(m.use("aft"), Vector((mx + 2.6, 2.4, zlo)), Vector((0.2, 1.0, 0)), "stand", navy="USA")
     m.use("aft")
-    zl = 21.5                                          # the searchlight platform: four lights
+    zl = 23.1                                          # the searchlight platform: four lights (over the funnel's top: light grey)
     lp = Model.round_rect(mx + 5.4, mx - 1.6, -4.3, 4.3, 1.0, 3 if fine else 1)
-    m.prism(lp, zl - 0.16, zl, "upper", top_paint="deck", bottom=True)
+    m.prism(lp, zl - 0.16, zl, "light", top_paint="deck", bottom=True)
     if fine:
-        railing(m, [Vector((px_, py_, zl)) for px_, py_ in lp] + [Vector((*lp[0], zl))], every=1.5)
+        railing(m, [Vector((px_, py_, zl)) for px_, py_ in lp] + [Vector((*lp[0], zl))], every=1.5, paint="light")
     for hand in (PORT, STBD):
         for lx in (mx + 3.7, mx + 0.4):
             yard.searchlight(lx, hand * 3.15, zl, 0.6, (0.3, hand * 1.0, 0.05))
@@ -2455,36 +2586,43 @@ def arizona(fine=True):
         fit.sailor(m.use("aft"), Vector((mx + 2.2, 3.4, zl)), Vector((0.3, 1.0, 0)), "stand", navy="USA")
         fit.sailor(m.use("aft"), Vector((mx + 2.2, -3.4, zl)), Vector((0.3, -1.0, 0)), "stand", navy="USA")
     m.use("aft")
-    gal = Model.round_rect(mx + 4.4, mx - 4.4, -4.8, 4.8, 1.2, 3 if fine else 1)
-    m.prism(gal, mz - 0.18, mz, "light", top_paint="deck", bottom=True)
-    if fine:
-        railing(m, [Vector((px_, py_, mz)) for px_, py_ in gal] + [Vector((*gal[0], mz))], every=1.6, paint="light")
-    az_tiers(yard, ((mx + 3.3, mx - 3.3, 3.7, 2.6, True), (mx + 2.8, mx - 2.8, 3.1, 2.6, True)), mz)
-    az_drum_director(yard, "director.aft", mx, zt, 2.0, zd - zt, 2.3, bearing=180.0)
+    # (no gallery: the top's lowest tier stands straight on the tripod's head, its floor's underside a deep bowl)
+    az_tiers(yard, main_tiers, zw, under=zw - mz, shrink=2.2, rail=False)
+    az_drum_director(yard, "director.aft", mx, zt, 1.8, zd - zt, 1.9, bearing=180.0)
     m.use("aft")
-    # the .50s' box: wider than the director under it and set forward of the pole, on a flared skirt (her 1941
-    # photograph: a squarish open box at the very top, the pole at its after edge)
-    bx0, bx1, bh = mx + 4.1, mx - 0.9, 2.4
-    zs0, zs1, rim = zd + 0.03, zn - 0.1, zn + 1.2
-    skirt_lo = Model.round_rect(mx + 1.9, mx - 1.9, -1.9, 1.9, 0.9, 3 if fine else 1)
-    skirt_hi = Model.round_rect(bx0, bx1, -bh, bh, 0.12, 3 if fine else 1)
+    # the .50s' box: wider than the director under it and set forward of the pole, its deep apron coming down
+    # straight to the director's roof, rounded under at its foot (her 1941 photograph: a squarish open box at the
+    # very top, its lower half dark in the shadow of the walls' overhang, the topmast stepped against its after wall)
+    bx0, bx1, bh = mx + 3.4, mx - 0.8, 1.7
+    zs0, zb0, rim = zd + 0.08, zn - 0.25, zn + 1.2
+    zs1 = zs0 + 0.4
+    skirt_hi = Model.round_rect(bx0 - 0.1, bx1 + 0.1, -bh + 0.1, bh - 0.1, 0.12, 3 if fine else 1)
+    skirt_lo = Model.round_rect(bx0 - 0.55, bx1 + 0.3, -bh + 0.4, bh - 0.4, 0.45, 3 if fine else 1)
     if len(skirt_lo) != len(skirt_hi):
         skirt_lo = skirt_hi
     m.prism(skirt_lo, zs0, zs1, "light", top=skirt_hi, top_paint="light", bottom=True)
+    m.prism(skirt_hi, zs1, zb0 + 0.05, "light", top_paint="light")
     t_ = 0.08
     for (cx_, cy_, lx_, ly_) in (((bx0 - t_ / 2, 0.0, t_, 2 * bh)), ((bx1 + t_ / 2, 0.0, t_, 2 * bh)), (((bx0 + bx1) / 2, bh - t_ / 2, bx0 - bx1 - 2 * t_, t_)),
                                  (((bx0 + bx1) / 2, -bh + t_ / 2, bx0 - bx1 - 2 * t_, t_))):
-        m.box((cx_, cy_, (zs1 + rim) * 0.5), (lx_, ly_, rim - zs1), "light")
-    m.prism([(bx0 - t_, bh - t_), (bx1 + t_, bh - t_), (bx1 + t_, -bh + t_), (bx0 - t_, -bh + t_)], zs1, zn, "light", top_paint="deck")
-    for gx_, gy_ in ((bx0 - 0.95, 1.4), (bx0 - 0.95, -1.4), (bx1 + 1.05, 1.5), (bx1 + 1.05, -1.5)):
-        face = math.degrees(math.atan2(gy_, gx_ - (bx0 + bx1) / 2))
+        m.box((cx_, cy_, (zb0 + rim) * 0.5), (lx_, ly_, rim - zb0), "light")
+    m.prism([(bx0 - t_, bh - t_), (bx1 + t_, bh - t_), (bx1 + t_, -bh + t_), (bx0 - t_, -bh + t_)], zb0, zn, "light", top_paint="deck", bottom=True)
+    if fine:                                                          # the rim's capping and the walls' stiffeners
+        for (p0_, p1_) in (((bx0, bh), (bx1, bh)), ((bx0, -bh), (bx1, -bh)), ((bx0, -bh), (bx0, bh)), ((bx1, -bh), (bx1, bh))):
+            m.rod((p0_[0], p0_[1], rim + 0.02), (p1_[0], p1_[1], rim + 0.02), 0.05, "light", sides=4)
+        for k_ in range(1, 6):
+            sx_ = bx0 + (bx1 - bx0) * k_ / 6
+            for hand in (PORT, STBD):
+                m.box((sx_, hand * (bh + 0.025), (zb0 + rim) * 0.5), (0.06, 0.05, rim - zb0), "light")
+    for gx_, gy_, face in ((mx + 2.8, 1.0, 35.0), (mx + 2.8, -1.0, -35.0), (mx + 0.3, 1.0, 145.0), (mx + 0.3, -1.0, -145.0)):
         fit.mg50(yard, gx_, gy_, zn + 0.02, facing=face, part="aft")
     m.use("aft")
-    m.lathe((mx, 0, zn), Z, [(0.0, 0.22), (6.4, 0.07)], "light", 10 if fine else 4)
-    m.rod((mx, -2.8, rim + 2.6), (mx, 2.8, rim + 2.6), 0.06, "light", sides=4)
-    gaff0, gaff1 = Vector((mx - 0.15, 0, rim + 0.9)), Vector((mx - 3.8, 0, rim + 2.1))
+    tmx = mx - 1.0                                                    # the topmast, against the box's after wall
+    m.lathe((tmx, 0, zs0), Z, [(0.0, 0.24), (zn + 6.4 - zs0, 0.07)], "light", 10 if fine else 4)
+    m.rod((tmx, -2.8, rim + 2.6), (tmx, 2.8, rim + 2.6), 0.06, "light", sides=4)
+    gaff0, gaff1 = Vector((tmx - 0.15, 0, rim + 0.9)), Vector((tmx - 3.8, 0, rim + 2.1))
     m.rod(gaff0, gaff1, 0.07, "light", sides=4)
-    head_main = Vector((mx, 0, zn + 6.3))
+    head_main = Vector((tmx, 0, zn + 6.3))
     yard.wire(head_fore, head_main, 0.025, sag=1.0)
     sx = -h.L * 0.497
     ens = Vector((sx - 0.3, 0, D(sx + 0.6) + 5.5))
@@ -2611,7 +2749,7 @@ def arizona(fine=True):
             for qa, qb in zip(pts, pts[1:]):
                 yard.wire(qa + Z * 2.1, qb + Z * 2.1, 0.015)
         for hand in (PORT, STBD):                    # the signal lamps at her bridge wings' ends
-            yard.searchlight(19.9, hand * 10.5, z04, 0.3, (0.6, hand * 1.0, 0.0))
+            yard.searchlight(wing_x1 - 0.5, hand * 5.05, zr, 0.3, (0.6, hand * 1.0, 0.0))
         for ox, oy, face in ((-32.8, 13.0, 1.6), (-33.4, 12.2, -0.4), (-32.6, -13.2, -1.6), (75.0, 6.5, 3.0), (73.6, -6.8, 2.8)):
             foot = Vector((ox, oy, D(ox) + 0.02))      # the officer of the deck's watch at the ladders; hands on the forecastle
             fit.sailor(m.use(yard.half(ox)), foot, Vector((math.cos(face), math.sin(face), 0)), "stand", navy="USA")
