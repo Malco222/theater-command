@@ -2330,6 +2330,7 @@ FMonthResult FCampaignSession::EndMonth()
 									FLostHull& Hull = Sinking.Ships.AddDefaulted_GetRef();
 									(*Hers)->TryGetStringField(TEXT("name"), Hull.Name); // (null where the record has run out: left empty)
 									(*Hers)->TryGetStringField(TEXT("cls"), Hull.Class);
+									(*Hers)->TryGetStringField(TEXT("type"), Hull.Type);
 									(*Hers)->TryGetNumberField(TEXT("crew"), Hull.Crew);
 									(*Hers)->TryGetNumberField(TEXT("lost"), Hull.Lost);
 									(*Hers)->TryGetBoolField(TEXT("pair"), Hull.bPair);

@@ -5774,6 +5774,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					Hull.Crew = FCString::Atoi(*Parts[4]);
 					Hull.Lost = FCString::Atoi(*Parts[5]);
 					Hull.bPair = Parts.IsValidIndex(6) && Parts[6] == TEXT("pair");
+					Hull.Type = Parts.IsValidIndex(6) && Parts[6] != TEXT("pair") ? Parts[6] : FString(); // (or her type, as "battlecruiser")
 				}
 			}
 			Remember(NamedForPicture, true);
@@ -10664,7 +10665,9 @@ void ACampaignPlayerController::Remember(const TArray<FSinking>& Sinkings, bool 
 				++Extra;
 				continue;
 			}
-			const TCHAR* Kind = Hull.bPair ? TEXT("light carriers") : Hull.Class == TEXT("cv") ? TEXT("aircraft carrier") : TEXT("battleship");
+			// (the historian's word for her where the rules give one: Hood was a battlecruiser, not a battleship)
+			const FString KindWord = Hull.bPair ? FString(TEXT("light carriers")) : !Hull.Type.IsEmpty() ? Hull.Type : Hull.Class == TEXT("cv") ? FString(TEXT("aircraft carrier")) : FString(TEXT("battleship"));
+			const TCHAR* Kind = *KindWord;
 			const TCHAR* Her = Hull.bPair ? TEXT("their") : TEXT("her");
 			const FString Men = FText::AsNumber(FMath::Max(Hull.Crew, 0)).ToString();
 			// (The two directors' single ruling, 19 November 2026: one wording for both sides, and the line ends at "lost".)

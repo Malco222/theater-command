@@ -33,6 +33,7 @@ struct FLostHull
 {
 	FString Name; // empty where the nation's record of names has run out
 	FString Class; // bb or cv
+	FString Type; // (the historian, 19 November 2026) what she was where her class's word is not it: "battlecruiser" for Hood, Renown and Repulse; empty for the rest
 	int32 Crew = 0;
 	int32 Lost = 0;
 	bool bPair = false; // two light carriers the counts treat as one: the name holds both, the crew is both crews
