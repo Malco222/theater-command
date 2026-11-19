@@ -252,9 +252,10 @@ def _plain(name, hexc, rough=0.9, noise_scale=0.0, dark=0.0):
     return m
 
 
-def mud_road(x0=-140.0, x1=170.0, half=3.7, seed=4):
+def mud_road(x0=-140.0, x1=170.0, half=3.7, seed=4, snow=False):
     """The east's road: a wide strip of churned mud (covering the field's own ruts), its edges ragged; wheel ruts
-    wandering inside it, wet and dark; puddles in them that show the sky."""
+    wandering inside it, wet and dark; puddles in them that show the sky. In winter (snow) the strip is packed snow
+    gone grey-brown under the traffic, the ruts dirty slush, the puddles frozen."""
     rng = np.random.default_rng(seed)
     xs = np.arange(x0, x1, 1.0)
     mid = 0.4 * np.sin(xs / 31.0) + 0.25 * np.sin(xs / 9.0)
@@ -263,9 +264,26 @@ def mud_road(x0=-140.0, x1=170.0, half=3.7, seed=4):
         P += [(x, c - half - rng.uniform(0, 0.6), 0.03), (x, c + half + rng.uniform(0, 0.6), 0.03)]
         if i:
             F.append((2 * i - 2, 2 * i - 1, 2 * i + 1, 2 * i))
-    _mesh("mud_road", P, F, _plain("mud", "6B5C49", 0.75, 0.35, 0.35))
-    wet = _plain("rut", "3F3428", 0.35, 0.8, 0.25)
-    water = _plain("puddle", "4A4C50", 0.04)
+    if snow:                                            # the snow the traffic shoved aside, banked low along both edges
+        edges = P[:]
+        for side in (0, 1):
+            sg = -1.0 if side == 0 else 1.0
+            B, BF = [], []
+            for i, x in enumerate(xs):
+                ey = edges[2 * i + side][1]
+                h = 0.16 + 0.1 * math.sin(x * 0.37 + side) + rng.uniform(-0.04, 0.04)
+                B += [(x, ey - sg * 0.35, 0.025), (x, ey + sg * 0.3, h), (x, ey + sg * (1.1 + rng.uniform(0, 0.5)), 0.0)]
+                if i:
+                    k = 3 * i
+                    BF += [(k - 3, k - 2, k + 1, k), (k - 2, k - 1, k + 2, k + 1)] if side else [(k - 3, k, k + 1, k - 2), (k - 2, k + 1, k + 2, k - 1)]
+            _mesh("berm", B, BF, _plain("berm", "D3D4D4", 0.9, 1.2, 0.2))
+        _mesh("mud_road", P, F, _plain("packed", "8C8275", 0.8, 0.6, 0.4))
+        wet = _plain("rut", "54493E", 0.4, 0.8, 0.3)
+        water = _plain("ice", "6F777E", 0.15)
+    else:
+        _mesh("mud_road", P, F, _plain("mud", "6B5C49", 0.75, 0.35, 0.35))
+        wet = _plain("rut", "3F3428", 0.35, 0.8, 0.25)
+        water = _plain("puddle", "4A4C50", 0.04)
     for lane in (-1.25, 1.25):
         for wheel in (-0.75, 0.75):
             off = lane + wheel + 0.5 * np.sin(xs / (13.0 + 3 * lane) + wheel) + 0.2 * np.sin(xs / 4.3 + lane)
@@ -280,6 +298,8 @@ def mud_road(x0=-140.0, x1=170.0, half=3.7, seed=4):
         x = rng.uniform(x0, x1)
         y = float(np.interp(x, xs, mid)) + rng.choice([-2.0, -0.5, 0.5, 2.0]) + rng.uniform(-0.4, 0.4)
         a, b = rng.uniform(0.6, 2.2), rng.uniform(0.35, 0.9)
+        if snow:
+            a, b = 0.6 * a, 0.6 * b
         n = 9
         P = [(x, y, 0.05)] + [(x + a * math.cos(2 * math.pi * j / n) * rng.uniform(0.75, 1.1), y + b * math.sin(2 * math.pi * j / n) * rng.uniform(0.75, 1.1), 0.05)
                               for j in range(n)]
@@ -347,6 +367,32 @@ def tall_grass(boxes, avoid, density=2.5, seed=6, colours=("6B7A3C", "A39C62")):
     print(f"  tall grass: {n} tufts", flush=True)
 
 
+def snow_look(amount=0.9, steep=0.45):
+    """Snow lying on what looks up on a model (roofs to about 60 degrees, fence tops, haystack crowns): in lumps,
+    banked in the corners, never on glass. A rigid.to_blender look."""
+    from works import _math, _mix, _noise, _ramp
+    from winter import SNOW
+
+    def look(paint, mat, nt, bsdf, mix):
+        if paint.split(".")[0] in ("glass", "lamp", "fire", "ember"):
+            return
+        last = bsdf.inputs["Base Color"].links[0].from_socket
+        geo = nt.nodes.new("ShaderNodeNewGeometry")
+        ns = nt.nodes.new("ShaderNodeSeparateXYZ")
+        nt.links.new(geo.outputs["Normal"], ns.inputs[0])
+        pos = nt.nodes.new("ShaderNodeTexCoord").outputs["Object"]
+        lumps = _noise(nt, pos, 2.2, 4.0, 0.6)
+        lies = _ramp(nt, ns.outputs[2], steep, steep + 0.25, 0.0, 1.0)
+        fac = _math(nt, "MULTIPLY", lies, _ramp(nt, lumps, 0.3, 0.5, 0.35, 1.0))
+        fac = _math(nt, "MULTIPLY", fac, amount, clamp=True)
+        _, f, a, b, o = _mix(nt)
+        nt.links.new(fac, f)
+        nt.links.new(last, a)
+        b.default_value = (*SNOW, 1.0)
+        nt.links.new(o, bsdf.inputs["Base Color"])
+    return look
+
+
 def garden(x, y, yaw, snow=False):
     """A kitchen-garden plot behind a house: dark tilled earth in ridged rows."""
     ca, sa = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
@@ -362,7 +408,7 @@ def garden(x, y, yaw, snow=False):
     _mesh("garden", P, F, _plain("garden" + ("_snow" if snow else ""), "E2E6EC" if snow else "3B3027", 0.95, 1.5, 0.3))
 
 
-def village(look, path, fast=False):
+def village(look, path, fast=False, extra=None, eye=None, target=None, lens=30.0, wash=0.0, spp=None, size=None):
     """A village street in the look, as the battle camera sees it: houses along a dirt road, fences, yards, trees."""
     import bpy
     import kit
@@ -376,8 +422,8 @@ def village(look, path, fast=False):
     kind = {"temperate": "meadow", "taiga": "meadow", "prairie": "steppe", "steppe": "steppe", "winter": "winter"}[look]
     if kind == "winter":
         import winter as W
-        W.install(0.0, 0.0)
-        G.Field(kind="winter", density=4.0, craters=False)
+        W.install(wash, wash)
+        G.Field(kind="winter", density=4.0, craters=extra is not None)
     else:
         G.Field(kind=kind, density=6.0 if fast else 10.0, trees=False)
     rng = random.Random(7)
@@ -389,7 +435,7 @@ def village(look, path, fast=False):
         if name not in built:
             m = E.BUILDERS[name](True)
             m.info.pop("about", None)
-            ob, arm = rigid.to_blender(m, crease=m.info.pop("crease", 38.0))
+            ob, arm = rigid.to_blender(m, look=snow_look() if season == "winter" and name not in ("SpruceSnow", "BirchBare") else None, crease=m.info.pop("crease", 38.0))
             ob.parent = None
             for md in list(ob.modifiers):
                 ob.modifiers.remove(md)
@@ -404,7 +450,7 @@ def village(look, path, fast=False):
     house = {"temperate": "Izba", "taiga": "Izba", "winter": "Izba", "prairie": "Khata", "steppe": "Khata"}[look]
     burnt = look == "winter"
     avoid = []
-    mud_road()
+    mud_road(snow=season == "winter")
     for side in (1.0, -1.0):
         for i in range(6):
             x = -40.0 + i * 17.0 + rng.uniform(-2, 2)
@@ -442,16 +488,18 @@ def village(look, path, fast=False):
         dry = look in ("prairie", "steppe")
         tall_grass([(-75.0, 85.0, -45.0, 45.0)], avoid + [(x_, side_ * 25.5, 6.0) for x_ in np.arange(-40.0, 50.0, 17.0) for side_ in (1, -1)],
                    density=0.9 if fast else 1.8, colours=("8A8448", "C4B37A") if dry else ("5E7034", "A49A5E"))
+    if extra:
+        extra(put)
     cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
     bpy.context.scene.collection.objects.link(cam)
     bpy.context.scene.camera = cam
-    cam.data.lens = 30
+    cam.data.lens = lens
     from mathutils import Vector
-    eye, target = Vector((-62.0, -30.0, 19.0)), Vector((12.0, 2.0, 2.0))
+    eye, target = Vector(eye or (-62.0, -30.0, 19.0)), Vector(target or (12.0, 2.0, 2.0))
     cam.location = eye
     cam.rotation_euler = (target - eye).to_track_quat("-Z", "Y").to_euler()
-    w, h = (960, 540) if fast else (1600, 900)
-    stage.render_setup(w, h, samples=12 if fast else 40)
+    w, h = size or ((960, 540) if fast else (1600, 900))
+    stage.render_setup(w, h, samples=spp or (12 if fast else 40))
     bpy.context.scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
     print("wrote", path, flush=True)
