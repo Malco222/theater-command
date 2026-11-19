@@ -219,6 +219,9 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 
 	// The flashes' lamps: a few, shadowless, out until a flash lights one.
 	Core.Setup(&Book, &FBattleEffects::GroundHeight, this, 3u);
+	// (picture.lit_gain: the kit writes its colours that much darker and its hottest lights up to that much past white,
+	// so the material's brightness must be the same number for all else to look as it did)
+	Instance->SetScalarParameterValue(TEXT("Brightness"), static_cast<float>(Core.PictureGain()));
 	double Wanted = 2.0, Candela = 2000.0;
 	Book.Find("game.max_lamps", Wanted);
 	Book.Find("game.lamp_candela_at_full", Candela);
@@ -512,6 +515,7 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 	Sight.Up = ToFxWay(Looking.GetUnitAxis(EAxis::Z));
 	const double HalfView = FMath::DegreesToRadians(FMath::Clamp(static_cast<double>(FieldOfViewDegrees), 5.0, 170.0) * 0.5);
 	Sight.PixelsPerRadian = FMath::Max(1, ViewWidth) / (2.0 * FMath::Tan(HalfView));
+	Sight.HalfAcross = FMath::Tan(HalfView); // (what is wholly off the screen takes no place; up and down a quarter more, whatever the window's shape)
 	Sight.SmokeLight = TheaterFx::Rgb(HourLight.R, HourLight.G, HourLight.B);
 	Sight.Sun = ToFxWay(Sun);
 	const float SunUp = static_cast<float>(Core.DayOf(Sight.SmokeLight)); // (the sun's own light: full by day, none at night)
