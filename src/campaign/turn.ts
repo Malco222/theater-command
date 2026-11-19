@@ -4,7 +4,7 @@
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
-import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
+import { deckView, fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, setDeckPlan, syncWings, wingCards, type DeckOption, type DeckView, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
@@ -23,6 +23,7 @@ import { foldChoices, foldCorps, type FoldView } from './fold';
 import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
 import { liftView, offers, orderOffer, smallAirMonth, type LiftView, type Offer } from './arsenal';
 import { designCard, drawDesign, nameOrder, orderRefit, refitOffers, subCard, type DesignCard, type Dials, type SubDials } from './sandbox';
+import type { DeckPlan } from './decks';
 import { cityOrders, ordersAt, type CityOrders, type OrderLine } from './orders';
 import { blocked, blowBridges, crossingOf, whyNotBlow } from './rivers';
 import { cancelJob, jobsFor, orderJob, type JobKind, type JobOffer } from './engineers';
@@ -1960,6 +1961,13 @@ export function orderShipRefit(g: Game, key: string): Build | null {
 /** The drawing board: what a design of these dials would cost and be, before it is signed for. */
 export const boardCard = (g: Game, d: Dials | SubDials, name?: string): DesignCard | null =>
   (g.human ? ('size' in d ? subCard(g, g.human, d, name) : designCard(g, g.human, d, name)) : null);
+/** A carrier fleet's decks, as the carrier's card shows them (the sandbox): the plan in squadrons and what is aboard. */
+export const carrierDeck = (g: Game, fleetId: number): DeckView | null => {
+  const f = g.fleets.find((x) => x.id === fleetId);
+  return g.human && f && f.nat === g.human ? deckView(g, g.human, f) : null;
+};
+/** Signs a deck plan for a carrier fleet in harbour: squadrons of fighters, dive bombers and torpedo planes. */
+export const planCarrierDeck = (g: Game, fleetId: number, sq: DeckPlan): boolean => (humanUp(g) ? setDeckPlan(g, g.human!, fleetId, sq) : false);
 /** Signs for a design: it joins the player's classes on the Navy column. */
 export const signDesign = (g: Game, d: Dials | SubDials, name: string): ReturnType<typeof drawDesign> =>
   (humanUp(g) ? drawDesign(g, g.human!, d, name) : { row: null, why: 'It is not your turn.' });

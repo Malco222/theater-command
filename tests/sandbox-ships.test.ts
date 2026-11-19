@@ -16,7 +16,10 @@ import {
 import { SANDBOX_SHIPS } from '../src/campaign/sandbox-data';
 import { startOpen } from '../src/campaign/staff';
 import { techOf } from '../src/campaign/tech';
-import { runTurnAI } from '../src/campaign/turn';
+import { beginHuman, carrierDeck, endHuman, humanUp, planCarrierDeck, runTurnAI, stepAI } from '../src/campaign/turn';
+import { airPool, airUpkeep, assessAir, shipHits } from '../src/campaign/air';
+import { deckView, setDeckPlan, syncWings, wingsOf } from '../src/campaign/carriers';
+import { atSea, sail, zoneOf } from '../src/campaign/navy';
 import type { Build, Fleet, Game, ShipClass, ShipHull } from '../src/campaign/types';
 import type { ClassRow } from '../src/campaign/classes';
 
@@ -339,5 +342,136 @@ describe('the computer\'s navies', () => {
       for (const f of g.fleets) for (const c of KINDS) expect(listed(f, c), `${f.name} ${c}`).toBeLessThanOrEqual(f.ships[c]);
     }
     for (const n of Object.values(g.nations)) for (const m of n.memorial ?? []) expect(m.name).toBeTruthy();
+  }, 120000);
+});
+
+// ---- Carrier decks (Brian, 19 November 2026: "treat carriers as airfields, you can pick which squadrons to assign to them") ----
+
+/** A grand campaign with Britain at the table, played until she is at war with Germany and it is her month. */
+function britain(seed = 3, on = true): Game {
+  const g = startOpen(createGame(seed, 'UK'));
+  if (on) g.flags.sandbox = 1;
+  for (let m = 0; m < 12; m++) {
+    let guard = 0;
+    while (!humanUp(g) && guard++ < 200) stepAI(g);
+    beginHuman(g);
+    if (g.nations.UK.atWar.length && g.nations.GER.atWar.includes('UK')) return g;
+    endHuman(g);
+  }
+  throw new Error('Britain never went to war');
+}
+const named = (g: Game, name: string): Fleet => g.fleets.find((f) => f.name === name)!;
+const wingOf = (g: Game, f: Fleet, kind: 'ftr' | 'bmr') => wingsOf(g, f.id).find((w) => w.kind === kind);
+/** The Home Fleet in its harbour with four carriers and their wings aboard. */
+function homeFleet(g: Game): Fleet {
+  const f = named(g, 'Home Fleet');
+  f.ships.cv = 4;
+  sail(g, f, f.home, 'port');
+  expect(atSea(f)).toBe(false);
+  syncWings(g);
+  return f;
+}
+
+describe('carrier decks (the sandbox)', () => {
+  it('with the switch off there is no deck plan, and a strike is the one it always was', () => {
+    const g = britain(3, false);
+    const f = homeFleet(g);
+    expect(deckView(g, 'UK', f)).toBeNull();
+    expect(carrierDeck(g, f.id)).toBeNull();
+    expect(setDeckPlan(g, 'UK', f.id, { ftr: 12, dive: 0, torp: 0 })).toBe(false);
+    expect(f.deckPlan).toBeUndefined();
+  }, 60000);
+
+  it('fills the decks with the navy\'s own mix until the player says otherwise', () => {
+    const g = britain();
+    const f = homeFleet(g);
+    const v = carrierDeck(g, f.id)!;
+    // Four British carriers hold 4 x 36 aircraft: twelve squadrons, a third of them fighters.
+    expect(v.squadrons).toBe(12);
+    expect(v.own).toBe(false);
+    expect(v.plan.ftr + v.plan.dive + v.plan.torp).toBe(12);
+    expect(v.plan.ftr).toBe(4);
+    expect(v.plan.torp).toBeGreaterThan(v.plan.dive);
+    expect(v.want).toEqual({ ftr: 48, bmr: 96 });
+    expect(v.aboard).toEqual(v.want);
+    expect(v.why).toBeNull();
+  }, 60000);
+
+  it('changes the decks over in harbour: what no longer fits goes to the reserve, and what is wanted comes from it', () => {
+    const g = britain();
+    const f = homeFleet(g);
+    const p = airPool(g, 'UK');
+    p.ftr = 30; p.pilots = 30;
+    const bmr = p.bmr;
+    // Eight squadrons of fighters, four of dive bombers, no torpedo planes.
+    expect(planCarrierDeck(g, f.id, { ftr: 8, dive: 4, torp: 0 })).toBe(true);
+    expect(f.deckPlan).toEqual({ ftr: 8 / 12, dive: 4 / 12, torp: 0 });
+    // The fighter wing wants 96 and the reserve had 30 to give; the strike wing gives back 48 of its 96.
+    expect(wingOf(g, f, 'ftr')!.est.ftr).toBe(96);
+    expect(wingOf(g, f, 'ftr')!.ftr).toBe(78);
+    expect(p.ftr).toBe(0);
+    expect(wingOf(g, f, 'bmr')!.bmr).toBe(48);
+    expect(p.bmr).toBe(bmr + 48);
+    expect(carrierDeck(g, f.id)!.torp).toBe(0);
+    // The rest come as the decks are made up in port.
+    p.ftr = 100; p.pilots = 100;
+    airUpkeep(g, 'UK');
+    expect(wingOf(g, f, 'ftr')!.ftr).toBe(96);
+    // A plan that does not add up to the decks is refused.
+    expect(planCarrierDeck(g, f.id, { ftr: 5, dive: 5, torp: 5 })).toBe(false);
+    expect(planCarrierDeck(g, f.id, { ftr: 12.5, dive: 0, torp: -0.5 })).toBe(false);
+  }, 60000);
+
+  it('all fighters: the strike wing goes ashore to the reserve, and comes back when the plan wants it', () => {
+    const g = britain();
+    const f = homeFleet(g);
+    const p = airPool(g, 'UK');
+    const bmr = p.bmr;
+    p.ftr = 500; p.pilots = 500;
+    expect(planCarrierDeck(g, f.id, { ftr: 12, dive: 0, torp: 0 })).toBe(true);
+    expect(wingOf(g, f, 'bmr')).toBeUndefined();
+    expect(p.bmr).toBe(bmr + 96);
+    syncWings(g);
+    expect(wingOf(g, f, 'bmr')).toBeUndefined();
+    expect(planCarrierDeck(g, f.id, { ftr: 4, dive: 4, torp: 4 })).toBe(true);
+    expect(wingOf(g, f, 'bmr')!.bmr).toBe(96);
+  }, 60000);
+
+  it('changes nothing at sea, and keeps the plan through a split and a save', () => {
+    const g = britain();
+    const f = homeFleet(g);
+    expect(planCarrierDeck(g, f.id, { ftr: 6, dive: 0, torp: 6 })).toBe(true);
+    const half = detach(g, f, { cv: 2 })!;
+    expect(half.deckPlan).toEqual(f.deckPlan);
+    expect(wingOf(g, half, 'ftr')!.est.ftr).toBe(36);
+    f.zone = zoneOf(g, 'natl'); f.stance = 'patrol';
+    expect(carrierDeck(g, f.id)!.why).toMatch(/at sea/);
+    expect(planCarrierDeck(g, f.id, { ftr: 2, dive: 2, torp: 2 })).toBe(false);
+    const h = loadGame(saveGame(g))!;
+    expect(named(h, 'Home Fleet').deckPlan).toEqual(f.deckPlan);
+  }, 60000);
+
+  it('torpedo planes do more harm to battleships and lose more to the guns; dive bombers go surer for carriers', () => {
+    const strikeWith = (sq: { ftr: number; dive: number; torp: number }) => {
+      const g = britain();
+      const home = homeFleet(g);
+      airPool(g, 'UK').bmr = 1000;
+      expect(planCarrierDeck(g, home.id, sq)).toBe(true);
+      const foe = named(g, 'Battle Fleet');
+      foe.ships.cv = Math.max(1, foe.ships.cv);
+      for (const x of [home, foe]) { x.zone = zoneOf(g, 'natl'); x.stance = 'patrol'; x.lane = undefined; }
+      syncWings(g);
+      const a = assessAir(g, [wingOf(g, home, 'bmr')!], 'fleet', foe.id);
+      expect(a.why).toBeNull();
+      return { a, hit: shipHits(a, 'fleet', 60) };
+    };
+    const torp = strikeWith({ ftr: 4, dive: 0, torp: 8 });
+    const dive = strikeWith({ ftr: 4, dive: 8, torp: 0 });
+    expect(torp.a.torp).toBe(1);
+    expect(dive.a.torp).toBe(0);
+    expect(torp.hit.sunk.bb).toBeGreaterThan(dive.hit.sunk.bb);
+    expect(dive.hit.sunk.cv).toBeGreaterThan(torp.hit.sunk.cv);
+    expect(torp.a.flak).toBeGreaterThan(dive.a.flak);
+    expect(torp.a.lines.some((l) => l.label === 'Strike aircraft' && /100% torpedo planes/.test(String(l.value)))).toBe(true);
   }, 120000);
 });

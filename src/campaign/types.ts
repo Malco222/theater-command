@@ -620,6 +620,11 @@ export interface Fleet extends Storied {
   hulls?: ShipHull[];
   /** Ships of the list lost this month, not yet written on the memorial (hulls.ts does that at the month's end). */
   fallen?: ShipHull[];
+  /**
+   * The deck plan the player gave its carriers (the sandbox, decks.ts): the shares of their aircraft that are
+   * fighters, dive bombers and torpedo planes. Absent, the navy's own mix.
+   */
+  deckPlan?: { ftr: number; dive: number; torp: number };
 }
 
 /**

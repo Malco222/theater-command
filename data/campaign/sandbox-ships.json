@@ -1,5 +1,5 @@
 {
-  "_about": "The sandbox's ships (Brian, 19 November 2026: 'a sandbox to play and make your own history'; design paper https://claude.ai/artifact/LV5ZA8vXKtyuDvjRbazxhc). Read only with the sandbox switched on (g.flags.sandbox, classes.ts); with it off nothing here is used. The ship classes themselves are rows of classes.json ('of' a ship kind). 'aaMost' is the most a fleet's anti-aircraft ships cut its losses to an air strike. 'styles' is how each navy's computer staff leans when it may build a class of its own (history.json stops 'whatif'), and 'likes' the classes each style orders, best first. 'refits' are the changes a ship in harbour can be given at a yard of her kind's size: 'months' out of service, 'share' of a new ship's price, 'needs' a technology, 'kinds' the ships it fits; 'mul' multiplies her numbers, 'add' adds to them, 'to' rebuilds her as another class (its row, or for a cruiser hull 'light' the numbers given), and 'once' means she can have it only once. 'board' is the drawing board: six dials on one card, each step with what it takes of the hull's room and what it costs and gives (armour and speed take a share of the hull's room and price, a flight deck 'roomShare' and 'costShare'; a small hull is ordered four at a time, a flotilla); 'value' is the most a design may be worth for its price against the standard ship of its kind (1.1: a tenth better), and above that its price is raised until it is not. 'sub' is a submarine's own small card. 'names' says how new ships are named: capital ships and carriers after the nation's home provinces, cruisers after its cities, flotillas by number.",
+  "_about": "The sandbox's ships (Brian, 19 November 2026: 'a sandbox to play and make your own history'; design paper https://claude.ai/artifact/LV5ZA8vXKtyuDvjRbazxhc). Read only with the sandbox switched on (g.flags.sandbox, classes.ts); with it off nothing here is used. The ship classes themselves are rows of classes.json ('of' a ship kind). 'aaMost' is the most a fleet's anti-aircraft ships cut its losses to an air strike. 'styles' is how each navy's computer staff leans when it may build a class of its own (history.json stops 'whatif'), and 'likes' the classes each style orders, best first. 'refits' are the changes a ship in harbour can be given at a yard of her kind's size: 'months' out of service, 'share' of a new ship's price, 'needs' a technology, 'kinds' the ships it fits; 'mul' multiplies her numbers, 'add' adds to them, 'to' rebuilds her as another class (its row, or for a cruiser hull 'light' the numbers given), and 'once' means she can have it only once. 'board' is the drawing board: six dials on one card, each step with what it takes of the hull's room and what it costs and gives (armour and speed take a share of the hull's room and price, a flight deck 'roomShare' and 'costShare'; a small hull is ordered four at a time, a flotilla); 'value' is the most a design may be worth for its price against the standard ship of its kind (1.1: a tenth better), and above that its price is raised until it is not. 'sub' is a submarine's own small card. 'names' says how new ships are named: capital ships and carriers after the nation's home provinces, cruisers after its cities, flotillas by number. 'decks' is a carrier fleet's deck plan (Brian, 19 November 2026: 'treat carriers as airfields, you can pick which squadrons to assign to them'): a fleet's carriers hold their nation's wing (carriers.json 'wing'), and with the sandbox on the player may divide it by 'squadron' of aircraft between fighters, dive bombers and torpedo planes, in harbour, where the decks are made up from the reserve. 'torp' is the share of a navy's strike aircraft that are torpedo planes until the player says otherwise. 'planes' says what each kind does against ships: 'hurt' multiplies what the strike does to ships of each kind (dive bombers are surest against carriers and light ships, torpedoes against battleships), 'flak' what the ships' guns bring down. Half and half is about as the game always was.",
   "aaMost": 0.3,
   "styles": {
     "_default": "guns",
@@ -430,5 +430,41 @@
   },
   "names": {
     "flotilla": "{n} {label} Flotilla"
+  },
+  "decks": {
+    "squadron": 12,
+    "torp": {
+      "_default": 0.5,
+      "UK": 0.7,
+      "USA": 0.4,
+      "JAP": 0.55,
+      "GER": 0.2,
+      "ITA": 0.5,
+      "FRA": 0.5
+    },
+    "planes": {
+      "dive": {
+        "label": "dive bombers",
+        "hurt": {
+          "bb": 0.8,
+          "cv": 1.2,
+          "ca": 1.1,
+          "dd": 1.15,
+          "ss": 1
+        },
+        "flak": 0.85
+      },
+      "torp": {
+        "label": "torpedo planes",
+        "hurt": {
+          "bb": 1.25,
+          "cv": 0.85,
+          "ca": 0.95,
+          "dd": 0.8,
+          "ss": 1
+        },
+        "flak": 1.15
+      }
+    }
   }
 }

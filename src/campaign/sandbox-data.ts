@@ -51,4 +51,9 @@ export const SANDBOX_SHIPS = data as unknown as {
     };
   };
   names: { flotilla: string };
+  decks: {
+    squadron: number;
+    torp: Record<string, number>;
+    planes: Record<'dive' | 'torp', { label: string; hurt: Record<ShipClass, number>; flak: number }>;
+  };
 };

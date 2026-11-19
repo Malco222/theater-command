@@ -479,6 +479,8 @@ export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string, p
   if (f.shelled !== undefined) sq.shelled = f.shelled;
   if (f.seen) sq.seen = { ...f.seen };
   if (f.struck) sq.struck = [f.struck[0], f.struck[1], f.struck[2]];
+  // The carriers that go keep the deck plan they sailed with (the sandbox, decks.ts).
+  if (f.deckPlan) sq.deckPlan = { ...f.deckPlan };
   g.fleets.push(sq);
   moveHulls(f, sq, pick);
   // Carriers that go take their aircraft with them.

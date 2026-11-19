@@ -43,6 +43,8 @@ import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunne
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 import { mapDist } from './wrap';
 import { classNum } from './classes';
+import { planeFlak, planeHurt, torpOf, torpShare } from './decks';
+import { sandbox } from './history';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
@@ -1333,6 +1335,12 @@ export interface AirAssess {
   again: number;
   /** A harbour caught unready in the month war was declared. */
   surprise: boolean;
+  /**
+   * The sandbox (decks.ts): what the strike's dive bombers and torpedo planes do to ships of each kind beside a strike
+   * as it always was, and the share of the strike aircraft that are torpedo planes. Absent with the sandbox off.
+   */
+  planes?: Ships;
+  torp?: number;
   /** The sky over the target (weather, ruling 127): clear with no weather. */
   sky: Sky;
   /** What cloud leaves of the bombs that find the target: 1 under a clear sky. */
@@ -1364,11 +1372,35 @@ export function shipHits(a: AirAssess, m: AirMission, through: number, found = 1
   const weight = SHIPS.reduce((s, c) => s + have[c] * S.aim[c], 0);
   if (weight <= 0 || hits <= 0) return { hits: 0, sunk, count: 0, value: 0 };
   let count = 0;
-  for (const c of SHIPS) { sunk[c] = Math.min(have[c], ((hits * have[c] * S.aim[c]) / weight) / S.takes[c]); count += sunk[c]; }
+  // (The sandbox: dive bombers and torpedo planes do more harm to some ships than others, decks.ts.)
+  for (const c of SHIPS) { sunk[c] = Math.min(have[c], ((hits * have[c] * S.aim[c]) / weight) / S.takes[c] * (a.planes ? a.planes[c] : 1)); count += sunk[c]; }
   // No strike sinks more than so much of what it finds.
   const most = (m === 'harbour' ? H.most : S.most) * SHIPS.reduce((s, c) => s + (S.aim[c] > 0 ? have[c] : 0), 0);
   if (count > most) { for (const c of SHIPS) sunk[c] *= most / count; hits *= most / count; count = most; }
   return { hits, sunk, count, value: SHIPS.reduce((s, c) => s + sunk[c] * S.value[c], 0) };
+}
+
+/**
+ * The sandbox (decks.ts): what a strike's bombers do to ships of each kind, and their toll from the ships' guns, beside
+ * a strike as it always was. A carrier's strike aircraft fly by its fleet's deck plan (dive bombers and torpedo planes);
+ * land bombers are as they always were. Null where no carrier aircraft are in the strike.
+ */
+function planeMix(g: Game, a: AirAssess): { hurt: Ships; flak: number; torp: number } | null {
+  const hurt = noShips();
+  let flak = 0, torp = 0, deck = 0;
+  for (const x of a.att) {
+    if (x.bmr <= 0) continue;
+    if (!deckBred(x.f)) { for (const c of SHIPS) hurt[c] += x.bmr; flak += x.bmr; continue; }
+    const fleet = carrierOf(g, x.f) ?? (x.f.ashore !== undefined ? g.fleets.find((y) => y.id === x.f.ashore) ?? null : null);
+    const t = fleet ? torpShare(fleet) : torpOf(x.f.nat);
+    for (const c of SHIPS) hurt[c] += x.bmr * planeHurt(t, c);
+    flak += x.bmr * planeFlak(t);
+    torp += x.bmr * t;
+    deck += x.bmr;
+  }
+  if (deck <= 0 || a.B <= 0) return null;
+  for (const c of SHIPS) hurt[c] /= a.B;
+  return { hurt, flak: flak / a.B, torp: torp / deck };
 }
 
 /** How hard the fighters fight over this kind of raid: in the air war only a fight for the sky is fought to a finish. */
@@ -1482,6 +1514,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const shipGuns = out.ships.reduce((s, x) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0), 0);
   if (out.ships.length) {
     out.flak = Math.min(CARRIERS.flak.most, shipGuns * CARRIERS.flak.per) * unready * gun;
+    // The sandbox (decks.ts): torpedo planes come in low and slow and lose more to the guns; dive bombers fewer.
+    const mix = sandbox(g) ? planeMix(g, out) : null;
+    if (mix) { out.planes = mix.hurt; out.torp = mix.torp; out.flak *= mix.flak; }
     if (out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.flak * I);
     out.spoil = CARRIERS.cap.spoil * Math.sqrt(met);
     out.naval = out.B > 0 ? out.att.reduce((s, a) => s + a.bmr * navalSkill(a.f), 0) / out.B : 1;
@@ -1541,6 +1576,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     if (out.B > 0) {
       const land = out.att.filter((a) => a.bmr > 0 && !deckBred(a.f)), deckB = out.att.filter((a) => a.bmr > 0 && deckBred(a.f));
       out.lines.push({ label: 'Crews', value: deckB.length && land.length ? 'Carrier crews and land bombers' : deckB.length ? 'Carrier crews, trained to hit ships' : 'Land bombers', effect: land.length ? `A land bomber counts ${pc(navalSkill(land[0].f))} of a carrier aircraft against ships${deckB.length ? `: the strike as a whole counts ${pc(out.naval)}` : ''}` : undefined });
+    }
+    if (out.torp !== undefined) {
+      const t = Math.round(out.torp * 100);
+      out.lines.push({ label: 'Strike aircraft', value: `${100 - t}% dive bombers, ${t}% torpedo planes`, effect: out.torp >= 0.5 ? 'Torpedoes do the most harm to battleships, but the low, slow run in costs more to the ships\' guns' : 'Dive bombers are surest against carriers and light ships, and lose fewer to the guns' });
     }
     if (out.again < 1) out.lines.push({ label: 'Already struck', value: 'The fleet has been struck this month', effect: `It is scattered and warned: this strike counts ${pc(out.again)}` });
     if (out.ships.some((x) => atSea(x) && fleetKnown(g, x, nat) !== 'exact')) out.lines.push({ label: 'Search', value: 'The ships are known only from a report', effect: `About ${pc(CARRIERS.strike.report)} of the strike finds them. Identify them first, by a search of that sea or by contact, for a full strike` });
