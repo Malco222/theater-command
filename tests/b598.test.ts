@@ -518,17 +518,21 @@ describe('(4) the names and the carriers are the rows, at every stop', () => {
     }
   });
 
-  it('a history campaign, and a player\'s own navy, keep the rows as they were', () => {
+  it('a history campaign, and a player\'s own navy, keep the rows as they were, but for a ship coming onto the chart', () => {
     for (const g of [createGame(1, null), wide(1, 'UK')]) {
+      const player = g.human === 'UK';
       const med = named(g, 'Mediterranean Fleet')!, home = named(g, 'Home Fleet')!;
       for (let turn = 2; turn <= 14; turn++) {
         g.turn = turn;
         navalUpkeep(g, 'UK');
-        // The Mediterranean keeps its first-day carrier throughout, with no news of the Glorious or the Eagle.
-        expect(med.ships.cv, `turn ${turn}`).toBe(1);
+        // The Mediterranean keeps its first-day carrier throughout, with no news of the Glorious. A player's is joined
+        // by the Eagle in May 1940: she comes from off the chart, where he cannot order her (the director's note of
+        // 15:52Z on rider b639).
+        expect(med.ships.cv, `turn ${turn}`).toBe(player && turn >= 9 ? 2 : 1);
       }
-      expect([med.ships.cv, home.ships.cv]).toEqual([1, 3]);
-      expect(g.headlines.some((h) => /Glorious|Eagle/.test(h.text))).toBe(false);
+      expect([med.ships.cv, home.ships.cv]).toEqual([player ? 2 : 1, 3]);
+      expect(g.headlines.some((h) => /Glorious/.test(h.text))).toBe(false);
+      expect(g.headlines.filter((h) => /Eagle/.test(h.text)).map((h) => [h.turn, h.text])).toEqual(player ? [[9, 'The carrier Eagle joins the Mediterranean Fleet.']] : []);
     }
   });
 });
@@ -569,6 +573,9 @@ describe('(5) the carriers\' rows at stops 1 and 2: each carrier in and out of t
   const LOOSE = [[1, 2, 1, -1], [2, 2, 0, -1], [9, 2, 1, -1], [10, 3, 1, -1], [11, 3, 1, 1], [16, 3, 2, 1], [21, 4, 2, 1]];
   // A history campaign and the player's own Britain: no row of the dial at all.
   const HISTORY = [[1, 2, 1, -1], [10, 3, 1, -1], [11, 3, 1, 1], [16, 3, 2, 1], [21, 4, 2, 1]];
+  // A player's own Britain at stops 1 and 2: the history campaign's, and the Eagle from off the chart in May 1940 (the
+  // director's note of 15:52Z on rider b639); her leaving in May 1941 is his to make or not.
+  const PLAYER = [[1, 2, 1, -1], [9, 2, 2, -1], [10, 3, 2, -1], [11, 3, 2, 1], [16, 3, 3, 1], [21, 4, 3, 1]];
 
   it('are in the data: one row each way, every move from a fleet on the chart, every key of its own, no record\'s sinking', () => {
     const rows = NAVY.arrivals.filter((r) => r[1] === 'UK' && r[5]?.stops);
@@ -738,9 +745,11 @@ describe('(5) the carriers\' rows at stops 1 and 2: each carrier in and out of t
       expect(g.headlines.some((h) => /Ark Royal|Furious|Victorious and|leaves the Home Fleet|joins Force H/.test(h.text))).toBe(false);
     }
     for (const g of [createGame(1, null), wide(1, 'UK'), wide(2, 'UK')]) {
-      expect(carriers(g)).toEqual(months(HISTORY));
+      const player = g.human === 'UK';
+      expect(carriers(g)).toEqual(months(player ? PLAYER : HISTORY));
       expect(news(g, 16)).toContain('The carrier Formidable joins the Mediterranean Fleet.');
-      expect(g.headlines.some((h) => /Glorious|Eagle|Ark Royal|Furious|leaves/.test(h.text))).toBe(false);
+      expect(g.headlines.some((h) => /Glorious|Ark Royal|Furious|leaves/.test(h.text))).toBe(false);
+      expect(g.headlines.filter((h) => /Eagle/.test(h.text)).map((h) => h.turn)).toEqual(player ? [9] : []);
     }
   });
 });
@@ -825,7 +834,8 @@ describe('(6) Force H\'s first months at stops 1 and 2: June 1940, with the hist
 
   it('at stops 3 to 5, in a history campaign and under a player, forms in July 1940 with its row\'s ships, as before', () => {
     for (const g of [wide(3), wide(4), wide(5), createGame(1, null), wide(1, 'UK'), wide(2, 'UK')]) {
-      expect(shape(strength(g))).toEqual(ROW);
+      // (A player's Mediterranean Fleet has the Eagle from off the chart besides: (4).)
+      expect(shape(strength(g))).toEqual(g.human === 'UK' ? ROW.map(([h, m, f]) => [h, [m![0], m![1] + 1, m![2]], f]) : ROW);
       expect(news(g, 11)).toContain('Force H forms at Gibraltar.');
       expect(g.headlines.some((h) => /Hood|Valiant|Renown|Enterprise|destroyers leave Force H/.test(h.text))).toBe(false);
     }
