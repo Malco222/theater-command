@@ -148,6 +148,9 @@ namespace TheaterFx
 		Rgb Edge;
 		double EdgeK = 0.0;
 		double Nearer = 0.0; // (sorted as if this many metres nearer the eye: a fire's white heart drawn over its own clumps)
+		// (dust that may hide a unit: from a high steep eye it thins near the units, so a player always finds his own.
+		// 1: a vehicle's trail, near any vehicle laying dust; 2: a gun's blast veil, near Origin, the gun)
+		uint8_t Thin = 0;
 	};
 
 	class Battle
@@ -495,6 +498,12 @@ namespace TheaterFx
 		// never drawn, holds no place: counted, far debris shut off the cases, gun smoke and showers beside the eye. The
 		// pre-check, 06:42Z)
 		size_t InSight = 0, HeldAtDraw = 0;
+		// (the steep high eye's thinning of dust near the units, worked out once a Draw: how much, and where the dust
+		// sockets are now; read at Setup from dust.vehicles.from_above)
+		double SteepThin = 0.0;
+		std::vector<Vec> NearSockets;
+		Span ThinAbove{ 15.0, 25.0 }, ThinSteep{ 0.3, 0.5 }, ThinNear{ 6.0, 12.0 };
+		double ThinKeep = 0.25;
 		size_t RoomAsked() const { return InSight + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + TwinBits; }
 		std::vector<Bit> Roots; // (each frame: the young end of each trail, from its point back to its newest hanging puff)
 

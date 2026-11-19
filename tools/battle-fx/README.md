@@ -104,8 +104,9 @@ raises dust, and that dust hides things.
 
 - Vehicles (`dust.vehicles`): `VehicleDust` every frame for each dust socket lays a puff every `spacing_m` along its
   path (no more than `most_a_second`). Pale fine dust: the ground's colour where it is thrown up (`low`; sand the
-  stony gravel 170,140,106) going paler as it climbs (`high`; sand 214,188,138; other grounds their `paint.dust`, and
-  `colour_from_ground` times it in the air). Low and long, drifting on the one wind (`SetWind`), lingering: dense for
+  stony gravel 170,140,106) losing colour as it climbs (`high`; sand a pale buff grey 210,196,170, so the top of the
+  cloud reads as haze in the air, about saturation 0.2; other grounds their `paint.dust`, and `colour_from_ground`
+  times it in the air). Low and long, drifting on the one wind (`SetWind`), lingering: dense for
   `haze_by_s`, then a thin haze to its end. Taller and longer at speed: between `least_mps` and `full_mps` the puffs
   grow from `r1_m` to `r1_fast_m`, `flatten` from 0.6 to 0.9 and `life_s` to `life_fast_s`. Half are low dense skirts
   (`low_skirt`), thick from the ground to a vehicle's height, under the soft tall billows. Tracks throw `tracked` times
@@ -120,9 +121,16 @@ raises dust, and that dust hides things.
   its line: the lead in the clear, the three behind it 0 to 16% visible through its dust (the same with the dust blown
   across or toward the eye). A towed anti-tank gun seen 45 m down its line of fire: 1 to 8% visible for 1.5 s after a
   shot, 24% at 2 s, 85% at 5 s.
-- The preview: `./fxpreview recipe.txt out drive sand 0,60 960x540 eye` (shots `eye`, `side`, `high`, `gun`;
+- The preview: `./fxpreview recipe.txt out drive sand 0,60 960x540 eye` (shots `eye`, `side`, `high`, `top` (the
+  overview, `FX_DIST`, `FX_DOWN`), `gun`;
   `FX_SPEED`, `FX_GAP`, `FX_VEHICLES`, `FX_WHEELS=1`, `FX_FIRE=1`, `FX_EVERY`, `FX_AHEAD`, `FX_OFF`, `FX_WIND_X`,
   `FX_WIND_Y`). Each frame prints how much of each vehicle, or the gun, still shows through the dust in front of it.
+- From above (`from_above`, art director 06:48Z): a player always finds his own units. With the eye more than
+  `above_m` up (15 to 25) and looking steeply down (`steep`, the sine of its look down, 0.3 to 0.5), the dust within
+  `near_m` (8 to 14) of a vehicle laying dust, or of the gun a veil came from, thins to `keep` of itself. The long
+  trail behind a column stays: from above it is how a column is spotted. Ground and follow eyes keep the full veil.
+  Measured: the overview 150 m off at 50 degrees, 400 m at 60, and 80 m at 40 show every tank 66 to 84% (from the
+  man's eye still 2, 0, 0%). Unit markers and banners are drawn over the effects, never under.
 - The bleached, hazy horizon of a desert day is the grade's, not the kit's.
 
 ## Oil fires at sea

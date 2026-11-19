@@ -174,6 +174,10 @@ namespace TheaterFx
 		AirRows.clear();
 		TrailRows.clear();
 		DustRows.clear();
+		ThinAbove = Range("dust.vehicles.from_above.above_m", 15.0, 25.0);
+		ThinSteep = Range("dust.vehicles.from_above.steep", 0.3, 0.5);
+		ThinNear = Range("dust.vehicles.from_above.near_m", 6.0, 12.0);
+		ThinKeep = Clamp01(Num("dust.vehicles.from_above.keep", 0.25));
 		Sides = std::max(6, std::min(24, static_cast<int>(Num("game.puff_sides", 16.0))));
 		PointsPerPuff = 2 * Sides + 1;
 		std::vector<double>* Tables[8] = { &RingCos, &RingSin, &Ring2Cos, &Ring2Sin, &Ring3Cos, &Ring3Sin, &Ring5Cos, &Ring5Sin };
@@ -1622,6 +1626,8 @@ namespace TheaterFx
 					B.Rough = 0.3;
 					B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 					B.Turn = D.U(0.0, 2.0 * Pi);
+					B.Thin = 2;
+					B.Origin = At - FwFlat * 1.5; // (the gun's body, behind its muzzle)
 					if (I % 2 == 0)
 					{
 						// (every other one a low dense skirt that stays on the ground, so the gun's foot is hidden too while
@@ -1770,6 +1776,7 @@ namespace TheaterFx
 			B.Rough = 0.25;
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.Thin = 1;
 			if (D.U() < Row.LowShare)
 			{
 				// (a low dense skirt along the ground, wider than the billows: the trail's body, thick from the ground to
@@ -4097,6 +4104,30 @@ namespace TheaterFx
 		{
 			return 0;
 		}
+		if (B.Thin != 0 && SteepThin > 0.0)
+		{
+			// (from a high steep eye, dust near a unit thins: how near, its edge counted, to the nearest dust socket or its gun)
+			double Near2 = 1e18;
+			if (B.Thin == 2)
+			{
+				Near2 = (P.X - B.Origin.X) * (P.X - B.Origin.X) + (P.Y - B.Origin.Y) * (P.Y - B.Origin.Y);
+			}
+			else
+			{
+				for (const Vec& Q : NearSockets)
+				{
+					Near2 = std::min(Near2, (P.X - Q.X) * (P.X - Q.X) + (P.Y - Q.Y) * (P.Y - Q.Y));
+				}
+			}
+			const double Near = std::sqrt(Near2) - 0.5 * Rad;
+			const double T = Clamp01((Near - ThinNear.A) / std::max(ThinNear.B - ThinNear.A, 1e-6));
+			const double Close = 1.0 - T * T * (3.0 - 2.0 * T);
+			A *= 1.0 - SteepThin * Close * (1.0 - ThinKeep);
+			if (A < 0.004)
+			{
+				return 0;
+			}
+		}
 		double Outer = 1.0; // (how near the puff is to its cloud's edge: only a cloud's own fringe lets the sun through)
 		Vec Outward; // (and which way on the screen is out of its cloud)
 		if (B.CloudShade > 0.0 && !B.bLight)
@@ -4511,6 +4542,24 @@ namespace TheaterFx
 		Run(Now);
 		Prune(Now);
 		++FrameNo;
+		// (art director 06:48Z: on the overview, or any eye above about 25 m looking steeply down, the dust within about
+		// 10 m of each vehicle or gun thins so each shows at least half; the long trail behind stays, a column's tell. A
+		// ground or follow eye keeps the full veil)
+		{
+			auto Smooth = [](double X, const Span& R) { const double T = Clamp01((X - R.A) / std::max(R.B - R.A, 1e-6)); return T * T * (3.0 - 2.0 * T); };
+			SteepThin = Smooth(Eye.Eye.Z - Height(Eye.Eye.X, Eye.Eye.Y), ThinAbove) * Smooth(-Eye.Forward.Z, ThinSteep);
+			NearSockets.clear();
+			if (SteepThin > 0.0)
+			{
+				for (const Dusting& Du : Dusts)
+				{
+					if (Now - Du.Last < 1.0)
+					{
+						NearSockets.push_back(Du.At);
+					}
+				}
+			}
+		}
 		for (Flash& F : Flashes)
 		{
 			if (F.FirstFrame < 0 && Now > F.Born)

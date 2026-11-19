@@ -8,12 +8,13 @@
 //     (size "mg": a machine gun's burst from 30 m away into the ground there, in place of a shell; FX_MG_VIEW=side|behind)
 //   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|close|far|target|hit|trail|wake|map|fall]
 //   ./fxpreview /tmp/recipe.txt <out folder> oil <sunk|burning|horizon> <frames> [WxH]
-//   ./fxpreview /tmp/recipe.txt <out folder> drive <sand|earth|...> <frames> [WxH] [eye|side|high|gun]
+//   ./fxpreview /tmp/recipe.txt <out folder> drive <sand|earth|...> <frames> [WxH] [eye|side|high|top|gun]
 //
 // The drive shot (the desert dust): a column of FX_VEHICLES (4) tanks, FX_GAP m (30) apart, driving along +X at
 // FX_SPEED m/s (10) on a stony desert ("sand"), FX_RUN s (12) before the first frame, each laying dust from its two
 // rear sockets (FX_WHEELS=1: wheeled). "eye" is a man's eye, 1.7 m up, FX_AHEAD m (70) ahead of the lead and FX_OFF m
-// (10) off the line; "side" FX_OFF m (70) abeam; "high" from 30 m up. FX_FIRE=1: the lead's gun fires at 0 s (again
+// (10) off the line; "side" FX_OFF m (70) abeam; "high" from 30 m up; "top" the overview, FX_DIST m (150) off at FX_DOWN
+// degrees (50) down. FX_FIRE=1: the lead's gun fires at 0 s (again
 // every FX_EVERY s). "gun": a towed anti-tank gun firing along +X at 0 s, seen at a man's eye FX_AHEAD m (45) down its
 // line of fire and FX_OFF m (6) off it. The wind is FX_WIND_X, FX_WIND_Y m/s (1.6, 0.4, the game's own). Each frame prints how much of
 // each vehicle (or the gun) still shows through the dust in front of it.
@@ -975,6 +976,13 @@ namespace
 		{
 			Cam.Eye = Ground_(40.0, -40.0) + Vec(0.0, 0.0, 30.0);
 			Look = Ground_(-Gap * 1.5, 0.0);
+		}
+		else if (Shot == "top")
+		{
+			// (the overview: FX_DIST m (150) off the column's middle, looking down at FX_DOWN degrees (50))
+			const double Dist = EnvNum("FX_DIST", 150.0), Down = EnvNum("FX_DOWN", 50.0) * 3.14159265 / 180.0;
+			Look = Ground_(-Gap * 1.5, 0.0);
+			Cam.Eye = Look + Vec(0.35, -1.0, 0.0).Unit() * (Dist * std::cos(Down)) + Vec(0.0, 0.0, Dist * std::sin(Down));
 		}
 		else
 		{

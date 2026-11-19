@@ -1836,13 +1836,13 @@
    },
    "high": {
     "sand": [
-     214,
-     188,
-     138
+     210,
+     196,
+     170
     ]
    },
    "colour_from_ground": 1.25,
-   "_colour": "Sand: the stony gravel 170,140,106 where it is thrown up, the pale sand 214,188,138 in the air (Mediterranean 03:35Z, art director 06:19Z). Other grounds: their paint.dust, and colour_from_ground times it in the air.",
+   "_colour": "Sand: the stony gravel 170,140,106 where it is thrown up (Mediterranean 03:35Z), losing colour as it climbs to a pale buff grey 210,196,170 (sat 0.2, art director 06:48Z) so the top reads as haze in the air, never a second layer of sand. Other grounds: their paint.dust, and colour_from_ground times it in the air.",
    "least_mps": 1.0,
    "full_mps": 12,
    "spacing_m": 2.5,
@@ -1893,6 +1893,22 @@
     "flatten": 0.35,
     "wide": 1.25,
     "thick": 1.2
+   },
+   "from_above": {
+    "_how": "Art director 06:48Z: a player always finds his own units from above. On the overview, or any eye more than above_m up looking steeply down (the sine of its look down past steep), the dust within near_m of a vehicle laying dust, or of a gun its veil came from, thins to keep of itself, so each unit shows at least half; the long trail behind stays, a column's tell. Ground and follow eyes keep the full veil. No effect covers a unit's marker or banner: those are drawn over the effects.",
+    "above_m": [
+     15,
+     25
+    ],
+    "steep": [
+     0.3,
+     0.5
+    ],
+    "near_m": [
+     8,
+     14
+    ],
+    "keep": 0.1
    }
   },
   "men_going_down": {
