@@ -180,6 +180,9 @@ namespace TheaterFx
 		// (dust that may hide a unit: from a high steep eye it thins near the units, so a player always finds his own.
 		// 1: a vehicle's trail, near any vehicle laying dust; 2: a gun's blast veil, near Origin, the gun)
 		uint8_t Thin = 0;
+		// (a lump of dust or smoke that rests on the ground, over 0: its middle is never lower than this share of its own
+		// radius above the ground under it, wherever it drifts, so the ground never cuts it along a straight line)
+		double Rest = 0.0;
 	};
 
 	class Battle
@@ -474,7 +477,7 @@ namespace TheaterFx
 			double BaseEvery = 0.0; // (the low black smoke rolling off the whole slick before it joins the column; 0: none)
 			double BaseFlat = 1.0; // (under 1: that roll hugs the water, this high for its width)
 			Span PallLife, PallR1, PallWindage, PallAlpha;
-			double PallEvery = 0.0, PallStretch = 1.0, PallStretchBy = 0.0, PallHold = 0.15, PallDrift = 0.0, PallRough = 0.0; Span PallLevel{ 1.0, 1.0 }; // (the long flat pall run out down the wind from the column's top; 0: none)
+			double PallEvery = 0.0, PallStretch = 1.0, PallStretchBy = 0.0, PallHold = 0.15, PallDrift = 0.0, PallRough = 0.0, PallRest = 0.0; Span PallLevel{ 1.0, 1.0 }; // (the long flat pall run out down the wind from the column's top; 0: none)
 			double SlickLong = 0.0, SlickWide = 0.0; // (over 0: the burning slick an oval, these shares of Reach long and wide, its heads all over it)
 			double FlameOdds = 1.0, FlamePoint = 0.9; // (flame_point: how sharp each tongue's tip, 1 a spike; each head's chance of a tongue each flame_every_s: a broken line of low flames)
 			double SunSide = 0.0; // (its sunward side lit toward Lit, so the column reads round)
@@ -570,6 +573,9 @@ namespace TheaterFx
 		double CaseHoldPx = 0.0, CaseFullPx = 0.6, CaseGonePx = 0.2, CaseFarGlint = 1.0, CaseFarShade = 1.0, CaseFarShine = 0.0, CaseNearer = 0.0;
 		double EdgeK = 0.0;
 		double SkyFill = 0.25, SunThrough = 1.5, SunThroughPow = 3.0;
+		// (see-through smoke and dust thins out as it comes up to the eye, game.near_eye_fade_m: nothing of a piece whose
+		// near edge is within NearGone metres of the eye, all of it from NearWhole on. 0, 0: no such fade)
+		double NearGone = 0.0, NearWhole = 0.0;
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
 		double ClodShade = 2.5;

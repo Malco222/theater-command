@@ -172,8 +172,9 @@ public:
 	static bool WantsTest();
 	/** A barrage that plays again every 24 seconds round Centre (a world point on the ground), every size and kind:
 	 * shells of each calibre, a bomb, a hit on armour, a skip, a tank gun and a machine gun firing tracer, a wreck
-	 * burning. For pictures taken by Tools/take_pictures.sh. */
-	void RunTest(const FVector& Centre);
+	 * burning. GroundKind: the kit's ground under Centre (earth, sand, snow, mud, woods, town), which the tank gun's and
+	 * the machine gun's dust take; the shells keep their own test grounds. For pictures taken by Tools/take_pictures.sh. */
+	void RunTest(const FVector& Centre, const FString& GroundKind = TEXT("earth"));
 
 private:
 	FBattleFxRecipe Book;
@@ -207,6 +208,7 @@ private:
 	};
 	TArray<FTestShot> TestShots;
 	FVector TestCentre = FVector::ZeroVector;
+	FString TestGround = TEXT("earth");
 	double TestStart = -1.0;
 
 	static double GroundHeight(void* Context, double X, double Y);

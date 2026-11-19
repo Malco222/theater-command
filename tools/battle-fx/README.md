@@ -229,7 +229,7 @@ ruling of 16:30Z: the game-wide curve and bloom stay as they are, and the kit's 
   saves each frame's light beside its picture (`.ppm.f32`, three floats a pixel, unclipped) for that.
 - `picture.lit_gain` is now 4, so the flash's root (`muzzle.hot.root` 255,233,158 at `over` 4) lands a warm white,
   253,250,234, over a spot 5 to 9 px across on a 1600 still, where it was cream at 235,231,216. `muzzle.hot.halo`
-  (0.08) and `halo_m` (0.028): a soft card of the root's colour round it, in place of bloom. `yellow_over` (1.175)
+  (0.08 then, 0 since build 1746) and `halo_m` (0.028): a soft card of the root's colour round it, in place of bloom. `yellow_over` (1.175)
   keeps the yellow as it was. `muzzle.hot.orange` 236,131,71 lands 234,141,41.
 - `tracer.day_core` 255,241,151 at `day_over` 2.72 lands the core on 245,240,210 and over.
 - `mg_smoke.colour` 228,232,238 and `puff_share` (0.63): the wisp reaches the whole 0.25 where its puffs overlap.
@@ -237,6 +237,72 @@ ruling of 16:30Z: the game-wide curve and bloom stay as they are, and the kit's 
   steps; through the game's curve a howitzer burst, a burning fall and an oil fire moved by 2 to 5 levels in their
   darks, 12 at most. Should dark smoke ever band in the game, the cure is in the material (bytes written with a
   gamma and squared there), not a lower gain.
+
+## A gun's smoke and dust in lumps (build 1746)
+
+In build 1746 the test's tank gun, 4 m beside the machine gun's riflemen, laid an even beige gauze over the whole west
+view: 17 big soft puffs of one grey-brown along the bore, 13 m from the eye. Art director 17:52Z: a heavy gun blinding
+the men beside it is right, but it has to read as dust and not as fog. Lumpy, heaviest low and near the muzzle,
+thinning upward, the thick part clear in 1.5 to 2 s with low tufts drifting longer, and faded out near the camera.
+
+- `muzzle.billows` (with `low` in the recipe, and a gun of `flame_m` 0.5 or more) builds the cloud in three layers in
+  place of the old smoke. **Low**: mounds of the ground's own dust lying on the ground along the first `reach` of the
+  dust ring, `low_alpha` dense; `tuft_share` of them settle to `haze_alpha` and drift for `tuft_s`. **Mid**: lumps of
+  dust mixed `smoke_mix` toward the gun's smoke, `mid_up_m` above the ground, thinner and shorter-lived with height
+  (`pale_up`). **Top**: the gun's smoke thrown along the bore in lumps, thinner the farther and the higher. Each lump
+  has a firm heart and a rough outline (`heart`, `inner`, `rough`) and is lit as part of one cloud (`shade`), so there
+  are thick parts, thin parts and gaps. The thick part is gone in `clear_s` and `top_s`. The low dust ring and the
+  desert veil (`muzzle.veil`) are as they were. Counts follow the gun's size and are capped; its own dice, so a recipe
+  without it draws as before, piece for piece.
+- `Bit::Rest`: a lump that rests on the ground never has its middle lower than that share of its radius above the
+  ground under it, so the ground never cuts it along a straight line.
+- `game.near_eye_fade_m` (2, 8): see-through smoke and dust thins out as its near edge comes within 8 m of the eye
+  and is gone at 2 m, so it never fills the whole frame evenly. Lights, thrown pieces, ribbons, smears and the kept
+  columns (oil fires) are left alone. At the battle camera a burst's own puffs stay farther off than that (a 105's
+  nearest edge 8.4 m), so the bursts look as they did; it is drifted dust and smoke over the eye that goes.
+- `muzzle.hot.halo` is 0 (art director 18:05Z): the game's bloom gives the glow.
+- The test barrage (`BattleEffects.cpp`) fires its tank gun at 20.0 s, after the machine gun's bursts at 15.5 and
+  18.0 s, with a third burst at 20.5 s that shows the men in the gun's dust.
+- Wild numbers: `dust_ring_m` is read to 30 m at most and the old smoke's count to a 4 m flame, so a recipe with a
+  number that is not one cannot ask for pieces without end.
+
+Preview: `FX_CREW=1` stands two riflemen at the machine gun; `FX_TEST_TANK=0.5` fires the test's tank gun that long
+before the burst, with the test's wind (`FX_TANK_UP=1` lifts its muzzle a metre, the game's ground there;
+`FX_TANK_ROW` another gun's row); `FX_GAME_FROM=208` is the builder's west view. `FX_BARRAGE=5` (any shell's shot) lands
+that many in a row across the view, `FX_BARRAGE_STEP` m and `FX_BARRAGE_GAP` s apart; with the wind (`FX_WIND_X`,
+`FX_WIND_Y`) toward the eye, the eye stands downwind in their dust.
+
+## Lighter burst dirt, smoke that stands on the sea, the desert veil in lumps (after build 1746)
+
+The art director's round of 18:28Z, on build 1746's stills.
+
+- **A burst that reads as earth.** From 60 m, on its shadow side, a 105's cloud read as an ink blot (smoke 36,30,24).
+  It was not `lit_gain`'s steps (the crops held 40 to 48 levels, and the kit gave the same dark means at gain 1.5):
+  it was the paints sinking through the grade. Earth's, mud's and woods' `paint.soil` and `paint.smoke` and the
+  cloud's top (`burst.smoke.colour_top`) are now written values, as the clods are, aimed with `game_curve.py write`
+  to show as they were painted; `paint.heavy` stays, so a dark heart sits inside lighter brown dust. Through the
+  game's curve the cloud's dense half on the shadow side goes from 44,37,28 to 61,53,44 at 2 s and from 58,48,35 to
+  77,67,55 at 6 s. The burst-black share at 0.4 s (under luma 60, the art director's 15% rule), through the curve:
+  earth 41% (was 46%), woods 38%, mud 38%, sand 17%. Snow keeps its old, darker soil, smoke and charcoal
+  (`grounds.snow.smoke_top`), by the art director's word: black earth thrown over white snow is the strongest picture
+  we have (12% there, as it was).
+- **Smoke that stands on the sea.** `fire.smoke_rest` (1): a plain fire's smoke (`Burn`) rests on the ground or sea
+  under it (`Bit::Rest`). Its puffs grow to two to four times the fire's width while climbing only 20 to 30 m, so a
+  40 m ship fire's stood half under the sea, and from the air the sea cut each along a straight level line (Pearl
+  Harbor, build 1746). A small fire's smoke already rides higher than it is wide and does not move; a crater's
+  smoulder lifts a few centimetres at its foot (one level over a hundred pixels).
+  `oil_fires.<kind>.pall_rest` (1.3): the same for the oil fire's pall, should a puff wander down.
+- **The desert veil in lumps.** `muzzle.veil.lumps` (1): the veil's ten upright sheets become as many lumps, each
+  `lump_r` of a sheet's radius across and `lump_thick` of its thickness, with the billows' firm heart and rough
+  outline; every other one a mound on the ground, the rest up to `lump_up_m` over it and thinner the higher.
+  `lump_tuft_share` of them thin to the haze and linger as the veil did. Twice the count and size made a pale wash
+  over the lower frame.
+- **The test's ground.** `RunTest(Centre, GroundKind)`: the test barrage's tank gun and machine gun raise the dust of
+  the ground they stand on (pale on Idaho's dry plain, "sand"); the shells keep their own test grounds.
+
+Each is behind its recipe key: the last recipe draws as before on this code, frame for frame. Preview:
+`FX_BURN=40 FX_DIST=1462 FX_EYE_H=651 FX_LOOK_H=0 ./fxpreview recipe.txt out oil sunk 450 1440x893` is a 40 m plain
+fire on the sea from the air battle's eye (`FX_BURN_UP` m its base over the sea).
 
 ## Oil fires at sea
 
