@@ -106,6 +106,15 @@ pointer's province changes, the map unfolds its crowds and would stand its piece
 the battle is. So every frame the scene puts away any piece that came back. On CONTINUE the map stands its pieces
 again itself, with the crowds folded.
 
+**The battle look (the 3D builder's, `Campaign/CampaignBattleLook.h/.cpp`).** The scene calls it in five places: the
+art director's grade on the scene's own camera (`Grade`, when the eye is made); the air haze, which starts 15 km out
+at twice the scene's density (`AirHaze`, after the scene sets its haze, whose numbers it scales); a sky behind the
+battle lit by the battle's sun, with the table's other lamps kept out of it (`AirSkyBegin`, once the key lamp faces
+the sun); and `AirSkyEnd` on CONTINUE, after the hazes are put back. The two files are the builder's, byte for byte as
+built in its 1732. This branch carries a copy only so that it builds alone; on any difference, the builder's own copy
+wins. Its switches (`-TheaterBattleGrade=`, `-TheaterAirHaze=`, `-TheaterAirSky=`, and `-TheaterNoBattleGrade` and
+`-TheaterNoAirSky` to turn them off) are described in the header.
+
 **The sky.** Each battle carries its day (`sky.place.cloud`, the air thread's `sky.ts`): a cloud deck or scattered
 cumulus, with one cloud base and one top. Pearl Harbor and Midway are cumulus days, as history had them: Oahu's
 base 940 m and tops 2,060 m, the Mobile Force's 510 m and 1,820 m. A ticket from a rules bundle without the sky draws

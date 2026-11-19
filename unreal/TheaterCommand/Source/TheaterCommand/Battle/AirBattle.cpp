@@ -6,6 +6,7 @@
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Campaign/ArmyPiece.h"
+#include "Campaign/CampaignBattleLook.h"
 #include "Campaign/CampaignEnvironment.h"
 #include "Campaign/CampaignHUD.h"
 #include "Campaign/CampaignMapActor.h"
@@ -487,6 +488,8 @@ bool AAirBattle::Open(const FString& Why)
 		Eye->GetCameraComponent()->bConstrainAspectRatio = false;
 		Eye->GetCameraComponent()->PostProcessSettings.bOverride_MotionBlurAmount = true;
 		Eye->GetCameraComponent()->PostProcessSettings.MotionBlurAmount = 0.0f;
+		// (the 3D builder, 19 November 2026: the art director's battle grade, on battle cameras only)
+		BattleLook::Grade(Eye->GetCameraComponent()->PostProcessSettings);
 	}
 	if (APlayerController* Controller = Here->GetFirstPlayerController())
 	{
@@ -750,12 +753,15 @@ void AAirBattle::HideTheTable()
 				Kept.Colour = AirParts::HazeColour(Fog, FLinearColor(0.80f, 0.84f, 0.88f));
 				// (thick low down and thin high up: looking down from bomber height the sea stays dark under the bright
 				// cloud floor, the art director's 19 November 12:59Z; the horizon and the low air far off soft. The sky's
-				// pictures, Tools/air_show/air_sky_picture.cpp, take the same numbers)
+				// pictures, Tools/air_show/air_sky_picture.cpp, take the same numbers; in the game the battle look then
+				// sets its own haze from these, CampaignBattleLook.cpp's AirHaze, which the pictures do not take)
 				Fog->SetStartDistance(2000.0f * static_cast<float>(UnitsPerMetre));
 				Fog->SetFogDensity(0.00045f);
 				Fog->SetFogHeightFalloff(0.006f);
 				Fog->SetFogMaxOpacity(0.8f);
 				Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.66f, 0.78f));
+				// (the 3D builder, 19 November 2026: the art director's ruling on the haze, thin under the eye)
+				BattleLook::AirHaze(*Fog, UnitsPerMetre);
 			}
 			// The lamps: the key turned to the battle's sun, every lamp at its day strength and white (a battle opened
 			// in the table's night kept the moon's), the sky's light the day's.
@@ -790,6 +796,8 @@ void AAirBattle::HideTheTable()
 				BattleKey = Key;
 				const FVector Sun = Stage && Stage->IsRaised() ? Stage->TowardSun() : FRotator(30.0, 150.0, 0.0).Vector();
 				Key->SetWorldRotation((-Sun).Rotation());
+				// (the 3D builder, 19 November 2026: a sky behind the battle, lit by its sun; taken away in ShowTheTable)
+				BattleLook::AirSkyBegin(*this, Key);
 			}
 			TArray<USkyLightComponent*> Skies;
 			Environment->GetComponents(Skies);
@@ -893,6 +901,7 @@ void AAirBattle::ShowTheTable()
 			Fog->SetFogInscatteringColor(Kept.Colour);
 		}
 	}
+	BattleLook::AirSkyEnd(); // (the 3D builder, 19 November 2026: the battle's sky goes with the battle)
 	for (const FKeptLamp& Kept : KeptLamps)
 	{
 		if (UDirectionalLightComponent* Light = Kept.Lamp.Get())
