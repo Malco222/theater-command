@@ -1784,6 +1784,12 @@
    "pall_stretch": 2.2,
    "pall_stretch_by_s": 90,
    "pall_hold": 0.4,
+   "pall_level": [
+    0.75,
+    1.05
+   ],
+   "pall_drift_mps": 0.3,
+   "pall_rough": 0.5,
    "sun_side": 2.2,
    "lit_colour": [
     118,
@@ -1888,6 +1894,12 @@
    "pall_stretch": 2.2,
    "pall_stretch_by_s": 80,
    "pall_hold": 0.35,
+   "pall_level": [
+    0.75,
+    1.05
+   ],
+   "pall_drift_mps": 0.25,
+   "pall_rough": 0.5,
    "sun_side": 1.5,
    "lit_colour": [
     140,

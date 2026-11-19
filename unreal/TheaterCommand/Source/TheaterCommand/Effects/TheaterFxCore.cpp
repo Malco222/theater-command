@@ -2639,6 +2639,9 @@ namespace TheaterFx
 		R.PallStretch = std::max(1.0, Num(P + "pall_stretch", 1.0));
 		R.PallStretchBy = Num(P + "pall_stretch_by_s", 0.0);
 		R.PallHold = Num(P + "pall_hold", 0.15);
+		R.PallLevel = Range(P + "pall_level", 1.0, 1.0);
+		R.PallDrift = std::max(0.0, Num(P + "pall_drift_mps", 0.0));
+		R.PallRough = std::max(0.0, Num(P + "pall_rough", 0.0));
 		R.SlickLong = Num(P + "slick_long", 0.0);
 		R.SlickWide = Num(P + "slick_wide", 0.0);
 		R.FlameOdds = Clamp01(Num(P + "flame_odds", 1.0));
@@ -2858,6 +2861,21 @@ namespace TheaterFx
 			B.Col2 = R.Col2 * D.U(0.95, 1.15);
 			B.SunSide = R.SunSide * 0.6; // (a thin sheet aloft: lit, but less than the column's thick sunward side)
 			B.Centre = S.At + ZUp * (0.5 * (R.Burst.A + R.Burst.B) * Big / std::max(R.BurstDrag, 1e-3)); // (the sheet's own height: where the push gives out)
+			// (art director 04:48Z: never a bent pipe. Each pall puff levels at its own share of the push, so the elbow is
+			// round and the sheet thick; and wanders slowly up or down, so it fans out down the wind and breaks into loose
+			// lumps as it thins)
+			if (R.PallLevel.A != 1.0 || R.PallLevel.B != 1.0)
+			{
+				B.Vel.Z *= R.PallLevel.Pick(D);
+			}
+			if (R.PallDrift > 0.0)
+			{
+				B.Rise = D.Bell() * R.PallDrift;
+			}
+			if (R.PallRough > 0.0)
+			{
+				B.Rough = R.PallRough;
+			}
 		}
 		Bits.push_back(B);
 	}

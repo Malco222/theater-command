@@ -102,7 +102,7 @@ Blasts->OilStop(Zone.Id); // only if it should go out before the fight ends
   broken line of low ragged flames along it (`flame_odds`, `flame_point`), a low dark roll as wide as the slick hugging
   the water (`base_flat`), and one fat black column standing up off it, about 350 m tall for a 100 m slick. Its top
   never closes: from where the push gives out it runs nearly level down the wind as a widening sheet two to three
-  times the column's height long, thinning to nothing (`pall_*`). `burning`: where a ship on fire left the line, a
+  times the column's height long, fanning out and breaking into loose lumps as it thins (`pall_*`; `pall_level` rounds the elbow). `burning`: where a ship on fire left the line, a
   narrower, greyer column on a small grey roll; give WorldAt her deck's height to put the flames on her.
 - The column reads round: lit as a round column by where each point sits across it on the screen, its width measured
   from its own puffs each frame. Sunward side brown-grey (`lit_colour`, `sun_side`), far side near black, a high sun
