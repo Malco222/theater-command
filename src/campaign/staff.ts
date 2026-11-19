@@ -115,6 +115,8 @@ export const isOpen = (g: Game): boolean => g.flags.open === 1;
  * attack on Poland is already under way. Later in the war each staff finds its fronts as history left them.
  */
 export function startOpen(g: Game, wide = true): Game {
+  // (Ruling 232, rider b606: the garrisons that are the ruling's own join the roster before anything is counted from it.)
+  raiseGarrisons(g);
   g.flags.open = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)
@@ -148,8 +150,6 @@ export function startOpen(g: Game, wide = true): Game {
   openManpower(g);
   numberDivisions(g);
   // (After the numbers: a garrison keeps its divisions' numbers under the record's name for the command. Ruling 232, b566.)
-  // (Rider b606: the garrisons that are ruling 232's own are raised now, after the roster's divisions have their numbers.)
-  raiseGarrisons(g);
   startGarrisons(g);
   // On the wider map the picture is drawn once here, so that a campaign saved on its first day comes back as it was.
   if (wide) computeSupply(g);
