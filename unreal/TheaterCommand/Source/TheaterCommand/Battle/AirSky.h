@@ -31,8 +31,15 @@
  *   high that it would come within 1.5 km of the bombers is thinned, or not drawn where the mountain stands through.
  * - Cumulus are scattered (about three eighths of the sky), each a flat grey base and a lit, lumpy dome of overlapping
  *   puffs, most shallow and a few up to the day's tops; fewer over the target, so the ships or the town stay in sight
- *   (Pearl Harbor's own morning: cloud banked on the mountains, the harbour open). A deck covers most of the sky with
- *   a few holes, and a strike on ships has its hole over the ships.
+ *   (Pearl Harbor's own morning: cloud banked on the mountains, the harbour open). Their sizes spread as a trade-wind
+ *   sky's do (the art director, 19 November 12:59Z): many small (300 to 600 m across), some middling, a few big (1.5 to
+ *   2.5 km), in loose clusters with gaps, in rows along the wind. A deck covers most of the sky with a few holes, a
+ *   floor of cells with lumps of mixed size, and a strike on ships has its hole over the ships: ragged, lobed, longer
+ *   along the wind, its edge tiles thinner and broken, a few small scraps inside it.
+ * - Light and shade come from each cloud's shape: every point of a puff is lit as the point of the cloud's rounded body
+ *   it stands for, so a cloud's sunlit top is bright, its down-sun side and its flat base darker. Sunlit edges are
+ *   crisp (they fade over the outer fifth of a puff); a base, a veil and a far body stay soft, a base's underside
+ *   straight. On a clear day each cloud lays its shadow on the sea, down-sun.
  * - Cumulus drift with the battle's wind, and the clearing stays over the target as they go: a cloud carried into it
  *   thins away, one carried out of it fills in. A deck stays where it is laid (from bomber height its drift could not
  *   be seen), so its hole stays over the ships.
@@ -60,7 +67,7 @@ namespace AirSky
 	 * out over the next kilometre). */
 	constexpr double NearAll = 5000.0;
 	/** Past this distance a cloud is drawn as its far body and its veil only (the rest fading out over the next
-	 * 1.5 km as the far body fades in). */
+	 * 1.5 km). The far body is drawn from NearAll out, the core under its far puffs. */
 	constexpr double FarAll = 10000.0;
 
 	/** The day's sky as the battle gives it (sky.place.cloud). Absent (a rules bundle from before it): cumulus. */
@@ -103,7 +110,10 @@ namespace AirSky
 		double Lit = 1.0;     // 0 to 1: how much of the sun it has (its cloud's top and sunward side)
 		double Alpha = 0.7;   // at its heart
 		int Cloud = 0;
-		int Lod = 2;          // drawn: 0 within NearAll of the eye, 1 within FarAll, 2 out to the reach, 3 past FarAll only
+		int Lod = 2;          // drawn: 0 within NearAll of the eye, 1 within FarAll, 2 out to the reach, 3 past NearAll only
+		double Soft = 0.45;   // the share of its radius its edge fades over: 0.2 a sunlit lump's crisp edge
+		double Trough = 0.0;  // how much less lit its rim is than its heart (a deck's cells: darker where they meet)
+		bool bFlatFoot = false; // a cloud's base: its underside drawn straight and crisp, seen from the side
 	};
 
 	/** One cloud (a cumulus, or a tile of the deck): its foot's middle on the laid square, its width and height. */
@@ -117,6 +127,9 @@ namespace AirSky
 		/** How far from its middle its puffs' hearts reach (a puff's middle and 0.55 of its radius), and their faded
 		 * rims, metres: the ground under it is looked at out to these. */
 		double HeartReach = 0.0, RimReach = 0.0;
+		/** A scrap of cloud left in the ships' hole: drawn whatever the hole, thin, and not part of the deck that
+		 * falls end in (a fall passes through it). */
+		bool bScrap = false;
 	};
 
 	/** Where one cloud is drawn: the copy of the square nearest the eye (Shift), lifted over the ground under it,
@@ -144,6 +157,8 @@ namespace AirSky
 		Vec Origin;
 		/** The share of the sky under cloud round the target (4.5 to 9 km from it) as first laid. */
 		double Cover = 0.0;
+		/** The ships' hole's ragged edge: the way the wind blows (radians, board axes) and the turn of its third lobe. */
+		double WindWay = 0.0, HoleTurn = 0.0;
 		double TargetX = 0.0, TargetY = 0.0, Band = 0.0;
 		bool bShips = false;
 		int MostPuffs = 4000;
@@ -167,9 +182,12 @@ namespace AirSky
 		 * mountain stands through); 1 for cumulus. */
 		double SquashFor(int CloudIndex, double Lift) const;
 		/** How much of a cloud the clearing leaves, its middle at a board point: cumulus reaching within 4 km of the
-		 * target thin out, the higher a cloud's Fate the sooner; a deck on a strike at ships keeps its hole within
-		 * 4.5 km. */
+		 * target thin out, the higher a cloud's Fate the sooner; a deck on a strike at ships keeps its hole, its edge
+		 * 3.6 km out give or take three tenths (HoleEdge), never within 2.6 km. */
 		double ShownAt(int CloudIndex, double X, double Y) const;
+		/** The ships' hole's edge toward a board point (metres from the target): two lobes along the wind and a third
+		 * turned at random, 3.6 km out give or take three tenths. */
+		double HoleEdge(double X, double Y) const;
 		/** A cloud as drawn for a point of the laid frame (an eye less the drift), the field carried by Drift. */
 		Placed Place(int CloudIndex, double X, double Y, const Vec& Drift) const;
 		/** The same for a copy of the square and a lift already found (the painter's own, eased as the cloud drifts):
@@ -214,7 +232,7 @@ namespace AirSky
 	class Painter
 	{
 	public:
-		explicit Painter(int InSides = 12);
+		explicit Painter(int InSides = 16);
 		int Sides() const { return SideCount; }
 		int PerPuff() const { return 1 + 2 * SideCount; }
 		/** The triangles for Count puffs (fixed: a puff's slot keeps its triangles, only its points change). */
@@ -222,8 +240,14 @@ namespace AirSky
 		/** Lays the field for an eye. The points are in the field's own frame: Drift is the wind's carry so far
 		 * (Field::DriftAt), which the caller adds to the whole (the scene moves the mesh by it), and the eye is turned
 		 * back by it here. Sun is the way toward the sun; Light the hour's light on cloud (white by day). Returns the
-		 * nearest puff's distance. */
-		double Paint(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light, std::vector<Vec>& OutPoints, std::vector<uint8_t>& OutRgba);
+		 * nearest puff's distance. With OutShadows, the clouds' shadows are laid there instead of among the puffs: a
+		 * room of their own of MostShadows, far to near, the room not needed first, for a mesh of their own drawn under
+		 * every other see-through thing (a shadow lies on the ground: the ground's fires and smoke, and the air over
+		 * them, stand in front of it; the review of 19 November). */
+		double Paint(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light, std::vector<Vec>& OutPoints, std::vector<uint8_t>& OutRgba,
+			std::vector<Vec>* OutShadows = nullptr, std::vector<uint8_t>* OutShadowRgba = nullptr);
+		/** The room for shadows laid apart (the nearest this many). */
+		static constexpr int MostShadows = 96;
 		/** Whether the eye has moved enough since the last Paint (in the field's own frame) for the turn of the
 		 * puffs to show: about a quarter of a degree at the nearest puff (at most 100 m); or, while a drawn cloud's
 		 * lift is still easing over high ground, whether the wind has carried the clouds a metre. */
@@ -231,20 +255,28 @@ namespace AirSky
 		/** The puffs drawn by the last Paint, and those it had no room for (the farthest). */
 		int Drawn() const { return LastDrawn; }
 		int Dropped() const { return LastDropped; }
+		/** The shadows laid apart by the last Paint given OutShadows. */
+		int ShadowsDrawn() const { return LastShadows; }
 		/** A cloud's lift as last drawn (metres; -1 before it is first drawn). */
 		double ShownLift(int CloudIndex) const;
 
 	private:
-		int SideCount = 12;
+		int SideCount = 16;
 		std::vector<double> Cos, Sin;
+		// (the rim's lumps round a puff: two and three to a turn; and each puff's ring turned by its own part of a side,
+		// by its phase, so that no two puffs' corners line up: the art director, 15:17Z, "stacked polygons")
+		std::vector<double> Cos3, Sin3, Cos2, Sin2, TurnCos, TurnSin;
 		struct Order
 		{
-			int Index = 0;
+			int Index = 0;   // the puff; for a shadow, its cloud's top puff
 			int Cloud = 0;
 			double Deep = 0.0;
 			double Fade = 1.0;
+			bool bShadow = false; // a cloud's shadow on the sea
+			Vec At;          // where a shadow lies
 		};
 		std::vector<Order> Sorted;
+		std::vector<Order> Shaded; // (the shadows, when laid apart)
 		std::vector<Placed> Where;
 		// (each cloud's lift: the ground looked up again once its middle has moved 30 m (Target), and the lift drawn
 		// eased toward it as the cloud drifts (Shown); taken at once when it is first drawn or its copy changes)
@@ -261,9 +293,15 @@ namespace AirSky
 		Vec LastEye;      // in the field's frame (eye less drift)
 		Vec LastDrift;    // the wind's carry at the last paint
 		double LastNear = 1000.0;
-		int LastDrawn = 0, LastDropped = 0;
+		int LastDrawn = 0, LastDropped = 0, LastShadows = 0;
 	};
 
-	/** The cloud's colours: its sunlit top, its shaded side, its grey base. */
-	extern const Rgb SunSide, ShadeSide, BaseSide;
+	/** The cloud's colours: its sunlit top, its shaded side, its grey base; and its shadow on the sea. */
+	extern const Rgb SunSide, ShadeSide, BaseSide, ShadowSide;
+	/** How far a cloud's shadow darkens what it falls on at its heart, and how far from the eye shadows are drawn
+	 * (metres, fading over the last two kilometres). The art director's 25 to 30 per cent is of the picture's
+	 * brightness; the blend is in light, so half the light off at the middle (0.5) is about 27 per cent of brightness
+	 * there, and some 23 at the heart ring (0.27 was only some 13 per cent). */
+	constexpr double ShadowDark = 0.5;
+	constexpr double ShadowReach = 10000.0;
 }

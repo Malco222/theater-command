@@ -87,6 +87,8 @@ private:
 	 * own, so that seen from above the clouds they are drawn under them, and the air fight over them. */
 	TUniquePtr<FBattleEffects> GroundFx;
 	TWeakObjectPtr<UProceduralMeshComponent> GroundFxMesh;
+	/** The air kit's mesh: drawn over the clouds while the eye is over them, behind them while it is under them. */
+	TWeakObjectPtr<UProceduralMeshComponent> AirFxMesh;
 	/** Which is drawn over which this frame: 1 the eye over the clouds, 2 under them, 0 not yet set. */
 	int32 SkyOrder = 0;
 	TSharedPtr<SAirBattleScreen> Screen;
@@ -100,7 +102,9 @@ private:
 	/** One mesh an aircraft, by the flight core's key, and the model and span it was made as. */
 	UPROPERTY()
 	TMap<int32, TObjectPtr<UProceduralMeshComponent>> Planes;
-	struct FPlaneMade { FString Model; double Span = 0.0; };
+	/** What each aircraft's mesh was made as; whether it has a far shape (section 0) and its near one made (section 1),
+	 * and which is shown. */
+	struct FPlaneMade { FString Model; double Span = 0.0; FString Shape; bool bTwoShapes = false; bool bNearMade = false; bool bNear = false; };
 	TMap<int32, FPlaneMade> PlaneMade;
 	/** Parachutes, pieces and bombs: one mesh, laid afresh each frame. */
 	UPROPERTY()
@@ -113,6 +117,12 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> CloudInk;
 	TArray<FVector> CloudPoints;
 	TArray<FColor> CloudColours;
+	/** The clouds' shadows on the sea and the land: a mesh of their own, drawn under every other see-through thing (a
+	 * shadow lies on the ground; the ground's fires and smoke, and the air fight, stand in front of it). */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> CloudShadows;
+	TArray<FVector> ShadowPoints;
+	TArray<FColor> ShadowColours;
 	/** The sea and the land under a battle with no stage. */
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> Ground;
@@ -137,10 +147,16 @@ private:
 	bool bOwnInput = false;
 	// The strategy camera: what it looks at (board metres), how far, which way.
 	FVector LookAt = FVector::ZeroVector;
-	double Distance = 2600.0, Yaw = 200.0, Pitch = -18.0;
+	// (from 2,600 m the aircraft were specks: the art director's note on the first Mac run)
+	double Distance = 1100.0, Yaw = 200.0, Pitch = -14.0;
 	bool bLookSet = false;
+	/** The close view: the eye's place and facing, and the ridden aircraft's way eased (what the eye trails along). */
 	FVector CloseEye = FVector::ZeroVector;
 	FRotator CloseFacing = FRotator::ZeroRotator;
+	FVector CloseAhead = FVector::ZeroVector;
+	/** The first ship to go down, and the ship the overview frames for "the ships" picture (-1: none). */
+	int32 FirstSunk = -1;
+	int32 ShipsLook = -1;
 	/** Falls a kit is shedding debris for (burning or spinning), and the kit; blow-ups whose blast the kit's AirFall
 	 * drew. */
 	TMap<int32, FBattleEffects*> FallsOn;
@@ -186,7 +202,7 @@ private:
 	TArray<FShot> Shots;
 	double MetRealT = -1.0, ShipRealT = -1.0;
 	int32 ShotsTaken = 0;
-	double QuitAt = -1.0, CloseOffAt = -1.0, CardShotAt = -1.0;
+	double QuitAt = -1.0, CloseOffAt = -1.0, CardShotAt = -1.0, ShipsLookOffAt = -1.0;
 	bool bCardShot = false;
 
 	bool Open(const FString& Why);
@@ -229,6 +245,8 @@ private:
 	int32 TagUnder(const FVector2D& Pixel) const;
 	FString ModelFor(const FString& Model, const FString& Nation, bool bFighter) const;
 	UProceduralMeshComponent* PlaneMesh(int32 Key, const FString& Model, const FString& Nation, bool bFighter, double Span);
+	/** Shows aircraft Key's near shape (made the first time) or its far one. */
+	void PlaneNear(int32 Key, UProceduralMeshComponent* Mesh, bool bNear);
 	void ShowScreen();
 	void HideScreen();
 	void Finish();

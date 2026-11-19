@@ -21,6 +21,8 @@ namespace
 	const FLinearColor Muted = FLinearColor(FColor::FromHex(TEXT("A89F8D")));
 	const FLinearColor Paper = FLinearColor(FColor::FromHex(TEXT("CDBE9B")));
 	const FLinearColor Alarm = FLinearColor(FColor::FromHex(TEXT("E08A6A")));
+	const FLinearColor Amber = FLinearColor(FColor::FromHex(TEXT("E0A13C"))); // (the campaign frame's amber)
+	const FLinearColor Plate = FLinearColor(0.02f, 0.015f, 0.01f, 0.8f);      // the dark plate under words on the sky (0.6 left amber at 2:1 over a bright cloud)
 	const FLinearColor DeskInk = FLinearColor(FColor::FromHex(TEXT("2B2118")));
 	const FLinearColor InkSoft = FLinearColor(FColor::FromHex(TEXT("5B4A38")));
 	const FLinearColor InkRed = FLinearColor(FColor::FromHex(TEXT("8E2C20")));
@@ -156,7 +158,10 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 	static const FSlateColorBrush Solid(FLinearColor::White);
 	const FVector2D Size = Geometry.GetLocalSize();
 	const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
-	auto WideOf = [&Measure](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+	// (measured at the scale the words are drawn at, as the engine's own text blocks measure: each letter's advance is
+	// whole pixels at that scale, some 5 per cent wider at 1600 by 900 than at the scale of 1)
+	const float TextScale = FMath::Max(Geometry.GetAccumulatedLayoutTransform().GetScale(), 0.01f);
+	auto WideOf = [&Measure, TextScale](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face, TextScale).X) / TextScale; };
 	auto Fill = [&](double X, double Y, double Wd, double Ht, const FLinearColor& Ink, int32 Layer)
 	{
 		FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &Solid, ESlateDrawEffect::None, Ink);
@@ -172,6 +177,39 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 	auto Line = [&](const TArray<FVector2D>& Points, const FLinearColor& Ink, float Thick, int32 Layer)
 	{
 		FSlateDrawElement::MakeLines(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Ink, true, Thick);
+	};
+	// Words broken at spaces to fit a width (a single word longer than the width stands on its own line).
+	auto Wrap = [&WideOf](const FString& Text, const FSlateFontInfo& Face, double Room) -> TArray<FString>
+	{
+		TArray<FString> Pieces, Out;
+		Text.ParseIntoArray(Pieces, TEXT(" "), true);
+		FString Now;
+		for (const FString& Piece : Pieces)
+		{
+			const FString Tried = Now.IsEmpty() ? Piece : Now + TEXT(" ") + Piece;
+			if (!Now.IsEmpty() && WideOf(Tried, Face) > Room)
+			{
+				Out.Add(Now);
+				Now = Piece;
+			}
+			else
+			{
+				Now = Tried;
+			}
+		}
+		if (!Now.IsEmpty() || Out.Num() == 0)
+		{
+			Out.Add(Now);
+		}
+		return Out;
+	};
+	// A line of words on the sky, on a dark plate so that it reads over any cloud; returns how far right it reaches.
+	auto OnPlate = [&](const FString& Words, double X, double Y, const FSlateFontInfo& Face, const FLinearColor& Ink, double High, int32 Layer) -> double
+	{
+		const double Wd = WideOf(Words, Face) + 12.0;
+		Fill(X - 6.0, Y - 2.0, Wd, High, Plate, Layer);
+		Write(Words, X, Y, Face, Ink, Layer + 1);
+		return X - 6.0 + Wd;
 	};
 	// A button of the strip: a brass-edged plate, lit where it is the choice in force; dimmed where it cannot be given.
 	auto Button = [&](const FString& Label, const FString& Action, double X, double Y, bool bLit, bool bLive, int32 Layer) -> double
@@ -213,62 +251,285 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		const double HY = BY + 22.0, HalfW = 150.0;
 		Centred(TEXT("HOW NEAR TO BREAKING OFF"), Mid, HY + 8.0, SmallCaps(), Muted, 2);
 		Fill(BX, HY, HalfW, 6.0, Track, 2);
-		Fill(BX + HalfW * (1.0 - FMath::Clamp(W.MyBar, 0.0, 1.0)), HY, HalfW * FMath::Clamp(W.MyBar, 0.0, 1.0), 6.0, W.MyBar >= 0.75 ? Alarm : Cream, 3);
+		Fill(BX + HalfW * (1.0 - FMath::Clamp(W.MyBar, 0.0, 1.0)), HY, HalfW * FMath::Clamp(W.MyBar, 0.0, 1.0), 6.0, W.MyBar >= 0.75 ? Amber : Cream, 3);
 		Fill(BX + BW - HalfW, HY, HalfW, 6.0, Track, 2);
 		Fill(BX + BW - HalfW, HY, HalfW * FMath::Clamp(W.TheirBar, 0.0, 1.0), 6.0, Paper, 3);
 	}
 
-	// ---- The field's top left: the clock's tag, the kicker, the aim slip, the near line. ----
+	// ---- The field's top left: the clock's tag, the kicker, the aim slip, the near line; each on a plate or slip so
+	// that it reads over any sky. ----
 	double Y = BarH + 12.0;
+	double PanelRight = 22.0;
 	if (!S.ClockTag.empty())
 	{
-		Write(Wide(S.ClockTag), 22.0, Y, Typed(10.0f, true, 30), BrightBrass, 2);
-		Y += 20.0;
+		PanelRight = FMath::Max(PanelRight, OnPlate(Wide(S.ClockTag), 22.0, Y, Typed(10.0f, true, 30), BrightBrass, 19.0, 2));
+		Y += 22.0;
 	}
 	if (!W.Kicker.empty())
 	{
-		Write(Wide(W.Kicker), 22.0, Y, SmallCaps(), Muted, 2);
-		Y += 18.0;
+		PanelRight = FMath::Max(PanelRight, OnPlate(Wide(W.Kicker), 22.0, Y, SmallCaps(), Muted, 17.0, 2));
+		Y += 20.0;
 	}
 	{
-		// THE AIM (b397): what the raid is for, how it stands, the aircraft lost; on a slip of paper.
-		const double SlipW = 330.0, SlipH = 84.0;
+		// THE AIM (b397): what the raid is for, how it stands, the aircraft lost; on a slip of paper as wide as its
+		// longest line (up to a third of the screen, then the words go onto a second line).
+		const FSlateFontInfo TargetFace = Serif(TEXT("Bold"), 13.0f), StateFace = Typed(9.5f);
+		const FString Target = Wide(W.AimTarget), Standing = Wide(W.AimState), Lost = Wide(W.AimLost);
+		const double MostSlip = FMath::Max(330.0, FMath::Min(560.0, Size.X * 0.36));
+		const double Longest = FMath::Max3(WideOf(Target, TargetFace), WideOf(Standing, StateFace), WideOf(Lost, StateFace));
+		const double SlipW = FMath::Clamp(Longest + 22.0, 330.0, MostSlip);
+		const TArray<FString> TargetLines = Wrap(Target, TargetFace, SlipW - 22.0);
+		const TArray<FString> StateLines = Wrap(Standing, StateFace, SlipW - 22.0);
+		const TArray<FString> LostLines = Wrap(Lost, StateFace, SlipW - 22.0);
+		const double SlipH = 21.0 + 21.0 * TargetLines.Num() + 2.0 + 16.0 * (StateLines.Num() + LostLines.Num()) + 8.0;
 		Fill(22.0, Y, SlipW, SlipH, Paper, 2);
 		Write(TEXT("THE AIM"), 32.0, Y + 7.0, SmallCaps(), InkSoft, 3);
-		Write(Wide(W.AimTarget), 32.0, Y + 21.0, Serif(TEXT("Bold"), 13.0f), DeskInk, 3);
-		Write(Wide(W.AimState), 32.0, Y + 44.0, Typed(9.5f), DeskInk, 3);
-		Write(Wide(W.AimLost), 32.0, Y + 60.0, Typed(9.5f), InkSoft, 3);
+		double SlipY = Y + 21.0;
+		for (const FString& Each : TargetLines)
+		{
+			Write(Each, 32.0, SlipY, TargetFace, DeskInk, 3);
+			SlipY += 21.0;
+		}
+		SlipY += 2.0;
+		for (const FString& Each : StateLines)
+		{
+			Write(Each, 32.0, SlipY, StateFace, DeskInk, 3);
+			SlipY += 16.0;
+		}
+		for (const FString& Each : LostLines)
+		{
+			Write(Each, 32.0, SlipY, StateFace, InkSoft, 3);
+			SlipY += 16.0;
+		}
+		PanelRight = FMath::Max(PanelRight, 22.0 + SlipW);
 		Y += SlipH + 10.0;
 	}
 	if (!W.NearLine.empty())
 	{
-		Write(Wide(W.NearLine), 22.0, Y, Typed(11.0f, true), Alarm, 2);
-		Y += 22.0;
+		// (amber, as the UI director's handoff has it: a warning that stays, not an alarm)
+		PanelRight = FMath::Max(PanelRight, OnPlate(Wide(W.NearLine), 22.0, Y, Typed(11.0f, true), Amber, 20.0, 2));
+		Y += 24.0;
 	}
 
-	// ---- A tag over each formation: his own in cream, the enemy's in muted paper (never red); in hand, brass. ----
-	for (const AirDesk::Tag& T : W.Tags)
+	// ---- A tag over each formation: his own in cream, the enemy's in muted paper (never red); in hand, brass. Groups
+	// never stack (b384(d)): tags that would touch gather into one block, which shows the two that matter most (his
+	// groups in hand, then his own, then the largest) and a line for the rest. No block covers the top bar, the aim
+	// slip, the dispatches or the orders strip; one moved out of their way keeps a thin line to its formation. ----
+	S.TagBoxes.clear();
 	{
-		const auto Found = S.TagAt.find(T.Id);
-		if (Found == S.TagAt.end())
+		const FSlateFontInfo NameFace = Typed(10.0f, true), UnderFace = Typed(8.5f), MoreFace = Typed(8.5f, true);
+		const double TagH = 30.0, TagGap = 3.0, MoreH = 16.0, Margin = 4.0;
+		struct FTagRect
 		{
-			continue;
-		}
-		const FVector2D At = ToLocal(Geometry, Found->second);
-		const bool bHand = std::find(S.Hand.begin(), S.Hand.end(), T.Id) != S.Hand.end();
-		const FLinearColor Ink = bHand ? BrightBrass : T.bMine ? Cream : Paper * FLinearColor(0.85f, 0.85f, 0.85f, 1.0f);
-		const FString Name = Wide(T.Name);
-		const FString Under = Wide(T.Count) + (T.Doing.empty() ? FString() : TEXT(", ") + Wide(T.Doing));
-		const FSlateFontInfo NameFace = Typed(10.0f, true), UnderFace = Typed(8.5f);
-		const double Wd = FMath::Max(WideOf(Name, NameFace), WideOf(Under, UnderFace)) + 12.0;
-		Fill(At.X - Wd * 0.5, At.Y - 30.0, Wd, 30.0, FLinearColor(0.02f, 0.015f, 0.01f, 0.55f), 4);
-		if (bHand)
+			double L = 0.0, T = 0.0, R = 0.0, B = 0.0;
+			bool Touches(const FTagRect& Other, double Room) const
+			{
+				return L < Other.R + Room && Other.L < R + Room && T < Other.B + Room && Other.T < B + Room;
+			}
+		};
+		// The places no tag may cover: the aim panel and the dispatches (the bar and the strip bound the field).
+		TArray<FTagRect> Kept;
+		Kept.Add({ 16.0, BarH, PanelRight + 2.0, Y });
 		{
-			Fill(At.X - Wd * 0.5, At.Y - 1.0, Wd, 2.0, BrightBrass, 5);
+			double DY = Size.Y - 70.0 - 20.0 * W.Dispatches.size();
+			FTagRect Sent{ 18.0, 0.0, 18.0, 0.0 };
+			bool bAnySent = false;
+			for (const AirDesk::Dispatch& D : W.Dispatches)
+			{
+				if (FMath::Clamp(1.0 - (D.Age - 10.0) / 4.0, 0.0, 1.0) > 0.0)
+				{
+					Sent.T = bAnySent ? Sent.T : DY - 2.0;
+					Sent.B = DY + 17.0;
+					Sent.R = FMath::Max(Sent.R, 18.0 + WideOf(Wide(D.Text), Typed(10.0f)) + 12.0);
+					bAnySent = true;
+				}
+				DY += 20.0;
+			}
+			if (bAnySent)
+			{
+				Kept.Add(Sent);
+			}
 		}
-		Write(Name, At.X - Wd * 0.5 + 6.0, At.Y - 29.0, NameFace, Ink, 5);
-		Write(Under, At.X - Wd * 0.5 + 6.0, At.Y - 15.0, UnderFace, Muted, 5);
-		Line({ FVector2D(At.X, At.Y), FVector2D(At.X, At.Y + 10.0) }, Ink * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), 1.0f, 4);
+		const double FieldT = BarH + 1.0 + Margin, FieldB = Size.Y - 54.0 - Margin;
+
+		struct FTagOne
+		{
+			const AirDesk::Tag* Tag = nullptr;
+			FVector2D At = FVector2D::ZeroVector; // over its formation (local units)
+			double Rank = 0.0;                    // the lower, the sooner shown
+			double Wd = 0.0;
+			FString Name, Under;
+			bool bHand = false;
+		};
+		TArray<FTagOne> Ones;
+		for (const AirDesk::Tag& T : W.Tags)
+		{
+			const auto Found = S.TagAt.find(T.Id);
+			if (Found == S.TagAt.end())
+			{
+				continue;
+			}
+			FTagOne One;
+			One.Tag = &T;
+			One.At = ToLocal(Geometry, Found->second);
+			const auto InHand = std::find(S.Hand.begin(), S.Hand.end(), T.Id);
+			One.bHand = InHand != S.Hand.end();
+			const double Aircraft = FMath::Clamp(static_cast<double>(FCString::Atoi(*Wide(T.Count))), 0.0, 999.0);
+			One.Rank = One.bHand ? static_cast<double>(InHand - S.Hand.begin()) : (T.bMine ? 1000.0 : 2000.0) + (999.0 - Aircraft);
+			One.Name = Wide(T.Name);
+			One.Under = Wide(T.Count) + (T.Doing.empty() ? FString() : TEXT(", ") + Wide(T.Doing));
+			One.Wd = FMath::Max(WideOf(One.Name, NameFace), WideOf(One.Under, UnderFace)) + 12.0;
+			Ones.Add(MoveTemp(One));
+		}
+
+		struct FTagBlock
+		{
+			TArray<int32> Members; // into Ones, the one that matters most first
+			FTagRect Box;
+			bool bMoved = false;
+		};
+		// A block stands on its first tag's formation, then steps out of the kept places and inside the field.
+		auto Lay = [&](FTagBlock& Block)
+		{
+			Block.Members.Sort([&Ones](int32 First, int32 Second) { return Ones[First].Rank < Ones[Second].Rank; });
+			const FTagOne& Head = Ones[Block.Members[0]];
+			const int32 Shown = FMath::Min(2, Block.Members.Num());
+			const int32 Folded = Block.Members.Num() - Shown;
+			double Wd = 0.0;
+			for (int32 K = 0; K < Shown; ++K)
+			{
+				Wd = FMath::Max(Wd, Ones[Block.Members[K]].Wd);
+			}
+			if (Folded > 0)
+			{
+				Wd = FMath::Max(Wd, WideOf(FString::Printf(TEXT("+%d more groups"), Folded), MoreFace) + 12.0);
+			}
+			const double High = Shown * TagH + (Shown - 1) * TagGap + (Folded > 0 ? TagGap + MoreH : 0.0);
+			FTagRect Box{ Head.At.X - Wd * 0.5, Head.At.Y - High, Head.At.X + Wd * 0.5, Head.At.Y };
+			auto Shift = [&Box](double Dx, double Dy) { Box.L += Dx; Box.R += Dx; Box.T += Dy; Box.B += Dy; };
+			auto Inside = [&Box, &Shift, &Size, FieldT, FieldB]()
+			{
+				Shift(FMath::Max(0.0, 4.0 - Box.L) - FMath::Max(0.0, Box.R - (Size.X - 4.0)), FMath::Max(0.0, FieldT - Box.T) - FMath::Max(0.0, Box.B - FieldB));
+			};
+			Inside();
+			for (int32 Pass = 0; Pass < 2; ++Pass)
+			{
+				for (const FTagRect& Keep : Kept)
+				{
+					if (!Box.Touches(Keep, Margin))
+					{
+						continue;
+					}
+					// (the smallest step that clears it and stays on the field: down, up, right or left)
+					const double Steps[4][2] = { { 0.0, Keep.B + Margin - Box.T }, { 0.0, Keep.T - Margin - Box.B }, { Keep.R + Margin - Box.L, 0.0 }, { Keep.L - Margin - Box.R, 0.0 } };
+					double BestStep = 1e18;
+					int32 BestWay = -1;
+					for (int32 Way = 0; Way < 4; ++Way)
+					{
+						const FTagRect Tried{ Box.L + Steps[Way][0], Box.T + Steps[Way][1], Box.R + Steps[Way][0], Box.B + Steps[Way][1] };
+						const double Step = FMath::Abs(Steps[Way][0]) + FMath::Abs(Steps[Way][1]);
+						if (Tried.L >= 4.0 && Tried.R <= Size.X - 4.0 && Tried.T >= FieldT && Tried.B <= FieldB && Step < BestStep)
+						{
+							BestStep = Step;
+							BestWay = Way;
+						}
+					}
+					if (BestWay >= 0)
+					{
+						Shift(Steps[BestWay][0], Steps[BestWay][1]);
+					}
+				}
+			}
+			Block.bMoved = FMath::Abs((Box.L + Box.R) * 0.5 - Head.At.X) > 1.0 || FMath::Abs(Box.B - Head.At.Y) > 1.0;
+			Block.Box = Box;
+		};
+		TArray<FTagBlock> Blocks;
+		for (int32 K = 0; K < Ones.Num(); ++K)
+		{
+			FTagBlock& Block = Blocks.AddDefaulted_GetRef();
+			Block.Members.Add(K);
+			Lay(Block);
+		}
+		// Blocks that touch become one, laid again on the one that matters most, until none touch.
+		for (bool bJoined = true; bJoined;)
+		{
+			bJoined = false;
+			for (int32 First = 0; First < Blocks.Num() && !bJoined; ++First)
+			{
+				for (int32 Second = First + 1; Second < Blocks.Num() && !bJoined; ++Second)
+				{
+					// (each with its stalk, the 10 under it: a stalk must not cross the next block down)
+					auto WithStalk = [](const FTagRect& Rect) { FTagRect Out = Rect; Out.B += 10.0; return Out; };
+					if (WithStalk(Blocks[First].Box).Touches(WithStalk(Blocks[Second].Box), 2.0))
+					{
+						Blocks[First].Members.Append(Blocks[Second].Members);
+						Blocks.RemoveAt(Second);
+						Lay(Blocks[First]);
+						bJoined = true;
+					}
+				}
+			}
+		}
+		auto Publish = [&](int Id, double Left, double Top, double Right, double Bottom)
+		{
+			FAirBattleState::FTagBox Drawn;
+			Drawn.Id = Id;
+			Drawn.Min = ToPixels(Geometry, FVector2D(Left, Top));
+			Drawn.Max = ToPixels(Geometry, FVector2D(Right, Bottom));
+			S.TagBoxes.push_back(Drawn);
+		};
+		for (const FTagBlock& Block : Blocks)
+		{
+			const FTagOne& Head = Ones[Block.Members[0]];
+			const FLinearColor HeadInk = Head.bHand ? BrightBrass : Head.Tag->bMine ? Cream : Paper * FLinearColor(0.85f, 0.85f, 0.85f, 1.0f);
+			// The stalk down to the formation; from a block moved out of the way, a thin line to where it flies.
+			FVector2D Foot((Block.Box.L + Block.Box.R) * 0.5, Block.Box.B);
+			if (Block.bMoved)
+			{
+				// (from the edge that faces the formation, never back up through the block; none when it flies under it)
+				const FVector2D Aim(Head.At.X, Head.At.Y + 10.0);
+				if (Aim.Y < Block.Box.T)
+				{
+					Foot.Y = Block.Box.T;
+				}
+				else if (Aim.Y <= Block.Box.B)
+				{
+					Foot = FVector2D(Aim.X < Block.Box.L ? Block.Box.L : Block.Box.R, Aim.Y);
+				}
+				const bool bAimInside = Aim.X >= Block.Box.L && Aim.X <= Block.Box.R && Aim.Y >= Block.Box.T && Aim.Y <= Block.Box.B;
+				if (!bAimInside)
+				{
+					Line({ Foot, Aim }, HeadInk * FLinearColor(1.0f, 1.0f, 1.0f, 0.45f), 1.0f, 4);
+				}
+			}
+			else
+			{
+				Line({ Foot, FVector2D(Foot.X, Foot.Y + 10.0) }, HeadInk * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), 1.0f, 4);
+			}
+			const double Wd = Block.Box.R - Block.Box.L;
+			double Top = Block.Box.T;
+			const int32 Shown = FMath::Min(2, Block.Members.Num());
+			for (int32 K = 0; K < Shown; ++K)
+			{
+				const FTagOne& One = Ones[Block.Members[K]];
+				const FLinearColor Ink = One.bHand ? BrightBrass : One.Tag->bMine ? Cream : Paper * FLinearColor(0.85f, 0.85f, 0.85f, 1.0f);
+				Fill(Block.Box.L, Top, Wd, TagH, FLinearColor(0.02f, 0.015f, 0.01f, 0.55f), 4);
+				if (One.bHand)
+				{
+					Fill(Block.Box.L, Top + TagH - 1.0, Wd, 2.0, BrightBrass, 5);
+				}
+				Write(One.Name, Block.Box.L + 6.0, Top + 1.0, NameFace, Ink, 5);
+				Write(One.Under, Block.Box.L + 6.0, Top + 15.0, UnderFace, Muted, 5);
+				Publish(One.Tag->Id, Block.Box.L, Top, Block.Box.R, Top + TagH);
+				Top += TagH + TagGap;
+			}
+			if (Block.Members.Num() > Shown)
+			{
+				Fill(Block.Box.L, Top, Wd, MoreH, FLinearColor(0.02f, 0.015f, 0.01f, 0.55f), 4);
+				Write(FString::Printf(TEXT("+%d more groups"), Block.Members.Num() - Shown), Block.Box.L + 6.0, Top + 1.0, MoreFace, Muted, 5);
+				Publish(Head.Tag->Id, Block.Box.L, Top, Block.Box.R, Top + MoreH);
+			}
+		}
 	}
 
 	// ---- The dispatches: bottom left, newest last, fading as they age. ----
@@ -292,7 +553,9 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 	}
 	if (!S.Note.empty())
 	{
-		Centred(Wide(S.Note), Size.X * 0.5, Size.Y - 92.0, Typed(10.5f, true), Alarm, 6);
+		const FString Said = Wide(S.Note);
+		const FSlateFontInfo SaidFace = Typed(10.5f, true);
+		OnPlate(Said, Size.X * 0.5 - WideOf(Said, SaidFace) * 0.5, Size.Y - 92.0, SaidFace, Alarm, 20.0, 6);
 	}
 
 	// ---- The orders strip (b384(e)): only what the groups in hand can take; the speed; the close view. ----
@@ -353,10 +616,15 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 	if (S.Question != 0)
 	{
 		const FString Question = Wide(S.Question == 1 ? S.Desk.StaffQuestion() : AirDesk::Desk::BreakOffAllQuestion());
-		const double QW = 620.0, QH = 132.0, QX = (Size.X - QW) * 0.5, QY = Size.Y * 0.42 - QH * 0.5;
+		const FSlateFontInfo AskFace = Serif(TEXT("Regular"), 13.0f);
+		const TArray<FString> Asked = Wrap(Question, AskFace, 620.0 - 44.0);
+		const double QW = 620.0, QH = 112.0 + 20.0 * Asked.Num(), QX = (Size.X - QW) * 0.5, QY = Size.Y * 0.42 - QH * 0.5;
 		Fill(QX - 1.0, QY - 1.0, QW + 2.0, QH + 2.0, Brass, 10);
 		Fill(QX, QY, QW, QH, Leather, 11);
-		Write(Question, QX + 22.0, QY + 20.0, Serif(TEXT("Regular"), 13.0f), Cream, 12);
+		for (int32 K = 0; K < Asked.Num(); ++K)
+		{
+			Write(Asked[K], QX + 22.0, QY + 20.0 + 20.0 * K, AskFace, Cream, 12);
+		}
 		double BX = QX + 22.0;
 		BX = Button(S.Question == 1 ? TEXT("HAND IT OVER") : TEXT("BREAK OFF ALL"), TEXT("yes"), BX, QY + QH - 44.0, false, true, 12);
 		Button(TEXT("KEEP FIGHTING"), TEXT("no"), BX, QY + QH - 44.0, true, true, 12);
@@ -367,37 +635,79 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 	if (S.bCard)
 	{
 		const AirDesk::Card& C = S.Card;
-		const double CW = 660.0, CH = 150.0 + 18.0 * (C.Lines.size() + C.Rows.size()), CX = (Size.X - CW) * 0.5, CY = FMath::Max(BarH + 20.0, (Size.Y - CH) * 0.5);
+		// The card is as wide as its longest line (660 at the least, the screen less a margin at the most); a line
+		// longer still goes onto the next. Every line is laid out first, so the card is as tall as what it holds.
+		const FSlateFontInfo TitleFace = Serif(TEXT("Bold"), 21.0f), LineFace = Typed(10.0f), MineFace = Typed(10.0f, true), ReckonFace = Serif(TEXT("Italic"), 11.0f);
+		const FString Stamp = Wide(C.Level);
+		const FSlateFontInfo StampFace = Typed(12.0f, true, 60);
+		const double SW = WideOf(Stamp, StampFace) + 18.0;
+		struct FCardLine
+		{
+			FString Words;
+			bool bMine = false;
+			bool bRow = false;
+		};
+		TArray<FCardLine> Body;
+		double Longest = 0.0;
+		for (const std::string& L : C.Lines)
+		{
+			Body.Add({ Wide(L), false, false });
+			Longest = FMath::Max(Longest, WideOf(Body.Last().Words, LineFace));
+		}
+		for (const AirDesk::Card::Row& R : C.Rows)
+		{
+			Body.Add({ Wide(R.Name) + TEXT(": ") + Wide(R.Words), R.bMine, true });
+			Longest = FMath::Max(Longest, WideOf(Body.Last().Words, R.bMine ? MineFace : LineFace));
+		}
+		const FString Reckoning = Wide(C.Reckoning);
+		const FString Title = Wide(C.Title);
+		Longest = FMath::Max(Longest, WideOf(Title, TitleFace) + 16.0 + SW);
+		const double CW = FMath::Clamp(Longest + 52.0, 660.0, FMath::Max(660.0, Size.X - 80.0));
+		const double Room = CW - 52.0;
+		const TArray<FString> TitleLines = Wrap(Title, TitleFace, Room - 16.0 - SW);
+		struct FLaid
+		{
+			FString Words;
+			const FSlateFontInfo* Face = nullptr;
+			FLinearColor Ink;
+		};
+		TArray<FLaid> Laid;
+		for (const FCardLine& Each : Body)
+		{
+			const FSlateFontInfo& Face = Each.bMine ? MineFace : LineFace;
+			for (const FString& Piece : Wrap(Each.Words, Face, Room))
+			{
+				Laid.Add({ Piece, &Face, Each.bRow && !Each.bMine ? InkSoft : DeskInk });
+			}
+		}
+		const TArray<FString> ReckonLines = Reckoning.IsEmpty() ? TArray<FString>() : Wrap(Reckoning, ReckonFace, Room);
+		const double CH = 18.0 + 16.0 + 28.0 * TitleLines.Num() + 12.0 + 18.0 + 18.0 * Laid.Num() + 18.0 * ReckonLines.Num() + 58.0;
+		const double CX = (Size.X - CW) * 0.5, CY = FMath::Max(BarH + 20.0, (Size.Y - CH) * 0.5);
 		Fill(0.0, 0.0, Size.X, Size.Y, FLinearColor(0.0f, 0.0f, 0.0f, 0.35f), 20);
 		Fill(CX, CY, CW, CH, Paper, 21);
 		double CY2 = CY + 18.0;
 		Write(Wide(C.Kicker), CX + 26.0, CY2, SmallCaps(), InkSoft, 22);
 		CY2 += 16.0;
-		Write(Wide(C.Title), CX + 26.0, CY2, Serif(TEXT("Bold"), 21.0f), DeskInk, 22);
+		for (const FString& Piece : TitleLines)
 		{
-			const FString Stamp = Wide(C.Level);
-			const FSlateFontInfo Face = Typed(12.0f, true, 60);
-			const double SW = WideOf(Stamp, Face) + 18.0;
-			Fill(CX + CW - 26.0 - SW, CY + 18.0, SW, 26.0, InkRed, 22);
-			Fill(CX + CW - 26.0 - SW + 2.0, CY + 20.0, SW - 4.0, 22.0, Paper, 23);
-			Write(Stamp, CX + CW - 26.0 - SW + 9.0, CY + 22.0, Face, InkRed, 24);
+			Write(Piece, CX + 26.0, CY2, TitleFace, DeskInk, 22);
+			CY2 += 28.0;
 		}
-		CY2 += 40.0;
+		Fill(CX + CW - 26.0 - SW, CY + 18.0, SW, 26.0, InkRed, 22);
+		Fill(CX + CW - 26.0 - SW + 2.0, CY + 20.0, SW - 4.0, 22.0, Paper, 23);
+		Write(Stamp, CX + CW - 26.0 - SW + 9.0, CY + 22.0, StampFace, InkRed, 24);
+		CY2 += 12.0;
 		Write(TEXT("IN THE AIR"), CX + 26.0, CY2, SmallCaps(), InkSoft, 22);
 		CY2 += 18.0;
-		for (const std::string& L : C.Lines)
+		for (const FLaid& Each : Laid)
 		{
-			Write(Wide(L), CX + 26.0, CY2, Typed(10.0f), DeskInk, 22);
+			Write(Each.Words, CX + 26.0, CY2, *Each.Face, Each.Ink, 22);
 			CY2 += 18.0;
 		}
-		for (const AirDesk::Card::Row& R : C.Rows)
+		for (const FString& Piece : ReckonLines)
 		{
-			Write(Wide(R.Name) + TEXT(": ") + Wide(R.Words), CX + 26.0, CY2, Typed(10.0f, R.bMine), R.bMine ? DeskInk : InkSoft, 22);
+			Write(Piece, CX + 26.0, CY2, ReckonFace, InkSoft, 22);
 			CY2 += 18.0;
-		}
-		if (!C.Reckoning.empty())
-		{
-			Write(Wide(C.Reckoning), CX + 26.0, CY2, Serif(TEXT("Italic"), 11.0f), InkSoft, 22);
 		}
 		Button(TEXT("CONTINUE"), TEXT("continue"), CX + CW - 26.0 - 110.0, CY + CH - 40.0, true, true, 25);
 	}
