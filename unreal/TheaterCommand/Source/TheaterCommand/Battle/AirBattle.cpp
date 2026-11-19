@@ -2044,8 +2044,10 @@ void AAirBattle::AimEye(double Real)
 		bLookSet = false;
 	}
 	// The close view (handoff 10, gap 1): it rides a plane of the group in hand, or with none in hand the busiest fighter
-	// near the middle of the picture; a fall, a straggle or a limp cuts to the next, never a swoop.
-	if (S.bClose)
+	// near the middle of the picture; a fall, a straggle or a limp cuts to the next, never a swoop. (Not while the
+	// flyover's glide runs, which is at this function's end: a ride asked for during the flyover, a C pressed while the
+	// battle loaded or a ride picture come due, starts when the glide is done. The cloud pre-check's catch, 17:05Z.)
+	if (S.bClose && !S.bFlying)
 	{
 		const std::vector<AirShow::PlaneOut>& Out = S.Show.Planes();
 		auto Find = [&Out](int Key) -> const AirShow::PlaneOut*
