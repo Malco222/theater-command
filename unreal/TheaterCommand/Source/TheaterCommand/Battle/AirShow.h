@@ -253,6 +253,9 @@ namespace AirShow
 		double Spin = 0.0, Size = 1.0, Age = 0.0, Heading = 0.0;
 		bool bOpen = false;
 		bool bTorpedo = false;
+		/** The deck top it passes out of sight in, metres: 0 when it came out under the deck (or there is none), and it
+		 * falls on to the ground or the sea. */
+		double Deck = 0.0;
 	};
 
 	/** An aircraft's size and where its engines and gun stations are, in its own frame (X forward, Y right, Z up). */
@@ -289,7 +292,8 @@ namespace AirShow
 		void SetLoadout(const std::string& Nation, bool bFighter, const Loadout& Guns);
 		/** The ground's height under a board point, metres (the sea 0). Left unset: the sea everywhere. */
 		std::function<double(double, double)> Ground;
-		/** The top of the cloud deck below the bombers, metres (0: none). Falls end inside it, so nothing pops from view. */
+		/** The top of the cloud deck below the bombers, metres (0: none). A fall begun above it ends inside it, so nothing
+		 * pops from view; one begun under it (a torpedo bomber, a low fight) goes on down to the sea or the ground. */
 		double CloudTop = 0.0;
 		/** Where the camera is (board metres): the guns nearest it are the ones fired when there are too many. */
 		Vec Eye;
@@ -359,6 +363,7 @@ namespace AirShow
 			int StragId = -1;
 			FallHow Falling = FallHow::None;
 			double FallT = 0.0;
+			double FallDeck = 0.0;   // the deck top its fall ends in, 0 if it began under the deck
 			int ChutesLeft = 0;
 			double ChuteAt = 0.0;
 			std::string ChuteCue;
@@ -436,6 +441,8 @@ namespace AirShow
 		Vec Velocity(const Craft& C) const;
 		double GroundAt(double X, double Y) const;
 		Fx& Emit(FxKind Kind, const Vec& At, const std::string& What = std::string(), int Key = 0);
+		/** The deck top something at height Z passes out of sight in: the deck's, if it is above the deck; else 0. */
+		double DeckFor(double Z) const { return CloudTop > 0.0 && Z > CloudTop ? CloudTop : 0.0; }
 		Craft* Find(int Key);
 		const Craft* Find(int Key) const;
 		bool Live(const Craft& C) const;

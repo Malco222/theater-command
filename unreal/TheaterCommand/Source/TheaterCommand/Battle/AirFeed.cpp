@@ -401,7 +401,40 @@ namespace AirFeed
 		Out.Terrain = Ground["terrain"].Str("");
 		for (const Json& R : Ground["land"].Items) Out.Land.push_back(Ring(R));
 		for (const Json& R : Ground["target"].Items) Out.TargetOutline.push_back(Ring(R));
+
+		// The day's sky (sky.ts): kept as given; a bundle from before it has none, and cumulus stands in.
+		const Json& Cloud = Place["cloud"];
+		if (Cloud.IsObject())
+		{
+			Out.Cloud.bGiven = true;
+			Out.Cloud.bDeck = Cloud["kind"].Str("cumulus") == "deck";
+			Out.Cloud.Base = Cloud["base"].Num(Out.Cloud.Base);
+			Out.Cloud.Top = Cloud["top"].Num(Out.Cloud.Top);
+			Out.Cloud.Chance = Cloud["chance"].Num(0.0);
+			Out.Cloud.Zone = Cloud["zone"].Str("");
+		}
 		return true;
+	}
+
+	AirSky::Placing PlacingOf(const Sky& S, const std::vector<AirShow::Group>& First, uint64_t Seed)
+	{
+		AirSky::Placing P;
+		// (a live battle's sky is handed no seed: its title, date and place stand in, the same for the same battle)
+		uint64_t Named = 1469598103934665603ull;
+		for (const char Ch : S.Title + "|" + S.Date + "|" + S.PlaceName)
+		{
+			Named ^= static_cast<unsigned char>(Ch);
+			Named *= 1099511628211ull;
+		}
+		P.Seed = Seed ? Seed : Named;
+		P.TargetX = S.TargetX;
+		P.TargetY = S.TargetY;
+		P.bShips = S.PlaceKind == "harbour" || S.PlaceKind == "fleet";
+		double Band = -1.0;
+		for (const AirShow::Group& G : First)
+			if (G.Side == 0 && !G.bFighter) Band = std::max(Band, G.Alt);
+		P.Band = Band > 0.0 ? Band : S.Bands.size() > 1 ? S.Bands[1] : 4500.0;
+		return P;
 	}
 
 	void Apply(const Sky& S, AirShow::Show& Show)

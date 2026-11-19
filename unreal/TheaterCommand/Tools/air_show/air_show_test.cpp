@@ -10,6 +10,7 @@
 #include "Battle/AirDesk.h"
 #include "Battle/AirFeed.h"
 #include "Battle/AirShow.h"
+#include "Battle/AirSky.h"
 
 #include <chrono>
 #include <cmath>
@@ -97,6 +98,12 @@ int main(int Argc, char** Argv)
 	AirShow::Show Show(Rec.Seed ? Rec.Seed : 238);
 	AirFeed::Apply(Rec.Board, Show);
 	Show.Eye = AirShow::Vec(Rec.Board.TargetX, Rec.Board.TargetY - 6000.0, 5000.0);
+	// The day's sky, laid as the scene lays it (the sea under it here: the stage's hills are the engine's).
+	const AirSky::Placing SkyAt = AirFeed::PlacingOf(Rec.Board, Rec.Views.front().Groups, Rec.Seed);
+	const auto Sky0 = std::chrono::steady_clock::now();
+	const AirSky::Field Sky = AirSky::Lay(Rec.Board.Cloud, SkyAt);
+	const double SkyLayMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Sky0).count();
+	Show.CloudTop = Sky.DeckTop;
 
 	// The track: every half battle second, each aircraft and each small thing; every effect as it comes.
 	std::ofstream Track(OutDir + "/" + Rec.Key + "-track.csv");
@@ -240,6 +247,9 @@ int main(int Argc, char** Argv)
 	std::printf("  trails: %d an aircraft's own, %d pieces'; room 24: most lit %d, refused %d (%d an aircraft's own), pieces put out %d;"
 	            " room 10: refused %d (%d an aircraft's own)\n",
 	            OwnTrails, PieceTrails, Trails24.Peak, Trails24.Refused, Trails24.RefusedOwn, Trails24.PutOut, Trails10.Refused, Trails10.RefusedOwn);
+	std::printf("  sky: %s%s from %.0f to %.0f m (zone %s, deck chance %.2f), band %.0f m; %zu clouds, %zu puffs, cover %.2f; laid in %.1f ms\n",
+	            Rec.Board.Cloud.bGiven ? "" : "(none given) ", Sky.Sky.bDeck ? "a deck" : "scattered cumulus", Sky.Base, Sky.Top, Rec.Board.Cloud.Zone.c_str(),
+	            Rec.Board.Cloud.Chance, SkyAt.Band, Sky.Clouds.size(), Sky.Puffs.size(), Sky.Cover, SkyLayMs);
 	{
 		// Each group's model as the scene makes it: the first view's, which the feed now fills from the next view to name it.
 		std::map<std::string, int> Made;
@@ -274,6 +284,152 @@ int main(int Argc, char** Argv)
 		{ "fighters pass the bombers", C.Passes > 0, std::to_string(C.Passes), "some" },
 		{ "a frame fits the budget", TotalMs / std::max(1L, Frames) < 2.0, Num(TotalMs / std::max(1L, Frames), 3), "under 2 ms on average" },
 	};
+	// The sky (AirSky): the day the battle gave, laid inside its heights, scattered, within the painter's room, the same
+	// every time, and turned to an eye within a frame's budget.
+	{
+		int Outside = 0;
+		for (const AirSky::Cloud& Cl : Sky.Clouds)
+		{
+			if (Cl.At.Z < Sky.Base - 0.5 || Cl.H > Sky.Top - Sky.Base + 0.5) ++Outside;
+			for (int K = Cl.First; K < Cl.First + Cl.Count; ++K)
+			{
+				const AirSky::Puff& Pf = Sky.Puffs[static_cast<size_t>(K)];
+				if (Pf.At.Z < Cl.At.Z - 0.5 || Pf.At.Z > Cl.At.Z + Cl.H + 0.5) ++Outside;
+			}
+		}
+		const AirSky::Field Again = AirSky::Lay(Rec.Board.Cloud, SkyAt);
+		bool bSame = Again.Puffs.size() == Sky.Puffs.size();
+		for (size_t K = 0; bSame && K < Sky.Puffs.size(); ++K)
+			bSame = Again.Puffs[K].At.X == Sky.Puffs[K].At.X && Again.Puffs[K].At.Y == Sky.Puffs[K].At.Y && Again.Puffs[K].At.Z == Sky.Puffs[K].At.Z && Again.Puffs[K].R == Sky.Puffs[K].R;
+		AirSky::Painter Paint;
+		std::vector<AirSky::Vec> Points;
+		std::vector<uint8_t> Rgba;
+		double WorstPaintMs = 0.0;
+		int Nearer = 0;
+		Paint.Paint(Sky, AirSky::Vec(Rec.Board.TargetX, Rec.Board.TargetY, 9000.0), AirSky::Vec(), SkyAt.Sun, AirSky::Rgb(1.0f, 1.0f, 1.0f), Points, Rgba); // (warm: the room made)
+		const AirSky::Vec Eyes[] = { AirSky::Vec(Rec.Board.TargetX, Rec.Board.TargetY - 6000.0, 5000.0), AirSky::Vec(Rec.Board.TargetX + 3000.0, Rec.Board.TargetY, 1200.0),
+		                             AirSky::Vec(Rec.Board.TargetX - 9000.0, Rec.Board.TargetY + 4000.0, 300.0) };
+		for (const AirSky::Vec& E : Eyes)
+		{
+			const auto P0 = std::chrono::steady_clock::now();
+			Paint.Paint(Sky, E, AirSky::Vec(300.0, -200.0, 0.0), SkyAt.Sun, AirSky::Rgb(1.0f, 1.0f, 1.0f), Points, Rgba);
+			WorstPaintMs = std::max(WorstPaintMs, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - P0).count());
+			// (laid far to near: each puff's middle no farther from the eye than the one before)
+			double Last = 1e18;
+			for (size_t K = 0; K < Points.size(); K += static_cast<size_t>(Paint.PerPuff()))
+			{
+				const AirSky::Vec D = Points[K] - (E - AirSky::Vec(300.0, -200.0, 0.0));
+				const double Far = D.Dot(D);
+				if (Far > Last + 1e-6) ++Nearer;
+				Last = Far;
+			}
+		}
+		const bool bCumulus = !Sky.Sky.bDeck;
+		Limits.push_back({ "the day's sky read from the battle", Rec.Board.Cloud.bGiven && Rec.Board.Cloud.Top >= Rec.Board.Cloud.Base + 299.0,
+		                   std::string(Rec.Board.Cloud.bDeck ? "deck " : "cumulus ") + Num(Rec.Board.Cloud.Base, 0) + " to " + Num(Rec.Board.Cloud.Top, 0) + " m", "given, tops 300 m over the base" });
+		Limits.push_back({ "cloud inside the day's base and tops", Outside == 0 && !Sky.Clouds.empty(), std::to_string(Outside) + " outside", "0" });
+		Limits.push_back({ bCumulus ? "cumulus scattered (share of sky under cloud)" : "a deck covers the sky (share under cloud)",
+		                   bCumulus ? Sky.Cover >= 0.18 && Sky.Cover <= 0.45 : Sky.Cover >= 0.625, Num(Sky.Cover, 2), bCumulus ? "0.18 to 0.45" : "5/8 or more" });
+		Limits.push_back({ "the sky within the painter's room", static_cast<int>(Sky.Puffs.size()) <= SkyAt.MostPuffs && Sky.Short == 0,
+		                   std::to_string(Sky.Puffs.size()) + " puffs, " + std::to_string(Sky.Short) + " clouds short", "at most the room, none short" });
+		Limits.push_back({ "the same sky every time", bSame, bSame ? "same" : "different", "same" });
+		Limits.push_back({ "the sky laid far to near for each eye", Nearer == 0, std::to_string(Nearer) + " out of order", "0" });
+		Limits.push_back({ "the sky turned to an eye within budget", WorstPaintMs < 4.0, Num(WorstPaintMs, 2) + " ms", "under 4 ms" });
+		Limits.push_back({ "falls end on the ground on a cumulus day", !bCumulus || Show.CloudTop == 0.0, Num(Show.CloudTop, 0), "no deck top" });
+	}
+
+	// The sky's other days, laid round this battle's target: a deck under the bombers (moved below the band where its
+	// tops come too near, over the lowest band where that is the band), a strike at ships with its hole, high ground,
+	// a ticket with no sky; and this battle flown again under a deck, where falls begun above it end in it and falls
+	// begun under it (the torpedo bombers, the low fights) go on down to the sea.
+	{
+		AirSky::Day Deck;
+		Deck.bGiven = true;
+		Deck.bDeck = true;
+		Deck.Base = 2600.0;
+		Deck.Top = 3600.0;
+		AirSky::Placing High = SkyAt;
+		High.Band = 4500.0;
+		High.bShips = false;
+		const AirSky::Field Under = AirSky::Lay(Deck, High);
+		Limits.push_back({ "a deck at least 1.5 km under the bombers", Under.Top <= High.Band - 1500.0 + 0.5 && std::fabs((Under.Top - Under.Base) - 1000.0) < 0.5 && Under.DeckTop == Under.Top,
+		                   "top " + Num(Under.Top, 0) + " m (moved " + Num(Under.Moved, 0) + "), " + Num(Under.Top - Under.Base, 0) + " m thick", "top at most 3,000 m, 1,000 m thick" });
+		Limits.push_back({ "a deck covers the sky (share under cloud)", Under.Cover >= 0.625, Num(Under.Cover, 2), "5/8 or more" });
+		AirSky::Day Low = Deck;
+		Low.Base = 900.0;
+		Low.Top = 1500.0;
+		AirSky::Placing Lowest = SkyAt;
+		Lowest.Band = 1800.0;
+		const AirSky::Field Over = AirSky::Lay(Low, Lowest);
+		Limits.push_back({ "the lowest band flies under its deck", Over.Base >= 1800.0 + 600.0 - 0.5, "base " + Num(Over.Base, 0) + " m (" + Over.MovedWhy + ")", "base at least 2,400 m" });
+		AirSky::Placing Ships = High;
+		Ships.bShips = true;
+		const AirSky::Field Hole = AirSky::Lay(Deck, Ships);
+		double Nearest = 1e9;
+		for (const AirSky::Puff& Pf : Hole.Puffs)
+			Nearest = std::min(Nearest, std::hypot(Pf.At.X - Ships.TargetX, Pf.At.Y - Ships.TargetY));
+		Limits.push_back({ "a deck keeps a hole over the ships", Nearest >= 2400.0 && Hole.Cover >= 0.625, Num(Nearest, 0) + " m to the nearest cloud, cover " + Num(Hole.Cover, 2), "at least 2,400 m, cover 5/8" });
+		// (a mountain of 2,000 m, 4 km off the target: cloud lifted to 300 m over the ground under it)
+		AirSky::Placing Hills = SkyAt;
+		const double MX = SkyAt.TargetX + 4000.0, MY = SkyAt.TargetY;
+		Hills.Ground = [MX, MY](double X, double Y) { return 2000.0 * std::exp(-((X - MX) * (X - MX) + (Y - MY) * (Y - MY)) / (2.0 * 3000.0 * 3000.0)); };
+		int Buried = 0, Lifted = 0;
+		for (const AirSky::Day& Day : { Rec.Board.Cloud, Deck })
+		{
+			const AirSky::Field Over2 = AirSky::Lay(Day, Hills);
+			for (const AirSky::Cloud& Cl : Over2.Clouds)
+			{
+				const double Floor = Hills.Ground(Cl.At.X, Cl.At.Y);
+				if (Cl.At.Z < Floor + 300.0 - 0.5) ++Buried;
+				if (Cl.At.Z > Over2.Base + 1.0) ++Lifted;
+			}
+		}
+		Limits.push_back({ "cloud 300 m or more over high ground", Buried == 0 && Lifted > 0, std::to_string(Buried) + " too low, " + std::to_string(Lifted) + " lifted", "0 too low, some lifted" });
+		AirFeed::Json Bare;
+		std::string Why;
+		AirFeed::Sky Old;
+		const bool bRead = AirFeed::Parse("{\"place\":{\"kind\":\"city\",\"name\":\"Essen\"}}", Bare, Why) && AirFeed::ReadSky(Bare, Old);
+		const AirSky::Field Plain = AirSky::Lay(Old.Cloud, AirFeed::PlacingOf(Old, {}, 0));
+		Limits.push_back({ "a ticket with no sky draws cumulus", bRead && !Old.Cloud.bGiven && !Plain.Sky.bDeck && !Plain.Clouds.empty() && Plain.DeckTop == 0.0,
+		                   bRead ? std::to_string(Plain.Clouds.size()) + " cumulus" : "unread", "cumulus, no deck" });
+
+		// This battle under a deck at 4,500 m: not a day's height but a test's, about half its aircraft lost above it
+		// and half under it.
+		const double TestDeck = 4500.0;
+		AirShow::Show Decked(Rec.Seed ? Rec.Seed : 238);
+		AirFeed::Apply(Rec.Board, Decked);
+		Decked.CloudTop = TestDeck;
+		size_t Next = 0;
+		int AboveFalls = 0, UnderFalls = 0, UnderBurning = 0, PlaneDowns = 0, PiecesDown = 0, WrongDeck = 0;
+		for (double At = Rec.Views.front().Head.T; At < EndT - 1e-9;)
+		{
+			At = std::min(EndT, At + 1.0 / 30.0);
+			while (Next < Rec.Views.size() && Rec.Views[Next].Head.T <= At + 1.0 + 1e-9)
+			{
+				Decked.Take(Rec.Views[Next].Head.T, Rec.Views[Next].Groups, Rec.Views[Next].Events, Rec.Views[Next].Ships);
+				++Next;
+			}
+			Decked.Advance(At);
+			for (const AirShow::Fx& E : Decked.Effects)
+			{
+				if (E.Kind == AirShow::FxKind::Fall)
+				{
+					const bool bAbove = E.At.Z > TestDeck;
+					AboveFalls += bAbove ? 1 : 0;
+					UnderFalls += bAbove ? 0 : 1;
+					UnderBurning += !bAbove && E.What != "explode" ? 1 : 0;
+					if ((bAbove && E.Deck != TestDeck) || (!bAbove && E.Deck >= TestDeck)) ++WrongDeck;
+				}
+				if ((E.Kind == AirShow::FxKind::Crash || E.Kind == AirShow::FxKind::Splash) && E.What == "plane") ++PlaneDowns;
+				if ((E.Kind == AirShow::FxKind::Crash || E.Kind == AirShow::FxKind::Splash) && E.What == "piece") ++PiecesDown;
+			}
+			Decked.Effects.clear();
+		}
+		Limits.push_back({ "under a deck, falls begun above it end in it", WrongDeck == 0 && AboveFalls > 0 && UnderFalls > 0 && PlaneDowns <= UnderBurning && PlaneDowns + 2 >= UnderBurning,
+		                   std::to_string(AboveFalls) + " above, " + std::to_string(UnderFalls) + " under; " + std::to_string(PlaneDowns) + " reach the sea of " + std::to_string(UnderBurning) + " not blown apart under it",
+		                   "every one under it that is not blown apart reaches the sea (within 2), none from above" });
+	}
+
 	int Failed = 0;
 	for (const Limit& L : Limits)
 	{

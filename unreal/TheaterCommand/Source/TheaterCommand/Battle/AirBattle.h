@@ -99,6 +99,14 @@ private:
 	/** Parachutes, pieces and bombs: one mesh, laid afresh each frame. */
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Small;
+	/** The day's clouds: one see-through mesh of soft puffs (the effects kit's shape and M_Highlight), turned to the eye
+	 * when it has moved enough, and carried by the wind. */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> Clouds;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> CloudInk;
+	TArray<FVector> CloudPoints;
+	TArray<FColor> CloudColours;
 	/** The sea and the land under a battle with no stage. */
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> Ground;
@@ -170,6 +178,10 @@ private:
 	bool Open(const FString& Why);
 	void Raise();
 	void LayGround();
+	/** The day's clouds laid round the target (AirSky) and their mesh made; the deck's top handed to the flight core. */
+	void LaySky();
+	/** The clouds moved with the wind and, when the eye has moved enough, turned to it again. */
+	void DrawSky();
 	void HideTheTable();
 	/** Every frame the battle is up: a piece the table stood again (its crowds unfolding under the pointer) is put away. */
 	void KeepTheTableHidden();

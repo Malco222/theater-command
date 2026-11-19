@@ -303,6 +303,7 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	S.Board = S.Recording.Board;
 	S.Show = AirShow::Show(S.Recording.Seed ? S.Recording.Seed : 238);
 	AirFeed::Apply(S.Board, S.Show);
+	S.SkyPlace = AirFeed::PlacingOf(S.Board, S.Recording.Views.front().Groups, S.Recording.Seed);
 	S.Desk.Begin(S.Board, S.Recording.Views.front().Head.Me);
 	S.Card = S.Desk.CardOf(S.Recording.Card);
 	S.BattleT = S.Recording.Views.front().Head.T;
@@ -340,6 +341,7 @@ bool AAirBattle::BeginLive(FCampaignSession* InSession, const FString& Kind, int
 	}
 	S.bReplay = false;
 	AirFeed::Apply(S.Board, S.Show);
+	S.SkyPlace = AirFeed::PlacingOf(S.Board, First.Groups, 0);
 	S.Desk.Begin(S.Board, First.Head.Me);
 	S.Show.Take(First.Head.T, First.Groups, First.Events, First.Ships);
 	S.Desk.Take(First);
@@ -436,6 +438,7 @@ bool AAirBattle::Open(const FString& Why)
 			return Under.IsValid() ? FMath::Max(0.0, Under->GroundZ(FVector(Y * U, X * U, 0.0)) / U) : 0.0;
 		};
 	}
+	LaySky();
 	Small = NewObject<UProceduralMeshComponent>(this, TEXT("AirSmallThings"));
 	Small->SetupAttachment(Root);
 	Small->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -900,6 +903,97 @@ void AAirBattle::ShowTheTable()
 	KeptPieces.Reset();
 }
 
+void AAirBattle::LaySky()
+{
+	// The day's clouds (AirSky, the art director's sky at bomber height): laid once, round the target, over the stage's
+	// hills; the flight core told the deck's top, where falls begun above it pass out of sight.
+	FAirBattleState& S = *State;
+	const FVector Sun = Stage && Stage->IsRaised() ? Stage->TowardSun() : FRotator(30.0, 150.0, 0.0).Vector();
+	S.SkyPlace.Sun = AirSky::Vec(Sun.Y, Sun.X, Sun.Z);
+	S.SkyPlace.Ground = S.Show.Ground;
+	S.Sky = AirSky::Lay(S.Board.Cloud, S.SkyPlace);
+	S.Show.CloudTop = S.Sky.DeckTop;
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the sky, %s%s from %.0f to %.0f m%s; %d clouds of %d puffs, %.0f%% of the sky."),
+		S.Board.Cloud.bGiven ? TEXT("") : TEXT("(none given) "), S.Sky.Sky.bDeck ? TEXT("a deck") : TEXT("scattered cumulus"), S.Sky.Base, S.Sky.Top,
+		S.Sky.MovedWhy.empty() ? TEXT("") : *FString::Printf(TEXT(", moved %.0f m %s"), S.Sky.Moved, *AirParts::Wide(S.Sky.MovedWhy)),
+		static_cast<int32>(S.Sky.Clouds.size()), static_cast<int32>(S.Sky.Puffs.size()), S.Sky.Cover * 100.0);
+	if (S.Sky.Puffs.empty())
+	{
+		return;
+	}
+	UMaterialInterface* Highlight = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight"));
+	if (!Highlight)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_Highlight is missing (run Tools/build_content.sh): no clouds are drawn."));
+		return;
+	}
+	Clouds = NewObject<UProceduralMeshComponent>(this, TEXT("AirClouds"));
+	Clouds->bUseAsyncCooking = false;
+	Clouds->SetupAttachment(Root);
+	Clouds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Clouds->SetCastShadow(false);
+	// (see-through, as the kit's smoke: drawn before it, so the smoke and tracer of a fight over the clouds lie on them)
+	Clouds->SetTranslucentSortPriority(-10);
+	Clouds->RegisterComponent();
+	CloudInk = UMaterialInstanceDynamic::Create(Highlight, this);
+	CloudInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+	// The first turn of the puffs, to an eye behind the raid; after that DrawSky turns them as the eye moves.
+	const AirSky::Vec Drift(0.0, 0.0, 0.0);
+	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
+	S.SkyPainter.Paint(S.Sky, AirSky::Vec(S.Board.TargetX, S.Board.TargetY - 6000.0, 5000.0), Drift, S.SkyPlace.Sun, Light, S.SkyPoints, S.SkyRgba);
+	const std::vector<int> Made = S.SkyPainter.Triangles(static_cast<int>(S.Sky.Puffs.size()));
+	TArray<int32> Triangles;
+	Triangles.Reserve(static_cast<int32>(Made.size()));
+	for (const int Index : Made)
+	{
+		Triangles.Add(Index);
+	}
+	CloudPoints.SetNum(static_cast<int32>(S.SkyPoints.size()));
+	CloudColours.SetNum(static_cast<int32>(S.SkyPoints.size()));
+	for (int32 Index = 0; Index < CloudPoints.Num(); ++Index)
+	{
+		const AirSky::Vec& P = S.SkyPoints[static_cast<size_t>(Index)];
+		CloudPoints[Index] = World(P.X, P.Y, P.Z);
+		const size_t C = static_cast<size_t>(Index) * 4;
+		CloudColours[Index] = FColor(S.SkyRgba[C], S.SkyRgba[C + 1], S.SkyRgba[C + 2], S.SkyRgba[C + 3]); // (linear already, as the kit's)
+	}
+	TArray<FVector> Normals;
+	Normals.Init(FVector::UpVector, CloudPoints.Num());
+	Clouds->CreateMeshSection(0, CloudPoints, Triangles, Normals, TArray<FVector2D>(), CloudColours, TArray<FProcMeshTangent>(), false);
+	Clouds->SetMaterial(0, CloudInk);
+}
+
+void AAirBattle::DrawSky()
+{
+	if (!Clouds || !Eye || !State.IsValid())
+	{
+		return;
+	}
+	FAirBattleState& S = *State;
+	// The wind's carry (the battle's wind, as the effects kit is given it: 3 m/s toward the east, 2 toward the south),
+	// on the air clock, so the clouds drift as the smoke does.
+	const double Air = S.Show.AirNow();
+	const AirSky::Vec Drift(3.0 * Air, -2.0 * Air, 0.0);
+	Clouds->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
+	const FVector At = Eye->GetActorLocation() / UnitsPerMetre;
+	const AirSky::Vec Seen(At.Y, At.X, At.Z);
+	if (!S.SkyPainter.Stale(Seen, Drift))
+	{
+		return;
+	}
+	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
+	S.SkyPainter.Paint(S.Sky, Seen, Drift, S.SkyPlace.Sun, Light, S.SkyPoints, S.SkyRgba);
+	const int32 Count = FMath::Min(CloudPoints.Num(), static_cast<int32>(S.SkyPoints.size()));
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		const AirSky::Vec& P = S.SkyPoints[static_cast<size_t>(Index)];
+		CloudPoints[Index] = World(P.X, P.Y, P.Z);
+		const size_t C = static_cast<size_t>(Index) * 4;
+		CloudColours[Index] = FColor(S.SkyRgba[C], S.SkyRgba[C + 1], S.SkyRgba[C + 2], S.SkyRgba[C + 3]);
+	}
+	Clouds->UpdateMeshSection(0, CloudPoints, TArray<FVector>(), TArray<FVector2D>(), CloudColours, TArray<FProcMeshTangent>());
+}
+
 FVector AAirBattle::World(double X, double Y, double Z) const
 {
 	return FVector(Y * UnitsPerMetre, X * UnitsPerMetre, Z * UnitsPerMetre);
@@ -967,6 +1061,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 	}
 	Draw(Real);
 	AimEye(Real);
+	DrawSky();
 	if (Effects && Eye)
 	{
 		int32 ViewW = 1600;

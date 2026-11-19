@@ -8,6 +8,7 @@ battle screen over it.
 
 | File | What it is |
 |---|---|
+| `AirSky.h/.cpp` | The day's sky, plain C++: the clouds laid round the target from `sky.place.cloud` (scattered cumulus, or a deck), and the painter that turns their puffs to the eye. |
 | `AirShow.h/.cpp` | The flight core, plain C++. Every aircraft of every formation flies as an aircraft flies: banked turns, no turn tighter than 210 m, at most 6 g, no sliding, speed lost in a climb. It also handles the passes and breaks, the guns, the hits, the falls, the parachutes, the flak round the boxes, the bombs and torpedoes, and the ship news when the bombs arrive. |
 | `AirFeed.h/.cpp` | Reads the bridge's JSON (sky, views, after card, recordings) into the flight core's terms. Plain C++. |
 | `AirDesk.h/.cpp` | The screen's words and clock: the top bar, the aim slip, the near line, the dispatches, the tags, the after card, the orders as `TC.battleOrder` takes them, and the close camera's subject. Plain C++. |
@@ -51,7 +52,7 @@ At ×1 the Pearl Harbor raid lasts about 7 real minutes, with contact about 20 s
 **Falling aircraft.** Every loss hands the effects kit its fall (`AirFall`, kit head 44af184). An aircraft blown apart
 throws its debris row at once round the kit's torn fireball. One going down burning or spinning sheds pieces as it
 falls (`AirFallMove` every frame, `AirFallStop` when the model is gone). The pieces fade into the ground under the
-fight, or the cloud deck's top once clouds are drawn. A blow-up keeps only its two biggest pieces trailing fire and
+fight, or the cloud deck's top for a fall begun above a deck. A blow-up keeps only its two biggest pieces trailing fire and
 smoke, because a trail holds about 240 of the kit's 3,000 puffs.
 
 The debris has a room of 700 puffs (`AirShow::DebrisRoom`). A burning or spinning fall leaves 100 of it for the next
@@ -69,6 +70,31 @@ day's light, and puts all of it back on CONTINUE. The campaign's controller stil
 pointer's province changes, the map unfolds its crowds and would stand its pieces again, at the world's origin where
 the battle is. So every frame the scene puts away any piece that came back. On CONTINUE the map stands its pieces
 again itself, with the crowds folded.
+
+**The sky.** Each battle carries its day (`sky.place.cloud`, the air thread's `sky.ts`): a cloud deck or scattered
+cumulus, with one cloud base and one top. Pearl Harbor and Midway are cumulus days, as history had them: Oahu's
+base 940 m and tops 2,060 m, the Mobile Force's 510 m and 1,820 m. A ticket from a rules bundle without the sky draws
+cumulus at the cloud table's middle heights. `AirSky` lays the clouds and the scene draws them as one see-through mesh
+of soft puffs, in the effects kit's shape and with the same `M_Highlight`. They are turned to the eye only when it has
+moved about a quarter of a degree at the nearest puff, and the whole mesh drifts with the battle's wind.
+
+- **Cumulus** cover about three eighths of the sky, fewer over the target so the ships stay in sight. Each is a flat
+  grey base, a lit, lumpy dome wider than it is tall, a few turrets and a faint veil that holds it together. Most are
+  shallow, and a few reach the day's tops.
+- **A deck** covers most of the sky, with a few holes. It sits at least 1.5 km under the raid's bombers (the art
+  director's 1.5 to 2.5 km). Where the drawn top comes nearer, the deck is lowered and keeps its thickness. Over the
+  lowest band (1,800 m) the deck lies above the bombers instead. A strike at ships keeps a hole over the ships. The
+  deck reaches out about 32 km in coarser tiles, so its edge is lost in the haze.
+- Cloud never sits lower than 300 m over the ground under it, so a cloud over a mountain is lifted with it.
+- **Falls and the deck.** The deck's top as drawn is where falls end (`DeckZ` for `AirFall`, `CloudTop` in the core).
+  A fall begun above the deck ends inside it. A fall begun under it (a torpedo bomber, a low fight) goes on down to the
+  sea or the ground, with its pieces and parachutes.
+- The cloud test checks the sky too. It checks the day as read, the heights, the cover, the room (at most 3,200 puffs;
+  the two battles lay about 2,200), the same sky every time, the far-to-near order and the painter's time. It lays a
+  deck under a 4,500 m band, a deck over the lowest band, a strike's hole, a 2,000 m mountain and a ticket with no sky,
+  and flies the battle again under a test deck. `AIR_SKY_PICTURES=1 Tools/air_show/run.sh` also draws each battle's
+  clouds from three eyes, plus a deck day, with a small software painter (`air_sky_picture.cpp`). Unreal's light and
+  haze are only stood in for there.
 
 ## Hook lines for the 3D builder
 
@@ -123,4 +149,8 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
 1. **Bank direction.** A plane turning right should have its right wing down. If every bank reads backwards, negate `P.Bank` in `AAirBattle::Draw` and in the close camera.
 2. **Nose direction and size.** Each model is built nose toward -X and turned half round before its heading. The carrier aircraft (Kate, Val, Dauntless, Devastator, Wildcat) use the sculpted models where `Content/Models` has them. Otherwise each is the nation's plain fighter or bomber, scaled to the battle's span.
 3. **The tags.** They should sit over their formations and fan out instead of stacking, his own in cream and the enemy's in muted paper. The near line should be amber.
-4. **The sound.** Each formation's drone, the bursts by calibre, the flak bursts heard after their flash, and a fighter group's pass within 300 m. The loudness and distances come from mix.json's families.
+4. **The clouds.** They should be white on their sunlit tops, grey under their flat bases, and soft at the edges,
+   with no ring of polygon corners. The fight's smoke and tracer over the clouds should lie on them. If the clouds glare
+   or vanish against the sky, their brightness is the three colours at the top of `AirSky.cpp`. If they cost too much
+   time, `Placing::MostPuffs` sets their room and `Painter(12)` the sides of each puff.
+5. **The sound.** Each formation's drone, the bursts by calibre, the flak bursts heard after their flash, and a fighter group's pass within 300 m. The loudness and distances come from mix.json's families.

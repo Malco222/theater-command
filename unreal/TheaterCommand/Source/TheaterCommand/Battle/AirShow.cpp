@@ -1013,13 +1013,14 @@ namespace AirShow
 			Chute.At = Local(C, Vec(-C.Form.Long * 0.3, 0.0, -1.5));
 			Chute.Vel = Velocity(C) * 0.25;
 			Chute.Size = 7.0;
+			Chute.Deck = DeckFor(Chute.At.Z);
 			Small.push_back(Chute);
 			if (!C.ChuteCue.empty()) Emit(FxKind::Sound, Chute.At, C.ChuteCue);
 			C.ChutesLeft--;
 			C.ChuteAt += Roll.U(1.0, 2.5);
 			Check.Chutes++;
 		}
-		const bool bCloud = CloudTop > 0.0 && C.P.Z < CloudTop - 150.0;
+		const bool bCloud = C.FallDeck > 0.0 && C.P.Z < C.FallDeck - 150.0;
 		if (C.P.Z <= Floor + 2.0 || bCloud || C.FallT > 150.0)
 		{
 			if (!bCloud && C.FallT <= 150.0) Emit(Floor > 0.5 ? FxKind::Crash : FxKind::Splash, Vec(C.P.X, C.P.Y, Floor), "plane").Size = C.Form.Span;
@@ -1153,16 +1154,18 @@ namespace AirShow
 		C.ChuteAt = Roll.U(2.0, 5.0);
 		C.ChuteCue = E.ChuteCue.empty() && E.Chutes > 0 ? "parachute_open" : E.ChuteCue;
 		C.Falling = E.Kind == "explode" ? FallHow::Explode : E.Kind == "spin" ? FallHow::Spin : FallHow::Burn;
+		C.FallDeck = DeckFor(C.P.Z);
 		Check.Falls++;
 		if (E.bByFlak) Emit(FxKind::Flak, C.P + Vec(Roll.U(-4.0, 4.0), Roll.U(-4.0, 4.0), Roll.U(-2.0, 3.0)), "heavy"); // (the one burst laid on a model: this one falls to it)
 		if (!E.Cue.empty()) Emit(FxKind::Sound, C.P, E.Cue);
 		const Vec V = Velocity(C);
 		{
-			// The debris row, for the effects kit: where the pieces leave sight is the cloud deck's top, else the ground.
+			// The debris row, for the effects kit: where the pieces leave sight is the cloud deck's top for a fall begun
+			// above it, else the ground.
 			Fx& F = Emit(FxKind::Fall, C.P, C.Falling == FallHow::Explode ? "explode" : C.Falling == FallHow::Spin ? "spin" : "burn", C.Key);
 			F.Vel = V;
 			F.Size = C.Form.Span;
-			F.Deck = CloudTop > 0.0 ? CloudTop : GroundAt(C.P.X, C.P.Y);
+			F.Deck = C.FallDeck > 0.0 ? C.FallDeck : GroundAt(C.P.X, C.P.Y);
 		}
 		const Vec EngineAt = Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[C.Form.Engines.size() > 1 ? (Roll.U() < 0.5 ? 1 : C.Form.Engines.size() - 2) : 0]);
 		if (C.Falling == FallHow::Explode)
@@ -1182,6 +1185,7 @@ namespace AirShow
 				P.Vel = V * 0.8 + Vec(Roll.U(-1.0, 1.0), Roll.U(-1.0, 1.0), Roll.U(-0.4, 1.0)) * 18.0;
 				P.Size = C.Form.Span * (K == 0 ? 0.45 : Roll.U(0.12, 0.3));
 				P.Spin = Roll.U(0.0, 6.0);
+				P.Deck = C.FallDeck;
 				Small.push_back(P);
 				// (the biggest trails fire and the next smoke; the rest fall bare: a trail holds about 240 of the
 				// effects kit's 3,000 puffs, and the kit's debris row is the small pieces)
@@ -1620,7 +1624,7 @@ namespace AirShow
 		{
 			Thing& T = Small[K];
 			const double Floor = GroundAt(T.At.X, T.At.Y);
-			const bool bCloud = CloudTop > 0.0 && T.Kind != ThingKind::Bomb && T.At.Z < CloudTop - 150.0;
+			const bool bCloud = T.Deck > 0.0 && T.Kind != ThingKind::Bomb && T.At.Z < T.Deck - 150.0;
 			if (T.At.Z > Floor && !bCloud && T.Age < 400.0) { ++K; continue; }
 			const Vec Down(T.At.X, T.At.Y, Floor);
 			if (T.Kind == ThingKind::Bomb)

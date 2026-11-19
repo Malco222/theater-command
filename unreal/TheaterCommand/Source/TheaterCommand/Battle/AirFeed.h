@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Battle/AirShow.h"
+#include "Battle/AirSky.h"
 
 #include <map>
 #include <string>
@@ -73,10 +74,16 @@ namespace AirFeed
 		/** The land under the board (place.ground.land): rings of board points. */
 		std::vector<std::vector<std::pair<double, double>>> Land;
 		std::vector<std::vector<std::pair<double, double>>> TargetOutline;
+		/** The day's sky (place.cloud): a deck or scattered cumulus, its base and top; absent, cumulus. */
+		AirSky::Day Cloud;
 	};
 	bool ReadSky(const Json& J, Sky& Out);
 	/** Hands the board and the loadouts to the show. */
 	void Apply(const Sky& S, AirShow::Show& Show);
+	/** Where and for what battle its sky is laid: the battle's seed, the target, the raid's band (the highest of the
+	 * raider's bombers in the first view; the middle band if it has none) and whether it is a strike at ships. The
+	 * caller adds the sun and the ground. */
+	AirSky::Placing PlacingOf(const Sky& S, const std::vector<AirShow::Group>& First, uint64_t Seed);
 
 	/** A side's bar under HOW NEAR TO BREAKING OFF, and why (ammo or nerve). */
 	struct Near
