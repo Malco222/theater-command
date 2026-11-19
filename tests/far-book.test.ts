@@ -9,7 +9,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { addCorps, assess, createGame, declareWar, removeCorps, startPhase } from '../src/campaign/game';
+import { addCorps, assess, capitulate, createGame, declareWar, removeCorps, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
 import { bookAttacks, bookFleets, bookStations, bookWatch, ceilinged, stations, type Attack } from '../src/campaign/stations';
@@ -150,38 +150,71 @@ describe("the book's dated attacks (ruling 234, riders b573 to b583)", () => {
 
   it("a landing with the record's figures meets its fight inland: no cut for the shore and the shore works aside; lost, it is back at its port and owed (rider b580)", () => {
     const name = 'Java: Bantam Bay and Merak', i = index(name);
-    const java = (more: number): { g: Game; d2: Corps; knil: Corps } => {
+    // Java in March 1942, the Indies in Britain's keeping as the book has them, West Java's rows on the month's step.
+    // (`stood`: a corps the record did not have at Batavia, so that the landing's own fight can be read.)
+    const java = (stood: number): { g: Game; d2: Corps; knil: Corps } => {
       const g = war(1);
+      declareWar(g, 'GER', 'NED');
+      capitulate(g, 'NED', 'GER');
       const d2 = put(g, 'JAP', '16th Army (2nd Division)', 'Cam Ranh', 1);
       const knil = g.corps.find((c) => c.name === 'KNIL 1st Division (West Java)')!;
-      if (more) put(g, knil.nat, 'A corps the record did not have on Java', 'Batavia', more);
       strike(g);
-      declareWar(g, 'JAP', knil.nat);
       g.byName['Cam Ranh'].ctrl = 'JAP';
       g.turn = 31;
+      bookStations(g, 'UK');
+      if (stood) put(g, 'UK', 'A corps the record did not have at Batavia', 'Batavia', stood);
       return { g, d2, knil };
     };
-    expect([attack(name).sea, attack(name).met]).toEqual([true, [1.0, 0.85]]);
-    const { g, d2, knil } = java(0);
-    const shore = g.byName.Batavia, whole = knil.str;
-    expect([at(g, knil), shore.fort]).toEqual(['Batavia', { lv: 1, vs: ['JAP'] }]);
+    // The row keeps Leuwiliang's figures by the historian's card: 0.25 of the 2nd Division against 0.3.
+    expect([attack(name).sea, attack(name).met]).toEqual([true, [0.25, 0.3]]);
+    const { g, d2 } = java(0.1);
+    const shore = g.byName.Batavia;
+    expect(shore.fort).toEqual({ lv: 1, vs: ['JAP'] });
     listen();
     bookAttacks(g, 'JAP');
     const t = made(name)[0], rep = t.report!;
-    // The West Group is under the record's 0.85 and fights whole; the division fights with what the crossing left it, and as no more than 1.0.
-    expect(menOf(rep.defenders)).toBe(Math.round(whole * MEN_PER_DIV));
-    expect(menOf(rep.attackers)).toBeLessThanOrEqual(MEN_PER_DIV);
+    // What stands there is under the record's 0.3 and fights whole; the division fights as no more than the 0.25 that met.
+    expect(menOf(rep.defenders)).toBe(Math.round(0.1 * MEN_PER_DIV));
+    expect(Math.abs(menOf(rep.attackers) - 0.25 * MEN_PER_DIV)).toBeLessThanOrEqual(2);
     const line = (label: string): string => { const l = rep.lines.find((x) => x.label === label); return l ? `${l.value} ${l.effect}` : ''; };
     expect(line('Landing')).toContain('100%');
     expect(line('Fortifications')).toBe('');
     expect(shore.fort).toEqual({ lv: 1, vs: ['JAP'] });
     expect([t.taken, at(g, d2), d2.hold, g.flags[`ba:${i}`], g.flags[`bat:${i}`]]).toEqual([true, 'Batavia', false, 31, undefined]);
-    // Against more than the record had there the same landing is thrown back: the division is at its quay, and the attack is owed for another month.
+    // Against more than the record met there the same landing is thrown back: the division is at its quay, and the attack is owed for another month.
     const strong = java(2);
     listen();
     bookAttacks(strong.g, 'JAP');
-    expect(Math.abs(menOf(made(name)[0].report!.defenders) - 0.85 * MEN_PER_DIV)).toBeLessThanOrEqual(2);
+    expect(Math.abs(menOf(made(name)[0].report!.defenders) - 0.3 * MEN_PER_DIV)).toBeLessThanOrEqual(2);
     expect([made(name)[0].taken, at(strong.g, strong.d2), strong.g.flags[`ba:${i}`], strong.g.flags[`bat:${i}`]]).toEqual([false, 'Cam Ranh', undefined, 31]);
+  });
+
+  it('Batavia is given up, not lost: West Java\'s rows are on the plateau in the month of the landing, before it is fought, and the 2nd Division lands on an empty province (rider b621)', () => {
+    const name = 'Java: Bantam Bay and Merak', i = index(name);
+    const west = ['KNIL 1st Division (West Java)', 'Blackforce (2/3rd Machine Gun and 2/2nd Pioneer Battalions)', '2nd Battalion, 131st Field Artillery (United States)'];
+    // The table: each of the three leaves Batavia for Bandoeng in March 1942 (turn 31), in the open; the militia is there in its works already.
+    expect(west.map((n) => stations()!.rows.find((r) => r.corps === n)!.steps.at(-1))).toEqual([[31, 'Bandoeng', 0], [31, 'Bandoeng', 0], [31, 'Bandoeng', 0]]);
+    const g = war(1);
+    declareWar(g, 'GER', 'NED');
+    capitulate(g, 'NED', 'GER');
+    const d2 = put(g, 'JAP', '16th Army (2nd Division)', 'Cam Ranh', 0.9);
+    const stand = west.map((n, k) => g.corps.find((c) => c.name === n) ?? put(g, 'UK', n, 'Batavia', [0.5, 0.2, 0.1][k]));
+    strike(g);
+    g.byName['Cam Ranh'].ctrl = 'JAP';
+    // February: the West Group is in Batavia still.
+    g.turn = 30;
+    bookStations(g, 'UK');
+    expect(stand.map((c) => at(g, c))).toEqual(['Batavia', 'Batavia', 'Batavia']);
+    // March: Britain's month comes before Japan's, and the three are on the plateau when the landing is made.
+    g.turn = 31;
+    bookStations(g, 'UK');
+    expect(stand.map((c) => [at(g, c), c.hold, c.bookWorks])).toEqual([['Bandoeng', true, 0], ['Bandoeng', true, 0], ['Bandoeng', true, 0]]);
+    listen();
+    bookAttacks(g, 'JAP');
+    // No fight is told: the division marches in, and the row is made in its month.
+    expect(made(name).map((t) => [t.taken, t.report])).toEqual([[true, undefined]]);
+    expect([at(g, d2), g.byName.Batavia.ctrl, g.flags[`ba:${i}`], g.flags[`bat:${i}`]]).toEqual(['Batavia', 'JAP', 31, undefined]);
+    expect(stand.map((c) => [at(g, c), c.dead ?? false])).toEqual([['Bandoeng', false], ['Bandoeng', false], ['Bandoeng', false]]);
   });
 
   it("is made computer against computer: never on ground a player holds, and not at all for a player's Japan or where history is loose", () => {
