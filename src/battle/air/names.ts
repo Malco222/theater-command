@@ -80,15 +80,17 @@ export function oneOf(name: string, adj = ''): string {
  * 'an American aircraft of Bombing Three and Scouting Six', 'a damaged German bomber of Kampfgeschwader 2'; for a
  * group named for its aircraft 'one of the Japanese Shokaku and Zuikaku dive bombers' ('how' after the name); the
  * enemy's fleet wing by its own aircraft and fleet, 'a British carrier fighter of the Home Fleet', 'of Force H' (14:48Z).
+ * 'adj' is the enemy's nation word ('' for one's own), dropped where the name already says it: 'a carrier fighter of
+ * the Brazilian Fleet', 'a bomber of the Polish Navy's strike wing' (ruling 5).
  */
 export function aCraftOf(name: string, noun: string, adj = '', how = ''): string {
-  const w = adj ? FLEET_WING.exec(name) : null;
+  const w = adj ? FLEET_WING.exec(name) : null, said = adjFor(name, adj);
   if (w && w[2] !== 'strike wing') {
-    const what = [how, adj, w[2].replace(/s$/, '')].filter(Boolean).join(' ');
+    const what = [how, said, w[2].replace(/s$/, '')].filter(Boolean).join(' ');
     return `${an(what)} ${what} of ${takesThe(w[1]) ? 'the ' : ''}${w[1]}`;
   }
-  if (subjectOf(name).craft) return `${oneOf(name, adj)}${how ? `, ${how},` : ''}`;
-  const what = [how, adj, noun].filter(Boolean).join(' ');
+  if (subjectOf(name).craft) return `${oneOf(name, said)}${how ? `, ${how},` : ''}`;
+  const what = [how, said, noun].filter(Boolean).join(' ');
   return `${an(what)} ${what} of ${subjectOf(name).whom}`;
 }
 

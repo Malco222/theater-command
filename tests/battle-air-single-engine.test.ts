@@ -162,6 +162,12 @@ describe('the UI director\'s rule of 14:48Z: a name takes "the" unless written a
     expect(aCraftOf('Force H carrier fighters', 'aircraft')).toBe("one of Force H's carrier fighters");
     // The strike wing keeps its passed form, the nation word on the aircraft.
     expect(aCraftOf('Home Fleet strike wing', 'bomber', 'British')).toBe("a British bomber of the Home Fleet's strike wing");
+    // A fleet whose name says its nation: still the enemy's form, the nation word said once (ruling 5).
+    expect(aCraftOf('Brazilian Fleet carrier fighters', 'aircraft', 'Brazilian')).toBe('a carrier fighter of the Brazilian Fleet');
+    expect(aCraftOf('Royal Norwegian Navy carrier fighters', 'aircraft', 'Norwegian')).toBe('a carrier fighter of the Royal Norwegian Navy');
+    expect(aCraftOf('Brazilian Fleet carrier fighters', 'aircraft')).toBe("one of the Brazilian Fleet's carrier fighters");
+    expect(aCraftOf('Polish Navy strike wing', 'bomber', 'Polish', 'damaged')).toBe("a damaged bomber of the Polish Navy's strike wing");
+    expect(aCraftOf('Japanese Shokaku and Zuikaku dive bombers', 'bomber', 'Japanese')).toBe('one of the Japanese Shokaku and Zuikaku dive bombers');
   });
 });
 
