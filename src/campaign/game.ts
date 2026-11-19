@@ -42,7 +42,7 @@ import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCros
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
-import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
+import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -3384,6 +3384,38 @@ function landVoyages(g: Game, nat: string): void {
   if (!g.atSea.length) delete g.atSea;
 }
 
+/**
+ * The far side: a division raised at home and posted abroad is not struck for a lost posting (rider b642 part 2 to
+ * ruling 234, the design director's of 15:52Z and 17:10Z of 19 November 2026). A row is a fact of the division's
+ * raising: where its posting, beyond the old chart, is not its side's on the date, it comes ashore at its country's
+ * nearest held port to the posting, clear of the enemy and with room, and the staff posts it: it holds nothing
+ * there. In twenty-four wars the old rule struck Japan a hundred and ten rows for want of the place, the 65th
+ * Brigade and the 21st Division's detachment for Luzon in every one. Returns the port, and the worth that lands.
+ *
+ * A row the record raised in the place itself (`levy`, the historian's mark) keeps the old rule: it waits its half
+ * year for the place and is then struck. So does a row that came by land or by air from a country of its own and
+ * is not its carrier's to land from the sea (`overland`: China's armies for Burma). A row with no home but one
+ * ground comes ashore only at a port of that ground its side holds (`shore`: the KNIL, the Netherlands being
+ * occupied). And a row that takes corps already on the board (`from`) keeps the old rule for them: they stay where
+ * they stand under their own names, and only what the row adds from home (`adds`, its worth) comes ashore, so that
+ * nobody is counted twice. The 18th Division, all of it in Malaya, is not brought to Rangoon's coast; the 56th's
+ * body comes from home and the Sakaguchi Detachment stays as it is. A fort, a row that joins a standing corps and a
+ * row made out of a defeat are not read. Null with the far side off, and for every row posted on the old chart.
+ */
+export function ashoreFor(g: Game, nat: string, row: any[], reg: Region | undefined): { at: Region; adds: number | null } | null {
+  const o = row[6] ?? {}, posting = g.byName[row[5]];
+  if (!farOn(g) || !reg || !posting || reg.id !== posting.id || !beyondEurope(posting) || allied(g, nat, posting.ctrl)) return null;
+  if (o.levy || o.overland || o.joins || o.join || o.ifLost || row[3] === 'fort' || (o.from !== undefined && !(Array.isArray(o.from) && o.adds > 0))) return null;
+  const mine = (r: Region): boolean => (o.shore ? r.owner === o.shore && allied(g, nat, r.ctrl) : r.ctrl === nat);
+  let best: Region | null = null, bd = Infinity;
+  for (const r of g.regions) {
+    if (!r.port || !mine(r) || hostileUnits(g, r, nat).length || friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= STACK) continue;
+    const d = mapDist2(g, r.x, r.y, posting.x, posting.y);
+    if (d < bd) { bd = d; best = r; }
+  }
+  return best ? { at: best, adds: o.from !== undefined ? o.adds : null } : null;
+}
+
 /** For the measuring harness: told of each dated row struck off unsent when its half year is out. Nothing in the game listens. */
 export const struckWatch: { tell: ((e: { turn: number; due: number; nat: string; name: string; kind: string; divs: number; place: string; owner: string | null; holder: string | null; to: string | null; toHolder: string | null; war: boolean; until: boolean; ifLost: boolean; joins: string | null; hold: boolean }) => void) | null } = { tell: null };
 
@@ -3413,6 +3445,7 @@ function expeditions(g: Game, nat: string): void {
     let reg = g.byName[row[5]];
     let due = row[0];
     let fell = false;
+    let ashore: { at: Region; adds: number | null } | null = null;
     // The wider world: a computer-run country that ships its own army across the ocean (world.ts, 'overseas') is sent
     // none of history's dated formations as well: the corps it raises and ships take their place.
     if (shipsItsOwn(g, nat)) return;
@@ -3449,6 +3482,13 @@ function expeditions(g: Game, nat: string): void {
       // it is his business. (A computer's staff ships the corps it raises itself, and is sent none of these: above.)
       if (worldOn(g) && nat === g.human && cap >= 0 && beyondEurope(cap) && g.regions[cap].ctrl === nat && reg && reg.owner !== nat && !o.from && !o.joins && row[3] !== 'fort')
         reg = roomNear(g, nat, g.regions[cap]) ?? g.regions[cap];
+      // (The far side: a division raised at home and posted abroad is not struck for a lost posting. On its date it
+      // comes ashore at its country's nearest held port to the posting and the staff posts it: rider b642 part 2 to
+      // ruling 234, `ashoreFor`. Nobody is brought ashore with the far side off.)
+      if (!fell) {
+        ashore = ashoreFor(g, nat, row, reg);
+        if (ashore) { reg = ashore.at; fell = true; }
+      }
       // A full province sends it on to the nearest ground with room.
       if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = roomNear(g, nat, reg) ?? reg;
     }
@@ -3484,12 +3524,15 @@ function expeditions(g: Game, nat: string): void {
     // (Room is counted as everywhere else: engineers take none.)
     if (!reg || !allied(g, nat, reg.ctrl) || (!o.join && friendlyUnits(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK)) return;
     g.flags[`sent:${i}`] = 1;
-    if (Array.isArray(o.from)) {
+    // (The body of a row brought ashore for a lost posting takes nobody off the board: the corps it would have
+    // taken stay where they stand under their own names. Rider b642 part 2.)
+    if (Array.isArray(o.from) && !ashore) {
       for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       g.supplyDirty = true;
     }
-    const c = addCorps(g, nat, row[2], row[3], g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, fell ? { ...o, hold: undefined } : o);
+    const c = addCorps(g, nat, row[2], row[3], g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, ashore ? { ...o, hold: undefined, stay: undefined, est: ashore.adds ?? o.est } : fell ? { ...o, hold: undefined } : o);
     if (o.str !== undefined) c.str = o.str;
+    if (ashore?.adds) c.str = Math.min(c.str, ashore.adds);
     if (g.flags.open === 1 && UNLESS.has(row[2])) {
       g.flags[`came:${i}`] = g.turn;
       // (A row standing in for this one, landed already, goes with it: the same men cannot stand in two places.)

@@ -401,6 +401,8 @@ const out = {
 //                          and her island garrisons by half-year)
 //   riders-234-b641.json   rider b641, a fact of the day at every stop: the 7th Division, home to Hokkaido in August
 //                          1940 from the 6th Army's row in Manchuria, which is cut in two for it
+//   riders-234-b642.json   rider b642 part 2: the rows a lost posting may not bring ashore (a local levy), and what
+//                          a row that takes corps on the board adds from home (the 56th Division's body)
 // A 'set' names its row and what the row reads before it: a source that moves under a rider stops the build instead
 // of being written over. A word set to null is taken off the row. A 'move' gives a row by date another month or
 // another place, and the row keeps its place in the list. An 'add' row goes at the END of its list, in the file's
@@ -460,7 +462,7 @@ function layRiders(file) {
   const n = (xs) => (xs ?? []).length, rosters = Object.keys(riders.roster ?? {}).filter((k) => k !== 'why');
   notes.push(`ruling 234's riders (${path.basename(file)}): ${n(E.set)} rows by date changed, ${n(E.move)} moved and ${n(E.add)} added, ${n(C.set)} first-day rows changed and ${n(C.add)} added, ${n(riders.fleets?.set)} fleet, ${n(riders.arrivals?.add)} arrival${rosters.length ? `, the rosters of ${rosters.join(' and ')}` : ''}`);
 }
-const RIDERS = ['pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json', 'pacific-six/riders-234-b641.json'];
+const RIDERS = ['pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json', 'pacific-six/riders-234-b641.json', 'pacific-six/riders-234-b642.json'];
 for (const file of RIDERS) layRiders(file);
 
 const text = JSON.stringify(out, null, 1) + '\n';

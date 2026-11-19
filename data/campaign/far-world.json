@@ -2595,7 +2595,8 @@
      "xp": 0,
      "str": 0.4,
      "hold": 1,
-     "est": 0.4
+     "est": 0.4,
+     "levy": 1
     }
    ],
    [
@@ -2676,7 +2677,8 @@
      "xp": 0.05,
      "str": 0.12,
      "hold": 1,
-     "est": 0.12
+     "est": 0.12,
+     "shore": "NED"
     }
    ],
    [
@@ -3572,7 +3574,8 @@
      "war": [
       "UK",
       "JAP"
-     ]
+     ],
+     "overland": 1
     }
    ],
    [
@@ -3589,7 +3592,8 @@
      "war": [
       "UK",
       "JAP"
-     ]
+     ],
+     "overland": 1
     }
    ],
    [
@@ -3621,7 +3625,8 @@
      "war": [
       "UK",
       "JAP"
-     ]
+     ],
+     "overland": 1
     }
    ],
    [
@@ -3829,7 +3834,8 @@
      "war": [
       "UK",
       "JAP"
-     ]
+     ],
+     "overland": 1
     }
    ],
    [
@@ -3943,7 +3949,8 @@
      ],
      "from": [
       "Sakaguchi Detachment (56th Mixed Infantry Group)"
-     ]
+     ],
+     "adds": 0.75
     }
    ],
    [

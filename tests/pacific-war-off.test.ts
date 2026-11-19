@@ -6,7 +6,7 @@ import { answering, cityBound, effortKeeps, effortSends, planSkies } from '../sr
 import { plannedStrike } from '../src/campaign/carriers';
 import { DIPLOMACY, closeDiplomacy, holds, monthlyDiplomacy, warDiplomacy } from '../src/campaign/diplomacy';
 import { FAR_LAID, lay } from '../src/campaign/far-rows';
-import { addCorps, atWar, capitulate, createGame, declareWar, setWar } from '../src/campaign/game';
+import { addCorps, ashoreFor, atWar, capitulate, createGame, declareWar, setWar } from '../src/campaign/game';
 import { HISTORY, setStop as setStopOff, shoreOpen } from '../src/campaign/history';
 import { frontArmys, lines, neverHis } from '../src/campaign/line';
 import { NAVY, airOver, assaultStrength, atSea, landCorps, liftLeft, navalUpkeep, shipsFor, whyNotLand } from '../src/campaign/navy';
@@ -329,6 +329,27 @@ describe('a main effort that leaves a city or port empty next to the enemy (the 
       expect(effortSends(g, nat, list), nat).toBe(list);
       for (const c of list) expect(effortKeeps(g, c), c.name).toBe(false);
     }
+  });
+});
+
+describe('a posted division and a lost posting (rider b642 part 2 to ruling 234) with the far side off', () => {
+  it('nobody is brought ashore: every row by date waits for its place as it did, whoever holds it', () => {
+    const g = startOpen(createGame(3, null));
+    setWar(g, 'GER', 'UK');
+    setWar(g, 'ITA', 'UK');
+    let read = 0;
+    for (const row of (setup as any).expeditions as any[]) {
+      const at = g.byName[row[5]];
+      if (!at) continue;
+      const was = at.ctrl;
+      for (const holder of [was, 'UK', 'GER', 'SOV', 'SWI']) {
+        at.ctrl = holder;
+        expect(ashoreFor(g, row[1], row, at), `${row[2]} with ${holder} at ${at.name}`).toBeNull();
+        read++;
+      }
+      at.ctrl = was;
+    }
+    expect(read).toBeGreaterThan(500);
   });
 });
 
