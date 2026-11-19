@@ -13571,6 +13571,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	float EyeFieldOfView = 40.0f;
 	int32 EyeWindowWide = 1600;
 	int32 EyeDrawnWide = 1600; // (how many pixels wide the scene is really drawn, before the upscaler fills the window)
+	int32 EyeWindowHigh = 1000, EyeDrawnHigh = 1000; // (and how high: the kit's pixel rules are exact in a tall window with it)
 	if (const APlayerController* Player = World->GetFirstPlayerController())
 	{
 		if (Player->PlayerCameraManager)
@@ -13586,6 +13587,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			if (WindowWide > 0)
 			{
 				EyeWindowWide = WindowWide;
+				EyeWindowHigh = FMath::Max(WindowHigh, 1);
 				PixelsAtOne = WindowWide / (2.0 * FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(static_cast<double>(EyeFieldOfView), 5.0, 150.0) * 0.5)));
 			}
 		}
@@ -13598,8 +13600,9 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		static IConsoleVariable* const KitDrawnPercent = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage"));
 		static IConsoleVariable* const KitSecondPercent = IConsoleManager::Get().FindConsoleVariable(TEXT("r.SecondaryScreenPercentage.GameViewport"));
 		const float KitFirstShare = KitDrawnPercent ? KitDrawnPercent->GetFloat() : 100.0f, KitNextShare = KitSecondPercent ? KitSecondPercent->GetFloat() : 100.0f;
-		EyeDrawnWide = FMath::Max(FMath::RoundToInt32(EyeWindowWide * (KitFirstShare > 0.0f ? FMath::Min(KitFirstShare, 100.0f) : 100.0f) / 100.0f
-			* (KitNextShare > 0.0f ? FMath::Min(KitNextShare, 100.0f) : 100.0f) / 100.0f), 64);
+		const float KitDrawnShare = (KitFirstShare > 0.0f ? FMath::Min(KitFirstShare, 100.0f) : 100.0f) / 100.0f * (KitNextShare > 0.0f ? FMath::Min(KitNextShare, 100.0f) : 100.0f) / 100.0f;
+		EyeDrawnWide = FMath::Max(FMath::RoundToInt32(EyeWindowWide * KitDrawnShare), 64);
+		EyeDrawnHigh = FMath::Max(FMath::RoundToInt32(EyeWindowHigh * KitDrawnShare), 40);
 	}
 	const double Now = World->GetTimeSeconds();
 	const double Unit = UnitScale * 2.1;
@@ -13654,7 +13657,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				FVector::Distance(EyeAt, CameraFocus), EyeFacing.Pitch, EyeFieldOfView, EyeWindowWide, EyeDrawnWide, BlastUnitsAMetre);
 			const FVector2D Under = WorldToMap(CameraFocus - BlastOff * BlastUnitsAMetre);
 			Blasts->Clear();
-			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeDrawnWide, SmokeHour); // (its clock first: the barrage is timed from it)
+			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeDrawnWide, SmokeHour, EyeDrawnHigh); // (its clock first: the barrage is timed from it)
 			Blasts->RunTest(SurfacePoint(Under.X, Under.Y, 0.0));
 			bBlastTicked = true; // (the kit is ticked once a frame: a second tick in this frame cut its lamps short)
 			{
@@ -13753,7 +13756,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		}
 		if (!bBlastTicked)
 		{
-			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeDrawnWide, SmokeHour);
+			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeDrawnWide, SmokeHour, EyeDrawnHigh);
 		}
 	}
 	bool bDrawingLight = false;
