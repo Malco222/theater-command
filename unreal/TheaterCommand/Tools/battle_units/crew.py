@@ -914,9 +914,7 @@ def elbow_pole(rig, st, s, hand_at, elbow_at):
 @crew_clip("commander_hatch", 10.0, loop=True, anchor="feet", weapon="none",
            place=[("vehicle", "PanzerIV", "commander", (0.0, 0.0, CUPOLA["rim"] - RIM_Z - CUPOLA["socket_z"])),
                   ("vehicle", "ArmouredCar", "commander", (0.0, 0.0, -0.92)),
-                  ("vehicle", "AssaultGun", "commander", (0.0, 0.0, -0.92)),
-                  ("vehicle", "SdKfz222", "commander", (0.0, 0.0, -0.92)),
-                  ("vehicle", "M8", "commander", (0.0, 0.0, -0.92))],
+                  ("vehicle", "AssaultGun", "commander", (0.0, 0.0, -0.92))],
            about="The tank commander stood up in his hatch, chest out of it and forearms on the rim, the binoculars in his "
                  "hands; he looks about, and twice raises the glasses to his eyes. His feet are inside the turret: root "
                  "0.92 m below the PanzerIV's `commander` socket (the rim 1.17 m over his feet), and the ArmouredCar's "
@@ -1545,7 +1543,7 @@ def mortar_bomb2(t):
     front = M["number2"].world((0.30, -0.02, 0.86))
     k = [(0.0, at_hand), (T["hand_over"], at_hand),
          (0.62, bomb_frame(front, M["number2"].world((0.25, -0.1, 0.0)) - M["number2"].at + np.array((0.0, 0.0, 0.9)))),
-         (1.0, bomb_frame(mz - 0.01 * bore + pl2_toward(0.012), bore)),
+         (1.03, bomb_frame(mz - 0.01 * bore + pl2_toward(0.012), bore)),
          (1.14, bomb_frame(mz - 0.09 * bore, bore)), (T["release"], bomb_frame(mz - 0.09 * bore, bore))]
     if t < T["release"]:
         return slerp_frames(k, t), t >= T["hand_over"]
@@ -1679,7 +1677,7 @@ def c_mortar_number2(t):
         hl_k, hr_k = on_knees(rig, P)
         rest = {"l": hl_k, "r": hr_k}
         down = ramp(t, T["release"] + 0.02, T["release"] + 0.45)          # (let go: hands from the muzzle to his knees)
-        w_muzzle = ramp(t, 0.98, 1.16) * (1 - down)
+        w_muzzle = ramp(t, 0.93, 1.22) * (1 - down)
         w_rest = down * (1 - ramp(t, 2.6, 3.15))
         w_hold = max(0.0, 1.0 - w_muzzle - w_rest)
         for s in ("l", "r"):
@@ -1765,13 +1763,13 @@ def c_mortar_number1(t):
     sight = kneel_from(xs)
     back = kneel_from(xs + np.array((-8.0, -6.0, 0.0, -0.03, 0.0, -6.0, -10.0)))
     duck = kneel_body(bend=30.0, turn=-50.0, side=-12.0, drop=0.03, fwd=-0.03, neck=(40.0, -50.0))
-    keys = [(0.0, sight), (1.2, sight), (1.36, back), (1.62, duck), (2.2, duck), (2.62, back), (2.86, sight)]
+    keys = [(0.0, sight), (1.2, sight), (1.4, back), (1.62, duck), (2.2, duck), (2.62, back), (2.86, sight)]
     st0 = rig.solve(dict(sight, hand_l={"frame": "chest", "at": (0.3, 0.1, -0.3), "a": (1, 0, 0), "n": (0, 0, -1)},
                          hand_r={"frame": "chest", "at": (0.3, -0.1, -0.3), "a": (1, 0, 0), "n": (0, 0, -1)}))
     knob = pl.local(g2b((0.309, -0.06, 0.827)))
     shaft = pl.local(M["shaft_l"]) + np.array((0.0, 0.0, 0.0))
     work = {"l": knob_hand("l", rig, st0, shaft), "r": knob_hand("r", rig, st0, knob)}
-    wt = lambda t: ramp(t, 1.2, 1.52) * (1 - ramp(t, 2.45, 2.8))
+    wt = lambda t: ramp(t, 1.15, 1.56) * (1 - ramp(t, 2.45, 2.8))
 
     def dress(t, P):
         hl, hr = on_knees(rig, P)
@@ -1970,6 +1968,9 @@ def _comfy_arms(P, holds):
 
 
 COMFY_STAND = {"lim_lo": (-25.0, -40.0, -20.0, -0.25, -0.25, -0.10), "lim_hi": (35.0, 40.0, 20.0, 0.25, 0.25, 0.25)}
+# (clips whose body may step only a little: the mortar men in their pit, whose back and sides are close)
+COMFY_CLIP = {k: {"lim_lo": (-25.0, -40.0, -20.0, -0.04, -0.04, -0.10), "lim_hi": (35.0, 40.0, 20.0, 0.04, 0.04, 0.25)}
+              for k in ("mortar_number1", "mortar_number3")}
 COMFY_WIDE = ("stand_load_breech", "stand_load_breech_twin", "stand_load_breech_twin_l", "stand_ammo_give",
               "stand_ammo_crate_hand_up")
 
@@ -1980,13 +1981,14 @@ def comfy_body(name, dressed, free, fixed=()):
     Kept on disk under the samples' own key."""
     import hashlib
     rig = MODEL["rig"]
+    _TORSO_M[0] = TRACK_CLIP.get(name, {}).get("torso_m", 0.01)
     holds = ARM_HOLD[name]
     free = np.asarray(free, float)
     wide = name in COMFY_WIDE
     if wide:
         free = np.ones(6)
     sc = np.asarray(COMFY["scale"])
-    lim = COMFY_STAND if wide else COMFY
+    lim = COMFY_CLIP.get(name, COMFY_STAND if wide else COMFY)
     lo, hi = np.asarray(lim["lim_lo"]), np.asarray(lim["lim_hi"])
     feats = []
     for P in dressed:
@@ -1997,7 +1999,8 @@ def comfy_body(name, dressed, free, fixed=()):
             row += [g, a1, n1]
         feats.append(np.concatenate(row))
     key = hashlib.sha1(json.dumps([name, COMFY, TRACK, holds, list(free), sorted(int(i) for i in fixed)] +
-                                  ([COMFY_STAND] if wide else []), sort_keys=True).encode() +
+                                  ([COMFY_STAND] if wide else []) + ([COMFY_CLIP[name]] if name in COMFY_CLIP else []),
+                                  sort_keys=True).encode() +
                        np.round(np.array(feats), 4).tobytes()).hexdigest()
     path = os.path.join(WORK, "arm_track", name + "_body.pkl")
     if os.path.exists(path):
@@ -2210,7 +2213,10 @@ def c_sit_handwheel_elevate(t):
     return _flak_layer("elevate", t)
 
 
-LOADER = {"grab": 2.72, "up": 2.95, "ready": 0.3}      # (both hands on the rack's round; lifted out; at the ready)
+LOADER_READY_1 = ((0.05, -0.49, 1.01), (0.8, 0.55, 0.13))   # (the single gun's loader: back from the breech, which recoils)
+LOADER_READY = ((0.22, -0.40, 1.10), (0.85, 0.5, 0.12))    # (the round at the ready: on both palms before his chest,
+#                                                             the elbows down and ahead of him, its nose clear of the recoil)
+LOADER = {"grab": 2.72, "up": 2.95, "ready": 0.3, "let_go": 1.88}      # (both hands on the rack's round; lifted out; at the ready)
 
 
 def flak_round_loader(t):
@@ -2220,7 +2226,7 @@ def flak_round_loader(t):
     T = FLAK_T
     pl = F["loader.fit"]
     br = F["breech"]
-    ready = bomb_frame(pl.world((0.02, -0.52, 0.96)), pl.R @ _n(np.array((0.75, 0.6, 0.15))))
+    ready = bomb_frame(pl.world(LOADER_READY_1[0]), pl.R @ _n(np.array(LOADER_READY_1[1])))
     aligned = bomb_frame(br + np.array((-0.74, 0.0, -0.03)), (1.0, 0.0, 0.0))
     home = bomb_frame(br + np.array((0.02, 0.0, 0.0)), (1.0, 0.0, 0.0))
     rack = bomb_frame(F["rack"], (0.0, 0.0, 1.0), up=(1.0, 0.0, 0.0))
@@ -2247,7 +2253,7 @@ def flak_round_loader(t):
                  "stands, no offset), in step with the gun's own fire clip (play both from the same moment, t = 0 the "
                  "shot): he stands at crew.loader, clear of the recoil, with the next round in his arms while the barrel "
                  "runs back and the case flies out (0.8); steps in to his left, puts the round's nose into the open breech, "
-                 "rams it home (2.2) and pulls his fist clear before the breech closes (2.45); turns to the ready rack, his "
+                 "rams it home with the flat of his right hand (2.2) and draws it clear before the breech closes (2.45); turns to the ready rack, his "
                  "hands on its nearest round at 2.6 (the fire clip hides round.ready then; the prop round shows in its "
                  "place, standing as it stood), closes them on it and lifts it out from 2.72, up to the ready by 0.3 into "
                  "the next cycle, stepping back to crew.loader. The gun laid level (the breech at its rest).")
@@ -2269,21 +2275,32 @@ def c_stand_load_breech(t):
         xl, xr = 0.75 + (0.6 - 0.75) * u, 0.55 + (0.28 - 0.55) * u      # (carried on both palms before him)
         on = {"l": on_rod("l", Bh, xl, 0.05, under, thumb=1.0, pole=pl.R @ np.array((-0.2, 1.0, -1.0))),
               "r": on_rod("r", Bh, xr, 0.055, under, thumb=1.0, pole=pl.R @ np.array((-0.4, -1.0, -0.6)))}
-        # (ramming: the right fist behind the case's base, pushing along the bore)
-        Bf = flak_round_loader(T["home"])[0] if t >= T["home"] else B          # (the round rammed home: his fist leaves it there)
+        # (ramming: the right palm flat on the case's base, pushing along the bore, the fingers up)
+        Bf = flak_round_loader(T["home"])[0] if t >= T["home"] else B          # (the round rammed home: his hand leaves it there)
         base = Bf[:3, 3]
-        fist = {"at": tuple(base - Bf[:3, 0] * 0.045), "a": tuple(_n(Bf[:3, 0] + np.array((0.0, 0.0, 0.3)))), "n": (0.0, 1.0, 0.0),
+        fist = {"at": tuple(base - Bf[:3, 0] * 0.03), "a": tuple(_n(np.array((0.0, 0.0, 1.0)) - Bf[:3, 0] * Bf[2, 0])), "n": tuple(Bf[:3, 0]),
                 "pole_world": tuple(pl.R @ np.array((-0.3, -1.0, -0.8)))}
-        # (the fist drawn back out of the breech as it closes (2.45), down to his side as he turns, and on to the
-        # rack's round: not straight across his chest from the breech to the rack)
-        w_ram = ramp(t, 1.6, 1.9) * (1 - ramp(t, T["home"] + 0.02, T["home"] + 0.3))
-        w_l_off = ramp(t, 1.85, 2.15) * (1 - ramp(t, 2.4, LOADER["grab"]))
-        w_r_off = ramp(t, T["home"] + 0.02, T["home"] + 0.3) * (1 - ramp(t, 2.45, LOADER["grab"])) if t >= 1.0 else 0.0
-        rest = hands_rest_pinned(rig, P)
-        hr = blend_hand([(1 - w_ram - w_r_off, to_local(pl, on["r"])), (w_ram, to_local(pl, fist)), (w_r_off, rest["r"])])
-        hl = blend_hand([(1 - w_l_off, to_local(pl, on["l"])), (w_l_off, rest["l"])])
+        # (the ramming hand drawn back out of the breech as it closes (2.45) and on, as he turns, to the rack's round, on
+        # it at `grab`; the left hand lets go of the round at 1.88 as the right drives it home, and goes to the rack's round
+        # with the turn of his body: no hand flung to his side and back)
+        rack_B = flak_round_loader(T["take"])[0]
+        on_rack = {"l": on_rod("l", rack_B, 0.75, 0.05, under, thumb=1.0, pole=pl.R @ np.array((-0.2, 1.0, -1.0))),
+                   "r": on_rod("r", rack_B, 0.55, 0.055, under, thumb=1.0, pole=pl.R @ np.array((-0.4, -1.0, -0.6)))}
+        let_go = on_rod("l", flak_round_loader(LOADER["let_go"])[0], 0.6, 0.05, under, thumb=1.0, pole=pl.R @ np.array((-0.2, 1.0, -1.0)))
+        if T["home"] + 0.02 <= t < LOADER["grab"]:
+            w = ramp(t, T["home"] + 0.02, LOADER["grab"])
+            hr = blend_hand([(1 - w, to_local(pl, fist)), (w, to_local(pl, on_rack["r"]))])
+            w_ram = 1 - w
+        else:
+            w_ram = ramp(t, 1.6, 1.9) if 1.0 <= t < T["home"] + 0.02 else 0.0
+            hr = blend_hand([(1 - w_ram, to_local(pl, on["r"])), (w_ram, to_local(pl, fist))])
+        if LOADER["let_go"] <= t < LOADER["grab"]:
+            w = ramp(t, LOADER["let_go"], LOADER["grab"])
+            hl = blend_hand([(1 - w, to_local(pl, let_go)), (w, to_local(pl, on_rack["l"]))])
+        else:
+            hl = to_local(pl, on["l"])
         P["hand_l"], P["hand_r"] = hl, hr
-        P["fingers_l"], P["fingers_r"] = 62.0, 62.0 + 20.0 * w_ram
+        P["fingers_l"], P["fingers_r"] = 62.0, 62.0 - 30.0 * w_ram
         P["props"] = {"flak_round": (np.linalg.inv(pl.matrix()) @ B, shown)}
         return P
 
@@ -2341,7 +2358,7 @@ def _flak_ammo_round(t, who):
     return slerp_frames(k[4:], t), T["pass"] <= t <= T["up"] + 0.03
 
 
-def round_hands(pl, B, xs=(0.3, 0.62), below=0.6, ref=None):
+def round_hands(pl, B, xs=(0.3, 0.62), below=0.6, ref=None, flip=False):
     """Both hands on a round from a man's side (under it), each at the end on its own side. Which end is on which
     side is read off the round as it is at `ref` (a frame) if given, for the whole of the hold: never swapped while
     he holds it (a round lying along his line of sight has no end to either side, and each hand would snap round)."""
@@ -2350,8 +2367,13 @@ def round_hands(pl, B, xs=(0.3, 0.62), below=0.6, ref=None):
     ends = [R_[:3, 3] + R_[:3, 0] * x for x in xs]
     left_first = pl.local(ends[0])[1] > pl.local(ends[1])[1]
     xl, xr = (xs[0], xs[1]) if left_first else (xs[1], xs[0])
-    return {"l": on_rod("l", B, xl, 0.05, under, thumb=1.0 if left_first else -1.0, pole=pl.R @ np.array((-0.3, 1.0, -1.0))),
-            "r": on_rod("r", B, xr, 0.055, under, thumb=-1.0 if left_first else 1.0, pole=pl.R @ np.array((-0.3, -1.0, -1.0)))}
+    th = 1.0 if left_first else -1.0
+    fl = ("l", "r") if flip is True else (flip or ())                 # (flip: those hands' thumbs the other way along it)
+    return {"l": on_rod("l", B, xl, 0.05, under, thumb=-th if "l" in fl else th, pole=pl.R @ np.array((-0.3, 1.0, -1.0))),
+            "r": on_rod("r", B, xr, 0.055, under, thumb=th if "r" in fl else -th, pole=pl.R @ np.array((-0.3, -1.0, -1.0)))}
+
+
+GIVE_FLIP = ("r",)    # (his right thumb on the round: so turned that his hand goes to the crate from his side with no snap)
 
 
 @crew_clip("stand_ammo_give", 3.2, loop=True, anchor="feet", weapon="none",
@@ -2369,7 +2391,7 @@ def c_stand_ammo_give(t):
     def dress(t, P):
         B, shown = _flak_ammo_round(t, 2)
         # (reaching for the next round: the hands go to it in the crate, not to where the last was handed over)
-        hold = round_hands(pl, _flak_ammo_round(0.45, 2)[0] if t >= 2.5 else B, ref=_flak_ammo_round(1.1, 2)[0])
+        hold = round_hands(pl, _flak_ammo_round(0.45, 2)[0] if t >= 2.5 else B, ref=_flak_ammo_round(1.1, 2)[0], flip=GIVE_FLIP)
         rest = hands_rest_pinned(rig, P)
         # (he reaches for the crate from 2.95, round the loop, to have the round at 0.45)
         w = ramp(t + T["long"] if t < 1.0 else t, 2.95, T["long"] + 0.45) if (t < 1.0 or t >= 2.95) else 1 - ramp(t, T["pass"] + 0.03, 2.5)
@@ -2499,7 +2521,7 @@ def twin_round(t, k):
     S4, canon, _ = _canon(k)
     L = twin()["loader." + k]
     br = (S4 @ np.append(L["fit"].local(L["breech"]), 1.0))[:3]
-    ready = bomb_frame((0.02, -0.52, 0.96), _n(np.array((0.75, 0.6, 0.15))))
+    ready = bomb_frame(LOADER_READY[0], _n(np.array(LOADER_READY[1])))
     if k == "l":
         # (upright before his chest: the fuze setter's machine stands at his outboard side, as high as his chest)
         ready = bomb_frame(TWIN_L["ready"][0], _n(np.array(TWIN_L["ready"][1])))
@@ -2602,18 +2624,38 @@ def _twin_loader(t, k, name):
                           pole=Ry @ np.array((-0.4, -1.0, -0.6) if k == "r" else (-0.6, -0.35, -1.0)))}   # (loader.l: the elbow in, off the machine)
         Bf = twin_round(T["home"], k)[0] if t >= T["home"] else Bc
         base = Bf[:3, 3]
-        fist = {"at": tuple(base - Bf[:3, 0] * 0.045), "a": tuple(_n(Bf[:3, 0] + np.array((0.0, 0.0, 0.3)))), "n": (0.0, 1.0, 0.0),
+        fist = {"at": tuple(base - Bf[:3, 0] * 0.03), "a": tuple(_n(np.array((0.0, 0.0, 1.0)) - Bf[:3, 0] * Bf[2, 0])), "n": tuple(Bf[:3, 0]),
                 "pole_world": (-0.3, -1.0, -0.8)}
         if k == "r":
-            w_ram = ramp(t, 1.6 + dt, 1.9 + dt) * (1 - ramp(t, T["home"] + 0.02, T["home"] + 0.3))
-            w_l_off = ramp(t, 1.85 + dt, 2.15 + dt) * (1 - ramp(t, 2.4 + dt, T["grab"]))
-            w_r_off = ramp(t, T["home"] + 0.02, T["home"] + 0.3) * (1 - ramp(t, 2.45 + dt, T["grab"])) if t >= 1.0 else 0.0
+            # (as the single gun's loader: the ramming hand from the breech straight on to the rack's round as he turns, the
+            # left hand from where it let go of the round to the rack's round)
+            rack_B = twin_round(T["take"], k)[0]
+            on_rack = {"l": on_rod("l", rack_B, 0.75, 0.05, under, thumb=1.0, pole=Ry @ np.array((-0.2, 1.0, -1.0))),
+                       "r": on_rod("r", rack_B, 0.55, 0.055, under, thumb=1.0, pole=Ry @ np.array((-0.4, -1.0, -0.6)))}
+            lg = LOADER["let_go"] + dt
+            let_go = on_rod("l", twin_round(lg, k)[0], 0.6, 0.05, under, thumb=1.0, pole=Ry @ np.array((-0.2, 1.0, -1.0)))
+            if T["home"] + 0.02 <= t < T["grab"]:
+                w = ramp(t, T["home"] + 0.02, T["grab"])
+                w_ram = 1.0 - w
+                hn = blend_hand([(1.0 - w, _mirror_hand(fist, side)), (w, _mirror_hand(on_rack["r"], side))])
+            else:
+                w_ram = ramp(t, 1.6 + dt, 1.9 + dt) if 1.0 <= t < T["home"] + 0.02 else 0.0
+                hn = blend_hand([(1.0 - w_ram, _mirror_hand(on["r"], side)), (w_ram, _mirror_hand(fist, side))])
+            if lg <= t < T["grab"]:
+                w = ramp(t, lg, T["grab"])
+                hf = blend_hand([(1.0 - w, _mirror_hand(let_go, side)), (w, _mirror_hand(on_rack["l"], side))])
+            else:
+                hf = _mirror_hand(on["l"], side)
+            P["hand_" + near], P["hand_" + far] = hn, hf
+            P["fingers_" + far], P["fingers_" + near] = 62.0, 62.0 - 30.0 * w_ram
+            P["props"] = {"flak_round": (uncanon(Bc), shown)}
+            return P
         else:
             # (both hands down while he turns round to the rail, up to the round as he faces it)
-            w_ram = ramp(t, 1.6, 1.9) * (1 - ramp(t, T["home"] + 0.02, T["home"] + 0.35))
+            w_ram = ramp(t, 1.6, 1.9) * (1 - ramp(t, T["home"] + 0.02, T["home"] + 0.4))
             back = ramp(t, T["take"] - 0.4, T["take"])
-            w_r_off = ramp(t, T["home"] + 0.02, T["home"] + 0.35) * (1 - back) if T["home"] <= t < T["take"] + 0.05 else 0.0
-            w_l_off = ramp(t, 1.85, 2.15) * (1 - back) if 1.85 <= t < T["take"] + 0.05 else 0.0
+            w_r_off = ramp(t, T["home"] + 0.02, T["home"] + 0.4) * (1 - back) if T["home"] <= t < T["take"] + 0.05 else 0.0
+            w_l_off = ramp(t, 1.85, 2.25) * (1 - back) if 1.85 <= t < T["take"] + 0.05 else 0.0
         rest = hands_rest_pinned(rig, P)
         if k == "l" and w_r_off > 0.0:
             # (his outboard hand, on his way to the rail, kept before his thigh, not swinging out into the fuze
@@ -2628,7 +2670,7 @@ def _twin_loader(t, k, name):
         hn = blend_hand([(1 - w_ram - w_r_off, _mirror_hand(on["r"], side)), (w_ram, _mirror_hand(fist, side)), (w_r_off, rest[near])])
         hf = blend_hand([(1 - w_l_off, _mirror_hand(on["l"], side)), (w_l_off, rest[far])])
         P["hand_" + near], P["hand_" + far] = hn, hf
-        P["fingers_" + far], P["fingers_" + near] = 62.0, 62.0 + 20.0 * w_ram
+        P["fingers_" + far], P["fingers_" + near] = 62.0, 62.0 - 30.0 * w_ram
         P["props"] = {"flak_round": (uncanon(Bc), shown)}
         return P
 
@@ -2702,7 +2744,7 @@ def _twin_loader(t, k, name):
                  "work at breech.r, 0.1 s behind it as breech.r runs 0.1 behind breech.l in the twin's fire clip (3.3 s; play "
                  "both from the same moment): at his socket, clear of the recoil, the next round in his arms while the right "
                  "barrel runs back (0.1) and its case flies out (0.9); steps in to his left, rams the round home (2.3) and "
-                 "pulls his fist clear before breech.r closes (2.55); steps out to the ready rack, his hands on round.ready "
+                 "draws his hand clear before breech.r closes (2.55); steps out to the ready rack, his hands on round.ready "
                  "at 2.7 (hide the part then: the twin's fire clip does not; the prop shows in its place, standing as it "
                  "stood), lifts it out from 2.82, up to the ready by 0.4. Show round.ready again at 0.7 (the rack refilled). "
                  "The guns laid level.")
@@ -2718,7 +2760,7 @@ def c_stand_load_breech_twin(t):
            about="The twin's left-hand loader (crew.loader.l; attach to the part `mount`, no offset): "
                  "stand_load_breech_twin's mirror at breech.l, in step with it (the twin's fire clip from the same moment): "
                  "his round held upright before him at his socket while the guns fire and run out (to 0.75), swung up "
-                 "and rammed home with his right fist (2.2), the fist clear before breech.l closes (2.35). He has no ready "
+                 "and rammed home with the flat of his right hand (2.2), clear before breech.l closes (2.35). He has no ready "
                  "round: he walks back to the rail behind him (inboard of the fuze setter's machine, stepping over the "
                  "low strut), takes the next round from ammo.1's hands over it (stand_ammo_crate_hand_up) at 3.08, and "
                  "walks back with it through the next shot, well behind the recoil, at his socket again by 0.55. The "
@@ -2900,12 +2942,13 @@ def toes_up(P, floor=0.0, give=0.003):
 # keeps its grip point.
 ROUND = {"spin": 180.0, "roll": 180.0, "top": True}   # (a palm on a round: turned on it and round it, dear on top of it)
 ROD = {"spin": 45.0, "roll": 180.0}        # (a fist round a handle: rolled round it, the handle aslant in it)
+ROD_WHEEL = {"spin": 45.0, "roll": 90.0, "behind": 0.04}    # (a fist on a handwheel's handle: rolled less, the forearm off the housing)
 ARM_HOLD = {
     "mortar_number1": {"l": ROD, "r": ROD},
     "mortar_number2": {"l": ROUND, "r": ROUND},
     "mortar_number3": {"l": ROUND, "r": ROUND},
-    "sit_handwheel_traverse": {"l": ROD, "r": ROD},
-    "sit_handwheel_elevate": {"l": ROD, "r": ROD},
+    "sit_handwheel_traverse": {"l": ROD_WHEEL, "r": ROD_WHEEL},
+    "sit_handwheel_elevate": {"l": ROD_WHEEL, "r": ROD_WHEEL},
     "stand_load_breech": {"l": ROUND, "r": ROUND},
     "stand_load_breech_twin": {"l": ROUND, "r": ROUND},
     "stand_load_breech_twin_l": {"l": ROUND, "r": ROUND},
@@ -2927,6 +2970,16 @@ TRACKED = {}
 TRACK_V = 3                  # (the tracker's cost as rom.py's limits are kept clear: a new one re-tracks every clip)
 TRACK_EASE = 3.0             # (the tracked path eased over this many frames (a Gaussian's sigma): its steps smoothed)
 TRACK_QUICK = 7.0            # (a joint's turn in a frame past this is dear: TRACK's quick)
+# (clips tracked with a lighter hand: eased less, a joint's turn freer; their version, ease and quick)
+TRACK_CLIP = {k: dict(v=2, ease=2.0, quick=9.0) for k in ("sit_handwheel_traverse", "sit_handwheel_elevate", "mortar_number1",
+                                                           "mortar_number2", "stand_ammo_hand_up")}
+TRACK_CLIP["stand_ammo_crate_hand_up"] = dict(torso_m=0.03)     # (his elbows kept 3 cm off his flanks, not 1)
+_TORSO_M = [0.01]
+
+
+def _track_set(name):
+    d = TRACK_CLIP.get(name, {})
+    return d.get("v", TRACK_V), d.get("ease", TRACK_EASE), d.get("quick", TRACK_QUICK)
 
 
 def _torso_cost(body, st, K):
@@ -2941,7 +2994,7 @@ def _torso_cost(body, st, K):
         dx, dy = q[:, 0] - xc, q[:, 1]
         e = np.sqrt((dx / ax) ** 2 + (dy / hw) ** 2)
         dist = np.hypot(dx, dy) * (1.0 - 1.0 / np.maximum(e, 1e-9))
-        pen = (rom.ELBOW_R + 0.01 - dist) * 100.0
+        pen = (rom.ELBOW_R + _TORSO_M[0] - dist) * 100.0
         bk = np.where(np.abs(q[:, 1]) < hw * 0.9, (xb + 0.01 - q[:, 0]) * 100.0, -1.0)
         c = c + np.where(inz, np.maximum(pen, 0.0) ** 2 + np.maximum(bk, 0.0) ** 2, 0.0)
     return c
@@ -3026,6 +3079,10 @@ def _arm_costs(rig, body, st, s, g, a1, n1, rr, hold, sig=(0.0, 0.0), steps=None
     an = S.arm_angles_batch(Ms, A, K, T, Dup, Dh, R0["flex"], R0["a"], R0["t"], R0["n"])
     c = S.arm_cost(an) + TRACK["torso"] * _torso_cost(body, st, K) + TRACK["short"] * (100.0 * short) ** 2 + \
         TRACK["prior"] * (P_.ravel() ** 2 + R_.ravel() ** 2)
+    if hold.get("behind"):
+        # (a handwheel's fist: the elbow kept `behind` back of the handle along the wheel's axis (his own x), the
+        # forearm coming onto the handle from his side of the wheel, not lying across its rim)
+        c = c + TRACK["torso"] * (100.0 * np.maximum(K[:, 0] - (g[0] - hold["behind"]), 0.0)) ** 2
     # (rom.py's own limits, kept 3 degrees clear: a degree squared past that a hundred times dearer)
     m3 = 3.0
     c = c + 100.0 * (np.maximum(an["wrist_flex"] - (75.0 - m3), 0) ** 2 + np.maximum(-an["wrist_flex"] - (65.0 - m3), 0) ** 2 +
@@ -3079,7 +3136,7 @@ def _ask_twist(ask, loop, cyc):
     return sig * np.array([1.0 if cyc[0] else 0.0, 1.0 if cyc[1] else 0.0])
 
 
-def _track_path(U, cyclic=(False, False, True), Fe=None):
+def _track_path(U, cyclic=(False, False, True), Fe=None, quick=None):
     """The cheapest path through per-frame costs U (F, a, b, c) moving at most a step a frame in a and b and two in c
     (an axis marked cyclic goes round), each move paid for by how far it moves on the grid and (Fe (F, a, b, c, 8):
     each state's arm, _arm_costs) how fast it turns the arm's joints: the indices (F, 3)."""
@@ -3112,7 +3169,7 @@ def _track_path(U, cyclic=(False, False, True), Fe=None):
         d = f1 - f0
         d[..., 3] = (d[..., 3] + 180.0) % 360.0 - 180.0
         d[..., 5] = (d[..., 5] + 180.0) % 360.0 - 180.0
-        q = TRACK_QUICK
+        q = TRACK_QUICK if quick is None else quick
         up = np.sqrt(np.sum(d[..., :4] ** 2, -1))
         hand = np.sqrt(np.sum(d[..., 5:] ** 2, -1))
         return TRACK["move"] * np.sum(d * d, -1) + TRACK["quick"] * (np.maximum(up - q, 0.0) ** 2 +
@@ -3182,7 +3239,10 @@ def track_arms(name, fn):
             ask[s] = (np.asarray(g, float), np.asarray(a1, float), np.asarray(n1, float), _rod_r(h))
         asks.append(ask)
         sts.append(st)
-    key = hashlib.sha1(json.dumps([name, TRACK, ARM_HOLD[name], TRACK_V], sort_keys=True).encode() + np.round(np.array(
+    tv, tease, tquick = _track_set(name)
+    _TORSO_M[0] = TRACK_CLIP.get(name, {}).get("torso_m", 0.01)
+    key = hashlib.sha1(json.dumps([name, TRACK, ARM_HOLD[name], tv] + ([TRACK_CLIP[name]] if name in TRACK_CLIP and tv != 2 else []),
+                                  sort_keys=True).encode() + np.round(np.array(
         [np.concatenate([np.concatenate(ask[s][:3] + (np.array([ask[s][3]]),)) for s in ("l", "r")] +
                         [st["H"]["upperarm_l"], st["H"]["upperarm_r"], st["D"]["chest"].ravel()])
          for ask, st in zip(asks, sts)]), 4).tobytes()).hexdigest()
@@ -3201,17 +3261,17 @@ def track_arms(name, fn):
         Fe = np.stack([f for u, f in UF])
         del UF
         if loop:
-            idx = _track_path(np.concatenate((U, U, U)), cyc, np.concatenate((Fe, Fe, Fe)))
+            idx = _track_path(np.concatenate((U, U, U)), cyc, np.concatenate((Fe, Fe, Fe)), tquick)
             seam = idx[2 * M] - idx[M]
             idx = idx[M:2 * M]
         else:
-            idx = _track_path(U, cyc, Fe)
+            idx = _track_path(U, cyc, Fe, tquick)
             seam = np.zeros(3, int)
         ps, rs, fs = _arm_grid(hold)
         ang = []
         for x, grid, cy in ((idx[:, 0], ps, cyc[0]), (idx[:, 1], rs, cyc[1]), (idx[:, 2], fs, True)):
             v = grid[x]
-            ang.append(_ease_angle(v, loop, TRACK_EASE) if cy else _ease(v, loop, TRACK_EASE))
+            ang.append(_ease_angle(v, loop, tease) if cy else _ease(v, loop, tease))
         ang = np.stack(ang, axis=1)
         if loop:
             ang = np.concatenate((ang, ang[:1]))
@@ -3397,9 +3457,10 @@ FITS = {
                        "PanzerIV, ArmouredCar and AssaultGun commander: root_offset (0, 0, -0.92), his feet 0.92 under the "
                        "socket (the ArmouredCar's and the AssaultGun's lids open by their open_up clips; at the ArmouredCar "
                        "his chest 1.7 cm into the rim's front, see the issues). "
-                       "Not the open turrets and fighting compartments (the M10, M8, SdKfz222, M16, FlakHalftrack, FlakTruck, "
-                       "M7, Sexton, Hummel, SU76 and SelfPropelledGun): their walls are 0.65-1.06 m over a floor he stands "
-                       "on, so their commanders stand there by crew.pose (crew.json `posed`).",
+                       "Not the M8's and SdKfz222's open turrets (their commanders' hatch sockets, tried with root_offset "
+                       "(0, 0, -0.92): 2.5-2.8 cm into the turret, see the issues), nor the open fighting compartments (the "
+                       "M10, M16, FlakHalftrack, FlakTruck, M7, Sexton, Hummel, SU76 and SelfPropelledGun): their walls are "
+                       "0.65-1.06 m over a floor he stands on, so their commanders stand there by crew.pose (crew.json `posed`).",
     "stand_mg": "a man stood at a pedestal or ring-mounted machine gun with spade grips 0.40 ahead of his feet and 1.08 up "
                 "(the M3's gunner and the M7's crew.mg on its raised pulpit, both with no root_offset; at the M7 his hips "
                 "go 1.8 cm into the pulpit's wall behind him, see the issues). Attach him to the gun's turning part.",
@@ -3417,7 +3478,7 @@ FITS = {
                               "crew.json `posed`.",
     "sit_handwheel_elevate": "as sit_handwheel_traverse, the hub 0.26 to his left (the HeavyFlak's elevation layer).",
     "stand_load_breech": "a loader stood beside a breech's path, the breech 0.59 ahead of his feet, 0.41 to his left and "
-                         "1.59 up, stepping in to ram the round home with his fist and taking the next from a ready rack "
+                         "1.59 up, stepping in to ram the round home with the flat of his hand and taking the next from a ready rack "
                          "0.23 behind him and 0.09 to his right (the HeavyFlak's crew.loader, which faces 8.5 degrees left "
                          "of the gun's line; these are square to his facing). The self-propelled guns' and the towed "
                          "guns' loaders (their breeches lower, and no ready rack where his clip has it): crew.pose "
@@ -3800,7 +3861,7 @@ POSED = {
               "crew.commander": dict(ST, off=(0.0, 0.15, 0.0)), "crew.ammo": dict(ST, off=(0.0, 0.15, 0.0))},
     "ZiS3": {"crew.layer": dict(LW, stance="stand", off=(0.15, -0.3, 0.0)), "crew.loader": dict(ST, look="breech"),
              "crew.commander": dict(ST), "crew.ammo": dict(ST)},
-    "leFH18": {"crew.layer": dict(LW, stance="stand"), "crew.loader": dict(ST, look="breech"),
+    "leFH18": {"crew.layer": dict(LW, stance="stand", off=(0.0, 0.04, 0.0)), "crew.loader": dict(ST, look="breech"),
                "crew.commander": dict(ST), "crew.ammo": dict(ST)},
     "Howitzer105": {"crew.layer": dict(LW, stance="stand", off=(0.0, -0.3, 0.0)), "crew.loader": dict(ST, look="breech"),
                     "crew.commander": dict(ST, off=(0.0, -0.3, 0.0)), "crew.ammo": dict(ST)},
@@ -4048,22 +4109,26 @@ ISSUES = [
     "behind the seat point): the benches fit sit_bench as they are (1.0 cm; rider.5 1.2 cm, his chest at the stern). "
     "The Hanomag's belt boxes now lie across the hull against the step by the left wall: rider.1 is clear of them (1.0 "
     "cm, his seat, as on the other benches) and so is a man stood at `gunner` (crew.pose; 0.1 cm, his soles). "
-    "`driver` and `rider.cab` nearly fit: sit_drive's left boot goes 1.5 cm into the footwell's outer wall (0.48 ahead of the seat point, 0.23 "
-    "outboard, 0.10 over the footwell's floor; its faces are the track_l part's), and sit_cab's right calf and boot 1.5 cm "
-    "into the same wall on the right (0.41-0.59 ahead, 0.23 outboard, from the seat's height down): each footwell 2 cm "
-    "wider outboard mends both. The Hanomag's `gunner` shoulders his gun (no grips): no clip of ours.",
-    "FlakHalftrack and FlakTruck `crew.gunner` (seat 0.31 over the platform; crew.pose seated, hands on grip.gunner.l/r): "
-    "his lower back goes 2.2 cm into the seat's back (0.19 behind the seat point, 0.31 up), wherever along the seat he "
-    "sits, and his right hand stops 3.8 cm short of grip.gunner.r (the laying wheel's handle, 0.39 ahead, 0.37 to his "
-    "right and 0.10 over the seat) with his left on grip.gunner.l. The seat's back 0.03 further back, and the laying "
-    "handle 0.05 nearer him (or the wheel 0.05 inboard), would seat him. `commander`, `crew.loader`, `crew.loader2` "
-    "stand clear (1.0 cm at most). The FlakTruck's cab is shut: no driver shown.",
-    "M16 (the 17:10 export): `driver` and `rider.cab` fit sit_drive and sit_cab as they are (0.7 and 0.6 cm). `crew.gunner` (seat 0.29 over "
-    "the turntable; crew.pose seated, both hands on the column's grips): his lower back goes 2.0 cm into the seat's back "
-    "(0.18 behind the seat point, 0.3 up): the back 0.03 further back mends it. `commander` and the loaders stand clear.",
-    "M7 (the 12:08 export): `crew.mg` on the raised pulpit takes stand_mg and stand_mg_burst with no root_offset, but "
-    "his hips go 1.8 cm into the pulpit's wall behind him on the left (0.08 behind, 0.17 left, 0.83 up) and his right heel "
-    "1.6 cm into the floor's rim behind him (0.19 behind, 0.18 right): the pulpit 2 cm roomier behind him mends it. "
+    "`driver` and `rider.cab` (the 23:28-23:29 exports: the footwells' inner wall faces 0.612 from the middle) fit "
+    "sit_drive and sit_cab as they are, in both (0.8 and 0.9 cm). The Hanomag's `gunner` shoulders his gun (no grips): "
+    "no clip of ours.",
+    "FlakHalftrack and FlakTruck `crew.gunner` (the 23:28 exports: the seat's back 0.2025 behind the seat point, "
+    "grip.gunner.r 0.34 ahead, 0.37 to his right and 0.10 over the seat; crew.pose seated, seat_h 0.31, hands on "
+    "grip.gunner.l/r): his back is clear of the seat's back now (1.2 cm at most, one point, the ball of his left boot), "
+    "but his right hand still stops 4.0 cm short of grip.gunner.r: the handle, low beside his thigh, is 0.66 from his "
+    "shoulder and his reach is 0.62, and leaning or turning to it, or sitting 4-7 cm further forward, does not close it "
+    "(3.9 cm). The handle 0.08 higher (0.18 over the seat) puts it 0.60 from his shoulder, in reach. `commander`, "
+    "`crew.loader`, `crew.loader2` stand clear (1.0 cm at most). The FlakTruck's cab is shut: no driver shown.",
+    "M16: `driver` and `rider.cab` fit sit_drive and sit_cab as they are (0.7 and 0.6 cm). `crew.gunner` (the 23:28 "
+    "export: the seat's back 0.195 behind the seat point; crew.pose seated, seat_h 0.29, both hands on the column's "
+    "grips): his hips still go 1.9 cm into the seat's back (0.21-0.22 behind the seat point, 0.24-0.32 up, about his "
+    "middle), and sat 3 or 5 cm further forward he is still 1.9-2.0 cm into it: the back wants another 0.03 or so. "
+    "`commander` and the loaders stand clear.",
+    "M7 (the 23:29 export: crew.mg and the gun 4.5 cm forward): `crew.mg` on the raised pulpit takes stand_mg and "
+    "stand_mg_burst with no root_offset, but his hips still go 1.8 cm into the pulpit's wall behind him (at 1.7 s of "
+    "stand_mg, 0.16-0.22 behind the socket, from 0.03 to his right to 0.15 to his left, 0.74-0.85 up). With him 5 cm "
+    "further forward and 2 cm to his right he would be clear (1.1 cm), but his hands must stay on the gun: the pulpit's "
+    "back 3-5 cm roomier mends it. "
     "`crew.gunner` kneeling (crew.pose stance 'kneel', root 'hips') has both hands on grip.gunner.l/r, but his raised "
     "left knee goes 3.2 cm into the hull's side (0.23 ahead of his hips, 0.26 left, 0.44-0.52 up) wherever his left foot "
     "goes. A stool helps: seated on one 0.20 high under his hips (crew.pose stance 'sit', seat_h 0.20, the seat point "
@@ -4077,18 +4142,28 @@ ISSUES = [
     "grip.gunner.l/r (0.0 cm short). Their commanders and loaders stand clear (crew.pose).",
     "M10 (the 17:10 export): `commander` stands with his toes under a shelf 0.23 over his floor (both shins 2.7 cm into "
     "its edge, 0.04 ahead of him): 0.15 further back he is clear (crew.json `posed` has him there). `crew.loader`'s hip "
-    "is 2.5 cm in the turret's wall on his right: 0.03 to the left he is clear. `crew.gunner` (his seat 0.28 over the "
-    "floor ahead, no grips): his left shin goes 1.8 cm into the turret and the gun's mount beside it (0.34-0.47 ahead, "
-    "0.12-0.21 left, about his shin's middle), however his feet are set: 3 cm more room to the left of his feet mends it. "
+    "is 2.5 cm in the turret's wall on his right: 0.03 to the left he is clear. `crew.gunner` (the 23:28 export: the "
+    "socket 2 cm back and 4 cm to his right; his seat 0.28 over the floor ahead, no grips): his left calf still goes "
+    "1.9 cm into the turret and the gun's mount (0.34-0.49 ahead, 0.14-0.24 left, from the floor to 0.18 over the seat), "
+    "and now his right hip 1.8 cm into the wall on his right (0.09-0.14 behind, 0.31 right, 0.11-0.20 over the seat): "
+    "his feet set closer and him 2 cm to the left, 1.7 cm. He wants 2 cm more room on both sides. "
     "commander_hatch does not fit: the open turret's wall is 0.65-0.96 over his feet.",
-    "M8 (the 16:33 export): `commander` stands clear, his socket 3 cm over the floor under it (his boots 4 cm off it) and "
-    "his right boot over a step 0.29 lower. `crew.gunner` (seat 0.26 over the floor ahead): his left shin and boot 1.6 "
-    "cm into the turret (0.41 ahead, 0.17 left) and his right toe 1.5 cm into the gun's mount (0.62 ahead, 0.10 right), "
-    "however his feet are set. SdKfz222: `commander` stands 7 cm over the floor under the socket's middle (1.62), and his "
-    "left boot lands on a ledge 0.18 to his left, 2.3 cm into it: the socket down to 1.62, and the ledge, want a look. "
-    "ArmouredCar: `commander` takes commander_hatch with root_offset (0, 0, -0.92) (his feet 0.92 under the socket, as "
-    "its note says; the lid open by its open_up clip), but his chest and right upper arm press 1.7 cm into the hatch's "
-    "rim at its front: the opening 2 cm wider mends it.",
+    "M8 (the 23:28 export): `crew.gunner` (the socket 4 cm back and 3 cm to his right; seat 0.26 over the floor ahead): "
+    "his right toe is clear of the gun's mount now, but his left calf still goes 1.7 cm into the turret (0.35-0.49 "
+    "ahead, 0.16-0.24 left; his feet set closer, 1.5 cm). `commander` is now a hatch socket 0.25 under the open "
+    "turret's rim: commander_hatch with root_offset (0, 0, -0.92), tested over the turret's floor (1.60), goes 2.5 cm "
+    "in: his left upper arm into something over the rim on his left (0.13-0.28 ahead, 0.30 left, 0.28 over the rim, as "
+    "he raises the glasses) and his right hip 1.7 cm into the turret's right wall (0.04-0.13 behind, 0.25-0.31 right, "
+    "about the socket's height); 3 cm to his left, or 5 cm back and 2 cm left, 2.5-2.8 cm. Not placed. SdKfz222 (the "
+    "23:28 export, the screens thrown open by open_up): `commander` is now a hatch socket 0.25 under the turret's rim: "
+    "commander_hatch with root_offset (0, 0, -0.92), tested over the turret's floor (1.62), goes 2.8 cm in: his belly "
+    "into a face 0.19 ahead of the socket, facing him (0.21 ahead, 0.07-0.10 right, 0.10 over the socket), and his "
+    "right hip 2.5 cm into a ledge about 0.08 over the socket (0.09 behind to 0.20 ahead, 0.11-0.31 right); 6 or 10 cm "
+    "further back, the hip still 2.5 cm. Not placed. ArmouredCar (the 23:29 export, the lid and opening 0.225 round): "
+    "`commander` takes commander_hatch with root_offset (0, 0, -0.92) as before, but his chest still goes 1.7 cm into "
+    "the rim's top at its front (0.175 ahead of the socket, 0.02-0.07 right, at 1.8 s as he leans on it), and 3 or 5 cm "
+    "further back the same: the opening's front edge seems to be about 0.17 ahead of the socket, as if the opening "
+    "were not centred on it.",
     "SelfPropelledGun (the 20:27 export: its seat 0.45 over the floor's top, the water can laid lengthways against the "
     "left wall, the traversing handle 0.05 higher and the elevating 0.03 nearer him): `crew.gunner` seated (crew.pose, "
     "seat_h 0.45, his boots where the stance puts them) is clear (0.1 cm), his left boot 11.6 cm from the can, with both "
@@ -4102,18 +4177,41 @@ ISSUES = [
     "chest against the rim at 2.08, 0.13 left of the socket). Its fighting box is solid, from its floor at 1.02 to its "
     "roof at 1.92, as the ArmouredCar's hull: what is over the rim is tested.",
     "Towed guns (the 12:08 export; the ground not modelled, the trails on it): the loaders stand clear at every gun. "
-    "`crew.layer` stands in the left trail at the Pak40, ZiS3, AntiTankGun, leFH18 and 105 mm howitzer (his legs 5-10 "
-    "cm into trail_l at 0.33-0.55 up, kneeling or standing; at the leFH18 and the howitzer the left wheel too). Where "
+    "`crew.layer` stands in the left trail at the Pak40, ZiS3, AntiTankGun and 105 mm howitzer (his legs 5-10 "
+    "cm into trail_l at 0.33-0.55 up, kneeling or standing; at the howitzer the left wheel too). Where "
     "he fits, crew.pose standing (both hands on grip.layer.l/r): the Pak40, ZiS3 and AntiTankGun 0.30 to the left of the "
     "socket and 0.15 ahead (the ZiS3's right hand 0.4 cm short), the 105 mm howitzer 0.30 left; kneeling, the Gun75 0.15 "
-    "left; the 25pdr kneels at his socket on the firing platform (0.03 up). The leFH18's layer fits nowhere tried (0.45 "
-    "left, his upper arm 1.8 cm into the wheel): his socket wants moving clear of the left trail and wheel. "
+    "left; the 25pdr kneels at his socket on the firing platform (0.03 up). The leFH18's layer (the 23:29 export: "
+    "crew.layer 0.46 behind and 0.15 right of the old place, no root_offset): at the socket his left knee goes 2.2 cm "
+    "into the trail beside it (0.12-0.16 ahead, 0.18-0.20 left, 0.46-0.57 up); crew.pose standing 0.04 to the right of "
+    "the socket, both hands on grip.layer.l/r, is clear (0.0 cm). "
     "`crew.commander` stands in a trail at the Pak40 (3.5 cm; 0.15 right is clear), the AntiTankGun (3.1 cm; 0.15 right, "
     "0.8 cm) and the 105 mm howitzer (7.2 cm; 0.30 left is clear); `crew.ammo` at the Pak40 (2.8 cm; 0.15 right clear) "
     "and the AntiTankGun (3.2 cm; 0.30 right clear). crew.json `posed` has each man where he fits.",
     "PanzerIV (the 10:38 export): no `driver` socket. Its `commander` socket's note now says his feet go 0.92 under it, "
     "as commander_hatch's root_offset has them (the rim 1.17 m over his feet, his chest out of it); checked against the "
     "mesh above the rim and against the cupola's ring as measured (1.0 cm). He wears the infantry kit.",
+    "Arms (rom.py's ranges at 60 fps, arms_check.py --crew): the arms of the gun crews' clips are tracked (ARM_HOLD: "
+    "each hand free to turn on its round or handle within its hold, the elbow to swing, the path the cheapest through "
+    "the clip with the joints' speed paid for) and the body carries the hands (comfy_body: the trunk bent, turned and "
+    "the hips moved per tenth of a second; the mortar men's number one and three step at most 4 cm, COMFY_CLIP, the "
+    "pit being close behind them). mortar_number1-3, sit_handwheel_traverse/elevate, stand_ammo_give, "
+    "stand_ammo_hand_up and stand_ammo_crate_hand_up have no arm fault and no joint over 900 degrees a second; the "
+    "handwheel layers' elbows are kept 4 cm back of the handles (ROD_WHEEL's behind), so the forearm comes onto the "
+    "handle from his side of the wheel and stays off its rim. The three loaders still fault: stand_load_breech (the "
+    "right forearm 6 degrees past its turn as the round goes in, the elbow 3 degrees over the level, joints to 1,310 "
+    "degrees a second), stand_load_breech_twin (the right elbow 4.6 cm into his side as he lifts the round, the "
+    "forearm 4 degrees past its turn, joints to 1,070 a second) and stand_load_breech_twin_l (the left shoulder 19 "
+    "degrees across his chest and the forearm 9 past its turn as he takes the round, the elbow 6.6 cm into his side, "
+    "joints to 1,500 a second). The round's base passes beside his body as it goes in: the loader wants to stand back "
+    "from the breech with the round and lunge in with the ram.",
+    "Fits the arm work has cost (against the 22:30 delivery): mortar_number2 at MortarPit crew.number2 2.4 cm (was "
+    "0.9: his pelvis on the pit's back corner at 1.6 s, as his body steps 14 cm right to bring the bomb to the muzzle; "
+    "at the Mortar 0.6), mortar_number3 1.9 cm (was 0.8: the right forearm on the bomb box's edge at 2.4 s), "
+    "stand_load_breech 1.5 cm (was 0.65: his pelvis at 1.5 s, as he steps in to ram) and stand_load_breech_twin_l "
+    "8.8 cm (was 1.05: his left upper arm on top of the fuze setter's machine at 0.6 s, the body stepped back with "
+    "the round). Limiting the body's step put the arms back into fault (mortar_number2, twin_l), so these are left "
+    "for the loaders' rework.",
     "Mortar: crew.number3 is 4 cm from the bomb box (a kneeling man's thigh goes into it): mortar_number3's root goes "
     "0.10 m to his left. MortarPit's number1 is 3 cm off the Mortar's (its root_offset puts his eye at the sight); "
     "MortarPit's number3 (by the niche) has no clip.",
