@@ -542,13 +542,104 @@ export function onTheAttack(g: Game, nat: string, e: string): boolean {
 }
 
 function onSince(g: Game, nat: string, f: Front, where = ''): number {
+  if (!where && ownFront(g, f)) return frontSince(g, nat, f);
   let t = 0;
   for (const e of f.enemies) { const v = flag(g, onKey(nat, e, where)); if (v && (!t || v < t)) t = v; }
   return t;
 }
 
 function setOn(g: Game, nat: string, f: Front, turn: number, where = ''): void {
+  if (!where && ownFront(g, f)) { setMark(g, nat, f, MARK.on, turn); if (turn) setMark(g, nat, f, MARK.rest, 0); return; }
   for (const e of f.enemies) { if (turn) g.flags[onKey(nat, e, where)] = turn; else delete g.flags[onKey(nat, e, where)]; }
+}
+
+/** True when the army on a front has had its rest since its last offensive there was called off. */
+const rested = (g: Game, nat: string, f: Front, where = ''): boolean => (!where && ownFront(g, f) ? g.turn >= markOf(g, nat, f, MARK.rest) : f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}${where}`)));
+/** Rests the army on a front until the month given. */
+function setRest(g: Game, nat: string, f: Front, until: number, where = ''): void {
+  if (!where && ownFront(g, f)) setMark(g, nat, f, MARK.rest, until);
+  else for (const e of f.enemies) g.flags[`st:rest:${nat}:${e}${where}`] = until;
+}
+
+// ---- The offensive held by front (rider b646 to ruling 234) ------------------------------------------------
+//
+// On the old chart a staff remembers its offensive by enemy country: on against Poland, resting against France.
+// Beyond the old chart one country's ground lies in many pieces, and a piece nobody stands on reads a strength
+// ratio in the thousands: remembered by country, it opened the offensive against the whole country, and the main
+// front's corps fought under it though their own front had never earned one. So on the far side each front opens,
+// keeps and calls off its own offensive by its own reading, and rests by itself; the orders are bounded to the
+// fronts that are on (build, below), so only those are attacked. No number is new. What is remembered is written
+// on the front's ground, province by province, and read back from its edge, so that a front that has moved, split
+// in two or grown since last month is still the same front: it is on (or resting) if more than half of the edge says so.
+// A great choice or a march of the staff's own still opens every front against the enemies it names, for its months.
+// None of this is read with the far side's switch off, and no front with a province of its edge on the old chart
+// or in the Americas reads it.
+
+const MARK = { on: 'st:fo', rest: 'st:fr', idle: 'st:fi' } as const;
+
+/** True for a front that keeps its own offensive: the far side's switch on, and every province of its edge on the far side of the chart. */
+export const ownFront = (g: Game, f: Pick<Front, 'edge'>): boolean => farOn(g) && f.edge.length > 0 && f.edge.every((id) => shoreOf(id) === 2);
+
+/** What a front remembers under a mark: the value more than half of its edge carries (the commonest, then the oldest), or 0. */
+function markOf(g: Game, nat: string, f: Pick<Front, 'edge'>, kind: string): number {
+  const tally = new Map<number, number>();
+  let n = 0;
+  for (const id of f.edge) { const v = g.flags[`${kind}:${nat}:${id}`]; if (v) { n++; tally.set(v, (tally.get(v) ?? 0) + 1); } }
+  if (2 * n <= f.edge.length) return 0;
+  let best = 0, most = 0;
+  for (const [v, k] of tally) if (k > most || (k === most && v < best)) { best = v; most = k; }
+  return best;
+}
+
+/** Writes a mark on the whole of a front's ground, or takes it off with 0. */
+function setMark(g: Game, nat: string, f: Pick<Front, 'depth'>, kind: string, value: number): void {
+  for (let id = 0; id < f.depth.length; id++) {
+    if (f.depth[id] < 1) continue;
+    if (value) g.flags[`${kind}:${nat}:${id}`] = value; else delete g.flags[`${kind}:${nat}:${id}`];
+  }
+}
+
+/**
+ * The month a far-side front's own offensive began, or 0. Its own memory first; then the plan's word: while a great
+ * choice or a march is being pressed (`st:push`), a front against an enemy it named is on with it, as on the old chart.
+ */
+function frontSince(g: Game, nat: string, f: Front): number {
+  const own = markOf(g, nat, f, MARK.on);
+  if (own || g.turn > flag(g, `st:push:${nat}`)) return own;
+  let t = 0;
+  for (const e of f.enemies) { if (!flag(g, `st:pushed:${nat}:${e}`)) continue; const v = flag(g, onKey(nat, e, '')); if (v && (!t || v < t)) t = v; }
+  return t;
+}
+
+/** Told what a staff decides on each of its fronts as the month opens: for tests and readings. */
+export const offensiveWatch: { tell: ((e: { nat: string; front: Front; own: boolean; was: number; now: number; how: 'opened' | 'eager' | 'pushed' | 'fresh' | 'kept' | 'off' | 'idle' | 'quiet'; marks: Temper }) => void) | null } = { tell: null };
+
+/**
+ * With the month's fronts decided: the by-country word of an offensive is kept true for those who read it (the
+ * air staff, the engineers, the player's view of a rival), on against an enemy while any far-side front against him
+ * is on; and what was remembered of ground that is on no far-side front now is forgotten.
+ */
+function frontsKept(g: Game, nat: string, real: Front[]): void {
+  if (!farOn(g)) return;
+  const on = new Map<string, number>(), seen = new Set<string>(), elsewhere = new Set<string>();
+  const ground = new Uint8Array(g.regions.length);
+  for (const f of real) {
+    if (!ownFront(g, f)) { for (const e of f.enemies) elsewhere.add(e); continue; }
+    const since = onSince(g, nat, f);
+    for (const e of f.enemies) { seen.add(e); if (since && (!on.get(e) || since < on.get(e)!)) on.set(e, since); }
+    for (let id = 0; id < f.depth.length; id++) if (f.depth[id] >= 1) ground[id] = 1;
+  }
+  for (const e of seen) {
+    const k = onKey(nat, e, '');
+    // (An enemy met on the old chart too: his word is the old chart's fronts' to take away.)
+    if (on.has(e)) { if (!flag(g, k)) g.flags[k] = on.get(e)!; }
+    else if (!elsewhere.has(e)) delete g.flags[k];
+  }
+  const mine = [`${MARK.on}:${nat}:`, `${MARK.rest}:${nat}:`, `${MARK.idle}:${nat}:`];
+  for (const k of Object.keys(g.flags)) {
+    const pre = mine.find((m) => k.startsWith(m));
+    if (pre && !ground[Number(k.slice(pre.length))]) delete g.flags[k];
+  }
 }
 
 /** Months since this nation and an enemy last fought on land, either way round, or since their war began. */
@@ -796,7 +887,9 @@ function mainEffort(g: Game, nat: string, real: Front[], T: Temper, where: strin
     if (taken) { g.flags[key('effWon')] = cur.won + 1; cur.won++; }
     const gone = !f || !g.nations[cur.enemy]?.alive || !atWar(g, nat, cur.enemy);
     // A general offensive opened on the same front takes the effort over.
-    const general = !!f && onSince(g, nat, f, where) > 0;
+    // (On the far side that is the front the effort's own target stands on: another front's offensive is not this one's.)
+    const same = (!where && farOn(g) ? real.find((x) => ownFront(g, x) && x.depth[cur.target] >= 1) : undefined) ?? f;
+    const general = !!same && onSince(g, nat, same, where) > 0;
     const live = !gone && !general && g.turn <= cur.to;
     // The place is taken: the effort is carried on to the next one beside it while its months last.
     const next = live && taken ? sector(g, nat, f!, T.minOdds, at) : null;
@@ -810,7 +903,7 @@ function mainEffort(g: Game, nat: string, real: Front[], T: Temper, where: strin
   for (const f of real) {
     if (onSince(g, nat, f, where) || spoken(f)) continue;
     // An offensive just called off: the army rests before anything new is asked of it.
-    if (!f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}${where}`))) continue;
+    if (!rested(g, nat, f, where)) continue;
     // The strength is weighed against the enemy on the line and close behind it, and the quiet is the quiet of the field.
     const quiet = Math.min(...f.enemies.map((e) => quietInField(g, nat, e)));
     const waited = quiet >= C.quiet;
@@ -888,11 +981,12 @@ function inNameOnly(g: Game, nat: string, f: Front, since: number): boolean {
 /** Called off as an offensive in name only: the front is marked, so that the next general offensive there waits for more strength. */
 function calledOffIdle(g: Game, nat: string, f: Front, where = ''): void {
   setOn(g, nat, f, 0, where);
-  for (const e of f.enemies) g.flags[`st:idle:${nat}:${e}${where}`] = g.turn;
+  if (!where && ownFront(g, f)) setMark(g, nat, f, MARK.idle, g.turn);
+  else for (const e of f.enemies) g.flags[`st:idle:${nat}:${e}${where}`] = g.turn;
 }
 /** True while a front's last offensive in name only is fresh in the staff's mind and it has not the strength to do better. */
 const shy = (g: Game, nat: string, f: Front, where = ''): boolean => rivalRules(g) && f.ratio < RIVALS.press.ratio
-  && f.enemies.some((e) => { const at = flag(g, `st:idle:${nat}:${e}${where}`); return at > 0 && g.turn - at < RIVALS.press.again; });
+  && (!where && ownFront(g, f) ? [markOf(g, nat, f, MARK.idle)] : f.enemies.map((e) => flag(g, `st:idle:${nat}:${e}${where}`))).some((at) => at > 0 && g.turn - at < RIVALS.press.again);
 
 /** One of the staff's own conditions, or one that reads as in diplomacy.json. */
 function cond(g: Game, nat: string, c: string, real: Front[]): boolean {
@@ -983,13 +1077,16 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
 
   for (const f of real) {
     const since = onSince(g, nat, f);
+    // (Told to whoever is reading the staff's month: tests and readings. Nothing in the game hears it.)
+    const told = (how: 'opened' | 'eager' | 'pushed' | 'fresh' | 'kept' | 'off' | 'idle' | 'quiet'): void => offensiveWatch.tell?.({ nat, front: f, own: ownFront(g, f), was: since, now: onSince(g, nat, f), how, marks: T });
     if (since) {
       // A main effort opened out of impatience is given its season before anyone asks what it has gained.
-      const fresh = g.turn - since < 2 || (pushed && f.enemies.some((e) => flag(g, `st:pushed:${nat}:${e}`))) || boldNow(g, nat) > 0;
-      if (!fresh && inNameOnly(g, nat, f, since)) calledOffIdle(g, nat, f);
-      else if (fresh || (f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt))) setOn(g, nat, f, since);
-      else { setOn(g, nat, f, 0); for (const e of f.enemies) g.flags[`st:rest:${nat}:${e}`] = g.turn + OPEN.rest; }
-    } else if (f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}`))) {
+      const byPlan = pushed && f.enemies.some((e) => flag(g, `st:pushed:${nat}:${e}`));
+      const fresh = g.turn - since < 2 || byPlan || boldNow(g, nat) > 0;
+      if (!fresh && inNameOnly(g, nat, f, since)) { calledOffIdle(g, nat, f); told('idle'); }
+      else if (fresh || (f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt))) { setOn(g, nat, f, since); told(byPlan ? 'pushed' : fresh ? 'fresh' : 'kept'); }
+      else { setOn(g, nat, f, 0); setRest(g, nat, f, g.turn + OPEN.rest); told('off'); }
+    } else if (rested(g, nat, f)) {
       const usual = T.attackAt * inConcert(g, nat, f);
       // The longer the front has been quiet, the smaller the advantage a staff waits for: a nation with no
       // offensive of its own in it finds one at last, and nobody attacks at hopeless odds.
@@ -1006,9 +1103,12 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
           g.flags[`st:bold:${nat}`] = g.turn + I.effort - 1;
           g.flags[`st:boldK:${nat}`] = k;
         }
-      }
-    }
+        told(f.ratio < usual ? 'eager' : 'opened');
+      } else told('quiet');
+    } else told('quiet');
   }
+  // (The far side: the by-country word follows the fronts, before a great choice of this month adds its own.)
+  frontsKept(g, nat, real);
 
   // Where no general offensive is on, a front that has gone quiet may still be given a main effort for the season.
   mainEffort(g, nat, real, T, '', planned);
