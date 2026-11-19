@@ -105,6 +105,24 @@ struct FAdviser
 	int32 Revision = 0;
 };
 
+/**
+ * (Brian's memorial card, 19 November 2026.) The plate for a battleship or a carrier lost at sea: where, and for
+ * each ship her name and a line on who she was and the men lost with her. Three ships at most; the rest are counted.
+ */
+struct FMemorialShow
+{
+	struct FRow
+	{
+		FString Name;
+		FString Line;
+	};
+	FString Heading;
+	TArray<FRow> Rows;
+	FString More;
+	double From = 0.0;
+	double Until = 0.0;
+};
+
 /** The newsreel being shown: the month it is of, its stories, and which is on the screen (-1 for the title). */
 struct FNewsreelShow
 {
@@ -546,6 +564,11 @@ public:
 	FText GetRulesNote() const;
 	/** A line of news for the player, shown for a few seconds. Empty when there is none. */
 	FText GetNotice() const;
+	/** (Brian's memorial card) The plate for the capital ships just lost, and how far it is shown (0 none, 1 whole: it fades in and out). */
+	const FMemorialShow& GetMemorial() const { return Memorial; }
+	float GetMemorialShown() const;
+	/** Names the battleships and carriers among these sinkings on the plate; bHold keeps it up (for a picture). */
+	void Remember(const TArray<FSinking>& Sinkings, bool bHold = false);
 
 	/** Selects a territory, or none with INDEX_NONE. */
 	void SelectRegion(int32 RegionId);
@@ -1253,6 +1276,7 @@ private:
 
 	FString NoticeText;
 	double NoticeUntil = 0.0;
+	FMemorialShow Memorial;
 	FString DispatchText;
 	double DispatchUntil = 0.0;
 

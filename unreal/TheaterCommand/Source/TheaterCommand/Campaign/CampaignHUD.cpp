@@ -4818,6 +4818,22 @@ namespace
 			{
 				return Controller.IsValid() ? &Controller->GetRegionPanel() : nullptr;
 			};
+			// (Brian's memorial card) One ship on the plate: her name, and under it who she was and the men lost with her.
+			auto MemorialRow = [this](int32 Index) -> TSharedRef<SWidget>
+			{
+				return SNew(SVerticalBox)
+					.Visibility_Lambda([this, Index]() { return Controller.IsValid() && Controller->GetMemorial().Rows.IsValidIndex(Index) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, Index == 0 ? 9.0f : 13.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Serif(TEXT("Bold"), 22)).ColorAndOpacity(Cream)
+						.Text_Lambda([this, Index]() { return Controller.IsValid() && Controller->GetMemorial().Rows.IsValidIndex(Index) ? FText::FromString(Controller->GetMemorial().Rows[Index].Name) : FText::GetEmpty(); })
+					]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 3.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Typed(11)).ColorAndOpacity(Muted)
+						.Text_Lambda([this, Index]() { return Controller.IsValid() && Controller->GetMemorial().Rows.IsValidIndex(Index) ? FText::FromString(Controller->GetMemorial().Rows[Index].Line) : FText::GetEmpty(); })
+					];
+			};
 			auto Tray = [this]() -> const FArmyTray*
 			{
 				return Controller.IsValid() ? &Controller->GetArmyTray() : nullptr;
@@ -5395,6 +5411,41 @@ namespace
 							]
 						])
 					]
+					]
+
+					// (Brian's memorial card, 19 November 2026.) A battleship or a carrier lost at sea is named, low on the
+					// screen and clear of the plates: where, who she was, and the men lost with her. It takes no click and
+					// stops no play; it fades in, stands a few seconds and fades out.
+					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Bottom).Padding(24.0f, 0.0f, 24.0f, 96.0f)
+					[
+						Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 14.0f, 36.0f, 17.0f))
+						.Visibility_Lambda([this]()
+						{
+							return Controller.IsValid() && Controller->GetMemorialShown() > 0.0f && !Controller->GetNewsreel().bOn ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+						})
+						.BorderBackgroundColor_Lambda([this]() { return FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, Controller.IsValid() ? Controller->GetMemorialShown() : 0.0f)); })
+						.ColorAndOpacity_Lambda([this]() { return FLinearColor(1.0f, 1.0f, 1.0f, Controller.IsValid() ? Controller->GetMemorialShown() : 0.0f); })
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+							[
+								SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Brass)
+								.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetMemorial().Heading) : FText::GetEmpty(); })
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 7.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox).WidthOverride(120.0f).HeightOverride(1.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Brass.CopyWithNewOpacity(0.6f))]
+							]
+							+ SVerticalBox::Slot().AutoHeight()[MemorialRow(0)]
+							+ SVerticalBox::Slot().AutoHeight()[MemorialRow(1)]
+							+ SVerticalBox::Slot().AutoHeight()[MemorialRow(2)]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 11.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Typed(10)).ColorAndOpacity(Faint)
+								.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetMemorial().More.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+								.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetMemorial().More) : FText::GetEmpty(); })
+							]
+						])
 					]
 
 					// Along the bottom: the territory panel and the army tray.

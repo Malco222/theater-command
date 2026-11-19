@@ -5750,14 +5750,32 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			bSunkForPicture = true;
 			TArray<FString> Each;
 			Asked.ParseIntoArray(Each, TEXT(","));
+			// (and "6:UK:bb:Hood:1418:1415" names her for the memorial plate, with her crew and the men lost; a seventh
+			// part "pair" is two light carriers counted as one, and "-" for the name is a ship the record has no name for)
+			TArray<FSinking> NamedForPicture;
 			for (int32 Nth = 0; Nth < Each.Num(); ++Nth)
 			{
 				TArray<FString> Parts;
-				if (Each[Nth].ParseIntoArray(Parts, TEXT(":")) == 3)
+				const int32 Given = Each[Nth].ParseIntoArray(Parts, TEXT(":"));
+				if (Given == 3 || Given >= 6)
 				{
 					Map->AddSinking(FCString::Atoi(*Parts[0]), Parts[1], Parts[2], Nth);
 				}
+				if (Given >= 6)
+				{
+					FSinking& Sinking = NamedForPicture.AddDefaulted_GetRef();
+					Sinking.Zone = FCString::Atoi(*Parts[0]);
+					Sinking.Nation = Parts[1];
+					Sinking.Class = Parts[2];
+					FLostHull& Hull = Sinking.Ships.AddDefaulted_GetRef();
+					Hull.Name = Parts[3] == TEXT("-") ? FString() : Parts[3];
+					Hull.Class = Parts[2];
+					Hull.Crew = FCString::Atoi(*Parts[4]);
+					Hull.Lost = FCString::Atoi(*Parts[5]);
+					Hull.bPair = Parts.IsValidIndex(6) && Parts[6] == TEXT("pair");
+				}
 			}
+			Remember(NamedForPicture, true);
 		}
 	}
 	// (release 1) The lamp over the army or the fleet in hand.
@@ -10355,6 +10373,7 @@ void ACampaignPlayerController::WatchNextStep()
 			}
 		}
 	}
+	Remember(Step.Sinkings); // (Brian's memorial card: the battleships and carriers among them, by name)
 	if (Step.SeaFights.Num() > 0)
 	{
 		CampaignSounds::Play(this, TEXT("ship_guns"), Step.bMine ? 0.5f : 0.3f);
@@ -10599,6 +10618,98 @@ void ACampaignPlayerController::Notify(const FString& Text, double Seconds)
 	++NoticesSaid; // (the playtester's hook: a sentence said again is still an answer)
 	NoticeText = Text;
 	NoticeUntil = FPlatformTime::Seconds() + Seconds;
+}
+
+// (Brian's memorial card, 19 November 2026.) A battleship or a carrier that goes down in a fight the player's side
+// was in is named on a small plate low on the screen: where, who she was, and the men lost with her. The names,
+// crews and losses are the rules' own record ('hulls'); nothing is said of a ship the rules do not name a class
+// for. The plate takes no click and stops no play: it fades in, stands a few seconds and fades out.
+void ACampaignPlayerController::Remember(const TArray<FSinking>& Sinkings, bool bHold)
+{
+	if (!Map.IsValid())
+	{
+		return;
+	}
+	FMemorialShow Card;
+	int32 Zone = INDEX_NONE, Extra = 0;
+	bool bOneSea = true;
+	for (const FSinking& Sinking : Sinkings)
+	{
+		const FCampaignNation* Nation = Map->GetData().FindNation(Sinking.Nation);
+		const FString Whose = Nation && !Nation->Adjective.IsEmpty() ? Nation->Adjective : Sinking.Nation;
+		for (const FLostHull& Hull : Sinking.Ships)
+		{
+			if (Hull.Class != TEXT("bb") && Hull.Class != TEXT("cv"))
+			{
+				continue;
+			}
+			bOneSea = bOneSea && (Zone == INDEX_NONE || Zone == Sinking.Zone);
+			Zone = Sinking.Zone;
+			if (Card.Rows.Num() >= 3)
+			{
+				++Extra;
+				continue;
+			}
+			const TCHAR* Kind = Hull.bPair ? TEXT("light carriers") : Hull.Class == TEXT("cv") ? TEXT("aircraft carrier") : TEXT("battleship");
+			const TCHAR* Her = Hull.bPair ? TEXT("their") : TEXT("her");
+			const TCHAR* WithHer = Hull.bPair ? TEXT("with them") : TEXT("with her");
+			const FString Men = FText::AsNumber(FMath::Max(Hull.Crew, 0)).ToString();
+			FString Loss;
+			if (Hull.Crew > 0 && Hull.Lost >= Hull.Crew)
+			{
+				Loss = FString::Printf(TEXT("Lost with all %s hands."), *Men);
+			}
+			else if (Hull.Crew > 0 && Hull.Lost <= 0)
+			{
+				Loss = FString::Printf(TEXT("All %s of %s men were saved."), *Men, Her);
+			}
+			else if (Hull.Crew > 0 && Hull.Lost == 1)
+			{
+				Loss = FString::Printf(TEXT("One of %s %s men was lost %s."), Her, *Men, WithHer);
+			}
+			else if (Hull.Crew > 0)
+			{
+				Loss = FString::Printf(TEXT("%s of %s %s men were lost %s."), *FText::AsNumber(Hull.Lost).ToString(), Her, *Men, WithHer);
+			}
+			FMemorialShow::FRow& Row = Card.Rows.AddDefaulted_GetRef();
+			if (!Hull.Name.IsEmpty())
+			{
+				Row.Name = Hull.Name;
+				Row.Line = FString::Printf(TEXT("%s %s. %s"), *Whose, Kind, *Loss).TrimEnd();
+			}
+			else
+			{
+				// (the record of names has run out: she is still marked, as what she was)
+				const bool bVowel = Whose.Len() > 0 && FString(TEXT("AEIOU")).Contains(Whose.Left(1).ToUpper());
+				Row.Name = FString::Printf(TEXT("%s %s %s"), bVowel ? TEXT("An") : TEXT("A"), *Whose, Kind);
+				Row.Line = Loss;
+			}
+		}
+	}
+	if (Card.Rows.Num() == 0)
+	{
+		return;
+	}
+	const FString Sea = bOneSea && Map->GetData().Seas.IsValidIndex(Zone) ? Map->GetData().Seas[Zone].Name : FString();
+	Card.Heading = Sea.IsEmpty() ? FString(TEXT("LOST AT SEA")) : FString::Printf(TEXT("LOST AT SEA  \u00B7  %s"), *Sea.ToUpper());
+	if (Extra > 0)
+	{
+		Card.More = Extra == 1 ? FString(TEXT("and one more capital ship")) : FString::Printf(TEXT("and %d more capital ships"), Extra);
+	}
+	Card.From = FPlatformTime::Seconds();
+	Card.Until = Card.From + (bHold ? 3600.0 : 6.5 + 1.5 * (Card.Rows.Num() - 1));
+	Memorial = MoveTemp(Card);
+	UE_LOG(LogTheater, Display, TEXT("Memorial: %s; %d named, %d more; first: %s (%s)"), *Memorial.Heading, Memorial.Rows.Num(), Extra, *Memorial.Rows[0].Name, *Memorial.Rows[0].Line);
+}
+
+float ACampaignPlayerController::GetMemorialShown() const
+{
+	const double Clock = FPlatformTime::Seconds();
+	if (Memorial.Rows.Num() == 0 || Clock >= Memorial.Until)
+	{
+		return 0.0f;
+	}
+	return static_cast<float>(FMath::Min(FMath::Clamp((Clock - Memorial.From) / 0.6, 0.0, 1.0), FMath::Clamp((Memorial.Until - Clock) / 1.2, 0.0, 1.0)));
 }
 
 FText ACampaignPlayerController::GetDispatches() const

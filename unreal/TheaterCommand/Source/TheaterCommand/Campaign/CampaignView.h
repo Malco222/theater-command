@@ -28,6 +28,16 @@ struct FArmNote
 	FString Poor; // and at its worst
 };
 
+/** (Brian's memorial card) A battleship or a carrier lost, by name: her crew and the men lost with her (the rules' 'hulls'). */
+struct FLostHull
+{
+	FString Name; // empty where the nation's record of names has run out
+	FString Class; // bb or cv
+	int32 Crew = 0;
+	int32 Lost = 0;
+	bool bPair = false; // two light carriers the counts treat as one: the name holds both, the crew is both crews
+};
+
 /** (release 1) Ships that went down in a fight at sea, as the month's replay shows them: where, whose, what class (bb, cv, ca, dd, ss), how many. */
 struct FSinking
 {
@@ -35,6 +45,7 @@ struct FSinking
 	FString Nation;
 	FString Class;
 	int32 Count = 1;
+	TArray<FLostHull> Ships; // (Brian's memorial card) the battleships and carriers among them, by name
 };
 
 /** (release 1) A wreck on the chart: where a battleship, a carrier or a cruiser went down. */
