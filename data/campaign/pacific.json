@@ -3,36 +3,320 @@
   "power": "JAP",
   "bloc": "axis",
   "china": "CHN",
-  "pair": ["USA", "UK"],
-  "with": {"UK": ["NED"]},
-  "pact": {"with": "USA", "book": 13, "fallen": "FRA", "months": 3},
-  "freeze": {"book": 24, "places": ["Saigon", "Cam Ranh"], "wars": ["UK", "NED"], "seller": "USA", "south": ["UK", "NED"]},
-  "north": {"nat": "SOV", "fallen": "GER", "months": 3, "book": 72, "while": ["USA", "UK"]},
-  "demand": {"of": "VIC", "key": "Saigon", "theatre": "pacific", "book": 23, "war": ["GER", "SOV"], "fallen": "FRA", "months": 13, "never": "GER"},
+  "pair": [
+    "USA",
+    "UK"
+  ],
+  "with": {
+    "UK": [
+      "NED"
+    ]
+  },
+  "pact": {
+    "with": "USA",
+    "book": 13,
+    "fallen": "FRA",
+    "months": 3
+  },
+  "freeze": {
+    "book": 24,
+    "places": [
+      "Saigon",
+      "Cam Ranh"
+    ],
+    "wars": [
+      "UK",
+      "NED"
+    ],
+    "seller": "USA",
+    "south": [
+      "UK",
+      "NED"
+    ]
+  },
+  "north": {
+    "nat": "SOV",
+    "fallen": "GER",
+    "months": 3,
+    "book": 72,
+    "while": [
+      "USA",
+      "UK"
+    ]
+  },
+  "demand": {
+    "of": "VIC",
+    "key": "Saigon",
+    "theatre": "pacific",
+    "book": 23,
+    "war": [
+      "GER",
+      "SOV"
+    ],
+    "fallen": "FRA",
+    "months": 13,
+    "never": "GER"
+  },
   "runs": {
-    "of": "USA", "share": 0.05, "equator": 2850, "idle": "south", "first": "marines",
-    "from": ["San Francisco", "Los Angeles", "San Diego", "Puget Sound"],
-    "lane": ["AUS", "NZL"], "havens": ["New Caledonia", "Fiji", "Samoa", "Espiritu Santo", "Port Moresby"],
+    "of": "USA",
+    "share": 0.05,
+    "equator": 2850,
+    "idle": "south",
+    "first": "marines",
+    "from": [
+      "San Francisco",
+      "Los Angeles",
+      "San Diego",
+      "Puget Sound"
+    ],
+    "lane": [
+      "AUS",
+      "NZL"
+    ],
+    "havens": [
+      "New Caledonia",
+      "Fiji",
+      "Samoa",
+      "Espiritu Santo",
+      "Port Moresby"
+    ],
     "roads": {
-      "south": {"south": true, "book": [[1, 0.05], [46, 0.03]], "both": 0.03},
-      "central": {"south": false, "book": [[46, 0.02]], "both": 0.02}
+      "south": {
+        "south": true,
+        "book": [
+          [
+            1,
+            0.05
+          ],
+          [
+            46,
+            0.03
+          ]
+        ],
+        "both": 0.03
+      },
+      "central": {
+        "south": false,
+        "book": [
+          [
+            46,
+            0.02
+          ]
+        ],
+        "both": 0.02
+      }
     }
   },
   "ready": {
-    "choice": "south", "flag": "pac:strike", "window": [3, 6], "chance": 0.5,
-    "first": {"bold": 3, "cautious": 4, "opportunist": 4},
-    "busy": {"first": 3, "of": ["UK", "SOV"], "with": "GER"},
-    "gather": {"after": 2, "fleet": "Mobile Fleet", "base": "Etorofu", "port": "Hitokappu Bay", "home": "kurile", "words": "The carrier striking force gathers at Hitokappu Bay in the Kuriles"},
-    "leads": {"Singapore": ["Singora", "Kota Bharu"], "Manila": ["Lingayen", "Aparri", "Legaspi"]}
+    "choice": "south",
+    "flag": "pac:strike",
+    "window": [
+      3,
+      6
+    ],
+    "chance": 0.5,
+    "first": {
+      "bold": 3,
+      "cautious": 4,
+      "opportunist": 4
+    },
+    "busy": {
+      "first": 3,
+      "of": [
+        "UK",
+        "SOV"
+      ],
+      "with": "GER"
+    },
+    "gather": {
+      "after": 2,
+      "fleet": "Mobile Fleet",
+      "base": "Etorofu",
+      "port": "Hitokappu Bay",
+      "home": "kurile",
+      "words": "The carrier striking force gathers at Hitokappu Bay in the Kuriles"
+    },
+    "leads": {
+      "Singapore": [
+        "Singora",
+        "Kota Bharu"
+      ],
+      "Manila": [
+        "Lingayen",
+        "Aparri",
+        "Legaspi"
+      ]
+    }
   },
-  "keepers": ["UK", "AUS", "USA"],
-  "africa": [478, 678],
-  "shores": {"slice": 312, "seas": ["bengal", "andaman", "ceylon", "malacca"]},
+  "keepers": [
+    "UK",
+    "AUS",
+    "USA"
+  ],
+  "africa": [
+    478,
+    678
+  ],
+  "shores": {
+    "slice": 312,
+    "seas": [
+      "bengal",
+      "andaman",
+      "ceylon",
+      "malacca"
+    ]
+  },
   "lift": {
     "until": 52,
-    "by": {"USA": [[34, 1.25], [40, 1.5], [46, 6], [52, 1.3]], "AUS": [[34, 0.06], [40, 0], [46, 1.2], [52, 0]], "NZL": [[46, 0.5], [52, 0]], "CAN": [[46, 0.35], [52, 0]]}
+    "by": {
+      "USA": [
+        [
+          34,
+          1.25
+        ],
+        [
+          40,
+          1.5
+        ],
+        [
+          46,
+          6
+        ],
+        [
+          52,
+          1.3
+        ]
+      ],
+      "AUS": [
+        [
+          34,
+          0.06
+        ],
+        [
+          40,
+          0
+        ],
+        [
+          46,
+          1.2
+        ],
+        [
+          52,
+          0
+        ]
+      ],
+      "NZL": [
+        [
+          46,
+          0.5
+        ],
+        [
+          52,
+          0
+        ]
+      ],
+      "CAN": [
+        [
+          46,
+          0.35
+        ],
+        [
+          52,
+          0
+        ]
+      ]
+    },
+    "own": {
+      "JAP": [
+        [
+          1,
+          4
+        ],
+        [
+          26,
+          11
+        ]
+      ]
+    }
   },
-  "skies": {"per": 8, "cover": {"USA": 550}, "seas": ["gulfalaska", "bering", "aleutian", "npacific", "calrun", "hawaii", "midway", "midpac", "line", "wake", "marcus", "marshalls", "eniwetok", "gilberts", "ellice", "truk", "marianas", "wcarolines", "bonin", "philsea", "honshu", "kyushu", "kurile", "okhotsk", "japansea", "tsushima", "inland", "yellow", "echina", "ryukyu", "formosa", "luzonstrait", "schina", "luzonsea", "palawan", "tonkin", "indochina", "siam", "natuna", "sulu", "visayan", "leyte", "celebes", "malacca", "java", "makassar", "molucca", "banda", "flores", "timor", "arafura", "ngnorth", "bismarck", "solomon", "eastsol", "coral", "newhebrides", "fiji", "samoa", "spacific", "tasman", "nzwaters", "bight", "westaus", "eindian", "mentawai", "andaman", "bengal", "ceylon", "chukchi"]},
+  "skies": {
+    "per": 8,
+    "cover": {
+      "USA": 550
+    },
+    "seas": [
+      "gulfalaska",
+      "bering",
+      "aleutian",
+      "npacific",
+      "calrun",
+      "hawaii",
+      "midway",
+      "midpac",
+      "line",
+      "wake",
+      "marcus",
+      "marshalls",
+      "eniwetok",
+      "gilberts",
+      "ellice",
+      "truk",
+      "marianas",
+      "wcarolines",
+      "bonin",
+      "philsea",
+      "honshu",
+      "kyushu",
+      "kurile",
+      "okhotsk",
+      "japansea",
+      "tsushima",
+      "inland",
+      "yellow",
+      "echina",
+      "ryukyu",
+      "formosa",
+      "luzonstrait",
+      "schina",
+      "luzonsea",
+      "palawan",
+      "tonkin",
+      "indochina",
+      "siam",
+      "natuna",
+      "sulu",
+      "visayan",
+      "leyte",
+      "celebes",
+      "malacca",
+      "java",
+      "makassar",
+      "molucca",
+      "banda",
+      "flores",
+      "timor",
+      "arafura",
+      "ngnorth",
+      "bismarck",
+      "solomon",
+      "eastsol",
+      "coral",
+      "newhebrides",
+      "fiji",
+      "samoa",
+      "spacific",
+      "tasman",
+      "nzwaters",
+      "bight",
+      "westaus",
+      "eindian",
+      "mentawai",
+      "andaman",
+      "bengal",
+      "ceylon",
+      "chukchi"
+    ]
+  },
   "ring": {"from": 33},
   "says": {
     "beside": "{Power} fights beside the Axis: it is at war with {foe}, and {foe} is at war with {axis}.",

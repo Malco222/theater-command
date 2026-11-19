@@ -37,7 +37,7 @@
     "resilience": 0.95,
     "align": "leaning_axis",
     "seaSupply": true,
-    "sealift": 6
+    "sealift": 4
    }
   },
   "order": [
