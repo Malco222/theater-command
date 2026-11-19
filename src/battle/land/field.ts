@@ -398,11 +398,13 @@ export function buildField(place: LandPlace, seed: number, bend?: Bend): LandFie
   }
   // A capital's or a city's own river (b526), laid over its streets after the roads, which it bridges; never where the
   // card prices a crossing (one river a field). Its own stream of draws, so the rest of the field is as it was.
-  let stream: FieldStream | undefined;
+  let stream: FieldStream | undefined, cityWater: boolean[] | undefined;
   if (place.stream && !flow && town && built.landmark) {
     const roadX = (y: number): number => w / 2 + (tx - w / 2) * Math.min(1, (y / h) * 1.4) + Math.sin((y / h) * 5 + wob) * 90;
     const roadY = (x: number): number => ty + Math.sin((x / w) * 4 + wob) * 70;
+    const dry = ground.map((k) => k !== G.water);
     stream = layStream(place.stream, seed, place.terrain, ground, height, built.landmark, town, built.streetEdge, roadX, roadY);
+    cityWater = dry.map((d, i) => d && ground[i] === G.water);
   }
   // A road on the slant steps from cell to cell corner to corner, and where both cells beside such a step are rock, marsh
   // or water a lorry cannot take it: the road takes one of them, over water the bridge does (b418: tanks and lorries
@@ -417,6 +419,8 @@ export function buildField(place: LandPlace, seed: number, bend?: Bend): LandFie
       const p = at(c + dc, r), q = at(c, r + 1);
       if (!hard(ground[p]) || !hard(ground[q])) continue;
       const k = ground[p] === G.water && ground[q] !== G.water ? q : p;
+      // A city's own river keeps the record's bridges (b596): no new deck over its water but one beside a bridge it has.
+      if (cityWater?.[k] && ![-1, 0, 1].some((a) => [-1, 0, 1].some((b) => ground[at(Math.min(cols - 1, Math.max(0, (k % cols) + a)), Math.min(rows - 1, Math.max(0, Math.floor(k / cols) + b)))] === G.bridge))) continue;
       ground[k] = ground[k] === G.water ? span : G.road;
     }
   }
@@ -476,10 +480,12 @@ function bezier(a: [number, number], k: [number, number], b: [number, number], s
  *   - 'across' it: through the core's back half, behind the defence's rows (a block inside the core's edge, b529) and
  *     the road across the field, the city's far quarter beyond it, as Praga across the Vistula or Buda across the Danube;
  *   - 'shore': along the city's edge at one side of the field, its water to the field's edge, never through it.
- * A second river meeting it (the Sava at Belgrade) comes in behind the defence too: from beyond an 'across' river, or
- * from its side of the field behind the defence's rows to meet one 'up' the field. Every road it crosses keeps its way
- * over by a bridge straight across the water where the road came to it: a bridge on every avenue; a road that only
- * comes down to the water ends at its bank. A river with no road over it gets one bridge, nearest the heart. Water is
+ * A second river meeting it (the Sava at Belgrade) never lies between the armies either: to meet one 'across', from its
+ * side edge to the heart's corner, beyond the defence's flank (b596(2)); to meet one 'up' the field, from its side of
+ * the field behind the defence's rows. A road it crosses keeps its way over by a bridge straight across the water where
+ * the road came to it, as many as the city had (b596(1), the record's count; none given, a bridge on every avenue),
+ * those nearest the heart; every other avenue ends at its quay, and a road that only comes down to the water ends at its
+ * bank. A river with no road over it gets one bridge, nearest the heart, unless the record says it had none. Water is
  * water in the rules (b526: what is drawn as a river is a river), but the card never prices it, so it lies where no
  * attack must cross it.
  */
@@ -726,6 +732,15 @@ function layStream(
         used.add(io);
         plan((o.s + p.s) / 2, { [sd]: o.cells, [-sd]: p.cells });
       });
+      // A road over it at a shallow slant (a second river meeting the road across the field) comes out on the far bank
+      // further along than a bridge pairs; where nothing above bridged this piece and its road reaches both banks, one
+      // bridge between the nearest run on each side.
+      if (!usedR.size && !usedL.size && right.length && left.length) {
+        let ia = 0, ib = 0;
+        right.forEach((a, i) => left.forEach((b, j) => { if (Math.abs(a.s - b.s) < Math.abs(right[ia].s - left[ib].s)) { ia = i; ib = j; } }));
+        usedR.add(ia); usedL.add(ib);
+        plan((right[ia].s + left[ib].s) / 2, { [-1]: right[ia].cells, 1: left[ib].cells });
+      }
       // What the water cut along one bank is joined again over the land: each run's cells in turn along it (a road that
       // dipped into the water and came out on the same bank), and a run left over, with no bridge, to another run on its
       // bank close by. Never a bridge: those are the record's (b596); where the land between is water, the repair below.

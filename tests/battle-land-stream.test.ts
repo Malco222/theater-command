@@ -15,6 +15,7 @@ const cityTicket = (size: 'city' | 'capital', terrain: 'urban' | 'plains' | 'hil
 const LIES: [string, Stream][] = [
   ['up', stream('up')], ['up, a second meeting it', stream('up', { flows: 'south', join: { name: 'Second', side: 'west' } })],
   ['across', stream('across')], ['across, a second meeting it', stream('across', { flows: 'west', join: { name: 'Second', side: 'east' } })],
+  ['across, a second from the west', stream('across', { join: { name: 'Second', side: 'west' } })],
   ['a shore', stream('shore')], ['a lesser river up the field', stream('up', { great: false })],
   ['a shore ahead, behind the defence', stream('shore', { side: 'back', flows: 'east' })],
 ];
@@ -231,6 +232,11 @@ describe("the city's river on the field (b526)", () => {
       ['up, four roads meeting in the water', 'urban', 'capital', 4608083, stream('up'), 0],
       ['up, over the first bridge and on over a second', 'urban', 'capital', 7959411, stream('up', { join: { name: 'Second', side: 'east' } }), 0],
       ['across, over the first bridge and on over a second', 'urban', 'capital', 134636, stream('across', { join: { name: 'Second', side: 'west' } }), 0],
+      // The b596 review: a second river from the west edge met the road across the field at a shallow slant, its two
+      // ends further apart than a bridge paired, and the road from the west edge was cut off.
+      ['across, a second at a slant over the road across', 'urban', 'city', -4163177, stream('across', { join: { name: 'Second', side: 'west' } }), 0],
+      ['across, a second at a slant (2)', 'urban', 'city', 4722859, stream('across', { join: { name: 'Second', side: 'west' } }), 0],
+      ['across, a second at a slant (3)', 'urban', 'city', 223651, stream('across', { join: { name: 'Second', side: 'west' } }), 0],
     ];
     const reach = (h: LandField): Set<number> => {
       const deck = (i: number): boolean => GROUNDS[h.ground[i]] === 'road' || GROUNDS[h.ground[i]] === 'bridge';
@@ -301,7 +307,7 @@ describe("the city's river on the field (b526)", () => {
         // Those it keeps are the nearest the heart of those it would lay.
         const near = (d: [number, number][]): number => Math.min(...d.map(([x, y]) => Math.hypot(x - all.town!.x, y - all.town!.y)));
         const kept = decks(two).map(near).sort((a, b) => a - b), every = decks(all).map(near).sort((a, b) => a - b);
-        expect(kept[0], name).toBeLessThanOrEqual(every[1] + 1);
+        kept.forEach((k, i) => expect(k, `${name} ${seed} deck ${i}`).toBeLessThanOrEqual(every[i] + 25));
       }
     }
   });

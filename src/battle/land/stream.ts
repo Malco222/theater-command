@@ -46,8 +46,9 @@ export function streamOf(r: CityRiver, heading: number): Stream {
   }
   return {
     name: r.river, lie: along ? 'up' : 'across', flows: along ? (Math.abs(f) < 90 ? 'north' : 'south') : f > 0 ? 'east' : 'west', great: r.great,
-    ...(r.bridges !== undefined ? { bridges: r.bridges } : {}),
-    ...(r.form === 'meet' && r.join ? { join: { name: r.join, side: side(r.joinFrom ?? r.flows + 180), ...(r.joinBridges !== undefined ? { bridges: r.joinBridges } : {}) } } : {}),
+    // The record's count, where it is one: 6 stands for six or more (a great city's every avenue has its bridge).
+    ...(r.bridges !== undefined && r.bridges < 6 ? { bridges: r.bridges } : {}),
+    ...(r.form === 'meet' && r.join ? { join: { name: r.join, side: side(r.joinFrom ?? r.flows + 180), ...(r.joinBridges !== undefined && r.joinBridges < 6 ? { bridges: r.joinBridges } : {}) } } : {}),
   };
 }
 

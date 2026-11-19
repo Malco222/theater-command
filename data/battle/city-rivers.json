@@ -5,7 +5,7 @@
     "form: 'through' (the river runs through the city), 'meet' (two rivers meet at the city: join is the second, joinFrom the compass bearing from the meeting toward where it comes from), 'shore' (the river runs along one edge of the city, not through it: water is the compass bearing from the city's heart to it).",
     "flows: the compass bearing, in degrees, the river flows toward as it passes the city's heart. great: wider than about 250 metres there (drawn wider).",
     "Only rivers a street fight would meet: no covered or small streams, and no sea coasts (a bay, a harbour, a strait). Where the card prices a crossing (the province's river between the armies), that river is the field's and this list adds nothing.",
-    "bridges, joinBridges: the city's road bridges over its river and the second river in 1939 to 1945, as the historian counted them for the design director's b596 (bridges.md); 6 stands for six or more, 0 for none (ferries only). The field lays that many, those nearest the heart, and every other avenue ends at a quay."
+    "bridges, joinBridges: the city's road bridges over its river and the second river in 1939 to 1945, as the historian counted them for the design director's b596 (bridges.md); 6 stands for six or more, 0 for none (ferries only). The field lays that many, those nearest the heart, and every other avenue ends at a quay; at six or more every avenue has its bridge."
   ],
   "cities": {
     "Warsaw": { "river": "Vistula", "form": "through", "flows": 340, "great": true, "bridges": 3, "note": "Praga on the east bank" },
