@@ -10697,7 +10697,8 @@ void ACampaignPlayerController::Remember(const TArray<FSinking>& Sinkings, bool 
 		Card.More = Extra == 1 ? FString(TEXT("and one more capital ship")) : FString::Printf(TEXT("and %d more capital ships"), Extra);
 	}
 	Card.From = FPlatformTime::Seconds();
-	Card.Until = Card.From + (bHold ? 3600.0 : 6.5 + 1.5 * (Card.Rows.Num() - 1));
+	// (The art director and the UI director, 19 November 2026: 6.5 seconds for one ship and two more for each further name.)
+	Card.Until = Card.From + (bHold ? 3600.0 : 6.5 + 2.0 * (Card.Rows.Num() - 1));
 	Memorial = MoveTemp(Card);
 	UE_LOG(LogTheater, Display, TEXT("Memorial: %s; %d named, %d more; first: %s (%s)"), *Memorial.Heading, Memorial.Rows.Num(), Extra, *Memorial.Rows[0].Name, *Memorial.Rows[0].Line);
 }

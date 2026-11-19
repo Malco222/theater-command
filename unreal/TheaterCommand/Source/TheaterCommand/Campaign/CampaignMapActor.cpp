@@ -115,7 +115,9 @@ namespace
 		{
 			return;
 		}
-		static float Fill = 0.3f, Rim = 0.6f;
+		// (Measured from the south at the effects test's gun, 19 November 2026: a rifleman's shaded back read 18 to 22
+		// of 255 with no fill, 39 to 42 at 0.3 and 60 to 62 at 0.6; the shadow he throws on the ground reads 44.)
+		static float Fill = 0.45f, Rim = 0.6f;
 		static bool bRead = false;
 		if (!bRead)
 		{

@@ -5416,7 +5416,16 @@ namespace
 					// (Brian's memorial card, 19 November 2026.) A battleship or a carrier lost at sea is named, low on the
 					// screen and clear of the plates: where, who she was, and the men lost with her. It takes no click and
 					// stops no play; it fades in, stands a few seconds and fades out.
-					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Bottom).Padding(24.0f, 0.0f, 24.0f, 96.0f)
+					// (The art director's ruling the same day: low centre, its bottom edge pinned seven hundredths of the
+					// frame's height above the bottom, so a taller plate grows upward; three named ships at most and the
+					// count of the rest; no dimming by night. The UI director: the count is typed as the lines are.
+					// The plate is a piece of the frame and takes the frame's own scale with the window's height.)
+					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Bottom)
+					.Padding(TAttribute<FMargin>::CreateLambda([this]()
+					{
+						const float High = ScreenRoot.IsValid() ? static_cast<float>(ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y) : 1000.0f;
+						return FMargin(24.0f, 0.0f, 24.0f, FMath::Max(0.07f * High, 56.0f));
+					}))
 					[
 						Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 14.0f, 36.0f, 17.0f))
 						.Visibility_Lambda([this]()
@@ -5441,7 +5450,7 @@ namespace
 							+ SVerticalBox::Slot().AutoHeight()[MemorialRow(2)]
 							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 11.0f, 0.0f, 0.0f)
 							[
-								SNew(STextBlock).Font(Typed(10)).ColorAndOpacity(Faint)
+								SNew(STextBlock).Font(Typed(11)).ColorAndOpacity(Muted)
 								.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetMemorial().More.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 								.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetMemorial().More) : FText::GetEmpty(); })
 							]
