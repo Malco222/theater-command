@@ -13696,7 +13696,45 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const FVector2D Under = WorldToMap(CameraFocus - BlastOff * BlastUnitsAMetre);
 			Blasts->Clear();
 			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeDrawnWide, SmokeHour, EyeDrawnHigh); // (its clock first: the barrage is timed from it)
-			Blasts->RunTest(SurfacePoint(Under.X, Under.Y, 0.0));
+			// (The art director's ruling of 19 November 2026: the test's tank gun and machine gun are told the ground
+			// they stand on, where they were told "earth" whatever it was. The kit's own kinds, read where the look's
+			// focus stands from what the land painter laid there: standing snow; by the province a marsh or a town; a
+			// wood; dry country (the painter's dry plain and desert); anything else is earth. The masks' numbers are
+			// said in the log beside the kind. "-TheaterBlastGround=sand" names it outright.)
+			FString BlastGround = TEXT("earth");
+			{
+				const FVector2D GunAt = WorldToMap(CameraFocus);
+				const double GunX = WrapX(GunAt.X);
+				const FCampaignTerrain* Shape = &Terrain;
+				const FCampaignGround* Laid = &Paint;
+				if (Data.bWorld && (GunX < 0.0 || GunAt.Y < 0.0 || GunX > Data.Width || GunAt.Y > Data.Height))
+				{
+					const FFineSheet* Fine = FineSheetAt(GunX, GunAt.Y);
+					const bool bFine = Fine && Fine->bBuilt.load();
+					Shape = bFine ? &Fine->Shape : &WorldTerrain;
+					Laid = bFine ? &Fine->Paint : &WorldPaint;
+				}
+				FColor Mask(0, 0, 0, 0);
+				if (Shape->NX > 1 && Shape->NY > 1 && Laid->Masks.Num() == Shape->NX * Shape->NY)
+				{
+					const int32 MaskI = FMath::Clamp(FMath::RoundToInt32((GunX - Shape->OriginX) / Shape->Cell), 0, Shape->NX - 1);
+					const int32 MaskJ = FMath::Clamp(FMath::RoundToInt32((GunAt.Y - Shape->OriginY) / Shape->Cell), 0, Shape->NY - 1);
+					Mask = Laid->Masks[Shape->Index(MaskI, MaskJ)];
+				}
+				const int32 Province = RegionAtWorld(CameraFocus);
+				const FString Lie = Data.Regions.IsValidIndex(Province) ? Data.Regions[Province].Terrain : FString();
+				const float Wooded = CoverAt(GunAt.X, GunAt.Y);
+				BlastGround = Mask.G > 140 ? TEXT("snow") : Lie == TEXT("marsh") ? TEXT("mud") : Lie == TEXT("urban") ? TEXT("town") : Wooded > 0.5f ? TEXT("woods")
+					: (Mask.A > 96 || Lie == TEXT("desert")) ? TEXT("sand") : TEXT("earth");
+				FString Named;
+				if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastGround="), Named) && !Named.IsEmpty())
+				{
+					BlastGround = Named;
+				}
+				UE_LOG(LogTheater, Display, TEXT("Effects: the test's guns stand on %s (the province is %s; the painter's masks there: rock %d, snow %d, shore sand %d, dry country %d of 255; woods %.2f)"),
+					*BlastGround, Lie.IsEmpty() ? TEXT("none") : *Lie, Mask.R, Mask.G, Mask.B, Mask.A, Wooded);
+			}
+			Blasts->RunTest(SurfacePoint(Under.X, Under.Y, 0.0), BlastGround);
 			bBlastTicked = true; // (the kit is ticked once a frame: a second tick in this frame cut its lamps short)
 			{
 				// (For the effects artist, 23:04Z on 18 November 2026: the near half of the test machine gun's tracer did
