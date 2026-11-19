@@ -18,8 +18,9 @@ const js = out.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 // The eight target pictures of the month's report card (the art director's own drawings), each once, as a style rule.
 const PICTURES = ['troops', 'fieldworks', 'town', 'fleet', 'factories', 'rail-yard', 'harbour', 'airfield'];
 const pictures = PICTURES.map((k) => `.tpic.k-${k} { background-image: url("data:image/svg+xml;base64,${readFileSync(`src/campaign/ui/pictures/target-${k}.svg`).toString('base64')}"); }`).join('\n');
-const css = `${readFileSync('src/campaign/ui/style.css', 'utf8')}\n${pictures}\n`;
-const fonts = '<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">';
+// FIRST COMMAND's notes, pointer and Guide (firsthour.ts) come after the page's own rules.
+const css = `${readFileSync('src/campaign/ui/style.css', 'utf8')}\n${pictures}\n${readFileSync('src/campaign/ui/firsthour.css', 'utf8')}\n`;
+const fonts = '<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=Courier+Prime:wght@400;700&family=PT+Serif:wght@400;700&display=swap" rel="stylesheet">';
 const page = `<title>Theater Command</title>
 ${fonts}
 <style>

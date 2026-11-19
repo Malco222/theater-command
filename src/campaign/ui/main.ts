@@ -91,10 +91,11 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
+import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { tenthPct } from '../../core/math';
 import { turnToDate } from '../../core/ticket';
+import { cardChanging, cardDrawn as lessonCard, guideCard, initFirstHour, lessonsAside, lessonsBegun, lessonsDrawn } from './firsthour';
 
 let g: Game;
 /** The month after the last one the historical plans cover: February 1945, when the Bulge has been closed. */
@@ -1466,7 +1467,7 @@ function refresh(): void {
     for (const c of picked) { const m = reach(g, c); reaches.push({ from: c.reg, ap: c.ap, map: m }); for (const [id, rc] of m) if (id !== c.reg) goes.set(id, (goes.get(id) ?? false) || rc.attack); }
     for (const [id, attack] of goes) marks += `<path class="mk ${attack ? 'hit' : 'move'}" d="${pathOf(g.regions[id].polys)}"/>`;
     // Beyond the march, in a second and quieter tint: every province the army in hand could ride to this month (ruling 110(b)).
-    if (ui.tab === 'region') { trainTo = trainReach(heldCorps(), goes); for (const id of trainTo) marks += `<path class="mk railfar" d="${pathOf(g.regions[id].polys)}"/>`; }
+    if (ui.tab === 'region') { trainTo = trainReachFor(g, heldCorps(), goes); for (const id of trainTo) marks += `<path class="mk railfar" d="${pathOf(g.regions[id].polys)}"/>`; }
     // Neutral ground next to the picked armies: marching in means war, and the game asks first.
     for (const id of invasions(g, picked).keys()) if (!goes.has(id)) marks += `<path class="mk war" d="${pathOf(g.regions[id].polys)}"/>`;
     // Ground the picked tanks cannot enter, where they stand next to it or to somewhere they can reach.
@@ -1588,6 +1589,8 @@ function refresh(): void {
   } else { pass.classList.remove('open'); pass.innerHTML = ''; }
   drawResult();
   hoverWhy(document.body);
+  // FIRST COMMAND's staff note, its pointer and the GUIDE button, over the page as drawn.
+  lessonsDrawn();
   queueSave();
 }
 
@@ -1805,23 +1808,6 @@ function cutTip(id: number): string {
 
 function railTargets(c: Corps): Region[] {
   return [...railReach(g, c)].map((id) => g.regions[id]);
-}
-
-/**
- * Where the army in hand can go by train and not by road this month: ground every corps of it can ride to, with room
- * for it, that none of them can march to. Empty unless every corps has its whole month, since a train takes all of it.
- */
-function trainReach(held: Corps[], goes: Map<number, boolean>): Set<number> {
-  const out = new Set<number>();
-  if (!held.length || held.some((c) => c.ap < 4)) return out;
-  let common: number[] | null = null;
-  for (const c of held) {
-    const m = railReach(g, c);
-    common = common ? common.filter((id) => m.has(id)) : [...m];
-    if (!common.length) return out;
-  }
-  for (const id of common ?? []) if (!goes.has(id) && held.every((c) => c.reg !== id) && roomForAll(g, g.regions[id], held)) out.add(id);
-  return out;
 }
 
 /** The line a train would take from a corps to a province, province by province, for drawing; the two ends alone where it cannot be traced. */
@@ -6137,6 +6123,7 @@ function airReportCard(r: AirReport): string {
 // ---- Modals -------------------------------------------------------------------------------
 
 function openModal(m: typeof ui.modal): void {
+  cardChanging(ui.modal, m);
   ui.modal = m;
   cardDrawn(m);
   const veil = $('#veil');
@@ -6154,6 +6141,7 @@ function openModal(m: typeof ui.modal): void {
   card.classList.toggle('ask', m.kind === 'askend' || m.kind === 'replace');
   card.classList.toggle('month', m.kind === 'news' && !!m.card);
   if (m.kind === 'start') card.innerHTML = startCard();
+  else if (m.kind === 'guide') card.innerHTML = guideCard();
   else if (m.kind === 'report') {
     const rep = g.reports.find((r) => r.id === m.id);
     if (!rep) { ui.modal = null; veil.classList.remove('open'); return; }
@@ -6282,6 +6270,7 @@ function openModal(m: typeof ui.modal): void {
   card.scrollTop = 0;
   fitMonth();
   dressCard(card);
+  lessonCard(card, m);
 }
 
 /** What every card gets once it is drawn: the key caps at its foot, the hovers of its off buttons, and the shadow over a body that scrolls. */
@@ -8071,8 +8060,10 @@ function startTour(): void {
   const stops = tourStops(card);
   if (!stops.length) return;
   dropTour();
+  cardChanging(ui.modal, null);
   ui.modal = null;
   $('#veil').classList.remove('open');
+  cardDrawn(null);
   tour = { card, stops, i: 0, timer: 0, view: { ...ui.view } };
   ui.sel = -1; ui.picked.clear();
   tourStep();
@@ -8297,7 +8288,7 @@ function onClick(e: MouseEvent): void {
     case 'start':
       // Nothing replaces a saved campaign without asking (ruling 130(a)): the game keeps one, and a slip on the front door must not cost him a war.
       if (t.dataset.sure !== '1' && peekSave(readSave() ?? '')) { openModal({ kind: 'replace', data: { ...t.dataset }, back: { kind: 'start' } }); break; }
-      if (t.dataset.view === 'grand') rememberPick(); openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || '', t.dataset.level || DIFFICULTY.start, t.dataset.cabinet !== '0', t.dataset.secure === '1', t.dataset.depth || '', t.dataset.view === 'grand' ? Number(t.dataset.hist) || HIST_FREE : HIST_FREE); break;
+      if (t.dataset.view === 'grand') rememberPick(); openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || '', t.dataset.level || DIFFICULTY.start, t.dataset.cabinet !== '0', t.dataset.secure === '1', t.dataset.depth || '', t.dataset.view === 'grand' ? Number(t.dataset.hist) || HIST_FREE : HIST_FREE); lessonsBegun(t.dataset.first === '1'); break;
     case 'menu': ui.menu = t.dataset.menu === 'scenarios' ? 'scenarios' : 'grand'; openModal({ kind: 'start' }); break;
     case 'gcnat': case 'gcyear': case 'gclevel': case 'gccabinet': case 'gcsecure': case 'gcdepth': case 'gchist': {
       if (act === 'gchist') ui.gcHist = Number(t.dataset.stop) || HIST_FREE; else if (act === 'gcdepth') ui.gcDepth = t.dataset.depth ?? DEPTH.start; else if (act === 'gcnat') ui.gcNat = t.dataset.nat ?? ''; else if (act === 'gclevel') ui.gcLevel = t.dataset.level ?? DIFFICULTY.start; else if (act === 'gccabinet') ui.gcCabinet = t.dataset.on === '1'; else if (act === 'gcsecure') ui.gcSecure = t.dataset.secure === '1'; else ui.gcYear = Number(t.dataset.year) || 1939;
@@ -8307,7 +8298,7 @@ function onClick(e: MouseEvent): void {
       $('#card').scrollTop = keep;
       break;
     }
-    case 'continue': if (continueGame()) openModal(null); else openModal({ kind: 'start' }); break;
+    case 'continue': if (continueGame()) { openModal(null); lessonsBegun(false); } else openModal({ kind: 'start' }); break;
     case 'new': stopAuto(); endPassing(); ui.menu = 'grand'; openModal({ kind: 'start' }); break;
     case 'skip': if (tour) endTour(true); else endPassing(); break;
     case 'alert': followAlert(t.dataset.kind!); break;
@@ -8519,7 +8510,7 @@ function onClick(e: MouseEvent): void {
         const idle = frontIdle(g).length;
         if (idle) { openModal({ kind: 'askend', n: idle, at: performance.now() }); break; }
       }
-      if (ui.modal?.kind === 'askend') { ui.modal = null; $('#veil').classList.remove('open'); }
+      if (ui.modal?.kind === 'askend') { ui.modal = null; $('#veil').classList.remove('open'); cardDrawn(null); }
       const since: Since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length, q: queueNow(), mark: markNow() };
       // The plate turns to the month that is coming as the press lands (ruling 204).
       const coming = onEve(g) ? '' : date(g.turn + 1);
@@ -8542,7 +8533,7 @@ function onClick(e: MouseEvent): void {
       if (standArmy(g, a.reg, on)) { ui.msg = on ? `The army at ${g.regions[a.reg].name} stands where it is this month.` : `The army at ${g.regions[a.reg].name} waits for orders again.`; queueSave(); }
       refresh(); break;
     }
-    case 'askshow': { ui.modal = null; $('#veil').classList.remove('open'); ui.roundSeen = []; ui.picked.clear(); ui.sel = -1; goNextArmy(); break; }
+    case 'askshow': { ui.modal = null; $('#veil').classList.remove('open'); cardDrawn(null); ui.roundSeen = []; ui.picked.clear(); ui.sel = -1; goNextArmy(); break; }
     case 'asktick': { setAskPref(!askPref()); if (ui.modal?.kind === 'askend') openModal(ui.modal); break; }
     case 'setask': { setAskPref(t.dataset.on === '1'); if (ui.modal?.kind === 'level') { const keep = $('#card').scrollTop; openModal({ kind: 'level' }); $('#card').scrollTop = keep; } else refresh(); break; }
     case 'stopmarch': {
@@ -8973,12 +8964,13 @@ function onClick(e: MouseEvent): void {
       const id = t.dataset.depth ?? '', to = DEPTH.depths.find((d) => d.id === id);
       // A depth with no cabinet, picked while the cabinet has business open, is asked twice: the bill is shown first.
       if (g.human && to && !to.cabinet && t.dataset.sure !== '1' && !cabinetIsOff(g) && cabinetBillOf(g).length) { openModal({ kind: 'level', ask: 'depthoff', depth: id }); document.querySelector('#card #setdepth')?.scrollIntoView({ block: 'start' }); break; }
-      if (g.human && orderDepth(g, id)) { queueSave(); const keep = $('#card').scrollTop; refresh(); openModal({ kind: 'level' }); $('#card').scrollTop = keep; }
+      if (g.human && orderDepth(g, id)) { lessonsAside(); queueSave(); const keep = $('#card').scrollTop; refresh(); openModal({ kind: 'level' }); $('#card').scrollTop = keep; }
       break;
     }
     case 'desk': {
       const d = t.dataset.desk as DeskId, on = t.dataset.on === '1';
       if (!g.human || !orderDesk(g, d, on)) break;
+      lessonsAside();
       queueSave();
       const name = lowFirst(deskDef(d)?.name ?? '');
       ui.msg = on ? `Your staff now runs ${name}.` : `${upFirst(name)} ${/ and /.test(name) ? 'are' : 'is'} on your own desk again.`;
@@ -9173,7 +9165,7 @@ function onClick(e: MouseEvent): void {
       if (!m || m.kind !== 'siege' || m.mode !== 'march') break;
       const target = g.regions[m.target];
       const corps = g.corps.filter((c) => (m.corps as number[]).includes(c.id));
-      if (act === 'domarch') { ui.modal = null; $('#veil').classList.remove('open'); if (marchTo(target.id, corps)) queueSave(); break; }
+      if (act === 'domarch') { ui.modal = null; $('#veil').classList.remove('open'); cardDrawn(null); if (marchTo(target.id, corps)) queueSave(); break; }
       const h = g.headlines.length;
       const before = g.regions.map((r) => r.ctrl);
       const was = beforeBattle(m.look ?? null, 'storm', target.id);
@@ -9261,6 +9253,11 @@ let shutByKey = false;
 /** When the result slip last came up on the map. */
 let slipAt = 0;
 const cardKey = (m: NonNullable<typeof ui.modal>): string => `${m.kind}:${m.target ?? m.id ?? m.region ?? ''}`;
+/**
+ * Told every time a card goes up or comes down. A card put down by hand (`ui.modal = null` outside openModal) must
+ * call it with null too: else the guard keeps the old card, and the same question asked again keeps its old time, so a
+ * hurried Enter answers it at once (the second playtester's check of 84.3.1: SHOW ME, then Enter three times).
+ */
 function cardDrawn(m: typeof ui.modal): void {
   const same = !!m && !!guardedCard && cardKey(m) === cardKey(guardedCard);
   if (m === guardedCard || same) { guardedCard = m; return; }
@@ -9898,6 +9895,11 @@ function wireMap(): void {
 // ---- Start --------------------------------------------------------------------------------
 
 g = createGame(1939, null);
+initFirstHour({
+  game: () => g, ui, held: heldCorps, esc, openModal, refresh,
+  tucked: (tab) => !!commandOf(g)?.desks.some((d) => d.tab === tab && d.staff),
+  busy: () => !!passing || !!working || !!tour,
+});
 mount();
 drawStatic();
 applyView();

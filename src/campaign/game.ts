@@ -2347,6 +2347,18 @@ export function railReachFor(g: Game, corps: Corps[]): Set<number> {
 }
 
 /**
+ * Where the army in hand can go by train and not by road this month, the map's quieter tint (ruling 110(b)) and
+ * FIRST COMMAND's lesson 8: ground every corps of it can ride to, with room for all, that none of them can march to
+ * (`goes`). Empty unless every corps has its whole month, since a train takes all of it.
+ */
+export function trainReachFor(g: Game, corps: Corps[], goes: { has(id: number): boolean }): Set<number> {
+  const out = new Set<number>();
+  if (!corps.length || corps.some((c) => c.ap < 4)) return out;
+  for (const id of railReachFor(g, corps)) if (!goes.has(id)) out.add(id);
+  return out;
+}
+
+/**
  * The break nearest an army on its own side's lines that stops its trains (a cut, a siege, bridges down), in the
  * words whyNoTrain has for it, or null where nothing of the kind bounds its reach.
  */
@@ -2577,7 +2589,9 @@ export function capitulate(g: Game, nat: string, by: string): void {
     const V = g.nations.VIC;
     V.alive = true; V.dormant = false;
     const cap = g.regions.find((r) => r.owner === 'VIC' && r.name === 'Auvergne') ?? g.regions.find((r) => r.owner === 'VIC');
-    if (cap) { cap.cap = true; V.capital = cap.id; }
+    // (Its distances are counted the month it has a capital, as every other country's are on the day it is drawn:
+    // a beaten Vichy corps falls back toward Auvergne whatever year the campaign began in.)
+    if (cap) { cap.cap = true; V.capital = cap.id; g.capDist.VIC = capitalDistances(g, cap.id); }
     headline(g, 'fall', 'France signs an armistice. The north and the Atlantic coast are occupied; a new government at Vichy keeps the south.', 'FRA', undefined, { arm: 'land', won: by, lost: 'FRA' });
   } else {
     headline(g, 'fall', `${theName(X, true)} capitulates to ${theName(g.nations[by])}.`, nat, undefined, { arm: 'land', won: by, lost: nat });
