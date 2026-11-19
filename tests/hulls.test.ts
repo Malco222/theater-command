@@ -5,7 +5,7 @@ import hulls from '../data/campaign/hulls.json';
 import navy from '../data/campaign/navy.json';
 import world from '../data/campaign/world.json';
 import { createGame } from '../src/campaign/game';
-import { nameLosses } from '../src/campaign/hulls';
+import { hullAt, nameLosses } from '../src/campaign/hulls';
 import { sail, seaBattles, zoneOf } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -13,19 +13,21 @@ import { beginHuman, endHuman, humanUp, orderRaid, stepAI } from '../src/campaig
 import { syncWings, wingsOf } from '../src/campaign/carriers';
 import type { Fleet, Game, Ships } from '../src/campaign/types';
 
-type Row = { name: string; crew: number; from?: number; fleet?: string; pair?: boolean };
+type Row = { name: string; crew: number; from?: number; fleet?: string; pair?: boolean; type?: 'battlecruiser'; later?: { from: number; name?: string; fleet?: string }[] };
 const NAVIES = hulls.navies as unknown as Record<string, Partial<Record<'bb' | 'cv', Row[]>>>;
 const lose = (bb: number, cv = 0): Ships => ({ bb, cv, ca: 0, dd: 0, ss: 0 });
 const fleet = (g: Game, name: string): Fleet => g.fleets.find((f) => f.name === name)!;
 const rows = (nat: string, cls: 'bb' | 'cv'): Row[] => NAVIES[nat][cls]!;
-const names = (nat: string, cls: 'bb' | 'cv', pick: (r: Row) => boolean): string[] => rows(nat, cls).filter(pick).map((r) => r.name);
+// The names a nation's ships bear in a month (turn), of those `pick` takes; `fleetAt` is a ship's fleet in that month.
+const names = (nat: string, cls: 'bb' | 'cv', pick: (r: Row) => boolean, turn = 1): string[] => rows(nat, cls).filter(pick).map((r) => hullAt(r, turn).name);
+const fleetAt = (r: Row, turn: number): string | undefined => hullAt(r, turn).fleet;
 
 describe('the record of names', () => {
   it('gives every fleet that begins with battleships or carriers as many names as it has ships', async () => {
     const g = createGame(1, null);
     for (const f of g.fleets) for (const cls of ['bb', 'cv'] as const) {
       if (!f.ships[cls]) continue;
-      expect(names(f.nat, cls, (r) => r.fleet === f.name && (r.from ?? 1) <= 1).length, `${f.name} (${f.nat}) ${cls}`).toBeGreaterThanOrEqual(f.ships[cls]);
+      expect(names(f.nat, cls, (r) => fleetAt(r, 1) === f.name && (r.from ?? 1) <= 1).length, `${f.name} (${f.nat}) ${cls}`).toBeGreaterThanOrEqual(f.ships[cls]);
     }
     // And every fleet row of the record, the far side's and the Americas' too, from the month it forms.
     type FleetRow = { nat: string; name: string; from?: number; ships: Partial<Ships> };
@@ -36,7 +38,7 @@ describe('the record of names', () => {
     expect(fleetRows.length).toBeGreaterThan(navy.fleets.length);
     for (const f of fleetRows) for (const cls of ['bb', 'cv'] as const) {
       if (!f.ships[cls]) continue;
-      expect(names(f.nat, cls, (r) => r.fleet === f.name && (r.from ?? 1) <= (f.from ?? 1)).length, `${f.name} (${f.nat}) ${cls}`).toBeGreaterThanOrEqual(f.ships[cls]!);
+      expect(names(f.nat, cls, (r) => fleetAt(r, f.from ?? 1) === f.name && (r.from ?? 1) <= (f.from ?? 1)).length, `${f.name} (${f.nat}) ${cls}`).toBeGreaterThanOrEqual(f.ships[cls]!);
     }
     for (const nat of Object.keys(NAVIES)) for (const cls of ['bb', 'cv'] as const) for (const r of NAVIES[nat][cls] ?? []) {
       expect(r.crew, r.name).toBeGreaterThan(400);
@@ -49,7 +51,7 @@ describe('the record of names', () => {
 describe('a battleship or carrier that goes down', () => {
   it('is one still afloat of the fleet that lost her, with her crew and a real share of it lost, and never named twice', () => {
     const g = createGame(4, null);
-    const home = names('UK', 'bb', (r) => r.fleet === 'Home Fleet' && (r.from ?? 1) <= 1);
+    const home = names('UK', 'bb', (r) => fleetAt(r, 1) === 'Home Fleet' && (r.from ?? 1) <= 1);
     const seen = new Set<string>();
     for (let k = 0; k < home.length; k++) {
       const [h] = nameLosses(g, 'UK', 'Home Fleet', lose(1), `t:${k}`);
@@ -85,6 +87,27 @@ describe('a battleship or carrier that goes down', () => {
     expect(h).toMatchObject({ name: 'Independence and Princeton', pair: true, crew: 3138 });
   });
 
+  it('bears the name she had that month, and is drawn from the fleet she was with that month (the historian\'s check)', () => {
+    // Marat is Petropavlovsk from May 1943 (turn 45), Coral Sea is Anzio from September 1944 (turn 61).
+    const sov = (turn: number): string | null => { const x = createGame(4, null); x.turn = turn; x.flags['hull:SOV:bb:1'] = 1; return nameLosses(x, 'SOV', 'Baltic Fleet', lose(1), 'k')[0].name; };
+    expect(sov(44)).toBe('Marat');
+    expect(sov(45)).toBe('Petropavlovsk');
+    const coral = rows('USA', 'cv').findIndex((r) => r.name === 'Coral Sea');
+    expect(hullAt(rows('USA', 'cv')[coral], 60).name).toBe('Coral Sea');
+    expect(hullAt(rows('USA', 'cv')[coral], 61).name).toBe('Anzio');
+    // Ark Royal is with the Home Fleet from September 1939 and with Force H from turn 11.
+    const ark = rows('UK', 'cv').find((r) => r.name === 'Ark Royal')!;
+    expect(names('UK', 'cv', (r) => fleetAt(r, 1) === 'Home Fleet' && (r.from ?? 1) <= 1)).toContain('Ark Royal');
+    expect(fleetAt(ark, 11)).toBe('Force H');
+    const forceH = new Set<string>();
+    for (let s = 1; s <= 8; s++) { const x = createGame(s, null); x.turn = 11; forceH.add(nameLosses(x, 'UK', 'Force H', lose(0, 1), 'k')[0].name!); }
+    expect([...forceH]).toEqual(['Ark Royal']);
+    // Hood, Renown and Repulse were battlecruisers: the card can print it.
+    for (const r of rows('UK', 'bb')) expect(r.type === 'battlecruiser', r.name).toBe(['Hood', 'Renown', 'Repulse'].includes(r.name));
+    const bc = (() => { const x = createGame(4, null); rows('UK', 'bb').forEach((r, i) => { if (r.name !== 'Hood') x.flags[`hull:UK:bb:${i}`] = 1; }); return nameLosses(x, 'UK', 'Home Fleet', lose(1), 'k')[0]; })();
+    expect(bc).toMatchObject({ name: 'Hood', type: 'battlecruiser' });
+  });
+
   it('is the same for the same game and fight, and leaves the war\'s dice alone', () => {
     const a = createGame(9, null), b = createGame(9, null);
     const dice = a.rng.state;
@@ -112,7 +135,7 @@ describe('the fights that sink them', () => {
       for (const side of [...r.att, ...r.def]) {
         const big = side.sunk.bb + side.sunk.cv;
         expect(side.hulls?.length ?? 0).toBe(big);
-        for (const h of side.hulls ?? []) expect(names(side.nat, h.cls, (x) => x.fleet === side.fleet)).toContain(h.name);
+        for (const h of side.hulls ?? []) expect(names(side.nat, h.cls, (x) => fleetAt(x, g.turn) === side.fleet, g.turn)).toContain(h.name);
       }
       const d = r.def[0];
       if (!d.sunk.bb) continue;
@@ -146,7 +169,7 @@ describe('the fights that sink them', () => {
       expect(side.hulls?.length ?? 0).toBe(side.sunk.bb + side.sunk.cv);
       if (!side.sunk.bb) continue;
       found = true;
-      expect(names('GER', 'bb', () => true)).toContain(side.hulls![0].name);
+      expect(names('GER', 'bb', () => true, g.turn)).toContain(side.hulls![0].name);
     }
     expect(found).toBe(true);
   });

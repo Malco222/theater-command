@@ -622,6 +622,8 @@ export interface LostHull {
   lost: number;
   /** Two light carriers counted as one (both names, both crews). */
   pair?: boolean;
+  /** Her type where it is not her class's (the game counts Hood, Renown and Repulse as battleships). */
+  type?: 'battlecruiser';
 }
 
 export interface SeaSide {
