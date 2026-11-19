@@ -574,10 +574,7 @@ export interface Fleet extends Storied {
   /** Where a computer-run fleet goes when it has nothing better to do, and what it does there. */
   station: number;
   duty: Stance;
-  /**
-   * A fleet tied to its station is never sent anywhere else by the computer. The tie lapses the month its home port
-   * falls, or once its station is out of reach from the port it is in (navy.ts tieLapses; ruling 233 rider b598).
-   */
+  /** A fleet tied to its station is never sent anywhere else by the computer. */
   tied: boolean;
   /** 0..1: how fit for sea the ships are. Battle and long patrols wear it down; time in harbour restores it. */
   ready: number;
