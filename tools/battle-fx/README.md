@@ -157,10 +157,19 @@ Blasts->TrailStop(EngineId);
 - Give `SpanMetres`, the aircraft's wingspan: a fire's flame is half the span, at most 10 m (`flame_of_span`,
   `flame_most_m`), ragged and flickering, streaming back from the root, with black smoke from its tips. Without it the
   flame keeps the row's `flame_m`.
+- By day the flame must read as fire off the skin (art director 04:59Z): its tongues stand off by
+  `flame_lift_of_length`, licking out above and below the fuselage, opaque (`flame_alpha` at the cowl and the tip,
+  `flame_hold`, `flame_wide`, `lick_alpha`), and `tip_smoke` lays black smoke right at each tongue's tip, so flame and
+  smoke join with no gap (about 27 more puffs a burning aircraft).
 - Smoke hangs (art director 04:40Z): a fire trail lives 30 s and a straggler's smoke 20 s. To fit the room, past
-  `thin_after_s` only one puff in `thin_keep_one_in` (4) hangs on, growing on to `thin_grow` times and thinning slowly,
-  so an old trail is fewer, bigger lumps: about 250 puffs for a fighter's fire trail at 150 m/s, 170 for its smoke.
-  A hit's puff hangs 3 to 4 s.
+  `thin_after_s` only one puff in `thin_keep_one_in` (4) hangs on, growing on to `thin_grow` times, so an old trail is
+  fewer, bigger lumps: about 250 puffs for a fighter's fire trail at 150 m/s, 170 for its smoke. Each kept puff
+  thickens to `thin_alpha` times its opacity by `thin_after_s`, holds full to `thin_hold` of its life and is drawn out
+  over the gap to the next, so the old trail stays one dark line (04:59Z: a fire trail 110 or darker for two thirds of
+  its length on a 212 sky, its oldest part no paler than 150; a straggler's head about 130). A hit's puff hangs 3 to 4 s.
+- When the room (`game.max_puffs`) is short, every light (flames, flashes, tracers) is counted first, as an oil fire's
+  kept column is, and the farthest smoke goes: a dozen trailing aircraft fill about 2,900 of 3,000 slots, and past that
+  the far trails shorten while no fire is lost (24 aircraft, half burning, seen from 1,200 m).
 - A trail not moved for 30 s is forgotten; call `TrailStart` again to bring it back.
 - Kinds live in the recipe's `air_trails`: `smoke`, `fire`, `glycol`. What a hit looks like lives in `air_hit`.
 - The same clock rule applies as for `AirGun`.

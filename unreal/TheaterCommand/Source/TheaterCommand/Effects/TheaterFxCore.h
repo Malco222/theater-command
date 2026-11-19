@@ -109,6 +109,7 @@ namespace TheaterFx
 		double Smear = 0.0; // (an aircraft trail's puff: drawn this many metres longer behind it, against Along, so puffs metres apart join in one line)
 		double SmearFor = 0.0; // (and that length shrinks to under a third over this many seconds, so an old trail breaks into lumps; 0 keeps it)
 		double LeastPx = 0.0; // (a streak: never thinner than this on the screen; a puff: never smaller across its long way, and thinner to match)
+		double LeastKeep = 0.0; // (a puff held up to LeastPx keeps at least this share of its opacity: a light's twinkle, a far trail's dark line)
 		double MostPx = 0.0; // (a tracer's streak: never wider than this on the screen, so one passing close stays a thin line; 0: no limit)
 		double ShadeK = 1.0; // (how strongly it is lit on its sunward side and shadowed on the other: a skirt's lit top and dark foot)
 		double Rough = 0.0, Turn = 0.0, TurnRate = 0.0; // (a clod: how lumpy its outline is, and how it tumbles)
@@ -271,7 +272,14 @@ namespace TheaterFx
 			std::string Name;
 			double Life = 6.0, Spacing = 8.0, R0 = 0.5, R1 = 3.5, Alpha = 0.5, DarkenS = 4.0, RampS = 1.5, Smear = 1.5, Carried = 0.05, Flame = 0.0;
 			double Grow = 0.5, Lumpy = 0.0, SmearS = 0.0, Rise = 0.0;
-			double ThinAfter = 0.0, ThinGrow = 1.0; int ThinKeep = 1; // (an old trail thinned: past ThinAfter s only one puff in ThinKeep hangs on to Life, ThinGrow times wider)
+			double ThinAfter = 0.0, ThinGrow = 1.0, ThinAlpha = 1.0, ThinHold = -1.0; int ThinKeep = 1; // (an old trail thinned: past ThinAfter s only one puff in ThinKeep hangs on to Life, ThinGrow times wider, ThinAlpha times denser, full until ThinHold of its life)
+			double LeastPx = 0.0, LeastKeep = 0.0; // (a far trail held at least LeastPx across, keeping LeastKeep of its opacity)
+			double SmokeStart = 1.0; // (fire: where along the flame its smoke starts, a share of the flame's length)
+			Span FlameLiftOfLen{ 0.0, 0.0 }; // (fire: how far each tongue stands off the skin as a share of its length; 0: flame_lift_m)
+			double LicksPerFrame = 0.4; // (fire: tongues torn free of the tip and streaming away aft, a frame)
+			double FlameAlphaRoot = 0.92, FlameAlphaFall = 0.2, FlameHold = 0.45, FlameWide = 1.0, LickAlpha = 0.9; // (fire: a tongue's opacity at the cowl and how much it loses to its tip; how long it holds full, a share of its life; how wide; a torn-free lick's opacity)
+			double TipSmoke = 0.0, TipSmokeR = 0.3; // (fire: black smoke laid at each tongue's tip at this opacity, widening to TipSmokeR of the flame's length; 0: none)
+			Span TipSmokeLife{ 0.3, 0.6 };
 			double FlameOfSpan = 0.0, FlameMost = 0.0, FlameLeastPx = 0.0; // (a fire's flame: this share of the aircraft's span, at most FlameMost m; never under FlameLeastPx on the screen)
 			Span FlameLift; // (metres a fire's tongue stands off the skin)
 			Rgb Col, ColFull, ColOld;
@@ -397,7 +405,7 @@ namespace TheaterFx
 		{
 			const Bit* B;
 			double Deep;
-			bool bKeep;
+			bool bKeep; // (counted first when the room is short: a kept oil column, or a light)
 		};
 		std::vector<Order> Sorted;
 		struct ColumnSpan

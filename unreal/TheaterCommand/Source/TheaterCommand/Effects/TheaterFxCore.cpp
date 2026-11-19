@@ -821,7 +821,7 @@ namespace TheaterFx
 		std::vector<double> Reaches;
 		for (int S = 0; S < NSpike; ++S)
 		{
-			Reaches.push_back(CrownH * SpikeReach.Pick(D));
+			Reaches.push_back(CrownH * std::max(0.0, SpikeReach.Pick(D))); // (never below nothing: a negative reach had no root)
 		}
 		if (SpikeMost > 0.0 && !Reaches.empty())
 		{
@@ -1873,6 +1873,7 @@ namespace TheaterFx
 			B.Heart = 0.85;
 			B.Rim = 0.2;
 			B.LeastPx = Row.FlashLeastPx; // (art director 04:40Z: from the strategy camera a muzzle flash is a twinkle of 2 px, never lost)
+			B.LeastKeep = 0.8;
 			B.bLight = true;
 			Bits.push_back(B);
 		}
@@ -1978,6 +1979,7 @@ namespace TheaterFx
 		// under flash_least_px: a twinkle)
 		Lick(At + Dir * (Len * 0.1), Dir, Len * 0.15, 1.4, CannonHeartCol, CannonHeartCol.Mix(FlameCol, 0.5), 1.0, 0.95, 0.35, 0.2);
 		Bits.back().LeastPx = Row.FlashLeastPx;
+		Bits.back().LeastKeep = 0.8;
 	}
 
 	void Battle::AirHit(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind)
@@ -2010,6 +2012,7 @@ namespace TheaterFx
 			B.Rough = 0.35;
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
 			B.LeastPx = HitLeastPx; // (art director 04:40Z: from the strategy camera a hit is a twinkle of 2 px, never lost)
+			B.LeastKeep = 0.8;
 			B.bLight = true;
 			Bits.push_back(B);
 		}
@@ -2337,6 +2340,25 @@ namespace TheaterFx
 			R.ThinAfter = std::max(0.0, Num(P + "thin_after_s", 0.0));
 			R.ThinKeep = std::max(1, static_cast<int>(Num(P + "thin_keep_one_in", 1.0)));
 			R.ThinGrow = std::max(1.0, Num(P + "thin_grow", 1.0));
+			R.ThinAlpha = std::max(0.0, Num(P + "thin_alpha", 1.0));
+			R.ThinHold = Num(P + "thin_hold", -1.0);
+			R.LeastPx = std::max(0.0, Num(P + "least_px", 0.0));
+			R.LeastKeep = Clamp01(Num(P + "least_keep", 0.0));
+			R.SmokeStart = std::max(0.0, Num(P + "smoke_start", 1.0));
+			R.FlameLiftOfLen = Range(P + "flame_lift_of_length", 0.0, 0.0);
+			R.LicksPerFrame = std::max(0.0, Num(P + "licks_a_frame", 0.4));
+			if (Has(P + "flame_alpha") || Has(P + "flame_alpha.0"))
+			{
+				const Span FlameAlpha = Range(P + "flame_alpha", 0.92, 0.72);
+				R.FlameAlphaRoot = Clamp01(FlameAlpha.A);
+				R.FlameAlphaFall = R.FlameAlphaRoot - Clamp01(FlameAlpha.B);
+			}
+			R.FlameHold = Clamp01(Num(P + "flame_hold", 0.45));
+			R.FlameWide = std::max(0.1, Num(P + "flame_wide", 1.0));
+			R.LickAlpha = Clamp01(Num(P + "lick_alpha", 0.9));
+			R.TipSmoke = Clamp01(Num(P + "tip_smoke", 0.0));
+			R.TipSmokeR = std::max(0.0, Num(P + "tip_smoke_r_of_flame", 0.3));
+			R.TipSmokeLife = Range(P + "tip_smoke_s", 0.3, 0.6);
 			R.FlameOfSpan = std::max(0.0, Num(P + "flame_of_span", 0.0));
 			R.FlameMost = Num(P + "flame_most_m", R.Flame);
 			R.FlameLeastPx = std::max(0.0, Num(P + "flame_least_px", 0.0));
@@ -2439,6 +2461,8 @@ namespace TheaterFx
 		B.Rim = 0.0;
 		B.Rough = 0.25 + 0.2 * Row.Lumpy;
 		B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+		B.LeastPx = Row.LeastPx; // (art director 04:59Z: far off a trail stays a dark line, never fading to nothing)
+		B.LeastKeep = Row.LeastKeep;
 		if (Row.ThinAfter > 0.0 && Row.ThinKeep > 1 && Row.Life > Row.ThinAfter)
 		{
 			// (art director 04:40Z: smoke hangs. A trail's smoke lives life_s, but to fit the room only one puff in
@@ -2449,8 +2473,23 @@ namespace TheaterFx
 			{
 				// (a lump that hangs on: it grows as it did over the first seconds and on after, thin_grow times more, and
 				// starts thinning when it did, but slowly, over the whole of life_s)
-				B.R1 = B.R0 + (B.R1 - B.R0) * Row.ThinGrow / std::pow(Early, B.Grow);
-				B.Hold *= Early;
+				// (art director 04:59Z: it grows but holds its density. It ends thin_grow times as wide as the old smoke
+				// did, on a curve that reaches the old size at thin_after_s, so the young trail looks as it did)
+				B.R1 = B.R0 + (B.R1 - B.R0) * Row.ThinGrow;
+				if (Row.ThinGrow > 1.0)
+				{
+					B.Grow = std::clamp(std::log(Row.ThinGrow) / -std::log(std::max(Early, 1e-3)), 0.2, 3.0);
+				}
+				// (it thickens by thin_alpha as the three beside it go, by thin_after_s, standing in for them; the young
+				// trail by the engine looks as it did)
+				B.HazeAlpha = std::min(0.95, B.Alpha * Row.ThinAlpha);
+				B.HazeBy = Row.ThinAfter;
+				B.Hold = Row.ThinHold >= 0.0 ? Row.ThinHold : B.Hold * Early;
+				// (and it is drawn out along the path over the gap to the next one kept, shrinking as slowly, so the old
+				// trail stays one dark line of lumps that touch, never a dotted line)
+				B.Smear *= Row.ThinKeep;
+				B.SmearFor /= Early;
+				B.Life /= Lasts; // (every one kept hangs the whole of life_s: a small one going early left a gap)
 			}
 			else
 			{
@@ -2492,7 +2531,7 @@ namespace TheaterFx
 		// (fire: its smoke starts at the flame's tips, not at the cowl)
 		const double Grown = Clamp01((Now - Tr->KindBorn) / Row.RampS);
 		const double FlameM = FlameOf(*Tr, Row);
-		Tr->Tip = FlameM * (0.45 + 0.55 * Grown);
+		Tr->Tip = FlameM * Row.SmokeStart * (0.45 + 0.55 * Grown); // (art director 04:59Z: the smoke starts inside the flame's tips, no gap)
 		const Vec TipBack = -Carry.Unit(Vec(1.0, 0.0, 0.0)) * Tr->Tip;
 		// puffs every spacing_m along the path (and at least ten a second, should the point hang nearly still)
 		double Done = Row.Spacing - Tr->Owed;
@@ -2535,7 +2574,11 @@ namespace TheaterFx
 				const Vec Curl = (Side * (0.2 * D.Bell()) + Lift * D.U(-0.05, 0.1)) * Len;
 				// (art director 21:37Z: fire in a slipstream stands off the skin and spills past the silhouette, so each
 				// tongue lifts above or below as it streams aft; the heart stays on the cowl)
-				const Vec Spill = Lift * ((D.U() < 0.5 ? 1.0 : -1.0) * Row.FlameLift.Pick(D));
+				// (art director 04:59Z: a fire at speed is outside the plane: a long flame's tongues stand off the skin by a share
+				// of their length, licking out above and below the fuselage)
+				const double Above = D.U() < 0.5 ? 1.0 : -1.0; // (above or below: drawn before how far, as it always was)
+				const double StandOff = Row.FlameLiftOfLen.B > 0.0 ? Len * Row.FlameLiftOfLen.Pick(D) : Row.FlameLift.Pick(D);
+				const Vec Spill = Lift * (Above * StandOff);
 				const int Pieces = 4;
 				for (int I = 0; I < Pieces; ++I)
 				{
@@ -2547,7 +2590,7 @@ namespace TheaterFx
 					B.From = Root + Back * (Len * At_) + Curl * (At_ * At_) + Spill * std::min(1.0, 1.4 * At_) + Ragged;
 					B.Vel = Vel + Back * (Len * D.U(3.0, 6.0)); // (streaming aft off the cowl)
 					B.Life = D.U(0.045, 0.075);
-					B.R0 = Len * (0.12 - 0.065 * At_) * D.U(0.85, 1.15);
+					B.R0 = Len * (0.12 - 0.065 * At_) * D.U(0.85, 1.15) * Row.FlameWide;
 					B.R1 = B.R0 * 0.6; // (eaten away as it goes)
 					B.Grow = 1.0;
 					B.Along = Way;
@@ -2556,9 +2599,10 @@ namespace TheaterFx
 					B.Tail = 0.5;
 					B.Col = At_ < 0.5 ? HeartCol.Mix(FlameCol, 0.35 + 1.3 * At_) : FlameCol.Mix(DeepCol, (At_ - 0.5) * 2.0);
 					B.Col2 = DeepCol * 0.7;
-					B.Alpha = 0.92 - 0.2 * At_;
+					// (art director 04:59Z: by day a tongue off the skin must read as fire against the sky, not a pale smear)
+					B.Alpha = Row.FlameAlphaRoot - Row.FlameAlphaFall * At_;
 					B.FadeIn = 0.002;
-					B.Hold = 0.45;
+					B.Hold = Row.FlameHold;
 					B.Heart = 0.85 - 0.2 * At_;
 					B.Rim = 0.1;
 					B.Rough = 0.45;
@@ -2567,8 +2611,38 @@ namespace TheaterFx
 					B.bLight = true;
 					Bits.push_back(B);
 				}
+				if (Row.TipSmoke > 0.0)
+				{
+					// (art director 04:59Z: the black smoke starts right at the flame's tips, above or below the fuselage as the
+					// tongue is, so there is no gap between flame and smoke. It hangs in the air where the tip was, the aircraft
+					// flying on from it, and joins the trail behind)
+					Bit B;
+					B.Born = T;
+					B.From = Root + Back * (Len * D.U(0.8, 1.0)) + Curl + Spill;
+					B.Vel = Vel * Row.Carried + Vec(D.Bell(), D.Bell(), D.Bell()) * 1.5;
+					B.Drag = 2.0;
+					B.Rise = Row.Rise;
+					B.Windage = 1.0;
+					B.Life = Row.TipSmokeLife.Pick(D);
+					B.R0 = Len * 0.07 * Row.FlameWide;
+					B.R1 = std::max(B.R0, FlameM * Row.TipSmokeR * D.U(0.8, 1.2));
+					B.Grow = 0.6;
+					B.Along = -Back;
+					B.Smear = Vel.Length() / 60.0 * Row.Smear; // (one a frame: each drawn back to the last)
+					B.Col = Row.ColFull;
+					B.Col2 = Row.Col.Mix(Row.ColOld, 0.3);
+					B.Cool = 1.0;
+					B.Alpha = Row.TipSmoke * (0.45 + 0.55 * Grown) * D.U(0.85, 1.05);
+					B.FadeIn = 0.015;
+					B.Hold = 0.4;
+					B.Heart = 0.7;
+					B.Rim = 0.0;
+					B.Rough = 0.4;
+					B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+					Bits.push_back(B);
+				}
 				// now and then a lick tears free of the tip and streams away aft on its own, dimming
-				if (D.U() < 0.4)
+				if (D.U() < Row.LicksPerFrame)
 				{
 					Bit B;
 					B.Born = T;
@@ -2584,7 +2658,7 @@ namespace TheaterFx
 					B.Tail = 0.6;
 					B.Col = FlameCol.Mix(DeepCol, 0.5);
 					B.Col2 = DeepCol * 0.7;
-					B.Alpha = 0.9;
+					B.Alpha = Row.LickAlpha;
 					B.FadeIn = 0.002;
 					B.Hold = 0.3;
 					B.Heart = 0.7;
@@ -2607,6 +2681,7 @@ namespace TheaterFx
 					B.Along = Back;
 					B.Stretch = 1.6;
 					B.LeastPx = Row.FlameLeastPx; // (art director 04:40Z: from the strategy camera a fire is never under 4 px)
+					B.LeastKeep = 0.8;
 					B.Point = 0.4;
 					B.Tail = 0.3;
 					B.Col = HeartCol;
@@ -3396,8 +3471,8 @@ namespace TheaterFx
 			const double Least = 0.5 * B.LeastPx * MetresAPixel;
 			if (Rad * Long < Least)
 			{
-				// (a light held up is a twinkle: it keeps most of its strength, as a bright point does on film)
-				A *= B.bLight ? std::max(0.8, std::sqrt(std::max(0.0, Rad * Long) / Least)) : std::sqrt(std::max(0.0, Rad * Long) / Least);
+				// (held up, it keeps at least LeastKeep of its opacity: a light's twinkle, a far trail's dark line)
+				A *= std::max(B.bLight ? std::max(0.8, B.LeastKeep) : B.LeastKeep, std::sqrt(std::max(0.0, Rad * Long) / Least));
 				Rad = Least / Long;
 			}
 		}
@@ -3718,7 +3793,10 @@ namespace TheaterFx
 			}
 			TwinBits += B.TwinPx > 0.0 ? 1u : 0u;
 			const Vec At = Where(B, Now - B.Born);
-			Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward), B.bKeep });
+			// (counted first when the room is short: an oil fire's kept column, and every light: flames, flashes and
+			// tracers are few and are what an air fight is read by from far off, so its smoke is what goes. The
+			// pre-check, 05:14Z: by depth alone the far side of a fight went bare, flames and all)
+			Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward), B.bKeep || B.bLight });
 			if (B.OilId >= 0)
 			{
 				// (an oil column's puff, not yet faded far: how far across the screen the column reaches at its height)
@@ -3773,7 +3851,8 @@ namespace TheaterFx
 			}
 			return bMayTwin ? 2u : 1u;
 		};
-		// (what is kept, an oil fire's column, is counted first, so a far column on the horizon never blinks out)
+		// (what is kept, an oil fire's column or a light, is counted first, so a far column on the horizon never blinks
+		// out and a far fight keeps its fires and flashes)
 		size_t Kept = 0;
 		for (const Order& O : Sorted)
 		{
