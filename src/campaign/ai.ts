@@ -29,7 +29,7 @@ import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
-  DEFENCE, EASTERN, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
+  DEFENCE, EASTERN, allied, assess, atWar, collapseScore, corpsBase, declareWar, dyleOrder, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
   hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 
@@ -780,7 +780,7 @@ export function keepWards(g: Game, nat: string, ph: PlanPhase | null, held: Set<
     };
     const named = new Set<number>();
     const free = (c: Corps): boolean =>
-      c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.divs >= 2 && !c.town && !c.hold && !c.dyle && c.joint === undefined && c.leave === undefined &&
+      c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.divs >= 2 && !c.town && !c.hold && !dyleOrder(g, c) && c.joint === undefined && c.leave === undefined &&
       d[c.reg] >= 0 && !held.has(c.id) && !named.has(c.id);
     for (let k = 0; k < count; k++) {
       const key = `ward:${nat}:${name}:${k}`;
@@ -936,7 +936,7 @@ function breakOut(g: Game, nat: string): void {
   const n = g.nations[nat];
   if (!R || scope || !rivalRules(g) || nat === g.human || !R.staffs.includes(nat) || n.capital < 0) return;
   const friendly = (x: Region): boolean => allied(g, nat, ctl(g, x));
-  const field = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && !c.dyle && c.joint === undefined && !massed.has(c.id) && c.ap > 0;
+  const field = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && !dyleOrder(g, c) && c.joint === undefined && !massed.has(c.id) && c.ap > 0;
   const tried = new Set<number>();
   for (let round = 0; round < 2 * R.reach && n.alive; round++) {
     if (!friendly(g.regions[n.capital])) return;
@@ -1044,7 +1044,7 @@ function stepBack(g: Game, nat: string): void {
   }
   // Those nearest home go first and leave room behind them.
   const leaving = g.corps
-    .filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && !c.dyle && c.joint === undefined && !massed.has(c.id) && found.has(c.reg))
+    .filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && !dyleOrder(g, c) && c.joint === undefined && !massed.has(c.id) && found.has(c.reg))
     .sort((a, b) => home[a.reg] - home[b.reg] || a.id - b.id);
   for (const c of leaving) {
     for (let step = 0; step < R.steps && c.ap > 0 && given.has(c.reg); step++) {
@@ -1079,7 +1079,7 @@ function relieve(g: Game, nat: string): void {
   const room = (x: Region, c: Corps, from: number): boolean => friendly(x) && home[x.id] >= 0 && !given.has(x.id) && !foeAt(x) && friendlyUnits(g, x, nat).length < STACK && !blocked(g, c, x, from);
   const quiet = (x: Region): boolean => !inLine(x);
   const field = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.town === undefined;
-  const mine = (c: Corps): boolean => field(c) && !c.hold && !c.dyle && c.joint === undefined && c.leave === undefined && !massed.has(c.id) && !aside(g, g.regions[c.reg], nat);
+  const mine = (c: Corps): boolean => field(c) && !c.hold && !dyleOrder(g, c) && c.joint === undefined && c.leave === undefined && !massed.has(c.id) && !aside(g, g.regions[c.reg], nat);
   const key = (c: Corps): string => `rl:${c.id}`;
   const keep = (c: Corps): void => { c.hold = true; rested.push(c); };
   // The weakest first: where two worn corps stand together the stronger stays to hold the place.
@@ -2348,7 +2348,7 @@ function defend(g: Game, nat: string, line = true): void {
   const lost = (r: Region): boolean => allied(g, nat, r.owner) || r.prev === nat;
   // A slow command needs a month to organise any answer to ground it has just lost.
   const late = (r: Region): boolean => n.slowCommand && r.since >= g.turn;
-  const movers = g.corps.filter((c) => c.nat === nat && !c.hold && !c.dyle && c.kind !== 'fort' && c.ap > 0);
+  const movers = g.corps.filter((c) => c.nat === nat && !c.hold && !dyleOrder(g, c) && c.kind !== 'fort' && c.ap > 0);
   for (const c of movers) {
     if (c.dead || c.ap <= 0 || massed.has(c.id)) continue;
     const here = g.regions[c.reg];

@@ -8,7 +8,7 @@ import data from '../../data/campaign/middle-east.json';
 import type { Corps, Game, Region } from './types';
 import { allied, atWar, voyagesOf } from './game';
 import { NAVY, canPass } from './navy';
-import { stopOf } from './history';
+import { stopDef, stopOf } from './history';
 
 interface Floor { from: number; to: number; share: number }
 interface Reinforce { theatre: string; to: string[]; stop: number; risk: number; cover: number; waves: number; by: string[]; cape: number }
@@ -20,9 +20,13 @@ const field = (c: Corps, nat: string): boolean => c.nat === nat && !c.dead && c.
 /** Ground of the homeland: the country's own, and not a colony overseas. */
 export const homeland = (r: Region, nat: string): boolean => r.owner === nat && !r.overseas;
 
-/** The floor's share this month, or null where none is set (another country, the player's, a history campaign, outside its months). */
+/**
+ * The floor's share this month, or null where none is set (another country, the player's, a history campaign, outside
+ * its months, and the loose stops 4 and 5, where the record's fear of invasion is not the staff's: the sandbox
+ * playtest's lock sweep, finding 6).
+ */
 function floorShare(g: Game, nat: string): number | null {
-  if (g.flags.open !== 1 || nat === g.human) return null;
+  if (g.flags.open !== 1 || nat === g.human || stopDef(g).ambitions) return null;
   return MIDDLE_EAST.floor[nat]?.find((f) => g.turn >= f.from && g.turn <= f.to)?.share ?? null;
 }
 

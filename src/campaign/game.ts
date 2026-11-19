@@ -54,7 +54,7 @@ import { TOWNS, townName, townSize } from './towns';
 import { skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
-import { stopOf } from './history';
+import { stopDef, stopOf } from './history';
 import { clientWar, tiedPair } from './far';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
@@ -508,12 +508,21 @@ export function standsBy(g: Game, a: string, b: string, since?: number): boolean
   return true;
 }
 
+/**
+ * A corps's standing order to go to a neighbour's aid (the Dyle Plan's armies), as its staff reads it: a computer staff
+ * at the loose stops 4 and 5 keeps none, and defends Belgium, or does not, by its own judgment (the sandbox playtest's
+ * lock sweep). The order stays on the corps, so a dial turned back finds it.
+ */
+export const dyleOrder = (g: Game, c: Corps): string | null =>
+  c.dyle && !(c.nat !== g.human && g.flags.open === 1 && stopDef(g).ambitions) ? c.dyle : null;
+
 /** Armies with standing orders to go to a neighbour's aid march the day that neighbour is attacked. */
 function reactionMoves(g: Game, aggressor: string, victim: string): void {
   let moved = 0;
   for (const c of g.corps) {
-    if (!c.dyle || c.nat === g.human || !atWar(g, c.nat, aggressor)) continue;
-    const to = g.byName[c.dyle];
+    const order = dyleOrder(g, c);
+    if (!order || c.nat === g.human || !atWar(g, c.nat, aggressor)) continue;
+    const to = g.byName[order];
     if (!to || to.owner !== victim || !allied(g, c.nat, to.ctrl)) continue;
     if (hostileUnits(g, to, c.nat).length || friendlyUnits(g, to, c.nat).length >= STACK) continue;
     place(g, c, to);
