@@ -944,6 +944,7 @@ void AAirBattle::LaySky()
 	FAirBattleState& S = *State;
 	S.Show.CloudTop = 0.0;
 	S.Show.DeckAt = nullptr;
+	S.Show.DeckReach = 0.0;
 	const FVector Sun = Stage && Stage->IsRaised() ? Stage->TowardSun() : FRotator(30.0, 150.0, 0.0).Vector();
 	S.SkyPlace.Sun = AirSky::Vec(Sun.Y, Sun.X, Sun.Z);
 	S.SkyPlace.Ground = S.Show.Ground;
@@ -1003,7 +1004,14 @@ void AAirBattle::LaySky()
 	{
 		const AirSky::Field* Laid = &S.Sky;
 		S.Show.CloudTop = S.Sky.DeckTop;
-		S.Show.DeckAt = [Laid](double X, double Y) { return Laid->DeckAt(X, Y); };
+		S.Show.DeckAt = [Laid](double X, double Y)
+		{
+			AirShow::DeckSpan Here;
+			Here.Hide = Laid->DeckAt(X, Y, &Here.Foot);
+			return Here;
+		};
+		// (drawn, more than half, within five sixths of the clouds' reach from the eye: past it, falls go on down)
+		S.Show.DeckReach = AirSky::Reach * 5.0 / 6.0;
 	}
 }
 
@@ -1049,10 +1057,26 @@ void AAirBattle::DrawSky()
 	Clouds->UpdateMeshSection(0, CloudPoints, TArray<FVector>(), TArray<FVector2D>(), CloudColours, TArray<FProcMeshTangent>());
 }
 
-FBattleEffects* AAirBattle::KitAt(const FVector& WorldAt) const
+FBattleEffects* AAirBattle::KitAt(const FVector& WorldAt, const FBattleEffects* InNow) const
 {
-	// (under the clouds' base, with the clouds drawn: the ground's kit, drawn under them when the eye is over them)
-	if (GroundFx && Clouds && State.IsValid() && WorldAt.Z / UnitsPerMetre < State->Sky.Base)
+	FBattleEffects* const Air = Effects ? Effects.Get() : GroundFx.Get();
+	if (!GroundFx || !Clouds || !State.IsValid())
+	{
+		return Air;
+	}
+	// (under the clouds' base as drawn there, with the clouds drawn: the ground's kit, drawn under them when the eye is
+	// over them; a cloud is lifted to 300 m over the ground under it)
+	const FAirBattleState& S = *State;
+	const double X = WorldAt.Y / UnitsPerMetre, Y = WorldAt.X / UnitsPerMetre, Z = WorldAt.Z / UnitsPerMetre;
+	const double Floor = S.Show.Ground ? S.Show.Ground(X, Y) : 0.0;
+	const double Base = FMath::Max(S.Sky.Base, Floor + 300.0);
+	const double Margin = InNow == GroundFx.Get() ? 50.0 : InNow == Air ? -50.0 : 0.0;
+	return Z < Base + Margin ? GroundFx.Get() : Air;
+}
+
+FBattleEffects* AAirBattle::GroundKit() const
+{
+	if (GroundFx && Clouds)
 	{
 		return GroundFx.Get();
 	}
@@ -1415,15 +1439,15 @@ void AAirBattle::Draw(double Real)
 		FTorn& Flame = Torn[K];
 		Flame.At += Flame.Velocity * Real;
 		Flame.Velocity *= FMath::Max(0.0, 1.0 - Real * 0.8);
-		if (Effects)
+		if (Flame.Kit)
 		{
-			Effects->TrailMove(S.Show.AirNow(), Flame.Key, Flame.At, Flame.Velocity);
+			Flame.Kit->TrailMove(S.Show.AirNow(), Flame.Key, Flame.At, Flame.Velocity);
 		}
 		if (RealT >= Flame.Until)
 		{
-			if (Effects)
+			if (Flame.Kit)
 			{
-				Effects->TrailStop(Flame.Key);
+				Flame.Kit->TrailStop(Flame.Key);
 			}
 			Torn.RemoveAt(K);
 		}
@@ -1443,9 +1467,18 @@ void AAirBattle::PlayEffects()
 		{
 		case AirShow::FxKind::Gun:
 		{
-			if (Effects)
+			// (in the kit for the muzzle's height, kept while the gun fires unless it passes the clouds' base)
+			FBattleEffects* const* Was = GunKits.Find(E.Key);
+			FBattleEffects* const Before = Was ? *Was : nullptr;
+			FBattleEffects* const Kit = KitAt(At, Before);
+			if (Before && Before != Kit)
 			{
-				Effects->AirGun(Now, E.Key, At, World(E.Aim.X, E.Aim.Y, E.Aim.Z), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What), static_cast<float>(E.Rate), static_cast<float>(E.Mv * U));
+				Before->AirGunStop(E.Key);
+			}
+			if (Kit)
+			{
+				GunKits.Add(E.Key, Kit);
+				Kit->AirGun(Now, E.Key, At, World(E.Aim.X, E.Aim.Y, E.Aim.Z), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What), static_cast<float>(E.Rate), static_cast<float>(E.Mv * U));
 			}
 			// The burst heard (mix.json air.gunsByCalibre): a take laid on while the trigger is down, never the same
 			// take under the mix's gap after itself.
@@ -1482,12 +1515,15 @@ void AAirBattle::PlayEffects()
 			break;
 		}
 		case AirShow::FxKind::GunStop:
-			if (Effects)
+		{
+			FBattleEffects* Kit = nullptr;
+			if (GunKits.RemoveAndCopyValue(E.Key, Kit) && Kit)
 			{
-				Effects->AirGunStop(E.Key);
+				Kit->AirGunStop(E.Key);
 			}
 			GunHeardAt.Remove(E.Key);
 			break;
+		}
 		case AirShow::FxKind::Hit:
 			if (FBattleEffects* Kit = KitAt(At))
 			{
@@ -1498,29 +1534,63 @@ void AAirBattle::PlayEffects()
 		{
 			// (the scene's room for trails, S.Trails: 24 on the newer kit, 10 on an older; a burning aircraft's own
 			// trail first, taking the place of the oldest piece's when the room is full)
+			// (in the kit for its height where it starts: over the clouds' base the air's, under it the ground's)
 			int PutOut = 0;
-			if (Effects && S.Trails.Start(E.Key, E.Text == "piece", PutOut))
+			FBattleEffects* const Kit = KitAt(At);
+			if (Kit && S.Trails.Start(E.Key, E.Text == "piece", PutOut))
 			{
 				if (PutOut != 0)
 				{
-					Effects->TrailStop(PutOut);
+					FTrailOn Out;
+					if (TrailKits.RemoveAndCopyValue(PutOut, Out) && Out.Kit)
+					{
+						Out.Kit->TrailStop(PutOut);
+					}
 				}
-				AirParts::TrailStart(Effects.Get(), Now, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What), static_cast<float>(E.Size));
+				FTrailOn On;
+				On.Kit = Kit;
+				On.Kind = AirParts::Wide(E.What);
+				On.Span = static_cast<float>(E.Size);
+				TrailKits.Add(E.Key, On);
+				AirParts::TrailStart(Kit, Now, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), On.Kind, On.Span);
 			}
 			break;
 		}
 		case AirShow::FxKind::TrailMove:
-			if (Effects && S.Trails.On(E.Key))
+			if (S.Trails.On(E.Key))
 			{
-				Effects->TrailMove(Now, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z));
+				if (FTrailOn* On = TrailKits.Find(E.Key))
+				{
+					const FVector Velocity = WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z);
+					FBattleEffects* const Kit = KitAt(At, On->Kit);
+					if (Kit && Kit != On->Kit)
+					{
+						// (passing the clouds' base: it goes on in the other kit, and what it has left in the air fades
+						// where it is)
+						if (On->Kit)
+						{
+							On->Kit->TrailStop(E.Key);
+						}
+						On->Kit = Kit;
+						AirParts::TrailStart(Kit, Now, E.Key, At, Velocity, On->Kind, On->Span);
+					}
+					else if (On->Kit)
+					{
+						On->Kit->TrailMove(Now, E.Key, At, Velocity);
+					}
+				}
 			}
 			break;
 		case AirShow::FxKind::TrailStop:
-			if (Effects && S.Trails.Stop(E.Key))
+		{
+			FTrailOn On;
+			const bool bKept = TrailKits.RemoveAndCopyValue(E.Key, On);
+			if (S.Trails.Stop(E.Key) && bKept && On.Kit)
 			{
-				Effects->TrailStop(E.Key);
+				On.Kit->TrailStop(E.Key);
 			}
 			break;
+		}
 		case AirShow::FxKind::Flak:
 		{
 			if (FBattleEffects* Kit = KitAt(At))
@@ -1544,31 +1614,47 @@ void AAirBattle::PlayEffects()
 			// The debris row (the art director, 04:40Z; the effects kit's AirFall): blown apart, every piece at once
 			// round the kit's short torn fireball; burning or spinning, pieces shed over the fall. Only while the
 			// pieces already falling leave the kit room (S.Debris): past that the blast below keeps the older flame.
-			if (Effects && AirParts::HasAirFall(Effects.Get()) && S.Debris.Take(Now, E))
+			// (in the kit for the height where the fall begins, as its trail)
+			if (FBattleEffects* const Kit = KitAt(At))
 			{
-				AirParts::AirFall(Effects.Get(), Now, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What), static_cast<float>(E.Size), World(0.0, 0.0, E.Deck).Z);
-				if (E.What == "explode")
+				if (AirParts::HasAirFall(Kit) && S.Debris.Take(Now, E))
 				{
-					BlastsTaken.Add(E.Key);
-				}
-				else
-				{
-					FallsOn.Add(E.Key);
+					AirParts::AirFall(Kit, Now, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What), static_cast<float>(E.Size), World(0.0, 0.0, E.Deck).Z);
+					if (E.What == "explode")
+					{
+						BlastsTaken.Add(E.Key);
+					}
+					else
+					{
+						FallsOn.Add(E.Key, Kit);
+					}
 				}
 			}
 			break;
 		case AirShow::FxKind::FallMove:
-			if (Effects && FallsOn.Contains(E.Key))
+			if (FBattleEffects* const* Kit = FallsOn.Find(E.Key))
 			{
-				AirParts::AirFallMove(Effects.Get(), Now, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z));
+				if (E.Deck < 0.0)
+				{
+					// (down a hole and under the deck: the row, told the deck, sheds no more)
+					AirParts::AirFallStop(*Kit, E.Key);
+					FallsOn.Remove(E.Key);
+				}
+				else
+				{
+					AirParts::AirFallMove(*Kit, Now, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z));
+				}
 			}
 			break;
 		case AirShow::FxKind::FallStop:
-			if (Effects && FallsOn.Remove(E.Key) > 0)
+		{
+			FBattleEffects* Kit = nullptr;
+			if (FallsOn.RemoveAndCopyValue(E.Key, Kit) && Kit)
 			{
-				AirParts::AirFallStop(Effects.Get(), E.Key);
+				AirParts::AirFallStop(Kit, E.Key);
 			}
 			break;
+		}
 		case AirShow::FxKind::Blast:
 		{
 			// Blown apart (the art director, 03:14Z): a short torn flame streaming on with the wreck, never a ball, the
@@ -1578,30 +1664,31 @@ void AAirBattle::PlayEffects()
 			{
 				break;
 			}
-			if (Effects)
+			if (FBattleEffects* const Kit = KitAt(At))
 			{
 				const FVector Velocity = WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z);
 				for (int32 K = 0; K < 4; ++K)
 				{
-					Effects->AirHit(Now, At + FMath::VRand() * E.Size * 0.2 * U, FMath::VRand(), Velocity, TEXT("cannon20"));
+					Kit->AirHit(Now, At + FMath::VRand() * E.Size * 0.2 * U, FMath::VRand(), Velocity, TEXT("cannon20"));
 				}
 				FTorn& Flame = Torn.AddDefaulted_GetRef();
 				Flame.Key = 1 << 29 | (TornNext++ & 0xFFFF);
 				Flame.At = At;
 				Flame.Velocity = Velocity * 0.6;
 				Flame.Until = RealT + 0.9;
-				AirParts::TrailStart(Effects.Get(), Now, Flame.Key, At, Flame.Velocity, TEXT("fire"), static_cast<float>(E.Size));
+				Flame.Kit = Kit;
+				AirParts::TrailStart(Kit, Now, Flame.Key, At, Flame.Velocity, TEXT("fire"), static_cast<float>(E.Size));
 			}
 			break;
 		}
 		case AirShow::FxKind::Splash:
-			if (FBattleEffects* Kit = KitAt(At))
+			if (FBattleEffects* Kit = GroundKit())
 			{
 				Kit->ShellOfSize(At, E.Size >= 8.0 ? TEXT("bomb250") : E.Size >= 3.0 ? TEXT("light") : TEXT("grenade"), TEXT("water"));
 			}
 			break;
 		case AirShow::FxKind::Crash:
-			if (FBattleEffects* Kit = KitAt(At))
+			if (FBattleEffects* Kit = GroundKit())
 			{
 				Kit->ShellOfSize(At, E.Size >= 8.0 ? TEXT("bomb250") : TEXT("grenade"), TEXT("earth"));
 				if (E.Size >= 8.0)
@@ -1611,7 +1698,7 @@ void AAirBattle::PlayEffects()
 			}
 			break;
 		case AirShow::FxKind::BombHit:
-			if (FBattleEffects* Kit = KitAt(At))
+			if (FBattleEffects* Kit = GroundKit())
 			{
 				Kit->ShellOfSize(At, E.Size >= 500.0 ? TEXT("bomb500") : TEXT("bomb250"), E.What == "water" ? TEXT("water") : TEXT("earth"));
 			}
@@ -1657,7 +1744,7 @@ void AAirBattle::PlayEffects()
 			}
 			break;
 		case AirShow::FxKind::Smoke:
-			if (FBattleEffects* Kit = KitAt(At))
+			if (FBattleEffects* Kit = GroundKit())
 			{
 				Kit->Burn(At, 40.0f, 900.0f);
 			}

@@ -147,13 +147,17 @@ namespace AirSky
 		}
 		else
 		{
-			const double Feel[4][2] = { { 0.45, 0.0 }, { -0.45, 0.0 }, { 0.0, 0.45 }, { 0.0, -0.45 } };
-			for (const auto& K : Feel)
+			// (a cumulus: its middle and two rings, out to its veil's edge, so a ridge between them is not missed)
+			for (int K = 0; K < 8; ++K)
 			{
-				Floor = std::max(Floor, At(X + K[0] * C.W, Y + K[1] * C.W));
+				const double A = 2.0 * Pi * K / 8.0 + Pi / 8.0;
+				Floor = std::max(Floor, At(X + 0.25 * C.W * std::cos(A), Y + 0.25 * C.W * std::sin(A)));
+				Floor = std::max(Floor, At(X + 0.5 * C.W * std::cos(A - Pi / 8.0), Y + 0.5 * C.W * std::sin(A - Pi / 8.0)));
 			}
 		}
-		return std::max(0.0, Floor + 300.0 - C.At.Z);
+		// (330 m over the highest found, so 300 m over the ground between the samples too, on a ridge as steep as the
+		// Koolau)
+		return std::max(0.0, Floor + 330.0 - C.At.Z);
 	}
 
 	double Field::SquashFor(int CloudIndex, double Lift) const
@@ -204,12 +208,18 @@ namespace AirSky
 	Placed Field::Place(int CloudIndex, double X, double Y, const Vec& Drift) const
 	{
 		const Cloud& C = Clouds[static_cast<size_t>(CloudIndex)];
+		const Vec Shift = ShiftNear(CloudIndex, X, Y);
+		return PlaceLifted(CloudIndex, Shift, Drift, LiftAt(CloudIndex, C.At.X + Shift.X + Drift.X, C.At.Y + Shift.Y + Drift.Y));
+	}
+
+	Placed Field::PlaceLifted(int CloudIndex, const Vec& Shift, const Vec& Drift, double Lift) const
+	{
+		const Cloud& C = Clouds[static_cast<size_t>(CloudIndex)];
 		Placed Out;
-		Out.Shift = ShiftNear(CloudIndex, X, Y);
-		const double WX = C.At.X + Out.Shift.X + Drift.X, WY = C.At.Y + Out.Shift.Y + Drift.Y;
-		Out.Lift = LiftAt(CloudIndex, WX, WY);
-		Out.Squash = SquashFor(CloudIndex, Out.Lift);
-		Out.Show = Out.Squash > 0.0 ? ShownAt(CloudIndex, WX, WY) : 0.0;
+		Out.Shift = Shift;
+		Out.Lift = Lift;
+		Out.Squash = SquashFor(CloudIndex, Lift);
+		Out.Show = Out.Squash > 0.0 ? ShownAt(CloudIndex, C.At.X + Shift.X + Drift.X, C.At.Y + Shift.Y + Drift.Y) : 0.0;
 		return Out;
 	}
 
@@ -248,9 +258,13 @@ namespace AirSky
 		return In ? static_cast<double>(Under) / In : 0.0;
 	}
 
-	double Field::DeckAt(double X, double Y) const
+	double Field::DeckAt(double X, double Y, double* OutFoot) const
 	{
-		if (DeckN <= 0 || DeckTiles.empty())
+		if (OutFoot)
+		{
+			*OutFoot = 0.0;
+		}
+		if (DeckN <= 0 || DeckFirst.size() != static_cast<size_t>(DeckN) * static_cast<size_t>(DeckN) + 1)
 		{
 			return 0.0;
 		}
@@ -259,18 +273,45 @@ namespace AirSky
 		V -= Period * std::floor(V / Period);
 		const int CU = std::min(DeckN - 1, std::max(0, static_cast<int>(U / DeckCell)));
 		const int CV = std::min(DeckN - 1, std::max(0, static_cast<int>(V / DeckCell)));
-		const int Tile = DeckTiles[static_cast<size_t>(CV) * static_cast<size_t>(DeckN) + static_cast<size_t>(CU)];
-		if (Tile < 0)
+		const size_t Cell = static_cast<size_t>(CV) * static_cast<size_t>(DeckN) + static_cast<size_t>(CU);
+		// (the tiles whose top puff reaches over the point, nearest first; the first drawn there is the deck's)
+		struct Near
 		{
-			return 0.0;
-		}
-		const Placed Here = Place(Tile, X, Y, Vec());
-		if (Here.Squash <= 0.0 || Here.Show < 0.5)
+			double Far = 0.0;
+			int Tile = 0;
+			Vec Shift;
+		};
+		Near Found[16];
+		int N = 0;
+		for (int K = DeckFirst[Cell]; K < DeckFirst[Cell + 1] && N < 16; ++K)
 		{
-			return 0.0;
+			const int Tile = DeckList[static_cast<size_t>(K)];
+			const Cloud& C = Clouds[static_cast<size_t>(Tile)];
+			const Vec Shift = ShiftNear(Tile, X, Y);
+			const double Ex = C.At.X + Shift.X - X, Ey = C.At.Y + Shift.Y - Y, Reach8 = 0.8 * Puffs[static_cast<size_t>(C.First)].R;
+			const double Far = Ex * Ex + Ey * Ey;
+			if (Far <= Reach8 * Reach8)
+			{
+				Found[N++] = { Far, Tile, Shift };
+			}
 		}
-		const Cloud& C = Clouds[static_cast<size_t>(Tile)];
-		return C.At.Z + Here.Lift + Here.Squash * C.H;
+		std::sort(Found, Found + N, [](const Near& A, const Near& B) { return A.Far < B.Far; });
+		for (int K = 0; K < N; ++K)
+		{
+			const Cloud& C = Clouds[static_cast<size_t>(Found[K].Tile)];
+			const Placed Here = PlaceLifted(Found[K].Tile, Found[K].Shift, Vec(), LiftAt(Found[K].Tile, C.At.X + Found[K].Shift.X, C.At.Y + Found[K].Shift.Y));
+			if (Here.Squash <= 0.0 || Here.Show < 0.5)
+			{
+				continue;
+			}
+			const Puff& TopPuff = Puffs[static_cast<size_t>(C.First)];
+			if (OutFoot)
+			{
+				*OutFoot = C.At.Z + Here.Lift;
+			}
+			return C.At.Z + Here.Lift + (TopPuff.At.Z - C.At.Z) * Here.Squash;
+		}
+		return 0.0;
 	}
 
 	Field Lay(const Day& D, const Placing& P)
@@ -376,9 +417,8 @@ namespace AirSky
 						{
 							Lit = std::min(Lit, 0.32);
 						}
-						// (far from the eye a layer is drawn with its first two puffs only; farther, the cloud with its
-						// lowest and highest layers' first)
-						const int Lod = J == 0 && (K == 0 || K + 1 == Layers) ? 2 : J < 2 ? 1 : 0;
+						// (far from the eye a layer is drawn with its first two puffs only)
+						const int Lod = J < 2 ? 1 : 0;
 						Add(Vec(PX, PY, PZ), Rk * Roll.U(0.7, 1.2), Flat, Lit, K == 0 ? 0.8 : 0.68, Lod);
 					}
 					TopW = Wk;
@@ -396,7 +436,11 @@ namespace AirSky
 				}
 				// Its veil: one broad, faint puff round the whole, so its lumps read as one body and not as separate balls
 				// (the art director's sheet: never a few round puffs that read as cotton).
-				Add(Vec(X, Y, Foot + 0.4 * H), 0.5 * W, Clamp(H / W, 0.4, 0.9), 0.55, 0.18, 2);
+				// (no deeper than the cloud's flat base and 120 m more, at its faded rim: a flat base stays flat)
+				Add(Vec(X, Y, Foot + 0.4 * H), 0.5 * W, Clamp((0.4 * H + 120.0) / (0.5 * W), 0.15, 0.9), 0.55, 0.18, 2);
+				// Its far body: farther than its lumps can be told apart, one soft lit puff over most of it, in its veil
+				// (its rim 60 m under the base at most).
+				Add(Vec(X, Y, Foot + 0.45 * H), 0.42 * W, Clamp(std::min(1.3 * H, 0.45 * H + 60.0) / (0.42 * W), 0.15, 0.9), 0.72, 0.72, 3);
 				C.Count = static_cast<int>(F.Puffs.size()) - C.First;
 				Covered += Pi * (W * 0.5) * (W * 0.5) * 0.85;
 			}
@@ -460,12 +504,12 @@ namespace AirSky
 					Spots.push_back({ X, Y, R, static_cast<int>(F.Clouds.size()) - 1 });
 				}
 			}
-			// (where it is drawn, for falls: each cell of the square takes the tile whose middle is nearest among those
-			// whose top puff reaches over it, within eight tenths of its reach, across the square's edges too)
+			// (where it is drawn, for falls: each cell of the square keeps the tiles whose top puff's eight tenths reach
+			// over any of it, across the square's edges too; DeckAt takes the nearest of them drawn at the point)
 			F.DeckN = static_cast<int>(std::round(Period / 240.0));
 			F.DeckCell = Period / F.DeckN;
-			F.DeckTiles.assign(static_cast<size_t>(F.DeckN) * static_cast<size_t>(F.DeckN), -1);
-			std::vector<double> Nearest(F.DeckTiles.size(), 1e30);
+			const size_t Cells = static_cast<size_t>(F.DeckN) * static_cast<size_t>(F.DeckN);
+			std::vector<std::vector<int>> ByCell(Cells);
 			for (const Spot& T : Spots)
 			{
 				const double Spread = 0.8 * T.R;
@@ -476,20 +520,26 @@ namespace AirSky
 				{
 					for (int U = U0; U <= U1; ++U)
 					{
-						const double Ex = (U + 0.5) * F.DeckCell - LX, Ey = (V + 0.5) * F.DeckCell - LY;
-						const double Far = Ex * Ex + Ey * Ey;
-						if (Far > Spread * Spread)
+						// (the nearest point of the cell to the tile's middle)
+						const double Ex = std::max(0.0, std::fabs((U + 0.5) * F.DeckCell - LX) - 0.5 * F.DeckCell);
+						const double Ey = std::max(0.0, std::fabs((V + 0.5) * F.DeckCell - LY) - 0.5 * F.DeckCell);
+						if (Ex * Ex + Ey * Ey > Spread * Spread)
 						{
 							continue;
 						}
-						const size_t Cell = static_cast<size_t>(Wrap(V, F.DeckN)) * static_cast<size_t>(F.DeckN) + static_cast<size_t>(Wrap(U, F.DeckN));
-						if (Far < Nearest[Cell])
-						{
-							Nearest[Cell] = Far;
-							F.DeckTiles[Cell] = T.Index;
-						}
+						ByCell[static_cast<size_t>(Wrap(V, F.DeckN)) * static_cast<size_t>(F.DeckN) + static_cast<size_t>(Wrap(U, F.DeckN))].push_back(T.Index);
 					}
 				}
+			}
+			F.DeckFirst.assign(Cells + 1, 0);
+			for (size_t Cell = 0; Cell < Cells; ++Cell)
+			{
+				F.DeckFirst[Cell + 1] = F.DeckFirst[Cell] + static_cast<int>(ByCell[Cell].size());
+			}
+			F.DeckList.reserve(static_cast<size_t>(F.DeckFirst[Cells]));
+			for (const std::vector<int>& Each : ByCell)
+			{
+				F.DeckList.insert(F.DeckList.end(), Each.begin(), Each.end());
 			}
 		}
 
@@ -536,7 +586,16 @@ namespace AirSky
 			return true;
 		}
 		const double Moved = ((Eye - Drift) - LastEye).Length();
-		return Moved > std::max(1.0, LastNear * 0.0045);
+		if (bEasing && Moved > 1.0)
+		{
+			return true;
+		}
+		return Moved > Clamp(LastNear * 0.0045, 1.0, 100.0);
+	}
+
+	double Painter::ShownLift(int CloudIndex) const
+	{
+		return CloudIndex >= 0 && static_cast<size_t>(CloudIndex) < Lifts.size() ? Lifts[static_cast<size_t>(CloudIndex)].Shown : -1.0;
 	}
 
 	double Painter::Paint(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light, std::vector<Vec>& OutPoints, std::vector<uint8_t>& OutRgba)
@@ -554,6 +613,7 @@ namespace AirSky
 		}
 		Where.resize(CloudCount);
 		Sorted.clear();
+		bEasing = false;
 		for (size_t I = 0; I < CloudCount; ++I)
 		{
 			const Cloud& C = F.Clouds[I];
@@ -565,26 +625,40 @@ namespace AirSky
 			{
 				continue;
 			}
-			// (lifted over the ground where it is drawn, looked up again only once its middle has moved 150 m)
+			// (lifted over the ground where it is drawn: the ground looked up again once its middle has moved 30 m, and
+			// the lift drawn eased toward it as the cloud drifts, up one and a half metres a metre and down half as fast,
+			// so a cloud carried over hills never hops; taken at once when first drawn or when its copy changes)
 			const double WX = LX + Drift.X, WY = LY + Drift.Y;
 			Kept& Lift = Lifts[I];
-			if ((WX - Lift.X) * (WX - Lift.X) + (WY - Lift.Y) * (WY - Lift.Y) > 150.0 * 150.0)
+			const double Jump = std::hypot(WX - Lift.PX, WY - Lift.PY);
+			if (Lift.Shown < 0.0 || Jump > 1000.0)
 			{
 				Lift.X = WX;
 				Lift.Y = WY;
-				Lift.Lift = F.LiftAt(Index, WX, WY);
+				Lift.Target = F.LiftAt(Index, WX, WY);
+				Lift.Shown = Lift.Target;
 			}
+			else
+			{
+				if ((WX - Lift.X) * (WX - Lift.X) + (WY - Lift.Y) * (WY - Lift.Y) > 30.0 * 30.0)
+				{
+					Lift.X = WX;
+					Lift.Y = WY;
+					Lift.Target = F.LiftAt(Index, WX, WY);
+				}
+				Lift.Shown += Clamp(Lift.Target - Lift.Shown, -0.75 * Jump, 1.5 * Jump);
+				bEasing = bEasing || std::fabs(Lift.Target - Lift.Shown) > 0.5;
+			}
+			Lift.PX = WX;
+			Lift.PY = WY;
 			Placed& Here = Where[I];
-			Here.Shift = Shift;
-			Here.Lift = Lift.Lift;
-			Here.Squash = F.SquashFor(Index, Here.Lift);
-			Here.Show = Here.Squash > 0.0 ? F.ShownAt(Index, WX, WY) : 0.0;
+			Here = F.PlaceLifted(Index, Shift, Drift, Lift.Shown);
 			if (Here.Show < 0.002)
 			{
 				continue;
 			}
-			// (thinning into the haze over the last third of the reach; past NearAll, its far puffs only, past FarAll its
-			// farthest-seen)
+			// (thinning into the haze over the last third of the reach; past NearAll, its far puffs only; past FarAll its
+			// far body, fading in as the rest fade out)
 			const Vec Middle(LX, LY, C.At.Z + Here.Lift + 0.5 * Here.Squash * C.H);
 			const double Far = (Middle - Seen).Length();
 			const double Haze = Smooth((Reach - Far) / (Reach / 3.0));
@@ -596,7 +670,7 @@ namespace AirSky
 			for (int K = C.First; K < C.First + C.Count; ++K)
 			{
 				const Puff& Each = F.Puffs[static_cast<size_t>(K)];
-				const double Fade = Haze * (Each.Lod >= 2 ? 1.0 : Each.Lod == 1 ? FarShare : NearShare);
+				const double Fade = Haze * (Each.Lod == 3 ? 1.0 - FarShare : Each.Lod == 2 ? 1.0 : Each.Lod == 1 ? FarShare : NearShare);
 				if (Fade * Here.Show * Each.Alpha < 0.002)
 				{
 					continue;
@@ -679,7 +753,8 @@ namespace AirSky
 		}
 		bPainted = true;
 		LastEye = Seen;
-		LastNear = std::max(50.0, Near);
+		// (nothing drawn: the next paint is wanted as soon as the eye moves, not never)
+		LastNear = LastDrawn > 0 ? std::max(50.0, Near) : 50.0;
 		return Near;
 	}
 }

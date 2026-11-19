@@ -99,23 +99,54 @@ namespace AirShow
 		return Ground ? std::max(0.0, Ground(X, Y)) : 0.0;
 	}
 
+	DeckSpan Show::DeckHere(double X, double Y) const
+	{
+		if (DeckReach > 0.0 && std::hypot(X - Eye.X, Y - Eye.Y) > DeckReach)
+		{
+			return DeckSpan();
+		}
+		if (DeckAt)
+		{
+			return DeckAt(X, Y);
+		}
+		DeckSpan Everywhere;
+		if (CloudTop > 0.0)
+		{
+			Everywhere.Foot = std::max(0.0, CloudTop - 500.0);
+			Everywhere.Hide = CloudTop;
+		}
+		return Everywhere;
+	}
+
+	double Show::DeckFor(const Vec& At) const
+	{
+		if (CloudTop <= 0.0 && !DeckAt)
+		{
+			return 0.0;
+		}
+		const DeckSpan Here = DeckHere(At.X, At.Y);
+		return Here.Hide > 0.0 && At.Z <= Here.Foot ? 0.0 : 1.0;
+	}
+
 	bool Show::IntoDeck(double& Deck, const Vec& At) const
 	{
 		if (Deck <= 0.0)
 		{
 			return false;
 		}
-		const double Here = DeckHere(At.X, At.Y);
-		if (At.Z >= (Here > 0.0 ? Here : Deck) - 150.0)
+		const DeckSpan Here = DeckHere(At.X, At.Y);
+		if (Here.Hide <= 0.0)
 		{
+			// (a hole: on down; it may yet fall into a tile beside it)
 			return false;
 		}
-		if (Here > 0.0)
+		if (At.Z <= Here.Foot)
 		{
-			return true;
+			// (under a tile: under the deck now, on down to the ground or the sea)
+			Deck = 0.0;
+			return false;
 		}
-		Deck = 0.0;
-		return false;
+		return At.Z < Here.Hide - std::min(150.0, 0.5 * (Here.Hide - Here.Foot));
 	}
 
 	Fx& Show::Emit(FxKind Kind, const Vec& At, const std::string& What, int Key)
@@ -997,7 +1028,6 @@ namespace AirShow
 	void Show::PilotFall(Craft& C, double Dt)
 	{
 		C.FallT += Dt;
-		const double Floor = GroundAt(C.P.X, C.P.Y);
 		if (C.Falling == FallHow::Explode)
 		{
 			C.bShown = false;
@@ -1023,7 +1053,17 @@ namespace AirShow
 			Fly(C, K, Dt, false);
 		}
 		if (C.TrailKey) Emit(FxKind::TrailMove, Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[0]), std::string(), C.TrailKey).Vel = Velocity(C);
-		Emit(FxKind::FallMove, C.P, std::string(), C.Key).Vel = Velocity(C);
+		// (the ground where it is now, after this frame's move: on a steep slope, where it was is not where it lands)
+		const double Floor = GroundAt(C.P.X, C.P.Y);
+		// (into the deck, or under it: down a hole and under a tile, its debris row, told the deck, stops shedding)
+		const bool bCloud = IntoDeck(C.FallDeck, C.P);
+		Fx& Moving = Emit(FxKind::FallMove, C.P, std::string(), C.Key);
+		Moving.Vel = Velocity(C);
+		if (C.bDebrisToDeck && C.FallDeck <= 0.0)
+		{
+			Moving.Deck = -1.0;
+			C.bDebrisToDeck = false;
+		}
 		// Parachutes, one after another, as the crew get out.
 		if (C.ChutesLeft > 0 && C.FallT > C.ChuteAt)
 		{
@@ -1032,17 +1072,17 @@ namespace AirShow
 			Chute.At = Local(C, Vec(-C.Form.Long * 0.3, 0.0, -1.5));
 			Chute.Vel = Velocity(C) * 0.25;
 			Chute.Size = 7.0;
-			Chute.Deck = DeckFor(Chute.At.Z);
+			Chute.Deck = DeckFor(Chute.At);
 			Small.push_back(Chute);
 			if (!C.ChuteCue.empty()) Emit(FxKind::Sound, Chute.At, C.ChuteCue);
 			C.ChutesLeft--;
 			C.ChuteAt += Roll.U(1.0, 2.5);
 			Check.Chutes++;
 		}
-		const bool bCloud = IntoDeck(C.FallDeck, C.P);
-		if (C.P.Z <= Floor + 2.0 || bCloud || C.FallT > 150.0)
+		// (at most 400 air seconds: a spin from 9 km is down in under 200)
+		if (C.P.Z <= Floor + 2.0 || bCloud || C.FallT > 400.0)
 		{
-			if (!bCloud && C.FallT <= 150.0) Emit(Floor > 0.5 ? FxKind::Crash : FxKind::Splash, Vec(C.P.X, C.P.Y, Floor), "plane").Size = C.Form.Span;
+			if (!bCloud && C.FallT <= 400.0) Emit(Floor > 0.5 ? FxKind::Crash : FxKind::Splash, Vec(C.P.X, C.P.Y, Floor), "plane").Size = C.Form.Span;
 			if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; }
 			Emit(FxKind::FallStop, C.P, std::string(), C.Key);
 			C.Doing = Role::Gone;
@@ -1173,19 +1213,21 @@ namespace AirShow
 		C.ChuteAt = Roll.U(2.0, 5.0);
 		C.ChuteCue = E.ChuteCue.empty() && E.Chutes > 0 ? "parachute_open" : E.ChuteCue;
 		C.Falling = E.Kind == "explode" ? FallHow::Explode : E.Kind == "spin" ? FallHow::Spin : FallHow::Burn;
-		C.FallDeck = DeckFor(C.P.Z);
+		C.FallDeck = DeckFor(C.P);
 		Check.Falls++;
 		if (E.bByFlak) Emit(FxKind::Flak, C.P + Vec(Roll.U(-4.0, 4.0), Roll.U(-4.0, 4.0), Roll.U(-2.0, 3.0)), "heavy"); // (the one burst laid on a model: this one falls to it)
 		if (!E.Cue.empty()) Emit(FxKind::Sound, C.P, E.Cue);
 		const Vec V = Velocity(C);
 		{
-			// The debris row, for the effects kit: where the pieces leave sight is the cloud deck's top for a fall begun
-			// above it, else the ground.
+			// The debris row, for the effects kit: where the pieces leave sight is where the deck hides them, for a fall
+			// begun over a drawn tile's foot, else the ground (and the row stops shedding if the fall goes down a hole
+			// and under the deck).
 			Fx& F = Emit(FxKind::Fall, C.P, C.Falling == FallHow::Explode ? "explode" : C.Falling == FallHow::Spin ? "spin" : "burn", C.Key);
 			F.Vel = V;
 			F.Size = C.Form.Span;
-			const double Here = C.FallDeck > 0.0 ? DeckHere(C.P.X, C.P.Y) : 0.0;
-			F.Deck = Here > 0.0 ? Here : GroundAt(C.P.X, C.P.Y);
+			const DeckSpan Here = DeckHere(C.P.X, C.P.Y);
+			C.bDebrisToDeck = Here.Hide > 0.0 && C.P.Z > Here.Foot;
+			F.Deck = C.bDebrisToDeck ? std::min(Here.Hide, C.P.Z) : GroundAt(C.P.X, C.P.Y);
 		}
 		const Vec EngineAt = Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[C.Form.Engines.size() > 1 ? (Roll.U() < 0.5 ? 1 : C.Form.Engines.size() - 2) : 0]);
 		if (C.Falling == FallHow::Explode)
@@ -1645,7 +1687,8 @@ namespace AirShow
 			Thing& T = Small[K];
 			const double Floor = GroundAt(T.At.X, T.At.Y);
 			const bool bCloud = T.Kind != ThingKind::Bomb && IntoDeck(T.Deck, T.At);
-			if (T.At.Z > Floor && !bCloud && T.Age < 400.0) { ++K; continue; }
+			// (at most 400 s, a parachute 1,500 s: one from 8 km is down in about 1,450)
+			if (T.At.Z > Floor && !bCloud && T.Age < (T.Kind == ThingKind::Chute ? 1500.0 : 400.0)) { ++K; continue; }
 			const Vec Down(T.At.X, T.At.Y, Floor);
 			if (T.Kind == ThingKind::Bomb)
 			{

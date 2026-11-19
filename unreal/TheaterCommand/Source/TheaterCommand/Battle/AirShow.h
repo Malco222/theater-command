@@ -144,7 +144,8 @@ namespace AirShow
 		Blast,      // an aircraft blowing apart: Key (the aircraft), At, Vel, Size (its span)
 		Fall,       // an aircraft lost, for its debris (the effects kit's AirFall): Key (the aircraft), At, Vel,
 		            //   What (explode, burn, spin), Size (its span), Deck (metres: where its pieces leave sight)
-		FallMove,   // a burning or spinning fall, every frame: Key, At, Vel
+		FallMove,   // a burning or spinning fall, every frame: Key, At, Vel; Deck -1 once, where it passes under the
+		            //   deck through a hole, its debris row having been told the deck (the row stops shedding there)
 		FallStop,   // the fall over, the model gone: Key
 		Splash,     // something into the sea: At, Size (metres across)
 		Crash,      // something into the land: At, Size
@@ -253,8 +254,9 @@ namespace AirShow
 		double Spin = 0.0, Size = 1.0, Age = 0.0, Heading = 0.0;
 		bool bOpen = false;
 		bool bTorpedo = false;
-		/** The deck top it began its fall above, metres, and passes out of sight in where a tile of it is drawn: 0 when
-		 * it came out under the deck or through a hole (or there is none), and it falls on to the ground or the sea. */
+		/** 1 while it may still pass into the deck (it came out over a drawn tile's foot, or where none is drawn), and
+		 * passes out of sight in a tile it falls into; 0 once it is under a tile's foot (it came out under the deck, or
+		 * went down through a hole and under it), or there is no deck, and it falls on to the ground or the sea. */
 		double Deck = 0.0;
 	};
 
@@ -282,6 +284,13 @@ namespace AirShow
 		int MostGunsAtOnce = 0, SharedWindows = 0;
 	};
 
+	/** The cloud deck as drawn over a board point (Show::DeckAt): its tile's foot and the height where it hides what
+	 * falls into it, metres; Hide 0 where no tile of it is drawn. */
+	struct DeckSpan
+	{
+		double Foot = 0.0, Hide = 0.0;
+	};
+
 	class Show
 	{
 	public:
@@ -292,14 +301,17 @@ namespace AirShow
 		void SetLoadout(const std::string& Nation, bool bFighter, const Loadout& Guns);
 		/** The ground's height under a board point, metres (the sea 0). Left unset: the sea everywhere. */
 		std::function<double(double, double)> Ground;
-		/** The top of the cloud deck below the bombers as laid, metres (0: none): what is above it when its fall begins
-		 * falls from above the deck. */
+		/** The top of the cloud deck below the bombers as laid, metres (0: none). */
 		double CloudTop = 0.0;
-		/** The deck's drawn top over a board point (metres; 0 where no tile of it is drawn: a hole, the ships' clearing,
-		 * past its reach). A fall begun above the deck ends inside it where a tile of it is drawn, so nothing pops from
-		 * view; through a hole it goes on down, as does one begun under it (a torpedo bomber, a low fight), to the sea
-		 * or the ground. Unset: the deck is everywhere at CloudTop. */
-		std::function<double(double, double)> DeckAt;
+		/** The deck as drawn over a board point: the foot of the tile drawn over it and the height where it hides what
+		 * falls into it (its top puff's middle), metres; Hide 0 where no tile of it is drawn (a hole, the ships'
+		 * clearing). Something falling into a drawn tile ends 150 m under where it hides (or halfway to its foot, in
+		 * a thin tile), so nothing pops from view; through a hole it goes on down, and once under a tile's foot (begun
+		 * under the deck, as a torpedo bomber or a low fight, or come down a hole) it goes on to the sea or the ground.
+		 * Unset: the deck is everywhere, from 500 m under CloudTop to CloudTop. */
+		std::function<DeckSpan(double, double)> DeckAt;
+		/** How far from the eye the deck is drawn (metres; 0: everywhere): past it, as in a hole. */
+		double DeckReach = 0.0;
 		/** Where the camera is (board metres): the guns nearest it are the ones fired when there are too many. */
 		Vec Eye;
 		/** The most guns fired at once (the effects kit's budget: about 17 puffs a machine gun, 3,000 in all). */
@@ -368,7 +380,8 @@ namespace AirShow
 			int StragId = -1;
 			FallHow Falling = FallHow::None;
 			double FallT = 0.0;
-			double FallDeck = 0.0;   // the deck top its fall began above, 0 if it began under the deck or came through a hole
+			double FallDeck = 0.0;   // 1 while its fall may still pass into the deck (as Thing::Deck), else 0
+			bool bDebrisToDeck = false; // its debris row was told the deck (it began over a drawn tile's foot)
 			int ChutesLeft = 0;
 			double ChuteAt = 0.0;
 			std::string ChuteCue;
@@ -446,12 +459,12 @@ namespace AirShow
 		Vec Velocity(const Craft& C) const;
 		double GroundAt(double X, double Y) const;
 		Fx& Emit(FxKind Kind, const Vec& At, const std::string& What = std::string(), int Key = 0);
-		/** The deck top something at height Z passes out of sight in: the deck's, if it is above the deck; else 0. */
-		double DeckFor(double Z) const { return CloudTop > 0.0 && Z > CloudTop ? CloudTop : 0.0; }
-		/** The deck's drawn top over a board point (0: none drawn there). */
-		double DeckHere(double X, double Y) const { return DeckAt ? DeckAt(X, Y) : CloudTop; }
-		/** For something whose fall began above the deck (Deck its top, else 0): true once it is 150 m inside the deck
-		 * where a tile of it is drawn; come down through a hole, it is let through (Deck to 0) and goes on down. */
+		/** Whether something coming out at a point may pass into the deck (1) or is under it (0; none: 0). */
+		double DeckFor(const Vec& At) const;
+		/** The deck as drawn over a board point (Hide 0: none drawn there, or past its reach from the eye). */
+		DeckSpan DeckHere(double X, double Y) const;
+		/** For something that may pass into the deck (Deck 1): true once it is inside a drawn tile, 150 m under where
+		 * it hides; under a tile's foot, it is let go on down (Deck to 0). */
 		bool IntoDeck(double& Deck, const Vec& At) const;
 		Craft* Find(int Key);
 		const Craft* Find(int Key) const;

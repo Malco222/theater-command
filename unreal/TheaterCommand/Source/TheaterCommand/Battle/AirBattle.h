@@ -141,9 +141,15 @@ private:
 	bool bLookSet = false;
 	FVector CloseEye = FVector::ZeroVector;
 	FRotator CloseFacing = FRotator::ZeroRotator;
-	/** Falls the kit is shedding debris for (burning or spinning), and blow-ups whose blast the kit's AirFall drew. */
-	TSet<int32> FallsOn;
+	/** Falls a kit is shedding debris for (burning or spinning), and the kit; blow-ups whose blast the kit's AirFall
+	 * drew. */
+	TMap<int32, FBattleEffects*> FallsOn;
 	TSet<int32> BlastsTaken;
+	/** Which kit each running gun and trail is in: chosen where it starts, a trail carried into the other kit as it
+	 * passes the clouds' base (its kind and span kept to start it there). */
+	struct FTrailOn { FBattleEffects* Kit = nullptr; FString Kind; float Span = 0.0f; };
+	TMap<int32, FTrailOn> TrailKits;
+	TMap<int32, FBattleEffects*> GunKits;
 	// The sounds' own clocks.
 	TMap<int32, double> GunHeardAt;  // a gun's last burst heard, real seconds
 	TMap<int32, double> PassHeardAt; // a fighter group's last pass heard
@@ -154,7 +160,7 @@ private:
 	/** The sound director's mix (Content/Data/Sound/mix.json). */
 	TSharedPtr<FJsonObject> Mix;
 	/** A blast's torn flame, streaming on with the wreck for a moment. */
-	struct FTorn { int32 Key = 0; FVector At = FVector::ZeroVector; FVector Velocity = FVector::ZeroVector; double Until = 0.0; };
+	struct FTorn { int32 Key = 0; FVector At = FVector::ZeroVector; FVector Velocity = FVector::ZeroVector; double Until = 0.0; FBattleEffects* Kit = nullptr; };
 	TArray<FTorn> Torn;
 	int32 TornNext = 0;
 
@@ -190,8 +196,12 @@ private:
 	/** The clouds moved with the wind and, when the eye has moved enough, turned to it again; the see-through things
 	 * put in order for the eye (over the clouds or under them). */
 	void DrawSky();
-	/** The kit for an effect at a world point: the ground's under the clouds' base, the air's above it. */
-	FBattleEffects* KitAt(const FVector& WorldAt) const;
+	/** The kit for an effect at a world point: the ground's under the clouds' base as drawn there (lifted to 300 m
+	 * over the ground under it), the air's above it. Given the kit something is in now, it changes only 50 m past the
+	 * base, so a trail along the base does not flicker between them. */
+	FBattleEffects* KitAt(const FVector& WorldAt, const FBattleEffects* InNow = nullptr) const;
+	/** The kit for what happens on the ground or the sea: the ground's, once the clouds are drawn. */
+	FBattleEffects* GroundKit() const;
 	void HideTheTable();
 	/** Every frame the battle is up: a piece the table stood again (its crowds unfolding under the pointer) is put away. */
 	void KeepTheTableHidden();

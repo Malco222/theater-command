@@ -36,8 +36,10 @@
  * - Cumulus drift with the battle's wind, and the clearing stays over the target as they go: a cloud carried into it
  *   thins away, one carried out of it fills in. A deck stays where it is laid (from bomber height its drift could not
  *   be seen), so its hole stays over the ships.
- * - Far clouds are drawn with fewer puffs (each layer's first two, its turrets, its veil), the farthest with three
- *   (its base, its top, its veil); the puffs in between fade.
+ * - Far clouds are drawn with fewer puffs (each layer's first two, its turrets, its veil), the farthest as one soft
+ *   body in its veil; the puffs in between fade, the far body fading in as the near puffs go.
+ * - A cloud's lift over the ground eases as it drifts (it rises up to one and a half metres for each metre it drifts,
+ *   and sinks half as fast), so a cloud carried over hills never hops.
  *
  * Places are in board metres (X east, Y north, Z up, the sea at 0), as the flight core's.
  */
@@ -57,8 +59,8 @@ namespace AirSky
 	/** Within this distance of the eye a cloud is drawn with all its puffs; past it with its far ones (the rest fading
 	 * out over the next kilometre). */
 	constexpr double NearAll = 5000.0;
-	/** Past this distance a cloud is drawn with its farthest-seen puffs only (its base, its top and its veil; the rest
-	 * fading out over the next 1.5 km). */
+	/** Past this distance a cloud is drawn as its far body and its veil only (the rest fading out over the next
+	 * 1.5 km as the far body fades in). */
 	constexpr double FarAll = 10000.0;
 
 	/** The day's sky as the battle gives it (sky.place.cloud). Absent (a rules bundle from before it): cumulus. */
@@ -101,7 +103,7 @@ namespace AirSky
 		double Lit = 1.0;     // 0 to 1: how much of the sun it has (its cloud's top and sunward side)
 		double Alpha = 0.7;   // at its heart
 		int Cloud = 0;
-		int Lod = 2;          // drawn: 0 within NearAll of the eye, 1 within FarAll, 2 out to the reach
+		int Lod = 2;          // drawn: 0 within NearAll of the eye, 1 within FarAll, 2 out to the reach, 3 past FarAll only
 	};
 
 	/** One cloud (a cumulus, or a tile of the deck): its foot's middle on the laid square, its width and height. */
@@ -151,7 +153,8 @@ namespace AirSky
 		Vec DriftAt(double AirSeconds) const;
 		/** The copy of the square that puts a cloud nearest a point of the laid frame (multiples of Period). */
 		Vec ShiftNear(int CloudIndex, double X, double Y) const;
-		/** How far a cloud is lifted with its middle at a board point: to 300 m over the highest ground under it. */
+		/** How far a cloud is lifted with its middle at a board point: its foot to 330 m over the highest ground found
+		 * under it (its middle and two rings of eight, out to its edge), so 300 m over the ground between them. */
 		double LiftAt(int CloudIndex, double X, double Y) const;
 		/** A deck tile's height share once lifted (the bombers' band: 1 as laid, less where thinned, 0 where the
 		 * mountain stands through); 1 for cumulus. */
@@ -162,16 +165,21 @@ namespace AirSky
 		double ShownAt(int CloudIndex, double X, double Y) const;
 		/** A cloud as drawn for a point of the laid frame (an eye less the drift), the field carried by Drift. */
 		Placed Place(int CloudIndex, double X, double Y, const Vec& Drift) const;
+		/** The same for a copy of the square and a lift already found (the painter's own, eased as the cloud drifts):
+		 * its squash and how much the clearing leaves. */
+		Placed PlaceLifted(int CloudIndex, const Vec& Shift, const Vec& Drift, double Lift) const;
 		/** The share of board points under a cloud more than half shown, the field carried by Drift: the points on a
 		 * grid within Outside of the target (a square), past Inside (a circle). */
 		double CoverOf(const Vec& Drift, double Inside, double Outside) const;
-		/** The deck's drawn top over a board point (metres): 0 where no tile of it is drawn (a hole, the ships'
-		 * clearing, high ground through it) and on a cumulus day. */
-		double DeckAt(double X, double Y) const;
+		/** Where the deck hides what falls into it over a board point (metres): the middle of the top puff of the
+		 * nearest tile drawn over the point (more than half shown, the point within eight tenths of that puff's
+		 * reach), as drawn. 0 where none is (a hole, the ships' clearing, high ground through it) and on a cumulus day.
+		 * OutFoot, if given, is that tile's drawn foot. */
+		double DeckAt(double X, double Y, double* OutFoot = nullptr) const;
 
-		// (the deck's tiles by cell of the laid square, DeckCell metres a cell: the tile whose middle is nearest among
-		// those drawn over it, -1 none)
-		std::vector<int> DeckTiles;
+		// (the deck's tiles by cell of the laid square, DeckCell metres a cell: those whose top puff's eight tenths
+		// may reach over some of the cell, DeckList[DeckFirst[cell] .. DeckFirst[cell + 1]])
+		std::vector<int> DeckFirst, DeckList;
 		double DeckCell = 240.0;
 		int DeckN = 0;
 	};
@@ -203,11 +211,14 @@ namespace AirSky
 		 * nearest puff's distance. */
 		double Paint(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light, std::vector<Vec>& OutPoints, std::vector<uint8_t>& OutRgba);
 		/** Whether the eye has moved enough since the last Paint (in the field's own frame) for the turn of the
-		 * puffs to show: about a quarter of a degree at the nearest puff. */
+		 * puffs to show: about a quarter of a degree at the nearest puff (at most 100 m); a metre while a cloud's lift
+		 * is still easing. */
 		bool Stale(const Vec& Eye, const Vec& Drift) const;
 		/** The puffs drawn by the last Paint, and those it had no room for (the farthest). */
 		int Drawn() const { return LastDrawn; }
 		int Dropped() const { return LastDropped; }
+		/** A cloud's lift as last drawn (metres; -1 before it is first drawn). */
+		double ShownLift(int CloudIndex) const;
 
 	private:
 		int SideCount = 12;
@@ -221,13 +232,17 @@ namespace AirSky
 		};
 		std::vector<Order> Sorted;
 		std::vector<Placed> Where;
-		// (each cloud's lift, kept until its middle has moved 150 m: the ground is looked up again only then)
+		// (each cloud's lift: the ground looked up again once its middle has moved 30 m (Target), and the lift drawn
+		// eased toward it as the cloud drifts (Shown); taken at once when it is first drawn or its copy changes)
 		struct Kept
 		{
-			double X = 1e30, Y = 1e30, Lift = 0.0;
+			double X = 1e30, Y = 1e30;   // where its middle was when the ground was last looked up
+			double PX = 1e30, PY = 1e30; // where its middle was last drawn
+			double Target = 0.0, Shown = -1.0;
 		};
 		std::vector<Kept> Lifts;
 		bool bPainted = false;
+		bool bEasing = false;
 		uint64_t LastSerial = 0;
 		Vec LastEye;      // in the field's frame (eye less drift)
 		double LastNear = 1000.0;
