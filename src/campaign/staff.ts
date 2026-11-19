@@ -23,7 +23,7 @@ import { lineShut } from './line';
 import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
-import { fieldCtrl, openSieges, startGarrisons } from './siege';
+import { fieldCtrl, openSieges, raiseGarrisons, startGarrisons } from './siege';
 import { agentsOf, atWork, knowsBooks } from './intel';
 import { startEngineers } from './engineers';
 import { openMorale } from './morale';
@@ -148,6 +148,8 @@ export function startOpen(g: Game, wide = true): Game {
   openManpower(g);
   numberDivisions(g);
   // (After the numbers: a garrison keeps its divisions' numbers under the record's name for the command. Ruling 232, b566.)
+  // (Rider b606: the garrisons that are ruling 232's own are raised now, after the roster's divisions have their numbers.)
+  raiseGarrisons(g);
   startGarrisons(g);
   // On the wider map the picture is drawn once here, so that a campaign saved on its first day comes back as it was.
   if (wide) computeSupply(g);

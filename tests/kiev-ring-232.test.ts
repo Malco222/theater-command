@@ -4,9 +4,11 @@
 // stands inside Kiev from the first day at an eighth of its two divisions, and Helsinki's garrison at 0.3 of one,
 // each with the fortress mark that keeps it in; and the first time anyone declares war on the Soviet Union (the
 // Winter War is the Soviet Union's own declaration, not one on her) the ring fills to its two divisions from the
-// reserve, before the attacker's battles that month. On 96 wars Kiev and Helsinki were then never bare.
+// reserve, before the attacker's battles that month. Both garrisons are the ruling's own, raised on the first day only
+// where it holds: the roster names neither, so the history campaign and a war with the ruling off are what they were. On 96 wars Kiev and Helsinki were then never bare.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.hoisted(() => { (globalThis as { TC_DRIVE?: unknown }).TC_DRIVE = 1; });
+import setup from '../data/campaign/setup-1939.json';
 import { garrisons } from '../src/campaign/ai';
 import { createGame, declareWar } from '../src/campaign/game';
 import { DRIVE, SIEGE, driveOut, garrisonOf, manRings } from '../src/campaign/siege';
@@ -16,11 +18,11 @@ import type { Corps, Game } from '../src/campaign/types';
 beforeEach(() => { DRIVE.on = true; });
 
 const open = (): Game => startOpen(createGame(3, null));
+const row = (corps: string) => SIEGE.startIn!.find((s) => s.corps === corps);
 const inTown = (g: Game, town: string, name: string): Corps | undefined => garrisonOf(g.byName[town]).find((c) => c.name === name && !c.dead);
 
 describe('ruling 232, rider b606: Kiev\'s ring and Helsinki\'s garrison by the record', () => {
   it('the rows are the record\'s: an eighth and three tenths, the fortress mark, one ring', () => {
-    const row = (corps: string) => SIEGE.startIn!.find((s) => s.corps === corps);
     expect(row('Kiev Fortified Region')).toMatchObject({ nat: 'SOV', str: 0.125, fortress: true });
     expect(row('Helsinki garrison')).toMatchObject({ nat: 'FIN', str: 0.3, fortress: true });
     expect(SIEGE.rings).toEqual([{ nat: 'SOV', town: 'Kiev', corps: 'Kiev Fortified Region', org: 0.7 }]);
@@ -78,10 +80,21 @@ describe('ruling 232, rider b606: Kiev\'s ring and Helsinki\'s garrison by the r
     expect(kiev.str).toBeCloseTo(0.125, 6);
   });
 
-  it('with ruling 232 off nothing is manned', () => {
+  it('with ruling 232 off nothing is manned, and neither garrison exists', () => {
     DRIVE.on = false;
     const g = open();
     manRings(g, 'SOV');
     expect(g.flags['ring:Kiev']).toBeUndefined();
+    expect(g.corps.some((c) => c.name === 'Kiev Fortified Region' || c.name === 'Helsinki garrison')).toBe(false);
+  });
+
+  it('the garrisons are the ruling\'s own: the roster names neither, and the history campaign has no such corps', () => {
+    const roster = (setup as unknown as { corps: unknown[][] }).corps;
+    expect(roster.length).toBeGreaterThan(100);
+    expect(roster.some((row) => row[1] === 'Kiev Fortified Region' || row[1] === 'Helsinki garrison')).toBe(false);
+    const g = createGame(3, null);
+    expect(g.corps.some((c) => c.name === 'Kiev Fortified Region' || c.name === 'Helsinki garrison')).toBe(false);
+    expect(row('Kiev Fortified Region')).toMatchObject({ town: 'Kiev', divs: 2 });
+    expect(row('Helsinki garrison')).toMatchObject({ town: 'Helsinki', divs: 1 });
   });
 });

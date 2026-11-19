@@ -107,7 +107,6 @@
     ["SOV", "Ukrainian Front", "inf", 5, "Zhitomir", {}],
     ["SOV", "25th Tank Corps", "arm", 2, "Vinnitsa", {}],
     ["SOV", "Kiev Military District", "inf", 4, "Kiev", {"hold": 1}],
-    ["SOV", "Kiev Fortified Region", "inf", 2, "Kiev", {"hold": 1}],
     ["SOV", "Leningrad Military District", "inf", 5, "Leningrad", {"hold": 1}],
     ["SOV", "Odessa Military District", "inf", 3, "Odessa", {"hold": 1}],
     ["SOV", "Western reserve", "inf", 4, "Smolensk", {"hold": 1}],
@@ -122,7 +121,6 @@
     ["SWE", "Southern Army", "inf", 2, "Scania", {"hold": 1}],
     ["FIN", "Army of the Isthmus", "inf", 4, "Karelia", {"hold": 1}],
     ["FIN", "Helsinki reserve", "inf", 2, "Helsinki", {"hold": 1}],
-    ["FIN", "Helsinki garrison", "inf", 1, "Helsinki", {"hold": 1}],
     ["EST", "Estonian Army", "inf", 2, "Estonia", {"hold": 1}],
     ["LAT", "Latvian Army", "inf", 2, "Latvia", {"hold": 1}],
     ["LIT", "Lithuanian Army", "inf", 2, "Lithuania", {"hold": 1}],
@@ -265,8 +263,8 @@
     [28, "SOV", "2nd Guards Cavalry Corps", "cav", 2, "Tula", {"xp": 0.3}]
   ],
   "formations": [
-    [41, "ITA", "Sardinia coastal divisions", "inf", 1, "Sardinia", {"hold": 1, "str": 0.3, "est": 0.3, "xp": 0.05}],
-    [47, "ITA", "Nembo Parachute Division", "inf", 1, "Sardinia", {"hold": 1, "str": 0.7, "est": 0.7, "xp": 0.15}],
+    [41, "ITA", "Sardinia coastal divisions", "inf", 1, "Sardinia", {"hold": 1, "str": 0.3, "est": 0.3, "xp": 0.05, "open": 1}],
+    [47, "ITA", "Nembo Parachute Division", "inf", 1, "Sardinia", {"hold": 1, "str": 0.7, "est": 0.7, "xp": 0.15, "open": 1}],
     [46, "SOV", "Central Front", "inf", 12, "Kursk", {"gen": "Konstantin Rokossovsky", "hold": 1, "xp": 0.4}],
     [46, "SOV", "Voronezh Front", "inf", 12, "Kursk", {"gen": "Nikolai Vatutin", "trait": "attacker", "hold": 1, "xp": 0.4}],
     [46, "SOV", "1st Tank Army", "arm", 2, "Kursk", {"gen": "Mikhail Katukov", "trait": "panzer", "hold": 1, "xp": 0.4}],
