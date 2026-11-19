@@ -664,7 +664,7 @@ function draw(g: Game, nat: string, st: GovState): Directive | null {
       options.push({ ...base, kind: 'build', from: nat, target: civicCount(g, nat) + 1, due: g.turn + D.build.months, capital: D.build.capital, money: 0,
         title: 'Build up a town', text: `The war cabinet wants the country built up: order a new building in one of your towns by the end of ${date(g.turn + D.build.months)}. The cheapest today is the ${site.label.toLowerCase()} at ${site.town}, for ${moneyShown(site.cost)}.` });
     }
-    if (quiet && agentsOf(g, nat).length < mostAgents(nat) && homeBase(g, nat) >= 0 && INTEL.agents.cost <= spare) {
+    if (quiet && agentsOf(g, nat).length < mostAgents(nat, g) && homeBase(g, nat) >= 0 && INTEL.agents.cost <= spare) {
       options.push({ ...base, kind: 'agent', from: nat, target: agentsOf(g, nat).length + 1, due: g.turn + D.agent.months, capital: D.agent.capital, money: 0,
         title: 'Recruit an agent', text: `The war cabinet wants eyes abroad: recruit an agent for the secret service by the end of ${date(g.turn + D.agent.months)}. One costs ${agentCost().toLocaleString('en-US')} to find and train.` });
     }

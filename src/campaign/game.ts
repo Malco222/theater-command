@@ -27,6 +27,7 @@ import { civicDrafts, civicSum, hospitalNear, hospitalWorth } from './buildings'
 import { tradeTick } from './trade';
 import { growCorps, numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
+import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
 import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
@@ -2159,6 +2160,8 @@ export function capture(g: Game, r: Region, nat: string): void {
   if (r.cap && r.owner === old) headline(g, 'fall', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id, { arm: 'land', won: nat, lost: old });
   // Overseas the prizes are the ports: whoever holds them feeds the army that fights there.
   else if (r.overseas && r.port && r.vp > 0 && atWar(g, nat, old)) headline(g, 'battle', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id, { arm: 'land', won: nat, lost: old });
+  // (Brian, 18 November: ground a great power owns, taken from it in war, gives a smaller taker its capital-ship plans.)
+  plansOnCapture(g, r, nat, old);
   checkCollapse(g, old, nat);
   // The grand campaign: ground of France's taken back from Vichy goes to a freed France. (A fallen country whose
   // capital its conqueror's enemies now hold comes back at the month's end, ruling 229 part 2: turn.ts.)

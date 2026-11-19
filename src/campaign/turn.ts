@@ -2,6 +2,7 @@
 // the player does not, and the player's orders go through the same rules.
 
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
+import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
@@ -1464,6 +1465,16 @@ export function orderRebase(g: Game, id: number, region: number): boolean {
 }
 
 // ---- The navy as pieces (the grand campaign): cards, escorts on a lane, shelling a coast, splitting and joining ----
+
+/**
+ * The great power whose plans each country builds its battleships, carriers, four-engined bombers, jet fighters,
+ * rocket artillery and guided weapons to (Brian, 18 November; ruling 235 and its rider b542; plans.ts):
+ * `{ ESP: { bb: 'GER', cv: null, heavybombers: null, jets: 'GER', rockets: null, guided: null }, UK: { bb: 'UK', ... } }`.
+ * A great power names itself; a dominion Britain, and Vichy and Free France France (for a technology, once that power
+ * has it); a smaller country the power whose plans it gained last, or null when it holds none. The 3D game draws a
+ * smaller country's battleship, carrier or aircraft as that power's model, in its own colours and under its own flag.
+ */
+export const capitalPlans = (g: Game): Record<string, Record<PlanItem, string | null>> => plansView(g);
 
 /** Any fleet as a card: its admiral, where it is, what it is doing, and its ships by class. */
 export function fleetView(g: Game, id: number): FleetCard | null {

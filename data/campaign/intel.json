@@ -33,7 +33,7 @@
     ]
   },
   "missions": {
-    "_about": "caught is the chance each month that the agent is found out while on this work; for sabotage it is the chance on the night of the attempt. success is the chance an attempt comes off. gain is the experience a success earns.",
+    "_about": "caught is the chance each month that the agent is found out while on this work; for sabotage it is the chance on the night of the attempt. success is the chance an attempt comes off. gain is the experience a success earns. bbPlans and cvPlans steal a great power's plans of battleships or of carriers, and (rider b542) bomberPlans, jetPlans, rocketPlans and guidedPlans its plans of four-engined bombers, jet fighters, rocket artillery and guided weapons: each tried once like an act of sabotage (arsenal.json, plans). A smaller nation's Intelligence branch (tech.json) makes its agents harder to catch and its thefts surer.",
     "watch": {
       "caught": 0.03
     },
@@ -67,6 +67,36 @@
       "success": 0.45,
       "gain": 1
     },
+    "bbPlans": {
+      "caught": 0.2,
+      "success": 0.3,
+      "gain": 3
+    },
+    "cvPlans": {
+      "caught": 0.2,
+      "success": 0.3,
+      "gain": 3
+    },
+    "bomberPlans": {
+      "caught": 0.2,
+      "success": 0.3,
+      "gain": 3
+    },
+    "jetPlans": {
+      "caught": 0.2,
+      "success": 0.3,
+      "gain": 3
+    },
+    "rocketPlans": {
+      "caught": 0.2,
+      "success": 0.3,
+      "gain": 3
+    },
+    "guidedPlans": {
+      "caught": 0.2,
+      "success": 0.3,
+      "gain": 3
+    },
     "guard": {
       "caught": 0
     },
@@ -89,8 +119,9 @@
     "lieLow": 2
   },
   "caught": {
-    "_about": "A neutral that catches a spy thinks worse of the side that sent it: its opinion moves this far away from that side.",
-    "opinion": 6
+    "_about": "A neutral that catches a spy thinks worse of the side that sent it: its opinion moves this far away from that side. 'war' (Brian, 18 November): the chance that a great power at peace with the thief, catching a spy at its plans (any of the six thefts), declares war on the spy's country.",
+    "opinion": 6,
+    "war": 0.4
   },
   "battle": {
     "_about": "An agent at work in a province has mapped its defences: the agent's own side attacks it this much harder.",

@@ -74,6 +74,8 @@ export interface Nation {
   corpsNo: number;
   /** Public opinion, from -100 (wants the Allies) to +100 (wants the Axis), and the leaning it drifts back to. */
   opinion: number;
+  /** A smaller nation's plans of battleships or carriers, taken or stolen from a great power (plans.ts), in the order gained. */
+  plans?: PlanHeld[];
   home: number;
   /** Political capital: what a government can spend on diplomacy. */
   pc: number;
@@ -250,7 +252,7 @@ export interface TechState {
   /** Technologies researched, in the order they were finished. */
   done: string[];
   /** One entry for each research team at work: the technology, the months still to go and the months it was begun with. */
-  work: { id: string; left: number; of: number }[];
+  work: { id: string; left: number; of: number; spy?: boolean }[];
 }
 
 /** The branches of research. */
@@ -1227,8 +1229,14 @@ export interface Passing {
   player?: boolean;
 }
 
-/** What an agent is doing: watching, reading a government's books, an act of sabotage, or guarding the home country. */
-export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'airfield' | 'orders' | 'guard' | 'hunt';
+/** What an agent is doing: watching, reading a government's books, an act of sabotage, a theft of plans, or work at home (guarding, hunting enemy agents). */
+export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'airfield' | 'orders' | 'bbPlans' | 'cvPlans' | 'bomberPlans' | 'jetPlans' | 'rocketPlans' | 'guidedPlans' | 'guard' | 'hunt';
+
+/**
+ * Plans a smaller nation holds of a weapon only the great powers make (Brian, 18 November; ruling 235 and its rider
+ * b542): a battleship, a carrier, or one of four technologies. Whose they are, how it got them, and when.
+ */
+export interface PlanHeld { what: 'bb' | 'cv' | 'heavybombers' | 'jets' | 'rockets' | 'guided'; from: string; how: 'taken' | 'stolen'; turn: number }
 
 /** A spy: a piece the player recruits, sends abroad and may lose. */
 export interface Agent {
