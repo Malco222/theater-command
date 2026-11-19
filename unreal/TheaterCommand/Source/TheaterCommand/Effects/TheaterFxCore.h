@@ -117,7 +117,7 @@ namespace TheaterFx
 		// on its cloud's sunward side and least on the far side; none seen side-on or against the sun, nor at night)
 		double FaceLit = 0.0;
 		Rgb LitCol;
-		bool bTwin = false; // (drawn as two fans, the second turned half a step: twice the sides, so no facet shows)
+		double TwinPx = 0.0; // (at least this many pixels across, drawn as two fans, the second turned half a step: twice the sides, so no facet shows; 0 never)
 		Rgb Col, Col2;
 		bool bLight = false; // flame, flash, sparks, tracer: keeps its own colour by night and takes no shading
 		mutable bool bShown = false; // (laid at least once: a light shorter than a frame is kept until it has been)
@@ -338,6 +338,7 @@ namespace TheaterFx
 			double Deep;
 		};
 		std::vector<Order> Sorted;
+		size_t TwinBits = 0; // (twins alive at the last Draw: each takes a second slot)
 		std::vector<Bit> Roots; // (each frame: the young end of each trail, from its point back to its newest hanging puff)
 
 		double Num(const std::string& Path, double Fallback) const;

@@ -1601,7 +1601,7 @@ namespace TheaterFx
 		}
 		// gun smoke: a thin grey wisp left hanging in the air where the gun was, so a firing wing trails a short
 		// smoky line behind it
-		if (bSmoke && Row.SmokeAlpha > 0.0 && Bits.size() < static_cast<size_t>(MaxPuffs) * 4 / 5) // (the first thing shed when the room fills)
+		if (bSmoke && Row.SmokeAlpha > 0.0 && Bits.size() + TwinBits < static_cast<size_t>(MaxPuffs) * 4 / 5) // (the first thing shed when the room fills; a twin counts its two slots)
 		{
 			Bit B;
 			B.Born = T + 0.01;
@@ -1868,6 +1868,7 @@ namespace TheaterFx
 		const Rgb Old = Picture(P + "colour_old", Rgb::FromPicture(128, 122, 116));
 		const double FaceLit = std::max(0.0, Num(P + "face_lit", 0.0));
 		const Rgb LitCol = Picture(P + "lit_colour", Rgb::FromPicture(182, 176, 166));
+		const double TwinPx = std::max(0.0, Num(P + "twin_px", 40.0));
 		auto Smoke = [&](const Vec& From, double R, double R1, const Vec& Vel, double A, double Life)
 		{
 			Bit B;
@@ -1901,7 +1902,7 @@ namespace TheaterFx
 			// into lumps; taken from its lump seed, so the throw of the burst's dice is as before)
 			B.FaceLit = FaceLit * (0.6 + 0.4 * static_cast<double>((B.LumpSeed * 2654435761u) >> 22) / 1023.0);
 			B.LitCol = LitCol;
-			B.bTwin = true;
+			B.TwinPx = TwinPx;
 			return B;
 		};
 		// the lobes: a crooked chain down the wind, never a clump: spread along the wind, wandering across it and up
@@ -2743,9 +2744,9 @@ namespace TheaterFx
 		}
 		const double Heart = B.HeartEnd >= 0.0 ? B.Heart + (B.HeartEnd - B.Heart) * F : B.Heart;
 		const double Turned = B.Turn + B.TurnRate * Age;
-		if (B.bTwin && Room >= 2)
+		if (B.TwinPx > 0.0 && Room >= 2 && 2.0 * Rad >= B.TwinPx * MetresAPixel)
 		{
-			// (art director 00:03Z: a flak puff is two fans, the second turned half a step round the same outline, so the
+			// (art director 00:03Z: a near flak puff is two fans, the second turned half a step round the same outline, so the
 			// two together have twice the sides and no straight facet shows. Each takes the opacity that makes the two
 			// together what one would be)
 			const double Step = Pi / Sides;
@@ -2823,12 +2824,14 @@ namespace TheaterFx
 		}
 		// then the rest, far to near, so that each is laid over what is behind it
 		Sorted.clear();
+		TwinBits = 0;
 		for (const Bit& B : Bits)
 		{
 			if (Now < B.Born || (Now > B.Born + B.Life && !Unseen(B)))
 			{
 				continue;
 			}
+			TwinBits += B.TwinPx > 0.0 ? 1u : 0u;
 			Sorted.push_back(Order{ &B, (Where(B, Now - B.Born) - Eye.Eye).Dot(Eye.Forward) });
 		}
 		for (const Bit& B : Roots)
@@ -2836,8 +2839,19 @@ namespace TheaterFx
 			Sorted.push_back(Order{ &B, (B.From - Eye.Eye).Dot(Eye.Forward) });
 		}
 		std::sort(Sorted.begin(), Sorted.end(), [](const Order& L, const Order& R) { return L.Deep > R.Deep; });
-		const size_t Left = static_cast<size_t>(MaxPuffs - Slot);
-		const size_t Start = Sorted.size() > Left ? Sorted.size() - Left : 0; // (out of room: the farthest go)
+		// (out of room: the farthest go. Counted from the nearest back, a twin taking two slots, so the nearest are never
+		// the ones left out)
+		const size_t Left = static_cast<size_t>(std::max(0, MaxPuffs - Slot));
+		size_t Start = Sorted.size();
+		for (size_t Need = 0; Start > 0; --Start)
+		{
+			const size_t Takes = Sorted[Start - 1].B->TwinPx > 0.0 ? 2u : 1u; // (a twin far off is laid once: then a slot is spare)
+			if (Need + Takes > Left)
+			{
+				break;
+			}
+			Need += Takes;
+		}
 		for (size_t I = Start; I < Sorted.size() && Slot < MaxPuffs; ++I)
 		{
 			Slot += LayBit(Slot, *Sorted[I].B, Now, Eye, MaxPuffs - Slot);
