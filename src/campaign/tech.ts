@@ -18,6 +18,7 @@ import { govMul } from './government';
 import { PLANS, planRules, whyNoTechPlans } from './plans';
 import type { Field, Game, Nation, TechState } from './types';
 import { controlFirst, radarWords } from './aircampaigns';
+import { techLift } from './lift';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine' | 'intel';
 
@@ -245,8 +246,9 @@ function finish(g: Game, n: Nation, id: string, quiet: boolean): void {
   const s = n.tech!, t = BY_ID[id];
   if (!t || s.done.includes(id)) return;
   s.done.push(id);
-  // (A country whose lift is the record's own count has its landing craft in that count already: pacific.ts, rider b630.)
-  if (t.sealift && !liftByRecord(g, n.id)) n.sealift += t.sealift;
+  // (A country whose lift is the record's own count has its landing craft in that count already: pacific.ts, rider b630.
+  // For the others the shipping may wait for the record's month: lift.json.)
+  if (t.sealift && !liftByRecord(g, n.id)) techLift(g, n.id, id, t.sealift);
   // (With the laboratories in his advisers' hands the free team is theirs to set to work: desks.ts.)
   if (!quiet && n.id === g.human) headline(g, 'info', `Research complete: ${t.name}. ${techRule(t, g, n.id)}${staffRuns(g, n.id, 'research') ? '' : ' A research team is free for new work.'}`, n.id);
 }

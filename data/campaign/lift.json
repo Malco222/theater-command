@@ -1,0 +1,9 @@
+{
+  "_about": "Sea lift by the record (ruling 234, the design director's note of 10:25Z on rider b630; historian/sea-lift-record-b630.md). A nation's 'sealift' in nations.json and world.json is the number of corps rows its shipping can put to sea in a month, its traits and bought troopships adding to it. 'dated' rows change it by date, at every stop of the grand campaign and in every campaign: [turn, nation, added, why]. A row is read once, at the start of the first phase of that nation on or after its turn, so a campaign that opens later opens with it. 'techFrom' holds a technology's shipping back for a nation until a month: a nation that takes the technology earlier has the rest of it at once and the shipping from that month. The record's figures: America about 2 before December 1941 and 3 to 4 from January 1942 (the 34th Division to Northern Ireland, Task Force 6814 to New Caledonia, the convoys to Australia), so 2 from September 1939 and one more from turn 29; America's landing craft (Higgins boats and attack transports, first used at Guadalcanal in August 1942) come in 1942, not 1941, so the technology's shipping waits for turn 29 there. Norway's and Greece's merchant fleets sailed for the Allies and carried no force of their own (their traits now give 1, the record's busiest month: Norway's coastal steamers in the north, April-May 1940; the 5th Cretan Division to the mainland, November-December 1940), and Denmark moved no force by sea before the occupation (its trait gives none).",
+  "dated": [
+    [29, "USA", 1, "January 1942: the 34th Division to Northern Ireland, Task Force 6814 to New Caledonia, the convoys to Australia"]
+  ],
+  "techFrom": {
+    "landingcraft": { "USA": 29 }
+  }
+}

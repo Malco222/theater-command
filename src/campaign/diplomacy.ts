@@ -591,6 +591,14 @@ export function leavings(g: Game): { nation: string; grounds: string[] }[] {
   return out;
 }
 
+/** Ruling 233, rider b612: true while this country's leaving is in play and an enemy of its holds or stands on a ground its leaving event names. */
+export function leavingThreat(g: Game, nation: string): boolean {
+  return leavings(g).some((L) => L.nation === nation && L.grounds.some((nm) => {
+    const r = g.byName[nm];
+    return !!r && (atWar(g, nation, r.ctrl) || r.units.some((u) => !u.dead && u.kind !== 'fort' && atWar(g, nation, u.nat)));
+  }));
+}
+
 /** Tests one condition of an event, written as "key:arguments". */
 export function holds(g: Game, cond: string): boolean {
   const i = cond.indexOf(':');

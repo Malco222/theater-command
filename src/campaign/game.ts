@@ -11,13 +11,14 @@ import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { BUDGET, PRODUCTION, budgeted, canBuildYet, corpsName, deliver, farShare, firstCorpsNumber, gunsWanted, income, specOf, upkeepTotal } from './economy';
-import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, majorsOf, pcIncome, sneakOn, warDiplomacy, wouldSurprise } from './diplomacy';
+import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, leavingThreat, majorsOf, pcIncome, sneakOn, warDiplomacy, wouldSurprise } from './diplomacy';
 import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
 import { AIR, airOnFall, airUpkeep, bookCloseAir, closeEdge, closeOf, closeRules, closeStrikes, setupAir, skyByNumbers, skyOnLand, skyOver, type CloseAir } from './air';
 import { syncWings } from './carriers';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
+import { liftDates } from './lift';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { crown } from './domination';
 import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
@@ -3278,6 +3279,28 @@ function bookOnly(g: Game, nat: string, name: string): boolean {
   return !!list && nat !== g.human && list.stops.includes(stopOf(g)) && list.rows.some(([n, nm]) => n === nat && nm === name);
 }
 
+/**
+ * Ruling 233, rider b612 (4): the book's rows. At the book's stops of the history dial a computer's staff is sent the
+ * roster's dated formations for a scripted theatre's ground where the roster's 'book' list names its country and the
+ * ground's owner (Germany's for Italy, 1943: the moves into Italy are history's own, and at those stops the staff
+ * makes history's moves). Free play at the looser stops sends none of them, as before, and the player never: his army
+ * is his own business. By the record the moves answered the landing (Sicily, and Mussolini's fall): each row waits
+ * until the ground's owner has had its leaving in play with an enemy on one of the grounds its leaving event names
+ * (the ward's trigger, staff.ts), and then comes at its date, or at once if the date has passed. A quiet ally draws
+ * no corps from the other fronts.
+ */
+type BookRows = { stops: number[]; scripted: [string, string][]; from?: Record<string, string[]> };
+const BOOK = (setup as unknown as { book?: BookRows }).book;
+function bookRow(g: Game, nat: string, reg: Region | undefined): boolean {
+  return !!BOOK && !!reg && nat !== g.human && BOOK.stops.includes(stopOf(g)) && BOOK.scripted.some(([n, owner]) => n === nat && owner === reg.owner);
+}
+/** True while a book row still waits: the enemy has never yet stood on a ground its ally's leaving event names. The month he first does is kept. */
+function bookWaits(g: Game, owner: string): boolean {
+  const key = `book:${owner}`;
+  if (g.flags[key] === undefined && leavingThreat(g, owner)) g.flags[key] = g.turn;
+  return g.flags[key] === undefined;
+}
+
 /** True where the war an expedition row names is on: '*' as the second name is a war with anyone. */
 const warOn = (g: Game, w: string[]): boolean => (w[1] === '*' ? (g.nations[w[0]]?.atWar.length ?? 0) > 0 : atWar(g, w[0], w[1]));
 /** The month the war a row names began, by its declaration (the earliest, for '*'): this month where none was declared. */
@@ -3422,7 +3445,11 @@ export const struckWatch: { tell: ((e: { turn: number; due: number; nat: string;
 function expeditions(g: Game, nat: string): void {
   const gone: Corps[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
-    const o = bookOnly(g, nat, row[2]) ? { ...(row[6] ?? {}), hold: 1, stay: 1 } : row[6] ?? {};
+    const booked = g.flags.open === 1 && row[1] === nat && bookRow(g, nat, g.byName[row[5]]);
+    // (Nothing is counted twice, b609: a division the roster already names elsewhere is not added again. The corps that
+    // holds it, where it still lives, is broken up into the row: the book's 'from' list, read as a row's own.)
+    const o0 = booked && BOOK!.from?.[row[2]] ? { ...(row[6] ?? {}), from: [...(row[6]?.from ?? []), ...BOOK!.from[row[2]]] } : row[6] ?? {};
+    const o = bookOnly(g, nat, row[2]) ? { ...o0, hold: 1, stay: 1 } : o0;
     // (A country's own call-up counted from its war's start waits for no book month in the grand campaign: ruling 229, part 3.)
     const fromWar = g.flags.open === 1 && !!o.war && o.after !== undefined;
     if (row[1] !== nat || (!fromWar && g.turn < row[0])) return;
@@ -3453,7 +3480,7 @@ function expeditions(g: Game, nat: string): void {
       // Free play. An invasion force history put together for a landing of its own planning is nobody's to send.
       // A formation raised for a war waits for that war, however late it comes, and then has its half year.
       const k = reg ? THEATRE_OF.get(reg.name) ?? -1 : -1;
-      if (k >= 0 && THEATRE_LIST[k].scripted && row[0] >= (THEATRE_LIST[k].opens ?? 0)) return;
+      if (k >= 0 && THEATRE_LIST[k].scripted && row[0] >= (THEATRE_LIST[k].opens ?? 0) && (!booked || bookWaits(g, reg!.owner))) return;
       if (o.war) {
         if (!warOn(g, o.war)) return;
         // And it waits for its own country to be in that war: no army turns up in a war its country is not fighting.
@@ -3698,6 +3725,8 @@ export function startPhase(g: Game, nat: string): void {
   const n = g.nations[nat];
   fadeWorks(g, nat);
   if (!n.alive) return;
+  // Shipping by the record's dates (ruling 234, rider b630).
+  liftDates(g, nat);
   // Reinforcements from the pre-war mobilisation, and the armies and fronts formed later from men already under arms.
   for (const row of [...(setup as any).reinforcements, ...((setup as any).formations ?? [])]) {
     if (row[0] !== g.turn || row[1] !== nat) continue;

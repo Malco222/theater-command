@@ -408,8 +408,13 @@ describe('one war at the history stop, nobody playing', () => {
     // seed 22 tells the story in full: Calais and Rouen refuse America's corps in May 1944 and Calais again in June, and
     // the staff lands them in Brittany in June 1944, its only landing of the war. Seeds 18, 25, 27 and 29 are refused in
     // May 1944 but land in France that same month; seeds 21, 26 and 28 are first refused in July or August and land
-    // nowhere in France; the rest land in France before the summer or not at all. Seed 22 is the one used.)
-    const g = startOpen(createGame(22, null));
+    // nowhere in France; the rest land in France before the summer or not at all. Seed 22 until release 1's tree, whose
+    // Brenner line (rider b640) moved it again (the same war on the ship candidate with the sea lift alone still told
+    // it). Of seeds 17 to 30 on release 1's tree only seed 27 tells it: America's corps are refused on the mainland of
+    // France in May 1944 and land at Rouen in June, its only first wave of that summer. Seeds 17, 18, 23, 26, 29 and 30
+    // are refused but land in France that same month; 19, 20, 24, 25 and 28 put no first wave ashore in the summer of
+    // 1944, and 21 lands in Liguria unrefused. Seed 27 is the one used.)
+    const g = startOpen(createGame(27, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
     const refused = new Set<number>();

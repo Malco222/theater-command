@@ -141,8 +141,12 @@ export function startOpen(g: Game, wide = true): Game {
     g.flags['st:on:GER:POL'] = 1;
     g.flags['st:gain:GER'] = 1;
   }
-  // (Begun after the first day: the rows whose men history's corps already brought do not come again.)
-  else carriedRows(g);
+  // (Begun after the first day: the rows whose men history's corps already brought do not come again. The month it
+  // opens is kept: its navies, the player's included, open with the record's ships of that month, rider b639.)
+  else {
+    carriedRows(g);
+    g.flags.openFrom = g.turn;
+  }
   startEngineers(g);
   openTraits(g);
   openTech(g);
