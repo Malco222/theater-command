@@ -1,13 +1,14 @@
 // After his start a player's navy reads one kind of the history dial's rows: a ship coming onto the chart from off it,
 // once (the design director's note of 15:52Z on ruling 234 rider b639). A player cannot order a ship that is off the
-// map, so she comes to him on her row's date at her row's fleet: the Renown, the Enterprise, and the Glorious's return
-// where his start sent her off the chart. A ship whose leaving falls after his start stays with him, so her return is
-// not read for him and she is never counted twice. Moves, departures and rows standing in for a plain row he reads are
-// never his. The computer's navies read the dial as before.
+// map, so she comes to him on her row's date at her row's fleet: the Eagle; the Enterprise and the Renown where his
+// start formed Force H by its book (formed by its plain row, it has them already); the Glorious's return where his start
+// sent her off the chart. A ship whose leaving falls after his start stays with him, so her return is not read for him
+// and she is never counted twice. Moves, departures and rows standing in for a plain row he reads are never his. The
+// computer's navies read the dial as before.
 import { describe, expect, it } from 'vitest';
 import { createGame, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
-import { navalUpkeep } from '../src/campaign/navy';
+import { NAVY, navalUpkeep } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
@@ -26,9 +27,10 @@ const fleet = (g: Game, name: string): Fleet => g.fleets.find((f) => f.nat === '
 /** The navy's month alone, turn by turn up to `to`. */
 const upTo = (g: Game, to: number): void => { while (g.turn < to) { g.turn++; navalUpkeep(g, 'UK'); } };
 const MED = 'Mediterranean Fleet';
+const FORCE_H = NAVY.fleets.find((f) => f.nat === 'UK' && f.name === 'Force H')!.ships;
 
 describe("a player's navy after his start: ships coming onto the chart, once (the director's note of 15:52Z on b639)", () => {
-  it("Britain from the first day at stop 1: the Eagle, the Enterprise and the Renown come; no move, departure or stand-in is read", () => {
+  it("Britain from the first day at stop 1: the Eagle comes; Force H forms with its row's ships; no move, departure or stand-in is read", () => {
     const g = startOpen(createGame(5, 'UK'));
     setStop(g, 1, true);
     const med = fleet(g, MED).ships.cv, home = { ...fleet(g, 'Home Fleet').ships };
@@ -48,14 +50,12 @@ describe("a player's navy after his start: ships coming onto the chart, once (th
     upTo(g, 10);
     expect([g.flags['arr:10:UK:Force H<Home Fleet'], g.flags['arr:10:UK:Home Fleet']]).toEqual([undefined, undefined]);
     expect(fleet(g, 'Home Fleet').ships).toMatchObject({ bb: home.bb, cv: home.cv + 1 });
-    // Turns 11 and 12: Force H forms by its own row; the Enterprise and two destroyers, then the Renown, join it.
-    upTo(g, 11);
-    const h = { ...fleet(g, 'Force H').ships };
-    expect(g.flags['arr:11:UK:Force H']).toBe(11);
+    // Turns 11 and 12: Force H forms by its own row, with its row's ships, the Enterprise and the Renown among them; the
+    // book's rows that bring them are not read for him, so neither is counted twice.
     upTo(g, 12);
-    expect(g.flags['arr:12:UK:Force H']).toBe(12);
-    expect(g.flags['arr:12:UK:Home Fleet<Force H']).toBeUndefined();
-    expect(fleet(g, 'Force H').ships.bb).toBe(Math.min(3, h.bb + 1));
+    expect([g.flags['arr:11:UK:Force H'], g.flags['arr:12:UK:Force H'], g.flags['arr:12:UK:Home Fleet<Force H']]).toEqual([undefined, undefined, undefined]);
+    expect(g.flags['bk:UK:Force H']).toBeUndefined();
+    expect(fleet(g, 'Force H').ships).toMatchObject(FORCE_H);
     // Turn 19: the Formidable's dated row stands in for her plain row of turn 16, which the player read: never his,
     // even with a carrier gone from the fleet.
     upTo(g, 18);
@@ -68,6 +68,21 @@ describe("a player's navy after his start: ships coming onto the chart, once (th
     // Turns 20 and 30: the Eagle does not leave his Mediterranean Fleet, so her return to Force H is not his either.
     upTo(g, 30);
     expect([g.flags['arr:20:UK:Mediterranean Fleet'], g.flags['arr:30:UK:Force H']]).toEqual([undefined, undefined]);
+  });
+
+  it("begun in June 1940: Force H forms by its book at his start, so the Enterprise and the Renown come to him, each once", () => {
+    const g = later(10, 1, 'UK');
+    expect(g.flags['bk:UK:Force H']).toBe(10);
+    // The start month: the book's Force H, with the Hood and the Valiant from the Home Fleet.
+    const h = { ...fleet(g, 'Force H').ships };
+    expect(h).toMatchObject({ bb: 3, cv: 1, ca: 1 });
+    upTo(g, 12);
+    expect([g.flags['arr:11:UK:Force H'], g.flags['arr:12:UK:Force H']]).toEqual([11, 12]);
+    // The Hood and the Valiant are his to keep or send: the Renown comes beside them, no cap on her.
+    expect([g.flags['arr:12:UK:Home Fleet<Force H'], g.flags['arr:13:UK:Mediterranean Fleet<Force H']]).toEqual([undefined, undefined]);
+    expect(fleet(g, 'Force H').ships).toMatchObject({ bb: h.bb + 1, ca: h.ca + 1, dd: h.dd + 2 });
+    upTo(g, 14);
+    expect(fleet(g, 'Force H').ships).toMatchObject({ bb: h.bb + 1, ca: h.ca + 1, dd: h.dd + 2 });
   });
 
   it("begun in November 1939: the start sent the Glorious to the Indian Ocean, so she comes back to the player in turn 5", () => {
