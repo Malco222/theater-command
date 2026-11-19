@@ -37,6 +37,7 @@ import { followUp, reckon } from './ashore';
 import { WORLD } from './world';
 import { allied, atWar } from './game';
 import { alongside } from './stations';
+import { byHand } from './depth';
 
 /** What the test reads in one month. */
 export interface Readiness {
@@ -171,4 +172,36 @@ export function readinessMonth(g: Game, nat: string): void {
   else { struck = monthly(g, nat, R.choice, 'ready', g.turn) < R.chance; why = struck ? 'ready, and the draw for it' : 'ready, and the draw against it'; }
   if (struck) g.flags[R.flag] = g.turn;
   readyWatch.tell?.({ ...now, nat, turn: g.turn, struck, why });
+}
+
+/** The month a player's admirals gathered his striking fleet (below), or -1 once that gathering is over. */
+const GATHERED = 'pac:gathered';
+
+/**
+ * The gathering for a player's Japan whose staff runs his navy, where no book dates the strike (rider b641 (b) to
+ * ruling 234; the director, 15:58Z of 19 November 2026). His admirals read the freeze as the computer's do: from
+ * the second month after it the striking fleet lies at the anchorage its strike is flown from. They gather no longer
+ * than the computer's would: once the window's last month has passed with no war on the country whose harbour the
+ * plan names, they stand down, and the fleet comes home as it would from the strike. His own hand on the navy's desk
+ * ends it at once and the fleet is his where it lies; so does the war come. A later declaration gets the strike only
+ * if the force is in reach then (carriers.ts, `plannedStrike`). Nothing is read for a computer's Japan (its own test
+ * gathers it, above), for any other country, where the book dates the choice (the record's dated rows gather it:
+ * navy.ts), or with the far side off.
+ */
+export function gatherMonth(g: Game, nat: string): void {
+  const R = readyRules(g), freeze = freezeAt(g);
+  if (!R || !freeze || nat !== PACIFIC!.power || nat !== g.human || !g.nations[nat]?.alive || g.flags[GATHERED] === -1) return;
+  const op = ops(nat).find((o) => o.id === R.choice), s = op?.strikes?.[0];
+  const target = s ? g.byName[s.harbour] : undefined;
+  if (!op || !s || !target || leash(g, nat, op.id).kind !== 'free') return;
+  const began = g.flags[GATHERED] !== undefined;
+  if (byHand(g, nat, 'navy') || atWar(g, nat, target.ctrl)) { if (began) g.flags[GATHERED] = -1; return; }
+  const f = fleetsOf(g, nat).find((x) => x.name === R.gather.fleet);
+  const there = (): boolean => !!f && g.regions[f.base]?.name === R.gather.base;
+  const m = g.turn - freeze;
+  if (m > R.window[1]) {
+    if (began) { if (f && s.home && there()) orderedTo(g, f, s.home); g.flags[GATHERED] = -1; }
+    return;
+  }
+  if (m >= R.gather.after && f && (orderedTo(g, f, R.gather) || there())) g.flags[GATHERED] ??= g.turn;
 }

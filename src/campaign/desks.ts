@@ -28,6 +28,7 @@ import { landingForce } from './staff';
 import { staysOut } from './history';
 import { shoreAI } from './fleets';
 import { seaStaff } from './carriers';
+import { gatherMonth } from './readiness';
 import { STACK, type AirReport, type Build, type Game, type Nation, type Region } from './types';
 
 const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
@@ -433,6 +434,8 @@ function runDesk(g: Game, nat: string, desk: DeskId): void {
 export function staffMonth(g: Game): void {
   const nat = g.human;
   if (!depthRules(g) || nat === null || !g.nations[nat]?.alive) return;
+  // (The far side: where no book dates Japan's strike, his admirals gather the striking fleet by the freeze, as the computer's do. readiness.ts.)
+  gatherMonth(g, nat);
   for (const desk of ORDER) if (staffRuns(g, nat, desk) && !deskRan(g, desk)) runDesk(g, nat, desk);
   crossingReport(g, nat);
 }

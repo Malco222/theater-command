@@ -15,7 +15,9 @@ import { setDesk } from '../src/campaign/depth';
 import { monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { atWar, capitulate, createGame, declareWar, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
+import { staffMonth } from '../src/campaign/desks';
 import { navalUpkeep } from '../src/campaign/navy';
+import { gatherMonth } from '../src/campaign/readiness';
 import { ops, startOpen } from '../src/campaign/staff';
 import { declarable, orderDeclare } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
@@ -132,5 +134,90 @@ describe("a player's Japan: the strike on Pearl Harbor", () => {
     expect(orderDeclare(g, 'USA')).toBe(true);
     expect(news(g, 28, 'raid Pearl Harbor')).toBe(false);
     expect(hulls(pacific)).toBe(afloat);
+  });
+});
+
+describe("a player's Japan where no book dates the strike: his admirals gather by the freeze (rider b641 (b) to ruling 234)", () => {
+  /** Japan's seat at a loose stop of the dial, the freeze come in July 1941 (turn 23). */
+  const frozen = (staff: boolean, human: string | null = 'JAP', stop = 3): Game => {
+    const g = war(stop, 23, human);
+    if (human) setDesk(g, 'navy', staff);
+    g.flags['pac:freeze'] = 23;
+    return g;
+  };
+  const month = (g: Game, t: number): void => { g.turn = t; gatherMonth(g, 'JAP'); };
+
+  it("from the second month after the freeze the striking force lies at Hitokappu Bay, and it stands down when the window's sixth month has passed", () => {
+    const g = frozen(true);
+    const force = fleet(g, 'JAP', 'Mobile Fleet'), was = base(g, force);
+    expect(was).not.toBe('Etorofu');
+    month(g, 24);
+    expect(base(g, force)).toBe(was);
+    month(g, 25);
+    expect([base(g, force), force.port]).toEqual(['Etorofu', 'Hitokappu Bay']);
+    expect(news(g, 25, 'gathers at Hitokappu Bay')).toBe(true);
+    // It lies there through the sixth month after the freeze, the last the computer's own staff could wait.
+    for (const t of [26, 27, 28, 29]) { month(g, t); expect(base(g, force), `turn ${t}`).toBe('Etorofu'); }
+    // No war on America by then: the admirals stand down, and the force comes home as it would from the strike.
+    month(g, 30);
+    expect([base(g, force), force.port]).toEqual(['Hiroshima', 'Kure']);
+    expect(news(g, 30, 'comes home to Kure')).toBe(true);
+    // And it does not gather again.
+    for (const t of [31, 32]) { month(g, t); expect(base(g, force)).toBe('Hiroshima'); }
+  });
+
+  it('gathered, the plan\'s strike is flown as he declares, and the gathering is over', () => {
+    const g = december(3, true);
+    g.flags['pac:freeze'] = 24;
+    const force = fleet(g, 'JAP', 'Mobile Fleet');
+    gatherMonth(g, 'JAP');
+    expect(base(g, force)).toBe('Etorofu');
+    const pacific = fleet(g, 'USA', 'Pacific Fleet');
+    const afloat = hulls(pacific);
+    expect(orderDeclare(g, 'USA')).toBe(true);
+    expect(news(g, 28, 'raid Pearl Harbor without warning')).toBe(true);
+    expect(hulls(pacific)).toBeLessThan(afloat);
+    expect(base(g, force)).toBe('Hiroshima');
+    // The war come, nothing more is gathered or stood down.
+    for (const t of [29, 30, 31]) { month(g, t); expect(base(g, force)).toBe('Hiroshima'); }
+  });
+
+  it("his own hand on the navy's desk ends it at once: the fleet is his where it lies, and it is not gathered or brought home again", () => {
+    const g = frozen(true);
+    const force = fleet(g, 'JAP', 'Mobile Fleet');
+    month(g, 25);
+    expect(base(g, force)).toBe('Etorofu');
+    setDesk(g, 'navy', false);
+    month(g, 26);
+    setDesk(g, 'navy', true);
+    for (const t of [27, 28, 29, 30, 31]) { month(g, t); expect(base(g, force), `turn ${t}`).toBe('Etorofu'); }
+  });
+
+  it('where he runs the navy himself nothing is moved; handed to his staff inside the window, they gather then', () => {
+    const g = frozen(false);
+    const force = fleet(g, 'JAP', 'Mobile Fleet'), was = base(g, force);
+    for (const t of [24, 25, 26]) { month(g, t); expect(base(g, force)).toBe(was); }
+    setDesk(g, 'navy', true);
+    month(g, 27);
+    expect(base(g, force)).toBe('Etorofu');
+    // Handed over only after the window, nothing is gathered.
+    const late = frozen(false);
+    const other = fleet(late, 'JAP', 'Mobile Fleet'), lay = base(late, other);
+    setDesk(late, 'navy', true);
+    for (const t of [30, 31]) { month(late, t); expect(base(late, other)).toBe(lay); }
+  });
+
+  it("it is read as his staff's month opens, and for nobody else: not the computer's Japan, another player's seat, or where the book dates the strike", () => {
+    const g = frozen(true);
+    const force = fleet(g, 'JAP', 'Mobile Fleet');
+    g.turn = 25;
+    staffMonth(g);
+    expect(base(g, force)).toBe('Etorofu');
+    for (const other of [frozen(true, null), frozen(true, 'USA'), frozen(true, 'JAP', 1)]) {
+      const f = fleet(other, 'JAP', 'Mobile Fleet'), was = base(other, f);
+      month(other, 25);
+      expect(base(other, f)).toBe(was);
+      expect(other.flags['pac:gathered']).toBeUndefined();
+    }
   });
 });

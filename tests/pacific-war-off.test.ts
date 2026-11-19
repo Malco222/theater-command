@@ -14,7 +14,7 @@ import { AIR, airQuality, airRange, airUpkeep } from '../src/campaign/air';
 import { ARSENAL, smallAirMonth } from '../src/campaign/arsenal';
 import airData from '../data/campaign/air.json';
 import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind, keepersOf, keptForces, mayDemand, pacificGround, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds, readyRules, shoreLift, skiesOn, skiesOver } from '../src/campaign/pacific';
-import { readiness, readinessMonth } from '../src/campaign/readiness';
+import { gatherMonth, readiness, readinessMonth } from '../src/campaign/readiness';
 import { FAR_STAGE } from '../src/campaign/stage';
 import { freed, ops, startOpen } from '../src/campaign/staff';
 import { alongside, bookAttacks, bookFleets, bookStations, ceilinged, goesWith, ridersOf, riding, stations, stationsBind } from '../src/campaign/stations';
@@ -314,6 +314,20 @@ describe('home ground that answers a landing from the sea (rider b641 (f) to rul
     addCorps(g, 'GER', 'Test landing corps', 'inf', 1, coast.id, {});
     addCorps(g, 'UK', 'Test home division', 'inf', 1, coast.id, { hold: 1 });
     for (const n of Object.keys(g.nations)) expect(answering(g, n), n).toEqual([]);
+  });
+});
+
+describe("a player's striking fleet gathered by the freeze (rider b641 (b) to ruling 234) with the far side off", () => {
+  it('nothing is read: no fleet is moved and nothing is remembered, whoever plays and whatever the flags say', () => {
+    for (const human of ['GER', 'UK', 'ITA']) {
+      const g = startOpen(createGame(3, human));
+      g.flags['pac:freeze'] = 1;
+      g.turn = 4;
+      const was = g.fleets.map((f) => [f.id, f.base, f.zone, f.stance]);
+      for (const n of Object.keys(g.nations)) gatherMonth(g, n);
+      expect(g.fleets.map((f) => [f.id, f.base, f.zone, f.stance])).toEqual(was);
+      expect(g.flags['pac:gathered']).toBeUndefined();
+    }
   });
 });
 
