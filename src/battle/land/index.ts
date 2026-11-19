@@ -5,5 +5,6 @@ export * from './sim';
 export * from './ai';
 export * from './ticket';
 export * from './sample';
+export * from './stream';
 export * from './offered';
 export * from './crews';

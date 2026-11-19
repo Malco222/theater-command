@@ -1,7 +1,8 @@
 // The 3D game's doorway to the field battles (unreal/TheaterCommand/Rules/battle-bridge.ts): a real campaign attack
 // fought through it, the way the game will call it, and settled through the campaign's own attack order.
 import { describe, expect, it } from 'vitest';
-import { battleCalls } from '../unreal/TheaterCommand/Rules/battle-bridge';
+import { battleCalls, unitOut } from '../unreal/TheaterCommand/Rules/battle-bridge';
+import { practiceTicket, PRACTICE_GROUNDS, LandBattle } from '../src/battle/land';
 import { newCampaign, offers } from '../src/battle/ui/campaign';
 import { attackOutlook, orderAttack } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
@@ -33,6 +34,17 @@ describe('the battle doorway for the 3D game', () => {
     const u = (st.view.units as { side: string; loop: string; figures0: number }[]).find((x) => x.side === 'att')!;
     expect(u.figures0).toBeGreaterThan(0);
     expect(typeof u.loop).toBe('string');
+  });
+  it('a fight is its shots and beds: no block plays a fight loop, but men fighting among buildings get the street battle', () => {
+    const b = new LandBattle(practiceTicket(PRACTICE_GROUNDS[0], { seed: 7, humanAtt: true }));
+    const foot = b.units.find((u) => u.kind === 'inf')!, tank = b.units.find((u) => u.kind === 'arm'), gun = b.units.find((u) => u.kind === 'art');
+    foot.act = 'fight'; foot.cover = 'open';
+    expect(unitOut(foot).loop).toBe('');
+    foot.cover = 'buildings';
+    expect(unitOut(foot).loop).toBe('street_battle');
+    expect((unitOut(foot).drops as { takes: string[] }).takes).toEqual(['mg_town_01', 'mg_town_02', 'mg_town_03']);
+    if (tank) { tank.act = 'fight'; tank.cover = 'open'; expect(unitOut(tank).loop).toBe('tank_idle_loop'); }
+    if (gun) { gun.act = 'fight'; gun.cover = 'buildings'; expect(unitOut(gun).loop).toBe(''); expect((unitOut(gun).drops as { takes: string[] }).takes[0]).toBe('far_guns_01'); }
   });
   it('a defence the card did not know comes as plain stands until his blocks have fought it (b464(2))', () => {
     const { g, TC } = rig();
@@ -81,5 +93,29 @@ describe('the battle doorway for the 3D game', () => {
     expect(fought).toEqual([v.over!.R]);
     expect(out.report!.odds).toBeCloseTo(v.over!.R);
     expect(() => TC.battleView()).toThrow();
+  });
+  it('says why an army broke: each bar\'s cause in the view, and the same at the break in the event, the result and the end (b496(2))', () => {
+    const { g, TC } = rig();
+    const o = offers(g)[0];
+    const st = TC.battleStart(o.corps.map((c) => c.id), o.target.id)!;
+    const units = st.view.units as { id: number; side: string }[];
+    TC.battleOrder({ do: 'attack', units: units.filter((x) => x.side === 'att').map((x) => x.id), target: units.find((x) => x.side === 'def')!.id });
+    TC.battleSpeed(4);
+    type Cause = { side: string; bar: number; by: string };
+    type View = { over: { broke?: string; brokeBy?: Cause } | null; events: { what: string; brokeBy?: Cause }[]; breaking: Record<string, number>; breakingBy: Record<string, Cause> };
+    let v = st.view as unknown as View;
+    expect(v.breakingBy.att.side).toBe('att');
+    const said: View['events'] = [];
+    for (let i = 0; i < 200 && !v.over; i++) {
+      v = TC.battleTick(1) as unknown as View;
+      said.push(...v.events);
+      for (const s of ['att', 'def']) expect(v.breakingBy[s].bar).toBeCloseTo(v.breaking[s], 3);
+    }
+    const why = v.over!.brokeBy!;
+    expect(why.side).toBe(v.over!.broke);
+    expect(why.bar).toBe(1);
+    expect(said.find((e) => e.what === 'broken')!.brokeBy).toEqual(why);
+    expect(v.breakingBy[why.side]).toEqual(why);
+    expect((TC.battleEnd() as { brokeBy?: Cause }).brokeBy).toEqual(why);
   });
 });

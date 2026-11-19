@@ -33,7 +33,7 @@ export const LAND = {
    * the quickest fights under a minute and a half.
    */
   rate: 0.00125,
-  /** Blows struck on the march, and by a block that is wavering. */
+  /** Blows struck on the march, or on a block giving ground at the brink (b496(1)), and by a block that is wavering. */
   moving: 0.4,
   wavering: 0.7,
   /** Guns: their share against what they hit, the extra they take off nerve, and what they can do when the enemy is on top of them. */
@@ -48,20 +48,20 @@ export const LAND = {
    * prices, the field draws but never prices again). Counted twice, the plain attack carried 23 points less often than
    * the card said in the campaign's dug-in battles, four in five of all it fights; counted once it lands within 3 (b407).
    */
-  cover: { open: 1, field: 0.95, woods: 0.7, rough: 0.85, marsh: 1, water: 1.25, road: 1.05, bridge: 1.2, buildings: 0.55, rock: 0.75, bunker: 0.4, works: 1, blown: 1.25 } as Record<Ground, number>,
+  cover: { open: 1, field: 0.95, woods: 0.7, rough: 0.85, marsh: 1, water: 1.25, road: 1.05, bridge: 1.2, buildings: 0.55, rock: 0.75, bunker: 0.4, works: 1, blown: 1.25, suburb: 0.75, industry: 0.6, park: 0.9 } as Record<Ground, number>,
   pace: {
-    foot: { open: 1, field: 0.9, woods: 0.6, rough: 0.7, marsh: 0.35, water: 0.35, road: 1.1, bridge: 1, buildings: 0.7, rock: 0.4, bunker: 0.5, works: 0.8, blown: 0.15 },
-    wheels: { open: 0.9, field: 0.8, woods: 0.3, rough: 0.4, marsh: 0, water: 0, road: 1.5, bridge: 1.2, buildings: 0.5, rock: 0, bunker: 0, works: 0.5, blown: 0 },
-    tracks: { open: 1, field: 0.9, woods: 0.4, rough: 0.6, marsh: 0.12, water: 0, road: 1.3, bridge: 1, buildings: 0.5, rock: 0, bunker: 0, works: 0.6, blown: 0 },
-    guns: { open: 1, field: 0.9, woods: 0.4, rough: 0.5, marsh: 0.15, water: 0, road: 1.4, bridge: 1, buildings: 0.6, rock: 0, bunker: 0, works: 0.7, blown: 0 },
-    fixed: { open: 0, field: 0, woods: 0, rough: 0, marsh: 0, water: 0, road: 0, bridge: 0, buildings: 0, rock: 0, bunker: 0, works: 0, blown: 0 },
+    foot: { open: 1, field: 0.9, woods: 0.6, rough: 0.7, marsh: 0.35, water: 0.35, road: 1.1, bridge: 1, buildings: 0.7, rock: 0.4, bunker: 0.5, works: 0.8, blown: 0.15, suburb: 0.85, industry: 0.75, park: 1 },
+    wheels: { open: 0.9, field: 0.8, woods: 0.3, rough: 0.4, marsh: 0, water: 0, road: 1.5, bridge: 1.2, buildings: 0.5, rock: 0, bunker: 0, works: 0.5, blown: 0, suburb: 0.7, industry: 0.55, park: 0.85 },
+    tracks: { open: 1, field: 0.9, woods: 0.4, rough: 0.6, marsh: 0.12, water: 0, road: 1.3, bridge: 1, buildings: 0.5, rock: 0, bunker: 0, works: 0.6, blown: 0, suburb: 0.75, industry: 0.55, park: 0.95 },
+    guns: { open: 1, field: 0.9, woods: 0.4, rough: 0.5, marsh: 0.15, water: 0, road: 1.4, bridge: 1, buildings: 0.6, rock: 0, bunker: 0, works: 0.7, blown: 0, suburb: 0.75, industry: 0.6, park: 0.95 },
+    fixed: { open: 0, field: 0, woods: 0, rough: 0, marsh: 0, water: 0, road: 0, bridge: 0, buildings: 0, rock: 0, bunker: 0, works: 0, blown: 0, suburb: 0, industry: 0, park: 0 },
   } as Record<Motion, Record<Ground, number>>,
   /**
    * Tanks are blind in the streets: what they strike and what they take there. Not in woods: the card prices tanks in
    * forest and on hills already (the campaign's ground rules), so the field draws them slow there but never prices them
    * again (b418). Priced twice, the panzers at Sedan carried the Meuse 21 points less often than their card said.
    */
-  tanksClose: { punch: 0.6, take: 1.3, ground: ['buildings'] as Ground[] },
+  tanksClose: { punch: 0.6, take: 1.3, ground: ['buildings', 'industry'] as Ground[] },
   /** Metres a second two blocks standing in each other's ground are eased apart, and the metres enemies keep between their fronts. */
   spread: 4,
   apart: 10,
@@ -95,9 +95,33 @@ export const LAND = {
    * under that. 'river' 1.51 to 1.5 for b439, once blocks at a bridge made way for each other rather than shove at its
    * foot to a standstill (Sedan's panzers ran out the clock there one fight in eleven). 1.4 to 1.3 for b464(5), once foot
    * waded out of the river at the wading pace instead of crawling up its bank under fire: the practice river and the
-   * telling odds behind a river land where they did (+5 and 0 against +6 and -2, the tests' seeds).
+   * telling odds behind a river land where they did (+5 and 0 against +6 and -2, the tests' seeds). 1.3 to 1.2, and
+   * counted only as far as the attack's tanks and lorries cross, for b494: a river is only ever a cost, so every river
+   * attack lands at or below the same attack with no river. Men on foot cross the field's rivers at no cost the field
+   * needs to make up (the campaign's river attacks on foot, with no hold, land level with their no-river twins), while
+   * an attack whose armour must cross pays dearly at the bridges; 1.3 lifted the telling odds 7.5 points and the
+   * practice river 5 over their no-river twins, 1.2 leaves them level (+0.6) and below (-5.8).
    */
-  hold: { take: { plains: 0.97, forest: 1.035, hills: 0.99, mountain: 1.12, marsh: 1.32, urban: 1.025, desert: 1.045 } as Record<string, number>, within: 300, river: 1.3, works: [1, 1.02, 1.06, 1.07] },
+  hold: {
+    take: { plains: 0.97, forest: 1.035, hills: 0.99, mountain: 1.12, marsh: 1.32, urban: 1.025, desert: 1.045 } as Record<string, number>, within: 300, river: 1.2, works: [1, 1.02, 1.06, 1.07],
+    // A capital's and a city's streets (field.ts streetsOf): the card prices the place's ground, not the cover of its
+    // houses, so the field takes that cover back off the held defence (b418; b511). With none, cities fell 4 points
+    // under the card and capitals 17, most to the clock. A kind of ground may have its own, else the size's (b515(f)):
+    // capital 1.1 is the plains capital's fit (48 attacks, captured and hand-made), and the hills' and forest's; an
+    // urban capital's core is deepest; a mountain capital, a desert city and a marsh city hold on their own ground.
+    // Fitted 18 November, 10 fights each, on 555 capital and city attacks captured from the campaign and hand-made on
+    // every kind of ground: capitals -1.0 against the card, cities +0.2, every kind within a tenth (furthest: plains
+    // cities captured -9.5, plains capitals captured +9.0 on 8); the practice city +2.0; every other place unchanged.
+    // Next (b515(g)): a city's clock follows its built share, and these come back toward 1.
+    streets: { city: 1.05, capital: 1.1, 'urban capital': 1.5, 'mountain capital': 1, 'desert city': 1, 'marsh city': 1 } as Record<string, number>,
+    // A city's own river up the field beside the heart (b526): where the whole defence stands on one bank its line ends
+    // on the river, a flank the attack cannot turn, and the card never priced the river, so the field takes that back
+    // off the held defence too. An army broad enough to stand on both banks has no such flank. Fitted 19 November, 10
+    // fights each on the 555 capital and city attacks with a river forced up every field the card left dry: 1 cost the
+    // attack 2.2 points (mountain cities at close odds 10.7); 1.06 leaves it -0.1 against the same attacks with no river,
+    // every kind within a tenth both ways (furthest: plains cities at close odds -6.7), fewer fights to the clock.
+    stream: 1.06,
+  },
   /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
   dug: { keep: 30 },
   nerve: {
@@ -143,6 +167,8 @@ export const LAND = {
    * its card, and at six blocks the hills-and-works practice ground 10 (the design director, b476(1) and b480; 356
    * campaign attacks and the nine practice grounds, 18 November). Never a defence behind fortress works or in a fort,
    * whose works the card prices already (b488: Verdun's three divisions behind works ran 8.6 points under their card).
+   * Held there, such an army's blocks no longer fresh give ground rather than stand to be ground down (the design
+   * director, b496(1): fought out, the Libyan Group at Mechili booked 1.27 of the staff's bill; now 1.06).
    */
   fresh: { str: 0.9, upTo: 5 },
   /**
@@ -175,6 +201,48 @@ export const LAND = {
   press: 600,
   /** Seconds of battle time before the defender is counted as having held. */
   limit: 360,
+  /**
+   * A capital's or a city's streets (field.ts layCity, streetsOf). inside: the metres inside the ragged edge of its core
+   * that the defence's line stands, in the outer streets and never in front of the city (the design director, b529).
+   * clock: a city's day is longer by this share of its field that is built (b515(g)): limit * (1 + clock * built), so
+   * the march in through the streets and the fight in them do not end on the clock. Measured with the line inside the
+   * edge over 555 city and capital fields x 10 seeds (b529's bars: every kind within a tenth of its card, close odds
+   * too, and none on the clock more than 1 fight in 10): 0.15 holds both, the widest forest cities at close odds +8.9
+   * and marsh cities at close odds 8.7% on the clock; 0.25 and 0.5 put the forest and marsh cities' close odds over
+   * a tenth, 0 put marsh and mountain cities on the clock 1 fight in 8.
+   */
+  city: { inside: 100, clock: 0.15 },
   /** The computer general thinks once a second. */
   think: 1,
+  /**
+   * Air support (Brian, 2026-11-18 18:58Z; the design director, b533): a side's fighters on call strike when called,
+   * the card having counted them already. While a side has strikes left, its blows hold back the card's share for them
+   * (SideTicket.air.share), owed to the block each fell on; a strike pays what is owed where its run lands (sim.ts,
+   * "Air support"). Seconds are battle time, metres field metres.
+   *   first, every: the first strike is ready this long after the armies meet, each next this long after the last call.
+   *   wait: a strike left ready this long, the staff call it themselves, for either side (b533(c): the enemy's too,
+   *     never aimed sharper).
+   *   eta: from the call to the run; speed: metres a second the flight flies, so the run takes its length over it;
+   *     out: seconds it is seen pulling away after the run.
+   *   len, minRun, wide: the run's longest and shortest, and the strip its guns rake, each side of its line half of it.
+   *   near: pointed at a place, the run takes the frontage of the enemy block nearest it within this.
+   *   close: no gun fires within this of the caller's own men; a run with less than 'least' of its line clear is refused.
+   *   armour: tanks take this much of a strafing run (guns made for men in the open).
+   *   nerve: the run's weight on nerve, as a blow from the front.
+   *   alt, low: the flight's height coming in and on the run, metres (pictures only). models: planes in a flight;
+   *     legs: the staff's strike splits into pairs, a pair down the frontage of each of the blocks owed most.
+   *   toss: seconds from a bomb let go to its burst ('land:bomb-drop' then the 'shell'), pictures only.
+   *   bombs: how many fall on the run's far third, pictures only (b533(f)): from the nation's first year of
+   *     fighter-bombers, before it the run strafes alone. bombsFrom: that year by nation, '_' for every other, from the
+   *     historian's list (/mnt/project-files/historian/fighter-bombers.md, 19:35Z): Germany from the Balkans and Russia,
+   *     1941; Britain and America 1942; the Soviets from June 1941 (the certain date); Italy 1941; Japan 1943; France
+   *     only with the Free French, 1943; Poland never in 1939; the generic fighter 1942.
+   */
+  air: {
+    first: 40, every: 40, wait: 20, eta: 12, speed: 120, out: 6,
+    len: 400, minRun: 100, wide: 60, near: 300, close: 60, least: 0.3, armour: 0.6, nerve: 1,
+    alt: 150, low: 60, models: 4, legs: 2,
+    bombs: 2, toss: 1.5,
+    bombsFrom: { GER: 1941, UK: 1942, USA: 1942, SOV: 1941, ITA: 1941, JAP: 1943, FRA: 1943, POL: 9999, _: 1942 } as Record<string, number>,
+  },
 };

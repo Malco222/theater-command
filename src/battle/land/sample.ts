@@ -6,14 +6,20 @@ import { combinedArms, groundAttack, groundDefence, isFoot } from '../../campaig
 import { ENGINEERING } from '../../campaign/rivers';
 import { antiTank, snipedIn, tollFor, tollOf, type Facing } from '../../campaign/support';
 import { FORT_MUL, KIND, TERRAIN_DEF, type Corps, type Game, type Kind, type Region } from '../../campaign/types';
-import type { FieldTicket, ForceTicket, Side, SideTicket } from '../core/types';
+import type { AirOnCall, FieldTicket, ForceTicket, Side, SideTicket } from '../core/types';
 import type { LandPlace, Terrain } from './field';
 import { LAND } from './rules';
 
 const force = (corps: number, name: string, nat: string, kind: string, divs: number, share: number, dug = false, first = 1, str = 0.9): ForceTicket =>
   ({ corps, name, nat, kind, divs, men: divs * 15000 * str, str, org: 0.85, xp: 0.3, mor: 0.65, share, dug, first });
 
-export interface SampleOpts { river?: boolean; bridgeDown?: boolean; fort?: number; dug?: boolean; town?: LandPlace['townSize']; seed?: number; humanAtt?: boolean; title?: string }
+export interface SampleOpts {
+  river?: boolean; bridgeDown?: boolean; fort?: number; dug?: boolean; town?: LandPlace['townSize']; seed?: number; humanAtt?: boolean; title?: string;
+  /** Fighters on call over the field, by side (air support): left out, none. */
+  air?: Partial<Record<Side, AirOnCall>>;
+  /** The ticket's date, 'September 1939' where not said: the year the fighters fly in, and whether they carry bombs. */
+  date?: string;
+}
 
 /** A corps of a hand-made army: its name, kind, divisions, share of its side's strength, and its first division's number. */
 type Corps5 = [string, Kind, number, number, number];
@@ -38,13 +44,15 @@ function made(terrain: Terrain, reckoning: FieldTicket<LandPlace>['reckoning'], 
   const att: SideTicket = {
     nat: 'RED', adj: 'Your', color: '#7d6a4f', human: !!o.humanAtt, general: { name: 'General Hale', level: 2 },
     forces: ATT.map(([name, kind, divs, share, first], i) => force(attId(i), name, 'RED', kind, divs, share, false, first)),
+    ...(o.air?.att ? { air: o.air.att } : {}),
   };
   const def: SideTicket = {
     nat: 'BLU', adj: 'Enemy', color: '#5a6f86', human: false, general: { name: 'General Vane', level: 2 },
     forces: defence.map(([name, kind, divs, share, first], i) => force(defId(i), name, 'BLU', kind, divs, share, !!o.dug && kind !== 'art', first, defStr)),
+    ...(o.air?.def ? { air: o.air.def } : {}),
   };
   return {
-    domain: 'land', kind: 'field', seed: o.seed ?? 7, turn: 1, date: 'September 1939', title: o.title ?? 'A practice field',
+    domain: 'land', kind: 'field', seed: o.seed ?? 7, turn: 1, date: o.date ?? 'September 1939', title: o.title ?? 'A practice field',
     place: { region: -1, name: 'Practice ground', terrain, river: o.river ? 'Wend' : null, bridgeDown: !!o.bridgeDown, town: o.town === null ? null : 'Millbrook', townSize: o.town === undefined ? 'village' : o.town, fort: o.fort ?? 0, mines: 0 },
     att, def, reckoning, lines: [], limit: LAND.limit,
   };
@@ -55,7 +63,23 @@ function made(terrain: Terrain, reckoning: FieldTicket<LandPlace>['reckoning'], 
  * its two corps (infantry, or motorized where said), its divisions of guns (one where not said), and how strong they
  * stand (0.9 where not said: a worn defence holds the hard ground).
  */
-export interface PracticeGround { terrain: Terrain; river?: boolean; fort?: number; def?: [number, number]; guns?: number; kind?: 'inf' | 'mot'; str?: number }
+export interface PracticeGround {
+  terrain: Terrain; river?: boolean; fort?: number; def?: [number, number]; guns?: number; kind?: 'inf' | 'mot'; str?: number;
+  /** Fighters on call over the field, both sides (PRACTICE_AIR): the card counts them, as the campaign's sky term would. */
+  air?: boolean;
+}
+
+/**
+ * The practice armies' fighters on call, where a ground has them (air support): a group a side, the attack's with three
+ * strikes and a tenth of its strength on the card, the defence's with two and a sixteenth. In 1942, so they carry bombs
+ * (LAND.air.bombsFrom). Planes lost a strike, as the campaign would price them: about one in two strikes.
+ */
+export const PRACTICE_AIR: Record<Side, AirOnCall> = {
+  att: { share: 0.1, strikes: 3, groups: [{ id: 1, name: '1st Fighter Group', nat: 'RED', planes: 36, lose: 0.5 }] },
+  def: { share: 0.0625, strikes: 2, groups: [{ id: 11, name: '11th Fighter Group', nat: 'BLU', planes: 24, lose: 0.6 }] },
+};
+/** The practice date where fighters are on call: they carry bombs then. */
+export const PRACTICE_AIR_DATE = 'June 1942';
 
 /**
  * The page's practice grounds: the seven kinds of ground, a river crossing and fortress works. The attack is the same
@@ -69,6 +93,7 @@ export const PRACTICE_GROUNDS: PracticeGround[] = [
   { terrain: 'mountain', def: [3, 3], str: 0.5 }, { terrain: 'marsh', def: [3, 3], str: 0.6 }, { terrain: 'urban', def: [3, 3], str: 0.55 },
   { terrain: 'desert', def: [4, 3], guns: 3, kind: 'mot', str: 0.85 },
   { terrain: 'plains', river: true, def: [3, 3], guns: 2 }, { terrain: 'hills', fort: 2, def: [2, 2], guns: 0, kind: 'mot' },
+  { terrain: 'plains', def: [4, 3], str: 0.85, air: true },
 ];
 
 /**
@@ -147,6 +172,8 @@ export function practiceReckoning(p: PracticeGround): FieldTicket<LandPlace>['re
     if (openDesert && !KIND[d.kind].mobile && d.kind !== 'fort') v *= DESERT.open;
     D += v;
   }
+  // Fighters on call: the card's sky term counted them, so they made their share of each side's strength.
+  if (p.air) { A /= 1 - PRACTICE_AIR.att.share; D /= 1 - PRACTICE_AIR.def.share; }
   const dice: [number, number] = [FIELD_DICE[0], FIELD_DICE[1]];
   return { A, D, odds: A / D, dice, even: evenOdds(dice) };
 }
@@ -188,5 +215,5 @@ export function practiceBill(p: PracticeGround, R: number, field: Record<Side, n
 
 /** A practice ground's ticket: the practice armies on that ground, at the odds their own card gives them there. */
 export function practiceTicket(p: PracticeGround, o: Omit<SampleOpts, 'river' | 'fort' | 'bridgeDown' | 'dug'> = {}): FieldTicket<LandPlace> {
-  return made(p.terrain, practiceReckoning(p), { ...o, river: p.river, fort: p.fort }, defenceOn(p), p.str ?? 0.9);
+  return made(p.terrain, practiceReckoning(p), { ...o, river: p.river, fort: p.fort, ...(p.air ? { air: PRACTICE_AIR, date: PRACTICE_AIR_DATE } : {}) }, defenceOn(p), p.str ?? 0.9);
 }

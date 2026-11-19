@@ -979,7 +979,11 @@ export interface AttackOpts {
  * its field loss where that is larger (b474): an army that pulls out early gets away for little more than it had lost; one on the point of
  * breaking could not get away at all, and pays the whole.
  */
-export interface FieldBill { corps: Record<number, number>; att: number; def: number; whole: boolean; broke?: 'att' | 'def'; pulled?: { side: 'att' | 'def'; bar: number } }
+export interface FieldBill {
+  corps: Record<number, number>; att: number; def: number; whole: boolean; broke?: 'att' | 'def'; pulled?: { side: 'att' | 'def'; bar: number };
+  /** Close air support flown on the field: the strikes each group flew, by group id, booked as AttackOpts.closeSorties. */
+  air?: Record<number, number>;
+}
 
 /**
  * How far a side's bill may stand from what the field cost it: the after card's headline and its field line are one

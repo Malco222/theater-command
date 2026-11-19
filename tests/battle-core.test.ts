@@ -1,7 +1,7 @@
 // The shared battle core (src/battle/core): how a fought battle's result lands on the campaign's scale (ruling 217),
 // the clock, and the line a group is drawn up on. Shared by the land, sea and air battles.
 import { describe, expect, it } from 'vitest';
-import { CLAMP, Clock, clampToDice, DROPS, diceChance, diceNow, fieldRatio, levelFor, levelOf, lineUp, LOOPS, nextGap, nextTake, RATIO, runOut, SALVOS, TOWN, type BattleSim, type UnitBase } from '../src/battle/core';
+import { CLAMP, Clock, clampToDice, DROPS, diceChance, diceNow, fieldRatio, levelFor, levelOf, lineUp, LOOPS, nextGap, nextTake, ONE_SHOTS, RATIO, runOut, SALVOS, TOWN, type BattleSim, type UnitBase } from '../src/battle/core';
 
 describe('R: where a fought battle lands on the campaign scale', () => {
   it('a field win is on or above the line, a field defeat below it', () => {
@@ -105,5 +105,18 @@ describe('the field\'s sounds: the approved pack\'s table', () => {
     expect(LOOPS.wheels.idle).toBe('lorry_idle_loop');
     expect(TOWN.loop).toBe('street_battle');
     expect(TOWN.drops.takes).toEqual(['mg_town_01', 'mg_town_02', 'mg_town_03']);
+  });
+  it('names only real sounds from the pack, and no block carries a fight loop of its own (the sound director, 14:59Z)', () => {
+    const named = [
+      ...Object.values(LOOPS).flatMap((l) => Object.values(l)),
+      ...Object.values(DROPS).flatMap((d) => Object.values(d ?? {}).flatMap((x) => x?.takes ?? [])),
+      TOWN.loop, ...TOWN.drops.takes, ...Object.values(ONE_SHOTS),
+    ];
+    // The made-up set the pack replaced, the bugles Brian cut, and the open field's bed, which is shared, not a block's.
+    for (const dead of ['battle', 'bugle', 'rifles', 'machine_gun', 'battle_loop', 'order_march', 'order_attack', 'order_cancel']) expect(named).not.toContain(dead);
+    expect(LOOPS.foot.fight).toBeUndefined();
+    expect(LOOPS.tracks.fight).toBe(LOOPS.tracks.idle);
+    expect(LOOPS.wheels.fight).toBe(LOOPS.wheels.idle);
+    expect(ONE_SHOTS).toEqual({ contact: 'whistle_long' });
   });
 });

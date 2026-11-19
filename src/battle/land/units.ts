@@ -7,8 +7,8 @@
 // card's odds are the field's.
 
 import type { CrewMarks } from './crews';
-import type { ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
-import { BEND, digWorks, type Bend, type LandField } from './field';
+import type { Calibre, ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
+import { BEND, GROUNDS, STREAM, digWorks, type Bend, type LandField } from './field';
 import { LAND, type Kind } from './rules';
 
 export interface LandOrder {
@@ -66,6 +66,12 @@ export interface LandUnit extends UnitBase {
    */
   fellBack?: boolean;
   /**
+   * Given ground at the brink (b496(1)): worn in a small army that its fresh blocks hold at the brink, it falls back off
+   * the field rather than stand to be ground down, and while it goes, or runs, it is struck only on its rearguard. Its
+   * order is a withdrawal; the player may send it in again.
+   */
+  gives?: boolean;
+  /**
    * A defence's reserve (the design director, b407): 'held' behind the line until the line is struck, then 'sent' at
    * marching pace to where it is struck hardest. A line block from a quiet stretch that closes on the fight is 'sent' too.
    * A block that is sent no longer goes back to the ground it was drawn up on.
@@ -75,6 +81,18 @@ export interface LandUnit extends UnitBase {
   tray: number;
   /** A tank block's crews' own marks, names or kill rings, as data for the 3D game and the hover (b477); none on the rest. */
   crew?: CrewMarks;
+  /**
+   * What its guns throw, as the explosions sheet sizes it (shells.ts): data for the 3D game, never read by the fight.
+   * None where it has only small arms.
+   */
+  cal?: Calibre;
+  /**
+   * Looks only (shells.ts): the harm each block that struck it has done it, by the striker's id, less a model's worth
+   * for each model of it the striker was given. Each model it loses goes to the striker of that tick owed most, so a gun
+   * firing from far back lands its shells in its share of the harm (the design director, b507). Nothing in the fight
+   * reads it.
+   */
+  owed?: Record<number, number>;
   /** The way it stepped this tick, if it marched: at a bridge or a pass, a friend in its way makes way (LAND.queue). */
   pressing?: number;
   /** The friend it made way for this tick (LAND.queue): next tick it waits rather than step back into that friend's way. */
@@ -217,47 +235,135 @@ export function deploy(units: LandUnit[], side: Side, f: LandField): void {
       [mine.filter((u) => !u.dry), west ? inner(1) : 10, west ? f.w - 10 : inner(-1)],
     ];
     for (const [us, lo, hi] of lanes) if (us.length) drawUp(us, side, f, (Math.max(lo, z[0]) + Math.min(hi, z[2])) / 2, lo, hi);
-  } else drawUp(mine, side, f, side === 'def' && f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2);
+  } else if (f.stream && (f.stream.lie === 'up' || (f.stream.lie === 'shore' && f.stream.side !== 'back'))) streamLanes(mine, side, f);
+  else if (side === 'def' && f.stream?.lie === 'across' && f.stream.join && joinLane(mine, f)) { /* drawn up beside the second river */ }
+  else drawUp(mine, side, f, side === 'def' && f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2);
   for (const u of mine) {
     u.x = Math.min(f.w - u.w / 2 - 10, Math.max(u.w / 2 + 10, u.x));
     u.y = Math.min(f.h - 40, Math.max(40, u.y));
+    // Never drawn up in a city's own river (b526): it lies behind the defence's rows and clear of the lanes either side
+    // of it; should a row still reach it (a deep row in a narrow lane, a second river coming in behind), the block steps
+    // forward out of it, toward the enemy, and a few steps more to stand a stone's throw off its water and bridges where
+    // those steps take it clear and keep it in its zone (beside a river up the field they would only take it out of its
+    // line, so it stays where its row put it).
+    if (f.stream) {
+      for (let k = 0; k < 40 && wetUnder(f, u); k++) u.y += side === 'att' ? 10 : -10;
+      const y0 = u.y;
+      for (let k = 0; k < 8 && wetUnder(f, u, STREAM.off); k++) u.y += side === 'att' ? 10 : -10;
+      if (wetUnder(f, u, STREAM.off) || (side === 'att' ? u.y > z[3] : u.y < z[1])) u.y = y0;
+    }
     u.home = [u.x, u.y];
     if (u.dug) digWorks(f, u.x, u.y, u.w, u.d);
   }
 }
 
+/** Whether any of a block's box, grown by off metres each way, stands in water or on a bridge. */
+function wetUnder(f: LandField, u: LandUnit, off = 0): boolean {
+  const hw = u.w / 2 + off, hd = u.d / 2 + off, nx = Math.ceil((2 * hw) / (f.cell / 2)), ny = Math.ceil((2 * hd) / (f.cell / 2));
+  for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) {
+    const c = Math.floor((u.x - hw + (2 * hw * i) / nx) / f.cell), r = Math.floor((u.y - hd + (2 * hd * j) / ny) / f.cell);
+    if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) continue;
+    const k = GROUNDS[f.ground[r * f.cols + c]];
+    if (k === 'water' || k === 'bridge' || k === 'blown') return true;
+  }
+  return false;
+}
+
 /**
- * Draws blocks up in rows about cx. Between lo and hi (metres east) where they are given: a row that would run past
- * either is moved in, and closed up where it is wider than the room.
+ * The defence beside a second river that comes in from its side edge to meet one across the field behind it (b596, the
+ * Sava at Belgrade): drawn up on the heart's side of it, a stone's throw off its water, as near the heart as it fits.
+ * False where the second river does not reach the defence's depth (it stands as it would with no second river).
+ */
+function joinLane(mine: LandUnit[], f: LandField): boolean {
+  const J = f.stream!.join!, z = f.zones.def, y0 = z[1] - 120;
+  const xs = J.course.filter(([x, y]) => y >= y0 && x >= 0 && x <= f.w).map(([x]) => x);
+  if (!xs.length) return false;
+  const clear = J.half * (1 + STREAM.wobble) + f.cell + STREAM.off, west = J.course[0][0] < f.w / 2;
+  const [a, b] = west ? [Math.max(...xs) + clear, f.w - 10] : [10, Math.min(...xs) - clear];
+  const centre = f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2;
+  drawUp(mine, 'def', f, Math.min(b, Math.max(a, centre)), a, b);
+  return true;
+}
+
+/**
+ * A side drawn up beside a city's own river (field.stream, b526). One that runs up the field leaves two lanes, either
+ * side of it and a stone's throw beyond its water: each army stands in the heart's where its front line fits, else across
+ * both, its blocks shared out by the room each has. A shore leaves one lane, off its water.
+ */
+function streamLanes(mine: LandUnit[], side: Side, f: LandField): void {
+  // Clear of its water at its widest, by a cell (the water is drawn by the cell) and the stone's throw.
+  const S = f.stream!, z = f.zones[side], clear = S.half * (1 + STREAM.wobble) + f.cell + STREAM.off;
+  // Over all the depth its rows may take, the stone's throw in front of them too: where the lanes are narrow, they run
+  // back toward the side's own edge.
+  const y0 = side === 'att' ? 0 : z[1] - 120, y1 = side === 'att' ? z[3] + 120 : f.h;
+  const xs = S.course.filter(([, y]) => y >= y0 && y <= y1).map(([x]) => x);
+  const lo = Math.min(...xs), hi = Math.max(...xs);
+  const lane = (a: number, b: number): [number, number, number] => [a, b, Math.max(0, Math.min(b, z[2]) - Math.max(a, z[0]))];
+  const lanes = S.lie === 'shore' ? [lo < f.w / 2 ? lane(hi + STREAM.clear, f.w - 10) : lane(10, lo - STREAM.clear)] : [lane(10, lo - clear), lane(hi + clear, f.w - 10)];
+  const open = lanes.filter((l) => l[2] >= 200);
+  const groups: LandUnit[][] = open.map(() => []), fill = open.map(() => 0);
+  // Both armies stand on the heart's bank where their front line fits there, the river beside them and never between
+  // them: the plain order's target is the defender nearest the attack, and a quarter of the attack wading over to it
+  // cost the attack up to 15 points against the card in the hills and mountains. Only an army too broad for that bank
+  // spreads over both, its blocks shared out by the room each has, block by block in their order.
+  const home = f.town ? open.findIndex(([a, b]) => f.town!.x >= a && f.town!.x <= b) : -1;
+  if (home >= 0 && rowWidth(rowsOf(mine)[0]) <= open[home][2]) groups[home].push(...mine);
+  else for (const u of mine) {
+    let k = 0;
+    for (let j = 1; j < open.length; j++) if ((fill[j] + u.w) / open[j][2] < (fill[k] + u.w) / open[k][2]) k = j;
+    groups[k].push(u); fill[k] += u.w;
+  }
+  // Each lane's rows as near as they fit to where the side stands with no river (the defence about the heart, the attack
+  // at the middle of its zone), not spread to the far ends of their lanes.
+  const centre = side === 'def' && f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2;
+  open.forEach(([a, b], j) => {
+    if (groups[j].length) drawUp(groups[j], side, f, Math.min(b, Math.max(a, centre)), a, b);
+  });
+}
+
+/**
+ * Draws blocks up in rows about cx. Between lo and hi (metres east) where they are given, the attack's lanes either side
+ * of the river's bend: a row that would run past either is moved in, and a row wider than the room goes on in a further
+ * row behind it, GAP kept between its blocks, so no two are drawn up on top of each other (b492(3)).
  */
 function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: number, hi?: number): void {
   const z = f.zones[side];
   const dir = side === 'att' ? 1 : -1;
-  const front = side === 'att' ? z[3] - 40 : z[1] + 40;
+  let front = side === 'att' ? z[3] - 40 : z[1] + 40;
   const lines = rowsOf(mine);
+  // In a capital's or a city's streets the defence stands a block inside the ragged edge of its core, in the outer
+  // streets, never in front of the city (the design director, b529): the core's edge along its front line, at the middle.
+  if (side === 'def' && f.streetEdge) {
+    const half = rowWidth(lines[0]) / 2;
+    const ys = f.streetEdge.filter((y, c) => y >= 0 && Math.abs(c * f.cell + f.cell / 2 - cx) <= half).sort((a, b) => a - b);
+    if (ys.length) front = Math.max(front, ys[Math.floor(ys.length / 2)] + LAND.city.inside);
+    // A city's own river across the field keeps behind the front line it read there (b526): never deeper than that.
+    if (f.stream?.front !== undefined) front = Math.min(front, f.stream.front);
+  }
   const x0 = lo ?? 10, x1 = hi ?? f.w - 10;
+  /**
+   * Where a row stands on the wings: half on each, beyond the ends of the front line. None where a wing would run off
+   * the field or past its lane (a big army's long front): the row stands centred behind the line instead, so no two blocks are drawn up
+   * on top of each other.
+   */
+  const wingsAt = (row: LandUnit[]): number[] | null => {
+    const span = (lines[0].length * (150 + GAP)) / 2;
+    const at = row.map((u, i) => { const left = i % 2 === 0, k = Math.floor(i / 2); return cx + (left ? -1 : 1) * (span + 60 + k * (u.w + GAP)); });
+    return row.every((u, i) => at[i] - u.w / 2 >= x0 && at[i] + u.w / 2 <= x1) ? at : null;
+  };
   /** Draws a row up at depth y; says whether it stood on the wings (false: centred). */
   const place = (row: LandUnit[], y: number, wings: boolean): boolean => {
-    const gap = GAP;
-    if (wings) {
-      // Half on each wing, beyond the ends of the front line; where a wing would run off the field (a big army's long
-      // front), the row stands centred behind the line instead, so no two blocks are drawn up on top of each other.
-      const span = (lines[0].length * (150 + gap)) / 2;
-      const at = row.map((u, i) => { const left = i % 2 === 0, k = Math.floor(i / 2); return cx + (left ? -1 : 1) * (span + 60 + k * (u.w + gap)); });
-      if (row.every((u, i) => at[i] - u.w / 2 >= x0 && at[i] + u.w / 2 <= x1)) {
-        row.forEach((u, i) => { u.x = at[i]; u.y = y; });
-        return true;
-      }
+    const at = wings ? wingsAt(row) : null;
+    if (at) {
+      row.forEach((u, i) => { u.x = at[i]; u.y = y; });
+      return true;
     }
     const width = rowWidth(row);
     let x = cx - width / 2;
-    for (const u of row) { u.x = x + u.w / 2; u.y = y; x += u.w + gap; }
+    for (const u of row) { u.x = x + u.w / 2; u.y = y; x += u.w + GAP; }
     if (lo !== undefined && hi !== undefined && row.length > 0) {
-      // Kept to its own lanes: closed up where the room is short, and moved in off the river's bend.
-      const first = row[0], last = row[row.length - 1], from = first.x, span = last.x - from;
-      const fits = x1 - x0 - first.w / 2 - last.w / 2;
-      if (span > fits && span > 0) for (const u of row) u.x = from + ((u.x - from) * Math.max(0, fits)) / span;
-      const a = first.x - first.w / 2, b = last.x + last.w / 2;
+      // Kept to its own lanes: moved in off the river's bend.
+      const a = row[0].x - row[0].w / 2, b = row[row.length - 1].x + row[row.length - 1].w / 2;
       const shift = a < x0 ? x0 - a : b > x1 ? x1 - b : 0;
       for (const u of row) u.x += shift;
     }
@@ -276,8 +382,44 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
       held.unshift(...lines[0].splice(at, 1));
     }
   }
-  place(lines[0], front, false);
-  const wide = place(lines[1], front - dir * 110, true);
-  if (held.length) { place(held, front - dir * (wide || !lines[1].length ? 110 : 170), false); for (const u of held) u.reserve = 'held'; }
-  place(lines[2], front - dir * 230, false);
+  if (lo === undefined || hi === undefined) {
+    place(lines[0], front, false);
+    const wide = place(lines[1], front - dir * 110, true);
+    if (held.length) { place(held, front - dir * (wide || !lines[1].length ? 110 : 170), false); for (const u of held) u.reserve = 'held'; }
+    place(lines[2], front - dir * 230, false);
+    return;
+  }
+  // In its lanes (b492(3)): each line cut into rows no wider than the room, the front ones full and the rest behind.
+  // A line's first row stands where it would with room enough (the tanks 110 m behind the front line, the guns 230 m),
+  // or further back to keep GAP behind the row before it, as each row after it does. Where the last row would stand
+  // past the back of the zone, the gaps between rows close up, 5 m at a time to no less than 10 m; past that the rows
+  // run on back toward the attacker's edge of the field.
+  const rows: { us: LandUnit[]; at: number; first: boolean; wings: boolean }[] = [];
+  const cut = (line: LandUnit[], at: number): void => line.forEach((u, i) => {
+    const r = rows[rows.length - 1];
+    if (i > 0 && rowWidth([...r.us, u]) <= x1 - x0) r.us.push(u);
+    else rows.push({ us: [u], at, first: i === 0, wings: false });
+  });
+  cut(lines[0], 0);
+  // The tanks stand on the wings only beside a front line that stands in one row.
+  const wide = rows.length <= 1 && lines[1].length > 0 && wingsAt(lines[1]) !== null;
+  if (wide) rows.push({ us: lines[1], at: 110, first: true, wings: true });
+  else cut(lines[1], 110);
+  cut(held, wide || !lines[1].length ? 110 : 170);
+  for (const u of held) u.reserve = 'held';
+  cut(lines[2], 230);
+  const deep = (us: LandUnit[]): number => Math.max(...us.map((u) => u.d));
+  const steps = (gap: number): number[] => {
+    const ys: number[] = [];
+    rows.forEach((r, i) => {
+      const behind = i ? ys[i - 1] - dir * (deep(rows[i - 1].us) / 2 + gap + deep(r.us) / 2) : front;
+      ys.push(!r.first ? behind : dir > 0 ? Math.min(front - r.at, behind) : Math.max(front + r.at, behind));
+    });
+    return ys;
+  };
+  const back = dir > 0 ? z[1] : z[3], n = rows.length - 1;
+  const past = (ys: number[]): boolean => n >= 0 && dir * (ys[n] - back) < deep(rows[n].us) / 2;
+  let ys = steps(GAP);
+  for (let gap = GAP - 5; gap >= 10 && past(ys); gap -= 5) ys = steps(gap);
+  rows.forEach((r, i) => place(r.us, ys[i], r.wings));
 }

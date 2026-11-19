@@ -5,6 +5,7 @@
 // battle from the campaign's own attack, runs the shared clock, passes the player's orders, hands plain pictures of
 // the field back as JSON, and settles the battle through the campaign's own attack order with the field's R in place
 // of the dice. The 3D game draws the pictures: the models, their walk and fire, the sounds the events name.
+// It draws every explosion too, by the art director's sheet (land: "Explosions" below).
 //
 // Wiring (two lines in campaign-bridge.ts, for the 3D builder):
 //   1. its attack(ids, to) takes two more arguments, fought?: number and field?: FieldBill (src/campaign/game.ts), and
@@ -22,7 +23,8 @@
 //   TC.battleLook(ids, to)       -> { ticket } for the attack the card shows, null where there is no field battle to fight,
 //                                   or { ticket: null, why } where the staff settles that kind of place (offered.ts): keep
 //                                   FIGHT IT YOURSELF on the card, off, with why beside it
-//   TC.battleStart(ids, to)      -> { field, view }: the battle opens paused; field is the ground, sent once
+//   TC.battleStart(ids, to)      -> { field, view }: the battle opens paused; field is the ground, sent once ("The
+//                                   ground" below)
 //   TC.battleTick(seconds)       -> view: runs the clock for that much real time at the speed set. Until the armies first
 //                                   meet (view.contact null) a land battle runs ×4 whatever the speed below that, then
 //                                   drops to the speed set (ruling 226(1)): say so on the field, "×4 until the armies
@@ -30,6 +32,12 @@
 //   TC.battleSpeed(speed)        -> { speed }: 0 (paused), 0.5, 1, 2 or 4
 //   TC.battleOrder(command)      -> { ok }: one of the core's commands (src/battle/core/types.ts), for the player's side
 //   TC.battleView()              -> view, without running the clock
+//   TC.battleAirRun(x, y[, x1, y1]) -> { run, why } for the player's air support ("Air support" below): run, the strafing
+//                                   run [x0, y0, x1, y1] a strike would fly if called where he points (x, y: down the
+//                                   frontage of the enemy block he can see nearest the point), or down the run he drew
+//                                   (all four); why, null where it can be called now, else the reason in words. Call it
+//                                   as the pointer moves to show the run; the call itself is TC.battleOrder({ do:
+//                                   'land:air', x0, y0, x1, y1 }) with that run
 //   TC.battleChance()            -> { chance, contact }: the staff's chance now that the attack carries the ground, 0 to
 //                                   1, and whether the armies have met, for HAND IT TO THE STAFF's question (ruling
 //                                   226(5)); null where the battle has no such question (sea and air word their own).
@@ -44,22 +52,31 @@
 //                                   squared where that is more than the field cost it; pursuit then says what the
 //                                   rearguard and the stragglers cost, in the same place: "As the Polish army withdrew
 //                                   under fire, it lost 4,644 more men in the rearguard and as stragglers." (b474)
+//                                   Where an army broke on the field, also brokeBy: why it broke, as below (b496(2)).
 //   TC.airLook(kind, target, ids) -> { ticket } for the raid the raid card shows, or { ticket: null, why } where it
 //                                   cannot be fought out (src/battle/air FOUGHT_KINDS: 'bomb', 'superiority')
 //   TC.airStart(kind, target, ids) -> { sky, view }: the air battle opens paused; sky is the board, sent once
 //
 // A view: { t, limit, speed, units, balance, events, zones, ai, over, me }, and for a land battle breaking: { att, def }
-// (how near each army is to breaking, 0 to 1, for the two army bars; an army breaks at 1, ruling 226(3)) and contact
-// (battle seconds of the first contact, null before it). Each unit: { id, side, kind, name, x, y, face,
-// str, mor, state, figures0, figures, w, d, act, speed, engaged, cover, loop, order }. Field metres, x east, y north,
+// (how near each army is to breaking, 0 to 1, for the two army bars; an army breaks at 1, ruling 226(3)), breakingBy:
+// { att, def } (what drives each bar as it stands, below) and contact (battle seconds of the first contact, null before
+// it). Each unit: { id, side, kind, name, x, y, face, str, mor, state, figures0, figures, w, d, act, speed, engaged,
+// cover, loop, order }, and cal where a land block has one ("Explosions" below). Field metres, x east, y north,
 // the attacker from the south; face in radians, 0 north, clockwise. 'loop' is the sound it plays while it does what it
-// does; each event's 'cue' is a one-shot, at its x and y. Sound names are the approved battle pack's
-// (/mnt/project-files/sound/battle-pack/, played from its own files), or the generator's list where the pack has none.
+// does (its engine or its march; a block in a fight carries no fight loop of its own, as its shots by its nation's
+// weapons and the shared beds are the fight, in the sound director's plan /mnt/project-files/sound/mix/mix.json, which
+// the 3D game reads for the beds, the shots, and the orders and cheers by nation); each event's 'cue' is a one-shot, at
+// its x and y (today only the attacker's whistle at first contact). Sound names are the approved battle pack's
+// (/mnt/project-files/sound/battle-pack/, played from its own files).
 // A unit may also carry drops: { takes, every: [lo, hi] }: play one take at a time, at random and never the one played
 // last, then wait a random lo to hi seconds before the next (core/cues.ts nextTake and nextGap say it in code). Guns in
 // action carry far_guns_01 to 03 every 6 to 20 s in place of a loop; a block fighting among buildings plays
 // street_battle as its loop, with mg_town_01 to 03 dropped in; a lorry idles on lorry_idle_loop and drives on
 // lorry_drive_loop. Several units playing the same bed or drops near each other should share one voice, not stack.
+// An army of five blocks or fewer that its fresh blocks hold at the brink (its bar stands at 0.99, b480) does not stand
+// there to be ground down (b496(1)): each of its blocks no longer fresh gives ground. Its order turns to 'withdraw', as
+// a block the player sends back, an event { what: 'land:gives' } says so ("1st Regiment, 4th Motorised gives ground."),
+// and it leaves the field as such a block does (state 'withdrawn'). Nothing new to draw.
 // Where the attack card did not know the defence (b453), an enemy block none of the player's has fought yet, of a corps
 // the card did not identify (a corps it names shows whole from the start, b476(3)), comes as
 // { id, side, known: false, x, y, face, w, d, act, speed, cover, state } (b464(2)): draw a plain stand in its side's
@@ -81,7 +98,146 @@
 // side, at, unit }, one for each tank a block has lost, where she stood, from battle second 'at' to the end of the
 // fight. Draw her as the model of block 'unit', knocked out (her knocked_out clip, then burn), burning at first and
 // then smoking to the end, never cut off (the art director's b477 look). Men on foot within r metres take light cover
-// in the rules already; nothing more to draw for it.
+// in the rules already; nothing more to draw for it. The zones also hold its craters (below).
+// The ground (Brian, 18 November: "make sure the battle terrian matches the map in the world so it matches. if are
+// attacking in hills than have that or a forrest or towns ect"): field is built from the province on the campaign map
+// (src/battle/land/field.ts): its terrain, the river between the armies and its bridges, its town and the town's size,
+// its fortress works. { w, h, cell, cols, rows, grounds, ground, height, zones, town, place, storeys?, landmark? }:
+// ground[r * cols + c] is an index into grounds, row 0 at the attacker's (south) edge, height that cell's metres. A
+// capital or a city is streets (the design director, b511; the art director's rings, 17:23Z): a capital's core of
+// blocks fills the defender's part of the field with suburbs back to the attacker's start, about 70 per cent built; a
+// city's core is about 800 by 600 m round its centre, suburbs to mid-field, about a third built. Its grounds:
+// 'buildings' (the core's blocks and the terraces), 'road' (its avenues too), 'suburb' (houses and gardens, open ground
+// between), 'industry' (sheds, yards, chimneys), 'park' (squares and parks, open with trees). storeys[i]: the houses'
+// storeys on a built cell (3 to 5 in a core, 2 in terraces and industry, 1 or 2 in suburbs, villages and towns), 0
+// elsewhere: draw the core tight, tall and shadowed, the suburbs low, green and open (the art director). landmark:
+// { x, y, kind } with kind 'spire', 'dome' or 'station', one a city, at its heart; draw it generic, no real building.
+// The region's own building style (brick in the north and east, stone and plaster in the south, timber further east)
+// is the 3D game's to pick from place and the nations, where it has the sets. Looks only beyond the grounds' cover.
+// A capital's or a city's own river through its streets (the design director, b526; the art director's 18:53Z note):
+// stream, where the city has one on the hand list (data/battle/city-rivers.json) and the card prices no crossing:
+// { name, lie, side?, great, half, course, join?, front? }. Its water is 'water' and its bridges 'bridge' in ground as on every field,
+// its road bridges as many as the city had in the war years (b596, the historian's record), on the avenues nearest the heart,
+// each laid straight across the water; every other avenue that meets it ends at its quay. lie 'up': it runs up the field through the
+// core, along the attack's line; 'across': through the core's back half behind the defence, the city's far quarter
+// beyond it; 'shore': along the city's edge at one side of the field (side 'west' or 'east'), its water out to the field's
+// edge, or, where its water lies straight ahead of the attack, along the field's back edge behind the defence (side
+// 'back', the Volga at Stalingrad's back; it keeps behind front as a river across does). course: its
+// middle line in field metres from upstream to downstream (the way its water runs), and half the metres either side of
+// that line that are water (a little more and less as it goes; ground has the cells); a shore's course is its bank,
+// half 0. join: a second river meeting it (the Sava at Belgrade), { name, half, course } from the field's edge to the
+// meeting, with its own bridges by the record: up the field, from its real side behind the defence's front; across, from
+// its side edge to the heart's corner (b596(2)), beyond the defence's flank and never between the armies, the defence
+// drawn up on the heart's side of it. A second river is about half the first one's width. front (lie 'across', and a shore along the back edge): the defence's front line in field metres north that the river keeps behind; the
+// rules' own, nothing to draw. Draw a city river as a river in a city: stone quays and embankments where the core meets the water, the
+// bridges stone or steel to the region's style, nothing named after a real bridge. A bridge's deck runs across the
+// water, square to course at that point. great: wider than about 250 m at the real city (the Danube at Budapest).
+//
+// Explosions (Brian, 18 November: "very dramatic and life like"; his own look, copying no game's effects): the 3D game
+// draws every burst, its flash and light, shock, earth crown, debris, smoke, the camera's jolt and the scar it leaves,
+// by the art director's sheet (/mnt/project-files/art-director/explosions/explosions-look.md) and the ground under it.
+// The rules give it what it cannot work out for itself (src/battle/land/shells.ts); none of it moves the fight:
+//   cal, on a land unit: what its guns throw, as the sheet's size classes: 'mortar' 81 or 82 mm, 'field' 75 or 76 mm,
+//     'howitzer' 105 mm, 'heavy' 150 or 155 mm, and 'light' for a 37 to 57 mm tank or anti-tank gun (the sheet has no
+//     row for it yet: draw it at its hand grenade row). Guns by the model the unit table draws them with in the
+//     battle's year, tanks in the year their nation's designs have reached (DesignYears; armourYear in
+//     src/campaign/tech.ts, set at TC.battleStart), so a tank's blast is the gun it is drawn with; foot, mountain and
+//     lorried infantry 'mortar', their own battalions' (they land no shells: their blows count as small arms);
+//     cavalry, engineers and fortress troops carry no cal. The mix plan's
+//     impacts.bySize (sound/mix/mix.json) reads light as grenade, mortar as mortar, field as field_gun, howitzer as
+//     howitzer_105 and heavy as howitzer_150.
+//   A 'shell' event each time a gun's or a tank's blow costs a block one of its models (figures falls in the same
+//     view): { t, what: 'shell', text: '', x, y, cal, by, on, armour, ground, reach }, with no words and no cue: keep
+//     it out of the dispatches strip (the after card's log never has it). x, y: where it landed, the lost model's place
+//     within block 'on': take off the model standing nearest it. armour: true where 'on' is tanks: it struck the tank
+//     it knocked out, whose wreck zone (unit 'on', from the same second) lies at x, y: sparks and a bright scar on her
+//     armour, then her brew-up, no earth crown and no crater. cal: the firing block's. by: the block that fired, left
+//     out where the player does not know that block (b464(2)): then it is always guns firing from far back, unseen.
+//     ground: the field's ground under it, a name from field.grounds, which picks the sheet's look: woods a tree burst;
+//     buildings, suburb, industry, bunker, road and bridge town and stone; marsh mud; water and blown the splash
+//     column; the rest (park too) earth, or sand where place.terrain is desert, and snow or mud as the weather the 3D
+//     game shows on the field. reach:
+//     metres from x, y within which men drop or are knocked flat and vehicles rock on their springs (the sheet's
+//     "Things react"; men a little beyond it flinch and duck). It is the blast's, not the camera shake's radius, which
+//     stays the sheet's: light 4, mortar 9, field 11, howitzer 15, heavy 23.
+//   A crater for each shell on the ground (none on armour, none in the river), as a zone beside the wrecks: { id, kind:
+//     'crater', x, y, r, until, at, cal }, r half the sheet's crater across for its class, ids -1, -2 and on, from
+//     battle second 'at' to the end of the fight. Draw the sheet's scar for the ground there, smoking faintly for about
+//     8 s from 'at', overlapping where hits overlap, never removed. Looks only: a crater gives no cover and slows no
+//     one.
+//   How they fit the mix plan's fireModel: the sims fight block against block with no single shots, so the plan times
+//     each block's firing (guns every 6 to 20 s, the impact 2 to 5 s later at the block engaged; tanks' guns every 6 to
+//     12 s). Those shots stay as they are, the near misses round the block engaged. A 'shell' event is the shot that
+//     hit: land it at once at x, y, as fired before by block 'by' (fire no gun again for it), and let it stand in for
+//     the next impact the plan has timed for that block, so the plan's pace holds. Its sound is the plan's impacts
+//     (near, middle or far by the listener's distance, sized by impacts.bySize), and its incoming the plan's artillery,
+//     mortar or tankGun by block 'by' (no 'by': artillery). A fight lands few shells (the six cold-check campaign
+//     fights 0 to 5, the nine practice grounds 2.8 a fight, 6 at most, twenty river crossings 5.8 a fight, 24 at
+//     most), one block's two never closer than 7 s apart in those fights, so the plan's shots are most of what is
+//     seen and heard, and every model that falls to a gun or a tank falls under a shell. Which striker a model falls
+//     to is the share rule (the design director, b507): each block keeps what every striker has done to it over the
+//     fight, and a model it loses goes to the striker it owes most, so guns firing from far back, whose blows are
+//     light, still land their shells in time (a quarter of the practice grounds' shells are the guns'). A big blow
+//     could cost a block two models in one tick: then two land in the same second.
+//   The browser page draws none of it (Brian: no look work in the browser).
+// Air support (Brian, 2026-11-18 18:58Z: "during ground battles where fighters are in range, you should be able to call
+// in air support where the fighters will strafe and drop bombs"; the design director, b533 and b536). A side whose
+// fighter groups are on ground support that month and reach the place comes on with fighters on call: the battle card
+// counted them in the side's strength, and on the field part of the side's blows is held back for them and paid where
+// the strikes land, never more than the card counted (b418). Nothing in the view changes where no side has any: no
+// 'flights', no 'air', no events below.
+//   view.air: { att?, def? }, one entry per side with fighters on call: { ready, left, nextIn, eta }. ready 1 when a
+//     strike can be called now; left, the strikes not yet flown; nextIn, battle seconds until the next is ready (null
+//     when ready or none left); eta, seconds until the strike called is over the field (null when none is on the way).
+//     None before the armies meet (TC.battleAirRun's why says "After the armies meet"). A strike left ready 20 s is
+//     called by the staff, so a player who forgets his planes is never short of them. The enemy's are called by its
+//     staff by the same rule, never aimed sharper.
+//   The button: "Air support" in the field's top bar where view.air[me] is set, its state beside it ("Ready · 2 left",
+//     "Ready in 0:31 · 2 left", "Over the field in 0:07", "All flown", "After the armies meet"); then the player points at the
+//     ground and the run shows as a band 60 m wide, brass where it can be flown and red where TC.battleAirRun's why is
+//     set ("Too close to your own men", where his men are under too much of it; the field's tag says it); a click calls it. The browser page's
+//     battle page does all of this with plain marks: copy its behaviour, not its look. The words are the UI director's
+//     (21:18Z review).
+//   view.flights: [{ id, side, nat, year, models, x, y, alt, face, phase, run }], each flight two to four fighters drawn
+//     as one picture (models), never a unit: nothing on the field fires at it or is hidden by it. x, y field metres,
+//     alt metres above the ground, face radians as the units'. phase 'in' (flying to the start of its run), 'run'
+//     (strafing down run [x0, y0, x1, y1] at alt LAND.air.low, 60 m) or 'out' (pulling up and away, climbing to 150 m
+//     and off the field). Draw nat's own fighter (battle-models/air: every nation has one; 62 fly the plain Fighter)
+//     at year's look; fly the fighter's 'fly' clip, 'bank.port' or 'bank.starboard' on the turns and 'peel_off' as
+//     the run ends; between view ticks, move it on its own heading at about 120 m/s.
+//   Events (all with side, t, and x, y where they happen):
+//     'land:air-call' { flights, runs, eta, by: 'you' | 'staff' } when a strike is called; x, y the first run's start.
+//       Its flights are in view.flights from then, phase 'in', eta seconds out. Text on the player's side when his
+//       staff called it: "The staff called in the fighters."
+//     'land:air-in' { flight, run, models, alt, nat, year, heading }, cue 'fighter_pass': the flight is over the start
+//       of its run and drops onto it. Its engines are the 'fighter_loop' bed while it is in view.flights.
+//     'land:strafe' { flight, from, to, width, secs }, cue 'machine_gun', at the same moment: the guns open down the
+//       run from 'from' to 'to', 60 m wide, for secs seconds: the fighter's 'fire' clip and its muzzles gun.1..N, the
+//       strike of the rounds walking down the strip as the flight flies it. No words.
+//     'land:strafed' { flight, on } as the run ends: 'on' lists the blocks it struck that the player can see. Its text,
+//       on the player's side: "Your fighters strafed the 4th Rifle Division." ("strafed and bombed" where the run let
+//       bombs go; or "the enemy line", or "found nothing under their run"); on his own men: "Soviet fighters strafed
+//       your 1st Panzer Division." No cue.
+//     'land:bomb-drop' { flight, from: { x, y, alt }, to: { x, y }, at }: a bomb let go from the flight's 'bombs'
+//       socket, two a run, from the year its nation first flew fighter-bombers (the historian's table: Germany, the
+//       Soviets and Italy 1941; Britain and America 1942; Japan and France 1943; Poland never; others 1942); before
+//       it the run strafes alone. Spawn the 'Bomb' prop (socket 'nose', clip 'fall', 6 s) about 1.2 m either side of
+//       the belly at 'from' and fly it down to 'to' by battle second 'at' (LAND.air.toss, 1.5 s), sound
+//       'bombs_falling_01' or '_02'.
+//     'shell' with cal 'bomb' { extra: { flight } } at 'at': the burst where it lands, the 250 kg row of the
+//       sheet (reach 45 m), sound 'bomb_single_01' or '_02'. It leaves a 'crater' zone like a shell's. 'on' and
+//       'armour' only for a block the player knows; over one he does not, it bursts as on its ground. A bomb costs no
+//       model of its own: it is a picture of the strike's blow, which the field pays with the run.
+//     'air:lost' { flight, kind, chutes, over, air: 'ftr', alt }, cue 'plane_down', text on the player's side ("Ground
+//       fire brought down one of your fighters." / "Your men brought down a Soviet fighter."): one fighter of the flight
+//       falls as the strike pulls away, for each whole plane the campaign's price for a strike comes to (never the dice):
+//       kind 'burn', 'spin' or 'explode' (its clips 'smoking', then 'fall_burn', 'fall_spin' or 'fall_explode');
+//       chutes, how many 'bail_out' (0 or 1). Brian, 19:33Z: "if a plane gets hit show the bullet holes or flak holes":
+//       before 'smoking', lay her <Name>Damage model on her and hold 'damage.flak' at 2 or 3 (ground fire;
+//       battle-models/air/damage-handoff.md); over 'own' or 'enemy', the side of the field it comes down on.
+//   over.air (and the view's over once the battle is over): { att?, def? } with [{ group, sorties, lost }] per group:
+//     every group on call flies every strike, as the campaign books it; handed to the staff, the strikes not yet flown
+//     count as flown (the staff fly them in the settlement). The campaign books these as flown (FieldBill.air).
 // A tank block may also carry crew (b477, Brian's pick: tank crews name their tanks): { mark: 'name', names } or
 // { mark: 'rings', rings }, one entry per tank in the block's model order. names[i] is { name, en } or null (that tank is
 // plain); paint it from the model's entry under that name in battle-models/land/names-fit.json (its rows, in Russian
@@ -92,6 +248,31 @@
 // 'also.UK') takes the name only where her own 'fits' lists it; with no entry she is painted plain, never with the
 // name shrunk or cut to fit (the modeller, 13:38Z).
 // The block's hover may add one line naming them (crewLine in src/battle/land/crews.ts).
+// Why an army broke (b496(2)): a large army breaks worn across its whole line, 13 in 100 of its power lost attacking,
+// 18 defending, while every block's card may still read Steady, so the field gives the numbers for the words that say
+// why. The words are the UI director's, and the field speaks them already: the 'broken' event's text is the break line
+// ("Your army breaks: it has lost about 13% of its men along the whole line, as much as an attack will pay before it is
+// called off, though every part of it was still steady."), the player's own 'nearBreak' text is the warning by what
+// drives his bar, and after a rout over.lines[1] is the break line in the past, so the strength line is lines[2] and
+// pursuit goes after it. The bar's hover: "When a bar fills, that army breaks and leaves the field. It fills with the
+// men lost along the whole line, or with the share of it running or gone, whichever is nearer, so an army can break
+// while every part of it is still steady."
+// The fields come in four places: view.breakingBy[side] as each bar stands, the player's own 'nearBreak' event's
+// brokeBy at the warning, the 'broken' event's brokeBy at the break, and view.over.brokeBy (and battleEnd's brokeBy)
+// once it is over, where over.broke is set. They are BreakCause in src/battle/core/types.ts: { side, bar, by, nearer,
+// worn, spent, running, breaks, fresh, fought, small, holding, held, heldFor, blocks, blocksWorn, wornAt, routing,
+// fled, steady, stillSteady }. The bar fills when worn reaches spent (shares of the army's power: worn across the whole
+// line, against what it will stand) or running reaches breaks (half its power running or fled); by names which ('worn',
+// 'running', or 'none' where an army driven from the field reached neither), nearer which stands higher, reached or not
+// (the warning goes by it). Worn to its mark, an army holds at the brink while fresh is more than fought: held says the
+// hold had kept it there, heldFor for how many battle seconds, small whether its steady blocks counted as fresh (five
+// blocks or fewer, not behind works). A small army held there gives ground: its blocks no longer fresh fall back off
+// the field, each with a 'land:gives' event ("The 2nd Libyan Division gives ground."), and an enemy that comes on after
+// them strikes only their rearguard. blocksWorn counts its blocks below wornAt (0.9) of their strength; steady is the
+// share of its power in blocks reading Steady, and stillSteady says it in the UI director's words ('all', 'most',
+// 'less').
+// Under fog (the card did not know the defence, b453) the enemy's breakingBy is only { side, bar } until the battle is
+// over: the rest would count blocks the player has not met.
 // An air group also carries extra: { n, n0, band, alt, job, per } (aircraft now and at the start, height band 0 to 2,
 // metres up, what it is doing, aircraft per model); /mnt/project-files/air-battles/3d-handoff.md says how to draw it.
 //
@@ -118,10 +299,12 @@
 
 import { Clock, SPEEDS, type Speed } from '../../../src/battle/core/clock';
 import { DROPS, LOOPS, TOWN } from '../../../src/battle/core/cues';
-import type { BattleSim, BattleView, Command, FieldResult, Side, UnitBase } from '../../../src/battle/core/types';
+import type { BattleSim, BattleView, BreakCause, Command, FieldResult, Side, UnitBase } from '../../../src/battle/core/types';
 import { GROUNDS } from '../../../src/battle/land/field';
 import { cardKnows, fieldBill, landTicket, pursuitLine } from '../../../src/battle/land/ticket';
 import { LandBattle } from '../../../src/battle/land/sim';
+import { calFor } from '../../../src/battle/land/shells';
+import { armourYear } from '../../../src/campaign/tech';
 import { staffOnly } from '../../../src/battle/land/offered';
 import { LAND, MOTION, type Kind } from '../../../src/battle/land/rules';
 import type { LandUnit } from '../../../src/battle/land/units';
@@ -166,15 +349,16 @@ function airLoop(a: AirUnit): string {
   return a.act === 'idle' || a.act === 'down' ? '' : SKY.cues.loops[a.air];
 }
 
-/** One unit as the 3D game reads it: plain fields only. */
-function unitOut(u: UnitBase): Record<string, unknown> {
+/** One unit as the 3D game reads it: plain fields only. Exported for the tests. */
+export function unitOut(u: UnitBase): Record<string, unknown> {
   const land = u as LandUnit;
   const air = (u as AirUnit).air ? (u as AirUnit) : null;
   const motion = MOTION[u.kind as Kind] as string | undefined;
   const loops = motion && motion !== 'fixed' ? LOOPS[motion as keyof typeof LOOPS] : undefined;
-  // A block fighting among buildings plays the town's street battle in place of the open field's bed, with the town's
-  // machine guns dropped in; guns in action drop one far salvo at a time (the approved pack's field table).
-  const town = !air && u.act === 'fight' && u.cover === 'buildings' && !!loops?.fight;
+  // A block fighting among buildings (a city's suburbs and industry too) plays the town's street battle in place of the
+  // open field's bed, with the town's machine guns dropped in; guns in action drop one far salvo at a time (the approved
+  // pack's field table).
+  const town = !air && u.act === 'fight' && (u.cover === 'buildings' || u.cover === 'suburb' || u.cover === 'industry') && !!loops && motion !== 'guns';
   const drops = air ? undefined : town ? TOWN.drops : motion && motion !== 'fixed' ? DROPS[motion as keyof typeof LOOPS]?.[u.act] : undefined;
   const extra = air ? { ...(u.extra ?? {}), n: air.n, n0: air.n0, band: air.band, alt: Math.round(air.alt), job: air.job.do, per: air.per } : u.extra;
   return {
@@ -187,6 +371,8 @@ function unitOut(u: UnitBase): Record<string, unknown> {
     ...(land.short ? { short: land.short, parent: land.parent } : {}),
     // A tank block's crews' own marks (b477): names, with their English meaning, or Germany's kill rings, per tank.
     ...(land.crew ? { crew: land.crew } : {}),
+    // What its guns throw, as the art director's explosions sheet sizes it (src/battle/land/shells.ts).
+    ...(land.cal ? { cal: land.cal } : {}),
     order: land.order ? { kind: land.order.kind, x: land.order.x, y: land.order.y, target: land.order.target ?? -1, path: land.path } : null,
     ...(extra ? { extra } : {}),
   };
@@ -205,12 +391,24 @@ function hiddenOut(u: UnitBase): Record<string, unknown> {
   };
 }
 
+/** Each army's bar and what drives it, with the enemy's cut to its bar: under fog the player sees no more of it. */
+function fogged(by: Record<Side, BreakCause>, me: Side): Record<Side, Partial<BreakCause>> {
+  const them: Side = me === 'att' ? 'def' : 'att';
+  return { [me]: by[me], [them]: { side: them, bar: by[them].bar } } as Record<Side, Partial<BreakCause>>;
+}
+
 function viewOut(s: Session, v: BattleView): Record<string, unknown> {
   const land = s.sim instanceof LandBattle ? s.sim : null;
   return {
     t: v.t, limit: v.limit, speed: s.clock.speed, units: v.units.map((u) => (land && !land.known(u as LandUnit) ? hiddenOut(u) : unitOut(u))), balance: v.balance, events: v.events, zones: v.zones, ai: v.ai, over: v.over, me: s.me,
     ...(v.breaking ? { breaking: { att: Math.round(v.breaking.att * 1000) / 1000, def: Math.round(v.breaking.def * 1000) / 1000 } } : {}),
+    // What drives each bar (b496(2)): plain numbers, to three places already. Under fog, of the enemy only its bar
+    // until the battle is over, as its blocks are hidden (hiddenOut).
+    ...(v.breakingBy ? { breakingBy: land?.fog && !v.over ? fogged(v.breakingBy, s.me) : v.breakingBy } : {}),
     ...(v.contact !== undefined ? { contact: v.contact } : {}),
+    // Air support ("Air support" above): only where a side has fighters on call.
+    ...(v.flights ? { flights: v.flights } : {}),
+    ...(v.air ? { air: v.air } : {}),
   };
 }
 
@@ -258,6 +456,9 @@ export function battleCalls(h: BattleHooks) {
       const t = landTicket(g, corps, target);
       if (!t || staffOnly(t)) return null;
       const sim = new LandBattle(t);
+      // A tank's shells by the model the game draws it with: its nation's design year where the campaign keeps one
+      // (armourYear, as this game's DesignYears), not the calendar's. Looks only: nothing in the fight reads cal.
+      for (const u of sim.units) if (u.kind === 'arm') { const c = calFor('arm', u.nat, t.turn, armourYear(g, u.nat)); if (c) u.cal = c; }
       // A defence the attack card did not know (b453), by the card's own outlook: its blocks show only where they stand
       // until one of the player's has fought them (b464(2)).
       const look = attackOutlook(g, corps, target);
@@ -272,12 +473,18 @@ export function battleCalls(h: BattleHooks) {
         // The army that broke, or pulled out under fire, booked more than the field cost it: the after card's line (b464, b474).
         const rep = (out as { report?: BattleReport | null } | null)?.report;
         const pursuit = rep ? pursuitLine(t, r, rep) : null;
-        return pursuit && out && typeof out === 'object' ? { ...out, pursuit } : out;
+        // Why the army broke, for the after card's words where it broke (b496(2)).
+        const more = { ...(pursuit ? { pursuit } : {}), ...(r.brokeBy ? { brokeBy: r.brokeBy } : {}) };
+        return out && typeof out === 'object' && Object.keys(more).length ? { ...out, ...more } : out;
       });
       if (look && !look.exact) ses.band = { lo: look.lo, hi: look.hi };
       const f = sim.field;
       return {
-        field: { w: f.w, h: f.h, cell: f.cell, cols: f.cols, rows: f.rows, grounds: GROUNDS, ground: f.ground, height: f.height.map((x) => Math.round(x * 10) / 10), zones: f.zones, town: f.town, place: t.place },
+        field: {
+          w: f.w, h: f.h, cell: f.cell, cols: f.cols, rows: f.rows, grounds: GROUNDS, ground: f.ground, height: f.height.map((x) => Math.round(x * 10) / 10), zones: f.zones, town: f.town, place: t.place,
+          ...(f.storeys ? { storeys: f.storeys } : {}), ...(f.landmark ? { landmark: f.landmark } : {}),
+          ...(f.stream ? { stream: f.stream } : {}),
+        },
         going, view: viewOut(ses, sim.view(ses.me)),
       };
     },
@@ -304,6 +511,14 @@ export function battleCalls(h: BattleHooks) {
     battleView() {
       const ses = need();
       return viewOut(ses, ses.sim.view(ses.me));
+    },
+    battleAirRun(x: number, y: number, x1?: number, y1?: number) {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      if (!land) return { run: null, why: 'No fighters on call' };
+      // A drawn run as the field will fly it (kept on the field and to its longest), or the one pointed at.
+      const run: [number, number, number, number] = x1 !== undefined && y1 !== undefined ? land.airRun([x, y, x1, y1]) : land.airRunAt(ses.me, x, y);
+      return { run, why: land.airWhyNot(ses.me, run) };
     },
     battleChance() {
       const ses = need();
@@ -346,7 +561,11 @@ export function battleCalls(h: BattleHooks) {
       if (!raid) return null;
       const t = airTicket(h.game(), kind as RaidKind, target, ids);
       if (!t.ticket) return null;
-      const sim = new AirSim(t.ticket);
+      // Shown, never counted (ruling 237): who shot whom, passes, stragglers, guns, escort roles for the 3D game to act
+      // out (the air battles thread, 2dc2da46). Written so it holds before that AirSim reaches this branch and after; once
+      // it has, this is plain new AirSim(t.ticket, { show: true }).
+      const Shown = AirSim as unknown as new (ticket: typeof t.ticket, opts: { show?: boolean }) => AirSim;
+      const sim = new Shown(t.ticket, { show: true });
       // The raid is ordered at the end with the groups the player picked, and paid with what the battle reports
       // (the campaign keeps it inside the dice's own run). Handed to the staff partway, the battle reports the whole raid.
       const ses = begin(sim, (r) => raid(kind, target, ids, r.extra?.air ? foughtAir(r.extra.air as AirOutcome) : undefined));
