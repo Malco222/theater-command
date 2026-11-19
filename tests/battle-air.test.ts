@@ -426,6 +426,8 @@ describe('the result back to the rules (b397: the card takes the field\'s losses
     expect(afterWords({ ...w, me: 'def', bombers: 48, dropped: 0, jettisoned: 48, lostBefore: 0 })[0]).toBe('None of the 48 British bombers dropped their bombs on Bremen: 48 jettisoned theirs.');
     // "36 of 48 dropped and 41 jettisoned" can never print: a count beyond the bombers that flew is cut to what is left.
     expect(afterWords({ ...w, bombers: 48, dropped: 36, jettisoned: 41, lostBefore: 0 })[0]).toBe('36 of your 48 bombers dropped their bombs on Bremen; 12 jettisoned theirs.');
+    // A strike on a fleet at sea: the bombs fell on the fleet, and only the bombers line names it.
+    expect(afterWords({ ...w, target: 'the Mobile Force', bombers: 72, dropped: 45, jettisoned: 0, lostBefore: 27 })[0]).toBe('45 of your 72 bombers dropped their bombs on the Mobile Force; 27 were lost before the target.');
   });
 
   it('a fought raid lands on the campaign exactly as the battle went (b397(3))', () => {

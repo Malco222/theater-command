@@ -193,6 +193,10 @@ export class AirSim implements BattleSim<AirUnit> {
     this.start = this.expect();
     for (const u of this.units) this.mor0.set(u.id, u.mor);
     this.through0 = this.throughNow(this.place.forecast.bmr);
+    // The opening view carries what the 3D game reads as the first tick gives it (the aircraft, tactics, a box's
+    // strike): the scene builds every group from that view. Nothing has moved yet and no box has a straggler, so with
+    // no time passed this sets only each group's 'extra', which the battle never reads, and draws no throw.
+    if (this.show) for (const u of this.units) this.shown(u, 0);
   }
 
   /** How a group of n aircraft is drawn: how many models, one for every 'per' aircraft, in a box of w by d metres. */
@@ -1131,8 +1135,10 @@ export class AirSim implements BattleSim<AirUnit> {
     // the campaign's raid order writes the whole card from what it books (airpages.ts airAct).
     const me: Side = this.ticket.def.human && !this.ticket.att.human ? 'def' : 'att';
     const bill = (s: Side) => ({ ftr: count(s, 'ftr'), bmr: count(s, 'bmr') });
+    // A strike on a fleet at sea: the bombs fell on the fleet, as the ticket's title names it, not on the place.
+    const quarry = this.place.ships && !this.place.ships.law.harbour ? this.place.ships.law.fleets[0]?.name : undefined;
     const lines = afterWords({
-      place: this.place.name, sky: this.place.mission === 'superiority', me, adj: { att: this.ticket.att.adj, def: this.ticket.def.adj },
+      place: this.place.name, ...(quarry ? { target: `the ${quarry}` } : {}), sky: this.place.mission === 'superiority', me, adj: { att: this.ticket.att.adj, def: this.ticket.def.adj },
       bombers: this.toStaff ? 0 : bombers0, dropped: out.dropped, jettisoned: Math.max(0, bombers0 - out.dropped - out.lostBefore), lostBefore: out.lostBefore, staff: this.toStaff,
       bill: this.toStaff ? null : { att: bill('att'), def: bill('def') }, before: this.before,
       ...(this.staff ? { how: staffHow(me, this.staff, this.place.chance) } : {}),

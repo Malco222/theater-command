@@ -141,6 +141,8 @@ export function staffHow(me: 'att' | 'def', staff: { chance?: number; fired?: bo
  */
 export function afterWords(w: {
   place: string; sky: boolean; me: 'att' | 'def'; adj: Record<'att' | 'def', string>;
+  /** What the bombers dropped on, where it is not the place: a fleet at sea ("the Mobile Force"). The bombers line only. */
+  target?: string;
   bombers: number; dropped: number; jettisoned: number; staff: boolean; bill: Bill | null; before: Bill | null;
   /** Bombers lost before the target. */
   lostBefore?: number;
@@ -174,14 +176,14 @@ export function afterWords(w: {
  * lost before the target." A bomber shot down after bombing bombed; a kind at 0 is left out. When he defends, the
  * raiders' bombers by their adjective (18:50Z).
  */
-function bombersLine(w: { place: string; me: 'att' | 'def'; adj: Record<'att' | 'def', string>; bombers: number; dropped: number; jettisoned: number; lostBefore?: number }): string {
-  const B = w.bombers, dropped = Math.max(0, Math.min(B, w.dropped));
+function bombersLine(w: { place: string; target?: string; me: 'att' | 'def'; adj: Record<'att' | 'def', string>; bombers: number; dropped: number; jettisoned: number; lostBefore?: number }): string {
+  const B = w.bombers, dropped = Math.max(0, Math.min(B, w.dropped)), on = w.target ?? w.place;
   const lost = Math.max(0, Math.min(B - dropped, w.lostBefore ?? 0));
   const jett = Math.max(0, Math.min(B - dropped - lost, w.jettisoned));
   const whose = w.me === 'att' ? `your ${B}` : `${B} ${w.adj.att}`;
   const rest = [jett ? `${jett} jettisoned ${jett === 1 ? 'its bombs' : 'theirs'}` : '', lost ? `${lost} ${lost === 1 ? 'was' : 'were'} lost before the target` : ''].filter(Boolean).join(', and ');
-  if (!dropped) return `None of ${w.me === 'att' ? whose : `the ${whose}`} bombers dropped their bombs on ${w.place}${rest ? `: ${rest}` : ''}.`;
-  return `${dropped} of ${whose} bombers dropped their bombs on ${w.place}${rest ? `; ${rest}` : ''}.`;
+  if (!dropped) return `None of ${w.me === 'att' ? whose : `the ${whose}`} bombers dropped their bombs on ${on}${rest ? `: ${rest}` : ''}.`;
+  return `${dropped} of ${whose} bombers dropped their bombs on ${on}${rest ? `; ${rest}` : ''}.`;
 }
 
 /**

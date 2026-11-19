@@ -123,9 +123,16 @@ describe("carrier groups fly by kind (ruling 238(2))", () => {
       // Its fighters are drawn as the carrier's fighter, and every unit has an id of its own.
       expect(s.units.filter((u) => u.side === 'att' && u.air === 'ftr').every((u) => u.model === 'Fulmar')).toBe(true);
       expect(new Set(s.units.map((u) => u.id)).size).toBe(s.units.length);
-      // The 3D game reads each box's kind of attack.
-      while (!s.over && !s.units.some((u) => u.extra && u.air === 'bmr')) s.step();
-      expect(s.units.filter((u) => u.air === 'bmr' && u.side === 'att').every((u) => (u.extra as { strike?: string }).strike === u.strike)).toBe(true);
+      // The 3D game reads each box's kind of attack and every group's aircraft from the opening view, before the clock
+      // starts (the scene builds every group from it), and the first tick says the same.
+      type Shown = { model?: string; form?: string; strike?: string };
+      const opening = new Map(s.view().units.map((u) => [u.id, u.extra as Shown | undefined]));
+      expect(s.units.filter((u) => u.air === 'bmr' && u.side === 'att').every((u) => opening.get(u.id)?.strike === u.strike)).toBe(true);
+      s.step();
+      for (const u of s.view().units) {
+        const x = u.extra as Shown, o = opening.get(u.id);
+        expect(o?.model).toBe(x.model); expect(o?.form).toBe(x.form); expect(o?.strike).toBe(x.strike);
+      }
     }
   });
 });
@@ -154,6 +161,8 @@ describe('the ships the field sinks are the ones the campaign books (b397\'s law
       expect(new Set(told.map((e) => e.extra!.ship)).size).toBe(told.length);
       // The verdict is the field's and the campaign's alike.
       expect(rep.won).toBe(s.over!.level.includes('victory'));
+      // The bombers line names what the bombs fell on: the fleet at sea, the port in harbour.
+      expect(s.over!.lines[0]).toContain(` dropped their bombs on ${kind === 'fleet' ? 'the Battle Fleet' : g.regions[target].name}`);
       sunkAll += told.length;
     }
     expect(sunkAll).toBeGreaterThan(0);
