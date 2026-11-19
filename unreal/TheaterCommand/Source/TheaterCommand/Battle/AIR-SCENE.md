@@ -48,6 +48,17 @@ A recorded battle shows the orders strip greyed out: it plays as it was fought.
 
 At ×1 the Pearl Harbor raid lasts about 7 real minutes, with contact about 20 s in. Midway lasts about 5 minutes, with contact about 30 s in.
 
+**Falling aircraft.** Every loss hands the effects kit its fall (`AirFall`, kit head 44af184). An aircraft blown apart
+throws its debris row at once round the kit's torn fireball. One going down burning or spinning sheds pieces as it
+falls (`AirFallMove` every frame, `AirFallStop` when the model is gone). The pieces fade into the ground under the
+fight, or the cloud deck's top once clouds are drawn. A blow-up keeps only its two biggest pieces trailing fire and
+smoke, because a trail holds about 240 of the kit's 3,000 puffs.
+
+The debris has a room of 700 puffs (`AirShow::DebrisRoom`). A burning or spinning fall leaves 100 of it for the next
+blow-up. Past that, a blow-up gets the older torn flame and a burning fall keeps only its trail. In the cloud test,
+Midway gives all 32 falls their debris. Pearl Harbor gives 37 of 52 (10 of its 13 blow-ups), at most 685 puffs at
+once. On an older kit without `AirFall`, every blow-up gets the older flame and the scene still builds.
+
 ## Hook lines for the 3D builder
 
 The scene needs no lines in CampaignMapActor or CampaignPlayerController. It needs one in **CampaignHUD**, so that the campaign's frame is hidden while a battle is up. Until this line is added, the frame stays under the battle's screen. The scene finds the line by itself (a `requires` check), so it builds either way.

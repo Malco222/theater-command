@@ -122,6 +122,9 @@ private:
 	// The trails running (the kit has room for about a dozen burning aircraft: handoff, the effects kit 05:25Z).
 	TSet<int32> TrailsOn;
 	static constexpr int32 MostTrails = 10;
+	/** Falls the kit is shedding debris for (burning or spinning), and blow-ups whose blast the kit's AirFall drew. */
+	TSet<int32> FallsOn;
+	TSet<int32> BlastsTaken;
 	// The sounds' own clocks.
 	TMap<int32, double> GunHeardAt;  // a gun's last burst heard, real seconds
 	TMap<int32, double> PassHeardAt; // a fighter group's last pass heard

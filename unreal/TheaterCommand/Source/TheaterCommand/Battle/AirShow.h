@@ -138,7 +138,11 @@ namespace AirShow
 		TrailMove,  // Key, At, Vel
 		TrailStop,  // Key
 		Flak,       // At, What: light, medium, heavy
-		Blast,      // an aircraft blowing apart: At, Vel, Size (its span)
+		Blast,      // an aircraft blowing apart: Key (the aircraft), At, Vel, Size (its span)
+		Fall,       // an aircraft lost, for its debris (the effects kit's AirFall): Key (the aircraft), At, Vel,
+		            //   What (explode, burn, spin), Size (its span), Deck (metres: where its pieces leave sight)
+		FallMove,   // a burning or spinning fall, every frame: Key, At, Vel
+		FallStop,   // the fall over, the model gone: Key
 		Splash,     // something into the sea: At, Size (metres across)
 		Crash,      // something into the land: At, Size
 		BombHit,    // a bomb landing: At, What ("water" or "land"), Size (kg class: 250 or 500)
@@ -156,7 +160,36 @@ namespace AirShow
 		Vec At, Aim, Vel, Normal;
 		std::string What, Text;
 		double Rate = 0.0, Mv = 0.0, Size = 0.0;
+		double Deck = 0.0;
 		int Side = -1;
+	};
+
+	/**
+	 * The effects kit's room for falling debris (its AirFall, kit head 44af184). A fall's pieces hold places among
+	 * the kit's puffs until they sink into the deck, up to 240 s for the light plates; a bomber blown apart holds about
+	 * 100, a fighter about 50, a burning aircraft up to 10 over its fall, a spinning one up to 5. A fall is given its
+	 * debris only while the pieces already falling leave room under Most, so the trails and the flak always keep
+	 * theirs (the kit drops the farthest puffs first when it is full; a trail holds about 240). A burning or spinning
+	 * fall leaves Keep of it for the next aircraft blown apart, whose debris row is the one the eye reads. Past that a
+	 * blown-apart aircraft keeps the older torn flame and its few big pieces, and a burning or spinning one its trail.
+	 * Times are the core's AirNow.
+	 */
+	struct DebrisRoom
+	{
+		int Most = 700, Keep = 100;
+		int Peak = 0, Given = 0, Refused = 0, RefusedBlasts = 0;
+		/** Puffs the falls given so far still hold at T. */
+		int Holding(double T);
+		/** A Fall effect: true if it is given its debris (and its puffs are counted from T). */
+		bool Take(double T, const Fx& Fall);
+
+	private:
+		struct Lot
+		{
+			double Until = 0.0;
+			int Puffs = 0;
+		};
+		std::vector<Lot> Lots;
 	};
 
 	/** One aircraft as it is to be drawn. */

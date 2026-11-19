@@ -87,6 +87,42 @@ namespace AirParts
 		}
 	}
 
+	/** The kit's falling debris (kit head 44af184): whether this kit has it. */
+	template <typename TKit>
+	static constexpr bool HasAirFall(const TKit*)
+	{
+		return requires(TKit* K) { K->AirFall(0.0, 0, FVector::ZeroVector, FVector::ZeroVector, FString(), 0.0f, 0.0); };
+	}
+
+	/** A lost aircraft's debris row: once as it falls (Kind explode, burn or spin; DeckZ the world height where its
+	 * pieces leave sight), then every frame of a burning or spinning fall, then when the model is gone. */
+	template <typename TKit>
+	static void AirFall(TKit* Kit, double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ)
+	{
+		if constexpr (requires(TKit* K) { K->AirFall(0.0, 0, FVector::ZeroVector, FVector::ZeroVector, FString(), 0.0f, 0.0); })
+		{
+			Kit->AirFall(Now, Id, At, Velocity, Kind, SpanMetres, DeckZ);
+		}
+	}
+
+	template <typename TKit>
+	static void AirFallMove(TKit* Kit, double Now, int32 Id, const FVector& At, const FVector& Velocity)
+	{
+		if constexpr (requires(TKit* K) { K->AirFallMove(0.0, 0, FVector::ZeroVector, FVector::ZeroVector); })
+		{
+			Kit->AirFallMove(Now, Id, At, Velocity);
+		}
+	}
+
+	template <typename TKit>
+	static void AirFallStop(TKit* Kit, int32 Id)
+	{
+		if constexpr (requires(TKit* K) { K->AirFallStop(0); })
+		{
+			Kit->AirFallStop(Id);
+		}
+	}
+
 	/** The way the campaign hides its own frame while a battle is up (CampaignHUD's ShowFrame, a hook line the 3D
 	 * builder adds: see Battle/AIR-SCENE.md). Without it the frame stays under the battle's screen. */
 	template <typename THud>
@@ -1072,10 +1108,44 @@ void AAirBattle::PlayEffects()
 			}
 			break;
 		}
+		case AirShow::FxKind::Fall:
+			// The debris row (the art director, 04:40Z; the effects kit's AirFall): blown apart, every piece at once
+			// round the kit's short torn fireball; burning or spinning, pieces shed over the fall. Only while the
+			// pieces already falling leave the kit room (S.Debris): past that the blast below keeps the older flame.
+			if (Effects && AirParts::HasAirFall(Effects.Get()) && S.Debris.Take(Now, E))
+			{
+				AirParts::AirFall(Effects.Get(), Now, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What), static_cast<float>(E.Size), World(0.0, 0.0, E.Deck).Z);
+				if (E.What == "explode")
+				{
+					BlastsTaken.Add(E.Key);
+				}
+				else
+				{
+					FallsOn.Add(E.Key);
+				}
+			}
+			break;
+		case AirShow::FxKind::FallMove:
+			if (Effects && FallsOn.Contains(E.Key))
+			{
+				AirParts::AirFallMove(Effects.Get(), Now, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z));
+			}
+			break;
+		case AirShow::FxKind::FallStop:
+			if (Effects && FallsOn.Remove(E.Key) > 0)
+			{
+				AirParts::AirFallStop(Effects.Get(), E.Key);
+			}
+			break;
 		case AirShow::FxKind::Blast:
 		{
 			// Blown apart (the art director, 03:14Z): a short torn flame streaming on with the wreck, never a ball, the
-			// sparks and scraps of the hits; the pieces are the flight core's.
+			// sparks and scraps of the hits; the pieces are the flight core's. Where the kit's AirFall took it, its
+			// torn fireball and debris row are the blast, and this older flame is not laid over them.
+			if (BlastsTaken.Remove(E.Key) > 0)
+			{
+				break;
+			}
 			if (Effects)
 			{
 				const FVector Velocity = WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z);

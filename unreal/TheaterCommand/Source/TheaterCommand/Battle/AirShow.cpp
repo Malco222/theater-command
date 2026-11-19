@@ -971,6 +971,7 @@ namespace AirShow
 			Fly(C, K, Dt, false);
 		}
 		if (C.TrailKey) Emit(FxKind::TrailMove, Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[0]), std::string(), C.TrailKey).Vel = Velocity(C);
+		Emit(FxKind::FallMove, C.P, std::string(), C.Key).Vel = Velocity(C);
 		// Parachutes, one after another, as the crew get out.
 		if (C.ChutesLeft > 0 && C.FallT > C.ChuteAt)
 		{
@@ -990,9 +991,43 @@ namespace AirShow
 		{
 			if (!bCloud && C.FallT <= 150.0) Emit(Floor > 0.5 ? FxKind::Crash : FxKind::Splash, Vec(C.P.X, C.P.Y, Floor), "plane").Size = C.Form.Span;
 			if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; }
+			Emit(FxKind::FallStop, C.P, std::string(), C.Key);
 			C.Doing = Role::Gone;
 			C.bShown = false;
 		}
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// The effects kit's room for debris.
+
+	int DebrisRoom::Holding(double T)
+	{
+		Lots.erase(std::remove_if(Lots.begin(), Lots.end(), [T](const Lot& L) { return L.Until <= T; }), Lots.end());
+		int Sum = 0;
+		for (const Lot& L : Lots) Sum += L.Puffs;
+		return Sum;
+	}
+
+	bool DebrisRoom::Take(double T, const Fx& Fall)
+	{
+		// (the most each sheds: air_debris fighter 30 to 50, bomber 60 to 100 at a span of 20 m, burn_sheds 5 to 10,
+		// spin_sheds 2 to 5; a light plate sinks at 7 m/s at the slowest, and none is kept past most_s, 240 s)
+		const int Puffs = Fall.What == "explode" ? (Fall.Size >= 20.0 ? 100 : 50) : Fall.What == "spin" ? 5 : 10;
+		const int Held = Holding(T);
+		const bool bBlast = Fall.What == "explode";
+		if (Held + Puffs > (bBlast ? Most : Most - Keep))
+		{
+			++Refused;
+			RefusedBlasts += bBlast ? 1 : 0;
+			return false;
+		}
+		Lot L;
+		L.Until = T + std::min(240.0, std::max(0.0, Fall.At.Z - Fall.Deck) / 7.0 + 10.0);
+		L.Puffs = Puffs;
+		Lots.push_back(L);
+		Peak = std::max(Peak, Held + Puffs);
+		++Given;
+		return true;
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -1040,11 +1075,18 @@ namespace AirShow
 		if (E.bByFlak) Emit(FxKind::Flak, C.P + Vec(Roll.U(-4.0, 4.0), Roll.U(-4.0, 4.0), Roll.U(-2.0, 3.0)), "heavy"); // (the one burst laid on a model: this one falls to it)
 		if (!E.Cue.empty()) Emit(FxKind::Sound, C.P, E.Cue);
 		const Vec V = Velocity(C);
+		{
+			// The debris row, for the effects kit: where the pieces leave sight is the cloud deck's top, else the ground.
+			Fx& F = Emit(FxKind::Fall, C.P, C.Falling == FallHow::Explode ? "explode" : C.Falling == FallHow::Spin ? "spin" : "burn", C.Key);
+			F.Vel = V;
+			F.Size = C.Form.Span;
+			F.Deck = CloudTop > 0.0 ? CloudTop : GroundAt(C.P.X, C.P.Y);
+		}
 		const Vec EngineAt = Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[C.Form.Engines.size() > 1 ? (Roll.U() < 0.5 ? 1 : C.Form.Engines.size() - 2) : 0]);
 		if (C.Falling == FallHow::Explode)
 		{
 			// Blown apart: a short torn flash and the pieces thrown out, each trailing fire and then smoke.
-			Fx& B = Emit(FxKind::Blast, C.P, "plane");
+			Fx& B = Emit(FxKind::Blast, C.P, "plane", C.Key);
 			B.Vel = V;
 			B.Size = C.Form.Span;
 			if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; }
@@ -1059,7 +1101,9 @@ namespace AirShow
 				P.Size = C.Form.Span * (K == 0 ? 0.45 : Roll.U(0.12, 0.3));
 				P.Spin = Roll.U(0.0, 6.0);
 				Small.push_back(P);
-				{ Fx& T = Emit(FxKind::TrailStart, P.At, K < 2 ? "fire" : "smoke", P.Key); T.Vel = P.Vel; T.Size = P.Size; }
+				// (the biggest trails fire and the next smoke; the rest fall bare: a trail holds about 240 of the
+				// effects kit's 3,000 puffs, and the kit's debris row is the small pieces)
+				if (K < 2) { Fx& T = Emit(FxKind::TrailStart, P.At, K == 0 ? "fire" : "smoke", P.Key); T.Vel = P.Vel; T.Size = P.Size; }
 			}
 			C.bShown = false;
 		}

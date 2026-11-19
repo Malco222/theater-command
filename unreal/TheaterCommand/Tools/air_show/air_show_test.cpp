@@ -34,6 +34,9 @@ namespace
 		case AirShow::FxKind::TrailStop: return "trailstop";
 		case AirShow::FxKind::Flak: return "flak";
 		case AirShow::FxKind::Blast: return "blast";
+		case AirShow::FxKind::Fall: return "fall";
+		case AirShow::FxKind::FallMove: return "fallmove";
+		case AirShow::FxKind::FallStop: return "fallstop";
 		case AirShow::FxKind::Splash: return "splash";
 		case AirShow::FxKind::Crash: return "crash";
 		case AirShow::FxKind::BombHit: return "bombhit";
@@ -105,6 +108,10 @@ int main(int Argc, char** Argv)
 	double WorstFrameMs = 0.0, TotalMs = 0.0;
 	long Frames = 0;
 	int EventsLost = 0, EventsChutes = 0;
+	// The falls as the scene hands them to the effects kit: a start, its moves, an end; and the kit's room for debris.
+	AirShow::DebrisRoom Debris;
+	std::map<int, std::string> FallsOpen;
+	int FallStarts = 0, FallStrays = 0, MostDebris = 0;
 	for (const AirFeed::Frame& F : Rec.Views)
 		for (const AirShow::Event& E : F.Events)
 			if (E.What == "air:lost") { ++EventsLost; EventsChutes += E.Chutes; }
@@ -140,7 +147,16 @@ int main(int Argc, char** Argv)
 			if (E.Kind == AirShow::FxKind::Sound) ++Sounds[E.What];
 			if (E.Kind == AirShow::FxKind::Gun) GunOn[E.Key] = true;
 			if (E.Kind == AirShow::FxKind::GunStop) GunOn.erase(E.Key);
-			if (E.Kind != AirShow::FxKind::Gun && E.Kind != AirShow::FxKind::TrailMove && E.Kind != AirShow::FxKind::Hit)
+			if (E.Kind == AirShow::FxKind::Fall)
+			{
+				++FallStarts;
+				Debris.Take(Show.AirNow(), E);
+				if (E.What != "explode" && E.What != "burn" && E.What != "spin") ++FallStrays;
+				if (E.What != "explode") FallsOpen[E.Key] = E.What;
+			}
+			if (E.Kind == AirShow::FxKind::FallMove && !FallsOpen.count(E.Key)) ++FallStrays;
+			if (E.Kind == AirShow::FxKind::FallStop && FallsOpen.erase(E.Key) == 0) ++FallStrays;
+			if (E.Kind != AirShow::FxKind::Gun && E.Kind != AirShow::FxKind::TrailMove && E.Kind != AirShow::FxKind::FallMove && E.Kind != AirShow::FxKind::Hit)
 			{
 				std::string Text = E.What;
 				for (char& C : Text) if (C == ',' || C == '\n') C = ';';
@@ -157,6 +173,7 @@ int main(int Argc, char** Argv)
 		Show.Effects.clear();
 		if (std::getenv("AIR_SHOW_TRACE") && std::fmod(Show.Shown(), 10.0) < Dt * 0.999)
 			std::fprintf(stderr, "== %.1f\n%s", Show.Shown(), Show.Describe().c_str());
+		MostDebris = std::max(MostDebris, Debris.Holding(Show.AirNow()));
 		LiveGuns = static_cast<int>(GunOn.size());
 		MostLiveGuns = std::max(MostLiveGuns, LiveGuns);
 		int Shown = 0;
@@ -194,6 +211,8 @@ int main(int Argc, char** Argv)
 	std::printf("  falls %d (battle lost %d), parachutes %d (battle %d), passes %d, breaks under %d / over %d\n",
 	            C.Falls, EventsLost, C.Chutes, EventsChutes, C.Passes, C.UnderBreaks, C.OverBreaks);
 	std::printf("  gun frames %d, hits %d, flak bursts %d, bombs %d\n", C.GunFrames, C.Hits, C.FlakBursts, C.Bombs);
+	std::printf("  debris: %d falls given it, %d left without (%d of them blown apart; room %d puffs, most held at once %d)\n",
+	            Debris.Given, Debris.Refused, Debris.RefusedBlasts, Debris.Most, MostDebris);
 	std::printf("  effects:");
 	for (const auto& P : FxCount) std::printf(" %s %d", P.first.c_str(), P.second);
 	std::printf("\n  sounds:");
@@ -210,6 +229,8 @@ int main(int Argc, char** Argv)
 		{ "no aircraft pops from place to place", C.MostJump <= 25.0, Num(C.MostJump), "at most 25 m beyond its speed in a frame" },
 		{ "never two gunners at one window", C.SharedWindows == 0, std::to_string(C.SharedWindows), "0" },
 		{ "a model falls for every aircraft lost", C.Falls >= EventsLost - 2 && C.Falls <= EventsLost + 2, std::to_string(C.Falls), "the battle's count, within 2" },
+		{ "the kit told of every fall, its moves only while it falls", FallStarts == C.Falls && FallStrays == 0, std::to_string(FallStarts) + " starts, " + std::to_string(FallStrays) + " stray", "a start a fall, 0 stray" },
+		{ "debris within its room", MostDebris <= Debris.Most, std::to_string(MostDebris), "at most the room" },
 		{ "parachutes as the battle says", C.Chutes >= EventsChutes * 8 / 10, std::to_string(C.Chutes), "at least 8 in 10 of the battle's" },
 		{ "guns within the effects budget", MostLiveGuns <= Show.MostGuns, std::to_string(MostLiveGuns), "at most MostGuns" },
 		{ "flak bursts round the boxes", C.FlakBursts > 0, std::to_string(C.FlakBursts), "some" },
