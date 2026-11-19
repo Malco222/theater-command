@@ -528,8 +528,27 @@ export const worksBy = (r: Region): string => r.fort?.by ?? r.owner;
  * and its side, never for its enemy against that nation's own attacks. A ring that has taken the ground behind a
  * city's lines does not stand in them backwards against the city's relief. Every nation, every stop.
  */
-export const worksFor = (g: Game, r: Region, nat: string): boolean => !!r.fort && (nat === worksBy(r) || allied(g, nat, worksBy(r)));
+export const worksFor = (g: Game, r: Region, nat: string): boolean => !!r.fort && (sideOf(g, nat, worksBy(r)) || (!!r.fort.held && sideOf(g, nat, r.fort.held)));
+const sideOf = (g: Game, nat: string, of: string): boolean => nat === of || allied(g, nat, of);
 /** True where a place's works count for whoever stands against `attNat` there: the army in its field, or with none, its holder. */
+/**
+ * Works taken over (the variant put to the design director beside b624): a side that has held a place outright from one
+ * month's end to the next (the place in its hands, no enemy army standing in it, no siege) takes over the works there
+ * too (fort.held): Tobruk's Italian perimeter held by Britain in 1941, the French Mareth Line held by the Axis in 1943.
+ * The works still count for the side that dug them, the day it takes them back (Kiev and Zhitomir in 1943). A ring
+ * in a city's field never holds the place outright while the city's own garrison holds the town, so it never takes the
+ * city's lines over (the Moscow case).
+ */
+export function worksMonth(g: Game): void {
+  for (const r of g.regions) {
+    const key = `wkh:${r.id}`;
+    const holder = r.ctrl;
+    const outright = !!r.fort && !worksFor(g, r, holder) && !r.units.some((u) => !u.dead && atWar(g, u.nat, holder)) && !besieged(g, r);
+    if (!outright) { if (g.flags[key] !== undefined) delete g.flags[key]; continue; }
+    if (g.flags[key] === undefined) { g.flags[key] = g.turn; continue; }
+    if (g.turn > g.flags[key]) { r.fort = { ...r.fort!, held: holder }; delete g.flags[key]; }
+  }
+}
 export function worksAgainst(g: Game, r: Region, attNat: string): boolean {
   if (!r.fort) return false;
   const foes = hostileUnits(g, r, attNat);

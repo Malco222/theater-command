@@ -18,7 +18,7 @@ export interface Region {
   cap: boolean;
   port: boolean;
   /** Works: their level, the nations whose ground they face, and who dug them (ruling 232 rider b624; unset in an old save: the owner). */
-  fort: { lv: number; vs: string[]; by?: string } | null;
+  fort: { lv: number; vs: string[]; by?: string; held?: string } | null;
   vichy: boolean;
   sov: boolean;
   oil: boolean;
