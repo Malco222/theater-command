@@ -45,6 +45,11 @@ describe('the record of names', () => {
       expect(r.crew, r.name).toBeLessThan(3500);
     }
     for (const cls of ['bb', 'cv'] as const) for (const s of hulls.share[cls]) { expect(s).toBeGreaterThan(0); expect(s).toBeLessThanOrEqual(1); }
+    // A ship's changes come after she joins, in the order of the months (the namer takes the last that has come).
+    for (const nat of Object.keys(NAVIES)) for (const cls of ['bb', 'cv'] as const) for (const r of NAVIES[nat][cls] ?? []) {
+      let at = r.from ?? 1;
+      for (const x of r.later ?? []) { expect(x.from, r.name).toBeGreaterThan(at); at = x.from; }
+    }
   });
 });
 
