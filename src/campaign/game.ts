@@ -2913,6 +2913,9 @@ export function standingCallUp(g: Game, nat: string): { held: boolean; corps: nu
   return { held: callUpHeld(g, nat), corps: Math.floor((plan.perMonth[wave] ?? plan.after) * (1 - callUpCut(g, nat)) + (g.flags[`mtr:${nat}`] ?? 0) + 1e-9), divs: plan.divs };
 }
 
+/** Watches the call-up (measures only; moves nothing): each month, the corps the plan and the reserve allowed before the trim, and those raised. */
+export const callUpWatch: { tell: ((e: { nat: string; turn: number; wave: number; want: number; raised: number; divs: number }) => void) | null } = { tell: null };
+
 /**
  * The one trim of the free call-up (ruling 228, rider b481; sized on the tree that ships, b627): the share of the corps
  * a nation's call-up would raise each month that are not raised, at the dial's stops its plan names (the grand
@@ -2970,6 +2973,7 @@ function mobilise(g: Game, nat: string): void {
   // The first waves take whatever there is; the standing call-up after them takes only what the armies in the field do not need.
   if (g.flags.open === 1) count = Math.min(count, wave < plan.perMonth.length ? raisable(g, nat, plan.divs) : Math.max(0, Math.floor(menSpare(g, nat) / plan.divs)));
   // The one trim (b481, b627): a share of the corps the month would raise are not raised, the fraction carried to the next month.
+  const want = count;
   const cut = held ? 0 : callUpCut(g, nat);
   if (cut > 0 && count > 0) { const want = count * (1 - cut) + (g.flags[`mtr:${nat}`] ?? 0); count = Math.floor(want + 1e-9); g.flags[`mtr:${nat}`] = Math.max(0, want - count); }
   // Held, the wave is not raised: its men go to the corps in the field as this month's extra drafts (startPhase).
@@ -2979,6 +2983,7 @@ function mobilise(g: Game, nat: string): void {
   // The grand campaign: a computer's staff whose line has met dug-in troops forms one corps of each month's wave as
   // massed guns, until it has its share of them (the same share its factories would be asked for).
   const guns = g.flags.open === 1 && nat !== g.human && count > 0 && !locked(g, nat, 'corps:art') && gunsWanted(g, nat) ? specOf(g, 'art') : null;
+  let raisedNow = 0;
   for (let k = 0; k < count; k++) {
     // Form up in the industrial towns still held, emptiest first, away from the fighting.
     let best: Region | null = null, bs = 1e9;
@@ -2992,8 +2997,10 @@ function mobilise(g: Game, nat: string): void {
     const c = asGuns ? addCorps(g, nat, corpsName(nat, 'art', n.corpsNo++), 'art', guns.divs, best.id, { xp: plan.xp })
       : addCorps(g, nat, `${ordinal(n.corpsNo++)} ${plan.name}`, plan.kind, plan.divs, best.id, { xp: plan.xp });
     c.org = 0.7;
+    raisedNow++;
     drawMen(g, nat, asGuns ? guns.divs : plan.divs);
   }
+  callUpWatch.tell?.({ nat, turn: g.turn, wave, want, raised: raisedNow, divs: plan.divs });
   if (count > 0 && month === 0) headline(g, 'event', `${n.name} orders general mobilisation.`, nat);
   // Behind the front, the people dig: anti-tank ditches and gun lines around the great cities.
   // In free play nobody waits for history's calendar: the lines round a city are dug as soon as the enemy is three marches from it.
