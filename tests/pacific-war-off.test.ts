@@ -2,7 +2,7 @@
 // December 1941 stands at its month's opening as it always did, the month's close reads nothing, and the rule that
 // lets two seats files give one country rows ("JAP+") is the far-side rig's rule with one more key.
 import { describe, expect, it } from 'vitest';
-import { answering, planSkies } from '../src/campaign/ai';
+import { answering, cityBound, effortKeeps, effortSends, planSkies } from '../src/campaign/ai';
 import { plannedStrike } from '../src/campaign/carriers';
 import { DIPLOMACY, closeDiplomacy, holds, monthlyDiplomacy, warDiplomacy } from '../src/campaign/diplomacy';
 import { FAR_LAID, lay } from '../src/campaign/far-rows';
@@ -314,6 +314,21 @@ describe('home ground that answers a landing from the sea (rider b641 (f) to rul
     addCorps(g, 'GER', 'Test landing corps', 'inf', 1, coast.id, {});
     addCorps(g, 'UK', 'Test home division', 'inf', 1, coast.id, { hold: 1 });
     for (const n of Object.keys(g.nations)) expect(answering(g, n), n).toEqual([]);
+  });
+});
+
+describe('a main effort that leaves a city or port empty next to the enemy (the director on Canton, 16:52Z of 19 November 2026) with the far side off', () => {
+  it('no place is bound and nobody is kept: every list comes back as it was given', () => {
+    const g = startOpen(createGame(3, null));
+    setWar(g, 'GER', 'POL');
+    setWar(g, 'GER', 'FRA');
+    for (const nat of ['GER', 'POL', 'FRA', 'UK', 'ITA', 'SOV']) {
+      for (const r of g.regions) expect(cityBound(g, nat, r), `${nat} ${r.name}`).toBe(false);
+      const list = g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort');
+      expect(list.some((c) => g.regions[c.reg].units.length === 1 && (g.regions[c.reg].vp > 0 || g.regions[c.reg].port)), nat).toBe(true);
+      expect(effortSends(g, nat, list), nat).toBe(list);
+      for (const c of list) expect(effortKeeps(g, c), c.name).toBe(false);
+    }
   });
 });
 

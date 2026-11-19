@@ -10,7 +10,7 @@ import { afloat, airAI, airFleetsOf, fieldRoom, homeCommand, km, rebaseAir, whyN
 import { aiProduction, armyWorn, gunsWanted, income } from './economy';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
-import { aiArsenal, aiFortify, aiProgramme } from './arsenal';
+import { aiArsenal, aiFortify, aiProgramme, isCity } from './arsenal';
 import { blocked as groundBars, blowBridges } from './rivers';
 import { groundRules, isFoot } from './ground';
 import { SUPPORT } from './support';
@@ -41,17 +41,71 @@ import {
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
 
 /** A computer staff's march: by the book none goes into ground the record's line shuts to it this month (line.ts). */
-const moveCorps = (g: Game, c: Corps, to: Region): boolean => !lineShut(g, c.nat, to) && !offFront(g, c, to) && !offHome(c, to) && moveTo(g, c, to);
+const moveCorps = (g: Game, c: Corps, to: Region): boolean => !lineShut(g, c.nat, to) && !offFront(g, c, to) && !offHome(c, to) && !lastGuard(g, c) && moveTo(g, c, to);
 // (A row on a live front of its plan goes nowhere that takes it off that front, by road or by rail: planfronts.ts,
 // rider b633 to ruling 234. No plan names fronts with the far side off.)
-const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => groundBars(g, c, to, from) || offFront(g, c, to) || offHome(c, to);
-const railCorps = (g: Game, c: Corps, to: Region): boolean => !offFront(g, c, to) && !offHome(c, to) && railMove(g, c, to);
+const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => groundBars(g, c, to, from) || offFront(g, c, to) || offHome(c, to) || lastGuard(g, c);
+const railCorps = (g: Game, c: Corps, to: Region): boolean => !offFront(g, c, to) && !offHome(c, to) && !lastGuard(g, c) && railMove(g, c, to);
 // (A held home row that answers a landing from the sea marches, rides and fights only on its own piece of home
 // ground for the month, and never sails: rider b641 (f) to ruling 234, `answering`. Nobody is tied with the far side off.)
 let tied = new Map<number, Set<number>>();
 const offHome = (c: Corps, to: Region): boolean => { const on = tied.get(c.id); return on !== undefined && !on.has(to.id); };
 /** Whether a province is barred to a corps this month because it answers a landing on its own home ground and the province is off that ground. */
 export const homeBars = (c: Corps, to: Region): boolean => offHome(c, to);
+// (A main effort leaves no city or port it holds empty next to ground an enemy holds, beyond the old chart: the
+// design director's ruling of 16:52Z of 19 November 2026 on Canton, from rider b642's China trace to ruling 234,
+// `cityBound`. True while a main effort's own steps run with the far side on; nobody is kept with it off.)
+let effort = false;
+/** The last of its side in a place a main effort may not leave empty: it does not go, by road, by rail or into an attack. */
+const lastGuard = (g: Game, c: Corps): boolean => effort && cityBound(g, c.nat, g.regions[c.reg]) && friendlyUnits(g, g.regions[c.reg], c.nat).length <= 1;
+/** Runs a step of a main effort: its attacks, its closing up to the front, its shoring up of the line afterwards. */
+function inEffort<T>(g: Game, run: () => T): T {
+  const was = effort;
+  effort = farOn(g);
+  try { return run(); } finally { effort = was; }
+}
+
+/**
+ * A city or a port a country holds beyond the old chart, next to ground an enemy of its holds: a main effort does
+ * not leave it empty (the design director, 16:52Z of 19 November 2026). In September 1939 Japan's free staff opened
+ * its offensive against China and the main effort sent Canton's one corps at Wuchow next door; it won and went in,
+ * and China walked into Canton behind it. Thirteen to fifteen of the thirty-four provinces Japan stood on were left
+ * with nobody on them that month. Japan held its occupied cities through the war and its offensives went out from
+ * them: one corps stays in such a place while the others go forward, read at the moment a corps would leave. It
+ * binds only where an empty city would hand the enemy a walk-in, so the offensive keeps the rest. A city is a
+ * province that counts for victory, or one the arsenal calls a city. The plan's own staging for a quay, a redeploy,
+ * a fall-back and the sea's routines are not bound, nor is a month on the defensive. The far side's alone: the
+ * general form, every staff's on the old chart, waits for after release.
+ */
+export function cityBound(g: Game, nat: string, r: Region): boolean {
+  if (!farOn(g) || !beyondEurope(r) || !(r.vp > 0 || r.port || isCity(r)) || ctl(g, r) !== nat) return false;
+  return r.nb.some((j) => atWar(g, nat, ctl(g, g.regions[j])));
+}
+
+/**
+ * Of the corps that could go at a place, those a main effort may send: where everybody of its side in a bound city
+ * or port is on the list, one stays. A corps on foot that fights stays before any other, and the weakest of them.
+ */
+function guardsStay(g: Game, nat: string, list: Corps[]): Corps[] {
+  if (!effort) return list;
+  const at = new Map<number, Corps[]>();
+  for (const c of list) {
+    const r = g.regions[c.reg];
+    if (!cityBound(g, nat, r)) continue;
+    const l = at.get(r.id);
+    if (l) l.push(c); else at.set(r.id, [c]);
+  }
+  const stay = new Set<number>();
+  const foot = (c: Corps): number => (fights(c) && !KIND[c.kind].mobile ? 0 : 1);
+  for (const [id, l] of at) {
+    if (l.length < friendlyUnits(g, g.regions[id], nat).length) continue;
+    stay.add([...l].sort((x, y) => foot(x) - foot(y) || atkPower(g, x) - atkPower(g, y) || x.id - y.id)[0].id);
+  }
+  return stay.size ? list.filter((c) => !stay.has(c.id)) : list;
+}
+/** For the tests and the measuring harness: the corps of a list a main effort may send at a place, and whether a main effort's march is refused a corps because it is its place's last. */
+export const effortSends = (g: Game, nat: string, list: Corps[]): Corps[] => inEffort(g, () => guardsStay(g, nat, list));
+export const effortKeeps = (g: Game, c: Corps): boolean => inEffort(g, () => lastGuard(g, c));
 
 function phases(nat: string): PlanPhase[] {
   const p = PLAN[nat];
@@ -618,7 +672,7 @@ function overseas(g: Game, nat: string): void {
           offensive(g, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only, ph.oddsFor);
         }
         // With the month's fighting done the rest of the army closes up to wherever the enemy now stands.
-        if (n.alive) { advance(g, nat, enemies, 0, null, edge); mass(g, nat, ph); defend(g, nat, false); }
+        if (n.alive) { inEffort(g, () => advance(g, nat, enemies, 0, null, edge)); mass(g, nat, ph); inEffort(g, () => defend(g, nat, false)); }
       } else { gather(g, nat, ph); mass(g, nat, ph); defend(g, nat); }
     } finally {
       // The troops that have just won the country round a town go straight on into it, if the odds allow.
@@ -816,16 +870,17 @@ function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): v
   if (!n.alive) return;
   if (posture === 'redeploy') redeploy(g, nat, ph!, enemies);
   else if (follow) {
-    advance(g, nat, enemies, 0, null, halt);
+    // (A main effort's closing up and shoring up leave no city or port empty next to the enemy, as its attacks leave none: `cityBound`.)
+    inEffort(g, () => advance(g, nat, enemies, 0, null, halt));
     mass(g, nat, ph);
     // With the month's attacks made, whoever still has marching time shores up the thin places.
-    defend(g, nat, false);
+    inEffort(g, () => defend(g, nat, false));
     // Where the plan calls for it, troops who closed up to a great prize late in the month go straight in
     // once the line around it has been filled out, and the line is then put in order again.
     if (ph?.lastPush?.length) {
       const fights = g.reports.length;
       offensive(g, nat, ph.lastPush, enemies, ph.minOdds ?? 1.3, [], true, false, halt, new Set(ph.lastPush));
-      if (n.alive && g.reports.length > fights) defend(g, nat, false);
+      if (n.alive && g.reports.length > fights) inEffort(g, () => defend(g, nat, false));
     }
   }
 }
@@ -2489,6 +2544,10 @@ export function twoWaves(g: Game, avail: Corps[], pool: Corps[], target: Region,
 export const attackWatch: { tell: ((e: { nat: string; open?: { minOdds: number; only: string[] | null; halt: string[]; oddsFor: Record<string, number>; theatre: boolean }; target?: Region; pool?: Corps[]; odds?: number; need?: number; sent?: boolean; waves?: boolean }) => void) | null } = { tell: null };
 
 function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, minOdds: number, axisList: string[], axisOpen: boolean, follow: boolean, halt: Set<string>, only: Set<string> | null, oddsFor: Record<string, number> = {}): void {
+  inEffort(g, () => attacks(g, nat, objs, enemies, minOdds, axisList, axisOpen, follow, halt, only, oddsFor));
+}
+
+function attacks(g: Game, nat: string, objs: string[], enemies: Set<string>, minOdds: number, axisList: string[], axisOpen: boolean, follow: boolean, halt: Set<string>, only: Set<string> | null, oddsFor: Record<string, number>): void {
   const failed = new Set<number>();
   attackWatch.tell?.({ nat, open: { minOdds, only: only ? [...only] : null, halt: [...halt], oddsFor, theatre: !!scope } });
   // Places a first wave has gone in at this month, and how many: the main body follows, and nobody sends a third
@@ -2551,7 +2610,9 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
           const score = value + 2;
           if (!best || score > best.score) best = { score, target, corps: [movers[0]], battle: false };
         } else {
-          const pool = limitAttackers(g, avail.filter((c) => c.org >= 0.35), target);
+          // (Where everybody in a city or port next to the enemy could go, one stays: `cityBound`. All may go with the far side off.)
+          const free = guardsStay(g, nat, avail.filter((c) => c.org >= 0.35));
+          const pool = limitAttackers(g, free, target);
           if (!pool.length) continue;
           // The tanks go in together along the main axis; elsewhere the infantry does the work.
           const main = axis.has(target.name);
@@ -2576,7 +2637,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
             if (odds >= need) pick = pool;
             else {
               // Not at these odds in one blow: in two, if there are the corps for it.
-              const two = single || (waved.get(j) ?? 0) >= waves - 1 ? null : twoWaves(g, avail, pool, target, need);
+              const two = single || (waved.get(j) ?? 0) >= waves - 1 ? null : twoWaves(g, free, pool, target, need);
               if (!two) { attackWatch.tell?.({ nat, target, pool, odds, need, sent: false }); continue; }
               pick = two.corps; odds = two.then; wave = true;
             }
@@ -3033,9 +3094,11 @@ function defend(g: Game, nat: string, line = true): void {
     // In free play the force a staff keeps at a place stays there: it is not thrown into a counter-attack next door.
     const kept = isOpen(g) ? massed : null;
     const near = g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0 && !c.fought && c.org >= 0.6 && !kept?.has(c.id) && g.regions[c.reg].nb.includes(r.id) && !offFront(g, c, r) && !offHome(c, r));
-    const cut = limitAttackers(g, near, r);
+    // (In a main effort's month one corps stays in a city or port next to the enemy, here as in the attacks: `cityBound`. All may go with the far side off.)
+    const free = guardsStay(g, nat, near);
+    const cut = limitAttackers(g, free, r);
     // (The local commander's tanks do not go alone at a gunned line any more than the army's: the infantry next door goes in with them, or he waits.)
-    const pool = cut.length ? footBeside(g, cut, near, r) ?? [] : [];
+    const pool = cut.length ? footBeside(g, cut, free, r) ?? [] : [];
     // Overseas a local counter-stroke sends two corps in to hold what it wins: the rest keep the door open behind them.
     // (The grand campaign: an army goes to the relief of a town at shorter odds than it would counter-attack, and of its capital at shorter still.)
     const bar = shut && siegeRules(g) ? reliefBar(g, r) : 1.8;
