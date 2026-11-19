@@ -498,12 +498,14 @@ export function joinTown(g: Game, r: Region, c: Corps): void {
 
 /**
  * Rider b606's garrisons are ruling 232's own and no part of the roster: a SIEGE.startIn row that carries 'town' and
- * 'divs'. At the start of a 1939 grand campaign with the ruling on, its corps is raised in that town's province, held
- * there (`startGarrisons` then takes it inside at the record's size). Where the ruling does not hold (the history
- * campaign, or the switch off) there is no such corps, and that war's roster is what it was.
+ * 'divs'. `startOpen` calls this first of all, on the first day of a 1939 grand campaign with the ruling's switch on:
+ * the corps is raised in that town's province, held there, as a row of the roster is, so that the campaign's opening
+ * counts (the depots, the numbers its divisions carry) take it as one; `startGarrisons` then takes it inside at the
+ * record's size. With the switch off, and in the history campaign, which never opens this way, there is no such corps
+ * and that war's roster is what it was.
  */
 export function raiseGarrisons(g: Game): void {
-  if (g.turn !== 1 || !driveOut(g)) return;
+  if (g.turn !== 1 || !DRIVE.on) return;
   for (const s of SIEGE.startIn ?? []) {
     const r = s.town ? g.byName[s.town] : undefined;
     if (!s.divs || !r || r.ctrl !== s.nat || r.owner !== s.nat || g.corps.some((x) => x.nat === s.nat && x.name === s.corps)) continue;
