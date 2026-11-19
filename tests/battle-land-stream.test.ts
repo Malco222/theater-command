@@ -377,6 +377,17 @@ describe('a city along its shore as a strip (the art director, 19 November)', ()
     expect(streamOf(CITY_RIVERS.Stalingrad, 198).strip).toBeUndefined();
     expect(streamOf(CITY_RIVERS.Saratov, 117).strip).toBeUndefined();
   });
+  it('strip cities by the design director (b619): marked only where the historian finds one bank and about 4 to 1', () => {
+    const marked = Object.entries(CITY_RIVERS).filter(([, r]) => r.strip).map(([n]) => n).sort();
+    expect(marked).toEqual(['Khabarovsk', 'Krasnoyarsk', 'Molotov', 'Stalingrad', 'Tbilisi']);
+    for (const n of ['Saratov', 'New York', 'Chungking', 'Zaporozhye']) if (CITY_RIVERS[n]) expect(CITY_RIVERS[n].strip, n).toBeUndefined();
+    // A shore city shows its strip only with its water straight ahead of the attack (behind the defence).
+    expect(streamOf(CITY_RIVERS.Molotov, 330)).toMatchObject({ lie: 'shore', side: 'back', strip: true });
+    expect(streamOf(CITY_RIVERS.Khabarovsk, 270)).toMatchObject({ lie: 'shore', side: 'back', strip: true });
+    expect(streamOf(CITY_RIVERS.Molotov, 150).strip).toBeUndefined();
+    // A river through the city lies up or across, never as a shore: the mark is carried, not drawn.
+    for (const n of ['Tbilisi', 'Krasnoyarsk']) for (let hd = 0; hd < 360; hd += 15) expect(streamOf(CITY_RIVERS[n], hd).strip, `${n} ${hd}`).toBeUndefined();
+  });
   it('its streets run the whole width along the water and reach only a little way inland; a round town leaves open flanks', () => {
     for (const seed of [11, 12, 13, 14]) {
       const strip = buildField(cityTicket('city', 'urban', seed, { ...back, strip: true }).place, seed);
