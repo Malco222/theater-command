@@ -341,7 +341,7 @@ describe('handed to the staff (the design director, log b368): the rules\' own d
 
 describe('the dispatches\' grammar (the UI director, air review 10)', () => {
   it('a group named as a plural takes a plural verb; a carrier\'s fighters are the fleet\'s', () => {
-    expect(subjectOf('Home Fleet carrier fighters')).toEqual({ who: "The Home Fleet's carrier fighters", whom: "the Home Fleet's carrier fighters", many: true });
+    expect(subjectOf('Home Fleet carrier fighters')).toEqual({ who: "The Home Fleet's carrier fighters", whom: "the Home Fleet's carrier fighters", many: true, craft: true });
     expect(told('Home Fleet carrier fighters', '{N} [is|are] in a fight.')).toBe("The Home Fleet's carrier fighters are in a fight.");
     expect(told('Jagdgeschwader 4', '{N} [is|are] in a fight.')).toBe('Jagdgeschwader 4 is in a fight.');
     expect(told('No. 11 Group', '{N} [breaks|break]: [it jettisons its|they jettison their] bombs and [turns|turn] for home.')).toBe('No. 11 Group breaks: it jettisons its bombs and turns for home.');

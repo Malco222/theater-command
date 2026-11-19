@@ -12,7 +12,7 @@ import { fieldRatio } from '../core/result';
 import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, FieldTicket, Side, UnitState, Zone } from '../core/types';
 import { DT } from '../core/types';
 import { SKY, type Band } from './book';
-import { an, oneOf, subjectOf, told, upFirst } from './names';
+import { aCraftOf, adjFor, oneOf, subjectOf, told, upFirst } from './names';
 import { enginesOf, escortRoles, fighterWay, passesOn, pickPass, type Pass, type Role, type When } from './doctrine';
 import { drawFall, fallWords } from './falls';
 import type { AirJob, AirOutcome, AirPlace, AirUnit, Straggler } from './types';
@@ -183,11 +183,17 @@ export class AirSim implements BattleSim<AirUnit> {
   /**
    * A group's name in a dispatch: his own bare, as the tray has them; the enemy's with its country word first, as every
    * enemy named on the field (the UI director's ruling 226(7), carried to the air: "French Groupe de Chasse 3 is in a
-   * fight."). With nobody's hand on either side, both bare.
+   * fight."). With nobody's hand on either side, both bare; and never the nation word twice ("Polish Navy strike wing").
    */
   called(u: AirUnit): string {
+    const adj = this.adjOf(u);
+    return adj ? `${adj} ${u.name}` : u.name;
+  }
+
+  /** The nation word the lines add to a group: the enemy's (as called()), unless its name already says it. */
+  private adjOf(u: AirUnit): string {
     const t = this.ticket;
-    return t[u.side].human || !(t.att.human || t.def.human) ? u.name : `${t[u.side].adj} ${u.name}`;
+    return t[u.side].human || !(t.att.human || t.def.human) ? '' : adjFor(u.name, t[u.side].adj);
   }
 
   private say(what: FieldEvent['what'], u: AirUnit | null, text: string, extra?: Record<string, unknown>, cue?: string): void {
@@ -420,7 +426,7 @@ export class AirSim implements BattleSim<AirUnit> {
     if (now !== null && was === null) {
       const box = this.unit(j.on)!, first = !this.broke.has(u.id);
       this.broke.add(u.id);
-      this.say('air:engage', u, first ? `${told(this.called(u), '{N} [has|have] broken away from')} ${subjectOf(this.called(box)).whom} to take on the attackers.` : '', { on: now, box: j.on });
+      this.say('air:engage', u, first ? `${told(this.called(u), '{N} [has|have] broken away from')} ${subjectOf(box.name).whom} to take on the attackers.` : '', { on: now, box: j.on });
     } else if (now === null && was !== null) this.say('air:rejoin', u, '', { box: j.on });
   }
 
@@ -658,7 +664,7 @@ export class AirSim implements BattleSim<AirUnit> {
         const fall = drawFall(this.fallRng, u.air, over, P.saved[u.side]);
         if (fall.back) u.back++;
         const who = by !== undefined ? { by, ...(s ? { strag: s.id, eng: s.eng, ...this.stragAt(u, s) } : {}) } : {};
-        this.say('air:lost', u, fallWords(this.called(u), fall), { ...fall, air: u.air, alt: s ? Math.max(0, u.alt - s.down) : u.alt, ...(fall.chutes ? { chuteCue: C.chutes } : {}), ...who }, fall.kind === 'explode' ? C.explode : C.down);
+        this.say('air:lost', u, fallWords(u.name, this.adjOf(u), fall), { ...fall, air: u.air, alt: s ? Math.max(0, u.alt - s.down) : u.alt, ...(fall.chutes ? { chuteCue: C.chutes } : {}), ...who }, fall.kind === 'explode' ? C.explode : C.down);
         u.figures = Math.max(u.n > 0 ? 1 : 0, Math.ceil(u.n / u.per));
       }
     }
@@ -726,14 +732,12 @@ export class AirSim implements BattleSim<AirUnit> {
   }
 
   /**
-   * 'A bomber of KG 2' for his own box, 'a German bomber of KG 2' for the enemy's (the UI director, 21:19Z). A box named
-   * for its aircraft is 'one of the Shokaku and Zuikaku dive bombers' (oneOf), the enemy's 'one of the Japanese ...',
-   * and 'how' follows the name ('one of the ..., damaged,').
+   * 'A bomber of KG 2' for his own box, 'a German bomber of KG 2' for the enemy's (the UI director, 21:19Z), 'a bomber
+   * of the 8th Bomb Group'; a box named for its aircraft 'one of the Shokaku and Zuikaku dive bombers', the enemy's 'one
+   * of the Japanese ...', and 'how' after the name ('one of the ..., damaged,') (names.ts aCraftOf).
    */
   private aBomberOf(b: AirUnit, first: boolean, how = ''): string {
-    const t = this.ticket, own = t[b.side].human || !(t.att.human || t.def.human), adj = own ? '' : t[b.side].adj;
-    const what = [how, adj, 'bomber'].filter(Boolean).join(' ');
-    const said = subjectOf(b.name).many ? `${oneOf(b.name, adj)}${how ? `, ${how},` : ''}` : `${an(what)} ${what} of ${subjectOf(b.name).whom}`;
+    const said = aCraftOf(b.name, 'bomber', this.adjOf(b), how);
     return first ? upFirst(said) : said;
   }
 

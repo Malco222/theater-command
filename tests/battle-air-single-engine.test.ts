@@ -9,6 +9,7 @@ import { createGame, setWar } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import { enginesOf } from '../src/battle/air/doctrine';
 import { airBattle, oneOf, subjectOf, told, type AirSim } from '../src/battle/air/sim';
+import { aCraftOf, adjFor } from '../src/battle/air/names';
 import { airTicket, raidGroups } from '../src/battle/air/ticket';
 import type { FieldEvent } from '../src/battle/core/types';
 
@@ -104,7 +105,7 @@ describe('a single-engined bomber falling out', () => {
 
 describe('the campaign\'s carrier groups by name (the UI director\'s air review 10, carried to the strike wing)', () => {
   it('a strike wing is its fleet\'s, singular; a fleet called by its letter takes no article', () => {
-    expect(subjectOf('Home Fleet strike wing')).toEqual({ who: "The Home Fleet's strike wing", whom: "the Home Fleet's strike wing", many: false });
+    expect(subjectOf('Home Fleet strike wing')).toEqual({ who: "The Home Fleet's strike wing", whom: "the Home Fleet's strike wing", many: false, craft: false });
     expect(told('Home Fleet strike wing', '{N} [is|are] in a fight.')).toBe("The Home Fleet's strike wing is in a fight.");
     expect(told('Force H strike wing', '{N} [is|are] in a fight.')).toBe("Force H's strike wing is in a fight.");
     expect(told('Force H carrier fighters', '{N} [is|are] in a fight.')).toBe("Force H's carrier fighters are in a fight.");
@@ -126,12 +127,84 @@ describe('the campaign\'s carrier groups by name (the UI director\'s air review 
       expect(out.length).toBeGreaterThan(0);
       for (const e of out) expect([`${pre} the Home Fleet's strike wing has taken a hit in the engine and is falling out of formation.`, `Flak has hit the engine of ${pre[0].toLowerCase()}${pre.slice(1)} the Home Fleet's strike wing, and it is falling out of formation.`]).toContain(e.text);
       const box = new Set(out.map((e) => e.unit));
-      for (const e of h.filter((e) => e.what === 'air:lost' && box.has(e.unit))) expect(e.text).toMatch(def ? /^An aircraft of the British Home Fleet's strike wing / : /^An aircraft of the Home Fleet's strike wing /);
+      // The nation word on the aircraft (the UI director, 14:26Z, ruling 2).
+      for (const e of h.filter((e) => e.what === 'air:lost' && box.has(e.unit))) expect(e.text).toMatch(def ? /^A British aircraft of the Home Fleet's strike wing / : /^An aircraft of the Home Fleet's strike wing /);
     }
     const tk = ticketOf(1);
     tk.att.human = false; tk.def.human = true; tk.att.adj = 'Uruguayan';
     const h = fight(tk).history();
     expect(h.filter((e) => e.what === 'air:straggle').length).toBeGreaterThan(0);
     for (const e of h.filter((e) => e.what === 'air:straggle' || (e.what === 'air:limped' && e.text))) expect(e.text).toMatch(/(^A|a) (damaged )?Uruguayan bomber of /);
+  });
+});
+
+describe('the UI director\'s six rulings of 14:26Z (words-air-battle-dispatches.md)', () => {
+  it('1. an ordinal group takes "the"; "No." names and the German and Italian forms stay bare', () => {
+    expect(told('1st Bomber Group', '{N} [is|are] in a fight.')).toBe('The 1st Bomber Group is in a fight.');
+    expect(told('American 15th Pursuit Group', '{N} [is|are] in a fight.')).toBe('The American 15th Pursuit Group is in a fight.');
+    expect(told('Eighth Air Force', '{N} [is|are] in a fight.')).toBe('The Eighth Air Force is in a fight.');
+    expect(aCraftOf('8th Bomb Group', 'bomber')).toBe('a bomber of the 8th Bomb Group');
+    // A Roman numeral is an ordinal too, and 'I Bomber Command' must never read as the pronoun.
+    expect(told('I Bomber Command', '{N} [is|are] in a fight.')).toBe('The I Bomber Command is in a fight.');
+    expect(told('American VIII Fighter Command', '{N} [is|are] in a fight.')).toBe('The American VIII Fighter Command is in a fight.');
+    for (const bare of ['No. 3 Group', 'No. 11 Bomber Group', 'KG 2', 'JG 26', 'Kampfgeschwader 2', 'Stormo Bombardieri 4', 'Groupe de Chasse 3', 'Groupe de Chasse I', 'Bomber Command', 'Italian Stormo Caccia 2']) {
+      expect(told(bare, '{N} [is|are] in a fight.'), bare).toBe(`${bare} is in a fight.`);
+    }
+  });
+  it('2. the nation word sits on the aircraft where a line names one, and before the name where the group is the subject', () => {
+    expect(aCraftOf('Bombing Three and Scouting Six', 'aircraft', 'American')).toBe('an American aircraft of Bombing Three and Scouting Six');
+    expect(aCraftOf('15th Pursuit Group', 'aircraft', 'American')).toBe('an American aircraft of the 15th Pursuit Group');
+    expect(told('American Bombing Three and Scouting Six', '{N} [is|are] in a fight.')).toBe('American Bombing Three and Scouting Six are in a fight.');
+  });
+  it('3. a name joined by "and" or a comma, or ending in a plural noun, takes a plural verb; a single unit the singular', () => {
+    expect(told('Torpedo Three, Six and Eight', '{N} [is|are] in a fight.')).toBe('Torpedo Three, Six and Eight are in a fight.');
+    expect(told('Fighting Three and Fighting Six', '{N} [has|have] broken away from')).toBe('Fighting Three and Fighting Six have broken away from');
+    expect(told('First Air Fleet fighters', '{N} [is|are] in a fight.')).toBe('The First Air Fleet fighters are in a fight.');
+    expect(told('KG 2', '{N} [is|are] in a fight.')).toBe('KG 2 is in a fight.');
+    // Joined, but not named for its aircraft: one of it is still 'a bomber of'.
+    expect(aCraftOf('Torpedo Three, Six and Eight', 'bomber')).toBe('a bomber of Torpedo Three, Six and Eight');
+  });
+  it('4. a box named for its aircraft takes "the" wherever it stands', () => {
+    expect(subjectOf('Akagi and Kaga torpedo bombers').whom).toBe('the Akagi and Kaga torpedo bombers');
+    expect(told('Japanese Shokaku and Zuikaku dive bombers', '{N} [is|are] in a fight.')).toBe('The Japanese Shokaku and Zuikaku dive bombers are in a fight.');
+  });
+  it('5. no nation word twice', () => {
+    expect([adjFor('Polish Navy strike wing', 'Polish'), adjFor('Royal Norwegian Navy carrier fighters', 'Norwegian'), adjFor('Home Fleet strike wing', 'British'), adjFor('KG 2', ''), adjFor('US Ninth Air Force', 'British')]).toEqual(['', '', 'British', '', '']);
+  });
+  it('in a battle: the enemy\'s joined and nation-named groups, and an ordinal one', () => {
+    const lines = (adj: string, name: string) => {
+      const tk = ticketOf(1, 'D3A');
+      tk.att.human = false; tk.def.human = true; tk.att.adj = adj;
+      const s = fight(tk, name), ids = new Set(s.units.filter((u) => u.side === 'att' && u.air === 'bmr').map((u) => u.id));
+      return s.history().filter((e) => e.unit !== undefined && ids.has(e.unit));
+    };
+    const joined = lines('American', 'Bombing Three and Scouting Six');
+    expect(joined.some((e) => e.what === 'air:straggle')).toBe(true);
+    expect(joined.some((e) => e.what === 'air:lost')).toBe(true);
+    expect(joined.some((e) => e.what === 'contact')).toBe(true);
+    for (const e of joined.filter((e) => e.what === 'air:straggle')) expect(e.text).toMatch(/^(An American bomber of Bombing Three and Scouting Six has|Flak has hit the engine of an American bomber of Bombing Three and Scouting Six,)/);
+    for (const e of joined.filter((e) => e.what === 'air:lost')) expect(e.text).toMatch(/^An American aircraft of Bombing Three and Scouting Six /);
+    for (const e of joined.filter((e) => e.what === 'contact')) expect(e.text).toBe('American Bombing Three and Scouting Six are in a fight.');
+    const navy = lines('Polish', 'Polish Navy strike wing');
+    expect(navy.some((e) => e.what === 'air:lost')).toBe(true);
+    for (const e of navy) expect(e.text).not.toMatch(/Polish Polish|Polish bomber|Polish aircraft/);
+    for (const e of navy.filter((e) => e.what === 'contact')) expect(e.text).toBe("The Polish Navy's strike wing is in a fight.");
+    for (const e of navy.filter((e) => e.what === 'air:lost')) expect(e.text).toMatch(/^An aircraft of the Polish Navy's strike wing /);
+    // An escort and its box are one side: its break names the box bare, so the nation word is said once.
+    // Three escort groups in 1940, so close escort flies (as tests/battle-air-realism.test.ts splitEscort).
+    const tk = ticketOf(0, 'D3A');
+    tk.place.when = { year: 1940, month: 8 };
+    const f = tk.att.forces.find((x) => x.kind !== 'bmr')!, each = Math.floor(f.men / 3);
+    for (let i = 1; i < 3; i++) { tk.att.forces.push({ ...f, corps: 90_000 + i, men: each }); tk.place.starts[90_000 + i] = { ...tk.place.starts[f.corps] }; }
+    f.men -= each * 2;
+    tk.att.human = false; tk.def.human = true; tk.att.adj = 'Japanese';
+    const esc = fight(tk, 'Shokaku and Zuikaku dive bombers').history().filter((e) => e.what === 'air:engage' && e.text);
+    expect(esc.length).toBeGreaterThan(0);
+    for (const e of esc) expect(e.text).toMatch(/^Japanese .+ broken away from the Shokaku and Zuikaku dive bombers to take on the attackers\.$/);
+    const nth = lines('American', '8th Bomb Group');
+    expect(['contact', 'air:lost', 'air:straggle'].every((w) => nth.some((e) => e.what === w))).toBe(true);
+    for (const e of nth.filter((e) => e.what === 'contact')) expect(e.text).toBe('The American 8th Bomb Group is in a fight.');
+    for (const e of nth.filter((e) => e.what === 'air:lost')) expect(e.text).toMatch(/^An American aircraft of the 8th Bomb Group /);
+    for (const e of nth.filter((e) => e.what === 'air:straggle')) expect(e.text).toMatch(/an American bomber of the 8th Bomb Group/i);
   });
 });
