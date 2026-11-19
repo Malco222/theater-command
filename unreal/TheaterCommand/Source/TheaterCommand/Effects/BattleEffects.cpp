@@ -322,11 +322,11 @@ void FBattleEffects::AirHit(double Now, const FVector& At, const FVector& Normal
 	}
 }
 
-void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind)
+void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres)
 {
 	if (IsReady())
 	{
-		Core.TrailStart(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str());
+		Core.TrailStart(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres);
 	}
 }
 
@@ -381,6 +381,14 @@ void FBattleEffects::OilStop(int32 Id)
 void FBattleEffects::SetWind(const FVector& MetresPerSecond)
 {
 	Core.SetWind(ToFxWay(MetresPerSecond));
+}
+
+void FBattleEffects::UseAirDistance()
+{
+	if (IsReady())
+	{
+		Core.SetDrawBeyond(Core.AirBeyond());
+	}
 }
 
 void FBattleEffects::SetSun(const FVector& TowardSun)

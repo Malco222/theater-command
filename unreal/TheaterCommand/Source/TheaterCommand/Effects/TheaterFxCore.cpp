@@ -1767,6 +1767,7 @@ namespace TheaterFx
 			R.SmokeAlpha = Num(P + "smoke_alpha", 0.1);
 			R.Licks = std::max(0, static_cast<int>(Num(P + "licks", 0.0)));
 			R.Lamp = Num(P + "lamp", 0.0);
+			R.FlashLeastPx = std::max(0.0, Num(P + "flash_least_px", Num("air_guns.flash_least_px", 0.0)));
 		}
 		R.Name = Kind;
 		AirRows.push_back(R);
@@ -1871,6 +1872,7 @@ namespace TheaterFx
 			B.Hold = 0.5;
 			B.Heart = 0.85;
 			B.Rim = 0.2;
+			B.LeastPx = Row.FlashLeastPx; // (art director 04:40Z: from the strategy camera a muzzle flash is a twinkle of 2 px, never lost)
 			B.bLight = true;
 			Bits.push_back(B);
 		}
@@ -1972,8 +1974,10 @@ namespace TheaterFx
 			const double Stretch = D.U(2.2, 2.8);
 			Lick(At + Dir * (Len * 0.08) + Way * (R * Stretch * 0.8), Way, R, Stretch, FlameCol, FlameCol * 0.6, 0.85, 0.8, 0.1, 0.3);
 		}
-		// the hot heart right at the muzzle, laid last so it is pale over the orange
+		// the hot heart right at the muzzle, laid last so it is pale over the orange (and from the strategy camera never
+		// under flash_least_px: a twinkle)
 		Lick(At + Dir * (Len * 0.1), Dir, Len * 0.15, 1.4, CannonHeartCol, CannonHeartCol.Mix(FlameCol, 0.5), 1.0, 0.95, 0.35, 0.2);
+		Bits.back().LeastPx = Row.FlashLeastPx;
 	}
 
 	void Battle::AirHit(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind)
@@ -1985,6 +1989,7 @@ namespace TheaterFx
 		Dice D(++Seeds * 67867967ull ^ PlaceKey(At));
 		const Vec Skin = Normal.Unit(Vec(0.0, 0.0, 1.0));
 		const Rgb Spark = Picture("air_hit.spark_colour", Rgb::FromPicture(255, 236, 180));
+		const double HitLeastPx = std::max(0.0, Num("air_hit.least_px", 0.0));
 		auto Away = [&](double Spread) { return (Skin + Vec(D.Bell(), D.Bell(), D.Bell()) * Spread).Unit(Skin); };
 		// the spit: a hot flash on the skin, one frame and a half
 		{
@@ -2004,6 +2009,7 @@ namespace TheaterFx
 			B.Rim = 0.25;
 			B.Rough = 0.35;
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			B.LeastPx = HitLeastPx; // (art director 04:40Z: from the strategy camera a hit is a twinkle of 2 px, never lost)
 			B.bLight = true;
 			Bits.push_back(B);
 		}
@@ -2099,7 +2105,7 @@ namespace TheaterFx
 			B.Windage = 1.0;
 			B.Life = Pick(D, "air_hit.smoke_s", 0.8, 1.5);
 			B.R0 = 0.25 * S;
-			B.R1 = 1.1 * S * D.U(0.8, 1.2);
+			B.R1 = Num("air_hit.smoke_r1", 1.1) * S * D.U(0.8, 1.2);
 			B.Grow = 0.4;
 			B.Col = Smoke;
 			B.Col2 = Smoke.Mix(Rgb::FromPicture(130, 128, 124), 0.5);
@@ -2328,6 +2334,12 @@ namespace TheaterFx
 			R.SmearS = std::max(0.0, Num(P + "smear_s", 0.0));
 			R.Rise = Num(P + "rise_mps", 0.0);
 			R.FlameLift = Range(P + "flame_lift_m", 0.3, 0.6);
+			R.ThinAfter = std::max(0.0, Num(P + "thin_after_s", 0.0));
+			R.ThinKeep = std::max(1, static_cast<int>(Num(P + "thin_keep_one_in", 1.0)));
+			R.ThinGrow = std::max(1.0, Num(P + "thin_grow", 1.0));
+			R.FlameOfSpan = std::max(0.0, Num(P + "flame_of_span", 0.0));
+			R.FlameMost = Num(P + "flame_most_m", R.Flame);
+			R.FlameLeastPx = std::max(0.0, Num(P + "flame_least_px", 0.0));
 			R.Col = Picture(P + "colour", Rgb::FromPicture(128, 126, 122));
 			R.ColFull = Picture(P + "colour_full", R.Col);
 			R.ColOld = Picture(P + "colour_old", R.ColFull);
@@ -2337,13 +2349,17 @@ namespace TheaterFx
 		return TrailRows.back();
 	}
 
-	void Battle::TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind)
+	void Battle::TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind, double SpanM)
 	{
 		const std::string Name = Kind && *Kind ? Kind : "smoke";
 		for (Trailing& Tr : Trails)
 		{
 			if (Tr.Id == Id)
 			{
+				if (SpanM > 0.0)
+				{
+					Tr.Span = SpanM;
+				}
 				if (!Tr.bOn)
 				{
 					Tr.bOn = true;
@@ -2371,10 +2387,21 @@ namespace TheaterFx
 		Tr.At = At;
 		Tr.Carry = Carry;
 		Tr.LastPuffAt = At;
+		Tr.Span = std::max(0.0, SpanM);
 		Trails.push_back(Tr);
 	}
 
-	void Battle::TrailPuff(double T, const Vec& At, const Vec& Carry, const Trailing& Tr, const TrailRow& Row, Dice& D)
+	double Battle::FlameOf(const Trailing& Tr, const TrailRow& Row) const
+	{
+		// (art director 04:40Z: a burning plane's flame is half its span, at most 10 m; with no span given, the row's own)
+		if (Row.FlameOfSpan > 0.0 && Tr.Span > 0.0 && Row.Flame > 0.0)
+		{
+			return std::max(0.5, std::min(Row.FlameMost, Row.FlameOfSpan * Tr.Span));
+		}
+		return Row.Flame;
+	}
+
+	void Battle::TrailPuff(double T, const Vec& At, const Vec& Carry, Trailing& Tr, const TrailRow& Row, Dice& D)
 	{
 		// Art director 21:27Z: thin and dark at the engine; about three times wider by 2 s and still widening; breaking
 		// into uneven lumps, paler and thinner with age; each lump hanging where it was laid. A trail still comes to
@@ -2412,6 +2439,24 @@ namespace TheaterFx
 		B.Rim = 0.0;
 		B.Rough = 0.25 + 0.2 * Row.Lumpy;
 		B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+		if (Row.ThinAfter > 0.0 && Row.ThinKeep > 1 && Row.Life > Row.ThinAfter)
+		{
+			// (art director 04:40Z: smoke hangs. A trail's smoke lives life_s, but to fit the room only one puff in
+			// thin_keep_one_in hangs on that long, wider by thin_grow to fill the gaps; the rest go as they did, by
+			// thin_after_s, and the old trail is fewer, bigger lumps. Each puff keeps its look over those first seconds)
+			const double Early = Row.ThinAfter / Row.Life; // (the share of its life the old trail lived)
+			if (Tr.Puffs++ % static_cast<unsigned>(Row.ThinKeep) == 0)
+			{
+				// (a lump that hangs on: it grows as it did over the first seconds and on after, thin_grow times more, and
+				// starts thinning when it did, but slowly, over the whole of life_s)
+				B.R1 = B.R0 + (B.R1 - B.R0) * Row.ThinGrow / std::pow(Early, B.Grow);
+				B.Hold *= Early;
+			}
+			else
+			{
+				B.Life *= Early; // (the rest live and grow as the trail's smoke did before)
+			}
+		}
 		Bits.push_back(B);
 	}
 
@@ -2446,7 +2491,8 @@ namespace TheaterFx
 		const double Long = Path.Length();
 		// (fire: its smoke starts at the flame's tips, not at the cowl)
 		const double Grown = Clamp01((Now - Tr->KindBorn) / Row.RampS);
-		Tr->Tip = Row.Flame * (0.45 + 0.55 * Grown);
+		const double FlameM = FlameOf(*Tr, Row);
+		Tr->Tip = FlameM * (0.45 + 0.55 * Grown);
 		const Vec TipBack = -Carry.Unit(Vec(1.0, 0.0, 0.0)) * Tr->Tip;
 		// puffs every spacing_m along the path (and at least ten a second, should the point hang nearly still)
 		double Done = Row.Spacing - Tr->Owed;
@@ -2470,7 +2516,7 @@ namespace TheaterFx
 		// fire (art director 21:27Z): ragged tongues that tear free of the cowl and stream aft, a pale yellow heart at
 		// the cowl and deep orange along the tongues, a new length and shape every frame; the standing flame rule,
 		// never soft balls merged into a smear
-		if (Row.Flame > 0.0)
+		if (FlameM > 0.0)
 		{
 			const Rgb HeartCol = Rgb::FromPicture(252, 228, 160);
 			const Rgb DeepCol = Rgb::FromPicture(196, 86, 30);
@@ -2485,7 +2531,7 @@ namespace TheaterFx
 				const Vec Side = Back.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
 				const Vec Lift = Side.Cross(Back).Unit(ZUp);
 				// this frame's tongue: its own length, its own curl sideways and lift
-				const double Len = Row.Flame * (0.45 + 0.55 * Grown) * D.U(0.55, 1.35);
+				const double Len = FlameM * (0.45 + 0.55 * Grown) * D.U(0.55, 1.35);
 				const Vec Curl = (Side * (0.2 * D.Bell()) + Lift * D.U(-0.05, 0.1)) * Len;
 				// (art director 21:37Z: fire in a slipstream stands off the skin and spills past the silhouette, so each
 				// tongue lifts above or below as it streams aft; the heart stays on the cowl)
@@ -2556,10 +2602,11 @@ namespace TheaterFx
 					B.From = Root + Back * (Len * 0.06);
 					B.Vel = Vel;
 					B.Life = 0.05;
-					B.R0 = Row.Flame * (0.45 + 0.55 * Grown) * 0.085 * D.U(0.85, 1.15);
+					B.R0 = FlameM * (0.45 + 0.55 * Grown) * 0.085 * D.U(0.85, 1.15);
 					B.R1 = B.R0;
 					B.Along = Back;
 					B.Stretch = 1.6;
+					B.LeastPx = Row.FlameLeastPx; // (art director 04:40Z: from the strategy camera a fire is never under 4 px)
 					B.Point = 0.4;
 					B.Tail = 0.3;
 					B.Col = HeartCol;
@@ -3346,7 +3393,8 @@ namespace TheaterFx
 			const double Least = 0.5 * B.LeastPx * MetresAPixel;
 			if (Rad * Long < Least)
 			{
-				A *= std::sqrt(std::max(0.0, Rad * Long) / Least);
+				// (a light held up is a twinkle: it keeps most of its strength, as a bright point does on film)
+				A *= B.bLight ? std::max(0.8, std::sqrt(std::max(0.0, Rad * Long) / Least)) : std::sqrt(std::max(0.0, Rad * Long) / Least);
 				Rad = Least / Long;
 			}
 		}

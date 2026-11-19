@@ -127,13 +127,18 @@ Blasts->AirGunStop(Gun);
 - `AirNow` is this frame's time on the clock given to `Tick`. An air scene with its own air time (slowed when the
   player slows the battle) keeps its own FBattleEffects, made with the scene's own units a metre, and gives that time
   to both `AirGun` and `Tick`, so gunfire slows with the scene.
+- The air scene calls `Blasts->UseAirDistance()` once after making it: its strategy camera stands 800 to 2,000 m off
+  the fight, so it draws out to `air.draw_beyond_m` (4 km), not the land battle's 1.5 km. From there every muzzle
+  flash and hit is held at 2 px on its flash frame (`air_guns.flash_least_px`, `air_hit.least_px`) and a fire's
+  heart at 4 px (`air_trails.fire.flame_least_px`): far off they read as twinkles, drawn from the kit's own shapes.
 - The battle decides lead and convergence: each gun gets its own aim point, and wing guns converge where it says.
 - `AircraftVelocity` is in world units a second. Rounds fly at the gun's speed plus the aircraft's, slow in the air
   and fall. Rate and muzzle speed come from `air_guns` in the recipe (`rifle`, `hmg`, `cannon20`); pass your own to
   override (rounds a minute, world units a second).
 - Every round flickers at the muzzle; one in five is the ruled tracer. Cannon also throw licks and light the wing.
 - The preview draws it: `./fxpreview recipe.txt out air hmg 15,45 960x540 side` (shots `chase`, `side`, `far`,
-  `target`, `hit`, `trail`; `FX_DUSK=1` for dusk, `FX_TURN=deg/s` for the turn, `FX_TRAIL=smoke|fire|glycol`).
+  `target`, `hit`, `trail`, `wake` (the whole trail from `FX_DIST` m off the beam), `map` (the strategy camera,
+  `FX_DIST` m off); `FX_DUSK=1` for dusk, `FX_TURN=deg/s` for the turn, `FX_TRAIL=smoke|fire|glycol`, `FX_SPAN=m`).
 - A ground machine gun's close burst: `./fxpreview recipe.txt out mg earth 0,1 1280x720`, seen from `FX_MG_VIEW=side`
   or `behind` the gun.
 
@@ -143,12 +148,19 @@ Blasts->AirGunStop(Gun);
 // a round striking an aircraft (Kind: the gun that hit)
 Blasts->AirHit(AirNow, HitPointWorld, SkinNormal, TargetVelocity, TEXT("cannon20"));
 // an engine trailing: once, then every frame, then when it ends
-Blasts->TrailStart(AirNow, EngineId, EngineSocketWorld, TargetVelocity, TEXT("smoke"));
+Blasts->TrailStart(AirNow, EngineId, EngineSocketWorld, TargetVelocity, TEXT("smoke"), /*SpanMetres*/ 10.5f);
 Blasts->TrailMove(AirNow, EngineId, EngineSocketWorld, TargetVelocity);
 Blasts->TrailStop(EngineId);
 ```
 
 - `TrailStart` again on a running trail changes its kind, such as smoke catching fire (`fire`).
+- Give `SpanMetres`, the aircraft's wingspan: a fire's flame is half the span, at most 10 m (`flame_of_span`,
+  `flame_most_m`), ragged and flickering, streaming back from the root, with black smoke from its tips. Without it the
+  flame keeps the row's `flame_m`.
+- Smoke hangs (art director 04:40Z): a fire trail lives 30 s and a straggler's smoke 20 s. To fit the room, past
+  `thin_after_s` only one puff in `thin_keep_one_in` (4) hangs on, growing on to `thin_grow` times and thinning slowly,
+  so an old trail is fewer, bigger lumps: about 250 puffs for a fighter's fire trail at 150 m/s, 170 for its smoke.
+  A hit's puff hangs 3 to 4 s.
 - A trail not moved for 30 s is forgotten; call `TrailStart` again to bring it back.
 - Kinds live in the recipe's `air_trails`: `smoke`, `fire`, `glycol`. What a hit looks like lives in `air_hit`.
 - The same clock rule applies as for `AirGun`.

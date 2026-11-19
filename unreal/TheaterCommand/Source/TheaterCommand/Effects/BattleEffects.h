@@ -106,8 +106,9 @@ public:
 	 * with the point and its velocity (world units a second), TrailStop when it ends; what is in the air fades on
 	 * its own. Id: a number that stays the same for that trail. Kind: "smoke" (thin and grey, thickening and
 	 * darkening), "fire" (flame at the root, black smoke) or "glycol" (thin white vapour); TrailStart again on a
-	 * running Id changes its kind (smoke catching fire). */
-	void TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind);
+	 * running Id changes its kind (smoke catching fire). SpanMetres: the aircraft's wingspan in metres, so a fire's
+	 * flame is sized to it (half the span, at most 10 m, by the recipe); 0 keeps the recipe's own flame_m. */
+	void TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres = 0.0f);
 	void TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity);
 	void TrailStop(int32 Id);
 	/** A flak shell bursting at At, at the bombers' height, on the same clock as AirGun. Kind: an air_flak row
@@ -130,6 +131,9 @@ public:
 	void OilStop(int32 Id);
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);
+	/** For an air scene: draw out to the recipe's air.draw_beyond_m (4,000 m), so guns, hits and flames are seen from
+	 * the strategy camera 800 to 2,000 m off the fight. Call once after it is made. */
+	void UseAirDistance();
 	/** The way toward the sun (world axes): each puff is lightened on that side, and looking toward it smoke's thin
 	 * edges glow warm where the sun shows through (by day and dusk, as the hour's light says; none at night). */
 	void SetSun(const FVector& TowardSun);

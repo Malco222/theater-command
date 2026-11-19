@@ -6,7 +6,7 @@
 //   clang++ -O2 -std=c++20 -I $SRC fxpreview.cpp $SRC/Effects/TheaterFxCore.cpp -o fxpreview
 //   ./fxpreview /tmp/recipe.txt <out folder> <size> <ground> <frames, e.g. 4,8,40> [WxH] [back up]
 //     (size "mg": a machine gun's burst from 30 m away into the ground there, in place of a shell; FX_MG_VIEW=side|behind)
-//   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|far|target|hit|trail]
+//   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|far|target|hit|trail|wake|map]
 //   ./fxpreview /tmp/recipe.txt <out folder> oil <sunk|burning|horizon> <frames> [WxH]
 //
 // The oil shot: one oil fire on a flat sea (FX_REACH metres of oil, 100; seen from FX_DIST metres off, 1200, at
@@ -18,7 +18,9 @@
 // wing guns, laid to meet 300 m ahead, from the first frame; AirGun is called sixty times a second as the game would.
 // FX_DUSK=1 darkens the sky and the smoke to dusk. The hit and trail shots turn it round: the aircraft is struck by
 // that kind of gun along its wing and nose from 0.2 s to 1 s, and its engine trails FX_TRAIL (smoke, fire, glycol)
-// from 0.3 s; hit looks from the side, trail from above and behind.
+// from 0.3 s; hit looks from the side, trail from above and behind, wake at the whole trail from FX_DIST m off the beam
+// (2500). FX_SPAN=metres gives TrailStart the aircraft's span (a fire's flame is sized by it). map is the strategy
+// camera: the guns firing seen from FX_DIST metres (1400) high abeam, where flashes are held at their pixel floor.
 //
 // It draws what the game's mesh would carry: the same puffs, in the same order, with the same colours and alphas,
 // laid over a plain field (grass, a gentle swell, a sky) with five men of 1.75 m standing round the hit. The flash's
@@ -459,6 +461,10 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		if (ShotName != "above")
+		{
+			Fx.SetDrawBeyond(Fx.AirBeyond()); // (as the air scene does: UseAirDistance)
+		}
 		Fx.SetWind(Vec(1.6, 0.4, 0.0));
 		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
 		const char* TurnIs = std::getenv("FX_TURN");
@@ -513,7 +519,7 @@ namespace
 		auto Level_ = [](const Frame& F) { return Vec(F.Fw.X, F.Fw.Y, 0.0).Unit(); };
 		auto Right_ = [&](const Frame& F) { return Vec(F.Fw.X, F.Fw.Y, 0.0).Unit().Cross(ZUp).Unit(); };
 		const double Meet = 300.0;
-		const bool bStruck = ShotName == "hit" || ShotName == "trail";
+		const bool bStruck = ShotName == "hit" || ShotName == "trail" || ShotName == "wake";
 		const char* TrailIs = std::getenv("FX_TRAIL");
 		const std::string TrailKind = TrailIs ? TrailIs : "smoke";
 		TheaterFx::Dice Spots(11);
@@ -539,6 +545,7 @@ namespace
 			}
 		}
 		double NextBurst = 0.2;
+		double Shown = 0.0; // (the time being drawn: the wake shot frames the whole trail laid so far)
 		auto Shoot = [&](const Frame& F)
 		{
 			const Vec Level = Vec(F.Fw.X, F.Fw.Y, 0.0).Unit();
@@ -578,6 +585,20 @@ namespace
 			{
 				Cam.Eye = F.At + LevelRight * 26.0 - Level * 6.0 + ZUp * 7.0;
 				Cam.Forward = ((F.At - Cam.Eye).Unit() - Level * 0.15).Unit();
+			}
+			else if (ShotName == "wake")
+			{
+				// (the whole trail laid so far, from far off the beam: FX_DIST metres, 2500)
+				const Vec Mid = Fly(0.5 * Shown).At;
+				Cam.Eye = Mid + StartRight * EnvNum("FX_DIST", 2500.0) + ZUp * 250.0;
+				Cam.Forward = (Mid - Cam.Eye).Unit();
+			}
+			else if (ShotName == "map")
+			{
+				// (the strategy camera: FX_DIST metres off (1400), high above and abeam, the guns firing)
+				const double Far = EnvNum("FX_DIST", 1400.0);
+				Cam.Eye = F.At + LevelRight * (0.8 * Far) + ZUp * (0.55 * Far) - Level * (0.2 * Far);
+				Cam.Forward = (F.At + Level * 150.0 - Cam.Eye).Unit();
 			}
 			else if (ShotName == "trail")
 			{
@@ -631,6 +652,7 @@ namespace
 			for (; Step <= Until; ++Step)
 			{
 				const double T = Step / 60.0;
+				Shown = T;
 				const Frame F = Fly(T);
 				if (bStruck)
 				{
@@ -643,7 +665,7 @@ namespace
 					const Vec Engine = Place(F, Vec(2.9, 0.75, -0.35)); // (an exhaust on the cowling's near side)
 					if (Step == 18)
 					{
-						Fx.TrailStart(T, 1, Engine, F.Fw * Speed, TrailKind.c_str());
+						Fx.TrailStart(T, 1, Engine, F.Fw * Speed, TrailKind.c_str(), EnvNum("FX_SPAN", 0.0)); // (FX_SPAN: the aircraft's span, metres)
 					}
 					if (Step >= 18)
 					{
@@ -686,6 +708,7 @@ namespace
 				DrawBetween(Step, Until, T, F);
 			}
 			const double Now = FrameNo / 30.0;
+			Shown = Now;
 			const Frame F = Fly(Now);
 			const Camera Cam = Shoot(F);
 			View.Eye = Cam.Eye;

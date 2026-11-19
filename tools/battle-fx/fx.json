@@ -1281,6 +1281,7 @@
  "air_guns": {
   "_how": "Brian 2026-11-18 19:35Z: 'make the gun fire very realistic and the tracer fire too'. Guns on aircraft (AirGun, called every frame while a trigger is down). The battle sends where each gun is, the point it is laid on (lead and convergence are the battle's), and the aircraft's own velocity; the kit lays each round from where the muzzle was at that moment. A round flies at muzzle_mps plus the aircraft's speed, slows (drag, a share of its speed lost a second) and falls (drop). Every round flickers at the muzzle; one in tracer_every is the ruled tracer (tracer.colour, tracer.streak_m), burning for tracer_s. The sound director's air.gunsByCalibre uses the same three families: rifle, heavy, 20 mm cannon.",
   "gravity": 9.81,
+  "flash_least_px": 2,
   "smoke_colour": [
    168,
    166,
@@ -1343,7 +1344,12 @@
    220,
    150
   ],
-  "_flash": "Art director 21:07Z, cannon (rows with licks): a hot pale heart at the muzzle (flash_heart) with orange only toward its edges; a ragged forward tongue two to three times the side licks' length; short side licks raked aft by the airstream; uneven, never the same twice; one frame at full, a second at about half. The machine guns' flicker passed as it is."
+  "_flash": "Art director 21:07Z, cannon (rows with licks): a hot pale heart at the muzzle (flash_heart) with orange only toward its edges; a ragged forward tongue two to three times the side licks' length; short side licks raked aft by the airstream; uneven, never the same twice; one frame at full, a second at about half. The machine guns' flicker passed as it is.",
+  "_flash_least_px": "Art director 04:40Z: from the strategy camera a heavy machine gun's 0.45 m flash is half a pixel at 800 m; every muzzle flash (the flicker, or a cannon's hot heart) is held at least flash_least_px 2 px across on its flash frame and made fainter to match, from the kit's own shape, never a card: far off they read as twinkles. A row may set its own."
+ },
+ "air": {
+  "_how": "An air scene (its own FBattleEffects, UseAirDistance): its strategy camera stands 800 to 2,000 m off the fight (feel-benchmark gap 3), so it draws puffs out to draw_beyond_m, not game.draw_beyond_m's 1,500 m.",
+  "draw_beyond_m": 4000
  },
  "air_hit": {
   "_how": "Rounds striking an aircraft (AirHit, at the point hit, carried with that aircraft): a hot spit on the skin with two or three short tongues, sparks thrown off and slowed by the air so they fall away behind, a scrap or two of skin tumbling off (some bare metal catching the light), and a small dark puff left hanging where the hit was. All scale with the hitting gun's air_guns.<kind>.strike_m, so 20 mm hits are about twice a .50's. No ball of fire: a hit that sets fuel alight is the battle's call (a fire trail).",
@@ -1377,15 +1383,21 @@
   ],
   "smoke_alpha": 0.55,
   "smoke_s": [
-   0.8,
-   1.5
-  ]
+   3,
+   4
+  ],
+  "smoke_r1": 1.8,
+  "least_px": 2,
+  "_art_director_0440": "Art director 04:40Z: a hit's puff hangs 3 to 4 s (smoke_s), growing to smoke_r1 times the strike size; from the strategy camera the spit on the skin is never under least_px 2 px on its flash frame, so far off a hit reads as a twinkle."
  },
  "air_trails": {
   "_how": "A trail from a moving point on an aircraft (TrailStart, TrailMove every frame, TrailStop). Puffs are laid every spacing_m along the path, each drawn smear x spacing longer behind it so they join in one line, and left hanging in the air (carried: the share of the aircraft's speed they keep) to drift with the wind. Each frame the young end is drawn from the point back to the newest puff, so a trail starts at the engine. A trail comes to full over ramp_s, darkening from colour to colour_full over darken_s; each puff widens from r0_m to r1_m as it hangs for life_s (grow: below 1 widens early, above 1 late) and pales toward colour_old. lumpy (0 to 1) makes some puffs bigger lumps and the rest smaller and shorter lived, and the smear shrinks over smear_s, so an old trail breaks into uneven lumps; rise_mps lifts the smoke. Fire adds ragged tongues streaming back about flame_m from the root, and its smoke starts at the flame's tips.",
   "smoke": {
    "_what": "a damaged engine: thin and dark at the engine, widening (about three times by 2 s) and breaking into paler lumps",
-   "life_s": 7,
+   "life_s": 20,
+   "thin_after_s": 7,
+   "thin_keep_one_in": 4,
+   "thin_grow": 3.0,
    "spacing_m": 9,
    "r0_m": 0.4,
    "r1_m": 4.5,
@@ -1417,7 +1429,10 @@
   },
   "fire": {
    "_what": "an engine or tank on fire: ragged flame streaming aft from the root, black smoke rising from its tips",
-   "life_s": 8,
+   "life_s": 30,
+   "thin_after_s": 8,
+   "thin_keep_one_in": 4,
+   "thin_grow": 3.0,
    "spacing_m": 8,
    "r0_m": 0.7,
    "r1_m": 6.0,
@@ -1442,6 +1457,9 @@
    "smear": 1.6,
    "carried": 0.05,
    "flame_m": 3.0,
+   "flame_of_span": 0.5,
+   "flame_most_m": 10,
+   "flame_least_px": 4,
    "flame_lift_m": [
     0.3,
     0.6
@@ -1480,7 +1498,8 @@
    "flame_m": 0
   },
   "_art_director": "21:27Z: 20 mm hits, glycol and the fire trail at distance PASS. Engine fire: ragged tongues tearing free of the cowl and streaming aft past the wing root, a pale yellow heart at the cowl and deep orange along the tongues, a new length and shape every frame, black smoke rising from the flame tips. Smoke: thin and dark at the engine, about three times wider by 2 s and still widening, breaking into uneven lumps, paler and thinner with age, each lump hanging where it was laid. 21:37Z: the smoke trail, the 10 s fire trail and the glycol start PASS. The fire's tongues stand off the skin as they stream aft (flame_lift_m, above or below), so a few break the outline; the heart hugs the cowl.",
-  "_load": "Pre-check 21:34Z: puffs a trail are about life_s x speed / spacing_m (the lumpy rows lose about an eighth to their short-lived small puffs). At 120 m/s: smoke about 80, fire about 105, glycol about 35. The room is game.max_puffs, shared by everything; when it is short the farthest puffs go first, so a far trail loses length first."
+  "_load": "Pre-check 21:34Z: puffs a trail are about life_s x speed / spacing_m (the lumpy rows lose about an eighth to their short-lived small puffs). At 120 m/s: smoke about 80, fire about 105, glycol about 35. The room is game.max_puffs, shared by everything; when it is short the farthest puffs go first, so a far trail loses length first.",
+  "_art_director_0440": "Art director 04:40Z (Brian's air clip, feel-benchmark gap 3): smoke hangs, a sky full of hanging trails is the picture. A fire trail lives 30 s and a straggler's smoke 20 s; to fit the 3,000-puff room, past thin_after_s (the old life) only one puff in thin_keep_one_in hangs on, growing on as it did and thinning slowly, so an old trail is fewer, bigger lumps. A burning plane's flame is half its span (TrailStart's span; flame_of_span), at most flame_most_m 10 m, ragged and flickering, streaming back from the root, black smoke from its tips; from the strategy camera its heart is never under flame_least_px 4 px. Gun smoke stays short."
  },
  "dust": {
   "vehicles": {
@@ -1633,7 +1652,7 @@
    "_face_lit": "Art director 23:44Z, first in-game flak: from above, against the fields, the burst read as an ink blot, in shadow all over. Smoke seen with the sun behind the eye shows its sunlit face: face_lit is how far a lobe then goes toward lit_colour (picture values), most on its outer lobes, wisps and sunward side, next to none in its young heart, none on its far side, which stays shadowed. Each lobe is laid as a dome: lit on the side toward the sun, its underside and edge darker. Art director 23:59Z: the lit faces must sit clearly above the field (about 135 to 150 in the game frame), so lit_colour is pale and face_lit over 1. Art director 00:03Z: never pale card: each puff at least twin_px across on the screen is two fans turned half a step (no facets; it takes two slots), the pale fades with the puff's own edge opacity (the rim goes see-through grey), and each lobe takes its own share of face_lit, 0.6 to 1.0, so the lit side breaks into lumps. Facing the sun and at night it keeps the dark look the art director passed; with the sun to the side or partly behind the eye (as her passed sky view, where the sun is partly behind) it is partly lit.",
    "heart_end": 0.4,
    "spread_mps": 1.1,
-   "least_px": 9,
+   "least_px": 10,
    "flash_glow_s": 0.1,
    "flash_heart_s": 0.05,
    "flash_spikes": [

@@ -147,6 +147,10 @@ namespace TheaterFx
 
 		void Setup(const Recipe* InRecipe, GroundFn InGround, void* InContext, uint32_t Seed);
 		void SetWind(const Vec& MetresPerSecond) { Wind = MetresPerSecond; }
+		/** How far off a puff is still drawn (game.draw_beyond_m, 1500, by default): an air scene, whose strategy camera
+		 * stands 800 to 2,000 m off the fight, draws farther (air.draw_beyond_m). Kept oil columns keep their own. */
+		void SetDrawBeyond(double Metres) { Beyond = Metres > 1.0 ? Metres : 1.0; }
+		double AirBeyond() const { return Num("air.draw_beyond_m", Beyond); }
 		void Clear();
 
 		/** The size row (sizes.<kind>) a calibre from the field battle draws (from_shell_cal): "howitzer" -> "how105". */
@@ -181,7 +185,7 @@ namespace TheaterFx
 		 * number that stays the same for that trail. Kind is an air_trails row: "smoke" (thin and grey, thickening and
 		 * darkening), "fire" (flame at the root, black smoke), "glycol" (a thin white vapour). TrailStart on a running
 		 * trail changes its kind (smoke catching fire). */
-		void TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind);
+		void TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind, double SpanM = 0.0);
 		void TrailMove(double Now, int Id, const Vec& At, const Vec& Carry);
 		void TrailStop(int Id);
 		/** A flak shell bursting at At, at the bombers' height: a soft flash of about 0.2 s off-centre in five to eight
@@ -258,7 +262,7 @@ namespace TheaterFx
 		{
 			std::string Name;
 			double Rate = 800.0, Mps = 870.0, Flash = 0.45, Strike = 0.8, Drag = 0.36, Drop = 9.81, TracerS = 2.4, Spread = 0.004;
-			double SmokeS = 0.8, SmokeAlpha = 0.1, Lamp = 0.0;
+			double SmokeS = 0.8, SmokeAlpha = 0.1, Lamp = 0.0, FlashLeastPx = 0.0; // (FlashLeastPx: the flash never under this on the screen, a twinkle far off)
 			int OneIn = 5, SmokeEvery = 3, Licks = 0;
 		};
 		/** An air_trails row, read once a kind. */
@@ -267,6 +271,8 @@ namespace TheaterFx
 			std::string Name;
 			double Life = 6.0, Spacing = 8.0, R0 = 0.5, R1 = 3.5, Alpha = 0.5, DarkenS = 4.0, RampS = 1.5, Smear = 1.5, Carried = 0.05, Flame = 0.0;
 			double Grow = 0.5, Lumpy = 0.0, SmearS = 0.0, Rise = 0.0;
+			double ThinAfter = 0.0, ThinGrow = 1.0; int ThinKeep = 1; // (an old trail thinned: past ThinAfter s only one puff in ThinKeep hangs on to Life, ThinGrow times wider)
+			double FlameOfSpan = 0.0, FlameMost = 0.0, FlameLeastPx = 0.0; // (a fire's flame: this share of the aircraft's span, at most FlameMost m; never under FlameLeastPx on the screen)
 			Span FlameLift; // (metres a fire's tongue stands off the skin)
 			Rgb Col, ColFull, ColOld;
 		};
@@ -278,6 +284,8 @@ namespace TheaterFx
 			std::string Kind;
 			double Born = 0.0, KindBorn = 0.0, Last = 0.0, Owed = 0.0, LastPuff = 0.0, NextFlame = 0.0;
 			double Tip = 0.0; // (fire: how far aft of the point its smoke starts, at the flame's tips)
+			double Span = 0.0; // (the aircraft's span, metres, as TrailStart was told: a fire's flame is sized by it)
+			unsigned Puffs = 0; // (puffs laid, counted only when the row thins its old puffs)
 			Vec At, Carry, LastPuffAt;
 		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */
@@ -426,7 +434,8 @@ namespace TheaterFx
 		void AirRound(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, double Mps, bool bTracer, bool bSmoke, Dice& D);
 		void CannonFlash(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D);
 		const TrailRow& TrailRowOf(const std::string& Kind);
-		void TrailPuff(double T, const Vec& At, const Vec& Carry, const Trailing& Tr, const TrailRow& Row, Dice& D);
+		void TrailPuff(double T, const Vec& At, const Vec& Carry, Trailing& Tr, const TrailRow& Row, Dice& D);
+		double FlameOf(const Trailing& Tr, const TrailRow& Row) const; // (a fire trail's flame length: the row's, or by the aircraft's span)
 		void Run(double Now); // the steady sources: fire, smouldering
 		void OilColumn(Source& S, double T, bool bPall = false); // one puff of an oil fire's column (or its long pall), born at T
 		Vec OnSlick(const Source& S, Dice& D) const; // a point anywhere on an oil fire's slick
