@@ -48,8 +48,11 @@ void BattleLook::AirSkyBegin(AActor& Scene, UDirectionalLightComponent* Sun)
 	// (Tuned on Pearl Harbor's first frames, 19 November 2026: the engine's own paling with distance, laid over the
 	// scene's haze, whited out everything past the middle of the strategy view; at four tenths the far cloud keeps
 	// about half its contrast and the horizon lies wholly in haze.)
-	double Air = 1.0, Dust = 1.0, Far = 0.4, HazeOver = 1.0, Bright = 1.0;
-	Asked(TEXT("TheaterAirSky="), { &Air, &Dust, &Far, &HazeOver, &Bright });
+	// (The sixth number is how dark the world is beyond the scene's own sea, which is a flat sheet that ends short of
+	// the round world's horizon: past its edge the air's own ground shows, and at the engine's pale grey it made a
+	// line along the horizon five levels brighter than the sea. It is the sea's colour, at this share of it.)
+	double Air = 1.0, Dust = 1.0, Far = 0.4, HazeOver = 1.0, Bright = 1.5, Beyond = 1.0;
+	Asked(TEXT("TheaterAirSky="), { &Air, &Dust, &Far, &HazeOver, &Bright, &Beyond });
 	// (Only the battle's sun lights the air: the table's other lamps are fills, and a second sun in the sky would show.)
 	LampsKeptOut.Reset();
 	if (UWorld* World = Scene.GetWorld())
@@ -84,6 +87,8 @@ void BattleLook::AirSkyBegin(AActor& Scene, UDirectionalLightComponent* Sun)
 	Made->SetAerialPespectiveViewDistanceScale(static_cast<float>(Far));
 	Made->SetHeightFogContribution(static_cast<float>(HazeOver));
 	Made->SetSkyLuminanceFactor(FLinearColor(static_cast<float>(Bright), static_cast<float>(Bright), static_cast<float>(Bright)));
+	Made->SetGroundAlbedo(FColor(static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(36.0 * Beyond), 0, 255)), static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(80.0 * Beyond), 0, 255)),
+		static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(95.0 * Beyond), 0, 255))));
 	BattleSky = Made;
 	UE_LOG(LogTheater, Display, TEXT("Battle look: a sky stands behind the air battle (air %.2f, dust %.2f, distance %.2f, haze over the sky %.2f, brightness %.2f); %d lamps were told to keep out of it or to light it"),
 		Air, Dust, Far, HazeOver, Bright, LampsKeptOut.Num());
