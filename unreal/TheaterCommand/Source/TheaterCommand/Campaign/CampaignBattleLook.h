@@ -3,6 +3,8 @@
 #include "CoreMinimal.h"
 
 struct FPostProcessSettings;
+class AActor;
+class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
 
 /**
@@ -26,4 +28,14 @@ namespace BattleLook
 	 * numbers (leave one empty to keep it).
 	 */
 	void AirHaze(UExponentialHeightFogComponent& Haze, double UnitsPerMetre);
+	/**
+	 * A sky behind an air battle. The table has none (it is looked down on), and a battle seen from the air showed
+	 * its haze over nothing: black behind it, darker the higher the eye looked, and a straight seam along the horizon
+	 * where the hazed sea ended (the art director, 19 November 2026). This is the engine's own air and sky, lit by the
+	 * battle's sun; the scene's other lamps are kept out of it. AirSkyEnd takes it away and puts the lamps back as they
+	 * were. "-TheaterAirSky=air,dust,far,haze" tries other numbers (how blue the air, how much dust in it, how fast
+	 * distance pales, how much of the haze lies over the sky); "-TheaterNoAirSky" leaves the sky as it was.
+	 */
+	void AirSkyBegin(AActor& Scene, UDirectionalLightComponent* Sun);
+	void AirSkyEnd();
 }

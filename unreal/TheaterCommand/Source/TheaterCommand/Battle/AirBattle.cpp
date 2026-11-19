@@ -780,6 +780,8 @@ void AAirBattle::HideTheTable()
 				BattleKey = Key;
 				const FVector Sun = Stage && Stage->IsRaised() ? Stage->TowardSun() : FRotator(30.0, 150.0, 0.0).Vector();
 				Key->SetWorldRotation((-Sun).Rotation());
+				// (the 3D builder, 19 November 2026: a sky behind the battle, lit by its sun; taken away in ShowTheTable)
+				BattleLook::AirSkyBegin(*this, Key);
 			}
 			TArray<USkyLightComponent*> Skies;
 			Environment->GetComponents(Skies);
@@ -883,6 +885,7 @@ void AAirBattle::ShowTheTable()
 			Fog->SetFogInscatteringColor(Kept.Colour);
 		}
 	}
+	BattleLook::AirSkyEnd(); // (the 3D builder, 19 November 2026: the battle's sky goes with the battle)
 	for (const FKeptLamp& Kept : KeptLamps)
 	{
 		if (UDirectionalLightComponent* Light = Kept.Lamp.Get())

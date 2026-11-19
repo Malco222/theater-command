@@ -1,7 +1,11 @@
 #include "Campaign/CampaignBattleLook.h"
 
+#include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/SkyAtmosphereComponent.h"
 #include "Engine/Scene.h"
+#include "EngineUtils.h"
+#include "GameFramework/Actor.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "TheaterCommand.h"
@@ -26,6 +30,76 @@ namespace
 			}
 		}
 	}
+}
+
+namespace
+{
+	// The battle's sky while it stands, and the lamps that were told to keep out of it.
+	TWeakObjectPtr<USkyAtmosphereComponent> BattleSky;
+	TArray<TPair<TWeakObjectPtr<UDirectionalLightComponent>, bool>> LampsKeptOut;
+}
+
+void BattleLook::AirSkyBegin(AActor& Scene, UDirectionalLightComponent* Sun)
+{
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterNoAirSky")) || BattleSky.IsValid())
+	{
+		return;
+	}
+	double Air = 1.0, Dust = 1.0, Far = 1.0, HazeOver = 1.0;
+	Asked(TEXT("TheaterAirSky="), { &Air, &Dust, &Far, &HazeOver });
+	// (Only the battle's sun lights the air: the table's other lamps are fills, and a second sun in the sky would show.)
+	LampsKeptOut.Reset();
+	if (UWorld* World = Scene.GetWorld())
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			TArray<UDirectionalLightComponent*> Lamps;
+			It->GetComponents(Lamps);
+			for (UDirectionalLightComponent* Lamp : Lamps)
+			{
+				const bool bIsSun = Lamp == Sun;
+				if (Lamp && Lamp->IsUsedAsAtmosphereSunLight() != bIsSun)
+				{
+					LampsKeptOut.Emplace(Lamp, Lamp->IsUsedAsAtmosphereSunLight());
+					Lamp->SetAtmosphereSunLight(bIsSun);
+				}
+			}
+		}
+	}
+	USkyAtmosphereComponent* Made = NewObject<USkyAtmosphereComponent>(&Scene, TEXT("BattleSky"));
+	if (!Made)
+	{
+		return;
+	}
+	if (USceneComponent* Root = Scene.GetRootComponent())
+	{
+		Made->SetupAttachment(Root);
+	}
+	Made->RegisterComponent();
+	Made->SetRayleighScatteringScale(static_cast<float>(0.0331 * Air));
+	Made->SetMieScatteringScale(static_cast<float>(0.003996 * Dust));
+	Made->SetAerialPespectiveViewDistanceScale(static_cast<float>(Far));
+	Made->SetHeightFogContribution(static_cast<float>(HazeOver));
+	BattleSky = Made;
+	UE_LOG(LogTheater, Display, TEXT("Battle look: a sky stands behind the air battle (air %.2f, dust %.2f, distance %.2f, haze over the sky %.2f); %d lamps were told to keep out of it or to light it"),
+		Air, Dust, Far, HazeOver, LampsKeptOut.Num());
+}
+
+void BattleLook::AirSkyEnd()
+{
+	if (USkyAtmosphereComponent* Sky = BattleSky.Get())
+	{
+		Sky->DestroyComponent();
+	}
+	BattleSky.Reset();
+	for (const TPair<TWeakObjectPtr<UDirectionalLightComponent>, bool>& Kept : LampsKeptOut)
+	{
+		if (UDirectionalLightComponent* Lamp = Kept.Key.Get())
+		{
+			Lamp->SetAtmosphereSunLight(Kept.Value);
+		}
+	}
+	LampsKeptOut.Reset();
 }
 
 void BattleLook::Grade(FPostProcessSettings& Lens)
