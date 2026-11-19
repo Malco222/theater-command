@@ -843,11 +843,16 @@
    ],
    "crater": "a black star on white with a grey-brown spatter ring",
    "extra": "white snow thrown up first, dark earth under it",
+   "smoke_top": [
+    66,
+    64,
+    62
+   ],
    "paint": {
     "soil": [
-     77,
-     71,
-     65
+     52,
+     45,
+     38
     ],
     "heavy": [
      46,
@@ -865,9 +870,9 @@
      64
     ],
     "smoke": [
-     81,
-     78,
-     75
+     58,
+     54,
+     50
     ],
     "first": [
      198,
@@ -1104,7 +1109,7 @@
   },
   "_paint": "paint: the game's unlit colours for each ground, as the finished picture should show them (sRGB 0-255): soil the lighter jets, heavy the dark heavy jets and the body, dust the skirt and veil, clod the lumps, smoke the cloud, first (snow) what is thrown first, splinter (woods) the wood. ring (optional) the dust ring's colour, from the ground it lands on (default dust: art director 03:28Z, earth's ring grey-brown, a touch darker than its dust); foot (optional) the dark foot's colour (default heavy: sand's is grey-black explosive smoke); stone (optional) the shower's lumps (default clod: sand throws dark stones). foot_dust (optional) how much of the ground's dust shows in the dark foot's veil and fill (snow 0: black earth through the white, art director 03:28Z).",
   "_clod_written": "Art director 17:08Z (build 1732, where one big clod was taken for a glitch): the game's grade crushes darks (picture._how), so a clod painted 40,33,26 showed as a black hole with no detail. The dark grounds' clod paints are WRITTEN values, aimed through the game's curve (tools/battle-fx/game_curve.py) to show as they were painted: earth 69,62,55 shows as 40,33,26; mud 64,58,52 as 34,28,22; snow 74,69,64 as 48,42,36; woods 80,72,64 as 56,46,36. Clods only: sand's and town's are light enough as they are, and no other dark paint is changed. At about 34 luma they still count toward the burst's black (under 60: burst.foot._how).",
-  "_soil_smoke_written": "Art director 18:28Z (build 1746's howitzer from 60 m: on its shadow side the burst read as an ink blot, smoke 36,30,24, and not as earth). The dark grounds' soil and smoke paints are now WRITTEN values too, aimed through the game's curve (tools/battle-fx/game_curve.py write) to show as they were painted: earth soil 86,78,70 shows as 66,55,44 and smoke 90,83,76 as 72,62,52; snow soil 77,71,65 as 52,45,38, smoke 81,78,75 as 58,54,50; mud soil 73,66,59 as 46,38,30, smoke 85,79,73 as 64,56,48; woods soil 83,75,67 as 60,50,40, smoke 89,84,79 as 70,64,56. heavy (the dark heavy jets, the body and the foot) stays as it was, so a dark heart sits inside lighter brown dust. Sand's and town's are light enough as they are."
+  "_soil_smoke_written": "Art director 18:28Z (build 1746's howitzer from 60 m: on its shadow side the burst read as an ink blot, smoke 36,30,24, and not as earth). Earth's, mud's and woods' soil and smoke paints are now WRITTEN values too, aimed through the game's curve (tools/battle-fx/game_curve.py write) to show as they were painted: earth soil 86,78,70 shows as 66,55,44 and smoke 90,83,76 as 72,62,52; mud soil 73,66,59 as 46,38,30, smoke 85,79,73 as 64,56,48; woods soil 83,75,67 as 60,50,40, smoke 89,84,79 as 70,64,56. heavy (the dark heavy jets, the body and the foot) stays as it was, so a dark heart sits inside lighter brown dust. Sand's and town's are light enough as they are. The cloud's upper part is mostly burst.smoke.colour_top, a charcoal painted 66,64,62 that showed as 31,32,33: it is written 86,84,83 to show as painted. Snow keeps its old, darker soil, smoke and charcoal (smoke_top 66,64,62 there), by the art director's word of 18:49Z: black earth thrown over white snow is the strongest picture we have."
  },
  "on_armour": {
   "_how": "A shell that hits a tank and does not go in.",
