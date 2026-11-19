@@ -19,6 +19,7 @@ import tanks_pol
 import tanks_sov
 import tanks_uk
 import tanks_usa
+import whatif_tanks
 
 BUILDERS = {
     "PanzerIV": tanks_ger.panzer4,
@@ -59,6 +60,13 @@ BUILDERS = {
     "Hummel": sp_guns.hummel,
     "SU76": sp_guns.su76,
     "SelfPropelledGun": sp_guns.sp_gun,
+    # (the what-if classes: our own designs that never ran, built after research in any army's paint)
+    "WhatIf_BreakthroughTank": whatif_tanks.breakthrough_tank,
+    "WhatIf_TankHunterCar": whatif_tanks.tank_hunter_car,
+    "WhatIf_FlameTank": whatif_tanks.flame_tank,
+    "WhatIf_AmphibiousTank": whatif_tanks.amphibious_tank,
+    "WhatIf_SnowTank": whatif_tanks.snow_tank,
+    "WhatIf_GliderTank": whatif_tanks.glider_tank,
 }
 
 ABOUT = {
@@ -100,6 +108,12 @@ ABOUT = {
     "SU76": {"nation": "SOV", "role": "self-propelled gun", "years": "1943-45", "units": "the light guns that keep up with the Soviet Union's infantry and armor"},
     "SelfPropelledGun": {"nation": "any", "role": "self-propelled gun", "years": "1942-45", "units": "the guns that keep up with the armor of every army without a self-propelled gun of its own"},
     "Sexton": {"nation": "UK", "role": "self-propelled gun", "years": "1943-45", "units": "the artillery that keeps up with the armor of Britain and the Commonwealth"},
+    "WhatIf_BreakthroughTank": {"nation": "any", "role": "breakthrough tank (what-if)", "years": "by research", "units": "the what-if class `breaker` (a variant of armor), in any army that has researched it"},
+    "WhatIf_TankHunterCar": {"nation": "any", "role": "tank hunter armoured car (what-if)", "years": "by research", "units": "the what-if class `tankhunter` (a variant of motorized infantry), in any army that has researched it"},
+    "WhatIf_FlameTank": {"nation": "any", "role": "flame tank (what-if)", "years": "by research", "units": "the what-if class `flametank` (a variant of armor), in any army that has researched it"},
+    "WhatIf_AmphibiousTank": {"nation": "any", "role": "amphibious tank (what-if)", "years": "by research", "units": "the what-if class `amphtank` (a variant of armor), in any army that has researched it"},
+    "WhatIf_SnowTank": {"nation": "any", "role": "snow tank (what-if)", "years": "by research", "units": "the what-if class `snowtank` (a variant of armor), in any army that has researched it"},
+    "WhatIf_GliderTank": {"nation": "any", "role": "glider tank (what-if)", "years": "by research", "units": "the what-if class `glidertank` (a variant of airborne infantry), in any army that has researched it; flown in by WhatIf_AssaultGlider"},
 }
 
 

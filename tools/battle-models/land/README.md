@@ -214,6 +214,27 @@ and hands reach: wear on an edge goes darker, never whiter (a pale line along ev
 
 **Budget.** About 50,000 triangles near and 5,000 far for a medium tank.
 
+## What-if vehicles (the sandbox)
+
+Brian, 2026-11-19: "i want this to be a sandbox to play and make your own history". Six original designs that never
+ran (`whatif_tanks.py`; the roster and rules are the tech-tree thread's, `sandbox/ARMS-ROSTER.md`). No real
+prototype is copied and none of ruling 230's late-war prototypes is used. Each is built in the plain coat with the
+owner's mark (`_`), so the game paints her in her owner's colours. Her file's `whatif` gives `kind` (the class key),
+`like` (the plain models she stands nearest, for a battle with no place for her yet), `from` (her research, filled by
+the tech tree) and a `note`.
+
+| model | class | what is her own |
+|---|---|---|
+| `WhatIf_BreakthroughTank` | `breaker` | a second turret: parts `turret_fore`, `hatch_fore`, `gun_fore`, `barrel_fore`, sockets `muzzle_fore`, `coax_fore`, `crew.fore`, `fire.4`, clip `fire_fore`; the main turret's 150 mm (`bore` 0.15) |
+| `WhatIf_TankHunterCar` | `tankhunter` | eight wheels, the front four pairs steering (`steer_l`, `steer_l2`, `steer_r`, `steer_r2`); a driver's hatch at each end (`hatch_driver`, `hatch_driver_rear`) |
+| `WhatIf_FlameTank` | `flametank` | `fire` is a flame jet from `muzzle` (fx `flame_jet`, about 110 m: `flame` in her file), socket `pilot` and clip `pilot` (the pilot light), socket `fuel` (her deck tanks: struck there she burns) |
+| `WhatIf_AmphibiousTank` | `amphtank` | parts `vane`, `screw_l`, `screw_r`, `rudder_l`, `rudder_r`; clips `vane_up` and `swim`; `swims.draught` 1.25 m |
+| `WhatIf_SnowTank` | `snowtank` | track links with ice spurs (`gear.link_shape` style `spurs`), socket `heater` and clip `stove` (a winter camp) |
+| `WhatIf_GliderTank` | `glidertank` | front mudguards `guard_fl`, `guard_fr` and clip `guards_up` (before loading); tie-down sockets `tie.1` to `tie.8`; `glider` in her file names the aircraft that carries her (`WhatIf_AssaultGlider`, its hold 4.8 x 2.4 x 1.95 m) |
+
+Made again with `python export_land.py <out>/land/vehicles WhatIf_BreakthroughTank,... json glb`. The picture sheet is
+`land/looks/whatif-tanks.jpg`.
+
 ## How a vehicle is made to look made
 
 * Every plate edge is cut back and the mesh carries weighted normals, so a flat stays flat and its edge catches the

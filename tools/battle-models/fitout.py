@@ -38,6 +38,9 @@ SEATS = {"Kate": [(0, 0.85, 0.0, 0.0), (0, -0.45, 0.0, 0.0), (0, -1.75, 0.0, 180
 # How far below the usual place (just under the glass) the men under a hood sit, where the hood is a tall cabin with
 # windows in its sides and a roof over them.
 SEAT_DROP = {"B17": 0.22}
+# The height of the floor under the pilots, where it is not her fuselage's usual floor (a glider's cockpit is on the roof
+# of her hold: whatif_planes).
+CABIN_FLOOR = {}
 # Who is seen through a glass nose: (forward, to port, height above the fuselage's middle or None for 'up under the glass', looks).
 NOSE_CREW = {"He111": [(5.15, 0.3, None, 0.0), (6.25, -0.12, -0.05, 0.0)], "B17": [(7.72, 0.0, 0.05, 0.0)], "Bomber": [(5.65, 0.0, 0.0, 0.0)],
              "Betty": [(7.95, 0.0, -0.05, 0.0)], "Amerikabomber": [(7.35, 0.38, None, 0.0), (7.35, -0.38, None, 0.0), (8.7, 0.0, -0.25, 0.0)],
@@ -370,7 +373,7 @@ def cockpit(m, f, s, G, hull):
         half = 0.8 * max(r[2] for r in stations)
         m.strip([port(hull.at(x, math.pi / 2.0)) for x in xs], [port(hull.out(x, math.pi / 2.0)) for x in xs], half, "inside", lift=0.012,
                 taper=lambda t: 0.45 + 0.55 * math.sin(math.pi * min(max(t, 0.0), 1.0)) ** 0.5)
-    single = not s.get("engines")
+    single = not s.get("engines") and not s.get("glider")    # (a glider's pilots sit side by side at their wheels: whatif_planes)
     first = True
     for hood, x, y, face in seats_of(f, s, G):
         z = body_top(hood, x, -y) - 0.118 - 0.03 - SEAT_DROP.get(f.name, 0.0)
@@ -388,7 +391,7 @@ def cockpit(m, f, s, G, hull):
         elif single and face == 0.0:
             m.box(at(-0.185, 0, 0.0), (0.02, 0.27, 0.3), "gunmetal")                        # the armour behind his head
         if not single and first and face == 0.0 and s.get("pilot_wheel"):
-            wheel(m, at, hull.z(-x) - 0.36 * hull.h(-x))    # (a bomber's pilot in her open cabin: both his hands on his wheel)
+            wheel(m, at, CABIN_FLOOR.get(f.name, hull.z(-x) - 0.36 * hull.h(-x)))    # (a bomber's pilot in her open cabin: both his hands on his wheel)
         if single and first and face == 0.0 and not getattr(f, "cockpit", None):
             sill = hull.at(x + 0.56, math.pi / 2.0).z
             if x + 0.75 < hood.front:
@@ -829,7 +832,7 @@ def guns(m, f, s, G, hull):
 
 def fasteners(m, f, s, G, hull):
     """The cowling of a single-engined machine: a row of fasteners round its after edge and along each side, as dots."""
-    if s.get("engines") or s.get("jets") or not m.fine:
+    if s.get("engines") or s.get("jets") or s.get("glider") or not m.fine:
         return
     long = hull.front - hull.back
     back = s.get("nose_back") if s.get("nose_back") is not None else hull.front - long * 0.2

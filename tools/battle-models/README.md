@@ -713,6 +713,35 @@ play on it whatever she plays.
   `high` shows the marks on her wings. Neighbouring layers of one colour in a country's `insignia` are laid at one
   height (Sweden's three crowns are 24 pieces; each layer stands a few millimetres prouder than the last).
 
+### What-if aircraft (the sandbox)
+
+Six original machines that never flew (`whatif_planes.py`; the roster is the tech-tree thread's,
+`sandbox/ARMS-ROSTER.md`), built to the B-17 standard like the others: framed glazing over an open cockpit with her
+crew inside at their controls, gunners at their guns, rivets and panel lines. No real prototype's lines or name, and
+none of ruling 230's late-war prototypes. Any army that has the research flies her in its own paint (`nation_paint`),
+the night fighter excepted (matt black). Her file's `whatif` gives `kind` (the class key), `like` (the plain models
+she stands nearest), `from` (her research, filled by the tech tree) and a `note`.
+
+| model | class | role | what is her own |
+|---|---|---|---|
+| `WhatIf_EscortFighter` | `escortftr` | fighter | twin booms, one airscrew pulling at her nose (`prop.1`) and one pushing behind her pod (`prop.2`); `gun.1`-`gun.4` heavy MGs and `gun.5` the cannon through her spinner; `exhaust.rear` |
+| `WhatIf_TankBuster` | `tankbuster` | attack | part `cannon` (kind `slide`, back 0 to 0.6 m) and its muzzle `gun.3`: clip `fire.cannon` (one shot, the barrel runs back, a big flash; `fire` no longer flickers it); a rear gunner (`flexgun.1`) |
+| `WhatIf_GunshipBomber` | `gunship` | bomber | eight gun positions: six turrets (nose, chin, two on her back, the steel ball, tail) and a gunner at each waist blister (`flexgun.1`, `flexgun.2`); no bombs (`bombs_away` taken away); 12 crew |
+| `WhatIf_NightFighter` | `nightftr` | fighter | radar antlers (socket `radar`); four cannon in a belly tray (`gun.1`-`gun.4`) and two firing upward behind her cabin (`gun.5`, `gun.6`: clip `fire.upward`, out of `fire`); flame-damper shrouds; a rear gunner |
+| `WhatIf_SeaHunter` | `seahunter` | torpedo bomber | a flying boat: parts `float.port`, `float.starboard` (kind `turn`, 0 to 90) and clip `floats_up` (each float swings out and up to be her wingtip; played backward for a landing); two torpedoes (`torpedo` to starboard, `torpedo.2` to port, one part `torpedo`); socket `radar` under her bow |
+| `WhatIf_AssaultGlider` | `glidertank` | glider | no engine and no airscrew (`glider`); part `nose` (her whole nose, hinged on her starboard side, 0 to 110) and parts `ramp.port`, `ramp.starboard` (0 to 160); clip `unload` (door, then ramps); sockets `hold` (where the glider tank is lashed down), `tow`, `engine.1` (the wind's sound: cue `glider_wind_loop`, a new cue for the sound director); `carries` in her file names `WhatIf_GliderTank` |
+
+What the kit gained for them (keys of a machine's numbers that `planes.convert` reads; see `whatif_planes.py`):
+`pushers` (an airscrew on her middle line facing aft), `glider` (no engine; also `fitout`: her pilots sit side by
+side at their wheels, `fitout.CABIN_FLOOR` puts their floor on the roof of her hold), `assign` (her pieces in parts
+of her own choosing), `doors` (parts that swing or slide, cut clean from her skin), `hooks` (`fit` and `clips`
+functions run after her fit-out and after her clips). `planes.TAIL_CUT` takes the what-ifs' tail cuts, and
+`damage.MANY_ENGINED` the four with two airscrews or more on wings (an `EngineOut` each).
+
+Made again with `python export.py <out> WhatIf_EscortFighter,... json glb` (and `...Damage`, `...EngineOut`); their
+hand-held guns are in `air/gun-arcs.json`. The picture sheets are `air/sheets/whatif-planes.jpg` and
+`air/sheets/whatif-details.jpg`.
+
 ## Making them again, and the pictures
 
 ```

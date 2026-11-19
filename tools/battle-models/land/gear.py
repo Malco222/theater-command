@@ -243,6 +243,14 @@ class Gear:
                 if style.get("cleats"):
                     for vv in (-W * 0.3, W * 0.3):
                         box(-L * 0.46, L * 0.46, vv - 0.02, vv + 0.02, thick, thick + g * 0.7, paint, taper=0.2, shine=(0.0, 0.2, 0.9))
+                if style.get("spurs"):
+                    # ice spurs: short pointed studs bolted on the bar, that bite into ice and packed snow; the ground
+                    # wears their points bright
+                    k_n = int(style["spurs"])
+                    sh = style.get("spur_high", 0.03)
+                    for k in range(k_n):
+                        vv = W * 0.84 * ((k + 0.5) / k_n - 0.5)
+                        box(-L * 0.13, L * 0.13, vv - 0.024, vv + 0.024, thick + g * 0.8, thick + g + sh, paint, taper=0.75, tv=0.75, shine=(0.0, 0.5, 1.0))
                 # the pin and its eyes, closing the gap to the next link
                 box(L / 2 - 0.004, pitch - L / 2 + 0.004, -W / 2, W / 2, 0.003, thick - 0.002, paint)
         elif kind == "block":

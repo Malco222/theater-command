@@ -37,6 +37,7 @@ from mathutils import Quaternion, Vector, noise
 
 import fighters
 import fitout
+import whatif_planes
 import rigid
 from rigid import Model, smooth
 
@@ -1145,6 +1146,10 @@ fitout.SEAT_DROP["Lancaster"] = 0.08
 # The single-seat fighters, laid out again to measured drawings with framed glazing of their own (fighters.py).
 EXTRA_PLANES.update(fighters.FIGHTERS)
 
+# The what-if machines of the sandbox (Brian, 2026-11-19: our own designs that never flew; whatif_planes.py).
+EXTRA_PLANES.update(whatif_planes.PLANES)
+TAIL_CUT.update(whatif_planes.TAIL_CUT)
+
 
 # The Ju 87B-2, laid out again against a three-view drawing of the real machine (Wikimedia Commons, "Junkers Ju 87B-2
 # Stuka.svg", Kaboldy, CC BY-SA 3.0; measured, not traced): the deep cowling of her inverted-vee engine with its
@@ -1375,7 +1380,7 @@ def game():
     if _G is None:
         path = os.path.join(HERE, "game", "build_plane.py")
         src = open(path).read().split("\ndef main():")[0]
-        for old, new in FINER + JETS + GRADED + NOSES + GILLS + CABIN + fighters.CANOPY:
+        for old, new in FINER + JETS + GRADED + NOSES + GILLS + CABIN + fighters.CANOPY + whatif_planes.SOURCE:
             if src.count(old) != 1:
                 raise ValueError("the game's sculptor has changed here: " + old)
             src = src.replace(old, new)
@@ -1398,6 +1403,8 @@ def names():
 CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
         "Stuka": 2, "Sturmovik": 2, "He111": 5, "Lancaster": 7, "B17": 10, "Bomber": 5}
 ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber"}
+CREW.update(whatif_planes.CREW)
+ROLE.update(whatif_planes.ROLE)
 
 
 # ---- later coats of paint ----------------------------------------------------------------------------------
@@ -1525,6 +1532,7 @@ def schemes_of(G, name, s, paints, ink):
 #   role: (rows of kills, rows of missions, marks to a row, half a kill mark, half a bomb's height)
 TALLY = {"fighter": (3, 0, 10, 0.05, 0.0), "dive bomber": (1, 2, 12, 0.05, 0.06), "attack": (1, 2, 12, 0.05, 0.06), "torpedo bomber": (1, 2, 12, 0.05, 0.06),
          "bomber": (2, 3, 20, 0.05, 0.06)}
+TALLY["glider"] = (0, 2, 12, 0.05, 0.06)                   # (a glider's record is the landings she has made)
 TALLY_ROW = {"He111": 16, "Bomber": 16, "Betty": 16, "Nell": 16}      # (a medium bomber's nose is shorter)
 TALLY_AT = {"He111": 3.85, "Amerikabomber": 6.8, "B29": 8.25}                   # (her cockpit is her glass nose: her record goes on the first solid skin behind it)
 LEAD = 0.026                                 # (half the star over a mission flown as leader)
@@ -1706,13 +1714,15 @@ def convert(name, fine=True):
     hubs = []
     jets = s.get("jets", [])
     pods = sorted(((G["Body"](st, 2.0, out * hand), out * hand) for st, out in jets for hand in (1.0, -1.0)), key=lambda q: q[1])     # (port first)
-    if (not s.get("engines") or s.get("nose_engine")) and not jets:                 # (a trimotor's nose engine too)
+    if (not s.get("engines") or s.get("nose_engine")) and not jets and not s.get("glider"):     # (a trimotor's nose engine too; a glider has none)
         hub_x = sorted((r[0] for r in s["hull"]), reverse=True)[s.get("spinner", 2) - 1] + 0.06
         hubs.append(Vector((hub_x, 0.0, hull.z(-hub_x))))
     for (out, lead, z, is_radial, back) in s.get("engines", []):
         for hand in (1.0, -1.0):
             hubs.append(Vector((lead + (1.96 if is_radial else 2.16), out * hand, z)))
-    hubs.sort(key=lambda h: h.y)                       # (the game's y is to the right: port first)
+    for (px, pz) in s.get("pushers", []):              # (an airscrew at the tail of her nacelle, pushing: whatif_planes)
+        hubs.append(Vector((px, 0.0, pz)))
+    hubs.sort(key=lambda h: (h.y, -h.x))               # (the game's y is to the right: port first; on her middle line, the nose's first)
     screw = s.get("screw", 1.5 if not s.get("engines") else 1.7)
 
     def side_of(y):
@@ -1723,6 +1733,8 @@ def convert(name, fine=True):
     for hand, nm in ((-1.0, "wing.port"), (1.0, "wing.starboard")):
         m.part(nm, "plane", port((root_mid, hand * y_cut, wing_z)), kind="free", note="breaks away at the root (fall_spin, fall_explode)")
     m.part("tail", "plane", (x_cut, 0.0, hull.z(-x_cut)), kind="free", note="the rear fuselage and tail; breaks away (fall_explode)")
+    for d in s.get("doors", []):                        # (a part of her own that swings or slides: a door, a gun's barrel: whatif_planes)
+        m.part(d["name"], d.get("parent", "plane"), port(d["pivot"]), note=d["note"], **d["kw"])     # (pivot in her numbers' axes; kw in the file's, y to port)
 
     def paint_of(ob):
         own = int(ob["paint"])
@@ -1905,6 +1917,13 @@ def convert(name, fine=True):
         return any(k in balls and sum(((p[j] - c[j]) / (radii[j] * 1.15)) ** 2 for j in range(3)) <= 1.0 for k, c, radii in turrets)
 
     def where(kind, c, mean, ob):
+        if s.get("assign"):
+            own_part = s["assign"](kind, c, mean, ob)    # (a machine's own parts: a glider's nose door, a boom: whatif_planes)
+            if own_part:
+                return own_part
+        return where_usual(kind, c, mean, ob)
+
+    def where_usual(kind, c, mean, ob):
         if kind in ("dome", "frames", "glints") and in_ball(mean if kind == "dome" else c):
             return None                                     # (the game's glass dome there, its frames and its glints, are left out)
         if kind in ("wing", "tail", "fin"):
@@ -1928,7 +1947,7 @@ def convert(name, fine=True):
         if kind in ("tail", "fin", "tailwheel", "tailwheel_leg"):
             return "tail"
         if kind == "blade":
-            k = min(range(len(hubs)), key=lambda i: (hubs[i] - Vector((hubs[i].x, mean.y, mean.z))).length)
+            k = min(range(len(hubs)), key=lambda i: (hubs[i] - Vector((mean.x if s.get("pushers") else hubs[i].x, mean.y, mean.z))).length)
             return f"prop.{k + 1}"
         if kind == "dome":
             return turret_at(mean, 0.5) or ("tail" if mean.x < x_cut else "plane")
@@ -1986,7 +2005,7 @@ def convert(name, fine=True):
         per_face = kind in ("hull", "wing", "tail", "fin", "lines", "frames", "glints", "gills")
         whole = None if per_face else where(kind, mean, mean, ob)
         fpart = [whole or where(kind, f.calc_center_median(), mean, ob) for f in bm.faces]
-        loose_ = surf.keys() | {"bay.port", "bay.starboard", None}     # (parts that are cut out clean, not torn off)
+        loose_ = surf.keys() | {"bay.port", "bay.starboard", None} | {d["name"] for d in s.get("doors", [])}     # (parts that are cut out clean, not torn off)
         verts, coat, blend, soot, index = [], [], [], [], {}
         out = {}                                             # part -> (faces, paints, by_point)
 
@@ -2216,7 +2235,7 @@ def convert(name, fine=True):
         if pods and n[2] < -0.2 and y < hull.w(-v.x) and v.x < s["wing"][0][2]:
             along = min(max((s["wing"][0][2] - v.x) / (s["wing"][0][2] - hull.back), 0.0), 1.0)
             soot = max(soot, 0.75 * min(1.0, along * 6.0) * (1.0 - along) ** 0.5 * max(0.0, 1.0 - y / hull.w(-v.x)) ** 0.6 * streak)
-        if (not s.get("engines") or s.get("nose_engine")) and not jets and n[2] < -0.5 and y < 0.5 * wide:
+        if (not s.get("engines") or s.get("nose_engine")) and not jets and not s.get("glider") and n[2] < -0.5 and y < 0.5 * wide:
             along = (nose_back - v.x) / 4.5
             if 0.0 < along < 1.0:
                 soot = max(soot, 0.4 * (1.0 - along) * (1.0 - y / (0.5 * wide)))
@@ -2267,7 +2286,11 @@ def convert(name, fine=True):
     f.flex = [(nm, port(a_), port(b_)) for nm, a_, b_ in flex]
     f.guns_of = {k: [(port(rods[i][0]), port(rods[i][1])) for i in range(len(rods)) if gun_part[i] == f"turret.{k}.guns"] for k, c, radii in turrets}
     fitout.fit(m, f, s, G, hull)
+    for hook in s.get("hooks", {}).get("fit", ()):     # (what a machine of her own adds after her fit-out: whatif_planes)
+        hook(m, f, s, G, hull)
     clips_for_plane(m, f)
+    for hook in s.get("hooks", {}).get("clips", ()):
+        hook(m, f, s, G, hull)
     return m, f
 
 
@@ -2619,3 +2642,4 @@ def torpedo(fine=True):
 BUILDERS = {n: (lambda fine=True, n=n: convert(n, fine)) for n in ("Bf109", "Spitfire", "Zero", "Mustang", "Yak", "Fw190", "Me262", "Hurricane", "Warhawk", "Hellcat", "Fighter", "CarrierFighter",
                                                                   "Stuka", "Sturmovik", "Val", "Dauntless", "DiveBomber", "Kate", "Avenger", "TorpedoBomber", "He111", "Nell", "Betty", "Lancaster", "B17",
                                                                   "Amerikabomber", "B29", "Bomber")}
+BUILDERS.update({n: (lambda fine=True, n=n: convert(n, fine)) for n in whatif_planes.PLANES})
