@@ -614,12 +614,24 @@ export interface ShoreReport {
   result: string;
 }
 
+/** A battleship or a carrier that went down: her name (null once the record of names runs out), her crew and the men lost with her (hulls.ts). */
+export interface LostHull {
+  name: string | null;
+  cls: 'bb' | 'cv';
+  crew: number;
+  lost: number;
+  /** Two light carriers counted as one (both names, both crews). */
+  pair?: boolean;
+}
+
 export interface SeaSide {
   nat: string;
   fleet: string;
   admiral: string | null;
   ships: Ships;
   sunk: Ships;
+  /** The battleships and carriers it lost, by name (a record only: hulls.ts). */
+  hulls?: LostHull[];
 }
 
 export interface SeaReport {
