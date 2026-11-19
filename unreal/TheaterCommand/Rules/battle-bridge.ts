@@ -114,6 +114,19 @@
 // { x, y, kind } with kind 'spire', 'dome' or 'station', one a city, at its heart; draw it generic, no real building.
 // The region's own building style (brick in the north and east, stone and plaster in the south, timber further east)
 // is the 3D game's to pick from place and the nations, where it has the sets. Looks only beyond the grounds' cover.
+// A capital's or a city's own river through its streets (the design director, b526; the art director's 18:53Z note):
+// stream, where the city has one on the hand list (data/battle/city-rivers.json) and the card prices no crossing:
+// { name, lie, great, half, course, join?, front? }. Its water is 'water' and its bridges 'bridge' in ground as on every field,
+// a bridge on every avenue it crosses, each laid straight across the water. lie 'up': it runs up the field through the
+// core, along the attack's line; 'across': through the core's back half behind the defence, the city's far quarter
+// beyond it; 'shore': along the city's edge at one side of the field, its water out to the field's edge. course: its
+// middle line in field metres from upstream to downstream (the way its water runs), and half the metres either side of
+// that line that are water (a little more and less as it goes; ground has the cells); a shore's course is its bank,
+// half 0. join: a second river meeting it (the Sava at Belgrade), { name, half, course } from the field's edge to the
+// meeting. front (lie 'across' only): the defence's front line in field metres north that the river keeps behind; the
+// rules' own, nothing to draw. Draw a city river as a river in a city: stone quays and embankments where the core meets the water, the
+// bridges stone or steel to the region's style, nothing named after a real bridge. A bridge's deck runs across the
+// water, square to course at that point. great: wider than about 250 m at the real city (the Danube at Budapest).
 //
 // Explosions (Brian, 18 November: "very dramatic and life like"; his own look, copying no game's effects): the 3D game
 // draws every burst, its flash and light, shock, earth crown, debris, smoke, the camera's jolt and the scar it leaves,
@@ -459,6 +472,7 @@ export function battleCalls(h: BattleHooks) {
         field: {
           w: f.w, h: f.h, cell: f.cell, cols: f.cols, rows: f.rows, grounds: GROUNDS, ground: f.ground, height: f.height.map((x) => Math.round(x * 10) / 10), zones: f.zones, town: f.town, place: t.place,
           ...(f.storeys ? { storeys: f.storeys } : {}), ...(f.landmark ? { landmark: f.landmark } : {}),
+          ...(f.stream ? { stream: f.stream } : {}),
         },
         going, view: viewOut(ses, sim.view(ses.me)),
       };

@@ -184,6 +184,19 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
       x.fillStyle = '#2c5878'; x.fillText(b.ticket.place.river, rx, ry);
     }
   }
+  const St = b.field.stream;
+  if (St) {
+    // A city's own river (b526): its name beside its line, clear of the water and the armies: a fifth of the way along
+    // where it runs across (the field's west fifth) or along a shore (its south fifth, on the water), halfway up the field
+    // between the armies where it runs up it.
+    const F = b.field, up = St.lie !== 'across', k = St.lie === 'up' ? 0.5 : 0.22;
+    const at = St.course.reduce((m, p) => (Math.abs((up ? p[1] : p[0]) - (up ? F.h : F.w) * k) < Math.abs((up ? m[1] : m[0]) - (up ? F.h : F.w) * k) ? p : m), St.course[0]);
+    const west = St.lie === 'shore' ? at[0] < F.w / 2 : false;
+    const [rx, ry] = toScreen(s, at[0] + (St.lie === 'shore' ? (west ? -at[0] / 2 : (F.w - at[0]) / 2) : up ? St.half + 20 : 0), at[1] + (up ? 0 : St.half + 30));
+    x.font = `italic ${Math.max(12, Math.min(18, 30 * cam.z))}px "PT Serif", Georgia, serif`;
+    x.textAlign = St.lie === 'shore' ? 'center' : 'left'; x.lineWidth = 3; x.strokeStyle = 'rgba(233,226,207,.75)'; x.strokeText(St.name, rx, ry);
+    x.fillStyle = '#2c5878'; x.fillText(St.name, rx, ry);
+  }
 
   const colour: Record<Side, string> = s.colours ?? { att: b.ticket.att.color, def: b.ticket.def.color };
   const byId = new Map(b.units.map((u) => [u.id, u]));

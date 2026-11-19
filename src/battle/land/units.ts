@@ -8,7 +8,7 @@
 
 import type { CrewMarks } from './crews';
 import type { Calibre, ForceTicket, Side, SideTicket, UnitBase } from '../core/types';
-import { BEND, digWorks, type Bend, type LandField } from './field';
+import { BEND, GROUNDS, STREAM, digWorks, type Bend, type LandField } from './field';
 import { LAND, type Kind } from './rules';
 
 export interface LandOrder {
@@ -235,13 +235,67 @@ export function deploy(units: LandUnit[], side: Side, f: LandField): void {
       [mine.filter((u) => !u.dry), west ? inner(1) : 10, west ? f.w - 10 : inner(-1)],
     ];
     for (const [us, lo, hi] of lanes) if (us.length) drawUp(us, side, f, (Math.max(lo, z[0]) + Math.min(hi, z[2])) / 2, lo, hi);
-  } else drawUp(mine, side, f, side === 'def' && f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2);
+  } else if (f.stream && f.stream.lie !== 'across') streamLanes(mine, side, f);
+  else drawUp(mine, side, f, side === 'def' && f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2);
   for (const u of mine) {
     u.x = Math.min(f.w - u.w / 2 - 10, Math.max(u.w / 2 + 10, u.x));
     u.y = Math.min(f.h - 40, Math.max(40, u.y));
+    // Never drawn up in a city's own river (b526): it lies behind the defence's rows and clear of the lanes either side
+    // of it; should a row still reach it (a deep row in a narrow lane, a second river coming in behind), the block steps
+    // forward out of it, toward the enemy, and a few steps more to stand a stone's throw off its water and bridges.
+    if (f.stream) {
+      for (let k = 0; k < 40 && wetUnder(f, u); k++) u.y += side === 'att' ? 10 : -10;
+      for (let k = 0; k < 8 && wetUnder(f, u, STREAM.off); k++) u.y += side === 'att' ? 10 : -10;
+    }
     u.home = [u.x, u.y];
     if (u.dug) digWorks(f, u.x, u.y, u.w, u.d);
   }
+}
+
+/** Whether any of a block's box, grown by off metres each way, stands in water or on a bridge. */
+function wetUnder(f: LandField, u: LandUnit, off = 0): boolean {
+  const hw = u.w / 2 + off, hd = u.d / 2 + off, nx = Math.ceil((2 * hw) / (f.cell / 2)), ny = Math.ceil((2 * hd) / (f.cell / 2));
+  for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) {
+    const c = Math.floor((u.x - hw + (2 * hw * i) / nx) / f.cell), r = Math.floor((u.y - hd + (2 * hd * j) / ny) / f.cell);
+    if (c < 0 || r < 0 || c >= f.cols || r >= f.rows) continue;
+    const k = GROUNDS[f.ground[r * f.cols + c]];
+    if (k === 'water' || k === 'bridge' || k === 'blown') return true;
+  }
+  return false;
+}
+
+/**
+ * A side drawn up beside a city's own river (field.stream, b526). One that runs up the field leaves two lanes, either
+ * side of it and STREAM.clear beyond its water: each army stands in the heart's where its front line fits, else across
+ * both, its blocks shared out by the room each has. A shore leaves one lane, off its water.
+ */
+function streamLanes(mine: LandUnit[], side: Side, f: LandField): void {
+  const S = f.stream!, z = f.zones[side], clear = S.half + STREAM.clear;
+  // Over all the depth its rows may take: where the lanes are narrow, they run back toward the side's own edge.
+  const y0 = side === 'att' ? 0 : z[1] - 100, y1 = side === 'att' ? z[3] + 20 : f.h;
+  const xs = S.course.filter(([, y]) => y >= y0 && y <= y1).map(([x]) => x);
+  const lo = Math.min(...xs), hi = Math.max(...xs);
+  const lane = (a: number, b: number): [number, number, number] => [a, b, Math.max(0, Math.min(b, z[2]) - Math.max(a, z[0]))];
+  const lanes = S.lie === 'shore' ? [lo < f.w / 2 ? lane(hi + STREAM.clear, f.w - 10) : lane(10, lo - STREAM.clear)] : [lane(10, lo - clear), lane(hi + clear, f.w - 10)];
+  const open = lanes.filter((l) => l[2] >= 200);
+  const groups: LandUnit[][] = open.map(() => []), fill = open.map(() => 0);
+  // Both armies stand on the heart's bank where their front line fits there, the river beside them and never between
+  // them: the plain order's target is the defender nearest the attack, and a quarter of the attack wading over to it
+  // cost the attack up to 15 points against the card in the hills and mountains. Only an army too broad for that bank
+  // spreads over both, its blocks shared out by the room each has, block by block in their order.
+  const home = f.town ? open.findIndex(([a, b]) => f.town!.x >= a && f.town!.x <= b) : -1;
+  if (home >= 0 && rowWidth(rowsOf(mine)[0]) <= open[home][2]) groups[home].push(...mine);
+  else for (const u of mine) {
+    let k = 0;
+    for (let j = 1; j < open.length; j++) if ((fill[j] + u.w) / open[j][2] < (fill[k] + u.w) / open[k][2]) k = j;
+    groups[k].push(u); fill[k] += u.w;
+  }
+  // Each lane's rows as near as they fit to where the side stands with no river (the defence about the heart, the attack
+  // at the middle of its zone), not spread to the far ends of their lanes.
+  const centre = side === 'def' && f.town ? Math.min(z[2] - 300, Math.max(z[0] + 300, f.town.x)) : (z[0] + z[2]) / 2;
+  open.forEach(([a, b], j) => {
+    if (groups[j].length) drawUp(groups[j], side, f, Math.min(b, Math.max(a, centre)), a, b);
+  });
 }
 
 /**
@@ -260,6 +314,8 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
     const half = rowWidth(lines[0]) / 2;
     const ys = f.streetEdge.filter((y, c) => y >= 0 && Math.abs(c * f.cell + f.cell / 2 - cx) <= half).sort((a, b) => a - b);
     if (ys.length) front = Math.max(front, ys[Math.floor(ys.length / 2)] + LAND.city.inside);
+    // A city's own river across the field keeps behind the front line it read there (b526): never deeper than that.
+    if (f.stream?.front !== undefined) front = Math.min(front, f.stream.front);
   }
   const x0 = lo ?? 10, x1 = hi ?? f.w - 10;
   /**

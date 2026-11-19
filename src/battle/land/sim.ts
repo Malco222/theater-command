@@ -171,6 +171,13 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (streetsOf(ticket.place)) this.ticket = { ...ticket, limit: Math.round(ticket.limit * (1 + LAND.city.clock * builtShare(this.field))) };
     deploy(this.units, 'att', this.field);
     deploy(this.units, 'def', this.field);
+    // A city's own river up the field with the whole defence drawn up on one bank of it: its line ends on the river.
+    const St = this.field.stream;
+    if (St?.lie === 'up') {
+      const xAt = (y: number): number => St.course.reduce((m, p) => (Math.abs(p[1] - y) < Math.abs(m[1] - y) ? p : m))[0];
+      const def = this.units.filter((u) => u.side === 'def'), west = def.filter((u) => u.x < xAt(u.y)).length;
+      this.flankOnRiver = west === 0 || west === def.length;
+    }
     for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
     // The day's luck, from the card's own run (ruling 226(4)): the attack's blows land that much harder or softer, and
@@ -200,11 +207,13 @@ export class LandBattle implements BattleSim<LandUnit> {
   private holdTake(u: LandUnit): number {
     const p = this.ticket.place, H = LAND.hold;
     const streets = streetsOf(p);
-    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1);
+    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * (this.flankOnRiver ? H.stream : 1);
   }
 
   /** The share of the attack's tanks and lorries, by strength, that must cross the river: 0 where it has none (b494). */
   private readonly armourWet: number;
+  /** The defence's line ends on a city's own river up the field (b526), all of it on one bank: a flank not on the card. */
+  private readonly flankOnRiver: boolean = false;
 
   private say(e: Omit<FieldEvent, 't'>): void {
     const ev = { t: Math.round(this.t * 10) / 10, ...e } as FieldEvent;

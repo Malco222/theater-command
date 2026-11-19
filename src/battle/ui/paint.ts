@@ -299,17 +299,23 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
   const mid: [number, number][] = [];
   // Where the river bends away from the lanes of the corps that do not cross, the field gives its line (b464(5)): a
   // column's middle would cut the corner where it turns down to the attacker's edge.
-  if (f.course) for (let i = 0; i < f.course.length; i += 2) mid.push([f.course[i][0] * PAINT, H - f.course[i][1] * PAINT]);
+  // A city's own river (b526) gives its line too, and a second meeting it its own; a shore has none, only its water.
+  const lines: [number, number][][] = [];
+  if (f.stream && f.stream.lie !== 'shore') for (const run of [f.stream.course, ...(f.stream.join ? [f.stream.join.course] : [])]) lines.push(run.filter((_, i) => i % 2 === 0).map(([ax, ay]) => [ax * PAINT, H - ay * PAINT]));
+  else if (f.stream) { /* a shore: its water alone */ }
+  else if (f.course) for (let i = 0; i < f.course.length; i += 2) mid.push([f.course[i][0] * PAINT, H - f.course[i][1] * PAINT]);
   else for (let c = 0; c < f.cols; c++) {
     let sum = 0, n = 0;
     for (let rr = 0; rr < f.rows; rr++) if (wet(g(c, rr))) { sum += rr; n++; }
     if (n) mid.push([cx(c), cy(sum / n)]);
   }
-  if (mid.length > 1) {
+  if (mid.length > 1) lines.push(mid);
+  for (const line of lines) {
+    if (line.length < 2) continue;
     x.strokeStyle = 'rgba(63,127,174,.6)'; x.lineWidth = 3; x.lineCap = 'round'; x.lineJoin = 'round';
-    x.beginPath(); x.moveTo(mid[0][0], mid[0][1]);
-    for (let i = 1; i < mid.length - 1; i++) x.quadraticCurveTo(mid[i][0], mid[i][1], (mid[i][0] + mid[i + 1][0]) / 2, (mid[i][1] + mid[i + 1][1]) / 2);
-    x.lineTo(mid[mid.length - 1][0], mid[mid.length - 1][1]);
+    x.beginPath(); x.moveTo(line[0][0], line[0][1]);
+    for (let i = 1; i < line.length - 1; i++) x.quadraticCurveTo(line[i][0], line[i][1], (line[i][0] + line[i + 1][0]) / 2, (line[i][1] + line[i + 1][1]) / 2);
+    x.lineTo(line[line.length - 1][0], line[line.length - 1][1]);
     x.stroke();
   }
 
@@ -322,6 +328,26 @@ export function paintField(f: LandField, terrain: Terrain, seed: number): Painte
   for (let r = 0; r < f.rows; r++) for (let c = 0; c < f.cols; c++) {
     const kd = g(c, r), X = px(c), Y = py(r);
     if (kd === 'bridge') {
+      // Laid along its deck: across the cell where the road runs on east and west of it and not north or south (a
+      // bridge over a city's river that runs up the field, b526), up the cell otherwise. A step in a deck has road both
+      // ways: there the river's own line says which way the bridge runs (across one that runs up the field).
+      const deckAt = (cc: number, rr: number): boolean => cc >= 0 && rr >= 0 && cc < f.cols && rr < f.rows && (g(cc, rr) === 'road' || g(cc, rr) === 'bridge');
+      const ew = deckAt(c - 1, r) || deckAt(c + 1, r), ns = deckAt(c, r - 1) || deckAt(c, r + 1);
+      const riverRunsUp = (): boolean => {
+        if (!f.stream || f.stream.lie === 'shore') return false;
+        const mx = c * f.cell + f.cell / 2, my = r * f.cell + f.cell / 2;
+        let best = Infinity, up = false;
+        for (const run of [f.stream.course, ...(f.stream.join ? [f.stream.join.course] : [])]) for (let k = 1; k < run.length; k++) {
+          const [ax, ay] = run[k - 1], [bx, by] = run[k], d = Math.hypot((ax + bx) / 2 - mx, (ay + by) / 2 - my);
+          if (d < best) { best = d; up = Math.abs(by - ay) > Math.abs(bx - ax); }
+        }
+        return up;
+      };
+      if (ew && (!ns || riverRunsUp())) {
+        x.fillStyle = '#f4ecd6'; x.fillRect(X, Y + cs / 2 - 6, cs, 12);
+        x.strokeStyle = INK; x.lineWidth = 1.6; x.beginPath(); x.moveTo(X, Y + cs / 2 - 7); x.lineTo(X + cs, Y + cs / 2 - 7); x.moveTo(X, Y + cs / 2 + 7); x.lineTo(X + cs, Y + cs / 2 + 7); x.stroke();
+        continue;
+      }
       x.fillStyle = '#f4ecd6'; x.fillRect(X + cs / 2 - 6, Y, 12, cs);
       x.strokeStyle = INK; x.lineWidth = 1.6; x.beginPath(); x.moveTo(X + cs / 2 - 7, Y); x.lineTo(X + cs / 2 - 7, Y + cs); x.moveTo(X + cs / 2 + 7, Y); x.lineTo(X + cs / 2 + 7, Y + cs); x.stroke();
     } else if (kd === 'blown') {

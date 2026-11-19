@@ -16,6 +16,7 @@ import { KIND, type BattleReport, type Corps, type Game, type Region } from '../
 import type { AirOnCall, FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
 import { streetsOf, type LandPlace } from './field';
 import { LAND } from './rules';
+import { bearingOf, streamFor } from './stream';
 
 /** The corps that would actually go in, as the attack card and the battle count them. */
 export function goingIn(g: Game, corps: Corps[], target: Region): Corps[] {
@@ -101,6 +102,13 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
     ...(crossing && CROSSINGS[target.name]?.river === riverName(crossing) ? { crossings: CROSSINGS[target.name].at } : {}),
     ...(dry ? { dryEnd: dry } : {}),
   };
+  // A capital's or a city's own river through its streets, as it lies to the way this attack comes on (b526): none
+  // where the card prices a crossing, so one river a field.
+  if (!crossing && streetsOf(place)) {
+    const mx = going.reduce((s, c) => s + g.regions[c.reg].x, 0) / going.length, my = going.reduce((s, c) => s + g.regions[c.reg].y, 0) / going.length;
+    const stream = streamFor(place.town, bearingOf(mx, my, target.x, target.y));
+    if (stream) place.stream = stream;
+  }
   const date = turnToDate(g.turn);
   // The odds as the attack card put them to the player (attackOutlook in turn.ts): a band where it did not know the
   // defence, its bar at the middle. The safety net reads the card (offered.ts), never the truth behind it.

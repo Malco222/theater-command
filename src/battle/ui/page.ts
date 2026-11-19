@@ -1087,7 +1087,7 @@ export function bootPage(): void {
   S.g = newCampaign();
   S.active = true;
   // A handle for the page's own checks (screenshots, the playtester's harness). Not used by the page itself.
-  (window as unknown as { __field: unknown }).__field = { state: S, give, showChooser };
+  (window as unknown as { __field: unknown }).__field = { state: S, give, showChooser, start: startBattle };
   showChooser();
   startLoop();
 }

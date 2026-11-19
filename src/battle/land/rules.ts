@@ -114,6 +114,13 @@ export const LAND = {
     // cities captured -9.5, plains capitals captured +9.0 on 8); the practice city +2.0; every other place unchanged.
     // Next (b515(g)): a city's clock follows its built share, and these come back toward 1.
     streets: { city: 1.05, capital: 1.1, 'urban capital': 1.5, 'mountain capital': 1, 'desert city': 1, 'marsh city': 1 } as Record<string, number>,
+    // A city's own river up the field beside the heart (b526): where the whole defence stands on one bank its line ends
+    // on the river, a flank the attack cannot turn, and the card never priced the river, so the field takes that back
+    // off the held defence too. An army broad enough to stand on both banks has no such flank. Fitted 19 November, 10
+    // fights each on the 555 capital and city attacks with a river forced up every field the card left dry: 1 cost the
+    // attack 2.2 points (mountain cities at close odds 10.7); 1.06 leaves it -0.1 against the same attacks with no river,
+    // every kind within a tenth both ways (furthest: plains cities at close odds -6.7), fewer fights to the clock.
+    stream: 1.06,
   },
   /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
   dug: { keep: 30 },

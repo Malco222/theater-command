@@ -8,6 +8,7 @@
 // Frame (see core/types.ts): metres, x east, y north, the attacker comes on from the south.
 
 import { Rng } from '../../core/rng';
+import { LAND } from './rules';
 
 /** Ground kinds, in the order their codes are stored in LandField.ground. Append only: saved fields keep their codes. */
 // (The art director's list of 17 November: open, field, woods, buildings, road, water with a bridge standing or blown,
@@ -48,6 +49,31 @@ export interface LandPlace {
    * faces the place (b464(5)). Absent there, the west.
    */
   dryEnd?: 'west' | 'east';
+  /**
+   * A capital's or a city's own river through its streets, as it lies to this attack (the design director, b526): never
+   * between the armies. From the hand list of real cities (data/battle/city-rivers.json, stream.ts). None where the card
+   * prices a crossing (river): one river a field.
+   */
+  stream?: Stream;
+}
+
+/**
+ * A city's own river as it lies to the attack (b526). 'up': along the attack's line, up the field through the city's
+ * core, a bridge on every avenue; 'across': across it, through the core's back half behind the defence (as Praga across
+ * the Vistula, or Buda across the Danube); 'shore': along the city's edge at one side of the field, not through it (the
+ * Tagus along Lisbon). The field's west is the attack's left.
+ */
+export interface Stream {
+  name: string;
+  lie: 'up' | 'across' | 'shore';
+  /** Which way its water runs on the field: up or down the field ('north', 'south') along it, 'east' or 'west' across it. */
+  flows: 'north' | 'south' | 'east' | 'west';
+  /** A shore's side of the field. */
+  side?: 'west' | 'east';
+  /** Wider than about 250 m at the city (the Danube at Budapest), drawn wider. */
+  great: boolean;
+  /** A second river meeting it at the city (the Sava at Belgrade): its name and the side of the field it comes in from. */
+  join?: { name: string; side: 'west' | 'east' };
 }
 
 /**
@@ -107,6 +133,25 @@ export interface LandField {
   bend?: Bend;
   /** Where it bends, its middle line in metres, from where it comes onto the field to where it leaves at the attacker's edge. */
   course?: [number, number][];
+  /**
+   * A capital's or a city's own river (b526): its name and how it lies, its middle line in metres from upstream to
+   * downstream, and how far either side of that line it is water (half, a little more and less as it goes); a shore's
+   * line is its bank, the water lying between it and the field's edge (half 0). Where two meet, the second's likewise,
+   * from the field's edge to where it meets the first. Its water and its bridges are in ground: a river in the rules
+   * like any other, but not on the card, so never between the armies. One across the field keeps behind the defence's
+   * front line as it read it (front, metres north): the defence draws up no deeper than that.
+   */
+  stream?: FieldStream;
+}
+
+export interface FieldStream {
+  name: string;
+  lie: Stream['lie'];
+  great: boolean;
+  half: number;
+  course: [number, number][];
+  join?: { name: string; half: number; course: [number, number][] };
+  front?: number;
 }
 
 export const FIELD = { w: 3000, h: 2000, cell: 25 };
@@ -119,6 +164,15 @@ export const zonesOf = (w: number, h: number): LandField['zones'] => ({ att: [w 
  * either side of its line, and over what length; and how far either side of that line no attacking block draws up.
  */
 export const BEND = { r: 180, swing: 30, wave: 520, clear: 130 };
+
+/**
+ * A city's own river (b526), in metres: half its width, great or lesser; how far it swings as it goes; how wide a shore's
+ * water is from the field's edge; how far behind the defence's front line it keeps, and a second river that meets it
+ * further still (the defence's rows reach 230 m back and its guns stand 50 m deep, deeper where its lanes are narrow); the far bank it leaves at the
+ * field's edge; how far either side of its line a block draws up clear of it; and how far it keeps from the roads up and
+ * across the field, which it bridges and never runs along; and the stone's throw a block stands off its water and bridges.
+ */
+export const STREAM = { great: 55, lesser: 35, swing: 45, shore: 230, behind: 330, joinBehind: 420, far: 60, clear: 75, road: 90, off: 60 };
 
 /** How each province's ground is made: relief in metres, and how much of it is each kind of cover. */
 const RECIPE: Record<Terrain, { relief: number; woods: number; fields: number; rough: number; marsh: number; rock: number }> = {
@@ -334,6 +388,14 @@ export function buildField(place: LandPlace, seed: number, bend?: Bend): LandFie
       course.push(...line);
     }
   }
+  // A capital's or a city's own river (b526), laid over its streets after the roads, which it bridges; never where the
+  // card prices a crossing (one river a field). Its own stream of draws, so the rest of the field is as it was.
+  let stream: FieldStream | undefined;
+  if (place.stream && !flow && town && built.landmark) {
+    const roadX = (y: number): number => w / 2 + (tx - w / 2) * Math.min(1, (y / h) * 1.4) + Math.sin((y / h) * 5 + wob) * 90;
+    const roadY = (x: number): number => ty + Math.sin((x / w) * 4 + wob) * 70;
+    stream = layStream(place.stream, seed, place.terrain, ground, height, built.landmark, town, built.streetEdge, roadX, roadY);
+  }
   // A road on the slant steps from cell to cell corner to corner, and where both cells beside such a step are rock, marsh
   // or water a lorry cannot take it: the road takes one of them, over water the bridge does (b418: tanks and lorries
   // stood for good where their road crossed a river or a ridge on the slant).
@@ -386,7 +448,276 @@ export function buildField(place: LandPlace, seed: number, bend?: Bend): LandFie
     ...(built.landmark ? { landmark: built.landmark } : {}),
     ...(built.streetEdge ? { streetEdge: built.streetEdge } : {}),
     ...(course ? { bend, course } : {}),
+    ...(stream ? { stream } : {}),
   };
+}
+
+/** A quadratic curve from a to b about k, as points. */
+function bezier(a: [number, number], k: [number, number], b: [number, number], steps = 40): [number, number][] {
+  return Array.from({ length: steps + 1 }, (_, i) => {
+    const u = i / steps, v = 1 - u;
+    return [v * v * a[0] + 2 * v * u * k[0] + u * u * b[0], v * v * a[1] + 2 * v * u * k[1] + u * u * b[1]] as [number, number];
+  });
+}
+
+/**
+ * A capital's or a city's own river through its streets (Brian, 18 November: the ground matches the map; the design
+ * director, b526), never between the armies:
+ *   - 'up', along the attack's line: up the field through the core, beside its heart on the side away from the road up
+ *     the field and clear of that road all the way (failing either side, across instead);
+ *   - 'across' it: through the core's back half, behind the defence's rows (a block inside the core's edge, b529) and
+ *     the road across the field, the city's far quarter beyond it, as Praga across the Vistula or Buda across the Danube;
+ *   - 'shore': along the city's edge at one side of the field, its water to the field's edge, never through it.
+ * A second river meeting it (the Sava at Belgrade) comes in behind the defence too: from beyond an 'across' river, or
+ * from its side of the field behind the defence's rows to meet one 'up' the field. Every road it crosses keeps its way
+ * over by a bridge straight across the water where the road came to it: a bridge on every avenue; a road that only
+ * comes down to the water ends at its bank. A river with no road over it gets one bridge, nearest the heart. Water is
+ * water in the rules (b526: what is drawn as a river is a river), but the card never prices it, so it lies where no
+ * attack must cross it.
+ */
+function layStream(
+  s: Stream, seed: number, terrain: Terrain, ground: number[], height: number[], heart: { x: number; y: number }, town: { x: number; y: number },
+  streetEdge: number[] | undefined, roadX: (y: number) => number, roadY: (x: number) => number,
+): FieldStream {
+  const { w, h, cell } = FIELD, cols = Math.round(w / cell), rows = Math.round(h / cell), z = zonesOf(w, h);
+  const rng = new Rng(seed ^ 0x57ea);
+  const half = s.great ? STREAM.great : STREAM.lesser, jh = STREAM.lesser;
+  // Where the defence's front line stands: a block inside the core's ragged edge (b529), never nearer the attack than
+  // its zone; read deep (the edge three-quarters of the way back about the defence's middle), so it keeps behind every row.
+  const dcx = Math.min(z.def[2] - 300, Math.max(z.def[0] + 300, town.x));
+  const edge = (streetEdge ?? []).filter((y, c) => y >= 0 && Math.abs(c * cell + cell / 2 - dcx) <= 700).sort((a, b) => a - b);
+  const front = Math.max(z.def[1] + 40, edge.length ? edge[Math.floor(edge.length * 0.75)] + LAND.city.inside : 0);
+  // Its slow swing as it goes, 0 to 1.
+  const L = rng.range(1500, 2300), p1 = rng.range(0, Math.PI * 2), p2 = rng.range(0, Math.PI * 2);
+  const wave = (v: number): number => 0.5 + 0.35 * Math.sin((2 * Math.PI * v) / L + p1) + 0.15 * Math.sin((2 * Math.PI * v) / (L * 0.37) + p2);
+  const far = (hw: number): number => h - hw - STREAM.far;
+  const jside = s.join?.side === 'east' ? 1 : -1;
+  const course: [number, number][] = [];
+  let lie = s.lie, join: FieldStream['join'];
+
+  if (lie === 'shore') {
+    const west = s.side !== 'east', width = s.great ? STREAM.shore : STREAM.shore * 0.7;
+    const bank = (y: number): number => width + 35 * (2 * wave(y) - 1);
+    for (let y = -50; y <= h + 50; y += cell) course.push([west ? bank(y) : w - bank(y), y]);
+    if (s.flows === 'south') course.reverse();
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const x = c * cell + cell / 2, y = r * cell + cell / 2, i = r * cols + c, d = west ? bank(y) - x : x - (w - bank(y));
+      if (d >= 0) { ground[i] = G.water; height[i] = Math.min(height[i], 0) - 2; }
+      else if (d > -40 && ground[i] === G.open && terrain !== 'desert') ground[i] = G.field;
+    }
+    return { name: s.name, lie, great: s.great, half: 0, course };
+  }
+  // How many cells of road a line would drown: of the lines it may take, it takes the one that drowns fewest, so it
+  // crosses the avenues rather than running along one.
+  const drowns = (f: (v: number) => number, up: boolean): number => {
+    const hit = new Set<number>(), k = Math.ceil(half / cell);
+    for (let v = -50; v <= (up ? h : w) + 50; v += cell / 2) {
+      const x = up ? f(v) : v, y = up ? v : f(v), c0 = Math.floor(x / cell), r0 = Math.floor(y / cell);
+      for (let dr = -k; dr <= k; dr++) for (let dc = -k; dc <= k; dc++) {
+        const c = c0 + dc, r = r0 + dr;
+        if (c < 0 || r < 0 || c >= cols || r >= rows || Math.hypot(c * cell + cell / 2 - x, r * cell + cell / 2 - y) > half) continue;
+        if (ground[r * cols + c] === G.road) hit.add(r * cols + c);
+      }
+    }
+    return hit.size;
+  };
+  // The same for a second river's course: it comes in where it drowns fewest cells of road, never along an avenue.
+  const drownsPts = (pts: [number, number][], hw: number): number => {
+    const hit = new Set<number>(), k = Math.ceil(hw / cell);
+    for (let n = 1; n < pts.length; n++) for (let t = 0; t < 1; t += 0.25) {
+      const x = pts[n - 1][0] + (pts[n][0] - pts[n - 1][0]) * t, y = pts[n - 1][1] + (pts[n][1] - pts[n - 1][1]) * t, c0 = Math.floor(x / cell), r0 = Math.floor(y / cell);
+      for (let dr = -k; dr <= k; dr++) for (let dc = -k; dc <= k; dc++) {
+        const c = c0 + dc, r = r0 + dr;
+        if (c < 0 || r < 0 || c >= cols || r >= rows || Math.hypot(c * cell + cell / 2 - x, r * cell + cell / 2 - y) > hw) continue;
+        if (ground[r * cols + c] === G.road) hit.add(r * cols + c);
+      }
+    }
+    return hit.size;
+  };
+  const fewest = (ways: [number, number][][]): [number, number][] => ways.reduce((a, b) => (drownsPts(b, jh) < drownsPts(a, jh) ? b : a));
+  if (lie === 'up') {
+    const pref = town.x > w / 2 ? 1 : -1;
+    const line = (x0: number) => (y: number): number => x0 + STREAM.swing * 1.2 * (2 * wave(y) - 1);
+    let xr: ((y: number) => number) | null = null, least = Infinity;
+    for (const side of [pref, -pref]) for (let off = 200; off <= 400; off += 25) {
+      const f = line(heart.x + side * off);
+      let ok = true;
+      for (let y = -50; y <= h + 50 && ok; y += cell) {
+        const x = f(y);
+        ok = Math.abs(x - roadX(Math.min(h, Math.max(0, y)))) >= half + STREAM.road && x >= z.att[0] + 200 && x <= z.att[2] - 200;
+      }
+      const n = ok ? drowns(f, true) : Infinity;
+      if (n < least) { least = n; xr = f; }
+    }
+    if (xr) {
+      for (let y = -50; y <= h + 50; y += cell) course.push([xr(y), y]);
+      if (s.flows === 'south') course.reverse();
+      if (s.join) {
+        const yc = Math.min(far(jh), front + STREAM.joinBehind + jh), xc = xr(yc), ex = jside < 0 ? -50 : w + 50;
+        const da = rng.range(40, 160), dk = rng.range(0, 80);
+        const way = (a: number, k: number): [number, number][] => bezier([ex, Math.min(h + 50, yc + a)], [(ex + xc) / 2, Math.min(h + 50, yc + k)], [xc, yc]);
+        join = { name: s.join.name, half: jh, course: fewest([way(da, dk), ...[40, 100, 160, 220].flatMap((a) => [way(a, 0), way(a, a / 2)])]) };
+      }
+    } else lie = 'across';
+  }
+  if (lie === 'across') {
+    const line = (base: number) => (x: number): number => Math.min(far(half), Math.max(base, roadY(Math.min(w, Math.max(0, x))) + STREAM.road + half) + STREAM.swing * wave(x));
+    let yr = line(front + STREAM.behind + half), least = drowns(yr, false);
+    for (let k = 1; k <= 6; k++) {
+      const f = line(front + STREAM.behind + half + k * cell), n = drowns(f, false);
+      if (n < least) { least = n; yr = f; }
+    }
+    for (let x = -50; x <= w + 50; x += cell) course.push([x, yr(x)]);
+    if (s.flows === 'west') course.reverse();
+    if (s.join) {
+      const d0 = rng.range(260, 420), da = rng.range(250, 500), dk = rng.range(40, 120);
+      const way = (d: number, a: number, k: number): [number, number][] => {
+        const xc = heart.x + jside * d, yc = yr(xc);
+        return bezier([xc + jside * a, h + 50], [xc + jside * k, yc + (h - yc) * 0.55], [xc, yc]);
+      };
+      join = { name: s.join.name, half: jh, course: fewest([way(d0, da, dk), ...[260, 340, 420].flatMap((d) => [way(d, 250, 40), way(d, 500, 120), way(d, 380, 80)])]) };
+    }
+  }
+
+  // The roads as they were before any water: those it crosses keep their way over.
+  const road0 = ground.map((k) => k === G.road);
+  const lay = (pts: [number, number][], hw: number): void => {
+    const wob = rng.range(0, Math.PI * 2), m = hw * 1.15 + 40;
+    const along = [0];
+    for (let k = 1; k < pts.length; k++) along.push(along[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    const c0 = Math.max(0, Math.floor((Math.min(...xs) - m) / cell)), c1 = Math.min(cols - 1, Math.ceil((Math.max(...xs) + m) / cell));
+    const r0 = Math.max(0, Math.floor((Math.min(...ys) - m) / cell)), r1 = Math.min(rows - 1, Math.ceil((Math.max(...ys) + m) / cell));
+    // Each cell near it: how far from its line, on which bank (+1 its left as it flows, -1 its right), and how far along.
+    const dist = new Map<number, number>(), bank = new Map<number, number>(), sta = new Map<number, number>();
+    const wet = new Set<number>();
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+      const x = c * cell + cell / 2, y = r * cell + cell / 2, i = r * cols + c;
+      // A second river stops where the first's water begins.
+      if (ground[i] === G.water || ground[i] === G.bridge) continue;
+      let best = Infinity, sAt = 0, sd = 0;
+      for (let k = 1; k < pts.length; k++) {
+        const [ax, ay] = pts[k - 1], vx = pts[k][0] - ax, vy = pts[k][1] - ay;
+        const q = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy || 1)));
+        const dd = Math.hypot(x - ax - q * vx, y - ay - q * vy);
+        if (dd < best) { best = dd; sAt = along[k - 1] + q * (along[k] - along[k - 1]); sd = vx * (y - ay) - vy * (x - ax) >= 0 ? 1 : -1; }
+      }
+      if (best > m) continue;
+      dist.set(i, best); bank.set(i, sd); sta.set(i, sAt);
+      if (best <= hw * (1 + 0.12 * Math.sin(sAt / 170 + wob))) wet.add(i);
+      else if (best <= hw + 40 && ground[i] === G.open && terrain !== 'desert') ground[i] = G.field;
+    }
+    for (const i of wet) { ground[i] = G.water; height[i] = Math.min(height[i], 0) - 2; }
+    const mid = (j: number): [number, number] => [(j % cols) * cell + cell / 2, Math.floor(j / cols) * cell + cell / 2];
+    const cellOf = (x: number, y: number): number => { const c = Math.floor(x / cell), r = Math.floor(y / cell); return c < 0 || r < 0 || c >= cols || r >= rows ? -1 : r * cols + c; };
+    const pave = (x0: number, y0: number, x1: number, y1: number): void => {
+      const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (cell / 4)));
+      for (let t = 0; t <= steps; t++) {
+        const j = cellOf(x0 + ((x1 - x0) * t) / steps, y0 + ((y1 - y0) * t) / steps);
+        if (j < 0) continue;
+        if (wet.has(j)) ground[j] = G.bridge;
+        else if (ground[j] !== G.road && ground[j] !== G.bridge && ground[j] !== G.water) ground[j] = G.road;
+      }
+    };
+    // A bridge straight over the water at s metres along it; its land at either end laid as road to the nearest of the
+    // road's cells on that bank (ends: -1 its right bank, +1 its left, which lies along the normal (-uy, ux)).
+    const span = (sAt: number, ends?: Record<number, number[]>): void => {
+      let k = 1;
+      while (k < pts.length - 1 && along[k] < sAt) k++;
+      const q = Math.max(0, Math.min(1, (sAt - along[k - 1]) / (along[k] - along[k - 1] || 1)));
+      const [ax, ay] = pts[k - 1], [bx, by] = pts[k], len = Math.hypot(bx - ax, by - ay) || 1;
+      const ux = (bx - ax) / len, uy = (by - ay) / len, px = ax + (bx - ax) * q, py = ay + (by - ay) * q, reach = hw * 1.15 + cell;
+      pave(px + uy * reach, py - ux * reach, px - uy * reach, py + ux * reach);
+      if (ends) for (const sd of [1, -1]) {
+        const ex = px - uy * reach * sd, ey = py + ux * reach * sd;
+        const to = ends[sd].reduce((a, j) => (Math.hypot(mid(j)[0] - ex, mid(j)[1] - ey) < Math.hypot(mid(a)[0] - ex, mid(a)[1] - ey) ? j : a), ends[sd][0]);
+        pave(ex, ey, ...mid(to));
+      }
+    };
+    // Every road it crosses keeps its way over: in each joined piece of road the water took, where a road comes to the
+    // water on one bank and leaves it on the other, nearest first along the river, a bridge straight across between
+    // them. A road that runs along in the water (a boulevard by the quay) bridges nothing; one that only comes down to
+    // the water ends at its bank.
+    const bridged: number[] = [];
+    const seen = new Set<number>();
+    for (const i0 of wet) {
+      if (!road0[i0] || seen.has(i0)) continue;
+      const ends: Record<number, Set<number>> = { 1: new Set(), [-1]: new Set() };
+      const stack = [i0];
+      seen.add(i0);
+      while (stack.length) {
+        const i = stack.pop()!;
+        for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+          const c = (i % cols) + dc, r = Math.floor(i / cols) + dr, j = r * cols + c;
+          if ((!dc && !dr) || c < 0 || r < 0 || c >= cols || r >= rows) continue;
+          if (wet.has(j)) { if (road0[j] && !seen.has(j)) { seen.add(j); stack.push(j); } }
+          else if (ground[j] === G.road && bank.has(j)) ends[bank.get(j)!].add(j);
+        }
+      }
+      // Where along the river each bank's road comes to the water: its cells there, in runs along the bank.
+      const runs = (cs: Set<number>): { s: number; cells: number[] }[] => {
+        const out: { s: number; cells: number[] }[] = [];
+        for (const j of [...cs].sort((p, q) => sta.get(p)! - sta.get(q)! || p - q)) {
+          const last = out[out.length - 1];
+          if (last && sta.get(j)! - sta.get(last.cells[last.cells.length - 1])! <= 2 * cell) last.cells.push(j);
+          else out.push({ s: 0, cells: [j] });
+        }
+        for (const o of out) o.s = o.cells.reduce((a, j) => a + sta.get(j)!, 0) / o.cells.length;
+        return out;
+      };
+      const right = runs(ends[-1]), left = runs(ends[1]);
+      const pairs: [number, number, number][] = [];
+      // A road over it slantwise comes to the far bank further along: one crossing down to about 20 degrees pairs too,
+      // nearest first, so one that crosses square still pairs with the run straight over from it.
+      right.forEach((a, ia) => left.forEach((b, ib) => { const d = Math.abs(a.s - b.s); if (d <= 6 * hw + 2 * cell) pairs.push([d, ia, ib]); }));
+      pairs.sort((p, q) => p[0] - q[0] || p[1] - q[1] || p[2] - q[2]);
+      const usedR = new Set<number>(), usedL = new Set<number>();
+      for (const [, ia, ib] of pairs) {
+        if (usedR.has(ia) || usedL.has(ib)) continue;
+        usedR.add(ia); usedL.add(ib);
+        // Two roads that come to the water within a few metres of each other share one bridge: this one is laid to it.
+        const sAt = (right[ia].s + left[ib].s) / 2, near = bridged.find((x) => Math.abs(x - sAt) < 2 * cell);
+        span(near ?? sAt, { [-1]: right[ia].cells, 1: left[ib].cells });
+        if (near === undefined) bridged.push(sAt);
+      }
+      // A road left over on one bank where two came to the water together (two avenues meeting at the river): its own
+      // bridge to the nearest road over the water, though that one has its bridge already.
+      for (const [mine, other, used, sd] of [[right, left, usedR, -1], [left, right, usedL, 1]] as const) mine.forEach((o, io) => {
+        if (used.has(io) || !other.length) return;
+        const p = other.reduce((a, b) => (Math.abs(b.s - o.s) < Math.abs(a.s - o.s) ? b : a));
+        if (Math.abs(p.s - o.s) > 6 * hw + 2 * cell) return;
+        used.add(io);
+        const sAt = (o.s + p.s) / 2, near = bridged.find((x) => Math.abs(x - sAt) < 2 * cell);
+        span(near ?? sAt, { [sd]: o.cells, [-sd]: p.cells });
+        if (near === undefined) bridged.push(sAt);
+      });
+      // What the water cut along one bank is joined again: each run's cells in turn along it (a road that dipped into the
+      // water and came out on the same bank), and a run left over, with no bridge, to another run on its bank close by.
+      for (const [side, used] of [[right, usedR], [left, usedL]] as const) {
+        for (const o of side) for (let k = 1; k < o.cells.length; k++) pave(...mid(o.cells[k - 1]), ...mid(o.cells[k]));
+        side.forEach((o, io) => {
+          if (used.has(io)) return;
+          let a0 = -1, b0 = -1, bd = Infinity;
+          side.forEach((p, ip) => {
+            if (ip !== io) for (const a of o.cells) for (const b of p.cells) { const d = Math.hypot(mid(a)[0] - mid(b)[0], mid(a)[1] - mid(b)[1]); if (d < bd) { bd = d; a0 = a; b0 = b; } }
+          });
+          if (a0 >= 0 && bd <= 4 * cell) pave(...mid(a0), ...mid(b0));
+        });
+      }
+    }
+    if (!bridged.length && pts.length > 1) {
+      // No road over it: one bridge, nearest the heart.
+      let s1 = 0, d1 = Infinity;
+      for (let k = 0; k < pts.length; k++) {
+        const d = Math.hypot(pts[k][0] - heart.x, pts[k][1] - heart.y);
+        if (d < d1 && pts[k][0] > 0 && pts[k][0] < w && pts[k][1] > 0 && pts[k][1] < h) { d1 = d; s1 = along[k]; }
+      }
+      span(s1);
+    }
+  };
+  lay(course, half);
+  if (join) lay(join.course, jh);
+  return { name: s.name, lie, great: s.great, half, course, ...(join ? { join } : {}), ...(lie === 'across' ? { front } : {}) };
 }
 
 /** The share of a field that is built: its houses, blocks, suburbs and industry. */
