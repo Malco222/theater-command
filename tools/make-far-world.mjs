@@ -334,7 +334,7 @@ notes.push(`oil: home ${Object.entries(oilHome).map(([n, v]) => `${n} ${v} (was 
 // ---- The file ----------------------------------------------------------------------------------------
 const out = {
   _about: "The far side's rows that are nobody's seat, written by tools/make-far-world.mjs from the Pacific planner's, the historian's and the clerk's files and never by hand. Keyed by the data file each block belongs in, as the seat builders' files are; the game lays it over its data only where the far side's switch is on (src/campaign/far-rows.ts). Japan is the seventh great power (ruling 141(a)): quality 1.0 (ruling 215), outside both blocs and leaning to the Axis (ruling 197), a sea lift of 6 (ruling 200). Its army is the planner's paper 17 (the historian's weights), its fleets paper 11 section 7 as ruling 189 amended them, with the names and admirals of ruling 208(f). The garrisons of Britain, the Netherlands, France, the Soviet Far East and America are paper 18's. America's fleets in the Pacific, the ships that join and leave them, and the bases by date of the Pacific Fleet and of Japan's battle line are the planner's pacific-fleets.json (rulings 185, 189, 208(f)); a fleet that forms later is a row of navy.json. 'manpower' is rulings 213(b), 216(b) and 218; China's row under 'traits' is the seat's with the levy of ruling 218. 'setup.held' is the clerk's held_1939 where it is not the owner.",
-  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'pacific-planner/pacific-fleets.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json', 'pacific-planner/20-trial/base-seats.json', 'map-tables/burma-front-forces.json', 'pacific-planner/far-yards.md', 'pacific-planner/far-oil.md', 'pacific-planner/21-whole-world-data-gaps.md', 'pacific-six/riders-234.json'].map((p) => [p, stamp(p)])),
+  _sources: Object.fromEntries(['pacific-planner/first-day-corps.json', 'pacific-planner/opening-armies.json', 'pacific-planner/pacific-fleets.json', 'historian/generals-usa-japan.json', 'historian/manpower-213.json', 'pacific-planner/runs-219/levy218-seats.json', 'pacific-planner/20-trial/base-seats.json', 'map-tables/burma-front-forces.json', 'pacific-planner/far-yards.md', 'pacific-planner/far-oil.md', 'pacific-planner/21-whole-world-data-gaps.md', 'pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json'].map((p) => [p, stamp(p)])),
   _draft: "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
   grand: {
     nations: [{
@@ -393,43 +393,66 @@ const out = {
 };
 
 // ---- Ruling 234's riders ---------------------------------------------------------------------------------
-// The record's rows the opening was measured with (the design director's riders b552 to b583; the Pacific six's
-// builder keeps the file). They are laid last, over what the sources above give. A 'set' names its row and what the
-// row reads before it: a source that moves under a rider stops the build instead of being written over. An 'add' row
-// goes at the END of its list, in the file's order (a saved game remembers an expedition by its place in the list).
-const riders = src('pacific-six/riders-234.json');
+// The record's rows the opening was measured with (the design director's riders to ruling 234; the Pacific six's
+// builder keeps the files). They are laid last, over what the sources above give, one file after the other:
+//   riders-234.json        riders b552 to b583, the book's rows of the opening
+//   riders-234-b591.json   riders b591 to b604, the facts of the day at every stop of the dial (Japan's armour roster)
+// A 'set' names its row and what the row reads before it: a source that moves under a rider stops the build instead
+// of being written over. A word set to null is taken off the row. A 'move' gives a row by date another month or
+// another place, and the row keeps its place in the list. An 'add' row goes at the END of its list, in the file's
+// order (a saved game remembers an expedition by its place in the list).
 const sameWord = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const setRow = (what, rows, words, r) => {
   need(rows.length === 1, `rider: ${rows.length} ${what} named ${JSON.stringify(r.row)}`);
   for (const [k, v] of Object.entries(r.was)) need(sameWord(words(rows[0])[k], v), `rider: ${what} ${JSON.stringify(r.row)} reads ${k} ${JSON.stringify(words(rows[0])[k])}, not ${JSON.stringify(v)}`);
-  Object.assign(words(rows[0]), r.now);
+  for (const [k, v] of Object.entries(r.now)) { if (v === null) delete words(rows[0])[k]; else words(rows[0])[k] = v; }
 };
-for (const r of riders.expeditions.set) setRow('row by date', dated.expeditions.filter((x) => x[0] === r.row[0] && x[1] === r.row[1] && x[2] === r.row[2]), (x) => x[6], r);
-for (const { row } of riders.expeditions.add) {
-  need(!dated.expeditions.some((x) => x[0] === row[0] && x[1] === row[1] && x[2] === row[2]), `rider: the row by date "${row[2]}" is laid already`);
-  need(owner.has(row[5]), `rider: "${row[2]}": ${row[5]} is not a province of the chart`);
-  dated.expeditions.push(row);
-}
-for (const r of riders.corps.set) setRow('first-day row', out.world.corps.filter((x) => x[0] === r.row[0] && x[1] === r.row[1]), (x) => x[5], r);
-for (const r of riders.fleets.set) setRow('fleet', out.world.fleets.filter((f) => f.nat === r.row[0] && f.name === r.row[1]), (f) => f.ships, r);
-for (const { row } of riders.arrivals.add) {
-  need(!out.navy.arrivals.some((x) => sameWord(x, row)), `rider: the arrival "${row[4]}" is laid already`);
-  need([...out.world.fleets, ...out.navy.fleets].some((f) => f.nat === row[1] && f.name === row[2]), `rider: the arrival "${row[4]}" names no fleet`);
-  out.navy.arrivals.push(row);
-}
-for (const [nat, r] of Object.entries(riders.roster)) {
-  if (nat === 'why') continue;
-  if (Array.isArray(r)) { need(out.commanders.roster[nat] === undefined, `rider: a roster for ${nat} is laid already`); out.commanders.roster[nat] = r; continue; }
-  const roster = out.commanders.roster[nat].map((x) => [...x]);
-  for (const [name, was, now] of r.month ?? []) {
-    const rows = roster.filter((x) => x[1] === name);
-    need(rows.length === 1 && rows[0][0] === was, `rider: ${name} is not rostered once, in turn ${was}`);
-    rows[0][0] = now;
+const byDate = (r) => dated.expeditions.filter((x) => x[0] === r.row[0] && x[1] === r.row[1] && x[2] === r.row[2]);
+function layRiders(file) {
+  const riders = src(file);
+  const E = riders.expeditions ?? {}, C = riders.corps ?? {};
+  for (const r of E.set ?? []) setRow('row by date', byDate(r), (x) => x[6], r);
+  for (const r of E.move ?? []) {
+    const rows = byDate(r);
+    need(rows.length === 1, `rider: ${rows.length} rows by date named ${JSON.stringify(r.row)}`);
+    need(rows[0][5] === r.was.place, `rider: the row by date ${JSON.stringify(r.row)} stands at ${rows[0][5]}, not ${r.was.place}`);
+    if (r.place !== undefined) { need(owner.has(r.place), `rider: "${r.row[2]}": ${r.place} is not a province of the chart`); rows[0][5] = r.place; }
+    if (r.turn !== undefined) { need(!dated.expeditions.some((x) => x !== rows[0] && x[0] === r.turn && x[1] === r.row[1] && x[2] === r.row[2]), `rider: the row by date "${r.row[2]}" is laid already in turn ${r.turn}`); rows[0][0] = r.turn; }
   }
-  for (const x of r.first ?? []) need(!roster.some((y) => y[1] === x[1]), `rider: ${x[1]} is rostered already`);
-  out.commanders.roster[nat] = [...(r.first ?? []), ...roster];
+  for (const { row } of E.add ?? []) {
+    need(!dated.expeditions.some((x) => x[0] === row[0] && x[1] === row[1] && x[2] === row[2]), `rider: the row by date "${row[2]}" is laid already`);
+    need(owner.has(row[5]), `rider: "${row[2]}": ${row[5]} is not a province of the chart`);
+    dated.expeditions.push(row);
+  }
+  for (const r of C.set ?? []) setRow('first-day row', out.world.corps.filter((x) => x[0] === r.row[0] && x[1] === r.row[1]), (x) => x[5], r);
+  for (const { row } of C.add ?? []) {
+    need(!out.world.corps.some((x) => x[0] === row[0] && x[1] === row[1]), `rider: the first-day row "${row[1]}" is laid already`);
+    need(owner.has(row[4]), `rider: "${row[1]}": ${row[4]} is not a province of the chart`);
+    out.world.corps.push(row);
+  }
+  for (const r of riders.fleets?.set ?? []) setRow('fleet', out.world.fleets.filter((f) => f.nat === r.row[0] && f.name === r.row[1]), (f) => f.ships, r);
+  for (const { row } of riders.arrivals?.add ?? []) {
+    need(!out.navy.arrivals.some((x) => sameWord(x, row)), `rider: the arrival "${row[4]}" is laid already`);
+    need([...out.world.fleets, ...out.navy.fleets].some((f) => f.nat === row[1] && f.name === row[2]), `rider: the arrival "${row[4]}" names no fleet`);
+    out.navy.arrivals.push(row);
+  }
+  for (const [nat, r] of Object.entries(riders.roster ?? {})) {
+    if (nat === 'why') continue;
+    if (Array.isArray(r)) { need(out.commanders.roster[nat] === undefined, `rider: a roster for ${nat} is laid already`); out.commanders.roster[nat] = r; continue; }
+    const roster = out.commanders.roster[nat].map((x) => [...x]);
+    for (const [name, was, now] of r.month ?? []) {
+      const rows = roster.filter((x) => x[1] === name);
+      need(rows.length === 1 && rows[0][0] === was, `rider: ${name} is not rostered once, in turn ${was}`);
+      rows[0][0] = now;
+    }
+    for (const x of r.first ?? []) need(!roster.some((y) => y[1] === x[1]), `rider: ${x[1]} is rostered already`);
+    out.commanders.roster[nat] = [...(r.first ?? []), ...roster];
+  }
+  const n = (xs) => (xs ?? []).length, rosters = Object.keys(riders.roster ?? {}).filter((k) => k !== 'why');
+  notes.push(`ruling 234's riders (${path.basename(file)}): ${n(E.set)} rows by date changed, ${n(E.move)} moved and ${n(E.add)} added, ${n(C.set)} first-day rows changed and ${n(C.add)} added, ${n(riders.fleets?.set)} fleet, ${n(riders.arrivals?.add)} arrival${rosters.length ? `, the rosters of ${rosters.join(' and ')}` : ''}`);
 }
-notes.push(`ruling 234's riders: ${riders.expeditions.set.length} rows by date changed and ${riders.expeditions.add.length} added, ${riders.corps.set.length} first-day row, ${riders.fleets.set.length} fleet, ${riders.arrivals.add.length} arrival, the rosters of ${Object.keys(riders.roster).filter((k) => k !== 'why').join(' and ')}`);
+const RIDERS = ['pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json'];
+for (const file of RIDERS) layRiders(file);
 
 const text = JSON.stringify(out, null, 1) + '\n';
 if (process.argv.includes('--check')) {

@@ -27,7 +27,7 @@ import { beyondEurope, enemyAtTheDoor, overseasOf, shoreOf, type OverseasRules }
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { frontArmys, lineAny, lineGives, lineLeaves, lineShut } from './line';
-import { bookAttacks, bookFleets, bookStations, ceilinged } from './stations';
+import { alongside, bookAttacks, bookFleets, bookStations, ceilinged, goesWith, ridersOf } from './stations';
 import { hashString } from '../core/rng';
 import { SIEGE, arrive, besieged, feeders, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
@@ -489,7 +489,12 @@ function mainCampaign(g: Game, nat: string): void {
     if (open) afterDeclaring(g, nat);
   }
   // (The corps the plan takes off hold this month: its named reserves the month it goes, its own landing forces later. staff.ts.)
-  if (open) for (const nm of freed(g, nat)) { const c = g.corps.find((x) => x.nat === nat && x.name === nm && !x.dead); if (c && c.hold && !c.stay) c.hold = false; }
+  // (A row that goes with a corps the plan lets go is let go with it: rider b604 to ruling 234, stations.ts.)
+  if (open) for (const nm of freed(g, nat)) {
+    for (const x of ridersOf(g, nat, nm)) if (x.hold && !x.stay) x.hold = false;
+    const c = g.corps.find((x) => x.nat === nat && x.name === nm && !x.dead);
+    if (c && c.hold && !c.stay) c.hold = false;
+  }
   // (The strikes the plan orders of its carriers fall with the declaration, before the admirals read the month.)
   for (const s of ph?.strikes ?? []) plannedStrike(g, nat, s.fleet, s.harbour, s.home);
   // (By the book the record's covering fleets take their seas first: stations.ts. None with the far side off.)
@@ -1040,14 +1045,22 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
     if (c.town !== undefined) { if (!pacificGround(g, from)) continue; takeField(g, c); }
     // Others the plan sends in the same lift, if they are standing on the same quay. (No more than the floor at home
     // lets go: ruling 229, 1b.)
-    const force = [c, ...(L.with ?? []).map((nm) => g.corps.find((x) => x.nat === nat && x.name === nm && !x.dead && x.reg === c.reg)).filter((x): x is Corps => !!x)];
+    const named = [c, ...(L.with ?? []).map((nm) => g.corps.find((x) => x.nat === nat && x.name === nm && !x.dead && x.reg === c.reg)).filter((x): x is Corps => !!x)];
+    // (And the rows that go with a corps of the force, in its lift: its tank regiment sails with a division, where
+    // it stands with it on the quay, and is the staff's own once ashore. Rider b604 to ruling 234, stations.ts.)
+    const force = [...named, ...alongside(g, named)];
     if (leavesHome(g, nat, from)) force.splice(Math.min(force.length, mayLeave(g, nat)));
     if (!force.length) continue;
+    // (To a friendly harbour such a row is shipped only behind its corps, and takes none of the shipping.)
+    const ship = (x: Corps, to: Region): boolean => {
+      const lead = goesWith(g, x);
+      return lead && lead !== x && force.includes(lead) ? lead.reg === to.id && shipMove(g, x, to, true) : shipMove(g, x, to);
+    };
     for (const name of L.to) {
       const to = g.byName[name];
       if (!to) continue;
       let ok = false;
-      if (allied(g, nat, to.ctrl)) ok = to.owner !== nat && force.map((x) => shipMove(g, x, to)).some(Boolean);
+      if (allied(g, nat, to.ctrl)) ok = to.owner !== nat && force.map((x) => ship(x, to)).some(Boolean);
       else if (atWar(g, nat, to.ctrl)) {
         // A defended shore is only stormed at fair odds.
         if (hostileUnits(g, to, nat).length && assess(g, force, to, landingOpts(g, force, to)).odds < (L.minOdds ?? 1.2)) continue;

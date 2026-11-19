@@ -25,6 +25,7 @@ import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
+import { alongside, riding } from './stations';
 import { hopAims, skiesOver } from './pacific';
 import { HISTORY, bookDate, dialDraw, stopDef, stopOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
@@ -585,7 +586,7 @@ function crossing(g: Game, cs: Corps[], path: number[], surprise: boolean, landi
 }
 
 /** Why a corps cannot be shipped to a friendly port, or null if it can. */
-export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
+export function whyNotShip(g: Game, c: Corps, to: Region, rides = false): string | null {
   const n = g.nations[c.nat], from = g.regions[c.reg];
   if (n.sealift <= 0) return `${n.name} has no shipping to move an army by sea.`;
   if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
@@ -609,17 +610,18 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   const steep = whyBarred(g, c, to);
   if (steep) return steep;
   if (friendlyUnits(g, to, c.nat).length >= STACK) return `${to.name} has no room for another corps.`;
-  if (liftLeft(g, c.nat) < 1) return 'All the shipping is in use this month.';
+  // (A row that goes with a corps already shipped there this month sails in that corps' lift: `rides`, rider b604 to ruling 234.)
+  if (!rides && liftLeft(g, c.nat) < 1) return 'All the shipping is in use this month.';
   if (!seaPath(g, c.nat, from, to)) return 'The enemy holds the sea between.';
   return null;
 }
 
 /** Ships a corps from one friendly port to another. It takes the whole month, and the enemy may find the convoy. */
-export function shipCorps(g: Game, c: Corps, to: Region): boolean {
-  if (whyNotShip(g, c, to)) return false;
+export function shipCorps(g: Game, c: Corps, to: Region, rides = false): boolean {
+  if (whyNotShip(g, c, to, rides)) return false;
   const path = seaPath(g, c.nat, g.regions[c.reg], to)!;
   const lost = crossing(g, [c], path, false);
-  g.flags[liftKey(g, c.nat)] = (g.flags[liftKey(g, c.nat)] ?? 0) + 1;
+  if (!rides) g.flags[liftKey(g, c.nat)] = (g.flags[liftKey(g, c.nat)] ?? 0) + 1;
   relocate(g, c, to);
   c.ap = 0;
   g.week = 2;
@@ -702,7 +704,8 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (!to.seas.length) return `${to.name} has no coast.`;
   if (allied(g, nat, to.ctrl) || !atWar(g, nat, to.ctrl)) return `${to.name} is not enemy ground.`;
   if (cs.length > STACK) return `No more than ${STACK} corps can go ashore in one place.`;
-  if (liftLeft(g, nat) < cs.length) return liftLeft(g, nat) ? `There is shipping for only ${liftLeft(g, nat)} more corps this month.` : 'All the shipping is in use this month.';
+  // (A row that goes with a corps of the force sails in that corps' lift: rider b604 to ruling 234, stations.ts.)
+  if (liftLeft(g, nat) < cs.length - riding(g, cs).length) return liftLeft(g, nat) ? `There is shipping for only ${liftLeft(g, nat)} more corps this month.` : 'All the shipping is in use this month.';
   if (!seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: surpriseOn(g, nat, to) })) return laneWhy(g, nat, from, to, laneBar(g, nat, from, to, surpriseOn(g, nat, to)));
   // Troopships cannot cross under an enemy sky. Only surprise, or winning the sky over the beach, gets them there.
   if (!surpriseOn(g, nat, to) && skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`;
@@ -1025,20 +1028,30 @@ export function planLanding(g: Game, cs: Corps[], to: Region): LandingPlan {
 
 export interface Landing { ok: boolean; why?: string; taken?: boolean; lostAtSea?: number; report?: BattleReport | null; surprise?: boolean; air?: boolean }
 
-/** Lands corps on an enemy coast. If it is defended they fight their way ashore, at a disadvantage unless the enemy is surprised. */
-export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[], to: Region) => BattleReport): Landing {
+/**
+ * Lands corps on an enemy coast. If it is defended they fight their way ashore, at a disadvantage unless the enemy is surprised.
+ * A row that goes with a corps of the force (stations.ts, rider b604 to ruling 234) lands in that corps' lift, and is
+ * its staff's own once ashore. A computer's staff takes such rows along where they stand with the corps on the quay;
+ * the player's force is his to choose, and a dated attack of the book brings its own (`alone`).
+ */
+export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[], to: Region) => BattleReport, alone = false): Landing {
+  if (!alone && cs.length && cs[0].nat !== g.human) {
+    const more = alongside(g, cs);
+    if (more.length && whyNotLand(g, [...cs, ...more], to) === null) cs = [...cs, ...more];
+  }
   const why = whyNotLand(g, cs, to);
   if (why) return { ok: false, why };
   const nat = cs[0].nat, from = g.regions[cs[0].reg];
   const held = to.ctrl;
   const air = airborne(cs);
   const surprise = !air && surpriseOn(g, nat, to);
+  const rode = air ? [] : riding(g, cs);
   let lostAtSea = 0;
   if (air) g.flags[dropKey(g, nat)] = 1;
   else {
     const path = seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise })!;
     lostAtSea = crossing(g, cs, path, surprise, to);
-    g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + cs.length;
+    g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + cs.length - rode.length;
     for (const z of to.seas) g.flags[`landed:${z}:${nat}`] = g.turn;
     // (And the ground itself, for the coast watch: a landing on this enemy's homeland is not news to come.)
     g.flags[`landedAt:${to.id}:${nat}`] = g.turn;
@@ -1056,6 +1069,7 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
     arrive(g, to, nat);
   }
   for (const c of cs) if (!c.dead) c.ap = 0;
+  if (taken) for (const c of rode) if (!c.dead) c.hold = false;
   const adj = g.nations[nat].adj;
   if (air) headline(g, 'battle', taken ? `${adj} airborne troops take ${to.name} from the air.` : `A ${adj} airborne assault on ${to.name} is beaten off with heavy loss.`, nat, to.id, { arm: 'land', won: taken ? nat : held, lost: taken ? held : nat });
   else headline(g, 'battle', taken ? `${adj} troops land at ${to.name} from the sea.` : `A ${adj} landing at ${to.name} is thrown back into the sea.`, nat, to.id, { arm: 'land', won: taken ? nat : held, lost: taken ? held : nat });

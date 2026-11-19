@@ -58,6 +58,9 @@
 //              division the record gives it from that month. It is the book's: it stands where its division stands
 //              in the field, goes in with every dated attack its division makes, and takes neither shipping of its
 //              own nor room on the roads.
+//              The first attachment the table gives is a fact of the day, at every stop of the dial and for every
+//              country (rider b604): a row held for the corps it goes with lands in that corps' lift the month it
+//              lands, and is its staff's own after. Later re-attachments stay the book's.
 // 'fleets' are the record's covering forces (rider b575): in its months the fleet named patrols the sea named, by
 // the book's order ahead of its admiral's own. What it meets there is fought by the rules.
 // Never the player: his own corps are never stationed, and in a war where he is the invader nobody is (the line's
@@ -279,6 +282,50 @@ function follow(g: Game, row: Row, slide: number): boolean {
   return put(g, c, to, 0);
 }
 
+/**
+ * The name of the corps a row goes with this month (riders b581 and b604), or null for a row that goes with nobody.
+ * While the book binds its country it is the record's for the month, re-attachments and all. Anywhere else it is the
+ * attachment of the day, the first the table gives, and only while the row is still held for it: once it has landed
+ * with its corps, or its corps has been let go, it is its staff's own.
+ */
+function attachment(g: Game, c: Corps): string | null {
+  const B = stations();
+  const row = B?.rows.find((r) => r.nat === c.nat && r.corps === c.name && !!r.beside?.length);
+  if (!B || !row?.beside) return null;
+  if (!stationsBind(g, c.nat)) return c.hold ? row.beside[0][1] : null;
+  const cal = calendar(g, B)!;
+  let name: string | null = null;
+  for (const [m, nm] of row.beside) if (g.turn >= m + cal.slide) name = nm;
+  return name;
+}
+
+/** The corps a row goes with this month, where it lives: null for a row that goes with nobody. */
+export function goesWith(g: Game, c: Corps): Corps | null {
+  const name = attachment(g, c);
+  return name === null ? null : g.corps.find((x) => x.nat === c.nat && !x.dead && x.name === name) ?? null;
+}
+
+/** The rows that go this month with the corps of this name, living or not. */
+export function ridersOf(g: Game, nat: string, name: string): Corps[] {
+  return stations() ? g.corps.filter((x) => x.nat === nat && !x.dead && attachment(g, x) === name) : [];
+}
+
+/** The rows of a force that sail in another's lift (rider b604): each is in the force with the corps it goes with. */
+export function riding(g: Game, cs: Corps[]): Corps[] {
+  if (!stations()) return [];
+  return cs.filter((c) => { const lead = goesWith(g, c); return !!lead && lead !== c && cs.includes(lead); });
+}
+
+/** The rows that go with a corps of this force, stand in the field on its quay with their month before them, and are not in it. */
+export function alongside(g: Game, cs: Corps[]): Corps[] {
+  if (!stations() || !cs.length) return [];
+  return g.regions[cs[0].reg].units.filter((u) => {
+    if (u.nat !== cs[0].nat || u.dead || cs.includes(u) || u.town !== undefined || u.kind === 'fort' || u.ap < Math.min(4, u.apMax)) return false;
+    const lead = goesWith(g, u);
+    return !!lead && cs.includes(lead);
+  });
+}
+
 const placesOf = (s: Step): string[] => (Array.isArray(s[1]) ? s[1] : [s[1]]);
 
 /** For the measuring harness: told of every dated attack the book weighs, made, owed or over. Nothing in the game listens. */
@@ -415,7 +462,7 @@ export function bookAttacks(g: Game, nat: string): void {
         const aboard = tanks.filter((c) => door(g, c, q) && bring(g, c, q));
         bookWatch.tell?.({ row, what: 'due', to, force: [...main, ...aboard] });
         // (A landing with the record's figures came ashore on an empty beach: its fight is inland, with no cut for the shore.)
-        const res = landCorps(g, main, to, row.met ? (cs, at) => fightMet(g, [...cs, ...aboard], at, row, { sea: 1 }) : undefined);
+        const res = landCorps(g, main, to, row.met ? (cs, at) => fightMet(g, [...cs, ...aboard], at, row, { sea: 1 }) : undefined, true);
         if (!res.ok) { why = res.why ?? 'the landing could not sail'; continue; }
         const won = !!res.taken;
         if (won) for (const c of aboard) if (!c.dead && c.reg !== to.id && door(g, c, to)) relocate(g, c, to);

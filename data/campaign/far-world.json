@@ -12,7 +12,8 @@
   "pacific-planner/far-yards.md": "2026-11-18T03:46Z",
   "pacific-planner/far-oil.md": "2026-11-18T07:05Z",
   "pacific-planner/21-whole-world-data-gaps.md": "2026-11-18T07:06Z",
-  "pacific-six/riders-234.json": "2026-11-18T23:54Z"
+  "pacific-six/riders-234.json": "2026-11-18T23:54Z",
+  "pacific-six/riders-234-b591.json": "2026-11-19T05:09Z"
  },
  "_draft": "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
  "grand": {
@@ -1095,6 +1096,82 @@
      "xp": 0.05,
      "str": 0.3,
      "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "3rd Tank Regiment",
+    "arm",
+    1,
+    "Szepingkai",
+    {
+     "xp": 0.3,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "4th Tank Regiment",
+    "arm",
+    1,
+    "Szepingkai",
+    {
+     "xp": 0.3,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "5th Tank Regiment",
+    "arm",
+    1,
+    "Mutankiang",
+    {
+     "xp": 0.15,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "8th Tank Regiment",
+    "arm",
+    1,
+    "Mukden",
+    {
+     "xp": 0.15,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "12th Tank Regiment",
+    "arm",
+    1,
+    "Taiyuan",
+    {
+     "xp": 0.3,
+     "str": 0.25,
+     "est": 0.25
+    }
+   ],
+   [
+    "JAP",
+    "13th Tank Regiment",
+    "arm",
+    1,
+    "Hankow",
+    {
+     "xp": 0.3,
+     "str": 0.25,
+     "est": 0.25
     }
    ]
   ],
@@ -2946,25 +3023,29 @@
     }
    ],
    [
-    38,
+    40,
     "JAP",
     "Mongolia Garrison Army (3rd Tank Division)",
     "arm",
     1,
     "Paotow",
     {
-     "str": 0.8,
+     "str": 0.6,
      "from": [
-      "Cavalry Group"
+      "Cavalry Group",
+      "8th Tank Regiment",
+      "12th Tank Regiment",
+      "13th Tank Regiment"
      ],
      "war": [
       "JAP",
       "CHN"
-     ]
+     ],
+     "est": 0.8
     }
    ],
    [
-    38,
+    40,
     "JAP",
     "Mongolia Garrison Army (4th Cavalry Brigade)",
     "cav",
@@ -4096,10 +4177,7 @@
      "str": 0.25,
      "est": 0.25,
      "hold": 1,
-     "stops": [
-      1,
-      2
-     ]
+     "until": 38
     }
    ],
    [
@@ -4114,10 +4192,7 @@
      "str": 0.25,
      "est": 0.25,
      "hold": 1,
-     "stops": [
-      1,
-      2
-     ]
+     "until": 38
     }
    ],
    [
@@ -4126,16 +4201,12 @@
     "14th Tank Regiment",
     "arm",
     1,
-    "Hainan",
+    "Phnom Penh",
     {
-     "xp": 0.2,
+     "xp": 0.3,
      "str": 0.2,
      "est": 0.2,
-     "hold": 1,
-     "stops": [
-      1,
-      2
-     ]
+     "hold": 1
     }
    ],
    [
@@ -4150,9 +4221,8 @@
      "str": 0.25,
      "est": 0.25,
      "hold": 1,
-     "stops": [
-      1,
-      2
+     "from": [
+      "4th Tank Regiment"
      ]
     }
    ],
@@ -4168,10 +4238,7 @@
      "str": 0.25,
      "est": 0.25,
      "hold": 1,
-     "stops": [
-      1,
-      2
-     ]
+     "until": 38
     }
    ],
    [
@@ -4193,6 +4260,103 @@
      "stops": [
       1,
       2
+     ]
+    }
+   ],
+   [
+    23,
+    "JAP",
+    "9th Tank Regiment",
+    "arm",
+    1,
+    "Mutankiang",
+    {
+     "xp": 0.15,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1
+    }
+   ],
+   [
+    23,
+    "JAP",
+    "10th Tank Regiment",
+    "arm",
+    1,
+    "Szepingkai",
+    {
+     "xp": 0.15,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1
+    }
+   ],
+   [
+    23,
+    "JAP",
+    "11th Tank Regiment",
+    "arm",
+    1,
+    "Szepingkai",
+    {
+     "xp": 0.15,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1
+    }
+   ],
+   [
+    29,
+    "JAP",
+    "2nd Tank Regiment",
+    "arm",
+    1,
+    "Kota Bharu",
+    {
+     "xp": 0.3,
+     "str": 0.25,
+     "est": 0.25,
+     "war": [
+      "JAP",
+      "UK"
+     ],
+     "after": 1
+    }
+   ],
+   [
+    34,
+    "JAP",
+    "1st Tank Division",
+    "arm",
+    1,
+    "Mutankiang",
+    {
+     "xp": 0.2,
+     "str": 0.6,
+     "est": 0.8,
+     "hold": 1,
+     "from": [
+      "3rd Tank Regiment",
+      "5th Tank Regiment",
+      "9th Tank Regiment"
+     ]
+    }
+   ],
+   [
+    34,
+    "JAP",
+    "2nd Tank Division",
+    "arm",
+    1,
+    "Mutankiang",
+    {
+     "xp": 0.15,
+     "str": 0.5,
+     "est": 0.8,
+     "hold": 1,
+     "from": [
+      "10th Tank Regiment",
+      "11th Tank Regiment"
      ]
     }
    ]

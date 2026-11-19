@@ -115,8 +115,9 @@
         {"nat": "JAP", "corps": "1st Tank Regiment", "beside": [[28, "25th Army (5th Division)"], [32, "15th Army (33rd and 55th Divisions)"]], "steps": []},
         {"nat": "JAP", "corps": "6th Tank Regiment", "beside": [[28, "25th Army (5th Division)"]], "steps": []},
         {"nat": "JAP", "corps": "14th Tank Regiment", "beside": [[28, "25th Army (Imperial Guards Division)"], [32, "56th Division"]], "steps": []},
-        {"nat": "JAP", "corps": "4th Tank Regiment", "beside": [[28, "14th Army (48th Division)"]], "steps": []},
+        {"nat": "JAP", "corps": "4th Tank Regiment", "beside": [[28, "14th Army (48th Division)"]], "steps": [], "worth": [[31, 0.2]]},
         {"nat": "JAP", "corps": "7th Tank Regiment", "beside": [[28, "14th Army (48th Division)"], [30, "14th Army (16th Division)"]], "steps": []},
+        {"nat": "JAP", "corps": "2nd Tank Regiment", "beside": [[29, "25th Army (5th Division)"]], "steps": []},
         {"nat": "JAP", "corps": "Shoji Detachment's light tank company", "beside": [[30, "Shoji Detachment (230th Infantry, of the 38th Division)"]], "steps": []}
       ],
       "attacks": [

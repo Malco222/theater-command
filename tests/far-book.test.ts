@@ -271,7 +271,7 @@ describe("Japan's tank regiments by the book (ruling 234, riders b581 and b583)"
     expect([at(g, tank), tank.hold, tank.stay, tank.bookWorks, ceilinged(g, tank)]).toEqual(['Bangkok', false, undefined, undefined, false]);
   });
 
-  it('are rows of stops 1 and 2 only, with the other rows the record adds there (rider b579, reading 4)', () => {
+  it("are facts of the day and come at every stop (riders b591 and b604); the rows the record adds to the defence are rows of stops 1 and 2 only (rider b579, reading 4)", () => {
     const names = ['18th British Division', '45th Indian Infantry Brigade', TANK1];
     const formed = (stop: number): string[] => {
       const g = war(stop);
@@ -281,7 +281,7 @@ describe("Japan's tank regiments by the book (ruling 234, riders b581 and b583)"
     };
     expect(formed(1)).toEqual(names);
     expect(formed(2)).toEqual(names);
-    expect(formed(3)).toEqual([]);
+    expect(formed(3)).toEqual([TANK1]);
   });
 });
 

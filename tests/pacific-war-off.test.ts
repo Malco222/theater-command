@@ -5,10 +5,10 @@ import { describe, expect, it } from 'vitest';
 import { plannedStrike } from '../src/campaign/carriers';
 import { DIPLOMACY, closeDiplomacy, holds, monthlyDiplomacy, warDiplomacy } from '../src/campaign/diplomacy';
 import { FAR_LAID, lay } from '../src/campaign/far-rows';
-import { atWar, capitulate, createGame, declareWar, setWar } from '../src/campaign/game';
+import { addCorps, atWar, capitulate, createGame, declareWar, setWar } from '../src/campaign/game';
 import { HISTORY, setStop as setStopOff, shoreOpen } from '../src/campaign/history';
 import { frontArmys, lines, neverHis } from '../src/campaign/line';
-import { NAVY, airOver, assaultStrength, atSea, navalUpkeep } from '../src/campaign/navy';
+import { NAVY, airOver, assaultStrength, atSea, landCorps, liftLeft, navalUpkeep, whyNotLand } from '../src/campaign/navy';
 import { AIR, airQuality, airRange, airUpkeep } from '../src/campaign/air';
 import { ARSENAL, smallAirMonth } from '../src/campaign/arsenal';
 import airData from '../data/campaign/air.json';
@@ -16,7 +16,7 @@ import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind,
 import { readiness, readinessMonth } from '../src/campaign/readiness';
 import { FAR_STAGE } from '../src/campaign/stage';
 import { freed, ops, startOpen } from '../src/campaign/staff';
-import { bookAttacks, bookFleets, bookStations, ceilinged, stations, stationsBind } from '../src/campaign/stations';
+import { alongside, bookAttacks, bookFleets, bookStations, ceilinged, goesWith, ridersOf, riding, stations, stationsBind } from '../src/campaign/stations';
 import open from '../data/campaign/open.json';
 import setup from '../data/campaign/setup-1939.json';
 
@@ -232,6 +232,30 @@ describe("a corps' own establishment in a fold (rider b594 to ruling 234) with t
     const rows = (setup as any).expeditions as any[];
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.filter((r) => r[r.length - 1]?.est !== undefined)).toEqual([]);
+  });
+});
+
+describe('a row that lands in the lift of the corps it goes with (rider b604 to ruling 234) with the far side off', () => {
+  it('no corps goes with another: every corps of a landing takes a lift of its own, and a staff takes nobody along', () => {
+    expect(stations()).toBeNull();
+    const g = startOpen(createGame(3, null));
+    expect(g.corps.filter((c) => goesWith(g, c) !== null)).toEqual([]);
+    expect(riding(g, g.corps)).toEqual([]);
+    expect(g.corps.flatMap((c) => ridersOf(g, c.nat, c.name))).toEqual([]);
+    // Two corps of Britain's in a home port, and a German shore: they ask for two lifts, as they always did.
+    const quay = g.regions.find((r) => r.port && r.owner === 'UK' && r.ctrl === 'UK' && r.seas.length > 0 && !r.units.length)!;
+    const cs = ['Test Corps A', 'Test Corps B'].map((nm) => addCorps(g, 'UK', nm, 'inf', 1, quay.id, {}));
+    for (const c of cs) { c.ap = c.apMax; c.supplied = true; }
+    expect(alongside(g, [cs[0]])).toEqual([]);
+    const shore = g.regions.find((r) => r.ctrl === 'GER' && r.seas.length > 0 && whyNotLand(g, cs, r) === null)!;
+    expect(shore).toBeDefined();
+    g.flags[`lift:UK:${g.turn}`] = g.nations.UK.sealift - 1;
+    expect(liftLeft(g, 'UK')).toBe(1);
+    expect(whyNotLand(g, cs, shore)).toMatch(/shipping for only 1 more corps/);
+    // And one corps sent alone goes alone, for its one lift.
+    expect(landCorps(g, [cs[0]], shore).ok).toBe(true);
+    expect(liftLeft(g, 'UK')).toBe(0);
+    expect(g.regions[cs[1].reg]).toBe(quay);
   });
 });
 

@@ -2786,8 +2786,8 @@ export function capitulate(g: Game, nat: string, by: string): void {
 }
 
 /** Sea transport: a nation with shipping can send a corps from one friendly port to another. It takes the whole month, and the enemy may find the convoy. */
-export function shipMove(g: Game, c: Corps, to: Region): boolean {
-  return shipCorps(g, c, to);
+export function shipMove(g: Game, c: Corps, to: Region, rides = false): boolean {
+  return shipCorps(g, c, to, rides);
 }
 
 /** Lifts a corps off the Continent from a port: to a haven of its theatre if there is one to go to, or else home. */
