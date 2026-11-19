@@ -306,9 +306,9 @@ describe.runIf(merged)("a client's tie: Manchukuo and Mongolia (the rider to rul
       declareWar(g, 'SOV', 'JAP');
       month(g);
       red.ap = red.apMax;
-      // Japan's 6th Army stands at Hailar beside Manchukuo's cavalry, and a corps marches into no province an enemy
-      // stands in: it fights for it.
-      expect(hailar.units.map((u) => u.nat).sort()).toEqual(['JAP', 'MAN']);
+      // Japan's 6th Army stands at Hailar beside Manchukuo's cavalry (two rows of it: its 7th Division is a row of
+      // its own, rider b641 to ruling 234), and a corps marches into no province an enemy stands in: it fights for it.
+      expect(hailar.units.map((u) => u.nat).sort()).toEqual(['JAP', 'JAP', 'MAN']);
       expect(moveCorps(g, red, hailar)).toBe(false);
       // With the garrison set aside the frontier itself is open to him: the ground is at war with him, and shelters nobody.
       hailar.units = [];

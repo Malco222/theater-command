@@ -399,6 +399,8 @@ const out = {
 //   riders-234.json        riders b552 to b583, the book's rows of the opening
 //   riders-234-b591.json   riders b591 to b614, the facts of the day at every stop of the dial (Japan's armour roster
 //                          and her island garrisons by half-year)
+//   riders-234-b641.json   rider b641, a fact of the day at every stop: the 7th Division, home to Hokkaido in August
+//                          1940 from the 6th Army's row in Manchuria, which is cut in two for it
 // A 'set' names its row and what the row reads before it: a source that moves under a rider stops the build instead
 // of being written over. A word set to null is taken off the row. A 'move' gives a row by date another month or
 // another place, and the row keeps its place in the list. An 'add' row goes at the END of its list, in the file's
@@ -426,7 +428,12 @@ function layRiders(file) {
     need(owner.has(row[5]), `rider: "${row[2]}": ${row[5]} is not a province of the chart`);
     dated.expeditions.push(row);
   }
-  for (const r of C.set ?? []) setRow('first-day row', out.world.corps.filter((x) => x[0] === r.row[0] && x[1] === r.row[1]), (x) => x[5], r);
+  for (const r of C.set ?? []) {
+    const rows = out.world.corps.filter((x) => x[0] === r.row[0] && x[1] === r.row[1]);
+    setRow('first-day row', rows, (x) => x[5], r);
+    // (A first-day row a rider cuts in two by name gives up the divisions its other half takes: 'divs' is before and after.)
+    if (r.divs) { need(rows[0][3] === r.divs[0], `rider: the first-day row ${JSON.stringify(r.row)} has ${rows[0][3]} divisions, not ${r.divs[0]}`); rows[0][3] = r.divs[1]; }
+  }
   for (const { row } of C.add ?? []) {
     need(!out.world.corps.some((x) => x[0] === row[0] && x[1] === row[1]), `rider: the first-day row "${row[1]}" is laid already`);
     need(owner.has(row[4]), `rider: "${row[1]}": ${row[4]} is not a province of the chart`);
@@ -453,7 +460,7 @@ function layRiders(file) {
   const n = (xs) => (xs ?? []).length, rosters = Object.keys(riders.roster ?? {}).filter((k) => k !== 'why');
   notes.push(`ruling 234's riders (${path.basename(file)}): ${n(E.set)} rows by date changed, ${n(E.move)} moved and ${n(E.add)} added, ${n(C.set)} first-day rows changed and ${n(C.add)} added, ${n(riders.fleets?.set)} fleet, ${n(riders.arrivals?.add)} arrival${rosters.length ? `, the rosters of ${rosters.join(' and ')}` : ''}`);
 }
-const RIDERS = ['pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json'];
+const RIDERS = ['pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json', 'pacific-six/riders-234-b641.json'];
 for (const file of RIDERS) layRiders(file);
 
 const text = JSON.stringify(out, null, 1) + '\n';
