@@ -497,10 +497,10 @@ describe('(4) the names and the carriers are the rows, at every stop', () => {
         navalUpkeep(g, 'UK');
         cv[turn] = [med.ships.cv, home.ships.cv];
       }
-      // The Glorious goes home in April 1940 and the Eagle comes from the China Station in May; the Home Fleet's
-      // Illustrious joins it in June, in every campaign, as before.
-      expect([cv[7], cv[8], cv[9], cv[10], cv[13]], `stop ${stop}`).toEqual([[1, 2], [0, 2], [1, 2], [1, 3], [1, 3]]);
-      expect(news(g, 8), `stop ${stop}`).toContain('The carrier Glorious leaves the Mediterranean Fleet for home waters.');
+      // The Glorious leaves for the Indian Ocean in October 1939 (b601) and the Eagle comes from the China Station in
+      // May 1940; the Home Fleet's Illustrious joins it in June, in every campaign, as before.
+      expect([cv[2], cv[8], cv[9], cv[10], cv[13]], `stop ${stop}`).toEqual([[0, 2], [0, 2], [1, 2], [1, 3], [1, 3]]);
+      expect(news(g, 2), `stop ${stop}`).toContain('The carrier Glorious leaves the Mediterranean Fleet for the Indian Ocean.');
       expect(news(g, 9), `stop ${stop}`).toContain('The carrier Eagle joins the Mediterranean Fleet.');
     }
   });
