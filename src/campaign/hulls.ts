@@ -7,8 +7,17 @@ import { Rng, hashString } from '../core/rng';
 import type { Game, LostHull, SeaSide, Ships } from './types';
 
 type Big = 'bb' | 'cv';
-interface Row { name: string; crew: number; from?: number; fleet?: string; pair?: boolean }
-const HULLS = data as unknown as { share: Record<Big, number[]>; crew: Record<Big, number>; navies: Record<string, Partial<Record<Big, Row[]>>> };
+/** A change to a ship from a month on (the historian's check): a new name ('name') or a move to another fleet ('fleet'). */
+interface Later { from: number; name?: string; fleet?: string }
+export interface HullRow { name: string; crew: number; from?: number; fleet?: string; pair?: boolean; type?: 'battlecruiser'; later?: Later[] }
+const HULLS = data as unknown as { share: Record<Big, number[]>; crew: Record<Big, number>; navies: Record<string, Partial<Record<Big, HullRow[]>>> };
+
+/** A ship's name and fleet in a month: her first ones, then each change of 'later' that has come by then, in order. */
+export function hullAt(r: HullRow, turn: number): { name: string; fleet?: string } {
+  let name = r.name, fleet = r.fleet;
+  for (const x of r.later ?? []) if (x.from <= turn) { name = x.name ?? name; fleet = x.fleet ?? fleet; }
+  return { name, fleet };
+}
 
 /** A number from 0 to 1 that the same game and key always give, drawn apart from the war's own dice. */
 const draw = (g: Game, key: string): number => new Rng(hashString(`hull:${g.seed}:${key}`)).next();
@@ -16,8 +25,8 @@ const draw = (g: Game, key: string): number => new Rng(hashString(`hull:${g.seed
 /**
  * The battleships and carriers a fleet of a nation lost (`sunk`), each named and its men counted, and each one named
  * marked as gone so that no other loss takes her name. The ship named is one still afloat of the fleet that lost her
- * if it has one, any afloat of her nation if not, and none once the record runs out; of her crew one of the real
- * shares of her class is lost. `key` is the fight's own and keeps the draws apart from the war's dice.
+ * (her fleet in that month) if it has one, any afloat of her nation if not, and none once the record runs out; she
+ * carries the name she bore that month. Of her crew one of the real shares of her class is lost. `key` is the fight's own and keeps the draws apart from the war's dice.
  */
 export function nameLosses(g: Game, nat: string, fleet: string, sunk: Ships, key: string): LostHull[] {
   const out: LostHull[] = [];
@@ -27,7 +36,7 @@ export function nameLosses(g: Game, nat: string, fleet: string, sunk: Ships, key
     for (let k = 0; k < (sunk[cls] ?? 0); k++) {
       const share = shares[Math.floor(draw(g, `${key}:${cls}:${k}:men`) * shares.length)];
       const afloat = rows.map((r, i) => ({ r, i })).filter(({ r, i }) => (r.from ?? 1) <= g.turn && g.flags[`hull:${nat}:${cls}:${i}`] === undefined);
-      const near = afloat.filter(({ r }) => r.fleet === fleet);
+      const near = afloat.filter(({ r }) => hullAt(r, g.turn).fleet === fleet);
       const pool = near.length ? near : afloat;
       if (!pool.length) {
         out.push({ name: null, cls, crew: HULLS.crew[cls], lost: Math.round(HULLS.crew[cls] * share) });
@@ -35,7 +44,7 @@ export function nameLosses(g: Game, nat: string, fleet: string, sunk: Ships, key
       }
       const { r, i } = pool[Math.floor(draw(g, `${key}:${cls}:${k}`) * pool.length)];
       g.flags[`hull:${nat}:${cls}:${i}`] = g.turn;
-      out.push({ name: r.name, cls, crew: r.crew, lost: Math.round(r.crew * share), ...(r.pair ? { pair: true } : {}) });
+      out.push({ name: hullAt(r, g.turn).name, cls, crew: r.crew, lost: Math.round(r.crew * share), ...(r.pair ? { pair: true } : {}), ...(r.type ? { type: r.type } : {}) });
     }
   }
   return out;
