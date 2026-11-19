@@ -142,9 +142,9 @@ CABIN = [
     ('        for (x0, x1, half_high) in s.get("glass_bands", []):', '        for (x0, x1, half_high, *high) in s.get("glass_bands", []):'),
     ("abs(p.z - hull.z(-p.x) - hull.h(-p.x) * 0.3) < half_high:", "abs(p.z - hull.z(-p.x) - hull.h(-p.x) * (high[0] if high else 0.3)) < half_high:"),
     ('                   lambda p, n: "glass")\n        # (the frames are on the table\'s model too: they read from above)\n',
-     '                   battle_cabin_paint(s["cabin"], hood, coat) if s.get("cabin") else (lambda p, n: "glass"))\n'
+     '                   battle_cabin_paint(s["cabin"], hood, coat, hull) if s.get("cabin") else (lambda p, n: "glass"))\n'
      '        if s.get("cabin"):\n'
-     '            battle_cabin_frames(parts, frames, hood, s["cabin"])\n'
+     '            battle_cabin_frames(parts, frames, hood, s["cabin"], hull)\n'
      '            continue\n'
      '        # (the frames are on the table\'s model too: they read from above)\n'),
     # (a point on the edge of a window takes her coat, not the glass's colour: no pale halo round a pane)
@@ -154,6 +154,9 @@ CABIN = [
      '                paint = paint_of.coat(v.co, v.normal)\n'
      '            if blend_of and paint in ("upper", "upper2"):'),
     ('    hull_paint.blend = coat.blend\n', '    hull_paint.blend = coat.blend\n    hull_paint.coat = coat\n'),
+    # (a cabin is a box with flat panes, not a round hood: its own body, and a finer mesh so that its panes' edges are clean)
+    ('        hood = Body(hood_stations, 2.3)\n', '        hood = battle_cabin_body(Body, hood_stations, s["cabin"], hull) if s.get("cabin") else Body(hood_stations, 2.3)\n'),
+    ('hood_around = 32 if fine else 10', 'hood_around = ((64 if fine else 32) if s.get("cabin") else 32 if fine else 10)'),
 ]
 
 NOSES = [
@@ -512,10 +515,11 @@ EXTRA_PLANES["B17"] = {
     "glass_bands": GLASS["B17"],
     # (her cabin and the deck behind it are one body: the windscreen, the pilots' windows and the two in the roof over
     #  them, then the roof back past the upper turret, the radio room's glazed hatch, and its fall to her back)
-    "hoods": [([(5.52, 0.62, 0.62, 0.6), (5.13, 0.7, 0.88, 0.84), (4.86, 0.7, 0.95, 0.98), (4.7, 0.7, 0.95, 1.017), (4.62, 0.7, 0.95, 1.017), (4.12, 0.7, 0.95, 1.017),
-                (3.66, 0.7, 0.95, 1.017), (1.14, 0.7, 0.95, 1.017), (0.47, 0.7, 0.95, 0.96), (-0.2, 0.7, 0.94, 0.91), (-0.87, 0.7, 0.91, 0.81), (-1.54, 0.7, 0.86, 0.66),
+    "hoods": [([(5.75, 0.35, 0.55, 1.35), (5.42, 0.35, 0.95, 1.35), (4.86, 0.35, 0.95, 1.355), (4.62, 0.35, 0.95, 1.367), (4.12, 0.35, 0.95, 1.367),
+                (3.66, 0.35, 0.95, 1.367), (1.14, 0.7, 0.95, 1.017), (0.47, 0.7, 0.95, 0.96), (-0.2, 0.7, 0.94, 0.91), (-0.87, 0.7, 0.91, 0.81), (-1.54, 0.7, 0.86, 0.66),
                 (-2.0, 0.7, 0.78, 0.56), (-2.3, 0.7, 0.66, 0.5)], (), False)],
-    "cabin": {"screen": 4.86, "back": 3.66, "sill": 22.5, "top": 45.0, "posts": (4.62, 4.12, 3.66), "brow": (4.78, 4.32, 56.25, 78.75), "hatch": (-0.87, -1.73, 67.5)},
+    "cabin": {"square": 4.0, "ease": 1.2, "skirt": (1.06, 0.2), "screen": (5.52, 1.22, 4.83, 1.7, 0.3), "pane": (0.9, 0.66, 1.62, 0.03), "back": 3.66, "sill": 1.09, "top": 1.42, "posts": (4.86, 4.26, 3.66),
+              "brow": (4.6, 4.2, 58.0, 80.0), "hatch": (-0.87, -1.73, 67.5)},
     "wing": [(0.0, 3.84, -2.17, -0.5, 1.0), (3.0, 3.39, -1.85, -0.26, 0.84), (6.08, 2.92, -1.52, -0.02, 0.67), (9.0, 2.49, -1.21, 0.21, 0.52), (14.32, 1.68, -0.65, 0.63, 0.26),
              (15.0, 1.57, -0.47, 0.68, 0.2), (15.4, 1.42, -0.2, 0.71, 0.12), (15.72, 1.06, 0.3, 0.74, 0.05), (15.81, 0.72, 0.62, 0.745, 0.02)],
     "tail": [(0.0, -8.4, -11.8, 0.43, 0.42), (5.58, -9.6, -11.26, 0.43, 0.2), (6.12, -9.77, -11.13, 0.43, 0.14), (6.31, -9.92, -10.98, 0.43, 0.09), (6.5, -10.24, -10.67, 0.43, 0.03)],
@@ -531,7 +535,7 @@ EXTRA_PLANES["B17"] = {
                ("rod", ((7.3, 0.16, -1.0), (8.2, 0.16, -1.16), 0.026, 0.02, "steel")),
                # (the astrodome, the upper turret, the ball under her)
                ("dome", ((6.29, 0.0, 1.12), (0.25, 0.25, 0.24))),
-               ("dome", ((3.14, 0.0, 1.72), (0.52, 0.52, 0.47))), ("rod", ((3.3, 0.17, 1.94), (4.4, 0.17, 2.22), 0.026, 0.02, "steel")),
+               ("dome", ((3.14, 0.0, 1.72), (0.52, 0.52, 0.47))), ("rod", ((3.3, 0.21, 1.94), (4.4, 0.21, 2.22), 0.026, 0.02, "steel")),
                ("dome", ((-2.82, 0.0, -1.23), (0.56, 0.56, 0.56))), ("rod", ((-2.52, 0.2, -1.46), (-1.62, 0.2, -1.76), 0.026, 0.02, "steel")),
                # (a gun in each cheek of her nose, one at each waist window, one up through the radio room's hatch, a pair in her tail)
                ("rod", ((7.0, 0.72, 0.3), (7.6, 1.12, 0.1), 0.022, 0.018, "steel")),
@@ -549,30 +553,28 @@ EXTRA_PLANES["B17"] = {
 def cabin_angle(hood, p):
     """Where round a hood a point of its skin is: degrees up from level on its own side (90 at its top)."""
     w, h = max(hood.w(-p.x), 1.0e-6), max(hood.h(-p.x), 1.0e-6)
-    e = 1.0 / hood.power
+    e = 0.5 * hood.square_at(p.x) if hasattr(hood, "square_at") else 1.0 / hood.power
     ty, tz = min(abs(p.y - hood.side) / w, 1.0), min(max((p.z - hood.z(-p.x)) / h, -1.0), 1.0)
     return math.degrees(math.atan2(math.copysign(abs(tz) ** e, tz), ty ** e))
 
 
-def cabin_paint(cabin, hood, coat):
-    """The paint of a raised cabin: glass where its windows are, her own coat elsewhere. Her numbers give `cabin`:
-    `screen` (ahead of this it is all windscreen, above the sill), `back` (where her side windows end), `sill` and
-    `top` (the side windows lie between these, in degrees round the cabin up from level), `brow` (a window in the roof
-    over each pilot: from, to along her; from, to round her), `hatch` (a glazed hatch across her back: from, to, and
-    how far round it begins)."""
+def cabin_paint(cabin, hood, coat, hull):
+    """The paint of a raised cabin (`fitout.cabin_body`): glass where its windows are, her own coat elsewhere. Her
+    numbers give `cabin`: `screen` (the windscreen's two flat panes: all of them that stands clear of her fuselage is
+    glass), `back` (where her side windows end), `sill` and `top` (the heights her side windows lie between), `brow`
+    (a window in the roof over each pilot: from, to along her; from, to round her), `hatch` (a glazed hatch across her
+    back: from, to, and how far round it begins)."""
     brow, hatch = cabin.get("brow"), cabin.get("hatch")
 
     def paint(p, n):
-        a = cabin_angle(hood, p)
-        if p.x > cabin["screen"]:
-            if a > cabin["sill"]:
+        if abs(p.z - hood.pane_z(p.x, p.y)) < 0.004:
+            return "glass"                                 # (on a pane of her windscreen)
+        if p.x > cabin["back"]:
+            if cabin["sill"] < p.z < cabin["top"] and abs(n.y) > 0.5:
                 return "glass"
-        elif p.x > cabin["back"]:
-            if cabin["sill"] < a < cabin["top"]:
+            if brow and brow[1] < p.x < brow[0] and brow[2] < cabin_angle(hood, p) < brow[3]:
                 return "glass"
-            if brow and brow[1] < p.x < brow[0] and brow[2] < a < brow[3]:
-                return "glass"
-        elif hatch and hatch[1] < p.x < hatch[0] and a > hatch[2]:
+        elif hatch and hatch[1] < p.x < hatch[0] and cabin_angle(hood, p) > hatch[2]:
             return "glass"
         return coat(p, n)
     paint.blend = coat.blend
@@ -580,40 +582,120 @@ def cabin_paint(cabin, hood, coat):
     return paint
 
 
-def cabin_frames(parts, frames, hood, cabin):
-    """The bars of a cabin's windows: a post at each end of each side window, a rail along their sills and their tops,
-    the windscreen's top bar, its middle post and a post each side, and a bar round each window in her roof."""
-    sill, top, screen, back = cabin["sill"], cabin["top"], cabin["screen"], cabin["back"]
+def cabin_frames(parts, frames, hood, cabin, hull):
+    """The bars of a cabin's windows. Her windscreen is two flat panes, each glazed from the post between them out to
+    a straight post at its side, under a straight bar along its top and over one along its foot (`pane` in her
+    numbers: how far out its foot and its top reach, how high its top's outer end, how far its top stands under her
+    roof); what is left of the flat round each pane is plated over in her skin's paint. Then a rail along the sills
+    and the tops of her side windows, a post between them, and a bar round each window in her roof."""
+    sill, top, back = cabin["sill"], cabin["top"], cabin["back"]
     wide = 1.0 if parts.fine else 1.4
+    (xa, za, xb, zb), sweep = cabin["screen"][:4], cabin["screen"][4]
+    y_foot, y_top, z_out, drop = cabin.get("pane", (0.87, 0.66, 1.62, 0.03))
+    run = (xa - xb) / (zb - za)
+    z_in = zb - drop
 
-    def arc(x, a0, a1, half=0.02, both=True):
+    def lay(points, half, lift=0.011):
+        pts = [p for p in points if p is not None]
+        if len(pts) > 1:
+            parts.strip(frames, [p for p, n in pts], [n for p, n in pts], half * wide, lift)
+
+    def on_box(x, deg):
+        a = math.radians(deg)
+        return hood.at(x, a), hood.out(x, a)
+
+    def arc(x, d0, d1, half=0.02, both=True):
         for hand in ((1, -1) if both else (1,)):
-            angles = [math.radians(a0 + (a1 - a0) * k / 8.0) for k in range(9)]
-            if hand < 0:
-                angles = [math.pi - a for a in angles]
-            parts.strip(frames, [hood.at(x, a) for a in angles], [hood.out(x, a) for a in angles], half * wide, 0.008)
+            lay([on_box(x, (d0 + (d1 - d0) * k / 8.0) if hand > 0 else 180.0 - (d0 + (d1 - d0) * k / 8.0)) for k in range(9)], half, 0.008)
 
-    def rail(a, x0, x1, half=0.018):
+    def rail(deg_at, x0, x1, half=0.018, both=True):
         n = max(2, int((x0 - x1) / 0.1))
         xs = [x0 - (x0 - x1) * k / n for k in range(n + 1)]
-        for angle in ((math.radians(a),) if abs(a - 90.0) < 1.0e-6 else (math.radians(a), math.pi - math.radians(a))):
-            parts.strip(frames, [hood.at(x, angle) for x in xs], [hood.out(x, angle) for x in xs], half * wide, 0.008)
+        for hand in ((1, -1) if both else (1,)):
+            lay([on_box(x, deg_at(x) if hand > 0 else 180.0 - deg_at(x)) for x in xs], half, 0.008)
 
+    # ---- the windscreen. A place on a pane is given by how far out it is and how high: (y, z).
+    def on_pane(y, z, hand):
+        return Vector((xa - sweep * abs(y) - run * (z - za), y * hand, z))
+
+    def on(y, z):
+        """Whether the pane, this far out and this high, is her skin: within the cabin and clear of her fuselage."""
+        p = on_pane(y, z, 1.0)
+        return hood.back < p.x < hood.front and p.z >= fitout.body_top(hull, p.x, p.y) and hood.holds(p.x, p.y, p.z - 0.004)
+
+    def span(y):
+        """From how low to how high the pane is her skin, this far out; None if it is not."""
+        held = [z for z in (za - 1.2 + 0.01 * k for k in range(int((zb + 1.5 - za) / 0.01) + 1)) if on(y, z)]
+        if not held:
+            return None
+        ends = []
+        for inside, outside in ((held[0], held[0] - 0.01), (held[-1], held[-1] + 0.01)):
+            for _ in range(8):
+                mid = 0.5 * (inside + outside)
+                inside, outside = (mid, outside) if on(y, mid) else (inside, mid)
+            ends.append(inside)
+        return ends[0], ends[1]
+
+    def top_of(y):
+        return z_in + (z_out - z_in) * min(abs(y) / y_top, 1.0)
+
+    def glazed_to(y):
+        """How high the glass goes this far out: to the bar along its top, or to the post at its side."""
+        if y <= y_top:
+            return top_of(y)
+        return z_out + (sill - z_out) * (y - y_top) / (y_foot - y_top)
+
+    def sheet(outer, inner, hand):
+        """Plating over the flat between two rows of places on a pane."""
+        n = hood.pane_n(hand)
+        rows = [(frames.verts.new(on_pane(a[0], a[1], hand) + n * 0.006), frames.verts.new(on_pane(b[0], b[1], hand) + n * 0.006)) for a, b in zip(outer, inner)]
+        for (a0, b0), (a1, b1) in zip(rows, rows[1:]):
+            if (a0.co - b0.co).length < 1.0e-4 and (a1.co - b1.co).length < 1.0e-4:
+                continue
+            f = frames.faces.new((a0, b0, b1, a1))
+            f.normal_update()
+            if f.normal.dot(n) < 0.0:
+                f.normal_flip()
+
+    y_max = y_foot
+    while y_max < 1.5 and span(y_max + 0.01):
+        y_max += 0.01                                      # (how far out the flat goes at all)
+    cols = sorted(set([y_top * k / 12.0 for k in range(13)] + [y_top + (y_foot - y_top) * k / 10.0 for k in range(11)] + [y_foot + (y_max - y_foot) * k / 8.0 for k in range(1, 9)]))
+    spans = [span(y) for y in cols]
+    cols, spans = [y for y, sp in zip(cols, spans) if sp], [sp for sp in spans if sp]
+    feet = [max(sill, lo) for lo, hi in spans]             # (the foot of the glass: her sill, or her fuselage where that stands higher)
+    tops = [max(min(glazed_to(y), hi), ft) for y, (lo, hi), ft in zip(cols, spans, feet)]
+    inner = [k for k, y in enumerate(cols) if y <= y_foot + 1.0e-9]
+    outer = [k for k, y in enumerate(cols) if y >= y_foot - 1.0e-9]
+    for hand in (1.0, -1.0):
+        # (what is left of the flat is plated over: above the glass, under its foot down to her fuselage, and all of it outside the post at its side)
+        sheet([(cols[k], spans[k][1] + 0.004) for k in inner], [(cols[k], tops[k]) for k in inner], hand)
+        sheet([(cols[k], spans[k][0] - 0.012) for k in inner], [(cols[k], feet[k]) for k in inner], hand)
+        sheet([(cols[k], spans[k][1] + 0.004) for k in outer], [(cols[k], spans[k][0] - 0.012) for k in outer], hand)
+        n = hood.pane_n(hand)
+        bar = lambda places, half: lay([(on_pane(y, z, hand), n) for y, z in places], half)
+        bar([(y_top * k / 8.0, top_of(y_top * k / 8.0)) for k in range(9)], 0.022)       # (its top)
+        bar([(y_top, z_out), (0.5 * (y_top + y_foot), 0.5 * (z_out + sill)), (y_foot, sill)], 0.024)      # (the post at its side)
+        bar([(cols[k], feet[k]) for k in inner], 0.02)                                    # (its foot)
+    foot = feet[0]
+    post = [(0.0, foot + (z_in + drop - foot) * k / 10.0) for k in range(11)]
+    lay([(on_pane(y, z, 1.0), hood.pane_n(0.0)) for y, z in post], 0.026, 0.013)
+
+    # ---- her side windows
     for x in cabin.get("posts", ()):
-        arc(x, sill, top)
-    rail(sill, hood.front - 0.3, back)
-    rail(top, screen, back)
-    arc(screen, sill, 180.0 - sill, 0.024, both=False)
-    rail(90.0, hood.front - 0.06, screen, 0.024)
-    rail(54.0, hood.front - 0.24, screen)
+        arc(x, hood.deg_of(x, sill), hood.deg_of(x, top))
+    x_sill = max((hood.cut_x(math.radians(hood.deg_of(xb, sill))) or xb), xb)
+    x_top = max((hood.cut_x(math.radians(hood.deg_of(xb, top))) or xb), xb)
+    rail(lambda x: hood.deg_of(x, sill), x_sill, back)
+    rail(lambda x: hood.deg_of(x, top), x_top, back)
     brow, hatch = cabin.get("brow"), cabin.get("hatch")
     if brow and parts.fine:
         for a in brow[2:]:
-            rail(a, brow[0], brow[1], 0.012)
+            rail(lambda x, a=a: a, brow[0], brow[1], 0.012)
         for x in brow[:2]:
             arc(x, brow[2], brow[3], 0.012)
     if hatch and parts.fine:
-        rail(hatch[2], hatch[0], hatch[1], 0.014)
+        rail(lambda x: hatch[2], hatch[0], hatch[1], 0.014)
         n = max(2, int(round((hatch[0] - hatch[1]) / 0.29)))
         for k in range(n + 1):
             arc(hatch[0] - (hatch[0] - hatch[1]) * k / n, hatch[2], 180.0 - hatch[2], 0.014, both=False)
@@ -644,7 +726,7 @@ def game():
             src = src.replace(old, new)
         _G = {"__file__": path, "__name__": "build_plane", "BATTLE": BATTLE, "BATTLE_CHORDS": {True: CHORDS, False: CHORDS_PLAIN}, "battle_us": battle_us,
               "BATTLE_FLAP": FLAP, "BATTLE_AILERON": AILERON, "BATTLE_ELEVATOR": ELEVATOR, "BATTLE_RUDDER": RUDDER, "LINE_DRAWN": LINE,
-              "battle_cabin_paint": cabin_paint, "battle_cabin_frames": cabin_frames}
+              "battle_cabin_paint": cabin_paint, "battle_cabin_frames": cabin_frames, "battle_cabin_body": fitout.cabin_body}
         exec(compile(src, path, "exec"), _G)
         _G["PAINTS"]["torpedo"] = len(_G["PAINTS"])        # (a paint of a battle's own: what a torpedo bomber carries)
         _G["COMMON"]["torpedo"] = "6C7174"

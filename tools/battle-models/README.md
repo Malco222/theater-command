@@ -237,7 +237,11 @@ points along the chord), so that her skin is smooth with the camera a wing's len
 adds what is seen at that distance:
 
 - her crew under the glass (head, helmet, goggles, mask, shoulders, life jacket), seats, a fighter's sight;
-  a bomber's gunners in their turrets and the men in a glass nose;
+  a bomber's gunners in their turrets and the men in a glass nose. A gunner sits wholly inside his turret, his head
+  clear under the dome between his guns, and has both hands on them (Brian, 2026-11-19: "he should be in the
+  turrett with 2 hands on the 50 call guns inside"): `fitout.arms` gives every gunner upper arms in his own part
+  and forearms and gloved hands in his guns' part, so that his hands stay on the grips as the guns lift or swing
+  (turrets, waist guns, a twin tail position, the ball turret);
 - exhaust stubs or pipes with their stain down the cowling, gun ports (doped red patches on British wings),
   muzzles, cowling fasteners, wingtip and tail lamps;
 - her plating, over all her skin (`fitout.rivets`, the fine model only; Brian's benchmark of 2026-11-19, below): rows
@@ -276,7 +280,15 @@ olive drab over grey, with a soft fade in the olive. What her numbers add to the
 
 - `cabin`: her raised cockpit and the deck behind it are one body with a roof, glass only where its windows are (the
   windscreen, the side windows, a window in the roof over each pilot, the radio room's glazed hatch): `cabin_paint`
-  and `cabin_frames` in `planes.py`, patched into the sculptor by `CABIN`;
+  and `cabin_frames` in `planes.py`, patched into the sculptor by `CABIN`. It is a flat-paned greenhouse, not a
+  bubble (Brian, 2026-11-19: "see how the cock pit isn't round"): `fitout.cabin_body` makes it a box with eased
+  corners (`square`, coming round again over `ease` behind `back`), so that the side windows are flat panes in a
+  row and the roof is nearly flat; `screen` is the post between the windscreen's two flat panes (its foot's x and z,
+  its head's x and z, then how far each pane sweeps back per metre out) and `pane` the straight-edged glass in each
+  (how far out its foot and its top reach, how high its top's outer end, how far its top stands under the roof);
+  the rest of each flat is plated over. `skirt` (from this height, down to this one) and `fillet` fill the hollow
+  between the cabin's sides and her round fuselage, as a fairing fills a wing root, and her rivet rows run on
+  down it;
 - `frames_paint`: the bars of her windows and turrets in her skin's paint, not the game's pale frames;
 - a fourth value in a row of `glass_bands`: how far up her side that window sits; and a point on a window's edge
   now takes her coat, so no pane has a pale halo;
@@ -285,7 +297,7 @@ olive drab over grey, with a soft fade in the olive. What her numbers add to the
 
 She has the chin turret and its fairing, a cheek gun each side of her nose, the astrodome, the upper and ball
 turrets, the waist, radio room and tail guns (her gunner's cabin stands behind her rudder), and her main wheels
-show half out of the inner nacelles, as the real machine's do. 78,400 triangles. Her turrets and guns are numbered
+show half out of the inner nacelles, as the real machine's do. 91,000 triangles. Her turrets and guns are numbered
 afresh: read them from her file and from `gun-arcs.json`, not from memory.
 
 **The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, twelve more entries in
@@ -526,7 +538,7 @@ python show.py Battleship_UK turn <out>        # ship clips: turn, broadside, si
 python airshow.py shot_down <out>              # aircraft clips: flypast (plane=Me262 for another machine), shot_down, ways_down, b17_head_on, b17_escort, b17_flak
 python airshow.py b17_flak <out> frames=none   # no pictures: only the clip's sound log, <out>/air-b17_flak-sound.json (seconds)
 python soundtrack.py <log.json> <sound pack's wav folder> <mix.json> <out.wav> [<video.mp4> <out.mp4>]   # mix a clip's sound, and lay it under the picture
-python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, glass, rear, over, under, side, profile, quarter, high, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; clip=load.bombs@0; record=JSON; hurt=14,6,2: bullet hits, flak hits, engines out)
+python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, glass, rear, over, under, side, profile, quarter, high, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; clip=load.bombs@0; record=JSON; hurt=14,6,2: bullet hits, flak hits, engines out; free with eye=x,y,z look=x,y,z: a close-up of anything, in her own metres)
 python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
 python export.py <out> parks                   # the three deck ranges alone (they are also in `ships` and `all`)
 python show.py Carrier_USA turn <out> month=1942-06   # a carrier in a month: her range and its paint are that month's
