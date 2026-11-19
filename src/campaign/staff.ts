@@ -15,10 +15,10 @@ import openData from '../../data/campaign/open.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import { hashString, Rng } from '../core/rng';
 import { turnToDate } from '../core/ticket';
-import { holds, majorsOf } from './diplomacy';
+import { holds, leavings, majorsOf } from './diplomacy';
 import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficulty';
 import { DOMINATION, dominating } from './domination';
-import { bookIf, leanFor, leash, moodMul, stopDef } from './history';
+import { bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
 import { lineShut } from './line';
 import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
@@ -103,7 +103,8 @@ const OPEN = openData as unknown as {
   /** The second front: when a staff with shipping and no land front crosses the sea, and with what. */
   descent: Landings & { after: number; abroad?: number; lead?: number; day?: boolean; wait?: boolean; afresh?: boolean; room?: boolean; joint?: boolean; stands?: boolean; hold?: number; feed?: number; strength?: unknown; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; door?: string[]; planned?: Record<string, Planned> };
   /** The coast watch: the share of its field corps a staff will keep in the harbours of its homeland, the fewest it keeps, and the most in one harbour. */
-  coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };
+  coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };  /** Ruling 233, rider b612: the ward. The stops of the dial at which a computer staff guards the capital of an ally whose leaving is in play, and the corps it keeps there. */
+  ward?: { stops: number[]; corps: number };
 };
 
 /** True in a free-play war: the computer's nations make their own decisions. */
@@ -1171,6 +1172,11 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   const watch = coastWatch(g, nat);
   for (const [name, count] of Object.entries(watch)) phase.staging = { ...(phase.staging ?? {}), [name]: Math.max(phase.staging?.[name] ?? 0, count) };
   if (Object.keys(watch).length) phase.watch = Object.keys(watch);
+  // Ruling 233, rider b612: the ward. The capital of an ally whose leaving is in play is kept as a watched harbour is:
+  // by a corps of the field army, sent by rail where none stands near enough to march there.
+  const ward = wards(g, nat);
+  for (const name of ward) phase.staging = { ...(phase.staging ?? {}), [name]: Math.max(phase.staging?.[name] ?? 0, OPEN.ward!.corps) };
+  if (ward.length) phase.watch = [...(phase.watch ?? []), ...ward.filter((name) => !phase.watch?.includes(name))];
   // So does a staff opening a second front, at home and on a far shore: and while its men ashore still have a front, all its ships can carry.
   for (const slot of [0, 1]) {
     const quay = seaBase(g, nat, slot);
@@ -1219,6 +1225,40 @@ function inTouch(g: Game, nat: string, e: string, among?: Uint8Array): boolean {
     if (r.units.some((u) => u.nat === nat && !u.dead)) return true;
   }
   return false;
+}
+
+/**
+ * Ruling 233, rider b612: the ward. A computer staff at the dial's looser stops guards the capital of an ally whose own
+ * leaving is in play: an enemy holds or stands on a place that ally's leaving event names (diplomacy.ts, leavings), and
+ * the capital can be reached overland from this staff's own through its side's ground. That is the record's reason
+ * (Italy in the summer of 1943). One guard, not one from every partner: it is kept by the strongest army among the
+ * ally's partners on the Continent that are run by a computer or not, and if that is the player the choice is his.
+ * Returns the capitals this staff guards.
+ */
+export function wards(g: Game, nat: string): string[] {
+  const W = OPEN.ward, n = g.nations[nat];
+  if (!W || !isOpen(g) || !W.stops.includes(stopOf(g)) || nat === g.human || !n?.alive || n.capital < 0 || n.seaSupply || !n.atWar.length) return [];
+  const out: string[] = [];
+  let on: Uint8Array | null = null;
+  for (const L of leavings(g)) {
+    const A = g.nations[L.nation];
+    if (!A?.alive || A.id === nat || A.capital < 0 || !allied(g, nat, A.id)) continue;
+    const cap = g.regions[A.capital];
+    if (cap.ctrl !== A.id || out.includes(cap.name)) continue;
+    if (!L.grounds.some((nm) => { const r = g.byName[nm]; return !!r && (atWar(g, A.id, r.ctrl) || hostileUnits(g, r, A.id).length > 0); })) continue;
+    const keeper = Object.values(g.nations)
+      .filter((x) => x.id !== A.id && x.alive && !x.dormant && !x.seaSupply && x.capital >= 0 && x.atWar.length > 0 && allied(g, x.id, A.id))
+      .sort((a, b) => b.armyPeak - a.armyPeak || (a.id < b.id ? -1 : 1))[0];
+    if (keeper?.id !== nat) continue;
+    if (!on) {
+      on = new Uint8Array(g.regions.length);
+      const list = [n.capital];
+      on[n.capital] = 1;
+      for (let i = 0; i < list.length; i++) for (const j of g.regions[list[i]].nb) if (!on[j] && (g.regions[j].ctrl === nat || allied(g, nat, g.regions[j].ctrl))) { on[j] = 1; list.push(j); }
+    }
+    if (on[cap.id]) out.push(cap.name);
+  }
+  return out;
 }
 
 /** The ground a nation holds in one piece with its capital, nearest first, and a mark on each province of it. Nothing for a capital off the map. */

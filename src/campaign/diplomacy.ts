@@ -562,6 +562,23 @@ function joinBloc(g: Game, n: Nation, b: 'allies' | 'axis'): boolean {
 
 // ---- Events: history as data ------------------------------------------------------------
 
+/**
+ * Ruling 233, rider b612: the leavings in play. For every country an event can still take out of the war by terms
+ * (a partition) on grounds the event itself names ('anyHeld' or 'allHeld'), those grounds, read from the event. Not an
+ * event that cannot fire in this game: one of the other mode, one that has fired or is past its last month, or one
+ * that spares the country the player leads (rulings 99 and 103).
+ */
+export function leavings(g: Game): { nation: string; grounds: string[] }[] {
+  const open = g.flags.open === 1;
+  const out: { nation: string; grounds: string[] }[] = [];
+  for (const e of DIPLOMACY.events) {
+    if (!e.partition || (e.mode && (e.mode === 'open') !== open) || g.flags[`event:${e.id}`] !== undefined || g.turn > (e.to ?? 999) || spared(g, e.partition.nation, e.stake)) continue;
+    const test = (e.if ?? []).find((c) => c.startsWith('anyHeld:') || c.startsWith('allHeld:'));
+    if (test) out.push({ nation: e.partition.nation, grounds: test.slice(test.indexOf(':') + 1).split(',').slice(1) });
+  }
+  return out;
+}
+
 /** Tests one condition of an event, written as "key:arguments". */
 export function holds(g: Game, cond: string): boolean {
   const i = cond.indexOf(':');
