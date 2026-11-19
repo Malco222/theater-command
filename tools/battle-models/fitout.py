@@ -310,11 +310,12 @@ def figure(m, head, face=0.0, vest=True, mask=True, chest=True):
     return at
 
 
-def arms(m, at, grips, fore=None):
+def arms(m, at, grips, fore=None, inside=None):
     """A gunner's two arms, from his shoulders to a grip for each hand (his left first; places on the machine): the
     upper arm, the elbow, the forearm and a gloved hand closed on the grip (Brian, 2026-11-19: "he should be in the
     turrett with 2 hands on the 50 call guns"). `fore`: the part his forearms and hands belong to, so that they stay
-    on a gun that moves; his upper arms stay with him."""
+    on a gun that moves; his upper arms stay with him. `inside`: where a narrow fuselage has room for his upper arm (a
+    function of the place his elbow would hang and his shoulder, giving the place it may hang)."""
     body = m.parts[m.cur].name
     u, v = (8, 5) if m.fine else (6, 3)
     for sy, grip in zip((1.0, -1.0), grips):
@@ -324,6 +325,8 @@ def arms(m, at, grips, fore=None):
         reach = (grip - sh).length
         sag = math.sqrt(max(0.29 ** 2 - (0.5 * reach) ** 2, 0.0))      # (an arm is two bones of 29 cm: the elbow hangs as far off the line as they allow)
         elbow = (sh + grip) * 0.5 + (out * 0.55 - Z * 0.83).normalized() * sag
+        if inside:
+            elbow = inside(elbow, sh)
         m.use(body)
         m.rod(sh, elbow, 0.06, "suit", 0.05, sides=7)
         m.ball(elbow, 0.052, "suit", u, v)
@@ -361,6 +364,7 @@ def cockpit(m, f, s, G, hull):
     for hood, x, y, face in seats_of(f, s, G):
         z = body_top(hood, x, -y) - 0.118 - 0.03 - SEAT_DROP.get(f.name, 0.0)
         at = figure(m, (x, y, z), face, vest=single)
+        f.seated = getattr(f, "seated", []) + [(Vector((x, y, z)), face, at)]             # (for rear_gunner: a man facing aft at a gun)
         if not m.fine:
             continue
         m.box(at(-0.2, 0, -0.3), (0.05, 0.42, 0.36), "inside", yaw=face)                    # the back of his seat
@@ -437,6 +441,11 @@ def controls(m, at, x, z, hull):
     m.box(at(0.2, 0.3, -0.5), (0.26, 0.05, 0.08), "gunmetal")                                                     # the throttle's quadrant on the wall
     m.rod(at(0.18, 0.29, -0.48), throttle, 0.012, "gunmetal", sides=5)                                            # its lever
     arms(m, at, (throttle, stick))
+    lap(m, at)
+
+
+def lap(m, at):
+    """A man's seat under him, and his thighs on it, his knees up and his shins down to the floor ahead of him."""
     m.box(at(0.06, 0.0, -0.8), (0.42, 0.42, 0.05), "inside")                                                      # his seat
     u, v = (8, 5) if m.fine else (6, 3)
     for sy in (1.0, -1.0):
@@ -478,7 +487,8 @@ def gunners(m, f):
         way = way.normalized() if way.length > 1e-6 else X.copy()
         m.use(f"turret.{k}")
         lift = max(0.1 * radii[2], min(0.52 * radii[2], radii[2] - 0.16))      # (his head clear under the dome, not cut off by her roof)
-        at = figure(m, c + Z * lift - way * 0.1, face, vest=False)
+        back = 0.22 if len(guns) == 1 else 0.1                                 # (one gun is on his middle line, under his eye: he sits back from its breech)
+        at = figure(m, c + Z * lift - way * back, face, vest=False)
         m.disc(c + Z * 0.012, Z, 0.9 * min(radii[0], radii[1]), "inside", 20 if m.fine else 10)
         grips = []
         if m.fine:
@@ -490,14 +500,105 @@ def gunners(m, f):
                 grip = a - d * 0.15
                 for sz in (-1.0, 1.0):                                                           # (and its spade grip behind that)
                     m.rod(a - d * 0.1 + over * 0.035 * sz, grip + over * 0.035 * sz, 0.011, "gunmetal", sides=5)
+                if len(guns) == 1:
+                    # (one gun: its spade grips stand out each side of its breech, a hand on each)
+                    side = d.cross(over).normalized()
+                    pair = [grip + side * 0.085 * sy for sy in (-1.0, 1.0)]
+                    m.rod(pair[0], pair[1], 0.011, "gunmetal", sides=5)
+                    for g in pair:
+                        m.rod(g - over * 0.05, g + over * 0.05, 0.017, "gunmetal", sides=6)
+                    grips += pair
+                    continue
                 m.rod(grip - over * 0.05, grip + over * 0.05, 0.017, "gunmetal", sides=6)
                 grips.append(grip)
         if len(grips) == 2:
             left = at(0.0, 1.0, 0.0) - at(0.0, 0.0, 0.0)
             grips.sort(key=lambda g: -(g - c).dot(left))
             m.use(f"turret.{k}")
-            arms(m, at, grips, fore=f"turret.{k}.guns")
+            arms(m, at, grips, fore=f"turret.{k}.guns", inside=lambda el, sh: tuck(f.hull, el, sh, 0.09))
     m.use("plane")
+
+
+def flex_pair(s, base):
+    """How far each gun of a pair on one free mounting stands out from its middle; 0 for a single gun. (A pair is one
+    rod in her numbers, off her middle line: planes.py mirrors it, and makes the two one mounting.)"""
+    if abs(base.y) > 1e-6:
+        return 0.0
+    for kind, v in s.get("extras", []):
+        if kind == "rod" and v[4] == "steel" and abs(v[0][0] - base.x) < 0.01 and abs(v[0][2] - base.z) < 0.01 and 0.0 < abs(v[0][1]) < 0.3:
+            return abs(v[0][1])
+    return 0.0
+
+
+def rear_gunner(m, f, s, G, hull):
+    """A man who sits facing aft under her hood with a gun on a free mounting in front of him (the rear gunner of a
+    dive bomber or a torpedo bomber, the gunner on a bomber's back): each gun's breech on its own line back to a pair
+    of grips where his hands fall as he sits, the post it swings on, his seat and his legs; and both his hands on the
+    grips (Brian, 2026-11-19: every gunner with his two hands on his guns). His forearms and hands go with the gun."""
+    if not m.fine or not f.flex:
+        return
+    taken = set()
+    for head, face, at in getattr(f, "seated", []):
+        if abs(abs(face) - 180.0) > 1.0:
+            continue
+        near = [(nm, b, t) for nm, b, t in f.flex if nm not in taken and b.x < head.x + 0.1 and (b - head).length < 1.4 and abs(b.y - head.y) < 0.45]
+        if not near:
+            continue                                      # (a man facing aft with no gun: he keeps watch)
+        nm, base, tip = min(near, key=lambda g: (g[1] - head).length)
+        taken.add(nm)
+        d = (tip - base).normalized()
+        want = at(0.33, 0.0, -0.2)                        # (where his hands fall as he sits: a forearm ahead of his chest)
+        hold = base - d * min(max((base - want).dot(d), 0.2), 0.8)      # (the middle of his grips, on the line of his guns)
+        across = d.cross(Z)
+        across = across.normalized() if across.length > 1e-6 else Y.copy()
+        over = across.cross(d).normalized()
+        if over.z < 0.0:
+            over = -over
+        half = flex_pair(s, base)
+        m.use(nm)
+        for sy in ((-1.0, 1.0) if half else (0.0,)):
+            off = across * half * sy
+            m.rod(hold + off + d * 0.03, base + off + d * 0.1, 0.032, "gunmetal", sides=8)       # (its breech, back from where its barrel begins)
+            m.box(hold + off + d * 0.2 - over * 0.075, (0.1, 0.05, 0.075), "gunmetal")            # (the box its rounds feed from)
+        grips = [hold + across * (half + 0.08) * sy for sy in (-1.0, 1.0)]
+        m.rod(grips[0], grips[1], 0.012, "gunmetal", sides=5)                                      # (the bar across the back of the breech)
+        for g in grips:
+            m.rod(g - over * 0.06, g + over * 0.06, 0.017, "gunmetal", sides=6)                    # (a grip for each hand)
+        m.use("plane")
+        deck = body_top(hull, base.x, -base.y)
+        if 0.05 < base.z - deck < 0.45:
+            m.rod(base - Z * 0.03, Vector((base.x, base.y, deck - 0.03)), 0.022, "gunmetal", sides=6)   # (the post it swings on)
+        lap(m, at)
+        left = at(0.0, 1.0, 0.0) - at(0.0, 0.0, 0.0)
+        grips.sort(key=lambda g: -(g - hold).dot(left))
+        arms(m, at, grips, fore=nm, inside=lambda el, sh: tuck(hull, el, sh, 0.09))
+    m.use("plane")
+
+
+def room_at(hull, p, room):
+    """How far out from her middle line a thing may stand at this place and stay `room` inside her skin; None above
+    her top (there it is under her glass)."""
+    w, h, zc = hull.w(-p.x), max(hull.h(-p.x), 1e-6), hull.z(-p.x)
+    t = abs(p.z - zc) / h
+    if p.z > zc and t >= 1.0:
+        return None
+    e = hull.square_at(p.x) if hasattr(hull, "square_at") else 2.0 / hull.power
+    return max(w * (1.0 - min(t, 1.0) ** e) ** (1.0 / e) - room, 0.04)
+
+
+def tuck(hull, elbow, shoulder, room):
+    """An elbow brought in towards her middle line until the whole upper arm, from the shoulder down to it, is inside
+    her skin: a man who sits high in a narrow fuselage holds his elbows in."""
+    e = Vector(elbow)
+    hand = 1.0 if shoulder.y >= 0.0 else -1.0
+    for t in (1.0, 0.75, 0.5, 0.3):
+        p = shoulder + (e - shoulder) * t
+        lim = room_at(hull, p, room)
+        if lim is not None and abs(p.y) > lim:
+            e.y = shoulder.y + (hand * lim - shoulder.y) / t
+            if hand * e.y < 0.04:
+                e.y = hand * 0.04
+    return e
 
 
 # The machines whose belly turret is a steel ball.
@@ -1304,6 +1405,7 @@ def jets(m, f, s, G, hull):
 def fit(m, f, s, G, hull):
     bomb_bay(m, f, s, G, hull)
     cockpit(m, f, s, G, hull)
+    rear_gunner(m, f, s, G, hull)
     glazed_nose(m, f, s, G, hull)
     gunners(m, f)
     ball_turret(m, f)
