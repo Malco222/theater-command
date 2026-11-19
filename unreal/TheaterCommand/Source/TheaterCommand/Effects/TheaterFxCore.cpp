@@ -2338,7 +2338,7 @@ namespace TheaterFx
 			R.Rise = Num(P + "rise_mps", 0.0);
 			R.FlameLift = Range(P + "flame_lift_m", 0.3, 0.6);
 			R.ThinAfter = std::max(0.0, Num(P + "thin_after_s", 0.0));
-			R.ThinKeep = std::max(1, static_cast<int>(Num(P + "thin_keep_one_in", 1.0)));
+			R.ThinKeep = static_cast<int>(std::clamp(Num(P + "thin_keep_one_in", 1.0), 1.0, 1000.0)); // (held: twice it must fit an int)
 			R.ThinGrow = std::max(1.0, Num(P + "thin_grow", 1.0));
 			R.ThinAlpha = std::max(0.0, Num(P + "thin_alpha", 1.0));
 			R.ThinHold = Num(P + "thin_hold", -1.0);
@@ -3820,6 +3820,12 @@ namespace TheaterFx
 			}
 			TwinBits += B.TwinPx > 0.0 ? 1u : 0u;
 			const Vec At = Where(B, Now - B.Born);
+			if ((At - Eye.Eye).Length() > (B.bKeep ? KeepBeyond : Beyond))
+			{
+				// (what LayBit will not lay for distance never takes a place: counted first, a far light held a slot it
+				// never filled, and the barrage in front of the eye was cut for it. The pre-check, 05:33Z)
+				continue;
+			}
 			// (counted first when the room is short: an oil fire's kept column, and every light: flames, flashes and
 			// tracers are few and are what an air fight is read by from far off, so its smoke is what goes. The
 			// pre-check, 05:14Z: by depth alone the far side of a fight went bare, flames and all)
