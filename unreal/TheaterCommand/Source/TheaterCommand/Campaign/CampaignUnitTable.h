@@ -51,6 +51,13 @@ namespace UnitTable
 	 * its machines carry. False where the country has none.
 	 */
 	bool Fin(const FString& Tag, bool& bOutUpright, TArray<FLinearColor>& OutBands);
+	/**
+	 * Models seen close, on the parade and in a battle, wear a country's own layered mark even where the map keeps the
+	 * simpler one the game draws by hand: Sweden's three crowns, which are specks at the map's size (the art
+	 * director, 19 November 2026). Whoever sets it puts it back; a model painted so is kept apart.
+	 */
+	void SetCloseMarks(bool bOn);
+	bool CloseMarks();
 	/** The campaign's month, told by the map whenever it shows a month (turn 1 is September 1939). */
 	void SetTurn(int32 Turn);
 	/**

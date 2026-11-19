@@ -8892,6 +8892,9 @@ void ACampaignMapActor::BuildParade()
 		UE_LOG(LogTheater, Warning, TEXT("Parade: no region called %s"), *Where);
 		return;
 	}
+	// (The parade is a close view: its models wear a country's own layered mark where the map keeps the simpler one.)
+	::UnitTable::SetCloseMarks(true);
+	ON_SCOPE_EXIT { ::UnitTable::SetCloseMarks(false); };
 	// ("-TheaterSeason=48" shows the parade's models as they are marked in that month of the war: turn 48 is August 1943.)
 	{
 		int32 Held = 0;

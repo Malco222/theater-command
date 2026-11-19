@@ -14,6 +14,7 @@ namespace
 		bool bWinterWash = false;
 		TArray<FString> Ring;
 		TArray<UnitTable::FInsigniaLayer> Insignia;
+		TArray<UnitTable::FInsigniaLayer> InsigniaClose; // (the layers of a country whose marking is "as built": for close views)
 		// (its dated marks: the month each stands from, counted in months from the year 0, and its layers)
 		TArray<int32> DatedFrom;
 		TArray<TArray<UnitTable::FInsigniaLayer>> Dated;
@@ -127,9 +128,9 @@ namespace
 		const TArray<TSharedPtr<FJsonValue>>* Layers = nullptr;
 		FString MarkingWords;
 		const bool bAsBuilt = Told->TryGetStringField(TEXT("marking"), MarkingWords) && MarkingWords == TEXT("as built");
-		if (!bAsBuilt && Told->TryGetArrayField(TEXT("insignia"), Layers))
+		if (Told->TryGetArrayField(TEXT("insignia"), Layers))
 		{
-			Look.Insignia = ReadLayers(*Layers);
+			(bAsBuilt ? Look.InsigniaClose : Look.Insignia) = ReadLayers(*Layers);
 		}
 		// (Her "marking_months": {"from": "1942-06", "insignia": [...]}, each standing from its month until the next.
 		// These are plain discs and bars and stand on the map too, whatever the country's first mark is.)
@@ -283,6 +284,7 @@ namespace
 {
 	// (the campaign's month, in months from the year 0: September 1939 until the map says otherwise)
 	int32 MonthNow = 1939 * 12 + 8;
+	bool bCloseMarksNow = false;
 }
 
 void UnitTable::SetTurn(int32 Turn)
@@ -336,7 +338,17 @@ TArray<UnitTable::FInsigniaLayer> UnitTable::Insignia(const FString& Tag)
 		return TArray<FInsigniaLayer>();
 	}
 	const int32 Era = MarkEra(Tag);
-	return Era > 0 ? Look->Dated[Era - 1] : Look->Insignia;
+	return Era > 0 ? Look->Dated[Era - 1] : Look->Insignia.Num() > 0 || !bCloseMarksNow ? Look->Insignia : Look->InsigniaClose;
+}
+
+void UnitTable::SetCloseMarks(bool bOn)
+{
+	bCloseMarksNow = bOn;
+}
+
+bool UnitTable::CloseMarks()
+{
+	return bCloseMarksNow;
 }
 
 bool UnitTable::Paint2(const FString& Tag, FLinearColor& Out)
