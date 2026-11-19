@@ -59,6 +59,8 @@ BUILDERS = {
     "Hummel": sp_guns.hummel,
     "SU76": sp_guns.su76,
     "SelfPropelledGun": sp_guns.sp_gun,
+    "Semovente": tanks_ita.semovente,
+    "L3": tanks_ita.l3,
 }
 
 ABOUT = {
@@ -100,6 +102,8 @@ ABOUT = {
     "SU76": {"nation": "SOV", "role": "self-propelled gun", "years": "1943-45", "units": "the light guns that keep up with the Soviet Union's infantry and armor"},
     "SelfPropelledGun": {"nation": "any", "role": "self-propelled gun", "years": "1942-45", "units": "the guns that keep up with the armor of every army without a self-propelled gun of its own"},
     "Sexton": {"nation": "UK", "role": "self-propelled gun", "years": "1943-45", "units": "the artillery that keeps up with the armor of Britain and the Commonwealth"},
+    "Semovente": {"nation": "ITA", "role": "assault gun", "years": "1941-43", "units": "assault guns beside Italy's armor (from 1941-11)"},
+    "L3": {"nation": "ITA", "role": "tankette", "years": "1935-43", "units": "armor (Italy, 1939 to 1940; the light tanks beside the M13 after)"},
 }
 
 

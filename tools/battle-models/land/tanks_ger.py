@@ -25,19 +25,41 @@ def plane_of(p0, p1, p2, toward):
 
 
 # The coats a German tank wore, and when (the art director's ruling: dark grey until early 1943, dark yellow after).
-GER_COATS = {"grey": ("4E5459", "1939 to early 1943", "dark grey"), "yellow": ("A3925E", "1943 on", "dark yellow")}
+GER_COATS = {"grey": ("4E5459", "1939 to early 1943", "dark grey"), "yellow": ("A3925E", "1943 on", "dark yellow"),
+             # The Afrika Korps' two coats (Brian 19 Nov: the Mediterranean in 3D; the art director's call 03:35Z): the
+             # order of March 1941, brown-yellow with grey-green at two to one, and the order of March 1942, light
+             # brown with grey. Most were seen in the first colour alone. They shipped grey and were painted in the
+             # theatre, so a 1941 coat wears through to the dark grey under it.
+             "desert41": ("A2814F", "in Africa, 1941-03 to 1942-02", "brown-yellow, the desert coat of 1941"),
+             "desert42": ("B49B6C", "in Africa, 1942-03 on", "light brown, the desert coat of 1942")}
+DESERT_SECOND = {"desert41": "6B6243", "desert42": "7F7D72"}          # (the grey-green, the grey: the orders' second colours)
+DESERT_UNDER = {"desert41": "4E5459"}                                 # (what shows where the coat is worn through)
+
+# Which coat a German vehicle wears on a desert field: the ground picks the coat, the month picks the scheme. After
+# May 1943 there was no German desert war; the month's own coat (dark yellow) serves.
+DESERT_BY_MONTH = [{"to": "1942-02", "paint": "desert41"}, {"from": "1942-03", "to": "1943-05", "paint": "desert42"}]
+BY_GROUND_HOW = ("by_ground: on a field of this ground (the field's look: desert) the rows here are read before by_month, as by_month "
+                 "is read (from and to both counted in), and pick the coat; a month no row holds falls back to by_month. "
+                 "`under` is the colour that shows where the coat is worn through (the pictures' chips; the game's own wear may use it).")
 
 
 def coats(v, default="grey", only=None):
     """The paint swap as the file tells it: for each coat, the three colours to put in place of upper, upper2, shade.
-    `only`: the coats she ever wore (a Panther came after the grey and never wore it)."""
+    `only`: the coats she ever wore (a Panther came after the grey and never wore it). A vehicle that wore the desert
+    coats has them as choices and a `by_ground` table that picks them on a desert field."""
     out = {}
     for key, (hx, years, words) in GER_COATS.items():
         if only and key not in only:
             continue
         p = livery("GER", hx)
-        out[key] = {"what": words, "years": years, "paints": {k: p[k] for k in ("upper", "upper2", "shade")}}
-    return {"default": default, "choices": out}
+        paints = {k: p[k] for k in ("upper", "upper2", "shade")}
+        if key in DESERT_SECOND:
+            paints["upper2"] = DESERT_SECOND[key]
+        out[key] = {"what": words, "years": years, "paints": paints, **({"under": DESERT_UNDER[key]} if key in DESERT_UNDER else {})}
+    swap = {"default": default, "choices": out}
+    if any(k in out for k in DESERT_SECOND):
+        swap["by_ground"] = {"how": BY_GROUND_HOW, "desert": [r for r in DESERT_BY_MONTH if r["paint"] in out]}
+    return swap
 
 
 # How a file's `swaps.by_month` is read (the Panzer IV's and the StuG III's alike).
