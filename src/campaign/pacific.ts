@@ -563,6 +563,17 @@ export function pacificRuns(g: Game, nat: string): [string, number][] {
   return [[[...named][0] ?? R.idle, R.share]];
 }
 
+/**
+ * Whether a staff's fleets go to the beach they cover (ruling 200(j); the Pacific planner's paper 14, section 4,
+ * "Which fleet goes where"; rider b585 to ruling 234, item 1(b)): a computer staff of the side against the power, at
+ * war with it, while the far side is on. The power's own fleet answers a landing by its own rule (paper 14, section
+ * 3). Never a player's fleets.
+ */
+export function coversBeaches(g: Game, nat: string): boolean {
+  const P = PACIFIC;
+  return !!P && reads(g) && nat !== g.human && nat !== P.power && !allied(g, nat, P.power) && !!live(g, P.power) && atWar(g, nat, P.power);
+}
+
 /** The Pacific's share of a country's shipping once its war there is won (the power beaten that it fought): it joins the Atlantic's. 0 otherwise. */
 export function pacificFreed(g: Game, nat: string): number {
   const R = runsOf(g, nat);
