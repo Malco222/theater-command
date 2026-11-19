@@ -2735,6 +2735,23 @@ namespace TheaterFx
 			Half = std::max(Half, Width);
 			AxA = Ua * Half;
 			AxB = Ub * Width;
+			if (B.HalfLength > 0.0 && Speed > 1e-9)
+			{
+				// (a tracer is laid along its true heading in the world, turned about it to face the eye, so the picture's
+				// own perspective puts its ends where they truly are. Laid flat across the eye's view at its middle, a long
+				// near tracer off the middle of the screen and running toward or away from the eye drew off its own line,
+				// by up to 150 px: the 3D builder's machine gun on hills, build 1708. Pointing almost at the eye it is laid
+				// as before)
+				const Vec Heading = Way * (1.0 / Speed);
+				const Vec ToEye = Eye.Eye - P;
+				const Vec Across = Heading.Cross(ToEye);
+				const double Far = ToEye.Length();
+				if (Far > 1e-6 && Across.Length() > 0.05 * Far)
+				{
+					AxA = Heading * std::max(B.HalfLength, Width);
+					AxB = Across.Unit(Ub) * Width;
+				}
+			}
 			break;
 		}
 		}
