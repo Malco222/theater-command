@@ -157,6 +157,35 @@ export function createGame(seed: number, human: string | null): Game {
   return g;
 }
 
+/**
+ * A row's establishment in a given month. A number is the fullest the row ever gets. A list of [month, worth] is the
+ * record's size by date (rider b614 to ruling 234: Japan's island garrisons by half-year, the historian's table):
+ * the last line whose month has come, and the first line before any has.
+ */
+export function estAt(est: number | [number, number][] | undefined, turn: number): number | undefined {
+  if (!Array.isArray(est)) return est;
+  let now = est[0]?.[1];
+  for (const [m, w] of est) if (m <= turn) now = w;
+  return now;
+}
+
+/**
+ * A dated establishment's month (`estAt`): the row, while it stands on the ground its row put it on, takes the
+ * record's size for the month. The men of an increase arrive with it, as any row's do; a smaller size sends the
+ * rest home. A garrison that has fallen, or been shipped off its island, is not followed. No row has a dated
+ * establishment with the far side off.
+ */
+function estMonth(g: Game, nat: string, row: any[]): void {
+  const est = row[6]?.est;
+  if (!Array.isArray(est)) return;
+  const c = g.corps.find((x) => x.nat === nat && x.name === row[2] && !x.dead);
+  if (!c || g.regions[c.reg].name !== row[5]) return;
+  const was = c.full ?? 1, now = estAt(est, g.turn) ?? 1;
+  if (now === was) return;
+  c.str = now > was ? Math.min(now, c.str + (now - was)) : Math.min(c.str, now);
+  if (now < 1) c.full = now; else delete c.full;
+}
+
 export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: number, region: string | number, o: any): Corps {
   const reg = typeof region === 'number' ? g.regions[region] : g.byName[region];
   const c: Corps = {
@@ -167,7 +196,9 @@ export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: n
   if (o.stay) c.stay = true;
   // The fullest the row ever gets (the planner's paper 18, ruled 16:32Z on 17 November 2026): a garrison of a brigade
   // is a row of one division that never fills past its own size, for player and computer alike.
-  if (o.est !== undefined && o.est < 1) c.full = o.est;
+  // (A row whose record changes its size by date gives a list of month and worth, as the air rows do: `estAt`.)
+  const est = estAt(o.est, g.turn);
+  if (est !== undefined && est < 1) c.full = est;
   // Where and when it was raised: the first lines of its record.
   c.born = g.turn;
   if (reg.owner === nat) c.home = reg.id;
@@ -3190,6 +3221,8 @@ function expeditions(g: Game, nat: string): void {
     // A row marked with stops is a row of the book's own record (ruling 234, riders b579 and b581): it comes only at those stops.
     if (o.stops && !(o.stops as number[]).includes(stopOf(g))) return;
     if (g.flags[`sent:${i}`]) {
+      // (A row whose record changes its size by date takes the new size in its month: rider b614 to ruling 234.)
+      if (g.flags[`sent:${i}`] === 1) estMonth(g, nat, row);
       // The main army's order of battle already counts these formations: the campaign only had the loan of them.
       const id = g.flags[`lent:${i}`];
       if (o.until && g.turn >= o.until && id > 0) {

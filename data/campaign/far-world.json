@@ -13,7 +13,7 @@
   "pacific-planner/far-oil.md": "2026-11-18T07:05Z",
   "pacific-planner/21-whole-world-data-gaps.md": "2026-11-18T07:06Z",
   "pacific-six/riders-234.json": "2026-11-18T23:54Z",
-  "pacific-six/riders-234-b591.json": "2026-11-19T05:09Z"
+  "pacific-six/riders-234-b591.json": "2026-11-19T06:25Z"
  },
  "_draft": "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
  "grand": {
@@ -2901,9 +2901,23 @@
     1,
     "Truk",
     {
-     "str": 0.2,
+     "str": 0.05,
      "hold": 1,
-     "est": 0.2
+     "est": [
+      [
+       27,
+       0.05
+      ],
+      [
+       40,
+       0.1
+      ],
+      [
+       52,
+       0.15
+      ]
+     ],
+     "stay": 1
     }
    ],
    [
@@ -2914,9 +2928,19 @@
     1,
     "Palau",
     {
-     "str": 0.2,
+     "str": 0.05,
      "hold": 1,
-     "est": 0.2
+     "est": [
+      [
+       27,
+       0.05
+      ],
+      [
+       46,
+       0.07
+      ]
+     ],
+     "stay": 1
     }
    ],
    [
@@ -2927,9 +2951,23 @@
     1,
     "Saipan",
     {
-     "str": 0.2,
+     "str": 0.07,
      "hold": 1,
-     "est": 0.2
+     "est": [
+      [
+       27,
+       0.07
+      ],
+      [
+       46,
+       0.06
+      ],
+      [
+       52,
+       0.17
+      ]
+     ],
+     "stay": 1
     }
    ],
    [
@@ -2940,9 +2978,27 @@
     1,
     "Eastern Marshalls",
     {
-     "str": 0.2,
+     "str": 0.1,
      "hold": 1,
-     "est": 0.2
+     "est": [
+      [
+       27,
+       0.1
+      ],
+      [
+       40,
+       0.15
+      ],
+      [
+       46,
+       0.2
+      ],
+      [
+       52,
+       0.3
+      ]
+     ],
+     "stay": 1
     }
    ],
    [
@@ -4359,6 +4415,182 @@
       "10th Tank Regiment",
       "11th Tank Regiment"
      ]
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "61st Guard Unit (Kwajalein and Roi)",
+    "inf",
+    1,
+    "Kwajalein",
+    {
+     "str": 0.07,
+     "est": [
+      [
+       27,
+       0.07
+      ],
+      [
+       40,
+       0.1
+      ],
+      [
+       46,
+       0.12
+      ],
+      [
+       52,
+       0.2
+      ]
+     ],
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "Engebi lookout station (Eniwetok)",
+    "inf",
+    1,
+    "Eniwetok",
+    {
+     "str": 0.01,
+     "est": [
+      [
+       27,
+       0.01
+      ],
+      [
+       52,
+       0.02
+      ]
+     ],
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "Yap naval guard",
+    "inf",
+    1,
+    "Yap",
+    {
+     "str": 0.02,
+     "est": [
+      [
+       27,
+       0.02
+      ],
+      [
+       46,
+       0.03
+      ]
+     ],
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "Ponape naval guard",
+    "inf",
+    1,
+    "Ponape",
+    {
+     "str": 0.04,
+     "est": [
+      [
+       27,
+       0.04
+      ],
+      [
+       40,
+       0.05
+      ],
+      [
+       52,
+       0.06
+      ]
+     ],
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "Marcus Island Guard Unit",
+    "inf",
+    1,
+    "Marcus Island",
+    {
+     "str": 0.02,
+     "est": [
+      [
+       27,
+       0.02
+      ],
+      [
+       40,
+       0.03
+      ],
+      [
+       52,
+       0.05
+      ]
+     ],
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "Iwo Jima naval air station",
+    "inf",
+    1,
+    "Iwo Jima",
+    {
+     "str": 0.01,
+     "est": [
+      [
+       27,
+       0.01
+      ],
+      [
+       40,
+       0.02
+      ],
+      [
+       46,
+       0.03
+      ],
+      [
+       52,
+       0.05
+      ]
+     ],
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "Chichi Jima Fortress",
+    "inf",
+    1,
+    "Chichi Jima",
+    {
+     "str": 0.33,
+     "est": 0.33,
+     "hold": 1,
+     "stay": 1
     }
    ]
   ],

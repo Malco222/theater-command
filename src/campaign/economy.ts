@@ -167,8 +167,12 @@ const FAR_POSTS = new Set(BUDGET.farColony.posts ?? []);
  * Hong Kong, Manila, Rangoon, Batavia, the Indies' outposts, the four cities of Indochina, Colombo and Wake, whose
  * fort row holds it; and Singapore, whose garrison row rose to the record's 0.8 as its guard came off. Midway, not yet
  * checked against the record, keeps the tenth beside its fort; Hawaii is home ground.
+ * The post rule reaches home ground on the far side (rider b614 to ruling 234): Japan's island garrisons are rows at
+ * the record's worth by half-year, the Mandates' and the home islands' alike, so Marcus Island, Iwo Jima and Chichi
+ * Jima hold the record's worth and not a home town's whole guard. Only places the historian's table names are posts.
  */
-export const farGuard = (r: Region): number => (!farColony(r) ? 1 : FAR_POSTS.has(r.name) ? 0 : BUDGET.farColony.guard ?? 1);
+const farPost = (r: Region): boolean => FAR_POSTS.has(r.name) && shoreOf(r) === 2;
+export const farGuard = (r: Region): number => (farPost(r) ? 0 : !farColony(r) ? 1 : BUDGET.farColony.guard ?? 1);
 /**
  * The share at which a province counts (ruling b466): 1 everywhere but on a country's own home ground on the far side
  * of the world, where budget.json's 'farHome' names a share for it. It is one factor on the whole of what the ground

@@ -397,7 +397,8 @@ const out = {
 // The record's rows the opening was measured with (the design director's riders to ruling 234; the Pacific six's
 // builder keeps the files). They are laid last, over what the sources above give, one file after the other:
 //   riders-234.json        riders b552 to b583, the book's rows of the opening
-//   riders-234-b591.json   riders b591 to b604, the facts of the day at every stop of the dial (Japan's armour roster)
+//   riders-234-b591.json   riders b591 to b614, the facts of the day at every stop of the dial (Japan's armour roster
+//                          and her island garrisons by half-year)
 // A 'set' names its row and what the row reads before it: a source that moves under a rider stops the build instead
 // of being written over. A word set to null is taken off the row. A 'move' gives a row by date another month or
 // another place, and the row keeps its place in the list. An 'add' row goes at the END of its list, in the file's
