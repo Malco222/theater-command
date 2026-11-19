@@ -23,7 +23,7 @@ import { lineShut } from './line';
 import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
-import { fieldCtrl, openSieges, startGarrisons } from './siege';
+import { fieldCtrl, openSieges, raiseGarrisons, startGarrisons } from './siege';
 import { agentsOf, atWork, knowsBooks } from './intel';
 import { startEngineers } from './engineers';
 import { openMorale } from './morale';
@@ -115,6 +115,8 @@ export const isOpen = (g: Game): boolean => g.flags.open === 1;
  * attack on Poland is already under way. Later in the war each staff finds its fronts as history left them.
  */
 export function startOpen(g: Game, wide = true): Game {
+  // (Ruling 232, rider b606: the garrisons that are the ruling's own join the roster before anything is counted from it.)
+  raiseGarrisons(g);
   g.flags.open = 1;
   // The grand campaign is played on the wider world: it is attached before anything else is set up for it. (One
   // kept to the map of Europe is what a campaign saved before the world was drawn plays on as.)

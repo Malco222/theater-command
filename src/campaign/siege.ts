@@ -21,7 +21,7 @@
 
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { GUNS_ALONE, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, type Assessment } from './game';
+import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, type Assessment } from './game';
 import { seat } from './commanders';
 import { bookFed } from './history';
 import { drawMen } from './manpower';
@@ -44,7 +44,7 @@ export const SIEGE = data as unknown as {
   sortie: number; pay: number;
   capital: number; capitalAfter: number; capitalYear: number;
   driveOut?: boolean;
-  startIn?: { nat: string; corps: string; name: string; gen?: string; trait?: string; xp?: number; str?: number; fortress?: boolean }[];
+  startIn?: { nat: string; corps: string; name: string; gen?: string; trait?: string; xp?: number; str?: number; fortress?: boolean; town?: string; divs?: number }[];
   rings?: { nat: string; town: string; corps: string; org: number }[];
   ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sea: { after: number; blockade: number }; relieved: { months: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>>; great?: { works: number; on?: boolean; field?: number }; lateGarrison?: { stops: number[]; str: number; org: number } };
 };
@@ -494,6 +494,23 @@ export function joinTown(g: Game, r: Region, c: Corps): void {
   if (c.digs) delete c.digs;
   if (c.yields) delete c.yields;
   if (c.job) delete c.job;
+}
+
+/**
+ * Rider b606's garrisons are ruling 232's own and no part of the roster: a SIEGE.startIn row that carries 'town' and
+ * 'divs'. `startOpen` calls this first of all, on the first day of a 1939 grand campaign with the ruling's switch on:
+ * the corps is raised in that town's province, held there, as a row of the roster is, so that the campaign's opening
+ * counts (the depots, the numbers its divisions carry) take it as one; `startGarrisons` then takes it inside at the
+ * record's size. With the switch off, and in the history campaign, which never opens this way, there is no such corps
+ * and that war's roster is what it was.
+ */
+export function raiseGarrisons(g: Game): void {
+  if (g.turn !== 1 || !DRIVE.on) return;
+  for (const s of SIEGE.startIn ?? []) {
+    const r = s.town ? g.byName[s.town] : undefined;
+    if (!s.divs || !r || r.ctrl !== s.nat || r.owner !== s.nat || g.corps.some((x) => x.nat === s.nat && x.name === s.corps)) continue;
+    addCorps(g, s.nat, s.corps, 'inf', s.divs, r.id, { hold: 1 });
+  }
 }
 
 /**

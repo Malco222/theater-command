@@ -402,8 +402,14 @@ describe('one war at the history stop, nobody playing', () => {
     // on the Cotentin in July. Of the 64 wars measured, seeds 17 to 80, four tell this story: seeds 30, 40, 48 and 58,
     // landing at Rouen, Marseille, the Cotentin and Brittany. The realism audit's desert row (b420) moved seeds 30, 40
     // and 48; seed 58 still told it. Ruling 232 (Warsaw's garrison, b566) and Italy's boats on the record's seas (b564)
-    // moved it again: of seeds 17 to 28 on that tree, seed 20 tells it.)
-    const g = startOpen(createGame(20, null));
+    // moved it again: of seeds 17 to 28 on that tree, seed 20 tells it. Seed 20 until the ship candidate of ruling 233
+    // (the works rule taken over, b629; the record garrisons; the boats rows), which moved the war again: on it seed 20's
+    // Americans land at Bordeaux in December 1943 and are never refused. Of seeds 17 to 30 on the ship candidate, only
+    // seed 22 tells the story in full: Calais and Rouen refuse America's corps in May 1944 and Calais again in June, and
+    // the staff lands them in Brittany in June 1944, its only landing of the war. Seeds 18, 25, 27 and 29 are refused in
+    // May 1944 but land in France that same month; seeds 21, 26 and 28 are first refused in July or August and land
+    // nowhere in France; the rest land in France before the summer or not at all. Seed 22 is the one used.)
+    const g = startOpen(createGame(22, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
     const refused = new Set<number>();
