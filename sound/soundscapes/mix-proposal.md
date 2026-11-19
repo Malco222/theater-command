@@ -20,11 +20,15 @@ the game. The air battles thread is preparing its own asks for `mix.json` `air`;
 Add to `beds.list`, same rules as the others (silent below `in`, full from `full` to `hold`, gone above `out`):
 
 ```json
-{"name": "front_rumble_loop", "in": 0.0, "full": 0.0, "hold": 0.5, "out": 0.85, "gainDb": -6, "land": true,
- "note": "the war beyond this battle, 3 to 14 km off; heard before contact and in lulls, gone in the thick of it"},
+{"name": "front_rumble_loop", "in": 0.0, "full": 0.0, "hold": 1.0, "out": 1.01, "gainDb": -6, "land": true,
+ "note": "the war beyond this battle, 3 to 14 km off; never leaves, so the battle has a low floor that never goes silent"},
 {"name": "naval_guns_far_loop", "in": 0.0, "full": 0.0, "hold": 0.4, "out": 0.7, "gainDb": -8, "sea": true,
  "note": "another fight beyond this one, 6 to 18 km off; rides on top of sea_day_loop"}
 ```
+
+Why it never leaves: the art director's grit direction (19 Nov, from Brian's reference clips) asks for a low
+bed that never drops more than about 12 dB under the peaks. `front_rumble_loop` measures 47% of its energy under
+150 Hz with a 5.4 dB loud-to-quiet gap; the pack's `battle_loop` measures 26% and 16.9 dB (README, grit table).
 
 `beds.beforeContact` would then read: `rifles_far_loop` at -14 dB and `front_rumble_loop` at its gain, in place of
 the single far salvo every 15 to 30 s (`far_guns_01..03`), which the rumble already holds.

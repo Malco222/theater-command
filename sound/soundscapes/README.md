@@ -57,6 +57,24 @@ and the battery +5; sea, her salvo +8.8, shells short +9.3, straddled +10.6, hit
 +8.3, strafing and bombs about +5.7; bombers only +1 to +4, as the busiest scene. The formation's drone falls about
 20% in pitch as it passes (1.12 to 0.90).
 
+**Against the grit targets** (art director's `grit-direction.md`, 19 Nov, from Brian's reference clips: 46 to 75%
+of the energy under 150 Hz, 2 to 4% over 2 kHz, the quiet floor 7 to 12 dB under the peaks). Same measure here:
+share of energy under 150 Hz and over 2 kHz, and the gap between the loud (95th percentile) and quiet (10th) 0.4 s
+levels. On Brian's bomber-waist clip this measure gives 45% / 4.7% / 7.0 dB (the art director's 46% / 4% / 11 dB):
+the shares agree, the gap reads about 4 dB tighter than theirs.
+
+| File | Under 150 Hz | Over 2 kHz | Loud to quiet gap | Against the targets |
+|---|---|---|---|---|
+| `front_rumble_loop` | 47% | 0.1% | 5.4 dB | A low wall that never stops: on target |
+| `naval_guns_far_loop` | 45% | 0.0% | 24.1 dB | Low enough, but silent between salvos: needs the sea beds under it |
+| `scene_horizon` | 51% | 2.9% | 12.6 dB | Close |
+| `scene_bombers` | 40% | 1.6% | 10.6 dB | Close; a little light in the low end |
+| `scene_sea` | 35% | 10.6% | 11.1 dB | Too bright: three times the highs of the clips |
+| `scene_strike` | 33% | 4.3% | 11.3 dB | Light in the low end |
+| pack `battle_loop` (in the game now) | 26% | 6.0% | 16.9 dB | The biggest gap: thin, crisp, with drops |
+| pack `battle_far_loop` | 29% | 0.6% | 13.7 dB | Light in the low end |
+| pack `sea_battle_loop` | 37% | 0.7% | 17.8 dB | Drops between guns |
+
 ## Known faults
 
 - `front_rumble_loop` lives low: laptop speakers lose 4.9 dB of it, against 2.2 dB for the pack's
