@@ -276,8 +276,8 @@ describe('the fight is not moved by a hair', () => {
     Pomorze: [5.304, 142, 131, 9945, '7a3ee283c24c69c8'],
     // Re-recorded on the city's streets (b511: Katowice is a city, fought in its streets now), viewed and not alike; and
     // again with the defence a block inside its core (b529): a shorter fight, one shell fewer; and on Katowice's own
-    // street plan (b618: a real city's plan from its name, no longer the battle's seed).
-    'Polish Silesia': [2.328, 179, 2348, 9950, 'c983fa9cd07b7933'],
+    // street plan (b618: a real city's plan from its name, no longer the battle's seed), its kept plan 3 (b625).
+    'Polish Silesia': [2.401, 167, 1540, 9951, 'aecea9823b67b851'],
   };
   const check = (key: string, b: LandBattle, viewed: boolean): number => {
     b.ai.def = true;
@@ -307,7 +307,7 @@ describe('the fight is not moved by a hair', () => {
       shells += check(name, new LandBattle(landTicket(g, cs, r)!), true);
       check(name, new LandBattle(landTicket(g, cs, r)!), false);
     }
-    // Katowice on its own plan (b618) fights eight seconds longer: one shell more.
-    expect(shells).toBe(8);
+    // Katowice on its own kept plan (b618, b625): two shells more than on the battle's plan.
+    expect(shells).toBe(9);
   });
 });

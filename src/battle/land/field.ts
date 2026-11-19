@@ -9,6 +9,7 @@
 
 import { hashString, Rng } from '../../core/rng';
 import { LAND } from './rules';
+import planData from '../../../data/battle/city-plans.json';
 
 /** Ground kinds, in the order their codes are stored in LandField.ground. Append only: saved fields keep their codes. */
 // (The art director's list of 17 November: open, field, woods, buildings, road, water with a bridge standing or blown,
@@ -869,11 +870,24 @@ export function builtShare(f: LandField): number {
 }
 
 /**
- * The seed a capital's or a city's street plan is laid from (b618): a real town's own, from its name, so it is the same
- * every time it is fought and no two cities share one; the battle's seed for a practice ground (no place on the map).
+ * Each real city's kept street plan by its key (planKey: its town's name; data/battle/city-plans.json, b625): the first of its own
+ * sequence that keeps it within 7 points of its kind and no more than one fight in ten to the clock. Not listed: plan 1.
+ */
+export const CITY_PLANS: Record<string, number> = { ...(planData as { plans: Record<string, number> }).plans };
+/** A real city's own key: its town's name, or, where two share a name, the key its province gives it (city-plans.json). */
+export function planKey(place: LandPlace): string {
+  return (planData as { shared: Record<string, Record<string, string>> }).shared[place.town ?? '']?.[place.name] ?? place.town ?? '';
+}
+
+/**
+ * The seed a capital's or a city's street plan is laid from (b618): a real town's own, from its name and its kept plan
+ * number (b625), so it is the same every time it is fought and no two cities share one; the battle's seed for a practice
+ * ground (no place on the map).
  */
 export function planSeed(place: LandPlace, seed: number): number {
-  return place.region >= 0 && place.town ? hashString(`streets:${place.town}`) : seed;
+  if (!(place.region >= 0 && place.town)) return seed;
+  const key = planKey(place), n = CITY_PLANS[key] ?? 1;
+  return hashString(n > 1 ? `streets:${key}#${n}` : `streets:${key}`);
 }
 
 /** Whether the place is fought in a capital's or a city's streets (layCity): an urban province is a city at least. */
