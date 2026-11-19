@@ -106,7 +106,7 @@ def uniform_layers(man, J, spec, LM):
     if not _ours(spec):
         return layers
     # (the quilted channels need the faces to stay through the thinning; the snow suit over them is plain)
-    S.BUDGET["uniform"] = UNIFORM_BUDGET + {"winter": 600, "snow": 900}.get(spec.get("dress"), 0)
+    S.BUDGET["uniform"] = UNIFORM_BUDGET + {"winter": 480, "snow": 900}.get(spec.get("dress"), 0)
     tunic, trousers, collar = layers[0], layers[1], layers[3]
     Z = LM["Z"]
     # ---- off: the button strip to the hem and the four pockets with their flaps (soldier.py's tunic)
@@ -183,33 +183,30 @@ def _round_axis(P, a, b, side):
     return t, ang, facing, rad
 
 
-# The body's rows go by length round him, not by angle about one point: at each height the outline of the shells round
+# The body's rows go by length round him, not by angle about one point: at each height the outline of the cloth round
 # the trunk (the arms left out), and how far round it each direction lies, so the 15 tubes are as wide down the back as
-# across the front (by angle about a point just ahead of the spine they came out 2 cm wide behind and 8 cm in front).
-# Laid by padded() for the man being dressed; empty otherwise (then the angle about that point, as before).
+# across the front (by angle about a point just ahead of the spine they came out 2 cm wide behind and 8 cm in front;
+# by length round the shells, under the cloth, still 4.5 cm down the spine, where the cloth bridges the groove). Each
+# shell face takes its row where its cloth stands. Laid by padded() for the man being dressed; empty otherwise.
 _BODY_ROWS = {}
 _BINS = 144                                  # (2.5 degrees)
 
 
-def _body_table(shells):
-    """_BODY_ROWS from the ShellFields `shells`: at each height (every cm) the trunk's middle front to back, and at every
-    direction about it the outline's radius and the arc-length angle u there (0 straight ahead, a whole turn round)."""
-    pts = []
-    for sh in shells:
-        arm = [i for i, b in enumerate(sh.names) if b.startswith(("upperarm", "lowerarm", "hand", "fingers", "thumb"))]
-        pts.append(sh.Fc[sh.Wf[:, arm].sum(axis=1) < 0.5])
-    P = np.concatenate(pts)
+def _body_table(P):
+    """_BODY_ROWS from points P on the trunk's cloth (its shells' faces pushed out to where the cloth stands, the arms
+    left out): at each height (every cm) the trunk's middle front to back, and at every direction about it the
+    outline's radius and the arc-length angle u there (0 straight ahead, a whole turn round)."""
     dth = 2.0 * np.pi / _BINS
     edges = -np.pi + np.arange(_BINS + 1) * dth
     out = {"z": [], "cx": [], "u": [], "r": [], "L": []}
     for z in np.arange(P[:, 2].min() + 0.02, P[:, 2].max() - 0.02, 0.01):
-        S = P[np.abs(P[:, 2] - z) < 0.012]
-        mid = S[np.abs(S[:, 1]) < 0.04]
+        sl = P[np.abs(P[:, 2] - z) < 0.012]
+        mid = sl[np.abs(sl[:, 1]) < 0.04]
         if len(mid) < 4:
             continue
         cx = 0.5 * (mid[:, 0].max() + mid[:, 0].min())
-        a = np.arctan2(S[:, 1], S[:, 0] - cx)
-        r = np.hypot(S[:, 0] - cx, S[:, 1])
+        a = np.arctan2(sl[:, 1], sl[:, 0] - cx)
+        r = np.hypot(sl[:, 0] - cx, sl[:, 1])
         rb = np.full(_BINS, -1.0)
         np.maximum.at(rb, np.clip(((a + np.pi) / dth).astype(int), 0, _BINS - 1), r)
         have = rb > 0.0
@@ -257,12 +254,13 @@ QUILT_BONES = {"body": ("pelvis", "spine_01", "spine_02", "chest", "spine_03"), 
                "arm_r": ("upperarm_r", "lowerarm_r"), "leg_l": ("thigh_l", "calf_l"), "leg_r": ("thigh_r", "calf_r")}
 
 
-def _rows(P, W, names, J, parts, force=None):
+def _rows(P, W, names, J, parts, force=None, Pu=None):
     """Where each point lies among the quilting's rows, on `parts` ("body", "arm", "leg"), each point counted to the
     part its bones (W, by `names`) mostly are (or every point to the part `force`): u (its angle round the part's axis;
     a seam wherever u is a whole number of spacings), the rows' spacing and height there, how surely it is quilted (0
     to 1: none across the front edge, under the arms or on the side of a limb toward the body, and faded where one
-    part meets the next), the metres one unit of u spans there (its distance from the axis), and its part."""
+    part meets the next), the metres one unit of u spans there (its distance from the axis), and its part. On the
+    body u is read at Pu where given (where the cloth stands over each point), else at P."""
     n = len(P)
     names = list(names)
 
@@ -280,7 +278,7 @@ def _rows(P, W, names, J, parts, force=None):
     if "body" in parts:
         m = best == keys.index("body")
         if _BODY_ROWS:
-            phi, per[m] = _body_u(P[m])
+            phi, per[m] = _body_u((P if Pu is None else Pu)[m])
         else:
             cx = J["spine_01"][0] + 0.03
             phi = np.arctan2(P[m, 1], P[m, 0] - cx)
@@ -312,10 +310,11 @@ def _band(z, z_lo, z_hi):
     return np.clip((z - z_lo) / 0.02, 0.0, 1.0) * np.clip((z_hi - z) / 0.02, 0.0, 1.0)
 
 
-def _quilting(shell, J, LM, parts, z_lo, z_hi, force=None):
-    """The quilting's extra thickness at each face of `shell` (a ShellField), on `parts`, kept between z_lo and z_hi."""
+def _quilting(shell, J, LM, parts, z_lo, z_hi, force=None, Q=None):
+    """The quilting's extra thickness at each face of `shell` (a ShellField), on `parts`, kept between z_lo and z_hi
+    (the body's rows read at Q, where each face's cloth stands)."""
     def more(Fc):
-        u, sp, h, k = _rows(Fc, shell.Wf, shell.names, J, parts, force)[:4]
+        u, sp, h, k = _rows(Fc, shell.Wf, shell.names, J, parts, force, Q)[:4]
         return _tubes(u, sp, h) * k * _band(Fc[:, 2], z_lo, z_hi)
     return more
 
@@ -359,6 +358,15 @@ def _shell_bvh(src, shell, levels=2):
     return BVHTree.FromPolygons(V.tolist(), F)
 
 
+def _face_normals(shell, bvh):
+    """The outward normal of each face of `shell` (by its BVH, built as ShellField built it)."""
+    N = np.zeros_like(shell.Fc)
+    near = bvh.find_nearest
+    for i, p in enumerate(shell.Fc.tolist()):
+        N[i] = near(p)[1]
+    return N
+
+
 def _quilt_bands(LM, Z):
     """The heights the quilting runs between: the jacket (body and sleeves), and the trousers between the boots and the
     jacket's hem."""
@@ -386,22 +394,37 @@ def padded(man, J, LM, layers, dress):
     fat = {b: v + (0.004 if b == "neck" else pad * (0.8 if b.startswith(("lowerarm", "hand")) else 1.0)) for b, v in loose.items()}
     quilt = dress == "winter"
     QB = _quilt_bands(LM, Z)
-    _QUILT_SRC.clear()
-    _BODY_ROWS.clear()
-    if quilt:
-        bvh_t, bvh_s = _shell_bvh(man["tights"], tights), _shell_bvh(man["skirt"], skirt)
-        _BODY_ROWS.update(_body_table([tights, skirt]))
-    q_top = _quilting(tights, J, LM, ("body", "arm"), *QB["jacket"]) if quilt else (lambda P: 0.0)
-    # (below the belt every face counted to the body, though the shells there are mostly the thighs': the rows run on
-    #  down the jacket's skirt to the hem)
-    q_skirt = _quilting(skirt, J, LM, ("body",), *QB["skirt"], force="body") if quilt else (lambda P: 0.0)
-    top = tights.cloth(fat, lo=(-BIG, -BIG, LM["belt"] - 0.02), default=OFF, more=q_top)
-    tunic.add(top, 0.02)
     ARMS = {b + s_: OFF for b in ("upperarm_", "lowerarm_", "hand_", "fingers_", "thumb_") for s_ in ("l", "r")}
     LEGS = ("pelvis", "spine_01", "thigh_l", "thigh_r")
     flare = lambda P: 0.026 + pad + 0.02 * np.clip((LM["belt"] - P[:, 2]) / (LM["belt"] - LM["hem"]), 0.0, 1.0) ** 1.5
     box = dict(lo=(-BIG, -BIG, LM["hem"] - 0.02), hi=(BIG, BIG, LM["belt"] + 0.03))
-    q_hips = _quilting(tights, J, LM, ("body",), *QB["skirt"], force="body") if quilt else (lambda P: 0.0)
+    _QUILT_SRC.clear()
+    _BODY_ROWS.clear()
+    Q_top = Q_hp = Q_sk = None
+    if quilt:
+        bvh_t, bvh_s = _shell_bvh(man["tights"], tights), _shell_bvh(man["skirt"], skirt)
+        # each shell face pushed out to where its cloth stands (before the tubes), and the body's rows laid round that
+        N_t, N_s = _face_normals(tights, bvh_t), _face_normals(skirt, bvh_s)
+        off_top = tights.Wf @ np.array([fat.get(n, OFF) for n in tights.names], np.float32)
+        off_hp = tights.Wf @ np.array([0.0 if n in LEGS else OFF for n in tights.names], np.float32) + flare(tights.Fc)
+        off_sk = skirt.Wf @ np.array([ARMS.get(n, 0.0) for n in skirt.names], np.float32) + flare(skirt.Fc)
+        Q_top, Q_hp, Q_sk = (tights.Fc + N_t * off_top[:, None], tights.Fc + N_t * off_hp[:, None],
+                             skirt.Fc + N_s * off_sk[:, None])
+        zt, zs = tights.Fc[:, 2], skirt.Fc[:, 2]
+        in_box = lambda z: (z > LM["hem"] - 0.02) & (z < LM["belt"] + 0.03)
+        trunk = lambda sh: sh.Wf[:, [i for i, b in enumerate(sh.names)
+                                     if b.startswith(("upperarm", "lowerarm", "hand", "fingers", "thumb"))]].sum(axis=1) < 0.5
+        tt, ts = trunk(tights), trunk(skirt)
+        _BODY_ROWS.update(_body_table(np.concatenate([Q_top[tt & (zt > LM["belt"] - 0.02) & (off_top > 0.0)],
+                                                      Q_hp[tt & in_box(zt) & (off_hp > 0.0)],
+                                                      Q_sk[ts & in_box(zs) & (off_sk > 0.0)]])))
+    q_top = _quilting(tights, J, LM, ("body", "arm"), *QB["jacket"], Q=Q_top) if quilt else (lambda P: 0.0)
+    # (below the belt every face counted to the body, though the shells there are mostly the thighs': the rows run on
+    #  down the jacket's skirt to the hem)
+    q_skirt = _quilting(skirt, J, LM, ("body",), *QB["skirt"], force="body", Q=Q_sk) if quilt else (lambda P: 0.0)
+    top = tights.cloth(fat, lo=(-BIG, -BIG, LM["belt"] - 0.02), default=OFF, more=q_top)
+    tunic.add(top, 0.02)
+    q_hips = _quilting(tights, J, LM, ("body",), *QB["skirt"], force="body", Q=Q_hp) if quilt else (lambda P: 0.0)
     sk = skirt.cloth(ARMS, more=lambda P: flare(P) + q_skirt(P), **box)
     hp = tights.cloth({b: 0.0 for b in LEGS}, more=lambda P: flare(P) + q_hips(P), default=OFF, **box)
     tunic.add(Blend(sk, hp, 0.05), 0.02)
@@ -466,8 +489,26 @@ def build_kit(J, spec, body_ls, Z=None):
     if spec.get("dress"):
         for z in np.linspace(Z(1.43), Z(1.11), 5):                     # (the jacket's five, on its lapped front edge)
             p, nrm = on_surface(tunic, (0.45, 0.012, z), (-1.0, 0.0, 0.0))
-            g.tube(p - nrm * 0.001, p + nrm * 0.004, 0.0085, 0.0075, "steel", 8)
+            g.tube(p - nrm * 0.001, p + nrm * 0.0055, 0.0085, 0.0075, "steel", 8)
         out["details"] = (g.build("details"), None)
+        # the ammunition pouches again, each cell made on its own and the six joined: on the padded jacket the cells'
+        # anchors tilt with the tubes, and two cells meeting at a thin seam came out as shards when made as one
+        bpy.data.objects.remove(out.pop("pouches")[0])
+        zb = Z(1.0)
+        cx = J["spine_01"][0] + 0.03 if "crown" in J else 0.0
+        cells = S.Geo()
+        for side in (1.0, -1.0):
+            for y in (0.06, 0.103, 0.143):
+                a = math.atan2(y * side, 0.12)
+                p0, n0 = S.project(tunic, [(cx + math.cos(a) * 0.2, math.sin(a) * 0.2, zb - 0.012)])
+                p0, n0 = p0[0], n0[0]
+                R = frame_from(n0, (0.0, 0.0, 1.0))
+                c = p0 + n0 * 0.028
+                L = Layer("pouches", "straps")
+                L.add(RoundBox(c, (0.021, 0.0195, 0.04), 0.008, R), 0.0)
+                L.add(RoundBox(c + R @ np.array((0.004, 0.0, 0.03)), (0.019, 0.021, 0.016), 0.006, R), 0.003)
+                cells.absorb(S.mesh_from_layers("pouch", [L], 0.0025, 260 // 6))
+        out["pouches"] = (cells.build("pouches", sharp=180.0), None)
         return out
     for z in (Z(1.418), Z(1.373), Z(1.328)):
         p, nrm = on_surface(tunic, (0.3, 0.004, z), (-1.0, 0.0, 0.0))
@@ -596,13 +637,14 @@ SEAM_REACH = 0.35       # (a seam whose middle is in the quilted zone is cut who
 SEAM_LEAST = 2.5e-4     # (a seam's piece smaller than this, m2, is a scrap at a zone's edge: left plain)
 
 
-def _seam_field(P, paint, J):
+def _seam_field(P, paint, J, force=None):
     """For points P of the cloth painted `paint`, where each lies among the quilting's rows as its tubes were laid: on
     each quilted cloth laid for that paint, through the shell face that cloth was pushed out from there (the nearest,
     as in ShellField); taken from the cloth it lies on (the least of their fields there), blended with any other within
     its smooth join of that one, as the surface is. Returns w (its place across the rows, in spacings: a seam at every
     whole number), a seam's half-width in those units, the rows all round, how far inside the quilted zone it is
-    (above 0: quilted), and its part (a seam runs only between points of one part)."""
+    (above 0: quilted), and its part (a seam runs only between points of one part). On the body u is read at the
+    cloth point itself (the tubes' rows were laid where the cloth stands). `force` counts every point to that part."""
     n = len(P)
     w, hw, rnd, q, key = np.zeros(n), np.full(n, 0.1), np.ones(n), np.full(n, -1.0), np.full(n, -1)
     src = [s for s in _QUILT_SRC if s["paint"] == paint]
@@ -617,8 +659,9 @@ def _seam_field(P, paint, J):
             loc, _, idx, _ = near(p)
             foot[j], fi[j] = loc, idx
         Wf = s["Wf"][fi]
-        u, sp, h, k, _, best = _rows(foot, Wf, s["names"], J, s["parts"], s["force"])
-        per = _rows(P, Wf, s["names"], J, s["parts"], s["force"])[4]          # (the line's width on the cloth itself)
+        fo = force or s["force"]
+        u, sp, h, k, _, best = _rows(foot, Wf, s["names"], J, s["parts"], fo, P)
+        per = _rows(P, Wf, s["names"], J, s["parts"], fo)[4]                  # (the line's width on the cloth itself)
         Ws.append(u / sp)
         HW.append(SEAM_HALF / np.maximum(per * sp, 1e-6))
         R.append(np.round(2.0 * np.pi / sp))
@@ -662,9 +705,11 @@ def _cut_seams(body, J):
     bm.verts.index_update()
     P = np.array([v.co[:] for v in bm.verts])
     field = {p: _seam_field(P, p, J) for p in fams}
+    # (where the body's points meet a sleeve's on one edge, the body's seams are read on the body's rows at both ends)
+    body_f = _seam_field(P, "tunic", J, force="body")
     # (each point's w eased off the cut lines, so no cut falls on or a hair from a point)
     EPS = 0.02
-    for w, hw, rnd, q, key in field.values():
+    for w, hw, rnd, q, key in list(field.values()) + [body_f]:
         for s in (-1.0, 1.0):
             dd = w - np.round(w) - s * hw
             close = np.abs(dd) < EPS
@@ -679,6 +724,8 @@ def _cut_seams(body, J):
         p = next(iter(fp))
         w, hw, rnd, q, key = field[p]
         a, b = e.verts[0].index, e.verts[1].index
+        if p == "tunic" and key[a] != key[b] and min(key[a], key[b]) == 0:
+            w, hw, rnd, q, key = body_f
         if key[a] < 0 or key[a] != key[b] or rnd[a] != rnd[b] or max(q[a], q[b]) <= -SEAM_REACH:
             continue
         R = int(rnd[a])
@@ -726,16 +773,34 @@ def _cut_seams(body, J):
             bmesh.utils.face_split(next(iter(common)), va, vb)
             joined += 1
     bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if paint_of_mat[f.material_index] in fams and len(f.verts) > 3])
-    # the faces between a seam's two cuts: their middle within a half-width of a whole w, and in the quilted zone, and
+    # the faces between a seam's two cuts: their middle in the quilted zone and within a half-width of a whole w, and
     # every corner on or inside the seam's edges (a face the cuts did not close, at a line's end or a paint's edge, left)
     bm.faces.ensure_lookup_table()
     bm.faces.index_update()
     seam = np.zeros(len(bm.faces), bool)
+    # (the zone read again at each face's own middle: corners in it can span a face whose middle is not)
+    FC = np.array([f.calc_center_median()[:] for f in bm.faces])
+    fpaint = np.array([paint_of_mat[f.material_index] for f in bm.faces], dtype=object)
+    QC, QCb = np.full(len(FC), -1.0), np.full(len(FC), -1.0)
+    for p in fams:
+        mm = fpaint == p
+        if mm.any():
+            QC[mm] = _seam_field(FC[mm], p, J)[3]
+    mm = fpaint == "tunic"
+    if mm.any():
+        QCb[mm] = _seam_field(FC[mm], "tunic", J, force="body")[3]
     for f in bm.faces:
         p = paint_of_mat[f.material_index]
         if p not in field:
             continue
         w, hw, rnd, q, key = field[p]
+        orig = {int(key[v.index]) for v in f.verts if v not in new}
+        qc = QC[f.index]
+        if p == "tunic" and len(orig) > 1 and min(orig) == 0:
+            w, hw, rnd, q, key = body_f
+            qc = QCb[f.index]
+        if qc <= 0.0:
+            continue
         vals = [new[v] if v in new else (w[v.index], hw[v.index], int(key[v.index]), int(rnd[v.index]), q[v.index])
                 for v in f.verts]
         if vals[0][2] < 0 or len({x[2] for x in vals}) != 1:
@@ -744,8 +809,7 @@ def _cut_seams(body, J):
         ws = np.array([x[0] - R * np.round((x[0] - w0) / R) for x in vals])
         hc, wc = np.mean([x[1] for x in vals]), ws.mean()
         kc = np.round(wc)
-        seam[f.index] = (abs(wc - kc) < hc and np.mean([x[4] for x in vals]) > 0.0
-                         and np.all(np.abs(ws - kc) <= 1.35 * hc))
+        seam[f.index] = abs(wc - kc) < hc and np.all(np.abs(ws - kc) <= 1.35 * hc)
     # scraps left plain: pieces of seam (faces joined by edges) smaller than SEAM_LEAST
     seen, dropped = set(), 0
     for f in bm.faces:
@@ -996,6 +1060,8 @@ def picture(info, fast=False, dresses=None):
     cast = [(DRESSES[d][0], y) for d, y in zip(dresses, (-1.1, 0.0, 1.1))] if winter else [("SOV", -0.55), ("GER", 0.55)]
     for nation, y in cast:
         m = S.assemble(nation)
+        if "body_uncut" in m:
+            bpy.data.meshes.remove(m.pop("body_uncut"))
         S.studio_smooth(m)
         for mt in bpy.data.materials:
             if not mt.name.startswith(("SOV_", "SOVW_", "SOVS_", "GER_", "backdrop", "ground")):
