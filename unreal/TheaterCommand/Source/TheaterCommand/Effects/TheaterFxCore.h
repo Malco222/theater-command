@@ -172,8 +172,16 @@ namespace TheaterFx
 		void Shell(double Now, const Vec& At, const char* Size, const char* Ground, bool bOnArmour = false);
 		/** An armour-piercing round that misses: a low spurt of earth and a skip, no crown and no crater. */
 		void Skip(double Now, const Vec& At, const Vec& Heading, const char* Ground);
-		/** A gun firing, its muzzle at At, pointing along Facing. Gun is a muzzle row ("tank_gun", "mg", "howitzer"). */
-		void Muzzle(double Now, const Vec& At, const Vec& Facing, const char* Gun);
+		/** A gun firing, its muzzle at At, pointing along Facing. Gun is a muzzle row ("tank_gun", "mg", "howitzer").
+		 * Ground (a grounds row) is what its blast throws up: on sand a tank or field gun's shot raises a veil of dust
+		 * in front of it that hides the gun and its line of sight for a second or two, then lingers. */
+		void Muzzle(double Now, const Vec& At, const Vec& Facing, const char* Gun, const char* Ground = "earth");
+		/** Dust thrown up behind a vehicle on dry ground: every frame, for each of its dust sockets (dust.left,
+		 * dust.right), where the socket is and the vehicle's velocity (metres a second). Id: any number that stays the
+		 * same for that socket. Ground is a grounds row; snow, mud and water throw none (dust.vehicles.by_ground).
+		 * Low and long, drifting on the wind (SetWind), lingering; taller and longer at speed; tracks throw more than
+		 * wheels. Standing still, nothing; a socket not called for a while is forgotten. */
+		void VehicleDust(double Now, int Id, const Vec& At, const Vec& Velocity, const char* Ground, bool bTracked = true);
 		/** Rounds fired by one gun (Gun: any number that is the same for the same gun) from From toward To, PerSecond:
 		 * every fifth is a tracer (tracer.one_in), out of step between guns; machine guns flicker at the muzzle. */
 		void Shots(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond, const char* Ground = "earth");
@@ -297,6 +305,16 @@ namespace TheaterFx
 			// a fading tip, never peach. bHotFlash: the cannon flash in these colours; the close view's licks always)
 			bool bHotFlash = false;
 			Rgb FlashHot, FlashOrange, FlashRim; // (FlashRim: the deeper orange its edges go to, so a rim over the sky stays orange)
+		};
+		/** A dust.vehicles row for one ground, read once a ground. */
+		struct DustRow
+		{
+			std::string Ground;
+			double Share = 0.0, LeastMps = 1.0, FullMps = 12.0, Spacing = 2.5, MostPerS = 4.0, Kick = 0.1, Drag = 1.0;
+			double Windage = 1.0, FlatSlow = 0.5, FlatFast = 0.75, HazeBy = 2.0, HazeAlpha = 0.2, Tracked = 1.3, Spread = 0.6;
+			double LowShare = 0.5, LowFlatten = 0.35, LowWide = 1.25, LowThick = 1.2; // (the low dense skirts among the billows)
+			Span Life{ 4.0, 6.0 }, LifeFast{ 7.0, 10.0 }, R0{ 0.5, 0.9 }, R1{ 1.5, 2.5 }, R1Fast{ 3.5, 5.0 }, RiseM{ 1.0, 3.0 }, Alpha{ 0.35, 0.5 };
+			Rgb Low, High; // (its colour by the ground, where it is thrown up; and higher in the air, paler)
 		};
 		/** An air_trails row, read once a kind. */
 		struct TrailRow
@@ -429,6 +447,14 @@ namespace TheaterFx
 		std::vector<AirRow> AirRows;
 		std::vector<Firing> Firings; // the air guns
 		std::vector<TrailRow> TrailRows;
+		std::vector<DustRow> DustRows;
+		struct Dusting
+		{
+			int Id = 0;
+			double Last = -1e9, Owed = 0.0;
+			Vec At;
+		};
+		std::vector<Dusting> Dusts; // (the vehicles' dust sockets being laid)
 		std::vector<Trailing> Trails; // the aircraft trails being laid
 		/** A falling aircraft shedding its debris row over its fall. */
 		struct Falling
@@ -464,7 +490,12 @@ namespace TheaterFx
 		std::vector<ColumnSpan> Spans; // (this frame: how far across the screen each oil column reaches, by fire and by ColumnBin metres of height)
 		static constexpr double ColumnBin = 20.0;
 		bool SpanAt(int Id, double Z, double& Mid, double& Half) const;
-		size_t TwinBits = 0; // (twins alive at the last Draw: each takes a second slot)
+		size_t TwinBits = 0; // (twins in sight at the last Draw: each takes a second slot)
+		// (the room a gate asks about: what was in sight at the last Draw and whatever was made since. A piece 5 km off,
+		// never drawn, holds no place: counted, far debris shut off the cases, gun smoke and showers beside the eye. The
+		// pre-check, 06:42Z)
+		size_t InSight = 0, HeldAtDraw = 0;
+		size_t RoomAsked() const { return InSight + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + TwinBits; }
 		std::vector<Bit> Roots; // (each frame: the young end of each trail, from its point back to its newest hanging puff)
 
 		double Num(const std::string& Path, double Fallback) const;
@@ -491,6 +522,7 @@ namespace TheaterFx
 		void CannonFlash(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D);
 		void Spent(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D);
 		const TrailRow& TrailRowOf(const std::string& Kind);
+		const DustRow& DustRowOf(const std::string& Ground);
 		void TrailPuff(double T, const Vec& At, const Vec& Carry, Trailing& Tr, const TrailRow& Row, Dice& D);
 		void Shed(double Now, const Vec& At, const Vec& Vel, const Vec& Throw, double SpanM, double DeckZ, int Sort, Dice& D); // (one piece: Sort 0 a skin plate, 1 a heavy piece, 2 a wing)
 		void TornFireball(double Now, const Vec& At, const Vec& Vel, double SpanM, Dice& D);

@@ -173,6 +173,7 @@ namespace TheaterFx
 		GunSmokeCol = Picture("air_guns.smoke_colour", Rgb::FromPicture(168, 166, 160));
 		AirRows.clear();
 		TrailRows.clear();
+		DustRows.clear();
 		Sides = std::max(6, std::min(24, static_cast<int>(Num("game.puff_sides", 16.0))));
 		PointsPerPuff = 2 * Sides + 1;
 		std::vector<double>* Tables[8] = { &RingCos, &RingSin, &Ring2Cos, &Ring2Sin, &Ring3Cos, &Ring3Sin, &Ring5Cos, &Ring5Sin };
@@ -209,6 +210,8 @@ namespace TheaterFx
 		Firings.clear();
 		Trails.clear();
 		Falls.clear();
+		Dusts.clear();
+		InSight = HeldAtDraw = TwinBits = 0;
 		for (size_t I = 0; I < OutRgba.size(); ++I)
 		{
 			OutRgba[I] = 0;
@@ -811,7 +814,7 @@ namespace TheaterFx
 		// only: a water spout keeps its passed column.
 		const std::string Sp_ = "burst.crown.spikes.";
 		const double HalvePast = Num("burst.debris.shower.halve_past", 0.0);
-		const double Busy = HalvePast > 0.0 && static_cast<double>(Bits.size()) > HalvePast ? 0.5 : 1.0; // (a busy screen: half the many small things)
+		const double Busy = HalvePast > 0.0 && static_cast<double>(RoomAsked()) > HalvePast ? 0.5 : 1.0; // (a busy screen: half the many small things)
 		const int NSpike = (ClodK > 0.02 || ShowerK > 0.02) && Has(Sp_ + "count.0") ? static_cast<int>(D.Whole(static_cast<int>(Num(Sp_ + "count.0", 24.0)), static_cast<int>(Num(Sp_ + "count.1", 40.0))) * Busy) : 0;
 		const int PiecesLo = std::max(2, static_cast<int>(Num(Sp_ + "pieces.0", 3.0))), PiecesHi = std::max(PiecesLo, static_cast<int>(Num(Sp_ + "pieces.1", 5.0)));
 		const Span SpikeReach = Range(Sp_ + "reach", 0.4, 1.15), SpikeLean = Range(Sp_ + "lean", 0.15, 1.1), SpikeThick = Range(Sp_ + "thick", 0.25, 0.6);
@@ -1426,7 +1429,7 @@ namespace TheaterFx
 	// ---------------------------------------------------------------------------------------------------------------
 	// Guns
 
-	void Battle::Muzzle(double Now, const Vec& At, const Vec& Facing, const char* GunIn)
+	void Battle::Muzzle(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn)
 	{
 		std::string M = std::string("muzzle.") + (GunIn ? GunIn : "rifle") + ".";
 		if (!Has(M + "flame_m"))
@@ -1535,9 +1538,12 @@ namespace TheaterFx
 		}
 		// big guns throw a ring of dust off the ground in front
 		const double Ring_ = Num(M + "dust_ring_m", 0.0);
+		const std::string Ground = GroundIn && *GroundIn ? GroundIn : "earth";
 		if (Ring_ > 0.0)
 		{
-			const Paint P = PaintOf("earth");
+			const Paint P = PaintOf(Ground);
+			// (how much dust this ground gives against earth's, grounds.<g>.dust: sand and town more, mud little)
+			const double Dusty = Ground == "earth" ? 1.0 : std::clamp(Num("grounds." + Ground + ".dust", 0.6) / std::max(0.05, Num("grounds.earth.dust", 0.6)), 0.0, 1.6);
 			const Vec FwFlat = Vec(Fw.X, Fw.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
 			const Vec Foot0 = At + FwFlat * std::min(3.0, Ring_ * 0.3);
 			const Vec Foot(Foot0.X, Foot0.Y, Height(Foot0.X, Foot0.Y));
@@ -1565,15 +1571,220 @@ namespace TheaterFx
 				B.Flatten = 0.7;
 				B.Col = P.Dust * 0.85;
 				B.Col2 = B.Col;
-				B.Alpha = D.U(0.35, 0.5);
+				B.Alpha = std::min(0.85, D.U(0.35, 0.5) * Dusty);
 				B.FadeIn = 0.02;
 				B.Hold = 0.1;
 				B.HazeBy = 0.8;
-				B.HazeAlpha = 0.12;
+				B.HazeAlpha = 0.12 * Dusty;
 				B.Heart = 0.55;
 				Bits.push_back(B);
 			}
+			const double Veil = Num("muzzle.veil.by_ground." + Ground, 0.0);
+			if (Veil > 0.0)
+			{
+				// (art director 06:19Z, the desert: a tank or field gun's blast raises the ground round its muzzle in a veil,
+				// spread most along the line of fire, rising a metre or two, that hides the gun and its line of sight for a
+				// second or two, then thins to a haze that lingers and drifts on the one wind)
+				const DustRow& Sand = DustRowOf(Ground);
+				const std::string V = "muzzle.veil.";
+				const Span Life = Range(V + "life_s", 5.0, 8.0), R1 = Range(V + "r1_of_ring", 0.45, 0.65), Rise = Range(V + "rise_mps", 0.3, 0.7), Alpha = Range(V + "alpha", 0.7, 0.9);
+				const double Reach = Num(V + "reach_of_ring", 0.9), HideS = Num(V + "hide_s", 1.8), Haze = Num(V + "haze_alpha", 0.18), Flatten = Num(V + "flatten", 0.6);
+				const int NVeil = std::max(1, static_cast<int>(std::lround(Num(V + "puffs", 10.0) * std::sqrt(Ring_ / 6.0))));
+				for (int I = 0; I < NVeil; ++I)
+				{
+					const double Forth = Ring_ * D.U(-0.3, Reach);
+					const double Wide = D.Bell() * Ring_ * 0.4;
+					Bit B;
+					B.Form = Bit::Shape::Upright;
+					B.bHug = true;
+					B.Born = Now + D.U(0.0, 0.06);
+					B.From = Foot + FwFlat * Forth + Across * Wide;
+					B.Vel = (FwFlat * 1.0 + Across * (Wide / std::max(Ring_, 1.0))).Unit(FwFlat) * D.U(2.0, 5.0);
+					B.Drag = 1.5;
+					B.Rise = Rise.Pick(D);
+					B.Windage = Sand.Windage;
+					B.Life = Life.Pick(D);
+					B.R0 = 0.15 * Ring_;
+					B.R1 = Ring_ * R1.Pick(D);
+					B.Grow = 0.25;
+					B.Along = FwFlat;
+					B.Stretch = 1.3;
+					B.Flatten = Flatten;
+					B.Col = Sand.Low * D.U(0.95, 1.05);
+					B.Col2 = Sand.High * D.U(0.95, 1.05);
+					B.Alpha = std::min(0.95, Alpha.Pick(D) * Veil);
+					B.FadeIn = 0.04;
+					B.Hold = 0.25;
+					B.HazeBy = HideS;
+					B.HazeAlpha = Haze * Veil;
+					B.Heart = 0.7;
+					B.Inner = 0.6;
+					B.Rough = 0.3;
+					B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+					B.Turn = D.U(0.0, 2.0 * Pi);
+					if (I % 2 == 0)
+					{
+						// (every other one a low dense skirt that stays on the ground, so the gun's foot is hidden too while
+						// the billows above climb)
+						B.Rise = 0.0;
+						B.Flatten = Sand.LowFlatten;
+						B.R1 *= Sand.LowWide;
+						B.Heart = 0.85;
+						B.Inner = 0.7;
+						B.Rim = 0.2;
+					}
+					Bits.push_back(B);
+				}
+			}
 		}
+	}
+
+	const Battle::DustRow& Battle::DustRowOf(const std::string& Ground)
+	{
+		for (const DustRow& R : DustRows)
+		{
+			if (R.Ground == Ground)
+			{
+				return R;
+			}
+		}
+		const std::string P = "dust.vehicles.";
+		DustRow R;
+		R.Ground = Ground;
+		R.Share = std::max(0.0, Num(P + "by_ground." + Ground, 0.0));
+		R.LeastMps = Num(P + "least_mps", 1.0);
+		R.FullMps = std::max(R.LeastMps + 0.1, Num(P + "full_mps", 12.0));
+		R.Spacing = std::max(0.3, Num(P + "spacing_m", 2.5));
+		R.MostPerS = std::max(0.5, Num(P + "most_a_second", 4.0));
+		R.Kick = Num(P + "kick", 0.1);
+		R.Drag = Num(P + "drag", 1.0);
+		R.Windage = Num(P + "windage", 1.0);
+		R.Spread = Num(P + "spread_mps", 0.6);
+		R.FlatSlow = Num(P + "flatten.0", 0.5);
+		R.FlatFast = Num(P + "flatten.1", 0.75);
+		R.HazeBy = Num(P + "haze_by_s", 2.0);
+		R.HazeAlpha = Num(P + "haze_alpha", 0.2);
+		R.Tracked = Num(P + "tracked", 1.3);
+		R.LowShare = Clamp01(Num(P + "low_skirt.share", 0.5));
+		R.LowFlatten = Num(P + "low_skirt.flatten", 0.35);
+		R.LowWide = Num(P + "low_skirt.wide", 1.25);
+		R.LowThick = Num(P + "low_skirt.thick", 1.2);
+		R.Life = Range(P + "life_s", 4.0, 6.0);
+		R.LifeFast = Range(P + "life_fast_s", 7.0, 10.0);
+		R.R0 = Range(P + "r0_m", 0.5, 0.9);
+		R.R1 = Range(P + "r1_m", 1.5, 2.5);
+		R.R1Fast = Range(P + "r1_fast_m", 3.5, 5.0);
+		R.RiseM = Range(P + "rise_m", 1.0, 3.0);
+		R.Alpha = Range(P + "alpha", 0.35, 0.5);
+		const Rgb GroundDust = PaintOf(Ground).Dust;
+		R.Low = Picture(P + "low." + Ground, GroundDust);
+		R.High = Picture(P + "high." + Ground, GroundDust * Num(P + "colour_from_ground", 1.25));
+		DustRows.push_back(R);
+		return DustRows.back();
+	}
+
+	void Battle::VehicleDust(double Now, int Id, const Vec& At, const Vec& Velocity, const char* GroundIn, bool bTracked)
+	{
+		// The Mediterranean set (03:35Z) and the art director (06:19Z): every vehicle moving on a desert field trails pale
+		// fine dust from its dust sockets, the stony gravel's colour where it is thrown up and paler as it climbs; low
+		// and long, taller and longer at speed, drifting on the one wind, lingering, never popping. Seen from a man's
+		// eye a column's dust hides the vehicles behind its lead.
+		const DustRow& Row = DustRowOf(GroundIn && *GroundIn ? GroundIn : "earth");
+		Dusting* Du = nullptr;
+		for (Dusting& Each : Dusts)
+		{
+			if (Each.Id == Id)
+			{
+				Du = &Each;
+				break;
+			}
+		}
+		if (!Du)
+		{
+			Dusts.push_back(Dusting());
+			Du = &Dusts.back();
+			Du->Id = Id;
+		}
+		if (Now < Du->Last || Now - Du->Last > 0.5)
+		{
+			// (new, or a long silence or time going back: start laying again from here)
+			Du->Last = Now;
+			Du->At = At;
+			Du->Owed = 0.0;
+			return;
+		}
+		const Vec From = Du->At;
+		const double Then = Du->Last, Between = Now - Du->Last;
+		const Vec Path = Vec(At.X - From.X, At.Y - From.Y, 0.0);
+		Du->At = At;
+		Du->Last = Now;
+		const Vec Flat(Velocity.X, Velocity.Y, 0.0);
+		const double Speed = Flat.Length();
+		const double Busy = static_cast<double>(RoomAsked()) / std::max(1, MaxPuffs);
+		if (Row.Share <= 0.0 || Speed < Row.LeastMps || Busy > 0.85)
+		{
+			Du->Owed = 0.0;
+			return;
+		}
+		// (a puff every spacing_m along its path, no more than most_a_second; when the screen is filling, half as many)
+		const double Fast = Clamp01((Speed - Row.LeastMps) / (Row.FullMps - Row.LeastMps));
+		double Spacing = std::max(Row.Spacing, Speed / Row.MostPerS);
+		if (Busy > 0.6)
+		{
+			Spacing *= 2.0;
+		}
+		const double Long = Path.Length();
+		const Vec Ahead = Flat * (1.0 / Speed);
+		const Vec Side(-Ahead.Y, Ahead.X, 0.0);
+		const double Big = (bTracked ? Row.Tracked : 1.0) * (0.7 + 0.3 * std::min(1.0, Row.Share));
+		Dice D(++Seeds * 67867967ull ^ PlaceKey(At));
+		double Done = Spacing - std::min(Du->Owed, Spacing);
+		for (int Laid = 0; Done <= Long && Laid < 16; Done += Spacing, ++Laid)
+		{
+			const double K = Long > 1e-9 ? Done / Long : 1.0;
+			Bit B;
+			B.Form = Bit::Shape::Upright;
+			B.bHug = true;
+			B.Born = Then + Between * K;
+			B.From = From + Path * K;
+			B.Vel = Flat * Row.Kick + Side * (D.Bell() * Row.Spread);
+			B.Drag = Row.Drag;
+			B.Windage = Row.Windage;
+			B.Life = Row.Life.Pick(D) + (Row.LifeFast.Pick(D) - Row.Life.A) * Fast;
+			B.Rise = Row.RiseM.Pick(D) * (0.5 + 0.5 * Fast) / B.Life;
+			B.R0 = Row.R0.Pick(D) * Big;
+			B.R1 = (Row.R1.Pick(D) + (Row.R1Fast.Pick(D) - Row.R1.A) * Fast) * Big;
+			B.Grow = 0.4;
+			B.Along = Ahead;
+			B.Stretch = 1.3 + 0.5 * Fast;
+			B.Flatten = Row.FlatSlow + (Row.FlatFast - Row.FlatSlow) * Fast;
+			B.Col = Row.Low * D.U(0.95, 1.05);
+			B.Col2 = Row.High * D.U(0.95, 1.05);
+			B.Alpha = std::min(0.9, Row.Alpha.Pick(D) * std::min(1.0, Row.Share) * (bTracked ? 1.0 : 0.8));
+			B.FadeIn = 0.15;
+			B.Hold = 0.3;
+			B.HazeBy = Row.HazeBy;
+			B.HazeAlpha = Row.HazeAlpha * std::min(1.0, Row.Share);
+			B.Heart = 0.6;
+			B.Inner = 0.55;
+			B.Rough = 0.25;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			if (D.U() < Row.LowShare)
+			{
+				// (a low dense skirt along the ground, wider than the billows: the trail's body, thick from the ground to
+				// a vehicle's height, so what drives in it is hidden; the billows above it are the soft tall part)
+				B.Flatten = Row.LowFlatten;
+				B.R1 *= Row.LowWide;
+				B.Alpha = std::min(0.95, B.Alpha * Row.LowThick);
+				B.HazeAlpha = std::min(B.Alpha, B.HazeAlpha * Row.LowThick);
+				B.Heart = 0.85;
+				B.Inner = 0.7;
+				B.Rim = 0.2;
+			}
+			Bits.push_back(B);
+		}
+		Du->Owed = std::fmod(Du->Owed + Long, Spacing);
 	}
 
 	void Battle::Shots(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond, const char* GroundIn)
@@ -1950,7 +2161,7 @@ namespace TheaterFx
 				}
 				const Vec Across = Dir.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
 				const Vec Over = Across.Cross(Dir).Unit(ZUp);
-				const int Licks = static_cast<int>(std::lround(Row.CloseLicks.Pick(D)));
+				const int Licks = static_cast<int>(std::lround(std::clamp(Row.CloseLicks.Pick(D), 0.0, 8.0)));
 				for (int I = 0; I < Licks; ++I)
 				{
 					const double A = D.U(0.0, 2.0 * Pi);
@@ -2010,13 +2221,13 @@ namespace TheaterFx
 			L.bNightOnly = true;
 			Flashes.push_back(L);
 		}
-		if (Row.CaseM > 0.0 && bEyeKnown && (LastEye - At).Length() < Row.CasesWithin && Bits.size() + TwinBits < static_cast<size_t>(MaxPuffs) * 3 / 5)
+		if (Row.CaseM > 0.0 && bEyeKnown && (LastEye - At).Length() < Row.CasesWithin && RoomAsked() < static_cast<size_t>(MaxPuffs) * 3 / 5)
 		{
 			Spent(T, At, Dir, Carry, Row, D); // (the close view only, and the first thing left out when the room fills)
 		}
 		// gun smoke: a thin grey wisp left hanging in the air where the gun was, so a firing wing trails a short
 		// smoky line behind it
-		if (bSmoke && Row.SmokeAlpha > 0.0 && Bits.size() + TwinBits < static_cast<size_t>(MaxPuffs) * 4 / 5) // (the first thing shed when the room fills; a twin counts its two slots)
+		if (bSmoke && Row.SmokeAlpha > 0.0 && RoomAsked() < static_cast<size_t>(MaxPuffs) * 4 / 5) // (the first thing shed when the room fills; a twin counts its two slots)
 		{
 			Bit B;
 			B.Born = T + 0.01;
@@ -2173,11 +2384,11 @@ namespace TheaterFx
 		}
 		// the hot heart right at the muzzle, laid last so it is pale over the orange (and from the strategy camera never
 		// under flash_least_px: a twinkle)
-		Lick(At + Dir * (Len * 0.1), Dir, Len * (bHot ? 0.19 : 0.15), 1.4, bHot ? Rgb::FromPicture(255, 250, 230) : CannonHeartCol, bHot ? Row.FlashHot : CannonHeartCol.Mix(FlameCol, 0.5), 1.0, bHot ? 1.0 : 0.95, bHot ? 0.7 : 0.35, 0.2);
+		Lick(At + Dir * (Len * 0.1), Dir, Len * (bHot ? 0.19 : 0.15), 1.4, bHot ? Rgb::FromPicture(255, 252, 238) : CannonHeartCol, bHot ? Rgb::FromPicture(255, 246, 205) : CannonHeartCol.Mix(FlameCol, 0.5), 1.0, bHot ? 1.0 : 0.95, bHot ? 0.7 : 0.35, 0.2);
 		if (bHot)
 		{
 			Bits.back().Edge = Row.FlashHot;
-			Bits.back().EdgeK = 0.5;
+			Bits.back().EdgeK = 0.35; // (art director 06:34Z: the cannon's core at least as white as the heavy machine gun's root)
 			Bits.back().Nearer = 0.5; // (the white core over its own orange)
 		}
 		Bits.back().LeastPx = Row.FlashLeastPx;
@@ -2985,7 +3196,7 @@ namespace TheaterFx
 		if (K == "explode")
 		{
 			const Span Row = Range(P + (bBomber ? "bomber" : "fighter"), bBomber ? 60.0 : 30.0, bBomber ? 100.0 : 50.0);
-			const int Count = static_cast<int>(std::lround(Row.Pick(D)));
+			const int Count = static_cast<int>(std::lround(std::clamp(Row.Pick(D), 0.0, 400.0))); // (held: a slip of the recipe never floods the frame)
 			const double Heavy = Clamp01(Num(P + "heavy_share", 0.12));
 			const Span Throw = Range(P + "throw_mps", 8.0, 35.0);
 			for (int I = 0; I < Count; ++I)
@@ -2998,12 +3209,12 @@ namespace TheaterFx
 		}
 		if (K == "spin")
 		{
-			Fa.Left = static_cast<int>(std::lround(Range(P + "spin_sheds", 2.0, 5.0).Pick(D)));
+			Fa.Left = static_cast<int>(std::lround(std::clamp(Range(P + "spin_sheds", 2.0, 5.0).Pick(D), 0.0, 64.0)));
 			Fa.bWing = D.U() < Clamp01(Num(P + "wing_odds", 0.35));
 		}
 		else
 		{
-			Fa.Left = static_cast<int>(std::lround(Range(P + "burn_sheds", 5.0, 10.0).Pick(D)));
+			Fa.Left = static_cast<int>(std::lround(std::clamp(Range(P + "burn_sheds", 5.0, 10.0).Pick(D), 0.0, 64.0)));
 		}
 		Fa.Next = Now + Range(P + "first_s", 0.3, 1.5).Pick(D);
 		Fa.Seed = static_cast<uint64_t>(D.U() * 9007199254740991.0) ^ Fa.Seed;
@@ -3062,7 +3273,7 @@ namespace TheaterFx
 		double Sink = 10.0;
 		if (Sort == 2)
 		{
-			const double Chord = Num(P + "wing_chord_of_span", 0.17) * SpanM;
+			const double Chord = std::max(0.05, Num(P + "wing_chord_of_span", 0.17) * SpanM); // (held over a least, as case_d_m is: a chord of 0 divided by nought)
 			B.R0 = B.R1 = 0.5 * Chord;
 			B.Stretch = std::max(1.0, 0.45 * SpanM / Chord);
 			B.Rough = 0.15;
@@ -3143,8 +3354,8 @@ namespace TheaterFx
 		const double CoolBy = std::max(0.02, Num(P + "cool_by_s", 0.25));
 		const double LobeRim = Clamp01(Num(P + "rim", 0.85)), LobeRough = Clamp01(Num(P + "rough", 0.35));
 		const double EdgeShare = Clamp01(Num(P + "edge", 0.5)), TwinPx = std::max(0.0, Num(P + "twin_px", 40.0));
-		const int Lobes = static_cast<int>(std::lround(Range(P + "lobes", 18.0, 28.0).Pick(D)));
-		const int Ways = std::max(1, static_cast<int>(std::lround(Range(P + "tears", 2.0, 4.0).Pick(D))));
+		const int Lobes = static_cast<int>(std::lround(std::clamp(Range(P + "lobes", 18.0, 28.0).Pick(D), 0.0, 200.0)));
+		const int Ways = static_cast<int>(std::lround(std::clamp(Range(P + "tears", 2.0, 4.0).Pick(D), 1.0, 16.0)));
 		const Span Life = Range(P + "life_s", 0.25, 0.6), Reach = Range(P + "reach_of_span", 0.3, 0.9), R = Range(P + "r_of_span", 0.05, 0.12);
 		const Span SmokeS = Range(P + "smoke_s", 5.0, 9.0), SmokeGrow = Range(P + "smoke_grow", 5.0, 7.0);
 		std::vector<Vec> Tears;
@@ -3153,7 +3364,7 @@ namespace TheaterFx
 			Tears.push_back(Vec(D.Bell(), D.Bell(), D.Bell()).Unit(ZUp));
 		}
 		// (the white heart, broken along the tears so it follows the clumps, never one flat disc: art director 06:09Z)
-		const int Hearts = std::max(1, static_cast<int>(std::lround(Num(P + "hearts", 3.0))));
+		const int Hearts = static_cast<int>(std::lround(std::clamp(Num(P + "hearts", 3.0), 1.0, 32.0)));
 		const double HeartR = Num(P + "heart_r_of_span", 0.11);
 		for (int I = 0; I < Hearts; ++I)
 		{
@@ -3712,6 +3923,7 @@ namespace TheaterFx
 		Firings.erase(std::remove_if(Firings.begin(), Firings.end(), [Now](const Firing& F) { return Now - F.Last > 30.0; }), Firings.end());
 		Trails.erase(std::remove_if(Trails.begin(), Trails.end(), [Now](const Trailing& T) { return Now - T.Last > 30.0; }), Trails.end()); // (stopped, or left on and never moved again)
 		Falls.erase(std::remove_if(Falls.begin(), Falls.end(), [Now](const Falling& Fa) { return Fa.Left <= 0 || Now - Fa.Last > 30.0; }), Falls.end()); // (all its pieces shed, or never moved again)
+		Dusts.erase(std::remove_if(Dusts.begin(), Dusts.end(), [Now](const Dusting& Du) { return Now - Du.Last > 10.0; }), Dusts.end()); // (a vehicle gone, or stopped calling)
 		Knocks.erase(std::remove_if(Knocks.begin(), Knocks.end(), [Now](const Knock& J) { return Now > J.Born + 1.0; }), Knocks.end());
 		Sources.erase(std::remove_if(Sources.begin(), Sources.end(), [Now](const Source& S) { return Now > S.End; }), Sources.end());
 	}
@@ -4362,7 +4574,6 @@ namespace TheaterFx
 			{
 				continue;
 			}
-			TwinBits += B.TwinPx > 0.0 ? 1u : 0u;
 			const Vec At = Where(B, Now - B.Born);
 			if ((At - Eye.Eye).Length() > (B.bKeep ? KeepBeyond : Beyond))
 			{
@@ -4370,6 +4581,7 @@ namespace TheaterFx
 				// never filled, and the barrage in front of the eye was cut for it. The pre-check, 05:33Z)
 				continue;
 			}
+			TwinBits += B.TwinPx > 0.0 ? 1u : 0u; // (a far twin is not counted either)
 			// (counted first when the room is short: an oil fire's kept column, and every light: flames, flashes and
 			// tracers are few and are what an air fight is read by from far off, so its smoke is what goes. The
 			// pre-check, 05:14Z: by depth alone the far side of a fight went bare, flames and all)
@@ -4405,6 +4617,8 @@ namespace TheaterFx
 			}
 			Spans.resize(Put + 1);
 		}
+		InSight = Sorted.size();
+		HeldAtDraw = Bits.size();
 		for (const Bit& B : Roots)
 		{
 			Sorted.push_back(Order{ &B, (B.From - Eye.Eye).Dot(Eye.Forward), false });

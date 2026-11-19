@@ -45,7 +45,7 @@ private:
  * and life like... like im in it and watching a movie at the same time").
  *
  * It knows nothing of the scene it is put in. Give it a parent to hang its mesh and lamps on, how many world units
- * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, Burn); and
+ * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, VehicleDust, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, Burn); and
  * tick it once a frame with the eye. It draws everything as soft puffs in one procedural mesh with the campaign map's
  * own M_Highlight (see-through, unlit, coloured by its points), the same shape of puff as the map's smoke, so no new
  * material is needed; flashes light the ground with at most two point lamps (game.max_lamps), shadowless.
@@ -81,8 +81,15 @@ public:
 	/** An armour-piercing round that misses and skips along Heading: a low spurt of earth, no crown, no crater. */
 	void Skip(const FVector& WorldAt, const FVector& Heading, const FString& Ground);
 	/** A gun firing: its muzzle at WorldAt, pointing along Facing. Gun is "rifle", "mg", "tank_gun", "at_gun",
-	 * "howitzer" or "mortar". */
-	void Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun);
+	 * "howitzer" or "mortar". Ground is what its blast throws up: on "sand" a tank or field gun's shot (a towed gun's
+	 * `muzzle` socket too) raises a veil of dust that hides the gun and its line of sight for a second or two. */
+	void Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun, const FString& Ground = TEXT("earth"));
+	/** Dust behind a moving vehicle: every frame, for each of its dust sockets ("dust.left", "dust.right"), where the
+	 * socket is and the vehicle's velocity (world units a second). Id: any number that stays the same for that socket
+	 * (the vehicle's number times two, plus one for the right). Ground is the ground it drives on ("sand" throws the
+	 * most; snow, mud and water none); bTracked for tanks and half-tracks, which throw more than wheels. Nothing when
+	 * it stands still; low, long and lingering at speed, drifting on the wind. */
+	void VehicleDust(int32 Id, const FVector& SocketAt, const FVector& Velocity, const FString& Ground, bool bTracked = true);
 	/** Rounds fired by one gun (any number that stays the same for that gun) toward To: every fifth a tracer. Ground
 	 * is what they strike, for the little dust spurts there ("earth" if left out). */
 	void Shots(int32 Gun, const FVector& From, const FVector& To, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground = TEXT("earth"));

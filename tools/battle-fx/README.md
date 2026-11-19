@@ -38,6 +38,13 @@ Blasts->Shell(Where, TEXT("howitzer"), TEXT("earth"), /*bOnArmour*/ false);
 // a machine gun's burst at a target (Ground: what the rounds kick up, earth if left out)
 Blasts->Shots(Gun, Muzzle, Target, TEXT("mg"), 25, 15.0f, TEXT("snow"));
 
+// a tank or towed gun firing on the desert (Ground: what its blast throws up, earth if left out)
+Blasts->Muzzle(MuzzleSocket, Facing, TEXT("tank_gun"), TEXT("sand"));
+
+// every frame, each moving vehicle's two dust sockets (dust.left, dust.right); Id the vehicle's number * 2 (+1 right)
+Blasts->VehicleDust(Vehicle * 2, LeftSocket, Velocity, TEXT("sand"), /*bTracked*/ true);
+Blasts->VehicleDust(Vehicle * 2 + 1, RightSocket, Velocity, TEXT("sand"), true);
+
 // EndPlay
 if (Blasts) { Blasts->End(); Blasts.Reset(); }
 ```
@@ -89,6 +96,34 @@ takes it as FX_SUNLIGHT=r,g,b.
 Names given to the kit (size, ground, calibre, gun, weapon, air gun kind) are matched in lower case, as in the recipe:
 `howitzer`, `snow`, `bomb250`, `hmg`. The wrapper lowers them, so `Snow` finds snow; a name the recipe does not have
 falls back (an unknown ground to earth, an unknown size to how105, an unknown air gun to hmg).
+
+## Desert dust
+
+From the Mediterranean set (03:35Z) and the art director (06:19Z): on a desert field everything that moves or fires
+raises dust, and that dust hides things.
+
+- Vehicles (`dust.vehicles`): `VehicleDust` every frame for each dust socket lays a puff every `spacing_m` along its
+  path (no more than `most_a_second`). Pale fine dust: the ground's colour where it is thrown up (`low`; sand the
+  stony gravel 170,140,106) going paler as it climbs (`high`; sand 214,188,138; other grounds their `paint.dust`, and
+  `colour_from_ground` times it in the air). Low and long, drifting on the one wind (`SetWind`), lingering: dense for
+  `haze_by_s`, then a thin haze to its end. Taller and longer at speed: between `least_mps` and `full_mps` the puffs
+  grow from `r1_m` to `r1_fast_m`, `flatten` from 0.6 to 0.9 and `life_s` to `life_fast_s`. Half are low dense skirts
+  (`low_skirt`), thick from the ground to a vehicle's height, under the soft tall billows. Tracks throw `tracked` times
+  more than wheels. `by_ground` scales it: sand 1, earth 0.55, town 0.5, woods 0.25; snow, mud and water none. Standing
+  still, nothing. Past three fifths of the room a trail lays half as many; past `0.85` none.
+- Guns (`muzzle.veil`): `Muzzle(..., Ground)` on a ground in `veil.by_ground` (sand) raises a veil from a gun with a
+  `dust_ring_m` (tank, anti-tank, howitzer; a towed gun's `muzzle` socket too), spread along the line of fire and
+  round the gun, every other puff a low skirt. It hides the gun and its line of sight for `hide_s`, then thins to
+  `haze_alpha` and lingers on the wind. The ring itself takes the ground's own paint, as thick as its
+  `grounds.<g>.dust` against earth's (on earth exactly as before).
+- Pass check, at a man's eye (1.7 m): a column of four tanks at 10 m/s, 30 m apart, seen from 70 m ahead and 10 m off
+  its line: the lead in the clear, the three behind it 0 to 16% visible through its dust (the same with the dust blown
+  across or toward the eye). A towed anti-tank gun seen 45 m down its line of fire: 1 to 8% visible for 1.5 s after a
+  shot, 24% at 2 s, 85% at 5 s.
+- The preview: `./fxpreview recipe.txt out drive sand 0,60 960x540 eye` (shots `eye`, `side`, `high`, `gun`;
+  `FX_SPEED`, `FX_GAP`, `FX_VEHICLES`, `FX_WHEELS=1`, `FX_FIRE=1`, `FX_EVERY`, `FX_AHEAD`, `FX_OFF`, `FX_WIND_X`,
+  `FX_WIND_Y`). Each frame prints how much of each vehicle, or the gun, still shows through the dust in front of it.
+- The bleached, hazy horizon of a desert day is the grade's, not the kit's.
 
 ## Oil fires at sea
 

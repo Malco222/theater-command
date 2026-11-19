@@ -281,11 +281,19 @@ void FBattleEffects::Skip(const FVector& WorldAt, const FVector& Heading, const 
 	}
 }
 
-void FBattleEffects::Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun)
+void FBattleEffects::Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun, const FString& Ground)
 {
 	if (IsReady())
 	{
-		Core.Muzzle(Time(), ToFx(WorldAt), ToFxWay(Facing), Named(Gun).c_str());
+		Core.Muzzle(Time(), ToFx(WorldAt), ToFxWay(Facing), Named(Gun).c_str(), Named(Ground).c_str());
+	}
+}
+
+void FBattleEffects::VehicleDust(int32 Id, const FVector& SocketAt, const FVector& Velocity, const FString& Ground, bool bTracked)
+{
+	if (IsReady())
+	{
+		Core.VehicleDust(Time(), Id, ToFx(SocketAt), ToFx(Velocity), Named(Ground).c_str(), bTracked);
 	}
 }
 

@@ -1232,7 +1232,34 @@
    "smoke": "a short puff up the tube's line",
    "smoke_s": 2.5
   },
-  "_day_lamp": "By day only rows with day_lamp light the ground (at game.day_lamp_share); tank guns, anti-tank guns, machine guns, rifles and mortars do not (art director 21:16Z)."
+  "_day_lamp": "By day only rows with day_lamp light the ground (at game.day_lamp_share); tank guns, anti-tank guns, machine guns, rifles and mortars do not (art director 21:16Z).",
+  "veil": {
+   "_how": "Art director 06:19Z, the desert: a tank or field gun's shot (any row with dust_ring_m; a towed gun's muzzle socket too) raises the ground round the muzzle in a veil spread along the line of fire, rising a metre or two (every other puff a low dense skirt on the ground, dust.vehicles.low_skirt), that hides the gun and its line of sight for hide_s, then thins to haze_alpha and lingers on the wind. by_ground: where it rises (and how thick); the ring itself takes the ground's own paint and grounds.<g>.dust against earth's.",
+   "by_ground": {
+    "sand": 1.0
+   },
+   "puffs": 10,
+   "reach_of_ring": 0.9,
+   "life_s": [
+    5,
+    8
+   ],
+   "r1_of_ring": [
+    0.45,
+    0.65
+   ],
+   "rise_mps": [
+    0.1,
+    0.35
+   ],
+   "alpha": [
+    0.7,
+    0.9
+   ],
+   "hide_s": 2.2,
+   "haze_alpha": 0.18,
+   "flatten": 0.6
+  }
  },
  "bullet_strike": {
   "_how": "Art director 21:16Z: small dust spurts where a burst's rounds strike the ground (Shots, given the ground). About three rounds in ten kick one (pre-check 21:34Z: at one in two a firing gun cost about 16 puffs): a quick upward spurt and a low puff in the ground's dust colour, gone in under a second, scattered about the aim point by spread_mil of the range.",
@@ -1789,21 +1816,84 @@
  },
  "dust": {
   "vehicles": {
+   "_how": "Mediterranean set 03:35Z and art director 06:19Z: every vehicle moving on dry ground trails dust from its dust sockets (dust.left, dust.right; VehicleDust every frame). Pale fine dust, the ground's own colour where it is thrown up (low) going paler as it climbs (high); low and long, drifting on the one wind (SetWind), lingering, never popping; taller and longer at speed (flatten, r1_m to r1_fast_m, life_s to life_fast_s between least_mps and full_mps); tracks throw tracked times more than wheels. A puff every spacing_m (no more than most_a_second); dense for haze_by_s, then a thin haze to its end. by_ground scales it; a ground not listed throws none. Pass check: from a 1.7 m eye a column's dust hides the vehicles behind its lead.",
    "when": "dry ground and roads, not snow, mud or wet weather",
+   "by_ground": {
+    "sand": 1.0,
+    "earth": 0.55,
+    "town": 0.5,
+    "woods": 0.25,
+    "snow": 0,
+    "mud": 0,
+    "water": 0
+   },
+   "low": {
+    "sand": [
+     170,
+     140,
+     106
+    ]
+   },
+   "high": {
+    "sand": [
+     214,
+     188,
+     138
+    ]
+   },
    "colour_from_ground": 1.25,
-   "trail_m": [
-    8,
-    20
-   ],
-   "rise_m": [
-    1,
-    3
-   ],
-   "linger_s": [
+   "_colour": "Sand: the stony gravel 170,140,106 where it is thrown up, the pale sand 214,188,138 in the air (Mediterranean 03:35Z, art director 06:19Z). Other grounds: their paint.dust, and colour_from_ground times it in the air.",
+   "least_mps": 1.0,
+   "full_mps": 12,
+   "spacing_m": 2.5,
+   "most_a_second": 4,
+   "kick": 0.1,
+   "drag": 1.0,
+   "spread_mps": 0.6,
+   "windage": 1.0,
+   "life_s": [
     4,
     6
    ],
-   "tracks_more_than_wheels": true
+   "life_fast_s": [
+    7,
+    10
+   ],
+   "r0_m": [
+    0.5,
+    0.9
+   ],
+   "r1_m": [
+    1.5,
+    2.5
+   ],
+   "r1_fast_m": [
+    5,
+    7
+   ],
+   "flatten": [
+    0.6,
+    0.9
+   ],
+   "rise_m": [
+    2,
+    5
+   ],
+   "alpha": [
+    0.55,
+    0.75
+   ],
+   "haze_by_s": 3.5,
+   "haze_alpha": 0.3,
+   "tracked": 1.3,
+   "tracks_more_than_wheels": true,
+   "low_skirt": {
+    "_how": "Of every puff, share is a low dense skirt (flatten, wider by wide, thicker by thick): the trail's body, thick from the ground to a vehicle's height so what drives in it is hidden; the rest are the soft tall billows.",
+    "share": 0.5,
+    "flatten": 0.35,
+    "wide": 1.25,
+    "thick": 1.2
+   }
   },
   "men_going_down": {
    "puff": "a small low puff at each man who throws himself flat",

@@ -8,6 +8,15 @@
 //     (size "mg": a machine gun's burst from 30 m away into the ground there, in place of a shell; FX_MG_VIEW=side|behind)
 //   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|close|far|target|hit|trail|wake|map|fall]
 //   ./fxpreview /tmp/recipe.txt <out folder> oil <sunk|burning|horizon> <frames> [WxH]
+//   ./fxpreview /tmp/recipe.txt <out folder> drive <sand|earth|...> <frames> [WxH] [eye|side|high|gun]
+//
+// The drive shot (the desert dust): a column of FX_VEHICLES (4) tanks, FX_GAP m (30) apart, driving along +X at
+// FX_SPEED m/s (10) on a stony desert ("sand"), FX_RUN s (12) before the first frame, each laying dust from its two
+// rear sockets (FX_WHEELS=1: wheeled). "eye" is a man's eye, 1.7 m up, FX_AHEAD m (70) ahead of the lead and FX_OFF m
+// (10) off the line; "side" FX_OFF m (70) abeam; "high" from 30 m up. FX_FIRE=1: the lead's gun fires at 0 s (again
+// every FX_EVERY s). "gun": a towed anti-tank gun firing along +X at 0 s, seen at a man's eye FX_AHEAD m (45) down its
+// line of fire and FX_OFF m (6) off it. The wind is FX_WIND_X, FX_WIND_Y m/s (1.6, 0.4, the game's own). Each frame prints how much of
+// each vehicle (or the gun) still shows through the dust in front of it.
 //
 // The oil shot: one oil fire on a flat sea (FX_REACH metres of oil, 100; seen from FX_DIST metres off, 1200, at
 // FX_EYE_H metres, 8, looking at FX_LOOK_H metres up its column, 150), or "horizon": three fires 3, 6 and 9 km off.
@@ -94,6 +103,8 @@ namespace
 	{
 		int W = 960, H = 540;
 		std::vector<double> R, G, B, Depth;
+		std::vector<double> Seen; // (how much of what is solid at a pixel still shows through the puffs in front of it)
+		std::vector<int> Owner; // (which solid thing a pixel shows: a vehicle's number, or -1)
 		void Init(int InW, int InH)
 		{
 			W = InW;
@@ -102,6 +113,8 @@ namespace
 			G = R;
 			B = R;
 			Depth.assign(static_cast<size_t>(W * H), 1e30);
+			Seen.assign(static_cast<size_t>(W * H), 1.0);
+			Owner.assign(static_cast<size_t>(W * H), -1);
 		}
 		void Save(const std::string& Path) const
 		{
@@ -145,12 +158,12 @@ namespace
 		return 0.5 + 0.3 * A * 0.5 + 0.2 * B;
 	}
 
-	void Paint(Canvas& C, const Camera& Cam, const Battle::Lamp* Lamps, int NLamps, const std::vector<Vec>& Men, bool bSnow, bool bSea = false)
+	void Paint(Canvas& C, const Camera& Cam, const Battle::Lamp* Lamps, int NLamps, const std::vector<Vec>& Men, bool bSnow, bool bSea = false, bool bSand = false)
 	{
 		// (grass, or a snowfield under a snow hit, so that a white skirt is judged on white; or the open sea, flat, for
-		// the oil fires, its haze drawn out to kilometres)
-		const double GrassA[3] = { ToLinear(bSea ? 58 : bSnow ? 226 : 124), ToLinear(bSea ? 80 : bSnow ? 230 : 132), ToLinear(bSea ? 98 : bSnow ? 236 : 74) };
-		const double GrassB[3] = { ToLinear(bSea ? 44 : bSnow ? 196 : 98), ToLinear(bSea ? 64 : bSnow ? 202 : 96), ToLinear(bSea ? 82 : bSnow ? 212 : 60) };
+		// the oil fires, its haze drawn out to kilometres; or a stony desert, for the desert dust)
+		const double GrassA[3] = { ToLinear(bSand ? 192 : bSea ? 58 : bSnow ? 226 : 124), ToLinear(bSand ? 166 : bSea ? 80 : bSnow ? 230 : 132), ToLinear(bSand ? 124 : bSea ? 98 : bSnow ? 236 : 74) };
+		const double GrassB[3] = { ToLinear(bSand ? 158 : bSea ? 44 : bSnow ? 196 : 98), ToLinear(bSand ? 132 : bSea ? 64 : bSnow ? 202 : 96), ToLinear(bSand ? 100 : bSea ? 82 : bSnow ? 212 : 60) };
 		const double Haze[3] = { ToLinear(206), ToLinear(214), ToLinear(222) };
 		for (int Y = 0; Y < C.H; ++Y)
 		{
@@ -290,12 +303,13 @@ namespace
 				C.R[I] = C.R[I] * (1.0 - A) + Cr * A;
 				C.G[I] = C.G[I] * (1.0 - A) + Cg * A;
 				C.B[I] = C.B[I] * (1.0 - A) + Cb * A;
+				C.Seen[I] *= 1.0 - std::min(1.0, A);
 			}
 		}
 	}
 
 	/** A flat-coloured triangle that hides what is behind it (the aircraft in the air shot). */
-	void Solid(Canvas& C, const Camera& Cam, const Vec P[3], const double Col[3])
+	void Solid(Canvas& C, const Camera& Cam, const Vec P[3], const double Col[3], int Who = -1)
 	{
 		double Sx[3], Sy[3], Z[3];
 		for (int K = 0; K < 3; ++K)
@@ -336,6 +350,7 @@ namespace
 				C.G[I] = Col[1];
 				C.B[I] = Col[2];
 				C.Depth[I] = Deep;
+				C.Owner[I] = Who;
 			}
 		}
 	}
@@ -894,6 +909,158 @@ namespace
 	}
 }
 
+namespace
+{
+	/** A plain box standing on the ground (a vehicle, a towed gun), its faces shaded flat; Who marks its pixels. */
+	void Box(Canvas& C, const Camera& Cam, const Vec& Foot, const Vec& Way, double Long, double Wide, double High, const double Col[3], int Who)
+	{
+		const Vec Fw = Vec(Way.X, Way.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
+		const Vec Rt(Fw.Y, -Fw.X, 0.0);
+		const Vec Up(0.0, 0.0, 1.0);
+		auto Corner = [&](int F, int R, int U) { return Foot + Fw * (Long * (F ? 0.5 : -0.5)) + Rt * (Wide * (R ? 0.5 : -0.5)) + Up * (U ? High : 0.0); };
+		struct Face { int A[4][3]; double Shade; };
+		const Face Faces[5] = {
+			{ { { 0, 0, 1 }, { 1, 0, 1 }, { 1, 1, 1 }, { 0, 1, 1 } }, 1.15 }, // top
+			{ { { 1, 0, 0 }, { 1, 1, 0 }, { 1, 1, 1 }, { 1, 0, 1 } }, 0.9 }, // front
+			{ { { 0, 0, 0 }, { 0, 1, 0 }, { 0, 1, 1 }, { 0, 0, 1 } }, 0.75 }, // back
+			{ { { 0, 0, 0 }, { 1, 0, 0 }, { 1, 0, 1 }, { 0, 0, 1 } }, 0.85 }, // left
+			{ { { 0, 1, 0 }, { 1, 1, 0 }, { 1, 1, 1 }, { 0, 1, 1 } }, 0.7 }, // right
+		};
+		for (const Face& F : Faces)
+		{
+			const double Shaded[3] = { Col[0] * F.Shade, Col[1] * F.Shade, Col[2] * F.Shade };
+			Vec Q[4];
+			for (int K = 0; K < 4; ++K)
+			{
+				Q[K] = Corner(F.A[K][0], F.A[K][1], F.A[K][2]);
+			}
+			const Vec T1[3] = { Q[0], Q[1], Q[2] };
+			const Vec T2[3] = { Q[0], Q[2], Q[3] };
+			Solid(C, Cam, T1, Shaded, Who);
+			Solid(C, Cam, T2, Shaded, Who);
+		}
+	}
+
+	/** The desert dust (see the top of the file): a column driving, or a towed gun firing. */
+	int Drive(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Ground, std::vector<int> Frames, int W, int H, const std::string& Shot)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		Battle Fx;
+		Fx.Setup(&Book, &Swell, nullptr, 3u);
+		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0)); // (the game's own wind until a scene sets one)
+		const double Speed = EnvNum("FX_SPEED", 10.0), Gap = EnvNum("FX_GAP", 30.0);
+		const int NCars = Shot == "gun" ? 0 : std::max(1, static_cast<int>(EnvNum("FX_VEHICLES", 4.0)));
+		const bool bTracked = std::getenv("FX_WHEELS") == nullptr;
+		const double CarL = 6.0, CarW = 2.9, CarH = 2.4;
+		auto Ground_ = [](double X, double Y) { return Vec(X, Y, Swell(nullptr, X, Y)); };
+		auto CarAt = [&](int I, double T) { return Ground_(Speed * T - Gap * I, 0.0); };
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(std::atan(18.0 / 35.0)));
+		Vec Look;
+		const Vec GunAt = Ground_(0.0, 0.0);
+		if (Shot == "gun")
+		{
+			// (a towed gun firing along +X, seen from FX_AHEAD m down its line of fire and FX_OFF m off it, at a man's eye)
+			Cam.Eye = Ground_(EnvNum("FX_AHEAD", 45.0), EnvNum("FX_OFF", 6.0)) + Vec(0.0, 0.0, 1.7);
+			Look = GunAt + Vec(0.0, 0.0, 0.9);
+		}
+		else if (Shot == "side")
+		{
+			Cam.Eye = Ground_(-Gap * 1.5, -EnvNum("FX_OFF", 70.0)) + Vec(0.0, 0.0, 1.7);
+			Look = Ground_(-Gap * 1.5, 0.0) + Vec(0.0, 0.0, 2.0);
+		}
+		else if (Shot == "high")
+		{
+			Cam.Eye = Ground_(40.0, -40.0) + Vec(0.0, 0.0, 30.0);
+			Look = Ground_(-Gap * 1.5, 0.0);
+		}
+		else
+		{
+			// ("eye": a man standing FX_AHEAD m ahead of the lead and FX_OFF m off the column's line, the column coming on)
+			Cam.Eye = Ground_(EnvNum("FX_AHEAD", 70.0), -EnvNum("FX_OFF", 10.0)) + Vec(0.0, 0.0, 1.7);
+			Look = Ground_(-Gap, 0.0) + Vec(0.0, 0.0, 1.5);
+		}
+		Cam.Forward = (Look - Cam.Eye).Unit();
+		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+		Battle::View View;
+		View.Eye = Cam.Eye;
+		View.Right = Cam.Right;
+		View.Up = Cam.Up;
+		View.Forward = Cam.Forward;
+		View.PixelsPerRadian = Cam.Ppr;
+		const double Every = EnvNum("FX_EVERY", 0.0); // (the gun fires again every this many seconds; 0: once)
+		const bool bFire = Shot == "gun" || std::getenv("FX_FIRE") != nullptr;
+		std::sort(Frames.begin(), Frames.end());
+		const double T0 = Shot == "gun" ? -0.2 : -EnvNum("FX_RUN", 12.0);
+		Fx.Draw(T0 - 0.1, View);
+		double NextShot = 0.0;
+		int Tick = 0;
+		for (int Frame : Frames)
+		{
+			const double Now = Frame / 30.0;
+			for (double T = T0 + Tick / 30.0; T <= Now + 1e-9; T = T0 + (++Tick) / 30.0)
+			{
+				for (int I = 0; I < NCars; ++I)
+				{
+					const Vec At = CarAt(I, T);
+					for (int Side = 0; Side < 2; ++Side)
+					{
+						const Vec Socket = At + Vec(-CarL * 0.5, Side ? 1.2 : -1.2, 0.3);
+						Fx.VehicleDust(T, I * 2 + Side, Socket, Vec(Speed, 0.0, 0.0), Ground.c_str(), bTracked);
+					}
+				}
+				if (bFire && T >= NextShot && NextShot >= 0.0)
+				{
+					const Vec Muzzle = Shot == "gun" ? GunAt + Vec(2.2, 0.0, 1.0) : CarAt(0, T) + Vec(CarL * 0.5 + 2.0, 0.0, 2.0);
+					Fx.Muzzle(T, Muzzle, Vec(1.0, 0.0, 0.0), Shot == "gun" ? "at_gun" : "tank_gun", Ground.c_str());
+					NextShot = Every > 0.0 ? NextShot + Every : -1.0;
+				}
+				Fx.Draw(T, View);
+			}
+			const int N = Fx.Draw(Now, View);
+			Battle::Lamp Lamps[2];
+			const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight));
+			Canvas C;
+			C.Init(W, H);
+			Paint(C, Cam, Lamps, NL, std::vector<Vec>(), Ground == "snow", false, Ground == "sand");
+			const double Hull[3] = { ToLinear(84), ToLinear(80), ToLinear(64) };
+			for (int I = 0; I < NCars; ++I)
+			{
+				Box(C, Cam, CarAt(I, Now), Vec(1.0, 0.0, 0.0), CarL, CarW, CarH, Hull, I);
+			}
+			if (Shot == "gun")
+			{
+				Box(C, Cam, GunAt, Vec(1.0, 0.0, 0.0), 2.6, 1.9, 1.2, Hull, 0);
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/drive-%s-%s-f%03d.ppm", OutDir.c_str(), Shot.c_str(), Ground.c_str(), Frame);
+			C.Save(Name);
+			// (how much of each vehicle, or the gun, still shows through the dust in front of it)
+			std::printf("frame %d: %d puffs", Frame, N);
+			for (int I = 0; I < std::max(NCars, Shot == "gun" ? 1 : 0); ++I)
+			{
+				double Sum = 0.0;
+				int Px = 0;
+				for (size_t K = 0; K < C.Owner.size(); ++K)
+				{
+					if (C.Owner[K] == I)
+					{
+						Sum += C.Seen[K];
+						++Px;
+					}
+				}
+				std::printf(" | %s %d: %d px, %.0f%% seen", Shot == "gun" ? "gun" : "vehicle", I + 1, Px, Px ? 100.0 * Sum / Px : 0.0);
+			}
+			std::printf("\n");
+		}
+		return 0;
+	}
+}
+
 int main(int Argc, char** Argv)
 {
 	if (Argc < 6)
@@ -941,6 +1108,10 @@ int main(int Argc, char** Argv)
 	if (Size == "oil")
 	{
 		return Oil(Book, OutDir, Ground, Frames, W, H);
+	}
+	if (Size == "drive")
+	{
+		return Drive(Book, OutDir, Ground, Frames, W, H, Argc > 7 ? Argv[7] : "eye");
 	}
 	if (Size == "air")
 	{
