@@ -273,6 +273,11 @@ She has no `prop.N` parts and no flaps; her sockets add `jet.N` (each tailpipe).
 `tech` "jets": by the art director's unit table Germany flies her only once jet fighters are researched (the rules'
 tech `jets`), and whether a battle mixes her in among the Fw 190s is the air battle builder's call.
 
+A trimotor (the SM.79, the Ju 52) has `engines` on her wings and `nose_engine`: True as well: her nose airscrew,
+spinner, cowling and exhausts are seated as a single-engined machine's are, from the same keys (`spinner`, `screw`,
+`blades`, `engine`, `lip`, `nose_back`, `stubs`). Her airscrews are numbered from port: `prop.1` and `engine.1` her
+port wing's, then her nose's, then her starboard wing's. Like every machine with wing engines she has no flap parts.
+
 **The benchmark** (Brian, 2026-11-19, of a B-17G model he had found: "use this 3d model is our bench mark for all
 airplanes"; "here is more inspiration of the level of detail im looking for"). His pictures are a reference for shape
 and finish only: no mesh or texture of theirs is used, and their nose art, names, codes and serials are real
