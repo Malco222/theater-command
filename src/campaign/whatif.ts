@@ -313,12 +313,23 @@ function calendarMonth(g: Game): void {
   }
 }
 
-/** Events that follow a war: the month the war is first seen, each is given its first month in this war, as long after it as history's was. */
+/**
+ * Events that follow a war: the month the war is first seen, each is given its first month in this war, as long after
+ * it as history's was. Until then the ones that came later than the war in history are held a month ahead, so that
+ * none slips in the month the war begins, before its own month is set (the month's diplomacy comes before this).
+ */
 function followMonth(g: Game): void {
   const s = stopOf(g) - 1;
   for (const f of WHATIF.follow.rows) {
     const [a, b] = f.war, key = `wi:war:${a}:${b}`;
-    if (g.flags[key] !== undefined || !atWar(g, a, b)) continue;
+    if (g.flags[key] !== undefined) continue;
+    if (!atWar(g, a, b)) {
+      for (const id of f.events) {
+        const e = eventOf(id);
+        if (e && e.from > f.at && g.flags[`event:${id}`] === undefined) g.flags[`wi:from:${id}`] = g.turn + 2;
+      }
+      continue;
+    }
     g.flags[key] = g.turn;
     const j = f.jitter[s] ?? 0;
     for (const id of f.events) {
@@ -462,8 +473,7 @@ export function whatIfMonth(g: Game): void {
     if (!who || !list.length) { delete g.flags[`tp:${t.id}:ask`]; continue; }
     take(g, t, histOf(t, list), who.nat, 'unanswered');
   }
-  // The wars others follow, and (with the turning points on) history's calendar.
-  followMonth(g);
+  // (With the turning points on) history's calendar.
   if (g.flags.wiTurns === 1) calendarMonth(g);
   // The start's own events: a side's follow-ups, in diplomacy.json's shape.
   for (const c of WHATIF.countries) {
@@ -473,20 +483,23 @@ export function whatIfMonth(g: Game): void {
       if (fireRow(g, e)) g.flags[`event:${e.id}`] = g.turn;
     }
   }
-  if (g.flags.wiTurns !== 1) return;
-  for (const t of WHATIF.turns) {
-    if (!due(g, t)) continue;
-    const who = deciderOf(g, t);
-    if (!who) continue;
-    const list = optionsFor(g, t, who.nat);
-    if (!list.length) continue;
-    if (who.player) {
-      g.flags[`tp:${t.id}:ask`] = g.turn;
-      warning(g, t.name, `${t.ask} Your answer is wanted this month. If you give none, history's choice stands.`, who.nat);
-      continue;
+  if (g.flags.wiTurns === 1) {
+    for (const t of WHATIF.turns) {
+      if (!due(g, t)) continue;
+      const who = deciderOf(g, t);
+      if (!who) continue;
+      const list = optionsFor(g, t, who.nat);
+      if (!list.length) continue;
+      if (who.player) {
+        g.flags[`tp:${t.id}:ask`] = g.turn;
+        warning(g, t.name, `${t.ask} Your answer is wanted this month. If you give none, history's choice stands.`, who.nat);
+        continue;
+      }
+      take(g, t, computerPick(g, t, list), who.nat, 'computer');
     }
-    take(g, t, computerPick(g, t, list), who.nat, 'computer');
   }
+  // Last, once this month's wars are made: the wars others follow.
+  followMonth(g);
 }
 
 // ---- For both interfaces -------------------------------------------------------------------------------------

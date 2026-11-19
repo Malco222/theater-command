@@ -362,7 +362,10 @@ describe('history\'s calendar in a war with turning points', () => {
     for (const seed of [1, 2, 3, 4, 5]) {
       const g = through(world('history', seed, null, 1), 9, 27);
       expect(Object.values(fates(g)).every((f) => f === 1), String(seed)).toBe(true);
-      expect(Object.keys(g.flags).filter((k) => k.startsWith('wi:from:') || k.startsWith('wi:bar:ev:'))).toEqual([]);
+      const cal = WHATIF.calendar.rows.map((c) => c.id);
+      expect(Object.keys(g.flags).filter((k) => cal.some((id) => k === `wi:from:${id}`) || k.startsWith('wi:bar:ev:'))).toEqual([]);
+      // (The Americas are only held until America's war is seen: by the book that is history's month, and theirs after it.)
+      expect(g.flags['wi:from:mexico-war']).toBe(29);
     }
     const off = through(world('nopact', 3, null, 5, false), 9, 27);
     expect(Object.values(fates(off)).every((f) => f === 0)).toBe(true);
@@ -460,5 +463,20 @@ describe('America in a sandbox world', () => {
     at(g, 3); monthlyDiplomacy(g);
     expect(g.flags['event:isthmus-war']).toBe(3);
     expect(g.flags['event:brazil-war']).toBeUndefined();
+  });
+
+  it("when America comes in late, the Americas follow it, not history's calendar", () => {
+    // Pearl Harbor slips to month 33, Mexico's own month in history: Mexico must not join in the same month.
+    const g = world('nopact', 2, null, 3);
+    for (let t = 29; t <= 32; t++) { at(g, t); whatIfMonth(g); }
+    expect(g.flags['wi:from:mexico-war']).toBe(34);
+    expect(g.flags['wi:from:isthmus-war']).toBeUndefined();
+    at(g, 33); setWar(g, 'USA', 'GER'); monthlyDiplomacy(g);
+    expect(g.flags['event:isthmus-war']).toBe(33);
+    expect(g.flags['event:mexico-war']).toBeUndefined();
+    whatIfMonth(g);
+    expect(g.flags['wi:war:USA:GER']).toBe(33);
+    expect(g.flags['wi:from:mexico-war']).toBeGreaterThanOrEqual(37);
+    expect(g.flags['wi:from:brazil-war']).toBeGreaterThanOrEqual(40);
   });
 });
