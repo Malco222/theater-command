@@ -232,9 +232,9 @@ def sdkfz222(fine=True, tag="GER", paint=None):
             c = (lo[i] + lo[i + 1] + hi[i + 1] + hi[i]) / 4
             v.port(c, Vector((c.x - x0, c.y, 0.2)), 0.035)
     # inside her: two seats, the gun's pedestal
-    for at in ((x0 - 0.24, 0.34), (x0 - 0.18, -0.34)):      # (apart: the commander stands between them, his hips 4 cm clear of each)
+    for at in ((x0 - 0.24, 0.44), (x0 - 0.24, -0.44)):      # (small, out by the walls: the commander stands between them, and a man in his belt kit is 0.6 wide at the hips)
         v.rod((at[0], at[1], zr + 0.03), (at[0], at[1], zr + 0.12), 0.022, "steel", 8)
-        v.box((0.24, 0.24, 0.05), (at[0], at[1], zr + 0.14), "leather", 0.018)
+        v.box((0.20, 0.20, 0.05), (at[0], at[1], zr + 0.14), "leather", 0.018)
     v.rod((x0 + 0.34, 0.0, zr + 0.03), (x0 + 0.34, 0.0, zr + 0.14), 0.05, "steel", 10)
 
     # the wire screens: two halves that meet in a ridge over her, each hung on the turret's edge and thrown outward
@@ -251,7 +251,7 @@ def sdkfz222(fine=True, tag="GER", paint=None):
         for q in quads:
             v.wire_screen(q if s > 0 else q[::-1])
         v.use("turret")
-    v.socket("commander", (x0 - 0.2, 0.0, z1 - 0.25), X, part="turret",
+    v.socket("commander", (x0 - 0.29, 0.0, z1 - 0.25), X, part="turret",
              note="the commander, who lays the guns, head and shoulders out when the screens are open: this point is 0.25 under the turret's rim, and his feet go 0.92 under it, "
                   "down in the hull (the floor seen in her turret is the hull's roof: only what is over it shows)")
 
@@ -393,7 +393,7 @@ def m8(fine=True, tag="USA"):
 
     # ---- the turret: a round wall leaning in a little, no roof --------------------------------------------------
     x0, th = -0.05, 0.56
-    r0, r1, wt = 0.74, 0.68, 0.035
+    r0, r1, wt = 0.75, 0.69, 0.02                             # (her plate was 19 mm: thin walls leave two men in their kit room to sit and stand)
     v.use("hull")
     v.ring_well((x0, 0.0, zr), 0.66)
     v.part("turret", "hull", (x0, 0.0, zr), axis=(0, 0, -1), kind="turn", note="trains all round, by hand: + to the right, clockwise seen from above; the game turns it")
@@ -402,7 +402,7 @@ def m8(fine=True, tag="USA"):
     v.lathe((x0, 0, zt), Z, [(0.02, 0.0), (0.02, r0 - wt)], "shade", v.n(40, 12))                                 # her floor, in shadow
     v.lathe((x0, 0, zr - 0.03), Z, [(0.06, r0 + 0.01), (0.0, r0 + 0.03), (0.0, 0.0)], "shade", v.n(40, 12))
     top = zt + th
-    for at in ((x0 + 0.01, 0.33),):                          # the gunner's seat (his shin 3 cm clear of the wall, his toe of the gun's shield); the commander stands
+    for at in ((x0 - 0.135, 0.30),):                          # the gunner's seat (back where the turret is widest: his knees clear of the wall's leaning top); the commander stands
         v.rod((at[0], at[1], zt + 0.02), (at[0], at[1], zt + 0.22), 0.025, "steel", 8)
         v.box((0.28, 0.28, 0.06), (at[0], at[1], zt + 0.25), "leather", 0.02)
     if fine:
@@ -414,10 +414,13 @@ def m8(fine=True, tag="USA"):
             v.lift_eye((x0 + 0.1, s * (r1 + 0.03), zt + th * 0.6), Vector((0, s, 0.1)), X, 0.028)
     pin = Vector((x0 - r1 + 0.02, 0.0, top))                  # the heavy machine gun on its pintle on her back wall
     v.rod(pin, pin + Z * 0.24, 0.02, "steel", 8)
-    v.box((0.30, 0.09, 0.11), pin + Z * 0.27 + X * 0.02, "steel", 0.008)
-    v.mg(pin + Z * 0.28 + X * 0.15, X, 0.9, r=0.02)
-    v.box((0.16, 0.11, 0.2), pin + Z * 0.22 + Y * 0.11 + X * 0.05, "upper", 0.006)
-    v.socket("mg", pin + Z * 0.28 + X * 1.07, X, part="turret", note="the heavy machine gun on her back wall")
+    cock = math.radians(60.0)                                 # stowed muzzle up, as they carried it on the march: level, it lay across the two men's shoulders
+    way, over = Vector((math.cos(cock), 0.0, math.sin(cock))), Vector((-math.sin(cock), 0.0, math.cos(cock)))
+    piv = pin + Z * 0.27
+    v.hull([tuple(piv + way * a + Y * b + over * c) for a in (-0.13, 0.17) for b in (-0.045, 0.045) for c in (-0.055, 0.055)], "steel", 0.008)
+    v.mg(piv + way * 0.15 + over * 0.01, way, 0.9, r=0.02)
+    v.box((0.16, 0.11, 0.2), pin + Z * 0.20 + Y * 0.11 + X * 0.02, "upper", 0.006)
+    v.socket("mg", piv + way * 1.07 + over * 0.01, way, part="turret", note="the heavy machine gun on her back wall, stowed muzzle up")
     for s in (LEFT, RIGHT):
         v.mark(tag, (x0 - 0.1, s * (r0 + r1) / 2, zt + th * 0.5), Vector((0, s, 0.1)), 0.13, part="turret")
 
@@ -427,7 +430,7 @@ def m8(fine=True, tag="USA"):
     v.hull([(tx + 0.04, 0.29, tz - 0.22), (tx + 0.04, 0.29, tz + 0.2), (tx + 0.22, 0.22, tz - 0.16), (tx + 0.22, 0.22, tz + 0.15), (tx + 0.31, 0.1, tz - 0.1), (tx + 0.31, 0.1, tz + 0.1)],
            coat, bevel=0.03, segs=3, angle=40.0)
     v.lathe((tx + 0.28, 0, tz), X, [(0.26, 0.0), (0.26, 0.062), (0.0, 0.075), (0.0, 0.0)], coat, v.n(20, 8))
-    v.slab((tx - 0.5, -0.07, tz - 0.08), (tx - 0.02, 0.07, tz + 0.08), "steel", 0.015)                            # her breech, in the open
+    v.slab((tx - 0.5, -0.06, tz - 0.08), (tx - 0.02, 0.06, tz + 0.08), "steel", 0.015)                            # her breech, in the open
     v.mg((tx + 0.2, -0.18, tz + 0.02), X, 0.4)
     v.socket("coax", (tx + 0.62, -0.18, tz + 0.02), X)
     v.part("barrel", "gun", (tx + 0.5, 0.0, tz), slide=(-1, 0, 0), slide_limits=[0.0, 0.2], axis=(0, -1, 0), kind="slide", note="runs back along its own length when she fires (metres)")
@@ -436,10 +439,10 @@ def m8(fine=True, tag="USA"):
     m.info["bore"] = 0.037
     m.info["brake"] = False
 
-    v.socket("commander", (x0 - 0.28, -0.30, top - 0.25), X, part="turret",
+    v.socket("commander", (x0 - 0.25, -0.24, top - 0.25), X, part="turret",
              note="the commander stands in the open turret, on the right, head and shoulders over its edge: this point is 0.25 under the turret's rim, and his feet go 0.92 under it, "
                   "down in the hull (the floor seen in her turret is the hull's roof: only what is over it shows)")
-    v.socket("crew.gunner", (x0 + 0.01, 0.33, zt + 0.28), X, part="turret", note="the gunner sits here, on the left of the breech: the top of his seat, 0.26 over the floor")
+    v.socket("crew.gunner", (x0 - 0.135, 0.30, zt + 0.28), X, part="turret", note="the gunner sits here, on the left of the breech: the top of his seat, 0.26 over the floor")
     v.socket("engine", d_at(0.42, 0.0) + dn * 0.05, Z, part="hull", note="engine deck: smoke and the first fire")
     v.socket("fire.1", d_at(0.42, 0.4) + dn * 0.05, Z, part="hull")
     v.socket("fire.2", (x0 - 0.1, 0.0, top), Z, part="turret", note="out of the open turret")
@@ -574,7 +577,7 @@ def armoured_car(fine=True, tag="_"):
     v.socket("dust.right", (xr - 0.3, -yw, 0.05), (-1, 0, 0.3), part="vehicle")
 
     # ---- the turret: eight plates riveted on a frame, a lid in its roof ---------------------------------------------
-    x0, th = -0.28, 0.44
+    x0, th = -0.28, 0.41
     v.use("hull")
     v.ring_well((x0, 0.0, zr), 0.5)
     v.part("turret", "hull", (x0, 0.0, zr), axis=(0, 0, -1), kind="turn", note="trains all round, by hand: + to the right, clockwise seen from above; the game turns it")
@@ -585,8 +588,12 @@ def armoured_car(fine=True, tag="_"):
     v.lathe((x0, 0, zr - 0.03), Z, [(0.06, 0.55), (0.0, 0.57), (0.0, 0.0)], "shade", v.n(32, 10))
     roof = zr + th
     riveted_prism(v, plan_w, top_w, zr + 0.02, roof, part="turret")
-    v.hatch_round("hatch_commander", "turret", (x0 - 0.12, 0.0, roof), 0.225, Z, -X, thick=0.022, opens=100.0)   # (0.225: a man's chest and arms pass its rim)
-    v.socket("commander", (x0 - 0.12, 0.0, roof - 0.25), X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
+    rim = roof + 0.03                                         # the hatch stands on a coaming, its rim where the roof was: a man leaning in it has his chest over the roof, not in it
+    hc = Vector((x0 - 0.12, 0.0, roof))
+    v.lathe(hc, Z, [(-0.005, 0.225), (0.03, 0.225), (0.03, 0.242), (0.022, 0.25), (-0.005, 0.25), (-0.005, 0.225)], coat, v.n(28, 12))
+    v.lathe(hc, Z, [(0.002, 0.0), (0.002, 0.2245)], "black", v.n(28, 12))
+    v.hatch_round("hatch_commander", "turret", (x0 - 0.12, 0.0, rim), 0.25, Z, -X, thick=0.022, opens=100.0, well=False)   # (the coaming's opening 0.225: a man's chest and arms pass it)
+    v.socket("commander", (x0 - 0.12, 0.0, rim - 0.25), X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim (the top of its coaming, 0.03 over the roof), and his feet go 0.92 under it")
     v.use("turret")
     v.vent((x0 + 0.24, 0.2, roof), 0.06, 0.03)
     if fine:
@@ -612,7 +619,7 @@ def armoured_car(fine=True, tag="_"):
 
     v.socket("engine", (1.5, 0.0, 1.45), Z, part="hull", note="the bonnet: smoke and the first fire")
     v.socket("fire.1", (1.5, 0.3, 1.42), Z, part="hull")
-    v.socket("fire.2", (x0 - 0.12, 0.0, roof + 0.1), Z, part="turret", note="out of the commander's hatch")
+    v.socket("fire.2", (x0 - 0.12, 0.0, rim + 0.07), Z, part="turret", note="out of the commander's hatch")
     v.socket("ring", (x0, 0.0, zr), Z, part="hull", note="the turret ring: where the blast comes from when her ammunition goes")
     v.socket("hit.front", f_at(0.27, 0.0), fn, part="hull")
     v.socket("hit.left", (-0.4, yk, 1.2), Y, part="hull")

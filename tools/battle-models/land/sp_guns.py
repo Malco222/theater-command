@@ -331,14 +331,14 @@ def m4_open_hull(v, zw, zb, xf, notch, pulpit=None, driver=LEFT, step=None, tag=
         # the heavy machine gun on its cradle on the ring, laid ahead
         pin = Vector((cx + r - 0.03, cy + 0.06, zp + 0.03))
         v.rod(pin, pin + Z * 0.17, 0.02, "steel", 8)
-        # (the gun sits 4.5 cm forward on its pintle, and her gunner with it: his hips and heels clear of the drum behind him)
-        v.box((0.30, 0.09, 0.11), pin + Z * 0.20 + X * -0.005, "steel", 0.008)
-        v.mg(pin + Z * 0.21 + X * 0.125, X, 0.95, r=0.02)
-        v.box((0.16, 0.11, 0.2), pin + Z * 0.15 + Y * 0.11 + X * 0.025, "upper", 0.006)
+        # (the gun sits 9.5 cm forward on its pintle, and her gunner with it: his hips, belt kit and heels clear of the drum behind him)
+        v.box((0.30, 0.09, 0.11), pin + Z * 0.20 + X * 0.045, "steel", 0.008)
+        v.mg(pin + Z * 0.21 + X * 0.175, X, 0.95, r=0.02)
+        v.box((0.16, 0.11, 0.2), pin + Z * 0.15 + Y * 0.11 + X * 0.075, "upper", 0.006)
         if fine:
-            v.tube([pin + Z * 0.2 + X * -0.155, pin + Z * 0.2 + X * -0.255 + Y * 0.05, pin + Z * 0.14 + X * -0.255 + Y * 0.05], 0.01, "steel", 6)      # the grips
-        v.socket("mg", pin + Z * 0.21 + X * 1.095, X, part="hull", note="the heavy machine gun on the pulpit's ring")
-        v.socket("crew.mg", (cx + r - 0.685, cy + 0.11, zp - 0.88), X, part="hull",
+            v.tube([pin + Z * 0.2 + X * -0.105, pin + Z * 0.2 + X * -0.205 + Y * 0.05, pin + Z * 0.14 + X * -0.205 + Y * 0.05], 0.01, "steel", 6)      # the grips
+        v.socket("mg", pin + Z * 0.21 + X * 1.145, X, part="hull", note="the heavy machine gun on the pulpit's ring")
+        v.socket("crew.mg", (cx + r - 0.635, cy + 0.11, zp - 0.88), X, part="hull",
                  note="the machine-gunner stands here on the pulpit's floor, waist-deep in it: the gun's spade grips are 0.40 ahead of his feet and 1.08 up")
         mg = "mg"
 

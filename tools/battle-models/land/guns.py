@@ -747,8 +747,8 @@ def lefh18(fine=True, tag="GER", paint=None):
     v.socket("dust.left", (-0.3, T / 2, 0.05), (-1, 0, 0.3), part="vehicle")
     v.socket("dust.right", (-0.3, -T / 2, 0.05), (-1, 0, 0.3), part="vehicle")
     v.socket("dust.muzzle", (2.0, 0.0, 0.03), X, part="vehicle", note="the ground under the muzzle: the blast lifts the dust here")
-    crew(v, (-1.16, 0.45, 0.0), (-1.6, -0.5, 0.0), (-2.7, 1.6, 0.0), (-2.2, -1.6, 0.0), (-1.5, -0.2, 0.0),
-         layer_note="the layer stands inside the trail legs, left of the breech's path (his knee 4 cm clear of the left leg), at the two handwheels and the sight on "
+    crew(v, (-1.16, 0.41, 0.0), (-1.6, -0.5, 0.0), (-2.7, 1.6, 0.0), (-2.2, -1.6, 0.0), (-1.5, -0.2, 0.0),
+         layer_note="the layer stands inside the trail legs, left of the breech's path (his knee clear of the left leg, his right arm of the breech as it runs back), at the two handwheels and the sight on "
                     "their case beside the breech (the handles 0.45 ahead of his feet at rest, the elevating one 1.24 up, the traversing one 1.00 up)")
     v.gun_clips(1.1, E.x, lift=0.04, close=close, eye_z=0.22, track=T, low=-5.0)
     v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names.", "paint": coats(v, paint or "grey")}

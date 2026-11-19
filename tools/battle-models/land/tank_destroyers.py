@@ -374,7 +374,7 @@ def m10(fine=True, tag="USA"):
     # the counterweight: a wedge standing off her back
     v.hull([(x0 - 1.29, 0.47, z0 + 0.22), (x0 - 1.17, 0.40, z1), (x0 - 1.56, 0.34, z1 - 0.03), (x0 - 1.54, 0.42, z0 + 0.34)], coat, bevel=0.02, segs=2)
     # inside: two seats, the ready rounds standing along her back wall
-    for at in ((x0 + 0.16, 0.46), (x0 - 0.42, -0.52)):       # (the gunner's: his left shin 2 cm clear of the turret's front corner)
+    for at in ((x0 - 0.22, 0.45), (x0 - 0.42, -0.52)):       # (the gunner's: behind the breech ring and left of the recoil guard, where the turret is widest)
         v.rod((at[0], at[1], zt + 0.05), (at[0], at[1], zt + 0.28), 0.025, "steel", 8)
         v.box((0.30, 0.30, 0.06), (at[0], at[1], zt + 0.31), "leather", 0.02)
     if fine:
@@ -415,7 +415,7 @@ def m10(fine=True, tag="USA"):
 
     # ---- sockets for the men in her open turret, and for what happens to her -----------------------------------
     v.socket("commander", (x0 - 0.45, -0.50, zt + 0.05), X, part="turret", note="the commander stands here in the open turret, on the right")
-    v.socket("crew.gunner", (x0 + 0.16, 0.46, zt + 0.34), X, part="turret", note="the gunner sits here, on the left of the breech: the top of his seat, 0.28 over the floor")
+    v.socket("crew.gunner", (x0 - 0.22, 0.45, zt + 0.34), X, part="turret", note="the gunner sits here, left of the breech and its guard, his knees beside the breech ring: the top of his seat, 0.28 over the floor")
     v.socket("crew.loader", (x0 - 0.70, 0.30, zt + 0.05), X, part="turret", note="the loader stands here, behind the breech")
     v.socket("engine", (-1.6, 0.0, zr + 0.05), Z, part="hull", note="engine deck: smoke and the first fire")
     v.socket("fire.1", (-1.65, 0.4, zr + 0.05), Z, part="hull")

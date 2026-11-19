@@ -120,8 +120,15 @@ commander's `commander` is 0.25 m under his hatch's rim, and the crew pack's `co
 0.92 m under the socket. The three armoured cars' `commander` is the same, whether he stands under a lid (the
 ArmouredCar) or in an open turret (the SdKfz 222, whose `open_up` throws both her screens open, and the M8): the
 floor seen in a low turret is the hull's roof, the hull is solid, and only what is over that floor shows of him.
+The ArmouredCar's lid stands on a coaming 3 cm high whose rim is the 0.25 point's measure: the roof inside it is
+lower than the rim, so a man leaning in the hatch has his chest over the roof.
 The leFH 18's layer stands inside her trail legs, left of the breech's path (between her left leg and her tall wheel
 there is no room for a man), and her laying gear is on a narrow case beside the breech where his hands reach it.
+A seat is made for a man in his belt kit: the crew pack's seated man is 0.29 deep behind his seat's point at the
+hips (0.21 at the shoulder blades), 0.31 wide to the right and 0.22 to the left there, his knees 0.25 to each side,
+his boots 0.68 ahead. So a seat's back is a pad at the shoulder blades over an open gap (the light flak gun, the
+M16), and a seat in a turret stands where that whole man clears the walls (the M10's behind the breech ring, the
+M8's well back in a turret of thin plate). The M8's pintle gun is stowed muzzle up, clear of both men's shoulders.
 A man who serves a gun that turns is on the part that turns (the M3's `gunner` is on
 `mg_mount`). Where his hands hold something there is a socket for each, named after his own: `grip.gunner.l` and
 `grip.gunner.r` for `crew.gunner`, `grip.layer.l` and `grip.layer.r` for a towed gun's `crew.layer`. Each is the
