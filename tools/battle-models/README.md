@@ -300,6 +300,18 @@ turrets, the waist, radio room and tail guns (her gunner's cabin stands behind h
 show half out of the inner nacelles, as the real machine's do. 91,000 triangles. Her turrets and guns are numbered
 afresh: read them from her file and from `gun-arcs.json`, not from memory.
 
+The `Stuka` is the second (Brian, 2026-11-19, of a picture of a Ju 87: "here is a stuka but i want it in the all
+black"): `EXTRA_PLANES["Stuka"]`, laid out against a three-view of the Ju 87B-2 (Wikimedia Commons, "Junkers Ju 87B-2
+Stuka.svg", Kaboldy, CC BY-SA 3.0; measured, not traced). She is black all over with a soft second tone, her rivets
+a shade lighter so that the black never reads as a hole, plain crosses on her sides and wings and nothing on her
+fin. Her cranked wing, trousered legs and spats, the siren on each leg, the radiator bath under her nose, the dive
+brake under each wing, the struts under her tailplane and the bomb on its crutch are in her numbers; her gunner
+faces aft with his gun (`flexgun.1`). 44,000 triangles. Three more keys of `cabin` make her long greenhouse:
+
+- `roof`: all of the cabin above its sill is glass (a greenhouse with no plated roof);
+- `hoops`: where a frame arches over it from sill to sill;
+- `spine`: a bar along its top.
+
 **The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, twelve more entries in
 `EXTRA_PLANES`. Paints and first years are the art director's rulings of that day; the file's `year` is the first
 year a nation flies her (none: from the start), `tech` the rules' technology she needs, `tag` the model tag the

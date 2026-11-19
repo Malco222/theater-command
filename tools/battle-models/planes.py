@@ -550,6 +550,57 @@ EXTRA_PLANES["B17"] = {
 }
 
 
+# The Ju 87B-2, laid out again against a three-view drawing of the real machine (Wikimedia Commons, "Junkers Ju 87B-2
+# Stuka.svg", Kaboldy, CC BY-SA 3.0; measured, not traced): the deep cowling of her inverted-vee engine with its
+# radiator bath under it, the tall framed greenhouse over her two men, the cranked wing (down to the legs, then up to
+# the tips) whose trailing edge sweeps forward, the trousered legs and their spats with a siren on each, the dive
+# brake under each wing, the square fin and the strutted tailplane. She is black all over (Brian, 2026-11-19, of a
+# picture of one: "here is a stuka but i want it in the all black"), with plain crosses.
+_BLACK = {"upper": "1D1E20", "upper2": "27292B", "under": "1D1E20", "nose": "1D1E20", "boss": "141414"}
+EXTRA_PLANES["Stuka"] = {
+    "title": "Ju 87B Stuka (our own model)",
+    "hull": [(4.6, 0.0, 0.03, 0.03), (4.47, 0.0, 0.16, 0.16), (4.26, 0.0, 0.26, 0.26), (4.05, 0.0, 0.27, 0.27), (3.99, 0.02, 0.32, 0.35), (3.85, 0.03, 0.38, 0.41),
+             (3.5, 0.02, 0.42, 0.47), (3.0, 0.0, 0.44, 0.57), (2.6, -0.06, 0.46, 0.68), (2.0, 0.05, 0.47, 0.68), (1.42, 0.08, 0.47, 0.74), (0.95, -0.1, 0.47, 0.6),
+             (0.0, -0.12, 0.47, 0.62), (-1.3, -0.06, 0.46, 0.56), (-1.6, 0.025, 0.43, 0.525), (-2.2, 0.055, 0.37, 0.495), (-3.0, 0.09, 0.3, 0.44), (-3.75, 0.11, 0.255, 0.39),
+             (-4.6, 0.155, 0.19, 0.365), (-5.5, 0.2, 0.11, 0.3), (-6.2, 0.22, 0.05, 0.22), (-6.45, 0.25, 0.025, 0.12)],
+    "square": 3.0, "screw": 1.7, "blades": 3, "nose_back": None, "spinner": 4,
+    # (her greenhouse: a raked windscreen of flat panes, the pilot's hood, the fixed middle with the mast, the gunner's
+    #  hood down to his gun; flat sides that lean in, glass right over the top, a frame every third of a metre)
+    "hoods": [([(1.8, 0.3, 0.26, 0.82), (1.5, 0.3, 0.37, 0.82), (1.1, 0.3, 0.38, 0.82), (0.0, 0.3, 0.38, 0.82), (-0.5, 0.3, 0.37, 0.82), (-1.1, 0.3, 0.34, 0.73),
+                (-1.36, 0.3, 0.3, 0.4), (-1.55, 0.3, 0.22, 0.26)], (), False)],
+    "cabin": {"square": 3.2, "ease": 0.3, "skirt": (0.5, 0.25), "fillet": 0.05, "screen": (1.46, 0.8, 1.12, 1.1, 0.3), "pane": (0.31, 0.25, 1.03, 0.03), "back": -1.55,
+              "sill": 0.52, "top": 0.95, "hoops": (0.98, 0.66, 0.38, 0.02, -0.16, -0.5, -0.8, -1.1), "spine": True, "roof": True},
+    "wing": [(0.0, 1.8, -1.55, -0.5, 0.5), (0.47, 1.8, -1.55, -0.52, 0.5), (1.4, 1.8, -1.24, -0.655, 0.46), (1.6, 1.79, -1.2, -0.65, 0.45), (2.6, 1.71, -0.96, -0.477, 0.38),
+             (4.1, 1.6, -0.6, -0.218, 0.3), (5.6, 1.48, -0.05, 0.042, 0.2), (6.5, 1.41, 0.3, 0.198, 0.13), (6.78, 1.36, 0.42, 0.246, 0.09), (6.87, 1.15, 0.5, 0.262, 0.05),
+             (6.9, 0.95, 0.62, 0.267, 0.01)],
+    "flap": (0.21, 0.585, 0.76), "aileron": (0.6, 0.985, 0.74),
+    "tail": [(0.0, -4.87, -5.88, 0.63, 0.13), (2.25, -4.87, -5.88, 0.63, 0.1), (2.4, -4.9, -5.88, 0.63, 0.07), (2.47, -5.02, -5.85, 0.63, 0.02)],
+    "fin": [(0, -4.42, -6.5, 0.3, 0.16), (0, -4.72, -6.47, 1.0, 0.14), (0, -5.1, -6.43, 1.8, 0.11), (0, -5.2, -6.4, 1.93, 0.09), (0, -5.34, -6.24, 2.0, 0.03)],
+    "patch": 2.6, "colours": dict(_BLACK), "frames_paint": "upper",
+    "stubs": (3.82, 2.55, -10.0), "pitot": True, "guns": [(1.97, 0.0, 0.45, 0.02)],
+    # (the radiator bath under her engine, and the oil cooler's intake on top of her cowling)
+    "scoops": [([(3.6, -0.6, 0.3, 0.2), (3.55, -0.66, 0.37, 0.28), (3.0, -0.68, 0.38, 0.29), (2.65, -0.72, 0.37, 0.31), (2.58, -0.66, 0.3, 0.2)], 0.0, 3.0),
+               ([(2.8, 0.6, 0.09, 0.05), (2.74, 0.62, 0.12, 0.08), (2.45, 0.67, 0.11, 0.07), (2.2, 0.7, 0.05, 0.02)], 0.0, 2.6)],
+    "tailwheel": (-5.67, -0.52), "mast": (-0.27, 1.1, 2.0),
+    "extras": [  # (each leg in its trouser, the spat round the wheel, the tyre showing under it)
+               ("body", ([(1.82, -1.1, 0.03, 0.22), (1.72, -1.1, 0.09, 0.3), (1.45, -1.1, 0.115, 0.33), (1.12, -1.1, 0.07, 0.31), (0.93, -1.1, 0.02, 0.27)], 1.5, 3.0, "upper")),
+               ("body", ([(2.3, -1.74, 0.03, 0.04), (2.22, -1.73, 0.13, 0.19), (2.0, -1.7, 0.2, 0.29), (1.6, -1.7, 0.22, 0.3), (1.2, -1.71, 0.17, 0.23), (0.85, -1.72, 0.09, 0.11),
+                          (0.62, -1.72, 0.02, 0.03)], 1.5, 2.4, "upper")),
+               ("rod", ((1.75, 1.41, -2.0), (1.75, 1.59, -2.0), 0.33, 0.33, "tyre")),
+               # (the siren on each leg: a small airscrew that howls in the dive)
+               ("rod", ((2.0, 1.5, -0.86), (1.78, 1.5, -0.86), 0.025, 0.055, "upper")),
+               ("rod", ((1.94, 1.33, -0.86), (1.94, 1.67, -0.86), 0.013, 0.013, "steel")), ("rod", ((1.94, 1.5, -1.03), (1.94, 1.5, -0.69), 0.013, 0.013, "steel")),
+               # (the dive brake under each wing, outboard of the leg; the struts under her tailplane)
+               ("rod", ((1.38, 1.8, -0.9), (1.3, 3.9, -0.5), 0.035, 0.035, "upper")),
+               ("rod", ((1.38, 2.2, -0.82), (1.38, 2.2, -0.68), 0.015, 0.015, "upper")), ("rod", ((1.32, 3.5, -0.57), (1.32, 3.5, -0.42), 0.015, 0.015, "upper")),
+               ("rod", ((-5.0, 1.2, 0.6), (-4.76, 0.17, -0.02), 0.02, 0.02, "upper")), ("rod", ((-5.05, 1.2, 0.6), (-4.98, 0.15, -0.02), 0.02, 0.02, "upper")),
+               # (her gunner's gun; her bomb on its crutch)
+               ("rod", ((-1.33, 0.0, 0.72), (-1.95, 0.0, 0.87), 0.022, 0.018, "steel")),
+               ("body", ([(1.55, -0.98, 0.03, 0.03), (1.2, -0.98, 0.2, 0.2), (0.2, -0.98, 0.23, 0.23), (-0.5, -0.98, 0.1, 0.1), (-0.75, -0.98, 0.04, 0.04)], 0.0, 2.0, "bomb"))],
+    "side_marks": [(-2.95, 0.34, "GER")], "wing_marks": [(4.7, 0.1, 0.5, "GER", "GER", True, True)], "code": (-1.9, 0.32),
+}
+
+
 def cabin_angle(hood, p):
     """Where round a hood a point of its skin is: degrees up from level on its own side (90 at its top)."""
     w, h = max(hood.w(-p.x), 1.0e-6), max(hood.h(-p.x), 1.0e-6)
@@ -563,13 +614,15 @@ def cabin_paint(cabin, hood, coat, hull):
     numbers give `cabin`: `screen` (the windscreen's two flat panes: all of them that stands clear of her fuselage is
     glass), `back` (where her side windows end), `sill` and `top` (the heights her side windows lie between), `brow`
     (a window in the roof over each pilot: from, to along her; from, to round her), `hatch` (a glazed hatch across her
-    back: from, to, and how far round it begins)."""
-    brow, hatch = cabin.get("brow"), cabin.get("hatch")
+    back: from, to, and how far round it begins), `roof` (a greenhouse: all of it above its sill is glass)."""
+    brow, hatch, roof = cabin.get("brow"), cabin.get("hatch"), cabin.get("roof")
 
     def paint(p, n):
         if abs(p.z - hood.pane_z(p.x, p.y)) < 0.004:
             return "glass"                                 # (on a pane of her windscreen)
         if p.x > cabin["back"]:
+            if roof and p.z > cabin["sill"]:
+                return "glass"                             # (a greenhouse: glass from its sill right over its top)
             if cabin["sill"] < p.z < cabin["top"] and abs(n.y) > 0.5:
                 return "glass"
             if brow and brow[1] < p.x < brow[0] and brow[2] < cabin_angle(hood, p) < brow[3]:
@@ -605,8 +658,9 @@ def cabin_frames(parts, frames, hood, cabin, hull):
         return hood.at(x, a), hood.out(x, a)
 
     def arc(x, d0, d1, half=0.02, both=True):
+        n = max(8, int(abs(d1 - d0) / 7.0))
         for hand in ((1, -1) if both else (1,)):
-            lay([on_box(x, (d0 + (d1 - d0) * k / 8.0) if hand > 0 else 180.0 - (d0 + (d1 - d0) * k / 8.0)) for k in range(9)], half, 0.008)
+            lay([on_box(x, (d0 + (d1 - d0) * k / n) if hand > 0 else 180.0 - (d0 + (d1 - d0) * k / n)) for k in range(n + 1)], half, 0.008)
 
     def rail(deg_at, x0, x1, half=0.018, both=True):
         n = max(2, int((x0 - x1) / 0.1))
@@ -675,7 +729,8 @@ def cabin_frames(parts, frames, hood, cabin, hull):
         n = hood.pane_n(hand)
         bar = lambda places, half: lay([(on_pane(y, z, hand), n) for y, z in places], half)
         bar([(y_top * k / 8.0, top_of(y_top * k / 8.0)) for k in range(9)], 0.022)       # (its top)
-        bar([(y_top, z_out), (0.5 * (y_top + y_foot), 0.5 * (z_out + sill)), (y_foot, sill)], 0.024)      # (the post at its side)
+        post = [(y_top + (y_foot - y_top) * k / 10.0, z_out + (sill - z_out) * k / 10.0) for k in range(11)]
+        bar([(y, z) for y, z in post if z >= (span(y) or (sill, sill))[0] - 0.02], 0.024)   # (the post at its side, down to its foot)
         bar([(cols[k], feet[k]) for k in inner], 0.02)                                    # (its foot)
     foot = feet[0]
     post = [(0.0, foot + (z_in + drop - foot) * k / 10.0) for k in range(11)]
@@ -688,6 +743,10 @@ def cabin_frames(parts, frames, hood, cabin, hull):
     x_top = max((hood.cut_x(math.radians(hood.deg_of(xb, top))) or xb), xb)
     rail(lambda x: hood.deg_of(x, sill), x_sill, back)
     rail(lambda x: hood.deg_of(x, top), x_top, back)
+    for x in cabin.get("hoops", ()):                       # (a greenhouse's frames: right over it, sill to sill)
+        arc(x, hood.deg_of(x, sill), 180.0 - hood.deg_of(x, sill), 0.02, both=False)
+    if cabin.get("spine"):
+        rail(lambda x: 90.0, hood.roof_from - 0.02, back + 0.04, 0.018, both=False)
     brow, hatch = cabin.get("brow"), cabin.get("hatch")
     if brow and parts.fine:
         for a in brow[2:]:
