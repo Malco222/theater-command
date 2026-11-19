@@ -1319,6 +1319,7 @@
   "least_px": 0.8,
   "most_lying": 200,
   "draw_within_m": 150,
+  "detail_px": 3,
   "mg": {
    "_note": "art director 07:08Z: out of the bottom of the receiver (the MG 34 and 42, the Bren, the DP, the Browning, the Vickers), rifle-calibre cases about 6 cm; they lie long enough to heap up",
    "case_m": 0.06,

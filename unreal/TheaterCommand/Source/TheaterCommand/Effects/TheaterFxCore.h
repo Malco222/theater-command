@@ -467,6 +467,8 @@ namespace TheaterFx
 		std::vector<double> CaseUntil; // (when each long-lying case goes: past ground_cases.most_lying, new ones lie only briefly)
 		size_t MostLying = 200;
 		double CaseFar = 150.0; // (ground_cases.draw_within_m: past it a case is neither counted nor laid)
+		double CaseDetailPx = 3.0; // (ground_cases.detail_px: a case narrower on the screen is laid as its tube alone)
+		bool CaseDetailed(double Rad, double Deep, const View& Eye) const { return 2.0 * Rad * std::max(Eye.PixelsPerRadian, 1.0) >= CaseDetailPx * std::max(Deep, 1e-3); }
 		double EdgeK = 0.0;
 		double SkyFill = 0.25, SunThrough = 1.5, SunThroughPow = 3.0;
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);

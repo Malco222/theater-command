@@ -153,7 +153,8 @@ eye is within `within_m` (40) of the gun, and only for the guns named there.
   it a bright band toward the sun (`colour` 196,156,82) with a gold glint (`glint`, `glint_colour`, `shine`), down to a
   shade side and underside (`shade` 112,82,37); a lying case spans about 130 levels of luma. The open mouth (`mouth`)
   shows dark with a brass lip when that end is turned to the eye, and once it lies there a soft contact shadow
-  (`contact_shadow`) sits under it. Each case takes up to three places.
+  (`contact_shadow`) sits under it. Each case takes up to three places, and is counted so in the room (the
+  pre-check, 07:35Z); narrower than `detail_px` (3) on the screen it is laid as its tube alone, in one.
 - Past `most_lying` (200) cases lying at once, a new one lies only a moment. Past `draw_within_m` (150) a case is
   neither counted nor drawn, fading over the last quarter. Below `least_px` on screen it is not drawn. Cases take no
   room past three fifths of it, and they use their own dice, so every other effect draws exactly as before.

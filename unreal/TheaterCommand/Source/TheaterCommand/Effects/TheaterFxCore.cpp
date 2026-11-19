@@ -186,6 +186,7 @@ namespace TheaterFx
 		CaseShine = std::clamp(Num("ground_cases.shine", 8.0), 1.0, 64.0);
 		MostLying = static_cast<size_t>(std::clamp(Num("ground_cases.most_lying", 200.0), 0.0, 5000.0));
 		CaseFar = std::max(1.0, Num("ground_cases.draw_within_m", 150.0));
+		CaseDetailPx = std::max(0.0, Num("ground_cases.detail_px", 3.0));
 		Sides = std::max(6, std::min(24, static_cast<int>(Num("game.puff_sides", 16.0))));
 		PointsPerPuff = 2 * Sides + 1;
 		std::vector<double>* Tables[8] = { &RingCos, &RingSin, &Ring2Cos, &Ring2Sin, &Ring3Cos, &Ring3Sin, &Ring5Cos, &Ring5Sin };
@@ -4337,7 +4338,8 @@ namespace TheaterFx
 		LaySquare = 0.0;
 		Tube.bOn = false;
 		EdgeK = 0.0;
-		if (Age >= B.Land2 && CaseShadow > 0.0 && Room - Used >= 3)
+		const bool bDetail = CaseDetailed(Rad, (P - Eye.Eye).Dot(Eye.Forward), Eye); // (under detail_px across, the tube alone)
+		if (bDetail && Age >= B.Land2 && CaseShadow > 0.0 && Room - Used >= 3)
 		{
 			// (the contact shadow: on the ground under the case, a little away from the sun, soft-edged)
 			const Vec Level = Vec(Axis.X, Axis.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
@@ -4369,7 +4371,7 @@ namespace TheaterFx
 		++Used;
 		Tube.bOn = false;
 		const double Facing = Axis.Dot(ToEye);
-		if (Facing > 0.08 && Room - Used >= 1)
+		if (bDetail && Facing > 0.08 && Room - Used >= 1)
 		{
 			// (the open mouth, turned toward the eye: the dark inside, its rim the brass lip lit as the tube's top)
 			const Vec Cross_ = Axis.Cross(Lv).Unit(Eye.Up);
@@ -5021,6 +5023,17 @@ namespace TheaterFx
 		auto Takes = [&](const Order& O) -> size_t
 		{
 			const Bit& Piece = *O.B;
+			if (Piece.bThrown && Piece.Form == Bit::Shape::Plate)
+			{
+				// (a spent case lays up to three fans: its shadow once it lies there, its tube, its mouth. Under detail_px
+				// across, the tube alone. Counted as one, the room ran out before the nearest: the heap under the gun
+				// blinked out. The pre-check, 07:35Z)
+				if (!CaseDetailed(Piece.R0, O.Deep + Piece.Nearer, Eye))
+				{
+					return 1u;
+				}
+				return Now - Piece.Born >= Piece.Land2 && CaseShadow > 0.0 ? 3u : 2u;
+			}
 			bool bMayTwin = false;
 			if (Piece.TwinPx > 0.0)
 			{
