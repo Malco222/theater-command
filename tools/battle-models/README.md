@@ -270,6 +270,11 @@ She has no `prop.N` parts and no flaps; her sockets add `jet.N` (each tailpipe).
 `tech` "jets": by the art director's unit table Germany flies her only once jet fighters are researched (the rules'
 tech `jets`), and whether a battle mixes her in among the Fw 190s is the air battle builder's call.
 
+A trimotor (the SM.79, the Ju 52) has `engines` on her wings and `nose_engine`: True as well: her nose airscrew,
+spinner, cowling and exhausts are seated as a single-engined machine's are, from the same keys (`spinner`, `screw`,
+`blades`, `engine`, `lip`, `nose_back`, `stubs`). Her airscrews are numbered from port: `prop.1` and `engine.1` her
+port wing's, then her nose's, then her starboard wing's. Like every machine with wing engines she has no flap parts.
+
 **The benchmark** (Brian, 2026-11-19, of a B-17G model he had found: "use this 3d model is our bench mark for all
 airplanes"; "here is more inspiration of the level of detail im looking for"). His pictures are a reference for shape
 and finish only: no mesh or texture of theirs is used, and their nose art, names, codes and serials are real
@@ -299,6 +304,74 @@ She has the chin turret and its fairing, a cheek gun each side of her nose, the 
 turrets, the waist, radio room and tail guns (her gunner's cabin stands behind her rudder), and her main wheels
 show half out of the inner nacelles, as the real machine's do. 91,000 triangles. Her turrets and guns are numbered
 afresh: read them from her file and from `gun-arcs.json`, not from memory.
+
+The `Stuka` is the second (Brian, 2026-11-19, of a picture of a Ju 87: "here is a stuka but i want it in the all
+black"): `EXTRA_PLANES["Stuka"]`, laid out against a three-view of the Ju 87B-2 (Wikimedia Commons, "Junkers Ju 87B-2
+Stuka.svg", Kaboldy, CC BY-SA 3.0; measured, not traced). She is black all over with a soft second tone, her rivets
+a shade lighter so that the black never reads as a hole, plain crosses on her sides and wings and nothing on her
+fin. Her cranked wing, trousered legs and spats, the siren on each leg, the radiator bath under her nose, the dive
+brake under each wing, the struts under her tailplane and the bomb on its crutch are in her numbers; her gunner
+faces aft with his gun (`flexgun.1`). 44,000 triangles. Three more keys of `cabin` make her long greenhouse:
+
+- `roof`: all of the cabin above its sill is glass (a greenhouse with no plated roof);
+- `hoops`: where a frame arches over it from sill to sill;
+- `spine`: a bar along its top.
+
+**The four single-seat fighters** come next (Brian, 2026-11-19: "all 4", the B-17's standard for the `Mustang`,
+`Spitfire`, `Bf109` and `Zero`): `fighters.FIGHTERS`, added to `EXTRA_PLANES`, each laid out against a three-view of
+the real machine (the P-51D, the Spitfire Mk I's lines, the Bf 109 E, the A6M2; each drawing is named beside her
+numbers in `fighters.py`; measured, not traced). They keep the game's own colours and marks as built. Wheels are up
+in flight, so a tailwheel that retracted (the Mustang's, the Zero's) is left off; the Spitfire's and the Bf 109's
+stay. 27,000 to 32,000 triangles, plain 4,700 to 6,000. What their numbers add:
+
+- `canopy`: a function of her fuselage that gives her glass as framed pieces (a windscreen, a hood, the glazing
+  behind it), each a loft through half sections from the foot of its rail up and over to her middle line; where the
+  points are few the panes are flat. `hoops` are frames across a piece, `rails` along it, `bars` and `struts` any
+  other; `bar` is their half width, `cap` glazes a piece's after end round and `bare` names sections its rails stop
+  short of. Every windscreen has a flat front pane between straight posts. `bubble` lays down a blown hood, widest at
+  its rail (the Mustang, the Spitfire); `box` flat panes in square frames under a flat roof (the Bf 109); `green` a
+  greenhouse of many frames with flat sides and a roof rounded in flat panes (the Zero). The rail a hood slides on
+  is painted her coat.
+- `opening`: her cockpit is open under the glass, from this x to that and from this many degrees round her side up
+  over her top; `planes.py` cuts her skin away there and `fitout.open_cockpit` lines it: her skin again from inside,
+  dark; the panel with its dials; the coaming and the gunsight, kept under the windscreen's glass; a floor; a padded
+  rim. The pilot sits wholly inside, his right hand on the stick and his left on the throttle.
+- `glare` (the game's own key, the dull panel ahead of her windscreen) lies on the round of her nose on a machine
+  with a `canopy`, not as a flat strip standing off it (the Mustang's olive drab).
+- a row of `scoops` may take a fourth item, `"one"`: that scoop is on her one side only (the Spitfire's radiator
+  under her starboard wing, her oil cooler under her port one); `mast` takes a fourth value, how far its top stands
+  aft of its foot (less than nothing: the Zero's, raked forward).
+
+**The `Me262`** is laid out again to the same standard (Brian, 2026-11-19, of pictures of one: "here is the ME 262
+for insipiration", and of the teeth painted on its nose: "dont do the shark nose"). Her numbers stand before
+`EXTRA_PLANES` in `planes.py`, measured from a three-view (Wikimedia Commons, "Messerschmitt Me 262 Schwalbe 3d
+drawing.svg", Voytek S, CC BY-SA 3.0; measured, not traced). Her nose is plain: four cannon ports and nothing
+painted on it. Plain crosses on her sides and wings, nothing on her fin, no aerial wire. 43,000 triangles. What her
+numbers add:
+
+- `taper`: (how much of her width is left at her spine, the height the narrowing begins at, stations of how much of
+  the taper she has along her). Her fuselage is a rounded triangle, wide low down and narrow at the spine, not an
+  oval: `fitout.hull_body` gives the game's `Body` with the same calls (`at`, `out`, `w`, `h`, `z`) and three more
+  (`round_of` a point, `side_at` a height, `top_at` a distance out). Her stations' half widths are still her widest.
+  A marking on a sloping side lies on the slope (its `facing` in her file then has a rise).
+- her `canopy` is three pieces in the fighters' form (the flat windscreen between its posts, the hinged hood, the
+  long fixed glass behind it that runs down to a point on her spine) over an `opening`; the rail's foot stands down
+  her side from the cockpit's rim and clear of it, so the rim's padding does not show outside the glass.
+- `graded` (her coat by where a point is): splinter wedges of two greys over her wings, her tailplane and along her
+  spine, in zones of straight lines (`_ME262_ZONES`: each line flips the colour, and lines next to each other lean
+  opposite ways); her sloping sides, her fin and her pods' flanks in the paler grey with broad soft clouds of the
+  darker, thicker toward her spine; pale blue-grey beneath.
+- `grain`: how far apart her wing's and tailplane's rings stand, when the usual is too coarse (`{"wing": 0.12,
+  "tail": 0.11}`; with it the rings along the chord stand closer too, `CHORDS_CLOSE`). A coat is laid point by
+  point, so a paint line narrower than the mesh comes out in steps: her lines are 12 cm of sprayed edge on a 12 cm
+  mesh, and run straight. Any machine may take the key.
+- `lines`: (how wide her scribed lines are against the usual, how far their colour is toward her paler upper
+  colour). The art director, 2026-11-19, of her first lines, black and even on pale grey: "she reads like a
+  blueprint". The joints her fuselage was built in (`hull_lines`) keep the usual width.
+- her soot (in `weather`, as every machine's): each pipe has scorched the tail of its pod, a soft stain runs back
+  under her rear fuselage, both in streaks, and each cannon port draws a faint stain back along her nose. An entry
+  of `f.stains` may end with how strong it is and how broad against an exhaust's. A jet's soot lies over her rivets
+  too.
 
 **The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, twelve more entries in
 `EXTRA_PLANES`. Paints and first years are the art director's rulings of that day; the file's `year` is the first
@@ -715,7 +788,8 @@ holds no sound: the mixer reads the pack where it lies, and a name the pack does
 - Camouflage patches are blended from point to point of the skin, so their edges are as soft as the skin's grain is
   coarse. The art director would like the 1940 British and German schemes tight-edged (a hand's width); that needs
   the skin cut along the patch edges, or the patches drawn in the game's shader. Soft is right for the Soviet
-  greens and the Me 262's mottle.
+  greens and the Me 262's clouds. Short of that, `grain` in a machine's numbers halves the wing's mesh and a
+  `graded` coat of straight lines then holds an edge a hand's width and a half broad (the Me 262's splinter).
 - One plain mesh (`far`) per model; no third level of detail.
 - The men and tanks in the landing craft are stand-ins; the land team's soldiers and tanks should stand there.
 - No beach in the pictures' stage, so there is no clip of a landing yet.

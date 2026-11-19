@@ -26,12 +26,12 @@ SUITS = {"UK": ("4D5666", "C9A227"), "GER": ("5C6670", "A39A5C"), "USA": ("6E624
 # Which machines carry guns over the engine, firing through the airscrew.
 NOSE_GUNS = {"Bf109", "Zero", "Fw190", "Yak", "Fighter", "Dauntless", "Val"}
 # Cannon in a jet's nose, each a port in her skin: (how far along her, where round her in degrees, 90 being her top).
-NOSE_CANNON = {"Me262": [(3.72, 68.0), (3.72, 112.0), (3.5, 40.0), (3.5, 140.0)]}
+NOSE_CANNON = {"Me262": [(3.78, 66.0), (3.78, 114.0), (3.62, 9.0), (3.62, 171.0)]}
 # Who sits under each hood where it is not one pilot: (which hood, how far forward, how far to port, which way he looks).
 SEATS = {"Kate": [(0, 0.85, 0.0, 0.0), (0, -0.45, 0.0, 0.0), (0, -1.75, 0.0, 180.0)], "Val": [(0, 0.75, 0.0, 0.0), (0, -1.4, 0.0, 180.0)],
          "Dauntless": [(0, 0.7, 0.0, 0.0), (0, -1.5, 0.0, 180.0)], "Avenger": [(0, 1.5, 0.0, 0.0), (0, -0.6, 0.0, 0.0)],
          "DiveBomber": [(0, 0.7, 0.0, 0.0), (0, -1.3, 0.0, 180.0)], "TorpedoBomber": [(0, 1.15, 0.0, 0.0), (0, -0.3, 0.0, 0.0), (0, -1.7, 0.0, 180.0)],
-         "Stuka": [(0, 0.75, 0.0, 0.0), (0, -1.55, 0.0, 180.0)], "Sturmovik": [(0, 0.7, 0.0, 0.0), (0, -1.25, 0.0, 180.0)],
+         "Stuka": [(0, 0.55, 0.0, 0.0), (0, -0.85, 0.0, 180.0)], "Sturmovik": [(0, 0.7, 0.0, 0.0), (0, -1.25, 0.0, 180.0)],
          "He111": [(0, -0.45, 0.0, 180.0)], "Lancaster": [(0, 7.45, 0.3, 0.0), (0, 6.95, -0.3, 0.0), (0, 5.6, 0.0, 0.0)],
          "B17": [(0, 4.42, 0.36, 0.0), (0, 4.42, -0.36, 0.0)], "Bomber": [(0, 3.75, 0.28, 0.0), (0, 3.75, -0.28, 0.0)],
          "Betty": [(0, 5.4, 0.3, 0.0), (0, 5.4, -0.3, 0.0), (0, 3.9, 0.0, 0.0)], "Nell": [(0, 4.45, 0.24, 0.0), (0, 4.45, -0.24, 0.0)]}
@@ -89,6 +89,80 @@ def body_top(body, x, y=0.0):
     e = body.square_at(x) if hasattr(body, "square_at") else 2.0 / body.power
     t = min(abs(y - body.side) / max(w, 1e-6), 1.0)
     return body.z(-x) + h * (1.0 - t ** e) ** (1.0 / e)
+
+
+def hull_body(Body, s):
+    """Her fuselage's body. Round, as the game's are; or, with `taper` in her numbers, a rounded triangle: widest low
+    down and drawn in toward her spine, as the Me 262's is (her wheels lie flat in the bottom of it). `taper` is (how
+    much of her width is left at her spine, the height the narrowing begins at (-1 her keel, 0 her middle, 1 her
+    spine), then stations (x, how much of the taper she has there: none at a round nose, all of it amidships)).
+    Her stations' half widths are still her widest, as a plan view shows them. Round her, a point is still named by
+    the same angle (its height is what the angle gives): `round_of` gives it back for a point of her skin."""
+    if not s.get("taper"):
+        return Body(s["hull"], s.get("square", 2.0))
+    top, low, along = s["taper"]
+    along = sorted(along, key=lambda r: -r[0])
+    widest = {}
+
+    class Tapered(Body):
+        def share(self, x):
+            if x >= along[0][0]:
+                return along[0][1]
+            for (xa, ka), (xb, kb) in zip(along, along[1:]):
+                if x >= xb:
+                    return ka + (kb - ka) * (xa - x) / (xa - xb)
+            return along[-1][1]
+
+        def narrow(self, k, t):
+            return 1.0 - (1.0 - top) * k * max(0.0, (t - low) / (1.0 - low))
+
+        def widest(self, k):
+            key = round(k, 3)
+            if key not in widest:
+                n = 2.0 / self.power
+                widest[key] = max((1.0 - abs(t) ** n) ** (1.0 / n) * self.narrow(k, t) for t in (-1.0 + j / 60.0 for j in range(121)))
+            return widest[key]
+
+        def at(self, x, a, proud=0.0):
+            c, sn = math.cos(a), math.sin(a)
+            y, z = math.copysign(abs(c) ** self.power, c), math.copysign(abs(sn) ** self.power, sn)
+            k = self.share(x)
+            g = self.narrow(k, z) / self.widest(k)
+            return Vector((x, self.side + y * (g * self.w(-x) + proud), self.z(-x) + z * (self.h(-x) + proud)))
+
+        def round_of(self, p):
+            """How far round her a point of her skin is: degrees up from level (90 on her spine, -90 on her keel)."""
+            t = max(-1.0, min(1.0, (p.z - self.z(-p.x)) / max(self.h(-p.x), 1e-6)))
+            return math.degrees(math.asin(math.copysign(abs(t) ** (1.0 / self.power), t)))
+
+        def side_at(self, x, z):
+            """How far out her side stands at this height (nothing above or below her)."""
+            t = (z - self.z(-x)) / max(self.h(-x), 1e-6)
+            if abs(t) >= 1.0:
+                return 0.0
+            n, k = 2.0 / self.power, self.share(x)
+            return self.w(-x) * (1.0 - abs(t) ** n) ** (1.0 / n) * self.narrow(k, t) / self.widest(k)
+
+        def top_at(self, x, y):
+            """How high her upper skin stands at x, y off her middle line (her spine's height beyond her side)."""
+            lo, hi = 0.0, 0.5 * math.pi
+            if abs(y) >= self.at(x, lo).y:
+                return self.z(-x)
+            for _ in range(36):
+                mid = 0.5 * (lo + hi)
+                if self.at(x, mid).y > abs(y):
+                    lo = mid
+                else:
+                    hi = mid
+            return self.at(x, 0.5 * (lo + hi)).z
+    return Tapered(s["hull"], s.get("square", 2.0))
+
+
+def wall(m, hull, x, way, paint="inside", inset=0.012, sides=32):
+    """A bulkhead across her fuselage at x, in her own section (a disc pokes through the sides of one that is not an oval)."""
+    ring = [port(hull.at(x, 2.0 * math.pi * k / sides, -inset)) for k in range(sides)]
+    mid = Vector((x, 0.0, hull.z(-x)))
+    m.add(ring + [mid], [(k, (k + 1) % sides, sides) for k in range(sides)], paint, False, lambda q: Vector(way))
 
 
 def cabin_body(Body, stations, cabin, hull=None):
@@ -236,11 +310,12 @@ def figure(m, head, face=0.0, vest=True, mask=True, chest=True):
     return at
 
 
-def arms(m, at, grips, fore=None):
+def arms(m, at, grips, fore=None, inside=None):
     """A gunner's two arms, from his shoulders to a grip for each hand (his left first; places on the machine): the
     upper arm, the elbow, the forearm and a gloved hand closed on the grip (Brian, 2026-11-19: "he should be in the
     turrett with 2 hands on the 50 call guns"). `fore`: the part his forearms and hands belong to, so that they stay
-    on a gun that moves; his upper arms stay with him."""
+    on a gun that moves; his upper arms stay with him. `inside`: where a narrow fuselage has room for his upper arm (a
+    function of the place his elbow would hang and his shoulder, giving the place it may hang)."""
     body = m.parts[m.cur].name
     u, v = (8, 5) if m.fine else (6, 3)
     for sy, grip in zip((1.0, -1.0), grips):
@@ -250,6 +325,8 @@ def arms(m, at, grips, fore=None):
         reach = (grip - sh).length
         sag = math.sqrt(max(0.29 ** 2 - (0.5 * reach) ** 2, 0.0))      # (an arm is two bones of 29 cm: the elbow hangs as far off the line as they allow)
         elbow = (sh + grip) * 0.5 + (out * 0.55 - Z * 0.83).normalized() * sag
+        if inside:
+            elbow = inside(elbow, sh)
         m.use(body)
         m.rod(sh, elbow, 0.06, "suit", 0.05, sides=7)
         m.ball(elbow, 0.052, "suit", u, v)
@@ -273,7 +350,7 @@ def cockpit(m, f, s, G, hull):
     m.use("plane")
     for i, (stations, hoops, spine) in enumerate(s.get("hoods", [])):
         if getattr(f, "cockpit", None):
-            open_cockpit(m, f, s, hull)                    # (her cockpit is open under her canopy: its own dark, and what is in it)
+            open_cockpit(m, f, s, hull, G)                 # (her cockpit is open under her canopy: its own dark, and what is in it)
             break
         hood = hood_body(G, s, i)
         n = 14 if m.fine else 6
@@ -287,6 +364,7 @@ def cockpit(m, f, s, G, hull):
     for hood, x, y, face in seats_of(f, s, G):
         z = body_top(hood, x, -y) - 0.118 - 0.03 - SEAT_DROP.get(f.name, 0.0)
         at = figure(m, (x, y, z), face, vest=single)
+        f.seated = getattr(f, "seated", []) + [(Vector((x, y, z)), face, at)]             # (for rear_gunner: a man facing aft at a gun)
         if not m.fine:
             continue
         m.box(at(-0.2, 0, -0.3), (0.05, 0.42, 0.36), "inside", yaw=face)                    # the back of his seat
@@ -308,7 +386,7 @@ def cockpit(m, f, s, G, hull):
         first = False
 
 
-def open_cockpit(m, f, s, hull):
+def open_cockpit(m, f, s, hull, G=None):
     """A fighter's cockpit, open under her canopy (planes.py cuts her skin away there: fighters.opening): her skin
     again from inside, dark; her instrument panel across the front of it with its dials, and a bulkhead behind her
     seat; a floor; and a padded rim round its edge (Brian, 2026-11-19: the crew "fully inside with their hands on
@@ -316,7 +394,10 @@ def open_cockpit(m, f, s, hull):
     x0, x1, edge = f.cockpit
     liner(m, f, hull, x0, x1, lambda x, high: x1 < x < x0 and high > edge)
     for x, way in ((x0, -X), (x1, X)):
-        m.disc((x, 0.0, hull.z(-x)), way, hull.h(-x) * 0.97, "inside", 24, oval=hull.w(-x) / hull.h(-x))
+        if hasattr(hull, "round_of"):
+            wall(m, hull, x, way)                          # (a fuselage that is not an oval: fitout.hull_body)
+        else:
+            m.disc((x, 0.0, hull.z(-x)), way, hull.h(-x) * 0.97, "inside", 24, oval=hull.w(-x) / hull.h(-x))
     xm = 0.5 * (x0 + x1)
     m.box((xm, 0.0, hull.z(-xm) - 0.36 * hull.h(-xm)), (x0 - x1, 1.5 * hull.w(-xm), 0.04), "inside")              # (her floor)
     # (her instrument panel, black, its top under the coaming, with two rows of dials)
@@ -336,6 +417,8 @@ def open_cockpit(m, f, s, hull):
     if m.fine:
         sx = x0 + 0.1
         top = hull.at(sx, math.pi / 2.0).z
+        if G is not None:
+            top = min(top, body_top(hood_body(G, s, 0), sx + 0.02) - 0.2)     # (and under her windscreen's glass, where it is low over it)
         m.box((sx, 0.0, top + 0.045), (0.08, 0.055, 0.09), "gunmetal")
         m.box((sx + 0.02, 0.0, top + 0.12), (0.008, 0.075, 0.085), "lens", pitch=-32.0)
     # (the rim round its edge, padded)
@@ -358,6 +441,11 @@ def controls(m, at, x, z, hull):
     m.box(at(0.2, 0.3, -0.5), (0.26, 0.05, 0.08), "gunmetal")                                                     # the throttle's quadrant on the wall
     m.rod(at(0.18, 0.29, -0.48), throttle, 0.012, "gunmetal", sides=5)                                            # its lever
     arms(m, at, (throttle, stick))
+    lap(m, at)
+
+
+def lap(m, at):
+    """A man's seat under him, and his thighs on it, his knees up and his shins down to the floor ahead of him."""
     m.box(at(0.06, 0.0, -0.8), (0.42, 0.42, 0.05), "inside")                                                      # his seat
     u, v = (8, 5) if m.fine else (6, 3)
     for sy in (1.0, -1.0):
@@ -399,7 +487,8 @@ def gunners(m, f):
         way = way.normalized() if way.length > 1e-6 else X.copy()
         m.use(f"turret.{k}")
         lift = max(0.1 * radii[2], min(0.52 * radii[2], radii[2] - 0.16))      # (his head clear under the dome, not cut off by her roof)
-        at = figure(m, c + Z * lift - way * 0.1, face, vest=False)
+        back = 0.22 if len(guns) == 1 else 0.1                                 # (one gun is on his middle line, under his eye: he sits back from its breech)
+        at = figure(m, c + Z * lift - way * back, face, vest=False)
         m.disc(c + Z * 0.012, Z, 0.9 * min(radii[0], radii[1]), "inside", 20 if m.fine else 10)
         grips = []
         if m.fine:
@@ -411,14 +500,105 @@ def gunners(m, f):
                 grip = a - d * 0.15
                 for sz in (-1.0, 1.0):                                                           # (and its spade grip behind that)
                     m.rod(a - d * 0.1 + over * 0.035 * sz, grip + over * 0.035 * sz, 0.011, "gunmetal", sides=5)
+                if len(guns) == 1:
+                    # (one gun: its spade grips stand out each side of its breech, a hand on each)
+                    side = d.cross(over).normalized()
+                    pair = [grip + side * 0.085 * sy for sy in (-1.0, 1.0)]
+                    m.rod(pair[0], pair[1], 0.011, "gunmetal", sides=5)
+                    for g in pair:
+                        m.rod(g - over * 0.05, g + over * 0.05, 0.017, "gunmetal", sides=6)
+                    grips += pair
+                    continue
                 m.rod(grip - over * 0.05, grip + over * 0.05, 0.017, "gunmetal", sides=6)
                 grips.append(grip)
         if len(grips) == 2:
             left = at(0.0, 1.0, 0.0) - at(0.0, 0.0, 0.0)
             grips.sort(key=lambda g: -(g - c).dot(left))
             m.use(f"turret.{k}")
-            arms(m, at, grips, fore=f"turret.{k}.guns")
+            arms(m, at, grips, fore=f"turret.{k}.guns", inside=lambda el, sh: tuck(f.hull, el, sh, 0.09))
     m.use("plane")
+
+
+def flex_pair(s, base):
+    """How far each gun of a pair on one free mounting stands out from its middle; 0 for a single gun. (A pair is one
+    rod in her numbers, off her middle line: planes.py mirrors it, and makes the two one mounting.)"""
+    if abs(base.y) > 1e-6:
+        return 0.0
+    for kind, v in s.get("extras", []):
+        if kind == "rod" and v[4] == "steel" and abs(v[0][0] - base.x) < 0.01 and abs(v[0][2] - base.z) < 0.01 and 0.0 < abs(v[0][1]) < 0.3:
+            return abs(v[0][1])
+    return 0.0
+
+
+def rear_gunner(m, f, s, G, hull):
+    """A man who sits facing aft under her hood with a gun on a free mounting in front of him (the rear gunner of a
+    dive bomber or a torpedo bomber, the gunner on a bomber's back): each gun's breech on its own line back to a pair
+    of grips where his hands fall as he sits, the post it swings on, his seat and his legs; and both his hands on the
+    grips (Brian, 2026-11-19: every gunner with his two hands on his guns). His forearms and hands go with the gun."""
+    if not m.fine or not f.flex:
+        return
+    taken = set()
+    for head, face, at in getattr(f, "seated", []):
+        if abs(abs(face) - 180.0) > 1.0:
+            continue
+        near = [(nm, b, t) for nm, b, t in f.flex if nm not in taken and b.x < head.x + 0.1 and (b - head).length < 1.4 and abs(b.y - head.y) < 0.45]
+        if not near:
+            continue                                      # (a man facing aft with no gun: he keeps watch)
+        nm, base, tip = min(near, key=lambda g: (g[1] - head).length)
+        taken.add(nm)
+        d = (tip - base).normalized()
+        want = at(0.33, 0.0, -0.2)                        # (where his hands fall as he sits: a forearm ahead of his chest)
+        hold = base - d * min(max((base - want).dot(d), 0.2), 0.8)      # (the middle of his grips, on the line of his guns)
+        across = d.cross(Z)
+        across = across.normalized() if across.length > 1e-6 else Y.copy()
+        over = across.cross(d).normalized()
+        if over.z < 0.0:
+            over = -over
+        half = flex_pair(s, base)
+        m.use(nm)
+        for sy in ((-1.0, 1.0) if half else (0.0,)):
+            off = across * half * sy
+            m.rod(hold + off + d * 0.03, base + off + d * 0.1, 0.032, "gunmetal", sides=8)       # (its breech, back from where its barrel begins)
+            m.box(hold + off + d * 0.2 - over * 0.075, (0.1, 0.05, 0.075), "gunmetal")            # (the box its rounds feed from)
+        grips = [hold + across * (half + 0.08) * sy for sy in (-1.0, 1.0)]
+        m.rod(grips[0], grips[1], 0.012, "gunmetal", sides=5)                                      # (the bar across the back of the breech)
+        for g in grips:
+            m.rod(g - over * 0.06, g + over * 0.06, 0.017, "gunmetal", sides=6)                    # (a grip for each hand)
+        m.use("plane")
+        deck = body_top(hull, base.x, -base.y)
+        if 0.05 < base.z - deck < 0.45:
+            m.rod(base - Z * 0.03, Vector((base.x, base.y, deck - 0.03)), 0.022, "gunmetal", sides=6)   # (the post it swings on)
+        lap(m, at)
+        left = at(0.0, 1.0, 0.0) - at(0.0, 0.0, 0.0)
+        grips.sort(key=lambda g: -(g - hold).dot(left))
+        arms(m, at, grips, fore=nm, inside=lambda el, sh: tuck(hull, el, sh, 0.09))
+    m.use("plane")
+
+
+def room_at(hull, p, room):
+    """How far out from her middle line a thing may stand at this place and stay `room` inside her skin; None above
+    her top (there it is under her glass)."""
+    w, h, zc = hull.w(-p.x), max(hull.h(-p.x), 1e-6), hull.z(-p.x)
+    t = abs(p.z - zc) / h
+    if p.z > zc and t >= 1.0:
+        return None
+    e = hull.square_at(p.x) if hasattr(hull, "square_at") else 2.0 / hull.power
+    return max(w * (1.0 - min(t, 1.0) ** e) ** (1.0 / e) - room, 0.04)
+
+
+def tuck(hull, elbow, shoulder, room):
+    """An elbow brought in towards her middle line until the whole upper arm, from the shoulder down to it, is inside
+    her skin: a man who sits high in a narrow fuselage holds his elbows in."""
+    e = Vector(elbow)
+    hand = 1.0 if shoulder.y >= 0.0 else -1.0
+    for t in (1.0, 0.75, 0.5, 0.3):
+        p = shoulder + (e - shoulder) * t
+        lim = room_at(hull, p, room)
+        if lim is not None and abs(p.y) > lim:
+            e.y = shoulder.y + (hand * lim - shoulder.y) / t
+            if hand * e.y < 0.04:
+                e.y = hand * 0.04
+    return e
 
 
 # The machines whose belly turret is a steel ball.
@@ -524,7 +704,7 @@ def exhausts(m, f, s, G, hull):
             stub(body.at(x, a), body.out(x, a), part, long, 0.05)
             f.stains.append((body, x - long, 2.4, a))
 
-    if not s.get("engines"):
+    if not s.get("engines") or s.get("nose_engine"):                                 # (a trimotor's nose engine too)
         if s.get("stubs"):
             row(hull, s["stubs"][0], s["stubs"][1], s["stubs"][2], "plane")
         elif s.get("engine") == "radial" and s.get("nose_back") is not None:
@@ -809,8 +989,8 @@ def rivets(m, f, s, G, hull):
             low = x >= cab["back"] and deg < hood.deg_of(x, cab["sill"]) - 4.0      # (her side under her windows)
             if x >= cab["back"] and not low and deg < hood.deg_of(x, cab["top"]) + 7.0:
                 return None                                # (her side windows)
-            if x > hood.roof_from - 0.06 and not low:
-                return None                                # (her windscreen)
+            if (x > hood.roof_from - 0.06 or cab.get("roof")) and not low:
+                return None                                # (her windscreen; a greenhouse's glass)
             if hatch and hatch[1] - 0.05 < x < hatch[0] + 0.05 and deg > hatch[2] - 4.0:
                 return None
             if brow and brow[1] - 0.05 < x < brow[0] + 0.05 and brow[2] - 4.0 < deg < brow[3] + 4.0:
@@ -1208,6 +1388,7 @@ def jets(m, f, s, G, hull):
         xs = [x + 0.02 - 0.34 * k / 5.0 for k in range(6)]
         m.strip([port(hull.at(q, a)) for q in xs], [port(hull.out(q, a)) for q in xs], 0.032, "engine", lift=0.004,
                 taper=lambda t: 0.35 + 0.65 * math.sin(math.pi * min(max(t, 0.0), 1.0)) ** 0.5)
+        f.stains.append((hull, x - 0.3, 1.0, a, 0.5, 0.75))        # (her cannon's smoke, drawn back from each port: fainter than an exhaust's stain, and narrower)
     if m.fine:
         # the gun bay's hatches (hinged along her spine), and the nosewheel's doors under her
         long = [3.9 - 1.6 * k / 10.0 for k in range(11)]
@@ -1224,6 +1405,7 @@ def jets(m, f, s, G, hull):
 def fit(m, f, s, G, hull):
     bomb_bay(m, f, s, G, hull)
     cockpit(m, f, s, G, hull)
+    rear_gunner(m, f, s, G, hull)
     glazed_nose(m, f, s, G, hull)
     gunners(m, f)
     ball_turret(m, f)

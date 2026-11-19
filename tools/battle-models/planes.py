@@ -49,6 +49,8 @@ _G = None
 # (ailerons at 0.74, flaps at 0.76, elevators at 0.62, rudders at 0.60).
 CHORDS = [0.0, 0.01, 0.04, 0.09, 0.16, 0.25, 0.36, 0.48, 0.60, 0.62, 0.74, 0.76, 0.86, 0.94, 0.98, 1.0]
 CHORDS_PLAIN = [0.0, 0.1, 0.35, 0.62, 0.75, 0.9, 1.0]
+# (with `grain` in her numbers, a coat of straight-edged wedges: her wing's rings stand closer, and along its chord too)
+CHORDS_CLOSE = [0.0, 0.01, 0.04, 0.09, 0.125, 0.16, 0.205, 0.25, 0.305, 0.36, 0.42, 0.48, 0.54, 0.60, 0.62, 0.68, 0.74, 0.76, 0.81, 0.86, 0.90, 0.94, 0.98, 1.0]
 BATTLE = {"hull": 0.15, "wing": 0.24, "tail": 0.22, "fin": 0.2}        # (how far apart the rings stand; set for each machine)
 FLAP, AILERON, ELEVATOR, RUDDER = (0.1, 0.5, 0.76), (0.54, 0.93, 0.74), (0.08, 0.95, 0.62), (0.06, 1.0, 0.60)
 # Where a bomber's bay is: from, to along her (its doors are the strip of her belly BAY_HALF degrees each side of her keel).
@@ -108,6 +110,11 @@ FINER = [
 GRADED = [
     ('    def field(p):\n        return noise.noise(', '    def field(p):\n        if s.get("graded"):\n            return s["graded"](p)\n        return noise.noise('),
     ('        if p.x > nose_back:\n            return "nose"', '        if p.x > nose_back and not s.get("graded"):\n            return "nose"'),
+    # (`taper`: a fuselage that is a rounded triangle, not an oval: fitout.hull_body; a marking on its sloping side
+    #  lies on the slope, and does not stand upright half inside her)
+    ('    hull = Body(s["hull"], s.get("square", 2.0))\n', '    hull = __import__("fitout").hull_body(Body, s)\n'),
+    ('"facing": [round(n.x, 3), round(n.y, 3), 0.0], "curve": round(bend, 3), "both": True})',
+     '"facing": [round(n.x, 3), round(n.y, 3), round(n.z, 3) if hasattr(hull, "round_of") else 0.0], "curve": round(bend, 3), "both": True})'),
 ]
 
 
@@ -195,24 +202,154 @@ def navy_blues(stations, square, fin_from, line=0.42):
     return field
 
 
+# ---- the Me 262 (Brian, 2026-11-19, of four pictures of one: "here is the ME 262 for insipiration"; "dont do the
+# shark nose"). Laid out again against "Messerschmitt Me 262 Schwalbe 3d drawing" (Wikimedia Commons, Voytek S,
+# CC BY-SA 3.0) at 167.7 pixels to the metre, her length 10.6 m: measured, not traced. What changed: her fuselage
+# is a rounded triangle, widest low down (`taper`), and lower and straighter along her back; her hood is low, with
+# flat sloping sides, a flat pane in front between two posts, a hinged middle and a long fixed tail of glass, over
+# an open cockpit (the fighters' `canopy`: fighters.py); her fin is 0.6 m lower and her tailplane half way up it;
+# her pods hang further out; a wing with its kinked trailing edge. Her nose is plain: four cannon ports, no mouth,
+# no eyes. Her coat is a splinter of grey-green and pale grey along her top, with her pale blue-grey coming high up
+# her sloping sides and over her fin, blotched with the upper colours as they were sprayed.
+_ME262_HULL = [(4.45, -0.03, 0.02, 0.02), (4.4, -0.03, 0.09, 0.08), (4.3, -0.04, 0.18, 0.15), (4.0, -0.022, 0.31, 0.248), (3.5, -0.022, 0.48, 0.378),
+               (3.0, -0.025, 0.615, 0.475), (2.5, -0.03, 0.72, 0.54), (2.0, -0.03, 0.8, 0.59), (1.5, -0.0275, 0.84, 0.6275), (1.0, -0.0225, 0.85, 0.6425),
+               (0.0, -0.0325, 0.85, 0.6325), (-1.0, -0.0475, 0.82, 0.6075), (-1.5, -0.0425, 0.76, 0.5775), (-2.0, -0.0425, 0.67, 0.5175),
+               (-3.0, -0.0425, 0.5, 0.4275), (-3.75, -0.05, 0.37, 0.35), (-4.4, -0.07, 0.265, 0.27), (-5.0, -0.085, 0.17, 0.205),
+               (-5.5, -0.0975, 0.1, 0.1475), (-6.0, -0.06, 0.035, 0.06), (-6.15, -0.02, 0.01, 0.015)]
+_ME262_TAPER = (0.36, -0.6, [(4.45, 0.0), (4.1, 0.3), (3.2, 0.85), (2.4, 1.0), (-3.2, 1.0), (-5.0, 0.6), (-6.15, 0.3)])
+_ME262_EDGE = 46.0                                          # (her cockpit's rim: this far round her from level)
+# Her hood: (x, the height its glass begins at, the height of its top, half the width of the flat of its top).
+_ME262_HOOD = [(0.47, 0.5, 0.905, 0.1), (0.2, 0.5, 0.955, 0.085), (-0.1, 0.5, 0.94, 0.085), (-0.38, 0.5, 0.895, 0.08)]
+# The fixed glass behind it: (x, where its glass begins: out and up, the height of its top, half the flat of its top,
+# how far out its metal foot stands on her: None along her cockpit's rim).
+_ME262_REAR = [(-0.38, None, 0.5, 0.895, 0.08, None), (-0.6, 0.24, 0.565, 0.84, 0.065, None), (-0.8, 0.15, 0.625, 0.795, 0.045, None),
+               (-1.0, 0.05, 0.685, 0.725, 0.02, 0.3), (-1.15, 0.012, 0.7, 0.705, 0.004, 0.26), (-1.5, 0.004, 0.537, 0.54, 0.002, 0.1)]
+_ME262_SCREEN = (0.97, 0.2)                                 # (the foot of her windscreen's flat pane, and half its width there)
+_ME262_BOX = []
+
+
+def _me262_hull():
+    if not _ME262_BOX:
+        _ME262_BOX.append(fitout.hull_body(game()["Body"], {"hull": _ME262_HULL, "square": 3.0, "taper": _ME262_TAPER}))
+    return _ME262_BOX[0]
+
+
+def _me262_section(hull, x, sill, top, flat, out=None, foot=None):
+    """Half a section of her hood, nine points: the foot of its metal rail on her (two points), then its glass from
+    the sill straight up her sloping side to the shoulder, round the shoulder, and level to her middle line."""
+    if foot is None:
+        edge = hull.at(x, math.radians(_ME262_EDGE - 7.0))     # (down her side from the rim, and clear of it: the rail covers the rim's padding)
+        fy, fz = edge.y + 0.014, edge.z
+    else:
+        fy, fz = foot, hull.top_at(x, foot) - 0.006
+    sy = hull.side_at(x, sill) + 0.012 if out is None else out
+    sy = max(sy, flat + 0.002)
+    rise = max(top - sill, 0.004)
+    shoulder = (flat + min(0.05, 0.6 * (sy - flat)), top - min(0.06, 0.35 * rise))
+    return [(max(fy - 0.03, 0.0), fz - 0.06), (fy, fz), (sy, sill), (0.5 * (sy + shoulder[0]), 0.5 * (sill + shoulder[1])), shoulder,
+            (flat + min(0.02, 0.25 * (sy - flat)), top - min(0.018, 0.1 * rise)), (flat, top - min(0.004, 0.02 * rise)), (0.5 * flat, top), (0.0, top)]
+
+
+def _me262_canopy(hull):
+    skirt, post = 2, 6
+    x0, sill, top, flat = _ME262_HOOD[0]
+    head = _me262_section(hull, x0, sill, top, flat)
+    fx, fhalf = _ME262_SCREEN
+    fz = hull.top_at(fx, fhalf) - 0.01
+    # (the windscreen: a flat pane from its foot on her deck to its head between the posts, a quarter pane each side
+    #  from the foot's corner back and out to the sill)
+    foot = [(fhalf, fz)] * (post + 1) + [(0.5 * fhalf, fz), (0.0, fz)]
+    screen = {"sections": [(fx, foot), (x0, head)], "skirt": skirt, "hoops": [-1], "rails": [post, skirt], "bar": 0.024}
+    hood = {"sections": [(x, _me262_section(hull, x, sl, t, fl)) for x, sl, t, fl in _ME262_HOOD], "skirt": skirt, "hoops": [0, -1],
+            "rails": [skirt], "bar": 0.024}
+    rear = {"sections": [(x, _me262_section(hull, x, sl, t, fl, out, ft)) for x, out, sl, t, fl, ft in _ME262_REAR], "skirt": skirt, "hoops": [0],
+            "rails": [skirt], "bar": 0.02, "cap": True, "bare": (4, 5)}
+    return [screen, hood, rear]
+
+
+# Her splinter: the two upper colours in turn along each wing, along her spine and out along each tailplane, parted
+# by straight lines. Each zone is (whether it begins in the paler colour, its lines); a line runs from a point at
+# the leading edge to one at the trailing edge (x, y: y to starboard), or across her spine from starboard to port.
+# Lines next to each other lean opposite ways, so the bands are wedges, and no two zones are alike.
+_ME262_ZONES = {
+    "starboard": (False, [((1.23, 1.5), (-0.92, 2.9)), ((0.25, 4.3), (-0.96, 3.35)), ((0.14, 4.6), (-1.21, 5.7))]),
+    "port": (True, [((0.9, -2.4), (-1.1, -1.25)), ((0.74, -2.9), (-1.08, -4.4)), ((-0.17, -5.5), (-1.12, -4.85))]),
+    "spine": (False, [((3.7, 1.0), (2.9, -1.0)), ((1.3, 1.0), (2.0, -1.0)), ((-1.3, 1.0), (-2.1, -1.0)), ((-3.3, 1.0), (-2.6, -1.0))]),
+    "tail starboard": (False, [((-4.87, 1.25), (-5.79, 0.55))]),
+    "tail port": (True, [((-4.6, -0.7), (-5.77, -1.45))]),
+}
+
+
+_ME262_SOFT = 0.06                                          # (half the breadth of a sprayed edge, in metres)
+_ME262_GRAIN = {"wing": 0.12, "tail": 0.11}                 # (how far apart her wing's and tailplane's rings stand: half the usual)
+
+
+def _me262_edge(d):
+    """A distance in metres from a paint line as the coat's field takes it. The field is soft for 0.045 each side of
+    nought, and the coat is laid point by point: an edge narrower than her mesh's grain comes out in steps, so a line
+    is as broad as _ME262_SOFT and her wings' mesh as fine (`grain`), and the line runs straight."""
+    return max(-2.0, min(2.0, d / _ME262_SOFT)) * 0.045
+
+
+def _me262_zone(zone, p):
+    """How far a point is into a zone's paler colour, in metres from the nearest of its lines (below nought in the darker)."""
+    pale, lines = _ME262_ZONES[zone]
+    hand = -1.0 if zone.endswith("port") else 1.0
+    near = 9.0
+    for (ax, ay), (bx, by) in lines:
+        d = ((bx - ax) * (p.y - ay) - (by - ay) * (p.x - ax)) / math.hypot(bx - ax, by - ay) * hand
+        if d < 0.0:
+            pale = not pale                                 # (beyond this line: the other colour)
+        near = min(near, abs(d))
+    return near if pale else -near
+
+
+def _me262_coat(p):
+    """Her coat: above nought in her paler upper colour, below in her darker. Splinter wedges over her wings, her
+    tailplane and along her spine; her fuselage's sloping sides, her fin and the flanks of her pods in the paler
+    colour, with broad soft clouds of the darker sprayed over them, thicker toward her spine."""
+    hull = _me262_hull()
+    x = min(max(p.x, hull.back), hull.front)
+    zc, h = hull.z(-x), max(hull.h(-x), 1.0e-6)
+    cloud = noise.noise(Vector((p.x * 1.1 + 7.7, p.z * 1.7 + (11.0 if p.y > 0.0 else 37.0), 0.0)))
+    if abs(p.z - zc) <= h + 0.04 and abs(p.y) <= hull.side_at(x, min(max(p.z, zc - 0.98 * h), zc + 0.98 * h)) + 0.035:
+        t = (p.z - zc) / h
+        top = 0.5 + 0.12 * noise.noise(Vector((p.x * 0.8, 3.1, 0.0)))
+        spine = smooth(min(max((t - top) / 0.3 + 0.5, 0.0), 1.0))      # (nought on her side, one on her spine)
+        return _me262_edge(_me262_zone("spine", p)) * spine + _me262_edge((cloud + 0.12 - 0.3 * t) * 0.36) * (1.0 - spine)
+    if abs(p.y) < 0.13 and p.x < -3.6 and p.z > zc + h:
+        return _me262_edge((cloud + 0.04) * 0.36)           # (her fin and rudder)
+    zone = ("tail " if p.x < -4.15 else "") + ("starboard" if p.y > 0.0 else "port")
+    wedge = _me262_edge(_me262_zone(zone, p))
+    if abs(abs(p.y) - 2.26) < 0.5 and p.z < -0.34:
+        top = smooth(min(max(((p.z + 0.82) / 0.455 - 0.6) / 0.5 + 0.5, 0.0), 1.0))     # (one along a pod's back, under her wing's wedges)
+        return wedge * top + _me262_edge((cloud + 0.16) * 0.36) * (1.0 - top)
+    return wedge
+
+
 EXTRA_PLANES = {
     "Me262": {
         "title": "Me 262A (our own model)", "year": 1944, "tech": "jets",
-        "hull": [(4.45, -0.08, 0.03, 0.03), (4.32, -0.08, 0.11, 0.11), (3.95, -0.07, 0.28, 0.27), (3.3, -0.05, 0.46, 0.44), (2.3, -0.02, 0.63, 0.59), (1.1, 0.02, 0.76, 0.69),
-                 (-0.2, 0.05, 0.8, 0.73), (-1.4, 0.09, 0.72, 0.7), (-2.8, 0.18, 0.5, 0.56), (-4.3, 0.3, 0.28, 0.4), (-5.5, 0.4, 0.12, 0.24), (-6.15, 0.45, 0.03, 0.1)],
-        "square": 2.6,
-        "hoods": [([(0.95, 0.7, 0.22, 0.06), (0.45, 0.9, 0.32, 0.22), (-0.3, 0.96, 0.34, 0.27), (-1.0, 0.92, 0.32, 0.24), (-1.8, 0.72, 0.2, 0.06)], (0.45, -0.3, -1.0), False)],
-        "wing": [(0.0, 1.62, -1.42, -0.5, 0.44), (0.9, 1.52, -1.4, -0.48, 0.4), (2.05, 1.05, -1.3, -0.42, 0.34), (5.7, -0.2, -1.45, -0.04, 0.15), (6.15, -0.5, -1.42, 0.0, 0.1),
-                 (6.3, -0.82, -1.3, 0.02, 0.03)],
-        "tail": [(0.0, -4.7, -5.95, 1.15, 0.11), (1.55, -5.22, -5.95, 1.15, 0.07), (1.88, -5.48, -5.9, 1.15, 0.04), (1.97, -5.7, -5.85, 1.15, 0.01)],
-        "fin": [(0, -3.7, -6.1, 0.42, 0.14), (0, -4.55, -6.22, 1.15, 0.12), (0, -5.25, -6.32, 2.0, 0.08), (0, -5.7, -6.3, 2.42, 0.04), (0, -5.92, -6.2, 2.52, 0.01)],
-        "patch": 1.7, "colours": {"upper": "4A5240", "upper2": "5F5848", "under": "9DB3BA", "nose": "4A5240", "boss": "2B2B2B"},
-        "well": (1.2, 0.42, 0.42), "pitot": True, "hull_lines": [3.3, 2.25, 0.95, -1.85, -3.6],
-        "jets": [([(2.42, -0.78, 0.3, 0.3), (2.3, -0.78, 0.36, 0.36), (1.9, -0.78, 0.41, 0.41), (0.4, -0.78, 0.42, 0.42), (-0.7, -0.77, 0.39, 0.39), (-1.35, -0.76, 0.31, 0.31),
-                   (-1.62, -0.76, 0.25, 0.25)], 2.05)],
-        "side_marks": [(-2.7, 0.33, "GER")], "wing_marks": [(4.3, -0.55, 0.45, "GER", "GER", True, True)], "code": (-1.75, 0.3),
+        "hull": _ME262_HULL, "square": 3.0, "taper": _ME262_TAPER,
+        "hoods": fighters.hood_of([(_ME262_SCREEN[0], 0.6, _ME262_SCREEN[1], 0.01)] + [(x, sl, 0.3, t - sl) for x, sl, t, fl in _ME262_HOOD]
+                                  + [(-1.0, 0.685, 0.05, 0.04), (-1.5, 0.53, 0.02, 0.01)]),
+        "canopy": _me262_canopy, "opening": (0.45, -0.75, _ME262_EDGE),
+        "wing": [(0.0, 1.75, -1.32, -0.5, 0.4), (0.85, 1.45, -1.22, -0.468, 0.366), (1.7, 1.157, -1.0, -0.375, 0.26), (2.7, 0.808, -0.9, -0.285, 0.2),
+                 (4.0, 0.354, -1.04, -0.165, 0.15), (5.0, 0.005, -1.13, -0.0875, 0.1), (5.96, -0.33, -1.245, -0.03, 0.07), (6.12, -0.47, -1.2, -0.02, 0.05),
+                 (6.2, -0.65, -1.05, -0.015, 0.02)],
+        "tail": [(0.0, -4.27, -5.8, 0.63, 0.12), (1.0, -4.74, -5.78, 0.63, 0.1), (1.71, -5.075, -5.76, 0.63, 0.07), (1.82, -5.22, -5.7, 0.63, 0.04),
+                 (1.86, -5.42, -5.58, 0.63, 0.01)],
+        "fin": [(0, -3.45, -6.14, 0.05, 0.14), (0, -3.77, -6.11, 0.3, 0.14), (0, -4.456, -6.01, 1.0, 0.12), (0, -4.946, -5.95, 1.5, 0.09),
+                (0, -5.22, -5.89, 1.78, 0.07), (0, -5.36, -5.8, 1.87, 0.05), (0, -5.5, -5.66, 1.91, 0.02)],
+        "patch": 1.0, "graded": _me262_coat, "grain": _ME262_GRAIN, "frames_paint": "upper", "lines": (0.6, 0.45),
+        "colours": {"upper": "4C5850", "upper2": "8B999E", "under": "A9B8C2", "nose": "4C5850", "boss": "2B2B2B"},
+        "well": (1.05, 0.45, 0.36), "pitot": True, "hull_lines": [3.95, 2.95, 2.06, 1.2, -1.78, -2.75, -3.67, -4.9],
+        "jets": [([(2.33, -0.862, 0.258, 0.258), (2.2, -0.85, 0.335, 0.335), (1.9, -0.835, 0.415, 0.415), (1.5, -0.82, 0.45, 0.45), (0.0, -0.815, 0.455, 0.455),
+                   (-0.6, -0.82, 0.45, 0.45), (-1.1, -0.845, 0.37, 0.37), (-1.5, -0.884, 0.256, 0.256)], 2.26)],
+        "side_marks": [(-2.6, 0.3, "GER")], "wing_marks": [(4.5, -0.45, 0.42, "GER", "GER", True, True)], "code": (-1.85, 0.28),
     },
 }
+fitout.SEATS["Me262"] = [(0, -0.05, 0.0, 0.0)]
 # ---- the carrier planes (Brian, 2026-11-18). Paints and first years are the art director's rulings of that day. ----
 # (The art director, 2026-11-18, of the first one: she, the Avenger and the generic carrier planes "read as one plane in
 #  different paint". Hers are: a deep, portly fuselage, a short sliding hood with metal behind it, the intake under
@@ -239,8 +376,10 @@ EXTRA_PLANES["Hellcat"] = {
     "side_marks": [(-2.75, 0.34, "USA-BAR")], "wing_marks": [(4.5, 0.05, 0.5, "USA-BAR", "USA-BAR", False, False)], "code": (-3.9, 0.3),
 }
 JETS = [
-    ('    boss_back = 1.0e9 if s.get("engines") else sorted(', '    boss_back = 1.0e9 if s.get("engines") or s.get("jets") else sorted('),
-    ('    if not s.get("engines"):\n        airscrew(parts, (hub_x, 0.0, hub_z)', '    if not s.get("engines") and not s.get("jets"):\n        airscrew(parts, (hub_x, 0.0, hub_z)'),
+    # (and `nose_engine`: a machine with engines on her wings that has one in her nose as well, a trimotor's: her nose
+    #  airscrew, spinner and cowling are seated as a single-engined machine's are)
+    ('    boss_back = 1.0e9 if s.get("engines") else sorted(', '    boss_back = 1.0e9 if (s.get("engines") and not s.get("nose_engine")) or s.get("jets") else sorted('),
+    ('    if not s.get("engines"):\n        airscrew(parts, (hub_x, 0.0, hub_z)', '    if (not s.get("engines") or s.get("nose_engine")) and not s.get("jets"):\n        airscrew(parts, (hub_x, 0.0, hub_z)'),
     ('    # The tailwheel, the aerial mast with its wire, and anything fixed under the machine.\n',
      '    for jet_stations, jet_out in s.get("jets", []):\n'
      '        for jet_side in (jet_out, -jet_out):\n'
@@ -554,6 +693,57 @@ EXTRA_PLANES["B17"] = {
 EXTRA_PLANES.update(fighters.FIGHTERS)
 
 
+# The Ju 87B-2, laid out again against a three-view drawing of the real machine (Wikimedia Commons, "Junkers Ju 87B-2
+# Stuka.svg", Kaboldy, CC BY-SA 3.0; measured, not traced): the deep cowling of her inverted-vee engine with its
+# radiator bath under it, the tall framed greenhouse over her two men, the cranked wing (down to the legs, then up to
+# the tips) whose trailing edge sweeps forward, the trousered legs and their spats with a siren on each, the dive
+# brake under each wing, the square fin and the strutted tailplane. She is black all over (Brian, 2026-11-19, of a
+# picture of one: "here is a stuka but i want it in the all black"), with plain crosses.
+_BLACK = {"upper": "1D1E20", "upper2": "27292B", "under": "1D1E20", "nose": "1D1E20", "boss": "141414"}
+EXTRA_PLANES["Stuka"] = {
+    "title": "Ju 87B Stuka (our own model)",
+    "hull": [(4.6, 0.0, 0.03, 0.03), (4.47, 0.0, 0.16, 0.16), (4.26, 0.0, 0.26, 0.26), (4.05, 0.0, 0.27, 0.27), (3.99, 0.02, 0.32, 0.35), (3.85, 0.03, 0.38, 0.41),
+             (3.5, 0.02, 0.42, 0.47), (3.0, 0.0, 0.44, 0.57), (2.6, -0.06, 0.46, 0.68), (2.0, 0.05, 0.47, 0.68), (1.42, 0.08, 0.47, 0.74), (0.95, -0.1, 0.47, 0.6),
+             (0.0, -0.12, 0.47, 0.62), (-1.3, -0.06, 0.46, 0.56), (-1.6, 0.025, 0.43, 0.525), (-2.2, 0.055, 0.37, 0.495), (-3.0, 0.09, 0.3, 0.44), (-3.75, 0.11, 0.255, 0.39),
+             (-4.6, 0.155, 0.19, 0.365), (-5.5, 0.2, 0.11, 0.3), (-6.2, 0.22, 0.05, 0.22), (-6.45, 0.25, 0.025, 0.12)],
+    "square": 3.0, "screw": 1.7, "blades": 3, "nose_back": None, "spinner": 4,
+    # (her greenhouse: a raked windscreen of flat panes, the pilot's hood, the fixed middle with the mast, the gunner's
+    #  hood down to his gun; flat sides that lean in, glass right over the top, a frame every third of a metre)
+    "hoods": [([(1.8, 0.3, 0.26, 0.82), (1.5, 0.3, 0.37, 0.82), (1.1, 0.3, 0.38, 0.82), (0.0, 0.3, 0.38, 0.82), (-0.5, 0.3, 0.37, 0.82), (-1.1, 0.3, 0.34, 0.73),
+                (-1.36, 0.3, 0.3, 0.4), (-1.55, 0.3, 0.22, 0.26)], (), False)],
+    "cabin": {"square": 3.2, "ease": 0.3, "skirt": (0.5, 0.25), "fillet": 0.05, "screen": (1.46, 0.8, 1.12, 1.1, 0.3), "pane": (0.31, 0.25, 1.03, 0.03), "back": -1.55,
+              "sill": 0.52, "top": 0.95, "hoops": (0.98, 0.66, 0.38, 0.02, -0.16, -0.5, -0.8, -1.1), "spine": True, "roof": True},
+    "wing": [(0.0, 1.8, -1.55, -0.5, 0.5), (0.47, 1.8, -1.55, -0.52, 0.5), (1.4, 1.8, -1.24, -0.655, 0.46), (1.6, 1.79, -1.2, -0.65, 0.45), (2.6, 1.71, -0.96, -0.477, 0.38),
+             (4.1, 1.6, -0.6, -0.218, 0.3), (5.6, 1.48, -0.05, 0.042, 0.2), (6.5, 1.41, 0.3, 0.198, 0.13), (6.78, 1.36, 0.42, 0.246, 0.09), (6.87, 1.15, 0.5, 0.262, 0.05),
+             (6.9, 0.95, 0.62, 0.267, 0.01)],
+    "flap": (0.21, 0.585, 0.76), "aileron": (0.6, 0.985, 0.74),
+    "tail": [(0.0, -4.87, -5.88, 0.63, 0.13), (2.25, -4.87, -5.88, 0.63, 0.1), (2.4, -4.9, -5.88, 0.63, 0.07), (2.47, -5.02, -5.85, 0.63, 0.02)],
+    "fin": [(0, -4.42, -6.5, 0.3, 0.16), (0, -4.72, -6.47, 1.0, 0.14), (0, -5.1, -6.43, 1.8, 0.11), (0, -5.2, -6.4, 1.93, 0.09), (0, -5.34, -6.24, 2.0, 0.03)],
+    "patch": 2.6, "colours": dict(_BLACK), "frames_paint": "upper",
+    "stubs": (3.82, 2.55, -10.0), "pitot": True, "guns": [(1.97, 0.0, 0.45, 0.02)],
+    # (the radiator bath under her engine, and the oil cooler's intake on top of her cowling)
+    "scoops": [([(3.6, -0.6, 0.3, 0.2), (3.55, -0.66, 0.37, 0.28), (3.0, -0.68, 0.38, 0.29), (2.65, -0.72, 0.37, 0.31), (2.58, -0.66, 0.3, 0.2)], 0.0, 3.0),
+               ([(2.8, 0.6, 0.09, 0.05), (2.74, 0.62, 0.12, 0.08), (2.45, 0.67, 0.11, 0.07), (2.2, 0.7, 0.05, 0.02)], 0.0, 2.6)],
+    "tailwheel": (-5.67, -0.52), "mast": (-0.27, 1.1, 2.0),
+    "extras": [  # (each leg in its trouser, the spat round the wheel, the tyre showing under it)
+               ("body", ([(1.82, -1.1, 0.03, 0.22), (1.72, -1.1, 0.09, 0.3), (1.45, -1.1, 0.115, 0.33), (1.12, -1.1, 0.07, 0.31), (0.93, -1.1, 0.02, 0.27)], 1.5, 3.0, "upper")),
+               ("body", ([(2.3, -1.74, 0.03, 0.04), (2.22, -1.73, 0.13, 0.19), (2.0, -1.7, 0.2, 0.29), (1.6, -1.7, 0.22, 0.3), (1.2, -1.71, 0.17, 0.23), (0.85, -1.72, 0.09, 0.11),
+                          (0.62, -1.72, 0.02, 0.03)], 1.5, 2.4, "upper")),
+               ("rod", ((1.75, 1.41, -2.0), (1.75, 1.59, -2.0), 0.33, 0.33, "tyre")),
+               # (the siren on each leg: a small airscrew that howls in the dive)
+               ("rod", ((2.0, 1.5, -0.86), (1.78, 1.5, -0.86), 0.025, 0.055, "upper")),
+               ("rod", ((1.94, 1.33, -0.86), (1.94, 1.67, -0.86), 0.013, 0.013, "steel")), ("rod", ((1.94, 1.5, -1.03), (1.94, 1.5, -0.69), 0.013, 0.013, "steel")),
+               # (the dive brake under each wing, outboard of the leg; the struts under her tailplane)
+               ("rod", ((1.38, 1.8, -0.9), (1.3, 3.9, -0.5), 0.035, 0.035, "upper")),
+               ("rod", ((1.38, 2.2, -0.82), (1.38, 2.2, -0.68), 0.015, 0.015, "upper")), ("rod", ((1.32, 3.5, -0.57), (1.32, 3.5, -0.42), 0.015, 0.015, "upper")),
+               ("rod", ((-5.0, 1.2, 0.6), (-4.76, 0.17, -0.02), 0.02, 0.02, "upper")), ("rod", ((-5.05, 1.2, 0.6), (-4.98, 0.15, -0.02), 0.02, 0.02, "upper")),
+               # (her gunner's gun; her bomb on its crutch)
+               ("rod", ((-1.33, 0.0, 0.72), (-1.95, 0.0, 0.87), 0.022, 0.018, "steel")),
+               ("body", ([(1.55, -0.98, 0.03, 0.03), (1.2, -0.98, 0.2, 0.2), (0.2, -0.98, 0.23, 0.23), (-0.5, -0.98, 0.1, 0.1), (-0.75, -0.98, 0.04, 0.04)], 0.0, 2.0, "bomb"))],
+    "side_marks": [(-2.95, 0.34, "GER")], "wing_marks": [(4.7, 0.1, 0.5, "GER", "GER", True, True)], "code": (-1.9, 0.32),
+}
+
+
 def cabin_angle(hood, p):
     """Where round a hood a point of its skin is: degrees up from level on its own side (90 at its top)."""
     w, h = max(hood.w(-p.x), 1.0e-6), max(hood.h(-p.x), 1.0e-6)
@@ -567,13 +757,15 @@ def cabin_paint(cabin, hood, coat, hull):
     numbers give `cabin`: `screen` (the windscreen's two flat panes: all of them that stands clear of her fuselage is
     glass), `back` (where her side windows end), `sill` and `top` (the heights her side windows lie between), `brow`
     (a window in the roof over each pilot: from, to along her; from, to round her), `hatch` (a glazed hatch across her
-    back: from, to, and how far round it begins)."""
-    brow, hatch = cabin.get("brow"), cabin.get("hatch")
+    back: from, to, and how far round it begins), `roof` (a greenhouse: all of it above its sill is glass)."""
+    brow, hatch, roof = cabin.get("brow"), cabin.get("hatch"), cabin.get("roof")
 
     def paint(p, n):
         if abs(p.z - hood.pane_z(p.x, p.y)) < 0.004:
             return "glass"                                 # (on a pane of her windscreen)
         if p.x > cabin["back"]:
+            if roof and p.z > cabin["sill"]:
+                return "glass"                             # (a greenhouse: glass from its sill right over its top)
             if cabin["sill"] < p.z < cabin["top"] and abs(n.y) > 0.5:
                 return "glass"
             if brow and brow[1] < p.x < brow[0] and brow[2] < cabin_angle(hood, p) < brow[3]:
@@ -609,8 +801,9 @@ def cabin_frames(parts, frames, hood, cabin, hull):
         return hood.at(x, a), hood.out(x, a)
 
     def arc(x, d0, d1, half=0.02, both=True):
+        n = max(8, int(abs(d1 - d0) / 7.0))
         for hand in ((1, -1) if both else (1,)):
-            lay([on_box(x, (d0 + (d1 - d0) * k / 8.0) if hand > 0 else 180.0 - (d0 + (d1 - d0) * k / 8.0)) for k in range(9)], half, 0.008)
+            lay([on_box(x, (d0 + (d1 - d0) * k / n) if hand > 0 else 180.0 - (d0 + (d1 - d0) * k / n)) for k in range(n + 1)], half, 0.008)
 
     def rail(deg_at, x0, x1, half=0.018, both=True):
         n = max(2, int((x0 - x1) / 0.1))
@@ -679,7 +872,8 @@ def cabin_frames(parts, frames, hood, cabin, hull):
         n = hood.pane_n(hand)
         bar = lambda places, half: lay([(on_pane(y, z, hand), n) for y, z in places], half)
         bar([(y_top * k / 8.0, top_of(y_top * k / 8.0)) for k in range(9)], 0.022)       # (its top)
-        bar([(y_top, z_out), (0.5 * (y_top + y_foot), 0.5 * (z_out + sill)), (y_foot, sill)], 0.024)      # (the post at its side)
+        post = [(y_top + (y_foot - y_top) * k / 10.0, z_out + (sill - z_out) * k / 10.0) for k in range(11)]
+        bar([(y, z) for y, z in post if z >= (span(y) or (sill, sill))[0] - 0.02], 0.024)   # (the post at its side, down to its foot)
         bar([(cols[k], feet[k]) for k in inner], 0.02)                                    # (its foot)
     foot = feet[0]
     post = [(0.0, foot + (z_in + drop - foot) * k / 10.0) for k in range(11)]
@@ -692,6 +886,10 @@ def cabin_frames(parts, frames, hood, cabin, hull):
     x_top = max((hood.cut_x(math.radians(hood.deg_of(xb, top))) or xb), xb)
     rail(lambda x: hood.deg_of(x, sill), x_sill, back)
     rail(lambda x: hood.deg_of(x, top), x_top, back)
+    for x in cabin.get("hoops", ()):                       # (a greenhouse's frames: right over it, sill to sill)
+        arc(x, hood.deg_of(x, sill), 180.0 - hood.deg_of(x, sill), 0.02, both=False)
+    if cabin.get("spine"):
+        rail(lambda x: 90.0, hood.roof_from - 0.02, back + 0.04, 0.018, both=False)
     brow, hatch = cabin.get("brow"), cabin.get("hatch")
     if brow and parts.fine:
         for a in brow[2:]:
@@ -837,7 +1035,10 @@ def paints_of(G, s, colours=None):
     paints["blur_tip"] = "D9B224"
     if fitout.nation(s) == "JAP":
         paints.update(NAVY_AIRSCREW)
-    paints["line"] = rigid.mix_hex(paints["line"], paints["upper"], 0.3)      # (scribed lines seen close: finer and softer than the map's)
+    if s.get("lines"):                                       # (a pale machine: her lines toward her paler upper colour, or she reads as a blueprint)
+        paints["line"] = rigid.mix_hex(paints["line"], paints["upper2"], s["lines"][1])
+    else:
+        paints["line"] = rigid.mix_hex(paints["line"], paints["upper"], 0.3)      # (scribed lines seen close: finer and softer than the map's)
     paints.update(fitout.paints_for(s))
     paints.update(fitout.rivet_paints(paints))
     return paints, c
@@ -1024,12 +1225,14 @@ def convert(name, fine=True):
     body = G["Body"](s["hull"], s.get("square", 2.0))
     fin_high = max(r[3] for r in fins[0][0]) - min(r[3] for r in fins[0][0])
     BATTLE.update(hull=max(0.15, (body.front - body.back) / 80.0), wing=max(0.24, half / 44.0), tail=max(0.22, tailw.tip / 14.0), fin=max(0.2, fin_high / 12.0))
+    BATTLE.update(s.get("grain", {}))
+    G["BATTLE_CHORDS"][True] = CHORDS_CLOSE if s.get("grain") else CHORDS
     parts, hull = G["build"](s, fine)
     paint_names = list(PAINTS)
     paints, colours = paints_of(G, s)
     role = ROLE.get(name, "fighter")
     m = Model(name, s.get("title", name), "aircraft", paints, fine)
-    chords = CHORDS if fine else CHORDS_PLAIN
+    chords = G["BATTLE_CHORDS"][fine]
 
     # ---- where she breaks ------------------------------------------------------------------------
     by_kind = {}
@@ -1050,7 +1253,7 @@ def convert(name, fine=True):
     hubs = []
     jets = s.get("jets", [])
     pods = sorted(((G["Body"](st, 2.0, out * hand), out * hand) for st, out in jets for hand in (1.0, -1.0)), key=lambda q: q[1])     # (port first)
-    if not s.get("engines") and not jets:
+    if (not s.get("engines") or s.get("nose_engine")) and not jets:                 # (a trimotor's nose engine too)
         hub_x = sorted((r[0] for r in s["hull"]), reverse=True)[s.get("spinner", 2) - 1] + 0.06
         hubs.append(Vector((hub_x, 0.0, hull.z(-hub_x))))
     for (out, lead, z, is_radial, back) in s.get("engines", []):
@@ -1313,9 +1516,14 @@ def convert(name, fine=True):
         if kind == "lines":
             # (every scribed line is a ribbon whose points come in pairs, one each side of it: drawn in to LINE of its width)
             vs = list(bm.verts)
+            # (`lines` in her numbers: (how wide hers are against the usual, how far their colour is toward her paler
+            #  upper colour). The joints her fuselage was built in, `hull_lines`, keep the usual width.)
+            fine_line = LINE * s.get("lines", (1.0,))[0]
+            joints = s.get("hull_lines", []) if s.get("lines") else []
             for i in range(0, len(vs) - 1, 2):
                 mid = 0.5 * (vs[i].co + vs[i + 1].co)
-                vs[i].co, vs[i + 1].co = mid + (vs[i].co - mid) * LINE, mid + (vs[i + 1].co - mid) * LINE
+                k = LINE if any(abs(mid.x - x) < 0.012 for x in joints) and abs(mid.y) < hull.w(-mid.x) + 0.03 else fine_line
+                vs[i].co, vs[i + 1].co = mid + (vs[i].co - mid) * k, mid + (vs[i + 1].co - mid) * k
         bm.faces.ensure_lookup_table()
         layer = bm.faces.layers.int.get("paint")
         by_point = bm.verts.layers.int.get("coat")
@@ -1523,8 +1731,9 @@ def convert(name, fine=True):
 
     def weather(v, n, paint, part):
         w, y = 0.0, abs(v.y)
-        if paint not in ("upper", "upper2", "under", "nose"):
-            return 0.0, 0.0                                  # (only her paintwork wears)
+        skin = paint in ("upper", "upper2", "under", "nose")
+        if not skin and not (pods and paint.startswith(("rivet", "seam"))):
+            return 0.0, 0.0                                  # (only her paintwork wears; a jet's soot lies over her rivets too)
         if wide * 0.8 < y < wide + 0.9 and n[2] > 0.5 and abs(v.z) < 1.0:
             w = max(w, 0.70 * (1.0 - (y - wide * 0.8) / (0.9 + wide * 0.2)))
         if v.x > nose_back - 0.25:
@@ -1537,17 +1746,28 @@ def convert(name, fine=True):
         grain = noise.noise(Vector((v.x * 1.3 + 7.1, v.y * 1.3 - 3.3, v.z * 2.1 + 1.7)))
         soot = 0.09 * max(grain, 0.0)
         w = max(w, 0.22 * max(-grain - 0.25, 0.0))
-        for stained, start, reach, a in f.stains:
+        for stained, start, reach, a, *more in f.stains:     # (a stain may say how strong it is and how broad, against an exhaust's)
+            strong, spread = (more[0] if more else 0.95), (more[1] if len(more) > 1 else 1.0)
             along = (start - g.x) / reach
             if -0.04 < along < 1.0 and abs(g.y - stained.side) < 2.5:
                 away = (g - stained.at(g.x, a)).length
-                broad = 0.17 + 0.34 * max(along, 0.0)
-                soot = max(soot, 0.95 * max(0.0, 1.0 - away / broad) ** 1.1 * min(1.0, (along + 0.04) * 10.0) * (1.0 - max(along, 0.0)) ** 0.7)
-        if not s.get("engines") and not jets and n[2] < -0.5 and y < 0.5 * wide:
+                broad = (0.17 + 0.34 * max(along, 0.0)) * spread
+                soot = max(soot, strong * max(0.0, 1.0 - away / broad) ** 1.1 * min(1.0, (along + 0.04) * 10.0) * (1.0 - max(along, 0.0)) ** 0.7)
+        # (a jet: her pipes have scorched the tail of each pod, and their smoke has drawn a soft grey stain back
+        #  under her rear fuselage; in streaks, never an even band)
+        streak = 0.75 + 0.5 * noise.noise(Vector((v.x * 0.35 + 3.0, v.y * 5.0, v.z * 5.0)))
+        for pod, out in pods:
+            back = (g.x - pod.back) / 1.7
+            if -0.1 < back < 1.0 and math.hypot(g.y - pod.side, g.z - pod.z(-g.x)) < pod.w(-g.x) + 0.04:
+                soot = max(soot, min(1.0, 1.25 * (1.0 - max(back, 0.0)) ** 1.3) * streak)
+        if pods and n[2] < -0.2 and y < hull.w(-v.x) and v.x < s["wing"][0][2]:
+            along = min(max((s["wing"][0][2] - v.x) / (s["wing"][0][2] - hull.back), 0.0), 1.0)
+            soot = max(soot, 0.75 * min(1.0, along * 6.0) * (1.0 - along) ** 0.5 * max(0.0, 1.0 - y / hull.w(-v.x)) ** 0.6 * streak)
+        if (not s.get("engines") or s.get("nose_engine")) and not jets and n[2] < -0.5 and y < 0.5 * wide:
             along = (nose_back - v.x) / 4.5
             if 0.0 < along < 1.0:
                 soot = max(soot, 0.4 * (1.0 - along) * (1.0 - y / (0.5 * wide)))
-        return w, soot
+        return (w if skin else 0.0), soot
     m.weather = weather
     m.marks = G["marks_of"](s, hull)
     n_code = 1 if s.get("code") else 0                       # (where each is: her sides first, then her wings, her fin, her number)
