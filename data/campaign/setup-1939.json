@@ -265,6 +265,8 @@
     [28, "SOV", "2nd Guards Cavalry Corps", "cav", 2, "Tula", {"xp": 0.3}]
   ],
   "formations": [
+    [41, "ITA", "Sardinia coastal divisions", "inf", 1, "Sardinia", {"hold": 1, "str": 0.3, "est": 0.3, "xp": 0.05}],
+    [47, "ITA", "Nembo Parachute Division", "inf", 1, "Sardinia", {"hold": 1, "str": 0.7, "est": 0.7, "xp": 0.15}],
     [46, "SOV", "Central Front", "inf", 12, "Kursk", {"gen": "Konstantin Rokossovsky", "hold": 1, "xp": 0.4}],
     [46, "SOV", "Voronezh Front", "inf", 12, "Kursk", {"gen": "Nikolai Vatutin", "trait": "attacker", "hold": 1, "xp": 0.4}],
     [46, "SOV", "1st Tank Army", "arm", 2, "Kursk", {"gen": "Mikhail Katukov", "trait": "panzer", "hold": 1, "xp": 0.4}],
