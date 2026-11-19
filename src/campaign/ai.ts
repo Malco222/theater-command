@@ -746,39 +746,65 @@ function hold(g: Game, nat: string, ph: PlanPhase | null): void {
 
 /**
  * The ward's guard (ruling 233, riders b612 and b627): the field corps a staff keeps for the capital of an ally whose
- * leaving is in play. A guard is named once (flags, 'ward:') and kept until the ward ends: each month it goes by rail
- * as far as the trains run toward that capital and marches on from where the line ends, and where the capital is full
- * of the ally's own corps it stands on the nearest ground that has room. Whoever of the field army already stands on
- * that ally's home ground is named first; then the nearest infantry standing three or more to a place, so that no
- * stretch of a front is left thin for it; then the nearest standing two.
+ * leaving is in play. A guard is named once (flags, 'ward:') and kept until the ward ends. Each month the trains take
+ * it to that ally's home ground, as near the capital as they run; with no line open onto that ground it marches when
+ * the ground is within two marches, and otherwise rides as near the capital as the trains run and marches on from the
+ * end of the line. Where the capital is full of the ally's own corps it stands on the nearest ground that has room.
+ * Named first is whoever of the field army already stands on that ally's home ground; then the infantry that can
+ * stand on it soonest: one the trains set down on it this month or one within two marches of it, and after those
+ * whoever the trains bring nearest the capital. Nobody is taken who stands alone, and of two as near the one standing
+ * three or more to a place goes, so that no stretch of a front is left thin for it.
+ * `held` is the month's list of corps the plan already keeps: nobody on it is taken, and the guard goes onto it.
  * (As a watched harbour's the guard was sent afresh each month, and only where a train could carry it the whole way
  * into a town with room. With Rome's five places taken by Italy's own guard, or no line open into Italy that month,
  * no German corps stood on Italian ground at the signing in 34 wars of the 86 where the ward was set.)
  */
-export function keepWards(g: Game, nat: string, ph: PlanPhase | null): void {
+export function keepWards(g: Game, nat: string, ph: PlanPhase | null, held: Set<number> = massed): void {
   for (const [name, count] of Object.entries(ph?.ward ?? {})) {
     const cap = g.byName[name];
     if (!cap || !allied(g, nat, cap.ctrl)) continue;
     const d = hops(g, cap.id, (r) => allied(g, nat, ctl(g, r)));
     const own = (r: Region): number => r.units.filter((u) => u.nat === nat && u.kind !== 'fort').length;
+    const home = (r: Region): boolean => r.owner === cap.owner && !r.overseas;
+    /** The ally's home ground is within two marches of here, over ground this side holds. */
+    const near = (r: Region): boolean => r.nb.some((j) => d[j] >= 0 && (home(g.regions[j]) || g.regions[j].nb.some((k) => d[k] >= 0 && home(g.regions[k]))));
+    /** Where the trains would set a corps down this month: on the ally's home ground before anywhere else, and the nearest the capital. */
+    const ride = (c: Corps): Region | null => {
+      let best: Region | null = null;
+      if (c.ap >= 4) for (const id of railReach(g, c)) {
+        const r = g.regions[id];
+        if (d[id] < 0 || !hasRoom(g, r, c)) continue;
+        if (!best || (home(r) !== home(best) ? home(r) : d[id] < d[best.id])) best = r;
+      }
+      return best;
+    };
     const named = new Set<number>();
     const free = (c: Corps): boolean =>
       c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.divs >= 2 && !c.town && !c.hold && !c.dyle && c.joint === undefined && c.leave === undefined &&
-      d[c.reg] >= 0 && !massed.has(c.id) && !named.has(c.id);
-    const nearest = (pool: Corps[]): Corps | undefined => pool.sort((a, b) => d[a.reg] - d[b.reg] || a.id - b.id)[0];
+      d[c.reg] >= 0 && !held.has(c.id) && !named.has(c.id);
     for (let k = 0; k < count; k++) {
       const key = `ward:${nat}:${name}:${k}`;
       let c = g.corps.find((u) => u.id === g.flags[key] && u.nat === nat && !u.dead && d[u.reg] >= 0 && !named.has(u.id));
       if (!c) {
-        const ride = (least: number): Corps | undefined => nearest(g.corps.filter((u) => free(u) && u.kind === 'inf' && u.ap >= 4 && own(g.regions[u.reg]) >= least));
-        c = nearest(g.corps.filter((u) => free(u) && g.regions[u.reg].owner === cap.owner && !g.regions[u.reg].overseas)) ?? ride(3) ?? ride(2);
+        c = g.corps.filter((u) => free(u) && home(g.regions[u.reg])).sort((a, b) => d[a.reg] - d[b.reg] || a.id - b.id)[0];
+        if (!c) {
+          // How soon each could stand on the ally's ground: this month (0) or later (1), and how near the capital its month ends.
+          const rank = g.corps.filter((u) => free(u) && u.kind === 'inf' && own(g.regions[u.reg]) >= 2).map((u) => {
+            const here = g.regions[u.reg], to = ride(u);
+            const soon = (to && home(to)) || near(here);
+            return { u, late: soon ? 0 : 1, end: to && (home(to) || !soon) ? Math.min(d[to.id], d[u.reg]) : d[u.reg], thin: own(here) >= 3 ? 0 : 1 };
+          });
+          c = rank.sort((a, b) => a.late - b.late || a.end - b.end || a.thin - b.thin || d[a.u.reg] - d[b.u.reg] || a.u.id - b.u.id)[0]?.u;
+        }
         if (!c) continue;
         g.flags[key] = c.id;
       }
       named.add(c.id);
-      massed.add(c.id);
+      held.add(c.id);
       if (c.reg === cap.id) continue;
-      if (c.ap >= 4 && railToward(g, c, cap)) continue;
+      const here = g.regions[c.reg], to = ride(c);
+      const train = !!to && (home(here) ? home(to) && d[to.id] < d[here.id] : home(to) || (!near(here) && d[to.id] < d[here.id]));
+      if (train && railMove(g, c, to!)) continue;
       if (c.ap > 0) walkToward(g, c, cap);
     }
   }

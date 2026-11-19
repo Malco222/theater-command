@@ -4,10 +4,11 @@
 // (3, 4 and 5) guards the capital of an ally whose own leaving is in play: an enemy holds or stands on a ground that
 // ally's leaving event names, and the capital can be reached overland through its own side's ground. One corps, kept
 // by the strongest army among the ally's partners on the Continent. The guard is named once and kept until the ward
-// ends: it goes by rail as far as the trains run toward the capital and marches on from there, and where the capital
-// is full of the ally's own corps it stands on the nearest ground that has room (b627: sent as a watched harbour's
-// corps is, no German corps reached Italian ground in 34 wars of the 86 where the ward was set, with Rome's five
-// places taken by Italy's own guard or with no train able to run the whole way into Rome).
+// ends: whoever can stand on that ally's ground soonest. The trains take it onto that ground where a line is open; within
+// two marches of it the guard walks; otherwise it rides as near the capital as the trains run and marches on. Where the
+// capital is full of the ally's own corps it stands on the nearest ground that has room (b627: sent as a watched
+// harbour's corps is, no German corps reached Italian ground in 34 wars of the 86 where the ward was set, with Rome's
+// five places taken by Italy's own guard or with no train able to run the whole way into Rome).
 import { describe, expect, it } from 'vitest';
 import open from '../data/campaign/open.json';
 import { keepWards } from '../src/campaign/ai';
@@ -113,7 +114,7 @@ describe('ruling 233, rider b627: the guard is named once and kept, and gets the
     const g = italyAtWar();
     landOnCalabria(g);
     expect(guard(g)).toBeUndefined();
-    keepWards(g, 'GER', WARD);
+    keepWards(g, 'GER', WARD, new Set());
     const c = guard(g)!;
     expect(c).toBeDefined();
     expect(c.nat).toBe('GER');
@@ -122,7 +123,7 @@ describe('ruling 233, rider b627: the guard is named once and kept, and gets the
     expect(c.hold).toBeFalsy();
     for (let month = 2; month <= 6; month++) {
       newMonth(g);
-      keepWards(g, 'GER', WARD);
+      keepWards(g, 'GER', WARD, new Set());
       expect(guard(g)).toBe(c);
     }
     expect(onItalianGround(g)).toEqual([c]);
@@ -132,16 +133,16 @@ describe('ruling 233, rider b627: the guard is named once and kept, and gets the
     const g = italyAtWar();
     landOnCalabria(g);
     const rome = g.byName.Rome;
-    keepWards(g, 'GER', WARD);
+    keepWards(g, 'GER', WARD, new Set());
     const c = guard(g)!;
     // (No line runs from Germany into Italy on the chart but through Switzerland, France or Slovenia: the trains set him down in Austria.)
     expect(g.regions[c.reg].owner).toBe('GER');
     expect(c.ap).toBe(0);
     newMonth(g);
-    keepWards(g, 'GER', WARD);
+    keepWards(g, 'GER', WARD, new Set());
     expect(g.regions[c.reg].owner).toBe('ITA');
     newMonth(g);
-    keepWards(g, 'GER', WARD);
+    keepWards(g, 'GER', WARD, new Set());
     expect(c.reg).toBe(rome.id);
     expect(germansIn(g, rome)).toEqual([c]);
   });
@@ -155,7 +156,7 @@ describe('ruling 233, rider b627: the guard is named once and kept, and gets the
     const fill: Corps[] = [];
     while (hasRoom(g, rome, probe)) fill.push(addCorps(g, 'ITA', `Test Rome Corps ${fill.length + 1}`, 'inf', 2, 'Rome', {}));
     expect(fill.length).toBeGreaterThan(0);
-    for (let month = 1; month <= 4; month++) { keepWards(g, 'GER', WARD); newMonth(g); }
+    for (let month = 1; month <= 4; month++) { keepWards(g, 'GER', WARD, new Set()); newMonth(g); }
     const c = guard(g)!;
     expect(c.reg).not.toBe(rome.id);
     expect(g.regions[c.reg].owner).toBe('ITA');
@@ -163,7 +164,7 @@ describe('ruling 233, rider b627: the guard is named once and kept, and gets the
     expect(onItalianGround(g)).toEqual([c]);
     // (One of Italy's corps marches off: the guard takes its place.)
     relocate(g, fill[0], g.byName.Naples);
-    keepWards(g, 'GER', WARD);
+    keepWards(g, 'GER', WARD, new Set());
     expect(c.reg).toBe(rome.id);
   });
 
@@ -172,27 +173,53 @@ describe('ruling 233, rider b627: the guard is named once and kept, and gets the
     landOnCalabria(g);
     const there = addCorps(g, 'GER', 'Test Corps in Lombardy', 'inf', 3, 'Berlin', {});
     relocate(g, there, g.byName.Lombardy);
-    keepWards(g, 'GER', WARD);
+    keepWards(g, 'GER', WARD, new Set());
     expect(guard(g)).toBe(there);
-    for (let month = 2; month <= 4; month++) { newMonth(g); keepWards(g, 'GER', WARD); }
+    for (let month = 2; month <= 4; month++) { newMonth(g); keepWards(g, 'GER', WARD, new Set()); }
     expect(there.reg).toBe(g.byName.Rome.id);
     expect(onItalianGround(g)).toEqual([there]);
+  });
+
+  it('a corps within two marches of Italian ground is named before one the trains would only bring nearer, and walks in the first month', () => {
+    const g = italyAtWar();
+    landOnCalabria(g);
+    // (Two corps in the Tyrol, so that the one taken leaves nobody alone: Alto Adige is the next province.)
+    const pair = [1, 2].map((n) => { const c = addCorps(g, 'GER', `Test Tyrol Corps ${n}`, 'inf', 3, 'Berlin', {}); relocate(g, c, g.byName.Tyrol); return c; });
+    keepWards(g, 'GER', WARD, new Set());
+    const c = guard(g)!;
+    expect(pair).toContain(c);
+    expect(g.regions[c.reg].owner).toBe('ITA');
+    expect(onItalianGround(g)).toEqual([c]);
+  });
+
+  it('with a line open onto Italian ground the trains set the guard down on it in the first month', () => {
+    const g = italyAtWar();
+    landOnCalabria(g);
+    // (No line crosses the Alps from Germany on the chart: the one from Slovenia into Friuli is open once Slovenia is German.)
+    capture(g, g.byName.Slovenia, 'GER');
+    const pair = [1, 2].map((n) => { const c = addCorps(g, 'GER', `Test Slovenia Corps ${n}`, 'inf', 3, 'Berlin', {}); relocate(g, c, g.byName.Slovenia); c.ap = c.apMax; return c; });
+    keepWards(g, 'GER', WARD, new Set());
+    const c = guard(g)!;
+    expect(pair).toContain(c);
+    expect(g.regions[c.reg].owner).toBe('ITA');
+    expect(c.ap).toBe(0);
+    expect(onItalianGround(g)).toEqual([c]);
   });
 
   it('a guard that falls is replaced; the ward over, nothing is named or moved', () => {
     const g = italyAtWar();
     landOnCalabria(g);
-    keepWards(g, 'GER', WARD);
+    keepWards(g, 'GER', WARD, new Set());
     const first = guard(g)!;
     first.dead = true;
     newMonth(g);
-    keepWards(g, 'GER', WARD);
+    keepWards(g, 'GER', WARD, new Set());
     const second = guard(g)!;
     expect(second).toBeDefined();
     expect(second).not.toBe(first);
     const at = second.reg;
     newMonth(g);
-    keepWards(g, 'GER', { from: 1, to: 99, posture: 'defend' });
+    keepWards(g, 'GER', { from: 1, to: 99, posture: 'defend' }, new Set());
     expect(guard(g)).toBe(second);
     expect(second.reg).toBe(at);
     expect(second.ap).toBe(second.apMax);
