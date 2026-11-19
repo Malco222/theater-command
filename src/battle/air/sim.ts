@@ -167,7 +167,7 @@ export class AirSim implements BattleSim<AirUnit> {
       const sp = splitWings(this.units, this.place.ships, (n) => this.drawn('bmr', n), () => id++);
       this.units = sp.units;
       this.flakNorm = sp.flakNorm;
-      this.sea = new ShipBook(this.place.ships, this.rng.fork(29), this.rng.fork(31), this.units.filter((u) => u.side === 'att' && u.air === 'bmr').reduce((t, u) => t + u.n, 0));
+      this.sea = new ShipBook(this.place.ships, this.rng.fork(29), this.rng.fork(31), this.units.filter((u) => u.side === 'att' && u.air === 'bmr').reduce((t, u) => t + u.n, 0), this.ticket.def.human ? this.ticket.def.nat : null);
     }
     // The raid comes on as one stream: its bomber boxes side by side on one line to the target, the escorts with them.
     const raid = this.units.filter((u) => u.side === 'att');
@@ -680,7 +680,7 @@ export class AirSim implements BattleSim<AirUnit> {
         const fall = drawFall(this.fallRng, u.air, over, P.saved[u.side]);
         if (fall.back) u.back++;
         const who = by !== undefined ? { by, ...(s ? { strag: s.id, eng: s.eng, ...this.stragAt(u, s) } : {}) } : {};
-        this.say('air:lost', u, fallWords(this.called(u), fall), { ...fall, air: u.air, alt: s ? Math.max(0, u.alt - s.down) : u.alt, ...(fall.chutes ? { chuteCue: C.chutes } : {}), ...who }, fall.kind === 'explode' ? C.explode : C.down);
+        this.say('air:lost', u, fallWords(this.called(u), fall), { ...fall, air: u.air, alt: s ? Math.max(0, this.shownAlt(u) - s.down) : this.shownAlt(u), ...(fall.chutes ? { chuteCue: C.chutes } : {}), ...who }, fall.kind === 'explode' ? C.explode : C.down);
         u.figures = Math.max(u.n > 0 ? 1 : 0, Math.ceil(u.n / u.per));
       }
     }
@@ -784,12 +784,16 @@ export class AirSim implements BattleSim<AirUnit> {
     const guard = this.units.find((f) => f.job.do === 'escort' && f.job.on === u.id && f.job.close && flying(f) && !away(f) && !f.contacts.length);
     u.strag.forEach((s, k) => { s.cover = k === 0 && guard ? guard.id : null; });
     u.extra = {
-      model: u.model, form: u.form, ...(u.strike ? { strike: u.strike, run: Math.round(Math.min(1, u.run / SKY.run) * 1000) / 1000 } : {}), box: u.state === 'routing' ? 'broken' : u.state === 'wavering' ? 'loose' : 'tight', away: u.away,
+      model: u.model, form: u.form, ...(u.strike ? { strike: u.strike, run: Math.round(Math.min(1, u.run / SKY.run) * 1000) / 1000, drawAlt: Math.round(this.shownAlt(u)) } : {}), box: u.state === 'routing' ? 'broken' : u.state === 'wavering' ? 'loose' : 'tight', away: u.away,
       strag: u.strag.map((s) => ({ id: s.id, eng: s.eng, prop: s.prop, why: s.why, cover: s.cover ?? -1, back: Math.round(s.back), down: Math.round(s.down) })),
       // The guns firing at it: only over a defended target, on its way in, never once it turns for home (the brief).
-      flak: u.side === 'att' && this.place.gunLoss > 0 && !done && !away(u) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? SKY.flak.kinds[u.band] : [],
+      flak: u.side === 'att' && this.place.gunLoss > 0 && !done && !away(u) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? SKY.flak.kinds[this.shownBand(u)] : [],
     };
   }
+
+  /** The band a box is drawn at: a torpedo box flies its run in low, though it is counted in the middle (ships.ts BAND). */
+  private shownBand(u: AirUnit): Band { return u.strike === 'torpedo' && !u.dropped && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? 0 : u.band; }
+  private shownAlt(u: AirUnit): number { return this.shownBand(u) === u.band ? u.alt : SKY.bands.alt[this.shownBand(u)]; }
 
   /** Morale, leaving the board, and the end of a group. */
   private settle(u: AirUnit, dt: number): void {
@@ -1062,7 +1066,9 @@ export class AirSim implements BattleSim<AirUnit> {
       value = bombWorth(L, T);
     } else {
       const share = this.through0 > 0 ? Math.min(1.5, this.throughNow(bmrToCome) / this.through0) : 1;
-      pr = Math.min(1, R.rail * share); pf = Math.min(1, R.ruin * share); value = Math.max(R.value * share, this.sea?.value() ?? 0);
+      pr = Math.min(1, R.rail * share); pf = Math.min(1, R.ruin * share); value = R.value * share;
+      // A strike on ships: what has gone down already, and the card's worth for the bombers still to drop.
+      if (this.sea) value = this.sea.value() + (this.through0 > 0 ? R.value * Math.min(1.5, Math.max(0, this.throughNow(bmrToCome) - this.droppedNow()) / this.through0) : 0);
     }
     const beats = (worth: number): number => { const x = Math.pow((foe + worth + 10) / (ftr + bmr + 10), R.k); return x / (1 + x); };
     return (1 - pr) * (1 - pf) * beats(value) + pr * (1 - pf) * beats(value + 300) + (1 - pr) * pf * beats(value + 300) + pr * pf * beats(value + 600);

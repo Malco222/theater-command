@@ -148,7 +148,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     domain: 'air', kind: 'field',
     seed: hashString(`airbattle:${g.seed}:${g.turn}:${kind}:${target}:${nat}:${(g.flags.airBattles ?? 0) + 1}`),
     turn: g.turn, date,
-    title: m === 'superiority' ? `The fight for the sky over ${a.place}` : m === 'harbour' ? `The raid on the harbour of ${a.place}` : quarry ? `The strike on the ${quarry.name}` : `The air battle over ${a.place}`,
+    title: m === 'superiority' ? `The fight for the sky over ${a.place}` : m === 'harbour' ? `The raid on ${harbourOf(a.place)}` : quarry ? `The strike on the ${quarry.name}` : `The air battle over ${a.place}`,
     place,
     att: side(nat, att, g.human === nat),
     def: side(defNat, def, g.human === defNat),
@@ -179,10 +179,16 @@ export function raidGroups(g: Game, kind: RaidKind, target: number, nat: string)
   return [...picked, ...seats.filter((x) => x.kind === 'ftr' && !picked.includes(x.id)).map((x) => x.id)];
 }
 
-/** Where a raid's groups fly from, by whether each comes off a carrier. */
+/**
+ * A harbour raid's place in words (the UI director, 03:43Z): where the place's name already says harbour it stands
+ * alone ("The raid on Pearl Harbor"); elsewhere "the harbour of Taranto".
+ */
+export const harbourOf = (place: string): string => (/\bHarbou?r\b/.test(place) ? place : `the harbour of ${place}`);
+
 /** The ground of a strike at sea: open water across the board (a stage draws its own). */
 const OPEN_SEA: AirGround = { land: [], rivers: [], borders: [], target: [], terrain: 'sea', inland: false };
 
+/** Where a raid's groups fly from, by whether each comes off a carrier. */
 function fromOf(decks: boolean[]): 'land' | 'sea' | 'both' {
   return decks.length && decks.every(Boolean) ? 'sea' : decks.some(Boolean) ? 'both' : 'land';
 }

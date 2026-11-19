@@ -227,7 +227,20 @@ function howDown(p: ShipPiece, harbour: boolean): [string, number][] {
   return [[harbour ? 'settle' : 'sink', 0.5], ['capsize', 0.3], ['explode', 0.2]];
 }
 const WORD: Record<ShipClass, string> = { bb: 'battleship', cv: 'carrier', ca: 'cruiser', dd: 'destroyer', ss: 'submarine' };
-const VERB: Record<string, string> = { settle: 'settles on the bottom', sink: 'goes down', capsize: 'rolls over', explode: 'blows up', burn: 'is burning out of control', break: 'breaks in two' };
+const WORDS: Record<ShipClass, string> = { bb: 'battleships', cv: 'carriers', ca: 'cruisers', dd: 'destroyers', ss: 'submarines' };
+/** How a ship goes down, in the UI director's words (03:43Z): a ship that burns is lost, as the campaign counts it. */
+const VERB: Record<string, string> = { settle: 'settles on the bottom', sink: 'goes down', capsize: 'rolls over', explode: 'blows up', burn: 'is ablaze from end to end and cannot be saved', break: 'breaks in two' };
+
+/**
+ * The dispatch for a ship going down (the UI director, 03:43Z): a named ship by its class and name, never a navy's
+ * prefix ("The battleship Arizona blows up."); the enemy's unnamed by nation ("An Italian destroyer breaks in two.");
+ * the player's own as every other dispatch says them ("One of your cruisers goes down."). The name rides in the
+ * event's extra too, for the 3D to set in italics.
+ */
+export function sinkLine(p: ShipPiece, how: string, own: string | null): string {
+  const who = p.name ? `The ${WORD[p.cls]} ${p.name}` : p.nat === own ? `One of your ${WORDS[p.cls]}` : `${/^[AEIOU]/.test(p.adj) ? 'An' : 'A'} ${p.adj} ${WORD[p.cls]}`;
+  return `${who} ${VERB[how]}.`;
+}
 
 /** One ship's state on the field, for the 3D game. */
 export interface ShipShown extends ShipPiece { hits: number; sunk: { t: number; how: string } | null }
@@ -252,7 +265,8 @@ export class ShipBook {
   private readonly harbour: boolean;
   private readonly bombers0: number;
 
-  constructor(private P: ShipPlace, throws: Rng, private shown: Rng, bombers0: number) {
+  /** own: the player's nation where the ships under attack are the player's, for "One of your cruisers". */
+  constructor(private P: ShipPlace, throws: Rng, private shown: Rng, bombers0: number, private own: string | null = null) {
     this.harbour = P.law.harbour;
     this.bombers0 = Math.max(1, bombers0);
     this.pieces = P.pieces.map((p) => ({ ...p, hits: 0, sunk: null }));
@@ -288,8 +302,7 @@ export class ShipBook {
           if (p.hits === 0) p.hits = 1;
           const big = !this.big && how === 'explode' && (c === 'bb' || c === 'cv');
           if (big) this.big = true;
-          const who = p.name ? `The ${WORD[c]} ${p.name}` : `A ${p.adj} ${WORD[c]}`;
-          news.push({ what: 'air:ship-sunk', piece: p, text: `${who} ${VERB[how]}.`, extra: { ship: p.id, how, strike, x: p.x, y: p.y, ...(big ? { big: true } : {}) } });
+          news.push({ what: 'air:ship-sunk', piece: p, text: sinkLine(p, how, this.own), extra: { ship: p.id, how, strike, x: p.x, y: p.y, ...(p.name ? { name: p.name } : {}), ...(big ? { big: true } : {}) } });
         }
         this.down.set(key, n);
       }

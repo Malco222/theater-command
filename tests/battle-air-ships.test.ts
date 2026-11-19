@@ -17,9 +17,9 @@ import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game, ShipClass } from '../src/campaign/types';
 import { SKY } from '../src/battle/air/book';
 import { airBattle, type AirSim } from '../src/battle/air/sim';
-import { deckMix, layShips } from '../src/battle/air/ships';
+import { deckMix, layShips, sinkLine, type ShipPiece } from '../src/battle/air/ships';
 import { faceOnBoard, onBoard, recordMonth, stageOf, STAGES } from '../src/battle/air/stages';
-import { airTicket, foughtAir, raidGroups } from '../src/battle/air/ticket';
+import { airTicket, foughtAir, harbourOf, raidGroups } from '../src/battle/air/ticket';
 
 const CLASSES: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
 
@@ -150,7 +150,7 @@ describe('the ships the field sinks are the ones the campaign books (b397\'s law
       }
       const told = s.history().filter((e) => e.what === 'air:ship-sunk');
       expect(told.length).toBe(total(Object.values(o.sunk!)[0]));
-      expect(told.every((e) => /^A German (battleship|cruiser|destroyer|carrier|submarine) (settles on the bottom|goes down|rolls over|blows up|is burning out of control|breaks in two)\.$/.test(e.text))).toBe(true);
+      expect(told.every((e) => /^A German (battleship|cruiser|destroyer|carrier|submarine) (settles on the bottom|goes down|rolls over|blows up|is ablaze from end to end and cannot be saved|breaks in two)\.$/.test(e.text))).toBe(true);
       expect(new Set(told.map((e) => e.extra!.ship)).size).toBe(told.length);
       // The verdict is the field's and the campaign's alike.
       expect(rep.won).toBe(s.over!.level.includes('victory'));
@@ -315,5 +315,16 @@ describe('the set pieces, by place (ruling 238)', () => {
     const bb = STAGES.oahu.berths.filter((b) => b.cls === 'bb').map((b) => b.name);
     expect(bb.sort()).toEqual(['Arizona', 'California', 'Maryland', 'Nevada', 'Oklahoma', 'Pennsylvania', 'Tennessee', 'West Virginia']);
     expect(CARRIERS.strike.aim.ss).toBe(0);
+  });
+
+  it("says it in the UI director's words: the harbour by name, a ship by class and name, the player's own as 'your'", () => {
+    expect(harbourOf('Pearl Harbor')).toBe('Pearl Harbor');
+    expect(harbourOf('Taranto')).toBe('the harbour of Taranto');
+    const p = (x: Partial<ShipPiece>): ShipPiece => ({ id: 1, fleet: 1, nat: 'ITA', adj: 'Italian', cls: 'dd', name: null, berth: null, x: 0, y: 0, face: 0, open: 1, ...x });
+    expect(sinkLine(p({ nat: 'USA', adj: 'American', cls: 'bb', name: 'Arizona' }), 'explode', 'USA')).toBe('The battleship Arizona blows up.');
+    expect(sinkLine(p({}), 'break', 'UK')).toBe('An Italian destroyer breaks in two.');
+    expect(sinkLine(p({ nat: 'GER', adj: 'German', cls: 'ca' }), 'settle', null)).toBe('A German cruiser settles on the bottom.');
+    expect(sinkLine(p({ nat: 'UK', adj: 'British', cls: 'ca' }), 'sink', 'UK')).toBe('One of your cruisers goes down.');
+    expect(sinkLine(p({ nat: 'JAP', adj: 'Japanese', cls: 'cv', name: 'Akagi' }), 'burn', 'USA')).toBe('The carrier Akagi is ablaze from end to end and cannot be saved.');
   });
 });
