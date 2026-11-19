@@ -402,6 +402,8 @@ describe("Japan's month of December 1941", () => {
 
   it("where history is loose the strike south waits for the staff's word, and no date sends it", () => {
     const g = december(3);
+    // (The staff's word is the readiness test's, far-ready.test.ts: here the freeze is a month old and its window is not open.)
+    g.flags['pac:freeze'] = 27;
     g.phase = g.order.indexOf('JAP');
     runTurnAI(g);
     expect(g.flags['st:done:JAP:south']).toBeUndefined();

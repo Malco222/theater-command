@@ -12,7 +12,8 @@ import { NAVY, airOver, assaultStrength, atSea, navalUpkeep } from '../src/campa
 import { AIR, airQuality, airRange, airUpkeep } from '../src/campaign/air';
 import { ARSENAL, smallAirMonth } from '../src/campaign/arsenal';
 import airData from '../data/campaign/air.json';
-import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind, keepersOf, keptForces, mayDemand, pacificGround, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds, skiesOn, skiesOver } from '../src/campaign/pacific';
+import { PACIFIC, demand, demandInstead, freezeAt, hopAims, hopShores, hopsBind, keepersOf, keptForces, mayDemand, pacificGround, pacificOpening, pacificSides, pacificWar, pactAt, pactBinds, readyRules, skiesOn, skiesOver } from '../src/campaign/pacific';
+import { readiness, readinessMonth } from '../src/campaign/readiness';
 import { FAR_STAGE } from '../src/campaign/stage';
 import { freed, ops, startOpen } from '../src/campaign/staff';
 import { bookAttacks, bookFleets, bookStations, ceilinged, stations, stationsBind } from '../src/campaign/stations';
@@ -202,6 +203,23 @@ describe("the book's stations, strength and dated attacks of ruling 234 (riders 
     expect(read()).toBe(before);
     expect(g.corps.some((c) => ceilinged(g, c) || c.bookWorks !== undefined || c.bookCoast !== undefined || c.bookPart !== undefined)).toBe(false);
     expect(g.fleets.some((f) => f.bookBase !== undefined)).toBe(false);
+  });
+});
+
+describe('the readiness test of ruling 200(m) (rider b586 to ruling 234) with the far side off', () => {
+  it('there is no test: no figures, no reading, no gathering and no flag, in any month and for any country', () => {
+    const g = startOpen(createGame(3, null));
+    g.turn = 28;
+    g.flags['pac:freeze'] = 22;
+    expect(readyRules(g)).toBeNull();
+    const read = (): string => JSON.stringify([g.flags, g.fleets.map((f) => [f.base, f.zone, f.stance]), g.headlines.length]);
+    const before = read();
+    for (const nat of Object.keys(g.nations)) {
+      expect(readiness(g, nat)).toBeNull();
+      readinessMonth(g, nat);
+    }
+    expect(read()).toBe(before);
+    expect(ops('JAP').some((op) => op.sure)).toBe(false);
   });
 });
 
