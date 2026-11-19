@@ -12,7 +12,7 @@ import { canRaise, provinceYield } from '../src/campaign/economy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import {
   SIEGE, arrive, besieged, besiegerOf, besiegers, breachOf, fieldCtrl, garrison, garrisonFed, garrisonOf, guardOf, hitTown, investedOn, monthsShut, musterNear,
-  planTownHit, previewSally, ringClosed, roomIn, sally, siegeMonth, siegeRules, siegeSupply, siegeView, storesOf, takeField, townBonus, townHeld, whyNotGarrison,
+  planTownHit, previewSally, ringClosed, roomIn, sally, siegeMonth, siegeRules, siegeSupply, siegeView, storesOf, takeField, townBonus, townHeld, townHitText, whyNotGarrison,
   whyNotSally, whyNotStorm,
 } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
@@ -456,7 +456,8 @@ describe('softening a town', () => {
     const plan = planTownHit(g, w, 'raid', 1);
     // Planning changes nothing.
     expect(breachOf(g, w)).toBe(0);
-    expect(plan.works).toBeCloseTo(Math.min(SIEGE.breach.most, SIEGE.breach.raid), 6);
+    // Bombs alone stop at a fifth (ruling 139 rider b610).
+    expect(plan.works).toBeCloseTo(Math.min(SIEGE.breach.air, SIEGE.breach.raid), 6);
     expect(plan.bonusAfter).toBeLessThan(plan.bonus);
     const guard = guardOf(g, w);
     const hit = hitTown(g, w, 'raid', 1);
@@ -465,7 +466,10 @@ describe('softening a town', () => {
     expect(townBonus(g, w)).toBeCloseTo(plan.bonusAfter, 6);
     expect(townBonus(g, w)).toBeLessThan(whole);
     expect(guardOf(g, w)).toBeLessThan(guard);
-    hitTown(g, w, 'raid', 1);
+    // A second raid breaks nothing more; shells, like the siege guns, go on to the most.
+    expect(hitTown(g, w, 'raid', 1).works).toBe(0);
+    expect(breachOf(g, w)).toBeCloseTo(SIEGE.breach.air / 100, 6);
+    hitTown(g, w, 'shell', 1);
     hitTown(g, w, 'shell', 1);
     expect(breachOf(g, w)).toBeCloseTo(SIEGE.breach.most / 100, 6);
     expect(townBonus(g, w)).toBeGreaterThan(1);
@@ -473,6 +477,21 @@ describe('softening a town', () => {
     siegeMonth(g, 'POL');
     expect(breachOf(g, w)).toBeCloseTo((SIEGE.breach.most - SIEGE.breach.mend) / 100, 6);
     expect(guardOf(g, w)).toBeCloseTo(guard, 6);
+  });
+
+  it('bombs never break the works past a fifth, though shells go on; the raid still thins the guard (ruling 139 rider b610)', () => {
+    const g = playing('GER');
+    const w = g.byName['Warsaw'];
+    expect(SIEGE.breach.air).toBeLessThan(SIEGE.breach.shell);
+    hitTown(g, w, 'shell', 1);
+    const before = breachOf(g, w), guard = guardOf(g, w);
+    expect(before * 100).toBeGreaterThan(SIEGE.breach.air);
+    expect(planTownHit(g, w, 'raid', 1).works).toBe(0);
+    const raid = hitTown(g, w, 'raid', 1);
+    expect(raid.works).toBe(0);
+    expect(breachOf(g, w)).toBeCloseTo(before, 6);
+    expect(guardOf(g, w)).toBeLessThan(guard);
+    expect(townHitText(g, w, raid, 'bombs', true)).toContain('as far as bombs can break them');
   });
 
   it('a bombardment shakes the troops inside', () => {
