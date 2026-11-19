@@ -12,15 +12,15 @@ Her paint and marks are the art director's (19 Nov, 03:35Z): sand with green "sm
 band round her rear fuselage; the white cross on her rudder with a small plain shield at its middle; bare wings.
 Each nation's plain period marking, never a party emblem: no fasces anywhere.
 
-The SM.79 is not here yet: she has three engines, one in her nose and one in each wing, and the sculptor
-(game/build_plane.py) seats a nose airscrew only on a machine with no wing engines. That is the fighters' and the
-sculptor's code to change, not this file's.
+The SM.79 Sparviero: three radials, the nose one seated beside the wing ones by the sculptor's `nose_engine` (the
+fighters' 3vdnfu 9d76161); sand with soft green blotches, the same band and cross. Her numbers are below hers.
 """
 import math
 
 from mathutils import Vector, noise
 
 import fighters
+import fitout
 import planes
 from fighters import SKIRT, bubble, deck, headed, hood_of, resample, tween
 
@@ -89,7 +89,53 @@ C202 = {
     "rings": (0.55, 0.09),                                  # (the smoke rings: how big a ring is, and how wide its line)
 }
 
-ITALIANS = {"C202": C202}
+# ---- the SM.79 Sparviero ------------------------------------------------------------------------------------------
+# Laid out from her published measures (length 16.2 m, span 21.2 m, wing 61.7 m2, airscrews about 3.1 m) and the
+# arrangement every account of her gives: three radials, one in her nose and one in each wing (`nose_engine`, the
+# fighters' sculptor, 3vdnfu 9d76161); a slim fuselage; the pilots side by side under a flat-paned hood at the front
+# of the hump on her back, the hump running aft to the dorsal gunner's open position, a fixed gun over the hood; the
+# bomb-aimer's gondola under her belly with its gun firing aft; a waist window and gun each side; a tapered wing with
+# rounded tips set low; a tall rounded fin and a braced tailplane. Her paint (the art director, 19 Nov): sand with
+# green blotches over light grey (the brown of the three-tone scheme left out: a third colour on the skin could only
+# be whole faces, and read as squares), the white band, the rudder cross; bare wings.
+_SM79_HUMP = [(2.95, 0.98, 0.42, 0.3), (2.6, 0.98, 0.5, 0.5), (2.0, 0.99, 0.52, 0.56), (1.2, 0.98, 0.5, 0.56), (0.4, 0.96, 0.46, 0.52),
+              (-0.3, 0.92, 0.42, 0.46), (-0.7, 0.9, 0.38, 0.38), (-0.9, 0.86, 0.3, 0.24), (-1.0, 0.84, 0.2, 0.1)]
+_SM79_GONDOLA = [(-0.4, -0.8, 0.1, 0.06), (-0.8, -0.92, 0.34, 0.22), (-1.8, -0.98, 0.38, 0.28), (-3.2, -0.96, 0.36, 0.26), (-4.0, -0.88, 0.28, 0.18),
+                 (-4.35, -0.82, 0.16, 0.08)]
+
+SM79 = {
+    "title": "SM.79 Sparviero (our own model)", "year": 1937,
+    "hull": [(7.05, 0.1, 0.06, 0.06), (6.95, 0.1, 0.16, 0.16), (6.82, 0.1, 0.52, 0.52), (6.75, 0.1, 0.66, 0.66), (6.3, 0.1, 0.7, 0.7), (5.95, 0.1, 0.68, 0.7),
+             (5.6, 0.08, 0.66, 0.74), (4.5, 0.05, 0.7, 0.84), (3.0, 0.02, 0.72, 0.88), (1.0, 0.0, 0.72, 0.88), (-1.0, 0.0, 0.7, 0.84), (-3.0, 0.02, 0.62, 0.74),
+             (-5.0, 0.06, 0.48, 0.6), (-7.0, 0.12, 0.32, 0.44), (-8.4, 0.18, 0.18, 0.3), (-9.05, 0.22, 0.06, 0.16), (-9.2, 0.23, 0.02, 0.05)],
+    "square": 2.4, "screw": 1.55, "blades": 3, "nose_back": 5.95, "spinner": 2, "engine": "radial", "lip": 6.75, "nose_engine": True,
+    # (the pilots' hood: flat panes from the windscreen's foot back to where the hump takes over)
+    "hoods": [([(4.35, 0.86, 0.46, 0.04), (4.05, 1.0, 0.58, 0.26), (3.6, 1.06, 0.62, 0.32), (3.0, 1.08, 0.62, 0.33), (2.55, 1.06, 0.6, 0.3)],
+               (4.05, 3.6, 3.15, 2.7), True)],
+    "wing": [(0.0, 1.7, -2.3, -0.45, 0.66), (1.0, 1.68, -2.26, -0.42, 0.64), (3.9, 1.45, -2.05, -0.3, 0.55), (7.0, 0.95, -1.7, -0.1, 0.36),
+             (9.4, 0.5, -1.35, 0.06, 0.22), (10.25, 0.25, -1.05, 0.12, 0.13), (10.55, -0.05, -0.75, 0.14, 0.05), (10.6, -0.35, -0.55, 0.145, 0.01)],
+    "tail": [(0.0, -7.25, -8.95, 0.3, 0.2), (2.2, -7.55, -8.85, 0.3, 0.13), (3.0, -7.95, -8.7, 0.3, 0.06), (3.25, -8.25, -8.55, 0.3, 0.01)],
+    "fin": [(0, -6.4, -9.1, 0.35, 0.16), (0, -7.0, -9.25, 1.0, 0.13), (0, -7.6, -9.3, 1.7, 0.1), (0, -8.1, -9.25, 2.15, 0.07), (0, -8.5, -9.1, 2.35, 0.04),
+            (0, -8.8, -8.95, 2.42, 0.01)],
+    "patch": 1.9, "colours": {"upper": SAND, "upper2": SMOKE, "under": UNDER, "nose": SAND, "boss": SAND},
+    "engines": [(3.9, 1.45, -0.34, True, 3.2)], "pitot": True, "tailwheel": (-8.4, -0.45),
+    "extras": [("body", (_SM79_HUMP, 0.0, 2.2, "coat")), ("body", (_SM79_GONDOLA, 0.0, 2.2, "coat")),
+               # (the fixed gun over the hood; the dorsal gunner's gun at the hump's end; the gondola's gun; a waist gun each side)
+               ("rod", ((2.75, 0.0, 1.45), (3.4, 0.0, 1.47), 0.02, 0.016, "steel")),
+               ("rod", ((-0.85, 0.0, 1.02), (-1.75, 0.0, 1.3), 0.024, 0.018, "steel")),
+               ("rod", ((-4.2, 0.0, -0.9), (-5.0, 0.0, -1.08), 0.022, 0.018, "steel")),
+               ("rod", ((-3.45, 0.6, 0.34), (-4.05, 1.1, 0.28), 0.02, 0.016, "steel")),
+               # (the gondola's windows, a window each side behind the wing, the waist windows)
+               ("ball", ((-1.5, 0.37, -1.0), (0.42, 0.03, 0.11), "glass")),
+               ("ball", ((-2.2, 0.66, 0.3), (0.22, 0.03, 0.14), "glass")),
+               ("ball", ((-3.5, 0.6, 0.36), (0.3, 0.03, 0.18), "glass")),
+               # (the tailplane's struts, from under it to her lower side)
+               ("rod", ((-8.0, 1.5, 0.27), (-7.85, 0.24, -0.12), 0.024, 0.024, "upper"))],
+    "side_marks": [(-6.15, 0.3, "ITA-BAND")], "wing_marks": [], "code": (-4.6, 0.32),
+    "band": (-5.85, -6.45),
+}
+
+ITALIANS = {"C202": C202, "SM79": SM79}
 
 
 # ---- what the sculptor does not do: the band, the rings, the rudder's cross ---------------------------------------
@@ -168,4 +214,6 @@ if planes._G is not None:                                   # (the sculptor alre
     planes._G["PLANES"].update(ITALIANS)
 for _n in ITALIANS:
     planes.BUILDERS[_n] = (lambda fine=True, n=_n: convert(n, fine))
-    planes.CREW[_n] = 1
+planes.CREW.update({"C202": 1, "SM79": 5})                  # (the SM.79: two pilots, engineer, radio operator, gunner)
+planes.ROLE["SM79"] = "bomber"
+fitout.SEATS["SM79"] = [(0, 3.25, 0.3, 0.0), (0, 3.25, -0.3, 0.0)]       # (her two pilots side by side under the hood)

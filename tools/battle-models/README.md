@@ -596,6 +596,16 @@ play on it whatever she plays.
   (`fin`: dir h, bands top to bottom; dir v, from the leading edge back), as it paints the country's `insignia` where
   a mark's tag is `*`. Their second upper colour (`upper2`, the unit table's `paint2`) covers 36 to 44 percent of the
   upper surfaces in soft-edged blotches; the under surface is its own paint.
+- Italy's aircraft (`planes_ita.py`; `import planes_ita` before `export.py` or `airlook.py` asks for them): the
+  C.202 Folgore (fighter; sand with soft green smoke rings) and the SM.79 Sparviero (bomber, crew 5; three radials
+  by the sculptor's `nose_engine`, so `prop.1` port wing, `prop.2` nose, `prop.3` starboard wing; the hump on her
+  back with the fixed gun over the hood and the dorsal gun at its end, the gondola's gun, a waist gun each side;
+  sand with soft green blotches). Both carry
+  the art director's plain period marking (2026-11-19): a white band round the rear fuselage, painted on her skin
+  (paint `band`, so nothing to draw), and a mark of place `fin`, tag `ITA-CROSS`, on the part `rudder`, both sides,
+  placed as the small nations' flag is (`quad`, `at`, `radius`). The game draws `ITA-CROSS` there: a white cross
+  the rudder's height with a small plain shield at its middle (`marks.shapes("ITA-CROSS")` gives its pieces). The
+  wings are bare. No fasces anywhere.
 - To see one as a country flies her: `python airlook.py Fighter <out> quarter 1280x720x16
   owner=<unit-table.json>#ARG` (her coat, her marking, her rudder flag, from the art director's unit table).
   `high` shows the marks on her wings. Neighbouring layers of one colour in a country's `insignia` are laid at one
