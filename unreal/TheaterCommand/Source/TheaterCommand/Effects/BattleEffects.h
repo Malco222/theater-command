@@ -45,7 +45,7 @@ private:
  * and life like... like im in it and watching a movie at the same time").
  *
  * It knows nothing of the scene it is put in. Give it a parent to hang its mesh and lamps on, how many world units
- * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, Shots, AirGun, AirHit, the Trail calls, AirFlak, Burn); and
+ * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, Burn); and
  * tick it once a frame with the eye. It draws everything as soft puffs in one procedural mesh with the campaign map's
  * own M_Highlight (see-through, unlit, coloured by its points), the same shape of puff as the map's smoke, so no new
  * material is needed; flashes light the ground with at most two point lamps (game.max_lamps), shadowless.
@@ -111,6 +111,17 @@ public:
 	void TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres = 0.0f);
 	void TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity);
 	void TrailStop(int32 Id);
+	/** An aircraft lost: what comes off it as it goes down. AirFall once when it is lost, AirFallMove every frame with
+	 * where it is and its velocity (world units a second), AirFallStop when it is gone (hits the ground or is
+	 * removed). Id: a number that stays the same for that aircraft. Kind: "explode" (blown apart: all its pieces at
+	 * once round a short torn fireball; no AirFallMove needed), "burn" (going down on fire: 5 to 10 pieces shed over
+	 * its fall) or "spin" (out of control: a few pieces, sometimes a wing). SpanMetres: its wingspan, so the pieces
+	 * are sized to it (a bomber, 20 m or more, sheds 60 to 100 at once, a fighter 30 to 50). DeckZ: the world height
+	 * where the pieces leave sight, the cloud deck's top, or the ground under the fight; nothing pops out of view.
+	 * Light torn skin plates flutter and glint as they sink; a few heavy dark pieces drop straight. */
+	void AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ);
+	void AirFallMove(double Now, int32 Id, const FVector& At, const FVector& Velocity);
+	void AirFallStop(int32 Id);
 	/** A flak shell bursting at At, at the bombers' height, on the same clock as AirGun. Kind: an air_flak row
 	 * ("heavy", the 88 mm class). A soft flash, then see-through lobes of smoke in a crooked chain that hang where
 	 * they burst, drift with the wind, grey and stretch, and are gone in about 9 s. The battle decides where and how

@@ -6,7 +6,7 @@
 //   clang++ -O2 -std=c++20 -I $SRC fxpreview.cpp $SRC/Effects/TheaterFxCore.cpp -o fxpreview
 //   ./fxpreview /tmp/recipe.txt <out folder> <size> <ground> <frames, e.g. 4,8,40> [WxH] [back up]
 //     (size "mg": a machine gun's burst from 30 m away into the ground there, in place of a shell; FX_MG_VIEW=side|behind)
-//   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|far|target|hit|trail|wake|map]
+//   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|far|target|hit|trail|wake|map|fall]
 //   ./fxpreview /tmp/recipe.txt <out folder> oil <sunk|burning|horizon> <frames> [WxH]
 //
 // The oil shot: one oil fire on a flat sea (FX_REACH metres of oil, 100; seen from FX_DIST metres off, 1200, at
@@ -521,6 +521,62 @@ namespace
 		auto Right_ = [&](const Frame& F) { return Vec(F.Fw.X, F.Fw.Y, 0.0).Unit().Cross(ZUp).Unit(); };
 		const double Meet = 300.0;
 		const bool bStruck = ShotName == "hit" || ShotName == "trail" || ShotName == "wake";
+		// "fall": the aircraft falls from 0.5 s, FX_FALL its way (burn, spin, explode), shedding its debris row into a
+		// deck FX_DECK metres below (400); seen from FX_DIST metres off the beam (140). FX_SPAN its span (11)
+		const bool bFall = ShotName == "fall";
+		const char* FallIs = std::getenv("FX_FALL");
+		const std::string FallKind = FallIs ? FallIs : "burn";
+		const double FallFrom = 0.5;
+		auto Fall = [&](double T)
+		{
+			if (!bFall || T <= FallFrom)
+			{
+				return Fly(T);
+			}
+			const Frame F0 = Fly(FallFrom);
+			const Vec L0 = Vec(F0.Fw.X, F0.Fw.Y, 0.0).Unit();
+			const Vec R0 = L0.Cross(ZUp).Unit();
+			const double U = T - FallFrom;
+			Frame F;
+			if (FallKind == "explode")
+			{
+				return Fly(T); // (gone, not drawn: its path only gives the moment's velocity)
+			}
+			if (FallKind == "spin")
+			{
+				// (a spin: nose well down, turning about a steep line through the air, sinking at about 45 m/s)
+				const double Om = 2.0 * Pi / 2.8, Rr = 18.0, Settle = std::min(1.0, U / 2.0);
+				const double A = Om * U;
+				const Vec Mid = F0.At + L0 * (Speed * 1.2 * (1.0 - std::exp(-U))) - R0 * Rr;
+				F.At = Mid + (R0 * std::cos(A) + L0 * std::sin(A)) * (Rr * Settle) - ZUp * (45.0 * U - 22.0 * (1.0 - std::exp(-U)));
+				const Vec Round = (L0 * std::cos(A) - R0 * std::sin(A)).Unit();
+				const double Nose = 1.05 * Settle;
+				F.Fw = (Round * std::cos(Nose) - ZUp * std::sin(Nose)).Unit();
+				F.Up = (ZUp * std::cos(Nose) + Round * std::sin(Nose)).Unit();
+				const double Roll = 2.5 * A;
+				const Vec Side = F.Fw.Cross(F.Up).Unit();
+				F.Up = (F.Up * std::cos(Roll) + Side * std::sin(Roll)).Unit();
+				F.Right = F.Fw.Cross(F.Up).Unit();
+				return F;
+			}
+			// (burning: the nose drops into a steepening dive and the speed builds, rolling slowly)
+			Vec At = F0.At;
+			const double Dt = 1.0 / 120.0;
+			double Th = 0.0, Sp = Speed;
+			for (double Tau = 0.0; Tau < U; Tau += Dt)
+			{
+				Th = std::min(1.0, 0.22 * Tau);
+				Sp = Speed + 9.0 * Tau;
+				At = At + (L0 * std::cos(Th) - ZUp * std::sin(Th)) * (Sp * std::min(Dt, U - Tau));
+			}
+			F.At = At;
+			F.Fw = (L0 * std::cos(Th) - ZUp * std::sin(Th)).Unit();
+			F.Up = (ZUp * std::cos(Th) + L0 * std::sin(Th)).Unit();
+			const double Roll = 0.35 * U;
+			F.Up = (F.Up * std::cos(Roll) + F.Fw.Cross(F.Up).Unit() * std::sin(Roll)).Unit();
+			F.Right = F.Fw.Cross(F.Up).Unit();
+			return F;
+		};
 		const char* TrailIs = std::getenv("FX_TRAIL");
 		const std::string TrailKind = TrailIs ? TrailIs : "smoke";
 		TheaterFx::Dice Spots(11);
@@ -581,6 +637,19 @@ namespace
 			{
 				Cam.Eye = F.At + Level * 520.0 + LevelRight * 260.0 + ZUp * 40.0;
 				Cam.Forward = (F.At + Level * 260.0 - Cam.Eye).Unit();
+			}
+			else if (bFall)
+			{
+				// (from off the beam of where the fall began, following the fall; an explosion's pieces carried on along
+				// the path, slowing and sinking)
+				const Frame F0 = Fly(FallFrom);
+				const Vec L0 = Vec(F0.Fw.X, F0.Fw.Y, 0.0).Unit();
+				const Vec R0 = L0.Cross(ZUp).Unit();
+				const double U = std::max(0.0, Shown - FallFrom);
+				const Vec Look = FallKind == "explode" ? F0.At + L0 * (Speed * 0.7 * (1.0 - std::exp(-U))) - ZUp * (10.0 * std::max(0.0, U - 1.0)) : F.At;
+				const double Off = EnvNum("FX_DIST", 140.0);
+				Cam.Eye = F0.At + R0 * Off + L0 * (0.6 * Off) + ZUp * (0.15 * Off);
+				Cam.Forward = (Look - Cam.Eye).Unit();
 			}
 			else if (ShotName == "hit")
 			{
@@ -654,7 +723,30 @@ namespace
 			{
 				const double T = Step / 60.0;
 				Shown = T;
-				const Frame F = Fly(T);
+				const Frame F = Fall(T);
+				if (bFall)
+				{
+					const Vec Vel = (Fall(T + 0.01).At - F.At) * 100.0;
+					const Vec Engine = Place(F, Vec(EnvNum("FX_FIRE_X", 2.9), 0.75, -0.35));
+					if (Step == 6 && FallKind != "explode")
+					{
+						Fx.TrailStart(T, 1, Engine, Vel, FallKind == "spin" ? "smoke" : "fire", EnvNum("FX_SPAN", 11.0));
+					}
+					if (Step >= 6 && FallKind != "explode")
+					{
+						Fx.TrailMove(T, 1, Engine, Vel);
+					}
+					if (Step == static_cast<int>(FallFrom * 60.0))
+					{
+						Fx.AirFall(T, 7, F.At, Vel, FallKind.c_str(), EnvNum("FX_SPAN", 11.0), Height - EnvNum("FX_DECK", 400.0));
+					}
+					else if (Step > static_cast<int>(FallFrom * 60.0))
+					{
+						Fx.AirFallMove(T, 7, F.At, Vel);
+					}
+					DrawBetween(Step, Until, T, F);
+					continue;
+				}
 				if (bStruck)
 				{
 					// (struck: a hit every 0.07 s or so along the right wing and the nose; the engine trails from 0.3 s)
@@ -710,7 +802,7 @@ namespace
 			}
 			const double Now = FrameNo / 30.0;
 			Shown = Now;
-			const Frame F = Fly(Now);
+			const Frame F = Fall(Now);
 			const Camera Cam = Shoot(F);
 			View.Eye = Cam.Eye;
 			View.Right = Cam.Right;
@@ -729,6 +821,7 @@ namespace
 			const int NAirLamps = bAbove ? Fx.Lamps(Now, AirLamps, 2, Fx.DayOf(View.SmokeLight)) : 0; // (over the fields: the flash's lamp on the ground)
 			Paint(C, Cam, AirLamps, NAirLamps, {}, false);
 			// the aircraft: a plain olive-drab shape, lit by the sun, so the flash and streams are judged on a wing
+			if (!(bFall && FallKind == "explode" && Now > FallFrom))
 			{
 				const Vec Sun = View.Sun.Unit();
 				const double Base[3] = { ToLinear(92), ToLinear(98), ToLinear(74) };
@@ -776,7 +869,7 @@ namespace
 			}
 			Puffs(C, Cam, Fx, N);
 			char Name[256];
-			std::snprintf(Name, sizeof(Name), "%s/air-%s-%s%s%s-f%03d.ppm", OutDir.c_str(), bFlak ? "flak" : Kind.c_str(), ShotName.c_str(), bStruck ? ("-" + TrailKind).c_str() : "", bDusk ? "-dusk" : "", FrameNo);
+			std::snprintf(Name, sizeof(Name), "%s/air-%s-%s%s%s-f%03d.ppm", OutDir.c_str(), bFlak ? "flak" : Kind.c_str(), ShotName.c_str(), bStruck ? ("-" + TrailKind).c_str() : (bFall ? ("-" + FallKind).c_str() : ""), bDusk ? "-dusk" : "", FrameNo);
 			C.Save(Name);
 			std::printf("frame %d: %d puffs\n", FrameNo, N);
 		}

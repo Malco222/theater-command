@@ -89,7 +89,8 @@ namespace TheaterFx
 			Puff, // turned to the eye; drawn out along Along (on the screen) when Stretch is over 1
 			Upright, // stands on the ground and turns about the upright only: low skirts of dust, which never cut into the ground
 			Flat, // lies on the ground (a crater's mark)
-			Streak // drawn out along its own flight: clods, sparks, tracer; never thinner than LeastPx on the screen
+			Streak, // drawn out along its own flight: clods, sparks, tracer; never thinner than LeastPx on the screen
+			Plate // a torn piece of an aircraft: a flat piece lying along Along and Face, tumbling about Along, lit and glinting
 		};
 		Shape Form = Shape::Puff;
 		Vec From, Vel, Along;
@@ -138,6 +139,14 @@ namespace TheaterFx
 		bool bThrown = false;
 		double Land = 1e9, Land2 = 1e9;
 		Vec Vel2, At1, At2;
+		// (a falling aircraft's piece: its other flat way at birth, square to Along; how fast it tumbles about Along,
+		// radians a second; how strongly it catches the sun)
+		Vec Face;
+		double Tumble = 0.0, Glint = 0.0;
+		// (a light's clump of fire: its edge goes EdgeK of the way to Edge, so a hot middle darkens out to a smoky rim
+		// and the clump reads as a lump of fire, never a flat cut-out; 0 keeps one colour across it)
+		Rgb Edge;
+		double EdgeK = 0.0;
 	};
 
 	class Battle
@@ -189,6 +198,15 @@ namespace TheaterFx
 		void TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind, double SpanM = 0.0);
 		void TrailMove(double Now, int Id, const Vec& At, const Vec& Carry);
 		void TrailStop(int Id);
+		/** A falling aircraft's debris row (art director 04:40Z). Kind: "explode" sheds every piece at once with a short
+		 * torn fireball; "burn" sheds 5 to 10 over its fall; "spin" a few, sometimes a wing. Mostly light torn skin plates
+		 * that flutter and glint, with a few heavy dark pieces that drop straight. AirFall once as the fall starts, with
+		 * the aircraft's span (20 m or more sheds a bomber's row) and DeckZ, the height where pieces end: the cloud
+		 * deck's top on a day with one, else the ground's; they fade into it, never popping out. Then AirFallMove every
+		 * frame with where the model is, and AirFallStop when it is gone. Id: any number that stays the same for that fall. */
+		void AirFall(double Now, int Id, const Vec& At, const Vec& Velocity, const char* Kind, double SpanM, double DeckZ);
+		void AirFallMove(double Now, int Id, const Vec& At, const Vec& Velocity);
+		void AirFallStop(int Id);
 		/** A flak shell bursting at At, at the bombers' height: a soft flash of about 0.2 s off-centre in five to eight
 		 * see-through lobes of smoke in a crooked chain, longer along the wind, with thin wisps trailing downwind; it
 		 * hangs where it burst, drifts with the wind, greys and stretches, and is gone by about 9 s. Kind is an
@@ -297,6 +315,7 @@ namespace TheaterFx
 			double Span = 0.0; // (the aircraft's span, metres, as TrailStart was told: a fire's flame is sized by it)
 			unsigned Puffs = 0, NextKept = 0, KeptGap = 0; // (puffs laid, counted only when the row thins its old puffs; the next to hang on, and how many back the last one kept was)
 			Vec At, Carry, LastPuffAt;
+			Vec KeptAt; bool bKeptAt = false; // (where the last puff kept to hang was laid)
 		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */
 		struct Firing
@@ -379,6 +398,8 @@ namespace TheaterFx
 		};
 		double RoundUp = 0.35;
 		RoundLight Round; // (while laying one oil column puff: each point lit as a point on a round column, by where it sits across it)
+		Rgb EdgeTo; // (while laying one bit: its rim's colour, EdgeK of the way; see Bit::Edge)
+		double EdgeK = 0.0;
 		double SkyFill = 0.25, SunThrough = 1.5, SunThroughPow = 3.0;
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
@@ -395,8 +416,19 @@ namespace TheaterFx
 		std::vector<Firing> Firings; // the air guns
 		std::vector<TrailRow> TrailRows;
 		std::vector<Trailing> Trails; // the aircraft trails being laid
+		/** A falling aircraft shedding its debris row over its fall. */
+		struct Falling
+		{
+			int Id = 0, Left = 0;
+			bool bOn = false, bWing = false;
+			double Span = 11.0, DeckZ = 0.0, Next = 0.0, Last = 0.0;
+			Vec At, Vel;
+			uint64_t Seed = 0;
+		};
+		std::vector<Falling> Falls;
 		// (the tracer's look, read at Setup: one streak for every gun, on the ground and in the air)
 		double TracerHalf = 8.0, TracerLeast = 3.0, TracerMost = 5.0, TracerDayWide = 1.5, WholePathBelow = 100.0, WholeFor = 0.015;
+		double GlintPow = 30.0; // (a falling piece's glint: how tight the sun's mirror spot on it is, air_debris.glint_power)
 		double DayFrom = 0.38, DayFull = 0.9, DayLampShare = 0.25;
 		Rgb DayLampCol;
 		int FrameNo = 0; // (frames drawn: flashes' lamps go by frames, not seconds)
@@ -445,6 +477,8 @@ namespace TheaterFx
 		void CannonFlash(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D);
 		const TrailRow& TrailRowOf(const std::string& Kind);
 		void TrailPuff(double T, const Vec& At, const Vec& Carry, Trailing& Tr, const TrailRow& Row, Dice& D);
+		void Shed(double Now, const Vec& At, const Vec& Vel, const Vec& Throw, double SpanM, double DeckZ, int Sort, Dice& D); // (one piece: Sort 0 a skin plate, 1 a heavy piece, 2 a wing)
+		void TornFireball(double Now, const Vec& At, const Vec& Vel, double SpanM, Dice& D);
 		double FlameOf(const Trailing& Tr, const TrailRow& Row) const; // (a fire trail's flame length: the row's, or by the aircraft's span)
 		void Run(double Now); // the steady sources: fire, smouldering
 		void OilColumn(Source& S, double T, bool bPall = false); // one puff of an oil fire's column (or its long pall), born at T

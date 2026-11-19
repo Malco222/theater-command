@@ -1538,6 +1538,163 @@
   "_art_director_0459": "Art director 04:59Z on 299e504: the trails faded too pale too soon. Each kept puff (one in thin_keep_one_in) now thickens to thin_alpha times its opacity by thin_after_s as the three beside it go, so the young trail looks as it did; it hangs the whole of life_s (a small one going early left a gap), holds full to thin_hold of its life, and is drawn out along the path over the gap to the next one kept, so the old trail is one dark line of lumps that touch. Measured at 2.5 km off the beam (sky 212): fire head 61, first third 103, second third 110, old 109, oldest 105; straggler smoke head 131, first third 143, second third 147. Fire: by day a tongue off the skin must read as fire against the sky, so flame_alpha [at the cowl, at the tip] and flame_hold keep it opaque, flame_wide widens it, and it stands off the skin by flame_lift_of_length, licking out above and below the fuselage; tip_smoke lays black smoke right at each tongue's tip (that opacity, living tip_smoke_s, widening to tip_smoke_r_of_flame of the flame's length), above or below as the tongue is, so there is no gap between flame and smoke. Old recipes without these keys draw as before.",
   "_art_director_0525": "Art director 05:25Z on 1295edc: trails PASS. Kept evenly the old trail read as a string of beads, so thin_ragged tears it: the gap to the next puff kept is thin_keep_one_in times 1 plus or minus thin_ragged, and the puff's size by up to half of it (fire at 2.5 km: 66 | 102 | 109 | 107 | 107). A tongue is fixed at its root and free at its tip: flame_lift_curve is the power of the way along it by which its stand-off comes, so it is rooted on the skin at the fire with the yellow-white heart there and only its tip licks out above or below, sweeping back, going orange to flame_tip_colour (dark red) into the black smoke laid at its tip."
  },
+ "air_debris": {
+  "_how": "A falling aircraft's debris row (AirFall once as the fall starts with its span and the deck height, AirFallMove every frame, AirFallStop when the model is gone). explode sheds fighter or bomber pieces at once (bomber at bomber_span_m or more), thrown throw_mps out and carried on at carry of its speed, with a short torn fireball; burn sheds burn_sheds over its fall, every_s apart, from first_s; spin sheds spin_sheds, the first a wing at wing_odds. A skin plate (plate_m across, painted face paint, bare metal inside bare) tumbles plate_tumble radians a second, so seen edge-on it thins and flutters, and glints when the sun catches it (glint, glint_power); it slows to sink at plate_sink_mps and drifts with the wind. A heavy piece (heavy_share of an explosion's, heavy_m, heavy_colour) drops at heavy_sink_mps. A wing (wing_chord_of_span) tumbles slowly down at wing_sink_mps. Every piece fades into the deck over its last enter_deck_m, at most most_s after it came loose; far off it shrinks to a speck under least_px and fades, never held up.",
+  "_art_director_0440": "Art director 04:40Z (benchmark gap 3): a fall throws a debris row: 30 to 50 pieces for a fighter, 60 to 100 for a bomber; explode sheds them all at once, with a short torn fireball, never a ball; burn sheds 5 to 10 over its fall; spin sheds a few, sometimes a wing. Mostly light torn skin plates that flutter and glint, with a few heavy dark pieces that drop straight. Nothing pops out of view: falls and debris end in the cloud deck on a day with one, otherwise they keep falling until the haze or the ground takes them.",
+  "fighter": [
+   30,
+   50
+  ],
+  "bomber": [
+   60,
+   100
+  ],
+  "bomber_span_m": 20,
+  "burn_sheds": [
+   5,
+   10
+  ],
+  "spin_sheds": [
+   2,
+   5
+  ],
+  "wing_odds": 0.35,
+  "first_s": [
+   0.3,
+   1.5
+  ],
+  "every_s": [
+   1.2,
+   4.0
+  ],
+  "heavy_share": 0.12,
+  "throw_mps": [
+   8,
+   35
+  ],
+  "loose_mps": [
+   3,
+   12
+  ],
+  "carry": [
+   0.55,
+   0.9
+  ],
+  "plate_m": [
+   0.25,
+   1.1
+  ],
+  "plate_tumble": [
+   2,
+   9
+  ],
+  "plate_sink_mps": [
+   7,
+   16
+  ],
+  "heavy_m": [
+   0.3,
+   0.8
+  ],
+  "heavy_tumble": [
+   0.5,
+   2.5
+  ],
+  "heavy_sink_mps": [
+   45,
+   80
+  ],
+  "wing_chord_of_span": 0.17,
+  "wing_tumble": [
+   0.6,
+   1.6
+  ],
+  "wing_sink_mps": [
+   22,
+   32
+  ],
+  "paint": [
+   92,
+   98,
+   74
+  ],
+  "underside": [
+   92,
+   98,
+   74
+  ],
+  "bare": [
+   168,
+   170,
+   172
+  ],
+  "heavy_colour": [
+   40,
+   38,
+   36
+  ],
+  "glint": 3.0,
+  "glint_power": 20,
+  "enter_deck_m": 40,
+  "most_s": 240,
+  "least_px": 1.0,
+  "fireball": {
+   "_how": "A short torn fireball, never a ball: lobes clumps of fire thrown out along tears ways at once, each r_of_span of the span across at birth, reaching reach_of_span, gone in life_s; colour hot (heart_mix of the way to a pale heart), each clump's edge edge of the way to deep_colour so it reads as a lump of fire; rim its edge opacity, rough its torn outline, drawn as two fans past twin_px. Each clump leaves smoke_colour smoke that grows smoke_grow times and hangs smoke_s at smoke_alpha, where the clump died, while the pieces fly on and fall; a lamp.",
+   "lobes": [
+    18,
+    28
+   ],
+   "tears": [
+    2,
+    4
+   ],
+   "life_s": [
+    0.25,
+    0.6
+   ],
+   "reach_of_span": [
+    0.3,
+    0.9
+   ],
+   "r_of_span": [
+    0.05,
+    0.12
+   ],
+   "colour": [
+    232,
+    124,
+    40
+   ],
+   "heart_mix": [
+    0.1,
+    0.5
+   ],
+   "deep_colour": [
+    140,
+    40,
+    16
+   ],
+   "edge": 0.7,
+   "rim": 0.5,
+   "rough": 0.35,
+   "twin_px": 40,
+   "smoke_colour": [
+    38,
+    35,
+    33
+   ],
+   "smoke_s": [
+    5,
+    9
+   ],
+   "smoke_grow": [
+    5,
+    7
+   ],
+   "smoke_alpha": 0.9,
+   "lamp": 0.6
+  }
+ },
  "dust": {
   "vehicles": {
    "when": "dry ground and roads, not snow, mud or wet weather",

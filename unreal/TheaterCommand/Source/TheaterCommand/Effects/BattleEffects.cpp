@@ -346,6 +346,30 @@ void FBattleEffects::TrailStop(int32 Id)
 	}
 }
 
+void FBattleEffects::AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ)
+{
+	if (IsReady())
+	{
+		Core.AirFall(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres, DeckZ / UnitsPerMetre);
+	}
+}
+
+void FBattleEffects::AirFallMove(double Now, int32 Id, const FVector& At, const FVector& Velocity)
+{
+	if (IsReady())
+	{
+		Core.AirFallMove(Now, Id, ToFx(At), ToFx(Velocity));
+	}
+}
+
+void FBattleEffects::AirFallStop(int32 Id)
+{
+	if (IsReady())
+	{
+		Core.AirFallStop(Id);
+	}
+}
+
 void FBattleEffects::AirFlak(double Now, const FVector& At, const FString& Kind)
 {
 	if (IsReady())

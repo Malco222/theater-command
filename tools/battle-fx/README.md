@@ -178,6 +178,31 @@ Blasts->TrailStop(EngineId);
 - Kinds live in the recipe's `air_trails`: `smoke`, `fire`, `glycol`. What a hit looks like lives in `air_hit`.
 - The same clock rule applies as for `AirGun`.
 
+## Aircraft going down
+
+```cpp
+// an aircraft lost (the battle's air:lost): once as it falls, then every frame, then when the model is gone
+Blasts->AirFall(AirNow, PlaneId, PlaneWorld, PlaneVelocity, TEXT("burn"), /*SpanMetres*/ 11.0f, /*DeckZ*/ CloudTopZ);
+Blasts->AirFallMove(AirNow, PlaneId, PlaneWorld, PlaneVelocity);
+Blasts->AirFallStop(PlaneId);
+```
+
+- The debris row (art director 04:40Z). `explode`: blown apart, every piece at once, 30 to 50 for a fighter and 60 to
+  100 for a bomber (a span of `bomber_span_m`, 20 m, or more), round a short torn fireball, never a ball: 18 to 28
+  clumps of fire thrown out along two to four tears, each a hot middle darkening to a deep red edge, gone in about half
+  a second, each leaving black smoke that hangs where it died while the pieces fly on. Hide the model at once; no
+  `AirFallMove` is needed. `burn`: going down on fire, 5 to 10 pieces shed over the fall. `spin`: out of control, two
+  to five, the first sometimes a wing (`wing_odds`). Keep the fire or smoke trail on the model with the Trail calls.
+- Most pieces are light torn skin plates, painted outside and bare metal inside, that tumble, flutter and glint in the
+  sun as they sink slowly and drift with the wind; a few (`heavy_share`) are heavy dark pieces that drop straight.
+- `DeckZ` is the world height where the pieces leave sight: the cloud deck's top on a day with one, otherwise the
+  ground under the fight. Each piece fades into it over its last `enter_deck_m`, at most `most_s` after it came loose.
+  Far off a piece shrinks to a speck and fades, never held up: nothing pops out of view.
+- A fall not moved for 30 s, or that has shed all its pieces, is forgotten. Everything lives in the recipe's
+  `air_debris` (and `air_debris.fireball`).
+- The preview: `FX_FALL=explode FX_DIST=90 ./fxpreview recipe.txt out air hmg 16,19,22,30,60 960x540 fall` (the fall
+  starts at frame 15; `burn` and `spin` too; FX_SPAN its span, FX_DECK metres down to the deck, 400).
+
 ## Flak at height
 
 ```cpp
