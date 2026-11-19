@@ -241,7 +241,7 @@ loaded through `capitals.NAMED_MODULES`):
 | `Yamato` | Yamato, April 1945, triple 46 cm, 25 mm nests everywhere | `Battleship_JAP` | 237k / 29k |
 | `Shokaku` | Shokaku-class carrier, 1941-42, bent funnels to starboard | `Carrier_JAP` | 109k / 14k |
 | `Essex` | Essex-class carrier, 1944, Measure 21, deck-edge lift to port | `Carrier_USA` | 136k / 19k |
-| `Arizona` | Pennsylvania-class battleship, Pearl Harbor, December 1941, Measure 1 | `Battleship_USA` | 96k / 16k |
+| `Arizona` | Pennsylvania-class battleship, Pearl Harbor, December 1941, Measure 1 | `Battleship_USA` | 100k / 17k |
 | `Yorktown` | Yorktown (CV-5) at Midway, June 1942, Measure 12 graded | `Carrier_USA` | 149k / 17k |
 | `Akagi` | Akagi, 1941-42: island to port, the great downturned funnel to starboard, 20 cm casemates | `Carrier_JAP` | 150k / 19k |
 | `Kaga` | Kaga, 1941-42: island forward to starboard, ten 20 cm casemates | `Carrier_JAP` | 142k / 20k |
