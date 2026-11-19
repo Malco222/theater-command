@@ -1,6 +1,7 @@
 // The hop staff's queue with the far side's switch on (rider b599 to ruling 234, (ii)): an aim stuck over the risk
 // limit gives its place to the next and comes back after, and a shore beside a nation's own army is the army's only
-// if that army can attack it this month. States are set by hand at stop 3 (no book) in a made-up 1942; the crossing's
+// if that army can attack it this month; a corps brought up for a shore keeps it as its aim (the Wake ruling's (b)).
+// States are set by hand at stop 3 (no book) in a made-up 1942; the crossing's
 // risk is held over the staff's limit by hand where the queue is read, so no landing goes in.
 import { vi } from 'vitest';
 const risky = vi.hoisted(() => { (globalThis as any).TC_FAR = 1; return { on: false }; });
@@ -166,5 +167,128 @@ describe("the hop staff's queue (rider b599 to ruling 234, (ii))", () => {
     expect(armysShore(g, 'JAP', rabaul, null)).toBe(false);
     relocate(g, aus, g.byName['Port Moresby']);
     expect(armysShore(g, 'JAP', rabaul, null)).toBe(false);
+  });
+});
+
+describe('a corps brought up for a shore keeps it as its aim (rider b599 to ruling 234, the Wake ruling\'s (b))', () => {
+  /** One army at Palau, every other Japanese corps held; with the crossing too risky nothing lands and the aims stand. */
+  const palau = (): { g: Game; a: Corps } => {
+    const g = pacificWar(30);
+    for (const c of g.corps) if (c.nat === 'JAP') c.hold = true;
+    return { g, a: ready(g, corps(g, '21st Army (Canton)'), g.byName['Palau']) };
+  };
+  /** The shore the army is named for first, and the one it is named for with that shore set aside. */
+  const firstTwo = (): [Region, Region] => {
+    const { g } = palau();
+    risky.on = true;
+    try {
+      hop(g, 'JAP', null);
+      const x = g.byName[aimed(g)[0]];
+      g.flags[`st:hopOff:JAP:${x.id}`] = 30;
+      hop(g, 'JAP', null);
+      return [x, g.byName[aimed(g)[0]]];
+    } finally { risky.on = false; }
+  };
+  /** The army as the ships left it at Palau a month ago for a shore: waiting there, held, with the shore it came for. */
+  const broughtFor = (g: Game, a: Corps, r: Region, at = 29): void => {
+    a.hold = true;
+    g.flags[`st:hopUp:${a.id}`] = at;
+    g.flags[`st:hopFor:${a.id}`] = r.id + 1;
+  };
+
+  it('three months: no other shore takes it, though the staff would name another first; then the army has it back', () => {
+    const [x, y] = firstTwo();
+    expect(x.id).not.toBe(y.id);
+    const { g, a } = palau();
+    broughtFor(g, a, y);
+    risky.on = true;
+    try {
+      for (const t of [30, 31, 32]) {
+        g.turn = t;
+        hop(g, 'JAP', null);
+        expect(aimed(g), `month ${t}`).toEqual([y.name]);
+        expect(g.flags[`st:hopFor:${a.id}`]).toBe(y.id + 1);
+        expect(a.hold).toBe(true);
+      }
+      // The quarter is up: it is off hold, and free for the shore the staff names first.
+      g.turn = 33;
+      hop(g, 'JAP', null);
+      expect(g.flags[`st:hopUp:${a.id}`]).toBeUndefined();
+      expect(g.flags[`st:hopFor:${a.id}`]).toBeUndefined();
+      expect(a.hold).toBe(false);
+      expect(aimed(g)).toEqual([x.name]);
+    } finally { risky.on = false; }
+  });
+
+  it('unless the shore is struck off the queue first: set aside, or taken; it is then free for any shore while it waits', () => {
+    const [x, y] = firstTwo();
+    const { g, a } = palau();
+    broughtFor(g, a, y);
+    g.flags[`st:hopOff:JAP:${y.id}`] = 30;
+    risky.on = true;
+    try {
+      hop(g, 'JAP', null);
+      expect(g.flags[`st:hopFor:${a.id}`]).toBeUndefined();
+      expect(g.flags[`st:hopUp:${a.id}`]).toBe(29);
+      expect(aimed(g)).toEqual([x.name]);
+      const { g: h, a: b } = palau();
+      broughtFor(h, b, y);
+      h.byName[y.name].ctrl = 'JAP';
+      hop(h, 'JAP', null);
+      expect(h.flags[`st:hopFor:${b.id}`]).toBeUndefined();
+      expect(aimed(h)).toEqual([x.name]);
+    } finally { risky.on = false; }
+  });
+
+  it('lands on the shore it came for when the crossing will do, and forgets it', () => {
+    const [x, y] = firstTwo();
+    const { g, a } = palau();
+    broughtFor(g, a, y);
+    hop(g, 'JAP', null);
+    expect(a.reg).toBe(y.id);
+    expect(a.reg).not.toBe(x.id);
+    expect(g.flags[`st:hopUp:${a.id}`]).toBeUndefined();
+    expect(g.flags[`st:hopFor:${a.id}`]).toBeUndefined();
+    expect(a.hold).toBe(false);
+  });
+
+  it("is not struck off by a month the shore is the army's: the corps waits on for it, and is named for it once it is the ships' again", () => {
+    const [x] = firstTwo();
+    expect(x.name).toBe('Rabaul');
+    const { g, a } = palau();
+    broughtFor(g, a, x);
+    const cape = g.byName['Cape Gloucester'];
+    cape.ctrl = 'JAP';
+    const jap = ready(g, corps(g, '13th Army (22nd Division, Hangchow)'), cape);
+    for (const c of x.units) if (!c.dead && c.nat !== 'JAP') c.str = 0.05;
+    expect(armysShore(g, 'JAP', x, null)).toBe(true);
+    risky.on = true;
+    try {
+      hop(g, 'JAP', null);
+      expect(g.flags[`st:hopFor:${a.id}`]).toBe(x.id + 1);
+      expect(aimed(g)).toEqual([]);
+      jap.hold = true;
+      g.turn = 31;
+      hop(g, 'JAP', null);
+      expect(aimed(g)).toEqual([x.name]);
+      expect(g.flags[`st:hopFor:${a.id}`]).toBe(x.id + 1);
+    } finally { risky.on = false; }
+  });
+
+  it('is freed the month another force takes its shore, in time for the shores after it', () => {
+    const { g, a } = palau();
+    // The corps waits at Kwajalein for Guam, made the staff's first shore. Another army one sea from Guam, at Saipan,
+    // goes in there this month.
+    const guam = g.byName['Guam'], kwajalein = g.byName['Kwajalein'];
+    guam.vp = 99;
+    relocate(g, a, kwajalein);
+    broughtFor(g, a, guam);
+    const b = ready(g, corps(g, '13th Army (22nd Division, Hangchow)'), g.byName['Saipan']);
+    hop(g, 'JAP', null);
+    expect(b.reg).toBe(guam.id);
+    expect(guam.ctrl).toBe('JAP');
+    expect(g.flags[`st:hopFor:${a.id}`]).toBeUndefined();
+    // Free in the same month: named for a shore of its own from Kwajalein.
+    expect(hopAims(g, 'JAP').some((x) => x.from.id === kwajalein.id)).toBe(true);
   });
 });
