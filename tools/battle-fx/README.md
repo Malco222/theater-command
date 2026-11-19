@@ -110,7 +110,8 @@ Blasts->AirFlak(AirNow, BurstWorld, TEXT("heavy"));
   looking down FX_PITCH degrees (50), facing FX_YAW degrees (90); FX_SUN=x,y,z sets the sun for every air shot.
 - Seen with the sun behind the eye (as from the campaign camera on a sunny day), a flak burst shows its sunlit face:
   `face_lit` takes its outer lobes and wisps toward `lit_colour`, most on the sunward side, while its young heart and
-  far side stay dark. Seen side-on, against the sun or at night it keeps the dark look.
+  far side stay dark. Seen side-on, against the sun or at night it keeps the dark look. Each flak puff is drawn as two
+  fans, the second turned half a step, so it takes two slots and its outline shows no facets.
 
 `-TheaterBlastTest` on the command line plays a 24-second barrage of every size and kind round the point given to
 RunTest, again and again, for test pictures.
