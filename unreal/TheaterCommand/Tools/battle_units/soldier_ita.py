@@ -11,10 +11,10 @@ before `assemble` calls them (the art director's calls, 2026-11-19: the army's o
 
 - the grey-green tunic of 1937 worn open at the neck: lapels over a shirt and tie (the shirt's collar is soldier.py's
   collar band), a short row of four buttons from the lapels' foot to the belt, its four pockets as soldier.py makes
-  them; on each lapel's point a collar patch in the infantry's red with the army's five-pointed star in white metal
-  (never black: black two-pointed flames were the Blackshirts' mark). A man has no paint of his own for these, so
-  they take two of the horse's, which he never uses: 10 (coat) the red patch, 11 (coat_dark) the star, and his
-  json says their colours under "colours";
+  them; on each lapel's point a collar patch with the army's five-pointed star, pale (never black: black two-pointed
+  flames were the Blackshirts' mark). The game paints a man from one fixed table of paints, so the patch takes the
+  helmet's paint and the star the skin's (the only pale one); the infantry's red patch and a white-metal star wait
+  for the game to read a soldier file's own "colours" (after release 1);
 - breeches full in the thigh and bloused just under the knee over puttees, the wool band wound up the shin from the
   ankle boots to the knee in a spiral, each turn's lower edge lapped over the one below like a shingle (its edge a
   rolled fold in shade, not a gap);
@@ -62,8 +62,6 @@ S.LOOK[NATION] = {
     "eye": "2A2420",
     "leather": "3A2E25",
     "blanket": "665F4C",    # the water bottle's felt
-    "coat": "9B2A25",       # (a horse's paint: on him the collar patch, the infantry's red)
-    "coat_dark": "E6E6E0",  # (a horse's paint: on him the collar star, white metal)
 }
 S.NATION_SEED[NATION] = 23          # (his face: one of MakeHuman's mixes no other army's file uses)
 import human  # noqa: E402
@@ -84,7 +82,7 @@ S.HELMETS["m33"] = dict(ax=0.121, ay=0.111, az=0.114, dx=-0.004, edge=S._cos3(0.
 BIG, OFF = 3.0, -0.06
 LM_NOW = {}                         # (the landmarks of the man being dressed: the kit lays the puttees' turns by them)
 PUTTEE = (0.075, 0.0045)             # (each turn's rise up the shin, and how far its lapped lower edge stands off the one below)
-MARKS = ("coat", "coat_dark")        # (the paints his collar patch and star take: see the top of this file)
+MARKS = ("helmet", "skin")           # (the paints his collar patch and star take: see the top of this file)
 
 
 def _ours(spec):
@@ -415,14 +413,10 @@ def export_ita(info, dress="summer"):
         S.export_glb(S.stage_path(f"{base}_LOD{lod}.glb"), [m["arm"]] + lods[lod] + socks, anim=False)
     data = S.write_game_json(S.stage_path(f"{base}.json"), m, lods)
     data["about"] = data["about"].replace("soldier.py.", "soldier_ita.py on soldier.py.")
-    data["about"] += (f" Paints {S.FIGURE_PAINTS[MARKS[0]]} ({MARKS[0]}) and {S.FIGURE_PAINTS[MARKS[1]]} ({MARKS[1]}), two of the"
-                      " horse's that a man never wears, are his collar patch (the infantry's red) and its star (white metal):"
-                      " paint them by their colours below.")
+    data["about"] += f" His collar patches take the {MARKS[0]} paint and their stars the {MARKS[1]} paint (pale, never black)."
     if dress != "summer":
-        data["about"] += f" Dress: {dress}; paint all by its colours below (they differ from the grey-green man's)."
+        data["about"] += f" Dress: {dress}; paint by its colours below (they differ from the grey-green man's)."
         data["colours"] = dict(S.LOOK[tag])
-    else:
-        data["colours"] = {k: S.LOOK[tag][k] for k in MARKS}
     with open(S.stage_path(f"{base}.json"), "w") as f:
         json.dump(data, f, separators=(",", ":"))
     rec["json"] = {k: len(data[k]["triangles"]) // 3 for k in ("near", "mid", "far")}
