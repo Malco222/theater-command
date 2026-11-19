@@ -969,7 +969,7 @@ function shellingSince(s: Game, since: number): { regions: number[]; notes: stri
 }
 
 /** The fights at sea since a report (by its id): the seas they were in, a line on each, and whether the player's ships were in one. */
-function seaFightsSince(s: Game, since: number): { zones: number[]; notes: string[]; mine: boolean; sunk: { zone: number; nat: string; cls: string; n: number }[] } {
+function seaFightsSince(s: Game, since: number): { zones: number[]; notes: string[]; mine: boolean; sunk: { zone: number; nat: string; cls: string; n: number; ships?: { name: string | null; cls: string; crew: number; lost: number; pair?: boolean }[] }[] } {
   const fresh = s.seaReports.filter((r) => r.id > since);
   const adj = (nat: string): string => s.nations[nat]?.adj ?? nat;
   // (release 1) Ships seen to sink: in a fight the player's side took part in he knows what went down, on both
@@ -978,7 +978,7 @@ function seaFightsSince(s: Game, since: number): { zones: number[]; notes: strin
   const me = s.human;
   const ours = (nat: string): boolean => !!me && (nat === me || allied(s, nat, me));
   const nats = Object.keys(s.nations);
-  const sunk: { zone: number; nat: string; cls: string; n: number }[] = [];
+  const sunk: { zone: number; nat: string; cls: string; n: number; ships?: { name: string | null; cls: string; crew: number; lost: number; pair?: boolean }[] }[] = [];
   const lostIn = new Map<number, string>();
   try {
     for (const r of fresh) {
@@ -990,7 +990,9 @@ function seaFightsSince(s: Game, since: number): { zones: number[]; notes: strin
         for (const cls of ['bb', 'cv', 'ca', 'dd', 'ss']) {
           const n = (side.sunk as unknown as Record<string, number>)[cls] ?? 0;
           if (n <= 0) continue;
-          sunk.push({ zone: r.zone, nat: side.nat, cls, n });
+          // (Brian's memorial card) The battleships and carriers lost, by name, with their crews and the men lost (the rules' 'hulls').
+          const ships = cls === 'bb' || cls === 'cv' ? (side.hulls ?? []).filter((h) => h.cls === cls) : [];
+          sunk.push({ zone: r.zone, nat: side.nat, cls, n, ...(ships.length ? { ships } : {}) });
           parts.push(`${n} ${SHIP_WORD[cls][n === 1 ? 0 : 1]}`);
         }
         if (parts.length) said.push(`${adj(side.nat)} ships sunk: ${parts.join(', ')}.`);
@@ -1007,6 +1009,27 @@ function seaFightsSince(s: Game, since: number): { zones: number[]; notes: strin
     mine: fresh.some((r) => r.attNat === s.human || r.defNat === s.human),
     sunk,
   };
+}
+
+/** (Brian's memorial card) The ships sunk by strikes from the air since a report (by its id): carrier battles and raids on a harbour, where the player's side was in it, as the sea fights give them (a harbour's by its province, 'region', with 'zone' -1). */
+function strikeLossesSince(s: Game, since: number): { zone: number; region?: number; nat: string; cls: string; n: number; ships?: { name: string | null; cls: string; crew: number; lost: number; pair?: boolean }[] }[] {
+  const me = s.human;
+  const ours = (nat: string): boolean => !!me && (nat === me || allied(s, nat, me));
+  const out: { zone: number; region?: number; nat: string; cls: string; n: number; ships?: { name: string | null; cls: string; crew: number; lost: number; pair?: boolean }[] }[] = [];
+  try {
+    for (const r of s.airReports) {
+      if (r.id <= since || !r.ships?.length || !(ours(r.attNat) || r.ships.some((x) => ours(x.nat)))) continue;
+      for (const side of r.ships) {
+        for (const cls of ['bb', 'cv', 'ca', 'dd', 'ss']) {
+          const n = (side.sunk as unknown as Record<string, number>)[cls] ?? 0;
+          if (n <= 0) continue;
+          const ships = cls === 'bb' || cls === 'cv' ? (side.hulls ?? []).filter((h) => h.cls === cls) : [];
+          out.push({ zone: r.zone, ...(r.zone < 0 ? { region: r.region } : {}), nat: side.nat, cls, n, ...(ships.length ? { ships } : {}) });
+        }
+      }
+    }
+  } catch { /* a strike whose losses cannot be read is shown without them */ }
+  return out;
 }
 
 /** (release 1) The wrecks on the chart: where a battleship, a carrier or a cruiser went down in a fight the player's side was in. The latest forty. */
@@ -1042,6 +1065,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
     const raidNote = air.notes.slice(0, 2).join(' ');
     const sea = seaFightsSince(s, sea0);
     const shore = shellingSince(s, shore0);
+    const sunk = [...sea.sunk, ...strikeLossesSince(s, air0)];
     const seaNote = [...sea.notes.slice(0, 2), ...shore.notes.slice(0, 1)].join(' ');
     const taken = s.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
     const reps = s.reports.slice(r0);
@@ -1049,7 +1073,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
       // Nothing was fought for or taken, but armies the player can see may have marched: that is shown too.
       const seen = sight(s);
       const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen[c.reg] > 0 || seen[stood.get(c.id)!] > 0)).map((c) => c.reg))];
-      if (air.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine || sea.mine || shore.mine, raids: air.flights, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, view: view() });
+      if (air.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine || sea.mine || shore.mine, raids: air.flights, seas: sea.zones, sunk, shelled: shore.regions, view: view() });
       else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, view: view() });
       else if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view() });
       return;
@@ -1073,7 +1097,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
       taken,
       raids: air.flights,
       seas: sea.zones,
-      sunk: sea.sunk,
+      sunk,
       shelled: shore.regions,
       battles: reps.map((r) => r.region),
       focus: [...new Set([...taken, ...reps.map((r) => r.region)])],
@@ -2658,7 +2682,7 @@ function endMonth() {
       endHuman(s);
     }
     const air = raidsSince(s, air0, [month, s.turn]);
-    if (air.flights.length) steps.push({ nat: me, note: air.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: true, raids: air.flights, view: view() });
+    if (air.flights.length) steps.push({ nat: me, note: air.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: true, raids: air.flights, sunk: strikeLossesSince(s, air0), view: view() });
     const sea = seaFightsSince(s, sea00);
     if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, sunk: sea.sunk, view: view() });
     runOthers(s, steps);
