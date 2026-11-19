@@ -1792,6 +1792,10 @@ namespace TheaterFx
 			R.CaseCol = Picture(C + "case_colour", Rgb::FromPicture(196, 156, 82));
 			R.CaseDark = Picture(C + "case_dark", Rgb::FromPicture(140, 104, 52));
 			R.LinkCol = Picture(C + "link_colour", Rgb::FromPicture(70, 70, 72));
+			R.bHotFlash = Num(P + "hot_flash", 0.0) > 0.0;
+			R.FlashHot = Picture("air_guns.flash_hot", Rgb::FromPicture(255, 232, 150));
+			R.FlashOrange = Picture("air_guns.flash_orange", Rgb::FromPicture(250, 140, 30));
+			R.FlashRim = Picture("air_guns.flash_rim", Rgb::FromPicture(230, 96, 16));
 		}
 		R.Name = Kind;
 		AirRows.push_back(R);
@@ -1899,11 +1903,51 @@ namespace TheaterFx
 			B.LeastPx = Row.FlashLeastPx; // (art director 04:40Z: from the strategy camera a muzzle flash is a twinkle of 2 px, never lost)
 			B.LeastKeep = 0.8;
 			B.bLight = true;
+			const bool bClose = bEyeKnown && (Row.CloseLicks.B > 0.0 || Row.CloseLamp > 0.0) && (LastEye - At).Length() < Row.LicksWithin;
+			if (bClose)
+			{
+				// (art director 06:19Z: seen close, the flicker's body the same saturated orange as the licks, dense to its
+				// edge so the sky behind never turns it peach)
+				B.Col = Row.FlashOrange.Mix(Row.FlashHot, 0.2);
+				B.Col2 = Row.FlashOrange;
+				B.Heart = 0.95;
+				B.Rim = 0.85;
+				B.Inner = 0.7;
+				B.Edge = Row.FlashRim;
+				B.EdgeK = 0.4;
+				B.R1 = B.R0 * 0.7; // (fading by shrinking, still dense)
+				B.Hold = 0.8;
+			}
 			Bits.push_back(B);
-			if (bEyeKnown && (Row.CloseLicks.B > 0.0 || Row.CloseLamp > 0.0) && (LastEye - At).Length() < Row.LicksWithin)
+			if (bClose)
 			{
 				// (art director 04:40Z, the close view: seen within 30 m a heavy machine gun's flicker throws none to two
-				// short side licks, raked aft by the airstream, and a small lamp)
+				// short side licks, raked aft by the airstream, and a small lamp. 06:19Z: lit from within, a white-yellow root
+				// at the muzzle over the flicker's first quarter and the licks' roots, an orange body, a fading tip)
+				{
+					Bit H;
+					H.Born = T;
+					H.From = At + Dir * (Len * 0.12);
+					H.Vel = Carry;
+					H.Life = B.Life;
+					H.R0 = Len * 0.1;
+					H.R1 = Len * 0.1;
+					H.Along = Dir;
+					H.Stretch = 1.6;
+					H.Point = 0.3;
+					H.Col = Rgb::FromPicture(255, 250, 230);
+					H.Col2 = Row.FlashHot;
+					H.Edge = Row.FlashHot;
+					H.EdgeK = 0.5;
+					H.Alpha = 1.0;
+					H.FadeIn = 0.002;
+					H.Hold = 0.8;
+					H.Heart = 1.0;
+					H.Rim = 0.7;
+					H.Nearer = 0.5; // (over the flicker and the licks it roots)
+					H.bLight = true;
+					Bits.push_back(H);
+				}
 				const Vec Across = Dir.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
 				const Vec Over = Across.Cross(Dir).Unit(ZUp);
 				const int Licks = static_cast<int>(std::lround(Row.CloseLicks.Pick(D)));
@@ -1919,19 +1963,22 @@ namespace TheaterFx
 					L.From = At + Dir * (Len * 0.3) + Way * (R * L.Stretch * 0.8);
 					L.Vel = Carry;
 					L.Life = B.Life;
-					L.R0 = R * 0.9;
-					L.R1 = R * 1.1;
+					L.R0 = R * 1.05;
+					L.R1 = R * 0.6;
 					L.Along = Way;
 					L.Point = 0.7;
 					L.Tail = 0.15;
-					L.Col = FlameCol;
-					L.Col2 = FlameCol * 0.6;
-					L.Alpha = 0.85;
+					L.Col = Row.FlashOrange.Mix(Row.FlashHot, 0.3);
+					L.Col2 = Row.FlashOrange; // (orange to the end, never darkening into a crease)
+					L.Alpha = 0.95;
 					L.FadeIn = 0.002;
-					L.Hold = 0.45;
-					L.Heart = 0.8;
-					L.Rim = 0.1;
-					L.Rough = 0.3;
+					L.Hold = 0.8;
+					L.Heart = 0.95;
+					L.Rim = 0.75;
+					L.Inner = 0.7;
+					L.Edge = Row.FlashRim;
+					L.EdgeK = 0.4;
+					L.Rough = 0.12;
 					L.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
 					L.Turn = D.U(0.0, 2.0 * Pi);
 					L.bLight = true;
@@ -2062,6 +2109,7 @@ namespace TheaterFx
 		const Vec Across = Dir.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
 		const Vec Over = Across.Cross(Dir).Unit(ZUp);
 		const double Len = Row.Flash * D.U(0.8, 1.2);
+		const bool bHot = Row.bHotFlash;
 		auto Lick = [&](const Vec& From, const Vec& Way, double R, double Stretch, const Rgb& Col, const Rgb& Col2, double Alpha, double Heart, double Rim, double Rough)
 		{
 			Bit B;
@@ -2085,19 +2133,33 @@ namespace TheaterFx
 			B.Rough = Rough;
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
 			B.Turn = D.U(0.0, 2.0 * Pi);
+			if (bHot)
+			{
+				// (a dense body out to its edge: a see-through rim over the sky goes peach. Its second frame is about half by
+				// shrinking, still dense, never by going see-through)
+				B.Inner = 0.7;
+				B.R0 = R * 1.05;
+				B.R1 = R * 0.55;
+				B.Hold = 0.8;
+				B.Edge = Row.FlashRim;
+				B.EdgeK = 0.45;
+			}
 			B.bLight = true;
 			Bits.push_back(B);
 		};
+		// (art director 06:19Z, bHotFlash: the cannon's the bigger, hotter flash, a white-yellow core over a saturated orange
+		// body that stays orange to its tip, near opaque, never pale peach smoke)
+		const Rgb Orange = bHot ? Row.FlashOrange : FlameCol;
 		// the orange edge round the heart: see-through in its middle, strongest at its heart ring, soft at its rim
-		Lick(At + Dir * (Len * 0.14), Dir, Len * 0.3, 1.3, FlameCol, FlameCol * 0.7, 0.3, 2.6, 0.3, 0.35);
+		Lick(At + Dir * (Len * 0.14), Dir, Len * 0.3, 1.3, Orange, bHot ? Orange : FlameCol * 0.7, bHot ? 0.95 : 0.3, bHot ? 1.0 : 2.6, bHot ? 0.8 : 0.3, bHot ? 0.15 : 0.35);
 		// the forward tongue: three ragged pieces, pale at the root and orange beyond, each a little off the line
 		const double Reach = Len * D.U(1.1, 1.4);
 		for (int K = 0; K < 3; ++K)
 		{
 			const double Along = Reach * (0.3 + 0.33 * K) * D.U(0.9, 1.1);
 			const Vec Off = (Across * D.Bell() + Over * D.Bell()) * (Len * 0.05 * (K + 1));
-			const Rgb Col = K == 0 ? CannonHeartCol.Mix(FlameCol, 0.45) : FlameCol;
-			Lick(At + Dir * Along + Off, (Dir + Off * (0.6 / std::max(Len, 1e-3))).Unit(Dir), Len * (0.2 - 0.045 * K) * D.U(0.85, 1.15), 2.2, Col, FlameCol * 0.75, 0.9, 0.8, 0.15, 0.4);
+			const Rgb Col = K == 0 ? (bHot ? Orange.Mix(Row.FlashHot, 0.4) : CannonHeartCol.Mix(FlameCol, 0.45)) : Orange;
+			Lick(At + Dir * Along + Off, (Dir + Off * (0.6 / std::max(Len, 1e-3))).Unit(Dir), Len * (0.2 - 0.045 * K) * D.U(0.85, 1.15), 2.2, Col, bHot ? Orange : FlameCol * 0.75, bHot ? 1.0 : 0.9, bHot ? 1.0 : 0.8, bHot ? 0.75 : 0.15, bHot ? 0.2 : 0.4);
 		}
 		// short side licks, raked aft by the air the aircraft flies into; a third of the tongue or less
 		for (int I = 0; I < Row.Licks; ++I)
@@ -2107,11 +2169,17 @@ namespace TheaterFx
 			const Vec Way = (Outward - Dir * D.U(0.3, 0.55)).Unit(Outward);
 			const double R = Len * D.U(0.06, 0.085);
 			const double Stretch = D.U(2.2, 2.8);
-			Lick(At + Dir * (Len * 0.08) + Way * (R * Stretch * 0.8), Way, R, Stretch, FlameCol, FlameCol * 0.6, 0.85, 0.8, 0.1, 0.3);
+			Lick(At + Dir * (Len * 0.08) + Way * (R * Stretch * 0.8), Way, R, Stretch, Orange, bHot ? Orange : FlameCol * 0.6, bHot ? 1.0 : 0.85, bHot ? 1.0 : 0.8, bHot ? 0.6 : 0.1, bHot ? 0.12 : 0.3);
 		}
 		// the hot heart right at the muzzle, laid last so it is pale over the orange (and from the strategy camera never
 		// under flash_least_px: a twinkle)
-		Lick(At + Dir * (Len * 0.1), Dir, Len * 0.15, 1.4, CannonHeartCol, CannonHeartCol.Mix(FlameCol, 0.5), 1.0, 0.95, 0.35, 0.2);
+		Lick(At + Dir * (Len * 0.1), Dir, Len * (bHot ? 0.19 : 0.15), 1.4, bHot ? Rgb::FromPicture(255, 250, 230) : CannonHeartCol, bHot ? Row.FlashHot : CannonHeartCol.Mix(FlameCol, 0.5), 1.0, bHot ? 1.0 : 0.95, bHot ? 0.7 : 0.35, 0.2);
+		if (bHot)
+		{
+			Bits.back().Edge = Row.FlashHot;
+			Bits.back().EdgeK = 0.5;
+			Bits.back().Nearer = 0.5; // (the white core over its own orange)
+		}
 		Bits.back().LeastPx = Row.FlashLeastPx;
 		Bits.back().LeastKeep = 0.8;
 	}

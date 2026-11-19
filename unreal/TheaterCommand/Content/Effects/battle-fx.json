@@ -1344,6 +1344,7 @@
    "flash_m": 0.9,
    "licks": 2,
    "lamp": 0.12,
+   "hot_flash": 1,
    "smoke_every": 1,
    "smoke_s": 1.1,
    "smoke_alpha": 0.16,
@@ -1404,6 +1405,22 @@
    220,
    150
   ],
+  "flash_hot": [
+   255,
+   232,
+   150
+  ],
+  "flash_orange": [
+   250,
+   140,
+   30
+  ],
+  "flash_rim": [
+   230,
+   96,
+   16
+  ],
+  "_flash_hot": "Art director 06:19Z: the flash lit from within, as the fireball: a white-yellow root at the muzzle (luma 235 or more over its first quarter), a saturated orange body (flash_orange) going to a deeper orange at its edges (flash_rim) so a rim over the sky never turns peach, and a fading tip, all emissive, no dark crease. Dense to its edge; its second frame is about half by shrinking, never by going see-through. The heavy machine gun's close view (flicker and licks) always; the cannon's whole flash where its row sets hot_flash; the cannon's is the bigger, hotter one (twice the heavy machine gun's length).",
   "_flash": "Art director 21:07Z, cannon (rows with licks): a hot pale heart at the muzzle (flash_heart) with orange only toward its edges; a ragged forward tongue two to three times the side licks' length; short side licks raked aft by the airstream; uneven, never the same twice; one frame at full, a second at about half. The machine guns' flicker passed as it is.",
   "_flash_least_px": "Art director 04:40Z: from the strategy camera a heavy machine gun's 0.45 m flash is half a pixel at 800 m; every muzzle flash (the flicker, or a cannon's hot heart) is held at least flash_least_px 2 px across on its flash frame and made fainter to match, from the kit's own shape, never a card: far off they read as twinkles. A row may set its own."
  },

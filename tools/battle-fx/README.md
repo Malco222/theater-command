@@ -145,6 +145,12 @@ Blasts->AirGunStop(Gun);
   row's own (`case_m`, `case_d_m`, `link_m`). They are the first thing left out when the screen is full (past three
   fifths of `game.max_puffs`). The preview: `... air hmg 20,40 1920x1080 close` (about 12 m off the right wing;
   `FX_CLOSE_OUT` metres out, or `FX_CLOSE_AFT=1` from behind and under it).
+- The hot flash (art director 06:19Z): lit from within, as the fireball. A white-yellow root at the muzzle over the
+  first quarter (luma 235 or more), a saturated orange body (`air_guns.flash_orange`) going to a deeper orange at its
+  edges (`flash_rim`, so a rim over the sky never turns peach), a fading tip, no dark crease. It stays dense to its
+  edge; the second frame is about half by shrinking, never by going see-through. The heavy machine gun's close view
+  (its flicker and licks) is always hot; a cannon's whole flash is where its row sets `hot_flash` (the 20 mm does: a
+  core of luma 240 or more, body saturation 0.7 or more, twice the heavy machine gun's length).
 - The preview draws it: `./fxpreview recipe.txt out air hmg 15,45 960x540 side` (shots `chase`, `side`, `far`,
   `close`, `target`, `hit`, `trail`, `wake` (the whole trail from `FX_DIST` m off the beam), `map` (the strategy camera,
   `FX_DIST` m off); `FX_DUSK=1` for dusk, `FX_TURN=deg/s` for the turn, `FX_TRAIL=smoke|fire|glycol`, `FX_SPAN=m`).

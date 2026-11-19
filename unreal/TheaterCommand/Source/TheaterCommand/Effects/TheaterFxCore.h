@@ -293,6 +293,10 @@ namespace TheaterFx
 			double ChuteBack = 1.0, ChuteDown = 0.25, CaseDrag = 5.0, CaseGlint = 4.0, CaseLeastPx = 0.8;
 			Span Throw{ 3.0, 8.0 }, CaseSink{ 18.0, 28.0 }, LinkSink{ 12.0, 20.0 }, CaseLife{ 1.2, 2.0 }, CaseTumble{ 15.0, 40.0 };
 			Rgb CaseCol, CaseDark, LinkCol;
+			// (art director 06:19Z: a hot flash, lit from within: a white-yellow root at the muzzle, a saturated orange body,
+			// a fading tip, never peach. bHotFlash: the cannon flash in these colours; the close view's licks always)
+			bool bHotFlash = false;
+			Rgb FlashHot, FlashOrange, FlashRim; // (FlashRim: the deeper orange its edges go to, so a rim over the sky stays orange)
 		};
 		/** An air_trails row, read once a kind. */
 		struct TrailRow
