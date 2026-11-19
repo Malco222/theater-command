@@ -1247,8 +1247,12 @@ def submarine(tag, fine=True, hull_hex=None):
     """A submarine: a round hull low in the water under a narrow casing, a conning tower, a gun on deck, planes fore and aft."""
     # the plain boat: 80 m by 7
     c = dict(name="Submarine", title="Submarine (our own model)", hull=dict(L=80.0, B=7.0, D=1.8, T=4.6, sheer=0.9, rake=2.5, counter=1.5, flare=0.0, fine=1.9, full=0.6, bilge=2.0, tumble=0.5, wl_fore=0.7),
-             tower=(4.0, -4.5, 2.7), gun=14.0, gun_aft=None, aa=-6.5, tubes=(4, 2))
-    if tag == "GER":      # 67 m by 6.2: a small tower with a railed gun platform abaft it, the gun before it
+             tower=(4.0, -4.5, 2.7), gun=14.0, gun_aft=None, aa=-6.5, tubes=(4, 2), wires=True)
+    if tag == "WHATIF_SCOUT":   # whatif.py's scout submarine: 122 m by 11; a hangar before her tower (added there), so no jumping wire
+        c.update(name="WhatIf_ScoutSubmarine", title="Scout submarine, a what-if class (our own design)",
+                 hull=dict(L=122.0, B=11.0, D=2.7, T=6.2, sheer=1.5, rake=3.6, counter=2.0, flare=0.0, fine=1.8, full=0.62, bilge=2.6, tumble=0.56, wl_fore=0.7),
+                 tower=(1.0, -11.0, 4.4), tower_half=2.3, gun=None, gun_aft=-28.0, aa=-6.5, tubes=(6, 2), wires=False)
+    elif tag == "GER":      # 67 m by 6.2: a small tower with a railed gun platform abaft it, the gun before it
         c.update(name="Submarine_GER", title="Submarine, German layout (our own model)", hull=dict(L=67.0, B=6.2, D=1.5, T=4.7, sheer=0.8, rake=2.2, counter=1.4, flare=0.0, fine=1.9, full=0.6, bilge=2.0, tumble=0.48, wl_fore=0.7),
                  tower=(3.4, -3.2, 2.5), gun=11.5, aa=-5.4, tubes=(4, 1))
     elif tag == "USA":    # 95 m by 8.3: a long high casing, a tall narrow tower with its periscope shears, a gun abaft it
@@ -1274,7 +1278,7 @@ def submarine(tag, fine=True, hull_hex=None):
     Z0 = yard.deck((x0 + x1) * 0.5)
 
     # ---- the conning tower: a rounded house; round its top the bridge screen, open abaft, and the bridge inside it
-    half = min(1.25, h.half_at((x0 + x1) * 0.5) * 0.8)
+    half = min(c.get("tower_half", 1.25), h.half_at((x0 + x1) * 0.5) * 0.8)
     rnd = half * 0.95
     t1 = yard.house(x0, x1, half, Z0, th, r=rnd, rail=False, walls=False, steps=6, smooth=True)
     xb = x1 + 0.9                                            # (the screen ends here: abaft it the tower's top is open)
@@ -1701,7 +1705,8 @@ def submarine(tag, fine=True, hull_hex=None):
     bow_top = Vector((h.frame_x(1.0) + h.rake * 0.9, 0, yard.deck(L * 0.49) + 0.5))
     stern_top = Vector((-L * 0.48, 0, yard.deck(-L * 0.48) + 0.5))
     wire_top = Vector((stand, 0, t1 + (3.7 if tag == "USA" else 1.9)))
-    yard.wire(bow_top, wire_top, 0.02)
+    if c["wires"]:
+        yard.wire(bow_top, wire_top, 0.02)
     yard.wire(wire_top, stern_top, 0.02)
     m.use("fore")
     m.rod(bow_top - Z * 0.5, bow_top, 0.05, "upper", sides=4)
@@ -1839,3 +1844,8 @@ BUILDERS.update(merchants.BUILDERS)
 import capitals  # noqa: E402
 
 BUILDERS.update(capitals.BUILDERS)
+
+# the what-if classes (whatif.py: original ships that never sailed) use this file's pieces and capitals.py's
+import whatif  # noqa: E402
+
+BUILDERS.update(whatif.BUILDERS)

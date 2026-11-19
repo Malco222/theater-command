@@ -24,6 +24,8 @@ carrier ranges on her deck are models of their own, kept with the ships: `DeckPa
 `DeckPark_Zero` (see "A carrier's deck" below). Aircraft: the game's own fifteen (`Bf109`, `Spitfire`, `Zero`, `Mustang`, `Yak`, `Fw190`,
 `Hurricane`, `Warhawk`, `Fighter`, `Stuka`, `Sturmovik`, `He111`, `Lancaster`, `B17`, `Bomber`), the jet `Me262`
 (a battle's own, from 1944), plus `Parachute` and `Bomb`.
+What-if ships, our own designs that never sailed (`whatif.py`, see "The what-if classes" below): `WhatIf_BattleCarrier`,
+`WhatIf_SuperBattleship`, `WhatIf_RaiderCruiser`, `WhatIf_AACruiser`, `WhatIf_ScoutSubmarine`, `WhatIf_EscortCarrier`.
 
 ## The file
 
@@ -264,6 +266,32 @@ Make one again with `python3 export.py <out> Essex` (or any name in the table); 
 `python3 shipcheck.py loose Essex` (0 loose pieces, 0 points in no face) and `boxes`. Pictures:
 `sea/close/<Name>-*.png`; the first four side by side in `sea/sheets/pacific-capitals.png`, the 1941-42 ships in
 `sea/sheets/pacific-1941-42.png`.
+
+### The what-if classes (our own designs)
+
+Six ship classes that never sailed, for a campaign that leaves history behind (Brian, 2026-11-19: "a sandbox to play
+and make your own history"). Each is our own design, drawn from the same kit as the named ships and at their level of
+detail, every light gun manned (`whatif.py`; the scout submarine is a variant of `ships.submarine`). None has a navy
+or a year: they wear a plain navy's greys (`livery("PLAIN")`, crew in plain blue-grey) that the game swaps for her
+owner's, and her file's `info.file.whatif` says what she is (`kind`, `like`, `from`, `note`). In the rules each is a
+technology on the Naval shelf and a class within a kind the game already fights with, the kind in `like`.
+
+| File | Ship | Counts as (`like`) | Triangles fine / plain |
+|---|---|---|---|
+| `WhatIf_BattleCarrier` | 236 m: two triple 38 cm turrets forward, tower and funnel amidships, flight deck and hangar aft, two catapults, one lift | Battleship, Carrier | 114k / 18k |
+| `WhatIf_SuperBattleship` | 292 m: four triple 46 cm turrets, a six-tier sloped tower, two funnels, stern catapults | Battleship | 124k / 20k |
+| `WhatIf_RaiderCruiser` | 228 m, sharply raked: two twin heavy turrets, a low tower, raked funnels, torpedo tubes, a seaplane on a catapult across the deck | Cruiser | 83k / 14k |
+| `WhatIf_AACruiser` | 166 m: six twin dual-purpose mounts stepped up fore and aft, big air-search radar, bofors and oerlikons everywhere | Cruiser | 96k / 15k |
+| `WhatIf_ScoutSubmarine` | 122 m: a hangar forward of the tower with a door that opens (`door.hangar`), a catapult on the foredeck, a seaplane, a crane | Submarine | 34k / 3k |
+| `WhatIf_EscortCarrier` | 152 m on a merchant hull: plank flight deck, small island, two lifts, a catapult, exhausts over the side | Carrier | 44k / 8k |
+
+The battle carrier has the battleship's clips (`fire.A`, `fire.B`, `sink`, `break`) and the carrier's (`lift.1`,
+`launch`, and `launch.2` from her starboard catapult); the escort carrier has a carrier's. The scout submarine adds `hangar.open`
+(the door swings up) and `launch` (her seaplane, the part `seaplane`, runs off the bow; then hide it and fly the game's
+own seaplane from the `launch` socket). Make one again with
+`python3 export.py <out> WhatIf_BattleCarrier`; check with `python3 shipcheck.py loose WhatIf_BattleCarrier` (all
+six: 0 loose pieces, 0 points in no face). Pictures: `sea/sheets/what-if-ships.png`, `sea/close/WhatIf_*.png`
+(`python stills.py <Name> <out> views=quarter,aftquarter,close:x:y:z:tx:ty:tz:label`).
 
 ## Aircraft
 
@@ -577,6 +605,7 @@ python airshow.py b17_flak <out> frames=none   # no pictures: only the clip's so
 python soundtrack.py <log.json> <sound pack's wav folder> <mix.json> <out.wav> [<video.mp4> <out.mp4>]   # mix a clip's sound, and lay it under the picture
 python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, glass, rear, over, under, side, profile, quarter, high, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; clip=load.bombs@0; record=JSON; hurt=14,6,2: bullet hits, flak hits, engines out; free with eye=x,y,z look=x,y,z: a close-up of anything, in her own metres)
 python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
+python stills.py WhatIf_BattleCarrier <out> views=quarter,beam,close:40:30:30:60:0:12:turrets   # big stills of one ship: quarter, beam, bow, stern, top, aftquarter, or close:eye:look:label
 python export.py <out> parks                   # the three deck ranges alone (they are also in `ships` and `all`)
 python show.py Carrier_USA turn <out> month=1942-06   # a carrier in a month: her range and its paint are that month's
 python shipcheck.py loose all                  # every piece of every ship that touches nothing else of her, and points in no face
@@ -741,7 +770,7 @@ holds no sound: the mixer reads the pack where it lies, and a name the pack does
   `bomb_doors`, `aircraft_break_up`, `parachute_open`, `ship_sinking`, `torpedo_launch`,
   `torpedo_run_loop`,
   `depth_charge_roll`, `depth_charge_thrower`, `dive_alarm`, `surfacing`, `lift_motor`, `craft_grounds`,
-  `ramp_drop`, `ramp_winch`.
+  `ramp_drop`, `ramp_winch`, `hangar_door`, `catapult` (the scout submarine's hangar and catapult).
 - Two exports of the same code write ten aircraft (those with gunners: the heavy and medium bombers, the Stuka, the
   Val, the Avenger) with the same points in another order over part of the mesh. Each file is whole and right in
   itself; do not match one file's points to another's by their numbers. The cause is not found yet.
