@@ -11,7 +11,7 @@ import { endStaffMonth, ferry } from '../src/campaign/ai';
 import { atWar, createGame, declareWar, relocate } from '../src/campaign/game';
 import { HISTORY, setStop } from '../src/campaign/history';
 import { NAVY, fleetReach, navalAI, seaPath } from '../src/campaign/navy';
-import { PACIFIC, coversBeaches, firstOnRun, hopShores, laneOn, onRun, pacificFreed, pacificRuns, runOf, runQuays } from '../src/campaign/pacific';
+import { PACIFIC, coversBeaches, firstOnRun, hopShores, hopsBind, laneOn, onRun, pacificFreed, pacificRuns, runOf, runQuays } from '../src/campaign/pacific';
 import { oceanRuns, startOpen } from '../src/campaign/staff';
 import { acrossOcean, oceanShares, overseasOf, sailings } from '../src/campaign/world';
 import type { Corps, Fleet, Game, Region } from '../src/campaign/types';
@@ -97,6 +97,32 @@ describe("America's run south (ruling 190; rider b585 (a))", () => {
     expect(pacificRuns(g, 'USA')).toEqual([]);
     expect(pacificFreed(g, 'USA')).toBe(0.05);
     expect(oceanShares(g, 'USA', O)).toEqual([['atlantic', 0.2]]);
+  });
+
+  it('splits the share by the shores its staff names once the book no longer binds: all to the run named, each its part when both are', () => {
+    const g = pacificWar(3, 36);
+    const at = (nm: string): Region => g.byName[nm];
+    expect(hopsBind(g)).toBe(false);
+    // No shore named: the whole share works the idle run.
+    expect(pacificRuns(g, 'USA')).toEqual([['south', 0.05]]);
+    // A shore north of the equator named alone: the whole share goes to the central run.
+    at('Wake').ctrl = 'JAP';
+    g.flags['st:hop:USA:0'] = at('Wake').id + 1;
+    g.flags['st:hopQ:USA:0'] = at('Pearl Harbor').id + 1;
+    expect(runOf(g, at('Wake'))).toBe('central');
+    expect(pacificRuns(g, 'USA')).toEqual([['central', 0.05]]);
+    // A shore on each road: each run its own part.
+    at('Guadalcanal').ctrl = 'JAP';
+    g.flags['st:hop:USA:1'] = at('Guadalcanal').id + 1;
+    g.flags['st:hopQ:USA:1'] = at('Samoa').id + 1;
+    expect(pacificRuns(g, 'USA')).toEqual([['south', 0.03], ['central', 0.02]]);
+    // While the book binds, the named shores do not move it: the book's months alone.
+    const b = pacificWar(1, 36);
+    b.flags['st:hop:USA:0'] = b.byName['Wake'].id + 1;
+    b.flags['st:hopQ:USA:0'] = b.byName['Pearl Harbor'].id + 1;
+    b.byName['Wake'].ctrl = 'JAP';
+    expect(hopsBind(b)).toBe(true);
+    expect(pacificRuns(b, 'USA')).toEqual([['south', 0.05]]);
   });
 
   it("puts an army down only on the lane: the run's own side of the equator, America's own line, Australia and New Zealand", () => {
