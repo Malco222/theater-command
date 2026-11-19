@@ -78,8 +78,8 @@ cumulus at the cloud table's middle heights. `AirSky` lays the clouds once, on a
 seam, and draws each cloud where it lies nearest the eye. So there are clouds wherever the fight goes (at Pearl Harbor
 most of the fight and the falls are 20 to 32 km short of the harbour). The scene draws them as one see-through mesh of
 soft puffs, in the effects kit's shape and with the same `M_Highlight`. They are turned to the eye only when it has
-moved about a quarter of a degree at the nearest puff (a metre, while a cloud's lift over high ground is still easing),
-and as soon as the eye moves after a paint that drew nothing.
+moved about a quarter of a degree at the nearest puff, as soon as the eye moves after a paint that drew nothing, and,
+while a drawn cloud's lift over high ground is still easing, for each metre the wind carries the clouds.
 
 - **How far.** Clouds are drawn out to 20 km from the eye and thin into the haze over the last third of that. A cloud
   within 5 km is drawn with all its puffs, out to 10 km with its bigger ones, and past that with two: its veil and one
@@ -96,35 +96,45 @@ and as soon as the eye moves after a paint that drew nothing.
   above the bombers instead, its base 600 m over them. A strike at ships keeps a hole over the ships. A deck does not
   drift (from bomber height its drift could not be seen), so the hole stays over the ships.
 - Cloud never sits lower than 300 m over the ground under it, so a cloud over a mountain is lifted with it where it
-  is drawn (330 m over the highest of 17 points under it, so 300 m over a ridge between them too). As a cloud drifts over
-  hills, the lift drawn eases toward the ground under it, up one and a half metres a metre of drift and down half as
-  fast, so it never hops. A deck tile lifted so high that it would come within 1.5 km of the bombers is thinned, or left
+  is drawn: 300 m over the ground under its puffs' hearts, 200 m under their faded rims. The ground is looked at on a
+  lattice 120 m apart (finer than the stage's 150 m cells) out past the rims, so no cell under a cloud is missed. As a
+  cloud drifts over hills, the lift drawn eases toward the higher of the ground under it and 250 m downwind, up one and
+  a half metres a metre of drift and down half as fast, so it rises before the high ground reaches it and never hops. A deck tile lifted so high that it would come within 1.5 km of the bombers is thinned, or left
   out where the mountain stands through.
 - **Falls and the deck.** Something falling into a drawn tile ends 150 m under its top puff's middle (halfway, in a
   thin tile), so it is hidden before it ends and nothing pops from view: aircraft, pieces and parachutes alike
   (`DeckAt` in the core gives the tile drawn over a point, its foot and that hiding height, out to the scene's reach;
-  `DeckZ` for `AirFall` is that height, or the ground). Through a hole it goes on down. Under a tile's foot it is
-  under the deck (a fall begun under it, a torpedo bomber, a low fight, or one come down a hole), and it goes on down to
-  the sea or the ground, its debris row told so. A tile lifted over high ground counts by its own foot, not the deck's
-  laid top. A fall ends after 400 s at most, a parachute after 1,500.
+  `DeckZ` for `AirFall` is that height, or the ground). Through a hole, or under the foot of the tile over it (a fall
+  begun under the deck, a torpedo bomber, a low fight, or one come down a hole), it goes on down to the sea or the
+  ground, unless it falls into another tile on the way: over high ground, tiles side by side are lifted unlike, and
+  each counts by its own foot. Under the deck's laid base no tile reaches, so it is under it for good. A fall's debris
+  row sheds only while the fall is over a drawn tile above the height its pieces leave sight; once not, the row is
+  let go, so no piece fades in clear air. A fall ends after 400 s at most, a parachute after 1,500.
 - **Two effects kits.** The fight in the air uses the effects kit as before. A second kit (`GroundFx`) draws what
   happens under the clouds' base: bomb bursts, crashes, splashes, fires and the stage's oil smoke, and the fight's own
   tracer, hits, flak, trails, debris and torn flames while they are under it (each by where it is, with 50 m either side
-  of the base before it changes kits, so nothing flickers between them). See-through things are drawn one after
-  another, not by depth, so the order follows the eye. Over the clouds, the ground's kit is drawn first, then the
-  clouds, then the air. Under them, the clouds come first (they are the sky behind), then the ground's kit, then the
-  air.
+  of the base before it changes kits, so nothing flickers between them; a trail carries on in the other kit at its
+  full look, as of when its kind began, and does not light again). See-through things are drawn one after another,
+  not by depth, so the order follows the eye. With the eye over the clouds' base under it, the ground's kit is drawn
+  first, then the clouds, then the air: every cloud between the eye and something under the base hides it. Under the
+  base, the clouds come first (they are the sky behind), then the ground's kit, then the air. The order turns 50 m
+  either side of the base.
 - The cloud test checks the sky too: the day as read, the heights, the cover (0.31 to 0.45), the clearing kept as the
   clouds drift (when the bombs fall, at the end and two hours on), cloud round the falls far from the target, the room,
   the same sky every time, the far-to-near order and the painter's time (under 4 ms; about 1.4). It checks the clearing
   on what the painter draws as well. On a cumulus day no fall or parachute ends in the air. It lays a deck under a
   4,500 m band, a deck raised to the band, a deck over the lowest band, a strike's hole, three kinds of high ground (a
   broad 2,000 m mountain, a steep ridge as steep as the Koolau, a 3,800 m peak) and a ticket with no sky. Over each
-  hill it paints the clouds as the wind carries them for 20 minutes: every puff's heart 150 m over the ground under it,
-  its rim 30 m, each cloud's foot 300 m, and no cloud's lift changing faster than 8 m a second. It flies the battle again
-  twice: under a test deck over the sea, and under the lowest band's deck lifted over high ground where the falls are
-  thickest. Every end is judged against the drawn tiles found one by one: in a tile, under its hiding height; or on
-  the sea or the ground; never in clear air, and nothing left falling in cloud. `AIR_SKY_PICTURES=1
+  hill, and over Oahu's own ground (the stage's grid, at Kaala and the Koolau's highest), it paints the clouds as the
+  wind carries them for 20 minutes: every puff's heart 150 m over the ground under it, its rim 30 m, each cloud's foot
+  300 m, and no cloud's lift changing faster than 8 m a second. An eye flying round the harbour for a minute asks for
+  no more paints over the island than over the sea. It flies the battle again twice: under a test deck over the sea,
+  and under the lowest band's deck lifted over high ground beside where the falls are thickest, so that tiles side by
+  side lifted unlike are where falls are. Every end is judged against the drawn tiles found one by one: in a tile,
+  under its hiding height; or on the sea or the ground; never in clear air, nothing left falling in cloud, and no
+  debris row shedding in clear air. A third flight puts a sharp step in the deck where falls begin (a tile higher than
+  any fall on one side, a thick low one on the other): falls that drift across must end in the low tile, and no plane,
+  piece or parachute is left falling inside it. `AIR_SKY_PICTURES=1
   Tools/air_show/run.sh` also draws each battle's clouds from four eyes (one where the battle opens, far from the
   target), plus a deck day, with a small software painter (`air_sky_picture.cpp`). Unreal's light and haze are only
   stood in for there.

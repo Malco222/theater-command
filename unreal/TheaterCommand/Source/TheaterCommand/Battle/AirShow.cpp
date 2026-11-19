@@ -124,8 +124,7 @@ namespace AirShow
 		{
 			return 0.0;
 		}
-		const DeckSpan Here = DeckHere(At.X, At.Y);
-		return Here.Hide > 0.0 && At.Z <= Here.Foot ? 0.0 : 1.0;
+		return DeckBase > 0.0 && At.Z <= DeckBase ? 0.0 : 1.0;
 	}
 
 	bool Show::IntoDeck(double& Deck, const Vec& At) const
@@ -134,16 +133,17 @@ namespace AirShow
 		{
 			return false;
 		}
-		const DeckSpan Here = DeckHere(At.X, At.Y);
-		if (Here.Hide <= 0.0)
+		if (DeckBase > 0.0 && At.Z <= DeckBase)
 		{
-			// (a hole: on down; it may yet fall into a tile beside it)
+			// (under the deck's laid base: no tile reaches down here, on down to the ground or the sea for good)
+			Deck = 0.0;
 			return false;
 		}
-		if (At.Z <= Here.Foot)
+		const DeckSpan Here = DeckHere(At.X, At.Y);
+		if (Here.Hide <= 0.0 || At.Z <= Here.Foot)
 		{
-			// (under a tile: under the deck now, on down to the ground or the sea)
-			Deck = 0.0;
+			// (a hole, or under the tile over it: on down; it may yet fall into a lower tile beside it, one lifted less
+			// over high ground)
 			return false;
 		}
 		return At.Z < Here.Hide - std::min(150.0, 0.5 * (Here.Hide - Here.Foot));
@@ -1059,10 +1059,17 @@ namespace AirShow
 		const bool bCloud = IntoDeck(C.FallDeck, C.P);
 		Fx& Moving = Emit(FxKind::FallMove, C.P, std::string(), C.Key);
 		Moving.Vel = Velocity(C);
-		if (C.bDebrisToDeck && C.FallDeck <= 0.0)
+		if (C.bDebrisToDeck && !bCloud)
 		{
-			Moving.Deck = -1.0;
-			C.bDebrisToDeck = false;
+			// (its pieces leave sight at the height the row was told: once it is no longer over a drawn tile above that
+			// height (a hole, past the deck's reach, under a tile's foot, or under that height), the row stops shedding,
+			// so no piece is shed where it would fade in clear air)
+			const DeckSpan Here = DeckHere(C.P.X, C.P.Y);
+			if (Here.Hide <= 0.0 || C.P.Z <= Here.Foot || C.P.Z < C.DebrisDeck)
+			{
+				Moving.Deck = -1.0;
+				C.bDebrisToDeck = false;
+			}
 		}
 		// Parachutes, one after another, as the crew get out.
 		if (C.ChutesLeft > 0 && C.FallT > C.ChuteAt)
@@ -1220,14 +1227,15 @@ namespace AirShow
 		const Vec V = Velocity(C);
 		{
 			// The debris row, for the effects kit: where the pieces leave sight is where the deck hides them, for a fall
-			// begun over a drawn tile's foot, else the ground (and the row stops shedding if the fall goes down a hole
-			// and under the deck).
+			// begun over a drawn tile's foot, else the ground (and the row stops shedding once the fall is no longer over
+			// a drawn tile above that height).
 			Fx& F = Emit(FxKind::Fall, C.P, C.Falling == FallHow::Explode ? "explode" : C.Falling == FallHow::Spin ? "spin" : "burn", C.Key);
 			F.Vel = V;
 			F.Size = C.Form.Span;
 			const DeckSpan Here = DeckHere(C.P.X, C.P.Y);
 			C.bDebrisToDeck = Here.Hide > 0.0 && C.P.Z > Here.Foot;
 			F.Deck = C.bDebrisToDeck ? std::min(Here.Hide, C.P.Z) : GroundAt(C.P.X, C.P.Y);
+			C.DebrisDeck = F.Deck;
 		}
 		const Vec EngineAt = Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[C.Form.Engines.size() > 1 ? (Roll.U() < 0.5 ? 1 : C.Form.Engines.size() - 2) : 0]);
 		if (C.Falling == FallHow::Explode)

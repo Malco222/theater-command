@@ -1012,6 +1012,8 @@ void AAirBattle::LaySky()
 		};
 		// (drawn, more than half, within five sixths of the clouds' reach from the eye: past it, falls go on down)
 		S.Show.DeckReach = AirSky::Reach * 5.0 / 6.0;
+		// (no tile's foot under the laid base: under it, under the deck for good)
+		S.Show.DeckBase = S.Sky.Base;
 	}
 }
 
@@ -1028,9 +1030,13 @@ void AAirBattle::DrawSky()
 	Clouds->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
 	const FVector At = Eye->GetActorLocation() / UnitsPerMetre;
 	const AirSky::Vec Seen(At.Y, At.X, At.Z);
-	// See-through things are drawn one after another, not by depth. Seen from over the clouds, the ground's bursts and
-	// fires lie under them and the air fight over them; seen from under, the clouds are the sky behind both.
-	const int32 Want = Seen.Z > 0.5 * (S.Sky.Base + S.Sky.Top) ? 1 : 2;
+	// See-through things are drawn one after another, not by depth. Seen from over the clouds' base, the ground's bursts
+	// and fires lie under every cloud between, and the air fight over them; seen from under, the clouds are the sky
+	// behind both. The base under the eye is the one the kits are split at (KitAt), with 50 m either side before the
+	// order turns, so it does not flicker.
+	const double UnderEye = S.Show.Ground ? S.Show.Ground(Seen.X, Seen.Y) : 0.0;
+	const double EyeBase = FMath::Max(S.Sky.Base, UnderEye + 300.0) + (SkyOrder == 1 ? -50.0 : SkyOrder == 2 ? 50.0 : 0.0);
+	const int32 Want = Seen.Z > EyeBase ? 1 : 2;
 	if (Want != SkyOrder)
 	{
 		SkyOrder = Want;
@@ -1551,8 +1557,27 @@ void AAirBattle::PlayEffects()
 				On.Kit = Kit;
 				On.Kind = AirParts::Wide(E.What);
 				On.Span = static_cast<float>(E.Size);
+				On.KindT = Now;
+				if (const FTrailOn* Was = TrailKits.Find(E.Key))
+				{
+					// (lit again while it burns: its kind's own start kept, the same kind going on at its full look; in
+					// the kit it is already in, with the base's 50 m either side)
+					On.Kit = KitAt(At, Was->Kit);
+					if (Was->Kind == On.Kind)
+					{
+						On.KindT = Was->KindT;
+					}
+					if (Was->Kit && Was->Kit != On.Kit)
+					{
+						Was->Kit->TrailStop(E.Key);
+					}
+				}
 				TrailKits.Add(E.Key, On);
-				AirParts::TrailStart(Kit, Now, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), On.Kind, On.Span);
+				AirParts::TrailStart(On.Kit, On.KindT, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), On.Kind, On.Span);
+				if (On.KindT < Now)
+				{
+					On.Kit->TrailMove(Now, E.Key, At, WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z));
+				}
 			}
 			break;
 		}
@@ -1566,13 +1591,15 @@ void AAirBattle::PlayEffects()
 					if (Kit && Kit != On->Kit)
 					{
 						// (passing the clouds' base: it goes on in the other kit, and what it has left in the air fades
-						// where it is)
+						// where it is; started there as of when its kind began, so it carries on at its full look and
+						// does not light again, and laid on from here)
 						if (On->Kit)
 						{
 							On->Kit->TrailStop(E.Key);
 						}
 						On->Kit = Kit;
-						AirParts::TrailStart(Kit, Now, E.Key, At, Velocity, On->Kind, On->Span);
+						AirParts::TrailStart(Kit, On->KindT, E.Key, At, Velocity, On->Kind, On->Span);
+						Kit->TrailMove(Now, E.Key, At, Velocity);
 					}
 					else if (On->Kit)
 					{

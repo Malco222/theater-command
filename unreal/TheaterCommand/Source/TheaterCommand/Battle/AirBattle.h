@@ -147,7 +147,9 @@ private:
 	TSet<int32> BlastsTaken;
 	/** Which kit each running gun and trail is in: chosen where it starts, a trail carried into the other kit as it
 	 * passes the clouds' base (its kind and span kept to start it there). */
-	struct FTrailOn { FBattleEffects* Kit = nullptr; FString Kind; float Span = 0.0f; };
+	/** A lit trail: the kit it is in, its kind and span, and when its kind began (on the air clock), so that passing
+	 * from one kit to the other it carries on at its full look. */
+	struct FTrailOn { FBattleEffects* Kit = nullptr; FString Kind; float Span = 0.0f; double KindT = 0.0; };
 	TMap<int32, FTrailOn> TrailKits;
 	TMap<int32, FBattleEffects*> GunKits;
 	// The sounds' own clocks.

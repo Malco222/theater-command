@@ -131,33 +131,50 @@ namespace AirSky
 		{
 			return 0.0;
 		}
+		LiftMemo* Memo = Sky.bDeck && static_cast<size_t>(CloudIndex) < DeckLifts.size() ? &DeckLifts[static_cast<size_t>(CloudIndex)] : nullptr;
+		if (Memo && Memo->X == X && Memo->Y == Y)
+		{
+			return Memo->Lift;
+		}
 		const Cloud& C = Clouds[static_cast<size_t>(CloudIndex)];
 		auto At = [this](double PX, double PY) { return std::max(0.0, Ground(PX, PY)); };
-		double Floor = At(X, Y);
-		if (Sky.bDeck)
+		// (the ground on a lattice 120 m apart, finer than a stage's 150 m cells, so that no cell is missed: under the
+		// puffs' hearts, and beyond them out to their rims; each 220 m wider, a cell's width across its corners, so that
+		// a cell the edge only clips is looked at wherever its lattice points fall in it)
+		const double Step = 120.0;
+		const double HeartOut = std::max(C.HeartReach, 0.25 * C.W) + 220.0, RimOut = std::max(HeartOut, std::max(C.RimReach, 0.5 * C.W) + 220.0);
+		const int N = static_cast<int>(std::ceil(RimOut / Step));
+		double UnderHearts = At(X, Y), UnderRims = 0.0;
+		for (int I = -N; I <= N; ++I)
 		{
-			// (a tile: its middle and two rings, out to its base puff's edge)
-			const double R = C.W / 1.8;
-			for (int K = 0; K < 8; ++K)
+			for (int J = -N; J <= N; ++J)
 			{
-				const double A = 2.0 * Pi * K / 8.0;
-				Floor = std::max(Floor, At(X + 0.55 * R * std::cos(A), Y + 0.55 * R * std::sin(A)));
-				Floor = std::max(Floor, At(X + 1.1 * R * std::cos(A), Y + 1.1 * R * std::sin(A)));
+				const double DX = I * Step, DY = J * Step, Far = DX * DX + DY * DY;
+				if (Far > RimOut * RimOut)
+				{
+					continue;
+				}
+				const double Here = At(X + DX, Y + DY);
+				if (Far <= HeartOut * HeartOut)
+				{
+					UnderHearts = std::max(UnderHearts, Here);
+				}
+				else
+				{
+					UnderRims = std::max(UnderRims, Here);
+				}
 			}
 		}
-		else
+		// (310 m over the highest found under the hearts, so 300 m over the ground between the points; 200 m under the
+		// rims, which fade to nothing and hang a little under the flat base)
+		const double Lift = std::max(0.0, std::max(UnderHearts + 310.0, UnderRims + 200.0) - C.At.Z);
+		if (Memo)
 		{
-			// (a cumulus: its middle and two rings, out to its veil's edge, so a ridge between them is not missed)
-			for (int K = 0; K < 8; ++K)
-			{
-				const double A = 2.0 * Pi * K / 8.0 + Pi / 8.0;
-				Floor = std::max(Floor, At(X + 0.25 * C.W * std::cos(A), Y + 0.25 * C.W * std::sin(A)));
-				Floor = std::max(Floor, At(X + 0.5 * C.W * std::cos(A - Pi / 8.0), Y + 0.5 * C.W * std::sin(A - Pi / 8.0)));
-			}
+			Memo->X = X;
+			Memo->Y = Y;
+			Memo->Lift = Lift;
 		}
-		// (330 m over the highest found, so 300 m over the ground between the samples too, on a ridge as steep as the
-		// Koolau)
-		return std::max(0.0, Floor + 330.0 - C.At.Z);
+		return Lift;
 	}
 
 	double Field::SquashFor(int CloudIndex, double Lift) const
@@ -543,6 +560,22 @@ namespace AirSky
 			}
 		}
 
+		// How far each cloud's puffs reach from its middle, for the ground under it.
+		for (Cloud& C : F.Clouds)
+		{
+			for (int K = C.First; K < C.First + C.Count; ++K)
+			{
+				const Puff& Each = F.Puffs[static_cast<size_t>(K)];
+				const double Off = std::hypot(Each.At.X - C.At.X, Each.At.Y - C.At.Y);
+				C.HeartReach = std::max(C.HeartReach, Off + 0.55 * Each.R);
+				C.RimReach = std::max(C.RimReach, Off + Each.R);
+			}
+		}
+		if (D.bDeck)
+		{
+			F.DeckLifts.assign(F.Clouds.size(), Field::LiftMemo());
+		}
+
 		// The cover round the target, past its clearing (4 km for cumulus, 4.5 km for a deck's hole over ships).
 		F.Cover = F.CoverOf(Vec(), 4500.0, 9000.0);
 		return F;
@@ -585,11 +618,13 @@ namespace AirSky
 		{
 			return true;
 		}
-		const double Moved = ((Eye - Drift) - LastEye).Length();
-		if (bEasing && Moved > 1.0)
+		// (while a drawn cloud's lift eases over high ground, a paint for each metre the wind carries it, whatever the
+		// eye does: its lift moves only as it drifts)
+		if (bEasing && (Drift - LastDrift).Length() > 1.0)
 		{
 			return true;
 		}
+		const double Moved = ((Eye - Drift) - LastEye).Length();
 		return Moved > Clamp(LastNear * 0.0045, 1.0, 100.0);
 	}
 
@@ -614,6 +649,10 @@ namespace AirSky
 		Where.resize(CloudCount);
 		Sorted.clear();
 		bEasing = false;
+		// (the way the wind carries the clouds, 250 m of it: a cloud's lift is the higher of the ground under it and
+		// under where it will be, so it rises before high ground reaches it and the easing never lags under it)
+		const Vec Carry = F.DriftAt(1.0);
+		const Vec Lead = Carry.Length() > 1e-9 ? Carry * (250.0 / Carry.Length()) : Vec();
 		for (size_t I = 0; I < CloudCount; ++I)
 		{
 			const Cloud& C = F.Clouds[I];
@@ -631,11 +670,17 @@ namespace AirSky
 			const double WX = LX + Drift.X, WY = LY + Drift.Y;
 			Kept& Lift = Lifts[I];
 			const double Jump = std::hypot(WX - Lift.PX, WY - Lift.PY);
+			bool bStillEasing = false;
+			auto LiftHere = [&F, Index, &Lead](double X, double Y)
+			{
+				const double Now = F.LiftAt(Index, X, Y);
+				return Lead.X == 0.0 && Lead.Y == 0.0 ? Now : std::max(Now, F.LiftAt(Index, X + Lead.X, Y + Lead.Y));
+			};
 			if (Lift.Shown < 0.0 || Jump > 1000.0)
 			{
 				Lift.X = WX;
 				Lift.Y = WY;
-				Lift.Target = F.LiftAt(Index, WX, WY);
+				Lift.Target = LiftHere(WX, WY);
 				Lift.Shown = Lift.Target;
 			}
 			else
@@ -644,10 +689,10 @@ namespace AirSky
 				{
 					Lift.X = WX;
 					Lift.Y = WY;
-					Lift.Target = F.LiftAt(Index, WX, WY);
+					Lift.Target = LiftHere(WX, WY);
 				}
 				Lift.Shown += Clamp(Lift.Target - Lift.Shown, -0.75 * Jump, 1.5 * Jump);
-				bEasing = bEasing || std::fabs(Lift.Target - Lift.Shown) > 0.5;
+				bStillEasing = std::fabs(Lift.Target - Lift.Shown) > 0.5;
 			}
 			Lift.PX = WX;
 			Lift.PY = WY;
@@ -666,6 +711,8 @@ namespace AirSky
 			{
 				continue;
 			}
+			// (only a cloud that is drawn asks for the paints that ease it)
+			bEasing = bEasing || bStillEasing;
 			const double NearShare = Smooth((NearAll + 1000.0 - Far) / 1000.0), FarShare = Smooth((FarAll + 1500.0 - Far) / 1500.0);
 			for (int K = C.First; K < C.First + C.Count; ++K)
 			{
@@ -753,6 +800,7 @@ namespace AirSky
 		}
 		bPainted = true;
 		LastEye = Seen;
+		LastDrift = Drift;
 		// (nothing drawn: the next paint is wanted as soon as the eye moves, not never)
 		LastNear = LastDrawn > 0 ? std::max(50.0, Near) : 50.0;
 		return Near;

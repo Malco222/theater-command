@@ -114,6 +114,9 @@ namespace AirSky
 		int First = 0, Count = 0;
 		/** 0.1 to 0.9: how soon the target's clearing (or the ships' hole) takes it. */
 		double Fate = 0.5;
+		/** How far from its middle its puffs' hearts reach (a puff's middle and 0.55 of its radius), and their faded
+		 * rims, metres: the ground under it is looked at out to these. */
+		double HeartReach = 0.0, RimReach = 0.0;
 	};
 
 	/** Where one cloud is drawn: the copy of the square nearest the eye (Shift), lifted over the ground under it,
@@ -153,8 +156,12 @@ namespace AirSky
 		Vec DriftAt(double AirSeconds) const;
 		/** The copy of the square that puts a cloud nearest a point of the laid frame (multiples of Period). */
 		Vec ShiftNear(int CloudIndex, double X, double Y) const;
-		/** How far a cloud is lifted with its middle at a board point: its foot to 330 m over the highest ground found
-		 * under it (its middle and two rings of eight, out to its edge), so 300 m over the ground between them. */
+		/** How far a cloud is lifted with its middle at a board point: its foot to 300 m over the highest ground under
+		 * its puffs' hearts, and 200 m over that under their faded rims. The ground is looked at on a lattice 120 m
+		 * apart (finer than a stage's 150 m cells) out past its rims by a cell's width across its corners, so no cell
+		 * under it is missed, and the foot set 310 m over the highest found under the hearts, for smooth ground between
+		 * the points. A deck tile's lift, which never drifts, is kept once found for the copy asked. The painter takes
+		 * the higher of this and the same 250 m downwind, so a drifting cloud rises before high ground reaches it. */
 		double LiftAt(int CloudIndex, double X, double Y) const;
 		/** A deck tile's height share once lifted (the bombers' band: 1 as laid, less where thinned, 0 where the
 		 * mountain stands through); 1 for cumulus. */
@@ -182,6 +189,13 @@ namespace AirSky
 		std::vector<int> DeckFirst, DeckList;
 		double DeckCell = 240.0;
 		int DeckN = 0;
+		// (each deck tile's lift as last found, for the board point asked: a tile never drifts, so the same copy asks
+		// the same point; the scene's falls ask the deck every frame)
+		struct LiftMemo
+		{
+			double X = 1e300, Y = 1e300, Lift = 0.0;
+		};
+		mutable std::vector<LiftMemo> DeckLifts;
 	};
 
 	/** The day's clouds, the same every time for the same battle. */
@@ -211,8 +225,8 @@ namespace AirSky
 		 * nearest puff's distance. */
 		double Paint(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light, std::vector<Vec>& OutPoints, std::vector<uint8_t>& OutRgba);
 		/** Whether the eye has moved enough since the last Paint (in the field's own frame) for the turn of the
-		 * puffs to show: about a quarter of a degree at the nearest puff (at most 100 m); a metre while a cloud's lift
-		 * is still easing. */
+		 * puffs to show: about a quarter of a degree at the nearest puff (at most 100 m); or, while a drawn cloud's
+		 * lift is still easing over high ground, whether the wind has carried the clouds a metre. */
 		bool Stale(const Vec& Eye, const Vec& Drift) const;
 		/** The puffs drawn by the last Paint, and those it had no room for (the farthest). */
 		int Drawn() const { return LastDrawn; }
@@ -245,6 +259,7 @@ namespace AirSky
 		bool bEasing = false;
 		uint64_t LastSerial = 0;
 		Vec LastEye;      // in the field's frame (eye less drift)
+		Vec LastDrift;    // the wind's carry at the last paint
 		double LastNear = 1000.0;
 		int LastDrawn = 0, LastDropped = 0;
 	};
