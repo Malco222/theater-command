@@ -284,6 +284,15 @@ namespace TheaterFx
 			double Rate = 800.0, Mps = 870.0, Flash = 0.45, Strike = 0.8, Drag = 0.36, Drop = 9.81, TracerS = 2.4, Spread = 0.004;
 			double SmokeS = 0.8, SmokeAlpha = 0.1, Lamp = 0.0, FlashLeastPx = 0.0; // (FlashLeastPx: the flash never under this on the screen, a twinkle far off)
 			int OneIn = 5, SmokeEvery = 3, Licks = 0;
+			// (the close view, art director 04:40Z: a heavy machine gun's flicker gains CloseLicks side licks and a lamp of
+			// CloseLamp when the eye is within LicksWithin metres of it; every round drops its spent case and belt link
+			// from the chute under the gun, CaseM long and CaseD across, a link LinkM, when the eye is within CasesWithin
+			// metres. 0 for each: none, as before)
+			Span CloseLicks{ 0.0, 0.0 };
+			double CloseLamp = 0.0, LicksWithin = 0.0, CasesWithin = 0.0, CaseM = 0.0, CaseD = 0.0, LinkM = 0.0;
+			double ChuteBack = 1.0, ChuteDown = 0.25, CaseDrag = 5.0, CaseGlint = 4.0, CaseLeastPx = 0.8;
+			Span Throw{ 3.0, 8.0 }, CaseSink{ 18.0, 28.0 }, LinkSink{ 12.0, 20.0 }, CaseLife{ 1.2, 2.0 }, CaseTumble{ 15.0, 40.0 };
+			Rgb CaseCol, CaseDark, LinkCol;
 		};
 		/** An air_trails row, read once a kind. */
 		struct TrailRow
@@ -476,6 +485,7 @@ namespace TheaterFx
 		const AirRow& AirRowOf(const std::string& Kind);
 		void AirRound(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, double Mps, bool bTracer, bool bSmoke, Dice& D);
 		void CannonFlash(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D);
+		void Spent(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D);
 		const TrailRow& TrailRowOf(const std::string& Kind);
 		void TrailPuff(double T, const Vec& At, const Vec& Carry, Trailing& Tr, const TrailRow& Row, Dice& D);
 		void Shed(double Now, const Vec& At, const Vec& Vel, const Vec& Throw, double SpanM, double DeckZ, int Sort, Dice& D); // (one piece: Sort 0 a skin plate, 1 a heavy piece, 2 a wing)

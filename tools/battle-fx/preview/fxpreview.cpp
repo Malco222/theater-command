@@ -6,7 +6,7 @@
 //   clang++ -O2 -std=c++20 -I $SRC fxpreview.cpp $SRC/Effects/TheaterFxCore.cpp -o fxpreview
 //   ./fxpreview /tmp/recipe.txt <out folder> <size> <ground> <frames, e.g. 4,8,40> [WxH] [back up]
 //     (size "mg": a machine gun's burst from 30 m away into the ground there, in place of a shell; FX_MG_VIEW=side|behind)
-//   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|far|target|hit|trail|wake|map|fall]
+//   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|close|far|target|hit|trail|wake|map|fall]
 //   ./fxpreview /tmp/recipe.txt <out folder> oil <sunk|burning|horizon> <frames> [WxH]
 //
 // The oil shot: one oil fire on a flat sea (FX_REACH metres of oil, 100; seen from FX_DIST metres off, 1200, at
@@ -632,6 +632,23 @@ namespace
 				// (off the outside wing, the aircraft left of the middle and its streams running off to the right)
 				Cam.Eye = F.At + LevelRight * 45.0 - Level * 8.0 + ZUp * 3.0;
 				Cam.Forward = ((F.At - Cam.Eye).Unit() + Level * 0.4).Unit();
+			}
+			else if (ShotName == "close")
+			{
+				// (the close view: off and under the right wing, about 12 m from its guns (FX_CLOSE_OUT metres out, 14),
+				// looking across at the chutes and the spray of cases and links streaming aft; the licks and lamp show within
+				// 30 m, cases within 60 m)
+				if (std::getenv("FX_CLOSE_AFT"))
+				{
+					// (FX_CLOSE_AFT=1: behind and under the right wing, FX_CLOSE_BACK metres aft (14), looking up the stream)
+					Cam.Eye = F.At - F.Fw * EnvNum("FX_CLOSE_BACK", 14.0) + F.Right * 3.6 - F.Up * 3.5;
+					Cam.Forward = (F.At + F.Right * 2.8 - F.Up * 1.2 - F.Fw * 2.0 - Cam.Eye).Unit();
+				}
+				else
+				{
+					Cam.Eye = F.At + F.Right * EnvNum("FX_CLOSE_OUT", 14.0) - F.Fw * 3.0 - F.Up * 4.0;
+					Cam.Forward = (F.At + F.Right * 2.8 - F.Fw * 1.0 - F.Up * 1.5 - Cam.Eye).Unit();
+				}
 			}
 			else if (ShotName == "far")
 			{

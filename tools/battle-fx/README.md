@@ -136,8 +136,17 @@ Blasts->AirGunStop(Gun);
   and fall. Rate and muzzle speed come from `air_guns` in the recipe (`rifle`, `hmg`, `cannon20`); pass your own to
   override (rounds a minute, world units a second).
 - Every round flickers at the muzzle; one in five is the ruled tracer. Cannon also throw licks and light the wing.
+- The close view (art director 04:40Z), from the eye of the last frame drawn, so nothing to call: a heavy machine gun
+  within 30 m (`air_guns.close.licks_within_m`) throws 0 to 2 short licks a round, raked aft, and a small lamp
+  (`close_licks`, `close_lamp`; by night only, as every small gun's). Within 60 m (`cases_within_m`) every round of
+  every gun drops its spent brass case and steel belt link from a chute about a metre behind the muzzle and under it
+  (`chute_back_m`, `chute_down_m`; a turret's guns dump theirs overboard the same way). The air tears them aft at once
+  and they fall, tumbling and glinting, gone in 1.2 to 2 s: a firing wing trails a thin spray of brass. Sizes are the
+  row's own (`case_m`, `case_d_m`, `link_m`). They are the first thing left out when the screen is full (past three
+  fifths of `game.max_puffs`). The preview: `... air hmg 20,40 1920x1080 close` (about 12 m off the right wing;
+  `FX_CLOSE_OUT` metres out, or `FX_CLOSE_AFT=1` from behind and under it).
 - The preview draws it: `./fxpreview recipe.txt out air hmg 15,45 960x540 side` (shots `chase`, `side`, `far`,
-  `target`, `hit`, `trail`, `wake` (the whole trail from `FX_DIST` m off the beam), `map` (the strategy camera,
+  `close`, `target`, `hit`, `trail`, `wake` (the whole trail from `FX_DIST` m off the beam), `map` (the strategy camera,
   `FX_DIST` m off); `FX_DUSK=1` for dusk, `FX_TURN=deg/s` for the turn, `FX_TRAIL=smoke|fire|glycol`, `FX_SPAN=m`).
 - A ground machine gun's close burst: `./fxpreview recipe.txt out mg earth 0,1 1280x720`, seen from `FX_MG_VIEW=side`
   or `behind` the gun.
@@ -191,7 +200,8 @@ Blasts->AirFallStop(PlaneId);
   100 for a bomber (a span of `bomber_span_m`, 20 m, or more), round a short torn fireball, never a ball: 18 to 28
   clumps of fire thrown out along two to four tears, each a hot middle darkening to a deep red edge, gone in about half
   a second, each leaving black smoke that hangs where it died while the pieces fly on. It is lit from within (art
-  director 06:00Z): a white-yellow heart for about 0.1 s, drawn over the clumps (`Bit::Nearer`); a saturated orange
+  director 06:00Z): a white-yellow heart for about 0.1 s, broken in three along the tears and drawn over the clumps
+  (`Bit::Nearer`); a saturated orange
   body, blue kept low and near opaque to its edge, cooling to deep red by `cool_by_s` and into its smoke, which rides
   with it as it dies, so it never goes peach, clay or salmon over the sky. The battle's colour grade must spare fire,
   flashes and tracers from its desaturation. Hide the model at once; no

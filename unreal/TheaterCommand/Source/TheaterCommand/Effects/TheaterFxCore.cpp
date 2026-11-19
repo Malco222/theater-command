@@ -1770,6 +1770,28 @@ namespace TheaterFx
 			R.Licks = std::max(0, static_cast<int>(Num(P + "licks", 0.0)));
 			R.Lamp = Num(P + "lamp", 0.0);
 			R.FlashLeastPx = std::max(0.0, Num(P + "flash_least_px", Num("air_guns.flash_least_px", 0.0)));
+			// (the close view: what only shows within a few tens of metres of the eye)
+			const std::string C = "air_guns.close.";
+			R.CloseLicks = Range(P + "close_licks", 0.0, 0.0);
+			R.CloseLamp = std::max(0.0, Num(P + "close_lamp", 0.0));
+			R.LicksWithin = std::max(0.0, Num(C + "licks_within_m", 30.0));
+			R.CasesWithin = std::max(0.0, Num(C + "cases_within_m", 60.0));
+			R.CaseM = std::max(0.0, Num(P + "case_m", 0.0));
+			R.CaseD = std::max(0.002, Num(P + "case_d_m", 0.02));
+			R.LinkM = std::max(0.0, Num(P + "link_m", 0.0));
+			R.ChuteBack = Num(C + "chute_back_m", 1.0);
+			R.ChuteDown = Num(C + "chute_down_m", 0.25);
+			R.CaseDrag = std::max(0.1, Num(C + "drag", 5.0));
+			R.CaseGlint = std::max(0.0, Num(C + "glint", 4.0));
+			R.CaseLeastPx = std::max(0.0, Num(C + "least_px", 0.8));
+			R.Throw = Range(C + "throw_mps", 3.0, 8.0);
+			R.CaseSink = Range(C + "case_sink_mps", 18.0, 28.0);
+			R.LinkSink = Range(C + "link_sink_mps", 12.0, 20.0);
+			R.CaseLife = Range(C + "life_s", 1.2, 2.0);
+			R.CaseTumble = Range(C + "tumble", 15.0, 40.0);
+			R.CaseCol = Picture(C + "case_colour", Rgb::FromPicture(196, 156, 82));
+			R.CaseDark = Picture(C + "case_dark", Rgb::FromPicture(140, 104, 52));
+			R.LinkCol = Picture(C + "link_colour", Rgb::FromPicture(70, 70, 72));
 		}
 		R.Name = Kind;
 		AirRows.push_back(R);
@@ -1878,6 +1900,56 @@ namespace TheaterFx
 			B.LeastKeep = 0.8;
 			B.bLight = true;
 			Bits.push_back(B);
+			if (bEyeKnown && (Row.CloseLicks.B > 0.0 || Row.CloseLamp > 0.0) && (LastEye - At).Length() < Row.LicksWithin)
+			{
+				// (art director 04:40Z, the close view: seen within 30 m a heavy machine gun's flicker throws none to two
+				// short side licks, raked aft by the airstream, and a small lamp)
+				const Vec Across = Dir.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+				const Vec Over = Across.Cross(Dir).Unit(ZUp);
+				const int Licks = static_cast<int>(std::lround(Row.CloseLicks.Pick(D)));
+				for (int I = 0; I < Licks; ++I)
+				{
+					const double A = D.U(0.0, 2.0 * Pi);
+					const Vec Outward = (Across * std::cos(A) + Over * std::sin(A)).Unit(Across);
+					const Vec Way = (Outward - Dir * D.U(0.3, 0.55)).Unit(Outward);
+					const double R = Len * D.U(0.06, 0.085);
+					Bit L;
+					L.Born = T;
+					L.Stretch = D.U(2.2, 2.8);
+					L.From = At + Dir * (Len * 0.3) + Way * (R * L.Stretch * 0.8);
+					L.Vel = Carry;
+					L.Life = B.Life;
+					L.R0 = R * 0.9;
+					L.R1 = R * 1.1;
+					L.Along = Way;
+					L.Point = 0.7;
+					L.Tail = 0.15;
+					L.Col = FlameCol;
+					L.Col2 = FlameCol * 0.6;
+					L.Alpha = 0.85;
+					L.FadeIn = 0.002;
+					L.Hold = 0.45;
+					L.Heart = 0.8;
+					L.Rim = 0.1;
+					L.Rough = 0.3;
+					L.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+					L.Turn = D.U(0.0, 2.0 * Pi);
+					L.bLight = true;
+					Bits.push_back(L);
+				}
+				if (Row.CloseLamp > 0.0)
+				{
+					Flash L;
+					L.At = At + Dir * (Len * 0.5);
+					L.Col = FlameCol;
+					L.Born = T;
+					L.Life = 0.03;
+					L.Strength = Row.CloseLamp;
+					L.Radius = 8.0;
+					L.bNightOnly = true; // (as every small gun's: it lights the wing by night, nothing by day)
+					Flashes.push_back(L);
+				}
+			}
 		}
 		if (Row.Lamp > 0.0)
 		{
@@ -1890,6 +1962,10 @@ namespace TheaterFx
 			L.Radius = 12.0;
 			L.bNightOnly = true;
 			Flashes.push_back(L);
+		}
+		if (Row.CaseM > 0.0 && bEyeKnown && (LastEye - At).Length() < Row.CasesWithin && Bits.size() + TwinBits < static_cast<size_t>(MaxPuffs) * 3 / 5)
+		{
+			Spent(T, At, Dir, Carry, Row, D); // (the close view only, and the first thing left out when the room fills)
 		}
 		// gun smoke: a thin grey wisp left hanging in the air where the gun was, so a firing wing trails a short
 		// smoky line behind it
@@ -1919,6 +1995,62 @@ namespace TheaterFx
 			const Vec Aim = (Dir + Vec(D.Bell(), D.Bell(), D.Bell()) * Row.Spread).Unit(Dir);
 			const Vec Vel = Aim * Mps + Carry;
 			Tracer(T, At, Vel.Unit(Aim), Vel, Row.TracerS, Row.Drag, Row.Drop);
+		}
+	}
+
+	void Battle::Spent(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, Dice& D)
+	{
+		// Art director 04:40Z, the close view: the spent case and its belt link from each round, out of the chute under
+		// a wing gun (or thrown overboard from a turret), drawn only within 60 m. They leave at the aircraft's own
+		// speed, kicked down and out, and the airstream tears them back at once, so a firing wing trails a glinting
+		// spray of brass that streams aft and falls away; the dark steel links tumble with them.
+		const Vec Across = Dir.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+		const Vec Chute = At - Dir * Row.ChuteBack - ZUp * Row.ChuteDown;
+		for (int K = 0; K < (Row.LinkM > 0.0 ? 2 : 1); ++K)
+		{
+			Bit B;
+			B.Form = Bit::Shape::Plate;
+			B.Born = T + D.U(0.0, 0.008);
+			B.From = Chute + Across * (D.Bell() * 0.04);
+			const double Sink = std::max(1.0, (K == 0 ? Row.CaseSink : Row.LinkSink).Pick(D));
+			const Vec Throw = Across * (D.Bell() * 1.5) - ZUp * Row.Throw.Pick(D) - Dir * D.U(0.0, 2.0);
+			// (the air's drag: from the aircraft's speed toward falling at its own speed in a fraction of a second)
+			B.Drag = Row.CaseDrag;
+			B.Vel = Carry + Throw + ZUp * Sink;
+			B.Rise = -Sink;
+			B.Gravity = 0.0;
+			B.Windage = 0.3;
+			if (K == 0)
+			{
+				B.R0 = B.R1 = 0.5 * Row.CaseD;
+				B.Stretch = std::max(1.0, Row.CaseM / Row.CaseD);
+				B.Col = Row.CaseCol;
+				B.Col2 = Row.CaseDark;
+				B.Glint = Row.CaseGlint;
+			}
+			else
+			{
+				B.R0 = B.R1 = 0.35 * Row.LinkM;
+				B.Stretch = 1.4;
+				B.Rough = 0.2;
+				B.Col = B.Col2 = Row.LinkCol;
+				B.Glint = 0.3 * Row.CaseGlint;
+			}
+			B.Tumble = Row.CaseTumble.Pick(D) * (D.U() < 0.5 ? 1.0 : -1.0);
+			B.Along = Vec(D.Bell(), D.Bell(), D.Bell()).Unit(Dir);
+			B.Face = B.Along.Cross(Vec(D.Bell(), D.Bell(), D.Bell())).Unit(B.Along.Cross(ZUp).Unit(Across));
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.Life = Row.CaseLife.Pick(D);
+			B.Alpha = 1.0;
+			B.FadeIn = 0.005;
+			B.Hold = 0.6;
+			B.Heart = 1.0;
+			B.Rim = 1.0;
+			B.Inner = 0.6;
+			B.ShadeK = 0.0;
+			B.LeastPx = Row.CaseLeastPx;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			Bits.push_back(B);
 		}
 	}
 
@@ -2952,15 +3084,23 @@ namespace TheaterFx
 		{
 			Tears.push_back(Vec(D.Bell(), D.Bell(), D.Bell()).Unit(ZUp));
 		}
+		// (the white heart, broken along the tears so it follows the clumps, never one flat disc: art director 06:09Z)
+		const int Hearts = std::max(1, static_cast<int>(std::lround(Num(P + "hearts", 3.0))));
+		const double HeartR = Num(P + "heart_r_of_span", 0.11);
+		for (int I = 0; I < Hearts; ++I)
 		{
+			const Vec Way = Tears[static_cast<size_t>(I % Ways)];
 			Bit H;
 			H.Born = Now;
-			H.From = At;
-			H.Vel = Vel * 0.8;
+			H.From = At + Way * (D.U(0.03, 0.12) * SpanM);
+			H.Vel = Vel * 0.8 + Way * (D.U(4.0, 10.0) * S);
 			H.Drag = 2.0;
-			H.Life = Num(P + "heart_s", 0.12);
-			H.R0 = 0.18 * SpanM;
-			H.R1 = H.R0 * 1.6;
+			H.Life = Num(P + "heart_s", 0.12) * D.U(0.9, 1.1);
+			H.R0 = HeartR * SpanM * D.U(0.7, 1.1);
+			H.R1 = H.R0 * 1.5;
+			H.Along = Way;
+			H.Stretch = D.U(1.2, 1.7);
+			H.Turn = D.U(0.0, 2.0 * Pi);
 			H.Col = Rgb::FromPicture(255, 252, 236);
 			H.Col2 = Picture(P + "heart_colour", Rgb::FromPicture(255, 240, 170));
 			H.Nearer = 0.5 * SpanM; // (drawn over its own clumps: the white heart shows through the fire round it)

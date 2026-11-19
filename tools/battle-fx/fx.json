@@ -1302,7 +1302,10 @@
    "smoke_every": 4,
    "smoke_s": 0.6,
    "smoke_alpha": 0.07,
-   "strike_m": 0.5
+   "strike_m": 0.5,
+   "case_m": 0.057,
+   "case_d_m": 0.012,
+   "link_m": 0.022
   },
   "hmg": {
    "_what": "heavy machine guns, 12.7 to 13 mm",
@@ -1319,7 +1322,15 @@
    "smoke_every": 3,
    "smoke_s": 0.8,
    "smoke_alpha": 0.1,
-   "strike_m": 0.8
+   "strike_m": 0.8,
+   "close_licks": [
+    0,
+    2
+   ],
+   "close_lamp": 0.05,
+   "case_m": 0.099,
+   "case_d_m": 0.02,
+   "link_m": 0.035
   },
   "cannon20": {
    "_what": "20 mm cannon",
@@ -1336,7 +1347,56 @@
    "smoke_every": 1,
    "smoke_s": 1.1,
    "smoke_alpha": 0.16,
-   "strike_m": 1.6
+   "strike_m": 1.6,
+   "case_m": 0.1,
+   "case_d_m": 0.03,
+   "link_m": 0.05
+  },
+  "close": {
+   "_how": "The close view: only within licks_within_m of the eye does a row's flicker throw close_licks short side licks raked aft, with a lamp of close_lamp (night only, as every small gun's); only within cases_within_m does every round drop its spent case (case_m long, case_d_m across, case_colour, case_dark on its far face) and belt link (link_m, link_colour) from a chute chute_back_m behind the muzzle and chute_down_m under it, kicked out at throw_mps, torn aft by the air (drag) and falling at case_sink_mps or link_sink_mps, tumbling tumble radians a second and glinting (glint), gone in life_s. Left out first when the room fills.",
+   "_art_director_0440": "Art director 04:40Z item 6: close view only: cases and links from the wing gun chutes and from the turrets that dumped them overboard, drawn within 60 m. Heavy machine gun licks 0 to 2, with the small lamp, for guns within 30 m.",
+   "licks_within_m": 30,
+   "cases_within_m": 60,
+   "chute_back_m": 1.0,
+   "chute_down_m": 0.25,
+   "throw_mps": [
+    3,
+    8
+   ],
+   "drag": 5,
+   "case_sink_mps": [
+    18,
+    28
+   ],
+   "link_sink_mps": [
+    12,
+    20
+   ],
+   "life_s": [
+    1.2,
+    2.0
+   ],
+   "tumble": [
+    15,
+    40
+   ],
+   "case_colour": [
+    196,
+    156,
+    82
+   ],
+   "case_dark": [
+    140,
+    104,
+    52
+   ],
+   "link_colour": [
+    70,
+    70,
+    72
+   ],
+   "glint": 4,
+   "least_px": 0.8
   },
   "_numbers": "Rates and speeds are the middle of each family: rifle calibre 900-1,200 a minute at 745-905 m/s; 12.7-13 mm 750-950 at 750-890; 20 mm 520-750 at 600-880. The battle can pass a gun's own rate and speed. drag is set so a round keeps the speed it really kept downrange: a .50 about 700 m/s at 500 m and 530 at 1,000 m (0.36), a rifle round about 520 at 450 m (0.5). tracer_s is how long the tracer burns: the .50's to about 1,450 m, the rifle round's and the 20 mm's to about 900 to 1,100 m. Each gun runs a few per cent fast or slow, so wing guns drift out of step as real ones did.",
   "flash_heart": [
@@ -1639,7 +1699,7 @@
   "most_s": 240,
   "least_px": 1.0,
   "fireball": {
-   "_how": "A short torn fireball, never a ball: lobes clumps of fire thrown out along tears ways at once, each r_of_span of the span across at birth, reaching reach_of_span, gone in life_s. Lit from within (art director 06:00Z): each clump is colour taken heart_mix of the way to hot_colour, cooling to deep_colour by cool_by_s and then gone into its smoke, near opaque to its edge (rim), its edge edge of the way to deep_colour so it reads as a lump of fire; rough its torn outline, drawn as two fans past twin_px. A white heart, heart_colour at its end, lasts heart_s and is drawn over the clumps. Each clump leaves smoke_colour smoke that grows smoke_grow times and hangs smoke_s at smoke_alpha, where the clump died, while the pieces fly on and fall; a lamp.",
+   "_how": "A short torn fireball, never a ball: lobes clumps of fire thrown out along tears ways at once, each r_of_span of the span across at birth, reaching reach_of_span, gone in life_s. Lit from within (art director 06:00Z): each clump is colour taken heart_mix of the way to hot_colour, cooling to deep_colour by cool_by_s and then gone into its smoke, near opaque to its edge (rim), its edge edge of the way to deep_colour so it reads as a lump of fire; rough its torn outline, drawn as two fans past twin_px. A white heart, broken in hearts pieces along the tears, each heart_r_of_span of the span across, heart_colour at its end, lasts heart_s and is drawn over the clumps. Each clump leaves smoke_colour smoke that grows smoke_grow times and hangs smoke_s at smoke_alpha, where the clump died, while the pieces fly on and fall; a lamp.",
    "_art_director_0600": "Art director 06:00Z: pieces, smoke, falls and numbers PASS. Mend the fire's colour: it read as pale peach petals (median 222,165,130). Make it emissive: the heart near white-yellow (luma 240 or more) through about 0.1 s; the body a saturated orange (blue under about 60, saturation 0.75 or more); cooling to deep orange-red and the 140,40,16 edge by 0.2 to 0.3 s, then into the black smoke, never a clay or salmon tone on the way.",
    "lobes": [
     18,
@@ -1682,6 +1742,8 @@
    ],
    "cool_by_s": 0.25,
    "heart_s": 0.12,
+   "hearts": 3,
+   "heart_r_of_span": 0.11,
    "heart_colour": [
     255,
     240,
