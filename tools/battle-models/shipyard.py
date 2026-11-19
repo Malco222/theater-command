@@ -177,11 +177,14 @@ class Yard:
         return self.h.deck_z(x) + 0.02
 
     # ---- the hull ------------------------------------------------------------------------------------
-    def hull(self, deck_paint="planks", frames=None, deck_from=None, deck_to=None, boot=None, above=None, tear=None):
+    def hull(self, deck_paint="planks", frames=None, deck_from=None, deck_to=None, boot=None, above=None, tear=None, line=None):
         """`boot`: the height of the top of her boot topping, where her freeboard is too low for the usual rule (a
         submarine's); `above`: the heights of the rows of points up her side, as shares of her freeboard (with `boot`,
         of her side above the boot); `tear`: how far the line she breaks along runs fore and aft of the break, in
-        metres (None: by her beam; 0: a clean cut, and none of what a torn end shows).
+        metres (None: by her beam; 0: a clean cut, and none of what a torn end shows); `line`: a height over the
+        waterline where her paint changes, level all along her (the American two-colour schemes: navy blue up to the
+        lowest point of her sheer, haze grey above it): a row of points is laid along it and her side above it is
+        painted `upper`.
 
         Where she breaks (the art director, 09:24 UTC on 18 November 2026: "She parts along a straight, clean vertical
         line, flat plating on both sides of a dark wedge, like a model sawn in two... destruction must look broken,
@@ -213,7 +216,14 @@ class Yard:
             wb = -0.07                                                      # the foot of the boot topping
             wt = min(boot_hi / zd, 0.18) if boot is None else min(boot / zd, 0.6)
             if boot is None:
-                return below + [wb, 0.0, wt] + [a for a in above if a > wt + 0.03]
+                if line is not None:
+                    # (the line is the same row on every frame, the rows below it shared out between the boot and
+                    # it and those above between it and the deck's edge, so that the skin's quads never cross it)
+                    s_ = min(max(line / zd, wt + 0.025), 0.99)
+                    under, over = ((0.25, 0.5, 0.75), (0.5, 1.0)) if m.fine else ((0.5,), (1.0,))
+                    return below + [wb, 0.0, wt] + [wt + (s_ - wt) * f for f in under] + [s_] + [s_ + (1.0 - s_) * f for f in over]
+                rows = [a for a in above if a > wt + 0.03]
+                return below + [wb, 0.0, wt] + rows
             # (shares of what is left of her side above the boot: the same count of rows on every frame)
             return below + [wb, 0.0, wt] + [wt + (1.0 - wt) * a for a in above]
 
@@ -232,6 +242,8 @@ class Yard:
                 return "antifoul"
             if mid.z < (boot_hi * 0.75 if boot is None else boot - 0.01):
                 return "boot"
+            if line is not None and mid.z > line + 0.01:
+                return "upper"
             return "hull"
 
         rings = [ring(u) for u in us]

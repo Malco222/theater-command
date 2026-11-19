@@ -1833,3 +1833,8 @@ def in_month(m, month=None):
 import merchants  # noqa: E402
 
 BUILDERS.update(merchants.BUILDERS)
+
+# the named Pacific capital ships (capitals.py: Iowa, and the others as they are built) also use this file's pieces
+import capitals  # noqa: E402
+
+BUILDERS.update(capitals.BUILDERS)
