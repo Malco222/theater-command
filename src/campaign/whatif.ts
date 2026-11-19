@@ -21,6 +21,9 @@
 //   wi:f:NAME          a flag a choice raised, with its month
 //   tp:ID              the choice made at a turning point, 1-based; tp:ID:at its month; tp:ID:by who made it
 //   tp:ID:ask          the month the player was asked and has not yet answered; tp:ID:next the month it comes again
+//   wi:cal:ID          the fate of a calendar event (1 on time, 2 later, 3 never); wi:told:ID the month its 'no' was told
+//   wi:from:ID         the first month an event may happen in this war, where it is not history's
+//   wi:war:A:B         the month a followed war (America's with Germany) was first seen
 
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/whatif.json';
@@ -28,7 +31,7 @@ import worldData from '../../data/campaign/world.json';
 import { hashString, Rng } from '../core/rng';
 import type { Align, Game, Nation } from './types';
 import { allied, atWar, bloc, declareWar, headline, setWar, theName, warning } from './game';
-import { fireRow, holds, signPeace, type DiploEvent } from './diplomacy';
+import { DIPLOMACY, fireRow, holds, signPeace, type DiploEvent } from './diplomacy';
 import { stopOf } from './history';
 import { siegeSweep } from './siege';
 
@@ -74,14 +77,23 @@ export interface Option {
   do?: Do;
   /** A choice the player makes that needs the other side's yes. */
   reply?: { by: string; w: number[]; no: string };
+  /** The country mood (WHATIF.moods) its computer weight is multiplied by. */
+  mood?: string;
 }
 export interface Turn { id: string; name: string; from: number; to?: number; again?: number; by: string[]; if?: string[]; ask: string; options: Option[] }
+/** A dated event of history's calendar that can come later, or not at all, in a war with turning points. */
+export interface CalRow { id: string; by: string; late: number[]; never: number[]; upTo: number; no: string; flag?: string[] }
+/** Events that follow a war's own start, not history's month. */
+export interface FollowRow { war: [string, string]; at: number; jitter: number[]; events: string[] }
 
 export const WHATIF = data as unknown as {
   menu: boolean;
   countries: Country[];
   starts: Start[];
   deal: Record<string, number[]>;
+  calendar: { rows: CalRow[] };
+  follow: { rows: FollowRow[] };
+  moods: Record<string, [number, number] | string>;
   turns: Turn[];
 };
 
@@ -252,11 +264,70 @@ function due(g: Game, t: Turn): boolean {
   return (t.if ?? []).every((c) => wiHolds(g, c));
 }
 
+/** A country's mood for this whole war (how ready America is for war), drawn once from the seed. 1 where none is set. */
+export function moodOf(g: Game, key: string): number {
+  const m = WHATIF.moods[key];
+  if (!Array.isArray(m)) return 1;
+  return m[0] + (m[1] - m[0]) * draw(g, 'mood', key);
+}
+
 /** The computer's weight for a choice at this campaign's stop of the dial. */
 function weightOf(g: Game, o: Option): number {
   let w = o.w[stopOf(g) - 1] ?? 0;
   for (const [c, k] of Object.entries(o.boost ?? {})) if (wiHolds(g, c)) w *= k;
+  if (o.mood) w *= moodOf(g, o.mood);
   return Math.max(0, w);
+}
+
+// ---- History's calendar, and the wars others follow ----------------------------------------------------------
+
+const eventOf = (id: string): DiploEvent | undefined => DIPLOMACY.events.find((e) => e.id === id);
+
+/**
+ * With the turning points on, each row of history's 1940-41 calendar (and America's December 1941) is dealt a fate
+ * the month before its event's first month: on time, a few months later, or never, by the dial's chances. Never: the
+ * event is taken out of this war, its 'no' is told the month it would have happened, and its flags are raised. A
+ * row whose country the player leads keeps history's calendar.
+ */
+function calendarMonth(g: Game): void {
+  const s = stopOf(g) - 1;
+  for (const c of WHATIF.calendar.rows) {
+    const e = eventOf(c.id);
+    if (!e || g.flags[`event:${c.id}`] !== undefined) continue;
+    const fate = g.flags[`wi:cal:${c.id}`];
+    if (fate === undefined) {
+      if (g.turn < e.from - 1) continue;
+      const x = draw(g, 'cal', c.id), never = c.by === g.human ? 0 : c.never[s] ?? 0, late = c.by === g.human ? 0 : c.late[s] ?? 0;
+      if (x < never) {
+        g.flags[`wi:cal:${c.id}`] = 3;
+        g.flags[`wi:bar:ev:${c.id}`] = 1;
+        for (const f of c.flag ?? []) g.flags[`wi:f:${f}`] = g.turn;
+      } else if (x < never + late) {
+        g.flags[`wi:cal:${c.id}`] = 2;
+        g.flags[`wi:from:${c.id}`] = e.from + 1 + Math.floor(draw(g, 'cal-late', c.id) * c.upTo);
+      } else g.flags[`wi:cal:${c.id}`] = 1;
+    } else if (fate === 3 && g.flags[`wi:told:${c.id}`] === undefined && g.turn >= e.from && (e.if ?? []).every((x) => holds(g, x))) {
+      g.flags[`wi:told:${c.id}`] = g.turn;
+      headline(g, 'event', c.no, c.by);
+    }
+  }
+}
+
+/** Events that follow a war: the month the war is first seen, each is given its first month in this war, as long after it as history's was. */
+function followMonth(g: Game): void {
+  const s = stopOf(g) - 1;
+  for (const f of WHATIF.follow.rows) {
+    const [a, b] = f.war, key = `wi:war:${a}:${b}`;
+    if (g.flags[key] !== undefined || !atWar(g, a, b)) continue;
+    g.flags[key] = g.turn;
+    const j = f.jitter[s] ?? 0;
+    for (const id of f.events) {
+      const e = eventOf(id);
+      if (!e || g.flags[`event:${id}`] !== undefined) continue;
+      const shift = j ? Math.floor(draw(g, 'follow', id) * (2 * j + 1)) - j : 0;
+      g.flags[`wi:from:${id}`] = Math.max(g.turn, g.turn + (e.from - f.at) + shift);
+    }
+  }
 }
 
 /** The computer's choice: by the dial's weights, drawn from the war's seed and the month. History's where nothing else weighs. */
@@ -391,6 +462,9 @@ export function whatIfMonth(g: Game): void {
     if (!who || !list.length) { delete g.flags[`tp:${t.id}:ask`]; continue; }
     take(g, t, histOf(t, list), who.nat, 'unanswered');
   }
+  // The wars others follow, and (with the turning points on) history's calendar.
+  followMonth(g);
+  if (g.flags.wiTurns === 1) calendarMonth(g);
   // The start's own events: a side's follow-ups, in diplomacy.json's shape.
   for (const c of WHATIF.countries) {
     for (const e of sideOf(g, c.id)?.follow ?? []) {

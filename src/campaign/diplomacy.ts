@@ -953,8 +953,10 @@ export function monthlyDiplomacy(g: Game): void {
   const open = g.flags.open === 1;
   for (const e of DIPLOMACY.events) {
     if (e.mode && (e.mode === 'open') !== open) continue;
-    if (g.flags[`event:${e.id}`] || g.turn < e.from || (g.turn > e.to && !open)) continue;
-    // (The sandbox: an event this war's world has taken out does not happen. Nothing is barred in a campaign without it.)
+    // (The sandbox: an event may first happen in another month in this war's world, or be taken out of it. Nothing
+    // moves and nothing is barred in a campaign without it.)
+    const from = g.flags.wi === 1 ? g.flags[`wi:from:${e.id}`] ?? e.from : e.from;
+    if (g.flags[`event:${e.id}`] || g.turn < from || (g.turn > e.to && !open)) continue;
     if (g.flags.wi === 1 && g.flags[`wi:bar:ev:${e.id}`]) continue;
     if (!(e.if ?? []).every((c) => holds(g, c))) continue;
     if (fire(g, e)) g.flags[`event:${e.id}`] = g.turn;

@@ -350,3 +350,115 @@ describe('turning points', () => {
     expect(Object.keys(g.flags).filter((k) => k.startsWith('tp:'))).toEqual([]);
   });
 });
+
+// The sandbox playtest (19 November 2026): history's 1940-41 calendar and America's December 1941 fired on history's
+// month in every war at every stop. With the turning points on, they can come later or not at all, and America has
+// roads of its own into the war.
+describe('history\'s calendar in a war with turning points', () => {
+  const fates = (g: Game): Record<string, number> => Object.fromEntries(WHATIF.calendar.rows.map((c) => [c.id, g.flags[`wi:cal:${c.id}`] ?? 0]));
+  const through = (g: Game, a: number, b: number): Game => { for (let t = a; t <= b; t++) { at(g, t); whatIfMonth(g); } return g; };
+
+  it('keeps history\'s months by the book, and in a war without turning points', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const g = through(world('history', seed, null, 1), 9, 27);
+      expect(Object.values(fates(g)).every((f) => f === 1), String(seed)).toBe(true);
+      expect(Object.keys(g.flags).filter((k) => k.startsWith('wi:from:') || k.startsWith('wi:bar:ev:'))).toEqual([]);
+    }
+    const off = through(world('nopact', 3, null, 5, false), 9, 27);
+    expect(Object.values(fates(off)).every((f) => f === 0)).toBe(true);
+  });
+
+  it('at the loose end deals each event on time, later or never, the same for the same seed', () => {
+    const count = [0, 0, 0, 0];
+    for (let seed = 1; seed <= 30; seed++) {
+      const f = fates(through(world('history', seed, null, 5), 9, 27));
+      expect(f, String(seed)).toEqual(fates(through(world('history', seed, null, 5), 9, 27)));
+      for (const v of Object.values(f)) count[v]++;
+    }
+    expect(count[0]).toBe(0);
+    expect(count[1]).toBeGreaterThan(count[2]);
+    expect(count[2]).toBeGreaterThan(10);
+    expect(count[3]).toBeGreaterThan(10);
+  });
+
+  it('an event that never comes is out of the war, and its news is told the month it would have happened', () => {
+    let seen = 0;
+    for (let seed = 1; seed <= 40 && !seen; seed++) {
+      const g = world('history', seed, null, 5);
+      through(g, 9, 9);
+      if (g.flags['wi:cal:baltic'] !== 3) continue;
+      seen = seed;
+      expect(g.flags['wi:bar:ev:baltic']).toBe(1);
+      g.nations.POL.alive = false;
+      const before = g.headlines.length;
+      through(g, 10, 10);
+      expect(g.headlines.slice(before).some((h) => /Baltic states/.test(h.text))).toBe(true);
+      monthlyDiplomacy(g);
+      expect(g.flags['event:baltic']).toBeUndefined();
+      expect(g.nations.EST.alive).toBe(true);
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('a country the player leads keeps history\'s calendar', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const g = through(world('history', seed, 'SOV', 5), 9, 12);
+      expect([g.flags['wi:cal:baltic'], g.flags['wi:cal:bessarabia']], String(seed)).toEqual([1, 1]);
+    }
+  });
+
+  it('a December 1941 that never comes opens America\'s own road into the war', () => {
+    let seen = 0;
+    for (let seed = 1; seed <= 60 && !seen; seed++) {
+      const g = through(world('history', seed, null, 5), 27, 27);
+      if (g.flags['wi:cal:pearl-harbor-world'] !== 3) continue;
+      seen = seed;
+      expect(g.flags['wi:bar:ev:pearl-harbor-world']).toBe(1);
+      expect(g.flags['wi:f:no-declaration']).toBe(27);
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+});
+
+describe('America in a sandbox world', () => {
+  it('has a mood for the whole war, drawn from its seed', async () => {
+    const { moodOf } = await import('../src/campaign/whatif');
+    const moods = Array.from({ length: 30 }, (_, k) => moodOf(world('nopact', k + 1), 'usa'));
+    expect(Math.min(...moods)).toBeGreaterThanOrEqual(0.3);
+    expect(Math.max(...moods)).toBeLessThanOrEqual(1.7);
+    expect(new Set(moods.map((m) => m.toFixed(3))).size).toBeGreaterThan(20);
+    expect(moodOf(world('nopact', 7), 'usa')).toBe(moodOf(world('nopact', 7), 'usa'));
+  });
+
+  it('may go to war before December 1941 at the loose end, and never in America First', () => {
+    let early = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      const g = world('history', seed, null, 5);
+      g.nations.FRA.alive = false;
+      for (let t = 10; t <= 27; t++) { at(g, t); whatIfMonth(g); }
+      if (atWar(g, 'USA', 'GER')) early++;
+    }
+    expect(early).toBeGreaterThan(0);
+    for (let seed = 1; seed <= 10; seed++) {
+      const g = world('firstly', seed, null, 5);
+      g.nations.FRA.alive = false;
+      g.flags['wi:f:no-declaration'] = 1;
+      for (let t = 10; t <= 60; t++) { at(g, t); whatIfMonth(g); }
+      expect(atWar(g, 'USA', 'GER'), String(seed)).toBe(false);
+      expect(g.flags['tp:america-early:waits'] ?? 0).toBe(0);
+    }
+  });
+
+  it('the Americas follow America into the war, as long after it as history had them', () => {
+    const g = world('arsenal', 3, null, 1);
+    expect(atWar(g, 'USA', 'GER')).toBe(true);
+    at(g, 2); whatIfMonth(g);
+    expect(g.flags['wi:war:USA:GER']).toBe(2);
+    // By the book exactly history's lag: Central America at once, Brazil eight months on.
+    expect(g.flags['wi:from:isthmus-war']).toBe(2);
+    expect(g.flags['wi:from:brazil-war']).toBe(10);
+    at(g, 3); monthlyDiplomacy(g);
+    expect(g.flags['event:isthmus-war']).toBe(3);
+    expect(g.flags['event:brazil-war']).toBeUndefined();
+  });
+});

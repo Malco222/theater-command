@@ -91,6 +91,40 @@
     "ESP": [0.6, 0.3, 0.1],
     "TUR": [0.6, 0.2, 0.2]
   },
+  "calendar": {
+    "_note": "With the turning points on, history's 1940-41 diplomatic calendar and America's December 1941 can go another way. Each row's fate is drawn once, from the war's seed, the month before its event's first month: on time, later by 1 to 'upTo' months, or never. 'late' and 'never' are the chances at each stop of the dial (by the book, none). A row whose country the player leads keeps history's calendar. 'no' is the news the month it would have happened; 'flag' is raised when it never does.",
+    "rows": [
+      { "id": "baltic", "by": "SOV", "late": [0, 0, 0.12, 0.25, 0.3], "never": [0, 0, 0.06, 0.18, 0.3], "upTo": 4,
+        "no": "Moscow does not move on the Baltic states. Estonia, Latvia and Lithuania keep their independence." },
+      { "id": "bessarabia", "by": "SOV", "late": [0, 0, 0.12, 0.25, 0.3], "never": [0, 0, 0.06, 0.18, 0.3], "upTo": 4,
+        "no": "Moscow does not press Bucharest for Bessarabia, and the province stays Romanian." },
+      { "id": "vienna", "by": "GER", "late": [0, 0, 0.12, 0.25, 0.3], "never": [0, 0, 0.06, 0.18, 0.3], "upTo": 4,
+        "no": "There is no award at Vienna. Transylvania stays Romanian, and Budapest's claim goes unanswered." },
+      { "id": "finland", "by": "FIN", "late": [0, 0, 0.12, 0.25, 0.3], "never": [0, 0, 0.06, 0.18, 0.3], "upTo": 4,
+        "no": "Finland keeps its distance from Berlin." },
+      { "id": "antonescu", "by": "ROM", "late": [0, 0, 0.12, 0.25, 0.3], "never": [0, 0, 0.06, 0.18, 0.3], "upTo": 4,
+        "no": "King Carol keeps his throne, and Romania keeps its distance from Berlin." },
+      { "id": "tripartite", "by": "GER", "late": [0, 0, 0.12, 0.25, 0.3], "never": [0, 0, 0.06, 0.18, 0.3], "upTo": 4,
+        "no": "Hungary and Romania turn down Berlin's invitation to the Tripartite Pact." },
+      { "id": "bulgaria", "by": "BUL", "late": [0, 0, 0.12, 0.25, 0.3], "never": [0, 0, 0.06, 0.18, 0.3], "upTo": 4,
+        "no": "Bulgaria turns down Berlin's invitation to the pact and stays neutral." },
+      { "id": "belgrade-coup", "by": "YUG", "late": [0, 0, 0.12, 0.25, 0.3], "never": [0, 0, 0.06, 0.18, 0.3], "upTo": 3,
+        "no": "There is no coup in Belgrade. Yugoslavia's government stays in office and out of the war." },
+      { "id": "pearl-harbor-world", "by": "USA", "late": [0, 0, 0.1, 0.2, 0.25], "never": [0, 0, 0.05, 0.15, 0.25], "upTo": 6,
+        "no": "December 1941 passes without the blow in the Pacific that history had. America stays at peace, for now.", "flag": ["no-declaration"] }
+    ]
+  },
+  "follow": {
+    "_note": "In a sandbox world these events follow a war's own start, not history's month: each may first happen 'its first month minus at' months after the war began, give or take 'jitter' months at each stop (by the book, none). The Americas follow America into the war.",
+    "rows": [
+      { "war": ["USA", "GER"], "at": 28, "jitter": [0, 0, 1, 2, 2],
+        "events": ["isthmus-war", "cuba-war", "mexico-war", "brazil-war", "bolivia-war", "colombia-war", "argentina-war", "americas-war-1945", "usa-italy"] }
+    ]
+  },
+  "moods": {
+    "_note": "A country's mood for a whole war, drawn once from its seed between these two numbers: it multiplies the computer's weight for every choice that names it. America's: how ready it is to go to war.",
+    "usa": [0.3, 1.7]
+  },
   "turns": [
     {
       "id": "london", "name": "Britain alone", "from": 10, "to": 16, "by": ["UK", "GER"],
@@ -210,14 +244,26 @@
       ]
     },
     {
+      "id": "america-early", "name": "America's patience", "from": 10, "to": 27, "again": 2, "by": ["USA"],
+      "if": ["side:USA:history", "alive:GER", "alive:USA", "peace:USA,GER", "war:GER,UK", "fallen:FRA"],
+      "ask": "France has fallen and Britain fights on. America is arming Britain, and the mood in Washington is turning. Does the United States go to war with Germany now?",
+      "options": [
+        { "id": "wait", "hist": true, "again": true, "label": "Not yet", "says": "America stays at peace and goes on arming Britain. You will be asked again in two months.", "news": "", "w": [1, 1, 1, 1, 1] },
+        { "id": "enter", "label": "Go to war with Germany", "says": "The United States declares war on Germany and joins the Allies.",
+          "news": "The United States declares war on Germany. Congress votes for war, and America joins Britain in the fight.",
+          "w": [0, 0, 0.005, 0.025, 0.05], "boost": { "momentum>=:0.5": 2 }, "mood": "usa",
+          "do": { "wake": ["USA"], "join": { "USA": "allies" }, "war": [["USA", "GER"], ["USA", "ITA"]] } }
+      ]
+    },
+    {
       "id": "america", "name": "America comes in", "from": 30, "to": 80, "again": 3, "by": ["USA"],
-      "if": ["wi:no-declaration", "alive:GER", "alive:USA", "peace:USA,GER", "war:GER,UK|war:GER,SOV"],
-      "ask": "Germany never declared war on America. Does the United States go to war with Germany of its own accord?",
+      "if": ["side:USA:history", "wi:no-declaration", "alive:GER", "alive:USA", "peace:USA,GER", "war:GER,UK|war:GER,SOV"],
+      "ask": "America is still at peace with Germany. Does the United States go to war of its own accord?",
       "options": [
         { "id": "wait", "hist": true, "again": true, "label": "Not yet", "says": "America stays out of Europe's war. You will be asked again in three months.", "news": "", "w": [1, 1, 0.8, 0.75, 0.7] },
         { "id": "enter", "label": "Go to war with Germany", "says": "The United States declares war on Germany.",
           "news": "The United States declares war on Germany. American convoys have been sunk once too often, and Congress votes for war.",
-          "w": [0, 0, 0.2, 0.25, 0.3], "boost": { "momentum>=:0.4": 2 }, "do": { "wake": ["USA"], "join": { "USA": "allies" }, "war": [["USA", "GER"]] } }
+          "w": [0, 0, 0.2, 0.25, 0.3], "boost": { "momentum>=:0.4": 2 }, "mood": "usa", "do": { "wake": ["USA"], "join": { "USA": "allies" }, "war": [["USA", "GER"]] } }
       ]
     },
     {
