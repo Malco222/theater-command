@@ -21,7 +21,7 @@ import { plannedStrike } from './carriers';
 import { shoreOpen } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, descentAsks, doorQuay, freed, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
-import { HOP_AIMS, hopShores, pacificGround } from './pacific';
+import { HOP_AIMS, firstOnRun, hopAims, hopShores, laneOn, pacificGround } from './pacific';
 import { beyondEurope, enemyAtTheDoor, overseasOf, shoreOf, type OverseasRules } from './world';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
@@ -1503,17 +1503,23 @@ function ferry(g: Game, nat: string): void {
     return ports;
   };
   if (front) {
+    // (A corps the staff keeps for a hop is not sent on: one the ships brought up for a shore, or one standing on the
+    // quay a shore is named from this month. pacific.ts `hopAims`; none with the far side off.)
+    const hopQuays = new Set(hopAims(g, nat).map((a) => a.from.id));
     for (const c of g.corps.filter(fit).sort(byWorth)) {
       if (liftLeft(g, nat) < 1) break;
       const here = g.regions[c.reg];
       if (here.owner === nat || !here.port || front.ground[here.id] || !allied(g, nat, here.ctrl)) continue;
+      if (hopQuays.has(here.id) || g.flags[`st:hopUp:${c.id}`] !== undefined) continue;
       // One with the enemy next to it has a front of its own already.
       if (here.nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) continue;
       // It goes on over a narrow sea, never back across the ocean: a harbour beside an enemy on the other shore (an
       // ally's colony next to an Axis Brazil) is no place to feed the army in a corps at a time (Version 78).
       refused = false;
-      if (portsFor(c).some((p) => beyondEurope(p) === beyondEurope(here) && goes(c, p, here))) went(c);
-      else if (refused && front.rear.some((p) => beyondEurope(p) === beyondEurope(here) && goes(c, p, here))) went(c);
+      // (Nor off the Pacific's lane, or on to the Pacific's ground from anywhere else: ruling 190, pacific.ts `laneOn`.)
+      const onward = (p: Region): boolean => beyondEurope(p) === beyondEurope(here) && laneOn(g, nat, here, p) && goes(c, p, here);
+      if (portsFor(c).some(onward)) went(c);
+      else if (refused && front.rear.some(onward)) went(c);
     }
   }
   const home = (): Corps[] => g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && g.regions[c.reg].owner === nat && !g.regions[c.reg].overseas);
@@ -1535,14 +1541,20 @@ function ferry(g: Game, nat: string): void {
       if (!lone(c) && railToward(g, c, door)) { massed.add(c.id); have++; }
     }
   }
-  // The ocean runs.
-  for (const run of oceanRuns(g, nat)) {
+  // The ocean runs. (Ruling 190, point 5: the special formation a run of the Pacific's names sails on that run
+  // before any other corps, and on no other run while that one is worked: the Marines. None with the far side off.)
+  const runs = oceanRuns(g, nat);
+  const leads = new Set(runs.map((r) => firstOnRun(r.ocean)).filter((x): x is string => !!x));
+  for (const run of runs) {
     const key = `fy:${nat}:${run.ocean}`, at = `fyAt:${nat}:${run.ocean}`;
     if (g.flags[at] !== g.turn) { g.flags[at] = g.turn; g.flags[key] = Math.min(O.bank, (g.flags[key] ?? 0) + run.share * n.sealift); }
     let spare = home().length - O.guard;
     // (An expeditionary force of history's size: no more than 'most' of its field corps are kept across the ocean.)
     let more = O.most === undefined ? Infinity : O.most - g.corps.reduce((s, c) => s + (c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !beyondEurope(c.reg) ? 1 : 0), 0);
-    for (const c of run.from.units.filter((u) => fit(u) && !u.hold && !(door && massed.has(u.id))).sort(byWorth)) {
+    const lead = firstOnRun(run.ocean);
+    const theirs = (c: Corps): boolean => !lead && !!c.elite && leads.has(c.elite);
+    const inOrder = lead ? (a: Corps, b: Corps): number => Number(b.elite === lead) - Number(a.elite === lead) || byWorth(a, b) : byWorth;
+    for (const c of run.from.units.filter((u) => fit(u) && !u.hold && !(door && massed.has(u.id)) && !theirs(u)).sort(inOrder)) {
       if (spare <= 0 || more <= 0 || (g.flags[key] ?? 0) < 1 || liftLeft(g, nat) < 1) break;
       // (The harbours of a front first; where the test of strength refused one of them, a harbour farther back on its
       // ground; then the harbour where the army is built up.)
@@ -1566,7 +1578,7 @@ function ferry(g: Game, nat: string): void {
     let have = run.from.units.filter((u) => u.nat === nat && !u.dead && !u.hold && u.kind !== 'fort' && u.kind !== 'eng').length;
     for (const u of run.from.units) if (u.nat === nat && !u.hold) massed.add(u.id);
     if (have >= want) continue;
-    const pool = home().filter((c) => !c.hold && c.reg !== run.from.id && !c.airborne && !c.town && c.joint === undefined && c.str >= 0.6 && c.ap >= 4 && !massed.has(c.id)).sort(byWorth);
+    const pool = home().filter((c) => !c.hold && c.reg !== run.from.id && !c.airborne && !c.town && c.joint === undefined && c.str >= 0.6 && c.ap >= 4 && !massed.has(c.id) && !theirs(c)).sort(inOrder);
     for (const c of pool) {
       if (have >= want || friendlyUnits(g, run.from, nat).length >= STACK) break;
       if (railToward(g, c, run.from) && c.reg === run.from.id) { massed.add(c.id); have++; }
