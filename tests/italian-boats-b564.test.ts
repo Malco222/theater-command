@@ -390,9 +390,9 @@ describe('Force H', () => {
       expect([cv[28], cv[31], cv[36], cv[37]]).toEqual([1, 1, 3, 1]);
       expect(f.lost.cv).toBe(0);
       expect(g.headlines.some((h) => /sunk|Eagle joins Force H/.test(h.text))).toBe(false);
-      // Its row's two capital ships and two cruisers, with the two destroyers its book adds in July 1940 (the
-      // director's note of 10:06Z; b598.test.ts (6) has its first months).
-      expect([f.ships.bb, f.ships.ca, f.ships.dd]).toEqual([2, 2, 11]);
+      // Its row's capital ships, cruisers and destroyers: the two destroyers its book brings in July 1940 leave in
+      // September (the director's notes of 10:06Z and 11:21Z; b598.test.ts (6) has its first months).
+      expect([f.ships.bb, f.ships.ca, f.ships.dd]).toEqual([2, 2, 9]);
     }
   });
 
