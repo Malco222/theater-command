@@ -421,6 +421,7 @@ void FMiniatureMesh::Marking(const FVector& Where, double Radius, const FString&
 {
 	// Drawn lying flat, then stood up against the surface: its top toward the sky (or toward the front, on a roof).
 	FMiniatureMesh Flat;
+	Flat.bMarkInDisc = bMarkInDisc;
 	Flat.WingMarking(FVector::ZeroVector, Radius, Tag, 0.0);
 	const FVector Out = Facing.GetSafeNormal();
 	// On a wall its top is toward the sky; on a roof or a wing (or under one) its top is toward the front.
@@ -644,6 +645,9 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			FVector At = FVector::ZeroVector, Facing = FVector::UpVector;
 			double Radius = 0.3, Curve = 0.0;
 			bool bBoth = false;
+			// (a mark that fills a four-cornered place on the fin: its corners along the machine and up it, the lower
+			// leading one first, then the lower trailing, the upper trailing and the upper leading)
+			TArray<FVector2D> Quad;
 		};
 		TArray<FMark> PlaneMarks;
 	};
@@ -779,6 +783,23 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 								(*Entry)->TryGetNumberField(TEXT("radius"), Mark.Radius);
 								(*Entry)->TryGetNumberField(TEXT("curve"), Mark.Curve);
 								(*Entry)->TryGetBoolField(TEXT("both"), Mark.bBoth);
+								const TArray<TSharedPtr<FJsonValue>>* Corners = nullptr;
+								if ((*Entry)->TryGetArrayField(TEXT("quad"), Corners) && Corners->Num() == 4)
+								{
+									for (const TSharedPtr<FJsonValue>& Corner : *Corners)
+									{
+										const TArray<TSharedPtr<FJsonValue>>* Pair = nullptr;
+										if (Corner.IsValid() && Corner->TryGetArray(Pair) && Pair->Num() >= 2)
+										{
+											// (the file has x forward; here the nose is toward -X)
+											Mark.Quad.Add(FVector2D(-(*Pair)[0]->AsNumber(), (*Pair)[1]->AsNumber()));
+										}
+									}
+									if (Mark.Quad.Num() != 4)
+									{
+										Mark.Quad.Reset();
+									}
+								}
 								// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
 								Mark.At = FVector(-(*AtList)[0]->AsNumber(), -(*AtList)[1]->AsNumber(), (*AtList)[2]->AsNumber());
 								Mark.Facing = FVector(-(*FacingList2)[0]->AsNumber(), -(*FacingList2)[1]->AsNumber(), (*FacingList2)[2]->AsNumber());
@@ -932,7 +953,26 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				// (A dominion flying a British machine wears the British marks the model names, until its own wartime
 				// roundel stands: then the roundels on its sides and wings are its own. The fin flash stays.)
 				const bool bOwnNow = Era > 0 && (Mark.Tag == TEXT("UK") || Mark.Tag == TEXT("UK-A1") || Mark.Tag == TEXT("UK-B"));
-				const FString What = Mark.Tag == TEXT("*") || bOwnNow ? Tag : Mark.Tag;
+				FString What = Mark.Tag == TEXT("*") || bOwnNow ? Tag : Mark.Tag;
+				// (The rudder. "*FIN" on a plain machine is its owner's stripes, where the table gives the country any; a
+				// country with none has a bare rudder. A dominion's British machine keeps the British flash until its own
+				// dated roundel stands, and then wears its own stripes: the art director, 19 November 2026, "the fin flash
+				// follows the roundel".)
+				bool bFinUpright = true;
+				TArray<FLinearColor> FinBands;
+				const bool bHasFin = UnitTable::Fin(Tag, bFinUpright, FinBands);
+				if (Mark.Tag == TEXT("*FIN"))
+				{
+					if (!bHasFin)
+					{
+						continue;
+					}
+					What = TEXT("FIN:") + Tag;
+				}
+				else if (Mark.Tag == TEXT("UK-FIN") && Era > 0 && bHasFin)
+				{
+					What = TEXT("FIN:") + Tag;
+				}
 				for (const double Hand : { 1.0, -1.0 })
 				{
 					if (Hand < 0.0 && !Mark.bBoth)
@@ -941,13 +981,37 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					}
 					TGuardValue<uint8> Metal(Fresh.Finish, 128);
 					const FVector At(Mark.At.X, Hand * Mark.At.Y, Mark.At.Z), Facing(Mark.Facing.X, Hand * Mark.Facing.Y, Mark.Facing.Z);
+					if (What.StartsWith(TEXT("FIN:")) && Mark.Quad.Num() == 4)
+					{
+						// (the stripes fill the rudder's own four-cornered place, a hair off the skin on each side)
+						const double Off = Hand * (FMath::Abs(Mark.At.Y) + 0.006);
+						auto Corner = [&Mark, Off](const FVector2D& P) { return FVector(P.X, Off, P.Y); };
+						const FVector2D LowLead = Mark.Quad[0], LowTrail = Mark.Quad[1], HighTrail = Mark.Quad[2], HighLead = Mark.Quad[3];
+						const int32 Count = FinBands.Num();
+						for (int32 K = 0; K < Count; ++K)
+						{
+							const double A = static_cast<double>(K) / Count, B = static_cast<double>(K + 1) / Count;
+							const FColor Ink = FinBands[K].ToFColor(true);
+							if (bFinUpright)
+							{
+								Fresh.Quad(Corner(FMath::Lerp(LowLead, LowTrail, A)), Corner(FMath::Lerp(LowLead, LowTrail, B)), Corner(FMath::Lerp(HighLead, HighTrail, B)), Corner(FMath::Lerp(HighLead, HighTrail, A)),
+									FVector(0.0, Hand, 0.0), Ink);
+							}
+							else
+							{
+								Fresh.Quad(Corner(FMath::Lerp(HighLead, LowLead, A)), Corner(FMath::Lerp(HighTrail, LowTrail, A)), Corner(FMath::Lerp(HighTrail, LowTrail, B)), Corner(FMath::Lerp(HighLead, LowLead, B)),
+									FVector(0.0, Hand, 0.0), Ink);
+							}
+						}
+						continue;
+					}
 					if (Mark.Tag == TEXT("#"))
 					{
 						Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, Raw->NumberInk);
 					}
 					else
 					{
-						Fresh.Marking(At, Mark.Radius, What, Facing, Mark.Curve, Hand < 0.0 && What.EndsWith(TEXT("-FIN")));
+						Fresh.Marking(At, Mark.Radius, What, Facing, Mark.Curve, Hand < 0.0 && (What.EndsWith(TEXT("-FIN")) || What.StartsWith(TEXT("FIN:"))));
 					}
 				}
 			}
@@ -962,6 +1026,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			for (const double Hand : { -1.0, 1.0 })
 			{
 				TGuardValue<uint8> Metal(Fresh.Finish, 128);
+				TGuardValue<bool> InDisc(Fresh.bMarkInDisc, true); // (a land vehicle's mark keeps inside its disc)
 				if (Raw->bMarks)
 				{
 					// (where the model's maker put them: the mark on the turret's side, the number on the hull's)
@@ -1189,7 +1254,31 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 	// art director's table gives thirty-five countries a mark of their own in layers, bottom first; it is painted
 	// here, so it shows wherever a mark is: a tank's turret, a lorry's door, a wing, a fuselage. The marks drawn by
 	// hand below are the twenty-five the game had; none of those is in the table's list.)
-	if (const TArray<UnitTable::FInsigniaLayer> Own = UnitTable::Insignia(Tag); Own.Num() > 0)
+	if (Tag.StartsWith(TEXT("FIN:")))
+	{
+		// (The rudder's stripes of the country named after the colon, from the art director's table: side by side from
+		// the leading edge, which is toward +Y here as the British flash's red is, or one over another from the top.
+		// A flash a little taller than it is long, as the British one.)
+		bool bUpright = true;
+		TArray<FLinearColor> Bands;
+		if (UnitTable::Fin(Tag.Mid(4), bUpright, Bands))
+		{
+			const int32 Count = Bands.Num();
+			for (int32 K = 0; K < Count; ++K)
+			{
+				if (bUpright)
+				{
+					Bar(-0.75, 1.0 - 2.0 * (K + 1) / Count, 0.75, 1.0 - 2.0 * K / Count, Bands[K]);
+				}
+				else
+				{
+					Bar(0.75 - 1.5 * (K + 1) / Count, -1.0, 0.75 - 1.5 * K / Count, 1.0, Bands[K]);
+				}
+			}
+			++Layer;
+		}
+	}
+	else if (const TArray<UnitTable::FInsigniaLayer> Own = UnitTable::Insignia(Tag); Own.Num() > 0)
 	{
 		for (int32 Index = 0; Index < Own.Num(); ++Index)
 		{
@@ -1237,6 +1326,12 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 				Star(One.Outer, One.Colour, One.Points, One.Inner);
 				break;
 			case UnitTable::FInsigniaLayer::EShape::Bar:
+				// (on a land vehicle a mark keeps inside its disc: New Zealand's white side bars are for aircraft, and on a
+				// tank they overhung the turret's edge)
+				if (bMarkInDisc && FMath::Max(FMath::Max(FMath::Abs(One.Up0), FMath::Abs(One.Up1)), FMath::Max(FMath::Abs(One.Across0), FMath::Abs(One.Across1))) > 1.001)
+				{
+					break;
+				}
 				Bar(One.Up0, One.Across0, One.Up1, One.Across1, One.Colour);
 				++Layer;
 				break;

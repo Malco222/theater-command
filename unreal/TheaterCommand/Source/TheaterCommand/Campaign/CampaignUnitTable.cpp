@@ -17,6 +17,14 @@ namespace
 		// (its dated marks: the month each stands from, counted in months from the year 0, and its layers)
 		TArray<int32> DatedFrom;
 		TArray<TArray<UnitTable::FInsigniaLayer>> Dated;
+		// (the rudder's stripes: its own, and those of each dated mark; "v" stands them side by side)
+		struct FFin
+		{
+			bool bUpright = true;
+			TArray<FString> Bands;
+		};
+		FFin Fin;
+		TArray<FFin> DatedFin;
 		// Whose layout its battleship and its cruiser take: "*" its own, a tag another's by the record, empty the plain one.
 		FString BattleshipOf, CruiserOf;
 	};
@@ -80,9 +88,25 @@ namespace
 		return Out;
 	}
 
+	/** A rudder's stripes as the table gives them: {"dir": "v" or "h", "bands": [colours]}. */
+	FLook::FFin ReadFin(const TSharedPtr<FJsonObject>& Told)
+	{
+		FLook::FFin Fin;
+		const TSharedPtr<FJsonObject>* Part = nullptr;
+		if (Told->TryGetObjectField(TEXT("fin"), Part))
+		{
+			FString Way;
+			(*Part)->TryGetStringField(TEXT("dir"), Way);
+			Fin.bUpright = Way != TEXT("h");
+			(*Part)->TryGetStringArrayField(TEXT("bands"), Fin.Bands);
+		}
+		return Fin;
+	}
+
 	FLook Read(const TSharedPtr<FJsonObject>& Told)
 	{
 		FLook Look;
+		Look.Fin = ReadFin(Told);
 		const TSharedPtr<FJsonObject>* Part = nullptr;
 		if (Told->TryGetObjectField(TEXT("soldier"), Part))
 		{
@@ -124,6 +148,7 @@ namespace
 					{
 						Look.DatedFrom.Add(FCString::Atoi(*YearText) * 12 + FMath::Clamp(FCString::Atoi(*MonthText), 1, 12) - 1);
 						Look.Dated.Add(MoveTemp(Mark));
+						Look.DatedFin.Add(ReadFin(*Entry));
 					}
 				}
 			}
@@ -279,6 +304,28 @@ int32 UnitTable::MarkEra(const FString& Tag)
 		}
 	}
 	return Era;
+}
+
+bool UnitTable::Fin(const FString& Tag, bool& bOutUpright, TArray<FLinearColor>& OutBands)
+{
+	OutBands.Reset();
+	const FLook* Look = LookOf(Tag);
+	if (!Look)
+	{
+		return false;
+	}
+	const int32 Era = MarkEra(Tag);
+	const FLook::FFin& Fin = Era > 0 && Look->DatedFin.IsValidIndex(Era - 1) && Look->DatedFin[Era - 1].Bands.Num() > 0 ? Look->DatedFin[Era - 1] : Look->Fin;
+	for (const FString& Code : Fin.Bands)
+	{
+		FLinearColor One;
+		if (Colour(Code, One))
+		{
+			OutBands.Add(One);
+		}
+	}
+	bOutUpright = Fin.bUpright;
+	return OutBands.Num() > 0;
 }
 
 TArray<UnitTable::FInsigniaLayer> UnitTable::Insignia(const FString& Tag)

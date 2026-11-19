@@ -44,6 +44,13 @@ namespace UnitTable
 	 * in the Pacific and in Burma), this is the one that stands in the campaign's month.
 	 */
 	TArray<FInsigniaLayer> Insignia(const FString& Tag);
+	/**
+	 * The stripes a country's aircraft carry on the rudder, in the campaign's month: side by side from the leading
+	 * edge (bOutUpright) or one over another from the top. A dominion's are its own once its dated roundel stands
+	 * (white and blue with the red taken out, and so on); before that it has none here and wears the British flash
+	 * its machines carry. False where the country has none.
+	 */
+	bool Fin(const FString& Tag, bool& bOutUpright, TArray<FLinearColor>& OutBands);
 	/** The campaign's month, told by the map whenever it shows a month (turn 1 is September 1939). */
 	void SetTurn(int32 Turn);
 	/**

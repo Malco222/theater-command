@@ -163,6 +163,8 @@ struct FMiniatureMesh
 	double DustFoot = 0.0, DustTop = 0.0;
 	/** What the paint lies on (art fix 12), kept in each point's alpha for the pieces' material: 255 cloth, wood, earth and skin; 128 painted metal, which chips down to the bare metal. */
 	uint8 Finish = 255;
+	/** A mark painted on a land vehicle keeps inside its own disc: side bars are for aircraft (the art director, 19 November 2026). */
+	bool bMarkInDisc = false;
 	float DustAmount = 0.0f;
 	FColor Dust = FColor(138, 122, 92);
 

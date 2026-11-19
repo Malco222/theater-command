@@ -1,5 +1,5 @@
 {
- "about": "Ruling 78(f): the one table the 3D game draws its models from. src is own (the country's own model), shared (another country's, by the record; 'of' says whose) or generic. A tag not listed here takes _default. insignia (18 November, Brian's ask for every country's own mark): layers lowest first in a square -1..1: ring [r0, r1], tri [r, turn degrees], star [r, inner, points], rect [u0, u1, v0, v1], each with c (hex); it goes wherever a model's marks say the owner's own; insignia_checked False until the historian confirms it. fin {dir h or v, bands}: the flag's stripes on the rudder. marking_months [{from YYYY-MM, insignia}]: a dominion's wartime roundel from that month. paint2 is the coat's second colour (the models' upper2 blotches); ground says the home ground it follows; winter_wash: a worn white wash over the coat when the battle's ground is snow. src captured (18 November 2026, Brian's rule for small nations' battleships and carriers): nothing shows until the country holds a great power's plans, by capture or by a spy; then it shows that great power's model named in captured_models[plans].models, in its own hull grey, flying its own ensign (and jack on a battleship). with_plans (ruling 235, b542) on a small nation's bomber or fighter: once it builds four-engined bombers or jet fighters, it draws captured_models[heavybombers or jets].models[the great power capitalPlans names], in its own paint and marking. captured_models keys are the rules' capitalPlans keys; column says which column each serves. Colours are hex. Art director, 16 November 2026. with_tech {tech id: model} shows that model once the country has researched it. swaps {swap name: [[from month YYYY-MM or null for the start, the file's choice], ...]} picks a model's swap by date. carrier_fighter, torpedo_bomber, dive_bomber and carrier_paint are for after release 1, as is a model named under after_release_1.",
+ "about": "Ruling 78(f): the one table the 3D game draws its models from. src is own (the country's own model), shared (another country's, by the record; 'of' says whose) or generic. A tag not listed here takes _default. insignia (18 November, Brian's ask for every country's own mark): layers lowest first in a square -1..1: ring [r0, r1], tri [r, turn degrees], star [r, inner, points], rect [u0, u1, v0, v1], each with c (hex); it goes wherever a model's marks say the owner's own; insignia_checked False until the historian confirms it. fin {dir h or v, bands}: the flag's stripes on the rudder. marking_months [{from YYYY-MM, insignia, fin}]: a dominion's wartime roundel and fin flash from that month (fin as above, dir v from the leading edge). On land vehicles an insignia is drawn only inside its disc, radius 1: side bars and anything else beyond it are for aircraft. paint2 is the coat's second colour (the models' upper2 blotches); ground says the home ground it follows; winter_wash: a worn white wash over the coat when the battle's ground is snow. src captured (18 November 2026, Brian's rule for small nations' battleships and carriers): nothing shows until the country holds a great power's plans, by capture or by a spy; then it shows that great power's model named in captured_models[plans].models, in its own hull grey, flying its own ensign (and jack on a battleship). with_plans (ruling 235, b542) on a small nation's bomber or fighter: once it builds four-engined bombers or jet fighters, it draws captured_models[heavybombers or jets].models[the great power capitalPlans names], in its own paint and marking. captured_models keys are the rules' capitalPlans keys; column says which column each serves. Colours are hex. Art director, 16 November 2026. with_tech {tech id: model} shows that model once the country has researched it. swaps {swap name: [[from month YYYY-MM or null for the start, the file's choice], ...]} picks a model's swap by date. carrier_fighter, torpedo_bomber, dive_bomber and carrier_paint are for after release 1, as is a model named under after_release_1.",
  "_default": {
   "soldier": {
    "src": "generic",
@@ -992,7 +992,15 @@
        "c": "F2EEE2"
       }
      ],
-     "words": "in the Pacific, red taken out: blue, white"
+     "words": "in the Pacific, red taken out: blue, white",
+     "fin": {
+      "dir": "v",
+      "bands": [
+       "F2EEE2",
+       "1F3F8F"
+      ],
+      "words": "white, blue from the leading edge"
+     }
     }
    ],
    "battleship": {
@@ -1089,7 +1097,15 @@
        "c": "F2EEE2"
       }
      ],
-     "words": "red taken out: blue, white"
+     "words": "red taken out: blue, white",
+     "fin": {
+      "dir": "v",
+      "bands": [
+       "F2EEE2",
+       "1F3F8F"
+      ],
+      "words": "white, blue from the leading edge"
+     }
     },
     {
      "from": "1943-01",
@@ -1127,7 +1143,15 @@
        "c": "F2EEE2"
       }
      ],
-     "words": "blue, white with white side bars"
+     "words": "blue, white with white side bars",
+     "fin": {
+      "dir": "v",
+      "bands": [
+       "F2EEE2",
+       "1F3F8F"
+      ],
+      "words": "white, blue from the leading edge"
+     }
     }
    ],
    "battleship": {
@@ -1231,7 +1255,16 @@
        "c": "E27A1F"
       }
      ],
-     "words": "orange in place of red"
+     "words": "orange in place of red",
+     "fin": {
+      "dir": "v",
+      "bands": [
+       "E27A1F",
+       "F2EEE2",
+       "1F3F8F"
+      ],
+      "words": "orange, white, blue from the leading edge"
+     }
     }
    ],
    "battleship": {
@@ -1328,7 +1361,15 @@
        "c": "F2EEE2"
       }
      ],
-     "words": "Burma, red painted out: blue, white"
+     "words": "Burma, red painted out: blue, white",
+     "fin": {
+      "dir": "v",
+      "bands": [
+       "F2EEE2",
+       "1F3F8F"
+      ],
+      "words": "white, blue from the leading edge"
+     }
     },
     {
      "from": "1943-07",
@@ -1348,7 +1389,15 @@
        "c": "8FB0D0"
       }
      ],
-     "words": "Burma: dark blue with a light blue middle"
+     "words": "Burma: dark blue with a light blue middle",
+     "fin": {
+      "dir": "v",
+      "bands": [
+       "8FB0D0",
+       "1C2C55"
+      ],
+      "words": "light blue, dark blue from the leading edge"
+     }
     }
    ],
    "battleship": {
