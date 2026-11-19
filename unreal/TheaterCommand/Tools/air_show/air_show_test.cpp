@@ -511,6 +511,38 @@ int main(int Argc, char** Argv)
 				}
 			}
 		}
+		// The sky in two rooms (AirSky::Rooms, the scene's since the Mac's Midway stutter): painted both at once from each
+		// eye, the near room and the far one hold every puff the plain painter draws, no puff twice, none left out of the
+		// near room for want of space, the same shadows; and the near room's clouds the nearer, but at the line.
+		int RoomsWrong = 0, RoomsMostNear = 0;
+		double RoomsLeastLine = 1e18;
+		{
+			AirSky::Painter Whole;
+			AirSky::Rooms Two;
+			std::vector<AirSky::Vec> WholePoints, WholeShadows;
+			std::vector<uint8_t> WholeRgba, WholeShadowRgba;
+			for (const AirSky::Vec& E : Eyes)
+			{
+				Whole.Paint(Sky, E, AtBombs, SkyAt.Sun, AirSky::Rgb(1.0f, 1.0f, 1.0f), WholePoints, WholeRgba, &WholeShadows, &WholeShadowRgba);
+				Two.PaintBoth(Sky, E, AtBombs, SkyAt.Sun, AirSky::Rgb(1.0f, 1.0f, 1.0f));
+				RoomsMostNear = std::max(RoomsMostNear, Two.Near.Drawn());
+				RoomsLeastLine = std::min(RoomsLeastLine, Two.Line());
+				if (Two.Near.Drawn() + Two.Far.Drawn() != Whole.Drawn() || Two.Near.Dropped() > 0 || Two.Far.Dropped() > Whole.Dropped() || Two.Far.ShadowsDrawn() != Whole.ShadowsDrawn()) ++RoomsWrong;
+				// (each puff's heart, its alpha laid, summed: the same in the two rooms as in the whole)
+				auto Hearts = [](const std::vector<AirSky::Vec>& Pts, const std::vector<uint8_t>& Cols, size_t Per)
+				{
+					long Sum = 0;
+					for (size_t K = 0; K < Pts.size(); K += Per) Sum += Cols[K * 4 + 3];
+					return Sum;
+				};
+				const size_t Per = static_cast<size_t>(Whole.PerPuff());
+				if (Hearts(Two.NearPoints, Two.NearRgba, Per) + Hearts(Two.FarPoints, Two.FarRgba, Per) != Hearts(WholePoints, WholeRgba, Per)) ++RoomsWrong;
+				bool bSameShadows = Two.Shadows.size() == WholeShadows.size() && Two.ShadowRgba == WholeShadowRgba;
+				for (size_t K = 0; bSameShadows && K < WholeShadows.size(); ++K)
+					bSameShadows = (Two.Shadows[K] - WholeShadows[K]).Length() < 1e-6;
+				if (!bSameShadows) ++RoomsWrong;
+			}
+		}
 		// The clearing over the target (within 1.8 km of it), and the field round it, as first laid, when the first
 		// bombs fall, at the battle's end and two hours on.
 		double WorstNear = 0.0, LeastField = 1.0, MostField = 0.0;
@@ -627,6 +659,9 @@ int main(int Argc, char** Argv)
 		                   "none left out, 300 or more round the fight" });
 		Limits.push_back({ "the same sky every time", bSame, bSame ? "same" : "different", "same" });
 		Limits.push_back({ "the sky laid far to near for each eye", Nearer == 0, std::to_string(Nearer) + " out of order", "0" });
+		Limits.push_back({ "the sky in two rooms, every puff in one", RoomsWrong == 0,
+		                   std::to_string(RoomsWrong) + " eyes wrong; the near room " + std::to_string(RoomsMostNear) + " puffs at most of " + std::to_string(AirSky::Rooms().NearRoom()) + ", the line " + Num(RoomsLeastLine, 0) + " m at least",
+		                   "0 (the whole sky's puffs, hearts and shadows; none left out of the near room)" });
 		// (5 ms on this machine: the art director's light, each puff's own lump and its soft edges away from the sun, and the
 		// shadows laid apart made a paint about 1.8 times what it was when the mark was 4, some 3 ms here, up to 4.2 under
 		// clang on a busy machine; the mark is there to catch the next such step, and the Mac's cores are faster)
@@ -912,11 +947,23 @@ int main(int Argc, char** Argv)
 			            Rec.Board.StageKey.c_str(), GroundTally.Refined, TrisAfter, TrisBefore, GroundTally.SandSplit, GroundTally.ShoreFaded, GroundTally.ShoreKept, GroundTally.Sheltered, GroundTally.Walled, GroundTally.Earth, GroundTally.Worn,
 			            GroundTally.RunwayRaised, GrassSpread, Grass, GroundMs, GroundTally.bLagoon ? ", a lagoon: the shallows keep their edge" : "");
 			const bool bShore = GroundTally.bLagoon ? GroundTally.ShoreFaded == 0 : GroundTally.ShoreFaded > 0 && GroundTally.ShoreKept > 0 && GroundTally.ShoreFaded * 4 >= GroundTally.ShoreKept;
+			// (a coast with no works keeps its shallows band all round, no point of it taken for a wall: Oahu painted again
+			// without its works part; the pre-check, 19:40Z, found every shallows point there the deep sea's)
+			AirGround::Tally BareTally;
+			if (bOahu)
+			{
+				std::vector<AirGround::Part> Bare;
+				for (const AirGround::Part& P : GroundParts)
+					if (P.Name != "works") Bare.push_back(P);
+				AirGround::Paint(Bare, PaintNames, PaintColours, { 0x1C, 0x44, 0x53 }, &BareTally, GroundNear);
+				std::printf("  ground (%s) without its works: shallows %d faded and %d kept, %d by a wall\n", Rec.Board.StageKey.c_str(), BareTally.ShoreFaded, BareTally.ShoreKept, BareTally.Walled);
+			}
+			const bool bBareShore = BareTally.Walled == 0 && BareTally.ShoreKept > 0 && BareTally.ShoreFaded > 0;
 			Limits.push_back({ "the stage's ground painted as the art director asked", bGround && BadIndex == 0 && GrewWrong == 0 && bShore && GroundTally.SandSplit > 0 && GroundTally.RunwayRaised > 0 && TrisAfter <= TrisBefore + 90000 &&
-			                   (!bOahu || (GroundTally.Earth > 0 && GrassSpread >= 5.0 && GroundTally.Refined > 0 && GroundTally.Sheltered > 0 && GroundTally.Worn > 0 && GroundTally.Walled > 0)),
+			                   (!bOahu || (GroundTally.Earth > 0 && GrassSpread >= 5.0 && GroundTally.Refined > 0 && GroundTally.Sheltered > 0 && GroundTally.Worn > 0 && GroundTally.Walled > 0 && bBareShore)),
 			                   bGround ? std::to_string(GroundTally.SandSplit) + " sand splits, " + std::to_string(GroundTally.ShoreFaded) + " shallows points faded, " + std::to_string(GroundTally.Earth) + " earth, grass spread " + Num(GrassSpread) + ", " + std::to_string(GroundTally.Refined) + " laid near, " + std::to_string(TrisAfter - TrisBefore) + " triangles more, " + std::to_string(BadIndex) + " bad points, " + std::to_string(GrewWrong) + " cracked or lost"
 			                           : "no stage at " + GroundPath,
-			                   "sand split, shallows faded (kept at a lagoon), runways lifted; at Oahu earth patches and the grass varied by 5 luma or more, the ground split near the harbour, sheltered shores plain, concrete worn; no cracks; 90,000 triangles more at most" });
+			                   "sand split, shallows faded (kept at a lagoon), runways lifted; at Oahu earth patches and the grass varied by 5 luma or more, the ground split near the harbour, sheltered shores plain, concrete worn, the band kept with no works; no cracks; 90,000 triangles more at most" });
 		}
 		Limits.push_back({ "the cloud ink lifts only the sunlit tops", InkBrighter == 0 && InkTopsMoved == 0 && InkShadeOff == 0 && InkTops > 0 && InkShades > 0,
 		                   std::to_string(InkBrighter) + " brighter, " + std::to_string(InkTopsMoved) + " of " + std::to_string(InkTops) + " tops moved, " + std::to_string(InkShadeOff) + " of " + std::to_string(InkShades) + " shades off",
@@ -1177,6 +1224,46 @@ int main(int Argc, char** Argv)
 			const int PaintsIsland = bGrid ? PaintsFlying(OverOahu) : 0, PaintsSea = PaintsFlying(OverSea);
 			Limits.push_back({ "the sky painted no more often over the island than the sea", bGrid && PaintsIsland <= PaintsSea + PaintsSea / 4 + 20,
 			                   std::to_string(PaintsIsland) + " paints over Oahu, " + std::to_string(PaintsSea) + " over the sea, of 3,600 frames", "at most a quarter more over the island" });
+			// The sky in two rooms along the same flights, and one low through the clouds (3 km out at the base and 150 m),
+			// the plain painter beside it: how often the far room turns, and the points sent to the engine (a room's
+			// slots, 33 points a puff, and the shadows' with the far room), against the whole sky's each paint.
+			struct Flown { int Paints = 0, Near = 0, Far = 0; double Whole = 0.0, Sent = 0.0; };
+			auto RoomsFlying = [&SkyAt, TX, TY](const AirSky::Field& Laid, double Out, double High)
+			{
+				AirSky::Painter Pt;
+				AirSky::Rooms Two;
+				std::vector<AirSky::Vec> Pts, Shades;
+				std::vector<uint8_t> Colours, ShadeColours;
+				Flown Got;
+				const double Per = Pt.PerPuff(), Shadowed = AirSky::Painter::MostShadows * Per;
+				for (int Frame = 0; Frame < 3600; ++Frame)
+				{
+					const double Secs = Frame / 60.0, A = Secs * 120.0 / Out;
+					const AirSky::Vec Eye(TX + Out * std::cos(A), TY + Out * std::sin(A), High);
+					const AirSky::Vec D = Laid.DriftAt(Secs);
+					if (Pt.Stale(Eye, D))
+					{
+						Pt.Paint(Laid, Eye, D, SkyAt.Sun, AirSky::Rgb(1.0f, 1.0f, 1.0f), Pts, Colours, &Shades, &ShadeColours);
+						++Got.Paints;
+						Got.Whole += Pt.RoomFor(Laid) * Per + Shadowed;
+					}
+					const AirSky::Rooms::Sent What = Two.Turn(Laid, Eye, D, SkyAt.Sun, AirSky::Rgb(1.0f, 1.0f, 1.0f));
+					if (What == AirSky::Rooms::Sent::Near) { ++Got.Near; Got.Sent += Two.NearRoom() * Per; }
+					if (What == AirSky::Rooms::Sent::Both) { ++Got.Far; Got.Sent += (Two.NearRoom() + Two.Far.RoomFor(Laid)) * Per + Shadowed; }
+				}
+				return Got;
+			};
+			const Flown HighSea = RoomsFlying(OverSea, 8000.0, 3000.0), LowSea = RoomsFlying(OverSea, 3000.0, OverSea.Base + 150.0);
+			const Flown HighIsland = bGrid ? RoomsFlying(OverOahu, 8000.0, 3000.0) : Flown();
+			auto FlownOk = [](const Flown& F) { return F.Far * 4 <= F.Paints + 8 && F.Sent * 2.0 <= F.Whole; };
+			auto FlownTold = [](const Flown& F)
+			{
+				return std::to_string(F.Far) + " far turns and " + std::to_string(F.Near) + " near of the whole's " + std::to_string(F.Paints) + " paints, " +
+				       Num(F.Sent / 60e3, 0) + "k points a second of " + Num(F.Whole / 60e3, 0) + "k";
+			};
+			Limits.push_back({ "the far clouds turned seldom, under half the points sent", FlownOk(HighSea) && FlownOk(LowSea) && (!bGrid || FlownOk(HighIsland)),
+			                   "high " + FlownTold(HighSea) + "; low " + FlownTold(LowSea) + (bGrid ? "; over Oahu " + FlownTold(HighIsland) : std::string()),
+			                   "far turns a quarter of the whole's paints or fewer, half its points or fewer, on each flight" });
 		}
 		AirFeed::Json Bare;
 		std::string Why;

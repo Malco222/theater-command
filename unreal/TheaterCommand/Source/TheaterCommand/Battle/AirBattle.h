@@ -120,6 +120,15 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> CloudInk;
 	TArray<FVector> CloudPoints;
 	TArray<FColor> CloudColours;
+	/** The near clouds (AirSky::Rooms): a small mesh of their own, turned as often as the eye's moves ask, drawn after
+	 * the far ones (Clouds), which are turned only when the eye has moved far enough to show. */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> NearClouds;
+	TArray<FVector> NearCloudPoints;
+	TArray<FColor> NearCloudColours;
+	/** The sky's own clock for the log (every 5 s: turns of each room, and what painting and sending them cost). */
+	int32 SkyNearTurns = 0, SkyBothTurns = 0;
+	double SkyPaintSeconds = 0.0, SkySendSeconds = 0.0, SkySlowest = 0.0, SkyClockAt = -1.0;
 	/** The clouds' shadows on the sea and the land: a mesh of their own, drawn under every other see-through thing (a
 	 * shadow lies on the ground; the ground's fires and smoke, and the air fight, stand in front of it). */
 	UPROPERTY()

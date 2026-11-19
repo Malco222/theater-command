@@ -754,41 +754,61 @@ namespace AirSky
 		return Out;
 	}
 
+	double Part::Edge(double X, double Y, double Half) const
+	{
+		return std::max(0.0, std::hypot(X - AX, Y - AY) - Half);
+	}
+
+	int Painter::RoomFor(const Field& F) const
+	{
+		return Room > 0 ? Room : std::max(1, F.MostPuffs);
+	}
+
+	double Painter::Slack() const
+	{
+		return Loose > 0.0 ? LastSlack : Clamp(LastNear * 0.0045, 1.0, 100.0);
+	}
+
 	bool Painter::Stale(const Vec& Eye, const Vec& Drift) const
 	{
 		if (!bPainted)
 		{
 			return true;
 		}
+		// (a near room with nothing in it has nothing to turn until the rooms are drawn again)
+		if (!Only.bAll && Only.bNear && LastDrawn == 0)
+		{
+			return false;
+		}
 		// (while a drawn cloud's lift eases over high ground, a paint for each metre the wind carries it, whatever the
-		// eye does: its lift moves only as it drifts)
-		if (bEasing && (Drift - LastDrift).Length() > 1.0)
+		// eye does: its lift moves only as it drifts; a far room's, every 3 m, a lift's step there a few pixels at most)
+		if (bEasing && (Drift - LastDrift).Length() > (Loose > 0.0 ? 3.0 : 1.0))
 		{
 			return true;
 		}
 		const double Moved = ((Eye - Drift) - LastEye).Length();
-		return Moved > Clamp(LastNear * 0.0045, 1.0, 100.0);
+		return Moved > Slack();
 	}
 
 	double Painter::ShownLift(int CloudIndex) const
 	{
-		return CloudIndex >= 0 && static_cast<size_t>(CloudIndex) < Lifts.size() ? Lifts[static_cast<size_t>(CloudIndex)].Shown : -1.0;
+		return CloudIndex >= 0 && static_cast<size_t>(CloudIndex) < Mem->Lifts.size() ? Mem->Lifts[static_cast<size_t>(CloudIndex)].Shown : -1.0;
 	}
 
 	double Painter::Paint(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light, std::vector<Vec>& OutPoints, std::vector<uint8_t>& OutRgba,
 		std::vector<Vec>* OutShadows, std::vector<uint8_t>* OutShadowRgba)
 	{
 		const bool bApart = OutShadows && OutShadowRgba;
-		const int Pool = std::max(1, F.MostPuffs);
+		const int Pool = RoomFor(F);
 		const int Per = PerPuff();
 		OutPoints.resize(static_cast<size_t>(Pool) * Per);
 		OutRgba.resize(static_cast<size_t>(Pool) * Per * 4);
 		const Vec Seen = Eye - Drift; // (the eye in the field's own frame)
 		const size_t CloudCount = F.Clouds.size();
-		if (LastSerial != F.Serial || Lifts.size() != CloudCount)
+		if (Mem->Serial != F.Serial || Mem->Lifts.size() != CloudCount)
 		{
-			Lifts.assign(CloudCount, Kept());
-			LastSerial = F.Serial;
+			Mem->Lifts.assign(CloudCount, Kept());
+			Mem->Serial = F.Serial;
 		}
 		Where.resize(CloudCount);
 		Sorted.clear();
@@ -813,11 +833,18 @@ namespace AirSky
 			{
 				continue;
 			}
+			// (the painter's own clouds, by where the cloud's near edge lies (Part); one that is not still lays its shadow,
+			// for the painter given the shadows' room)
+			const bool bMine = Only.Has(LX, LY, 0.5 * C.W);
+			if (!bMine && !(bApart && bShadows))
+			{
+				continue;
+			}
 			// (lifted over the ground where it is drawn: the ground looked up again once its middle has moved 30 m, and
 			// the lift drawn eased toward it as the cloud drifts, up one and a half metres a metre and down half as fast,
 			// so a cloud carried over hills never hops; taken at once when first drawn or when its copy changes)
 			const double WX = LX + Drift.X, WY = LY + Drift.Y;
-			Kept& Lift = Lifts[I];
+			Kept& Lift = Mem->Lifts[I];
 			const double Jump = std::hypot(WX - Lift.PX, WY - Lift.PY);
 			bool bStillEasing = false;
 			auto LiftHere = [&F, Index, &Lead](double X, double Y)
@@ -862,9 +889,9 @@ namespace AirSky
 				continue;
 			}
 			// (only a cloud that is drawn asks for the paints that ease it)
-			bEasing = bEasing || bStillEasing;
+			bEasing = bEasing || (bMine && bStillEasing);
 			const double NearShare = Smooth((NearAll + 1000.0 - Far) / 1000.0), FarShare = Smooth((FarAll + 1500.0 - Far) / 1500.0);
-			for (int K = C.First; K < C.First + C.Count; ++K)
+			for (int K = C.First; bMine && K < C.First + C.Count; ++K)
 			{
 				const Puff& Each = F.Puffs[static_cast<size_t>(K)];
 				const double Fade = Haze * (Each.Lod == 3 ? 1.0 - NearShare : Each.Lod == 2 ? 1.0 : Each.Lod == 1 ? FarShare : NearShare);
@@ -879,7 +906,8 @@ namespace AirSky
 			// (its shadow, where the sun's way through its middle meets the sea: a dark disc of its body's breadth, 1.5 m
 			// over the water and laid over the land where it falls there (the art director, on build 1722: over Oahu the
 			// clouds floated with nothing under them); out to ShadowReach from the eye; a cloud 600 m across or more)
-			if (bShadows && !C.bScrap && C.W >= 600.0)
+			// (a painter of one room lays none unless given the shadows' room: the far room's lays them all)
+			if (bShadows && (bApart || Only.bAll) && !C.bScrap && C.W >= 600.0)
 			{
 				const double High = C.At.Z + Here.Lift + 0.45 * Here.Squash * C.H;
 				const Vec Lies(LX - SunWay.X / SunWay.Z * High, LY - SunWay.Y / SunWay.Z * High, 1.5);
@@ -942,6 +970,8 @@ namespace AirSky
 		const Vec SunFlat = Vec(SunWay.X, SunWay.Y, 0.0).Unit(Vec(0.0, 1.0, 0.0));
 		const double Stretch = Clamp(1.0 / std::max(0.25, SunWay.Z), 1.0, 1.8);
 		double Near = 1e18;
+		// (the loose measure: the least of each drawn puff's own slack, a rim 15 per cent past its radius for its lumps)
+		double Slackest = 1e18;
 		// (a shadow's points and the ground under each, kept from one shadow to the next)
 		std::vector<Vec> Laid(static_cast<size_t>(Per));
 		std::vector<double> Under(static_cast<size_t>(Per));
@@ -1025,6 +1055,11 @@ namespace AirSky
 			Vec Fwd = C - Seen;
 			const double Dist = Fwd.Length();
 			Near = std::min(Near, Dist - Each.R);
+			if (Loose > 0.0)
+			{
+				const double Across = 1.15 * Each.R;
+				Slackest = std::min(Slackest, std::min(Loose * Dist * Dist * Dist / (Across * Across), LooseTurn * Dist));
+			}
 			Fwd = Fwd.Unit(Vec(0.0, 0.0, -1.0));
 			Vec Right = Fwd.Cross(Vec(0.0, 0.0, 1.0));
 			Right = Right.Length() < 1e-6 ? Vec(1.0, 0.0, 0.0) : Right.Unit();
@@ -1117,6 +1152,81 @@ namespace AirSky
 		LastDrift = Drift;
 		// (nothing drawn: the next paint is wanted as soon as the eye moves, not never)
 		LastNear = LastDrawn > 0 ? std::max(50.0, Near) : 50.0;
+		// (the loose measure at most 400 m, and 50 m when nothing was drawn)
+		LastSlack = LastDrawn > 0 ? Clamp(Slackest, 1.0, 400.0) : 50.0;
 		return Near;
+	}
+
+	Rooms::Rooms(int InNearRoom, double InMostSplit, double InTau, double InTurn)
+		: NearPuffs(std::max(16, InNearRoom)), MostSplit(std::max(500.0, InMostSplit))
+	{
+		Near.SetRoom(NearPuffs);
+		Near.ShareLifts(Far);
+		Far.SetLoose(InTau, InTurn);
+	}
+
+	void Rooms::SetInk(double InInk)
+	{
+		Near.SetInk(InInk);
+		Far.SetInk(InInk);
+	}
+
+	Rooms::Sent Rooms::Turn(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light)
+	{
+		if (!bBoth || Far.Stale(Eye, Drift))
+		{
+			PaintBoth(F, Eye, Drift, Sun, Light);
+			return Sent::Both;
+		}
+		if (Near.Stale(Eye, Drift))
+		{
+			Near.Paint(F, Eye, Drift, Sun, Light, NearPoints, NearRgba);
+			return Sent::Near;
+		}
+		return Sent::None;
+	}
+
+	void Rooms::PaintBoth(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light)
+	{
+		const Vec Seen = Eye - Drift;
+		Part Cut;
+		Cut.bAll = false;
+		Cut.AX = Seen.X;
+		Cut.AY = Seen.Y;
+		// (the line: the clouds nearest the eye across the ground, by their near edges, as many as nine tenths of the near
+		// room holds, every puff of each counted; no farther than MostSplit)
+		ByNear.clear();
+		for (size_t I = 0; I < F.Clouds.size(); ++I)
+		{
+			const Cloud& C = F.Clouds[I];
+			const Vec Shift = F.ShiftNear(static_cast<int>(I), Seen.X, Seen.Y);
+			const double Across = Cut.Edge(C.At.X + Shift.X, C.At.Y + Shift.Y, 0.5 * C.W);
+			if (Across < MostSplit)
+			{
+				ByNear.push_back({ Across, C.Count });
+			}
+		}
+		std::sort(ByNear.begin(), ByNear.end());
+		const int Fits = NearPuffs * 9 / 10;
+		double Line = MostSplit;
+		int Held = 0;
+		for (const std::pair<double, int>& Each : ByNear)
+		{
+			if (Held + Each.second > Fits)
+			{
+				Line = Each.first;
+				break;
+			}
+			Held += Each.second;
+		}
+		LastLine = Line;
+		Cut.Split = Line;
+		Cut.bNear = false;
+		Far.SetPart(Cut);
+		Far.Paint(F, Eye, Drift, Sun, Light, FarPoints, FarRgba, &Shadows, &ShadowRgba);
+		Cut.bNear = true;
+		Near.SetPart(Cut);
+		Near.Paint(F, Eye, Drift, Sun, Light, NearPoints, NearRgba);
+		bBoth = true;
 	}
 }

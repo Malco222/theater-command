@@ -31,11 +31,9 @@ struct FAirBattleState
 	/** The day's sky (AirSky): where it is laid from, the clouds as laid, and their painter's work. */
 	AirSky::Placing SkyPlace;
 	AirSky::Field Sky;
-	AirSky::Painter SkyPainter;
-	std::vector<AirSky::Vec> SkyPoints;
-	std::vector<uint8_t> SkyRgba;
-	std::vector<AirSky::Vec> SkyShadows;
-	std::vector<uint8_t> SkyShadowRgba;
+	/** The clouds in two rooms: the near clouds turned as the eye moves, the far ones when it has moved far enough to
+	 * show, with their shadows (AirSky::Rooms; the Mac's Midway stutter, 19 November). */
+	AirSky::Rooms SkyRooms;
 
 	/** A recorded battle (Content/Data/AirBattles/<key>.json), played back: no orders are taken. */
 	bool bReplay = true;

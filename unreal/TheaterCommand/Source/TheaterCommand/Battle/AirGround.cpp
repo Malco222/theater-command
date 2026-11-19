@@ -614,8 +614,9 @@ namespace AirGround
 					const double Seaward = Coast + Open > 0.0 ? Coast / (Coast + Open) : 0.0;
 					// (the art director on the second picture, 18:47Z: by a quay, a pier or a seawall the deep sea's paint
 					// up to the wall, the band coming back over 40 m beside it; along the natural shores the band's width
-					// wanders, so that it reads as shoal water and not as a glow drawn round the land)
-					const double Wall = Walls.Lines.empty() ? 1.0 : 1.0 - Ease(std::clamp((Walls.Nearest(X, Y, 60.0) - 10.0) / 40.0, 0.0, 1.0));
+					// wanders, so that it reads as shoal water and not as a glow drawn round the land; a stage with no works
+					// has no wall, and keeps its band all round: the pre-check, 19:40Z)
+					const double Wall = Walls.Lines.empty() ? 0.0 : 1.0 - Ease(std::clamp((Walls.Nearest(X, Y, 60.0) - 10.0) / 40.0, 0.0, 1.0));
 					const double Wander = 0.55 + Noise(X, Y, 260.0, 31);
 					const double Fade = std::max(Ease(std::pow(std::clamp(Seaward, 0.0, 1.0), Wander)), Wall);
 					if (Wall > 0.5)

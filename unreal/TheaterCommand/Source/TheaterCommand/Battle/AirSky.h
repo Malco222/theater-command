@@ -4,7 +4,9 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 /**
@@ -229,6 +231,29 @@ namespace AirSky
 	 * effects kit lays its own, so the same see-through, unlit material draws them. Colours are linear red, green, blue
 	 * and alpha, four bytes a point. The room not needed is drawn as points (no area, nothing to fill), first.
 	 */
+	/**
+	 * Which clouds a painter draws: all of them (the plain painter), or, for the sky in two rooms (Rooms), those whose
+	 * near edge (its middle less half its width) lies within Split of (AX, AY), across the ground in the field's own
+	 * frame (bNear), or those at Split or beyond. A cloud's middle is fixed in that frame, so the same line puts every
+	 * cloud in one room or the other.
+	 */
+	struct Part
+	{
+		bool bAll = true;
+		bool bNear = false;
+		double AX = 0.0, AY = 0.0, Split = 0.0;
+		bool Has(double X, double Y, double Half) const
+		{
+			if (bAll)
+			{
+				return true;
+			}
+			const bool bIn = Edge(X, Y, Half) < Split;
+			return bNear ? bIn : !bIn;
+		}
+		double Edge(double X, double Y, double Half) const;
+	};
+
 	class Painter
 	{
 	public:
@@ -248,6 +273,26 @@ namespace AirSky
 			std::vector<Vec>* OutShadows = nullptr, std::vector<uint8_t>* OutShadowRgba = nullptr);
 		/** The room for shadows laid apart (the nearest this many). */
 		static constexpr int MostShadows = 96;
+		/** The clouds this painter draws (all, unless set); a painter given room for shadows (Paint's OutShadows) lays
+		 * them for every cloud, its own or not. */
+		void SetPart(const Part& InPart) { Only = InPart; }
+		const Part& PartOf() const { return Only; }
+		/** Its room in puffs (the field's MostPuffs, unless set). */
+		void SetRoom(int InRoom) { Room = InRoom; }
+		int RoomFor(const Field& F) const;
+		/** The lifts another painter keeps, kept together from now on: two painters drawing the same field's clouds
+		 * ease each cloud's lift as one, whichever draws it. */
+		void ShareLifts(const Painter& Other) { Mem = Other.Mem; }
+		/**
+		 * A far room's measure of staleness, in place of the near one: the eye may move until the turn of any puff
+		 * drawn would shift its rim on the picture by Tau radians (a puff R across, D away, turned by an eye moved M
+		 * across the line to it: about R squared M over D cubed), and no farther than Turn times the nearest puff's
+		 * distance (so that their order far to near holds); while a drawn cloud's lift eases, every 3 m of the wind's
+		 * carry. Tau 0 is the near measure (Stale).
+		 */
+		void SetLoose(double InTau, double InTurn) { Loose = InTau; LooseTurn = InTurn; }
+		/** How far the eye may move from the last paint before Stale (the loose measure's; the near one's otherwise). */
+		double Slack() const;
 		/** Whether the eye has moved enough since the last Paint (in the field's own frame) for the turn of the
 		 * puffs to show: about a quarter of a degree at the nearest puff (at most 100 m); or, while a drawn cloud's
 		 * lift is still easing over high ground, whether the wind has carried the clouds a metre. */
@@ -293,14 +338,57 @@ namespace AirSky
 			double PX = 1e30, PY = 1e30; // where its middle was last drawn
 			double Target = 0.0, Shown = -1.0;
 		};
-		std::vector<Kept> Lifts;
+		struct Memory
+		{
+			std::vector<Kept> Lifts;
+			uint64_t Serial = 0;
+		};
+		std::shared_ptr<Memory> Mem = std::make_shared<Memory>();
+		Part Only;
+		int Room = 0;
+		double Loose = 0.0, LooseTurn = 0.02;
+		double LastSlack = 1.0;
 		bool bPainted = false;
 		bool bEasing = false;
-		uint64_t LastSerial = 0;
 		Vec LastEye;      // in the field's frame (eye less drift)
 		Vec LastDrift;    // the wind's carry at the last paint
 		double LastNear = 1000.0;
 		int LastDrawn = 0, LastDropped = 0, LastShadows = 0;
+	};
+
+	/**
+	 * The sky in two rooms (the builder's Mac run, 19 November: Midway stuttered, 9 to 17 frames over 33 ms in five
+	 * seconds; the whole field, 4,000 puffs and 132,000 points, was painted and sent to the engine 9 to 16 times a
+	 * second, as often as the nearest puff's turn asked). The near clouds, a few hundred puffs, are turned as often as
+	 * before (Painter::Stale); the rest, nearly all the points, only when the eye has moved far enough for a far puff's
+	 * turn to show (Painter::SetLoose), and the line between the rooms is drawn again then. The line is at most
+	 * MostSplit from the eye across the ground, nearer where the near clouds would not fit their room. The scene draws
+	 * the near room after the far: every near cloud nearer the eye than every far one, but for a little at the line.
+	 */
+	class Rooms
+	{
+	public:
+		explicit Rooms(int InNearRoom = 800, double InMostSplit = 4500.0, double InTau = 0.0005, double InTurn = 0.04);
+		/** What the scene must send the engine after a Turn. */
+		enum class Sent { None, Near, Both };
+		/** Turns the clouds to the eye as far as it has moved (Painter::Paint's terms): the first call paints both. */
+		Sent Turn(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light);
+		/** Both rooms and the shadows, the line drawn again from this eye. */
+		void PaintBoth(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light);
+		void SetInk(double InInk);
+		int NearRoom() const { return NearPuffs; }
+		/** The line between the rooms as last drawn (metres from the eye then, across the ground). */
+		double Line() const { return LastLine; }
+		Painter Near, Far;
+		std::vector<Vec> NearPoints, FarPoints, Shadows;
+		std::vector<uint8_t> NearRgba, FarRgba, ShadowRgba;
+
+	private:
+		int NearPuffs = 800;
+		double MostSplit = 4500.0;
+		double LastLine = 0.0;
+		bool bBoth = false;
+		std::vector<std::pair<double, int>> ByNear; // (each cloud's distance from the eye across the ground, its puffs)
 	};
 
 	/** The cloud's colours: its sunlit top, its shaded side, its grey base; and its shadow on the sea. */

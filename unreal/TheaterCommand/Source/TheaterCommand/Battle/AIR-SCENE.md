@@ -214,10 +214,27 @@ cumulus, with one cloud base and one top. Pearl Harbor and Midway are cumulus da
 base 940 m and tops 2,060 m, the Mobile Force's 510 m and 1,820 m. A ticket from a rules bundle without the sky draws
 cumulus at the cloud table's middle heights. `AirSky` lays the clouds once, on a 44 km square that repeats without a
 seam, and draws each cloud where it lies nearest the eye. So there are clouds wherever the fight goes (at Pearl Harbor
-most of the fight and the falls are 20 to 32 km short of the harbour). The scene draws them as one see-through mesh of
-soft puffs, in the effects kit's shape and with the same `M_Highlight`. They are turned to the eye only when it has
-moved about a quarter of a degree at the nearest puff, as soon as the eye moves after a paint that drew nothing, and,
-while a drawn cloud's lift over high ground is still easing, for each metre the wind carries the clouds.
+most of the fight and the falls are 20 to 32 km short of the harbour). The scene draws them as see-through meshes of
+soft puffs, in the effects kit's shape and with the same `M_Highlight`, in two rooms (`AirSky::Rooms`):
+
+- **The near room** (`NearClouds`, 800 puffs) holds the clouds whose near edge is within 4.5 km of the eye across the
+  ground, fewer when they would not fit nine tenths of it. They are turned to the eye when it has moved about a quarter
+  of a degree at the nearest puff, as soon as it moves after a paint that drew nothing, and, while a drawn cloud's lift
+  over high ground is still easing, for each metre the wind carries the clouds. A room with nothing in it waits.
+- **The far room** (`Clouds`, 4,000 puffs) holds the rest, and the shadows go with it. It is turned only when the eye
+  has moved far enough for a far puff's turn to shift its rim by about a pixel (half a thousandth of a radian), or by a
+  twenty-fifth of the nearest far puff's distance, whichever comes first; while a far cloud's lift eases, every 3 m of
+  the wind's carry. Then the line between the rooms is drawn again from the eye, and both rooms are sent.
+- **Why.** On the builder's Mac run of 19 November, Midway stuttered: 9 to 17 frames over 33 ms in five seconds. The
+  whole field, 4,000 puffs and 132,000 points, was painted and sent 9 to 16 times a second, on the strategy camera and on
+  the chase. Now the far room turns about once or twice a second and the near room, 26,400 points, as often as before.
+  The cloud test flies three paths with both and checks that the far room turns a quarter as often as the whole sky did,
+  or less, and that under half the points are sent. It also checks, from every test eye, that the two rooms hold
+  exactly the puffs, the hearts and the shadows of the whole sky.
+- **Order.** The near room is drawn just after the far one (its sort priority 5 over theirs). Every near cloud is nearer
+  the eye than every far one, except for a little at the line.
+- **The log.** Every 5 s, `Air battle sky` gives the near and far turns, the milliseconds of painting and of sending
+  on the game thread (the render thread's share of a send is not in it), the slowest turn, and the line.
 
 - **How far.** Clouds are drawn out to 20 km from the eye and thin into the haze over the last third of that. A cloud
   within 5 km is drawn with all its puffs, out to 10 km with its bigger ones, and past that with two: its veil and one
@@ -362,7 +379,10 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
 4. **The clouds.** They should be white on their sunlit tops, grey under their flat bases, and soft at the edges,
    with no ring of polygon corners. The fight's smoke and tracer over the clouds should lie on them. If the clouds glare
    or vanish against the sky, their brightness is the three colours at the top of `AirSky.cpp`. If they cost too much
-   time, `Placing::MostPuffs` sets their room and `Painter(12)` the sides of each puff.
+   time, `Placing::MostPuffs` sets their room and `Painter(12)` the sides of each puff. Midway should no longer
+   stutter: the `Air battle sky` log line every 5 s gives each room's turns (near 8 to 15 a second, far about 1 to 2)
+   and the game thread's milliseconds. If the far clouds seem to swim or pop as the eye moves, the far room's measure
+   is `Rooms`' last two numbers (0.0005 and 0.04): smaller turns it more often.
 5. **Pearl Harbor's ground.** The grass mottled with patches of red earth, the beach a band along the water, the
    shallows darkening into the sea, and the yard's grey blocks with Pennsylvania standing on her dry dock's floor and
    Shaw in YFD-2 off the beach. No pad's edge floating over the land or sunk under it; the paving in slabs, not a flat
