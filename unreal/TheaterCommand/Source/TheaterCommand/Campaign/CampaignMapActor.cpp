@@ -13729,6 +13729,38 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 						UE_LOG(LogTheater, Display, TEXT("Effects: no sheet of the land stands under the test gun yet; its ground cannot be compared"));
 					}
 				}
+				// (For the effects artist, 16:29Z on 19 November 2026: "put a gun and crew model at the muzzle on the next MG
+				// stills, because the gun-smoke wisp only shows against something darker than pale ground." Two of the
+				// game's own riflemen in field grey stand at the test gun, one each side of its line of fire and a little
+				// behind the muzzle, at the test's own scale. "-TheaterBlastBare" leaves the ground bare as it was.)
+				{
+					static TWeakObjectPtr<UProceduralMeshComponent> BlastCrew;
+					if (UProceduralMeshComponent* Old = BlastCrew.Get())
+					{
+						Old->DestroyComponent();
+					}
+					BlastCrew.Reset();
+					if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterBlastBare")))
+					{
+						const FVector Fire = (Target - Gun).GetSafeNormal2D();
+						const FVector Aside(-Fire.Y, Fire.X, 0.0);
+						const FVector Foot = Gun - FVector(0.0, 0.0, 0.6 * BlastUnitsAMetre);
+						FMiniatureMesh Crew;
+						Crew.Soldier(TEXT("GER"), GroundUnder(Foot - Fire * (0.7 * BlastUnitsAMetre) - Aside * (0.45 * BlastUnitsAMetre)), BlastUnitsAMetre, Fire.Rotation().Yaw);
+						Crew.Soldier(TEXT("GER"), GroundUnder(Foot - Fire * (1.1 * BlastUnitsAMetre) + Aside * (0.55 * BlastUnitsAMetre)), BlastUnitsAMetre, Fire.Rotation().Yaw + 20.0);
+						if (Crew.Vertices.Num() > 0)
+						{
+							UProceduralMeshComponent* Stood = NewObject<UProceduralMeshComponent>(this);
+							Stood->SetupAttachment(Root);
+							Stood->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+							Stood->RegisterComponent();
+							Stood->CreateMeshSection(0, Crew.Vertices, Crew.Triangles, Crew.Normals, TArray<FVector2D>(), Crew.Colors, TArray<FProcMeshTangent>(), false);
+							Stood->SetMaterial(0, SceneryMaterial);
+							BlastCrew = Stood;
+							UE_LOG(LogTheater, Display, TEXT("Effects: two riflemen stand at the test gun (%d points)"), Crew.Vertices.Num());
+						}
+					}
+				}
 			}
 		}
 		if (BlastHold >= 0.0)
