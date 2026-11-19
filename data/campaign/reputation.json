@@ -1,0 +1,152 @@
+{
+  "_about": "Reputations (the sandbox; Brian, 19 November 2026: 'i want airplane squadrons to get nick names if they keep winning battles and get a reputation', 'for example the Red Tails', 'same with tanks and battalions of troops'). Every air group, corps and fleet keeps a reputation: points for battles won, points off for battles lost, and a count of battles won running. A unit with enough points on a run of wins gets a name: a historical formation the one history gave it (real), any other one a name in its own country's style (styles; share lends a style to a country that has none). Most names come from the paint its men put on to be known by, as the Red Tails' did, and the paint is kept with the name as the unit's mark, for the 3D game to put on its machines (parts, emblemAt, bandAt). A name already in history's use is never made up for another unit (blocked). The tiers' edge is for the player's own units only, beside the honours' edge (stories.json edgeCap): nothing here changes a number for a computer-run nation. Off unless g.flags.sandbox is 1.",
+  "gain": { "win": 1, "big": 2, "famous": 2, "loss": -2 },
+  "odds": { "_note": "A land battle's odds before it (attacker to defender): an attack won at easy odds or better is a walkover and makes no name; one won at hard odds or worse is a big win. A stand is a big win at even odds or worse, and none when the attack on it was lighter than light.", "easy": 3, "hard": 1.2, "light": 0.5 },
+  "named": { "_note": "A name needs rep points on a run of wins; and an army talks about its best only: at most share of a nation's units of one arm (corps, air groups, fleets) go by a name of this kind at once, and never fewer than one.", "rep": 8, "run": 4, "share": 0.1 },
+  "tiers": [
+    { "at": 4, "word": "Noticed", "edge": 0 },
+    { "at": 8, "word": "Known", "edge": 0.02 },
+    { "at": 14, "word": "Feared", "edge": 0.04 },
+    { "at": 22, "word": "Legendary", "edge": 0.06 }
+  ],
+  "famousTier": 2,
+  "colours": {
+    "red": "#b3261e", "yellow": "#e2b51f", "blue": "#2a5ba6", "white": "#eeede8", "black": "#1d1d1d", "green": "#2f6c3b",
+    "orange": "#d4701c", "silver": "#b8bdc2", "gold": "#c9a13a", "grey": "#7d8288"
+  },
+  "parts": {
+    "air": [
+      { "name": "Tails", "at": "tail", "says": "painted their tails {colour}" },
+      { "name": "Noses", "at": "nose", "says": "painted their noses {colour}" },
+      { "name": "Spinners", "at": "spinner", "says": "painted their spinners {colour}" },
+      { "name": "Cowlings", "at": "cowling", "says": "painted their cowlings {colour}" },
+      { "name": "Wingtips", "at": "wingtips", "says": "painted their wingtips {colour}" },
+      { "name": "Rudders", "at": "rudder", "says": "painted their rudders {colour}" }
+    ],
+    "tank": [
+      { "name": "Turrets", "at": "turret ring", "says": "painted {a} {colour} ring round their turrets" },
+      { "name": "Bands", "at": "hull band", "says": "painted {a} {colour} band round their hulls" },
+      { "name": "Pennants", "at": "aerial pennant", "says": "hung {a} {colour} pennant on their aerials" },
+      { "name": "Hatches", "at": "hatches", "says": "painted their hatches {colour}" }
+    ],
+    "troops": [
+      { "name": "Scarves", "at": "scarf", "says": "taken to wearing {colour} scarves" },
+      { "name": "Patches", "at": "shoulder patch", "says": "sewn {a} {colour} patch on their sleeves" },
+      { "name": "Flashes", "at": "helmet flash", "says": "painted {a} {colour} flash on their helmets" },
+      { "name": "Lanyards", "at": "lanyard", "says": "taken to wearing {colour} lanyards" }
+    ],
+    "fleet": [
+      { "name": "Funnels", "at": "funnel band", "says": "painted {a} {colour} band round their funnels" },
+      { "name": "Bows", "at": "bow", "says": "painted their bows {colour}" }
+    ]
+  },
+  "emblemAt": {
+    "air": { "at": "nose", "says": "Its aircraft carry {a} {colour} {emblem} on the nose." },
+    "tank": { "at": "turret", "says": "Its tanks carry {a} {colour} {emblem} on the turret." },
+    "troops": { "at": "shoulder patch", "says": "Its men wear {a} {colour} {emblem} on their sleeves." },
+    "fleet": { "at": "bridge", "says": "Its ships carry {a} {colour} {emblem} on the bridge." }
+  },
+  "bandAt": {
+    "air": { "at": "fuselage band", "says": "Its aircraft carry {a} {colour} band round the fuselage." },
+    "tank": { "at": "hull band", "says": "Its tanks carry {a} {colour} band round the hull." },
+    "troops": { "at": "scarf", "says": "Its men wear {colour} scarves." },
+    "fleet": { "at": "funnel band", "says": "Its ships carry {a} {colour} band round the funnel." }
+  },
+  "who": { "air": "Its crews have", "tank": "Its crews have", "troops": "Its men have", "fleet": "Its crews have" },
+  "share": { "CAN": "UK", "AUS": "UK", "NZL": "UK", "SAF": "UK", "IND": "UK", "BEL": "FRA", "VIC": "FRA", "PHI": "USA" },
+  "styles": {
+    "USA": {
+      "_note": "Brash and home-grown: the paint on the machine (the Red Tails' kind), a critter from back home, or the boss's name in front of his outfit.",
+      "forms": [["the {colour} {part}", 3], ["the {adj} {beast}", 2], ["{leader}'s {beast}", 1]],
+      "colours": ["red", "yellow", "blue", "white", "black", "green", "orange"],
+      "adj": ["Howling", "Galloping", "Rolling", "Rampaging", "Whistling", "Barnstorming", "Hell-Bent", "Rip-Roaring", "Hard-Luck", "Lucky"],
+      "beasts": [["Bobcats", "bobcat"], ["Rattlers", "rattlesnake"], ["Badgers", "badger"], ["Coyotes", "coyote"], ["Bulldogs", "bulldog"], ["Wolverines", "wolverine"], ["Longhorns", "longhorn"], ["Buzzards", "buzzard"], ["Grizzlies", "grizzly"], ["Catamounts", "catamount"], ["Razorbacks", "razorback"], ["Jackrabbits", "jackrabbit"], ["Gamecocks", "gamecock"], ["Roadrunners", "roadrunner"], ["Bison", "bison"]]
+    },
+    "UK": {
+      "_note": "Heraldic and dry: a beast from the badge, the place it made its name, or a regiment's 'Own'.",
+      "forms": [["the {colour} {beast}", 3], ["the {place} {beast}", 2], ["{place}'s Own", 1], ["the {colour} {part}", 1]],
+      "colours": ["black", "red", "green", "blue", "white", "silver", "gold", "grey"],
+      "adj": [],
+      "beasts": [["Stags", "stag"], ["Martlets", "martlet"], ["Griffins", "griffin"], ["Wyverns", "wyvern"], ["Herons", "heron"], ["Kestrels", "kestrel"], ["Otters", "otter"], ["Ferrets", "ferret"], ["Stoats", "stoat"], ["Hedgehogs", "hedgehog"], ["Choughs", "chough"], ["Kingfishers", "kingfisher"], ["Swifts", "swift"], ["Unicorns", "unicorn"], ["Hares", "hare"]]
+    },
+    "GER": {
+      "_note": "From the badge on the machine, as the Geschwader emblems were: a colour and a beast or a weapon, or the beast and the place.",
+      "forms": [["the {colour} {beast}", 3], ["the {beast} of {place}", 2], ["the {colour} {part}", 2]],
+      "colours": ["black", "white", "yellow", "red", "green", "blue", "silver"],
+      "adj": [],
+      "beasts": [["Hatchets", "hatchet"], ["Gauntlets", "gauntlet"], ["Lynxes", "lynx"], ["Boars", "boar"], ["Ravens", "raven"], ["Ibexes", "ibex"], ["Bears", "bear"], ["Lances", "lance"], ["Arrows", "arrow"], ["Hammers", "hammer"], ["Owls", "owl"], ["Wasps", "wasp"], ["Stags", "stag"], ["Foxes", "fox"], ["Griffins", "griffin"]]
+    },
+    "SOV": {
+      "_note": "Bold words of the front newspapers: steel and thunder, the hunters of the steppe and forest, the place they held.",
+      "forms": [["the {adj} {beast}", 3], ["the {beast} of {place}", 2], ["the {colour} {part}", 2]],
+      "colours": ["red", "white", "yellow", "blue", "green"],
+      "adj": ["Steel", "Thunder", "Frost", "Iron", "Swift", "Stubborn", "Northern", "Storm"],
+      "beasts": [["Falcons", "falcon"], ["Hawks", "hawk"], ["Lynxes", "lynx"], ["Wolves", "wolf"], ["Bears", "bear"], ["Sables", "sable"], ["Sparrowhawks", "sparrowhawk"], ["Hammers", "hammer"], ["Arrows", "arrow"], ["Swifts", "swift"], ["Eagles", "eagle"], ["Pikes", "pike"]]
+    },
+    "JAP": {
+      "_note": "A season or the weather and a bird or beast, as the sentai and kokutai painted on their tails.",
+      "forms": [["the {adj} {beast}", 3], ["the {beast} of {place}", 2], ["the {colour} {part}", 2]],
+      "colours": ["red", "white", "yellow", "blue", "black"],
+      "adj": ["Thunder", "Storm", "Morning", "Autumn", "Crimson", "Silver", "Mountain", "Moonlit", "Snow", "Mist"],
+      "beasts": [["Cranes", "crane"], ["Sparrowhawks", "sparrowhawk"], ["Kites", "kite"], ["Herons", "heron"], ["Swallows", "swallow"], ["Dragons", "dragon"], ["Wild Boars", "wild boar"], ["Foxes", "fox"], ["Carp", "carp"], ["Kingfishers", "kingfisher"], ["Wolves", "wolf"], ["Tigers", "tiger"]]
+    },
+    "ITA": {
+      "_note": "Flair from the squadron badge: a colour and a beast, or the beast and the place.",
+      "forms": [["the {colour} {beast}", 3], ["the {beast} of {place}", 2], ["the {colour} {part}", 2]],
+      "colours": ["red", "white", "green", "yellow", "black", "blue"],
+      "adj": [],
+      "beasts": [["Wasps", "wasp"], ["Falcons", "falcon"], ["Wolves", "wolf"], ["Lions", "lion"], ["Vipers", "viper"], ["Swallows", "swallow"], ["Griffins", "griffin"], ["Hawks", "hawk"], ["Foxes", "fox"], ["Bulls", "bull"], ["Owls", "owl"], ["Kestrels", "kestrel"], ["Hornets", "hornet"]]
+    },
+    "FRA": {
+      "_note": "The escadrille's bird or beast on the fuselage, or the place: some with a musketeer's swagger.",
+      "forms": [["the {colour} {beast}", 2], ["the {beast} of {place}", 2], ["the Musketeers of {place}", 1], ["the {colour} {part}", 2]],
+      "colours": ["blue", "red", "white", "yellow", "green", "black"],
+      "adj": [],
+      "beasts": [["Swifts", "swift"], ["Swallows", "swallow"], ["Kingfishers", "kingfisher"], ["Lapwings", "lapwing"], ["Herons", "heron"], ["Cockerels", "cockerel"], ["Lynxes", "lynx"], ["Wolves", "wolf"], ["Foxes", "fox"], ["Larks", "lark"], ["Thistles", "thistle"]]
+    },
+    "_default": {
+      "_note": "Every other country: the paint, a colour and a beast, or the beast and the place.",
+      "forms": [["the {colour} {part}", 2], ["the {colour} {beast}", 2], ["the {beast} of {place}", 1]],
+      "colours": ["red", "white", "blue", "yellow", "green", "black"],
+      "adj": [],
+      "beasts": [["Hawks", "hawk"], ["Wolves", "wolf"], ["Foxes", "fox"], ["Lions", "lion"], ["Eagles", "eagle"], ["Falcons", "falcon"], ["Bears", "bear"], ["Stags", "stag"], ["Lynxes", "lynx"], ["Vipers", "viper"]]
+    }
+  },
+  "ship": {
+    "_note": "For a named ship that has come through many battles (her battle stars, hulls.ts): what her crew calls her.",
+    "stars": 5,
+    "forms": [["Old {adj}", 2], ["the Lucky {noun}", 2]],
+    "adj": ["Steady", "Stubborn", "Faithful", "Smokey", "Rusty", "Cranky", "Thunder", "Unsinkable", "Leadfoot", "Workhorse"],
+    "nouns": ["Penny", "Horseshoe", "Clover", "Sixpence", "Charm", "Star", "Dice", "Button"]
+  },
+  "blocked": [
+    "red tails", "checkertails", "checkered tails", "yellow tails", "blue noses", "yellow noses", "red noses", "black sheep",
+    "flying tigers", "jolly rogers", "grim reapers", "black cats", "red devils", "green devils", "blue devils", "desert rats",
+    "black rats", "red bulls", "red eagles", "screaming eagles", "wolfpack", "wolf pack", "night witches", "green hearts",
+    "ace of spades", "ace of clubs", "prancing horse", "storks", "bloody hundredth", "flying eightballs", "hell's angels",
+    "hell on wheels", "big red one", "timberwolves", "wildcats", "golden lions", "rock of the marne", "tropic lightning",
+    "black watch", "green jackets", "red hackles", "fighting cocks", "dambusters", "pathfinders", "chindits", "ghost division",
+    "death's head", "vikings", "black panthers", "red arrows", "old red patch", "china marines", "grey ghost", "gray ghost",
+    "lucky lady", "fighting lady", "big e", "mighty mo", "old ironsides", "iron lady", "silver ghost", "edelweiss",
+    "steel falcons", "white eagles", "thunderbolts", "flying fortresses", "old reliable", "cactus", "red knights"
+  ],
+  "real": [
+    { "nat": "UK", "name": "7th Armoured Division", "nick": "the Desert Rats", "mark": { "at": "turret", "colour": "red", "emblem": "jerboa" }, "says": "Its tanks carry the red jerboa, the desert rat, on their hulls.", "why": "The division's sign was a red jerboa from 1940, and the name went with it from the Western Desert to Berlin." },
+    { "nat": "UK", "name": "4th Indian Division", "nick": "the Red Eagles", "mark": { "at": "shoulder patch", "colour": "red", "emblem": "eagle" }, "says": "Its men wear a red eagle on their sleeves.", "why": "Its sign was a red eagle, carried from the Western Desert to Cassino." },
+    { "nat": "USA", "name": "3rd Infantry Division", "nick": "the Rock of the Marne", "mark": { "at": "shoulder patch", "colour": "blue", "emblem": "stripes" }, "says": "Its men wear blue and white stripes on their sleeves.", "why": "The name dates from its stand on the Marne in July 1918." },
+    { "nat": "USA", "name": "34th Infantry Division", "nick": "the Red Bulls", "mark": { "at": "shoulder patch", "colour": "red", "emblem": "bull's skull" }, "says": "Its men wear a red bull's skull on their sleeves.", "why": "Its patch was a red bull's skull on a black water jar, and the Germans in Italy took up the name." },
+    { "nat": "USA", "name": "25th Infantry Division", "nick": "Tropic Lightning", "mark": { "at": "shoulder patch", "colour": "yellow", "emblem": "lightning bolt" }, "says": "Its men wear a yellow lightning bolt on a red leaf on their sleeves.", "why": "It was raised in Hawaii in 1941, and its patch is a lightning bolt on a taro leaf." },
+    { "nat": "USA", "name": "4th Marines", "nick": "the China Marines", "mark": { "at": "shoulder patch", "colour": "red" }, "says": "Its men wear a red patch on their sleeves.", "why": "The regiment kept the International Settlement at Shanghai from 1927 to November 1941." },
+    { "nat": "CAN", "name": "1st Canadian Division", "nick": "the Old Red Patch", "mark": { "at": "shoulder patch", "colour": "red" }, "says": "Its men wear a plain red patch on their sleeves.", "why": "Its sign since 1916 was a plain red patch." },
+    { "nat": "USA", "name": "332nd Fighter Group", "nick": "the Red Tails", "mark": { "at": "tail", "colour": "red" }, "says": "Its crews have painted their tails red.", "why": "The Tuskegee airmen's group painted the tails of its Thunderbolts and Mustangs red from 1944." },
+    { "nat": "USA", "name": "56th Fighter Group", "nick": "the Wolfpack", "mark": { "at": "cowling", "colour": "red" }, "says": "Its crews have painted their cowlings red.", "why": "Hubert Zemke's group was the highest-scoring Thunderbolt group of the war." },
+    { "nat": "USA", "name": "100th Bombardment Group", "nick": "the Bloody Hundredth", "mark": { "at": "tail", "colour": "black", "emblem": "square D" }, "says": "Its bombers carry a square D on the tail.", "why": "The name came from its heavy losses over Germany in 1943 and 1944." },
+    { "nat": "GER", "name": "Jagdgeschwader 54", "nick": "the Green Hearts", "mark": { "at": "nose", "colour": "green", "emblem": "heart" }, "says": "Its aircraft carry a green heart on the nose.", "why": "Grünherz: its badge was a green heart, for its commander's home of Thuringia, the green heart of Germany." },
+    { "nat": "GER", "name": "Jagdgeschwader 53", "nick": "the Ace of Spades", "mark": { "at": "nose", "colour": "black", "emblem": "ace of spades" }, "says": "Its aircraft carry the ace of spades on the nose.", "why": "Pik As: its badge was the ace of spades." },
+    { "nat": "SOV", "name": "588th Bomber Aviation Regiment", "nick": "the Night Witches", "mark": { "at": "nose", "colour": "red", "emblem": "star" }, "says": "Its biplanes carry a red star on the nose.", "why": "The women's night bomber regiment was named by the Germans for the hiss of its biplanes gliding in." },
+    { "nat": "JAP", "name": "64th Sentai", "nick": "the Katō Hayabusa Sentai", "mark": { "at": "tail", "colour": "white", "emblem": "arrow" }, "says": "Its aircraft carry a white arrow on the tail.", "why": "Lieutenant Colonel Katō Tateo's Hayabusa fighters flew over Malaya and Burma." },
+    { "nat": "ITA", "name": "4° Stormo Caccia Terrestre", "nick": "the Prancing Horse", "mark": { "at": "nose", "colour": "black", "emblem": "prancing horse" }, "says": "Its aircraft carry a black prancing horse on the nose.", "why": "Il Cavallino Rampante was the badge of Francesco Baracca, the great Italian ace of 1918." },
+    { "nat": "FRA", "name": "Groupe de Chasse I/2", "nick": "the Storks", "mark": { "at": "nose", "colour": "black", "emblem": "stork" }, "says": "Its aircraft carry a stork on the nose.", "why": "Les Cigognes kept the stork of Guynemer's escadrille of 1916." },
+    { "nat": "POL", "name": "No. 303 (Polish) Squadron", "nick": "the Kościuszko Squadron", "mark": { "at": "nose", "colour": "red", "emblem": "Kościuszko badge" }, "says": "Its aircraft carry the Kościuszko badge on the nose.", "why": "It was the highest-scoring Hurricane squadron of the Battle of Britain." }
+  ]
+}

@@ -17,6 +17,7 @@ import { clamp } from '../core/math';
 import { DESERT, EASTERN, allied, atWar, headline, relocate, weather } from './game';
 import { gainXp, generalOf } from './commanders';
 import { DIPLOMACY } from './diplomacy';
+import { landWin, repAir, repBattle, repEdge } from './reputation';
 import {
   STACK,
   type AirFleet, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
@@ -297,6 +298,8 @@ const rivalIn = (g: Game, c: Corps, others: Corps[]): boolean => {
 export function storyAttack(g: Game, c: Corps, target: Region, defenders: Corps[]): number {
   if (c.nat !== g.human || c.kind === 'fort') return 1;
   let m = 1 + edge(g, c, 'attack');
+  const r = repEdge(g, c);
+  if (r) m += r;
   if (c.home === target.id && target.owner === c.nat) m += STORIES.home.attack;
   if (rivalIn(g, c, defenders)) m += STORIES.rivals.edge;
   return m;
@@ -306,13 +309,15 @@ export function storyAttack(g: Game, c: Corps, target: Region, defenders: Corps[
 export function storyDefence(g: Game, c: Corps, target: Region, attackers: Corps[]): number {
   if (c.nat !== g.human || c.kind === 'fort') return 1;
   let m = 1 + edge(g, c, 'defence');
+  const r = repEdge(g, c);
+  if (r) m += r;
   if (c.home === target.id) m += STORIES.home.defence;
   if (rivalIn(g, c, attackers)) m += STORIES.rivals.edge;
   return m;
 }
 
-/** What the honours of one of the player's air fleets or fleets add to its fighting strength. 1 for everyone else. */
-export const storyEdge = (g: Game, f: { nat: string } & Storied): number => (f.nat === g.human ? 1 + edge(g, f, 'all') : 1);
+/** What the honours of one of the player's air fleets or fleets add to its fighting strength, and its reputation in the sandbox. 1 for everyone else. */
+export const storyEdge = (g: Game, f: { nat: string } & Storied): number => (f.nat === g.human ? 1 + edge(g, f, 'all') + repEdge(g, f) : 1);
 
 // ---- Letters ----------------------------------------------------------------------------
 
@@ -430,6 +435,8 @@ export function storyBattle(g: Game, rep: BattleReport, target: Region, preOdds:
     for (const c of attackers) if (!c.dead) earn(g, 'corps', c, target.id);
     for (const c of defenders) if (!c.dead) earn(g, 'corps', c, target.id);
   } finally { publish(g); }
+  // The sandbox's reputations: a walkover makes no name, a hard win or a stand against the odds a big one.
+  repBattle(g, 'corps', win ? attackers : defenders, win ? defenders : attackers, target.id, landWin(win, preOdds, decisive || (f.capital && attackers.some((c, i) => rep.attackers[i].fate === 'advanced'))));
 }
 
 /** Ground taken without a fight goes in the diaries of the corps that marched in. */
@@ -500,6 +507,7 @@ export function storyFallen(g: Game, c: Corps, how: Fallen['how'], by: string, r
   if (c.rec) f.rec = c.rec;
   if (c.hon?.length) f.hon = c.hon;
   if (c.nick) f.nick = c.nick;
+  if (c.mark) f.mark = c.mark;
   // Everybody's dead are on the wall; the diaries kept are the player's own.
   if (c.log && c.nat === g.human) f.log = c.log;
   const gen = generalOf(g, c);
@@ -525,6 +533,7 @@ export function inherit(g: Game, c: Corps, id: number): void {
   f.heir = c.id;
   c.heir = f.id;
   if (f.nick) c.nick = f.nick;
+  if (f.mark) c.mark = f.mark;
   for (const old of honoursOf(g, f)) {
     const a: Award = { ...old, id: g.stories.awards.length + 1, unit: c.id, old: true, seen: true };
     delete a.cash; delete a.cashed;
@@ -647,6 +656,7 @@ export function storyAir(g: Game, mission: string, target: number, att: AirFleet
     note(g, f, 'defend', f.base);
     earn(g, 'air', f, f.base);
   }
+  repAir(g, sea ? -1 : target, att, def, facts);
 }
 
 /** A fleet action is over: the winners have it as a victory, with any great ship they sank, and the losers as a defeat. */
@@ -658,6 +668,7 @@ export function storySea(g: Game, zone: number, winners: Fleet[], losers: Fleet[
     earn(g, 'fleet', f, zone);
   }
   for (const f of losers) note(g, f, 'beaten', zone, sunkOfWinners || undefined);
+  repBattle(g, 'fleet', winners, losers, zone, sunkCapital > 0 ? 2 : 1);
   const mine = winners.find((f) => f.nat === g.human);
   if (mine && sunkCapital) g.stories.mail.push({ w: 4, m: 'sea', id: -1000 - mine.id, unit: mine.name, reg: -1 });
 }

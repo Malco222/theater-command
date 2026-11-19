@@ -314,6 +314,23 @@ export interface Storied {
   hon?: number[];
   /** The name the army knows it by, once it has earned one. */
   nick?: string;
+  /** The sandbox's reputation (reputation.ts): points for battles won, points off for battles lost. */
+  rep?: number;
+  /** Battles won running, and the most it has ever won running. */
+  run?: number;
+  best?: number;
+  /** The paint it is known by, put on as it made its name (reputation.ts): for the 3D game to show on its machines. */
+  mark?: UnitMark;
+}
+
+/** A unit's mark (the sandbox's reputations): a colour, where it is painted or worn, and the badge, if it is one. */
+export interface UnitMark {
+  /** Where: 'tail', 'spinner', 'turret ring', 'hull band', 'shoulder patch', 'funnel band' (reputation.json parts). */
+  at: string;
+  /** A colour word of reputation.json 'colours'. */
+  colour: string;
+  /** The badge, where the mark is one: 'hatchet', 'stag'. */
+  emblem?: string;
 }
 
 export interface Corps extends Storied {

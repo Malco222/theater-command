@@ -46,7 +46,7 @@ import { carried } from '../support';
 import { INTEL, THEFT, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
 import { DEPTH, deskDef, type DeskId } from '../depth';
-import { FREE as HIST_FREE, type DialView } from '../history';
+import { FREE as HIST_FREE, sandbox, type DialView } from '../history';
 import type { ClaimView } from '../claims';
 import { setDepth, type CommandView } from '../desks';
 import { SIEGE, besiegers, driveOut, garrisonOf, guardMen, guardWorth, salliers, siegeRules, stormForce, townHitText } from '../siege';
@@ -95,6 +95,7 @@ import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, rankOf, serving, vac
 import { DIVISIONS, ordinal, type DivisionCard } from '../armies';
 import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
+import { REPUTATION, markOf, tierOf } from '../reputation';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, envoysWord, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
@@ -4640,6 +4641,15 @@ function lettersOf(kind: UnitKind, id: number): Game['headlines'] {
 }
 
 /** A unit's whole story: what it is, what it has earned, what it has done, and what the player can decide about it. */
+/** The sandbox's reputation of a unit, for its service record: how far its name has gone, its run of wins, its paint. */
+function repBlock(kind: UnitKind, u: AnyUnit): string {
+  if (!sandbox(g) || (!u.rep && !u.mark)) return '';
+  const t = tierOf(u), mine = u.nat === g.human;
+  const paint = u.mark ? `<p class="sub"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:-1px;border:1px solid var(--ink-2);background:${REPUTATION.colours[u.mark.colour] ?? u.mark.colour}"></span> ${esc(markOf(kind, u))}</p>` : '';
+  const edge = t?.edge && mine ? ` · fights ${Math.round(t.edge * 100)}% harder for it` : '';
+  return `<h3>Reputation</h3><p class="sub">${t ? `<b>${t.word}</b> · ` : ''}${u.rep ?? 0} points · ${u.run ?? 0} battles won running, ${u.best ?? 0} at best${edge}</p>${paint}`;
+}
+
 function unitRecordCard(kind: UnitKind, u: AnyUnit): string {
   const n = g.nations[u.nat];
   const mine = u.nat === g.human;
@@ -4693,6 +4703,7 @@ function unitRecordCard(kind: UnitKind, u: AnyUnit): string {
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${n.adj} ${serviceOf(kind)} · Service record</div><h2>${esc(u.name)}</h2>${u.nick ? `<div class="aka">${esc(capital(u.nick))}</div>` : ''}</header>
     <div class="body">
       <div class="record">${badge}<div class="who">${who}</div></div>
+      ${repBlock(kind, u)}
       <h3>Honours</h3>${hs.length ? `${hs.map((a) => honourBlock(a, true)).join('')}${waiting ? `<p class="sub">An honour carried at the front makes the unit fight harder. Open one to send its heroes home instead: on a bond tour, or to the schools as instructors.</p>` : ''}` : `<div class="empty">None yet. Honours are earned from the record: ${kind === 'corps' ? 'breakthroughs, stands against the odds, capitals entered, sieges outlasted, long service' : kind === 'air' ? 'a full tour of twenty-five bombing missions, a sky won, raids broken up, ships sunk' : 'a great ship sunk in a fleet action, a year on convoy escort, tonnage sunk on the trade routes'}.</div>`}
       <h3>Record</h3>${statGrid(kind, u, kind === 'corps' ? 3 : 1)}
       ${extra}
