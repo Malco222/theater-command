@@ -22,7 +22,7 @@ import math
 
 from mathutils import Matrix, Vector
 
-from rigid import PORT, STBD, X, Y, Z, Model, lerp
+from rigid import X, Y, Z, Model
 
 # The men's colours (US Navy at general quarters: chambray shirt, blue dungarees, kapok life jacket, grey steel
 # helmet; the Imperial Navy's sailors in their pale working dress with the khaki helmet). Paints are added to a
@@ -76,7 +76,6 @@ def sailor(m, foot, facing, pose="stand", hands=None, seat=None, navy="USA", lea
     sitting = pose == "sit"
     hip_h = (seat + 0.08) if sitting else 0.93 * k
     hip = foot + Z * hip_h + (f * -0.06 if sitting else Vector())
-    sh_h = hip_h + 0.5 * k
     lean_v = f * lean
     # legs: two lengths each, from his hips to his knees to his feet
     for side in (1, -1):
@@ -482,7 +481,6 @@ def jp_triple25(yard, n, x, y, z, bearing=0.0, shield=True, crew=True, tub=2.2, 
         # the box shield of the late war: a front and sides of thin plate, open behind and above the gunners' heads
         S = Model.round_rect(1.45, -1.25, -1.35, 1.35, 0.25, 2)
         pts = [W(px, py, 0.2) for px, py in S]
-        n_ = len(pts)
         keep = [i for i, (px, py) in enumerate(S) if px > -1.2]
         for a_, b_ in zip(keep, keep[1:]):
             if b_ != a_ + 1:

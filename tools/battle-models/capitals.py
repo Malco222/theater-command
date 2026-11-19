@@ -23,7 +23,7 @@ from mathutils import Matrix, Vector
 from mathutils.geometry import tessellate_polygon
 
 import fittings as fit
-from rigid import PORT, STBD, X, Y, Z, Model, lerp, smooth
+from rigid import PORT, STBD, X, Y, Z, Model, lerp
 from shipyard import Hull, Yard, livery, weather_for
 
 
@@ -244,7 +244,7 @@ def us_turret(yard, name, x, deck, bearing, raised=0.0, barrels=3, floats=True, 
     return tname, guns, W, H
 
 
-def us_funnel(yard, x, z0, top, long, wide, slope=1.6, name=None, lights=True, platform=None):
+def us_funnel(yard, x, z0, top, long, wide, slope=1.6, name=None, lights=True, platform=None, y=0.0):
     """An American fast battleship's funnel: oval in plan with flatter sides, tall, its top cut on a slope (higher
     forward) under a deep cap with a grating over the mouth; steam pipes up its after face, a railed platform with a
     searchlight each side."""
@@ -259,7 +259,7 @@ def us_funnel(yard, x, z0, top, long, wide, slope=1.6, name=None, lights=True, p
             th = 2 * math.pi * k / n
             c, s = math.cos(th), math.sin(th)
             r = 1.0 / ((abs(c) ** 3.0 + abs(s) ** 3.0) ** (1.0 / 3.0))      # (a superellipse: flatter sides, rounded ends)
-            pts.append((x + a_ * c * r, b_ * s * r))
+            pts.append((x + a_ * c * r, y + b_ * s * r))
         return pts
 
     def zt(px, cut):
@@ -273,37 +273,37 @@ def us_funnel(yard, x, z0, top, long, wide, slope=1.6, name=None, lights=True, p
     cap0 = rings[-1]
     cap1 = [Vector((p.x, p.y, zt(p.x, 0.0))) for p in cap0]
     m.skin([cap0, cap1], "black", (False, False))
-    inner = [Vector((x + (p.x - x) * 0.86, p.y * 0.84, p.z)) for p in cap1]
+    inner = [Vector((x + (p.x - x) * 0.86, y + (p.y - y) * 0.84, p.z)) for p in cap1]
     m.add(cap1 + inner, [(k, (k + 1) % n, n + (k + 1) % n, n + k) for k in range(n)], "black", False, lambda q: Z)
     deep = [p - Z * 1.8 for p in inner]
     m.skin([deep, inner], "black", (True, False), inside=True, cap_paint="black")
     if fine:
         for j in range(-4, 5):                           # the grating over its mouth
             px = x + j * long * 0.09
-            m.box((px, 0, zt(px, 0.0) + 0.03), (0.09, wide * 0.8, 0.06), "steel")
+            m.box((px, y, zt(px, 0.0) + 0.03), (0.09, wide * 0.8, 0.06), "steel")
         for off, r in ((-1.0, 0.16), (0.0, 0.12), (1.0, 0.14)):    # steam pipes up its after face
             px = x - long * 0.5 - r - 0.08
-            m.rod((px, off, z0), (px, off, zt(x - long * 0.5, 0.0) + 0.6), r, "upper", sides=6)
-            m.lathe((px, off, zt(x - long * 0.5, 0.0) + 0.58), Z, [(0.0, r), (0.1, r * 1.4), (0.25, r * 1.4)], "black", 6)
+            m.rod((px, y + off, z0), (px, y + off, zt(x - long * 0.5, 0.0) + 0.6), r, "upper", sides=6)
+            m.lathe((px, y + off, zt(x - long * 0.5, 0.0) + 0.58), Z, [(0.0, r), (0.1, r * 1.4), (0.25, r * 1.4)], "black", 6)
         for k in range(4):                                # its plates' seams
             zz = lerp(z0, zt(x, 1.4), (k + 1) / 5.0)
             ring = [Vector((px * 1.0, py, zz)) for px, py in plan((zz - z0) / max(zt(x, 1.4) - z0, 1e-6))]
-            ring = [Vector((x + (p.x - x) * 1.004, p.y * 1.004, p.z)) for p in ring]
-            m.strip(ring + [ring[0]], [Vector((p.x - x, p.y, 0)).normalized() for p in ring + [ring[0]]], 0.012, "seam", 0.004)
+            ring = [Vector((x + (p.x - x) * 1.004, y + (p.y - y) * 1.004, p.z)) for p in ring]
+            m.strip(ring + [ring[0]], [Vector((p.x - x, p.y - y, 0)).normalized() for p in ring + [ring[0]]], 0.012, "seam", 0.004)
     if platform is not None and lights:
         zp = platform
         from ships import railing
         for hand in (PORT, STBD):
-            yy = hand * (wide * 0.5 + 0.9)
+            yy = y + hand * (wide * 0.5 + 0.9)
             m.box((x + 0.5, yy, zp), (3.2, 2.0, 0.12), "upper")
             for dx in (-1.2, 1.2):
-                m.rod((x + 0.5 + dx, hand * wide * 0.42, zp - 1.1), (x + 0.5 + dx, yy + hand * 0.8, zp - 0.06), 0.06, "upper", sides=4)
+                m.rod((x + 0.5 + dx, y + hand * wide * 0.42, zp - 1.1), (x + 0.5 + dx, yy + hand * 0.8, zp - 0.06), 0.06, "upper", sides=4)
             if fine:
                 railing(m, [(x + 2.1, yy + hand * 0.95, zp), (x - 1.1, yy + hand * 0.95, zp)], every=1.0)
             yard.searchlight(x + 0.5, yy, zp + 0.06, 0.62, (0.6, hand * 0.8, 0.1))
     k = sum(1 for s in m.sockets if s["name"].startswith("funnel.")) + 1
-    m.socket(name or f"funnel.{k}", (x, 0, top + 0.4), (-0.25, 0, 1), yard.half(x), "the funnel's mouth: her smoke rises here, more when she works up speed")
-    yard.soot_at.append((x, 0, top, long))
+    m.socket(name or f"funnel.{k}", (x, y, top + 0.4), (-0.25, 0, 1), yard.half(x), "the funnel's mouth: her smoke rises here, more when she works up speed")
+    yard.soot_at.append((x, y, top, long))
     return top
 
 
@@ -907,7 +907,6 @@ def yamato(fine=True):
             for i in range(-2, 3):
                 m.rod(c + Vector((0.12, -1.25, i * 0.38)), c + Vector((0.12, 1.25, i * 0.38)), 0.02, "steel", sides=3, smooth=False)
     m.use("fore")
-    mast_foot = Vector((-6.8, 0, tower_top + 3.6))
     m.lathe((-6.8, 0, tower_top), Z, [(0.0, 0.3), (3.6, 0.26), (8.6, 0.12)], "upper", 8 if fine else 5)
     m.rod((-6.8, -3.0, tower_top + 6.0), (-6.8, 3.0, tower_top + 6.0), 0.07, "upper", sides=4)
     head_fore = Vector((-6.8, 0, tower_top + 8.6))
@@ -1103,7 +1102,6 @@ def bent_funnel(yard, x, wall_y, z0, r, out=4.6, drop=3.6, name=None):
     steps = 9 if fine else 4
     for i in range(steps + 1):
         t = i / steps
-        a = t * math.pi * 0.5 * 0.8
         # (out level from the wall, then round a bend of radius `drop` downward)
         if t < 0.45:
             s = t / 0.45
@@ -1151,9 +1149,15 @@ def carrier_finish(yard, lifts, x_fore, x_aft, iz, hz, deck_park, launch_x, land
                     note="an aircraft lift: slides down to the hangar deck and back; the dark well under it is part of the deck")
         m.use(yard.half(lx))
         plan = Model.round_rect(lx + ll * 0.5, lx - ll * 0.5, ly - lw * 0.5, ly + lw * 0.5, 0.5, 2)
-        m.add([Vector((px, py, iz + 0.012)) for px, py in plan], [tuple(range(len(plan)))], "black", False, lambda q: Z)
+        if abs(ly) < 5.0:                                # (a lift out at the deck's edge has no well under it)
+            m.add([Vector((px, py, iz + 0.012)) for px, py in plan], [tuple(range(len(plan)))], "black", False, lambda q: Z)
         m.use(ln)
         m.prism(plan, iz - 0.3, iz + 0.035, "upper", top_paint=paint, bottom=True)
+        if abs(ly) >= 5.0:                               # (a deck-edge lift hangs on girders off its guides)
+            for k in range(5):
+                gx = lx + (k - 2) * (ll - 1.0) / 4.0
+                m.box((gx, ly, iz - 0.75), (0.35, lw - 0.4, 0.9), "upper")
+            m.box((lx, ly - math.copysign(lw * 0.5 - 0.3, ly), iz - 0.75), (ll - 0.4, 0.4, 0.9), "upper")
         if m.fine:
             for dx in (-0.5, 0.5):
                 m.box((lx + dx * (ll - 0.2), ly, iz + 0.045), (0.14, lw - 0.6, 0.02), "seam")
@@ -1417,11 +1421,277 @@ def shokaku(fine=True):
     return m, yard
 
 
+# the flight deck's edges, aft to fore: 262.7 m, 29.3 wide, tapering forward to its square end; to starboard it is
+# narrowed a little beside the island, which stands out over her side on a sponson of its own
+ESSEX_PORT = [(-130.4, 6.5), (-129.6, 10.6), (-127.6, 13.2), (-124.0, 14.4), (-118.0, 14.65), (62.0, 14.65), (80.0, 14.2), (95.0, 13.4), (108.0, 12.2),
+              (118.0, 11.0), (123.6, 10.2), (124.6, 8.6), (124.9, 4.0)]
+ESSEX_STAR = [(-130.4, -6.5), (-129.6, -10.6), (-127.6, -13.2), (-124.0, -14.4), (-118.0, -14.65), (-40.0, -14.65), (-36.0, -13.4), (34.0, -13.4),
+              (38.0, -14.65), (62.0, -14.65), (80.0, -14.2), (95.0, -13.4), (108.0, -12.2), (118.0, -11.0), (123.6, -10.2), (124.6, -8.6), (124.9, -4.0)]
+# her hull's deck edge at the hangar deck (half widths as shares of 14.15 m): long and full amidships, a broad
+# rounded stern under the flight deck's overhang, the bow fine at the water and flared out above it
+ESSEX_PLAN = [(-132.9, 0.0), (-132.6, 0.3), (-131.8, 0.46), (-130.0, 0.6), (-126.0, 0.74), (-120.0, 0.84), (-112.0, 0.92), (-100.0, 0.975),
+              (-86.0, 1.0), (30.0, 1.0), (48.0, 0.97), (64.0, 0.91), (80.0, 0.8), (92.0, 0.68), (104.0, 0.53), (112.0, 0.42), (118.0, 0.33),
+              (123.0, 0.24), (127.0, 0.16), (130.0, 0.09), (132.9, 0.01)]
+ESSEX_PAINT = {"hull": "3E4A5C", "upper": "3E4A5C", "deck": "3B4757", "planks": "3B4757", "flight": "47525F", "roof": "36414F",
+               "door": "4A5566", "seam": "35404D", "plane": "3E4A5C"}
+
+
+def open_5in(yard, name, x, y, z, bearing, limits):
+    """A single 5-inch/38 in an open mounting on the gallery: the gun on its pedestal behind a low shield, its loaders
+    and pointers standing round it. A `sec.*` turret."""
+    m = yard.m
+    tn, guns = yard.turret(name, x, z, 3.4, 1, 5.6, bearing, 0.07, y=y, style="open", rate=15.0, elev=(-15, 85), rest_elev=8.0, limits=limits, floats=False)
+    if m.fine:
+        p = m.parts[m.part_at[tn]]
+        m.use(tn)
+        rot = Matrix.Rotation(math.radians(bearing), 3, "Z")
+        o = Vector(p.pivot)
+
+        def W(px, py, pz):
+            return o + rot @ Vector((px, py, pz))
+        f = rot @ X
+        for side in (1, -1):
+            m.box(W(0.7, side * 0.9, 0.95), (0.08, 1.0, 1.3), "upper", yaw=bearing + side * 18.0)    # the low shield either side of the gun
+            fit.sailor(m, W(-0.3, side * 1.15, 0.0), f, "aim", hands=(W(0.1, side * 0.75, 1.2), W(0.2, side * 0.75, 1.0)), navy="USA", lean=0.06)
+        fit.sailor(m, W(-1.7, 0.4, 0.0), f, "load", navy="USA")
+        fit.sailor(m, W(-2.4, -0.6, 0.0), f, "carry", navy="USA")
+    return tn, guns
+
+
+def essex(fine=True):
+    """Essex, first of her class, as she was in 1944: 265.8 m by 28.3, a 262.7 m flight deck over an open hangar with
+    its roller curtains, two lifts on the centre line and one on the port deck edge, the tall island to starboard with
+    its funnel, tripod and radars, four twin 5-inch gun houses on the flight deck either end of it and four single
+    5-inch on the port gallery, the quadruple 40 mm and the 20 mm round her galleries, all manned. Measure 21: navy blue
+    everywhere, her flight deck stained dark blue."""
+    paints = livery("USA", "carrier")
+    paints.update(ESSEX_PAINT)
+    paints = fit.crew_paints(paints, "USA")
+    m = Model("Essex", "Aircraft carrier, Essex class, 1944 (our own model)", "ship", paints, fine)
+    h = PlanHull(ESSEX_PLAN, L=265.8, B=28.3, D=8.1, T=8.7, sheer=2.2, sheer_aft=0.3, rake=10.0, counter=4.6, flare=0.95, fine=1.6, full=0.72,
+                 wl_fore=0.5, bilge=6.0)
+    bx = -2.0
+    yard = Yard(m, h, break_x=bx)
+    yard.soot_at, yard.rust_at = [], []
+    yard.hull("deck")
+    D = h.deck_z
+    fd, iz = 16.1, 16.8                       # the flight deck's underside and its top
+    zg = fd - 1.3                             # the galleries round her, just under the flight deck's edge
+    hz = iz - D(0.0)                          # how far a lift goes down to the hangar deck
+
+    # ---- the hangar: open sides closed by roller curtains, a few bays open; the hangar's walls follow her sides
+    hx0, hx1 = 112.0, -118.0
+    for x0, x1, part in ((bx, hx0, "fore"), (hx1, bx, "aft")):
+        xs = [lerp(x0, x1, k / 26.0) for k in range(27)]
+        plan = sym([(x1, 0.0)] + [(x, h.half_at(x) * 0.97) for x in reversed(xs)] + [(x0, 0.0)])
+        m.use(part)
+        slab(m, plan, D(x0 if part == "fore" else x1) - 0.5, fd, paint="hull", top=None)
+    if fine:
+        x, k = hx0 - 9.0, 0
+        while x > hx1 + 6.0:
+            for hand in (PORT, STBD):
+                if hand == STBD and -40.0 < x < 36.0:
+                    continue                                    # (the island's sponson and the boiler uptakes there)
+                if hand == PORT and -8.0 < x < 14.0:
+                    continue                                    # (the deck-edge lift's opening)
+                yy = hand * (h.half_at(x) * 0.97 + 0.03)
+                open_bay = (k + (1 if hand == STBD else 0)) % 5 == 2
+                yard.on(x).box((x, yy, D(x) + 3.0), (11.0, 0.06, 5.2), "black" if open_bay else "door")
+                if not open_bay:                               # the curtain's slats
+                    for j in range(1, 7):
+                        yard.on(x).box((x, yy + hand * 0.02, D(x) + 0.4 + j * 0.74), (10.8, 0.03, 0.05), "seam")
+            x -= 12.5
+            k += 1
+    # the galleries round her under the flight deck's edge, on brackets, railed
+    for hand in (PORT, STBD):
+        for a, b in (((-118.0, -7.4), (13.4, 100.0)) if hand == PORT else ((-118.0, bx), (bx, 100.0))):
+            pts = [lerp(a, b, k / 14.0) for k in range(15)]
+            m.use(yard.half((a + b) * 0.5))
+            edge = ESSEX_PORT if hand == PORT else ESSEX_STAR
+            strip = [Vector((x, hand * (abs(edge_at(edge, x)) - 0.2), zg)) for x in pts]
+            m.strip(strip, [Z] * len(strip), 1.4, "deck", 0.1)
+            if fine:
+                from ships import railing
+                railing(m, [Vector((x, hand * (abs(edge_at(edge, x)) + 0.45), zg)) for x in pts], high=1.0, every=2.4)
+                for x in pts[::2]:
+                    w0 = h.half_at(x) * 0.97
+                    m.rod((x, hand * w0, zg - 2.0), (x, hand * (abs(edge_at(edge, x)) + 0.3), zg - 0.08), 0.07, "upper", sides=4)
+
+    # ---- the flight deck, its pillars over the open bow and fantail, its lines, catapults, wires, barriers
+    for x0, x1, part in ((bx, 124.9, "fore"), (-130.4, bx, "aft")):
+        m.use(part)
+        slab(m, cut_deck(ESSEX_PORT, ESSEX_STAR, x0, x1), fd, iz, paint="upper", top="flight", bottom=True)
+    for px in (121.0, 116.0):
+        for hand in (PORT, STBD):
+            yy = hand * min(h.half_at(px) * 0.6, 4.2)
+            yard.on(px).rod((px, yy, D(px)), (px, yy * 1.4, fd), 0.3, "upper", sides=8 if fine else 5)
+    for px in (-121.0, -127.0):
+        for hand in (PORT, STBD):
+            yy = hand * min(h.half_at(px) * 0.6, 5.5)
+            yard.on(px).rod((px, yy, D(px)), (px, yy * 1.3, fd), 0.32, "upper", sides=8 if fine else 5)
+    lifts = [(64.0, 0.0, 13.4, 14.6, "flight"), (3.0, 14.65 + 5.0, 18.3, 10.4, "flight"), (-58.0, 0.0, 13.4, 14.6, "flight")]
+    x = 120.0
+    while x > -124.0:                     # the dashed centre line
+        if not any(abs(x - lx) < ll * 0.5 + 3.2 and abs(ly) < 1.0 for lx, ly, ll, _, _ in lifts):
+            yard.on(x).box((x, 0, iz + 0.02), (4.5, 0.35, 0.03), "line")
+        x -= 9.0
+    for hand in (PORT, STBD):             # the deck-edge lines
+        edge = ESSEX_PORT if hand == PORT else ESSEX_STAR
+        for a, b in ((-122.0, bx), (bx, 118.0)):
+            xs = [lerp(a, b, k / 10.0) for k in range(11)]
+            line = [Vector((x, hand * (abs(edge_at(edge, x)) - 1.0), iz + 0.02)) for x in xs]
+            m.use(yard.half((a + b) * 0.5))
+            m.strip(line, [Z] * len(line), 0.3, "line", 0.01)
+    m.use("fore")
+    for cy in (3.6, -3.6):                # the two hydraulic catapults' tracks forward
+        m.box((101.0, cy, iz + 0.03), (44.0, 0.5, 0.05), "steel")
+        m.box((122.0, cy, iz + 0.05), (1.6, 1.1, 0.12), "steel")
+    for xb in (24.0, 30.0):              # the crash barriers, lowered
+        m.rod((xb, -11.0, iz + 0.18), (xb, 11.0, iz + 0.18), 0.05, "steel", sides=4, smooth=False)
+        for hand in (PORT, STBD):
+            m.box((xb, hand * 11.4, iz + 0.3), (0.4, 0.4, 0.6), "steel")
+    m.use("aft")
+    for xw in (-72.0, -78.0, -84.0, -90.0, -96.0, -102.0, -108.0, -114.0):
+        w_ = min(edge_at(ESSEX_PORT, xw), -edge_at(ESSEX_STAR, xw)) - 2.0
+        m.rod((xw, -w_, iz + 0.12), (xw, w_, iz + 0.12), 0.035, "steel", sides=3, smooth=False)
+        if fine:
+            for hand in (PORT, STBD):
+                m.lathe((xw, hand * w_, iz), Z, [(0.0, 0.22), (0.18, 0.18)], "steel", 8)
+    # the deck-edge lift's guides down her side
+    for dx in (-7.6, 7.6):
+        yard.on(3.0 + dx).box((3.0 + dx, h.half_at(3.0) * 0.97 + 0.35, D(3.0) + hz * 0.5), (0.5, 0.5, hz), "upper")
+
+    # ---- the island: its sponson out over her starboard side, four levels, the Mk 37s fore and aft, the tripod with
+    # the SK and SG, the big funnel over its after half, two quadruple 40 mm at its ends
+    m.use("fore")
+    yi = -16.6                                # (the middle of its foot)
+    for pl, part in ((Model.round_rect(15.0, bx, -20.0, -13.0, 1.4, 3 if fine else 1), "fore"), (Model.round_rect(bx, -20.0, -20.0, -13.0, 1.4, 3 if fine else 1), "aft")):
+        m.use(part)
+        slab(m, pl, zg - 0.3, iz, paint="hull", top="deck")
+    for dx in (-15.0, -7.0, 1.0, 9.0):
+        yard.on(dx).rod((dx, -h.half_at(dx) * 0.97, zg - 4.0), (dx, -19.4, zg - 0.4), 0.2, "upper", sides=5)
+    m.use("fore")
+    tz = iz
+    levels = ((14.0, bx + 0.01, 2.6, 3.0, "base"), (10.6, -2.8, 2.9, 2.7, "flag"), (9.8, -2.2, 2.9, 2.6, "nav"), (8.4, -1.4, 2.6, 2.5, "pilot"))
+    for k, (xf, xa, hw, hh, what) in enumerate(levels):
+        yc = yi - (0.5 if k else 0.0)
+        pl = Model.round_rect(xf, xa, yc - hw, yc + hw, 1.0, 3 if fine else 1)
+        slab(m, pl, tz, tz + hh)
+        walls_detail(yard, pl, tz, tz + hh, doors=k == 0, scuttles=k == 0)
+        if what in ("nav", "pilot", "flag") and fine:
+            yard.windows(xf, hw - 0.3, tz + hh - 1.4, 0.9, y=yc, back=3.4)
+        tz += hh
+    m.use("aft")
+    after = Model.round_rect(bx - 0.01, -20.0, yi - 2.6, yi + 2.6, 1.0, 3 if fine else 1)
+    slab(m, after, iz, iz + 3.0)
+    walls_detail(yard, after, iz, iz + 3.0, doors=True, scuttles=True)
+    house_aft = Model.round_rect(-14.5, -19.6, yi - 2.2, yi + 2.2, 0.9, 3 if fine else 1)
+    slab(m, house_aft, iz + 3.0, iz + 6.4)
+    walls_detail(yard, house_aft, iz + 3.0, iz + 6.4, doors=False, scuttles=True)
+    fit.mk37(yard, "director.fore", 4.0, yi - 0.5, tz, 0.0, parent="fore")
+    fit.mk37(yard, "director.aft", -17.0, yi, iz + 6.4, 180.0, parent="aft")
+    # the funnel over the island's after half
+    us_funnel(yard, -8.6, iz + 3.0, iz + 15.6, 12.4, 5.6, slope=1.2, platform=None, y=yi)
+    # the tripod on the pilot house's roof, between the bridge and the funnel
+    m.use("fore")
+    mx = 0.6
+    head = Vector((mx, yi, iz + 27.0))
+    m.lathe((mx, yi, tz), Z, [(0.0, 0.34), (iz + 14.0 - tz, 0.28), (iz + 24.0 - tz, 0.13)], "upper", 8 if fine else 5)
+    for hand in (PORT, STBD):
+        m.rod((mx - 1.6, yi + hand * 2.0, tz), (mx, yi, iz + 15.0), 0.16, "upper", sides=6)
+    m.box((mx + 1.2, yi, iz + 18.0), (4.6, 3.8, 0.16), "deck")
+    m.rod((mx + 0.0, yi, iz + 15.0), (mx + 3.0, yi, iz + 17.9), 0.1, "upper", sides=5)
+    fit.sk_radar(yard, "radar.air", mx + 2.0, yi, iz + 18.1, size=5.0, parent="fore")
+    fit.sg_radar(yard, "radar.surface", mx, yi, iz + 24.6, wide=1.5, parent="fore")
+    m.rod((mx - 0.2, yi - 3.0, iz + 22.6), (mx - 0.2, yi + 3.0, iz + 22.6), 0.07, "upper", sides=4)
+    fit.bofors_quad(yard, 1, 12.6, yi + 0.4, iz + 3.0, bearing=0.0, tub=2.6, parent="fore")
+    fit.bofors_quad(yard, 2, -21.8, yi, iz + 0.0, bearing=180.0, tub=2.6, parent="aft")
+
+    # ---- four twin 5-inch on the flight deck, the inner of each pair firing over the outer
+    for nm, gx, base, bearing in (("sec.S1", 29.5, 0.0, 0.0), ("sec.S2", 21.6, 2.7, 0.0), ("sec.S3", -27.4, 2.7, 180.0), ("sec.S4", -35.4, 0.0, 180.0)):
+        lim = (-30, 150) if bearing == 0.0 else (-150, 30)
+        m.use(yard.half(gx))
+        slab(m, Model.round_rect(gx + 3.4, gx - 3.4, yi - 2.9, yi + 2.9, 1.0, 3 if fine else 1), zg - 0.3, iz, paint="hull", top="deck")
+        fit.twin_5in(yard, nm, gx, yi, iz, bearing, limits=lim, base=base)
+    # ---- four single 5-inch open mountings on the port gallery, two forward, two aft
+    for k, gx in enumerate((44.0, 34.0, -38.0, -48.0)):
+        w0 = h.half_at(gx) * 0.97
+        yy = edge_at(ESSEX_PORT, gx) + 2.4
+        sponson(yard, gx, yy, zg - 0.1, 3.2, w0)
+        bearing = 0.0 if gx > 0 else 180.0
+        open_5in(yard, f"sec.P{k + 1}", gx, yy, zg - 0.1, bearing, (-165, 20) if gx > 0 else (-20, 165))
+
+    # ---- the quadruple 40 mm round her: forward corners, galleries, fantail
+    q = 2
+    quads = [(111.0, PORT), (111.0, STBD), (88.0, PORT), (78.0, STBD), (-20.0, PORT), (-70.0, PORT), (-86.0, STBD), (-102.0, PORT), (-108.0, STBD)]
+    for gx, hand in quads:
+        q += 1
+        edge = ESSEX_PORT if hand == PORT else ESSEX_STAR
+        yy = hand * (abs(edge_at(edge, gx)) + 2.2)
+        sponson(yard, gx, yy, zg - 0.6, 3.1, hand * h.half_at(gx) * 0.97)
+        fit.bofors_quad(yard, q, gx, yy, zg - 0.6, bearing=hand * (-80.0 if gx > 0 else -100.0), tub=2.7)
+    for hand in (PORT, STBD):              # two on the fantail under the flight deck's overhang
+        q += 1
+        fit.bofors_quad(yard, q, -125.0, hand * 6.2, D(-125.0), bearing=180.0 + hand * 30.0, tub=2.5)
+
+    # ---- the 20 mm along her galleries
+    for hand in (PORT, STBD):
+        edge = ESSEX_PORT if hand == PORT else ESSEX_STAR
+        for gx in (94.0, 70.0, 58.0, 52.0, 24.0, 18.0, -12.0, -28.0, -56.0, -62.0, -78.0, -94.0, -108.0):
+            if hand == STBD and -40.0 < gx < 36.0:
+                continue
+            if hand == PORT and -10.0 < gx < 16.0:
+                continue
+            if any(abs(gx - qx) < 5.0 and qh == hand for qx, qh in quads) or (hand == PORT and any(abs(gx - sx) < 5.0 for sx in (44.0, 34.0, -38.0, -48.0))):
+                continue
+            yy = hand * (abs(edge_at(edge, gx)) - 0.25)
+            fit.oerlikon(yard, gx, yy, zg, facing=hand * 80.0, loader=(int(gx) % 3 == 0))
+    for gx in (12.0, 6.0, -6.0):            # and along the island's sponson
+        fit.oerlikon(yard, gx, -19.2, iz, facing=-80.0, loader=False)
+
+    # ---- her flight deck's crew: handlers by the aircraft, at the lifts, by the island
+    if fine:
+        rg = __import__("random").Random(1944)
+        for cx, cy, k_ in ((-82.0, 0.0, 7), (64.0, 10.8, 3), (8.0, -10.0, 5), (3.0, 10.0, 3)):
+            for i in range(k_):
+                a = rg.uniform(0, 2 * math.pi)
+                foot = Vector((cx + rg.uniform(-5.0, 5.0), cy + rg.uniform(-3.0, 3.0), iz + 0.035))
+                fit.sailor(m.use(yard.half(foot.x)), foot, Vector((math.cos(a), math.sin(a), 0)), "stand", navy="USA")
+
+    # ---- forecastle and fantail: anchor gear, bollards, rails, scuttles; staffs
+    yard.anchor_gear(h.L * 0.47, 118.5, spread=2.2)
+    for bx_ in (126.0, 119.0, -122.0, -128.0):
+        for hand in (PORT, STBD):
+            yard.bollards(bx_, hand * (h.half_at(bx_) - 0.8), D(bx_))
+    yard.rails(hx0 + 1.5, h.L * 0.488)
+    yard.rails(-h.L * 0.49, hx1 - 1.0)
+    yard.portholes(-h.L * 0.4, h.L * 0.43, 2.0, every=3.4)
+    yard.portholes(-h.L * 0.38, h.L * 0.41, 4.6, every=3.4)
+    m.use("aft")
+    sx = -h.L * 0.497
+    m.rod((sx + 0.6, 0, D(sx + 0.6)), (sx - 0.4, 0, D(sx + 0.6) + 5.0), 0.07, "upper", sides=4)
+    m.use("fore")
+    jx = h.L * 0.493
+    m.rod((jx, 0, D(jx)), (jx + 0.4, 0, D(jx) + 3.0), 0.06, "upper", sides=4)
+    m.socket("jack", (jx + 0.4, 0, D(jx) + 3.0), (1, 0, 0), "fore")
+    yard.screws_and_rudder(screws=4, r=2.3, rudders=1)
+
+    carrier_finish(yard, lifts, 124.9, -130.4, iz, hz, [{"model": "DeckPark_CarrierFighter"}, {"from": "1943-01", "model": "DeckPark_Hellcat"}],
+                   112.0, -118.0, head - Vector((1.0, 0, 3.0)), "fore")
+    yard.fire_points += [(50.0, 0.0, iz), (-20.0, 0.0, iz), (-80.0, 0.0, iz), (4.0, yi, iz + 6.0), (-8.0, yi, iz + 3.0)]
+    from ships import sockets_common
+    sockets_common(yard)
+    m.weather = weather_for(yard)
+    carrier_clips(m, yard, len(lifts), hz)
+    m.info.setdefault("file", {}).update({"class": "Essex", "navy": "USA", "year": 1943, "stands_for": "Carrier_USA",
+                                          "paint": "Measure 21: navy blue 5-N on every side, deck blue 20-B decks, the flight deck stained dark blue"})
+    return m, yard
+
+
 def aa_clip(m):
     """Every light mounting that trains: they swing onto a bearing and fire in short bursts (the game aims each by its
     own part; this clip only shows them working)."""
     tracks, events = [], []
-    t_ = 0.0
     for p in m.parts:
         if p.name.endswith(".guns") and (p.name.startswith("bofors.") or p.name.startswith("aa25.")):
             ph = (sum(map(ord, p.name)) % 7) * 0.05     # (a steady hash: Python's own changes every run)
@@ -1433,6 +1703,7 @@ def aa_clip(m):
 
 
 BUILDERS = {
+    "Essex": lambda fine: essex(fine),
     "Iowa": lambda fine: iowa(fine),
     "Yamato": lambda fine: yamato(fine),
     "Shokaku": lambda fine: shokaku(fine),
