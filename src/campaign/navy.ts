@@ -118,9 +118,10 @@ export const NAVY = data as unknown as {
 };
 
 /**
- * A fleet's base by date (navy.json, 'moves'; the Pacific planner's rows): in its month a computer-run navy moves
- * the fleet's base to the province named, if its country holds the place, and only at the stops of the history dial
- * the row names (every stop where it names none). A player's fleet moves when he says.
+ * A fleet's base by date (navy.json, 'moves'; the Pacific planner's rows): in its month a navy the computer or a
+ * player's staff runs moves the fleet's base to the province named, if its country holds the place, and only at the
+ * stops of the history dial the row names (every stop where it names none). A player who runs his navy himself
+ * moves his fleets when he says (depth.ts, `byHand`).
  */
 export interface FleetMove {
   turn: number; nat: string; fleet: string; words: string; stops?: number[];
@@ -1721,7 +1722,8 @@ export function navalUpkeep(g: Game, nat: string): void {
       if (f) { out.set(f.id, z); headline(g, 'info', `${m.words}.`, nat); }
       continue;
     }
-    if (m.turn !== g.turn || nat === g.human) continue;
+    // (A player who runs his navy himself moves his own fleets; where his staff runs it, the staff keeps the dates.)
+    if (m.turn !== g.turn || byHand(g, nat, 'navy')) continue;
     const f = named(m.fleet);
     if (f && m.base !== undefined && m.port !== undefined && m.home !== undefined) orderedTo(g, f, { base: m.base, port: m.port, home: m.home, words: m.words });
   }

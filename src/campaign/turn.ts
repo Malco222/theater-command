@@ -4,7 +4,7 @@
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
-import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
+import { fleetKnown, fleetsSeen, flyAboard, flyAshore, plannedStrike, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
@@ -57,7 +57,7 @@ import { endTrade, gateTrade, refreshTrade, signTrade, tradeBook, type GateTrade
 import { gateViews, type GateView } from './gates';
 import { SIEGE, fieldCtrl, garrison, garrisonOf, guardMen, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
 import { loadGame, saveGame } from './save';
-import { RIVALS, characterOf, effortsOf, lodgment, plansKnown, quietNews, rivalRules, stalemates, type Character } from './staff';
+import { RIVALS, characterOf, effortsOf, lodgment, ops, plansKnown, quietNews, rivalRules, stalemates, type Character } from './staff';
 import {
   orderWreckPrize, prizeIncome, prizeMarks, prizesAt, scorchPolicy, setBurnOrder, setScorchPolicy, whyNotWreck,
   type PrizeIncome, type PrizeKind, type PrizeMark, type PrizesView, type ScorchPolicy,
@@ -2579,6 +2579,11 @@ export function orderDeclare(g: Game, on: string): boolean {
   declareWar(g, g.human, on);
   // At war with an Axis power, a country across the ocean stands with the Allies (ruling 32).
   standWithAllies(g, g.human, was);
+  // The plan's strike falls in the month of the declaration (the far side, ruling 200(c)). A computer's staff flies
+  // it as its great choice is taken (ai.ts); a player's staff, where he has handed it the navy, flies it as he
+  // declares, at each harbour of the country declared on that his country's plan names. A harbour out of the
+  // fleet's reach, or with no ship of the enemy's in it, is not struck (carriers.ts, `plannedStrike`).
+  if (staffRuns(g, g.human, 'navy')) for (const op of ops(g.human)) for (const st of op.strikes ?? []) if (g.byName[st.harbour]?.ctrl === on) plannedStrike(g, g.human, st.fleet, st.harbour, st.home);
   ensureSupply(g);
   return true;
 }
