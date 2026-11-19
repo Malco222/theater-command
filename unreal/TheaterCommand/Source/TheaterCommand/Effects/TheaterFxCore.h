@@ -99,6 +99,7 @@ namespace TheaterFx
 		double Stretch = 1.0, Flatten = 1.0, Point = 0.0, Tail = 0.0, Spin = 0.0;
 		double HalfLength = 0.0; // (a tracer's streak: half its length in metres)
 		Vec Origin; // (a tracer: where it was fired from, or a ricochet's strike; nothing of it is drawn behind this)
+		bool bFired = false; // (made by Tracer(): only then is Origin set, and only then is the streak cut at it; a hit's spark is never cut)
 		double Until = 0.0; // (a close shot's whole path: how far along from Origin it strikes; nothing is drawn past it. 0: no end)
 		double Alpha = 1.0, FadeIn = 0.02, Hold = 0.2, Cool = 1.0;
 		double HazeBy = 0.0, HazeAlpha = 0.0; // (a skirt: settles to HazeAlpha by HazeBy seconds)

@@ -1713,6 +1713,7 @@ namespace TheaterFx
 			B.Life = For;
 			B.HalfLength = Half;
 			B.Origin = Start - Way * Behind; // (a piece of a whole path: the muzzle is Behind metres back from its start)
+			B.bFired = true;
 			B.Until = Until > 0.0 ? Behind + Until : 0.0;
 			B.Along = Way;
 			B.R0 = B.R1 = Layer == 0 ? 0.045 : 0.018;
@@ -3285,7 +3286,7 @@ namespace TheaterFx
 					const double Gone = (P - B.Origin).Dot(Heading); // (how far its middle is along from where it was fired)
 					const double Back = std::max(0.0, Gone);
 					const double Front = B.Until > 0.0 ? std::min(Ahead, std::max(0.0, B.Until - Gone)) : Ahead;
-					if (Behind > Back || Ahead > Front)
+					if (B.bFired && (Behind > Back || Ahead > Front))
 					{
 						// (an end cut short is blunt, so the line runs at its width right up to the muzzle flash or the strike,
 						// with no faint gap before it)
