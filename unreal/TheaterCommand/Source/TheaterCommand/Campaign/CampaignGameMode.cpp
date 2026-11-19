@@ -1,4 +1,5 @@
 #include "Campaign/CampaignGameMode.h"
+#include "Battle/AirBattle.h"
 #include "Battle/AirStage.h"
 
 #include "Campaign/CampaignFlags.h"
@@ -190,6 +191,18 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 		if (AAirStage* Stage = World->SpawnActor<AAirStage>(FVector::ZeroVector, FRotator::ZeroRotator))
 		{
 			Stage->BeginTest(StageKey);
+		}
+	}
+
+	// "-TheaterAirBattle=oahu" (or "midway-fleet") plays a recorded air battle in the 3D scene (ruling 238; the recordings
+	// are Content/Data/AirBattles, written by tools/air-record): with "-TheaterAirBattleShots=<folder>" it takes the art
+	// director's pictures there and quits. (No campaign-screen button until the playtester passes it: ruling 217.)
+	FString AirKey;
+	if (AAirBattle::WantsReplay(AirKey))
+	{
+		if (AAirBattle* Air = World->SpawnActor<AAirBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
+		{
+			Air->ReplayWhenReady(AirKey);
 		}
 	}
 }

@@ -1,0 +1,79 @@
+# The air battle's 3D scene (ruling 238: Pearl Harbor and Midway first)
+
+The air battles thread's 3D handoff (`/mnt/project-files/air-battles/3d-handoff.md`, sections 1 to 10) built for the
+3D game. The battle is the rules' (`src/battle/air` on the browser branches). This scene draws it, and so does the
+battle screen over it.
+
+## The files
+
+| File | What it is |
+|---|---|
+| `AirShow.h/.cpp` | The flight core, plain C++. Every aircraft of every formation flies as an aircraft flies: banked turns, no turn tighter than 210 m, at most 6 g, no sliding, speed lost in a climb. It also handles the passes and breaks, the guns, the hits, the falls, the parachutes, the flak round the boxes, the bombs and torpedoes, and the ship news when the bombs arrive. |
+| `AirFeed.h/.cpp` | Reads the bridge's JSON (sky, views, after card, recordings) into the flight core's terms. Plain C++. |
+| `AirDesk.h/.cpp` | The screen's words and clock: the top bar, the aim slip, the near line, the dispatches, the tags, the after card, the orders as `TC.battleOrder` takes them, and the close camera's subject. Plain C++. |
+| `AirBattleState.h` | The plain state above, kept out of the actor's header. |
+| `AirBattle.h/.cpp` | `AAirBattle`, the scene. It feeds the core and draws what the core says: the planes, the small things, the effects kit, the stage and its ships, the cameras and the sound. |
+| `AirBattleScreen.h/.cpp` | `SAirBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
+| `AirStage.h/.cpp` | The Oahu and Midway stages (an earlier commit on this branch). |
+| `../../../Tools/air_show/` | The cloud test. It plays each recording through the core at 60 fps and checks the flight: g, turn radius, slip, roll, a fall for every loss, two gunners never at one window, the frame time. It also plays the screen's clock and words. `run.sh` builds and runs it; `air_show_frames.py` draws pictures of the flight. |
+| `Content/Data/AirBattles/*.json` | The two recorded battles, `oahu` and `midway-fleet`, written by `tools/air-record` on the rules branch `claude/project-thread-2bdb2m`. |
+| `Content/Data/Sound/mix.json` | The sound director's mix, read by the scene (it never copies the mix's numbers). |
+| `Sounds/Real/*.wav` (17 new) | The air recordings of the approved battle pack: engines by model, guns by calibre, flak, and the falls. Credits are in `credits.json` and `CREDITS.md`. |
+
+## Running it
+
+1. `Tools/build_sounds.sh` brings the 17 new recordings into `/Game/Campaign/Sounds/Real`. Without it the battle plays silent and nothing fails.
+2. `-TheaterAirBattle=oahu` or `-TheaterAirBattle=midway-fleet` on the command line plays the recorded battle about two seconds after the table is up. The table is hidden while it plays.
+3. Adding `-TheaterAirBattleShots=<folder>` takes the art director's eight pictures and then quits:
+   - the approach
+   - the meeting
+   - riding a fighter
+   - the thick of it
+   - riding again
+   - the ships
+   - the fight going on
+   - the after card
+
+Mouse and keys:
+- Left click takes his group in hand. Shift adds another group.
+- Right click on an enemy tag attacks it. Right click on the sky patrols there.
+- Drag turns the camera. The wheel draws it in and out.
+- H holds, R breaks off, and C switches the close view.
+- Space holds the clock or lets it run. Keys 1 to 4 set the speed.
+- Esc answers KEEP FIGHTING. Enter presses CONTINUE.
+
+A recorded battle shows the orders strip greyed out: it plays as it was fought.
+
+**The clock (a reversible call, flagged to the design director).** In the 3D scene, ×1 is real time, so the aircraft fly at their true speeds (Brian: "not moving normal"). A battle second is `SKY.scale` (2) real seconds. The run-up and the run home go at ×10, and the clock is held while a question stands.
+
+At ×1 the Pearl Harbor raid lasts about 7 real minutes, with contact about 20 s in. Midway lasts about 5 minutes, with contact about 30 s in.
+
+## Hook lines for the 3D builder
+
+The scene needs no lines in CampaignMapActor or CampaignPlayerController. It needs one in **CampaignHUD**, so that the campaign's frame is hidden while a battle is up. Until this line is added, the frame stays under the battle's screen. The scene finds the line by itself (a `requires` check), so it builds either way.
+
+```cpp
+// CampaignHUD.h, public:
+void ShowFrame(bool bShow) { if (Overlay.IsValid()) { Overlay->SetVisibility(bShow ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed); } }
+```
+
+(Use the visibility the overlay has now in place of `SelfHitTestInvisible` if it is a different one.)
+
+The lines already made on this branch:
+- `CampaignGameMode.cpp`: the `-TheaterAirBattle` hook, beside the stage's.
+- `CampaignSession.h/.cpp`: the public `CallBattle(Function, ArgumentsJson, OutJson, OutError)` for the live battle.
+
+**The live battle.** For a raid from the campaign, call `GetWorld()->SpawnActor<AAirBattle>()->BeginLive(Session, Kind, Target, Ids)`. Kind is "bomb", "superiority" or "ship". This needs land's `battle-bridge.ts` and the air diff (`/mnt/project-files/air-battles/battle-bridge-air.diff`) in the rules bundle.
+
+Under ruling 217 there is no campaign-screen button until the playtester passes the battle, so nothing calls this yet.
+
+## Packaging
+
+Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/Effects` is staged. Then `Sounds/Real/credits.json` for the credits page.
+
+## On the first build, look at
+
+1. **Bank direction.** A plane turning right should have its right wing down. If every bank reads backwards, negate `P.Bank` in `AAirBattle::Draw` and in the close camera.
+2. **Nose direction and size.** Each model is built nose toward -X and turned half round before its heading. The carrier aircraft (Kate, Val, Dauntless, Devastator, Wildcat) use the sculpted models where `Content/Models` has them. Otherwise each is the nation's plain fighter or bomber, scaled to the battle's span.
+3. **The tags.** They should sit over their formations and fan out instead of stacking, his own in cream and the enemy's in muted paper. The near line should be amber.
+4. **The sound.** Each formation's drone, the bursts by calibre, the flak bursts heard after their flash, and a fighter group's pass within 300 m. The loudness and distances come from mix.json's families.
