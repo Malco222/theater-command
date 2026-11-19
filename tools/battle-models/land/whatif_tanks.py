@@ -312,7 +312,7 @@ def breakthrough_tank(fine=True, tag="_"):
                  traverse=10.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", blow=(-1.2, 3.4, 0.55, 168.0))
     second_turret(v, "fore", (xf, 0.0, zr), [-8.0, 20.0], 22.0, "Trained aft of the beam its gun meets the barbette: the game keeps it within 100 degrees of ahead.")
     second_gun_clip(v, "fore", 0.22, "tank_gun_01")
-    _file(v, "breaker", "Breakthrough tank", ["Tiger", "MediumTank"], None, 7,
+    _file(v, "breaker", "Breakthrough tank", ["Tiger", "MediumTank"], "breakthroughtanks", 7,
           "Two turrets, the main one firing over the fore one: the 150 mm blasts bunkers and strongpoints, the long 50 mm keeps enemy tanks off her.")
     v.camouflage(cell=0.9)
     return v
@@ -482,7 +482,7 @@ def tank_hunter_car(fine=True, tag="_"):
     for p in ("steer_l2", "steer_r2"):
         m.clips["knocked_out"]["tracks"].append({"part": p, "turn": [[0.0, 0.0], [0.2, 0.0], [0.75, 10.0], [0.9, 8.0], [1.05, 9.0], [3.0, 9.0]]})
     ctl["reverse"] = {"what": "she has a driver at each end: she runs backward as fast as forward (no turning round)"}
-    _file(v, "tankhunter", "Tank hunter armoured car", ["M8", "AssaultGun"], None, 4,
+    _file(v, "tankhunter", "Tank hunter armoured car", ["M8", "AssaultGun"], "tankhunters", 4,
           "Eight wheels and a driver at each end: a fast long gun that strikes from far off and is gone.")
     v.camouflage(cell=0.8)
     return v
@@ -640,7 +640,7 @@ def flame_tank(fine=True, tag="_"):
     m.clips["brew_up"]["about"] = "her fuel goes: a fireball from the deck's tanks and the hatches, then the blast throws the turret off its ring; holds its last pose (follow with `burn`)"
     m.clips["brew_up"]["events"].append({"t": 0.05, "fx": "fireball", "socket": "fuel", "cue": "fire_start"})
     scorched(v, [("muzzle", 0.42, 0.95, 1.6)])
-    _file(v, "flametank", "Flame tank", ["MediumTank", "AssaultGun"], None, 4,
+    _file(v, "flametank", "Flame tank", ["MediumTank", "AssaultGun"], "flametanks", 4,
           "A flame projector in place of the gun: short reach, and men in cover break and run before it.")
     v.camouflage()
     return v
@@ -855,7 +855,7 @@ def amphibious_tank(fine=True, tag="_"):
     m.info["file"]["controls"]["screws"] = {"parts": ["screw_l", "screw_r"], "what": "the game spins them while she swims (or plays `swim`): + ahead, the right one turning the other way"}
     m.info["file"]["controls"]["vane"] = {"part": "vane", "what": "folded (0) on land, up (95) in the water: play `vane_up`"}
     m.info["swims"] = {"draught": 1.25, "note": "afloat she floats with the water about 1.25 m up her sides (over the tracks, under the rubbing strake)"}
-    _file(v, "amphtank", "Amphibious tank", ["MediumTank", "LightTank"], None, 4,
+    _file(v, "amphtank", "Amphibious tank", ["MediumTank", "LightTank"], "amphibioustanks", 4,
           "She swims: a tank that lands with the first wave from her own ship, or crosses a river where no bridge stands.")
     v.camouflage()
     return v
@@ -1101,7 +1101,7 @@ def snow_tank(fine=True, tag="_"):
                                                  {"t": 0.0, "fx": "warm_air", "socket": "crew_heater", "cue": None}]}
     m.info["cold"] = {"ground_pressure": 0.5, "note": "her tracks are twice a medium tank's width: she bears on the snow about half as hard, and the spurs grip ice. "
                       "The game slows her less than other tanks on snow, ice and mud; she starts in hard frost (the stove) and her crew fights warm."}
-    _file(v, "snowtank", "Snow tank", ["MediumTank", "T34"], None, 4,
+    _file(v, "snowtank", "Snow tank", ["MediumTank", "T34"], "snowtanks", 4,
           "Built for the deep cold: wide spurred tracks, a stove for her engine, a heater for her crew, fur round every lid.")
     v.camouflage(cell=0.85)
     return v
@@ -1273,7 +1273,7 @@ def glider_tank(fine=True, tag="_"):
     m.info["file"]["controls"]["mudguards"] = {"parts": ["guard_fl", "guard_fr"], "what": "fold up (80) to load her into the glider: play `guards_up`"}
     m.info["glider"] = {"model": "WhatIf_AssaultGlider", "hold": GLIDER_HOLD, "lashings": [f"tie.{k + 1}" for k in range(len(ties))],
                         "note": "she rides in the assault glider's hold facing its nose; the nose swings open to the side and she drives out down two ramps"}
-    _file(v, "glidertank", "Glider tank", ["LightTank"], None, 2,
+    _file(v, "glidertank", "Glider tank", ["LightTank"], "assaultgliders", 2,
           "Flown in by the heavy assault glider: the airborne troops' own armour, behind the enemy's line.")
     v.camouflage(cell=0.7)
     return v

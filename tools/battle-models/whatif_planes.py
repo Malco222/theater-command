@@ -64,9 +64,15 @@ def add_socket(m, name, at, facing, part, note):
     m.socket(name, port(at), port(facing), part=part, note=note)
 
 
+# The research each comes from (the tech tree's keys, data/campaign/classes.json `tech`; the tech-tree thread,
+# 2026-11-19). The glider is no class of her own: she comes with the glider tank.
+TECH = {"escortftr": "escortfighters", "tankbuster": "tankbusters", "gunship": "gunships", "nightftr": "nightfighters",
+        "seahunter": "seahunters", "glidertank": "assaultgliders"}
+
+
 def set_whatif(m, kind, like, note):
     """What the file says of a what-if machine (as the ships' and the tanks' what-ifs say it)."""
-    m.info["file"].update({"stands_for": None, "whatif": {"kind": kind, "like": like, "from": None,
+    m.info["file"].update({"stands_for": None, "whatif": {"kind": kind, "like": like, "from": TECH.get(kind),
                                                           "note": "an original design that never flew: any air force that has the research flies her, in its own paint. " + note}})
 
 
