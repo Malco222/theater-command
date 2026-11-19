@@ -683,6 +683,8 @@ function fight(g: Game, nat: string, ph: PlanPhase | null, posture: string): voi
 function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): void {
   const n = g.nations[nat];
   hold(g, nat, ph);
+  // An ally's capital on the ward has its guard before anything else is settled (ruling 233, riders b612 and b627).
+  keepWards(g, nat, ph);
   // The coast watch is set before anybody marches for the front: a corps that has gone forward is not called back.
   mass(g, nat, ph, true);
   breakOut(g, nat);
@@ -739,6 +741,46 @@ function hold(g: Game, nat: string, ph: PlanPhase | null): void {
     const r = g.byName[name];
     if (!r || !allied(g, nat, r.ctrl)) continue;
     standing(g, nat, r).filter((u) => watchman(ph, name, u) && !commandAtHome(g, nat, r, u)).slice(0, count).forEach((u, k) => { if (!KIND[u.kind].mobile || k < 2) massed.add(u.id); });
+  }
+}
+
+/**
+ * The ward's guard (ruling 233, riders b612 and b627): the field corps a staff keeps for the capital of an ally whose
+ * leaving is in play. A guard is named once (flags, 'ward:') and kept until the ward ends: each month it goes by rail
+ * as far as the trains run toward that capital and marches on from where the line ends, and where the capital is full
+ * of the ally's own corps it stands on the nearest ground that has room. Whoever of the field army already stands on
+ * that ally's home ground is named first; then the nearest infantry standing three or more to a place, so that no
+ * stretch of a front is left thin for it; then the nearest standing two.
+ * (As a watched harbour's the guard was sent afresh each month, and only where a train could carry it the whole way
+ * into a town with room. With Rome's five places taken by Italy's own guard, or no line open into Italy that month,
+ * no German corps stood on Italian ground at the signing in 34 wars of the 86 where the ward was set.)
+ */
+export function keepWards(g: Game, nat: string, ph: PlanPhase | null): void {
+  for (const [name, count] of Object.entries(ph?.ward ?? {})) {
+    const cap = g.byName[name];
+    if (!cap || !allied(g, nat, cap.ctrl)) continue;
+    const d = hops(g, cap.id, (r) => allied(g, nat, ctl(g, r)));
+    const own = (r: Region): number => r.units.filter((u) => u.nat === nat && u.kind !== 'fort').length;
+    const named = new Set<number>();
+    const free = (c: Corps): boolean =>
+      c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.divs >= 2 && !c.town && !c.hold && !c.dyle && c.joint === undefined && c.leave === undefined &&
+      d[c.reg] >= 0 && !massed.has(c.id) && !named.has(c.id);
+    const nearest = (pool: Corps[]): Corps | undefined => pool.sort((a, b) => d[a.reg] - d[b.reg] || a.id - b.id)[0];
+    for (let k = 0; k < count; k++) {
+      const key = `ward:${nat}:${name}:${k}`;
+      let c = g.corps.find((u) => u.id === g.flags[key] && u.nat === nat && !u.dead && d[u.reg] >= 0 && !named.has(u.id));
+      if (!c) {
+        const ride = (least: number): Corps | undefined => nearest(g.corps.filter((u) => free(u) && u.kind === 'inf' && u.ap >= 4 && own(g.regions[u.reg]) >= least));
+        c = nearest(g.corps.filter((u) => free(u) && g.regions[u.reg].owner === cap.owner && !g.regions[u.reg].overseas)) ?? ride(3) ?? ride(2);
+        if (!c) continue;
+        g.flags[key] = c.id;
+      }
+      named.add(c.id);
+      massed.add(c.id);
+      if (c.reg === cap.id) continue;
+      if (c.ap >= 4 && railToward(g, c, cap)) continue;
+      if (c.ap > 0) walkToward(g, c, cap);
+    }
   }
 }
 

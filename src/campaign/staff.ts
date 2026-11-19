@@ -1172,11 +1172,11 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   const watch = coastWatch(g, nat);
   for (const [name, count] of Object.entries(watch)) phase.staging = { ...(phase.staging ?? {}), [name]: Math.max(phase.staging?.[name] ?? 0, count) };
   if (Object.keys(watch).length) phase.watch = Object.keys(watch);
-  // Ruling 233, rider b612: the ward. The capital of an ally whose leaving is in play is kept as a watched harbour is:
-  // by a corps of the field army, sent by rail where none stands near enough to march there.
+  // Ruling 233, riders b612 and b627: the ward. The capital of an ally whose leaving is in play is guarded by a corps
+  // of the field army, named once and kept until the ward ends (ai.ts, keepWards): it is no watched harbour, which is
+  // sent a fresh corps each month and only where a train can carry it the whole way into a town with room.
   const ward = wards(g, nat);
-  for (const name of ward) phase.staging = { ...(phase.staging ?? {}), [name]: Math.max(phase.staging?.[name] ?? 0, OPEN.ward!.corps) };
-  if (ward.length) phase.watch = [...(phase.watch ?? []), ...ward.filter((name) => !phase.watch?.includes(name))];
+  if (ward.length) phase.ward = Object.fromEntries(ward.map((name) => [name, OPEN.ward!.corps]));
   // So does a staff opening a second front, at home and on a far shore: and while its men ashore still have a front, all its ships can carry.
   for (const slot of [0, 1]) {
     const quay = seaBase(g, nat, slot);

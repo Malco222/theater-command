@@ -834,6 +834,11 @@ export interface PlanPhase {
   staging?: Record<string, number>;
   /** Staging places that are a coast watch (the grand campaign): one with no corps within three marches is sent one by rail. */
   watch?: string[];
+  /**
+   * The capitals of allies this staff guards while their leaving is in play, and the corps each is to have (ruling 233,
+   * riders b612 and b627). A guard is named once and kept: it goes by rail as far as the trains run and marches on.
+   */
+  ward?: Record<string, number>;
   minOdds?: number;
   force?: number;
   /** Places the plan means to starve out rather than storm: never assaulted while the phase lasts. */
