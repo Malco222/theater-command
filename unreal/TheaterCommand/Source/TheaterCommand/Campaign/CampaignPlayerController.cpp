@@ -5757,14 +5757,15 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			{
 				TArray<FString> Parts;
 				const int32 Given = Each[Nth].ParseIntoArray(Parts, TEXT(":"));
-				if (Given == 3 || Given >= 6)
+				if ((Given == 3 || Given >= 6) && !Parts[0].StartsWith(TEXT("r")))
 				{
 					Map->AddSinking(FCString::Atoi(*Parts[0]), Parts[1], Parts[2], Nth);
 				}
 				if (Given >= 6)
 				{
 					FSinking& Sinking = NamedForPicture.AddDefaulted_GetRef();
-					Sinking.Zone = FCString::Atoi(*Parts[0]);
+					Sinking.Zone = Parts[0].StartsWith(TEXT("r")) ? INDEX_NONE : FCString::Atoi(*Parts[0]); // ("r412" for the sea is a harbour: province 412)
+					Sinking.Region = Parts[0].StartsWith(TEXT("r")) ? FCString::Atoi(*Parts[0].Mid(1)) : INDEX_NONE;
 					Sinking.Nation = Parts[1];
 					Sinking.Class = Parts[2];
 					FLostHull& Hull = Sinking.Ships.AddDefaulted_GetRef();
@@ -10631,8 +10632,8 @@ void ACampaignPlayerController::Remember(const TArray<FSinking>& Sinkings, bool 
 		return;
 	}
 	FMemorialShow Card;
-	int32 Zone = INDEX_NONE, Extra = 0;
-	bool bOneSea = true;
+	int32 Zone = INDEX_NONE, Harbour = INDEX_NONE, Extra = 0;
+	bool bOneSea = true, bAny = false;
 	for (const FSinking& Sinking : Sinkings)
 	{
 		const FCampaignNation* Nation = Map->GetData().FindNation(Sinking.Nation);
@@ -10643,8 +10644,10 @@ void ACampaignPlayerController::Remember(const TArray<FSinking>& Sinkings, bool 
 			{
 				continue;
 			}
-			bOneSea = bOneSea && (Zone == INDEX_NONE || Zone == Sinking.Zone);
+			bOneSea = bOneSea && (!bAny || (Zone == Sinking.Zone && Harbour == Sinking.Region));
+			bAny = true;
 			Zone = Sinking.Zone;
+			Harbour = Sinking.Region;
 			if (Card.Rows.Num() >= 3)
 			{
 				++Extra;
@@ -10691,7 +10694,11 @@ void ACampaignPlayerController::Remember(const TArray<FSinking>& Sinkings, bool 
 		return;
 	}
 	const FString Sea = bOneSea && Map->GetData().Seas.IsValidIndex(Zone) ? Map->GetData().Seas[Zone].Name : FString();
-	Card.Heading = Sea.IsEmpty() ? FString(TEXT("LOST AT SEA")) : FString::Printf(TEXT("LOST AT SEA  \u00B7  %s"), *Sea.ToUpper());
+	// (A raid on a harbour sinks ships at their moorings: the bridge gives the province and no sea. They were not
+	// lost at sea, and the plate says where they lay.)
+	const bool bInHarbour = bOneSea && !Map->GetData().Seas.IsValidIndex(Zone) && Map->GetData().Regions.IsValidIndex(Harbour);
+	Card.Heading = bInHarbour ? FString::Printf(TEXT("LOST IN HARBOUR  \u00B7  %s"), *Map->GetData().Regions[Harbour].Name.ToUpper())
+		: Sea.IsEmpty() ? FString(TEXT("LOST AT SEA")) : FString::Printf(TEXT("LOST AT SEA  \u00B7  %s"), *Sea.ToUpper());
 	if (Extra > 0)
 	{
 		Card.More = Extra == 1 ? FString(TEXT("and one more capital ship")) : FString::Printf(TEXT("and %d more capital ships"), Extra);

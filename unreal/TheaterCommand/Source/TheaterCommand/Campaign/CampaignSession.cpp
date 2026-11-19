@@ -2314,6 +2314,7 @@ FMonthResult FCampaignSession::EndMonth()
 					{
 						FSinking& Sinking = Step.Sinkings.AddDefaulted_GetRef();
 						(*Lost)->TryGetNumberField(TEXT("zone"), Sinking.Zone);
+						(*Lost)->TryGetNumberField(TEXT("region"), Sinking.Region);
 						(*Lost)->TryGetStringField(TEXT("nat"), Sinking.Nation);
 						(*Lost)->TryGetStringField(TEXT("cls"), Sinking.Class);
 						(*Lost)->TryGetNumberField(TEXT("n"), Sinking.Count);

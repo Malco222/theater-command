@@ -42,6 +42,7 @@ struct FLostHull
 struct FSinking
 {
 	int32 Zone = INDEX_NONE;
+	int32 Region = INDEX_NONE; // (Brian's memorial card) a ship sunk at her moorings by a raid on a harbour: the province, with no sea (the bridge's zone is -1)
 	FString Nation;
 	FString Class;
 	int32 Count = 1;
