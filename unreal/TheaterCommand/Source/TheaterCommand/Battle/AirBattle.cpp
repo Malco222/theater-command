@@ -6,6 +6,7 @@
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Campaign/ArmyPiece.h"
+#include "Campaign/CampaignBattleLook.h"
 #include "Campaign/CampaignEnvironment.h"
 #include "Campaign/CampaignHUD.h"
 #include "Campaign/CampaignMapActor.h"
@@ -475,6 +476,8 @@ bool AAirBattle::Open(const FString& Why)
 		Eye->GetCameraComponent()->SetFieldOfView(55.0f);
 		Eye->GetCameraComponent()->PostProcessSettings.bOverride_MotionBlurAmount = true;
 		Eye->GetCameraComponent()->PostProcessSettings.MotionBlurAmount = 0.0f;
+		// (the 3D builder, 19 November 2026: the art director's battle grade, on battle cameras only)
+		BattleLook::Grade(Eye->GetCameraComponent()->PostProcessSettings);
 	}
 	if (APlayerController* Controller = Here->GetFirstPlayerController())
 	{
@@ -741,6 +744,8 @@ void AAirBattle::HideTheTable()
 				Fog->SetFogHeightFalloff(0.004f);
 				Fog->SetFogMaxOpacity(0.8f);
 				Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.66f, 0.78f));
+				// (the 3D builder, 19 November 2026: the art director's ruling on the haze, thin under the eye)
+				BattleLook::AirHaze(*Fog, UnitsPerMetre);
 			}
 			// The lamps: the key turned to the battle's sun, every lamp at its day strength and white (a battle opened
 			// in the table's night kept the moon's), the sky's light the day's.
