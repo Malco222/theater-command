@@ -81,6 +81,10 @@ export interface SeaExtra {
   fleet: string;
   /** A carrier's aircraft still in the fight, from 1 at the start: they are worn as the fleet is (b415). */
   planes?: number;
+  /** A destroyer piece of its fleet's screen (data/battle/sea.json torp), and the enemy piece it is running in on
+   *  with torpedoes while it makes a run (ruling 239): for the screens and the 3D game. */
+  screen?: boolean;
+  run?: number;
   [k: string]: unknown;
 }
 

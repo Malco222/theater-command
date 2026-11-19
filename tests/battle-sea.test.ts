@@ -13,7 +13,7 @@ import { SEA_CLASSES, type SeaClass, type SeaShips, type SeaUnit } from '../src/
 import { foughtOf } from '../src/battle/sea/handoff';
 import { PRACTICE, practiceTicket } from '../src/battle/sea/practice';
 import { headCount, hurtAfloat, ofFleet, repairLines, theFleet } from '../src/battle/sea/words';
-import { SEA_CUES, seaLoop } from '../src/battle/sea/cues';
+import { SEA_CUES, SEA_ZONE_LOOPS, seaLoop } from '../src/battle/sea/cues';
 
 const HOME: PlainFleet = { name: 'Home Fleet', nat: 'UK', ships: { bb: 2, cv: 1, ca: 3, dd: 8 } };
 const BATTLE: PlainFleet = { name: 'Battle Fleet', nat: 'GER', ships: { bb: 2, ca: 3, dd: 12 } };
@@ -252,6 +252,168 @@ describe('each ship class to its own job (ruling 239)', () => {
     expect(sim.orderOf(bb.id)).toEqual({ kind: 'attack', target: eca.id });
     aim(sim, bb);
     expect(bb.extra.target).toBe(eca.id);
+  });
+});
+
+describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
+  const only = (sim: SeaSim, keep: [SeaUnit, number, number][]): void => {
+    for (const u of sim.units) if (!keep.some(([k]) => k === u)) u.state = 'gone';
+    for (const [u, x, y] of keep) { u.x = x; u.y = y; }
+  };
+  const all = (sim: SeaSim, side: 'att' | 'def', cls: string): SeaUnit[] => sim.units.filter((u) => u.side === side && u.extra.cls === cls);
+  /** The guns have met: the bank and the runs count from here. */
+  const met = (sim: SeaSim): any => { const s = sim as any; s.contactAt = 0; return s; };
+
+  it("a destroyer's guns take destroyers and cruisers before battleships and carriers, and big ships only when nothing else is in reach", () => {
+    const sim = battle(11, { human: null }), s = sim as any;
+    const dd = piece(sim, 'att', 'dd'), ebb = piece(sim, 'def', 'bb'), eca = piece(sim, 'def', 'ca');
+    only(sim, [[dd, 10000, 10000], [ebb, 10000, 11000], [eca, 10000, 14500]]);
+    s.aim(dd);
+    expect(dd.extra.target).toBe(eca.id);
+    eca.state = 'gone';
+    s.aim(dd);
+    expect(dd.extra.target).toBe(ebb.id);
+  });
+
+  it('a destroyer piece banks only the weight its guns cannot fire, from the moment the guns meet, and no more than bank seconds of it', () => {
+    const sim = battle(11, { human: null }), s = sim as any;
+    const dd = piece(sim, 'att', 'dd'), edd = piece(sim, 'def', 'dd');
+    only(sim, [[dd, 10000, 10000], [edd, 10000, 18000]]);
+    s.aim(dd); s.fire(dd);
+    expect(s.bank[dd.id]).toBe(0); // before the guns meet nothing is banked
+    met(sim);
+    const per = SEA.fire.rate * s.output(dd) * s.day('att');
+    s.aim(dd); s.fire(dd);
+    expect(dd.extra.target).toBe(-1);
+    expect(s.bank[dd.id]).toBeCloseTo(per * DT, 12);
+    for (let i = 0; i < (SEA.torp.bank + 50) / DT; i++) s.fire(dd);
+    expect(s.bank[dd.id]).toBeCloseTo(per * SEA.torp.bank, 9);
+    // With an enemy in reach the guns fire it, and nothing more is banked.
+    edd.y = 13000;
+    const banked = s.bank[dd.id], dealt = s.dealt[dd.id];
+    s.aim(dd); s.fire(dd);
+    expect(dd.extra.target).toBe(edd.id);
+    expect(s.bank[dd.id]).toBe(banked);
+    expect(s.dealt[dd.id]).toBeGreaterThan(dealt);
+  });
+
+  it('on a run the guns keep firing at what their job finds in reach, so a run takes no weight out of the fight', () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd')[0], ebb = all(s, 'def', 'bb')[0], edd = all(s, 'def', 'dd')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 15000], [edd, 10500, 12000]]);
+    s.beginRun(dd, ebb);
+    expect(dd.extra.run).toBe(ebb.id);
+    const dealt = s.dealt[dd.id];
+    s.aim(dd); s.fire(dd);
+    expect(dd.extra.target).toBe(edd.id);
+    expect(s.dealt[dd.id]).toBeGreaterThan(dealt);
+    expect(s.bank[dd.id]).toBe(0);
+  });
+
+  it("a salvo is the bank, no more and no less: it lands 'travel' seconds after launch on its target and counts as the destroyers' weight", () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd')[0], ebb = all(s, 'def', 'bb')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 12400]]);
+    s.bank[dd.id] = 0.05;
+    const lost = s.lostShare('def'), dealt = s.dealt[dd.id];
+    s.launch(dd, ebb, null);
+    expect(s.bank[dd.id]).toBe(0);
+    expect(s.torps).toHaveLength(1);
+    expect(s.torps[0].weight).toBe(0.05);
+    expect(s.torps[0].at).toBeCloseTo(s.t + SEA.torp.travel, 9);
+    expect(events(s).some((e: FieldEvent) => e.what === 'sea:torpedo' && e.unit === dd.id)).toBe(true);
+    s.landTorps();
+    expect(s.torps).toHaveLength(1); // not yet: it is still running
+    s.t += SEA.torp.travel;
+    s.landTorps();
+    expect(s.torps).toHaveLength(0);
+    expect(s.dealt[dd.id] - dealt).toBeCloseTo(0.05, 12);
+    expect(s.lostShare('def')).toBeGreaterThan(lost);
+    expect(events(s).some((e: FieldEvent) => e.what === 'sea:torpedoHit' && e.unit === ebb.id)).toBe(true);
+  });
+
+  it("a run closes at flank, launches at its style's press range, turns away for 'away' seconds and rejoins", () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd')[0], ebb = all(s, 'def', 'bb')[0];
+    only(s, [[dd, 10000, 8000], [ebb, 10000, 14000]]);
+    const free = { kind: 'free' } as const, flank = SEA.classes.dd.speed * SEA.speeds.flank, press = SEA.styles.methodical!.press;
+    s.bank[dd.id] = 0.02;
+    s.beginRun(dd, ebb);
+    const inbound = s.runCourse(dd, free);
+    expect(inbound.speed).toBe(flank);
+    expect(Math.abs(Math.sin(inbound.want))).toBeLessThan(1e-9); // straight at the target, due north on this field
+    expect(s.torps).toHaveLength(0);
+    dd.y = ebb.y - press;
+    const away = s.runCourse(dd, free);
+    expect(s.torps).toHaveLength(1);
+    expect(s.runs.get(dd.id).phase).toBe('away');
+    expect(away.speed).toBe(flank);
+    expect(Math.abs(Math.cos(away.want) + 1)).toBeLessThan(1e-9); // away from it
+    s.t += SEA.torp.away;
+    expect(s.runCourse(dd, free)).toBeNull();
+    expect(s.runs.has(dd.id)).toBe(false);
+    expect(dd.extra.run).toBeUndefined();
+  });
+
+  it('a destroyer piece whose guns have only a battleship to fire on goes for it on a run at once, before its style opens the runs', () => {
+    const s = met(battle(11, { human: null }));
+    s.contactAt = s.t;
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0], edd = all(s, 'def', 'dd')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 13000], [edd, 10000, 14500]]);
+    s.aim(dd); s.startRuns();
+    expect(dd.extra.target).toBe(edd.id); // a destroyer in reach: its guns take it, and the runs wait for the style
+    expect(s.runs.has(dd.id)).toBe(false);
+    edd.state = 'gone';
+    s.aim(dd); s.startRuns();
+    expect(dd.extra.target).toBe(ebb.id);
+    expect(s.runs.get(dd.id)?.target).toBe(ebb.id);
+  });
+
+  it('wavering on the run-in breaks it off and keeps the bank for the next', () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd')[0], ebb = all(s, 'def', 'bb')[0];
+    only(s, [[dd, 10000, 8000], [ebb, 10000, 14000]]);
+    s.bank[dd.id] = 0.02;
+    s.beginRun(dd, ebb);
+    dd.state = 'wavering';
+    expect(s.runCourse(dd, { kind: 'free' })).toBeNull();
+    expect(s.runs.has(dd.id)).toBe(false);
+    expect(s.bank[dd.id]).toBe(0.02);
+  });
+
+  it("the screen is the destroyer pieces nearest the big ships, the style's share of them rounded down and at least one; a fleet with no big ship keeps none", () => {
+    const s = battle(11, { human: null }) as any;
+    for (const side of ['att', 'def'] as const) {
+      const dds = all(s, side, 'dd'), screened = dds.filter((u) => s.screen.has(u.id));
+      expect(screened.length).toBe(Math.max(dds.length >= 2 ? 1 : 0, Math.floor(SEA.styles.methodical!.screen * dds.length)));
+      for (const u of screened) expect(u.extra.screen).toBe(true);
+    }
+    const light = new SeaSim(plainTicket({ att: [{ name: '2nd Fleet', nat: 'ITA', ships: { dd: 16 } }], def: [BATTLE], seed: 3, human: null })) as any;
+    expect(all(light, 'att', 'dd').some((u) => light.screen.has(u.id))).toBe(false);
+  });
+
+  it('a screen piece keeps station ahead of the ship it guards until its guns find a target, then fights where it is', () => {
+    const s = met(battle(11, { human: null }));
+    const scr = all(s, 'att', 'dd').find((u) => s.screen.has(u.id))!;
+    const free = { kind: 'free' } as const;
+    scr.extra.target = -1;
+    expect(s.station(scr, free)).not.toBeNull();
+    scr.extra.target = all(s, 'def', 'dd')[0].id;
+    expect(s.station(scr, free)).toBeNull();
+  });
+
+  it('a screen piece fires first on an enemy destroyer making a run, before a nearer one', () => {
+    const s = met(battle(11, { human: null }));
+    const scr = all(s, 'att', 'dd').find((u) => s.screen.has(u.id))!, bb = all(s, 'att', 'bb')[0];
+    const [near, runner] = all(s, 'def', 'dd');
+    only(s, [[scr, 10000, 10000], [bb, 10000, 9000], [near, 10000, 11500], [runner, 12000, 12500]]);
+    s.beginRun(runner, bb);
+    s.aim(scr);
+    expect(scr.extra.target).toBe(runner.id);
+  });
+
+  it('the torpedoes have their sounds: the launch, the hit, and the run while a salvo is in the water', () => {
+    expect([SEA_CUES['sea:torpedo'], SEA_CUES['sea:torpedoHit'], SEA_ZONE_LOOPS.torpedo]).toEqual(['torpedo_launch', 'torpedo_hit', 'torpedo_run_loop']);
   });
 });
 

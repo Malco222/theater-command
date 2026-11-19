@@ -2,7 +2,7 @@
 // Brian 18 November; its README's table "The sea" follows this file) that answer what happens at sea. The sim names
 // them on its events; the 3D game plays them. 'ship_sinking' passed Brian's ear at 14:49Z and now sounds. He cut
 // 'ship_horn', so a fleet breaking off, and the fleet's signal, name no sound until a new horn passes his ear. The
-// torpedo and depth charge sounds he passed then wait for orders the field does not have yet (the torpedo run).
+// torpedo sounds he passed then answer the destroyers' torpedo run (ruling 239), for the sound director to confirm.
 
 import type { Act, FieldEvent } from '../core/types';
 
@@ -14,10 +14,15 @@ export const SEA_CUES: Partial<Record<FieldEvent['what'], string>> = {
   'sea:air': 'bomb_stick_01',
   'sea:sunk': 'ship_sinking',
   'sea:burning': 'fire_start',
+  'sea:torpedo': 'torpedo_launch',
+  'sea:torpedoHit': 'torpedo_hit',
   // A fleet breaking off: silent until a new horn passes Brian's ear (he cut 'ship_horn', 14:49Z).
   // The action ends: two bells (the README: "a fleet signals; action stations; the action ends").
   end: 'ship_bells_two',
 };
+
+/** The loop a zone plays while it lasts: a torpedo salvo's track runs from the launch to its aim point (the zone). */
+export const SEA_ZONE_LOOPS: Partial<Record<string, string>> = { torpedo: 'torpedo_run_loop' };
 
 /** The loop a ship plays while it does this: a warship under way is its engines (under its wash, which the ship models
  *  key for themselves). A destroyer's is its own wash: seaLoop. */

@@ -11,7 +11,8 @@
 // The first slice's orders (ruling 217): course (move, line), attack, speed, withdraw (one piece, or the whole
 // fleet), and the carrier strike. Pieces with no order fight at will, as their captains would, each ship class to its
 // own job around the fleet's main effort (ruling 239): the player steps in where they want a different target, a
-// different course, or the fight broken off. Formations and the torpedo run wait for the polish pass (TODO(polish)).
+// different course, or the fight broken off. Destroyers screen their big ships, or make torpedo runs at the enemy's
+// with the weight their guns hold back (torp). Formations wait for the polish pass (TODO(polish)).
 //
 // Same ticket, same orders, same battle: every roll comes from the battle's own seeded stream.
 
@@ -65,6 +66,11 @@ export function enemyNearestMiddle(units: readonly SeaUnit[], side: Side): SeaUn
 
 interface Strike { at: number; side: Side; target: number; weight: number; from: string; count: number }
 
+/** A destroyer piece's torpedo run (ruling 239): in at its target to its style's press range, launch, then away. */
+interface Run { target: number; phase: 'in' | 'away'; until: number; away: number; face: number; turned: number; launched: number; near: boolean; shot: boolean }
+/** A torpedo salvo in the water: it falls torp.travel seconds after its launch. */
+interface Torp { at: number; side: Side; target: number; x: number; y: number; weight: number; from: number }
+
 /** Each fleet's ships lost on the field, by class: sunk, and gone out of the fight burning (past the dice's limit); and
  *  the ships it took home badly hurt, those burning and those afloat at half their hull or less (b458, 3). */
 export interface SeaLosses { sunk: Record<number, SeaShips>; burnt: Record<number, SeaShips>; hurt: Record<number, SeaShips>; toDice?: boolean }
@@ -112,6 +118,18 @@ export class SeaSim implements BattleSim<SeaUnit> {
   /** Which way round each piece turns to bring its broadside to bear: kept, so that it does not dither. */
   private readonly hand = new Map<number, number>();
   private strikes: Strike[] = [];
+  /** Destroyer pieces on a torpedo run, by unit id; the battle time each may run again; the weight each has banked for
+   *  its torpedoes (torp); the screen's pieces, chosen as the fleets draw up, with the big ship each guards and how far
+   *  to its side it keeps; and salvos in the water. */
+  private readonly runs = new Map<number, Run>();
+  private readonly nextRun = new Map<number, number>();
+  private readonly bank: number[] = [];
+  private readonly screen = new Set<number>();
+  private readonly guard = new Map<number, { ship: number; lat: number }>();
+  private torps: Torp[] = [];
+  private zoneId = 0;
+  /** Runs launched by each side's destroyers outside the screen (the B4 mark). */
+  private readonly launched: Record<Side, number> = { att: 0, def: 0 };
   private readonly nextAir: Record<Side, number>;
   /** Wear each piece has dealt by gunfire, and seconds it has spent with a target in reach, by unit id: see tally. */
   private readonly dealt: number[] = [];
@@ -154,6 +172,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.inReach[u.id] = 0;
       this.swing[u.id] = 0;
       this.deck[u.id] = 1;
+      this.bank[u.id] = 0;
       if (u.extra.cls === 'cv') u.extra.planes = 1;
       this.weight0[u.side] += this.weightOf(u);
     }
@@ -167,6 +186,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
     // Each side's captains know their main effort from the start: the enemy nearest the middle of their fleet as it is drawn up.
     for (const side of ['att', 'def'] as Side[]) this.focus[side] = this.nearestToMiddle(side);
+    for (const side of ['att', 'def'] as Side[]) this.drawScreen(side);
     const S = SEA.side;
     this.luck = this.rng.range(DICE[0], DICE[1]);
     const adm = (side: Side): number => Math.max(0, ...ticket.place.fleets.filter((f) => f.side === side).map((f) => f.admiral?.level ?? 0));
@@ -404,6 +424,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     if (tick % 10 === 0) { this.sample(); this.decide(); }
     for (const u of this.units) { u.engaged = undefined; if (live(u)) this.fire(u); }
     this.landStrikes();
+    this.landTorps();
     this.coastAir();
     for (const u of this.units) if (live(u)) this.nerve(u);
     // What the models show, once every blow of the tick has told: a ship a strike or a raid sank is not drawn afloat.
@@ -416,6 +437,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
   /** Once a second after the guns meet, before the targets change: what the marks read (see marks). */
   private sample(): void {
     if (this.contactAt === null) return;
+    // A run that passes within torp.intercept metres of an enemy screen piece (the B6 mark).
+    for (const [id, r] of this.runs) {
+      const u = this.byId.get(id);
+      if (u && r.phase === 'in' && !r.near) r.near = this.units.some((e) => e.side !== u.side && this.screen.has(e.id) && live(e) && dist(u.x, u.y, e.x, e.y) <= SEA.torp.intercept);
+    }
     const big = (c: string): boolean => c === 'bb' || c === 'ca' || c === 'cv';
     const near = (a: SeaUnit, b: SeaUnit, r: number): boolean => dist(a.x, a.y, b.x, b.y) <= r;
     for (const side of ['att', 'def'] as Side[]) {
@@ -473,6 +499,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       }
       if ((this.look.get(u.id) ?? 0) <= this.t) { this.look.set(u.id, this.t + SEA.fire.retarget); this.aim(u); }
     }
+    this.startRuns();
   }
 
   /** Each side's main effort: the enemy piece nearest the middle of its own fleet, kept until it goes or breaks off,
@@ -500,6 +527,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const C = SEA.classes[u.extra.cls as SeaClass];
     if (o?.kind === 'attack' && !o.fleet) {
       const foe = this.byId.get(o.target);
+      // A destroyer told to attack a bigger ship also makes a torpedo run at it (startRuns).
       if (foe && live(foe) && dist(u.x, u.y, foe.x, foe.y) <= C.reach) { u.extra.target = foe.id; return; }
     }
     u.extra.target = this.job(u);
@@ -519,8 +547,20 @@ export class SeaSim implements BattleSim<SeaUnit> {
       for (const f of this.units) if (f !== u && f.side === side && live(f) && BIG_GUNS.has(f.extra.cls) && f.extra.target === e.id) n++;
       return n;
     };
+    const classes = SEA.jobs.fire[c];
+    if (this.screen.has(u.id) && !this.broken) {
+      // The screen fires first on an enemy destroyer piece making a run, the nearest; then on the destroyers nearest its
+      // own big ships; then as its job has it.
+      const dds = this.units.filter((e) => e.side !== side && e.extra.cls === 'dd' && live(e) && e.state !== 'routing' && dist(u.x, u.y, e.x, e.y) <= R);
+      const running = dds.filter((e) => this.runs.get(e.id)?.phase === 'in');
+      const bigs = this.units.filter((f) => f.side === side && f.extra.cls !== 'dd' && live(f));
+      const by = (us: SeaUnit[], d: (e: SeaUnit) => number): number => us.map((e) => ({ id: e.id, d: Math.round(d(e)) })).sort((a, b) => a.d - b.d || a.id - b.id)[0].id;
+      if (running.length) return by(running, (e) => dist(u.x, u.y, e.x, e.y));
+      // (With no big ship of its own left, the destroyer nearest it.)
+      if (dds.length) return by(dds, (e) => (bigs.length ? Math.min(...bigs.map((f) => dist(f.x, f.y, e.x, e.y))) : dist(u.x, u.y, e.x, e.y)));
+    }
     for (const breaking of [false, true]) {
-      for (const tc of SEA.jobs.fire[c]) {
+      for (const tc of classes) {
         const pool = this.units.filter((e) => e.side !== side && e.extra.cls === tc && live(e) && (breaking || e.state !== 'routing') && dist(u.x, u.y, e.x, e.y) <= R);
         if (!pool.length) continue;
         const ranked = pool.map((e) => ({ id: e.id, n: spread ? shooters(e) : 0, d: Math.round(dist(e.x, e.y, mx, my)), l: (e.x - mx) * cs - (e.y - my) * sn }))
@@ -622,11 +662,17 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // fight: sending every ship at one point drew the line into a knot the enemy fought around (ruling 226, 4).
       // A ship fighting at will, or under a fleet order, steers the same way for its fleet's main effort: ships far from
       // the fight close on it, as the land thread found idle reserves must (b407).
-      const tgt = this.byId.get(o.kind === 'attack' && !o.fleet ? o.target : this.focus[u.side]) ?? null;
-      const near = this.steerFoe(u);
-      // A carrier keeps its standoff from the nearest enemy whatever it strikes: its aircraft reach any target.
-      const foe = u.extra.cls !== 'cv' && tgt && (!near || dist(u.x, u.y, tgt.x, tgt.y) > dist(u.x, u.y, near.x, near.y) + SEA.ai.beyond) ? tgt : near;
-      if (foe) want = this.engage(u, foe);
+      // A destroyer piece on a torpedo run goes in at flank and turns away (runCourse); a screen piece keeps its station
+      // on the big ship it guards, or goes for an enemy run near it (station).
+      const run = u.extra.cls === 'dd' ? this.runCourse(u, o) : null;
+      const post = run ?? (this.screen.has(u.id) ? this.station(u, o) : null);
+      if (post) { want = post.want; speed = post.speed; } else {
+        const tgt = this.byId.get(o.kind === 'attack' && !o.fleet ? o.target : this.focus[u.side]) ?? null;
+        const near = this.steerFoe(u);
+        // A carrier keeps its standoff from the nearest enemy whatever it strikes: its aircraft reach any target.
+        const foe = u.extra.cls !== 'cv' && tgt && (!near || dist(u.x, u.y, tgt.x, tgt.y) > dist(u.x, u.y, near.x, near.y) + SEA.ai.beyond) ? tgt : near;
+        if (foe) want = this.engage(u, foe);
+      }
       // A carrier group that sees a battle line coming turns away and opens the range while it launches (b389), an
       // attack order or not. Its screen turns with it only within evade.screen metres of a carrier, and that is 0: the
       // screen stays and fights (b402: a screen that ran with its carriers left the plain order short of the card).
@@ -762,12 +808,15 @@ export class SeaSim implements BattleSim<SeaUnit> {
   // ---- Fire and wear -------------------------------------------------------------------------------------------
 
   private fire(u: SeaUnit): void {
-    if (u.extra.cls === 'cv' || u.extra.target < 0) return;
+    if (u.extra.cls === 'cv') return;
+    // A destroyer piece whose guns have nothing in reach banks their weight for its torpedoes (store). On a run its guns
+    // keep firing at whatever their job finds in reach, so a run takes no weight out of the fight (ruling 239).
+    if (u.extra.target < 0) { this.store(u); return; }
     const foe = this.byId.get(u.extra.target);
-    if (!foe || !live(foe)) { u.extra.target = -1; return; }
+    if (!foe || !live(foe)) { u.extra.target = -1; this.store(u); return; }
     const C = SEA.classes[u.extra.cls as SeaClass];
     const d = dist(u.x, u.y, foe.x, foe.y);
-    if (d > C.reach) return;
+    if (d > C.reach) { this.store(u); return; }
     const range = this.reachFactor(C, d);
     const arc = SEA.fire.endOn + (1 - SEA.fire.endOn) * Math.abs(Math.sin(turn(u.face, bearing(u.x, u.y, foe.x, foe.y))));
     const nerve = u.state === 'wavering' ? SEA.nerve.wavering : u.state === 'routing' || this.orders.get(u.id)?.kind === 'leave' ? 0.5 : 1;
@@ -778,6 +827,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.dealt[u.id] += w;
     this.inReach[u.id] += DT;
     this.mark(`${u.side}:${u.extra.cls}>${foe.extra.cls}`, w);
+    if (u.extra.cls === 'dd' && (foe.extra.cls === 'bb' || foe.extra.cls === 'cv')) { this.mark(`${u.side}:ddBig:s`, DT); if (!this.runs.has(u.id)) { this.mark(`${u.side}:ddBigOff:s`, DT); if (d > this.style(u.side).press) this.mark(`${u.side}:ddBigFar:s`, DT); } }
+    if (u.extra.cls === 'dd') this.mark(`${u.side}:ddGun:s`, DT);
+    if (this.screen.has(u.id)) { const r = this.runs.get(foe.id); if (r?.phase === 'in') r.shot = true; }
     // Gunfire, like a strike, takes the same weight out of the fight whatever it falls on (wear in proportion to the
     // ship's hull): a heavy fleet's light screen is no weaker for being light, and a fleet is worth what the campaign
     // counts it, whatever its mix (the second playtester's newcomer test, b402).
@@ -837,7 +889,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const along = (mix(u.id * 613 + n * 389 + 3) - 0.5) * u.d * 0.8;
     const x = clamp(u.x + along * Math.sin(u.face), 2, F - 2), y = clamp(u.y + along * Math.cos(u.face), 2, F - 2);
     this.zones.push({
-      id: this.zones.length + 1, kind, x: Math.round(x), y: Math.round(y), r: Math.round(SEA.classes[u.extra.cls as SeaClass].len * 0.6),
+      id: ++this.zoneId, kind, x: Math.round(x), y: Math.round(y), r: Math.round(SEA.classes[u.extra.cls as SeaClass].len * 0.6),
       until: this.ticket.limit, side: u.side, at: Math.round(this.t * 10) / 10, unit: u.id,
     });
   }
@@ -886,6 +938,238 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.splash(at, s.weight, s.side);
       this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + s.weight;
       this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.count ? `${headCount(s.count)} bombers` : 'Aircraft'} from ${theFleet(s.from)} find ${this.told(at)}.`, extra: { count: s.count } });
+    }
+  }
+
+  // ---- Torpedoes ---------------------------------------------------------------------------------------------------
+
+  /**
+   * The screen (torp; styles: screen): the destroyer pieces nearest the side's own big ships as the fleets draw up,
+   * ties by id, no dice; at least one where the style keeps a screen and there are two or more. Each keeps station on the
+   * big ship it is nearest, at its own side of it as drawn up. A fleet with no big ship keeps no screen.
+   */
+  private drawScreen(side: Side): void {
+    const dds = this.units.filter((u) => u.side === side && u.extra.cls === 'dd');
+    const bigs = this.units.filter((u) => u.side === side && u.extra.cls !== 'dd');
+    const share = this.style(side).screen;
+    if (!bigs.length || share <= 0) return;
+    const k = Math.max(dds.length >= 2 ? 1 : 0, Math.floor(share * dds.length));
+    const cs = side === 'att' ? 1 : -1;
+    const near = (u: SeaUnit): SeaUnit => bigs.reduce((b, x) => (dist(u.x, u.y, x.x, x.y) < dist(u.x, u.y, b.x, b.y) - 1e-6 ? x : b));
+    const ranked = dds.map((u) => ({ u, d: Math.round(dist(u.x, u.y, near(u).x, near(u).y)) })).sort((a, b) => a.d - b.d || a.u.id - b.u.id);
+    for (const { u } of ranked.slice(0, k)) {
+      const g = near(u);
+      this.screen.add(u.id);
+      u.extra.screen = true;
+      this.guard.set(u.id, { ship: g.id, lat: clamp((u.x - g.x) * cs, -SEA.torp.station, SEA.torp.station) });
+    }
+  }
+
+  /** The big ship a screen piece guards: the one it drew up beside, or once that is gone or breaking off, its side's
+   *  big ship now nearest it (ties by id); null with none left, when the piece fights as any other does. */
+  private guarded(u: SeaUnit): SeaUnit | null {
+    const gd = this.guard.get(u.id);
+    if (!gd) return null;
+    const g = this.byId.get(gd.ship);
+    if (g && live(g) && g.state !== 'routing') return g;
+    let best: SeaUnit | null = null, bd = Infinity;
+    for (const f of this.units) {
+      if (f.side !== u.side || f.extra.cls === 'dd' || !live(f) || f.state === 'routing') continue;
+      const d = dist(u.x, u.y, f.x, f.y);
+      if (d < bd - 1e-6) { bd = d; best = f; }
+    }
+    if (best) gd.ship = best.id;
+    return best;
+  }
+
+  /**
+   * A screen piece's course and speed (torp): for an enemy destroyer piece on a run within 'intercept' metres of it, the
+   * nearest; else its station, 'station' metres ahead of the big ship it guards toward the enemy's middle, at its own
+   * side of it. Null before the guns meet (the fleet keeps together), once a side has broken off, under an order of the
+   * player's own, or with no big ship left to guard: it then fights as any other piece does.
+   */
+  private station(u: SeaUnit, o: SeaOrder): { want: number; speed: number } | null {
+    if (this.contactAt === null || this.broken || !(o.kind === 'free' || (o.kind === 'attack' && o.fleet)) || !steady(u)) return null;
+    const g = this.guarded(u);
+    if (!g) return null;
+    const T = SEA.torp, flank = SEA.classes.dd.speed * SEA.speeds.flank;
+    let runner: SeaUnit | null = null, rd = T.intercept;
+    for (const e of this.units) {
+      if (e.side === u.side || !live(e) || this.runs.get(e.id)?.phase !== 'in') continue;
+      const d = dist(u.x, u.y, e.x, e.y);
+      if (d < rd) { rd = d; runner = e; }
+    }
+    if (runner) return { want: this.engage(u, runner), speed: flank };
+    // Once its guns find a target it fights where it is, as the line's other pieces do: held on station, its weight
+    // stood out of the fight (ruling 239, 22:04Z figures).
+    if (u.extra.target >= 0) return null;
+    const [ex, ey] = this.centre(other(u.side)), b = bearing(g.x, g.y, ex, ey), lat = this.guard.get(u.id)!.lat;
+    const sx = g.x + Math.sin(b) * T.station + Math.cos(b) * lat, sy = g.y + Math.cos(b) * T.station - Math.sin(b) * lat;
+    const d = dist(u.x, u.y, sx, sy);
+    if (d < 200) return { want: g.face, speed: g.extra.way };
+    return { want: bearing(u.x, u.y, sx, sy), speed: clamp(d / 20, g.extra.way, flank) };
+  }
+
+  /** A destroyer piece whose guns have nothing in reach banks their weight for its torpedoes (torp), from the moment the
+   *  guns first meet, up to torp.bank seconds' worth: its salvo is weight its guns could not fire, and no more. */
+  private store(u: SeaUnit): void {
+    if (u.extra.cls !== 'dd' || this.contactAt === null || !steady(u) || this.orders.get(u.id)?.kind === 'leave') return;
+    const per = SEA.fire.rate * this.output(u) * this.day(u.side);
+    const nerve = u.state === 'wavering' ? SEA.nerve.wavering : 1;
+    this.bank[u.id] = Math.min(per * SEA.torp.bank, this.bank[u.id] + per * nerve * DT);
+  }
+
+  /** How shaken the enemy's big ships in reach of a side's big guns are: their nerve on average, or Infinity with none. */
+  private shaken(side: Side): number {
+    let n = 0, m = 0;
+    for (const e of this.units) {
+      if (e.side === side || e.extra.cls === 'dd' || !live(e) || e.state === 'routing') continue;
+      if (!this.units.some((u) => u.side === side && BIG_GUNS.has(u.extra.cls) && live(u) && u.state !== 'routing' && dist(u.x, u.y, e.x, e.y) <= SEA.classes[u.extra.cls as SeaClass].reach)) continue;
+      n++; m += e.mor;
+    }
+    return n ? m / n : Infinity;
+  }
+
+  /**
+   * Once a second after the guns meet: the destroyers' torpedo runs (torp). Once its side's style opens them (torpWhen,
+   * or torp.after seconds after contact), a steady destroyer piece outside the screen, free to run, goes for the enemy
+   * big ship runTarget names. One told on its own to attack a bigger ship runs at it. A screen piece launches its bank
+   * from station at an enemy big ship within press.
+   */
+  private startRuns(): void {
+    if (this.contactAt === null) return;
+    for (const side of ['att', 'def'] as Side[]) {
+      const st = this.style(side);
+      const open = st.torpWhen >= 1 || this.t - this.contactAt >= SEA.torp.after || this.shaken(side) <= st.torpWhen;
+      for (const u of this.units) {
+        if (u.side !== side || u.extra.cls !== 'dd' || u.state !== 'steady' || this.runs.has(u.id) || (this.nextRun.get(u.id) ?? 0) > this.t) continue;
+        const o = this.orders.get(u.id);
+        if (o && o.kind !== 'attack') continue;
+        if (o && !o.fleet) {
+          const foe = this.byId.get(o.target);
+          if (foe && live(foe) && foe.extra.cls !== 'dd' && dist(u.x, u.y, foe.x, foe.y) <= SEA.torp.start) this.beginRun(u, foe);
+          continue;
+        }
+        if (this.screen.has(u.id) && !this.broken && this.guarded(u)) {
+          if (this.bank[u.id] <= 0) continue;
+          let foe: SeaUnit | null = null, fd = st.press;
+          for (const e of this.units) {
+            if (e.side === side || e.extra.cls === 'dd' || !live(e) || e.state === 'routing') continue;
+            const d = dist(u.x, u.y, e.x, e.y);
+            if (d <= fd) { fd = d; foe = e; }
+          }
+          if (foe) this.launch(u, foe, null);
+          continue;
+        }
+        // One whose guns have only a battleship or a carrier left to fire on goes for it at once, whatever its style: it is
+        // seen closing to launch, not trading shots at full reach (the admiral's note on ruling 239).
+        const onBig = ['bb', 'cv'].includes(this.byId.get(u.extra.target)?.extra.cls ?? '');
+        if (!open && !onBig) continue;
+        const foe = this.runTarget(u);
+        if (foe) this.beginRun(u, foe);
+      }
+    }
+  }
+
+  /** The enemy big ship a destroyer piece runs at: battleships, then cruisers, then carriers, within torp.start of it,
+   *  the one nearest the main effort; with spread, one run to each before any second. Ships still fighting, except in a
+   *  chase. No dice. */
+  private runTarget(u: SeaUnit): SeaUnit | null {
+    const side = u.side, main = this.byId.get(this.focus[side]);
+    const [mx, my] = main ? [main.x, main.y] : this.centre(other(side));
+    const cs = side === 'att' ? 1 : -1, spread = this.style(side).spread > 0;
+    const on = (e: SeaUnit): number => { let n = 0; for (const r of this.runs.values()) if (r.target === e.id && r.phase === 'in') n++; return n; };
+    for (const tc of ['bb', 'ca', 'cv'] as SeaClass[]) {
+      const pool = this.units.filter((e) => e.side !== side && e.extra.cls === tc && live(e) && (e.state !== 'routing' || this.broken === e.side) && dist(u.x, u.y, e.x, e.y) <= SEA.torp.start);
+      if (!pool.length) continue;
+      const ranked = pool.map((e) => ({ e, n: spread ? on(e) : 0, d: Math.round(dist(e.x, e.y, mx, my)), l: (e.x - mx) * cs }))
+        .sort((a, b) => a.n - b.n || a.d - b.d || a.l - b.l || a.e.id - b.e.id);
+      return ranked[0].e;
+    }
+    return null;
+  }
+
+  private beginRun(u: SeaUnit, foe: SeaUnit): void {
+    this.runs.set(u.id, { target: foe.id, phase: 'in', until: 0, away: 0, face: 0, turned: 0, launched: 0, near: false, shot: false });
+    u.extra.run = foe.id;
+  }
+
+  /**
+   * The course and speed of a destroyer piece on a torpedo run (torp): in at flank until its style's press range, when
+   * it launches; then away from the target at flank for torp.away seconds. Null when it is on none, or the run has just
+   * ended: a piece that wavers on the run-in, or whose target goes, breaks it off with its bank kept; an order of the
+   * player's own ends it.
+   */
+  private runCourse(u: SeaUnit, o: SeaOrder): { want: number; speed: number } | null {
+    const run = this.runs.get(u.id);
+    if (!run) return null;
+    const flank = SEA.classes.dd.speed * SEA.speeds.flank;
+    const told = o.kind === 'move' || o.kind === 'hold' || o.kind === 'leave' || (o.kind === 'attack' && !o.fleet && o.target !== run.target);
+    if (run.phase === 'in') {
+      const foe = this.byId.get(run.target);
+      if (!foe || !live(foe) || (foe.state === 'routing' && this.broken !== foe.side) || u.state !== 'steady' || told) { this.endRun(u, run, false); return null; }
+      if (dist(u.x, u.y, foe.x, foe.y) > this.style(u.side).press) return { want: bearing(u.x, u.y, foe.x, foe.y), speed: flank };
+      this.launch(u, foe, run);
+    }
+    if (u.state === 'routing' || told) { this.endRun(u, run, true); return null; }
+    run.turned = Math.max(run.turned, Math.abs(turn(run.face, u.face)));
+    if (this.t >= run.until) { this.endRun(u, run, true); return null; }
+    return { want: run.away, speed: flank };
+  }
+
+  /** A run ends: after its launch it may run again torp.again seconds after it; broken off before, as soon as it is fit. */
+  private endRun(u: SeaUnit, run: Run, done: boolean): void {
+    this.runs.delete(u.id);
+    delete u.extra.run;
+    if (!done) { this.nextRun.set(u.id, this.t); this.mark(`${u.side}:runsBroken`, 1); return; }
+    this.nextRun.set(u.id, run.launched + SEA.torp.again);
+    if (run.turned < Math.PI / 2) this.mark(`${u.side}:turnLate`, 1);
+  }
+
+  /**
+   * A destroyer piece launches its bank at an enemy ship (torp): a salvo that falls torp.travel seconds later, aimed
+   * where the target will be by then, its track a zone of kind 'torpedo' from the launch to the aim point (for the 3D
+   * game; it lasts while the salvo runs). On a run, it then turns away; from station, it may launch again torp.again
+   * seconds later.
+   */
+  private launch(u: SeaUnit, foe: SeaUnit, run: Run | null): void {
+    const T = SEA.torp, F = SEA.field.size, w = this.bank[u.id];
+    this.bank[u.id] = 0;
+    const ahead = foe.extra.way * T.travel;
+    const x = Math.round(clamp(foe.x + Math.sin(foe.face) * ahead, 2, F - 2)), y = Math.round(clamp(foe.y + Math.cos(foe.face) * ahead, 2, F - 2));
+    this.torps.push({ at: this.t + T.travel, side: u.side, target: foe.id, x, y, weight: w, from: u.id });
+    this.zones.push({ id: ++this.zoneId, kind: 'torpedo', x, y, r: T.radius, until: this.t + T.travel, side: u.side, at: Math.round(this.t * 10) / 10, unit: u.id });
+    this.say({ what: 'sea:torpedo', unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? 'fire' : 'fires'} torpedoes at ${this.told(foe)}.`, extra: { target: foe.id, x, y, running: T.travel } });
+    if (!run) { this.nextRun.set(u.id, this.t + T.again); this.mark(`${u.side}:screenLaunch`, 1); return; }
+    this.launched[u.side]++;
+    this.mark(`${u.side}:runs`, 1);
+    if (dist(u.x, u.y, foe.x, foe.y) > this.style(u.side).press + 200) this.mark(`${u.side}:launchFar`, 1);
+    if (run.near) { this.mark(`${u.side}:runsNearScreen`, 1); if (run.shot) this.mark(`${u.side}:runsShotByScreen`, 1); }
+    Object.assign(run, { phase: 'away', until: this.t + T.away, away: bearing(foe.x, foe.y, u.x, u.y), face: u.face, turned: 0, launched: this.t });
+    delete u.extra.run;
+  }
+
+  /** Salvos due to fall: on the target, as any blow does (take); with it gone, on the enemy nearest the aim point within
+   *  torp.radius, else on the heaviest, so the destroyers' weight is never lost. */
+  private landTorps(): void {
+    if (!this.torps.some((s) => s.at <= this.t)) return;
+    const due = this.torps.filter((s) => s.at <= this.t);
+    this.torps = this.torps.filter((s) => s.at > this.t);
+    for (const s of due) {
+      if (s.weight <= 0) continue;
+      const foe = this.byId.get(s.target);
+      let at: SeaUnit | null = foe && live(foe) ? foe : null;
+      if (!at) {
+        let bd = SEA.torp.radius;
+        for (const e of this.units) { if (e.side === s.side || !live(e)) continue; const d = dist(e.x, e.y, s.x, s.y); if (d <= bd) { bd = d; at = e; } }
+      }
+      at ??= this.heaviest(other(s.side));
+      if (!at) continue;
+      this.take(at, s.weight);
+      this.dealt[s.from] += s.weight;
+      this.mark(`${s.side}:torp>${at.extra.cls}`, s.weight);
+      const by = this.byId.get(s.from)!;
+      this.say({ what: 'sea:torpedoHit', unit: at.id, side: s.side, text: `Torpedoes from ${this.told(by)} hit ${this.told(at)}.`, extra: { from: s.from } });
     }
   }
 
@@ -1012,6 +1296,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
     for (const f of this.ticket.place.fleets) hurt[f.id] = { ...this.fleetLoss.burnt[f.id] };
     for (const u of this.units) if (u.state !== 'gone') hurt[this.info.get(u.id)!.fleet.id][u.extra.cls as SeaClass] += hurtAfloat(u.str, u.extra.ships0, u.extra.ships);
     const extra: SeaLosses = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, hurt, ...(toDice ? { toDice } : {}) };
+    // The B4 mark: a side with two destroyer pieces outside its screen, against an enemy with a big ship, made a run.
+    for (const side of ['att', 'def'] as Side[]) {
+      const free = this.units.filter((u) => u.side === side && u.extra.cls === 'dd' && !this.screen.has(u.id)).length;
+      if (free < 2 || !this.units.some((e) => e.side !== side && e.extra.cls !== 'dd')) continue;
+      this.mark(`${side}:runEligible`, 1);
+      if (this.launched[side] > 0) this.mark(`${side}:runBattles`, 1);
+    }
+    for (const u of this.units) if (this.bank[u.id] > 0) this.mark(`${u.side}:bankLeft`, this.bank[u.id]);
     this.over = {
       winner, how, seconds: this.t, lost, men: crews, R, level: seaLevel(R), lines, forces,
       extra: extra as unknown as Record<string, unknown>,

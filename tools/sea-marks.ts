@@ -150,7 +150,7 @@ function marksOf(rs: Rec[]): Record<string, number | null> {
     out[`${s}.B5far`] = ratio(sum(rs, (r) => k(r, `${s}:launchFar`)), sum(rs, (r) => k(r, `${s}:runs`)));
     out[`${s}.B5late`] = ratio(sum(rs, (r) => k(r, `${s}:turnLate`)), sum(rs, (r) => k(r, `${s}:runs`)));
     out[`${s}.B6`] = ratio(sum(rs, (r) => k(r, `${s}:runsShotByScreen`)), sum(rs, (r) => k(r, `${s}:runsNearScreen`)));
-    for (const m of ['runs', 'runEligible', 'runBattles', 'runsBroken', 'launchFar', 'turnLate', 'screenLaunch', 'runsNearScreen', 'runsShotByScreen', 'cvFirst', 'cvFirstAtCv', 'cvFirstAtBb', 'strikesMet', 'strikesBelow', 'strikesIn', 'denied', 'paid', 'owed', 'cvNearBb']) {
+    for (const m of ['runs', 'runEligible', 'runBattles', 'runsBroken', 'launchFar', 'turnLate', 'screenLaunch', 'runsNearScreen', 'runsShotByScreen', 'cvFirst', 'cvFirstAtCv', 'cvFirstAtBb', 'strikesMet', 'strikesBelow', 'strikesIn', 'denied', 'paid', 'owed', 'cvNearBb', 'bankLeft', 'ddBig:s', 'ddBigOff:s', 'ddBigFar:s', 'ddGun:s']) {
       const v = sum(rs, (r) => k(r, `${s}:${m}`));
       if (v) out[`${s}.${m}`] = v;
     }
