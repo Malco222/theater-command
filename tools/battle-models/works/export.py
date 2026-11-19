@@ -142,10 +142,13 @@ def main():
         n = {"upper": rows[0][1], "upper2": rows[0][2], "machine_gun": MG.get(k, MG["_default"]), "cue_machine_gun": CUE[MG.get(k, MG["_default"])]}
         if len(rows) > 1:
             n["by_date"] = [[when, {"upper": a, "upper2": b, "what": what}] for when, a, b, what in rows]
+        if bits.winter_wash(k):
+            n["winter_wash"] = True
         nations[k] = n
     with open(os.path.join(out, "nations.json"), "w") as f:
         json.dump({"about": "Every work is one mesh for all armies. Paint `upper` (and `upper2`, the second camouflage colour) with the owner's colour below; nothing else changes. "
-                            "`upper` is the country's `paint` in the art director's unit table (ruling 78(f)); a tag not listed takes `_default`. "
+                            "`upper` is the country's `paint` in the art director's unit table (ruling 78(f)) and `upper2` its `paint2` where the table gives one; a tag not listed takes `_default`. "
+                            "`winter_wash` true is the table's own: a worn white wash over the coat when the battle's ground is snow, as on that army's vehicles. "
                             "`by_date` [[from month YYYY-MM or null for the start, the two colours], ...] is paint that changed in the war, read as the unit table's swaps are: "
                             "Germany's guns are dark grey until early 1943 and dark yellow from 1943-02, the month its tanks change. "
                             "`machine_gun` says which machine-gun pieces that army's posts and pillboxes use: `air` = MachineGun, MGNest, Pillbox; `water` = MachineGun_water, MGNest_water, Pillbox_water.",

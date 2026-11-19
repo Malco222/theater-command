@@ -37,9 +37,10 @@ PAINTS = {
     "leaf": "4B5C2F", "leaf.2": "5E6D39", "leaf.dull": "6C6840", "leaf.dry": "76633F",
 }
 
-# Each army's field paint. The first colour comes from the art director's unit table (ruling 78(f): every gun takes its
-# owner's paint from that one table); this list is what stands in when the table cannot be read, and holds the second
-# colour of an army's camouflage where it used one (the table gives the first only).
+# Each army's field paint. Both colours come from the art director's unit table (ruling 78(f): every gun takes its
+# owner's paint from that one table): `paint`, and `paint2` for the second colour of its camouflage where the table
+# gives one. This list is what stands in when the table cannot be read, and holds the second colour of the armies the
+# table gives only one for (the great powers and Poland keep their coats).
 NATIONS = {
     "GER": ("4E5459", "3E4347"), "UK": ("65704E", "4A4436"), "USA": ("565C3A", "3F4430"), "SOV": ("4F5E3E", "6B6146"),
     "FRA": ("5E6A48", "7A6844"), "ITA": ("8A7F5E", "5E6442"), "JAP": ("988256", "566240"), "POL": ("66684A", "7B6A48"),
@@ -50,6 +51,7 @@ NATIONS = {
 DATED = {"GER": [(None, "4E5459", "3E4347", "dark grey"), ("1943-02", "A3925E", "82744B", "dark yellow")]}
 TABLE = os.environ.get("UNIT_TABLE", "/mnt/project-files/art-director/generic-units/unit-table.json")
 _armies = None
+_washed = set()
 
 
 def _darker(hexa, k=0.8):
@@ -62,21 +64,30 @@ def armies():
     global _armies
     if _armies is None:
         firsts = {k: v[0] for k, v in NATIONS.items()}
+        seconds = {}
         try:
             import json
             table = json.load(open(TABLE))
             firsts.update({k: c["paint"].upper() for k, c in table["countries"].items() if c.get("paint")})
+            seconds.update({k: c["paint2"].upper() for k, c in table["countries"].items() if c.get("paint2")})
+            _washed.update(k for k, c in table["countries"].items() if c.get("winter_wash"))
             if table.get("_default", {}).get("paint"):
                 firsts["_default"] = table["_default"]["paint"].upper()
         except (OSError, ValueError, KeyError) as e:
             print(f"bits: unit table not read ({e}); using the paints kept here", file=sys.stderr)
         _armies = {}
         for k, first in firsts.items():
-            second = NATIONS[k][1] if k in NATIONS and NATIONS[k][0] == first else _darker(first)
+            second = seconds.get(k) or (NATIONS[k][1] if k in NATIONS and NATIONS[k][0] == first else _darker(first))
             _armies[k] = [(None, first, second, "field paint")]
             if k in DATED:
                 _armies[k] = [(when, a if when else first, b, what) for when, a, b, what in DATED[k]]
     return _armies
+
+
+def winter_wash(tag):
+    """Does the unit table give this army a worn white wash over its coat when the battle's ground is snow?"""
+    armies()
+    return tag in _washed
 
 
 def paint_of(nation="_default"):
