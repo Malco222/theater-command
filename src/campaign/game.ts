@@ -3547,6 +3547,8 @@ export function startPhase(g: Game, nat: string): void {
   // Reinforcements from the pre-war mobilisation, and the armies and fronts formed later from men already under arms.
   for (const row of [...(setup as any).reinforcements, ...((setup as any).formations ?? [])]) {
     if (row[0] !== g.turn || row[1] !== nat) continue;
+    // A row marked 'open' is the open grand campaign's alone (ruling 233, rider b609(a)): the history campaign's roster stays the book's.
+    if (row[6]?.open && g.flags.open !== 1) continue;
     let reg = g.byName[row[5]];
     // A row for ground this campaign's chart does not carry (a far-side row on the older chart) never comes.
     if (!reg) continue;
