@@ -241,7 +241,7 @@ loaded through `capitals.NAMED_MODULES`):
 | `Yamato` | Yamato, April 1945, triple 46 cm, 25 mm nests everywhere | `Battleship_JAP` | 237k / 29k |
 | `Shokaku` | Shokaku-class carrier, 1941-42, bent funnels to starboard | `Carrier_JAP` | 109k / 14k |
 | `Essex` | Essex-class carrier, 1944, Measure 21, deck-edge lift to port | `Carrier_USA` | 136k / 19k |
-| `Arizona` | Pennsylvania-class battleship, Pearl Harbor, December 1941, Measure 1 | `Battleship_USA` | 71k / 13k |
+| `Arizona` | Pennsylvania-class battleship, Pearl Harbor, December 1941, Measure 1 | `Battleship_USA` | 96k / 16k |
 | `Yorktown` | Yorktown (CV-5) at Midway, June 1942, Measure 12 graded | `Carrier_USA` | 149k / 17k |
 | `Akagi` | Akagi, 1941-42: island to port, the great downturned funnel to starboard, 20 cm casemates | `Carrier_JAP` | 150k / 19k |
 | `Kaga` | Kaga, 1941-42: island forward to starboard, ten 20 cm casemates | `Carrier_JAP` | 142k / 20k |
@@ -250,8 +250,10 @@ loaded through `capitals.NAMED_MODULES`):
 
 The Pearl Harbor and Midway stages take the 1941-42 ships; the Iowa, Yamato and Essex stand for the later war.
 
-Each is a drop-in for the plain ship it names in `info.file.stands_for`: the same parts, sockets and clips, so a
-battle can swap one for the other. What they add: more `sec.*` mounts (`sec.P1…/sec.S1…`, and Yamato's two centre-line
+Each is a drop-in for the plain ship it names in `stands_for`: the same clips and the same kinds of parts and
+sockets, so a battle can swap one for the other. The counts follow the real ship, so look parts up by kind, not by a
+fixed list: a ship has no `radar.*` before she carried one (the Arizona and the 1941-42 carriers), a single 5-inch
+mount has no `.gun.2`, and a ship has as many `aa.N` and `funnel.N` as she had guns and funnels. What they add: more `sec.*` mounts (`sec.P1…/sec.S1…`, and Yamato's two centre-line
 15.5 cm turrets `sec.C1`, `sec.C2`), every 40 mm / 25 mm mount its own turn part (`bofors.N`, `aa25.N`, each with its
 `.guns` lifting; Yorktown's 1.1-inch quads are `aa28.N`; the prefixes are `capitals.AA_TRAINS`), `aa.N` sockets on
 every light gun, and the clip `fire.aa` (the light guns firing in a ripple, for a raid). Casemate guns (the Arizona's
