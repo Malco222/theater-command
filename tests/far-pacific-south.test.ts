@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { wantsOut } from '../src/campaign/ai';
 import { plannedStrike } from '../src/campaign/carriers';
 import { bookMonth } from '../src/campaign/claims';
-import { DIPLOMACY, holds, monthlyDiplomacy } from '../src/campaign/diplomacy';
+import { DIPLOMACY, holds, monthlyDiplomacy, step } from '../src/campaign/diplomacy';
 import { allied, atWar, bloc, capitulate, createGame, declareWar, startPhase } from '../src/campaign/game';
 import { HISTORY, bookExpects, onBook, setStop } from '../src/campaign/history';
 import { NAVY, assaultStrength, navalUpkeep } from '../src/campaign/navy';
@@ -76,7 +76,13 @@ describe("Japan's opening (ruling 200): the rows", () => {
   it("reads Siam's row at a declaration of war, and moves the carrier striking force to Etorofu and home again by date", () => {
     const siam = DIPLOMACY.events.find((e) => e.id === 'siam-beside-japan')!;
     expect(siam.when).toBe('war');
-    expect(siam.if).toContain('book');
+    // (At stops 1 to 3 of the dial, not the book's stops alone: riders b591 and b593 to ruling 234. A second row is read at stops 4 and 5.)
+    expect(siam.if).toContain('stop:1,2,3');
+    expect(siam.if).not.toContain('book');
+    const own = DIPLOMACY.events.find((e) => e.id === 'siam-chooses-japan')!;
+    expect(own.when).toBe('war');
+    expect(own.if).toEqual(siam.if!.map((c) => (c === 'stop:1,2,3' ? 'stop:4,5' : c)).flatMap((c) => (c === 'stop:4,5' ? [c, 'step>=:THA,1'] : [c])));
+    expect([own.enter, own.war, own.text]).toEqual([siam.enter, siam.war, siam.text]);
     const moves = (NAVY.moves ?? []).filter((m) => m.nat === 'JAP' && m.fleet === 'Mobile Fleet');
     expect(moves.map((m) => [m.turn, m.base, m.home])).toEqual([[27, 'Etorofu', 'kurile'], [29, 'Hiroshima', 'inland']]);
     expect(moves.every((m) => JSON.stringify(m.stops) === '[1,2]')).toBe(true);
@@ -274,9 +280,9 @@ describe('the demand on Indochina (ruling 199)', () => {
   });
 });
 
-describe('Siam beside Japan (ruling 200(b))', () => {
-  it('at the stops that keep the book: the day Japan is at war with Britain, Siam joins the Axis and declares on Britain', () => {
-    for (const stop of [1, 2]) {
+describe('Siam beside Japan (ruling 200(b); riders b591 and b593 to ruling 234)', () => {
+  it('at stops 1 to 3 of the dial: the day Japan is at war with Britain, Siam joins the Axis and declares on Britain (it let Japan pass within hours, a fact of the day)', () => {
+    for (const stop of [1, 2, 3]) {
       const g = war(stop, 28);
       expect(bloc(g.nations.THA)).toBeNull();
       declareWar(g, 'JAP', 'UK');
@@ -293,11 +299,39 @@ describe('Siam beside Japan (ruling 200(b))', () => {
     }
   });
 
-  it("not where history is loose, and never a player's Siam", () => {
+  it("at stops 4 and 5 it chooses by its character: beside Japan only while it leans to the Axis that day, and never a player's Siam", () => {
+    for (const stop of [4, 5]) {
+      // As it opens the war, in neither camp and leaning to neither: it stays neutral, whatever Japan does.
+      const g = war(stop, 28);
+      expect(step(g.nations.THA)).toBe(0);
+      declareWar(g, 'JAP', 'UK');
+      expect(bloc(g.nations.THA), `stop ${stop}`).toBeNull();
+      expect(atWar(g, 'THA', 'UK')).toBe(false);
+      expect(g.flags['event:siam-beside-japan']).toBeUndefined();
+      expect(g.flags['event:siam-chooses-japan']).toBeUndefined();
+      // Courted to Japan's side since: the next declaration finds it leaning, and it stands with Japan.
+      g.nations.THA.align = 'leaning_axis';
+      declareWar(g, 'JAP', 'USA');
+      expect(bloc(g.nations.THA), `stop ${stop}`).toBe('axis');
+      expect(atWar(g, 'THA', 'UK')).toBe(true);
+      expect(g.flags['event:siam-chooses-japan']).toBe(28);
+      expect(g.flags['event:siam-beside-japan']).toBeUndefined();
+      expect(g.headlines.filter((h) => h.text.includes('Thailand stands with Japan')).length).toBe(1);
+      // Leaning on the day of the blow itself: that day.
+      const w = war(stop, 28);
+      w.nations.THA.align = 'leaning_axis';
+      declareWar(w, 'JAP', 'UK');
+      expect(bloc(w.nations.THA), `stop ${stop}`).toBe('axis');
+      // Leaning to the Allies: neutral.
+      const a = war(stop, 28);
+      a.nations.THA.align = 'leaning_allies';
+      declareWar(a, 'JAP', 'UK');
+      expect(bloc(a.nations.THA), `stop ${stop}`).toBeNull();
+    }
+    // (The second row is not read at stops 1 to 3, nor the first at 4 and 5: one row a stop.)
     const g = war(3, 28);
     declareWar(g, 'JAP', 'UK');
-    expect(bloc(g.nations.THA)).toBeNull();
-    expect(atWar(g, 'THA', 'UK')).toBe(false);
+    expect([g.flags['event:siam-beside-japan'], g.flags['event:siam-chooses-japan']]).toEqual([28, undefined]);
     const h = war(1, 28, 'THA');
     declareWar(h, 'JAP', 'UK');
     expect(bloc(h.nations.THA)).toBeNull();

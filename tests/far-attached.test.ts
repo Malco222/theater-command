@@ -15,7 +15,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { bookMonth } from '../src/campaign/claims';
 import { monthlyDiplomacy } from '../src/campaign/diplomacy';
-import { addCorps, capitulate, createGame, declareWar, hostileUnits, removeCorps, startPhase } from '../src/campaign/game';
+import { addCorps, atWar, capitulate, createGame, declareWar, hostileUnits, removeCorps, startPhase } from '../src/campaign/game';
 import { release } from '../src/campaign/ai';
 import { setStop } from '../src/campaign/history';
 import { landCorps, liftLeft, navalUpkeep, whyNotLand } from '../src/campaign/navy';
@@ -233,8 +233,10 @@ describe('a row lands in the lift of the corps it goes with (rider b604)', () =>
     g.phase = g.order.indexOf('JAP');
     runTurnAI(g);
     expect(g.flags['st:done:JAP:south']).toBe(28);
-    // (With Siam neutral Singora is no beach: the 5th Division is for Kota Bharu, far-ready.test.ts.)
-    expect([at(g, G5), at(g, reg('1st')), at(g, reg('6th'))]).toEqual(['Kota Bharu', 'Kota Bharu', 'Kota Bharu']);
+    // (Siam stands with Japan the day of the blow at stops 1 to 3, riders b591 and b593: Singora is a friendly harbour,
+    // the 5th Division is shipped there and its regiments behind it, for no shipping of their own.)
+    expect(atWar(g, 'THA', 'UK')).toBe(true);
+    expect([at(g, G5), at(g, reg('1st')), at(g, reg('6th'))]).toEqual(['Singora', 'Singora', 'Singora']);
     for (const n of ['1st', '6th', '14th']) expect(corps(g, reg(n))!.hold, n).toBe(false);
     // The 48th Division waits on Formosa for January's ships, and its regiments wait with it, held.
     expect([at(g, G48), at(g, reg('4th')), at(g, reg('7th'))]).toEqual(['Formosa', 'Formosa', 'Formosa']);

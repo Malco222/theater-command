@@ -220,7 +220,7 @@ describe('the readiness test: the first month, the draw and the last month', () 
     expect(readiness(g, 'JAP')).toBeNull();
   });
 
-  it("the flag up, the strike south goes that month with no second draw: Japan declares on the three, the carriers strike Pearl Harbor from Etorofu, the armies land, and Siam stays neutral", () => {
+  it("the flag up, the strike south goes that month with no second draw: Japan declares on the three, the carriers strike Pearl Harbor from Etorofu, the armies land, and Siam lets them pass", () => {
     const g = months(december(3), 6);
     g.phase = g.order.indexOf('JAP');
     runTurnAI(g);
@@ -230,9 +230,10 @@ describe('the readiness test: the first month, the draw and the last month', () 
     expect(atWar(g, 'JAP', 'USA') && atWar(g, 'JAP', 'UK') && atWar(g, 'JAP', 'AUS')).toBe(true);
     expect(news(g, 28, 'raid the harbour of Pearl Harbor without warning')).toBe(true);
     expect(g.regions[striking(g).base].name).toBe('Hiroshima');
-    expect(bloc(g.nations.THA)).toBeNull();
-    // (With Siam neutral Singora is no beach: both divisions on Hainan are for Kota Bharu.)
-    expect(at(g, '25th Army (5th Division)')).toBe('Kota Bharu');
+    // (Siam stands with Japan the day of the blow at stops 1 to 3, riders b591 and b593 to ruling 234: Singora is the
+    // 5th Division's harbour, as the plan's row has it first, and Kota Bharu the 18th's.)
+    expect(bloc(g.nations.THA)).toBe('axis');
+    expect(at(g, '25th Army (5th Division)')).toBe('Singora');
     const sailed = SOUTH().landings!.filter((l) => l.to.includes(at(g, l.corps) ?? '')).length;
     expect(sailed).toBeGreaterThanOrEqual(5);
   });
