@@ -13,7 +13,8 @@ before `assemble` calls them (the art director's calls, 2026-11-19: the army's o
   collar band), a short row of four buttons from the lapels' foot to the belt, its four pockets as soldier.py makes
   them; on each lapel's point a collar patch with the army's five-pointed star, pale (never black: black two-pointed
   flames were the Blackshirts' mark). The game paints a man from one fixed table of paints, so the patch takes the
-  helmet's paint and the star the skin's (the only pale one); the infantry's red patch and a white-metal star wait
+  helmet's paint (in the desert dress the leather's, so the star sits on dark) and the star the skin's (the only
+  pale one); the infantry's red patch and a white-metal star wait
   for the game to read a soldier file's own "colours" (after release 1);
 - breeches full in the thigh and bloused just under the knee over puttees, the wool band wound up the shin from the
   ankle boots to the knee in a spiral, each turn's lower edge lapped over the one below like a shingle (its edge a
@@ -290,7 +291,7 @@ def build_kit(J, spec, body_ls, Z=None):
         _plate(g, tunic, [(0.026 * side, top + 0.005), (0.074 * side, top - 0.006), (0.0, foot - 0.006)], 0.0032, 0.003, "tunic", 4)
         # the collar patch along the lapel's outer edge, the star at its lower end
         _plate(g, tunic, [(0.042 * side, top - 0.002), (0.07 * side, top - 0.008), (0.058 * side, top - 0.05), (0.037 * side, top - 0.04)],
-               0.0064, 0.0012, MARKS[0], 2)
+               0.0064, 0.0012, "straps" if desert else MARKS[0], 2)        # (on the sand dress, dark leather under the pale star)
         p, nrm = on_surface(tunic, (0.4, 0.05 * side, top - 0.035), (-1.0, 0.0, 0.0))
         _star(g, p + nrm * 0.0066, nrm, (0.0, 0.0, 1.0), 0.0075, MARKS[1])
     # ---- the four buttons from the lapels' foot to the belt, and one on each pocket's flap
@@ -413,7 +414,8 @@ def export_ita(info, dress="summer"):
         S.export_glb(S.stage_path(f"{base}_LOD{lod}.glb"), [m["arm"]] + lods[lod] + socks, anim=False)
     data = S.write_game_json(S.stage_path(f"{base}.json"), m, lods)
     data["about"] = data["about"].replace("soldier.py.", "soldier_ita.py on soldier.py.")
-    data["about"] += f" His collar patches take the {MARKS[0]} paint and their stars the {MARKS[1]} paint (pale, never black)."
+    data["about"] += (f" His collar patches take the {'straps' if dress == 'desert' else MARKS[0]} paint and their stars the {MARKS[1]}"
+                      " paint (pale, never black).")
     if dress != "summer":
         data["about"] += f" Dress: {dress}; paint by its colours below (they differ from the grey-green man's)."
         data["colours"] = dict(S.LOOK[tag])
