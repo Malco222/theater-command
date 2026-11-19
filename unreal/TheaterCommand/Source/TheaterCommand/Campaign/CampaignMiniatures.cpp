@@ -881,7 +881,8 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	const int32 Era = UnitTable::MarkEra(Tag);
 	// (and by whether it is whitewashed for the snow: a vehicle or a gun only, never a figure, an aircraft or a piece of scenery)
 	const bool bWash = UnitTable::Wash() && !bFigure && !Raw->bAircraft && !Raw->bPiece;
-	const FString Key = (Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag) + (bWash ? TEXT("|wash") : TEXT(""));
+	const FString Key = (Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag) + (bWash ? TEXT("|wash") : TEXT(""))
+		+ (UnitTable::CloseMarks() ? TEXT("|close") : TEXT(""));
 	FMiniatureMesh* Model = Painted.Find(Key);
 	if (!Model)
 	{
@@ -930,14 +931,35 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		// lay a worn, streaky white wash at about 70% over the base coat". Brushed on by the crew: it runs in streaks
 		// down the plates, lies thinner in patches where it has worn, and thinner still on what faces the ground,
 		// where no brush went. The marks are painted round, and stay.)
-		auto Washed = [&Raw, &WashWhite, WashGrain](const FLinearColor& Coat, int32 K)
+		// (The art director on seeing the first of it, 02:27Z on 19 November: it read as "a fresh, even cream paint job".
+		// She asked for white in strokes and patches with the base coat showing through in streaks, most of all round
+		// hatches, edges, the gun and where the crew climb; the lower hull and running gear in grey-brown grime and
+		// slush, not white; about six or seven parts in ten covered, but unevenly. So: long strokes, down the sides
+		// and along the top, and broad patches, cut off sharply enough that coat shows between them; none where the
+		// model says the paint is worn; none low down, where the coat is mired instead.)
+		const double WashHigh = FMath::Max(FBox(Raw->Points).Max.Z, 0.01);
+		const FLinearColor Slush(FColor(98, 90, 78));
+		auto Mired = [&Raw, &Slush, WashHigh](const FLinearColor& Coat, int32 K, float Most)
+		{
+			const float Up = static_cast<float>(Raw->Points[K].Z / WashHigh);
+			return FMath::Lerp(Coat, Slush, Most * (1.0f - FMath::SmoothStep(0.16f, 0.36f, Up)));
+		};
+		auto Washed = [&Raw, &WashWhite, &Mired, WashGrain, WashHigh](const FLinearColor& Coat, int32 K)
 		{
 			const FVector& At = Raw->Points[K];
-			const double Run = 0.5 + 0.5 * FMath::Sin(At.Z * WashGrain * 1.4 + 1.7 * FMath::Sin(At.X * WashGrain * 0.6) + 0.9 * FMath::Sin(At.Y * WashGrain * 0.8));
-			const double Worn = 0.5 + 0.5 * FMath::Sin(At.X * WashGrain * 2.3 + At.Y * WashGrain * 1.9 + 1.3);
-			const float Brushed = FMath::Lerp(0.4f, 1.0f, FMath::Clamp(0.5f + 0.5f * static_cast<float>(Raw->Facings[K].Z) + 0.35f, 0.0f, 1.0f));
-			const float Much = 0.7f * (0.62f + 0.38f * static_cast<float>(0.6 * Run + 0.4 * Worn)) * Brushed;
-			return FMath::Lerp(Coat, WashWhite, Much);
+			const FVector& Out = Raw->Facings[K];
+			const float Up = static_cast<float>(At.Z / WashHigh);
+			const FVector Brush = Out.Z > 0.6
+				? FVector(At.Y * WashGrain * 1.9, At.X * WashGrain * 0.35, 3.1)
+				: FVector((At.X + At.Y * 0.6) * WashGrain * 1.9, At.Z * WashGrain * 0.35, 7.7);
+			const float Stroke = FMath::PerlinNoise3D(Brush);
+			const float Patch = FMath::PerlinNoise3D(At * (WashGrain * 0.28) + FVector(11.3, 4.1, 8.6));
+			const float Worn = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) / 100.0f : 0.0f;
+			float Laid = FMath::SmoothStep(-0.04f, 0.18f, 0.6f * Stroke + 0.75f * Patch + 0.18f);
+			Laid *= 1.0f - 0.85f * Worn;
+			Laid *= FMath::SmoothStep(0.24f, 0.42f, Up);
+			Laid *= FMath::Lerp(0.35f, 1.0f, FMath::Clamp(0.85f + static_cast<float>(Out.Z), 0.0f, 1.0f));
+			return FMath::Lerp(Mired(Coat, K, 0.62f), WashWhite, 0.9f * Laid);
 		};
 		// (A battle vehicle's coat: the nation's paint, its second colour in the blotches where the table gives it one,
 		// and a shade of the paint for what lies in shadow under the hull.)
@@ -1003,6 +1025,10 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				{
 					Coat = Washed(Coat, K);
 				}
+				else if (bWash && Kind <= 5)
+				{
+					Coat = Mired(Coat, K, 0.5f); // (tracks, tyres and steel low down: grey-brown with slush)
+				}
 				if (Raw->Soot.IsValidIndex(K) && Raw->Soot[K] > 4)
 				{
 					Coat = FMath::Lerp(Coat, Raw->PaintColours[10], 0.72f * FMath::Min(Raw->Soot[K], 100) / 100.0f);
@@ -1031,6 +1057,10 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			if (bWash && Kind <= 1)
 			{
 				Coat = Washed(Coat, K);
+			}
+			else if (bWash && Kind <= 3)
+			{
+				Coat = Mired(Coat, K, 0.5f); // (tracks and tyres low down: grey-brown with slush)
 			}
 			Fresh.Add(Raw->Points[K], Raw->Facings[K], Coat.ToFColor(true));
 		}
