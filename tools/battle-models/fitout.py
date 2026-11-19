@@ -347,7 +347,7 @@ def cockpit(m, f, s, G, hull):
     m.use("plane")
     for i, (stations, hoops, spine) in enumerate(s.get("hoods", [])):
         if getattr(f, "cockpit", None):
-            open_cockpit(m, f, s, hull)                    # (her cockpit is open under her canopy: its own dark, and what is in it)
+            open_cockpit(m, f, s, hull, G)                 # (her cockpit is open under her canopy: its own dark, and what is in it)
             break
         hood = hood_body(G, s, i)
         n = 14 if m.fine else 6
@@ -382,7 +382,7 @@ def cockpit(m, f, s, G, hull):
         first = False
 
 
-def open_cockpit(m, f, s, hull):
+def open_cockpit(m, f, s, hull, G=None):
     """A fighter's cockpit, open under her canopy (planes.py cuts her skin away there: fighters.opening): her skin
     again from inside, dark; her instrument panel across the front of it with its dials, and a bulkhead behind her
     seat; a floor; and a padded rim round its edge (Brian, 2026-11-19: the crew "fully inside with their hands on
@@ -413,6 +413,8 @@ def open_cockpit(m, f, s, hull):
     if m.fine:
         sx = x0 + 0.1
         top = hull.at(sx, math.pi / 2.0).z
+        if G is not None:
+            top = min(top, body_top(hood_body(G, s, 0), sx + 0.02) - 0.2)     # (and under her windscreen's glass, where it is low over it)
         m.box((sx, 0.0, top + 0.045), (0.08, 0.055, 0.09), "gunmetal")
         m.box((sx + 0.02, 0.0, top + 0.12), (0.008, 0.075, 0.085), "lens", pitch=-32.0)
     # (the rim round its edge, padded)

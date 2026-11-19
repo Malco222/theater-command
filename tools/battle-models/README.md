@@ -312,6 +312,31 @@ faces aft with his gun (`flexgun.1`). 44,000 triangles. Three more keys of `cabi
 - `hoops`: where a frame arches over it from sill to sill;
 - `spine`: a bar along its top.
 
+**The four single-seat fighters** come next (Brian, 2026-11-19: "all 4", the B-17's standard for the `Mustang`,
+`Spitfire`, `Bf109` and `Zero`): `fighters.FIGHTERS`, added to `EXTRA_PLANES`, each laid out against a three-view of
+the real machine (the P-51D, the Spitfire Mk I's lines, the Bf 109 E, the A6M2; each drawing is named beside her
+numbers in `fighters.py`; measured, not traced). They keep the game's own colours and marks as built. Wheels are up
+in flight, so a tailwheel that retracted (the Mustang's, the Zero's) is left off; the Spitfire's and the Bf 109's
+stay. 27,000 to 32,000 triangles, plain 4,700 to 6,000. What their numbers add:
+
+- `canopy`: a function of her fuselage that gives her glass as framed pieces (a windscreen, a hood, the glazing
+  behind it), each a loft through half sections from the foot of its rail up and over to her middle line; where the
+  points are few the panes are flat. `hoops` are frames across a piece, `rails` along it, `bars` and `struts` any
+  other; `bar` is their half width, `cap` glazes a piece's after end round and `bare` names sections its rails stop
+  short of. Every windscreen has a flat front pane between straight posts. `bubble` lays down a blown hood, widest at
+  its rail (the Mustang, the Spitfire); `box` flat panes in square frames under a flat roof (the Bf 109); `green` a
+  greenhouse of many frames with flat sides and a roof rounded in flat panes (the Zero). The rail a hood slides on
+  is painted her coat.
+- `opening`: her cockpit is open under the glass, from this x to that and from this many degrees round her side up
+  over her top; `planes.py` cuts her skin away there and `fitout.open_cockpit` lines it: her skin again from inside,
+  dark; the panel with its dials; the coaming and the gunsight, kept under the windscreen's glass; a floor; a padded
+  rim. The pilot sits wholly inside, his right hand on the stick and his left on the throttle.
+- `glare` (the game's own key, the dull panel ahead of her windscreen) lies on the round of her nose on a machine
+  with a `canopy`, not as a flat strip standing off it (the Mustang's olive drab).
+- a row of `scoops` may take a fourth item, `"one"`: that scoop is on her one side only (the Spitfire's radiator
+  under her starboard wing, her oil cooler under her port one); `mast` takes a fourth value, how far its top stands
+  aft of its foot (less than nothing: the Zero's, raked forward).
+
 **The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, twelve more entries in
 `EXTRA_PLANES`. Paints and first years are the art director's rulings of that day; the file's `year` is the first
 year a nation flies her (none: from the start), `tech` the rules' technology she needs, `tag` the model tag the
