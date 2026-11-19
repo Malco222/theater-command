@@ -138,6 +138,33 @@ describe('the campaign\'s carrier groups by name (the UI director\'s air review 
   });
 });
 
+describe('the UI director\'s rule of 14:48Z: a name takes "the" unless written as a code or a proper name of its own', () => {
+  const fight1 = (n: string) => told(n, '{N} [is|are] in a fight.');
+  it('takes "the"', () => {
+    expect(fight1('Japanese Akagi fighter patrol')).toBe('The Japanese Akagi fighter patrol is in a fight.');
+    expect(fight1('Polish Pursuit Brigade')).toBe('The Polish Pursuit Brigade is in a fight.');
+    expect(fight1('American Caribbean Air Force')).toBe('The American Caribbean Air Force is in a fight.');
+    expect(aCraftOf('Northern Air Zone', 'bomber')).toBe('a bomber of the Northern Air Zone');
+    expect(fight1('US Ninth Air Force')).toBe('The US Ninth Air Force is in a fight.');
+    expect(subjectOf('Mobile Force strike wing').who).toBe("The Mobile Force's strike wing");
+  });
+  it('stays bare: codes, "No." names, the American navy\'s squadrons, Force H, names in their own language, the RAF\'s commands', () => {
+    for (const n of ['KG 2', 'German KG 2', 'JG 26', 'VMF-221', 'No. 3 Group', 'Bombing Three', 'Fighting Six', 'Torpedo Eight', 'Jagdgeschwader 2', '4° Stormo', 'Tainan Kokutai', 'Japanese Tainan Kokutai', 'Luftflotte 2', 'Groupe de Chasse 3', 'Bomber Command', 'Fighter Command']) {
+      expect(fight1(n), n).toBe(`${n} is in a fight.`);
+    }
+    expect(subjectOf('Force H strike wing').whom).toBe("Force H's strike wing");
+    expect(subjectOf('Kido Butai carrier fighters').whom).toBe("Kido Butai's carrier fighters");
+  });
+  it('the enemy\'s fleet wing by its aircraft and fleet; the player\'s own as "one of"', () => {
+    expect(aCraftOf('Home Fleet carrier fighters', 'aircraft', 'British')).toBe('a British carrier fighter of the Home Fleet');
+    expect(aCraftOf('Force H carrier fighters', 'aircraft', 'British')).toBe('a British carrier fighter of Force H');
+    expect(aCraftOf('Home Fleet carrier fighters', 'aircraft')).toBe("one of the Home Fleet's carrier fighters");
+    expect(aCraftOf('Force H carrier fighters', 'aircraft')).toBe("one of Force H's carrier fighters");
+    // The strike wing keeps its passed form, the nation word on the aircraft.
+    expect(aCraftOf('Home Fleet strike wing', 'bomber', 'British')).toBe("a British bomber of the Home Fleet's strike wing");
+  });
+});
+
 describe('the UI director\'s six rulings of 14:26Z (words-air-battle-dispatches.md)', () => {
   it('1. an ordinal group takes "the"; "No." names and the German and Italian forms stay bare', () => {
     expect(told('1st Bomber Group', '{N} [is|are] in a fight.')).toBe('The 1st Bomber Group is in a fight.');
@@ -197,10 +224,10 @@ describe('the UI director\'s six rulings of 14:26Z (words-air-battle-dispatches.
     const f = tk.att.forces.find((x) => x.kind !== 'bmr')!, each = Math.floor(f.men / 3);
     for (let i = 1; i < 3; i++) { tk.att.forces.push({ ...f, corps: 90_000 + i, men: each }); tk.place.starts[90_000 + i] = { ...tk.place.starts[f.corps] }; }
     f.men -= each * 2;
-    tk.att.human = false; tk.def.human = true; tk.att.adj = 'Japanese';
+    tk.att.human = false; tk.def.human = true;
     const esc = fight(tk, 'Shokaku and Zuikaku dive bombers').history().filter((e) => e.what === 'air:engage' && e.text);
     expect(esc.length).toBeGreaterThan(0);
-    for (const e of esc) expect(e.text).toMatch(/^Japanese .+ broken away from the Shokaku and Zuikaku dive bombers to take on the attackers\.$/);
+    for (const e of esc) expect(e.text).toMatch(/^German Jagdgeschwader \d+ (has|have) broken away from the Shokaku and Zuikaku dive bombers to take on the attackers\.$/);
     const nth = lines('American', '8th Bomb Group');
     expect(['contact', 'air:lost', 'air:straggle'].every((w) => nth.some((e) => e.what === w))).toBe(true);
     for (const e of nth.filter((e) => e.what === 'contact')) expect(e.text).toBe('The American 8th Bomb Group is in a fight.');

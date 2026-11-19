@@ -2,7 +2,9 @@
 // one aircraft of a group, and 'a' or 'an'. Shared by the battle (sim.ts) and the words for a fall (falls.ts).
 // The UI director's rulings: air review 10 (a carrier's fighters are the fleet's), 19 November 14:26Z (an ordinal
 // group takes 'the'; the nation word on the aircraft; a joined or plural name takes a plural verb; a box named for its
-// aircraft takes 'the' everywhere; no nation word twice) (ui-director/words-air-battle-dispatches.md).
+// aircraft takes 'the' everywhere; no nation word twice) and 14:48Z (every group's name takes 'the' unless written as a
+// code or a proper name of its own; the enemy's fleet wing as 'a British carrier fighter of the Home Fleet')
+// (ui-director/words-air-battle-dispatches.md).
 
 const ORDINAL = '(?:\\d+(?:st|nd|rd|th)|First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth|Tenth|Eleventh|Twelfth|Thirteenth|Fourteenth|Fifteenth|Sixteenth|Seventeenth|Eighteenth|Nineteenth|Twentieth)';
 /**
@@ -11,6 +13,30 @@ const ORDINAL = '(?:\\d+(?:st|nd|rd|th)|First|Second|Third|Fourth|Fifth|Sixth|Se
  * Command' (never read as 'I'). 'No. 11 Group', 'KG 2' and 'Groupe de Chasse 3' stay bare (ruling 1).
  */
 const ORDINAL_NAME = new RegExp(`^(?:[A-Z][A-Za-z]* ){0,2}(?:${ORDINAL}|[IVX]+(?= [A-Z])) `);
+
+/** Words of a name left in its own language (the UI director, 14:48Z: 'Jagdgeschwader 2', '4° Stormo', 'Tainan Kokutai'). */
+const OWN_TONGUE = /(^| )(?:Jagdgeschwader|Kampfgeschwader|Stukageschwader|Zerstörergeschwader|Nachtjagdgeschwader|Schlachtgeschwader|Geschwader|Luftflotte|Fliegerkorps|Fliegerdivision|Gruppe|Staffel|Stormo|Gruppo|Squadriglia|Groupe|Escadrille|Escadre|Kokutai|Kōkūtai|Sentai|Hikōtai|Hikotai|Hikodan|Butai)( |$)/;
+
+/**
+ * A name written as a code or as a proper name of its own, which takes no 'the' (the UI director, 14:48Z), wherever
+ * called() has put the enemy's nation word: codes ('KG 2', 'JG 26', 'VMF-221'), 'No.' names ('No. 3 Group'), the
+ * American navy's squadrons ('Bombing Three', 'Fighting Six', 'Torpedo Three, Six and Eight'), 'Force H' and its kind,
+ * names in their own language, and the RAF's commands as Britain wrote them ('Bomber Command').
+ */
+const BARE = [
+  /(^| )[A-Z]{2,}(?:-| )\d+( |$)/,
+  /(^| )No\. /,
+  /(^| )(?:Bombing|Fighting|Torpedo|Scouting|Patrol) [A-Z][a-z]+\b/,
+  /(^| )Force [A-Z]$/,
+  /(^| )(?:Bomber|Fighter|Coastal) Command$/,
+  OWN_TONGUE,
+];
+
+/** Whether a group's name takes 'the': an ordinal one always ('The I Bomber Command', 'The US Ninth Air Force'); otherwise unless it is BARE. */
+export const takesThe = (name: string): boolean => ORDINAL_NAME.test(name) || !BARE.some((r) => r.test(name));
+
+/** A carrier's wing: '{fleet} carrier fighters', '{fleet} strike wing' (data/campaign/carriers.json). */
+const FLEET_WING = /^(.+?) (carrier [a-z]+s|strike wing)$/;
 
 export interface Subject {
   /** The name opening a sentence, and inside one. */
@@ -29,14 +55,14 @@ export interface Subject {
  * dive bombers are in a fight", "Torpedo Three, Six and Eight are in a fight".
  */
 export function subjectOf(name: string): Subject {
-  const m = /^(.+?) (carrier [a-z]+s|strike wing)$/.exec(name);
+  const m = FLEET_WING.exec(name);
   if (m) {
-    const whom = `${/(^| )Force [A-Z]$/.test(m[1]) ? '' : 'the '}${m[1]}'s ${m[2]}`;
+    const whom = `${takesThe(m[1]) ? 'the ' : ''}${m[1]}'s ${m[2]}`;
     const craft = m[2] !== 'strike wing';
     return { who: upFirst(whom), whom, many: craft, craft };
   }
   const craft = /(^| )[a-z]+s$/.test(name);
-  const whom = craft || ORDINAL_NAME.test(name) ? `the ${name}` : name;
+  const whom = craft || takesThe(name) ? `the ${name}` : name;
   return { who: upFirst(whom), whom, many: craft || /,| and /.test(name), craft };
 }
 
@@ -52,9 +78,15 @@ export function oneOf(name: string, adj = ''): string {
 /**
  * One aircraft of a group, the nation word on the aircraft (the UI director, 14:26Z): 'a bomber of the 8th Bomb Group',
  * 'an American aircraft of Bombing Three and Scouting Six', 'a damaged German bomber of Kampfgeschwader 2'; for a
- * group named for its aircraft 'one of the Japanese Shokaku and Zuikaku dive bombers' ('how' after the name).
+ * group named for its aircraft 'one of the Japanese Shokaku and Zuikaku dive bombers' ('how' after the name); the
+ * enemy's fleet wing by its own aircraft and fleet, 'a British carrier fighter of the Home Fleet', 'of Force H' (14:48Z).
  */
 export function aCraftOf(name: string, noun: string, adj = '', how = ''): string {
+  const w = adj ? FLEET_WING.exec(name) : null;
+  if (w && w[2] !== 'strike wing') {
+    const what = [how, adj, w[2].replace(/s$/, '')].filter(Boolean).join(' ');
+    return `${an(what)} ${what} of ${takesThe(w[1]) ? 'the ' : ''}${w[1]}`;
+  }
   if (subjectOf(name).craft) return `${oneOf(name, adj)}${how ? `, ${how},` : ''}`;
   const what = [how, adj, noun].filter(Boolean).join(' ');
   return `${an(what)} ${what} of ${subjectOf(name).whom}`;
