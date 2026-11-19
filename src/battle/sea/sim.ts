@@ -9,9 +9,9 @@
 // nothing flies.
 //
 // The first slice's orders (ruling 217): course (move, line), attack, speed, withdraw (one piece, or the whole
-// fleet), and the carrier strike. Pieces with no order fight at will, as their captains would: the player steps in
-// where they want a different target, a different course, or the fight broken off. Formations, the torpedo run and
-// smoke wait for the polish pass (TODO(polish)).
+// fleet), and the carrier strike. Pieces with no order fight at will, as their captains would, each ship class to its
+// own job around the fleet's main effort (ruling 239): the player steps in where they want a different target, a
+// different course, or the fight broken off. Formations and the torpedo run wait for the polish pass (TODO(polish)).
 //
 // Same ticket, same orders, same battle: every roll comes from the battle's own seeded stream.
 
@@ -23,7 +23,8 @@ import { drawUp, type PieceInfo } from './pieces';
 import { SEA_CUES } from './cues';
 import { none, seaLevel, seaRatio, shipsIn, shipWords, sunkCaps } from './result';
 import { headCount, hurtAfloat, ofFleet, theFleet } from './words';
-import type { SeaClass, SeaCommand, SeaOrder, SeaShips, SeaSpeed, SeaTicket, SeaUnit } from './types';
+import type { SeaClass, SeaCommand, SeaOrder, SeaShips, SeaSpeed, SeaStyle, SeaTicket, SeaUnit } from './types';
+import type { StyleNumbers } from './numbers';
 import { seaWhat, seaWhere } from '../../campaign/sea-words';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
@@ -32,6 +33,8 @@ const live = (u: SeaUnit): boolean => u.state !== 'gone' && u.state !== 'withdra
 const mix = (n: number): number => { let h = n >>> 0; h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
 /** Pieces that still answer orders and fight as told: not running for home. */
 const steady = (u: SeaUnit): boolean => u.state === 'steady' || u.state === 'wavering';
+/** The big guns: the classes whose fire a style shares out over the enemy's big ships (jobs). */
+const BIG_GUNS = new Set<string>(['bb', 'ca']);
 
 /**
  * The enemy piece nearest a point, for one side. Two pieces equally near (within a metre) go to the one on the side's
@@ -52,7 +55,7 @@ export function nearestEnemy(units: readonly SeaUnit[], side: Side, x: number, y
 }
 
 /** The enemy piece nearest the middle of a side's own pieces still on the field: the newcomer's first target, and the
- *  staff's (ai.common). */
+ *  staff's (ai). */
 export function enemyNearestMiddle(units: readonly SeaUnit[], side: Side): SeaUnit | null {
   const mine = units.filter((u) => u.side === side && live(u));
   if (!mine.length) return null;
@@ -162,7 +165,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     for (const f of ticket.place.fleets) { this.fleetLoss.sunk[f.id] = none(); this.fleetLoss.burnt[f.id] = none(); }
     this.caps = sunkCaps(ticket.place.fleets, ticket.reckoning.odds);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
-    // Each side's captains know their common target from the start: the enemy nearest the middle of their fleet as it is drawn up.
+    // Each side's captains know their main effort from the start: the enemy nearest the middle of their fleet as it is drawn up.
     for (const side of ['att', 'def'] as Side[]) this.focus[side] = this.nearestToMiddle(side);
     const S = SEA.side;
     this.luck = this.rng.range(DICE[0], DICE[1]);
@@ -307,14 +310,17 @@ export class SeaSim implements BattleSim<SeaUnit> {
       case 'attack': {
         const us = mine(c.units), foe = this.byId.get(c.target);
         if (!us.length || !foe || foe.side === by || !live(foe)) return false;
+        // Given to two or more pieces, an order to attack is a fleet order (ruling 239): the enemy named is the fleet's
+        // main effort and each piece does its job around it, as the staff's captains do, so the newcomer's plain order
+        // fights the staff's battle (b402). Given to one piece, it is that piece's own target.
+        const fleet = us.length > 1;
         for (const u of us) {
           // A carrier attacks with its strike: the order is the strike, flown at the next look round (within a
           // second) whenever its aircraft are ready, the same second the staff's carrier would fly it (b402).
-          this.orders.set(u.id, { kind: 'attack', target: foe.id });
-          if (u.extra.cls !== 'cv') u.extra.target = foe.id;
+          this.orders.set(u.id, fleet ? { kind: 'attack', target: foe.id, fleet } : { kind: 'attack', target: foe.id });
+          if (!fleet && u.extra.cls !== 'cv') u.extra.target = foe.id;
         }
-        // The target the player names is the fleet's common target too, for every ship that can reach it.
-        this.focus[by] = foe.id;
+        if (fleet) this.focus[by] = foe.id;
         return true;
       }
       case 'hold': {
@@ -438,7 +444,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
 
   /** Once a second: targets, carriers' strikes, and the side's own reckoning. */
   private decide(): void {
-    // A common target that has gone or broken off gives way to the enemy now nearest the middle of the fleet.
+    // A main effort that has gone or broken off gives way to the enemy now nearest the middle of the fleet.
     for (const side of ['att', 'def'] as Side[]) {
       const f = this.byId.get(this.focus[side]);
       if (!f || !live(f) || f.state === 'routing') this.focus[side] = this.nearestToMiddle(side);
@@ -452,15 +458,15 @@ export class SeaSim implements BattleSim<SeaUnit> {
         // rather than chasing a beaten enemy across the sea.
         if (!foe || !live(foe) || foe.state === 'routing') this.orders.delete(u.id);
       }
-      // A carrier with no strike ordered sends one whenever its aircraft are ready, at its fleet's common target, so a
+      // A carrier with no strike ordered sends one whenever its aircraft are ready, at its fleet's main effort, so a
       // newcomer's one order and the staff's play strike the same ship (b402). Once a side has broken off, no carrier
       // flies a new strike unless the player has sent it after the beaten enemy since (b458, 1): the staff's carriers,
       // and the player's left to themselves, let it go. A strike already in the air still lands.
       if (u.extra.cls === 'cv' && steady(u) && (this.broken === null || this.pursuing.has(u.id))) {
-        // The order as it stands now: one that has just lapsed falls through to the common target, as at-will play does.
+        // The order as it stands now: one that has just lapsed falls through to the main effort, as at-will play does.
         // In the chase, the enemy it was sent after while that one is still afloat (an order on a ship breaking off lapses).
         const still = this.orders.get(u.id), sent = this.pursuing.get(u.id);
-        const ordered = still?.kind === 'attack' ? this.byId.get(still.target) : sent !== undefined ? this.byId.get(sent) : undefined;
+        const ordered = still?.kind === 'attack' && !still.fleet ? this.byId.get(still.target) : sent !== undefined ? this.byId.get(sent) : undefined;
         const common = this.byId.get(this.focus[u.side]);
         const foe = ordered && live(ordered) ? ordered : common && live(common) ? common : this.heaviest(other(u.side));
         if (foe) this.strike(u, foe);
@@ -469,9 +475,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
     }
   }
 
-  /** Each side's common target: the enemy piece nearest the middle of its own fleet, kept until it goes or breaks
-   *  off, or the one the player names. Every ship that can reach it fires on it: the staff's play is exactly the
-   *  newcomer's (select all, right-click the enemy nearest the middle), so the two give the same battle (b402). */
+  /** Each side's main effort: the enemy piece nearest the middle of its own fleet, kept until it goes or breaks off,
+   *  or the one the player names in a fleet order. Each ship does its job around it (jobs): the staff's play is
+   *  exactly the newcomer's (select all, right-click the enemy nearest the middle), so the two give the same battle
+   *  (b402, ruling 239). */
   private readonly focus: Record<Side, number> = { att: -1, def: -1 };
   private nearestToMiddle(side: Side): number {
     // An enemy breaking off is no longer the fleet's target while any other is still fighting (only in the chase is
@@ -480,40 +487,55 @@ export class SeaSim implements BattleSim<SeaUnit> {
     return (enemyNearestMiddle(fighting, side) ?? enemyNearestMiddle(this.units, side))?.id ?? -1;
   }
 
-  /** The enemy piece a piece fires on: the one it was told to attack if it can reach it, else its fleet's common target
-   *  if it can reach that, else one in reach. */
+  /**
+   * The enemy piece a piece fires on (ruling 239, the tactics panel's item 2: each ship class to its own job). A piece
+   * told on its own to attack one enemy fires on it whenever it is in reach. Otherwise it does its class's job
+   * (jobs.fire): the first class of enemy it has in reach, ships still fighting before ships breaking off; among them
+   * the one nearest its fleet's main effort, or, where its style shares the big guns' fire out (spread), the one fewest
+   * of its side's battleships and cruisers are firing on, kept until another has two fewer. No dice: the same ships in
+   * the same places make the same choice.
+   */
   private aim(u: SeaUnit): void {
     const o = this.orders.get(u.id);
     const C = SEA.classes[u.extra.cls as SeaClass];
-    const told = o?.kind === 'attack' ? o.target : -1;
-    if (told >= 0) {
-      const foe = this.byId.get(told);
+    if (o?.kind === 'attack' && !o.fleet) {
+      const foe = this.byId.get(o.target);
       if (foe && live(foe) && dist(u.x, u.y, foe.x, foe.y) <= C.reach) { u.extra.target = foe.id; return; }
     }
-    {
-      const foe = this.byId.get(this.focus[u.side]);
-      if (foe && live(foe) && dist(u.x, u.y, foe.x, foe.y) <= C.reach) { u.extra.target = foe.id; return; }
-    }
-    let total = 0;
-    const near: [SeaUnit, number][] = [];
-    for (const e of this.units) {
-      if (e.side === u.side || !live(e)) continue;
-      const d = dist(u.x, u.y, e.x, e.y);
-      if (d > C.reach) continue;
-      // Any ship in reach is as good a target as another by its weight (the field counts no class twice, b415): only how
-      // well the guns tell at that range sets the odds of picking it.
-      const w = this.reachFactor(C, d);
-      near.push([e, w]);
-      total += w;
-    }
-    if (!near.length) { u.extra.target = -1; return; }
-    // Keep the current target if it is still in reach most of the time: ships hold a target, they do not flit.
-    const cur = near.find(([e]) => e.id === u.extra.target);
-    if (cur && this.rng.chance(0.7)) return;
-    let r = this.rng.next() * total;
-    for (const [e, w] of near) { r -= w; if (r <= 0) { u.extra.target = e.id; return; } }
-    u.extra.target = near[near.length - 1][0].id;
+    u.extra.target = this.job(u);
   }
+
+  /** The enemy a piece's job puts its guns on, or -1 with none of its classes in reach (see aim). */
+  private job(u: SeaUnit): number {
+    const c = u.extra.cls as SeaClass;
+    if (c === 'cv') return -1;
+    const side = u.side, R = SEA.classes[c].reach, main = this.byId.get(this.focus[side]);
+    const [mx, my] = main ? [main.x, main.y] : this.centre(other(side));
+    // Two equally near the main effort go to the one on the side's own left as it drew up (nearestEnemy).
+    const f0 = side === 'att' ? 0 : Math.PI, cs = Math.cos(f0), sn = Math.sin(f0);
+    const spread = BIG_GUNS.has(c) && this.style(side).spread > 0;
+    const shooters = (e: SeaUnit): number => {
+      let n = 0;
+      for (const f of this.units) if (f !== u && f.side === side && live(f) && BIG_GUNS.has(f.extra.cls) && f.extra.target === e.id) n++;
+      return n;
+    };
+    for (const breaking of [false, true]) {
+      for (const tc of SEA.jobs.fire[c]) {
+        const pool = this.units.filter((e) => e.side !== side && e.extra.cls === tc && live(e) && (breaking || e.state !== 'routing') && dist(u.x, u.y, e.x, e.y) <= R);
+        if (!pool.length) continue;
+        const ranked = pool.map((e) => ({ id: e.id, n: spread ? shooters(e) : 0, d: Math.round(dist(e.x, e.y, mx, my)), l: (e.x - mx) * cs - (e.y - my) * sn }))
+          .sort((a, b) => a.n - b.n || a.d - b.d || a.l - b.l || a.id - b.id);
+        // Its own target counts it among its shooters: it moves only to one with two fewer on it than that.
+        if (spread) { const cur = ranked.find((r) => r.id === u.extra.target); if (cur && cur.n + 1 - ranked[0].n < 2) return cur.id; }
+        return ranked[0].id;
+      }
+    }
+    return -1;
+  }
+
+  /** A side's style (ruling 239): methodical for every side until the ticket carries each side's. */
+  private styleName(side: Side): SeaStyle { void side; return 'methodical'; }
+  private style(side: Side): StyleNumbers { return SEA.styles[this.styleName(side)]!; }
 
   /** How much of a piece's fire tells at this range: all of it within its best range, falling to fire.far at its reach
    *  (fire.far is 1: the guns tell as hard anywhere in reach, b415). */
@@ -598,9 +620,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // An order to attack sets what the guns fire on whenever it is in reach. The ship keeps with the fight as its
       // captain would, engaging the enemy nearest it, and steers for the target only when that lies well beyond the
       // fight: sending every ship at one point drew the line into a knot the enemy fought around (ruling 226, 4).
-      // A ship fighting at will steers the same way for its fleet's common target: ships far from the fight close on
-      // it, as the land thread found idle reserves must (b407).
-      const tgt = this.byId.get(o.kind === 'attack' ? o.target : this.focus[u.side]) ?? null;
+      // A ship fighting at will, or under a fleet order, steers the same way for its fleet's main effort: ships far from
+      // the fight close on it, as the land thread found idle reserves must (b407).
+      const tgt = this.byId.get(o.kind === 'attack' && !o.fleet ? o.target : this.focus[u.side]) ?? null;
       const near = this.steerFoe(u);
       // A carrier keeps its standoff from the nearest enemy whatever it strikes: its aircraft reach any target.
       const foe = u.extra.cls !== 'cv' && tgt && (!near || dist(u.x, u.y, tgt.x, tgt.y) > dist(u.x, u.y, near.x, near.y) + SEA.ai.beyond) ? tgt : near;

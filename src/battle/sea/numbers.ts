@@ -3,7 +3,7 @@
 
 import seaData from '../../../data/battle/sea.json';
 import navyData from '../../../data/campaign/navy.json';
-import type { SeaClass } from './types';
+import type { SeaClass, SeaStyle } from './types';
 
 interface ClassOnField { speed: number; turn: number; best: number; reach: number; per: number; crew: number; len: number; beam: number; standoff?: number }
 
@@ -19,7 +19,12 @@ export const SEA = seaData as unknown as {
   pieces: { most: number; front: number };
   ai: { keep: number; beyond: number; station: number; broadside: number };
   evade: { see: number; speed: number; screen: number };
+  jobs: { fire: Record<Exclude<SeaClass, 'cv'>, SeaClass[]> };
+  styles: Partial<Record<SeaStyle, StyleNumbers>>;
 };
+
+/** A style's numbers (ruling 239; data/battle/sea.json _about.styles). */
+export interface StyleNumbers { spread: number }
 
 /** The rules' classes: a ship's weight in a fleet action (power) and how readily it is sunk (tough: lower is tougher). */
 export const RULES_CLASSES = (navyData as unknown as { classes: Record<SeaClass, { label: string; one: string; many: string; power: number; tough: number }> }).classes;

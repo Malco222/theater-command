@@ -144,7 +144,13 @@ function marksOf(rs: Rec[]): Record<string, number | null> {
       for (const t of ['bb', 'ca', 'dd', 'cv']) out[`${s}.${c}>${t}`] = ratio(sum(rs, (r) => k(r, `${s}:${c}>${t}`)), all);
     }
     // Item 2 and 3's later marks, where the sim counts them.
-    for (const m of ['runs', 'runBattles', 'runsOk', 'launchFar', 'turnLate', 'screenRuns', 'runsNearScreen', 'runsShotByScreen', 'cvFirst', 'cvFirstAtCv', 'cvFirstAtBb', 'strikesMet', 'strikesBelow', 'strikesIn', 'denied', 'paid', 'owed', 'cvNearBb', 'torpHits', 'torpWeight']) {
+    for (const c of ['bb', 'ca', 'dd', 'cv', 'air']) out[`${s}.${c}`] = sum(rs, (r) => k(r, `${s}:${c}`)) / n;
+    out[`${s}.torp`] = sum(rs, (r) => ['bb', 'ca', 'dd', 'cv'].reduce((m, t) => m + k(r, `${s}:torp>${t}`), 0)) / n;
+    out[`${s}.B4`] = ratio(sum(rs, (r) => k(r, `${s}:runBattles`)), sum(rs, (r) => k(r, `${s}:runEligible`)));
+    out[`${s}.B5far`] = ratio(sum(rs, (r) => k(r, `${s}:launchFar`)), sum(rs, (r) => k(r, `${s}:runs`)));
+    out[`${s}.B5late`] = ratio(sum(rs, (r) => k(r, `${s}:turnLate`)), sum(rs, (r) => k(r, `${s}:runs`)));
+    out[`${s}.B6`] = ratio(sum(rs, (r) => k(r, `${s}:runsShotByScreen`)), sum(rs, (r) => k(r, `${s}:runsNearScreen`)));
+    for (const m of ['runs', 'runEligible', 'runBattles', 'runsBroken', 'launchFar', 'turnLate', 'screenLaunch', 'runsNearScreen', 'runsShotByScreen', 'cvFirst', 'cvFirstAtCv', 'cvFirstAtBb', 'strikesMet', 'strikesBelow', 'strikesIn', 'denied', 'paid', 'owed', 'cvNearBb']) {
       const v = sum(rs, (r) => k(r, `${s}:${m}`));
       if (v) out[`${s}.${m}`] = v;
     }
@@ -162,7 +168,8 @@ function report(rs: Rec[]): string {
     for (const key of [...new Set(of.map((r) => r.key))]) {
       const g = of.filter((r) => r.key === key), m = marksOf(g);
       const byOdds = [...new Set(g.map((r) => r.odds))].map((o) => { const x = marksOf(g.filter((r) => r.odds === o)); return `${o ?? 'own'}: ${f(x.field)} v ${f(x.card)}`; }).join('; ');
-      lines.push(`${key.padEnd(9)} gap ${sg(m.gap!)} (${byOdds}) time ${f(m.time)} | dealt att ${f(m['att.total'], 3)} def ${f(m['def.total'], 3)} | B1 ${f(m['att.B1'])}/${f(m['def.B1'])} B2bb ${f(m['att.B2bb'])}/${f(m['def.B2bb'])} B2ca ${f(m['att.B2ca'])}/${f(m['def.B2ca'])} B3 ${f(m['att.B3'], 4)}/${f(m['def.B3'], 4)}`);
+      lines.push(`${key.padEnd(9)} gap ${sg(m.gap!)} (${byOdds}) time ${f(m.time)} | dealt att ${f(m['att.total'], 3)} def ${f(m['def.total'], 3)} | B1 ${f(m['att.B1'])}/${f(m['def.B1'])} B2bb ${f(m['att.B2bb'])}/${f(m['def.B2bb'])} B2ca ${f(m['att.B2ca'])}/${f(m['def.B2ca'])} B3 ${f(m['att.B3'], 4)}/${f(m['def.B3'], 4)}`
+        + (m['att.runs'] || m['def.runs'] ? ` | torp ${f(m['att.torp'])}/${f(m['def.torp'])} runs ${f(m['att.runs']! / m.n!, 1)}/${f(m['def.runs']! / m.n!, 1)} B4 ${f(m['att.B4'])}/${f(m['def.B4'])} B5 far ${f(m['att.B5far'])}/${f(m['def.B5far'])} late ${f(m['att.B5late'])}/${f(m['def.B5late'])} B6 ${f(m['att.B6'])}/${f(m['def.B6'])}` : ''));
     }
   }
   return lines.join('\n');

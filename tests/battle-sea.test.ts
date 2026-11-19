@@ -213,6 +213,48 @@ describe('how the staff sails a fleet', () => {
   });
 });
 
+describe('each ship class to its own job (ruling 239)', () => {
+  /** A field with only these pieces left on it, each placed where the test says; the rest are gone. */
+  const only = (sim: SeaSim, keep: [SeaUnit, number, number][]): void => {
+    for (const u of sim.units) if (!keep.some(([k]) => k === u)) u.state = 'gone';
+    for (const [u, x, y] of keep) { u.x = x; u.y = y; }
+  };
+  const aim = (sim: SeaSim, ...us: SeaUnit[]): void => { for (const u of us) (sim as unknown as { aim(u: SeaUnit): void }).aim(u); };
+  const both = (sim: SeaSim, side: 'att' | 'def', cls: string): SeaUnit[] => sim.units.filter((u) => u.side === side && u.extra.cls === cls);
+
+  it('a battleship fires on a battleship before a nearer cruiser, a cruiser on a cruiser before a battleship', () => {
+    const sim = battle(11, { human: null });
+    const bb = piece(sim, 'att', 'bb'), ca = piece(sim, 'att', 'ca'), ebb = piece(sim, 'def', 'bb'), eca = piece(sim, 'def', 'ca');
+    only(sim, [[bb, 10000, 10000], [ca, 10500, 10000], [eca, 10000, 12000], [ebb, 10500, 13000]]);
+    aim(sim, bb, ca);
+    expect([bb.extra.target, ca.extra.target]).toEqual([ebb.id, eca.id]);
+  });
+
+  it('two battleships share their fire over two enemy battleships, with no dice', () => {
+    for (const seed of [3, 11, 29]) {
+      const sim = battle(seed, { human: null });
+      const [b1, b2] = both(sim, 'att', 'bb'), [e1, e2] = both(sim, 'def', 'bb');
+      only(sim, [[b1, 9000, 10000], [b2, 11000, 10000], [e1, 9000, 13000], [e2, 11000, 13000]]);
+      aim(sim, b1, b2);
+      expect(new Set([b1.extra.target, b2.extra.target])).toEqual(new Set([e1.id, e2.id]));
+    }
+  });
+
+  it('an order to attack given to several pieces names the main effort and each does its job; given to one, it is that piece\'s target', () => {
+    const sim = battle(11, { human: 'att' });
+    const bb = piece(sim, 'att', 'bb'), ca = piece(sim, 'att', 'ca'), ebb = piece(sim, 'def', 'bb'), eca = piece(sim, 'def', 'ca');
+    only(sim, [[bb, 10000, 10000], [ca, 10500, 10000], [eca, 10000, 12000], [ebb, 10500, 13000]]);
+    expect(sim.command({ do: 'attack', units: [bb.id, ca.id], target: eca.id }, 'att')).toBe(true);
+    expect(sim.orderOf(bb.id)).toEqual({ kind: 'attack', target: eca.id, fleet: true });
+    aim(sim, bb);
+    expect(bb.extra.target).toBe(ebb.id);
+    expect(sim.command({ do: 'attack', units: [bb.id], target: eca.id }, 'att')).toBe(true);
+    expect(sim.orderOf(bb.id)).toEqual({ kind: 'attack', target: eca.id });
+    aim(sim, bb);
+    expect(bb.extra.target).toBe(eca.id);
+  });
+});
+
 describe('what a blow takes', () => {
   // b415: the card counts each side's carriers and its coasts' aircraft in its strength; the field wears them as it
   // wears the ships, so a side breaks off on the whole of what it brought and the aircraft are worth what the card says.
