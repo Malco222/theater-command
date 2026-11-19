@@ -24,6 +24,7 @@ import { SKY } from '../../src/battle/air/book';
 import { AirSim } from '../../src/battle/air/sim';
 import { deckMix, deckModels, layShips } from '../../src/battle/air/ships';
 import { onBoard, STAGES } from '../../src/battle/air/stages';
+import { cloudOf } from '../../src/battle/air/sky';
 import { airTicket, raidGroups } from '../../src/battle/air/ticket';
 import { bomberGuns, fighterGuns } from '../../src/battle/air/guns';
 import type { AirUnit, AirPlace } from '../../src/battle/air/types';
@@ -108,6 +109,17 @@ function standIn(kind: 'harbour' | 'fleet', carriers: number): Game {
   return g;
 }
 
+/** A stage point (metres east and north of its origin) on the globe: latitude and longitude, near enough for the sky. */
+function stageLatLon(origin: [number, number], p: [number, number]): [number, number] {
+  const lat = origin[0] + p[1] / 111_320;
+  return [lat, origin[1] + p[0] / (111_320 * Math.cos((lat * Math.PI) / 180))];
+}
+
+/** The campaign map's point for a latitude and longitude: sky.ts's latLonOf turned round (x = (lon + 11) cos 50 x 40). */
+function mapPointOf(lat: number, lon: number): [number, number] {
+  return [(lon + 11) * Math.cos((50 * Math.PI) / 180) * 40, (71.4 - lat) * 40];
+}
+
 /** The stand-in's ticket, turned into the record's set piece. */
 function ticketOf(P: SetPiece, seed: number): FieldTicket<AirPlace> {
   const g = standIn(P.kind, P.attNames.length);
@@ -163,6 +175,12 @@ function ticketOf(P: SetPiece, seed: number): FieldTicket<AirPlace> {
   place.guns = Object.fromEntries(Object.entries(place.models).map(([n, k]) => [n, { ftr: fighterGuns(k.ftr, n, P.when), bmr: bomberGuns(k.bmr, n, P.when) }]));
   place.ground = { land: [], rivers: [], borders: [], target: [], terrain: 'sea', inland: false };
   if (P.forecast) place.forecast = { ...place.forecast, ...P.forecast };
+  // The sky: the cloud table's base and tops for the stage's own place and the record's month, drawn from this battle's
+  // seed (the stand-in's target would give the North Sea's). The kind is history's, not the table's chance: both days
+  // had scattered cumulus and no deck (cloud banked on Oahu's mountains with the harbour open; broken cloud over the
+  // Mobile Force), as the art director's ruling of 19 November names them.
+  const [lat, lon] = stageLatLon(S.origin, st.aim);
+  place.cloud = { ...cloudOf(...mapPointOf(lat, lon), P.when, t.seed), kind: 'cumulus' };
   t.title = P.title;
   t.date = P.date;
   return t;
