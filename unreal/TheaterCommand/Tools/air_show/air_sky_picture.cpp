@@ -7,9 +7,11 @@
 //   Tools/air_show/air_sky_picture <recording.json> <out folder>     (writes <key>-sky-<n>.ppm)
 //   AIR_SKY_PICTURES=1 Tools/air_show/run.sh                        (builds it and draws every recording's)
 //
-// Three eyes: behind the raid as the strategy camera opens (6 km back, 5 km up), low over the sea under the cloud
-// base as a torpedo bomber sees it, and high over the field looking down on it. A few dark aircraft are drawn at
-// the raid's height for the contrast the art director asked for (a bright cloud floor under dark aircraft).
+// Four eyes: behind the raid as the strategy camera opens (6 km back, 5 km up), low over the sea under the cloud
+// base as a torpedo bomber sees it, high over the field looking down on it, and behind the raid's first group where
+// the battle opens, far from the target (the clouds lie wherever the fight is); then a deck day from above. A few
+// dark aircraft are drawn at the raid's height for the contrast the art director asked for (a bright cloud floor
+// under dark aircraft).
 
 #include "Battle/AirFeed.h"
 #include "Battle/AirSky.h"
@@ -206,10 +208,20 @@ int main(int Argc, char** Argv)
 		Vec From, To;
 		double Fov;
 	};
+	// (the raid's first group as the battle opens: where the fight begins, its way toward the target)
+	Vec Opens(TX, TY - 20000.0, 4000.0);
+	for (const AirShow::Group& G : Rec.Views.front().Groups)
+		if (G.Side == 0 && !G.bFighter)
+		{
+			Opens = Vec(G.X, G.Y, G.Alt > 100.0 ? G.Alt : 3000.0);
+			break;
+		}
+	const Vec Toward = Vec(TX - Opens.X, TY - Opens.Y, 0.0).Unit(Vec(0.0, 1.0, 0.0));
 	const Shot Shots[] = {
 		{ "behind the raid", Vec(TX, TY - 6000.0, 5000.0), Vec(TX, TY + 2000.0, 600.0), 55.0 },
 		{ "low over the sea", Vec(TX - 6000.0, TY - 5000.0, 120.0), Vec(TX + 4000.0, TY + 3000.0, 700.0), 60.0 },
 		{ "high over the field", Vec(TX - 2000.0, TY - 9000.0, 7500.0), Vec(TX + 1000.0, TY + 3000.0, 0.0), 55.0 },
+		{ "where the battle opens", Opens - Toward * 3000.0 + Vec(0.0, 0.0, 600.0), Opens + Toward * 6000.0 - Vec(0.0, 0.0, 1500.0), 55.0 },
 	};
 	// A deck day too, for its look (this battle's own day may be cumulus): base 2,000 m, tops 3,000 m, under a 4,500 m
 	// band, seen from 5.5 km behind and above the raid.
@@ -223,10 +235,10 @@ int main(int Argc, char** Argv)
 	const AirSky::Field Deck = AirSky::Lay(DeckDay, DeckAt);
 	AirSky::Painter Paint;
 	int N = 0;
-	for (int Pass = 0; Pass < 4; ++Pass)
+	for (int Pass = 0; Pass < 5; ++Pass)
 	{
-		const Shot S = Pass < 3 ? Shots[Pass] : Shot{ "a deck day, from above", Vec(TX, TY - 7000.0, 5500.0), Vec(TX, TY + 3000.0, 2600.0), 55.0 };
-		const AirSky::Field& Sky = Pass < 3 ? Day : Deck;
+		const Shot S = Pass < 4 ? Shots[Pass] : Shot{ "a deck day, from above", Vec(TX, TY - 7000.0, 5500.0), Vec(TX, TY + 3000.0, 2600.0), 55.0 };
+		const AirSky::Field& Sky = Pass < 4 ? Day : Deck;
 		Camera Cam;
 		Cam.Look(S.From, S.To, S.Fov);
 		Canvas C;
@@ -235,7 +247,7 @@ int main(int Argc, char** Argv)
 		std::vector<Vec> Points;
 		std::vector<uint8_t> Rgba;
 		Paint.Paint(Sky, Cam.Eye, Vec(), At.Sun, Rgb(1.0f, 1.0f, 1.0f), Points, Rgba);
-		const std::vector<int> Tris = Paint.Triangles(static_cast<int>(Sky.Puffs.size()));
+		const std::vector<int> Tris = Paint.Triangles(Sky.MostPuffs);
 		// (one face of each pair: the painter lays both, the software painter needs one)
 		for (size_t K = 0; K + 2 < Tris.size(); K += 6)
 		{
@@ -254,11 +266,11 @@ int main(int Argc, char** Argv)
 			}
 			if (bIn) Triangle(C, V[0], V[1], V[2]);
 		}
-		for (const Vec& P : Raid) Dot(C, Cam, Pass < 3 ? P : Vec(P.X, P.Y, 4500.0), 14.0);
+		for (const Vec& P : Raid) Dot(C, Cam, Pass < 4 ? P : Vec(P.X, P.Y, 4500.0), 14.0);
 		const std::string Path = std::string(Argv[2]) + "/" + Rec.Key + "-sky-" + std::to_string(++N) + ".ppm";
 		C.Save(Path);
-		std::printf("%s: %s (%s, from %.0f to %.0f m, %zu clouds, %zu puffs) -> %s\n", Rec.Key.c_str(), S.Name, Sky.Sky.bDeck ? "deck" : "cumulus", Sky.Base, Sky.Top,
-		            Sky.Clouds.size(), Sky.Puffs.size(), Path.c_str());
+		std::printf("%s: %s (%s, from %.0f to %.0f m, %zu clouds, %d puffs drawn) -> %s\n", Rec.Key.c_str(), S.Name, Sky.Sky.bDeck ? "deck" : "cumulus", Sky.Base, Sky.Top,
+		            Sky.Clouds.size(), Paint.Drawn(), Path.c_str());
 	}
 	return 0;
 }

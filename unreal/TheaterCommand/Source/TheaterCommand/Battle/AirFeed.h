@@ -80,9 +80,9 @@ namespace AirFeed
 	bool ReadSky(const Json& J, Sky& Out);
 	/** Hands the board and the loadouts to the show. */
 	void Apply(const Sky& S, AirShow::Show& Show);
-	/** Where and for what battle its sky is laid: the battle's seed, the target, the raid's band (the highest of the
-	 * raider's bombers in the first view; the middle band if it has none) and whether it is a strike at ships. The
-	 * caller adds the sun and the ground. */
+	/** Where and for what battle its sky is laid: the battle's seed, the target, the raid's bands (of the raider's
+	 * bombers in the first view: the lowest above 2,000 m, and the highest at 2,000 m or lower; the middle band if it
+	 * has none) and whether it is a strike at ships. The caller adds the sun and the ground. */
 	AirSky::Placing PlacingOf(const Sky& S, const std::vector<AirShow::Group>& First, uint64_t Seed);
 
 	/** A side's bar under HOW NEAR TO BREAKING OFF, and why (ammo or nerve). */

@@ -8,7 +8,7 @@ battle screen over it.
 
 | File | What it is |
 |---|---|
-| `AirSky.h/.cpp` | The day's sky, plain C++: the clouds laid round the target from `sky.place.cloud` (scattered cumulus, or a deck), and the painter that turns their puffs to the eye. |
+| `AirSky.h/.cpp` | The day's sky, plain C++: the clouds from `sky.place.cloud` (scattered cumulus, or a deck), laid on a square that repeats round the eye, and the painter that turns their puffs to the eye. |
 | `AirShow.h/.cpp` | The flight core, plain C++. Every aircraft of every formation flies as an aircraft flies: banked turns, no turn tighter than 210 m, at most 6 g, no sliding, speed lost in a climb. It also handles the passes and breaks, the guns, the hits, the falls, the parachutes, the flak round the boxes, the bombs and torpedoes, and the ship news when the bombs arrive. |
 | `AirFeed.h/.cpp` | Reads the bridge's JSON (sky, views, after card, recordings) into the flight core's terms. Plain C++. |
 | `AirDesk.h/.cpp` | The screen's words and clock: the top bar, the aim slip, the near line, the dispatches, the tags, the after card, the orders as `TC.battleOrder` takes them, and the close camera's subject. Plain C++. |
@@ -74,27 +74,44 @@ again itself, with the crowds folded.
 **The sky.** Each battle carries its day (`sky.place.cloud`, the air thread's `sky.ts`): a cloud deck or scattered
 cumulus, with one cloud base and one top. Pearl Harbor and Midway are cumulus days, as history had them: Oahu's
 base 940 m and tops 2,060 m, the Mobile Force's 510 m and 1,820 m. A ticket from a rules bundle without the sky draws
-cumulus at the cloud table's middle heights. `AirSky` lays the clouds and the scene draws them as one see-through mesh
-of soft puffs, in the effects kit's shape and with the same `M_Highlight`. They are turned to the eye only when it has
-moved about a quarter of a degree at the nearest puff, and the whole mesh drifts with the battle's wind.
+cumulus at the cloud table's middle heights. `AirSky` lays the clouds once, on a 44 km square that repeats without a
+seam, and draws each cloud where it lies nearest the eye. So there are clouds wherever the fight goes (at Pearl Harbor
+most of the fight and the falls are 20 to 32 km short of the harbour). The scene draws them as one see-through mesh of
+soft puffs, in the effects kit's shape and with the same `M_Highlight`. They are turned to the eye only when it has
+moved about a quarter of a degree at the nearest puff.
 
-- **Cumulus** cover about three eighths of the sky, fewer over the target so the ships stay in sight. Each is a flat
-  grey base, a lit, lumpy dome wider than it is tall, a few turrets and a faint veil that holds it together. Most are
-  shallow, and a few reach the day's tops.
-- **A deck** covers most of the sky, with a few holes. It sits at least 1.5 km under the raid's bombers (the art
-  director's 1.5 to 2.5 km). Where the drawn top comes nearer, the deck is lowered and keeps its thickness. Over the
-  lowest band (1,800 m) the deck lies above the bombers instead. A strike at ships keeps a hole over the ships. The
-  deck reaches out about 32 km in coarser tiles, so its edge is lost in the haze.
-- Cloud never sits lower than 300 m over the ground under it, so a cloud over a mountain is lifted with it.
-- **Falls and the deck.** The deck's top as drawn is where falls end (`DeckZ` for `AirFall`, `CloudTop` in the core).
-  A fall begun above the deck ends inside it. A fall begun under it (a torpedo bomber, a low fight) goes on down to the
-  sea or the ground, with its pieces and parachutes.
-- The cloud test checks the sky too. It checks the day as read, the heights, the cover, the room (at most 3,200 puffs;
-  the two battles lay about 2,200), the same sky every time, the far-to-near order and the painter's time. It lays a
-  deck under a 4,500 m band, a deck over the lowest band, a strike's hole, a 2,000 m mountain and a ticket with no sky,
-  and flies the battle again under a test deck. `AIR_SKY_PICTURES=1 Tools/air_show/run.sh` also draws each battle's
-  clouds from three eyes, plus a deck day, with a small software painter (`air_sky_picture.cpp`). Unreal's light and
-  haze are only stood in for there.
+- **How far.** Clouds are drawn out to 20 km from the eye and thin into the haze over the last third of that. A cloud
+  within 5 km is drawn with all its puffs, out to 10 km with its far ones, and past that with three (its base, its top
+  and its veil), so the clouds run on small toward the horizon. The painter's room is 4,000 puffs (`MostPuffs`); the two
+  battles draw about 3,100 at most. With no room, the farthest puffs are left out.
+- **Cumulus** cover about three eighths of the sky. Each is a flat grey base, a lit, lumpy dome wider than it is tall,
+  a few turrets and a faint veil that holds it together. Most are shallow, and a few reach the day's tops. They drift
+  with the battle's wind. Over the target there is a clearing that stays put as they drift: a cloud carried into it
+  thins away, and one carried out of it fills in, so the ships or the town stay in sight.
+- **A deck** covers most of the sky, with a few holes. It sits 1.5 to 2.5 km under the lowest bombers above 2,000 m
+  (the art director). It is moved up or down to that and keeps its thickness. Over the lowest band (1,800 m) it lies
+  above the bombers instead, its base 600 m over them. A strike at ships keeps a hole over the ships. A deck does not
+  drift (from bomber height its drift could not be seen), so the hole stays over the ships.
+- Cloud never sits lower than 300 m over the ground under it, so a cloud over a mountain is lifted with it where it
+  is drawn. A deck tile lifted so high that it would come within 1.5 km of the bombers is thinned, or left out where the
+  mountain stands through.
+- **Falls and the deck.** A fall begun above the deck ends inside it, where a tile of it is drawn under the fall
+  (`DeckAt` in the core, the deck's drawn top there; `DeckZ` for `AirFall`). Through a hole, or a fall begun under it
+  (a torpedo bomber, a low fight), it goes on down to the sea or the ground, with its pieces and parachutes.
+- **Two effects kits.** The fight in the air uses the effects kit as before. A second kit (`GroundFx`) draws what
+  happens under the clouds' base: bomb bursts, crashes, splashes, fires and the stage's oil smoke. See-through things
+  are drawn one after another, not by depth, so the order follows the eye. Over the clouds, the ground's kit is drawn
+  first, then the clouds, then the air. Under them, the clouds come first (they are the sky behind), then the ground's
+  kit, then the air.
+- The cloud test checks the sky too: the day as read, the heights, the cover (0.31 to 0.45), the clearing kept as the
+  clouds drift (when the bombs fall, at the end and two hours on), cloud round the falls far from the target, the room,
+  the same sky every time, the far-to-near order and the painter's time (under 4 ms; about 1.5). It lays a deck under a
+  4,500 m band, a deck raised to the band, a deck over the lowest band, a strike's hole, three kinds of high ground (a
+  broad 2,000 m mountain, a steep ridge, a 3,800 m peak) and a ticket with no sky. It flies the battle again under a
+  test deck, where falls begun above it end in it and go on down through its holes. `AIR_SKY_PICTURES=1
+  Tools/air_show/run.sh` also draws each battle's clouds from four eyes (one where the battle opens, far from the
+  target), plus a deck day, with a small software painter (`air_sky_picture.cpp`). Unreal's light and haze are only
+  stood in for there.
 
 ## Hook lines for the 3D builder
 

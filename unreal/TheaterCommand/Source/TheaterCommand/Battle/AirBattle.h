@@ -83,6 +83,12 @@ private:
 	TSharedPtr<FAirBattleState> State;
 	FCampaignSession* Session = nullptr;
 	TUniquePtr<FBattleEffects> Effects;
+	/** The effects on the ground and the sea (bomb bursts, crashes, splashes, fires, the stage's oil): a kit of their
+	 * own, so that seen from above the clouds they are drawn under them, and the air fight over them. */
+	TUniquePtr<FBattleEffects> GroundFx;
+	TWeakObjectPtr<UProceduralMeshComponent> GroundFxMesh;
+	/** Which is drawn over which this frame: 1 the eye over the clouds, 2 under them, 0 not yet set. */
+	int32 SkyOrder = 0;
 	TSharedPtr<SAirBattleScreen> Screen;
 
 	UPROPERTY()
@@ -178,10 +184,14 @@ private:
 	bool Open(const FString& Why);
 	void Raise();
 	void LayGround();
-	/** The day's clouds laid round the target (AirSky) and their mesh made; the deck's top handed to the flight core. */
+	/** The day's clouds laid round the target (AirSky) and their mesh made; once they are drawn, the deck handed to the
+	 * flight core (where falls begun above it pass out of sight). */
 	void LaySky();
-	/** The clouds moved with the wind and, when the eye has moved enough, turned to it again. */
+	/** The clouds moved with the wind and, when the eye has moved enough, turned to it again; the see-through things
+	 * put in order for the eye (over the clouds or under them). */
 	void DrawSky();
+	/** The kit for an effect at a world point: the ground's under the clouds' base, the air's above it. */
+	FBattleEffects* KitAt(const FVector& WorldAt) const;
 	void HideTheTable();
 	/** Every frame the battle is up: a piece the table stood again (its crowds unfolding under the pointer) is put away. */
 	void KeepTheTableHidden();

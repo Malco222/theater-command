@@ -425,7 +425,31 @@ bool AAirBattle::Open(const FString& Why)
 	{
 		AirParts::UseAirDistance(Effects.Get());
 		S.Trails.Most = AirParts::HasTrailSpan(Effects.Get()) ? 24 : 10;
-		Effects->SetWind(FVector(-2.0, 3.0, 0.0) * UnitsPerMetre / 100.0);
+		Effects->SetWind(WorldVector(AirSky::Wind.X, AirSky::Wind.Y, 0.0) * (1.0 / 100.0));
+		// The ground's own kit (bomb bursts, crashes, splashes, fires, the stage's oil), so the clouds can lie over it
+		// while the air fight lies over them: its mesh is the one it hangs on Root.
+		TArray<TObjectPtr<USceneComponent>> Before = Root->GetAttachChildren();
+		GroundFx = MakeUnique<FBattleEffects>();
+		if (GroundFx->Begin(Root, UnitsPerMetre, [this](const FVector& Point)
+			{
+				return FVector(Point.X, Point.Y, Stage && Stage->IsRaised() ? Stage->GroundZ(Point) : 0.0);
+			}))
+		{
+			AirParts::UseAirDistance(GroundFx.Get());
+			GroundFx->SetWind(WorldVector(AirSky::Wind.X, AirSky::Wind.Y, 0.0) * (1.0 / 100.0));
+			for (const TObjectPtr<USceneComponent>& Child : Root->GetAttachChildren())
+			{
+				UProceduralMeshComponent* Found = Cast<UProceduralMeshComponent>(Child.Get());
+				if (Found && !Before.Contains(Child))
+				{
+					GroundFxMesh = Found;
+				}
+			}
+		}
+		else
+		{
+			GroundFx.Reset();
+		}
 	}
 	Raise();
 	// The flight core's ground: the stage's hills, or the sea.
@@ -498,11 +522,15 @@ void AAirBattle::Raise()
 	{
 		Stage = GetWorld()->SpawnActor<AAirStage>(FVector::ZeroVector, FRotator::ZeroRotator);
 		if (Stage && Stage->Raise(AirParts::Wide(S.Board.StageKey), FVector2D(S.Board.StageAimX, S.Board.StageAimY), S.Board.StageTurn,
-			FVector2D(S.Board.TargetX, S.Board.TargetY), UnitsPerMetre, Effects.Get()))
+			FVector2D(S.Board.TargetX, S.Board.TargetY), UnitsPerMetre, GroundFx ? GroundFx.Get() : Effects.Get()))
 		{
 			if (Effects)
 			{
 				Effects->SetSun(Stage->TowardSun());
+			}
+			if (GroundFx)
+			{
+				GroundFx->SetSun(Stage->TowardSun());
 			}
 			// The ships as the battle lays them (the first view that carries them).
 			if (S.bReplay)
@@ -539,10 +567,14 @@ void AAirBattle::Raise()
 		}
 	}
 	LayGround();
+	// (the hour's sun: mid-morning, from the south-east, as the campaign's daylight raids)
 	if (Effects)
 	{
-		// (the hour's sun: mid-morning, from the south-east, as the campaign's daylight raids)
 		Effects->SetSun(FRotator(30.0, 150.0, 0.0).Vector());
+	}
+	if (GroundFx)
+	{
+		GroundFx->SetSun(FRotator(30.0, 150.0, 0.0).Vector());
 	}
 }
 
@@ -905,18 +937,21 @@ void AAirBattle::ShowTheTable()
 
 void AAirBattle::LaySky()
 {
-	// The day's clouds (AirSky, the art director's sky at bomber height): laid once, round the target, over the stage's
-	// hills; the flight core told the deck's top, where falls begun above it pass out of sight.
+	// The day's clouds (AirSky, the art director's sky at bomber height): laid once on a square that repeats round the
+	// eye, so there are clouds wherever the fight goes, lifted over the stage's hills where they are drawn; once they
+	// are drawn, the flight core is told where the deck is, so that falls begun above it pass out of sight in it (where
+	// a tile of it is drawn, and nowhere else: with no clouds drawn, every fall goes on down).
 	FAirBattleState& S = *State;
+	S.Show.CloudTop = 0.0;
+	S.Show.DeckAt = nullptr;
 	const FVector Sun = Stage && Stage->IsRaised() ? Stage->TowardSun() : FRotator(30.0, 150.0, 0.0).Vector();
 	S.SkyPlace.Sun = AirSky::Vec(Sun.Y, Sun.X, Sun.Z);
 	S.SkyPlace.Ground = S.Show.Ground;
 	S.Sky = AirSky::Lay(S.Board.Cloud, S.SkyPlace);
-	S.Show.CloudTop = S.Sky.DeckTop;
+	const FString Moved = S.Sky.MovedWhy.empty() ? FString() : FString::Printf(TEXT(", moved %.0f m %s"), S.Sky.Moved, *AirParts::Wide(S.Sky.MovedWhy));
 	UE_LOG(LogTheater, Display, TEXT("Air battle: the sky, %s%s from %.0f to %.0f m%s; %d clouds of %d puffs, %.0f%% of the sky."),
 		S.Board.Cloud.bGiven ? TEXT("") : TEXT("(none given) "), S.Sky.Sky.bDeck ? TEXT("a deck") : TEXT("scattered cumulus"), S.Sky.Base, S.Sky.Top,
-		S.Sky.MovedWhy.empty() ? TEXT("") : *FString::Printf(TEXT(", moved %.0f m %s"), S.Sky.Moved, *AirParts::Wide(S.Sky.MovedWhy)),
-		static_cast<int32>(S.Sky.Clouds.size()), static_cast<int32>(S.Sky.Puffs.size()), S.Sky.Cover * 100.0);
+		*Moved, static_cast<int32>(S.Sky.Clouds.size()), static_cast<int32>(S.Sky.Puffs.size()), S.Sky.Cover * 100.0);
 	if (S.Sky.Puffs.empty())
 	{
 		return;
@@ -924,7 +959,7 @@ void AAirBattle::LaySky()
 	UMaterialInterface* Highlight = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight"));
 	if (!Highlight)
 	{
-		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_Highlight is missing (run Tools/build_content.sh): no clouds are drawn."));
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_Highlight is missing (run Tools/build_content.sh): no clouds are drawn, and falls go on down."));
 		return;
 	}
 	Clouds = NewObject<UProceduralMeshComponent>(this, TEXT("AirClouds"));
@@ -932,16 +967,16 @@ void AAirBattle::LaySky()
 	Clouds->SetupAttachment(Root);
 	Clouds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Clouds->SetCastShadow(false);
-	// (see-through, as the kit's smoke: drawn before it, so the smoke and tracer of a fight over the clouds lie on them)
-	Clouds->SetTranslucentSortPriority(-10);
 	Clouds->RegisterComponent();
 	CloudInk = UMaterialInstanceDynamic::Create(Highlight, this);
 	CloudInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+	SkyOrder = 0;
 	// The first turn of the puffs, to an eye behind the raid; after that DrawSky turns them as the eye moves.
-	const AirSky::Vec Drift(0.0, 0.0, 0.0);
+	const AirSky::Vec Drift = S.Sky.DriftAt(S.Show.AirNow());
 	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
 	S.SkyPainter.Paint(S.Sky, AirSky::Vec(S.Board.TargetX, S.Board.TargetY - 6000.0, 5000.0), Drift, S.SkyPlace.Sun, Light, S.SkyPoints, S.SkyRgba);
-	const std::vector<int> Made = S.SkyPainter.Triangles(static_cast<int>(S.Sky.Puffs.size()));
+	// (the painter's room, fixed: each slot keeps its triangles, only its points move as the eye does)
+	const std::vector<int> Made = S.SkyPainter.Triangles(S.Sky.MostPuffs);
 	TArray<int32> Triangles;
 	Triangles.Reserve(static_cast<int32>(Made.size()));
 	for (const int Index : Made)
@@ -959,8 +994,17 @@ void AAirBattle::LaySky()
 	}
 	TArray<FVector> Normals;
 	Normals.Init(FVector::UpVector, CloudPoints.Num());
+	Clouds->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
 	Clouds->CreateMeshSection(0, CloudPoints, Triangles, Normals, TArray<FVector2D>(), CloudColours, TArray<FProcMeshTangent>(), false);
 	Clouds->SetMaterial(0, CloudInk);
+	// (drawn: now the deck is where falls pass out of sight; the field outlives the flight core's hold on it, both
+	// being the battle state's)
+	if (S.Sky.DeckTop > 0.0)
+	{
+		const AirSky::Field* Laid = &S.Sky;
+		S.Show.CloudTop = S.Sky.DeckTop;
+		S.Show.DeckAt = [Laid](double X, double Y) { return Laid->DeckAt(X, Y); };
+	}
 }
 
 void AAirBattle::DrawSky()
@@ -970,13 +1014,24 @@ void AAirBattle::DrawSky()
 		return;
 	}
 	FAirBattleState& S = *State;
-	// The wind's carry (the battle's wind, as the effects kit is given it: 3 m/s toward the east, 2 toward the south),
-	// on the air clock, so the clouds drift as the smoke does.
-	const double Air = S.Show.AirNow();
-	const AirSky::Vec Drift(3.0 * Air, -2.0 * Air, 0.0);
+	// The wind's carry (the battle's wind, as the effects kit is given it), on the air clock, so cumulus drift as the
+	// smoke does (a deck stays where it was laid).
+	const AirSky::Vec Drift = S.Sky.DriftAt(S.Show.AirNow());
 	Clouds->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
 	const FVector At = Eye->GetActorLocation() / UnitsPerMetre;
 	const AirSky::Vec Seen(At.Y, At.X, At.Z);
+	// See-through things are drawn one after another, not by depth. Seen from over the clouds, the ground's bursts and
+	// fires lie under them and the air fight over them; seen from under, the clouds are the sky behind both.
+	const int32 Want = Seen.Z > 0.5 * (S.Sky.Base + S.Sky.Top) ? 1 : 2;
+	if (Want != SkyOrder)
+	{
+		SkyOrder = Want;
+		Clouds->SetTranslucentSortPriority(Want == 1 ? -10 : -20);
+		if (GroundFxMesh.IsValid())
+		{
+			GroundFxMesh->SetTranslucentSortPriority(Want == 1 ? -20 : -10);
+		}
+	}
 	if (!S.SkyPainter.Stale(Seen, Drift))
 	{
 		return;
@@ -992,6 +1047,16 @@ void AAirBattle::DrawSky()
 		CloudColours[Index] = FColor(S.SkyRgba[C], S.SkyRgba[C + 1], S.SkyRgba[C + 2], S.SkyRgba[C + 3]);
 	}
 	Clouds->UpdateMeshSection(0, CloudPoints, TArray<FVector>(), TArray<FVector2D>(), CloudColours, TArray<FProcMeshTangent>());
+}
+
+FBattleEffects* AAirBattle::KitAt(const FVector& WorldAt) const
+{
+	// (under the clouds' base, with the clouds drawn: the ground's kit, drawn under them when the eye is over them)
+	if (GroundFx && Clouds && State.IsValid() && WorldAt.Z / UnitsPerMetre < State->Sky.Base)
+	{
+		return GroundFx.Get();
+	}
+	return Effects ? Effects.Get() : GroundFx.Get();
 }
 
 FVector AAirBattle::World(double X, double Y, double Z) const
@@ -1071,7 +1136,13 @@ void AAirBattle::Tick(float DeltaSeconds)
 			GEngine->GameViewport->GetViewportSize(Size);
 			ViewW = FMath::Max(1, static_cast<int32>(Size.X));
 		}
-		const FBattleJolt Jolt = Effects->Tick(S.Show.AirNow(), Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW);
+		FBattleJolt Jolt = Effects->Tick(S.Show.AirNow(), Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW);
+		if (GroundFx)
+		{
+			const FBattleJolt Under = GroundFx->Tick(S.Show.AirNow(), Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW);
+			Jolt.Offset += Under.Offset;
+			Jolt.RollDegrees += Under.RollDegrees;
+		}
 		if (S.bClose)
 		{
 			// (the braced camera's jolt, in the close view only: the overview stays still)
@@ -1418,9 +1489,9 @@ void AAirBattle::PlayEffects()
 			GunHeardAt.Remove(E.Key);
 			break;
 		case AirShow::FxKind::Hit:
-			if (Effects)
+			if (FBattleEffects* Kit = KitAt(At))
 			{
-				Effects->AirHit(Now, At, WorldVector(E.Normal.X, E.Normal.Y, E.Normal.Z).GetSafeNormal(), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What));
+				Kit->AirHit(Now, At, WorldVector(E.Normal.X, E.Normal.Y, E.Normal.Z).GetSafeNormal(), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What));
 			}
 			break;
 		case AirShow::FxKind::TrailStart:
@@ -1452,9 +1523,9 @@ void AAirBattle::PlayEffects()
 			break;
 		case AirShow::FxKind::Flak:
 		{
-			if (Effects)
+			if (FBattleEffects* Kit = KitAt(At))
 			{
-				Effects->AirFlak(Now, At, AirParts::Wide(E.What));
+				Kit->AirFlak(Now, At, AirParts::Wide(E.What));
 			}
 			// Flak heard when it is seen (handoff 10, gap 6): the burst at its point, after the flash by the distance
 			// over the speed of sound (none within 150 m, at most 3 s), no closer together than the mix's soundEvery.
@@ -1524,25 +1595,25 @@ void AAirBattle::PlayEffects()
 			break;
 		}
 		case AirShow::FxKind::Splash:
-			if (Effects)
+			if (FBattleEffects* Kit = KitAt(At))
 			{
-				Effects->ShellOfSize(At, E.Size >= 8.0 ? TEXT("bomb250") : E.Size >= 3.0 ? TEXT("light") : TEXT("grenade"), TEXT("water"));
+				Kit->ShellOfSize(At, E.Size >= 8.0 ? TEXT("bomb250") : E.Size >= 3.0 ? TEXT("light") : TEXT("grenade"), TEXT("water"));
 			}
 			break;
 		case AirShow::FxKind::Crash:
-			if (Effects)
+			if (FBattleEffects* Kit = KitAt(At))
 			{
-				Effects->ShellOfSize(At, E.Size >= 8.0 ? TEXT("bomb250") : TEXT("grenade"), TEXT("earth"));
+				Kit->ShellOfSize(At, E.Size >= 8.0 ? TEXT("bomb250") : TEXT("grenade"), TEXT("earth"));
 				if (E.Size >= 8.0)
 				{
-					Effects->Burn(At, static_cast<float>(E.Size * 0.6), 90.0f);
+					Kit->Burn(At, static_cast<float>(E.Size * 0.6), 90.0f);
 				}
 			}
 			break;
 		case AirShow::FxKind::BombHit:
-			if (Effects)
+			if (FBattleEffects* Kit = KitAt(At))
 			{
-				Effects->ShellOfSize(At, E.Size >= 500.0 ? TEXT("bomb500") : TEXT("bomb250"), E.What == "water" ? TEXT("water") : TEXT("earth"));
+				Kit->ShellOfSize(At, E.Size >= 500.0 ? TEXT("bomb500") : TEXT("bomb250"), E.What == "water" ? TEXT("water") : TEXT("earth"));
 			}
 			break;
 		case AirShow::FxKind::Sound:
@@ -1586,9 +1657,9 @@ void AAirBattle::PlayEffects()
 			}
 			break;
 		case AirShow::FxKind::Smoke:
-			if (Effects)
+			if (FBattleEffects* Kit = KitAt(At))
 			{
-				Effects->Burn(At, 40.0f, 900.0f);
+				Kit->Burn(At, 40.0f, 900.0f);
 			}
 			break;
 		}
@@ -2013,6 +2084,12 @@ void AAirBattle::EndPlay(const EEndPlayReason::Type Reason)
 		Stage->Destroy();
 		Stage = nullptr;
 	}
+	if (GroundFx)
+	{
+		GroundFx->End();
+		GroundFx.Reset();
+	}
+	GroundFxMesh.Reset();
 	if (Eye)
 	{
 		Eye->Destroy();

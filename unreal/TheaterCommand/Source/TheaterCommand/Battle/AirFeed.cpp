@@ -430,10 +430,22 @@ namespace AirFeed
 		P.TargetX = S.TargetX;
 		P.TargetY = S.TargetY;
 		P.bShips = S.PlaceKind == "harbour" || S.PlaceKind == "fleet";
-		double Band = -1.0;
+		// (the deck keeps 1.5 to 2.5 km under the lowest of the raider's bombers above 2,000 m, and over any at 2,000 m
+		// or lower: the level and torpedo bombers at Pearl Harbor and Midway, not the dive bombers over them)
+		double Band = 0.0, Low = 0.0;
 		for (const AirShow::Group& G : First)
-			if (G.Side == 0 && !G.bFighter) Band = std::max(Band, G.Alt);
-		P.Band = Band > 0.0 ? Band : S.Bands.size() > 1 ? S.Bands[1] : 4500.0;
+		{
+			if (G.Side != 0 || G.bFighter || G.Alt <= 0.0) continue;
+			if (G.Alt > 2000.0) Band = Band > 0.0 ? std::min(Band, G.Alt) : G.Alt;
+			else Low = std::max(Low, G.Alt);
+		}
+		if (Band <= 0.0 && Low <= 0.0)
+		{
+			const double Middle = S.Bands.size() > 1 ? S.Bands[1] : 4500.0;
+			(Middle > 2000.0 ? Band : Low) = Middle;
+		}
+		P.Band = Band;
+		P.LowBand = Low;
 		return P;
 	}
 

@@ -99,6 +99,25 @@ namespace AirShow
 		return Ground ? std::max(0.0, Ground(X, Y)) : 0.0;
 	}
 
+	bool Show::IntoDeck(double& Deck, const Vec& At) const
+	{
+		if (Deck <= 0.0)
+		{
+			return false;
+		}
+		const double Here = DeckHere(At.X, At.Y);
+		if (At.Z >= (Here > 0.0 ? Here : Deck) - 150.0)
+		{
+			return false;
+		}
+		if (Here > 0.0)
+		{
+			return true;
+		}
+		Deck = 0.0;
+		return false;
+	}
+
 	Fx& Show::Emit(FxKind Kind, const Vec& At, const std::string& What, int Key)
 	{
 		Fx F;
@@ -1020,7 +1039,7 @@ namespace AirShow
 			C.ChuteAt += Roll.U(1.0, 2.5);
 			Check.Chutes++;
 		}
-		const bool bCloud = C.FallDeck > 0.0 && C.P.Z < C.FallDeck - 150.0;
+		const bool bCloud = IntoDeck(C.FallDeck, C.P);
 		if (C.P.Z <= Floor + 2.0 || bCloud || C.FallT > 150.0)
 		{
 			if (!bCloud && C.FallT <= 150.0) Emit(Floor > 0.5 ? FxKind::Crash : FxKind::Splash, Vec(C.P.X, C.P.Y, Floor), "plane").Size = C.Form.Span;
@@ -1165,7 +1184,8 @@ namespace AirShow
 			Fx& F = Emit(FxKind::Fall, C.P, C.Falling == FallHow::Explode ? "explode" : C.Falling == FallHow::Spin ? "spin" : "burn", C.Key);
 			F.Vel = V;
 			F.Size = C.Form.Span;
-			F.Deck = C.FallDeck > 0.0 ? C.FallDeck : GroundAt(C.P.X, C.P.Y);
+			const double Here = C.FallDeck > 0.0 ? DeckHere(C.P.X, C.P.Y) : 0.0;
+			F.Deck = Here > 0.0 ? Here : GroundAt(C.P.X, C.P.Y);
 		}
 		const Vec EngineAt = Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[C.Form.Engines.size() > 1 ? (Roll.U() < 0.5 ? 1 : C.Form.Engines.size() - 2) : 0]);
 		if (C.Falling == FallHow::Explode)
@@ -1624,7 +1644,7 @@ namespace AirShow
 		{
 			Thing& T = Small[K];
 			const double Floor = GroundAt(T.At.X, T.At.Y);
-			const bool bCloud = T.Deck > 0.0 && T.Kind != ThingKind::Bomb && T.At.Z < T.Deck - 150.0;
+			const bool bCloud = T.Kind != ThingKind::Bomb && IntoDeck(T.Deck, T.At);
 			if (T.At.Z > Floor && !bCloud && T.Age < 400.0) { ++K; continue; }
 			const Vec Down(T.At.X, T.At.Y, Floor);
 			if (T.Kind == ThingKind::Bomb)

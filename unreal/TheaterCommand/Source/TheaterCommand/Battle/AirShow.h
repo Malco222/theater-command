@@ -253,8 +253,8 @@ namespace AirShow
 		double Spin = 0.0, Size = 1.0, Age = 0.0, Heading = 0.0;
 		bool bOpen = false;
 		bool bTorpedo = false;
-		/** The deck top it passes out of sight in, metres: 0 when it came out under the deck (or there is none), and it
-		 * falls on to the ground or the sea. */
+		/** The deck top it began its fall above, metres, and passes out of sight in where a tile of it is drawn: 0 when
+		 * it came out under the deck or through a hole (or there is none), and it falls on to the ground or the sea. */
 		double Deck = 0.0;
 	};
 
@@ -292,9 +292,14 @@ namespace AirShow
 		void SetLoadout(const std::string& Nation, bool bFighter, const Loadout& Guns);
 		/** The ground's height under a board point, metres (the sea 0). Left unset: the sea everywhere. */
 		std::function<double(double, double)> Ground;
-		/** The top of the cloud deck below the bombers, metres (0: none). A fall begun above it ends inside it, so nothing
-		 * pops from view; one begun under it (a torpedo bomber, a low fight) goes on down to the sea or the ground. */
+		/** The top of the cloud deck below the bombers as laid, metres (0: none): what is above it when its fall begins
+		 * falls from above the deck. */
 		double CloudTop = 0.0;
+		/** The deck's drawn top over a board point (metres; 0 where no tile of it is drawn: a hole, the ships' clearing,
+		 * past its reach). A fall begun above the deck ends inside it where a tile of it is drawn, so nothing pops from
+		 * view; through a hole it goes on down, as does one begun under it (a torpedo bomber, a low fight), to the sea
+		 * or the ground. Unset: the deck is everywhere at CloudTop. */
+		std::function<double(double, double)> DeckAt;
 		/** Where the camera is (board metres): the guns nearest it are the ones fired when there are too many. */
 		Vec Eye;
 		/** The most guns fired at once (the effects kit's budget: about 17 puffs a machine gun, 3,000 in all). */
@@ -363,7 +368,7 @@ namespace AirShow
 			int StragId = -1;
 			FallHow Falling = FallHow::None;
 			double FallT = 0.0;
-			double FallDeck = 0.0;   // the deck top its fall ends in, 0 if it began under the deck
+			double FallDeck = 0.0;   // the deck top its fall began above, 0 if it began under the deck or came through a hole
 			int ChutesLeft = 0;
 			double ChuteAt = 0.0;
 			std::string ChuteCue;
@@ -443,6 +448,11 @@ namespace AirShow
 		Fx& Emit(FxKind Kind, const Vec& At, const std::string& What = std::string(), int Key = 0);
 		/** The deck top something at height Z passes out of sight in: the deck's, if it is above the deck; else 0. */
 		double DeckFor(double Z) const { return CloudTop > 0.0 && Z > CloudTop ? CloudTop : 0.0; }
+		/** The deck's drawn top over a board point (0: none drawn there). */
+		double DeckHere(double X, double Y) const { return DeckAt ? DeckAt(X, Y) : CloudTop; }
+		/** For something whose fall began above the deck (Deck its top, else 0): true once it is 150 m inside the deck
+		 * where a tile of it is drawn; come down through a hole, it is let through (Deck to 0) and goes on down. */
+		bool IntoDeck(double& Deck, const Vec& At) const;
 		Craft* Find(int Key);
 		const Craft* Find(int Key) const;
 		bool Live(const Craft& C) const;
