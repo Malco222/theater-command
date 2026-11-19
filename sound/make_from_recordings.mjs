@@ -23,6 +23,7 @@ import battle3 from './recordings/battle3.mjs';
 import battle4 from './recordings/battle4.mjs';
 import battle5 from './recordings/battle5.mjs';
 import battle6 from './recordings/battle6.mjs';
+import battle7 from './recordings/battle7.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2), setAt = args.indexOf('--set'), only = setAt >= 0 ? args.splice(setAt, 2)[1] : null;
@@ -49,6 +50,7 @@ battle3(defIn('battle'));
 battle4(defIn('battle'));
 battle5(defIn('battle'));
 battle6(defIn('battle'));
+battle7(defIn('battle'));
 
 fs.mkdirSync(out, { recursive: true });
 const list = [];
