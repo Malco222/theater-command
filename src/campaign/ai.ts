@@ -196,7 +196,7 @@ function campaign(g: Game, nat: string): void {
  * of being sent to other fronts. A staff's habit at every stop, for its own side's towns; a player's corps are
  * never held. Returns the corps held, for the month's end to free.
  */
-function reliefFirst(g: Game, nat: string): Corps[] {
+export function reliefFirst(g: Game, nat: string): Corps[] {
   const kept: Corps[] = [];
   if (!siegeRules(g) || nat === g.human || !g.nations[nat].alive) return kept;
   for (const r of g.regions) {
