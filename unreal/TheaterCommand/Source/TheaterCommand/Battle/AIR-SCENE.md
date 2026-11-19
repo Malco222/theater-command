@@ -111,8 +111,10 @@ stands as it is under a sun up to 20 degrees high and darkens as the sun climbs,
 its hue kept (`SeaPaintUnder` in AirStage.cpp): Pearl Harbor's morning sun at 18 degrees leaves it as it was, and
 Midway's at 45 takes the open sea from 78 to 90 of brightness toward her 55 to 60. The clouds' ink is 1.3 times their
 paint (`CloudBright` in LaySky): through the grade the sunlit tops read 226 to 231, her mark is 238 to 245 with no more
-than about one per cent of the picture at 250 or over, and the paint's top is already 252. `-TheaterCloudBright=` tries
-another.
+than about one per cent of the picture at 250 or over, and the paint's top is already 252. The painter paints the
+shaded sides, the bases and the shadows that much darker (`Painter::SetInk`), so only the sunlit tops rise: the bases
+already pass at 140 to 155 and the deck's troughs at 12 to 18 per cent darker (her 16:31Z). `-TheaterCloudBright=`
+tries another.
 
 **The battle look (the 3D builder's, `Campaign/CampaignBattleLook.h/.cpp`).** The scene calls it in five places: the
 art director's grade on the scene's own camera (`Grade`, when the eye is made); the air haze, which starts 15 km out

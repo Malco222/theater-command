@@ -994,14 +994,16 @@ void AAirBattle::LaySky()
 	Clouds->SetCastShadow(false);
 	Clouds->RegisterComponent();
 	CloudInk = UMaterialInstanceDynamic::Create(Highlight, this);
-	// (the clouds a third brighter than their paint: on build 1732, through the battle grade, the sunlit tops read 226
+	// (the clouds' sunlit tops a third brighter than their paint: on build 1732, through the battle grade, they read 226
 	// to 231 at the 99.5th percentile of the picture, the art director's mark 238 to 245 with no more than about one
 	// per cent of it at 250 or over (16:21Z). The paint's top, AirSky.cpp's SunSide, is already 252, so the lift is the
-	// ink's, the cloud's three colours together. "-TheaterCloudBright=1.2" tries another; the shadows' darkness is
-	// hardly touched, 10 of brightness becoming 13)
+	// ink's; the painter paints the shaded sides, the bases and the shadows that much darker, so that they stand where
+	// they were (her 16:31Z). "-TheaterCloudBright=1.2" tries another)
 	float CloudBright = 1.3f;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterCloudBright="), CloudBright);
-	CloudInk->SetScalarParameterValue(TEXT("Brightness"), FMath::Clamp(CloudBright, 0.5f, 3.0f));
+	CloudBright = FMath::Clamp(CloudBright, 0.5f, 3.0f);
+	CloudInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
+	S.SkyPainter.SetInk(CloudBright);
 	CloudShadows = NewObject<UProceduralMeshComponent>(this, TEXT("AirCloudShadows"));
 	CloudShadows->bUseAsyncCooking = false;
 	CloudShadows->SetupAttachment(Root);

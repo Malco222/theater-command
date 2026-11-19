@@ -420,6 +420,38 @@ int main(int Argc, char** Argv)
 				Last = Far;
 			}
 		}
+		// Under the scene's cloud ink (1.3, AirBattle.cpp), only the sunlit tops rise: painted with the ink, no point is
+		// brighter than without it, the brightest are as they were, and the shaded sides and bases are the ink's share
+		// darker, so that the ink brings them back where they were (the art director, 16:31Z).
+		int InkBrighter = 0, InkTopsMoved = 0, InkShadeOff = 0, InkTops = 0, InkShades = 0;
+		{
+			AirSky::Painter Plain, Inked;
+			Inked.SetInk(1.3);
+			std::vector<AirSky::Vec> PlainPoints, InkedPoints;
+			std::vector<uint8_t> PlainRgba, InkedRgba;
+			const AirSky::Vec E = Eyes.front();
+			Plain.Paint(Sky, E, AtBombs, SkyAt.Sun, AirSky::Rgb(1.0f, 1.0f, 1.0f), PlainPoints, PlainRgba);
+			Inked.Paint(Sky, E, AtBombs, SkyAt.Sun, AirSky::Rgb(1.0f, 1.0f, 1.0f), InkedPoints, InkedRgba);
+			int Top = 0; // (the brightest green laid: a sunlit top)
+			for (size_t K = 1; K < PlainRgba.size(); K += 4) Top = std::max(Top, static_cast<int>(PlainRgba[K]));
+			for (size_t K = 0; K + 3 < PlainRgba.size() && K < InkedRgba.size(); K += 4)
+			{
+				const int R0 = PlainRgba[K], G0 = PlainRgba[K + 1], R1 = InkedRgba[K], G1 = InkedRgba[K + 1];
+				if (R1 > R0 + 1 || G1 > G0 + 1) ++InkBrighter;
+				if (G0 >= Top - 1)
+				{
+					++InkTops;
+					if (std::abs(G1 - G0) > 1) ++InkTopsMoved;
+				}
+				// (a base or a shaded side: no brighter than the shaded side's own paint, 170 of green in a picture,
+				// some 102 laid)
+				if (G0 > 0 && G0 <= 102)
+				{
+					++InkShades;
+					if (std::abs(G1 * 1.3 - G0) > 2.0) ++InkShadeOff;
+				}
+			}
+		}
 		// The clearing over the target (within 1.8 km of it), and the field round it, as first laid, when the first
 		// bombs fall, at the battle's end and two hours on.
 		double WorstNear = 0.0, LeastField = 1.0, MostField = 0.0;
@@ -541,6 +573,9 @@ int main(int Argc, char** Argv)
 		// clang on a busy machine; the mark is there to catch the next such step, and the Mac's cores are faster)
 		Limits.push_back({ "the sky turned to an eye within budget", WorstPaintMs < 5.0, Num(WorstPaintMs, 2) + " ms", "under 5 ms (the least of three middles of 15)" });
 		// (the shadows in their own room, none among the puffs: their mesh is drawn under the ground's fires and smoke)
+		Limits.push_back({ "the cloud ink lifts only the sunlit tops", InkBrighter == 0 && InkTopsMoved == 0 && InkShadeOff == 0 && InkTops > 0 && InkShades > 0,
+		                   std::to_string(InkBrighter) + " brighter, " + std::to_string(InkTopsMoved) + " of " + std::to_string(InkTops) + " tops moved, " + std::to_string(InkShadeOff) + " of " + std::to_string(InkShades) + " shades off",
+		                   "0 brighter, tops as they were, shades the ink's share darker" });
 		Limits.push_back({ "the clouds' shadows laid apart from the puffs", DarkAmongPuffs == 0 && (!bCumulus || Rec.Board.bNight || MostShadows > 0),
 		                   std::to_string(MostShadows) + " shadows at most, " + std::to_string(DarkAmongPuffs) + " dark points among the puffs",
 		                   "none among the puffs; some on a cumulus day" });

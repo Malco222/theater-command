@@ -12,7 +12,8 @@ namespace AirSky
 	// to 245, a base 140 to 155, darker than the sky behind it; a cloud's shadow on the sea 25 to 30 per cent darker.
 	// The sunlit top's paint is above that mark on purpose: the haze and the game's exposure take it down (230 in game
 	// on build 1722, the art director, 14:13Z; 226 to 231 through the battle grade on 1732, and at 252 there is no room
-	// left in the paint: the scene's cloud ink lifts all three colours together, AirBattle.cpp's CloudBright))
+	// left in the paint: the scene's cloud ink lifts it, AirBattle.cpp's CloudBright, and the painter paints the
+	// other three that much darker to keep them where they were, Painter::SetInk))
 	const Rgb SunSide = Rgb::FromPicture(252, 250, 245);
 	const Rgb ShadeSide = Rgb::FromPicture(162, 170, 184);
 	const Rgb BaseSide = Rgb::FromPicture(134, 141, 154);
@@ -929,12 +930,15 @@ namespace AirSky
 		auto Put = [&OutPoints, &OutRgba, &PutIn](size_t At, const Vec& Point, const Rgb& Col, double A) { PutIn(OutPoints, OutRgba, At, Point, Col, A); };
 		// (a cloud's colour for how much sun a point of it has: its grey base, its shaded side, its sunlit top, full from
 		// 0.9, so a sunlit top grades over its upper part (the art director, 15:17Z); by the hour's light)
-		auto Tone = [&Light](double L)
+		// (under the scene's ink, the shaded side, the base and the shadows painted darker by as much as the ink lifts
+		// them: only the sunlit top rises, the art director, 16:31Z)
+		const Rgb BaseInked = BaseSide * (1.0 / Ink), ShadeInked = ShadeSide * (1.0 / Ink), ShadowInked = ShadowSide * (1.0 / Ink);
+		auto Tone = [&Light, &BaseInked, &ShadeInked](double L)
 		{
-			const Rgb B = L < 0.35 ? Blend(BaseSide, ShadeSide, Clamp(L, 0.0, 0.35) / 0.35) : Blend(ShadeSide, SunSide, (Clamp(L, 0.35, 0.9) - 0.35) / 0.55);
+			const Rgb B = L < 0.35 ? Blend(BaseInked, ShadeInked, Clamp(L, 0.0, 0.35) / 0.35) : Blend(ShadeInked, SunSide, (Clamp(L, 0.35, 0.9) - 0.35) / 0.55);
 			return Rgb(B.R * Light.R, B.G * Light.G, B.B * Light.B);
 		};
-		const Rgb Shade = Rgb(ShadowSide.R * Light.R, ShadowSide.G * Light.G, ShadowSide.B * Light.B);
+		const Rgb Shade = Rgb(ShadowInked.R * Light.R, ShadowInked.G * Light.G, ShadowInked.B * Light.B);
 		const Vec SunFlat = Vec(SunWay.X, SunWay.Y, 0.0).Unit(Vec(0.0, 1.0, 0.0));
 		const double Stretch = Clamp(1.0 / std::max(0.25, SunWay.Z), 1.0, 1.8);
 		double Near = 1e18;
