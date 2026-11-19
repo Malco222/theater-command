@@ -28,6 +28,12 @@ struct FAirBattleState
 	/** The effects kit's room for falling debris (the kit's AirFall), and the scene's room for smoke trails. */
 	AirShow::DebrisRoom Debris;
 	AirShow::TrailRoom Trails;
+	/** The day's sky (AirSky): where it is laid from, the clouds as laid, and their painter's work. */
+	AirSky::Placing SkyPlace;
+	AirSky::Field Sky;
+	AirSky::Painter SkyPainter;
+	std::vector<AirSky::Vec> SkyPoints;
+	std::vector<uint8_t> SkyRgba;
 
 	/** A recorded battle (Content/Data/AirBattles/<key>.json), played back: no orders are taken. */
 	bool bReplay = true;

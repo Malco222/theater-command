@@ -83,6 +83,12 @@ private:
 	TSharedPtr<FAirBattleState> State;
 	FCampaignSession* Session = nullptr;
 	TUniquePtr<FBattleEffects> Effects;
+	/** The effects on the ground and the sea (bomb bursts, crashes, splashes, fires, the stage's oil): a kit of their
+	 * own, so that seen from above the clouds they are drawn under them, and the air fight over them. */
+	TUniquePtr<FBattleEffects> GroundFx;
+	TWeakObjectPtr<UProceduralMeshComponent> GroundFxMesh;
+	/** Which is drawn over which this frame: 1 the eye over the clouds, 2 under them, 0 not yet set. */
+	int32 SkyOrder = 0;
 	TSharedPtr<SAirBattleScreen> Screen;
 
 	UPROPERTY()
@@ -99,6 +105,14 @@ private:
 	/** Parachutes, pieces and bombs: one mesh, laid afresh each frame. */
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Small;
+	/** The day's clouds: one see-through mesh of soft puffs (the effects kit's shape and M_Highlight), turned to the eye
+	 * when it has moved enough, and carried by the wind. */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> Clouds;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> CloudInk;
+	TArray<FVector> CloudPoints;
+	TArray<FColor> CloudColours;
 	/** The sea and the land under a battle with no stage. */
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> Ground;
@@ -127,9 +141,17 @@ private:
 	bool bLookSet = false;
 	FVector CloseEye = FVector::ZeroVector;
 	FRotator CloseFacing = FRotator::ZeroRotator;
-	/** Falls the kit is shedding debris for (burning or spinning), and blow-ups whose blast the kit's AirFall drew. */
-	TSet<int32> FallsOn;
+	/** Falls a kit is shedding debris for (burning or spinning), and the kit; blow-ups whose blast the kit's AirFall
+	 * drew. */
+	TMap<int32, FBattleEffects*> FallsOn;
 	TSet<int32> BlastsTaken;
+	/** Which kit each running gun and trail is in: chosen where it starts, a trail carried into the other kit as it
+	 * passes the clouds' base (its kind and span kept to start it there). */
+	/** A lit trail: the kit it is in, its kind and span, and when its kind began (on the air clock), so that passing
+	 * from one kit to the other it carries on at its full look. */
+	struct FTrailOn { FBattleEffects* Kit = nullptr; FString Kind; float Span = 0.0f; double KindT = 0.0; };
+	TMap<int32, FTrailOn> TrailKits;
+	TMap<int32, FBattleEffects*> GunKits;
 	// The sounds' own clocks.
 	TMap<int32, double> GunHeardAt;  // a gun's last burst heard, real seconds
 	TMap<int32, double> PassHeardAt; // a fighter group's last pass heard
@@ -140,7 +162,7 @@ private:
 	/** The sound director's mix (Content/Data/Sound/mix.json). */
 	TSharedPtr<FJsonObject> Mix;
 	/** A blast's torn flame, streaming on with the wreck for a moment. */
-	struct FTorn { int32 Key = 0; FVector At = FVector::ZeroVector; FVector Velocity = FVector::ZeroVector; double Until = 0.0; };
+	struct FTorn { int32 Key = 0; FVector At = FVector::ZeroVector; FVector Velocity = FVector::ZeroVector; double Until = 0.0; FBattleEffects* Kit = nullptr; };
 	TArray<FTorn> Torn;
 	int32 TornNext = 0;
 
@@ -170,6 +192,18 @@ private:
 	bool Open(const FString& Why);
 	void Raise();
 	void LayGround();
+	/** The day's clouds laid round the target (AirSky) and their mesh made; once they are drawn, the deck handed to the
+	 * flight core (where falls begun above it pass out of sight). */
+	void LaySky();
+	/** The clouds moved with the wind and, when the eye has moved enough, turned to it again; the see-through things
+	 * put in order for the eye (over the clouds or under them). */
+	void DrawSky();
+	/** The kit for an effect at a world point: the ground's under the clouds' base as drawn there (lifted to 300 m
+	 * over the ground under it), the air's above it. Given the kit something is in now, it changes only 50 m past the
+	 * base, so a trail along the base does not flicker between them. */
+	FBattleEffects* KitAt(const FVector& WorldAt, const FBattleEffects* InNow = nullptr) const;
+	/** The kit for what happens on the ground or the sea: the ground's, once the clouds are drawn. */
+	FBattleEffects* GroundKit() const;
 	void HideTheTable();
 	/** Every frame the battle is up: a piece the table stood again (its crowds unfolding under the pointer) is put away. */
 	void KeepTheTableHidden();
