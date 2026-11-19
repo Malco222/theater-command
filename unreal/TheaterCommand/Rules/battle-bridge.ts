@@ -116,13 +116,14 @@
 // is the 3D game's to pick from place and the nations, where it has the sets. Looks only beyond the grounds' cover.
 // A capital's or a city's own river through its streets (the design director, b526; the art director's 18:53Z note):
 // stream, where the city has one on the hand list (data/battle/city-rivers.json) and the card prices no crossing:
-// { name, lie, side?, great, half, course, join?, front? }. Its water is 'water' and its bridges 'bridge' in ground as on every field,
+// { name, lie, side?, strip?, great, half, course, join?, front? }. Its water is 'water' and its bridges 'bridge' in ground as on every field,
 // its road bridges as many as the city had in the war years (b596, the historian's record), on the avenues nearest the heart,
 // each laid straight across the water; every other avenue that meets it ends at its quay. lie 'up': it runs up the field through the
 // core, along the attack's line; 'across': through the core's back half behind the defence, the city's far quarter
 // beyond it; 'shore': along the city's edge at one side of the field (side 'west' or 'east'), its water out to the field's
 // edge, or, where its water lies straight ahead of the attack, along the field's back edge behind the defence (side
-// 'back', the Volga at Stalingrad's back; it keeps behind front as a river across does). course: its
+// 'back', the Volga at Stalingrad's back; it keeps behind front as a river across does; strip: its city is laid as a strip
+// along it, the field's whole width and about 800 m deep, the art director's 19 Nov Stalingrad). course: its
 // middle line in field metres from upstream to downstream (the way its water runs), and half the metres either side of
 // that line that are water (a little more and less as it goes; ground has the cells); a shore's course is its bank,
 // half 0. join: a second river meeting it (the Sava at Belgrade), { name, half, course } from the field's edge to the

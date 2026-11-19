@@ -70,6 +70,11 @@ export interface Stream {
   flows: 'north' | 'south' | 'east' | 'west';
   /** A shore's side of the field: 'back' along its far edge, behind the defence (b595). */
   side?: 'west' | 'east' | 'back';
+  /**
+   * A city that runs along its shore as a strip (Stalingrad along the Volga; the art director, 19 Nov): with the water
+   * behind the defence, its streets run the field's whole width along the bank and reach only a little way inland.
+   */
+  strip?: boolean;
   /** Wider than about 250 m at the city (the Danube at Budapest), drawn wider. */
   great: boolean;
   /** A second river meeting it at the city (the Sava at Belgrade): its name and the side of the field it comes in from. */
@@ -154,6 +159,8 @@ export interface FieldStream {
   lie: Stream['lie'];
   /** A shore's side of the field ('back': along the field's far edge, behind the defence). */
   side?: 'west' | 'east' | 'back';
+  /** Its city laid as a strip along it (Stream.strip): the field's whole width, shallow. */
+  strip?: boolean;
   great: boolean;
   half: number;
   course: [number, number][];
@@ -180,6 +187,12 @@ export const BEND = { r: 180, swing: 30, wave: 520, clear: 130 };
  * across the field, which it bridges and never runs along; and the stone's throw a block stands off its water and bridges.
  * Its water reaches half its width and a little more as it goes (wobble: up to an eighth more).
  */
+/**
+ * A city along its shore as a strip (Stream.strip), in metres inland from where its water begins: its core, then its
+ * terraces, then its suburbs. About 800 m in all against the field's 3000 m width, as Stalingrad ran 20 km along the Volga
+ * and 2 to 5 km deep.
+ */
+export const STRIP = { core: 380, terraces: 170, suburbs: 250 };
 export const STREAM = { great: 55, lesser: 35, swing: 45, shore: 230, behind: 330, joinBehind: 420, far: 60, clear: 75, road: 90, off: 60, wobble: 0.12 };
 
 /** How each province's ground is made: relief in metres, and how much of it is each kind of cover. */
@@ -278,10 +291,12 @@ export function buildField(place: LandPlace, seed: number, bend?: Bend): LandFie
   let built: Pick<LandField, 'storeys' | 'landmark' | 'streetEdge'> = {};
   if (size) {
     const rad = size === 'capital' ? 520 : size === 'city' ? 430 : size === 'town' ? 260 : 150;
-    const tx = w * (0.4 + 0.2 * rng.next()), ty = h * (0.7 + 0.06 * rng.next());
+    // A city along its shore as a strip has its heart near the water, in the middle of its depth.
+    const s = place.stream, strip = size === 'city' && s?.lie === 'shore' && s.side === 'back' && s.strip ? h - (s.great ? STREAM.shore : STREAM.shore * 0.7) : 0;
+    const tx = w * (0.4 + 0.2 * rng.next()), ty0 = h * (0.7 + 0.06 * rng.next()), ty = strip ? strip - STRIP.core / 2 : ty0;
     town = { x: tx, y: ty, r: rad };
     const dense = fractal(rng, cols, rows, 3, 2);
-    if (size === 'capital' || size === 'city') built = layCity(size, tx, ty, cols, rows, ground, height, seed);
+    if (size === 'capital' || size === 'city') built = layCity(size, tx, ty, cols, rows, ground, height, seed, strip);
     else {
       for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
         const d = Math.hypot(c * cell + cell / 2 - tx, r * cell + cell / 2 - ty) / rad;
@@ -521,7 +536,7 @@ function layStream(
       if (d >= 0) { ground[i] = G.water; height[i] = Math.min(height[i], 0) - 2; }
       else if (d > -40 && ground[i] === G.open && terrain !== 'desert') ground[i] = G.field;
     }
-    return { name: s.name, lie, side: 'back', great: s.great, half: 0, course, front };
+    return { name: s.name, lie, side: 'back', ...(s.strip ? { strip: true } : {}), great: s.great, half: 0, course, front };
   }
   if (lie === 'shore') {
     const west = s.side !== 'east', width = s.great ? STREAM.shore : STREAM.shore * 0.7;
@@ -870,7 +885,7 @@ export function streetsOf(place: LandPlace): 'capital' | 'city' | null {
  * Roads, the river and fortress works are laid over it after, as on every field. Its own stream of draws, so the rest
  * of the field (its roads, its river) is as it was. Returns the storeys of what it built and its landmark.
  */
-function layCity(size: 'capital' | 'city', tx: number, ty: number, cols: number, rows: number, ground: number[], height: number[], seed: number): Pick<LandField, 'storeys' | 'landmark' | 'streetEdge'> {
+function layCity(size: 'capital' | 'city', tx: number, ty: number, cols: number, rows: number, ground: number[], height: number[], seed: number, strip = 0): Pick<LandField, 'storeys' | 'landmark' | 'streetEdge'> {
   const { w, h, cell } = FIELD, n = cols * rows;
   const cr = new Rng(seed ^ 0xc17e);
   const edge = fractal(cr, cols, rows, 6, 2), fill = fractal(cr, cols, rows, 2, 2);
@@ -891,6 +906,11 @@ function layCity(size: 'capital' | 'city', tx: number, ty: number, cols: number,
     if (capital) {
       const west = w * 0.05 + westSide(y) + e * 0.6, east = w - w * 0.05 - eastSide(y) - e * 0.6;
       ring = y >= front + coreFront(x) + e && x > west && x < east ? 3 : y >= front - 350 + termFront(x) + e ? 2 : y >= 90 ? 1 : 0;
+    } else if (strip) {
+      // Along its shore, 'strip' the line where its water begins (laid later, over the back of it): the whole width,
+      // shallow, its edges ragged.
+      const cf = strip - STRIP.core + coreFront(x) * 0.4 + e;
+      ring = y >= cf ? 3 : y >= cf - STRIP.terraces + termFront(x) * 0.4 ? 2 : y >= cf - STRIP.terraces - STRIP.suburbs + termFront(x) * 0.6 + e ? 1 : 0;
     } else {
       // Rounded boxes about the centre (|dx|^4 + |dy|^4 < 1); the suburbs reach back to the middle of the field.
       const box = (a: number, b: number): number => ((x - tx) / a) ** 4 + ((y - ty) / b) ** 4;

@@ -5,7 +5,8 @@
     "form: 'through' (the river runs through the city), 'meet' (two rivers meet at the city: join is the second, joinFrom the compass bearing from the meeting toward where it comes from), 'shore' (the river runs along one edge of the city, not through it: water is the compass bearing from the city's heart to it).",
     "flows: the compass bearing, in degrees, the river flows toward as it passes the city's heart. great: wider than about 250 metres there (drawn wider).",
     "Only rivers a street fight would meet: no covered or small streams, and no sea coasts (a bay, a harbour, a strait). Where the card prices a crossing (the province's river between the armies), that river is the field's and this list adds nothing.",
-    "bridges, joinBridges: the city's road bridges over its river and the second river in 1939 to 1945, as the historian counted them for the design director's b596 (bridges.md); 6 stands for six or more, 0 for none (ferries only). The field lays that many, those nearest the heart, and every other avenue ends at a quay; at six or more every avenue has its bridge."
+    "bridges, joinBridges: the city's road bridges over its river and the second river in 1939 to 1945, as the historian counted them for the design director's b596 (bridges.md); 6 stands for six or more, 0 for none (ferries only). The field lays that many, those nearest the heart, and every other avenue ends at a quay; at six or more every avenue has its bridge.",
+    "strip: a shore city that runs along its water, long and shallow (the art director, 19 November): where its water lies behind the defence, its streets run the field's whole width along the bank and reach about 800 m inland."
   ],
   "cities": {
     "Warsaw": { "river": "Vistula", "form": "through", "flows": 340, "great": true, "bridges": 3, "note": "Praga on the east bank" },
@@ -47,7 +48,7 @@
     "Dnepropetrovsk": { "river": "Dnieper", "form": "through", "flows": 100, "great": true, "bridges": 2, "note": "mostly on the south (right) bank" },
     "Zaporozhye": { "river": "Dnieper", "form": "through", "flows": 190, "great": true, "bridges": 2, "note": "Khortitsa island and the dam" },
     "Rostov": { "river": "Don", "form": "shore", "flows": 260, "water": 180, "great": true, "note": "the city on the north bank, the flood plain south" },
-    "Stalingrad": { "river": "Volga", "form": "shore", "flows": 195, "water": 100, "great": true, "note": "the city along the west bank, no bridge in 1942" },
+    "Stalingrad": { "river": "Volga", "form": "shore", "flows": 195, "water": 100, "great": true, "strip": true, "note": "the city along the west bank, more than 20 km long and 2 to 5 km deep; no bridge in 1942" },
     "Tbilisi": { "river": "Kura", "form": "through", "flows": 140, "great": false, "bridges": 5 },
     "Cairo": { "river": "Nile", "form": "through", "flows": 0, "great": true, "bridges": 6, "note": "the city on the east bank, Giza west, the islands between" },
     "Washington": { "river": "Potomac", "form": "shore", "flows": 160, "water": 225, "great": true, "note": "along the city's south-west, Arlington across" },

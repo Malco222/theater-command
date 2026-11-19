@@ -1302,11 +1302,22 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (this.t >= this.ticket.limit) this.finish('def', 'time');
   }
 
+  /**
+   * What a block keeps of its strength in the day's count: the fled leave LAND.count.gone behind them, runners and those
+   * that fell back in order LAND.count.routing. A defence's runner caught in the water at the end is booked as fled (the
+   * design director, b608(3)): it has not got back in order, and a stand with the water at its back carries its price at
+   * the break. An attack's runner back in a river it came over counts as before: the card's crossing prices that.
+   */
+  private kept(u: LandUnit): number {
+    const caught = u.side === 'def' && u.state === 'routing' && inRiver(groundAt(this.field, u.x, u.y));
+    return u.state === 'gone' || caught ? u.str * (1 - LAND.count.gone[u.side]) : u.state === 'routing' || u.fellBack ? u.str * (1 - LAND.count.routing[u.side]) : u.str;
+  }
+
   /** Each side's share of its starting power lost: strength worn away, and what runners and the fled leave behind them. */
   lostShares(): Record<Side, number> {
     const lost = { att: 0, def: 0 };
     for (const u of this.units) {
-      const kept = u.state === 'gone' ? u.str * (1 - LAND.count.gone[u.side]) : u.state === 'routing' || u.fellBack ? u.str * (1 - LAND.count.routing[u.side]) : u.str;
+      const kept = this.kept(u);
       lost[u.side] += u.power0 * (1 - kept / u.str0);
     }
     return { att: lost.att / this.power.att, def: lost.def / this.power.def };
@@ -1321,7 +1332,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Men counted as the shares are, with what the runners and the fled leave behind, so the two never tell two stories.
     const men = { att: 0, def: 0 };
     for (const u of this.units) {
-      const kept = u.state === 'gone' ? u.str * (1 - LAND.count.gone[u.side]) : u.state === 'routing' || u.fellBack ? u.str * (1 - LAND.count.routing[u.side]) : u.str;
+      const kept = this.kept(u);
       men[u.side] += Math.round(u.men0 * (1 - kept / u.str0));
     }
     const k = this.ticket.reckoning;

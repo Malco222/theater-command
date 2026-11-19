@@ -21,6 +21,8 @@ export interface CityRiver {
   /** Its road bridges at the city in the war years, and the second river's (b596, the historian's record). */
   bridges?: number;
   joinBridges?: number;
+  /** A shore city that runs along its water as a strip, long and shallow (Stalingrad along the Volga; the art director, 19 Nov). */
+  strip?: boolean;
   note?: string;
 }
 
@@ -41,7 +43,7 @@ export function streamOf(r: CityRiver, heading: number): Stream {
   const f = rel(r.flows, heading), along = Math.abs(f) <= 45 || Math.abs(f) >= 135;
   if (r.form === 'shore') {
     const water = r.water ?? r.flows + 90;
-    if (Math.abs(rel(water, heading)) <= 45) return { name: r.river, lie: 'shore', flows: f > 0 ? 'east' : 'west', side: 'back', great: r.great };
+    if (Math.abs(rel(water, heading)) <= 45) return { name: r.river, lie: 'shore', flows: f > 0 ? 'east' : 'west', side: 'back', great: r.great, ...(r.strip ? { strip: true } : {}) };
     return { name: r.river, lie: 'shore', flows: Math.abs(f) < 90 ? 'north' : 'south', side: side(water), great: r.great };
   }
   return {
