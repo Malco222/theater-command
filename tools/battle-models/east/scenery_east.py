@@ -37,7 +37,7 @@ import kit  # noqa: E402
 import rigid  # noqa: E402
 
 PAINTS = {
-    "log": "7C6046", "log_end": "A3845E", "plank": "6F6A60", "board": "77654E", "thatch": "9C8256", "thatch_dark": "6E5C40",
+    "log": "6E6458", "log_end": "978B78", "plank": "6F6A60", "board": "77654E", "thatch": "9C8256", "thatch_dark": "6E5C40",
     "whitewash": "E0DACB", "plinth": "7E5E42", "frame": "DCD8CC", "shutter": "4E7A86", "glass": "1D2124", "door": "5C4A38",
     "brick": "8E4E3C", "plaster": "C9C1B1", "soot": "2E2A27", "char": "1D1B19", "ash": "5D5853",
     "birch_bark": "DCD7CB", "birch_mark": "2F2C29", "birch_leaf": "7C9246", "twig": "4E4038",
@@ -66,18 +66,25 @@ def slab(m, pts, thick, paint):
     m.add(verts, faces, paint, False, lambda p: p - mid)
 
 
-def gable_roof(m, L, W, z0, pitch, over_x, over_y, thick, paint, ridge_paint=None):
-    """Two roof planes meeting at a ridge along x, eaves at z0, overhanging the walls."""
+def gable_roof(m, L, W, z0, pitch, over_x, over_y, thick, paint, ridge_paint=None, sag=0.0):
+    """Two roof planes meeting at a ridge along x, eaves at z0, overhanging the walls. `sag`: how far (m) the ridge and
+    eaves dip in the middle of the house's length, an old roof settling (each length of it a flat piece)."""
     rise = (W / 2 + over_y) * math.tan(math.radians(pitch))
     zr = z0 + rise - over_y * math.tan(math.radians(pitch))
     ze = z0 - over_y * math.tan(math.radians(pitch))
     x0, x1 = -L / 2 - over_x, L / 2 + over_x
-    for s in (1.0, -1.0):
-        e = s * (W / 2 + over_y)
-        pts = [(x0, 0.0, zr), (x1, 0.0, zr), (x1, e, ze), (x0, e, ze)] if s > 0 else [(x1, 0.0, zr), (x0, 0.0, zr), (x0, e, ze), (x1, e, ze)]
-        slab(m, pts, thick, paint)
-    if ridge_paint:
-        m.rod((x0, 0.0, zr + thick * 0.6), (x1, 0.0, zr + thick * 0.6), thick * 1.1, ridge_paint, sides=6 if m.fine else 4)
+    n = 4 if (sag and m.fine) else 1
+    xs = [x0 + (x1 - x0) * i / n for i in range(n + 1)]
+    dip = lambda x: -sag * (1.0 - ((2.0 * (x - x0) / (x1 - x0)) - 1.0) ** 2) if n > 1 else 0.0
+    for a, b in zip(xs, xs[1:]):
+        da, db = dip(a), dip(b)
+        for s in (1.0, -1.0):
+            e = s * (W / 2 + over_y)
+            pts = [(a, 0.0, zr + da), (b, 0.0, zr + db), (b, e, ze + db), (a, e, ze + da)] if s > 0 else \
+                [(b, 0.0, zr + db), (a, 0.0, zr + da), (a, e, ze + da), (b, e, ze + db)]
+            slab(m, pts, thick, paint)
+        if ridge_paint:
+            m.rod((a, 0.0, zr + da + thick * 0.6), (b, 0.0, zr + db + thick * 0.6), thick * 1.1, ridge_paint, sides=6 if m.fine else 4)
     return zr
 
 
@@ -107,9 +114,11 @@ def window(m, at, face, w, h, frame="frame", shutter="shutter", carved=True):
 
 
 # ================================================================================================ the houses
-def izba(fine=True):
-    """A log house, 6.6 x 5.4 m, its gable end with three windows to the street (+x)."""
-    m = new("Izba", "Izba: log house (our own design)", fine)
+def izba(fine=True, thatch=False):
+    """A log house, 6.6 x 5.4 m, its gable end with three windows to the street (+x); logs gone silver-grey-brown, the
+    roof of planks settling a little in the middle, or (`thatch`) thick thatch sagging more."""
+    name = "IzbaThatch" if thatch else "Izba"
+    m = new(name, f"Izba: log house{', thatched' if thatch else ''} (our own design)", fine)
     L, W, r = 6.6, 5.4, 0.13
     courses = 10 if fine else 1
     step = 2 * r * 0.9
@@ -135,7 +144,10 @@ def izba(fine=True):
         s = math.copysign(1.0, x)
         pts = [(x, W / 2, top), (x, -W / 2, top), (x, 0.0, top + rise)] if s > 0 else [(x, -W / 2, top), (x, W / 2, top), (x, 0.0, top + rise)]
         slab(m, pts, 0.06 * -s, "board")
-    zr = gable_roof(m, L, W, top, pitch, 0.45, 0.55, 0.07, "plank", "board" if fine else None)
+    if thatch:
+        zr = gable_roof(m, L, W, top, pitch, 0.5, 0.6, 0.22, "thatch", "thatch_dark" if fine else None, sag=0.22)
+    else:
+        zr = gable_roof(m, L, W, top, pitch, 0.45, 0.55, 0.07, "plank", "board" if fine else None, sag=0.1)
     # windows: three on the street end, two on the long side, under carved heads
     face_x = Vector((1.0, 0.0, 0.0))
     wx = L / 2 + r + 0.02
@@ -231,6 +243,21 @@ def _hash(v, k=0.0):
     return x - math.floor(x)
 
 
+def ragged_ball(m, rng, at, radii, paint, u, v, rough=0.3, droop=0.5):
+    """A leafy clump: a ball whose points are pushed in and out at random, its underside dragged down."""
+    base = len(m.verts)
+    m.ball(at, radii, paint, u=u, v=v)
+    at = Vector(at)
+    k = rng.uniform(0, 100)
+    for i in range(base, len(m.verts)):
+        # (by the point's place, so the copies of a point that the ball's caps and sides each hold move as one)
+        key = Vector((round(m.verts[i].x, 4), round(m.verts[i].y, 4), round(m.verts[i].z, 4)))
+        d = (m.verts[i] - at) * (1.0 + rough * (2.0 * _hash(key, k) - 1.0))
+        if d.z < 0:
+            d.z *= 1.0 + droop * (0.3 + 0.7 * _hash(key, k + 5.0))
+        m.verts[i] = at + d
+
+
 def birch(fine=True, leaves=True):
     """A birch about 15 m: a slim white stem with dark dashes (never rings), leaning a little; boughs rising and then
     hanging. In leaf an open oval crown of many clumps of different sizes with sky between them; bare, a spray of
@@ -271,18 +298,15 @@ def birch(fine=True, leaves=True):
                 m.rod(b + d * 0.5, b + d * 0.5 + Vector((rng.uniform(-1, 1), rng.uniform(-1, 1), -1.0)) * long * 0.15, 0.007, "twig", rb=0.003,
                       sides=3)
     if leaves:
-        # the crown: clumps scattered through an oval round the boughs' ends, bigger and denser outside, gaps between
-        n = 34 if fine else 9
-        c0 = axis * h * 0.68
+        # the crown: many small clumps along and below the boughs, each one ragged (its points pushed in and out at
+        # random and its underside dragged down), so the crown reads loose and weeping, never as balls on a stick
+        n = 44 if fine else 8
         for i in range(n):
             mid, end, long = ends[i % len(ends)]
-            p = mid + (end - mid) * rng.uniform(0.2, 1.0) + Vector((rng.uniform(-0.6, 0.6), rng.uniform(-0.6, 0.6), rng.uniform(-0.8, 0.5)))
-            off = p - c0
-            off.z *= 0.5
-            if off.length > 3.4:                                              # (kept inside the crown's oval)
-                p = c0 + (p - c0) * (3.4 / max(off.length, 1e-6))
-            s = rng.uniform(0.55, 1.15) if fine else rng.uniform(1.0, 1.6)
-            m.ball(p, (s, s * rng.uniform(0.75, 1.1), s * rng.uniform(0.6, 0.85)), "birch_leaf", u=6 if fine else 5, v=4)
+            p = mid + (end - mid) * rng.uniform(0.0, 1.0) + Vector((rng.uniform(-0.5, 0.5), rng.uniform(-0.5, 0.5), rng.uniform(-0.9, 0.3)))
+            s = rng.uniform(0.45, 0.9) if fine else rng.uniform(1.0, 1.5)
+            ragged_ball(m, rng, p, (s, s * rng.uniform(0.8, 1.1), s * rng.uniform(0.55, 0.75)), "birch_leaf", 6 if fine else 5, 4,
+                        rough=0.35 if fine else 0.15, droop=0.6)
     m.info["about"] = {"foot_m": 0.3, "sway": "crown"}
     m.info["crease"] = 80.0                                                   # (the clumps shaded round, not cut)
     return m
@@ -407,7 +431,7 @@ def telegraph_pole(fine=True):
 
 
 BUILDERS = {
-    "Izba": izba, "Khata": khata, "BurntChimney": burnt_chimney,
+    "Izba": izba, "IzbaThatch": lambda fine=True: izba(fine, True), "Khata": khata, "BurntChimney": burnt_chimney,
     "Birch": lambda fine=True: birch(fine, True), "BirchBare": lambda fine=True: birch(fine, False),
     "Spruce": lambda fine=True: spruce(fine, False), "SpruceSnow": lambda fine=True: spruce(fine, True),
     "Haystack": haystack, "WattleFence": wattle_fence, "WellSweep": well_sweep, "TelegraphPole": telegraph_pole,

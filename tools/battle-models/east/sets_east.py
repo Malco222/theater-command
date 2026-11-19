@@ -79,13 +79,23 @@ def write_surfaces(folder, size=256):
 
 
 # ---- the village kit, shared by the four sets
+RUIN = {"share": "in proportion to the battle damage the game tracks for the town; where none is tracked, by how many "
+                 "times the front has crossed it. A village fought over in 1943-44 is about half chimneys.",
+        "ruling": "art director, 19 Nov 2026 04:05Z"}
 KIT = {
-    "eastern_village": {"houses": ["Izba"], "yard": ["WattleFence", "Haystack", "WellSweep"], "ruin": ["BurntChimney"],
-                        "by_road": ["TelegraphPole"], "landmark": {"spire": None, "dome": None, "station": None},
-                        "about": "Log houses strung along the street, gable ends to it, behind wattle fences; a well sweep and a "
-                                 "haystack in the yards; poles along the road. Landmarks: Europe's kit's until our own are made."},
+    "eastern_village": {"houses": ["Izba", "IzbaThatch"], "mix": {"Izba": 0.7, "IzbaThatch": 0.3}, "yard": ["WattleFence", "Haystack", "WellSweep"],
+                        "ruin": ["BurntChimney"], "ruin_share": RUIN, "by_road": ["TelegraphPole"],
+                        "small_town_kit": "railway_town", "landmark": {"spire": None, "dome": None, "station": None},
+                        "where": "Russia west of the Volga and Belorussia, with the eastern Polish lands taken in 1939 (the art "
+                                 "director's ruling; the Baltic states, central and western Poland and East Prussia keep Europe's kit)",
+                        "about": "Log houses gone silver-grey, strung along the street with their gable ends to it, behind wattle "
+                                 "fences, a kitchen-garden plot behind each; a well sweep and haystacks in the yards; poles along "
+                                 "the road. Small towns take the railway town kit (log walls, green and iron-red roofs); big cities "
+                                 "their own city work. Landmarks: Europe's kit's until our own are made."},
     "ukrainian_village": {"houses": ["Khata"], "yard": ["WattleFence", "Haystack", "WellSweep"], "ruin": ["BurntChimney"],
-                          "by_road": ["TelegraphPole"], "landmark": {"spire": None, "dome": None, "station": None},
+                          "ruin_share": RUIN, "by_road": ["TelegraphPole"], "small_town_kit": "railway_town",
+                          "landmark": {"spire": None, "dome": None, "station": None},
+                          "where": "the Ukraine, Bessarabia, the Don and the Kuban, roughly south of 50 to 51 N (the art director's ruling)",
                           "about": "Whitewashed cottages under thatch, each in its own yard among birches and orchards; wattle "
                                    "fences, well sweeps, haystacks."},
 }
@@ -115,7 +125,7 @@ def sets():
     out["temperate"] = {
         "look": "temperate", "region": "east",
         "where": "central Russia and Belorussia, east of the old frontier",
-        "where_boxes": [[23.5, 60.0, 50.0, 57.5]],
+        "where_boxes": [[27.5, 60.0, 50.0, 57.5], [23.5, 27.5, 50.0, 54.0]],      # (not the Baltic states)
         "town_kit": "eastern_village",
         "haze": {"colour": "A9B0A4", "sight_m": 2600},
         "grounds": {
@@ -208,6 +218,150 @@ def write_sets(folder):
 
 
 # ================================================================================================ the review pictures
+def _mesh(name, P, F, mat):
+    import bpy
+    me = bpy.data.meshes.new(name)
+    me.from_pydata([tuple(map(float, p)) for p in P], [], [tuple(int(i) for i in f) for f in F])
+    me.materials.append(mat)
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(ob)
+    return ob
+
+
+def _plain(name, hexc, rough=0.9, noise_scale=0.0, dark=0.0):
+    """A material of one colour, optionally mottled darker by a noise."""
+    import bpy
+    from kit import hex_rgb
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    b = nt.nodes["Principled BSDF"]
+    b.inputs["Roughness"].default_value = rough
+    c = (*hex_rgb(hexc), 1.0)
+    if noise_scale:
+        n = nt.nodes.new("ShaderNodeTexNoise")
+        n.inputs["Scale"].default_value = noise_scale
+        n.inputs["Detail"].default_value = 6.0
+        r = nt.nodes.new("ShaderNodeValToRGB")
+        r.color_ramp.elements[0].color = (c[0] * (1 - dark), c[1] * (1 - dark), c[2] * (1 - dark), 1.0)
+        r.color_ramp.elements[1].color = c
+        nt.links.new(n.outputs["Fac"], r.inputs["Fac"])
+        nt.links.new(r.outputs["Color"], b.inputs["Base Color"])
+    else:
+        b.inputs["Base Color"].default_value = c
+    return m
+
+
+def mud_road(x0=-140.0, x1=170.0, half=3.7, seed=4):
+    """The east's road: a wide strip of churned mud (covering the field's own ruts), its edges ragged; wheel ruts
+    wandering inside it, wet and dark; puddles in them that show the sky."""
+    rng = np.random.default_rng(seed)
+    xs = np.arange(x0, x1, 1.0)
+    mid = 0.4 * np.sin(xs / 31.0) + 0.25 * np.sin(xs / 9.0)
+    P, F = [], []
+    for i, (x, c) in enumerate(zip(xs, mid)):
+        P += [(x, c - half - rng.uniform(0, 0.6), 0.03), (x, c + half + rng.uniform(0, 0.6), 0.03)]
+        if i:
+            F.append((2 * i - 2, 2 * i - 1, 2 * i + 1, 2 * i))
+    _mesh("mud_road", P, F, _plain("mud", "6B5C49", 0.75, 0.35, 0.35))
+    wet = _plain("rut", "3F3428", 0.35, 0.8, 0.25)
+    water = _plain("puddle", "4A4C50", 0.04)
+    for lane in (-1.25, 1.25):
+        for wheel in (-0.75, 0.75):
+            off = lane + wheel + 0.5 * np.sin(xs / (13.0 + 3 * lane) + wheel) + 0.2 * np.sin(xs / 4.3 + lane)
+            P, F = [], []
+            for i, (x, c, o) in enumerate(zip(xs, mid, off)):
+                w = 0.22 + 0.08 * math.sin(x * 0.7 + lane)
+                P += [(x, c + o - w, 0.04), (x, c + o + w, 0.04)]
+                if i:
+                    F.append((2 * i - 2, 2 * i - 1, 2 * i + 1, 2 * i))
+            _mesh("rut", P, F, wet)
+    for k in range(int((x1 - x0) / 6)):
+        x = rng.uniform(x0, x1)
+        y = float(np.interp(x, xs, mid)) + rng.choice([-2.0, -0.5, 0.5, 2.0]) + rng.uniform(-0.4, 0.4)
+        a, b = rng.uniform(0.6, 2.2), rng.uniform(0.35, 0.9)
+        n = 9
+        P = [(x, y, 0.05)] + [(x + a * math.cos(2 * math.pi * j / n) * rng.uniform(0.75, 1.1), y + b * math.sin(2 * math.pi * j / n) * rng.uniform(0.75, 1.1), 0.05)
+                              for j in range(n)]
+        _mesh("puddle", P, [(0, 1 + j, 1 + (j + 1) % n) for j in range(n)], water)
+
+
+def tall_grass(boxes, avoid, density=2.5, seed=6, colours=("6B7A3C", "A39C62")):
+    """Tufts of tall rough grass, knee to thigh high, green going to straw at the tips; not on the road or in the
+    houses' footprints (avoid: (x, y, radius))."""
+    from kit import hex_rgb
+    import bpy
+    rng = np.random.default_rng(seed)
+    pts = []
+    for x0, x1, y0, y1 in boxes:
+        n = int((x1 - x0) * (y1 - y0) * density)
+        x, y = rng.uniform(x0, x1, n), rng.uniform(y0, y1, n)
+        keep = np.abs(y) > 4.8
+        for ax, ay, r in avoid:
+            keep &= (x - ax) ** 2 + (y - ay) ** 2 > r * r
+        pts.append(np.stack([x[keep], y[keep]], 1))
+    pts = np.concatenate(pts)
+    n = len(pts)
+    P, F, C = [], [], []
+    base, tip = np.array(hex_rgb(colours[0])), np.array(hex_rgb(colours[1]))
+    k = 0
+    for b in range(6):
+        a = rng.uniform(0, 2 * np.pi, n)
+        h = rng.uniform(0.45, 1.05, n)
+        lean = rng.uniform(0.2, 0.5, n) * h
+        w = rng.uniform(0.012, 0.024, n)
+        bx, by = pts[:, 0] + rng.uniform(-0.12, 0.12, n), pts[:, 1] + rng.uniform(-0.12, 0.12, n)
+        ca, sa = np.cos(a), np.sin(a)
+        v0 = np.stack([bx - sa * w, by + ca * w, np.zeros(n)], 1)
+        v1 = np.stack([bx + sa * w, by - ca * w, np.zeros(n)], 1)
+        v2 = np.stack([bx + ca * lean, by + sa * lean, h], 1)
+        P.append(np.stack([v0, v1, v2], 1).reshape(-1, 3))
+        t = rng.uniform(0, 1, n)[:, None]
+        cb = base[None, :] * (0.6 + 0.3 * t)
+        ct = base[None, :] * (1 - t) + tip[None, :] * t
+        C.append(np.stack([cb, cb, ct], 1).reshape(-1, 3))
+        i = k + np.arange(n) * 3
+        F.append(np.stack([i, i + 1, i + 2], 1))
+        k += n * 3
+    P, F, C = np.concatenate(P), np.concatenate(F), np.concatenate(C)
+    me = bpy.data.meshes.new("tall_grass")
+    me.vertices.add(len(P))
+    me.vertices.foreach_set("co", P.astype(np.float32).ravel())
+    me.loops.add(len(F) * 3)
+    me.loops.foreach_set("vertex_index", F.astype(np.int32).ravel())
+    me.polygons.add(len(F))
+    me.polygons.foreach_set("loop_start", (np.arange(len(F)) * 3).astype(np.int32))
+    me.update(calc_edges=True)
+    col = me.color_attributes.new("Col", "FLOAT_COLOR", "POINT")
+    col.data.foreach_set("color", np.concatenate([C, np.ones((len(C), 1))], 1).astype(np.float32).ravel())
+    m = bpy.data.materials.new("tall_grass")
+    m.use_nodes = True
+    nt = m.node_tree
+    att = nt.nodes.new("ShaderNodeVertexColor")
+    att.layer_name = "Col"
+    nt.links.new(att.outputs["Color"], nt.nodes["Principled BSDF"].inputs["Base Color"])
+    nt.nodes["Principled BSDF"].inputs["Roughness"].default_value = 0.8
+    me.materials.append(m)
+    ob = bpy.data.objects.new("tall_grass", me)
+    bpy.context.scene.collection.objects.link(ob)
+    print(f"  tall grass: {n} tufts", flush=True)
+
+
+def garden(x, y, yaw, snow=False):
+    """A kitchen-garden plot behind a house: dark tilled earth in ridged rows."""
+    ca, sa = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+    P, F = [], []
+    rows, L, W = 9, 10.0, 7.0
+    for r in range(rows):
+        v = -W / 2 + W * (r + 0.5) / rows
+        for u0, u1 in ((-L / 2, L / 2),):
+            k = len(P)
+            for du, dv, z in ((u0, v - 0.32, 0.03), (u1, v - 0.32, 0.03), (u1, v, 0.2), (u0, v, 0.2), (u0, v + 0.32, 0.03), (u1, v + 0.32, 0.03)):
+                P.append((x + du * ca - dv * sa, y + du * sa + dv * ca, z))
+            F += [(k, k + 1, k + 2, k + 3), (k + 3, k + 2, k + 5, k + 4)]
+    _mesh("garden", P, F, _plain("garden" + ("_snow" if snow else ""), "E2E6EC" if snow else "3B3027", 0.95, 1.5, 0.3))
+
+
 def village(look, path, fast=False):
     """A village street in the look, as the battle camera sees it: houses along a dirt road, fences, yards, trees."""
     import bpy
@@ -225,7 +379,7 @@ def village(look, path, fast=False):
         W.install(0.0, 0.0)
         G.Field(kind="winter", density=4.0, craters=False)
     else:
-        G.Field(kind=kind, density=8.0 if fast else 14.0, trees=False)
+        G.Field(kind=kind, density=6.0 if fast else 10.0, trees=False)
     rng = random.Random(7)
     built = {}
 
@@ -249,6 +403,8 @@ def village(look, path, fast=False):
         o.scale = (scale, scale, scale)
     house = {"temperate": "Izba", "taiga": "Izba", "winter": "Izba", "prairie": "Khata", "steppe": "Khata"}[look]
     burnt = look == "winter"
+    avoid = []
+    mud_road()
     for side in (1.0, -1.0):
         for i in range(6):
             x = -40.0 + i * 17.0 + rng.uniform(-2, 2)
@@ -256,13 +412,15 @@ def village(look, path, fast=False):
             if burnt and (i + (side > 0)) % 3 == 0:
                 put("BurntChimney", x, y, rng.uniform(0, 360))
             elif house == "Izba":
-                put("Izba", x, y, -90.0 * side + rng.uniform(-4, 4))
+                put("IzbaThatch" if rng.random() < 0.3 else "Izba", x, y, -90.0 * side + rng.uniform(-4, 4))
             else:
                 put("Khata", x, y, 180.0 + rng.uniform(-6, 6) if side > 0 else rng.uniform(-6, 6))
+            garden(x + rng.uniform(-1, 1), side * 25.5, rng.uniform(-4, 4), snow=burnt)                # the kitchen garden behind
+            avoid.append((x, y, 5.5))
             for k in range(3):                                                         # the fence along the street
                 put("WattleFence", x - 4.1 + k * 4.1, side * 8.5, rng.uniform(-3, 3))
             if i % 2 == 0:
-                put("Haystack", x + rng.uniform(-3, 3), side * (27.0 + rng.uniform(0, 4)), rng.uniform(0, 360), rng.uniform(0.85, 1.1))
+                put("Haystack", x + rng.uniform(-3, 3), side * (33.0 + rng.uniform(0, 4)), rng.uniform(0, 360), rng.uniform(0.85, 1.1))
             if i == 2:
                 put("WellSweep", x + 6.5, side * 11.5, -90.0 * side)
     for i in range(5):
@@ -273,13 +431,17 @@ def village(look, path, fast=False):
     for t in range(n_trees):
         side = 1.0 if t % 2 else -1.0
         x = rng.uniform(-70.0 if side > 0 else -25.0, 80.0)                     # (none in the camera's face)
-        y = side * rng.uniform(24.0, 70.0 if look == "taiga" else 48.0)
+        y = side * rng.uniform(31.0, 70.0 if look == "taiga" else 52.0)
         r, acc = rng.random(), 0.0
         for name, share in trees:
             acc += share
             if r <= acc:
                 break
         put(name, x, y, rng.uniform(0, 360), rng.uniform(0.75, 1.15))
+    if look != "winter":
+        dry = look in ("prairie", "steppe")
+        tall_grass([(-75.0, 85.0, -45.0, 45.0)], avoid + [(x_, side_ * 25.5, 6.0) for x_ in np.arange(-40.0, 50.0, 17.0) for side_ in (1, -1)],
+                   density=0.9 if fast else 1.8, colours=("8A8448", "C4B37A") if dry else ("5E7034", "A49A5E"))
     cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
     bpy.context.scene.collection.objects.link(cam)
     bpy.context.scene.camera = cam
