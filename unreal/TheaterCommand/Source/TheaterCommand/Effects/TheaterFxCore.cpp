@@ -240,6 +240,7 @@ namespace TheaterFx
 		FlamesDue.clear();
 		InSight = HeldAtDraw = TwinBits = 0;
 		SeenBits = SeenTwin = 0;
+		CaseOff = 0;
 		bEyeWas = false;
 		EyeMoved = EyeTurned = 0.0;
 		DustInSight = DustSince = 0;
@@ -1612,7 +1613,7 @@ namespace TheaterFx
 		// so the cases pile up behind the gun through a fight. Its own dice)
 		{
 			CaseRow Cases;
-			if (CaseRowOf(GunIn ? GunIn : "", At, Cases) && RoomSeen() < static_cast<size_t>(MaxPuffs) * 3 / 5)
+			if (CaseRowOf(GunIn ? GunIn : "", At, Cases) && RoomForCases() < static_cast<size_t>(MaxPuffs) * 3 / 5)
 			{
 				Dice DC(PlaceKey(At) * 0xD1B54A32D192ED03ull ^ static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)));
 				const Vec Flat_ = Vec(Fw.X, Fw.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
@@ -2211,7 +2212,7 @@ namespace TheaterFx
 					Bits.push_back(Du);
 				}
 			}
-			if (bCases && RoomSeen() < static_cast<size_t>(MaxPuffs) * 3 / 5)
+			if (bCases && RoomForCases() < static_cast<size_t>(MaxPuffs) * 3 / 5)
 			{
 				GroundCase(T + Cases.After, From - Dir * Cases.Back, CaseOut, Cases, DC);
 			}
@@ -2654,7 +2655,7 @@ namespace TheaterFx
 			L.bNightOnly = true;
 			Flashes.push_back(L);
 		}
-		if (Row.CaseM > 0.0 && bEyeKnown && (LastEye - At).Length() < Row.CasesWithin && RoomSeen() < static_cast<size_t>(MaxPuffs) * 3 / 5)
+		if (Row.CaseM > 0.0 && bEyeKnown && (LastEye - At).Length() < Row.CasesWithin && RoomForCases() < static_cast<size_t>(MaxPuffs) * 3 / 5)
 		{
 			Spent(T, At, Dir, Carry, Row, D); // (the close view only, and the first thing left out when the room fills)
 		}
@@ -3197,6 +3198,11 @@ namespace TheaterFx
 			R.TurnCos = std::cos(std::clamp(Num(P + "keep_each_turn_deg", 26.0), 2.0, 90.0) * Pi / 180.0);
 			R.LumpsFrom = Clamp01(Num(P + "lumps_from", 0.75));
 			R.Drift = Clamp01(Num(P + "drift", 0.35));
+			R.PaleTo = Clamp01(Num(P + "pale_to", 0.0));
+			R.PaleFrom = std::max(0.0, Num(P + "pale_from_s", 0.0));
+			R.PaleBy = std::max(R.PaleFrom + 0.1, Num(P + "pale_by_s", 2.5));
+			R.Wander = std::clamp(Num(P + "wide_wander", 0.0), 0.0, 2.0);
+			R.WidenBy = std::max(0.0, Num(P + "widen_by_s", 0.0));
 			R.SmokeStart = std::max(0.0, Num(P + "smoke_start", 1.0));
 			R.FlameLiftOfLen = Range(P + "flame_lift_of_length", 0.0, 0.0);
 			R.LicksPerFrame = std::max(0.0, Num(P + "licks_a_frame", 0.4));
@@ -3253,6 +3259,7 @@ namespace TheaterFx
 						// (a ribbon starts again from here: no piece reaches back over the break)
 						Tr.bPuffAt = Tr.bKeptAt = false;
 						Tr.Prev.bOn = Tr.Kept.bOn = Tr.bWander = false;
+						Tr.Wide = 0.0;
 						Tr.NextKept = Tr.Puffs;
 					}
 				}
@@ -3350,7 +3357,23 @@ namespace TheaterFx
 			// the strip as it widens and pales, so no gap ever opens)
 			B.Ribbon = Row.Core;
 			B.SmearFor = 0.0;
+			if (Row.Wander > 0.0)
+			{
+				// (art director 15:22Z, the falls read as pen strokes: its width wanders along its length, each piece
+				// taking most of the last one's, so its edges swell and pinch in soft lumps over several pieces and it
+				// is never a ruled line)
+				Tr.Wide = Tr.Wide * 0.8 + 0.6 * Row.Wander * (Size - (1.0 - 0.09 * Row.Lumpy));
+				B.EdgeSoft = 4.0;
+				B.R1 = B.R0 + (B.R1 / Size - B.R0) * std::clamp(1.0 + Tr.Wide, 0.5, 1.7);
+			}
 			B.SmearHold = Row.LumpsFrom; // (only toward its old end does it shorten to a lump)
+			if (Row.PaleTo > 0.0)
+			{
+				// (art director 15:22Z: it pales with age; the length that hangs on under it takes the same)
+				B.PaleTo = Row.PaleTo;
+				B.PaleFrom = Row.PaleFrom;
+				B.PaleBy = Row.PaleBy;
+			}
 			B.Smear = 3.0 * Row.Spacing; // (the most it reaches back: for what is off the screen, and the sun through its edge)
 			if (Tr.bPuffAt && (At - Tr.PuffAt).Length() < 3.0 * Row.Spacing)
 			{
@@ -3389,6 +3412,13 @@ namespace TheaterFx
 					// that overlap; it grows on as the old smoke did, thin_grow times wider, and shortens to a lump only
 					// toward its old end)
 					Bit C = B;
+					if (Row.WidenBy > 0.0)
+					{
+						// (widen_by_s: it widens as the short pieces over it do, so the two are one width, and then on)
+						C.GrowBy = Row.WidenBy;
+						C.RMid = B.R1;
+						C.GrowEarly = B.Grow;
+					}
 					C.R1 = C.R0 + (C.R1 - C.R0) * Row.ThinGrow * Torn;
 					if (Row.ThinGrow > 1.0)
 					{
@@ -3416,6 +3446,7 @@ namespace TheaterFx
 					Tr.Kept.Rise = C.Rise;
 					Tr.Kept.Born = C.Born;
 					Tr.Kept.R0 = C.R0;
+					Tr.Kept.RMid = C.RMid;
 					Tr.Kept.R1 = C.R1;
 					Tr.Kept.Grow = C.Grow;
 					Tr.Kept.Life = C.Life;
@@ -3478,12 +3509,25 @@ namespace TheaterFx
 		}
 		if (bRibbon)
 		{
+			if (Row.WidenBy > 0.0)
+			{
+				// (widen_by_s: it has its width by then, by the power grow; see Bit::GrowBy. And its colour pales by its age
+				// in the trail's whole life, as the length under it does, so the two are one colour)
+				B.GrowBy = Row.WidenBy;
+				B.RMid = B.R1;
+				B.GrowEarly = B.Grow;
+				if (Row.Life > 0.0)
+				{
+					B.Cool *= B.Life / Row.Life;
+				}
+			}
 			Tr.Prev.From = B.From;
 			Tr.Prev.Vel = B.Vel;
 			Tr.Prev.Way = Way;
 			Tr.Prev.Rise = B.Rise;
 			Tr.Prev.Born = B.Born;
 			Tr.Prev.R0 = B.R0;
+			Tr.Prev.RMid = B.RMid;
 			Tr.Prev.R1 = B.R1;
 			Tr.Prev.Grow = B.Grow;
 			Tr.Prev.Life = B.Life;
@@ -3525,6 +3569,7 @@ namespace TheaterFx
 			{
 				Tr->bPuffAt = Tr->bKeptAt = false;
 				Tr->Prev.bOn = Tr->Kept.bOn = Tr->bWander = false;
+				Tr->Wide = 0.0;
 				Tr->NextKept = Tr->Puffs;
 			}
 		}
@@ -4674,7 +4719,7 @@ namespace TheaterFx
 				// the piece draws in, each point to its place on a round puff, a share of its length long. The far end,
 				// the older, goes first)
 				const double U = 0.5 * (1.0 + Along), T = 1.0 - U; // (T: 0 at the near edge, 1 at the far)
-				const double Wob = std::fabs(Along) < 0.999 ? Reach : 1.0;
+				const double Wob = std::fabs(Along) < 0.999 ? 1.0 + (Reach - 1.0) * LayWob : 1.0;
 				const Vec OnStrip = Middle + LayLong * Along + LayBendFar * (((U - 2.0) * U + 1.0) * U - 0.125) + LayBendNear * ((U - 1.0) * U * U + 0.125);
 				const double LumpAt = LayLump + (LayLumpFar - LayLump) * T;
 				const double Let = Clamp01(4.0 * LumpAt), Soft = Let * Let * (3.0 - 2.0 * Let);
@@ -4817,8 +4862,27 @@ namespace TheaterFx
 		const double Shown = Unseen(B) && Age > B.Life * std::min(B.Hold, 0.5) ? B.Life * std::min(B.Hold, 0.5) : Age;
 		const double F = Shown / B.Life;
 		double Rad = B.R0 + (B.R1 - B.R0) * std::pow(F, B.Grow);
+		// (a ribbon's piece, in two stages: see Bit::GrowBy)
+		auto RadTwo = [&B](double R0_, double RMid_, double R1_, double Age_, double Life_)
+		{
+			return R0_ + (RMid_ - R0_) * std::pow(Clamp01(Age_ / B.GrowBy), B.GrowEarly) + (R1_ - RMid_) * std::pow(Clamp01((Age_ - B.GrowBy) / std::max(Life_ - B.GrowBy, 1e-6)), B.Grow);
+		};
+		if (B.GrowBy > 0.0)
+		{
+			Rad = RadTwo(B.R0, B.RMid, B.R1, Shown, B.Life);
+		}
 		const double Fade = std::min(1.0, Shown / std::max(B.FadeIn, 1e-3)) * (F < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (F - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4));
 		double A = B.Alpha * Fade;
+		// (a ribbon's piece pales as it widens: see Bit::PaleBy. How dark it is at this age, as a share of how it was laid)
+		auto Paled = [&B](double Age_)
+		{
+			const double G = Clamp01((Age_ - B.PaleFrom) / std::max(B.PaleBy - B.PaleFrom, 1e-6));
+			return 1.0 - (1.0 - B.PaleTo) * G * G * (3.0 - 2.0 * G);
+		};
+		if (B.PaleBy > 0.0)
+		{
+			A *= Paled(Age);
+		}
 		if (B.DayAlpha != 1.0)
 		{
 			A *= 1.0 + (B.DayAlpha - 1.0) * DayOf(Eye.SmokeLight);
@@ -4853,6 +4917,10 @@ namespace TheaterFx
 				{
 					const double T = Clamp01((AgeT - B.ShowFrom) / std::max(B.ShowBy - B.ShowFrom, 1e-6));
 					TailA *= T * T * (3.0 - 2.0 * T);
+				}
+				if (B.PaleBy > 0.0)
+				{
+					TailA *= Paled(AgeT);
 				}
 			}
 			if (B.Back.LumpsFrom >= 0.0 && FT > B.Back.LumpsFrom)
@@ -4941,6 +5009,7 @@ namespace TheaterFx
 		bLayLong = false;
 		LayTailAlpha = 1.0;
 		LayLump = LayLumpFar = 0.0;
+		LayWob = 1.0;
 		EdgeK = B.EdgeK;
 		EdgeTo = B.Edge;
 		EdgeIn = B.EdgeIn;
@@ -5074,7 +5143,7 @@ namespace TheaterFx
 					const double AgeT = Now - T.Born;
 					const double GoT = B.Drag > 1e-6 ? (1.0 - std::exp(-B.Drag * AgeT)) / B.Drag : AgeT;
 					const Vec Far = T.From + T.Vel * GoT + Wind * (B.Windage * AgeT) + Vec(0.0, 0.0, T.Rise * AgeT);
-					double RadT = T.R0 + (T.R1 - T.R0) * std::pow(Clamp01(AgeT / std::max(T.Life, 1e-6)), T.Grow);
+					double RadT = B.GrowBy > 0.0 ? RadTwo(T.R0, T.RMid, T.R1, AgeT, T.Life) : T.R0 + (T.R1 - T.R0) * std::pow(Clamp01(AgeT / std::max(T.Life, 1e-6)), T.Grow);
 					if (B.LeastPx > 0.0)
 					{
 						// (held up far off and thinned to match, as that piece holds itself)
@@ -5117,6 +5186,10 @@ namespace TheaterFx
 						bLayLong = true;
 						LayTailAlpha = TailA / A;
 						LayLumpFar = LumpFar;
+						if (B.EdgeSoft > 0.0)
+						{
+							LayWob = std::min(1.0, RunLong / (B.EdgeSoft * std::max({ Rad, RadT, 1e-3 })));
+						}
 						if (B.SmearHold >= 0.0 && F > B.SmearHold)
 						{
 							LayLump = Clamp01((F - B.SmearHold) / std::max(1.0 - B.SmearHold, 1e-6)); // (its old end: drawing in to a round lump)
@@ -5526,6 +5599,7 @@ namespace TheaterFx
 		TwinBits = 0;
 		DustInSight = 0;
 		SeenTwin = 0;
+		CaseOff = 0;
 		size_t OffSight = 0;
 		const Vec RightLevel = Vec(Eye.Right.X, Eye.Right.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
 		for (const Bit& B : Bits)
@@ -5573,6 +5647,7 @@ namespace TheaterFx
 			DustInSight += B.Thin == 1 ? 1u : 0u;
 			OffSight += bOff ? 1u : 0u;
 			SeenTwin += bOff ? 0u : Twins;
+			CaseOff += bOff && bCase ? 1u + Twins : 0u;
 			// (counted first when the room is short: an oil fire's kept column, and every light: flames, flashes and
 			// tracers are few and are what an air fight is read by from far off, so its smoke is what goes. The
 			// pre-check, 05:14Z: by depth alone the far side of a fight went bare, flames and all)

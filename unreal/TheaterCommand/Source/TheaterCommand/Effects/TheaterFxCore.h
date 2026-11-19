@@ -121,11 +121,19 @@ namespace TheaterFx
 		struct Reach
 		{
 			Vec From, Vel, Way;
-			double Rise = 0.0, Born = 0.0, R0 = 0.0, R1 = 0.0, Grow = 1.0, Life = 1.0, Alpha = 1.0, LumpsFrom = -1.0;
+			double Rise = 0.0, Born = 0.0, R0 = 0.0, RMid = 0.0, R1 = 0.0, Grow = 1.0, Life = 1.0, Alpha = 1.0, LumpsFrom = -1.0;
 			bool bOn = false;
 		};
 		double Ribbon = 0.0, ShowFrom = 0.0, ShowBy = 0.0, SmearHold = -1.0;
 		Reach Back;
+		// (a ribbon's piece widens in two stages, GrowBy over 0: from R0 to RMid over its first GrowBy seconds, by the
+		// power GrowEarly (under 1: fast at first, as smoke spreads in an aircraft's wake), then on to R1 by the end
+		// of its life, by Grow. And it pales as it widens, PaleBy over 0: as dark as it was laid until PaleFrom
+		// seconds, then paler, PaleTo as dark from PaleBy seconds on. The short pieces and the lengths that hang on
+		// under them pale by the one clock, so the young trail stays as black as it was. Art director 15:22Z)
+		double GrowBy = 0.0, RMid = 0.0, GrowEarly = 1.0;
+		double PaleTo = 0.0, PaleFrom = 0.0, PaleBy = 0.0;
+		double EdgeSoft = 0.0; // (over 0: its lumpy outline is gentler the wider the piece is for its length, so a wide old length has soft swells, never a comb of spikes: all of it up to a width of its length over EdgeSoft)
 		double LeastPx = 0.0; // (a streak: never thinner than this on the screen; a puff: never smaller across its long way, and thinner to match)
 		double LeastKeep = 0.0; // (a puff held up to LeastPx keeps at least this share of its opacity: a light's twinkle, a far trail's dark line)
 		double MostPx = 0.0; // (a tracer's streak: never wider than this on the screen, so one passing close stays a thin line; 0: no limit)
@@ -399,6 +407,10 @@ namespace TheaterFx
 			// since the last, so a spin's trail follows its curve. LumpsFrom: the share of its life after which a length
 			// draws in to a lump. Drift: the share of the lumpy scatter each piece is thrown with)
 			double Core = 0.0, JoinFrom = 0.15, JoinBy = 0.45, TurnCos = 0.9, LumpsFrom = 0.75, Drift = 0.35;
+			// (PaleTo, PaleFrom, PaleBy: a ribbon pales from PaleFrom seconds old to PaleTo as dark by PaleBy seconds, and
+			// stays so; 0: as it was. Wander: how far its width wanders along its length, 1 about a sixth either way.
+			// WidenBy: seconds by which it has widened from r0_m to r1_m, by the power grow; 0: by the short pieces' life)
+			double PaleTo = 0.0, PaleFrom = 0.0, PaleBy = 2.5, Wander = 0.0, WidenBy = 0.0;
 			double SmokeStart = 1.0; // (fire: where along the flame its smoke starts, a share of the flame's length)
 			Span FlameLiftOfLen{ 0.0, 0.0 }; // (fire: how far each tongue stands off the skin as a share of its length; 0: flame_lift_m)
 			double LicksPerFrame = 0.4; // (fire: tongues torn free of the tip and streaming away aft, a frame)
@@ -426,6 +438,7 @@ namespace TheaterFx
 			Vec PuffAt, KeptWay; bool bPuffAt = false; // (a ribbon: where the last puff was laid, and the way the path ran at the last one kept)
 			Bit::Reach Prev, Kept; // (a ribbon: the last piece laid and the last length that hangs on, for the next of each to reach back to)
 			Vec Wander; double RiseK = 1.0; bool bWander = false; // (a ribbon: the drift and rise its last piece took, which the next takes most of, so the strip meanders and never zig-zags)
+			double Wide = 0.0; // (and how much wider or narrower than the row its last piece was)
 		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */
 		struct Firing
@@ -519,7 +532,7 @@ namespace TheaterFx
 		// run to leave each edge along the path there; LayTailAlpha: its far edge's opacity as a share of its near
 		// edge's; LayLump, LayLumpFar: how far its near and far ends have drawn in to a round lump, 0 a link of the
 		// strip and 1 a round puff)
-		Vec LayLong, LayFar, LayBendFar, LayBendNear; bool bLayLong = false; double LayTailAlpha = 1.0, LayLump = 0.0, LayLumpFar = 0.0;
+		Vec LayLong, LayFar, LayBendFar, LayBendNear; bool bLayLong = false; double LayTailAlpha = 1.0, LayLump = 0.0, LayLumpFar = 0.0, LayWob = 1.0;
 		// (picture.lit_gain: the game's picture multiplies every colour by this (the wrapper sets the material's
 		// brightness to it), and every colour is written that much darker, so all looks as before; but a light's hottest
 		// parts (Bit::Over) are written up to that much brighter than white, so they land white-hot after the game's
@@ -620,6 +633,7 @@ namespace TheaterFx
 		// pre-check, 06:42Z)
 		size_t InSight = 0, HeldAtDraw = 0;
 		size_t SeenBits = 0, SeenTwin = 0; // (of InSight and TwinBits, what was on the screen: see RoomSeen)
+		size_t CaseOff = 0; // (the places spent cases off the screen hold in the room asked: see RoomForCases)
 		// (the eye given may be the frame before's: the campaign map reads the camera before it has moved for the frame.
 		// So what the eye moved and turned between the last two frames is allowed for again, twice over, before a bit
 		// is called off the screen. A still eye changes nothing. The pre-check, 14:55Z)
@@ -642,6 +656,10 @@ namespace TheaterFx
 		 *  three fifths full, and the machine gun in front of the eye threw no brass at all. The same as RoomAsked when
 		 *  the view's width is not known. */
 		size_t RoomSeen() const { return SeenBits + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + SeenTwin; }
+		/** What a spent case is thrown by: the screen's room, and the brass lying off it. A barrage off the screen does
+		 *  not stop the brass; brass off the screen does, or guns firing beside the eye fill the room asked with cases
+		 *  nobody sees (three places each) and every shell throws half its shower for them. */
+		size_t RoomForCases() const { return RoomSeen() + CaseOff; }
 		bool OffScreen(const Bit& B, const Vec& At, const View& Eye) const; // (wholly outside the view, with room to spare for its size and the eye's shake)
 		std::vector<Bit> Roots; // (each frame: the young end of each trail, from its point back to its newest hanging puff)
 
