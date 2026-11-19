@@ -1,6 +1,6 @@
 """A close look at one aircraft, for judging her detail.
 
-    python airlook.py <name> <out folder> [view,view,...] [WxHxSPP] [clip=name@t ...] [record=JSON] [tag=word] [scheme=YYYY-MM] [owner=<unit-table.json>#TAG]
+    python airlook.py <name> <out folder> [view,view,...] [WxHxSPP] [clip=name@t ...] [record=JSON] [tag=word] [scheme=YYYY-MM] [owner=<unit-table.json>#TAG] [hurt=bullets,flak,engine,...]
 
 views:  front   from ahead and to port, a little above (the sheet's view, closer)
         hood    close on her hood and nose, from ahead and above
@@ -9,6 +9,7 @@ views:  front   from ahead and to port, a little above (the sheet's view, closer
         under   from below and ahead
         tail, waist, belly   close on a bomber's tail guns, her waist windows, her ball turret
         side    square on her port side
+        profile all of her, square on her port side, nose to tail
         quarter her whole port side from astern and above: her wing, side and fin marks together
         high    all of her from high on the quarter: the marks on her wings
         record  close on the record painted on her port side (kills, missions); rudder: on a German fighter's rudder;
@@ -16,6 +17,7 @@ views:  front   from ahead and to port, a little above (the sheet's view, closer
 record= is what she has done, e.g. record='{"kills": [["GER", 14], ["ITA", 3]], "missions": 32, "lead": [12, 19]}'
 (see marks.record); tag= is added to the pictures' names; scheme=YYYY-MM shows her as she is in that month: her coat of paint and her markings then.
 owner=<unit-table.json>#TAG shows a plain machine as that country flies her: its paint and paint2, its insignia, its rudder flag.
+hurt=14,6,2 shows her with fourteen bullet hits, six flak hits and engine 2 out (her damage layers: damage.py).
 A clip named after the views is laid over `fly` at the time given (bank.port@0.9, watch@2.0, flaps.down@1.5).
 """
 import json
@@ -54,6 +56,10 @@ def main():
         if c.startswith("load."):                        # (clip=load.bombs@0: she is seen with that load, not her usual one)
             p.carry(c.split("@")[0][5:])
     extra = [c for c in extra if not c.startswith("load.")]
+    hurt = next((a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("hurt=")), None)      # (hurt=14,6,2: bullet hits, flak hits, then the engines that are out)
+    if hurt:
+        h = [int(v) for v in hurt.split(",")]
+        p.hurt(h[0], h[1] if len(h) > 1 else 0, out=tuple(h[2:]))
     poses = [p.play("fly", 0.6)] + [p.play(c.split("@")[0], float(c.split("@")[1])) for c in extra]
     p.put((0, 0, 0), *poses)
     A.at(0.0)
@@ -73,6 +79,7 @@ def main():
              "high": ((-s * 0.58, s * 0.52, s * 1.15), (-L * 0.14, 0, 0.0), 35.0)}         # (all of her from high on the quarter: the marks on her wings)
     back = p.f.hull.back
     front = p.f.hull.front
+    shots["profile"] = ((0.5 * (front + back), 1.5 * (front - back) + 2.0, 0.9), (0.5 * (front + back), 0, 0.9), 50.0)      # (all of her, square on her port side)
     shots["glass"] = ((front + 3.2, 3.6, 1.7), (front - 1.7, 0, 0.25), 50.0)          # (into a glass nose, at the men in it)
     shots["tailside"] = ((back + 0.9, 3.4, 0.75), (back + 0.75, 0, 0.36), 50.0)      # (abeam of a tail gunner's windows)
     for k, c, radii in p.f.turrets:                      # (straight in at the window of a ball turret, from where its guns point)

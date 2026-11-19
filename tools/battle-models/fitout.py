@@ -33,8 +33,11 @@ SEATS = {"Kate": [(0, 0.85, 0.0, 0.0), (0, -0.45, 0.0, 0.0), (0, -1.75, 0.0, 180
          "DiveBomber": [(0, 0.7, 0.0, 0.0), (0, -1.3, 0.0, 180.0)], "TorpedoBomber": [(0, 1.15, 0.0, 0.0), (0, -0.3, 0.0, 0.0), (0, -1.7, 0.0, 180.0)],
          "Stuka": [(0, 0.75, 0.0, 0.0), (0, -1.55, 0.0, 180.0)], "Sturmovik": [(0, 0.7, 0.0, 0.0), (0, -1.25, 0.0, 180.0)],
          "He111": [(0, -0.45, 0.0, 180.0)], "Lancaster": [(0, 7.45, 0.3, 0.0), (0, 6.95, -0.3, 0.0), (0, 5.6, 0.0, 0.0)],
-         "B17": [(0, 6.05, 0.34, 0.0), (0, 6.05, -0.34, 0.0)], "Bomber": [(0, 3.75, 0.28, 0.0), (0, 3.75, -0.28, 0.0)],
+         "B17": [(0, 4.42, 0.36, 0.0), (0, 4.42, -0.36, 0.0)], "Bomber": [(0, 3.75, 0.28, 0.0), (0, 3.75, -0.28, 0.0)],
          "Betty": [(0, 5.4, 0.3, 0.0), (0, 5.4, -0.3, 0.0), (0, 3.9, 0.0, 0.0)], "Nell": [(0, 4.45, 0.24, 0.0), (0, 4.45, -0.24, 0.0)]}
+# How far below the usual place (just under the glass) the men under a hood sit, where the hood is a tall cabin with
+# windows in its sides and a roof over them.
+SEAT_DROP = {"B17": 0.22}
 # Who is seen through a glass nose: (forward, to port, height above the fuselage's middle or None for 'up under the glass', looks).
 NOSE_CREW = {"He111": [(5.15, 0.3, None, 0.0), (6.25, -0.12, -0.05, 0.0)], "B17": [(7.72, 0.0, 0.05, 0.0)], "Bomber": [(5.65, 0.0, 0.0, 0.0)],
              "Betty": [(7.95, 0.0, -0.05, 0.0)], "Amerikabomber": [(7.35, 0.38, None, 0.0), (7.35, -0.38, None, 0.0), (8.7, 0.0, -0.25, 0.0)],
@@ -59,7 +62,18 @@ def paints_for(s):
 def rivet_paints(paints):
     """A rivet is a shade under the paint it sits in."""
     from rigid import mix_hex
-    return {"rivet": mix_hex(paints["upper"], "000000", 0.3), "rivet_under": mix_hex(paints["under"], "000000", 0.24)}
+    return {"rivet": mix_hex(paints["upper"], "000000", 0.3), "rivet_under": mix_hex(paints["under"], "000000", 0.24),
+            "seam": mix_hex(paints["upper"], "000000", 0.36), "seam_under": mix_hex(paints["under"], "000000", 0.3)}      # (and the joint of two panels a shade under that)
+
+
+def nacelle_of(G, lead, z, is_radial, back, side):
+    """An engine's nacelle on a wing, as the game's sculptor shapes it: round and stubby for an air-cooled engine, long
+    and narrow for one in line."""
+    if is_radial:
+        return G["Body"]([(lead + 1.75, z, 0.46, 0.46), (lead + 1.65, z, 0.66, 0.66), (lead + 0.8, z, 0.68, 0.68), (lead - 0.4, z - 0.05, 0.62, 0.58),
+                          (lead - back * 0.7, z - 0.1, 0.38, 0.32), (lead - back, z - 0.02, 0.08, 0.07)], 2.0, side)
+    return G["Body"]([(lead + 2.55, z, 0.04, 0.04), (lead + 2.1, z, 0.34, 0.34), (lead + 2.05, z - 0.04, 0.4, 0.48), (lead + 0.6, z - 0.1, 0.47, 0.6),
+                      (lead - 1.2, z - 0.14, 0.44, 0.5), (lead - back, z - 0.04, 0.1, 0.1)], 2.3, side)
 
 
 def body_top(body, x, y=0.0):
@@ -122,7 +136,7 @@ def cockpit(m, f, s, G, hull):
     single = not s.get("engines")
     first = True
     for hood, x, y, face in seats_of(f, s, G):
-        z = body_top(hood, x, -y) - 0.118 - 0.03
+        z = body_top(hood, x, -y) - 0.118 - 0.03 - SEAT_DROP.get(f.name, 0.0)
         at = figure(m, (x, y, z), face, vest=single)
         if not m.fine:
             continue
@@ -284,13 +298,10 @@ def exhausts(m, f, s, G, hull):
         for hand in (1.0, -1.0):
             part = ("wing.starboard" if hand > 0.0 else "wing.port") if out > f.y_cut else "plane"
             side = out * hand
+            nacelle = nacelle_of(G, lead, z, is_radial, back, side)
             if is_radial:
-                nacelle = G["Body"]([(lead + 1.75, z, 0.46, 0.46), (lead + 1.65, z, 0.66, 0.66), (lead + 0.8, z, 0.68, 0.68), (lead - 0.4, z - 0.05, 0.62, 0.58),
-                                     (lead - back * 0.7, z - 0.1, 0.38, 0.32), (lead - back, z - 0.02, 0.08, 0.07)], 2.0, side)
                 pipes(nacelle, lead + 0.7, part, 0.5)
             else:
-                nacelle = G["Body"]([(lead + 2.55, z, 0.04, 0.04), (lead + 2.1, z, 0.34, 0.34), (lead + 2.05, z - 0.04, 0.4, 0.48), (lead + 0.6, z - 0.1, 0.47, 0.6),
-                                     (lead - 1.2, z - 0.14, 0.44, 0.5), (lead - back, z - 0.04, 0.1, 0.1)], 2.3, side)
                 row(nacelle, lead + 1.75, lead + 0.95, 10.0, part)
 
 
@@ -453,14 +464,39 @@ def holed_flaps(m, f, s, G, hull):
 
 
 def rivets(m, f, s, G, hull):
-    """Rows of rivets, as small dark dots a shade under her paint: round the fuselage at her frames and along her
-    stringers, along the spars and the ribs of her wings, her tailplane and her fin. They are what a smooth skin shows
-    when the camera is a wing's length away. (The plain model has none.)"""
+    """Her skin's panels: rows of rivets, as small dark dots a shade under her paint, and the joints between panels, as
+    fine lines a shade under that. Round the fuselage at every frame and along her stringers; along the spars and the
+    ribs of her wings, her tailplane and her fin; round her engines' nacelles; over a raised cabin's roof. A joint
+    runs beside every other frame and rib, and along the main stringers and spars. (Brian, 2026-11-19, of two models
+    of a B-17 he sent pictures of: "use this 3d model is our bench mark for all airplanes", "the level of detail im
+    looking for": a grid of seams and rivet lines over all her skin. The plain model has none.)"""
     if not m.fine:
         return
     big = bool(s.get("engines"))
-    r, gap = (0.011, 0.13) if big else (0.008, 0.085)
+    r, gap = (0.009, 0.11) if big else (0.007, 0.08)
+    seam = 0.0034 if big else 0.0028                       # (half as wide as a joint is drawn)
     dots = {}
+
+    def joint(part, run):
+        """A joint along a row of (point, facing), left out where an entry is None and broken where her paint changes."""
+        piece, paint = [], None
+
+        def flush():
+            if len(piece) >= 2:
+                m.use(part)
+                m.strip([port(q[0]) for q in piece], [port(q[1]) for q in piece], seam, paint, lift=0.001)
+            del piece[:]
+        for got in run:
+            if got is None:
+                flush()
+                continue
+            own = "seam_under" if got[2] else "seam"
+            if piece and own != paint:
+                piece.append(got)
+                flush()
+            paint = own
+            piece.append(got)
+        flush()
 
     def dot(part, paint, p, n, t):
         dots.setdefault((part, paint), []).append((port(p), port(n), port(t)))
@@ -477,32 +513,126 @@ def rivets(m, f, s, G, hull):
     x_back = hull.back + 0.4
     bands = s.get("glass_bands", [])
 
-    def body_dot(x, a, along):
+    def skin_at(x, a):
+        """A point of her fuselage's skin, the way it faces and whether it is her under surface; None where neither a
+        rivet nor a joint belongs."""
         deg = math.degrees(a) % 360.0
         if 38.0 < deg < 142.0 and any(lo <= x <= hi for hi, lo in hoods):
-            return                                         # (under her hood)
+            return None                                    # (under her hood)
         if f.bay and f.bay[1] - 0.06 <= x <= f.bay[0] + 0.06 and abs(deg - 270.0) < f.bay_half + 2.5:
-            return                                         # (her bomb doors)
+            return None                                    # (her bomb doors)
         p, n = hull.at(x, a, 0.003), hull.out(x, a)
         if f.waist_hole(p, 0.03) or f.pane_at(p, 0.03):
-            return                                         # (an open window, a pane of glass)
-        for (x0, x1, half_high) in bands:
-            if x1 - 0.05 < x < x0 + 0.05 and abs(n.y) > 0.6 and abs(p.z - hull.z(-x) - hull.h(-x) * 0.3) < half_high + 0.04:
-                return                                     # (her cabin windows)
+            return None                                    # (an open window, a pane of glass)
+        for (x0, x1, half_high, *high) in bands:
+            if x1 - 0.05 < x < x0 + 0.05 and abs(n.y) > 0.6 and abs(p.z - hull.z(-x) - hull.h(-x) * (high[0] if high else 0.3)) < half_high + 0.04:
+                return None                                # (her cabin windows)
+        return p, n, n.z < under_from
+
+    def body_dot(x, a, along):
+        got = skin_at(x, a)
+        if got is None:
+            return
+        p, n, under = got
         t = X if along else (hull.at(x, a + 0.02) - hull.at(x, a - 0.02))
-        dot("tail" if x < f.x_cut else "plane", "rivet_under" if n.z < under_from else "rivet", p, n, t)
-    step = max(0.72, f.long / 14.0)
+        dot("tail" if x < f.x_cut else "plane", "rivet_under" if under else "rivet", p, n, t)
+    step = min(max(f.long / 42.0, 0.42), 0.56)             # (a frame every half metre or so)
     n_rings = max(2, int((x_front - x_back) / step))
-    for k in range(n_rings + 1):
-        x = x_front - (x_front - x_back) * k / n_rings
+    ring_xs = [x_front - (x_front - x_back) * k / n_rings for k in range(n_rings + 1)]
+    for x in ring_xs:
         round_ = 2.0 * math.pi * 0.5 * (hull.w(-x) + hull.h(-x))
         n = max(8, int(round_ / gap))
         for i in range(n):
             body_dot(x, 2.0 * math.pi * (i + 0.5) / n, False)
     n_along = max(4, int((x_front - x_back) / gap))
-    for deg in (38.0, 142.0, -24.0, 204.0, 90.0, 270.0):
+    for deg in (90.0, 270.0, 64.0, 116.0, 38.0, 142.0, 12.0, 168.0, -14.0, 194.0, -40.0, 220.0, -66.0, 246.0):
         for i in range(n_along):
             body_dot(x_front - (x_front - x_back) * (i + 0.5) / n_along, math.radians(deg), True)
+    # (a joint round her beside every other frame, and along four of her stringers)
+    for x in ring_xs[1::2]:
+        x = x + 0.022
+        joint("tail" if x < f.x_cut else "plane", [skin_at(x, 2.0 * math.pi * k / 56.0) for k in range(57)])
+    n_seam = max(4, int((x_front - x_back) / 0.24))
+    for deg in (38.0, 142.0, -40.0, 220.0):
+        a = math.radians(deg + 1.2)
+        xs = [x_front - (x_front - x_back) * k / n_seam for k in range(n_seam + 1)]
+        joint("plane", [skin_at(x, a) for x in xs if x >= f.x_cut - 0.13])
+        joint("tail", [skin_at(x, a) for x in xs if x <= f.x_cut + 0.13])
+
+    # -- a raised cabin and the deck behind it: frames over its roof, and rows along it
+    cab = s.get("cabin")
+    if cab and s.get("hoods"):
+        hood = G["Body"](s["hoods"][0][0], 2.3)
+        hatch, brow = cab.get("hatch"), cab.get("brow")
+
+        def roof_at(x, deg):
+            if deg > 90.0:
+                return roof_at_side(x, 180.0 - deg, True)
+            return roof_at_side(x, deg, False)
+
+        def roof_at_side(x, deg, far):
+            if x >= cab["back"] and deg < cab["top"] + 7.0:
+                return None                                # (her windscreen and her side windows)
+            if hatch and hatch[1] - 0.05 < x < hatch[0] + 0.05 and deg > hatch[2] - 4.0:
+                return None
+            if brow and brow[1] - 0.05 < x < brow[0] + 0.05 and brow[2] - 4.0 < deg < brow[3] + 4.0:
+                return None
+            a = math.radians(180.0 - deg if far else deg)
+            p, n = hood.at(x, a, 0.003), hood.out(x, a)
+            if p.z < body_top(hull, x, p.y) + 0.02:
+                return None                                # (inside her fuselage)
+            if any((port(p) - c).length < 1.08 * max(radii) for k, c, radii in f.turrets):
+                return None                                # (under a turret)
+            return p, n, False
+        x_hi, x_lo = cab["screen"] - 0.12, hood.back + 0.2
+        for x in ring_xs:
+            if not x_lo < x < x_hi:
+                continue
+            round_ = math.pi * 0.5 * (hood.w(-x) + hood.h(-x))
+            n = max(6, int(round_ / gap))
+            for i in range(n):
+                got = roof_at(x, 180.0 * (i + 0.5) / n)
+                if got:
+                    dot("plane", "rivet", got[0], got[1], hood.at(x, math.radians(180.0 * (i + 0.5) / n) + 0.02) - hood.at(x, math.radians(180.0 * (i + 0.5) / n) - 0.02))
+        n_along = max(4, int((x_hi - x_lo) / gap))
+        for deg in (16.0, 52.0, 76.0, 104.0, 128.0, 164.0):
+            for i in range(n_along):
+                got = roof_at(x_hi - (x_hi - x_lo) * (i + 0.5) / n_along, deg)
+                if got:
+                    dot("plane", "rivet", got[0], got[1], X)
+        for x in ring_xs[1::2]:
+            if x_lo < x + 0.022 < x_hi:
+                joint("plane", [roof_at(x + 0.022, 180.0 * k / 28.0) for k in range(29)])
+        n_seam = max(4, int((x_hi - x_lo) / 0.24))
+        for deg in (53.2, 126.8):
+            joint("plane", [roof_at(x_hi - (x_hi - x_lo) * k / n_seam, deg) for k in range(n_seam + 1)])
+
+    # -- her engines' nacelles: a ring of rivets at each frame, and a joint behind the cowling and one further aft
+    for (out, lead, z, is_radial, back) in s.get("engines", []):
+        for hand in (1.0, -1.0):
+            part = ("wing.starboard" if hand > 0.0 else "wing.port") if out > f.y_cut else "plane"
+            nacelle = nacelle_of(G, lead, z, is_radial, back, out * hand)
+            W = G["Wing"](s["wing"], hand)
+
+            def cowl_at(x, a):
+                p, n = nacelle.at(x, a, 0.003), nacelle.out(x, a)
+                u = abs(p.y)
+                if W.root <= u <= W.tip:
+                    c = (p.x - W.lead(u)) / (W.trail(u) - W.lead(u))
+                    if 0.0 < c < 1.0 and W.at(u, c, False).z - 0.015 < p.z < W.at(u, c, True).z + 0.015:
+                        return None                        # (inside her wing)
+                return p, n, n.z < under_from
+            first = lead + (1.28 if is_radial else 1.6)
+            xs = [first] + [lead + 0.3 - 0.5 * k for k in range(12) if lead + 0.3 - 0.5 * k > lead - 0.72 * back]
+            for x in xs:
+                n = max(8, int(2.0 * math.pi * 0.5 * (nacelle.w(-x) + nacelle.h(-x)) / gap))
+                for i in range(n):
+                    a = 2.0 * math.pi * (i + 0.5) / n
+                    got = cowl_at(x, a)
+                    if got:
+                        dot(part, "rivet_under" if got[2] else "rivet", got[0], got[1], nacelle.at(x, a + 0.02) - nacelle.at(x, a - 0.02))
+            for x in xs[:2]:
+                joint(part, [cowl_at(x + 0.022, 2.0 * math.pi * k / 40.0) for k in range(41)])
 
     # -- a jet's pods: a ring of rivets at each frame
     for pod, out in f.pods:
@@ -516,7 +646,7 @@ def rivets(m, f, s, G, hull):
                 dot(part, "rivet_under" if nn.z < under_from else "rivet", p, nn, pod.at(x, a + 0.02) - pod.at(x, a - 0.02))
 
     # -- her flying surfaces
-    def rows(sections, kind, c_max, spars, rib_gap, upright=False, side=0.0):
+    def rows(sections, kind, c_max, spars, rib_gap, upright=False, side=0.0, joints=()):
         for hand in ((1.0,) if upright else (1.0, -1.0)):
             W = G["Wing"](sections, hand, upright, side)
             xm = 0.5 * (W.lead(W.root) + W.trail(W.root))
@@ -545,15 +675,28 @@ def rivets(m, f, s, G, hull):
                 n = max(2, int((W.trail(u) - W.lead(u)) * (c_max - 0.05) / gap * (-1.0 if W.trail(u) < W.lead(u) else 1.0)))
                 for i in range(n):
                     put(u, 0.05 + (c_max - 0.05) * (i + 0.5) / n, chordwise)
+                if k % 2 == 0:                             # (a joint beside every other rib)
+                    us = min(u + 0.022, u1)
+                    cs = [0.03 + (c_max - 0.03) * i / 10.0 for i in range(11)]
+                    for upper in (True, False):
+                        joint(part_of(us), [(W.at(us, c, upper, 0.003), W.out(us, c, upper), not (upper or upright)) for c in cs])
             n = max(2, int((u1 - u0) / gap))
             for c in spars:
                 for i in range(n):
                     put(u0 + (u1 - u0) * (i + 0.5) / n, c, spanwise)
-    rows(s["wing"], "wing", 0.66, (0.24, 0.56), max(0.5, f.half / 13.0))
-    rows(s["tail"], "tail", 0.56, (0.3,), max(0.4, f.half / 20.0))
+            cuts = [u0] + ([f.y_cut] if kind == "wing" and u0 < f.y_cut < u1 else []) + [u1]
+            for c in joints:                               # (and along her spars)
+                for a, b in zip(cuts, cuts[1:]):
+                    n = max(2, int((b - a) / 0.3))
+                    us = [a + (b - a) * i / n for i in range(n + 1)]
+                    for upper in (True, False):
+                        joint(part_of(0.5 * (a + b)), [(W.at(u, c + 0.006, upper, 0.003), W.out(u, c + 0.006, upper), not (upper or upright)) for u in us])
+    rib = min(max(f.half / 26.0, 0.45), 0.62)              # (a rib every half metre or so)
+    rows(s["wing"], "wing", 0.66, (0.1, 0.24, 0.4, 0.56), rib, joints=(0.24, 0.56))
+    rows(s["tail"], "tail", 0.56, (0.12, 0.3, 0.48), rib, joints=(0.3,))
     for fin_sections, fin_side in f.fins:
         for side in ((fin_side, -fin_side) if fin_side else (0.0,)):
-            rows(fin_sections, "fin", 0.54, (0.3,), max(0.4, f.half / 20.0), True, side)
+            rows(fin_sections, "fin", 0.54, (0.12, 0.3, 0.48), rib, True, side, joints=(0.3,))
 
     # -- laid a part and a paint at a time: each one a small square on its corner, lying in the skin
     for (part, paint), each in dots.items():
@@ -667,7 +810,7 @@ def waist(m, f, s, G, hull):
 
 
 # A gunner who sits in her tail behind his windows: (how far along her, how high above her middle).
-REAR_CREW = {"B17": (-13.72, 0.11), "B29": (-18.56, 0.12), "Betty": (-10.85, 0.05)}
+REAR_CREW = {"B17": (-12.72, 0.46), "B29": (-18.56, 0.12), "Betty": (-10.85, 0.05)}
 
 
 def tail_gunner(m, f, s, G, hull):

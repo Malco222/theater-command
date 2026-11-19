@@ -240,7 +240,12 @@ adds what is seen at that distance:
   a bomber's gunners in their turrets and the men in a glass nose;
 - exhaust stubs or pipes with their stain down the cowling, gun ports (doped red patches on British wings),
   muzzles, cowling fasteners, wingtip and tail lamps;
-- rows of rivets along frames, stringers, spars and ribs (small dark squares, the fine model only);
+- her plating, over all her skin (`fitout.rivets`, the fine model only; Brian's benchmark of 2026-11-19, below): rows
+  of rivets along her frames (every 42 to 56 cm) and fourteen stringers, along the ribs and spars of her wings, tail
+  and fin, and in rings round each nacelle; and the joints of her panels, a thin dark strip beside every other frame
+  and rib, along four stringers and along two spars. A rivet is a small square (9 mm on a bomber, 7 on a fighter), a
+  joint 6 to 7 mm wide; paints `rivet`, `rivet_under`, `seam`, `seam_under`, each a shade under the coat it lies in.
+  They cost a fighter about 5,000 triangles and a heavy bomber about 17,000;
 - a bomb bay behind two doors with the bombs on their racks (`BAYS` in `planes.py`: the bombers, and the
   torpedo bombers that carry their torpedo inside);
 - the black rubber along the leading edges of the `B17`, her two open waist windows with a gunner standing at each
@@ -260,6 +265,28 @@ airscrew off and skin the pods; `fitout.jets` adds the intake lips and bullets, 
 She has no `prop.N` parts and no flaps; her sockets add `jet.N` (each tailpipe). Her file says `year` 1944 and
 `tech` "jets": by the art director's unit table Germany flies her only once jet fighters are researched (the rules'
 tech `jets`), and whether a battle mixes her in among the Fw 190s is the air battle builder's call.
+
+**The benchmark** (Brian, 2026-11-19, of a B-17G model he had found: "use this 3d model is our bench mark for all
+airplanes"; "here is more inspiration of the level of detail im looking for"). His pictures are a reference for shape
+and finish only: no mesh or texture of theirs is used, and their nose art, names, codes and serials are real
+aircraft's and are not copied. The first to meet it is the `B17`, now a battle's own too (`EXTRA_PLANES["B17"]`
+replaces the game's numbers): she is laid out again against a three-view drawing of the real B-17G (Wikimedia
+Commons, "Boeing B-17G Flying Fortress 3-view line drawing", Kaboldy, CC BY-SA 3.0; measured, not traced), in her
+olive drab over grey, with a soft fade in the olive. What her numbers add to the game's form:
+
+- `cabin`: her raised cockpit and the deck behind it are one body with a roof, glass only where its windows are (the
+  windscreen, the side windows, a window in the roof over each pilot, the radio room's glazed hatch): `cabin_paint`
+  and `cabin_frames` in `planes.py`, patched into the sculptor by `CABIN`;
+- `frames_paint`: the bars of her windows and turrets in her skin's paint, not the game's pale frames;
+- a fourth value in a row of `glass_bands`: how far up her side that window sits; and a point on a window's edge
+  now takes her coat, so no pane has a pale halo;
+- `TAIL_CUT` in `planes.py`: where her tail parts from her fuselage (ahead of her long fin fillet, which is in two
+  pieces there).
+
+She has the chin turret and its fairing, a cheek gun each side of her nose, the astrodome, the upper and ball
+turrets, the waist, radio room and tail guns (her gunner's cabin stands behind her rudder), and her main wheels
+show half out of the inner nacelles, as the real machine's do. 78,400 triangles. Her turrets and guns are numbered
+afresh: read them from her file and from `gun-arcs.json`, not from memory.
 
 **The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, twelve more entries in
 `EXTRA_PLANES`. Paints and first years are the art director's rulings of that day; the file's `year` is the first
@@ -386,7 +413,7 @@ record='{"kills": [["GER", 6]], "missions": 32, "lead": [12, 19]}'`; `Plane(...,
 
 Paints added after the game's own: `torn` (the inside of a torn-off end), `blur` (the disc of a turning airscrew),
 and the fit-out's (`inside`, `leather`, `skin`, `suit`, `vest`, `goggles`, `exhaust`, `gunmetal`, `patch`, `lens`,
-`boot`, `rivet`, `rivet_under`, `blur_tip`, three lamps). **Draw `glass`, `blur` and `blur_tip` clear**: the file
+`boot`, `rivet`, `rivet_under`, `seam`, `seam_under`, `blur_tip`, three lamps). **Draw `glass`, `blur` and `blur_tip` clear**: the file
 gives how clear under `clear` (`glass` 0.3, `blur` 0.07, `blur_tip` 0.035), and then her crew are seen through the
 hood. The disc of a turning airscrew (`prop.N.blur`) is a faint disc that leaves the spinner clear, the smear of
 each blade over it, and a thin yellow ring near the rim where the blades have yellow tips (British and American
@@ -499,7 +526,7 @@ python show.py Battleship_UK turn <out>        # ship clips: turn, broadside, si
 python airshow.py shot_down <out>              # aircraft clips: flypast (plane=Me262 for another machine), shot_down, ways_down, b17_head_on, b17_escort, b17_flak
 python airshow.py b17_flak <out> frames=none   # no pictures: only the clip's sound log, <out>/air-b17_flak-sound.json (seconds)
 python soundtrack.py <log.json> <sound pack's wav folder> <mix.json> <out.wav> [<video.mp4> <out.mp4>]   # mix a clip's sound, and lay it under the picture
-python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, glass, rear, over, under, side, quarter, high, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; clip=load.bombs@0; record=JSON)
+python airlook.py Spitfire <out> front,hood     # aircraft close up (front, hood, glass, rear, over, under, side, profile, quarter, high, tail, tailside, waist, belly, ball, record, rudder, nose, ace; clip=bombs_away@1.6; clip=load.bombs@0; record=JSON; hurt=14,6,2: bullet hits, flak hits, engines out)
 python sheet.py <out.png> bow+beam <names> 2   # a line-up sheet of ships, each from the bow and on the broadside;  python airshow.py sheet <out.png>
 python export.py <out> parks                   # the three deck ranges alone (they are also in `ships` and `all`)
 python show.py Carrier_USA turn <out> month=1942-06   # a carrier in a month: her range and its paint are that month's

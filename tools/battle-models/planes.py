@@ -51,20 +51,22 @@ CHORDS_PLAIN = [0.0, 0.1, 0.35, 0.62, 0.75, 0.9, 1.0]
 BATTLE = {"hull": 0.15, "wing": 0.24, "tail": 0.22, "fin": 0.2}        # (how far apart the rings stand; set for each machine)
 FLAP, AILERON, ELEVATOR, RUDDER = (0.1, 0.5, 0.76), (0.54, 0.93, 0.74), (0.08, 0.95, 0.62), (0.06, 1.0, 0.60)
 # Where a bomber's bay is: from, to along her (its doors are the strip of her belly BAY_HALF degrees each side of her keel).
-BAYS = {"He111": (3.3, 1.3), "Lancaster": (6.4, -3.0), "B17": (1.6, -1.0), "Bomber": (2.0, -0.8), "Avenger": (2.3, -2.0), "TorpedoBomber": (2.0, -1.9),
+BAYS = {"He111": (3.3, 1.3), "Lancaster": (6.4, -3.0), "B17": (2.3, -0.1), "Bomber": (2.0, -0.8), "Avenger": (2.3, -2.0), "TorpedoBomber": (2.0, -1.9),
         "Betty": (2.8, -2.7), "Amerikabomber": (2.6, -2.2), "B29": (6.4, 2.9)}
 # The machines whose bay holds a torpedo, or bombs instead (the loads are parts `torpedo` and `bombs`: one is hidden).
 BAY_TORPEDO = {"Avenger": (4.1, 0.28), "TorpedoBomber": (3.8, 0.24), "Betty": (5.3, 0.225)}       # (how long it is, half as thick)
 BAY_HALF = 27.0
 # Open windows in a bomber's sides where a gunner stands at his gun: (from, to along her; from, to in degrees above the
 # level of her middle). They are cut on the lines of her skin's own rings, on the fine model only.
-WAIST = {"B17": (-4.5, -5.3, 0.0, 27.0), "Amerikabomber": (-5.0, -5.8, 0.0, 27.0)}
-# Windows the game's numbers give a machine, made larger where a battle looks in at a man: (from, to, half its height).
-GLASS = {"B17": [(0.85, 0.35, 0.16)]}
+WAIST = {"B17": (-4.84, -5.96, 0.0, 41.0), "Amerikabomber": (-5.0, -5.8, 0.0, 27.0)}
+# Windows the game's numbers give a machine, made larger where a battle looks in at a man: (from, to, half its height),
+# and after those, where a window is not at the usual height, how far up her side its middle is (0 level, 1 her top).
+# The B-17's: her nose's cheek window and the two small ones behind it, and the radio room's.
+GLASS = {"B17": [(7.43, 6.9, 0.25, 0.33), (6.46, 6.14, 0.13, 0.19), (6.04, 5.72, 0.13, 0.19), (-0.52, -0.87, 0.09, 0.59)]}
 # A closed gun position's windows: panes of glass set in her skin, each (from, to along her; from, to round her side
 # in degrees up from level), on both sides alike; a pane that runs up to 90 is one panel across her back. They are
 # framed by fitout.tail_gunner. (The art director, 2026-11-18: one clear band round her tail read as a missing panel.)
-PANES = {"B17": [(-13.2, -13.9, 0.0, 36.0), (-13.67, -14.36, 45.0, 90.0)], "B29": [(-18.04, -18.74, 0.0, 36.0), (-18.51, -19.2, 45.0, 90.0)],
+PANES = {"B17": [(-12.3, -12.86, 25.0, 66.0), (-13.03, -13.38, 45.0, 90.0)], "B29": [(-18.04, -18.74, 0.0, 36.0), (-18.51, -19.2, 45.0, 90.0)],
          "Betty": [(-10.45, -11.4, -27.0, 90.0)]}                           # (the Betty's tail is a cone of glass round her gunner)
 # The machines whose every turret is aimed from somewhere else in her: nobody sits in one.
 REMOTE = {"B29"}
@@ -72,6 +74,9 @@ REMOTE = {"B29"}
 #  21:19Z, for the Lancaster: her nose turret 95 either side and 45 below to 60 above; her mid-upper all round, from
 #  level to 70 above; her tail turret 95 either side and 60 below to 60 above, the widest field in her.)
 TURRET_LIMITS = {"Lancaster": {1: ((-95, 95), (-45, 60)), 2: ((-180, 180), (0, 70)), 3: ((-95, 95), (-60, 60))}}
+# Where a machine's tail comes away, where the usual place (a little aft of the middle between wing and tailplane) would
+# cut through a compartment: the B-17's, just aft of her waist gunners.
+TAIL_CUT = {"B17": -6.8}
 SPATS = {"Val"}                                                           # (a fixed undercarriage in spats, painted as her sides are)
 LINE = 0.4                                                                # (how wide a scribed line is drawn, as a share of the map's)
 
@@ -129,6 +134,26 @@ GILLS = [
     ("    frames = bmesh.new()\n", "    frames = bmesh.new()\n    gill_plates = bmesh.new()\n"),
     ('    parts.add("frames", frames, "frame", False, outward=False)\n',
      '    parts.add("frames", frames, "frame", False, outward=False)\n    parts.add("gills", gill_plates, "nose", False, outward=False)\n'),
+]
+
+# A window in her side at a height of its own (see GLASS), and a cabin: a hood that is a raised cabin with a roof, glass
+# only where its windows are (`cabin` in her numbers; see cabin_paint and cabin_frames).
+CABIN = [
+    ('        for (x0, x1, half_high) in s.get("glass_bands", []):', '        for (x0, x1, half_high, *high) in s.get("glass_bands", []):'),
+    ("abs(p.z - hull.z(-p.x) - hull.h(-p.x) * 0.3) < half_high:", "abs(p.z - hull.z(-p.x) - hull.h(-p.x) * (high[0] if high else 0.3)) < half_high:"),
+    ('                   lambda p, n: "glass")\n        # (the frames are on the table\'s model too: they read from above)\n',
+     '                   battle_cabin_paint(s["cabin"], hood, coat) if s.get("cabin") else (lambda p, n: "glass"))\n'
+     '        if s.get("cabin"):\n'
+     '            battle_cabin_frames(parts, frames, hood, s["cabin"])\n'
+     '            continue\n'
+     '        # (the frames are on the table\'s model too: they read from above)\n'),
+    # (a point on the edge of a window takes her coat, not the glass's colour: no pale halo round a pane)
+    ('            paint = paint_of(v.co, v.normal)\n            if blend_of and paint in ("upper", "upper2"):',
+     '            paint = paint_of(v.co, v.normal)\n'
+     '            if paint == "glass" and getattr(paint_of, "coat", None):\n'
+     '                paint = paint_of.coat(v.co, v.normal)\n'
+     '            if blend_of and paint in ("upper", "upper2"):'),
+    ('    hull_paint.blend = coat.blend\n', '    hull_paint.blend = coat.blend\n    hull_paint.coat = coat\n'),
 ]
 
 NOSES = [
@@ -464,6 +489,136 @@ EXTRA_PLANES["B29"] = {
 }
 
 
+# The B-17 again, to the lines of the real B-17G (Brian, 2026-11-19: "make the b-17 look more like this but in the army
+# green color its in now", of a model he linked and five pictures of it; then "use this 3d model is our bench mark for
+# all airplanes"). Her lines are measured from a three-view drawing of the real machine (Commons, "Boeing B-17G Flying
+# Fortress 3-view line drawing", Kaboldy, CC BY-SA 3.0): measured, not traced, and nothing of the linked model is used.
+# What changed from the game's own numbers: her pilots sit in a raised cabin whose roof runs back level past the upper
+# turret and falls to her back behind the radio room; her engines are close in, the inner pair ahead of the outer;
+# her wing tapers straight from a root well forward; her fin stands on a long fillet up her back, and the gunner's
+# cabin is behind her rudder; under her short glass nose is the chin turret with its fairing. Her olive drab over
+# grey is as it was.
+_B17_FILLET = [(-2.7, 0.6, 0.04, 0.58), (-3.55, 0.6, 0.06, 0.71), (-4.22, 0.6, 0.07, 0.8), (-4.89, 0.6, 0.08, 0.91), (-5.56, 0.6, 0.09, 0.99), (-6.23, 0.6, 0.1, 1.08),
+               (-6.8, 0.6, 0.105, 1.17), (-7.57, 0.6, 0.115, 1.29), (-8.24, 0.6, 0.125, 1.52), (-8.75, 0.6, 0.12, 1.84), (-8.9, 0.6, 0.1, 1.86)]
+EXTRA_PLANES["B17"] = {
+    "title": "B-17G Flying Fortress (our own model)",
+    "hull": [(8.3, 0.187, 0.06, 0.06), (8.149, 0.195, 0.24, 0.237), (8.015, 0.169, 0.35, 0.369), (7.881, 0.143, 0.44, 0.484), (7.747, 0.107, 0.52, 0.607), (7.529, 0.107, 0.615, 0.712),
+             (7.177, 0.169, 0.72, 0.774), (6.674, 0.178, 0.84, 0.888), (6.171, 0.187, 0.9, 0.967), (5.501, 0.134, 1.0, 1.09), (4.663, 0.064, 1.1, 1.16), (3.825, 0.037, 1.143, 1.187),
+             (0.472, 0.03, 1.143, 1.18), (-2.88, 0.02, 1.143, 1.17), (-4.053, -0.016, 1.08, 1.134), (-4.84, -0.011, 1.012, 1.088), (-5.394, -0.007, 0.965, 1.055), (-5.96, 0.0, 0.916, 1.015),
+             (-6.8, 0.012, 0.843, 0.956), (-7.07, 0.015, 0.82, 0.937), (-8.747, 0.05, 0.68, 0.81), (-10.42, 0.075, 0.52, 0.685), (-11.2, 0.08, 0.46, 0.62), (-11.36, 0.255, 0.45, 0.785),
+             (-12.3, 0.303, 0.42, 0.742), (-12.58, 0.318, 0.411, 0.729), (-12.86, 0.332, 0.402, 0.716), (-13.2, 0.33, 0.385, 0.7), (-13.38, 0.204, 0.375, 0.545), (-13.5, 0.13, 0.36, 0.44),
+             (-13.78, 0.11, 0.35, 0.41), (-14.2, 0.09, 0.3, 0.36), (-14.36, 0.085, 0.24, 0.29)],
+    "square": 2.0, "screw": 1.76, "blades": 3, "glazed": (7.53, 7.53), "nose_frames": ((7.53,), 6), "nose_bar": 0.6, "nose_cap": 8.2, "nose_frames_paint": "upper",
+    "glass_bands": GLASS["B17"],
+    # (her cabin and the deck behind it are one body: the windscreen, the pilots' windows and the two in the roof over
+    #  them, then the roof back past the upper turret, the radio room's glazed hatch, and its fall to her back)
+    "hoods": [([(5.52, 0.62, 0.62, 0.6), (5.13, 0.7, 0.88, 0.84), (4.86, 0.7, 0.95, 0.98), (4.7, 0.7, 0.95, 1.017), (4.62, 0.7, 0.95, 1.017), (4.12, 0.7, 0.95, 1.017),
+                (3.66, 0.7, 0.95, 1.017), (1.14, 0.7, 0.95, 1.017), (0.47, 0.7, 0.95, 0.96), (-0.2, 0.7, 0.94, 0.91), (-0.87, 0.7, 0.91, 0.81), (-1.54, 0.7, 0.86, 0.66),
+                (-2.0, 0.7, 0.78, 0.56), (-2.3, 0.7, 0.66, 0.5)], (), False)],
+    "cabin": {"screen": 4.86, "back": 3.66, "sill": 22.5, "top": 45.0, "posts": (4.62, 4.12, 3.66), "brow": (4.78, 4.32, 56.25, 78.75), "hatch": (-0.87, -1.73, 67.5)},
+    "wing": [(0.0, 3.84, -2.17, -0.5, 1.0), (3.0, 3.39, -1.85, -0.26, 0.84), (6.08, 2.92, -1.52, -0.02, 0.67), (9.0, 2.49, -1.21, 0.21, 0.52), (14.32, 1.68, -0.65, 0.63, 0.26),
+             (15.0, 1.57, -0.47, 0.68, 0.2), (15.4, 1.42, -0.2, 0.71, 0.12), (15.72, 1.06, 0.3, 0.74, 0.05), (15.81, 0.72, 0.62, 0.745, 0.02)],
+    "tail": [(0.0, -8.4, -11.8, 0.43, 0.42), (5.58, -9.6, -11.26, 0.43, 0.2), (6.12, -9.77, -11.13, 0.43, 0.14), (6.31, -9.92, -10.98, 0.43, 0.09), (6.5, -10.24, -10.67, 0.43, 0.03)],
+    "fin": [(0.0, -8.3, -12.85, 0.6, 0.34), (0.0, -8.75, -12.54, 2.44, 0.32), (0.0, -9.17, -12.45, 2.86, 0.3), (0.0, -9.58, -12.32, 3.53, 0.26), (0.0, -9.84, -12.17, 4.27, 0.2),
+            (0.0, -10.0, -11.98, 4.6, 0.16), (0.0, -10.42, -11.56, 4.94, 0.09), (0.0, -10.85, -11.18, 5.06, 0.02)],
+    "patch": 2.6, "colours": {"upper": "4F5236", "upper2": "595B3F", "under": "84878A", "nose": "4F5236", "boss": "171717"},
+    "engines": [(3.06, 3.62, -0.1, True, 2.55), (6.08, 3.16, 0.05, True, 2.05)], "pitot": True, "under_from": -0.6, "frames_paint": "upper",
+    "tailwheel": (-8.63, -0.9), "mast": (-0.6, 1.5, 1.95),
+    "extras": [("body", (_B17_FILLET[:7], 0.0, 2.0, "coat")), ("body", (_B17_FILLET[6:], 0.0, 2.0, "coat")),
+               # (the chin turret, the fairing behind it, and its pair of guns)
+               ("ball", ((7.1, 0.0, -0.9), (0.42, 0.44, 0.37), "under")),
+               ("body", ([(7.0, -0.88, 0.42, 0.36), (6.6, -0.87, 0.4, 0.3), (6.2, -0.86, 0.33, 0.22), (5.8, -0.88, 0.24, 0.14), (5.5, -0.9, 0.12, 0.07)], 0.0, 2.0, "coat")),
+               ("rod", ((7.3, 0.16, -1.0), (8.2, 0.16, -1.16), 0.026, 0.02, "steel")),
+               # (the astrodome, the upper turret, the ball under her)
+               ("dome", ((6.29, 0.0, 1.12), (0.25, 0.25, 0.24))),
+               ("dome", ((3.14, 0.0, 1.72), (0.52, 0.52, 0.47))), ("rod", ((3.3, 0.17, 1.94), (4.4, 0.17, 2.22), 0.026, 0.02, "steel")),
+               ("dome", ((-2.82, 0.0, -1.23), (0.56, 0.56, 0.56))), ("rod", ((-2.52, 0.2, -1.46), (-1.62, 0.2, -1.76), 0.026, 0.02, "steel")),
+               # (a gun in each cheek of her nose, one at each waist window, one up through the radio room's hatch, a pair in her tail)
+               ("rod", ((7.0, 0.72, 0.3), (7.6, 1.12, 0.1), 0.022, 0.018, "steel")),
+               ("rod", ((-5.15, 0.93, 0.32), (-5.75, 1.9, 0.15), 0.022, 0.018, "steel")),
+               ("rod", ((-1.3, 0.0, 1.4), (-1.95, 0.0, 1.98), 0.022, 0.018, "steel")),
+               ("rod", ((-14.3, 0.09, 0.19), (-15.02, 0.09, 0.19), 0.026, 0.02, "steel")),
+               # (her main wheels go up forward into the inner nacelles, and half of each tyre stays out in the wind)
+               ("rod", ((3.05, 2.9, -0.44), (3.05, 3.22, -0.44), 0.66, 0.66, "tyre")), ("rod", ((3.05, 2.88, -0.44), (3.05, 3.24, -0.44), 0.3, 0.3, "leg")),
+               # (the turbo-supercharger under each nacelle)
+               ("rod", ((2.5, 3.06, -0.6), (2.5, 3.06, -0.7), 0.26, 0.26, "soot")), ("rod", ((2.2, 6.08, -0.42), (2.2, 6.08, -0.52), 0.26, 0.26, "soot"))],
+    "side_marks": [(-3.72, 0.5, "USA-BAR")], "wing_marks": [(11.6, 0.75, 0.95, "USA-BAR", "USA-BAR", False, False)], "code": (-7.3, 0.5),
+}
+
+
+def cabin_angle(hood, p):
+    """Where round a hood a point of its skin is: degrees up from level on its own side (90 at its top)."""
+    w, h = max(hood.w(-p.x), 1.0e-6), max(hood.h(-p.x), 1.0e-6)
+    e = 1.0 / hood.power
+    ty, tz = min(abs(p.y - hood.side) / w, 1.0), min(max((p.z - hood.z(-p.x)) / h, -1.0), 1.0)
+    return math.degrees(math.atan2(math.copysign(abs(tz) ** e, tz), ty ** e))
+
+
+def cabin_paint(cabin, hood, coat):
+    """The paint of a raised cabin: glass where its windows are, her own coat elsewhere. Her numbers give `cabin`:
+    `screen` (ahead of this it is all windscreen, above the sill), `back` (where her side windows end), `sill` and
+    `top` (the side windows lie between these, in degrees round the cabin up from level), `brow` (a window in the roof
+    over each pilot: from, to along her; from, to round her), `hatch` (a glazed hatch across her back: from, to, and
+    how far round it begins)."""
+    brow, hatch = cabin.get("brow"), cabin.get("hatch")
+
+    def paint(p, n):
+        a = cabin_angle(hood, p)
+        if p.x > cabin["screen"]:
+            if a > cabin["sill"]:
+                return "glass"
+        elif p.x > cabin["back"]:
+            if cabin["sill"] < a < cabin["top"]:
+                return "glass"
+            if brow and brow[1] < p.x < brow[0] and brow[2] < a < brow[3]:
+                return "glass"
+        elif hatch and hatch[1] < p.x < hatch[0] and a > hatch[2]:
+            return "glass"
+        return coat(p, n)
+    paint.blend = coat.blend
+    paint.coat = coat
+    return paint
+
+
+def cabin_frames(parts, frames, hood, cabin):
+    """The bars of a cabin's windows: a post at each end of each side window, a rail along their sills and their tops,
+    the windscreen's top bar, its middle post and a post each side, and a bar round each window in her roof."""
+    sill, top, screen, back = cabin["sill"], cabin["top"], cabin["screen"], cabin["back"]
+    wide = 1.0 if parts.fine else 1.4
+
+    def arc(x, a0, a1, half=0.02, both=True):
+        for hand in ((1, -1) if both else (1,)):
+            angles = [math.radians(a0 + (a1 - a0) * k / 8.0) for k in range(9)]
+            if hand < 0:
+                angles = [math.pi - a for a in angles]
+            parts.strip(frames, [hood.at(x, a) for a in angles], [hood.out(x, a) for a in angles], half * wide, 0.008)
+
+    def rail(a, x0, x1, half=0.018):
+        n = max(2, int((x0 - x1) / 0.1))
+        xs = [x0 - (x0 - x1) * k / n for k in range(n + 1)]
+        for angle in ((math.radians(a),) if abs(a - 90.0) < 1.0e-6 else (math.radians(a), math.pi - math.radians(a))):
+            parts.strip(frames, [hood.at(x, angle) for x in xs], [hood.out(x, angle) for x in xs], half * wide, 0.008)
+
+    for x in cabin.get("posts", ()):
+        arc(x, sill, top)
+    rail(sill, hood.front - 0.3, back)
+    rail(top, screen, back)
+    arc(screen, sill, 180.0 - sill, 0.024, both=False)
+    rail(90.0, hood.front - 0.06, screen, 0.024)
+    rail(54.0, hood.front - 0.24, screen)
+    brow, hatch = cabin.get("brow"), cabin.get("hatch")
+    if brow and parts.fine:
+        for a in brow[2:]:
+            rail(a, brow[0], brow[1], 0.012)
+        for x in brow[:2]:
+            arc(x, brow[2], brow[3], 0.012)
+    if hatch and parts.fine:
+        rail(hatch[2], hatch[0], hatch[1], 0.014)
+        n = max(2, int(round((hatch[0] - hatch[1]) / 0.29)))
+        for k in range(n + 1):
+            arc(hatch[0] - (hatch[0] - hatch[1]) * k / n, hatch[2], 180.0 - hatch[2], 0.014, both=False)
+
+
 def battle_us(wing, step, shares=()):
     """Where a flying surface's rings stand along its span: the game's own, closer, and one exactly at each given share
     of the span (the ends of its control surfaces)."""
@@ -483,12 +638,13 @@ def game():
     if _G is None:
         path = os.path.join(HERE, "game", "build_plane.py")
         src = open(path).read().split("\ndef main():")[0]
-        for old, new in FINER + JETS + GRADED + NOSES + GILLS:
+        for old, new in FINER + JETS + GRADED + NOSES + GILLS + CABIN:
             if src.count(old) != 1:
                 raise ValueError("the game's sculptor has changed here: " + old)
             src = src.replace(old, new)
         _G = {"__file__": path, "__name__": "build_plane", "BATTLE": BATTLE, "BATTLE_CHORDS": {True: CHORDS, False: CHORDS_PLAIN}, "battle_us": battle_us,
-              "BATTLE_FLAP": FLAP, "BATTLE_AILERON": AILERON, "BATTLE_ELEVATOR": ELEVATOR, "BATTLE_RUDDER": RUDDER, "LINE_DRAWN": LINE}
+              "BATTLE_FLAP": FLAP, "BATTLE_AILERON": AILERON, "BATTLE_ELEVATOR": ELEVATOR, "BATTLE_RUDDER": RUDDER, "LINE_DRAWN": LINE,
+              "battle_cabin_paint": cabin_paint, "battle_cabin_frames": cabin_frames}
         exec(compile(src, path, "exec"), _G)
         _G["PAINTS"]["torpedo"] = len(_G["PAINTS"])        # (a paint of a battle's own: what a torpedo bomber carries)
         _G["COMMON"]["torpedo"] = "6C7174"
@@ -799,7 +955,7 @@ def convert(name, fine=True):
     rings_x = sorted({round(v.co.x, 4) for ob in by_kind["hull"] for v in ob.data.vertices})
     a, b = wing.trail(wing.root), tailw.lead(tailw.root)
     hood_back = min([min(r[0] for r in h[0]) for h in s.get("hoods", [])] + [a])
-    want = min(b + 0.38 * (a - b), hood_back - 0.2)
+    want = TAIL_CUT.get(name, min(b + 0.38 * (a - b), hood_back - 0.2))
     ok = [x for x in rings_x if b + 0.15 < x < a - 0.1] or rings_x
     x_cut = min(ok, key=lambda x: abs(x - want))
 
@@ -1099,6 +1255,8 @@ def convert(name, fine=True):
             glassy = kind == "hull" and bool(panes) and pane_at(f.calc_center_median())
             if kind == "frames" and nose_bars and f.calc_center_median().x > nose_from:
                 of_face = PAINTS[nose_bars]                  # (the frames of her glass nose, in her skin's own finish)
+            if kind == "frames" and s.get("frames_paint"):
+                of_face = PAINTS[s["frames_paint"]]          # (every bar of her windows and turrets, painted as her skin is)
             if kind == "gills" and cowl_as_coat:             # (her cowl is painted with the rest of her: so are its gills, grey beneath)
                 of_face = PAINTS["under"] if f.normal.z < -0.6 else PAINTS["upper"]
             if kind == "extra" and name in SPATS and own == PAINTS["under"] and mean.z < -0.8 and abs(mean.y) > 1.0:

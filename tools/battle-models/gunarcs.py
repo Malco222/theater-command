@@ -10,7 +10,7 @@ def arc(name, part, pivot, f, parent, last_aft):
     head = math.degrees(math.atan2(fy, fx))                  # 0 dead ahead, plus to starboard, 180 dead astern
     rest_lift = math.degrees(math.asin(max(-1.0, min(1.0, fz))))
     side = "starboard" if fy > 0 else "port"
-    if abs(fy) > 0.5:                                        # a beam gun at a waist window or blister
+    if abs(fy) > 0.5 and fx <= 0.7:                          # a beam gun at a waist window or blister (a cheek gun points more ahead than abeam)
         lo, hi = (60.0, 150.0) if fy > 0 else (-150.0, -60.0)
         return f"waist, {side}", [lo - head, hi - head], [-45.0, 40.0], "from 30 degrees forward of abeam to 60 degrees aft of it"
     if fx > 0.7:
@@ -34,7 +34,7 @@ def arc(name, part, pivot, f, parent, last_aft):
 table, lines = {}, []
 for path in sorted(glob.glob(os.path.join(air, "*.json"))):
     name = os.path.basename(path)[:-5]
-    if name.endswith("Damage") or name.startswith("index"):
+    if name.endswith(("Damage", "EngineOut")) or name.startswith("index"):
         continue
     m = json.load(open(path))
     if not isinstance(m, dict) or "parts" not in m:
@@ -66,6 +66,6 @@ about = ("Placeholder firing arcs for every hand-held gun (flexgun.N) on the bat
          "degrees, plus clockwise seen from above (the sign a turret part uses). lift: how low and how high it points, in degrees above the aircraft's "
          "own level (not measured from rest). A gun's part is `kind: free` and swings about its pivot (its breech). Turrets are not here: their limits "
          "are in the model files (`turret.N` trains, `turret.N.guns` lifts).")
-json.dump({"about": about, "made": "2026-11-18", "aircraft": table}, open(out_json, "w"), indent=1)
+json.dump({"about": about, "made": "2026-11-19", "aircraft": table}, open(out_json, "w"), indent=1)
 open(out_md, "w").write("| Aircraft | Part | Muzzles | Station | Rest heading | Train about rest | Lift |\n|---|---|---|---|---|---|---|\n" + "\n".join(lines) + "\n")
 print(len(lines), "guns on", len(table), "aircraft")
