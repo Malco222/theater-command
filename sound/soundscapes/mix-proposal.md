@@ -106,7 +106,9 @@ Its five open calls:
 
 1. **`explosionsYield`: kept.** A plane lost is the moment; a flak burst is one of 146. It costs 2 to 4 heard flak
    bursts in each view. Asked of the air battles thread: the same with `air.limits.explosions` 7 (air battle only),
-   on map and close. If that wins the flak back at no other cost, 7 goes in.
+   on map and close. If that wins the flak back at no other cost, 7 goes in. **Result (07:07Z): the limit stays
+   at 5.** At 7 flak heard rises (47 to 52 on the map, 18 to 22 close) but a plane lost heard is lost on the map (a
+   far explosion at 2,050 m) and in the close view (a `plane_down` at 283 m); at 6 the map still loses it.
 2. **`limits.big`: deleted.** Big moments are never capped: `big._how` says they always play and `battle-mix.md`
    section 4 says they are never the ones dropped, so the 2 contradicted both. The duck is one state: more big
    moments at once hold it longer, never deeper (the renderer already takes the deepest, not the sum).
@@ -115,7 +117,12 @@ Its five open calls:
    (margins -12 to -26 dB), yet each ducks everything around the camera for about 2.3 s. Asked of the air battles
    thread: render a rule where, in the air battle, a big moment farther than 1,000 m from the listener still plays
    but does not duck. It must keep 9 of 9 planes lost heard on the map; if it does not, it applies only with the
-   camera within 300 m of what it looks at (no air master).
+   camera within 300 m of what it looks at (no air master). **Result (07:07Z): taken, in every view.** The map and
+   the fighters keep 9 of 9; the duck falls from 13.9 s to 4.7 s of the 40 (35% to 12%); loudness range drops 0.4 to
+   1.0 LU. Its cost: a `plane_down` 311 m off that rode a far one's duck misses the line by 0.4 dB looking aft, and
+   close flak heard goes 18 to 16. The air battles thread folds it into its draft 5.
 4. **True peak:** item 6 above.
 5. **The 7.2 dB jump at 300 m:** item 4 above. Asked: one render with the camera at 3 km, where drones past 3.6 km
-   now rise instead of fading out.
+   now rise instead of fading out. **Result (07:07Z):** at 3 km the render is sample-identical (the engines limit
+   gives all 8 slots to loops 1.6 to 1.9 km off); with the camera at 8 km the drones 4.6 to 4.9 km off rise 2.0 to
+   2.8 dB, and nothing else moves.
