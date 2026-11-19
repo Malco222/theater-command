@@ -908,12 +908,12 @@ int main(int Argc, char** Argv)
 				for (const AirGround::Drawn& D : GroundDrawn) Part(D);
 				Part(Paved);
 			}
-			std::printf("  ground (%s): %d points laid near the battle (%zu triangles, %zu before), %d sand splits, shallows %d faded and %d kept, %d sheltered shore points, %d earth, %d concrete worn, %d runway points lifted, grass spread %.1f luma over %d points, %.0f ms%s\n",
-			            Rec.Board.StageKey.c_str(), GroundTally.Refined, TrisAfter, TrisBefore, GroundTally.SandSplit, GroundTally.ShoreFaded, GroundTally.ShoreKept, GroundTally.Sheltered, GroundTally.Earth, GroundTally.Worn,
+			std::printf("  ground (%s): %d points laid near the battle (%zu triangles, %zu before), %d sand splits, shallows %d faded and %d kept, %d sheltered shore points, %d shallows points by a wall, %d earth, %d concrete worn, %d runway points lifted, grass spread %.1f luma over %d points, %.0f ms%s\n",
+			            Rec.Board.StageKey.c_str(), GroundTally.Refined, TrisAfter, TrisBefore, GroundTally.SandSplit, GroundTally.ShoreFaded, GroundTally.ShoreKept, GroundTally.Sheltered, GroundTally.Walled, GroundTally.Earth, GroundTally.Worn,
 			            GroundTally.RunwayRaised, GrassSpread, Grass, GroundMs, GroundTally.bLagoon ? ", a lagoon: the shallows keep their edge" : "");
 			const bool bShore = GroundTally.bLagoon ? GroundTally.ShoreFaded == 0 : GroundTally.ShoreFaded > 0 && GroundTally.ShoreKept > 0 && GroundTally.ShoreFaded * 4 >= GroundTally.ShoreKept;
 			Limits.push_back({ "the stage's ground painted as the art director asked", bGround && BadIndex == 0 && GrewWrong == 0 && bShore && GroundTally.SandSplit > 0 && GroundTally.RunwayRaised > 0 && TrisAfter <= TrisBefore + 90000 &&
-			                   (!bOahu || (GroundTally.Earth > 0 && GrassSpread >= 5.0 && GroundTally.Refined > 0 && GroundTally.Sheltered > 0 && GroundTally.Worn > 0)),
+			                   (!bOahu || (GroundTally.Earth > 0 && GrassSpread >= 5.0 && GroundTally.Refined > 0 && GroundTally.Sheltered > 0 && GroundTally.Worn > 0 && GroundTally.Walled > 0)),
 			                   bGround ? std::to_string(GroundTally.SandSplit) + " sand splits, " + std::to_string(GroundTally.ShoreFaded) + " shallows points faded, " + std::to_string(GroundTally.Earth) + " earth, grass spread " + Num(GrassSpread) + ", " + std::to_string(GroundTally.Refined) + " laid near, " + std::to_string(TrisAfter - TrisBefore) + " triangles more, " + std::to_string(BadIndex) + " bad points, " + std::to_string(GrewWrong) + " cracked or lost"
 			                           : "no stage at " + GroundPath,
 			                   "sand split, shallows faded (kept at a lagoon), runways lifted; at Oahu earth patches and the grass varied by 5 luma or more, the ground split near the harbour, sheltered shores plain, concrete worn; no cracks; 90,000 triangles more at most" });

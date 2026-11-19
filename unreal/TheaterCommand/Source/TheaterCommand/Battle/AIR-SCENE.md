@@ -82,7 +82,8 @@ shape (a camera actor keeps 16:9 and bars the rest; both have `bConstrainAspectR
   it in and out (120 m to 20 km). For "the ships" picture it cuts to the first ship that went down, 1.6 km off and 24
   degrees above her in harbour, and back to the fight after it. At sea (the art director on build 1734, Midway 06) she
   fills about a third of the picture's width: a 35-degree lens from her sunlit side, 35 degrees forward of her beam,
-  13 degrees above her, so her smoke stands up over her (`AAirStage::ShipLie` gives her length, bow and harbour).
+  9 degrees above her, so her smoke stands up over her against the sky (`AAirStage::ShipLie` gives her length, bow
+  and harbour).
   Depth of field is off in the whole game (the campaign's light trims), so it was not what made that picture soft:
   the scene is drawn at the campaign map's pixel budget (about 1077 by 668 on Brian's 2881 by 1786 window) and filled
   out by Unreal's upscaler. `-TheaterAirSize=85` draws the battle at 85 hundredths of the window's points each way, for
@@ -166,7 +167,11 @@ meshes now go through `AirGround::Paint` before they are built (BuildGround):
 - a shore on sheltered water (the open sea's edge within 130 m: the harbour's natural shores) is the grass to the water,
   not a thin line of sand that read as a drawn outline; quays and seawalls keep their grey;
 - the piers' concrete is worn (`Worn`: patches of 6 per cent at 40 m, stains to 7 per cent darker at 16 m), and there
-  is no reef inside the lochs (today's mapped shoals there read as mint patches).
+  is no reef inside the lochs (today's mapped shoals there read as mint patches);
+- by the quays, piers and seawalls (within 10 m of the works, coming back over 40 m) the shallows take the deep sea's
+  paint, since a berth was dredged to the wall; along the natural shores the band's fade wanders in width (its curve's
+  power 0.55 to 1.55 on 260 m noise), so it no longer reads as a glow drawn round the land (the art director on the
+  second picture, 18:47Z). A sand point back from the coast, by height or past 8 m, fades to the grass as painted there.
 Oahu's palette is also darker and less mint (`tools/stages/mesh.py`'s `OAHU_PAINT`: cane #5D7934, pineapple #7D5A3C,
 forest #35512A, sand #CDBD95, shallows #3A6E68, reef #6C9E8E, concrete #8F8B83). The mottle finer than the points are apart is the
 material's own grain (M_MapSurface's two noise samples at one tile to 1,800 m and one to 260 m, strength 0.28;

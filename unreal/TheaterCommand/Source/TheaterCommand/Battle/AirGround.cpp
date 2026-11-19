@@ -402,6 +402,31 @@ namespace AirGround
 			WaterCoast.File(CoastLines);
 			WaterOuter.File(OuterLines);
 		}
+		// The piers, quays and seawalls (the works' outlines, every edge of their triangles as seen from above): a berth
+		// was dredged, so the deep water runs right up to them and the shallows' pale band does not.
+		Filed Walls;
+		{
+			std::vector<Segment> WallLines;
+			for (const Part& P : Parts)
+			{
+				if (P.Name != "works")
+				{
+					continue;
+				}
+				for (size_t K = 0; K + 2 < P.Tris.size(); K += 3)
+				{
+					const int A = P.Tris[K], B = P.Tris[K + 1], C = P.Tris[K + 2];
+					if (A < 0 || B < 0 || C < 0 || static_cast<size_t>(std::max({ A, B, C })) >= std::min(P.X.size(), P.Y.size()))
+					{
+						continue;
+					}
+					WallLines.push_back({ P.X[A], P.Y[A], P.X[B], P.Y[B] });
+					WallLines.push_back({ P.X[B], P.Y[B], P.X[C], P.Y[C] });
+					WallLines.push_back({ P.X[C], P.Y[C], P.X[A], P.Y[A] });
+				}
+			}
+			Walls.File(WallLines);
+		}
 
 		std::vector<Drawn> All;
 		All.reserve(Parts.size());
@@ -425,36 +450,52 @@ namespace AirGround
 				// earth of the pineapple fields' paint, in patches some hundreds of metres across; the forest a little
 				// varied too. (One colour for one place, whichever point carries it, so no seam shows.)
 				const Rgb8 Inland = Cane >= 0 ? ColourOf(Cane) : Scrub >= 0 ? ColourOf(Scrub) : ColourOf(Sand);
+				// (the grass at a place, as a cane point there is painted)
+				auto Grass = [&](double X, double Y)
+				{
+					Rgb8 C = Shaded(Inland, 0.82 + 0.36 * (0.6 * Noise(X, Y, 380.0, 12) + 0.4 * Noise(X, Y, 140.0, 14)));
+					const double Red = Earth >= 0 ? 0.6 * Step(0.68, 0.9, Noise(X + 5000.0, Y - 3000.0, 480.0, 11)) : 0.0;
+					if (Red > 0.02)
+					{
+						C = Blend(C, ColourOf(Earth), Red);
+						++Count.Earth;
+					}
+					return C;
+				};
 				for (size_t K = 0; K < Points; ++K)
 				{
 					const double X = P.X[K], Y = P.Y[K];
 					if (P.Paints[K] == Cane)
 					{
-						Rgb8 C = Shaded(D.Colours[K], 0.82 + 0.36 * (0.6 * Noise(X, Y, 380.0, 12) + 0.4 * Noise(X, Y, 140.0, 14)));
-						const double Red = Earth >= 0 ? 0.6 * Step(0.68, 0.9, Noise(X + 5000.0, Y - 3000.0, 480.0, 11)) : 0.0;
-						if (Red > 0.02)
-						{
-							C = Blend(C, ColourOf(Earth), Red);
-							++Count.Earth;
-						}
-						D.Colours[K] = C;
+						D.Colours[K] = Grass(X, Y);
 					}
 					else if (P.Paints[K] == Forest)
 					{
 						D.Colours[K] = Shaded(D.Colours[K], 0.9 + 0.2 * Noise(X, Y, 520.0, 13));
 					}
-					else if (P.Paints[K] == Sand && P.Z[K] <= 0.45 && !Count.bLagoon && Cane >= 0 && WaterOuter.Nearest(X, Y, 140.0) < 130.0)
+					else if (P.Paints[K] == Sand && !Count.bLagoon && Cane >= 0 && WaterOuter.Nearest(X, Y, 140.0) < 130.0)
 					{
 						// (a shore in sheltered water, where the shallows' band is narrow, as in the harbour's lochs: mud
-						// and grass to the water, not a beach; a thin sand edge there read as a drawn outline)
-						D.Colours[K] = Blend(D.Colours[K], Shaded(Inland, 0.82 + 0.36 * (0.6 * Noise(X, Y, 380.0, 12) + 0.4 * Noise(X, Y, 140.0, 14))), 0.8);
+						// and grass to the water, not a beach; a thin sand edge there read as a drawn outline. The sand
+						// points back from the water there too, which showed as a lattice of paler triangles in the coves)
+						// (at the water's edge a little of the mud's colour left; back from it, even on a spit as low as the
+						// coast, the grass as the grass is: a fifth of sand there showed the split points as a lattice)
+						D.Colours[K] = P.Z[K] <= 0.45 && LandRim.Nearest(X, Y, 4.0) < 3.0 ? Blend(D.Colours[K], Grass(X, Y), 0.8) : Grass(X, Y);
 						++Count.Sheltered;
 					}
-					else if (P.Paints[K] == Sand && P.Z[K] > 0.45)
+					else if (P.Paints[K] == Sand)
 					{
 						// (the sand at the water's edge only: a point back from it, where the coast's ramp has lifted it,
-						// is mostly the grass behind, so a beach is a band along the water and not a fan to the next point)
-						D.Colours[K] = Blend(D.Colours[K], Inland, 0.85 * std::clamp((P.Z[K] - 0.4) / 1.5, 0.0, 1.0));
+						// is mostly the grass behind, so a beach is a band along the water and not a fan to the next point.
+						// Where no lagoon is, also by how far it lies from the coast, past 8 m: a low sand spit split fine
+						// showed its points as a lattice of paler triangles. The grass as the grass is painted there.)
+						const double Lifted = std::clamp((P.Z[K] - 0.4) / 1.5, 0.0, 1.0);
+						const double Inward = Count.bLagoon ? 0.0 : std::clamp((LandRim.Nearest(X, Y, 60.0) - 8.0) / 30.0, 0.0, 1.0);
+						const double Back = std::max(Lifted, Inward);
+						if (Back > 0.0)
+						{
+							D.Colours[K] = Blend(D.Colours[K], Count.bLagoon || Cane < 0 ? Inland : Grass(X, Y), 0.85 * Back); // (Midway's sand as it was)
+						}
 					}
 				}
 				// The beach. Sand belongs at the water's edge (a point of the coast itself, 0.4 m up). An edge from such a
@@ -568,14 +609,25 @@ namespace AirGround
 				// to the other, so the band fades across its own width.
 				for (size_t K = 0; K < Points; ++K)
 				{
-					const double Coast = WaterCoast.Nearest(P.X[K], P.Y[K], 240.0), Open = WaterOuter.Nearest(P.X[K], P.Y[K], 240.0);
+					const double X = P.X[K], Y = P.Y[K];
+					const double Coast = WaterCoast.Nearest(X, Y, 240.0), Open = WaterOuter.Nearest(X, Y, 240.0);
 					const double Seaward = Coast + Open > 0.0 ? Coast / (Coast + Open) : 0.0;
-					if (Seaward < 0.02)
+					// (the art director on the second picture, 18:47Z: by a quay, a pier or a seawall the deep sea's paint
+					// up to the wall, the band coming back over 40 m beside it; along the natural shores the band's width
+					// wanders, so that it reads as shoal water and not as a glow drawn round the land)
+					const double Wall = Walls.Lines.empty() ? 1.0 : 1.0 - Ease(std::clamp((Walls.Nearest(X, Y, 60.0) - 10.0) / 40.0, 0.0, 1.0));
+					const double Wander = 0.55 + Noise(X, Y, 260.0, 31);
+					const double Fade = std::max(Ease(std::pow(std::clamp(Seaward, 0.0, 1.0), Wander)), Wall);
+					if (Wall > 0.5)
+					{
+						++Count.Walled;
+					}
+					if (Fade < 0.02)
 					{
 						++Count.ShoreKept;
 						continue;
 					}
-					D.Colours[K] = Blend(D.Colours[K], Sea, Ease(Seaward));
+					D.Colours[K] = Blend(D.Colours[K], Sea, Fade);
 					++Count.ShoreFaded;
 				}
 			}

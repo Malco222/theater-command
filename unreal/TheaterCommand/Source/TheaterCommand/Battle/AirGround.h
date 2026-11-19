@@ -28,6 +28,9 @@
  * there is longer than some tens of metres, each new point painted for its own place; the shallows fade by how far a
  * point lies between the coast and the band's open-sea edge; a shore in sheltered water (the band there narrow) is the
  * grass to the water and not sand; and the piers' concrete is worn (Worn, which the yard's paving uses too).
+ *
+ * On the second picture (18:47Z): by the quays, piers and seawalls the deep water runs to the wall (a berth was
+ * dredged), and along the natural shores the band's width wanders, so it no longer reads as an outline glow.
  */
 namespace AirGround
 {
@@ -65,6 +68,7 @@ namespace AirGround
 		int Refined = 0;      // points laid by splitting the triangles near the focus
 		int Sheltered = 0;    // shore points in sheltered water, painted the grass and not sand
 		int Worn = 0;         // concrete points worn
+		int Walled = 0;       // shallows points by a quay, pier or seawall, painted the deep sea's
 	};
 
 	/** Where the battle is, and how fine the ground is split round it (no splitting with no radius). */

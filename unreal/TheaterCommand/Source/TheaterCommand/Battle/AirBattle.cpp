@@ -2240,7 +2240,9 @@ void AAirBattle::AimEye(double Real)
 			// (seen 35 degrees off her beam she shows some 0.82 of her length; the frame is 2 tan(lens/2) of the way wide)
 			const double Shown = 0.82 * Long;
 			Away = FMath::Clamp(3.0 * Shown / (2.0 * FMath::Tan(FMath::DegreesToRadians(LensDegrees * 0.5))), 450.0, 1600.0);
-			Down = -13.0;
+			// (9 degrees down: the frame's top edge a little over the horizon, so her column stands against the sky and
+			// not the sea; at 13 the top lay 2 to 3 degrees under it. The pre-check and the art director, 18:47Z)
+			Down = -9.0;
 			Heading = (-Out).Rotation().Yaw;
 			Wanted = ShipWorld + FVector::UpVector * (0.12 * Long * U);
 			Lens->SetFieldOfView(static_cast<float>(LensDegrees));
