@@ -3614,7 +3614,7 @@ function siegeBar(r: Region): string {
   const up = humanUp(g);
   if (v.by && atWar(g, me, r.ctrl) && stormCandidates(g, r.id).length) {
     const why = whyNotStormTown(g, r.id);
-    return `<div class="jointbar siegebar"><small title="${esc(v.lines.join(' '))}">${ringIcon(g.nations[me].color, 20)}Siege of ${esc(v.town)} · walls +${Math.round((v.bonus - 1) * 100)}%${v.broken > 0 ? `, ${Math.round(v.broken * 100)}% broken` : ''} · ${v.bySea ? 'fed by sea' : v.closed ? (v.left > 0 ? `stores for ${monthsWord(v.left)}` : 'stores gone') : 'ring not closed'}</small><button class="btn small go" data-act="storm" data-id="${r.id}" ${why ? `disabled title="${esc(why)}"` : 'title="See the odds of an assault before anything is ordered."'}>Storm the town</button></div>`;
+    return `<div class="jointbar siegebar"><small title="${esc(v.lines.join(' '))}">${ringIcon(g.nations[me].color, 20)}Siege of ${esc(v.town)} · walls +${Math.round((v.bonus - 1) * 100)}%${v.broken > 0 ? `, ${Math.round(v.broken * 100)}% broken` : ''} · ${v.bySea ? 'fed by sea' : v.byBook ? 'fed across the lake' : v.closed ? (v.left > 0 ? `stores for ${monthsWord(v.left)}` : 'stores gone') : 'ring not closed'}</small><button class="btn small go" data-act="storm" data-id="${r.id}" ${why ? `disabled title="${esc(why)}"` : 'title="See the odds of an assault before anything is ordered."'}>Storm the town</button></div>`;
   }
   if (r.ctrl === me && v.by && v.inside > 0) {
     const why = whyNotSallyOut(g, r.id);
@@ -3662,7 +3662,7 @@ function siegeBlock(r: Region): string {
     + fact('Town guard', v.guard > 0 ? `${v.guard.toFixed(1)} div` : 'None', v.guard > 0
       ? `Depot troops, police and militia who hold ${v.town} while no army does. ${SIEGE.summonsNot.includes(v.size) ? `A ${v.size === 'capital' ? 'capital' : 'city'} never opens its gates at a summons: its guard has to be beaten in the streets or starved out.` : `A town held only by its guard opens its gates to a force with odds of ${SIEGE.summons} to 1 or better.`}`
       : `${v.town} has no guard of its own${r.ctrl !== r.owner ? ': it is held by a foreign army' : ''}. With no troops inside, it falls to whoever wins the country round it.`)
-    + fact('Stores', v.by ? (v.bySea ? 'By sea' : `${v.left} of ${v.stores} mo`) : `${v.stores} mo`, v.by && v.bySea ? 'Ships still reach the harbour: the town cannot be starved while they do.' : `Closely shut in, ${v.town} feeds its defenders for ${monthsWord(v.stores)}. After that they go hungry, and a hungry garrison gives in.`, v.by && !v.bySea && v.left === 0 ? ' hurt' : '');
+    + fact('Stores', v.by ? (v.bySea ? 'By sea' : v.byBook ? 'Across the lake' : `${v.left} of ${v.stores} mo`) : `${v.stores} mo`, v.by && v.bySea ? 'Ships still reach the harbour: the town cannot be starved while they do.' : v.by && v.byBook ? 'Food still comes in across the lake: the town is not starved while it does.' : `Closely shut in, ${v.town} feeds its defenders for ${monthsWord(v.stores)}. After that they go hungry, and a hungry garrison gives in.`, v.by && !v.bySea && !v.byBook && v.left === 0 ? ' hurt' : '');
   let head: string;
   if (v.by) {
     const ours = alive && allied(g, me!, v.by);

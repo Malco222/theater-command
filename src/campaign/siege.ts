@@ -23,6 +23,7 @@ import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
 import { GUNS_ALONE, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, type Assessment } from './game';
 import { seat } from './commanders';
+import { bookFed } from './history';
 import { armyOf } from './joint';
 import { closedTo, seaOpenAt } from './navy';
 import { storyFallen } from './stories';
@@ -246,6 +247,13 @@ export function fedBySea(g: Game, r: Region): boolean {
   return feeders(g, r).some((id) => seaOpenAt(g, id, r));
 }
 
+/** True where the town's stores do not run down however closely it is ringed: ships still reach it, or the book feeds it (history.json 'restraint'). */
+export const fed = (g: Game, r: Region): boolean => fedBySea(g, r) || fedByBook(g, r);
+
+/** True for a town the book feeds against the ring round it now: Leningrad against a computer Germany, at stops 1 and 2. */
+// (Each besieger by the army it fights in: a corps lent to a player stands in the player's ring.)
+export const fedByBook = (g: Game, r: Region): boolean => besieged(g, r) && bookFed(g, r.name, r.ctrl, [...new Set(besiegers(g, r).map(armyOf))]);
+
 /** The seas the town's food comes in by: those off its harbour that are still open to someone who feeds it. Close them all and it starves like any other. */
 export function feedingSeas(g: Game, r: Region): number[] {
   const who = feeders(g, r);
@@ -275,7 +283,7 @@ export function ringClosed(g: Game, r: Region): boolean {
 }
 
 /** True while the garrison still eats: the stores last, or ships still come in. */
-export const garrisonFed = (g: Game, r: Region): boolean => !besieged(g, r) || monthsShut(g, r) <= storesOf(g, r) || fedBySea(g, r);
+export const garrisonFed = (g: Game, r: Region): boolean => !besieged(g, r) || monthsShut(g, r) <= storesOf(g, r) || fed(g, r);
 
 // ---- A pocket: part of a country cut off from the rest of it ------------------------------------
 //
@@ -905,7 +913,7 @@ export function siegeMonth(g: Game, nat: string): void {
       // Shellfire wears on the men inside too.
       for (const c of garrisonOf(r)) c.org = Math.max(0.15, c.org - 0.03 * Math.min(4, weight));
     }
-    if (ringClosed(g, r) && !fedBySea(g, r)) g.flags[`sgm:${r.id}`] = monthsShut(g, r) + 1;
+    if (ringClosed(g, r) && !fed(g, r)) g.flags[`sgm:${r.id}`] = monthsShut(g, r) + 1;
     siegeEnds(g, r, by);
   }
 }
@@ -956,7 +964,7 @@ export function siegeSupply(g: Game): void {
 }
 
 /** True for a corps shut in a besieged town: no drafts reach it. */
-export const shutIn = (g: Game, c: Corps): boolean => !!c.town && besieged(g, g.regions[c.reg]) && !fedBySea(g, g.regions[c.reg]);
+export const shutIn = (g: Game, c: Corps): boolean => !!c.town && besieged(g, g.regions[c.reg]) && !fed(g, g.regions[c.reg]);
 
 // ---- Softening a town: bombs and shells ---------------------------------------------------------
 
@@ -1036,8 +1044,11 @@ export interface SiegeView {
   holder: string; by: string | null;
   /** The month it was invested (-1 if it is not), and the months it has been closely shut in. */
   since: number; months: number;
-  /** Months of stores when the gates shut, months left, whether ships still feed it, and whether the ring is closed. */
-  stores: number; left: number; bySea: boolean; closed: boolean;
+  /**
+   * Months of stores when the gates shut, months left, whether ships still feed it, whether the book feeds it across
+   * the lake (history.json 'restraint', 'fed'), and whether the ring is closed.
+   */
+  stores: number; left: number; bySea: boolean; byBook: boolean; closed: boolean;
   /** How much stronger its defenders fight inside (1.45 is 45% stronger), and the share of its works broken down. */
   bonus: number; broken: number;
   /** Corps the town can hold and corps inside, and the town's own guard in divisions' worth. */
@@ -1051,7 +1062,7 @@ export function siegeView(g: Game, region: number): SiegeView | null {
   const r = g.regions[region];
   if (!r || !siegeRules(g)) return null;
   const size = townSize(g, r), by = besiegerOf(g, r);
-  const stores = storesOf(g, r), shut = monthsShut(g, r), bySea = fedBySea(g, r);
+  const stores = storesOf(g, r), shut = monthsShut(g, r), bySea = fedBySea(g, r), byBook = fedByBook(g, r);
   const inside = garrisonOf(r).length, guard = guardOf(g, r), bonus = townBonus(g, r), broken = breachOf(g, r);
   const left = Math.max(0, stores - shut);
   const lines: string[] = [];
@@ -1063,7 +1074,8 @@ export function siegeView(g: Game, region: number): SiegeView | null {
   if (by) {
     const closed = ringClosed(g, r);
     const seas = bySea ? feedingSeas(g, r).map((z) => g.seas[z].name) : [];
-    lines.push(bySea ? `Ships still reach the harbour${seas.length ? ` by the ${seas.length === 1 ? seas[0] : `${seas.slice(0, -1).join(', ')} and the ${seas[seas.length - 1]}`}` : ''}: the town cannot be starved while they do. A fleet at sea there, strong enough to close ${seas.length > 1 ? 'those waters' : 'that water'} to them, starts its stores running down.`
+    lines.push(bySea ? `Ships still reach the harbour${seas.length ? ` by the ${seas.length === 1 ? seas[0] : `${seas.slice(0, -1).join(', ')} and the ${seas[seas.length - 1]}`}` : ''}: the town cannot be starved while they do.${byBook ? ' Food comes in across the lake as well, so closing the sea would not starve it.' : ` A fleet at sea there, strong enough to close ${seas.length > 1 ? 'those waters' : 'that water'} to them, starts its stores running down.`}`
+      : byBook ? 'Food still comes in across the lake: however close the ring, the town is not starved while no player\'s troops stand in it.'
       : !closed ? 'The ring is not closed: a road out is still open, and the army round it is too weak to shut it in alone. Its stores are not running down. Take the ground next door, or bring more troops up beside it.'
       : left > 0 ? `Closely invested. Its stores will feed the defenders ${left === 1 ? 'one more month' : `${left} more months`}; after that they go hungry.`
       : inside ? 'Its stores are gone: the garrison is starving, and loses men and heart every month.' : 'Its stores are gone: it is about to give in.');
@@ -1078,7 +1090,7 @@ export function siegeView(g: Game, region: number): SiegeView | null {
   }
   return {
     region, town: townName(r), size, sizeWord: TOWNS.words[size], holder: r.ctrl, by, since: investedOn(g, r), months: shut,
-    stores, left, bySea, closed: by ? ringClosed(g, r) : false, bonus, broken, room: roomIn(g, r), inside, guard, lines,
+    stores, left, bySea, byBook, closed: by ? ringClosed(g, r) : false, bonus, broken, room: roomIn(g, r), inside, guard, lines,
   };
 }
 

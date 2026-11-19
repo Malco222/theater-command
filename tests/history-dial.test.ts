@@ -218,9 +218,62 @@ describe('the book yields when it no longer fits', () => {
     g.turn = 11;
     const failed = bookMonth(g);
     expect(failed.some((m) => m.theatre === 'west')).toBe(true);
-    for (const t of ['west', 'med', 'balkans', 'east', 'second']) expect(onBook(g, t), t).toBe(false);
+    for (const t of ['west', 'med', 'balkans']) expect(onBook(g, t), t).toBe(false);
+    // The east's book hangs on France's fall by the east's own month (b530): it waits, and with it the second front.
+    for (const t of ['east', 'second']) expect(onBook(g, t), t).toBe(true);
     expect(news(g, /closed in the west: Germany has not struck in the west/).length).toBe(1);
+    expect(news(g, /the east/)).toEqual([]);
     expect(leash(g, 'ITA', 'jackal').kind).toBe('free');
+  });
+
+  it("keeps the east's book when the west's closes, if France is out of the war by May 1941 (b530)", () => {
+    const g = grand(9, 'UK', 1);
+    g.turn = 11;
+    bookMonth(g);
+    expect(onBook(g, 'west')).toBe(false);
+    expect(g.flags['hist:wait:east']).toBe(11);
+    // France falls in the winter: the east's book stands, and Barbarossa keeps its month.
+    g.turn = 17;
+    g.nations.FRA.alive = false;
+    for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((x) => x !== 'FRA');
+    g.nations.FRA.atWar = [];
+    bookMonth(g);
+    expect(g.flags['hist:wait:east']).toBeUndefined();
+    expect(g.flags['hist:kept:east']).toBe(17);
+    g.turn = 22;
+    bookMonth(g);
+    expect([onBook(g, 'east'), onBook(g, 'second')]).toEqual([true, true]);
+    expect(leash(g, 'GER', 'east').kind).toBe('dated');
+    expect(news(g, /closed in the east/)).toEqual([]);
+  });
+
+  it('closes the east, and the second front with it, when France still stands at the end of May 1941 (b530)', () => {
+    for (const stop of [1, 2]) {
+      const g = grand(9, 'UK', stop);
+      g.turn = 12;
+      bookMonth(g);
+      expect(onBook(g, 'west'), `stop ${stop}`).toBe(false);
+      g.turn = 21;
+      bookMonth(g);
+      expect(onBook(g, 'east'), `stop ${stop}`).toBe(true);
+      expect(bookExpects(g).some((x) => x.text === 'The book is closed in the east if France is still in the war when May 1941 is over.'), `stop ${stop}`).toBe(true);
+      g.turn = 22;
+      bookMonth(g);
+      expect([onBook(g, 'east'), onBook(g, 'second')], `stop ${stop}`).toEqual([false, false]);
+      const told = news(g, /closed in the east/);
+      expect(told, `stop ${stop}`).toEqual(["History's book is closed in the east: France was still in the war when May 1941 ended. With it the book is closed in the second front. From here on the staffs there decide for themselves."]);
+      bookMonth(g);
+      expect(news(g, /closed in the east/).length).toBe(1);
+    }
+  });
+
+  it("closes the east at once when the west's book closes after May 1941 (b530)", () => {
+    const g = grand(9, 'UK', 1);
+    g.turn = 22;
+    bookMonth(g);
+    expect(onBook(g, 'west')).toBe(false);
+    expect([onBook(g, 'east'), onBook(g, 'second')]).toEqual([false, false]);
+    expect(g.flags['hist:wait:east']).toBeUndefined();
   });
 });
 
