@@ -332,6 +332,8 @@ export interface Corps extends Storied {
   stay?: boolean;
   /** The fullest this corps ever gets, where that is under a division's full strength (a setup row's 'est'): its drafts stop there. */
   full?: number;
+  /** A record garrison marked to stay inside its town (ruling 232, rider b606): a computer's staff does not send it back to the field for want of an enemy near. */
+  fortress?: boolean;
   dyle: string | null;
   supplied: boolean;
   fought: boolean;

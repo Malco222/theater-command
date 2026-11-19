@@ -24,6 +24,7 @@ import { clamp } from '../core/math';
 import { GUNS_ALONE, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, type Assessment } from './game';
 import { seat } from './commanders';
 import { bookFed } from './history';
+import { drawMen } from './manpower';
 import { armyOf } from './joint';
 import { closedTo, seaOpenAt } from './navy';
 import { storyFallen } from './stories';
@@ -43,7 +44,8 @@ export const SIEGE = data as unknown as {
   sortie: number; pay: number;
   capital: number; capitalAfter: number; capitalYear: number;
   driveOut?: boolean;
-  startIn?: { nat: string; corps: string; name: string; gen?: string; trait?: string; xp?: number }[];
+  startIn?: { nat: string; corps: string; name: string; gen?: string; trait?: string; xp?: number; str?: number; fortress?: boolean }[];
+  rings?: { nat: string; town: string; corps: string; org: number }[];
   ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sea: { after: number; blockade: number }; relieved: { months: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>>; great?: { works: number; on?: boolean; field?: number }; lateGarrison?: { stops: number[]; str: number; org: number } };
 };
 
@@ -511,6 +513,32 @@ export function startGarrisons(g: Game): void {
     c.name = s.name;
     if (s.xp !== undefined) c.xp = s.xp;
     if (s.gen) seat(g, c, s.gen, s.trait);
+    // (Rider b606: a row the record keeps small stands at its own size from the first day, and its army's count is taken again.)
+    if (s.str !== undefined) { c.str = c.full = s.str; g.nations[s.nat].armyPeak = armySize(g, s.nat); }
+    if (s.fortress) c.fortress = true;
+  }
+}
+
+/**
+ * Ruling 232's rider b606: a ring the record manned in the month its country was first attacked (Kiev, July 1941). The
+ * first time anyone declares war on a nation SIEGE.rings names, the corps the row names, if it still stands inside
+ * its town, fills to its full divisions before the attacker's battles that month: new men from the reserve, as a
+ * call-up wave's are, as far as the reserve allows. Once; no staff reads it.
+ */
+export function manRings(g: Game, nat: string): void {
+  if (!siegeRules(g) || !driveOut(g)) return;
+  for (const s of SIEGE.rings ?? []) {
+    const key = `ring:${s.town}`;
+    if (s.nat !== nat || g.flags[key] !== undefined) continue;
+    g.flags[key] = g.turn;
+    const r = g.byName[s.town];
+    const c = r && r.ctrl === nat ? garrisonOf(r).find((x) => x.nat === nat && x.name === s.corps && !x.dead) : undefined;
+    if (!r || !c || c.str >= 1) continue;
+    const men = drawMen(g, nat, (1 - c.str) * c.divs);
+    c.str = Math.min(1, c.str + men / c.divs);
+    delete c.full;
+    c.org = Math.min(c.org, s.org);
+    headline(g, 'event', `The forts round ${townName(r)} are manned.`, nat, r.id);
   }
 }
 

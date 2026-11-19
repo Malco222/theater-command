@@ -48,7 +48,7 @@ import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
+import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
 import { TOWNS, townName, townSize } from './towns';
 import { skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
 import desertData from '../../data/campaign/desert.json';
@@ -375,6 +375,8 @@ export function declareWar(g: Game, a: string, b: string): void {
   // A country outside every alliance that is struck down is a fright to its friends: the month such pacts are made.
   if (g.flags.open === 1 && bloc(B) === null) g.flags[`shock:${b}`] = g.turn;
   setWar(g, a, b);
+  // (Ruling 232, rider b606: a ring the record manned in the month its country was first attacked is manned before the attacker's battles.)
+  manRings(g, b);
   if (sneak) g.flags[`sneak:${a}:${b}`] = g.turn;
   A.offStart[b] = g.turn;
   g.flags[`war:${a}:${b}`] = g.turn;

@@ -227,7 +227,7 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
   if (!siegeRules(g)) return;
   if (!g.nations[nat].atWar.length) {
     // Ruling 139 as mended (b512(f)): a garrison put in for a war that has ended comes out with the peace.
-    if (GREAT.on && !post) for (const r of g.regions) if (r.ctrl === nat && !besieged(g, r)) for (const c of garrisonOf(r).filter((c) => c.nat === nat)) takeField(g, c);
+    if (GREAT.on && !post) for (const r of g.regions) if (r.ctrl === nat && !besieged(g, r)) for (const c of garrisonOf(r).filter((c) => c.nat === nat && !c.fortress)) takeField(g, c);
     return;
   }
   const near = (r: Region, far: number): boolean => {
@@ -280,7 +280,8 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
       inside = garrisonOf(r).filter((c) => c.nat === nat);
     }
     if (!post) {
-      if (inside.length && !near(r, 2)) for (const c of [...inside]) takeField(g, c);
+      // (A record garrison with the fortress mark stays in: rider b606.)
+      if (inside.length && !near(r, 2)) for (const c of [...inside]) if (!c.fortress) takeField(g, c);
       continue;
     }
     // An attacker does not shut its attackers in (b519(m)): a staff attacking every country next door, in wars it
