@@ -25,6 +25,8 @@ import { INTEL, agentsOf, atWork, fogOn } from './intel';
 import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
+import { weatherOn, whyNotSky, zoneOfSea } from './weather';
+import { inCampaign } from './aircampaigns';
 
 type WingKind = 'ftr' | 'bmr';
 const KINDS: WingKind[] = ['ftr', 'bmr'];
@@ -586,6 +588,8 @@ export function whyNotSearch(g: Game, f: AirFleet, z: number): string | null {
   if (f.ftr + f.bmr <= 0) return 'It has no aircraft fit to fly.';
   if (f.scouted === g.turn) return 'It has flown its reconnaissance this month.';
   if (!g.nations[f.nat].atWar.length) return 'The nation is at peace.';
+  // Weather (ruling 127): no search flies from or over a closed sky.
+  if (weatherOn(g)) { const why = whyNotSky(g, f, zoneOfSea(g, z)); if (why) return why; }
   const R = airRange(f, g);
   return kmToSea(g, f, z) <= (f.bmr > 0 ? R.bmr : R.ftr) ? null : 'That sea is out of its range.';
 }
@@ -749,7 +753,7 @@ export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 
   const trade = !!A.trade;
   const hit = new Set<string>();
   let flown = what === 'land' ? 100 : 0;
-  const fit = (f: AirFleet | undefined): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ready >= A.ready;
+  const fit = (f: AirFleet | undefined): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ready >= A.ready && !inCampaign(g, f);
   const send = (b: Blow): void => {
     const rep = fly(g, nat, b.m, b.t, b.fleets, `:sea${flown++}`);
     hit.add(`${b.m}:${b.t}`);

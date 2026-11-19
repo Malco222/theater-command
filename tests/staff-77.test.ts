@@ -25,6 +25,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import { RIVALS, builtUp, frontAshore, joinsOn, landingForce, massing, oceanRuns, opensOn, seaBase, stalemates, startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import { STACK, type Corps, type Game, type Region } from '../src/campaign/types';
+import { FAR_STAGE } from '../src/campaign/stage';
 import { WORLD, beyondEurope, overseasOf } from '../src/campaign/world';
 import open from '../data/campaign/open.json';
 
@@ -40,12 +41,12 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; owner: string; island: boolean; overseas: boolean; wave: boolean; across: number }[] = [];
 const months: { turn: number; can: number; canHome: number; bra: number; usa: number }[] = [];
 {
-  // Seed 2: America's staff makes a landing of its own in this war, on Sardinia in September 1943 (before ruling 233,
-  // which keeps history's season for the landing in Italy, it was seed 6 and October 1942). Seed 7 until Version 84,
-  // whose rules of what an attack brings and faces moved every war; seed 8 until ruling 227, whose air war moved them
-  // again; seed 6 until ruling 233. Of seeds 1 to 7 under 233 only 2 tells this story in full: in 3, 5, 6 and 7 the
-  // first landing of America's own comes after September 1944 or not at all.
-  const g = wide(2);
+  // Seed 6 until ruling 232: America's staff made a landing of its own in that war, on Sardinia in October 1942, and Germany holds
+  // Norway. Seed 7 until Version 84, whose rules of what an attack brings and faces moved every war; seed 8 until ruling
+  // 227, whose air war moved them again (in seed 8 Germany now never takes Norway). Of seeds 1 to 13 under 227, 3, 6, 7,
+  // 9 and 12 tell this story in full. Seed 4 since ruling 232 (Warsaw's garrison, b566) and Italy's boats on the
+  // record's seas (b564) moved the war again: of seeds 1 to 9 then, 4 and 5 tell it in full.
+  const g = wide(4);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, island: e.to.nb.length === 0, overseas: e.to.overseas, wave: e.wave, across: across(g, e.nat).length }); };
   while (g.turn < SEP_44) {
     runTurnAI(g);
@@ -79,7 +80,9 @@ describe('history\'s shores (rulings 39 and 40)', () => {
     // A colony overseas is open to it always (North Africa, where its first landing of the real war went in).
     expect(R('Tripoli').overseas).toBe(true);
     expect(opensOn(g, 'USA', R('Tripoli'))).toBe(true);
-    expect(joinsOn(g, 'CAN', R('Tripoli'))).toBe(true);
+    // (To Canada too on the older chart. With the whole world on it a colony across an ocean is shut to her for good:
+    // ruling 231, 3, and its rider b462. See shores-79.test.ts.)
+    expect(joinsOn(g, 'CAN', R('Tripoli'))).toBe(!FAR_STAGE);
     expect(opensOn(g, 'CAN', R('Brittany'))).toBe(false);
     // A staff with no list goes where it judges best. (Britain's has one since Version 79.)
     for (const nat of ['GER', 'ITA', 'SOV']) for (const name of ['Bergen', 'Brittany', 'Holland']) { expect(opensOn(g, nat, R(name))).toBe(true); expect(joinsOn(g, nat, R(name))).toBe(true); }

@@ -6,6 +6,7 @@
 // The numbers and the calendar live in data/campaign/history.json. What the dial does to who goes to war with whom
 // (the book's marks, the neutrals' ambitions) is in claims.ts.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/history.json';
 import { hashString, Rng } from '../core/rng';
 import { turnToDate } from '../core/ticket';
@@ -28,8 +29,8 @@ export interface Stop {
 }
 /** What history's calendar expects in a theatre: these must hold before `until`, or from the month after `by`. */
 export interface Mark { theatre: string; until?: number; by?: number; if: string[]; why: string }
-/** A claim on named ground: who claims it, from whom, and why. */
-export interface Ambition { id: string; nat: string; on: string; ground: string[]; name: string; why: string; stop?: number; if?: string[]; lift?: number }
+/** A claim on named ground: who claims it, from whom, and why. 'op': the staff's own war for it (open.json): the claim is not pressed while that war may still come, and is put away once it has come (ruling 228). */
+export interface Ambition { id: string; nat: string; on: string; ground: string[]; name: string; why: string; stop?: number; if?: string[]; lift?: number; op?: string }
 
 export const HISTORY = data as unknown as {
   start: number;
@@ -40,7 +41,11 @@ export const HISTORY = data as unknown as {
   unhistoric: string[];
   joined: { axis: string[]; allies: string[] };
   theatre: Record<string, string>;
-  theatres: Record<string, { name: string; after: string[] }>;
+  /**
+   * A theatre's book that does not close at once with one it comes after (b530): at the stops named, while the
+   * month is no later than 'by', it waits; it stands if 'if' holds by then, and closes when 'by' is past without it.
+   */
+  theatres: Record<string, { name: string; after: string[]; stays?: { stops: number[]; by: number; if: string[]; why: string; ask: string } }>;
   marks: Mark[];
   shores: {
     id: string; from: number; owners: string[];
@@ -53,6 +58,8 @@ export const HISTORY = data as unknown as {
   }[];
   claims: { weak: number; odds: number; thin: number; notice: number; chance: number; guard: number; lapse: number; aid: number; treaty: number; push: number };
   ambitions: Ambition[];
+  /** The book's restraints (b509(c), b512): towns a computer staff does not storm, and ground it does not enter, at the stops named. */
+  restraint?: { stops: number[]; front?: string[]; storm: { nat: string; town: string; why: string }[]; enter: { nat: string; ground: string[]; why: string }[]; fed?: { nat: string; town: string; by: string; why: string }[] };
 };
 
 /** The stop with nothing added: where a campaign starts, and what every game without a stop is played at. */
@@ -65,6 +72,24 @@ export const dialRules = (g: Game): boolean => g.flags.open === 1;
 export const stopOf = (g: Game): number => (g.flags.open === 1 ? g.flags.hist ?? FREE : FREE);
 export const stopDef = (g: Game): Stop => HISTORY.stops.find((s) => s.stop === stopOf(g)) ?? HISTORY.stops.find((s) => s.stop === FREE)!;
 export const stopByNumber = (n: number): Stop | undefined => HISTORY.stops.find((s) => s.stop === n);
+/**
+ * True where the book's restraints hold: a computer staff, at a stop that names them (b509(c), b512), in a war where
+ * no player holds a seat on that front (b527: computer against computer, or not at all).
+ */
+const restrained = (g: Game, nat: string): boolean => !!HISTORY.restraint && nat !== g.human && g.flags.open === 1 && HISTORY.restraint.stops.includes(stopOf(g))
+  && !(g.human !== null && (HISTORY.restraint.front ?? []).includes(g.human));
+/** The computer staff whose own restraint keeps it from storming this town, if any: Germany before Leningrad by the book. */
+export const stormHeldBy = (g: Game, town: string): string | null =>
+  HISTORY.restraint?.storm.find((s) => s.town === town && restrained(g, s.nat))?.nat ?? null;
+/** True for ground a computer staff's armies do not go into by the book: Finland's before Leningrad in 1941. */
+export const halted = (g: Game, nat: string, place: string): boolean =>
+  restrained(g, nat) && HISTORY.restraint!.enter.some((h) => h.nat === nat && h.ground.includes(place));
+/**
+ * True for a town the book feeds while it is held by its own side and the computer staff named for it stands round it,
+ * with none but computer staffs beside it: Leningrad, fed across Lake Ladoga while Germany rings it. Its stores do not run down.
+ */
+export const bookFed = (g: Game, town: string, holder: string, ring: string[]): boolean =>
+  !!HISTORY.restraint?.fed?.some((f) => f.town === town && f.nat === holder && ring.includes(f.by) && restrained(g, f.by) && !ring.some((n) => n === g.human));
 /** The loosest stop this campaign has been played at: what its verdicts, medals and par are read against. */
 export const loosest = (g: Game): number => (g.flags.open === 1 ? g.flags.histMax ?? stopOf(g) : FREE);
 
@@ -264,6 +289,11 @@ export function bookExpects(g: Game): DialView['expects'] {
       out.push({ theatre: m.theatre, name: t.name, turn: last, text: `The book is closed in ${t.name} if ${m.why} when ${turnToDate(last).label} is over.` });
     }
   });
+  // A theatre left waiting when one it comes after closed (b530).
+  for (const [id, t] of Object.entries(HISTORY.theatres)) {
+    if (!t.stays || g.flags[`hist:wait:${id}`] === undefined || g.flags[`hist:off:${id}`]) continue;
+    out.push({ theatre: id, name: t.name, turn: t.stays.by, text: `The book is closed in ${t.name} if ${t.stays.ask} when ${turnToDate(t.stays.by).label} is over.` });
+  }
   return out.sort((a, b) => a.turn - b.turn);
 }
 

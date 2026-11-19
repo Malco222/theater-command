@@ -15,13 +15,14 @@ import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPictu
 import { allied, atWar, headline, routineNews } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
-  CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, quality, screenGap, seaRng,
+  CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
 import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules, siegeView, townHeld, townHitText, townShare, type TownHit } from './siege';
 import { townName } from './towns';
 import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance } from './types';
+import { skyAtSea, skyBattleLine, zoneOfSea } from './weather';
 
 // Read straight from the data, so that nothing here depends on the order the modules are loaded in.
 const B = (fleetData as unknown as typeof FLEETS).bombard;
@@ -82,6 +83,8 @@ export interface FleetCard {
   bare: string;
   /** The same line in few words, for a card with one short line. */
   bareBrief: string;
+  /** Weather (ruling 143(e)): at sea under a closed sky, "The sky is closed over the North Sea this month: no aircraft will fly for either side." Only then. */
+  sky?: string;
 }
 
 const gunsRaw = (s: Ships): number => CLASSES.reduce((n, c) => n + s[c] * B.guns[c], 0);
@@ -122,6 +125,7 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
     wings: wingCards(g, f), decks: wingShare(g, f),
     aboard: wingCards(g, f).reduce((s, w) => s + w.aircraft, 0), deckRoom: wingCards(g, f).reduce((s, w) => s + w.est, 0) + bareOf(f, 'ftr') + bareOf(f, 'bmr'),
     ashore: wingsAshore(g, f.id).map((w) => ({ id: w.id, name: w.name, kind: w.kind === 'bmr' ? 'bmr' as const : 'ftr' as const, label: w.kind === 'bmr' ? 'Strike aircraft' : 'Carrier fighters', at: g.regions[w.base].name, aircraft: w.ftr + w.bmr })), bare: bareLine(g, f), bareBrief: bareBrief(g, f),
+    ...(atSea(f) && skyAtSea(g, f.zone) === 'closed' ? { sky: skyBattleLine(g, zoneOfSea(g, f.zone), `the ${g.seas[f.zone].name}`)! } : {}),
   };
 }
 
@@ -512,10 +516,12 @@ export const mergeTargets = (g: Game, f: Fleet): Fleet[] => g.fleets.filter((x) 
 
 /**
  * At the opening of a grand campaign the commands tied to a station on their own side's shipping lane are already
- * sailing with the convoys. This covers the player's navy too, which no computer admiral orders about.
+ * sailing with the convoys. This covers the player's navy too, which no computer admiral orders about. First the
+ * fleets already formed take what their rows say for the grand campaign (Force H's beat, ruling 233 rider b564).
  */
 export function openEscorts(g: Game): void {
   if (!seaWar(g)) return;
+  openFleetRows(g);
   for (const f of g.fleets) {
     if (!f.tied || !atSea(f) || f.stance !== 'patrol') continue;
     const rt = seaRoutes(g).find((r) => r.zones.includes(f.zone) && (r.to === f.nat || allied(g, r.to, f.nat)) && whyNotEscort(g, f, r.id) === null);

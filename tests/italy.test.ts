@@ -323,7 +323,8 @@ describe('the fall of Mussolini and the armistice', () => {
     expect(at(JULY_43).flags['event:mussolini-falls']).toBeUndefined();
     const g = at(AUG_43);
     expect(g.flags['event:mussolini-falls']).toBe(AUG_43);
-    expect(told(g, AUG_43).filter((t) => /voted against Mussolini/.test(t))).toHaveLength(1);
+    // The news is dated as the record has it, the last week of July (ruling 228, item 13: 25 July 1943).
+    expect(told(g, JULY_43).filter((t) => /voted against Mussolini/.test(t))).toHaveLength(1);
     expect(g.nations.ITA.alive).toBe(true);
     expect(g.nations.ITA.atWar).toContain('UK');
     expect(g.flags['event:italian-armistice']).toBeUndefined();

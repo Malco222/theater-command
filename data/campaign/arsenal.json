@@ -74,13 +74,13 @@
     "field": { "label": "Airfields", "cost": [0, 10, 15, 22], "months": 3, "upkeep": 0.04, "holds": 500, "blurb": "Runways, hangars and control rooms. An air fleet can be founded here for fighter patrols, and each level lets more aircraft fly from the province." }
   },
   "yards": {
-    "Hamburg": 3, "Bremen": 3, "Stettin": 1, "Konigsberg": 1,
+    "Hamburg": 3, "Bremen": 3, "Schleswig-Holstein": 3, "Stettin": 1, "Konigsberg": 1,
     "Clydeside": 3, "Northumbria": 3, "Ulster": 3, "Lancashire": 2, "London": 2, "Hampshire": 2,
-    "Brittany": 3, "Nantes": 2, "Marseille": 2, "Rouen": 1,
-    "Liguria": 3, "Naples": 2, "Apulia": 2, "Friuli": 2,
+    "Brittany": 3, "Nantes": 3, "Marseille": 2, "Rouen": 1,
+    "Liguria": 3, "Naples": 2, "Apulia": 2, "Friuli": 3,
     "Leningrad": 3, "Nikolaev": 3, "Crimea": 1, "Murmansk": 1, "Arkhangelsk": 1,
     "Rotterdam": 2, "Holland": 2, "Antwerp": 1, "Zealand": 2, "Oslo": 1, "Cadiz": 2, "Catalonia": 1, "Athens": 1, "Danzig Corridor": 1,
-    "Norfolk": 3, "New York": 3, "Philadelphia": 3, "Boston": 2, "Bath": 1, "San Francisco": 3, "Puget Sound": 3, "Los Angeles": 1,
+    "Norfolk": 3, "New York": 3, "Philadelphia": 3, "Boston": 3, "Bath": 1, "San Francisco": 3, "Puget Sound": 3, "Los Angeles": 1,
     "Nova Scotia": 1, "Vancouver": 1, "Esquimalt": 1,
     "Rio de Janeiro": 1, "Buenos Aires": 1, "Santiago": 1, "Lima": 1
   },
@@ -90,5 +90,13 @@
     "guns": { "per": 6, "most": 10, "facing": 3, "fit": 0.9 },
     "_programme": "Rulings 68(b) and 70(a): a computer staff's own orders of ships and aircraft, in the grand campaign from stop 'fromStop' of the history dial (below it history's schedules are the whole of its building). It buys from this arsenal as a player does, at these prices and under the same rules of yard, factory and technology, after its corps, guns and works, one order a month for its navy and one for its air force. It pays in two ways: with its share ('rate' of the month's income set aside for the navy, and as much for the air force, while there is something the arsenal would build for it; never taking the treasury below the staff's reserve nor holding more than the dearest thing it wants costs), and with idle money (what the treasury holds over the price of a corps of infantry and the reserve, or over the reserve alone while it has no men for a corps). By its war and its character: destroyers when a convoy route that feeds it lost 'bled' of its cargo last month; fighters first while its factories are being bombed; submarines when it is at war with a nation a convoy route feeds and has submarines out raiding; a carrier when its navy has carriers; and wings of fighters and bombers until what it has bought stands at 'share' of its air force's own establishment. 'each' is the most of a kind it has on order at a time.",
     "programme": { "fromStop": 3, "bled": 0.1, "share": 0.5, "rate": { "ship": 0.06, "air": 0.06 }, "each": { "dd": 1, "ss": 1, "cv": 1, "ftr": 1, "bmr": 1 } }
+  },
+  "plans": {
+    "_note": "Brian, 18 November: the smaller nations build no battleships or carriers until they hold a great power's plans. 'great' build both as before (the tech tree still holds carriers back); 'kin' hold the plans of the power named (the dominions Britain's, Vichy and Free France France's) and build as a great power does. Any other country gets them by taking ground a great power owns, in a war with it, or by a spy's theft (intel.json, bbPlans and cvPlans). Plans of carriers open carriers without the country's own research. Ships a country starts with stay. The grand campaign only. 'techs' (rider b542, Brian: heavy bombers, jets and rockets 'should all be treated like the battleships'): technologies a smaller nation cannot research; it gains each with a great power's plans, where that power has researched it, and the kin wherever their great power has.",
+    "on": true,
+    "hulls": ["bb", "cv"],
+    "techs": ["heavybombers", "jets", "rockets", "guided"],
+    "great": ["GER", "UK", "USA", "SOV", "FRA", "ITA", "JAP"],
+    "kin": { "CAN": "UK", "AUS": "UK", "NZL": "UK", "SAF": "UK", "IND": "UK", "VIC": "FRA", "FFR": "FRA" }
   }
 }
