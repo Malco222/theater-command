@@ -49,6 +49,8 @@ _G = None
 # (ailerons at 0.74, flaps at 0.76, elevators at 0.62, rudders at 0.60).
 CHORDS = [0.0, 0.01, 0.04, 0.09, 0.16, 0.25, 0.36, 0.48, 0.60, 0.62, 0.74, 0.76, 0.86, 0.94, 0.98, 1.0]
 CHORDS_PLAIN = [0.0, 0.1, 0.35, 0.62, 0.75, 0.9, 1.0]
+# (with `grain` in her numbers, a coat of straight-edged wedges: her wing's rings stand closer, and along its chord too)
+CHORDS_CLOSE = [0.0, 0.01, 0.04, 0.09, 0.125, 0.16, 0.205, 0.25, 0.305, 0.36, 0.42, 0.48, 0.54, 0.60, 0.62, 0.68, 0.74, 0.76, 0.81, 0.86, 0.90, 0.94, 0.98, 1.0]
 BATTLE = {"hull": 0.15, "wing": 0.24, "tail": 0.22, "fin": 0.2}        # (how far apart the rings stand; set for each machine)
 FLAP, AILERON, ELEVATOR, RUDDER = (0.1, 0.5, 0.76), (0.54, 0.93, 0.74), (0.08, 0.95, 0.62), (0.06, 1.0, 0.60)
 # Where a bomber's bay is: from, to along her (its doors are the strip of her belly BAY_HALF degrees each side of her keel).
@@ -108,10 +110,6 @@ FINER = [
 GRADED = [
     ('    def field(p):\n        return noise.noise(', '    def field(p):\n        if s.get("graded"):\n            return s["graded"](p)\n        return noise.noise('),
     ('        if p.x > nose_back:\n            return "nose"', '        if p.x > nose_back and not s.get("graded"):\n            return "nose"'),
-    # (`pale`: a function of a point and the way her skin faces there that says where her under colour comes up her
-    #  sides, whatever way they face: the Me 262's sloping sides, her fin, the flanks of her pods)
-    ('    def paint(p, n):\n        if n.z < under_from:\n            return "under"\n',
-     '    def paint(p, n):\n        if s.get("pale") and s["pale"](p, n):\n            return "under"\n        if n.z < under_from:\n            return "under"\n'),
     # (`taper`: a fuselage that is a rounded triangle, not an oval: fitout.hull_body; a marking on its sloping side
     #  lies on the slope, and does not stand upright half inside her)
     ('    hull = Body(s["hull"], s.get("square", 2.0))\n', '    hull = __import__("fitout").hull_body(Body, s)\n'),
@@ -224,7 +222,7 @@ _ME262_EDGE = 46.0                                          # (her cockpit's rim
 _ME262_HOOD = [(0.47, 0.5, 0.905, 0.1), (0.2, 0.5, 0.955, 0.085), (-0.1, 0.5, 0.94, 0.085), (-0.38, 0.5, 0.895, 0.08)]
 # The fixed glass behind it: (x, where its glass begins: out and up, the height of its top, half the flat of its top,
 # how far out its metal foot stands on her: None along her cockpit's rim).
-_ME262_REAR = [(-0.38, None, 0.5, 0.895, 0.08, None), (-0.6, 0.24, 0.565, 0.84, 0.065, None), (-0.8, 0.15, 0.625, 0.795, 0.045, 0.33),
+_ME262_REAR = [(-0.38, None, 0.5, 0.895, 0.08, None), (-0.6, 0.24, 0.565, 0.84, 0.065, None), (-0.8, 0.15, 0.625, 0.795, 0.045, None),
                (-1.0, 0.05, 0.685, 0.725, 0.02, 0.3), (-1.15, 0.012, 0.7, 0.705, 0.004, 0.26), (-1.5, 0.004, 0.537, 0.54, 0.002, 0.1)]
 _ME262_SCREEN = (0.97, 0.2)                                 # (the foot of her windscreen's flat pane, and half its width there)
 _ME262_BOX = []
@@ -240,8 +238,8 @@ def _me262_section(hull, x, sill, top, flat, out=None, foot=None):
     """Half a section of her hood, nine points: the foot of its metal rail on her (two points), then its glass from
     the sill straight up her sloping side to the shoulder, round the shoulder, and level to her middle line."""
     if foot is None:
-        edge = hull.at(x, math.radians(_ME262_EDGE - 4.0))     # (a little down her side from the rim: the rail covers the rim's padding)
-        fy, fz = edge.y + 0.004, edge.z
+        edge = hull.at(x, math.radians(_ME262_EDGE - 7.0))     # (down her side from the rim, and clear of it: the rail covers the rim's padding)
+        fy, fz = edge.y + 0.014, edge.z
     else:
         fy, fz = foot, hull.top_at(x, foot) - 0.006
     sy = hull.side_at(x, sill) + 0.012 if out is None else out
@@ -282,14 +280,19 @@ _ME262_ZONES = {
 }
 
 
-def _me262_splinter(p):
-    """Her splinter coat: how far a point is into the paler colour, in metres from the nearest line (below nought in the darker)."""
-    if p.x < -4.15:
-        if abs(p.y) < 0.3:
-            return -1.0                                     # (her fin's blotches, and her spine under it: the darker)
-        zone = "tail starboard" if p.y > 0.0 else "tail port"
-    else:
-        zone = "spine" if abs(p.y) < 0.9 else "starboard" if p.y > 0.0 else "port"
+_ME262_SOFT = 0.06                                          # (half the breadth of a sprayed edge, in metres)
+_ME262_GRAIN = {"wing": 0.12, "tail": 0.11}                 # (how far apart her wing's and tailplane's rings stand: half the usual)
+
+
+def _me262_edge(d):
+    """A distance in metres from a paint line as the coat's field takes it. The field is soft for 0.045 each side of
+    nought, and the coat is laid point by point: an edge narrower than her mesh's grain comes out in steps, so a line
+    is as broad as _ME262_SOFT and her wings' mesh as fine (`grain`), and the line runs straight."""
+    return max(-2.0, min(2.0, d / _ME262_SOFT)) * 0.045
+
+
+def _me262_zone(zone, p):
+    """How far a point is into a zone's paler colour, in metres from the nearest of its lines (below nought in the darker)."""
     pale, lines = _ME262_ZONES[zone]
     hand = -1.0 if zone.endswith("port") else 1.0
     near = 9.0
@@ -301,24 +304,27 @@ def _me262_splinter(p):
     return near if pale else -near
 
 
-def _me262_pale(p, n):
-    """Where her pale blue-grey lies whatever way her skin faces: up her fuselage's sloping sides to a wavy line under
-    her spine, with blotches of her upper colours along them; over her fin and rudder, blotched; down the flanks of
-    her pods."""
+def _me262_coat(p):
+    """Her coat: above nought in her paler upper colour, below in her darker. Splinter wedges over her wings, her
+    tailplane and along her spine; her fuselage's sloping sides, her fin and the flanks of her pods in the paler
+    colour, with broad soft clouds of the darker sprayed over them, thicker toward her spine."""
     hull = _me262_hull()
     x = min(max(p.x, hull.back), hull.front)
     zc, h = hull.z(-x), max(hull.h(-x), 1.0e-6)
-    blot = noise.noise(Vector((p.x * 2.5 + 7.7, p.z * 3.2 + (11.0 if p.y > 0.0 else 37.0), 0.0)))
+    cloud = noise.noise(Vector((p.x * 1.1 + 7.7, p.z * 1.7 + (11.0 if p.y > 0.0 else 37.0), 0.0)))
     if abs(p.z - zc) <= h + 0.04 and abs(p.y) <= hull.side_at(x, min(max(p.z, zc - 0.98 * h), zc + 0.98 * h)) + 0.035:
         t = (p.z - zc) / h
-        if t > 0.5 + 0.13 * noise.noise(Vector((p.x * 0.8, 3.1, 0.0))):
-            return False                                    # (her spine: the upper colours)
-        return not (t > -0.5 and blot > 0.24)               # (a blotch of them sprayed on her side)
+        top = 0.5 + 0.12 * noise.noise(Vector((p.x * 0.8, 3.1, 0.0)))
+        spine = smooth(min(max((t - top) / 0.3 + 0.5, 0.0), 1.0))      # (nought on her side, one on her spine)
+        return _me262_edge(_me262_zone("spine", p)) * spine + _me262_edge((cloud + 0.12 - 0.3 * t) * 0.36) * (1.0 - spine)
     if abs(p.y) < 0.13 and p.x < -3.6 and p.z > zc + h:
-        return blot < 0.2                                   # (her fin and rudder)
+        return _me262_edge((cloud + 0.04) * 0.36)           # (her fin and rudder)
+    zone = ("tail " if p.x < -4.15 else "") + ("starboard" if p.y > 0.0 else "port")
+    wedge = _me262_edge(_me262_zone(zone, p))
     if abs(abs(p.y) - 2.26) < 0.5 and p.z < -0.34:
-        return n.z < 0.6 and blot < 0.3                     # (her pods)
-    return False
+        top = smooth(min(max(((p.z + 0.82) / 0.455 - 0.6) / 0.5 + 0.5, 0.0), 1.0))     # (one along a pod's back, under her wing's wedges)
+        return wedge * top + _me262_edge((cloud + 0.16) * 0.36) * (1.0 - top)
+    return wedge
 
 
 EXTRA_PLANES = {
@@ -335,8 +341,8 @@ EXTRA_PLANES = {
                  (1.86, -5.42, -5.58, 0.63, 0.01)],
         "fin": [(0, -3.45, -6.14, 0.05, 0.14), (0, -3.77, -6.11, 0.3, 0.14), (0, -4.456, -6.01, 1.0, 0.12), (0, -4.946, -5.95, 1.5, 0.09),
                 (0, -5.22, -5.89, 1.78, 0.07), (0, -5.36, -5.8, 1.87, 0.05), (0, -5.5, -5.66, 1.91, 0.02)],
-        "patch": 1.0, "graded": _me262_splinter, "pale": _me262_pale,
-        "colours": {"upper": "66736C", "upper2": "97A7AE", "under": "ABBAC3", "nose": "66736C", "boss": "2B2B2B"},
+        "patch": 1.0, "graded": _me262_coat, "grain": _ME262_GRAIN, "frames_paint": "upper",
+        "colours": {"upper": "4C5850", "upper2": "8B999E", "under": "A9B8C2", "nose": "4C5850", "boss": "2B2B2B"},
         "well": (1.05, 0.45, 0.36), "pitot": True, "hull_lines": [3.95, 2.95, 2.06, 1.2, -1.78, -2.75, -3.67, -4.9],
         "jets": [([(2.33, -0.862, 0.258, 0.258), (2.2, -0.85, 0.335, 0.335), (1.9, -0.835, 0.415, 0.415), (1.5, -0.82, 0.45, 0.45), (0.0, -0.815, 0.455, 0.455),
                    (-0.6, -0.82, 0.45, 0.45), (-1.1, -0.845, 0.37, 0.37), (-1.5, -0.884, 0.256, 0.256)], 2.26)],
@@ -1214,12 +1220,14 @@ def convert(name, fine=True):
     body = G["Body"](s["hull"], s.get("square", 2.0))
     fin_high = max(r[3] for r in fins[0][0]) - min(r[3] for r in fins[0][0])
     BATTLE.update(hull=max(0.15, (body.front - body.back) / 80.0), wing=max(0.24, half / 44.0), tail=max(0.22, tailw.tip / 14.0), fin=max(0.2, fin_high / 12.0))
+    BATTLE.update(s.get("grain", {}))
+    G["BATTLE_CHORDS"][True] = CHORDS_CLOSE if s.get("grain") else CHORDS
     parts, hull = G["build"](s, fine)
     paint_names = list(PAINTS)
     paints, colours = paints_of(G, s)
     role = ROLE.get(name, "fighter")
     m = Model(name, s.get("title", name), "aircraft", paints, fine)
-    chords = CHORDS if fine else CHORDS_PLAIN
+    chords = G["BATTLE_CHORDS"][fine]
 
     # ---- where she breaks ------------------------------------------------------------------------
     by_kind = {}

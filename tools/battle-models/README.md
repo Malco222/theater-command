@@ -337,6 +337,30 @@ stay. 27,000 to 32,000 triangles, plain 4,700 to 6,000. What their numbers add:
   under her starboard wing, her oil cooler under her port one); `mast` takes a fourth value, how far its top stands
   aft of its foot (less than nothing: the Zero's, raked forward).
 
+**The `Me262`** is laid out again to the same standard (Brian, 2026-11-19, of pictures of one: "here is the ME 262
+for insipiration", and of the teeth painted on its nose: "dont do the shark nose"). Her numbers stand before
+`EXTRA_PLANES` in `planes.py`, measured from a three-view (Wikimedia Commons, "Messerschmitt Me 262 Schwalbe 3d
+drawing.svg", Voytek S, CC BY-SA 3.0; measured, not traced). Her nose is plain: four cannon ports and nothing
+painted on it. Plain crosses on her sides and wings, nothing on her fin, no aerial wire. 43,000 triangles. What her
+numbers add:
+
+- `taper`: (how much of her width is left at her spine, the height the narrowing begins at, stations of how much of
+  the taper she has along her). Her fuselage is a rounded triangle, wide low down and narrow at the spine, not an
+  oval: `fitout.hull_body` gives the game's `Body` with the same calls (`at`, `out`, `w`, `h`, `z`) and three more
+  (`round_of` a point, `side_at` a height, `top_at` a distance out). Her stations' half widths are still her widest.
+  A marking on a sloping side lies on the slope (its `facing` in her file then has a rise).
+- her `canopy` is three pieces in the fighters' form (the flat windscreen between its posts, the hinged hood, the
+  long fixed glass behind it that runs down to a point on her spine) over an `opening`; the rail's foot stands down
+  her side from the cockpit's rim and clear of it, so the rim's padding does not show outside the glass.
+- `graded` (her coat by where a point is): splinter wedges of two greys over her wings, her tailplane and along her
+  spine, in zones of straight lines (`_ME262_ZONES`: each line flips the colour, and lines next to each other lean
+  opposite ways); her sloping sides, her fin and her pods' flanks in the paler grey with broad soft clouds of the
+  darker, thicker toward her spine; pale blue-grey beneath.
+- `grain`: how far apart her wing's and tailplane's rings stand, when the usual is too coarse (`{"wing": 0.12,
+  "tail": 0.11}`; with it the rings along the chord stand closer too, `CHORDS_CLOSE`). A coat is laid point by
+  point, so a paint line narrower than the mesh comes out in steps: her lines are 12 cm of sprayed edge on a 12 cm
+  mesh, and run straight. Any machine may take the key.
+
 **The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, twelve more entries in
 `EXTRA_PLANES`. Paints and first years are the art director's rulings of that day; the file's `year` is the first
 year a nation flies her (none: from the start), `tech` the rules' technology she needs, `tag` the model tag the
@@ -752,7 +776,8 @@ holds no sound: the mixer reads the pack where it lies, and a name the pack does
 - Camouflage patches are blended from point to point of the skin, so their edges are as soft as the skin's grain is
   coarse. The art director would like the 1940 British and German schemes tight-edged (a hand's width); that needs
   the skin cut along the patch edges, or the patches drawn in the game's shader. Soft is right for the Soviet
-  greens and the Me 262's mottle.
+  greens and the Me 262's clouds. Short of that, `grain` in a machine's numbers halves the wing's mesh and a
+  `graded` coat of straight lines then holds an edge a hand's width and a half broad (the Me 262's splinter).
 - One plain mesh (`far`) per model; no third level of detail.
 - The men and tanks in the landing craft are stand-ins; the land team's soldiers and tanks should stand there.
 - No beach in the pictures' stage, so there is no clip of a landing yet.
