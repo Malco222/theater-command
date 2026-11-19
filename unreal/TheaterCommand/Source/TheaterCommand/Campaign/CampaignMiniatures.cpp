@@ -1407,16 +1407,28 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 	}
 	else if (const TArray<UnitTable::FInsigniaLayer> Own = UnitTable::Insignia(Tag); Own.Num() > 0)
 	{
+		bool bAnyDrawn = false;
+		FLinearColor LastDrawn = FLinearColor::Black;
 		for (int32 Index = 0; Index < Own.Num(); ++Index)
 		{
 			const UnitTable::FInsigniaLayer& One = Own[Index];
+			// (on a land vehicle a mark keeps inside its disc: New Zealand's white side bars are for aircraft, and on a
+			// tank they overhung the turret's edge. A layer left out takes no place in the stack.)
+			if (bMarkInDisc && One.Shape == UnitTable::FInsigniaLayer::EShape::Bar
+				&& FMath::Max(FMath::Max(FMath::Abs(One.Up0), FMath::Abs(One.Up1)), FMath::Max(FMath::Abs(One.Across0), FMath::Abs(One.Across1))) > 1.001)
+			{
+				continue;
+			}
 			// (The art director, 21:59Z the same day: neighbouring layers of one colour lie at one height. A mark of
 			// many small pieces, each a hair above the last, stood centimetres off the skin and broke apart seen from
-			// the side.)
-			if (Index > 0 && Layer > 0 && One.Colour.Equals(Own[Index - 1].Colour))
+			// the side. It is the layer last DRAWN that counts: New Zealand's white middle came after two white bars
+			// that a tank leaves out, was laid at the blue disc's own height, and the two fought.)
+			if (bAnyDrawn && Layer > 0 && One.Colour.Equals(LastDrawn))
 			{
 				--Layer;
 			}
+			bAnyDrawn = true;
+			LastDrawn = One.Colour;
 			switch (One.Shape)
 			{
 			case UnitTable::FInsigniaLayer::EShape::Ring:
@@ -1453,12 +1465,6 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 				Star(One.Outer, One.Colour, One.Points, One.Inner);
 				break;
 			case UnitTable::FInsigniaLayer::EShape::Bar:
-				// (on a land vehicle a mark keeps inside its disc: New Zealand's white side bars are for aircraft, and on a
-				// tank they overhung the turret's edge)
-				if (bMarkInDisc && FMath::Max(FMath::Max(FMath::Abs(One.Up0), FMath::Abs(One.Up1)), FMath::Max(FMath::Abs(One.Across0), FMath::Abs(One.Across1))) > 1.001)
-				{
-					break;
-				}
 				Bar(One.Up0, One.Across0, One.Up1, One.Across1, One.Colour);
 				++Layer;
 				break;
