@@ -128,12 +128,13 @@ describe('Italy\'s boats by the historian\'s rows (stops 1 to 3)', () => {
     const atl = named(g, 'Atlantic Submarine Fleet')!;
     expect(g.regions[atl.base].name).toBe('Bordeaux');
     expect(g.seas[atl.home].key).toBe('biscay');
-    expect(g.seas[atl.station].key).toBe('natl');
+    // Its beat is the sea nearest Bordeaux that carries a British lane (rider b598(3)): the Western Approaches, before
+    // and after March 1941, when its dated beat would move to the Iberian Coast, where no British lane runs.
+    expect(g.seas[atl.station].key).toBe('wapp');
     expect(italian(g)).toEqual([30, 18, 29, 23]);
-    // From March 1941 the flotilla hunts off the Iberian coast.
     g.turn = 19;
     placeBoats(g, 'ITA');
-    expect(g.seas[atl.station].key).toBe('iberia');
+    expect(g.seas[atl.station].key).toBe('wapp');
     expect(fleetReach(g, atl)).toContain(atl.station);
     // Bordeaux falls to the Allies: the flotilla stands down and the Mediterranean has its boats again.
     g.byName.Bordeaux.ctrl = 'UK';
