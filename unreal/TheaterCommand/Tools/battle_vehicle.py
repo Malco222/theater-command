@@ -33,7 +33,7 @@ model = {
     "was": battle.get("kind", ""),
     "long": battle["long"], "wide": battle["wide"], "high": battle["high"],
     "colours": battle["colours"], "paint_names": battle["paint_names"],
-    "marks": [{key: mark[key] for key in ("tag", "part", "at", "facing", "radius") if key in mark} for mark in battle["marks"]],
+    "marks": [{key: mark[key] for key in ("tag", "part", "at", "facing", "radius") if key in mark} for mark in battle.get("marks", [])],
     "near": mesh, "far": mesh,
 }
 with open(target, "w", encoding="utf-8") as file:
