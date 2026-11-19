@@ -27,6 +27,7 @@
 #include "GameFramework/HUD.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Materials/Material.h"
@@ -45,6 +46,7 @@
 #include "TheaterCommand.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
+#include "Widgets/Layout/SDPIScaler.h"
 
 #include <algorithm>
 #include <cmath>
@@ -490,6 +492,23 @@ bool AAirBattle::Open(const FString& Why)
 		Eye->GetCameraComponent()->PostProcessSettings.MotionBlurAmount = 0.0f;
 		// (the 3D builder, 19 November 2026: the art director's battle grade, on battle cameras only)
 		BattleLook::Grade(Eye->GetCameraComponent()->PostProcessSettings);
+	}
+	{
+		// The scene's own drawing size, for timing (build 1734: on Brian's 2881 by 1786 window the scene is drawn at the
+		// campaign map's budget, some 1077 by 668, and filled out 2.7 times each way by Unreal's upscaler, which is the
+		// softness of the Midway ships picture; the words are drawn at every pixel, which is why they stay sharp).
+		// "-TheaterAirSize=85" draws the scene at 85 hundredths of the window's points each way while the battle
+		// stands; without it the map's budget holds. The size it had comes back when the scene ends.
+		int32 AirSize = 0;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterAirSize="), AirSize) && AirSize >= 40 && AirSize <= 100)
+		{
+			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))
+			{
+				KeptScreenPercent = Variable->GetFloat();
+				Variable->Set(static_cast<float>(AirSize), ECVF_SetByCode);
+				UE_LOG(LogTheater, Display, TEXT("Air battle: the scene drawn at %d hundredths of the window's points (the map's %.0f)"), AirSize, KeptScreenPercent);
+			}
+		}
 	}
 	if (APlayerController* Controller = Here->GetFirstPlayerController())
 	{
@@ -2192,7 +2211,7 @@ void AAirBattle::AimEye(double Real)
 		Focus = Sum * (1.0 / Count);
 	}
 	FVector Wanted = World(Focus.X, Focus.Y, Focus.Z);
-	double Away = Distance, Down = Pitch;
+	double Away = Distance, Down = Pitch, Heading = Yaw;
 	// "The ships" picture: the overview cut to the ship that went down, from 1.6 km off and above, her neighbours and
 	// the water round her in the frame (the art director's note: the first run framed the hills, no ship in sight).
 	FVector ShipWorld;
@@ -2202,10 +2221,34 @@ void AAirBattle::AimEye(double Real)
 		Wanted = ShipWorld;
 		Away = 1600.0;
 		Down = -24.0;
+		// At sea (the art director on build 1734, Midway 06: the carrier a small soft shape in a teal field): she fills
+		// about a third of the picture's width, seen from her sunlit side and 35 degrees forward of her beam, through a
+		// longer lens (35 degrees) from low enough that her smoke stands up above her; the look a little over her
+		// waterline, so that she sits under the middle with her column over her. In harbour the wide picture stands
+		// (Pearl Harbor 06: its columns across the harbour are what it is for).
+		double Long = 0.0;
+		FVector Bow;
+		bool bHarbour = true;
+		if (Stage->ShipLie(ShipsLook, Long, Bow, bHarbour) && !bHarbour)
+		{
+			const double LensDegrees = 35.0;
+			const FVector Abeam = FVector::CrossProduct(FVector::UpVector, Bow).GetSafeNormal();
+			FVector Sun = Stage->TowardSun();
+			Sun.Z = 0.0;
+			const double Hand = FVector::DotProduct(Abeam, Sun) >= 0.0 ? 1.0 : -1.0;
+			const FVector Out = (Abeam * Hand * FMath::Cos(FMath::DegreesToRadians(35.0)) + Bow * FMath::Sin(FMath::DegreesToRadians(35.0))).GetSafeNormal();
+			// (seen 35 degrees off her beam she shows some 0.82 of her length; the frame is 2 tan(lens/2) of the way wide)
+			const double Shown = 0.82 * Long;
+			Away = FMath::Clamp(3.0 * Shown / (2.0 * FMath::Tan(FMath::DegreesToRadians(LensDegrees * 0.5))), 450.0, 1600.0);
+			Down = -13.0;
+			Heading = (-Out).Rotation().Yaw;
+			Wanted = ShipWorld + FVector::UpVector * (0.12 * Long * U);
+			Lens->SetFieldOfView(static_cast<float>(LensDegrees));
+		}
 	}
 	LookAt = bLookSet && !bOnShip ? FMath::Lerp(LookAt, Wanted, AirParts::Smooth(Real, 1.2)) : Wanted;
 	bLookSet = true;
-	const FRotator Facing(Down, Yaw, 0.0);
+	const FRotator Facing(Down, Heading, 0.0);
 	FVector From = LookAt - Facing.Vector() * Away * U;
 	if (Stage && Stage->IsRaised())
 	{
@@ -2497,6 +2540,14 @@ void AAirBattle::Finish()
 void AAirBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
 	HideScreen();
+	if (KeptScreenPercent > 0.0f)
+	{
+		if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))
+		{
+			Variable->Set(KeptScreenPercent, ECVF_SetByCode);
+		}
+		KeptScreenPercent = -1.0f;
+	}
 	if (Reason == EEndPlayReason::Destroyed)
 	{
 		ShowTheTable(); // (taken down without CONTINUE: the table still comes back as it was)
@@ -2540,7 +2591,15 @@ void AAirBattle::ShowScreen()
 		return;
 	}
 	Screen = SNew(SAirBattleScreen).Battle(this);
-	GEngine->GameViewport->AddViewportWidgetContent(Screen.ToSharedRef(), 20);
+	// The words and the name tags a quarter larger than Unreal's own game-screen size, which already grows with the
+	// window's height (the art director on build 1734: they were small at Brian's window; 1.3 at 1440 high and 1.24 at
+	// his, so one number between). Everything on the screen grows together, so the dark plates still fit their words.
+	// "-TheaterAirTextScale=" tunes it.
+	float Lettering = 1.25f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterAirTextScale="), Lettering);
+	Lettering = FMath::Clamp(Lettering, 0.75f, 2.0f);
+	ScreenFrame = SNew(SDPIScaler).DPIScale(Lettering)[Screen.ToSharedRef()];
+	GEngine->GameViewport->AddViewportWidgetContent(ScreenFrame.ToSharedRef(), 20);
 	if (APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
 	{
 		FInputModeUIOnly Mode;
@@ -2554,10 +2613,11 @@ void AAirBattle::ShowScreen()
 
 void AAirBattle::HideScreen()
 {
-	if (Screen.IsValid() && GEngine && GEngine->GameViewport)
+	if (ScreenFrame.IsValid() && GEngine && GEngine->GameViewport)
 	{
-		GEngine->GameViewport->RemoveViewportWidgetContent(Screen.ToSharedRef());
+		GEngine->GameViewport->RemoveViewportWidgetContent(ScreenFrame.ToSharedRef());
 	}
+	ScreenFrame.Reset();
 	Screen.Reset();
 	if (bOwnInput)
 	{

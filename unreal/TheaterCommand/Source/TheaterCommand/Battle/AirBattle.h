@@ -12,6 +12,7 @@ class FJsonObject;
 class ACameraActor;
 class FCampaignSession;
 class SAirBattleScreen;
+class SWidget;
 class UAudioComponent;
 class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
@@ -92,6 +93,8 @@ private:
 	/** Which is drawn over which this frame: 1 the eye over the clouds, 2 under them, 0 not yet set. */
 	int32 SkyOrder = 0;
 	TSharedPtr<SAirBattleScreen> Screen;
+	/** What holds the screen on the game's viewport: it draws the screen a size larger (ShowScreen). */
+	TSharedPtr<SWidget> ScreenFrame;
 
 	UPROPERTY()
 	TObjectPtr<USceneComponent> Root;
@@ -157,6 +160,8 @@ private:
 	/** The first ship to go down, and the ship the overview frames for "the ships" picture (-1: none). */
 	int32 FirstSunk = -1;
 	int32 ShipsLook = -1;
+	/** r.ScreenPercentage as the campaign had it, while "-TheaterAirSize=" holds its own (EndPlay puts it back); -1 none. */
+	float KeptScreenPercent = -1.0f;
 	/** Falls a kit is shedding debris for (burning or spinning), and the kit; blow-ups whose blast the kit's AirFall
 	 * drew. */
 	TMap<int32, FBattleEffects*> FallsOn;

@@ -213,6 +213,22 @@ bool AAirStage::ShipAt(int32 Id, FVector& Out) const
 	return true;
 }
 
+bool AAirStage::ShipLie(int32 Id, double& OutLong, FVector& OutBow, bool& bOutHarbour) const
+{
+	const FShip* Ship = Ships.Find(Id);
+	if (!Ship)
+	{
+		return false;
+	}
+	OutLong = Ship->Long;
+	bOutHarbour = Ship->bHarbour;
+	// (a model is built with its bow toward -X)
+	FVector Bow = GetActorRotation().RotateVector(FRotator(0.0, Ship->Yaw, 0.0).RotateVector(-FVector::ForwardVector));
+	Bow.Z = 0.0;
+	OutBow = Bow.GetSafeNormal();
+	return !OutBow.IsNearlyZero();
+}
+
 FVector AAirStage::TowardSun() const
 {
 	const double Heading = FMath::DegreesToRadians(SunAzimuth) - StageTurn, Up = FMath::DegreesToRadians(SunElevation);
@@ -844,8 +860,10 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 			Effects->Burn(GetActorTransform().TransformPosition(Ship->Base + FVector(0.0, 0.0, Ship->High * 0.25 * U)), static_cast<float>(Ship->Beam * 0.6), 600.0f);
 		}
 	}
-	// Her oil burning on the water where she lies (a fat black column off the slick), or, ablaze from end to end, on her
-	// own deck (a greyer column, the flames on her): one fire a ship, its reach 0.6 of her length, until the scene ends.
+	// Her oil burning on the water where she lies: a fat black column off the slick, one fire a ship, its reach 0.6 of
+	// her length, until the scene ends. A ship ablaze from end to end takes the same black column, its slick round her
+	// and the fires on her deck at its foot (the art director on build 1734: Akagi's greyer deck column read pale
+	// grey-brown, some 97 luma, where a carrier burning end to end sends up Pearl Harbor's black).
 	// A submarine going down leaves none. At most MostOilFires columns (the effects kit, 05:25Z: at 24 the shell bursts
 	// get no room at all): past that a battleship's or a carrier's puts out a destroyer's, and a destroyer's is not lit.
 	if (Ship->Given.Class != TEXT("ss") && !OilLit.Contains(Id))
@@ -871,9 +889,7 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 		}
 		if (bLight)
 		{
-			const bool bOnDeck = How == TEXT("burn");
-			const FVector Oil = Ship->Base + FVector(0.0, 0.0, bOnDeck ? FMath::Min(Ship->High * 0.3, 9.0) * U : 0.0);
-			if (StageParts::OilFire(Effects, 238000 + Id, GetActorTransform().TransformPosition(Oil), static_cast<float>(Ship->Long * 0.6), bOnDeck ? TEXT("burning") : TEXT("sunk")))
+			if (StageParts::OilFire(Effects, 238000 + Id, GetActorTransform().TransformPosition(Ship->Base), static_cast<float>(Ship->Long * 0.6), TEXT("sunk")))
 			{
 				OilLit.Add(Id, Rank);
 			}

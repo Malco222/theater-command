@@ -68,12 +68,24 @@ kept 60 m over the stage's ground. Pearl Harbor (no American fighters up at the 
 shots on each recording: the raid and the target shown, at least 60 per cent of the raid's aircraft in view through its
 shot, 14 s or less, and the eye never jumping within a shot, never under 60 m, never within 40 m of an aircraft.
 
+**The size of the words** (the art director on build 1734: the tags and the running words were small at Brian's
+window). Unreal draws its game screen at the window's height over 1080; the battle's screen is drawn 1.25 times that
+(an `SDPIScaler` round it, in `ShowScreen`), so it keeps the same size against the window at every size and everything
+on it grows together, the dark plates with their words. `-TheaterAirTextScale=` tunes it (0.75 to 2); the UI director
+has the last word on the type.
+
 **The cameras** (the art director's notes on the first Mac run, build 1720). Both fill the whole window, whatever its
 shape (a camera actor keeps 16:9 and bars the rest; both have `bConstrainAspectRatio` off).
 - **The overview** starts 1.1 km behind his own raid and 14 degrees above it, looking along its way (from 2.6 km the
   aircraft were specks). It follows the group in hand, else the fight, else his raid; drag turns it and the wheel draws
   it in and out (120 m to 20 km). For "the ships" picture it cuts to the first ship that went down, 1.6 km off and 24
-  degrees above her, and back to the fight after it.
+  degrees above her in harbour, and back to the fight after it. At sea (the art director on build 1734, Midway 06) she
+  fills about a third of the picture's width: a 35-degree lens from her sunlit side, 35 degrees forward of her beam,
+  13 degrees above her, so her smoke stands up over her (`AAirStage::ShipLie` gives her length, bow and harbour).
+  Depth of field is off in the whole game (the campaign's light trims), so it was not what made that picture soft:
+  the scene is drawn at the campaign map's pixel budget (about 1077 by 668 on Brian's 2881 by 1786 window) and filled
+  out by Unreal's upscaler. `-TheaterAirSize=85` draws the battle at 85 hundredths of the window's points each way, for
+  timing a sharper scene; without it nothing changes.
 - **The close view** rides one aircraft: of the group in hand, else the busiest of his own side's fighters near the
   middle of the picture, else the other side's. After 10 seconds on one it moves to another of his, but stays if that
   one is the only aircraft of his still up. A fighter is seen from 22 m behind along its path and 6 m above it,
