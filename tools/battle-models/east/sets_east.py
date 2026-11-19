@@ -228,8 +228,8 @@ def _mesh(name, P, F, mat):
     return ob
 
 
-def _plain(name, hexc, rough=0.9, noise_scale=0.0, dark=0.0):
-    """A material of one colour, optionally mottled darker by a noise."""
+def _plain(name, hexc, rough=0.9, noise_scale=0.0, dark=0.0, bump=0.0, bump_scale=3.0):
+    """A material of one colour, optionally mottled darker by a noise, and (bump) its surface churned by another."""
     import bpy
     from kit import hex_rgb
     m = bpy.data.materials.new(name)
@@ -249,6 +249,16 @@ def _plain(name, hexc, rough=0.9, noise_scale=0.0, dark=0.0):
         nt.links.new(r.outputs["Color"], b.inputs["Base Color"])
     else:
         b.inputs["Base Color"].default_value = c
+    if bump:
+        n2 = nt.nodes.new("ShaderNodeTexNoise")
+        n2.inputs["Scale"].default_value = bump_scale
+        n2.inputs["Detail"].default_value = 8.0
+        n2.inputs["Roughness"].default_value = 0.65
+        bp = nt.nodes.new("ShaderNodeBump")
+        bp.inputs["Strength"].default_value = bump
+        bp.inputs["Distance"].default_value = 0.08
+        nt.links.new(n2.outputs["Fac"], bp.inputs["Height"])
+        nt.links.new(bp.outputs["Normal"], b.inputs["Normal"])
     return m
 
 
@@ -277,19 +287,19 @@ def mud_road(x0=-140.0, x1=170.0, half=3.7, seed=4, snow=False):
                     k = 3 * i
                     BF += [(k - 3, k - 2, k + 1, k), (k - 2, k - 1, k + 2, k + 1)] if side else [(k - 3, k, k + 1, k - 2), (k - 2, k + 1, k + 2, k - 1)]
             _mesh("berm", B, BF, _plain("berm", "D3D4D4", 0.9, 1.2, 0.2))
-        _mesh("mud_road", P, F, _plain("packed", "8C8275", 0.8, 0.6, 0.4))
-        wet = _plain("rut", "54493E", 0.4, 0.8, 0.3)
-        water = _plain("ice", "6F777E", 0.15)
+        _mesh("mud_road", P, F, _plain("packed", "8C8275", 0.8, 0.6, 0.4, bump=0.9, bump_scale=2.2))
+        wet = _plain("rut", "5A5046", 0.3, 0.8, 0.3, bump=0.6, bump_scale=6.0)
+        water = _plain("meltwater", "40444A", 0.06)
     else:
-        _mesh("mud_road", P, F, _plain("mud", "6B5C49", 0.75, 0.35, 0.35))
-        wet = _plain("rut", "3F3428", 0.35, 0.8, 0.25)
+        _mesh("mud_road", P, F, _plain("mud", "6B5C49", 0.75, 0.35, 0.35, bump=0.7, bump_scale=2.2))
+        wet = _plain("rut", "3F3428", 0.35, 0.8, 0.25, bump=0.5, bump_scale=6.0)
         water = _plain("puddle", "4A4C50", 0.04)
-    for lane in (-1.25, 1.25):
+    for lane in ((-2.3, -1.25, 0.0, 1.25, 2.3) if snow else (-1.25, 1.25)):
         for wheel in (-0.75, 0.75):
             off = lane + wheel + 0.5 * np.sin(xs / (13.0 + 3 * lane) + wheel) + 0.2 * np.sin(xs / 4.3 + lane)
             P, F = [], []
             for i, (x, c, o) in enumerate(zip(xs, mid, off)):
-                w = 0.22 + 0.08 * math.sin(x * 0.7 + lane)
+                w = (0.3 if snow else 0.22) + 0.08 * math.sin(x * 0.7 + lane)
                 P += [(x, c + o - w, 0.04), (x, c + o + w, 0.04)]
                 if i:
                     F.append((2 * i - 2, 2 * i - 1, 2 * i + 1, 2 * i))
@@ -374,7 +384,7 @@ def snow_look(amount=0.9, steep=0.45):
     from winter import SNOW
 
     def look(paint, mat, nt, bsdf, mix):
-        if paint.split(".")[0] in ("glass", "lamp", "fire", "ember"):
+        if paint.split(".")[0] in ("glass", "lamp", "fire", "ember", "melt", "ash", "char", "soot", "stove_burnt", "brick_burnt"):
             return
         last = bsdf.inputs["Base Color"].links[0].from_socket
         geo = nt.nodes.new("ShaderNodeNewGeometry")
@@ -393,19 +403,54 @@ def snow_look(amount=0.9, steep=0.45):
     return look
 
 
-def garden(x, y, yaw, snow=False):
-    """A kitchen-garden plot behind a house: dark tilled earth in ridged rows."""
+def garden(x, y, yaw, snow=False, seed=None):
+    """A kitchen-garden plot behind a house: low, uneven mounds of dug earth in broken rows, the season's dead stalks
+    standing in them; under snow a lumpy white with the stalks poking through."""
+    rng = np.random.default_rng(seed if seed is not None else int(abs(x * 7.3 + y * 3.1)) % 9973)
     ca, sa = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
-    P, F = [], []
-    rows, L, W = 9, 10.0, 7.0
+    at = lambda u, v, z: (x + u * ca - v * sa, y + u * sa + v * ca, z)
+    P, F, S, SF = [], [], [], []
+    rows, L, W = 8, 10.0, 7.0
     for r in range(rows):
-        v = -W / 2 + W * (r + 0.5) / rows
-        for u0, u1 in ((-L / 2, L / 2),):
+        v0 = -W / 2 + W * (r + 0.5) / rows + rng.uniform(-0.12, 0.12)
+        u = -L / 2 + rng.uniform(0.0, 0.8)
+        while u < L / 2 - 0.6:                                              # the row in pieces, with gaps between
+            long = rng.uniform(1.6, 4.0)
+            u1 = min(L / 2 - rng.uniform(0.0, 0.5), u + long)
+            n = max(2, int((u1 - u) / 0.4))
             k = len(P)
-            for du, dv, z in ((u0, v - 0.32, 0.03), (u1, v - 0.32, 0.03), (u1, v, 0.2), (u0, v, 0.2), (u0, v + 0.32, 0.03), (u1, v + 0.32, 0.03)):
-                P.append((x + du * ca - dv * sa, y + du * sa + dv * ca, z))
-            F += [(k, k + 1, k + 2, k + 3), (k + 3, k + 2, k + 5, k + 4)]
-    _mesh("garden", P, F, _plain("garden" + ("_snow" if snow else ""), "E2E6EC" if snow else "3B3027", 0.95, 1.5, 0.3))
+            for j in range(n + 1):
+                uu = u + (u1 - u) * j / n
+                end = min(j, n - j) / max(1, n / 4)                          # the mound's ends sink into the ground
+                h = (0.07 + 0.06 * rng.random()) * min(1.0, end + 0.15)
+                w = 0.26 + rng.uniform(-0.06, 0.08)
+                v = v0 + 0.06 * math.sin(uu * 1.7 + r)
+                P += [at(uu, v - w, 0.02), at(uu, v + rng.uniform(-0.05, 0.05), 0.02 + h), at(uu, v + w, 0.02)]
+                if j:
+                    q = k + 3 * (j - 1)
+                    F += [(q, q + 3, q + 4, q + 1), (q + 1, q + 4, q + 5, q + 2)]
+                if rng.random() < 0.45:                                       # a dead stalk
+                    sx, sy, _ = at(uu + rng.uniform(-0.15, 0.15), v + rng.uniform(-0.12, 0.12), 0.0)
+                    tall = rng.uniform(0.25, 0.6)
+                    lean = rng.uniform(-0.12, 0.12, 2)
+                    m = len(S)
+                    S += [(sx - 0.012, sy, 0.02), (sx + 0.012, sy, 0.02), (sx + lean[0], sy + lean[1], 0.02 + h + tall)]
+                    SF.append((m, m + 1, m + 2))
+            u = u1 + rng.uniform(0.3, 1.2)
+    if not snow:                                                            # the dug plot between the rows, its edge ragged
+        k = 20
+        rim = []
+        for j in range(k):
+            a = 2 * math.pi * j / k
+            cu, cv = math.cos(a), math.sin(a)
+            f = 1.0 / max(abs(cu) / (L / 2 + 0.4), abs(cv) / (W / 2 + 0.4))   # (round a rectangle)
+            f *= rng.uniform(0.92, 1.04)
+            rim.append(at(cu * f, cv * f, 0.015))
+        _mesh("plot", [at(0.0, 0.0, 0.015)] + rim, [(0, 1 + j, 1 + (j + 1) % k) for j in range(k)],
+              _plain("plot", "54463A", 0.95, 1.8, 0.25, bump=0.5, bump_scale=4.0))
+    _mesh("garden", P, F, _plain("garden" + ("_snow" if snow else ""), "D9DDE2" if snow else "45372B", 0.95, 2.5, 0.35 if snow else 0.3))
+    if S:
+        _mesh("stalks", S, SF, _plain("stalk", "4F4232", 0.9))
 
 
 def village(look, path, fast=False, extra=None, eye=None, target=None, lens=30.0, wash=0.0, spp=None, size=None):
@@ -461,7 +506,7 @@ def village(look, path, fast=False, extra=None, eye=None, target=None, lens=30.0
                 put("IzbaThatch" if rng.random() < 0.3 else "Izba", x, y, -90.0 * side + rng.uniform(-4, 4))
             else:
                 put("Khata", x, y, 180.0 + rng.uniform(-6, 6) if side > 0 else rng.uniform(-6, 6))
-            garden(x + rng.uniform(-1, 1), side * 25.5, rng.uniform(-4, 4), snow=burnt)                # the kitchen garden behind
+            garden(x + rng.uniform(-1, 1), side * 25.5, rng.uniform(-4, 4), snow=season == "winter", seed=i * 2 + (side > 0))                # the kitchen garden behind
             avoid.append((x, y, 5.5))
             for k in range(3):                                                         # the fence along the street
                 put("WattleFence", x - 4.1 + k * 4.1, side * 8.5, rng.uniform(-3, 3))

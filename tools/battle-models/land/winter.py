@@ -22,7 +22,7 @@ from works import _math, _mix, _noise, _ramp
 #                    snow      wind-packed  earth      road (churned)  rut (slush)  dead stalk  stalk tip   conifer
 ground.KINDS["winter"] = ("E4E8EE", "CDD4DD", "5A5046", "9C948A", "4A423A", "7E7458", "A69A76", "1E2A24")
 # a road of churned snow throws grey slush, not summer dust, onto what drives on it
-SLUSH = "8A8580"
+SLUSH = "6E665B"
 
 SNOW = (0.80, 0.83, 0.88)               # snow as it lies, linear (sun-lit it reads near white, in shade blue-grey)
 WASH = (0.62, 0.62, 0.59)               # lime wash: chalky, a shade off white, never as white as the snow
@@ -370,7 +370,7 @@ def washed(look, model, wash=0.85, snow=0.8):
             patches = _noise(nt, pos, 0.8, 2.0, 0.5)
             fine = _noise(nt, pos, 30.0, 3.0, 0.6)
             cover = _math(nt, "ADD", _math(nt, "MULTIPLY", strokes, 0.55), _math(nt, "MULTIPLY", patches, 0.45))
-            cover = _ramp(nt, cover, 0.36, 0.56, 0.12, 0.95)                          # thin where the brush ran dry
+            cover = _ramp(nt, cover, 0.44, 0.58, 0.0, 0.95)                           # bare where the brush ran dry: a third of the green shows
             worn = _math(nt, "MULTIPLY", at.outputs["Fac"], _ramp(nt, fine, 0.3, 0.6, 0.6, 1.0))
             worn = _math(nt, "MAXIMUM", worn, _ramp(nt, ao.outputs["AO"], 0.55, 0.9, 0.8, 0.0))
             worn = _math(nt, "MAXIMUM", worn, _ramp(nt, sep.outputs[2], 0.35, 1.25, 0.95, 0.0))

@@ -54,7 +54,51 @@ def extra(put):
         tr = a.animation_data.nla_tracks.new()
         long = act.frame_range[1] - act.frame_range[0]
         tr.strips.new("pose", int(-at * long), act)
+    tracks(21.0 - 3.6, 0.4)
     bpy.context.scene.frame_set(0)
+
+
+def tracks(x_end, y_end, gauge=1.32, width=0.72, back=110.0, step=0.5):
+    """The KV's own track marks behind her: two bands of churned slush, each crossed by the prints of her grousers,
+    swinging in from the middle of the road to where she is (she turns a little to the verge)."""
+    import bpy
+    import numpy as np
+    from kit import hex_rgb
+    xs = np.arange(x_end - back, x_end + 0.01, step)
+    t = np.clip((xs - (x_end - 14.0)) / 14.0, 0.0, 1.0)
+    mid = -0.4 + (y_end + 0.4) * t * t
+    m = bpy.data.materials.new("track_print")
+    nt = m.node_tree
+    b = nt.nodes["Principled BSDF"]
+    b.inputs["Roughness"].default_value = 0.55
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    w = nt.nodes.new("ShaderNodeTexWave")
+    w.wave_type = "BANDS"
+    w.bands_direction = "X"
+    w.inputs["Scale"].default_value = 2.0                         # (a grouser's print every 0.3 m or so)
+    w.inputs["Distortion"].default_value = 1.5
+    w.inputs["Detail"].default_value = 3.0
+    nt.links.new(tc.outputs["Object"], w.inputs["Vector"])
+    r = nt.nodes.new("ShaderNodeValToRGB")
+    r.color_ramp.elements[0].position = 0.35
+    r.color_ramp.elements[0].color = (*hex_rgb("332D27"), 1.0)
+    r.color_ramp.elements[1].position = 0.7
+    r.color_ramp.elements[1].color = (*hex_rgb("6A6257"), 1.0)
+    nt.links.new(w.outputs["Fac"], r.inputs["Fac"])
+    nt.links.new(r.outputs["Color"], b.inputs["Base Color"])
+    bp = nt.nodes.new("ShaderNodeBump")
+    bp.inputs["Strength"].default_value = 0.8
+    bp.inputs["Distance"].default_value = 0.05
+    nt.links.new(w.outputs["Fac"], bp.inputs["Height"])
+    nt.links.new(bp.outputs["Normal"], b.inputs["Normal"])
+    for side in (-1.0, 1.0):
+        P, F = [], []
+        for i, (x, c) in enumerate(zip(xs, mid)):
+            y = c + side * gauge
+            P += [(float(x), float(y - width / 2), 0.046), (float(x), float(y + width / 2), 0.046)]
+            if i:
+                F.append((2 * i - 2, 2 * i - 1, 2 * i + 1, 2 * i))
+        sets_east._mesh("track_print", P, F, m)
 
 
 def main():

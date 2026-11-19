@@ -37,10 +37,11 @@ import kit  # noqa: E402
 import rigid  # noqa: E402
 
 PAINTS = {
-    "log": "6E6458", "log_end": "978B78", "plank": "6F6A60", "board": "77654E", "thatch": "9C8256", "thatch_dark": "6E5C40",
+    "log": "6E6458", "log_end": "978B78", "plank": "6F6A60", "board": "77654E", "thatch": "786950", "thatch_dark": "564A39",
     "whitewash": "E0DACB", "plinth": "7E5E42", "frame": "DCD8CC", "shutter": "4E7A86", "glass": "1D2124", "door": "5C4A38",
     "brick": "8E4E3C", "plaster": "C9C1B1", "soot": "2E2A27", "char": "1D1B19", "ash": "5D5853",
-    "birch_bark": "DCD7CB", "birch_mark": "2F2C29", "birch_leaf": "7C9246", "twig": "4E4038",
+    "stove_burnt": "6A645D", "brick_burnt": "5E3B31", "melt": "34312D",
+    "birch_bark": "DCD7CB", "birch_mark": "2F2C29", "birch_leaf": "6F873F", "birch_leaf2": "5A6E35", "twig": "4E4038",
     "spruce": "2D4535", "spruce_dark": "23372B", "bark": "4A3C30", "snow": "E6EAEE",
     "hay": "A68F5B", "hay_old": "7F6F4F", "wood": "6E5A44", "withy": "7A6648", "pole": "5C4C3C", "insulator": "9DB2A9",
 }
@@ -146,6 +147,18 @@ def izba(fine=True, thatch=False):
         slab(m, pts, 0.06 * -s, "board")
     if thatch:
         zr = gable_roof(m, L, W, top, pitch, 0.5, 0.6, 0.22, "thatch", "thatch_dark" if fine else None, sag=0.22)
+        if fine:                                            # the eaves: thick, ragged, the straw ends hanging unevenly
+            rng = random.Random(23)
+            ze = top - 0.6 * math.tan(math.radians(pitch))
+            x0, x1 = -L / 2 - 0.5, L / 2 + 0.5
+            for side in (1.0, -1.0):
+                x = x0 + 0.15
+                while x < x1 - 0.1:
+                    dip = -0.22 * (1.0 - ((2.0 * (x - x0) / (x1 - x0)) - 1.0) ** 2)
+                    a = rng.uniform(0.2, 0.3)
+                    m.ball((x, side * (W / 2 + 0.6 + rng.uniform(-0.06, 0.04)), ze + dip - rng.uniform(0.02, 0.1)),
+                           (a, rng.uniform(0.16, 0.24), rng.uniform(0.12, 0.2)), "thatch_dark", u=6, v=3)
+                    x += a * rng.uniform(1.3, 1.7)
     else:
         zr = gable_roof(m, L, W, top, pitch, 0.45, 0.55, 0.07, "plank", "board" if fine else None, sag=0.1)
     # windows: three on the street end, two on the long side, under carved heads
@@ -182,6 +195,16 @@ def khata(fine=True):
     m.prism(eave, H - 0.28, H, "thatch_dark", bottom=True)
     ridge = m.round_rect(-L * 0.27, L * 0.27, -0.12, 0.12, 0.1 if fine else 0.0, 2 if fine else 1)
     m.prism(eave, H, H + 2.6, "thatch", top=ridge)
+    if fine:                                                # the eave's straw ends, hanging unevenly all round
+        rng = random.Random(29)
+        k = len(eave)
+        for i in range(k):
+            a, b = Vector((*eave[i], 0.0)), Vector((*eave[(i + 1) % k], 0.0))
+            n = max(1, int((b - a).length / 0.5))
+            for j in range(n):
+                p = a.lerp(b, (j + rng.uniform(0.2, 0.8)) / n)
+                sz = rng.uniform(0.2, 0.3)
+                m.ball((p.x, p.y, H - 0.24 - rng.uniform(0.0, 0.08)), (sz, sz * 0.9, rng.uniform(0.1, 0.17)), "thatch_dark", u=6, v=3)
     if fine:
         for x in (-L * 0.27, L * 0.27):                                             # the ridge's bound ends
             m.ball((x, 0.0, H + 2.62), (0.35, 0.22, 0.16), "thatch_dark", u=8, v=4)
@@ -201,14 +224,20 @@ def burnt_chimney(fine=True):
     """The stove left standing when the house has burnt: its block, the chimney, charred stubs of the walls, ash."""
     m = new("BurntChimney", "Burnt-out house: the stove and chimney (our own design)", fine)
     rng = random.Random(5)
-    m.prism(m.oval(0.0, 0.0, 3.9, 3.3, 14 if fine else 8), 0.0, 0.04, "ash")
-    m.box((0.2, 0.3, 0.8), (1.6, 1.45, 1.6), "plaster")
+    # the fire melted the snow far round it: a wide ragged patch of wet black ash and earth (what reads from high up)
+    k = 22 if fine else 10
+    rim = [(math.cos(2 * math.pi * i / k) * r, math.sin(2 * math.pi * i / k) * r * 0.85)
+           for i, r in ((i, rng.uniform(6.0, 8.5)) for i in range(k))]
+    m.prism(rim, 0.0, 0.03, "melt")
+    m.prism(m.oval(0.0, 0.0, 3.9, 3.3, 14 if fine else 8), 0.0, 0.045, "ash")
+    m.box((0.2, 0.3, 0.8), (1.6, 1.45, 1.6), "stove_burnt")                                      # the stove, its whitewash smoked
     m.box((0.2, 0.3, 1.66), (1.7, 1.55, 0.12), "soot")
     m.box((0.98, 0.3, 0.6), (0.06, 0.5, 0.4), "char")                                             # the stove's mouth
-    m.box((0.45, 0.55, 3.0), (0.6, 0.6, 2.7), "brick")
-    m.box((0.45, 0.55, 4.38), (0.72, 0.72, 0.1), "soot")
     if fine:
-        m.box((0.45, 0.55, 2.2), (0.62, 0.62, 1.0), "soot")                                      # the smoke's black up the stack
+        m.box((0.2, 0.3, 1.3), (1.64, 1.49, 0.6), "soot")                                         # black where the flames licked it
+    m.box((0.45, 0.55, 3.0), (0.6, 0.6, 2.7), "brick_burnt")
+    m.box((0.45, 0.55, 4.38), (0.72, 0.72, 0.1), "soot")
+    m.box((0.45, 0.55, 3.45), (0.62, 0.62, 1.8), "soot")                                          # the stack black from its top down
     L, W = 6.2, 5.0
     for k, (a, b) in enumerate((((-L / 2, W / 2), (L / 2, W / 2)), ((L / 2, W / 2), (L / 2, -W / 2)), ((L / 2, -W / 2), (-L / 2, -W / 2)),
                                 ((-L / 2, -W / 2), (-L / 2, W / 2)))):
@@ -218,13 +247,15 @@ def burnt_chimney(fine=True):
             pa = Vector((a[0] + (b[0] - a[0]) * f0, a[1] + (b[1] - a[1]) * f0, 0.13 + c * 0.23))
             pb = Vector((a[0] + (b[0] - a[0]) * f1, a[1] + (b[1] - a[1]) * f1, 0.13 + c * 0.23))
             m.rod(pa, pb, 0.12, "char", sides=6 if fine else 4)
-    for i in range(4 if fine else 2):                                                             # fallen beams
+    for x, y in ((-2.9, 2.3), (3.0, -2.2)) if fine else ():                                       # two corner posts still standing, charred
+        m.rod((x, y, 0.0), (x + rng.uniform(-0.15, 0.15), y, rng.uniform(1.2, 2.1)), 0.11, "char", sides=6)
+    for i in range(7 if fine else 2):                                                             # fallen beams
         x, y, a = rng.uniform(-2.0, 2.4), rng.uniform(-1.8, 1.8), rng.uniform(0, math.pi)
         long = rng.uniform(2.0, 3.6)
         d = Vector((math.cos(a), math.sin(a), 0.0)) * long / 2
         lift = Vector((0.0, 0.0, rng.uniform(0.0, 0.6)))
         m.rod(Vector((x, y, 0.1)) - d, Vector((x, y, 0.1)) + d + lift, rng.uniform(0.08, 0.12), "char", sides=6 if fine else 4)
-    m.info["about"] = {"foot_m": 4.0, "sway": "none"}
+    m.info["about"] = {"foot_m": 8.5, "sway": "none"}
     return m
 
 
@@ -300,13 +331,13 @@ def birch(fine=True, leaves=True):
     if leaves:
         # the crown: many small clumps along and below the boughs, each one ragged (its points pushed in and out at
         # random and its underside dragged down), so the crown reads loose and weeping, never as balls on a stick
-        n = 44 if fine else 8
+        n = 96 if fine else 8
         for i in range(n):
             mid, end, long = ends[i % len(ends)]
-            p = mid + (end - mid) * rng.uniform(0.0, 1.0) + Vector((rng.uniform(-0.5, 0.5), rng.uniform(-0.5, 0.5), rng.uniform(-0.9, 0.3)))
-            s = rng.uniform(0.45, 0.9) if fine else rng.uniform(1.0, 1.5)
-            ragged_ball(m, rng, p, (s, s * rng.uniform(0.8, 1.1), s * rng.uniform(0.55, 0.75)), "birch_leaf", 6 if fine else 5, 4,
-                        rough=0.35 if fine else 0.15, droop=0.6)
+            p = mid + (end - mid) * rng.uniform(0.0, 1.1) + Vector((rng.uniform(-0.6, 0.6), rng.uniform(-0.6, 0.6), rng.uniform(-1.2, 0.3)))
+            s = rng.uniform(0.28, 0.62) if fine else rng.uniform(1.0, 1.5)
+            ragged_ball(m, rng, p, (s, s * rng.uniform(0.7, 1.1), s * rng.uniform(0.45, 0.7)), "birch_leaf2" if (fine and rng.random() < 0.35) else "birch_leaf",
+                        6 if fine else 5, 4, rough=0.55 if fine else 0.15, droop=0.9)
     m.info["about"] = {"foot_m": 0.3, "sway": "crown"}
     m.info["crease"] = 80.0                                                   # (the clumps shaded round, not cut)
     return m
