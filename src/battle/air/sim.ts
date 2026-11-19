@@ -186,14 +186,17 @@ export class AirSim implements BattleSim<AirUnit> {
    * fight."). With nobody's hand on either side, both bare; and never the nation word twice ("Polish Navy strike wing").
    */
   called(u: AirUnit): string {
-    const adj = this.adjOf(u);
+    const adj = adjFor(u.name, this.adjOf(u));
     return adj ? `${adj} ${u.name}` : u.name;
   }
 
-  /** The nation word the lines add to a group: the enemy's (as called()), unless its name already says it. */
+  /**
+   * The enemy's nation word ('' for his own, and with nobody's hand on either side). Each line drops it where the name
+   * already says it (names.ts adjFor), but it still marks the group as the enemy's ('a carrier fighter of the Brazilian Fleet').
+   */
   private adjOf(u: AirUnit): string {
     const t = this.ticket;
-    return t[u.side].human || !(t.att.human || t.def.human) ? '' : adjFor(u.name, t[u.side].adj);
+    return t[u.side].human || !(t.att.human || t.def.human) ? '' : t[u.side].adj;
   }
 
   private say(what: FieldEvent['what'], u: AirUnit | null, text: string, extra?: Record<string, unknown>, cue?: string): void {
