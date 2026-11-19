@@ -253,6 +253,29 @@ describe('the guns (guns.ts; the design\'s section 3 with the historian\'s revie
     }
   });
 
+  it('one gunner to an opening: no gunner\'s socket fires two guns, and a gun with no socket says which side\'s window it fires from (Brian, 02:57Z)', () => {
+    // Brian on his reference clip: "The video is off with the 2 gunners at the same window". A twin mount is one entry
+    // (one opening); two gunners' entries never share a socket. A gun the model has no socket for (the He 111's beam
+    // guns, a French bomber's ventral gun) is hand-held with an arc whose middle is on one side, so the 3D game fires it
+    // from that side's own window, never from another gun's socket. (A fighter's fixed guns may share gun.nose: the hub
+    // cannon and the cowl guns, no gunner, drawn apart by the kit.)
+    for (const nat of NATS) for (let year = 1939; year <= 1945; year++) for (let month = 0; month < 12; month++) {
+      const w = { year, month };
+      for (const [kind, models] of [['ftr', FTR], ['bmr', BMR]] as const) for (const model of models) {
+        const l = kind === 'ftr' ? fighterGuns(model === 'Fighter' ? `Fighter:${nat}` : model, nat, w) : bomberGuns(model === 'Bomber' ? `Bomber:${nat}` : model, nat, w);
+        const used = l.guns.filter((g) => g.mount !== 'fixed').flatMap((g) => g.at);
+        expect(new Set(used).size, `${l.mark} ${year}-${month + 1}: ${used.join(' ')}`).toBe(used.length);
+        for (const g of l.guns.filter((x) => !x.at.length)) {
+          expect(g.mount).toBe('hand');
+          expect(g.arc).toBeTruthy();
+        }
+      }
+    }
+    const beams = bomberGuns('He111', 'GER', { year: 1943, month: 6 }).guns.filter((g) => !g.at.length);
+    const mid = (g: (typeof beams)[number]): number => { const [a, b] = g.arc!.yaw; return ((a + ((b - a + 360) % 360) / 2) % 360); };
+    expect(beams.map(mid).sort((a, b) => a - b)).toEqual([90, 270]);
+  });
+
   it('flies the marks the historian gave: the 109 by month in 1940, the RAF\'s convergence, the four-gun Mustang, the B-17 by year', () => {
     const e1 = fighterGuns('Bf109', 'GER', { year: 1939, month: 8 });
     expect(e1.mark).toBe('Bf 109E-1');
