@@ -23,7 +23,7 @@ import {
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
 import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
-import { decks as deckCount, scouts } from './hulls';
+import { decks as deckCount, scouts } from './shiplist';
 import { deckPlan, perDeck, torpShare, type DeckPlan } from './decks';
 import { SANDBOX_SHIPS } from './sandbox-data';
 import { sandbox } from './history';

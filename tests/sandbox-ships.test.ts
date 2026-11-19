@@ -1,13 +1,13 @@
 // The sandbox at sea (Brian, 19 November 2026: "a sandbox to play and make your own history, not just play out the
 // real one"). Behind one switch (g.flags.sandbox): ships of classes of their own, named and kept on their fleet's list
-// (hulls.ts); refits in the yards; the drawing board; and the computer's navies building to their style. With the
+// (shiplist.ts); refits in the yards; the drawing board; and the computer's navies building to their style. With the
 // switch off nothing of it is offered and a fleet's numbers are the sums they always were.
 import { describe, expect, it } from 'vitest';
 import { ARSENAL, offers, orderOffer, type Offer } from '../src/campaign/arsenal';
 import { cancelBuild, deliver } from '../src/campaign/economy';
 import { detach } from '../src/campaign/fleets';
 import { createGame } from '../src/campaign/game';
-import { aaCut, decks, listed, loseShips, lossWeight, moveShips, standard, worth, writeFallen } from '../src/campaign/hulls';
+import { aaCut, decks, listed, loseShips, lossWeight, moveShips, standard, worth, writeFallen } from '../src/campaign/shiplist';
 import { NAVY, fleetsOf } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import {
@@ -67,7 +67,7 @@ describe('with the switch off', () => {
   });
 });
 
-describe('a fleet\'s list of named ships (hulls.ts)', () => {
+describe('a fleet\'s list of named ships (shiplist.ts)', () => {
   it('counts each ship on the list at her own numbers and the rest at the standard ship\'s', () => {
     const g = grand();
     const f = fleetsOf(g, 'UK').find((x) => x.ships.ca >= 2)!;

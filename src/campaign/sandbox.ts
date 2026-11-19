@@ -2,7 +2,7 @@
 // real one"; design paper https://claude.ai/artifact/LV5ZA8vXKtyuDvjRbazxhc). With the switch on (classes.ts), the
 // Navy column of the arsenal offers, beside each kind's standard ship, the classes a nation may build of that kind:
 // the what-if classes it has researched and the classes it has drawn itself. Every ship laid down to one of them
-// joins her fleet's list by name (hulls.ts). A ship in harbour can be refitted. And the drawing board prices a
+// joins her fleet's list by name (shiplist.ts). A ship in harbour can be refitted. And the drawing board prices a
 // design of the player's own from six dials, so that no design beats the standard ship of its kind for the money
 // by more than a tenth.
 //
@@ -14,7 +14,7 @@ import { ARSENAL, isCity, joinsFleet, slipSite, yardLevel, type Hull } from './a
 import { BUDGET, isHome } from './economy';
 import { CLASS_ROWS, classById, classLocked, classRule, classesFor, computerDesigns, sandbox, stampSteel, whatifShare, type ClassRow } from './classes';
 import { headline } from './game';
-import { listed, standard, trim, writeFallen } from './hulls';
+import { listed, standard, trim, writeFallen } from './shiplist';
 import { NAVY, foundFleet } from './navy';
 import { onPlans, whyNoPlans } from './plans';
 import { SANDBOX_SHIPS, type RefitDef, type Style } from './sandbox-data';

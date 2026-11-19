@@ -18,7 +18,7 @@ import {
   CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
-import { moveHulls, worth } from './hulls';
+import { moveHulls, worth } from './shiplist';
 import { lanesTo } from './resources';
 import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules, siegeView, townHeld, townHitText, townShare, type TownHit } from './siege';
 import { townName } from './towns';

@@ -12,7 +12,7 @@
 // viewer's side has identified (carriers.ts, `fleetKnown`). A force that is only reported is listed with the word
 // its report gives it and is not in the figures, and a force nobody has found is not mentioned at all.
 
-import { lossWeight } from './hulls';
+import { lossWeight } from './shiplist';
 import { clamp } from '../core/math';
 import type { TicketLine } from '../core/ticket';
 import { fleetKnown, fleetsSeen, seaPicture, type SeaKnown } from './carriers';

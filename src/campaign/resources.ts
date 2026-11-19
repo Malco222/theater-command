@@ -6,7 +6,7 @@
 
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/resources.json';
-import { oilShips } from './hulls';
+import { oilShips } from './shiplist';
 import { civicSum } from './buildings';
 import { KIND, type Corps, type Game, type Kind, type Region, type ShipClass, type Stores, type Terrain } from './types';
 import { allied, atWar, bloc, headline } from './game';

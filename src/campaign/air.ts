@@ -9,7 +9,7 @@
 // lists is split into air groups of one kind, fighters or bombers, and a group flies one raid a month, planned
 // from its target and flown the moment the order is given. A historical scenario keeps the fleets as they were.
 
-import { aaCut, loseShips, starHulls, writeFallen } from './hulls';
+import { aaCut, loseShips, starHulls, writeFallen } from './shiplist';
 import { SANDBOX_SHIPS } from './sandbox-data';
 import { byHand, staffRuns } from './depth';
 import data from '../../data/campaign/air.json';

@@ -21,7 +21,7 @@ import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, CARRIERS, carrierRules, skyDenies, skyOver, skyReach } from './air';
 import { skyAtSea, skySupport, weatherOn } from './weather';
 import { capOver, deckWorth, syncWings } from './carriers';
-import { aaCut, loseShips, lossWeight, moveHulls, starHulls, trim, worth, writeFallen } from './hulls';
+import { aaCut, loseShips, lossWeight, moveHulls, starHulls, trim, worth, writeFallen } from './shiplist';
 import { SANDBOX_SHIPS } from './sandbox-data';
 import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';

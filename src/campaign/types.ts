@@ -94,7 +94,7 @@ export interface Nation {
   league?: boolean;
   /** The technology tree (the grand campaign): what the nation has researched and what its teams are working on. */
   tech?: TechState;
-  /** The named ships the nation has lost (the sandbox, hulls.ts), oldest first. */
+  /** The named ships the nation has lost (the sandbox, shiplist.ts), oldest first. */
   memorial?: ShipMemorial[];
   /** Oil and supplies in the depots (the grand campaign), for a power that keeps stocks of its own. */
   res?: Stores;
@@ -613,12 +613,12 @@ export interface Fleet extends Storied {
    */
   bare?: { ftr: number; bmr: number };
   /**
-   * The ships of the fleet that are more than a count (the sandbox, hulls.ts): those laid down in the war to a class of
+   * The ships of the fleet that are more than a count (the sandbox, shiplist.ts): those laid down in the war to a class of
    * their own, each named, with what she fights with and her record. The rest of each kind's count are its standard
    * ships. Never more of a kind on the list than the count holds. Absent in a game that never built one.
    */
   hulls?: ShipHull[];
-  /** Ships of the list lost this month, not yet written on the memorial (hulls.ts does that at the month's end). */
+  /** Ships of the list lost this month, not yet written on the memorial (shiplist.ts does that at the month's end). */
   fallen?: ShipHull[];
   /**
    * The deck plan the player gave its carriers (the sandbox, decks.ts): the shares of their aircraft that are

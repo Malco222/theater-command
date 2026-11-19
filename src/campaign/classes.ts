@@ -201,7 +201,7 @@ function edgeWords(e: Edge): string {
 type ShipStat = 'power' | 'tough' | 'escort' | 'raid';
 const SHIPS = (navyData as unknown as { classes: Record<string, Record<ShipStat, number> & { one: string }> }).classes;
 
-/** A ship class in words, against the standard ship of her kind (navy.json): her numbers are hulls.ts's. */
+/** A ship class in words, against the standard ship of her kind (navy.json): her numbers are shiplist.ts's. */
 function shipWords(row: ClassRow): string {
   const std = SHIPS[row.of], one = std.one;
   const n = (k: ShipStat): number | undefined => (typeof row[k] === 'number' ? (row[k] as number) : undefined);
