@@ -321,6 +321,12 @@ Blasts->TrailStop(EngineId);
   short pieces go. From `lumps_from` of its life a length lets go of its neighbours, paling and narrowing to nothing
   at each end, and draws in to a soft lump: only the old end tears into lumps. It takes no more room: at 120 m/s a
   smoke trail 124 places and a fire trail 225. Recipes without `ribbon` draw as before.
+- A ribbon ages (art director 15:22Z, where the falls read as pen strokes): `widen_by_s` is the time by which a piece
+  has widened from `r0_m` to `r1_m`, by the power `grow` (over 1: thin at first, then spreading), and the long lengths
+  widen with it and on to `thin_grow` times; it stays as black as laid until `pale_from_s` and pales to `pale_to` of
+  its opacity by `pale_by_s`; `wide_wander` makes its width wander along its length in soft swells. Without those
+  keys a ribbon draws as it did. Read a fall frame with care: 14 s into a burning fall the preview's aircraft is under
+  its ground plane, so the frame holds only smoke about 2.5 to 7.5 s old; at 8 s (frame 240) the plane is in sight.
 - When the room (`game.max_puffs`) is short, every light (flames, flashes, tracers) is counted first, as an oil fire's
   kept column is, and the farthest smoke goes: a dozen trailing aircraft fill about 2,900 of 3,000 slots, and past that
   the far trails shorten while no fire is lost (24 aircraft, half burning, seen from 1,200 m).
