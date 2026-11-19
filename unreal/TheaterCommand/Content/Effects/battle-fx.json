@@ -1434,13 +1434,13 @@
     116
    ],
    "cloud_shade": 4.0,
-   "face_lit": 1.0,
+   "face_lit": 1.3,
    "lit_colour": [
-    140,
-    134,
-    124
+    182,
+    176,
+    166
    ],
-   "_face_lit": "Art director 23:44Z, first in-game flak: from above, against the fields, the burst read as an ink blot, in shadow all over. Smoke seen with the sun behind the eye shows its sunlit face: face_lit is how far a lobe then goes toward lit_colour (picture values), most on the cloud's sunward side, half in its middle, none on its far side, which stays shadowed. Seen side-on, against the sun or at night it keeps the dark look the art director passed.",
+   "_face_lit": "Art director 23:44Z, first in-game flak: from above, against the fields, the burst read as an ink blot, in shadow all over. Smoke seen with the sun behind the eye shows its sunlit face: face_lit is how far a lobe then goes toward lit_colour (picture values), most on its outer lobes, wisps and sunward side, next to none in its young heart, none on its far side, which stays shadowed. Each lobe is laid as a dome: lit on the side toward the sun, its underside and edge darker. Art director 23:59Z: the lit faces must sit clearly above the field (about 135 to 150 in the game frame), so lit_colour is pale and face_lit over 1. Seen side-on, against the sun or at night it keeps the dark look the art director passed.",
    "heart_end": 0.4,
    "spread_mps": 1.1,
    "least_px": 9,

@@ -1867,7 +1867,7 @@ namespace TheaterFx
 		const Rgb Young = Picture(P + "colour", Rgb::FromPicture(46, 43, 42));
 		const Rgb Old = Picture(P + "colour_old", Rgb::FromPicture(128, 122, 116));
 		const double FaceLit = std::max(0.0, Num(P + "face_lit", 0.0));
-		const Rgb LitCol = Picture(P + "lit_colour", Rgb::FromPicture(140, 134, 124));
+		const Rgb LitCol = Picture(P + "lit_colour", Rgb::FromPicture(182, 176, 166));
 		auto Smoke = [&](const Vec& From, double R, double R1, const Vec& Vel, double A, double Life)
 		{
 			Bit B;
@@ -2447,10 +2447,12 @@ namespace TheaterFx
 			OutRgba[I * 4 + 2] = Byte(C.B);
 			OutRgba[I * 4 + 3] = Byte(A);
 		};
-		// (Lift: the sunlit face of smoke seen with the sun behind the eye, all of it at the middle, less toward the edge
-		// and least on the edge away from the sun, so each lobe shows as a lit dome and the lobes can be counted)
+		// (Lift: the sunlit face of smoke seen with the sun behind the eye. Art director 23:59Z: each lobe a dome, its
+		// crown on the side toward the sun lit and its underside and edge darker, so the lobes count as lumps. The
+		// middle takes the ring's mean, so the crown is a smooth slope across the lobe and never a star of spokes)
 		const bool bLift = std::fabs(Lift.R) + std::fabs(Lift.G) + std::fabs(Lift.B) > 1e-6f;
-		const Rgb Mid = bLift ? Rgb(Col.R + Lift.R, Col.G + Lift.G, Col.B + Lift.B) : Col;
+		const float KMid = 0.6f;
+		const Rgb Mid = bLift ? Rgb(Col.R + KMid * Lift.R, Col.G + KMid * Lift.G, Col.B + KMid * Lift.B) : Col;
 		Put(First, Middle, Rgb(std::max(Mid.R, Floor.R), std::max(Mid.G, Floor.G), std::max(Mid.B, Floor.B)), Alpha);
 		// (a clod's lumpy outline: a few waves round it, its own, turning as it tumbles. Each wave is
 		// cos(n * (Angle - Turn) + Pn), worked out from the ring's own table, so a puff costs six cosines, not three a side)
@@ -2510,7 +2512,7 @@ namespace TheaterFx
 				const double Len2 = AA * Cs * Cs + BB * Sn * Sn + 2.0 * AB * Cs * Sn;
 				const double Toward = Len2 > 1e-18 ? (SunA * Cs + SunB * Sn) / std::sqrt(Len2) : 0.0;
 				const double Lean = Clamp01(0.5 + 0.5 * Toward / std::max(SunAcross, 0.05)); // (1 on the side toward the sun on the screen)
-				const float KHeart = static_cast<float>(0.6 + 0.4 * Lean), KRim = static_cast<float>(0.15 + 0.6 * Lean);
+				const float KHeart = static_cast<float>(0.15 + 0.85 * Lean), KRim = static_cast<float>(0.1 * Lean); 
 				HeartShaded = Rgb(HeartShaded.R + KHeart * Lift.R, HeartShaded.G + KHeart * Lift.G, HeartShaded.B + KHeart * Lift.B);
 				Shaded = Rgb(Shaded.R + KRim * Lift.R, Shaded.G + KRim * Lift.G, Shaded.B + KRim * Lift.B);
 			}
