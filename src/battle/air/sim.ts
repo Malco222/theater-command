@@ -110,6 +110,8 @@ export class AirSim implements BattleSim<AirUnit> {
   private broke = new Set<number>();
   /** The enemy group each close escort has broken off to engage, if any. */
   private chasing = new Map<number, number | null>();
+  /** Battle seconds of the first contact, null before it (the view's contact, as land's). */
+  private metAt: number | null = null;
 
   constructor(ticket: FieldTicket<AirPlace>, opts: { show?: boolean } = {}) {
     this.ticket = ticket;
@@ -519,6 +521,7 @@ export class AirSim implements BattleSim<AirUnit> {
           const how = this.show ? { form: x.form, style: x.style, ...(pass ? { pass } : {}) } : {};
           const extra = x.air === 'bmr' ? { with: other.id, ...how } : this.show ? { with: other.id, ...how } : undefined;
           this.say('contact', x, told(this.called(x), '{N} [is|are] in a fight.'), extra, x.air === 'bmr' ? C.onBombers : C.dogfight);
+          if (this.metAt === null) this.metAt = this.t;
         }
       }
     }
@@ -899,12 +902,16 @@ export class AirSim implements BattleSim<AirUnit> {
     return { att: power('att') / all, def: power('def') / all };
   }
 
-  view(as?: Side): BattleView<AirUnit> {
+  /**
+   * The view, with land's two army bars in land's shape: breaking (how near each side is to breaking off, 0 to 1; it
+   * breaks at 1) and contact (battle seconds of the first contact, null before it), so the 3D top bar reads both alike.
+   */
+  view(as?: Side): BattleView<AirUnit> & { breaking: Record<Side, number>; contact: number | null } {
     const units = this.units.map((u) => ({ ...u, spotted: { att: this.sees('att', u), def: this.sees('def', u) } }))
       .filter((u) => !as || u.side === as || u.spotted[as]);
     const events = this.events;
     this.events = [];
-    return { t: this.t, limit: this.ticket.limit, units, balance: this.balance(), events, zones: this.zones, ai: { ...this.ai }, over: this.over };
+    return { t: this.t, limit: this.ticket.limit, units, balance: this.balance(), events, zones: this.zones, ai: { ...this.ai }, over: this.over, breaking: { att: this.nearBreak('att'), def: this.nearBreak('def') }, contact: this.metAt };
   }
 
   /** Every event so far, for the after-action card and replays. */

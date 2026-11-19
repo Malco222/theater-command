@@ -111,6 +111,19 @@ describe('the straggler (Brian, 19:38Z: "it goes slower and falls out of formati
 });
 
 describe('what the 3D game reads each tick', () => {
+  it('the two army bars in land\'s shape: how near each side is to breaking off, and when the sides first met', () => {
+    let met: number | null = null, sawNull = false;
+    const s = fight('GER', 'bomb', 'Alsace', 1, false, (s) => {
+      const v = s.view();
+      for (const side of ['att', 'def'] as const) { expect(v.breaking[side]).toBeGreaterThanOrEqual(0); expect(v.breaking[side]).toBeLessThanOrEqual(1); expect(v.breaking[side]).toBe(s.nearBreak(side)); }
+      if (v.contact === null) { sawNull = true; expect(met).toBeNull(); }
+      else { if (met === null) met = v.contact; expect(v.contact).toBe(met); }
+    });
+    const first = s.history().find((e) => e.what === 'contact')!;
+    expect(sawNull).toBe(true);
+    expect(met).toBe(first.t);
+  });
+
   it('a fighter group says its aircraft, tactics, ammunition (never rising) and fire; a box its state and stragglers', () => {
     const ammo = new Map<number, number>();
     let fired = 0, passes = 0;
