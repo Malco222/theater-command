@@ -78,14 +78,14 @@
     },
     "NOR": {
       "traits": [
-        { "id": "merchant", "name": "The merchant fleet", "text": "One of the largest merchant fleets in the world, with crews in every ocean. It earns in peace and in war, and it can carry an army.", "income": 0.8, "sealift": 2 },
+        { "id": "merchant", "name": "The merchant fleet", "text": "One of the largest merchant fleets in the world, with crews in every ocean. It earns in peace and in war; at home its coastal steamers carry one force at a time.", "income": 0.8, "sealift": 1 },
         { "id": "fjords", "name": "Fjord and mountain", "text": "A long, steep country with few roads, where a handful of men can hold a valley.", "defence": 1.2, "when": { "home": true, "terrain": ["mountain", "hills", "forest"] } }
       ]
     },
     "DEN": {
       "traits": [
         { "id": "sound", "name": "Gate of the Baltic", "text": "Every ship between the Baltic and the North Sea passes Danish waters, and Danish farms feed half of northern Europe. It pays while Denmark is at peace.", "income": 0.6, "incomeAt": "peace" },
-        { "id": "seafarers", "name": "A seafaring nation", "text": "Shipping lines and yards out of all proportion to the size of the country.", "sealift": 1, "cost": { "what": ["ship:dd", "ship:tp"], "mul": 0.8 } }
+        { "id": "seafarers", "name": "A seafaring nation", "text": "Shipping lines and yards out of all proportion to the size of the country.", "cost": { "what": ["ship:dd", "ship:tp"], "mul": 0.8 } }
       ]
     },
     "NED": {
@@ -141,7 +141,7 @@
     "GRE": {
       "traits": [
         { "id": "line", "name": "The mountain line", "text": "Concrete works in the passes of the north and an army that knows its own mountains.", "defence": 1.2, "when": { "home": true, "terrain": ["mountain", "hills"] } },
-        { "id": "shipping", "name": "The merchant marine", "text": "Greek shipowners run one of the great merchant fleets. It earns in peace and in war, and it can carry an army.", "income": 0.5, "sealift": 2 }
+        { "id": "shipping", "name": "The merchant marine", "text": "Greek shipowners run one of the great merchant fleets. It earns in peace and in war; its own ships carry one force at a time.", "income": 0.5, "sealift": 1 }
       ],
       "unit": { "id": "evzones", "label": "Evzone corps", "word": "Evzone", "kind": "mtn", "divs": 2, "cost": 30, "months": 4, "most": 2, "starts": 1, "attack": 1.2, "defence": 1.2, "when": { "terrain": ["mountain", "hills"] }, "text": "The picked light infantry of the Greek army, mountain men who attack uphill." }
     },

@@ -18,6 +18,7 @@ import { AIR, airOnFall, airUpkeep, bookCloseAir, closeEdge, closeOf, closeRules
 import { syncWings } from './carriers';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
+import { liftDates } from './lift';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { crown } from './domination';
 import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
@@ -3551,6 +3552,8 @@ export function startPhase(g: Game, nat: string): void {
   const n = g.nations[nat];
   fadeWorks(g, nat);
   if (!n.alive) return;
+  // Shipping by the record's dates (ruling 234, rider b630).
+  liftDates(g, nat);
   // Reinforcements from the pre-war mobilisation, and the armies and fronts formed later from men already under arms.
   for (const row of [...(setup as any).reinforcements, ...((setup as any).formations ?? [])]) {
     if (row[0] !== g.turn || row[1] !== nat) continue;
