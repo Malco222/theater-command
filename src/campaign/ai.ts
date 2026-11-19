@@ -23,7 +23,7 @@ import { shoreOpen, stopOf, stormHeldBy } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff, descentAsks, freed } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { HOP_AIMS, firstOnRun, hopAims, hopShores, laneOn, pacificGround } from './pacific';
-import { beyondEurope, enemyAtTheDoor, oceanShares, overseasOf, shoreOf, type OverseasRules } from './world';
+import { beyondEurope, enemyAtTheDoor, farOn, oceanShares, overseasOf, shoreOf, type OverseasRules } from './world';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { frontArmys, lineAny, lineGives, lineLeaves, lineShut } from './line';
@@ -3025,6 +3025,12 @@ export function wantsOut(g: Game, c: Corps): boolean {
   // have followed. A corps on ground beyond the old chart's far shore stays where its staff put it, and comes off
   // only when cut off or broken. (None stands there while the far side's switch is off.)
   if (shoreOf(here) === 2) return !c.supplied || c.org < 0.3;
+  // Nor is a corps of a country beyond Europe on an ally's ground in the Americas (the Pacific playtester's finding
+  // 5, 19 November 2026): an American corps that marched into Canada found its host in Moscow, no road there, and was
+  // lifted off the beaches of Prince Rupert month after month at a quarter of its strength each time. With the far
+  // side on, the armies of the Americas and of the far side's countries stand on friendly ground of their own
+  // hemisphere as on the far side's. Britain's, whose capital is on the old chart, keep the host rule.
+  if (farOn(g) && shoreOf(here) === 1 && beyondEurope(g.nations[c.nat].capital) && allied(g, c.nat, ctl(g, here))) return !c.supplied || c.org < 0.3;
 
   // The host is the biggest continental ally. If it has fallen, there is nothing left to stay for.
   let host: string | null = null, size = 0;

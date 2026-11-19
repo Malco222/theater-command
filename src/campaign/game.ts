@@ -2312,7 +2312,7 @@ export function standersLine(g: Game, r: Region, who: string): string[] {
  * home to its own nearest ground, its month spent, with one plain line of news told to the player whoever took it
  * (rulings b341(b) and b343). A corps whose country holds no ground with room stays where it is.
  */
-function goHome(g: Game, r: Region): void {
+export function goHome(g: Game, r: Region): void {
   const by = new Map<string, Corps[]>();
   for (const c of r.units) {
     if (c.dead || c.kind === 'fort' || c.nat === r.ctrl || allied(g, c.nat, r.ctrl) || atWar(g, c.nat, r.ctrl)) continue;
