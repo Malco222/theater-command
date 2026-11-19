@@ -120,7 +120,16 @@ export const LAND = {
     // fights each on the 555 capital and city attacks with a river forced up every field the card left dry: 1 cost the
     // attack 2.2 points (mountain cities at close odds 10.7); 1.06 leaves it -0.1 against the same attacks with no river,
     // every kind within a tenth both ways (furthest: plains cities at close odds -6.7), fewer fights to the clock.
+    // Re-measured with bridges by the record (b596, three): +0.25, every kind within a tenth, 58 fights to the clock
+    // against 75 (1.045 would leave -0.4 but more capitals to the clock, 0 to 5 of 2,420).
     stream: 1.06,
+    // A second river along the defence's flank, meeting one across the field behind it (b596(2), the Sava at Belgrade):
+    // the defence drawn up beside it has its line's end on the water as up the field. Fitted 19 November on the same 555
+    // attacks with the river across and a second one from the west edge on every field the card left dry, bridges 3
+    // and 2: 1 left the attack where it was (+0.05) but 18 more fights of 5,550 ran to the clock (75 to 93); 1.06 (as up
+    // the field) took the clock back (76) but gave the attack +2.3, two kinds at close odds over a tenth (forest capitals
+    // +11.4, hills cities +13.4); 1.045 leaves +1.7, every kind within a tenth (furthest: hills cities at close odds +10.0), 81 fights to the clock.
+    join: 1.045,
   },
   /** Dug in: a block is drawn in its works while it stays within this many metres of where it began. */
   dug: { keep: 30 },

@@ -178,10 +178,12 @@ export class LandBattle implements BattleSim<LandUnit> {
       const xAt = (y: number): number => St.course.reduce((m, p) => (Math.abs(p[1] - y) < Math.abs(m[1] - y) ? p : m))[0];
       const west = held.filter((u) => u.x < xAt(u.y)).length;
       this.flankOnRiver = west === 0 || west === held.length;
+      if (this.flankOnRiver) this.flankHold = LAND.hold.stream;
     } else if (St?.lie === 'across' && St.join) {
       // The second comes in from a side edge and turns up to the first: the defence all beyond where it meets it.
       const xs = St.join.course.map((p) => p[0]).filter((x) => x >= 0 && x <= this.field.w), west = St.join.course[0][0] < this.field.w / 2;
       this.flankOnRiver = xs.length > 0 && held.every((u) => (west ? u.x > Math.max(...xs) : u.x < Math.min(...xs)));
+      if (this.flankOnRiver) this.flankHold = LAND.hold.join;
     }
     for (const u of this.units) u.cover = groundAt(this.field, u.x, u.y);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
@@ -212,13 +214,15 @@ export class LandBattle implements BattleSim<LandUnit> {
   private holdTake(u: LandUnit): number {
     const p = this.ticket.place, H = LAND.hold;
     const streets = streetsOf(p);
-    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * (this.flankOnRiver ? H.stream : 1);
+    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
   }
 
   /** The share of the attack's tanks and lorries, by strength, that must cross the river: 0 where it has none (b494). */
   private readonly armourWet: number;
   /** The defence's line ends on a city's own river up the field (b526), or a second river along its flank (b596), all of it on one bank: a flank not on the card. */
   private readonly flankOnRiver: boolean = false;
+  /** What the held defence's take is multiplied by for that flank: LAND.hold.stream up the field, LAND.hold.join beside a second river. */
+  private readonly flankHold: number = 1;
 
   private say(e: Omit<FieldEvent, 't'>): void {
     const ev = { t: Math.round(this.t * 10) / 10, ...e } as FieldEvent;

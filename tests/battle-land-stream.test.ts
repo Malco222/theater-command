@@ -1,8 +1,8 @@
 // A capital's or a city's own river through its streets (Brian, 18 November: the battle's ground matches the map; the
-// design director, b526): the hand list of real cities, how the river lies to the attack, never between the armies, a
-// bridge on every avenue, one river a field, and the rest of the field as it was.
+// design director, b526): the hand list of real cities, how the river lies to the attack, never between the armies, its
+// bridges by the record (b596), one river a field, and the rest of the field as it was.
 import { describe, expect, it } from 'vitest';
-import { CITY_RIVERS, GROUNDS, LandBattle, bearingOf, buildField, sampleTicket, streamFor, streamOf, type LandField, type Stream } from '../src/battle/land';
+import { CITY_RIVERS, GROUNDS, LAND, LandBattle, bearingOf, buildField, sampleTicket, streamFor, streamOf, type LandField, type Stream } from '../src/battle/land';
 
 const kind = (f: LandField, c: number, r: number): string => GROUNDS[f.ground[r * f.cols + c]];
 const wet = (k: string): boolean => k === 'water' || k === 'bridge' || k === 'blown';
@@ -332,5 +332,17 @@ describe("the city's river on the field (b526)", () => {
         expect(k === 'water' || k === 'blown', `${name} ${seed} ${u.name}`).toBe(false);
       }
     }
+  });
+  it("a defence whose line ends on the water is held as the river's (b526, b596(2)): up the field hold.stream, beside a second river hold.join", () => {
+    const at = (s?: Stream): { on: boolean; k: number } => {
+      const b = new LandBattle(cityTicket('city', 'urban', 4242, s)) as unknown as { flankOnRiver: boolean; flankHold: number };
+      return { on: b.flankOnRiver, k: b.flankHold };
+    };
+    expect(at()).toEqual({ on: false, k: 1 });
+    expect(at(stream('across'))).toEqual({ on: false, k: 1 });
+    expect(at(stream('across', { flows: 'west', join: { name: 'Second', side: 'east', bridges: 1 }, bridges: 2 }))).toEqual({ on: true, k: LAND.hold.join });
+    const up = at(stream('up', { bridges: 3 }));
+    expect(up.k).toBe(up.on ? LAND.hold.stream : 1);
+    expect(LAND.hold.join).toBeLessThan(LAND.hold.stream);
   });
 });

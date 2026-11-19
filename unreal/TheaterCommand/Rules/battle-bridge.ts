@@ -403,6 +403,9 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
     // Air support ("Air support" above): only where a side has fighters on call.
     ...(v.flights ? { flights: v.flights } : {}),
     ...(v.air ? { air: v.air } : {}),
+    // A strike on ships carries the ships under attack (src/battle/air/ships.ts, ruling 238): each one's place, hits
+    // and how it went down. The air thread's; passed as it comes.
+    ...((v as BattleView & { ships?: unknown }).ships ? { ships: (v as BattleView & { ships?: unknown }).ships } : {}),
   };
 }
 
