@@ -228,6 +228,30 @@ or `sink.stern`, torpedoes `capsize.*`, a magazine `break`. No wake on a sinking
 sea boils white (heaviest where the last of her went down, lighter along her side where the sea is climbing it),
 and a dark sheen of oil wells up there and spreads.
 
+### The named Pacific capital ships
+
+Four named ships built to their real dimensions and drawings (measured off reference pictures; no mesh, texture or
+drawing is copied), at the B-17's level of detail, with every light gun manned (`capitals.py`, its small fittings in
+`fittings.py`):
+
+| File | Ship, as she was | Stands in for | Triangles fine / plain |
+|---|---|---|---|
+| `Iowa` | Iowa-class fast battleship, 1944, Measure 22 | `Battleship_USA` | 199k / 30k |
+| `Yamato` | Yamato, April 1945, triple 46 cm, 25 mm nests everywhere | `Battleship_JAP` | 237k / 29k |
+| `Shokaku` | Shokaku-class carrier, 1941-42, bent funnels to starboard | `Carrier_JAP` | 109k / 14k |
+| `Essex` | Essex-class carrier, 1944, Measure 21, deck-edge lift to port | `Carrier_USA` | 136k / 19k |
+
+Each is a drop-in for the plain ship it names in `info.file.stands_for`: the same parts, sockets and clips, so a
+battle can swap one for the other. What they add: more `sec.*` mounts (`sec.P1…/sec.S1…`, and Yamato's two centre-line
+15.5 cm turrets `sec.C1`, `sec.C2`), every 40 mm / 25 mm mount its own turn part (`bofors.N`, `aa25.N`, each with its
+`.guns` lifting), `aa.N` sockets on every light gun, and the clip `fire.aa` (the light guns firing in a ripple, for a
+raid). A carrier's lifts are `lift.N` slide parts; the Essex's second lift is out on the port deck edge, on girders,
+with no well under it. The deck park's markings follow the kind a carrier stands for (`deckpark.stands_for`).
+
+Make one again with `python3 export.py <out> Essex` (or Iowa, Yamato, Shokaku); check with
+`python3 shipcheck.py loose Essex` (0 loose pieces, 0 points in no face) and `boxes`. Pictures:
+`sea/close/<Name>-*.png`, and all four side by side in `sea/sheets/pacific-capitals.png`.
+
 ## Aircraft
 
 All are built by the game's own sculptor (`game/build_plane.py`, copied from the `unreal` branch) and
