@@ -619,6 +619,9 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	{
 		TArray<FVector> Points, Facings;
 		TArray<int32> Paints, Triangles;
+		// (A worn figure, the soldiers' maker, 19 November 2026: the file's optional "shade" beside its paints, one
+		// number for each point, 1 clean and less where the cloth is worn or stitched. Empty where the file has none.)
+		TArray<float> Worn;
 		// (where the model's maker says its markings go, on the right-hand side, and how high its roof is: a model
 		// that does not say is marked by its outline)
 		bool bMarks = false, bCross = false, bNumber = false; // (a lorry carries its nation's mark and no number; a gun carries neither)
@@ -692,6 +695,15 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				for (const TSharedPtr<FJsonValue>& Value : *PaintList)
 				{
 					Raw->Paints.Add(static_cast<int32>(Value->AsNumber()));
+				}
+				const TArray<TSharedPtr<FJsonValue>>* ShadeList = nullptr;
+				if ((*Part)->TryGetArrayField(TEXT("shade"), ShadeList) && ShadeList->Num() == PaintList->Num())
+				{
+					Raw->Worn.Reserve(ShadeList->Num());
+					for (const TSharedPtr<FJsonValue>& Value : *ShadeList)
+					{
+						Raw->Worn.Add(FMath::Clamp(static_cast<float>(Value->AsNumber()), 0.0f, 1.0f));
+					}
 				}
 				for (const TSharedPtr<FJsonValue>& Value : *TriangleList)
 				{
@@ -998,7 +1010,13 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			if (bFigure)
 			{
 				Fresh.Finish = 255;
-				Fresh.Add(Raw->Points[K], Raw->Facings[K], (*Kit)[FMath::Clamp(Raw->Paints[K], 0, Kit->Num() - 1)].ToFColor(true));
+				// (its kit's colour for the point's paint, darkened by the point's own wear where the figure carries any)
+				FLinearColor Dress = (*Kit)[FMath::Clamp(Raw->Paints[K], 0, Kit->Num() - 1)];
+				if (Raw->Worn.IsValidIndex(K) && Raw->Worn[K] < 1.0f)
+				{
+					Dress = FLinearColor(Dress.R * Raw->Worn[K], Dress.G * Raw->Worn[K], Dress.B * Raw->Worn[K], Dress.A);
+				}
+				Fresh.Add(Raw->Points[K], Raw->Facings[K], Dress.ToFColor(true));
 				continue;
 			}
 			if (Raw->bBattle && Raw->PaintColours.Num() > 11)
