@@ -68,6 +68,15 @@ outer 70% and under 1.5 m high (`shock_ring.skirt.lobes`, `feather`, `most_high_
 `shower.halve_past` puffs live, a shell throws half the shower and half the spikes. Leave these keys out and the kit
 draws as before.
 
+The mend round (art director 03:28Z): each spike is 3 to 5 lumps of unequal width with small gaps (`spikes.pieces`,
+`lump_share`, `rough`), its outer lumps drooping under gravity after about 0.3 s (`droop`), and no spike longer than
+`longest_of_median` times the middle one, so a 500 lb bomb shows no lone stick. A ground may give its own colours:
+`ring` (the dust ring; earth, mud and woods a touch darker than their dust), `foot` (the dark foot; sand's grey-black
+explosive smoke, snow's dark earth), `stone` (the shower's lumps) and `foot_dust` (how much of its dust shows in the
+foot; snow none). Water's mist is drawn out down the wind (`smoke_stretch`, 1.65 makes it about 1.5 times as wide for
+its height) and thins to half by `smoke_half_by_s`. Measured at 0.4 s, 25 m off: earth 22%, woods 19%, sand 6%, snow
+5% of the burst's box under luma 60 (snow's white ring covers some of its dark: 7.6% without it).
+
 Sun and sky: `SetSun` gives the way toward the sun. Smoke's shadow side never falls below `game.sky_fill` of its own
 colour in the hour's light, and looking toward the sun the fringe of a smoke cloud or trail glows warm
 (`game.sun_through`). The sun's own light is full by day and none at night, read from the hour's light; the preview

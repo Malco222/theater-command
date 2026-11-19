@@ -228,10 +228,9 @@
      24,
      36
     ],
-    "pieces": 8,
     "reach": [
-     0.3,
-     0.85
+     0.45,
+     1.05
     ],
     "lean": [
      0.15,
@@ -245,14 +244,28 @@
      0.4,
      0.7
     ],
-    "tip_alpha": 0.6,
+    "tip_alpha": 0.85,
     "tip_clod_m": [
      0.05,
      0.12
     ],
-    "_how": "Thin dark rays of earth among the heavy jets: count of them (halved past burst.debris.shower.halve_past puffs), each pieces long thin pieces drawn to a point, reaching reach times the crown's height, leaning lean times half the fan, thick times the jet's foot and tip radius, the heavy colour times shade, alpha falling to tip_alpha at the tip, a lump of tip_clod_m (times the square root of scale) riding each tip. The debris shower streams along them too. overlap: how long each piece is, as a share of the gap to the next (over 1 overlaps); ragged: how far pieces stray sideways, so a spike is never a smooth blade.",
-    "overlap": 1.4,
-    "ragged": 0.8
+    "ragged": 1.6,
+    "pieces": [
+     3,
+     5
+    ],
+    "lump_share": [
+     0.6,
+     0.9
+    ],
+    "rough": [
+     0.55,
+     0.85
+    ],
+    "droop": 0.55,
+    "longest_of_median": 1.3,
+    "stretch_most": 6,
+    "_how": "Thin dark rays of earth among the heavy jets: count of them (halved past burst.debris.shower.halve_past puffs), each a few lumps (pieces) along its length with small gaps (each lump lump_share of its place), edges broken by rough (foot to tip), drawn to a point, reaching reach times the crown's height, leaning lean times half the fan, thick times the jet's foot and tip radius, the heavy colour times shade, alpha falling to tip_alpha at the tip, a lump of tip_clod_m (times the square root of scale) riding each tip. The debris shower streams along them too. droop: the outer lumps fall faster (gravity up to 1 + droop at the tip), so the tip bends down after about 0.3 s. longest_of_median: no spike longer than this times the middle one (a long lone blade reads as a stick). stretch_most: no lump drawn longer than this times its width. Art director 03:28Z."
    }
   },
   "foot": {
@@ -740,6 +753,11 @@
      72,
      62,
      52
+    ],
+    "ring": [
+     124,
+     114,
+     100
     ]
    }
   },
@@ -781,6 +799,16 @@
      176,
      152,
      118
+    ],
+    "foot": [
+     36,
+     35,
+     34
+    ],
+    "stone": [
+     78,
+     72,
+     66
     ]
    },
    "shower": 0.8,
@@ -837,7 +865,13 @@
     "first_share": [
      0.35,
      0.8
-    ]
+    ],
+    "foot": [
+     30,
+     26,
+     22
+    ],
+    "foot_dust": 0.0
    },
    "_mend_1931": "Art director 19:31Z on the first in-game frames: the snow crown was smooth pure-white blades like a paper flower, ringed by cotton puffs. Now broken and granular (grain: its pieces half the size, twice as many, soft-edged, not drawn out), off-white (about 188,193,201 in shade; each grain its own shade) with dark earth showing in the jets (first_share: a third of the pieces snow at the jet's foot, four fifths at its tip)."
   },
@@ -878,6 +912,11 @@
      64,
      56,
      48
+    ],
+    "ring": [
+     100,
+     90,
+     78
     ]
    }
   },
@@ -976,6 +1015,11 @@
      205,
      186,
      150
+    ],
+    "ring": [
+     112,
+     104,
+     90
     ]
    }
   },
@@ -1014,8 +1058,10 @@
     164
    ],
    "haze_lingers": 0.35,
-   "_spout": "Brian's battle video (11-19): a water spout is white spray that falls back fast and leaves a thin mist, not a cloud. The smoke's top mixes toward smoke_top (pale grey: burst.smoke.colour_top is charcoal, for earth), its puffs are smoke_alpha as solid, the mist clears in about a third of the time (haze_lingers), and nothing smoulders.",
-   "smoke_alpha": 0.5
+   "_spout": "Brian's battle video (11-19): a water spout is white spray that falls back fast and leaves a thin mist, not a cloud. The smoke's top mixes toward smoke_top (pale grey: burst.smoke.colour_top is charcoal, for earth), its puffs are smoke_alpha as solid, the mist clears in about a third of the time (haze_lingers), and nothing smoulders. Art director 03:28Z: the mist at 1.6 s was a round white ball; the wind draws each puff out smoke_stretch times downwind (and carries some further than others), and it thins to half by smoke_half_by_s.",
+   "smoke_alpha": 0.5,
+   "smoke_half_by_s": 1.6,
+   "smoke_stretch": 1.65
   },
   "ground_of": {
    "open": "earth",
@@ -1037,7 +1083,7 @@
    "mud": "the autumn and spring thaw (rasputitsa) in the east, and marsh",
    "sand": "North Africa and the desert fields"
   },
-  "_paint": "paint: the game's unlit colours for each ground, as the finished picture should show them (sRGB 0-255): soil the lighter jets, heavy the dark heavy jets and the body, dust the skirt and veil, clod the lumps, smoke the cloud, first (snow) what is thrown first, splinter (woods) the wood."
+  "_paint": "paint: the game's unlit colours for each ground, as the finished picture should show them (sRGB 0-255): soil the lighter jets, heavy the dark heavy jets and the body, dust the skirt and veil, clod the lumps, smoke the cloud, first (snow) what is thrown first, splinter (woods) the wood. ring (optional) the dust ring's colour, from the ground it lands on (default dust: art director 03:28Z, earth's ring grey-brown, a touch darker than its dust); foot (optional) the dark foot's colour (default heavy: sand's is grey-black explosive smoke); stone (optional) the shower's lumps (default clod: sand throws dark stones). foot_dust (optional) how much of the ground's dust shows in the dark foot's veil and fill (snow 0: black earth through the white, art director 03:28Z)."
  },
  "on_armour": {
   "_how": "A shell that hits a tank and does not go in.",

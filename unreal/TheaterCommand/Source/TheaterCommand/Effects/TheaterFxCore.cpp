@@ -268,6 +268,10 @@ namespace TheaterFx
 		Out_.FirstAtTip = Num(P + "first_share.1", 1.0);
 		Out_.bSplinter = Has(P + "splinter.0");
 		Out_.Splinter = Picture(P + "splinter", Out_.Clod);
+		Out_.Ring = Picture(P + "ring", Out_.Dust);
+		Out_.Foot = Picture(P + "foot", Out_.Heavy);
+		Out_.Stone = Picture(P + "stone", Out_.Clod);
+		Out_.FootDust = Has(P + "foot_dust") ? Clamp01(Num(P + "foot_dust", 0.0)) : -1.0;
 		return Out_;
 	}
 
@@ -531,7 +535,7 @@ namespace TheaterFx
 		const std::string R = "burst.shock_ring.";
 		const std::string Sk = R + "skirt.";
 		const double Reach = Num(R + "reach_m", 15.0) * K;
-		const Rgb Col = P.Dust * Num(R + "colour_from_ground", 0.85);
+		const Rgb Col = P.Ring * Num(R + "colour_from_ground", 0.85); // (the ground's own ring colour where it has one: earth's darker than its dust)
 		const double Many = std::max(0.7, std::sqrt(K));
 		const int NOut = static_cast<int>(Num(Sk + "puffs_outer", 110.0) * Many);
 		const int NIn = static_cast<int>(Num(Sk + "puffs_inner", 60.0) * Many);
@@ -630,7 +634,7 @@ namespace TheaterFx
 		const bool bDarkFoot = (ClodK > 0.02 || ShowerK > 0.02) && Has(Ft + "count.0");
 		const Span FootShade = Range(Ft + "shade", 0.35, 0.55);
 		const Rgb Settled = P.Smoke.Mix(P.Dust, Num(Ft + "settle_dust", 0.3));
-		const double FillDust = Num(Ft + "fill_dust", 0.35);
+		const double FillDust = P.FootDust >= 0.0 ? P.FootDust : Num(Ft + "fill_dust", 0.35);
 		// (a size may have its own crown numbers under sizes.<size>.crown.: the bombs' fan of many jets)
 		const std::string Own = "sizes." + Size + ".crown.";
 		auto Path = [&](const std::string& Name) -> std::string
@@ -720,7 +724,7 @@ namespace TheaterFx
 				}
 				const double Sp = V * (0.05 + 0.95 * std::pow(F, 0.9));
 				const double Rr = Rl * (D.U() < Lumps ? D.U(1.4, 2.0) : D.U(0.8, 1.1));
-				Rgb Col = bHeavy ? P.Heavy * Shade : (bDarkFoot ? P.Heavy.Mix(P.Dust, DustShare * FillDust) : P.Soil.Mix(P.Dust, DustShare)) * Shade;
+				Rgb Col = bHeavy ? P.Heavy * Shade : (bDarkFoot ? P.Foot.Mix(P.Dust, DustShare * FillDust) : P.Soil.Mix(P.Dust, DustShare)) * Shade;
 				if (P.bFirst && D.U() < P.FirstAtFoot + (P.FirstAtTip - P.FirstAtFoot) * F)
 				{
 					Col = P.First * D.U(0.84, 1.04); // (snow: thrown up first, never two grains the same shade, earth showing through)
@@ -801,40 +805,60 @@ namespace TheaterFx
 		const double HalvePast = Num("burst.debris.shower.halve_past", 0.0);
 		const double Busy = HalvePast > 0.0 && static_cast<double>(Bits.size()) > HalvePast ? 0.5 : 1.0; // (a busy screen: half the many small things)
 		const int NSpike = (ClodK > 0.02 || ShowerK > 0.02) && Has(Sp_ + "count.0") ? static_cast<int>(D.Whole(static_cast<int>(Num(Sp_ + "count.0", 24.0)), static_cast<int>(Num(Sp_ + "count.1", 40.0))) * Busy) : 0;
-		const int SpikePieces = std::max(2, static_cast<int>(Num(Sp_ + "pieces", 6.0)));
+		const int PiecesLo = std::max(2, static_cast<int>(Num(Sp_ + "pieces.0", 3.0))), PiecesHi = std::max(PiecesLo, static_cast<int>(Num(Sp_ + "pieces.1", 5.0)));
 		const Span SpikeReach = Range(Sp_ + "reach", 0.4, 1.15), SpikeLean = Range(Sp_ + "lean", 0.15, 1.1), SpikeThick = Range(Sp_ + "thick", 0.25, 0.6);
-		const Span SpikeShade = Range(Sp_ + "shade", 0.55, 0.85), SpikeTipClod = Range(Sp_ + "tip_clod_m", 0.05, 0.12);
-		const double SpikeTipAlpha = Num(Sp_ + "tip_alpha", 0.6), SpikeOverlap = Num(Sp_ + "overlap", 1.4), SpikeRagged = Num(Sp_ + "ragged", 0.8);
+		const Span SpikeShade = Range(Sp_ + "shade", 0.55, 0.85), SpikeTipClod = Range(Sp_ + "tip_clod_m", 0.05, 0.12), SpikeFill = Range(Sp_ + "lump_share", 0.6, 0.9);
+		const double SpikeTipAlpha = Num(Sp_ + "tip_alpha", 0.6), SpikeRagged = Num(Sp_ + "ragged", 0.8), SpikeDroop = Clamp01(Num(Sp_ + "droop", 0.0));
+		const double SpikeMost = Num(Sp_ + "longest_of_median", 0.0), SpikeStretchMost = Num(Sp_ + "stretch_most", 14.0);
+		const Span SpikeRough = Range(Sp_ + "rough", 0.35, 0.65);
+		// (unequal lengths, the longest no more than longest_of_median times the middle one: a long lone blade reads as a stick)
+		std::vector<double> Reaches;
+		for (int S = 0; S < NSpike; ++S)
+		{
+			Reaches.push_back(CrownH * SpikeReach.Pick(D));
+		}
+		if (SpikeMost > 0.0 && !Reaches.empty())
+		{
+			std::vector<double> ByLength = Reaches;
+			std::nth_element(ByLength.begin(), ByLength.begin() + static_cast<std::ptrdiff_t>(ByLength.size() / 2), ByLength.end());
+			const double Cap = ByLength[ByLength.size() / 2] * SpikeMost;
+			for (double& Rch : Reaches)
+			{
+				Rch = std::min(Rch, Cap);
+			}
+		}
 		for (int S = 0; S < NSpike; ++S)
 		{
 			const double Az = D.U(0.0, 2.0 * Pi);
 			const double Lean = SpikeLean.Pick(D) * Half;
 			const Vec Dir = (Vec(std::cos(Az) * std::sin(Radians(Lean)), std::sin(Az) * std::sin(Radians(Lean)), std::cos(Radians(Lean))) + Tilt).Unit();
-			const double ReachS = CrownH * SpikeReach.Pick(D);
-			const double V = ReachS * KD * 1.12 / std::sqrt(Slow);
+			const double ReachS = Reaches[static_cast<size_t>(S)];
 			JetThrow.push_back(Dir * std::sqrt(2.0 * 9.8 * ReachS));
 			const double Thick = SpikeThick.Pick(D);
 			const double Rf = FootR * Thick * (P.Grain < 0.999 ? P.Grain : 1.0), Rt = TipR * Thick;
 			const Rgb Col = P.Heavy * SpikeShade.Pick(D);
+			// (a few lumps along it with small gaps between, never one clean cone: art director 03:28Z)
+			const int SpikePieces = D.Whole(PiecesLo, PiecesHi);
 			for (int Q = 0; Q < SpikePieces; ++Q)
 			{
-				const double F = (Q + D.U(0.3, 0.7)) / SpikePieces; // (the middle of this piece, along the spike)
-				const double Rl = Rt + (Rf - Rt) * std::pow(1.0 - F, 0.8);
+				const double F = (Q + D.U(0.35, 0.65)) / SpikePieces; // (the middle of this lump, along the spike)
+				const double Rl = (Rt + (Rf - Rt) * std::pow(1.0 - F, 0.8)) * D.U(0.75, 1.3); // (unequal lumps)
+				const double V = ReachS * KD * 1.12 / std::sqrt(Slow);
 				Bit B;
 				B.Born = T0 + 0.01 + 0.025 * (1.0 - F);
 				B.From = At + ZUp * 0.1 + Dir * (0.25 * K);
 				B.Vel = Dir * (V * (0.05 + 0.95 * std::pow(F, 0.9))) + Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-1.0, 1.0)) * (Rl * SpikeRagged * KD); // (ragged: never a smooth blade)
 				B.Drag = KD;
-				B.Gravity = 9.8 / Slow;
+				B.Gravity = 9.8 / Slow * (1.0 + SpikeDroop * F); // (the outer lumps fall faster, so the tip bends down after about 0.3 s)
 				B.Windage = 0.35;
 				B.Life = D.U(0.9, 1.5) * Slow;
 				B.R0 = Rl;
-				B.R1 = Rl * D.U(1.5, 2.0);
+				B.R1 = Rl * D.U(1.1, 1.3); // (they barely swell, so the gaps stay open)
 				B.Grow = 0.5;
 				B.Along = Dir;
-				B.Stretch = std::clamp(ReachS * SpikeOverlap / (2.0 * SpikePieces * Rl), 1.0, 14.0); // (each piece long enough to reach the next)
-				B.Point = F > 0.6 ? 0.9 : 0.3;
-				B.Tail = 0.15;
+				B.Stretch = std::clamp(ReachS * SpikeFill.Pick(D) / (2.0 * SpikePieces * Rl * 1.25), 1.0, std::max(1.0, SpikeStretchMost)); // (each lump short of the next: a small gap)
+				B.Point = Q == SpikePieces - 1 ? 0.6 : 0.2; // (only the last drawn to a point)
+				B.Tail = 0.1;
 				B.Col = Col * D.U(0.9, 1.1);
 				B.Col2 = P.Heavy.Mix(P.Dust, 0.4);
 				B.Cool = 0.7;
@@ -844,7 +868,7 @@ namespace TheaterFx
 				B.Heart = 0.95;
 				B.Inner = 0.8;
 				B.Rim = 0.0;
-				B.Rough = 0.35 + 0.3 * F;
+				B.Rough = SpikeRough.A + (SpikeRough.B - SpikeRough.A) * F; // (broken edges, most torn at the tip)
 				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 				B.Turn = D.U(0.0, 2.0 * Pi);
 				Bits.push_back(B);
@@ -887,7 +911,7 @@ namespace TheaterFx
 			B.Cool = 1.2;
 			if (bDarkFoot)
 			{
-				B.Col = P.Heavy * FootShade.Pick(D);
+				B.Col = P.Foot * FootShade.Pick(D);
 				B.Col2 = Settled;
 				B.Cool = Num(Ft + "settle", 0.75);
 			}
@@ -931,7 +955,7 @@ namespace TheaterFx
 				B.R0 = Rr * 0.7;
 				B.R1 = Rr * D.U(1.1, 1.4);
 				B.Grow = 0.4;
-				B.Col = P.Heavy * FootShade.Pick(D);
+				B.Col = P.Foot * FootShade.Pick(D);
 				B.Col2 = Settled * D.U(0.85, 1.05);
 				B.Cool = FootCool;
 				B.Alpha = D.U(0.9, 1.0);
@@ -1025,7 +1049,7 @@ namespace TheaterFx
 			B.Gravity = 9.8;
 			B.R0 = B.R1 = LaunchR[I];
 			const bool bShower = I >= ShowerFrom && I < ShowerTo;
-			B.Col = (P.bSplinter && D.U() < 0.35 ? P.Splinter : P.Clod) * (bShower ? ShowerShade.Pick(D) : D.U(0.8, 1.2));
+			B.Col = (P.bSplinter && D.U() < 0.35 ? P.Splinter : (bShower ? P.Stone : P.Clod)) * (bShower ? ShowerShade.Pick(D) : D.U(0.8, 1.2));
 			B.Col2 = B.Col;
 			B.Alpha = 1.0;
 			B.FadeIn = 0.005;
@@ -1069,7 +1093,7 @@ namespace TheaterFx
 		// (art director 03:13Z: the foot carries the black for its first second, so the earth that stands over it and
 		// the smoke at its foot start dark and settle to brown-grey; never on water)
 		const bool bDarkFoot = Ground != "water" && Has("burst.foot.count.0");
-		const Rgb VeilCol = bDarkFoot ? P.Dust.Mix(P.Heavy, Num("burst.foot.veil_dark", 0.5)) : P.Dust;
+		const Rgb VeilCol = bDarkFoot ? P.Dust.Mix(P.Foot, P.FootDust >= 0.0 ? 1.0 - P.FootDust : Num("burst.foot.veil_dark", 0.5)) : P.Dust;
 		const double FootBand = Num("burst.foot.smoke_band", 0.45), FootSmokeDark = Num("burst.foot.smoke_dark", 0.45), FootSettle = std::max(0.1, Num("burst.foot.smoke_settle_s", 1.0));
 		for (int I = 0; I < NVeil; ++I)
 		{
@@ -1113,6 +1137,10 @@ namespace TheaterFx
 		const Span SmokeR0 = Range(Sm + "puff_r.0", 0.5, 0.9), SmokeR1 = Range(Sm + "puff_r.1", 1.2, 2.6), SmokeAlpha = Range(Sm + "alpha", 0.35, 0.6);
 		const double SmokeGrow = Num(Sm + "grow", 0.3);
 		const double AlphaK = Num("grounds." + Ground + ".smoke_alpha", 1.0); // (a water spout leaves a thin mist, not a cloud)
+		// (and the wind draws that mist out and thins it to half by smoke_half_by_s, so no round ball is left: art director 03:28Z)
+		const double HalfBy = Num("grounds." + Ground + ".smoke_half_by_s", 0.0);
+		const double WindStretch = Num("grounds." + Ground + ".smoke_stretch", 1.0);
+		const Vec Downwind = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(Lean.X, Lean.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0)));
 		for (int I = 0; I < N; ++I)
 		{
 			const double F = std::pow(D.U(), 0.9); // (0 at the foot, 1 at the top of the crown)
@@ -1158,6 +1186,21 @@ namespace TheaterFx
 			B.Centre = At + (Lean + ZUp) * (CrownH * 0.45); // (the cloud's middle leans as the cloud does)
 			B.CloudR = CrownH * CloudR; // (within this of the middle a puff is only partly lit or shadowed)
 			B.CentreRise = 0.55 * std::sqrt(K);
+			if (HalfBy > 0.0)
+			{
+				B.HazeBy = HalfBy;
+				B.HazeAlpha = B.Alpha * 0.5;
+			}
+			if (WindStretch > 1.0)
+			{
+				B.Along = Downwind;
+				B.Stretch = WindStretch;
+				B.Windage = D.U(0.3, 1.7); // (some puffs carried further than others: the cloud draws out downwind)
+				// (and the cloud itself is laid out and spreads that much longer down the wind than across it)
+				const Vec Off = B.From - At;
+				B.From = B.From + Downwind * (Off.Dot(Downwind) * (WindStretch - 1.0));
+				B.Vel = B.Vel + Downwind * (B.Vel.Dot(Downwind) * (WindStretch - 1.0));
+			}
 			Bits.push_back(B);
 		}
 		// the crater smoulders faintly for a while (water has none)
