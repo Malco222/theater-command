@@ -128,8 +128,10 @@ describe('Italy\'s boats by the historian\'s rows (stops 1 to 3)', () => {
     const atl = named(g, 'Atlantic Submarine Fleet')!;
     expect(g.regions[atl.base].name).toBe('Bordeaux');
     expect(g.seas[atl.home].key).toBe('biscay');
-    // Its beat is the sea nearest Bordeaux that carries a British lane (rider b598(3)): the Western Approaches, before
-    // and after March 1941, when its dated beat would move to the Iberian Coast, where no British lane runs.
+    // Its beat is read from the record's seas by half-year (riders b601 and b603): to February 1941 the one of the
+    // Western Approaches and the North Atlantic with the most British lane, the first of them where both carry one;
+    // from March 1941, when the record's boats went south where the chart carries no British lane, the nearest sea to
+    // those that does. The Western Approaches both times, never the Iberian Coast its dated beat would give.
     expect(g.seas[atl.station].key).toBe('wapp');
     expect(italian(g)).toEqual([30, 18, 29, 23]);
     g.turn = 19;

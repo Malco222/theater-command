@@ -38,7 +38,7 @@ import grand from '../data/campaign/grand.json';
 import open from '../data/campaign/open.json';
 import setup from '../data/campaign/setup-1939.json';
 
-const DEC_41 = 28, JAN_42 = 29, OCT_42 = 38, JUN_43 = 46;
+const DEC_41 = 28, JAN_42 = 29, JUN_43 = 46;
 /** A grand campaign on the wider world as it opens. */
 const wide = (seed = 1, human: string | null = null): Game => startOpen(createGame(seed, human));
 const field = (g: Game, nat: string): Corps[] => g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng');
@@ -58,7 +58,7 @@ const guard: number[] = [];
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, warned: e.warned, island: e.to.nb.length === 0, wave: e.wave }); };
   while (g.turn < JUN_43) {
     runTurnAI(g);
-    if ([JAN_42, OCT_42, JUN_43].includes(g.turn)) war[g.turn] = saveGame(g);
+    if ([JAN_42, JUN_43].includes(g.turn)) war[g.turn] = saveGame(g);
     if (g.turn > JAN_42) guard.push(atHome(g, 'USA').length);
   }
   landingWatch.tell = null;
@@ -237,9 +237,12 @@ describe('the army sent across the ocean', () => {
   it('ships nobody over a crossing too dangerous for its staff', () => {
     const O = WORLD.overseas.USA;
     const sail = (risk: number): Region[] => {
-      // October 1942: a month in this war with danger on the way to the harbour where the army is built up, and no more
-      // than the staff will bear. (In seed 5's war, since ruling 233 rider b564, that harbour is Northumbria.)
-      const g = at(OCT_42);
+      // January 1942: a month in this war with danger on the way to the harbour where the army is built up, and no more
+      // than the staff will bear. (Since ruling 233 riders b598, b601 and b603 the Bordeaux flotilla hunts the Western
+      // Approaches and not the Iberian Coast, so in October 1942 the way to Gibraltar, that month's harbour, carries no
+      // danger. Seed 5's war scanned month by month from turn 26 to 46: danger at turns 28 to 33, on the way to
+      // Cornwall by the Western Approaches, and at 40 to 46, on the way to Sardinia; none at 34 to 39.)
+      const g = at(JAN_42);
       const before = new Set(across(g, 'USA').map((c) => c.id));
       // A month's sailing banked and a fit corps on the quay.
       const run = oceanRuns(g, 'USA')[0];

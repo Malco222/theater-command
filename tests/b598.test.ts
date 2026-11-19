@@ -3,12 +3,16 @@
 // move by need stands and, while an enemy fleet is based on a Mediterranean sea, Italy's three Mediterranean beats keep
 // at least a third of her boats between them (navy.json beats 'floor'). (2) Every tied fleet, in every campaign, loses
 // its tie the month its home falls or once its beat is out of reach from the port it is in, and is then placed as any
-// other fleet. (3) At stops 1 to 3 the Bordeaux flotilla's beat is the sea nearest Bordeaux that carries a British
-// lane that month, its dated beat only where none in its reach does.
+// other fleet. (3) At stops 1 to 3 the Bordeaux flotilla's beat follows the historian's seas by half-year (riders b601
+// and b603, which replace b598's interim): the sea of the list with the most British lane, or where none has any, the
+// nearest sea to the list that does; its dated beat only where no sea in its reach carries one. (4) The names and the
+// carriers are the rows, at every stop (rider b601): Bordeaux's and the German Mediterranean boats' commanders by date,
+// and the Mediterranean Fleet's Glorious and Eagle. (The Illustrious's row from turn 13 is held for the director: it
+// moves the history stop's wars, and without the record's departures it leaves that fleet three carriers from turn 16.)
 import { describe, expect, it } from 'vitest';
 import { createGame, declareWar } from '../src/campaign/game';
 import {
-  NAVY, fleetReach, foeBasedOn, laneBeat, lanesTo, navalAI, navalUpkeep, placeBoats, rebase, seaRoutes, shippingIn, tieLapses, zoneOf,
+  NAVY, fleetReach, fleetsAnswer, foeBasedOn, huntBeat, lanesTo, navalAI, navalUpkeep, placeBoats, rebase, sail, seaRoutes, shippingIn, tieLapses, tiedNow, zoneOf,
 } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import type { Fleet, Game } from '../src/campaign/types';
@@ -136,6 +140,42 @@ describe('(1) need, and the Mediterranean\'s third', () => {
     g.turn = 28;
     placeBoats(g, 'ITA');
     expect(italian(g)).toEqual([18, 19, 38, 25]);
+    // The record's rows never leave the Mediterranean below a third, so a row that does is laid in for the test: read by
+    // date, it stands as written with an enemy fleet based at Alexandria, where by need the floor would lift it to 34.
+    const rows = NAVY.beats!.ITA.rows;
+    rows.push([28, 80, 5, 5, 5]);
+    try {
+      for (const stop of [1, 2, 3]) {
+        g.flags.hist = stop;
+        placeBoats(g, 'ITA');
+        expect(foeBasedOn(g, 'ITA', NAVY.beats!.ITA.floor!.seas)).toBe(true);
+        expect(italian(g), `stop ${stop}`).toEqual([84, 6, 5, 5]);
+      }
+      g.flags.hist = 4;
+      placeBoats(g, 'ITA');
+      expect(sum(italian(g).slice(1))).toBeGreaterThanOrEqual(34);
+    } finally {
+      rows.pop();
+    }
+  });
+
+  it('a group counts for the floor while its beat is on a Mediterranean sea, not by its name alone', () => {
+    const g = drawnWest();
+    // Italy holds the Rock, so the western group can pass the strait, and a British lane is laid off the Iberian coast:
+    // by need the western group's beat is that sea, outside the Mediterranean.
+    g.byName.Gibraltar.ctrl = 'ITA';
+    seaRoutes(g).push({ id: 'b598-iberia', name: 'a test lane', to: 'UK', zones: [zoneOf(g, 'iberia')] });
+    expect(foeBasedOn(g, 'ITA', NAVY.beats!.ITA.floor!.seas)).toBe(true);
+    placeBoats(g, 'ITA');
+    const west = named(g, 'Submarine Fleet')!;
+    expect(key(g, west.station)).toBe('iberia');
+    // The third is kept by the groups still on Mediterranean seas; the western group's boats are not counted in it.
+    const seas = NAVY.beats!.ITA.floor!.seas;
+    const onMed = MED.filter((name) => seas.includes(key(g, named(g, name)!.station)));
+    expect(onMed).not.toContain('Submarine Fleet');
+    expect(onMed.length).toBeGreaterThan(0);
+    expect(sum(onMed.map((name) => boats(g, name)))).toBe(34);
+    expect(sum(italian(g))).toBe(100);
   });
 });
 
@@ -198,17 +238,24 @@ describe('(2) a tie lapses', () => {
     navalUpkeep(g, 'UK');
     expect(f.tied).toBe(false);
     expect(g.regions[f.base].name).toBe('Cornwall');
-    // Tied, its admiral looked only at a beat it could not reach and kept it in harbour. Freed, he sends it where the
-    // work is, as any other fleet: here against a German landing on the Channel coast.
+    // Freed, its admiral sends it where the work is, as any other fleet: here against a German landing on the Channel
+    // coast. Tied, he would have looked only at a beat it could not reach and kept it in harbour; and a tie that has
+    // lapsed holds nothing even before its flag is cleared (tiedNow), so the flag set again changes nothing.
     const channel = zoneOf(g, 'channel');
-    const tied = (): void => { f.tied = true; };
     g.flags[`landed:${channel}:GER`] = g.turn;
-    tied();
-    navalAI(g, 'UK');
-    expect(f.stance).toBe('port');
-    f.tied = false;
     navalAI(g, 'UK');
     expect([key(g, f.zone), f.stance]).toEqual(['channel', 'patrol']);
+    f.tied = true;
+    expect(tiedNow(g, f)).toBe(false);
+    sail(g, f, f.home, 'port');
+    navalAI(g, 'UK');
+    expect([key(g, f.zone), f.stance]).toEqual(['channel', 'patrol']);
+    // With its beat back in reach (the Rock British again), the tie holds and the admiral keeps it to its beat.
+    g.byName.Gibraltar.ctrl = 'UK';
+    expect(tiedNow(g, f)).toBe(true);
+    sail(g, f, f.home, 'port');
+    navalAI(g, 'UK');
+    expect(key(g, f.zone)).not.toBe('channel');
   });
 
   it('an untied fleet is left as it was: its base moves when it falls, and nothing else changes', () => {
@@ -238,10 +285,60 @@ describe('(2) a tie lapses', () => {
     }
     for (const name of ['Western Approaches Fleet', 'Dover Fleet', 'Swinemunde Fleet', 'Baltic Fleet', 'Black Sea Fleet', 'Northern Fleet']) expect(named(g, name)!.tied, name).toBe(true);
   });
+
+  it('a home taken after its owner\'s month frees the fleet at once in the enemy\'s forecast, before its flag is cleared', () => {
+    const g = wide(1);
+    const f = forceH(g);
+    declareWar(g, 'ITA', 'UK');
+    g.turn = 12;
+    navalUpkeep(g, 'UK');
+    const central = zoneOf(g, 'central');
+    const answering = (): string[] => { const a = fleetsAnswer(g, 'ITA', [central], g.byName.Malta); return [...a.come, ...a.kept, ...a.shy].map((x) => x.name); };
+    // Tied to the Western Mediterranean, Force H does not come out against an Italian landing on Malta.
+    expect(answering()).not.toContain('Force H');
+    // Italy takes the Rock after Britain's month: the flag is cleared only at Britain's next, but the tie no longer holds.
+    g.byName.Gibraltar.ctrl = 'ITA';
+    expect([f.tied, tiedNow(g, f)]).toEqual([true, false]);
+    expect(answering()).toContain('Force H');
+  });
+
+  it('a fleet moved from a fallen home while still tied, as a save from before this rule has it, is freed once loaded', () => {
+    const g = wide(1);
+    const f = forceH(g);
+    declareWar(g, 'ITA', 'UK');
+    // As b564 left it: Gibraltar lost, Force H based at Malta, still tied to the Western Mediterranean, which is in reach.
+    g.byName.Gibraltar.ctrl = 'ITA';
+    expect(rebase(g, f, g.byName.Malta)).toBe(true);
+    f.tied = true;
+    expect(fleetReach(g, f)).toContain(f.station);
+    expect(tieLapses(g, f)).toBe(true);
+    g.turn = 12;
+    navalUpkeep(g, 'UK');
+    expect(f.tied).toBe(false);
+    // With the Rock British again the home it was tied to stands, and a fleet still tied away from it keeps its tie.
+    g.byName.Gibraltar.ctrl = 'UK';
+    f.tied = true;
+    expect(tieLapses(g, f)).toBe(false);
+  });
 });
 
-describe('(3) the Bordeaux flotilla\'s beat at stops 1 to 3', () => {
-  it('is the sea nearest Bordeaux that carries a British lane, every month it sails, and never an empty sea', () => {
+describe('(3) the Bordeaux flotilla\'s beat at stops 1 to 3, by the record\'s seas', () => {
+  const H = NAVY.beats!.ITA.groups[0].hunts!;
+  const bordeaux = (g: Game): Pick<Fleet, 'nat' | 'base' | 'home'> => ({ nat: 'ITA', base: g.byName.Bordeaux.id, home: zoneOf(g, 'biscay') });
+  /** A British lane through these seas, laid in for the test (each game has its own list of routes). */
+  const lane = (g: Game, id: string, seas: string[]): void => { seaRoutes(g).push({ id, name: 'a test lane', to: 'UK', zones: seas.map((k) => zoneOf(g, k)) }); };
+
+  it('the historian\'s seas by half-year are in the data, every one on the chart', () => {
+    expect(H.to).toBe('UK');
+    expect(H.seas.map(([turn]) => turn)).toEqual([13, 19, 25, 30, 37, 43]);
+    expect(H.seas[0][1]).toEqual(['wapp', 'natl']);
+    expect(H.seas[1][1]).toEqual(['azores', 'iberia', 'canary', 'sierra']);
+    expect(H.seas[3][1]).toContain('narrows');
+    const g = wide();
+    for (const [, seas] of H.seas) for (const k of seas) expect(zoneOf(g, k), k).toBeGreaterThanOrEqual(0);
+  });
+
+  it('every month it sails, on a sea that carries a British lane, and never the list\'s first sea for its own sake', () => {
     for (const stop of [1, 2, 3]) {
       const g = wide(stop);
       frenchFall(g);
@@ -250,7 +347,9 @@ describe('(3) the Bordeaux flotilla\'s beat at stops 1 to 3', () => {
         placeBoats(g, 'ITA');
         const atl = named(g, 'Atlantic Submarine Fleet');
         if (!atl) continue;
-        // The Bay of Biscay carries only France's lane; the Western Approaches, two seas out, Britain's.
+        // On this chart Britain's one lane runs through the North Atlantic, the Western Approaches and the Irish Sea.
+        // To February 1941 the list's two seas both carry it and the first of them is taken; from March 1941 no sea of
+        // the list carries it, and the Western Approaches is the nearest to the list that does.
         expect(key(g, atl.station), `stop ${stop} turn ${turn}`).toBe('wapp');
         expect(lanesTo(g, 'UK', atl.station), `stop ${stop} turn ${turn}`).toBeGreaterThan(0);
         expect(fleetReach(g, atl)).toContain(atl.station);
@@ -259,14 +358,44 @@ describe('(3) the Bordeaux flotilla\'s beat at stops 1 to 3', () => {
     }
   });
 
-  it('counts from the seas Bordeaux opens on, and the Bay of Biscay\'s own lane is not Britain\'s', () => {
+  it('takes the sea of the list with the most British lane, the first in the list between seas with as much', () => {
     const g = wide(1);
     frenchFall(g);
-    expect(g.byName.Bordeaux.seas.map((z) => key(g, z))).toEqual(['biscay']);
-    expect(lanesTo(g, 'UK', zoneOf(g, 'biscay'))).toBe(0);
-    expect(lanesTo(g, 'FRA', zoneOf(g, 'biscay'))).toBe(1);
-    const from = { nat: 'ITA', base: g.byName.Bordeaux.id, home: zoneOf(g, 'biscay') };
-    expect(key(g, laneBeat(g, from, 'UK'))).toBe('wapp');
+    g.turn = 14;
+    expect(key(g, huntBeat(g, bordeaux(g), H))).toBe('wapp');
+    lane(g, 'b603-natl', ['natl']);
+    expect(lanesTo(g, 'UK', zoneOf(g, 'natl'))).toBe(2);
+    expect(key(g, huntBeat(g, bordeaux(g), H))).toBe('natl');
+    // From March 1941 the list's own seas come first once one carries a British lane: the most of them, then the first.
+    g.turn = 19;
+    lane(g, 'b603-canary', ['canary']);
+    expect(key(g, huntBeat(g, bordeaux(g), H))).toBe('canary');
+    lane(g, 'b603-iberia', ['iberia', 'azores']);
+    expect(key(g, huntBeat(g, bordeaux(g), H))).toBe('azores');
+    lane(g, 'b603-canary2', ['canary']);
+    expect(key(g, huntBeat(g, bordeaux(g), H))).toBe('canary');
+  });
+
+  it('where none of the list carries one: the nearest sea to the list that does, within the flotilla\'s reach', () => {
+    const g = wide(1);
+    frenchFall(g);
+    // February to August 1942, the American coasts: the Western Approaches is two seas from the Sargasso Sea, by the
+    // Azores, the North Atlantic further.
+    g.turn = 32;
+    expect(key(g, huntBeat(g, bordeaux(g), H))).toBe('wapp');
+    // A British lane through the Tropical Atlantic, next to the list, is out of the flotilla's reach from Bordeaux.
+    lane(g, 'b603-tropic', ['tropic']);
+    expect(fleetReach(g, bordeaux(g))).not.toContain(zoneOf(g, 'tropic'));
+    expect(key(g, huntBeat(g, bordeaux(g), H))).toBe('wapp');
+    // The Canary Basin is as near to the list as the Western Approaches: with one lane each, the chart's order; with
+    // more, the Canary Basin.
+    lane(g, 'b603-canary', ['canary']);
+    expect(key(g, huntBeat(g, bordeaux(g), H))).toBe('wapp');
+    lane(g, 'b603-canary2', ['canary']);
+    expect(key(g, huntBeat(g, bordeaux(g), H))).toBe('canary');
+    // Before the list's first half-year there is no beat by it.
+    g.turn = 12;
+    expect(huntBeat(g, bordeaux(g), H)).toBe(-1);
   });
 
   it('where no sea in its reach carries a British lane, it keeps its dated beat', () => {
@@ -276,29 +405,11 @@ describe('(3) the Bordeaux flotilla\'s beat at stops 1 to 3', () => {
     declareWar(g, 'USA', 'UK');
     for (const turn of [16, 19]) {
       g.turn = turn;
+      expect(huntBeat(g, bordeaux(g), H), `turn ${turn}`).toBe(-1);
       placeBoats(g, 'ITA');
       const atl = named(g, 'Atlantic Submarine Fleet')!;
       expect(key(g, atl.station), `turn ${turn}`).toBe(turn < 19 ? 'natl' : 'iberia');
     }
-  });
-
-  it('between seas as near: the one with more such lanes, then the first in the chart\'s order', () => {
-    const g = wide(1);
-    const sicily = { nat: 'GER', base: g.byName.Sicily.id, home: zoneOf(g, 'tyrr') };
-    // Sicily opens on the Tyrrhenian, the Central Mediterranean and the Ionian: Italy's Gibraltar lane runs through the
-    // first, her Libya convoys through the second, one each. The chart's order decides.
-    expect(g.byName.Sicily.seas.map((z) => key(g, z))).toEqual(['tyrr', 'central', 'ionian']);
-    expect(key(g, laneBeat(g, sicily, 'ITA'))).toBe('tyrr');
-    // A second lane through the Central Mediterranean makes it the thicker.
-    seaRoutes(g).push({ id: 'b598-test', name: 'a test lane', to: 'ITA', zones: [zoneOf(g, 'central')] });
-    expect(lanesTo(g, 'ITA', zoneOf(g, 'central'))).toBe(2);
-    expect(key(g, laneBeat(g, sicily, 'ITA'))).toBe('central');
-    // A nearer sea wins over a thicker one further off.
-    const naples = { nat: 'GER', base: g.byName.Naples.id, home: zoneOf(g, 'tyrr') };
-    expect(g.byName.Naples.seas.map((z) => key(g, z))).toEqual(['tyrr']);
-    expect(key(g, laneBeat(g, naples, 'ITA'))).toBe('tyrr');
-    // With none in reach: -1.
-    expect(laneBeat(g, sicily, 'SOV')).toBe(-1);
   });
 
   it('at stops 4 and 5 the beat is by need, as before', () => {
@@ -308,7 +419,7 @@ describe('(3) the Bordeaux flotilla\'s beat at stops 1 to 3', () => {
     g.turn = 13;
     placeBoats(g, 'ITA');
     const atl = named(g, 'Atlantic Submarine Fleet')!;
-    // Need finds no sea thicker than the dated beat's: the North Atlantic, not the nearest.
+    // Need finds no sea thicker than the dated beat's: the North Atlantic, not the list's.
     expect(key(g, atl.station)).toBe('natl');
   });
 
@@ -318,5 +429,93 @@ describe('(3) the Bordeaux flotilla\'s beat at stops 1 to 3', () => {
     g.turn = 16;
     placeBoats(g, 'ITA');
     expect(named(g, 'Atlantic Submarine Fleet')).toBeUndefined();
+  });
+});
+
+describe('(4) the names and the carriers are the rows, at every stop', () => {
+  const admiral = (g: Game, name: string): string | undefined => named(g, name)?.admiral?.name;
+
+  it('Bordeaux\'s commanders by date: Parona, Polacchini from turn 25, Grossi from turn 40, each with his line of news', () => {
+    for (const stop of [1, 3, 4]) {
+      const g = wide(stop);
+      frenchFall(g);
+      declareWar(g, 'ITA', 'UK');
+      const seen: Record<number, string | undefined> = {};
+      for (let turn = 13; turn <= 41; turn++) {
+        g.turn = turn;
+        placeBoats(g, 'ITA');
+        seen[turn] = admiral(g, 'Atlantic Submarine Fleet');
+      }
+      expect([seen[13], seen[24], seen[25], seen[39], seen[40], seen[41]], `stop ${stop}`).toEqual(['Angelo Parona', 'Angelo Parona', 'Romolo Polacchini', 'Romolo Polacchini', 'Enzo Grossi', 'Enzo Grossi']);
+      expect(news(g, 25), `stop ${stop}`).toContain('Romolo Polacchini takes command of the Atlantic Submarine Fleet.');
+      expect(news(g, 40), `stop ${stop}`).toContain('Enzo Grossi takes command of the Atlantic Submarine Fleet.');
+      expect(named(g, 'Atlantic Submarine Fleet')!.admiral!.level).toBe(1);
+    }
+  });
+
+  it('a group formed after a commander\'s date forms under him, with no second line', () => {
+    const g = wide(1);
+    declareWar(g, 'ITA', 'UK');
+    // Bordeaux is taken only in turn 30: the flotilla forms then, under Polacchini.
+    g.turn = 29;
+    placeBoats(g, 'ITA');
+    expect(named(g, 'Atlantic Submarine Fleet')).toBeUndefined();
+    frenchFall(g);
+    g.turn = 30;
+    placeBoats(g, 'ITA');
+    expect(admiral(g, 'Atlantic Submarine Fleet')).toBe('Romolo Polacchini');
+    expect(news(g, 30)).toContain('The Atlantic Submarine Fleet forms at Bordeaux.');
+    expect(news(g, 30).some((t) => /takes command/.test(t))).toBe(false);
+  });
+
+  it('the U-boats in the Mediterranean: Donitz, then Oehrn from turn 27, Kreisch from 29 and Hartmann from 53', () => {
+    const g = wide(1);
+    const groups = NAVY.beats!.GER.groups.map((G) => G.name);
+    const seen: Record<number, (string | undefined)[]> = {};
+    for (let turn = 26; turn <= 54; turn++) {
+      g.turn = turn;
+      placeBoats(g, 'GER');
+      seen[turn] = groups.map((name) => admiral(g, name));
+    }
+    // October 1941: six boats, all east, under the head of the U-boat arm.
+    expect(seen[26]).toEqual([undefined, 'Karl Donitz']);
+    expect(seen[27]).toEqual([undefined, 'Victor Oehrn']);
+    expect(seen[28]).toEqual(['Victor Oehrn', 'Victor Oehrn']);
+    expect(seen[29]).toEqual(['Leo Kreisch', 'Leo Kreisch']);
+    expect(seen[52]).toEqual(['Leo Kreisch', 'Leo Kreisch']);
+    expect(seen[53]).toEqual(['Werner Hartmann', 'Werner Hartmann']);
+    expect(news(g, 29)).toContain(`Leo Kreisch takes command of the ${groups[1]}.`);
+  });
+
+  it('the Mediterranean Fleet\'s carrier: the Glorious on the first day, the Eagle from turn 9, at every stop', () => {
+    for (const stop of [1, 2, 3, 4, 5]) {
+      const g = wide(stop);
+      const med = named(g, 'Mediterranean Fleet')!, home = named(g, 'Home Fleet')!;
+      const cv: Record<number, [number, number]> = {};
+      for (let turn = 2; turn <= 14; turn++) {
+        g.turn = turn;
+        navalUpkeep(g, 'UK');
+        cv[turn] = [med.ships.cv, home.ships.cv];
+      }
+      // The Glorious goes home in April 1940 and the Eagle comes from the China Station in May; the Home Fleet's
+      // Illustrious joins it in June, in every campaign, as before.
+      expect([cv[7], cv[8], cv[9], cv[10], cv[13]], `stop ${stop}`).toEqual([[1, 2], [0, 2], [1, 2], [1, 3], [1, 3]]);
+      expect(news(g, 8), `stop ${stop}`).toContain('The carrier Glorious leaves the Mediterranean Fleet for home waters.');
+      expect(news(g, 9), `stop ${stop}`).toContain('The carrier Eagle joins the Mediterranean Fleet.');
+    }
+  });
+
+  it('a history campaign, and a player\'s own navy, keep the rows as they were', () => {
+    for (const g of [createGame(1, null), wide(1, 'UK')]) {
+      const med = named(g, 'Mediterranean Fleet')!, home = named(g, 'Home Fleet')!;
+      for (let turn = 2; turn <= 14; turn++) {
+        g.turn = turn;
+        navalUpkeep(g, 'UK');
+        // The Mediterranean keeps its first-day carrier throughout, with no news of the Glorious or the Eagle.
+        expect(med.ships.cv, `turn ${turn}`).toBe(1);
+      }
+      expect([med.ships.cv, home.ships.cv]).toEqual([1, 3]);
+      expect(g.headlines.some((h) => /Glorious|Eagle/.test(h.text))).toBe(false);
+    }
   });
 });
