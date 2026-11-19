@@ -19,6 +19,7 @@ import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficu
 import { DOMINATION, dominating } from './domination';
 import { bookIf, leanFor, leash, moodMul, stopDef } from './history';
 import { openAirWar, openWorldAir, skyDenies } from './air';
+import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
 import { fieldCtrl, openSieges } from './siege';
 import { agentsOf, atWork, knowsBooks } from './intel';
@@ -32,7 +33,7 @@ import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, neighbourByLand, overseasOf } from './world';
-import { EASTERN, allied, assess, atWar, bloc, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, limitAttackers, weather } from './game';
+import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, weather } from './game';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
@@ -96,6 +97,8 @@ export function startOpen(g: Game, wide = true): Game {
     g.flags['st:on:GER:POL'] = 1;
     g.flags['st:gain:GER'] = 1;
   }
+  // (Begun after the first day: the rows whose men history's corps already brought do not come again.)
+  else carriedRows(g);
   startEngineers(g);
   openTraits(g);
   openTech(g);
@@ -103,6 +106,7 @@ export function startOpen(g: Game, wide = true): Game {
   openWorldAir(g);
   openStores(g);
   openAirWar(g);
+  openSmallAir(g);
   openCarriers(g);
   openSieges(g);
   openMorale(g);
@@ -1069,7 +1073,9 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
     const way = axis(g, nat, main, true);
     const opening = phase.from === g.turn;
     phase.axis = way.slice(0, opening && n.blitz ? OPEN.thrust[0] : OPEN.thrust[1]);
-    phase.targets = [...new Set(live.flatMap((f) => bound(g, nat, f, f === main ? way : [], opening)))];
+    const blow = bound(g, nat, main, way, opening);
+    phase.targets = [...new Set(live.flatMap((f) => (f === main ? blow : bound(g, nat, f, [], opening))))];
+    phase.main = blow;
     // No army takes a capital deep in enemy country in its first bound: the opening month goes to breaking the front.
     if (opening) phase.haltOrder = g.regions.filter((r) => r.cap && main.depth[r.id] >= 3 && main.enemies.includes(r.owner)).map((r) => r.name);
     // The will to finish: with the numbers and no ground gained for months, shorter odds and a third wave.
@@ -1896,6 +1902,7 @@ export function afterDeclaring(g: Game, nat: string): void {
   n.align = op.join === 'allies' ? 'allies_cobelligerent' : 'axis_cobelligerent';
   n.opinion = n.home = op.join === 'allies' ? -100 : 100;
   g.supplyDirty = true;
+  joinedSide(g, nat);
 }
 
 /** This month's orders for a computer-run nation's army in a theatre overseas that keeps a staff of its own. */

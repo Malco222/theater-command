@@ -67,7 +67,11 @@ describe.skipIf(waiting)("84.2.6 the alarm (ruling 211(c)): Brian's own save, De
     const g = brian();
     setFog(g, false);
     const all = alarms(g);
-    expect(all.length).toBe(1);
+    // Two rows since the cities version: Rochester, a city of Buffalo's province drawn since the save was made, began
+    // in Buffalo's hands, Canada's, with nobody in it (save.ts: a new city starts as its province stands). Buffalo's
+    // own row is nearer his capital and comes first.
+    expect(all.length).toBe(2);
+    expect(all[1]).toMatchObject({ case: 'empty', region: at(g, 'Rochester').id, by: 'CAN' });
     const a = all[0];
     expect(a.case).toBe('taken');
     expect(a.region).toBe(at(g, 'Buffalo').id);
@@ -93,8 +97,10 @@ describe.skipIf(waiting)("84.2.6 the alarm (ruling 211(c)): Brian's own save, De
     // Pittsburgh rides the railways' costs: "2 months by road", which is what a right-click on Pittsburgh orders.
     expect(a.help!.rail).toBe(false);
     // The time to reach the province where the enemy stands (the design director, 17:22Z). Model 1 says "1 month";
-    // planMarch to Pittsburgh next door counts 2 with this month. The row must say the reading's own figure.
-    expect([1, 2]).toContain(a.help!.months);
+    // planMarch to Pittsburgh next door counted 2 with this month on the old chart. On the cities chart the road from
+    // Vancouver runs through 14 provinces and cities where it ran through 8, so it is 4. The row must say the
+    // reading's own figure.
+    expect(a.help!.months).toBe(4);
     const last = said(a)[said(a).length - 1];
     expect(last).toBe(`Nearest help: the army round Vancouver, ${a.help!.months} ${a.help!.months === 1 ? 'month' : 'months'} by ${a.help!.rail ? 'rail' : 'road'}.`);
   });
@@ -140,8 +146,11 @@ describe.skipIf(waiting)("84.2.6 the alarm (ruling 211(c)): Brian's own save, De
 
   it('only his home ground raises the alarm: the Mexican armies on Mexican ground he holds raise none', () => {
     const g = brian();
+    // (On the cities chart the Mexican armies at Mexico City stand two steps from his conquests: its cities Morelia and
+    // Poza Rica, still Mexican, lie between.)
+    const near = (r: Region): boolean => r.nb.some((j) => g.regions[j].ctrl === 'USA' || g.regions[j].nb.some((k) => g.regions[k].ctrl === 'USA'));
     const mexicansOnHisConquests = g.regions.some((r) => r.owner === 'MEX' && r.ctrl === 'USA' && r.units.some((u) => !u.dead && u.nat === 'MEX'))
-      || g.regions.some((r) => r.owner === 'MEX' && r.units.some((u) => !u.dead && u.nat === 'MEX') && r.nb.some((j) => g.regions[j].ctrl === 'USA'));
+      || g.regions.some((r) => r.owner === 'MEX' && r.units.some((u) => !u.dead && u.nat === 'MEX') && near(r));
     expect(mexicansOnHisConquests).toBe(true);
     for (const a of alarms(g)) expect(g.regions[a.region].owner).toBe('USA');
   });

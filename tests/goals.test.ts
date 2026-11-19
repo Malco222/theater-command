@@ -2,7 +2,7 @@
 // never change it, so a war with nobody at the controls carries no trace of them.
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
-import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, judgeGoals, openGoals, weeksLasted } from '../src/campaign/goals';
+import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalEndsIn, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../src/campaign/goals';
 import { startOpen } from '../src/campaign/staff';
 import { beginEve, runTurnAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
@@ -134,5 +134,64 @@ describe('a campaign that opens late', () => {
     expect(goalState(early, 'short')).toBe('out');
     openGoals(early, 'UK', 12);
     expect(goalState(early, 'short')).toBe('open');
+  });
+});
+
+describe('a goal of endurance against one enemy (the third playtester, 84.3.1, finding 5)', () => {
+  // "Not one step back": Moscow, Leningrad and Stalingrad Soviet a year and a half into the war with Germany.
+  const goal = GOALS.SOV.short!;
+  const at = (turn: number, since?: number): Game => {
+    const g = structuredClone(war);
+    openGoals(g, 'SOV', JAN_41);
+    for (const k of Object.keys(g.flags)) if (/^war:(GER:SOV|SOV:GER)$/.test(k)) delete g.flags[k];
+    if (since !== undefined) g.flags['war:GER:SOV'] = since;
+    // (A war that has come is one still being fought: since b434 a goal whose clock it is is judged the month it ends.)
+    const S = g.nations.SOV, G = g.nations.GER;
+    S.atWar = S.atWar.filter((e) => e !== 'GER');
+    G.atWar = G.atWar.filter((e) => e !== 'SOV');
+    if (since !== undefined) { S.atWar.push('GER'); G.atWar.push('SOV'); }
+    g.turn = turn;
+    return g;
+  };
+  const date = (t: number): string => `month ${t}`;
+
+  it('is not won at peace, however long the peace lasts', () => {
+    expect(goal.war).toEqual({ with: 'GER', from: 22 });
+    for (const turn of [41, 50, 77]) {
+      const g = at(turn);
+      expect(goalEndsIn(g, 'SOV', goal)).toBe(Infinity);
+      expect(judgeGoals(g, 'SOV').filter((d) => d.key === 'short'), `month ${turn}`).toEqual([]);
+      expect(goalState(g, 'short')).toBe('open');
+    }
+    expect(goalWhen(goal, date, Infinity, 'Germany')).toBe('decided after 19 months of war with Germany');
+  });
+
+  it("is decided when 1943 opens after history's war, and as many months later after a later one", () => {
+    let g = at(41, 22);
+    expect(goalEndsIn(g, 'SOV', goal)).toBe(40);
+    expect(goalWhen(goal, date, goalEndsIn(g, 'SOV', goal))).toBe('decided when month 41 opens');
+    expect(judgeGoals(g, 'SOV').filter((d) => d.key === 'short').map((d) => d.won)).toEqual([true]);
+    // An earlier war does not bring the day forward: the book's day stands.
+    expect(goalEndsIn(at(41, 18), 'SOV', goal)).toBe(40);
+    // Germany comes in June 1943 (month 46): the goal waits for its nineteen months, to January 1945.
+    g = at(41, 46);
+    expect(goalEndsIn(g, 'SOV', goal)).toBe(64);
+    expect(judgeGoals(g, 'SOV').filter((d) => d.key === 'short')).toEqual([]);
+    g.turn = 64;
+    expect(judgeGoals(g, 'SOV').filter((d) => d.key === 'short')).toEqual([]);
+    g.turn = 65;
+    expect(judgeGoals(g, 'SOV').filter((d) => d.key === 'short').map((d) => d.won)).toEqual([true]);
+    // And lost if a city has gone by then.
+    const h = at(65, 46);
+    h.byName['Leningrad'].ctrl = 'GER';
+    expect(judgeGoals(h, 'SOV').filter((d) => d.key === 'short').map((d) => d.won)).toEqual([false]);
+  });
+
+  it('keeps every other goal on the book\'s day', () => {
+    for (const [nat, pair] of Object.entries(GOALS)) for (const key of GOAL_KEYS) {
+      if (nat === 'SOV' && key === 'short') continue;
+      expect(pair[key]!.war, `${nat} ${key}`).toBeUndefined();
+      expect(goalEndsIn(war, nat, pair[key]!)).toBe(goalEnds(pair[key]!));
+    }
   });
 });

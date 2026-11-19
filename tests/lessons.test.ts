@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { setDepth } from '../src/campaign/desks';
 import { setLevel } from '../src/campaign/difficulty';
-import { createGame } from '../src/campaign/game';
+import { createGame, placeName } from '../src/campaign/game';
 import {
   CLOSING, FIRST_COMMAND, LESSONS, LESSON_DOOR, LESSON_GROUPS, LESSON_NAMES, TIPS, WORDS_MOST, WORDS_MOST_RAID, allDone, bringBack, closingOwed,
   currentLesson, doneCount, firstCommand, freshNotebook, isDone, lessonDeed, lessonDue, lessonReady, lessonWords, lessonsAgain, lessonsOn,
@@ -13,7 +13,8 @@ import {
 } from '../src/campaign/lessons';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
-import type { Game } from '../src/campaign/types';
+import { townName } from '../src/campaign/towns';
+import type { Game, Region } from '../src/campaign/types';
 
 /** FIRST COMMAND as the door opens it, at the player's first month. */
 function firstHour(seed = 5): Game {
@@ -45,7 +46,7 @@ describe('the list', () => {
   });
 
   it('keeps every note to 30 words, the raid to 36, in each game\'s own words', () => {
-    for (const game of ['shared', 'browser']) {
+    for (const game of ['shared', 'browser', 'unreal']) {
       for (const l of LESSONS) {
         const n = wordCount(namedWords(l.text, game, game === 'browser' ? ' under STAFF' : ''));
         expect(n, `${l.id} in ${game}`).toBeLessThanOrEqual(l.id === 'raid' ? WORDS_MOST_RAID : WORDS_MOST);
@@ -65,7 +66,15 @@ describe('the list', () => {
 
   it('swaps in the browser game\'s own words for its controls, and every swap is used', () => {
     const all = [...LESSONS.flatMap((l) => [l.text, l.deed]), CLOSING.text].join('\n');
-    for (const [from] of LESSON_NAMES.browser) expect(all.includes(from), from).toBe(true);
+    for (const game of ['browser', 'unreal']) for (const [from] of LESSON_NAMES[game]) expect(all.includes(from), `${game}: ${from}`).toBe(true);
+    // The 3D game's own words (ruling b425): YOUR STAFF, the aircraft on the map, the card's pins.
+    expect(namedWords(LESSONS.find((l) => l.id === 'raid')!.text, 'unreal')).toContain('In YOUR STAFF, take the air war yourself. Click your aircraft on the map');
+    expect(namedWords(LESSONS.find((l) => l.id === 'card')!.deed, 'unreal')).toBe('Click the pin on one line of the card.');
+    // Ruling b429: one closing text in both games, YOUR STAFF in 3D at 29 words; the verdict and the button's own words.
+    expect(namedWords(CLOSING.text, 'unreal')).toMatch(/^YOUR STAFF hands you each desk when you want it: research, building, envoys, agents, air, navy\./);
+    expect(wordCount(namedWords(CLOSING.text, 'unreal'))).toBe(29);
+    expect(LESSONS.find((l) => l.id === 'attack')!.text).toContain('Attack when its verdict favours you.');
+    expect(LESSONS.find((l) => l.id === 'end')!.text).toContain('When it reads NEXT IN THE REAR, END THE MONTH.');
     const byId = (id: string): string => namedWords(LESSONS.find((l) => l.id === id)!.text, 'browser', ' under STAFF');
     expect(byId('month')).toContain('END MONTH carries out');
     expect(byId('rail')).toContain('Right-click blue ground to ride there');
@@ -84,8 +93,10 @@ describe('the list', () => {
 
 describe('the notebook', () => {
   it('is kept with the player: it reads what was saved and mends what was not', () => {
-    expect(readNotebook(null)).toEqual({ on: true, done: [], later: [], tips: [] });
-    expect(readNotebook({ on: false, done: ['month', 7, 'nonsense'], later: 'x' })).toEqual({ on: false, done: ['month'], later: [], tips: [] });
+    expect(readNotebook(null)).toEqual({ on: true, set: false, done: [], later: [], tips: [] });
+    // (One kept before b434 with the notes off was switched off by its player.)
+    expect(readNotebook({ on: false, done: ['month', 7, 'nonsense'], later: 'x' })).toEqual({ on: false, set: true, done: ['month'], later: [], tips: [] });
+    expect(readNotebook({ on: true, set: true })).toEqual({ on: true, set: true, done: [], later: [], tips: [] });
   });
 
   it('puts a note away and brings it back; the GUIDE counts what waits', () => {
@@ -116,9 +127,10 @@ describe('FIRST COMMAND, played', () => {
     expect(firstCommand(g)).toBe(true);
     expect(g.turn).toBe(1);
     expect(lessonsOn(g, book())).toBe(true);
-    expect(lessonsOn(g, { ...book(), on: false })).toBe(false);
-    expect(currentLesson(g, { ...book(), on: false }, { card: true })).toBeNull();
-    expect(lessonDeed(g, { ...book(), on: false }, 'card', { card: true })).toEqual([]);
+    const off = { ...book(), on: false, set: true };
+    expect(lessonsOn(g, off)).toBe(false);
+    expect(currentLesson(g, off, { card: true })).toBeNull();
+    expect(lessonDeed(g, off, 'card', { card: true })).toEqual([]);
   });
 
   it('opens with lesson 1 on the month card, and its deed is putting the card down', () => {
@@ -197,6 +209,31 @@ describe('FIRST COMMAND, played', () => {
     expect(lessonDue(g, b, rail, { inHand: rides!.map((c) => c.id) })).toBe(false);
   });
 
+  it('teaches NEXT ARMY and the month\'s end at peace too: lesson 5 comes in the second month without a battle', () => {
+    const g = firstHour();
+    const b = book(upTo('attack'));
+    const end = LESSONS.find((l) => l.id === 'end')!;
+    expect(lessonReady(g, b, end)).toBe(false);
+    month(g);
+    expect(lessonReady(g, b, end)).toBe(true);
+    // The first month's end, read as the second opens, is not its deed: lesson 5 was not yet due then (the review of 85.1).
+    expect(lessonDeed(g, b, 'end', { ended: g.turn - 1 })).toEqual([]);
+    expect(lessonDue(g, b, end, {})).toBe(true);
+    // The second month's end is.
+    month(g);
+    expect(lessonDeed(g, b, 'end', { ended: g.turn - 1 }).map((l) => l.id)).toEqual(['end']);
+  });
+
+  it('names for lesson 2 at peace an army that does not stand in the capital', () => {
+    const g = startOpen(createGame(5, 'ITA'));
+    for (let k = 0; !humanUp(g) && k < 80; k++) stepAI(g);
+    beginHuman(g);
+    const at = pickupPlace(g);
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(at).not.toBe(g.nations.ITA.capital);
+    expect(g.regions[at].units.some((c) => c.nat === 'ITA')).toBe(true);
+  });
+
   it('owes the closing note once all ten are done, and only once', () => {
     const g = firstHour();
     const b = book(ids);
@@ -205,9 +242,25 @@ describe('FIRST COMMAND, played', () => {
     expect(closingOwed(g, b)).toBe(false);
   });
 
-  it('fills the city lesson\'s place names, and says "The province" where no siege stands', () => {
+  it('fills the city lesson\'s place names, and reads the design director\'s words where no siege stands', () => {
     const g = firstHour();
     const w = lessonWords(g, LESSONS.find((l) => l.id === 'city')!, 'browser');
-    expect(w.text.startsWith('The province is not yours until its town falls.')).toBe(true);
+    expect(w.text.startsWith('The province is not yours until its city falls.')).toBe(true);
+  });
+
+  it('names a province once where it is named for its city, and its town where it is not (the cities chart)', () => {
+    const g = firstHour();
+    const city = LESSONS.find((l) => l.id === 'city')!;
+    const ger = g.corps.find((c) => c.nat === 'GER' && !c.dead)!;
+    const enemy = g.regions.filter((r) => r.ctrl === 'POL');
+    const besiege = (r: Region): string => {
+      for (const x of g.regions) x.units = x.units.filter((u) => u !== ger);
+      r.units.push(ger);
+      return lessonWords(g, city, 'browser').text;
+    };
+    const same = enemy.find((r) => townName(r) === r.name)!, other = enemy.find((r) => townName(r) !== r.name)!;
+    expect(g.flags.sieges).toBe(1);
+    expect(besiege(same).startsWith(`${same.name} is not yours until its city falls.`)).toBe(true);
+    expect(besiege(other).startsWith(`${placeName(other.name, true)} is not yours until ${townName(other)} falls.`)).toBe(true);
   });
 });

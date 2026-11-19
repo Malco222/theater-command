@@ -395,8 +395,9 @@ describe('the raid planner', () => {
     expect(alone.meets.length).toBeGreaterThan(0);
     for (const m of alone.meets) { expect(m.able).toBeGreaterThan(0); expect(m.able).toBeLessThanOrEqual(m.ftr); expect(g.nations.GER.atWar).toContain(m.nat); }
     expect(alone.bomberLoss).toBeGreaterThan(0.1);
-    expect(alone.bomberLoss).toBeLessThanOrEqual(AIRWAR.losses.most);
-    expect(alone.foeLossN).toBe(0);
+    expect(alone.bomberLoss).toBeLessThanOrEqual(AIRWAR.losses.day);
+    // The bombers' own guns bring down some of the fighters that close with them (ruling 227): never none.
+    expect(alone.foeLossN).toBeGreaterThan(0);
     const escorted = previewRaid(g, 'bomb', target, [bombers[0], ...fighters.slice(0, 2)]);
     expect(escorted.fighters).toBeGreaterThan(0);
     expect(escorted.bomberLoss).toBeLessThan(alone.bomberLoss);
@@ -596,6 +597,17 @@ describe('the pages the 3D game reads', () => {
     // It cannot be flown twice.
     expect(airAct(g, fly.act)!.ok).toBe(false);
     expect(airPage(g, `group:${b.id}`)!.sections[1].rows.every((r) => !r.buttons[0].ok)).toBe(true);
+  });
+
+  it('say why a standing order cannot be given: the one it has now says so (build 1618: ITS ORDERS NOW was dim and said nothing)', () => {
+    const g = grand('GER');
+    for (const x of [mine(g, 'bmr')[0], mine(g, 'ftr')[0]]) {
+      const rows = airPage(g, `group:${x.id}`)!.sections[0].rows;
+      const now = rows.find((r) => r.buttons[0].label === 'ITS ORDERS NOW')!;
+      expect(now.buttons[0].ok).toBe(false);
+      expect(now.buttons[0].tip).toBe('This is its standing order now. Give it one of the others to change it.');
+      for (const r of rows) if (!r.buttons[0].ok) expect(r.buttons[0].tip, r.title).not.toBe('');
+    }
   });
 
   it('take standing orders, reconnaissance and moves as actions, and leave anything else alone', () => {

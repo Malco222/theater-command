@@ -7,8 +7,9 @@
 // historical scenarios. The numbers are in data/campaign/prizes.json.
 import { describe, expect, it } from 'vitest';
 import { whyNotBase } from '../src/campaign/air';
+import { groupBases } from '../src/campaign/airwar';
 import { income, ledger, provinceYield } from '../src/campaign/economy';
-import { addCorps, createGame, declareWar, relocate } from '../src/campaign/game';
+import { addCorps, createGame, declareWar, placeName, relocate } from '../src/campaign/game';
 import { whyNotShip } from '../src/campaign/navy';
 import {
   PRIZES, PRIZE_KINDS, airfieldOpenTo, burnChance, burnOrder, harbourOpen, hasPrize, junctionOpenTo, mendPrizes, orderWreckPrize, prizeHolder, prizeIncome,
@@ -97,13 +98,20 @@ describe('what a province has, and where it lies', () => {
     expect(count('oil')).toBe(5);
     expect(count('works')).toBe(37);
     expect(count('junction')).toBe(32);
-    // Five more in Latin America since Version 76 (Maracaibo and eastern Venezuela, Santander, Talara, Comodoro Rivadavia).
-    expect(count('oil', true)).toBe(15);
-    // Buenos Aires, Rio de Janeiro and Sao Paulo are factory districts too.
-    expect(count('works', true)).toBe(57);
-    expect(count('junction', true)).toBe(37);
-    expect(g.regions.filter((r) => beyondEurope(r) && hasPrize(g, r, 'junction')).map((r) => r.name)).toEqual(['Pittsburgh', 'Chicago', 'Kansas', 'East Texas', 'Northern Ontario']);
-    expect(kindsAt(g, g.byName['East Texas'])).toEqual(['oil', 'works', 'airfield', 'harbour', 'junction']);
+    // Five more in Latin America since Version 76 (Maracaibo and eastern Venezuela, Santander, Talara, Comodoro Rivadavia),
+    // and Calgary's Turner Valley field since the cities version (the clerk's reference-cities.md).
+    expect(count('oil', true)).toBe(16);
+    // On the cities chart the factories of a province went in part to its cities (ruling 210): Houston and Indiana are
+    // factory districts now, and Washington, East Texas, Toronto and Rio de Janeiro are not, their factories spread
+    // among their cities, one apiece. Buenos Aires and Sao Paulo still are.
+    expect(count('works', true)).toBe(55);
+    // The great junctions of the wider world are read from the cities chart's railways (five lines or more): Kansas and
+    // Northern Ontario are not, their lines now meeting at their cities; the others are new on the denser net.
+    expect(count('junction', true)).toBe(43);
+    expect(g.regions.filter((r) => beyondEurope(r) && hasPrize(g, r, 'junction')).map((r) => r.name)).toEqual(['Pittsburgh', 'Chicago', 'Alabama', 'Mississippi', 'East Texas', 'New Mexico', 'Winnipeg', 'Monterrey', 'Minneapolis', 'Pergamino', 'Denver']);
+    // East Texas keeps its oil and its junction; its factories, airfield and harbour are Houston's, its city on the coast.
+    expect(kindsAt(g, g.byName['East Texas'])).toEqual(['oil', 'junction']);
+    expect(kindsAt(g, g.byName['Houston'])).toEqual(['works', 'airfield', 'harbour']);
     expect(count('airfield')).toBeGreaterThan(100);
     expect(count('harbour')).toBeGreaterThan(80);
     expect(kindsAt(g, g.byName['Warsaw'])).toEqual(['works', 'airfield', 'junction']);
@@ -252,6 +260,11 @@ describe('the prizes outside the walls go with the field', () => {
     expect(why === null || /Too far|already changed base/.test(why)).toBe(true);
     const polish = g.airFleets.find((f) => f.nat === 'POL' && f.ship === undefined && f.base !== town.id);
     if (polish) expect(whyNotBase(g, polish, town)).toMatch(/enemy holds the country round the town/);
+    // The list of a group's airfields offers it as the map does (the code checker on 85.1: Helsinki under a Soviet siege).
+    const near = g.airFleets.filter((f) => f.nat === 'GER' && f.ship === undefined).find((f) => { f.moved = -1; return whyNotBase(g, f, town) === null; })!;
+    expect(near).toBeDefined();
+    expect(town.ctrl).toBe('POL');
+    expect(groupBases(g, near.id, 'GER').some((b) => b.region === town.id && b.why === null)).toBe(true);
   });
 
   it('trains run through a great junction held with the field, though the station in the town is shut', () => {
@@ -329,7 +342,7 @@ describe('wrecking a prize by order', () => {
     expect(prizeOut(g, ruhr, 'works')).toBe(PRIZES.wreck.works);
     expect(workingFactories(g, ruhr)).toBe(ruhr.fac - worksOutside(ruhr));
     expect(prizeUser(g, ruhr, 'works')).toBeNull();
-    expect(g.headlines.slice(news).some((h) => /German troops blow up the factory district of Ruhr: its 2 factories stand idle for 6 months/.test(h.text))).toBe(true);
+    expect(g.headlines.slice(news).some((h) => /German troops blow up the factory district of the Ruhr: its 2 factories stand idle for 6 months/.test(h.text))).toBe(true);
     expect(whyNotWreckPrize(g, ruhr.id, 'works')).toMatch(/already wrecked/);
     expect(prizeMarks(g).find((m) => m.region === ruhr.id)).toEqual({ region: ruhr.id, by: null, burning: ['works'], seized: [] });
     // The same corps has no month left for the airfield.
@@ -360,6 +373,12 @@ describe('wrecking a prize by order', () => {
     expect(wreckPrize(g, bremen, 'harbour', 5)).toBe(true);
     expect(whyNotShip(g, c, bremen)).toMatch(/harbour of Bremen is wrecked: no ship will use it for 5 months/);
     expect(whole === null || !/wrecked/.test(whole)).toBe(true);
+    // A sailing refused for want of a port names the place at fault (the UI director, build 1638).
+    const inland = g.regions.find((r) => r.owner === 'GER' && r.ctrl === 'GER' && !r.port && !r.overseas)!;
+    const noPort = `${placeName(inland.name, true)} has no port: troops are shipped from one port to another.`;
+    expect(whyNotShip(g, c, inland)).toBe(noPort);
+    expect(whyNotShip(g, c, hamburg)).toBe('They are in Hamburg already.');
+    expect(whyNotShip(g, addCorps(g, 'GER', 'Inland corps', 'inf', 3, inland.id, {}), hamburg)).toBe(noPort);
     expect(harbourOpen(g, bremen)).toBe(false);
     expect(provinceYield(g, bremen).port).toBe(0);
 

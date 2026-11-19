@@ -577,6 +577,30 @@ describe('the art director\'s mends and the 3D builder\'s three points', () => {
     expect(monthCard(g, mark, ME).staff[0]).toMatchObject({ short: said[3][2], text: said[3][1], desk: 'build' });
   });
 
+  it('the 3D game\'s card gives every line whole: its rows and boxes wrap, so no sentence is cut with three dots (its UI director, build 1628)', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    // (two such fights: one is the lead story, told whole on either card, and the other a row)
+    const storm = (at: Region): string => `German troops storm ${at.name} after a long fight in its streets and take its bridges whole.`;
+    for (const at of fields(g).slice(0, 2)) news(g, { kind: 'battle', arm: 'land', text: storm(at), nat: ME, region: at.id, won: ME, lost: 'POL' });
+    news(g, { kind: 'info', text: 'Your secret service sent Heron to London to read the books.', nat: ME, desk: 'spies' } as Parameters<typeof news>[1]);
+    // (the browser's card, in its typewriter rows, cuts them)
+    const cut = monthCard(g, mark, ME);
+    const row = cut.rows.find((r) => r.region !== undefined && /^German troops storm /.test(r.line))!;
+    expect(row.line).toMatch(/…$/);
+    expect(cut.staff[0].short).toBe('Spies: sent Heron to London to read…');
+    // (the 3D game's does not)
+    const whole = monthCard(g, mark, ME, { whole: true });
+    expect(whole.rows.find((r) => r.region === row.region)!.line).toBe(storm(g.regions[row.region!]));
+    expect(whole.staff[0].short).toBe('Spies: sent Heron to London to read the books');
+    for (const r of [...whole.rows, ...(whole.lead ? [whole.lead] : [])]) expect(r.line, r.line).not.toMatch(/…$/);
+    for (const x of [...whole.staff.map((y) => y.short), ...whole.also, ...whole.elsewhere.map((y) => y.text)]) expect(x, x).not.toMatch(/…$/);
+    // A foot box's lines are each whole, as many as it has lines.
+    const long = 'German troops close round Lille: the city is under siege, with one corps inside';
+    expect(fitFoot([long, long], Infinity, 2, 3)).toEqual([{ text: `${long}.`, at: 0 }, { text: `${long}.`, at: 1 }]);
+    expect(staffShort('spies', 'Your secret service recruited agent Chalice and sent Bellows to Berlin to read the books.', Infinity)).toBe('Spies: recruited agent Chalice and 1 more');
+  });
+
   it('a line in a foot box keeps to whole words, never half a name, and a cut shows itself', () => {
     // (The room is a count of letters to a line, and two lines: the boxes are set in a typewriter face.)
     expect(wholeWords('Engineers finish the bridge at Lodz.', 30)).toBe('Engineers finish the bridge at Lodz.');
@@ -801,6 +825,42 @@ describe('at home, what his staff did, and elsewhere', () => {
     expect(said).toHaveLength(1);
     expect(said[0].replace(/\.$/, '')).toBe('No. 1 Bomber Group bombs Viipuri');
   });
+
+  it('nor one that opens with a German ordinal, and a number that ends a sentence still ends it (the third playtester, 84.3.1)', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'battle', text: '2. Fliegerdivision bombs Rotterdam. The docks burn.', nat: 'SOV' });
+    news(g, { kind: 'battle', text: 'The 10. Armee is cut down to 2. The rest are taken.', nat: 'BRA' });
+    const said = monthCard(g, mark, ME).elsewhere.map((e) => e.text.replace(/\.$/, ''));
+    expect(said).toContain('2. Fliegerdivision bombs Rotterdam');
+    expect(said).toContain('The 10. Armee is cut down to 2');
+  });
+
+  it('an air formation\'s ordinal holds its sentence together wherever it stands (ruling 220\'s names)', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    news(g, { kind: 'battle', text: '3. Fliegerdivision and 1. Jagddivision strike the Home Fleet in the North Sea. Ships were hit.', nat: 'SOV' });
+    news(g, { kind: 'battle', text: 'Kampfgeschwader 1 and 2. Jagddivision raid the French troops at Alsace. The raids cut the roads.', nat: 'BRA' });
+    news(g, { kind: 'battle', text: 'Losses were 1 and 2. The rest came home.', nat: 'ARG' });
+    const said = monthCard(g, mark, ME).elsewhere.map((e) => e.text.replace(/\.$/, ''));
+    expect(said).toContain('3. Fliegerdivision and 1. Jagddivision strike the Home Fleet in the North Sea');
+    expect(said).toContain('Kampfgeschwader 1 and 2. Jagddivision raid the French troops at Alsace');
+    expect(said).toContain('Losses were 1 and 2');
+  });
+
+  it('several countries that declare war on him share one band, a sentence with its verb, "the" in lower case past the first', () => {
+    const g = game();
+    const mark = monthMark(g, ME);
+    for (const nat of ['CUB', 'DOM']) declareWar(g, nat, ME);
+    expect(monthCard(g, mark, ME).bands[0].head).toBe('Cuba and the Dominican Republic declare war on Germany');
+    const h = game();
+    const mark2 = monthMark(h, ME);
+    const many = ['CUB', 'DOM', 'HAI', 'GUA', 'HON', 'NIC', 'COS', 'PAN', 'ELS', 'ECU'];
+    for (const nat of many) declareWar(h, nat, ME);
+    const head = monthCard(h, mark2, ME).bands[0].head;
+    expect(head.length).toBeLessThanOrEqual(76);
+    expect(head).toMatch(/^Cuba, the Dominican Republic, .+ and \d+ more declare war on Germany$/);
+  });
 });
 
 describe('a year of war with nobody playing, a card a month for four countries', () => {
@@ -820,8 +880,9 @@ describe('a year of war with nobody playing, a card a month for four countries',
         expect(card.bands.length).toBeLessThanOrEqual(2);
         bands += card.bands.length;
         const rows = order(card);
-        // The rows in order of class, the red ones first; the lead story is the heaviest of ground, sea and air.
-        expect(card.rows.map((r) => r.cls)).toEqual([...card.rows.map((r) => r.cls)].sort((a, b) => a - b));
+        // The rows in order of class, the red ones first, above the fold and below it (a ring of his lifted above the
+        // fold may put a row of war and peace under it: ruling 106, b444); the lead story is the heaviest of ground, sea and air.
+        for (const part of [card.rows.slice(0, card.show), card.rows.slice(card.show)]) expect(part.map((r) => r.cls)).toEqual([...part.map((r) => r.cls)].sort((a, b) => a - b));
         const fighting = rows.filter((r) => r.cls === 3 || r.cls === 4);
         if (fighting.length) { leads++; expect(card.lead, `${nat} ${card.month}`).not.toBeNull(); if (!card.lead!.stake) expect(card.lead!.picture).not.toBeNull(); expect(card.quiet).toBe(''); expect(card.show).toBe(card.bands.length > 1 ? 5 : 6); }
         else { quiet++; expect(card.lead).toBeNull(); expect(card.quiet).not.toBe(''); expect(card.show).toBe(card.bands.length > 1 ? 6 : 7); if (card.bands.length) expect(card.quiet).not.toBe('A quiet month.'); }

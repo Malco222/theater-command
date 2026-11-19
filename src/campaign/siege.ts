@@ -843,10 +843,12 @@ export function siegeFalls(g: Game, nat: string): void {
 export function siegeEmpties(g: Game): void {
   if (!siegeRules(g)) return;
   for (const r of g.regions) {
-    if (!r.units.length || townHeld(g, r)) continue;
+    if (!r.units.length) continue;
+    // The army round the town is looked for first: whether the town is held counts every corps of its owner's.
     const by = besiegerOf(g, r);
+    if (!by || townHeld(g, r)) continue;
     // (Guns alone take no town, even an empty one: ruling 211(a).)
-    if (by && g.nations[by]?.alive && besiegers(g, r).some(fights)) fall(g, r, by, 'empty');
+    if (g.nations[by]?.alive && besiegers(g, r).some(fights)) fall(g, r, by, 'empty');
   }
 }
 

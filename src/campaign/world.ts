@@ -15,10 +15,11 @@
 // The world is attached once, as the grand campaign opens (staff.ts), before anything else is set up for it, and
 // again whenever a campaign saved on it is loaded (save.ts).
 
-import worldMap from '../generated/world-map.json';
+import worldMap from '../generated/world-americas.json';
 import data from '../../data/campaign/world.json';
 import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, standsBy, theName } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
+import { fieldClass, seedClass, seedFields } from './air';
 import { newLab, researches } from './research';
 import type { Game, Region } from './types';
 
@@ -45,6 +46,8 @@ export const WORLD = data as unknown as {
   fleets: FleetRow[];
   peace: Record<string, [number, number][]>;
   warWork: Record<string, number>;
+  climbFrom?: Record<string, number>;
+  works?: Record<string, number>;
   overseas: Record<string, OverseasRules>;
   protector: string[];
   pairs: [string, string][];
@@ -63,10 +66,11 @@ export const WORLD_FIRST = WORLD_MAP.first;
 export const WORLD_REGIONS = WORLD_MAP.regions.length;
 /**
  * How many provinces the wider world had at each earlier stage of its drawing: North America and the Atlantic
- * islands alone (Versions 74 and 75). The chart only ever grows at its end, so a campaign saved on an earlier
+ * islands alone (Versions 74 and 75), then the whole of the Americas before their cities were cut (Versions 76 to
+ * 84.3; the cities version lays 339 cities after them, tools/build-world-americas.mjs). The chart only ever grows at its end, so a campaign saved on an earlier
  * stage can be laid over today's (save.ts): the ground it never knew begins as it stood on the first day.
  */
-export const WORLD_STAGES = [104];
+export const WORLD_STAGES = [104, 201];
 
 /** True for a campaign played on the wider world. */
 export const worldOn = (g: Game): boolean => g.flags.world === 1;
@@ -125,6 +129,9 @@ export function attachWorld(g: Game, fresh = true): void {
   }
   // The chart itself: the coasts, the ferries, and the frame the interfaces draw in.
   g.links = [...g.links, ...WORLD_MAP.links];
+  // Europe's factories as the wider world counts them (world.json, 'works'): a saved campaign is laid over a fresh
+  // map, so it takes them too, with its own factories built since added on top (save.ts).
+  for (const [name, fac] of Object.entries(WORLD.works ?? {})) if (g.byName[name]) g.byName[name].fac = fac;
   g.land = [...WORLD_MAP.land, ...g.land];
   g.x0 = WORLD_MAP.frame.x0;
   g.width = WORLD_MAP.frame.x1 - WORLD_MAP.frame.x0;
@@ -154,6 +161,9 @@ export function attachWorld(g: Game, fresh = true): void {
       if (h.align) n.align = h.align as typeof n.align;
     }
   }
+  // A campaign begun after the first day: the colonies of a country already fallen in Europe (Iceland and Greenland
+  // in a 1941 start) are not left to it, frozen, but go where they would have gone on the day it fell.
+  if (fresh) settleFallen(g, WORLD_FIRST);
   // Every nation's distances to its capital are counted again on the wider map.
   for (const n of Object.values(g.nations)) if (n.capital >= 0) g.capDist[n.id] = capitalDistances(g, n.capital);
   // The supply picture keeps every country's place in it, widened to the new provinces: they are unsupplied until
@@ -190,13 +200,17 @@ export function attachWorld(g: Game, fresh = true): void {
  */
 export function settleNewGround(g: Game, from: number): void {
   if (!worldOn(g)) return;
+  // A city cut out of a province since the campaign was saved stands as its province does: held by whoever holds
+  // the province, since the month it changed hands (a city of Buffalo's held by Canada is Canada's).
+  const parents = new Set<number>();
   for (let i = Math.max(from, WORLD_FIRST); i < g.regions.length; i++) {
-    const r = g.regions[i], n = g.nations[r.ctrl];
-    if (n?.alive || !n?.fellOn) continue;
-    const by = n.fellOn.to;
-    r.ctrl = (r.overseas ? protectorOf(g, by) : null) ?? (g.nations[by]?.alive ? by : r.ctrl);
-    r.since = g.turn;
+    const r = g.regions[i], of = (WORLD_MAP.regions[i - WORLD_FIRST] as { of?: number } | undefined)?.of;
+    if (of === undefined || of >= from) continue;
+    parents.add(of);
+    const p = g.regions[of];
+    if (p && p.ctrl !== r.ctrl) { r.ctrl = p.ctrl; r.since = p.since; }
   }
+  settleFallen(g, from);
   const fresh = (name: string | null | undefined): boolean => !!name && !!g.byName[name] && g.byName[name].id >= from;
   for (const [nat, name, kind, divs, at, o] of WORLD.corps) {
     if (!fresh(at) || !g.nations[nat]?.alive || g.byName[at].ctrl !== nat) continue;
@@ -204,8 +218,34 @@ export function settleNewGround(g: Game, from: number): void {
     if (o.str !== undefined) c.str = o.str;
   }
   for (const row of WORLD.fleets) if (fresh(row.base) && g.nations[row.nat]?.alive && g.byName[row.base!].ctrl === row.nat) addFleet(g, row);
+  // Its first-day airfields too, where the air war is already running. The field a province held for a city cut out
+  // of it since goes with the city (Houston's, out of East Texas): the province keeps the one the first day gives it
+  // now, unless an air group is based there. What engineers or the treasury built there (wk:field) stays its own.
+  if (g.flags.airwar === 1) {
+    seedFields(g, Math.max(from, WORLD_FIRST));
+    for (const p of parents) {
+      const want = seedClass(g, g.regions[p]);
+      if (fieldClass(g, p) <= want || g.airFleets.some((f) => f.base === p)) continue;
+      if (want) g.flags[`af:${p}`] = want; else delete g.flags[`af:${p}`];
+    }
+  }
   for (const n of Object.values(g.nations)) if (n.alive) n.armyPeak = Math.max(n.armyPeak, armySize(g, n.id));
   g.supplyDirty = true;
+}
+
+/**
+ * Ground from 'from' on still held by a country that has fallen goes where a fallen country's ground overseas goes
+ * (game.ts, on the day of the fall): into the keeping of a sea power still fighting the victor, or failing that to the
+ * victor. For ground the chart did not yet have on that day: a save laid over a wider chart, or a campaign begun late.
+ */
+function settleFallen(g: Game, from: number): void {
+  for (let i = Math.max(from, WORLD_FIRST); i < g.regions.length; i++) {
+    const r = g.regions[i], n = g.nations[r.ctrl];
+    if (n?.alive || !n?.fellOn) continue;
+    const by = n.fellOn.to;
+    r.ctrl = (r.overseas ? protectorOf(g, by) : null) ?? (g.nations[by]?.alive ? by : r.ctrl);
+    r.since = g.turn;
+  }
 }
 
 /**
@@ -267,7 +307,17 @@ export function peaceFooting(g: Game, nat: string): number | null {
  */
 export function warFooting(g: Game, nat: string): number | null {
   if (!worldOn(g) || WORLD.warWork[nat] === undefined) return null;
-  return Math.min(1, g.flags[`ww:${nat}`] ?? peaceFooting(g, nat) ?? 1);
+  // (At war before its first month's step is taken, a climb stands where the calendar has it.)
+  return Math.min(1, g.flags[`ww:${nat}`] ?? (g.nations[nat]?.atWar.length ? climbStart(g, nat) : peaceFooting(g, nat) ?? 1));
+}
+
+/**
+ * Where a country's climb to war work starts in the month its war comes: the peace table, or, for a climb that waits
+ * for a named month (Canada's, world.json 'climbFrom'), as far up as the calendar has it by then.
+ */
+function climbStart(g: Game, id: string): number {
+  const table = peaceFooting(g, id) ?? 1, from = WORLD.climbFrom?.[id], step = WORLD.warWork[id] ?? 0;
+  return from === undefined ? table : table + step * Math.max(0, g.turn - from);
 }
 
 /** The month's step in war work for the countries that climb to it: for the player's country and the computer's alike. */
@@ -277,8 +327,12 @@ export function warWorkMonth(g: Game): void {
     const n = g.nations[id], key = `ww:${id}`;
     // Peace again: the factories go back to the peace table, and a new war begins from there.
     if (!n?.alive || !n.atWar.length) { delete g.flags[key]; continue; }
-    const table = peaceFooting(g, id) ?? 1, was = g.flags[key];
-    const now = Math.min(1, Math.max(table, was === undefined ? table : was + step));
+    // A climb that waits for a named month (Canada's, world.json 'climbFrom') stands at the peace table until then;
+    // a campaign that opens after it finds the share where the calendar has it.
+    const table = peaceFooting(g, id) ?? 1, was = g.flags[key], from = WORLD.climbFrom?.[id];
+    const start = climbStart(g, id);
+    const climbed = was === undefined ? start : from !== undefined && g.turn <= from ? table : was + step;
+    const now = Math.min(1, Math.max(table, climbed >= 1 - 1e-9 ? 1 : climbed));
     g.flags[key] = now;
     if (was !== undefined && was < 1 && now >= 1 && id === g.human) headline(g, 'info', `${n.adj} industry is now wholly on war work: every factory at home earns its full worth.`, id);
   }
@@ -286,8 +340,12 @@ export function warWorkMonth(g: Game): void {
 
 /** How many months of war are left before a country that climbs to full war work gets there: 0 when it is there, or has no climb to make. */
 export function warWorkLeft(g: Game, nat: string): number {
-  const share = warFooting(g, nat), step = WORLD.warWork[nat];
-  return share === null || share >= 1 || !step ? 0 : Math.ceil((1 - share) / step - 1e-9);
+  const step = WORLD.warWork[nat];
+  if (warFooting(g, nat) === null || !step) return 0;
+  // At peace, from where a war begun this month would start (warWorkMonth).
+  const share = Math.min(1, g.flags[`ww:${nat}`] ?? climbStart(g, nat));
+  const wait = Math.max(0, (WORLD.climbFrom?.[nat] ?? 0) - g.turn);
+  return share >= 1 ? 0 : wait + Math.ceil((1 - share) / step - 1e-9);
 }
 
 /** What a country's small wells and plants at home yield, where the wider world puts its oilfields on the map; null where the ordinary figure stands. */

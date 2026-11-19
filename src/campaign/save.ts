@@ -8,7 +8,7 @@ import { atWar, capitalDistances, computeSupply, createGame, openTheatres } from
 import { seat } from './commanders';
 import { FIELDS } from './research';
 import { newStories } from './stories';
-import { restoreWorks } from './arsenal';
+import { openSmallAir, restoreWorks } from './arsenal';
 import { resetRailheads } from './rails';
 import { openAirWar, openWorldAir } from './air';
 import { openCarriers } from './carriers';
@@ -80,6 +80,8 @@ export function saveGame(g: Game): string {
     intel: g.flags.open === 1 ? g.intel : undefined,
     // The roll of the fallen and the freed: left out while it is empty, so a save with nothing on it is written as it always was.
     passings: g.passings.length ? g.passings : undefined,
+    // Corps at sea on a long passage: left out while there are none, so a save with none is written as it always was.
+    atSea: g.atSea?.length ? g.atSea : undefined,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -219,6 +221,9 @@ export function loadGame(text: string): Game | null {
   if (g.flags.open === 1) openAirWar(g);
   // And one saved before the air commands beyond the old chart were listed (America's): they are raised on their fields.
   if (g.flags.open === 1) openWorldAir(g);
+  // And one saved before the aircraft from abroad (ruling 213(d)): the rows due before the month it was saved in came
+  // with the order of battle it already has, so they are marked as come and not delivered all at once.
+  if (g.flags.open === 1 && g.flags.gifts === undefined) openSmallAir(g);
   // A grand campaign saved before morale was kept, or before divisions carried numbers, picks both up here.
   openMorale(g);
   numberDivisions(g);
@@ -228,6 +233,8 @@ export function loadGame(text: string): Game | null {
   g.intel = { agents: [], next: 1, notes: [], heat: {}, ...(d.intel ?? {}) };
   // A save from before the roll of the fallen was kept: it is written up from what each nation remembers of its own fall.
   g.passings = Array.isArray(d.passings) ? d.passings : rollFromMemory(g);
+  // Corps at sea on a long passage (ruling 229, part 1): none in a save from before the Cape was sailed.
+  if (Array.isArray(d.atSea) && d.atSea.length) g.atSea = d.atSea;
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
   if (g.flags.open === 1) openCarriers(g);

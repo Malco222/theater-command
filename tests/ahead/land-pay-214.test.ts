@@ -19,7 +19,7 @@
 // measured on the far-side seats' rig (seed 7, chart df440fc), not on main, and Canada's war-work climb moves its own.
 import { describe, expect, it } from 'vitest';
 import * as economy from '../../src/campaign/economy';
-import { BUDGET, provinceYield } from '../../src/campaign/economy';
+import { BUDGET, landShare, provinceYield } from '../../src/campaign/economy';
 import { capture, createGame } from '../../src/campaign/game';
 import { majorsOf } from '../../src/campaign/diplomacy';
 import { startOpen } from '../../src/campaign/staff';
@@ -48,7 +48,8 @@ function grand(seed = 3, human = 'GER'): Game {
 function basePay(g: Game, r: Region, nat: string): { land: number; port: number } {
   const own = r.owner === nat;
   const k = !own ? BUDGET.occupied : r.overseas ? BUDGET.overseas : 1;
-  return { land: BUDGET.land[r.terrain] * k, port: r.port ? BUDGET.port * k : 0 };
+  // (A city and its province share the province's land pay, ruling 210(a); the sixteen's factor stands in for it.)
+  return { land: BUDGET.land[r.terrain] * k * landShare(r), port: r.port ? BUDGET.port * k : 0 };
 }
 const close = (a: number, b: number): boolean => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));
 

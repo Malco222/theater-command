@@ -40,10 +40,11 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; owner: string; island: boolean; overseas: boolean; wave: boolean; across: number }[] = [];
 const months: { turn: number; can: number; canHome: number; bra: number; usa: number }[] = [];
 {
-  // Seed 8: America's staff makes landings of its own in this war, on Sardinia in January 1943 and at Marseille in June 1944
-  // (in seed 3 it joins a British front at Nantes and needs none). Seed 7 until Version 84, whose rules of what an attack
-  // brings and faces moved every war.
-  const g = wide(8);
+  // Seed 6: America's staff makes a landing of its own in this war, on Sardinia in October 1942, and Germany holds
+  // Norway. Seed 7 until Version 84, whose rules of what an attack brings and faces moved every war; seed 8 until ruling
+  // 227, whose air war moved them again (in seed 8 Germany now never takes Norway). Of seeds 1 to 13 under 227, 3, 6, 7,
+  // 9 and 12 tell this story in full.
+  const g = wide(6);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, island: e.to.nb.length === 0, overseas: e.to.overseas, wave: e.wave, across: across(g, e.nat).length }); };
   while (g.turn < SEP_44) {
     runTurnAI(g);
@@ -212,6 +213,9 @@ describe('a front is any harbour its side holds near the enemy', () => {
       const beach = g.byName.Brittany;
       for (const c of [...beach.units]) removeCorps(g, c);
       capture(g, beach, 'UK');
+      // (And the army next door sent away. Germany moves first in the month, and since ruling 229 five of its corps stand
+      // at Rennes in this war: they would take the empty beach back before America's staff sat down to its orders.)
+      for (const j of beach.nb) for (const c of [...g.regions[j].units]) if (c.nat !== 'UK') removeCorps(g, c);
       const quay = g.byName.Cornwall;
       const c = addCorps(g, 'USA', 'Waiting Corps', 'inf', 2, quay.id, {});
       c.supplied = true;

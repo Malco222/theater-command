@@ -40,7 +40,7 @@ import { hashString } from '../core/rng';
 import { garrisonLine } from './armies';
 import { allied, atWar, headline, moveCost } from './game';
 import { blocked } from './rivers';
-import { canOrder, humanUp, onEve, orderMove, reach, sight } from './turn';
+import { canOrder, humanUp, onEve, orderMove, reach, sight, type Reach } from './turn';
 import type { Corps, Game } from './types';
 
 const key = (id: number): string => `march:${id}`;
@@ -90,8 +90,16 @@ export function farGround(g: Game, c: Corps): Map<number, { cost: number; prev: 
 
 /** The road over friendly ground from where a corps stands to a place, the place itself last, and the weeks it costs; null if there is none. */
 export function farRoad(g: Game, c: Corps, to: number): { road: number[]; cost: number } | null {
+  return roadOver(g, c, to, () => farGround(g, c));
+}
+
+/** The corps' farGround, asked for only when it is needed: worked out once and kept while nothing in the war changes. */
+export type GroundOf = () => Map<number, { cost: number; prev: number }>;
+
+/** farRoad, over the corps' farGround as given. */
+function roadOver(g: Game, c: Corps, to: number, groundOf: GroundOf): { road: number[]; cost: number } | null {
   if (to === c.reg || !friendlyTo(g, c, to)) return null;
-  const ground = farGround(g, c);
+  const ground = groundOf();
   const end = ground.get(to);
   if (!end) return null;
   const road: number[] = [];
@@ -160,7 +168,7 @@ function sweepHot(g: Game): void {
 }
 
 /** Why a march to a place cannot be kept for this corps, in one line; '' when it can. */
-export function whyNotMarch(g: Game, c: Corps, to: number): string {
+export function whyNotMarch(g: Game, c: Corps, to: number, groundOf: GroundOf = () => farGround(g, c)): string {
   const r = g.regions[to];
   if (!r || !g.human || !humanUp(g)) return 'No orders can be given now.';
   if (!canOrder(g, c)) return `${c.name} takes no orders this month.`;
@@ -170,7 +178,7 @@ export function whyNotMarch(g: Game, c: Corps, to: number): string {
   if (to === c.reg) return `${c.name} is there already.`;
   if (atWar(g, c.nat, r.ctrl)) return c.ap > 0 ? 'A march is never kept onto enemy ground: an attack is planned in the month it is made, with the odds in front of you.' : 'No moves left this month. An attack is planned in the month it is made.';
   if (!allied(g, c.nat, r.ctrl)) return 'A kept march goes through friendly ground only.';
-  if (!farRoad(g, c, to)) return `A kept march goes through friendly ground only, and there is no such road to ${r.name}.`;
+  if (!roadOver(g, c, to, groundOf)) return `A kept march goes through friendly ground only, and there is no such road to ${r.name}.`;
   return '';
 }
 
@@ -196,12 +204,15 @@ export interface MarchPlan {
  * Before an order is given: can this corps be marched to that place on a standing order, about how long it would
  * take, and the line for the pointer. It reads the game and leaves it as it was.
  */
-export function planMarch(g: Game, c: Corps, to: number): MarchPlan {
+export function planMarch(g: Game, c: Corps, to: number, kept: { ground?: GroundOf; reach?: () => Map<number, Reach> } = {}): MarchPlan {
   const spent = c.ap <= 0;
-  const why = whyNotMarch(g, c, to);
+  // The corps' ground is worked out once for the question and the road both (or handed in, by one asking of many places).
+  let ground: Map<number, { cost: number; prev: number }> | null = null;
+  const groundOf = kept.ground ?? (() => (ground ??= farGround(g, c)));
+  const why = whyNotMarch(g, c, to, groundOf);
   if (why) return { ok: false, spent, now: false, months: 0, road: [], line: why };
-  const way = farRoad(g, c, to)!;
-  const at = spent ? undefined : reach(g, c).get(to);
+  const way = roadOver(g, c, to, groundOf)!;
+  const at = spent ? undefined : (kept.reach ? kept.reach() : reach(g, c)).get(to);
   if (at && !at.attack) return { ok: true, spent, now: true, months: 0, road: way.road, line: '' };
   const months = spent ? marchMonths(c, way.cost) : 1 + marchMonths(c, Math.max(1, way.cost - c.ap));
   const line = spent ? `${c.name} marches here from next month, ${aboutMonths(months)}.` : `${c.name} marches here over ${aboutMonths(months)}, going on by itself as each month opens.`;

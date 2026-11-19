@@ -188,7 +188,7 @@ describe('blown bridges', () => {
     expect(bridgeDown(g, x)).toBe(true);
     expect(blownOn(g, x)).toBe(g.turn);
     expect(downBetween(g, neumark.id, berlin.id)).toBe(true);
-    expect(g.headlines.some((h) => /German troops blow the bridges over the Oder between Berlin and Neumark/.test(h.text))).toBe(true);
+    expect(g.headlines.some((h) => /German troops blow the bridges over the Oder between Berlin and the Neumark/.test(h.text))).toBe(true);
     expect(whyNotBlowBridges(g, berlin.id, neumark.id)).toMatch(/already down/);
     expect(orderBlowBridges(g, berlin.id, neumark.id)).toBe(false);
     expect(riverNotes(g, neumark.id).find((n) => n.far === berlin.id)).toMatchObject({ river: 'Oder', down: true, since: g.turn });
