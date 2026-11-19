@@ -45,7 +45,7 @@ private:
  * and life like... like im in it and watching a movie at the same time").
  *
  * It knows nothing of the scene it is put in. Give it a parent to hang its mesh and lamps on, how many world units
- * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, Shots, AirGun, AirHit, the Trail calls, AirFlak, Burn); and
+ * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, VehicleDust, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, Burn); and
  * tick it once a frame with the eye. It draws everything as soft puffs in one procedural mesh with the campaign map's
  * own M_Highlight (see-through, unlit, coloured by its points), the same shape of puff as the map's smoke, so no new
  * material is needed; flashes light the ground with at most two point lamps (game.max_lamps), shadowless.
@@ -81,8 +81,15 @@ public:
 	/** An armour-piercing round that misses and skips along Heading: a low spurt of earth, no crown, no crater. */
 	void Skip(const FVector& WorldAt, const FVector& Heading, const FString& Ground);
 	/** A gun firing: its muzzle at WorldAt, pointing along Facing. Gun is "rifle", "mg", "tank_gun", "at_gun",
-	 * "howitzer" or "mortar". */
-	void Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun);
+	 * "howitzer" or "mortar". Ground is what its blast throws up: on "sand" a tank or field gun's shot (a towed gun's
+	 * `muzzle` socket too) raises a veil of dust that hides the gun and its line of sight for a second or two. */
+	void Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun, const FString& Ground = TEXT("earth"));
+	/** Dust behind a moving vehicle: every frame, for each of its dust sockets ("dust.left", "dust.right"), where the
+	 * socket is and the vehicle's velocity (world units a second). Id: any number that stays the same for that socket
+	 * (the vehicle's number times two, plus one for the right). Ground is the ground it drives on ("sand" throws the
+	 * most; snow, mud and water none); bTracked for tanks and half-tracks, which throw more than wheels. Nothing when
+	 * it stands still; low, long and lingering at speed, drifting on the wind. */
+	void VehicleDust(int32 Id, const FVector& SocketAt, const FVector& Velocity, const FString& Ground, bool bTracked = true);
 	/** Rounds fired by one gun (any number that stays the same for that gun) toward To: every fifth a tracer. Ground
 	 * is what they strike, for the little dust spurts there ("earth" if left out). */
 	void Shots(int32 Gun, const FVector& From, const FVector& To, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground = TEXT("earth"));
@@ -106,10 +113,22 @@ public:
 	 * with the point and its velocity (world units a second), TrailStop when it ends; what is in the air fades on
 	 * its own. Id: a number that stays the same for that trail. Kind: "smoke" (thin and grey, thickening and
 	 * darkening), "fire" (flame at the root, black smoke) or "glycol" (thin white vapour); TrailStart again on a
-	 * running Id changes its kind (smoke catching fire). */
-	void TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind);
+	 * running Id changes its kind (smoke catching fire). SpanMetres: the aircraft's wingspan in metres, so a fire's
+	 * flame is sized to it (half the span, at most 10 m, by the recipe); 0 keeps the recipe's own flame_m. */
+	void TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres = 0.0f);
 	void TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity);
 	void TrailStop(int32 Id);
+	/** An aircraft lost: what comes off it as it goes down. AirFall once when it is lost, AirFallMove every frame with
+	 * where it is and its velocity (world units a second), AirFallStop when it is gone (hits the ground or is
+	 * removed). Id: a number that stays the same for that aircraft. Kind: "explode" (blown apart: all its pieces at
+	 * once round a short torn fireball; no AirFallMove needed), "burn" (going down on fire: 5 to 10 pieces shed over
+	 * its fall) or "spin" (out of control: a few pieces, sometimes a wing). SpanMetres: its wingspan, so the pieces
+	 * are sized to it (a bomber, 20 m or more, sheds 60 to 100 at once, a fighter 30 to 50). DeckZ: the world height
+	 * where the pieces leave sight, the cloud deck's top, or the ground under the fight; nothing pops out of view.
+	 * Light torn skin plates flutter and glint as they sink; a few heavy dark pieces drop straight. */
+	void AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ);
+	void AirFallMove(double Now, int32 Id, const FVector& At, const FVector& Velocity);
+	void AirFallStop(int32 Id);
 	/** A flak shell bursting at At, at the bombers' height, on the same clock as AirGun. Kind: an air_flak row
 	 * ("heavy", the 88 mm class). A soft flash, then see-through lobes of smoke in a crooked chain that hang where
 	 * they burst, drift with the wind, grey and stretch, and are gone in about 9 s. The battle decides where and how
@@ -118,8 +137,21 @@ public:
 	void AirFlak(double Now, const FVector& At, const FString& Kind = TEXT("heavy"));
 	/** Something burning, about AcrossMetres wide: flames for Seconds, then a thinning grey column. */
 	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds);
+	/** Oil burning on the sea where a ship went down (Kind "sunk"), or where a ship on fire left the line ("burning"):
+	 * low flames on the water and a tall black column leaning down the wind (SetWind; one wind for every column),
+	 * kept even when the screen is full and drawn kilometres off, so the far columns stay on the horizon. One call for
+	 * each smoke zone of the sea battle (its id, x, y and r): ReachMetres is its r (0.6 of her length). UntilSeconds is
+	 * when it stops, on Tick's clock (the fight's end; 0: until OilStop); SinceSeconds, how long it has already burned
+	 * when the scene opens (the battle's second now minus the zone's at), so the column stands grown. A WorldAt above
+	 * the sea (a burning ship's deck) puts the flames there. Calling again with the same Id starts it afresh. */
+	void OilFire(int32 Id, const FVector& WorldAt, float ReachMetres, const FString& Kind = TEXT("sunk"), double UntilSeconds = 0.0, float SinceSeconds = 0.0f);
+	/** That oil fire goes out: no new flame or smoke, and its column thins away on its own. */
+	void OilStop(int32 Id);
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);
+	/** For an air scene: draw out to the recipe's air.draw_beyond_m (4,000 m), so guns, hits and flames are seen from
+	 * the strategy camera 800 to 2,000 m off the fight. Call once after it is made. */
+	void UseAirDistance();
 	/** The way toward the sun (world axes): each puff is lightened on that side, and looking toward it smoke's thin
 	 * edges glow warm where the sun shows through (by day and dusk, as the hour's light says; none at night). */
 	void SetSun(const FVector& TowardSun);

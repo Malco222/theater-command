@@ -281,11 +281,19 @@ void FBattleEffects::Skip(const FVector& WorldAt, const FVector& Heading, const 
 	}
 }
 
-void FBattleEffects::Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun)
+void FBattleEffects::Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun, const FString& Ground)
 {
 	if (IsReady())
 	{
-		Core.Muzzle(Time(), ToFx(WorldAt), ToFxWay(Facing), Named(Gun).c_str());
+		Core.Muzzle(Time(), ToFx(WorldAt), ToFxWay(Facing), Named(Gun).c_str(), Named(Ground).c_str());
+	}
+}
+
+void FBattleEffects::VehicleDust(int32 Id, const FVector& SocketAt, const FVector& Velocity, const FString& Ground, bool bTracked)
+{
+	if (IsReady())
+	{
+		Core.VehicleDust(Time(), Id, ToFx(SocketAt), ToFx(Velocity), Named(Ground).c_str(), bTracked);
 	}
 }
 
@@ -322,11 +330,11 @@ void FBattleEffects::AirHit(double Now, const FVector& At, const FVector& Normal
 	}
 }
 
-void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind)
+void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres)
 {
 	if (IsReady())
 	{
-		Core.TrailStart(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str());
+		Core.TrailStart(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres);
 	}
 }
 
@@ -346,6 +354,30 @@ void FBattleEffects::TrailStop(int32 Id)
 	}
 }
 
+void FBattleEffects::AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ)
+{
+	if (IsReady())
+	{
+		Core.AirFall(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres, DeckZ / UnitsPerMetre);
+	}
+}
+
+void FBattleEffects::AirFallMove(double Now, int32 Id, const FVector& At, const FVector& Velocity)
+{
+	if (IsReady())
+	{
+		Core.AirFallMove(Now, Id, ToFx(At), ToFx(Velocity));
+	}
+}
+
+void FBattleEffects::AirFallStop(int32 Id)
+{
+	if (IsReady())
+	{
+		Core.AirFallStop(Id);
+	}
+}
+
 void FBattleEffects::AirFlak(double Now, const FVector& At, const FString& Kind)
 {
 	if (IsReady())
@@ -362,9 +394,33 @@ void FBattleEffects::Burn(const FVector& WorldAt, float AcrossMetres, float Seco
 	}
 }
 
+void FBattleEffects::OilFire(int32 Id, const FVector& WorldAt, float ReachMetres, const FString& Kind, double UntilSeconds, float SinceSeconds)
+{
+	if (IsReady())
+	{
+		Core.OilFire(Time(), Id, ToFx(WorldAt), ReachMetres, Named(Kind).c_str(), UntilSeconds, SinceSeconds);
+	}
+}
+
+void FBattleEffects::OilStop(int32 Id)
+{
+	if (IsReady())
+	{
+		Core.OilStop(Time(), Id);
+	}
+}
+
 void FBattleEffects::SetWind(const FVector& MetresPerSecond)
 {
 	Core.SetWind(ToFxWay(MetresPerSecond));
+}
+
+void FBattleEffects::UseAirDistance()
+{
+	if (IsReady())
+	{
+		Core.SetDrawBeyond(Core.AirBeyond());
+	}
 }
 
 void FBattleEffects::SetSun(const FVector& TowardSun)
@@ -585,6 +641,15 @@ void FBattleEffects::RunTest(const FVector& Centre)
 	Add(16.0, 5, 24.0, 18.0, TEXT(""), TEXT("")); // a wreck burning
 	Add(18.0, 4, -36.0, -10.0, TEXT("mg"), TEXT(""));
 	Add(19.0, 6, 0.0, 60.0, TEXT("heavy"), TEXT("")); // a heavy flak burst hanging 60 m up over the far row
+	// (and behind it all, for the whole test, two oil fires already burning a minute and a half: a slick's black column
+	// 900 m off and a burning ship's 2.5 km off, as a sea battle's lost ships stand on its horizon)
+	auto Far = [this, &Centre](double X, double Y)
+	{
+		const FVector Flat = Centre + FVector(X, Y, 0.0) * UnitsPerMetre;
+		return GroundUnder ? GroundUnder(Flat) : Flat;
+	};
+	OilFire(9001, Far(-250.0, 900.0), 100.0f, TEXT("sunk"), 0.0, 90.0f);
+	OilFire(9002, Far(600.0, 2500.0), 70.0f, TEXT("burning"), 0.0, 90.0f);
 }
 
 void FBattleEffects::PlayTest(double Now)
