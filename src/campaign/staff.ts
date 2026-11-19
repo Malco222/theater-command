@@ -40,7 +40,7 @@ import { openSecretWar } from './secretwar';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, overseasOf, shoreOf } from './world';
 import { tieWar } from './far';
-import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather } from './game';
+import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
 import { openWinter, winterOver } from './winter';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
@@ -299,6 +299,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     const works = (e: Region): number => {
       if (!e.fort) return 1;
       let best = 99;
+      if (!worksAgainst(g, e, nat)) return 1;
       for (const j of e.nb) if (f.ours.has(j)) best = Math.min(best, e.fort.vs.includes(g.regions[j].owner) ? FORT_MUL[e.fort.lv] : 1);
       return best === 99 ? 1 : best;
     };
@@ -361,7 +362,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
       if (c.dead || side[c.reg] !== 1 || !f.areas.has(label[c.reg]) || !allied(g, nat, c.nat) || !fights(c.nat)) continue;
       const r = g.regions[c.reg];
       if (c.kind === 'fort' || c.hold) {
-        if (f.ours.has(c.reg)) fixed += defP(g, c, r) * (r.fort ? FORT_MUL[r.fort.lv] : 1);
+        if (f.ours.has(c.reg)) fixed += defP(g, c, r) * (r.fort && worksFor(g, r, c.nat) ? FORT_MUL[r.fort.lv] : 1);
         // A garrison on the front itself would go in with the rest; one further back stays where it is.
         if (c.kind === 'fort' || c.nat !== nat || !close[c.reg]) continue;
       }
@@ -409,7 +410,7 @@ function axis(g: Game, nat: string, f: Front, placed = false): string[] {
   const N = g.regions.length;
   const cost = new Float32Array(N).fill(1e9);
   const from = new Int16Array(N).fill(-1);
-  const step = (r: Region): number => 1 + (GOING[r.terrain] ?? 0) + (r.fort && r.fort.vs.includes(nat) ? 2.5 * r.fort.lv : 0) + 0.2 * r.units.length;
+  const step = (r: Region): number => 1 + (GOING[r.terrain] ?? 0) + (r.fort && r.fort.vs.includes(nat) && worksAgainst(g, r, nat) ? 2.5 * r.fort.lv : 0) + 0.2 * r.units.length;
   const open: number[] = [];
   const doors = f.edge.filter((id) => f.depth[id] === 1);
   // With the army in the field, the road starts where the army is: a thrust cannot be launched out of a corner

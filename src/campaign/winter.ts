@@ -40,7 +40,7 @@ const cap = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
 export function layWinterWorks(g: Game): void {
   for (const [name, [lv, ...vs]] of Object.entries(OP?.works ?? {})) {
     const r = g.byName[name];
-    if (r && !r.fort && vs.length && r.owner === r.ctrl && !vs.includes(r.owner)) r.fort = { lv, vs: [...vs] };
+    if (r && !r.fort && vs.length && r.owner === r.ctrl && !vs.includes(r.owner)) r.fort = { lv, vs: [...vs], by: r.owner };
   }
 }
 
