@@ -182,6 +182,8 @@ export function bookIf(nat: string, opId: string): string[] | null {
 }
 
 export function leash(g: Game, nat: string, opId: string): Leash {
+  // (The sandbox: a great choice this war's world has taken out is not taken, at any stop. Nothing is barred without it.)
+  if (g.flags.wi === 1 && g.flags[`wi:bar:${nat}:${opId}`]) return { kind: 'never', chance: 0, nerve: 1, early: 0 };
   const S = stopDef(g);
   const un = HISTORY.unhistoric.includes(`${nat}:${opId}`);
   // Off the book, or at a stop that keeps none: the staff decides, and a choice history never took is weighed by the stop.

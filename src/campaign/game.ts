@@ -2817,7 +2817,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
   endVoyages(g, nat);
   fleetsOnFall(g, nat);
   airOnFall(g, nat);
-  const pact = g.nations.SOV.alive && !atWar(g, 'SOV', by);
+  const pact = g.nations.SOV.alive && !atWar(g, 'SOV', by) && !(g.flags.wi === 1 && g.flags['wi:nopact']);
   // Its sieges end with it: nobody is left to hold the towns, or to stand round them.
   dropSieges(g, nat);
   const kept: Region[] = [];
@@ -3759,7 +3759,8 @@ export function startPhase(g: Game, nat: string): void {
  * (The historical scenarios are left as they were.)
  */
 export function sovietEvent(g: Game): void {
-  if (g.flags.sovietMove || !g.nations.SOV.alive || g.turn > 3 || atWar(g, 'SOV', 'GER')) return;
+  // (The sandbox: in a war where the Pact was never signed the Red Army stays home.)
+  if (g.flags.sovietMove || !g.nations.SOV.alive || g.turn > 3 || atWar(g, 'SOV', 'GER') || (g.flags.wi === 1 && g.flags['wi:nopact'])) return;
   const fallen = !g.nations.POL.alive;
   if (fallen) {
     if (g.flags.open !== 1 || !g.regions.some((r) => r.sov && r.owner === 'POL' && r.ctrl === 'SOV')) return;

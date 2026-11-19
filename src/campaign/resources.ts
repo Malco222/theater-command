@@ -304,6 +304,8 @@ function deal(g: Game, row: DealRow): Lane {
     lane.why = way === 'narvik' ? 'Coming through Narvik while the Baltic is frozen.' : '';
     return lane;
   }
+  // (The sandbox: a deal this war's world never made, the Soviet deliveries in a war with no Pact.)
+  if (g.flags.wi === 1 && g.flags[`wi:bar:deal:${row.id}`]) return stop('No such agreement was signed in this war.', 'idle');
   let seller = row.seller ?? '';
   if (row.field) {
     const f = g.byName[row.field];

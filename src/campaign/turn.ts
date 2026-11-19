@@ -71,6 +71,10 @@ import { MANPOWER, callEarly, classGapUntil, classNow, earlyClass, earlyGap, man
 import { commandView, crossingWord, handOver, setDepth, setStaffCap, staffMonth, type CommandView, type CrossingWord } from './desks';
 import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from './history';
 import { claimsView, historyMonth, type ClaimView } from './claims';
+import {
+  answerTurningPoint, eveLines, sandboxCountries, sandboxMenu, sandboxOf, sandboxStarts, setSandbox, turningPointsOf, turningRecord, whatIfMonth, whyNotSandbox, whyNotTurningPoint,
+  type CountryView, type SandboxView, type StartView, type TurningPointView, type TurningRecord,
+} from './whatif';
 import { finishMonthEnd, finishMonthOpen } from './finish';
 import { staffRuns, type DeskId } from './depth';
 import { minesKnown, whatYouFace } from './facing';
@@ -118,6 +122,8 @@ function closePhase(g: Game, nat: string): void {
     winterMonth(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
     historyMonth(g);
+    // The sandbox's month (a campaign begun with it only): its start's own events, and the turning points due.
+    whatIfMonth(g);
     // The wars an alliance gave notice of when its enemy fell, now due (ruling 115).
     finishMonthOpen(g);
     // Wars nobody can fight any longer end in an armistice (the grand campaign).
@@ -203,7 +209,9 @@ export interface EvePlan { title: string; advice: string[]; place: [string, numb
 /** What the staff advises on the eve of war, if the player's nation has such advice and the eve is not over. */
 export function evePlan(g: Game): EvePlan | null {
   if (!onEve(g) || !g.human) return null;
-  return (EVE as unknown as Record<string, EvePlan | undefined>)[g.human] ?? null;
+  const plan = (EVE as unknown as Record<string, EvePlan | undefined>)[g.human] ?? null;
+  // (The sandbox: a line the war's own world makes untrue reads as that world has it.)
+  return plan && g.flags.wi === 1 ? { ...plan, advice: eveLines(g, g.human, plan.advice) } : plan;
 }
 
 /**
@@ -276,6 +284,32 @@ export function orderHistory(g: Game, stop: number, fresh = false): boolean {
 }
 /** The claims on named ground that can be read now (stops 4 and 5): who claims what from whom and why, and whether it is being pressed or fought for. */
 export const claimsOf = (g: Game): ClaimView[] => claimsView(g);
+
+// ---- The sandbox: how the war begins, and its turning points (the grand campaign, begun in September 1939) ----
+
+/** True where the new-campaign card offers the sandbox. Off for release 1: one line in whatif.json switches it on. */
+export const sandboxOffered = (): boolean => sandboxMenu();
+/** The ways the war can begin: history's first, then the what-ifs, "A World Dealt Anew" and "Your Own World". */
+export const sandboxStartList = (): StartView[] => sandboxStarts();
+/** The five swing powers and the sides each can take, for "Your Own World". */
+export const sandboxCountryList = (): CountryView[] => sandboxCountries();
+/** Why the war cannot begin in this world, or null. Only on the first day of a grand campaign, before the first move. */
+export const whyNotOrderSandbox = (g: Game, start: string, sides: Record<string, string> = {}): string | null => whyNotSandbox(g, start, sides);
+/**
+ * Sets the world the war begins in, and whether turning points come. Called once, straight after the grand
+ * campaign is set up and before anybody moves. History's start with no turning points stores nothing at all.
+ */
+export const orderSandbox = (g: Game, start: string, sides: Record<string, string> = {}, turns = true): boolean => setSandbox(g, start, sides, turns);
+/** The world this war began in, the sides, and the turning points so far. Null for a campaign without the sandbox. */
+export const sandboxView = (g: Game): SandboxView | null => sandboxOf(g);
+/** The turning points waiting for the player's answer this month. */
+export const turningPoints = (g: Game): TurningPointView[] => turningPointsOf(g);
+/** Why the player cannot give this answer, or null. */
+export const whyNotAnswer = (g: Game, id: string, choice: string): string | null => whyNotTurningPoint(g, id, choice);
+/** The player's answer at a turning point. It is carried out at once, and the news says what followed. */
+export const orderAnswer = (g: Game, id: string, choice: string): boolean => answerTurningPoint(g, id, choice);
+/** The war's turning points so far, oldest first: the campaign's own what-if book. */
+export const turningBook = (g: Game): TurningRecord[] => turningRecord(g);
 
 // ---- How deep the player plays (the grand campaign) --------------------------------------------
 

@@ -573,6 +573,7 @@ export function leavings(g: Game): { nation: string; grounds: string[] }[] {
   const out: { nation: string; grounds: string[] }[] = [];
   for (const e of DIPLOMACY.events) {
     if (!e.partition || (e.mode && (e.mode === 'open') !== open) || g.flags[`event:${e.id}`] !== undefined || g.turn > (e.to ?? 999) || spared(g, e.partition.nation, e.stake)) continue;
+    if (g.flags.wi === 1 && g.flags[`wi:bar:ev:${e.id}`]) continue;
     const test = (e.if ?? []).find((c) => c.startsWith('anyHeld:') || c.startsWith('allHeld:'));
     if (test) out.push({ nation: e.partition.nation, grounds: test.slice(test.indexOf(':') + 1).split(',').slice(1) });
   }
@@ -919,6 +920,8 @@ function fire(g: Game, e: DiploEvent): boolean {
 /** Runs at the start of every month: opinion drifts, neutrals move along the track, and history's events are checked. */
 /** Carries out one of history's events now, whatever the calendar says: for the tests of what an event does. */
 export const fireEvent = (g: Game, id: string): boolean => { const e = DIPLOMACY.events.find((x) => x.id === id); return !!e && fire(g, e); };
+/** Carries out an event that is not one of history's: the sandbox's own (whatif.ts), written in the same shape. */
+export const fireRow = (g: Game, e: DiploEvent): boolean => fire(g, e);
 
 export function monthlyDiplomacy(g: Game): void {
   // The last act of the grand campaign: no alliances, no courting, no treaties, and history's calendar is closed.
@@ -951,6 +954,8 @@ export function monthlyDiplomacy(g: Game): void {
   for (const e of DIPLOMACY.events) {
     if (e.mode && (e.mode === 'open') !== open) continue;
     if (g.flags[`event:${e.id}`] || g.turn < e.from || (g.turn > e.to && !open)) continue;
+    // (The sandbox: an event this war's world has taken out does not happen. Nothing is barred in a campaign without it.)
+    if (g.flags.wi === 1 && g.flags[`wi:bar:ev:${e.id}`]) continue;
     if (!(e.if ?? []).every((c) => holds(g, c))) continue;
     if (fire(g, e)) g.flags[`event:${e.id}`] = g.turn;
   }

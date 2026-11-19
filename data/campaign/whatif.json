@@ -1,0 +1,283 @@
+{
+  "_about": "The sandbox (Brian, 19 November 2026: \"i want this to be a sandbox to play and make your own history, not just play out the real one\"). The grand campaign only, begun in September 1939. Two parts. 'countries' and 'starts': how the war begins. Each swing country has sides; 'history' is the war as it was and is stored as nothing. A start is a set of sides, chosen on the new-campaign card ('custom' lets the player set each country; 'dealt' deals each country a side from the war's seed by 'deal'). A side's 'align' puts the country on the alignment track on the first day, 'war' starts wars on the first day (no news of its own: the start's line tells it), 'wake' brings a dormant country in, 'bar' shuts the computer's great choices (open.json 'NAT:op'), history's events ('ev:id', diplomacy.json) and trade deals ('deal:id', resources.json), 'nopact' keeps the Red Army out of Poland, and 'follow' are events in diplomacy.json's shape that belong to that side alone. 'turns' are the turning points: moments where the war can go another way. Each is decided by the first nation in 'by' that the player leads, with that nation's labels; with none of them in the player's hands the first in 'by' decides on the computer's weights 'w' (one per stop of the history dial: at stops 1 and 2 history's choice, at 3 now and then another, at 4 and 5 often). 'boost' multiplies an option's weight while a condition holds. 'if' reads as in diplomacy.json, plus 'side:NAT:id', 'tp:id:opt' (that choice was made), 'tpAgo:id,n' (decided at least n months ago), 'wi:flag' (raised by a choice), and 'a|b' for either. 'from' and 'to' are the months of the war it may come in; 'again' asks again that many months later when the choice made is one marked 'again'. An answer the player has not given by the month's end is history's ('hist'). 'reply': a choice the player makes that needs the other side's yes, which the computer gives on its weights. A choice's 'do': 'join' (a side), 'leave' (its bloc, to neutrality), 'war' and 'peace' (pairs), 'truce' (peace where each keeps the ground its armies hold), 'armistice' (every country at war with the one named makes peace, but those in 'except'), 'dominions' (the dominions of the first of each pair do as it does), 'partners' (the allies of the first of each pair at war with the second do as it does), 'opinion', 'bar' and 'unbar', 'quality' (multiplied), 'wake', 'flag'. No choice takes the player's country out of a war unless the player made it. 'menu' false: the new-campaign card shows none of it (release 1); the rules run for any campaign that was begun with it, and a campaign begun without it is played exactly as before.",
+  "menu": false,
+  "countries": [
+    {
+      "id": "SOV", "name": "the Soviet Union",
+      "sides": [
+        { "id": "history", "name": "The Pact", "says": "Stalin signs with Hitler in August 1939. Poland is divided and the Red Army takes the east of it." },
+        { "id": "nopact", "name": "No Pact", "says": "Stalin and Hitler never sign. The Red Army stays home, Poland is Germany's alone to take, and the two armies meet face to face on a new frontier.",
+          "nopact": true, "bar": ["ev:baltic", "ev:bessarabia", "deal:pact"],
+          "eve": { "POL": [2, "There is no pact between Moscow and Berlin in this war: the Red Army will not cross the eastern border. The eastern provinces are yours to hold, or to fall back through."] } },
+        { "id": "allies", "name": "With the Allies", "says": "The talks in Moscow of August 1939 succeed. The Soviet Union stands with Britain and France, at war with Germany from the first day.",
+          "align": "allies", "war": [["SOV", "GER"], ["SOV", "SVK"]], "nopact": true, "bar": ["ev:baltic", "ev:bessarabia", "deal:pact", "SOV:west", "SOV:vulture"],
+          "eve": { "POL": [2, "The Soviet Union is at war with Germany beside you. Hold on in the east: the Red Army is coming, and ground you keep there is ground it can fight from."] } },
+        { "id": "axis", "name": "In the Axis", "says": "The Pact becomes an alliance. The Soviet Union stands in the Axis camp, takes its share of Poland and the Baltic, and Germany has no war in the east to fear while the partnership holds.",
+          "align": "axis", "bar": ["GER:east", "SOV:west", "SOV:vulture", "ITA:east", "ROM:east", "HUN:east", "SVK:east", "FIN:east"] }
+      ]
+    },
+    {
+      "id": "ITA", "name": "Italy",
+      "sides": [
+        { "id": "history", "name": "Waits, then strikes", "says": "Bound to Germany by the Pact of Steel, Italy waits to see how the war goes and comes in as France is falling." },
+        { "id": "out", "name": "Sits it out", "says": "Mussolini keeps Italy out of the war. A neutral Italy can still be drawn in by either side when its moment comes.",
+          "align": "leaning_axis", "opinion": 30, "bar": ["ITA:jackal", "ITA:late", "ITA:greece", "ITA:yugoslavia", "ITA:east"] },
+        { "id": "allies", "name": "With the Allies", "says": "The front of Stresa holds. Italy stands with Britain and France and is at war with Germany from the first day.",
+          "align": "allies", "war": [["ITA", "GER"]], "bar": ["ITA:jackal", "ITA:late", "ITA:greece", "ITA:yugoslavia", "ITA:east"] },
+        { "id": "axis", "name": "In from the start", "says": "Italy keeps the Pact of Steel to the letter and is at war with Britain and France from the first day.",
+          "war": [["ITA", "UK"], ["ITA", "FRA"]] }
+      ]
+    },
+    {
+      "id": "USA", "name": "the United States",
+      "sides": [
+        { "id": "history", "name": "Waits for Pearl Harbor", "says": "America stays out until the attack on Pearl Harbor in December 1941, then comes in against Germany and Italy." },
+        { "id": "early", "name": "In from the start", "says": "America is at war with Germany from the first day. Its industry still climbs to war work step by step, and its army has an ocean to cross.",
+          "wake": true, "align": "allies", "war": [["USA", "GER"]] },
+        { "id": "out", "name": "America First", "says": "Nothing brings America into Europe's war. It stays at peace unless somebody makes war on it, or you lead it in yourself.",
+          "bar": ["ev:pearl-harbor", "ev:pearl-harbor-world", "ev:usa-italy"] }
+      ]
+    },
+    {
+      "id": "ESP", "name": "Spain",
+      "sides": [
+        { "id": "history", "name": "Franco stays out", "says": "Spain leans to the Axis but names a price for coming in that Germany will not pay." },
+        { "id": "axis", "name": "Franco marches", "says": "Spain joins the Axis, and goes to war with Britain and France in the spring of 1940 as Germany's army marches in the west. Gibraltar is in its sights.",
+          "align": "axis",
+          "follow": [
+            { "id": "wi-spain-marches", "from": 8, "to": 99, "if": ["inBloc:ESP,axis", "atPeace:ESP", "alive:UK", "war:GER,UK"], "war": [["ESP", "UK"], ["ESP", "FRA"]], "tell": "war",
+              "text": "Spain declares war on Britain. Franco has thrown in his lot with Germany, and Spanish guns are trained on Gibraltar." }
+          ] },
+        { "id": "allies", "name": "Leans to the Allies", "says": "Madrid looks to London and Paris. Spain starts the war leaning to the Allies, and German envoys find no welcome there.",
+          "align": "leaning_allies", "opinion": -45 }
+      ]
+    },
+    {
+      "id": "TUR", "name": "Turkey",
+      "sides": [
+        { "id": "history", "name": "Ankara waits", "says": "Turkey signs with Britain and France in October 1939 but stays out of the war until its last months." },
+        { "id": "allies", "name": "Keeps its word", "says": "Turkey honours its treaty with Britain and France. It joins the Allies and goes to war with Germany when the war reaches the Balkans.",
+          "align": "allies",
+          "follow": [
+            { "id": "wi-turkey-allies", "from": 2, "to": 99, "if": ["inBloc:TUR,allies", "atPeace:TUR", "alive:GER", "war:GER,GRE|war:GER,YUG|war:ITA,GRE|inBloc:BUL,axis"], "war": [["TUR", "GER"], ["TUR", "BUL"], ["TUR", "ITA"]], "tell": "war",
+              "text": "Turkey declares war on Germany. The war has come to the Balkans, and Ankara keeps the word it gave Britain and France in 1939." }
+          ] },
+        { "id": "axis", "name": "Gambles on Berlin", "says": "Turkey joins the Axis. It goes to war with the Soviet Union beside Germany, its eyes on the Caucasus and the oil of Baku.",
+          "align": "axis",
+          "follow": [
+            { "id": "wi-turkey-axis", "from": 2, "to": 99, "if": ["inBloc:TUR,axis", "atPeace:TUR", "alive:SOV", "war:GER,SOV"], "war": [["TUR", "SOV"]], "tell": "war",
+              "text": "Turkey declares war on the Soviet Union. Turkish divisions march for the Caucasus beside Germany's war in the east." }
+          ] }
+      ]
+    }
+  ],
+  "starts": [
+    { "id": "history", "n": 0, "name": "The war that was", "tag": "History's opening", "blurb": "September 1939 as it happened: the Pact signed, Poland invaded, Italy and America waiting.", "sides": {} },
+    { "id": "nopact", "n": 1, "name": "No Pact", "tag": "Stalin never signs", "blurb": "Germany takes all of Poland and finds the Red Army waiting on the far side of it.", "sides": { "SOV": "nopact" } },
+    { "id": "grand", "n": 2, "name": "The Grand Alliance", "tag": "Moscow joins London and Paris", "blurb": "The Soviet Union is at war with Germany from the first day. Germany has two fronts in 1939.", "sides": { "SOV": "allies" } },
+    { "id": "partners", "n": 3, "name": "Partners in Conquest", "tag": "The Pact becomes an alliance", "blurb": "The Soviet Union stands in the Axis. Germany's east is safe for as long as the partnership holds.", "sides": { "SOV": "axis" } },
+    { "id": "arsenal", "n": 4, "name": "The Arsenal Sails Early", "tag": "America in from the start", "blurb": "The United States is at war with Germany from September 1939, its factories climbing to war work.", "sides": { "USA": "early" } },
+    { "id": "firstly", "n": 5, "name": "America First", "tag": "America stays home", "blurb": "Nothing brings America into Europe's war. Britain must find another way.", "sides": { "USA": "out" } },
+    { "id": "sitout", "n": 6, "name": "Italy Sits It Out", "tag": "Rome stays neutral", "blurb": "Mussolini keeps out. A neutral Italy waits for its moment, and either side may yet win it over.", "sides": { "ITA": "out" } },
+    { "id": "ablaze", "n": 7, "name": "The Mediterranean Ablaze", "tag": "Italy and Spain march early", "blurb": "Italy goes to war in 1939 and Spain follows in the spring. Gibraltar and Malta are in danger from the start.", "sides": { "ITA": "axis", "ESP": "axis" } },
+    { "id": "dealt", "n": 8, "name": "A World Dealt Anew", "tag": "Every side dealt by chance", "blurb": "Each of the five swing powers is dealt a side from the war's seed. You learn which on the first day.", "sides": {}, "dealt": true },
+    { "id": "custom", "n": 9, "name": "Your Own World", "tag": "Set each country yourself", "blurb": "Pick where the Soviet Union, Italy, America, Spain and Turkey stand on the first day.", "sides": {}, "custom": true }
+  ],
+  "deal": {
+    "_note": "The weights each swing country's sides are dealt by in 'A World Dealt Anew', in the order of its sides. Kept to what could have been: history's side is the likeliest.",
+    "SOV": [0.4, 0.25, 0.15, 0.2],
+    "ITA": [0.45, 0.25, 0.1, 0.2],
+    "USA": [0.5, 0.25, 0.25],
+    "ESP": [0.6, 0.3, 0.1],
+    "TUR": [0.6, 0.2, 0.2]
+  },
+  "turns": [
+    {
+      "id": "london", "name": "Britain alone", "from": 10, "to": 16, "by": ["UK", "GER"],
+      "if": ["fallen:FRA", "alive:UK", "alive:GER", "war:UK,GER", "peace:GER,SOV"],
+      "ask": "France has fallen and Britain fights on alone. Is there a peace to be had?",
+      "options": [
+        { "id": "fight", "hist": true, "label": { "UK": "Fight on", "GER": "Fight on until Britain gives in" },
+          "says": { "UK": "No terms. The war goes on until Germany is beaten.", "GER": "No offer goes to London. The war in the west goes on." },
+          "news": "Britain will not treat with Germany. London answers the talk of peace with a promise to fight on, alone if need be.", "w": [1, 1, 0.97, 0.9, 0.8] },
+        { "id": "terms", "label": { "UK": "Ask Berlin's terms", "GER": "Offer Britain an honourable peace" },
+          "says": { "UK": "Britain and its dominions make peace with Germany and Italy. Each side keeps what it holds, and you may take up arms again later.", "GER": "If London accepts, Britain and its dominions leave the war, and Germany has a free hand in the east." },
+          "reply": { "by": "UK", "w": [0, 0, 0.25, 0.35, 0.45], "no": "London turns down Berlin's offer of peace. Britain fights on." },
+          "news": "Britain makes peace with Germany. The guns fall silent across the Channel: Britain and its dominions leave the war, each side keeping what it holds.",
+          "w": [0, 0, 0.03, 0.1, 0.2], "do": { "truce": [["UK", "GER"], ["UK", "ITA"]], "dominions": true, "flag": ["london-peace"] } }
+      ]
+    },
+    {
+      "id": "london-again", "name": "Britain takes up arms again", "from": 12, "to": 80, "again": 3, "by": ["UK"],
+      "if": ["wi:london-peace", "tpAgo:london,6", "alive:UK", "alive:GER", "peace:UK,GER"],
+      "ask": "The peace with Germany has held for half a year or more. Does Britain go back to war?",
+      "options": [
+        { "id": "wait", "hist": true, "again": true, "label": "Keep the peace", "says": "Britain stays out for now. You will be asked again in three months.", "news": "", "w": [1, 1, 0.8, 0.75, 0.7] },
+        { "id": "again", "label": "Go back to war", "says": "Britain and its dominions declare war on Germany again.",
+          "news": "Britain is at war with Germany again. The peace of 1940 is torn up, and the Empire takes up arms once more.",
+          "w": [0, 0, 0.2, 0.25, 0.3], "boost": { "war:GER,SOV": 2, "war:GER,USA": 2 }, "do": { "war": [["UK", "GER"], ["UK", "ITA"]], "dominions": true } }
+      ]
+    },
+    {
+      "id": "hendaye", "name": "Spain's price", "from": 13, "to": 18, "by": ["ESP", "GER"],
+      "if": ["fallen:FRA", "alive:ESP", "atPeace:ESP", "notInBloc:ESP", "alive:UK", "war:GER,UK"],
+      "ask": "Berlin and Madrid meet on the frontier at Hendaye. Does Spain come into the war?",
+      "options": [
+        { "id": "price", "hist": true, "label": { "ESP": "Name a price Berlin will not pay", "GER": "Refuse Franco's price" },
+          "says": { "ESP": "Spain stays out, friendly to Germany but not at war.", "GER": "Spain stays out of the war." },
+          "news": "Franco and Hitler meet at Hendaye. Spain's price for coming into the war is French Morocco and a great deal of grain and oil, and Berlin will not pay it. Spain stays out.", "w": [1, 1, 0.9, 0.75, 0.55] },
+        { "id": "march", "label": { "ESP": "Join the Axis and march on Gibraltar", "GER": "Pay Franco's price" },
+          "says": { "ESP": "Spain joins the Axis and declares war on Britain. Gibraltar is the first prize.", "GER": "If Franco accepts, Spain joins the Axis and declares war on Britain." },
+          "reply": { "by": "ESP", "w": [0, 0, 0.6, 0.65, 0.7], "no": "Franco takes Germany's promises and still says no. Spain stays out." },
+          "news": "Spain joins the Axis and declares war on Britain. Franco has been promised Gibraltar and French Morocco.",
+          "w": [0, 0, 0.07, 0.17, 0.3], "do": { "join": { "ESP": "axis" }, "war": [["ESP", "UK"]] } },
+        { "id": "door", "label": { "ESP": "Close the door to Germany" },
+          "says": { "ESP": "No German army crosses the Pyrenees. Spain turns toward Britain and America for grain." },
+          "news": "Spain closes its frontier to Germany. Madrid wants no part of the war, and turns to Britain and America for grain.",
+          "w": [0, 0, 0.03, 0.08, 0.15], "do": { "opinion": { "ESP": -60 } } }
+      ]
+    },
+    {
+      "id": "molotov", "name": "A place in the Pact", "from": 14, "to": 17, "by": ["SOV", "GER"],
+      "if": ["side:SOV:history", "alive:SOV", "alive:GER", "peace:GER,SOV", "notInBloc:SOV", "war:GER,UK"],
+      "ask": "Molotov comes to Berlin. Germany offers the Soviet Union a place in the Tripartite Pact.",
+      "options": [
+        { "id": "fail", "hist": true, "label": { "SOV": "Turn Berlin's offer down", "GER": "Keep Moscow at arm's length" },
+          "says": { "SOV": "The talks come to nothing. The Pact of 1939 stands, and no more.", "GER": "The talks come to nothing. The way east stays open." },
+          "news": "Molotov leaves Berlin with nothing signed. Moscow's price for joining the Pact, Finland, Bulgaria and the Straits, is more than Germany will give.", "w": [1, 1, 0.92, 0.8, 0.6] },
+        { "id": "sign", "label": { "SOV": "Sign the Tripartite Pact", "GER": "Offer Moscow a place in the Pact" },
+          "says": { "SOV": "The Soviet Union joins the Axis. Germany will not march east while the partnership holds.", "GER": "If Moscow accepts, the Soviet Union joins the Axis and your eastern frontier is safe. Your staff will not attack it while the partnership holds." },
+          "reply": { "by": "SOV", "w": [0, 0, 0.5, 0.6, 0.7], "no": "Moscow's answer comes back from the Kremlin: the price is Finland, Bulgaria and the Straits. Berlin will not pay it, and the talks end." },
+          "news": "The Soviet Union signs the Tripartite Pact in Berlin. The two great dictatorships of Europe now stand in one camp.",
+          "w": [0, 0, 0.08, 0.2, 0.4], "do": { "join": { "SOV": "axis" }, "bar": ["GER:east", "SOV:west", "SOV:vulture", "ITA:east", "ROM:east", "HUN:east", "SVK:east", "FIN:east"], "flag": ["partners"] } }
+      ]
+    },
+    {
+      "id": "breaks", "name": "The partners fall out", "from": 20, "to": 70, "again": 4, "by": ["GER", "SOV"],
+      "if": ["alive:SOV", "alive:GER", "inBloc:SOV,axis", "peace:GER,SOV", "side:SOV:axis|tpAgo:molotov,8"],
+      "ask": "Germany and the Soviet Union stand in one camp. Does the partnership hold?",
+      "options": [
+        { "id": "keep", "again": true, "label": { "GER": "Keep the partnership another season", "SOV": "Stay in the Axis" },
+          "says": { "GER": "The two stay partners. You will be asked again in four months.", "SOV": "The Soviet Union stays in the Axis. You will be asked again in four months." },
+          "news": "", "w": [0, 0, 0.85, 0.78, 0.7] },
+        { "id": "turn", "hist": true, "label": { "GER": "Break with Moscow", "SOV": "Leave the Axis" },
+          "says": { "GER": "The Soviet Union leaves the Axis. The way east is open again, and your staff may march when it likes.", "SOV": "The Soviet Union leaves the Axis and stands alone. Germany's staff may now turn east." },
+          "news": "The partnership between Berlin and Moscow is over. The Soviet Union leaves the Axis, and on both sides of the new frontier the armies dig in.",
+          "w": [1, 1, 0.15, 0.22, 0.3], "do": { "leave": ["SOV"], "unbar": ["GER:east", "SOV:west", "SOV:vulture", "ITA:east", "ROM:east", "HUN:east", "SVK:east", "FIN:east"] } }
+      ]
+    },
+    {
+      "id": "rome", "name": "Rome's moment", "from": 9, "to": 66, "again": 6, "by": ["ITA"],
+      "if": ["alive:ITA", "atPeace:ITA", "notInBloc:ITA", "alive:GER", "war:GER,UK|war:GER,FRA|war:GER,SOV"],
+      "ask": "Italy stands outside the war. Is this its moment?",
+      "options": [
+        { "id": "wait", "hist": true, "again": true, "label": "Stay out", "says": "Italy stays neutral. You will be asked again in six months.", "news": "", "w": [1, 1, 0.9, 0.82, 0.72] },
+        { "id": "axis", "label": "Go in beside Germany", "says": "Italy joins the Axis and declares war on Germany's enemies in the west.",
+          "news": "Italy declares war beside Germany. Mussolini has judged the moment right, and Italian troops march for the frontier.",
+          "w": [0, 0, 0.02, 0.05, 0.09], "boost": { "fallen:FRA": 2, "momentum>=:0.5": 2 },
+          "do": { "join": { "ITA": "axis" }, "war": [["ITA", "FRA"], ["ITA", "UK"]], "unbar": ["ITA:greece", "ITA:yugoslavia", "ITA:east"] } },
+        { "id": "allies", "label": "Go in beside the Allies", "says": "Italy joins the Allies and declares war on Germany.", "if": ["momentum<=:-0.2"],
+          "news": "Italy declares war on Germany. Rome has watched the war turn and throws in its lot with the Allies.",
+          "w": [0, 0, 0.05, 0.09, 0.14], "do": { "join": { "ITA": "allies" }, "war": [["ITA", "GER"]] } }
+      ]
+    },
+    {
+      "id": "turkey", "name": "Turkey's door", "from": 19, "to": 26, "by": ["TUR"],
+      "if": ["alive:TUR", "atPeace:TUR", "notInBloc:TUR", "alive:GER", "war:GER,UK"],
+      "ask": "The war has reached the Balkans and Turkey's frontier. Germany wants a road through to Iraq and Syria, and Britain wants an ally.",
+      "options": [
+        { "id": "out", "hist": true, "label": "Keep Turkey out", "says": "Turkey stays neutral and lets neither side through.",
+          "news": "Turkey signs a treaty of friendship with Germany, and promises Britain it will defend its own frontiers. Ankara stays out of the war.", "w": [1, 1, 0.9, 0.75, 0.6] },
+        { "id": "axis", "label": "Open the road to Germany", "says": "Turkey joins the Axis and goes to war with Britain.",
+          "news": "Turkey joins the Axis and declares war on Britain. German trains roll through Anatolia toward Iraq and Syria.",
+          "w": [0, 0, 0.04, 0.12, 0.2], "do": { "join": { "TUR": "axis" }, "war": [["TUR", "UK"]] } },
+        { "id": "allies", "label": "Stand with Britain", "says": "Turkey joins the Allies and goes to war with Germany and its allies in the Balkans.",
+          "news": "Turkey joins the Allies and declares war on Germany. Turkish divisions man the Thracian frontier.",
+          "w": [0, 0, 0.06, 0.13, 0.2], "do": { "join": { "TUR": "allies" }, "war": [["TUR", "GER"], ["TUR", "BUL"]] } }
+      ]
+    },
+    {
+      "id": "atlantic", "name": "Germany and America", "from": 26, "to": 27, "by": ["GER"],
+      "if": ["alive:GER", "alive:USA", "peace:USA,GER", "war:GER,UK"],
+      "ask": "America is arming Britain, and war in the Pacific is coming. If it comes, does Germany declare war on the United States?",
+      "options": [
+        { "id": "declare", "hist": true, "label": "Declare war on America when Japan strikes",
+          "says": "America comes into the war against Germany and Italy in December 1941, as it did.", "news": "", "w": [1, 1, 0.92, 0.8, 0.65] },
+        { "id": "hold", "label": "Hold back: leave America to Japan",
+          "says": "Germany does not declare war. America's war is with Japan alone until it chooses otherwise.",
+          "news": "Berlin keeps silent on the United States. Whatever happens in the Pacific, Germany will not declare war on America.",
+          "w": [0, 0, 0.08, 0.2, 0.35], "do": { "bar": ["ev:pearl-harbor", "ev:pearl-harbor-world", "ev:usa-italy"], "flag": ["no-declaration"] } }
+      ]
+    },
+    {
+      "id": "america", "name": "America comes in", "from": 30, "to": 80, "again": 3, "by": ["USA"],
+      "if": ["wi:no-declaration", "alive:GER", "alive:USA", "peace:USA,GER", "war:GER,UK|war:GER,SOV"],
+      "ask": "Germany never declared war on America. Does the United States go to war with Germany of its own accord?",
+      "options": [
+        { "id": "wait", "hist": true, "again": true, "label": "Not yet", "says": "America stays out of Europe's war. You will be asked again in three months.", "news": "", "w": [1, 1, 0.8, 0.75, 0.7] },
+        { "id": "enter", "label": "Go to war with Germany", "says": "The United States declares war on Germany.",
+          "news": "The United States declares war on Germany. American convoys have been sunk once too often, and Congress votes for war.",
+          "w": [0, 0, 0.2, 0.25, 0.3], "boost": { "momentum>=:0.4": 2 }, "do": { "wake": ["USA"], "join": { "USA": "allies" }, "war": [["USA", "GER"]] } }
+      ]
+    },
+    {
+      "id": "feeler", "name": "Stalin's peace feeler", "from": 22, "to": 60, "again": 4, "by": ["SOV"],
+      "if": ["war:GER,SOV", "alive:SOV", "alive:GER", "anyHeld:axis,Moscow,Leningrad|allHeld:axis,Kiev,Smolensk,Kharkov"],
+      "ask": "The war in the east is going badly. A message through the Bulgarian embassy could ask Berlin for terms.",
+      "options": [
+        { "id": "fight", "hist": true, "again": true, "label": "Not one step back", "says": "No feelers go out. The Red Army fights on. You may be asked again in four months.", "news": "", "w": [1, 1, 0.88, 0.75, 0.6] },
+        { "id": "offer", "label": "Ask Berlin for terms", "says": "Moscow offers peace on the line where the armies stand. Berlin will answer next month.",
+          "news": "Word reaches Berlin through the Bulgarian embassy: Moscow will make peace on the line where the armies stand.",
+          "w": [0, 0, 0.12, 0.25, 0.4], "do": { "flag": ["feeler"] } }
+      ]
+    },
+    {
+      "id": "brest", "name": "Moscow asks for terms", "from": 23, "to": 62, "by": ["GER"],
+      "if": ["wi:feeler", "tpAgo:feeler,1", "war:GER,SOV", "alive:SOV", "alive:GER"],
+      "ask": "Moscow offers peace on the line where the armies stand: a second Brest-Litovsk. Does Germany take it?",
+      "options": [
+        { "id": "refuse", "hist": true, "label": "Refuse: Germany wants all of it", "says": "The war in the east goes on to the end.",
+          "news": "Berlin sends no answer to Moscow. The war in the east goes on.", "w": [1, 1, 0.6, 0.5, 0.45] },
+        { "id": "accept", "label": "Make peace where the armies stand", "says": "Germany and its allies make peace with the Soviet Union. Each side keeps the ground its armies hold. Moscow may come back one day.",
+          "news": "Germany and the Soviet Union make peace on the line where the armies stand: a second Brest-Litovsk. The guns fall silent in the east.",
+          "w": [0, 0, 0.4, 0.5, 0.55], "do": { "truce": [["GER", "SOV"]], "partners": true, "flag": ["eastern-peace"] } }
+      ]
+    },
+    {
+      "id": "revenge", "name": "The Red Army comes back", "from": 30, "to": 80, "again": 3, "by": ["SOV"],
+      "if": ["wi:eastern-peace", "tpAgo:brest,10", "alive:SOV", "alive:GER", "peace:GER,SOV"],
+      "ask": "The peace in the east has held for most of a year, and the Red Army has rebuilt. Does it go back to war?",
+      "options": [
+        { "id": "wait", "hist": true, "again": true, "label": "Keep the peace", "says": "The peace holds for now. You will be asked again in three months.", "news": "", "w": [1, 1, 0.75, 0.7, 0.65] },
+        { "id": "again", "label": "Tear up the peace", "says": "The Soviet Union declares war on Germany again.",
+          "news": "The Soviet Union tears up the peace and declares war on Germany. The Red Army has come back for what it lost.",
+          "w": [0, 0, 0.25, 0.3, 0.35], "boost": { "war:GER,USA": 2, "war:GER,UK": 1.5 }, "do": { "war": [["SOV", "GER"]] } }
+      ]
+    },
+    {
+      "id": "plot", "name": "The generals' plot", "from": 55, "to": 64, "by": ["GER"],
+      "if": ["computer:GER", "alive:GER", "war:GER,UK", "war:GER,SOV", "armyOn:allies,GER|anyHeld:allies,Paris,Warsaw"],
+      "ask": "Officers in the army plot to kill the Führer and make peace.",
+      "options": [
+        { "id": "fails", "hist": true, "label": "The plot fails", "says": "The bomb goes off, but the Führer lives.",
+          "news": "A bomb goes off in the Führer's headquarters, but he survives it. The plotters are rounded up and shot, and the war goes on.", "w": [1, 1, 0.9, 0.75, 0.6] },
+        { "id": "succeeds", "label": "The plot succeeds", "says": "A new government in Berlin asks the western Allies for terms.",
+          "news": "The generals' plot succeeds. The Führer is dead, the army holds Berlin, and the new government asks Britain and America for an armistice in the west.",
+          "w": [0, 0, 0.1, 0.25, 0.4], "do": { "flag": ["plot"] } }
+      ]
+    },
+    {
+      "id": "terms", "name": "Terms for a new Germany", "from": 55, "to": 66, "by": ["UK", "USA"],
+      "if": ["wi:plot", "tpAgo:plot,1", "alive:GER", "war:GER,UK|war:GER,USA"],
+      "ask": "Berlin's new government asks for an armistice in the west, and will fight on in the east.",
+      "options": [
+        { "id": "unconditional", "hist": true, "label": "Unconditional surrender, nothing less", "says": "No terms. Germany's army fights on, but its heart is not in it.",
+          "news": "London and Washington answer Berlin's new government in one line: unconditional surrender. The German army fights on, but its heart is not in it.",
+          "w": [1, 1, 0.7, 0.55, 0.5], "do": { "quality": { "GER": 0.92 } } },
+        { "id": "armistice", "label": "Grant an armistice in the west", "says": "Every western Ally makes peace with Germany. The war in the east goes on.",
+          "news": "An armistice is signed in the west. British and American troops halt where they stand, and Germany's war goes on in the east alone.",
+          "w": [0, 0, 0.3, 0.45, 0.5], "do": { "armistice": { "with": "GER", "except": ["SOV"] }, "partners": true } }
+      ]
+    }
+  ]
+}
