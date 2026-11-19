@@ -2,23 +2,23 @@
 // the player does not, and the player's orders go through the same rules.
 
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
-import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
-import { fleetKnown, fleetsSeen, searchOptions, searchSea, seaPicture, syncWings, wingCards, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
+import { airBattles, airBases, airTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, type AirAssess } from './air';
+import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
 import {
-  airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
+  airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
-import { NAVY, baseTargets, canPass, crossingsOf, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
+import { NAVY, baseTargets, canPass, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
-  DEFENCE, allied, assess, atWar, battleCost, bloc, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, friendlyUnits, groundWorks, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
+  DEFENCE, aloneLine, allied, assess, atWar, battleCost, bloc, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, fights, friendlyUnits, groundWorks, gunsMayFollow, gunsRule, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
   endPhase, foldNews, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
   type Assessment, type CostOf, type GroundWorks, type ProbeReport,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
-import { cancelBuild, orderCorps, orderFort } from './economy';
+import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
 import { liftView, offers, orderOffer, type LiftView, type Offer } from './arsenal';
 import { cityOrders, ordersAt, type CityOrders, type OrderLine } from './orders';
 import { blocked, blowBridges, crossingOf, whyNotBlow } from './rivers';
@@ -38,18 +38,22 @@ import {
 import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
 import { phaseFor, runAI } from './ai';
-import { court, majorsOf, monthlyDiplomacy, warForecast, type WarForecast } from './diplomacy';
+import { RELATIONS, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
 import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour } from './stories';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
 import { fallenNations, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
 import { armyCard, corpsCard, corpsSeen, type ArmyCard, type CorpsCard } from './armies';
+export { FORT_NO_ORDERS, garrisonLine, whyNotOrder, whyNotOrderGarrison } from './armies';
+export { gunsLeftAlone } from './siege';
 import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
-import { endTrade, signTrade, tradeBook, type TradeBook } from './trade';
-import { SIEGE, fieldCtrl, garrison, garrisonOf, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
+import { endTrade, gateTrade, refreshTrade, signTrade, tradeBook, type GateTradeRow, type TradeBook } from './trade';
+import { gateViews, type GateView } from './gates';
+import { SIEGE, fieldCtrl, garrison, garrisonOf, guardMen, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
+import { loadGame, saveGame } from './save';
 import { RIVALS, characterOf, effortsOf, lodgment, plansKnown, quietNews, rivalRules, stalemates, type Character } from './staff';
 import {
   orderWreckPrize, prizeIncome, prizeMarks, prizesAt, scorchPolicy, setBurnOrder, setScorchPolicy, whyNotWreck,
@@ -64,6 +68,8 @@ import { commandView, crossingWord, handOver, setDepth, setStaffCap, staffMonth,
 import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from './history';
 import { claimsView, historyMonth, type ClaimView } from './claims';
 import { staffRuns, type DeskId } from './depth';
+import { minesKnown, whatYouFace } from './facing';
+import { SUPPORT, type FaceLine } from './support';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -81,6 +87,8 @@ function closePhase(g: Game, nat: string): void {
   g.phase++;
   if (g.phase >= g.order.length) {
     g.phase = 0; g.turn++; g.week = 1;
+    // A gate that has changed hands is no longer shut by the order of the country that lost it.
+    gatesTick(g);
     openTheatres(g);
     monthlyDiplomacy(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
@@ -293,6 +301,10 @@ export function reach(g: Game, c: Corps): Map<number, Reach> {
   const out = new Map<number, Reach>();
   if (c.kind === 'fort' || c.ap <= 0) return out;
   out.set(c.reg, { cost: 0, prev: -1, attack: false });
+  // Guns and engineers follow a fighting corps onto enemy-held ground, they never lead (ruling 211(a), the grand
+  // campaign). Such a corps reaches enemy-held ground only where a fighting corps of its side stands already, or
+  // where one stands with it that still has a move this month and can go first (marchOrder sends it first).
+  const led = !gunsRule(g) || fights(c) || g.regions[c.reg].units.some((u) => u !== c && !u.dead && u.ap > 0 && fights(u) && allied(g, u.nat, c.nat));
   const open = [c.reg];
   while (open.length) {
     open.sort((a, b) => out.get(a)!.cost - out.get(b)!.cost);
@@ -303,14 +315,20 @@ export function reach(g: Game, c: Corps): Map<number, Reach> {
       const friendly = allied(g, c.nat, r.ctrl);
       if (!friendly && (onEve(g) || !atWar(g, c.nat, r.ctrl))) continue; // on the eve of war nobody crosses a frontier
       if (blocked(g, c, r, a)) continue; // tanks and the steepest ground, wheels and a river with its bridges down
-      const step = moveCost(g, c, r, a);
-      const left = c.ap - ca;
-      if (left <= 0 || left < Math.min(step, 4)) continue;
-      const cost = ca + step;
+      // An attack on the province next door takes one move of the month, whatever the ground would cost to march
+      // over: the battle charges one, and the attack's card and its order ask only for a move left. So the gate
+      // below is for a march alone, and an army that has come up with a move in hand is shown its attack (Version
+      // 84.2.3: Brian's find of 2026-11-17, traced by the code checker. Before it, such an army had no red on
+      // the map and no word of an attack under the pointer, though a click still opened the card).
       if (hostileUnits(g, r, c.nat).length) {
         if (a === c.reg && !out.has(j)) out.set(j, { cost: 1, prev: a, attack: true });
         continue;
       }
+      if (!friendly && !led && !gunsMayFollow(g, c, r)) continue;
+      const step = moveCost(g, c, r, a);
+      const left = c.ap - ca;
+      if (left <= 0 || left < Math.min(step, 4)) continue;
+      const cost = ca + step;
       if (!hasRoom(g, r, c)) continue;
       const old = out.get(j);
       if (old && old.cost <= cost) continue;
@@ -334,6 +352,29 @@ export function orderMove(g: Game, c: Corps, to: number): number {
   let n = 0;
   for (const j of path) { if (!moveCorps(g, c, g.regions[j])) break; n++; }
   return n;
+}
+
+/**
+ * The order the corps of an army are marched in (both games): the fighting corps first, then the guns and the
+ * engineers, who follow them onto enemy-held ground and never lead (ruling 211(a), the grand campaign). Elsewhere
+ * the order given.
+ */
+export const marchOrder = (g: Game, corps: Corps[]): Corps[] => (gunsRule(g) ? [...corps].sort((a, b) => Number(fights(b)) - Number(fights(a))) : corps);
+
+/**
+ * Why these corps cannot go forward onto this ground by themselves, or null if they can (ruling 211(a), the grand
+ * campaign; both games say the sentence). A force with no fighting corps in it (infantry, cavalry, mountain troops,
+ * motorized troops or tanks) opens no attack and marches onto no enemy-held ground: guns and engineers go in beside
+ * a fighting corps, or follow one onto ground it stands on. Asked of the corps picked for an attack or a march.
+ */
+export function whyNotLead(g: Game, corps: Corps[], to: number): string | null {
+  const r = g.regions[to];
+  if (!gunsRule(g) || !r) return null;
+  const able = corps.filter((c) => !c.dead && c.kind !== 'fort' && !blocked(g, c, r));
+  if (!able.length || able.some(fights)) return null;
+  const c = able[0];
+  if (allied(g, c.nat, r.ctrl) || !atWar(g, c.nat, r.ctrl) || gunsMayFollow(g, c, r)) return null;
+  return aloneLine(able);
 }
 
 /** The player's corps that could join an attack on a region. */
@@ -401,6 +442,8 @@ export interface Outlook {
    */
   cost: { won: CostSeen | null; lost: CostSeen | null };
   lines: TicketLine[];
+  /** WHAT YOU FACE, as his reports know it (the grand campaign; null in a history campaign): a sign and a sentence a line, four at most. */
+  face: FaceLine[] | null;
 }
 /** One result's bill as the player's staff can state it before the fight. */
 export interface CostSeen { ours: number; theirs: number | null; share: number }
@@ -442,7 +485,8 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   if (!band.exact && !bill.lost) bill.lost = billAt(band.lo).lost;
   const seen = (c: CostOf | null): CostSeen | null => (c ? { ours: c.ours, theirs: band.exact ? c.theirs : null, share: c.share } : null);
   const cost = { won: seen(bill.won), lost: seen(bill.lost) };
-  if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), even, unidentified: 0, stale: 0, note: '', wide: false, guess: chanceAt(a.odds), narrow: '', cost, lines: a.lines };
+  const face = whatYouFace(g, a, target, g.human);
+  if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), even, unidentified: 0, stale: 0, note: '', wide: false, guess: chanceAt(a.odds), narrow: '', cost, lines: a.lines, face };
   const n = a.defenders.length;
   const corpsWord = (x: number): string => `${x} corps`;
   // What the ticket says of the defenders' numbers, spirit and armour is left out where it is not known.
@@ -454,8 +498,18 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
     }
     if (l.label === 'Troops') return { label: l.label, value: 'How good the defenders are is not known', effect: 'Training and experience count for as much as numbers: identify them first' };
     if (l.label === 'Armor' && /without armor/.test(l.value) && k.none.length) return { ...l, value: 'No tanks have been seen among the defenders', effect: 'Tank attack up 25% if there are none' };
+    // (The grand campaign: the guns of a defence that is not identified are not known, and neither is what they take from the tanks.)
+    if (l.label === 'Armor' && /^Tank attack up/.test(l.value) && k.none.length) return { label: l.label, value: 'Tank attack up by as much as 25%: their guns are not known' };
     return l;
-  });
+  // (Guns alone, ruling 211(a): before the battle the row is left out while any defender is not identified, and the
+  // odds speak alone; the fog wins, the design director's log b357. After it they have been seen.)
+  }).filter((l) => !k.none.length || !(l.label === 'Machine guns' || l.label === 'Tanks alone' || l.label === 'Guns alone' || l.label === 'Who pays' || (l.label === 'Minefields' && !minesKnown(g, target, g.human))));
+  // Tanks with no infantry beside them, against guns that are not known: the most they could take (ruling 164(c)).
+  const loneMost = k.none.length && a.faced?.antiTank && a.faced.shock !== null ? SUPPORT.antiTank.alone.cut * (1 - a.faced.antiTank.cover) : 0;
+  if (loneMost >= 0.005) {
+    const at = lines.findIndex((l) => l.label === 'Armor');
+    lines.splice(at < 0 ? lines.length : at + 1, 0, { label: 'Tanks alone', value: `Tank attack cut by as much as ${Math.round(loneMost * 100)}%: their guns are not known` });
+  }
   const nn = k.none.length, old = k.report.length;
   const count = (x: number): string => ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six'][x] ?? `${x}`;
   const dark = !nn ? '' : nn < n ? `${count(nn)} of the ${n} defending corps ${nn === 1 ? 'is' : 'are'} not identified`
@@ -479,7 +533,7 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
     unidentified: k.none.length, stale: k.report.length,
     note: `${what}, so the odds are the staff's estimate. ${probeRules(g) ? 'A probe by one corps' : 'A battle'}, an agent on watch or a reconnaissance flight over ${target.name} would show what is there.`,
     wide: chanceAt(band.hi) - chanceAt(band.lo) > 0.4, guess: Array.from({ length: 21 }, (_, i) => chanceAt(band.lo + ((band.hi - band.lo) * i) / 20)).reduce((s, x) => s + x, 0) / 21, narrow, cost,
-    lines,
+    lines, face,
   };
 }
 
@@ -844,11 +898,27 @@ export type { PocketView };
 /** The town of a province as a fortress: what it holds, what it adds to its defenders, and how its siege stands. Null outside the grand campaign. */
 export function townSiege(g: Game, region: number): SiegeView | null {
   const v = siegeView(g, region);
-  if (!v || g.human === null || !fogOn(g, g.human)) return v;
+  if (!v) return v;
   // Under the fog an enemy's garrison is counted only where the player's side stands round the town or has the province in full view.
   const r = g.regions[region];
-  if (allied(g, g.human, r.ctrl) || (v.by && allied(g, g.human, v.by)) || sightOf(g, g.human)[region] === SIGHT.full) return v;
-  return { ...v, inside: -1 };
+  const seen = g.human === null || !fogOn(g, g.human) || allied(g, g.human, r.ctrl) || (!!v.by && allied(g, g.human, v.by)) || sightOf(g, g.human)[region] === SIGHT.full;
+  if (!seen) return { ...v, inside: -1 };
+  // A town with no army in it, none in the country round it and nobody at its gates is held by its guard only: said first, with the men (ruling 175(c)).
+  if (v.inside !== 0 || v.guard <= 0 || v.by || r.units.some((c) => !c.dead)) return v;
+  const foe = g.human !== null && atWar(g, g.human, r.ctrl);
+  return { ...v, lines: [`No army holds ${v.town}: only its town guard, about ${menWord(guardMen(g, r))} men.${foe ? ' An army you march in goes at the town as it arrives.' : ''}`, ...v.lines] };
+}
+
+/** The forces line of a province whose town no army holds (ruling 175(c), as the UI director placed it): a head, the
+ *  guard's strength, and for an enemy's town what a march in meets. Null where an army is in the town or the country
+ *  round it, where somebody stands at its gates, where the town has no guard, and where the fog hides who is inside. */
+export interface GuardOnly { town: string; men: number; head: string; strength: string; march: string }
+export function guardOnly(g: Game, region: number): GuardOnly | null {
+  const v = townSiege(g, region), r = g.regions[region];
+  if (!v || !r || v.inside !== 0 || v.guard <= 0 || v.by || r.units.some((c) => !c.dead)) return null;
+  const men = guardMen(g, r);
+  const foe = g.human !== null && atWar(g, g.human, r.ctrl);
+  return { town: v.town, men, head: 'Held by its town guard only', strength: `About ${menWord(men)} men, and no army.`, march: foe ? 'An army you march in goes at the town as it arrives.' : '' };
 }
 
 /** Every siege the player knows of: his own, his allies', and any other on ground he can see. */
@@ -928,6 +998,196 @@ export function orderStorm(g: Game, region: number, corps?: Corps[]): BattleRepo
   const r = g.regions[region];
   if (!r || whyNotStormTown(g, region)) return null;
   return storm(g, corps ? corps.filter((c) => canOrder(g, c)) : stormCandidates(g, region), r);
+}
+
+// ---- Marching in is the attack (ruling 175(c)) ----------------------------------------------------
+
+/** What an army ordered into an enemy province with no enemy corps in its field will meet there (the grand campaign). */
+export interface MarchOutlook {
+  region: number;
+  /** The town, and the size of the place in a word. */
+  town: string; size: TownSize; sizeWord: string;
+  /**
+   * 'open': nothing holds the place, and it falls with the move. 'gates': only its own guard holds it, and gives it
+   * up to this force without a fight: it falls with the move. 'guard': only its guard holds it, and will fight: the
+   * army goes at the town as it arrives. 'garrison': corps hold the town: the march closes round it and a siege
+   * begins. 'unknown': the player's reports do not say what is inside: the march finds out.
+   */
+  meets: 'open' | 'gates' | 'guard' | 'garrison' | 'unknown';
+  /** The town's own guard, in divisions' worth and in men: 0 where it has none. */
+  guard: number; guardMen: number;
+  /** The corps that make the march this month, of those offered. */
+  going: number[];
+  /** What it comes to, in a sentence. */
+  line: string;
+  /** Where the guard will fight: the assault as it will stand when the army arrives, off the march (a hasty one). Null otherwise. */
+  outlook: Outlook | null;
+  /** The same assault made ready: as it would stand next month, with the army round the town and nothing else changed. Null otherwise. */
+  prepared: Outlook | null;
+  /** Which of the two orders the card lights where the guard fights: the storm on arrival when its forecast is favoured, else the siege (ruling 180). */
+  favours: 'storm' | 'siege' | null;
+  /** Where the guard fights, the sentence that stands under each order's forecast: what a failed storm costs, and what laying siege first comes to. '' otherwise. */
+  ifStorm: string;
+  ifSiege: string;
+}
+/** The chance from which a forecast's verdict reads "The odds favour you". The cards print their verdicts from this figure, and whatever a verdict lights moves with it (ruling 180). */
+export const FAVOURED = 0.6;
+/**
+ * The staff's verdict on a forecast, in the words every card prints: one function, so that the browser's cards and
+ * the 3D table's never differ. `band` is the verdict as a key, `word` the line, and `tone` how it is coloured
+ * ('win', '' or 'loss'). `of` is what is forecast: an attack in the field, the storm of a town, or a garrison's
+ * sortie. Where the defence is not fully known the verdict is the staff's, of the band.
+ */
+export interface Verdict { band: 'certain' | 'favoured' | 'even' | 'long' | 'none'; word: string; tone: 'win' | '' | 'loss' }
+export function verdictOf(look: Outlook, of: 'attack' | 'storm' | 'sortie' = 'attack'): Verdict {
+  if (look.exact) return verdictAt(look.chance, of);
+  const p = look.chance;
+  const tone = p >= FAVOURED ? 'win' : p >= 0.3 ? '' : 'loss';
+  if (look.chanceLo >= 0.95) return { band: 'certain', word: `${of === 'sortie' ? 'Breaking out' : 'Victory'} looks certain`, tone };
+  if (look.chanceHi <= 0) return { band: 'none', word: `${of === 'attack' ? 'This attack' : 'This'} looks hopeless`, tone };
+  if (p >= FAVOURED) return { band: 'favoured', word: 'The staff thinks the odds favour you', tone };
+  return p >= 0.3 ? { band: 'even', word: 'The staff cannot call it', tone } : { band: 'long', word: 'The staff thinks it a long shot', tone };
+}
+/** The verdict on a chance that is known exactly (every defender identified). */
+export function verdictAt(p: number, of: 'attack' | 'storm' | 'sortie' = 'attack'): Verdict {
+  const tone = p >= FAVOURED ? 'win' : p >= 0.3 ? '' : 'loss';
+  if (p >= 0.95) return { band: 'certain', word: `${of === 'sortie' ? 'Breaking out' : 'Victory'} is all but certain`, tone };
+  if (p >= FAVOURED) return { band: 'favoured', word: 'The odds favour you', tone };
+  if (p >= 0.3) return { band: 'even', word: 'It could go either way', tone };
+  return p > 0 ? { band: 'long', word: 'A long shot', tone } : { band: 'none', word: `${of === 'attack' ? 'This attack' : 'This'} will fail`, tone };
+}
+/** True where a forecast's verdict reads "The odds favour you" or better, as its card prints it. */
+export function favoured(look: Outlook): boolean {
+  const b = verdictOf(look).band;
+  return b === 'certain' || b === 'favoured';
+}
+/** How far over the forecast's own figure an attacker's losses may run and the result still count as forecast (ruling 204): half as much again. */
+export const AS_FORECAST_LOSS = 1.5;
+/**
+ * Ruling 204: a won battle that went as forecast is told on the map and opens no card. Four things together: the
+ * attack won; the verdict on the order's card was "certain" or "the odds favour you"; it was not a Pyrrhic
+ * victory; and the attacker's losses were no more than half as much again as the card said a win would cost.
+ * `look` is the forecast the order's card showed, taken before the order was given. One function, so that the
+ * browser's page and the 3D table never differ on which results are news.
+ */
+export function asForecast(look: Outlook | null | undefined, rep: BattleReport, of: 'attack' | 'storm' | 'sortie' = 'attack'): boolean {
+  if (!look || !rep.taken) return false;
+  const band = verdictOf(look, of).band;
+  if (band !== 'certain' && band !== 'favoured') return false;
+  if (rep.level === 'Pyrrhic victory') return false;
+  const said = look.cost.won;
+  if (!said) return false;
+  const lost = Math.max(rep.attLost, rep.attackers.reduce((s, u) => s + u.lost, 0));
+  return lost <= AS_FORECAST_LOSS * said.ours;
+}
+
+const menWord = (n: number): string => Math.round(n).toLocaleString('en-US');
+
+/**
+ * What marching these corps into a province will meet, before anything is ordered: ordering an army onto enemy
+ * ground where no enemy corps stands is the order to take the place. Null where the march is no such thing: the
+ * ground is a friend's or a neutral's, an enemy army stands in its field (that is an attack), an army already
+ * stands round its town (the corps only join the siege), or none of the corps can get there this month. Where only
+ * the town's guard will fight, the forecast is read off a copy of the campaign on which the march has been made, so
+ * it is the assault exactly as it will be fought. Not for every square a pointer crosses: for the card.
+ */
+export function marchOutlook(g: Game, corps: Corps[], to: number): MarchOutlook | null {
+  const r = g.regions[to], me = g.human;
+  if (!r || me === null || !siegeRules(g) || current(g) !== me || onEve(g)) return null;
+  if (!atWar(g, me, r.ctrl) || hostileUnits(g, r, me).length || r.units.some((c) => !c.dead && atWar(g, c.nat, r.ctrl))) return null;
+  const able = corps.filter((c) => { if (!canOrder(g, c) || c.reg === to) return false; const e = reach(g, c).get(to); return !!e && !e.attack; });
+  if (!able.length) return null;
+  const v = townSiege(g, to);
+  if (!v) return null;
+  const base = { region: to, town: v.town, size: v.size, sizeWord: v.sizeWord, guard: v.guard, guardMen: guardMen(g, r), going: able.map((c) => c.id), outlook: null, prepared: null, favours: null, ifStorm: '', ifSiege: '' };
+  const guardWords = `its town guard, about ${menWord(base.guardMen)} men`;
+  if (v.inside < 0) return { ...base, meets: 'unknown', line: `Your reports do not say what holds ${v.town}${v.guard > 0 ? ` beside ${guardWords}` : ''}. Your army marches up to it and finds out.` };
+  if (v.inside > 0) return { ...base, meets: 'garrison', line: `${v.inside === 1 ? 'A corps holds' : `${v.inside} corps hold`} ${v.town}: your army closes round it and the siege begins.` };
+  if (!townHeld(g, r)) return { ...base, meets: 'open', line: `Nothing holds ${v.town}: ${r.name} is yours as your army marches in.` };
+  // Only the guard: the march is made on a copy of the campaign, and the copy says what follows.
+  const h = loadGame(saveGame(g));
+  if (!h) return null;
+  const hr = h.regions[to];
+  const there: number[] = [];
+  for (const c of marchOrder(g, able)) { const hc = h.corps.find((x) => x.id === c.id); if (hc && orderMove(h, hc, to) > 0 && hc.reg === to) there.push(c.id); }
+  if (!there.length) return null;
+  if (allied(h, me, hr.ctrl)) return { ...base, going: there, meets: 'gates', line: `Only ${guardWords}, holds ${v.town}, and against this force it opens its gates: ${r.name} is yours as your army marches in.` };
+  const outlook = stormOutlook(h, to);
+  // Made ready: the same army round the same town, with the month it came up behind it.
+  h.flags[`siege:${to}`] = h.turn - 1;
+  const prepared = stormOutlook(h, to);
+  return {
+    ...base, going: there, meets: 'guard', outlook, prepared, favours: outlook && favoured(outlook) ? 'storm' : 'siege',
+    ifStorm: IF_STORM,
+    ifSiege: 'Nothing is risked this month. The storm is then yours to order from the siege: next month it goes in made ready, if nothing else changes.',
+    line: `Only ${guardWords}, holds ${v.town}, and it will fight: your army goes at the town as it arrives.` };
+}
+
+/** What an order to take a place came to. */
+/**
+ * The storm of a town an army already stands round, as the choice its card puts (ruling 182): the storm now with
+ * its forecast, or keeping up the siege. `hasty` is true where the army only came up this month; `prepared` is then
+ * the same storm as it would stand next month made ready, with nothing else changed (asked of a copy of the game:
+ * nothing is changed here). `favours` is the order the card lights, by the verdict of the storm's own forecast.
+ * `ifStorm` and `ifWait` are the sentences that stand under the two orders; `ifWait` is '' where the rules have
+ * nothing to say of waiting. Null where no storm can be ordered (whyNotStormTown says why).
+ */
+export interface StormChoice {
+  region: number;
+  outlook: Outlook;
+  hasty: boolean;
+  prepared: Outlook | null;
+  favours: 'storm' | 'siege';
+  ifStorm: string;
+  ifWait: string;
+}
+const IF_STORM = 'If the storm fails, your corps pay more dearly than they would in the open, and the town guard is thinned too.';
+const carryWord = (o: Outlook): string => `${o.exact ? '' : 'about '}${o.odds.toFixed(2)} to 1, about ${Math.min(99, Math.max(1, Math.round(o.chance * 100)))}% to carry it`;
+export function stormChoice(g: Game, region: number): StormChoice | null {
+  const outlook = stormOutlook(g, region);
+  if (!outlook) return null;
+  const hasty = g.flags[`siege:${region}`] === g.turn && outlook.lines.some((l) => l.label === 'A hasty assault');
+  let prepared: Outlook | null = null;
+  if (hasty) {
+    const h = loadGame(saveGame(g));
+    if (h) { h.flags[`siege:${region}`] = h.turn - 1; prepared = stormOutlook(h, region); }
+  }
+  const v = townSiege(g, region);
+  // Made ready, the wait is a better storm. Otherwise it is what the siege itself is doing: the stores, the ring, the sea.
+  const ifWait = prepared ? `Made ready, a month later: ${carryWord(prepared)}, if nothing else changes.` : v && v.by ? v.lines[v.guard > 0 ? 2 : 1] ?? '' : '';
+  return { region, outlook, hasty, prepared, favours: favoured(outlook) ? 'storm' : 'siege', ifStorm: IF_STORM, ifWait };
+}
+
+export interface TakeResult {
+  /** How many of the corps marched. */
+  moved: number;
+  /** The province is the player's side's: it fell with the move, or to the assault. */
+  fell: boolean;
+  /** The assault on the town, where one was made. */
+  report: BattleReport | null;
+  /** What still holds the town now that the army stands round it: null where the place has fallen, or nobody marched. */
+  stands: 'guard' | 'garrison' | null;
+}
+
+/**
+ * The order to take a place: marches the corps in, and where only the town's guard holds out, storms the town as
+ * they arrive (all the player's corps round it go in, as an assault's card shows). With `assault` false the army
+ * only marches in and lays the siege: the assault is then made ready, and can go in next month at full weight.
+ */
+export function orderTake(g: Game, corps: Corps[], to: number, assault = true): TakeResult {
+  const r = g.regions[to], me = g.human;
+  const none: TakeResult = { moved: 0, fell: false, report: null, stands: null };
+  if (!r || me === null) return none;
+  let moved = 0, arrived = 0;
+  for (const c of marchOrder(g, corps)) if (canOrder(g, c) && orderMove(g, c, to) > 0) { moved++; if (c.reg === to) arrived++; }
+  if (!moved) return none;
+  if (!arrived) return { moved, fell: false, report: null, stands: null };
+  if (allied(g, me, r.ctrl)) return { moved, fell: true, report: null, stands: null };
+  const stands = garrisonOf(r).length ? 'garrison' : 'guard';
+  if (!assault || stands !== 'guard' || !siegeRules(g) || whyNotStormTown(g, to)) return { moved, fell: false, report: null, stands };
+  const report = orderStorm(g, to);
+  const fell = allied(g, me, r.ctrl);
+  return { moved, fell, report, stands: fell ? null : 'guard' };
 }
 
 /** Why the player's garrison cannot sally out against the army round its town, or null if it can. */
@@ -1095,8 +1355,8 @@ export function orderLand(g: Game, cs: Corps[], to: number): Landing {
  * by land, the safest way over the water, what bars it today, why it is as dangerous as it is and what would make
  * it safer. The one he has named as his plan comes first.
  */
-export function crossings(g: Game): CrossingOutlook[] {
-  return g.human && g.nations[g.human].alive ? crossingsOf(g, g.human) : [];
+export function crossings(g: Game, short = false): CrossingOutlook[] {
+  return g.human && g.nations[g.human].alive ? crossingsOf(g, g.human, { short }) : [];
 }
 
 /**
@@ -1248,10 +1508,175 @@ export function orderAir(g: Game, id: number, mission: AirMission, target = -1):
   return !!f && setMission(g, f, mission, target);
 }
 
-/** Moves one of the player's air fleets to airfields in another friendly region. */
+/**
+ * Moves one of the player's air fleets to airfields in another friendly region. For a carrier wing aboard its
+ * fleet this is the order to fly ashore (ruling 175(b)): to the airfield of the harbour its fleet lies in, or one on
+ * the sea it is in. airGroupBases() lists where; a wing's GroupRow.wingMove says why not when it cannot.
+ */
+// ---- The gate's order (Version 84.1; ruling 176(e), on Brian's words of 2026-11-17: "you should be able to open or
+// close the panama canal"). The holder may shut his gate to all ships but his own and his allies', and open it
+// again. The player's order only: no staff gives it. The question says whose trade it stops before he orders. ----
+
+export interface GateRow {
+  nat: string;
+  name: string;
+  /** The holder's own row: it stands first. */
+  own: boolean;
+  /** What happens to its trade, as a sentence. */
+  what: string;
+  /** What it loses a month, rounded to the money the page shows (budget.json 'scale'), so that the rows add up to the totals. */
+  loss: number;
+}
+/** A country that resents the shut gate (ruling 177(a)): how far its opinion has moved for this shutting, of the most it can. */
+export interface GateSoreRow { nat: string; name: string; so: number; most: number; line: string }
+export interface GateQuestion {
+  gate: GateView;
+  /** The order the box offers: to shut the gate, or to open it again. */
+  order: 'shut' | 'open';
+  label: string;
+  question: string;
+  lead: string;
+  /**
+   * The price as rows: whose trade stops or goes the long way round, with what each loses a month. The holder's own
+   * row always stands first, even when none of his trade runs through the gate (it then says so, and its loss is 0).
+   */
+  heading: string;
+  rows: GateRow[];
+  /** All the rows together; and the other countries' alone, with the words for that last row of the tally. */
+  total: number;
+  others: number;
+  sumLabel: string;
+  /** Said under the holder's own row where nobody else's trade runs through the gate. */
+  none: string;
+  /**
+   * Who resents it (ruling 177(a)): the countries at peace and outside both blocs whose trade it turns back, each a
+   * point of opinion a month away from the holder's side, to a most for one shutting. Empty where nobody will.
+   */
+  resentHeading: string;
+  resentNote: string;
+  resent: GateSoreRow[];
+  /** The two buttons: the order, and leaving things as they are. */
+  yes: string;
+  no: string;
+}
+/**
+ * What ordering these corps away would leave a sea gate to (ruling 176(d)): when they are the last of the player's and
+ * his allies' corps in the province of a gate he holds, the sentence for the move's card. Null otherwise. Nothing is changed.
+ */
+export interface GateLeft {
+  gate: number; name: string; region: number;
+  /** The town's own guard that stays, in men: 0 where the place has none. */
+  men: number;
+  /** For the move's card, before the order: "If they go, the Panama Canal is left to its town guard: about 4,800 men, and no army." */
+  ifLine: string;
+  /** Once they have gone: "The Panama Canal is left to its town guard: about 4,800 men, and no army." */
+  line: string;
+}
+export function gateLeft(g: Game, corps: Corps[]): GateLeft | null {
+  if (g.human === null || !corps.length) return null;
+  const going = new Set(corps.map((c) => c.id));
+  for (const from of new Set(corps.map((c) => c.reg))) {
+    const i = g.gates.findIndex((gt) => gt.region === from);
+    const r = g.regions[from];
+    if (i < 0 || !r || r.ctrl !== g.human) continue;
+    const stays = [...r.units, ...(r.garr ?? [])].some((c) => !c.dead && !going.has(c.id) && allied(g, g.human!, c.nat));
+    if (stays) continue;
+    const gt = g.gates[i], many = /s$/.test(gt.name), men = guardMen(g, r);
+    const rest = men > 0 ? `${many ? 'are' : 'is'} left to ${many ? 'their' : 'its'} town guard: about ${menWord(men)} men, and no army.` : `${many ? 'are' : 'is'} left with nobody to hold ${many ? 'them' : 'it'}.`;
+    return { gate: i, name: gt.name, region: from, men, ifLine: `If they go, ${gt.name} ${rest}`, line: `${gt.name[0].toUpperCase()}${gt.name.slice(1)} ${rest}` };
+  }
+  return null;
+}
+
+/** Why the player cannot give a gate's order, or null when he can. */
+export function whyNotGate(g: Game, gate: number): string | null {
+  const gt = g.gates[gate];
+  if (!gt) return 'There is no such gate.';
+  if (g.human === null || !g.nations[g.human]?.alive || gateHolder(g, gt) !== g.human) return `Only its holder can ${gateShutSince(g, gate) < 0 ? 'shut' : 'open'} it.`;
+  if (!humanUp(g) || onEve(g)) return 'It is not your month.';
+  return null;
+}
+const namesOf = (g: Game, ids: string[]): string => {
+  const ns = ids.map((id) => theName(g.nations[id]));
+  return ns.length <= 1 ? ns.join('') : `${ns.slice(0, -1).join(', ')} and ${ns[ns.length - 1]}`;
+};
+/** The gate's question for its holder: what the order does, and what it costs whom, before he gives it. Null where he cannot give it. */
+export function gateQuestion(g: Game, gate: number): GateQuestion | null {
+  if (whyNotGate(g, gate)) return null;
+  const me = g.human!, gt = g.gates[gate];
+  const v = gateViews(g, me)[gate];
+  const isShut = v.shutSince >= 0;
+  const many = /s$/.test(gt.name), it = many ? 'they' : 'it', them = many ? 'them' : 'it';
+  // The same game with the gate the other way, as an exact copy: the price is read off the two, and nothing changes.
+  const other = loadGame(saveGame(g));
+  let list: GateTradeRow[] = [];
+  if (other) {
+    setGate(other, gate, !isShut);
+    list = isShut ? gateTrade(other, g, gate) : gateTrade(g, other, gate);
+  }
+  const what = (r: GateTradeRow, own: boolean): string => {
+    const parts: string[] = [];
+    if (r.stops.length) parts.push(`${own ? 'Your' : 'Its'} trade with ${namesOf(g, r.stops)} ${isShut ? 'is stopped' : 'stops'}`);
+    if (r.round.length) parts.push(`${parts.length ? (own ? 'your' : 'its') : own ? 'Your' : 'Its'} trade with ${namesOf(g, r.round)} goes the long way round`);
+    return `${parts.join('; ')}.`;
+  };
+  // (Each figure is rounded to the money the page shows, and the totals are the rows added up: a sum that is one out reads as a fault.)
+  const shown = (x: number): number => Math.round(x * BUDGET.scale) / BUDGET.scale;
+  const rows: GateRow[] = list.map((r) => ({ nat: r.nat, name: g.nations[r.nat].name, own: r.nat === me, what: what(r, r.nat === me), loss: shown(r.loss) }))
+    .sort((x, y) => Number(y.own) - Number(x.own));
+  // His own row first, always: he must not read the others' bill as his own.
+  if (!rows.length || !rows[0].own) rows.unshift({ nat: me, name: g.nations[me].name, own: true, what: 'None of your own trade runs through it.', loss: 0 });
+  const others = rows.filter((r) => !r.own);
+  // Who resents it: fixed at the shutting for a gate already shut, else those of the rows who would.
+  const G = RELATIONS.gate, side = sideName(g, me);
+  const sore = isShut ? soreList(g, gate) : others.filter((r) => wouldResent(g, me, r.nat)).map((r) => ({ nat: r.nat, so: 0 }));
+  const resent: GateSoreRow[] = sore.map((x) => ({
+    nat: x.nat, name: g.nations[x.nat].name, so: x.so, most: G.most,
+    line: isShut ? `${x.so} of ${G.most} points so far` : `${G.month} point of opinion a month, ${G.most} at most`,
+  })).sort((x, y) => x.name.localeCompare(y.name));
+  return {
+    gate: v, order: isShut ? 'open' : 'shut', label: 'Sea gate · you hold it',
+    question: isShut ? `Open ${gt.name} again?` : `Shut ${gt.name}?`,
+    lead: isShut
+      ? `You shut ${them} in ${turnToDate(v.shutSince).label}. Open, ${it} ${many ? 'stand' : 'stands'} as before: ${gt.closed ? 'in wartime only your allies may pass, and a country at war with nobody' : 'every country may pass that is not at war with you'}.`
+      : `Shut, ${it} ${many ? 'let' : 'lets'} through only your own ships and your allies'. Every other country's ships are turned back: its warships, its supply ships and the trade it carries, your own trade with it included. You can open ${them} again whenever you choose.`,
+    heading: isShut ? 'What it is costing each month' : 'What it costs each month',
+    rows, total: shown(rows.reduce((s, r) => s + r.loss, 0)), others: shown(others.reduce((s, r) => s + r.loss, 0)), sumLabel: 'All told, to others',
+    none: isShut ? 'No agreement is held up by it today.' : 'No trade runs through it today: shutting it costs nobody anything yet.',
+    resentHeading: isShut ? 'Who resents it' : 'Who will resent it',
+    resentNote: !resent.length ? '' : isShut
+      ? `Each has moved away from ${side} in public opinion since you shut ${them}. Open, they move no further.`
+      : `Each moves away from ${side} in public opinion for as long as ${it} ${many ? 'stay' : 'stays'} shut.`,
+    resent,
+    yes: isShut ? 'Open the gate' : 'Shut the gate', no: isShut ? 'Leave it shut' : 'Leave it open',
+  };
+}
+/** The holder's order: shuts his gate to all ships but his own and his allies', or opens it again. */
+export function orderGate(g: Game, gate: number, shut: boolean): boolean {
+  if (whyNotGate(g, gate) || (gateShutSince(g, gate) >= 0) === shut) return false;
+  // Who resents it is fixed at the shutting: the countries whose trade it turns back this month (ruling 177(a)).
+  const sore = shut ? gateQuestion(g, gate)?.resent.map((r) => r.nat) ?? [] : [];
+  setGate(g, gate, shut);
+  if (shut) soreAtShut(g, gate, g.human!, sore); else soreForget(g, gate);
+  // His own agreements find the gate so at once; every other country's do in its own month.
+  refreshTrade(g, g.human!);
+  return true;
+}
+
 export function orderAirBase(g: Game, id: number, region: number): boolean {
-  const f = myAir(g, id);
-  return !!f && rebaseAir(g, f, g.regions[region]);
+  const f = myAir(g, id), r = g.regions[region];
+  if (!f || !r) return false;
+  // (Across an ocean a land group goes by sea, one a month: ruling 133(b).)
+  return f.ship !== undefined ? flyAshore(g, f, r) : overOcean(f, r) ? shipAir(g, f, r) : rebaseAir(g, f, r);
+}
+
+/** The fleets one of the player's carrier wings ashore could go back aboard, those it can board now first: each with where it lies, the deck room standing empty, and why not now. */
+export const airGroupDecks = (g: Game, id: number): DeckOption[] => groupDecks(g, id, g.human);
+
+/** Sends one of the player's carrier wings ashore back aboard a fleet of his navy that has deck room standing empty for it there. */
+export function orderAboard(g: Game, id: number, fleet: number): boolean {
+  const f = myAir(g, id), c = g.fleets.find((x) => x.id === fleet);
+  return !!f && !!c && flyAboard(g, f, c);
 }
 
 /** Where one of the player's air fleets could be sent on a mission, and where it could be based. */
@@ -1282,27 +1707,39 @@ export function orderGroupJob(g: Game, id: number, key: string): boolean {
 /** The airfields one of the player's air groups could move to, nearest first. orderAirBase() moves it. */
 export const airGroupBases = (g: Game, id: number): BaseOption[] => groupBases(g, id, g.human);
 
+/**
+ * The eve of war has no shot fired, so the player's planner has no raid to offer on it: every kind but the scouts'
+ * photographs is refused with this sentence, in the menu, in the targets, in the plan and in the order itself.
+ * (Only a player has an eve, so no war the computer fights alone is touched.)
+ */
+export const EVE_NO_RAID = 'It is the eve of war: no raid flies until the first shot is fired.';
+const eveRaid = (g: Game, kind: RaidKind): boolean => onEve(g) && kind !== 'recon';
+const eveMenu = (g: Game, menu: RaidKindView[]): RaidKindView[] => (onEve(g) ? menu.map((k) => (k.key === 'recon' ? k : { ...k, targets: 0, why: EVE_NO_RAID })) : menu);
+
 /** The raid planner's menu: each kind of raid and how many targets are in reach this month. */
-export const raidMenu = (g: Game): RaidKindView[] => raidKinds(g, g.human);
+export const raidMenu = (g: Game): RaidKindView[] => eveMenu(g, raidKinds(g, g.human));
 
 /** The same menu with a bombing raid named once, by day or by night (the design director's ruling 117, point 6). */
-export const raidMenuOne = (g: Game): RaidKindView[] => raidKindsOne(g, g.human);
+export const raidMenuOne = (g: Game): RaidKindView[] => eveMenu(g, raidKindsOne(g, g.human));
 
 /** Every target for one kind of raid, nearest first. With `lead`, only those that one of the player's groups can fly against. */
-export const raidTargetsFor = (g: Game, kind: RaidKind, lead = -1): RaidTarget[] => raidTargets(g, kind, g.human, lead);
+export const raidTargetsFor = (g: Game, kind: RaidKind, lead = -1): RaidTarget[] => (eveRaid(g, kind) ? [] : raidTargets(g, kind, g.human, lead));
 
 /**
  * A raid weighed up before it is ordered: who could fly it, who is going, what will meet it, the chance of success,
  * the losses to expect and what meeting up is worth. Leave `ids` out for the staff's proposal.
  */
-export const previewRaid = (g: Game, kind: RaidKind, target: number, ids?: number[]): RaidPlan => planRaid(g, kind, target, ids, g.human);
+export const previewRaid = (g: Game, kind: RaidKind, target: number, ids?: number[]): RaidPlan => {
+  const p = planRaid(g, kind, target, ids, g.human);
+  return eveRaid(g, kind) ? { ...p, why: EVE_NO_RAID } : p;
+};
 
 /** A bombing raid by day and by night, side by side, for the raid card (ruling 107(d)). Null for any other kind of raid. */
 export const previewDayNight = (g: Game, kind: RaidKind, target: number, ids?: number[]): DayNight | null => dayOrNight(g, kind, target, ids, g.human);
 
 /** Flies a planned raid at once and files its report. Null if it cannot be flown as picked. */
 export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[]): AirReport | null {
-  return g.human !== null && humanUp(g) ? launchRaid(g, kind, target, ids, g.human) : null;
+  return g.human !== null && humanUp(g) && !eveRaid(g, kind) ? launchRaid(g, kind, target, ids, g.human) : null;
 }
 
 /**

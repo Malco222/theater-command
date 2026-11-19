@@ -7,10 +7,11 @@
 // draw. Every number is in data/campaign/fleets.json. None of it touches the history campaigns.
 
 import { byHand } from './depth';
+import { tenthPct } from '../core/math';
 import type { TicketLine } from '../core/ticket';
 import fleetData from '../../data/campaign/fleets.json';
 import { AIRWAR, carrierRules, raid as stopOutput } from './air';
-import { deckWorth, fleetKnown, moveWings, seaPicture, wingCards, wingShare, type WingCard } from './carriers';
+import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPicture, wingCards, wingShare, wingsAshore, type WingCard } from './carriers';
 import { allied, atWar, headline, routineNews } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
@@ -73,6 +74,14 @@ export interface FleetCard {
   /** The aircraft its carriers bring, as cards (fighters first), and how full its decks are, 0..1. Empty and 1 for a fleet without carriers. */
   wings: WingCard[];
   decks: number;
+  /** The aircraft aboard, and the aircraft its decks hold: "0 of 78 aboard" while its wings are ashore. Both 0 for a fleet without carriers. */
+  aboard: number;
+  deckRoom: number;
+  /** Its wings ordered ashore (ruling 175(b)): each one's group id, name, where it is and its aircraft. And the line the card carries while deck room stands empty for them, or ''. */
+  ashore: { id: number; name: string; kind: 'ftr' | 'bmr'; label: string; at: string; aircraft: number }[];
+  bare: string;
+  /** The same line in few words, for a card with one short line. */
+  bareBrief: string;
 }
 
 const gunsRaw = (s: Ships): number => CLASSES.reduce((n, c) => n + s[c] * B.guns[c], 0);
@@ -111,6 +120,8 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
     },
     shelled: f.shelled === g.turn,
     wings: wingCards(g, f), decks: wingShare(g, f),
+    aboard: wingCards(g, f).reduce((s, w) => s + w.aircraft, 0), deckRoom: wingCards(g, f).reduce((s, w) => s + w.est, 0) + bareOf(f, 'ftr') + bareOf(f, 'bmr'),
+    ashore: wingsAshore(g, f.id).map((w) => ({ id: w.id, name: w.name, kind: w.kind === 'bmr' ? 'bmr' as const : 'ftr' as const, label: w.kind === 'bmr' ? 'Strike aircraft' : 'Carrier fighters', at: g.regions[w.base].name, aircraft: w.ftr + w.bmr })), bare: bareLine(g, f), bareBrief: bareBrief(g, f),
   };
 }
 
@@ -348,7 +359,7 @@ export function planBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, vi
     plan.lines.push({ label: 'The town', value: `${townName(r)}, ${v.sizeWord.toLowerCase()}: troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger`, effect: `A weight of fire of ${SIEGE.bombard.shellFull} breaks down ${SIEGE.breach.shell}% of its works, less its share; never more than ${SIEGE.breach.most}% in all` });
     if (town) plan.lines.push({ label: 'The shelling', value: town.works >= 0.5 ? `About ${Math.round(town.works)}% of the works broken down` : 'Little more can be broken', effect: townHitText(g, r, town, 'shells', false) });
   } else {
-    plan.lines.push({ label: 'Industry', value: plural(r.fac, 'factory', 'factories'), effect: output > 0 ? `${Math.round(output * 100)}% of its output stopped for a month: ${(plan.nation * 100).toFixed(1)}% of ${g.nations[r.ctrl].adj} production` : 'Nothing to hit' });
+    plan.lines.push({ label: 'Industry', value: plural(r.fac, 'factory', 'factories'), effect: output > 0 ? `${Math.round(output * 100)}% of its output stopped for a month: ${tenthPct(plan.nation)} of ${g.nations[r.ctrl].adj} production` : 'Nothing to hit' });
   }
   if (fort > 0) plan.lines.push({ label: 'Shore batteries', value: `Fortress level ${fort}`, effect: `About ${Math.round(plan.reply * 100)}% of the cruisers and destroyers that stand in are likely to be sunk` });
   plan.lines.push({ label: 'Readiness', value: `${Math.round(f.ready * 100)}% now`, effect: `${Math.round(plan.ready * 100)}% afterwards: a bombardment wears the ships and empties the magazines` });
@@ -383,7 +394,7 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
   } else {
     output = plan.output; nation = plan.nation;
     stopOutput(g, f.nat, r.ctrl, nation);
-    result = `The shelling stopped ${Math.round(output * 100)}% of ${r.name}'s output for a month: ${(nation * 100).toFixed(1)}% of ${g.nations[r.ctrl].adj} production.`;
+    result = output > 0 ? `The shelling stopped ${Math.round(output * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.` : '';
   }
   const sunk = plan.reply > 0 ? sinkShips(f, plan.reply, rng, ['ca', 'dd']) : none();
   if (shipCount(sunk)) result += ` The shore batteries sank ${shipList(sunk)}.`;
@@ -420,9 +431,9 @@ export function bombardTargets(g: Game, f: Fleet, viewer: string | null = null):
 
 const ORD = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
 
-/** A name for a squadron split off from a fleet, by what it is made of: "2nd Escort Group". */
+/** A name for ships split off from a fleet, by what they are made of: "2nd Escort Fleet". Every group of ships is called a fleet. */
 export function squadronName(g: Game, nat: string, s: Ships): string {
-  const word = s.ss > 0 && shipCount(s) === s.ss ? 'Submarine Flotilla' : s.bb + s.cv > 0 ? 'Battle Squadron' : s.dd >= s.ca ? 'Escort Group' : 'Cruiser Squadron';
+  const word = s.ss > 0 && shipCount(s) === s.ss ? 'Submarine Fleet' : s.bb + s.cv > 0 ? 'Battle Fleet' : s.dd >= s.ca ? 'Escort Fleet' : 'Cruiser Fleet';
   for (let k = 0; ; k++) {
     const name = `${ORD[k] ?? `${k + 1}th`} ${word}`;
     if (!g.fleets.some((f) => f.nat === nat && f.name === name)) return name;

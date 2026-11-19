@@ -14,7 +14,7 @@ import data from '../../data/campaign/intel.json';
 import { Rng, hashString } from '../core/rng';
 import type { Agent, Corps, Game, IntelNote, Mission, Region } from './types';
 import { allied, atWar, bloc, fieldArmy, headline } from './game';
-import { CAUSE_WORDS, cutCause, cutOn, cutRail, hastyLeft, onNet, railCut, ruinMost, ruinedAt, workingFactories, wreckFactory, type RailCause } from './rails';
+import { CAUSE_WORDS, cutCause, cutOn, cutRail, cutThroughGuns, hastyLeft, onNet, railCut, ruinMost, ruinedAt, workingFactories, wreckFactory, type RailCause } from './rails';
 import { turnToDate } from '../core/ticket';
 import { levelIndex } from './difficulty';
 import { fieldOut, fireField, stores, type StoresView } from './resources';
@@ -184,7 +184,10 @@ export function cutSays(g: Game, region: number, viewer: string | null = g.human
   if (k.how === 'now') {
     const when = monthOf(k.since ?? g.turn);
     const stops = `No train runs into, out of or through ${name} until ${k.hasty > 0 ? `the railwaymen have it running, in ${monthOf(g.turn + k.hasty)}, or engineers relay the track sooner` : 'engineers relay the track'}. Only engineers can be carried up to the break.`;
-    return { head: 'Railway cut', line: `${cause ? `${capital(cause)} in ${when}` : `Cut since ${when}`}. ${stops}`, short: `railway cut (${cause ? `${cause}, ` : ''}${when})` };
+    // A line cut by bombing says whether guns stood there that month (ruling 125): other causes say nothing of guns.
+    const guns = cutThroughGuns(g, region);
+    const through = guns === null ? '' : guns > 0 ? `, through level ${guns} guns` : '. No guns guarded the railway here';
+    return { head: 'Railway cut', line: `${cause ? `${capital(cause)} in ${when}` : `Cut since ${when}`}${through}. ${stops}`, short: `railway cut (${cause ? `${cause}, ` : ''}${when})` };
   }
   const when = monthOf(k.asOf);
   if (k.how === 'seen') return { head: 'Railway cut when last seen', line: `Last seen cut in ${when}${cause ? ` (${cause})` : ''}. What has been done to the line since is not known.`, short: `railway cut when last seen (${when})` };

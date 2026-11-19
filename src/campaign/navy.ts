@@ -17,13 +17,13 @@ import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
-import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
+import { aloneLine, allied, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
 import { RES, fuelFleet, laneStopped } from './resources';
 import {
-  STACK, type BattleReport, type Corps, type Fleet, type Game, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
+  STACK, type BattleReport, type Corps, type Fleet, type Game, type Gate, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
 } from './types';
 
 interface ClassSpec { label: string; one: string; many: string; power: number; tough: number; escort: number; raid: number }
@@ -253,13 +253,66 @@ export function closedTo(g: Game, z: number, nat: string): boolean {
   return e.total >= NAVY.closed.ratio * seaSide(g, z, nat, false).total;
 }
 
+/** The smallest strength of a nation's own side in a sea, in whole points, that opens it to its troopships; 0 while it is open. */
+export function opensAt(g: Game, z: number, nat: string): number {
+  if (!closedTo(g, z, nat)) return 0;
+  // From the enemy's strength as the sentence prints it, so that the two figures agree; never less than the rule needs.
+  const e = seaSide(g, z, nat, true).total;
+  return Math.max(Math.floor(e / NAVY.closed.ratio), Math.floor(Math.round(e) / NAVY.closed.ratio)) + 1;
+}
+
+/**
+ * A closed sea in a sentence (ruling 207): its name, each side's strength there as the rule counts it, the strength
+ * that would open it, and the two things the rule counts that he can order: a fleet at sea in it, and the sky over
+ * a coast of it the enemy holds (airOver: his aircraft fly from that coast at seaOwn, and the enemy's at seaFoe).
+ */
+export function closedLine(g: Game, z: number, nat: string): string {
+  const e = seaSide(g, z, nat, true), own = seaSide(g, z, nat, false);
+  const foeCoast = g.seas[z].coast.some((id) => { const n = g.nations[g.regions[id].ctrl]; return !!n && n.alive && atWar(g, g.regions[id].ctrl, nat) && skyOver(g, id) === null; });
+  return `The ${g.seas[z].name} is closed to your troopships: the enemy has ${round(e.total)} there to your ${round(own.total)}, and ${opensAt(g, z, nat)} would open it. Put a fleet to sea there, or ${foeCoast && e.air >= 0.5 ? "win the sky over the enemy's coast on it" : "beat the enemy's fleets in it"}.`;
+}
+
 /** Whether a nation's ships may pass between two neighbouring seas: most are open water, a few are straits someone holds. */
 export function canPass(g: Game, a: number, b: number, nat: string): boolean {
-  const gt = g.gates.find((x) => (x.a === a && x.b === b) || (x.a === b && x.b === a));
-  if (!gt) return true;
-  const holder = gt.region >= 0 ? g.regions[gt.region].ctrl : gt.nation!;
+  const i = g.gates.findIndex((x) => (x.a === a && x.b === b) || (x.a === b && x.b === a));
+  if (i < 0) return true;
+  const gt = g.gates[i];
+  const holder = gateHolder(g, gt);
+  // Shut by its holder's order (ruling 176(e)): only his own ships and his allies' pass.
+  if (g.flags[shutKey(i, holder)] !== undefined && !allied(g, holder, nat)) return false;
   if (gt.closed) return allied(g, holder, nat) || !g.nations[nat].atWar.length;
   return !atWar(g, holder, nat);
+}
+
+// ---- A gate its holder has shut (Version 84.1; ruling 176(e), on Brian's words of 2026-11-17: "you should be able
+// to open or close the panama canal") ----
+// The order is the holder's own, so it is kept under his name: the moment the gate changes hands it no longer
+// holds, and gatesTick forgets it so that it does not come back with the gate. No staff gives it in release 1.
+const shutKey = (i: number, holder: string): string => `gateshut:${i}:${holder}`;
+/** The country that holds a gate. */
+export const gateHolder = (g: Game, gt: Gate): string => (gt.region >= 0 ? g.regions[gt.region].ctrl : gt.nation!);
+/** The month a gate's holder ordered it shut, or -1 while it stands as its own rule leaves it. */
+export function gateShutSince(g: Game, i: number): number {
+  const gt = g.gates[i];
+  return gt ? g.flags[shutKey(i, gateHolder(g, gt))] ?? -1 : -1;
+}
+/** Shuts a gate in its holder's name, or opens it again. Ships, supply and trade find it so from that moment. */
+export function setGate(g: Game, i: number, shut: boolean): void {
+  const gt = g.gates[i];
+  if (!gt) return;
+  const key = shutKey(i, gateHolder(g, gt));
+  if (!shut) delete g.flags[key];
+  else if (g.flags[key] === undefined) g.flags[key] = g.turn;
+  g.supplyDirty = true;
+}
+/** As a month opens: an order to shut a gate ends when the gate has changed hands, and does not come back with it. */
+export function gatesTick(g: Game): void {
+  for (const k of Object.keys(g.flags)) {
+    if (!k.startsWith('gateshut:')) continue;
+    const [, i, nat] = k.split(':');
+    const gt = g.gates[Number(i)];
+    if (!gt || gateHolder(g, gt) !== nat) delete g.flags[k];
+  }
 }
 
 /** The seas a nation's supply ships and troopships can use: those it can reach from a home port without crossing a sea closed to it. */
@@ -390,6 +443,53 @@ export function shipCorps(g: Game, c: Corps, to: Region): boolean {
   return true;
 }
 
+/** Why no sea lane serves a landing (ruling 207): a sea closed to the troopships, a coast too far, a strait shut, or waters that do not join. */
+export type LaneBar = { kind: 'sea'; sea: number } | { kind: 'far'; seas: number; /** The dangerous sea the troopships go round, where that is why the way is too long. */ round?: number } | { kind: 'gate'; gate: number } | { kind: 'none' };
+
+/**
+ * The true one of the reasons a landing force has no lane from this port to that coast. It reads the rule and
+ * changes nothing: the lane itself is seaPath's, as before. In order: a sea on the shortest crossing that is
+ * closed to the troopships; a coast further off than a landing reaches; a strait shut to the nation's ships on
+ * the way the waters themselves would give.
+ */
+export function laneBar(g: Game, nat: string, from: Region, to: Region, surprise = false): LaneBar {
+  const range = NAVY.landing.range;
+  const through = seaPath(g, nat, from, to, { max: range, surprise: true });
+  if (through && !surprise) {
+    const sea = through.find((z) => closedTo(g, z, nat));
+    if (sea !== undefined) return { kind: 'sea', sea };
+    // A way within reach with no sea shut, that the troopships still will not take: the safe way round is the longer
+    // one. The sea they go round is the most dangerous on the short way.
+    const worst = through.reduce((a, z) => (seaRisk(g, z, nat) > seaRisk(g, a, nat) ? z : a), through[0]);
+    return { kind: 'far', seas: seaPath(g, nat, from, to)?.length ?? range + 1, ...(seaRisk(g, worst, nat) > 0 ? { round: worst } : {}) };
+  }
+  const long = seaPath(g, nat, from, to, { surprise: true });
+  if (long) return { kind: 'far', seas: long.length };
+  // The waters alone, every strait taken as open: the first strait on that way the nation's ships may not pass.
+  const prev = new Int16Array(g.seas.length).fill(-2);
+  const q: number[] = [];
+  for (const z of from.seas) { prev[z] = -1; q.push(z); }
+  for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (prev[j] === -2) { prev[j] = q[i]; q.push(j); }
+  const end = q.find((z) => to.seas.includes(z));
+  if (end === undefined) return { kind: 'none' };
+  const way: number[] = [];
+  for (let z = end; z >= 0; z = prev[z]) way.unshift(z);
+  for (let i = 1; i < way.length; i++) {
+    if (canPass(g, way[i - 1], way[i], nat)) continue;
+    const gate = g.gates.findIndex((x) => (x.a === way[i - 1] && x.b === way[i]) || (x.a === way[i] && x.b === way[i - 1]));
+    if (gate >= 0) return { kind: 'gate', gate };
+  }
+  return { kind: 'none' };
+}
+
+/** The lane's refusal in words. (The page gives a shut strait its own sentence, with its holder: gates.ts.) */
+function laneWhy(g: Game, nat: string, from: Region, to: Region, bar: LaneBar): string {
+  if (bar.kind === 'sea') return closedLine(g, bar.sea, nat);
+  if (bar.kind === 'far') return `${to.name} is too far for a landing from ${from.name}: troopships cross ${NAVY.landing.range} seas at most, and ${bar.round !== undefined ? `the safe way round the ${g.seas[bar.round].name} is longer` : bar.seas > NAVY.landing.range ? `this is ${bar.seas}` : 'the safe way round is longer'}.`;
+  if (bar.kind === 'gate') return `The ${g.gates[bar.gate].name} ${/s$/.test(g.gates[bar.gate].name) ? 'are' : 'is'} shut to your ships, and no other way leads to ${to.name}.`;
+  return `No sea joins ${from.name} to ${to.name}.`;
+}
+
 /** A landing made in the month war is declared catches the defenders unready and sails before any fleet can stop it. */
 export const surpriseOn = (g: Game, nat: string, to: Region): boolean => g.flags[`war:${nat}:${to.ctrl}`] === g.turn;
 
@@ -397,6 +497,8 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (!cs.length) return 'No corps chosen.';
   const nat = cs[0].nat, n = g.nations[nat], from = g.regions[cs[0].reg];
   for (const c of cs) { const steep = whyBarred(g, c, to); if (steep) return steep; }
+  // Guns and engineers land on no enemy shore by themselves (ruling 211(a), the grand campaign).
+  if (gunsRule(g) && !cs.some(fights) && !allied(g, nat, to.ctrl) && !gunsMayFollow(g, cs[0], to)) return aloneLine(cs);
   if (airborne(cs)) {
     if (cs.some((c) => c.nat !== nat || c.reg !== from.id)) return 'An airborne force takes off from one place.';
     if (!allied(g, nat, from.ctrl)) return 'Airborne troops take off from friendly airfields.';
@@ -415,7 +517,7 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (allied(g, nat, to.ctrl) || !atWar(g, nat, to.ctrl)) return `${to.name} is not enemy ground.`;
   if (cs.length > STACK) return `No more than ${STACK} corps can go ashore in one place.`;
   if (liftLeft(g, nat) < cs.length) return liftLeft(g, nat) ? `There is shipping for only ${liftLeft(g, nat)} more corps this month.` : 'All the shipping is in use this month.';
-  if (!seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: surpriseOn(g, nat, to) })) return 'No sea lane to that coast is open: it is too far, or the enemy holds the sea between.';
+  if (!seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: surpriseOn(g, nat, to) })) return laneWhy(g, nat, from, to, laneBar(g, nat, from, to, surpriseOn(g, nat, to)));
   // Troopships cannot cross under an enemy sky. Only surprise, or winning the sky over the beach, gets them there.
   if (!surpriseOn(g, nat, to) && skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`;
   return null;
@@ -454,6 +556,8 @@ export interface LandingPlan {
   account?: CrossingAccount;
   /** For any landing from the sea: whether the sea behind the beach could be kept open once the force is ashore. */
   hold?: SeaHold;
+  /** Where the refusal is that no sea lane serves: which of the reasons it is (ruling 207). */
+  bar?: LaneBar;
 }
 
 /** The enemy warships that put to sea against an invasion: those in harbour on the seas it crosses or the seas next to them, and those at sea next door. */
@@ -705,7 +809,12 @@ export function crossingAccount(g: Game, nat: string, path: number[], to: Region
 /** What a landing would meet: the seas to cross, the danger on the way, and the odds on the beach. Nothing is changed. */
 export function planLanding(g: Game, cs: Corps[], to: Region): LandingPlan {
   const why = whyNotLand(g, cs, to);
-  if (why) return { why, surprise: false, path: [], risk: 0, defended: false, assess: null, sky: false, sortie: 0 };
+  if (why) {
+    // The lane's own refusal is the one that names a sea, a distance or a strait: say which, for the page.
+    const from = g.regions[cs[0].reg], sur = surpriseOn(g, cs[0].nat, to);
+    const lane = !airborne(cs) && from.port && to.seas.length > 0 && !seaPath(g, cs[0].nat, from, to, { max: NAVY.landing.range, surprise: sur }) && why === laneWhy(g, cs[0].nat, from, to, laneBar(g, cs[0].nat, from, to, sur));
+    return { why, surprise: false, path: [], risk: 0, defended: false, assess: null, sky: false, sortie: 0, ...(lane ? { bar: laneBar(g, cs[0].nat, from, to, sur) } : {}) };
+  }
   const nat = cs[0].nat;
   const defended = hostileUnits(g, to, nat).length > 0;
   const sky = skyOver(g, to.id);
@@ -784,6 +893,10 @@ export interface CrossingOutlook {
   planned: boolean;
   /** True for a crossing listed because it would be the safest way to its shore once the sky over the beach was won. */
   hope?: boolean;
+  /** The sea that bars it, where a closed sea does. */
+  shut?: number;
+  /** True for the shortest crossing to its shore, listed (for the page alone) because a closed sea bars it and the list shows a longer way round. */
+  short?: boolean;
 }
 
 const aimKey = (nat: string): string => `st:aim:${nat}`;
@@ -842,7 +955,7 @@ function lookAcross(g: Game, nat: string, from: Region, to: Region, reach: Retur
     : barred === 'sea' ? `The ${g.seas[shut].name} is closed to your troopships: the enemy is much the stronger there.`
     : barred === 'sky' ? `${g.nations[to.ctrl].adj} fighters hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`
     : null;
-  return { from, to, path, bar, barred, account };
+  return { from, to, path, bar, barred, account, ...(barred === 'sea' ? { shut } : {}) };
 }
 
 /**
@@ -851,7 +964,7 @@ function lookAcross(g: Game, nat: string, from: Region, to: Region, reach: Retur
  * too, with the reason: a coast under an enemy sky is offered to no landing force, and this says why. The crossing
  * named as the plan comes first, with a safer way to the same shore after it when there is one.
  */
-export function crossingsOf(g: Game, nat: string): CrossingOutlook[] {
+export function crossingsOf(g: Game, nat: string, o: { short?: boolean } = {}): CrossingOutlook[] {
   const n = g.nations[nat];
   if (!seaWar(g) || !n?.alive || !n.atWar.length) return [];
   // One port for each stretch of water: the one with most of this nation's troops on its quays.
@@ -894,7 +1007,7 @@ export function crossingsOf(g: Game, nat: string): CrossingOutlook[] {
   for (const [k, coasts] of shores) {
     const [owner, foe, far] = k.split(':');
     const home = owner === foe && far === '0';
-    let best: CrossingOutlook | null = null, hope: CrossingOutlook | null = null;
+    let best: CrossingOutlook | null = null, hope: CrossingOutlook | null = null, short: CrossingOutlook | null = null;
     // The lane depends only on the waters at each end: one look for each pair, then the sky over each coast.
     const lanes = new Map<string, Region[]>();
     for (const c of coasts) lanes.set(c.seas.join(','), [...(lanes.get(c.seas.join(',')) ?? []), c]);
@@ -907,6 +1020,7 @@ export function crossingsOf(g: Game, nat: string): CrossingOutlook[] {
           const row: CrossingOutlook = { ...look, foe, owner, home, planned: false };
           if (better(row, best)) best = row;
           if (won(row) < Infinity && (!hope || won(row) < won(hope) - 1e-9)) hope = row;
+          if (o.short && row.barred === 'sea' && (!short || row.path.length < short.path.length)) short = row;
         }
       }
     }
@@ -924,6 +1038,9 @@ export function crossingsOf(g: Game, nat: string): CrossingOutlook[] {
     // A beach whose sky could be won, where that would make it a clearly safer way than the safest as things stand.
     const shown: CrossingOutlook[] = out.filter((x) => x.foe === foe && x.owner === owner && x.home === home);
     if (hope && !shown.some((x) => x.from === hope!.from && x.to === hope!.to) && shown.every((x) => x.bar !== null || won(hope!) < x.account.risk - 0.05) && shown.every((x) => won(hope!) < won(x) - 0.05)) out.push({ ...hope, hope: true });
+    // For the page (ruling 207): the short crossing a closed sea bars, where every way listed to this shore is longer.
+    const listed: CrossingOutlook[] = out.filter((x) => x.foe === foe && x.owner === owner && x.home === home);
+    if (short && listed.length && listed.every((x) => x.barred !== 'sea' && x.path.length > short!.path.length)) out.push({ ...short, short: true });
   }
   // The enemy's own country first, then the safest.
   return out.sort((a, b) => Number(b.planned) - Number(a.planned) || Number(b.home) - Number(a.home) || Number(a.bar !== null) - Number(b.bar !== null) || a.account.risk - b.account.risk || a.to.id - b.to.id);
@@ -1026,13 +1143,15 @@ export function whyNotEscort(g: Game, f: Fleet, lane: string): string | null {
   if (!rt) return 'There is no such lane.';
   const to = g.nations[rt.to];
   if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
-  if (!to?.alive || (rt.to !== f.nat && !allied(g, f.nat, rt.to))) return `${cap(rt.name)} feeds ${to?.name ?? rt.to}, which is no ally of ${g.nations[f.nat].name}.`;
-  if (!to.atWar.length || !g.nations[f.nat].atWar.length) return `${cap(rt.name)} is not under attack: nobody is at war over it.`;
+  // (A lane may be named in the plural: "the Arctic convoys" feed, "the Atlantic lane" feeds.)
+  const many = /s$/.test(rt.name);
+  if (!to?.alive || (rt.to !== f.nat && !allied(g, f.nat, rt.to))) return `${cap(rt.name)} ${many ? 'feed' : 'feeds'} ${to?.name ?? rt.to}, which is no ally of ${g.nations[f.nat].name}.`;
+  if (!to.atWar.length || !g.nations[f.nat].atWar.length) return `Not under attack: nobody is at war over ${rt.name}.`;
   const stop = laneStopped(g, lane);
   if (stop) return `Nothing sails on ${rt.name} now. ${stop.why}`.trim();
   if (escortWorth(f.ships) <= 0) return `The ${f.name} has nothing that can guard a convoy: escorts are destroyers, carriers and cruisers.`;
   const reach = fleetReach(g, f);
-  if (!rt.zones.some((z) => reach.includes(z))) return `${cap(rt.name)} is out of reach of the ${f.name} from ${f.port}.`;
+  if (!rt.zones.some((z) => reach.includes(z))) return `${cap(rt.name)} ${many ? 'are' : 'is'} out of reach of the ${f.name} from ${f.port}.`;
   return null;
 }
 

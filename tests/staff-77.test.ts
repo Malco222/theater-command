@@ -16,7 +16,8 @@
 // 8. The art director's twelve colours for the small republics, and where the Canal Zone's name is written.
 import { describe, expect, it } from 'vitest';
 import { landingWatch } from '../src/campaign/ai';
-import { AIR, km, whyNotBase } from '../src/campaign/air';
+import { STRENGTH } from '../src/campaign/ashore';
+import { AIR, homeCommand, km, whyNotBase } from '../src/campaign/air';
 import { addCorps, allied, atWar, capture, createGame, removeCorps } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { NAVY, coastReport, crossingRisk, fleetsOf, seaPath } from '../src/campaign/navy';
@@ -39,8 +40,10 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; owner: string; island: boolean; overseas: boolean; wave: boolean; across: number }[] = [];
 const months: { turn: number; can: number; canHome: number; bra: number; usa: number }[] = [];
 {
-  // Seed 7: America's staff makes a landing of its own in this war (in seed 3 it joins a British front at Nantes and needs none).
-  const g = wide(7);
+  // Seed 8: America's staff makes landings of its own in this war, on Sardinia in January 1943 and at Marseille in June 1944
+  // (in seed 3 it joins a British front at Nantes and needs none). Seed 7 until Version 84, whose rules of what an attack
+  // brings and faces moved every war.
+  const g = wide(8);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, island: e.to.nb.length === 0, overseas: e.to.overseas, wave: e.wave, across: across(g, e.nat).length }); };
   while (g.turn < SEP_44) {
     runTurnAI(g);
@@ -219,7 +222,11 @@ describe('a front is any harbour its side holds near the enemy', () => {
       // An ocean crossing at this danger would not be made; the hop's own ceiling decides.
       O.risk = Math.min(O.risk, danger / 2);
       O.hop = ceiling < 0 ? 0 : danger + ceiling;
-      try { runTurnAI(g); } finally { O.risk = was.risk; O.hop = was.hop; }
+      // (A test of the hop's own ceiling: the test of strength of Version 83, which would keep one corps out of a
+      // harbour with the German army of 1942 next door, is set aside. strength-83.test.ts is its own.)
+      const asked = { ...STRENGTH! };
+      Object.assign(STRENGTH!, { sure: 0, bold: 0, even: 0 });
+      try { runTurnAI(g); } finally { O.risk = was.risk; O.hop = was.hop; Object.assign(STRENGTH!, asked); }
       return !c.dead && c.reg === beach.id;
     };
     expect(hop(0.01)).toBe(true);
@@ -250,23 +257,28 @@ describe('a quay must have room', () => {
 });
 
 describe('the fleet and the air groups follow the army', () => {
-  it('the Atlantic Squadron bases itself across the ocean once the first corps is over, and its carrier wings go with it', () => {
+  it('the Atlantic Fleet bases itself across the ocean once the first corps is over, and its carrier wings go with it', () => {
     const O = WORLD.overseas.USA;
-    expect(O.fleet).toEqual(['Atlantic Squadron']);
+    expect(O.fleet).toEqual(['Atlantic Fleet']);
     expect(O.air).toBe(0);
     const early = wide(7);
-    const home = fleetsOf(early, 'USA').find((f) => f.name === 'Atlantic Squadron')!;
+    const home = fleetsOf(early, 'USA').find((f) => f.name === 'Atlantic Fleet')!;
     expect(beyondEurope(home.base)).toBe(true);
     const g = at(JAN_43);
     expect(g.flags['fy:first:USA']).toBe(1);
-    const f = fleetsOf(g, 'USA').find((x) => x.name === 'Atlantic Squadron')!;
+    const f = fleetsOf(g, 'USA').find((x) => x.name === 'Atlantic Fleet')!;
     expect(f.base).toBeGreaterThanOrEqual(0);
     expect(beyondEurope(f.base)).toBe(false);
     expect(allied(g, 'USA', g.regions[f.base].ctrl)).toBe(true);
     for (const w of g.airFleets.filter((a) => a.ship === f.id)) expect(w.base).toBe(f.base);
-    expect(g.headlines.some((h) => /^The Atlantic Squadron crosses the ocean to /.test(h.text))).toBe(true);
-    // No land-based group of a country that ships its army is left at home beyond the figure.
-    expect(g.airFleets.filter((a) => a.nat === 'USA' && a.ship === undefined && beyondEurope(a.base)).length).toBeLessThanOrEqual(O.air!);
+    expect(g.headlines.some((h) => /^The Atlantic Fleet crosses the ocean to /.test(h.text))).toBe(true);
+    // No land-based group raised for the war overseas is left at home beyond the figure. The home commands (Version
+    // 84.2: the First Air Force and the rest) guard their own country and never cross.
+    const land = g.airFleets.filter((a) => a.nat === 'USA' && a.ship === undefined);
+    expect(land.filter((a) => !homeCommand(a) && beyondEurope(a.base)).length).toBeLessThanOrEqual(O.air!);
+    expect(land.filter((a) => !homeCommand(a) && !beyondEurope(a.base)).length).toBeGreaterThanOrEqual(4);
+    expect(land.filter((a) => homeCommand(a)).length).toBeGreaterThanOrEqual(5);
+    expect(land.filter((a) => homeCommand(a)).every((a) => beyondEurope(a.base))).toBe(true);
   });
 
   it('an air group on an airfield at home is shipped across, however far, to a field of its side\'s near the army', () => {

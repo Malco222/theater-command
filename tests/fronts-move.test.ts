@@ -279,8 +279,8 @@ describe('room on the roads', () => {
     const going = limitAttackers(g, [...inf, ...guns], target);
     expect(going.filter((c) => c.kind === 'inf').length).toBe(cap);
     expect(going.filter((c) => c.kind === 'art').length).toBe(F.guns);
-    // Guns support somebody: with no one else to go in they take the roads themselves.
-    expect(limitAttackers(g, guns.slice(0, F.guns), target).length).toBe(F.guns);
+    // Guns support somebody: with no one else to go in they open no attack (Version 84.2.5, ruling 211(a)).
+    expect(limitAttackers(g, guns.slice(0, F.guns), target)).toEqual([]);
     // The forecast and the battle count the same force.
     const look = attackOutlook(g, [...inf, ...guns], target)!;
     expect(look.lines.find((x) => x.label === 'Artillery')).toBeTruthy();
@@ -371,7 +371,45 @@ describe('terms go to whoever stands on the ground', () => {
     expect(g.nations.ITA.fellOn).toMatchObject({ to: 'GER', how: 'terms' });
     expect(rome.ctrl).toBe('GER');
     expect(naples.ctrl).toBe('SOV');
-    expect(g.headlines.slice(news).map((h) => h.text).join(' ')).toContain('German troops disarm the Italian army');
+    // Nobody else at war with Italy has a man in the country, so the islands go to Germany with the rest: the news
+    // says what happened here, and history's "given up" is not said of islands that were not (ruling 134(e)).
+    expect(g.byName['Sardinia'].ctrl).toBe('GER');
+    const told = g.headlines.slice(news).map((h) => h.text).join(' ');
+    expect(told).toContain('Italy has signed an armistice and is out of the war. Its armies lay down their arms, and Germany takes over what is left of the country. The Soviet Union takes Naples.');
+    expect(told).not.toContain('given up');
+  });
+
+  it('history\'s own words are told where the treaty ran as history wrote it, and only there (ruling 134(e))', () => {
+    const signed = (germansOnSardinia: boolean): { told: string; sardinia: string; corsica: string } => {
+      const g = free(5);
+      const { rome } = italy(g);
+      declareWar(g, 'UK', 'ITA');
+      // (A corps is mustered elsewhere when an enemy stands in the province: the islands are emptied first.)
+      const land = (nat: string, name: string, where: string): void => {
+        const r = g.byName[where];
+        for (const u of [...r.units]) if (u.kind !== 'fort') relocate(g, u, g.byName['Apulia']);
+        const c = addCorps(g, nat, name, 'inf', 3, r.id, {});
+        if (c.reg !== r.id || c.town !== undefined) throw new Error(`${name} was not set down in the field of ${where}`);
+      };
+      land('UK', 'Eighth Army', 'Sicily');
+      addCorps(g, 'GER', 'Garrison', 'inf', 3, rome.id, {});
+      if (germansOnSardinia) land('GER', 'Sardinia Command', 'Sardinia');
+      const news = g.headlines.length;
+      expect(fireEvent(g, 'italian-armistice')).toBe(true);
+      expect(g.nations.ITA.fellOn).toMatchObject({ to: 'GER', how: 'terms' });
+      return { told: g.headlines.slice(news).map((h) => h.text).join(' '), sardinia: g.byName['Sardinia'].ctrl, corsica: g.byName['Corsica'].ctrl };
+    };
+    // German troops in Rome, a British army in Sicily and nobody on the islands: Sardinia goes to the Allies.
+    const history = signed(false);
+    expect(history.sardinia).toBe('UK');
+    expect(history.told).toContain('German troops disarm the Italian army');
+    expect(history.told).toContain('Sardinia and Corsica are given up');
+    // A German corps stands on Sardinia and keeps it: nothing says the island was given up.
+    const kept = signed(true);
+    expect(kept.sardinia).toBe('GER');
+    expect(kept.told).not.toContain('given up');
+    expect(kept.told).toContain('Germany takes over what is left of the country.');
+    expect(kept.told).toContain('The United Kingdom takes Sicily');
   });
 });
 

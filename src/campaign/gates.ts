@@ -10,13 +10,18 @@
  * - the Turkish straits are stricter: in wartime only the holder's allies may pass, and a country at war with nobody.
  *   Shut there never says "you are at war with Turkey" to a player who is not.
  *
+ * Version 84.1 (ruling 176(e), on Brian's words of 2026-11-17): the holder may shut his gate to all ships but his
+ * own and his allies', and open it again. The view says who shut it, since when and to whom, and whether the
+ * viewer may give the order; the order itself and its question are whyNotGate, gateQuestion and orderGate in turn.ts.
+ *
  * What an interface calls:
  *   gateViews(g, viewer)     every gate: its name, holder, open or shut to the viewer, and the pointing box's line
  *   gateSpot(g, gate)        where its mark stands on the map: on the water, at the gate
  *   gateBar(g, fleet, sea)   the shut gate that keeps a fleet from a sea it could otherwise reach, with the one line that says why
  */
-import { allied, theName } from './game';
-import { NAVY, canPass, seaAt, seaBorders } from './navy';
+import { turnToDate } from '../core/ticket';
+import { allied, atWar, theName } from './game';
+import { NAVY, canPass, gateHolder, gateShutSince, seaAt, seaBorders } from './navy';
 import type { Fleet, Game, Gate } from './types';
 
 export interface GateView {
@@ -36,22 +41,42 @@ export interface GateView {
   line: string;
   /** Shut: why, as the end of a sentence. Empty when it is open. */
   why: string;
+  /** The month its holder ordered it shut (ruling 176(e)), or -1 while it stands as its own rule leaves it. */
+  shutSince: number;
+  /** Where its holder has shut it: who shut it, when, and to whom, as one sentence for the plate. Empty otherwise. */
+  shutLine: string;
+  /** The order the viewer may give: he holds the gate and is the player. Null for anyone else. */
+  order: 'shut' | 'open' | null;
+  /** The pointing box's last line: for the holder the order's name, for anyone else that only its holder can give it. */
+  orderLine: string;
 }
 
 const upFirst = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 /** A province's name inside a sentence: "the Canal Zone", "Gibraltar". */
 const thePlace = (name: string): string => (/ (Zone|Straits?|Coast|Islands?)$/.test(name) ? `the ${name}` : name);
-const holderOf = (g: Game, gt: Gate): string => (gt.region >= 0 ? g.regions[gt.region].ctrl : gt.nation!);
-
 function view(g: Game, gt: Gate, id: number, viewer: string | null): GateView {
-  const holder = holderOf(g, gt), H = g.nations[holder];
+  const holder = gateHolder(g, gt), H = g.nations[holder];
   const who = H ? theName(H) : holder;
   const name = upFirst(gt.name.replace(/^the /i, ''));
-  const base = { id, name, theName: upFirst(gt.name), holder, region: gt.region };
-  if (!viewer || !g.nations[viewer]) return { ...base, open: null, line: `Held by ${who}.`, why: '' };
-  const open = canPass(g, gt.a, gt.b, viewer);
   const mine = holder === viewer;
+  const since = gateShutSince(g, id);
+  const shutLine = since < 0 ? '' : mine ? `You shut it in ${turnToDate(since).label}: only your own ships and your allies' pass.`
+    : `${upFirst(who)} shut it in ${turnToDate(since).label}: only its own ships and its allies' pass.`;
+  const order: GateView['order'] = mine && viewer === g.human && !!H?.alive ? (since < 0 ? 'shut' : 'open') : null;
+  const orderLine = order === 'shut' ? 'Shut the gate' : order === 'open' ? 'Open the gate' : viewer ? `Only its holder can ${since < 0 ? 'shut' : 'open'} it.` : '';
+  const base = { id, name, theName: upFirst(gt.name), holder, region: gt.region, shutSince: since, shutLine, order, orderLine };
+  if (!viewer || !g.nations[viewer]) return { ...base, open: null, line: `Held by ${who}.${shutLine ? ` ${shutLine}` : ''}`, why: '' };
+  const open = canPass(g, gt.a, gt.b, viewer);
   const held = mine ? 'You hold it.' : `Held by ${who}.`;
+  if (since >= 0) {
+    if (open) return { ...base, open, line: mine ? "You hold it, and you have shut it: only your own ships and your allies' pass." : `${held} It is shut by its holder's order. Open to your ships: you are an ally of ${who}.`, why: '' };
+    // Shut to the viewer by the order, unless the gate's own rule would turn his ships back in any case: then that is the reason given.
+    const byItsRule = gt.closed ? !g.nations[viewer].atWar.length : !atWar(g, holder, viewer);
+    if (byItsRule) {
+      const why = `${who} has shut it to all ships but its own and its allies'`;
+      return { ...base, open, line: `Shut to your ships: ${why}.`, why };
+    }
+  }
   if (gt.closed) {
     // In wartime only the holder's allies may pass, and a country at war with nobody.
     const peace = !g.nations[viewer].atWar.length;

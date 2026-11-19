@@ -15,14 +15,15 @@
 // standing orders; raidKinds(), raidTargets() and planRaid() are the planner; launchRaid() flies it; scout()
 // is a reconnaissance flight; groupBases() says where a group could move. The engine is air.ts.
 
+import { tenthPct } from '../core/math';
 import { Rng, hashString } from '../core/rng';
 import type { TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import {
   AIR, AIRWAR, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, cover, crowding,
-  fightersOver, fly, forecastAir, groupAt, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, setMission, shipsInPort, whyNotBase, whyNotMission,
+  fightersOver, fly, forecastAir, groupAt, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, whyNotBase, whyNotMission, whyNotShipAir,
 } from './air';
-import { fleetKnown } from './carriers';
+import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
 import { DEFENCE, allied, atWar, headline, worksOf } from './game';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, atSea, shipList, surfaceShips } from './navy';
@@ -142,8 +143,22 @@ export interface GroupRow {
   ready: number;
   leader: string | null;
   level: number;
+  /** The province of its airfield, or -1 for a wing aboard its fleet: a wing aboard is at no airfield, and is never counted or drawn at one. */
   base: number;
   baseName: string;
+  /** For a wing aboard: the province of the harbour its fleet lies in, or -1 at sea or at a base off the map. -1 for every other group. */
+  port: number;
+  /** For a carrier wing ordered ashore: the fleet whose decks it left, and that fleet's name ('' if it is gone). -1 and '' for every other group. */
+  ashore: number;
+  fleetName: string;
+  /** Where it is, in a line: "Aboard the Atlantic Fleet", "Ashore at Norfolk", or "At Kent" for a group that was never a wing. */
+  where: string;
+  /**
+   * A carrier wing's one order of its own (ruling 175(b)): 'ashore' for a wing aboard, 'aboard' for one ashore, with
+   * the sentence that stands by the order before it is given and why it cannot be given now (null where it can).
+   * Null for every other group. Where to: airGroupBases() for a wing aboard, airGroupDecks() for one ashore.
+   */
+  wingMove: { order: 'ashore' | 'aboard'; price: string; why: string | null } | null;
   /** The fleet whose carriers it flies from, or -1 for a group on an airfield; and where it is, for a map: a sea (or -1) and a point. */
   ship: number;
   sea: number;
@@ -174,16 +189,22 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
   const with_ = escorted(g, f);
   const place = placeOf(g, kindFlown(f.mission), f.target, viewer);
   const deck = afloat(f), at = groupAt(g, f);
+  const fleet = deck ? carrierOf(g, f) : f.ashore !== undefined ? g.fleets.find((c) => c.id === f.ashore) ?? null : null;
+  const own = f.nat === viewer;
   const doing = away ? `Flew against ${place} this month: back ${deck ? 'aboard' : 'at its airfield'} next month`
     : isOffensive(f.mission) ? `Ordered against ${place}: flies when the month ends`
     : f.mission === 'rest' ? 'Resting and refitting'
     : kind === 'bmr' ? (deck ? 'Ranged on deck, ready for a strike' : 'Supporting the armies, and ready for a raid')
     : with_ ? `On patrol, and sticking with the ${with_.name} as its escort`
-    : deck ? 'On patrol over its fleet: meets any raid on the ships in its sea' : 'On patrol: meets any raid within its reach';
+    : deck ? (fleet && !atSea(fleet) ? `In harbour at ${fleet.port}: on patrol over its fleet` : 'On patrol over its fleet: meets any raid on the ships in its sea') : 'On patrol: meets any raid within its reach';
   return {
     id: f.id, nat: f.nat, name: f.name, command: f.parent && f.parent !== f.name ? f.parent : '', kind,
     ftr: f.ftr, bmr: f.bmr, aircraft: f.ftr + f.bmr, est: f.est.ftr + f.est.bmr, ready: f.ready,
-    leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: f.base, baseName: homeName(g, f), ship: f.ship ?? -1, sea: at.sea, x: at.x, y: at.y,
+    leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: deck ? -1 : f.base, baseName: homeName(g, f),
+    port: deck && fleet && !atSea(fleet) ? fleet.base : -1, ashore: f.ashore ?? -1, fleetName: f.ashore !== undefined ? fleet?.name ?? '' : '',
+    where: deck ? `Aboard the ${homeName(g, f)}` : f.ashore !== undefined ? `Ashore at ${g.regions[f.base].name}` : `At ${g.regions[f.base].name}`,
+    wingMove: !own ? null : deck ? { order: 'ashore', price: PRICE_ASHORE, why: whyNoShore(g, f) } : f.ashore !== undefined ? { order: 'aboard', price: PRICE_ABOARD, why: whyNoDeck(g, f) } : null,
+    ship: f.ship ?? -1, sea: at.sea, x: at.x, y: at.y,
     doing, job: away || isOffensive(f.mission) ? 'raid' : f.mission === 'rest' ? 'rest' : with_ ? 'escort' : 'patrol',
     escorts: with_ ? with_.id : -1, flew: f.flew === g.turn, scouted: f.scouted === g.turn,
     range: kind === 'bmr' ? R.bmr : kind === 'ftr' ? R.ftr : Math.max(R.ftr, R.bmr), crowd: crowding(g, f), mine: f.nat === viewer,
@@ -203,6 +224,8 @@ export interface AirfieldCard {
   note: string;
   /** How it can be made, or made larger. */
   build: string;
+  /** The note's last sentence by itself, or '': carriers lying in the harbour here keep their aircraft aboard (ruling 176(b)). */
+  aboard: string;
   /** The fog of war hides what flies from here. */
   hidden: boolean;
   rows: GroupRow[];
@@ -216,13 +239,16 @@ export function airfieldCard(g: Game, region: number, viewer: string | null = g.
   const build = built < E
     ? `An engineer corps standing here can ${field ? 'enlarge it' : 'lay one out'} in a month, as far as ${E} levels built. The treasury builds larger ones from the arsenal.`
     : 'It is as large as field engineers can make it. The treasury builds larger ones from the arsenal.';
-  if (!field) return { region, name: r.name, field: null, note: `There is no airfield at ${r.name}: no aircraft can be based here.`, build, hidden: false, rows: [] };
+  if (!field) return { region, name: r.name, field: null, note: `There is no airfield at ${r.name}: no aircraft can be based here.`, build, aboard: '', hidden: false, rows: [] };
   const hidden = field.groups < 0;
   const rows = hidden ? [] : g.airFleets.filter((f) => f.base === region && !afloat(f) && flying(f)).map((f) => groupRow(g, f, viewer));
   const used = rows.reduce((s, x) => s + x.aircraft, 0);
-  const note = `${field.word}: it serves ${num(field.holds)} aircraft${hidden ? '. What flies from here is not known: scout it from the air, or put an agent on watch'
-    : `, and ${used > 0 ? `${num(used)} are based here` : 'none are based here'}${field.crowded ? `. It is crowded: only ${pct(field.holds / used)} of each group can fly` : ''}`}.`;
-  return { region, name: r.name, field, note, build, hidden, rows };
+  // Carriers lying in the harbour here keep their aircraft aboard: said, so that nobody looks for them on the field (ruling 176(b)).
+  const inPort = hidden ? [] : g.fleets.filter((c) => c.base === region && !atSea(c) && c.ships.cv > 0 && viewer !== null && allied(g, c.nat, viewer) && g.airFleets.some((w) => w.ship === c.id && w.ftr + w.bmr > 0));
+  const aboard = inPort.length ? ` The aircraft of the ${inPort.length === 1 ? inPort[0].name : inPort.map((c) => c.name).join(' and the ')}, in harbour here, are aboard ${inPort.length === 1 ? 'its' : 'their'} carriers.` : '';
+  const note = `${field.word}: it has room for ${num(field.holds)} aircraft${hidden ? '. What flies from here is not known: scout it from the air, or put an agent on watch'
+    : `, and ${used > 0 ? `${num(used)} are based here` : 'none are based here'}${field.crowded ? `. It is crowded: only ${pct(field.holds / used)} of each group can fly` : ''}`}.${aboard}`;
+  return { region, name: r.name, field, note, build, aboard: aboard.trim(), hidden, rows };
 }
 
 // ---- Standing orders ----------------------------------------------------------------------------------
@@ -292,24 +318,49 @@ export function setGroupJob(g: Game, id: number, key: string, nat: string | null
   return setMission(g, f, 'support');
 }
 
-/** Where a group could move to: the airfields in reach, nearest first, with the room each has. */
-export interface BaseOption { region: number; name: string; km: number; word: string; holds: number; free: number; why: string | null }
+/**
+ * Where a group could move to: the airfields in reach, nearest first, with the room each has; then, for a land group,
+ * the friendly airfields across an ocean, where it goes by sea (`sea`: one group of a nation a month, ruling 133(b)).
+ */
+export interface BaseOption { region: number; name: string; km: number; word: string; holds: number; free: number; why: string | null; sea?: boolean }
 
 export function groupBases(g: Game, id: number, nat: string | null = g.human): BaseOption[] {
   const f = mine(g, id, nat);
-  // A carrier wing has no airfield to change: it goes where its fleet goes.
-  if (!f || afloat(f)) return [];
+  if (!f) return [];
   const out: BaseOption[] = [];
+  // A carrier wing goes where its fleet goes: the fields it could be sent ashore to are the one of the harbour its
+  // fleet lies in, or the friendly ones on the sea it is in (ruling 175(b)).
+  if (afloat(f)) {
+    const c = carrierOf(g, f);
+    for (const id of c ? shoresOf(g, c) : []) {
+      const r = g.regions[id], holds = airfieldsHold(g, id);
+      if (holds <= 0 || !allied(g, f.nat, r.ctrl)) continue;
+      const there = g.airFleets.reduce((s, x) => s + (x.base === id && !afloat(x) ? x.ftr + x.bmr : 0), 0);
+      out.push({ region: id, name: r.name, km: 0, word: fieldWord(holds).word, holds, free: Math.max(0, holds - there), why: whyNotAshore(g, f, r) });
+    }
+    return out.sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || b.free - a.free || a.region - b.region);
+  }
   for (const r of g.regions) {
     const holds = airfieldsHold(g, r.id);
     if (holds <= 0 || r.id === f.base || !allied(g, f.nat, r.ctrl)) continue;
-    const d = kmTo(g, f, r.id);
-    if (d > AIR.ferry) continue;
+    const d = kmTo(g, f, r.id), sea = overOcean(f, r);
+    if (!sea && d > AIR.ferry) continue;
     const there = g.airFleets.reduce((s, x) => s + (x.base === r.id && !afloat(x) ? x.ftr + x.bmr : 0), 0);
-    out.push({ region: r.id, name: r.name, km: d, word: fieldWord(holds).word, holds, free: Math.max(0, holds - there), why: whyNotBase(g, f, r) });
+    const o: BaseOption = { region: r.id, name: r.name, km: d, word: fieldWord(holds).word, holds, free: Math.max(0, holds - there), why: sea ? whyNotShipAir(g, f, r) : whyNotBase(g, f, r) };
+    if (sea) o.sea = true;
+    out.push(o);
   }
-  return out.sort((a, b) => a.km - b.km);
+  return out.sort((a, b) => (a.sea ? 1 : 0) - (b.sea ? 1 : 0) || a.km - b.km);
 }
+
+/** The fleets a carrier wing ashore could go back aboard: those it can board now first. Empty for any other group. */
+export function groupDecks(g: Game, id: number, nat: string | null = g.human): DeckOption[] {
+  const f = mine(g, id, nat);
+  return f ? decksFor(g, f) : [];
+}
+
+/** What going back aboard costs, said by the order before it is given. */
+const PRICE_ABOARD = 'Going aboard costs it some readiness for a month, as a move between airfields does.';
 
 // ---- Planning a raid ------------------------------------------------------------------------------------
 
@@ -419,6 +470,11 @@ export interface RaidTarget {
   x: number;
   y: number;
   km: number;
+  /**
+   * The distance in words, as a list of targets prints it (ruling 133(g)): that of the nearest group able to fly the
+   * raid itself, '1,240 km'; and never '0 km', which reads as a fault: 'carriers off this coast', 'based at the target'.
+   */
+  far: string;
   groups: number;
   what: string;
 }
@@ -491,17 +547,22 @@ export function raidTargets(g: Game, kind: RaidKind, nat: string | null = g.huma
   if (!airWar(g) || nat === null || !g.nations[nat].atWar.length) return [];
   const sea = kind === 'strike' || kind === 'fleet';
   const sight = sightOf(g, nat);
+  const needs = kindRow(kind).needs;
   const out: RaidTarget[] = [];
   for (const [t, can] of reachable(g, nat, kind)) {
     if (lead >= 0 && !can.some((f) => f.id === lead)) continue;
     const quarry = kind === 'fleet' ? g.fleets.find((x) => x.id === t)! : null;
     const zone = quarry ? quarry.zone : kind === 'strike' ? t : -1;
     const p = sea ? g.seas[zone] : g.regions[t];
-    // With a group leading, the distance is its own; otherwise the nearest group's.
-    const d = Math.min(...can.filter((f) => lead < 0 || f.id === lead).map((f) => distTo(g, f, kind, t)));
+    // With a group leading, the distance is its own; otherwise that of the nearest group able to fly the raid itself
+    // (ruling 133(g)): where the raid needs bombers, fighters that could only go with it do not set the distance.
+    const flies = can.filter((f) => (lead < 0 ? needs !== 'bmr' || f.bmr > 0 : f.id === lead));
+    const from = (flies.length ? flies : can).reduce((a, b) => (distTo(g, b, kind, t) < distTo(g, a, kind, t) ? b : a));
+    const d = distTo(g, from, kind, t);
+    const far = Math.round(d) > 0 ? `${num(d)} km` : sea ? (from.ship !== undefined ? 'carriers in these waters' : 'based on these shores') : from.ship !== undefined ? 'carriers off this coast' : 'based at the target';
     const known = quarry && fleetKnown(g, quarry, nat) !== 'exact' ? 'report' : 'exact';
     const name = kind === 'fleet' ? placeOf(g, kind, t, nat).replace(/^the /, '') : p.name;
-    out.push({ id: t, sea, zone, known, name, holder: quarry ? quarry.nat : sea ? '' : g.regions[t].ctrl, x: p.x, y: p.y, km: d, groups: can.length, what: whatIsThere(g, nat, kind, t, sight) });
+    out.push({ id: t, sea, zone, known, name, holder: quarry ? quarry.nat : sea ? '' : g.regions[t].ctrl, x: p.x, y: p.y, km: d, far, groups: can.length, what: whatIsThere(g, nat, kind, t, sight) });
   }
   return out.sort((a, b) => a.km - b.km || a.id - b.id);
 }
@@ -601,7 +662,7 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
   const place = placeOf(g, kind, target);
   if (kind === 'bomb' || kind === 'night') {
     const r = g.regions[target];
-    out.push(r.fac > 0 ? `Should stop about ${pct(fc.cut)} of ${place}'s output for a month: ${(fc.nation * 100).toFixed(1)}% of ${g.nations[r.ctrl].adj} production.` : `There is no industry at ${place}: the bombers go for its rail yards.`);
+    out.push(r.fac > 0 ? `Should stop about ${pct(fc.cut)} of ${place}'s output for a month: ${tenthPct(fc.nation)} of ${g.nations[r.ctrl].adj} production.` : `There is no industry at ${place}: the bombers go for its rail yards.`);
     if (fc.rail) out.push(`About a ${pct(fc.rail)} chance of cutting the railway through ${place}, which stays cut until engineers relay it.`);
     if (fc.ruin) out.push(`About a ${pct(fc.ruin)} chance of wrecking a factory outright.`);
   } else if (kind === 'superiority') {

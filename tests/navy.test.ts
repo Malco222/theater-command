@@ -87,11 +87,11 @@ describe('who holds a sea', () => {
     const home = fleet(g, 'Home Fleet');
     expect(home.stance).toBe('patrol');
     expect(g.seas[home.zone].key).toBe('nsea');
-    expect(fleet(g, 'U-boat Arm').stance).toBe('raid');
-    expect(g.seas[fleet(g, 'U-boat Arm').zone].key).toBe('wapp');
+    expect(fleet(g, 'U-boat Fleet').stance).toBe('raid');
+    expect(g.seas[fleet(g, 'U-boat Fleet').zone].key).toBe('wapp');
     // The German surface fleet waits in port, and Italy is not yet at war.
     expect(fleet(g, 'Battle Fleet').stance).toBe('port');
-    expect(fleet(g, '1st Squadron').stance).toBe('port');
+    expect(fleet(g, '1st Fleet').stance).toBe('port');
     expect(fleetPower(g, home)).toBeGreaterThan(2 * fleetPower(g, fleet(g, 'Battle Fleet')));
   });
 
@@ -125,7 +125,7 @@ describe('who holds a sea', () => {
     expect(reach).not.toContain('black');
     // The Italian fleet cannot pass Gibraltar once it is at war with Britain.
     declareWar(g, 'ITA', 'UK');
-    for (const name of ['1st Squadron', '2nd Squadron']) expect(fleetReach(g, fleet(g, name)).map((z) => g.seas[z].key)).not.toContain('iberia');
+    for (const name of ['1st Fleet', '2nd Fleet']) expect(fleetReach(g, fleet(g, name)).map((z) => g.seas[z].key)).not.toContain('iberia');
   });
 });
 
@@ -173,7 +173,7 @@ describe('fleet actions', () => {
     // The escorts and the U-boats share the Western Approaches without a fleet action.
     const g2 = createGame(5, null);
     expect(seaBattles(g2, 'UK')).toEqual([]);
-    expect(surfaceShips(fleet(g2, 'U-boat Arm'))).toBe(0);
+    expect(surfaceShips(fleet(g2, 'U-boat Fleet'))).toBe(0);
   });
 
   it('admirals learn from battle and can go down with the flagship', () => {
@@ -209,7 +209,7 @@ describe('fleet actions', () => {
 
   it('a fleet whose base falls moves to another port, or is scuttled when there is none', () => {
     const g = createGame(1, null);
-    const sq = fleet(g, 'Atlantic Squadron');
+    const sq = fleet(g, 'Atlantic Fleet');
     const brest = g.byName['Brittany'];
     expect(sq.base).toBe(brest.id);
     capture(g, brest, 'GER');
@@ -237,13 +237,13 @@ describe('the convoy war', () => {
     expect(m.share).toBeLessThan(0.2);
 
     const bare = createGame(3, null);
-    fleet(bare, 'Western Approaches Command').stance = 'port';
+    fleet(bare, 'Western Approaches Fleet').stance = 'port';
     convoyWar(bare, 'UK');
     expect(bare.convoys.atlantic.tons).toBeGreaterThan(m.tons);
     expect(income(bare, 'UK')).toBeLessThan(income(g, 'UK'));
 
     const quiet = createGame(3, null);
-    fleet(quiet, 'U-boat Arm').stance = 'port';
+    fleet(quiet, 'U-boat Fleet').stance = 'port';
     convoyWar(quiet, 'UK');
     expect(quiet.convoys.atlantic.tons).toBe(0);
     expect(seaIncomeLoss(quiet, 'UK')).toBe(0);
@@ -293,7 +293,7 @@ describe('armies at sea', () => {
 
     // With the enemy in overwhelming strength the Channel is shut.
     battle.ships.bb = 40;
-    fleet(g, 'Dover Command').stance = 'port';
+    fleet(g, 'Dover Fleet').stance = 'port';
     expect(closedTo(g, channel, 'UK')).toBe(true);
     const d = g.byName['Kent'].units.find((u) => u.nat === 'UK' && u.kind !== 'fort')!;
     expect(shipTargets(g, d)).not.toContain(rouen);
@@ -450,7 +450,7 @@ describe('Norway, April 1940', () => {
       expect(g.corps.some((c) => c.nat === 'UK' && g.regions[c.reg].owner === 'NOR')).toBe(false);
       // The convoy war has gone on all the while.
       expect(g.convoys.atlantic.total).toBeGreaterThan(1000000);
-      expect(shipCount(fleet(g, 'U-boat Arm').lost)).toBeGreaterThan(0);
+      expect(shipCount(fleet(g, 'U-boat Fleet').lost)).toBeGreaterThan(0);
     });
   }
 });

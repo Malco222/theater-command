@@ -17,7 +17,7 @@
 
 import worldMap from '../generated/world-map.json';
 import data from '../../data/campaign/world.json';
-import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, theName } from './game';
+import { addCorps, allied, armySize, bloc, capitalDistances, computeSupply, headline, nationOf, regionOf, setWar, standsBy, theName } from './game';
 import { addFleet, chartSeas, type FleetRow } from './navy';
 import { newLab, researches } from './research';
 import type { Game, Region } from './types';
@@ -40,6 +40,7 @@ export const WORLD = data as unknown as {
   nations: Record<string, any>;
   home: Record<string, { align?: string }>;
   follow: Record<string, string>;
+  dominions?: Record<string, { of: string[]; answers: number; steps?: number[]; europe?: string[]; beside?: string; willGone?: number; since?: Record<string, number> }>;
   corps: [string, string, string, number, string, { xp?: number; str?: number; hold?: number }][];
   fleets: FleetRow[];
   peace: Record<string, [number, number][]>;
@@ -69,6 +70,36 @@ export const WORLD_STAGES = [104];
 
 /** True for a campaign played on the wider world. */
 export const worldOn = (g: Game): boolean => g.flags.world === 1;
+
+/** The mother country that stands by a dominion (world.json, 'dominions'), or null. */
+export function patronOf(nat: string): string | null {
+  for (const [p, row] of Object.entries(WORLD.dominions ?? {})) if (row.of.includes(nat)) return p;
+  return null;
+}
+
+/**
+ * The declare card's row for a dominion's mother country, first among its friends (the UI director's words, 17 November
+ * 2026): "The mother country: Canada has been a dominion since 1867." Display only: the tie moves no opinion.
+ */
+export function motherLine(patron: string, nat: string, name: string): string {
+  const since = WORLD.dominions?.[patron]?.since?.[nat];
+  return since ? `The mother country: ${name} has been a dominion since ${since}.` : `The mother country: ${name} is a dominion.`;
+}
+
+/**
+ * The share of the time a mother country answers when war is made on a dominion of hers, at the step her own war in
+ * Europe stands at (ruling 222: 0.8, 0.6, 0.4 or 0.2 for Britain), or her one share where she has no steps.
+ */
+export function answersOf(patron: string, step?: number): number {
+  const row = WORLD.dominions?.[patron];
+  return (step ? row?.steps?.[step - 1] : undefined) ?? row?.answers ?? 0;
+}
+
+/** What a mother country's war in Europe is read by (ruling 222): the great powers of Europe, the ally beside her, the share of her will that puts her in danger. */
+export function pressData(patron: string): { europe: string[]; beside: string | null; willGone: number } {
+  const row = WORLD.dominions?.[patron];
+  return { europe: row?.europe ?? [], beside: row?.beside ?? null, willGone: row?.willGone ?? 1 / 3 };
+}
 
 /** True for a province beyond the map of Europe. */
 export const beyondEurope = (r: Region | number): boolean => (typeof r === 'number' ? r : r.id) >= WORLD_FIRST;
@@ -190,7 +221,16 @@ export function worldMonth(g: Game): void {
       const E = g.nations[e];
       if (!E?.alive || n.atWar.includes(e) || allied(g, id, e)) continue;
       setWar(g, id, e);
-      headline(g, 'war', `${n.name} is at war with ${E.name}, beside ${M.name}.`, id);
+      headline(g, 'war', `${theName(n, true)} is at war with ${theName(E)}, beside ${theName(M)}.`, id);
+    }
+  }
+  // A campaign saved before ruling 211(b): the roll for a war somebody made on a dominion is made as the month
+  // ends, once (a new war has its roll the day it is declared, in declareWar, and is passed over here).
+  for (const row of Object.values(WORLD.dominions ?? {})) {
+    for (const d of row.of) {
+      const D = g.nations[d];
+      if (!D?.alive) continue;
+      for (const e of [...D.atWar]) { const since = g.flags[`war:${e}:${d}`]; if (since !== undefined) standsBy(g, e, d, since); }
     }
   }
   // No declaration switches such a country off (ruling 58). A computer-led country whose industry goes to war by
@@ -311,6 +351,9 @@ export function armyIdle(g: Game, nat: string): boolean {
   let home = n.queue.reduce((s, b) => s + (b.what === 'corps' && b.kind !== 'eng' ? 1 : 0), 0);
   for (let i = WORLD_FIRST; i < g.regions.length; i++) {
     const r = g.regions[i];
+    // A corps in an overseas possession is that place's garrison and not the army at home (as the ferry reckons it):
+    // the Canal's division, infantry since Version 84.2, counts no more than the fortress troops it replaced.
+    if (r.overseas) continue;
     for (const c of r.units) if (c.nat === nat && c.kind !== 'fort' && c.kind !== 'eng') home++;
     for (const c of r.garr ?? []) if (c.nat === nat && c.kind !== 'fort' && c.kind !== 'eng') home++;
   }

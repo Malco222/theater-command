@@ -58,7 +58,7 @@ describe('the data', () => {
 
   it('gives every technology something to do, with numbers that are sane and orders that exist', () => {
     for (const t of TECH.techs) {
-      const does = ['field', 'unlock', 'slots', 'winterKit', 'sealift', 'attack', 'defence', 'drafts', 'cost', 'fleet', 'seaLoss', 'oil'].filter((k) => (t as any)[k] !== undefined);
+      const does = ['field', 'unlock', 'slots', 'winterKit', 'sealift', 'attack', 'defence', 'drafts', 'cost', 'fleet', 'seaLoss', 'oil', 'weapons'].filter((k) => (t as any)[k] !== undefined);
       expect(does.length, t.id).toBeGreaterThan(0);
       if (t.field) expect(FIELDS, t.id).toContain(t.field);
       for (const k of t.unlock ?? []) expect(k, t.id).toMatch(ORDERS);
@@ -176,9 +176,10 @@ describe('research', () => {
     techTick(g, 'GER');
     expect(hasTech(g, 'GER', 'antitank')).toBe(true);
     expect(techOf(g, 'GER')!.work).toEqual([]);
-    expect(techMul(g, 'GER', 'infantry')).toBeCloseTo(before + RESEARCH.fields.infantry.per, 9);
+    // The infantry's weapons no longer add 6% to everything (ruling 146): each has a job of its own, and the news says what.
+    expect(techMul(g, 'GER', 'infantry')).toBeCloseTo(before, 9);
     const news = g.headlines[g.headlines.length - 1].text;
-    expect(news).toMatch(/^Research complete: Anti-tank guns\. Every corps that is not armoured or motorised fights 6% harder\./);
+    expect(news).toMatch(/^Research complete: Anti-tank guns\. Its infantry keeps up with the anti-tank guns of the day: without this they count at 50% of their worth\./);
     // Nothing is begun for the player: his teams stay idle until he says.
     techTick(g, 'GER');
     expect(techOf(g, 'GER')!.work).toEqual([]);

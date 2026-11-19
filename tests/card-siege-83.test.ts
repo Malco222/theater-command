@@ -85,7 +85,8 @@ describe('a siege laid on his town that holds', () => {
     land(g, city, { siege: true, taken: false, attLost: 1822, defLost: 1204 } as Partial<BattleReport>);
     const card = monthCard(g, mark, ME);
     expect(shut).toBeGreaterThan(60000);
-    expect(card.lead).toMatchObject({ place: townName(city), tag: 'HELD', tone: 'warn', head: `${townName(city)} is besieged`, line: 'The town is besieged and holds.' });
+    // (Version 84.2.6, the fronts row: BESIEGED by its besieger, "Polish troops close round the town.")
+    expect(card.lead).toMatchObject({ place: townName(city), tag: 'BESIEGED', tone: 'warn', head: `${townName(city)} is besieged`, line: 'Polish troops close round the town.' });
     expect(card.lead!.facts).toEqual([{ n: num(shut), label: 'men shut in' }, { n: '1,204', label: 'men lost' }, { n: '1,822', label: 'of theirs' }]);
     expect(card.lead!.follows).toBe(`4 corps are shut in at ${townName(city)}. The province is yours while the town holds.`);
     // (In the rows its one figure is the men shut in.)
@@ -155,7 +156,7 @@ describe('a siege laid on his town that holds', () => {
     land(g, city, { siege: true, taken: false, attLost: 700, defLost: 900 } as Partial<BattleReport>);
     const card = monthCard(g, mark, ME);
     const row = order(card).find((r) => r.region === city.id)!;
-    expect(row).toMatchObject({ tag: 'HELD', line: 'The field is lost. The town holds out.' });
+    expect(row).toMatchObject({ tag: 'BESIEGED', line: 'The field is lost. The town holds out.' });
     expect(row.facts).toEqual([{ n: '1 corps', label: 'fought outside' }, { n: '900', label: 'men lost' }, { n: '700', label: 'of theirs' }]);
     expect(order(card).some((r) => r.facts.some((f) => f.label === 'held the line'))).toBe(false);
     // (No battle won or lost, and no town besieged: the box has nothing to count.)
@@ -209,8 +210,8 @@ describe('a siege laid on his town that holds', () => {
       land(g, a, { taken: true, attLost: 1000, defLost: 60000 });
       return order(monthCard(g, mark, ME)).filter((r) => r.arm === 'land').map((r) => r.tag);
     };
-    expect(stage(0)).toEqual(['LOST', 'HELD']);
-    expect(stage(3)).toEqual(['HELD', 'LOST']);
+    expect(stage(0)).toEqual(['LOST', 'BESIEGED']);
+    expect(stage(3)).toEqual(['BESIEGED', 'LOST']);
   });
 
   it('told with the town\'s own fight in the same month, is one row that keeps the assault\'s words and the men shut in', () => {
@@ -263,10 +264,10 @@ describe("ruling 106: the first case of ruling 95(d), rewritten", () => {
     const card = monthCard(g, mark, ME);
     expect(inParis).toBeGreaterThan(110000);
     expect(inLille).toBeGreaterThan(120000);
-    expect(card.lead).toMatchObject({ place: townName(capital), tag: 'HELD', head: `${townName(capital)} is besieged`, follows: `${townName(capital)} holds, at a cost of 48,342 men. 3 corps are shut in.` });
+    expect(card.lead).toMatchObject({ place: townName(capital), tag: 'BESIEGED', head: `${townName(capital)} is besieged`, follows: `${townName(capital)} holds, at a cost of 48,342 men. 3 corps are shut in. It is your capital: the country will not long outlast it.` });
     expect(card.lead!.facts).toEqual([{ n: num(inParis), label: 'men shut in' }, { n: '48,342', label: 'men lost' }, { n: '18,261', label: 'of theirs' }]);
-    expect(card.rows.map((r) => `${r.tag} ${r.place}`)).toEqual([`HELD ${townName(city)}`, `LOST ${a.name}`, `LOST ${b.name}`, `LOST ${c.name}`]);
-    expect(card.rows[0]).toMatchObject({ line: 'The town is besieged and holds.', figures: [{ n: num(inLille), label: 'shut in' }] });
+    expect(card.rows.map((r) => `${r.tag} ${r.place}`)).toEqual([`BESIEGED ${townName(city)}`, `LOST ${a.name}`, `LOST ${b.name}`, `LOST ${c.name}`]);
+    expect(card.rows[0]).toMatchObject({ line: 'Polish troops close round the town.', figures: [{ n: num(inLille), label: 'shut in' }] });
     // The score: one battle lost, two towns besieged, and nobody shut in is among the lost.
     expect(box(card, 'battles')).toMatchObject({ figure: '0 – 1', sub: '0 won · 1 lost · 2 towns besieged' });
     expect(box(card, 'men')!.figure).toBe(num(43209 + 116735 + 48342));

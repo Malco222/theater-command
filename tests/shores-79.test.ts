@@ -38,7 +38,9 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; owner: string; island: boolean; overseas: boolean; wave: boolean; entered: boolean }[] = [];
 const canada: { turn: number; across: number; inBritain: number; where: string[] }[] = [];
 {
-  const g = wide(7);
+  // Seed 8 (seed 7 until Version 84, whose rules of what an attack brings and faces moved every war): nobody stands on
+  // Germany's ground in January 1943, and America's own landing in France is Marseille in June 1944.
+  const g = wide(8);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, island: e.to.nb.length === 0, overseas: e.to.overseas, wave: e.wave, entered: germanyEntered(g) }); };
   while (g.turn < OCT_44) {
     runTurnAI(g);
@@ -211,11 +213,15 @@ describe('Canada\'s corps are the island\'s guard', () => {
     expect(joinsOn(g, 'CAN', R(g, 'Tripoli'))).toBe(true);
   });
 
-  it('at the two loosest stops Canada goes on as it did', () => {
+  it('at the two loosest stops Canada keeps no date, and goes only into a British or American landing that is ashore to stay (Version 83)', () => {
     for (const stop of [4, 5]) {
       const g = wide(1, null, stop);
-      expect(joinsOn(g, 'CAN', R(g, 'Holland')), `stop ${stop}`).toBe(true);
-      expect(joinsOn(g, 'CAN', R(g, 'Brittany')), `stop ${stop}`).toBe(true);
+      // A harbour an ally merely holds is no longer enough (ruling 89(e); the landing ashore to stay: strength-83.test.ts).
+      expect(joinsOn(g, 'CAN', R(g, 'Holland')), `stop ${stop}`).toBe(false);
+      expect(joinsOn(g, 'CAN', R(g, 'Brittany')), `stop ${stop}`).toBe(false);
+      // Its base in Britain is open as ever, and so is a colony overseas.
+      expect(joinsOn(g, 'CAN', R(g, 'Kent')), `stop ${stop}`).toBe(true);
+      expect(joinsOn(g, 'CAN', R(g, 'Tripoli')), `stop ${stop}`).toBe(true);
     }
   });
 

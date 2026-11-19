@@ -119,6 +119,22 @@ describe('the line on the army\'s panel where the switch stood (ruling 118(b); s
     expect(railSays(g, [c], 12, 'right-click', { one: 'the station dot', many: 'a station dot' })!.line).toBe('By rail this month to 12 more places: right-click a station dot. It takes the whole month.');
   });
 
+  it('names the places where a train reaches three or fewer beyond the march, the nearest by rail first (Version 82.4, ruling 123)', () => {
+    const g = grand();
+    const { c, far } = rider(g);
+    expect(far.length).toBeGreaterThanOrEqual(4);
+    const [a, b, d] = far.map((id) => g.regions[id].name);
+    expect(railSays(g, [c], far.slice(0, 3), 'right-click', BLUE)).toEqual({ can: true, strong: `By rail this month to ${a}, ${b} and ${d}:`, line: `By rail this month to ${a}, ${b} and ${d}: right-click a blue one. It takes the whole month.` });
+    expect(railSays(g, [c], far.slice(0, 2), 'right-click', BLUE)).toEqual({ can: true, strong: `By rail this month to ${a} and ${b}:`, line: `By rail this month to ${a} and ${b}: right-click a blue one. It takes the whole month.` });
+    expect(railSays(g, [c], far.slice(0, 1), 'right-click', BLUE)).toEqual({ can: true, strong: `By rail this month to ${a}:`, line: `By rail this month to ${a}: right-click it. It takes the whole month.` });
+    expect(railSays(g, [c], far.slice(0, 1), 'press and hold', BLUE)!.line).toBe(`By rail this month to ${a}: press and hold it. It takes the whole month.`);
+    // Over three it counts them as before, and with none it says the train reaches no farther than the march.
+    expect(railSays(g, [c], far.slice(0, 4), 'right-click', BLUE)!.line).toBe('By rail this month to 4 more places: right-click a blue one. It takes the whole month.');
+    expect(railSays(g, [c], [], 'right-click', BLUE)!.line).toBe('By rail this month, but a train reaches no farther than it can march.');
+    // The places as railReachFor hands them are in the order the train comes to them.
+    expect([...railReachFor(g, [c])].filter((id) => far.includes(id))).toEqual(far.filter((id) => railReachFor(g, [c]).has(id)));
+  });
+
   it('says a train reaches no farther than the march, and where the line is broken if a break is why', () => {
     const g = grand();
     const { c } = rider(g);
@@ -165,8 +181,10 @@ describe('under the pointer on ground it can ride to (section 8)', () => {
     expect(railReachFor(g, [eng]).has(to)).toBe(true);
     expect(railReachFor(g, [eng, c]).has(to)).toBe(false);
     expect(rideLines(g, [eng], to, 'Right-click').relay).toBe('Engineers can relay the track here.');
+    // (Version 82.4, the art director's mend: it is the works train that takes them, so the line does not gainsay "no train runs through".)
+    expect(rideLines(g, [eng], to, 'Right-click').line).toBe(`Right-click: by works train to ${g.regions[to].name}, there this month. It takes the whole month.`);
     mendRail(g, to);
-    expect(rideLines(g, [eng], to, 'Right-click').relay).toBe('');
+    expect(rideLines(g, [eng], to, 'Right-click')).toEqual({ line: `Right-click: by rail to ${g.regions[to].name}, there this month. It takes the whole month.`, relay: '' });
   });
 });
 

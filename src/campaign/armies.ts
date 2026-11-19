@@ -16,8 +16,9 @@
  */
 import data from '../../data/campaign/divisions.json';
 import { hashString } from '../core/rng';
+import { turnToDate } from '../core/ticket';
 import { KIND, MEN_PER_DIV, type Corps, type Game, type Kind } from './types';
-import { allied, men } from './game';
+import { allied, atWar, men } from './game';
 import { generalOf } from './commanders';
 import { grade, STORIES } from './stories';
 import { SIGHT, armyBand, corpsKnown, reportSource, sightOf, sortKnown, strengthBand, type Source } from './intel';
@@ -153,6 +154,8 @@ export interface CorpsCard {
   /** Morale and rest, 0 to 1, each with its word and a sentence on why. */
   mood: Mood;
   divisions: DivisionCard[];
+  /** Why it takes no orders, in the rules' sentence (ruling 176(c)); null where it takes them, and for a corps that is not the player's own. */
+  noOrders: string | null;
   /**
    * How the viewer knows it. 'exact': everything above is true today. 'report': a dated report gone stale, 'age' months
    * old. Its kind, divisions and experience stand; 'str' and 'men' are the middle of an estimate that runs from 'strLo'
@@ -208,6 +211,39 @@ export interface ArmyCard {
 
 
 /** One corps opened up: its record, its mood and its divisions. */
+/** The sentence for fortress troops, wherever a unit that takes no orders says why (ruling 176(c)). */
+export const FORT_NO_ORDERS = 'Fortress troops man their works and do not move.';
+/**
+ * Why a corps of the player's own takes no orders, in the rules' sentence, for its card and for the first time it
+ * is picked up (ruling 176(c), on Brian's words of 2026-11-17: "there are troops you start with in panama but you
+ * cant move them"). Null where it takes orders, and for a corps that is not his.
+ */
+export function whyNotOrder(g: Game, c: Corps): string | null {
+  if (c.dead || g.human === null || c.nat !== g.human) return null;
+  if (c.kind === 'fort') return FORT_NO_ORDERS;
+  if (c.leave !== undefined) return `It is at home, out of the line, and takes no orders until ${turnToDate(c.leave).label}.`;
+  if (c.town !== undefined) return garrisonLine(g, [c]);
+  return null;
+}
+/**
+ * The sentence for corps of one side that are inside a town, the same in both games, wherever they are asked to march
+ * or to attack (Version 84.2.4, on Brian's words of 2026-11-17: "if an enemy army is out of a city i couldnt attack
+ * them"). A garrison takes no marching orders, and the sentence names the cure: TAKE THE FIELD, or a sortie where an
+ * enemy army stands round the town. One corps is named; several are "They". The corps are of one province.
+ */
+export function garrisonLine(g: Game, cs: Corps[]): string {
+  const r = g.regions[cs[0].reg], town = townName(r), one = cs.length === 1;
+  const who = one ? `${cs[0].name} is ${(r.garr?.length ?? 0) > 1 ? 'in ' : ''}the garrison of ${town}` : `They are the garrison of ${town}`;
+  const shut = g.flags.sieges === 1 && r.units.some((u) => !u.dead && atWar(g, u.nat, r.ctrl));
+  return shut ? `${who}, shut in by the army round it. Order a sortie against that army.` : `${who}. Order ${one ? 'it' : 'them'} to take the field first.`;
+}
+/** Why the player's corps inside the town of a province take no marching orders, in the rules' sentence; null where he has none inside. */
+export function whyNotOrderGarrison(g: Game, region: number): string | null {
+  const r = g.regions[region];
+  const cs = g.human === null || !r ? [] : (r.garr ?? []).filter((c) => c.nat === g.human && !c.dead);
+  return cs.length ? garrisonLine(g, cs) : null;
+}
+
 export function corpsCard(g: Game, c: Corps): CorpsCard {
   const battles = c.rec?.battles ?? 0, won = c.rec?.won ?? 0;
   const hardened = c.xp >= DIVISIONS.hardened;
@@ -216,6 +252,7 @@ export function corpsCard(g: Game, c: Corps): CorpsCard {
     id: c.id, nat: c.nat, name: c.name, nick: c.nick ?? null, kind: c.kind, label: KIND[c.kind].label, divs: c.divs, men: men(c),
     str: c.str, xp: c.xp, grade: grade(c.xp), hardened, battles, won, service, general: generalOf(g, c)?.name ?? null,
     mood: corpsMood(g, c), divisions: divisionsOf(g, c), known: 'exact', age: 0, source: null, strLo: c.str, strHi: c.str, joint: c.joint ?? null,
+    noOrders: whyNotOrder(g, c),
   };
 }
 

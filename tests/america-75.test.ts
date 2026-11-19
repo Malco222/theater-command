@@ -33,6 +33,7 @@ import { beginHuman, crossingStaffWord, crossings, declarable, endHuman, humanUp
 import { STACK, type Corps, type Game, type Region } from '../src/campaign/types';
 import { FLAGS } from '../src/campaign/ui/flags';
 import { WORLD, acrossTheWater, armyIdle, beyondEurope, overseasOf, sailings, shipsItsOwn, standWithAllies, warFooting, warWorkLeft, warWorkMonth, wouldStandWithAllies } from '../src/campaign/world';
+import { turnToDate } from '../src/core/ticket';
 import grand from '../data/campaign/grand.json';
 import open from '../data/campaign/open.json';
 import setup from '../data/campaign/setup-1939.json';
@@ -49,8 +50,9 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; warned: boolean; island: boolean; wave: boolean }[] = [];
 const guard: number[] = [];
 {
-  // Seed 3 since Version 76: on the chart with Latin America seed 2's staffs make no landing before June 1943.
-  const g = wide(3);
+  // Seed 4 since Version 84.2.5: with guns no longer going forward alone (ruling 211(a)) seed 3's staffs make no
+  // landing before June 1943. (Seed 3 since Version 76, when seed 2's made none on the chart with Latin America.)
+  const g = wide(4);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, warned: e.warned, island: e.to.nb.length === 0, wave: e.wave }); };
   while (g.turn < JUN_43) {
     runTurnAI(g);
@@ -182,8 +184,9 @@ describe('the army sent across the ocean', () => {
       // Never a shore the enemy holds: the ocean run puts nobody ashore against a defence.
       expect(p.units.some((u) => atWar(g, 'USA', u.nat))).toBe(false);
     }
-    // The harbour where the army is built up is Britain's.
-    expect(run.to[0].owner).toBe('UK');
+    // The harbour where the army is built up is one Britain holds. (In this war since Version 84 it is Gibraltar,
+    // which the staff reckons the better placed of Britain's harbours that winter.)
+    expect(run.to[0].ctrl).toBe('UK');
   });
 
   it('puts its corps across month by month, keeps a guard at home, and takes no dated formation from history', () => {
@@ -210,7 +213,10 @@ describe('the army sent across the ocean', () => {
   it('ships nobody over a crossing too dangerous for its staff', () => {
     const O = WORLD.overseas.USA;
     const sail = (risk: number): Region[] => {
-      const g = at(JAN_42);
+      // January 1943: a month in this war with danger on the way to the harbour where the army is built up, and no more
+      // than the staff will bear. (In January 1942, since Version 84 moved the wars, that harbour is Gibraltar, and no
+      // enemy is at work on the way to it.)
+      const g = at(JAN_43);
       const before = new Set(across(g, 'USA').map((c) => c.id));
       // A month's sailing banked and a fit corps on the quay.
       const run = oceanRuns(g, 'USA')[0];
@@ -271,7 +277,7 @@ describe('the army sent across the ocean', () => {
     const careful = oceanRuns(g, 'USA')[0];
     expect(careful.front).toBe(false);
     expect(careful.to).not.toContain(beach);
-    expect(careful.to[0].owner).toBe('UK');
+    expect(careful.to[0].ctrl).toBe('UK');
     // With a staff that would bear any danger the beachhead comes first, and Britain's ports stand behind it for
     // the month its harbour is full.
     const keep = O.risk;
@@ -281,7 +287,7 @@ describe('the army sent across the ocean', () => {
       expect(bold.front).toBe(true);
       expect(bold.to[0]).toBe(beach);
       expect(bold.to.length).toBeGreaterThan(1);
-      expect(bold.to.slice(1).every((p: Region) => p.owner === 'UK' && p !== beach)).toBe(true);
+      expect(bold.to.slice(1).every((p: Region) => p.ctrl === 'UK' && p !== beach)).toBe(true);
     } finally { O.risk = keep; }
   });
 });
@@ -518,8 +524,10 @@ describe('an American player goes to war when he chooses (rulings 31 to 33)', ()
     const small = startOpen(createGame(3, 'USA'), false);
     expect(acrossTheWater(small, 'USA', ['GER', 'ITA'])).toEqual([]);
     // The start screen says when America comes in if he does nothing.
-    const us = (grand as unknown as { nations: { id: string; under?: string }[] }).nations.find((n) => n.id === 'USA')!;
-    expect(us.under).toBe('America stays out until December 1941 unless you decide otherwise. Start in 1942 to begin at war.');
+    const us = (grand as unknown as { nations: { id: string; under?: string; peaceUntil?: number }[] }).nations.find((n) => n.id === 'USA')!;
+    expect(us.under).toBe('A long peace comes first: in history the United States was not at war until December 1941. Take over in 1942 to begin at war.');
+    // (Ruling 138. The line is shown for as long as the year picked begins before that month.)
+    expect(turnToDate(us.peaceUntil!).label).toBe('December 1941');
   });
 
   it('at war with Germany he stands with the Allies, and their ports are open to his corps the same month', () => {

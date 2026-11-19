@@ -28,7 +28,7 @@
     "leadership": { "label": "Leadership", "steady": 0.06, "rally": 0.06, "blurb": "Each point means 6% less cohesion lost in battle and 6% more regained each month." }
   },
   "traits": {
-    "panzer_leader": { "label": "Panzer leader", "good": true, "effect": "Fast troops under him move an extra week every month and attack 6% harder.", "earned": "Three decisive victories at the head of fast troops.", "attack": 1.06, "ap": 1, "needs": ["fast", 3], "not": ["hard_charger"], "mobile": true },
+    "panzer_leader": { "label": "Leader of fast troops", "good": true, "effect": "Fast troops under him move an extra week every month and attack 6% harder.", "earned": "Three decisive victories at the head of fast troops.", "attack": 1.06, "ap": 1, "needs": ["fast", 3], "not": ["hard_charger"], "mobile": true },
     "hard_charger": { "label": "Hard charger", "good": true, "effect": "Presses an attack home: 6% harder in attack.", "earned": "Three attacks won when the odds were close.", "attack": 1.06, "needs": ["close", 3], "not": ["panzer_leader", "cautious"] },
     "encirclement_master": { "label": "Encirclement master", "good": true, "effect": "Attacks 15% harder against defenders who have no line of retreat.", "earned": "Three victories that ended with the defenders laying down their arms.", "pocket": 1.15, "needs": ["enc", 3] },
     "iron_defender": { "label": "Iron defender", "good": true, "effect": "His corps is 6% stronger in defence.", "earned": "Three positions held against a stronger attacker.", "defence": 1.06, "needs": ["held", 3], "not": ["cautious"] },

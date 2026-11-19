@@ -321,6 +321,8 @@ export interface Corps extends Storied {
   dug?: boolean;
   /** Months it has been dug in where it stands (the grand campaign): its works grow with them, and attacks wear them down. */
   dugFor?: number;
+  /** Months it has dug in the open desert with no works to show for them yet (the grand campaign): the works there come a month late. */
+  digging?: number;
   /** It was attacked since its own last month ended (the grand campaign): it does no digging this month. */
   pressed?: boolean;
   /** It took over fieldworks left on this ground this month (the grand campaign): it keeps them at the month's end though it marched. */
@@ -462,6 +464,11 @@ export interface BattleReport {
   relief?: boolean;
   /** The garrison of a besieged town came out against the army round it. */
   sally?: boolean;
+  /**
+   * Who paid, and to what (the grand campaign, rulings 146 and 149): the result's line as the attacker reads it and as
+   * the defender does. "Your infantry paid most of it, to their machine guns. The tanks' shock counted for a third."
+   */
+  paid?: { att: string; def: string; sign?: 'tank' | 'anti-tank' | 'machine-gun' | 'mortar' | 'sniper' | 'gun' | 'scouted' };
 }
 
 // ---- The war at sea ---------------------------------------------------------------------
@@ -541,6 +548,12 @@ export interface Fleet extends Storied {
   seen?: Record<string, number>;
   /** The month it was last struck from the air, how many times that month (a fleet struck once is scattered and warned), and the sea it was in (-1 in harbour). */
   struck?: [number, number, number?];
+  /**
+   * Deck room standing empty because a wing was ordered ashore, in aircraft of each kind (the grand campaign; the
+   * player's order only). No new wing is raised for it, and the fleet's carriers fight as empty carriers for that
+   * share of their decks until the wing comes back aboard.
+   */
+  bare?: { ftr: number; bmr: number };
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */
@@ -632,6 +645,11 @@ export interface Headline {
   desk?: string;
   /** A warning to the player, with its short title ('Coast watch'): an interface sets it out as a card of its own. */
   warn?: string;
+  /**
+   * A title of its own over a line of news that is no warning ('Britain stands by Canada', 'Britain stays out of
+   * Canada's war': ruling 211(b)). An interface heads the news with it.
+   */
+  head?: string;
   /** For a warning: the country the news is about, where that is not the player's own (display only: a band flies its flag). */
   about?: string;
   /**
@@ -893,6 +911,11 @@ export interface AirFleet extends Storied {
   escorts?: number;
   /** A carrier wing: the id of the fleet whose carriers it flies from. It goes where that fleet goes and has no airfield (the grand campaign). */
   ship?: number;
+  /**
+   * A carrier wing ordered ashore: the id of the fleet whose decks it left. It is based on an airfield like any air
+   * group, with its own aircraft, pilots and fitness, and keeps a carrier wing's reach and its crews' training.
+   */
+  ashore?: number;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */

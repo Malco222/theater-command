@@ -16,7 +16,7 @@
 
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { allied, armySize, assess, atWar, capture, corpsBase, headline, men, relocate, removeCorps, resolveBattle, sendHome, theName, type Assessment } from './game';
+import { GUNS_ALONE, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, type Assessment } from './game';
 import { armyOf } from './joint';
 import { closedTo, seaOpenAt } from './navy';
 import { storyFallen } from './stories';
@@ -496,7 +496,7 @@ function tell(g: Game, r: Region, text: string, nat: string, parties: string[], 
   if (size === 'capital' || size === 'city' || mine) headline(g, 'battle', text, nat, r.id, { arm: 'land', ...out });
 }
 
-const placeWords = (g: Game, r: Region): string => (r.cap && r.owner === r.ctrl ? `the capital of ${g.nations[r.owner].name}` : `the ${TOWNS.words[townSize(g, r)].toLowerCase()}`);
+const placeWords = (g: Game, r: Region): string => (r.cap && r.owner === r.ctrl ? `the capital of ${theName(g.nations[r.owner])}` : `the ${TOWNS.words[townSize(g, r)].toLowerCase()}`);
 const months = (n: number): string => (n <= 1 ? 'a month' : `${n} months`);
 
 // ---- Investing a town, raising a siege, and the fall --------------------------------------------
@@ -538,7 +538,7 @@ export function lift(g: Game, r: Region, by: string | null = null): void {
   if (by) g.flags[`relieved:${r.id}`] = g.turn;
   g.supplyDirty = true;
   tallySiege(g, 'raised');
-  tell(g, r, `The siege of ${townName(r)} is raised${lasted >= 1 ? ` after ${months(lasted)}` : ''}${by ? ` by ${g.nations[by].adj} troops` : ''}.`, r.ctrl, [r.ctrl, ...(by ? [by] : []), ...garrisonOf(r).map((c) => c.nat)], { won: r.ctrl });
+  tell(g, r, `The siege of ${townName(r)} is raised${lasted >= 1 ? ` after ${months(lasted)}` : ''}${by ? ` by ${g.nations[by].adj} troops` : ''}.`, r.ctrl, [r.ctrl, ...(by ? [by] : []), ...garrisonOf(r).map((c) => c.nat)], { won: r.ctrl, ...(was && g.nations[was] ? { lost: was } : {}) });
   // Driven off by a relieving army, the besiegers burn what they held outside the walls, if that is their order.
   if (by && was && lasted >= PRIZES.settle) prizesOnLoss(g, r, by, was, 'outside');
 }
@@ -623,7 +623,10 @@ export function whyNotStorm(g: Game, r: Region, nat: string): string | null {
   if (!besieged(g, r) || besiegerOf(g, r) === null) return `${townName(r)} is not under siege.`;
   if (!r.units.some((c) => armyOf(c) === nat && atWar(g, c.nat, r.ctrl))) return `You have no army round ${townName(r)}.`;
   if (g.flags[`storm:${r.id}`] === g.turn) return `${townName(r)} has been assaulted this month. The next assault can go in next month.`;
-  if (!stormers(g, r, nat).length) return 'No corps round the town is fit to storm it.';
+  const fit = stormers(g, r, nat);
+  if (!fit.length) return 'No corps round the town is fit to storm it.';
+  // Guns storm no town alone (ruling 211(a)).
+  if (!fit.some(fights)) return aloneLine(fit);
   return null;
 }
 
@@ -637,9 +640,12 @@ export function stormForce(g: Game, corps: Corps[], r: Region, lead?: string): C
   // Where allies storm together, the troops of the nation that leads go in first and the town falls to it.
   const own = (c: Corps): number => (lead && c.nat === lead ? 1 : 0);
   const line = fit.filter((c) => c.kind !== 'eng').sort((x, y) => own(y) - own(x) || corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk);
-  if (!line.length) return [];
+  // (Guns go in behind a fighting corps or not at all: ruling 211(a).)
+  if (!line.some(fights)) return [];
   const most = g.nations[lead ?? line[0].nat].maxAttack || 99;
-  return [...line.slice(0, most), ...fit.filter((c) => c.kind === 'eng')];
+  const first = line.slice(0, most);
+  if (!first.some(fights)) first[first.length - 1] = line.find(fights)!;
+  return [...first, ...fit.filter((c) => c.kind === 'eng')];
 }
 
 /** The odds of an assault, with its Battle Ticket. */
@@ -671,14 +677,17 @@ export function whyNotSally(g: Game, r: Region, nat: string): string | null {
   if (!besieged(g, r)) return `${townName(r)} is not under siege.`;
   if (!garrisonOf(r).some((c) => armyOf(c) === nat)) return `You have no garrison in ${townName(r)}.`;
   if (g.flags[`sally:${r.id}`] === g.turn) return `The garrison of ${townName(r)} has made its sortie this month.`;
-  if (!salliers(g, r, nat).length) return 'The garrison is too shaken to come out.';
+  const out = salliers(g, r, nat);
+  if (!out.length) return 'The garrison is too shaken to come out.';
+  // A garrison of guns alone makes no sortie (ruling 211(a)).
+  if (!out.some(fights)) return aloneLine(out);
   return null;
 }
 
 /** The odds of a sortie, with its Battle Ticket. */
 export function previewSally(g: Game, r: Region, nat: string): Assessment | null {
   const going = salliers(g, r, nat);
-  return going.length ? assess(g, going, r, { sally: true }) : null;
+  return going.some(fights) ? assess(g, going, r, { sally: true }) : null;
 }
 
 /**
@@ -737,6 +746,42 @@ export function siegeSweep(g: Game): void {
 const guns = (cs: Corps[]): number => cs.reduce((s, c) => s + (c.kind === 'art' ? c.divs * c.str * (c.supplied ? 1 : 0.5) : 0), 0);
 
 /**
+ * The player's own corps round a town of an enemy's are guns and engineers alone (his order has taken the fighting
+ * corps away, or they are dead): what the paper says of it, or null (ruling 211(a); the UI director's line). The
+ * siege is raised at the holder's next month unless a fighting corps joins them first.
+ */
+export function gunsLeftAlone(g: Game, region: number): string | null {
+  const r = g.regions[region];
+  if (!r || g.human === null || g.flags.open !== 1 || !siegeRules(g) || allied(g, g.human, r.ctrl)) return null;
+  const round = besiegers(g, r).filter((c) => allied(g, c.nat, g.human!));
+  if (!round.length || round.some(fights)) return null;
+  const what = round.every((c) => c.kind === 'eng') ? 'engineers' : round.some((c) => c.kind === 'eng') ? 'guns and engineers' : 'guns';
+  return `Only ${what} are left round ${townName(r)}: the siege is raised unless infantry or tanks join them this month.`;
+}
+
+/**
+ * Guns and engineers left alone in the field of an enemy's province, their fighting corps dead or marched away:
+ * they keep up no siege (ruling 211(a)). They fall back on ground their side holds, as a beaten army does, and
+ * where there is none they are taken where they stand.
+ */
+function gunsFallBack(g: Game, r: Region, left: Corps[]): void {
+  const by = armyOf(left[0]), town = townName(r);
+  const back = new Set<string>();
+  let taken = 0;
+  for (const c of [...left]) {
+    const to = retreatTarget(g, c, r, new Set());
+    if (to) { relocate(g, c, to); c.ap = 0; back.add(to.name); }
+    else { storyFallen(g, c, 'surrendered', r.ctrl, r.id); removeCorps(g, c); taken++; }
+  }
+  const who = `${g.nations[by].adj} guns`;
+  const text = taken === left.length
+    ? `The ${who} round ${town}, left with no infantry or tanks beside them and no way back, are taken where they stand. The siege is raised.`
+    : `The ${who} round ${town}, left with no infantry or tanks beside them, fall back to ${[...back].join(' and ')}. The siege is raised.`;
+  tell(g, r, text, r.ctrl, [by, r.ctrl, ...garrisonOf(r).map((c) => c.nat)], { won: r.ctrl, lost: by });
+  g.supplyDirty = true;
+}
+
+/**
  * The start of a nation's month, for the towns it holds: sieges that have been raised are struck off and the works
  * mended; where a siege goes on, the guns play on the town, another month's stores are eaten if the ring is
  * closed, and a town with no garrison left gives in when its stores are gone. Called before supply is drawn, so
@@ -747,7 +792,9 @@ export function siegeMonth(g: Game, nat: string): void {
   siegeSweep(g);
   for (const r of g.regions) {
     if (r.ctrl !== nat) continue;
-    const foes = besiegers(g, r);
+    let foes = besiegers(g, r);
+    // Guns left alone in an enemy field keep up no siege (ruling 211(a)): they fall back before the month's reckoning.
+    if (foes.length && !foes.some(fights)) { gunsFallBack(g, r, foes); foes = besiegers(g, r); }
     if (!foes.length) {
       if (g.flags[`siege:${r.id}`] !== undefined) lift(g, r);
       // Left alone, the walls are mended and the guard fills up again.
@@ -798,7 +845,8 @@ export function siegeEmpties(g: Game): void {
   for (const r of g.regions) {
     if (!r.units.length || townHeld(g, r)) continue;
     const by = besiegerOf(g, r);
-    if (by && g.nations[by]?.alive) fall(g, r, by, 'empty');
+    // (Guns alone take no town, even an empty one: ruling 211(a).)
+    if (by && g.nations[by]?.alive && besiegers(g, r).some(fights)) fall(g, r, by, 'empty');
   }
 }
 

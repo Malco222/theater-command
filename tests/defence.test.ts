@@ -10,6 +10,7 @@ import { DEFENCE, DUG_IN, FIELD_DICE, GUNS, addCorps, assess, chanceOn, createGa
 import { loadGame, saveGame } from '../src/campaign/save';
 import { garrisonOf, joinTown } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
+import { SUPPORT } from '../src/campaign/support';
 import { attackOutlook, beginHuman, humanUp, orderStance, postureOf, runTurnAI, stepAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
@@ -197,11 +198,15 @@ describe('a prepared line', () => {
     // Tanks.
     const tanks = addCorps(g, 'GER', 'Test panzers', 'arm', 3, from.id, {});
     tanks.supplied = true;
-    expect(assess(g, [...att, tanks], target).prepared).toBeCloseTo(1 - DEFENCE.prepared.armour, 6);
-    expect(value([...att, tanks])).toBe(`${dug}, but the line has no armour to meet the tanks`);
-    // With armour of its own behind the line the tanks find no opening.
-    const reserve = addCorps(g, 'POL', 'Test armour', 'arm', 1, target.id, {});
+    // (Ruling 146: the line's own anti-tank guns close part of the opening, a fifth of it behind finished works in 1939.)
+    const shut = assess(g, [...att, tanks], target).faced!.antiTank!.strength;
+    expect(shut).toBeCloseTo(SUPPORT.antiTank.byYear['1939'][1], 6);
+    expect(assess(g, [...att, tanks], target).prepared).toBeCloseTo(1 - DEFENCE.prepared.armour * (1 - shut), 6);
+    expect(value([...att, tanks])).toBe(`${dug}, but the tanks break part of the way into the line`);
+    // With strong armour of its own behind the line the tanks find no opening.
+    const reserve = addCorps(g, 'POL', 'Test armour', 'arm', 4, target.id, {});
     reserve.supplied = true; reserve.dug = true; reserve.dugFor = M;
+    expect(assess(g, [...att, tanks], target).faced!.antiTank!.strength).toBe(1);
     expect(assess(g, [...att, tanks], target).prepared).toBeCloseTo(1, 6);
     relocate(g, reserve, g.byName['Lublin']);
     // Guns.
@@ -213,8 +218,8 @@ describe('a prepared line', () => {
     expect(value([...att, guns])).toBe(`${dug}, but the guns have worked the line over`);
     // All three together.
     g.nations.GER.offStart.POL = g.turn;
-    expect(assess(g, [...att, tanks, guns], target).prepared).toBeCloseTo((1 - soften) * (1 - DEFENCE.prepared.surprise) * (1 - DEFENCE.prepared.armour), 6);
-    expect(value([...att, tanks, guns])).toBe(`${dug}, but the guns have worked the line over, the new offensive has caught it off balance and it has no armour to meet the tanks`);
+    expect(assess(g, [...att, tanks, guns], target).prepared).toBeCloseTo((1 - soften) * (1 - DEFENCE.prepared.surprise) * (1 - DEFENCE.prepared.armour * (1 - shut)), 6);
+    expect(value([...att, tanks, guns])).toBe(`${dug}, but the guns have worked the line over, the new offensive has caught it off balance and the tanks break part of the way into it`);
   });
 
   it('turns odds that are safe in the open into a gamble', () => {

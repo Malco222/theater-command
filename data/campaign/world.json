@@ -3,9 +3,10 @@
     "what": "The wider world, attached to a grand campaign when it opens (src/campaign/world.ts). The history campaigns never see any of it: they keep the map of Europe. The provinces and seas themselves come from tools/build-geo-world.mjs (data/campaign/world.mjs, world-seas.json); this file holds what the rules add to them.",
     "nations": "Countries that exist only on the wider map, in the same form as nations.json. Canada, Mexico and Cuba came with North America (Version 74); the six larger countries of South America, which a player can take, and the twelve small republics of Central America, the Caribbean and South America came with the Latin slice (Version 76). The small republics share one muted colour until the art director sends each its own.",
     "home": "What changes for a country of nations.json once its homeland is on the map. The United States is no longer a country beyond the map's edge that wakes in December 1941: it is there from the first day, neutral, with its factories on its own soil.",
+    "dominions": "A mother country may stand by each of her dominions ('of'), one way only (ruling 211(b) as Brian changed it on 17 November 2026): when a country at peace with her makes war on a dominion, while the two stand in the same alliance, she answers as far as her own war in Europe allows (ruling 222, Brian's ask of 17 November 2026): 'steps' are the shares for the four steps, counting from the bottom the first that holds: 4, in danger at home (an enemy army on her home ground, or 'willGone' of her will to fight gone), two times in ten; 3, at war with one of the great powers of Europe ('europe') with her ally 'beside' not fighting beside her, four; 2, at war there with that ally fighting beside her, six; 1, no such war, eight. 'answers' is the share for a mother country with no steps. 'since' is the year each became a dominion, said on the declare card's row for the mother country (display only). One roll for each such war, made when it is declared, at the step of that day; the same at every stop of the dial and at every difficulty. A war a dominion starts is not hers. Ireland is outside. Countries not on the map yet are passed over.",
     "follow": "Dominions: each goes to war with whoever its mother country is at war with on the day the world is attached.",
     "corps": "The armies standing at home on the first day: [nation, name, kind, divisions, province, options]. 'str' is the strength it starts at (a peacetime army is a cadre).",
-    "fleets": "Squadrons in home waters on the first day, in the form of navy.json.",
+    "fleets": "Fleets in home waters on the first day, in the form of navy.json.",
     "peace": "The share of a great power's industry on war work while it is at peace, by month: [from month, share]. It stands in place of production.json's peaceIncome for that country.",
     "parts": "The parts of the world. A League is a pact of neighbours: a founder or a member may ask only countries of its own part (the design director's ruling 58). Every country under 'nations' here lies in the part named by 'new' unless 'of' names another; every country of the old chart lies in 'europe' unless 'of' names another. Each new slice of the map adds its part.",
     "warWork": "Going to war does not turn such a country's factories over in a day. From the month it is at war the share climbs from where the peace table stands by this much a month until it is all on war work (for the United States 0.037: at war in December 1941 with 35 in 100, full in June 1943; at war in September 1939 with 10 in 100, full in October 1941). It is the same for a player and for the computer. A country without a figure here works at full stretch from the day it is at war, as every other does.",
@@ -45,12 +46,13 @@
     "USA": { "align": "leaning_allies" }
   },
   "follow": { "CAN": "UK" },
+  "dominions": { "UK": { "of": ["CAN", "AUS", "NZL", "SAF"], "answers": 0.6, "steps": [0.8, 0.6, 0.4, 0.2], "europe": ["GER", "ITA", "FRA", "SOV"], "beside": "FRA", "willGone": 0.3333, "since": { "CAN": 1867, "AUS": 1901, "NZL": 1907, "SAF": 1910 } } },
   "corps": [
-    ["USA", "First Army (1st Division)", "inf", 2, "New York", { "xp": 0.05, "str": 0.5 }],
+    ["USA", "First Army", "inf", 2, "New York", { "xp": 0.05, "str": 0.5 }],
     ["USA", "Washington garrison", "inf", 1, "Washington", { "xp": 0.05, "str": 0.6, "hold": 1 }],
-    ["USA", "Second Army (5th and 6th Divisions)", "inf", 2, "Chicago", { "xp": 0.05, "str": 0.4 }],
-    ["USA", "Third Army (2nd Division and 1st Cavalry Division)", "inf", 2, "North Texas", { "xp": 0.05, "str": 0.5 }],
-    ["USA", "Fourth Army (3rd Division)", "inf", 1, "San Francisco", { "xp": 0.05, "str": 0.6 }],
+    ["USA", "Second Army", "inf", 2, "Chicago", { "xp": 0.05, "str": 0.4 }],
+    ["USA", "Third Army", "inf", 2, "North Texas", { "xp": 0.05, "str": 0.5 }],
+    ["USA", "Fourth Army", "inf", 1, "San Francisco", { "xp": 0.05, "str": 0.6 }],
     ["CAN", "1st Canadian Division", "inf", 1, "Montreal", { "xp": 0.05, "str": 0.6 }],
     ["CAN", "Atlantic Command", "inf", 1, "Nova Scotia", { "xp": 0.05, "str": 0.5, "hold": 1 }],
     ["CAN", "Pacific Command", "inf", 1, "Vancouver", { "xp": 0.05, "str": 0.5, "hold": 1 }],
@@ -58,7 +60,7 @@
     ["MEX", "Northern military zones", "inf", 1, "Monterrey", { "xp": 0.05, "str": 0.5 }],
     ["MEX", "Gulf military zones", "inf", 1, "Veracruz", { "xp": 0.05, "str": 0.5 }],
     ["CUB", "Cuban Army", "inf", 1, "Havana", { "xp": 0.05, "str": 0.5, "hold": 1 }],
-    ["USA", "Panama Canal Department", "fort", 1, "Canal Zone", { "hold": 1 }],
+    ["USA", "Panama Canal Department", "inf", 1, "Canal Zone", { "hold": 1 }],
     ["BRA", "1st Military Region (Rio de Janeiro)", "inf", 2, "Rio de Janeiro", { "xp": 0.05, "str": 0.5, "hold": 1 }],
     ["BRA", "2nd Military Region (Sao Paulo)", "inf", 1, "Sao Paulo", { "xp": 0.05, "str": 0.5 }],
     ["BRA", "3rd Military Region (Rio Grande do Sul)", "inf", 2, "Rio Grande do Sul", { "xp": 0.05, "str": 0.5 }],
@@ -92,12 +94,12 @@
     ["DOM", "Dominican Army", "inf", 1, "Ciudad Trujillo", { "xp": 0.05, "str": 0.4, "hold": 1 }]
   ],
   "fleets": [
-    { "nat": "USA", "name": "Atlantic Squadron", "base": "Norfolk", "port": "Norfolk", "home": "seaboard", "zone": "seaboard", "duty": "patrol", "ships": { "bb": 4, "cv": 1, "ca": 4, "dd": 20, "ss": 0 } },
+    { "nat": "USA", "name": "Atlantic Fleet", "base": "Norfolk", "port": "Norfolk", "home": "seaboard", "zone": "seaboard", "duty": "patrol", "ships": { "bb": 4, "cv": 1, "ca": 4, "dd": 20, "ss": 0 } },
     { "nat": "CAN", "name": "Royal Canadian Navy", "base": "Nova Scotia", "port": "Halifax", "home": "scotian", "zone": "scotian", "duty": "patrol", "ships": { "bb": 0, "cv": 0, "ca": 0, "dd": 6, "ss": 0 } },
     { "nat": "BRA", "name": "Brazilian Fleet", "base": "Rio de Janeiro", "port": "Rio de Janeiro", "home": "santos", "zone": "santos", "duty": "patrol", "ships": { "bb": 2, "cv": 0, "ca": 2, "dd": 6, "ss": 3 } },
     { "nat": "ARG", "name": "Sea Fleet", "base": "Buenos Aires", "port": "Puerto Belgrano", "home": "plate", "zone": "plate", "duty": "patrol", "ships": { "bb": 2, "cv": 0, "ca": 3, "dd": 12, "ss": 3 } },
-    { "nat": "CHL", "name": "Chilean Squadron", "base": "Santiago", "port": "Valparaiso", "home": "valparaiso", "zone": "valparaiso", "duty": "patrol", "ships": { "bb": 1, "cv": 0, "ca": 1, "dd": 8, "ss": 6 } },
-    { "nat": "PER", "name": "Peruvian Squadron", "base": "Lima", "port": "Callao", "home": "callao", "zone": "callao", "duty": "patrol", "ships": { "bb": 0, "cv": 0, "ca": 2, "dd": 2, "ss": 4 } }
+    { "nat": "CHL", "name": "Chilean Fleet", "base": "Santiago", "port": "Valparaiso", "home": "valparaiso", "zone": "valparaiso", "duty": "patrol", "ships": { "bb": 1, "cv": 0, "ca": 1, "dd": 8, "ss": 6 } },
+    { "nat": "PER", "name": "Peruvian Fleet", "base": "Lima", "port": "Callao", "home": "callao", "zone": "callao", "duty": "patrol", "ships": { "bb": 0, "cv": 0, "ca": 2, "dd": 2, "ss": 4 } }
   ],
   "peace": {
     "USA": [[1, 0.1], [10, 0.2], [19, 0.35]]
@@ -105,7 +107,7 @@
   "warWork": { "USA": 0.037 },
   "parts": { "names": { "europe": "Europe and the Mediterranean", "americas": "the Americas" }, "of": { "USA": "americas" }, "new": "americas" },
   "overseas": {
-    "USA": { "guard": 4, "ahead": 7, "bank": 2, "risk": 0.1, "hop": 0.2, "air": 0, "fleet": ["Atlantic Squadron"], "oceans": { "atlantic": 0.15 } },
+    "USA": { "guard": 4, "ahead": 7, "bank": 2, "risk": 0.1, "hop": 0.2, "air": 0, "fleet": ["Atlantic Fleet"], "oceans": { "atlantic": 0.15 } },
     "CAN": { "guard": 2, "ahead": 4, "bank": 1, "risk": 0.1, "hop": 0.2, "most": 3, "oceans": { "atlantic": 0.25 } },
     "BRA": { "guard": 4, "ahead": 1, "bank": 1, "risk": 0.1, "hop": 0.2, "from": 59, "most": 1, "oceans": { "atlantic": 1 } }
   },

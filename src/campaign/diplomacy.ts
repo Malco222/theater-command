@@ -8,17 +8,17 @@ import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps, theName, warning } from './game';
+import { addCorps, allied, atWar, bloc, capture, declareWar, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, warning } from './game';
 import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
 import { techMonth } from './tech';
-import { fleetsOnFall } from './navy';
+import { fleetsOnFall, gateShutSince } from './navy';
 import { airOnFall } from './air';
 import { recordFall } from './liberation';
 import { mayJoin, stopDef } from './history';
 import worldData from '../../data/campaign/world.json';
-import { warWorkMonth, worldMonth } from './world';
+import { pressData, warWorkMonth, worldMonth } from './world';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -178,11 +178,68 @@ const blocName = (s: number): string => (s > 0 ? 'the Axis' : 'the Allies');
 export const RELATIONS = relationsData as unknown as {
   sneak: { attack: number };
   wary: { all: { opinion: number; home: number }; friend: { opinion: number; home: number } };
+  gate: { month: number; most: number };
   groups: { id: string; name: string; why: string; nations: string[] }[];
   pairs: [string, string, string][];
 };
 
 export interface Friend { nat: string; why: string }
+
+// ---- A gate its holder has shut: who resents it (rulings 176(e) and 177(a)) -----------------------------------
+
+const soreKey = (gate: number, nat: string): string => `gatesore:${gate}:${nat}`;
+
+/** The side a country stands on or leans to: +1 the Axis, -1 the Allies, 0 neither (a strict neutral, or the League). */
+export function sideHeld(g: Game, nat: string): number {
+  const n = g.nations[nat];
+  if (!n) return 0;
+  const b = bloc(n);
+  return b === 'axis' ? 1 : b === 'allies' ? -1 : b === 'league' ? 0 : Math.sign(step(n));
+}
+
+/** The words for that side: "the Allies", "the Axis", or '' for neither. */
+export const sideName = (g: Game, nat: string): string => (sideHeld(g, nat) ? blocName(sideHeld(g, nat)) : '');
+
+/** True for a country that would resent a gate this holder shut on its trade: at peace, outside both blocs, and the holder has a side to turn it from. */
+export const wouldResent = (g: Game, holder: string, nat: string): boolean => nat !== holder && sideHeld(g, holder) !== 0 && !!g.nations[nat] && courtable(g.nations[nat]);
+
+/** Forgets who resents a gate: it is open again, or it has changed hands. */
+export function soreForget(g: Game, gate: number): void {
+  for (const k of Object.keys(g.flags)) if (k.startsWith(`gatesore:${gate}:`)) delete g.flags[k];
+}
+
+/** Marks who resents a gate its holder has just shut. The list is fixed at the shutting: the countries whose trade it turned back that month. */
+export function soreAtShut(g: Game, gate: number, holder: string, nats: string[]): void {
+  soreForget(g, gate);
+  for (const id of nats) if (wouldResent(g, holder, id)) g.flags[soreKey(gate, id)] = 0;
+}
+
+/** Who resents a gate shut now, with the points of opinion each has moved so far. */
+export function soreList(g: Game, gate: number): { nat: string; so: number }[] {
+  const pre = `gatesore:${gate}:`;
+  return Object.keys(g.flags).filter((k) => k.startsWith(pre)).map((k) => ({ nat: k.slice(pre.length), so: g.flags[k] })).filter((x) => !!g.nations[x.nat]);
+}
+
+/**
+ * The month's move for each neutral that resents a shut gate: so many points away from the side the gate's holder
+ * stands on, counted against the most one shutting costs. A gate that is open again, or in other hands, is forgotten.
+ */
+function soreMonth(g: Game): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const k of Object.keys(g.flags)) {
+    if (!k.startsWith('gatesore:')) continue;
+    const [, gi, nat] = k.split(':');
+    const gate = Number(gi), gt = g.gates[gate];
+    const holder = gt ? (gt.region >= 0 ? g.regions[gt.region].ctrl : gt.nation ?? '') : '';
+    if (!gt || gateShutSince(g, gate) < 0) { delete g.flags[k]; continue; }
+    const n = g.nations[nat], side = sideHeld(g, holder);
+    if (!n || !courtable(n) || !side || g.flags[k] >= RELATIONS.gate.most) continue;
+    const pts = Math.min(RELATIONS.gate.month, RELATIONS.gate.most - g.flags[k]);
+    g.flags[k] += pts;
+    out.set(nat, (out.get(nat) ?? 0) - side * pts);
+  }
+  return out;
+}
 
 /** The countries that count this one a friend, and why: its circle of neighbours first, then its single friendships. */
 export function friendsOf(nat: string): Friend[] {
@@ -294,12 +351,40 @@ export interface WarForecast {
   trade: boolean;
   /** The other members of the League, when the country belongs to it: each goes to war with the declarer the same day. */
   league: string[];
+  /**
+   * The mother country that may stand by it, when it is a dominion of hers (ruling 211(b)), or null. `answers` is
+   * the share of the time she goes to war with the declarer the same month as her war in Europe stands today
+   * (ruling 222: 0.8, 0.6, 0.4 or 0.2; one roll when the war is declared), and `patronSays` the card's two
+   * sentences, the first set bold as the League's is.
+   */
+  patron: string | null;
+  answers: number;
+  patronSays: [string, string] | null;
+}
+
+const TIMES = ['never', 'once', 'twice', 'three times', 'four times', 'five times', 'six times', 'seven times', 'eight times', 'nine times'];
+/**
+ * The declare card's two sentences where a mother country may answer for the country declared on (the UI
+ * director's words for ruling 222, 17 November 2026): the odds as her war in Europe stands today, in plain words,
+ * and the reason in one short clause after them; never a promise.
+ */
+export function patronSays(g: Game, patron: string, on: string): [string, string] {
+  const P = newsName(g.nations[patron]), press = patronPress(g, patron);
+  const k = Math.min(9, Math.max(1, Math.round(press.answers * 10)));
+  const ally = pressData(patron).beside, F = ally && g.nations[ally] ? newsName(g.nations[ally]) : 'France';
+  const why = press.step === 4 ? `${P} must look to its own shores`
+    : press.step === 3 ? (press.fallen ? `${F} has fallen, and ${P} fights on in Europe` : ally && atWar(g, ally, patron) ? `${P} is at war in Europe, with ${F} among its enemies` : `${P} is at war in Europe, and ${F} stays out of it`)
+    : press.step === 2 ? `${P} is at war in Europe, with ${F} still fighting beside it`
+    : `${P} has no war in Europe to hold it back`;
+  const times = TIMES[k][0].toUpperCase() + TIMES[k].slice(1);
+  return [`${P} may stand by it.`, `${times} in ten ${P} declares war on you the same month, and ${TIMES[10 - k]} in ten it stays out of this war: ${why}.`];
 }
 
 export function warForecast(g: Game, by: string, on: string): WarForecast {
   const A = g.nations[by], B = g.nations[on];
   const ba = A ? bloc(A) : null;
   const sneak = wouldSurprise(g, by, on);
+  const patron = standsByWhom(g, by, on);
   const fighting = !!B && B.atWar.some((x) => x === by || allied(g, x, by));
   return {
     on,
@@ -310,6 +395,9 @@ export function warForecast(g: Game, by: string, on: string): WarForecast {
     alarm: alarmed(g, by, on),
     trade: g.flags.open === 1 && tradePartners(g, by).some((n) => n.id === on),
     league: standsWith(g, by, on),
+    patron,
+    answers: patron ? patronPress(g, patron).answers : 0,
+    patronSays: patron ? patronSays(g, patron, on) : null,
   };
 }
 
@@ -555,6 +643,7 @@ function fire(g: Game, e: DiploEvent): boolean {
     const live = (id: string): boolean => !!g.nations[id]?.alive && g.nations[id].atWar.length > 0;
     const stake = (id: string): number => home.reduce((s, r) => s + (r.ctrl === id ? 1 : 0) + (r.units.some((u) => u.nat === id && u.kind !== 'fort') ? 1 : 0), 0);
     const first = (list: string[]): string | undefined => list.find((id) => live(id) && (!open || stake(id) > 0));
+    const held = new Set(g.regions.filter((r) => r.ctrl === X.id).map((r) => r.id));
     for (const c of g.corps.filter((c) => c.nat === X.id)) removeCorps(g, c);
     fleetsOnFall(g, X.id);
     airOnFall(g, X.id);
@@ -579,13 +668,25 @@ function fire(g: Game, e: DiploEvent): boolean {
     if (!heir) return false;
     // Anything the terms forgot goes with the rest.
     for (const r of g.regions) if (r.ctrl === X.id) { r.ctrl = heir; r.cap = false; r.since = g.turn; }
+    // (For the news: what passed to somebody other than the heir, by the terms or because his army stood on it.)
+    const others = new Map<string, string[]>();
+    for (const r of g.regions) if (held.has(r.id) && r.ctrl !== heir) others.set(r.ctrl, [...(others.get(r.ctrl) ?? []), r.name]);
     X.alive = false;
     X.align = 'independent'; // its ground is nobody's ally's now: whoever holds a piece holds it as a conquest
     X.fellOn = { turn: g.turn, week: g.week, to: heir, how: 'terms' };
-    // Where the terms went to somebody history's treaty does not name, the news is told as it happened here.
-    if (open && heir !== e.partition.shares[0]?.[0]?.[0]) {
+    // The grand campaign: history's own words are kept only where the treaty ran as history wrote it, to its first
+    // heir and with every place it names in the hands it names (or their ally's). Anywhere else the news is told as
+    // it happened here and says what truly changed hands (ruling 134(e)): history's words name ground that an army
+    // standing on it has kept, or that went to somebody else.
+    const asWritten = heir === e.partition.shares[0]?.[0]?.[0] && e.partition.shares.every(([takers, names]) => names.every((nm) => {
+      const r = g.byName[nm];
+      return !r || r.ctrl === takers[0] || allied(g, r.ctrl, takers[0]);
+    }));
+    if (open && !asWritten) {
       const H = g.nations[heir];
-      headline(g, 'event', `${X.name} has signed an armistice and is out of the war. Its armies lay down their arms, and ${theName(H)} takes over what is left of the country.`, X.id, undefined, { arm: 'land', won: H.id, lost: X.id });
+      const also = [...others.entries()].sort((a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1))
+        .map(([id, names]) => ` ${theName(g.nations[id], true)} takes ${names.length <= 3 ? listed(names) : `${names.length} of its provinces`}.`).join('');
+      headline(g, 'event', `${X.name} has signed an armistice and is out of the war. Its armies lay down their arms, and ${theName(H)} takes over what is left of the country.${also}`, X.id, undefined, { arm: 'land', won: H.id, lost: X.id });
       told = true;
     }
     recordFall(g, X.id, heir, 'terms');
@@ -646,11 +747,13 @@ export function monthlyDiplomacy(g: Game): void {
   // The last act of the grand campaign: no alliances, no courting, no treaties, and history's calendar is closed.
   if ((g.flags.dom ?? 0) > 0) { warWorkMonth(g); traitsMonth(g); techMonth(g); return; }
   const m = momentum(g);
+  // A gate its holder has shut: the neutrals whose trade it turned back move a point a month away from his side (ruling 177(a)).
+  const sore = soreMonth(g);
   for (const n of Object.values(g.nations)) {
     // A small country in the player's hands stays where its player puts it.
     if (!courtable(n) || ownPath(g, n.id)) continue;
     const bw = DIPLOMACY.bandwagon[n.id] ?? DIPLOMACY.bandwagon._default;
-    n.opinion = clamp(n.opinion + (n.home - n.opinion) * DIPLOMACY.pull + m * bw, -100, 100);
+    n.opinion = clamp(n.opinion + (n.home - n.opinion) * DIPLOMACY.pull + m * bw + (sore.get(n.id) ?? 0), -100, 100);
     settle(g, n);
   }
   // The wider world: the dominions follow their mother country, and a great industry that has gone to war turns over a little more of itself.
@@ -817,8 +920,30 @@ export function stakeDue(g: Game, viewer: string | null = g.human): StakeDue | n
  * News only: no rule reads it. The grounds and the dates are read from the two events themselves.
  */
 function romeWaversOwn(g: Game): void {
-  const st = romeStake(g);
-  if (!st) return;
+  const w = stakeWarning(g);
+  if (w) warning(g, w.title, w.text, w.nat, w.region, w.about);
+}
+
+/** A stake's standing warning: its title, its words as things stand, the country it is about and a place to show. */
+export interface StakeWarning {
+  title: string;
+  text: string;
+  nat: string;
+  about: string;
+  region?: number;
+  /** The next moment the test is made, as the month that will open then ('September'): the stake is tried as each month opens. */
+  tested: string;
+}
+
+/**
+ * The warning of a seat's stake as things stand this moment, or null where no stake is live. The month's news is
+ * made from it (romeWaversOwn), and a month card takes its band from it, so that the card which opens a campaign
+ * carries the warning before any month's events have run (ruling 123(a)) and every card says the stake as it is
+ * when he reads it.
+ */
+export function stakeWarning(g: Game, viewer: string | null = g.human): StakeWarning | null {
+  const st = romeStake(g, viewer);
+  if (!st) return null;
   const { grounds, lost, who, falls } = st;
   const six = listed(grounds, 'or');
   const held = listed(lost);
@@ -835,5 +960,5 @@ function romeWaversOwn(g: Game): void {
     : lost.length
       ? `Mussolini falls ${g.turn < falls ? `in ${date}` : 'next month'} unless ${held} ${are} taken back. The month after, Italy signs an armistice while ${who} hold any of ${six}, and that ends your campaign.`
       : `Mussolini falls if ${who} take one of six places. They are ${listed(grounds)}${g.turn < falls ? `, and they count from ${date}` : ''}. The month after he falls, Italy signs an armistice if one is still held, and that ends your campaign.`;
-  warning(g, changed && !lost.length ? ROME_HOLDS : 'Rome wavers', text, 'ITA', g.byName[lost[0] ?? grounds[grounds.length - 1]]?.id, 'ITA');
+  return { title: changed && !lost.length ? ROME_HOLDS : 'Rome wavers', text, nat: 'ITA', about: 'ITA', region: g.byName[lost[0] ?? grounds[grounds.length - 1]]?.id, tested: turnToDate(g.turn + 1).label.split(' ')[0] };
 }

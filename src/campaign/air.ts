@@ -12,11 +12,12 @@
 import { byHand } from './depth';
 import data from '../../data/campaign/air.json';
 import warData from '../../data/campaign/airwar.json';
+import namesData from '../../data/campaign/air-names.json';
 import carrierData from '../../data/campaign/carriers.json';
 import rivalsData from '../../data/campaign/rivals.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
-import { clamp } from '../core/math';
+import { clamp, tenthPct } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, routineNews, worksOf } from './game';
 import { techMul, techNotes } from './research';
@@ -30,12 +31,13 @@ import { fuelAir } from './resources';
 import { SIEGE, besieged, besiegerOf, breachOf, fieldCtrl, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, type TownHit } from './siege';
 import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
+import { beyondEurope } from './world';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, Region, SeaSide, ShipClass, Ships } from './types';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
 interface Chain { nat: string; from: number; name: string; by: string; ground: number }
-interface FleetRow { nat: string; name: string; base: string; from?: number; leader?: string; start?: [number, number]; est: Sched; ftrRange?: number; scripted?: boolean }
+interface FleetRow { nat: string; name: string; base: string; from?: number; leader?: string; start?: [number, number]; est: Sched; ftrRange?: number; scripted?: boolean; home?: boolean }
 export interface AirOrder { fleet: string; base?: string[]; mission: AirMission; region?: string; sea?: string }
 export interface AirPlan { nat: string; from: number; to: number; name: string; against: string; orders: AirOrder[] }
 interface Reserve { ftr: number; bmr: number; pilots: number }
@@ -106,6 +108,9 @@ export const carrierRules = (g: Game): boolean => g.flags.carriers === 1;
 /** True for a carrier wing: an air group that flies from a fleet's carriers, goes where they go, and has no airfield. */
 export const afloat = (f: { ship?: number }): boolean => f.ship !== undefined;
 
+/** True for a carrier wing wherever it is, aboard or ordered ashore: its aircraft are built for the deck and its crews trained against ships. */
+export const deckBred = (f: { ship?: number; ashore?: number }): boolean => f.ship !== undefined || f.ashore !== undefined;
+
 /** The fleet a carrier wing sails with, or null for a group on land (or a wing whose fleet is gone). */
 export const carrierOf = (g: Game, f: { ship?: number }): Fleet | null => (f.ship === undefined ? null : g.fleets.find((x) => x.id === f.ship) ?? null);
 
@@ -144,10 +149,12 @@ const cap = (s: string): string => s[0].toUpperCase() + s.slice(1);
 const planes = (n: number, one: string): string => `${n.toLocaleString('en-US')} ${one}${n === 1 ? '' : 's'}`;
 
 export const airFleetsOf = (g: Game, nat: string): AirFleet[] => g.airFleets.filter((f) => f.nat === nat);
+/** True for a group of a command that guards its own country (air.json 'home'): it does not follow the army across an ocean. */
+export const homeCommand = (f: { nat: string; name: string; parent?: string }): boolean => !!AIR.fleets.find((x) => x.nat === f.nat && x.name === (f.parent ?? f.name))?.home;
 /** How far one fleet reaches: its nation's ranges, unless the fleet has long-range fighters of its own ('ftrRange' on its row in air.json). */
-const reach = (f: { nat: string; name: string; parent?: string; ship?: number }): NatSpec => {
-  // Carrier aircraft are built for the deck, not for range.
-  if (f.ship !== undefined) return { quality: spec(f.nat).quality * (CARRIERS.quality[f.nat] ?? CARRIERS.quality._default), ftrRange: CARRIERS.range.ftr, bmrRange: CARRIERS.range.bmr };
+const reach = (f: { nat: string; name: string; parent?: string; ship?: number; ashore?: number }): NatSpec => {
+  // Carrier aircraft are built for the deck, not for range: ashore as aboard.
+  if (deckBred(f)) return { quality: spec(f.nat).quality * (CARRIERS.quality[f.nat] ?? CARRIERS.quality._default), ftrRange: CARRIERS.range.ftr, bmrRange: CARRIERS.range.bmr };
   const own = AIR.fleets.find((x) => x.nat === f.nat && x.name === (f.parent ?? f.name))?.ftrRange;
   return own ? { ...spec(f.nat), ftrRange: own } : spec(f.nat);
 };
@@ -319,12 +326,12 @@ function addAir(g: Game, r: FleetRow): AirFleet | null {
 }
 
 /** A new air fleet with no aircraft yet, on airfields the nation holds: the grand campaign's arsenal fills it. In the air war it is an air group of one kind. */
-export function foundAirFleet(g: Game, nat: string, r: Region, name: string, kind?: 'ftr' | 'bmr'): AirFleet {
+export function foundAirFleet(g: Game, nat: string, r: Region, name: string, kind?: 'ftr' | 'bmr', strength = 0): AirFleet {
   const taken = (x: string): boolean => g.airFleets.some((f) => f.name === x);
   let unique = name;
   for (let k = 2; taken(unique); k++) unique = `${name} ${k}`;
   const f: AirFleet = {
-    id: g.nextAir++, nat, name: kind ? groupName(g, nat, kind) : unique, base: r.id, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
+    id: g.nextAir++, nat, name: kind ? groupName(g, nat, kind, strength, r) : unique, base: r.id, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
     mission: 'support', target: -1, ready: 1, leader: null, moved: 0, lost: { ftr: 0, bmr: 0 },
   };
   if (kind) { f.kind = kind; f.parent = unique; f.share = 1; }
@@ -336,14 +343,70 @@ export function foundAirFleet(g: Game, nat: string, r: Region, name: string, kin
 
 const ordinal = (k: number): string => `${k}${k % 100 >= 11 && k % 100 <= 13 ? 'th' : k % 10 === 1 ? 'st' : k % 10 === 2 ? 'nd' : k % 10 === 3 ? 'rd' : 'th'}`;
 
-/** The next name on a nation's list of air groups of one kind: "3rd Bomber Group". */
-function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr'): string {
+/** A rung of a country's ladder of air formation names (ruling 220, the historian's data/campaign/air-names.json). */
+export interface Rung { rung: string; ftr: number; bmr: number; form: { ftr: string; bmr: string }; from?: number; until?: number }
+const NAMES = namesData as unknown as { near: [number, number]; navyBases: string[]; ladders: Record<string, Rung[]> };
+
+/** A country's homeland is lost while it does not hold its own capital. */
+const homeLost = (g: Game, nat: string): boolean => { const n = g.nations[nat]; return !n || !n.alive || n.capital < 0 || g.regions[n.capital]?.ctrl !== nat; };
+
+/**
+ * The rungs a country's new air group may be named for this month: its ladder's rows that hold now (from, until),
+ * and while its homeland is lost only the rows of its forces in exile, where it has them. Japan's navy names the
+ * groups based on the Pacific islands, its army the rest (and all of them while the map cannot tell).
+ */
+export function rungsOf(g: Game, nat: string, base: Region | null): Rung[] {
+  const ladder = (nat === 'JAP' && base && NAMES.navyBases.includes(base.name) ? NAMES.ladders.JAP_navy : null) ?? NAMES.ladders[nat] ?? [];
+  const now = ladder.filter((r) => (r.from ?? 1) <= g.turn && g.turn <= (r.until ?? Infinity));
+  const exile = now.filter((r) => /in exile/.test(r.rung));
+  return exile.length && homeLost(g, nat) ? exile : now.filter((r) => !/in exile/.test(r.rung));
+}
+
+/** The rung nearest a group's full strength by ratio, among those near it (half to twice the rung's), or null. */
+export function nearestRung(rungs: Rung[], kind: 'ftr' | 'bmr', strength: number): Rung | null {
+  const [lo, hi] = NAMES.near;
+  let best: Rung | null = null, bd = Infinity;
+  for (const r of rungs) {
+    const v = r[kind];
+    if (!(v > 0) || strength < lo * v || strength > hi * v) continue;
+    const d = Math.abs(Math.log(strength / v));
+    if (d < bd) { bd = d; best = r; }
+  }
+  return best;
+}
+
+/** A form of name with its number: {n}, {nth}, {n+K}, {nth_fr} (1re, 1er before a régiment, else 2e), {nth_nl} (1e). */
+export function formName(form: string, n: number): string {
+  return form
+    .replace(/\{n\+(\d+)\}/g, (_, k: string) => String(n + Number(k)))
+    .replace(/\{nth_fr\}/g, n === 1 ? (/R[ée]giment/i.test(form) ? '1er' : '1re') : `${n}e`)
+    .replace(/\{nth_nl\}/g, `${n}e`)
+    .replace(/\{nth\}/g, ordinal(n))
+    .replace(/\{n\}/g, String(n));
+}
+
+/**
+ * A new air group's name, taken once as it is formed and kept as it is worn down (ruling 220): the rung of its
+ * country's ladder nearest its full strength, with the next number of that rung; where no rung is near, the plain
+ * form ("3rd Fighter Group"), never another country's word. No two of a country's groups share a name.
+ */
+function groupName(g: Game, nat: string, kind: 'ftr' | 'bmr', strength: number, base: Region | null): string {
+  const taken = (x: string): boolean => g.airFleets.some((f) => f.nat === nat && f.name === x);
+  const rungs = rungsOf(g, nat, base);
+  for (let left = rungs; left.length;) {
+    const r = nearestRung(left, kind, strength);
+    if (!r) break;
+    const form = r.form[kind];
+    // A rung with no number in its name (Poland's Brygada Pościgowa) is one formation: once it is taken, the next rung.
+    if (!/\{n/.test(form)) { if (!taken(form)) return form; left = left.filter((x) => x !== r); continue; }
+    const key = `agn:${nat}:${kind}:${r.rung}`;
+    let name: string;
+    do { g.flags[key] = (g.flags[key] ?? 0) + 1; name = formName(form, g.flags[key]); } while (taken(name));
+    return name;
+  }
   const key = `agn:${nat}:${kind}`;
   let name: string;
-  do {
-    g.flags[key] = (g.flags[key] ?? 0) + 1;
-    name = (AIRWAR.groups.names[nat] ?? AIRWAR.groups.names._default)[kind].replace('{nth}', ordinal(g.flags[key])).replace('{n}', String(g.flags[key]));
-  } while (g.airFleets.some((f) => f.nat === nat && f.name === name));
+  do { g.flags[key] = (g.flags[key] ?? 0) + 1; name = formName(AIRWAR.groups.names._default[kind], g.flags[key]); } while (taken(name));
   return name;
 }
 
@@ -383,8 +446,27 @@ export function splitFleet(g: Game, f: AirFleet): AirFleet[] {
     out.push(grp);
   });
   // The names are given once every group is on the list, so that no two of a nation's are alike.
-  if (out.length > 1) for (const grp of out) grp.name = groupName(g, f.nat, grp.kind!);
+  if (out.length > 1) for (const grp of out) grp.name = groupName(g, f.nat, grp.kind!, Math.max(grp.est[grp.kind!], grp[grp.kind!]), g.regions[grp.base] ?? null);
   return out;
+}
+
+/**
+ * The air commands history bases beyond the old chart (America's: ruling 133(b)) stand on their fields from the
+ * first day of a grand campaign: the wider world is attached after the air forces of Europe are set up, so they
+ * are raised here. A campaign saved before they were listed has them raised as its month finds them, at the
+ * strength history gives them by then. Done once. The commands history forms later form in their month (airUpkeep).
+ */
+export function openWorldAir(g: Game): void {
+  if (g.flags.worldair === 1) return;
+  g.flags.worldair = 1;
+  for (const r of AIR.fleets) {
+    const base = g.byName[r.base];
+    if (!base || !beyondEurope(base) || (r.from ?? 1) > 1 || r.scripted || base.ctrl !== r.nat || !g.nations[r.nat]?.alive) continue;
+    if (g.airFleets.some((f) => f.nat === r.nat && (f.parent ?? f.name) === r.name)) continue;
+    const f = addAir(g, r);
+    // An air war already open (a saved campaign): the command's ground has its air base, and it stands as air groups.
+    if (f && airWar(g)) { if (fieldClass(g, base.id) < AIRWAR.fields.seed.base) g.flags[`af:${base.id}`] = AIRWAR.fields.seed.base; splitFleet(g, f); }
+  }
 }
 
 /**
@@ -429,7 +511,36 @@ export function whyNotBase(g: Game, f: AirFleet, r: Region, bySea = false): stri
   return null;
 }
 
-export const airBases = (g: Game, f: AirFleet): Region[] => g.regions.filter((r) => whyNotBase(g, f, r) === null);
+/** True when a field lies across an ocean from a land group's base: the group can get there only by sea (world.json 'overseas'). */
+export const overOcean = (f: AirFleet, r: Region): boolean => f.ship === undefined && beyondEurope(f.base) !== beyondEurope(r);
+
+export const SHIP_AIR_TIP = 'A group crosses an ocean by sea: one group a month, to a friendly airfield with room for all of it. Settling in costs it some readiness.';
+export const SHIP_AIR_ONE = 'One air group a month crosses an ocean by sea, and one has gone this month.';
+export const SHIP_AIR_ROOM = 'The airfields there have no room for the whole group, and a group that comes by sea is not put down on a crowded field.';
+
+/**
+ * Why a land air group cannot be shipped across an ocean to a region's airfields, or null if it can (ruling 133(b)).
+ * What a computer country's staff does for the groups that follow its army (ai.ts `follow`) is the player's order
+ * too: one group of a nation crosses in a month, however far, to a friendly airfield with room for all of it.
+ */
+export function whyNotShipAir(g: Game, f: AirFleet, r: Region): string | null {
+  const no = whyNotBase(g, f, r, true);
+  if (no) return no;
+  if (g.flags[`fy:air:${f.nat}`] === g.turn) return SHIP_AIR_ONE;
+  return fieldRoom(g, r.id, f) ? null : SHIP_AIR_ROOM;
+}
+
+/** Why a group cannot move to a region's airfields, by air or (across an ocean) by sea; null if it can. */
+export const whyNotMoveAir = (g: Game, f: AirFleet, r: Region): string | null => (overOcean(f, r) ? whyNotShipAir(g, f, r) : whyNotBase(g, f, r));
+
+/** Ships a land air group across an ocean to a friendly airfield with room for it: the nation's one such sailing of the month. */
+export function shipAir(g: Game, f: AirFleet, r: Region): boolean {
+  if (!overOcean(f, r) || whyNotShipAir(g, f, r) || !rebaseAir(g, f, r, true)) return false;
+  g.flags[`fy:air:${f.nat}`] = g.turn;
+  return true;
+}
+
+export const airBases = (g: Game, f: AirFleet): Region[] => g.regions.filter((r) => whyNotMoveAir(g, f, r) === null);
 
 /**
  * Whether a nation's fighters could fight for the sky over a region: from the airfields they are on now ('now'), or
@@ -707,7 +818,7 @@ export interface AirAssess {
 const SHIPS: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
 const noShips = (): Ships => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
 /** What one of a group's bombers is worth against ships: carrier crews are trained for it, land bombers mostly are not. */
-const navalSkill = (f: AirFleet): number => (f.ship !== undefined ? CARRIERS.naval.carrier : CARRIERS.naval.land[f.nat] ?? CARRIERS.naval.land._default);
+const navalSkill = (f: AirFleet): number => (deckBred(f) ? CARRIERS.naval.carrier : CARRIERS.naval.land[f.nat] ?? CARRIERS.naval.land._default);
 
 /**
  * What a strike on ships should do, before the dice: the hits to expect, the ships of each class they should sink,
@@ -865,7 +976,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     if (out.D >= 1) out.lines.push({ label: 'Fighter cover', value: decks.length ? `${planes(Math.round(decks.reduce((s, x) => s + x.f.ftr * x.w, 0)), 'carrier fighter')} over the ships${decks.length < out.def.length ? ', and fighters from the coast' : ''}` : 'Fighters from the coast', effect: `They break up about ${pc(out.spoil)} of the strike. An escort of fighters cuts that` });
     else out.lines.push({ label: 'Fighter cover', value: 'None', effect: 'Nothing breaks up the strike' });
     if (out.B > 0) {
-      const land = out.att.filter((a) => a.bmr > 0 && a.f.ship === undefined), deckB = out.att.filter((a) => a.bmr > 0 && a.f.ship !== undefined);
+      const land = out.att.filter((a) => a.bmr > 0 && !deckBred(a.f)), deckB = out.att.filter((a) => a.bmr > 0 && deckBred(a.f));
       out.lines.push({ label: 'Crews', value: deckB.length && land.length ? 'Carrier crews and land bombers' : deckB.length ? 'Carrier crews, trained to hit ships' : 'Land bombers', effect: land.length ? `A land bomber counts ${pc(navalSkill(land[0].f))} of a carrier aircraft against ships${deckB.length ? `: the strike as a whole counts ${pc(out.naval)}` : ''}` : undefined });
     }
     if (out.again < 1) out.lines.push({ label: 'Already struck', value: 'The fleet has been struck this month', effect: `It is scattered and warned: this strike counts ${pc(out.again)}` });
@@ -1040,11 +1151,12 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     raid(g, nat, r.ctrl, nation);
     // The air war: a province with no industry has no output to stop, and the raid is judged on its railway alone.
     value += airWar(g) && r.fac <= 0 ? 0 : cut * 1000;
-    result = r.fac > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${(nation * 100).toFixed(1)}% of ${g.nations[r.ctrl].adj} production.` : '';
+    // (No line where no bombs fell.)
+    result = r.fac > 0 && cut > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.` : '';
     // The grand campaign: a heavy raid wrecks a factory outright, and the bombs that fall on the yards and
     // junctions may cut the province's railway. Both stay as they are until engineers come.
     if (bombFactories(g, nat, r, cut)) { value += 300; notable = true; result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`; }
-    if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0)) { value += 300; notable = true; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
+    if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0, a.aa ?? 0)) { value += 300; notable = true; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
     else if (!result) result = through > 0 ? `The bombs fell on the rail yards of ${r.name}, but the line still runs.` : 'No bombers got through.';
     result = result.trim();
   } else if (m === 'town') {
@@ -1107,7 +1219,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const worst = Object.entries(hurt).sort((x, y) => y[1] - x[1])[0];
     shipsSunk = shipCount(sunk);
     value += shipCount(sunk) * 30 + (worst ? worst[1] * 3000 : 0);
-    result = [shipCount(sunk) ? `${cap(shipList(sunk))} sunk.` : '', worst ? `Merchant shipping losses cost ${g.nations[worst[0]].name} ${(worst[1] * 100).toFixed(1)}% of a month's production.` : ''].filter(Boolean).join(' ') || 'The bombers found little to hit.';
+    result = [shipCount(sunk) ? `${cap(shipList(sunk))} sunk.` : '', worst ? `Merchant shipping losses cost ${g.nations[worst[0]].name} ${tenthPct(worst[1])} of a month's production.` : ''].filter(Boolean).join(' ') || 'The bombers found little to hit.';
   }
 
   // Has the sky been won? The attacker's surviving fighters against what the defender can put up once his losses are made good.

@@ -112,7 +112,7 @@ export function stationSite(g: Game, nat: string, want = -1): number {
  * The air fleet a wing stationed here would join, if one of the nation's is based here. In the air war a wing joins
  * an air group of its own kind that has room for it, and otherwise founds a new group.
  */
-const fleetAt = (g: Game, nat: string, region: number, wing?: Wing): AirFleet | null => strongest(airFleetsOf(g, nat).filter((f) => f.base === region && f.ship === undefined
+const fleetAt = (g: Game, nat: string, region: number, wing?: Wing): AirFleet | null => strongest(airFleetsOf(g, nat).filter((f) => f.base === region && f.ship === undefined && f.ashore === undefined
   && (!airWar(g) || !wing || (f.kind === wing && f.est[wing] + ARSENAL.air[wing].count <= AIRWAR.groups.most))));
 
 /** True if a ship needing a yard of this level can be laid down here. */
@@ -295,7 +295,7 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       ...(held ? { tech: held.tech } : {}),
       key: `ship:${hull}`, group: 'navy', label: spec.label, blurb: spec.blurb, size: hull === 'tp' ? 'lift for one more corps a month' : plural(spec.count, one, many), cost, months: spec.months,
       upkeep: hull === 'tp' ? 0 : spec.count * BUDGET.upkeep.ships[hull], at,
-      note: at < 0 ? '' : hull === 'tp' ? `Built at ${g.regions[at].name}.` : fleet ? `Laid down at ${g.regions[at].name}. Joins the ${fleet.name}.` : `Laid down at ${g.regions[at].name}. Forms a new squadron there.`,
+      note: at < 0 ? '' : hull === 'tp' ? `Built at ${g.regions[at].name}.` : fleet ? `Laid down at ${g.regions[at].name}. Joins the ${fleet.name}.` : `Laid down at ${g.regions[at].name}. Forms a new fleet there.`,
       why: held?.why ?? (at < 0 ? `Needs a shipyard of level ${spec.yard} in one of your home ports.` : full ? 'The nation has all the troopships its ports can handle.' : poor(cost)),
     });
   }
@@ -374,11 +374,11 @@ export function deliverArsenal(g: Game, nat: string, b: Build): void {
     const war = airWar(g);
     let f = canStation(g, nat, r) || r.ctrl === nat ? fleetAt(g, nat, r.id, wing) : null;
     if (!f && r.ctrl === nat && (!war || hasAirfield(g, r.id))) {
-      f = foundAirFleet(g, nat, r, `${r.name} Air Command`, war ? wing : undefined);
+      f = foundAirFleet(g, nat, r, `${r.name} Air Command`, war ? wing : undefined, count);
       tell(war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`);
     } else {
       // The air war: the wing goes to the strongest group of its own kind.
-      f ??= strongest(airFleetsOf(g, nat).filter((x) => x.ship === undefined && (!war || x.kind === wing)));
+      f ??= strongest(airFleetsOf(g, nat).filter((x) => x.ship === undefined && x.ashore === undefined && (!war || x.kind === wing)));
       if (f) tell(`${cap(word)} from the factories join ${f.name} at ${g.regions[f.base].name}.`);
     }
     if (!f) {
@@ -401,7 +401,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build): void {
       return;
     }
     let f = joinsFleet(g, nat, hull, r.id);
-    if (!f && isHome(g, nat, r) && r.port && r.seas.length) f = foundFleet(g, nat, r, `${r.name} Squadron`);
+    if (!f && isHome(g, nat, r) && r.port && r.seas.length) f = foundFleet(g, nat, r, `${r.name} Fleet`);
     if (!f) { tell(`With no port left to take them, the ${NAVY.classes[hull].many} building at ${r.name} are lost.`); return; }
     f.ships[hull] += count;
     // A new carrier joins with its aircraft aboard (the grand campaign).
