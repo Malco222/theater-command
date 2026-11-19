@@ -11,9 +11,13 @@ before `assemble` calls them (the art director's calls, 2026-11-19: the army's o
 
 - the grey-green tunic of 1937 worn open at the neck: lapels over a shirt and tie (the shirt's collar is soldier.py's
   collar band), a short row of four buttons from the lapels' foot to the belt, its four pockets as soldier.py makes
-  them; on each lapel's point a collar patch with the five-pointed star;
-- breeches full in the thigh and bloused just under the knee over puttees, the wool bands wound up the shin from the
-  ankle boots to the knee in overlapping turns;
+  them; on each lapel's point a collar patch in the infantry's red with the army's five-pointed star in white metal
+  (never black: black two-pointed flames were the Blackshirts' mark). A man has no paint of his own for these, so
+  they take two of the horse's, which he never uses: 10 (coat) the red patch, 11 (coat_dark) the star, and his
+  json says their colours under "colours";
+- breeches full in the thigh and bloused just under the knee over puttees, the wool band wound up the shin from the
+  ankle boots to the knee in a spiral, each turn's lower edge lapped over the one below like a shingle (its edge a
+  rolled fold in shade, not a gap);
 - his kit: belt, bread bag, water bottle and entrenching tool as soldier.py makes them; no Y-straps; two leather
   cartridge pouches on the belt, one either side of the buckle;
 - the steel helmet of 1933: a deep round dome with a short peak, low over the ears, with the boss on its crown.
@@ -39,7 +43,7 @@ import soldier as S  # noqa: E402  (imports bpy first)
 import bpy  # noqa: E402
 import numpy as np  # noqa: E402
 import kit  # noqa: E402
-from sculpt import HalfSpace, RoundBox, Torus, frame_from, on_surface  # noqa: E402
+from sculpt import HalfSpace, Layer, RoundBox, Torus, frame_from, on_surface  # noqa: E402
 
 NATION = "ITA"
 
@@ -58,6 +62,8 @@ S.LOOK[NATION] = {
     "eye": "2A2420",
     "leather": "3A2E25",
     "blanket": "665F4C",    # the water bottle's felt
+    "coat": "9B2A25",       # (a horse's paint: on him the collar patch, the infantry's red)
+    "coat_dark": "E6E6E0",  # (a horse's paint: on him the collar star, white metal)
 }
 S.NATION_SEED[NATION] = 23          # (his face: one of MakeHuman's mixes no other army's file uses)
 import human  # noqa: E402
@@ -77,7 +83,8 @@ S.HELMETS["m33"] = dict(ax=0.121, ay=0.111, az=0.114, dx=-0.004, edge=S._cos3(0.
 
 BIG, OFF = 3.0, -0.06
 LM_NOW = {}                         # (the landmarks of the man being dressed: the kit lays the puttees' turns by them)
-PUTTEE = (0.055, 0.0026)            # (each turn's rise up the shin, and how thick the wound band stands)
+PUTTEE = (0.075, 0.0045)             # (each turn's rise up the shin, and how far its lapped lower edge stands off the one below)
+MARKS = ("coat", "coat_dark")        # (the paints his collar patch and star take: see the top of this file)
 
 
 def _ours(spec):
@@ -137,19 +144,18 @@ def uniform_layers(man, J, spec, LM):
         Rs = S.ring_frame(knee - ank)
         rx, ry = S.ring_axes(trousers, c, Rs)
         trousers.add(Torus(c, rx - 0.002, 0.019, Rs @ S.rot_euler(0, -5, 0), major_y=ry - 0.002), 0.02)
-    # ---- the puttees: wool wound from the boot's top to just under the knee, each turn's edge over the last
+    # ---- the puttees: the wound band itself is the kit's (_wind); here the wool under it, 3 mm below the band's
+    # face so no turn sinks into it, from just above the boot's top (the band covers its ragged foot and the boot's
+    # top by 1.5 cm, standing 4 mm clear of the boot) to under the breeches' blousing
     lower.ops = []
-    # (standing 4 mm clear of the boot, whose top they cover by 1.5 cm: two skins at one depth broke up in teeth)
-    lower.add(tights.cloth({"calf_l": 0.016, "calf_r": 0.016, "foot_l": 0.016, "foot_r": 0.016}, lo=(-BIG, -BIG, LM["ankle"] + 0.02),
+    lower.add(tights.cloth({"calf_l": 0.013, "calf_r": 0.013, "foot_l": 0.013, "foot_r": 0.013}, lo=(-BIG, -BIG, LM["ankle"] + 0.04),
                            hi=(BIG, BIG, tuck + 0.03), default=OFF))
     lower.cut(HalfSpace((0.0, 0.0, tuck + 0.012), (0.0, 0.0, 1.0)), 0.005)
-    lower.cut(HalfSpace((0.0, 0.0, LM["ankle"] + 0.03), (0.0, 0.0, -1.0)), 0.006)
-    for s, side in (("l", 1.0), ("r", -1.0)):                  # (the wool's lower edge rolled, over the boot's top)
-        knee, ank = np.array(J["calf_" + s]), np.array(J["foot_" + s])
-        c = S.leg_point(J, s, LM["ankle"] + 0.036)
-        Rs = S.ring_frame(knee - ank)
-        rx, ry = S.ring_axes(lower, c, Rs)
-        lower.add(Torus(c, rx - 0.001, 0.0065, Rs, major_y=ry - 0.001), 0.004)
+    lower.cut(HalfSpace((0.0, 0.0, LM["ankle"] + 0.05), (0.0, 0.0, -1.0)), 0.006)
+    face = Layer("puttee_face", "lower")                       # (the band's face, uncut: the turns are laid on it)
+    face.add(tights.cloth({"calf_l": 0.016, "calf_r": 0.016, "foot_l": 0.016, "foot_r": 0.016}, lo=(-BIG, -BIG, LM["ankle"] - 0.02),
+                          hi=(BIG, BIG, tuck + 0.05), default=OFF))
+    LM["puttee_face"] = face
     LM["tuck"] = tuck
     LM_NOW.clear()
     LM_NOW.update(LM)
@@ -208,6 +214,51 @@ def _plate(g, L, corners, lift, thick, paint, n=6):
     g._add([tuple(v) for v in verts], faces, paint)
 
 
+# the wound band's section from its lower edge (0) to its upper (1): how far it stands off the cloth, as a share of
+# PUTTEE[1]. Its lower edge rolls down onto the turn below (the fold, in shade); its upper part lies flat under the next
+# turn, which stands clear of it all along the lap.
+WIND = ((-0.03, 0.0), (0.0, 0.5), (0.08, 1.0), (1.0, 0.05))
+LAP = 0.2                           # (the share of each turn's width the next turn covers)
+
+
+def _wind(g, L, J, s_, side, zb, zt, per_turn=14):
+    """One leg's puttee: a band wound from zb (its lowest turn's edge flat at the boot's top) to zt in a spiral, each
+    turn's lower edge lapped over the turn below. The band's points are found on the puttee layer and stood off it."""
+    rise, thick = PUTTEE
+    w = rise / (1.0 - LAP)
+    a_end = 2.0 * math.pi * (zt - zb + rise) / rise
+    A = np.arange(0.0, a_end + 1e-9, 2.0 * math.pi / per_turn)
+    rows = []
+    for a_ in A:
+        z0 = zb - rise + rise * a_ / (2.0 * math.pi)       # (this turn's lower edge here, before it is held to zb..zt)
+        way = np.array((math.cos(a_), side * math.sin(a_), 0.0))
+        row = []
+        for s, lift in WIND:
+            z = min(max(z0 + s * w, zb), zt)
+            row.append((S.leg_point(J, s_, z) + way * 0.075, lift))
+        rows.append(row)
+    flat = [p for row in rows for p, _ in row]
+    P, N = S.project(L, flat)
+    lift = np.array([lf for row in rows for _, lf in row]) * thick + 0.0004
+    V = P + N * lift[:, None]
+    k = len(WIND)
+    faces = []
+    for i in range(len(rows) - 1):
+        for j in range(k - 1):
+            a, b, c, d = i * k + j, (i + 1) * k + j, (i + 1) * k + j + 1, i * k + j + 1
+            faces.append((a, b, c, d) if side > 0 else (a, d, c, b))
+    # (each quad faced outward: checked against the normal at its first corner)
+    out = []
+    for f in faces:
+        v0, v1, v2, v3 = (V[q] for q in f)
+        if np.linalg.norm(np.cross(v2 - v0, v3 - v1)) < 1e-9:         # (none where the band is held flat at its ends)
+            continue
+        if np.cross(v1 - v0, v3 - v0) @ N[f[0]] < 0:
+            f = (f[0], f[3], f[2], f[1])
+        out.append(f)
+    g._add([tuple(v) for v in V], out, "lower")
+
+
 def _star(g, p, nrm, up, r, paint="steel"):
     """A small five-pointed star lying on the cloth at p: five rays from its middle."""
     R = frame_from(nrm, up)
@@ -232,44 +283,43 @@ def build_kit(J, spec, body_ls, Z=None):
     # ---- the open neck: the shirt in the V, the tie (not in the desert), and the lapels over them, each a thin plate
     # laid on the tunic's front (its points found by rays from in front of him)
     top, foot = Z(1.43), Z(1.29)
-    _plate(g, tunic, [(-0.028, top + 0.004), (0.028, top + 0.004), (0.0, foot - 0.004)], 0.0012, 0.0012, "trousers")
+    _plate(g, tunic, [(-0.028, top + 0.004), (0.028, top + 0.004), (0.0, foot - 0.004)], 0.0012, 0.0012, "trousers", 4)
     if not desert:
-        _plate(g, tunic, [(-0.0065, top - 0.01), (0.0065, top - 0.01), (0.0085, foot + 0.022), (-0.0085, foot + 0.022)], 0.0026, 0.0014, "lower")
+        _plate(g, tunic, [(-0.0065, top - 0.01), (0.0065, top - 0.01), (0.0085, foot + 0.022), (-0.0085, foot + 0.022)], 0.0026, 0.0014, "lower", 3)
         p, nrm = on_surface(tunic, (0.4, 0.0, top - 0.009), (-1.0, 0.0, 0.0))
         g.box(p + nrm * 0.0055, (0.003, 0.0085, 0.0065), "lower", frame_from(nrm, (0.0, 0.0, 1.0)))     # (the knot)
     for side in (1.0, -1.0):
-        _plate(g, tunic, [(0.026 * side, top + 0.005), (0.074 * side, top - 0.006), (0.0, foot - 0.006)], 0.0032, 0.003, "tunic")
+        _plate(g, tunic, [(0.026 * side, top + 0.005), (0.074 * side, top - 0.006), (0.0, foot - 0.006)], 0.0032, 0.003, "tunic", 4)
         # the collar patch along the lapel's outer edge, the star at its lower end
         _plate(g, tunic, [(0.042 * side, top - 0.002), (0.07 * side, top - 0.008), (0.058 * side, top - 0.05), (0.037 * side, top - 0.04)],
-               0.0064, 0.0012, "helmet")
+               0.0064, 0.0012, MARKS[0], 2)
         p, nrm = on_surface(tunic, (0.4, 0.05 * side, top - 0.035), (-1.0, 0.0, 0.0))
-        _star(g, p + nrm * 0.0066, nrm, (0.0, 0.0, 1.0), 0.0075)
+        _star(g, p + nrm * 0.0066, nrm, (0.0, 0.0, 1.0), 0.0075, MARKS[1])
     # ---- the four buttons from the lapels' foot to the belt, and one on each pocket's flap
     spots = [((0.3, 0.0, z), (-1.0, 0.0, 0.0)) for z in np.linspace(foot - 0.012, Z(1.045), 4)]
     for side in (1.0, -1.0):
         spots += [((0.3, 0.078 * side, Z(1.336)), (-1.0, -0.25 * side, 0.0)), ((0.3, 0.105 * side, Z(0.918)), (-1.0, -0.25 * side, 0.0))]
     for start, way in spots:
         p, nrm = on_surface(tunic, start, way)
-        g.tube(p - nrm * 0.001, p + nrm * 0.0035, 0.0082, 0.007, "steel", 8)
+        g.tube(p - nrm * 0.001, p + nrm * 0.0035, 0.0082, 0.007, "steel", 6)
     if desert:
         # the sahariana's yoke: each breast pocket's flap carried on up over the shoulder and down the back a hand's width
         for side in (1.0, -1.0):
             ctrl = [(0.14, 0.08 * side, Z(1.36)), (0.12, 0.095 * side, Z(1.415)), (0.06, 0.11 * side, Z(1.462)), (-0.03, 0.112 * side, Z(1.462)),
                     (-0.1, 0.1 * side, Z(1.415)), (-0.13, 0.09 * side, Z(1.36))]
+            first = len(g.V)
             S.strap_on(g, tunic, S.spline(ctrl, 18), 0.07, 0.003, paint="tunic", gap=0.0026)
-    puttees = next((L for L in body_ls if L.name == "puttees"), None)
-    if puttees is not None and LM_NOW.get("tuck"):
-        rise, thick = PUTTEE
-        ank, tuck = LM_NOW["ankle"], LM_NOW["tuck"]
-        for s_, side in (("l", 1.0), ("r", -1.0)):
-            t = np.linspace(0.0, (tuck - 0.012 - ank - 0.06) / rise * 2.0 * np.pi, 120)
-            pts = []
-            for a_ in t:
-                z = ank + 0.06 + rise * a_ / (2.0 * np.pi)
-                c = S.leg_point(J, s_, z)
-                pts.append(c + np.array((math.cos(a_), side * math.sin(a_), 0.0)) * 0.075)
-            S.strap_on(g, puttees, pts, rise * 0.94, thick, paint="lower", gap=0.0012)
+            # (over the shoulder by the collar the tunic moves with the neck: there the yoke stands 6 mm clearer)
+            P = np.array(g.V[first:])
+            _, Nn = S.project(tunic, P)
+            P += Nn * (0.006 * np.clip((P[:, 2] - Z(1.4)) / 0.04, 0.0, 1.0))[:, None]
+            g.V[first:] = [tuple(v) for v in P]
     out["details"] = (g.build("details"), None)
+    if LM_NOW.get("puttee_face") is not None:
+        gw = S.Geo()
+        for s_, side in (("l", 1.0), ("r", -1.0)):
+            _wind(gw, LM_NOW["puttee_face"], J, s_, side, LM_NOW["ankle"] + 0.03, LM_NOW["tuck"] + 0.006)
+        out["puttee_wraps"] = (gw.build("puttee_wraps"), None)
     # ---- the two cartridge pouches on the belt, one either side of the buckle, each with its rounded lid
     from sculpt import Layer
     L = Layer("pouches", "straps")
@@ -288,6 +338,36 @@ def build_kit(J, spec, body_ls, Z=None):
 
 
 S.build_kit = build_kit
+S.LOD2_LEFT_OFF = S.LOD2_LEFT_OFF + ("puttee_wraps",)
+_skin_like = S.skin_like
+
+
+def skin_like(piece, body, k=4):
+    """The wound band takes the weights of the wool it lies on (the uniform's puttee layer, which takes the shin's),
+    never those of the boot below it, so its lowest turns ride the shin and not the foot."""
+    if not piece.name.startswith("puttee_wraps"):
+        return _skin_like(piece, body, k)
+    from mathutils import kdtree
+    W, names = S.weights_of(body)
+    mats = {i for i, m_ in enumerate(body.data.materials) if m_ is not None and m_.name.split(".")[0] == "lower"}
+    on = sorted({v for p_ in body.data.polygons if p_.material_index in mats for v in p_.vertices})
+    kd = kdtree.KDTree(len(on))
+    for v in on:
+        kd.insert(body.data.vertices[v].co, v)
+    kd.balance()
+    Wp = np.zeros((len(piece.data.vertices), len(names)))
+    Mi = piece.matrix_world
+    for v in piece.data.vertices:
+        tot = 0.0
+        for co, j, d in kd.find_n(Mi @ v.co, k):
+            w = 1.0 / max(d, 1e-3)
+            Wp[v.index] += W[j] * w
+            tot += w
+        Wp[v.index] /= tot
+    S.set_weights(piece, Wp, names, 4, 0.03)
+
+
+S.skin_like = skin_like
 
 
 # ================================================================================================ the helmet
@@ -335,9 +415,14 @@ def export_ita(info, dress="summer"):
         S.export_glb(S.stage_path(f"{base}_LOD{lod}.glb"), [m["arm"]] + lods[lod] + socks, anim=False)
     data = S.write_game_json(S.stage_path(f"{base}.json"), m, lods)
     data["about"] = data["about"].replace("soldier.py.", "soldier_ita.py on soldier.py.")
+    data["about"] += (f" Paints {S.FIGURE_PAINTS[MARKS[0]]} ({MARKS[0]}) and {S.FIGURE_PAINTS[MARKS[1]]} ({MARKS[1]}), two of the"
+                      " horse's that a man never wears, are his collar patch (the infantry's red) and its star (white metal):"
+                      " paint them by their colours below.")
     if dress != "summer":
-        data["about"] += f" Dress: {dress}; paint by its colours below (they differ from the grey-green man's)."
+        data["about"] += f" Dress: {dress}; paint all by its colours below (they differ from the grey-green man's)."
         data["colours"] = dict(S.LOOK[tag])
+    else:
+        data["colours"] = {k: S.LOOK[tag][k] for k in MARKS}
     with open(S.stage_path(f"{base}.json"), "w") as f:
         json.dump(data, f, separators=(",", ":"))
     rec["json"] = {k: len(data[k]["triangles"]) // 3 for k in ("near", "mid", "far")}
