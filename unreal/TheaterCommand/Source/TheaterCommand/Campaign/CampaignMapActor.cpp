@@ -29,6 +29,7 @@ FLinearColor ACampaignEnvironment_DuskShade();
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/CommandLine.h"
@@ -13569,6 +13570,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	FRotator EyeFacing(-60.0, 0.0, 0.0);
 	float EyeFieldOfView = 40.0f;
 	int32 EyeWindowWide = 1600;
+	int32 EyeDrawnWide = 1600; // (how many pixels wide the scene is really drawn, before the upscaler fills the window)
 	if (const APlayerController* Player = World->GetFirstPlayerController())
 	{
 		if (Player->PlayerCameraManager)
@@ -13587,6 +13589,17 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				PixelsAtOne = WindowWide / (2.0 * FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(static_cast<double>(EyeFieldOfView), 5.0, 150.0) * 0.5)));
 			}
 		}
+	}
+	{
+		// (The effects artist, 14:02Z on 19 November 2026: the kit's pixel rules are to count the pixels the scene is
+		// really drawn at. The map is drawn to a budget and filled out to the window by Unreal's upscaler: 1072 of a
+		// picture run's 1600, about 1080 of Brian's 2881. The table's own puffs keep the window's pixels they were
+		// tuned in.)
+		static IConsoleVariable* const KitDrawnPercent = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage"));
+		static IConsoleVariable* const KitSecondPercent = IConsoleManager::Get().FindConsoleVariable(TEXT("r.SecondaryScreenPercentage.GameViewport"));
+		const float KitFirstShare = KitDrawnPercent ? KitDrawnPercent->GetFloat() : 100.0f, KitNextShare = KitSecondPercent ? KitSecondPercent->GetFloat() : 100.0f;
+		EyeDrawnWide = FMath::Max(FMath::RoundToInt32(EyeWindowWide * (KitFirstShare > 0.0f ? FMath::Min(KitFirstShare, 100.0f) : 100.0f) / 100.0f
+			* (KitNextShare > 0.0f ? FMath::Min(KitNextShare, 100.0f) : 100.0f) / 100.0f), 64);
 	}
 	const double Now = World->GetTimeSeconds();
 	const double Unit = UnitScale * 2.1;
@@ -13637,11 +13650,11 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			BlastLaidAt = BlastNow;
 			BlastLaidWall = Now;
 			BlastFrameSaid = -1;
-			UE_LOG(LogTheater, Display, TEXT("Effects: the barrage is laid; the eye is %.0f units from what it looks at, pitched %.1f degrees, its view %.1f degrees and %d pixels wide; a metre is %.2f units"),
-				FVector::Distance(EyeAt, CameraFocus), EyeFacing.Pitch, EyeFieldOfView, EyeWindowWide, BlastUnitsAMetre);
+			UE_LOG(LogTheater, Display, TEXT("Effects: the barrage is laid; the eye is %.0f units from what it looks at, pitched %.1f degrees, its view %.1f degrees; the window is %d pixels wide and the scene is drawn %d wide, which is the width the kit is told; a metre is %.2f units"),
+				FVector::Distance(EyeAt, CameraFocus), EyeFacing.Pitch, EyeFieldOfView, EyeWindowWide, EyeDrawnWide, BlastUnitsAMetre);
 			const FVector2D Under = WorldToMap(CameraFocus - BlastOff * BlastUnitsAMetre);
 			Blasts->Clear();
-			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour); // (its clock first: the barrage is timed from it)
+			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeDrawnWide, SmokeHour); // (its clock first: the barrage is timed from it)
 			Blasts->RunTest(SurfacePoint(Under.X, Under.Y, 0.0));
 			bBlastTicked = true; // (the kit is ticked once a frame: a second tick in this frame cut its lamps short)
 			{
@@ -13677,6 +13690,42 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				}
 				UE_LOG(LogTheater, Display, TEXT("Effects: the test machine gun's line of fire:%s the middle's ground is %.2f m above the gun's"), *Said,
 					(Middle.Z - (Gun.Z - 0.6 * BlastUnitsAMetre) - LoweredMetres * BlastUnitsAMetre) / BlastUnitsAMetre);
+				// (For the effects artist, 14:03Z on 19 November 2026: brass rests a centimetre over the ground the kit
+				// is given, which is the map's height function, read smoothly between the grid points of the sheet under
+				// it. The land is drawn as flat triangles between those points. How far the two part at the gun's place,
+				// by either way a cell can be cut in two; and how far the gun's ground stands over the table's flat plane,
+				// which is what the eye turns about.)
+				{
+					const FVector2D GunOnMap = WorldToMap(Gun);
+					const double GunX = WrapX(GunOnMap.X);
+					const FCampaignTerrain* GunShape = &Terrain;
+					if (Data.bWorld && (GunX < 0.0 || GunOnMap.Y < 0.0 || GunX > Data.Width || GunOnMap.Y > Data.Height))
+					{
+						const FFineSheet* GunSheet = FineSheetAt(GunX, GunOnMap.Y);
+						GunShape = GunSheet ? &GunSheet->Shape : nullptr;
+					}
+					if (GunShape && GunShape->NX > 1 && GunShape->NY > 1 && GunShape->Cell > 0.0 && GunShape->Height.Num() == GunShape->NX * GunShape->NY)
+					{
+						const double AlongCells = FMath::Clamp((GunX - GunShape->OriginX) / GunShape->Cell, 0.0, static_cast<double>(GunShape->NX - 1));
+						const double DownCells = FMath::Clamp((GunOnMap.Y - GunShape->OriginY) / GunShape->Cell, 0.0, static_cast<double>(GunShape->NY - 1));
+						const int32 CellI = FMath::Min(FMath::FloorToInt32(AlongCells), GunShape->NX - 2), CellJ = FMath::Min(FMath::FloorToInt32(DownCells), GunShape->NY - 2);
+						const double InU = AlongCells - CellI, InV = DownCells - CellJ;
+						auto CornerOf = [GunShape](int32 I, int32 J) { return FMath::Max(static_cast<double>(GunShape->Height[GunShape->Index(I, J)]), 0.0); };
+						const double H00 = CornerOf(CellI, CellJ), H10 = CornerOf(CellI + 1, CellJ), H01 = CornerOf(CellI, CellJ + 1), H11 = CornerOf(CellI + 1, CellJ + 1);
+						const double CutOne = InU >= InV ? H00 + InU * (H10 - H00) + InV * (H11 - H10) : H00 + InU * (H11 - H01) + InV * (H01 - H00);
+						const double CutOther = InU + InV <= 1.0 ? H00 + InU * (H10 - H00) + InV * (H01 - H00) : H11 + (1.0 - InU) * (H01 - H11) + (1.0 - InV) * (H10 - H11);
+						const double Read = FMath::Max(static_cast<double>(GroundAt(GunOnMap.X, GunOnMap.Y)), 0.0);
+						// (one unit of the map's height, in the kit's metres)
+						const double MetresAUnit = (MapToWorld(GunOnMap.X, GunOnMap.Y, 1.0).Z - MapToWorld(GunOnMap.X, GunOnMap.Y, 0.0).Z) / BlastUnitsAMetre;
+						UE_LOG(LogTheater, Display, TEXT("Effects: the test gun's ground stands %.3f m over the table's flat plane by the height function (the eye's focus is %.3f m over it); the sheet's grid points are %.2f map units apart, %.2f m; flat triangles between them would stand %+.3f m from the function at the gun cut one way and %+.3f m cut the other; the cell's corners stand at %.3f, %.3f, %.3f and %.3f m"),
+							Read * MetresAUnit, (CameraFocus.Z - MapToWorld(GunOnMap.X, GunOnMap.Y, 0.0).Z) / BlastUnitsAMetre, GunShape->Cell, GunShape->Cell * UnitScale / BlastUnitsAMetre,
+							(CutOne - Read) * MetresAUnit, (CutOther - Read) * MetresAUnit, H00 * MetresAUnit, H10 * MetresAUnit, H01 * MetresAUnit, H11 * MetresAUnit);
+					}
+					else
+					{
+						UE_LOG(LogTheater, Display, TEXT("Effects: no sheet of the land stands under the test gun yet; its ground cannot be compared"));
+					}
+				}
 			}
 		}
 		if (BlastHold >= 0.0)
@@ -13704,7 +13753,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		}
 		if (!bBlastTicked)
 		{
-			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour);
+			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeDrawnWide, SmokeHour);
 		}
 	}
 	bool bDrawingLight = false;
