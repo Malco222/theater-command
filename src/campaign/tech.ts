@@ -10,6 +10,7 @@ import supportData from '../../data/campaign/support.json';
 import { turnToDate } from '../core/ticket';
 import { EASTERN, allied, atWar, headline } from './game';
 import { RESEARCH } from './research';
+import { liftByRecord } from './pacific';
 import { traitRule, type Trait, type When } from './traits';
 import { RES, keepsStores, oilMonths } from './resources';
 import { researchSpeed } from './buildings';
@@ -192,7 +193,8 @@ function finish(g: Game, n: Nation, id: string, quiet: boolean): void {
   const s = n.tech!, t = BY_ID[id];
   if (!t || s.done.includes(id)) return;
   s.done.push(id);
-  if (t.sealift) n.sealift += t.sealift;
+  // (A country whose lift is the record's own count has its landing craft in that count already: pacific.ts, rider b630.)
+  if (t.sealift && !liftByRecord(g, n.id)) n.sealift += t.sealift;
   // (With the laboratories in his advisers' hands the free team is theirs to set to work: desks.ts.)
   if (!quiet && n.id === g.human) headline(g, 'info', `Research complete: ${t.name}. ${techRule(t)}${staffRuns(g, n.id, 'research') ? '' : ' A research team is free for new work.'}`, n.id);
 }

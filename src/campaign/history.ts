@@ -136,12 +136,12 @@ export const theatreOf = (nat: string, opId: string): string | null => HISTORY.t
 export const onBook = (g: Game, theatre: string | null): boolean => !!stopDef(g).book && theatre !== null && !g.flags[`hist:off:${theatre}`];
 
 /**
- * By the book a row fights at the figure of the army that raised it, whoever's flag it stands under (rider b626 to
- * ruling 234, with b628): the stations' `raised` table gives it by the row's name, as a figure (with a last month,
- * where the record's army changed) or as the country whose own army's figure it takes, or for every corps a fallen
- * country left in keeping (`armies`). Null where the
- * book gives none or is shut: the corps then fights at the figure of the country it answers to, as it always did.
- * Nothing is read with the far side off, or from the history dial's third stop on.
+ * A row fights at the figure of the army that raised it, whoever's flag it stands under (rider b626 to ruling 234,
+ * with b628): the stations' `raised` table gives it by the row's name, as a figure (with a last month, where the
+ * record's army changed) or as the country whose own army's figure it takes, or for every corps a fallen country
+ * left in keeping (`armies`). A row's quality is a fact, so it holds at every stop of the history dial, with the
+ * book open or shut (rider b630). Null where the table gives none: the corps then fights at the figure of the
+ * country it answers to, as it always did. Nothing is read with the far side off.
  */
 interface Raised { armies?: Record<string, number>; rows?: Record<string, number | string | [figure: number, until: number]> }
 const RAISED = (): { theatre: string; raised?: Raised } | null => (HISTORY as unknown as { stations?: { theatre: string; raised?: Raised } }).stations ?? null;
@@ -152,7 +152,7 @@ export function raisedQuality(g: Game, c: { name: string; raised?: string }): nu
   // (A figure with a last month holds to that month: after it the row is again as its flag's are.)
   const of = row !== undefined ? (typeof row === 'number' ? row : typeof row === 'string' ? g.nations[row]?.quality : g.turn <= row[1] ? row[0] : undefined)
     : c.raised !== undefined ? R.armies?.[c.raised] : undefined;
-  return of === undefined || !onBook(g, B!.theatre) ? null : of;
+  return of ?? null;
 }
 /** The month the book was closed in a theatre, or 0. */
 export const bookClosed = (g: Game, theatre: string): number => g.flags[`hist:off:${theatre}`] ?? 0;

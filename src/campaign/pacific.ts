@@ -136,6 +136,8 @@ interface LiftRules {
   until: number;
   /** By country: from the month of a line to the country's next line, so many divisions' worth may be put ashore. */
   by: Record<string, [number, number][]>;
+  /** A country's own sea lift by the record (rider b630): from the month of a line its shipping puts that many forces to sea in a month. The first line is its figure as the game opens. `liftMonth`. */
+  own?: Record<string, [number, number][]>;
 }
 
 /** The Pacific's rules. None while the far side's switch is off. */
@@ -212,11 +214,41 @@ function freezeMonth(g: Game): void {
 }
 
 /**
+ * A country's sea lift by the record (rider b630 to ruling 234; the historian's historian/sea-lift-record-b630.md):
+ * the most times its rows put to sea in a month of the record, from the month the shipping for it was gathered.
+ * Japan's is 4 on the China coast and 11 from October 1941, when the southern operation's shipping was held: the
+ * ten forces of December 1941 in eleven sailings. Counted as the game counts its lift, one for each time a row puts
+ * to sea. A fact of the day, like the landing ships: by the date, at every stop of the dial, for player and computer
+ * alike, wherever the far side's switch is on, in the grand campaign's last act too. What the country's yards have
+ * added since stays added.
+ */
+export function liftMonth(g: Game): void {
+  if (!PACIFIC || !farOn(g)) return;
+  for (const [nat, rows] of Object.entries(PACIFIC.lift?.own ?? {})) {
+    const n = g.nations[nat];
+    if (!n) continue;
+    for (let i = 1; i < rows.length; i++) {
+      const key = `lift:own:${nat}:${i}`;
+      if (g.turn < rows[i][0] || g.flags[key] !== undefined) continue;
+      n.sealift = Math.max(0, n.sealift + rows[i][1] - rows[i - 1][1]);
+      g.flags[key] = g.turn;
+    }
+  }
+}
+/**
+ * True for a country whose sea lift is the record's own count (`liftMonth`): its landing craft are in that count
+ * already, so a technology adds no shipping to it (rider b630: Japan's Daihatsu craft and the Shinshu Maru were in
+ * service from 1937).
+ */
+export const liftByRecord = (g: Game, nat: string): boolean => PACIFIC !== null && farOn(g) && !!PACIFIC.lift?.own?.[nat];
+
+/**
  * The month's opening, before history's events are read: the month a pact begins to bind, the freeze, Britain and
  * America with each other, and the Soviet staff's month.
  */
 export function pacificOpening(g: Game): void {
   const P = PACIFIC;
+  liftMonth(g);
   if (!P || !reads(g)) return;
   const J = live(g, P.power);
   if (!J) return;
@@ -485,7 +517,7 @@ export interface ShoreLift { left: number; of: number; from: number; next: numbe
  * worth (size times strength). The record's count is a country's own troops landed on an enemy-held shore, in
  * anyone's ships, since there is no boarding here. It is a fact of the day: it binds player and computer alike, by
  * the date, at every stop of the dial and whenever the war began. A country the rows do not name has none; Japan and
- * those who fight beside it are not counted (ruling 200's six a month). After the rows' last month the ordinary lift
+ * those who fight beside it are not counted (Japan's own lift is the record's: `liftMonth`). After the rows' last month the ordinary lift
  * binds alone. Null where the count is not read.
  */
 export function shoreLift(g: Game, nat: string, to: Region): ShoreLift | null {

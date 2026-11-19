@@ -23,7 +23,7 @@ import worldData from '../../data/campaign/world.json';
 import { pressData, warWorkMonth, worldMonth } from './world';
 import { mapDist2 } from './wrap';
 import { guarantorsOf, type Guarantor } from './guarantees';
-import { pacificOpening, pacificSides, pactBinds } from './pacific';
+import { liftMonth, pacificOpening, pacificSides, pactBinds } from './pacific';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -917,7 +917,7 @@ export const fireEvent = (g: Game, id: string): boolean => { const e = DIPLOMACY
 
 export function monthlyDiplomacy(g: Game): void {
   // The last act of the grand campaign: no alliances, no courting, no treaties, and history's calendar is closed.
-  if ((g.flags.dom ?? 0) > 0) { warWorkMonth(g); traitsMonth(g); techMonth(g); return; }
+  if ((g.flags.dom ?? 0) > 0) { liftMonth(g); warWorkMonth(g); traitsMonth(g); techMonth(g); return; }
   const m = momentum(g);
   // A gate its holder has shut: the neutrals whose trade it turned back move a point a month away from his side (ruling 177(a)).
   const sore = soreMonth(g);
