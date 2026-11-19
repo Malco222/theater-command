@@ -75,9 +75,13 @@ def rivet_paints(paints):
             "seam": shade(paints["upper"], 0.36), "seam_under": shade(paints["under"], 0.3)}
 
 
-def nacelle_of(G, lead, z, is_radial, back, side):
+def nacelle_of(G, lead, z, is_radial, back, side, s=None):
     """An engine's nacelle on a wing, as the game's sculptor shapes it: round and stubby for an air-cooled engine, long
-    and narrow for one in line."""
+    and narrow for one in line. `nacelle` in her numbers is a nacelle of her own lines for an engine in line: stations
+    (ahead of `lead`, above the airscrew's line, half its width, half its height), in the same frame as the game's
+    (the spinner's tip 2.55 ahead of `lead`, its back at 2.09, the airscrew at 2.16); `nacelle_square` its section."""
+    if s and s.get("nacelle") and not is_radial:
+        return G["Body"]([(lead + dx, z + dz, w, h) for dx, dz, w, h in s["nacelle"]], s.get("nacelle_square", 2.3), side)
     if is_radial:
         return G["Body"]([(lead + 1.75, z, 0.46, 0.46), (lead + 1.65, z, 0.66, 0.66), (lead + 0.8, z, 0.68, 0.68), (lead - 0.4, z - 0.05, 0.62, 0.58),
                           (lead - back * 0.7, z - 0.1, 0.38, 0.32), (lead - back, z - 0.02, 0.08, 0.07)], 2.0, side)
@@ -402,6 +406,9 @@ def open_cockpit(m, f, s, hull, G=None):
             m.disc((x, 0.0, hull.z(-x)), way, hull.h(-x) * 0.97, "inside", 24, oval=hull.w(-x) / hull.h(-x))
     xm = 0.5 * (x0 + x1)
     m.box((xm, 0.0, hull.z(-xm) - 0.36 * hull.h(-xm)), (x0 - x1, 1.5 * hull.w(-xm), 0.04), "inside")              # (her floor)
+    if s.get("opening_plain"):
+        open_rim(m, f, hull, x0, x1, edge)                 # (a gunner's position: no panel, no coaming, no sight)
+        return
     # (her instrument panel, black, its top under the coaming, with two rows of dials)
     lip = hull.at(x0, math.radians(edge)).z
     wide = hull.at(x0, math.radians(edge)).y
@@ -423,7 +430,11 @@ def open_cockpit(m, f, s, hull, G=None):
             top = min(top, body_top(hood_body(G, s, 0), sx + 0.02) - 0.2)     # (and under her windscreen's glass, where it is low over it)
         m.box((sx, 0.0, top + 0.045), (0.08, 0.055, 0.09), "gunmetal")
         m.box((sx + 0.02, 0.0, top + 0.12), (0.008, 0.075, 0.085), "lens", pitch=-32.0)
-    # (the rim round its edge, padded)
+    open_rim(m, f, hull, x0, x1, edge)
+
+
+def open_rim(m, f, hull, x0, x1, edge):
+    """The rim round the edge of an open cockpit, padded."""
     xs = [x for x in sorted(f.rings_x, reverse=True) if x1 - 1e-4 <= x <= x0 + 1e-4]
     for a in (edge, 180.0 - edge):
         m.strip([port(hull.at(x, math.radians(a))) for x in xs], [port(hull.out(x, math.radians(a))) for x in xs], 0.026, "leather", lift=0.006)
@@ -469,11 +480,29 @@ def glazed_nose(m, f, s, G, hull):
     if x1 > glazed[1] + 0.1:
         xm = 0.5 * (x1 + glazed[1])
         m.box((xm, 0.0, hull.z(-xm) - 0.5 * hull.h(-xm)), (x1 - glazed[1], 1.3 * hull.w(-x1), 0.04), "inside")
+    floor = hull.z(-0.5 * (x1 + glazed[1])) - 0.5 * hull.h(-0.5 * (x1 + glazed[1])) if x1 > glazed[1] + 0.1 else None
     for x, y, high, face in NOSE_CREW.get(f.name, []):
         z = body_top(hull, x, -y) - 0.2 if high is None else hull.z(-x) + high
         at = figure(m, (x, y, z), face, vest=False)
         if m.fine and high is None:
             m.box(at(-0.2, 0, -0.3), (0.05, 0.42, 0.36), "inside")
+            if s.get("nose_wheel") and floor is not None:
+                # (her pilot flies her from inside her glass nose: his seat on its frame, his legs, and both his hands
+                #  on the wheel at the head of his control column)
+                lap(m, at)
+                seat = at(0.06, 0.0, -0.825)
+                if seat.z - floor > 0.08:
+                    m.box((seat.x, seat.y, 0.5 * (seat.z + floor)), (0.3, 0.3, seat.z - floor), "inside")
+                hub = at(0.4, 0.0, -0.38)
+                m.rod(Vector((hub.x + 0.12, hub.y, floor)), hub, 0.02, "gunmetal", sides=6)
+                grips = [at(0.38, 0.15 * sy, -0.36) for sy in (1.0, -1.0)]
+                m.rod(grips[0], grips[1], 0.014, "gunmetal", sides=6)
+                for g in grips:
+                    m.rod(g - Z * 0.02, g + Z * 0.07, 0.016, "leather", sides=6)
+                arms(m, at, [g + Z * 0.03 for g in grips])
+        elif m.fine and s.get("nose_gunner"):
+            hold_gun(m, f, s, hull, Vector((x, y, z)), face, at, legs=False)     # (the man at her nose gun: both his hands on it)
+    m.use("plane")
 
 
 def gunners(m, f):
@@ -534,47 +563,59 @@ def flex_pair(s, base):
 
 def rear_gunner(m, f, s, G, hull):
     """A man who sits facing aft under her hood with a gun on a free mounting in front of him (the rear gunner of a
-    dive bomber or a torpedo bomber, the gunner on a bomber's back): each gun's breech on its own line back to a pair
-    of grips where his hands fall as he sits, the post it swings on, his seat and his legs; and both his hands on the
-    grips (Brian, 2026-11-19: every gunner with his two hands on his guns). His forearms and hands go with the gun."""
+    dive bomber or a torpedo bomber, the gunner on a bomber's back): see hold_gun."""
     if not m.fine or not f.flex:
         return
-    taken = set()
     for head, face, at in getattr(f, "seated", []):
         if abs(abs(face) - 180.0) > 1.0:
             continue
-        near = [(nm, b, t) for nm, b, t in f.flex if nm not in taken and b.x < head.x + 0.1 and (b - head).length < 1.4 and abs(b.y - head.y) < 0.45]
-        if not near:
-            continue                                      # (a man facing aft with no gun: he keeps watch)
-        nm, base, tip = min(near, key=lambda g: (g[1] - head).length)
-        taken.add(nm)
-        d = (tip - base).normalized()
-        want = at(0.33, 0.0, -0.2)                        # (where his hands fall as he sits: a forearm ahead of his chest)
-        hold = base - d * min(max((base - want).dot(d), 0.2), 0.8)      # (the middle of his grips, on the line of his guns)
-        across = d.cross(Z)
-        across = across.normalized() if across.length > 1e-6 else Y.copy()
-        over = across.cross(d).normalized()
-        if over.z < 0.0:
-            over = -over
-        half = flex_pair(s, base)
-        m.use(nm)
-        for sy in ((-1.0, 1.0) if half else (0.0,)):
-            off = across * half * sy
-            m.rod(hold + off + d * 0.03, base + off + d * 0.1, 0.032, "gunmetal", sides=8)       # (its breech, back from where its barrel begins)
-            m.box(hold + off + d * 0.2 - over * 0.075, (0.1, 0.05, 0.075), "gunmetal")            # (the box its rounds feed from)
-        grips = [hold + across * (half + 0.08) * sy for sy in (-1.0, 1.0)]
-        m.rod(grips[0], grips[1], 0.012, "gunmetal", sides=5)                                      # (the bar across the back of the breech)
-        for g in grips:
-            m.rod(g - over * 0.06, g + over * 0.06, 0.017, "gunmetal", sides=6)                    # (a grip for each hand)
-        m.use("plane")
-        deck = body_top(hull, base.x, -base.y)
-        if 0.05 < base.z - deck < 0.45:
-            m.rod(base - Z * 0.03, Vector((base.x, base.y, deck - 0.03)), 0.022, "gunmetal", sides=6)   # (the post it swings on)
-        lap(m, at)
-        left = at(0.0, 1.0, 0.0) - at(0.0, 0.0, 0.0)
-        grips.sort(key=lambda g: -(g - hold).dot(left))
-        arms(m, at, grips, fore=nm, inside=lambda el, sh: tuck(hull, el, sh, 0.09))
+        hold_gun(m, f, s, hull, head, face, at)
     m.use("plane")
+
+
+def hold_gun(m, f, s, hull, head, face, at, legs=True):
+    """A man at a gun on a free mounting in front of him: each gun's breech on its own line back to a pair of grips
+    where his hands fall as he sits, the post it swings on, his seat and his legs (`legs`); and both his hands on the
+    grips (Brian, 2026-11-19: every gunner with his two hands on his guns). His forearms and hands go with the gun.
+    False if no gun of hers is in front of him: he keeps watch."""
+    if not m.fine or not f.flex:
+        return False
+    taken = f.__dict__.setdefault("guns_held", set())
+    ahead = Vector((math.cos(math.radians(face)), math.sin(math.radians(face)), 0.0))
+    near = [(nm, b, t) for nm, b, t in f.flex if nm not in taken and (b - head).dot(ahead) > -0.1 and (b - head).length < 1.4 and abs(b.y - head.y) < 0.45]
+    if not near:
+        return False
+    nm, base, tip = min(near, key=lambda g: (g[1] - head).length)
+    taken.add(nm)
+    d = (tip - base).normalized()
+    want = at(0.33, 0.0, -0.2)                        # (where his hands fall as he sits: a forearm ahead of his chest)
+    hold = base - d * min(max((base - want).dot(d), 0.2), 0.8)      # (the middle of his grips, on the line of his guns)
+    across = d.cross(Z)
+    across = across.normalized() if across.length > 1e-6 else Y.copy()
+    over = across.cross(d).normalized()
+    if over.z < 0.0:
+        over = -over
+    half = flex_pair(s, base)
+    m.use(nm)
+    for sy in ((-1.0, 1.0) if half else (0.0,)):
+        off = across * half * sy
+        m.rod(hold + off + d * 0.03, base + off + d * 0.1, 0.032, "gunmetal", sides=8)       # (its breech, back from where its barrel begins)
+        m.box(hold + off + d * 0.2 - over * 0.075, (0.1, 0.05, 0.075), "gunmetal")            # (the box its rounds feed from)
+    grips = [hold + across * (half + 0.08) * sy for sy in (-1.0, 1.0)]
+    m.rod(grips[0], grips[1], 0.012, "gunmetal", sides=5)                                      # (the bar across the back of the breech)
+    for g in grips:
+        m.rod(g - over * 0.06, g + over * 0.06, 0.017, "gunmetal", sides=6)                    # (a grip for each hand)
+    m.use("plane")
+    deck = body_top(hull, base.x, -base.y)
+    if 0.05 < base.z - deck < 0.45:
+        m.rod(base - Z * 0.03, Vector((base.x, base.y, deck - 0.03)), 0.022, "gunmetal", sides=6)   # (the post it swings on)
+    if legs:
+        lap(m, at)
+    left = at(0.0, 1.0, 0.0) - at(0.0, 0.0, 0.0)
+    grips.sort(key=lambda g: -(g - hold).dot(left))
+    arms(m, at, grips, fore=nm, inside=lambda el, sh: tuck(hull, el, sh, 0.09))
+    m.use("plane")
+    return True
 
 
 def room_at(hull, p, room):
@@ -715,7 +756,7 @@ def exhausts(m, f, s, G, hull):
         for hand in (1.0, -1.0):
             part = ("wing.starboard" if hand > 0.0 else "wing.port") if out > f.y_cut else "plane"
             side = out * hand
-            nacelle = nacelle_of(G, lead, z, is_radial, back, side)
+            nacelle = nacelle_of(G, lead, z, is_radial, back, side, s)
             if is_radial:
                 pipes(nacelle, lead + 0.7, part, 0.5)
             else:
@@ -1055,7 +1096,7 @@ def rivets(m, f, s, G, hull):
     for (out, lead, z, is_radial, back) in s.get("engines", []):
         for hand in (1.0, -1.0):
             part = ("wing.starboard" if hand > 0.0 else "wing.port") if out > f.y_cut else "plane"
-            nacelle = nacelle_of(G, lead, z, is_radial, back, out * hand)
+            nacelle = nacelle_of(G, lead, z, is_radial, back, out * hand, s)
             W = G["Wing"](s["wing"], hand)
 
             def cowl_at(x, a):

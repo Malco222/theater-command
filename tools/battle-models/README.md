@@ -415,10 +415,38 @@ measures). 50,000 triangles. What is hers:
 - pale grey, black cowling, plain red discs, as the Val, so that one carrier's air group reads as one (the art
   director). No names, numbers or unit marks; no aerial wire.
 
+**The `He111`** (the He 111H, Germany's medium bomber) is the first twin-engined machine laid out again, measured
+the same way (Wikimedia Commons, "Heinkel He 111 H-1 3-view line drawing.svg", Kaboldy, CC BY-SA 3.0; measured, not
+traced). Her numbers in `EXTRA_PLANES` stand in place of the game's own, as the B-17's do. 69,000 triangles. What
+is hers:
+
+- a fuselage that is an oval taller than it is wide, and a nose that is a bullet of glass with no step: glass all
+  round ahead of her pilot's feet, and from there back to her cabin's last frame down to a sill beside him
+  (`glazed_sill`: degrees round her above her middle line, on one of her skin's own rows so that the edge is clean;
+  she is metal below it). The frames: a round pane at her tip, ten ribs back to the first hoop, then hoops over
+  her cabin from sill to sill and frames along it (`cabin_ribs`).
+- her pilot sits to port in the glass, on a seat on its frame, with both hands on the wheel at the head of his
+  control column (`nose_wheel`); the man at her nose gun kneels ahead of him with both hands on its grips
+  (`nose_gunner`; `fitout.hold_gun`, which serves any man with a free gun in front of him, whichever way he faces).
+- her engines hang low, each in a nacelle of her own lines (`nacelle`: stations in the same frame as the game's
+  nacelle for an engine in line, so that her airscrews, exhaust stubs and rivets fall where they should), deepest
+  where its wheel's doors are, with its radiator bath under it (`scoops`).
+- a wing whose middle is straight and thick between her fuselage and her engines, its trailing edge cut forward
+  there and run into her side in a long fillet; outer panels that taper and rise; a broad oval tailplane and fin.
+- the gunner on her back sits facing aft under a glazed hood that is round in front and open behind him
+  (`_he111_canopy`; `opening_plain`: an open position with no instrument panel), both hands on his gun. The bath
+  under her has four round windows a side and a gun out of each end; the men who lay in it are not modelled, since
+  nothing of them was seen from outside.
+- her coat is a splinter of two dark greens parted by straight lines (`splinter`, as the Me 262's wedges: bands
+  across her fuselage, wedges out along each wing and tailplane, one line across her fin) over pale blue, which
+  begins low on her sides (`under_from`). Crosses on her wings and fuselage only, and a plain fin (the art
+  director). No names, code letters or unit marks; no aerial wire.
+
 The tools that read a three-view are not in the repository (they hold nothing but arithmetic on a picture): cut
 each view out and turn it to stand the usual way, rub out strokes too thin to be her outline (wires, a torpedo
 drawn in), find the paper by filling in from the edge, set the scales from her real length and span, and set the
-height of her airscrew's line by the middle of her cowling, not by the first ink at her nose.
+height of her airscrew's line by the middle of her cowling, not by the first ink at her nose. Where a gun stands out
+of her nose, her nose is set by hand, and one scale serves the whole sheet (the He 111: her span).
 
 **The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, twelve more entries in
 `EXTRA_PLANES`. Paints and first years are the art director's rulings of that day; the file's `year` is the first

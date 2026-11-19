@@ -168,17 +168,30 @@ CABIN = [
 ]
 
 NOSES = [
+    # (`glazed_sill`: behind the part that is glass all round, her windows come down her sides to a sill this many
+    #  degrees round her above her middle line, on one of her skin's own rows so that its edge is clean, and she is
+    #  metal below it; `cabin_ribs`: where round her the frames run along her over those windows)
+    ('(p.x > glazed[1] and n.z > -0.55)', '(p.x > glazed[1] and ((p.z - hull.z(-p.x)) / hull.h(-p.x) > math.sin(math.radians(s["glazed_sill"])) ** hull.power if "glazed_sill" in s else n.z > -0.55))'),
+    # (`nacelle`: an engine in line in a nacelle of her own lines: see fitout.nacelle_of)
+    ("                nacelle = Body([(lead + 2.55, z, 0.04, 0.04), (lead + 2.1, z, 0.34, 0.34), (lead + 2.05, z - 0.04, 0.4, 0.48), (lead + 0.6, z - 0.1, 0.47, 0.6),\n"
+     "                                (lead - 1.2, z - 0.14, 0.44, 0.5), (lead - back, z - 0.04, 0.1, 0.1)], 2.3, side)\n",
+     "                nacelle = battle_nacelle(globals(), lead, z, False, back, side, s)\n"),
     ("        xs = [hull.front - 0.02 - (hull.front - glazed[0] - 0.04) * k / 12.0 for k in range(13)]\n",
      "        x_tip = s.get('nose_cap', hull.front - 0.02)\n"
      "        bar = s.get('nose_bar', 1.0)\n"
      "        xs = [x_tip - (x_tip - glazed[0] - 0.02) * k / 12.0 for k in range(13)]\n"),
     ("            parts.strip(frames, [hull.at(x, a) for x in xs], [hull.out(x, a) for x in xs], 0.016, 0.008)\n",
      "            parts.strip(frames, [hull.at(x, a) for x in xs], [hull.out(x, a) for x in xs], 0.016 * bar, 0.008)\n"
-     "            if s.get('windows_back') and hull.out(glazed[1], a).z > -0.5:\n"
+     "            if s.get('windows_back') and 'glazed_sill' not in s and hull.out(glazed[1], a).z > -0.5:\n"
      "                more = [glazed[0] - (glazed[0] - glazed[1]) * j / 6.0 for j in range(7)]\n"
-     "                parts.strip(frames, [hull.at(x, a) for x in more], [hull.out(x, a) for x in more], 0.016 * bar, 0.008)\n"),
+     "                parts.strip(frames, [hull.at(x, a) for x in more], [hull.out(x, a) for x in more], 0.016 * bar, 0.008)\n"
+     "        for deg in ([s['glazed_sill'], 180.0 - s['glazed_sill']] + list(s.get('cabin_ribs', ())) if 'glazed_sill' in s else []):\n"
+     "            more = [glazed[0] - (glazed[0] - glazed[1]) * j / 8.0 for j in range(9)]\n"
+     "            parts.strip(frames, [hull.at(x, math.radians(deg)) for x in more], [hull.out(x, math.radians(deg)) for x in more], 0.016 * bar, 0.008)\n"),
     ("            parts.strip(frames, [hull.at(x, a) for a in angles], [hull.out(x, a) for a in angles], 0.018, 0.008)\n",
      "            ring = angles if x >= glazed[0] - 0.01 else [math.radians(-30.0 + 240.0 * k / 30.0) for k in range(31)]\n"
+     "            if 'glazed_sill' in s and x < glazed[0] - 0.01:\n"
+     "                ring = [math.radians(s['glazed_sill'] + (180.0 - 2.0 * s['glazed_sill']) * k / 30.0) for k in range(31)]\n"
      "            parts.strip(frames, [hull.at(x, a) for a in ring], [hull.out(x, a) for a in ring], 0.018 * bar, 0.008)\n"),
 ]
 
@@ -880,6 +893,139 @@ EXTRA_PLANES["B17"] = {
     "side_marks": [(-3.72, 0.5, "USA-BAR")], "wing_marks": [(11.6, 0.75, 0.95, "USA-BAR", "USA-BAR", False, False)], "code": (-7.3, 0.5),
 }
 
+# The He 111 again, to the lines of the real machine (Brian, 2026-11-19: "use this 3d model is our bench mark for all
+# airplanes"), measured from a three-view drawing (Wikimedia Commons, "Heinkel He 111 H-1 3-view line drawing",
+# Kaboldy, CC BY-SA 3.0; 165 px to the metre, set by her span of 22.6 m; measured, not traced). What changed from the
+# game's own numbers: her fuselage is an oval taller than it is wide, and its nose is a bullet of glass with no step,
+# glass all round ahead of her pilot's feet and down to a sill beside him (`glazed_sill`), where he sits to port with
+# his hands on his wheel and the man at the nose gun kneels ahead of him; her engines hang low in nacelles of her own
+# lines (`nacelle`), each with its radiator bath under it and its wheel's doors behind that; her wing's middle is
+# straight and thick between her fuselage and her engines, its trailing edge cut forward there, and its outer panels
+# taper and rise; her tailplane and fin are the broad ovals they were; the gunner on her back sits facing aft under a
+# glazed hood open behind him; and the bath under her has a gun at each end. Her coat is a splinter of two dark
+# greens, parted by straight lines, over pale blue; crosses on her wings and fuselage only, and her fin plain (the
+# art director, 2026-11-19).
+_HE111_HULL = [(7.0, -0.02, 0.02, 0.02), (6.97, -0.02, 0.13, 0.12), (6.9, -0.021, 0.29, 0.306), (6.8, -0.022, 0.38, 0.398), (6.65, -0.02, 0.45, 0.47), (6.4, -0.015, 0.545, 0.605),
+               (6.2, -0.01, 0.627, 0.70), (5.94, 0.0, 0.705, 0.80), (5.6, 0.01, 0.772, 0.90), (5.27, 0.018, 0.816, 0.962), (5.0, 0.025, 0.839, 1.017), (4.7, 0.032, 0.856, 1.046),
+               (4.42, 0.04, 0.868, 1.067), (4.13, 0.043, 0.875, 1.073), (3.0, 0.035, 0.89, 1.085), (2.15, 0.03, 0.89, 1.09), (0.95, 0.025, 0.885, 1.075), (0.4, 0.033, 0.88, 1.063),
+               (-0.2, 0.042, 0.86, 1.042), (-1.0, 0.049, 0.79, 1.0), (-1.6, 0.052, 0.757, 0.96), (-2.0, 0.058, 0.742, 0.924), (-3.0, 0.034, 0.697, 0.87), (-4.0, 0.022, 0.636, 0.79),
+               (-5.0, 0.022, 0.563, 0.688), (-6.0, 0.025, 0.46, 0.575), (-6.4, 0.023, 0.42, 0.532), (-7.0, 0.035, 0.34, 0.435), (-7.8, 0.005, 0.26, 0.35), (-8.4, 0.0, 0.19, 0.254),
+               (-8.8, 0.0, 0.139, 0.142), (-9.0, -0.005, 0.076, 0.073), (-9.12, 0.0, 0.01, 0.01)]
+# (the hood over the gunner on her back: along her, half its width, the height of its top; round in front as a
+#  fairing, then straight-sided back to its open end)
+_HE111_HOOD = [(2.28, 0.3, 1.2), (2.2, 0.42, 1.26), (2.1, 0.52, 1.335), (2.0, 0.575, 1.385), (1.9, 0.605, 1.415), (1.8, 0.62, 1.423), (1.4, 0.62, 1.423), (1.0, 0.62, 1.423)]
+_HE111_BOX = []
+
+
+def _he111_hull():
+    if not _HE111_BOX:
+        _HE111_BOX.append(game()["Body"](_HE111_HULL, 2.2))
+    return _HE111_BOX[0]
+
+
+def _he111_canopy(hull):
+    skirt = fighters.SKIRT
+
+    def sec(x, ys, top):
+        sill = fitout.body_top(hull, x, ys) + 0.055
+        return _val_section(hull, x, sill, ys, None, max(top, sill + 0.05), None, 0.8)
+    n = len(sec(*_HE111_HOOD[0]))
+    foot = [fighters.deck(hull, 2.37, 0.1)] * (n - 1) + [fighters.deck(hull, 2.37, 0.0)]
+    k = next(i for i, r in enumerate(_HE111_HOOD) if r[1] >= 0.62)
+    return [{"sections": [(2.37, foot)] + [(x, sec(x, ys, top)) for x, ys, top in _HE111_HOOD[:k + 1]], "skirt": skirt, "hoops": [3, k + 1], "rails": [skirt, n - 1], "bar": 0.018},
+            {"sections": [(x, sec(x, ys, top)) for x, ys, top in _HE111_HOOD[k:]], "skirt": skirt, "hoops": [1, 2], "rails": [skirt, 3, n - 1], "bar": 0.018}]
+
+
+# Her splinter: as the Me 262's (see _ME262_ZONES), her own lines. On her fin a line is in (along her, height).
+_HE111_ZONES = {
+    "starboard": (False, [((4.74, 1.6), (0.2, 2.9)), ((4.5, 4.3), (-0.05, 3.9)), ((3.95, 6.6), (0.3, 8.2)), ((3.3, 9.3), (0.4, 9.9))]),
+    "port": (True, [((4.74, -2.6), (0.1, -1.5)), ((4.4, -4.9), (0.0, -6.2)), ((3.7, -7.7), (0.3, -7.1)), ((3.2, -9.6), (0.42, -10.4))]),
+    "spine": (True, [((3.4, 1.0), (2.6, -1.0)), ((0.6, 1.0), (1.3, -1.0)), ((-1.4, 1.0), (-2.3, -1.0)), ((-3.9, 1.0), (-3.2, -1.0)), ((-5.6, 1.0), (-6.3, -1.0))]),
+    "tail starboard": (True, [((-6.5, 1.9), (-8.8, 1.2))]),
+    "tail port": (False, [((-6.35, -1.0), (-8.9, -2.1))]),
+    "fin": (False, [((-6.6, 1.2), (-8.8, 2.0))]),
+}
+_HE111_SOFT = 0.09                                          # (half the breadth of a sprayed edge, in metres)
+
+
+def splinter(zones, zone, u, v, soft):
+    """How far a point (u along her, v out to starboard) is into a zone's paler colour, as the coat's field takes it:
+    each line it is beyond turns the colour over, and an edge is `soft` broad each side of its line."""
+    pale, lines = zones[zone]
+    hand = -1.0 if zone.endswith("port") else 1.0
+    near = 9.0
+    for (ax, ay), (bx, by) in lines:
+        d = ((bx - ax) * (v - ay) - (by - ay) * (u - ax)) / math.hypot(bx - ax, by - ay) * hand
+        if d < 0.0:
+            pale = not pale
+        near = min(near, abs(d))
+    return max(-2.0, min(2.0, (near if pale else -near) / soft)) * 0.045
+
+
+def _he111_coat(p):
+    """Her coat: bands across her fuselage from her nose to her tail, wedges out along each wing and each tailplane,
+    and one line across her fin."""
+    hull = _he111_hull()
+    x = min(max(p.x, hull.back), hull.front)
+    zc, h, w = hull.z(-x), hull.h(-x), hull.w(-x)
+    if abs(p.y) < 0.14 and p.x < -6.2 and p.z > zc + h - 0.02:
+        return splinter(_HE111_ZONES, "fin", p.x, p.z, _HE111_SOFT)
+    if abs(p.y) <= w + 0.04 and abs(p.z - zc) <= h + 0.5:
+        return splinter(_HE111_ZONES, "spine", p.x, p.y, _HE111_SOFT)       # (her fuselage, the hood on her back, the bath under her)
+    zone = ("tail " if p.x < -6.0 else "") + ("starboard" if p.y > 0.0 else "port")
+    return splinter(_HE111_ZONES, zone, p.x, p.y, _HE111_SOFT)
+
+
+def _he111_bath():
+    """The bath under her, with four round windows down each side (a gun out of each end of it: see her extras)."""
+    st = [(1.06, -1.04, 0.2, 0.05), (0.92, -1.12, 0.33, 0.13), (0.6, -1.17, 0.4, 0.21), (0.3, -1.185, 0.42, 0.2), (-0.4, -1.185, 0.42, 0.2), (-0.95, -1.16, 0.4, 0.19),
+          (-1.2, -1.12, 0.36, 0.15), (-1.4, -1.07, 0.27, 0.09), (-1.46, -1.04, 0.15, 0.04)]
+    return [("body", (st, 0.0, 2.3, "under"))] + [("rod", ((x, 0.4, -1.2), (x, 0.428, -1.2), 0.07, 0.07, "glass")) for x in (0.38, -0.2, -0.47, -0.78)]
+
+
+EXTRA_PLANES["He111"] = {
+    "title": "He 111H (our own model)",
+    "hull": _HE111_HULL, "square": 2.2, "screw": 1.72, "blades": 3,
+    # (glass all round ahead of 5.94, and from there back to her cabin's last frame down to the sill; the round pane at
+    #  her tip, then ten ribs to the first hoop; over her cabin the frames run along her at the heads of its side
+    #  windows, each side of her roof and down its middle)
+    "glazed": (5.94, 4.13), "glazed_sill": 9.0, "windows_back": True, "nose_frames": ((6.65, 6.3, 5.94, 5.27, 4.42, 4.15), 10), "nose_cap": 6.65, "nose_bar": 0.5,
+    "nose_frames_paint": "upper", "cabin_ribs": (45.0, 72.0, 90.0, 108.0, 135.0), "nose_wheel": True, "nose_gunner": True,
+    "glass_bands": [(-0.13, -0.58, 0.175, 0.36)],
+    "hoods": fighters.hood_of([(2.37, 1.1, 0.1, 0.01)] + [(x, 0.88, ys, top - 0.88) for x, ys, top in _HE111_HOOD]),
+    "canopy": _he111_canopy, "opening": (2.15, 0.95, 62.0), "opening_plain": True, "frames_paint": "upper", "lines": (0.6, 0.45),
+    "wing": [(0.0, 4.741, -0.95, -0.4, 1.15), (0.8, 4.741, -0.75, -0.4, 1.15), (0.88, 4.741, -0.5, -0.4, 1.15), (0.95, 4.741, -0.3, -0.4, 1.15), (1.04, 4.741, 0.0, -0.4, 1.15),
+             (1.13, 4.741, 0.2, -0.4, 1.15), (1.25, 4.741, 0.295, -0.4, 1.15), (1.5, 4.741, 0.295, -0.4, 1.15), (1.8, 4.741, 0.21, -0.4, 1.15), (2.1, 4.741, 0.101, -0.395, 1.13),
+             (2.4, 4.741, 0.01, -0.385, 1.08), (2.7, 4.741, -0.051, -0.365, 1.0), (3.0, 4.741, -0.087, -0.34, 0.93), (3.37, 4.741, -0.099, -0.31, 0.84), (3.6, 4.686, -0.087, -0.3, 0.81),
+             (4.2, 4.535, -0.045, -0.227, 0.756), (6.0, 4.092, 0.089, 0.002, 0.614), (9.0, 3.36, 0.307, 0.389, 0.371), (10.2, 3.063, 0.404, 0.542, 0.272), (10.5, 2.966, 0.501, 0.58, 0.245),
+             (10.8, 2.784, 0.676, 0.616, 0.2), (11.1, 2.445, 1.021, 0.658, 0.12), (11.25, 2.1, 1.35, 0.68, 0.05), (11.3, 1.85, 1.6, 0.69, 0.01)],
+    "aileron": (0.56, 0.93, 0.76), "flap": (0.3, 0.55, 0.78),
+    "tail": [(0.0, -6.19, -9.02, -0.01, 0.33), (0.6, -6.211, -8.997, -0.01, 0.31), (1.2, -6.241, -8.931, -0.01, 0.28), (1.8, -6.32, -8.846, -0.01, 0.25), (2.4, -6.459, -8.767, -0.01, 0.21),
+             (3.0, -6.671, -8.64, -0.01, 0.16), (3.3, -6.823, -8.537, -0.01, 0.13), (3.6, -7.035, -8.373, -0.01, 0.1), (3.8, -7.25, -8.15, -0.01, 0.06), (3.9, -7.41, -7.992, -0.01, 0.04),
+             (3.96, -7.6, -7.8, -0.01, 0.01)],
+    "fin": [(0, -6.25, -8.9, 0.45, 0.2), (0, -6.368, -8.87, 0.7, 0.2), (0, -6.447, -8.834, 1.0, 0.19), (0, -6.556, -8.773, 1.4, 0.17), (0, -6.671, -8.682, 1.8, 0.15),
+            (0, -6.756, -8.622, 2.0, 0.14), (0, -6.871, -8.543, 2.2, 0.12), (0, -7.023, -8.44, 2.4, 0.1), (0, -7.12, -8.373, 2.5, 0.09), (0, -7.235, -8.295, 2.6, 0.075),
+            (0, -7.386, -8.167, 2.7, 0.055), (0, -7.495, -8.077, 2.75, 0.04), (0, -7.671, -7.901, 2.8, 0.01)],
+    "patch": 1.0, "graded": _he111_coat, "grain": {"wing": 0.2, "tail": 0.2}, "under_from": -0.5,
+    "colours": {"upper": "3E4638", "upper2": "56604A", "under": "8FB0BF", "nose": "3E4638", "boss": "2E332A"},
+    # (each engine: its airscrew 2.58 out and 0.4 below her middle line; the nacelle from its spinner back over and
+    #  under her wing to her trailing edge, deepest where its wheel's doors are)
+    "engines": [(2.583, 4.23, -0.4, False, 4.3)],
+    "nacelle": [(2.55, 0.0, 0.04, 0.04), (2.4, 0.0, 0.2, 0.2), (2.25, 0.0, 0.3, 0.3), (2.1, 0.0, 0.36, 0.36), (2.05, 0.01, 0.42, 0.4), (1.75, -0.005, 0.5, 0.475),
+                (1.3, 0.0, 0.53, 0.5), (0.8, -0.005, 0.55, 0.545), (0.5, -0.095, 0.56, 0.655), (0.0, -0.14, 0.56, 0.72), (-1.0, -0.15, 0.54, 0.72), (-1.8, -0.1, 0.48, 0.62),
+                (-2.6, 0.01, 0.36, 0.41), (-3.3, 0.08, 0.2, 0.2), (-4.2, 0.05, 0.04, 0.03)],
+    "scoops": [([(6.02, -0.84, 0.28, 0.07), (5.95, -0.86, 0.36, 0.11), (5.4, -0.88, 0.38, 0.11), (5.02, -0.9, 0.3, 0.08)], 2.583, 2.6)],
+    "pitot": True, "tailwheel": (-7.35, -0.72), "mast": (0.0, 1.09, 1.9, 0.0),
+    # (her guns, in the order the battle knows them: her nose, her back, the bath's aft end, its fore end)
+    "extras": _he111_bath() + [
+        ("rod", ((6.95, 0.0, -0.14), (7.6, 0.0, -0.34), 0.022, 0.018, "steel")), ("rod", ((0.98, 0.0, 1.3), (0.2, 0.0, 1.52), 0.022, 0.018, "steel")),
+        ("rod", ((-1.3, 0.0, -1.1), (-2.05, 0.0, -1.42), 0.022, 0.018, "steel")), ("rod", ((0.95, 0.0, -1.2), (1.65, 0.0, -1.43), 0.022, 0.018, "steel"))],
+    "side_marks": [(-3.4, 0.5, "GER")], "wing_marks": [(7.6, 1.95, 0.75, "GER", "GER", True, True)], "code": (-2.2, 0.45),
+}
+fitout.SEATS["He111"] = [(0, 1.58, 0.0, 180.0)]
+fitout.NOSE_CREW["He111"] = [(4.95, 0.32, None, 0.0), (6.28, -0.1, 0.06, 0.0)]
+
+
 # The single-seat fighters, laid out again to measured drawings with framed glazing of their own (fighters.py).
 EXTRA_PLANES.update(fighters.FIGHTERS)
 
@@ -1119,7 +1265,7 @@ def game():
             src = src.replace(old, new)
         _G = {"__file__": path, "__name__": "build_plane", "BATTLE": BATTLE, "BATTLE_CHORDS": {True: CHORDS, False: CHORDS_PLAIN}, "battle_us": battle_us,
               "BATTLE_FLAP": FLAP, "BATTLE_AILERON": AILERON, "BATTLE_ELEVATOR": ELEVATOR, "BATTLE_RUDDER": RUDDER, "LINE_DRAWN": LINE,
-              "battle_cabin_paint": cabin_paint, "battle_cabin_frames": cabin_frames, "battle_cabin_body": fitout.cabin_body,
+              "battle_cabin_paint": cabin_paint, "battle_cabin_frames": cabin_frames, "battle_cabin_body": fitout.cabin_body, "battle_nacelle": fitout.nacelle_of,
               "battle_canopy": fighters.canopy, "battle_glare": fighters.glare}
         exec(compile(src, path, "exec"), _G)
         _G["PAINTS"]["torpedo"] = len(_G["PAINTS"])        # (a paint of a battle's own: what a torpedo bomber carries)
@@ -1264,7 +1410,7 @@ def schemes_of(G, name, s, paints, ink):
 TALLY = {"fighter": (3, 0, 10, 0.05, 0.0), "dive bomber": (1, 2, 12, 0.05, 0.06), "attack": (1, 2, 12, 0.05, 0.06), "torpedo bomber": (1, 2, 12, 0.05, 0.06),
          "bomber": (2, 3, 20, 0.05, 0.06)}
 TALLY_ROW = {"He111": 16, "Bomber": 16, "Betty": 16, "Nell": 16}      # (a medium bomber's nose is shorter)
-TALLY_AT = {"He111": 4.45, "Amerikabomber": 6.8, "B29": 8.25}                   # (her cockpit is her glass nose: her record goes on the first solid skin behind it)
+TALLY_AT = {"He111": 3.85, "Amerikabomber": 6.8, "B29": 8.25}                   # (her cockpit is her glass nose: her record goes on the first solid skin behind it)
 LEAD = 0.026                                 # (half the star over a mission flown as leader)
 BAR = 0.045                                  # (half the height of a white bar on a rudder)
 
