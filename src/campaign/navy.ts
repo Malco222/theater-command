@@ -26,7 +26,7 @@ import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { alongside, riding } from './stations';
-import { coversBeaches, hopAims, pacificGround, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
+import { PACIFIC, coversBeaches, hopAims, pacificGround, ringDrawn, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
 import { HISTORY, bookDate, dialDraw, stopDef, stopOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
@@ -2040,9 +2040,11 @@ function coverHops(g: Game, nat: string, orders?: { fleet: string }[], cover?: {
  * takes it elsewhere meanwhile stands. One the enemy drives from its cover base covers from the harbour it is driven
  * to, and still goes home when its beaches are done. A fleet that may cover: warships on the surface, fit for sea,
  * free (no order of the plan or the book, not tied to a station, not a raider) and based on the Pacific's ground; a
- * beach, a shore on the Pacific's ground (the plan's landings elsewhere are covered by the admirals there). Only for
- * the side against the power, never a player's, and nothing while the far side is off (pacific.ts `coversBeaches`).
- * Returns the fleets covering a beach, and those that moved their base this month.
+ * beach, a shore on the Pacific's ground (the plan's landings elsewhere are covered by the admirals there). Every
+ * computer staff's in the Pacific's war, the power's included (rider b599 (iii) to ruling 234), never a player's, and
+ * nothing while the far side is off (pacific.ts `coversBeaches`); the power's battle line, and once its ring is drawn
+ * its carrier striking force, keep to their own rule and are never among the fleets that may cover (`keptTogether`). Returns the fleets covering
+ * a beach, and those that moved their base this month.
  */
 function coverBases(g: Game, nat: string, orders?: { fleet: string }[]): { covers: Set<number>; moved: Set<number> } {
   const covers = new Set<number>(), moved = new Set<number>();
@@ -2055,6 +2057,8 @@ function coverBases(g: Game, nat: string, orders?: { fleet: string }[]): { cover
   for (const f of mine) {
     const at = g.flags[`fl:coverAt:${f.id}`];
     if (at === undefined || f.base === at - 1) continue;
+    // (A row of the book with a sea takes it out from its cover base and brings it back there after: the cover stands.)
+    if (f.bookBase) continue;
     if (bookMoved(g, nat, f)) forget(f);
     else g.flags[`fl:coverAt:${f.id}`] = f.base + 1;
   }
@@ -2062,8 +2066,9 @@ function coverBases(g: Game, nat: string, orders?: { fleet: string }[]): { cover
     for (const f of mine) if (was(f) !== undefined && !ordered(f)) { const r = g.regions[was(f)! - 1]; forget(f); if (r && rebase(g, f, r)) moved.add(f.id); }
     return { covers, moved };
   }
-  // (A fleet on its month of peace at sea is left alone that month: `navalAI`.)
-  const fit = (f: Fleet): boolean => surfaceShips(f) > 0 && f.duty !== 'raid' && !f.tied && f.cruised !== g.turn && !ordered(f) && f.ready >= 0.5 && f.base >= 0 && pacificGround(g, g.regions[f.base]);
+  // (A fleet on its month of peace at sea is left alone that month: `navalAI`. The power's main fleet keeps to its own rule.)
+  const kept = keptTogether(g, nat);
+  const fit = (f: Fleet): boolean => surfaceShips(f) > 0 && f.duty !== 'raid' && !f.tied && f.cruised !== g.turn && !ordered(f) && !kept.has(f.id) && f.ready >= 0.5 && f.base >= 0 && pacificGround(g, g.regions[f.base]);
   // The sea off each named beach of the Pacific's, in the order the beaches were named, with the first beach named on it.
   const beaches: { z: number; to: Region }[] = [];
   for (const { from, to } of hopAims(g, nat)) {
@@ -2089,12 +2094,13 @@ function coverBases(g: Game, nat: string, orders?: { fleet: string }[]): { cover
       break;
     }
   }
-  // Between landings: a fleet with no named beach left in its reach goes back to the base it had.
+  // Between landings: a fleet with no named beach left in its reach goes back to the base it had. So does the power's
+  // carrier striking force the month its ring is drawn, whatever beach is still in its reach: it is kept together now.
   for (const f of mine) {
     const at = was(f);
     if (at === undefined || covers.has(f.id) || ordered(f)) continue;
     const reach = fleetReach(g, f);
-    if (beaches.some((b) => reach.includes(b.z))) continue;
+    if (!kept.has(f.id) && beaches.some((b) => reach.includes(b.z))) continue;
     const r = g.regions[at - 1];
     forget(f);
     if (r && r.id !== f.base && rebase(g, f, r)) { moved.add(f.id); headline(g, 'info', `The ${f.name} returns to ${r.name}.`, nat, r.id); }
@@ -2103,12 +2109,36 @@ function coverBases(g: Game, nat: string, orders?: { fleet: string }[]): { cover
 }
 
 /**
- * Whether the book moved the fleet's base this month (stations.ts, `bookFleets`): a row with a sea that took it to a
- * harbour within reach of its sea (it keeps its own base to go back to), or a row that is a move of base (marked done
- * this month).
+ * The power's main fleet, which never goes to a beach to cover it (rider b599 (iii) to ruling 234; the Pacific
+ * planner's paper 14). Its battle line, the fleet with the most battleships, always: in the opening only the carriers
+ * and the lighter fleets cover the landings (section 2, and the record: the main body lay in home waters through the
+ * opening; the design director, 16:22Z). Once the ring is drawn its carrier striking force too, of its other fleets
+ * the one with the most carriers (section 3, "The fleet is kept together and comes out for the line"): they share the
+ * line's base and sail together, by the book's dated moves and the admirals' own odds (pacific.ts, `ringDrawn`).
+ * Empty for every other nation, and while the far side is off.
+ */
+function keptTogether(g: Game, nat: string): Set<number> {
+  const out = new Set<number>();
+  if (!PACIFIC || nat !== PACIFIC.power) return out;
+  const mine = fleetsOf(g, nat).filter((f) => shipCount(f.ships) > 0);
+  const top = (k: 'bb' | 'cv', not?: Fleet): Fleet | undefined => mine
+    .filter((f) => f.ships[k] > 0 && f !== not)
+    .sort((a, b) => b.ships[k] - a.ships[k] || fleetPower(g, b) - fleetPower(g, a) || a.id - b.id)[0];
+  const line = top('bb');
+  if (line) out.add(line.id);
+  if (!ringDrawn(g)) return out;
+  const carriers = top('cv', line);
+  if (carriers) out.add(carriers.id);
+  return out;
+}
+
+/**
+ * Whether the book moved the fleet's base this month for good (stations.ts, `bookFleets`): a row that is a move of
+ * base (marked done this month). A row with a sea is not: it takes the fleet out from where it lay and brings it back
+ * there after its last month (its `bookBase`), so a fleet covering a beach keeps its cover and its own base to go home
+ * to (`coverBases`).
  */
 function bookMoved(g: Game, nat: string, f: Fleet): boolean {
-  if (f.bookBase) return true;
   const key = `bf:${nat}:${f.name}:`;
   for (const k in g.flags) if (k.startsWith(key) && g.flags[k] === g.turn) return true;
   return false;

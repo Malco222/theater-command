@@ -11,7 +11,7 @@ import { endStaffMonth, ferry } from '../src/campaign/ai';
 import { atWar, createGame, declareWar, relocate } from '../src/campaign/game';
 import { HISTORY, setStop } from '../src/campaign/history';
 import { NAVY, fleetReach, navalAI, seaPath } from '../src/campaign/navy';
-import { PACIFIC, coversBeaches, firstOnRun, hopShores, hopsBind, laneOn, onRun, pacificFreed, pacificRuns, runOf, runQuays } from '../src/campaign/pacific';
+import { PACIFIC, coversBeaches, firstOnRun, hopShores, hopsBind, laneOn, onRun, pacificFreed, pacificRuns, ringDrawn, runOf, runQuays } from '../src/campaign/pacific';
 import { oceanRuns, startOpen } from '../src/campaign/staff';
 import { acrossOcean, oceanShares, overseasOf, sailings } from '../src/campaign/world';
 import type { Corps, Fleet, Game, Region } from '../src/campaign/types';
@@ -204,13 +204,151 @@ describe('the fleet goes to the beach it covers (ruling 200(j); rider b585 (b))'
     return { g, beach: path[path.length - 1] };
   };
 
-  it("is America's rule and the Allies', never Japan's or a player's", () => {
+  it("is every computer staff's in the Pacific's war, Japan's included (rider b599 (iii)), never a player's", () => {
     const g = pacificWar(1, 36);
     expect(coversBeaches(g, 'USA')).toBe(true);
     expect(coversBeaches(g, 'AUS')).toBe(true);
-    expect(coversBeaches(g, 'JAP')).toBe(false);
+    expect(coversBeaches(g, 'JAP')).toBe(true);
     expect(coversBeaches(war(1, 36), 'USA')).toBe(false);
     expect(coversBeaches(pacificWar(1, 36, 'USA'), 'USA')).toBe(false);
+    expect(coversBeaches(pacificWar(1, 36, 'JAP'), 'JAP')).toBe(false);
+  });
+
+  /**
+   * August 1942 by hand at a stop with no book: Koepang Japan's, named by Japan's staff for a landing at Darwin. With
+   * `ring`, Japan has drawn its ring (paper 14, section 3): its war on America six months old, no ground gained since.
+   */
+  const darwin = (human: string | null = null, ring = false): { g: Game; beach: number } => {
+    const g = pacificWar(3, 36, human);
+    if (ring) { g.flags['war:JAP:USA'] = 30; g.flags['st:gain:JAP'] = 30; }
+    const kp = g.byName['Koepang'], dw = g.byName['Darwin'];
+    kp.ctrl = 'JAP';
+    g.flags['st:hop:JAP:0'] = dw.id + 1;
+    g.flags['st:hopQ:JAP:0'] = kp.id + 1;
+    const path = seaPath(g, 'JAP', kp, dw, { max: NAVY.landing.range, surprise: true })!;
+    return { g, beach: path[path.length - 1] };
+  };
+  const covering = (g: Game): string[] => g.fleets.filter((f) => f.nat === 'JAP' && g.flags[`fl:cover:${f.id}`] !== undefined).map((f) => f.name);
+
+  it("draws Japan's ring by the book from the outer line's month, slid with the strike; elsewhere the first month its offensive has stalled since its war on America began, and for good", () => {
+    expect(PACIFIC!.ring).toEqual({ from: 33 });
+    const b = pacificWar(1, 32);
+    expect(hopsBind(b)).toBe(true);
+    expect(ringDrawn(b)).toBe(false);
+    b.turn = 33;
+    expect(ringDrawn(b)).toBe(true);
+    const g = pacificWar(3, 36);
+    expect(ringDrawn(g)).toBe(false);
+    g.flags['war:JAP:USA'] = 30;
+    g.flags['st:gain:JAP'] = 34;
+    expect(ringDrawn(g)).toBe(false);
+    g.flags['st:gain:JAP'] = 33;
+    expect(ringDrawn(g)).toBe(true);
+    // Once drawn it stays drawn, whatever is gained after.
+    g.flags['st:gain:JAP'] = 36;
+    expect(ringDrawn(g)).toBe(true);
+    // Not before the war on America, however long the offensive in China has stood still.
+    const c = war(3, 26);
+    c.flags['st:gain:JAP'] = 10;
+    expect(ringDrawn(c)).toBe(false);
+  });
+
+  it("moves Japan's fleets to the beach they cover in the opening as the Allies' do, its carrier striking force too; its battle line stays in home waters (paper 14, section 2)", () => {
+    const { g, beach } = darwin();
+    expect(ringDrawn(g)).toBe(false);
+    navalAI(g, 'JAP');
+    expect(covering(g)).toEqual(['Mobile Fleet']);
+    const f = fleet(g, 'JAP', 'Mobile Fleet');
+    expect(g.regions[f.base].name).toBe('Koepang');
+    expect(fleetReach(g, f)).toContain(beach);
+    expect(g.headlines.some((h) => h.turn === 36 && h.text === 'The Mobile Fleet moves its base to Koepang to cover the landing at Darwin.')).toBe(true);
+    // The battle line, the fleet with the most battleships, never covers: not even when no other fleet is fit to go.
+    const { g: h } = darwin();
+    for (const x of h.fleets) if (x.nat === 'JAP' && x.name !== 'Combined Fleet') x.ready = 0.3;
+    navalAI(h, 'JAP');
+    expect(covering(h)).toEqual([]);
+    expect(h.regions[fleet(h, 'JAP', 'Combined Fleet').base].name).toBe('Hiroshima');
+  });
+
+  it("once the ring is drawn keeps its carrier striking force and battle line together at their base: another fleet goes (paper 14, section 3)", () => {
+    const { g, beach } = darwin(null, true);
+    expect(ringDrawn(g)).toBe(true);
+    const second = fleet(g, 'JAP', '2nd Fleet');
+    expect(fleetReach(g, second)).not.toContain(beach);
+    navalAI(g, 'JAP');
+    expect(g.regions[second.base].name).toBe('Koepang');
+    expect(second.stance).toBe('port');
+    expect(g.headlines.some((h) => h.turn === 36 && h.text === 'The 2nd Fleet moves its base to Koepang to cover the landing at Darwin.')).toBe(true);
+    expect(covering(g)).toEqual(['2nd Fleet']);
+    for (const nm of ['Combined Fleet', 'Mobile Fleet']) expect(g.regions[fleet(g, 'JAP', nm).base].name, nm).toBe('Hiroshima');
+    g.turn = 37;
+    navalAI(g, 'JAP');
+    expect(second.zone).toBe(beach);
+    expect(second.stance).toBe('patrol');
+    for (const nm of ['Combined Fleet', 'Mobile Fleet']) expect(g.regions[fleet(g, 'JAP', nm).base].name, nm).toBe('Hiroshima');
+  });
+
+  it("then never sends them to a beach, though no other fleet is fit to go, nor when the striking force is down to the line's count of carriers; nothing for a player's Japan", () => {
+    const { g } = darwin(null, true);
+    for (const f of g.fleets) if (f.nat === 'JAP' && f.name !== 'Combined Fleet' && f.name !== 'Mobile Fleet') f.ready = 0.3;
+    // Three of the striking force's carriers lost: it has as many as the battle line, and is still the striking force.
+    const mobile = fleet(g, 'JAP', 'Mobile Fleet');
+    mobile.ships.cv = fleet(g, 'JAP', 'Combined Fleet').ships.cv;
+    navalAI(g, 'JAP');
+    expect(covering(g)).toEqual([]);
+    for (const nm of ['Combined Fleet', 'Mobile Fleet']) expect(g.regions[fleet(g, 'JAP', nm).base].name, nm).toBe('Hiroshima');
+    const { g: p } = darwin('JAP', true);
+    navalAI(p, 'JAP');
+    expect(p.regions[fleet(p, 'JAP', '2nd Fleet').base].name).toBe('Formosa');
+  });
+
+  it("brings a main fleet that went to a beach in the opening home the month the ring is drawn, though the beach is still named and in its reach", () => {
+    const { g, beach } = darwin();
+    navalAI(g, 'JAP');
+    const went = covering(g);
+    expect(went.length).toBe(1);
+    const f = fleet(g, 'JAP', went[0]);
+    const home = g.regions[g.flags[`fl:cover:${f.id}`] - 1].name;
+    expect(g.regions[f.base].name).toBe('Koepang');
+    // A month on, still covering the same beach, and then the ring is drawn.
+    g.turn = 37;
+    navalAI(g, 'JAP');
+    expect(f.zone).toBe(beach);
+    g.turn = 38;
+    g.flags['war:JAP:USA'] = 30; g.flags['st:gain:JAP'] = 30;
+    expect(ringDrawn(g)).toBe(true);
+    navalAI(g, 'JAP');
+    expect(g.regions[f.base].name).toBe(home);
+    expect(g.flags[`fl:cover:${f.id}`]).toBeUndefined();
+    expect(g.headlines.some((h) => h.turn === 38 && h.text === `The ${f.name} returns to ${home}.`)).toBe(true);
+    // Another fleet goes to the beach instead.
+    expect(covering(g).length).toBe(1);
+    expect(covering(g)).not.toContain(f.name);
+  });
+
+  it("keeps a covering fleet's cover while a row of the book with a sea takes it out and brings it back: it still goes home when its beaches are done", () => {
+    const { g } = august();
+    const pf = fleet(g, 'USA', 'Pacific Fleet');
+    navalAI(g, 'USA');
+    const samoa = g.byName['Samoa'], nc = g.byName['New Caledonia'], pearl = g.byName['Pearl Harbor'];
+    expect(pf.base).toBe(samoa.id);
+    // The book's row takes it from Samoa to New Caledonia for a sea, keeping Samoa as the base it goes back to.
+    g.turn = 37;
+    pf.bookBase = [pf.base, pf.port, pf.home, pf.station];
+    pf.base = nc.id; pf.port = nc.name; pf.home = nc.seas[0]; pf.zone = pf.home;
+    navalAI(g, 'USA', [{ fleet: 'Pacific Fleet', zone: g.seas[nc.seas[0]].key!, stance: 'patrol' }]);
+    expect(g.flags[`fl:cover:${pf.id}`]).toBe(pearl.id + 1);
+    expect(g.flags[`fl:coverAt:${pf.id}`]).toBe(samoa.id + 1);
+    // The row ends: the book brings it back to Samoa. Its beaches done, it goes home to Pearl Harbor.
+    g.turn = 38;
+    const [base, port, home, station] = pf.bookBase;
+    pf.base = base; pf.port = port; pf.home = home; pf.zone = home; pf.station = station;
+    delete pf.bookBase;
+    delete g.flags['st:hop:USA:0'];
+    delete g.flags['st:hopQ:USA:0'];
+    navalAI(g, 'USA');
+    expect(g.regions[pf.base].name).toBe('Pearl Harbor');
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('fl:cover'))).toEqual([]);
   });
 
   it('moves the strongest fleet that could cover to the nearest harbour of its side within three seas of the beach; it spends the month in harbour there', () => {
