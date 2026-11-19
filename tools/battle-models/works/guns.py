@@ -15,14 +15,17 @@ from rigid import smooth
 
 
 def annulus(m, at, r0, r1, thick, paint, sides=32, a0=0.0, a1=360.0):
-    """A flat ring (or part of one) lying level: inner radius r0, outer r1, its top at `at`."""
+    """A flat ring (or part of one) lying level: inner radius r0, outer r1, its top at `at`. Either radius may be a
+    function of the bearing in degrees, for an edge that is not a circle."""
     at = Vector(at)
+    f0 = r0 if callable(r0) else (lambda a: r0)
+    f1 = r1 if callable(r1) else (lambda a: r1)
     full = abs(a1 - a0) >= 359.9
     n = sides if full else max(2, int(sides * abs(a1 - a0) / 360.0))
     angs = [math.radians(a0 + (a1 - a0) * k / n) for k in range(n + (0 if full else 1))]
     cnt = len(angs)
-    top_i = [at + Vector((math.cos(a) * r0, math.sin(a) * r0, 0)) for a in angs]
-    top_o = [at + Vector((math.cos(a) * r1, math.sin(a) * r1, 0)) for a in angs]
+    top_i = [at + Vector((math.cos(a), math.sin(a), 0)) * f0(math.degrees(a)) for a in angs]
+    top_o = [at + Vector((math.cos(a), math.sin(a), 0)) * f1(math.degrees(a)) for a in angs]
     bot_i = [p - Z * thick for p in top_i]
     bot_o = [p - Z * thick for p in top_o]
     last = cnt if full else cnt - 1
@@ -30,7 +33,7 @@ def annulus(m, at, r0, r1, thick, paint, sides=32, a0=0.0, a1=360.0):
     m.add(top_i + top_o, quads, paint, False, lambda p: Z)
     m.add(bot_i + bot_o, quads, paint, False, lambda p: -Z)
     m.add(top_o + bot_o, quads, paint, True, lambda p: Vector((p.x - at.x, p.y - at.y, 0)))
-    if r0 > 1e-4:
+    if callable(r0) or r0 > 1e-4:
         m.add(top_i + bot_i, quads, paint, True, lambda p: -Vector((p.x - at.x, p.y - at.y, 0)))
     if not full:
         for k in (0, cnt - 1):
@@ -132,12 +135,23 @@ def heavy_gun(m, parent, at=(0.0, 0.0, 0.0), shield=False, twin=False):
     # the platform the crew ride on: tread plate on brackets, a rail round the back
     deck_z = O.z + 0.66
     Rd = 1.82 + w * 1.3                            # the platform's edge
-    annulus(m, (O.x, O.y, deck_z), 0.70 + q, Rd, 0.035, "upper", 40 if fine else 16)
-    annulus(m, (O.x, O.y, deck_z - 0.035), Rd - 0.08, Rd - 0.02, 0.07, "upper", 40 if fine else 16)               # its kerb
+    # (the single gun's platform runs 0.42 m further back behind the breech, a loader's step on the bore's line: he
+    # stands square behind the base of his round with its nose at the breech, and lunges in to ram it home. The round
+    # is 0.93 m long and the round edge was only 1.07 m behind the breech's face. The twin's broad platform has the room)
+    STEP, STEP_HALF = (0.0, 1.0) if twin else (0.42, 26.0)
+
+    def edge(a):
+        """The platform's edge at a bearing (degrees; 180 is straight behind the breech)."""
+        return Rd + STEP * smooth((STEP_HALF - abs((a + 360.0) % 360.0 - 180.0)) / STEP_HALF)
+    round_deck = (40 if fine else 16) if twin else (72 if fine else 24)
+    annulus(m, (O.x, O.y, deck_z), 0.70 + q, edge, 0.035, "upper", round_deck)
+    annulus(m, (O.x, O.y, deck_z - 0.035), lambda a: edge(a) - 0.08, lambda a: edge(a) - 0.02, 0.07, "upper", round_deck)               # its kerb
     if fine:                                                                                                    # the tread pattern: rings of studs
-        for ring, cnt in [(0.86 + q + 0.18 * k, int((0.86 + q + 0.18 * k) * 30.5)) for k in range(int((Rd - 0.24 - 0.86 - q) / 0.18) + 1)]:
+        for ring, cnt in [(0.86 + q + 0.18 * k, int((0.86 + q + 0.18 * k) * 30.5)) for k in range(int((Rd + STEP - 0.24 - 0.86 - q) / 0.18) + 1)]:
             for k in range(cnt):
                 a = 2 * math.pi * (k + 0.5 * (cnt % 3)) / cnt
+                if ring > edge(math.degrees(a)) - 0.24 + 1e-6:
+                    continue
                 c = Vector((O.x + math.cos(a) * ring, O.y + math.sin(a) * ring, deck_z))
                 m.add([c + Vector((0.03, 0, 0.004)), c + Vector((0, 0.012, 0.004)), c + Vector((-0.03, 0, 0.004)), c + Vector((0, -0.012, 0.004))], [(0, 1, 2, 3)], "upper", False, lambda p: Z)
     for k in range(8):
@@ -145,15 +159,21 @@ def heavy_gun(m, parent, at=(0.0, 0.0, 0.0), shield=False, twin=False):
         d = Vector((math.cos(a), math.sin(a), 0))
         m.rod(P + d * (0.52 + q) + Z * 0.06, Vector((O.x, O.y, deck_z - 0.04)) + d * (Rd - 0.57), 0.03, "upper", sides=8)
         m.rod(Vector((O.x, O.y, deck_z - 0.05)) + d * (0.72 + q), Vector((O.x, O.y, deck_z - 0.05)) + d * (Rd - 0.06), 0.022, "upper", sides=6)
+    if STEP:        # the step's own bearers, all under the plate: nothing stands on the bore's line where he lunges
+        under = Vector((O.x, O.y, deck_z - 0.05))
+        m.rod(under - X * (0.72 + q), under - X * (edge(180.0) - 0.06), 0.022, "upper", sides=6)
+        for sy in (-1, 1):
+            d = Vector((math.cos(math.radians(180.0 + sy * 22.5)), math.sin(math.radians(180.0 + sy * 22.5)), 0))
+            m.rod(under + d * 1.25, under - X * (edge(180.0) - 0.12) + Y * sy * 0.1, 0.022, "upper", sides=6)
     rail = [a for a in range(100, 261, 20)]
     posts_top = []
     for a in rail:
         d = Vector((math.cos(math.radians(a)), math.sin(math.radians(a)), 0))
-        foot = Vector((O.x, O.y, deck_z)) + d * (Rd - 0.06)
+        foot = Vector((O.x, O.y, deck_z)) + d * (edge(a) - 0.06)
         m.rod(foot, foot + Z * 0.95, 0.017, "upper", sides=8)
         m.lathe(foot, Z, [(0.0, 0.035), (0.02, 0.035)], "upper", 8)
         posts_top.append(foot + Z * 0.95)
-    arc_pts = [Vector((O.x + math.cos(math.radians(a)) * (Rd - 0.06), O.y + math.sin(math.radians(a)) * (Rd - 0.06), deck_z + 0.95)) for a in range(100, 261, 5)]
+    arc_pts = [Vector((O.x, O.y, deck_z + 0.95)) + Vector((math.cos(math.radians(a)), math.sin(math.radians(a)), 0)) * (edge(a) - 0.06) for a in range(100, 261, 5)]
     bits.tube(m, arc_pts, 0.017, "upper", 8)
     bits.tube(m, [p - Z * 0.47 for p in arc_pts], 0.012, "upper", 6)
     # the layers: one each side, a seat, a handwheel and his dials
@@ -355,7 +375,7 @@ def HeavyFlak(fine=True, nation="_default", name="HeavyFlak", shield=False):
     m.info["span"] = 5.4
     m.info["high"] = 2.4
     m.info["worn"] = [(0.0, 0.0, 4.2)]
-    m.info["clear"] = [[(math.cos(math.radians(a)) * 2.0, math.sin(math.radians(a)) * 2.0) for a in range(0, 360, 20)]]
+    m.info["clear"] = [[(math.cos(math.radians(a)) * 2.4, math.sin(math.radians(a)) * 2.4) for a in range(0, 360, 20)]]      # (the loader's step sweeps 2.24)
     m.info["file"] = {"controls": {"mount": "the game turns it to the target's bearing", "cradle": "the game lifts it to the target's height",
                                    "handwheel.traverse": "spin 60 degrees for each degree the mount turns", "handwheel.elevate": "spin 60 degrees for each degree the cradle lifts"}}
     return m

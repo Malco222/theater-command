@@ -283,11 +283,13 @@ def ray_poly(poly, a):
     return best
 
 
-def dug_bowl(m, outline_r, floor_z, batter, step=3.0, seed=0, lump=0.03, wall="earth", floor="earth.dry", flare=0.15):
+def dug_bowl(m, outline_r, floor_z, batter, step=3.0, seed=0, lump=0.03, wall="earth", floor="earth.dry", flare=0.15, trodden=False):
     """A hole dug in level ground, star-shaped about the origin: `outline_r(a)` is its edge at ground level (a in
     degrees), `floor_z(x, y)` the floor's height, `batter(a)` how far in the wall's foot stands from its top. Walls
     lumpy, a lip of loose earth round the edge lying over the ground. Returns the plan outline for `m.info["dig"]`,
-    drawn `flare` outside the hole's edge so the ground the stage leaves never overhangs the hole."""
+    drawn `flare` outside the hole's edge so the ground the stage leaves never overhangs the hole. `trodden`: the
+    floor's lumps only go down from `floor_z`, never up (a kneeling man's shin lies on the floor: a lump 1 cm high
+    under it reads to the crew check as his leg in the ground)."""
     if not m.fine:
         step *= 2.0
     n = int(round(360.0 / step))
@@ -302,8 +304,8 @@ def dug_bowl(m, outline_r, floor_z, batter, step=3.0, seed=0, lump=0.03, wall="e
         row = []
         for t in ft:
             p = d * (Rf * t)
-            z = floor_z(p.x, p.y) + (bits.fbm((p.x * 2 + seed, p.y * 2, 1.0), 0.5) * 0.012 if t > 0 else 0.0)
-            row.append(p + Z * z)
+            up = bits.fbm((p.x * 2 + seed, p.y * 2, 1.0), 0.5) * 0.012 if t > 0 else 0.0
+            row.append(p + Z * (floor_z(p.x, p.y) + (min(up, 0.0) if trodden else up)))
         zf = floor_z((d * Rf).x, (d * Rf).y)
         for t in ((0.3, 0.65) if m.fine else (0.5,)):
             r = Rf + (Ro - Rf) * t
@@ -1043,13 +1045,10 @@ def bomb_box(m, at, yaw=0.0, n=6, seed=0, lid=True):
     m.box(P(0, 0, H * 0.55), (L - 0.03, 0.008, H * 0.9), "planks", yaw)
     for x in (-0.068, 0.068):
         m.box(P(x, 0, H * 0.55), (0.008, W - 0.03, H * 0.9), "planks", yaw)
-    k = 0
-    for ix in (-1, 0, 1):
-        for iy in (-1, 1):
-            if k >= n:
-                break
-            bomb(m, P(ix * 0.135, iy * 0.07, th) + Vector((g.uniform(-0.004, 0.004), g.uniform(-0.004, 0.004), 0)), Vector((g.uniform(-0.03, 0.03), g.uniform(-0.03, 0.03), 1)))
-            k += 1
+    # (the row on the box's -y side is the last to be emptied, and the other empties from its +x end: the bomb handler
+    # kneels on the +y side and lifts from that end, so his forearm passes over empty places, not standing fuzes)
+    for ix, iy in ((-1, -1), (0, -1), (1, -1), (-1, 1), (0, 1), (1, 1))[:n]:
+        bomb(m, P(ix * 0.135, iy * 0.07, th) + Vector((g.uniform(-0.004, 0.004), g.uniform(-0.004, 0.004), 0)), Vector((g.uniform(-0.03, 0.03), g.uniform(-0.03, 0.03), 1)))
     if lid:
         m.box(P(0, -W / 2 - 0.06, H * 0.5), (L, 0.016, W), "wood.paint", yaw, 0.0, -68.0)
 
@@ -1151,7 +1150,10 @@ def Mortar(fine=True, nation="_default", name="Mortar"):
     m.part("mortar", None, (0, 0, 0), kind="root")
     mt = mortar(m, "mortar", (0, 0, 0))
     m.use("mortar")
-    bomb_box(m, (-0.55, -0.55, 0.0), 20.0, 5, seed=3)
+    # (the box stands 3 cm further to number three's right than it first did, and the two places nearest his hands
+    # are the empty ones: lifting the next bomb out, his right forearm came down 1.9 cm onto the nose of a bomb
+    # standing in the near row's middle place)
+    bomb_box(m, (-0.544, -0.579, 0.0), 20.0, 4, seed=3)
     bomb(m, Vector((-0.2, -0.75, 0.042)), Vector((1.0, 0.25, 0.0)))
     bits.crew(m, "number1", (0.05, 0.62, 0.0), (0.35, -1, 0), "kneel", "mortar", "number one kneeling on the left, his eye at the sight (socket `sight`)")
     bits.crew(m, "number2", (0.55, -0.55, 0.0), (-0.25, 1, 0), "kneel", "mortar", "number two kneeling on the right front, his hands at the muzzle to drop the bomb",
@@ -1168,14 +1170,16 @@ def Mortar(fine=True, nation="_default", name="Mortar"):
 
 
 def MortarPit(fine=True, nation="_default", name="MortarPit"):
-    """A round pit 2.4 m across sunk 0.6 m, its wall revetted with poles on stakes, a collar of bags round the rim, steps
-    in at the back, a niche of bombs; two aiming posts out in front; the mortar in it."""
+    """A round pit 2.6 m across sunk 0.6 m, its wall revetted with poles on stakes, a collar of bags round the rim, steps
+    in at the back, a niche of bombs; two aiming posts out in front; the mortar in it. (5.5 cm wider all round than it
+    was first dug: number two, kneeling at the right front, sits back against the wall as he ducks from the muzzle,
+    and his seat and the toe of his right boot were 2.4 and 1.6 cm into its poles.)"""
     m = bits.model(name, "Mortar pit (our own model)", "works", nation, fine, MORE)
     m.part("pit", None, (0, 0, 0), kind="root")
     m.use("pit")
     g = rnd(31)
     D = 0.6
-    RO, RF = 1.33, 1.27
+    RO, RF = 1.385, 1.325
     STEP_HALF = 0.42
     NA = -118.0
 
@@ -1190,12 +1194,15 @@ def MortarPit(fine=True, nation="_default", name="MortarPit"):
             return -D * (1.0 - min(1.0, (-0.95 - x) / 1.25))
         return -D
 
-    dig = [dug_bowl(m, outline, floor_z, lambda a: RO - RF + 0.25 * smooth((22.0 - adiff(a, 180.0)) / 7.0), 3.0, seed=6)]
+    dig = [dug_bowl(m, outline, floor_z, lambda a: RO - RF + 0.25 * smooth((22.0 - adiff(a, 180.0)) / 7.0), 3.0, seed=6, trodden=True)]
     # the wall's revetment: stakes and level poles, broken at the steps and at the niche
     gaps = [(180.0, 21.0), (NA, 16.0)]
     spans = []
     a = -180.0 + 21.0
-    stake_angles = [x for x in range(-180, 180, 24) if all(adiff(x, c) > h + 3 for c, h in gaps)] + [c + s * h for c, h in gaps for s in (-1, 1)]
+    # (no stake stands from bearing -66 to -42, where number two sits back against the wall and his right boot's toe
+    # lies: the stakes either side are set a little wider, at -70 and -38)
+    stake_angles = ([x for x in range(-180, 180, 24) if all(adiff(x, c) > h + 3 for c, h in gaps) and not -90 < x < -30] + [-70, -38]
+                    + [c + s * h for c, h in gaps for s in (-1, 1)])
     for k, sa in enumerate(stake_angles):
         p = V2(sa, RF - 0.045)
         bits.log(m, p - Z * (D + 0.1), p + Z * 0.05, 0.03, "timber", 300 + k, sides=8, taper=0.9)
@@ -1217,24 +1224,24 @@ def MortarPit(fine=True, nation="_default", name="MortarPit"):
         bomb(m, P(RF + 0.08, -0.2, -D + 0.075), -V2(NA) + Vector((0, 0, 0)))
     niche(m, NA, RF - 0.01, -D, -0.17, 0.32, 0.6, seed=5, fill=fill)
     # the collar: three courses two bags thick on the rim, a gap at the steps; earth banked low outside
-    gh = math.degrees(math.asin(0.45 / 1.5))
+    gh = math.degrees(math.asin(0.45 / 1.555))
     # (the sandbag wall's own bag, slumped and tied at the neck: the pits' lighter bag read as cushions here, where
     # the collar is seen from above and close)
-    top = bits.bag_wall(m, bits.arc(0, 0, 1.5, -180 + gh, 180 - gh, 40), 2, 0.025, seed=9, batter=0.015, thick=2, inward=-1.0)
+    top = bits.bag_wall(m, bits.arc(0, 0, 1.555, -180 + gh, 180 - gh, 40), 2, 0.025, seed=9, batter=0.015, thick=2, inward=-1.0)
     # (the top course is headers: bags laid across both rows, each sagging over the course beneath, its tied neck
     # outward. Seen from above, a course of stretchers pressed flat read as a ring of cushions)
     n = 31
     for k in range(n):
         # (laid by tired men: none quite square to the rim, some pushed in, some out)
         a = -180 + gh + 1.5 + (k + 0.5 + g.uniform(-0.16, 0.16)) / n * (360 - 2 * gh - 3.0)
-        at = V2(a, 1.635 + g.uniform(-0.06, 0.06)) + Z * (top - 0.012 + g.uniform(-0.004, 0.008))
+        at = V2(a, 1.69 + g.uniform(-0.06, 0.06)) + Z * (top - 0.012 + g.uniform(-0.004, 0.008))
         size = (bits.BAG[0] * g.uniform(0.9, 1.04), bits.BAG[1] * g.uniform(0.94, 1.06), bits.BAG[2])
         bits.sandbag(m, at, a + g.uniform(-11, 11), size=size, seed=g.randrange(1 << 30), droop=g.uniform(0.04, 0.062), pitch=g.uniform(-2.5, 2.5), roll=g.uniform(-4.0, 4.0))
 
     def cut(x, y):
         return smooth((abs(y) - 0.65) / 0.4) if x < -1.0 else 1.0
     # (the bank lies low against the collar, so the bags' staggered courses show above it)
-    ring_bank(m, 1.84, [(0.0, 0.1), (0.14, 0.13), (0.39, 0.13), (0.74, 0.07), (1.04, 0.02), (1.19, 0.0)], seed=4, lump=0.03, step=2.5, cut=cut, turf=0.5)
+    ring_bank(m, 1.895, [(0.0, 0.1), (0.14, 0.13), (0.39, 0.13), (0.74, 0.07), (1.04, 0.02), (1.19, 0.0)], seed=4, lump=0.03, step=2.5, cut=cut, turf=0.5)
     # the mortar, its bombs to hand, empties of the charges' containers
     O = Vector((-0.22, 0.0, -D))
     mt = mortar(m, "pit", O)
@@ -1243,9 +1250,12 @@ def MortarPit(fine=True, nation="_default", name="MortarPit"):
     for k in range(3):
         bomb(m, O + Vector((-0.75 + 0.09 * k, -0.15, 0.042)), Vector((0.2, -1.0, 0.0)) + Vector((g.uniform(-0.1, 0.1), 0, 0)))
     if fine:
+        # (thrown to the left front, along the wall's foot, where nobody kneels: number one's boots are on the floor
+        # from x -0.61 to 0.19 on the left, number two's on the right)
         for k in range(5):
-            p = O + Vector((g.uniform(-0.6, 0.6), g.uniform(0.3, 0.8), 0.035))
-            ya = g.uniform(0, 6.28)
+            ba = math.radians(g.uniform(25.0, 65.0))
+            p = Vector((math.cos(ba), math.sin(ba), 0.0)) * g.uniform(0.78, 1.0) + Z * (-D + 0.035)
+            ya = ba + math.pi / 2 + g.uniform(-0.7, 0.7)
             m.lathe(p, Vector((math.cos(ya), math.sin(ya), 0)), [(0.0, 0.032), (0.22, 0.032)], "rubber", 10, (True, False))
             m.disc(p + Vector((math.cos(ya), math.sin(ya), 0)) * 0.219, Vector((math.cos(ya), math.sin(ya), 0)), 0.028, "void", 10)
     m.rod(V2(150, RF - 0.1) + Z * -D, V2(150, RF - 0.05) + Z * 0.35, 0.013, "timber", sides=6)        # the cleaning rod
