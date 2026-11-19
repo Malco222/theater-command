@@ -159,10 +159,10 @@ describe('the Pacific\'s shores rows (ruling 200, finding 2)', () => {
 
   it('shuts the second front\'s own rule out of the Pacific\'s ground while the Pacific\'s book stands', () => {
     const g = pacificWar(1, 60);
-    expect(shoreOpen(g, 'USA', true, true)).toBe(false);
-    expect(shoreOpen(g, 'JAP', false, true)).toBe(false);
+    expect(shoreOpen(g, 'USA', true, undefined, true)).toBe(false);
+    expect(shoreOpen(g, 'JAP', false, undefined, true)).toBe(false);
     const h = pacificWar(3, 60);
-    expect(shoreOpen(h, 'USA', true, true)).toBe(true);
+    expect(shoreOpen(h, 'USA', true, undefined, true)).toBe(true);
   });
 
   it('keeps the shores a staff has named in the flags, six at most, for the fleet and the fighters to read', () => {

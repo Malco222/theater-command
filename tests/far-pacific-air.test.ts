@@ -7,6 +7,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
+import airData from '../data/campaign/air.json';
 import farAir from '../data/campaign/far-air.json';
 import { AIR, AIRWAR, airAI, airPool, airQuality, airRange, airUpkeep, cover, crowding, groupOverSea, groupsOver, seaKm, whyNotMission } from '../src/campaign/air';
 import { ARSENAL, orderOffer, smallAirMonth } from '../src/campaign/arsenal';
@@ -71,7 +72,7 @@ describe('the Pacific\'s air commands (rulings 184 and 187)', () => {
     expect(AIR.reserve.JAP).toEqual({ ftr: 250, bmr: 250, pilots: 150 });
     expect(AIR.decline!.JAP).toEqual([[1, 1], [41, 0.9], [58, 0.75], [65, 0.65]]);
     // Europe's rows and America's nation row stand as they were.
-    expect(AIR.production.GER).toEqual([[1, 180, 280], [9, 250, 300], [16, 300, 320], [22, 360, 350]]);
+    expect(AIR.production.GER).toEqual((airData as any).production.GER);
     expect(AIR.nations.USA).toEqual({ quality: 1, ftrRange: 300, bmrRange: 1100 });
     expect(AIR.fleets.length).toBe(36 + 49);
     // The script's marks: who may stand on an ally's ground, whose aircraft arrive with the date, the commands' own figures.

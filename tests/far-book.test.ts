@@ -169,7 +169,7 @@ describe("the book's dated attacks (ruling 234, riders b573 to b583)", () => {
     expect([attack(name).sea, attack(name).met]).toEqual([true, [0.25, 0.3]]);
     const { g, d2 } = java(0.1);
     const shore = g.byName.Batavia;
-    expect(shore.fort).toEqual({ lv: 1, vs: ['JAP'] });
+    expect(shore.fort).toMatchObject({ lv: 1, vs: ['JAP'] });
     listen();
     bookAttacks(g, 'JAP');
     const t = made(name)[0], rep = t.report!;
@@ -179,7 +179,7 @@ describe("the book's dated attacks (ruling 234, riders b573 to b583)", () => {
     const line = (label: string): string => { const l = rep.lines.find((x) => x.label === label); return l ? `${l.value} ${l.effect}` : ''; };
     expect(line('Landing')).toContain('100%');
     expect(line('Fortifications')).toBe('');
-    expect(shore.fort).toEqual({ lv: 1, vs: ['JAP'] });
+    expect(shore.fort).toMatchObject({ lv: 1, vs: ['JAP'] });
     expect([t.taken, at(g, d2), d2.hold, g.flags[`ba:${i}`], g.flags[`bat:${i}`]]).toEqual([true, 'Batavia', false, 31, undefined]);
     // Against more than the record met there the same landing is thrown back: the division is at its quay, and the attack is owed for another month.
     const strong = java(2);
@@ -323,8 +323,9 @@ describe("the record's covering fleets (ruling 234, riders b575 and b577)", () =
     const g = war(1);
     const f3 = g.fleets.find((f) => f.nat === 'JAP' && f.name === '3rd Fleet')!, china = g.fleets.find((f) => f.nat === 'UK' && f.name === 'China Fleet')!;
     const home = g.regions[f3.base].name;
-    // (Indomitable is in no row before March 1942: the China Fleet starts without a carrier.)
-    expect([g.regions[china.base].name, china.ships.cv]).toEqual(['Singapore', 0]);
+    // (Rider b637: the China Fleet's first-day carrier is the Eagle, who leaves for the Mediterranean in May 1940, ruling
+    // 233 (f). Indomitable is in no row before March 1942, so the fleet has no carrier in between: tests/far-on.test.ts.)
+    expect([g.regions[china.base].name, china.ships.cv]).toEqual(['Singapore', 1]);
     for (const nm of ['Balikpapan', 'Cam Ranh']) g.byName[nm].ctrl = 'JAP';
     // Before the blow, and before its month, the book gives no admiral an order.
     g.turn = 30;

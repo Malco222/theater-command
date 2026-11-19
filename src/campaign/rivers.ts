@@ -19,6 +19,7 @@ import data from '../../data/campaign/engineering.json';
 import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Kind, type Region } from './types';
 import { barred, groundRules, whyBarred } from './ground';
+import { straitOpen } from './history';
 import { allied, atWar, headline } from './game';
 import { tieBars, whyTieBars } from './far';
 import { halted } from './history';
@@ -35,10 +36,17 @@ export const ENGINEERING = data as unknown as {
   mines: { most: number; attack: number; march: number };
   breach: { perDiv: number; most: number };
   works: { most: number };
+  named: Record<'1' | '2' | '3' | 'mines', string>;
   jobs: Record<string, JobText>;
   start: { nations: string[]; corps: number };
   ai: { most: number; reserve: number };
 };
+
+/**
+ * What a province's works are at a level, in words (ruling 145(b)): 1 "barbed wire, gun pits and an anti-tank ditch",
+ * 2 "pillboxes and dragon's teeth", 3 "a line of concrete forts". Empty for none. Words only: no rule reads them.
+ */
+export const worksName = (lv: number): string => (lv >= 1 ? ENGINEERING.named[String(Math.min(3, Math.floor(lv))) as '1' | '2' | '3'] : '');
 
 /** The rivers and crossings of the map of Europe. */
 export const RIVERS = (riverData as unknown as { rivers: River[] }).rivers;
@@ -89,9 +97,10 @@ export const noCrossing = (g: Game, kind: Kind, from: number, to: number): boole
  * Whether a corps cannot go from where it stands (or from another region) into a neighbour: ground too steep, or
  * bridges down. On the far side, also a strike from a client's ground into a war the client is not in (far.ts). And
  * ground a computer staff does not go into by the book (b512(h), history.json 'restraint'). And, for a country whose
- * war is a declaration and not a front, any ground but its own (diplomacy.json 'stay', Turkey in 1945).
+ * war is a declaration and not a front, any ground but its own (diplomacy.json 'stay', Turkey in 1945). And a strait
+ * that is shut to it (straitOpen).
  */
-export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id) || tieBars(g, c, to, from) || halted(g, c.nat, to.name) || keepsHome(g, c, to);
+export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id) || tieBars(g, c, to, from) || halted(g, c.nat, to.name) || keepsHome(g, c, to) || !straitOpen(g, c, g.regions[from], to);
 
 /** True where a computer-run country whose war is only declared (diplomacy.json 'stay') would send a corps off its own ground. */
 export const keepsHome = (g: Game, c: Corps, to: Region): boolean => !!g.flags[`stay:${c.nat}`] && c.nat !== g.human && to.owner !== c.nat;

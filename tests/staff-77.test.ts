@@ -41,11 +41,12 @@ const war: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; owner: string; island: boolean; overseas: boolean; wave: boolean; across: number }[] = [];
 const months: { turn: number; can: number; canHome: number; bra: number; usa: number }[] = [];
 {
-  // Seed 6: America's staff makes a landing of its own in this war, on Sardinia in October 1942, and Germany holds
+  // Seed 6 until ruling 232: America's staff made a landing of its own in that war, on Sardinia in October 1942, and Germany holds
   // Norway. Seed 7 until Version 84, whose rules of what an attack brings and faces moved every war; seed 8 until ruling
   // 227, whose air war moved them again (in seed 8 Germany now never takes Norway). Of seeds 1 to 13 under 227, 3, 6, 7,
-  // 9 and 12 tell this story in full.
-  const g = wide(6);
+  // 9 and 12 tell this story in full. Seed 4 since ruling 232 (Warsaw's garrison, b566) and Italy's boats on the
+  // record's seas (b564) moved the war again: of seeds 1 to 9 then, 4 and 5 tell it in full.
+  const g = wide(4);
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, island: e.to.nb.length === 0, overseas: e.to.overseas, wave: e.wave, across: across(g, e.nat).length }); };
   while (g.turn < SEP_44) {
     runTurnAI(g);
@@ -282,10 +283,16 @@ describe('the fleet and the air groups follow the army', () => {
     // No land-based group raised for the war overseas is left at home beyond the figure. The home commands (Version
     // 84.2: the First Air Force and the rest) guard their own country and never cross.
     const land = g.airFleets.filter((a) => a.nat === 'USA' && a.ship === undefined);
-    expect(land.filter((a) => !homeCommand(a) && beyondEurope(a.base)).length).toBeLessThanOrEqual(O.air!);
     expect(land.filter((a) => !homeCommand(a) && !beyondEurope(a.base)).length).toBeGreaterThanOrEqual(4);
     expect(land.filter((a) => homeCommand(a)).length).toBeGreaterThanOrEqual(5);
     expect(land.filter((a) => homeCommand(a)).every((a) => beyondEurope(a.base))).toBe(true);
+    // (Since rulings 68(b) and 70(a) a computer staff orders wings all through the war. One fresh from the factories
+    // waits at home for its ship, a month or two and no longer: so the count is taken of those found at home today
+    // that are still there two months on.)
+    const waiting = land.filter((a) => !homeCommand(a) && beyondEurope(a.base)).map((a) => a.id);
+    runTurnAI(g);
+    runTurnAI(g);
+    expect(g.airFleets.filter((a) => waiting.includes(a.id) && beyondEurope(a.base)).length).toBeLessThanOrEqual(O.air!);
   });
 
   it('an air group on an airfield at home is shipped across, however far, to a field of its side\'s near the army', () => {

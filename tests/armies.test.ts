@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import data from '../data/campaign/divisions.json';
 import setup from '../data/campaign/setup-1939.json';
 import { addCorps, createGame, men, removeCorps } from '../src/campaign/game';
+import { SIEGE } from '../src/campaign/siege';
 import { DIVISIONS, armyCard, corpsCard, divisionWords, divisionsOf, growCorps, mixLine, mixOf, numberDivisions, ordinal } from '../src/campaign/armies';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -139,16 +140,19 @@ describe('the numbers divisions carry', () => {
     const late = addCorps(g, 'GER', 'XXXIX Corps', 'arm', 1, g.byName['Berlin'].id, {});
     expect(divisionsOf(g, late)[0].no).toBe(11);
     for (const name of ['Berlin garrison', 'Hamburg garrison']) expect(parseInt(nos('GER', name)[0], 10)).toBeGreaterThanOrEqual(270);
-    expect(parseInt(nos('POL', 'Warsaw garrison')[1], 10)).toBeGreaterThan(60);
+    // (Warsaw's garrison opens inside the city as the Warsaw Defence Command, rider b566, with its row's numbers.)
+    expect(parseInt(nos('POL', 'Warsaw Defence Command')[1], 10)).toBeGreaterThan(60);
+    // A corps renamed at the start for the record's command is still its setup row's corps.
+    const rowName = (c: Corps): string => SIEGE.startIn?.find((s) => s.nat === c.nat && s.name === c.name)?.corps ?? c.name;
     // No stand-in takes a number the record holds for its nation's arm, placed or spare.
     const real = new Set<string>();
     for (const c of g.corps) {
-      const row = c.nat === 'GER' || c.nat === 'POL' ? ((setup as any).corps as any[]).find((r) => r[0] === c.nat && r[1] === c.name) : null;
+      const row = c.nat === 'GER' || c.nat === 'POL' ? ((setup as any).corps as any[]).find((r) => r[0] === c.nat && r[1] === rowName(c)) : null;
       for (const n of row?.[5]?.nos ?? []) if (n) real.add(`${c.nat}:${c.kind}:${n}`);
     }
     for (const [nat, arms] of Object.entries(DIVISIONS.record)) for (const [kind, ns] of Object.entries(arms)) for (const n of ns ?? []) real.add(`${nat}:${kind}:${n}`);
     for (const c of g.corps) {
-      const row = ((setup as any).corps as any[]).find((r) => r[0] === c.nat && r[1] === c.name);
+      const row = ((setup as any).corps as any[]).find((r) => r[0] === c.nat && r[1] === rowName(c));
       divisionsOf(g, c).forEach((d, i) => {
         if (row?.[5]?.nos?.[i]) expect(d.no, `${c.name} ${i}`).toBe(row[5].nos[i]);
         else expect(real.has(`${c.nat}:${c.kind}:${d.no}`), `${c.nat} ${c.name}: ${d.name}`).toBe(false);

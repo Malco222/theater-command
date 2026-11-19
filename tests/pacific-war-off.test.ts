@@ -19,6 +19,7 @@ import { freed, ops, startOpen } from '../src/campaign/staff';
 import { alongside, bookAttacks, bookFleets, bookStations, ceilinged, goesWith, ridersOf, riding, stations, stationsBind } from '../src/campaign/stations';
 import open from '../data/campaign/open.json';
 import setup from '../data/campaign/setup-1939.json';
+import siege from '../data/campaign/siege.json';
 
 describe('the Pacific war with the far side off', () => {
   it('reads no rule of it and lays no row of it', () => {
@@ -107,8 +108,8 @@ describe('the months after December 1941 with the far side off (ruling 200, find
     g.flags['st:hop:UK:0'] = g.byName['Calais'].id + 1;
     g.flags['st:hopQ:UK:0'] = g.byName['Kent'].id + 1;
     expect(hopAims(g, 'UK')).toEqual([]);
-    // The second front's own rule is asked as it always was: its fourth word is never true here.
-    expect(shoreOpen(g, 'FRA', false, false)).toBe(shoreOpen(g, 'FRA', false));
+    // The second front's own rule is asked as it always was: its last word (the Pacific's) is never true here.
+    expect(shoreOpen(g, 'FRA', false, undefined, false)).toBe(shoreOpen(g, 'FRA', false));
     // And no great choice of anybody's frees a corps.
     expect(Object.values(open.ops as Record<string, { frees?: unknown; freesAfter?: unknown }[]>).flat().some((op) => op.frees !== undefined || op.freesAfter !== undefined)).toBe(false);
   });
@@ -231,11 +232,15 @@ describe('the readiness test of ruling 200(m) (rider b586 to ruling 234) with th
   });
 });
 
+/** The garrisons the record keeps small (ruling 232's rider b606, SIEGE.startIn's rows with a size): the only corps with an establishment of their own while the far side is off. */
+const SMALL: string[] = ((siege as any).startIn as any[]).filter((s) => s.str !== undefined).map((s) => s.name).sort();
+
 describe("a corps' own establishment in a fold (rider b594 to ruling 234) with the far side off", () => {
   it('no corps has one, on the first day or by a dated row, so worn reads as it always did', () => {
     const g = startOpen(createGame(3, null));
     expect(g.corps.length).toBeGreaterThan(100);
-    expect(g.corps.filter((c) => c.full !== undefined)).toEqual([]);
+    // (But the garrisons the record keeps small, which stand at their own size from the first day: ruling 232's rider b606.)
+    expect(g.corps.filter((c) => c.full !== undefined).map((c) => c.name).sort()).toEqual(SMALL);
     const rows = (setup as any).expeditions as any[];
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.filter((r) => r[r.length - 1]?.est !== undefined)).toEqual([]);
@@ -283,7 +288,7 @@ describe("the Allies' landing ships in the Pacific and the islands' garrisons (r
     const rows = (setup as any).expeditions as any[];
     expect(rows.filter((r) => Array.isArray(r[r.length - 1]?.est))).toEqual([]);
     const g = startOpen(createGame(3, null));
-    expect(g.corps.filter((c) => c.full !== undefined)).toEqual([]);
+    expect(g.corps.filter((c) => c.full !== undefined).map((c) => c.name).sort()).toEqual(SMALL);
   });
 });
 

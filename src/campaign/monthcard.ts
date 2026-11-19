@@ -35,13 +35,16 @@ import { turnToDate } from '../core/ticket';
 import { staffRuns, type DeskId } from './depth';
 import { CAPITAL_BESIEGED, fallWarning, withinReach } from './danger';
 import { NO_LAST_MONTH, ROME_HOLDS, majorsOf, stakeDue, stakeWarning } from './diplomacy';
-import { ARSENAL, workLevel } from './arsenal';
+import { ARSENAL, workLevel, yardLevel } from './arsenal';
 import { BUDGET, PRODUCTION, ledger } from './economy';
 import { allied, atWar, men, theName } from './game';
 import { CLASSES, NAVY, shipCount, shipList } from './navy';
 import { cityOrders } from './orders';
 import { besieged, garrisonOf, guardMen } from './siege';
 import { prizeOf, townName, townSize } from './towns';
+import { skyView, type SkyView } from './weather';
+import { menRules, raisable } from './manpower';
+import { bureauCost } from './research';
 import { MEN_PER_DIV, type AirReport, type Game, type Headline, type SeaSide, type ShipClass, type Ships } from './types';
 
 export type CardTone = 'good' | 'bad' | 'warn' | 'plain';
@@ -205,6 +208,12 @@ export interface MonthCard {
   foot: string;
   /** At home: what was delivered, what was researched, anything else of his own, and next month's deliveries. */
   home: CardHome[];
+  /**
+   * The line when men run out (ruling 133(d)(1)): the reserve cannot fill a corps of one division and the treasury
+   * holds more than three months' income. The first line AT HOME, with OPEN THE ARSENAL beside it; the first month
+   * and then every third while it lasts (menOutLine).
+   */
+  menOut?: string;
   research: string[];
   /** Other news of home, each cut to a line or two of whole words; and the same lines whole, for a hover. */
   also: string[];
@@ -215,6 +224,12 @@ export interface MonthCard {
   letters: CardLetter[];
   /** Lines of the month's news that are not on the card. They are all in the newsreel. */
   more: number;
+  /**
+   * THE SKY (weather, rulings 127 and 143(b)): after the rows of news and before AT HOME, never a warning. Closed zones
+   * where he flies or fights first, a line each; cloud on one line; then one line for the clear sky, always. Only in a
+   * campaign with weather.
+   */
+  sky?: SkyView;
 }
 
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
@@ -1163,6 +1178,12 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     for (const l of c.lines) if (l.unit && l.months === 1) group(coming, l.mark, `${l.label}|${l.plural}|next month`, l.stands, true);
   }
   card.home = [...done, ...coming].map((x) => { if (x.bare) return x; const [one, many, tail] = x.text.split('|'); return { ...x, text: `${x.count === 1 ? one : many} ${tail}` }; });
+  // Weather (ruling 143(b)): THE SKY, this month's and next month's chances, and last month's grounded groups.
+  const sky = skyView(g, me);
+  if (sky) card.sky = sky;
+  // The line when men run out (ruling 133(d)(1)).
+  const menOut = menOutLine(g, me);
+  if (menOut && menOutDue(g, me)) card.menOut = menOut;
   const news: Headline[] = [];
   for (const h of hs) {
     if (used.has(h) || !mine(h.nat)) continue;
@@ -1233,4 +1254,47 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   card.more = hs.filter((h) => !used.has(h)).length;
   for (const x of [...card.bands, ...card.rows, ...(card.lead ? [card.lead] : [])]) x.when = dateWords(x);
   return card;
+}
+
+// ---- The line when men run out (ruling 133(d)(1), `fl-men-out`) -------------------------------------------------
+
+/** What money alone still buys, by the rules: everything in the arsenal that takes no men from the reserve. */
+export function moneyBuys(g: Game, nat: string): string[] {
+  const n = g.nations[nat];
+  const out = ['anti-aircraft guns', 'fortifications', 'factories', 'airfields', 'aircraft'];
+  if (g.regions.some((r) => r.owner === nat && r.ctrl === nat && yardLevel(g, r) > 0)) out.push('warships');
+  if (n && bureauCost(n) !== null) out.push('design teams');
+  return out;
+}
+
+/**
+ * The line when men run out (ruling 133(d)(1)): "The reserve of men is empty and 153,343 lies unspent. Money alone
+ * still buys: anti-aircraft guns, fortifications, factories, airfields, aircraft, warships and design teams." Null
+ * while the reserve can still fill a corps of one division, or the treasury holds no more than three months' income.
+ * The grand campaign only. Words: it changes nothing.
+ */
+export function menOutLine(g: Game, nat: string): string | null {
+  const n = g.nations[nat];
+  if (!n?.alive || !menRules(g) || raisable(g, nat, 1) >= 1) return null;
+  const L = ledger(g, nat);
+  if (L.gross <= 0 || L.treasury <= 3 * L.gross) return null;
+  const buys = moneyBuys(g, nat);
+  const list = buys.length > 1 ? `${buys.slice(0, -1).join(', ')} and ${buys[buys.length - 1]}` : buys[0];
+  return `The reserve of men is empty and ${Math.floor(L.treasury * BUDGET.scale + 1e-6).toLocaleString('en-US')} lies unspent. Money alone still buys: ${list}.`;
+}
+
+/** The line is said the first month the men are out and then every third (the month card marks it seen: cardSeen). */
+const menOutDue = (g: Game, nat: string): boolean => { const from = g.flags[`menout:${nat}`]; return from === undefined || (g.turn - from) % 3 === 0; };
+
+/**
+ * The page has shown the player this month's card: marks what is said once or in turn, so that both games say it
+ * alike. THE SKY's tip (ruling 143(g)) and the line when men run out (133(d)(1)). Never called in a war nobody plays.
+ */
+export function cardSeen(g: Game, card: MonthCard): void {
+  if (card.sky?.tip) g.flags['wx:tip'] = g.turn;
+  const me = card.viewer;
+  if (!me) return;
+  const key = `menout:${me}`;
+  if (!menOutLine(g, me)) delete g.flags[key];
+  else if (card.menOut && g.flags[key] === undefined) g.flags[key] = g.turn;
 }

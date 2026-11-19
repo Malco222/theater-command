@@ -22,6 +22,8 @@ import { hashString } from '../core/rng';
 import worldData from '../../data/campaign/world.json';
 import { pressData, warWorkMonth, worldMonth } from './world';
 import { mapDist2 } from './wrap';
+import { footingMonth } from './footing';
+import { weatherMonth } from './weather';
 import { guarantorsOf, type Guarantor } from './guarantees';
 import { liftMonth, pacificOpening, pacificSides, pactBinds } from './pacific';
 
@@ -572,6 +574,23 @@ function joinBloc(g: Game, n: Nation, b: 'allies' | 'axis'): boolean {
 
 // ---- Events: history as data ------------------------------------------------------------
 
+/**
+ * Ruling 233, rider b612: the leavings in play. For every country an event can still take out of the war by terms
+ * (a partition) on grounds the event itself names ('anyHeld' or 'allHeld'), those grounds, read from the event. Not an
+ * event that cannot fire in this game: one of the other mode, one that has fired or is past its last month, or one
+ * that spares the country the player leads (rulings 99 and 103).
+ */
+export function leavings(g: Game): { nation: string; grounds: string[] }[] {
+  const open = g.flags.open === 1;
+  const out: { nation: string; grounds: string[] }[] = [];
+  for (const e of DIPLOMACY.events) {
+    if (!e.partition || (e.mode && (e.mode === 'open') !== open) || g.flags[`event:${e.id}`] !== undefined || g.turn > (e.to ?? 999) || spared(g, e.partition.nation, e.stake)) continue;
+    const test = (e.if ?? []).find((c) => c.startsWith('anyHeld:') || c.startsWith('allHeld:'));
+    if (test) out.push({ nation: e.partition.nation, grounds: test.slice(test.indexOf(':') + 1).split(',').slice(1) });
+  }
+  return out;
+}
+
 /** Tests one condition of an event, written as "key:arguments". */
 export function holds(g: Game, cond: string): boolean {
   const i = cond.indexOf(':');
@@ -587,6 +606,8 @@ export function holds(g: Game, cond: string): boolean {
     // but the 47th (July 1943, whose card states Rome's fall as the stake) is spared too (ruling 103).
     case 'computer': return !spared(g, a[0], a.slice(1).map(Number));
     // 'stop:1,2': the campaign is played at one of these stops of the history dial (a history campaign is at stop 3).
+    // (What the world was on the day belongs to more stops than the book's calendar does: rider b591 to ruling 234.
+    // Siam let Japan pass within hours on 8 December 1941.)
     case 'stop': return a.map(Number).includes(stopOf(g));
     // 'by:21': no later than this month. In the grand campaign an event's calendar otherwise only says when it may
     // first happen; an event that keeps history's calendar at the book's stops says here when its moment has passed.
@@ -613,9 +634,6 @@ export function holds(g: Game, cond: string): boolean {
     case 'flag': return !!g.flags[rest];
     // 'book': the dial stands at a stop that keeps history's calendar. 'book:pacific': and the book is still open in that theatre.
     case 'book': return !!stopDef(g).book && (rest === '' || onBook(g, rest));
-    // 'stop:1,2,3': the dial stands at one of the stops named. (What the world was on the day belongs to more stops than
-    // the book's calendar does: rider b591 to ruling 234. Siam let Japan pass within hours on 8 December 1941.)
-    case 'stop': return a.map(Number).includes(stopOf(g));
     // 'since:event:x,2': that flag was raised at least two months ago.
     case 'since': return !!g.flags[a[0]] && g.turn - g.flags[a[0]] >= Number(a[1] ?? 1);
     case 'war': return !!N(a[0]) && !!N(a[1]) && atWar(g, a[0], a[1]);
@@ -917,7 +935,7 @@ export const fireEvent = (g: Game, id: string): boolean => { const e = DIPLOMACY
 
 export function monthlyDiplomacy(g: Game): void {
   // The last act of the grand campaign: no alliances, no courting, no treaties, and history's calendar is closed.
-  if ((g.flags.dom ?? 0) > 0) { liftMonth(g); warWorkMonth(g); traitsMonth(g); techMonth(g); return; }
+  if ((g.flags.dom ?? 0) > 0) { liftMonth(g); warWorkMonth(g); footingMonth(g); weatherMonth(g); traitsMonth(g); techMonth(g); return; }
   const m = momentum(g);
   // A gate its holder has shut: the neutrals whose trade it turned back move a point a month away from his side (ruling 177(a)).
   const sore = soreMonth(g);
@@ -935,6 +953,9 @@ export function monthlyDiplomacy(g: Game): void {
   // The wider world: the dominions follow their mother country, and a great industry that has gone to war turns over a little more of itself.
   worldMonth(g);
   warWorkMonth(g);
+  // The nation's footing: each climb takes its step, staffs decide, all-out war wears the will (ruling 172; switched off, nothing).
+  footingMonth(g);
+  weatherMonth(g);
   // The grand campaign: now and then a circle of small countries founds the League, or another joins it.
   leagueMonth(g);
   traitsMonth(g);

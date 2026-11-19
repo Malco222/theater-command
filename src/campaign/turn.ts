@@ -2,6 +2,7 @@
 // the player does not, and the player's orders go through the same rules.
 
 import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Headline, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
+import { plansView, type PlanItem } from './plans';
 import { airBattles, airBases, airTargets, crowdedNews, moveTargets, overOcean, previewAir, rebaseAir, setMission, shipAir, spreadAir, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, flyAboard, flyAshore, searchOptions, searchSea, seaPicture, syncWings, wingCards, type DeckOption, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import { planSeaBattle, type SeaPlan } from './seaplan';
@@ -16,6 +17,7 @@ import {
   DEFENCE, aloneLine, allied, assess, atWar, battleCost, bloc, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, fights, friendlyUnits, groundWorks, gunsMayFollow, gunsRule, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
   endPhase, foldNews, sidesAtPeace, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, sameSide, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
   type Assessment, type CostOf, type GroundWorks, type ProbeReport,
+  worksMonth,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
@@ -32,8 +34,8 @@ import {
   type EscortLane, type EscortPlan, type FleetCard, type SeaOption, type ShorePlan, type ShoreTarget,
 } from './fleets';
 import {
-  INTEL, SIGHT, armiesSeen, booksOf, cityReport, corpsKnown, fogOn, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
-  whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
+  INTEL, SIGHT, armiesSeen, arrest, booksOf, cityReport, corpsKnown, fogOn, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
+  whyNotArrest, whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
 } from './intel';
 import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
@@ -64,15 +66,18 @@ import {
   appoint, cabinetBill, cabinetOff, decree, govMul, government, headAsked, headGiven, headOf, noteReadings, officeSecure, promise, promiseTargets, promiseTerms, setAside, setCabinet, setCanFall, standBy, takeBack,
   whyNotAppoint, whyNotDecree, whyNotPromise, whyNotSetAside, whyNotStandBy, whyNotTakeBack, type GovView, type PromiseTarget, type PromiseTerms,
 } from './government';
+import { footingView, orderFooting, whyNotFooting, type FootingId, type FootingView } from './footing';
 import { MANPOWER, callEarly, classGapUntil, classNow, earlyClass, earlyGap, manpower, menWords, raisable, whyNotEarly, type MenView } from './manpower';
 import { commandView, crossingWord, handOver, setDepth, setStaffCap, staffMonth, type CommandView, type CrossingWord } from './desks';
 import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from './history';
 import { claimsView, historyMonth, type ClaimView } from './claims';
+import { finishMonthEnd, finishMonthOpen } from './finish';
 import { staffRuns, type DeskId } from './depth';
 import { minesKnown, whatYouFace } from './facing';
 import { SUPPORT, type FaceLine } from './support';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import EVE from '../../data/campaign/eve.json';
+import { airWarMonth } from './aircampaigns';
 
 export const current = (g: Game): string => g.order[g.phase];
 
@@ -95,19 +100,28 @@ function closePhase(g: Game, nat: string): void {
     liberationMonth(g);
     // History's events that are read as a month closes (the far side: America's entry follows Japan's blow, ruling 197).
     closeDiplomacy(g);
+    // An alliance finishes its war together (ruling 115): Vichy ends with a France that is free again, and a great
+    // power's fall this month turns its conquerors on the great powers their allies still fight.
+    finishMonthEnd(g);
     // (And no country is left at war with its own side's members, whatever path took it to that side: ruling 229, 3.)
     sidesAtPeace(g);
+    // Works held outright from one month's end to the next are taken over by the side that holds them.
+    worksMonth(g);
     g.phase = 0; g.turn++; g.week = 1;
     // A gate that has changed hands is no longer shut by the order of the country that lost it.
     gatesTick(g);
     openTheatres(g);
     // A smaller power's aircraft from abroad, and the month its own works open (ruling 213(d), the grand campaign).
     smallAirMonth(g);
+    // Air campaigns (ruling 236.2): the bombs' damage is repaired, held skies kept, and the book's campaigns open and close.
+    airWarMonth(g);
     monthlyDiplomacy(g);
     // The Winter War: the peace of Moscow, or the offer of it to a player on either side (ruling 228, 1b).
     winterMonth(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
     historyMonth(g);
+    // The wars an alliance gave notice of when its enemy fell, now due (ruling 115).
+    finishMonthOpen(g);
     // Wars nobody can fight any longer end in an armistice (the grand campaign).
     stalemates(g);
   }
@@ -843,6 +857,26 @@ export function orderDecree(g: Game, track: string, step: number): boolean {
   return g.human !== null && humanUp(g) && decree(g, g.human, track, step);
 }
 
+// ---- The nation's footing (ruling 172; the grand campaign with the lever switched on) ----------------------------
+
+/**
+ * A country's footing as both games show it: the ledger's line, the four footings as a tally with their locks, and
+ * the one move the card asks about (one step up, or back down). With no nation named, the player's own. Null with the
+ * lever switched off.
+ */
+export const footingOf = (g: Game, nat: string | null = g.human): FootingView | null => footingView(g, nat);
+
+/** Why the player cannot put his country on this footing now, or null if he can. */
+export function whyNotOrderFooting(g: Game, to: FootingId): string | null {
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  return whyNotFooting(g, g.human, to);
+}
+
+/** The player puts his country on a footing: one step up, for its price in political capital, or back down, at once and free. */
+export function orderFootingTo(g: Game, to: FootingId): boolean {
+  return g.human !== null && humanUp(g) && orderFooting(g, g.human, to);
+}
+
 /** Why the player cannot set his directive aside, or null if he can. */
 export function whyNotSetAsideDirective(g: Game): string | null {
   if (g.human === null || !humanUp(g)) return 'It is not your month.';
@@ -1442,6 +1476,16 @@ export function orderRebase(g: Game, id: number, region: number): boolean {
 }
 
 // ---- The navy as pieces (the grand campaign): cards, escorts on a lane, shelling a coast, splitting and joining ----
+
+/**
+ * The great power whose plans each country builds its battleships, carriers, four-engined bombers, jet fighters,
+ * rocket artillery and guided weapons to (Brian, 18 November; ruling 235 and its rider b542; plans.ts):
+ * `{ ESP: { bb: 'GER', cv: null, heavybombers: null, jets: 'GER', rockets: null, guided: null }, UK: { bb: 'UK', ... } }`.
+ * A great power names itself; a dominion Britain, and Vichy and Free France France (for a technology, once that power
+ * has it); a smaller country the power whose plans it gained last, or null when it holds none. The 3D game draws a
+ * smaller country's battleship, carrier or aircraft as that power's model, in its own colours and under its own flag.
+ */
+export const capitalPlans = (g: Game): Record<string, Record<PlanItem, string | null>> => plansView(g);
 
 /** Any fleet as a card: its admiral, where it is, what it is doing, and its ships by class. */
 export function fleetView(g: Game, id: number): FleetCard | null {
@@ -2060,6 +2104,18 @@ export function whyNotAgentMission(g: Game, id: number, mission: Mission): strin
 /** Gives the player's agent its work: 'watch', 'books', 'factory', 'rail', 'oil' or 'guard'. */
 export function orderAgentMission(g: Game, id: number, mission: Mission): boolean {
   return whyNotAgentMission(g, id, mission) === null && setAgentMission(g, g.human!, id, mission);
+}
+
+/** Why the player cannot arrest this uncovered enemy agent now, or null (ruling 151(c)). */
+export function whyNotArrestAgent(g: Game, id: number): string | null {
+  if (!g.human) return 'Nobody is at the controls.';
+  if (!humanUp(g)) return 'Orders are given in your own month.';
+  return whyNotArrest(g, g.human, id);
+}
+
+/** ARREST: ends an enemy agent the player's hunters uncovered (ruling 151(c)). */
+export function orderArrest(g: Game, id: number): boolean {
+  return whyNotArrestAgent(g, id) === null && arrest(g, g.human!, id);
 }
 
 /** Retires one of the player's agents, which frees a place in the service. */

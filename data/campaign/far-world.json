@@ -1339,7 +1339,7 @@
     "duty": "patrol",
     "ships": {
      "bb": 0,
-     "cv": 0,
+     "cv": 1,
      "ca": 8,
      "dd": 9,
      "ss": 15

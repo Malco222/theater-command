@@ -361,7 +361,10 @@ describe('an agent\'s work', () => {
     expect(whyNotMission(g, 'GER', 9999, 'watch')).toMatch(/no such agent/);
     // The room shows the same answers.
     const view = secretService(g)!.agents.find((x) => x.id === paris.id)!;
-    expect(view.missions.map((m) => m.id)).toEqual(['watch', 'books', 'factory', 'rail', 'oil']);
+    expect(view.missions.map((m) => m.id)).toEqual(['watch', 'books', 'factory', 'rail', 'oil', 'bbPlans', 'cvPlans', 'bomberPlans', 'jetPlans', 'rocketPlans', 'guidedPlans']);
+    // (Ruling 235 and its rider b542: a great power steals no plans; it draws and develops its own.)
+    expect(view.missions.find((m) => m.id === 'bbPlans')!.why).toMatch(/own designs/);
+    expect(view.missions.find((m) => m.id === 'jetPlans')!.why).toBe('Germany develops its own jet fighters.');
     expect(view.missions.find((m) => m.id === 'oil')!.ok).toBe(false);
     expect(view.missions.find((m) => m.id === 'watch')!.now).toBe(true);
     expect(view.missions.find((m) => m.id === 'factory')!.success).toBeCloseTo(INTEL.missions.factory.success!, 9);
@@ -594,7 +597,8 @@ describe('the month\'s secret war', () => {
     expect(JSON.stringify([g.intel, g.flags])).toBe(before);
     const watch = grand(null, 6);
     for (let k = 0; k < 14; k++) runTurnAI(watch);
-    expect(watch.intel).toEqual({ agents: [], next: 1, notes: [], heat: {} });
+    // (The sea searches a computer's air staff keeps beside it, ruling 52, are no part of the secret war.)
+    expect({ ...watch.intel, seaBy: undefined }).toEqual({ agents: [], next: 1, notes: [], heat: {} });
     expect(watch.flags.spyfrom).toBeUndefined();
     expect(Object.keys(watch.flags).some((k) => k.startsWith('oilout:'))).toBe(false);
   });

@@ -42,7 +42,13 @@ const snap: Record<number, string> = {};
 const landings: { turn: number; nat: string; to: string; owner: string; corps: number; warned: boolean; wave: boolean }[] = [];
 const months: { turn: number; inCol: number; inVen: number; abroadOnOwnSide: number; across: number; col: boolean; ven: boolean; ashoreFlags: number; atWarWithGermany: boolean; atWar: boolean; door: boolean; sails: boolean }[] = [];
 {
-  const g = startOpen(createGame(25, null));
+  // Seed 25 until the ship candidate of ruling 233, whose rules (the works rule taken over, b629; the record garrisons;
+  // the boats rows) moved the war again: in seed 25 three French corps now stand in the Saar in September 1940, so
+  // France's date lapses and America's list opens Nantes that month. Of seeds 1 to 30 under the ship candidate, 1, 2,
+  // 3, 4, 5, 7, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 22, 23, 27 and 28 tell this story in full (in 9 the French
+  // stand in the Saar too, and in 6, 8, 19, 20, 24, 26, 29 and 30 fewer than three staffs would choose an enemy across
+  // the sea when asked for the quay). Seed 1 is the first; in it France has fallen by September 1940.
+  const g = startOpen(createGame(1, null));
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, owner: e.to.owner, corps: e.force.length, warned: e.warned, wave: e.wave }); };
   while (g.turn < END) {
     const t = g.turn;
@@ -226,7 +232,9 @@ describe('an enemy whose home is on that side is the first business (rulings 75b
     const quay = doorQuay(g, 'USA')!;
     expect(quay).not.toBeNull();
     expect(quay.owner === 'USA' && !quay.overseas).toBe(true);
-    // He is landed on within three months and beaten within five, and the force is home again two months after.
+    // He is beaten within three months, and the force is home again two months after. (Under ruling 232 the corps
+    // in the Canal Zone take Panama City with the field, its guard beside the police, so he can fall in the month he
+    // declares with no American corps ever standing on his ground; before the ruling a landing came first.)
     let landed = 0, fell = 0;
     for (let i = 0; i < 5 && !fell; i++) {
       const t = g.turn;
@@ -234,9 +242,9 @@ describe('an enemy whose home is on that side is the first business (rulings 75b
       if (!landed && standingIn(g, 'PAN')) landed = t;
       if (!g.nations.PAN.alive) fell = t;
     }
-    expect(landed).toBeGreaterThan(0);
-    expect(landed - SEP_40).toBeLessThanOrEqual(3);
     expect(fell).toBeGreaterThan(0);
+    expect(fell - SEP_40).toBeLessThanOrEqual(3);
+    if (landed) expect(landed).toBeLessThanOrEqual(fell);
     runTurnAI(g);
     runTurnAI(g);
     expect(field(g, 'USA').filter((c) => beyondEurope(c.reg) && g.regions[c.reg].owner !== 'USA').length).toBe(0);

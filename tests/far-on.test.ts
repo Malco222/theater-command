@@ -27,7 +27,7 @@ import { allied, armySize, atWar, bloc, capitulate, capture, createGame, declare
 import { setStop } from '../src/campaign/history';
 import { small, threatened } from '../src/campaign/league';
 import { MANPOWER, classNow, homeShare } from '../src/campaign/manpower';
-import { NAVY } from '../src/campaign/navy';
+import { NAVY, navalUpkeep } from '../src/campaign/navy';
 import { RES, fieldOverseas, fieldYield, stores } from '../src/campaign/resources';
 import { blocked } from '../src/campaign/rivers';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -255,6 +255,34 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
     // On the older chart, where a history campaign is played, that row never comes.
     const old = createGame(3, null);
     if (old.nations.USA?.alive) { old.turn = 51; startPhase(old, 'USA'); expect(old.fleets.some((f) => f.name === 'Escort Carrier Fleet')).toBe(false); }
+  });
+
+  it("brings the Eagle to the Mediterranean in May 1940 from the China Fleet, which holds her from the first day: one carrier, counted once (ruling 233, 10:02Z)", () => {
+    for (const stop of [1, 3, 5]) {
+      const g = grand();
+      setStop(g, stop, true);
+      const china = fleet(g, 'UK', 'China Fleet'), med = fleet(g, 'UK', 'Mediterranean Fleet');
+      expect(china.ships.cv, `stop ${stop}`).toBe(1);
+      const was: Record<number, number[]> = {};
+      for (let turn = 2; turn <= 9; turn++) {
+        g.turn = turn;
+        navalUpkeep(g, 'UK');
+        was[turn] = [china.ships.cv, med.ships.cv];
+      }
+      // The Glorious away from 2 (and at stop 1 back at 5 and to the Home Fleet at 8): the Mediterranean Fleet has none
+      // when the Eagle comes, and the China Fleet has none after.
+      expect([was[8], was[9]], `stop ${stop}`).toEqual([[1, 0], [0, 1]]);
+      expect(g.headlines.filter((h) => /Eagle/.test(h.text)).map((h) => [h.turn, h.text]), `stop ${stop}`)
+        .toEqual([[9, 'The carrier Eagle leaves the China Fleet for the Mediterranean Fleet.']]);
+      // The row's own key, as on the older chart, so a save or a stop turned later reads it once.
+      expect(g.flags['arr:9:UK:Mediterranean Fleet'], `stop ${stop}`).toBe(9);
+    }
+    // A China Fleet that has lost its carrier sends none, and the Mediterranean Fleet has no second Eagle from off the chart.
+    const lost = grand();
+    fleet(lost, 'UK', 'China Fleet').ships.cv = 0;
+    for (let turn = 2; turn <= 9; turn++) { lost.turn = turn; navalUpkeep(lost, 'UK'); }
+    expect(fleet(lost, 'UK', 'Mediterranean Fleet').ships.cv).toBe(0);
+    expect(lost.headlines.some((h) => /Eagle/.test(h.text))).toBe(false);
   });
 
   it('plays two months of a war nobody leads, and a campaign saved on it loads as it was', () => {

@@ -404,7 +404,7 @@ describe("Japan's month of December 1941", () => {
     expect(g.flags['event:siam-beside-japan']).toBe(28);
     expect(atWar(g, 'THA', 'UK')).toBe(true);
     // The strike: flown the month the blow falls, without warning, at what lay in the harbour.
-    expect(news(g, 28, 'raid the harbour of Pearl Harbor without warning')).toBe(true);
+    expect(news(g, 28, 'raid Pearl Harbor without warning')).toBe(true);
     const after = g.fleets.find((x) => x.nat === 'USA' && x.name === 'Pacific Fleet')!;
     expect(after.ships.bb + after.ships.cv + after.ships.ca + after.ships.dd).toBeLessThan(afloat);
     // The strike flown, the force is based at Kure again before the month is out (Japan moves last in a month); where

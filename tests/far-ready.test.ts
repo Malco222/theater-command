@@ -251,7 +251,7 @@ describe('the readiness test: the first month, the draw and the last month', () 
     expect(g.flags['pac:strike']).toBe(28);
     expect(g.flags['st:done:JAP:south']).toBe(28);
     expect(atWar(g, 'JAP', 'USA') && atWar(g, 'JAP', 'UK') && atWar(g, 'JAP', 'AUS')).toBe(true);
-    expect(news(g, 28, 'raid the harbour of Pearl Harbor without warning')).toBe(true);
+    expect(news(g, 28, 'raid Pearl Harbor without warning')).toBe(true);
     expect(g.regions[striking(g).base].name).toBe('Hiroshima');
     // (Siam stands with Japan the day of the blow at stops 1 to 3, riders b591 and b593 to ruling 234: Singora is the
     // 5th Division's harbour, as the plan's row has it first, and Kota Bharu the 18th's.)

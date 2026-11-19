@@ -8,10 +8,10 @@
 // beforehand still holds the town after the field is lost. History campaigns are fought as they always were.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.hoisted(() => { (globalThis as { TC_DRIVE?: unknown }).TC_DRIVE = 1; });
-import { addCorps, createGame, men, relocate, setWar } from '../src/campaign/game';
+import { addCorps, createGame, men, relocate, setWar, sovietEvent } from '../src/campaign/game';
 import { DRIVE, besieged, driveOut, garrison, garrisonOf, guardInField, guardMen, guardOf, guardWorth, opensTo, siegeView } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
-import { attackOutlook, beginHuman, candidates, humanUp, orderAttack, previewAttack, stepAI } from '../src/campaign/turn';
+import { attackOutlook, beginHuman, candidates, humanUp, orderAttack, previewAttack, runTurnAI, stepAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
 function seat(nat: string, seed = 3): Game {
@@ -76,6 +76,9 @@ describe("ruling 232: beat the army, take the city", () => {
     const g = seat('GER');
     const warsaw = g.byName['Warsaw'], masuria = g.byName['Masuria'];
     expect(masuria.ctrl).toBe('GER');
+    // (Warsaw opens with its Defence Command inside (rider b566). Sent away to Lublin, it leaves the city to its guard.)
+    expect(garrisonOf(warsaw).map((c) => c.name)).toEqual(['Warsaw Defence Command']);
+    for (const c of [...garrisonOf(warsaw)]) relocate(g, c, g.byName['Lublin']);
     expect(garrisonOf(warsaw)).toHaveLength(0);
     const poles = field(g, warsaw, 'POL');
     expect(poles.length).toBeGreaterThan(0);
@@ -241,5 +244,37 @@ describe("ruling 232: beat the army, take the city", () => {
     const going = g.corps.filter((c) => c.nat === 'GER' && !c.dead && c.kind === 'inf' && lodz.nb.includes(c.reg));
     if (going.length) expect(previewAttack(g, going, lodz)?.guard).toBeUndefined();
     expect(men(field(g, lodz, 'POL')[0])).toBeGreaterThan(0);
+  });
+
+  it("Warsaw holds out with its Defence Command, and the Red Army still comes into its zone: what Germany overran is handed over (riders b566, b571)", () => {
+    const g = startOpen(createGame(3, null));
+    const warsaw = g.byName['Warsaw'];
+    expect(garrisonOf(warsaw).map((c) => c.name)).toEqual(['Warsaw Defence Command']);
+    // (The Red Army is held back for a month, to see the zone as Germany's first month leaves it.)
+    g.flags.sovietMove = 1;
+    runTurnAI(g);
+    delete g.flags.sovietMove;
+    // Germany's first month takes the field everywhere, the Soviet zone too; Warsaw stands, so Poland does.
+    expect(g.nations.POL.alive).toBe(true);
+    expect(warsaw.ctrl).toBe('POL');
+    const overrun = g.regions.filter((r) => r.sov && r.owner === 'POL' && r.ctrl === 'GER');
+    expect(overrun.length).toBeGreaterThan(0);
+    const sovietsBefore = g.corps.filter((c) => c.nat === 'SOV' && !c.dead && g.regions[c.reg].sov).length;
+    // A player's Germany keeps what it took: the pact moves no ground and no corps of his.
+    const h = structuredClone(g);
+    h.human = 'GER';
+    const theirs = h.regions.filter((r) => r.sov && r.owner === 'POL' && r.ctrl === 'GER').map((r) => r.id);
+    sovietEvent(h);
+    for (const id of theirs) expect(h.regions[id].ctrl, h.regions[id].name).toBe('GER');
+    // The computer's Germany draws back to the line, and the Red Army takes up its places.
+    sovietEvent(g);
+    for (const r of overrun) {
+      expect(r.ctrl, r.name).toBe('SOV');
+      expect([...r.units, ...garrisonOf(r)].some((c) => c.nat !== 'SOV'), r.name).toBe(false);
+    }
+    for (const name of ['Wilno', 'Brest', 'Lwow', 'Volhynia', 'Bialystok', 'Polesie']) expect(g.byName[name].ctrl, name).toBe('SOV');
+    expect(g.corps.filter((c) => c.nat === 'SOV' && !c.dead && g.regions[c.reg].sov).length).toBeGreaterThan(sovietsBefore);
+    expect(g.corps.filter((c) => c.nat === 'GER' && !c.dead).every((c) => !g.regions[c.reg].sov || g.regions[c.reg].ctrl !== 'SOV')).toBe(true);
+    expect(warsaw.ctrl).toBe('POL');
   });
 });

@@ -17,7 +17,8 @@ export interface Region {
   fac: number;
   cap: boolean;
   port: boolean;
-  fort: { lv: number; vs: string[] } | null;
+  /** Works: their level, the nations whose ground they face, and who dug them (ruling 232 rider b624; unset in an old save: the owner). */
+  fort: { lv: number; vs: string[]; by?: string; held?: string } | null;
   vichy: boolean;
   sov: boolean;
   oil: boolean;
@@ -74,6 +75,8 @@ export interface Nation {
   corpsNo: number;
   /** Public opinion, from -100 (wants the Allies) to +100 (wants the Axis), and the leaning it drifts back to. */
   opinion: number;
+  /** A smaller nation's plans of battleships or carriers, taken or stolen from a great power (plans.ts), in the order gained. */
+  plans?: PlanHeld[];
   home: number;
   /** Political capital: what a government can spend on diplomacy. */
   pc: number;
@@ -95,6 +98,27 @@ export interface Nation {
   res?: Stores;
   /** The player's government (the grand campaign): his war cabinet, his decrees, the cabinet's trust and its directive. */
   gov?: GovState;
+  /** The nation's footing (ruling 172, the grand campaign with the lever switched on): see footing.ts. */
+  foot?: Footing;
+}
+
+/**
+ * The nation's footing, where it differs from the one that comes of itself (ruling 172; footing.ts). Absent for a
+ * country that has never touched the lever: it earns exactly what it always did.
+ */
+export interface Footing {
+  /** The footing ordered above the one that comes of itself: Rearmament at peace, All-out war at war. */
+  step?: 'rearm' | 'allout';
+  /** How far the climb has come: the share of industry on war work, all of it on one shift = 1. */
+  share?: number;
+  /** The month the climb was ordered. */
+  since?: number;
+  /** No footing may be raised again before this month (a step down, by choice or for want of political capital). */
+  wait?: number;
+  /** The share of the will to fight all-out war has worn away: its own count, above what shortage takes. */
+  worn?: number;
+  /** The month the worn share first reached the amber mark in this war, so that the month card says it once. */
+  amber?: number;
 }
 
 /** A job the war cabinet, or an ally, has set the player (the grand campaign): optional, with a deadline and a reward. */
@@ -229,7 +253,7 @@ export interface TechState {
   /** Technologies researched, in the order they were finished. */
   done: string[];
   /** One entry for each research team at work: the technology, the months still to go and the months it was begun with. */
-  work: { id: string; left: number; of: number }[];
+  work: { id: string; left: number; of: number; spy?: boolean }[];
 }
 
 /** The branches of research. */
@@ -309,6 +333,8 @@ export interface Corps extends Storied {
   stay?: boolean;
   /** The fullest this corps ever gets, where that is under a division's full strength (a setup row's 'est'): its drafts stop there. */
   full?: number;
+  /** A record garrison marked to stay inside its town (ruling 232, rider b606): a computer's staff does not send it back to the field for want of an enemy near. */
+  fortress?: boolean;
   dyle: string | null;
   supplied: boolean;
   fought: boolean;
@@ -490,6 +516,8 @@ export interface BattleReport {
   guarded?: boolean;
   /** A relief: the attackers came to raise a siege of their own side's town. */
   relief?: boolean;
+  /** Close air support (the grand campaign, air.json 'close'): the air strikes each side's groups on ground support flew over the battle. */
+  air?: { att: number; def: number };
   /** The garrison of a besieged town came out against the army round it. */
   sally?: boolean;
   /**
@@ -563,7 +591,10 @@ export interface Fleet extends Storied {
   /** Where a computer-run fleet goes when it has nothing better to do, and what it does there. */
   station: number;
   duty: Stance;
-  /** A fleet tied to its station is never sent anywhere else by the computer. */
+  /**
+   * A fleet tied to its station is never sent anywhere else by the computer. The tie lapses the month its home port
+   * falls, or once its station is out of reach from the port it is in (navy.ts tieLapses; ruling 233 rider b598).
+   */
   tied: boolean;
   /** 0..1: how fit for sea the ships are. Battle and long patrols wear it down; time in harbour restores it. */
   ready: number;
@@ -828,6 +859,11 @@ export interface PlanPhase {
   staging?: Record<string, number>;
   /** Staging places that are a coast watch (the grand campaign): one with no corps within three marches is sent one by rail. */
   watch?: string[];
+  /**
+   * The capitals of allies this staff guards while their leaving is in play, and the corps each is to have (ruling 233,
+   * riders b612 and b627). A guard is named once and kept: it goes by rail as far as the trains run and marches on.
+   */
+  ward?: Record<string, number>;
   minOdds?: number;
   force?: number;
   /** Places the plan means to starve out rather than storm: never assaulted while the phase lasts. */
@@ -959,6 +995,15 @@ export interface AirFleet extends Storied {
   scouted?: number;
   /** A fighter group's standing order to stick with one bomber group: that group's id. It goes on every day raid the bombers fly, as far as its fighters reach. */
   escorts?: number;
+  /**
+   * A land fighter group's standing order 'Ground support' (the grand campaign, air.json 'close'): it flies over its
+   * own side's land battles within its fighters' reach, and does not meet raids or escort.
+   */
+  close?: boolean;
+  /** The week it last flew over a battle on that order, as month x 10 + week: one battle a week. */
+  closeAt?: number;
+  /** The air campaign it flies in (ruling 236.2): the campaign's id, while the campaign stands. */
+  camp?: number;
   /** A carrier wing: the id of the fleet whose carriers it flies from. It goes where that fleet goes and has no airfield (the grand campaign). */
   ship?: number;
   /**
@@ -1036,6 +1081,99 @@ export interface AirReport {
   surprise?: boolean;
 }
 
+/** Ruling 236.2: how a battle for the sky over one province stands, for the side fighting for it. */
+export type SkyState = 'contested' | 'held' | 'lost';
+
+/**
+ * The battle for the sky over one province (ruling 236.2): the side fighting for it, where it stands, and the months
+ * running it has gone that side's way (above 0) or the defender's (below 0). It carries over from month to month.
+ */
+export interface SkyFight {
+  by: string;
+  state: SkyState;
+  streak: number;
+  /** The month of the last fight, and the month the fight began. */
+  turn: number;
+  since: number;
+  /** The month it was won, while held. */
+  won?: number;
+  /** This month's best result so far (2 the defender's fields knocked out, 1 a month won, 0 even, -1 lost), and where the fight stood before it. */
+  best: number;
+  was: { state: SkyState; streak: number };
+}
+
+/**
+ * What the bombs have kept down in one province, of one kind ('works' its output, 'oil' its oilfield or fuel plants),
+ * ruling 236.2: damage carries over and comes back at the historian's rate for the target (air-campaign-236).
+ * 'v' is the share held down at the end of month 'at'; 'land' what raids have landed for later months; 'carry' what
+ * is still down this month from earlier raids, after the month's repair.
+ */
+export interface BombStock {
+  region: number;
+  kind: 'works' | 'oil';
+  by: string;
+  victim: string;
+  v: number;
+  rate: number;
+  at: number;
+  land: Record<number, number>;
+  carry: number;
+  /** This month: what came back, and what the raids did. */
+  mended: number;
+  done: number;
+  /** The last raid that landed here: its month, its side and what it did. */
+  last?: { turn: number; by: string; cut: number };
+}
+
+export type CampaignKind = 'sky' | 'bomb' | 'support';
+
+/** One month of an air campaign: where it went, what it sent and lost, and what it did (ruling 236.2). */
+export interface CampaignMonth {
+  turn: number;
+  target: number;
+  sent: number;
+  lost: number;
+  downed: number;
+  done: number;
+  sky?: SkyState;
+}
+
+/**
+ * An air campaign (ruling 236.2): a standing order to an air force, flown every month until it is called off. It
+ * holds its targets, its groups and escorts, day or night, and what it has done month by month.
+ */
+export interface AirCampaign {
+  id: number;
+  nat: string;
+  kind: CampaignKind;
+  name: string;
+  targets: number[];
+  /** The next target in turn, for a bombing campaign. */
+  next: number;
+  groups: number[];
+  escorts: number[];
+  night: boolean;
+  /** What a bombing campaign aims at: the works, the oil, or the railways. */
+  aim: 'works' | 'oil' | 'rail';
+  since: number;
+  /** The month it ended, and why. */
+  off?: number;
+  why?: string;
+  /** The row of the campaign table it was opened from, at the stops that follow the book. */
+  book?: number;
+  log: CampaignMonth[];
+}
+
+/** The air war's memory (ruling 236.2): the campaigns, the battles for the sky, and the damage the bombs left. */
+export interface AirWarMemory {
+  campaigns: AirCampaign[];
+  next: number;
+  sky: Record<number, SkyFight>;
+  stock: Record<string, BombStock>;
+  /** The last month each nation's ground was bombed by night (b569(2): its staff reaches for Fighter control). */
+  night?: Record<string, number>;
+}
+
 /**
  * A corps on a long passage by sea (ruling 229, part 1; the design director's b460): it left `from` in its own
  * country's harbours and lands at `to`, or the nearest harbour its side holds on that front, in month `due`. While
@@ -1103,6 +1241,8 @@ export interface Game {
   passings: Passing[];
   /** Corps at sea on a long passage, off the map until the month they land (ruling 229, part 1: the Cape). Absent while there are none. */
   atSea?: Voyage[];
+  /** The air campaigns (ruling 236.2, the grand campaign with the switch on): absent while the switch is off. */
+  ac?: AirWarMemory;
   links: [number, number][];
   /** The chart's west edge. 0 on the map of Europe; further west (negative) once the wider world is attached (world.ts). */
   x0: number;
@@ -1140,8 +1280,14 @@ export interface Passing {
   player?: boolean;
 }
 
-/** What an agent is doing: watching, reading a government's books, an act of sabotage, or guarding the home country. */
-export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'guard';
+/** What an agent is doing: watching, reading a government's books, an act of sabotage, a theft of plans, or work at home (guarding, hunting enemy agents). */
+export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'airfield' | 'orders' | 'bbPlans' | 'cvPlans' | 'bomberPlans' | 'jetPlans' | 'rocketPlans' | 'guidedPlans' | 'guard' | 'hunt';
+
+/**
+ * Plans a smaller nation holds of a weapon only the great powers make (Brian, 18 November; ruling 235 and its rider
+ * b542): a battleship, a carrier, or one of four technologies. Whose they are, how it got them, and when.
+ */
+export interface PlanHeld { what: 'bb' | 'cv' | 'heavybombers' | 'jets' | 'rockets' | 'guided'; from: string; how: 'taken' | 'stolen'; turn: number }
 
 /** A spy: a piece the player recruits, sends abroad and may lose. */
 export interface Agent {
@@ -1163,6 +1309,44 @@ export interface Agent {
   months?: number;
 }
 
+/**
+ * An agent of the other side's service on the player's home ground (ruling 151(c), spy hunters): hidden until one of
+ * his hunters uncovers it, it strikes in its month unless it is arrested first or a guard stops it.
+ */
+export interface FoeAgent {
+  id: number;
+  /** The service it works for. */
+  nat: string;
+  reg: number;
+  /** What it means to strike at. */
+  kind: 'factory' | 'rail' | 'airfield';
+  /** The month it strikes. */
+  strike: number;
+  /** The month a hunter of the player's uncovered it, if one has. */
+  found?: number;
+}
+
+/**
+ * An enemy air staff's order for next month, read by the player's agent (ruling 135, spy orders): the groups on one
+ * field, the target, by day or by night. The staff flies it in its month if it still can; a stolen order is never false.
+ */
+export interface StolenOrder {
+  /** The staff whose order it is, and the field its groups fly from. */
+  nat: string;
+  field: number;
+  groups: number[];
+  target: number;
+  mission: 'bomb' | 'night';
+  bombers: number;
+  /** The month it is to be flown. */
+  turn: number;
+  /** The agent who read it, and the player's side. */
+  agent: string;
+  by: string;
+  /** Once its month has come: flown, or why it lapsed. */
+  done?: 'flown' | 'lapsed';
+}
+
 /** A line in the secret service's file: what happened, to whom, where, and whether it was good news. */
 export interface IntelNote { turn: number; agent: string; nat: string; reg: number; what: string; text: string; good: boolean }
 
@@ -1180,11 +1364,18 @@ export interface Intel {
   how?: Record<number, 'battle' | 'agent' | 'air'>;
   /** Seas the player's aircraft have searched, and the month they did. */
   sea?: Record<number, number>;
+  /** Seas each computer staff's aircraft have searched, and the month they did (ruling 52): by nation, then by sea. */
+  seaBy?: Record<string, Record<number, number>>;
   /**
    * Cut railways as the player last knew them (rulings 113 and 114): the month, whether he saw the cut or has it by
    * the report of his own raid, agent or troops, and the cause where it was known. One record a province.
    */
   cuts?: Record<number, { t: number; how: 'seen' | 'report'; why?: 'bombed' | 'agent' | 'saboteurs' | 'retreat' | 'hasty' | 'order' }>;
+  /** The other side's agents on the player's ground (ruling 151(c)), and the next id. */
+  foes?: FoeAgent[];
+  foeNext?: number;
+  /** Enemy air orders the player's agents have read (ruling 135). */
+  orders?: StolenOrder[];
 }
 
 export const MEN_PER_DIV = 15000;
