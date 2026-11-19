@@ -147,6 +147,7 @@ namespace TheaterFx
 		// and the clump reads as a lump of fire, never a flat cut-out; 0 keeps one colour across it)
 		Rgb Edge;
 		double EdgeK = 0.0;
+		double Nearer = 0.0; // (sorted as if this many metres nearer the eye: a fire's white heart drawn over its own clumps)
 	};
 
 	class Battle

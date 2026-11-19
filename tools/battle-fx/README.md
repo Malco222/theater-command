@@ -190,7 +190,11 @@ Blasts->AirFallStop(PlaneId);
 - The debris row (art director 04:40Z). `explode`: blown apart, every piece at once, 30 to 50 for a fighter and 60 to
   100 for a bomber (a span of `bomber_span_m`, 20 m, or more), round a short torn fireball, never a ball: 18 to 28
   clumps of fire thrown out along two to four tears, each a hot middle darkening to a deep red edge, gone in about half
-  a second, each leaving black smoke that hangs where it died while the pieces fly on. Hide the model at once; no
+  a second, each leaving black smoke that hangs where it died while the pieces fly on. It is lit from within (art
+  director 06:00Z): a white-yellow heart for about 0.1 s, drawn over the clumps (`Bit::Nearer`); a saturated orange
+  body, blue kept low and near opaque to its edge, cooling to deep red by `cool_by_s` and into its smoke, which rides
+  with it as it dies, so it never goes peach, clay or salmon over the sky. The battle's colour grade must spare fire,
+  flashes and tracers from its desaturation. Hide the model at once; no
   `AirFallMove` is needed. `burn`: going down on fire, 5 to 10 pieces shed over the fall. `spin`: out of control, two
   to five, the first sometimes a wing (`wing_odds`). Keep the fire or smoke trail on the model with the Trail calls.
 - Most pieces are light torn skin plates, painted outside and bare metal inside, that tumble, flutter and glint in the

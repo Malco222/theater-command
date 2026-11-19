@@ -2929,15 +2929,20 @@ namespace TheaterFx
 		// (art director 04:40Z: a short torn fireball, never a ball: the airframe tears along a few ways at once, so the
 		// fire is thrown out in ragged clumps of different sizes along those ways, deep orange, gone in half a second,
 		// each clump leaving black smoke that hangs. A white-hot heart for a frame or two)
+		// (art director 06:00Z: fire, never pale peach. It is lit from within: the heart near white-yellow through about
+		// 0.1 s, the body a saturated orange, cooling to deep orange-red by 0.2 to 0.3 s and then into the black smoke,
+		// never through clay or salmon. So every colour on the way keeps its blue low, the ramp runs hot, orange, deep
+		// red with no pale mix, and a clump is near opaque to its rim, as a see-through rim over the sky goes salmon)
 		const std::string P = "air_debris.fireball.";
 		const double S = SpanM / 11.0;
-		const Rgb HeartCol = Rgb::FromPicture(252, 228, 160);
+		const Rgb HotCol = Picture(P + "hot_colour", Rgb::FromPicture(255, 222, 90));
 		const Rgb DeepCol = Picture(P + "deep_colour", Rgb::FromPicture(140, 40, 16));
 		const Rgb SmokeCol = Picture(P + "smoke_colour", Rgb::FromPicture(38, 35, 33));
-		const Rgb FireCol = Picture(P + "colour", Rgb::FromPicture(232, 124, 40));
-		const Span HeartMix = Range(P + "heart_mix", 0.1, 0.5);
-		const double LobeRim = Clamp01(Num(P + "rim", 0.5)), LobeRough = Clamp01(Num(P + "rough", 0.35));
-		const double EdgeShare = Clamp01(Num(P + "edge", 0.7)), TwinPx = std::max(0.0, Num(P + "twin_px", 40.0));
+		const Rgb FireCol = Picture(P + "colour", Rgb::FromPicture(250, 136, 22));
+		const Span HeartMix = Range(P + "heart_mix", 0.2, 0.6);
+		const double CoolBy = std::max(0.02, Num(P + "cool_by_s", 0.25));
+		const double LobeRim = Clamp01(Num(P + "rim", 0.85)), LobeRough = Clamp01(Num(P + "rough", 0.35));
+		const double EdgeShare = Clamp01(Num(P + "edge", 0.5)), TwinPx = std::max(0.0, Num(P + "twin_px", 40.0));
 		const int Lobes = static_cast<int>(std::lround(Range(P + "lobes", 18.0, 28.0).Pick(D)));
 		const int Ways = std::max(1, static_cast<int>(std::lround(Range(P + "tears", 2.0, 4.0).Pick(D))));
 		const Span Life = Range(P + "life_s", 0.25, 0.6), Reach = Range(P + "reach_of_span", 0.3, 0.9), R = Range(P + "r_of_span", 0.05, 0.12);
@@ -2953,18 +2958,19 @@ namespace TheaterFx
 			H.From = At;
 			H.Vel = Vel * 0.8;
 			H.Drag = 2.0;
-			H.Life = 0.09;
+			H.Life = Num(P + "heart_s", 0.12);
 			H.R0 = 0.18 * SpanM;
 			H.R1 = H.R0 * 1.6;
-			H.Col = Rgb::FromPicture(255, 246, 214);
-			H.Col2 = HeartCol;
-			H.Edge = FireCol;
-			H.EdgeK = EdgeShare;
+			H.Col = Rgb::FromPicture(255, 252, 236);
+			H.Col2 = Picture(P + "heart_colour", Rgb::FromPicture(255, 240, 170));
+			H.Nearer = 0.5 * SpanM; // (drawn over its own clumps: the white heart shows through the fire round it)
+			H.Edge = HotCol; // (white going to yellow at its edge, never a pale fringe over the sky)
+			H.EdgeK = 0.6;
 			H.Alpha = 1.0;
 			H.FadeIn = 0.002;
-			H.Hold = 0.4;
-			H.Heart = 0.95;
-			H.Rim = 0.3;
+			H.Hold = 0.85; // (full through about 0.1 s, then gone in a frame: never a pale ghost over the sky)
+			H.Heart = 1.0;
+			H.Rim = LobeRim;
 			H.Rough = 0.45;
 			H.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
 			H.bLight = true;
@@ -2986,13 +2992,13 @@ namespace TheaterFx
 			B.Grow = 0.5;
 			B.Along = Toward;
 			B.Stretch = D.U(1.1, 2.0);
-			B.Col = FireCol.Mix(HeartCol, HeartMix.Pick(D));
-			B.Col2 = DeepCol.Mix(SmokeCol, 0.45); // (dying, it darkens into its smoke, never a pale ghost)
-			B.Cool = 1.3;
+			B.Col = FireCol.Mix(HotCol, HeartMix.Pick(D));
+			B.Col2 = DeepCol; // (cooling to deep orange-red by CoolBy, still near opaque, then gone into its smoke)
+			B.Cool = B.Life / CoolBy;
 			B.Alpha = 1.0;
 			B.FadeIn = 0.005;
-			B.Hold = 0.35;
-			B.Heart = 0.95;
+			B.Hold = 0.6;
+			B.Heart = 1.0;
 			B.Rim = LobeRim;
 			B.Rough = LobeRough;
 			B.Edge = DeepCol; // (a hot middle darkening out to a deep red rim: a lump of fire)
@@ -3004,22 +3010,23 @@ namespace TheaterFx
 			B.bWhole = true;
 			Bits.push_back(B);
 			{
-				// (and the black smoke a clump leaves, from where the clump is as it dies, hanging there)
-				const double Late = B.Life * 0.4;
+				// (and the black smoke a clump leaves, from where the clump is as it starts to die, riding with it and a
+				// little wider, so the dying fire goes into the smoke and never fades out over the bare sky, then hanging)
+				const double Late = B.Life * std::max(0.0, B.Hold - 0.15);
 				Bit M;
 				M.Born = B.Born + Late;
 				M.From = Where(B, Late);
-				M.Vel = Going(B, Late) * 0.7;
-				M.Drag = 1.5;
+				M.Vel = Going(B, Late);
+				M.Drag = B.Drag;
 				M.Windage = 1.0;
 				M.Life = SmokeS.Pick(D);
-				M.R0 = B.R0 + (B.R1 - B.R0) * 0.5;
+				M.R0 = 1.15 * (B.R0 + (B.R1 - B.R0) * std::pow(B.Hold, B.Grow));
 				M.R1 = M.R0 * SmokeGrow.Pick(D);
 				M.Grow = 0.5;
 				M.Col = SmokeCol;
 				M.Col2 = SmokeCol.Mix(Rgb::FromPicture(120, 116, 112), 0.6);
 				M.Alpha = Num(P + "smoke_alpha", 0.9) * D.U(0.8, 1.05);
-				M.FadeIn = 0.1;
+				M.FadeIn = 0.04;
 				M.Hold = 0.3;
 				M.Heart = 0.7;
 				M.Rim = 0.0;
@@ -4158,7 +4165,7 @@ namespace TheaterFx
 			// (counted first when the room is short: an oil fire's kept column, and every light: flames, flashes and
 			// tracers are few and are what an air fight is read by from far off, so its smoke is what goes. The
 			// pre-check, 05:14Z: by depth alone the far side of a fight went bare, flames and all)
-			Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward), B.bKeep || B.bLight });
+			Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward) - B.Nearer, B.bKeep || B.bLight });
 			if (B.OilId >= 0)
 			{
 				// (an oil column's puff, not yet faded far: how far across the screen the column reaches at its height)

@@ -1639,7 +1639,8 @@
   "most_s": 240,
   "least_px": 1.0,
   "fireball": {
-   "_how": "A short torn fireball, never a ball: lobes clumps of fire thrown out along tears ways at once, each r_of_span of the span across at birth, reaching reach_of_span, gone in life_s; colour hot (heart_mix of the way to a pale heart), each clump's edge edge of the way to deep_colour so it reads as a lump of fire; rim its edge opacity, rough its torn outline, drawn as two fans past twin_px. Each clump leaves smoke_colour smoke that grows smoke_grow times and hangs smoke_s at smoke_alpha, where the clump died, while the pieces fly on and fall; a lamp.",
+   "_how": "A short torn fireball, never a ball: lobes clumps of fire thrown out along tears ways at once, each r_of_span of the span across at birth, reaching reach_of_span, gone in life_s. Lit from within (art director 06:00Z): each clump is colour taken heart_mix of the way to hot_colour, cooling to deep_colour by cool_by_s and then gone into its smoke, near opaque to its edge (rim), its edge edge of the way to deep_colour so it reads as a lump of fire; rough its torn outline, drawn as two fans past twin_px. A white heart, heart_colour at its end, lasts heart_s and is drawn over the clumps. Each clump leaves smoke_colour smoke that grows smoke_grow times and hangs smoke_s at smoke_alpha, where the clump died, while the pieces fly on and fall; a lamp.",
+   "_art_director_0600": "Art director 06:00Z: pieces, smoke, falls and numbers PASS. Mend the fire's colour: it read as pale peach petals (median 222,165,130). Make it emissive: the heart near white-yellow (luma 240 or more) through about 0.1 s; the body a saturated orange (blue under about 60, saturation 0.75 or more); cooling to deep orange-red and the 140,40,16 edge by 0.2 to 0.3 s, then into the black smoke, never a clay or salmon tone on the way.",
    "lobes": [
     18,
     28
@@ -1661,21 +1662,33 @@
     0.12
    ],
    "colour": [
-    232,
-    124,
-    40
+    250,
+    136,
+    22
+   ],
+   "hot_colour": [
+    255,
+    222,
+    90
    ],
    "heart_mix": [
-    0.1,
-    0.5
+    0.2,
+    0.6
    ],
    "deep_colour": [
     140,
     40,
     16
    ],
-   "edge": 0.7,
-   "rim": 0.5,
+   "cool_by_s": 0.25,
+   "heart_s": 0.12,
+   "heart_colour": [
+    255,
+    240,
+    170
+   ],
+   "edge": 0.5,
+   "rim": 0.85,
    "rough": 0.35,
    "twin_px": 40,
    "smoke_colour": [
