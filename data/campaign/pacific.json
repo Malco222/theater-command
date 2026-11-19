@@ -8,7 +8,7 @@
   "pact": {"with": "USA", "book": 13, "fallen": "FRA", "months": 3},
   "freeze": {"book": 24, "places": ["Saigon", "Cam Ranh"], "wars": ["UK", "NED"], "seller": "USA", "south": ["UK", "NED"]},
   "north": {"nat": "SOV", "fallen": "GER", "months": 3, "book": 72, "while": ["USA", "UK"]},
-  "demand": {"of": "VIC", "key": "Saigon", "theatre": "pacific", "book": 23, "war": ["GER", "SOV"], "fallen": "FRA", "months": 13, "never": "GER"},
+  "demand": {"of": "VIC", "key": "Saigon", "theatre": "pacific", "book": 23, "war": ["GER", "SOV"], "fallen": "FRA", "months": 13, "never": "GER", "choose": {"bold": 0.15, "opportunist": 0.08, "cautious": 0.04, "busy": 2}},
   "runs": {
     "of": "USA", "share": 0.05, "equator": 2850, "idle": "south", "first": "marines",
     "from": ["San Francisco", "Los Angeles", "San Diego", "Puget Sound"],
@@ -19,12 +19,13 @@
     }
   },
   "ready": {
-    "choice": "south", "flag": "pac:strike", "window": [3, 6], "chance": 0.5,
+    "choice": "south", "flag": "pac:strike", "window": [3, 6], "chance": 0.5, "flank": {"bold": 0.85, "opportunist": 0.5, "cautious": 0.25},
     "first": {"bold": 3, "cautious": 4, "opportunist": 4},
     "busy": {"first": 3, "of": ["UK", "SOV"], "with": "GER"},
     "gather": {"after": 2, "fleet": "Mobile Fleet", "base": "Etorofu", "port": "Hitokappu Bay", "home": "kurile", "words": "The carrier striking force gathers at Hitokappu Bay in the Kuriles"},
     "leads": {"Singapore": ["Singora", "Kota Bharu"], "Manila": ["Lingayen", "Aparri", "Legaspi"]}
   },
+  "_sandbox": "At stops 4 and 5 of the dial only (the sandbox playtest of 19 November, owner the Pacific planner): 'demand'.'choose' makes the demand on Vichy the staff's own choice, made in each month it may be made with the chance its character gives, times 'busy' while Germany and the Soviet Union are at war; 'ready'.'flank' is the chance, by the staff's character and drawn once a war, that the strike south takes in a country that has only stopped Japan's trade, fights none of Japan's friends and is bound to nobody Japan strikes (pacific.ts inTheWay, staff.ts asGoes, readiness.ts). Stops 1 to 3 read neither.",
   "keepers": ["UK", "AUS", "USA"],
   "africa": [478, 678],
   "shores": {"slice": 312, "seas": ["bengal", "andaman", "ceylon", "malacca"]},

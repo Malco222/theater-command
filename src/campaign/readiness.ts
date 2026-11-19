@@ -27,11 +27,16 @@
 //   THE GATHERING. By the book a dated row moves the carrier striking force to its northern anchorage the month
 //     before the blow. Off the book the staff gives the same order on the freeze's clock, two months after the
 //     freeze, so that the fleet lies in reach as the window opens (and again in any month it is found elsewhere).
+//   AT STOPS 4 AND 5 (the sandbox playtest of 19 November): the window has no last month, so a staff that is never
+//     ready never strikes; and the strike goes against those that stand in Japan's way that month (pacific.ts
+//     inTheWay), with its strikes and landings cut to their ground (staff.ts asGoes). Everything above reads that
+//     choice: a strike that leaves America out asks no striking fleet and gathers none, and nobody in the way is no
+//     strike. Stops 1 to 3 read history's choice exactly as before.
 
 import type { Corps, Game, Region } from './types';
 import { PACIFIC, freezeAt, readyRules, type ReadyRules } from './pacific';
-import { RIVALS, characterOf, monthly, ops, strengthAsked, type Op } from './staff';
-import { leash } from './history';
+import { RIVALS, asGoes, characterOf, monthly, ops, strengthAsked, type Op } from './staff';
+import { leash, stopDef } from './history';
 import { FLEETS, NAVY, fleetReach, fleetsOf, orderedTo, seaPath, shipCount } from './navy';
 import { followUp, reckon } from './ashore';
 import { WORLD } from './world';
@@ -53,14 +58,17 @@ export interface Readiness {
 /** For the measuring harness: told what the test read each month of the window, and whether the staff struck. Nothing in the game listens. */
 export const readyWatch: { tell: ((e: Readiness & { nat: string; turn: number; struck: boolean; why: string }) => void) | null } = { tell: null };
 
-/** The test's figures and the choice it names the month of, while that month is the staff's own to choose. */
+/**
+ * The test's figures and the choice it names the month of, while that month is the staff's own to choose: the choice
+ * as it would go this month (at stops 4 and 5 against those in Japan's way, staff.ts asGoes).
+ */
 function testFor(g: Game, nat: string): { R: ReadyRules; op: Op } | null {
   const R = readyRules(g);
   if (!R || nat !== PACIFIC!.power || nat === g.human || !g.nations[nat]?.alive) return null;
   const op = ops(nat).find((o) => o.id === R.choice);
   if (!op || g.flags[`st:done:${nat}:${op.id}`] || g.flags[R.flag] !== undefined) return null;
   // (Where the book dates the choice, the book's month stands.)
-  return leash(g, nat, op.id).kind === 'free' ? { R, op } : null;
+  return leash(g, nat, op.id).kind === 'free' ? { R, op: asGoes(g, nat, op) } : null;
 }
 
 /** The countries the choice would bring to war with its own: those it declares on, their dominions and the countries the Pacific's ties name with them. */
@@ -129,10 +137,11 @@ export function readiness(g: Game, nat: string): Readiness | null {
 export function readinessMonth(g: Game, nat: string): void {
   const X = testFor(g, nat), freeze = freezeAt(g);
   if (!X || !freeze) return;
-  const { R } = X;
+  const { R, op } = X;
   const m = g.turn - freeze;
-  // The gathering: the striking fleet to the anchorage its strike is flown from.
-  if (m >= R.gather.after) {
+  // The gathering: the striking fleet to the anchorage its strike is flown from. (At stops 4 and 5 only while a strike
+  // it flies is still meant: one that leaves America out flies none.)
+  if (m >= R.gather.after && (!stopDef(g).ambitions || (op.strikes ?? []).some((s) => s.fleet === R.gather.fleet))) {
     const f = fleetsOf(g, nat).find((x) => x.name === R.gather.fleet);
     if (f) orderedTo(g, f, R.gather);
   }
@@ -140,7 +149,10 @@ export function readinessMonth(g: Game, nat: string): void {
   const now = readiness(g, nat);
   if (!now) return;
   let struck = false, why: string;
-  if (m >= R.window[1]) { struck = true; why = 'the last month of the window'; }
+  // (At stops 4 and 5 there is no last month, and nobody in the way is no strike: the sandbox playtest of 19 November.)
+  const loose = !!stopDef(g).ambitions;
+  if (m >= R.window[1] && !loose) { struck = true; why = 'the last month of the window'; }
+  else if (loose && !(op.declare ?? []).length) why = 'nobody in its way';
   else if (m < now.first) why = 'before its first month';
   else if (!now.ready) why = 'not ready';
   else { struck = monthly(g, nat, R.choice, 'ready', g.turn) < R.chance; why = struck ? 'ready, and the draw for it' : 'ready, and the draw against it'; }

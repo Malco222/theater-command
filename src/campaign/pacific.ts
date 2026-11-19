@@ -46,8 +46,10 @@
 //     war, in the form of an ultimatum (diplomacy.json 'bessarabia'), and the French garrison stands down. The
 //     computer's Japan makes it in July 1941 while the Pacific's book stands; where no book dates it, in the first of
 //     two months, the month after Germany and the Soviet Union go to war or the thirteenth after France fell, and
-//     never once Germany is beaten. A declaration of war on Vichy France while it holds Saigon is answered by the
-//     handing-over (game.ts declareWar): a player's Japan makes its demand so.
+//     never once Germany is beaten. At stops 4 and 5 (the sandbox playtest of 19 November) no clock brings it: it is
+//     the staff's own choice, drawn in each month it may be made by the staff's character ('demand'.'choose'), and
+//     likelier while Germany and the Soviet Union are at war. A declaration of war on Vichy France while it holds
+//     Saigon is answered by the handing-over (game.ts declareWar): a player's Japan makes its demand so.
 //
 //   A FALLEN COUNTRY'S FAR GROUND (ruling 199(b), (c)). The keepers of far ground are Britain, then Australia, then
 //     America (world.ts protectorOf). The fallen country's corps on ground that passes into keeping, and its
@@ -74,6 +76,7 @@ import type { Game, Nation, Region } from './types';
 import { allied, atWar, bloc, declareWar, headline, joinedSide, newsName, removeCorps, sameSide, setWar, theName } from './game';
 import { FAR_FIRST, WORLD, WORLD_FIRST, WORLD_MAP, farOn, shoreOf, standWithAllies } from './world';
 import { HISTORY, bookDate, onBook, stopDef } from './history';
+import { characterOf, monthly } from './staff';
 import { neverHis } from './line';
 import { ownPath } from './league';
 
@@ -108,6 +111,8 @@ export interface ReadyRules {
   gather: { after: number; fleet: string; base: string; port: string; home: string; words: string };
   /** The places the opening is for, each with the beaches that lead to it, the nearest the record's first. */
   leads: Record<string, string[]>;
+  /** At stops 4 and 5: by the staff's character, the chance it strikes a country that has only stopped its trade (inTheWay). */
+  flank?: Record<string, number>;
 }
 
 interface Rules {
@@ -117,7 +122,11 @@ interface Rules {
   pact: { with: string; book: number; fallen: string; months: number };
   freeze: { book: number; places: string[]; wars: string[]; seller: string; south: string[] };
   north: { nat: string; fallen: string; months: number; book: number; while: string[] };
-  demand: { of: string; key: string; theatre: string; book: number; war: [string, string]; fallen: string; months: number; never: string };
+  demand: {
+    of: string; key: string; theatre: string; book: number; war: [string, string]; fallen: string; months: number; never: string;
+    /** At stops 4 and 5: the staff's chance each month by its character, times 'busy' while `war` is on (demandMonth). */
+    choose?: Record<string, number> & { busy: number };
+  };
   /** America's shipping in the Pacific (ruling 190): `pacificRuns`. */
   runs?: RunRules;
   /** The readiness test (ruling 200(m)): the month the computer's Japan strikes where no book dates it. readiness.ts. */
@@ -341,12 +350,54 @@ function demandMonth(g: Game): void {
   if (P.power === g.human || g.flags['pac:demand'] !== undefined || !mayDemand(g)) return;
   let due: boolean;
   if (onBook(g, D.theatre)) due = g.turn >= D.book;
-  else {
+  else if (stopDef(g).ambitions && D.choose) {
+    // (At stops 4 and 5 it is the staff's choice: drawn each month it may be made, by its character, and likelier
+    // while the Soviet Union is held by Germany and the north is safe. Never once Germany is beaten.)
+    const C = D.choose, busy = atWar(g, D.war[0], D.war[1]) ? C.busy : 1;
+    due = !!g.nations[D.never]?.alive && monthly(g, P.power, 'demand', g.turn) < (C[characterOf(g, P.power)] ?? 0) * busy;
+  } else {
     const never = g.nations[D.never], F = g.nations[D.fallen];
     const east = Math.max(g.flags[`war:${D.war[0]}:${D.war[1]}`] ?? 0, g.flags[`war:${D.war[1]}:${D.war[0]}`] ?? 0);
     due = !!never?.alive && ((east > 0 && g.turn > east) || (!!F && !F.alive && !!F.fellOn && g.turn >= F.fellOn.turn + D.months));
   }
   if (due) demand(g);
+}
+
+// ---- Who stands in Japan's way (stops 4 and 5) --------------------------------------------------------------
+
+/** What inTheWay reads of a great choice: whom it declares on, and the ground its landings and strikes go for. */
+interface WayOp { id: string; declare?: string[]; landings?: { to: string[] }[]; strikes?: { harbour: string }[] }
+
+/**
+ * The countries the strike south declares on at stops 4 and 5 (the sandbox playtest of 19 November): not history's
+ * list but those that stand in Japan's way the month it goes. Of the countries the choice names, living, outside
+ * Japan's side and not yet at war with it:
+ *   - one that fights a power of Japan's bloc stands in its way;
+ *   - so does one bound to one of those: its dominions and those the ties name with it (at war the same day), and
+ *     Britain or America while the two stand in one alliance (at war the month after: pacificOpening);
+ *   - one that has only stopped Japan's trade (the freeze) and holds ground the strike goes for is the flank: the
+ *     staff strikes it, or hopes to leave it out, by the chance its character gives, drawn once a war.
+ * Nobody is in the way unless one of them holds ground the strike goes for. Null where history's list stands: at
+ * stops 1 to 3, for every other choice, and where the ties do not read.
+ */
+export function inTheWay(g: Game, nat: string, op: WayOp): string[] | null {
+  const P = PACIFIC, R = P?.ready;
+  if (!P || !R || !reads(g) || !stopDef(g).ambitions || nat !== P.power || op.id !== R.choice) return null;
+  const road = new Set([...(op.landings ?? []).flatMap((L) => L.to), ...(op.strikes ?? []).map((s) => s.harbour), ...Object.keys(R.leads)]);
+  const onRoad = (id: string): boolean => [...road].some((nm) => g.byName[nm]?.ctrl === id);
+  const open = (op.declare ?? []).filter((id) => !!live(g, id) && !allied(g, nat, id) && !atWar(g, nat, id));
+  const side = (id: string): string | null => { const b = bloc(g.nations[id]); return b && b !== 'league' ? b : null; };
+  const fights = (id: string): boolean => g.nations[id].atWar.some((e) => { const E = live(g, e); return !!E && bloc(E) === P.bloc; });
+  const cut = (id: string): boolean => freezeAt(g) > 0 && (id === P.freeze.seller || P.freeze.south.includes(id));
+  const who = characterOf(g, nat);
+  const out = new Set(open.filter((id) => fights(id) || (cut(id) && onRoad(id) && monthly(g, nat, 'flank', id) < (R.flank?.[who] ?? 1))));
+  const bound = (id: string): boolean => [...out].some((o) => (P.with[o] ?? []).includes(id) || WORLD.follow[id] === o
+    || (P.pair.includes(id) && P.pair.includes(o) && side(o) !== null && side(o) === side(id)));
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const id of open) if (!out.has(id) && bound(id)) { out.add(id); grew = true; }
+  }
+  return [...out].some(onRoad) ? open.filter((id) => out.has(id)) : [];
 }
 
 // ---- A fallen country's far ground (ruling 199(b), (c)) ---------------------------------------------------

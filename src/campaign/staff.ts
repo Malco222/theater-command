@@ -40,7 +40,7 @@ import { openSecretWar } from './secretwar';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
 import { tieWar } from './far';
-import { runQuays } from './pacific';
+import { inTheWay, runQuays } from './pacific';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
 import { openWinter, winterOver } from './winter';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
@@ -903,8 +903,23 @@ function cond(g: Game, nat: string, c: string, real: Front[]): boolean {
   return holds(g, c);
 }
 
+/**
+ * A great choice as it goes in this war. Where its enemies are those that stand in the way rather than history's list
+ * (pacific.ts inTheWay: the strike south at stops 4 and 5), it declares on them, and its strikes and landings are cut
+ * to ground held by countries it is at war with or declares on (`declaring`, this month's declarations; left out, all
+ * those in the way). Every other choice, and this one at stops 1 to 3, goes exactly as written.
+ */
+export function asGoes(g: Game, nat: string, op: Op, declaring?: string[]): Op {
+  const way = inTheWay(g, nat, op);
+  if (!way) return op;
+  const now = declaring ?? way;
+  const foe = (nm: string): boolean => { const r = g.byName[nm]; return !!r && (atWar(g, nat, r.ctrl) || now.includes(r.ctrl)); };
+  const strikes = op.strikes?.filter((s) => foe(s.harbour)), landings = op.landings?.filter((L) => L.to.some(foe));
+  return { ...op, declare: way, strikes: strikes?.length ? strikes : undefined, landings: landings?.length ? landings : undefined };
+}
+
 /** Whom an operation would still add to this nation's enemies: the living, not on its own side, not yet at war with it. */
-const targets = (g: Game, nat: string, op: Op): string[] => (op.declare ?? []).filter((e) => g.nations[e]?.alive && !g.nations[e].dormant && !allied(g, nat, e) && !atWar(g, nat, e));
+const targets = (g: Game, nat: string, op: Op): string[] => (asGoes(g, nat, op).declare ?? []).filter((e) => g.nations[e]?.alive && !g.nations[e].dormant && !allied(g, nat, e) && !atWar(g, nat, e));
 
 /**
  * A great offensive against an enemy the nation is at war with already (it declares on nobody and is no side-show):
@@ -1114,8 +1129,10 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   const list = ops(nat);
   const prep = list[flag(g, `st:op:${nat}`) - 1] ?? null;
   // The operation launched this month or last: its landings may take two months to get ashore.
-  const went = g.turn - flag(g, `st:go:${nat}`) <= 1 && flag(g, `st:go:${nat}`) ? list[flag(g, `st:goOp:${nat}`) - 1] ?? null : null;
-  const declare = went && flag(g, `st:go:${nat}`) === g.turn ? targets(g, nat, went) : [];
+  const wentAs = g.turn - flag(g, `st:go:${nat}`) <= 1 && flag(g, `st:go:${nat}`) ? list[flag(g, `st:goOp:${nat}`) - 1] ?? null : null;
+  const declare = wentAs && flag(g, `st:go:${nat}`) === g.turn ? targets(g, nat, wentAs) : [];
+  // (Its strikes and landings as it goes: at stops 4 and 5 the strike south's are cut to those it fights. asGoes.)
+  const went = wentAs ? asGoes(g, nat, wentAs, declare) : null;
   // The fronts as they will stand once this month's declarations are made.
   const real = fronts(g, nat, { extra: new Set(declare), skip });
   const live = real.filter((f) => onSince(g, nat, f) > 0 || f.enemies.some((e) => declare.includes(e)));
