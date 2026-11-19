@@ -10,7 +10,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { answering } from '../src/campaign/ai';
+import { answering, homeBars, withAnswer } from '../src/campaign/ai';
 import { addCorps, atWar, createGame, relocate, setWar } from '../src/campaign/game';
 import { homeland } from '../src/campaign/middleeast';
 import { startOpen } from '../src/campaign/staff';
@@ -100,4 +100,29 @@ describe('home ground an enemy reached from the sea (rider b641 (f))', () => {
     // None of them was shipped abroad: each still stands on the home islands.
     for (const c of answer) if (!c.dead) expect(homeland(g.regions[c.reg], 'JAP'), c.name).toBe(true);
   }, 120000);
+
+  it('a row that answers marches, rides and fights only on its own piece of home ground, and never sails (the director, 16:17Z)', () => {
+    const g = wide();
+    setWar(g, 'JAP', 'USA');
+    const coast = g.regions.find((r) => homeland(r, 'USA') && beyondEurope(r) && r.port && r.ctrl === 'USA')!;
+    invader(g, 'JAP', coast);
+    // A held division at Detroit, with Canada's Windsor across the river: allied ground, by land, and no home ground of its own.
+    const detroit = g.byName['Detroit'], windsor = g.byName['Windsor'];
+    expect(detroit.nb.includes(windsor.id) && windsor.owner === 'CAN').toBe(true);
+    const held = addCorps(g, 'USA', 'Test home division', 'inf', 1, detroit.id, { hold: 1 });
+    const field = addCorps(g, 'USA', 'Test field division', 'inf', 1, detroit.id, {});
+    const inside = detroit.nb.map((j) => g.regions[j]).find((r) => homeland(r, 'USA'))!;
+    expect([homeBars(held, windsor), held.hold]).toEqual([false, true]);
+    const seen = withAnswer(g, 'USA', () => ({ hold: held.hold, out: homeBars(held, windsor), honolulu: homeBars(held, g.byName['Honolulu']), near: homeBars(held, inside), field: homeBars(field, windsor) }));
+    // For the month it is off hold, barred from Canada and from every ground off its own piece (Hawaii is not
+    // joined to it by land), and free on its own; a corps of the field army is not tied.
+    expect(seen).toEqual({ hold: false, out: true, honolulu: true, near: false, field: false });
+    // The month over, it holds again and nothing is tied.
+    expect([homeBars(held, windsor), held.hold]).toEqual([false, true]);
+    // A Japanese corps answering on the home islands may go nowhere off them: not Korea, not China.
+    const at = addCorps(g, 'JAP', 'Test division at Sapporo', 'inf', 1, 'Sapporo', { hold: 1 });
+    invader(g, 'USA', g.byName['Kushiro']);
+    const far = withAnswer(g, 'JAP', () => ['Tokyo', 'Seoul', 'Shanghai', 'Okinawa'].map((nm) => homeBars(at, g.byName[nm])));
+    expect(far).toEqual([false, true, true, true]);
+  });
 });

@@ -41,11 +41,17 @@ import {
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
 
 /** A computer staff's march: by the book none goes into ground the record's line shuts to it this month (line.ts). */
-const moveCorps = (g: Game, c: Corps, to: Region): boolean => !lineShut(g, c.nat, to) && !offFront(g, c, to) && moveTo(g, c, to);
+const moveCorps = (g: Game, c: Corps, to: Region): boolean => !lineShut(g, c.nat, to) && !offFront(g, c, to) && !offHome(c, to) && moveTo(g, c, to);
 // (A row on a live front of its plan goes nowhere that takes it off that front, by road or by rail: planfronts.ts,
 // rider b633 to ruling 234. No plan names fronts with the far side off.)
-const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => groundBars(g, c, to, from) || offFront(g, c, to);
-const railCorps = (g: Game, c: Corps, to: Region): boolean => !offFront(g, c, to) && railMove(g, c, to);
+const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => groundBars(g, c, to, from) || offFront(g, c, to) || offHome(c, to);
+const railCorps = (g: Game, c: Corps, to: Region): boolean => !offFront(g, c, to) && !offHome(c, to) && railMove(g, c, to);
+// (A held home row that answers a landing from the sea marches, rides and fights only on its own piece of home
+// ground for the month, and never sails: rider b641 (f) to ruling 234, `answering`. Nobody is tied with the far side off.)
+let tied = new Map<number, Set<number>>();
+const offHome = (c: Corps, to: Region): boolean => { const on = tied.get(c.id); return on !== undefined && !on.has(to.id); };
+/** Whether a province is barred to a corps this month because it answers a landing on its own home ground and the province is off that ground. */
+export const homeBars = (c: Corps, to: Region): boolean => offHome(c, to);
 
 function phases(nat: string): PlanPhase[] {
   const p = PLAN[nat];
@@ -520,13 +526,29 @@ export function release(g: Game, nat: string, names: string[]): void {
  * of a country fighting beside him (Japan's road into China was Manchukuo's ground). A land front stays with its
  * staff: China's line is not touched. The corps on that piece answer, never a fortress, a row marked
  * to stay or a row the plan has waiting. The hold is the record's: `mainCampaign` takes it off for the month's
- * fighting and puts it back where the corps then stands, so a freed division is never the free staff's to ship
- * abroad. None for the player, nor with the far side off.
+ * fighting and puts it back where the corps then stands, and for that month the corps marches, rides and fights
+ * only on its own piece of home ground and never sails (the director, 16:17Z), so a freed division is never the
+ * free staff's to ship abroad. None for the player, nor with the far side off.
  */
 export function answering(g: Game, nat: string): Corps[] {
+  return answers(g, nat).map((x) => x.c);
+}
+
+/**
+ * Runs a staff's fighting with its answering rows off hold and tied to their own piece of home ground, and puts the
+ * hold back on each where it then stands.
+ */
+export function withAnswer<T>(g: Game, nat: string, run: () => T): T {
+  const answer = answers(g, nat);
+  for (const x of answer) { x.c.hold = false; tied.set(x.c.id, x.on); }
+  try { return run(); } finally { for (const x of answer) if (!x.c.dead) x.c.hold = true; tied = new Map(); }
+}
+
+/** Each corps that answers, with the piece of home ground it answers on. */
+function answers(g: Game, nat: string): { c: Corps; on: Set<number> }[] {
   if (!farOn(g) || nat === g.human) return [];
   const home = (r: Region): boolean => homeland(r, nat) && beyondEurope(r);
-  const out: Corps[] = [], seen = new Set<number>();
+  const out: { c: Corps; on: Set<number> }[] = [], seen = new Set<number>();
   for (const r0 of g.regions) {
     if (seen.has(r0.id) || !home(r0)) continue;
     const piece = [r0.id];
@@ -536,7 +558,7 @@ export function answering(g: Game, nat: string): Corps[] {
     const foe = (r: Region): boolean => atWar(g, nat, ctl(g, r));
     if (!piece.some((id) => foe(g.regions[id]) || g.regions[id].units.some((u) => !u.dead && atWar(g, nat, u.nat)))) continue;
     if (piece.some((id) => g.regions[id].nb.some((j) => !on.has(j) && foe(g.regions[j])))) continue;
-    for (const c of g.corps) if (c.nat === nat && !c.dead && c.hold && !c.stay && c.kind !== 'fort' && on.has(c.reg) && !planWaits(c)) out.push(c);
+    for (const c of g.corps) if (c.nat === nat && !c.dead && c.hold && !c.stay && c.kind !== 'fort' && on.has(c.reg) && !planWaits(c)) out.push({ c, on });
   }
   return out;
 }
@@ -681,9 +703,7 @@ function mainCampaign(g: Game, nat: string): void {
   lineHome(g, nat, g.turn);
   // (An enemy come from the sea onto the country's own home ground is answered by the corps held there, for the
   // month's fighting only: rider b641 (f) to ruling 234, `answering`. None with the far side off.)
-  const answer = answering(g, nat);
-  for (const c of answer) c.hold = false;
-  try { fight(g, nat, ph, posture); lineHome(g, nat, g.turn + 1); } finally { for (const c of answer) if (!c.dead) c.hold = true; endStaffMonth(); }
+  try { withAnswer(g, nat, () => { fight(g, nat, ph, posture); lineHome(g, nat, g.turn + 1); }); } finally { endStaffMonth(); }
 }
 
 /** The staff's month is over: the corps it massed, entrusted and gave are free again, and the phase's manner is forgotten. */
@@ -698,7 +718,7 @@ export function lineHome(g: Game, nat: string, t: number): void {
   if (!lineAny(g, nat)) return;
   if (t === g.turn) lineGiveBack(g, nat);
   for (const c of g.corps) {
-    if (c.nat !== nat || c.dead || c.kind === 'fort' || !lineLeaves(g, nat, g.regions[c.reg], t)) continue;
+    if (c.nat !== nat || c.dead || c.kind === 'fort' || tied.has(c.id) || !lineLeaves(g, nat, g.regions[c.reg], t)) continue;
     if (c.town !== undefined && !takeField(g, c)) continue;
     c.hold = false;
     const ours = (r: Region): boolean => allied(g, nat, ctl(g, r));
@@ -866,7 +886,7 @@ export function keepWards(g: Game, nat: string, ph: PlanPhase | null, held: Set<
     const named = new Set<number>();
     const free = (c: Corps): boolean =>
       c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.divs >= 2 && !c.town && !c.hold && !c.dyle && c.joint === undefined && c.leave === undefined &&
-      d[c.reg] >= 0 && !held.has(c.id) && !named.has(c.id);
+      d[c.reg] >= 0 && !held.has(c.id) && !named.has(c.id) && !tied.has(c.id);
     for (let k = 0; k < count; k++) {
       const key = `ward:${nat}:${name}:${k}`;
       let c = g.corps.find((u) => u.id === g.flags[key] && u.nat === nat && !u.dead && d[u.reg] >= 0 && !named.has(u.id));
@@ -3012,7 +3032,7 @@ function defend(g: Game, nat: string, line = true): void {
     // Troops that have already fought this month are in no state to be thrown straight into another attack.
     // In free play the force a staff keeps at a place stays there: it is not thrown into a counter-attack next door.
     const kept = isOpen(g) ? massed : null;
-    const near = g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0 && !c.fought && c.org >= 0.6 && !kept?.has(c.id) && g.regions[c.reg].nb.includes(r.id) && !offFront(g, c, r));
+    const near = g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0 && !c.fought && c.org >= 0.6 && !kept?.has(c.id) && g.regions[c.reg].nb.includes(r.id) && !offFront(g, c, r) && !offHome(c, r));
     const cut = limitAttackers(g, near, r);
     // (The local commander's tanks do not go alone at a gunned line any more than the army's: the infantry next door goes in with them, or he waits.)
     const pool = cut.length ? footBeside(g, cut, near, r) ?? [] : [];
