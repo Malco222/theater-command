@@ -480,7 +480,8 @@ export class AirSim implements BattleSim<AirUnit> {
         u.run += dt;
         if (u.run >= SKY.run) {
           u.dropped = u.n;
-          this.say('air:bombs', u, `${told(this.called(u), '{N} [bombs|bomb]')} ${this.quarry() ?? this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
+          // Torpedo bombers attack; dive and level bombers bomb (the UI director, 19 November 14:26Z, ruling 6).
+          this.say('air:bombs', u, `${told(this.called(u), u.strike === 'torpedo' ? '{N} [attacks|attack]' : '{N} [bombs|bomb]')} ${this.quarry() ?? this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
           this.bombsFall();
           if (this.sea) for (const x of this.sea.drop(this.droppedNow(), u.strike ?? 'bomb', this.t)) this.say(x.what, u, x.text, x.extra);
         }

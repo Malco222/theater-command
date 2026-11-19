@@ -208,3 +208,17 @@ describe('the UI director\'s six rulings of 14:26Z (words-air-battle-dispatches.
     for (const e of nth.filter((e) => e.what === 'air:straggle')) expect(e.text).toMatch(/an American bomber of the 8th Bomb Group/i);
   });
 });
+
+describe('ruling 6 (the UI director, 14:26Z): torpedo bombers attack, dive and level bombers bomb', () => {
+  it('says "attack" for a torpedo box over the target, "bomb" for the others', () => {
+    for (const [strike, name, verb] of [['torpedo', 'Akagi and Kaga torpedo bombers', 'attack'], ['dive', 'Shokaku and Zuikaku dive bombers', 'bomb'], ['level', 'Soryu and Hiryu level bombers', 'bomb']] as const) {
+      const s = airBattle(ticketOf(1, 'B5N'), { show: true });
+      s.ai.att = true; s.ai.def = true;
+      for (const u of s.units) if (u.side === 'att' && u.air === 'bmr') { u.name = name; u.strike = strike; }
+      while (!s.over) s.step();
+      const over = s.history().filter((e) => e.what === 'air:bombs');
+      expect(over.length, strike).toBeGreaterThan(0);
+      for (const e of over) expect(e.text.startsWith(`The ${name} ${verb} `), e.text).toBe(true);
+    }
+  });
+});
