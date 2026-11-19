@@ -1248,7 +1248,13 @@ export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
   for (const cs of quays.values()) cs.sort((a, b) => atkPower(g, a) - atkPower(g, b) || a.id - b.id);
   const taken = (cs: Corps[]): void => { for (const at of quays.values()) for (const c of cs) { const i = at.indexOf(c); if (i >= 0) at.splice(i, 1); } };
   const most = (q: Region, have: number): number => Math.min(have, cap, leavesHome(g, nat, q) ? mayLeave(g, nat) : Infinity);
-  const enough = (w: Corps[], r: Region, defended: boolean): boolean => w.some(fights) && (!defended || assess(g, w, r, landingOpts(g, w, r)).odds >= D.odds);
+  // What fights on a shore (rider b614 to ruling 234, (2): the odds count every defender): the corps in the field and,
+  // where nobody stands in the field, the town itself, its garrison and its guard. An empty shore is one with nothing
+  // that fights. The odds are reckoned against whichever the wave meets first.
+  const inField = (r: Region): boolean => hostileUnits(g, r, nat).length > 0;
+  const fought = (r: Region): boolean => inField(r) || townHeld(g, r);
+  const oddsOn = (w: Corps[], r: Region): number => (inField(r) ? assess(g, w, r, landingOpts(g, w, r)) : assess(g, w, r, { town: true })).odds;
+  const enough = (w: Corps[], r: Region, defended: boolean): boolean => w.some(fights) && (!defended || oddsOn(w, r) >= D.odds);
   // (A wave is one the Pacific's landing ships will carry: the Allies' count by the record, rider b614 to ruling 234, navy.ts.)
   const does = (w: Corps[], q: Region, r: Region, defended: boolean): boolean => shipsFor(g, w, r) && enough(w, r, defended) && holdsAshore(g, nat, r, w, followUp(g, nat, q, w, r));
   const waveFrom = (q: Region, cs: Corps[], r: Region, defended: boolean): Corps[] | null => {
@@ -1259,14 +1265,14 @@ export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
     for (let m = 2; m <= k; m++) { const w = best.slice(0, m); if (does(w, q, r, defended)) return w; }
     return null;
   };
-  const worth = (r: Region): number => (2 + r.vp + r.fac + (r.cap ? 6 : 0)) * (hostileUnits(g, r, nat).length ? 1 : 1.5);
+  const worth = (r: Region): number => (2 + r.vp + r.fac + (r.cap ? 6 : 0)) * (fought(r) ? 1 : 1.5);
   const rank = S.book ? S.open : [...S.open].sort((a, b) => worth(b) - worth(a) || a.id - b.id);
   // The shores in the staff's own hands this month: not the plan's, not the army's (`armysShore`).
   const armys = (r: Region): boolean => armysShore(g, nat, r, ph);
   const mine = (r: Region, ahead: boolean): boolean => atWar(g, nat, r.ctrl) && !plans.has(r.id) && (ahead || !lineShut(g, nat, r)) && !armys(r);
   // The nearest harbour with a force that will do, and that force. With `now`, only one that can sail this month.
   const pickFor = (r: Region, now: boolean): { q: Region; w: Corps[]; far: number; warned: boolean; sea: number } | null => {
-    const defended = hostileUnits(g, r, nat).length > 0;
+    const defended = fought(r);
     let pick: { q: Region; w: Corps[]; far: number; warned: boolean; sea: number } | null = null;
     for (const [id, cs] of quays) {
       if (!cs.length) continue;
@@ -1345,7 +1351,7 @@ export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
   const fresh = (c: Corps): boolean => !waits(c);
   for (const r of wanting) {
     if (liftLeft(g, nat) < 1) break;
-    const defended = hostileUnits(g, r, nat).length > 0;
+    const defended = fought(r);
     const near: Corps[] = [], far: Corps[] = [];
     for (const [id, cs] of quays) {
       const q = g.regions[id];
