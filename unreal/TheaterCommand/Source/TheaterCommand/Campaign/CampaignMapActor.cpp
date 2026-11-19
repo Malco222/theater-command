@@ -294,6 +294,25 @@ bool ACampaignMapActor::BuildMap()
 		{
 			Blasts->SetSun(TowardSun);
 			Blasts->SetWind(FVector(0.25, 0.9, 0.0).GetSafeNormal() * 3.0);
+			// (The campaign lays see-through washes over its ground. A see-through mesh with no place in the drawing order
+			// is sorted among them by distance, and the kit's has none: the first ten metres of its tracer, half a
+			// metre over the ground, were drawn under a wash and did not show, over rails and over bare ground
+			// alike. The kit's mesh is put over the washes, as the map's own smoke is. "-TheaterBlastOrder=0" leaves
+			// it where it was, to show the difference.)
+			int32 Order = 1;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastOrder="), Order);
+			TArray<UProceduralMeshComponent*> Meshes;
+			GetComponents<UProceduralMeshComponent>(Meshes);
+			int32 Placed = 0;
+			for (UProceduralMeshComponent* One : Meshes)
+			{
+				if (One && One->GetName().StartsWith(TEXT("BattleEffects")))
+				{
+					One->SetTranslucentSortPriority(Order);
+					++Placed;
+				}
+			}
+			UE_LOG(LogTheater, Display, TEXT("Effects: the kit's mesh is given place %d in the drawing order of see-through things (%d mesh)"), Order, Placed);
 		}
 		UE_LOG(LogTheater, Display, TEXT("Effects: the test barrage is %s, a metre drawn as %.2f of a map unit; the sun stands %.0f degrees up"), bMade ? TEXT("made ready") : TEXT("NOT made (its recipe or its material is missing)"),
 			MapUnitsAMetre, FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(TowardSun.GetSafeNormal().Z, -1.0, 1.0))));
