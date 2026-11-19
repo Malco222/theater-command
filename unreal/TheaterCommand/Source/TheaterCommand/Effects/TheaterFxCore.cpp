@@ -544,12 +544,39 @@ namespace TheaterFx
 		const double FlattenOf = Num(Sk + "flatten", 0.75), Billow = Num(Sk + "front_billow", 1.35);
 		const double HazeBy = Num(Sk + "haze_by_s", 1.0), ShadeOf = Num(Sk + "shade", 1.8), HeartOf = Num(Sk + "heart", 0.55);
 		const double DustAlpha = std::pow(DustK, 0.4);
+		// (art director 03:13Z: from a low eye the skirt read as a flat disc with an edge. Its rim is broken into a few
+		// lobes of uneven reach, its outer part feathers away, and it stays low)
+		const int NLobes = Has(Sk + "lobes.0") ? D.Whole(static_cast<int>(Num(Sk + "lobes.0", 5.0)), static_cast<int>(Num(Sk + "lobes.1", 7.0))) : 0;
+		const double LobeLeast = Num(Sk + "lobe_least", 0.45);
+		std::vector<double> LobeAt, LobeReach, LobeHalf;
+		for (int L = 0; L < NLobes; ++L)
+		{
+			LobeAt.push_back(2.0 * Pi * (L + D.U(-0.3, 0.3)) / NLobes);
+			LobeReach.push_back(D.U(0.6, 1.0));
+			LobeHalf.push_back(2.0 * Pi / NLobes * D.U(0.6, 0.95));
+		}
+		auto ReachAt = [&](double A) // (the share of the full reach the skirt has that way round)
+		{
+			if (NLobes == 0)
+			{
+				return 1.0;
+			}
+			double Most = 0.0;
+			for (int L = 0; L < NLobes; ++L)
+			{
+				const double Off = std::fabs(std::remainder(A - LobeAt[static_cast<size_t>(L)], 2.0 * Pi)) / LobeHalf[static_cast<size_t>(L)];
+				Most = std::max(Most, LobeReach[static_cast<size_t>(L)] * (Off < 1.0 ? 0.5 + 0.5 * std::cos(Pi * Off) : 0.0));
+			}
+			return LobeLeast + (1.0 - LobeLeast) * Most;
+		};
+		const double FeatherFrom = Clamp01(1.0 - Num(Sk + "feather", 0.0)); // (the share of the reach out to which it is full strength)
+		const double MostHigh = Num(Sk + "most_high_m", 0.0) * K;
 		for (int I = 0; I < NOut + NIn; ++I)
 		{
 			const bool bFront = I < NOut;
 			const int N = bFront ? NOut : NIn;
 			const int Place = bFront ? I : I - NOut;
-			const double Speed = bFront ? 1.0 : std::sqrt(D.U(0.02, 0.85)); // (the inner ones fill back toward the hole, evenly over its round: one skirt, not a ring)
+			const double Speed = bFront ? (FeatherFrom < 1.0 ? D.U(FeatherFrom, 1.0) : 1.0) : std::sqrt(D.U(0.02, 0.85)); // (the inner ones fill back toward the hole, evenly over its round: one skirt, not a ring)
 			const double A = 2.0 * Pi * (Place + D.U(-0.4, 0.4)) / std::max(N, 1);
 			const Vec Outward(std::cos(A), std::sin(A), 0.0);
 			const double Drag = DragOf * D.U(0.85, 1.15);
@@ -558,7 +585,8 @@ namespace TheaterFx
 			B.bHug = true;
 			B.Born = T0 + D.U(0.0, 0.02);
 			B.From = At + Outward * (D.U(0.4, 1.0) * K);
-			B.Vel = Outward * (Reach * Speed * Drag * D.U(0.85, 1.0));
+			const double Out_ = Speed * D.U(0.85, 1.0); // (how far out it goes, as a share of the reach that way)
+			B.Vel = Outward * (Reach * ReachAt(A) * Out_ * Drag);
 			B.Drag = Drag;
 			B.Rise = RiseOf * D.U(0.6, 1.4);
 			B.Windage = 0.6;
@@ -569,9 +597,15 @@ namespace TheaterFx
 			B.Stretch = StretchOf;
 			B.Along = Vec(-std::sin(A), std::cos(A), 0.0);
 			B.Flatten = FlattenOf * D.U(0.8, 1.2) * (bFront ? Billow : 1.0); // (the front edge stands tallest)
+			if (MostHigh > 0.0)
+			{
+				B.Flatten = std::min(B.Flatten, MostHigh / (1.8 * std::max(B.R1, 1e-3))); // (its top, at 1.8 times its half height, under most_high_m)
+			}
 			B.Col = Col * D.U(0.9, 1.08);
 			B.Col2 = B.Col;
-			B.Alpha = std::min(0.9, AlphaOf.Pick(D) * DustAlpha);
+			// (its outer part feathers away: full strength out to FeatherFrom of the reach, a sixth of it at the rim)
+			const double Feather = Out_ > FeatherFrom ? 1.0 - 0.85 * Clamp01((Out_ - FeatherFrom) / std::max(1.0 - FeatherFrom, 1e-3)) : 1.0;
+			B.Alpha = std::min(0.9, AlphaOf.Pick(D) * DustAlpha) * Feather;
 			B.FadeIn = 0.02;
 			B.Hold = 0.1;
 			B.HazeBy = HazeBy;
@@ -589,6 +623,14 @@ namespace TheaterFx
 		// lighter dust filling the gaps so that the outline is one torn fan; each heavy jet thinnest and torn at its
 		// tip, drawn to a point, with clods flying on beyond it. Then a dense dark body at the foot.
 		const std::string C = "burst.crown.";
+		// (art director 03:13Z, from Brian's battle clips: the burst itself carries the black. With burst.foot on, a dark
+		// mass of lumps stands at the foot, and the body and the dust between the jets start near-black too, settling to
+		// brown-grey; never on water)
+		const std::string Ft = "burst.foot.";
+		const bool bDarkFoot = (ClodK > 0.02 || ShowerK > 0.02) && Has(Ft + "count.0");
+		const Span FootShade = Range(Ft + "shade", 0.35, 0.55);
+		const Rgb Settled = P.Smoke.Mix(P.Dust, Num(Ft + "settle_dust", 0.3));
+		const double FillDust = Num(Ft + "fill_dust", 0.35);
 		// (a size may have its own crown numbers under sizes.<size>.crown.: the bombs' fan of many jets)
 		const std::string Own = "sizes." + Size + ".crown.";
 		auto Path = [&](const std::string& Name) -> std::string
@@ -678,7 +720,7 @@ namespace TheaterFx
 				}
 				const double Sp = V * (0.05 + 0.95 * std::pow(F, 0.9));
 				const double Rr = Rl * (D.U() < Lumps ? D.U(1.4, 2.0) : D.U(0.8, 1.1));
-				Rgb Col = bHeavy ? P.Heavy * Shade : P.Soil.Mix(P.Dust, DustShare) * Shade;
+				Rgb Col = bHeavy ? P.Heavy * Shade : (bDarkFoot ? P.Heavy.Mix(P.Dust, DustShare * FillDust) : P.Soil.Mix(P.Dust, DustShare)) * Shade;
 				if (P.bFirst && D.U() < P.FirstAtFoot + (P.FirstAtTip - P.FirstAtFoot) * F)
 				{
 					Col = P.First * D.U(0.84, 1.04); // (snow: thrown up first, never two grains the same shade, earth showing through)
@@ -700,7 +742,7 @@ namespace TheaterFx
 				B.Point = bTip ? TipPoint : (bHeavy ? 0.3 : 0.0); // (torn and pointed, never rounded; the dust between has no points)
 				B.Tail = 0.15;
 				B.Col = Col;
-				B.Col2 = P.bFirst ? Col : (bHeavy && F < RootSolid ? P.Heavy.Mix(P.Dust, 0.35) : P.Dust); // (the root stays dark earth)
+				B.Col2 = P.bFirst ? Col : (bHeavy && F < RootSolid ? P.Heavy.Mix(P.Dust, 0.35) : (bDarkFoot ? Settled : P.Dust)); // (the root stays dark earth)
 				B.Cool = 0.7;
 				B.Alpha = (bHeavy ? (bTip ? 1.0 - (1.0 - TipAlpha) * OnTip : 1.0) : FillAlpha * (1.0 - 0.3 * F)) * (bGrained ? D.U(0.7, 1.0) : 1.0);
 				B.FadeIn = 0.01;
@@ -752,12 +794,75 @@ namespace TheaterFx
 				}
 			}
 		}
+		// the spikes: many thin dark rays of earth among the heavy jets, each drawn to a point with a lump riding its tip
+		// (art director 03:13Z, from Brian's battle clips). Few long pieces each, so thirty of them cost little. On land
+		// only: a water spout keeps its passed column.
+		const std::string Sp_ = "burst.crown.spikes.";
+		const double HalvePast = Num("burst.debris.shower.halve_past", 0.0);
+		const double Busy = HalvePast > 0.0 && static_cast<double>(Bits.size()) > HalvePast ? 0.5 : 1.0; // (a busy screen: half the many small things)
+		const int NSpike = (ClodK > 0.02 || ShowerK > 0.02) && Has(Sp_ + "count.0") ? static_cast<int>(D.Whole(static_cast<int>(Num(Sp_ + "count.0", 24.0)), static_cast<int>(Num(Sp_ + "count.1", 40.0))) * Busy) : 0;
+		const int SpikePieces = std::max(2, static_cast<int>(Num(Sp_ + "pieces", 6.0)));
+		const Span SpikeReach = Range(Sp_ + "reach", 0.4, 1.15), SpikeLean = Range(Sp_ + "lean", 0.15, 1.1), SpikeThick = Range(Sp_ + "thick", 0.25, 0.6);
+		const Span SpikeShade = Range(Sp_ + "shade", 0.55, 0.85), SpikeTipClod = Range(Sp_ + "tip_clod_m", 0.05, 0.12);
+		const double SpikeTipAlpha = Num(Sp_ + "tip_alpha", 0.6), SpikeOverlap = Num(Sp_ + "overlap", 1.4), SpikeRagged = Num(Sp_ + "ragged", 0.8);
+		for (int S = 0; S < NSpike; ++S)
+		{
+			const double Az = D.U(0.0, 2.0 * Pi);
+			const double Lean = SpikeLean.Pick(D) * Half;
+			const Vec Dir = (Vec(std::cos(Az) * std::sin(Radians(Lean)), std::sin(Az) * std::sin(Radians(Lean)), std::cos(Radians(Lean))) + Tilt).Unit();
+			const double ReachS = CrownH * SpikeReach.Pick(D);
+			const double V = ReachS * KD * 1.12 / std::sqrt(Slow);
+			JetThrow.push_back(Dir * std::sqrt(2.0 * 9.8 * ReachS));
+			const double Thick = SpikeThick.Pick(D);
+			const double Rf = FootR * Thick * (P.Grain < 0.999 ? P.Grain : 1.0), Rt = TipR * Thick;
+			const Rgb Col = P.Heavy * SpikeShade.Pick(D);
+			for (int Q = 0; Q < SpikePieces; ++Q)
+			{
+				const double F = (Q + D.U(0.3, 0.7)) / SpikePieces; // (the middle of this piece, along the spike)
+				const double Rl = Rt + (Rf - Rt) * std::pow(1.0 - F, 0.8);
+				Bit B;
+				B.Born = T0 + 0.01 + 0.025 * (1.0 - F);
+				B.From = At + ZUp * 0.1 + Dir * (0.25 * K);
+				B.Vel = Dir * (V * (0.05 + 0.95 * std::pow(F, 0.9))) + Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-1.0, 1.0)) * (Rl * SpikeRagged * KD); // (ragged: never a smooth blade)
+				B.Drag = KD;
+				B.Gravity = 9.8 / Slow;
+				B.Windage = 0.35;
+				B.Life = D.U(0.9, 1.5) * Slow;
+				B.R0 = Rl;
+				B.R1 = Rl * D.U(1.5, 2.0);
+				B.Grow = 0.5;
+				B.Along = Dir;
+				B.Stretch = std::clamp(ReachS * SpikeOverlap / (2.0 * SpikePieces * Rl), 1.0, 14.0); // (each piece long enough to reach the next)
+				B.Point = F > 0.6 ? 0.9 : 0.3;
+				B.Tail = 0.15;
+				B.Col = Col * D.U(0.9, 1.1);
+				B.Col2 = P.Heavy.Mix(P.Dust, 0.4);
+				B.Cool = 0.7;
+				B.Alpha = 1.0 - (1.0 - SpikeTipAlpha) * F * F;
+				B.FadeIn = 0.01;
+				B.Hold = 0.35;
+				B.Heart = 0.95;
+				B.Inner = 0.8;
+				B.Rim = 0.0;
+				B.Rough = 0.35 + 0.3 * F;
+				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+				B.Turn = D.U(0.0, 2.0 * Pi);
+				Bits.push_back(B);
+			}
+			if (ClodK > 0.05)
+			{
+				const Vec Way = (Dir + Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-1.0, 1.0)) * 0.06).Unit();
+				Launch.push_back(Way * (std::sqrt(2.0 * 9.8 * ReachS) * Pick(D, C + "tip_clod_speed", 1.1, 1.35)));
+				LaunchR.push_back(SpikeTipClod.Pick(D) * K);
+			}
+		}
 		// the body: a dense dark mound of earth and dust at the crown's foot from about frame 4, slumping into the smoke
 		const int NBody = static_cast<int>(Num(Path("body.puffs"), 50.0) * std::max(0.7, std::sqrt(K)));
 		const double BodyWide = Num(Path("body.width"), 0.3), BodyHigh = Num(Path("body.height"), 0.22);
 		const Span BodyR = Range(Path("body.puff_r"), 0.06, 0.11), BodyAlpha = Range(Path("body.alpha"), 0.85, 0.95);
 		const double BodyFrom = Num(Path("body.from_frame"), 3.0) / 30.0;
 		const double BodyRim = Num(Path("body.rim"), 0.1), BodyRough = Num(Path("body.rough"), 0.0);
+		// (with the dark foot on, the body is near-black too for its first second, settling to brown-grey)
 		for (int I = 0; I < NBody; ++I)
 		{
 			const double A = D.U(0.0, 2.0 * Pi);
@@ -780,6 +885,12 @@ namespace TheaterFx
 			B.Col = P.Heavy.Mix(P.Dust, D.U(0.0, 0.35)) * D.U(0.85, 1.1);
 			B.Col2 = P.Smoke;
 			B.Cool = 1.2;
+			if (bDarkFoot)
+			{
+				B.Col = P.Heavy * FootShade.Pick(D);
+				B.Col2 = Settled;
+				B.Cool = Num(Ft + "settle", 0.75);
+			}
 			B.Alpha = BodyAlpha.Pick(D);
 			B.FadeIn = 0.03;
 			B.Hold = 0.45;
@@ -792,6 +903,49 @@ namespace TheaterFx
 				B.Turn = D.U(0.0, 2.0 * Pi);
 			}
 			Bits.push_back(B);
+		}
+		// the foot: a dense mass of near-black lumps at the crown's base for the first second, settling to brown-grey
+		// (art director 03:13Z, from Brian's battle clips: the burst itself has to carry the black, no grade can)
+		if (bDarkFoot)
+		{
+			const int NFoot = static_cast<int>(Pick(D, Ft + "count", 70.0, 100.0) * std::max(0.7, std::sqrt(K)));
+			const double FootWide = Num(Ft + "width", 0.25), FootHigh = Num(Ft + "height", 0.22);
+			const Span FootRs = Range(Ft + "lump_r", 0.025, 0.07), FootLife = Range(Ft + "life_s", 1.2, 1.8);
+			const double FootCool = Num(Ft + "settle", 0.75), FootRough = Num(Ft + "rough", 0.45), FootShadeK = Num(Ft + "light", 1.2);
+			for (int I = 0; I < NFoot; ++I)
+			{
+				const double A = D.U(0.0, 2.0 * Pi);
+				const double Out_ = CrownH * FootWide * std::pow(D.U(), 0.7);
+				const double Up_ = CrownH * FootHigh * std::pow(D.U(), 1.5);
+				const Vec To = Vec(std::cos(A) * Out_, std::sin(A) * Out_, Up_) + Tilt * Up_;
+				const double KB = 6.0;
+				Bit B;
+				B.Born = T0 + D.U(0.02, 0.12);
+				B.From = At + ZUp * (0.1 * K);
+				B.Vel = To * KB;
+				B.Drag = KB;
+				B.Gravity = 1.5 / Slow;
+				B.Windage = 0.3;
+				B.Life = FootLife.Pick(D) * Slow;
+				const double Rr = CrownH * FootRs.Pick(D);
+				B.R0 = Rr * 0.7;
+				B.R1 = Rr * D.U(1.1, 1.4);
+				B.Grow = 0.4;
+				B.Col = P.Heavy * FootShade.Pick(D);
+				B.Col2 = Settled * D.U(0.85, 1.05);
+				B.Cool = FootCool;
+				B.Alpha = D.U(0.9, 1.0);
+				B.FadeIn = 0.02;
+				B.Hold = 0.55;
+				B.Heart = 0.95;
+				B.Inner = 0.7;
+				B.Rim = 0.3;
+				B.Rough = FootRough;
+				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+				B.Turn = D.U(0.0, 2.0 * Pi);
+				B.ShadeK = FootShadeK; // (a lit top and a dark underside, so the mass has form)
+				Bits.push_back(B);
+			}
 		}
 		// the clods: those at the jets' tips, and more thrown clear low and wide
 		const int NMore = static_cast<int>(ClodK * 50.0 * std::max(0.5, K * K));
@@ -811,7 +965,7 @@ namespace TheaterFx
 		const std::string Sh = "burst.debris.shower.";
 		if (ShowerK > 0.02 && Has(Sh + "count.0"))
 		{
-			const int NShower = static_cast<int>(Pick(D, Sh + "count", 60.0, 90.0) * ShowerK * std::max(0.5, std::min(K * K, Num(Sh + "most_k2", 3.0))));
+			const int NShower = static_cast<int>(Pick(D, Sh + "count", 60.0, 90.0) * ShowerK * std::max(0.5, std::min(K * K, Num(Sh + "most_k2", 3.0))) * Busy);
 			const double SpeedK = std::sqrt(K); // (a bigger shell throws higher: the top of the shower grows as K)
 			const Span UpS = Range(Sh + "up_mps", 7.0, 16.0), OutS = Range(Sh + "out_mps", 2.0, 8.0), Rs = Range(Sh + "r_m", 0.03, 0.14);
 			const double Skew = Num(Sh + "small_skew", 2.0);
@@ -912,6 +1066,11 @@ namespace TheaterFx
 		// The veil: fine earth that stands a moment over the crown's foot and falls back.
 		const double Slow = Num("grounds." + Ground + ".crown_slow", 1.0);
 		const int NVeil = static_cast<int>(30.0 * std::max(0.7, K));
+		// (art director 03:13Z: the foot carries the black for its first second, so the earth that stands over it and
+		// the smoke at its foot start dark and settle to brown-grey; never on water)
+		const bool bDarkFoot = Ground != "water" && Has("burst.foot.count.0");
+		const Rgb VeilCol = bDarkFoot ? P.Dust.Mix(P.Heavy, Num("burst.foot.veil_dark", 0.5)) : P.Dust;
+		const double FootBand = Num("burst.foot.smoke_band", 0.45), FootSmokeDark = Num("burst.foot.smoke_dark", 0.45), FootSettle = std::max(0.1, Num("burst.foot.smoke_settle_s", 1.0));
 		for (int I = 0; I < NVeil; ++I)
 		{
 			Bit B;
@@ -921,8 +1080,8 @@ namespace TheaterFx
 			B.Life = D.U(1.4, 2.4) * Slow;
 			B.R0 = 0.25 * K;
 			B.R1 = D.U(0.7, 1.2) * K;
-			B.Col = P.Dust;
-			B.Col2 = P.Dust;
+			B.Col = VeilCol;
+			B.Col2 = VeilCol;
 			B.Alpha = std::min(0.6, D.U(0.25, 0.4) * std::sqrt(DustK));
 			B.Gravity = 6.0 / Slow;
 			B.Drag = 1.2;
@@ -981,6 +1140,11 @@ namespace TheaterFx
 			B.Col = (F < 0.25 && Born - T0 < 0.22) ? Base.Mix(Warm, 0.35) : Base; // (warm only at its foot, at first)
 			B.Col2 = Base;
 			B.Cool = B.Life / 0.15;
+			if (bDarkFoot && F < FootBand)
+			{
+				B.Col = B.Col * FootSmokeDark; // (dark at the foot for its first second, settling to the cloud's own colour)
+				B.Cool = B.Life / FootSettle;
+			}
 			B.Alpha = SmokeAlpha.Pick(D) * AlphaK;
 			B.Drag = D.U(1.4, 2.2);
 			B.Rise = D.U(0.25, 0.9) * std::sqrt(K);

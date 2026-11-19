@@ -791,7 +791,7 @@ int main(int Argc, char** Argv)
 		Fx.Muzzle(-0.02, Gun, (Hit - Gun).Unit(), "mg");
 		Fx.Shots(-0.02, 13, Gun, Hit + Vec(0.0, 0.0, 0.1), "mg", 25, 15.0, Ground.c_str());
 	}
-	else
+	else if (!std::getenv("FX_NOHIT")) // (FX_NOHIT: the same shot with no hit, the ground alone, to measure a burst against)
 	{
 		Fx.Shell(-0.02, Hit, Size.c_str(), Ground.c_str(), false);
 	}

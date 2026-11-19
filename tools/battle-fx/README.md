@@ -59,6 +59,15 @@ sets how much (default its `clods` share; sand and town 0.8, water none). With n
 exactly what it did before. A water spout leaves a thin pale mist (`grounds.water.smoke_top`, `smoke_alpha`,
 `haze_lingers`) and nothing smoulders on water.
 
+The dark foot (`burst.foot`) and the spikes (`burst.crown.spikes`), from the art director's grit direction: on land a
+shell's base is a dense mass of near-black lumps for its first second (the body, the dust between the jets, the earth
+veil and the smoke's lower part start dark too), settling to brown-grey, and 24 to 36 thin dark rays with a lump at
+each tip stand among 3 to 5 heavy jets. Test: on earth at 0.4 s, 25 m off, about a fifth of the burst's box is under
+luma 60 (the art director's pass is 15%). The dust ring is 9 m, broken into 5 to 7 uneven lobes, feathered over its
+outer 70% and under 1.5 m high (`shock_ring.skirt.lobes`, `feather`, `most_high_m`). With more than
+`shower.halve_past` puffs live, a shell throws half the shower and half the spikes. Leave these keys out and the kit
+draws as before.
+
 Sun and sky: `SetSun` gives the way toward the sun. Smoke's shadow side never falls below `game.sky_fill` of its own
 colour in the hour's light, and looking toward the sun the fringe of a smoke cloud or trail glows warm
 (`game.sun_through`). The sun's own light is full by day and none at night, read from the hour's light; the preview
