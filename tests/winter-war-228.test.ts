@@ -268,7 +268,7 @@ describe('the Winter War (ruling 228, 1b)', () => {
     expect(loadGame(saveGame(old))!.byName.Karelia.fort).toEqual({ lv: 1, vs: ['SOV'], by: 'FIN' });
     old.turn = 17;
     const back = loadGame(saveGame(old))!;
-    expect([back.byName.Karelia.fort, back.flags['wnt:late']]).toEqual([{ lv: 1, vs: ['SOV'] }, 17]);
+    expect([back.byName.Karelia.fort, back.flags['wnt:late']]).toEqual([{ lv: 1, vs: ['SOV'], by: 'FIN' }, 17]);
     expect(loadGame(saveGame(grand()))!.flags['wnt:late']).toBeUndefined();
   });
 
