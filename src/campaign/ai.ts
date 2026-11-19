@@ -511,6 +511,36 @@ export function release(g: Game, nat: string, names: string[]): void {
   for (const c of riders) if (!goesWith(g, c)?.hold) c.hold = false;
 }
 
+/**
+ * The held corps that answer a landing on their own home ground this month (rider b641 (f) to ruling 234, as bounded
+ * at 16:00Z of 19 November 2026; the Pacific playtester's finding 4: every home corps of Japan's stood on hold while
+ * Americans walked from Kushiro to Sendai). Beyond the old chart only, and only on home ground an enemy reached from
+ * the sea: a piece of the homeland (the country's own ground, no colony, in one piece by land) on which an enemy
+ * stands or holds ground, and which has no frontier by land with ground outside it that an enemy holds, his or that
+ * of a country fighting beside him (Japan's road into China was Manchukuo's ground). A land front stays with its
+ * staff: China's line is not touched. The corps on that piece answer, never a fortress, a row marked
+ * to stay or a row the plan has waiting. The hold is the record's: `mainCampaign` takes it off for the month's
+ * fighting and puts it back where the corps then stands, so a freed division is never the free staff's to ship
+ * abroad. None for the player, nor with the far side off.
+ */
+export function answering(g: Game, nat: string): Corps[] {
+  if (!farOn(g) || nat === g.human) return [];
+  const home = (r: Region): boolean => homeland(r, nat) && beyondEurope(r);
+  const out: Corps[] = [], seen = new Set<number>();
+  for (const r0 of g.regions) {
+    if (seen.has(r0.id) || !home(r0)) continue;
+    const piece = [r0.id];
+    seen.add(r0.id);
+    for (let i = 0; i < piece.length; i++) for (const j of g.regions[piece[i]].nb) if (!seen.has(j) && home(g.regions[j])) { seen.add(j); piece.push(j); }
+    const on = new Set<number>(piece);
+    const foe = (r: Region): boolean => atWar(g, nat, ctl(g, r));
+    if (!piece.some((id) => foe(g.regions[id]) || g.regions[id].units.some((u) => !u.dead && atWar(g, nat, u.nat)))) continue;
+    if (piece.some((id) => g.regions[id].nb.some((j) => !on.has(j) && foe(g.regions[j])))) continue;
+    for (const c of g.corps) if (c.nat === nat && !c.dead && c.hold && !c.stay && c.kind !== 'fort' && on.has(c.reg) && !planWaits(c)) out.push(c);
+  }
+  return out;
+}
+
 /** Runs a nation's corps in each overseas theatre by that theatre's plan. */
 function overseas(g: Game, nat: string): void {
   const n = g.nations[nat];
@@ -649,7 +679,11 @@ function mainCampaign(g: Game, nat: string): void {
   near = ph?.near ?? null;
   // (By the book, a raid whose months are over comes back inside the record's line, before the month's fighting and after it.)
   lineHome(g, nat, g.turn);
-  try { fight(g, nat, ph, posture); lineHome(g, nat, g.turn + 1); } finally { endStaffMonth(); }
+  // (An enemy come from the sea onto the country's own home ground is answered by the corps held there, for the
+  // month's fighting only: rider b641 (f) to ruling 234, `answering`. None with the far side off.)
+  const answer = answering(g, nat);
+  for (const c of answer) c.hold = false;
+  try { fight(g, nat, ph, posture); lineHome(g, nat, g.turn + 1); } finally { for (const c of answer) if (!c.dead) c.hold = true; endStaffMonth(); }
 }
 
 /** The staff's month is over: the corps it massed, entrusted and gave are free again, and the phase's manner is forgotten. */

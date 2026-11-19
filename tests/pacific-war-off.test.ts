@@ -2,7 +2,7 @@
 // December 1941 stands at its month's opening as it always did, the month's close reads nothing, and the rule that
 // lets two seats files give one country rows ("JAP+") is the far-side rig's rule with one more key.
 import { describe, expect, it } from 'vitest';
-import { planSkies } from '../src/campaign/ai';
+import { answering, planSkies } from '../src/campaign/ai';
 import { plannedStrike } from '../src/campaign/carriers';
 import { DIPLOMACY, closeDiplomacy, holds, monthlyDiplomacy, warDiplomacy } from '../src/campaign/diplomacy';
 import { FAR_LAID, lay } from '../src/campaign/far-rows';
@@ -303,6 +303,17 @@ describe("the plan holds the sky it lands under (rider b631 (iv) to ruling 234) 
     const c = addCorps(g, 'GER', 'A corps for the far shore', 'inf', 1, quay.id, {});
     const ph = { name: 'a landing plan', from: 1, to: 6, posture: 'attack', landings: [{ corps: c.name, to: [shore.name] }] } as any;
     expect(planSkies(g, 'GER', ph, null)).toEqual([]);
+  });
+});
+
+describe('home ground that answers a landing from the sea (rider b641 (f) to ruling 234) with the far side off', () => {
+  it('nobody answers: a held corps stays held, whoever stands on its home ground', () => {
+    const g = startOpen(createGame(3, null));
+    setWar(g, 'GER', 'UK');
+    const coast = g.regions.find((r) => r.owner === 'UK' && !r.overseas && r.port)!;
+    addCorps(g, 'GER', 'Test landing corps', 'inf', 1, coast.id, {});
+    addCorps(g, 'UK', 'Test home division', 'inf', 1, coast.id, { hold: 1 });
+    for (const n of Object.keys(g.nations)) expect(answering(g, n), n).toEqual([]);
   });
 });
 
