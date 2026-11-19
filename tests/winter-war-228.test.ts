@@ -62,7 +62,7 @@ const finland = (g: Game): string[] => g.regions.filter((r) => r.owner === 'FIN'
 
 describe('the Winter War (ruling 228, 1b)', () => {
   it('lays the Mannerheim Line on the isthmus when the grand campaign opens, and leaves the history campaigns alone', () => {
-    expect(grand().byName.Karelia.fort).toEqual({ lv: 1, vs: ['SOV'] });
+    expect(grand().byName.Karelia.fort).toEqual({ lv: 1, vs: ['SOV'], by: 'FIN' });
     const h = createGame(3, null);
     expect(h.byName.Karelia.fort).toBeNull();
     h.turn = NOV_39;
@@ -119,7 +119,7 @@ describe('the Winter War (ruling 228, 1b)', () => {
     g.turn = MAY_40;
     winterMonth(g);
     expect(atWar(g, 'SOV', 'FIN')).toBe(false);
-    expect([g.byName.Karelia.owner, g.byName.Karelia.fort]).toEqual(['FIN', { lv: 1, vs: ['SOV'] }]);
+    expect([g.byName.Karelia.owner, g.byName.Karelia.fort]).toEqual(['FIN', { lv: 1, vs: ['SOV'], by: 'FIN' }]);
     expect(g.headlines.at(-1)!.text).toBe('Finland and the Soviet Union have made peace in Moscow. The frontier stays where it was.');
   });
 
@@ -252,7 +252,7 @@ describe('the Winter War (ruling 228, 1b)', () => {
     openWinter(early);
     openWinter(late);
     expect([early.flags['wnt:late'], late.flags['wnt:late']]).toEqual([undefined, 17]);
-    expect(late.byName.Karelia.fort).toEqual({ lv: 1, vs: ['SOV'] });
+    expect(late.byName.Karelia.fort).toEqual({ lv: 1, vs: ['SOV'], by: 'FIN' });
     // At stop 1, a campaign that had its months and never had the war fails the mark; one opened after them does not.
     for (const was of [undefined, 17]) {
       const g = grand();
@@ -265,17 +265,17 @@ describe('the Winter War (ruling 228, 1b)', () => {
     // A grand campaign saved before the line was laid has it laid when it is loaded, and one from after the war's months is marked late.
     const old = grand();
     old.byName.Karelia.fort = null;
-    expect(loadGame(saveGame(old))!.byName.Karelia.fort).toEqual({ lv: 1, vs: ['SOV'] });
+    expect(loadGame(saveGame(old))!.byName.Karelia.fort).toEqual({ lv: 1, vs: ['SOV'], by: 'FIN' });
     old.turn = 17;
     const back = loadGame(saveGame(old))!;
-    expect([back.byName.Karelia.fort, back.flags['wnt:late']]).toEqual([{ lv: 1, vs: ['SOV'] }, 17]);
+    expect([back.byName.Karelia.fort, back.flags['wnt:late']]).toEqual([{ lv: 1, vs: ['SOV'], by: 'FIN' }, 17]);
     expect(loadGame(saveGame(grand()))!.flags['wnt:late']).toBeUndefined();
   });
 
   it('keeps the war and the line in a saved game', () => {
     const g = begun(grand());
     const back = loadGame(saveGame(g))!;
-    expect(back.byName.Karelia.fort).toEqual({ lv: 1, vs: ['SOV'] });
+    expect(back.byName.Karelia.fort).toEqual({ lv: 1, vs: ['SOV'], by: 'FIN' });
     expect(winterSince(back)).toBe(NOV_39);
   });
 
