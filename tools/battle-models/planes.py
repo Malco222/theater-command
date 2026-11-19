@@ -108,6 +108,15 @@ FINER = [
 GRADED = [
     ('    def field(p):\n        return noise.noise(', '    def field(p):\n        if s.get("graded"):\n            return s["graded"](p)\n        return noise.noise('),
     ('        if p.x > nose_back:\n            return "nose"', '        if p.x > nose_back and not s.get("graded"):\n            return "nose"'),
+    # (`pale`: a function of a point and the way her skin faces there that says where her under colour comes up her
+    #  sides, whatever way they face: the Me 262's sloping sides, her fin, the flanks of her pods)
+    ('    def paint(p, n):\n        if n.z < under_from:\n            return "under"\n',
+     '    def paint(p, n):\n        if s.get("pale") and s["pale"](p, n):\n            return "under"\n        if n.z < under_from:\n            return "under"\n'),
+    # (`taper`: a fuselage that is a rounded triangle, not an oval: fitout.hull_body; a marking on its sloping side
+    #  lies on the slope, and does not stand upright half inside her)
+    ('    hull = Body(s["hull"], s.get("square", 2.0))\n', '    hull = __import__("fitout").hull_body(Body, s)\n'),
+    ('"facing": [round(n.x, 3), round(n.y, 3), 0.0], "curve": round(bend, 3), "both": True})',
+     '"facing": [round(n.x, 3), round(n.y, 3), round(n.z, 3) if hasattr(hull, "round_of") else 0.0], "curve": round(bend, 3), "both": True})'),
 ]
 
 
@@ -195,24 +204,146 @@ def navy_blues(stations, square, fin_from, line=0.42):
     return field
 
 
+# ---- the Me 262 (Brian, 2026-11-19, of four pictures of one: "here is the ME 262 for insipiration"; "dont do the
+# shark nose"). Laid out again against "Messerschmitt Me 262 Schwalbe 3d drawing" (Wikimedia Commons, Voytek S,
+# CC BY-SA 3.0) at 167.7 pixels to the metre, her length 10.6 m: measured, not traced. What changed: her fuselage
+# is a rounded triangle, widest low down (`taper`), and lower and straighter along her back; her hood is low, with
+# flat sloping sides, a flat pane in front between two posts, a hinged middle and a long fixed tail of glass, over
+# an open cockpit (the fighters' `canopy`: fighters.py); her fin is 0.6 m lower and her tailplane half way up it;
+# her pods hang further out; a wing with its kinked trailing edge. Her nose is plain: four cannon ports, no mouth,
+# no eyes. Her coat is a splinter of grey-green and pale grey along her top, with her pale blue-grey coming high up
+# her sloping sides and over her fin, blotched with the upper colours as they were sprayed.
+_ME262_HULL = [(4.45, -0.03, 0.02, 0.02), (4.4, -0.03, 0.09, 0.08), (4.3, -0.04, 0.18, 0.15), (4.0, -0.022, 0.31, 0.248), (3.5, -0.022, 0.48, 0.378),
+               (3.0, -0.025, 0.615, 0.475), (2.5, -0.03, 0.72, 0.54), (2.0, -0.03, 0.8, 0.59), (1.5, -0.0275, 0.84, 0.6275), (1.0, -0.0225, 0.85, 0.6425),
+               (0.0, -0.0325, 0.85, 0.6325), (-1.0, -0.0475, 0.82, 0.6075), (-1.5, -0.0425, 0.76, 0.5775), (-2.0, -0.0425, 0.67, 0.5175),
+               (-3.0, -0.0425, 0.5, 0.4275), (-3.75, -0.05, 0.37, 0.35), (-4.4, -0.07, 0.265, 0.27), (-5.0, -0.085, 0.17, 0.205),
+               (-5.5, -0.0975, 0.1, 0.1475), (-6.0, -0.06, 0.035, 0.06), (-6.15, -0.02, 0.01, 0.015)]
+_ME262_TAPER = (0.36, -0.6, [(4.45, 0.0), (4.1, 0.3), (3.2, 0.85), (2.4, 1.0), (-3.2, 1.0), (-5.0, 0.6), (-6.15, 0.3)])
+_ME262_EDGE = 46.0                                          # (her cockpit's rim: this far round her from level)
+# Her hood: (x, the height its glass begins at, the height of its top, half the width of the flat of its top).
+_ME262_HOOD = [(0.47, 0.5, 0.905, 0.1), (0.2, 0.5, 0.955, 0.085), (-0.1, 0.5, 0.94, 0.085), (-0.38, 0.5, 0.895, 0.08)]
+# The fixed glass behind it: (x, where its glass begins: out and up, the height of its top, half the flat of its top,
+# how far out its metal foot stands on her: None along her cockpit's rim).
+_ME262_REAR = [(-0.38, None, 0.5, 0.895, 0.08, None), (-0.6, 0.24, 0.565, 0.84, 0.065, None), (-0.8, 0.15, 0.625, 0.795, 0.045, 0.33),
+               (-1.0, 0.05, 0.685, 0.725, 0.02, 0.3), (-1.15, 0.012, 0.7, 0.705, 0.004, 0.26), (-1.5, 0.004, 0.537, 0.54, 0.002, 0.1)]
+_ME262_SCREEN = (0.97, 0.2)                                 # (the foot of her windscreen's flat pane, and half its width there)
+_ME262_BOX = []
+
+
+def _me262_hull():
+    if not _ME262_BOX:
+        _ME262_BOX.append(fitout.hull_body(game()["Body"], {"hull": _ME262_HULL, "square": 3.0, "taper": _ME262_TAPER}))
+    return _ME262_BOX[0]
+
+
+def _me262_section(hull, x, sill, top, flat, out=None, foot=None):
+    """Half a section of her hood, nine points: the foot of its metal rail on her (two points), then its glass from
+    the sill straight up her sloping side to the shoulder, round the shoulder, and level to her middle line."""
+    if foot is None:
+        edge = hull.at(x, math.radians(_ME262_EDGE - 4.0))     # (a little down her side from the rim: the rail covers the rim's padding)
+        fy, fz = edge.y + 0.004, edge.z
+    else:
+        fy, fz = foot, hull.top_at(x, foot) - 0.006
+    sy = hull.side_at(x, sill) + 0.012 if out is None else out
+    sy = max(sy, flat + 0.002)
+    rise = max(top - sill, 0.004)
+    shoulder = (flat + min(0.05, 0.6 * (sy - flat)), top - min(0.06, 0.35 * rise))
+    return [(max(fy - 0.03, 0.0), fz - 0.06), (fy, fz), (sy, sill), (0.5 * (sy + shoulder[0]), 0.5 * (sill + shoulder[1])), shoulder,
+            (flat + min(0.02, 0.25 * (sy - flat)), top - min(0.018, 0.1 * rise)), (flat, top - min(0.004, 0.02 * rise)), (0.5 * flat, top), (0.0, top)]
+
+
+def _me262_canopy(hull):
+    skirt, post = 2, 6
+    x0, sill, top, flat = _ME262_HOOD[0]
+    head = _me262_section(hull, x0, sill, top, flat)
+    fx, fhalf = _ME262_SCREEN
+    fz = hull.top_at(fx, fhalf) - 0.01
+    # (the windscreen: a flat pane from its foot on her deck to its head between the posts, a quarter pane each side
+    #  from the foot's corner back and out to the sill)
+    foot = [(fhalf, fz)] * (post + 1) + [(0.5 * fhalf, fz), (0.0, fz)]
+    screen = {"sections": [(fx, foot), (x0, head)], "skirt": skirt, "hoops": [-1], "rails": [post, skirt], "bar": 0.024}
+    hood = {"sections": [(x, _me262_section(hull, x, sl, t, fl)) for x, sl, t, fl in _ME262_HOOD], "skirt": skirt, "hoops": [0, -1],
+            "rails": [skirt], "bar": 0.024}
+    rear = {"sections": [(x, _me262_section(hull, x, sl, t, fl, out, ft)) for x, out, sl, t, fl, ft in _ME262_REAR], "skirt": skirt, "hoops": [0],
+            "rails": [skirt], "bar": 0.02, "cap": True, "bare": (4, 5)}
+    return [screen, hood, rear]
+
+
+# Her splinter: the two upper colours in turn along each wing, along her spine and out along each tailplane, parted
+# by straight lines. Each zone is (whether it begins in the paler colour, its lines); a line runs from a point at
+# the leading edge to one at the trailing edge (x, y: y to starboard), or across her spine from starboard to port.
+# Lines next to each other lean opposite ways, so the bands are wedges, and no two zones are alike.
+_ME262_ZONES = {
+    "starboard": (False, [((1.23, 1.5), (-0.92, 2.9)), ((0.25, 4.3), (-0.96, 3.35)), ((0.14, 4.6), (-1.21, 5.7))]),
+    "port": (True, [((0.9, -2.4), (-1.1, -1.25)), ((0.74, -2.9), (-1.08, -4.4)), ((-0.17, -5.5), (-1.12, -4.85))]),
+    "spine": (False, [((3.7, 1.0), (2.9, -1.0)), ((1.3, 1.0), (2.0, -1.0)), ((-1.3, 1.0), (-2.1, -1.0)), ((-3.3, 1.0), (-2.6, -1.0))]),
+    "tail starboard": (False, [((-4.87, 1.25), (-5.79, 0.55))]),
+    "tail port": (True, [((-4.6, -0.7), (-5.77, -1.45))]),
+}
+
+
+def _me262_splinter(p):
+    """Her splinter coat: how far a point is into the paler colour, in metres from the nearest line (below nought in the darker)."""
+    if p.x < -4.15:
+        if abs(p.y) < 0.3:
+            return -1.0                                     # (her fin's blotches, and her spine under it: the darker)
+        zone = "tail starboard" if p.y > 0.0 else "tail port"
+    else:
+        zone = "spine" if abs(p.y) < 0.9 else "starboard" if p.y > 0.0 else "port"
+    pale, lines = _ME262_ZONES[zone]
+    hand = -1.0 if zone.endswith("port") else 1.0
+    near = 9.0
+    for (ax, ay), (bx, by) in lines:
+        d = ((bx - ax) * (p.y - ay) - (by - ay) * (p.x - ax)) / math.hypot(bx - ax, by - ay) * hand
+        if d < 0.0:
+            pale = not pale                                 # (beyond this line: the other colour)
+        near = min(near, abs(d))
+    return near if pale else -near
+
+
+def _me262_pale(p, n):
+    """Where her pale blue-grey lies whatever way her skin faces: up her fuselage's sloping sides to a wavy line under
+    her spine, with blotches of her upper colours along them; over her fin and rudder, blotched; down the flanks of
+    her pods."""
+    hull = _me262_hull()
+    x = min(max(p.x, hull.back), hull.front)
+    zc, h = hull.z(-x), max(hull.h(-x), 1.0e-6)
+    blot = noise.noise(Vector((p.x * 2.5 + 7.7, p.z * 3.2 + (11.0 if p.y > 0.0 else 37.0), 0.0)))
+    if abs(p.z - zc) <= h + 0.04 and abs(p.y) <= hull.side_at(x, min(max(p.z, zc - 0.98 * h), zc + 0.98 * h)) + 0.035:
+        t = (p.z - zc) / h
+        if t > 0.5 + 0.13 * noise.noise(Vector((p.x * 0.8, 3.1, 0.0))):
+            return False                                    # (her spine: the upper colours)
+        return not (t > -0.5 and blot > 0.24)               # (a blotch of them sprayed on her side)
+    if abs(p.y) < 0.13 and p.x < -3.6 and p.z > zc + h:
+        return blot < 0.2                                   # (her fin and rudder)
+    if abs(abs(p.y) - 2.26) < 0.5 and p.z < -0.34:
+        return n.z < 0.6 and blot < 0.3                     # (her pods)
+    return False
+
+
 EXTRA_PLANES = {
     "Me262": {
         "title": "Me 262A (our own model)", "year": 1944, "tech": "jets",
-        "hull": [(4.45, -0.08, 0.03, 0.03), (4.32, -0.08, 0.11, 0.11), (3.95, -0.07, 0.28, 0.27), (3.3, -0.05, 0.46, 0.44), (2.3, -0.02, 0.63, 0.59), (1.1, 0.02, 0.76, 0.69),
-                 (-0.2, 0.05, 0.8, 0.73), (-1.4, 0.09, 0.72, 0.7), (-2.8, 0.18, 0.5, 0.56), (-4.3, 0.3, 0.28, 0.4), (-5.5, 0.4, 0.12, 0.24), (-6.15, 0.45, 0.03, 0.1)],
-        "square": 2.6,
-        "hoods": [([(0.95, 0.7, 0.22, 0.06), (0.45, 0.9, 0.32, 0.22), (-0.3, 0.96, 0.34, 0.27), (-1.0, 0.92, 0.32, 0.24), (-1.8, 0.72, 0.2, 0.06)], (0.45, -0.3, -1.0), False)],
-        "wing": [(0.0, 1.62, -1.42, -0.5, 0.44), (0.9, 1.52, -1.4, -0.48, 0.4), (2.05, 1.05, -1.3, -0.42, 0.34), (5.7, -0.2, -1.45, -0.04, 0.15), (6.15, -0.5, -1.42, 0.0, 0.1),
-                 (6.3, -0.82, -1.3, 0.02, 0.03)],
-        "tail": [(0.0, -4.7, -5.95, 1.15, 0.11), (1.55, -5.22, -5.95, 1.15, 0.07), (1.88, -5.48, -5.9, 1.15, 0.04), (1.97, -5.7, -5.85, 1.15, 0.01)],
-        "fin": [(0, -3.7, -6.1, 0.42, 0.14), (0, -4.55, -6.22, 1.15, 0.12), (0, -5.25, -6.32, 2.0, 0.08), (0, -5.7, -6.3, 2.42, 0.04), (0, -5.92, -6.2, 2.52, 0.01)],
-        "patch": 1.7, "colours": {"upper": "4A5240", "upper2": "5F5848", "under": "9DB3BA", "nose": "4A5240", "boss": "2B2B2B"},
-        "well": (1.2, 0.42, 0.42), "pitot": True, "hull_lines": [3.3, 2.25, 0.95, -1.85, -3.6],
-        "jets": [([(2.42, -0.78, 0.3, 0.3), (2.3, -0.78, 0.36, 0.36), (1.9, -0.78, 0.41, 0.41), (0.4, -0.78, 0.42, 0.42), (-0.7, -0.77, 0.39, 0.39), (-1.35, -0.76, 0.31, 0.31),
-                   (-1.62, -0.76, 0.25, 0.25)], 2.05)],
-        "side_marks": [(-2.7, 0.33, "GER")], "wing_marks": [(4.3, -0.55, 0.45, "GER", "GER", True, True)], "code": (-1.75, 0.3),
+        "hull": _ME262_HULL, "square": 3.0, "taper": _ME262_TAPER,
+        "hoods": fighters.hood_of([(_ME262_SCREEN[0], 0.6, _ME262_SCREEN[1], 0.01)] + [(x, sl, 0.3, t - sl) for x, sl, t, fl in _ME262_HOOD]
+                                  + [(-1.0, 0.685, 0.05, 0.04), (-1.5, 0.53, 0.02, 0.01)]),
+        "canopy": _me262_canopy, "opening": (0.45, -0.75, _ME262_EDGE),
+        "wing": [(0.0, 1.75, -1.32, -0.5, 0.4), (0.85, 1.45, -1.22, -0.468, 0.366), (1.7, 1.157, -1.0, -0.375, 0.26), (2.7, 0.808, -0.9, -0.285, 0.2),
+                 (4.0, 0.354, -1.04, -0.165, 0.15), (5.0, 0.005, -1.13, -0.0875, 0.1), (5.96, -0.33, -1.245, -0.03, 0.07), (6.12, -0.47, -1.2, -0.02, 0.05),
+                 (6.2, -0.65, -1.05, -0.015, 0.02)],
+        "tail": [(0.0, -4.27, -5.8, 0.63, 0.12), (1.0, -4.74, -5.78, 0.63, 0.1), (1.71, -5.075, -5.76, 0.63, 0.07), (1.82, -5.22, -5.7, 0.63, 0.04),
+                 (1.86, -5.42, -5.58, 0.63, 0.01)],
+        "fin": [(0, -3.45, -6.14, 0.05, 0.14), (0, -3.77, -6.11, 0.3, 0.14), (0, -4.456, -6.01, 1.0, 0.12), (0, -4.946, -5.95, 1.5, 0.09),
+                (0, -5.22, -5.89, 1.78, 0.07), (0, -5.36, -5.8, 1.87, 0.05), (0, -5.5, -5.66, 1.91, 0.02)],
+        "patch": 1.0, "graded": _me262_splinter, "pale": _me262_pale,
+        "colours": {"upper": "66736C", "upper2": "97A7AE", "under": "ABBAC3", "nose": "66736C", "boss": "2B2B2B"},
+        "well": (1.05, 0.45, 0.36), "pitot": True, "hull_lines": [3.95, 2.95, 2.06, 1.2, -1.78, -2.75, -3.67, -4.9],
+        "jets": [([(2.33, -0.862, 0.258, 0.258), (2.2, -0.85, 0.335, 0.335), (1.9, -0.835, 0.415, 0.415), (1.5, -0.82, 0.45, 0.45), (0.0, -0.815, 0.455, 0.455),
+                   (-0.6, -0.82, 0.45, 0.45), (-1.1, -0.845, 0.37, 0.37), (-1.5, -0.884, 0.256, 0.256)], 2.26)],
+        "side_marks": [(-2.6, 0.3, "GER")], "wing_marks": [(4.5, -0.45, 0.42, "GER", "GER", True, True)], "code": (-1.85, 0.28),
     },
 }
+fitout.SEATS["Me262"] = [(0, -0.05, 0.0, 0.0)]
 # ---- the carrier planes (Brian, 2026-11-18). Paints and first years are the art director's rulings of that day. ----
 # (The art director, 2026-11-18, of the first one: she, the Avenger and the generic carrier planes "read as one plane in
 #  different paint". Hers are: a deep, portly fuselage, a short sliding hood with metal behind it, the intake under

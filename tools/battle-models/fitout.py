@@ -26,7 +26,7 @@ SUITS = {"UK": ("4D5666", "C9A227"), "GER": ("5C6670", "A39A5C"), "USA": ("6E624
 # Which machines carry guns over the engine, firing through the airscrew.
 NOSE_GUNS = {"Bf109", "Zero", "Fw190", "Yak", "Fighter", "Dauntless", "Val"}
 # Cannon in a jet's nose, each a port in her skin: (how far along her, where round her in degrees, 90 being her top).
-NOSE_CANNON = {"Me262": [(3.72, 68.0), (3.72, 112.0), (3.5, 40.0), (3.5, 140.0)]}
+NOSE_CANNON = {"Me262": [(3.78, 66.0), (3.78, 114.0), (3.62, 9.0), (3.62, 171.0)]}
 # Who sits under each hood where it is not one pilot: (which hood, how far forward, how far to port, which way he looks).
 SEATS = {"Kate": [(0, 0.85, 0.0, 0.0), (0, -0.45, 0.0, 0.0), (0, -1.75, 0.0, 180.0)], "Val": [(0, 0.75, 0.0, 0.0), (0, -1.4, 0.0, 180.0)],
          "Dauntless": [(0, 0.7, 0.0, 0.0), (0, -1.5, 0.0, 180.0)], "Avenger": [(0, 1.5, 0.0, 0.0), (0, -0.6, 0.0, 0.0)],
@@ -89,6 +89,80 @@ def body_top(body, x, y=0.0):
     e = body.square_at(x) if hasattr(body, "square_at") else 2.0 / body.power
     t = min(abs(y - body.side) / max(w, 1e-6), 1.0)
     return body.z(-x) + h * (1.0 - t ** e) ** (1.0 / e)
+
+
+def hull_body(Body, s):
+    """Her fuselage's body. Round, as the game's are; or, with `taper` in her numbers, a rounded triangle: widest low
+    down and drawn in toward her spine, as the Me 262's is (her wheels lie flat in the bottom of it). `taper` is (how
+    much of her width is left at her spine, the height the narrowing begins at (-1 her keel, 0 her middle, 1 her
+    spine), then stations (x, how much of the taper she has there: none at a round nose, all of it amidships)).
+    Her stations' half widths are still her widest, as a plan view shows them. Round her, a point is still named by
+    the same angle (its height is what the angle gives): `round_of` gives it back for a point of her skin."""
+    if not s.get("taper"):
+        return Body(s["hull"], s.get("square", 2.0))
+    top, low, along = s["taper"]
+    along = sorted(along, key=lambda r: -r[0])
+    widest = {}
+
+    class Tapered(Body):
+        def share(self, x):
+            if x >= along[0][0]:
+                return along[0][1]
+            for (xa, ka), (xb, kb) in zip(along, along[1:]):
+                if x >= xb:
+                    return ka + (kb - ka) * (xa - x) / (xa - xb)
+            return along[-1][1]
+
+        def narrow(self, k, t):
+            return 1.0 - (1.0 - top) * k * max(0.0, (t - low) / (1.0 - low))
+
+        def widest(self, k):
+            key = round(k, 3)
+            if key not in widest:
+                n = 2.0 / self.power
+                widest[key] = max((1.0 - abs(t) ** n) ** (1.0 / n) * self.narrow(k, t) for t in (-1.0 + j / 60.0 for j in range(121)))
+            return widest[key]
+
+        def at(self, x, a, proud=0.0):
+            c, sn = math.cos(a), math.sin(a)
+            y, z = math.copysign(abs(c) ** self.power, c), math.copysign(abs(sn) ** self.power, sn)
+            k = self.share(x)
+            g = self.narrow(k, z) / self.widest(k)
+            return Vector((x, self.side + y * (g * self.w(-x) + proud), self.z(-x) + z * (self.h(-x) + proud)))
+
+        def round_of(self, p):
+            """How far round her a point of her skin is: degrees up from level (90 on her spine, -90 on her keel)."""
+            t = max(-1.0, min(1.0, (p.z - self.z(-p.x)) / max(self.h(-p.x), 1e-6)))
+            return math.degrees(math.asin(math.copysign(abs(t) ** (1.0 / self.power), t)))
+
+        def side_at(self, x, z):
+            """How far out her side stands at this height (nothing above or below her)."""
+            t = (z - self.z(-x)) / max(self.h(-x), 1e-6)
+            if abs(t) >= 1.0:
+                return 0.0
+            n, k = 2.0 / self.power, self.share(x)
+            return self.w(-x) * (1.0 - abs(t) ** n) ** (1.0 / n) * self.narrow(k, t) / self.widest(k)
+
+        def top_at(self, x, y):
+            """How high her upper skin stands at x, y off her middle line (her spine's height beyond her side)."""
+            lo, hi = 0.0, 0.5 * math.pi
+            if abs(y) >= self.at(x, lo).y:
+                return self.z(-x)
+            for _ in range(36):
+                mid = 0.5 * (lo + hi)
+                if self.at(x, mid).y > abs(y):
+                    lo = mid
+                else:
+                    hi = mid
+            return self.at(x, 0.5 * (lo + hi)).z
+    return Tapered(s["hull"], s.get("square", 2.0))
+
+
+def wall(m, hull, x, way, paint="inside", inset=0.012, sides=32):
+    """A bulkhead across her fuselage at x, in her own section (a disc pokes through the sides of one that is not an oval)."""
+    ring = [port(hull.at(x, 2.0 * math.pi * k / sides, -inset)) for k in range(sides)]
+    mid = Vector((x, 0.0, hull.z(-x)))
+    m.add(ring + [mid], [(k, (k + 1) % sides, sides) for k in range(sides)], paint, False, lambda q: Vector(way))
 
 
 def cabin_body(Body, stations, cabin, hull=None):
@@ -316,7 +390,10 @@ def open_cockpit(m, f, s, hull):
     x0, x1, edge = f.cockpit
     liner(m, f, hull, x0, x1, lambda x, high: x1 < x < x0 and high > edge)
     for x, way in ((x0, -X), (x1, X)):
-        m.disc((x, 0.0, hull.z(-x)), way, hull.h(-x) * 0.97, "inside", 24, oval=hull.w(-x) / hull.h(-x))
+        if hasattr(hull, "round_of"):
+            wall(m, hull, x, way)                          # (a fuselage that is not an oval: fitout.hull_body)
+        else:
+            m.disc((x, 0.0, hull.z(-x)), way, hull.h(-x) * 0.97, "inside", 24, oval=hull.w(-x) / hull.h(-x))
     xm = 0.5 * (x0 + x1)
     m.box((xm, 0.0, hull.z(-xm) - 0.36 * hull.h(-xm)), (x0 - x1, 1.5 * hull.w(-xm), 0.04), "inside")              # (her floor)
     # (her instrument panel, black, its top under the coaming, with two rows of dials)

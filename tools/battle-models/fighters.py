@@ -241,6 +241,8 @@ def in_opening(op, hull, c):
     """Whether a point of her skin lies in her cockpit's opening."""
     if not op or not (op[1] < c.x < op[0]):
         return False
+    if hasattr(hull, "round_of"):
+        return hull.round_of(c) > op[2]                      # (a fuselage that is not an oval: fitout.hull_body)
     a = math.degrees(math.atan2((c.z - hull.z(-c.x)) / hull.h(-c.x), abs(c.y) / hull.w(-c.x)))
     return a > op[2]
 
