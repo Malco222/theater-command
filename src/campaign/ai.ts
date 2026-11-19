@@ -392,7 +392,12 @@ function campaignMoves(g: Game, nat: string): void {
  * garrison row marked to stay keeps it (ruling 221, H): an offensive does not empty the bases behind it.
  */
 export function release(g: Game, nat: string, names: string[]): void {
-  for (const c of g.corps) if (c.nat === nat && c.hold && !c.stay && c.kind !== 'fort' && names.includes(g.regions[c.reg].name)) c.hold = false;
+  const held = (c: Corps): boolean => c.nat === nat && c.hold && !c.stay && c.kind !== 'fort' && names.includes(g.regions[c.reg].name);
+  // (A row held for the corps it goes with is let go with that corps and not before it: rider b604 to ruling 234,
+  // stations.ts. The tank regiments beside a division that waits on its quay wait with it. None with the far side off.)
+  const riders = g.corps.filter((c) => held(c) && goesWith(g, c) !== null);
+  for (const c of g.corps) if (held(c) && !riders.includes(c)) c.hold = false;
+  for (const c of riders) if (!goesWith(g, c)?.hold) c.hold = false;
 }
 
 /** Runs a nation's corps in each overseas theatre by that theatre's plan. */

@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { bookMonth } from '../src/campaign/claims';
 import { monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { addCorps, capitulate, createGame, declareWar, hostileUnits, removeCorps, startPhase } from '../src/campaign/game';
+import { release } from '../src/campaign/ai';
 import { setStop } from '../src/campaign/history';
 import { landCorps, liftLeft, navalUpkeep, whyNotLand } from '../src/campaign/navy';
 import { readinessMonth } from '../src/campaign/readiness';
@@ -187,6 +188,22 @@ describe('a row lands in the lift of the corps it goes with (rider b604)', () =>
     expect(before - liftLeft(g, 'JAP')).toBe(1);
     expect([t1.hold, t6.hold]).toEqual([false, true]);
     expect(goesWith(g, t1)).toBeNull();
+  });
+
+  it('held for its corps, it is let go with that corps and not before: an offensive that takes the hold off its quay leaves it beside a division that waits', () => {
+    const g = december(3);
+    const d5 = corps(g, G5)!, t1 = corps(g, reg('1st'))!, t6 = corps(g, reg('6th'))!;
+    const other = addCorps(g, 'JAP', 'Test Brigade', 'inf', 1, 'Formosa', { hold: 1 });
+    // (Where history is loose the 5th Division waits held and stayed for the strike south: ruling b423, china-stop3.json.)
+    expect([d5.hold, d5.stay, t1.hold, t1.stay]).toEqual([true, true, true, undefined]);
+    release(g, 'JAP', ['Hainan', 'Formosa']);
+    expect([d5.hold, t1.hold, t6.hold, other.hold]).toEqual([true, true, true, false]);
+    // The 48th Division on Formosa has a plain hold: let go there, its regiments go with it, whichever the list reads first.
+    expect([corps(g, G48)!.hold, corps(g, reg('4th'))!.hold, corps(g, reg('7th'))!.hold]).toEqual([false, false, false]);
+    // And once the division is let go, so are they.
+    d5.hold = false;
+    release(g, 'JAP', ['Hainan']);
+    expect([t1.hold, t6.hold]).toEqual([false, false]);
   });
 
   it("the player's force is his to choose: nothing sails he did not send, and a row he sends with its corps takes no shipping", () => {
