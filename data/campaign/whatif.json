@@ -174,7 +174,7 @@
         { "id": "wait", "hist": true, "again": true, "label": "Stay out", "says": "Italy stays neutral. You will be asked again in six months.", "news": "", "w": [1, 1, 0.9, 0.82, 0.72] },
         { "id": "axis", "label": "Go in beside Germany", "says": "Italy joins the Axis and declares war on Germany's enemies in the west.",
           "news": "Italy declares war beside Germany. Mussolini has judged the moment right, and Italian troops march for the frontier.",
-          "w": [0, 0, 0.02, 0.05, 0.09], "boost": { "fallen:FRA": 2, "momentum>=:0.5": 2 },
+          "w": [0, 0, 0.02, 0.04, 0.07], "boost": { "fallen:FRA": 1.5, "momentum>=:0.5": 1.5 },
           "do": { "join": { "ITA": "axis" }, "war": [["ITA", "FRA"], ["ITA", "UK"]], "unbar": ["ITA:greece", "ITA:yugoslavia", "ITA:east"] } },
         { "id": "allies", "label": "Go in beside the Allies", "says": "Italy joins the Allies and declares war on Germany.", "if": ["momentum<=:-0.2"],
           "news": "Italy declares war on Germany. Rome has watched the war turn and throws in its lot with the Allies.",

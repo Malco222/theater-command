@@ -296,6 +296,17 @@ describe('turning points', () => {
     expect(atWar(g, 'SOV', 'GER')).toBe(true);
   });
 
+  it('a turning point whose first country has fallen is decided by the next one still standing', () => {
+    const g = world('history', 3, null, 5);
+    at(g, 56);
+    g.flags['wi:f:plot'] = 55; g.flags['tp:plot:at'] = 55;
+    if (!atWar(g, 'GER', 'USA')) setWar(g, 'GER', 'USA');
+    g.nations.UK.alive = false;
+    whatIfMonth(g);
+    expect(g.flags['tp:terms']).toBeGreaterThan(0);
+    expect(g.flags['tp:terms:by']).toBe(2); // the computer, for America
+  });
+
   it('a peace for Britain is a peace for its dominions', () => {
     const g = grand(3, null);
     expect(atWar(g, 'CAN', 'GER')).toBe(true);

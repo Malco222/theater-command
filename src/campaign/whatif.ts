@@ -227,12 +227,12 @@ export function wiHolds(g: Game, cond: string): boolean {
 
 // ---- Turning points ------------------------------------------------------------------------------------------
 
-/** Who decides a turning point this month: the player if he leads one of its countries, else the first of them on the computer. */
+/** Who decides a turning point this month: the player if he leads one of its countries, else the first of them still standing on the computer. */
 function deciderOf(g: Game, t: Turn): { nat: string; player: boolean } | null {
   const mine = t.by.find((id) => id === g.human && g.nations[id]?.alive);
   if (mine) return { nat: mine, player: true };
-  const first = t.by[0];
-  return first && g.nations[first]?.alive && !g.nations[first].dormant ? { nat: first, player: false } : null;
+  const first = t.by.find((id) => id !== g.human && g.nations[id]?.alive && !g.nations[id].dormant);
+  return first ? { nat: first, player: false } : null;
 }
 
 const wordsFor = (w: Words, nat: string): string | null => (typeof w === 'string' ? w : w[nat] ?? null);
