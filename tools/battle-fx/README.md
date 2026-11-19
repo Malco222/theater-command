@@ -52,6 +52,13 @@ screen from end to end, and no wider than `tracer.most_px` (times `day_width` by
 one passing close stays a thin whip; toward the screen's edges it draws up to about a sixth wider, as the picture
 draws everything there. `most_px` 0 takes the limit off. Test: a hmg tracer passing 3 to 20 m off is long on screen (over 150 px) for 1 to 3 frames at 30 a second.
 
+The debris shower (`burst.debris.shower`): every shell on land throws a dense spray of dark lumps, most streaming
+along the crown's jets and flying on past their tips, the rest flung every way, so a hit rains earth for one to three
+seconds (about 110 to 150 lumps for a 105, a bit over a hundred more puffs at its height). A ground's `shower` share
+sets how much (default its `clods` share; sand and town 0.8, water none). With no `shower` in the recipe the kit draws
+exactly what it did before. A water spout leaves a thin pale mist (`grounds.water.smoke_top`, `smoke_alpha`,
+`haze_lingers`) and nothing smoulders on water.
+
 Sun and sky: `SetSun` gives the way toward the sun. Smoke's shadow side never falls below `game.sky_fill` of its own
 colour in the hour's light, and looking toward the sun the fringe of a smoke cloud or trail glows warm
 (`game.sun_through`). The sun's own light is full by day and none at night, read from the hour's light; the preview

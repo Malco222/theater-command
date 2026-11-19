@@ -431,10 +431,11 @@ namespace TheaterFx
 			const double Slow = Num(G + "crown_slow", 1.0);
 			const double DustK = Num(G + "dust", 1.0);
 			const double ClodK = Ground == "water" ? 0.0 : Num(G + "clods", 1.0);
+			const double ShowerK = Ground == "water" ? 0.0 : Num(G + "shower", ClodK);
 			const double CrownH = Pick(D, S + "crown_m", 8.0, 12.0);
 			Wink(Now, At, Scale, D);
 			Skirt(Now + 0.01, At, K, P, DustK, D);
-			Crown(Now + 0.005, At, CrownH, K, Slow, P, ClodK, Size, D);
+			Crown(Now + 0.005, At, CrownH, K, Slow, P, ClodK, ShowerK, Size, D);
 			Smoke(Now, At, CrownH, K, Scale, Size, Ground, P, DustK, D);
 			const double Across = Num(S + "crater_m", 1.5);
 			if (Across > 0.0 && Ground != "water")
@@ -582,7 +583,7 @@ namespace TheaterFx
 		}
 	}
 
-	void Battle::Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, const std::string& Size, Dice& D)
+	void Battle::Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, double ShowerK, const std::string& Size, Dice& D)
 	{
 		// The crown: a wide torn fan. A few heavy dark jets, very uneven in length and width, bunched and overlapping;
 		// lighter dust filling the gaps so that the outline is one torn fan; each heavy jet thinnest and torn at its
@@ -630,6 +631,7 @@ namespace TheaterFx
 		const int NFill = D.Whole(static_cast<int>(Num(C + "fill_jets.0", 10.0)), static_cast<int>(Num(C + "fill_jets.1", 16.0)));
 		std::vector<Vec> Launch;
 		std::vector<double> LaunchR;
+		std::vector<Vec> JetThrow; // (each jet's way and the speed that carries a lump to its tip: the shower streams along them)
 		for (int J = 0; J < NHeavy + NFill; ++J)
 		{
 			const bool bHeavy = J < NHeavy;
@@ -651,6 +653,7 @@ namespace TheaterFx
 			const Vec Dir = (Vec(std::cos(Az) * std::sin(Radians(Lean)), std::sin(Az) * std::sin(Radians(Lean)), std::cos(Radians(Lean))) + Tilt).Unit();
 			const double ReachJ = CrownH * ReachF;
 			const double V = ReachJ * KD * 1.12 / std::sqrt(Slow);
+			JetThrow.push_back(Dir * std::sqrt(2.0 * 9.8 * ReachJ));
 			const double Thick = bHeavy ? Pick(D, Path("heavy_thick"), 0.7, 2.6) : Pick(D, C + "fill_thick", 1.6, 3.0);
 			const double Rf = FootR * Thick, Rt = TipR * Thick;
 			const double Shade = D.U(0.85, 1.15);
@@ -802,6 +805,44 @@ namespace TheaterFx
 			const double Lo = ClodLo, Hi = ClodHi;
 			LaunchR.push_back((Lo + (Hi - Lo) * std::pow(D.U(), 2.2)) * K);
 		}
+		// the shower: a dense spray of dark lumps flung higher than the crown and wide, raining back for a second or two,
+		// so a hit reads as violent from any distance (burst.debris.shower)
+		const size_t ShowerFrom = Launch.size();
+		const std::string Sh = "burst.debris.shower.";
+		if (ShowerK > 0.02 && Has(Sh + "count.0"))
+		{
+			const int NShower = static_cast<int>(Pick(D, Sh + "count", 60.0, 90.0) * ShowerK * std::max(0.5, std::min(K * K, Num(Sh + "most_k2", 3.0))));
+			const double SpeedK = std::sqrt(K); // (a bigger shell throws higher: the top of the shower grows as K)
+			const Span UpS = Range(Sh + "up_mps", 7.0, 16.0), OutS = Range(Sh + "out_mps", 2.0, 8.0), Rs = Range(Sh + "r_m", 0.03, 0.14);
+			const double Skew = Num(Sh + "small_skew", 2.0);
+			// (most stream along the crown's jets, some falling short inside them and some flying on past their tips;
+			// the rest are flung every way)
+			const double AlongJets = JetThrow.empty() ? 0.0 : Clamp01(Num(Sh + "along_jets", 0.6));
+			const double JetSpread = Num(Sh + "jet_spread", 0.2);
+			const Span JetSpeed = Range(Sh + "jet_speed", 0.6, 1.3);
+			for (int I = 0; I < NShower; ++I)
+			{
+				if (D.U() < AlongJets)
+				{
+					const Vec& Jet = JetThrow[static_cast<size_t>(D.Whole(0, static_cast<int>(JetThrow.size()) - 1))];
+					const double Speed = Jet.Length();
+					const Vec Way = (Jet * (1.0 / std::max(Speed, 1e-6)) + Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-1.0, 1.0)) * JetSpread).Unit(ZUp);
+					Launch.push_back(Way * (Speed * JetSpeed.Pick(D)));
+				}
+				else
+				{
+					const double A = D.U(0.0, 2.0 * Pi);
+					const double Out_ = OutS.Pick(D) * SpeedK;
+					const double Up_ = UpS.Pick(D) * SpeedK;
+					Launch.push_back(Vec(std::cos(A) * Out_, std::sin(A) * Out_, Up_));
+				}
+				LaunchR.push_back((Rs.A + (Rs.B - Rs.A) * std::pow(D.U(), Skew)) * K);
+			}
+		}
+		const size_t ShowerTo = Launch.size();
+		const Span ShowerShade = Range(Sh + "shade", 0.55, 0.9);
+		const Span ShowerRest = Range(Sh + "rest_s", 1.0, 2.5);
+		const double ShowerPuffR = Num(Sh + "landing_puff_r_m", 0.08);
 		// (a close hit throws a few lumps past the lens: what puts the player in the hole)
 		if (bEyeKnown && ClodK > 0.05)
 		{
@@ -829,7 +870,8 @@ namespace TheaterFx
 			B.Vel = Launch[I];
 			B.Gravity = 9.8;
 			B.R0 = B.R1 = LaunchR[I];
-			B.Col = (P.bSplinter && D.U() < 0.35 ? P.Splinter : P.Clod) * D.U(0.8, 1.2);
+			const bool bShower = I >= ShowerFrom && I < ShowerTo;
+			B.Col = (P.bSplinter && D.U() < 0.35 ? P.Splinter : P.Clod) * (bShower ? ShowerShade.Pick(D) : D.U(0.8, 1.2));
 			B.Col2 = B.Col;
 			B.Alpha = 1.0;
 			B.FadeIn = 0.005;
@@ -838,13 +880,13 @@ namespace TheaterFx
 			B.LeastPx = ClodLeast;
 			Chunk(B, D);
 			Throw(B);
-			B.Life = B.Land2 + D.U(2.0, 4.0);
+			B.Life = B.Land2 + (bShower ? ShowerRest.Pick(D) : D.U(2.0, 4.0));
 			B.Hold = std::min(0.95, (B.Land2 + 1.0) / B.Life);
 			const Vec Landed = B.At1;
 			const double Down = B.Born + B.Land;
 			const double R = B.R0;
 			Bits.push_back(B);
-			if (R > 0.04)
+			if (R > (bShower ? ShowerPuffR * K : 0.04))
 			{
 				Bit Puff;
 				Puff.Born = Down;
@@ -897,7 +939,7 @@ namespace TheaterFx
 		const Rgb Warm = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
 		const Vec Lean = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), 0.0) * 0.15;
 		const std::string Sm = "burst.smoke.";
-		const Rgb Top = Picture(Sm + "colour_top", Rgb::FromPicture(66, 64, 62));
+		const Rgb Top = Picture("grounds." + Ground + ".smoke_top", Picture(Sm + "colour_top", Rgb::FromPicture(66, 64, 62))); // (a water spout's mist goes pale, never charcoal)
 		const double TopShare = Num(Sm + "top_share", 0.8);
 		// (the top breaks into a few lumps, never one smooth dome)
 		const int NLobes = D.Whole(static_cast<int>(Num(Sm + "top_lobes.0", 3.0)), static_cast<int>(Num(Sm + "top_lobes.1", 5.0)));
@@ -911,6 +953,7 @@ namespace TheaterFx
 		const double CloudR = Num(Sm + "cloud_r", 0.3);
 		const Span SmokeR0 = Range(Sm + "puff_r.0", 0.5, 0.9), SmokeR1 = Range(Sm + "puff_r.1", 1.2, 2.6), SmokeAlpha = Range(Sm + "alpha", 0.35, 0.6);
 		const double SmokeGrow = Num(Sm + "grow", 0.3);
+		const double AlphaK = Num("grounds." + Ground + ".smoke_alpha", 1.0); // (a water spout leaves a thin mist, not a cloud)
 		for (int I = 0; I < N; ++I)
 		{
 			const double F = std::pow(D.U(), 0.9); // (0 at the foot, 1 at the top of the crown)
@@ -938,7 +981,7 @@ namespace TheaterFx
 			B.Col = (F < 0.25 && Born - T0 < 0.22) ? Base.Mix(Warm, 0.35) : Base; // (warm only at its foot, at first)
 			B.Col2 = Base;
 			B.Cool = B.Life / 0.15;
-			B.Alpha = SmokeAlpha.Pick(D);
+			B.Alpha = SmokeAlpha.Pick(D) * AlphaK;
 			B.Drag = D.U(1.4, 2.2);
 			B.Rise = D.U(0.25, 0.9) * std::sqrt(K);
 			B.FadeIn = 0.08;
@@ -953,7 +996,11 @@ namespace TheaterFx
 			B.CentreRise = 0.55 * std::sqrt(K);
 			Bits.push_back(B);
 		}
-		// the crater smoulders faintly for a while
+		// the crater smoulders faintly for a while (water has none)
+		if (Ground == "water")
+		{
+			return;
+		}
 		Source S;
 		S.At = At;
 		S.Kind = 1;

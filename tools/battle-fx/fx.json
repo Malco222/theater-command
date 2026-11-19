@@ -265,7 +265,43 @@
    "clod_r_m": [
     0.015,
     0.09
-   ]
+   ],
+   "shower": {
+    "count": [
+     110,
+     150
+    ],
+    "up_mps": [
+     7,
+     16
+    ],
+    "out_mps": [
+     2,
+     8
+    ],
+    "r_m": [
+     0.025,
+     0.12
+    ],
+    "small_skew": 2.0,
+    "shade": [
+     0.55,
+     0.9
+    ],
+    "rest_s": [
+     1.0,
+     2.5
+    ],
+    "landing_puff_r_m": 0.08,
+    "most_k2": 3.0,
+    "along_jets": 0.6,
+    "jet_spread": 0.2,
+    "jet_speed": [
+     0.6,
+     1.3
+    ],
+    "_why": "Brian's battle video (11-19): what makes a hit read as violent is a dense spray of dark lumps flung higher than the crown and twice as wide, raining back for one to three seconds. Ours threw a few small clods low. The shower: count lumps for a 105 (times the ground's shower share, default its clods share, and the shell's size squared up to most_k2), thrown up_mps and out_mps (both times the fourth root of the shell's scale, so a 105 tops out at 2 to 13 m and lands 1.2 to 3.3 s later), radius r_m (times the square root of scale; small_skew keeps most small), darkened by shade (backlit undersides), resting rest_s on the ground, a landing puff only from landing_puff_r_m. Water throws none. along_jets of them stream along the crown's jets (each within jet_spread of its way, at jet_speed times the speed that carries a lump to that jet's tip, so some fall short inside it and some fly on past), the rest flung every way at up_mps and out_mps."
+   }
   },
   "smoke": {
    "frames": [
@@ -674,7 +710,9 @@
      152,
      118
     ]
-   }
+   },
+   "shower": 0.8,
+   "_shower": "A shell in sand still throws stones and damp lumps high (the video's beach): shower 0.8, though its clods share stays 0.15."
   },
   "snow": {
    "thrown_first": [
@@ -817,7 +855,9 @@
      146,
      138
     ]
-   }
+   },
+   "shower": 0.8,
+   "_shower": "Masonry lumps and tiles in the shower, in the town's clod colour: shower 0.8, though town throws no earth clods."
   },
   "woods": {
    "thrown_from_ground": 0.55,
@@ -895,7 +935,15 @@
      190,
      196
     ]
-   }
+   },
+   "smoke_top": [
+    150,
+    158,
+    164
+   ],
+   "haze_lingers": 0.35,
+   "_spout": "Brian's battle video (11-19): a water spout is white spray that falls back fast and leaves a thin mist, not a cloud. The smoke's top mixes toward smoke_top (pale grey: burst.smoke.colour_top is charcoal, for earth), its puffs are smoke_alpha as solid, the mist clears in about a third of the time (haze_lingers), and nothing smoulders.",
+   "smoke_alpha": 0.5
   },
   "ground_of": {
    "open": "earth",
