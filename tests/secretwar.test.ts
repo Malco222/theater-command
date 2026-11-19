@@ -35,7 +35,7 @@ describe('the switches', () => {
     const away = plant(g, 'Ruhr', 'watch');
     const room = spyRoom(g)!;
     expect(room.agents.find((a) => a.id === home.id)!.missions.map((m) => m.id)).toEqual(['guard']);
-    expect(room.agents.find((a) => a.id === away.id)!.missions.map((m) => m.id)).toEqual(['watch', 'books', 'factory', 'rail', 'oil']);
+    expect(room.agents.find((a) => a.id === away.id)!.missions.map((m) => m.id)).toEqual(['watch', 'books', 'factory', 'rail', 'oil', 'bbPlans', 'cvPlans', 'bomberPlans', 'jetPlans', 'rocketPlans', 'guidedPlans']);
     expect(room.found).toBeUndefined();
     expect(room.orders).toBeUndefined();
     busy(g);
