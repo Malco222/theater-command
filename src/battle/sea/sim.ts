@@ -119,7 +119,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private readonly fromAir: Record<string, number> = {};
   /** Wear dealt by each side's classes ('att:bb') over the battle, and seconds each spent in reach ('att:bb:s'): for tuning, read by tools and tests only. */
   get tally(): Record<string, number> {
-    const out: Record<string, number> = { ...this.fromAir };
+    const out: Record<string, number> = { ...this.fromAir, ...this.marks };
     for (const u of this.units) {
       const k = `${u.side}:${u.extra.cls}`;
       out[k] = (out[k] ?? 0) + this.dealt[u.id];
@@ -127,6 +127,16 @@ export class SeaSim implements BattleSim<SeaUnit> {
     }
     return out;
   }
+  /**
+   * What the tactics panel's marks read (tactics-panel/briefs/sea.md), in the tally beside the wear by class: the wear
+   * each class dealt on each enemy class ('att:bb>ca'); and, once a second after the guns meet, a gun class's seconds of
+   * fire while an enemy big ship was in its reach ('att:bb@big:s'), and of those at one ('att:bb@big>big:s'); and, while
+   * a side's battleships (or cruisers) in reach of the enemy's are at least as many, the enemy's in their reach counted
+   * each second ('att:bb:exposed:s'), with those that no ship of the class was firing on ('att:bb:untroubled:s') and
+   * those no ship at all was ('att:bb:unfired:s'). Counted only: nothing reads them back, and they draw no dice.
+   */
+  private readonly marks: Record<string, number> = {};
+  private mark(k: string, n: number): void { this.marks[k] = (this.marks[k] ?? 0) + n; }
   private readonly fleetLoss: { sunk: Record<number, SeaShips>; burnt: Record<number, SeaShips> } = { sunk: {}, burnt: {} };
 
   constructor(ticket: SeaTicket) {
@@ -385,7 +395,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.t = Math.round((this.t + DT) * 1000) / 1000;
     const tick = Math.round(this.t / DT);
     for (const u of this.units) if (live(u)) this.steer(u);
-    if (tick % 10 === 0) this.decide();
+    if (tick % 10 === 0) { this.sample(); this.decide(); }
     for (const u of this.units) { u.engaged = undefined; if (live(u)) this.fire(u); }
     this.landStrikes();
     this.coastAir();
@@ -395,6 +405,35 @@ export class SeaSim implements BattleSim<SeaUnit> {
     for (const u of this.units) for (const a of u.abilities ?? []) if (a.ready > 0) a.ready = Math.max(0, Math.round((a.ready - DT) * 1000) / 1000);
     this.zones = this.zones.filter((z) => z.until > this.t);
     this.judge();
+  }
+
+  /** Once a second after the guns meet, before the targets change: what the marks read (see marks). */
+  private sample(): void {
+    if (this.contactAt === null) return;
+    const big = (c: string): boolean => c === 'bb' || c === 'ca' || c === 'cv';
+    const near = (a: SeaUnit, b: SeaUnit, r: number): boolean => dist(a.x, a.y, b.x, b.y) <= r;
+    for (const side of ['att', 'def'] as Side[]) {
+      const mine = this.units.filter((u) => u.side === side && live(u) && u.state !== 'routing');
+      const foes = this.units.filter((u) => u.side !== side && live(u) && u.state !== 'routing');
+      for (const u of mine) {
+        const c = u.extra.cls as SeaClass;
+        if (c === 'cv' || u.engaged === undefined) continue;
+        const R = SEA.classes[c].reach;
+        if (!foes.some((e) => big(e.extra.cls) && near(u, e, R))) continue;
+        this.mark(`${side}:${c}@big:s`, 1);
+        const t = this.byId.get(u.engaged);
+        if (t && big(t.extra.cls)) this.mark(`${side}:${c}@big>big:s`, 1);
+      }
+      for (const c of ['bb', 'ca'] as SeaClass[]) {
+        const R = SEA.classes[c].reach, own = mine.filter((u) => u.extra.cls === c), theirs = foes.filter((e) => e.extra.cls === c);
+        const exposed = theirs.filter((e) => own.some((u) => near(u, e, R)));
+        const able = own.filter((u) => theirs.some((e) => near(u, e, R)));
+        if (!exposed.length || able.length < exposed.length) continue;
+        this.mark(`${side}:${c}:exposed:s`, exposed.length);
+        this.mark(`${side}:${c}:untroubled:s`, exposed.filter((e) => !own.some((u) => u.engaged === e.id)).length);
+        this.mark(`${side}:${c}:unfired:s`, exposed.filter((e) => !mine.some((u) => u.engaged === e.id)).length);
+      }
+    }
   }
 
   /** Once a second: targets, carriers' strikes, and the side's own reckoning. */
@@ -716,6 +755,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const w = SEA.fire.rate * this.output(u) * range * arc * nerve * this.day(u.side) * DT;
     this.dealt[u.id] += w;
     this.inReach[u.id] += DT;
+    this.mark(`${u.side}:${u.extra.cls}>${foe.extra.cls}`, w);
     // Gunfire, like a strike, takes the same weight out of the fight whatever it falls on (wear in proportion to the
     // ship's hull): a heavy fleet's light screen is no weaker for being light, and a fleet is worth what the campaign
     // counts it, whatever its mix (the second playtester's newcomer test, b402).
