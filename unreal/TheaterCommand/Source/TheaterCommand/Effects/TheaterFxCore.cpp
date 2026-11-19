@@ -1478,7 +1478,9 @@ namespace TheaterFx
 			M = "muzzle.rifle.";
 		}
 		Dice D(++Seeds * 15485863ull ^ PlaceKey(At));
-		const double Len = Num(M + "flame_m", 0.3);
+		// (a flame length that is not a number, or without end, would lay points that are not numbers: the pre-check's find)
+		const double LenIs = Num(M + "flame_m", 0.3);
+		const double Len = LenIs == LenIs ? std::min(20.0, std::max(0.0, LenIs)) : 0.3;
 		const Vec Fw = Facing.Unit(Vec(1.0, 0.0, 0.0));
 		const Vec Across = Fw.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
 		const Rgb Flame = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
