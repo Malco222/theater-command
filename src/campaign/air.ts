@@ -538,6 +538,24 @@ export function fightersOver(g: Game, region: number, against: string): number {
 }
 
 /**
+ * The fighters each enemy airfield puts over a region against this nation, by the province the field stands in:
+ * fightersOver told apart by where its land-based groups come from (a carrier's wing in harbour is no field's).
+ */
+export function fightersOverFrom(g: Game, region: number, against: string): Map<number, number> {
+  const out = new Map<number, number>();
+  const holder = g.regions[region].ctrl;
+  const wx = weatherOn(g);
+  if (wx && skyAt(g, region) === 'closed') return out;
+  for (const f of g.airFleets) {
+    if (f.ftr <= 0 || f.mission !== 'support' || f.close || f.ship !== undefined || !atWar(g, f.nat, against) || !guardsLand(g, f, region, holder)) continue;
+    if ((wx && grounded(g, f)) || wrecked(g, f)) continue;
+    const n = f.ftr * cover(kmTo(g, f, region), reach(f, g).ftrRange) * crowding(g, f);
+    if (n > 0) out.set(f.base, (out.get(f.base) ?? 0) + n);
+  }
+  return out;
+}
+
+/**
  * What a won sky lends a land battle: 'land' is added to the attacker's air edge where its side holds the sky, and the
  * attack and the defence are then multiplied by 1 + attack x edge and 1 - defence x edge. In the grand campaign's air
  * war (ruling 227, b433) the sky counts for whichever side holds it and the effect is fitted to the record
@@ -2256,8 +2274,10 @@ export function airBattles(g: Game, nat: string): AirReport[] {
 /**
  * Orders for one computer-run nation's air fleets: history's plan where it has one, otherwise support for the armies.
  * 'ph' is the month's orders for its main army, whose named offensive draws the air groups (ruling 227, b447).
+ * 'skies' are the shores its landing plan still owes a landing on, where the plan holds the sky (planSky; none but
+ * where ai.ts names them).
  */
-export function airAI(g: Game, nat: string, ph?: PlanPhase | null): void {
+export function airAI(g: Game, nat: string, ph?: PlanPhase | null, skies?: number[]): void {
   // The player's air force is his own to order, unless he has handed the air war to his staff (depth.ts).
   if (byHand(g, nat, 'air')) return;
   const n = g.nations[nat];
@@ -2271,7 +2291,15 @@ export function airAI(g: Game, nat: string, ph?: PlanPhase | null): void {
   if (!n.alive || !n.atWar.length) return;
   // In the grand campaign history's air plan does not apply: the air groups patrol, and the staff plans raids of its own.
   // Ships come first: the carriers' wings, and a few of the land bombers, go for the fleets the staff has found.
-  if (g.flags.open === 1) { flyReadOrders(g, nat, mine); seaStaff(g, nat, nat === g.human ? 'land' : 'all'); raidStaff(g, nat, mine, ph); return; }
+  // (A landing plan holds the sky it lands under before anything the staff decides this month is flown: rider b631 (iv)
+  // to ruling 234. An order an agent read last month is flown before it, as written: a stolen order is never false.)
+  if (g.flags.open === 1) {
+    flyReadOrders(g, nat, mine);
+    const plan = skies ? planSky(g, nat, mine, skies) : null;
+    seaStaff(g, nat, nat === g.human ? 'land' : 'all', plan?.named);
+    raidStaff(g, nat, mine, ph, plan);
+    return;
+  }
   for (const ph of AIR.plan) {
     if (ph.nat !== nat || g.turn < ph.from || g.turn > ph.to || !atWar(g, nat, ph.against)) continue;
     for (const o of ph.orders) {
@@ -2293,8 +2321,9 @@ export function airAI(g: Game, nat: string, ph?: PlanPhase | null): void {
  * the airfield where it meets most of what is still asked for, and moves only when that is clearly better than where it
  * is (airwar.json ai.basing). Groups that flew or moved this month, carrier wings, and groups in reach of a beach the
  * staff means to land on stay where they are. Home defence is kept for the raids the staff expects, no more.
+ * So do the groups a landing plan has named for its sky ('held'; planSky).
  */
-function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[], battles: number[] = []): void {
+function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[], battles: number[] = [], held?: Set<number>): void {
   const K = AIRWAR.ai.basing;
   const own = (r: Region): boolean => r.ctrl === nat && r.owner === nat;
   // The places to guard: the nation's own troops at the front (beside ground an enemy holds), and its own cities and works.
@@ -2339,7 +2368,7 @@ function baseByThreat(g: Game, nat: string, mine: AirFleet[], beaches: number[],
   const asked = ask.reduce((s, x) => s + x, 0);
   if (asked <= 0) return;
   const fighters = mine.filter((f) => f.kind === 'ftr' && f.ftr > 0 && !afloat(f));
-  const stays = (f: AirFleet): boolean => f.moved === g.turn || f.flew === g.turn || f.mission !== 'support' || posted(g, f) || watching(g, f) || beaches.some((t) => kmTo(g, f, t) <= reach(f, g).ftrRange);
+  const stays = (f: AirFleet): boolean => f.moved === g.turn || f.flew === g.turn || f.mission !== 'support' || posted(g, f) || watching(g, f) || !!held?.has(f.id) || beaches.some((t) => kmTo(g, f, t) <= reach(f, g).ftrRange);
   const free = fighters.filter((f) => !stays(f));
   if (!free.length) return;
   const total = fighters.reduce((s, f) => s + f.ftr, 0);
@@ -2506,6 +2535,143 @@ function baseBombers(g: Game, nat: string, mine: AirFleet[], battles: number[]):
 }
 
 /**
+ * Fighter groups brought forward for a beach a staff means to land on: with no fighter group in reach of it, one
+ * based overseas is brought up to the friendly airfield nearest the beach. (A player's air staff, for the crossing
+ * he has named, 'BP': it brings up to 'monthly' fighter groups forward each month until 'groups' of them can reach
+ * the beach or the airfields in reach of it are full, from the homeland too while more than 'home' groups still
+ * guard it.) A group in 'held' is not moved.
+ */
+function callUp(g: Game, nat: string, mine: AirFleet[], t: number, BP: typeof AIRWAR.ai.raids.beach, held?: Set<number>): void {
+  const roomOn = (base: number, f: AirFleet): boolean => {
+    const there = g.airFleets.reduce((s, x) => s + (x.base === base && x.ship === undefined ? x.ftr + x.bmr : 0), 0);
+    return there + f.ftr + f.bmr <= (airWar(g) ? Math.max(AIRWAR.fields.least, airfieldsHold(g, base)) : airfieldsHold(g, base));
+  };
+  const fighters = mine.filter((f) => f.kind === 'ftr' && f.ftr > 0 && !afloat(f));
+  const cap = g.nations[nat].capital;
+  const guards = (f: AirFleet): boolean => g.regions[f.base].owner === nat && !g.regions[f.base].overseas && cap >= 0;
+  for (let k = 0; k < (BP ? BP.monthly : 1); k++) {
+    const within = fighters.filter((f) => whyNotMission(g, f, 'superiority', t) === null).length;
+    if (within >= (BP ? BP.groups : 1)) break;
+    const spare = !!BP && fighters.filter(guards).length > BP.home;
+    let move: { f: AirFleet; to: Region; d: number } | null = null;
+    for (const f of fighters) {
+      // The fighters that guard the homeland stay over it.
+      if (f.moved === g.turn || f.flew === g.turn || held?.has(f.id) || (guards(f) && !spare)) continue;
+      if (BP && whyNotMission(g, f, 'superiority', t) === null) continue;
+      for (const r of airBases(g, f)) {
+        const d = km(g, r.id, t);
+        // (Not onto airfields that are full already: aircraft that cannot be served fly nowhere. Nor across an
+        // ocean, where a group goes only by sea.)
+        if (!roomOn(r.id, f) || overOcean(g, f, r)) continue;
+        // (Of two groups that could go as near, a player's staff sends the one that is not over the capital.)
+        if (d <= reach(f, g).ftrRange && (!move || d < move.d || (!!BP && d === move.d && move.f.base === cap && f.base !== cap))) move = { f, to: r, d };
+      }
+    }
+    if (!move) break;
+    rebaseAir(g, move.f, move.to);
+  }
+}
+
+/** What a landing plan has of the air this month: the shores whose sky it holds, and the groups it has named for them. */
+export interface PlanSky { shores: number[]; named: Set<number> }
+
+/**
+ * For the measuring harness and the tests: told of each sky a landing plan holds this month. 'to' is where its fight
+ * goes (the enemy field that denies several of its shores, or the shore itself), 'shores' the plan's shores it is for,
+ * 'named' the groups the plan holds for them and 'flew' those that went up. In a month the shore is open 'to' is the
+ * shore and nothing is flown. Nothing in the game listens.
+ */
+export const skyWatch: { tell: ((e: { nat: string; to: Region; shores: Region[]; named: AirFleet[]; flew: AirFleet[]; report: AirReport | null }) => void) | null } = { tell: null };
+
+/** The month a shore became one of its country's plan's skies (planSky): kept until no landing is owed on it. */
+export const planSkyKey = (nat: string, shore: number): string => `sky:plan:${nat}:${shore}`;
+
+/**
+ * The plan holds the sky it lands under (rider b631 (iv) to ruling 234, with the design director's notes of 12:41Z,
+ * 13:57Z, 14:11Z and 14:38Z, 19 November 2026). 'skies' are the shores a staff's landing plan still owes a landing on, in
+ * the plan's order (ai.ts, planSkies).
+ *   its skies  a shore becomes one of the plan's skies in the month enemy fighters deny the sky over it, and stays
+ *              one until no landing is owed on it, whether or not the sky is denied in a later month.
+ *   named      every land-based group of the country in reach of such a shore, as it stands that month, and in a
+ *              month of fighting those in reach of the field the fight goes over. The groups named are the plan's
+ *              for the month: the basing rules do not move them, and they fly nothing else. In a month the sky is
+ *              open they stand where they are, in reach. Carrier wings stay the navy's.
+ *   the fight  in a month the sky is denied, first of all the staff decides, before its strikes and raids: the
+ *              named groups that are fit to fly (the raids' readiness, and not flown this month) go up together,
+ *              whatever the forecast. A plan does not wait to be sure of the sky it lands under; its landings still
+ *              read their own odds before they sail. It is a fight for the sky, so it goes with a fighter group in
+ *              it: bombers with none in reach wait for the one brought up.
+ *   where      clearing a sky is beating the fighters that deny it. Where one enemy field's fighters are by
+ *              themselves enough to deny several of the plan's shores and a bomber group of the plan's reaches
+ *              that field, the fight goes over the field, so that the bombers strike its groups on the ground, and
+ *              the one fight is for every shore the field denies. With no bomber group that reaches the field
+ *              there is no reason to go there: the fight goes over the shore, the first in the plan's order, with
+ *              every group that reaches it. So it does where no fighter group can reach the field or be brought
+ *              up to: a fight for the sky is not flown by bombers alone.
+ *   brought up with no fighter group in reach of where the fight goes, one is brought up, as for a hop (callUp).
+ * A group in reach of two of the plan's skies is the first one's, in the plan's order. A sky the month's earlier
+ * fights have cleared is not fought for again that month. Null where the plan holds no sky this month.
+ */
+function planSky(g: Game, nat: string, mine: AirFleet[], skies: number[]): PlanSky | null {
+  const count = `sky:plan:${nat}`;
+  if (!airWar(g) || (!skies.length && !g.flags[count])) return null;
+  const R = AIRWAR.ai.raids, least = AIR.sky.least;
+  const owed = skies.filter((t, i) => skies.indexOf(t) === i && !!g.regions[t] && atWar(g, nat, g.regions[t].ctrl));
+  // A shore no landing is owed on any more is no longer the plan's.
+  if (g.flags[count]) for (const k of Object.keys(g.flags)) if (k.startsWith(`${count}:`) && !owed.includes(Number(k.slice(count.length + 1)))) delete g.flags[k];
+  for (const t of owed) if (g.flags[planSkyKey(nat, t)] === undefined && skyDenies(g, nat, t)) g.flags[planSkyKey(nat, t)] = g.turn;
+  const shores = owed.filter((t) => g.flags[planSkyKey(nat, t)] !== undefined);
+  if (shores.length) g.flags[count] = shores.length; else delete g.flags[count];
+  if (!shores.length) return null;
+  const named = new Set<number>();
+  const reaches = (f: AirFleet, t: number): boolean => whyNotMission(g, f, 'superiority', t) === null;
+  const land = (): AirFleet[] => mine.filter((f) => !afloat(f) && !named.has(f.id));
+  const from = new Map<number, Map<number, number>>();
+  const over = (t: number): Map<number, number> => { let m = from.get(t); if (!m) { m = fightersOverFrom(g, t, nat); from.set(t, m); } return m; };
+  const done = new Set<number>();
+  let flown = 0;
+  for (const s of shores) {
+    if (done.has(s)) continue;
+    done.add(s);
+    if (!skyDenies(g, nat, s)) {
+      // An open month: its groups stand in reach, the plan's still.
+      const groups = land().filter((f) => reaches(f, s));
+      for (const f of groups) named.add(f.id);
+      skyWatch.tell?.({ nat, to: g.regions[s], shores: [g.regions[s]], named: groups, flew: [], report: null });
+      continue;
+    }
+    // The enemy field that by itself denies this shore and another of the plan's that is denied this month: the
+    // one that denies most of them, then the one with most fighters over this shore.
+    from.clear();
+    const denied = shores.filter((t) => t === s || (!done.has(t) && skyDenies(g, nat, t)));
+    let field = -1, most = 1, v = 0;
+    for (const [b, n] of over(s)) {
+      if (n < least || !atWar(g, nat, g.regions[b].ctrl)) continue;
+      const k = denied.filter((t) => (over(t).get(b) ?? 0) >= least).length;
+      if (k > most || (k === most && k > 1 && (n > v || (n === v && b < field)))) { field = b; most = k; v = n; }
+    }
+    // (The field is in reach when the plan's bombers reach it: the fight goes there for them, 14:38Z.)
+    const bombed = field >= 0 && land().some((f) => f.bmr > 0 && reaches(f, field) && kmTo(g, f, field) <= reach(f, g).bmrRange);
+    let to = s;
+    if (bombed && field !== s) {
+      callUp(g, nat, mine, field, undefined, named);
+      if (land().some((f) => f.kind === 'ftr' && f.ftr > 0 && reaches(f, field))) to = field;
+    }
+    if (to === s) callUp(g, nat, mine, s, undefined, named);
+    const its = bombed && to === field ? denied.filter((t) => (over(t).get(field) ?? 0) >= least) : [s];
+    for (const t of its) done.add(t);
+    const groups = land().filter((f) => reaches(f, to) || its.some((t) => reaches(f, t)));
+    for (const f of groups) named.add(f.id);
+    const fleets = groups.filter((f) => f.flew !== g.turn && f.mission === 'support' && f.ready >= R.ready && reaches(f, to));
+    const goes = fleets.some((f) => f.kind === 'ftr' && f.ftr > 0) && !assessAir(g, fleets, 'superiority', to).why;
+    const rep = goes ? fly(g, nat, 'superiority', to, fleets, `:sky${flown++}`) : null;
+    if (rep) for (const f of fleets) { f.mission = 'superiority'; f.target = to; f.flew = g.turn; }
+    skyWatch.tell?.({ nat, to: g.regions[to], shores: its.map((t) => g.regions[t]), named: groups, flew: rep ? fleets : [], report: rep });
+  }
+  return { shores, named };
+}
+
+/**
  * The grand campaign: a computer nation's air staff plans raids of its own and flies them at once, as the player's
  * are flown. Each month a share of its bomber groups goes out, each with the fighter groups on its own airfield as
  * escort by day: against the factories and railway junctions of its enemies, by night where the day would cost too
@@ -2514,7 +2680,7 @@ function baseBombers(g: Game, nat: string, mine: AirFleet[], battles: number[]):
  * losses stay within what the staff will bear. A rival on the harder levels sends more, bears more, and goes for
  * the player first; on the easier levels it sends fewer.
  */
-function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null): void {
+function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null, plan?: PlanSky | null): void {
   if (!airWar(g)) return;
   const R = AIRWAR.ai.raids;
   const B = bombingFor(g, nat);
@@ -2522,8 +2688,9 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
   const you = B ? seat(g) : null;
   const rng = airRng(g, `staff:${nat}`);
   const used = new Set<number>();
-  // (A group on ground support flies over the army's battles, not on raids or sweeps.)
-  const fit = (f: AirFleet): boolean => !used.has(f.id) && f.flew !== g.turn && f.mission === 'support' && !f.close;
+  // (A group on ground support flies over the army's battles, not on raids or sweeps. Nor does a group a landing
+  // plan has named for its sky fly anything else this month: planSky.)
+  const fit = (f: AirFleet): boolean => !used.has(f.id) && f.flew !== g.turn && f.mission === 'support' && !f.close && !plan?.named.has(f.id);
   const leads = (): AirFleet[] => mine.filter((f) => fit(f) && f.kind !== 'ftr' && f.bmr >= rules.least && f.ready >= R.ready);
   const fightersAt = (base: number): AirFleet[] => mine.filter((x) => fit(x) && x.kind === 'ftr' && x.ftr > 0 && homeOf(x) === base && x.ready >= AIRWAR.ai.escortReady);
   // The front: enemy-held ground with enemy troops on it, beside this nation's own field corps, and how many of its divisions stand against each.
@@ -2585,43 +2752,16 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[], ph?: PlanPhase | null
   // month until 'groups' of them can reach the beach or the airfields in reach of it are full, from the homeland
   // too while more than 'home' groups still guard it.)
   const BP = nat === g.human ? R.beach : undefined;
-  const roomOn = (base: number, f: AirFleet): boolean => {
-    const there = g.airFleets.reduce((s, x) => s + (x.base === base && x.ship === undefined ? x.ftr + x.bmr : 0), 0);
-    return there + f.ftr + f.bmr <= (airWar(g) ? Math.max(AIRWAR.fields.least, airfieldsHold(g, base)) : airfieldsHold(g, base));
-  };
-  for (const t of beaches) {
-    const fighters = mine.filter((f) => f.kind === 'ftr' && f.ftr > 0 && !afloat(f));
-    const cap = g.nations[nat].capital;
-    const guards = (f: AirFleet): boolean => g.regions[f.base].owner === nat && !g.regions[f.base].overseas && cap >= 0;
-    for (let k = 0; k < (BP ? BP.monthly : 1); k++) {
-      const within = fighters.filter((f) => whyNotMission(g, f, 'superiority', t) === null).length;
-      if (within >= (BP ? BP.groups : 1)) break;
-      const spare = !!BP && fighters.filter(guards).length > BP.home;
-      let move: { f: AirFleet; to: Region; d: number } | null = null;
-      for (const f of fighters) {
-        // The fighters that guard the homeland stay over it.
-        if (f.moved === g.turn || f.flew === g.turn || (guards(f) && !spare)) continue;
-        if (BP && whyNotMission(g, f, 'superiority', t) === null) continue;
-        for (const r of airBases(g, f)) {
-          const d = km(g, r.id, t);
-          // (Not onto airfields that are full already: aircraft that cannot be served fly nowhere. Nor across an
-          // ocean, where a group goes only by sea.)
-          if (!roomOn(r.id, f) || overOcean(g, f, r)) continue;
-          // (Of two groups that could go as near, a player's staff sends the one that is not over the capital.)
-          if (d <= reach(f, g).ftrRange && (!move || d < move.d || (!!BP && d === move.d && move.f.base === cap && f.base !== cap))) move = { f, to: r, d };
-        }
-      }
-      if (!move) break;
-      rebaseAir(g, move.f, move.to);
-    }
-  }
+  for (const t of beaches) callUp(g, nat, mine, t, BP, plan?.named);
   // The rest of the fighters are based by the threat to the nation's troops and cities (ruling 227, b428): the beaches
   // have first call on them, and a group in reach of a beach stays. The battles of the staff's main effort ask for
   // the sky, and its bombers go in reach of them (b447).
   const battles = effortBattles(g, nat, ph);
-  baseByThreat(g, nat, mine, beaches, battles);
-  baseBombers(g, nat, mine, battles);
-  if (ph?.posture === 'attack') closeStaff(g, mine, battles);
+  // (The groups a landing plan has named for its sky are not moved, and are not put on ground support: planSky.)
+  const free = plan ? mine.filter((f) => !plan.named.has(f.id)) : mine;
+  baseByThreat(g, nat, mine, beaches, battles, plan?.named);
+  baseBombers(g, nat, free, battles);
+  if (ph?.posture === 'attack') closeStaff(g, free, battles);
   let flown = 0;
   for (let k = 0; k < R.sweeps && (front.size || beaches.length); k++) {
     let best: { t: number; fleets: AirFleet[]; v: number } | null = null;
