@@ -7,7 +7,7 @@
 //
 // Frame (see core/types.ts): metres, x east, y north, the attacker comes on from the south.
 
-import { Rng } from '../../core/rng';
+import { hashString, Rng } from '../../core/rng';
 import { LAND } from './rules';
 
 /** Ground kinds, in the order their codes are stored in LandField.ground. Append only: saved fields keep their codes. */
@@ -288,15 +288,21 @@ export function buildField(place: LandPlace, seed: number, bend?: Bend): LandFie
   // (layCity below). An urban province is a city at least.
   let town: LandField['town'] = null;
   const size = streetsOf(place) ?? place.townSize;
+  // A real city's street plan is a fact of the place (the design director, b618): laid from the town's own seed, the
+  // same every time it is fought and never another city's: where it stands on the field, its streets, and the two roads
+  // through it. The battle's own draws are still taken, so everything else on the field draws as it did. A practice
+  // ground's town is no place on the map, and keeps the battle's seed.
+  const plan = planSeed(place, seed), own = plan !== seed && (size === 'capital' || size === 'city'), pr = new Rng(plan ^ 0x7a11);
   let built: Pick<LandField, 'storeys' | 'landmark' | 'streetEdge'> = {};
   if (size) {
     const rad = size === 'capital' ? 520 : size === 'city' ? 430 : size === 'town' ? 260 : 150;
     // A city along its shore as a strip has its heart near the water, in the middle of its depth.
     const s = place.stream, strip = size === 'city' && s?.lie === 'shore' && s.side === 'back' && s.strip ? h - (s.great ? STREAM.shore : STREAM.shore * 0.7) : 0;
-    const tx = w * (0.4 + 0.2 * rng.next()), ty0 = h * (0.7 + 0.06 * rng.next()), ty = strip ? strip - STRIP.core / 2 : ty0;
+    const ux = rng.next(), uy = rng.next();
+    const tx = w * (0.4 + 0.2 * (own ? pr.next() : ux)), ty0 = h * (0.7 + 0.06 * (own ? pr.next() : uy)), ty = strip ? strip - STRIP.core / 2 : ty0;
     town = { x: tx, y: ty, r: rad };
     const dense = fractal(rng, cols, rows, 3, 2);
-    if (size === 'capital' || size === 'city') built = layCity(size, tx, ty, cols, rows, ground, height, seed, strip);
+    if (size === 'capital' || size === 'city') built = layCity(size, tx, ty, cols, rows, ground, height, plan, strip);
     else {
       for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
         const d = Math.hypot(c * cell + cell / 2 - tx, r * cell + cell / 2 - ty) / rad;
@@ -322,7 +328,7 @@ export function buildField(place: LandPlace, seed: number, bend?: Bend): LandFie
     }
   };
   const tx = town?.x ?? w / 2, ty = town?.y ?? h * 0.72;
-  const wob = rng.range(-1, 1);
+  const wob0 = rng.range(-1, 1), wob = own ? pr.range(-1, 1) : wob0;
   // The river's line, drawn from the seed here, before the roads are laid (they draw nothing from it, so every field draws
   // what it always did): its middle in each column, metres north of the attacker's edge, and its half-width there.
   const flow = place.river ? { base: h * (0.46 + 0.04 * rng.next()), amp: 60 + 50 * rng.next(), ph: rng.range(0, 6) } : null;
@@ -860,6 +866,14 @@ export function builtShare(f: LandField): number {
   let n = 0;
   for (const k of f.ground) { const g = GROUNDS[k]; if (g === 'buildings' || g === 'suburb' || g === 'industry') n++; }
   return n / f.ground.length;
+}
+
+/**
+ * The seed a capital's or a city's street plan is laid from (b618): a real town's own, from its name, so it is the same
+ * every time it is fought and no two cities share one; the battle's seed for a practice ground (no place on the map).
+ */
+export function planSeed(place: LandPlace, seed: number): number {
+  return place.region >= 0 && place.town ? hashString(`streets:${place.town}`) : seed;
 }
 
 /** Whether the place is fought in a capital's or a city's streets (layCity): an urban province is a city at least. */

@@ -63,6 +63,24 @@ describe('the field is built from the province', () => {
     // The new grounds come after the old, whose codes saved fields keep.
     expect(GROUNDS.slice(13)).toEqual(['suburb', 'industry', 'park']);
   });
+  it("a real city's street plan is its own (the design director, b618): the same every battle, never another city's", () => {
+    const at = (town: string, region: number, seed: number) => {
+      const t = sampleTicket('urban', 1.2, { town: 'city', seed });
+      return buildField({ ...t.place, region, town, name: town }, seed);
+    };
+    const plan = (f: ReturnType<typeof buildField>) => JSON.stringify([f.town, f.landmark, f.storeys]);
+    // Warsaw is laid out alike however the battle falls; Lodz is not Warsaw.
+    expect(plan(at('Warsaw', 36, 11))).toBe(plan(at('Warsaw', 36, 12)));
+    expect(plan(at('Warsaw', 36, 11))).not.toBe(plan(at('Lodz', 37, 11)));
+    // Its streets and the roads through it are the same cells every time; everything else is the battle's own: the
+    // ground before the city differs from battle to battle.
+    const roads = (f: ReturnType<typeof buildField>) => f.ground.map((k) => +(GROUNDS[k] === 'road')).join('');
+    expect(roads(at('Warsaw', 36, 11))).toBe(roads(at('Warsaw', 36, 12)));
+    const front = (f: ReturnType<typeof buildField>) => f.ground.slice(0, f.cols * 10).filter((k) => GROUNDS[k] !== 'road').join(',');
+    expect(front(at('Warsaw', 36, 11))).not.toBe(front(at('Warsaw', 36, 12)));
+    // A practice ground's town is no place on the map: it keeps the battle's plan, a new one each fight.
+    expect(plan(at('Millbrook', -1, 11))).not.toBe(plan(at('Millbrook', -1, 12)));
+  });
 });
 
 describe('blocks from divisions', () => {
