@@ -13,14 +13,28 @@ sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "land")))
 
 import sets_east  # noqa: E402
 
-SOLDIER = "/mnt/project-files/battle-models/land/soldier/soldier_SOV.glb"
+SOLDIER = "/mnt/project-files/battle-models/land/soldier/soldier_SOV{}.glb"
 # (the glb carries paint names only, the game colours by them; these are soldier_sov.py's picture colours)
 SOV_LOOK = {"tunic": "7B7748", "trousers": "6C6943", "boots": "26211D", "straps": "5B4A33", "helmet": "4E5A3A",
             "pack": "7A7154", "skin": "BDA08E", "wood": "6B4429", "steel": "34363A", "eye": "2A2420", "leather": "3A2E25",
             "blanket": "675D4E"}
-# (where each rifleman walks, his clip and how far into it: beside and behind the tank, on the verges)
-MEN = [(17.0, -3.6, "walk", 0.1), (13.5, -4.4, "walk", 0.55), (10.0, -3.4, "walk", 0.3), (6.5, -4.6, "advance", 0.2),
-       (15.0, 3.7, "walk", 0.8), (11.0, 4.3, "advance", 0.5), (7.0, 3.6, "walk", 0.9), (2.5, -4.0, "walk", 0.45)]
+# (where each rifleman walks, his clip and how far into it, his dress: beside and behind the tank, on the verges;
+#  padded jackets and fur caps, a few in white snow suits)
+MEN = [(17.0, -3.6, "walk", 0.1, "_winter"), (13.5, -4.4, "walk", 0.55, "_snow"), (10.0, -3.4, "walk", 0.3, "_winter"),
+       (6.5, -4.6, "advance", 0.2, "_winter"), (15.0, 3.7, "walk", 0.8, "_snow"), (11.0, 4.3, "advance", 0.5, "_winter"),
+       (7.0, 3.6, "walk", 0.9, "_winter"), (2.5, -4.0, "walk", 0.45, "_snow")]
+
+
+def colours_of(dress):
+    """A dress's own colours (its json's "colours"), else the summer man's."""
+    import json
+    if not dress:
+        return SOV_LOOK
+    try:
+        with open(SOLDIER.format(dress)[:-4] + ".json") as f:
+            return json.load(f).get("colours") or SOV_LOOK
+    except OSError:
+        return SOV_LOOK
 
 
 def extra(put):
@@ -33,15 +47,16 @@ def extra(put):
     ob, arm = works.to_scene(v.m, dust_hex=ground.KINDS["winter"][3])
     arm.location = (21.0, 0.4, 0.0)
     arm.rotation_euler = (0.0, 0.0, math.radians(4.0))
-    for x, y, clip, at in MEN:
+    for x, y, clip, at, dress in MEN:
         before = set(bpy.data.objects)
-        bpy.ops.import_scene.gltf(filepath=SOLDIER)
+        bpy.ops.import_scene.gltf(filepath=SOLDIER.format(dress))
+        look = colours_of(dress)
         new = [o for o in bpy.data.objects if o not in before]
         a = next(o for o in new if o.type == "ARMATURE")
         for o in new:
             for slot in getattr(o, "material_slots", []):
                 m = slot.material
-                hexc = SOV_LOOK.get(m.name.split(".")[0]) if m else None
+                hexc = look.get(m.name.split(".")[0]) if m else None
                 if hexc and m.node_tree:
                     b = m.node_tree.nodes.get("Principled BSDF")
                     b.inputs["Base Color"].default_value = (*hex_rgb(hexc), 1.0)
