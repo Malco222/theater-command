@@ -17,6 +17,7 @@ import { SKY, type Band } from './book';
 import { bomberOf, designYear, fighterOf } from './doctrine';
 import { bomberGuns, fighterGuns } from './guns';
 import { groundOf } from './ground';
+import { cloudOf } from './sky';
 import type { AirOutcome, AirPlace } from './types';
 
 /**
@@ -102,6 +103,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
   });
   const when = { year: turnToDate(g.turn).year, month: turnToDate(g.turn).month };
   const models = Object.fromEntries([...new Set([nat, defNat, ...att.map((f) => f.nat), ...def.map((f) => f.nat)])].map((n) => [n, { ftr: fighterOf(n, designYear(g, n, 'fighters')), bmr: bomberOf(n, designYear(g, n, 'bombers')) }]));
+  const seed = hashString(`airbattle:${g.seed}:${g.turn}:${kind}:${target}:${nat}:${(g.flags.airBattles ?? 0) + 1}`);
   const place: AirPlace = {
     kind, mission: m, target, name: a.place, night, nat, radar: !!a.radar,
     I: C.intensity[m as 'bomb' | 'night' | 'superiority'] ?? 1,
@@ -124,11 +126,13 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     guns: Object.fromEntries(Object.entries(models).map(([n, k]) => [n, { ftr: fighterGuns(k.ftr, n, when), bmr: bomberGuns(k.bmr, n, when) }])),
     // The country round the target, turned as the board is (b384(j)).
     ground: groundOf(g, target, (x, y) => { const [rx, ry] = rot([(x - T.x) * AIR.kmPerUnit * 1000, -(y - T.y) * AIR.kmPerUnit * 1000]); return [SKY.target.x + rx, SKY.target.y + ry]; }),
+    // The sky that day over the target (sky.ts): drawn from the battle's own seed, so the same battle has the same sky.
+    cloud: cloudOf(T.x, T.y, when, seed),
   };
   const date = turnToDate(g.turn).label;
   const ticket: FieldTicket<AirPlace> = {
     domain: 'air', kind: 'field',
-    seed: hashString(`airbattle:${g.seed}:${g.turn}:${kind}:${target}:${nat}:${(g.flags.airBattles ?? 0) + 1}`),
+    seed,
     turn: g.turn, date,
     title: m === 'superiority' ? `The fight for the sky over ${a.place}` : `The air battle over ${a.place}`,
     place,

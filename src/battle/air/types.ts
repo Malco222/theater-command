@@ -11,6 +11,7 @@ import type { Band } from './book';
 import type { AirGround } from './ground';
 import type { Form, Pass, Style, When } from './doctrine';
 import type { Loadout } from './guns';
+import type { AirCloud } from './sky';
 
 export type AirKind = 'ftr' | 'bmr';
 
@@ -174,6 +175,8 @@ export interface AirPlace {
   from?: 'land' | 'sea' | 'both';
   /** The country round the target, in board metres (ground.ts): absent, the page draws a plain country. */
   ground?: AirGround;
+  /** The sky that day (sky.ts): a cloud deck under the bombers or scattered cumulus, and one cloud base and top drawn from the table's deck ranges. Shown, never counted. */
+  cloud?: AirCloud;
   /** Fighter pilots who come down over this side's ground fly again at this rate (AIR.pilots.home, away). */
   saved: Record<Side, number>;
 }
