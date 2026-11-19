@@ -312,10 +312,15 @@ def _band(z, z_lo, z_hi):
 
 def _quilting(shell, J, LM, parts, z_lo, z_hi, force=None, Q=None):
     """The quilting's extra thickness at each face of `shell` (a ShellField), on `parts`, kept between z_lo and z_hi
-    (the body's rows read at Q, where each face's cloth stands)."""
+    (the body's rows read at Q, where each face's cloth stands); on the body drawn flat under the belt, which cinches
+    the padding (its tubes' crests stood out between the belt's points, through it at the back)."""
+    zc = LM["Z"](1.0)                                     # (the belt's middle, as soldier.py's build_kit lays it)
+    body = list(QUILT_BONES).index("body")
+
     def more(Fc):
-        u, sp, h, k = _rows(Fc, shell.Wf, shell.names, J, parts, force, Q)[:4]
-        return _tubes(u, sp, h) * k * _band(Fc[:, 2], z_lo, z_hi)
+        u, sp, h, k, _, best = _rows(Fc, shell.Wf, shell.names, J, parts, force, Q)
+        cinch = np.where(best == body, 1.0 - _band(Fc[:, 2], zc - 0.055, zc + 0.045), 1.0)
+        return _tubes(u, sp, h) * k * cinch * _band(Fc[:, 2], z_lo, z_hi)
     return more
 
 
@@ -430,9 +435,12 @@ def padded(man, J, LM, layers, dress):
     tunic.add(Blend(sk, hp, 0.05), 0.02)
     if quilt:
         _QUILT_SRC.extend([
-            dict(paint="tunic", group="top", field=top, bvh=bvh_t, Wf=tights.Wf, names=tights.names, parts=("body", "arm"), band=QB["jacket"], force=None),
-            dict(paint="tunic", group="skirt", field=sk, bvh=bvh_s, Wf=skirt.Wf, names=skirt.names, parts=("body",), band=QB["skirt"], force="body"),
-            dict(paint="tunic", group="skirt", field=hp, bvh=bvh_t, Wf=tights.Wf, names=tights.names, parts=("body",), band=QB["skirt"], force="body")])
+            dict(paint="tunic", group="top", field=top, bvh=bvh_t, Wf=tights.Wf, names=tights.names, parts=("body", "arm"), band=QB["jacket"], force=None,
+                 N=N_t, off=off_top),
+            dict(paint="tunic", group="skirt", field=sk, bvh=bvh_s, Wf=skirt.Wf, names=skirt.names, parts=("body",), band=QB["skirt"], force="body",
+                 N=N_s, off=off_sk),
+            dict(paint="tunic", group="skirt", field=hp, bvh=bvh_t, Wf=tights.Wf, names=tights.names, parts=("body",), band=QB["skirt"], force="body",
+                 N=N_t, off=off_hp)])
         print("  SOV quilting: tubes in the jacket's thickness, body, skirt and sleeves")
     else:
         # the hood's cloth gathered round the neck and lying on the shoulders, all round (the hood itself rides the head)
@@ -445,9 +453,15 @@ def padded(man, J, LM, layers, dress):
     # the front edge: the right side's edge lapped over the left, from the collar to the hem
     nmid, nfwd, nrx, nry = LM["neck_ring"]
     top = nmid + nfwd * nrx
-    p, nrm = on_surface(tunic, (0.45, 0.012, (top[2] - 0.02 + LM["hem"]) / 2), (-1.0, 0.0, 0.0))
-    half = (top[2] - 0.02 - LM["hem"]) / 2
-    tunic.add(RoundBox(p - nrm * 0.004, (0.006, 0.02, half), 0.005, frame_from(nrm, (0.0, 0.0, 1.0))), 0.006)
+    # (in pieces down the cloth, each on it: one straight edge stood 5 cm proud of the throat, its top button with it)
+    # (twelve pieces, each about 5 cm: longer ones stood a few mm proud at their ends where the chest turns back to the
+    #  throat, and the thinned mesh folded over the step)
+    zs = np.linspace(top[2] - 0.02, LM["hem"] + 0.03, 13)         # (to 3 cm above the hem: the hem curls back under there)
+    ps = [on_surface(tunic, (0.45, 0.012, z), (-1.0, 0.0, 0.0))[0] for z in zs]
+    for a, b in zip(ps[:-1], ps[1:]):
+        p, nrm = on_surface(tunic, (0.45, 0.012, (a[2] + b[2]) / 2), (-1.0, 0.0, 0.0))
+        along = (a - b) / np.linalg.norm(a - b)
+        tunic.add(RoundBox(p - nrm * 0.004, (0.006, 0.02, np.linalg.norm(a - b) / 2 + 0.004), 0.005, frame_from(nrm, along)), 0.006)
     tunic.cut(HalfSpace((0.0, 0.0, LM["hem"]), (0.0, 0.0, -1.0)), 0.004)
     LM["front_edge"] = (top[2] - 0.035, LM["hem"] + 0.03)
     # ---- the padded trousers: fuller all the way down, drawn in where they go into the felt boots
@@ -489,7 +503,7 @@ def build_kit(J, spec, body_ls, Z=None):
     if spec.get("dress"):
         for z in np.linspace(Z(1.43), Z(1.11), 5):                     # (the jacket's five, on its lapped front edge)
             p, nrm = on_surface(tunic, (0.45, 0.012, z), (-1.0, 0.0, 0.0))
-            g.tube(p - nrm * 0.001, p + nrm * 0.0055, 0.0085, 0.0075, "steel", 8)
+            g.tube(p - nrm * 0.004, p + nrm * 0.0055, 0.0085, 0.0075, "steel", 8)   # (backs deep: the thinned cloth can lie 2-3 mm under the field)
         out["details"] = (g.build("details"), None)
         # the ammunition pouches again, each cell made on its own and the six joined: on the padded jacket the cells'
         # anchors tilt with the tubes, and two cells meeting at a thin seam came out as shards when made as one
@@ -634,7 +648,7 @@ SHADE = {"seam": 0.75, "wear": 0.82, "grey": 0.85}
 SEAM_HALF = 0.005       # (each seam a line 1 cm wide: the near model is cut along both its edges and the faces between
                         #  painted dark, since its points lie 2 to 3 cm apart and a line laid on the points missed most)
 SEAM_REACH = 0.35       # (a seam whose middle is in the quilted zone is cut whole, its far edge up to this much outside)
-SEAM_LEAST = 2.5e-4     # (a seam's piece smaller than this, m2, is a scrap at a zone's edge: left plain)
+SEAM_LEAST = 5e-4       # (a seam's piece smaller than this, m2, is a scrap at a zone's edge: left plain)
 
 
 def _seam_field(P, paint, J, force=None):
@@ -643,8 +657,8 @@ def _seam_field(P, paint, J, force=None):
     as in ShellField); taken from the cloth it lies on (the least of their fields there), blended with any other within
     its smooth join of that one, as the surface is. Returns w (its place across the rows, in spacings: a seam at every
     whole number), a seam's half-width in those units, the rows all round, how far inside the quilted zone it is
-    (above 0: quilted), and its part (a seam runs only between points of one part). On the body u is read at the
-    cloth point itself (the tubes' rows were laid where the cloth stands). `force` counts every point to that part."""
+    (above 0: quilted), and its part (a seam runs only between points of one part). On the body u is read where that
+    shell face's cloth stands (as the tubes' rows were laid). `force` counts every point to that part."""
     n = len(P)
     w, hw, rnd, q, key = np.zeros(n), np.full(n, 0.1), np.ones(n), np.full(n, -1.0), np.full(n, -1)
     src = [s for s in _QUILT_SRC if s["paint"] == paint]
@@ -660,7 +674,10 @@ def _seam_field(P, paint, J, force=None):
             foot[j], fi[j] = loc, idx
         Wf = s["Wf"][fi]
         fo = force or s["force"]
-        u, sp, h, k, _, best = _rows(foot, Wf, s["names"], J, s["parts"], fo, P)
+        # (the body's rows were laid where each shell face's cloth stands, Q = face + normal x its offset before the
+        #  tubes: read there too, not at the cloth point, which on the skirt and belt lies 3 to 8 mm round from it)
+        Pu = foot + s["N"][fi] * np.asarray(s["off"])[fi][:, None] if "off" in s else P
+        u, sp, h, k, _, best = _rows(foot, Wf, s["names"], J, s["parts"], fo, Pu)
         per = _rows(P, Wf, s["names"], J, s["parts"], fo)[4]                  # (the line's width on the cloth itself)
         Ws.append(u / sp)
         HW.append(SEAM_HALF / np.maximum(per * sp, 1e-6))
@@ -920,6 +937,104 @@ def shade_dress(body, J, LM, dress):
     return stats
 
 
+FOLD_DOT = -0.5         # (a face turned more than 120 degrees from a neighbour: a fold, or a sharp crease)
+FOLD_LEAST = 2e-6       # (m2: a needle thinner than this, as the cut along the paints leaves, shows nothing and is left)
+FOLD_PAINTS = ("tunic", "trousers", "boots", "leather")     # (the dress and the soles; the face, shared, left as it is)
+FOLD_OFF = 0.001        # (m: how far a smoothed point may leave the surface the thinning left)
+
+
+def _unfold(body, rounds=12):
+    """Smooths out the folds the thinning left where they can be seen: a face turned over onto its neighbours, whose
+    back a two-sided material draws as a black needle or patch. A fold counts if, from some way round (26 of them), a
+    ray from outside meets that face's back first. Its corners are drawn toward their neighbours' middle, and it is
+    looked for again (smoothing can turn another over), until none is seen. Returns (seen at first, seen at the end)."""
+    import bmesh
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+    me = body.data
+    ok = [_paint_name(mt) in FOLD_PAINTS for mt in me.materials]
+    ways = [Vector((i, j, k)).normalized() for i in (-1, 0, 1) for j in (-1, 0, 1) for k in (-1, 0, 1) if (i, j, k) != (0, 0, 0)]
+    bm = bmesh.new()
+    bm.from_mesh(me)
+
+    def seen_backs():
+        bm.normal_update()
+        bm.faces.ensure_lookup_table()
+        bvh = BVHTree.FromBMesh(bm)
+        out = []
+        for f in bm.faces:
+            if not ok[f.material_index] or f.calc_area() < FOLD_LEAST:
+                continue
+            n = f.normal
+            if not any(n.dot(g.normal) < FOLD_DOT for e in f.edges for g in e.link_faces if g is not f):
+                continue
+            c = f.calc_center_median()
+            for w in ways:
+                if w.dot(n) > -0.2:                              # (only ways from which its back is turned to the eye)
+                    continue
+                hit = bvh.ray_cast(c + w * 0.6, -w, 0.7)
+                if hit[2] == f.index:
+                    out.append(f)
+                    break
+        return out
+    bm.faces.ensure_lookup_table()
+    was = BVHTree.FromBMesh(bm)                                 # (the surface as the thinning left it)
+    first = backs = seen_backs()
+    for _ in range(rounds):
+        if not backs:
+            break
+        verts = list({v for f in backs for v in f.verts})
+        for _ in range(3):
+            bmesh.ops.smooth_vert(bm, verts=verts, factor=0.5, use_axis_x=True, use_axis_y=True, use_axis_z=True)
+            # (drawn along the surface, not into it: back onto it, within FOLD_OFF; smoothing alone sank the throat 1.5 cm)
+            for v in verts:
+                q = was.find_nearest(v.co)[0]
+                if q is not None and (v.co - q).length > FOLD_OFF:
+                    v.co = q + (v.co - q).normalized() * FOLD_OFF
+        backs = seen_backs()
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+    return len(first), len(backs)
+
+
+def _seat_buttons(m):
+    """Sets the jacket's five buttons on the body's mesh as it came out (they were laid on the cloth's field, which the
+    thinned mesh can lie some millimetres under, most at the throat where the front edge meets the collar): each moved
+    along its own axis until its back is 4 mm into the cloth. Returns how far each moved (mm)."""
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+    det = [o for o in m["kit"] if o.name.split(".")[0] == "details"]
+    if not det:
+        return []
+    ob, body = det[0], m["body"]
+    bvh = BVHTree.FromPolygons([v.co[:] for v in body.data.vertices], [tuple(p.vertices) for p in body.data.polygons])
+    n = len(ob.data.vertices)
+    V = np.zeros(n * 3)
+    ob.data.vertices.foreach_get("co", V)
+    V = V.reshape(-1, 3)
+    order = np.argsort(V[:, 2])
+    moved = []
+    for g in np.split(order, np.flatnonzero(np.diff(V[order, 2]) > 0.02) + 1):
+        P = V[g]
+        c = P.mean(axis=0)
+        ax = np.linalg.eigh(np.cov((P - c).T))[1][:, 0]
+        ax = ax if ax[0] > 0 else -ax
+        t = (P - c) @ ax
+        back = P[t < t.min() + 5e-4].mean(axis=0)
+        hit = bvh.ray_cast(Vector(back + ax * 0.03), Vector(-ax), 0.08)[0]
+        if hit is None:
+            moved.append(None)
+            continue
+        d = (np.array(hit) - back) @ ax - 0.004
+        V[g] += ax * d
+        moved.append(round(float(d) * 1000, 1))
+    ob.data.vertices.foreach_set("co", V.ravel())
+    ob.data.update()
+    S.mark_rest(ob)
+    return moved
+
+
 _assemble = S.assemble
 
 
@@ -928,6 +1043,9 @@ def assemble(nation, weapon="rifle", seed=None):
         m = _assemble(nation, weapon, seed)
         dress = S.NATION_KIT.get(nation, {}).get("dress")
         if dress:
+            print("  SOV folds seen from outside (before, after smoothing):", _unfold(m["body"]))
+            S.mark_rest(m["body"], dusty=True)
+            print("  SOV buttons set on the cloth (mm moved, top first):", _seat_buttons(m)[::-1])
             m["body_uncut"] = m["body"].data.copy()          # (the mid and far are thinned from the body before its seams)
             m["shade"] = shade_dress(m["body"], m["J"], m["LM"], dress)
     finally:
