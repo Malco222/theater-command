@@ -54,3 +54,14 @@ the single far salvo every 15 to 30 s (`far_guns_01..03`), which the rumble alre
   heard coming from kilometres off, as in Bombers overhead.
 - The rest (fighter passes within 300 m, flak firing and bursting 1.5 to 4 s later, `plane_down` and
   `plane_explode` as big moments) is already in `mix.json` `air`; the scenes follow it.
+
+## 5. Grit (from the art director, 19 Nov 03:15Z; needs Brian's approval like the rest)
+
+- **Fix first: the thick-of-it bed.** The pack's `battle_loop`, which plays in the thick of a land fight, measures
+  26% of its energy under 150 Hz and 6% over 2 kHz, with a 16.9 dB loud-to-quiet gap. Brian's reference clips are
+  46 to 75% low, 2 to 4% high, and never drop to silence. Item 2 (front rumble that never leaves) is part of the
+  answer; a heavier real take for `battle_loop`, or a low layer under it, is the rest. Recorded library only.
+- **Debris timing for big guns.** `impacts` lays the falling earth from 0.6 to 0.9 s after the flash. The effects
+  thread's new debris shower lands 1.2 to 3.3 s after a 105 mm's flash. Start the patter at about 1.2 s for big
+  guns, or key it to the shower's landings, so you hear what you see.
+
