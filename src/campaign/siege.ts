@@ -44,7 +44,7 @@ export const SIEGE = data as unknown as {
   capital: number; capitalAfter: number; capitalYear: number;
   driveOut?: boolean;
   startIn?: { nat: string; corps: string; name: string; gen?: string; trait?: string; xp?: number }[];
-  ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sea: { after: number; blockade: number }; relieved: { months: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>>; great?: { works: number; on?: boolean; field?: number } };
+  ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sea: { after: number; blockade: number }; relieved: { months: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>>; great?: { works: number; on?: boolean; field?: number }; lateGarrison?: { stops: number[]; str: number; org: number } };
 };
 
 /** True where towns are garrisoned and besieged: the grand campaign. A historical scenario is fought as it always was. */
@@ -119,6 +119,16 @@ export const GREAT = { on: forcedGreat !== undefined ? !!forcedGreat && forcedGr
  */
 export function greatCity(g: Game, r: Region): boolean {
   if (!GREAT.on || !SIEGE.ai.great || !siegeRules(g)) return false;
+  const size = townSize(g, r);
+  return size === 'capital' || (size === 'city' && !!r.fort && r.fort.lv >= SIEGE.ai.great.works);
+}
+
+/**
+ * A capital, or a city whose works stand at the great-city level (siege.json, ai.great.works), whether or not ruling
+ * 139's own switch is on: the places ruling 232's late garrison (rider b587) looks after.
+ */
+export function greatPlace(g: Game, r: Region): boolean {
+  if (!SIEGE.ai.great || !siegeRules(g)) return false;
   const size = townSize(g, r);
   return size === 'capital' || (size === 'city' && !!r.fort && r.fort.lv >= SIEGE.ai.great.works);
 }

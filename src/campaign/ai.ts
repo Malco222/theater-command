@@ -17,7 +17,7 @@ import { SUPPORT } from './support';
 import { aiBridges, aiEngineers } from './engineers';
 import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, useLift } from './navy';
 import { shoreAI } from './fleets';
-import { shoreOpen, stormHeldBy } from './history';
+import { shoreOpen, stopOf, stormHeldBy } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, onTheAttack, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './world';
@@ -25,7 +25,7 @@ import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules,
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { lineAny, lineGives, lineLeaves, lineShut } from './line';
 import { hashString } from '../core/rng';
-import { GREAT, SIEGE, arrive, besieged, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
+import { GREAT, SIEGE, arrive, besieged, driveOut, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
@@ -224,7 +224,31 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
   };
   for (const r of g.regions) {
     if (r.ctrl !== nat || besieged(g, r)) continue;
-    const inside = garrisonOf(r).filter((c) => c.nat === nat);
+    let inside = garrisonOf(r).filter((c) => c.nat === nat);
+    // Ruling 232, riders b587 and b588 (the late garrison): with an enemy field army one march away, a computer staff
+    // at the dial's looser stops orders into its capital, or a great city of its own, up to the town's room, its
+    // worn corps: those standing in the province (the ones that fell back into it among them), and those in a
+    // province next door that can march in this month, the most worn first. Fresh corps stay in the field. It is an
+    // order like any garrison (232(d)), its month spent, given when the staff's month opens and again when its moves
+    // are made; a beaten army's retreat still never goes inside (232(a)).
+    // (Worn is read against the corps' own size, ruling 234's rider b594: a row the record keeps small is not worn at its full.)
+    const LATE = SIEGE.ai.lateGarrison;
+    if (LATE && driveOut(g) && LATE.stops.includes(stopOf(g)) && r.owner === nat && greatPlace(g, r) && !sacks.has(r.id) && near(r, 1)) {
+      const room = roomIn(g, r);
+      const worn = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && c.leave === undefined && (c.str / (c.full ?? 1) < LATE.str || c.org < LATE.org);
+      const wear = (x: Corps, y: Corps): number => x.str * x.org - y.str * y.org;
+      for (const c of r.units.filter(worn).sort(wear)) {
+        if (garrisonOf(r).length >= room) break;
+        garrison(g, c);
+      }
+      // (b588: one march wider, worn corps only.)
+      const beside = r.nb.map((j) => g.regions[j]).filter((q) => allied(g, nat, ctl(g, q)) && !hostileUnits(g, q, nat).length).flatMap((q) => q.units.filter(worn)).sort(wear);
+      for (const c of beside) {
+        if (garrisonOf(r).length >= room) break;
+        if (moveCorps(g, c, r)) garrison(g, c);
+      }
+      inside = garrisonOf(r).filter((c) => c.nat === nat);
+    }
     if (!post) {
       if (inside.length && !near(r, 2)) for (const c of [...inside]) takeField(g, c);
       continue;
