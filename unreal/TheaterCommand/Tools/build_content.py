@@ -634,8 +634,28 @@ def build_land():
     # quarters, each part with a crop of its own; one part in five is green, the rest wheat and fallow.)
     big = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, (cover, "G"), -0.5, -1300, 2500), 1000.0, -1150, 2500), -1000, 2500)
     grid = lerp(m, rows, plus(m, times(m, rows, 0.42, -1300, 2600), 0.37 * 64.0, -1150, 2600), big, -850, 2550)
-    home = one_in(m, unreal.MaterialExpressionFloor, grid, -700, 2500)
+    square_of = one_in(m, unreal.MaterialExpressionFloor, grid, -700, 2500)
     cell = one_in(m, unreal.MaterialExpressionFrac, grid, -700, 2620)
+    # (The art director's ruling of 19 November 2026: "merge 1 to 4 squares into rectangles so it reads as
+    # patchwork". The squares are taken in blocks of two by two, and each block throws its own dice: a quarter of the
+    # blocks are one field, a quarter two fields side by side, a quarter one above the other, and a quarter four
+    # single squares. A joined field reads its crop at the block's own corner, so its squares are one colour.
+    # "SquareJoin" at nought lays every square alone, as before.)
+    block = times(m, one_in(m, unreal.MaterialExpressionFloor, times(m, square_of, 0.5, -700, 2380), -550, 2380), 2.0, -400, 2380)
+    block_dice = picture(m, "Fields", times(m, plus(m, block, 0.5, -250, 2380), 1.0 / 64.0, -100, 2380), 50, 2380, numbers=True)
+    join_u = one_in(m, unreal.MaterialExpressionSaturate,
+                    times(m, plus(m, one_in(m, unreal.MaterialExpressionFrac, times(m, (block_dice, "R"), 23.1, 200, 2340), 300, 2340), -0.5, 400, 2340), 1000.0, 500, 2340), 600, 2340)
+    join_v = one_in(m, unreal.MaterialExpressionSaturate,
+                    times(m, plus(m, one_in(m, unreal.MaterialExpressionFrac, times(m, (block_dice, "G"), 31.7, 200, 2420), 300, 2420), -0.5, 400, 2420), 1000.0, 500, 2420), 600, 2420)
+    joined = scalar(m, "SquareJoin", 1.0, 600, 2300)
+    home = pair(m,
+                lerp(m, node_from(m, unreal.MaterialExpressionComponentMask, square_of, 700, 2340, r=True, g=False, b=False, a=False),
+                     node_from(m, unreal.MaterialExpressionComponentMask, block, 700, 2380, r=True, g=False, b=False, a=False),
+                     times(m, join_u, joined, 750, 2300), 850, 2340),
+                lerp(m, node_from(m, unreal.MaterialExpressionComponentMask, square_of, 700, 2420, r=False, g=True, b=False, a=False),
+                     node_from(m, unreal.MaterialExpressionComponentMask, block, 700, 2460, r=False, g=True, b=False, a=False),
+                     times(m, join_v, joined, 750, 2460), 850, 2420),
+                1000, 2380)
     lot = picture(m, "Fields", times(m, plus(m, home, 0.5, -550, 2500), 1.0 / 64.0, -400, 2500), -250, 2500, numbers=True)
     # (which squares are split, and how: a third of them; of those, half in two and half in four)
     dice = one_in(m, unreal.MaterialExpressionFrac, times(m, (lot, "R"), 13.7, -100, 2480), 50, 2480)
@@ -671,7 +691,10 @@ def build_land():
     grain = times(m, grain, plus(m, times(m, times(m, furrow, 0.03, 3450, 3450), work, 3550, 3450), 1.0, 3650, 3450), 3750, 3300)
     # (From high up the squares are smaller than a point of the screen and their crops only speckle it: there they
     # are drawn toward the plain's own mean, to about a third of their contrast.)
-    grain = lerp(m, lerp(m, vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), 3750, 3500), vector(m, "CoolFieldMean", (0.98, 0.98, 0.94, 1.0), 3750, 3560), cool_paint, 3800, 3530), grain, lerp(m, 0.33, 1.0, work, 3850, 3500), 3950, 3400)
+    grain = lerp(m, lerp(m, vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), 3750, 3500), vector(m, "CoolFieldMean", (0.98, 0.98, 0.94, 1.0), 3750, 3560), cool_paint, 3800, 3530), grain,
+                 # (the same ruling: "halve the step between neighbouring fields": from near, a field keeps under half of
+                 # its own crop's tone over the plain's mean, where it kept all of it)
+                 lerp(m, 0.33, scalar(m, "SquareNear", 0.7, 3850, 3560), work, 3850, 3500), 3950, 3400)
     # (The art director's world-detail order, item 2: the squares now end where the survey ended, across open
     # farmland, and their gold stopped there at a ruled line. A square's blue is how wholly the country is
     # square-field country, from nought at its edge to one well inside: at the edge a square's crops are taken back
