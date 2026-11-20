@@ -17,7 +17,7 @@ export const DAMAGE = data as unknown as {
   guns: { perDiv: number; most: number };
   battle: { field: number; streets: number; storm: number; repulsed: number; guns: number; gunsMost: number; full: number };
   repair: { months: number; least: number };
-  ai: { share: number; reserve: number };
+  ai: { share: number; reserve: number; quiet: number };
   worth: number;
 };
 

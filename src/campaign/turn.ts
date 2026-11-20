@@ -2027,7 +2027,7 @@ export function cityDamage(g: Game, region: number): RepairView | null {
   return damageRules(g) ? repairView(g, region, g.human) : null;
 }
 
-/** Every damaged town the player holds, the ones a repair pays back soonest first. */
+/** Every damaged town the player holds, the ones whose damage costs him most first. */
 export function damagedCities(g: Game): RepairView[] {
   return g.human && damageRules(g) ? damagedTowns(g, g.human) : [];
 }

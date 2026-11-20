@@ -2,7 +2,7 @@
 // bombs, shells or the fighting have damaged (citydamage.ts) pays that much less until its holder pays to repair it.
 // The price is a few months of what the damage costs (damage.json 'repair'), paid at once and done at once; the
 // player may take a repair back, with his money, in the month he ordered it. Computer nations repair out of a purse
-// they fill from their income, the towns that pay back soonest first.
+// they fill from their income, the towns whose damage costs them most first, away from the front line.
 //
 // One price and one list for both interfaces: what can be repaired, what it costs, what it brings back each month.
 
@@ -51,7 +51,7 @@ export function hitPoints(kind: HitKind, weight: number, stopped = 0, night = fa
 
 /** What lasting damage to a town is worth to whoever did it, as a raid's achievement is counted (in aircraft). */
 export function cityWorthOf(g: Game, r: Region, pts: number): number {
-  if (!damageRules(g) || pts <= 0) return 0;
+  if (!damageRules(g) || pts <= 0 || !DAMAGE.worth) return 0;
   const room = Math.max(0, Math.min(pts, DAMAGE.most - damageOf(g, r) * 100));
   return (room / 100) * wholePay(g, r) * DAMAGE.worth;
 }
@@ -81,7 +81,7 @@ export function battleHit(g: Game, r: Region, kind: FightKind, divs: number, gun
 }
 
 function hurt(g: Game, r: Region, pts: number): CityHit | null {
-  const pay = wholePay(g, r);
+  const pay = DAMAGE.worth ? wholePay(g, r) : 0;
   const added = damageCity(g, r, pts);
   if (added <= 0) return null;
   const now = g.flags[damageKey(r.id)] ?? 0;
@@ -175,15 +175,14 @@ export function repairView(g: Game, region: number, viewer: string | null = g.hu
   };
 }
 
-/** Every damaged town a nation holds, the ones a repair pays back soonest first. */
+/** Every damaged town a nation holds, the ones whose damage costs it most first. */
 export function damagedTowns(g: Game, nat: string): RepairView[] {
   if (!damageRules(g) || !g.flags['dmg:any']) return [];
   const out: RepairView[] = [];
   for (const r of g.regions) if (r.ctrl === nat && damageOf(g, r) > 0) out.push(repairView(g, r.id, nat)!);
-  return out.sort((a, b) => soonest(a, b));
+  // (A repair is priced by what the damage costs, so every one pays back in about the same months: the dearest first.)
+  return out.sort((a, b) => b.lost - a.lost || b.pct - a.pct || a.region - b.region);
 }
-
-const soonest = (a: RepairView, b: RepairView): number => (b.lost > 0 ? a.cost / Math.max(1e-9, a.lost) : Infinity) - (a.lost > 0 ? b.cost / Math.max(1e-9, b.lost) : Infinity) || b.pct - a.pct || a.region - b.region;
 
 /** Every damaged town on the map, for the map's own marks: where, and how badly. */
 export function townsDamaged(g: Game): { region: number; town: string; damage: number; holder: string; hit: boolean }[] {
@@ -196,7 +195,7 @@ export function townsDamaged(g: Game): { region: number; town: string; damage: n
   return out;
 }
 
-/** What 'Repair all' would do: the towns it can pay for now, best first, and what is left over for want of money. */
+/** What 'Repair all' would do: the towns it can pay for now, the dearest first, and what is left over for want of money. */
 export interface RepairAll {
   /** Every damaged town the nation holds. */
   towns: RepairView[];
@@ -264,7 +263,7 @@ export function undoRepair(g: Game, nat: string, region: number): boolean {
   return true;
 }
 
-/** Repairs every town the treasury can pay for, the ones that pay back soonest first. Returns the towns repaired. */
+/** Repairs every town the treasury can pay for, the ones whose damage costs most first. Returns the towns repaired. */
 export function repairAll(g: Game, nat: string): string[] {
   const done: string[] = [];
   for (const t of repairAllPlan(g, nat).pick) if (repairCity(g, nat, t.region)) done.push(t.town);
@@ -275,9 +274,10 @@ export function repairAll(g: Game, nat: string): string[] {
 
 /**
  * A computer nation's repairs for the month (and the player's staff, when he has handed it the building desk). It
- * puts a share of its income by in a purse while it has damaged towns, and pays out of it for the towns that pay back
- * soonest, keeping a reserve in hand. It leaves alone a town under siege or hit this month. No dice: the same war
- * repairs the same towns. Returns the towns repaired.
+ * puts a share of its income by in a purse while it has damaged towns, and pays out of it for the towns whose damage
+ * costs it most, keeping a reserve in hand. It does not rebuild on the front line: it leaves alone a town under siege,
+ * one beside ground its enemies hold, and one hit in the last months ('quiet'). No dice: the same war repairs the same
+ * towns. Returns the towns repaired.
  */
 export function aiRepair(g: Game, nat: string): string[] {
   if (!damageRules(g) || !g.flags['dmg:any']) return [];
@@ -294,10 +294,12 @@ export function aiRepair(g: Game, nat: string): string[] {
   if (!towns.length) { delete g.flags[P]; return []; }
   const all = towns.reduce((s, t) => s + t.cost, 0);
   let purse = Math.min(all, (g.flags[P] ?? 0) + Math.max(0, income(g, nat)) * DAMAGE.ai.share);
-  towns.sort((a, b) => b.lost / b.cost - a.lost / a.cost || a.r.id - b.r.id);
+  towns.sort((a, b) => b.lost - a.lost || a.r.id - b.r.id);
+  const foes = new Set(n.atWar);
   const done: string[] = [];
   for (const t of towns) {
-    if (lastHit(g, t.r) === g.turn || besieged(g, t.r)) continue;
+    const hit = lastHit(g, t.r);
+    if ((hit !== undefined && g.turn - hit < DAMAGE.ai.quiet) || besieged(g, t.r) || t.r.nb.some((j) => foes.has(g.regions[j].ctrl))) continue;
     if (t.cost > purse || n.pp < t.cost + DAMAGE.ai.reserve) continue;
     n.pp -= t.cost;
     purse -= t.cost;

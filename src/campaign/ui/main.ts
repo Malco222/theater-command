@@ -3356,7 +3356,7 @@ function repairsBlock(): string {
     return `<div class="rrow down"><span><b>${esc(t.town)}</b> ${t.pct}% in ruins${t.hit ? ' <span class="tag bad">Hit this month</span>' : ''}</span><small>${cash(-t.lost, true)} a month · repair ${money(t.cost)} · pays back in ${t.months} month${t.months === 1 ? '' : 's'}${t.why && !t.poor ? ` · ${esc(t.why)}` : ''}</small><button class="btn small" data-act="repair" data-id="${t.region}" ${why === null ? '' : `disabled title="${esc(why)}"`}>Repair</button></div>`;
   };
   const most = 8;
-  const all = `<button class="btn small go" data-act="repairall" ${up && plan.pick.length ? '' : 'disabled'} title="Repairs the towns that pay back soonest first, as many as the treasury covers.">Repair all you can afford · ${money(plan.cost)}${plan.gain > 0 ? ` · ${cash(plan.gain, true)} a month` : ''}</button>`;
+  const all = `<button class="btn small go" data-act="repairall" ${up && plan.pick.length ? '' : 'disabled'} title="Repairs the towns whose damage costs you most first, as many as the treasury covers.">Repair all you can afford · ${money(plan.cost)}${plan.gain > 0 ? ` · ${cash(plan.gain, true)} a month` : ''}</button>`;
   return `<h3>Damaged towns <span class="inhand">${plan.towns.length} · costing you ${cash(-lost, true)} a month</span></h3>
       <p class="sub">Bombs, shells and the fighting leave towns in ruins, and a town pays as much less as lies in ruins. A repair costs a few months of what the damage costs, and is done at once.</p>
       <div class="rivers">${plan.towns.slice(0, most).map(row).join('')}</div>

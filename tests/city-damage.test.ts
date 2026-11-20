@@ -144,7 +144,8 @@ describe('what does the damage', () => {
     const hit = cityHit(g, r, 'raid', DAMAGE.raid.full)!;
     expect(hit.added).toBeCloseTo(DAMAGE.raid.points, 9);
     expect(hit.now).toBeCloseTo(DAMAGE.raid.points, 9);
-    expect(hit.worth).toBeGreaterThan(0);
+    // The air staffs weigh a raid as they always did (damage.json 'worth' is 0): the damage follows the raids they fly.
+    expect(hit.worth).toBe(0);
     expect(hit.words).toMatch(/in ruins/);
     expect(hit.words).not.toMatch(/output/);
     expect(lastHit(g, r)).toBe(g.turn);
@@ -260,13 +261,15 @@ describe('repairing', () => {
     expect(damageOf(g, berlin)).toBeCloseTo(0.3, 9);
   }, 60_000);
 
-  it('repair all: the towns that pay back soonest first, as many as the treasury covers', () => {
+  it('repair all: the towns whose damage costs most first, as many as the treasury covers', () => {
     const g = playing('GER');
     const towns = g.regions.filter((r) => r.ctrl === 'GER' && r.owner === 'GER' && r.fac > 0).slice(0, 4);
     towns.forEach((r, i) => damageCity(g, r, 20 + i * 10));
     const plan = repairAllOutlook(g)!;
     expect(plan.towns).toHaveLength(towns.length);
-    for (let i = 1; i < plan.towns.length; i++) expect(plan.towns[i].cost / plan.towns[i].lost).toBeGreaterThanOrEqual(plan.towns[i - 1].cost / plan.towns[i - 1].lost - 1e-9);
+    for (let i = 1; i < plan.towns.length; i++) expect(plan.towns[i].lost).toBeLessThanOrEqual(plan.towns[i - 1].lost);
+    // A repair is priced by what the damage costs, so each pays back in about the same months.
+    for (const t of plan.towns) expect(t.months).toBeCloseTo(plan.towns[0].months, 0);
     // With money for only the first, only the first.
     const first = plan.towns[0];
     g.nations.GER.pp = first.cost + 0.01;
@@ -282,25 +285,34 @@ describe('repairing', () => {
     expect(damagedCities(g)).toEqual([]);
   }, 60_000);
 
-  it('a computer nation repairs out of its purse, the town that pays back soonest first, never in the month it was hit', () => {
+  it('a computer nation repairs out of its purse, never on the front line or soon after a hit', () => {
     const g = grand();
     const n = g.nations.GER;
     const berlin = g.byName['Berlin'];
+    expect(berlin.nb.some((j) => n.atWar.includes(g.regions[j].ctrl))).toBe(false);
     damageCity(g, berlin, 30);
-    // Hit this month: left alone.
+    // Hit this month, or last: left alone.
+    n.pp = 1000;
+    expect(aiRepair(g, 'GER')).toEqual([]);
+    g.turn++;
     expect(aiRepair(g, 'GER')).toEqual([]);
     expect(damageOf(g, berlin)).toBeCloseTo(0.3, 9);
     g.turn++;
-    n.pp = 1000;
     let done: string[] = [];
     for (let k = 0; k < 24 && !done.length; k++) done = aiRepair(g, 'GER');
     expect(done).toEqual(['Berlin']);
     expect(damageOf(g, berlin)).toBe(0);
     expect(n.pp).toBeLessThan(1000);
+    // A town beside ground its enemies hold is on the front line: it waits for the front to move.
+    const front = g.regions.find((r) => r.ctrl === 'GER' && r.fac > 0 && r.nb.some((j) => n.atWar.includes(g.regions[j].ctrl)))!;
+    damageCity(g, front, 30);
+    g.turn += 2;
+    for (let k = 0; k < 12; k++) aiRepair(g, 'GER');
+    expect(damageOf(g, front)).toBeCloseTo(0.3, 9);
     // A poor nation keeps its reserve.
     const p = grand();
     damageCity(p, p.byName['Berlin'], 30);
-    p.turn++;
+    p.turn += 2;
     p.nations.GER.pp = DAMAGE.ai.reserve / 2;
     for (let k = 0; k < 12; k++) aiRepair(p, 'GER');
     expect(damageOf(p, p.byName['Berlin'])).toBeCloseTo(0.3, 9);
