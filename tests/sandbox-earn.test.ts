@@ -7,6 +7,7 @@ import { canBuildYet } from '../src/campaign/economy';
 import { createGame, setWar, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
+import { grantTech } from '../src/campaign/tech';
 import type { Game } from '../src/campaign/types';
 import { greatWarOf } from '../src/campaign/warclock';
 
@@ -133,6 +134,7 @@ describe('the four reforms', () => {
     const g = grand(5);
     setWar(g, 'GER', 'USA');
     g.flags['war:GER:USA'] = 15;
+    grantTech(g, 'USA', 'heavybombers');
     at(g, 41);
     expect(g.flags['event:luftwaffe-1944']).toBeUndefined();
     at(g, 42);

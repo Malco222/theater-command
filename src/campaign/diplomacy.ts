@@ -13,7 +13,7 @@ import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headlin
 import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
-import { techMonth } from './tech';
+import { hasTech, techMonth } from './tech';
 import { fleetsOnFall, gateShutSince } from './navy';
 import { airOnFall } from './air';
 import { recordFall } from './liberation';
@@ -25,7 +25,7 @@ import { mapDist2 } from './wrap';
 import { footingMonth } from './footing';
 import { weatherMonth } from './weather';
 import { guarantorsOf, type Guarantor } from './guarantees';
-import { warMonths } from './warclock';
+import { combatMonths, corpsTrade, factoriesHeld, peakCorps, warMonths } from './warclock';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -79,10 +79,12 @@ export interface DiploEvent {
   /** News of something won in the month just ended: the dispatch is dated to that month's last week, not to the new one. */
   past?: boolean;
   /**
-   * The sandbox stops (4 and 5) of the open grand campaign: the event is earned, not dated. Its 'from' is not read there,
-   * and these conditions must hold as well as 'if' (the sandbox playtest's lock sweep, finding 3). Stops 1 to 3 never read it.
+   * The sandbox stops (4 and 5) of the open grand campaign: the event is earned, not dated. Its 'from' is not read there;
+   * the conditions of 'if' must hold as well as the event's own, and, where 'any' is given, every condition of one of
+   * its lists: an earlier path on what the war has done, or the backstop of time at war (the sandbox playtest's lock
+   * sweep, finding 3; the historian's thresholds). Stops 1 to 3 never read it.
    */
-  earned?: { if: string[] };
+  earned?: { if?: string[]; any?: string[][] };
 }
 
 export const DIPLOMACY = data as unknown as {
@@ -636,6 +638,17 @@ export function holds(g: Game, cond: string): boolean {
     case 'since': return !!g.flags[a[0]] && g.turn - g.flags[a[0]] >= Number(a[1] ?? 1);
     // 'warFor:A,B,N': A and B are at war, and have been for N months or more (a war on at the start counts from month 1).
     case 'warFor': return warMonths(g, a[0], a[1]) >= Number(a[2]);
+    // The sandbox's earned paths (the historian's thresholds), read off what the war has done:
+    // 'held>=:SOV,0.5': the nation holds at least this share of the factories on its own first-day ground.
+    case 'held>=': return factoriesHeld(g, a[0]) >= Number(a[1]);
+    // 'trades:SOV,3': over the last 3 months it destroyed more enemy corps than it lost.
+    case 'trades': { const t = corpsTrade(g, a[0], g.turn - Number(a[1])); return t.destroyed > t.lost; }
+    // 'bled>=:GER,0.5': the corps it has lost reach this share of the most field corps it ever had at once.
+    case 'bled>=': { const p = peakCorps(g, a[0]); return p > 0 && corpsTrade(g, a[0], 0).lost >= Number(a[1]) * p; }
+    // 'combat>=:USA,15': months in which it lost or destroyed at least one corps.
+    case 'combat>=': return combatMonths(g, a[0]) >= Number(a[1]);
+    // 'foeTech:GER,heavybombers': a nation at war with it holds that technology.
+    case 'foeTech': return (N(a[0])?.atWar ?? []).some((f) => !!N(f)?.alive && hasTech(g, f, a[1]));
     case 'war': return !!N(a[0]) && !!N(a[1]) && atWar(g, a[0], a[1]);
     // No army of that alliance on the country's ground or on ground bordering it (Turkey, 1945: b528).
     case 'noArmyNear': {
@@ -961,7 +974,7 @@ export function monthlyDiplomacy(g: Game): void {
     const earned = open && !!e.earned && !!stopDef(g).ambitions;
     if (g.flags[`event:${e.id}`] || (g.turn < e.from && !earned) || (g.turn > e.to && !open)) continue;
     if (!(e.if ?? []).every((c) => holds(g, c))) continue;
-    if (earned && !e.earned!.if.every((c) => holds(g, c))) continue;
+    if (earned && !((e.earned!.if ?? []).every((c) => holds(g, c)) && (!e.earned!.any || e.earned!.any.some((l) => l.every((c) => holds(g, c)))))) continue;
     if (fire(g, e)) g.flags[`event:${e.id}`] = g.turn;
   }
   // (For 'taken': each watched place that stands in other hands, now that its flag is raised, is noted.)

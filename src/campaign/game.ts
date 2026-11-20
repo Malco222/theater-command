@@ -19,7 +19,7 @@ import { syncWings } from './carriers';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
 import { liftDates } from './lift';
-import { clockOf, dueOn, rowWarOn, startClock } from './warclock';
+import { clockOf, dueOn, notePeak, rowWarOn, startClock } from './warclock';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { crown } from './domination';
 import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
@@ -3595,6 +3595,7 @@ export function startPhase(g: Game, nat: string): void {
   // the first month it is at war with one of its foes.
   const clock = clockOf(g, nat);
   const began = clock && startClock(g, nat, clock);
+  notePeak(g, nat);
   // (A row's index in this list names it in 'wc:'.)
   for (const [i, row] of [...(setup as any).reinforcements, ...((setup as any).formations ?? [])].entries()) {
     const onClock = !!clock && row[1] === nat && row[0] >= clock.from;
