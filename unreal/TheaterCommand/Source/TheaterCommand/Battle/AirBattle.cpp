@@ -1215,20 +1215,20 @@ void AAirBattle::LaySky()
 				Pixels[Index] = FColor(Rgba[C], Rgba[C + 1], Rgba[C + 2], Rgba[C + 3]);
 			}
 			// (plain numbers, not colours: twice each is the share of the cloud's light; the edge held, not repeated)
-			CloudSheet = CampaignTextures::Create(Side, Side, Pixels, false, false, FName(TEXT("AirCloudSheet")));
+			// (a name of its own each battle: a second battle in one run would otherwise make its sheet over the first,
+			// still uncollected, and the engine destroys that one in place on the game thread; the pre-check, 22:11Z)
+			CloudSheet = CampaignTextures::Create(Side, Side, Pixels, false, false, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("AirCloudSheet")));
 		}
 	}
-	if (!CloudSheet)
-	{
-		if (CloudMaterial)
-		{
-			UE_LOG(LogTheater, Warning, TEXT("Air battle: the sheet of cloud shapes was not made: the clouds are soft discs."));
-		}
-		CloudMaterial = nullptr;
-	}
-	else if (!CloudMaterial)
+	// (the material asked first: with no M_Cloud no sheet is made, and its missing must still be said; the pre-check, 22:11Z)
+	if (!CloudMaterial)
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_Cloud is missing (run Tools/build_content.sh): the clouds are soft discs, not the sheet's shapes."));
+	}
+	else if (!CloudSheet)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: the sheet of cloud shapes was not made: the clouds are soft discs."));
+		CloudMaterial = nullptr;
 	}
 	bCloudShapes = CloudMaterial != nullptr;
 	S.SkyRooms.SetSprites(bCloudShapes);
