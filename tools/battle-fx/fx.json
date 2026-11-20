@@ -1350,7 +1350,22 @@
    ],
    "sun_young": 0.1,
    "sun_from_s": 4,
-   "sun_by_s": 16
+   "sun_by_s": 16,
+   "_lumps": "As oil_fires.sunk._lumps.",
+   "lumps": 5,
+   "lumps_px": 260,
+   "lumps_r": [
+    0.18,
+    0.56
+   ],
+   "lumps_out": [
+    0.3,
+    1.0
+   ],
+   "lumps_alpha": 0.9,
+   "lumps_inner": 0.7,
+   "lumps_light": 0.6,
+   "lumps_rim": 0.8
   }
  },
  "camera": {
@@ -2560,6 +2575,7 @@
  "game": {
   "_how": "Numbers only the 3D game's effects kit uses (Source/TheaterCommand/Effects). Tune here, not in code.",
   "max_puffs": 3000,
+  "_max_puffs": "The room: how many fans the kit lays in a frame at the most. Held to 100 to 20,000, and a value that is not a number gives 3,000 (the pre-check, 12:57Z: unchecked, a broken file's nan was a fault and its 1e9 asked for hundreds of gigabytes).",
   "max_lamps": 2,
   "lamp_candela_at_full": 400.0,
   "_lamp": "A flash's lamp at full strength (a 105 mm is 1), in candelas at 100 world units a metre (the kit scales it for other scales). 400 PASSED in build 1690 (art director 21:16Z): 1.23x screen brightness at 3 m and 1.11 to 1.15x at 13 to 16 m by night; 1200 overlit (1.57x).",
@@ -2819,7 +2835,22 @@
     118,
     106,
     94
-   ]
+   ],
+   "_lumps": "Art director 10:57Z 20 November, build 1766's Midway ships picture: Akagi's column was the right shape and colour and read as a soft brown smear. The cause was the kit's own picture, not Unreal's upscaler: a column puff is 60 to 90 m across, 300 to 400 of the window's pixels from a kilometre, and one fan whose edge fades over two fifths of its radius, so at that size no lump has an outline (drawing the scene bigger did not help, as the fade is a share of the puff). A column puff at least lumps_px pixels across on the screen carries lumps smaller lumps on its face: their sizes dealt from lumps_r of its radius, one step of that range to each, so every puff has a big one, small ones and the sizes between and no two puffs the same pattern (art director 11:29Z); each set lumps_out of the way from its middle to where it would touch the puff's edge, lumps_alpha as thick as the puff, its heart ring at lumps_inner (a firmer edge than the puff's), lumps_light of its light from its own sunward side and lumps_rim of it kept at its rim, so the dark between two lumps lies on their shadow sides. They come in between lumps_px and a quarter as much again, turn with the puff, and melt into it before it begins to thin (whole for three quarters of hold of its life, gone by hold): young smoke low in the column billows, old smoke aloft is one soft mass. Each takes a place in game.max_puffs only while its puff is that big on the screen and that young, and only a place nothing else wants: the lumps are not counted when the room is shared out, they are whole while a tenth of game.max_puffs would still be free with them all laid, thinner as that goes and not laid once the room is full, so a crowded sky costs a near column its billows, smoothly, and nothing else. The room is judged by the most places asked of late, held two seconds and then let down a hundredth of the room a second, and what is shown falls no faster than a half a second (the pre-check, 12:56Z: judged by one frame's count, every lump flickered with the fires' flames once the room was in its last tenth); so the lumps come back slowly after a crowd, up to 12 seconds from nothing to whole. A cut clears that memory for the frame and the next (the eye over 50 m from where it was a frame ago, turned by over 0.6, or its view a quarter bigger or smaller), so a close-up cut out of a crowded view shows its lumps at once. At lumps_px 110 one lost carrier from a kilometre took 435 places and one from the harbour picture's 1.5 km as many, which six ships there could not afford; at 260 the carrier takes about 220 and a ship in the harbour picture about 15: nearly all her young puffs are under 260 pixels across there and draw as they were passed. The pall aloft and the black root have none. The pixels are the ones the kit is told: the air scene tells it the window's, the map the ones it draws.",
+   "lumps": 5,
+   "lumps_px": 260,
+   "lumps_r": [
+    0.18,
+    0.56
+   ],
+   "lumps_out": [
+    0.3,
+    1.0
+   ],
+   "lumps_alpha": 0.9,
+   "lumps_inner": 0.7,
+   "lumps_light": 0.6,
+   "lumps_rim": 0.8
   },
   "burning": {
    "_rule": "a ship on fire leaving the line, as the sea battle's 'burning' zone marks it: fires on the water where she went (or on her deck, if the caller gives the deck's height) and one narrower black column, a little greyer than burning oil",
@@ -2947,7 +2978,22 @@
     0.6,
     0.75
    ],
-   "base_flat": 0.75
+   "base_flat": 0.75,
+   "_lumps": "As oil_fires.sunk._lumps.",
+   "lumps": 5,
+   "lumps_px": 260,
+   "lumps_r": [
+    0.18,
+    0.56
+   ],
+   "lumps_out": [
+    0.3,
+    1.0
+   ],
+   "lumps_alpha": 0.9,
+   "lumps_inner": 0.7,
+   "lumps_light": 0.6,
+   "lumps_rim": 0.8
   },
   "_pall_rest": "pall_rest (art director 18:28Z): a pall puff's middle is never lower than this share of its own radius above the sea (Bit::Rest; 1.3 covers its rough outline), so one that wanders down (pall_drift_mps) is never cut by the sea along a straight line when seen from the air. 0 or no key: as before."
  }
