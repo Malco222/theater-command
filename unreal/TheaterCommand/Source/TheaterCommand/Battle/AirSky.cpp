@@ -81,7 +81,7 @@ namespace AirSky
 		/** The nearest whole number, halves away from nought, as std::round, for the small numbers of the repeating
 		 * square: one conversion, where std::round is a library call on a plain x86-64 build (the painter calls it for
 		 * every cloud it draws, and it was a sixth of a paint's time in the cloud test). */
-		double Nearest(double V) { return static_cast<double>(static_cast<int64_t>(V + (V >= 0.0 ? 0.5 : -0.5))); }
+		double Nearest(double V) { return std::fabs(V) < 4.0e15 ? static_cast<double>(static_cast<int64_t>(V + (V >= 0.0 ? 0.5 : -0.5))) : V; }
 
 		/** The shortest way across the repeating square (a difference of laid places, folded into half a side). */
 		double Across(double D) { return D - Period * Nearest(D / Period); }
