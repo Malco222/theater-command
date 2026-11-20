@@ -210,6 +210,33 @@ namespace AirScrew
 		return Out;
 	}
 
+	PaintsAre PaintKinds(const std::string& FileText)
+	{
+		PaintsAre Are;
+		const size_t Key = FileText.find("\"paint_names\"");
+		const size_t Open = Key == std::string::npos ? std::string::npos : FileText.find('[', Key);
+		const size_t Close = Open == std::string::npos ? std::string::npos : FileText.find(']', Open);
+		if (Close == std::string::npos)
+		{
+			Are.Blade.assign(static_cast<size_t>(BladePaint) + 1, false);
+			Are.Blade[static_cast<size_t>(BladePaint)] = true;
+			return Are;
+		}
+		size_t At = Open + 1;
+		while (At < Close)
+		{
+			const size_t Begin = FileText.find('"', At);
+			if (Begin == std::string::npos || Begin >= Close) break;
+			const size_t End = FileText.find('"', Begin + 1);
+			if (End == std::string::npos || End > Close) break;
+			const std::string Name = FileText.substr(Begin + 1, End - Begin - 1);
+			Are.Blade.push_back(Name.rfind("blade", 0) == 0);
+			Are.Blur.push_back(Name.rfind("blur", 0) == 0);
+			At = End + 1;
+		}
+		return Are;
+	}
+
 	std::vector<int> NearPaints(const std::string& FileText)
 	{
 		std::vector<int> Paints;

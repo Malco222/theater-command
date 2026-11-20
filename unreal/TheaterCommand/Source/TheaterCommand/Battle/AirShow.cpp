@@ -429,6 +429,12 @@ namespace AirShow
 	{
 		C.Model = G.Model;
 		C.Form = ShapeOf(G.Model, C.bFighter);
+		// A liquid-cooled engine hit in its cooling trails white glycol; a radial, blue-grey oil smoke (the art director).
+		// The rules name it (extra.cool); an older recording does not, and the model's name tells.
+		static const char* Cooled[] = { "Spitfire", "Bf109", "Mustang", "Warhawk", "Hurricane", "Yak", "Sturmovik", "Stuka", "He111", "Lancaster" };
+		C.bLiquid = G.Cool == "liquid";
+		if (G.Cool.empty()) for (const char* M : Cooled) C.bLiquid = C.bLiquid || C.Model.find(M) != std::string::npos;
+		if (!C.TrailKey) C.TrailAt = EngineOf(C, 1);
 		if (C.bFighter)
 		{
 			C.VMin = 80.0; C.VMax = 153.0; C.VTop = 200.0; C.RMin = 210.0; C.GMax = 6.0; C.RollMax = 120.0 * Deg;
@@ -531,6 +537,52 @@ namespace AirShow
 		C.Step = Phase::None;
 		C.StepT = 0.0;
 		C.bFiring = false;
+	}
+
+	Vec Show::EngineOf(const Craft& C, int N)
+	{
+		if (C.Form.Engines.empty()) return Vec();
+		return C.Form.Engines[static_cast<size_t>(std::max(0, std::min(N - 1, static_cast<int>(C.Form.Engines.size()) - 1)))];
+	}
+
+	void Show::LayTrail(Craft& C, const std::string& Kind)
+	{
+		if (!C.TrailKey) C.TrailKey = C.Key * 8 + 1;
+		const Vec V = Velocity(C);
+		{
+			Fx& T = Emit(FxKind::TrailStart, Local(C, C.TrailAt), Kind, C.TrailKey);
+			T.Vel = V;
+			T.Size = C.Form.Span;
+		}
+		if (C.TrailKey2)
+		{
+			Fx& T = Emit(FxKind::TrailStart, Local(C, C.TrailAt2), Kind, C.TrailKey2);
+			T.Vel = V;
+			T.Size = C.Form.Span;
+		}
+		C.TrailKind = Kind;
+	}
+
+	void Show::DeadEngineTrail(Craft& C, bool bFire)
+	{
+		// (the art director's three states, 15:38Z: burning, the densest black; out and windmilling, heavy dark oil
+		// smoke that pulses; the fire put out and feathered, about half that, a thin dark streak that never clears)
+		C.TrailPlan.clear();
+		if (bFire) { LayTrail(C, "fire"); return; }
+		if (C.bFireOut) { LayTrail(C, "streak"); return; }
+		// (a liquid-cooled engine: white glycol first, thinning as the coolant runs out, then the same dark oil)
+		LayTrail(C, C.bLiquid ? "glycol" : "oil");
+		if (C.bLiquid) C.TrailPlan.push_back({ AirT + 45.0, "oil" });
+		// (feathered with no fire, its oil spent: it thins to the streak and keeps it)
+		if (C.bFeathered) C.TrailPlan.push_back({ AirT + (C.bLiquid ? 65.0 : 20.0), "streak" });
+	}
+
+	void Show::StopTrails(Craft& C)
+	{
+		if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; }
+		if (C.TrailKey2) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey2); C.TrailKey2 = 0; }
+		C.TrailKind.clear();
+		C.TrailPlan.clear();
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -660,7 +712,7 @@ namespace AirShow
 			if (C.StepT > 120.0)
 			{
 				C.Doing = Role::Gone;
-				if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; }
+				StopTrails(C);
 			}
 			return;
 		}
@@ -677,14 +729,20 @@ namespace AirShow
 		{
 			const Strag* Mine = nullptr;
 			for (const Strag& S : G->Strags) if (S.Id == C.StragId) Mine = &S;
-			if (Mine)
+			// (its dead engine catching fire, as the box's view tells it; a fire put out is the battle's own event)
+			if (Mine && Mine->bFire && C.TrailKind != "fire" && !C.bFireOut) DeadEngineTrail(C, true);
+			// (the battle tells of a bomber falling out a moment before its box's view lists it: it drops back meanwhile)
+			if (Mine || AirT - C.StragAt < 8.0)
 			{
 				const Vec F = Ahead(G->Face);
-				const Vec To = Vec(G->X, G->Y, G->Alt) - F * Mine->Back - Up * Mine->Down + RightOf(G->Face) * (C.Hand * G->W * 0.3);
+				const Vec To = Vec(G->X, G->Y, G->Alt) - F * (Mine ? Mine->Back : 180.0) - Up * (Mine ? Mine->Down : 18.0) + RightOf(G->Face) * (C.Hand * G->W * 0.3);
 				Fly(C, Steer(C, To, GV, 0.08, C.VMin, C.VMax), Dt, true);
 				return;
 			}
-			C.Doing = Role::Slot; // (taken back into the box's count: it flies its place again)
+			// (taken back into the box's count: it flies its place again, closing slowly)
+			C.Doing = Role::Slot;
+			C.StragId = -1;
+			C.bJoining = true;
 		}
 		if (C.Doing == Role::Cover)
 		{
@@ -1036,37 +1094,154 @@ namespace AirShow
 	void Show::PilotFall(Craft& C, double Dt)
 	{
 		C.FallT += Dt;
-		if (C.Falling == FallHow::Explode)
+		if (C.Falling == FallHow::Explode || C.Falling == FallHow::Breakup)
 		{
 			C.bShown = false;
 			if (C.FallT > 1.0) C.Doing = Role::Gone;
 			return;
 		}
-		if (C.Falling == FallHow::Spin)
+		// Struck the sea or the ground already: a ditched aircraft floats nose-low a while, then sinks; a belly-landed
+		// one lies in its furrow.
+		if (C.Ended >= 0.0)
 		{
-			// The spin: nose well down, turning round and round, smoke trailing.
-			C.Gam = std::max(C.Gam - 1.2 * Dt, -72.0 * Deg);
-			C.Hdg = Wrap(C.Hdg + C.Hand * 3.0 * Dt);
-			C.Bank = C.Hand * 35.0 * Deg;
-			C.Spd = std::max(55.0, std::min(C.Spd - 6.0 * Dt, 90.0));
-			C.P += Vec(0.0, 0.0, -C.Spd * 0.85 * Dt) + Ahead(C.Hdg) * (C.Spd * 0.25 * Dt);
+			C.Spd = 0.0;
+			C.Gam = -4.0 * Deg;
+			C.Bank = 0.0;
+			if (C.FallT - C.Ended > 5.0 + 3.3 * C.Look)
+			{
+				if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; }
+				Emit(FxKind::FallStop, C.P, std::string(), C.Key);
+				C.Doing = Role::Gone;
+				C.bShown = false;
+			}
+			return;
+		}
+		const double Floor0 = GroundAt(C.P.X, C.P.Y);
+		// How fast it must come down to strike when the battle says (the event's dur is the truth: the art director);
+		// never under 8 m/s, never past what the airframe may move.
+		const double Left = std::max(C.Dur - C.FallT, 1.5);
+		const double Sink = std::clamp((C.P.Z - Floor0) / Left, 8.0, C.VTop * 0.95);
+		const bool bTumbling = C.Falling == FallHow::Wing || C.Falling == FallHow::Spin || (C.Falling == FallHow::Tail && !C.bHeavy);
+		// Its fire shows (a burning engine's smoke catches; a flamer's wing root), and later it may blow apart.
+		if (!C.bLit && C.FireAt >= 0.0 && C.FallT >= C.FireAt && (C.Falling == FallHow::Burn || C.Falling == FallHow::Flamer || C.Falling == FallHow::Struck))
+		{
+			C.bLit = true;
+			if (!C.TrailKey) C.TrailKey = C.Key * 8 + 1;
+			Fx& T = Emit(FxKind::TrailStart, C.Falling == FallHow::Flamer ? C.P : Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[0]), "fire", C.TrailKey);
+			T.Vel = Velocity(C);
+			T.Size = C.Form.Span * (C.Falling == FallHow::Flamer ? 1.0 + 0.5 * C.Look : 1.0);
+		}
+		if (C.BoomAt >= 0.0 && C.FallT >= C.BoomAt)
+		{
+			// (its debris row ends here, in the air: "boom")
+			Emit(FxKind::FallStop, C.P, "boom", C.Key);
+			BlowApart(C, true);
+			return;
+		}
+		if (bTumbling)
+		{
+			// Its own way through the air, no longer its nose's: what it was flying at dies away, and it comes down.
+			const double Ease = std::min(1.0, Dt * 0.35);
+			C.FallV.X += (0.0 - C.FallV.X) * Ease;
+			C.FallV.Y += (0.0 - C.FallV.Y) * Ease;
+			C.FallV.Z += (-Sink - C.FallV.Z) * std::min(1.0, Dt * 0.6);
+			if (C.Falling == FallHow::Spin)
+			{
+				// A helix: round its middle line as that comes down. Steep (looks 0, 1): the nose 60 to 80 degrees down,
+				// 1 to 2 turns a second a fighter, 0.3 to 0.6 a heavy; flat (2, 3): the nose 20 to 40 degrees down, lazy.
+				const bool bSteep = C.Look < 2;
+				const double Turns = C.bHeavy ? (bSteep ? 0.3 + 0.3 * C.Look : 0.2) : (bSteep ? 1.0 + 1.0 * C.Look : 0.5 + 0.2 * (C.Look - 2));
+				const double Radius = bSteep ? 6.0 + C.Form.Span * 0.4 : 14.0 + C.Form.Span * 0.8;
+				C.Spin += C.Turn * Turns * 2.0 * Pi * Dt;
+				C.Axis += C.FallV * Dt;
+				C.P = C.Axis + Vec(std::sin(C.Spin), std::cos(C.Spin), 0.0) * Radius;
+				C.Hdg = Wrap(C.Spin + C.Turn * Pi * 0.5);
+				const double Nose = bSteep ? 60.0 + 10.0 * C.Look : 20.0 + 15.0 * (C.Look - 2);
+				C.Gam += (-Nose * Deg - C.Gam) * std::min(1.0, Dt * 1.5);
+				C.Bank = C.Turn * 40.0 * Deg;
+				C.Spd = Turns * 2.0 * Pi * Radius;
+			}
+			else if (C.Falling == FallHow::Wing)
+			{
+				// A wing gone: snap-rolling toward it, 2 to 4 rolls a second a fighter, about 1 a heavy, in a fast
+				// spiral, the nose well down.
+				const double Rolls = C.bHeavy ? 0.8 + 0.15 * C.Look : 2.0 + 0.66 * C.Look;
+				C.Bank = Wrap(C.Bank + C.Turn * Rolls * 2.0 * Pi * Dt);
+				C.Hdg = Wrap(C.Hdg + C.Turn * 0.9 * Dt);
+				C.Gam += (-65.0 * Deg - C.Gam) * std::min(1.0, Dt * 1.2);
+				C.P += C.FallV * Dt;
+				C.Spd = Len(C.FallV);
+			}
+			else
+			{
+				// A fighter's tail gone: the nose down hard and over and over, end over end.
+				C.Spin += (1.0 + 0.4 * C.Look) * 2.0 * Pi * Dt;
+				C.Gam = Wrap(-C.Spin);
+				C.Bank = 0.0;
+				C.P += C.FallV * Dt;
+				C.Spd = Len(C.FallV);
+			}
 		}
 		else
 		{
-			// Burning: still flying at first, then the nose going down, a slow turn as it goes.
-			Cmd K;
-			K.Hdg = C.Hdg + C.Hand * 0.25;
-			K.Gam = -(10.0 + 35.0 * std::min(1.0, C.FallT / 12.0)) * Deg;
-			K.Spd = C.VTop;
-			Fly(C, K, Dt, false);
+			// Still flying, after a fashion: the nose where the way down puts it, its speed what the drop asks.
+			double Nose = -30.0, Bank = 0.0, Turn = 0.0;
+			switch (C.Falling)
+			{
+			case FallHow::Pilot:
+			{
+				// Holds its line 0.5 to 2 s, then rolls gently off and dives straight in, 60 to 85 degrees; a heavy whose
+				// pilots are hit (look 3) rears up first, stalls and falls off on a wing.
+				const double Hold = 0.5 + 0.5 * C.Look;
+				if (C.bHeavy && C.Look == 3 && C.FallT < Hold + 2.5) { Nose = C.FallT < Hold ? 0.0 : 18.0; Bank = 0.0; }
+				else if (C.FallT < Hold) { Nose = C.Gam / Deg; Bank = C.Bank / Deg; }
+				else { Nose = -(60.0 + 8.0 * C.Look); Bank = C.Turn * 25.0; }
+				break;
+			}
+			case FallHow::Glide:
+				// A long, shallow, steady glide on dead engines.
+				Nose = -std::clamp(std::atan2(Sink, C.VMin * 1.1) / Deg, 3.0, 25.0);
+				Bank = C.Turn * 8.0 * (C.Look % 2);
+				Turn = C.Turn * 0.03 * (C.Look % 2);
+				break;
+			case FallHow::Tail:
+				// A heavy's tail gone: a steep nose-down plunge, turning.
+				Nose = -75.0;
+				Bank = C.Turn * 30.0;
+				Turn = C.Turn * 0.25;
+				break;
+			case FallHow::Flamer:
+				// A shallow dive that steepens.
+				Nose = -(10.0 + (25.0 + 10.0 * C.Look) * std::min(1.0, C.FallT / 15.0));
+				Bank = C.Turn * 15.0;
+				Turn = C.Turn * 0.1;
+				break;
+			default:
+				// Burning (and struck, going down on fire): banking away and diving, steeper by its look.
+				Nose = -(12.0 + (18.0 + 12.0 * C.Look) * std::min(1.0, C.FallT / 10.0));
+				Bank = C.Turn * (25.0 + 10.0 * C.Look);
+				Turn = C.Turn * 0.2;
+				break;
+			}
+			// (no steeper than the drop allows at its speed, no shallower than the drop asks)
+			const double Want = Nose * Deg;
+			C.Gam += (Want - C.Gam) * std::min(1.0, Dt * (C.Falling == FallHow::Pilot ? 1.2 : 0.6));
+			C.Bank += (Bank * Deg - C.Bank) * std::min(1.0, Dt * 1.5);
+			C.Hdg = Wrap(C.Hdg + Turn * Dt);
+			const double Down = std::max(std::sin(-C.Gam), 0.05);
+			const double Pace = std::clamp(Sink / Down, 35.0, C.VTop + 20.0);
+			C.Spd += (Pace - C.Spd) * std::min(1.0, Dt * 0.8);
+			C.P += Ahead(C.Hdg, C.Gam) * (C.Spd * Dt);
+			C.FallV = Ahead(C.Hdg, C.Gam) * C.Spd;
 		}
-		if (C.TrailKey) Emit(FxKind::TrailMove, Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[0]), std::string(), C.TrailKey).Vel = Velocity(C);
+		const Vec Moved = bTumbling ? (C.Falling == FallHow::Spin ? C.FallV + Ahead(C.Hdg) * C.Spd : C.FallV) : Velocity(C);
+		if (C.TrailKey) Emit(FxKind::TrailMove, C.Falling == FallHow::Flamer ? C.P : Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[0]), std::string(), C.TrailKey).Vel = Moved;
 		// (the ground where it is now, after this frame's move: on a steep slope, where it was is not where it lands)
 		const double Floor = GroundAt(C.P.X, C.P.Y);
 		// (into the deck, or under it: down a hole and under a tile, its debris row, told the deck, stops shedding)
 		const bool bCloud = IntoDeck(C.FallDeck, C.P);
 		Fx& Moving = Emit(FxKind::FallMove, C.P, std::string(), C.Key);
-		Moving.Vel = Velocity(C);
+		Moving.Vel = Moved;
 		if (C.bDebrisToDeck && !bCloud)
 		{
 			// (its pieces leave sight at the height the row was told: once it is no longer over a drawn tile above that
@@ -1079,25 +1254,49 @@ namespace AirShow
 				C.bDebrisToDeck = false;
 			}
 		}
-		// Parachutes, one after another, as the crew get out.
+		// Parachutes, one after another, as the crew get out: when the battle says, else every second or two.
 		if (C.ChutesLeft > 0 && C.FallT > C.ChuteAt)
 		{
 			Thing Chute;
 			Chute.Kind = ThingKind::Chute;
 			Chute.At = Local(C, Vec(-C.Form.Long * 0.3, 0.0, -1.5));
-			Chute.Vel = Velocity(C) * 0.25;
+			Chute.Vel = Moved * 0.25;
 			Chute.Size = 7.0;
 			Chute.Deck = DeckFor(Chute.At);
 			Small.push_back(Chute);
 			if (!C.ChuteCue.empty()) Emit(FxKind::Sound, Chute.At, C.ChuteCue);
 			C.ChutesLeft--;
-			C.ChuteAt += Roll.U(1.0, 2.5);
+			if (C.ChuteNext < static_cast<int>(C.ChuteTimes.size()) && C.FallT - C.ChuteTimes[static_cast<size_t>(C.ChuteNext)] > Dt + 1e-6) Check.ChutesOffTime++;
+			C.ChuteNext++;
+			C.ChuteAt = C.ChuteNext < static_cast<int>(C.ChuteTimes.size()) ? C.ChuteTimes[static_cast<size_t>(C.ChuteNext)] : C.ChuteAt + Roll.U(1.0, 2.5);
 			Check.Chutes++;
 		}
-		// (at most 400 air seconds: a spin from 9 km is down in under 200)
-		if (C.P.Z <= Floor + 2.0 || bCloud || C.FallT > 400.0)
+		// (it strikes when it reaches the ground; a long glide may take its whole dur, and a little over)
+		if (C.P.Z <= Floor + 2.0 || bCloud || C.FallT > std::max(400.0, C.Dur + 60.0))
 		{
-			if (!bCloud && C.FallT <= 400.0) Emit(Floor > 0.5 ? FxKind::Crash : FxKind::Splash, Vec(C.P.X, C.P.Y, Floor), "plane").Size = C.Form.Span;
+			const bool bStruck = !bCloud && C.P.Z <= Floor + 2.0;
+			if (bStruck)
+			{
+				const double Off = std::fabs(C.FallT - C.Dur);
+				(Off <= std::max(6.0, 0.25 * C.Dur) ? Check.FallsOnTime : Check.FallsOffTime) += 1;
+				Check.MostOffTime = std::max(Check.MostOffTime, Off);
+			}
+			if (bStruck)
+			{
+				// A ditching (a glide onto the sea under control): a skip and a long spray, then it floats a while.
+				const bool bDitching = C.Falling == FallHow::Glide && Floor <= 0.5;
+				const bool bBelly = C.Falling == FallHow::Glide && Floor > 0.5;
+				Fx& End = Emit(Floor > 0.5 ? FxKind::Crash : FxKind::Splash, Vec(C.P.X, C.P.Y, Floor), bDitching ? "ditch" : bBelly ? "belly" : "plane");
+				End.Size = C.Form.Span;
+				if (bDitching || bBelly)
+				{
+					C.P.Z = Floor + (bDitching ? 0.3 : 1.0);
+					C.Ended = C.FallT;
+					Check.Ditched += bDitching ? 1 : 0;
+					if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; }
+					return;
+				}
+			}
 			if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; }
 			Emit(FxKind::FallStop, C.P, std::string(), C.Key);
 			C.Doing = Role::Gone;
@@ -1117,7 +1316,8 @@ namespace AirShow
 	bool TrailRoom::Start(int Key, bool bPiece, int& OutPutOut)
 	{
 		OutPutOut = 0;
-		if (On(Key)) return true;
+		// (lit again with a new kind: it yields from now as that kind does, a dead engine's thin streak as a piece)
+		for (One& L : Lit) if (L.Key == Key) { L.bPiece = bPiece; return true; }
 		if (static_cast<int>(Lit.size()) >= Most && !bPiece)
 		{
 			for (size_t K = 0; K < Lit.size(); ++K)
@@ -1206,14 +1406,19 @@ namespace AirShow
 				const Craft& Shooter = Pair.second;
 				if (Shooter.Group != E.By || Shooter.Target < 0 || !Live(Shooter)) continue;
 				const Craft* T = Find(Shooter.Target);
-				if (T && T->Group == E.Unit && Live(*T) && T->Doing != Role::Ground && (Shooter.bFiring || Shooter.Step == Phase::Break || Shooter.Step == Phase::Turn)) return Shooter.Target;
+				if (T && T->Group == E.Unit && Live(*T) && T->Doing != Role::Ground && T->StragId < 0 && (Shooter.bFiring || Shooter.Step == Phase::Break || Shooter.Step == Phase::Turn)) return Shooter.Target;
 			}
 		}
-		// A straggler first, being the easier target; then any in a fight; then any.
-		for (int K : Keys) if (Find(K)->Doing == Role::Straggle) return K;
-		for (int K : Keys) if (Find(K)->Doing == Role::Fight) return K;
-		std::vector<int> Flying;
-		for (int K : Keys) if (Find(K)->Doing != Role::Ground) Flying.push_back(K);
+		// Any in a fight; then any. A straggler the battle still counts is kept for the end it gives it (its fire put
+		// out, its limp home, its own loss), unless no other is left.
+		for (int K : Keys) if (Find(K)->Doing == Role::Fight && Find(K)->StragId < 0) return K;
+		std::vector<int> Flying, Lame;
+		for (int K : Keys)
+		{
+			if (Find(K)->Doing == Role::Ground) continue;
+			(Find(K)->StragId < 0 ? Flying : Lame).push_back(K);
+		}
+		if (Flying.empty()) Flying = Lame;
 		if (Flying.empty()) return Keys.back();
 		return Flying[static_cast<size_t>(Roll.U() * Flying.size()) % Flying.size()];
 	}
@@ -1224,20 +1429,53 @@ namespace AirShow
 		C.Step = Phase::None;
 		C.FallT = 0.0;
 		C.bFiring = false;
+		C.TrailPlan.clear();
+		// (a second dead engine's ribbon ends here; the way down lays its own from the engine the battle names)
+		if (C.TrailKey2) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey2); C.TrailKey2 = 0; }
 		C.ChutesLeft = E.Chutes;
-		C.ChuteAt = Roll.U(2.0, 5.0);
+		C.ChuteTimes = E.ChuteAt;
+		C.ChuteNext = 0;
+		C.ChuteAt = !C.ChuteTimes.empty() ? C.ChuteTimes.front() : Roll.U(2.0, 5.0);
 		C.ChuteCue = E.ChuteCue.empty() && E.Chutes > 0 ? "parachute_open" : E.ChuteCue;
-		C.Falling = E.Kind == "explode" ? FallHow::Explode : E.Kind == "spin" ? FallHow::Spin : FallHow::Burn;
+		// The way down the battle names (the air rules pick it from the situation; the scene never does). A recording
+		// from before the ways down names only the old three (explode, burn, spin).
+		std::string How = E.How.empty() ? (E.Kind == "explode" || E.Kind == "spin" ? E.Kind : std::string("burn")) : E.How;
+		C.FallName = How;
+		C.Look = std::clamp(E.Look, 0, 3);
+		C.Turn = E.Roll < 0 ? -1.0 : E.Roll > 0 ? 1.0 : (E.Hand < 0 ? -1.0 : E.Hand > 0 ? 1.0 : C.Hand);
+		C.bHeavy = !C.bFighter && C.Form.Engines.size() >= 2;
+		C.FireAt = E.FireAt;
+		C.BoomAt = E.Boom;
+		C.bDitch = E.bDitch;
+		C.bLit = false;
+		C.Ended = -1.0;
+		C.Spin = 0.0;
+		C.FallV = Velocity(C);
+		// (an old recording says nothing of how long: a fighter is down in under a minute from its height, a heavy longer)
+		C.Dur = E.Dur > 0.0 ? E.Dur : (C.bFighter ? 45.0 : 75.0);
+		// A collision: the fighter comes apart; the bomber loses what it hit, a wing (looks 0, 1) or its tail (2, 3).
+		// Struck by another's fall: on fire (even looks) or cut in two (odd).
+		bool bCut = false;
+		if (How == "collide") How = C.bFighter ? "breakup" : C.Look < 2 ? "wing" : "tail";
+		if (How == "struck" && C.Look % 2 == 1) { How = "breakup"; bCut = true; }
+		C.Falling = How == "explode" ? FallHow::Explode : How == "spin" ? FallHow::Spin : How == "flamer" ? FallHow::Flamer : How == "wing" ? FallHow::Wing
+		          : How == "tail" ? FallHow::Tail : How == "pilot" ? FallHow::Pilot : How == "glide" ? FallHow::Glide : How == "breakup" ? FallHow::Breakup
+		          : How == "struck" ? FallHow::Struck : FallHow::Burn;
+		if (C.Falling == FallHow::Struck && C.FireAt < 0.0) C.FireAt = 0.0;
 		C.FallDeck = DeckFor(C.P);
 		Check.Falls++;
+		Check.FallsBy[C.FallName]++;
 		if (E.bByFlak) Emit(FxKind::Flak, C.P + Vec(Roll.U(-4.0, 4.0), Roll.U(-4.0, 4.0), Roll.U(-2.0, 3.0)), "heavy"); // (the one burst laid on a model: this one falls to it)
 		if (!E.Cue.empty()) Emit(FxKind::Sound, C.P, E.Cue);
 		const Vec V = Velocity(C);
 		{
-			// The debris row, for the effects kit: where the pieces leave sight is where the deck hides them, for a fall
-			// begun over a drawn tile's foot, else the ground (and the row stops shedding once the fall is no longer over
-			// a drawn tile above that height).
-			Fx& F = Emit(FxKind::Fall, C.P, C.Falling == FallHow::Explode ? "explode" : C.Falling == FallHow::Spin ? "spin" : "burn", C.Key);
+			// The debris row, for the effects kit (its three kinds: blown apart, burning, spinning; Text the way down, for
+			// the kit that knows more): where the pieces leave sight is where the deck hides them, for a fall begun over a
+			// drawn tile's foot, else the ground (and the row stops shedding once the fall is no longer over a drawn tile
+			// above that height).
+			const bool bApart = C.Falling == FallHow::Explode || C.Falling == FallHow::Breakup;
+			Fx& F = Emit(FxKind::Fall, C.P, bApart ? "explode" : C.Falling == FallHow::Spin ? "spin" : "burn", C.Key);
+			F.Text = C.FallName;
 			F.Vel = V;
 			F.Size = C.Form.Span;
 			const DeckSpan Here = DeckHere(C.P.X, C.P.Y);
@@ -1245,39 +1483,266 @@ namespace AirShow
 			F.Deck = C.bDebrisToDeck ? std::min(Here.Hide, C.P.Z) : GroundAt(C.P.X, C.P.Y);
 			C.DebrisDeck = F.Deck;
 		}
-		const Vec EngineAt = Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[C.Form.Engines.size() > 1 ? (Roll.U() < 0.5 ? 1 : C.Form.Engines.size() - 2) : 0]);
-		if (C.Falling == FallHow::Explode)
+		// Which engine: the one the battle names (engine k of N is floor(engineAt N) + 1), else one of the inner pair.
+		size_t Engine = 0;
+		if (!C.Form.Engines.empty())
 		{
-			// Blown apart: a short torn flash and the pieces thrown out, each trailing fire and then smoke.
+			const size_t N = C.Form.Engines.size();
+			Engine = E.EngineAt >= 0.0 ? std::min(N - 1, static_cast<size_t>(std::floor(E.EngineAt * static_cast<double>(N))))
+			                           : (N > 1 ? (Roll.U() < 0.5 ? 1 : N - 2) : 0);
+			// (its trail follows from engine 0's place: the burning one put there, the list otherwise as it was)
+			std::swap(C.Form.Engines[0], C.Form.Engines[Engine]);
+		}
+		const Vec EngineAt = Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[0]);
+		// A liquid-cooled engine hit in its cooling trails white glycol; a radial, blue-grey oil smoke (the art director).
+		const bool bCooled = C.bLiquid;
+		switch (C.Falling)
+		{
+		case FallHow::Explode:
+			BlowApart(C, true);
+			break;
+		case FallHow::Breakup:
+		{
+			// Into three or four big pieces at the real joints: the wings flutter, the fuselage falls fastest, the tail
+			// tumbles; one or two of them smoke. Cut in two (struck): the fore and the aft.
+			if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; }
+			const Vec R = RightOf(C.Hdg);
+			const int Smoking = 1 + C.Look % 2;
+			int Made = 0;
+			auto Part = [&](const Vec& At, const Vec& Push, double Size, double Flutter)
+			{
+				Piece(C, 2 + Made, At, V * 0.85 + Push, Size, Flutter, Made < Smoking ? (Made == 0 ? "fire" : "smoke") : nullptr, 120.0);
+				Made++;
+			};
+			if (bCut)
+			{
+				Part(Local(C, Vec(C.Form.Long * 0.2, 0.0, 0.0)), Vec(0.0, 0.0, -4.0), C.Form.Long * 0.55, 0.0);
+				Part(Local(C, Vec(-C.Form.Long * 0.3, 0.0, 0.0)), Vec(0.0, 0.0, 2.0), C.Form.Long * 0.4, 0.0);
+			}
+			else
+			{
+				Part(C.P, Vec(0.0, 0.0, -6.0), C.Form.Long * 0.6, 0.0);                                        // the fuselage
+				Part(C.P + R * (C.Form.Span * 0.3), R * 9.0 + Vec(0.0, 0.0, 4.0), C.Form.Span * 0.42, 14.0);   // the starboard wing
+				if (C.Look < 2) Part(C.P - R * (C.Form.Span * 0.3), R * -9.0 + Vec(0.0, 0.0, 4.0), C.Form.Span * 0.42, 14.0); // the port wing
+				Part(Local(C, Vec(-C.Form.Long * 0.45, 0.0, 0.0)), Vec(0.0, 0.0, 6.0), C.Form.Span * 0.3, 0.0); // the tail
+			}
+			C.bShown = false;
+			break;
+		}
+		case FallHow::Wing:
+		{
+			// The wing on its side tears away and flutters, slowly, flat like a leaf, far above the wreck; fuel mist
+			// from the torn root, on fire in looks 2 and 3 (the art director's break point and root fire).
+			const double Out_ = (C.Turn < 0.0 ? -1.0 : 1.0) * C.Form.Span * (C.Look == 1 ? 0.2 : C.Look == 3 ? 0.35 : 0.28);
+			Piece(C, 2, Local(C, Vec(0.0, Out_, 0.0)), V * 0.6 + RightOf(C.Hdg) * (Out_ > 0.0 ? 6.0 : -6.0), C.Form.Span * 0.45, 9.0 + 2.0 * C.Look, nullptr, 90.0);
+			if (!C.TrailKey) C.TrailKey = C.Key * 8 + 1;
+			Fx& T = Emit(FxKind::TrailStart, Local(C, Vec(0.0, Out_ * 0.3, 0.0)), C.Look >= 2 ? "fire" : "glycol", C.TrailKey);
+			T.Vel = V;
+			T.Size = C.Form.Span;
+			break;
+		}
+		case FallHow::Tail:
+			// The tail unit breaks away, fluttering (looks 0, 2) or tumbling, a little smoke (1, 3) or none.
+			Piece(C, 2, Local(C, Vec(-C.Form.Long * 0.42, 0.0, 0.5)), V * 0.7, C.Form.Span * 0.3, C.Look % 2 == 0 ? 11.0 : 0.0, nullptr, 90.0);
+			if (C.Look % 2 == 1)
+			{
+				if (!C.TrailKey) C.TrailKey = C.Key * 8 + 1;
+				Fx& T = Emit(FxKind::TrailStart, EngineAt, "smoke", C.TrailKey);
+				T.Vel = V;
+				T.Size = C.Form.Span * 0.6;
+			}
+			break;
+		case FallHow::Pilot:
+			// Clean and silent: no fire, no smoke, no pieces (a straggler's smoke stops).
+			if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; }
+			break;
+		case FallHow::Spin:
+		{
+			// A helix round a middle line, the aircraft on it where it is now; a smoke (looks 0, 2), a thin vapour (1)
+			// or nothing (3).
+			C.Spin = Wrap(C.Hdg - C.Turn * Pi * 0.5);
+			const double Radius = C.Look < 2 ? 6.0 + C.Form.Span * 0.4 : 14.0 + C.Form.Span * 0.8;
+			C.Axis = C.P - Vec(std::sin(C.Spin), std::cos(C.Spin), 0.0) * Radius;
+			C.FallV = Vec(V.X * 0.5, V.Y * 0.5, std::min(V.Z, 0.0));
+			if (C.Look == 3) { if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; } break; }
+			if (!C.TrailKey) C.TrailKey = C.Key * 8 + 1;
+			Fx& T = Emit(FxKind::TrailStart, EngineAt, C.Look == 1 ? "glycol" : "smoke", C.TrailKey);
+			T.Vel = V;
+			T.Size = C.Form.Span * (C.Look == 1 ? 0.5 : 0.8);
+			break;
+		}
+		case FallHow::Glide:
+			// Dead engines, a thin smoke (looks 0, 2) or none.
+			if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; }
+			if (C.Look % 2 == 0)
+			{
+				C.TrailKey = C.Key * 8 + 1;
+				Fx& T = Emit(FxKind::TrailStart, EngineAt, "smoke", C.TrailKey);
+				T.Vel = V;
+				T.Size = C.Form.Span * 0.4;
+			}
+			break;
+		case FallHow::Struck:
+			// Struck by another's fall: a burst of debris where it met, then down burning.
+			for (int K = 0; K < 3; ++K)
+			{
+				Piece(C, 2 + K, C.P + Vec(Roll.U(-1.0, 1.0), Roll.U(-1.0, 1.0), Roll.U(-0.5, 0.5)) * (C.Form.Span * 0.2),
+				      V * 0.7 + Vec(Roll.U(-1.0, 1.0), Roll.U(-1.0, 1.0), Roll.U(-0.3, 1.0)) * 12.0, C.Form.Span * Roll.U(0.08, 0.16), 0.0, nullptr, 20.0);
+			}
+			[[fallthrough]];
+		default:
+		{
+			// Burning (a flamer from its wing root, a burn from one engine): first the cause's smoke, white glycol or
+			// blue-grey oil, then fire when the battle says; a straggler's smoke already running goes on.
+			if (C.Falling == FallHow::Flamer && C.FireAt < 0.0) C.FireAt = 0.4;
+			const bool bAtOnce = C.FireAt <= 0.0;
+			if (!C.TrailKey) C.TrailKey = C.Key * 8 + 1;
+			Fx& T = Emit(FxKind::TrailStart, C.Falling == FallHow::Flamer ? C.P : EngineAt, bAtOnce ? "fire" : bCooled ? "glycol" : "smoke", C.TrailKey);
+			T.Vel = V;
+			T.Size = C.Form.Span;
+			C.bLit = bAtOnce;
+			break;
+		}
+		}
+	}
+
+	void Show::BlowApart(Craft& C, bool bFireball)
+	{
+		// Blown apart: a short torn flash and the pieces thrown out (4 to 8 by its look, one more for a heavy), the
+		// biggest trailing fire and smoke, two or three burning fuel streaks among them.
+		const Vec V = C.Doing == Role::Fall ? C.FallV : Velocity(C);
+		if (bFireball)
+		{
 			Fx& B = Emit(FxKind::Blast, C.P, "plane", C.Key);
 			B.Vel = V;
 			B.Size = C.Form.Span;
-			if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; }
-			const int Pieces = 3 + static_cast<int>(Roll.U() * 3.0);
-			for (int K = 0; K < Pieces; ++K)
-			{
-				Thing P;
-				P.Kind = ThingKind::Piece;
-				P.Key = C.Key * 8 + 2 + K;
-				P.At = C.P + Vec(Roll.U(-1.0, 1.0), Roll.U(-1.0, 1.0), Roll.U(-0.5, 0.5)) * (C.Form.Span * 0.25);
-				P.Vel = V * 0.8 + Vec(Roll.U(-1.0, 1.0), Roll.U(-1.0, 1.0), Roll.U(-0.4, 1.0)) * 18.0;
-				P.Size = C.Form.Span * (K == 0 ? 0.45 : Roll.U(0.12, 0.3));
-				P.Spin = Roll.U(0.0, 6.0);
-				P.Deck = C.FallDeck;
-				Small.push_back(P);
-				// (the biggest trails fire and the next smoke; the rest fall bare: a trail holds about 240 of the
-				// effects kit's 3,000 puffs, and the kit's debris row is the small pieces)
-				if (K < 2) { Fx& T = Emit(FxKind::TrailStart, P.At, K == 0 ? "fire" : "smoke", P.Key); T.Vel = P.Vel; T.Size = P.Size; T.Text = "piece"; }
-			}
-			C.bShown = false;
 		}
-		else
+		if (C.TrailKey) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey); C.TrailKey = 0; }
+		const int Pieces = std::min(8, 4 + C.Look + (C.bHeavy ? 1 : 0));
+		const int Burning = C.Look >= 2 ? 3 : 2;
+		for (int K = 0; K < Pieces && K < 6; ++K)
 		{
-			// Burning, or a spin with smoke: the trail from an engine (a straggler's smoke catches fire).
-			if (!C.TrailKey) C.TrailKey = C.Key * 8 + 1;
-			Fx& T = Emit(FxKind::TrailStart, EngineAt, C.Falling == FallHow::Burn ? "fire" : "smoke", C.TrailKey);
-			T.Vel = V;
-			T.Size = C.Form.Span;
+			const Vec At = C.P + Vec(Roll.U(-1.0, 1.0), Roll.U(-1.0, 1.0), Roll.U(-0.5, 0.5)) * (C.Form.Span * 0.25);
+			const Vec Thrown = V * 0.8 + Vec(Roll.U(-1.0, 1.0), Roll.U(-1.0, 1.0), Roll.U(-0.4, 1.0)) * 18.0;
+			// (a wing panel flutters; an engine and the rest fall fast)
+			const double Size = C.Form.Span * (K == 0 ? 0.45 : Roll.U(0.12, 0.3));
+			Piece(C, 2 + K, At, Thrown, Size, K == 1 ? 12.0 : 0.0, K < Burning ? (K == 0 ? "fire" : K == 1 ? "smoke" : "fire") : nullptr);
+		}
+		C.Falling = FallHow::Explode;
+		C.FallT = 0.0;
+		C.bShown = false;
+	}
+
+	void Show::Piece(const Craft& C, int Slot, const Vec& At, const Vec& Vel, double Size, double Flutter, const char* Trail, double Life)
+	{
+		Thing P;
+		P.Kind = ThingKind::Piece;
+		P.Key = C.Key * 8 + std::clamp(Slot, 2, 7);
+		P.At = At;
+		P.Vel = Vel;
+		P.Size = Size;
+		P.Spin = Roll.U(0.0, 6.0);
+		P.Deck = C.FallDeck;
+		P.Flutter = Flutter;
+		P.Life = Life;
+		// (a trail holds about 240 of the effects kit's 3,000 puffs, and the kit's debris row is the small pieces)
+		P.bTrail = Trail != nullptr;
+		Small.push_back(P);
+		if (Trail) { Fx& T = Emit(FxKind::TrailStart, P.At, Trail, P.Key); T.Vel = P.Vel; T.Size = P.Size; T.Text = "piece"; }
+	}
+
+	void Show::HitSurvived(const Event& E)
+	{
+		const std::vector<int> Keys = LiveOf(E.Unit);
+		if (E.What == "air:fireout" || E.What == "air:regain")
+		{
+			for (int Key : Keys)
+			{
+				Craft& C = *Find(Key);
+				if (C.StragId != E.Strag || C.Doing == Role::Fall || C.Doing == Role::Gone || C.Doing == Role::Ground) continue;
+				if (E.What == "air:fireout")
+				{
+					// The crew put the fire out: the tongues shrink back, the extinguisher's white-grey puff, then the
+					// thin dark streak that stays (the art director, 15:38Z, on Brian's 15:29Z ask), its airscrew feathered.
+					C.bFireOut = true;
+					C.bFeathered = C.bFeathered || E.bFeather;
+					LayTrail(C, "doused");
+					C.TrailPlan = { { AirT + 2.0, "streak" } };
+					Check.FiresOut++;
+				}
+				else
+				{
+					// On three engines it has caught its box up: back into its slot, closing slowly.
+					C.Doing = Role::Slot;
+					C.StragId = -1;
+					C.bJoining = true;
+					Check.Regained++;
+				}
+				break;
+			}
+			return;
+		}
+		// A hit survived, on the model in the formation's slot the battle names (any one still flying in it).
+		std::vector<int> Flying;
+		for (int Key : Keys)
+		{
+			const Craft& C = *Find(Key);
+			if (C.Doing != Role::Ground && C.Doing != Role::Fall && C.Doing != Role::Gone) Flying.push_back(Key);
+		}
+		if (Flying.empty()) return;
+		// (a hit that lights a trail goes to the first in the slot's turn not already trailing one, so none is lost)
+		const bool bLights = E.Mark == "smoke" || E.Mark == "fireout";
+		size_t Pick = static_cast<size_t>(std::max(0, E.Slot)) % Flying.size();
+		for (size_t K = 0; bLights && K < Flying.size(); ++K)
+		{
+			const size_t Try = (Pick + K) % Flying.size();
+			if (!Find(Flying[Try])->TrailKey) { Pick = Try; break; }
+		}
+		Craft& C = *Find(Flying[Pick]);
+		Check.HitsShown++;
+		const Vec V = Velocity(C);
+		// The sparkle where the stream met it: a few strikes winking over it.
+		for (int K = 0; K < 3; ++K)
+		{
+			const Vec Spot = Local(C, Vec(Roll.U(-0.4, 0.4) * C.Form.Long, (E.Hand != 0 ? E.Hand * Roll.U(0.05, 0.45) : Roll.U(-0.45, 0.45)) * C.Form.Span, Roll.U(-0.2, 0.5)));
+			Fx& H = Emit(FxKind::Hit, Spot, "hmg");
+			H.Normal = Norm(Spot - C.P, Vec(0.0, 0.0, 1.0));
+			H.Vel = V;
+		}
+		if (E.Mark == "pieces")
+		{
+			// A few panels torn off, fluttering away and turning flat.
+			const int Count = 2 + static_cast<int>(Roll.U() * 2.0);
+			for (int K = 0; K < Count; ++K)
+			{
+				Piece(C, 5 + K, Local(C, Vec(Roll.U(-0.3, 0.3) * C.Form.Long, Roll.U(-0.4, 0.4) * C.Form.Span, 0.3)),
+				      V * 0.9 + Vec(Roll.U(-1.0, 1.0), Roll.U(-1.0, 1.0), Roll.U(0.0, 1.0)) * 6.0, C.Form.Span * Roll.U(0.04, 0.08), Roll.U(5.0, 9.0), nullptr, 25.0);
+			}
+		}
+		if ((E.Mark == "smoke" || E.Mark == "fireout") && !C.TrailKey)
+		{
+			// From the engine the battle names (0 port to 1 starboard): a puff, then a thin trail for its time, then
+			// clear; or an engine fire in the box that its crew put out: it burns for its time, the extinguisher's puff,
+			// then the feathered engine's thin dark streak, which stays (the air thread's engine-out note).
+			const int N = static_cast<int>(C.Form.Engines.size());
+			const int Engine = N > 1 && E.EngineAt >= 0.0 ? 1 + static_cast<int>(std::lround(std::min(1.0, E.EngineAt) * (N - 1))) : 1;
+			C.TrailAt = EngineOf(C, Engine);
+			const double For = std::max(E.For, 3.0);
+			if (E.Mark == "fireout")
+			{
+				C.DeadEngines = { Engine };
+				C.bFeathered = E.bFeather || N > 1;
+				C.bFireOut = true;
+				if (C.SootAt < 0.0) C.SootAt = AirT;
+				LayTrail(C, "fire");
+				C.TrailPlan = { { AirT + For, "doused" }, { AirT + For + 2.0, "streak" } };
+				Check.FiresOut++;
+			}
+			else
+			{
+				LayTrail(C, "smoke");
+				C.TrailPlan = { { AirT + For, "" } };
+			}
 		}
 	}
 
@@ -1354,6 +1819,11 @@ namespace AirShow
 			return;
 		}
 		if (!E.Cue.empty()) Emit(FxKind::Sound, At, E.Cue);
+		if (E.What == "air:hit" || E.What == "air:fireout" || E.What == "air:regain")
+		{
+			HitSurvived(E);
+			return;
+		}
 		if (E.What == "contact")
 		{
 			// The pass the contact names: kept for the fighters of the pair, against the other group.
@@ -1369,20 +1839,37 @@ namespace AirShow
 		if (E.What == "air:straggle")
 		{
 			// A bomber falls out of the box: one at the box's edge, smoke from the engine it lost.
+			// (one in its slot; else, the box being in its run, a bomber diving or in a fight)
 			std::vector<int> Keys = LiveOf(E.Unit);
+			std::vector<int> Pick;
+			for (auto It = Keys.rbegin(); It != Keys.rend(); ++It) if (Find(*It)->Doing == Role::Slot) Pick.push_back(*It);
 			for (auto It = Keys.rbegin(); It != Keys.rend(); ++It)
+				if (!Find(*It)->bFighter && (Find(*It)->Doing == Role::Dive || Find(*It)->Doing == Role::Fight)) Pick.push_back(*It);
+			for (int Each : Pick)
 			{
-				Craft& C = *Find(*It);
-				if (C.Doing != Role::Slot || C.StragId >= 0) continue;
+				Craft& C = *Find(Each);
+				if (C.StragId >= 0) continue;
 				C.Doing = Role::Straggle;
+				C.Step = Phase::None;
+				C.bFiring = false;
 				C.StragId = E.Strag;
-				const int Engine = E.Eng.empty() ? 1 : E.Eng.front();
-				const Vec Socket = C.Form.Engines.empty() ? Vec() : C.Form.Engines[static_cast<size_t>(std::max(0, std::min(Engine - 1, static_cast<int>(C.Form.Engines.size()) - 1)))];
+				C.StragAt = AirT;
+				// (each dead engine trails from its own nacelle for as long as it is out, a second one its own ribbon)
+				C.DeadEngines = E.Eng.empty() ? std::vector<int>{ 1 } : E.Eng;
+				C.bFeathered = E.bFeather;
+				C.bFireOut = false;
+				if (C.SootAt < 0.0) C.SootAt = AirT;
+				const Vec Socket = EngineOf(C, C.DeadEngines.front());
 				C.Hand = Socket.Y < 0.0 ? -1.0 : 1.0;
-				C.TrailKey = C.Key * 8 + 1;
-				Fx& T = Emit(FxKind::TrailStart, Local(C, Socket), "smoke", C.TrailKey);
-				T.Vel = Velocity(C);
-				T.Size = C.Form.Span;
+				if (C.TrailKey2) { Emit(FxKind::TrailStop, C.P, std::string(), C.TrailKey2); C.TrailKey2 = 0; }
+				C.TrailAt = Socket;
+				if (C.DeadEngines.size() > 1 && C.Form.Engines.size() > 1 && C.DeadEngines[1] != C.DeadEngines[0])
+				{
+					C.TrailKey2 = C.Key * 8 + 7;
+					C.TrailAt2 = EngineOf(C, C.DeadEngines[1]);
+				}
+				// (falling out burning, the battle says, or its dead engine smoking)
+				DeadEngineTrail(C, E.bFire);
 				// An escort's cover: two of its aircraft weave over it.
 				if (GroupIt != Now.end())
 				{
@@ -1686,11 +2173,21 @@ namespace AirShow
 				const Vec Drift = T.bOpen ? Vec(2.5, 1.0, -5.5) : Vec(T.Vel.X * 0.98, T.Vel.Y * 0.98, std::max(T.Vel.Z - Gee * Dt, -45.0));
 				T.Vel = T.bOpen ? T.Vel + (Drift - T.Vel) * std::min(1.0, Dt * 1.5) : Drift;
 			}
+			else if (T.Kind == ThingKind::Piece && T.Flutter > 0.0)
+			{
+				// A torn wing or panel: it flutters down like a leaf, slowly turning flat, swaying as it goes.
+				const double Sway = std::sin(T.Age * 1.7 + T.Spin) * 3.0;
+				T.Vel.X += (Sway - T.Vel.X) * std::min(1.0, Dt * 0.5);
+				T.Vel.Y += (Sway * 0.6 - T.Vel.Y) * std::min(1.0, Dt * 0.5);
+				T.Vel.Z += (-T.Flutter - T.Vel.Z) * std::min(1.0, Dt * 0.9);
+				T.Spin += Dt * 1.3;
+				if (T.bTrail) Emit(FxKind::TrailMove, T.At, std::string(), T.Key).Vel = T.Vel;
+			}
 			else if (T.Kind == ThingKind::Piece)
 			{
 				T.Vel = T.Vel * (1.0 - 0.12 * Dt) + Vec(0.0, 0.0, -Gee * Dt);
 				T.Spin += Dt * 4.0;
-				Emit(FxKind::TrailMove, T.At, std::string(), T.Key).Vel = T.Vel;
+				if (T.bTrail) Emit(FxKind::TrailMove, T.At, std::string(), T.Key).Vel = T.Vel;
 			}
 			else
 			{
@@ -1702,9 +2199,15 @@ namespace AirShow
 		{
 			Thing& T = Small[K];
 			const double Floor = GroundAt(T.At.X, T.At.Y);
-			const bool bCloud = T.Kind != ThingKind::Bomb && IntoDeck(T.Deck, T.At);
+			// (a piece fluttering down drifts as it goes: one that drifts into a drawn tile's side is gone into it there)
+			bool bCloud = T.Kind != ThingKind::Bomb && IntoDeck(T.Deck, T.At);
+			if (!bCloud && T.Kind == ThingKind::Piece && T.Flutter > 0.0 && (CloudTop > 0.0 || DeckAt) && !(DeckBase > 0.0 && T.At.Z <= DeckBase))
+			{
+				const DeckSpan Here = DeckHere(T.At.X, T.At.Y);
+				bCloud = Here.Hide > 0.0 && T.At.Z > Here.Foot && T.At.Z < Here.Hide;
+			}
 			// (at most 400 s, a parachute 1,500 s: one from 8 km is down in about 1,450)
-			if (T.At.Z > Floor && !bCloud && T.Age < (T.Kind == ThingKind::Chute ? 1500.0 : 400.0)) { ++K; continue; }
+			if (T.At.Z > Floor && !bCloud && T.Age < (T.Kind == ThingKind::Chute ? 1500.0 : T.Kind == ThingKind::Piece ? T.Life : 400.0)) { ++K; continue; }
 			const Vec Down(T.At.X, T.At.Y, Floor);
 			if (T.Kind == ThingKind::Bomb)
 			{
@@ -1717,8 +2220,9 @@ namespace AirShow
 			}
 			else if (T.Kind == ThingKind::Piece)
 			{
-				if (!bCloud) Emit(Floor > 0.5 ? FxKind::Crash : FxKind::Splash, Down, "piece").Size = T.Size;
-				Emit(FxKind::TrailStop, Down, std::string(), T.Key);
+				// (one that has lived out its time aloft leaves the picture there: no splash in the air)
+				if (!bCloud && T.At.Z <= Floor) Emit(Floor > 0.5 ? FxKind::Crash : FxKind::Splash, Down, "piece").Size = T.Size;
+				if (T.bTrail) Emit(FxKind::TrailStop, T.At.Z <= Floor ? Down : T.At, std::string(), T.Key);
 			}
 			Small.erase(Small.begin() + static_cast<long>(K));
 		}
@@ -1764,7 +2268,17 @@ namespace AirShow
 				Craft& C = Pair.second;
 				if (!C.bHasLast || C.Doing == Role::Gone) continue;
 				Check.MostJump = std::max(Check.MostJump, Len(C.P - C.LastP) - (C.VTop + 30.0) * AirDt);
-				if (C.TrailKey && C.Doing != Role::Fall) Emit(FxKind::TrailMove, Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[0]), std::string(), C.TrailKey).Vel = Velocity(C);
+				// (a hit's trail, or a fire put out: its kind changes when it was planned to, and it clears)
+				while (!C.TrailPlan.empty() && AirT >= C.TrailPlan.front().first && C.Doing != Role::Fall)
+				{
+					const std::string Kind = C.TrailPlan.front().second;
+					C.TrailPlan.erase(C.TrailPlan.begin());
+					if (!C.TrailKey) continue;
+					if (Kind.empty()) { StopTrails(C); break; }
+					LayTrail(C, Kind);
+				}
+				if (C.TrailKey && C.Doing != Role::Fall) Emit(FxKind::TrailMove, Local(C, C.TrailAt), std::string(), C.TrailKey).Vel = Velocity(C);
+				if (C.TrailKey2 && C.Doing != Role::Fall) Emit(FxKind::TrailMove, Local(C, C.TrailAt2), std::string(), C.TrailKey2).Vel = Velocity(C);
 			}
 			FireGuns(AirDt);
 			FlakRound(AirDt);
@@ -1803,6 +2317,9 @@ namespace AirShow
 			P.bFiring = C.bFiring;
 			P.Target = C.bFighter && C.Doing == Role::Fight ? C.Target : -1;
 			P.Speed = C.Spd;
+			P.DeadEngines = C.DeadEngines;
+			P.bFeathered = C.bFeathered;
+			P.Soot = C.SootAt >= 0.0 ? std::max(0.0, std::min(1.0, (AirT - C.SootAt) / 30.0)) : 0.0;
 			Out.push_back(P);
 		}
 	}

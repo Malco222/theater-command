@@ -6,6 +6,7 @@
 #include <deque>
 #include <functional>
 #include <map>
+#include <utility>
 #include <set>
 #include <string>
 #include <vector>
@@ -66,6 +67,7 @@ namespace AirShow
 		int Id = 0;
 		std::vector<int> Eng;  // its dead engines, from 1
 		bool bFeather = true;  // its dead airscrew feathered, or windmilling
+		bool bFire = false;    // its dead engine burning
 		int Cover = -1;        // the escort group over it
 		double Back = 0.0, Down = 0.0; // metres behind and below its box, along the box's heading
 	};
@@ -85,6 +87,7 @@ namespace AirShow
 		int Side = 0; // 0 the raider, 1 the defender
 		bool bFighter = true;
 		std::string Name, Model, Nation, State, Form, Style, Box, Role, Strike, Job;
+		std::string Cool;     // its engines: liquid or radial (the rules' extra.cool; empty in an older recording)
 		/** The view named no model: the place's main one of its kind stands in until a view names it. */
 		bool bModelGuessed = false;
 		double X = 0.0, Y = 0.0, Alt = 0.0, Face = 0.0, W = 400.0, D = 300.0, Speed = 0.0;
@@ -115,9 +118,26 @@ namespace AirShow
 		int With = -1;        // contact: the other group
 		std::string Pass;     // contact: the pass flown
 		int Ship = -1;        // air:ship-hit, air:ship-sunk
-		std::string How, Strike;
+		std::string How, Strike;   // air:lost: the way down (explode ... collide); air:ship-sunk: how she goes
 		bool bBig = false;
 		std::string Name;
+		// air:lost's way down (the air rules decide it, Brian 11-20 14:23Z: "many different ways a plan can go down"):
+		int Fid = -1;              // this loss's own number; With, for struck and collide, the other's
+		std::string Cause;         // struck, collide: debris, falling or ram
+		int Hand = 0;              // the wing, tail or spin's side: -1 port, +1 starboard, 0 not said
+		int Roll = 0;              // +1 or -1: which way it rolls or spins
+		int Look = 0;              // 0 to 3: which of its way's looks
+		double EngineAt = -1.0;    // which engine, 0 (port) to 1 (starboard)
+		double FireAt = -1.0, Boom = -1.0, Dur = -1.0; // air seconds from the hit: the fire shows, it blows apart, it strikes
+		bool bDitch = false;       // a glide onto the sea under control
+		int Out = 0;               // crew seen climbing out after a ditching or crash-landing
+		std::vector<double> ChuteAt; // air seconds from the hit when each parachute opens
+		// air:hit (a hit survived): what shows, for how long, on which model of the formation
+		std::string Mark;          // holes, smoke, pieces or fireout
+		double For = 0.0;
+		int Slot = -1;
+		bool bFire = false;        // air:straggle: it falls out burning
+		bool bFeather = false;     // air:straggle, air:fireout, air:regain, air:hit fireout: its dead airscrew feathered
 	};
 
 	/** A ship under attack, as the view's ships give it. */
@@ -208,7 +228,8 @@ namespace AirShow
 		int Most = 10;
 		int Peak = 0, Refused = 0, RefusedOwn = 0, PutOut = 0;
 		/** A TrailStart. True if it is lit (or was already); OutPutOut: the key of a piece's trail put out to make room
-		 * for it (to stop in the kit), else 0. */
+		 * for it (to stop in the kit), else 0. bPiece: a trail that gives way to an aircraft's own when the room is
+		 * full (a piece's, or a dead engine's thin "streak", which never clears); a lit trail's follows its newest kind. */
 		bool Start(int Key, bool bPiece, int& OutPutOut);
 		bool On(int Key) const;
 		/** A TrailStop: true if it was lit. */
@@ -242,6 +263,12 @@ namespace AirShow
 		bool bFiring = false;  // a fighter: its guns firing this frame
 		int Target = -1;       // a fighter in the fight: the plane it is after
 		double Speed = 0.0;    // metres a second along its path
+		/** Its dead engines (from 1, as the model's engine.N), their airscrews feathered (stopped) or windmilling, and
+		 * how far the soot behind them has built, 0 to 1 over about 30 s from when the engine died (the art director:
+		 * it builds over 20 to 40 s and stays, after a fire is out and back in the box too). */
+		std::vector<int> DeadEngines;
+		bool bFeathered = false;
+		double Soot = 0.0;
 	};
 
 	/** The small things drawn in one mesh: a parachute, a piece of a wreck, a bomb or a torpedo. */
@@ -254,6 +281,10 @@ namespace AirShow
 		double Spin = 0.0, Size = 1.0, Age = 0.0, Heading = 0.0;
 		bool bOpen = false;
 		bool bTorpedo = false;
+		/** A piece that flutters down slowly, as a torn wing or panel does, at about this many metres a second (0: it
+		 * falls as a stone does); and how long it lives, air seconds. */
+		double Flutter = 0.0, Life = 400.0;
+		bool bTrail = false; // it trails fire or smoke (its Key the trail's)
 		/** 1 while it may still pass into the deck, and passes out of sight in any drawn tile it falls into (under one
 		 * tile's foot it may yet fall into a lower tile beside it); 0 once it is under the deck's laid base, or there is
 		 * no deck, and it falls on to the ground or the sea. */
@@ -284,6 +315,11 @@ namespace AirShow
 		double MostJump = 0.0;        // metres an aircraft moved in a frame beyond its speed (a pop)
 		int Falls = 0, Chutes = 0, GunFrames = 0, Hits = 0, FlakBursts = 0, Bombs = 0, Passes = 0, UnderBreaks = 0, OverBreaks = 0;
 		int MostGunsAtOnce = 0, SharedWindows = 0;
+		std::map<std::string, int> FallsBy;  // falls begun, by the way down they play
+		int FallsOnTime = 0, FallsOffTime = 0; // falls that struck the sea or ground within a quarter of the battle's dur, or not
+		double MostOffTime = 0.0;            // air seconds, the worst of those
+		int ChutesOffTime = 0;               // parachutes not opened when the battle said
+		int HitsShown = 0, FiresOut = 0, Regained = 0, Ditched = 0;
 	};
 
 	/** The cloud deck as drawn over a board point (Show::DeckAt): its tile's foot and the height where it hides what
@@ -351,7 +387,7 @@ namespace AirShow
 		};
 		enum class Role { Ground, Slot, Fight, Straggle, Cover, Fall, Home, Dive, Gone };
 		enum class Phase { None, Setup, Run, Break, Climb, Turn, Peel, Plunge, Pull, Egress };
-		enum class FallHow { None, Explode, Burn, Spin };
+		enum class FallHow { None, Explode, Burn, Spin, Flamer, Wing, Tail, Pilot, Glide, Breakup, Struck };
 
 		/** What a pilot asks of his aircraft: a heading, a climb, a speed; or a bank of his own (a half-roll). */
 		struct Cmd
@@ -384,6 +420,7 @@ namespace AirShow
 			double Rest = 0.0;       // air seconds before the next burst may start
 			bool bFiring = false;
 			int StragId = -1;
+			double StragAt = -1.0;   // the air time it fell out of its box
 			FallHow Falling = FallHow::None;
 			double FallT = 0.0;
 			double FallDeck = 0.0;   // 1 while its fall may still pass into the deck (as Thing::Deck), else 0
@@ -393,6 +430,32 @@ namespace AirShow
 			double ChuteAt = 0.0;
 			std::string ChuteCue;
 			int TrailKey = 0;        // its running trail, 0 for none
+			// A dead engine's trail (Brian 15:29Z: "if a engine is out there should be a lot more dark smoke strains
+			// from that engine"): where on it the trail runs from, a second dead engine's own trail, what both lay now.
+			Vec TrailAt;             // its own frame; engine 1's place unless a dead or burning engine's
+			int TrailKey2 = 0;
+			Vec TrailAt2;
+			std::string TrailKind;   // fire, oil, streak, glycol or smoke, as last laid by LayTrail
+			bool bFireOut = false;   // its dead engine's fire put out (the streak stays from then)
+			bool bLiquid = false;    // liquid-cooled engines: white glycol first
+			std::vector<int> DeadEngines;
+			bool bFeathered = false;
+			double SootAt = -1.0;    // the air time its dead engine's soot began to build
+			// The way it falls, as the battle named it (AirShow.cpp, StartFall):
+			std::string FallName;    // the event's how (struck and collide play as another way, kept here as named)
+			int Look = 0;
+			double Turn = 1.0;       // +1 or -1: the way it rolls, spins or banks away
+			double FireAt = -1.0, BoomAt = -1.0, Dur = 60.0; // fall seconds: its fire shows, it blows apart, it strikes
+			bool bDitch = false;
+			bool bLit = false;       // its fire showing
+			bool bHeavy = false;     // a bomber: slower rolls and spins, long curves
+			Vec FallV;               // a tumbling or spinning fall's own velocity (its nose no longer its way)
+			Vec Axis;                // a spin's middle line, where it is now
+			double Spin = 0.0;       // a spin's or a tumble's angle (radians)
+			double Ended = -1.0;     // fall seconds when it struck the sea or ground (a ditching floats a while)
+			std::vector<double> ChuteTimes; // fall seconds when each parachute opens, as the battle said
+			int ChuteNext = 0;
+			std::vector<std::pair<double, std::string>> TrailPlan; // air times its trail changes kind ("" stops it)
 			bool bShown = true;
 			bool bJoining = false;   // a replacement still closing up to its slot
 			double Weave = 0.0;      // its own phase in an escort's weave
@@ -457,6 +520,21 @@ namespace AirShow
 		void FlakRound(double Dt);
 		void SmallThings(double Dt);
 		void StartFall(Craft& C, const Event& E);
+		/** A falling aircraft blown apart: the flash, the pieces, the model gone (explode, or a burning one's boom). */
+		void BlowApart(Craft& C, bool bFireball);
+		/** A piece of a lost aircraft, falling or fluttering on its own, its trail if it has one. */
+		void Piece(const Craft& C, int Slot, const Vec& At, const Vec& Vel, double Size, double Flutter, const char* Trail, double Life = 400.0);
+		/** A hit survived (air:hit), and a straggler's fire put out (air:fireout). */
+		void HitSurvived(const Event& E);
+		/** Its own trail (and a second dead engine's) laid as Kind from now: TrailStart again on the same key, so the
+		 * kit ramps the new kind into the same ribbon with no break in the smoke. */
+		void LayTrail(Craft& C, const std::string& Kind);
+		/** A dead engine's trail as its state has it: burning, put out (the thin dark streak that stays), or out and
+		 * running oil smoke (white glycol first on a liquid-cooled type; a feathered one thinning to the streak). */
+		void DeadEngineTrail(Craft& C, bool bFire);
+		void StopTrails(Craft& C);
+		/** Engine N's place (from 1, as the model's engine.N) in its own frame. */
+		static Vec EngineOf(const Craft& C, int N);
 		/** The model, its shape and its limits, from its group (as made, or when a view first names its model). */
 		void Fit(Craft& C, const Group& G);
 		int PickToFall(const Event& E);

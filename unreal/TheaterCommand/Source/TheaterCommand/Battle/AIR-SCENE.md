@@ -50,7 +50,29 @@ What else the scene draws for the battle:
 - Each sculpted aircraft near the eye turns its airscrews: the blades the model was built with (Battle/AirScrew finds
   them by their paint) are taken out of its near shape and a see-through blur disc turns at each hub, 1.9 turns a
   second as a film's camera sees it (`-TheaterScrewTurns=` tries another), slower on an aircraft falling. Far shapes
-  keep their blades, too small to see turn.
+  keep their blades, too small to see turn. A blade is every paint whose name in the file's `paint_names` begins
+  "blade" (the newer Kate, Val and Dauntless paint each blade in three), paint 9 in a file without names; a model's
+  own painted blur disc (`blur`, `blur_tip`) is taken out with its blades, the turning disc standing in for both.
+- Each aircraft goes down the way the battle names it (the air rules' `how`, 11 ways): blown apart, burning, a flamer,
+  a wing or the tail torn off and fluttering down, the pilot hit (a dive, no smoke), spinning, a glide on to the sea or
+  a belly landing (floating or lying a while), broken up, struck by another's wreck. The battle also says when it
+  catches fire, blows apart, strikes and opens each parachute, and the scene keeps to it. A pilot hit and a glide shed
+  no debris; a ditching throws a spray, not a bomb's column, and a belly landing dust with no fire.
+- Hits survived show on the model in the formation's slot the battle names: sparkles, panels torn away, a puff and a
+  trail, or an engine fire in the box that its crew put out.
+- A dead engine smokes for as long as it is out (Brian, 20 November 15:29Z: "a lot more dark smoke strains from that
+  engine and directly behind it on the tail"): each dead engine its own ribbon from its own nacelle, kinds "fire"
+  while it burns, "oil" while it windmills (white "glycol" first on a liquid-cooled type), "doused" for 2 s when its
+  crew put the fire out, then "streak", which never clears, after a fire is out and back in the box too. A kind
+  change is a TrailStart on the same key, so the ribbon never breaks. Until the effects thread's rows land the kit
+  trails the new kinds as smoke. A streak gives way, as a piece's trail does, when the room is full. Each aircraft
+  out carries its dead engines, its airscrews feathered or windmilling, and its soot (0 to 1 over 30 s) for the
+  modeller's soot parts when they land.
+- Tracers are passed their aircraft's nation for the art director's colours (G2) once the kit takes it.
+- Past the nearest 16 parachutes, those over 600 m from the eye are left out, the farthest first.
+- A ship blown up at sea takes her magazine fire down with her (about 30 s); her oil burns on where she went down.
+- A cloud's shadow lies 25 m over the highest ground under it among hills, but half a metre over flat land (the
+  points under it within a metre of each other), so it passes over a flat field's waiting aircraft, not above them.
 - A gun's burst sound stops with the gun: a take still playing is faded out when its gunner stops (a crew baled out,
   a target gone), not left to run to its end.
 - The stage's ships are each fitted to her real length and beam (AirFeed::HullOf), the kit having one model a class.

@@ -97,6 +97,22 @@ namespace AirParts
 		}
 	}
 
+	/** A gun firing, with its aircraft's nation where the kit takes it (the art director's G2, 15:38Z: Allied streams
+	 * red-orange, German and Italian pale yellow-white, Japanese near white, Soviet green; the effects thread's call,
+	 * the nation last, as the recordings give it: us, gb, de, it, jp, su). An older kit draws its one colour. */
+	template <typename TKit>
+	static void AirGun(TKit* Kit, double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& Carry, const FString& Kind, float Rate, float Mv, const FString& Nation)
+	{
+		if constexpr (requires(TKit* K) { K->AirGun(0.0, 0, FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector, FString(), 0.0f, 0.0f, FString()); })
+		{
+			Kit->AirGun(Now, Gun, Muzzle, Aim, Carry, Kind, Rate, Mv, Nation);
+		}
+		else
+		{
+			Kit->AirGun(Now, Gun, Muzzle, Aim, Carry, Kind, Rate, Mv);
+		}
+	}
+
 	/** The kit from 1295edc (TrailStart with a span) keeps every flame on a full screen and sheds the farthest smoke
 	 * first, so the scene may light 24 trails at once on it; 10 on an older kit (the pre-check, 06:08Z). */
 	template <typename TKit>
@@ -1716,7 +1732,9 @@ namespace AirParts
 		{
 			return;
 		}
-		const std::vector<int> Paints = AirScrew::NearPaints(std::string(TCHAR_TO_UTF8(*Text)));
+		const std::string FileText(TCHAR_TO_UTF8(*Text));
+		const std::vector<int> Paints = AirScrew::NearPaints(FileText);
+		const AirScrew::PaintsAre Are = AirScrew::PaintKinds(FileText);
 		if (Paints.empty() || static_cast<int32>(Paints.size()) > Made.Vertices.Num() || Shape.Triangles.Num() != Made.Triangles.Num())
 		{
 			return;
@@ -1728,7 +1746,7 @@ namespace AirParts
 		{
 			const FVector& P = Made.Vertices[static_cast<int32>(K)];
 			Points.push_back({ P.X, P.Y, P.Z });
-			Blade[K] = Paints[K] == AirScrew::BladePaint;
+			Blade[K] = Are.IsBlade(Paints[K]);
 		}
 		const std::vector<int> Triangles(Made.Triangles.GetData(), Made.Triangles.GetData() + Made.Triangles.Num());
 		const AirScrew::Found Found = AirScrew::Find(Points, Blade, Triangles);
@@ -1746,9 +1764,13 @@ namespace AirParts
 		}
 		TArray<int32> Kept;
 		Kept.Reserve(Shape.Triangles.Num());
+		// (the blades go, and with them the model's own painted blur disc where it has one: the turning disc stands
+		// in for both, and the blur would draw solid here)
+		auto IsBlur = [&](int32 Point) { return Point >= 0 && static_cast<size_t>(Point) < Paints.size() && Are.IsBlur(Paints[static_cast<size_t>(Point)]); };
 		for (int32 T = 0; T + 2 < Shape.Triangles.Num(); T += 3)
 		{
-			if (!Found.BladeTriangle[static_cast<size_t>(T / 3)])
+			const bool bBlur = IsBlur(Made.Triangles[T]) && IsBlur(Made.Triangles[T + 1]) && IsBlur(Made.Triangles[T + 2]);
+			if (!Found.BladeTriangle[static_cast<size_t>(T / 3)] && !bBlur)
 			{
 				Kept.Append({ Shape.Triangles[T], Shape.Triangles[T + 1], Shape.Triangles[T + 2] });
 			}
@@ -2007,6 +2029,10 @@ void AAirBattle::Draw(double Real)
 	for (const AirShow::PlaneOut& P : S.Show.Planes())
 	{
 		Seen.Add(P.Key);
+		if (!GunNations.Contains(P.Key))
+		{
+			GunNations.Add(P.Key, AirParts::Wide(P.Nation));
+		}
 		TObjectPtr<UProceduralMeshComponent>* Have = Planes.Find(P.Key);
 		if (!P.bShown)
 		{
@@ -2065,12 +2091,35 @@ void AAirBattle::Draw(double Real)
 	// The small things, laid afresh each frame in one mesh: a parachute's canopy and its airman, a torn piece of a
 	// wreck tumbling, a bomb or a torpedo falling.
 	FMiniatureMesh Things;
+	// (a real crew gets out, up to ten from a B-17, so three lost together may hang twenty canopies or more: past the
+	// nearest MostChutes, those over 600 m from the eye are left out, the farthest first, as the trails are thinned)
+	constexpr int32 MostChutes = 16;
+	double ChuteFar = TNumericLimits<double>::Max();
+	{
+		TArray<double> Aways;
+		for (const AirShow::Thing& T : S.Show.Things())
+		{
+			if (T.Kind == AirShow::ThingKind::Chute)
+			{
+				Aways.Add(FVector::Dist(World(T.At.X, T.At.Y, T.At.Z), EyeAt) / U);
+			}
+		}
+		if (Aways.Num() > MostChutes)
+		{
+			Aways.Sort();
+			ChuteFar = FMath::Max(600.0, Aways[MostChutes - 1]);
+		}
+	}
 	for (const AirShow::Thing& T : S.Show.Things())
 	{
 		const FVector At = World(T.At.X, T.At.Y, T.At.Z);
 		switch (T.Kind)
 		{
 		case AirShow::ThingKind::Chute:
+			if (FVector::Dist(At, EyeAt) / U > ChuteFar)
+			{
+				break;
+			}
 			if (T.bOpen)
 			{
 				Things.Pillar(At + FVector(0.0, 0.0, 5.2 * U), 3.6 * U, 0.9 * U, 1.7 * U, AirParts::Silk, 14);
@@ -2152,7 +2201,9 @@ void AAirBattle::PlayEffects()
 			if (Kit)
 			{
 				GunKits.Add(E.Key, Kit);
-				Kit->AirGun(Now, E.Key, At, World(E.Aim.X, E.Aim.Y, E.Aim.Z), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What), static_cast<float>(E.Rate), static_cast<float>(E.Mv * U));
+				const FString* Nation = GunNations.Find(E.Key / 64); // (the gun's key names its aircraft: Key * 64 + gun)
+				AirParts::AirGun(Kit, Now, E.Key, At, World(E.Aim.X, E.Aim.Y, E.Aim.Z), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), AirParts::Wide(E.What), static_cast<float>(E.Rate),
+				                 static_cast<float>(E.Mv * U), Nation ? *Nation : FString());
 			}
 			// The burst heard (mix.json air.gunsByCalibre): a take laid on while the trigger is down, never the same
 			// take under the mix's gap after itself.
@@ -2237,7 +2288,7 @@ void AAirBattle::PlayEffects()
 			// (in the kit for its height where it starts: over the clouds' base the air's, under it the ground's)
 			int PutOut = 0;
 			FBattleEffects* const Kit = KitAt(At);
-			if (Kit && S.Trails.Start(E.Key, E.Text == "piece", PutOut))
+			if (Kit && S.Trails.Start(E.Key, E.Text == "piece" || E.What == "streak", PutOut))
 			{
 				if (PutOut != 0)
 				{
@@ -2336,6 +2387,11 @@ void AAirBattle::PlayEffects()
 			// round the kit's short torn fireball; burning or spinning, pieces shed over the fall. Only while the
 			// pieces already falling leave the kit room (S.Debris): past that the blast below keeps the older flame.
 			// (in the kit for the height where the fall begins, as its trail)
+			// A pilot hit or a glide down goes down whole: no pieces shed (the air thread's ways down, Text the way).
+			if (E.Text == "pilot" || E.Text == "glide")
+			{
+				break;
+			}
 			if (FBattleEffects* const Kit = KitAt(At))
 			{
 				if (AirParts::HasAirFall(Kit) && S.Debris.Take(Now, E))
@@ -2405,14 +2461,17 @@ void AAirBattle::PlayEffects()
 		case AirShow::FxKind::Splash:
 			if (FBattleEffects* Kit = GroundKit())
 			{
-				Kit->ShellOfSize(At, E.Size >= 8.0 ? TEXT("bomb250") : E.Size >= 3.0 ? TEXT("light") : TEXT("grenade"), TEXT("water"));
+				// (a ditching, a glide on to the sea under control: a skip and spray, never a bomb's column)
+				Kit->ShellOfSize(At, E.What == "ditch" ? TEXT("light") : E.Size >= 8.0 ? TEXT("bomb250") : E.Size >= 3.0 ? TEXT("light") : TEXT("grenade"), TEXT("water"));
 			}
 			break;
 		case AirShow::FxKind::Crash:
 			if (FBattleEffects* Kit = GroundKit())
 			{
-				Kit->ShellOfSize(At, E.Size >= 8.0 ? TEXT("bomb250") : TEXT("grenade"), TEXT("earth"));
-				if (E.Size >= 8.0)
+				// (a belly landing: dust thrown up, no fire)
+				const bool bBelly = E.What == "belly";
+				Kit->ShellOfSize(At, !bBelly && E.Size >= 8.0 ? TEXT("bomb250") : TEXT("grenade"), TEXT("earth"));
+				if (!bBelly && E.Size >= 8.0)
 				{
 					Kit->Burn(At, static_cast<float>(E.Size * 0.6), 90.0f);
 				}

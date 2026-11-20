@@ -1029,13 +1029,17 @@ namespace AirSky
 			{
 				Under[K] = bLand ? GroundAt(Laid[K]) : 0.0;
 			}
-			auto Lay = [](double Highest) { return Highest > 0.5 ? Highest + 25.0 : 1.5; };
-			double Middle = Under[0];
+			// (25 m over the highest ground under it, to clear the hills between the points asked; on flat land, where
+			// the points asked lie within a metre, half a metre over it, so that a shadow passing over a flat field lies
+			// on it and not over the aircraft waiting there: the pre-check on Bremen, 20 November)
+			auto Lay = [](double Highest, double Lowest) { return Highest > 0.5 ? Highest + (Highest - Lowest < 1.0 ? 0.5 : 25.0) : 1.5; };
+			double Middle = Under[0], MiddleLow = Under[0];
 			for (int K = 0; K < SideCount; ++K)
 			{
 				Middle = std::max(Middle, Under[static_cast<size_t>(1 + K)]);
+				MiddleLow = std::min(MiddleLow, Under[static_cast<size_t>(1 + K)]);
 			}
-			PutHere(First, Vec(C.X, C.Y, Lay(Middle)), Shade, A);
+			PutHere(First, Vec(C.X, C.Y, Lay(Middle, MiddleLow)), Shade, A);
 			for (int K = 0; K < SideCount; ++K)
 			{
 				const size_t Heart = static_cast<size_t>(1 + K), Rim = static_cast<size_t>(1 + SideCount + K);
@@ -1043,8 +1047,10 @@ namespace AirSky
 				const size_t RimOn = static_cast<size_t>(1 + SideCount + (K + 1) % SideCount), RimBack = static_cast<size_t>(1 + SideCount + (K + SideCount - 1) % SideCount);
 				const double HeartTop = std::max({ Under[Heart], Under[0], Under[HeartOn], Under[HeartBack], Under[Rim] });
 				const double RimTop = std::max({ Under[Rim], Under[Heart], Under[RimOn], Under[RimBack] });
-				PutHere(First + Heart, Vec(Laid[Heart].X, Laid[Heart].Y, Lay(HeartTop)), Shade, A * 0.8);
-				PutHere(First + Rim, Vec(Laid[Rim].X, Laid[Rim].Y, Lay(RimTop)), Shade, 0.0);
+				const double HeartLow = std::min({ Under[Heart], Under[0], Under[HeartOn], Under[HeartBack], Under[Rim] });
+				const double RimLow = std::min({ Under[Rim], Under[Heart], Under[RimOn], Under[RimBack] });
+				PutHere(First + Heart, Vec(Laid[Heart].X, Laid[Heart].Y, Lay(HeartTop, HeartLow)), Shade, A * 0.8);
+				PutHere(First + Rim, Vec(Laid[Rim].X, Laid[Rim].Y, Lay(RimTop, RimLow)), Shade, 0.0);
 			}
 		};
 		// (the sweep: only a real one, of a millimetre or more and not endless, changes the lens's fade)

@@ -523,6 +523,7 @@ namespace AirFeed
 			G.Name = U["name"].Str("");
 			G.Nation = G.Side == 0 ? S.AttNat : S.DefNat;
 			G.Model = X["model"].Str("");
+			G.Cool = X["cool"].Str("");
 			if (G.Model.empty())
 			{
 				G.bModelGuessed = true;
@@ -564,6 +565,7 @@ namespace AirFeed
 				Row.Id = St["id"].Int();
 				Row.Eng = Ints(St["eng"]);
 				Row.bFeather = St["prop"].Str("feather") == "feather";
+				Row.bFire = St["fire"].Truth(false);
 				Row.Cover = St["cover"].Int(-1);
 				Row.Back = St["back"].Num(0.0);
 				Row.Down = St["down"].Num(0.0);
@@ -610,7 +612,8 @@ namespace AirFeed
 			Ev.bByFlak = By.IsString() && By.Text == "flak";
 			Ev.By = By.IsNumber() ? By.Int() : -1;
 			// The straggler's id: air:lost names it as strag; air:straggle and air:limped as id.
-			Ev.Strag = X["strag"].IsNumber() ? X["strag"].Int() : (Ev.What == "air:straggle" || Ev.What == "air:limped") ? X["id"].Int(-1) : -1;
+			Ev.Strag = X["strag"].IsNumber() ? X["strag"].Int()
+			         : (Ev.What == "air:straggle" || Ev.What == "air:limped" || Ev.What == "air:fireout" || Ev.What == "air:regain") ? X["id"].Int(-1) : -1;
 			Ev.Eng = Ints(X["eng"]);
 			Ev.With = X["with"].Int(X["on"].Int(-1));
 			Ev.Pass = X["pass"].Str("");
@@ -619,6 +622,25 @@ namespace AirFeed
 			Ev.Strike = X["strike"].Str("");
 			Ev.bBig = X["big"].Truth(false);
 			Ev.Name = X["name"].Str("");
+			// The way down and the hits survived (the air rules' fates, 20 November).
+			Ev.Fid = X["fid"].Int(-1);
+			Ev.Cause = X["cause"].Str("");
+			const std::string Hand = X["side"].Str("");
+			Ev.Hand = Hand == "port" ? -1 : Hand == "starboard" ? 1 : 0;
+			Ev.Roll = X["roll"].Int(0);
+			Ev.Look = X["look"].Int(0);
+			Ev.EngineAt = X["engineAt"].Num(-1.0);
+			Ev.FireAt = X["fire"].IsNumber() ? X["fire"].Num() : -1.0;
+			Ev.bFire = X["fire"].Truth(false);
+			Ev.bFeather = X["prop"].Str("") == "feather";
+			Ev.Boom = X["boom"].Num(-1.0);
+			Ev.Dur = X["dur"].Num(-1.0);
+			Ev.bDitch = X["ditch"].Truth(false);
+			Ev.Out = X["out"].Int(0);
+			for (const Json& At : X["chuteAt"].Items) Ev.ChuteAt.push_back(At.Num(0.0));
+			Ev.Mark = X["mark"].Str("");
+			Ev.For = X["for"].Num(0.0);
+			Ev.Slot = X["slot"].Int(-1);
 			Out.Events.push_back(std::move(Ev));
 		}
 

@@ -241,6 +241,8 @@ private:
 	struct FTrailOn { FBattleEffects* Kit = nullptr; FString Kind; float Span = 0.0f; double KindT = 0.0; };
 	TMap<int32, FTrailOn> TrailKits;
 	TMap<int32, FBattleEffects*> GunKits;
+	/** Each aircraft's nation (by its key), for its tracers' colour. */
+	TMap<int32, FString> GunNations;
 	// The sounds' own clocks.
 	TMap<int32, double> GunHeardAt;  // a gun's last burst heard, real seconds
 	TMultiMap<int32, TWeakObjectPtr<UAudioComponent>> GunTakes;  // the bursts a gun has playing, cut when it stops

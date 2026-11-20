@@ -167,6 +167,8 @@ int main(int Argc, char** Argv)
 	double WorstFrameMs = 0.0, TotalMs = 0.0;
 	long Frames = 0;
 	int EventsLost = 0, EventsChutes = 0;
+	std::map<std::string, int> EventsHow; // (the ways down the battle names, as the scene plays them: collide as its pieces)
+	int EventsHits = 0, EventsFiresOut = 0, EventsRegain = 0;
 	double FirstBombAir = -1.0; // (the air clock when the first bombs fall)
 	std::vector<AirSky::Vec> FallsAt; // (where each fall began, and on the air clock when, in Z)
 	std::vector<double> FallsAir;
@@ -183,6 +185,11 @@ int main(int Argc, char** Argv)
 	Trails24.Most = 24;
 	Trails10.Most = 10;
 	int PieceTrails = 0, OwnTrails = 0;
+	// A dead engine smokes for as long as it is out (Brian 15:29Z, the art director's G1): every aircraft the scene
+	// counts an engine dead on has its own trail lit, and none of its oil or streak is stopped while it still flies.
+	std::map<int, std::string> TrailKinds;
+	std::set<int> DeadSeen, DeadDark;
+	int DeadCleared = 0;
 	// No group still flies the place's stand-in once a view has named its model.
 	int Guessed = 0;
 	for (const AirFeed::Frame& F : Rec.Views)
@@ -190,7 +197,12 @@ int main(int Argc, char** Argv)
 			Guessed += G.bModelGuessed ? 1 : 0;
 	for (const AirFeed::Frame& F : Rec.Views)
 		for (const AirShow::Event& E : F.Events)
-			if (E.What == "air:lost") { ++EventsLost; EventsChutes += E.Chutes; }
+		{
+			if (E.What == "air:lost") { ++EventsLost; EventsChutes += E.Chutes; ++EventsHow[E.How.empty() ? (E.Kind == "explode" || E.Kind == "spin" ? E.Kind : std::string("burn")) : E.How]; }
+			if (E.What == "air:hit") { ++EventsHits; EventsFiresOut += E.Mark == "fireout" ? 1 : 0; }
+			if (E.What == "air:fireout") ++EventsFiresOut;
+			if (E.What == "air:regain") ++EventsRegain;
+		}
 
 	const double Dt = 1.0 / Fps;
 	double NextSample = 0.0;
@@ -221,6 +233,24 @@ int main(int Argc, char** Argv)
 		{
 			if (!P.bFiring || P.Target < 0) continue;
 			for (const AirShow::PlaneOut& T_ : PlanesNow) if (T_.Key == P.Target && T_.bFalling) { ++FiringAtFalling; break; }
+		}
+		for (const AirShow::Fx& E : Show.Effects)
+		{
+			if (E.Kind == AirShow::FxKind::TrailStart) TrailKinds[E.Key] = E.What;
+			if (E.Kind == AirShow::FxKind::TrailStop)
+			{
+				const auto Was = TrailKinds.find(E.Key);
+				if (Was != TrailKinds.end() && (Was->second == "oil" || Was->second == "streak"))
+					for (const AirShow::PlaneOut& P : PlanesNow)
+						if (P.Key == E.Key / 8 && P.bShown && !P.bFalling && !P.bOnGround) ++DeadCleared;
+				if (Was != TrailKinds.end()) TrailKinds.erase(Was);
+			}
+		}
+		for (const AirShow::PlaneOut& P : PlanesNow)
+		{
+			if (P.DeadEngines.empty() || !P.bShown || P.bFalling || P.bOnGround) continue;
+			DeadSeen.insert(P.Key);
+			if (TrailKinds.find(P.Key * 8 + 1) == TrailKinds.end()) DeadDark.insert(P.Key);
 		}
 		for (const AirShow::Fx& E : Show.Effects)
 		{
@@ -274,7 +304,8 @@ int main(int Argc, char** Argv)
 			}
 			if (E.Kind == AirShow::FxKind::FallMove && !FallsOpen.count(E.Key)) ++FallStrays;
 			if (E.Kind == AirShow::FxKind::FallStop && FallsOpen.erase(E.Key) == 0) ++FallStrays;
-			if (E.Kind == AirShow::FxKind::FallStop)
+			if (E.Kind == AirShow::FxKind::FallStop && E.What == "boom") FallBegan.erase(E.Key); // (blown apart in the air: it ends there)
+			if (E.Kind == AirShow::FxKind::FallStop && E.What != "boom")
 			{
 				const auto Began = FallBegan.find(E.Key);
 				const double Under = Show.Ground ? Show.Ground(E.At.X, E.At.Y) : 0.0;
@@ -283,7 +314,7 @@ int main(int Argc, char** Argv)
 			}
 			if (E.Kind == AirShow::FxKind::TrailStart)
 			{
-				const bool bPiece = E.Text == "piece";
+				const bool bPiece = E.Text == "piece" || E.What == "streak";
 				PieceTrails += bPiece ? 1 : 0;
 				OwnTrails += bPiece ? 0 : 1;
 				int Out = 0;
@@ -517,6 +548,16 @@ int main(int Argc, char** Argv)
 		{ "every burning aircraft keeps its trail (room 24)", Trails24.RefusedOwn == 0 && Trails24.Peak <= 24, std::to_string(Trails24.RefusedOwn), "0 refused" },
 		{ "no group left on the stand-in model", Guessed == 0, std::to_string(Guessed), "0 views" },
 		{ "parachutes as the battle says", C.Chutes >= EventsChutes * 8 / 10, std::to_string(C.Chutes), "at least 8 in 10 of the battle's" },
+		{ "every way down played as the battle names it", [&]() { int Off = 0; for (const auto& [How, N] : EventsHow) { const auto It = C.FallsBy.find(How); Off += std::abs(N - (It == C.FallsBy.end() ? 0 : It->second)); } return Off <= 2; }(),
+		  [&]() { std::string Text; for (const auto& [How, N] : C.FallsBy) Text += How + " " + std::to_string(N) + " "; return Text; }(), "the battle's, within 2" },
+		{ "falls strike when the battle says", C.FallsOffTime <= std::max(1, (C.FallsOnTime + C.FallsOffTime) / 20), std::to_string(C.FallsOnTime) + " on time, " + std::to_string(C.FallsOffTime) + " off, worst " + Num(C.MostOffTime, 1) + " s",
+		  "within a quarter of dur, 1 in 20 may miss" },
+		{ "parachutes open when the battle says", C.ChutesOffTime == 0, std::to_string(C.ChutesOffTime), "0 late" },
+		{ "hits survived shown", C.HitsShown >= EventsHits * 9 / 10, std::to_string(C.HitsShown) + " of " + std::to_string(EventsHits), "9 in 10" },
+		{ "fires put out", C.FiresOut >= EventsFiresOut * 7 / 10, std::to_string(C.FiresOut) + " of " + std::to_string(EventsFiresOut), "7 in 10" },
+		{ "bombers back in formation", C.Regained >= EventsRegain * 7 / 10, std::to_string(C.Regained) + " of " + std::to_string(EventsRegain), "7 in 10" },
+		{ "every dead engine smokes while it flies", DeadDark.empty() && DeadCleared == 0,
+		  std::to_string(DeadSeen.size()) + " with an engine out, " + std::to_string(DeadDark.size()) + " without smoke, " + std::to_string(DeadCleared) + " cleared", "0 and 0" },
 		{ "guns within the effects budget", MostLiveGuns <= Show.MostGuns, std::to_string(MostLiveGuns), "at most MostGuns" },
 		{ "no gun fires from a falling or hidden aircraft", GunsFromFalling == 0 && GunsFromHidden == 0, std::to_string(GunsFromFalling) + " falling, " + std::to_string(GunsFromHidden) + " hidden", "0" },
 		{ "every gun's key names its own aircraft", GunsMisKeyed == 0, std::to_string(GunsMisKeyed), "0" },
@@ -1594,6 +1635,7 @@ int main(int Argc, char** Argv)
 					{
 						const auto Found = Begins.find(E.Key);
 						if (Found == Begins.end()) continue;
+						if (E.What == "boom") { Begins.erase(Found); continue; } // (blown apart in the air: it ends there)
 						const AirShow::DeckSpan Here = Drawn(E.At.X, E.At.Y);
 						double Foot = 0.0;
 						const double Hide = std::hypot(E.At.X - Decked.Eye.X, E.At.Y - Decked.Eye.Y) > Decked.DeckReach ? 0.0 : Test.DeckAt(E.At.X, E.At.Y, &Foot);
