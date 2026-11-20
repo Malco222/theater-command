@@ -28,7 +28,7 @@ import { fieldOut, keepsStores, shortOfOil, supIncome } from './resources';
 import { SIEGE, besieged } from './siege';
 import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
-import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
+import { MANPOWER, drawMen, menSpare, ownMen, raisable, returnMen } from './manpower';
 import { raiseMorale } from './morale';
 import { WORLD_MAP, armyIdle, peaceFooting, shoreOf, warFooting, warWorkLeft } from './world';
 import { footLabel, footLineStays, footShare } from './footing';
@@ -59,13 +59,23 @@ export function corpsKinds(g: Game): Kind[] {
   return kinds.sort((a, b) => Number(a === 'eng') - Number(b === 'eng') || needsOf(g, a) - needsOf(g, b) || (specOf(g, a)!.cost - specOf(g, b)!.cost));
 }
 
-/** What a corps of this kind costs this nation: the list price, less what its own abilities take off (the grand campaign). */
-export function corpsCost(g: Game, nat: string, kind: string): number {
+/** What a corps of this kind is priced at for this nation: the list price, less what its own abilities take off (the grand campaign). */
+export function corpsList(g: Game, nat: string, kind: string): number {
   const price = priceOf(g, nat, `corps:${kind}`, specOf(g, kind)?.cost ?? 0);
   // The player's Minister of Armaments drives the price down, or up (the grand campaign).
   const m = govMul(g, nat, 'cost');
   return m === 1 ? price : Math.round(price * m * 10) / 10;
 }
+
+/**
+ * True where this nation forms a corps of this kind from its own men (rider B of 20:45Z to ruling 234; manpower.ts,
+ * ownMen): the fighting arms that need no industry. It is paid for in men from the reserve, as every corps is, and
+ * in no points. Nobody with the far side off.
+ */
+export const paidInMen = (g: Game, nat: string, kind: string): boolean => ownMen(g, nat) && kind !== 'eng' && needsOf(g, kind) === 0;
+
+/** What a corps of this kind costs this nation in points: its price, or nothing where it is paid for in men. */
+export const corpsCost = (g: Game, nat: string, kind: string): number => (paidInMen(g, nat, kind) ? 0 : corpsList(g, nat, kind));
 
 /** How many factories a province must have for a corps of this kind to be raised there. None in a historical scenario. */
 export const needsOf = (g: Game, kind: string): number => (budgeted(g) ? (arsenalData.needs as Record<string, number>)[kind] ?? 0 : 0);
@@ -702,6 +712,11 @@ export function aiProduction(g: Game, nat: string): void {
   // The grand campaign: a staff whose line has met dug-in troops orders massed guns to break them, one corps of guns
   // to every few of the rest, and brings them up where the works are.
   const wantsGuns = (): boolean => gunsWanted(g, nat);
+  // A corps paid for in men asks nothing of the bank (rider B of 20:45Z to ruling 234; paidInMen, above), and its
+  // men are counted in the reserve itself. Such a nation's thin corps are its standing shape, not a want its
+  // drafts will ever meet, so by the other test it would never have a man to spare. Nobody with the far side off.
+  const bank = (kind: string, price: number): boolean => paidInMen(g, nat, kind) || n.pp >= price + PRODUCTION.aiReserve;
+  const men = (kind: string, divs: number): boolean => (paidInMen(g, nat, kind) ? raisable(g, nat, divs) >= 1 : menSpare(g, nat) >= divs);
   while (slots() < most) {
     // The wider world: a staff an ocean away from every enemy raises no more corps than it has a use for at home.
     if (armyIdle(g, nat)) break;
@@ -711,7 +726,7 @@ export function aiProduction(g: Game, nat: string): void {
     if (old) {
       const t = cadreTerms(g, nat, old), up = corpsUpkeep(old.kind, old.divs);
       const site = budgeted(g) ? raiseSite(g, nat, old.kind, cap.id) : cap.id;
-      if (n.pp >= t.cost + PRODUCTION.aiReserve && spare >= up * BUDGET.debt.aiMargin && menSpare(g, nat) >= t.divs && orderCadre(g, nat, old.id, site >= 0 ? site : cap.id)) { spare -= up; continue; }
+      if (bank(old.kind, t.cost) && spare >= up * BUDGET.debt.aiMargin && men(old.kind, t.divs) && orderCadre(g, nat, old.id, site >= 0 ? site : cap.id)) { spare -= up; continue; }
     }
     let kind: Kind = wantsGuns() ? 'art' : home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
     // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the
@@ -719,11 +734,11 @@ export function aiProduction(g: Game, nat: string): void {
     let at = budgeted(g) ? raiseSite(g, nat, kind, cap.id) : cap.id;
     // A nation that has not researched the tank arm raises infantry instead, and so does one with no fuel to run more tanks.
     if (at < 0 || locked(g, nat, `corps:${kind}`) || (kind === 'arm' && shortOfOil(g, nat))) { kind = 'inf'; at = cap.id; }
-    if (n.pp < corpsCost(g, nat, kind) + PRODUCTION.aiReserve) break;
+    if (!bank(kind, corpsCost(g, nat, kind))) break;
     const cost = corpsUpkeep(kind, specOf(g, kind)!.divs);
     if (spare < cost * BUDGET.debt.aiMargin) break;
     // Nor does it raise new corps with men its armies in the field are waiting for (the grand campaign).
-    if (menSpare(g, nat) < specOf(g, kind)!.divs) break;
+    if (!men(kind, specOf(g, kind)!.divs)) break;
     if (!orderCorps(g, nat, kind, at)) break;
     spare -= cost;
   }

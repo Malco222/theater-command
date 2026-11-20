@@ -13,7 +13,7 @@ import { AIR, AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, car
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
 import { govMul } from './government';
-import { BUDGET, PRODUCTION, budgeted, cadreTerms, income, upkeepTotal, cadresOf, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
+import { BUDGET, PRODUCTION, budgeted, cadreTerms, income, upkeepTotal, cadresOf, canRaise, corpsCost, corpsKinds, corpsList, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
 import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
 import { atWar, headline } from './game';
@@ -903,7 +903,7 @@ export function aiProgramme(g: Game, nat: string): void {
   const wants = programmeWants(g, nat);
   if (!wants.length) return;
   const men = menSpare(g, nat) >= (specOf(g, 'inf')?.divs ?? 1);
-  const keep = PRODUCTION.aiReserve + (men ? corpsCost(g, nat, 'inf') : 0);
+  const keep = PRODUCTION.aiReserve + (men ? corpsList(g, nat, 'inf') : 0);
   const inc = income(g, nat);
   let spare = inc - upkeepTotal(g, nat);
   // What the arsenal would build for it: an order it could place, or one that waits only for the money.
@@ -951,7 +951,7 @@ export function aiFortify(g: Game, nat: string, watch: string[], C: FortRules | 
   if (!C || g.flags.open !== 1 || !budgeted(g) || nat === g.human || !n?.alive || n.capital < 0 || !n.atWar.length) return;
   const level = (r: Region): number => (r.fort?.lv ?? 0) + n.queue.filter((b) => b.what === 'fort' && b.region === r.id).length;
   const order = (r: Region, keep: number): boolean => { const cost = fortCost(g, nat, r); return cost !== null && n.pp >= cost + keep && !!orderFort(g, nat, r.id); };
-  const idle = corpsCost(g, nat, 'inf') + PRODUCTION.aiReserve;
+  const idle = corpsList(g, nat, 'inf') + PRODUCTION.aiReserve;
   const coast = watch.map((nm) => g.byName[nm]).filter((r) => !!r && isHome(g, nat, r) && level(r) < C.works).sort((a, b) => level(a) - level(b) || a.id - b.id);
   if (coast.length && !n.queue.some((b) => b.what === 'fort' && watch.includes(g.regions[b.region].name))) order(coast[0], idle);
   const D = C.dig;
