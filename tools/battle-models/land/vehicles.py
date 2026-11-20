@@ -3,6 +3,8 @@
 BUILDERS[name](fine) -> the Works that built it (its model is `.m`). ABOUT[name] says whose it is, what it does on the
 field and which of the game's units wear it (the unit table's names, generic-units/unit-table.json).
 """
+import os
+
 import armoured_cars
 import carriers
 import flak
@@ -145,4 +147,20 @@ def build(name, fine=True, tag=None, whole=False, **choice):
     fn = BUILDERS[name]
     if whole:
         choice = {**WHOLE.get(name, {}), **choice}
-    return fn(fine, tag, **choice) if tag else fn(fine, **choice)
+    v = fn(fine, tag, **choice) if tag else fn(fine, **choice)
+    unitmarks().vehicle(v.m)                                 # (where a unit that has made a name paints her: ../unitmarks.py)
+    return v
+
+
+def unitmarks():
+    """The battle models' own finder of a unit's earned paint (one folder up; loaded by its path, as the two folders'
+    rigid, kit and marks share their names)."""
+    import importlib.util
+    import sys
+    if "unitmarks" not in sys.modules:
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "unitmarks.py")
+        spec = importlib.util.spec_from_file_location("unitmarks", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        sys.modules["unitmarks"] = mod
+    return sys.modules["unitmarks"]

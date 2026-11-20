@@ -37,6 +37,7 @@ from mathutils import Quaternion, Vector, noise
 
 import fighters
 import fitout
+import unitmarks  # noqa: E402
 import whatif_planes
 import rigid
 from rigid import Model, smooth
@@ -2291,6 +2292,8 @@ def convert(name, fine=True):
     clips_for_plane(m, f)
     for hook in s.get("hooks", {}).get("clips", ()):
         hook(m, f, s, G, hull)
+    f.tailw = tailw
+    unitmarks.plane(m, f, G)                                 # (where a unit that has made a name paints her: unitmarks.py)
     return m, f
 
 

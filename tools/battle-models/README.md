@@ -742,6 +742,36 @@ Made again with `python export.py <out> WhatIf_EscortFighter,... json glb` (and 
 hand-held guns are in `air/gun-arcs.json`. The picture sheets are `air/sheets/whatif-planes.jpg` and
 `air/sheets/whatif-details.jpg`.
 
+### A unit's earned paint (the sandbox's reputation marks)
+
+Brian, 2026-11-19: squadrons, tank battalions and troops that keep winning "get a reputation", "for example the Red
+Tails". The rules (PR #16, `src/campaign/reputation.ts`) save on such a unit `mark: {at, colour, emblem?}`;
+`/mnt/project-files/sandbox/REPUTATION-MARKS.md` says what each `at` means. `unitmarks.py` finds those places on every
+aircraft as she is built (`planes.convert` calls it last), so the game knows exactly which points to paint:
+
+- `unit_marks` in her file: `places` (the `at` words she has, in the order of their bits), `emblems` (where a badge
+  goes, one entry for each side: `place`, `side`, `at`, `facing`, `radius`, `part`, in the file's axes) and `how`.
+- `unit_mark` in `near` and `far`: for every point, the places it lies in, as bits (bit k is `places[k]`; 0 is none).
+  A point can lie in two: the rudder is part of the tail, the front of the cowling part of the cowling.
+
+| `at` | what is painted |
+|---|---|
+| `tail` | fin, rudder, tailplane and elevators, every one of them (the Red Tails' look), with the lines and rivets on them |
+| `rudder` | the rudder alone |
+| `nose` | the front of each cowling, about 0.4 m (0.3 m on an engine out on a wing); with no engine in her nose (a jet, a bomber, a glider), her nose: 8% of her length, 0.6 to 1.2 m |
+| `spinner` | every spinner (`boss`); a machine with none (the B-17) has no `spinner` |
+| `cowling` | each engine's cowling: a radial's to its gills (at least 0.9 m behind the airscrew: the Fw 190's long cowl), an inline's to her windscreen, each nacelle's ahead of the wing, a jet's intakes |
+| `wingtips` | the outer 8% of each wing (0.4 to 1.0 m), ailerons too |
+| `fuselage band` | a band round her rear fuselage between wing and tailplane (5.5% of her length, 0.3 to 0.75 m), clear of her national marking |
+| `nose` (emblem) | `emblems`: a flat place on each side of her nose, on her painted skin, clear of her markings, codes and record, looking squarely out to the side where one has room (not under a bomber's chin) |
+
+The game paints a point whose bit for the unit's `at` is set in the mark's colour (the rules' `colours` table), then
+lays its own wear and soot over it as over any paint: flat and a little worn, never new. With an `emblem` it lays the
+badge as it lays a marking, at the `emblems` entries. The `.glb` gives each painted place its own material slots too
+(`<Name>:<paint>|tail+rudder` and so on). For the pictures, `airlook.py <Name> <out> high unit=tail:B3261E,spinner:B3261E
+emblem=E2B51F` paints them (`unitmarks.paint`) and lays a plain round badge where the emblem goes (`unitmarks.badges`).
+The what-if machines carry it now; every other aircraft gains it at her next export.
+
 ## Making them again, and the pictures
 
 ```

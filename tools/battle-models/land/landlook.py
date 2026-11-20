@@ -37,7 +37,11 @@ def main():
         pick["skirts"] = True if opt["skirts"] in ("all", "1", "yes") else opt["skirts"]
     v = vehicles.build(name, True, **pick)
     m = v.m
+    if opt.get("unit"):                                   # (unit=turret ring:EEEDE8,hatches:EEEDE8: a unit's earned paint, as the game lays it: ../unitmarks.py)
+        vehicles.unitmarks().paint(m, dict(kv.split(":") for kv in opt["unit"].split(",")))
     ob, arm = works.to_scene(m, dust=float(opt.get("dust", 1.0)), wear=float(opt.get("wear", 1.0)))
+    if opt.get("emblem"):                                 # (emblem=HEX: a plain badge where the unit's own emblem goes)
+        vehicles.unitmarks().badges(m, ob, arm, opt["emblem"])
     print(f"{name}: {m.triangles()} triangles, {len(m.parts)} parts, {len(m.sockets)} sockets, {len(m.clips)} clips, built in {time.time() - t:.1f}s", flush=True)
     pose = {}
     if "turn" in opt and "turret" in m.part_at:

@@ -235,6 +235,29 @@ the tech tree) and a `note`.
 Made again with `python export_land.py <out>/land/vehicles WhatIf_BreakthroughTank,... json glb`. The picture sheet is
 `land/looks/whatif-tanks.jpg`.
 
+## A unit's earned paint (the sandbox's reputation marks)
+
+The tanks, assault guns, tank hunters and armoured cars (kinds `tank` and `car`) carry the places a battalion that has
+made a name paints (rules: PR #16; what each place means: `/mnt/project-files/sandbox/REPUTATION-MARKS.md`). The
+finder is the battle models' own `../unitmarks.py` (`vehicles.build` calls it last); the file's keys are the same as an
+aircraft's (`unit_marks` with `places`, `emblems`, `how`; `unit_mark` bits for every point in `near` and `far`; see
+the aircraft README, "A unit's earned paint").
+
+| `at` | what is painted |
+|---|---|
+| `turret ring` | a band round each turret at the middle of its walls, 0.09 to 0.18 m high (a second turret too, and the turret's skirt) |
+| `hull band` | a band round the hull at one height, 0.08 m under the top of her sides, 0.16 m high (0.12 m on a car); skirt plates too |
+| `hatches` | every hatch cover (the parts `hatch_*`) |
+| `aerial pennant` | no paint: the socket `pennant` at the top of her aerial, where the game flies a small pennant in the colour |
+| `turret` (emblem) | `emblems`: a flat place on each side of the turret clear of her marking and her crew's name; on the hull's side where she has no turret |
+
+The two bands are cut into her plates along level lines (`unitmarks.cut_z`), so each is an even stripe and not a
+staircase of whole plates. They lie on her own plates only (`unitmarks.on_outside`): not on what is fitted to them (fuel
+drums, boxes, hoods, smoke dischargers), not on a plate hidden behind such a thing, and not on the inside walls of an
+open fighting compartment. A badge takes a side that looks squarely out, on the hull if the turret has none. For the
+pictures: `landlook.py <Name> <out> front 12 1280x720 "unit=turret ring:EEEDE8,hull
+band:B3261E" emblem=E2B51F`. The what-if vehicles carry it now; the rest gain it at their next export.
+
 ## How a vehicle is made to look made
 
 * Every plate edge is cut back and the mesh carries weighted normals, so a flat stays flat and its edge catches the

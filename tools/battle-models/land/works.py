@@ -989,7 +989,8 @@ def gather_land(model, ob):
     part, paint = model._vpart[lv], model._lpaint
     wear = np.round(model._wear[lv] * 100)
     soot, blend = np.round(np.maximum(model._soot[lv], ledge * EDGE_DARK) * 100), np.round(model._lblend * 100)
-    key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None]], axis=1)
+    lmark = rigid.loop_marks(model, me)
+    key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None], lmark[:, None]], axis=1)
     _, first, inverse = np.unique(key, axis=0, return_index=True, return_inverse=True)
     inverse = inverse.ravel()
     order = np.argsort(first)
@@ -1004,8 +1005,11 @@ def gather_land(model, ob):
 
     def flat(a, digits):
         return [round(float(x), digits) if digits else int(x) for x in a.ravel()]
-    return {"points": flat(p, 3), "facings": flat(n, 2), "paints": flat(paint[first], 0), "triangles": flat(t, 0),
-            "blend": flat(blend[first], 0), "soot": flat(soot[first], 0), "wear": flat(wear[first], 0), "part": flat(part[first], 0)}
+    out = {"points": flat(p, 3), "facings": flat(n, 2), "paints": flat(paint[first], 0), "triangles": flat(t, 0),
+           "blend": flat(blend[first], 0), "soot": flat(soot[first], 0), "wear": flat(wear[first], 0), "part": flat(part[first], 0)}
+    if lmark.any():           # (where a unit's earned paint goes: rigid.gather)
+        out["unit_mark"] = flat(lmark[first], 0)
+    return out
 
 
 def bake_actions(model, arm, fps=30):
