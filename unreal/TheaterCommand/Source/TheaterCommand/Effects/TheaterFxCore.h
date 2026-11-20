@@ -107,6 +107,7 @@ namespace TheaterFx
 		double Heart = 0.5, Rim = 0.0; // how thick it is at its heart ring, and at its edge, as shares of its middle
 		double HeartEnd = -1.0; // (when 0 or more: the heart thins or thickens to this by the end of its life, so old smoke loses its dark core)
 		double Inner = 0.5; // (where the heart ring sits, as a share of the radius: further out, a denser body with a thinner soft edge)
+		double FeatherPx = 0.0; // (over 0: its edge fades over at least this many pixels on the screen however far the eye is, its heart ring brought in to suit)
 		double Smear = 0.0; // (an aircraft trail's puff: drawn this many metres longer behind it, against Along, so puffs metres apart join in one line)
 		double SmearFor = 0.0; // (and that length shrinks to under a third over this many seconds, so an old trail breaks into lumps; 0 keeps it)
 		// (a ribbon trail's piece, Ribbon over 0: a length of ribbon from its own point back to the piece laid before it,
