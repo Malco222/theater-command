@@ -18,6 +18,7 @@ import { PLANS, planRules, whyNoTechPlans } from './plans';
 import type { Field, Game, Nation, TechState } from './types';
 import { controlFirst, radarWords } from './aircampaigns';
 import { techLift } from './lift';
+import { needEarly, needKeeps, needOrder, needPull, needWatch } from './need';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine' | 'intel';
 
@@ -280,8 +281,11 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
   // With the air campaigns on, a staff bombed by night takes Fighter control first (b569(2)).
   const first = controlFirst(g, nat);
   if (first && !s.done.includes(first) && !s.work.some((w) => w.id === first) && BY_ID[first].needs.every((x) => s.done.includes(x))) return first;
-  const A = TECH.ai, order = A.order[nat] ?? A.order._default, year = yearOf(turn);
-  const skip = (id: string): boolean => A.skip._all.includes(id) || !!A.skip[nat]?.includes(id);
+  // (Where a staff researches by need, need.ts: its order of branches may be dealt from the war's seed, the calendar
+  // pulls it less, a navy with a battle fleet takes carriers in their turn, and what it has met pulls its answers.)
+  const A = TECH.ai, order = needOrder(g, nat, A.order[nat] ?? A.order._default), year = yearOf(turn);
+  const early = A.early * needEarly(g, nat);
+  const skip = (id: string): boolean => (A.skip._all.includes(id) || !!A.skip[nat]?.includes(id)) && !needKeeps(g, nat, id);
   let best: Tech | null = null, low = Infinity;
   const thirsty = oilMonths(g, nat) < RES.ai.synthAt;
   for (const t of TECH.techs) {
@@ -298,7 +302,7 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
     const cold = t.winterKit && winterAhead(g, nat) ? A.winter ?? 0 : 0;
     // A staff at war with an army that has tanks wants the guns that stop them (ruling 152(g)).
     const guns = t.id === SUPPORT_TECH.antiTank && facesTanks(g, nat) ? A.guns ?? 0 : 0;
-    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold - guns;
+    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold - guns - needPull(g, nat, t.id);
     if (score < low) { low = score; best = t; }
   }
   return best ? best.id : null;
@@ -317,6 +321,8 @@ function month(g: Game, n: Nation, turn: number, staffed: boolean, quiet: boolea
     for (const id of due) finish(g, n, id, quiet);
   }
   if (!staffed) return;
+  // (A staff that researches by need reads what has come against it before it sets its free teams to work.)
+  needWatch(g, n.id);
   fill(g, n, turn);
 }
 
