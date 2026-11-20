@@ -53,9 +53,11 @@ namespace CampaignTextures
 	/**
 	 * (Speed, 17 November 2026.) The same box, and with it the box's share of every smaller copy of the picture, so
 	 * that the far view is right without the whole picture being halved and sent again: ground that changes hands
-	 * costs what the province costs, not what the world costs.
+	 * costs what the province costs, not what the world costs. MaxLevel stops at that smaller copy (the air battle's
+	 * craters, 20 November 2026: a crater is lost in a pixel of 64 m, and the copies above it, each made from the whole
+	 * picture, cost some 20 ms a crater); the copies above it keep what they had.
 	 */
-	void UpdateBoxAll(UTexture2D* Texture, const TArray<FColor>& Pixels, int32 X0, int32 Y0, int32 X1, int32 Y1);
+	void UpdateBoxAll(UTexture2D* Texture, const TArray<FColor>& Pixels, int32 X0, int32 Y0, int32 X1, int32 Y1, int32 MaxLevel = MAX_int32);
 
 	/** The size of the detail pictures, each way. */
 	constexpr int32 DetailSize = 512;

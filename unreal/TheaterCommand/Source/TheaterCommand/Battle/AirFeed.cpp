@@ -401,6 +401,19 @@ namespace AirFeed
 		Out.Terrain = Ground["terrain"].Str("");
 		for (const Json& R : Ground["land"].Items) Out.Land.push_back(Ring(R));
 		for (const Json& R : Ground["target"].Items) Out.TargetOutline.push_back(Ring(R));
+		for (const Json& R : Ground["rivers"].Items) Out.Rivers.push_back(Ring(R));
+		const Json& North = Ground["north"];
+		if (North.IsArray() || North.IsObject())
+		{
+			const double NX = North.IsArray() ? North.At(0).Num(0.0) : North["x"].Num(0.0);
+			const double NY = North.IsArray() ? North.At(1).Num(1.0) : North["y"].Num(1.0);
+			if (std::hypot(NX, NY) > 0.5)
+			{
+				Out.NorthX = NX / std::hypot(NX, NY);
+				Out.NorthY = NY / std::hypot(NX, NY);
+				Out.bNorthGiven = true;
+			}
+		}
 
 		// The day's sky (sky.ts): kept as given; a bundle from before it has none, and cumulus stands in.
 		const Json& Cloud = Place["cloud"];
