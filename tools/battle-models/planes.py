@@ -1209,7 +1209,9 @@ EXTRA_PLANES["Lancaster"] = {
                    (-4.6, 1.25, 0.05, 0.04)], 0.0, 2.0, "coat")),
         ("rod", ((9.55, 0.1, 0.62), (10.33, 0.1, 0.63), 0.022, 0.018, "steel")), ("rod", ((-3.42, 0.13, 1.6), (-4.18, 0.13, 1.84), 0.022, 0.018, "steel")),
         ("rod", ((-10.1, 0.31, 0.84), (-10.98, 0.31, 0.86), 0.022, 0.018, "steel")), ("rod", ((-10.1, 0.31, 0.46), (-10.98, 0.31, 0.44), 0.022, 0.018, "steel"))],
-    "side_marks": [(-5.6, 0.55, "UK-A1")], "wing_marks": [(11.5, 2.1, 1.0, "UK-B", None, True, False)], "fin_marks": [(-7.75, 1.5, 0.4, "UK-FIN")], "fin_marks_at": 5.07,
+    # (her side roundel half a metre forward of where it was, so that her squadron letters are 0.75 m and her starboard
+    #  fin hides none of them from far abeam: the art director, 2026-11-20, codes.py)
+    "side_marks": [(-5.1, 0.55, "UK-A1")], "wing_marks": [(11.5, 2.1, 1.0, "UK-B", None, True, False)], "fin_marks": [(-7.75, 1.5, 0.4, "UK-FIN")], "fin_marks_at": 5.07,
     "code": (-3.9, 0.55),
 }
 fitout.SEATS["Lancaster"] = [(0, 7.0, 0.33, 0.0), (0, 6.55, -0.36, 0.0), (0, 5.55, 0.0, 0.0)]
