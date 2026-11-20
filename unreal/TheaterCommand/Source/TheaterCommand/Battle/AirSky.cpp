@@ -166,7 +166,11 @@ namespace AirSky
 		// a cell the edge only clips is looked at wherever its lattice points fall in it)
 		const double Step = 120.0;
 		const double HeartOut = std::max(C.HeartReach, 0.25 * C.W) + 220.0, RimOut = std::max(HeartOut, std::max(C.RimReach, 0.5 * C.W) + 220.0);
-		const int N = static_cast<int>(std::ceil(RimOut / Step));
+		// (at most 64 lattice steps, 7.7 km, either way: no cloud laid is a fifth of that, and a broken field, a cloud of
+		// infinite or unknown width, takes the ground under its middle alone, never a loop without end; the pre-check
+		// on round 8)
+		const double Cells = std::ceil(RimOut / Step);
+		const int N = std::isfinite(Cells) ? static_cast<int>(std::min(64.0, std::max(0.0, Cells))) : 0;
 		double UnderHearts = At(X, Y), UnderRims = 0.0;
 		for (int I = -N; I <= N; ++I)
 		{
@@ -783,6 +787,12 @@ namespace AirSky
 		// (while a drawn cloud's lift eases over high ground, a paint for each metre the wind carries it, whatever the
 		// eye does: its lift moves only as it drifts; a far room's, every 3 m, a lift's step there a few pixels at most)
 		if (bEasing && (Drift - LastDrift).Length() > (Loose > 0.0 ? 3.0 : 1.0))
+		{
+			return true;
+		}
+		// (a far room's clouds thin over the target's clearing and their shadows slide over the land as the wind carries
+		// them, whatever the eye does: a turn for every 15 m of carry)
+		if (Loose > 0.0 && (Drift - LastDrift).Length() > 15.0)
 		{
 			return true;
 		}

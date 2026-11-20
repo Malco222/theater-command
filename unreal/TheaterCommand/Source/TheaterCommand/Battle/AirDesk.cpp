@@ -492,9 +492,10 @@ namespace AirDesk
 			AirShow::Vec Lead;
 			double Span = 0.0;
 			int Found = 0;
+			// (a lead plane going down leaves the aim where its fellows fly: it is never followed down; the pre-check on round 8)
 			for (const AirShow::PlaneOut& P : Planes)
 			{
-				if (P.bShown && std::find(Three.begin(), Three.end(), P.Key) != Three.end())
+				if (P.bShown && !P.bFalling && std::find(Three.begin(), Three.end(), P.Key) != Three.end())
 				{
 					Lead = Lead + P.At;
 					Span += P.Span;
