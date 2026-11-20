@@ -10,10 +10,11 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { frontWatch, runAI } from '../src/campaign/ai';
+import { frontWatch, garrisons, runAI } from '../src/campaign/ai';
 import { addCorps, createGame, declareWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { byThePlan, followKey, frontsClear, frontsState, frontsTick, hopKey, hopMade, landMarches, offFront, onFront, planFronts, planWaits, plansHold, sailedKey, walkedKey } from '../src/campaign/planfronts';
+import { garrison, garrisonOf } from '../src/campaign/siege';
 import { ops, startOpen } from '../src/campaign/staff';
 import farWorld from '../data/campaign/far-world.json';
 import farShores from '../data/campaign/far-shores.json';
@@ -335,5 +336,43 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
     expect(after.some(([, , why]) => /the hop before/.test(String(why)))).toBe(false);
     // (What it does next is the landing rules' to say; with the hop unmade it would have waited on it: the test above.)
     expect(after).toEqual(first);
+  });
+  // (The design director's ruling of 23:46Z, 20 November 2026, on Hong Kong's trace, 1. In 24 wars on the regiments'
+  // rows Hong Kong fell in 13, where the division's one row had taken it in 22: the 230th, the smallest foot row at
+  // Canton, was Canton's town row from its second month, the 21st Army's row was free and marched away, and the blow
+  // took the regiment out a day late and left Canton empty.)
+  it("a row a plan has spoken for is never taken as a town's garrison, before its front is live or after: Canton's own row keeps the town", () => {
+    const A21 = '21st Army (Canton)';
+    const inTown = (g: Game): string[] => garrisonOf(g.byName.Canton).map((c) => c.name);
+    const enemyBeside = (g: Game): void => { const w = g.byName.Waichow; w.ctrl = 'CHN'; w.units = w.units.filter((u) => u.nat !== 'JAP'); addCorps(g, 'CHN', 'a test army', 'inf', 1, 'Waichow', { xp: 0.1 }); };
+    // Before the plan goes: the three regiments stand at Canton, held for it, each smaller than the 21st Army's row.
+    const g = war(3, 3, 0);
+    enemyBeside(g);
+    const rows = [R228, R229, R230].map((nm, i) => put(g, nm, 'Canton', { stay: true, str: i === 2 ? 0.27 : 0.3 }));
+    const own = g.corps.find((c) => c.nat === 'JAP' && c.name === A21)!;
+    expect([where(g, own), own.town, state(g, 'hongkong')]).toEqual(['Canton', undefined, undefined]);
+    garrisons(g, 'JAP', true);
+    expect(inTown(g)).toEqual([A21]);
+    for (const c of rows) expect(c.town).toBeUndefined();
+    // (A free row of the staff's own, smaller still, is the town's as the rule has it: the smallest foot row first.)
+    const h = war(3, 3, 0);
+    enemyBeside(h);
+    for (const nm of [R228, R229, R230]) put(h, nm, 'Canton', { stay: true, str: 0.3 });
+    const small = put(h, 'a test brigade', 'Canton', { str: 0.2 });
+    garrisons(h, 'JAP', true);
+    expect(inTown(h)).toEqual([small.name]);
+    // The blow's month: the regiments and the guns walk for Hong Kong together, and Canton's town row stays where it is.
+    const w = war(3, 28, 28);
+    enemyBeside(w);
+    const regs = [R229, R228, R230].map((nm, i) => put(w, nm, 'Canton', { stay: true, str: i === 2 ? 0.27 : 0.3 }));
+    const guns = put(w, GUNS, 'Canton', { hold: true, kind: 'art', str: 0.4 });
+    // (Each at its record's size, as the data lays them: a row at its full is not folded into its neighbour.)
+    for (const c of [...regs, guns]) c.full = c.str;
+    expect(garrison(w, w.corps.find((c) => c.nat === 'JAP' && c.name === A21)!)).toBe(true);
+    runAI(w, 'JAP');
+    expect(inTown(w)).toEqual([A21]);
+    expect(w.byName.Canton.ctrl).toBe('JAP');
+    expect([...regs, guns].map((c) => w.flags[walkedKey(c)])).toEqual([28, 28, 28, 28]);
+    for (const c of [...regs, guns]) expect(['Tungkun', 'Hong Kong']).toContain(where(w, c));
   });
 });

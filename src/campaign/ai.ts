@@ -306,6 +306,14 @@ export function reliefFirst(g: Game, nat: string): Corps[] {
  */
 export function garrisons(g: Game, nat: string, post: boolean): void {
   if (!siegeRules(g)) return;
+  // A row a plan has spoken for is never taken as a town's garrison, from the month it is posted, whether or not its
+  // front is live: a garrison is meant to stay, and a row with a dated job is committed elsewhere (the design
+  // director's ruling of 23:46Z, 20 November 2026, on Hong Kong's trace, 1, to ruling 234). As built the rule spared a
+  // plan's row only once its front was live: the 230th Infantry Regiment, the smallest foot row at Canton, went into
+  // Canton's town in its second month, the 21st Army's row was a free corps and marched away, and the blow took the
+  // regiment out again, a day late for Hong Kong, and left Canton with nobody. The far side only.
+  const plans = farOn(g) ? plansKeep(g, nat) : null;
+  const spoken = (c: Corps): boolean => onFront(c) || !!plans?.has(c.name);
   if (!g.nations[nat].atWar.length) {
     // Ruling 139 as mended (b512(f)): a garrison put in for a war that has ended comes out with the peace.
     if (GREAT.on && !post) for (const r of g.regions) if (r.ctrl === nat && !besieged(g, r)) for (const c of garrisonOf(r).filter((c) => c.nat === nat && !c.fortress)) takeField(g, c);
@@ -346,7 +354,7 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
     const LATE = SIEGE.ai.lateGarrison;
     if (LATE && driveOut(g) && LATE.stops.includes(stopOf(g)) && r.owner === nat && greatPlace(g, r) && !sacks.has(r.id) && near(r, 1)) {
       const room = roomIn(g, r);
-      const worn = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && c.leave === undefined && (c.str / (c.full ?? 1) < LATE.str || c.org < LATE.org);
+      const worn = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && c.leave === undefined && !plans?.has(c.name) && (c.str / (c.full ?? 1) < LATE.str || c.org < LATE.org);
       const wear = (x: Corps, y: Corps): number => x.str * x.org - y.str * y.org;
       for (const c of r.units.filter(worn).sort(wear)) {
         if (garrisonOf(r).length >= room) break;
@@ -374,7 +382,7 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
     if (inside.length >= want || !near(r, 1) || sacks.has(r.id)) continue;
     if (great) {
       // (A row on a live front of its plan is that front's and not the garrison rule's: planfronts.ts.)
-      const all = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && !onFront(c));
+      const all = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && !spoken(c));
       const first = (c: Corps): number => (c.kind === 'inf' ? 0 : 1);
       // The field first (b512(e)): while the field can be held against the enemy next door, only the corps it can
       // spare go inside. Where it cannot be held, the city is filled to its room, a lone corps and all.
@@ -397,7 +405,7 @@ export function garrisons(g: Game, nat: string, post: boolean): void {
       continue;
     }
     // (A row on a live front of its plan is that front's and not the garrison rule's: the free staff garrisons with rows of its own. The director's note of 11:07Z on rider b631 (ii).)
-    const foot = r.units.filter((c) => c.nat === nat && !c.dead && c.kind === 'inf' && c.joint === undefined && !onFront(c)).sort((a, b) => corpsBase(g, a) - corpsBase(g, b));
+    const foot = r.units.filter((c) => c.nat === nat && !c.dead && c.kind === 'inf' && c.joint === undefined && !spoken(c)).sort((a, b) => corpsBase(g, a) - corpsBase(g, b));
     let field = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng').length, have = inside.length;
     for (const c of foot) {
       if (have >= want || field <= 1) break;
