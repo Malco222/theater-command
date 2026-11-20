@@ -264,9 +264,13 @@ export interface Fall {
   /** Where it ends: blown apart in the air, in the sea, on land; 'ditch' a glide onto the sea under control. */
   end?: 'air' | 'sea' | 'land';
   ditch?: boolean;
-  /** The other loss in a collision or a strike, and what struck it: wreckage, a falling aircraft, or the two met ('ram'). */
+  /**
+   * The other loss in a collision or a strike, and what struck it: wreckage, a falling aircraft, or the two met ('ram');
+   * 'meant': a fighter that rammed on purpose and the aircraft it rammed (book.ts SKY.fate.ram.meant).
+   */
   with?: number;
   cause?: 'debris' | 'falling' | 'ram';
+  meant?: true;
   /** Crew seen to climb out after a ditching or a crash-landing; air seconds after the hit each parachute opens. */
   out?: number;
   chuteAt?: number[];

@@ -10,7 +10,7 @@ import { startOpen } from '../src/campaign/staff';
 import type { Game } from '../src/campaign/types';
 import type { FieldEvent, FieldTicket } from '../src/battle/core/types';
 import { SKY } from '../src/battle/air/book';
-import { fateOf, freshMemory, HOWS, seaAt, weightsOf, type Scene } from '../src/battle/air/fates';
+import { coolOf, fateOf, freshMemory, HOWS, seaAt, tanksOf, weightsOf, type Scene } from '../src/battle/air/fates';
 import { airBattle, AirSim } from '../src/battle/air/sim';
 import { airTicket } from '../src/battle/air/ticket';
 import type { AirPlace, Fall } from '../src/battle/air/types';
@@ -138,7 +138,8 @@ describe('a falling aircraft strikes another; a fighter collides with the bomber
         expect(by, 'the loss that struck it').toBeDefined();
         if (fallOf(by).air === 'ftr') expect(by.side).not.toBe(e.side);
         else expect(by.unit).toBe(e.unit);
-        expect(e.t - by.t).toBeGreaterThanOrEqual(0);
+        // Seen falling a moment first, so the eye can follow it down (the art director, 20 November).
+        expect(e.t - by.t).toBeGreaterThanOrEqual(SKY.fate.near.min - 1e-9);
         expect(e.t - by.t).toBeLessThanOrEqual(SKY.fate.near.t);
         expect(fallOf(by).strag).toBeUndefined();
         expect(f.strag).toBeUndefined();
@@ -150,14 +151,19 @@ describe('a falling aircraft strikes another; a fighter collides with the bomber
     expect(seen).toBeGreaterThan(5);
   });
 
-  it('a collision is two losses of the two sides at the same moment, each naming the other, told once', () => {
+  it('a collision is two losses of the two sides at the same moment, each naming the other, told once in one line for both', () => {
     const was = { ...SKY.fate.ram };
     // Head-on collisions are rare: made common here so the test sees enough of them.
-    Object.assign(SKY.fate.ram, { headon: 1, other: 0.5, tangle: 0.3 });
-    let pairs = 0;
+    Object.assign(SKY.fate.ram, { headon: 1, other: 1, tangle: 0.3 });
+    let pairs = 0, mixedPairs = 0;
     try {
-      for (const tk of tickets) for (let k = 0; k < RUNS; k++) {
-        const s = fight(tk, k);
+      // Also with the groups taken in the other order, so a fighter's loss can come before its bomber's.
+      // More runs over Alsace, where a French fighter and the bomber it fires on fall together most.
+      for (const [i, tk] of tickets.entries()) for (let k = 0; k < (i === 0 ? 30 : RUNS); k++) for (const flip of [false, true]) {
+        const s = airBattle({ ...tk, seed: tk.seed + k }, { show: true });
+        if (flip) s.units.reverse();
+        s.ai.att = true; s.ai.def = true;
+        while (!s.over) s.step();
         const lost = lostOf(s.history());
         for (const e of lost) {
           const f = fallOf(e);
@@ -168,19 +174,29 @@ describe('a falling aircraft strikes another; a fighter collides with the bomber
           expect(o.t).toBe(e.t);
           expect(o.side).not.toBe(e.side);
           expect([e.text, o.text].filter(Boolean).length).toBe(1);
-          if (e.text) expect(e.text).toMatch(/collides with/);
+          // The UI director, 15:02Z: 'A bomber of the 8th Bomb Group and a fighter of JG 26 collide, and both go down.'
+          if (e.text) {
+            expect(e.text).toMatch(/^[A-Z].* and an? .* collide, and both go down(, .*)?\.$/);
+            // The bomber first, as the ruled line has it.
+            if (fallOf(e).air !== fallOf(o).air) { mixedPairs++; expect(e.text).not.toMatch(/^(An? (\w+ )?fighter of |One of the [^,]*fighters and )/); }
+            const c = fallOf(e).chutes + fallOf(o).chutes;
+            if (c === 0) expect(e.text).not.toMatch(/parachute/);
+            else expect(e.text).toContain(c === 1 ? ', one parachute' : `, ${c} parachutes`);
+          }
+          expect(fallOf(e).meant).toBeUndefined();
           pairs++;
         }
       }
     } finally { Object.assign(SKY.fate.ram, was); }
     expect(pairs).toBeGreaterThanOrEqual(2);
+    expect(mixedPairs).toBeGreaterThanOrEqual(2);
   });
 });
 
 /** A scene to draw from: a bomber of a twin-engined box at middle height, over land, hit by a fighter, all else plain. */
 const scene = (o: Partial<Scene> = {}): Scene => ({
   air: 'bmr', engines: 2, nat: 'USA', model: 'Bomber:USA', when: { year: 1942, month: 6 }, gun: 'hmg', flak: null, pass: null,
-  band: 1, alt: 4_500, loaded: false, strag: null, sea: false, back: false, over: 'enemy', crew: 5, near: null, ...o,
+  band: 1, alt: 4_500, loaded: false, strag: null, sea: false, night: false, back: false, over: 'enemy', crew: 5, near: null, ...o,
 });
 function shares(sc: Scene, n = 4_000): Record<string, number> {
   const rng = new Rng(11), out: Record<string, number> = {};
@@ -310,6 +326,159 @@ describe('not every aircraft that is hit goes down (Brian: "not all planes that 
       }
     }
     expect(back).toBeGreaterThan(3);
+  });
+});
+
+/** Shares of a mix of scenes, each from the weights alone (no memory of the last way shown). */
+function mixed(mk: (r: Rng) => Scene, n = 6_000): Record<string, number> {
+  const rng = new Rng(7), pick = new Rng(3), out: Record<string, number> = {};
+  for (let i = 0; i < n; i++) { const f = fateOf(rng, mk(pick), freshMemory()); out[f.how] = (out[f.how] ?? 0) + 1 / n; }
+  return out;
+}
+const of = (o: Record<string, number>, ...ks: string[]) => ks.reduce((t, k) => t + (o[k] ?? 0), 0);
+const oneOf = <T,>(r: Rng, xs: T[]): T => xs[Math.floor(r.next() * xs.length)];
+
+describe('the historian\'s check of the ways down (historian/air-fates-check.md, 20 November)', () => {
+  it('Japan\'s tanks: bare until mid-1944, the G4M until November 1944; partly protected after, never as well as the others', () => {
+    expect(tanksOf('JAP', 'Zero', { year: 1943, month: 8 })).toBe('bare');
+    expect(tanksOf('JAP', 'Zero', { year: 1944, month: 8 })).toBe('part');
+    expect(tanksOf('JAP', 'Bomber:JAP', { year: 1944, month: 8 })).toBe('bare');
+    expect(tanksOf('JAP', 'G4M', { year: 1944, month: 9 })).toBe('bare');
+    expect(tanksOf('JAP', 'Bomber:JAP', { year: 1945, month: 1 })).toBe('part');
+    expect(tanksOf('USA', 'B17', { year: 1942, month: 1 })).toBeNull();
+    const zero = (month: number, year: number) => scene({ air: 'ftr', engines: 1, nat: 'JAP', model: 'Zero', when: { year, month }, crew: 1 });
+    const fl = HOWS.indexOf('flamer'), w = (sc: Scene) => weightsOf(sc, freshMemory())[fl];
+    const none = scene({ air: 'ftr', engines: 1, model: 'Warhawk', crew: 1 });
+    // Flamers about three times as often bare, about two times after (the historian: cut to about two, not to none).
+    expect(w(zero(3, 1943)) / w(none)).toBeCloseTo(3, 5);
+    expect(w(zero(12, 1944)) / w(none)).toBeCloseTo(2, 5);
+    const bare = shares(zero(3, 1943)), part = shares(zero(12, 1944)), plain = shares(none);
+    expect(bare.flamer).toBeGreaterThan(part.flamer);
+    expect(part.flamer).toBeGreaterThan(1.4 * plain.flamer);
+  });
+
+  it('the record\'s shares: day heavies come down slowly, night kills burn, unprotected types burn, cannon take structure off, head-on kills the pilot', () => {
+    // The Eighth Air Force's heavies by day: German fighters with cannon, or flak; high; loaded or not.
+    const heavy = mixed((r) => {
+      const flak = r.next() < 0.3;
+      return scene({ engines: 4, model: 'B17', when: { year: 1943, month: 10 }, gun: flak ? null : r.next() < 0.8 ? 'cannon20' : 'hmg', flak: flak ? oneOf(r, ['heavy', 'heavy', 'medium'] as const) : null,
+        pass: flak ? null : oneOf(r, ['quarter', 'quarter', 'headon', 'astern', 'close'] as const), band: 2, alt: 7_500, loaded: r.next() < 0.5, crew: 10 });
+    });
+    expect(of(heavy, 'glide', 'burn')).toBeGreaterThanOrEqual(0.4);
+    expect(of(heavy, 'explode')).toBeLessThan(0.1);
+    // A Lancaster brought down by a night fighter's cannon from below and astern: about three in five flamers or blown up.
+    const night = mixed((r) => scene({ engines: 4, nat: 'UK', model: 'Lancaster', when: { year: 1944, month: 2 }, gun: 'cannon20', pass: oneOf(r, ['below', 'below', 'quarter', 'astern'] as const), band: 2, alt: 6_000, loaded: r.next() < 0.5, night: true, crew: 7 }));
+    expect(of(night, 'flamer', 'explode')).toBeGreaterThan(0.55);
+    expect(of(night, 'flamer', 'explode')).toBeLessThan(0.75);
+    // Unprotected: about three in five burn, flame or blow up.
+    const bare = mixed((r) => r.next() < 0.5
+      ? scene({ air: 'ftr', engines: 1, nat: 'JAP', model: 'Zero', when: { year: 1943, month: 3 }, band: oneOf(r, [0, 1, 1, 2] as const), crew: 1 })
+      : scene({ nat: 'JAP', model: 'Bomber:JAP', when: { year: 1943, month: 3 }, pass: oneOf(r, ['astern', 'quarter', 'beam', 'headon'] as const), loaded: r.next() < 0.5, crew: 7 }));
+    expect(of(bare, 'burn', 'flamer', 'explode')).toBeGreaterThan(0.55);
+    expect(of(bare, 'burn', 'flamer', 'explode')).toBeLessThan(0.7);
+    // Cannon: about a third lose a wing or the tail or come apart.
+    const cannon = mixed((r) => r.next() < 0.5
+      ? scene({ air: 'ftr', engines: 1, gun: 'cannon20', band: oneOf(r, [0, 1, 2] as const), crew: 1 })
+      : scene({ gun: 'cannon20', pass: oneOf(r, ['quarter', 'quarter', 'astern', 'beam', 'headon'] as const), loaded: r.next() < 0.5, band: oneOf(r, [0, 1, 2] as const) }));
+    expect(of(cannon, 'wing', 'tail', 'breakup')).toBeGreaterThan(0.3);
+    expect(of(cannon, 'wing', 'tail', 'breakup')).toBeLessThan(0.42);
+    // Head-on: about one in five has its pilot killed.
+    const head = mixed((r) => scene({ engines: r.next() < 0.5 ? 4 : 2, gun: oneOf(r, ['cannon20', 'cannon20', 'hmg', 'rifle'] as const), pass: 'headon', loaded: r.next() < 0.5, band: oneOf(r, [1, 2] as const) }));
+    expect(of(head, 'pilot')).toBeGreaterThan(0.15);
+    expect(of(head, 'pilot')).toBeLessThan(0.27);
+  });
+
+  it('by night no bomber is struck by another (there is no tight box in the stream), and a heavy that catches up stays with the stream', () => {
+    let regain = 0, lost = 0;
+    for (const [i, tk] of tickets.entries()) {
+      const dark = structuredClone(tk);
+      dark.place.night = true;
+      dark.place.models![RAIDS[i][0]].bmr = 'Lancaster';
+      for (let k = 0; k < RUNS; k++) {
+        const h = fight(dark, k).history();
+        for (const e of lostOf(h)) { lost++; expect(fallOf(e).how).not.toBe('struck'); }
+        for (const e of h.filter((x) => x.what === 'air:regain')) { regain++; expect(e.text).toMatch(/, on three engines, stays with the stream\.$/); }
+      }
+    }
+    expect(lost).toBeGreaterThan(50);
+    expect(regain).toBeGreaterThan(0);
+  });
+
+  it('a fighter rams on purpose where and when pilots did: one line, the one who rams first, and his pilot may get out and fly again', () => {
+    const was = SKY.fate.ram.meant;
+    // Made certain here for the French over Alsace, so the test sees enough of them (a fighter and the bomber it fires
+    // on seldom fall in the same moment).
+    SKY.fate.ram.meant = [{ nat: 'FRA', from: 1900, to: 2000, p: 1 }];
+    let rams = 0, back = 0;
+    try {
+      for (let k = 0; k < 30; k++) {
+        const lost = lostOf(fight(tickets[0], k).history());
+        for (const e of lost) {
+          const f = fallOf(e);
+          if (!f.meant) continue;
+          expect(f.how).toBe('collide');
+          const o = lost.find((x) => fallOf(x).fid === f.with)!;
+          expect(fallOf(o).meant).toBe(true);
+          expect(new Set([f.air, fallOf(o).air])).toEqual(new Set(['ftr', 'bmr']));
+          if (f.air === 'ftr' && f.back) { back++; expect(f.chutes).toBe(1); }
+          if (e.text) {
+            rams++;
+            expect(e.text).toMatch(/^An? [^,]*fighter of .* rams (an? |one of the ).*, and both go down(, .*)?\.$/);
+            // The endings of the two together.
+            const c = f.chutes + fallOf(o).chutes;
+            if (c === 0) expect(e.text).not.toMatch(/parachute/);
+            else expect(e.text).toContain(c === 1 ? ', one parachute' : `, ${c} parachutes`);
+          }
+        }
+      }
+    } finally { SKY.fate.ram.meant = was; }
+    expect(rams).toBeGreaterThan(2);
+    expect(back).toBeGreaterThan(0);
+  });
+});
+
+describe('the art director\'s and the UI director\'s rulings (20 November, 15:02Z)', () => {
+  it('each group says how its engines are cooled, beside its model, for the shade of what a hit one trails', () => {
+    expect(coolOf('Bf109')).toBe('liquid');
+    expect(coolOf('Spitfire')).toBe('liquid');
+    expect(coolOf('Lancaster')).toBe('liquid');
+    expect(coolOf('Zero')).toBe('radial');
+    expect(coolOf('B17')).toBe('radial');
+    expect(coolOf('D3A')).toBe('radial');
+    const s = airBattle({ ...tickets[0], seed: tickets[0].seed }, { show: true });
+    s.ai.att = true; s.ai.def = true;
+    for (let i = 0; i < 300 && !s.over; i++) s.step();
+    const groups = s.units.filter((u) => u.extra);
+    expect(groups.length).toBeGreaterThan(2);
+    for (const u of groups) expect((u.extra as { cool?: string }).cool).toBe(coolOf(u.model));
+  });
+
+  it('a fire put out is told from the aircraft and leaves its propeller feathered; a heavy regains its box only once its fire is out, most with it feathered, and says the engines it has left', () => {
+    let out = 0, feather = 0, wind = 0;
+    for (const [i, tk] of tickets.entries()) {
+      const heavy = structuredClone(tk);
+      heavy.place.models![RAIDS[i][0]].bmr = 'B17';
+      for (let k = 0; k < RUNS; k++) {
+        const h = fight(heavy, k).history();
+        for (const e of h.filter((x) => x.what === 'air:fireout')) {
+          out++;
+          expect(e.text).toMatch(/^On (an? |one of the ).*, the crew put out the engine fire\.$/);
+          expect((e.extra as { prop: string }).prop).toBe('feather');
+        }
+        for (const e of h.filter((x) => x.what === 'air:regain')) {
+          const id = (e.extra as { id: number }).id;
+          expect(e.text).toMatch(/^(An? |One of the ).*, on three engines, has caught up and is back in formation\.$/);
+          const fell = h.find((x) => x.what === 'air:straggle' && (x.extra as { id: number }).id === id)!;
+          if ((fell.extra as { fire?: boolean }).fire) {
+            const put = h.find((x) => x.what === 'air:fireout' && (x.extra as { id: number }).id === id);
+            expect(put && put.t <= e.t, 'its fire was out first').toBe(true);
+          }
+          if ((e.extra as { prop: string }).prop === 'feather') feather++; else wind++;
+        }
+      }
+    }
+    expect(out).toBeGreaterThan(5);
+    expect(feather).toBeGreaterThan(2 * wind);
   });
 });
 

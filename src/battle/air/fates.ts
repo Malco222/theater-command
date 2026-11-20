@@ -10,8 +10,9 @@
 // The situation weighs each way down: what hit it (a fighter's rifle-calibre guns, heavy machine guns or cannon; the
 // guns round the target, light, medium or heavy), the way the fighter came at it (head-on, from astern, from below),
 // its height, whether it still carries its bombs, whether it already has a dead engine, whether its tanks were
-// protected, and what is close by: a bomber that falls out of a tight box moments after another may be struck by it or
-// by its wreckage, and a fighter lost in the same moment as the bomber it was attacking may have collided with it.
+// protected, whether a night fighter came at it from below, and what is close by: a bomber that falls out of a tight
+// box moments after another may be struck by it or by its wreckage, and a fighter lost in the same moment as the
+// bomber it was attacking may have collided with it, or rammed it on purpose.
 // The same way down is never shown twice running, and each carries a look number so the 3D side can vary even that.
 
 import type { Rng } from '../../core/rng';
@@ -49,6 +50,8 @@ export interface Scene {
   strag: number[] | null;
   /** Over the sea. */
   sea: boolean;
+  /** A night battle: a bomber a fighter brings down was mostly hit from below and astern, in the tanks. */
+  night: boolean;
   /** The rules' fighter pilot who flies again, and whose ground it is over. */
   back: boolean;
   over: Fall['over'];
@@ -66,11 +69,31 @@ export const freshMemory = (): FateMemory => ({ last: [], looks: {} });
 export type Fate = Required<Pick<Fall, 'how' | 'hit' | 'dur' | 'end' | 'roll' | 'look'>> &
   Pick<Fall, 'side' | 'engineAt' | 'fire' | 'boom' | 'with' | 'cause' | 'ditch' | 'out' | 'chuteAt'> & { chutes: number };
 
+/** Japan's navy land bombers, the G4M and the G3M (the plain Japanese bomber is drawn as a G4M). */
+const japanTwin = (model: string): boolean => /^(G4M|G3M|Bomber:(JAP|JPN))$/.test(model);
 /**
- * Japan flew without self-sealing tanks or armour for most of the war (the A6M and G4M until 1944): hit, they burned
- * and blew apart far more often (the historian to confirm the month it changes).
+ * Japan flew without self-sealing tanks or armour for most of the war: hit, its aircraft burned and blew apart far
+ * more often. 'bare' until mid-1944, and the G4M until November 1944, when the G4M3 came (the historian, 20 November,
+ * turn 63); 'part' after, for the A6M5b's CO2 bottles and armoured glass and a little armour came, but self-sealing
+ * tanks only with the A6M6c from November 1944, and few were built, so most flew unprotected to the end.
  */
-export const fragile = (nat: string, w: { year: number; month: number }): boolean => nat === 'JAP' && w.year + w.month / 12 < 1944 + 6 / 12;
+export function tanksOf(nat: string, model: string, w: { year: number; month: number }): 'bare' | 'part' | null {
+  if (nat !== 'JAP' && nat !== 'JPN') return null;
+  const d = w.year + w.month / 12;
+  return d < 1944 + 6 / 12 || (japanTwin(model) && d < 1944 + 10 / 12) ? 'bare' : 'part';
+}
+
+/**
+ * How the engine is cooled, for the shade of what it trails when hit (the art director, 20 November: white glycol
+ * vapour from a liquid-cooled engine, blue-grey oil smoke from a radial). By the model the 3D game draws; a nation's
+ * plain fighter or bomber by what it mostly flew (France's Morane and Dewoitine and the Soviet SB in-line, the rest
+ * radials).
+ */
+export function coolOf(model: string): 'liquid' | 'radial' {
+  if (/^(Bf109|Bf110|Me410|Spitfire|Hurricane|Mustang|Warhawk|P38|P40|P51|Yak|Ki61|D4Y|Barracuda|Stuka|Ju87|Ju88|He111|Lancaster|Mosquito|MC202|Il2|Pe2|Whitley)/.test(model)) return 'liquid';
+  if (/^(Fighter:FRA|Bomber:SOV)$/.test(model)) return 'liquid';
+  return 'radial';
+}
 /** The twin-engined fighters. */
 export const fighterEngines = (model: string): number => (/^(Bf110|Me410|P38|Beaufighter|Mosquito|Ki45|J1N|Pe3|Potez63)/.test(model) ? 2 : 1);
 
@@ -94,8 +117,11 @@ export function weightsOf(sc: Scene, mem: FateMemory): number[] {
   if (sc.flak) mul(w, F.flak[sc.flak]);
   if (sc.pass) mul(w, F.pass[sc.pass]);
   if (sc.air === 'bmr') mul(w, sc.loaded ? F.loaded : F.dropped);
-  if (fragile(sc.nat, sc.when)) mul(w, F.fragile);
-  if (sc.air === 'bmr' && sc.engines === 4) mul(w, F.sturdy);
+  const tanks = tanksOf(sc.nat, sc.model, sc.when);
+  if (tanks) mul(w, tanks === 'bare' ? F.fragile : F.frail);
+  // By night a fighter came at a bomber from below into its tanks; by day the heavies came down under control.
+  if (sc.air === 'bmr' && sc.night && sc.gun) mul(w, F.night);
+  else if (sc.air === 'bmr' && sc.engines === 4) mul(w, F.sturdy);
   if (sc.strag) mul(w, F.strag);
   mul(w, F.band[sc.band]);
   // A saved pilot was seen under a parachute: only the ways down he can get out of.
@@ -140,7 +166,8 @@ export function fateOf(rng: Rng, sc: Scene, mem: FateMemory, pair?: { fid: numbe
   const dur = Math.round((Math.max(200, sc.alt) / v) * 10) / 10;
   // A burning one may blow apart on the way down; sooner with its bombs aboard.
   const bp = how === 'burn' ? F.boom.burn : how === 'flamer' ? F.boom.flamer : 0;
-  const boom = bp > 0 && rng.chance(Math.min(0.9, bp * (sc.air === 'bmr' && sc.loaded ? F.boom.loaded : 1) * (fragile(sc.nat, sc.when) ? 1.5 : 1)))
+  const tanks = tanksOf(sc.nat, sc.model, sc.when);
+  const boom = bp > 0 && rng.chance(Math.min(0.9, bp * (sc.air === 'bmr' && sc.loaded ? F.boom.loaded : 1) * (tanks ? F.boomBare[tanks] : 1)))
     ? Math.round(dur * range(rng, F.boom.at) * 10) / 10 : undefined;
   const fire = how === 'burn' ? Math.round(range(rng, F.fire.burn) * 10) / 10 : how === 'flamer' ? Math.round(range(rng, F.fire.flamer) * 10) / 10 : undefined;
   // Who is seen to get out, and when each canopy opens (never after the end, never in a blast).

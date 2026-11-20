@@ -173,7 +173,7 @@ export const SKY = {
     },
     /** By the way the fighter came at the box: head-on hits the cockpit and the engines; from astern the tail and the tanks; from below the tanks and the bomb bay. */
     pass: {
-      headon: { pilot: 2.5, burn: 1.5, tail: 0.3 },
+      headon: { pilot: 5, burn: 1.3, tail: 0.3 },
       astern: { tail: 2, flamer: 1.3, pilot: 0.7 },
       quarter: { wing: 1.3, burn: 1.2 },
       beam: { wing: 1.4, flamer: 1.2 },
@@ -183,10 +183,26 @@ export const SKY = {
     /** A bomber with its bombs aboard blows up far more often than one that has dropped. */
     loaded: { explode: 1.8 },
     dropped: { explode: 0.7 },
-    /** No self-sealing tanks, no armour (fates.ts fragile). */
-    fragile: { flamer: 3, explode: 1.5, glide: 0.6 },
-    /** The four-engined heavies took terrible punishment and often came down under control. */
-    sturdy: { glide: 1.6, spin: 1.2, explode: 0.7, flamer: 0.7, breakup: 0.7 },
+    /**
+     * No self-sealing tanks, no armour (fates.ts tanksOf): Japan's aircraft until mid-1944, the G4M until November 1944;
+     * and 'part', Japan's after that, with CO2 bottles and some armour but still no self-sealing tanks in most (the
+     * historian, 20 November: the Zero's flamers cut to about two times, not to none). 'boom' is how much more often
+     * a burning one blows apart on the way down.
+     */
+    fragile: { flamer: 3, explode: 1.9, burn: 1.3, glide: 0.6 },
+    frail: { flamer: 2, explode: 1.4, burn: 1.15, glide: 0.8 },
+    boomBare: { bare: 1.5, part: 1.25 },
+    /**
+     * The four-engined heavies by day took terrible punishment and often came down under control (the historian: the
+     * Eighth Air Force had more men taken prisoner than killed, so its lost heavies glided or burned down slowly at
+     * least two in five times, and blew up fewer than one in ten).
+     */
+    sturdy: { glide: 2.6, burn: 1.3, spin: 1.1, explode: 0.45, flamer: 0.7, breakup: 0.7 },
+    /**
+     * A bomber a night fighter brings down: from below and astern into the wing tanks, it goes up in flames (the
+     * historian: about three in five flamers or blown up; a Lancaster's crew the least likely of the heavies to get out).
+     */
+    night: { flamer: 4.5, explode: 3, burn: 0.8, wing: 0.7, glide: 0.3, spin: 0.5, pilot: 0.4, tail: 0.6 },
     /** A straggler already on fewer engines: the dead engine's fire spreads, the wing burns through, the rest give out. */
     strag: { burn: 2.5, wing: 1.6, glide: 2.5, explode: 0.6, pilot: 0.5 },
     /** By height: low down it has no room to spin long, and glides in; high up it spins. */
@@ -217,9 +233,23 @@ export const SKY = {
      * hit); and a fighter shot down while it attacked the box, falling through it, at 'foe' times those (it is smaller).
      * Each loss strikes at most one other.
      */
-    near: { t: 4, debris: 0.3, falling: 0.2, burning: 0.08, foe: 0.5 },
-    /** A fighter and the bomber it was attacking lost in the same moment: the chance they collided, head-on and otherwise; two fighters locked in a fight. */
-    ram: { headon: 0.12, other: 0.03, tangle: 0.04 },
+    near: { t: 4, min: 1, debris: 0.3, falling: 0.2, burning: 0.08, foe: 0.5 },
+    /**
+     * A fighter and the bomber it was attacking lost in the same moment: the chance they collided by accident, head-on
+     * and otherwise, and two fighters locked in a fight (the historian: about 2 to 3 in a hundred; closing at 900 km/h
+     * the fighters broke away under or rolled off). 'meant': a ram on purpose, its own situation by nation and month
+     * (the historian: Soviet pilots, most in 1941 to 1943; Japan's ramming units against the B-29s from late 1944;
+     * Germany's armoured Sturm groups closing from astern in 1944 and to April 1945). The pilot who rams may get out
+     * and fly again. Shares of 'meant' are placeholders for the historian.
+     */
+    ram: {
+      headon: 0.03, other: 0.01, tangle: 0.02,
+      meant: [
+        { nat: 'SOV', from: 1941 + 5 / 12, to: 1944, p: 0.2 },
+        { nat: 'JAP', from: 1944 + 10 / 12, to: 1946, p: 0.25, four: true },
+        { nat: 'GER', from: 1944, to: 1945 + 4 / 12, p: 0.08, four: true, pass: 'close' },
+      ] as { nat: string; from: number; to: number; p: number; four?: boolean; pass?: string }[],
+    },
     /** How many looks each way down has on the 3D side (smoke, debris, the way it rolls); never the last one again. */
     looks: 4,
   },
@@ -260,12 +290,16 @@ export const SKY = {
     /**
      * Shown only (Brian, 20 November: "some bombers flew on 2 engines after they put out the fire"). The chance its dead
      * engine was burning as it fell out, and the air seconds before the crew put the fire out ('stays': the share where
-     * it never goes out). After its box has dropped, a heavy with one engine out regains the box at 'four' (the
-     * historian, question 6: after the drop most could keep up): it closes at 'close' metres an air second and climbs
-     * back at 'climb'. A twin on one engine, or a carrier or dive bomber with its one engine hit, never does.
+     * it never goes out; the historian, 20 November: an engine fire was put out about 55 to 60 times in a hundred with
+     * the propeller feathered and the CO2 bottle, a wing-tank fire almost never, so about half overall). A fire put out
+     * leaves its propeller feathered. After its box has dropped, and its fire is out, a heavy with one engine out
+     * regains the box: most with the dead engine's propeller feathered, few with it windmilling, for the drag held it
+     * back (the historian: about 60 to 65 and about 10 in a hundred). It closes at 'close' metres an air second and
+     * climbs back at 'climb'; at night it stays with the stream. A twin on one engine, or a carrier or dive bomber with
+     * its one engine hit, never does.
      */
-    fire: { k: 0.4, out: [4, 15] as [number, number], stays: 0.25 },
-    join: { four: 0.45, close: 3, climb: 1.5 },
+    fire: { k: 0.4, out: [4, 15] as [number, number], stays: 0.5 },
+    join: { feather: 0.62, windmill: 0.1, close: 3, climb: 1.5 },
   },
 };
 
