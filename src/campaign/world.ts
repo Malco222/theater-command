@@ -322,6 +322,18 @@ function settleFallen(g: Game, from: number): void {
 }
 
 /**
+ * The mother country whose war with e a dominion would be taken back into next month (worldMonth), or undefined.
+ * A dominion makes no separate peace while she fights that enemy (staff.ts, stalemates).
+ */
+export function followsInto(g: Game, id: string, e: string): string | undefined {
+  const of = WORLD.follow[id];
+  if (!of || !worldOn(g) || (g.flags.dom ?? 0) > 0) return undefined;
+  const n = g.nations[id], M = g.nations[of];
+  if (!n?.alive || !M?.alive || id === g.human || !allied(g, id, of)) return undefined;
+  return M.atWar.includes(e) && g.nations[e]?.alive && !allied(g, id, e) ? of : undefined;
+}
+
+/**
  * The wider world's month: a dominion follows its mother country into every war she is in, while the two stand in
  * the same alliance. One in the player's hands goes to war only when its player says so.
  */

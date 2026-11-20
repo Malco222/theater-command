@@ -38,7 +38,7 @@ import { openWeather } from './weather';
 import { openAirVersion } from './airversion';
 import { openSecretWar } from './secretwar';
 import { openManpower } from './manpower';
-import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, overseasOf, shoreOf } from './world';
+import { acrossOcean, attachWorld, beyondEurope, farOn, followsInto, neighbourByLand, overseasOf, shoreOf } from './world';
 import { tieWar } from './far';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
 import { openWinter, winterOver } from './winter';
@@ -2279,6 +2279,12 @@ export function stalemates(g: Game): [string, string][] {
     if (g.turn - since < S.after || !free(A.id, sb) || !free(b, sa)) continue;
     signed.push([A.id, b]);
   }
+  // A dominion makes no separate peace while its mother country fights that enemy, unless she signs with it this
+  // month: her war would only take it back in (world.ts, worldMonth). The far side's client and patron in general.
+  const pair = (a: string, b: string): string => (a < b ? `${a}:${b}` : `${b}:${a}`);
+  const signing = new Set(signed.map(([a, b]) => pair(a, b)));
+  const alone = (d: string, e: string): boolean => { const m = followsInto(g, d, e); return m !== undefined && !signing.has(pair(m, e)); };
+  for (let i = signed.length - 1; i >= 0; i--) if (alone(signed[i][0], signed[i][1]) || alone(signed[i][1], signed[i][0])) signed.splice(i, 1);
   for (const [a, b] of signed) {
     const A = g.nations[a], B = g.nations[b];
     A.atWar = A.atWar.filter((x) => x !== b);
