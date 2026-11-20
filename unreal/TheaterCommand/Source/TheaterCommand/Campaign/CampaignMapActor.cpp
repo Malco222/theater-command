@@ -13740,6 +13740,22 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				UE_LOG(LogTheater, Display, TEXT("Effects: the test's guns stand on %s (the province is %s; the bare ground there is %d,%d,%d, wooded %d of 255; the painter's masks: rock %d, snow %d, shore sand %d, desert %d of 255)"),
 					*BlastGround, Lie.IsEmpty() ? TEXT("none") : *Lie, Bare.R, Bare.G, Bare.B, Bare.A, Mask.R, Mask.G, Mask.B, Mask.A);
 			}
+			// (The VFX artist's hook, 20 November 2026: a heavy gun's dust takes the colour of the ground as the SCREEN
+			// shows it. On the campaign's map that colour is not in the bare ground's picture (Idaho's bare paint is
+			// 106,108,86 and the screen shows 176,159,117: the dry range is laid over it by the land's material), so
+			// for the test rig it is measured off a still and given by a switch: "-TheaterBlastGroundColour=176,159,117",
+			// pixel values, the same for every shot of the test. Without the switch the kit is told nothing and keeps
+			// its named ground's paint. A real battle's scene feeds the hook from its own ground.)
+			{
+				FString SeenAsked;
+				TArray<FString> SeenParts;
+				if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastGroundColour="), SeenAsked, false) && SeenAsked.ParseIntoArray(SeenParts, TEXT(",")) >= 3)
+				{
+					const FLinearColor Seen(FCString::Atof(*SeenParts[0]) / 255.0f, FCString::Atof(*SeenParts[1]) / 255.0f, FCString::Atof(*SeenParts[2]) / 255.0f, 1.0f);
+					Blasts->GroundColour = [Seen](const FVector&, FLinearColor& Out) { Out = Seen; return true; };
+					UE_LOG(LogTheater, Display, TEXT("Effects: the test tells the kit the ground is seen as %s,%s,%s (by switch)"), *SeenParts[0], *SeenParts[1], *SeenParts[2]);
+				}
+			}
 			Blasts->RunTest(SurfacePoint(Under.X, Under.Y, 0.0), BlastGround);
 			bBlastTicked = true; // (the kit is ticked once a frame: a second tick in this frame cut its lamps short)
 			{
