@@ -99,6 +99,10 @@ export class AirSim implements BattleSim<AirUnit> {
   private chasing = new Map<number, number | null>();
   /** Battle seconds of the first contact, null before it (the view's contact, as land's). */
   private metAt: number | null = null;
+  /** The defending groups whose staff has weighed its climb (once each: a group that has dived is never sent back up). */
+  private risen = new Set<number>();
+  /** A split defence's pool (arm): each group's weight, by which it shares what the defence still in the fight has left. */
+  private pool: Map<number, number> | null = null;
 
   constructor(ticket: FieldTicket<AirPlace>, opts: { show?: boolean } = {}) {
     this.ticket = ticket;
@@ -155,6 +159,7 @@ export class AirSim implements BattleSim<AirUnit> {
       boxes.forEach((u, k) => { u.lane = (k - (boxes.length - 1) / 2) * SKY.stream; u.x = entry + u.lane; u.homeX = u.x; });
       raid.filter((u) => u.air === 'ftr').forEach((u, k) => { u.x = entry + (k % 2 ? 1 : -1) * (SKY.escort.close + Math.floor(k / 2) * 600); u.homeX = u.x; });
     }
+    this.deal();
     this.arm();
     // Both sides start on the staff's plan; the player changes what he likes before or after he starts the clock.
     this.think('att', true);
@@ -228,7 +233,8 @@ export class AirSim implements BattleSim<AirUnit> {
    * the large raids. The first two take the doctrine's other roles in its order.
    */
   private role(u: AirUnit): Role {
-    const roles = escortRoles(u.nat, this.when), from = SKY.escort.topFrom;
+    // At stops 4 and 5 a computer raid orders its roles by its weight against the defence (the ticket's roles, styles.ts).
+    const roles = this.place.roles?.[u.nat] ?? escortRoles(u.nat, this.when), from = SKY.escort.topFrom;
     const k = Math.max(0, this.units.filter((f) => f.side === 'att' && f.air === 'ftr').indexOf(u));
     const rest = roles.filter((r) => r !== 'top');
     if (k < from) return rest[k % rest.length];
@@ -260,20 +266,103 @@ export class AirSim implements BattleSim<AirUnit> {
         u.job = { do: 'escort', on: b.id, close: role === 'close', ...(role === 'top' ? { top: true } : {}) };
         u.to = role === 'top' ? Math.min(2, b.band + 1) as Band : b.band;
       } else {
-        // The defenders go for the bombers that have yet to drop; failing those, any raider still coming on.
+        // The defenders go for the bombers that have yet to drop; failing those, any raider still coming on. A group
+        // its staff sent at the escort (deal) goes for the raid's nearest fighters still coming on while it has fight
+        // left for fighters, and then as the rest do.
         const loaded = (v: AirUnit): boolean => !away(v) && v.air === 'bmr' && !v.dropped && !v.jettisoned;
+        const escort = (v: AirUnit): boolean => !away(v) && v.air === 'ftr';
+        const atEscort = u.def === 'escort' && u.kit.ftr > 0;
         const cur = u.job.do === 'intercept' ? this.unit(u.job.on) : undefined;
-        if (!first && cur && this.valid(u, u.job) && loaded(cur)) continue;
+        // On its staff's climb, a group keeps no more than a band above its quarry, or it could never reach it: a box
+        // that goes down a band takes the climbers down with it. Once it is back at the height every staff flies at
+        // (band 1), it is no longer above the raid on its staff's climb, and is priced as any other group from there
+        // (here if it is there already, otherwise in fly() when it gets there): a dive on the way down is still the
+        // climb's own.
+        const keep = (q: AirUnit | null | undefined): void => {
+          if (!u.rise || !q || u.to <= q.band + 1) return;
+          u.to = (q.band + 1) as Band;
+          if (u.to <= 1 && u.band <= 1) u.rise = false;
+        };
+        if (!first && cur && this.valid(u, u.job) && (atEscort ? escort(cur) : loaded(cur))) { keep(cur); continue; }
         const want = u.kit.bmr > 0 || u.kit0 <= 0;
-        const e = (want ? this.nearest(u, loaded) : null) ?? (cur && this.valid(u, u.job) && !away(cur) ? cur : null)
+        const e = (atEscort ? this.nearest(u, escort) : null) ?? (want ? this.nearest(u, loaded) : null) ?? (cur && this.valid(u, u.job) && !away(cur) ? cur : null)
           ?? this.nearest(u, (v) => !away(v) && (v.air === 'ftr' ? u.kit.ftr > 0 || u.kit0 <= 0 : want));
         if (e) u.job = { do: 'intercept', on: e.id };
         else u.job = { do: 'patrol', x: SKY.target.x, y: SKY.target.y };
-        // The staff meets the raid at its own height. Height is the player's to play: a group sent above the enemy dives
-        // on it (book.ts edge.bounce); the raid card's odds already weigh radar and a late scramble.
-        if (first) u.to = Math.max(u.to, 1) as Band;
+        // The staff meets the raid at its own height, or, warned in time, climbs above it first (climb). Height is
+        // otherwise the player's to play: a group sent above the enemy dives on it (book.ts edge.bounce); the raid
+        // card's odds already weigh radar and a late scramble.
+        if (first) {
+          const up = this.climb(u);
+          if (up !== null) {
+            u.to = up; u.rise = true;
+            this.say('air:climb', u, told(this.called(u), 'Warned by radar, {n} [climbs|climb] to get above the raid.'), { to: up });
+          } else u.to = Math.max(u.to, 1) as Band;
+        }
+        keep(e);
       }
     }
+  }
+
+  /**
+   * The staff's climb (the tactics panel's 5d): warned by radar of a day raid, a computer defence's group climbs its
+   * style's bands above the raid's highest box (its highest group, in a fight for the sky) before it meets it, if the
+   * raid is far enough off for the climb to be done first; if not, it meets the raid at its height, as every staff did
+   * before. Weighed once for each group, so a group that has dived is never sent back up. The climb is drawn, never
+   * priced (b418): the card already counts every warned fighter up in time, so place_ takes its height as level and its
+   * dive knocks no nerve. Null: no climb.
+   */
+  private climb(u: AirUnit): Band | null {
+    const D = this.place.defence;
+    if (!D || D.climb <= 0 || !this.place.radar || this.place.night || this.risen.has(u.id)) return null;
+    this.risen.add(u.id);
+    const raid = this.units.filter((v) => v.side === 'att' && flying(v));
+    const boxes = raid.filter((v) => v.air === 'bmr');
+    if (!raid.length) return null;
+    const to = Math.min(2, Math.max(...(boxes.length ? boxes : raid).map((v) => v.band)) + D.climb) as Band;
+    if (to <= Math.max(1, u.band)) return null;
+    // In time: closing at the raid's speed and its own climbing speed, the raid is still further off than the climb takes.
+    const need = (to - u.band) * SKY.bands.climb - u.climbT;
+    const near = Math.min(...raid.map((v) => dist(u.x, u.y, v.x, v.y))) - SKY.contact.day;
+    const close = (boxes.length ? SKY.speed.bmr : SKY.speed.ftr) + SKY.speed.ftr * SKY.speed.climbing;
+    return near / close >= need ? to : null;
+  }
+
+  /**
+   * A computer defence's roles (the tactics panel's 5c): against an escorted raid, with two groups or more and a style
+   * that sends some at the escort, whole groups whose weight comes nearest the style's share go for the escort, the
+   * rest for the bombers, each role with one group at least; on a tie the earlier groups in the ticket's order take
+   * the escort. Otherwise no group has a role and every one goes for the bombers, as every staff did before (mass, a
+   * single group, an unescorted raid). A human defender has no roles.
+   */
+  private deal(): void {
+    const D = this.place.defence;
+    if (!D) return;
+    const def = this.units.filter((u) => u.side === 'def' && u.air === 'ftr');
+    const raid = this.units.filter((u) => u.side === 'att');
+    const escorted = raid.some((u) => u.air === 'ftr') && raid.some((u) => u.air === 'bmr');
+    const n = def.length, w = def.map((u) => this.weight(u, u.n0)), all = w.reduce((t, x) => t + x, 0);
+    if (D.escort <= 0 || n < 2 || !escorted || all <= 0) return;
+    const take = def.map(() => false);
+    if (n <= 16) {
+      // Every split with a group in each role. Bit k is the ticket's k-th group; on a tie, the split whose earliest
+      // differing group goes for the escort.
+      let best = 0, gap = Infinity;
+      for (let m = 1; m < (1 << n) - 1; m++) {
+        let sh = 0;
+        for (let k = 0; k < n; k++) if (m & (1 << k)) sh += w[k];
+        const d = Math.abs(sh / all - D.escort), x = m ^ best;
+        if (d < gap - 1e-12 || (d < gap + 1e-12 && (m & x & -x) !== 0)) { gap = d; best = m; }
+      }
+      for (let k = 0; k < n; k++) take[k] = (best & (1 << k)) !== 0;
+    } else {
+      // A great many groups: in the ticket's order, the first goes for the escort, and each after it while that brings
+      // the share nearer; the last always goes for the bombers.
+      let sh = 0;
+      for (let k = 0; k < n - 1; k++) if (k === 0 || Math.abs((sh + w[k]) / all - D.escort) < Math.abs(sh / all - D.escort)) { sh += w[k]; take[k] = true; }
+    }
+    def.forEach((u, k) => { u.def = take[k] ? 'escort' : 'bombers'; });
+    for (const u of def) if (u.def === 'escort') this.say('air:split', u, told(this.called(u), '{N} [is|are] sent against the escort.'), { def: 'escort' });
   }
 
   /** Whether a side can see that group: radar shows the raid to the defender; otherwise only what is within sight. */
@@ -441,7 +530,11 @@ export class AirSim implements BattleSim<AirUnit> {
       const up = u.to > u.band, need = up ? SKY.bands.climb : SKY.bands.dive;
       const a0 = SKY.bands.alt[u.band], a1 = SKY.bands.alt[(u.band + (up ? 1 : -1)) as Band];
       u.alt = a0 + (a1 - a0) * Math.min(1, u.climbT / need);
-      if (u.climbT >= need) { u.band = (u.band + (up ? 1 : -1)) as Band; u.climbT = 0; u.alt = SKY.bands.alt[u.band]; }
+      if (u.climbT >= need) {
+        u.band = (u.band + (up ? 1 : -1)) as Band; u.climbT = 0; u.alt = SKY.bands.alt[u.band];
+        // Brought back down to every staff's height without diving (keep): its staff's climb is over.
+        if (u.rise && u.band <= 1 && u.band === u.to && u.bounce <= 0) u.rise = false;
+      }
     } else u.alt = SKY.bands.alt[u.band];
     const was = this.chasing.get(u.id) ?? null;
     const [tx, ty] = this.aim(u);
@@ -501,12 +594,17 @@ export class AirSim implements BattleSim<AirUnit> {
         if (before.get(a.id)?.has(d.id)) continue;
         // A new run at a bomber group: the fighters fly the pass their doctrine gives against that bomber (doctrine.ts).
         if (this.show && a.air === 'bmr') this.passes.set(`${d.id}:${a.id}`, pickPass(this.passRng, passesOn(d.nat, this.when, a.model, a.nat)));
-        // A new contact: the higher group dives on the lower one and strikes first.
-        const hi = a.band > d.band ? a : d.band > a.band ? d : null;
+        // A new contact: the higher fighter group dives on the lower one and strikes first. A bomber box above a fighter
+        // is simply in contact: bombers do not dive on fighters (the tactics panel's S0).
+        const hi = a.band > d.band && a.air === 'ftr' ? a : d.band > a.band ? d : null;
         if (hi) {
           const lo = hi === a ? d : a;
+          // The dive that ends a staff's climb is drawn, never priced (b418): it knocks no nerve. Only that one dive, from
+          // the height the climb gave (band 2). A dive from the height every staff flies at (band 1: after the climb's
+          // dive, or caught short of the climb) is the group's own, priced as any other group's.
+          if (hi.rise && hi.band <= 1) hi.rise = false;
           hi.bounce = SKY.edge.bounceFor; hi.band = lo.band; hi.to = lo.band; hi.alt = SKY.bands.alt[lo.band];
-          lo.mor = clamp01(lo.mor - SKY.morale.bounced);
+          if (!hi.rise) lo.mor = clamp01(lo.mor - SKY.morale.bounced);
           this.say('air:bounce', hi, `${told(this.called(hi), '{N} [dives|dive] on')} ${subjectOf(this.called(lo)).whom} from above.`, { on: lo.id });
         }
         for (const x of [a, d]) if (!(before.get(x.id)?.size)) {
@@ -523,8 +621,12 @@ export class AirSim implements BattleSim<AirUnit> {
     }
   }
 
-  /** Where a group stands in the fight: diving from above, or caught climbing. Counts for its blows and against the enemy's. */
+  /**
+   * Where a group stands in the fight: diving from above, or caught climbing. Counts for its blows and against the
+   * enemy's. A group on its staff's climb stands level both ways (climb: drawn, never priced).
+   */
   private place_(u: AirUnit): number {
+    if (u.rise) return 1;
     return (u.bounce > 0 ? SKY.edge.bounce : 1) * (u.to > u.band ? SKY.edge.climbing : 1);
   }
 
@@ -550,6 +652,8 @@ export class AirSim implements BattleSim<AirUnit> {
     const onBombers = Math.max(0, F.bmr - B * P.gunLoss);
     for (const u of att) { const k = A > 0 ? this.weight(u, u.n0) / A : 0; u.kit = { ftr: F.foe * k * full, bmr: 0 }; }
     for (const u of def) { const k = D > 0 ? this.weight(u, u.n0) / D : 0; u.kit = { ftr: F.ftr * k * full, bmr: onBombers * k * full }; }
+    // A split defence (deal) fights from one pool: each group holds its weight's share of what the defence has left.
+    this.pool = def.some((u) => u.def === 'escort') && D > 0 ? new Map(def.map((u) => [u.id, this.weight(u, u.n0)])) : null;
     for (const u of this.units) u.kit0 = u.kit.ftr + u.kit.bmr;
     const met = D / Math.max(1e-9, D + A + B * P.bomberDefence);
     this.law = { D, B, ePer: B > 0 ? A / B : 0, guns: P.bomberDefence, met };
@@ -569,12 +673,29 @@ export class AirSim implements BattleSim<AirUnit> {
   private cover(b: AirUnit, live: AirUnit[]): number {
     const L = this.law, P = this.place;
     if (L.met <= 0) return 1;
-    const by = (f: AirUnit): boolean => f.side === 'att' && f.job.do !== 'home' && Math.abs(f.band - b.band) <= 1 && dist(f.x, f.y, b.x, b.y) <= SKY.escort.near;
+    const by = (f: AirUnit): boolean => f.side === 'att' && f.job.do !== 'home' && ((Math.abs(f.band - b.band) <= 1 && dist(f.x, f.y, b.x, b.y) <= SKY.escort.near) || this.tied(f, b));
     // The escort per bomber round this box: the fighters near it over the bombers near it (boxes in a stream share theirs).
     const E = live.filter((f) => f.air === 'ftr' && by(f)).reduce((s, f) => s + this.weight(f), 0);
     const per = E / Math.max(1, live.filter((f) => f.air === 'bmr' && by(f)).reduce((s, f) => s + f.n, 0));
     const met = L.D / Math.max(1e-9, L.D + L.B * (per + L.guns));
     return Math.max(SKY.escort.cover[0], Math.min(SKY.escort.cover[1], Math.pow(met / L.met, P.law.power)));
+  }
+
+  /**
+   * An escort held off by the defenders its staff sent against it (deal) still counts over its own box: the split is
+   * the staff's choice of where its weight falls, and the card has priced the escort's protection (217, b418).
+   */
+  private tied(f: AirUnit, b: AirUnit): boolean {
+    return f.air === 'ftr' && f.job.do === 'escort' && f.job.on === b.id && f.contacts.some((i) => this.unit(i)?.def === 'escort');
+  }
+
+  /** A fighter group's fight left, and home once all but SKY.spent of it is gone. */
+  private tire(u: AirUnit): void {
+    u.vig = u.kit0 > 0 ? (u.kit.ftr + u.kit.bmr) / u.kit0 : 1;
+    if (u.vig < SKY.spent && u.job.do !== 'home') {
+      u.job = { do: 'home' };
+      this.say('air:spent', u, told(this.called(u), '{N} [has|have] fought [itself|themselves] out and [breaks|break] off for home.'));
+    }
   }
 
   /** The wear: what contact and the guns cost each group this tick, owed until a whole aircraft is lost. */
@@ -585,6 +706,19 @@ export class AirSim implements BattleSim<AirUnit> {
     const foes = (u: AirUnit, k: 'ftr' | 'bmr'): AirUnit[] => u.contacts.map((i) => byId.get(i)!).filter((v) => v && v.air === k);
     const sum = (xs: AirUnit[]): number => xs.reduce((s, v) => s + v.n, 0);
     const burn = 1 - Math.exp(-dt / SKY.tire);
+    // A split defence's pool (arm): what its groups still in the fight have left, drawn at their whole rate and shared by
+    // weight among those in contact. A group that is gone, has broken off or routs takes its own share with it, as any
+    // group's fight goes with it; one on the ground still counts, since it would come up.
+    const pool = this.pool, kept = pool ? this.units.filter((u) => pool.has(u.id) && !off(u) && !away(u)) : [];
+    const W = kept.reduce((s, u) => s + pool!.get(u.id)!, 0);
+    const on = { ftr: 0, bmr: 0 };
+    if (pool && W > 0) for (const u of live) {
+      if (!pool.has(u.id) || !u.contacts.length || away(u)) continue;
+      const k = pool.get(u.id)! / W;
+      if (foes(u, 'ftr').length) on.ftr += k;
+      if (foes(u, 'bmr').length) on.bmr += k;
+    }
+    const pace = (u: AirUnit, k: 'ftr' | 'bmr'): number => (on[k] > 0 && pool?.has(u.id) ? 1 / on[k] : 1);
     const covers = new Map<number, number>();
     // Who owed what this tick (shown only): each group's debts by creditor, and each fighter's fire.
     const show = this.show;
@@ -601,7 +735,7 @@ export class AirSim implements BattleSim<AirUnit> {
       const F = foes(u, 'ftr'), Bs = foes(u, 'bmr');
       // On fighters: the more for coming down from above, the less for climbing or wavering.
       if (F.length && u.kit.ftr > 0) {
-        const spend = u.kit.ftr * burn;
+        const spend = u.kit.ftr * burn * pace(u, 'ftr');
         u.kit.ftr -= spend;
         const nF = sum(F);
         for (const v of F) {
@@ -612,7 +746,7 @@ export class AirSim implements BattleSim<AirUnit> {
       }
       // On bombers: the same, and harder on a box with less than its share of the escort by it.
       if (Bs.length && u.kit.bmr > 0) {
-        const spend = u.kit.bmr * burn;
+        const spend = u.kit.bmr * burn * pace(u, 'bmr');
         u.kit.bmr -= spend;
         const nB = sum(Bs);
         for (const b of Bs) {
@@ -626,10 +760,16 @@ export class AirSim implements BattleSim<AirUnit> {
           if (cover > 1.2) b.mor = clamp01(b.mor - SKY.morale.alone * dt);
         }
       }
-      u.vig = u.kit0 > 0 ? (u.kit.ftr + u.kit.bmr) / u.kit0 : 1;
-      if (u.vig < SKY.spent && u.job.do !== 'home') {
-        u.job = { do: 'home' };
-        this.say('air:spent', u, told(this.called(u), '{N} [has|have] fought [itself|themselves] out and [breaks|break] off for home.'));
+      if (!pool?.has(u.id)) this.tire(u);
+    }
+    // A split defence's pool: what its groups spent this tick comes off what those still in the fight hold together,
+    // each keeping its weight's share.
+    if (pool && W > 0) {
+      const left = { ftr: kept.reduce((s, u) => s + u.kit.ftr, 0), bmr: kept.reduce((s, u) => s + u.kit.bmr, 0) };
+      for (const u of kept) {
+        const k = pool.get(u.id)! / W;
+        u.kit = { ftr: left.ftr * k, bmr: left.bmr * k };
+        if (flying(u)) this.tire(u);
       }
     }
     // The guns round the target.
@@ -763,6 +903,7 @@ export class AirSim implements BattleSim<AirUnit> {
       u.extra = {
         model: u.model, form: u.form, style: u.style, ammo: Math.round(ammo * 1000) / 1000,
         ...(u.job.do === 'escort' ? { role: roleOf(u.job) } : {}),
+        ...(u.def ? { def: u.def } : {}),
         ...(u.side === 'att' && u.fuel0 < SKY.fuel.home ? { fuel: Math.round(clamp01(u.fuel / Math.max(1, u.fuel0)) * 1000) / 1000 } : {}),
         fire: u.fire.map((f) => ({ ...f, rate: Math.round(f.rate * 10_000) / 10_000 })),
       };
@@ -788,7 +929,11 @@ export class AirSim implements BattleSim<AirUnit> {
 
   /** Morale, leaving the board, and the end of a group. */
   private settle(u: AirUnit, dt: number): void {
-    if (u.bounce > 0) u.bounce = Math.max(0, u.bounce - dt);
+    if (u.bounce > 0) {
+      u.bounce = Math.max(0, u.bounce - dt);
+      // The dive that ended its staff's climb has run its course: from here the group is priced as any other.
+      if (u.bounce <= 0 && u.rise) u.rise = false;
+    }
     if (u.n <= 0) { this.state(u, 'gone', told(this.called(u), '{N} [is|are] wiped out.')); return; }
     u.str = u.n / u.n0;
     if (!u.contacts.length) u.mor = Math.min(SKY.morale.base + SKY.morale.ready, u.mor + SKY.morale.mend * dt);
@@ -881,7 +1026,8 @@ export class AirSim implements BattleSim<AirUnit> {
         const b = Number(c.band);
         if (b !== 0 && b !== 1 && b !== 2) return false;
         const us = mine(c.units).filter((u) => u.job.do !== 'wait');
-        us.forEach((u) => { u.to = b as Band; u.climbT = 0; });
+        // The player's own height order is priced as always, so it ends a staff's climb.
+        us.forEach((u) => { u.to = b as Band; u.climbT = 0; u.rise = false; });
         return us.length > 0;
       }
       case 'air:jettison': {

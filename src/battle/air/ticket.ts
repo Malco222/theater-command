@@ -18,6 +18,7 @@ import { bomberOf, designYear, fighterOf } from './doctrine';
 import { bomberGuns, fighterGuns } from './guns';
 import { groundOf } from './ground';
 import { cloudOf } from './sky';
+import { airStyles } from './styles';
 import type { AirOutcome, AirPlace } from './types';
 
 /**
@@ -104,6 +105,9 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
   const when = { year: turnToDate(g.turn).year, month: turnToDate(g.turn).month };
   const models = Object.fromEntries([...new Set([nat, defNat, ...att.map((f) => f.nat), ...def.map((f) => f.nat)])].map((n) => [n, { ftr: fighterOf(n, designYear(g, n, 'fighters')), bmr: bomberOf(n, designYear(g, n, 'bombers')) }]));
   const seed = hashString(`airbattle:${g.seed}:${g.turn}:${kind}:${target}:${nat}:${(g.flags.airBattles ?? 0) + 1}`);
+  // How the computer flies its side (styles.ts; the tactics panel's item 5, ruling 239): a computer defence's style, and
+  // at stops 4 and 5 a computer raid's escort roles. Read from the game, never written to it.
+  const styled = airStyles(g, { nat, forces: att }, { nat: defNat, forces: def }, { escort: a.Epow, defence: a.Dpow });
   const place: AirPlace = {
     kind, mission: m, target, name: a.place, night, nat, radar: !!a.radar,
     I: C.intensity[m as 'bomb' | 'night' | 'superiority'] ?? 1,
@@ -128,6 +132,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     ground: groundOf(g, target, (x, y) => { const [rx, ry] = rot([(x - T.x) * AIR.kmPerUnit * 1000, -(y - T.y) * AIR.kmPerUnit * 1000]); return [SKY.target.x + rx, SKY.target.y + ry]; }),
     // The sky that day over the target (sky.ts): drawn from the battle's own seed, so the same battle has the same sky.
     cloud: cloudOf(T.x, T.y, when, seed),
+    ...styled,
   };
   const date = turnToDate(g.turn).label;
   const ticket: FieldTicket<AirPlace> = {

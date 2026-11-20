@@ -14,6 +14,7 @@ import { runOut } from '../src/battle/core/clock';
 import { SKY } from '../src/battle/air/book';
 import { AirSim, airBattle, peopleOf, subjectOf, told } from '../src/battle/air/sim';
 import { airTicket, foughtAir } from '../src/battle/air/ticket';
+import { defenceOf, type DefenceStyle } from '../src/battle/air/styles';
 
 const WARS: Record<string, string[]> = { GER: ['UK', 'FRA'], UK: ['GER'], FRA: ['GER'] };
 
@@ -23,9 +24,10 @@ function game(nat: string): Game {
   return g;
 }
 
-/** The staff's raid on a named province, with every fighter group that can go with it by day. */
-function raid(nat: string, kind: RaidKind, name: string) {
+/** The staff's raid on a named province, with every fighter group that can go with it by day (`set`: the game first). */
+function raid(nat: string, kind: RaidKind, name: string, set?: (g: Game) => void) {
   const g = game(nat);
+  set?.(g);
   const t = raidTargets(g, kind, nat).find((x) => planRaid(g, kind, x.id, undefined, nat).place === name);
   if (!t) throw new Error(`no ${kind} raid on ${name} for ${nat}`);
   const day = planRaid(g, kind, t.id, undefined, nat);
@@ -87,6 +89,30 @@ describe('the air battle against the raid card', () => {
     expect(s.over!.seconds).toBeLessThan(SKY.limit);
     expect(s.outcome().dropped).toBeGreaterThan(0);
   });
+});
+
+describe("the air battle against the raid card, whatever the computer defence's style (ruling 239)", () => {
+  const CASES: [string, RaidKind, string][] = [['GER', 'bomb', 'Alsace'], ['FRA', 'bomb', 'Saar'], ['UK', 'bomb', 'Bremen'], ['GER', 'bomb', 'Kent'], ['GER', 'superiority', 'Alsace']];
+  // At stop 5 with the computer flying the raid too, the escort's roles come from its weight (the escortRoles hook);
+  // otherwise each style forced on the defence.
+  const HOW: [string, (g: Game) => void, DefenceStyle?][] = [
+    ['at stop 5, the computer flying both sides', (g) => { g.flags.hist = 5; g.human = 'USA'; }],
+    ['the defence bold', () => {}, 'bold'],
+    ['the defence methodical', () => {}, 'methodical'],
+    ['the defence mass', () => {}, 'mass'],
+  ];
+  for (const [nat, kind, name] of CASES) for (const [how, set, style] of HOW) {
+    it(`costs what the card forecast, within a tenth: ${nat} on ${name} (${kind}), ${how}`, () => {
+      const { ticket } = raid(nat, kind, name, set);
+      const tk = style ? { ...ticket, place: { ...ticket.place, defence: defenceOf(style) } } : ticket;
+      const f = tk.place.forecast;
+      const got = average(tk, 24);
+      for (const [k, want] of [['foe', f.foe], ['ftr', f.ftr], ['bmr', f.bmr]] as const) {
+        if (want < 3) continue;
+        expect(Math.abs(got[k] - want), `${k}: ${got[k].toFixed(1)} against ${want.toFixed(1)}`).toBeLessThan(Math.max(0.1 * want, 1));
+      }
+    });
+  }
 });
 
 describe('what the player decides', () => {
