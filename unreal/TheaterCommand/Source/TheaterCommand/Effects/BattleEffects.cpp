@@ -155,6 +155,25 @@ double FBattleEffects::GroundHeight(void* Context, double X, double Y)
 	return Self->GroundUnder(FVector(X * U, Y * U, 0.0)).Z / U;
 }
 
+bool FBattleEffects::GroundColourAt(void* Context, double X, double Y, double& Red, double& Green, double& Blue)
+{
+	const FBattleEffects* Self = static_cast<const FBattleEffects*>(Context);
+	if (!Self || !Self->GroundColour)
+	{
+		return false;
+	}
+	const double U = Self->UnitsPerMetre;
+	FLinearColor Seen(0.0f, 0.0f, 0.0f, 0.0f);
+	if (!Self->GroundColour(FVector(X * U, Y * U, 0.0), Seen))
+	{
+		return false;
+	}
+	Red = 255.0 * Seen.R;
+	Green = 255.0 * Seen.G;
+	Blue = 255.0 * Seen.B;
+	return true;
+}
+
 TheaterFx::Vec FBattleEffects::ToFx(const FVector& World) const
 {
 	return TheaterFx::Vec(World.X / UnitsPerMetre, World.Y / UnitsPerMetre, World.Z / UnitsPerMetre);
@@ -219,6 +238,10 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 
 	// The flashes' lamps: a few, shadowless, out until a flash lights one.
 	Core.Setup(&Book, &FBattleEffects::GroundHeight, this, 3u);
+	Core.SetGroundColour(&FBattleEffects::GroundColourAt, this);
+	// (picture.lit_gain: the kit writes its colours that much darker and its hottest lights up to that much past white,
+	// so the material's brightness must be the same number for all else to look as it did)
+	Instance->SetScalarParameterValue(TEXT("Brightness"), static_cast<float>(Core.PictureGain()));
 	double Wanted = 2.0, Candela = 2000.0;
 	Book.Find("game.max_lamps", Wanted);
 	Book.Find("game.lamp_candela_at_full", Candela);
@@ -281,11 +304,19 @@ void FBattleEffects::Skip(const FVector& WorldAt, const FVector& Heading, const 
 	}
 }
 
-void FBattleEffects::Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun)
+void FBattleEffects::Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun, const FString& Ground)
 {
 	if (IsReady())
 	{
-		Core.Muzzle(Time(), ToFx(WorldAt), ToFxWay(Facing), Named(Gun).c_str());
+		Core.Muzzle(Time(), ToFx(WorldAt), ToFxWay(Facing), Named(Gun).c_str(), Named(Ground).c_str());
+	}
+}
+
+void FBattleEffects::VehicleDust(int32 Id, const FVector& SocketAt, const FVector& Velocity, const FString& Ground, bool bTracked)
+{
+	if (IsReady())
+	{
+		Core.VehicleDust(Time(), Id, ToFx(SocketAt), ToFx(Velocity), Named(Ground).c_str(), bTracked);
 	}
 }
 
@@ -297,12 +328,12 @@ void FBattleEffects::Shots(int32 Gun, const FVector& From, const FVector& To, co
 	}
 }
 
-void FBattleEffects::AirGun(double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& ShooterVelocity, const FString& Kind, float RatePerMinute, float MuzzleSpeed)
+void FBattleEffects::AirGun(double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& ShooterVelocity, const FString& Kind, float RatePerMinute, float MuzzleSpeed, const FString& Nation)
 {
 	if (IsReady())
 	{
 		// (velocities are world units a second, as places are: the same ToFx turns both to metres)
-		Core.AirGun(Now, Gun, ToFx(Muzzle), ToFx(Aim), ToFx(ShooterVelocity), Named(Kind).c_str(), RatePerMinute, MuzzleSpeed / UnitsPerMetre);
+		Core.AirGun(Now, Gun, ToFx(Muzzle), ToFx(Aim), ToFx(ShooterVelocity), Named(Kind).c_str(), RatePerMinute, MuzzleSpeed / UnitsPerMetre, Named(Nation).c_str());
 	}
 }
 
@@ -322,11 +353,11 @@ void FBattleEffects::AirHit(double Now, const FVector& At, const FVector& Normal
 	}
 }
 
-void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind)
+void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres)
 {
 	if (IsReady())
 	{
-		Core.TrailStart(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str());
+		Core.TrailStart(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres);
 	}
 }
 
@@ -346,6 +377,30 @@ void FBattleEffects::TrailStop(int32 Id)
 	}
 }
 
+void FBattleEffects::AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ)
+{
+	if (IsReady())
+	{
+		Core.AirFall(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres, DeckZ / UnitsPerMetre);
+	}
+}
+
+void FBattleEffects::AirFallMove(double Now, int32 Id, const FVector& At, const FVector& Velocity)
+{
+	if (IsReady())
+	{
+		Core.AirFallMove(Now, Id, ToFx(At), ToFx(Velocity));
+	}
+}
+
+void FBattleEffects::AirFallStop(int32 Id)
+{
+	if (IsReady())
+	{
+		Core.AirFallStop(Id);
+	}
+}
+
 void FBattleEffects::AirFlak(double Now, const FVector& At, const FString& Kind)
 {
 	if (IsReady())
@@ -354,17 +409,81 @@ void FBattleEffects::AirFlak(double Now, const FVector& At, const FString& Kind)
 	}
 }
 
-void FBattleEffects::Burn(const FVector& WorldAt, float AcrossMetres, float Seconds)
+void FBattleEffects::Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id)
 {
 	if (IsReady())
 	{
-		Core.Burn(Time(), ToFx(WorldAt), AcrossMetres, Seconds);
+		Core.Burn(Time(), ToFx(WorldAt), AcrossMetres, Seconds, Id);
+	}
+}
+
+void FBattleEffects::BurnOut(int32 Id, float OverSeconds, const FString& How)
+{
+	if (IsReady())
+	{
+		Core.BurnOut(Time(), Id, OverSeconds, Named(How).c_str());
+	}
+}
+
+void FBattleEffects::Steam(int32 Id, const FVector& WorldAt, const FVector& Way, float AcrossMetres, float Seconds, const FString& Kind)
+{
+	if (IsReady())
+	{
+		Core.Steam(Time(), Id, ToFx(WorldAt), ToFxWay(Way), AcrossMetres, Seconds, Named(Kind).c_str());
+	}
+}
+
+void FBattleEffects::SteamStop(int32 Id)
+{
+	if (IsReady())
+	{
+		Core.SteamStop(Time(), Id);
+	}
+}
+
+void FBattleEffects::CookOff(const FVector& WorldAt, const FVector& Up, float AcrossMetres, int32 Pops, float OverSeconds, float JetSeconds, float JetFromSeconds)
+{
+	if (IsReady())
+	{
+		Core.CookOff(Time(), ToFx(WorldAt), ToFxWay(Up), AcrossMetres, Pops, OverSeconds, JetSeconds, JetFromSeconds);
+	}
+}
+
+void FBattleEffects::Glance(const FVector& WorldAt, const FVector& Incoming, const FVector& Normal, float CalibreMm, const FString& Ground)
+{
+	if (IsReady())
+	{
+		Core.Glance(Time(), ToFx(WorldAt), ToFxWay(Incoming), ToFxWay(Normal), CalibreMm, Named(Ground).c_str());
+	}
+}
+
+void FBattleEffects::OilFire(int32 Id, const FVector& WorldAt, float ReachMetres, const FString& Kind, double UntilSeconds, float SinceSeconds)
+{
+	if (IsReady())
+	{
+		Core.OilFire(Time(), Id, ToFx(WorldAt), ReachMetres, Named(Kind).c_str(), UntilSeconds, SinceSeconds);
+	}
+}
+
+void FBattleEffects::OilStop(int32 Id)
+{
+	if (IsReady())
+	{
+		Core.OilStop(Time(), Id);
 	}
 }
 
 void FBattleEffects::SetWind(const FVector& MetresPerSecond)
 {
 	Core.SetWind(ToFxWay(MetresPerSecond));
+}
+
+void FBattleEffects::UseAirDistance()
+{
+	if (IsReady())
+	{
+		Core.SetDrawBeyond(Core.AirBeyond());
+	}
 }
 
 void FBattleEffects::SetSun(const FVector& TowardSun)
@@ -426,7 +545,7 @@ void FBattleEffects::Hide()
 	}
 }
 
-FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight)
+FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator& Facing, float FieldOfViewDegrees, int32 ViewWidth, const FLinearColor& HourLight, int32 ViewHeight)
 {
 	FBattleJolt Jolt;
 	if (!IsReady())
@@ -456,6 +575,11 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 	Sight.Up = ToFxWay(Looking.GetUnitAxis(EAxis::Z));
 	const double HalfView = FMath::DegreesToRadians(FMath::Clamp(static_cast<double>(FieldOfViewDegrees), 5.0, 170.0) * 0.5);
 	Sight.PixelsPerRadian = FMath::Max(1, ViewWidth) / (2.0 * FMath::Tan(HalfView));
+	Sight.HalfAcross = FMath::Tan(HalfView); // (what is wholly off the screen takes no place; up and down a quarter more, when the height is not given)
+	if (ViewHeight > 0 && ViewWidth > 0)
+	{
+		Sight.HalfUp = Sight.HalfAcross * static_cast<double>(ViewHeight) / static_cast<double>(ViewWidth); // (a window taller than wide lost pieces at its top and bottom. The pre-check, 15:02Z)
+	}
 	Sight.SmokeLight = TheaterFx::Rgb(HourLight.R, HourLight.G, HourLight.B);
 	Sight.Sun = ToFxWay(Sun);
 	const float SunUp = static_cast<float>(Core.DayOf(Sight.SmokeLight)); // (the sun's own light: full by day, none at night)
@@ -511,6 +635,19 @@ FBattleJolt FBattleEffects::Tick(double Now, const FVector& Eye, const FRotator&
 	// the lamps: the strongest flashes now, out the moment they are spent
 	TheaterFx::Battle::Lamp Lit[MostLamps];
 	const int32 NLit = Core.Lamps(Now, Lit, LampsInUse, Core.DayOf(Sight.SmokeLight)); // (after Draw: a flash's lamp goes by the frames it is drawn in)
+	// (-TheaterFxLampLog: a line for each frame a lamp is lit, and one for the first frame after with none)
+	static const bool bLampLog = FParse::Param(FCommandLine::Get(), TEXT("TheaterFxLampLog"));
+	if (bLampLog && (NLit > 0 || LampsLitBefore > 0))
+	{
+		FString Line = FString::Printf(TEXT("Battle effects lamps at %.3f s: %d lit"), Now, NLit);
+		for (int32 Index = 0; Index < NLit; ++Index)
+		{
+			const TheaterFx::Battle::Lamp& L = Lit[Index];
+			Line += FString::Printf(TEXT("; #%d at (%.0f, %.0f, %.0f) %.1f cd reach %.0f colour %.2f %.2f %.2f"), Index, L.At.X * UnitsPerMetre, L.At.Y * UnitsPerMetre, L.At.Z * UnitsPerMetre, L.Strength * LampCandela, L.Radius * UnitsPerMetre, L.Col.R, L.Col.G, L.Col.B);
+		}
+		UE_LOG(LogTheater, Log, TEXT("%s"), *Line);
+	}
+	LampsLitBefore = NLit;
 	for (int32 Index = 0; Index < LampsInUse; ++Index)
 	{
 		UPointLightComponent* Lamp = LampLights[Index].Get();
@@ -538,12 +675,14 @@ bool FBattleEffects::WantsTest()
 	return FParse::Param(FCommandLine::Get(), TEXT("TheaterBlastTest"));
 }
 
-void FBattleEffects::RunTest(const FVector& Centre)
+void FBattleEffects::RunTest(const FVector& Centre, const FString& GroundKind)
 {
 	// The test barrage, laid out in metres round Centre and played again every 24 s: each calibre on earth in a row
 	// across the view, then sand, snow and mud, a bomb further off, a hit on armour, a skip, guns firing tracer and a
-	// wreck burning.
+	// wreck burning. GroundKind: the kit's ground under Centre, which the tank gun's and the machine gun's dust take
+	// (art director 18:28Z: dust takes the colour of the ground it rose from); the shells keep their own grounds.
 	TestCentre = Centre;
+	TestGround = GroundKind.IsEmpty() ? FString(TEXT("earth")) : GroundKind;
 	TestStart = Time();
 	TestShots.Reset();
 	auto Add = [this](double When, int32 Kind, double X, double Y, const TCHAR* Size, const TCHAR* Ground)
@@ -567,11 +706,23 @@ void FBattleEffects::RunTest(const FVector& Centre)
 	Add(11.0, 0, 40.0, 90.0, TEXT("bomb250"), TEXT("earth"));
 	Add(13.5, 1, -8.0, 14.0, TEXT("gun75"), TEXT("earth")); // on armour
 	Add(14.2, 2, 6.0, 12.0, TEXT(""), TEXT("earth")); // a skip
-	Add(15.0, 3, -40.0, -6.0, TEXT("tank_gun"), TEXT("")); // a tank gun firing toward the row
 	Add(15.5, 4, -36.0, -10.0, TEXT("mg"), TEXT("")); // a machine gun's burst, tracer
 	Add(16.0, 5, 24.0, 18.0, TEXT(""), TEXT("")); // a wreck burning
 	Add(18.0, 4, -36.0, -10.0, TEXT("mg"), TEXT(""));
 	Add(19.0, 6, 0.0, 60.0, TEXT("heavy"), TEXT("")); // a heavy flak burst hanging 60 m up over the far row
+	// (the tank gun fires after the machine gun's two bursts, so those are seen clean from every side: at 15.0 s its
+	// smoke lay over the gun's riflemen (build 1746). A third burst half a second after it shows the men in its dust)
+	Add(20.0, 3, -40.0, -6.0, TEXT("tank_gun"), TEXT("")); // a tank gun firing toward the row
+	Add(20.5, 4, -36.0, -10.0, TEXT("mg"), TEXT(""));
+	// (and behind it all, for the whole test, two oil fires already burning a minute and a half: a slick's black column
+	// 900 m off and a burning ship's 2.5 km off, as a sea battle's lost ships stand on its horizon)
+	auto Far = [this, &Centre](double X, double Y)
+	{
+		const FVector Flat = Centre + FVector(X, Y, 0.0) * UnitsPerMetre;
+		return GroundUnder ? GroundUnder(Flat) : Flat;
+	};
+	OilFire(9001, Far(-250.0, 900.0), 100.0f, TEXT("sunk"), 0.0, 90.0f);
+	OilFire(9002, Far(600.0, 2500.0), 70.0f, TEXT("burning"), 0.0, 90.0f);
 }
 
 void FBattleEffects::PlayTest(double Now)
@@ -606,14 +757,14 @@ void FBattleEffects::PlayTest(double Now)
 		{
 			const FVector Gun = Where + FVector(0.0, 0.0, 2.0 * UnitsPerMetre);
 			const FVector Target = TestCentre + FVector(12.0, 3.0, 1.0) * UnitsPerMetre;
-			Muzzle(Gun, (Target - Gun).GetSafeNormal(), Shot.Size);
+			Muzzle(Gun, (Target - Gun).GetSafeNormal(), Shot.Size, TestGround);
 			break;
 		}
 		case 4:
 		{
 			const FVector Gun = Where + FVector(0.0, 0.0, 0.6 * UnitsPerMetre);
 			const FVector Target = TestCentre + FVector(20.0, 20.0, 0.5) * UnitsPerMetre;
-			Shots(13, Gun, Target, Shot.Size, 25, 15.0f, TEXT("earth")); // (gun 13's belt starts on a tracer, so the first frames show one)
+			Shots(13, Gun, Target, Shot.Size, 25, 15.0f, TestGround); // (gun 13's belt starts on a tracer, so the first frames show one)
 			break;
 		}
 		case 5:

@@ -27,6 +27,54 @@
     168,
     72
    ],
+   "tongues": [
+    6,
+    10
+   ],
+   "licks": [
+    2,
+    4
+   ],
+   "reach_m": [
+    1.6,
+    2.5
+   ],
+   "life_s": [
+    0.05,
+    0.06
+   ],
+   "heart": [
+    255,
+    233,
+    158
+   ],
+   "yellow": [
+    255,
+    186,
+    81
+   ],
+   "orange": [
+    236,
+    131,
+    71
+   ],
+   "red": [
+    200,
+    80,
+    30
+   ],
+   "over": 4.0,
+   "yellow_over": 1.8,
+   "heart_share": 0.2,
+   "feather_m": 0.035,
+   "feather_px": 3,
+   "root_reach": 0.33,
+   "root_yellow": 0.75,
+   "root_melt": 0.5,
+   "root_from": 0.85,
+   "_ragged": "Art director 19:57Z on build 1748's frames, where the flash was an even orange star, 202,124,6, darker than pale ground (214,196,166): a shell's flash follows the gun flashes' rule. With tongues here it is ragged and new every round: that many tongues of unequal length thrown mostly up and out as the dirt is, the longest reach_m (times the size's root scale), bright at the root and red-orange at the end; licks flung low; a lumpy orange body with a second lump to one side; a yellow inside it written yellow_over times white (lands 250,216,82, luma 214: over pale ground's 198, blue under 110); and a heart heart_share of the flash's width written over times white (lands 253,248,226). It lasts life_s, about two frames, shrinking and dense: the tongues stand among the first dirt, the body, yellow and heart shine through it. Art director 20:12Z: every edge fades out over feather_m (2 to 3 pixels from the battle eye) and no piece is one flat colour. Colours are WRITTEN values (picture._how). Without tongues: the old seven-pointed star in core_colour.",
+   "_soft": "Art director 06:08Z 20 November on build 1758's frames. From 18 m feather_m is about one pixel and the tongues read as cut paper: every feathered edge now fades over at least feather_px pixels on the screen, whatever the distance. And in the game the tongues read as one flat orange (median green over red 0.50): each tongue's root is now yellow-orange (root_yellow of the way from orange to yellow; it lands about 243,202,63, green over red 0.8) from the body out to root_reach of what shows of the tongue, then turns orange and reddens to its tip (in the preview the flames' green over red runs 0.37 to 0.84, median 0.53 to 0.70). Neither key: as before.",
+   "_melt": "Art director 08:03Z 20 November on build 1762's frames from 18 m: the root showed as a flat yellow petal with a firm line round it inside each orange tongue, and the flash read as a flower. With root_melt each tongue is drawn from the point where it leaves the body (root_from of what the body hides of it): orange there, running evenly out to the red-orange of its edge. Its root is the tongue's own shape laid over it, outline for outline, yellow and whole at that same point and thinning evenly to nothing at the tongue's rim, half gone root_melt of the way out and turning orange as it thins. So the yellow melts into the orange along the tongue and across it with no line anywhere, the hottest yellow runs down the centre line, and the edges are orange to red-orange. Heart, body, sizes, timing and dice are as they were. No root_melt: build 1762's root.",
    "light": {
     "radius_m": 50,
     "lift": [
@@ -53,7 +101,7 @@
     1,
     4
    ],
-   "reach_m": 15,
+   "reach_m": 9,
    "height_m": 1.2,
    "colour_from_ground": 0.85,
    "skirt": {
@@ -65,8 +113,8 @@
     "stretch_along_ring": 1.7,
     "flatten": 0.75,
     "alpha": [
-     0.4,
-     0.55
+     0.22,
+     0.3
     ],
     "drag": 8.0,
     "life_s": [
@@ -74,17 +122,25 @@
      3.5
     ],
     "upright": true,
-    "rise_mps": 0.8,
+    "rise_mps": 0.3,
     "haze_by_s": 1.0,
     "haze_alpha": 0.2,
     "grow": 0.25,
     "front_billow": 1.35,
     "shade": 1.8,
     "_shade": "how strongly the skirt is lit on top and shadowed at its foot (1 is every other puff), so it shows its height (art director 17:09Z)",
-    "heart": 0.3,
+    "heart": 0.0,
     "_mend_1931": "Art director 19:31Z: the skirt must be one low continuous haze, never puffs. Its pieces are now drawn as low flattened balls seen from where the eye is (a low wall from the side, the whole round they cover from above, where they used to be thin upright cards that read as separate dabs), larger, more of them, softer and fainter, so they run together.",
     "_budget": "Fewer, larger pieces since they cover their whole round from above (19:45Z): 130 a 105 where 250 overflowed the room in a battery's salvo (the pre-check's count).",
-    "inner_radius_k": 1.5
+    "inner_radius_k": 1.5,
+    "lobes": [
+     5,
+     7
+    ],
+    "lobe_least": 0.25,
+    "feather": 0.7,
+    "most_high_m": 1.5,
+    "_mend_0319": "Art director 03:13Z (Brian's battle clips): from a low eye the skirt was a big flat beige pancake that veiled the crown's foot. Cut to reach 9 m, alpha 0.22 to 0.3; its rim broken into lobes (5 to 7, of uneven reach, never less than lobe_least of the reach between them); its outer feather share of the reach fading to a sixth, each piece soft from its middle out (heart 0); its top under most_high_m (times the square root of scale), rising only rise_mps as it hazes. Pass: no visible rim from a 1.7 m eye."
    },
    "grass": "flattens outward, springs back over 0.6 s",
    "heat_shimmer_frames": 2,
@@ -98,8 +154,8 @@
    ],
    "fan_deg": 100,
    "heavy_jets": [
-    5,
-    8
+    3,
+    5
    ],
    "heavy_reach": [
     0.3,
@@ -213,7 +269,82 @@
    "root_solid": 0.6,
    "_root": "Art director 19:43Z: earth flying up is heavy at the root and thins only near the tip, with side edges broken as the clods are. Up to root_solid of a heavy jet's length its puffs are denser, and at each step a dense lumpy clump bulges out of its side (side_clumps is the chance).",
    "side_clumps": 0.7,
-   "_tips_1943": "Art director 19:43Z: jet sides read as glass shards or blades. The cause was each big heavy piece's wide see-through band (solid only to half its radius, then thinning to a hard rim), drawn with straight sides between the ring's points. Now a heavy piece is solid out to heavy_inner of its radius (heavy_heart) and fades in a thin soft edge with no rim, so its lumpy outline shows and nothing is glassy. The root stays dense and dark up to root_solid with clumps bulging from its sides (side_clumps); the tip is torn into smaller, rougher, scattered pieces (tip_grain, tip_rough, tip_inner), drawn out and pointed less (tip_stretch 1.2, tip_point 0.45). The lighter dust between the jets is scattered wider, lumpy and soft, never pointed (fill_scatter, fill_rough, fill_stretch)."
+   "_tips_1943": "Art director 19:43Z: jet sides read as glass shards or blades. The cause was each big heavy piece's wide see-through band (solid only to half its radius, then thinning to a hard rim), drawn with straight sides between the ring's points. Now a heavy piece is solid out to heavy_inner of its radius (heavy_heart) and fades in a thin soft edge with no rim, so its lumpy outline shows and nothing is glassy. The root stays dense and dark up to root_solid with clumps bulging from its sides (side_clumps); the tip is torn into smaller, rougher, scattered pieces (tip_grain, tip_rough, tip_inner), drawn out and pointed less (tip_stretch 1.2, tip_point 0.45). The lighter dust between the jets is scattered wider, lumpy and soft, never pointed (fill_scatter, fill_rough, fill_stretch).",
+   "_heavy_jets_0319": "Art director 03:13Z (Brian's battle clips): 24 to 40 thin dark spiky jets in place of 5 to 8 heavy ones. The shells keep 3 to 5 heavy jets for the mass and add the spikes (burst.crown.spikes); the bombs keep their own passed fan (sizes.<bomb>.crown).",
+   "spikes": {
+    "count": [
+     24,
+     36
+    ],
+    "reach": [
+     0.45,
+     1.05
+    ],
+    "lean": [
+     0.15,
+     1.1
+    ],
+    "thick": [
+     0.25,
+     0.6
+    ],
+    "shade": [
+     0.4,
+     0.7
+    ],
+    "tip_alpha": 0.85,
+    "tip_clod_m": [
+     0.05,
+     0.12
+    ],
+    "ragged": 1.6,
+    "pieces": [
+     3,
+     5
+    ],
+    "lump_share": [
+     0.6,
+     0.9
+    ],
+    "rough": [
+     0.55,
+     0.85
+    ],
+    "droop": 0.55,
+    "longest_of_median": 1.3,
+    "stretch_most": 6,
+    "_how": "Thin dark rays of earth among the heavy jets: count of them (halved past burst.debris.shower.halve_past puffs), each a few lumps (pieces) along its length with small gaps (each lump lump_share of its place), edges broken by rough (foot to tip), drawn to a point, reaching reach times the crown's height, leaning lean times half the fan, thick times the jet's foot and tip radius, the heavy colour times shade, alpha falling to tip_alpha at the tip, a lump of tip_clod_m (times the square root of scale) riding each tip. The debris shower streams along them too. droop: the outer lumps fall faster (gravity up to 1 + droop at the tip), so the tip bends down after about 0.3 s. longest_of_median: no spike longer than this times the middle one (a long lone blade reads as a stick). stretch_most: no lump drawn longer than this times its width. Art director 03:28Z."
+   }
+  },
+  "foot": {
+   "count": [
+    90,
+    120
+   ],
+   "width": 0.4,
+   "height": 0.35,
+   "lump_r": [
+    0.035,
+    0.09
+   ],
+   "shade": [
+    0.35,
+    0.55
+   ],
+   "light": 1.2,
+   "rough": 0.45,
+   "life_s": [
+    1.6,
+    2.4
+   ],
+   "settle": 0.6,
+   "settle_dust": 0.3,
+   "veil_dark": 0.75,
+   "smoke_band": 0.45,
+   "smoke_dark": 0.45,
+   "smoke_settle_s": 1.3,
+   "fill_dust": 0.35,
+   "_how": "Art director 03:13Z, from Brian's battle clips: close-hit black is 29% of the burst in the clips and 0.8% in ours; the burst itself has to carry the black, no grade can. A dense mass of near-black lumps at the crown's base (and the crown's body near-black with it): count lumps (times the square root of scale, at least 0.7), out to width and up to height times the crown's height, each lump_r times the crown's height, the heavy colour times shade (near black), lit on top and dark below by light, lumpy by rough, living life_s and settling toward the smoke's colour mixed with settle_dust of the dust, settle of the way by its end, so near-black for 0.3 to 1.0 s, then brown-grey. Not on water. Pass: at 0.4 s on earth, at least 15% of the burst box under luma 60. The earth veil over the foot is the dust mixed veil_dark toward the heavy colour, and the smoke puffs in the lower smoke_band of the cloud start smoke_dark as bright, settling to the cloud's own colour by smoke_settle_s. The dust between the jets is the heavy colour mixed with fill_dust of its usual dust share, settling the same way."
   },
   "debris": {
    "frames": [
@@ -253,6 +384,19 @@
    },
    "lens": {
     "within_m": 40,
+    "landing_puff": 0,
+    "miss_m": [
+     3,
+     6
+    ],
+    "rough": [
+     0.6,
+     0.9
+    ],
+    "shade": [
+     0.5,
+     0.8
+    ],
     "pieces": [
      3,
      7
@@ -265,7 +409,45 @@
    "clod_r_m": [
     0.015,
     0.09
-   ]
+   ],
+   "shower": {
+    "count": [
+     110,
+     150
+    ],
+    "up_mps": [
+     7,
+     16
+    ],
+    "out_mps": [
+     2,
+     8
+    ],
+    "r_m": [
+     0.025,
+     0.12
+    ],
+    "small_skew": 2.0,
+    "shade": [
+     0.55,
+     0.9
+    ],
+    "rest_s": [
+     1.0,
+     2.5
+    ],
+    "landing_puff_r_m": 0.08,
+    "most_k2": 3.0,
+    "along_jets": 0.6,
+    "jet_spread": 0.2,
+    "jet_speed": [
+     0.6,
+     1.3
+    ],
+    "_why": "Brian's battle video (11-19): what makes a hit read as violent is a dense spray of dark lumps flung higher than the crown and twice as wide, raining back for one to three seconds. Ours threw a few small clods low. The shower: count lumps for a 105 (times the ground's shower share, default its clods share, and the shell's size squared up to most_k2), thrown up_mps and out_mps (both times the fourth root of the shell's scale, so a 105 tops out at 2 to 13 m and lands 1.2 to 3.3 s later), radius r_m (times the square root of scale; small_skew keeps most small), darkened by shade (backlit undersides), resting rest_s on the ground, a landing puff only from landing_puff_r_m. Water throws none. along_jets of them stream along the crown's jets (each within jet_spread of its way, at jet_speed times the speed that carries a lump to that jet's tip, so some fall short inside it and some fly on past), the rest flung every way at up_mps and out_mps.",
+    "halve_past": 2000,
+    "_halve": "Art director 03:13Z: with more than halve_past puffs live when a shell lands, it throws half the shower and half the spikes."
+   }
   },
   "smoke": {
    "frames": [
@@ -311,9 +493,9 @@
     0.6
    ],
    "colour_top": [
-    66,
-    64,
-    62
+    86,
+    84,
+    83
    ],
    "top_share": 0.8,
    "_top": "Warm brown near the ground, charcoal grey toward the top: brown all the way up reads as dust (art director 19:36Z). Each puff mixes toward colour_top by its height in the cloud, up to top_share.",
@@ -593,6 +775,84 @@
     },
     "_pieces": "Art director 20:05Z: at bomb size the big pieces showed flat faces with straight edges, like a dark crystal cluster. A piece's outline has the ring's few points however big it is, so a bomb's jets are built of more pieces no bigger than piece_max_m (radius when thrown), scattered across each jet's width, and the body's pieces are lumpy (body.rough) with soft edges (body.rim 0)."
    }
+  },
+  "torpedo": {
+   "_what": "a torpedo against a ship's side (the scene passes this size for it; a kit without the row draws a field gun's burst, so pass it only with this recipe). On water: the tallest, narrowest column, over the mast, dark for its lower third.",
+   "scale": 5.2,
+   "crown_m": [
+    55.0,
+    70.0
+   ],
+   "crater_m": 10.0,
+   "linger_s": [
+    60,
+    120
+   ],
+   "shake_within_m": 200,
+   "push": true,
+   "cue_size": "bomb",
+   "spout": {
+    "wide": 0.085,
+    "crown_wide": 0.13,
+    "fingers": [
+     8,
+     12
+    ],
+    "finger_lean_deg": [
+     2,
+     10
+    ],
+    "base_to": 0.72,
+    "base_colour": [
+     46,
+     52,
+     56
+    ],
+    "fall_s": [
+     3.4,
+     4.8
+    ]
+   }
+  },
+  "churn": {
+   "_what": "white water round a ship that is settling, going down or rolling over (the scene passes this size for it, on water only): no explosion, so quiet 1, no flash and no jolt. A low boil several times wider than it is tall (art director 22:03Z: the first was a white hedgehog mound): domes of pale water heaving up a few metres and sinking back, no two at the same moment, froth breaking round the foot of each, darker water between them, a burst of spray here and there as air vents, and a wide patch of foam that lasts.",
+   "scale": 1.0,
+   "crown_m": [
+    3.5,
+    6.0
+   ],
+   "crater_m": 0.0,
+   "linger_s": [
+    4,
+    7
+   ],
+   "shake_within_m": 0,
+   "quiet": 1,
+   "spout": {
+    "rise_s": 4.0,
+    "fall_s": [
+     6.0,
+     10.0
+    ],
+    "wide": 1.1,
+    "crown_wide": 2.2,
+    "piece_max_m": 1.6,
+    "alpha": 0.85,
+    "domes": [
+     10,
+     13
+    ],
+    "surge": 20,
+    "foam": 60,
+    "foam_reach": 3.2,
+    "foam_alpha": 0.7,
+    "foam_s": [
+     40,
+     70
+    ],
+    "mist": 12,
+    "base_to": 0.02
+   }
   }
  },
  "grounds": {
@@ -609,9 +869,9 @@
    "extra": "a turf tear",
    "paint": {
     "soil": [
-     66,
-     55,
-     44
+     86,
+     78,
+     70
     ],
     "heavy": [
      50,
@@ -624,14 +884,19 @@
      108
     ],
     "clod": [
-     40,
-     33,
-     26
+     69,
+     62,
+     55
     ],
     "smoke": [
-     72,
-     62,
-     52
+     90,
+     83,
+     76
+    ],
+    "ring": [
+     124,
+     114,
+     100
     ]
    }
   },
@@ -673,8 +938,20 @@
      176,
      152,
      118
+    ],
+    "foot": [
+     36,
+     35,
+     34
+    ],
+    "stone": [
+     78,
+     72,
+     66
     ]
-   }
+   },
+   "shower": 0.8,
+   "_shower": "A shell in sand still throws stones and damp lumps high (the video's beach): shower 0.8, though its clods share stays 0.15."
   },
   "snow": {
    "thrown_first": [
@@ -692,6 +969,11 @@
    ],
    "crater": "a black star on white with a grey-brown spatter ring",
    "extra": "white snow thrown up first, dark earth under it",
+   "smoke_top": [
+    66,
+    64,
+    62
+   ],
    "paint": {
     "soil": [
      52,
@@ -709,9 +991,9 @@
      213
     ],
     "clod": [
-     48,
-     42,
-     36
+     74,
+     69,
+     64
     ],
     "smoke": [
      58,
@@ -727,7 +1009,19 @@
     "first_share": [
      0.35,
      0.8
-    ]
+    ],
+    "foot": [
+     30,
+     26,
+     22
+    ],
+    "foot_dust": 0.0,
+    "scar": [
+     46,
+     36,
+     28
+    ],
+    "scar_rays": 1.5
    },
    "_mend_1931": "Art director 19:31Z on the first in-game frames: the snow crown was smooth pure-white blades like a paper flower, ringed by cotton puffs. Now broken and granular (grain: its pieces half the size, twice as many, soft-edged, not drawn out), off-white (about 188,193,201 in shade; each grain its own shade) with dark earth showing in the jets (first_share: a third of the pieces snow at the jet's foot, four fifths at its tip)."
   },
@@ -745,9 +1039,9 @@
    "ground_shine": "matt: wet earth, not a glaze",
    "paint": {
     "soil": [
-     46,
-     38,
-     30
+     73,
+     66,
+     59
     ],
     "heavy": [
      38,
@@ -760,14 +1054,19 @@
      66
     ],
     "clod": [
-     34,
-     28,
-     22
+     64,
+     58,
+     52
     ],
     "smoke": [
-     64,
-     56,
-     48
+     85,
+     79,
+     73
+    ],
+    "ring": [
+     100,
+     90,
+     78
     ]
    }
   },
@@ -817,7 +1116,9 @@
      146,
      138
     ]
-   }
+   },
+   "shower": 0.8,
+   "_shower": "Masonry lumps and tiles in the shower, in the town's clod colour: shower 0.8, though town throws no earth clods."
   },
   "woods": {
    "thrown_from_ground": 0.55,
@@ -836,9 +1137,9 @@
    "tree_burst": "the trunk left torn and pale where it split",
    "paint": {
     "soil": [
-     60,
-     50,
-     40
+     83,
+     75,
+     67
     ],
     "heavy": [
      48,
@@ -851,19 +1152,24 @@
      95
     ],
     "clod": [
-     56,
-     46,
-     36
+     80,
+     72,
+     64
     ],
     "smoke": [
-     70,
-     64,
-     56
+     89,
+     84,
+     79
     ],
     "splinter": [
      205,
      186,
      150
+    ],
+    "ring": [
+     112,
+     104,
+     90
     ]
    }
   },
@@ -895,6 +1201,95 @@
      190,
      196
     ]
+   },
+   "smoke_top": [
+    150,
+    158,
+    164
+   ],
+   "haze_lingers": 0.35,
+   "_spout": "Brian's battle video (11-19): a water spout is white spray that falls back fast and leaves a thin mist, not a cloud. The smoke's top mixes toward smoke_top (pale grey: burst.smoke.colour_top is charcoal, for earth), its puffs are smoke_alpha as solid, the mist clears in about a third of the time (haze_lingers), and nothing smoulders. Art director 03:28Z: the mist at 1.6 s was a round white ball; the wind draws each puff out smoke_stretch times downwind (and carries some further than others), and it thins to half by smoke_half_by_s.",
+   "smoke_alpha": 0.5,
+   "smoke_half_by_s": 1.6,
+   "smoke_stretch": 1.65,
+   "spout": {
+    "_how": "A hit in the sea (art director 17:54Z 20 November, from build 1778: the columns were soft white billows that hung like steam or cotton). With this row a shell, bomb or torpedo in the water throws white water and nothing else: a column up to the size's crown_m in about rise_s (a 50 m one; a small splash sooner), wide of its height at its stalk and crown_wide at its head. Its body stands to three quarters of the height; the top is fingers that rise inside it and bend out of its head (fingers of them, leaning finger_lean_deg at their tips, the tallest to the full height, the next clearly shorter, the rest finger_reach of it), each drawn to a torn point. Streamers of spray leave their heads (streamers a finger) and the column's sides (side_spray): each streamer_pieces pieces thrown one after another out to streamer_out of the column's height, so it is an arc that bends over under its own weight, thicker at its root and breaking into beads at its tip, and is gone before the column's top is down (art director 22:03Z: single streaks were dead-straight hairlines like a firework, and hung over the column like rain). The water goes up as a jet, each piece jet_stretch as long as it is wide (1.9 to 2.8 unless given), and comes down as a curtain, drawn out longer as it falls, the top back on the sea in fall_s. Its lowest base_to is dark wet water (base_colour) that breaks white above, with a low heave of the same round its foot (foot). The side away from the sun is shaded toward shadow by side_shade. A low ring of spray races out over the sea (surge) to foam_reach of the height; foam lies where it stood in a soft mottled patch (foam pieces, foam_alpha, gone in foam_s); a thin mist (mist puffs of mist_alpha, mist_s) goes off down the wind. body: the column's pieces, none bigger than piece_max_m. A small splash is fewer and coarser pieces by its height, and so is a hit far off: so far that a 50 m column would stand under full_px tall in the picture (the scene's window pixels), it has that share of its pieces, never under far_least, each as much bigger. Past halve_past pieces asked for on the screen, a new column is half as many, and with the room four fifths full a quarter. A size may set any of these under sizes.<size>.spout, and domes there: no column at all, but that many low domes of water heaving up and sinking back over the column's width (the churn's). Without this row: the old crown of pale dust and its hanging mist.",
+    "rise_s": 0.9,
+    "fall_s": [
+     2.8,
+     4.2
+    ],
+    "wide": 0.11,
+    "crown_wide": 0.17,
+    "piece_max_m": 2.4,
+    "body": 110,
+    "fingers": [
+     10,
+     16
+    ],
+    "finger_lean_deg": [
+     3,
+     16
+    ],
+    "finger_reach": [
+     0.62,
+     0.98
+    ],
+    "streamers": [
+     0,
+     2
+    ],
+    "streamer_pieces": 5,
+    "streamer_out": [
+     0.16,
+     0.32
+    ],
+    "side_spray": 6,
+    "foot": 20,
+    "surge": 40,
+    "foam": 22,
+    "foam_reach": 0.42,
+    "foam_alpha": 0.6,
+    "foam_s": [
+     10,
+     16
+    ],
+    "mist": 10,
+    "mist_alpha": [
+     0.08,
+     0.16
+    ],
+    "mist_s": [
+     4,
+     7
+    ],
+    "colour": [
+     240,
+     244,
+     246
+    ],
+    "shadow": [
+     150,
+     166,
+     180
+    ],
+    "shadow_k": 0.7,
+    "base_colour": [
+     58,
+     72,
+     80
+    ],
+    "base_to": 0.38,
+    "foam_colour": [
+     206,
+     222,
+     220
+    ],
+    "alpha": 0.95,
+    "side_shade": 0.6,
+    "halve_past": 1800,
+    "full_px": 300,
+    "far_least": 0.12
    }
   },
   "ground_of": {
@@ -917,7 +1312,9 @@
    "mud": "the autumn and spring thaw (rasputitsa) in the east, and marsh",
    "sand": "North Africa and the desert fields"
   },
-  "_paint": "paint: the game's unlit colours for each ground, as the finished picture should show them (sRGB 0-255): soil the lighter jets, heavy the dark heavy jets and the body, dust the skirt and veil, clod the lumps, smoke the cloud, first (snow) what is thrown first, splinter (woods) the wood."
+  "_paint": "paint: the game's unlit colours for each ground, as the finished picture should show them (sRGB 0-255): soil the lighter jets, heavy the dark heavy jets and the body, dust the skirt and veil, clod the lumps, smoke the cloud, first (snow) what is thrown first, splinter (woods) the wood. ring (optional) the dust ring's colour, from the ground it lands on (default dust: art director 03:28Z, earth's ring grey-brown, a touch darker than its dust); foot (optional) the dark foot's colour (default heavy: sand's is grey-black explosive smoke); stone (optional) the shower's lumps (default clod: sand throws dark stones). foot_dust (optional) how much of the ground's dust shows in the dark foot's veil and fill (snow 0: black earth through the white, art director 03:28Z).",
+  "_clod_written": "Art director 17:08Z (build 1732, where one big clod was taken for a glitch): the game's grade crushes darks (picture._how), so a clod painted 40,33,26 showed as a black hole with no detail. The dark grounds' clod paints are WRITTEN values, aimed through the game's curve (tools/battle-fx/game_curve.py) to show as they were painted: earth 69,62,55 shows as 40,33,26; mud 64,58,52 as 34,28,22; snow 74,69,64 as 48,42,36; woods 80,72,64 as 56,46,36. Clods only: sand's and town's are light enough as they are, and no other dark paint is changed. At about 34 luma they still count toward the burst's black (under 60: burst.foot._how).",
+  "_soil_smoke_written": "Art director 18:28Z (build 1746's howitzer from 60 m: on its shadow side the burst read as an ink blot, smoke 36,30,24, and not as earth). Earth's, mud's and woods' soil and smoke paints are now WRITTEN values too, aimed through the game's curve (tools/battle-fx/game_curve.py write) to show as they were painted: earth soil 86,78,70 shows as 66,55,44 and smoke 90,83,76 as 72,62,52; mud soil 73,66,59 as 46,38,30, smoke 85,79,73 as 64,56,48; woods soil 83,75,67 as 60,50,40, smoke 89,84,79 as 70,64,56. heavy (the dark heavy jets, the body and the foot) stays as it was, so a dark heart sits inside lighter brown dust. Sand's and town's are light enough as they are. The cloud's upper part is mostly burst.smoke.colour_top, a charcoal painted 66,64,62 that showed as 31,32,33: it is written 86,84,83 to show as painted. Snow keeps its old, darker soil, smoke and charcoal (smoke_top 66,64,62 there), by the art director's word of 18:49Z: black earth thrown over white snow is the strongest picture we have."
  },
  "on_armour": {
   "_how": "A shell that hits a tank and does not go in.",
@@ -949,7 +1346,239 @@
   "blast_cloud": "warm only at its foot, charcoal above",
   "light_lift_max": 1.15,
   "wreck": "orange tongues from the hatches, then a thinning grey column to the end of the fight; at night a hatch glow (b477)",
-  "_passed": "Flame 207, 134, 56 at frame 0 and the crown's foot glow 184, 100, 3 at frame 2, gone by frame 6: both passed in the fortifications 105 mm burst, 17:11Z."
+  "_passed": "Flame 207, 134, 56 at frame 0 and the crown's foot glow 184, 100, 3 at frame 2, gone by frame 6: both passed in the fortifications 105 mm burst, 17:11Z.",
+  "smoke_rest": 1.0,
+  "_smoke_rest": "Art director 18:28Z (build 1746, Pearl Harbor from the air: a wide see-through sheet of smoke beside a burning ship ended along a straight level line). A fire's smoke puff grows to two to four times the fire's width while it climbs only 20 to 30 m, so a 40 m ship fire's puffs, 80 to 160 m in radius, stood half under the sea and the sea cut each along a straight line. smoke_rest: the puff's middle is never lower than this share of its own radius above the ground or sea under it (Bit::Rest), so the cloud stands on the surface. 0 or no key: as before. A small fire's smoke already rides higher than it is wide and does not move.",
+  "smoke_foot": [
+   50,
+   46,
+   42
+  ],
+  "smoke_foot_clear": 1.0,
+  "smoke_foot_from_m": [
+   8,
+   20
+  ],
+  "_smoke_foot": "Art director 19:57Z (build 1748, Pearl Harbor from the air): the smoke now stands on the sea, but the puffs lying there had paled with age to a sunlit grey bank at the column's foot and read as steam. Smoke is youngest and darkest at the fire. smoke_foot: while a big fire's smoke puff lies on the ground or sea (see smoke_rest) it keeps this dark, after the flames too; written 50, 46, 42 it lands about 18, the oil column's own dark. It takes its own, paler colour only as it rides clear of where it rests, all of it by smoke_foot_clear of its radius. smoke_foot_from_m: how big a fire, from the width where this begins to the width where it is whole; a tank's or a house's fire is under it and smokes as before. No key: as before.",
+  "smoke_bank": {
+   "_how": "Art director 03:30Z 20 November (build 1750, Pearl Harbor from the air; Akagi in picture 06): the smoke resting on the sea beside a big fire was a smooth, soft dark oval with no lumps and no edge, a stain or a hole in the water. A fire from_m across or more lays its smoke as a bank of the oil column's own kind of lumps (rough, heart, twin_px, its sunward lumps lit toward lit_colour by sun_side), run out down the wind. The bank: its lumps wander wide times the fire's width apart by the far end and it is long times that in length; measured from straight above it comes to 2.2 to 2.9 times as long as it is wide. Each lump is lump_r of the fire's width in radius, is born on the fire every every_s (while it flames, after) and runs down the wind at the pace that takes the longest lived (life_s, for a 40 m fire; a 12 m fire's about half) to the far end. All live through the first short share of that, piling into one dark mass at the fire; fewer and fewer live on (thin: higher, fewer), each solid for hold of its life, so down the wind the bank thins to lumps apart with clear sea between. Most lie on the sea (rise_mps, rest) and keep the fire's dark (smoke_foot), each its own shade; heads of them lift (head_rise_mps) and pale as they ride clear. A young lump is lit only sun_young as much until sun_from of the longest life and in full by sun_by of it (art director 04:06Z: the dark pile at the root, the first third, takes about a tenth of the light and lands near the passed foot, luma about 32 and near neutral, reading by its edge against the sea; the light comes in through the middle so the far lumps keep their lit tops). Every dial is held to a sane span in the code. No such key, or a fire under from_m (a tank, a house): the old smoke, unchanged.",
+   "from_m": 8,
+   "wide": 2.2,
+   "long": [
+    2.6,
+    3.4
+   ],
+   "life_s": 60,
+   "short": 0.35,
+   "thin": 1.4,
+   "every_s": [
+    0.5,
+    1.0
+   ],
+   "lump_r": [
+    0.5,
+    0.85
+   ],
+   "alpha": [
+    0.8,
+    0.95
+   ],
+   "shade": [
+    0.8,
+    1.25
+   ],
+   "rise_mps": [
+    0.0,
+    0.4
+   ],
+   "heads": 0.33,
+   "head_rise_mps": [
+    0.8,
+    1.8
+   ],
+   "spread": 0.35,
+   "rough": 0.35,
+   "heart": 0.85,
+   "hold": 0.75,
+   "sun_side": 1.3,
+   "sun_young": 0.1,
+   "sun_from": 0.33,
+   "sun_by": 0.6,
+   "lit_colour": [
+    118,
+    106,
+    94
+   ],
+   "twin_px": 160,
+   "rest": 1.0
+  },
+  "smoke_column": {
+   "_how": "A big fire's own column (art director 04:06Z 20 November: a burning ship gets a column of her own, of the oil column's kind but about half its width: black at the root, lumps, leaning down the wind, rising a few hundred metres before it bends flat; the bank lies on the sea beneath it). A plain fire (Burn) from_m across or more that burns from_s seconds or longer sends one up: the oil column's own puffs and pall (the keys below are the oil row's, read the same way, sizes as shares of the fire's width), laid from this row. from_s: a shorter fire sends up none (a crashed aeroplane's 90 seconds lays its bank only). One column to a ship: a fire lit within join_m of a place a standing column rises from joins it; the column then rises from both fires and from between them (eight places at most; a fire that joins after that adds none, so a ship struck again and again keeps her one column), stands on their middle, and is join_wide of her burning length across (the fires' greatest distance apart plus the new fire's width; never wider than a fire join_m across would send up), so a carrier ablaze from end to end sends up one broad column and never three chimneys. most: so many columns stand at once and never more (each is some 95 to 130 puffs that are kept when the screen is full, as an oil column's are); a fire past that lays its bank only, chosen as it is lit and never by the eye. under_oil: none of it is laid while burning oil (OilFire) stands within this share of that oil's reach of one of her fires: the game lights an oil fire 0.6 of her length across on every ship lost, and that oil's column is hers. A column that oil has stood over does not stand again when the oil goes out, and takes no place among the most; a fire lit under burning oil starts none. 0: laid all the same. sun_young, sun_from_s, sun_by_s: a puff has only sun_young of its lit side until sun_from_s seconds old and all of it by sun_by_s, so the column is black at its root and its lit lumps come in higher up (any oil row can ask the same; none asked: as before). After the flames the column thins, greys and comes half as often until the fire ends. No fire.smoke_column.column_life_s key: no column, every fire as before.",
+   "from_m": 8,
+   "from_s": 120,
+   "join_m": 120,
+   "join_wide": 0.5,
+   "most": 6,
+   "under_oil": 0.75,
+   "head_r": [
+    0.15,
+    0.3
+   ],
+   "column_every_s": 0.8,
+   "column_life_s": [
+    45,
+    60
+   ],
+   "rise_mps": [
+    0.0,
+    0.0
+   ],
+   "burst_mps": [
+    12,
+    16
+   ],
+   "burst_drag": 0.04,
+   "slow_mps2": 0.0,
+   "windage": [
+    1.0,
+    1.6
+   ],
+   "r0": [
+    0.25,
+    0.38
+   ],
+   "r1": [
+    0.42,
+    0.68
+   ],
+   "grow": 0.6,
+   "alpha": [
+    0.75,
+    0.95
+   ],
+   "hold": 0.5,
+   "heart": 0.85,
+   "rough": 0.35,
+   "cool": 1.0,
+   "colour": [
+    24,
+    22,
+    21
+   ],
+   "colour_top": [
+    64,
+    60,
+    57
+   ],
+   "twin_px": 160,
+   "keep": 1,
+   "pall_every_s": 4.0,
+   "pall_life_s": [
+    150,
+    220
+   ],
+   "pall_r1": [
+    0.8,
+    1.3
+   ],
+   "pall_windage": [
+    1.4,
+    1.9
+   ],
+   "pall_alpha": [
+    0.4,
+    0.6
+   ],
+   "pall_stretch": 2.2,
+   "pall_stretch_by_s": 90,
+   "pall_hold": 0.4,
+   "pall_level": [
+    0.75,
+    1.05
+   ],
+   "pall_drift_mps": 0.3,
+   "pall_rough": 0.5,
+   "pall_rest": 1.3,
+   "sun_side": 2.2,
+   "lit_colour": [
+    118,
+    106,
+    94
+   ],
+   "sun_young": 0.1,
+   "sun_from_s": 4,
+   "sun_by_s": 16,
+   "_lumps": "As oil_fires.sunk._lumps.",
+   "lumps": 5,
+   "lumps_px": 260,
+   "lumps_r": [
+    0.18,
+    0.56
+   ],
+   "lumps_out": [
+    0.3,
+    1.0
+   ],
+   "lumps_alpha": 0.9,
+   "lumps_inner": 0.7,
+   "lumps_light": 0.6,
+   "lumps_rim": 0.8,
+   "tight_m": 50,
+   "overlap": 1.5,
+   "least_px": 8,
+   "least_keep": 0.6,
+   "_tight": "A small fire's column held in one piece (art director 15:40Z 20 November on the outcome looks' first cuts: 'at 300 m the ship fire's smoke breaks into a scatter of separate flakes. Each puff should overlap the next at every distance, at least 1.5 times the spacing with a floor in pixels'). A puff's size goes by the fire's width, but the scatter the row's spread of windage and push gives two puffs does not: over a 12 m fire the puffs were a fifth as wide as over a 60 m one and thrown as far apart. tight_m: a fire narrower than this keeps only its share (its width over tight_m) of that spread, so its puffs go nearly one way; at this width or wider nothing is changed (three fires along Akagi make a column 55 m wide: Midway 06 is laid as passed). overlap: under tight_m each puff is at least this many times as wide as the way to the next one, young and old, with what scatter is left. least_px, least_keep: far off a puff of the column is never under this many window pixels across, keeping that share of its ink. Without the keys: as before."
+  },
+  "put_out": {
+   "_how": "A fire its crew puts out (art director 14:39Z 20 November; BurnOut on a fire lit with a number): 'the smoke turns white, then the fire is gone'. over_s: seconds in which the flames are eaten back from the edges to the seat, lower and in fits, never thinner, when the caller gives none. surge_s: with water (a ship's hoses) white steam surges at the seat that long as it hits (the steam.surge row); with an extinguisher (a tank's crew) a brief pale puff instead. pale_s: by then the smoke has gone from black through grey to grey-white; it thins to a wisp and is gone gone_s after the crew began. The flames shrink steadily, half their height by two fifths of that time, never all gone and back. Where it burned a dull patch (glow, glow_alpha) lies on the seat and small specks flicker over it, embers of them alight at once at first and fewer to the end, embers_s after the last flame (art director 16:41Z: never round red lamps). No such row: BurnOut does nothing.",
+   "over_s": [
+    6,
+    12
+   ],
+   "pale_s": [
+    10,
+    30
+   ],
+   "gone_s": 60,
+   "surge_s": [
+    2,
+    5
+   ],
+   "embers": [
+    5,
+    15
+   ],
+   "embers_s": [
+    10,
+    20
+   ],
+   "ember": [
+    255,
+    150,
+    62
+   ],
+   "ember_old": [
+    176,
+    52,
+    20
+   ],
+   "glow": [
+    190,
+    68,
+    24
+   ],
+   "glow_alpha": 0.65,
+   "smoke": [
+    196,
+    195,
+    191
+   ],
+   "puff": [
+    214,
+    214,
+    210
+   ]
+  }
  },
  "camera": {
   "shake": {
@@ -965,7 +1594,8 @@
    "push_m": {
     "bomb250": 0.4,
     "bomb500": 0.7,
-    "_note": "big bombs add a slight push away from the blast"
+    "_note": "big bombs add a slight push away from the blast",
+    "torpedo": 0.7
    },
    "setting": "Options: Camera shake on or off (default on)"
   },
@@ -1047,7 +1677,340 @@
    "smoke": "a short puff up the tube's line",
    "smoke_s": 2.5
   },
-  "_day_lamp": "By day only rows with day_lamp light the ground (at game.day_lamp_share); tank guns, anti-tank guns, machine guns, rifles and mortars do not (art director 21:16Z)."
+  "_day_lamp": "By day only rows with day_lamp light the ground (at game.day_lamp_share); tank guns, anti-tank guns, machine guns, rifles and mortars do not (art director 21:16Z).",
+  "veil": {
+   "_how": "Art director 06:19Z, the desert: a tank or field gun's shot (any row with dust_ring_m; a towed gun's muzzle socket too) raises the ground round the muzzle in a veil spread along the line of fire, rising a metre or two (every other puff a low dense skirt on the ground, dust.vehicles.low_skirt), that hides the gun and its line of sight for hide_s, then thins to haze_alpha and lingers on the wind. by_ground: where it rises (and how thick); the ring itself takes the ground's own paint and grounds.<g>.dust against earth's.",
+   "by_ground": {
+    "sand": 1.0
+   },
+   "puffs": 10,
+   "reach_of_ring": 0.9,
+   "life_s": [
+    5,
+    8
+   ],
+   "r1_of_ring": [
+    0.45,
+    0.65
+   ],
+   "rise_mps": [
+    0.1,
+    0.35
+   ],
+   "alpha": [
+    0.7,
+    0.9
+   ],
+   "hide_s": 2.2,
+   "haze_alpha": 0.18,
+   "flatten": 0.6,
+   "lumps": 1.0,
+   "lump_r": [
+    0.25,
+    0.5
+   ],
+   "lump_up_m": [
+    0.2,
+    1.2
+   ],
+   "lump_thick": [
+    0.3,
+    0.9
+   ],
+   "lump_pale_up": 0.5,
+   "lump_tuft_share": 0.45,
+   "_lumps": "Art director 18:28Z: the desert veil gets the tank gun's treatment (muzzle.billows), lumps and never upright sheets. lumps: that many times puffs, each a lump lump_r of a sheet's radius across (so several sizes, 0.7 to 2 m for a tank gun) and lump_thick of the veil's thickness (thick ones and thin ones, with gaps), with the billows' firm heart and rough outline, lit as one cloud; every other one a mound lying on the ground, the rest thrown up lump_up_m over it and thinner the higher by lump_pale_up. lump_tuft_share of them thin to haze_alpha by hide_s and linger for life_s as the veil did; the others are gone soon after hide_s. With game.near_eye_fade_m it fades out near the camera. Tried at twice the count and size: a pale wash over the lower frame. 0 or no key: the ten upright sheets as before."
+  },
+  "billows": {
+   "_how": "Art director 17:52Z on build 1746's test, where a tank gun fired 4 m from two riflemen and its smoke lay over them as one even beige gauze: a heavy gun blinding the men beside it is right, but it must read as dust, not fog. A field gun's shot (a row whose flame_m is 0.5 or more) raises a cloud in three layers, each a scatter of lumps of several sizes and thicknesses with gaps between, never one sheet. low: dense mounds of the ground's own dust resting on the ground under and ahead of the muzzle, over reach of its dust ring (shares of dust_ring_m, behind to ahead) and wide of it to each side, each low_r of the ring across. mid: lumps of dust and smoke (smoke_mix of game.muzzle_smoke) thrown up over them, mid_up_m above the ground, mid_r of the ring across, thinner by pale_up and sooner gone the higher they start. top: the gun's own smoke thrown along the bore from the muzzle and scattered off it at scatter_mps, top_r of the flame's length across (plus 0.2 m); the further it flies and the higher, the thinner. So the cloud is heaviest low and near the muzzle and thins upward, and men behind it come clear from the head down. Each layer is thick for a little under half its life, then thins: mid and low live clear_s, top top_s, so the thick part is gone in 1.5 to 2 s. Of the low mounds, tuft_share settle to haze_alpha by haze_by_s and drift on the wind for tuft_s as tufts. low, mid, top are a tank gun's counts (a wider ring and a longer flame throw more); dust goes by the ground's own (grounds.<g>.dust against earth's). heart, inner: how solid a lump is and how far out (a firm body with a short soft edge shows its lumpy outline, rough); shade: its sunward side lit and far side shadowed. A lump never sinks into the ground: its middle stays its own radius clear of it. Without low, a gun smokes as it did before (17 soft puffs along the bore). The gun's low dust ring (dust_ring_m) and the desert's veil (veil, sand only) are as they were.",
+   "low": 9,
+   "mid": 10,
+   "top": 12,
+   "low_alpha": [
+    0.55,
+    0.8
+   ],
+   "mid_alpha": [
+    0.35,
+    0.6
+   ],
+   "top_alpha": [
+    0.35,
+    0.7
+   ],
+   "low_r": [
+    0.14,
+    0.26
+   ],
+   "mid_r": [
+    0.15,
+    0.28
+   ],
+   "top_r": [
+    0.5,
+    1.3
+   ],
+   "clear_s": [
+    1.8,
+    2.4
+   ],
+   "top_s": [
+    1.6,
+    2.4
+   ],
+   "tuft_share": 0.4,
+   "tuft_s": [
+    3,
+    5
+   ],
+   "haze_alpha": 0.2,
+   "haze_by_s": 1.8,
+   "reach": [
+    -0.15,
+    1.1
+   ],
+   "wide": 0.3,
+   "mid_up_m": [
+    0.8,
+    2.6
+   ],
+   "scatter_mps": 2.0,
+   "pale_up": 0.6,
+   "smoke_mix": 0.4,
+   "heart": 0.9,
+   "inner": 0.7,
+   "rough": 0.5,
+   "shade": 0.4
+  },
+  "dry": {
+   "_how": "Art director 06:08Z 20 November on build 1758's west still on sand: half a second after the shot the dry lumps and the gun's smoke wisps were still one soft cloud, and two riflemen 4 m off the line of fire, seen across it, almost vanished. On a ground named in by_ground (its number: how many times the pieces) a heavy gun's blast (a row with dust_ring_m) raises four to six big dense lumps and nothing thin. tall of them stand where the blast strikes the ground hardest, at the muzzle's two flanks and just ahead of it, never behind it: each tall_r of the ring across with two shoulders, about man-high for a tank gun. low of them are heaps of two lobes farther down the line of fire, one to a stretch with clear ground between, each low_r of the ring across, smaller the farther out. The gun's own smoke is puffs dense puffs at the muzzle, puff_r of the flame across, taking smoke_as_dust of the dust's colour. Every piece is alpha thick to inner of its radius with a lumpy outline (rough) and is lit as a thing with form (light: how strongly its sunward side is lit and its far side shadowed): in the preview its lit top lands 1.08 to 1.10 times the ground, its shadow side about two thirds. The heaps are gone by clear_s; the tall ones hold to near_s, thinning, the cloud that gives the gun away. Colour: the ground under the muzzle as the game's screen shows it (FBattleEffects::GroundColour), shade times lighter times as light at its middle, written to land on it by picture.to_land; where the game cannot say, the ground row's dust paint. The ring, the billows and the veil are not drawn there. Neither tall nor lumps (build 1758's lumps: lumps, lump_r, belly, crown_r, crown_up, wide, reach, smoke): all as before.",
+   "_low": "Art director 08:03Z 20 November on build 1762's still from 60 m, a fifth of a second after the shot: the young lumps read as small pale balls. With low_s the dust is born low: until low_s.0 seconds old each lump and heap lies along the ground low_flat times as high as it is wide (as wide again as keeps its bulk), the way blast dust first skirts out, in its plain middle tone with no lit top and no shadow side, its dense part reaching only low_soft of the way out it will, so the young skirt has a soft edge. By low_s.1 seconds it has risen round, firmed and earned its light, so half a second after the shot it is the lump the art director passed in build 1762. The gun's smoke puffs, off the ground, keep their round shape and only firm and come into their light as late. shade is now six parts in a hundred either side of its middle, so each lump is of its own shade. No low_s: born round and lit, as in build 1762. Build 1764's stills from 60 m (09:28Z 20 November): the young skirt, soft-edged and in one flat tone a little under the ground's, was lost on the game's rippled sand, so nothing marked the shot for a third of a second. low_lit is the share of its light and shade a mound is born with: at 0.5 its top sits at about the ground's own tone (never the pale of a lit lump) and its foot is darker, so it reads as a low heap of dust; low_soft 1 gives it its firm edge from birth. No low_lit: 0, as in build 1764.",
+   "by_ground": {
+    "sand": 1.0
+   },
+   "tall": [
+    2,
+    3
+   ],
+   "low": [
+    2,
+    3
+   ],
+   "puffs": [
+    1,
+    2
+   ],
+   "tall_r": [
+    0.15,
+    0.19
+   ],
+   "low_r": [
+    0.1,
+    0.13
+   ],
+   "puff_r": [
+    0.45,
+    0.6
+   ],
+   "alpha": [
+    0.88,
+    0.95
+   ],
+   "inner": 0.74,
+   "rough": 0.4,
+   "light": 4.0,
+   "clear_s": [
+    2.0,
+    2.4
+   ],
+   "near_s": [
+    2.8,
+    3.2
+   ],
+   "low_s": [
+    0.3,
+    0.45
+   ],
+   "low_flat": 0.5,
+   "low_soft": 1.0,
+   "low_lit": 0.5,
+   "shade": [
+    0.77,
+    0.87
+   ],
+   "lighter": 1.04,
+   "twin_px": 6,
+   "smoke_as_dust": 0.8
+  },
+  "hot": {
+   "_how": "Art director 07:08Z: close to the eye (within_m) a ground gun's flash, a machine gun's (Shots, mg) or a field gun's (Muzzle), is lit from within as the air guns' close flash: a yellow-white root at the muzzle (root to root_edge, its rim hot), an orange body (orange, its rim rim) with dense rims, shrinking rather than going see-through. Past within_m as before. Art director 13:54Z on the game's own frames (build 1720), where that read as a sticker: with tongues here, the close flash is instead a small white-yellow root right at the muzzle (root), melting into yellow, then the orange body, widest a third of the way out, which breaks into 3 to 5 ragged tongues with red only at their ends (red), and 2 to 4 short licks thrown sideways; its length is rolled between long x its usual length every round (mg_flame_m for a machine gun, 1.4 x flame_m for a gun), so no two match. Dense inside, its edge a pixel or two soft. glow: a thin glow glow_m past the flame, that opaque at dusk and glow_day_share of it by day. over: how far past white the root burns (see picture.lit_gain). wide: half its width, as a share of its usual length. Art director 16:30Z on build 1732's stills (root cream at 235,231,216, orange 230,152,4 with no blue: candy): these colours are WRITTEN values, aimed through the game's curve (picture._how). root at over 4 lands 253,250,234, luma 249, over a spot 5 to 9 px across on a 1600 still. orange lands about 234,141,41 (her 235,140,40; written 235,140,40 it landed 234,150,0). yellow_over: how far past white the yellow burns (1.175, as it did when over was 1.5; absent, a share of over). halo: a soft card of the root's colour round the root, that opaque at its inner edge and nothing halo_m further out, in place of the game's bloom (never over 0.25; 0 or absent: none). At 0.08 and 0.028 m it lifts the picture a quarter of the way to the root at most, 3 to 4.5 px out on a 1600 still. Art director 18:05Z on build 1746's stills (root 252,249,233, white for about 5 px along the bore, the glow down to the ground by about 8 px on a 1600 still): the game's own bloom already gives the glow, so the card is dropped (halo 0; halo_m kept for the day it is wanted again).",
+   "within_m": 50,
+   "root": [
+    255,
+    233,
+    158
+   ],
+   "root_edge": [
+    255,
+    240,
+    190
+   ],
+   "hot": [
+    255,
+    232,
+    150
+   ],
+   "orange": [
+    236,
+    131,
+    71
+   ],
+   "rim": [
+    230,
+    96,
+    16
+   ],
+   "yellow": [
+    240,
+    200,
+    90
+   ],
+   "red": [
+    200,
+    80,
+    30
+   ],
+   "tongues": [
+    3,
+    5
+   ],
+   "licks": [
+    2,
+    4
+   ],
+   "long": [
+    0.6,
+    1.3
+   ],
+   "wide": 0.2,
+   "mg_flame_m": 0.5,
+   "glow": 0.5,
+   "glow_day_share": 0.5,
+   "glow_m": 0.035,
+   "over": 4.0,
+   "yellow_over": 1.175,
+   "halo": 0,
+   "halo_m": 0.028
+  }
+ },
+ "ground_cases": {
+  "_how": "The grit up close (art director): within within_m of the eye, a ground machine gun (Shots with weapon mg) drops its spent brass out of the bottom of its receiver every round (as the war's machine guns did), falling with a little scatter to build a small heap under and beside the gun where the gunner lies; a towed or field gun (Muzzle at_gun, howitzer) opens its breech after_s after each shot and throws its big brass case out behind, where it lies for minutes, so the cases pile up behind the gun through a fight. A tank's cases stay inside it. Each case is a brass tube lit as metal (art director 07:08Z): a bright band toward the sun with a glint (glint, shine), a shade side and underside (shade), the dark open mouth (mouth) at one end when it is turned to the eye, and a soft contact shadow on the ground once it lies there (contact_shadow). Past most_lying cases lying at once, a new one lies only a moment. Each gun's cases use their own dice, so its rounds, strikes and smoke fall as they always did; a recipe without ground_cases draws none. They are left out when the screen is past three fifths full.",
+  "within_m": 40,
+  "colour": [
+   196,
+   156,
+   82
+  ],
+  "shade": [
+   112,
+   82,
+   37
+  ],
+  "mouth": [
+   46,
+   34,
+   18
+  ],
+  "glint": 4,
+  "glint_colour": [
+   255,
+   220,
+   140
+  ],
+  "shine": 8,
+  "contact_shadow": 0.5,
+  "least_px": 0.8,
+  "most_lying": 200,
+  "draw_within_m": 150,
+  "detail_px": 3,
+  "hold_px": 1.6,
+  "full_px": 0.6,
+  "gone_px": 0.2,
+  "far_glint": 1.6,
+  "far_shade": 0.75,
+  "far_shine": 2.5,
+  "nearer_m": 0.05,
+  "mg": {
+   "_note": "art director 07:08Z: out of the bottom of the receiver (the MG 34 and 42, the Bren, the DP, the Browning, the Vickers), rifle-calibre cases about 6 cm; they lie long enough to heap up",
+   "case_m": 0.06,
+   "case_d_m": 0.011,
+   "breech_back_m": 0.6,
+   "below_m": 0.06,
+   "side": 0.15,
+   "throw_mps": [
+    0.05,
+    0.25
+   ],
+   "up_mps": [
+    -0.4,
+    0.0
+   ],
+   "scatter_mps": 0.18,
+   "lie_s": [
+    60,
+    120
+   ],
+   "tumble": [
+    4,
+    12
+   ]
+  },
+  "at_gun": {
+   "case_m": 0.6,
+   "case_d_m": 0.1,
+   "after_s": 0.8,
+   "breech_back_m": 3.0,
+   "side": 0.3,
+   "throw_mps": [
+    1.5,
+    3
+   ],
+   "up_mps": [
+    0.8,
+    1.6
+   ],
+   "lie_s": [
+    180,
+    240
+   ],
+   "tumble": [
+    4,
+    8
+   ]
+  },
+  "howitzer": {
+   "case_m": 0.4,
+   "case_d_m": 0.12,
+   "after_s": 1.5,
+   "breech_back_m": 2.5,
+   "side": 0.2,
+   "throw_mps": [
+    1,
+    2
+   ],
+   "up_mps": [
+    0.5,
+    1.2
+   ],
+   "lie_s": [
+    180,
+    240
+   ],
+   "tumble": [
+    3,
+    6
+   ]
+  }
  },
  "bullet_strike": {
   "_how": "Art director 21:16Z: small dust spurts where a burst's rounds strike the ground (Shots, given the ground). About three rounds in ten kick one (pre-check 21:34Z: at one in two a firing gun cost about 16 puffs): a quick upward spurt and a low puff in the ground's dust colour, gone in under a second, scattered about the aim point by spread_mil of the range.",
@@ -1066,6 +2029,8 @@
   "core": "paler along its middle",
   "tail": "thinning toward the gun",
   "least_px": 3,
+  "most_px": 5,
+  "_most": "Art director 01:31Z: a near streak stays thin, no brighter than a far one, and is long on the screen for a frame or two (a whip, not a beam). A tracer is laid along its true heading, as wide on the screen from end to end, and no wider than most_px in the middle of the screen (times day_width by day: 7.5 px; a far one is 4.5; up to a sixth wider toward the edges, as the picture draws everything there). 0 takes the limit off. Passing a few metres off it drew 20 px and more before.",
   "life_s": 0.6,
   "bloom": "mild",
   "speed_mps": 760,
@@ -1081,17 +2046,70 @@
   "render_note": "airshow.py TRACER: radiance (0.15, 0.133, 0.0) at puff strength, as built for the air clips",
   "day_width": 1.5,
   "day_core": [
-   245,
-   240,
-   210
+   255,
+   241,
+   151
   ],
+  "day_px": 3.4,
+  "day_core_px": 2.0,
+  "day_edge": [
+   235,
+   180,
+   70
+  ],
+  "day_over": 2.72,
+  "_day_solid": "Art director 13:54Z on the game's own frames (build 1720), where a day tracer was a faint hairline 25 luma over pale ground: by day a tracer is a solid pale core (day_core, day_core_px across, day_over past white: see picture.lit_gain) inside a warm edge (day_edge), day_px across in all, straight-sided and at its whole opacity along its whole length. Pixels are drawn pixels: the art director's 3 and 5 px on a 1600 frame are 2 and 3.4 where the game draws 1072 across. At dusk as before. Art director 16:30Z (build 1732, core 231,226,212): day_core and day_over are written values aimed through the game's curve (picture._how); 255,241,151 at 2.72 times white lands 249,247,222 on a flat patch, and a core this thin measures some 5 to 13 lower, so on her 245,240,210.",
   "_day": "Art director 21:07Z: by day only, the streak is 1.5 times wider and its pale core pushed toward 245,240,210, so a stream holds against a pale sky. Day is read from the hour's light (white by day); at dusk the streak is as ruled. One in five and 213,199,104 stay.",
   "whole_path_below_m": 100,
+  "whole_path_s": 0.015,
+  "_whole_path_s": "Art director 02:13Z (build 1710): the close shot's whole path is a whip, one frame and gone, never a standing line. Shown for whole_path_s, under one frame at 60 a second; a frame is never missed. Nothing of a tracer is drawn behind the muzzle (or behind a ricochet's strike), and a whole path stops at its strike.",
   "_close": "Art director 21:16Z (build 1690, a machine gun seen from 19 m showed no tracer line): below whole_path_below_m a tracer crosses in a frame or two, so its whole path is drawn at once, muzzle to strike, fading toward the muzzle (three lengths at 35, 68 and 100 per cent), for at least one frame."
+ },
+ "mg_smoke": {
+  "_how": "Art director 13:54Z: close to the eye (muzzle.hot.within_m), a machine gun's burst of 3 rounds or more leaves a thin wisp, a little paler and cooler than the ground (art director 14:26Z: a faint veil on pale and dark ground alike) at the muzzle, one puff every every_rounds rounds, living life_s and drifting on the wind; on dry ground (dust.vehicles.by_ground) with the muzzle under dust_under_m up, also a low puff of the ground's own dust kicked up just in front of it. alpha: the most the whole wisp is ever opaque, never over 0.25. Art director 16:30Z (build 1732, where the wisp lifted Idaho's pale ground by 6 luma and was not seen): colour 228,232,238, and the wisp reaches the full 0.25 where its puffs overlap. puff_share: one puff's opacity as a share of alpha (0.55 before, and absent). At 0.63 the overlaps peak at 0.25 (measured over 100 rounds; 0.75 passed it, 0.30).",
+  "alpha": 0.25,
+  "every_rounds": 4,
+  "life_s": [
+   1.0,
+   2.0
+  ],
+  "colour": [
+   228,
+   232,
+   238
+  ],
+  "dust_under_m": 1.2,
+  "puff_share": 0.63
+ },
+ "picture": {
+  "_how": "The game's picture (CampaignCameraPawn.cpp: Unreal's film curve, saturation 1.07, contrast 1.08, warm highlights, film toe 0.6) holds plain white (255) down to about 226, darkens and warms the darks (grey 60 shows as 31) and takes the blue out of a strong orange. tools/battle-fx/game_curve.py is that road in numbers: `lands` says what a written colour shows as in the game, `write` what to write to land on a number. lit_gain: the game's material multiplies every colour by this (the wrapper sets M_Highlight's Brightness to it) and the kit writes every colour that much darker, so all looks as before; but the hottest lights (muzzle.hot.over, tracer.day_over) are written up to that much past white. 1 or absent: nothing changes. Art director 16:30Z (build 1732): the game-wide curve and bloom stay as they are, and a flash's root burns near white by the kit's own gain; 4 times white lands a warm white at 253,250,236, where 1.5 landed cream at 238,234,222. Colours are written in 8 bits of linear light, so at 4 the darkest paints keep fewer steps: dark smoke and clods through the game's curve moved by 2 to 5 levels at most 12 (checked on a howitzer burst, a burning fall and an oil fire).",
+  "lit_gain": 4.0,
+  "to_land": [
+   2.1,
+   46.3,
+   59.8,
+   71.4,
+   81.7,
+   91.4,
+   100.7,
+   109.8,
+   119.1,
+   128.8,
+   139.3,
+   151.1,
+   165.7,
+   184.5,
+   210.4,
+   249.6,
+   250.4,
+   255.0
+  ],
+  "_to_land": "What to write, 0 to 255, for the game's screen to show a grey of 0, 15, 30 and so on to 255: the game's film curve and grade turned round (python3 tools/battle-fx/game_curve.py table; make it again if the grade in CampaignCameraPawn.cpp changes). The kit reads a colour off it channel by channel, between the steps, where it must match something the screen already shows: a gun's dust on dry ground against the ground under it (muzzle.dry). Earth colours land within about 3 of the colour asked."
  },
  "air_guns": {
   "_how": "Brian 2026-11-18 19:35Z: 'make the gun fire very realistic and the tracer fire too'. Guns on aircraft (AirGun, called every frame while a trigger is down). The battle sends where each gun is, the point it is laid on (lead and convergence are the battle's), and the aircraft's own velocity; the kit lays each round from where the muzzle was at that moment. A round flies at muzzle_mps plus the aircraft's speed, slows (drag, a share of its speed lost a second) and falls (drop). Every round flickers at the muzzle; one in tracer_every is the ruled tracer (tracer.colour, tracer.streak_m), burning for tracer_s. The sound director's air.gunsByCalibre uses the same three families: rifle, heavy, 20 mm cannon.",
   "gravity": 9.81,
+  "flash_least_px": 2,
   "smoke_colour": [
    168,
    166,
@@ -1112,7 +2130,10 @@
    "smoke_every": 4,
    "smoke_s": 0.6,
    "smoke_alpha": 0.07,
-   "strike_m": 0.5
+   "strike_m": 0.5,
+   "case_m": 0.057,
+   "case_d_m": 0.012,
+   "link_m": 0.022
   },
   "hmg": {
    "_what": "heavy machine guns, 12.7 to 13 mm",
@@ -1129,7 +2150,15 @@
    "smoke_every": 3,
    "smoke_s": 0.8,
    "smoke_alpha": 0.1,
-   "strike_m": 0.8
+   "strike_m": 0.8,
+   "close_licks": [
+    0,
+    2
+   ],
+   "close_lamp": 0.05,
+   "case_m": 0.099,
+   "case_d_m": 0.02,
+   "link_m": 0.035
   },
   "cannon20": {
    "_what": "20 mm cannon",
@@ -1143,10 +2172,64 @@
    "flash_m": 0.9,
    "licks": 2,
    "lamp": 0.12,
+   "hot_flash": 1,
    "smoke_every": 1,
    "smoke_s": 1.1,
    "smoke_alpha": 0.16,
-   "strike_m": 1.6
+   "strike_m": 1.6,
+   "case_m": 0.1,
+   "case_d_m": 0.03,
+   "link_m": 0.05,
+   "cannon": 1,
+   "tracer_wide": 1.5,
+   "tracer_life_k": 0.85,
+   "streak_s": 0.0245
+  },
+  "close": {
+   "_how": "The close view: only within licks_within_m of the eye does a row's flicker throw close_licks short side licks raked aft, with a lamp of close_lamp (night only, as every small gun's); only within cases_within_m does every round drop its spent case (case_m long, case_d_m across, case_colour, case_dark on its far face) and belt link (link_m, link_colour) from a chute chute_back_m behind the muzzle and chute_down_m under it, kicked out at throw_mps, torn aft by the air (drag) and falling at case_sink_mps or link_sink_mps, tumbling tumble radians a second and glinting (glint), gone in life_s. Left out first when the room fills.",
+   "_art_director_0440": "Art director 04:40Z item 6: close view only: cases and links from the wing gun chutes and from the turrets that dumped them overboard, drawn within 60 m. Heavy machine gun licks 0 to 2, with the small lamp, for guns within 30 m.",
+   "licks_within_m": 30,
+   "cases_within_m": 60,
+   "chute_back_m": 1.0,
+   "chute_down_m": 0.25,
+   "throw_mps": [
+    3,
+    8
+   ],
+   "drag": 5,
+   "case_sink_mps": [
+    18,
+    28
+   ],
+   "link_sink_mps": [
+    12,
+    20
+   ],
+   "life_s": [
+    1.2,
+    2.0
+   ],
+   "tumble": [
+    15,
+    40
+   ],
+   "case_colour": [
+    196,
+    156,
+    82
+   ],
+   "case_dark": [
+    140,
+    104,
+    52
+   ],
+   "link_colour": [
+    70,
+    70,
+    72
+   ],
+   "glint": 4,
+   "least_px": 0.8
   },
   "_numbers": "Rates and speeds are the middle of each family: rifle calibre 900-1,200 a minute at 745-905 m/s; 12.7-13 mm 750-950 at 750-890; 20 mm 520-750 at 600-880. The battle can pass a gun's own rate and speed. drag is set so a round keeps the speed it really kept downrange: a .50 about 700 m/s at 500 m and 530 at 1,000 m (0.36), a rifle round about 520 at 450 m (0.5). tracer_s is how long the tracer burns: the .50's to about 1,450 m, the rifle round's and the 20 mm's to about 900 to 1,100 m. Each gun runs a few per cent fast or slow, so wing guns drift out of step as real ones did.",
   "flash_heart": [
@@ -1154,7 +2237,164 @@
    220,
    150
   ],
-  "_flash": "Art director 21:07Z, cannon (rows with licks): a hot pale heart at the muzzle (flash_heart) with orange only toward its edges; a ragged forward tongue two to three times the side licks' length; short side licks raked aft by the airstream; uneven, never the same twice; one frame at full, a second at about half. The machine guns' flicker passed as it is."
+  "flash_hot": [
+   255,
+   232,
+   150
+  ],
+  "flash_orange": [
+   250,
+   140,
+   30
+  ],
+  "flash_rim": [
+   230,
+   96,
+   16
+  ],
+  "_flash_hot": "Art director 06:19Z: the flash lit from within, as the fireball: a white-yellow root at the muzzle (luma 235 or more over its first quarter), a saturated orange body (flash_orange) going to a deeper orange at its edges (flash_rim) so a rim over the sky never turns peach, and a fading tip, all emissive, no dark crease. Dense to its edge; its second frame is about half by shrinking, never by going see-through. The heavy machine gun's close view (flicker and licks) always; the cannon's whole flash where its row sets hot_flash; the cannon's is the bigger, hotter one (twice the heavy machine gun's length).",
+  "_flash": "Art director 21:07Z, cannon (rows with licks): a hot pale heart at the muzzle (flash_heart) with orange only toward its edges; a ragged forward tongue two to three times the side licks' length; short side licks raked aft by the airstream; uneven, never the same twice; one frame at full, a second at about half. The machine guns' flicker passed as it is.",
+  "_flash_least_px": "Art director 04:40Z: from the strategy camera a heavy machine gun's 0.45 m flash is half a pixel at 800 m; every muzzle flash (the flicker, or a cannon's hot heart) is held at least flash_least_px 2 px across on its flash frame and made fainter to match, from the kit's own shape, never a card: far off they read as twinkles. A row may set its own.",
+  "tracers": {
+   "_how": "An air gun's tracer (art director 15:02Z 20 November, air-fates-look D, for Brian's 'more real istic chaser fire'; colours 15:38Z, G2). With this row every air tracer is alight life_s (a cannon's tracer_life_k of that), a streak streak_s seconds of its flight long (about 30 m for a .50; a row may set its own streak_s) that shortens as the round slows, a hot core in a glow no wider than two or three times the core, at its full strength until dim_from of its life, dimming to dim_to of it, then out over out_s, two or three frames. It flies in the world at the gun's speed plus the aircraft's own, slowing and dropping about 7 m, so a moving bomber's streams bend back like water from a hose. A cannon's (the row's cannon 1) is tracer_wide times as wide. nations: whose gun it is (AirGun's Nation), body the glow and core the hot middle, each written for the game's picture (game_curve.py write) with how far past white it burns; a nation's cannon colours where it has its own; default for no nation or one not listed. No more than most alight at once: as the count nears it the guns farthest from the eye go without first, those within always_within_m never. Without this row the tracers are the ruled yellow streak, as before.",
+   "life_s": 1.2,
+   "streak_s": 0.0333,
+   "dim_from": 0.667,
+   "dim_to": 0.5,
+   "out_s": 0.045,
+   "body_px": 9.6,
+   "core_px": 3.2,
+   "white_within_m": 80,
+   "white_beyond_m": 400,
+   "_white": "The core burns white-hot (as far past white as the picture allows, picture.lit_gain) within white_within_m of the eye and its nation's own colour from white_beyond_m on: near white at close range, as ruled.",
+   "_px": "body_px and core_px are the glow's and the core's width by day in the pixels the scene tells the kit. The air scene draws 1072 across and tells the kit its window's 2881, so 9.6 and 3.2 are 5.3 and 1.8 px on a 1600 still (the art director's 3 px least stands, the glow three cores wide and soft). The ruled streak's 3.4 came out at 1.3 drawn pixels there, a hairline the Pearl Harbor film lost. A cannon's are tracer_wide times these. At dusk a streak is never under three quarters of these.",
+   "most": 1500,
+   "always_within_m": 300,
+   "one_fan_beyond_m": 1200,
+   "one_fan_px": 5.5,
+   "glow_soft": 1.0,
+   "_glow_soft": "Art director 19:52Z 20 November: solid across, the glow was a bar darker than a pale sky round a sky-pale core, a hollow tube, and end-on a ring. With glow_soft the glow is that strong beside the core and fades smoothly from the core's edge to nothing at its own, with no rim (by day; at dusk it is as it was), and the core stands at least 25 over the sky it crosses (us lands 255,236,212, red only in its glow). one_fan_px: a far gun's one-fan tracer is a solid dash that wide in the core's own colour, never an outlined oval.",
+   "_one_fan": "A gun farther than one_fan_beyond_m from the eye fires tracers of one piece (see one_fan_px): its core was a pixel wide there, and a tracer costs half as much. Without the key every tracer is glow and core.",
+   "nations": {
+    "_lands": "us and gb: core 255,236,212, body 230,80,40. de and it: core 255,250,225, body 240,228,160. jp: core 255,250,225, body 240,236,205. su: core 235,255,235, body 120,225,120, its cannon red as us. default as de.",
+    "us": {
+     "body": [
+      224,
+      90,
+      67
+     ],
+     "body_over": 1.0,
+     "core": [
+      255,
+      174,
+      127
+     ],
+     "core_over": 3.2
+    },
+    "gb": {
+     "body": [
+      224,
+      90,
+      67
+     ],
+     "body_over": 1.0,
+     "core": [
+      255,
+      174,
+      127
+     ],
+     "core_over": 3.2
+    },
+    "de": {
+     "body": [
+      255,
+      220,
+      127
+     ],
+     "body_over": 1.32,
+     "core": [
+      255,
+      225,
+      131
+     ],
+     "core_over": 4.0
+    },
+    "it": {
+     "body": [
+      255,
+      220,
+      127
+     ],
+     "body_over": 1.32,
+     "core": [
+      255,
+      225,
+      131
+     ],
+     "core_over": 4.0
+    },
+    "jp": {
+     "body": [
+      255,
+      240,
+      164
+     ],
+     "body_over": 1.53,
+     "core": [
+      255,
+      225,
+      131
+     ],
+     "core_over": 4.0
+    },
+    "su": {
+     "body": [
+      111,
+      227,
+      115
+     ],
+     "body_over": 1.0,
+     "core": [
+      146,
+      255,
+      154
+     ],
+     "core_over": 4.0,
+     "cannon": {
+      "body": [
+       224,
+       90,
+       67
+      ],
+      "body_over": 1.0,
+      "core": [
+       255,
+       174,
+       127
+      ],
+      "core_over": 3.2
+     }
+    },
+    "default": {
+     "body": [
+      255,
+      220,
+      127
+     ],
+     "body_over": 1.32,
+     "core": [
+      255,
+      225,
+      131
+     ],
+     "core_over": 4.0
+    }
+   }
+  }
+ },
+ "air": {
+  "_how": "An air scene (its own FBattleEffects, UseAirDistance): its strategy camera stands 800 to 2,000 m off the fight (feel-benchmark gap 3), so it draws puffs out to draw_beyond_m, not game.draw_beyond_m's 1,500 m.",
+  "draw_beyond_m": 4000
  },
  "air_hit": {
   "_how": "Rounds striking an aircraft (AirHit, at the point hit, carried with that aircraft): a hot spit on the skin with two or three short tongues, sparks thrown off and slowed by the air so they fall away behind, a scrap or two of skin tumbling off (some bare metal catching the light), and a small dark puff left hanging where the hit was. All scale with the hitting gun's air_guns.<kind>.strike_m, so 20 mm hits are about twice a .50's. No ball of fire: a hit that sets fuel alight is the battle's call (a fire trail).",
@@ -1188,19 +2428,74 @@
   ],
   "smoke_alpha": 0.55,
   "smoke_s": [
-   0.8,
-   1.5
-  ]
+   3,
+   4
+  ],
+  "smoke_r1": 1.8,
+  "least_px": 2,
+  "_art_director_0440": "Art director 04:40Z: a hit's puff hangs 3 to 4 s (smoke_s), growing to smoke_r1 times the strike size; from the strategy camera the spit on the skin is never under least_px 2 px on its flash frame, so far off a hit reads as a twinkle.",
+  "sparkle": {
+   "_how": "A rifle-calibre or heavy machine gun round striking an aircraft (art director 15:02Z 20 November, air-fates-look D): a bright sparkle of one or two frames and nothing more, no puff and no scraps. points of them within within_s, the first where the round struck and the rest scatter_m about it on the skin, each size_m across for a .50 (by the gun's strike_m), alight life_s, burning over times past white, never under least_px on the screen (the pixels the scene tells the kit). With this row; without it a hit is as it was.",
+   "points": [
+    1,
+    3
+   ],
+   "within_s": 0.05,
+   "scatter_m": 0.5,
+   "size_m": 0.12,
+   "life_s": [
+    0.02,
+    0.035
+   ],
+   "over": 4.0,
+   "least_px": 5
+  },
+  "burst": {
+   "_how": "A 20 mm shell striking an aircraft (the same ruling; a row of air_guns with cannon 1): the small flash as before, sparks of them, fragments scraps of skin, and one black-grey puff puff_m across hanging puff_s where the hit was, a ragged roundish ball of a main puff and puff_lobes smaller ones crowding it (art director 19:52Z: one rough puff read as a bird or a moth). With this row; without it a cannon's hit is as it was.",
+   "sparks": [
+    2,
+    4
+   ],
+   "fragments": [
+    1,
+    2
+   ],
+   "puff_m": [
+    1,
+    2
+   ],
+   "puff_s": [
+    1.5,
+    3.0
+   ],
+   "puff_colour": [
+    58,
+    57,
+    58
+   ],
+   "puff_alpha": 0.8,
+   "puff_lobes": 2,
+   "least_px": 5,
+   "puff_least_px": 4
+  }
  },
  "air_trails": {
   "_how": "A trail from a moving point on an aircraft (TrailStart, TrailMove every frame, TrailStop). Puffs are laid every spacing_m along the path, each drawn smear x spacing longer behind it so they join in one line, and left hanging in the air (carried: the share of the aircraft's speed they keep) to drift with the wind. Each frame the young end is drawn from the point back to the newest puff, so a trail starts at the engine. A trail comes to full over ramp_s, darkening from colour to colour_full over darken_s; each puff widens from r0_m to r1_m as it hangs for life_s (grow: below 1 widens early, above 1 late) and pales toward colour_old. lumpy (0 to 1) makes some puffs bigger lumps and the rest smaller and shorter lived, and the smear shrinks over smear_s, so an old trail breaks into uneven lumps; rise_mps lifts the smoke. Fire adds ragged tongues streaming back about flame_m from the root, and its smoke starts at the flame's tips.",
   "smoke": {
    "_what": "a damaged engine: thin and dark at the engine, widening (about three times by 2 s) and breaking into paler lumps",
-   "life_s": 7,
+   "life_s": 20,
+   "thin_after_s": 7,
+   "thin_keep_one_in": 6,
+   "thin_grow": 2.89,
+   "thin_alpha": 2.2,
+   "thin_hold": 0.8,
+   "thin_ragged": 0.4,
+   "least_px": 3,
+   "least_keep": 0.6,
    "spacing_m": 9,
    "r0_m": 0.4,
-   "r1_m": 4.5,
-   "alpha": 0.5,
+   "r1_m": 7.5,
+   "alpha": 0.55,
    "colour": [
     92,
     90,
@@ -1212,27 +2507,47 @@
     46
    ],
    "colour_old": [
-    140,
-    137,
-    133
+    96,
+    94,
+    91
    ],
    "darken_s": 3,
    "ramp_s": 1.5,
    "smear": 1.6,
    "carried": 0.05,
    "flame_m": 0,
-   "grow": 1.1,
+   "grow": 1.5,
    "lumpy": 0.7,
    "smear_s": 5,
-   "rise_mps": 0
+   "rise_mps": 0,
+   "join_from": 0.15,
+   "join_by": 0.45,
+   "keep_each_turn_deg": 26,
+   "drift": 0.7,
+   "ribbon": 1,
+   "core": 0.3,
+   "lumps_from": 1.0,
+   "pale_to": 0.8,
+   "pale_by_s": 8.0,
+   "wide_wander": 2.0,
+   "pale_from_s": 2.5,
+   "widen_by_s": 7.0
   },
   "fire": {
    "_what": "an engine or tank on fire: ragged flame streaming aft from the root, black smoke rising from its tips",
-   "life_s": 8,
+   "life_s": 30,
+   "thin_after_s": 8,
+   "thin_keep_one_in": 6,
+   "thin_grow": 1.78,
+   "thin_alpha": 1.4,
+   "thin_hold": 0.85,
+   "thin_ragged": 0.4,
+   "least_px": 3,
+   "least_keep": 0.6,
    "spacing_m": 8,
-   "r0_m": 0.7,
-   "r1_m": 6.0,
-   "alpha": 0.7,
+   "r0_m": 0.75,
+   "r1_m": 16.0,
+   "alpha": 0.96,
    "colour": [
     44,
     41,
@@ -1244,31 +2559,98 @@
     31
    ],
    "colour_old": [
-    80,
-    78,
-    76
+    46,
+    44,
+    42
    ],
    "darken_s": 1,
    "ramp_s": 0.8,
    "smear": 1.6,
    "carried": 0.05,
    "flame_m": 3.0,
+   "flame_of_span": 0.3,
+   "flame_most_m": 9,
+   "flame_least_px": 4,
    "flame_lift_m": [
     0.3,
     0.6
    ],
-   "grow": 1.0,
+   "flame_lift_of_length": [
+    0.06,
+    0.2
+   ],
+   "flame_lift_curve": 1.4,
+   "flame_tip_colour": [
+    120,
+    34,
+    18
+   ],
+   "licks_a_frame": 0.9,
+   "flame_alpha": [
+    1.0,
+    0.9
+   ],
+   "flame_hold": 0.6,
+   "flame_wide": 1.0,
+   "lick_alpha": 0.95,
+   "smoke_start": 0.7,
+   "tip_smoke": 0.75,
+   "tip_smoke_s": [
+    0.3,
+    0.6
+   ],
+   "tip_smoke_r_of_flame": 0.35,
+   "grow": 1.8,
    "lumpy": 0.6,
    "smear_s": 5,
-   "rise_mps": 1.2
+   "rise_mps": 1.2,
+   "join_from": 0.15,
+   "join_by": 0.45,
+   "keep_each_turn_deg": 26,
+   "drift": 0.7,
+   "ribbon": 1,
+   "core": 0.5,
+   "lumps_from": 1.0,
+   "pale_to": 0.94,
+   "pale_by_s": 8.0,
+   "wide_wander": 2.0,
+   "pale_from_s": 2.5,
+   "widen_by_s": 7.5,
+   "tail_wide_m": [
+    7.6,
+    10.4
+   ],
+   "tail_m": 16,
+   "soft": 1,
+   "tail_widen": 0.22,
+   "fold": 0.45,
+   "knots": 0.8,
+   "knot_alpha": 0.6,
+   "knot_dark": 0.8,
+   "wisps": 0.45,
+   "knot_r": [
+    0.45,
+    0.85
+   ],
+   "knot_off": [
+    0.1,
+    0.95
+   ],
+   "edge_torn": 0.35,
+   "flame_tongues": 3,
+   "flame_over": 2.2,
+   "knot_s": [
+    1.5,
+    3.0
+   ]
   },
   "glycol": {
    "_what": "a holed radiator: a thin white vapour that soon thins out",
    "life_s": 2.2,
    "spacing_m": 8,
-   "r0_m": 0.3,
+   "r0_m": 0.38,
    "r1_m": 2.0,
-   "alpha": 0.4,
+   "alpha": 0.7,
    "colour": [
     236,
     237,
@@ -1288,28 +2670,531 @@
    "ramp_s": 0.4,
    "smear": 1.5,
    "carried": 0.05,
-   "flame_m": 0
+   "flame_m": 0,
+   "drift": 0.7,
+   "ribbon": 1,
+   "core": 0.45,
+   "lumps_from": 0.75,
+   "fade_over_s": [
+    30,
+    60
+   ],
+   "fade_to": 0.2,
+   "then_streak": 1,
+   "soft": 1,
+   "shadow": [
+    78,
+    90,
+    116
+   ],
+   "shadow_k": 1.0,
+   "spurt_m": [
+    2,
+    3
+   ],
+   "spurt_wide": 2.2,
+   "spurt_alpha": 1.6,
+   "tail_wide_m": [
+    1.5,
+    2.1
+   ],
+   "tail_m": 16
   },
   "_art_director": "21:27Z: 20 mm hits, glycol and the fire trail at distance PASS. Engine fire: ragged tongues tearing free of the cowl and streaming aft past the wing root, a pale yellow heart at the cowl and deep orange along the tongues, a new length and shape every frame, black smoke rising from the flame tips. Smoke: thin and dark at the engine, about three times wider by 2 s and still widening, breaking into uneven lumps, paler and thinner with age, each lump hanging where it was laid. 21:37Z: the smoke trail, the 10 s fire trail and the glycol start PASS. The fire's tongues stand off the skin as they stream aft (flame_lift_m, above or below), so a few break the outline; the heart hugs the cowl.",
-  "_load": "Pre-check 21:34Z: puffs a trail are about life_s x speed / spacing_m (the lumpy rows lose about an eighth to their short-lived small puffs). At 120 m/s: smoke about 80, fire about 105, glycol about 35. The room is game.max_puffs, shared by everything; when it is short the farthest puffs go first, so a far trail loses length first."
+  "_load": "Pre-check 21:34Z: puffs a trail are about life_s x speed / spacing_m (the lumpy rows lose about an eighth to their short-lived small puffs). At 120 m/s: smoke about 80, fire about 105, glycol about 35. The room is game.max_puffs, shared by everything; when it is short the farthest puffs go first, so a far trail loses length first.",
+  "_art_director_0440": "Art director 04:40Z (Brian's air clip, feel-benchmark gap 3): smoke hangs, a sky full of hanging trails is the picture. A fire trail lives 30 s and a straggler's smoke 20 s; to fit the 3,000-puff room, past thin_after_s (the old life) only one puff in thin_keep_one_in hangs on, growing on as it did and thinning slowly, so an old trail is fewer, bigger lumps. A burning plane's flame is half its span (TrailStart's span; flame_of_span), at most flame_most_m 10 m, ragged and flickering, streaming back from the root, black smoke from its tips; from the strategy camera its heart is never under flame_least_px 4 px. Gun smoke stays short.",
+  "_art_director_0459": "Art director 04:59Z on 299e504: the trails faded too pale too soon. Each kept puff (one in thin_keep_one_in) now thickens to thin_alpha times its opacity by thin_after_s as the three beside it go, so the young trail looks as it did; it hangs the whole of life_s (a small one going early left a gap), holds full to thin_hold of its life, and is drawn out along the path over the gap to the next one kept, so the old trail is one dark line of lumps that touch. Measured at 2.5 km off the beam (sky 212): fire head 61, first third 103, second third 110, old 109, oldest 105; straggler smoke head 131, first third 143, second third 147. Fire: by day a tongue off the skin must read as fire against the sky, so flame_alpha [at the cowl, at the tip] and flame_hold keep it opaque, flame_wide widens it, and it stands off the skin by flame_lift_of_length, licking out above and below the fuselage; tip_smoke lays black smoke right at each tongue's tip (that opacity, living tip_smoke_s, widening to tip_smoke_r_of_flame of the flame's length), above or below as the tongue is, so there is no gap between flame and smoke. Old recipes without these keys draw as before.",
+  "_art_director_0525": "Art director 05:25Z on 1295edc: trails PASS. Kept evenly the old trail read as a string of beads, so thin_ragged tears it: the gap to the next puff kept is thin_keep_one_in times 1 plus or minus thin_ragged, and the puff's size by up to half of it (fire at 2.5 km: 66 | 102 | 109 | 107 | 107). A tongue is fixed at its root and free at its tip: flame_lift_curve is the power of the way along it by which its stand-off comes, so it is rooted on the skin at the fire with the yellow-white heart there and only its tip licks out above or below, sweeping back, going orange to flame_tip_colour (dark red) into the black smoke laid at its tip.",
+  "_art_director_1413": "Art director 14:13Z on build 1722's air frames: the falling planes' trails read as beads on a string, the spacing seeming to depend on speed. Each puff was a lens drawn out behind it, so two neighbours met only at their thin faint tips, and past thin_after_s most were gone. With ribbon 1 a trail is one strip: each piece runs from its own point back to the piece laid before it, wherever that has drifted to, as wide and as dark at that edge as that piece is now, so the two share the edge with no overlap and no gap at any speed; the strip leaves each edge along the way the aircraft flew there, so it bends through a turn or a spin. core: the share of its half width that is dense, thinning to nothing at its sides. drift: how much of the sideways scatter it keeps; each piece takes most of the drift and rise of the one before it, so the strip meanders and never zig-zags, and its pieces all last as long, so it goes from its old end. One piece in thin_keep_one_in, and one wherever the path has turned keep_each_turn_deg, is also a long length that hangs the whole of life_s, growing thin_grow times wider; it comes into sight between join_from and join_by of thin_after_s as the short pieces go. From lumps_from of its life (a little sooner or later each, by thin_ragged) a length lets go of its neighbours, paling and narrowing to nothing at each end, then draws in to a soft lump: only the old end tears into lumps. Measured: room at 120 m/s, smoke 124 places (130 before) and fire 225 (225); close up on a 212 sky, fire 98 (101 before) and smoke 160 (158), with alpha raised a little (smoke 0.5 to 0.55, fire 0.9 to 0.96) since pieces no longer overlap. Recipes without ribbon draw as before.",
+  "_art_director_1522": "Art director 15:22Z on 00c2860: level trails PASS; the two falls read as pen strokes, evenly black with ruled edges. A ribbon now ages over its first seconds: widen_by_s is the time by which a piece has widened from r0_m to r1_m (by the power grow: over 1 it stays thin at first, then spreads), and the lengths that hang on widen with it and then on to thin_grow times; it stays as black as it was laid until pale_from_s and pales to pale_to of its opacity by pale_by_s, short pieces and long lengths by the one clock; wide_wander makes its width wander along its length, each piece taking most of the last one's, so its edges swell and pinch in soft lumps, and a wide length's lumpy outline is gentler so it never combs into spikes. Measured on the fall preview 14 s into the fall (sky 208 to 211; the frame holds smoke about 2.5 to 7.5 s old, the burning plane itself is by then under the preview's ground): burning fall 3 px wide and 155 darker than the sky at its young end, 11 px and 130 darker at its old end (before: 2.4 to 5.7 px, 146 to 150 all along); spin 2.2 to 11 px, 134 to 87. Level flight from 2.5 km: fire 82 to 83 along its length, smoke 125 to 129. 16:01Z, falls PASS, and pale_to is split by kind: a burning plane's black smoke is one of the strongest grit cues, so fire keeps about 85% of its young darkness at its old end (pale_to 0.94; at 0.85 the level burning trail read mid-grey, 105), while a damaged engine's smoke goes grey (0.8). Darkness on the screen falls faster than opacity, so tune pale_to by measured luma. Recipes without widen_by_s, pale_to and wide_wander draw as 00c2860 did. It takes no more room.",
+  "_art_director_1708": "Art director 17:08Z on build 1734's air frames: the old ends of the trails read as beads on a string, a dotted line and not smoke breaking up. From lumps_from of its life each long length let go of its neighbours and drew in to a lump; once the aircraft was gone, all that was left of its trail was in that stage at once, a row of even dark dashes about 50 m apart for 4 to 7 s. lumps_from 1 on smoke and fire: the strip stays whole to its end and thins to nothing over its last fifth (thin_hold, left as it was); a burning plane's keeps its darkness until that thinning. Only its last twentieth may still part, at a seventh of its darkness and less.",
+  "_engine_out": "Art director 15:38Z 20 November (air-fates-look G1) for Brian's 'if a engine is out there should be a lot more dark smoke strains from that engine and directly behind it on the tail': a dead engine always smokes. tail_wide_m: how wide the smoke is as it passes the tail, tail_m behind its source; the aircraft's own wake spreads it that fast, and the row's r1_m and widen_by_s widen it on after. fire: 1.5 m at the nacelle, 5 to 6 m past the tail, the densest black. oil (out and windmilling): 1.2 to 1.5 m and 4 to 5 m, dark grey, 0.6 to 0.7 opaque at the nacelle, lumpy, one torn column, a gout gout_wide times as wide and gout_alpha times as dense for gout_s every gout_every_s as the oil spits; wisps: the share of its pieces that throw a shred off its edge. streak (the fire put out, the airscrew feathered): 0.8 to 1 m and about 3 m, 0.3 to 0.4 opaque at the nacelle paling to 0.15 by 60 m behind; it never clears while the caller keeps it. doused: the extinguisher's white-grey puff for for_s, the flames of a burning trail shrinking back to the nacelle over flame_shrink_s, then the streak on its own (then_streak), grey at first and darkening. glycol: thinning to fade_to of itself over fade_over_s, then the streak. A change of kind is TrailStart again with the same number; a kind with blend_s takes that long to come out of the kind before it, in colour, density and width, so the trail never changes at a cut (black, greying, the white puff, grey, the thin dark streak). soft: the strip's colour runs from piece to piece and its density swells with its width, so no piece shows as a block; it is lit across it, top and underside. A soft strip's piece is as dark as it will be from the moment it is laid (the trail's young end has drawn the smoke that far already), so no piece is pale at its near end for a frame and the trail never starts behind its engine. shadow, shadow_k: pale smoke's underside, away from the sun, and how far it goes to it. The widths are as seen: a strip thins to nothing at its sides, so tail_wide_m is set wider than the ruled width, which is where it is half as dark.",
+  "oil": {
+   "_what": "an engine out and windmilling: heavy dark grey oil smoke, lumpy, one torn column, a thicker gout as the oil spits",
+   "life_s": 30,
+   "thin_after_s": 6,
+   "thin_keep_one_in": 6,
+   "thin_grow": 2.4,
+   "thin_alpha": 1.8,
+   "thin_hold": 0.75,
+   "thin_ragged": 0.5,
+   "least_px": 6,
+   "least_keep": 0.6,
+   "spacing_m": 8,
+   "r0_m": 0.85,
+   "r1_m": 6.0,
+   "widen_by_s": 6.0,
+   "grow": 1.3,
+   "tail_wide_m": [
+    4.4,
+    7.0
+   ],
+   "tail_m": 16,
+   "alpha": 0.78,
+   "tail_widen": 0.22,
+   "fold": 0.45,
+   "edge_torn": 0.9,
+   "knots": 0.8,
+   "knot_alpha": 0.45,
+   "knot_dark": 0.85,
+   "knot_r": [
+    0.45,
+    0.85
+   ],
+   "knot_off": [
+    0.1,
+    0.95
+   ],
+   "knot_s": [
+    1.5,
+    3.0
+   ],
+   "colour": [
+    84,
+    86,
+    90
+   ],
+   "colour_full": [
+    66,
+    68,
+    73
+   ],
+   "colour_old": [
+    100,
+    101,
+    105
+   ],
+   "darken_s": 2,
+   "ramp_s": 1.0,
+   "gout_every_s": [
+    2,
+    5
+   ],
+   "gout_s": [
+    0.25,
+    0.45
+   ],
+   "gout_wide": 1.7,
+   "gout_alpha": 1.4,
+   "lumpy": 0.6,
+   "wisps": 0.65,
+   "soft": 1,
+   "rise_mps": 0.3,
+   "pale_to": 0.8,
+   "pale_from_s": 2.5,
+   "pale_by_s": 9.0,
+   "smear": 1.6,
+   "carried": 0.05,
+   "flame_m": 0,
+   "smear_s": 5,
+   "join_from": 0.15,
+   "join_by": 0.45,
+   "keep_each_turn_deg": 26,
+   "drift": 0.7,
+   "ribbon": 1,
+   "core": 0.55,
+   "lumps_from": 1.0,
+   "wide_wander": 2.0
+  },
+  "streak": {
+   "_what": "a fire put out and the airscrew feathered: a thin dark streak, about half the windmilling trail, that never clears",
+   "life_s": 22,
+   "thin_after_s": 5,
+   "thin_keep_one_in": 6,
+   "thin_grow": 2.2,
+   "thin_alpha": 1.6,
+   "thin_hold": 0.7,
+   "thin_ragged": 0.5,
+   "least_px": 5,
+   "least_keep": 0.5,
+   "spacing_m": 8,
+   "r0_m": 0.58,
+   "r1_m": 3.5,
+   "widen_by_s": 6.0,
+   "grow": 1.3,
+   "tail_wide_m": [
+    3.3,
+    4.4
+   ],
+   "tail_m": 16,
+   "alpha": 0.75,
+   "wisps": 0.4,
+   "tail_widen": 0.15,
+   "fold": 0.3,
+   "edge_torn": 0.6,
+   "colour": [
+    110,
+    110,
+    112
+   ],
+   "colour_full": [
+    70,
+    70,
+    73
+   ],
+   "colour_old": [
+    98,
+    98,
+    100
+   ],
+   "darken_s": 2,
+   "ramp_s": 0.5,
+   "lumpy": 0.5,
+   "soft": 1,
+   "blend_s": 1.5,
+   "rise_mps": 0.2,
+   "pale_to": 0.6,
+   "pale_from_s": 0.1,
+   "pale_by_s": 0.75,
+   "smear": 1.6,
+   "carried": 0.05,
+   "flame_m": 0,
+   "smear_s": 5,
+   "join_from": 0.15,
+   "join_by": 0.45,
+   "keep_each_turn_deg": 26,
+   "drift": 0.7,
+   "ribbon": 1,
+   "core": 0.55,
+   "lumps_from": 1.0,
+   "wide_wander": 2.0
+  },
+  "doused": {
+   "_what": "the extinguisher going off in a burning nacelle: a white-grey puff for a second or two, then the streak",
+   "life_s": 3.5,
+   "least_px": 5,
+   "least_keep": 0.5,
+   "spacing_m": 7,
+   "r0_m": 0.8,
+   "r1_m": 5.5,
+   "widen_by_s": 2.5,
+   "grow": 0.8,
+   "tail_wide_m": [
+    5,
+    6.5
+   ],
+   "tail_m": 16,
+   "alpha": 0.88,
+   "colour": [
+    236,
+    240,
+    244
+   ],
+   "colour_full": [
+    226,
+    230,
+    236
+   ],
+   "colour_old": [
+    200,
+    204,
+    210
+   ],
+   "darken_s": 1.5,
+   "ramp_s": 0.15,
+   "shadow": [
+    139,
+    145,
+    158
+   ],
+   "shadow_k": 0.9,
+   "soft": 1,
+   "blend_s": 0.7,
+   "lumpy": 0.6,
+   "wisps": 1.0,
+   "rise_mps": 0.4,
+   "for_s": [
+    1.2,
+    2.0
+   ],
+   "then_streak": 1,
+   "flame_shrink_s": 1.0,
+   "smear": 1.6,
+   "carried": 0.08,
+   "flame_m": 0,
+   "smear_s": 5,
+   "join_from": 0.15,
+   "join_by": 0.45,
+   "keep_each_turn_deg": 26,
+   "drift": 0.7,
+   "ribbon": 1,
+   "core": 0.5,
+   "lumps_from": 0.8,
+   "wide_wander": 2.0
+  },
+  "_mends_1952": "Art director 19:52Z 20 November, on head ea8c1ba. tail_widen: past the tail a trail keeps widening, as its age over the time to the tail to this power (0.22: half as wide again by 100 m), a cone and never a tube. edge_torn: its two sides wobble in and out by this much more. fold: a lighter fold along inside it, the strip up to this much thinner on one side, the side wandering along it; never denser. knots: the share of its pieces that carry a soft lump of denser smoke, knot_r of the strip's half width across, knot_off of it off its middle, knot_alpha as dense and knot_dark as dark, for knot_s; one past 0.6 off the middle is the column's own colour and lumps its outline; three times as many in a gout, none when the room is four fifths full. oil's gout_s is short, so a gout is a lump seen running back down the trail. streak: dark from the nacelle; the game blends in linear light, where a dark thing over a pale sky loses about a third of its darkness on the picture, so alpha 0.75 reads 0.3 to 0.4 at the nacelle, paling to 0.6 of that by 60 m (0.15 on the picture). glycol: a cool grey underside 10 below a pale sky (shadow), and spurt_m: a denser, wider spurt that long behind the radiator, spurt_wide times the source's width and spurt_alpha as dense. fire: flame_tongues thin tongues a step in place of the one wide one, each rooted on the nacelle's skin round it, flame_over times past white at its root, licking back and flame_lift_of_length of its length off the skin at its tip."
+ },
+ "air_debris": {
+  "_how": "A falling aircraft's debris row (AirFall once as the fall starts with its span and the deck height, AirFallMove every frame, AirFallStop when the model is gone). explode sheds fighter or bomber pieces at once (bomber at bomber_span_m or more), thrown throw_mps out and carried on at carry of its speed, with a short torn fireball; burn sheds burn_sheds over its fall, every_s apart, from first_s; spin sheds spin_sheds, the first a wing at wing_odds. A skin plate (plate_m across, painted face paint, bare metal inside bare) tumbles plate_tumble radians a second, so seen edge-on it thins and flutters, and glints when the sun catches it (glint, glint_power); it slows to sink at plate_sink_mps and drifts with the wind. A heavy piece (heavy_share of an explosion's, heavy_m, heavy_colour) drops at heavy_sink_mps. A wing (wing_chord_of_span) tumbles slowly down at wing_sink_mps. Every piece fades into the deck over its last enter_deck_m, at most most_s after it came loose; far off it shrinks to a speck under least_px and fades, never held up.",
+  "_art_director_0440": "Art director 04:40Z (benchmark gap 3): a fall throws a debris row: 30 to 50 pieces for a fighter, 60 to 100 for a bomber; explode sheds them all at once, with a short torn fireball, never a ball; burn sheds 5 to 10 over its fall; spin sheds a few, sometimes a wing. Mostly light torn skin plates that flutter and glint, with a few heavy dark pieces that drop straight. Nothing pops out of view: falls and debris end in the cloud deck on a day with one, otherwise they keep falling until the haze or the ground takes them.",
+  "fighter": [
+   30,
+   50
+  ],
+  "bomber": [
+   60,
+   100
+  ],
+  "bomber_span_m": 20,
+  "burn_sheds": [
+   5,
+   10
+  ],
+  "spin_sheds": [
+   2,
+   5
+  ],
+  "wing_odds": 0.35,
+  "first_s": [
+   0.3,
+   1.5
+  ],
+  "every_s": [
+   1.2,
+   4.0
+  ],
+  "heavy_share": 0.12,
+  "throw_mps": [
+   8,
+   35
+  ],
+  "loose_mps": [
+   3,
+   12
+  ],
+  "carry": [
+   0.55,
+   0.9
+  ],
+  "plate_m": [
+   0.25,
+   1.1
+  ],
+  "plate_tumble": [
+   2,
+   9
+  ],
+  "plate_sink_mps": [
+   7,
+   16
+  ],
+  "heavy_m": [
+   0.3,
+   0.8
+  ],
+  "heavy_tumble": [
+   0.5,
+   2.5
+  ],
+  "heavy_sink_mps": [
+   45,
+   80
+  ],
+  "wing_chord_of_span": 0.17,
+  "wing_tumble": [
+   0.6,
+   1.6
+  ],
+  "wing_sink_mps": [
+   22,
+   32
+  ],
+  "paint": [
+   92,
+   98,
+   74
+  ],
+  "underside": [
+   92,
+   98,
+   74
+  ],
+  "bare": [
+   168,
+   170,
+   172
+  ],
+  "heavy_colour": [
+   40,
+   38,
+   36
+  ],
+  "glint": 3.0,
+  "glint_power": 20,
+  "enter_deck_m": 40,
+  "most_s": 240,
+  "least_px": 1.0,
+  "fireball": {
+   "_how": "A short torn fireball, never a ball: lobes clumps of fire thrown out along tears ways at once, each r_of_span of the span across at birth, reaching reach_of_span, gone in life_s. Lit from within (art director 06:00Z): each clump is colour taken heart_mix of the way to hot_colour, cooling to deep_colour by cool_by_s and then gone into its smoke, near opaque to its edge (rim), its edge edge of the way to deep_colour so it reads as a lump of fire; rough its torn outline, drawn as two fans past twin_px. A white heart, broken in hearts pieces along the tears, each heart_r_of_span of the span across, heart_colour at its end, lasts heart_s and is drawn over the clumps. Each clump leaves smoke_colour smoke that grows smoke_grow times and hangs smoke_s at smoke_alpha, where the clump died, while the pieces fly on and fall; a lamp.",
+   "_art_director_0600": "Art director 06:00Z: pieces, smoke, falls and numbers PASS. Mend the fire's colour: it read as pale peach petals (median 222,165,130). Make it emissive: the heart near white-yellow (luma 240 or more) through about 0.1 s; the body a saturated orange (blue under about 60, saturation 0.75 or more); cooling to deep orange-red and the 140,40,16 edge by 0.2 to 0.3 s, then into the black smoke, never a clay or salmon tone on the way.",
+   "lobes": [
+    18,
+    28
+   ],
+   "tears": [
+    2,
+    4
+   ],
+   "life_s": [
+    0.25,
+    0.6
+   ],
+   "reach_of_span": [
+    0.3,
+    0.9
+   ],
+   "r_of_span": [
+    0.05,
+    0.12
+   ],
+   "colour": [
+    250,
+    136,
+    22
+   ],
+   "hot_colour": [
+    255,
+    222,
+    90
+   ],
+   "heart_mix": [
+    0.2,
+    0.6
+   ],
+   "deep_colour": [
+    140,
+    40,
+    16
+   ],
+   "cool_by_s": 0.25,
+   "heart_s": 0.12,
+   "hearts": 3,
+   "heart_r_of_span": 0.11,
+   "heart_colour": [
+    255,
+    240,
+    170
+   ],
+   "edge": 0.5,
+   "rim": 0.85,
+   "rough": 0.35,
+   "twin_px": 40,
+   "smoke_colour": [
+    38,
+    35,
+    33
+   ],
+   "smoke_s": [
+    5,
+    9
+   ],
+   "smoke_grow": [
+    5,
+    7
+   ],
+   "smoke_alpha": 0.9,
+   "lamp": 0.6
+  }
  },
  "dust": {
   "vehicles": {
+   "_how": "Mediterranean set 03:35Z and art director 06:19Z: every vehicle moving on dry ground trails dust from its dust sockets (dust.left, dust.right; VehicleDust every frame). Pale fine dust, the ground's own colour where it is thrown up (low) going paler as it climbs (high); low and long, drifting on the one wind (SetWind), lingering, never popping; taller and longer at speed (flatten, r1_m to r1_fast_m, life_s to life_fast_s between least_mps and full_mps); tracks throw tracked times more than wheels. A puff every spacing_m (no more than most_a_second); dense for haze_by_s, then a thin haze to its end. by_ground scales it; a ground not listed throws none. Pass check: from a 1.7 m eye a column's dust hides the vehicles behind its lead.",
    "when": "dry ground and roads, not snow, mud or wet weather",
+   "by_ground": {
+    "sand": 1.0,
+    "earth": 0.55,
+    "town": 0.5,
+    "woods": 0.25,
+    "snow": 0,
+    "mud": 0,
+    "water": 0
+   },
+   "low": {
+    "sand": [
+     170,
+     140,
+     106
+    ]
+   },
+   "high": {
+    "sand": [
+     210,
+     196,
+     170
+    ]
+   },
    "colour_from_ground": 1.25,
-   "trail_m": [
-    8,
-    20
-   ],
-   "rise_m": [
-    1,
-    3
-   ],
-   "linger_s": [
+   "_colour": "Sand: the stony gravel 170,140,106 where it is thrown up (Mediterranean 03:35Z), losing colour as it climbs to a pale buff grey 210,196,170 (sat 0.2, art director 06:48Z) so the top reads as haze in the air, never a second layer of sand. Other grounds: their paint.dust, and colour_from_ground times it in the air.",
+   "least_mps": 1.0,
+   "full_mps": 12,
+   "spacing_m": 2.5,
+   "most_a_second": 4,
+   "kick": 0.1,
+   "drag": 1.0,
+   "spread_mps": 0.6,
+   "windage": 1.0,
+   "life_s": [
     4,
     6
    ],
-   "tracks_more_than_wheels": true
+   "life_fast_s": [
+    8,
+    11
+   ],
+   "r0_m": [
+    0.5,
+    0.9
+   ],
+   "r1_m": [
+    1.5,
+    2.5
+   ],
+   "r1_fast_m": [
+    5.5,
+    7.5
+   ],
+   "flatten": [
+    0.6,
+    0.9
+   ],
+   "rise_m": [
+    2,
+    5
+   ],
+   "alpha": [
+    0.55,
+    0.75
+   ],
+   "haze_by_s": 3.5,
+   "haze_alpha": 0.3,
+   "tracked": 1.3,
+   "most_of_room": 0.4,
+   "full_within_m": 120,
+   "_most_of_room": "pre-check 07:10Z: the dust's gate takes the fuller of the whole room and the dust's own share of it (most_of_room), so dust alone never cuts a salvo behind the columns; a vehicle within full_within_m of the eye keeps its whole trail",
+   "tracks_more_than_wheels": true,
+   "low_skirt": {
+    "_how": "Of every puff, share is a low dense skirt (flatten, wider by wide, thicker by thick): the trail's body, thick from the ground to a vehicle's height so what drives in it is hidden; the rest are the soft tall billows.",
+    "share": 0.5,
+    "flatten": 0.35,
+    "wide": 1.25,
+    "thick": 1.2
+   },
+   "from_above": {
+    "_how": "Art director 06:48Z: a player always finds his own units from above. On the overview, or any eye more than above_m up looking steeply down (the sine of its look down past steep), the dust within near_m of a vehicle laying dust, or of a gun its veil came from, thins to keep of itself, so each unit shows at least half; the long trail behind stays, a column's tell. Ground and follow eyes keep the full veil. No effect covers a unit's marker or banner: those are drawn over the effects.",
+    "above_m": [
+     15,
+     25
+    ],
+    "steep": [
+     0.3,
+     0.5
+    ],
+    "near_m": [
+     8,
+     14
+    ],
+    "keep": 0.1
+   }
   },
   "men_going_down": {
    "puff": "a small low puff at each man who throws himself flat",
@@ -1353,9 +3238,21 @@
  "game": {
   "_how": "Numbers only the 3D game's effects kit uses (Source/TheaterCommand/Effects). Tune here, not in code.",
   "max_puffs": 3000,
+  "_max_puffs": "The room: how many fans the kit lays in a frame at the most. Held to 100 to 20,000, and a value that is not a number gives 3,000 (the pre-check, 12:57Z: unchecked, a broken file's nan was a fault and its 1e9 asked for hundreds of gigabytes).",
+  "lumps_most": 48,
+  "lumps_px_most": [
+   1200,
+   1800
+  ],
+  "lumps_least_ink": 0.02,
+  "_lumps_cost": "The lumps' cost held (the builder's rested reading of build 1770, 15:09Z 20 November: Pearl Harbor 55.8 frames a second against 72.7 on 1766 and Midway 59.0 against 67.8 once the ships burned, every puff over its lumps_px carrying five lumps, each a fan of its own; the art director, 14:50Z: bound them to the biggest few dozen puffs as long as Midway 06 holds, and lumps faded to nothing must cost nothing). lumps_most: no more puffs than this carry lumps at once. With more wide enough, the places go to the widest on the screen and the rest stay plain; the width asked follows the count by half its size a second at most, and each puff's lumps come in over the next quarter of it, so none appears or goes at a stroke. Akagi's column in Midway 06 has about 40 such puffs and is laid exactly as passed; at 20 its lower half went smooth again. lumps_px_most: a puff wider on the screen than the first number counts for less the wider it is and loses its lumps by the second (window pixels). A column the eye is in or under fills the screen with such pieces: their lumps are murk, and cost the most of all to paint. lumps_least_ink: lumps thinner than this (0 to 1) are not laid at all. Without these three keys every lump is laid as in build 1770.",
+  "lumps_soft_s": 0.35,
+  "_lumps_soft": "The pre-check on 7d83869, 16:14Z 20 November: no single lump popped, but at the cap every lump in the fade band stepped together about once a second, 6 to 13% of all the lumps' ink in one frame, and blinked twice on a slow approach. lumps_soft_s: the width asked closes most of the way to the count's in this many seconds, the same at any frame rate, so a small move of the count is a fade over many frames (its tried cure: the biggest frame change 2% from 12%, no blinks). 0 or no key: at once, as 7d83869. Under the cap nothing changes: Midway 06 is laid exactly as passed. Not set here: lumps_band, the share of the width asked over which a puff's lumps come in (0.25 without the key). With many puffs alike in size most of the kept ones lie inside that quarter and show at under half strength (the pre-check's note); 0.15 gives the kept lumps a third more ink at the cap, but it also quickens every young puff's lumps under the cap, so Midway 06 would no longer be the picture passed.",
   "max_lamps": 2,
   "lamp_candela_at_full": 400.0,
   "_lamp": "A flash's lamp at full strength (a 105 mm is 1), in candelas at 100 world units a metre (the kit scales it for other scales). 400 PASSED in build 1690 (art director 21:16Z): 1.23x screen brightness at 3 m and 1.11 to 1.15x at 13 to 16 m by night; 1200 overlit (1.57x).",
+  "muzzle_lamp_height_m": 6.0,
+  "_muzzle_lamp": "A gun's muzzle lamp (muzzles.<gun>.light_w) hangs this high times the square root of its strength above the muzzle, and its strength is cut by the square of how much lower that is than a shell's lamp of the same strength (burst.flash.light.height_m), so the ground at the gun's foot is lifted no more than at a shell's foot, never washed white. Build 1700: with the lamp at the muzzle, a tank gun at night lit the ground 1 m round its foot to 112 to 249 of 255.",
   "shade_lit": 0.32,
   "shade_dark": 0.28,
   "_shade": "puffs are unlit: each is lightened toward the sun and darkened away from it by these shares, so a cloud has a lit and a shadowed side",
@@ -1369,6 +3266,11 @@
   ],
   "_backlight": "Art director 22:24Z (dusk salvo sheet): with the sun behind, smoke never falls below about a fifth of the ground's value, from sky fill, and its thin edges and tips glow warm where the sun shows through, so it reads as smoke against the light and not as a hole. sky_fill: a smoke puff's shadow side is never darker than this share of its own colour in the hour's light. sun_through: the warm light added at a puff's thin edge when the eye looks toward the sun (sun_through_colour times the sun's own light, View::SunLight, white by day and none at night), falling off as the cosine to the sun to the power sun_through_power. Smoke clouds and trails only, most at middle thickness (art director 22:36Z): a low sheet of dust along the ground takes none, so it never glows as a fog over the field.",
   "clod_least_px": 1.2,
+  "near_eye_fade_m": [
+   2,
+   8
+  ],
+  "_near_eye": "Art director 17:52Z: smoke and dust one can see through fades out as it comes up to the camera, so it never fills the whole frame evenly (a barrage's dust drifting downwind over the eye was a flat beige sheet for about 4 s). near_eye_fade_m: nothing of a piece whose near edge is within the first of these of the eye, all of it from the second on. Never a light, a thrown clod, an aircraft's trail or an oil fire's column. At 2 and 8 the passed bursts at the battle camera (18.75 m off) do not change: a 105's nearest puff edge is 8.4 m off; a mortar's and a 75's nearest drifting puffs (5.7 and 6.3 m) thin by a third at most. Absent: no fade.",
   "draw_beyond_m": 1500,
   "muzzle_smoke": [
    150,
@@ -1432,9 +3334,17 @@
     116
    ],
    "cloud_shade": 4.0,
+   "face_lit": 1.6,
+   "twin_px": 40,
+   "lit_colour": [
+    182,
+    176,
+    166
+   ],
+   "_face_lit": "Art director 23:44Z, first in-game flak: from above, against the fields, the burst read as an ink blot, in shadow all over. Smoke seen with the sun behind the eye shows its sunlit face: face_lit is how far a lobe then goes toward lit_colour (picture values), most on its outer lobes, wisps and sunward side, next to none in its young heart, none on its far side, which stays shadowed. Each lobe is laid as a dome: lit on the side toward the sun, its underside and edge darker. Art director 23:59Z: the lit faces must sit clearly above the field (about 135 to 150 in the game frame), so lit_colour is pale and face_lit over 1. Art director 00:03Z: never pale card: each puff at least twin_px across on the screen is two fans turned half a step (no facets; it takes two slots), the pale fades with the puff's own edge opacity (the rim goes see-through grey), and each lobe takes its own share of face_lit, 0.6 to 1.0, so the lit side breaks into lumps. Facing the sun and at night it keeps the dark look the art director passed; with the sun to the side or partly behind the eye (as her passed sky view, where the sun is partly behind) it is partly lit.",
    "heart_end": 0.4,
    "spread_mps": 1.1,
-   "least_px": 9,
+   "least_px": 10,
    "flash_glow_s": 0.1,
    "flash_heart_s": 0.05,
    "flash_spikes": [
@@ -1462,5 +3372,549 @@
    "lamp": 0.35,
    "lamp_reach_m": 60
   }
+ },
+ "oil_fires": {
+  "_how": "Art director's grit direction (19 November): ships burn black oil smoke; 2 to 4 dark columns on the horizon. Pearl Harbor and Midway mornings were mostly clear, so their grit is this smoke. One fire to each ship lost in a sea battle (the zone's kind: sunk = the oil burning where she went down, burning = where she left the line on fire), fixed where it is, to the fight's end, with the scene's one wind for every column. Its column is kept when the screen is full (keep), so a far column never blinks out.",
+  "draw_beyond_m": 20000,
+  "round_up": 0.1,
+  "sunk": {
+   "_rule": "a slick of burning oil on the sea: low ragged flames on a few heads of the slick, and over them one fat black column standing up from the water, bending over down the wind as it climbs and cools, browner and thinner aloft",
+   "_mend_0359": "Art director 03:59Z: never close the top: from about 60% of its height it bends over and runs nearly level down the wind as a widening, flattening pall 2 to 3 times the column's height long, thinning to nothing (pall_*; the push burst_mps / burst_drag sets the height it levels at). It reads round: its sunward side lit to about 90 to 110 luma in a brown-grey, the shadow side kept at 24 to 35 (sun_side, lit_colour, oil_fires.round_up: lit as a round column, its width measured each frame); against the sun the warm fringe on its own edge only. Its base a low dark roll as wide as the slick, hugging the water, with a broken line of low flames along it (slick_long, slick_wide, flame_odds, flame_point, base_flat).",
+   "heads": [
+    9,
+    14
+   ],
+   "head_spread": 0.6,
+   "head_r": [
+    0.15,
+    0.3
+   ],
+   "flame_up_m": 0.0,
+   "flame_every_s": 0.1,
+   "flame_r_m": [
+    3.0,
+    5.5
+   ],
+   "flame_tall": [
+    1.5,
+    2.5
+   ],
+   "flame_life_s": [
+    0.35,
+    0.7
+   ],
+   "column_every_s": 0.6,
+   "column_life_s": [
+    45,
+    60
+   ],
+   "rise_mps": [
+    0.0,
+    0.0
+   ],
+   "burst_mps": [
+    24,
+    30
+   ],
+   "burst_drag": 0.075,
+   "slow_mps2": 0.0,
+   "base_every_s": 0.25,
+   "base_life_s": [
+    8,
+    12
+   ],
+   "base_rise_mps": [
+    0.3,
+    0.8
+   ],
+   "base_r": [
+    0.1,
+    0.18
+   ],
+   "base_alpha": [
+    0.75,
+    0.9
+   ],
+   "windage": [
+    1.0,
+    1.6
+   ],
+   "r0": [
+    0.18,
+    0.3
+   ],
+   "r1": [
+    0.55,
+    0.9
+   ],
+   "grow": 0.6,
+   "alpha": [
+    0.75,
+    0.95
+   ],
+   "hold": 0.5,
+   "heart": 0.85,
+   "rough": 0.35,
+   "cool": 1.0,
+   "colour": [
+    24,
+    22,
+    21
+   ],
+   "colour_top": [
+    64,
+    60,
+    57
+   ],
+   "lamp": 0.25,
+   "lamp_reach": 2.0,
+   "twin_px": 160,
+   "keep": 1,
+   "slick_long": 1.0,
+   "slick_wide": 0.4,
+   "flame_odds": 0.5,
+   "flame_point": 0.55,
+   "base_flat": 0.6,
+   "pall_every_s": 2.5,
+   "pall_life_s": [
+    200,
+    300
+   ],
+   "pall_r1": [
+    1.1,
+    1.8
+   ],
+   "pall_windage": [
+    1.4,
+    1.9
+   ],
+   "pall_alpha": [
+    0.4,
+    0.6
+   ],
+   "pall_stretch": 2.2,
+   "pall_stretch_by_s": 90,
+   "pall_hold": 0.4,
+   "pall_level": [
+    0.75,
+    1.05
+   ],
+   "pall_drift_mps": 0.3,
+   "pall_rough": 0.5,
+   "pall_rest": 1.3,
+   "sun_side": 2.2,
+   "lit_colour": [
+    118,
+    106,
+    94
+   ],
+   "_lumps": "Art director 10:57Z 20 November, build 1766's Midway ships picture: Akagi's column was the right shape and colour and read as a soft brown smear. The cause was the kit's own picture, not Unreal's upscaler: a column puff is 60 to 90 m across, 300 to 400 of the window's pixels from a kilometre, and one fan whose edge fades over two fifths of its radius, so at that size no lump has an outline (drawing the scene bigger did not help, as the fade is a share of the puff). A column puff at least lumps_px pixels across on the screen carries lumps smaller lumps on its face: their sizes dealt from lumps_r of its radius, one step of that range to each, so every puff has a big one, small ones and the sizes between and no two puffs the same pattern (art director 11:29Z); each set lumps_out of the way from its middle to where it would touch the puff's edge, lumps_alpha as thick as the puff, its heart ring at lumps_inner (a firmer edge than the puff's), lumps_light of its light from its own sunward side and lumps_rim of it kept at its rim, so the dark between two lumps lies on their shadow sides. They come in between lumps_px and a quarter as much again, turn with the puff, and melt into it before it begins to thin (whole for three quarters of hold of its life, gone by hold): young smoke low in the column billows, old smoke aloft is one soft mass. Each takes a place in game.max_puffs only while its puff is that big on the screen and that young, and only a place nothing else wants: the lumps are not counted when the room is shared out, they are whole while a tenth of game.max_puffs would still be free with them all laid, thinner as that goes and not laid once the room is full, so a crowded sky costs a near column its billows, smoothly, and nothing else. The room is judged by the most places asked of late, held two seconds and then let down a hundredth of the room a second, and what is shown falls no faster than a half a second (the pre-check, 12:56Z: judged by one frame's count, every lump flickered with the fires' flames once the room was in its last tenth); so the lumps come back slowly after a crowd, up to 12 seconds from nothing to whole. A cut clears that memory for the frame and the next (the eye over 50 m from where it was a frame ago, turned by over 0.6, or its view a quarter bigger or smaller), so a close-up cut out of a crowded view shows its lumps at once. At lumps_px 110 one lost carrier from a kilometre took 435 places and one from the harbour picture's 1.5 km as many, which six ships there could not afford; at 260 the carrier takes about 220 and a ship in the harbour picture about 15: nearly all her young puffs are under 260 pixels across there and draw as they were passed. The pall aloft and the black root have none. The pixels are the ones the kit is told: the air scene tells it the window's, the map the ones it draws.",
+   "lumps": 5,
+   "lumps_px": 260,
+   "lumps_r": [
+    0.18,
+    0.56
+   ],
+   "lumps_out": [
+    0.3,
+    1.0
+   ],
+   "lumps_alpha": 0.9,
+   "lumps_inner": 0.7,
+   "lumps_light": 0.6,
+   "lumps_rim": 0.8
+  },
+  "burning": {
+   "_rule": "a ship on fire leaving the line, as the sea battle's 'burning' zone marks it: fires on the water where she went (or on her deck, if the caller gives the deck's height) and one narrower black column, a little greyer than burning oil",
+   "_mend_0359": "Art director 03:59Z: greyer than the sunk ship's column, its foot about 60 to 80 (colour, a small grey roll: base_*). Its top runs down the wind as the sunk one's does (pall_*).",
+   "heads": [
+    2,
+    4
+   ],
+   "head_spread": 0.35,
+   "head_r": [
+    0.1,
+    0.2
+   ],
+   "flame_up_m": 0.0,
+   "flame_every_s": 0.1,
+   "flame_r_m": [
+    2.5,
+    5.0
+   ],
+   "flame_tall": [
+    2.5,
+    4.0
+   ],
+   "flame_life_s": [
+    0.35,
+    0.7
+   ],
+   "column_every_s": 0.7,
+   "column_life_s": [
+    45,
+    60
+   ],
+   "rise_mps": [
+    0.0,
+    0.0
+   ],
+   "burst_mps": [
+    20,
+    26
+   ],
+   "burst_drag": 0.08,
+   "slow_mps2": 0.0,
+   "base_every_s": 0.4,
+   "windage": [
+    1.0,
+    1.5
+   ],
+   "r0": [
+    0.18,
+    0.28
+   ],
+   "r1": [
+    0.45,
+    0.8
+   ],
+   "grow": 0.6,
+   "alpha": [
+    0.7,
+    0.9
+   ],
+   "hold": 0.5,
+   "heart": 0.8,
+   "rough": 0.35,
+   "cool": 1.0,
+   "colour": [
+    58,
+    55,
+    52
+   ],
+   "colour_top": [
+    100,
+    96,
+    92
+   ],
+   "lamp": 0.2,
+   "lamp_reach": 1.5,
+   "twin_px": 160,
+   "keep": 1,
+   "pall_every_s": 3.0,
+   "pall_life_s": [
+    170,
+    250
+   ],
+   "pall_r1": [
+    1.0,
+    1.6
+   ],
+   "pall_windage": [
+    1.4,
+    1.9
+   ],
+   "pall_alpha": [
+    0.35,
+    0.55
+   ],
+   "pall_stretch": 2.2,
+   "pall_stretch_by_s": 80,
+   "pall_hold": 0.35,
+   "pall_level": [
+    0.75,
+    1.05
+   ],
+   "pall_drift_mps": 0.25,
+   "pall_rough": 0.5,
+   "pall_rest": 1.3,
+   "sun_side": 1.5,
+   "lit_colour": [
+    140,
+    132,
+    124
+   ],
+   "base_life_s": [
+    6,
+    9
+   ],
+   "base_rise_mps": [
+    0.4,
+    1.0
+   ],
+   "base_r": [
+    0.14,
+    0.22
+   ],
+   "base_alpha": [
+    0.6,
+    0.75
+   ],
+   "base_flat": 0.75,
+   "_lumps": "As oil_fires.sunk._lumps.",
+   "lumps": 5,
+   "lumps_px": 260,
+   "lumps_r": [
+    0.18,
+    0.56
+   ],
+   "lumps_out": [
+    0.3,
+    1.0
+   ],
+   "lumps_alpha": 0.9,
+   "lumps_inner": 0.7,
+   "lumps_light": 0.6,
+   "lumps_rim": 0.8
+  },
+  "_pall_rest": "pall_rest (art director 18:28Z): a pall puff's middle is never lower than this share of its own radius above the sea (Bit::Rest; 1.3 covers its rough outline), so one that wanders down (pall_drift_mps) is never cut by the sea along a straight line when seen from the air. 0 or no key: as before."
+ },
+ "steam": {
+  "_how": "Steam from a ship's boiler or engine-room hit, or a vehicle's radiator (art director 14:39Z 20 November): 'white that rises fast and vanishes, beside black that stays'. A narrow cone (cone_deg), clear for gap_m at the mouth where dry steam is not yet seen, then white rags that evaporate within life_s; never a bank, never brown, no flash. It roars for the first roar of its time, then its length and speed sink together to least of what they were, a wisp that wavers (waver) and leans with the wind. reach_m is how far a vent across_m wide throws it (by_width: how strongly a narrower or wider vent's reach follows its width); rag, a rag's radius at its end as a share of how far it went; mouth, its width at the mouth as a share of the vent's; lance, the share of rags that carry a short dense length of jet at the mouth, lance_long times as long as wide, living lance_life_s, so the fast root is one white lance and never a string of beads. vent: deck vents, skylights, holes in her side. funnel: the escape pipes on the funnel's face as the safety valves lift, a tall plume straight up. surge: the steam where water hits a fire being put out (reach: its height as a share of the fire's width). No such row: Steam does nothing.",
+  "colour": [
+   238,
+   240,
+   244
+  ],
+  "colour_old": [
+   226,
+   230,
+   236
+  ],
+  "shadow": [
+   174,
+   184,
+   202
+  ],
+  "shadow_k": 1.0,
+  "side_shade": 0.85,
+  "vent": {
+   "reach_m": [
+    5,
+    15
+   ],
+   "across_m": 2.0,
+   "by_width": 0.7,
+   "cone_deg": 12,
+   "gap_m": 1.0,
+   "every_s": 0.05,
+   "roar": 0.3,
+   "least": 0.12,
+   "mouth": 0.4,
+   "rag": 0.13,
+   "rise_mps": 1.5,
+   "windage": 0.5,
+   "alpha": 0.9,
+   "waver": 0.25,
+   "rough": 0.28,
+   "life_s": [
+    1.6,
+    2.8
+   ],
+   "lance": 1.0,
+   "lance_life_s": 0.35,
+   "lance_long": 3.5
+  },
+  "funnel": {
+   "reach_m": [
+    30,
+    60
+   ],
+   "across_m": 2.0,
+   "by_width": 0.3,
+   "cone_deg": 10,
+   "gap_m": 1.5,
+   "every_s": 0.045,
+   "roar": 0.35,
+   "least": 0.1,
+   "mouth": 0.4,
+   "rag": 0.1,
+   "rise_mps": 2.5,
+   "windage": 0.45,
+   "alpha": 0.92,
+   "waver": 0.2,
+   "rough": 0.28,
+   "life_s": [
+    2.6,
+    4.6
+   ],
+   "lance": 1.0,
+   "lance_life_s": 0.6,
+   "lance_long": 4.5,
+   "cap": 0.3,
+   "cap_wide": 2.4,
+   "cap_from": 0.62,
+   "cap_life_s": [
+    3.0,
+    6.0
+   ]
+  },
+  "surge": {
+   "reach": 1.8,
+   "cone_deg": 34,
+   "gap_m": 0.0,
+   "every_s": 0.03,
+   "least": 0.15,
+   "mouth": 0.4,
+   "rag": 0.26,
+   "rise_mps": 3.5,
+   "windage": 0.7,
+   "alpha": 0.82,
+   "rough": 0.34,
+   "life_s": [
+    1.6,
+    3.4
+   ]
+  }
+ },
+ "cook_off": {
+  "_how": "Ammunition cooking off in a burning tank, a ship's gun mount or aircraft parked on a deck (art director 14:39Z 20 November): 'repeated small pops, and flame roaring from the hatches'. Each pop: a small flash by the flash rule (flash: its size for a hatch a metre wide), a grey-black puff out of the hatch, orange embers thrown ember_up_m up in short arcs and cooling to dull red, and by fragment_odds a dark fragment tumbling off. NEVER a glowing round streaking skyward: a cooked-off round is not fired, and it reads as fireworks. The jet: jet_tall_m tall from a hatch hatch_m wide (taller from a wider one by the root of its width), jet_wide of its height across at its widest and never narrower than the hatch, ragged tapering tongues by the fire rules, black smoke off its top; in two pulses by two_pulses, sinking to pulse_dip between them. The caller says how many pops, over how long, how long the jet burns and when it starts. No bodies. No such row: CookOff does nothing.",
+  "hatch_m": 0.6,
+  "jet_tall_m": [
+   3,
+   6
+  ],
+  "jet_wide": 0.28,
+  "jet_every_s": 0.04,
+  "jet_smoke_every_s": 0.08,
+  "jet_pulse": 0.3,
+  "jet_torn": 0.45,
+  "jet_lean": 0.05,
+  "jet_lean_most": 0.4,
+  "jet_sparks": 1.6,
+  "jet_lamp": 0.5,
+  "jet_lamp_day": 0.6,
+  "jet_root": [
+   255,
+   244,
+   206
+  ],
+  "ember_uneven": 1.8,
+  "pulse_dip": 0.35,
+  "two_pulses": 0.5,
+  "flash": 0.75,
+  "lamp": 0.3,
+  "puffs": [
+   2,
+   3
+  ],
+  "puff_alpha": 0.6,
+  "puff": [
+   62,
+   59,
+   56
+  ],
+  "embers": [
+   6,
+   14
+  ],
+  "ember_up_m": [
+   5,
+   20
+  ],
+  "ember_life_s": [
+   0.8,
+   2.2
+  ],
+  "ember": [
+   255,
+   150,
+   60
+  ],
+  "ember_old": [
+   170,
+   56,
+   20
+  ],
+  "fragment_odds": 0.35,
+  "fragment": [
+   44,
+   41,
+   38
+  ],
+  "jet_smoke": [
+   38,
+   35,
+   32
+  ]
+ },
+ "glance": {
+  "_how": "An armour-piercing shot glancing off armour (art director 14:39Z 20 November): 'a spark spray thrown the way the shot glances, and a glowing shot streaking off at a new angle'. A small two-frame flash by the flash rule (flash: its size for a 75 mm shot); sparks in a cone_deg cone along the glance, white-yellow cooling to orange, falling, gone in spark_life_s; a very small grey puff of paint and metal dust for half a second; the shot red-orange, leaving lift_deg off the plate at shot_mps, seen for shot_s, slowing hard (shot_drag, each second), veering veer_deg off its line and wobbling wobble_m about it tumble_hz times a second as it tumbles, and kicking up a little of the ground's dust where it comes down in sight. No burst, no smoke. Art director 15:40Z on the first cut: the shot was a long straight laser line and the sparks an even fan. The shot is now only the path it covered in the last streak_s (the 1/30 s streak rule), a tail that tapers and dims behind a small hot head (shot_head), bending as the path does and shortening as it slows; the sparks' speeds are skewed by the power spark_uneven (most slow and short, a few fast and long) and one in five leaves late. Each ricochet throws its own dice (the place, the moment, the kit's seed and how many came before), so no two take the same angle, kink time or kink direction. most_shots: no more shots than this are followed at once; one past that has its flash, sparks and puff only. The bright gouge it leaves is the model's to show, not the kit's. Sizes go by the root of the calibre over 75 mm. No such row: Glance does nothing.",
+  "sparks": [
+   14,
+   26
+  ],
+  "cone_deg": [
+   20,
+   40
+  ],
+  "spark_life_s": [
+   0.3,
+   0.8
+  ],
+  "spark_mps": [
+   8,
+   40
+  ],
+  "spark_uneven": 2.2,
+  "spark": [
+   255,
+   236,
+   170
+  ],
+  "spark_old": [
+   255,
+   140,
+   50
+  ],
+  "flash": 0.4,
+  "lamp": 0.15,
+  "lift_deg": [
+   8,
+   25
+  ],
+  "shot_mps": [
+   320,
+   480
+  ],
+  "shot_s": [
+   0.8,
+   1.4
+  ],
+  "shot_drag": 1.2,
+  "veer_deg": [
+   3,
+   10
+  ],
+  "wobble_m": 0.7,
+  "tumble_hz": [
+   14,
+   20
+  ],
+  "streak_s": 0.0333,
+  "most_shots": 12,
+  "shot_head": [
+   255,
+   232,
+   180
+  ],
+  "shot_wide_m": 0.1,
+  "shot": [
+   255,
+   122,
+   44
+  ],
+  "shot_old": [
+   210,
+   64,
+   22
+  ],
+  "puff": [
+   128,
+   126,
+   122
+  ],
+  "most_a_frame": 3,
+  "_most_a_frame": "The pre-check on de54166, 17:51Z 20 November: a ricochet's cost is its call (off a deck one pushes some 345 pieces, 0.6 ms; a dozen in one frame took 7 ms). No more than most_a_frame shots begin to be followed at one moment; one past it keeps its flash, sparks and puff, and its shot is not drawn. Without the key: no such limit, as before."
  }
 }
