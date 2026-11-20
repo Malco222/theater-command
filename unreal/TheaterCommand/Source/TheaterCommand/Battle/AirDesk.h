@@ -170,11 +170,15 @@ namespace AirDesk
 		static constexpr double Lens = 50.0;
 		/**
 		 * The raid's and the guard's shots (the art director on build 1750, 19 November 2026: the planes were 10 to 15
-		 * pixel specks in a white void): each of the lead three about this share of the picture's width (150 pixels of
-		 * the 2881 pixel picture, her 120 to 180), seen from this many degrees above: the guard's from 13, the raid's
-		 * from 21 (her note on build 1756: tilted 8 to 10 degrees further down, so the cloud field fills the lower half).
+		 * pixel specks in a white void): each of the guard's lead three about LeadShare of the picture's width (150
+		 * pixels of the 2881 pixel picture, her 120 to 180), each of the raid's trailing three about TrailShare (her note
+		 * on build 1760: the nearest about 120 pixels, the rest of the raid receding ahead of them), seen from this many
+		 * degrees above: the guard's from 13, the raid's from 21 (her note on build 1756: tilted 8 to 10 degrees further
+		 * down, so the cloud field fills the lower half).
 		 */
-		static constexpr double LeadShare = 150.0 / 2881.0, LookDown = 13.0, RaidLookDown = 21.0;
+		static constexpr double LeadShare = 150.0 / 2881.0, TrailShare = 125.0 / 2881.0, LookDown = 13.0, RaidLookDown = 21.0;
+		/** How far the raid's shot looks on from its trailing three toward the raid's middle (0 at them, 1 at it). */
+		static constexpr double RaidLookOn = 0.5;
 		/** Over a harbour, how far under the picture's middle the target is held while the look lifts (degrees). */
 		static constexpr double HarbourLow = 9.5;
 		/**
@@ -197,12 +201,14 @@ namespace AirDesk
 		AirShow::Vec Toward;   // level, from the target toward the raid at Begin
 		// (the last place each group was seen: a shot whose group has gone keeps its last framing)
 		mutable std::map<int, AirShow::Group> Last;
-		// (each close shot's lead three, by plane, chosen as its shot begins: the planes fly a little behind the slots
-		// their group's place gives, and the shot frames the planes)
+		// (each close shot's three, by plane, chosen as its shot begins: the guard's lead, the raid's trailing element;
+		// the planes fly a little behind the slots their group's place gives, and the shot frames the planes)
 		mutable std::map<int, std::vector<int>> Leads;
 		// (a group's lead planes already seen going down, and how far the aim stands off its flying leads' middle since)
 		mutable std::map<int, std::vector<int>> Fallen;
 		mutable std::map<int, AirShow::Vec> Shifts;
+		// (the raid's middle as its shot begins, ahead, right and up of its group's place: where the raid's shot looks)
+		mutable std::map<int, AirShow::Vec> Middles;
 		const AirShow::Group* Find(const std::map<int, AirShow::Group>& Groups, int Id) const;
 	};
 }
