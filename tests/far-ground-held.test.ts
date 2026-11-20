@@ -14,8 +14,9 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
 import stop3 from '../data/campaign/china-stop3.json';
-import { computeSupply, createGame } from '../src/campaign/game';
-import { fronts, garrisonMonth, offensiveWatch, startOpen, takenGround, type Front } from '../src/campaign/staff';
+import { computeSupply, createGame, declareWar } from '../src/campaign/game';
+import { pacificGround } from '../src/campaign/pacific';
+import { fronts, garrisonAsk, garrisonMonth, offensiveWatch, startOpen, takenGround, type Front } from '../src/campaign/staff';
 import { release } from '../src/campaign/ai';
 import { stepAI } from '../src/campaign/turn';
 import type { Corps, Game } from '../src/campaign/types';
@@ -34,7 +35,53 @@ const REAR = ['Tientsin-Pukow railway garrison (21st Division)', '12th Army (5th
 
 describe('ground taken has to be held (rider C to ruling 234)', () => {
   it('is the far side\'s row: half a division\'s worth a province, at the stops where the reading decides', () => {
-    expect(stop3.open).toEqual({ garrison: { each: 0.5, stops: [3, 4, 5] } });
+    const G = stop3.open.garrison;
+    expect([G.each, G.stops]).toEqual([0.5, [3, 4, 5]]);
+    // The record's figure for a province of each region of the Pacific's ground (rider of 22:30Z and the notes of
+    // 22:28Z and 22:33Z; the historian's japan-south-garrison-1942.md and pacific-garrison-rest.md).
+    expect(G.by.map((b) => [b.name, b.each, b.places.length])).toEqual([
+      ['the Philippines', 0.2, 14], ['Malaya with Singapore', 0.2, 7], ['Sumatra', 0.15, 7], ['Java', 0.2, 4],
+      ['Borneo and the eastern islands', 0.05, 25], ['Burma', 0.1, 12], ['Thailand, taken against its will', 0.1, 7], ['Indochina', 0.1, 11],
+      ['New Guinea and the Bismarcks, the Solomons, the Gilberts and Nauru', 0.05, 15], ['the mandates and Guam', 0.05, 10],
+      ['Hong Kong, Okinawa, Karafuto, the Kurils and Formosa', 0.1, 7], ['Iwo Jima, the Bonins and Marcus', 0, 3],
+    ]);
+    // Every place a row names is a province of the Pacific's ground, and none is named twice.
+    const g = war();
+    const names = G.by.flatMap((b) => b.places);
+    expect(new Set(names).size).toBe(names.length);
+    for (const nm of names) { expect(g.byName[nm], nm).toBeTruthy(); expect(pacificGround(g, g.byName[nm]), nm).toBe(true); }
+  });
+
+  it('asks each region of the south its own figure, and a province cut finer shares it among its parts', () => {
+    const g = war();
+    const takes = (...names: string[]): void => { for (const nm of names) { g.byName[nm].ctrl = 'JAP'; } };
+    const asked = (name: string): number => takenGround(g, 'JAP').find((p) => p.ids.includes(g.byName[name].id))!.ask;
+    for (const e of ['USA', 'UK', 'NED']) declareWar(g, 'JAP', e);
+    // Luzon's Manila alone: 0.2. Java's four provinces: 0.8. Borneo's Tarakan: its part of 0.05.
+    takes('Manila');
+    expect(asked('Manila')).toBe(0.2);
+    takes('Batavia', 'Bandoeng', 'Semarang', 'Soerabaja');
+    expect(asked('Batavia')).toBe(0.8);
+    // Sumatra's seven provinces are eleven on the chart, and ask the record's seven times 0.15 together.
+    const sumatra = ['Atjeh', 'Medan', 'Pakanbaru', 'Padang', 'Djambi', 'Palembang', 'Oosthaven', 'Pematang Siantar', 'Padang Sidempoean', 'Benkoelen', 'Pangkalpinang'];
+    expect(Math.round(sumatra.reduce((s, nm) => s + garrisonAsk(g, g.byName[nm]), 0) * 100) / 100).toBe(1.05);
+    expect(garrisonAsk(g, g.byName['Pematang Siantar'])).toBeLessThan(0.15);
+    takes('Medan', 'Pematang Siantar', 'Atjeh');
+    expect(asked('Medan')).toBe(Math.round(['Medan', 'Pematang Siantar', 'Atjeh'].reduce((s, nm) => s + garrisonAsk(g, g.byName[nm]), 0) * 100) / 100);
+    // Hong Kong asks 0.1 and Marcus Island nothing; China's ground asks 0.5 as before.
+    expect([garrisonAsk(g, g.byName['Hong Kong']), garrisonAsk(g, g.byName['Marcus Island']), garrisonAsk(g, g.byName.Nanking), garrisonAsk(g, g.byName.Tokyo)]).toEqual([0.1, 0, 0.5, 0.5]);
+  });
+
+  it('asks nothing beyond the Pacific\'s ground: Iran, Arabia, Africa and inland India wait for the rule\'s general form', () => {
+    const g = war();
+    for (const [nat, owner, places] of [['SOV', 'IRN', ['Tehran', 'Hamadan', 'Qazvin']], ['ITA', 'FRA', ['Faya-Largeau', 'Zouar']], ['GER', 'UK', ['Qena', 'Minya']], ['JAP', 'UK', ['Delhi', 'Lahore']]] as [string, string, string[]][]) {
+      if (!g.nations[nat].atWar.includes(owner)) declareWar(g, nat, owner);
+      for (const nm of places) { expect(g.byName[nm], nm).toBeTruthy(); expect(pacificGround(g, g.byName[nm]), nm).toBe(false); g.byName[nm].ctrl = nat; }
+      expect(takenGround(g, nat).filter((p) => p.ids.some((id) => places.includes(g.regions[id].name)))).toEqual([]);
+    }
+    // The coast of the Bay of Bengal is the Pacific's ground, as the landing rules read it: Madras taken asks its garrison.
+    g.byName.Madras.ctrl = 'JAP';
+    expect(takenGround(g, 'JAP').find((p) => p.ids.includes(g.byName.Madras.id))!.ask).toBe(0.5);
   });
 
   it('counts all the ground held on the first day: 39 provinces of China in four pieces ask 19.5', () => {

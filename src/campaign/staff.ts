@@ -38,9 +38,9 @@ import { openWeather } from './weather';
 import { openAirVersion } from './airversion';
 import { openSecretWar } from './secretwar';
 import { openManpower } from './manpower';
-import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
+import { WORLD_FIRST, WORLD_MAP, acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
 import { patronOfClient, tieWar } from './far';
-import { runQuays } from './pacific';
+import { pacificGround, runQuays } from './pacific';
 import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
 import { openWinter, winterOver } from './winter';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
@@ -120,7 +120,7 @@ const OPEN = openData as unknown as {
   coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };  /** Ruling 233, rider b612: the ward. The stops of the dial at which a computer staff guards the capital of an ally whose leaving is in play, and the corps it keeps there. */
   ward?: { stops: number[]; corps: number };
   /** Rider C of 20:45Z (20 November 2026) to ruling 234: ground taken has to be held. The garrison a province of taken ground asks, in divisions' worth, and the stops of the dial at which a computer staff keeps it (garrisonMonth). Far-side rows alone give it. */
-  garrison?: { each: number; stops: number[] };
+  garrison?: { each: number; stops: number[]; by?: { name: string; each: number; places: string[] }[] };
 };
 
 /** True in a free-play war: the computer's nations make their own decisions. */
@@ -476,11 +476,38 @@ function drawsOn(g: Game, nat: string, owner: string): boolean {
   return !!op && (targets(g, nat, op).includes(owner) || inWar(g, nat, op).includes(owner));
 }
 
-/** Each piece of ground beyond the old chart this country has taken, with the garrison it asks this month. */
+/** A city's province (a province is its own), on the wider chart. */
+const provinceOf = (id: number): number => (id >= WORLD_FIRST ? (WORLD_MAP.regions[id - WORLD_FIRST] as { of?: number } | undefined)?.of ?? id : id);
+let garrisonBy: Map<string, number> | null = null;
+let provinceParts: Map<number, number> | null = null;
+/**
+ * What one province of taken ground asks (rider of 22:30Z, 20 November 2026, to ruling 234, and the note of 22:28Z on
+ * the historian's paper, historian/japan-south-garrison-1942.md): the record's figure for its region where the row
+ * gives one (`by`: the Philippines, Malaya, Sumatra, Java, Borneo and the eastern islands, Burma), and the row's
+ * `each`, sized from China's record, everywhere else. The historian's figures are the record's men over the
+ * provinces of the far side's first chart; where the chart cuts one of those finer, its parts share the figure, so
+ * that a region asks the men the record gives it and no more.
+ */
+export function garrisonAsk(g: Game, r: Region): number {
+  const C = OPEN.garrison;
+  if (!C) return 0;
+  if (!garrisonBy) { garrisonBy = new Map(); for (const row of C.by ?? []) for (const nm of row.places) garrisonBy.set(nm, row.each); }
+  const of = provinceOf(r.id), fig = garrisonBy.get(g.regions[of]?.name ?? '');
+  if (fig === undefined) return C.each;
+  if (!provinceParts) { provinceParts = new Map(); for (const q of g.regions) { const p = provinceOf(q.id); provinceParts.set(p, (provinceParts.get(p) ?? 0) + 1); } }
+  return fig / (provinceParts.get(of) ?? 1);
+}
+
+/**
+ * Each piece of ground this country has taken, with the garrison it asks this month. On the Pacific's ground as the
+ * landing rules read it (pacific.ts, `pacificGround`: the far side's first slice with its cities, and the coasts of
+ * the Bay of Bengal's seas), and no farther: Africa, Arabia, Iran, inner Russia, Afghanistan and inland India wait
+ * for the rule's general form, each with a record figure of its own (rider of 22:30Z, 1).
+ */
 export function takenGround(g: Game, nat: string): { ids: number[]; ask: number }[] {
   const C = OPEN.garrison;
   if (!C || !farOn(g)) return [];
-  const taken = (r: Region): boolean => shoreOf(r) === 2 && r.ctrl === nat && r.owner !== nat && !allied(g, nat, r.owner);
+  const taken = (r: Region): boolean => r.ctrl === nat && r.owner !== nat && pacificGround(g, r) && !allied(g, nat, r.owner);
   const seen = new Uint8Array(g.regions.length);
   const out: { ids: number[]; ask: number }[] = [];
   for (const r0 of g.regions) {
@@ -488,7 +515,8 @@ export function takenGround(g: Game, nat: string): { ids: number[]; ask: number 
     const ids = [r0.id];
     seen[r0.id] = 1;
     for (let i = 0; i < ids.length; i++) for (const j of g.regions[ids[i]].nb) if (!seen[j] && taken(g.regions[j])) { seen[j] = 1; ids.push(j); }
-    out.push({ ids, ask: C.each * ids.filter((id) => !drawsOn(g, nat, g.regions[id].owner)).length });
+    // (To two places, as the record's figures are.)
+    out.push({ ids, ask: Math.round(ids.reduce((s, id) => s + (drawsOn(g, nat, g.regions[id].owner) ? 0 : garrisonAsk(g, g.regions[id])), 0) * 100) / 100 });
   }
   return out;
 }
