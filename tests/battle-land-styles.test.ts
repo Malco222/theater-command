@@ -145,6 +145,48 @@ describe('the defence by its style (item 1b)', () => {
   });
 });
 
+describe('a bold defence\'s reserve follows the approach (ruling 239\'s rider, 03:20Z)', () => {
+  /** The plain order against this defence style on plains: how far its held blocks have walked by first contact, and their worst while held. */
+  const run = (ds: StyleId, seed: number) => {
+    const t0 = sampleTicket('plains', 1.3, { seed, style: { def: ds } });
+    const b = new LandBattle({ ...t0, att: { ...t0.att, human: true } });
+    b.ai.def = true;
+    const mine = b.units.filter((u) => u.side === 'att');
+    const foe = b.units.filter((u) => u.side === 'def').reduce((m, f) => (f.y < m.y ? f : m));
+    b.command({ do: 'attack', units: mine.map((u) => u.id), target: foe.id }, 'att');
+    const held = b.units.filter((u) => u.side === 'def' && u.reserve === 'held');
+    const str = held.map((u) => u.str);
+    let walked: number | null = null, far = 0, hit = 0, phase = false;
+    for (let i = 0; i < 100000 && !b.over; i++) {
+      b.step();
+      if (b.view().plan?.def?.phase === 'shift') phase = true;
+      held.forEach((u, k) => {
+        if (u.reserve !== 'held') return;
+        far = Math.max(far, Math.hypot(u.x - u.home[0], u.y - u.home[1]));
+        if (u.str < str[k] || u.engaged !== undefined) hit++;
+      });
+      if (walked === null && b.contactAt !== null) walked = Math.max(0, ...held.map((u) => Math.abs(u.x - u.home[0])));
+    }
+    return { held: held.length, walked: walked ?? 0, far, hit, phase, told: b.log.filter((e) => e.what === 'land:reserve' && e.text).length };
+  };
+  it('walks behind its line toward the attack before the line is struck, within its held ground, striking and struck by nothing', () => {
+    const rs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => run('bold', s * 7919 + 13));
+    expect(rs.every((r) => r.held > 0)).toBe(true);
+    expect(rs.filter((r) => r.walked >= 100).length).toBeGreaterThanOrEqual(6);
+    for (const r of rs) { expect(r.far).toBeLessThanOrEqual(LAND.hold.within); expect(r.hit).toBe(0); expect(r.told).toBeLessThanOrEqual(1); }
+    expect(rs.some((r) => r.phase && r.told === 1)).toBe(true);
+  });
+  it('a methodical or mass defence\'s reserve stands in the middle until its line is struck, as it always did', () => {
+    for (const ds of ['methodical', 'mass'] as const) for (const s of [1, 2, 3]) {
+      const r = run(ds, s * 7919 + 13);
+      expect(r.far, `${ds} ${s}`).toBe(0);
+      expect(r.phase || r.told > 0, `${ds} ${s}`).toBe(false);
+    }
+    expect(STYLES.methodical.defShift).toBe(0);
+    expect(STYLES.mass.defShift).toBe(0);
+  });
+});
+
 describe('tanks that leave their infantry pay on close ground (item 7; ruling 239(5))', () => {
   it('the figures are the card\'s own, never more (b418)', () => {
     const arms = (groundCard as unknown as { arms: { foot: string[]; alone: Record<string, number>; defence: { alone: Record<string, number> } } }).arms;

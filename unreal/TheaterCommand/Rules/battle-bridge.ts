@@ -77,6 +77,9 @@
 // there to be ground down (b496(1)): each of its blocks no longer fresh gives ground. Its order turns to 'withdraw', as
 // a block the player sends back, an event { what: 'land:gives' } says so ("1st Regiment, 4th Motorised gives ground."),
 // and it leaves the field as such a block does (state 'withdrawn'). Nothing new to draw.
+// A bold defence's reserve walking toward the player's attack (the 'shift' phase below) raises one event, once a battle,
+// { what: 'land:reserve', unit, side } at the player's own block it walks toward ("Movement behind their line, toward
+// your 3rd Armoured."; keyed to the player's block so it tells nothing the fog hides, b464; words the UI director's).
 // Where the attack card did not know the defence (b453), an enemy block none of the player's has fought yet, of a corps
 // the card did not identify (a corps it names shows whole from the start, b476(3)), comes as
 // { id, side, known: false, x, y, face, w, d, act, speed, cover, state } (b464(2)): draw a plain stand in its side's
@@ -279,6 +282,10 @@
 // effort and its foot waits at the start line, startY metres north (the foot down there, the shells on the main
 // stretch), 'assault' once it goes in (the fire lifts), 'hook' once its tanks wheel round the main target's flank; main
 // lists the enemy blocks of the main effort, the main target first (empty for a mass, which goes in all along the line).
+// A defence has one phase, 'shift' (ruling 239, rider 03:20Z): while its line is not yet struck, a bold defence walks its
+// held block sideways along its own row, behind its line, toward the stretch the attack is coming at, up to 290 m from
+// home; reserve lists those blocks (main empty, startY null). Draw the march behind the line for the blocks the view
+// carries (an unseen block is not in it); the phase ends when the line is struck and the block is sent as any reserve.
 // For pictures only: never its style's name, which the player is not told (ruling 239(4)). A gun block told to fire on
 // one block and stay put carries aim (that block's id): the computer's main effort, or the player's own order
 // { do: 'land:fire', units, target } (ruling 239(6); its words are the UI director's). A tank block paying for having
@@ -403,7 +410,7 @@ function hiddenOut(u: UnitBase): Record<string, unknown> {
 /** Each computer attack's plan as the 3D game shows it: phase, main stretch, start line; no style's name. Exported for the tests. */
 export function planOut(plan: NonNullable<BattleView['plan']>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const [s, p] of Object.entries(plan)) if (p?.phase) out[s] = { phase: p.phase, main: p.main ?? [], startY: p.startY ?? null };
+  for (const [s, p] of Object.entries(plan)) if (p?.phase) out[s] = { phase: p.phase, main: p.main ?? [], startY: p.startY ?? null, ...(p.reserve ? { reserve: p.reserve } : {}) };
   return out;
 }
 
