@@ -371,8 +371,15 @@ def in_opening(op, hull, c):
 # tail; the bubble hood on its metal rail, its glass widest at the rail and ending in a point on her spine, over a
 # windscreen with one flat armoured pane in front and a quarter pane each side; an open cockpit under it; the belly
 # scoop well forward, under her seat, and long, rising into her belly far aft; a straight-tapered wing; the tall fin
-# with its rudder hinged straight up and down, and the small fillet that runs it into her spine. Her natural metal,
-# the red band behind her spinner and the olive drab panel ahead of her windscreen are as they were.
+# with its rudder hinged straight up and down, and the small fillet that runs it into her spine.
+# Her paint (the art director, 2026-11-20, for the escort over Bremen in December 1943, where her silver was lost in the
+# haze): olive drab over neutral grey, as the first Mustangs in England came, with the theatre's white recognition
+# marks of that winter (told apart from the Bf 109): her spinner, and a band a foot wide round her nose straight behind
+# it; a band fifteen inches wide straight across each wing, inboard, its inner edge about fifteen feet in from the tip;
+# and one across each half of her tailplane, centred 33 inches in from its tip; top and bottom (`bands`, see
+# planes.battle_bands). No band round her fin: her group's own record names only the wings and tailplane. Later coats
+# by the month (planes.SCHEMES): natural metal from April 1944 with the same marks in black, then natural metal with
+# her red nose. The olive drab panel ahead of her windscreen stops at her nose band.
 #
 # Her hood, measured (x, the height of its sill where the glass begins, half its width there, the height of its top).
 _P51_BUBBLE = [(0.10, 0.41, 0.33, 0.845), (-0.06, 0.42, 0.335, 0.865), (-0.30, 0.435, 0.335, 0.89), (-0.55, 0.455, 0.325, 0.885),
@@ -404,7 +411,7 @@ MUSTANG = {
              (1.45, -0.135, 0.435, 0.64), (0.9, -0.13, 0.44, 0.665), (0.4, -0.12, 0.44, 0.67), (-0.4, -0.115, 0.44, 0.66), (-1.2, -0.09, 0.43, 0.62),
              (-1.72, -0.055, 0.40, 0.615), (-2.18, -0.02, 0.367, 0.59), (-2.81, 0.0, 0.317, 0.55), (-3.45, 0.025, 0.267, 0.505), (-4.08, 0.05, 0.225, 0.45),
              (-4.72, 0.04, 0.16, 0.34), (-5.19, 0.02, 0.11, 0.235), (-5.55, 0.0, 0.065, 0.145), (-5.85, -0.01, 0.03, 0.055), (-5.93, -0.01, 0.01, 0.02)],
-    "square": 2.3, "screw": 1.70, "blades": 4, "nose_back": 2.85, "spinner": 5,
+    "square": 2.3, "screw": 1.70, "blades": 4, "nose_back": 3.0, "spinner": 5,
     "hoods": hood_of([(_P51_SCREEN[0], 0.535, _P51_SCREEN[1], 0.01)] + [(x, sl, w, t - sl) for x, sl, w, t in _P51_BUBBLE]),
     "canopy": _p51_canopy,
     "opening": (0.12, -1.0, 54.0),                          # (her cockpit, open under the glass: from, to, and from 54 degrees round her up over her top)
@@ -417,8 +424,10 @@ MUSTANG = {
     #  the drawing has it, and running down under her tailplane to her tail cone; the fillet ahead of it is a scoop)
     "fin": [(0, -4.50, -5.85, 0.0, 0.13), (0, -4.40, -5.92, 0.25, 0.13), (0, -4.455, -5.88, 0.50, 0.13), (0, -4.575, -5.80, 0.82, 0.115),
             (0, -4.695, -5.72, 1.21, 0.095), (0, -4.80, -5.65, 1.52, 0.075), (0, -4.89, -5.61, 1.65, 0.055), (0, -5.02, -5.55, 1.71, 0.02)],
-    "patch": 0, "colours": {"upper": "B0B6BA", "upper2": "B0B6BA", "under": "9CA2A6", "nose": "B01818", "boss": "B01818"},
-    "stubs": (2.77, 1.87, 17.0), "well": (1.25, 0.42, 0.45), "well_in": True, "pitot": True, "glare": (3.2, 0.62, 0.17),
+    "patch": 0, "colours": {"upper": "4C4B35", "upper2": "4C4B35", "under": "84878A", "nose": "E9E7DF", "boss": "E9E7DF",
+                            "band": "E9E7DF", "band_under": "E9E7DF"},
+    "bands": {"wing": (1.07, 1.45), "tail": (0.97, 1.35)},
+    "stubs": (2.77, 1.87, 17.0), "well": (1.25, 0.42, 0.45), "well_in": True, "pitot": True, "glare": (3.0, 0.62, 0.17),
     "aileron": (0.60, 0.95, 0.74), "flap": (0.08, 0.60, 0.76),
     "guns": [(2.08, 0.05, 0.05, 0.02), (2.27, 0.05, 0.05, 0.02), (2.46, 0.05, 0.05, 0.02)],
     "scoops": [

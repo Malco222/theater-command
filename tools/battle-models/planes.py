@@ -1455,6 +1455,52 @@ def rudder_ends(rudder):
     return tuple(rudder[:1]) if rudder[1] >= 1.0 else tuple(rudder[:2])
 
 
+# Recognition bands (`bands` in her numbers; the art director, 2026-11-20, for the Mustang over Bremen in December 1943):
+# a band of her own paint, `band` (and `band_under` beneath her), straight across each wing, across each half of her
+# tailplane and round her fin and rudder, each as {"wing": (from, to) metres out from her middle line, "tail": (from,
+# to) the same, "fin": (from, to) metres up}. A hard paint, laid by face, so that its edges are clean: a ring of her
+# skin stands at each edge (battle_band_shares), and a point on an edge keeps her coat. Her nose band is her `nose`
+# paint (ahead of `nose_back`). Without `bands` she is built as before, and her file has no band paints.
+BAND_PAINTS = ("band", "band_under")
+BAND_EDGE = 0.003                                           # (a point this close to a band's edge, or on it, is her coat)
+
+
+def battle_band_shares(s, where, surface):
+    """The shares of a flying surface's span at which a ring must stand: each edge of her band on it."""
+    band = (s.get("bands") or {}).get(where)
+    if not band:
+        return ()
+    span = surface.tip - surface.root
+    return tuple((v - surface.root) / span for v in band)
+
+
+def battle_bands(s, coat):
+    """Her coat with her recognition bands laid over it (see BAND_PAINTS)."""
+    bands = s.get("bands")
+    if not bands:
+        return coat
+    Wing = game()["Wing"]
+    wing, tail, fin = Wing(s["wing"]), Wing(s["tail"]), Wing((s.get("fins") or [(s["fin"], 0.0)])[0][0], 1.0, True)
+    under_from = s.get("under_from", -0.3)
+
+    def inside(v, band):
+        return band[0] + BAND_EDGE < v < band[1] - BAND_EDGE
+
+    def across(surface, u, x):
+        u = min(max(u, surface.root), surface.tip)
+        return surface.trail(u) - 0.05 < x < surface.lead(u) + 0.05
+
+    def paint(p, n):
+        y = abs(p.y)
+        if ("wing" in bands and inside(y, bands["wing"]) and across(wing, y, p.x) and abs(p.z - wing.z(y)) < 0.4) or \
+           ("tail" in bands and inside(y, bands["tail"]) and across(tail, y, p.x) and abs(p.z - tail.z(y)) < 0.25) or \
+           ("fin" in bands and inside(p.z, bands["fin"]) and across(fin, p.z, p.x) and y < 0.2):
+            return "band_under" if n.z < under_from else "band"
+        return coat(p, n)
+    paint.blend = coat.blend
+    return paint
+
+
 def head_numbers(body, lip, heads):
     """A machine's `heads` in full: (how many in a row, how many rows, how far out from her middle line their ring is,
     each head's radius, how far the front row stands back behind her cowling's lip). All but the first may be left
@@ -1627,13 +1673,25 @@ def battle_dome(parts, frames, at, radii, skirt, window=None):
         parts.strip(frames, pts, [Vector((math.cos(a) * shrink, across, math.sin(a) * shrink)).normalized() for a in arc], 0.016, 0.01)
 
 
+# Her recognition bands (battle_bands): her coat with them laid over it, and a ring of each surface at each band's edge.
+BANDS = [
+    ("    coat = coat_of(s)\n", "    coat = battle_bands(s, coat_of(s))\n"),
+    ("battle_us(wing, BATTLE['wing'] if fine else 1.2, s.get('flap', BATTLE_FLAP)[:2] + s.get('aileron', BATTLE_AILERON)[:2])",
+     "battle_us(wing, BATTLE['wing'] if fine else 1.2, s.get('flap', BATTLE_FLAP)[:2] + s.get('aileron', BATTLE_AILERON)[:2] + battle_band_shares(s, 'wing', wing))"),
+    ("battle_us(tail, BATTLE['tail'] if fine else 1.0, s.get('elevator', BATTLE_ELEVATOR)[:2])",
+     "battle_us(tail, BATTLE['tail'] if fine else 1.0, tuple(s.get('elevator', BATTLE_ELEVATOR)[:2]) + battle_band_shares(s, 'tail', tail))"),
+    ("battle_us(fin, BATTLE['fin'] if fine else 0.8, rudder_ends(s.get('rudder', BATTLE_RUDDER)))",
+     "battle_us(fin, BATTLE['fin'] if fine else 0.8, rudder_ends(s.get('rudder', BATTLE_RUDDER)) + battle_band_shares(s, 'fin', fin))"),
+]
+
+
 def game():
     """The game's own aircraft sculptor, loaded without running it, at a battle's grain."""
     global _G
     if _G is None:
         path = os.path.join(HERE, "game", "build_plane.py")
         src = open(path).read().split("\ndef main():")[0]
-        for old, new in FINER + JETS + GRADED + NOSES + GILLS + CABIN + OWN + fighters.CANOPY:
+        for old, new in FINER + JETS + GRADED + NOSES + GILLS + CABIN + OWN + fighters.CANOPY + BANDS:
             if src.count(old) != 1:
                 raise ValueError("the game's sculptor has changed here: " + old)
             src = src.replace(old, new)
@@ -1641,10 +1699,14 @@ def game():
               "BATTLE_FLAP": FLAP, "BATTLE_AILERON": AILERON, "BATTLE_ELEVATOR": ELEVATOR, "BATTLE_RUDDER": RUDDER, "LINE_DRAWN": LINE,
               "battle_cabin_paint": cabin_paint, "battle_cabin_frames": cabin_frames, "battle_cabin_body": fitout.cabin_body, "battle_nacelle": fitout.nacelle_of,
               "battle_canopy": fighters.canopy, "battle_glare": fighters.glare, "rudder_ends": rudder_ends, "battle_heads": battle_heads,
-              "battle_recess": battle_recess, "battle_dome": battle_dome, "battle_hinge": battle_hinge}
+              "battle_recess": battle_recess, "battle_dome": battle_dome, "battle_hinge": battle_hinge,
+              "battle_bands": battle_bands, "battle_band_shares": battle_band_shares}
         exec(compile(src, path, "exec"), _G)
         _G["PAINTS"]["torpedo"] = len(_G["PAINTS"])        # (a paint of a battle's own: what a torpedo bomber carries)
         _G["COMMON"]["torpedo"] = "6C7174"
+        for k in BAND_PAINTS:                                # (a machine's recognition bands: see battle_bands; white unless her numbers say)
+            _G["PAINTS"][k] = len(_G["PAINTS"])
+            _G["COMMON"][k] = "E9E7DF"
         _G["PLANES"].update(EXTRA_PLANES)
     return _G
 
@@ -1665,6 +1727,7 @@ ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "
 _THREE_BLUES = {"upper": "2A3850", "upper2": "55708C", "under": "D9DAD3", "nose": "2A3850"}
 _SEA_BLUE = {"upper": "1E2A40", "upper2": "1E2A40", "under": "1E2A40", "nose": "1E2A40", "finish": "gloss"}     # (the war's one gloss coat)
 _DARK_GREEN = {"upper": "2F4236", "upper2": "2F4236", "under": "A3A69C"}
+_BARE_MUSTANG = {"upper": "B0B6BA", "upper2": "B0B6BA", "under": "9CA2A6"}
 SCHEMES = {
     "Hellcat": [("1944-07", "overall sea blue", _SEA_BLUE)],
     "Dauntless": [("1943-02", "three blues over white", _THREE_BLUES), ("1944-07", "overall sea blue", _SEA_BLUE)],
@@ -1672,6 +1735,11 @@ SCHEMES = {
     "Zero": [("1942-07", "dark green over grey", _DARK_GREEN)],
     "Kate": [("1942-07", "dark green over grey", _DARK_GREEN)],
     "Val": [("1942-07", "dark green over grey", _DARK_GREEN)],
+    # (the Mustang: olive drab over grey with white bands as she first flew from England, fighters.MUSTANG; natural metal
+    #  from April 1944, her spinner, nose band and bands then black, as the theatre painted them on bare metal; from
+    #  December 1944, the bands gone, her nose red)
+    "Mustang": [("1944-04", "natural metal, black bands", dict(_BARE_MUSTANG, nose="1C1C1C", boss="1C1C1C", band="1C1C1C", band_under="1C1C1C")),
+                ("1944-12", "natural metal", dict(_BARE_MUSTANG, nose="B01818", boss="B01818", band=_BARE_MUSTANG["upper"], band_under=_BARE_MUSTANG["under"]))],
 }
 
 
@@ -1738,7 +1806,7 @@ def paints_of(G, s, colours=None):
     """Every paint of a machine, by name, from her numbers (or from them with some colours changed: a later coat)."""
     colours = {k: v for k, v in (colours or {}).items() if k != "finish"}
     c = G["colours_of"](dict(s, colours=dict(s["colours"], **colours)) if colours else s)
-    paints = {k: c.get(k, "808080") for k in G["PAINTS"]}
+    paints = {k: c.get(k, "808080") for k in G["PAINTS"] if k not in BAND_PAINTS}
     paints["torn"] = "2B2825"
     paints["blur"] = "3A3A36"
     paints["blur_tip"] = "D9B224"
@@ -1750,6 +1818,8 @@ def paints_of(G, s, colours=None):
         paints["line"] = rigid.mix_hex(paints["line"], paints["upper"], 0.3)      # (scribed lines seen close: finer and softer than the map's)
     paints.update(fitout.paints_for(s))
     paints.update(fitout.rivet_paints(paints))
+    if s.get("bands"):                                       # (her recognition bands, last: no other machine's paints move)
+        paints.update({k: c.get(k, "E9E7DF") for k in BAND_PAINTS})
     return paints, c
 
 
