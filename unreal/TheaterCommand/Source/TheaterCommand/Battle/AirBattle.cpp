@@ -54,6 +54,7 @@
 #include "Widgets/Layout/SDPIScaler.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <memory>
 
@@ -62,6 +63,21 @@ namespace AirParts
 	static FString Wide(const std::string& Text)
 	{
 		return FString(UTF8_TO_TCHAR(Text.c_str()));
+	}
+
+	/** The effects kit's nation rows (us, gb, de, it, jp, su, agreed with the effects thread 17:34Z) from a
+	 * recording's nation (USA, UK, GER, ITA, JAP, SOV): empty for any other, which the kit draws in its default. */
+	static FString KitNation(const std::string& Nation)
+	{
+		std::string Up;
+		for (const char Ch : Nation) Up += static_cast<char>(std::toupper(static_cast<unsigned char>(Ch)));
+		if (Up == "USA" || Up == "US") return TEXT("us");
+		if (Up == "UK" || Up == "GBR" || Up == "GB" || Up == "ENG") return TEXT("gb");
+		if (Up == "GER" || Up == "DE") return TEXT("de");
+		if (Up == "ITA" || Up == "IT") return TEXT("it");
+		if (Up == "JAP" || Up == "JPN" || Up == "JP") return TEXT("jp");
+		if (Up == "SOV" || Up == "USSR" || Up == "SU") return TEXT("su");
+		return FString();
 	}
 
 	static std::string Narrow(const FString& Text)
@@ -99,7 +115,7 @@ namespace AirParts
 
 	/** A gun firing, with its aircraft's nation where the kit takes it (the art director's G2, 15:38Z: Allied streams
 	 * red-orange, German and Italian pale yellow-white, Japanese near white, Soviet green; the effects thread's call,
-	 * the nation last, as the recordings give it: us, gb, de, it, jp, su). An older kit draws its one colour. */
+	 * the nation last, as KitNation names it: us, gb, de, it, jp, su). An older kit draws its one colour. */
 	template <typename TKit>
 	static void AirGun(TKit* Kit, double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& Carry, const FString& Kind, float Rate, float Mv, const FString& Nation)
 	{
@@ -137,6 +153,9 @@ namespace AirParts
 		}
 		return false;
 	}
+
+	/** The air battle's haze colour (the fog's inscattering, set by HideTheTable; the haze band takes it too). */
+	static const FLinearColor AirHazeInk(0.55f, 0.66f, 0.78f);
 
 	/** A haze's colour, by the name this engine gives it. */
 	template <typename TFog>
@@ -522,6 +541,8 @@ bool AAirBattle::Open(const FString& Why)
 		}
 	}
 	LaySky();
+	LayZenith();
+	LayHazeBand();
 	Small = NewObject<UProceduralMeshComponent>(this, TEXT("AirSmallThings"));
 	Small->SetupAttachment(Root);
 	Small->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -582,7 +603,7 @@ bool AAirBattle::Open(const FString& Why)
 			{ TEXT("02-the-meeting"), 6.0, false, false, false },  // (after they meet)
 			{ TEXT("03-ride-a-fighter"), 22.0, true, false, false },
 			{ TEXT("04-the-thick-of-it"), 45.0, false, false, false },
-			{ TEXT("05-ride-again"), 70.0, true, false, false },
+			{ TEXT("05-ride-again"), 70.0, true, false, false, true }, // (riding the other side)
 			{ TEXT("06-the-ships"), 5.0, false, true, false },     // (after the first ship goes down)
 			{ TEXT("07-the-fight-goes-on"), 120.0, false, false, false },
 		};
@@ -825,7 +846,7 @@ void AAirBattle::HideTheTable()
 				Fog->SetFogDensity(0.00045f);
 				Fog->SetFogHeightFalloff(0.006f);
 				Fog->SetFogMaxOpacity(0.8f);
-				Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.66f, 0.78f));
+				Fog->SetFogInscatteringColor(AirParts::AirHazeInk);
 				// (the 3D builder, 19 November 2026: the art director's ruling on the haze, thin under the eye)
 				BattleLook::AirHaze(*Fog, UnitsPerMetre);
 			}
@@ -1215,6 +1236,272 @@ void AAirBattle::LaySky()
 	}
 }
 
+void AAirBattle::LayZenith()
+{
+	FAirBattleState& S = *State;
+	FString Asked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterZenith="), Asked, false))
+	{
+		TArray<FString> Parts;
+		Asked.ParseIntoArray(Parts, TEXT(","), false);
+		double* const Into[] = { &ZenithStrength, &ZenithFrom };
+		for (int32 K = 0; K < Parts.Num() && K < 2; ++K)
+		{
+			if (!Parts[K].TrimStartAndEnd().IsEmpty())
+			{
+				*Into[K] = FCString::Atod(*Parts[K]);
+			}
+		}
+	}
+	ZenithStrength = FMath::Clamp(ZenithStrength, 0.0, 3.0);
+	ZenithFrom = FMath::Clamp(ZenithFrom, 0.0, 80.0);
+	// (by night the sky is the night's; with the battle's own sky left out, the engine's is not lifted)
+	if (S.Board.bNight || ZenithStrength <= 0.0 || FParse::Param(FCommandLine::Get(), TEXT("TheaterNoAirSky")))
+	{
+		return;
+	}
+	UMaterialInterface* GlowMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Glow.M_Glow"));
+	if (!GlowMaterial)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_Glow is missing (run Tools/build_content.sh): the sky looking up is the engine's alone."));
+		return;
+	}
+	// A bowl 9 km round the eye, inside the haze's start (15 km), so no haze lies on it, and past every cloud and
+	// aircraft near enough to matter: rings from ZenithFrom up, 48 a ring. Its colour is the lift's tint, its alpha
+	// how much of it: none at ZenithFrom, all of it at the zenith, rising as the sky's own blue thins (the eye's path
+	// through the air up there is shortest). The tint from the battle's grade worked back (contrast 1.42 about 0.18,
+	// red 1.08 and blue 0.87, colour kept 0.55 to 0.72): to bring the zenith from (22, 27, 37) to about (55, 105, 185)
+	// it wants about 0.01, 0.09 and 0.35 more light in red, green and blue, before the grade.
+	const double Radius = 9000.0 * UnitsPerMetre;
+	const int32 Around = 48;
+	const double Rings[] = { 0.0, 0.08, 0.18, 0.3, 0.45, 0.6, 0.75, 0.88, 1.0 };
+	const int32 RingCount = UE_ARRAY_COUNT(Rings);
+	const double Low = FMath::DegreesToRadians(ZenithFrom);
+	TArray<FVector> Points;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FColor> Colours;
+	for (int32 R = 0; R < RingCount; ++R)
+	{
+		const double Up = Low + (UE_DOUBLE_HALF_PI - Low) * Rings[R];
+		const double Rise = (FMath::Sin(Up) - FMath::Sin(Low)) / FMath::Max(1e-6, 1.0 - FMath::Sin(Low));
+		const uint8 Share = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(255.0 * FMath::Pow(FMath::Clamp(Rise, 0.0, 1.0), 1.5)), 0, 255));
+		const int32 Count = R == RingCount - 1 ? 1 : Around;
+		for (int32 K = 0; K < Count; ++K)
+		{
+			const double Round = 2.0 * UE_DOUBLE_PI * K / Around;
+			const FVector Way(FMath::Cos(Up) * FMath::Cos(Round), FMath::Cos(Up) * FMath::Sin(Round), FMath::Sin(Up));
+			Points.Add(Way * Radius);
+			Normals.Add(-Way);
+			Colours.Add(FColor(6, 64, 255, Share));
+		}
+	}
+	for (int32 R = 0; R + 1 < RingCount; ++R)
+	{
+		const int32 Here = R * Around;
+		const int32 Next = (R + 1) * Around;
+		for (int32 K = 0; K < Around; ++K)
+		{
+			const int32 K2 = (K + 1) % Around;
+			if (R + 1 == RingCount - 1)
+			{
+				Triangles.Append({ Here + K, Here + K2, Next });
+			}
+			else
+			{
+				Triangles.Append({ Here + K, Here + K2, Next + K2, Here + K, Next + K2, Next + K });
+			}
+		}
+	}
+	Zenith = NewObject<UProceduralMeshComponent>(this, TEXT("AirZenith"));
+	Zenith->bUseAsyncCooking = false;
+	Zenith->SetupAttachment(Root);
+	Zenith->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Zenith->SetCastShadow(false);
+	// (behind every other see-through thing: the cloud shadows are at -40, the clouds and kits from -30 up)
+	Zenith->SetTranslucentSortPriority(-50);
+	Zenith->RegisterComponent();
+	Zenith->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+	ZenithInk = UMaterialInstanceDynamic::Create(GlowMaterial, this);
+	ZenithInk->SetScalarParameterValue(TEXT("Strength"), 0.0f);
+	Zenith->SetMaterial(0, ZenithInk);
+	ZenithShown = -1.0;
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the sky looking up lifted toward a deep blue, %.2f at 7,500 m, from %.0f degrees up."), ZenithStrength, ZenithFrom);
+}
+
+void AAirBattle::ZenithAt(const FVector& EyeWorld)
+{
+	if (!Zenith || !ZenithInk)
+	{
+		return;
+	}
+	Zenith->SetWorldLocation(EyeWorld);
+	// (the air over the eye thins as it climbs, the engine's sky looking up darkening with it: the lift is none at the
+	// sea, all of ZenithStrength at a B-17's 7,500 m, a little more higher still)
+	const double High = FMath::Max(0.0, EyeWorld.Z / UnitsPerMetre);
+	const double Want = ZenithStrength * FMath::Min(1.3, (1.0 - FMath::Exp(-High / 8000.0)) / (1.0 - FMath::Exp(-7500.0 / 8000.0)));
+	if (FMath::Abs(Want - ZenithShown) > 0.002)
+	{
+		ZenithShown = Want;
+		ZenithInk->SetScalarParameterValue(TEXT("Strength"), static_cast<float>(Want));
+	}
+}
+
+void AAirBattle::LayHazeBand()
+{
+	FAirBattleState& S = *State;
+	FString Asked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterHazeBand="), Asked, false))
+	{
+		TArray<FString> Parts;
+		Asked.ParseIntoArray(Parts, TEXT(","), false);
+		double* const Into[] = { &HazeBandStrength, &HazeBandFrom, &HazeBandFull };
+		for (int32 K = 0; K < Parts.Num() && K < 3; ++K)
+		{
+			if (!Parts[K].TrimStartAndEnd().IsEmpty())
+			{
+				*Into[K] = FCString::Atod(*Parts[K]);
+			}
+		}
+	}
+	HazeBandStrength = FMath::Clamp(HazeBandStrength, 0.0, 3.0);
+	HazeBandFrom = FMath::Max(0.0, HazeBandFrom);
+	HazeBandFull = FMath::Max(HazeBandFrom + 1.0, HazeBandFull);
+	// (the sea's square: the stage's, 200 km each way from the board's target (AirStage::BuildSea), or with no stage
+	// the scene's own, 300 km (LayGround); both centred on the target)
+	SeaMiddle = World(S.Board.TargetX, S.Board.TargetY, 0.0);
+	SeaHalf = (Stage && Stage->IsRaised() ? 200000.0 : 300000.0) * UnitsPerMetre;
+	if (S.Board.bNight || HazeBandStrength <= 0.0)
+	{
+		return;
+	}
+	UMaterialInterface* Ink = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight"));
+	if (!Ink)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_Highlight is missing (run Tools/build_content.sh): no haze band over the horizon."));
+		return;
+	}
+	HazeBand = NewObject<UProceduralMeshComponent>(this, TEXT("AirHazeBand"));
+	HazeBand->bUseAsyncCooking = false;
+	HazeBand->SetupAttachment(Root);
+	HazeBand->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HazeBand->SetCastShadow(false);
+	// (behind every other see-through thing but the zenith's bowl, -50: the cloud shadows are at -40, the clouds and
+	// kits from -30 up, so a cloud far out still draws over it)
+	HazeBand->SetTranslucentSortPriority(-48);
+	HazeBand->RegisterComponent();
+	HazeBandInk = UMaterialInstanceDynamic::Create(Ink, this);
+	HazeBandInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+	HazeBandInk->SetVectorParameterValue(TEXT("Tint"), AirParts::AirHazeInk * static_cast<float>(HazeBandStrength));
+	HazeBandInk->SetScalarParameterValue(TEXT("Opacity"), 0.0f);
+	HazeBandLaidAt = FVector(1e30, 1e30, 1e30);
+	HazeBandShown = -1.0;
+	UE_LOG(LogTheater, Display, TEXT("Air battle: a haze band over the sea's far edge (the sea %.0f km each way), %.2f of the haze's brightness, from an eye %.0f m up, all of it from %.0f m."),
+		SeaHalf / UnitsPerMetre / 1000.0, HazeBandStrength, HazeBandFrom, HazeBandFull);
+}
+
+void AAirBattle::HazeBandAt(const FVector& EyeWorld)
+{
+	if (!HazeBand || !HazeBandInk)
+	{
+		return;
+	}
+	const double U = UnitsPerMetre;
+	const double High = EyeWorld.Z / U;
+	const double Want = FMath::Clamp((High - HazeBandFrom) / (HazeBandFull - HazeBandFrom), 0.0, 1.0);
+	if (FMath::Abs(Want - HazeBandShown) > 0.004)
+	{
+		HazeBandShown = Want;
+		HazeBandInk->SetScalarParameterValue(TEXT("Opacity"), static_cast<float>(Want));
+		HazeBand->SetVisibility(Want > 0.0);
+	}
+	if (Want <= 0.0)
+	{
+		return;
+	}
+	// (laid again when the eye has gone 250 m along or 100 m up or down: the edge's angle under the eye moves little)
+	const FVector Moved = EyeWorld - HazeBandLaidAt;
+	if (FVector2D(Moved.X, Moved.Y).Size() < 250.0 * U && FMath::Abs(Moved.Z) < 100.0 * U)
+	{
+		return;
+	}
+	HazeBandLaidAt = EyeWorld;
+	HazeBand->SetWorldLocation(FVector(EyeWorld.X, EyeWorld.Y, 0.0));
+	// Column by column round the eye: how far the sea's edge lies that way, and so how far under the level it shows
+	// (Edge). The band stands at 0.6 of that distance, from the sea (Foot, under the edge, none of it there) up through
+	// the edge (all of it from just under it to just over it) and thinning to none 7 degrees above it.
+	struct FRow
+	{
+		double Over;  // degrees over the edge's angle (the first two rows are placed by the foot instead)
+		uint8 Share;  // how much of the band
+	};
+	static const FRow Rows[] = { { 0.0, 0 }, { 0.0, 150 }, { -0.1, 255 }, { 0.4, 255 }, { 1.2, 180 }, { 2.2, 108 }, { 3.4, 52 }, { 5.0, 16 }, { 7.0, 0 } };
+	const int32 RowCount = UE_ARRAY_COUNT(Rows);
+	const int32 Around = 64;
+	const double Ex = EyeWorld.X - SeaMiddle.X, Ey = EyeWorld.Y - SeaMiddle.Y;
+	TArray<FVector> Points;
+	TArray<FColor> Colours;
+	Points.Reserve(Around * RowCount);
+	Colours.Reserve(Around * RowCount);
+	for (int32 K = 0; K < Around; ++K)
+	{
+		const double Round = 2.0 * UE_DOUBLE_PI * K / Around;
+		const double Dx = FMath::Cos(Round), Dy = FMath::Sin(Round);
+		// (the way out of the square from the eye: the nearer of its two sides that way)
+		double Out = 1e18;
+		if (FMath::Abs(Dx) > 1e-9)
+		{
+			Out = FMath::Min(Out, ((Dx > 0.0 ? SeaHalf : -SeaHalf) - Ex) / Dx);
+		}
+		if (FMath::Abs(Dy) > 1e-9)
+		{
+			Out = FMath::Min(Out, ((Dy > 0.0 ? SeaHalf : -SeaHalf) - Ey) / Dy);
+		}
+		const double Far = FMath::Max(Out, 20000.0 * U) / U; // metres
+		const double Stand = 0.6 * Far;
+		const double Edge = -FMath::Atan2(FMath::Max(High, 1.0), Far);
+		const double Foot = -FMath::Atan2(FMath::Max(High, 1.0), Stand);
+		for (int32 R = 0; R < RowCount; ++R)
+		{
+			double Angle = Edge + FMath::DegreesToRadians(Rows[R].Over);
+			if (R == 0)
+			{
+				Angle = Foot;
+			}
+			else if (R == 1)
+			{
+				Angle = 0.5 * (Foot + Edge + FMath::DegreesToRadians(Rows[2].Over));
+			}
+			const double Z = FMath::Max(0.0, High + Stand * FMath::Tan(Angle));
+			Points.Add(FVector(Dx * Stand * U, Dy * Stand * U, Z * U));
+			Colours.Add(FColor(255, 255, 255, Rows[R].Share));
+		}
+	}
+	if (HazeBand->GetNumSections() == 0)
+	{
+		TArray<int32> Triangles;
+		Triangles.Reserve(Around * (RowCount - 1) * 12);
+		for (int32 K = 0; K < Around; ++K)
+		{
+			const int32 K2 = (K + 1) % Around;
+			for (int32 R = 0; R + 1 < RowCount; ++R)
+			{
+				const int32 A = K * RowCount + R, B = K2 * RowCount + R, C = K2 * RowCount + R + 1, D = K * RowCount + R + 1;
+				// (both ways round: the band is seen from inside, whichever way the engine takes as its face)
+				Triangles.Append({ A, B, C, A, C, D, A, C, B, A, D, C });
+			}
+		}
+		TArray<FVector> Normals;
+		Normals.Init(FVector::UpVector, Points.Num());
+		HazeBand->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+		HazeBand->SetMaterial(0, HazeBandInk);
+	}
+	else
+	{
+		HazeBand->UpdateMeshSection(0, Points, TArray<FVector>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+	}
+}
+
 void AAirBattle::DrawSky()
 {
 	if (!Clouds || !Eye || !State.IsValid())
@@ -1550,6 +1837,11 @@ void AAirBattle::Tick(float DeltaSeconds)
 	AimEye(Real);
 	Draw(Real);
 	DrawSky();
+	if (Eye)
+	{
+		ZenithAt(Eye->GetActorLocation());
+		HazeBandAt(Eye->GetActorLocation());
+	}
 	if (Effects && Eye)
 	{
 		int32 ViewW = 1600;
@@ -2029,10 +2321,8 @@ void AAirBattle::Draw(double Real)
 	for (const AirShow::PlaneOut& P : S.Show.Planes())
 	{
 		Seen.Add(P.Key);
-		if (!GunNations.Contains(P.Key))
-		{
-			GunNations.Add(P.Key, AirParts::Wide(P.Nation));
-		}
+		// (laid each frame, so an aircraft's nation is always this battle's: the pre-check on round 16)
+		GunNations.Add(P.Key, AirParts::KitNation(P.Nation));
 		TObjectPtr<UProceduralMeshComponent>* Have = Planes.Find(P.Key);
 		if (!P.bShown)
 		{
@@ -2609,17 +2899,20 @@ void AAirBattle::AimEye(double Real)
 			}
 			if (Next.Plane < 0)
 			{
-				// (his own side's aircraft first: the picture rides with his men; the other side's when his have none up)
+				// (his own side's aircraft first: the picture rides with his men; the other side's when his have none up,
+				// or when a picture run's ride asks for theirs)
 				std::vector<AirShow::PlaneOut> Ours;
 				for (const AirShow::PlaneOut& P : Out)
 				{
-					if (P.Side == S.Desk.MySideIndex())
+					if ((P.Side == S.Desk.MySideIndex()) != bRideOther)
 					{
 						Ours.push_back(P);
 					}
 				}
-				Next = AirDesk::Choose(Ours, std::vector<int>(), S.Show.Eye, bLost ? -1 : S.Subject.Plane);
-				if (Next.Plane < 0 && !bLost && Rider->Side == S.Desk.MySideIndex())
+				// (a fighter closing on what it fights, so that is in the picture too; on a bomber, one coming at it
+				// head-on most of all: Brian on the Bremen film, "where are the german fighters?")
+				Next = AirDesk::ChooseRide(Ours, Out, S.Show.Eye, bLost ? -1 : S.Subject.Plane);
+				if (Next.Plane < 0 && !bLost && (Rider->Side == S.Desk.MySideIndex()) != bRideOther)
 				{
 					S.Subject.Since = 0.0; // (his only aircraft up: the picture stays with it)
 				}
@@ -2811,34 +3104,48 @@ void AAirBattle::AimEye(double Real)
 					}
 					return Least;
 				};
-				FVector Out = Abeam;
-				double Best = -1e9;
-				for (const double Turn : { 55.0, -55.0 })
+				// (the ways the eye may stand, upwind of the row and off the wind, best first: the one that shows her
+				// broadside and is lit from behind the eye, then the others, nearer the wind and farther off it)
+				TArray<TPair<double, FVector>> Ways;
+				for (const double Turn : { 55.0, -55.0, 35.0, -35.0, 75.0, -75.0 })
 				{
 					const FVector Way = (-Downwind).RotateAngleAxis(Turn, FVector::UpVector);
-					const double Score = FMath::Abs(FVector::DotProduct(Way, Abeam)) + 0.25 * FMath::Max(0.0, FVector::DotProduct(Way, Sun));
-					if (Score > Best)
-					{
-						Best = Score;
-						Out = Way;
-					}
+					const double Score = FMath::Abs(FVector::DotProduct(Way, Abeam)) + 0.25 * FMath::Max(0.0, FVector::DotProduct(Way, Sun)) - 0.004 * (FMath::Abs(Turn) - 55.0) * (FMath::Abs(Turn) - 55.0) / 20.0;
+					Ways.Add(TPair<double, FVector>(Score, Way));
 				}
-				ShipsEyeHeading = (-Out).Rotation().Yaw;
+				Ways.Sort([](const TPair<double, FVector>& A, const TPair<double, FVector>& B) { return A.Key > B.Key; });
+				// (clear of every column by 700 m, or by 0.35 of the eye's way to her, whichever is more: at 300 m on build
+				// 1778 a near column out of focus still filled 45 per cent of the picture, the art director 17:54Z: 60 per
+				// cent of it clear, no column inside the near eye's fade. The nearest eye that is, any of the ways)
+				ShipsEyeHeading = (-Ways[0].Value).Rotation().Yaw;
 				ShipsEyeAway = 1600.0;
 				ShipsEyeDown = -24.0;
-				for (int32 Step = 0; Step <= 12; ++Step)
+				bool bFound = false;
+				for (int32 Step = 0; Step <= 16 && !bFound; ++Step)
 				{
-					const double Away_ = 1600.0 + Step * 250.0, Down_ = -24.0 - Step * 1.5;
-					ShipsEyeAway = Away_;
-					ShipsEyeDown = Down_;
-					const FVector Eye_ = ShipWorld - FRotator(Down_, ShipsEyeHeading, 0.0).Vector() * Away_ * U;
-					if (Clear(Eye_) >= 300.0)
+					const double Away_ = 1600.0 + Step * 250.0, Down_ = -24.0 - Step * 1.25;
+					for (const TPair<double, FVector>& Way : Ways)
 					{
-						break;
+						const double Heading_ = (-Way.Value).Rotation().Yaw;
+						const FVector Eye_ = ShipWorld - FRotator(Down_, Heading_, 0.0).Vector() * Away_ * U;
+						if (Clear(Eye_) >= FMath::Max(700.0, 0.35 * Away_))
+						{
+							ShipsEyeHeading = Heading_;
+							ShipsEyeAway = Away_;
+							ShipsEyeDown = Down_;
+							bFound = true;
+							break;
+						}
 					}
 				}
-				UE_LOG(LogTheater, Display, TEXT("Air battle: the ships picture in harbour, %d columns kept clear: %.0f m off, %.1f degrees down"), Feet.Num(), ShipsEyeAway,
-					-ShipsEyeDown);
+				if (!bFound)
+				{
+					// (none clear: the farthest and steepest of the best way)
+					ShipsEyeAway = 1600.0 + 16 * 250.0;
+					ShipsEyeDown = -24.0 - 16 * 1.25;
+				}
+				UE_LOG(LogTheater, Display, TEXT("Air battle: the ships picture in harbour, %d columns %s: %.0f m off, %.1f degrees down, heading %.0f"), Feet.Num(),
+					bFound ? TEXT("kept clear") : TEXT("not all kept clear"), ShipsEyeAway, -ShipsEyeDown, ShipsEyeHeading);
 			}
 			Away = ShipsEyeAway;
 			Down = ShipsEyeDown;
@@ -3058,6 +3365,7 @@ void AAirBattle::Press(const FString& Button)
 	if (Button == TEXT("ride"))
 	{
 		S.bClose = !S.bClose;
+		bRideOther = bRideOther && S.bClose; // (a ride taken off ends a ride of the other side's; the next is his own)
 		S.Subject = AirDesk::Subject();
 		CloseEye = FVector::ZeroVector;
 		return;
@@ -3526,6 +3834,7 @@ void AAirBattle::TakeShots(double Real)
 		}
 		if (Shot.bClose && !S.bClose && RealT >= Due - 1.5)
 		{
+			bRideOther = Shot.bOther;
 			Press(TEXT("ride"));
 		}
 		if (Shot.bShips && ShipsLook < 0 && FirstSunk >= 0 && RealT >= Due - 2.0)

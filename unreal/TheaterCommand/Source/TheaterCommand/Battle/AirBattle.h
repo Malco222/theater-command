@@ -274,7 +274,9 @@ private:
 
 	// The picture run (-TheaterAirBattleShots).
 	FString ShotFolder;
-	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; };
+	/** bOther: a ride picture that rides the other side's aircraft (the art director on the Bremen film, build 1778:
+	 * both rides fell on a Mustang and the German fighters were small in every frame). */
+	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; };
 	TArray<FShot> Shots;
 	double MetRealT = -1.0, ShipRealT = -1.0;
 	int32 ShotsTaken = 0;
@@ -282,6 +284,8 @@ private:
 	/** Real seconds a ride picture's ride is held after it ("-TheaterAirBattleRideHold=40", 0.5 to 300; a film stays
 	 * behind the fighter through the fight). */
 	double RideHold = 0.5;
+	/** The close view rides the other side's aircraft, not his own (a picture run's ride picture with bOther). */
+	bool bRideOther = false;
 	bool bCardShot = false;
 
 	bool Open(const FString& Why);
@@ -293,6 +297,43 @@ private:
 	/** The clouds moved with the wind and, when the eye has moved enough, turned to it again; the see-through things
 	 * put in order for the eye (over the clouds or under them). */
 	void DrawSky();
+	/** The sky's deep blue looking up (LayZenith, ZenithAt). */
+	void LayZenith();
+	void ZenithAt(const FVector& EyeWorld);
+	/** Light added to the sky above 25 degrees, deepest blue at the zenith, on a bowl round the eye drawn behind every
+	 * other see-through thing (M_Glow): high up, under little air, the engine's sky looking up went near black through
+	 * the battle's grade (the art director on the Bremen film, build 1778: luma 29; her mark a deep blue at 90 to 110).
+	 * Its strength grows with the eye's height as the air over it thins. "-TheaterZenith=0.3,25" tries another strength
+	 * and lowest angle (0 turns it off). */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> Zenith;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> ZenithInk;
+	double ZenithStrength = 0.3, ZenithFrom = 25.0, ZenithShown = -1.0;
+	/** The haze band over the horizon (LayHazeBand, HazeBandAt). */
+	void LayHazeBand();
+	void HazeBandAt(const FVector& EyeWorld);
+	/**
+	 * A band of haze standing round the eye between it and the sea's far edge, over the line where the edge meets the
+	 * sky, drawn behind every other see-through thing (M_Highlight, the haze's own colour, the height fog over it as
+	 * over the sea behind it): high up the sea's flat sheet ends short of the round world's horizon, and from bomber
+	 * height its far edge showed as a hard straight line across the sky's foot, the hazed sea below it lighter than
+	 * the thin-aired sky above (the art director on build 1778's Bremen 01: the haze should swallow the horizon). It
+	 * comes in from none below the edge to all of it just over it and thins away 7 degrees up: the pale band low on the
+	 * horizon of the trade-cumulus brief (item 3), now that the haze lies over the sky at a third (BattleLook's
+	 * AirSkyBegin). It is none with the eye under HazeBandFrom metres, all of it over HazeBandFull (by default all of
+	 * it at any height). "-TheaterHazeBand=1,0,1" tries another strength (the colour's brightness against the haze's;
+	 * 0 turns it off) and heights.
+	 */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> HazeBand;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> HazeBandInk;
+	double HazeBandStrength = 1.0, HazeBandFrom = 0.0, HazeBandFull = 1.0, HazeBandShown = -1.0;
+	/** Where the band was laid for (world), and the sea's square it stands inside (world middle, half its side). */
+	FVector HazeBandLaidAt = FVector(1e30, 1e30, 1e30);
+	FVector SeaMiddle = FVector::ZeroVector;
+	double SeaHalf = 0.0;
 	/** The kit for an effect at a world point: the ground's under the clouds' base as drawn there (lifted to 300 m
 	 * over the ground under it), the air's above it. Given the kit something is in now, it changes only 50 m past the
 	 * base, so a trail along the base does not flicker between them. */

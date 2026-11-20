@@ -42,9 +42,12 @@ battle screen over it.
    meanwhile is taken from the ride. So a film run's stills are not a picture run's: they do not go to the art
    director as one.
 
-   In harbour "the ships" is seen from upwind, 55 degrees off the wind, at least 300 m clear of every smoke column over
-   a ship struck, sunk or moored within 800 m of her; where none is clear at 1.6 km the eye backs off and rises in steps
-   (the log line "the ships picture in harbour" gives where it stood).
+   In harbour "the ships" is seen from upwind, 55 degrees off the wind, at least 700 m clear of every smoke column over
+   a ship struck, sunk or moored within 800 m of her (or 0.35 of the eye's way to her, if more: at 300 m on build 1778 a
+   near column out of focus filled 45 per cent of the picture, and the art director's mark is 60 per cent clear, no
+   column in the near eye's fade). Where none is clear at 1.6 km the eye tries 35 and 75 degrees off the wind as well,
+   then backs off and rises in steps, the nearest clear eye of any of them (the log line "the ships picture in harbour"
+   gives where it stood, its heading and whether every column was kept clear).
 
 What else the scene draws for the battle:
 - Each sculpted aircraft near the eye turns its airscrews: the blades the model was built with (Battle/AirScrew finds
@@ -62,17 +65,44 @@ What else the scene draws for the battle:
   trail, or an engine fire in the box that its crew put out.
 - A dead engine smokes for as long as it is out (Brian, 20 November 15:29Z: "a lot more dark smoke strains from that
   engine and directly behind it on the tail"): each dead engine its own ribbon from its own nacelle, kinds "fire"
-  while it burns, "oil" while it windmills (white "glycol" first on a liquid-cooled type), "doused" for 2 s when its
+  while it burns, "oil" while it windmills (a liquid-cooled type white "glycol", then after 45 s the "streak", as G1
+  has it), "doused" for 2 s when its
   crew put the fire out, then "streak", which never clears, after a fire is out and back in the box too. A kind
   change is a TrailStart on the same key, so the ribbon never breaks. Until the effects thread's rows land the kit
   trails the new kinds as smoke. A streak gives way, as a piece's trail does, when the room is full. Each aircraft
   out carries its dead engines, its airscrews feathered or windmilling, and its soot (0 to 1 over 30 s) for the
   modeller's soot parts when they land.
-- Tracers are passed their aircraft's nation for the art director's colours (G2) once the kit takes it.
+- Tracers are passed their aircraft's nation for the art director's colours (G2) once the kit takes it, named as
+  the kit's rows are (us, gb, de, it, jp, su) from the recordings' USA, UK, GER, ITA, JAP and SOV; any other nation
+  is drawn in the kit's default.
+- Each bomber gunner lays his own gun (the art director's D6, on the Bremen film: "one gun is one stream", the box's
+  streams "a web converging on the fighter", never a starburst). He leads the fighter by 55 to 105 per cent of the
+  full lead, slowly changing, and wanders about it, about 0.6 degrees in a power turret and 1.8 with a hand-held gun.
+  His gun follows that point about 0.2 s behind and swings no faster than 40 degrees a second in a turret, 50 by
+  hand, and he holds his fire while he swings onto a new fighter more than 15 degrees off. The test counts it: no
+  more than 1 in 20 pairs of gunners on one fighter lay on one spot, and 99 in 100 of the guns' frames swing at
+  under 55 degrees a second (before: 1 in 15, and 145).
+- Looking up, the sky is lifted toward a deep blue (the art director: never near black, about 90 to 110 luma graded;
+  the Bremen film's zenith read 29). Light is added on a bowl 9 km round the eye, none 25 degrees up and most at the
+  zenith, tinted blue, and its strength grows with the eye's height as the air over it thins (none at the sea, all of
+  it at 7,500 m). "-TheaterZenith=0.3,25" tries another strength and lowest angle; 0 turns it off.
+- From high up the sea's flat sheet ends short of the round world's horizon, and its far edge showed as a hard straight
+  line across the sky's foot, the hazed sea under it lighter than the thin-aired sky over it (the art director on build
+  1778's Bremen 01: the haze should swallow the horizon). A haze band stands round the eye at 0.6 of the way to the
+  edge, in the haze's own colour with the height fog over it as over the sea behind: none where it meets the sea, all of
+  it from just under the edge to just over it, thinning to none 7 degrees above. It is the pale band low on the
+  horizon of the trade-cumulus brief (item 3), at every height, now that the haze lies over the sky at a third
+  (BattleLook::AirSkyBegin's HazeOver, 0.35; it was all of it, and the whole upper frame read as white fog, 217 to 226,
+  no blue): the air above the inversion clean and the sky overhead blue. "-TheaterHazeBand=1,0,1" tries another
+  strength (its brightness against the haze's; 0 turns it off) and the eye's heights from none to all of it;
+  "-TheaterAirSky=,,,1" lays the haze wholly over the sky again.
+- A picture run's second ride (05-ride-again, and a film's second ride) rides the other side's aircraft: on Bremen a
+  German fighter.
 - Past the nearest 16 parachutes, those over 600 m from the eye are left out, the farthest first.
 - A ship blown up at sea takes her magazine fire down with her (about 30 s); her oil burns on where she went down.
-- A cloud's shadow lies 25 m over the highest ground under it among hills, but half a metre over flat land (the
-  points under it within a metre of each other), so it passes over a flat field's waiting aircraft, not above them.
+- A cloud's shadow lies over the highest ground under it by half a metre and 4 m for each metre the ground under its
+  points differs, at most 25 m (the pre-check on Bremen and Oahu): on flat land it passes over a flat field's waiting
+  aircraft, not above them, and among hills it clears the ground between its points without lifting off a slope.
 - A gun's burst sound stops with the gun: a take still playing is faded out when its gunner stops (a crew baled out,
   a target gone), not left to run to its end.
 - The stage's ships are each fitted to her real length and beam (AirFeed::HullOf), the kit having one model a class.
@@ -155,8 +185,13 @@ shape (a camera actor keeps 16:9 and bars the rest; both have `bConstrainAspectR
   timing a sharper scene; without it nothing changes. On build 1760 the column was as soft at 85 as at the map's
   budget, for 1.9 ms more of the graphics chip a frame, so the battle keeps the map's budget; the softness was the
   column leaning at the eye, hence the upwind eye.
-- **The close view** rides one aircraft: of the group in hand, else the busiest of his own side's fighters near the
-  middle of the picture, else the other side's. After 10 seconds on one it moves to another of his, but stays if that
+- **The close view** rides one aircraft: of the group in hand, else one of his own side's fighters closing on what it
+  fights within 2.5 km of it, the nearer and the more nearly pointed at it the better, firing first, any after a bomber
+  before any after a fighter, and one coming at a bomber head-on most of all, so what it fights is in the picture with
+  it or soon will be (`AirDesk::ChooseRide`; Brian on the Bremen film, 20 November: "where are the german fighters?",
+  both rides had followed a Mustang and the German fighters showed as specks). The cloud test asks it each second a
+  side has a fighter closing on a bomber: its pick on a bomber three times in four or more, none over 2.5 km off (on
+  round 18b every time: 125 of 125 seconds at Bremen, 86 of 86 at Midway, 27 of 27 over Oahu); with none such, the busiest of his fighters near the middle of the picture, else the other side's. After 10 seconds on one it moves to another of his, but stays if that
   one is the only aircraft of his still up. A fighter is seen from 22 m behind along its path and 6 m above it,
   looking 80 m past it, so its back, its fin and the tops of its wings face the eye. A bomber is seen from 1.8 spans
   behind it, 0.55 out on the side the attack comes from and 0.45 above, looking 1.2 spans past its nose: the whole
@@ -181,7 +216,7 @@ patches drawn out along the trade wind (from about 070, turned with the stage, s
 1.5 km by 600 m (none smaller than two squares across, or the grid would draw it as speckle), and whose surface tilts
 up to some 5 degrees, so the sun's
 path on the water breaks into glitter; the patches fade out over the grid's last 4 km. Past it, a plain sheet in four
-bands. Its colour is darker than before (1C4453), with a tighter sun path (roughness 0.2): looking down from 5 km the
+bands. Its colour is the deep blue below (1F577A), with a tighter sun path (roughness 0.2): looking down from 5 km the
 first run's sea measured 100 to 118 of brightness, and the art director's mark is 80 or under before the grade.
 A stage's land more than 25 km from the battle's aim (`AirStage::LandReach`) is not built: a fight at sea keeps
 its own sea. Midway's fleet battle is fought 37.6 km from the atoll (33 km from its nearest reef, the stage's log
@@ -211,10 +246,13 @@ pointer's province changes, the map unfolds its crowds and would stand its piece
 the battle is. So every frame the scene puts away any piece that came back. On CONTINUE the map stands its pieces
 again itself, with the crowds folded.
 
-**The sea and the clouds' brightness (the art director on build 1732, 16:21Z).** The stage's sea paint (#1C4453)
-stands as it is under a sun up to 20 degrees high and darkens as the sun climbs, to 0.65 of it at 45 degrees and over,
-its hue kept (`SeaPaintUnder` in AirStage.cpp): Pearl Harbor's morning sun at 18 degrees leaves it as it was, and
-Midway's at 45 takes the open sea from 78 to 90 of brightness toward her 55 to 60. The clouds' ink is 1.3 times their
+**The sea and the clouds' brightness (the art director on build 1732, 16:21Z, and on build 1778).** The stage's sea
+paint (#1F577A, a deep blue: 1.7 times the light of build 1778's #1C4453, whose harbour read 34 of brightness and
+grey-teal looking down on the ships at Pearl Harbor against the brief's 50 to 70) stands as it is under a sun up to 20
+degrees high and darkens as the sun climbs, to 0.55 of it at 45 degrees and over, its hue kept (`SeaPaintUnder` in
+AirStage.cpp): Pearl Harbor's morning sun at 18 degrees leaves it as it is, and Midway's at 45 keeps the open sea
+about where build 1770 measured it (47 to 58, near her 55 to 60), a little lighter. The battle's grade takes nearly
+half the colour out of the darks, so the paint carries more blue than the picture shows. The clouds' ink is 1.3 times their
 paint (`CloudBright` in LaySky): through the grade the sunlit tops read 226 to 231, her mark is 238 to 245 with no more
 than about one per cent of the picture at 250 or over, and the paint's top is already 252. The painter paints the
 shaded sides, the bases and the shadows that much darker (`Painter::SetInk`), so only the sunlit tops rise: the bases
@@ -344,17 +382,28 @@ soft puffs, in the effects kit's shape and with the same `M_Highlight`, in two r
 - **How far.** Clouds are drawn out to 20 km from the eye and thin into the haze over the last third of that. A cloud
   within 5 km is drawn with all its puffs, out to 10 km with its bigger ones, and past that with two: its veil and one
   soft lit body, which fades in as the rest fade out, so the clouds run on small toward the horizon with no empty band.
-  The painter's room is 4,000 puffs (`MostPuffs`); the two battles draw about 2,800 at most. With no room, the farthest
+  The painter's room is 4,000 puffs (`MostPuffs`); the three battles draw about 3,100 to 3,300 at most. With no room, the farthest
   puffs are left out.
-- **Cumulus** cover about three eighths of the sky: a trade-wind sky (the art director), many small ones (300 to 600 m),
-  some middling and a few big (1.5 to 2.5 km), in loose clusters with gaps and in rows along the wind about 4 km
-  apart. Each is a flat grey base, a lit, lumpy dome wider than it is tall, a few turrets and a faint veil that holds
-  it together (within the body, so it lays no pale disc on the sea; no deeper than 120 m under the base at its faded
-  rim, so a flat base stays flat). Most are shallow, and a few reach the day's tops. They drift with the battle's wind.
+- **Cumulus** cover about three eighths of the sky: a trade-wind sky (the art director's trade-cumulus brief, 20
+  November), sizes on a steep power law, about six in ten 300 to 600 m across as laid, a third 600 m to 1.5 km and one
+  in seventeen 1.5 to 3.5 km (even on a log scale within each), so most of the cover comes from the few big ones; in loose streets
+  along the wind about 4 km apart, narrower than the clear lanes between them, the bigger ones keeping to the streets
+  and the small ones scattered in the lanes a little more. Each is a flat grey base, a lit, lumpy dome 1 to 2.5 times
+  as wide as it is tall (a small one flatter all through, a rag and not a ball), a few turrets and a faint veil that
+  holds it together (within the body, so it lays no pale disc on the sea; no deeper than 120 m under the base at its
+  faded rim, so a flat base stays flat). Tops stop at 0.8 to 0.9 of the day's depth, one broken level under the
+  inversion; one big cloud in about twenty is a tower to the day's top. Each leans 5 to 15 degrees downwind as it
+  rises; its lee side is softer, thinner and smaller (ragged), its upwind side firm, and a big one has one to three
+  grey fractus bits (30 to 75 m, alpha 0.3 to 0.6) at its base level downwind. They drift with the battle's wind.
   Over the target there is a clearing that stays put as they drift: a cloud carried into it thins away, and one
-  carried out of it fills in, so the ships or the town stay in sight.
+  carried out of it fills in, so the ships or the town stay in sight. Only small clouds stay in it (a few under 600 m,
+  none of 1.5 km or more).
 - **Light and shade** come from each cloud's shape: every point of a puff is lit as the point of the cloud's rounded
-  body it stands for. Sunlit tops come out about 242 of brightness, down-sun sides about 165, the base from under it
+  body it stands for, three parts in four (a quarter from the puff's own lump), and darkened by as much of its own
+  cloud as lies between it and the sun (each puff's `Shadowed`, the other lumps' depth along the way to the sun, laid
+  with the cloud; up to 0.55 off): one sun on each cloud, a bright sun side and a grey-blue shade side (the brief's
+  item 1). The shade side is painted bluer (150, 164, 192) and the base a little darker (122, 130, 148): through the
+  grade the old 162, 170, 184 came out a neutral grey. Sunlit tops come out about 242 of brightness, down-sun sides about 165, the base from under it
   150 to 155 with a straight, crisp underside (from above, the dome hides it). The sunlit tops and sides are crisp
   over their outer fifth; the base and the far body stay soft. (The art director, 15:17Z.) A third of each point's
   light is from its own round lump as well, so a small cloud's sunlit cap grades rather than reading as a white

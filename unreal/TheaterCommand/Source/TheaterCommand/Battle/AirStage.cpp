@@ -151,18 +151,21 @@ namespace StageParts
 	static constexpr double YardSkirt = -4.5; // metres under a yard block's ground its sides reach down to
 	static const FLinearColor TrunkPaint = FLinearColor(FColor::FromHex(TEXT("7A6A55")));
 	static const FLinearColor FrondPaint = FLinearColor(FColor::FromHex(TEXT("3F6A2E")));
-	// (darker than the first run's 24505F: looking down from 5 km the sea measured luma 100 to 118, the art director's
-	// mark is 80 or under before the grade)
-	static const FColor SeaPaint = FColor::FromHex(TEXT("1C4453"));
+	// A deep blue, 1.7 times the light of the 1C4453 it was and bluer (the art director on build 1778's Oahu 06: the
+	// harbour read 34 of brightness and grey-teal looking down on the ships, the brief's near sea is 50 to 70; the
+	// battle's grade takes nearly half the colour out of the darks, so the paint carries more blue than the picture
+	// shows). The first run's 24505F measured 100 to 118 looking down from 5 km, against her mark of 80 or under.
+	static const FColor SeaPaint = FColor::FromHex(TEXT("1F577A"));
 	/**
-	 * The sea's paint under the day's sun: as it is up to a sun 20 degrees high, and darker as the sun climbs, to 0.65
+	 * The sea's paint under the day's sun: as it is up to a sun 20 degrees high, and darker as the sun climbs, to 0.55
 	 * of it at 45 degrees and over, its hue kept (the art director on build 1732: Midway's sun at 45 lit the open sea
-	 * to 78 to 90 of brightness and teal, against Pearl Harbor's 42 to 47 under its morning sun; her mark there is 55
-	 * to 60).
+	 * to 78 to 90 of brightness and teal, against Pearl Harbor's 42 to 47 under its morning sun; her mark there was 55
+	 * to 60). At 0.55 Midway's sea keeps the light it had under the old paint at 0.65, and a little more (the material
+	 * takes the paint to the power 2.2: 0.55 of the new paint is 1.17 times the light of 0.65 of the old).
 	 */
 	static FColor SeaPaintUnder(double SunElevationDegrees)
 	{
-		const double Darker = 1.0 - 0.35 * FMath::Clamp((SunElevationDegrees - 20.0) / 25.0, 0.0, 1.0);
+		const double Darker = 1.0 - 0.45 * FMath::Clamp((SunElevationDegrees - 20.0) / 25.0, 0.0, 1.0);
 		auto Byte = [Darker](uint8 Channel) { return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Channel * Darker), 0, 255)); };
 		return FColor(Byte(SeaPaint.R), Byte(SeaPaint.G), Byte(SeaPaint.B));
 	}
@@ -1337,6 +1340,7 @@ void AAirStage::Advance(double Now)
 		Lie.World = GetActorTransform();
 		// (her waterline where she lies now: settled, or going down, a late hit's burst stands on her, not above her)
 		Lie.Base = Ship->Hull ? FVector(Ship->Base.X, Ship->Base.Y, Ship->Hull->GetRelativeLocation().Z) : Ship->Base;
+		Lie.SeaZ = Ship->Base.Z;
 		Lie.Yaw = Ship->Yaw;
 		Lie.Long = Ship->Long;
 		Lie.Beam = Ship->Beam;
@@ -1557,11 +1561,11 @@ void AAirStage::TestPlan()
 			const FVector Her(Stage.X, Stage.Y, 6.0), Eye(Stage.X - Reach * 0.8, Stage.Y - Reach * 0.6, FMath::Max(Ship->High * 1.4, 24.0));
 			for (const FString& Look : Looks.ReelOf(Ship->Given.Class, Ship->bHarbour))
 			{
-				const double At = 4.0 + Order * 24.0;
+				const double At = 4.0 + Order * 44.0;
 				TestBeats.Add({ At, Ship->Given.Id, TEXT("look"), Look, false });
 				const FString Key = Look.Left(Look.Find(TEXT("|"))).Replace(TEXT("ship."), TEXT(""));
 				TestShots.Add({ FString::Printf(TEXT("reel-%02d-%s-a"), Order + 1, *Key), At + 1.5, Eye, Her, 40.0 });
-				TestShots.Add({ FString::Printf(TEXT("reel-%02d-%s-b"), Order + 1, *Key), At + 12.0, Eye, Her, 40.0 });
+				TestShots.Add({ FString::Printf(TEXT("reel-%02d-%s-b"), Order + 1, *Key), At + 40.0, Eye, Her, 40.0 });
 				++Order;
 			}
 		}
@@ -1672,7 +1676,51 @@ void AAirStage::TestTick()
 		{
 			if (const FShip* Ship = Ships.Find(Beat.Ship))
 			{
+				// Each look alone: the kit cleared of the last look's smoke, fire and steam first (the art director, 20
+				// November 17:54Z: from the fourth hit on, each look sat inside the smoke of the ones before it).
+				if (Effects)
+				{
+					Effects->Clear();
+					Looks.Cleared();
+				}
 				Looks.Reel(Beat.Ship, Ship->Given.Class, Beat.How, Ship->bHarbour, Now);
+				// And the camera on the look: its first picture close on the hit, from the side it is on and a little
+				// toward her nearer end; its second further off on that quarter and lower, where a list, a trim or a lower
+				// freeboard shows. (over land, it stands at least 12 m above the ground)
+				double Along = 0.0, Up = 0.0, Side = 1.0;
+				if (Looks.ReelAim(Beat.Ship, Ship->High, Along, Up, Side))
+				{
+					const double U = UnitsPerMetre;
+					const FRotator Turned(0.0, Ship->Yaw, 0.0);
+					const FVector Length = Turned.RotateVector(FVector::ForwardVector), Abeam = Turned.RotateVector(FVector::RightVector);
+					const double End = Along < 0.0 ? -1.0 : 1.0; // (her bow's end, minus, or her stern's)
+					const double Near = FMath::Max(Ship->Long * 0.55, 70.0), Far = FMath::Max(Ship->Long * 1.1, 130.0);
+					const FVector Hit = Ship->Base + Length * (Along * Ship->Long * U) + FVector(0.0, 0.0, Up * U);
+					const FVector Middle = Ship->Base + Length * (Along * 0.5 * Ship->Long * U) + FVector(0.0, 0.0, FMath::Min(Ship->High * 0.3, 9.0) * U);
+					auto ToStage = [this](const FVector& Local)
+					{
+						const FVector2D Flat = BoardToStage(FVector2D(Local.Y, Local.X) / UnitsPerMetre);
+						return FVector(Flat.X, Flat.Y, Local.Z / UnitsPerMetre);
+					};
+					auto Above = [this](FVector Stage)
+					{
+						Stage.Z = FMath::Max(Stage.Z, StageHeight(Stage.X, Stage.Y) + 12.0);
+						return Stage;
+					};
+					const FVector EyeA = Above(ToStage(Hit + (Abeam * (Side * Near) + Length * (End * Near * 0.45)) * U + FVector(0.0, 0.0, FMath::Max(Ship->High * 0.8, 16.0) * U)));
+					const FVector EyeB = Above(ToStage(Ship->Base + (Abeam * (Side * Far * 0.7) + Length * (End * Far * 0.75)) * U + FVector(0.0, 0.0, FMath::Max(Ship->High * 0.5, 12.0) * U)));
+					for (int32 K = NextShot; K < TestShots.Num() && K < NextShot + 3; ++K)
+					{
+						FTestShot& Shot = TestShots[K];
+						if (Shot.At >= Now && Shot.At <= Now + 43.0 && Shot.Name.StartsWith(TEXT("reel-")))
+						{
+							const bool bFirst = Shot.Name.EndsWith(TEXT("-a"));
+							Shot.Eye = bFirst ? EyeA : EyeB;
+							Shot.Look = ToStage(bFirst ? Hit : Middle);
+							Shot.Lens = bFirst ? 45.0 : 50.0;
+						}
+					}
+				}
 			}
 		}
 		else

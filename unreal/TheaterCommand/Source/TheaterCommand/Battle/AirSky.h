@@ -119,6 +119,7 @@ namespace AirSky
 		double Soft = 0.45;   // the share of its radius its edge fades over: 0.2 a sunlit lump's crisp edge
 		double Trough = 0.0;  // how much less lit its rim is than its heart (a deck's cells: darker where they meet)
 		bool bFlatFoot = false; // a cloud's base: its underside drawn straight and crisp, seen from the side
+		double Shadowed = 0.0;  // 0 to 1: how much of its own cloud lies between it and the sun (laid with the cloud)
 	};
 
 	/** One cloud (a cumulus, or a tile of the deck): its foot's middle on the laid square, its width and height. */

@@ -493,6 +493,13 @@ namespace AirShow
 		std::vector<Thing> Small;
 		std::vector<PlaneOut> Out;
 		std::set<int> Firing;
+		/** Each bomber gunner's gun as he has it laid (its way in the world, and when), by his mount's key. */
+		struct Lay
+		{
+			Vec Way;
+			double T = -1.0;
+		};
+		std::map<int, Lay> Lays;
 		double ShownT = 0.0, AirT = 0.0;
 		bool bStarted = false;
 		int NextKey = 1;
@@ -535,6 +542,12 @@ namespace AirShow
 		void StopTrails(Craft& C);
 		/** Engine N's place (from 1, as the model's engine.N) in its own frame. */
 		static Vec EngineOf(const Craft& C, int N);
+		/** A bomber's gunner at Station (its own frame) laying his gun on Foe, Near metres off, this frame: his own
+		 * lead, short of the full one, and his own slow wander about it, wider for a hand-held gun than a power
+		 * turret; the gun follows that a little behind and swings no faster than a man or a turret lays one. Mount
+		 * names the gunner (his aircraft's key * 64 + the mount's first gun), so a twin's guns lie together. Aim is
+		 * where the gun points; true when he is on it (within 15 degrees) and can fire. */
+		bool LayGun(const Craft& C, const Vec& Station, const Craft& Foe, double Near, const Gun& Row, int Mount, Vec& Aim);
 		/** The model, its shape and its limits, from its group (as made, or when a view first names its model). */
 		void Fit(Craft& C, const Group& G);
 		int PickToFall(const Event& E);

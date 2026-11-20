@@ -13,7 +13,7 @@ src, out = sys.argv[1], sys.argv[2]
 x0, y0, x1, y1, mpp = (float(v) for v in (sys.argv[3:8] if len(sys.argv) >= 8 else (-3500, -2500, 2500, 2000, 2)))
 W, H = int((x1 - x0) / mpp), int((y1 - y0) / mpp)
 img = np.zeros((H, W, 3), dtype=np.float32)
-img[:] = (0x1C, 0x44, 0x53)
+img[:] = (0x1F, 0x57, 0x7A)  # (the stage's sea paint, AirStage.cpp)
 depth = np.full((H, W), -1e9, dtype=np.float32)
 b = open(src, 'rb').read()
 o = 0
