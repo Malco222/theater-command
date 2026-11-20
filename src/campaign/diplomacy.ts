@@ -27,6 +27,7 @@ import { weatherMonth } from './weather';
 import { guarantorsOf, type Guarantor } from './guarantees';
 import { warMonths } from './warclock';
 import { reformsMonth } from './reforms';
+import { heartLeavings, heartMonth } from './heart';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -84,8 +85,11 @@ export interface DiploEvent {
    * and these conditions must hold as well as 'if' (the sandbox playtest's lock sweep, finding 3). Stops 1 to 3 never read it.
    */
   earned?: { if: string[] };
-  /** A reform the sandbox stops (4 and 5) never fire by date: there it comes only from its own cause, for any nation (reforms.ts). */
-  sandbox?: 'reforms';
+  /**
+   * An event the sandbox stops (4 and 5) never fire by date: there it comes only from its own cause, for any nation.
+   * 'reforms': a reform (reforms.ts). 'heart': a junior partner's loss of heart, fall of government or armistice (heart.ts).
+   */
+  sandbox?: 'reforms' | 'heart';
 }
 
 export const DIPLOMACY = data as unknown as {
@@ -580,12 +584,14 @@ function joinBloc(g: Game, n: Nation, b: 'allies' | 'axis'): boolean {
 export function leavings(g: Game): { nation: string; grounds: string[] }[] {
   const open = g.flags.open === 1;
   const out: { nation: string; grounds: string[] }[] = [];
+  const sandbox = open && !!stopDef(g).ambitions;
   for (const e of DIPLOMACY.events) {
-    if (!e.partition || (e.mode && (e.mode === 'open') !== open) || g.flags[`event:${e.id}`] !== undefined || g.turn > (e.to ?? 999) || spared(g, e.partition.nation, e.stake)) continue;
+    if (!e.partition || (e.mode && (e.mode === 'open') !== open) || (sandbox && e.sandbox) || g.flags[`event:${e.id}`] !== undefined || g.turn > (e.to ?? 999) || spared(g, e.partition.nation, e.stake)) continue;
     const test = (e.if ?? []).find((c) => c.startsWith('anyHeld:') || c.startsWith('allHeld:'));
     if (test) out.push({ nation: e.partition.nation, grounds: test.slice(test.indexOf(':') + 1).split(',').slice(1) });
   }
-  return out;
+  // The sandbox stops: a junior partner that has lost heart can leave the war from any of its home provinces (heart.ts).
+  return [...out, ...heartLeavings(g)];
 }
 
 /** Ruling 233, rider b612: true while this country's leaving is in play and an enemy of its holds or stands on a ground its leaving event names. */
@@ -694,6 +700,16 @@ export function signPeace(g: Game, a: string, b: string): boolean {
 export function transfer(g: Game, r: Region, to: string): void {
   r.owner = to; r.ctrl = to; r.cap = false; r.since = g.turn;
   g.supplyDirty = true;
+}
+
+/**
+ * The sandbox stops (heart.ts): a junior partner signs an armistice. Its army lays down its arms, and its ground goes
+ * to whoever has troops there, the rest to the power at war with most of its home ground: the grand campaign's terms,
+ * with no share written in advance. Never on the player's own country (ruling 99). True if it signed.
+ */
+export function signArmistice(g: Game, nat: string): boolean {
+  const n = g.nations[nat];
+  return !!n && fire(g, { id: `armistice-${nat}`, from: 0, to: 999, partition: { nation: nat, shares: [] }, text: `${n.name} has signed an armistice and is out of the war.` });
 }
 
 function fire(g: Game, e: DiploEvent): boolean {
@@ -961,10 +977,12 @@ export function monthlyDiplomacy(g: Game): void {
   const open = g.flags.open === 1;
   // At the sandbox stops reforms are earned by any nation from their own causes, in place of the record's four.
   reformsMonth(g);
+  // And there a junior partner loses heart, its government falls and it signs an armistice from its own causes.
+  heartMonth(g);
   const sandbox = open && !!stopDef(g).ambitions;
   for (const e of DIPLOMACY.events) {
     if (e.mode && (e.mode === 'open') !== open) continue;
-    if (sandbox && e.sandbox === 'reforms') continue;
+    if (sandbox && e.sandbox) continue;
     const earned = open && !!e.earned && !!stopDef(g).ambitions;
     if (g.flags[`event:${e.id}`] || (g.turn < e.from && !earned) || (g.turn > e.to && !open)) continue;
     if (!(e.if ?? []).every((c) => holds(g, c))) continue;
@@ -994,7 +1012,8 @@ const listed = (xs: string[], last = 'and'): string => (xs.length <= 1 ? xs.join
  */
 function romeWavers(g: Game): void {
   const me = g.human, I = g.nations.ITA;
-  if (g.flags.open !== 1 || !me || me === 'ITA' || !I?.alive || !g.nations[me]?.alive || !g.nations[me].atWar.length || !allied(g, me, 'ITA')) return;
+  // (Not at the sandbox stops, where Rome's dated fall is not read: heart.ts's own headlines tell the player there.)
+  if (g.flags.open !== 1 || !!stopDef(g).ambitions || !me || me === 'ITA' || !I?.alive || !g.nations[me]?.alive || !g.nations[me].atWar.length || !allied(g, me, 'ITA')) return;
   const falls = DIPLOMACY.events.find((e) => e.id === 'mussolini-falls');
   const test = falls?.if?.find((c) => c.startsWith('anyHeld:'));
   if (!falls || !test || g.flags['event:italian-armistice']) return;

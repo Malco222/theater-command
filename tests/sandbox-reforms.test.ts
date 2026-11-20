@@ -102,7 +102,7 @@ describe('an army comes of age (rated below 1.0, not one that learns)', () => {
     setWar(g, 'ITA', 'UK');
     setWar(g, 'GER', 'SOV');
     g.turn = 50;
-    g.flags['event:italy-loses-heart'] = 47;
+    g.flags['event:reform:heart:ITA'] = 47;
     for (const n of ['USA', 'ITA']) g.flags[`cm:${n}`] = 16;
     g.flags['cm:SOV'] = 10;
     reformsMonth(g);

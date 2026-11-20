@@ -6,8 +6,8 @@
     "quality": 0.1, "maxAttack": 14, "air": 1.43
   },
   "ofAge": {
-    "_who": "An army rated below 1.0 that is not one that learns, and has not lost heart ('heart': the event, and the armies it names). The record's America against Germany, Torch to Tunisia (39-45) and Sicily on: 12 land months at 51, 16 at 55 (the historian, 07:41Z, H). An army that never fights on land never comes of age.",
-    "land": 12, "backstop": 16, "quality": 0.1, "heart": { "italy-loses-heart": ["ITA"] }
+    "_who": "An army rated below 1.0 that is not one that learns, and has not lost heart (heart.json: a junior partner's loss of heart overrides it). The record's America against Germany, Torch to Tunisia (39-45) and Sicily on: 12 land months at 51, 16 at 55 (the historian, 07:41Z, H). An army that never fights on land never comes of age.",
+    "land": 12, "backstop": 16, "quality": 0.1
   },
   "ofAgeAir": {
     "_who": "Any nation: an enemy it is fighting has bled out ('bleeds'), after 'combat' months fighting that enemy (land battles or bombs either way); backstop: 'backstop' months bombing an enemy's home ground or being bombed on its own (the historian, 07:41Z: Britain, turn 9 to 57). The largest aircraft output among those at war with that enemy (air.json production) takes 'airMost', the rest 'air'.",

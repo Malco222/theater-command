@@ -84,9 +84,13 @@ describe('ruling 233, rider b612: the ward is set by the ally\'s leaving event',
       landOnCalabria(g);
       expect(wards(g, 'GER')).toEqual([]);
     }
+    // (The sandbox stops: Italy's leaving is in play only once it has lost heart by its own causes, heart.ts. Then an
+    // enemy on any of its home provinces sets the ward.)
     for (const stop of [4, 5]) {
       const g = italyAtWar(stop);
       landOnCalabria(g);
+      expect(wards(g, 'GER')).toEqual([]);
+      g.flags['event:reform:heart:ITA'] = g.turn;
       expect(wards(g, 'GER')).toEqual(['Rome']);
     }
     const g = italyAtWar(3, 'GER');

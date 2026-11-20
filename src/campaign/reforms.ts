@@ -14,7 +14,7 @@ import type { Game, Nation, Region } from './types';
 
 interface Reforms {
   learns: { land: number; trade: number; factories: number; backstop: number; quality: number; maxAttack: number; air: number };
-  ofAge: { land: number; backstop: number; quality: number; heart: Record<string, string[]> };
+  ofAge: { land: number; backstop: number; quality: number };
   ofAgeAir: { combat: number; backstop: number; air: number; airMost: number };
   bleeds: { raids: number; tech: string; backstop: number; backstopTech: string; air: number };
   cadre: { share: number; quality: number };
@@ -110,9 +110,8 @@ function take(g: Game, k: Kind, n: Nation, to: Partial<Pick<Nation, 'quality' | 
   g.flags[`event:reform:${k}:${n.id}`] = g.turn;
   headline(g, 'event', REFORMS.text[k].replace('{adj}', n.adj), n.id);
 }
-/** Whether the nation's army has lost heart (the events 'heart' names, fired, that name it). */
-const lostHeart = (g: Game, nat: string): boolean =>
-  Object.entries(REFORMS.ofAge.heart).some(([e, nats]) => nats.includes(nat) && g.flags[`event:${e}`] !== undefined);
+/** Whether the nation's army has lost heart (heart.ts: a junior partner's, from its own causes). */
+const lostHeart = (g: Game, nat: string): boolean => g.flags[`event:reform:heart:${nat}`] !== undefined;
 /** Whether this nation is one that learns (slow command, or a top attack below 14; 0 is no limit), or has learned. */
 const learner = (g: Game, n: Nation): boolean => taken(g, 'learns', n.id) || !!n.slowCommand || (n.maxAttack > 0 && n.maxAttack < REFORMS.learns.maxAttack);
 

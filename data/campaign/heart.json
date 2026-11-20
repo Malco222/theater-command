@@ -1,0 +1,15 @@
+{
+  "_note": "Junior partners lose heart, their governments fall and they sign armistices from their own causes, at the sandbox stops (4 and 5) of the open grand campaign only: the historian's section 7 (historian/sandbox-thresholds.md; L of 18 from 07:32Z), ruled in by the design director 20 November 2026 07:40Z under the one rule (a reform fires only from its own cause in that nation's war). It reaches every junior partner, not Italy alone, and stands in place of the record's dated italy-loses-heart, mussolini-falls and italian-armistice there. Stops 1 to 3 read none of this. DRAFT, not ruled in.",
+  "_who": "A junior partner: a nation at war beside a senior partner, a co-belligerent (at war with one of its enemies and never with it) whose peak field army is at least 'senior' times its own. The senior partner itself never loses heart.",
+  "senior": 2,
+  "_heart": "Loss of heart: 'land' months of land battle against a great power (L, as the reforms count it), and any one cause: corps lost reach 'losses' of its peak; every overseas province it held on its first day is out of its own and its allies' hands; or one battle at its senior partner's side cost it 'army' divisions or more, destroyed or taken. Its army falls to 'quality' of its first-day rating (Italy 0.75 to 0.45, the record's July 1943). Once only, and it overrides coming of age. Causes H, numbers M (the historian); 'army' is the builder's reading of 'a whole army' (a Romanian or Italian army of 1942 was two to four corps), for the historian to confirm.",
+  "land": 18, "losses": 0.4, "army": 6, "quality": 0.6,
+  "_regime": "The fall of the government: 'regime' months after an enemy first holds one of its home provinces (its own, not overseas) once it has lost heart, if an enemy still holds one (the record: Sicily, 10 July 1943; Mussolini, 25 July). Without the loss of heart a foothold topples nobody. A country the player leads is never touched (ruling 99).",
+  "regime": 1,
+  "_armistice": "The armistice: 'armistice' months after the fall, while an enemy still holds one of its home provinces (the record: 8 September 1943). Its army lays down its arms and its ground goes to whoever has troops there, the rest to the power at war with most of its home ground (the grand campaign's terms, diplomacy.ts).",
+  "armistice": 1,
+  "text": {
+    "heart": "The {adj} army has lost heart. Defeat after defeat beside a stronger ally, for a war that was never its own, has taken the fight out of it. Its divisions will not fight as they did.",
+    "regime": "The government of {the} has fallen. With an enemy on its own soil, new men have taken power. \"The war goes on,\" they say, and nobody believes them: they are looking for a way out."
+  }
+}
