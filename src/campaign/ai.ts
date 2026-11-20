@@ -1563,6 +1563,8 @@ function frontsMonth(g: Game, nat: string, N: FrontsNow, plans: PlanPhase | null
     delete g.flags[`st:hopUp:${c.id}`];
     if (c.town !== undefined && pacificGround(g, g.regions[c.reg])) takeField(g, c);
     if (row.waits && !c.hold) c.hold = true;
+    // (A row whose staging ground an enemy stands on is its front's in the field, for that ground: planfronts.ts, `road`.)
+    else if (row.road && c.hold) c.hold = false;
   }
   // A row that stands in no harbour walks to the nearest its side holds, one the shore can be reached from if there is one.
   const toQuay = (c: Corps, front: string, shore: Region): void => {
@@ -1583,12 +1585,18 @@ function frontsMonth(g: Game, nat: string, N: FrontsNow, plans: PlanPhase | null
     if (went.length) frontWatch.tell?.({ nat, what: 'stage', front, force: went, to: p, from });
     return went.length > 0;
   };
-  // Moves by land: to the place named, once it is its side's. Arrived, the row is its front's in the field.
+  // Moves by land: to the place named. Arrived, the row is its front's in the field. The move does not wait for the
+  // place to be its side's: empty enemy ground is marched into, as any army takes it (the foot first; the guns follow
+  // onto ground a row has taken), and the move goes on. Ground an enemy stands on is the front's to fight for, and
+  // the road waits only while that fight is open (the design director's ruling of 23:46Z, 20 November 2026, on Hong
+  // Kong's trace, 2, to ruling 234: as built the move read who held the place today, as "the hop before" did, and
+  // in three wars of 24 Hong Kong's rows waited at Canton to the end behind an empty Tungkun in China's hands).
+  const marchIn = (r: Region | undefined): r is Region => !!r && atWar(g, nat, r.ctrl) && !hostileUnits(g, r, nat).length;
   for (let k = 0; k < plan.fronts.length; k++) {
     if (!now.live[k]) continue;
     for (const m of plan.fronts[k].land ?? []) {
       const to = g.byName[m.to];
-      if (!mine(to)) continue;
+      if (!mine(to) && !marchIn(to)) continue;
       for (const nm of [m.corps, ...(m.with ?? [])]) {
         const c = corps(nm), row = c ? now.rows.get(c.id) : undefined;
         if (!c || !row || row.k !== k || row.next || g.flags[walkedKey(c)] !== undefined) continue;

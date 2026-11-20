@@ -375,4 +375,61 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
     expect([...regs, guns].map((c) => w.flags[walkedKey(c)])).toEqual([28, 28, 28, 28]);
     for (const c of [...regs, guns]) expect(['Tungkun', 'Hong Kong']).toContain(where(w, c));
   });
+  // (The design director's ruling of 23:46Z, 20 November 2026, on Hong Kong's trace, 2. As built the move walked "once
+  // the place is its side's": in wars 25, 35 and 38 of 24 China held Tungkun, empty, from before the blow, and Hong
+  // Kong's rows waited at Canton to the end. The same fault as "the hop before": a precondition read from today's holder.)
+  it("a move by land does not wait for its staging ground to be its side's: empty enemy ground is marched into, and ground an enemy stands on is the front's to fight for", () => {
+    const rows = (g: Game): Corps[] => {
+      const cs = [...[R229, R228, R230].map((nm, i) => put(g, nm, 'Canton', { stay: true, str: i === 2 ? 0.27 : 0.3 })), put(g, GUNS, 'Canton', { hold: true, kind: 'art', str: 0.4 })];
+      for (const c of cs) c.full = c.str;
+      return cs;
+    };
+    const chinas = (g: Game, name: string, army = 0): void => {
+      const r = g.byName[name];
+      r.ctrl = 'CHN';
+      r.units = [];
+      if (army) addCorps(g, 'CHN', 'a test army', 'inf', army, name, { xp: 0.1 });
+    };
+    // Tungkun in China's hands with nobody on it: the rows march in, the foot first and the guns behind, and are Hong Kong's in the field.
+    const g = war(3, 29, 28);
+    chinas(g, 'Tungkun');
+    const cs = rows(g);
+    listen();
+    runAI(g, 'JAP');
+    expect(told.filter((t) => t.what === 'walk').map((t) => [t.front, t.force[0], t.from, t.to])).toEqual([
+      ['hongkong', R229, 'Canton', 'Tungkun'], ['hongkong', R228, 'Canton', 'Tungkun'], ['hongkong', R230, 'Canton', 'Tungkun'], ['hongkong', GUNS, 'Canton', 'Tungkun'],
+    ]);
+    expect(g.byName.Tungkun.ctrl).toBe('JAP');
+    expect(cs.map((c) => g.flags[walkedKey(c)])).toEqual([29, 29, 29, 29]);
+    expect(cs.some((c) => c.hold)).toBe(false);
+    for (const c of cs) expect(['Tungkun', 'Hong Kong']).toContain(where(g, c));
+    // With China's army standing on Tungkun the road waits, and the rows are in the field for that ground and no other.
+    const h = war(3, 29, 28);
+    chinas(h, 'Tungkun', 3);
+    const hs = rows(h);
+    frontsTick(h, 'JAP');
+    expect(state(h, 'hongkong').waiting).toEqual([]);
+    for (const c of hs) {
+      expect([onFront(c), planWaits(c)]).toEqual([true, false]);
+      expect([offFront(h, c, h.byName.Tungkun), offFront(h, c, h.byName.Waichow), offFront(h, c, h.byName['Hong Kong'])]).toEqual([false, true, true]);
+    }
+    frontsClear();
+    runAI(h, 'JAP');
+    expect(hs.some((c) => c.hold)).toBe(false);
+    expect(hs.map((c) => h.flags[walkedKey(c)])).toEqual([undefined, undefined, undefined, undefined]);
+    for (const c of hs) if (!c.dead) expect(where(h, c)).toBe('Canton');
+    // The enemy gone from it, the road is open again the next month: the rows are held for the walk and make it.
+    // The enemy gone from it, the road is open again: rows that stood free for the fight are the plan's for the walk, and make it.
+    const k = war(3, 30, 28);
+    chinas(k, 'Tungkun', 3);
+    const ks = rows(k);
+    frontsTick(k, 'JAP');
+    expect(ks.map((c) => planWaits(c))).toEqual([false, false, false, false]);
+    frontsClear();
+    for (const c of ks) c.hold = false;
+    k.byName.Tungkun.units = [];
+    runAI(k, 'JAP');
+    expect(ks.map((c) => k.flags[walkedKey(c)])).toEqual([30, 30, 30, 30]);
+    expect(k.byName.Tungkun.ctrl).toBe('JAP');
+  });
 });

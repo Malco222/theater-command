@@ -8,7 +8,11 @@
 //           railways, not the garrison rule), and on land it goes no farther from the front's place than it stands.
 //           The free staff may add rows of its own to the fight; it takes none away.
 //   held    rows of the list the plan keeps on their quay from the day they stand (the 2nd Division for Java).
-//   land    moves by land: a row that joins its front by road (the Guards from Phnom Penh to Singora).
+//   land    moves by land: a row that joins its front by road (the Guards from Phnom Penh to Singora). The move
+//           does not wait for its staging ground to be its side's: empty enemy ground is marched into, as any
+//           army takes it, and the move goes on. Ground an enemy stands on is the front's to fight for: the row
+//           is in the field for that ground and no other, and its road waits only while that fight is open (the
+//           design director's ruling of 23:46Z, 20 November 2026, on Hong Kong's trace, 2).
 //   then    follow-ons by month, counted from the month the choice went. A follow-on goes by its date whatever
 //           the state of the front its row came from (the 48th left Luzon while Bataan held), unless it names that
 //           front's place in `after`: every place in `after` is to be its side's first (the hop before, by the
@@ -21,7 +25,7 @@
 // player, and only for a plan that names fronts: with the far side off there is none, and nothing here happens.
 // This file is the state of the fronts; what a staff does with it is ai.ts (`frontsMonth`).
 
-import { allied } from './game';
+import { allied, hostileUnits } from './game';
 import { isOpen, ops, type Op } from './staff';
 import { bookKept } from './stations';
 import type { Corps, Game, Region } from './types';
@@ -29,8 +33,11 @@ import type { Corps, Game, Region } from './types';
 export interface FollowOn { month: number; corps: string; with?: string[]; to: string[]; after?: string[]; from?: string[]; stage?: boolean; minOdds?: number }
 export interface PlanFront { id: string; place: string; rows: string[]; held?: string[]; land?: { corps: string; with?: string[]; to: string }[]; then?: FollowOn[] }
 export interface FrontPlan { op: Op; at: number; fronts: PlanFront[] }
-/** A row on a live front: the front it is on, the follow-on that has it (if one does), and whether the plan holds it where it stands. */
-export interface FrontRow { c: Corps; k: number; front: PlanFront; place: Region; next: { k: number; i: number; f: FollowOn } | null; waits: boolean }
+/**
+ * A row on a live front: the front it is on, the follow-on that has it (if one does), whether the plan holds it where
+ * it stands, and (`road`) the staging ground of its move by land while an enemy stands on it: ground the row may fight for.
+ */
+export interface FrontRow { c: Corps; k: number; front: PlanFront; place: Region; next: { k: number; i: number; f: FollowOn } | null; waits: boolean; road: Region | null }
 export interface FrontsNow { nat: string; plan: FrontPlan; live: boolean[]; rows: Map<number, FrontRow> }
 
 const overKey = (nat: string, k: number): string => `st:frO:${nat}:${k}`;
@@ -157,8 +164,11 @@ function read(g: Game, nat: string, change: boolean): FrontsNow | null {
     if (k < 0) continue;
     if (change && next && k !== s) g.flags[joinedKey(c)] = k + 1;
     const F = plan.fronts[k];
-    const byRoad = (F.land ?? []).some((m) => m.corps === nm || (m.with ?? []).includes(nm)) && g.flags[walkedKey(c)] === undefined;
-    rows.set(c.id, { c, k, front: F, place: g.byName[F.place], next, waits: !!next || byRoad });
+    const move = g.flags[walkedKey(c)] === undefined ? (F.land ?? []).find((m) => m.corps === nm || (m.with ?? []).includes(nm)) : undefined;
+    // (Its staging ground with an enemy standing on it is the front's to fight for: the row is not held off that fight.)
+    const stage = move ? g.byName[move.to] : undefined;
+    const road = !next && stage && !allied(g, nat, stage.ctrl) && hostileUnits(g, stage, nat).length ? stage : null;
+    rows.set(c.id, { c, k, front: F, place: g.byName[F.place], next, waits: !!next || (!!move && !road), road });
   }
   // The rows a front that ended this month named, and no live front has now, are their staff's own again.
   if (change) for (const k of ended) for (const nm of new Set(named(plan.fronts[k]))) {
@@ -194,6 +204,8 @@ export function offFront(g: Game, c: Corps, to: Region): boolean {
   if (!current || ordered) return false;
   const row = current.rows.get(c.id);
   if (!row || !row.place) return false;
+  // (A row whose staging ground an enemy stands on fights for that ground and goes nowhere else.)
+  if (row.road) return to.id !== row.road.id;
   const d = landMarches(g, row.place.id);
   return d[c.reg] >= 0 && (d[to.id] < 0 || d[to.id] > d[c.reg]);
 }
