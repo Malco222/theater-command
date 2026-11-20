@@ -1,5 +1,10 @@
 {
   "_note": "The air war as its own game (the grand campaign only). Aircraft fly from airfields: places on the map with a size, which engineers can lay out and the treasury can enlarge. Each air fleet history lists is split into air groups of one kind, fighters or bombers, of at most groups.most aircraft. A group patrols, rests, or flies one raid a month. A raid is planned from its target: who can reach it, what will meet it, the chance of success and the losses to expect, and it is flown the moment the order is given.",
+  "count": {
+    "_note": "The defences of a target as the raid card counts them (Brian, 20 November 2026: 'calculate how many flak guns they have and fighter squadrons they have that will be in range to intercept them'). The forecast has always weighed both; these put them in numbers a player can read. squadron: how many fighters make a squadron in each nation's air force ('_default' for the rest), so the fighters able to meet a raid are told in squadrons. guns: every target puts up 'light' flak guns, and each level of anti-aircraft guns built there is 'heavy' heavy guns more. A count only: the losses come from the same shares as before.",
+    "squadron": { "USA": 25, "UK": 16, "CAN": 16, "AUS": 16, "NZL": 16, "SAF": 16, "IND": 16, "_default": 12 },
+    "guns": { "light": 60, "heavy": 120 }
+  },
   "fields": {
     "_note": "sizes is how many aircraft a seeded airfield serves, by its class: 1 a landing ground, 2 an airfield, 3 an air base. Every level built on top (the arsenal's airfields, or engineers as far as 'engineers') serves arsenal.works.field.holds more. seed says where the war begins with airfields: an air base wherever history bases an air fleet and at every capital, an airfield in every city, a landing ground in every town. least is what a group stranded on bare ground can still fly. words name an airfield from the aircraft it serves.",
     "sizes": [0, 500, 1000, 1500],

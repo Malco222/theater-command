@@ -157,6 +157,11 @@ export interface AirPlace {
   bomberDefence: number;
   /** The share of bombers the guns bring down over the whole raid (flak, built guns), as the raid card shows it. */
   gunLoss: number;
+  /**
+   * The guns round the target as the raid card counts them (campaign/air.ts flakGuns): light and heavy. For the scene,
+   * which can stand that many gun sites round the target and thicken its bursts by them; nothing in the battle reads it.
+   */
+  flakGuns: { light: number; heavy: number };
   /** Average fighting worth of an aircraft on each side, as assessAir weighs it. */
   worth: Record<Side, number>;
   /** What the raid card forecast: aircraft each side should lose, and bombers that should get through. */

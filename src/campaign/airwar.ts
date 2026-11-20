@@ -21,7 +21,7 @@ import type { AirFleet, AirMission, AirReport, Game } from './types';
 import type { FoughtAir } from './airfought';
 import {
   AIR, AIRWAR, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, cover, crowding,
-  fightersOver, fly, forecastAir, groupAt, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, whyNotBase, whyNotMission, whyNotShipAir,
+  fightersOver, flakGuns, fly, forecastAir, groupAt, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, squadronsOf, whyNotBase, whyNotMission, whyNotShipAir,
 } from './air';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
 import { DEFENCE, allied, atWar, headline, worksOf } from './game';
@@ -895,6 +895,19 @@ export interface DayNight {
    */
   guns: number;
   gunsLabel: string;
+  /**
+   * The same defences in numbers (Brian, 20 November 2026: "calculate how many flak guns they have and fighter
+   * squadrons they have that will be in range to intercept them"): the flak guns round the target, light and heavy
+   * together, and how many of them are heavy; and the enemy's fighter squadrons able to meet the raid, and the groups
+   * they come from. `foes` counts every fighter of those groups; `foesAble` those that can get to the raid.
+   */
+  gunCount: number;
+  gunHeavy: number;
+  gunsCount: string;
+  foeSquadrons: number;
+  foeGroups: number;
+  foesAble: number;
+  foesCount: string;
   /** After the label, in the row's small dim type, where no guns are built: 'light flak only' (any target puts up some). Empty with guns. */
   gunsTail: string;
   /** Fighter groups picked that fly by day and stay at home by night: "Stays home: no escort by night". */
@@ -951,11 +964,17 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
   const lead = !plans.bomb.why ? plans.bomb : plans.night;
   const fighter = (id: number): boolean => plans.bomb.seats.some((s) => s.id === id && s.kind === 'ftr');
   const level = g.regions[target] ? gunsAt(g, target) : 0;
+  const guns = flakGuns(level);
+  const squadrons = lead.meets.reduce((n, x) => n + squadronsOf(x.nat, x.able), 0), able = lead.meets.reduce((n, x) => n + x.able, 0);
   return {
     chosen: kind, day, night,
     bombers: lead.bombers,
     foes: lead.meets.reduce((n, x) => n + x.ftr, 0),
     guns: level, gunsLabel: level ? `Level ${level} anti-aircraft guns` : 'No anti-aircraft guns', gunsTail: level ? '' : 'light flak only',
+    gunCount: guns.all, gunHeavy: guns.heavy,
+    gunsCount: guns.heavy ? `about ${num(guns.all)} guns, ${num(guns.heavy)} of them heavy` : `about ${num(guns.all)} light guns`,
+    foeSquadrons: squadrons, foeGroups: lead.meets.length, foesAble: able,
+    foesCount: squadrons ? `about ${num(squadrons)} ${squadrons === 1 ? 'squadron' : 'squadrons'} of ${num(lead.meets.length)} ${lead.meets.length === 1 ? 'group' : 'groups'} can intercept` : '',
     home: day.picked.filter((id) => fighter(id) && !night.picked.includes(id)),
     barred: plans.bomb.seats.filter((s) => s.kind === 'ftr' && !s.why && !s.picked).map((s) => s.id),
   };

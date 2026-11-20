@@ -114,7 +114,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     clash: airWar(g) && m !== 'superiority' ? AIRWAR.losses.clash : 1,
     law: { bombers: L.bombers, power: L.power, most },
     fighters: C.fighters, escortShare: C.escortShare, bomberDefence: C.bomberDefence,
-    gunLoss: a.gunLoss,
+    gunLoss: a.gunLoss, flakGuns: { light: a.guns.light, heavy: a.guns.heavy },
     worth: { att: a.E > 0 ? a.Epow / a.E : 1, def: a.D > 0 ? a.Dpow / a.D : 1 },
     forecast: { foe: fc.foeLoss, ftr: fc.ftrLoss, bmr: fc.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
     chance: fc.success,
