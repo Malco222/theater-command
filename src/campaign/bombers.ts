@@ -33,7 +33,7 @@ import data from '../../data/campaign/stories.json';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { NOSE_ART, markOf, type BomberMark, type MarkStyle } from './bomber-marks';
-import type { AirFleet, BomberRoster, BomberRow, CrewOrder, CrewsHome, Game } from './types';
+import type { AirFleet, BomberRoster, BomberRow, BomberSeats, BomberShot, CrewOrder, CrewsHome, Game } from './types';
 
 export { NOSE_ART };
 
@@ -227,6 +227,56 @@ export function credit(b: BomberRow, foe?: string): void {
   if (foe) { const by = (b[6] ??= {}); by[foe] = (by[foe] ?? 0) + 1; }
 }
 
+/**
+ * A group's bombers as an air battle is handed them (battle/air/ticket.ts): the 'n' of them that fly, the old hands
+ * first. Read from the game and never written to it: the roster is made up on a copy, exactly as the raid's booking
+ * makes up the real one before it books the losses (air.ts fly), so each seat's row is found again when the battle
+ * hands back which of them fell. Which fly, when not all do, is drawn from the battle's own seed.
+ */
+export function seatsOf(g: Game, f: AirFleet, n: number, seed: number): BomberSeats | null {
+  if (!keptByName(f) || n <= 0) return null;
+  const R = f.bombers;
+  const copy: AirFleet = { ...f, bombers: R ? { ...R, on: R.on.map(copyRow), used: { ...R.used }, roll: [...R.roll] } : undefined };
+  muster(g, copy);
+  let on = copy.bombers?.on ?? [];
+  if (!on.length) return null;
+  if (n < on.length) {
+    const rng = new Rng(hashString(`seats:${seed}:${f.id}`));
+    const pick = on.map((_, i) => i);
+    for (let i = pick.length - 1; i > 0; i--) { const j = rng.int(i + 1); [pick[i], pick[j]] = [pick[j], pick[i]]; }
+    on = pick.slice(0, n).sort((a, b) => a - b).map((i) => on[i]);
+  }
+  const style = styleOf(f.nat);
+  const seats = on
+    .map((b, i) => ({ b, i, m: bomberMark(g, copy, b) }))
+    .sort((x, y) => y.b[2] - x.b[2] || y.b[3] - x.b[3] || x.i - y.i)
+    .map(({ b, m }) => ({
+      name: m.name, mark: m.mark, art: style === 'nose' ? b[0] : 0, missions: b[2], kills: b[3], ...(b[6] ? { by: { ...b[6] } } : {}),
+      crew: b[5], grade: crewGrade(b, f.nat), risk: riskOf(b), row: copyRow(b),
+    }));
+  return { style, told: BOMBERS.told, flown: flownWord(f.nat), gunners: BOMBERS.gunners, seats };
+}
+
+/**
+ * What a fought battle saw a group's gunners shoot down goes to the bombers seen to do it: each row as the battle was
+ * handed it, found on the roster before the month's flying changes it, in the order the battle saw them and never
+ * more than 'most', the group's share of the raid's kills (the group's record counts no more). Returns how many kills
+ * were so credited; one whose bomber is no longer on the roster (it fell later in the same battle) is not.
+ */
+function creditSeen(R: BomberRoster, seen: BomberShot[], most: number): number {
+  const found = new Set<BomberRow>();
+  const to: [BomberRow, Record<string, number>][] = [];
+  for (const s of seen) {
+    const b = R.on.find((x) => !found.has(x) && same(x, s.row));
+    if (!b) continue;
+    found.add(b);
+    to.push([b, s.by]);
+  }
+  let n = 0;
+  for (const [b, by] of to) for (const [foe, k] of Object.entries(by)) for (let i = 0; i < k && n < most; i++) { credit(b, foe); n++; }
+  return n;
+}
+
 /** What became of a month's finished crews: the bombers as they stood, and for the player where the crews went. */
 export interface ToursDone {
   done: BomberRow[];
@@ -245,21 +295,23 @@ export interface ToursDone {
 
 /**
  * A group has flown a month of bombing: each bomber flies most of its missions, the group's gunners' kills go to
- * bombers of the group, and a crew that reaches the end of its tour goes home. The player's crews go where his
+ * bombers of the group (first to those a fought battle saw make them, 'seen'), and a crew that reaches the end of its tour goes home. The player's crews go where his
  * standing order sends them (crewsHome().order), and their going lifts the group; a computer nation's go to its
  * schools, the bomber flying on, and nothing else changes.
  */
-export function flownMonth(g: Game, f: AirFleet, kills: number, foe?: string): ToursDone | null {
+export function flownMonth(g: Game, f: AirFleet, kills: number, foe?: string, seen?: BomberShot[]): ToursDone | null {
   const R = f.bombers;
   if (!R || !R.on.length) return null;
   const B = BOMBERS, rng = draw(g, f, R), tour = tourOf(f.nat);
+  // The kills a fought battle saw are the bombers' that made them; only the rest of the month's are shared out by lot.
+  const had = seen?.length ? creditSeen(R, seen, kills) : 0;
   for (const b of R.on) {
     let n = 0;
     for (let i = 0; i < PER_MONTH; i++) if (rng.chance(B.fit)) n++;
     n = Math.min(n, tour - b[5]);
     b[2] += n; b[5] += n;
   }
-  for (let k = 0; k < kills; k++) credit(R.on[rng.int(R.on.length)], foe);
+  for (let k = had; k < kills; k++) credit(R.on[rng.int(R.on.length)], foe);
   const done = R.on.filter((b) => b[5] >= tour);
   if (!done.length) return null;
   const mine = f.nat === g.human;

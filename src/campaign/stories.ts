@@ -20,7 +20,7 @@ import { decorate, valourMonth } from './valour';
 import { DIPLOMACY } from './diplomacy';
 import {
   STACK,
-  type AirFleet, type Award, type BattleReport, type BomberRow, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
+  type AirFleet, type Award, type BattleReport, type BomberRow, type BomberShot, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
   type Region, type Rivalry, type Storied, type Stories, type UnitKind,
 } from './types';
 
@@ -659,10 +659,10 @@ export function toursWords(unit: string, t: ToursDone): string {
 /**
  * A bomber group's bombers after an operation (bombers.ts): the lost are struck off its roster (those the field saw
  * fall, 'fallen', where the raid was fought out), and after a month of bombing each bomber has its missions, the
- * gunners their kills, and the crews that have finished a tour go home. Told to the player; for everyone else it is
+ * gunners their kills (first the bombers the field saw make them, 'seen'), and the crews that have finished a tour go home. Told to the player; for everyone else it is
  * kept and no more.
  */
-function bombersFlew(g: Game, f: AirFleet, bombing: boolean, kills: number, at: number, sea: boolean, fallen?: BomberRow[], foe?: string): void {
+function bombersFlew(g: Game, f: AirFleet, bombing: boolean, kills: number, at: number, sea: boolean, fallen?: BomberRow[], foe?: string, seen?: BomberShot[]): void {
   if (!keptByName(f)) return;
   const struck = muster(g, f, fallen);
   if (!f.bombers) return;
@@ -673,14 +673,14 @@ function bombersFlew(g: Game, f: AirFleet, bombing: boolean, kills: number, at: 
   if (!bombing) return;
   // Of a mixed fleet's kills, the gunners' share is the bombers' weight beside its fighters'.
   const share = f.ftr > 0 ? (f.bmr * BOMBERS.gunners) / (f.ftr + f.bmr * BOMBERS.gunners) : 1;
-  const done = flownMonth(g, f, Math.round(kills * share), foe);
+  const done = flownMonth(g, f, Math.round(kills * share), foe, seen);
   if (!done) return;
   // Counted on the group's record; the bombers' own roll says which crews they were, so the group's diary does not.
   bump(f, 'tours', done.done.length);
   if (mine) headline(g, 'info', toursWords(f.name, done), f.nat);
 }
 
-export function storyAir(g: Game, mission: string, target: number, att: AirFleet[], def: AirFleet[], facts: { sky: boolean; sunk: number; attLost: number; defLost: number; fallen?: Record<number, BomberRow[]> }): void {
+export function storyAir(g: Game, mission: string, target: number, att: AirFleet[], def: AirFleet[], facts: { sky: boolean; sunk: number; attLost: number; defLost: number; fallen?: Record<number, BomberRow[]>; shot?: Record<number, BomberShot[]> }): void {
   const sea = mission === 'strike';
   const bombing = mission === 'bomb' || mission === 'night' || sea;
   // Whose fighters the bombers' gunners shot at: the nation with the most of them up.
@@ -696,7 +696,7 @@ export function storyAir(g: Game, mission: string, target: number, att: AirFleet
     const had = f.hon?.length ?? 0;
     earn(g, 'air', f, sea ? -1 : target);
     if (f.nat === g.human && (f.hon?.length ?? 0) > had && honoursOf(g, f).slice(had).some((a) => a.hon === 'tour')) g.stories.mail.push({ w: 7, m: 'tour', id: -f.id, unit: f.name, reg: f.base });
-    bombersFlew(g, f, bombing, facts.defLost ? Math.round(facts.defLost / att.length) : 0, target, sea, facts.fallen?.[f.id], foe);
+    bombersFlew(g, f, bombing, facts.defLost ? Math.round(facts.defLost / att.length) : 0, target, sea, facts.fallen?.[f.id], foe, facts.shot?.[f.id]);
   }
   const fighters = def.reduce((s, x) => s + x.ftr, 0);
   for (const f of def) {

@@ -12,7 +12,7 @@
 // field reports cut is the line the campaign cuts. Absent, fly() rolls its dice exactly as before.
 
 import type { VictoryLevel } from '../core/ticket';
-import type { AirFleet, AirReport, Game } from './types';
+import type { AirFleet, AirReport, BomberRow, BomberShot, Game } from './types';
 
 export interface FoughtAir {
   /** By campaign air group id: fighters and bombers lost, and downed fighter pilots who fly again. */
@@ -48,6 +48,14 @@ export interface FoughtAir {
    * that dropped, comes above the throw. fly() uses them in place of its own, so it books what the field showed.
    */
   rolls?: { rail?: number; ruin?: number };
+  /**
+   * By campaign air group id, for a group whose bombers the battle knew by name (bombers.ts seatsOf): the bombers that
+   * fell, each as the row the battle was handed, and what the battle saw each bomber's gunners shoot down. fly() makes
+   * the group's roster up as the ticket did before it books the losses, and the stories strike off these very bombers
+   * (stories.ts bombersFlew). Never a count: 'lost' is the count.
+   */
+  fell?: Record<number, BomberRow[]>;
+  shot?: Record<number, BomberShot[]>;
 }
 
 /**

@@ -902,6 +902,43 @@ export interface AirLeader {
  */
 export type BomberRow = [art: number, ord: number, missions: number, kills: number, head: number, crew: number, by?: Record<string, number>];
 
+/**
+ * One bomber of a group as an air battle is handed it (bombers.ts seatsOf; battle/air AirPlace.bombers): what the 3D
+ * game paints on it, and what the battle hands back about it. Shown, never counted.
+ */
+export interface BomberSeat {
+  /** What it is called ('Prize Pumpkin', 'G for George', '5J+DM') and its marking as painted ('KM-G', 'K-312'): both '' for a new aircraft not yet named. */
+  name: string;
+  mark: string;
+  /** Its number on the nose-art list, for a nation that paints nose art (America alone); 0 for a bare nose, and for every other nation. */
+  art: number;
+  /** The missions it has flown (a bomb painted for each), the aircraft its gunners have shot down (a symbol for each), and whose they were. */
+  missions: number;
+  kills: number;
+  by?: Record<string, number>;
+  /** Its present crew's missions, and what their experience is called. */
+  crew: number;
+  grade: string;
+  /** How likely a loss of the group is to be this one, beside the others: a green crew's the likeliest (stories.json bombers.risk). */
+  risk: number;
+  /** The campaign's own row for it, handed back as it is with what the battle saw of it. */
+  row: BomberRow;
+}
+
+/** A group's bombers for an air battle: how its nation marks them (bomber-marks.ts), and the seats, old hands first. */
+export interface BomberSeats {
+  style: string;
+  /** The missions from which a bomber's loss is told by name, and what its nation calls one ('mission', 'operation'). */
+  told: number;
+  flown: string;
+  /** What a bomber's guns weigh beside a fighter, in the share of a raid's kills that is the gunners' (stories.json bombers.gunners). */
+  gunners: number;
+  seats: BomberSeat[];
+}
+
+/** What an air battle saw a bomber's gunners shoot down: the bomber's row as the battle was handed it, and how many of each nation's. */
+export interface BomberShot { row: BomberRow; by: Record<string, number> }
+
 /** A bomber group's aircraft one by one, and what became of those that have gone (bombers.ts). */
 export interface BomberRoster {
   /** The bombers on strength, in the order they joined: as many as the group has bombers. */

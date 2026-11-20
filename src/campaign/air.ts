@@ -22,7 +22,7 @@ import { allied, atWar, headline, routineNews, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
-import { trainedEdge } from './bombers';
+import { muster, trainedEdge } from './bombers';
 import { storyAir, storyEdge } from './stories';
 import { groundRules } from './ground';
 import { RAILWAYS, bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
@@ -1042,6 +1042,10 @@ function tradeHurt(g: Game, nat: string, target: number, through: number): Recor
 export function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFleet[], salt = '', battle?: FoughtAir): AirReport | null {
   const a = assessAir(g, fleets, m, target);
   if (a.why) return null;
+  // A fought battle that knew the bombers by name: each such group's roster is made up now, before any loss is booked,
+  // exactly as the battle's ticket made it up on a copy (bombers.ts seatsOf), so the bombers the battle names are found
+  // on it. After the assessment, which the ticket made on the roster as it stood. A draw of the group's own stream only.
+  if (battle?.fell) for (const x of a.att) if (battle.fell[x.f.id]) muster(g, x.f);
   const C = AIR.combat, I = intensity(m);
   const sea = m === 'strike' || m === 'fleet', night = m === 'night';
   // The sea fought over: the one struck, or the one the fleet struck is in.
@@ -1281,7 +1285,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   // The grand campaign keeps what the raid was worth beside what it cost: a staff learns from its own results.
   if (g.flags.open === 1) rep.worth = Math.round(value);
   g.airReports.push(rep);
-  storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost });
+  storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
 
   const who = list(fleets.filter((f) => a.att.some((x) => x.f === f)).map((f) => f.name));
   const cost = `${planes(aLost, 'aircraft').replace('aircrafts', 'aircraft')} lost`;

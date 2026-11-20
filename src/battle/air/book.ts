@@ -78,6 +78,13 @@ export const SKY = {
    * bombers lost, and when each falls, are the same with this on or off (tests/battle-air-flak-hold.test.ts).
    */
   flak: { band: [1.5, 1, 0.55], fighters: 0, kinds: [['light', 'medium', 'heavy'], ['medium', 'heavy'], ['heavy']] as string[][], hold: true },
+  /**
+   * Bombers by name (AirPlace.bombers; Brian, 20 November 2026: "i would like the game to keep track of real bombers
+   * names and how many missions they have completed and fighters shot down"). 'lines': when one of a group's
+   * longest-serving bombers falls, a line names it, and only for this many of each group, its first seats; an air
+   * fleet that loses forty bombers in a raid does not fill the strip with forty names. Shown, never counted.
+   */
+  named: { lines: 2 },
   /** A defending fighter caught between escorts and bombers gives the escorts this share of its effort. */
   tied: 0.6,
   /** Fighting edges: diving from a higher band (for this many air seconds), caught climbing, wavering. A routing group does not fight back. */

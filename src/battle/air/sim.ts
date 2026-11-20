@@ -17,7 +17,8 @@ import { enginesOf, escortRoles, fighterWay, passesOn, pickPass, type Pass, type
 import { collideWords, drawFall, fallWords } from './falls';
 import { coolOf, crewOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
 import { fighterGuns, type GunKind } from './guns';
-import type { AirJob, AirOutcome, AirPlace, AirUnit, Fall, FallHow, Straggler } from './types';
+import type { AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
+import type { BomberSeat } from '../../campaign/types';
 import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow } from '../../campaign/airfought';
 import type { VictoryLevel } from '../../core/ticket';
 export { peopleOf } from '../../campaign/airfought';
@@ -25,7 +26,21 @@ export { peopleOf } from '../../campaign/airfought';
 const C = SKY.cues;
 
 /** One of a tick's losses, before how it goes is drawn (AirSim.fated). */
-interface Loss { u: AirUnit; fall: Fall; by: number | 'flak' | null | undefined; s: Straggler | null; alt: number; fid: number }
+interface Loss {
+  u: AirUnit; fall: Fall; by: number | 'flak' | null | undefined; s: Straggler | null; alt: number; fid: number;
+  /** A bomber known by name: its seat in its group's list (-1: none). A fighter that fell to a named box's gunners: that box and the seat of the bomber that got it. */
+  seat: number;
+  gun: [box: number, seat: number] | null;
+}
+
+/** A box whose bombers are known by name (AirPlace.bombers): the seats in formation, those that limped home, those that fell, and each one's gunners' kills by nation. */
+interface Seated { all: BomberSeat[]; told: number; flown: string; gunners: number; form: number[]; away: number[]; spare: number; fell: number[]; shot: Map<number, Record<string, number>> }
+
+/** A named bomber as an event carries it. */
+const toldOf = (B: Seated, seat: number): BomberTold => {
+  const b = B.all[seat];
+  return { seat, name: b.name, mark: b.mark, art: b.art, missions: b.missions, kills: b.kills };
+};
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 const off = (u: AirUnit): boolean => u.state === 'gone' || u.state === 'withdrawn';
@@ -113,6 +128,14 @@ export class AirSim implements BattleSim<AirUnit> {
   /** This tick, what each group was owed and by whom ('flak' for the guns): who shot down whom. */
   private owedBy = new Map<number, Map<number | 'flak', number>>();
   private stragId = 1;
+  /**
+   * Bombers by name (AirPlace.bombers): each such box's seats, and the seat each straggler holds. Which bomber a loss
+   * is, and whose gunners brought a fighter down, is drawn from a stream of its own in shown and unshown battles
+   * alike, and is never a count: the same aircraft fall at the same moments with the names or without them.
+   */
+  private seatRng: Rng;
+  private seated = new Map<number, Seated>();
+  private stragSeat = new Map<number, number>();
   /** The escort groups that have broken away from their bombers at least once (told once each). */
   private broke = new Set<number>();
   /** The boxes the target's guns are holding their fire on, and the fighter group each is held for (SKY.flak.hold). */
@@ -144,6 +167,8 @@ export class AirSim implements BattleSim<AirUnit> {
     this.lookRng = this.rng.fork(41);
     this.stragLook = this.rng.fork(43);
     this.hitRng = this.rng.fork(47);
+    // 53 is the crews' (fates.ts: the men past the fifth). 59: which bomber by name a loss is.
+    this.seatRng = this.rng.fork(59);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
     const T = SKY.target;
     this.zones = [
@@ -179,6 +204,12 @@ export class AirSim implements BattleSim<AirUnit> {
         };
         this.units.push(u);
       }
+    }
+    for (const u of this.units) {
+      const B = u.air === 'bmr' ? this.place.bombers?.[u.corps] : undefined;
+      if (!B || !B.seats.length) continue;
+      const k = Math.min(u.n0, B.seats.length);
+      this.seated.set(u.id, { all: B.seats, told: B.told, flown: B.flown, gunners: B.gunners, form: Array.from({ length: k }, (_, i) => i), away: [], spare: u.n0 - k, fell: [], shot: new Map() });
     }
     // The raid comes on as one stream: its bomber boxes side by side on one line to the target, the escorts with them.
     const raid = this.units.filter((u) => u.side === 'att');
@@ -841,13 +872,16 @@ export class AirSim implements BattleSim<AirUnit> {
         // Which group brought it down, and whether it was a straggler (the box's next loss is its straggler's): never a count.
         const by = this.creditor(u);
         const s = u.air === 'bmr' ? this.nextDown(u) : null;
+        // Which bomber by name it is, or which bomber's gunners got this fighter: never a count either.
+        const seat = u.air === 'bmr' ? this.seatDown(u, s) : -1;
+        const gun = u.air === 'ftr' ? this.gunnerOf(u, by) : null;
         u.n--;
         u.mor = clamp01(u.mor - SKY.morale.perLoss / u.n0);
         const over = u.side === 'att' ? 'enemy' : 'own';
         const fall = drawFall(this.fallRng, u.air, over, P.saved[u.side]);
         if (fall.back) u.back++;
         const alt = s ? Math.max(0, u.alt - s.down) : u.alt;
-        lost.push({ u, fall, by, s, alt, fid: this.fid++ });
+        lost.push({ u, fall, by, s, alt, fid: this.fid++, seat, gun });
         u.figures = Math.max(u.n > 0 ? 1 : 0, Math.ceil(u.n / u.per));
       }
       if (this.show && owed > 0 && u.n > 0) hit.push([u, owed]);
@@ -931,7 +965,16 @@ export class AirSim implements BattleSim<AirUnit> {
       told.add(L);
       const who = L.by !== undefined ? { by: L.by, ...(s ? { strag: s.id, eng: s.eng, ...this.stragAt(u, s) } : {}) } : {};
       const loud = fall.how === 'explode' || fall.how === 'breakup' || fall.how === 'collide';
-      this.say('air:lost', u, text, { ...fall, air: u.air, alt: L.alt, ...(fall.chutes ? { chuteCue: C.chutes } : {}), ...who }, loud ? C.explode : C.down);
+      // By name: the bomber this is ('bomber'), or the bomber whose gunners brought this fighter down ('gunner').
+      const B = L.seat >= 0 ? this.seated.get(u.id) : undefined;
+      const named = { ...(B ? { bomber: toldOf(B, L.seat) } : {}), ...(L.gun ? { gunner: { box: L.gun[0], ...toldOf(this.seated.get(L.gun[0])!, L.gun[1]) } } : {}) };
+      this.say('air:lost', u, text, { ...fall, air: u.air, alt: L.alt, ...(fall.chutes ? { chuteCue: C.chutes } : {}), ...who, ...named }, loud ? C.explode : C.down);
+      // One of the group's longest-serving bombers is named as it goes (its seats come old hands first; the campaign's
+      // news names the oldest again after the raid, stories.ts bombersFlew). Shown only; the words are the UI director's to rule.
+      if (B && L.seat < SKY.named.lines && B.all[L.seat].name && B.all[L.seat].missions >= B.told) {
+        const b = B.all[L.seat];
+        this.shownSay('air:named', u, `That was ${b.name}, with ${b.missions} ${B.flown}s flown.`, { bomber: toldOf(B, L.seat), fid: L.fid });
+      }
     }
   }
 
@@ -1076,12 +1119,16 @@ export class AirSim implements BattleSim<AirUnit> {
     // From its own stream, never a count: its dead engine may be burning as it falls out, and the crew may put it out.
     if (this.stragLook.chance(G.fire.k)) s.fire = this.stragLook.chance(G.fire.stays) ? Infinity : G.fire.out[0] + this.stragLook.next() * (G.fire.out[1] - G.fire.out[0]);
     b.strag.push(s);
+    // By name: the bomber that falls out keeps its seat, and the box's next loss, the straggler's, is that bomber.
+    const B = this.seated.get(b.id);
+    const seat = B && B.form.length ? this.seatFrom(B, B.form) : -1;
+    if (seat >= 0) this.stragSeat.set(s.id, seat);
     // The UI director's words (ui-director/words-air-battle-dispatches.md, 21:19Z): both forms end alike. A
     // single-engined bomber has no engine to lose and fly on: its one engine is hit (the Mac's first Pearl Harbor run).
     const text = single
       ? s.why === 'flak' ? `Flak has hit the engine of ${this.aBomberOf(b, false)}, and it is falling out of formation.` : `${this.aBomberOf(b, true)} has taken a hit in the engine and is falling out of formation.`
       : s.why === 'flak' ? `Flak has knocked out an engine on ${this.aBomberOf(b, false)}, and it is falling out of formation.` : `${this.aBomberOf(b, true)} has lost an engine and is falling out of formation.`;
-    this.shownSay('air:straggle', b, text, { id: s.id, box: b.id, eng: s.eng, prop: s.prop, why: s.why, by: s.by, ...(s.fire ? { fire: true } : {}) });
+    this.shownSay('air:straggle', b, text, { id: s.id, box: b.id, eng: s.eng, prop: s.prop, why: s.why, by: s.by, ...(s.fire ? { fire: true } : {}), ...(B && seat >= 0 ? { bomber: toldOf(B, seat) } : {}) });
   }
 
   /** The aircraft a box loses next: its oldest straggler that has been seen to leave and has no escort over it; failing that, one in formation; failing that, any straggler. */
@@ -1090,6 +1137,69 @@ export class AirSim implements BattleSim<AirUnit> {
     const k = b.strag.findIndex((s) => s.age >= G.seen && s.cover === null);
     const at = k >= 0 ? k : b.n > b.strag.length ? -1 : 0;
     return at >= 0 ? b.strag.splice(at, 1)[0] : null;
+  }
+
+  /**
+   * One of a list of a box's seats, the likelier the greater its risk (a green crew's, as the campaign's own draw has
+   * it: bombers.ts unlucky), taken out of the list; with 'spare' aircraft the box has beyond its seats, maybe one of
+   * those (-1).
+   */
+  private seatFrom(B: Seated, pool: number[], spare = 0): number {
+    let all = spare;
+    for (const k of pool) all += B.all[k].risk;
+    if (all <= 0) return -1;
+    let x = this.seatRng.next() * all;
+    for (let i = 0; i < pool.length; i++) { x -= B.all[pool[i]].risk; if (x < 0) return pool.splice(i, 1)[0]; }
+    return spare > 0 || !pool.length ? -1 : pool.pop()!;
+  }
+
+  /**
+   * Which bomber by name a box's loss is: its straggler's seat when the loss is a straggler's; otherwise one in
+   * formation; failing that, one that had limped clear. -1 for a box not known by name.
+   */
+  private seatDown(u: AirUnit, s: Straggler | null): number {
+    const B = this.seated.get(u.id);
+    if (!B) return -1;
+    let k = -1;
+    if (s && this.stragSeat.has(s.id)) { k = this.stragSeat.get(s.id)!; this.stragSeat.delete(s.id); }
+    else if (B.form.length || B.spare > 0) { k = this.seatFrom(B, B.form, B.spare); if (k < 0) B.spare--; }
+    else if (B.away.length) k = this.seatFrom(B, B.away);
+    if (k >= 0) B.fell.push(k);
+    return k;
+  }
+
+  /** A straggler's seat goes back to its box's formation (it caught up), or among those that limped clear. */
+  private seatBack(b: AirUnit, s: Straggler, to: 'form' | 'away'): void {
+    const B = this.seated.get(b.id), k = this.stragSeat.get(s.id);
+    if (!B || k === undefined) return;
+    this.stragSeat.delete(s.id);
+    B[to].push(k);
+  }
+
+  /**
+   * Whether a fighter that falls while it fires on a box known by name fell to that box's gunners, and to which
+   * bomber's. The chance is the campaign's own share of a raid's kills for the gunners (bombers.ts: a bomber's guns
+   * weigh 'gunners' of a fighter), between the box it presses hardest and the group the loss is booked to. The loss
+   * and who it is booked to ('by') stand as they are: this only names the bomber the campaign paints the kill on
+   * (bombers.ts credit). Returns the box and the seat, or null.
+   */
+  private gunnerOf(u: AirUnit, by: number | 'flak' | null | undefined): [number, number] | null {
+    if (!this.seated.size) return null;
+    let box: AirUnit | undefined, most = 0;
+    for (const f of u.fire) if (f.rate > most && this.seated.has(f.on)) { most = f.rate; box = this.unit(f.on); }
+    if (!box) return null;
+    const B = this.seated.get(box.id)!;
+    const esc = typeof by === 'number' ? this.unit(by) : undefined;
+    const w = box.n * B.gunners;
+    if (this.seatRng.next() >= (esc && esc.air === 'ftr' ? w / (esc.n + w) : 1)) return null;
+    // Any bomber still in formation; failing that, one of the box's stragglers.
+    const pool = B.form.length ? B.form : box.strag.map((s) => this.stragSeat.get(s.id)).filter((k): k is number => k !== undefined);
+    if (!pool.length) return null;
+    const k = pool[this.seatRng.int(pool.length)];
+    const got = B.shot.get(k) ?? {};
+    got[u.nat] = (got[u.nat] ?? 0) + 1;
+    B.shot.set(k, got);
+    return [box.id, k];
   }
 
   /** Where a straggler is: behind its box along its heading, and below it. */
@@ -1110,6 +1220,7 @@ export class AirSim implements BattleSim<AirUnit> {
   /** A straggler that got clear of the fight and is on its way home. */
   private limped(b: AirUnit, s: Straggler, seen = false): void {
     b.away++;
+    this.seatBack(b, s, 'away');
     // Told only when one is seen to get clear in the fight; those that go home with their box, or at the end, are not.
     this.shownSay('air:limped', b, seen ? `${this.aBomberOf(b, true, 'damaged')} has turned for home on its own.` : '', { id: s.id, box: b.id, ...this.stragAt(b, s) });
   }
@@ -1174,6 +1285,7 @@ export class AirSim implements BattleSim<AirUnit> {
       if (!done) s.back = Math.min(s.back, G.held);
       else if (s.join && s.back <= 0) {
         u.strag.splice(u.strag.indexOf(s), 1);
+        this.seatBack(u, s, 'form');
         this.shownSay('air:regain', u, this.regainWords(u, s), { id: s.id, box: u.id, prop: s.prop });
         continue;
       } else if (s.back > G.clear) { u.strag.splice(u.strag.indexOf(s), 1); this.limped(u, s, true); }
@@ -1494,6 +1606,12 @@ export class AirSim implements BattleSim<AirUnit> {
       const row = groups.get(u.corps) ?? { id: u.corps, side: u.side, lostFtr: 0, lostBmr: 0, back: 0, flewFtr: 0, flewBmr: 0 };
       if (u.air === 'ftr') { row.lostFtr += u.n0 - u.n; row.flewFtr += u.n0; } else { row.lostBmr += u.n0 - u.n; row.flewBmr += u.n0; }
       row.back += u.back;
+      // The bombers known by name: the rows of those that fell, and what each one's gunners shot down.
+      const B = this.seated.get(u.id);
+      if (B) {
+        row.fell = [...(row.fell ?? []), ...B.fell.map((k) => B.all[k].row)];
+        row.shot = [...(row.shot ?? []), ...[...B.shot].map(([k, by]) => ({ row: B.all[k].row, by: { ...by } }))];
+      }
       groups.set(u.corps, row);
     }
     const att = this.units.filter((u) => u.side === 'att' && u.air === 'bmr');
