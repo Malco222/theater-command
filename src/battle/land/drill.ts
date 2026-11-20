@@ -271,8 +271,14 @@ export class Drill {
       const s = toWorld(u, u.face, (i - (sq.veh.length - 1) / 2) * 14, -u.d / 2 - 30);
       v.x = s[0]; v.y = s[1]; v.spot = s; v.slotAt = s; v.pose = 'parked';
     });
-    // Lorried infantry start aboard their lorries.
-    if (u.kind === 'mot' && sq.veh.length) for (const m of sq.men) { const v = sq.veh[m.k % sq.veh.length]; m.x = v.x; m.y = v.y; m.spot = [v.x, v.y]; m.cover = 'none'; }
+    // Lorried infantry start aboard their lorries, unless their block opens holding its ground: then they are down
+    // and in their places already, the lorries parked behind.
+    if (u.kind === 'mot') {
+      if (sq.phase === 'hold' || sq.phase === 'startline' || sq.phase === 'fight' || sq.phase === 'pinned' || !sq.veh.length) {
+        sq.down = true;
+        for (const m of sq.men) m.pose = 'wait';
+      } else for (const m of sq.men) { const v = sq.veh[m.k % sq.veh.length]; m.x = v.x; m.y = v.y; m.spot = [v.x, v.y]; m.cover = 'none'; }
+    }
   }
 
   // ---- Each step ----------------------------------------------------------------------------------------------------
@@ -418,10 +424,12 @@ export class Drill {
     let ph = this.phaseOf(sq);
     // Lorried infantry and cavalry get down once the enemy is near or they are hit, and their block has slowed to a pace
     // men on foot can keep (the lorries drive in close and the men jump down); they stay down.
+    let got = false;
     if (!sq.down && sq.speed < 4.5 && (ph === 'fight' || ph === 'pinned' || ph === 'hold' || ph === 'startline' || this.nearestGap(u) < DR.ranges.debus || sq.harm > 0)) {
-      if (u.kind === 'mot' || (u.kind === 'cav' && this.nearestGap(u) < DR.ranges.debus * 0.85)) sq.down = true;
+      if (u.kind === 'mot' || (u.kind === 'cav' && this.nearestGap(u) < DR.ranges.debus * 0.85)) got = sq.down = true;
     }
-    if (ph !== was) { sq.phase = ph; sq.since = t; }
+    // Just down: each man goes from his lorry or his horse to his place, as on a fresh phase.
+    if (ph !== was || got) { sq.phase = ph; sq.since = t; }
     ph = sq.phase;
     sq.ran = u.state === 'routing' || (sq.ran && u.state === 'wavering' && t - sq.since < 8);
     if (ph === 'gone') return;
@@ -723,7 +731,9 @@ export class Drill {
       const s = toWorld(u, u.face, a, l);
       if (sq.since === t || Math.hypot(s[0] - m.slotAt[0], s[1] - m.slotAt[1]) > 5 || t >= m.until) this.go(sq, m, s, pose, 3, t + 30, dir);
       if (Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 1) { m.pose = m.role === 'mg' ? 'hide' : pose; m.v = 0; }
-      else { m.pose = 'creep'; m.v = 2.5; }
+      // Not there yet: a run where it is far (off a lorry, a horse), a crawl for the last stretch; each at his own pace,
+      // so men going the same way string out and never move as one.
+      else { const far = Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) > 15, r = roll(this.seed, u.id, m.k, 41); m.pose = far ? 'run' : 'creep'; m.v = far ? 3.8 + 1.4 * r : 2.1 + 0.6 * r; }
     }
   }
 
@@ -1116,7 +1126,7 @@ export class Drill {
     if (sq.phase === 'limbered' || sq.phase === 'flee' || sq.phase === 'fallback') {
       guns.forEach((g, i) => { g.aim = undefined; this.follow(sq, g, toWorld(u, h, 0, -10 - i * 18), 'towed'); if (g.v === 0) g.pose = 'towed'; });
       if (tractor) { this.follow(sq, tractor, toWorld(u, h, 0, 8), 'drive'); }
-      sq.fo = null;
+      this.spotter(sq, null, false); // the pair stays where it is, watching, till the guns fire again
       return;
     }
     if (tractor) { const s = toWorld(u, u.face, 0, -u.d / 2 - 50); if (Math.hypot(s[0] - tractor.slotAt[0], s[1] - tractor.slotAt[1]) > 20) { tractor.spot = s; tractor.slotAt = s; tractor.pose = 'drive'; tractor.v = 4; } else if (Math.hypot(tractor.x - tractor.spot[0], tractor.y - tractor.spot[1]) < 2) { tractor.pose = 'parked'; tractor.v = 0; } }
@@ -1224,7 +1234,7 @@ export class Drill {
         if (d > 0.3) {
           const way = Math.atan2(dx, dy);
           // A tank whose next place is behind her backs into it, her front to the enemy (never her thin rear).
-          if (m.role === 'tank' && m.pose === 'drive' && d < 30 && Math.abs(wrap(way - m.face)) > 1.9) { m.pose = 'reverse'; m.v = Math.min(m.v, 2.5); s = Math.min(d, m.v * DT); }
+          if (m.role === 'tank' && m.pose === 'drive' && d < 30 && Math.abs(wrap(way - m.face)) > 1.9) { m.pose = 'reverse'; m.v = Math.min(m.v, 4); s = Math.min(d, m.v * DT); }
           const want = way + (m.pose === 'reverse' ? Math.PI : 0);
           m.face = turnTo(m.face, want, rate);
           // He turns before he goes: a man about-turns on the spot, a tank, a lorry or a gun slows while her nose is off
@@ -1250,11 +1260,22 @@ export class Drill {
       const gd = Math.hypot(lx - m.x, ly - m.y);
       if (gd === 0) return;
       const fast = veh ? 16 : m.pose === 'ride' || m.pose === 'mounted' ? 14 : CATCH_UP, need = Math.min(fast, Math.max(3, sq.speed * 1.25));
-      m.spot = this.leash(sq, m.spot, extra ? extra - 4 : -4);
-      if (m.role !== 'holder' && m.pose !== 'ride' && m.pose !== 'mounted' && (!MOVING.has(m.pose) ? gd > 0.05 : gd > 2 && m.v < need)) {
+      const own = m.role !== 'holder' && m.pose !== 'ride' && m.pose !== 'mounted';
+      // Well outside, he makes for his own place in the block as it is now (men making for the box's nearest point
+      // would bunch on it); just outside, for his spot brought inside.
+      if (own && gd > 2 && m.role !== 'lorry') {
+        const [a, l] = this.slot(sq, m, sq.phase === 'rest' ? 'rest' : 'line');
+        m.slotAt = toWorld(u, u.face, a, l); m.spot = this.leash(sq, m.slotAt, -4);
+      } else m.spot = this.leash(sq, m.spot, extra ? extra - 4 : -4);
+      // A tank backs into a place close behind her (no faster than 4), as in walk's own switch.
+      const back = (p: [number, number]): boolean => m.role === 'tank' && Math.hypot(p[0] - m.x, p[1] - m.y) < 30 && Math.abs(wrap(Math.atan2(p[0] - m.x, p[1] - m.y) - m.face)) > 1.9;
+      if (own && (!MOVING.has(m.pose) ? gd > 0.05 : gd > 2 && m.v < (m.pose === 'reverse' ? Math.min(need, 4) : need))) {
         // Running to catch up, never sliding over the ground lying down.
-        m.spot = this.leash(sq, m.slotAt, extra ? extra - 4 : -4); m.v = need; m.aim = undefined; m.hidden = undefined;
-        m.pose = m.role === 'tank' || m.role === 'lorry' ? 'drive' : m.role === 'gun' ? 'towed' : sq.phase === 'flee' ? 'flee' : sq.phase === 'bound' || sq.phase === 'fight' ? 'advance' : 'run';
+        if (gd <= 2 || m.role === 'lorry') m.spot = this.leash(sq, m.slotAt, extra ? extra - 4 : -4);
+        m.aim = undefined; m.hidden = undefined;
+        const rev = back(m.spot);
+        m.v = rev ? Math.min(need, 4) : need;
+        m.pose = rev ? 'reverse' : m.role === 'tank' || m.role === 'lorry' ? 'drive' : m.role === 'gun' ? 'towed' : sq.phase === 'flee' ? 'flee' : sq.phase === 'bound' || sq.phase === 'fight' ? 'advance' : 'run';
         m.until = t + 1;
       }
       this.ring(sq, m, extra);

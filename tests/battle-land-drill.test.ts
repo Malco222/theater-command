@@ -218,6 +218,27 @@ describe('the men move as men, step by step (the 3D check, PR 20)', () => {
     expect(P.foOut + Q.foOut).toBeGreaterThan(0);
     for (const x of [P, Q]) { expect(x.foMade).toBe(0); expect(x.foLost).toBe(0); }
   });
+  it('a battery ordered to move limbers up, and its spotter stays out where he was, watching', () => {
+    const b = new LandBattle(sampleTicket('hills', 1.4, { seed: 23, style: { att: 'bold', def: 'methodical' } }));
+    const d = b.drillOn();
+    let gun: number | undefined;
+    for (let k = 0; !b.over && k < 30000 && gun === undefined; k++) { b.step(); gun = d.view().find((x) => x.fo)?.id; }
+    expect(gun).toBeDefined();
+    const u = b.unit(gun!)!;
+    expect(b.command({ do: 'move', units: [u.id], x: u.x, y: u.side === 'att' ? u.y - 250 : u.y + 250 }, u.side)).toBe(true);
+    let limbered = 0, lost = 0, jumped = 0;
+    const was = new Map<number, [number, number]>();
+    for (let k = 0; !b.over && k < 400; k++) {
+      b.step();
+      const blk = d.view().find((x) => x.id === u.id)!;
+      if (blk.ph === 'limbered') limbered++;
+      if (!blk.fo) { lost++; continue; }
+      for (const m of blk.fo) { const w = was.get(m.k); if (w && Math.hypot(m.x - w[0], m.y - w[1]) > 0.9) jumped++; was.set(m.k, [m.x, m.y]); }
+    }
+    expect(limbered).toBeGreaterThan(0);
+    expect(lost).toBe(0);
+    expect(jumped).toBe(0);
+  });
 });
 
 describe('lorried foot and cavalry (the practice armies have none: a corps of each made so)', () => {
@@ -230,7 +251,8 @@ describe('lorried foot and cavalry (the practice armies have none: a corps of ea
   const go = (g: Ground, seed: number, att: (typeof STY)[number], def: (typeof STY)[number], drill: boolean) => {
     const b = new LandBattle(ticket(g, seed, att, def));
     const d = drill ? b.drillOn() : null;
-    const t = { poses: new Set<string>(), strayed: 0, thrown: 0, turned: 0, aboardAtFirst: 0, men: 0 };
+    const t = { poses: new Set<string>(), strayed: 0, thrown: 0, turned: 0, aboardAtFirst: 0, men: 0, piled: 0 };
+    const pileFrom = new Map<number, number>();
     const was = new Map<string, [number, number, number]>(), at = new Map<number, [number, number]>();
     const ev: CoreEvent[] = [];
     for (let k = 0; !b.over && k < 30000; k++) {
@@ -239,6 +261,9 @@ describe('lorried foot and cavalry (the practice armies have none: a corps of ea
       for (const blk of d.view()) {
         const u = b.unit(blk.id)!, o = at.get(u.id), went = o ? Math.hypot(u.x - o[0], u.y - o[1]) : 0;
         at.set(u.id, [u.x, u.y]);
+        // Three men or more on one point (off their lorries or horses) for over five seconds: a knot, not a squad.
+        const foot = blk.men.filter((m) => m.d === undefined && m.r !== 'lorry' && m.p !== 'mounted' && m.p !== 'ride' && m.p !== 'horses');
+        if (foot.some((m) => foot.filter((q) => Math.hypot(q.x - m.x, q.y - m.y) < 1).length >= 3)) { const s0 = pileFrom.get(blk.id) ?? b.t; pileFrom.set(blk.id, s0); if (b.t - s0 > 5) t.piled++; } else pileFrom.delete(blk.id);
         for (const m of blk.men) {
           if (m.d !== undefined) continue;
           if (u.kind === 'mot' || u.kind === 'cav') { t.poses.add(`${u.kind} ${m.r === 'lorry' ? 'lorry' : 'man'} ${m.p}`); if (k === 0 && u.kind === 'mot' && m.r !== 'lorry' && m.p === 'mounted') t.aboardAtFirst++; }
@@ -274,6 +299,17 @@ describe('lorried foot and cavalry (the practice armies have none: a corps of ea
   });
   it('none strays, is thrown or turns about in a step, mounted or not', () => {
     for (const x of on) { expect(x.t.men).toBeGreaterThan(0); expect(x.t.strayed).toBe(0); expect(x.t.thrown).toBe(0); expect(x.t.turned).toBe(0); }
+  });
+  it('off their lorries and horses, the men spread to their places: no knot of three on one point for long', () => {
+    for (const x of on) expect(x.t.piled).toBe(0);
+  });
+  it('a lorried block holding from the start is down and in its places, not aboard', () => {
+    const T = ticket('hills', 538, 'methodical', 'mass');
+    const b = new LandBattle(T), d = b.drillOn();
+    b.step();
+    const held = d.view().filter((blk) => b.unit(blk.id)!.kind === 'mot' && blk.ph === 'hold');
+    expect(held.length).toBeGreaterThan(0);
+    for (const blk of held) expect(blk.men.filter((m) => m.r !== 'lorry' && m.p === 'mounted')).toHaveLength(0);
   });
 });
 
