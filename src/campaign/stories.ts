@@ -14,7 +14,7 @@ import { Rng, hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { clamp } from '../core/math';
 import { DESERT, EASTERN, allied, atWar, headline, relocate, weather } from './game';
-import { BOMBERS, bomberName, bondsMonth, flownMonth, flownWord, keptByName, muster, type ToursDone } from './bombers';
+import { BOMBERS, bomberName, bondsMonth, countWord, flownMonth, flownWord, keptByName, muster, thePlace, theUnit, type ToursDone } from './bombers';
 import { gainXp, generalOf } from './commanders';
 import { decorate, valourMonth } from './valour';
 import { DIPLOMACY } from './diplomacy';
@@ -632,28 +632,37 @@ export function storyMonth(g: Game, nat: string): void {
 // ---- The air war and the war at sea ------------------------------------------------------------
 
 /** An air operation is over: what each fleet that flew in it did goes in its record. */
-const WORDS = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
 const nth = (n: number): string => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 
-/** The news of crews who have finished their tour, for the player (bombers.ts). */
+/**
+ * The news of crews who have finished their tour, for the player (bombers.ts). The UI director's words (20 November
+ * 2026, ui-director/words-bombers-flak-valour.md): the tour is the crew's, a crew takes the plural verb, a bomber is
+ * given its kind on first mention, one with a name is 'her' and one known by its marking is 'it', and the gain is
+ * named in the game's own word, readiness.
+ */
 export function toursWords(unit: string, t: ToursDone): string {
-  const tour = `${nth(t.tour)} ${t.flown}`, n = t.done.length;
+  const n = t.done.length, of = theUnit(unit);
   const names = t.names.filter(Boolean);
-  const to = (k: number, where: string): string => `${k} ${k === 1 ? 'goes' : 'go'} ${where}`;
-  const lift = t.lift > 0 ? ' The group is in better heart for it.' : '';
+  const lift = t.lift > 0 ? " The group's readiness rises." : '';
   if (n === 1) {
-    // A named bomber is 'her' to her crew; one known by its marking is 'it'.
-    const her = t.named && names.length > 0;
-    const where = t.school ? ' to train new crews' : t.bonds ? ` on a war bond tour${names.length ? `, and takes ${her ? 'her' : 'it'} along` : ''}` : '';
-    return names.length
-      ? `${names[0]} of ${unit} has flown ${her ? 'her' : 'its'} ${tour}. ${her ? 'Her' : 'Its'} crew has finished its tour and goes home${where}.${lift}`
-      : `A bomber of ${unit} has flown its ${tour}. Its crew has finished its tour and goes home${where}.${lift}`;
+    const her = t.named && names.length > 0 ? 'her' : 'it';
+    const home = t.school ? 'They go home to train new crews.' : t.bonds ? `They fly ${her} home for a war bond tour.` : 'They go home.';
+    const who = names.length ? `The bomber ${names[0]} of ${of}` : `A bomber of ${of}`;
+    return `${who} brings ${her === 'her' ? 'her' : 'its'} crew home from their ${nth(t.tour)} ${t.flown}, and their tour is over. ${home}${lift}`;
   }
   const shown = names.slice(0, 3), more = n - shown.length;
-  const which = shown.length ? `: ${listOf(more > 0 ? [...shown, `${more} more`] : shown)}` : '';
-  const went = [t.school ? to(t.school, 'to train new crews') : '', t.bonds ? to(t.bonds, 'on a war bond tour') : ''].filter(Boolean);
+  const who = shown.length ? `The crews of ${listOf(more > 0 ? [...shown, `${more} more`] : shown)}, of ${of},` : `${countWord(n, true)} crews of ${of}`;
   const rest = n - t.school - t.bonds;
-  return `${WORDS[n] ?? n} crews of ${unit} have flown their ${tour}${which}. Their tours are over and they are going home${went.length ? `: ${went.join(' and ')}${rest > 0 && went.length ? `, and ${rest} to other duties` : ''}` : ''}.${lift}`;
+  const went: [number, string][] = [];
+  if (t.school) went.push([t.school, 'home to train new crews']);
+  if (t.bonds) went.push([t.bonds, 'on a war bond tour']);
+  if (rest > 0) went.push([rest, 'home']);
+  // All the same way: 'They go home to train new crews.' Otherwise each count with its own verb.
+  // Small counts as words ('Two go home'); if any is past twelve, all as figures, so one sentence does not mix them.
+  const words = went.every(([k]) => k <= 12);
+  const each = went.map(([k, where], i) => `${words ? countWord(k, i === 0) : k.toLocaleString('en-US')} ${k === 1 ? 'goes' : 'go'} ${where}`);
+  const home = went.length === 1 ? `They go ${went[0][1]}.` : `${each.slice(0, -1).join(', ')}, and ${each[each.length - 1]}.`;
+  return `${who} have finished their tours of ${t.tour} ${t.flown}s. ${home}${lift}`;
 }
 
 /**
@@ -669,7 +678,7 @@ function bombersFlew(g: Game, f: AirFleet, bombing: boolean, kills: number, at: 
   const mine = f.nat === g.human;
   // An old hand that did not come back is news: the one with the most missions, if it had enough of them.
   const old = struck.filter((b) => b[0] && b[2] >= BOMBERS.told).sort((a, b) => b[2] - a[2])[0];
-  if (mine && old) headline(g, 'info', `${bomberName(g, f, old)} of ${f.name}, with ${old[2]} ${flownWord(f.nat)}s flown, did not come back from ${placeName(g, sea ? 'fleet' : 'air', at) || 'the raid'}.`, f.nat, sea ? undefined : at);
+  if (mine && old) headline(g, 'info', `The bomber ${bomberName(g, f, old)} of ${theUnit(f.name)}, with ${old[2]} ${flownWord(f.nat)}s flown, did not come back from ${sea ? (placeName(g, 'fleet', at) ? `the ${placeName(g, 'fleet', at)}` : 'the raid') : thePlace(placeName(g, 'air', at)) || 'the raid'}.`, f.nat, sea ? undefined : at);
   if (!bombing) return;
   // Of a mixed fleet's kills, the gunners' share is the bombers' weight beside its fighters', and never more than
   // 'escorted' of them: where there was an escort it took most of the kills, however many the bombers (the historian).

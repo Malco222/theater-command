@@ -38,12 +38,13 @@ describe('each nation\'s highest award for valour', () => {
     expect(awardName('ITA', 1)).toBe('the Gold Medal of Military Valour');
     expect(awardName('FRA', 1)).toBe('the Legion of Honour');
     expect(awardName('POL', 1)).toBe('the Virtuti Militari');
-    expect(awardName('BRA', 1)).toBe("the nation's highest award for valour");
-    expect([awardTitleOf('USA', 1), awardTitleOf('SOV', 1), awardTitleOf('BRA', 1)]).toEqual(['Medal of Honor', 'Hero of the Soviet Union', 'Highest award for valour']);
+    // A nation with no award of its own named: never 'awarded the ... award' (the UI director).
+    expect(awardName('BRA', 1)).toBe('the highest decoration for valour');
+    expect([awardTitleOf('USA', 1), awardTitleOf('SOV', 1), awardTitleOf('BRA', 1)]).toEqual(['Medal of Honor', 'Hero of the Soviet Union', 'Highest decoration for valour']);
   });
 
   it('Finland\'s Mannerheim Cross is given only from December 1941 (the historian)', () => {
-    expect(awardName('FIN', 27)).toBe("the nation's highest award for valour");
+    expect(awardName('FIN', 27)).toBe('the highest decoration for valour');
     expect(awardName('FIN', 28)).toBe('the Mannerheim Cross');
   });
 
@@ -51,11 +52,15 @@ describe('each nation\'s highest award for valour', () => {
     const g = createGame(1, 'GER');
     const at = g.byName['Warsaw'].id;
     const h = (nat: string, kind: Hero['kind'], where: number): Hero => ({ id: 1, turn: 30, nat, kind, unit: 1, name: '9th Corps', who: 'A sergeant', at: where, award: 1 });
-    expect(heroWords(g, h('USA', 'corps', at))).toBe('A sergeant of 9th Corps has been awarded the Medal of Honor for valour at Warsaw.');
-    expect(heroWords(g, h('SOV', 'corps', at))).toBe('A sergeant of 9th Corps has been made a Hero of the Soviet Union for valour at Warsaw.');
-    expect(heroWords(g, h('UK', 'air', -1))).toBe('A sergeant of 9th Corps has been awarded the Victoria Cross for valour.');
-    expect(heroWords(g, h('BRA', 'corps', -1))).toBe("A sergeant of 9th Corps has been awarded the nation's highest award for valour.");
-    expect(heroWords(g, h('UK', 'fleet', 0))).toBe(`A sergeant of 9th Corps has been awarded the Victoria Cross for valour in the ${g.seas[0].name}.`);
+    // A unit named in English takes 'the'; a title is 'made' (the UI director, 20 November 2026).
+    expect(heroWords(g, h('USA', 'corps', at))).toBe('A sergeant of the 9th Corps has been awarded the Medal of Honor for valour at Warsaw.');
+    expect(heroWords(g, h('SOV', 'corps', at))).toBe('A sergeant of the 9th Corps has been made a Hero of the Soviet Union for valour at Warsaw.');
+    expect(heroWords(g, h('UK', 'air', -1))).toBe('A sergeant of the 9th Corps has been awarded the Victoria Cross for valour.');
+    expect(heroWords(g, h('BRA', 'corps', -1))).toBe('A sergeant of the 9th Corps has been awarded the highest decoration for valour.');
+    expect(heroWords(g, h('UK', 'fleet', 0))).toBe(`A sergeant of the 9th Corps has been awarded the Victoria Cross for valour in the ${g.seas[0].name}.`);
+    // A unit written as a code or in its own language stays bare, and a place English gives 'the' keeps it.
+    expect(heroWords(g, { ...h('GER', 'air', g.byName['Ruhr'].id), name: 'Kampfgeschwader 4', who: 'A navigator' })).toBe("A navigator of Kampfgeschwader 4 has been awarded the Knight's Cross for valour at the Ruhr.");
+    expect(heroWords(g, { ...h('SOV', 'air', at), name: '3rd Fighter Division', who: 'A pilot' })).toBe('A pilot of the 3rd Fighter Division has been made a Hero of the Soviet Union for valour at Warsaw.');
   });
 });
 
@@ -74,7 +79,8 @@ describe('a man of a unit that earns an honour may be given the award', () => {
     expect(heroesWaiting(g)).toEqual(heroes(g));
     const told = g.headlines.slice(news).filter((x) => x.kind === 'honour' && x.text.includes("has been awarded the Knight's Cross for valour"));
     expect(told).toHaveLength(heroes(g).length);
-    expect(told[0].text).toBe(`${h.who} of ${f.name} has been awarded the Knight's Cross for valour at Warsaw. Leave the holder with the unit, or send the holder home from its record: on a war bond tour, or to train recruits.`);
+    // The rank once, then 'them': not 'the holder', and not 'him' (the UI director).
+    expect(told[0].text).toBe(`${h.who} of ${f.name} has been awarded the Knight's Cross for valour at Warsaw. You can keep them with their unit, or send them home from its record, on a war bond tour or to train recruits.`);
   });
 
   it('the greater the honour the likelier, and with no chance nobody is', () => {
@@ -123,7 +129,7 @@ describe('what the player does with a holder of the award', () => {
     const months = h.left!;
     expect(months).toBeGreaterThanOrEqual(5);
     expect(months).toBeLessThanOrEqual(10);
-    expect(g.headlines[news].text).toBe(`${h.who} of ${h.name}, holder of the Knight's Cross, goes home on a war bond tour: ${(VALOUR.bonds.pp * budget.scale).toLocaleString('en-US')} a month for the treasury for ${months} months.`);
+    expect(g.headlines[news].text).toBe(`${h.who} of ${h.name}, holder of the Knight's Cross, goes home on a war bond tour, which will bring in ${(VALOUR.bonds.pp * budget.scale).toLocaleString('en-US')} a month for ${months} months.`);
     // He is no longer waiting, and cannot be sent twice.
     expect(heroesWaiting(g).some((x) => x.id === h.id)).toBe(false);
     expect(whyNotSend(g, h, 'school')).toBe('Already home on a war bond tour.');
@@ -165,6 +171,16 @@ describe('what the player does with a holder of the award', () => {
     expect(g.headlines.at(-1)!.text).toBe(`${h.who} of ${h.name}, holder of the Knight's Cross, goes home to train recruits. From now on every draft reaches the front better trained.`);
     expect(whyNotSend(g, h, 'bonds')).toBe('Already home training recruits.');
     expect(valourMonth(g, 'GER')).toBe(0);
+  });
+
+  it('a title is what its holder is: a Hero of the Soviet Union goes home, not a holder of one', () => {
+    const g = createGame(1, 'SOV');
+    const f = g.airFleets.find((x) => x.nat === 'SOV' && x.ftr > 0)!;
+    const h: Hero = { id: 1, turn: g.turn, nat: 'SOV', kind: 'air', unit: f.id, name: f.name, who: 'A pilot', at: -1, award: 1 };
+    (g.stories.heroes ??= []).push(h);
+    expect(f.name).toBe('Leningrad District Air Force');
+    expect(sendHero(g, h.id, 'school')).toBe(true);
+    expect(g.headlines.at(-1)!.text).toBe('A pilot of the Leningrad District Air Force, a Hero of the Soviet Union, goes home to train recruits. From now on every draft reaches the front better trained.');
   });
 
   it('the schools can take only so many, and a man whose unit is gone cannot be sent', () => {

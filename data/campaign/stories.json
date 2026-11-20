@@ -34,7 +34,7 @@
       "SOV": "Hero of the Soviet Union", "GER": "the Knight's Cross", "JAP": "the Order of the Golden Kite", "JPN": "the Order of the Golden Kite", "ITA": "the Gold Medal of Military Valour",
       "FRA": "the Legion of Honour", "VIC": "the Legion of Honour", "POL": "the Virtuti Militari", "FIN": "the Mannerheim Cross", "NED": "the Military William Order",
       "NOR": "the War Cross with Sword", "ROM": "the Order of Michael the Brave", "CHN": "the Order of Blue Sky and White Sun", "YUG": "the Order of the People's Hero",
-      "_default": "the nation's highest award for valour"
+      "_default": "the highest decoration for valour"
     },
     "given": { "SOV": "made a Hero of the Soviet Union", "_default": "awarded {award}" },
     "since": { "FIN": 28 },

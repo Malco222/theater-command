@@ -91,7 +91,7 @@ import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc, hasRoom, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
-import { BOMBERS, bomberCard, bomberMark, carriesNames, flownWord, headStart, tourOf } from '../bombers';
+import { BOMBERS, bomberCard, bomberMark, carriesNames, countWord, flownWord, headStart, tourOf } from '../bombers';
 import { VALOUR, awardTitleOf, heroesOf, heroesWaiting, sendWorth, whyNotSend } from '../valour';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type CrewOrder, type Hero, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
@@ -4126,23 +4126,31 @@ function bombersBlock(f: AirFleet): string {
   const B = BOMBERS, rows = bomberCard(g, f), shown = rows.slice(0, 12);
   const tour = tourOf(f.nat), word = flownWord(f.nat), named = carriesNames(f.nat);
   const fact = (label: string, v: number | string): string => `<div class="fact"><span>${label}</span><b>${typeof v === 'number' ? num(v) : v}</b></div>`;
-  const shot = (k: number): string => `${k} ${k === 1 ? 'fighter' : 'fighters'} shot down`;
+  const shot = (k: number): string => (k === 1 ? 'a fighter shot down' : `${k} fighters shot down`);
   // An American bomber goes by its name; any other by its marking, with the word its crew calls it by where it has one.
   const called = (m: { name: string; mark: string }): string => (m.mark && m.mark !== m.name ? `${m.mark}, ${m.name}` : m.name);
-  const line = (r: (typeof rows)[number]): string => `<tr><td><b>${esc(called(r) || 'No name yet')}</b></td><td>${r.missions} ${r.missions === 1 ? word : `${word}s`}</td><td>${r.kills ? shot(r.kills) : ''}</td><td><small>${esc(r.grade)} crew, ${r.crew} of ${tour}</small></td></tr>`;
-  const roll = R.roll.slice(-6).reverse().map((x) => `<p>${date(x.t)}: ${esc(called(bomberMark(g, f, x.b, x.t)) || 'A bomber')} ${x.how === 'home' ? `sent ${named ? 'her' : 'its'} crew home after ${tour} ${word}s` : `was lost with ${x.b[2]} ${word}s flown`}${x.b[3] ? ` and ${shot(x.b[3])}` : ''}.</p>`).join('');
+  const line = (r: (typeof rows)[number]): string => `<tr><td><b>${esc(called(r) || 'No name yet')}</b></td><td>${r.missions} ${r.missions === 1 ? word : `${word}s`}</td><td>${r.kills ? shot(r.kills) : ''}</td><td><small>${esc(r.grade)} crew, ${r.crew} of their ${tour}</small></td></tr>`;
+  // In running text a bomber goes by its name alone; its marking stays in its row above (the UI director).
+  const roll = R.roll.slice(-6).reverse().map((x) => {
+    const name = bomberMark(g, f, x.b, x.t).name;
+    const what = x.how === 'home'
+      ? `${name ? `${esc(name)}'s crew` : "A bomber's crew"} went home after ${tour} ${word}s${x.b[3] ? `, with ${shot(x.b[3])}` : ''}`
+      : `${esc(name) || 'A bomber'} was lost with ${x.b[2]} ${x.b[2] === 1 ? word : `${word}s`} flown${x.b[3] ? ` and ${shot(x.b[3])}` : ''}`;
+    return `<p>${date(x.t)}: ${what}.</p>`;
+  }).join('');
   let order = '';
   if (f.nat === g.human) {
     const C = g.stories.crews?.[f.nat], now: CrewOrder = C?.order ?? 'split';
     const opt = (how: CrewOrder, label: string): string => `<button class="btn ${now === how ? 'on' : ''}" data-act="crews" data-id="${f.id}" data-how="${how}">${label}</button>`;
     const head = headStart(g, f.nat), tours = C?.bonds.length ?? 0;
+    const crews = (k: number): string => `${countWord(k, true)} ${k === 1 ? 'crew is' : 'crews are'}`;
     const state = [
-      C?.school ? `${C.school} ${C.school === 1 ? 'crew is' : 'crews are'} at the schools${head ? `: a new bomber's crew arrives with ${head} ${head === 1 ? word : `${word}s`} of experience` : ''}` : '',
-      tours ? `${tours} ${tours === 1 ? 'crew is' : 'crews are'} on a war bond tour: ${cash(B.bonds.pp * tours, true)} a month for the treasury` : '',
-    ].filter(Boolean).join('. ');
-    order = `<p class="sub">A crew goes home after ${tour} ${word}s, and the group is in better heart for it. Where your air force's crews go next is your standing order:</p>
-      <div class="seg">${opt('school', 'Train new crews')}${opt('bonds', 'War bond tour')}${opt('split', 'Turn about')}</div>
-      <p class="sub">At the schools a crew gives every new bomber experience before its first ${word}, and its own bomber flies on with a new crew. On a bond tour it flies its bomber home and brings in money each month for ${B.bonds.months[0]} to ${B.bonds.months[1]} months.${state ? ` ${state}.` : ''}</p>`;
+      C?.school ? `${crews(C.school)} at the schools${head ? `: new crews arrive with ${head === 1 ? `${/^[aeiou]/.test(word) ? 'an' : 'a'} ${word}'s` : `${head} ${word}s'`} experience` : ''}.` : '',
+      tours ? `${crews(tours)} on a war bond tour: ${cash(B.bonds.pp * tours)} a month into the treasury.` : '',
+    ].filter(Boolean).join(' ');
+    order = `<p class="sub">Crews go home after ${tour} ${word}s, and their group's readiness rises. Where they go next is your standing order:</p>
+      <div class="seg">${opt('school', 'Train new crews')}${opt('bonds', 'War bond tour')}${opt('split', 'Both in turn')}</div>
+      <p class="sub">Crews at the schools give every new crew experience before their first ${word}, and their own bomber flies on with a new crew. Crews on a war bond tour fly their bomber home, and bring in money every month for ${B.bonds.months[0]} to ${B.bonds.months[1]} months.${state ? ` ${state}` : ''}</p>`;
   }
   return `<h3>Bombers</h3>
       <div class="facts">${fact('On strength', R.on.length)}${fact('Crews gone home', R.home)}${fact(named ? 'Named bombers lost' : 'Bombers lost', R.gone)}</div>
@@ -4161,7 +4169,7 @@ function heroesBlock(kind: UnitKind, u: AnyUnit): string {
   const row = (h: Hero): string => {
     const at = h.at < 0 ? '' : h.kind === 'fleet' ? g.seas[h.at]?.name ?? '' : g.regions[h.at]?.name ?? '';
     let state: string;
-    if (h.sent === 'bonds') state = `<small>${h.left ? `On a war bond tour: ${h.left} ${h.left === 1 ? 'month' : 'months'} to go` : 'Back from a war bond tour'}</small>`;
+    if (h.sent === 'bonds') state = `<small>${h.left ? `On a war bond tour: ${h.left} ${h.left === 1 ? 'month' : 'months'} to go` : 'With the unit, back from a war bond tour'}</small>`;
     else if (h.sent === 'school') state = '<small>At home, training recruits</small>';
     else if (!mine) state = '<small>With the unit</small>';
     else {
@@ -4176,7 +4184,7 @@ function heroesBlock(kind: UnitKind, u: AnyUnit): string {
   };
   const rows = hs.map(row).join('');
   const B = VALOUR.bonds;
-  return `<h3>Highest award</h3>${rows}${todo ? `<p class="sub">A holder can stay with the unit, or go home. On a war bond tour the crowds bring in ${cash(B.pp, true)} a month for ${B.months[0]} to ${B.months[1]} months. Training recruits, every later draft reaches the front better trained.</p>` : ''}`;
+  return `<h3>Highest award</h3>${rows}${todo ? `<p class="sub">A holder can stay with the unit or go home. On a war bond tour the crowds bring in ${cash(B.pp)} a month for ${B.months[0]} to ${B.months[1]} months. One who trains recruits sends every later draft to the front better trained.</p>` : ''}`;
 }
 
 function diaryBlock(u: { log?: DiaryLine[] }, shape: { kind?: unknown; ships?: unknown; ftr?: unknown }): string {

@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { assessAir } from '../src/campaign/air';
 import { markOf } from '../src/campaign/bomber-marks';
-import { BOMBERS, NOSE_ART, bomberCard, bomberMark, bomberName, bondsMonth, carriesNames, crewExperience, crewGrade, crewsHome, flownMonth, flownWord, headStart, keptByName, muster, setCrewOrder, styleOf, tourOf, trainedEdge, type ToursDone } from '../src/campaign/bombers';
+import { BOMBERS, NOSE_ART, bomberCard, bomberMark, bomberName, bondsMonth, carriesNames, crewExperience, crewGrade, crewsHome, flownMonth, flownWord, headStart, keptByName, muster, setCrewOrder, styleOf, theUnit, thePlace, tourOf, trainedEdge, type ToursDone } from '../src/campaign/bombers';
 import { createGame } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -151,15 +151,27 @@ describe('every bomber of a group has a name and a record', () => {
     expect(near.every((b) => b[5] < 30 && b[5] >= 25 && f.bombers!.on.includes(b))).toBe(true);
     expect(f.ready).toBeCloseTo(ready + 2 * BOMBERS.lift.each, 9);
     const news = g.headlines.at(-1)!.text;
-    expect(news).toContain(`Two crews of ${f.name} have flown their 30th operation: ${who[0]} and ${who[1]}.`);
-    expect(news).toContain('1 goes to train new crews and 1 goes on a war bond tour');
+    // 'No. 1 Bomber Group' is written as Britain wrote it and takes no 'the'; a crew's tour is of operations there.
+    expect(news).toBe(`The crews of ${who[0]} and ${who[1]}, of ${f.name}, have finished their tours of 30 operations. One goes home to train new crews, and one goes on a war bond tour. The group's readiness rises.`);
     const C = crewsHome(g, 'UK');
     expect([C.school, C.bonds.length]).toEqual([1, 1]);
   });
 
+  it('a unit and a place read inside a sentence as English has them', () => {
+    // A group named in English takes 'the'; a code, a 'No.' name or a name in its own language stays bare, as in the
+    // air battle's dispatches, so a group reads the same in both (the UI director, 20 November 2026).
+    expect(['8th Bomb Group', '9th Corps', 'Home Fleet', 'I Bomber Command', 'Pursuit Brigade'].map(theUnit)).toEqual(['the 8th Bomb Group', 'the 9th Corps', 'the Home Fleet', 'the I Bomber Command', 'the Pursuit Brigade']);
+    for (const bare of ['No. 5 Group', 'Kampfgeschwader 4', 'KG 4', 'II. Gruppe JG 1', 'Luftflotte 2', 'Stormo Bombardieri 1', 'Force H', 'Army Karpaty']) expect(theUnit(bare)).toBe(bare);
+    expect(['Ruhr', 'Crimea', 'Bremen', 'Warsaw', ''].map(thePlace)).toEqual(['the Ruhr', 'the Crimea', 'Bremen', 'Warsaw', '']);
+  });
+
   it('the news of one crew calls a bomber with a marking "it"', () => {
     const t: ToursDone = { done: [[4, 1, 25, 0, 0, 25]], names: ['5J+DH'], tour: 25, flown: 'mission', named: false, school: 0, bonds: 1, lift: 0 };
-    expect(toursWords('KG 4', t)).toBe('5J+DH of KG 4 has flown its 25th mission. Its crew has finished its tour and goes home on a war bond tour, and takes it along.');
+    expect(toursWords('KG 4', t)).toBe('The bomber 5J+DH of KG 4 brings its crew home from their 25th mission, and their tour is over. They fly it home for a war bond tour.');
+    // A group named in its own language stays bare, and Britain's tour is of operations.
+    const g4: ToursDone = { ...t, names: ['G for George'], tour: 30, flown: 'operation', school: 1, bonds: 0 };
+    expect(toursWords('No. 5 Group', g4)).toBe('The bomber G for George of No. 5 Group brings its crew home from their 30th operation, and their tour is over. They go home to train new crews.');
+    expect(toursWords('Kampfgeschwader 4', { ...t, tour: 60 })).toBe('The bomber 5J+DH of Kampfgeschwader 4 brings its crew home from their 60th mission, and their tour is over. They fly it home for a war bond tour.');
   });
 
   it('a kill goes on the bomber\'s tally with the nation it was taken from', () => {
@@ -308,7 +320,7 @@ describe('missions, kills and losses', () => {
     const name = bomberName(g, f, old), flown = old[2];
     lose(f, 1);
     storyAir(g, 'superiority', g.byName['Warsaw'].id, [f], [], { ...NONE, attLost: 1, fallen: { [f.id]: [[...old] as BomberRow] } });
-    expect(g.headlines.at(-1)!.text).toBe(`${name} of ${f.name}, with ${flown} missions flown, did not come back from Warsaw.`);
+    expect(g.headlines.at(-1)!.text).toBe(`The bomber ${name} of ${theUnit(f.name)}, with ${flown} missions flown, did not come back from Warsaw.`);
     expect(f.bombers!.roll.at(-1)).toEqual({ t: g.turn, how: 'lost', b: old });
   });
 });
@@ -378,9 +390,9 @@ describe('the tour of duty', () => {
     expect(R.on.filter((b) => !b[0])).toHaveLength(D.most);
     expect(R.on.filter((b) => b[0]).every((b) => names.includes(bomberName(g, f, b)) && b[2] === 31 && b[3] === 2 && b[5] === 0)).toBe(true);
     const line = g.headlines.at(-1)!.text;
-    expect(line).toContain(`crews of ${f.name} have flown their 25th mission`);
-    expect(line).toContain(`${S.crews * S.most} go to train new crews and ${D.most} go on a war bond tour, and ${n - S.crews * S.most - D.most} to other duties.`);
-    expect(line.endsWith('The group is in better heart for it.')).toBe(true);
+    expect(line).toContain(`and ${n - 3} more, of ${theUnit(f.name)}, have finished their tours of 25 missions.`);
+    expect(line).toContain(`${S.crews * S.most} go home to train new crews, ${D.most} go on a war bond tour, and ${n - S.crews * S.most - D.most} go home.`);
+    expect(line.endsWith("The group's readiness rises.")).toBe(true);
   });
 
   it('readiness never passes full, and a second month lifts it again', () => {
@@ -404,7 +416,7 @@ describe('the tour of duty', () => {
     storyAir(g, 'bomb', g.byName['Warsaw'].id, [f], [], NONE);
     const C = crewsHome(g, 'USA');
     expect([C.school, C.bonds.length]).toEqual([0, 4]);
-    expect(g.headlines.at(-1)!.text).toContain('Their tours are over and they are going home: 4 go on a war bond tour.');
+    expect(g.headlines.at(-1)!.text).toContain('have finished their tours of 25 missions. They go on a war bond tour.');
     // Every nation's crews fly tours (Brian, 20 November 2026: "applied for all nations not just the US").
     const h = war(3, 'GER');
     expect(setCrewOrder(h, 'bonds')).toBe(true);
@@ -415,12 +427,17 @@ describe('the tour of duty', () => {
     const done = (rows: BomberRow[], school: number, bonds: number, lift = 0): ToursDone => ({ done: rows, names: rows.map((b) => markOf('nose', 'k', b[0], b[1]).name), tour: 25, flown: 'mission', named: true, school, bonds, lift });
     const one = (b: BomberRow, school: number, bonds: number, lift = 0) => toursWords('VIII Bomber Command', done([b], school, bonds, lift));
     const b: BomberRow = [62, 1, 25, 3, 0, 25];
-    expect(one(b, 1, 0)).toBe('Prize Pumpkin of VIII Bomber Command has flown her 25th mission. Her crew has finished its tour and goes home to train new crews.');
-    expect(one(b, 0, 1, 0.02)).toBe('Prize Pumpkin of VIII Bomber Command has flown her 25th mission. Her crew has finished its tour and goes home on a war bond tour, and takes her along. The group is in better heart for it.');
-    expect(one([62, 2, 25, 0, 0, 25], 0, 0)).toBe('Prize Pumpkin II of VIII Bomber Command has flown her 25th mission. Her crew has finished its tour and goes home.');
-    expect(one([0, 0, 25, 0, 0, 25], 1, 0)).toBe('A bomber of VIII Bomber Command has flown its 25th mission. Its crew has finished its tour and goes home to train new crews.');
-    const three = toursWords('VIII Bomber Command', done([b, [19, 1, 40, 0, 0, 25], [187, 1, 25, 1, 0, 25], [1, 1, 25, 0, 0, 25], [2, 1, 25, 0, 0, 25]], 3, 2));
-    expect(three).toBe('Five crews of VIII Bomber Command have flown their 25th mission: Prize Pumpkin, Highball Pearl, Welcome Mat and 2 more. Their tours are over and they are going home: 3 go to train new crews and 2 go on a war bond tour.');
+    // The UI director's words (20 November 2026): the bomber's kind on first mention, 'the' before a group named in
+    // English, the tour is the crew's and a crew takes the plural, and the gain is the game's own word, readiness.
+    expect(one(b, 1, 0)).toBe('The bomber Prize Pumpkin of the VIII Bomber Command brings her crew home from their 25th mission, and their tour is over. They go home to train new crews.');
+    expect(one(b, 0, 1, 0.02)).toBe("The bomber Prize Pumpkin of the VIII Bomber Command brings her crew home from their 25th mission, and their tour is over. They fly her home for a war bond tour. The group's readiness rises.");
+    expect(one([62, 2, 25, 0, 0, 25], 0, 0)).toBe('The bomber Prize Pumpkin II of the VIII Bomber Command brings her crew home from their 25th mission, and their tour is over. They go home.');
+    expect(one([0, 0, 25, 0, 0, 25], 1, 0)).toBe('A bomber of the VIII Bomber Command brings its crew home from their 25th mission, and their tour is over. They go home to train new crews.');
+    const many = (school: number, bonds: number, lift = 0) => toursWords('8th Bomb Group', done([b, [19, 1, 40, 0, 0, 25], [187, 1, 25, 1, 0, 25], [1, 1, 25, 0, 0, 25], [2, 1, 25, 0, 0, 25]].slice(0, school + bonds) as BomberRow[], school, bonds, lift));
+    expect(many(2, 1, 0.02)).toBe("The crews of Prize Pumpkin, Highball Pearl and Welcome Mat, of the 8th Bomb Group, have finished their tours of 25 missions. Two go home to train new crews, and one goes on a war bond tour. The group's readiness rises.");
+    expect(many(3, 2)).toMatch(/^The crews of Prize Pumpkin, Highball Pearl, Welcome Mat and 2 more, of the 8th Bomb Group, have finished their tours of 25 missions\. Three go home to train new crews, and two go on a war bond tour\.$/);
+    // All the same way.
+    expect(many(3, 0)).toBe('The crews of Prize Pumpkin, Highball Pearl and Welcome Mat, of the 8th Bomb Group, have finished their tours of 25 missions. They go home to train new crews.');
   });
 });
 
