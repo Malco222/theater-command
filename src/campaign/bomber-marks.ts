@@ -27,9 +27,9 @@ export interface BomberMark {
 }
 
 const MARKS = data as unknown as {
-  letter: { from: number; early: string[]; late: string[]; block: string[] };
+  letter: { from: number; early: string[]; late: string[]; block: string[]; never: string[] };
   code: { aircraft: string; squadrons: string; words: string[] };
-  tail: { codes: string[]; first: number; per: number };
+  tail: { codes: string[]; first: number; per: number; never: string[] };
   squadron: { from: number; to: number; per: number };
   tactical: { colours: string[]; per: number };
 };
@@ -79,7 +79,12 @@ export function markOf(style: MarkStyle, key: string, slot: number, ord = 1, yea
     case 'letter': {
       const codes = shuffled(key, 'letter', squadronLetters);
       const l = i % 26, word = (year >= MARKS.letter.from ? MARKS.letter.late : MARKS.letter.early)[l];
-      return { name: `${ALPHABET[l]} for ${word}`, mark: `${codes[Math.floor(i / 26) % codes.length]}-${ALPHABET[l]}`, word };
+      // A famous real aircraft's letters are never worn (the modeller's layer paints nothing for them): the bomber whose
+      // turn it would be takes the last letters in its group's order, which no group is big enough to reach.
+      const N = MARKS.letter.never, never = (c: string): boolean => N.includes(c) || N.includes(`${c}-${ALPHABET[l]}`);
+      let at = Math.floor(i / 26) % codes.length;
+      for (let spare = codes.length - 1; spare >= 0 && never(codes[at]); spare--) at = spare;
+      return { name: `${ALPHABET[l]} for ${word}`, mark: `${codes[at]}-${ALPHABET[l]}`, word };
     }
     case 'code': {
       const C = MARKS.code, codes = shuffled(key, 'code', wingCodes);
@@ -90,7 +95,9 @@ export function markOf(style: MarkStyle, key: string, slot: number, ord = 1, yea
     }
     case 'tail': {
       const T = MARKS.tail, codes = shuffled(key, 'tail', () => [...T.codes]);
-      const mark = `${codes[Math.floor(i / T.per) % codes.length]}-${T.first + (i % T.per)}`;
+      const code = codes[Math.floor(i / T.per) % codes.length], n = T.first + (i % T.per);
+      // Two famous real aircraft's markings are never carried: that bomber's number is one past its unit's own run.
+      const mark = `${code}-${T.never.includes(`${code}-${n}`) ? n + T.per : n}`;
       return { name: mark, mark };
     }
     case 'squadron': {

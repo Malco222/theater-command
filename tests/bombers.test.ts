@@ -117,6 +117,31 @@ describe('every bomber of a group has a name and a record', () => {
     }
   });
 
+  it('no bomber carries a famous real aircraft\'s marking (the modeller\'s layer paints nothing for them)', () => {
+    // The modeller, 2026-11-20: any AJ letters (the dams raid), KM-B, PM-M, and the tail codes T1-323 and T1-326.
+    const famous = (m: string): boolean => m.startsWith('AJ-') || m === 'KM-B' || m === 'PM-M' || m === 'T1-323' || m === 'T1-326';
+    // One group through every squadron's letters and every unit's code: none of them, whoever's turn it was.
+    const key = '3:17';
+    for (let n = 1; n <= 26 * 600; n++) expect(famous(markOf('letter', key, n).mark), `letter ${n}`).toBe(false);
+    const tails = Array.from({ length: 27 * 60 }, (_, i) => markOf('tail', key, i + 1).mark);
+    expect(tails.some(famous)).toBe(false);
+    expect(new Set(tails).size).toBe(tails.length);
+    expect(tails.filter((m) => /^T1-3[0-9]{2}$/.test(m)).length).toBe(60);
+    expect(tails).toContain('T1-383');
+    expect(tails).toContain('T1-386');
+    // Many groups' first two squadrons: still none, and the bomber whose turn it was carries letters nobody else in
+    // its group has.
+    let took = 0;
+    for (let k = 0; k < 3000; k++) {
+      const all = Array.from({ length: 52 }, (_, i) => markOf('letter', `9:${k}`, i + 1).mark);
+      expect(all.some(famous), `group ${k}`).toBe(false);
+      expect(new Set(all).size, `group ${k}`).toBe(52);
+      if (new Set(all.map((m) => m.slice(0, 2))).size > 2) took++;
+    }
+    // Some of those groups did have a famous marking's turn come up (a third pair of letters shows where).
+    expect(took).toBeGreaterThan(0);
+  });
+
   it('a replacement takes the marking of the bomber it replaces, and has it from the day it arrives', () => {
     const g = war(3, 'UK');
     const f = g.airFleets.find((x) => x.nat === 'UK' && x.bmr >= 30 && keptByName(x))!;
