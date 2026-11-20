@@ -567,7 +567,15 @@ right shape and colour and read as a soft brown smear.
   falls by no more than a half a second. On the same scenes: 0 or 1 such step a run. The limits: the frame in
   which a salvo fills the room still takes every lump in that frame (there are no places; a guard that lays
   what there is room for was tried and is a known follow-up if it is ever seen), and after a crowd the lumps
-  take up to 12 s to come back whole, as they do after a cut from a nearly full harbour to a close-up.
+  take up to 12 s to come back whole.
+- **A cut clears that memory** (the pre-check's second diff, 13:07Z; `LumpsZoom`). Cut from a harbour view with
+  the room in its last tenth to a close-up, the columns stood bare for over 2 s and were whole only 10 s
+  later; the Midway ships picture is itself reached by a cut. A cut is the eye over 50 m from where it was a
+  frame ago, turned by over 0.6, or its view's pixels a radian changed by over a quarter: on that frame and the
+  next the room is that frame's count alone. With a still or flying eye nothing is drawn differently.
+- **`game.max_puffs` is held** to 100 to 20,000 in `Battle::Setup`, and a value that is not a number gives
+  3,000: turned into a whole number unchecked, a broken recipe's nan was a fault and its 1e9 asked for hundreds
+  of gigabytes (the pre-check's fault finder, 12:57Z).
 - **Old recipes.** With no `lumps` key a row draws as it did: head d96d6be's recipe gives the same 65 frames,
   byte for byte, on its own code and on this.
 

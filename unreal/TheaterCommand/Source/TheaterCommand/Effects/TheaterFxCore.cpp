@@ -138,7 +138,10 @@ namespace TheaterFx
 		GroundAt = InGround;
 		GroundContext = InContext;
 		Seeds = static_cast<uint64_t>(Seed) * 2654435761ull + 1ull;
-		MaxPuffs = std::max(100, static_cast<int>(Num("game.max_puffs", 3000.0)));
+		// (the pre-check, 12:57Z: turned into a whole number unchecked, a broken recipe's nan or inf here was a fault
+		// and its 1e9 asked for hundreds of gigabytes. Held to 100 to 20,000; not a number: the 3,000 it ships with)
+		const double PuffsAsked = Num("game.max_puffs", 3000.0);
+		MaxPuffs = PuffsAsked == PuffsAsked ? static_cast<int>(std::clamp(PuffsAsked, 100.0, 20000.0)) : 3000;
 		ShadeLit = Num("game.shade_lit", 0.18);
 		ShadeDark = Num("game.shade_dark", 0.28);
 		SkyFill = Clamp01(Num("game.sky_fill", 0.25));
@@ -7239,7 +7242,7 @@ namespace TheaterFx
 		// a half a second, so a rise in the count is a fade and not a step; held under three times what this
 		// frame's count alone would give, so it is still at nothing when the room is full. The lumps are
 		// laid, as before, only while this frame's count has a place for every one of them. A second or more
-		// since the last Draw, or time gone back: no memory, this frame's count alone)
+		// since the last Draw, time gone back, or a cut: no memory, this frame's count alone)
 		LumpsRoom = 0.0;
 		size_t Lumped = 0;
 		double Asked = static_cast<double>(Left); // (something left out for want of room: the room is full)
@@ -7253,7 +7256,11 @@ namespace TheaterFx
 		}
 		const double LumpsTenth = std::max(1.0, 0.1 * MaxPuffs);
 		const double LumpsSince = Now - LumpsAt;
-		const bool bLumpsWas = LumpsSince >= 0.0 && LumpsSince < 1.0;
+		// (a cut: since the last frame the eye came over 50 m, turned by over 0.6, or its view grew or shrank by over
+		// a quarter. What was asked of the last view says nothing of this one, so there is no memory on this frame
+		// or the next, whose count is the first of the new view laid with its own margins)
+		const bool bLumpsCut = !(EyeMoved <= 50.0) || !(EyeTurned <= 0.6) || !(std::abs(Eye.PixelsPerRadian - LumpsZoom) <= 0.25 * LumpsZoom);
+		const bool bLumpsWas = !bLumpsCut && LumpsSince >= 0.0 && LumpsSince < 1.0;
 		if (!bLumpsWas || Asked >= LumpsMost)
 		{
 			LumpsMost = Asked;
@@ -7267,7 +7274,8 @@ namespace TheaterFx
 		{
 			LumpsMost = std::max(Asked, LumpsMost - LumpsSince * 0.1 * LumpsTenth);
 		}
-		LumpsAt = Now;
+		LumpsAt = bLumpsCut ? -1.0e9 : Now;
+		LumpsZoom = Eye.PixelsPerRadian;
 		if (Lumped > 0 && Need + Lumped < Left)
 		{
 			LumpsRoom = Clamp01((static_cast<double>(Left) - LumpsMost) / LumpsTenth);
