@@ -514,6 +514,8 @@ int main(int Argc, char** Argv)
 	            C.Fights, SoonestGuns, C.WingSamples ? C.WingSum / C.WingSamples : 0.0, C.WingFar, C.WingSamples, C.Threats, C.Evasions, C.Covers, C.GuardChases);
 	std::printf("  pilots: falls to fighters %d, %d of them under those fighters' guns (%d held for the guns to bear); %ld pilot samples, %ld with no task; lowest in a fight %.0f m; hurt %d, dry %d\n",
 	            C.FallsByFighters, C.FallsUnderFire, C.FallsHeld, PilotSamples, PilotNoTask, C.LowestFight > 1e8 ? 0.0 : C.LowestFight, C.Hurt, C.Dry);
+	std::printf("  pilots: %d scissors (an overshoot, then each rolling back into the other), %d rolls back in them, %d won from behind, the longest %.1f air s; %d pulls up and over, %d half-rolls away\n",
+	            C.Scissors, C.ScissorTurns, C.ScissorWins, C.LongestScissors, C.YoYos, C.SplitS);
 	double SwingMid = 0.0, Swing90 = 0.0, Swing99 = 0.0;
 	if (!Swings.empty())
 	{
@@ -704,6 +706,7 @@ int main(int Argc, char** Argv)
 		{ "aircraft lost to fighters fall to guns that bear", C.FallsByFighters < 6 || C.FallsUnderFire * 6 >= C.FallsByFighters,
 		  std::to_string(C.FallsUnderFire) + " of " + std::to_string(C.FallsByFighters), "at least 1 in 6 under those fighters' guns" },
 		{ "a pilot with an enemy on his tail does something about it", C.Threats < 5 || C.Evasions > 0, std::to_string(C.Evasions) + " evasions for " + std::to_string(C.Threats) + " threats seen", "some" },
+		{ "a scissors is won only after its crossings, and never drags on", C.ScissorTurns >= 2 * C.ScissorWins && C.LongestScissors <= 24.0, std::to_string(C.Scissors) + " scissors, " + std::to_string(C.ScissorTurns) + " rolls back, " + std::to_string(C.ScissorWins) + " won, longest " + Num(C.LongestScissors, 1) + " s", "two rolls back or more for each one won, none over 24 air s" },
 		{ "an escort in a fight goes after the attackers", !bEscortFought || C.FallsByFighters == 0 || C.GuardChases + C.Covers > 0, std::to_string(C.GuardChases) + " chases off its box, " + std::to_string(C.Covers) + " off a partner's tail", "some" },
 		{ "no fighter fights into the ground", C.LowestFight >= 60.0, Num(C.LowestFight > 1e8 ? 0.0 : C.LowestFight), "at least 60 m over it (a strafing run apart)" },
 		{ "a frame fits the budget", TotalMs / std::max(1L, Frames) < 2.0, Num(TotalMs / std::max(1L, Frames), 3), "under 2 ms on average" },

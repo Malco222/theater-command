@@ -341,6 +341,8 @@ namespace AirShow
 		int Waves = 0;                     // passes the battle's beat opened on a box
 		double BeatIn = 0.0, BeatOut = 0.0; // air seconds of fighters' fire on a box with a beat: in the pass (or within 3 s after it), standing off
 		int Threats = 0, Evasions = 0, SplitS = 0, Reversals = 0, Covers = 0, YoYos = 0; // an enemy seen on a tail; what was done about it
+		int Scissors = 0, ScissorTurns = 0, ScissorWins = 0; // scissors begun; the times a pilot in one rolled back into the other; those won (one came out behind the other)
+		double LongestScissors = 0.0;      // air seconds, the longest of them
 		int GuardChases = 0, GuardReturns = 0; // an escort kept by its box going after an attacker, and coming back
 		int Hurt = 0, Dry = 0;             // fighters that left the fight hit, or with their guns empty
 		int FallsByFighters = 0, FallsUnderFire = 0; // aircraft a fighter group brought down; those with its guns on them as they fell (or within 25 s before)
@@ -415,7 +417,7 @@ namespace AirShow
 			std::map<int, Group> Groups;
 		};
 		enum class Role { Ground, Slot, Fight, Straggle, Cover, Fall, Home, Dive, Gone };
-		enum class Phase { None, Setup, Run, Break, Climb, Turn, Peel, Plunge, Pull, Egress, Hold, Zoom, Evade, Station, Chase, Away, Wing };
+		enum class Phase { None, Setup, Run, Break, Climb, Turn, Peel, Plunge, Pull, Egress, Hold, Zoom, Evade, Station, Chase, Away, Wing, Scissor };
 		enum class FallHow { None, Explode, Burn, Spin, Flamer, Wing, Tail, Pilot, Glide, Breakup, Struck };
 
 		/** What a pilot asks of his aircraft: a heading, a climb, a speed; or a bank of his own (a half-roll). */
@@ -511,6 +513,13 @@ namespace AirShow
 			int OwnMark = -1;        // a wingman going in on a box with his leader: the bomber beside his leader's that he fires on
 			int OwnMarkBy = -1;      // (and the leader's bomber it was picked beside)
 			bool bReversed = false;  // his chase is after the enemy that slid past him as he broke
+			double ScissAxis = 0.0;  // in a scissors: the line of it (the attacker's heading as it began)
+			double ScissUntil = 0.0; // the air time it is given up, nobody having won it
+			double ScissNext = 0.0;  // the air time he may next be drawn into one
+			double ScissTurn = 0.0;  // the way he is turning in it, +1 right of its line (he rolls back when his enemy has crossed him)
+			int ScissLegs = 0;       // the times he has rolled back so far
+			bool bScissWin = false;  // the one of the two who comes out behind the other
+			bool bScissIn = false;   // the attacker, still coming through fast: the overshoot that begins it
 			bool bStrafing = false;  // his pass is at an aircraft on the ground
 			bool bFleeing = false;   // half-rolled and diving away from an enemy on his tail
 			bool bOpened = false;    // has made his first pass of this fight
@@ -630,6 +639,10 @@ namespace AirShow
 		bool PilotFight(Craft& C, const Group& G, double Dt);
 		void LookBehind(Craft& C);
 		bool Evading(Craft& C, const Group& G, double Dt);
+		/** In a scissors with the enemy who overshot him (or whom he overshot), this step. */
+		bool Scissoring(Craft& C, const Group& G, double Dt);
+		/** Breaking from an enemy or in a scissors with one: not to be taken off it, and no threat to anyone else. */
+		static bool Dodging(const Craft& C) { return C.Step == Phase::Evade || C.Step == Phase::Scissor; }
 		bool Covering(Craft& C, const Group& G, Craft* Mate, double Dt);
 		bool Answering(Craft& C, const Group& G, double Dt);
 		void FlyAway(Craft& C, const Group& G, Craft* Follow, double Dt);

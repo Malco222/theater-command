@@ -1159,7 +1159,7 @@ namespace AirShow
 			L->Target = -1;
 			L->TargetGroup = -1;
 			L->bCover = L->bReversed = false;
-			if (L->Step != Phase::Evade && L->Step != Phase::Away) { L->Step = Phase::None; L->StepT = 0.0; }
+			if (!Dodging(*L) && L->Step != Phase::Away) { L->Step = Phase::None; L->StepT = 0.0; }
 		}
 	}
 
@@ -1255,7 +1255,7 @@ namespace AirShow
 				for (Craft* L : Leaders)
 				{
 					if (L->TargetGroup != M_.Id) continue;
-					if (L->Step == Phase::Break || L->Step == Phase::Evade || L->Step == Phase::Chase || L->Step == Phase::Away || L->Burst > 0.0) continue;
+					if (L->Step == Phase::Break || Dodging(*L) || L->Step == Phase::Chase || L->Step == Phase::Away || L->Burst > 0.0) continue;
 					const double D = Len(L->P - At);
 					if (L->Step == Phase::Run && D < 2400.0) continue;
 					if (D > Far) { Far = D; Pick = L; }
@@ -1285,7 +1285,7 @@ namespace AirShow
 			L->TargetGroup = Best->Id;
 			L->Target = -1;
 			L->bFiring = false;
-			if (L->Step != Phase::Evade && L->Step != Phase::Away && !L->bCover) { L->Step = Phase::None; L->StepT = 0.0; }
+			if (!Dodging(*L) && L->Step != Phase::Away && !L->bCover) { L->Step = Phase::None; L->StepT = 0.0; }
 		}
 	}
 
@@ -1467,6 +1467,16 @@ namespace AirShow
 		}
 		C.bFiring = C.Burst > 0.0 && bMay && Dist < Range * 1.2 && Dist > 60.0 && T.Doing != Role::Fall && T.Doing != Role::Gone;
 		if (!C.bFiring) return;
+		// (he holds his fire while an aircraft already going down is passing close by the one he is after: no rounds
+		// are drawn striking a falling aircraft)
+		const double Clear = 0.45 * std::hypot(T.Form.Long, T.Form.Span) + 8.0;
+		for (const auto& Pair : Crafts)
+		{
+			const Craft& Q = Pair.second;
+			if (Q.Doing != Role::Fall || Len(Q.P - T.P) > Clear + 0.6 * Q.Form.Span) continue;
+			C.bFiring = false;
+			return;
+		}
 		T.ShotAt = AirT;
 		T.ShotBy = C.Group;
 		if (!T.bFighter)
@@ -1493,7 +1503,8 @@ namespace AirShow
 		if (L && (!Live(*L) || L->Doing != Role::Fight)) L = nullptr;
 		Craft* W = !L && C.Wing ? Find(C.Wing) : nullptr;
 		if (W && (!Live(*W) || W->Doing != Role::Fight)) W = nullptr;
-		// An enemy on his own tail comes before anything.
+		// A scissors he is in, and an enemy on his own tail, come before anything.
+		if (Scissoring(C, G, Dt)) return true;
 		if (Evading(C, G, Dt)) return true;
 		// Out of the fight: hit hard, or his pair's guns empty (an escort kept by its box stays by it all the same).
 		{
@@ -1556,7 +1567,7 @@ namespace AirShow
 			for (int Key : Keys)
 			{
 				const Craft* F = Find(Key);
-				if (!F || F->Side == C.Side || !F->bFighter || !Live(*F) || F->Doing != Role::Fight || F->Step == Phase::Away || F->Step == Phase::Evade) continue;
+				if (!F || F->Side == C.Side || !F->bFighter || !Live(*F) || F->Doing != Role::Fight || F->Step == Phase::Away || Dodging(*F)) continue;
 				// (one that is after him, its nose within 35 degrees of him; or any enemy on a pass or a chase with him
 				// square in its sights, inside 450 m)
 				const bool bAfterHim = F->Target == C.Key;
@@ -1578,7 +1589,7 @@ namespace AirShow
 		{
 			// (one already seen is not lost the moment its nose swings a little wide)
 			const Craft* F = Find(C.Threat);
-			if (F && Live(*F) && F->Doing == Role::Fight && F->Step != Phase::Away && F->Step != Phase::Evade)
+			if (F && Live(*F) && F->Doing == Role::Fight && F->Step != Phase::Away && !Dodging(*F))
 			{
 				const Vec Rel = C.P - F->P;
 				const double D = Len(Rel);
@@ -1627,6 +1638,89 @@ namespace AirShow
 		else C.Threat = -1;
 	}
 
+	bool Show::Scissoring(Craft& C, const Group& G, double Dt)
+	{
+		// The scissors: an attacker who came in too fast on a pilot breaking into him slides out past his tail, and each
+		// then turns back into the other, crossing and crossing again, each trying to make the other fly out in front.
+		// The one who flies the slower, wider weave comes out behind. Shown, never counted: nobody falls here unless
+		// the battle has counted it.
+		if (C.Step != Phase::Scissor) return false;
+		Craft* O = C.Foe >= 0 ? Find(C.Foe) : nullptr;
+		const bool bWith = O && Live(*O) && O->Doing == Role::Fight && O->Step == Phase::Scissor && O->Foe == C.Key;
+		const Vec Rel = bWith ? O->P - C.P : Vec();
+		const double D = Len(Rel);
+		// Won, after a crossing or two: behind him, he before the nose and going away. On to his tail.
+		if (bWith && C.bScissWin && C.ScissLegs >= 2 && D < 520.0 && Ahead(C.Hdg, C.Gam).Dot(Rel) > 0.8 * D && Ahead(O->Hdg, O->Gam).Dot(Rel) > 0.3 * D)
+		{
+			Check.ScissorWins++;
+			Check.LongestScissors = std::max(Check.LongestScissors, C.StepT);
+			C.Step = Phase::Chase;
+			C.StepT = 0.0;
+			C.bReversed = true;
+			C.bCover = C.bAnswer = false;
+			C.Target = O->Key;
+			C.Threat = -1;
+			C.Foe = -1;
+			C.ScissNext = AirT + 25.0;
+			return false;
+		}
+		// Over: the other out of it; another enemy on his own tail; hit; too low; drawn too far apart; or at its time.
+		// (his enemy's wingman, holding his leader's wing through it, is not after him)
+		const Craft* Third = C.Threat >= 0 && C.Threat != C.Foe ? Find(C.Threat) : nullptr;
+		if (Third && Third->Step == Phase::Wing && Third->Lead == C.Foe) { Third = nullptr; C.Threat = -1; }
+		const bool bThird = Third && AirT >= C.ThreatSeen;
+		if (!bWith || bThird || C.bHurt || C.P.Z - GroundAt(C.P.X, C.P.Y) < 350.0 || D > 1000.0 || AirT > C.ScissUntil)
+		{
+			Check.LongestScissors = std::max(Check.LongestScissors, C.StepT);
+			C.Step = Phase::None;
+			C.StepT = 0.0;
+			C.Foe = -1;
+			C.ScissNext = AirT + 25.0;
+			if (!bThird) C.Threat = -1;
+			return false;
+		}
+		// Each turns toward the other, never more than so far off the line the chase was flown on: they cross, and each
+		// rolls back the other way. First the overshoot: the attacker comes through fast and nearly straight while the
+		// other hangs back in a wide, slow weave. Then the one who is to come out behind hangs back, and the other, out
+		// in front, weaves narrow and fast to get clear.
+		const Vec Fa = Ahead(C.ScissAxis), Rt = RightOf(C.ScissAxis);
+		const double Fore = Rel.Dot(Fa), Lat = Rel.Dot(Rt), Side = Lat >= 0.0 ? 1.0 : -1.0;
+		if (C.bScissIn && (Fore < 30.0 || C.StepT > 8.0)) C.bScissIn = false;
+		const bool bOpening = C.bScissIn || O->bScissIn;
+		const bool bBack = bOpening ? !C.bScissIn : C.bScissWin;
+		const double Wide = (bBack ? 58.0 : C.bScissIn ? 16.0 : 44.0) * Deg;
+		// (he rolls back toward the other once the other has crossed him, and not before he has swung most of the way out)
+		const double Swung = C.ScissTurn * Wrap(C.Hdg - C.ScissAxis);
+		if (C.ScissTurn == 0.0) C.ScissTurn = Side;
+		else if (Side != C.ScissTurn && (Swung > 0.75 * Wide || std::fabs(Lat) > 170.0))
+		{
+			C.ScissTurn = Side;
+			C.ScissLegs++;
+			Check.ScissorTurns++;
+		}
+		Cmd K;
+		K.Hdg = C.ScissAxis + C.ScissTurn * Wide;
+		K.Spd = bBack ? 106.0 : C.bScissIn ? C.VTop : 122.0;
+		// (the other well out in front of him now: round on to his tail)
+		if (!bOpening && C.bScissWin && C.ScissLegs >= 2 && Fore > 110.0) K = Toward(C, O->P + Velocity(*O) * (D / 800.0), 118.0);
+		// (a little over or under him at the crossing, never through him)
+		K.Gam = std::min(Clamp((O->P.Z + (C.Key < O->Key ? 28.0 : -28.0) - C.P.Z) * 0.004, -0.14, 0.14), ClimbMost(C));
+		MindGround(C, K);
+		Fly(C, K, Dt, true);
+		FightSpeed(C);
+		// A snap shot as he crosses before the nose.
+		Squeeze(C, *O, G, 340.0, 9.0 * Deg, 0.4, 0.9, Dt);
+		C.Target = O->Key;
+		C.Task = Fore >= 0.0 ? "attacking" : "evading";
+		// (losing it, the enemy behind him: his partner's cue to come for the one on his tail)
+		if (C.Threat < 0 || C.Threat == C.Foe)
+		{
+			C.Threat = !C.bScissWin && C.StepT > 5.0 && Fore < -80.0 ? C.Foe : -1;
+			if (C.Threat >= 0) C.ThreatSeen = std::min(C.ThreatSeen, AirT);
+		}
+		return true;
+	}
+
 	bool Show::Evading(Craft& C, const Group& G, double Dt)
 	{
 		const double Over = C.P.Z - GroundAt(C.P.X, C.P.Y);
@@ -1656,6 +1750,40 @@ namespace AirShow
 			C.bFleeing = G.Style == "dive" && bHigh && Over > 1600.0 && Len(F->P - C.P) < 450.0 && Roll.U() < 0.4;
 			Check.Evasions++;
 			if (C.bFleeing) Check.SplitS++;
+			// Or the break makes him overshoot: an enemy close behind comes on too fast to hold the turn, slides out past
+			// his tail, and the two fall into a scissors. (Not where the battle has counted a loss on his group at that
+			// enemy's guns, yet to be shown: that chase ends as the battle has it.)
+			Craft* A = !C.bFleeing && AirT > C.ScissNext && Over > 700.0 ? Find(C.Threat) : nullptr;
+			if (A && !(A->Target == C.Key && (A->Step == Phase::Chase || A->Step == Phase::Turn || A->Step == Phase::Run) && AirT > A->ScissNext
+			           && A->P.Z - GroundAt(A->P.X, A->P.Y) > 700.0 && DueOn(C.Group, A->Group) == 0)) A = nullptr;
+			// (close, and closing; the less often the better the pilot coming in, who would pull up and over instead; and
+			// seldom one diving through, whose way is up and away on his speed, never round and round)
+			const Vec Gap = A ? C.P - A->P : Vec();
+			const double Far = Len(Gap);
+			if (A && Far < 340.0 && Far > 1.0 && (Velocity(*A) - Velocity(C)).Dot(Gap) > 10.0 * Far && Roll.U() < (A->Step == Phase::Run ? 0.6 : 0.9) - 0.5 * A->Skill)
+			{
+				// Who comes out behind: his, where the battle has a loss of the enemy's group to show at his group's guns;
+				// else the better pilot's more often than not.
+				const bool bMine = DueOn(A->Group, C.Group) > 0 || Roll.U() < Clamp(0.5 + 0.8 * (C.Skill - A->Skill), 0.15, 0.85);
+				C.Step = A->Step = Phase::Scissor;
+				C.StepT = A->StepT = 0.0;
+				C.Foe = A->Key;
+				A->Foe = C.Key;
+				C.Target = A->Key;
+				C.ScissAxis = A->ScissAxis = A->Hdg;
+				C.ScissUntil = A->ScissUntil = AirT + Roll.U(17.0, 23.0);
+				C.ScissTurn = A->ScissTurn = 0.0;
+				C.ScissLegs = A->ScissLegs = 0;
+				C.bScissWin = bMine;
+				A->bScissWin = !bMine;
+				C.bScissIn = false;
+				A->bScissIn = true;
+				A->bCover = A->bReversed = A->bAnswer = false;
+				A->Burst = 0.0;
+				A->YoYo = 0.0;
+				Check.Scissors++;
+				return Scissoring(C, G, Dt);
+			}
 		}
 		Cmd K;
 		C.Task = "evading";
@@ -1815,7 +1943,7 @@ namespace AirShow
 			const Vec Rel = F.P - C.P;
 			double Cost = Len(Rel);
 			if (Ahead(C.Hdg, C.Gam).Dot(Rel) < 0.0) Cost += 500.0;
-			if (F.Step == Phase::Evade) Cost += 400.0;
+			if (Dodging(F)) Cost += 400.0;
 			if (Cost < Best) { Best = Cost; Pick = &F; }
 		}
 		if (!Pick) return false;
@@ -1885,7 +2013,7 @@ namespace AirShow
 		}
 		MindGround(C, K, 120.0);
 		Fly(C, K, Dt, true);
-		if (C.Doing == Role::Fight && C.Step == Phase::Wing && C.WingOf == L.Key && AirT - C.WingAt > 15.0 && L.Step != Phase::Evade && L.Step != Phase::Zoom)
+		if (C.Doing == Role::Fight && C.Step == Phase::Wing && C.WingOf == L.Key && AirT - C.WingAt > 15.0 && !Dodging(L) && L.Step != Phase::Zoom)
 		{
 			const double Off = Len(L.P - C.P);
 			Check.WingSum += Off;
@@ -2008,7 +2136,7 @@ namespace AirShow
 					for (int Key : H->second)
 					{
 						Craft* F = Find(Key);
-						if (!F || F->Side == C.Side || !Live(*F) || F->Doing != Role::Fight || F->Step == Phase::Away || F->Step == Phase::Evade || F->Lead != F->Key) continue;
+						if (!F || F->Side == C.Side || !Live(*F) || F->Doing != Role::Fight || F->Step == Phase::Away || Dodging(*F) || F->Lead != F->Key) continue;
 						const double D = Len(F->P - Box);
 						if (D >= std::min(Near, Within)) continue;
 						bool bTaken = false;
@@ -2065,7 +2193,7 @@ namespace AirShow
 		const bool bSternKind = Named == "astern" || Named == "close" || Named == "below";
 		// His four's leader, when he leads its second pair and they are on the same box.
 		Craft* Boss = C.Boss ? Find(C.Boss) : nullptr;
-		if (Boss && (!Live(*Boss) || Boss->Doing != Role::Fight || Boss->TargetGroup != E.Id || Boss->bGuard || Boss->Step == Phase::Away || Boss->Step == Phase::Evade || Boss->Step == Phase::Chase)) Boss = nullptr;
+		if (Boss && (!Live(*Boss) || Boss->Doing != Role::Fight || Boss->TargetGroup != E.Id || Boss->bGuard || Boss->Step == Phase::Away || Dodging(*Boss) || Boss->Step == Phase::Chase)) Boss = nullptr;
 		if (Boss && C.Step != Phase::Run && C.Step != Phase::Break) C.Hand = Boss->Hand;
 		Craft* T = C.Target >= 0 ? Find(C.Target) : nullptr;
 		if (T && (T->Group != E.Id || !Live(*T))) { T = nullptr; C.Target = -1; }
@@ -2431,7 +2559,7 @@ namespace AirShow
 			// who has not seen him: an enemy going in on the bombers, or with his eyes on somebody else.
 			const bool bBounce = C.P.Z - Tp.Z > 150.0 && Dist < 1800.0 && Nose.Dot(Rel) > 0.5 * Dist;
 			const bool bGift = C.StepT > 1.5 && Dist < 1300.0 && C.Spd > 118.0 && Nose.Dot(Rel) > 0.6 * Dist;
-			const bool bUnseen = C.StepT > 2.0 && Dist < 1700.0 && T.Target != C.Key && (T.Threat != C.Key || T.bBlind) && T.Step != Phase::Zoom && T.Step != Phase::Evade
+			const bool bUnseen = C.StepT > 2.0 && Dist < 1700.0 && T.Target != C.Key && (T.Threat != C.Key || T.bBlind) && T.Step != Phase::Zoom && !Dodging(T)
 				&& (T.Step == Phase::Run || Ahead(T.Hdg).Dot(Rel) > -0.2 * Dist) && C.P.Z > Tp.Z - 250.0 && (Nose.Dot(Rel) > 0.3 * Dist || Dist > 700.0);
 			// (and at once at one of a group the battle has counted a loss on at his group's guns, yet to be shown)
 			const bool bDue = C.StepT > 1.0 && DueOn(T.Group, C.Group) > 0 && Dist < 2500.0 && C.P.Z > Tp.Z - 300.0;
@@ -3934,7 +4062,7 @@ namespace AirShow
 	{
 		// One line an aircraft: what it is doing (for a debug overlay, and the cloud test's trace).
 		static const char* Roles[] = { "ground", "slot", "fight", "straggle", "cover", "fall", "home", "dive", "gone" };
-		static const char* Steps[] = { "-", "setup", "run", "break", "climb", "turn", "peel", "plunge", "pull", "egress", "hold", "zoom", "evade", "station", "chase", "away", "wing" };
+		static const char* Steps[] = { "-", "setup", "run", "break", "climb", "turn", "peel", "plunge", "pull", "egress", "hold", "zoom", "evade", "station", "chase", "away", "wing", "scissor" };
 		std::string Text;
 		char Line[256];
 		for (const auto& Pair : Crafts)
