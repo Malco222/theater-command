@@ -371,6 +371,49 @@ from the air. From straight above a 40 m fire's was a round disc some 250 m acro
 Behind its recipe key, with its own dice: head 71a0d19's recipe draws as before on this code, frame for frame,
 fires of 3, 9, 12 and 40 m among them. A fire under `from_m` (a tank, a house) smokes as before.
 
+## A burning ship's own column (after head 335b669)
+
+The art director's item of 04:06Z, 20 November: a burning ship gets a column of her own, of the oil column's kind
+but about half its width: black at the root, in lumps, leaning down the wind, rising a few hundred metres before
+it bends flat, the bank lying on the sea beneath it.
+
+- **What the game already lights.** Every ship lost but a submarine gets an oil fire 0.6 of her length across
+  (`AAirStage`, at most `MostOilFires`), so Akagi in build 1750 had her column: the soft blur in picture 06 was
+  the deck fires' old smoke discs in front of it. With the bank the column stands clear; this round changes
+  nothing for a lost ship.
+- **Her own column.** `fire.smoke_column` (`Battle::OwnColumn`, a `Source` of kind 3): a plain fire `from_m`
+  across or more that burns `from_s` seconds or longer sends up the oil column's own puffs and pall, read from
+  this row by the oil row's keys (`Battle::OilRowAt`), sizes as shares of the fire's width. A 40 m fire's column
+  is 35 to 55 m across and stands 200 to 280 m before it bends. A shorter fire (a crashed aeroplane's 90 s) and a
+  smaller one (a bomb hit on a destroyer) lay their smoke as before.
+- **Black at the root.** `sun_young`, `sun_from_s`, `sun_by_s`: a puff has a tenth of its lit side until 4 s old
+  and all of it by 16 s, so the first 40 m or so of the column is black and the lit lumps come in higher up. Any
+  oil row may ask the same; none asks, so the oil fires draw as before.
+- **One column to a ship.** A fire lit within `join_m` of a place a standing column rises from joins it: the
+  column then rises from both fires and from between them (eight places at most), stands on their middle, and is
+  `join_wide` of her burning length across, never wider than a fire `join_m` across would send up. A carrier
+  ablaze from end to end (three 33 m fires 78 m apart) sends up one column of lumps 40 to 64 m in radius, about
+  half her oil column's.
+- **Under burning oil, none.** While an oil fire burns within `under_oil` of its reach of one of her fires, the
+  column lays nothing (`Battle::UnderOil`): the oil's column is hers. The picture with her oil fire is the same
+  to the byte with and without this row.
+- **Cost.** A column is 95 to 130 puffs, kept when the screen is full as an oil column's are; `most` (6) stand at
+  once, a fire past that lays its bank only, and one standing down under oil is not counted.
+- **Held.** `OilRowAt` now holds every oil row dial to a sane span and gives one that is not a number its usual
+  value (an oil row of 1e9 heads once ran out of memory, one of `inf` laid points at infinity), and never lets a
+  row ask for more than some four hundred puffs of a kind to a fire; `OilFire` holds a reach to 5000 m. A sane
+  row is not changed by it.
+
+Behind its recipe key, with its own dice: head 335b669's recipe draws as before on this code, frame for frame,
+the oil scenes among them. The kit cannot tell a ship's fire from one on land: a big, long fire ashore (the
+atoll's tanks and hangars) sends up a column too.
+
+`FX_BURN_ROW=n,m` lays n plain fires m metres apart, centred where `FX_BURN_ASIDE` puts the fire, turned
+`FX_BURN_TURN` degrees. Near build 1750's Akagi 06: `FX_LENS=42 FX_BURN=33 FX_BURN_ROW=3,78 FX_BURN_TURN=15
+FX_BURN_UP=9 FX_DIST=830 FX_EYE_H=200 FX_LOOK_H=60 ./fxpreview recipe.txt out oil sunk 3600 1072x670`; add
+`FX_BURN_ASIDE=0.01 FX_REACH=156 FX_SINCE=90` for her oil fire. The lone 40 m fire in the game's air view:
+`FX_BURN=40 FX_DIST=520 FX_EYE_H=330 FX_LOOK_H=60`.
+
 ## Oil fires at sea
 
 ```cpp

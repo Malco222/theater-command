@@ -455,7 +455,23 @@ namespace
 				// (FX_BURN=metres across: a plain fire of that size in place of the oil (Burn, as a ship hit's in the air
 				// battle), its base FX_BURN_UP m over the sea. It has no Since: ask for a frame late enough, 450 is 15 s.
 				// FX_BURN_ASIDE=m: the oil fire burns too, the plain fire that far aside of it, as a ship on fire by her oil)
-				Fx.Burn(0.0, Vec(EnvNum("FX_BURN_ASIDE", 0.0), 0.0, EnvNum("FX_BURN_UP", 0.0)), std::atof(BurnIs), 900.0);
+				// FX_BURN_ROW=n,m: n such fires in a row m metres apart, as a ship ablaze from end to end (FX_BURN_TURN=degrees
+				// turns the row and the oil's place from the view's own line)
+				const char* RowIs = std::getenv("FX_BURN_ROW");
+				int RowN = 1;
+				double RowStep = 0.0;
+				if (RowIs)
+				{
+					std::sscanf(RowIs, "%d,%lf", &RowN, &RowStep);
+					RowN = std::clamp(RowN, 1, 12);
+				}
+				const double RowTurn = EnvNum("FX_BURN_TURN", 0.0) * 3.14159265358979 / 180.0;
+				const Vec RowWay(std::cos(RowTurn), std::sin(RowTurn), 0.0);
+				for (int I = 0; I < RowN; ++I)
+				{
+					const Vec Spot = RowWay * (EnvNum("FX_BURN_ASIDE", 0.0) + (I - 0.5 * (RowN - 1)) * RowStep);
+					Fx.Burn(0.0, Vec(Spot.X, Spot.Y, EnvNum("FX_BURN_UP", 0.0)), std::atof(BurnIs), 900.0);
+				}
 				Fx.SetDrawBeyond(Fx.AirBeyond()); // (as the air scene does: UseAirDistance)
 			}
 			if (!BurnIs || std::getenv("FX_BURN_ASIDE"))

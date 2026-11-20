@@ -4661,7 +4661,137 @@ namespace TheaterFx
 		S.Across = std::min(5000.0, std::max(0.3, Across)); // (a width that is not a number counts as the least, and an endless one is held: no point of it is ever laid at infinity)
 		S.Seed = ++Seeds * 49979687ull ^ PlaceKey(At);
 		S.Bank = BankRowOf(S.Across, S.Seed);
+		OwnColumn(Now, S);
 		Sources.push_back(S);
+	}
+
+	void Battle::OwnColumn(double Now, const Source& Fire)
+	{
+		// (fire.smoke_column, art director 04:06Z 20 November: a burning ship gets a column of her own, of the oil
+		// column's kind but about half its width: black at the root, in lumps, leaning down the wind, rising a few
+		// hundred metres before it bends flat, the bank lying on the sea beneath it. A fire from_m across or more.
+		// One column to a ship: a fire lit within join_m of a fire that already has one joins it as another place the
+		// column rises from, so a carrier ablaze from end to end sends up one broad column and never three. And none
+		// where burning oil already stands over the fire (UnderOil): there the oil's column is hers. No such key: none)
+		const std::string P = "fire.smoke_column.";
+		if (!Has(P + "column_life_s.0"))
+		{
+			return;
+		}
+		auto Safe = [](double Is, double Least, double Most, double Usual) { return Is == Is ? std::min(Most, std::max(Least, Is)) : Usual; };
+		if (Fire.Across < Safe(Num(P + "from_m", 8.0), 0.0, 1e6, 8.0))
+		{
+			return;
+		}
+		// (from_s: a fire that burns less than this long sends up none: a crashed aeroplane's minute and a half of fire
+		// lays its bank and never a column a few hundred metres tall)
+		if (Fire.Flames - Now < Safe(Num(P + "from_s", 120.0), 0.0, 1e6, 120.0))
+		{
+			return;
+		}
+		const double Join = Safe(Num(P + "join_m", 120.0), 0.0, 2000.0, 120.0);
+		Source* Hers = nullptr;
+		size_t HerHead = 0;
+		double LeastSq = Join * Join;
+		for (Source& S : Sources)
+		{
+			// (a column rises from eight places at most: a fire past that starts the next column)
+			if (S.Kind != 3 || S.End <= Now || S.Heads.size() >= 8)
+			{
+				continue;
+			}
+			for (size_t I = 0; I < S.Heads.size(); ++I)
+			{
+				const double Dx = S.Heads[I].X - Fire.At.X, Dy = S.Heads[I].Y - Fire.At.Y;
+				if (Dx * Dx + Dy * Dy <= LeastSq)
+				{
+					LeastSq = Dx * Dx + Dy * Dy;
+					Hers = &S;
+					HerHead = I;
+				}
+			}
+		}
+		if (Hers)
+		{
+			// (the column rises from between the two fires as well: one broad column off the whole length of her,
+			// never a chimney to a fire)
+			Source& S = *Hers;
+			if (S.Heads.size() < 7)
+			{
+				S.Heads.push_back((S.Heads[HerHead] + Fire.At) * 0.5);
+			}
+			S.Heads.push_back(Fire.At);
+			// (and it is as broad as the fires lie apart: join_wide of her burning length, so its lumps close over the
+			// gaps between her fires; never broader than a fire join_m across would send up. It stands on their middle)
+			double Length = 0.0;
+			Vec Middle;
+			for (size_t I = 0; I < S.Heads.size(); ++I)
+			{
+				Middle = Middle + S.Heads[I];
+				for (size_t K = I + 1; K < S.Heads.size(); ++K)
+				{
+					Length = std::max(Length, std::hypot(S.Heads[I].X - S.Heads[K].X, S.Heads[I].Y - S.Heads[K].Y));
+				}
+			}
+			const double Broad = Safe(Num(P + "join_wide", 0.5), 0.0, 4.0, 0.5) * (Length + Fire.Across);
+			S.Across = std::max(std::max(S.Across, Fire.Across), std::min(Broad, std::max(Join, Fire.Across)));
+			S.At = Middle * (1.0 / static_cast<double>(S.Heads.size()));
+			S.Flames = std::max(S.Flames, Fire.Flames);
+			S.End = std::max(S.End, Fire.End);
+			return;
+		}
+		// (most: so many columns of their own stand at once and no more, each some hundred puffs that are never dropped
+		// when the screen is full; a fire past that lays its bank only. One standing down under burning oil is not counted)
+		const int Most = static_cast<int>(Safe(Num(P + "most", 6.0), 0.0, 64.0, 6.0));
+		int Standing = 0;
+		for (const Source& S : Sources)
+		{
+			Standing += S.Kind == 3 && S.End > Now && !UnderOil(S, Now) ? 1 : 0;
+		}
+		if (Standing >= Most)
+		{
+			return;
+		}
+		Source C;
+		C.Kind = 3;
+		C.At = Fire.At;
+		C.Across = Fire.Across;
+		C.Start = Now;
+		C.Flames = Fire.Flames;
+		C.End = Fire.End;
+		C.Next = C.NextSmoke = C.NextPall = Now;
+		C.Seed = Fire.Seed ^ 0x5C01A3D5EEDull;
+		C.Oil = OilRowAt(P);
+		C.Id = OwnColumnId + OwnColumns;
+		OwnColumns = (OwnColumns + 1) % 100000;
+		C.UnderOil = Safe(Num(P + "under_oil", 0.75), 0.0, 10.0, 0.75);
+		C.Heads.push_back(Fire.At);
+		Sources.push_back(C);
+	}
+
+	bool Battle::UnderOil(const Source& Column, double T) const
+	{
+		if (Column.UnderOil <= 0.0)
+		{
+			return false;
+		}
+		for (const Source& S : Sources)
+		{
+			if (S.Kind != 2 || T < S.Start || T >= S.End)
+			{
+				continue;
+			}
+			const double Reach = Column.UnderOil * S.Across;
+			for (const Vec& H : Column.Heads)
+			{
+				const double Dx = H.X - S.At.X, Dy = H.Y - S.At.Y;
+				if (Dx * Dx + Dy * Dy <= Reach * Reach)
+				{
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	Battle::BankRow Battle::BankRowOf(double Across, uint64_t Seed) const
@@ -4780,7 +4910,11 @@ namespace TheaterFx
 
 	Battle::OilRow Battle::OilRowOf(const std::string& Kind) const
 	{
-		const std::string P = "oil_fires." + (Has("oil_fires." + Kind + ".column_life_s.0") ? Kind : std::string("sunk")) + ".";
+		return OilRowAt("oil_fires." + (Has("oil_fires." + Kind + ".column_life_s.0") ? Kind : std::string("sunk")) + ".");
+	}
+
+	Battle::OilRow Battle::OilRowAt(const std::string& P) const
+	{
 		OilRow R;
 		R.Heads = Range(P + "heads", 3.0, 5.0);
 		R.HeadSpread = Num(P + "head_spread", 0.6);
@@ -4836,6 +4970,76 @@ namespace TheaterFx
 		R.Col = Picture(P + "colour", Rgb::FromPicture(24, 22, 21));
 		R.Col2 = Picture(P + "colour_top", Rgb::FromPicture(64, 60, 57));
 		R.Flame = Picture(P + "flame_colour", Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56)));
+		R.SunYoung = Num(P + "sun_young", 1.0);
+		R.SunFrom = Num(P + "sun_from_s", 0.0);
+		R.SunBy = Num(P + "sun_by_s", 0.0);
+		// (every dial held to a sane span, and one that is not a number given its usual value: no wild recipe number
+		// lays a point at infinity or asks for puffs without end. A sane row is not changed by any of it)
+		auto Held = [](double& V, double Least, double Most, double Usual) { V = V == V ? std::min(Most, std::max(Least, V)) : Usual; };
+		auto Held2 = [&Held](Span& S, double Least, double Most, double Low, double High) { Held(S.A, Least, Most, Low); Held(S.B, Least, Most, High); };
+		Held2(R.Heads, 1.0, 64.0, 3.0, 5.0);
+		Held(R.HeadSpread, 0.0, 5.0, 0.6);
+		Held2(R.HeadR, 0.0, 5.0, 0.15, 0.3);
+		Held(R.FlameUp, -1000.0, 1000.0, 0.0);
+		Held(R.FlameEvery, 0.02, 60.0, 0.1);
+		Held2(R.FlameR, 0.0, 200.0, 2.0, 4.5);
+		Held2(R.FlameTall, 0.1, 20.0, 2.0, 3.5);
+		Held2(R.FlameLife, 0.02, 30.0, 0.35, 0.7);
+		Held(R.ColumnEvery, 0.1, 600.0, 1.0);
+		Held2(R.ColumnLife, 1.0, 900.0, 50.0, 70.0);
+		Held2(R.Rise, -50.0, 100.0, 6.0, 9.0);
+		Held2(R.Burst, 0.0, 300.0, 0.0, 0.0);
+		Held(R.BaseEvery, 0.0, 600.0, 0.0);
+		Held2(R.BaseLife, 0.5, 600.0, 10.0, 15.0);
+		Held2(R.BaseRise, -20.0, 50.0, 1.5, 3.0);
+		Held2(R.BaseR, 0.0, 5.0, 0.15, 0.3);
+		Held2(R.BaseAlpha, 0.0, 1.0, 0.8, 0.95);
+		Held(R.BaseFlat, 0.02, 1.0, 1.0);
+		Held(R.PallEvery, 0.0, 600.0, 0.0);
+		Held2(R.PallLife, 1.0, 1800.0, 150.0, 240.0);
+		Held2(R.PallR1, 0.0, 10.0, 1.2, 2.0);
+		Held2(R.PallWindage, 0.0, 10.0, 1.3, 1.8);
+		Held2(R.PallAlpha, 0.0, 1.0, 0.55, 0.75);
+		Held(R.PallStretch, 1.0, 20.0, 1.0);
+		Held(R.PallStretchBy, 0.0, 3600.0, 0.0);
+		Held(R.PallHold, 0.0, 0.99, 0.15);
+		Held2(R.PallLevel, 0.0, 5.0, 1.0, 1.0);
+		Held(R.PallDrift, 0.0, 20.0, 0.0);
+		Held(R.PallRough, 0.0, 0.9, 0.0);
+		Held(R.PallRest, 0.0, 2.0, 0.0);
+		Held(R.SlickLong, 0.0, 20.0, 0.0);
+		Held(R.SlickWide, 0.0, 20.0, 0.0);
+		Held(R.FlameOdds, 0.0, 1.0, 1.0);
+		Held(R.FlamePoint, 0.0, 1.0, 0.9);
+		Held(R.SunSide, 0.0, 20.0, 0.0);
+		Held(R.SunYoung, 0.0, 1.0, 1.0);
+		Held(R.SunFrom, 0.0, 3600.0, 0.0);
+		Held(R.SunBy, 0.0, 3600.0, 0.0);
+		Held(R.BurstDrag, 0.01, 100.0, 0.1);
+		Held(R.Slow, -10.0, 10.0, 0.06);
+		Held2(R.Windage, 0.0, 10.0, 1.0, 1.6);
+		Held2(R.R0, 0.001, 10.0, 0.2, 0.35);
+		Held2(R.R1, 0.001, 20.0, 0.8, 1.4);
+		Held(R.Grow, 0.05, 8.0, 0.6);
+		Held2(R.Alpha, 0.0, 1.0, 0.85, 0.95);
+		Held(R.Hold, 0.0, 0.99, 0.5);
+		Held(R.Heart, 0.0, 4.0, 0.7);
+		Held(R.Rough, 0.0, 0.9, 0.3);
+		Held(R.Cool, 0.0, 4.0, 1.0);
+		Held(R.Lamp, 0.0, 100.0, 0.25);
+		Held(R.LampReach, 0.0, 100.0, 2.0);
+		Held(R.TwinPx, 0.0, 100000.0, 0.0);
+		// (and never more than some four hundred puffs of a kind alive to a fire, however often the recipe asks)
+		R.ColumnEvery = std::max(R.ColumnEvery, std::max(R.ColumnLife.A, R.ColumnLife.B) / 400.0);
+		if (R.BaseEvery > 0.0)
+		{
+			R.BaseEvery = std::max(R.BaseEvery, std::max(R.BaseLife.A, R.BaseLife.B) / 400.0);
+		}
+		if (R.PallEvery > 0.0)
+		{
+			R.PallEvery = std::max(R.PallEvery, std::max(R.PallLife.A, R.PallLife.B) / 400.0);
+		}
+		R.FlameEvery = std::max(R.FlameEvery, std::max(R.FlameLife.A, R.FlameLife.B) * std::max(R.Heads.A, R.Heads.B) / 600.0);
 		return R;
 	}
 
@@ -4846,7 +5050,7 @@ namespace TheaterFx
 		S.Kind = 2;
 		S.Id = Id;
 		S.At = Vec(AtIn.X, AtIn.Y, std::max(AtIn.Z, Height(AtIn.X, AtIn.Y))); // (on the sea, or on a burning ship's deck if given)
-		S.Across = std::max(5.0, Reach);
+		S.Across = std::min(5000.0, std::max(5.0, Reach)); // (a reach that is not a number counts as the least, and an endless one is held)
 		S.Oil = OilRowOf(Kind && *Kind ? Kind : "sunk");
 		S.Seed = static_cast<uint64_t>(static_cast<uint32_t>(Id)) * 2654435761ull ^ PlaceKey(S.At) ^ 0x9e3779b97f4a7c15ull;
 		S.Start = Now - std::max(0.0, Since);
@@ -5011,6 +5215,9 @@ namespace TheaterFx
 		B.bKeep = R.bKeep;
 		B.SunSide = R.SunSide;
 		B.LitCol = R.Lit;
+		B.SunYoung = R.SunYoung; // (sun_by_s: the column's young smoke, low over the fire, takes little of the light)
+		B.SunFrom = R.SunFrom;
+		B.SunBy = R.SunBy;
 		B.Centre = S.At;
 		B.AxisWindage = 0.5 * ((bPall ? R.PallWindage.A : R.Windage.A) + (bPall ? R.PallWindage.B : R.Windage.B));
 		B.OilId = bPall ? -1 : S.Id;
@@ -5097,6 +5304,41 @@ namespace TheaterFx
 			// (after a long pause, such as the game being paused, only the last second is made up)
 			S.Next = std::max(S.Next, Now - 1.0);
 			S.NextSmoke = std::max(S.NextSmoke, Now - 1.0);
+			if (S.Kind == 3)
+			{
+				// a big fire's own column (fire.smoke_column): the oil column's kind of puff, over the fire or fires it
+				// stands on, and its pall; thinner, greyer and slower once the flames are out. None of it while burning
+				// oil stands over her
+				const OilRow& R = S.Oil;
+				const double Step = R.ColumnEvery;
+				auto Lay = [&](double T, bool bPall)
+				{
+					const bool bFlames = T < S.Flames;
+					if (!S.Heads.empty() && !UnderOil(S, T))
+					{
+						OilColumn(S, T, bPall);
+						if (!bFlames)
+						{
+							const double After = (T - S.Flames) / std::max(S.End - S.Flames, 1.0);
+							Bit& B = Bits.back();
+							B.Alpha *= std::max(0.15, 1.0 - After);
+							B.Col = B.Col.Mix(Rgb::FromPicture(110, 108, 104), 0.5);
+							B.Col2 = B.Col2.Mix(Rgb::FromPicture(120, 118, 114), 0.5);
+						}
+					}
+					return bFlames ? 1.0 : 2.0;
+				};
+				while (S.NextSmoke <= Now && S.NextSmoke < S.End)
+				{
+					S.NextSmoke += Step * Lay(S.NextSmoke, false);
+				}
+				S.NextPall = std::max(S.NextPall, Now - 1.0);
+				while (R.PallEvery > 0.0 && S.NextPall <= Now && S.NextPall < S.End)
+				{
+					S.NextPall += R.PallEvery * Lay(S.NextPall, true);
+				}
+				continue;
+			}
 			if (S.Kind == 2)
 			{
 				// burning oil on the sea: low ragged flames on each head of the slick, and the column over them
@@ -5844,7 +6086,9 @@ namespace TheaterFx
 					Round.Mid = SpanMid;
 					Round.R = std::max(SpanHalf, 1e-3);
 				}
-				Round.Gain = B.SunSide * Day;
+				// (SunBy, as the bank's: the column's young smoke, low over the fire, takes little of the light, so the
+				// column stands black at its root and its lit side comes in higher up. None asked: all of it, as before)
+				Round.Gain = B.SunSide * Day * (B.SunBy > 0.0 ? B.SunYoung + (1.0 - B.SunYoung) * Clamp01((Age - B.SunFrom) / std::max(B.SunBy - B.SunFrom, 1e-3)) : 1.0);
 				Round.Level = std::sqrt(std::max(0.0, 1.0 - Eye.Sun.Z * Eye.Sun.Z));
 				Round.Up = RoundUp * std::max(0.0, Eye.Sun.Z);
 				Lift = Rgb(B.LitCol.R * Eye.SmokeLight.R - Col.R, B.LitCol.G * Eye.SmokeLight.G - Col.G, B.LitCol.B * Eye.SmokeLight.B - Col.B);

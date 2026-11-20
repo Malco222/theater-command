@@ -495,6 +495,7 @@ namespace TheaterFx
 			double SlickLong = 0.0, SlickWide = 0.0; // (over 0: the burning slick an oval, these shares of Reach long and wide, its heads all over it)
 			double FlameOdds = 1.0, FlamePoint = 0.9; // (flame_point: how sharp each tongue's tip, 1 a spike; each head's chance of a tongue each flame_every_s: a broken line of low flames)
 			double SunSide = 0.0; // (its sunward side lit toward Lit, so the column reads round)
+			double SunYoung = 1.0, SunFrom = 0.0, SunBy = 0.0; // (SunBy over 0: a puff has only SunYoung of that light until SunFrom seconds old and all of it by SunBy, so the column is black at its root)
 			double BurstDrag = 0.1, HeadSpread = 0.6, FlameUp = 0.0, FlameEvery = 0.1, ColumnEvery = 1.0, Slow = 0.06, Hold = 0.5, Heart = 0.6, Rough = 0.3;
 			double Cool = 1.0, Lamp = 0.25, LampReach = 2.0, TwinPx = 0.0, Grow = 0.6;
 			bool bKeep = true;
@@ -517,7 +518,8 @@ namespace TheaterFx
 			Vec At;
 			double Start = 0.0, Flames = 0.0, End = 0.0, Across = 1.0, Next = 0.0, NextSmoke = 0.0, NextBase = 0.0, NextPall = 0.0;
 			Vec SlickA, SlickB; // (an oil fire's oval slick: its half-axes, long and wide)
-			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea
+			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea, 3 a big fire's own column
+			double UnderOil = 0.0; // (a big fire's own column: none of it is laid while oil burns within this share of that oil's reach of a fire it stands on)
 			int Id = -1; // (an oil fire: the caller's number for it)
 			uint64_t Seed = 1;
 			OilRow Oil; // (an oil fire: its row)
@@ -544,6 +546,8 @@ namespace TheaterFx
 		void* GroundContext = nullptr;
 		Vec Wind = Vec(1.6, 0.4, 0.0);
 		uint64_t Seeds = 1;
+		int OwnColumns = 0; // (big fires given a column of their own so far: each takes an id above every caller's, for the column's width measure)
+		static constexpr int OwnColumnId = 1 << 28;
 		int MaxPuffs = 3000;
 		int Sides = 16, PointsPerPuff = 33;
 		std::vector<double> RingCos, RingSin, Ring2Cos, Ring2Sin, Ring3Cos, Ring3Sin, Ring5Cos, Ring5Sin; // (made once at Setup, so no puff works out a cosine a side each frame)
@@ -748,6 +752,9 @@ namespace TheaterFx
 		Vec OnSlick(const Source& S, Dice& D) const; // a point anywhere on an oil fire's slick
 		void OilBase(Source& S, double T); // one puff of the low smoke rolling off the slick, born at T
 		OilRow OilRowOf(const std::string& Kind) const;
+		OilRow OilRowAt(const std::string& Prefix) const; // (the row under any prefix, every dial held to a sane span)
+		void OwnColumn(double Now, const Source& Fire); // (a big fire's own column: started, or this fire joined to one standing near)
+		bool UnderOil(const Source& Column, double T) const; // (burning oil stands over one of its fires at T: the oil's column is hers)
 		BankRow BankRowOf(double Across, uint64_t Seed) const;
 		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK);
 		void Prune(double Now);

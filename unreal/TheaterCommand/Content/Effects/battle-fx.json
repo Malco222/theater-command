@@ -1247,6 +1247,103 @@
    ],
    "twin_px": 160,
    "rest": 1.0
+  },
+  "smoke_column": {
+   "_how": "A big fire's own column (art director 04:06Z 20 November: a burning ship gets a column of her own, of the oil column's kind but about half its width: black at the root, lumps, leaning down the wind, rising a few hundred metres before it bends flat; the bank lies on the sea beneath it). A plain fire (Burn) from_m across or more that burns from_s seconds or longer sends one up: the oil column's own puffs and pall (the keys below are the oil row's, read the same way, sizes as shares of the fire's width), laid from this row. from_s: a shorter fire sends up none (a crashed aeroplane's 90 seconds lays its bank only). One column to a ship: a fire lit within join_m of a place a standing column rises from joins it; the column then rises from both fires and from between them (eight places at most, a fire past that starts the next column), stands on their middle, and is join_wide of her burning length across (the fires' greatest distance apart plus the new fire's width; never wider than a fire join_m across would send up), so a carrier ablaze from end to end sends up one broad column and never three chimneys. most: so many columns stand at once and no more (each is some 95 to 130 puffs that are kept when the screen is full, as an oil column's are); a fire past that lays its bank only, and a column standing down under burning oil is not counted. under_oil: none of it is laid while burning oil (OilFire) stands within this share of that oil's reach of one of her fires: the game lights an oil fire 0.6 of her length across on every ship lost, and that oil's column is hers. 0: laid all the same. sun_young, sun_from_s, sun_by_s: a puff has only sun_young of its lit side until sun_from_s seconds old and all of it by sun_by_s, so the column is black at its root and its lit lumps come in higher up (any oil row can ask the same; none asked: as before). After the flames the column thins, greys and comes half as often until the fire ends. No fire.smoke_column.column_life_s key: no column, every fire as before.",
+   "from_m": 8,
+   "from_s": 120,
+   "join_m": 120,
+   "join_wide": 0.5,
+   "most": 6,
+   "under_oil": 0.75,
+   "head_r": [
+    0.15,
+    0.3
+   ],
+   "column_every_s": 0.8,
+   "column_life_s": [
+    45,
+    60
+   ],
+   "rise_mps": [
+    0.0,
+    0.0
+   ],
+   "burst_mps": [
+    12,
+    16
+   ],
+   "burst_drag": 0.04,
+   "slow_mps2": 0.0,
+   "windage": [
+    1.0,
+    1.6
+   ],
+   "r0": [
+    0.25,
+    0.38
+   ],
+   "r1": [
+    0.42,
+    0.68
+   ],
+   "grow": 0.6,
+   "alpha": [
+    0.75,
+    0.95
+   ],
+   "hold": 0.5,
+   "heart": 0.85,
+   "rough": 0.35,
+   "cool": 1.0,
+   "colour": [
+    24,
+    22,
+    21
+   ],
+   "colour_top": [
+    64,
+    60,
+    57
+   ],
+   "twin_px": 160,
+   "keep": 1,
+   "pall_every_s": 4.0,
+   "pall_life_s": [
+    150,
+    220
+   ],
+   "pall_r1": [
+    0.8,
+    1.3
+   ],
+   "pall_windage": [
+    1.4,
+    1.9
+   ],
+   "pall_alpha": [
+    0.4,
+    0.6
+   ],
+   "pall_stretch": 2.2,
+   "pall_stretch_by_s": 90,
+   "pall_hold": 0.4,
+   "pall_level": [
+    0.75,
+    1.05
+   ],
+   "pall_drift_mps": 0.3,
+   "pall_rough": 0.5,
+   "pall_rest": 1.3,
+   "sun_side": 2.2,
+   "lit_colour": [
+    118,
+    106,
+    94
+   ],
+   "sun_young": 0.1,
+   "sun_from_s": 4,
+   "sun_by_s": 16
   }
  },
  "camera": {
