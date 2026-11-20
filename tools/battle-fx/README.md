@@ -842,7 +842,51 @@ foam ring and a thin drifting mist.
   air look 44 and 50), byte for byte. de54166's recipe: 115 frames (65 and 50), byte for byte. Both hashes
   unchanged. No warnings (g++ and clang, -Wshadow). Wild numbers on the 96 keys of the sea's rows, alone and all
   together, with wild winds and screen scales and a salvo of 16: 2,143 runs under ASAN and UBSAN, no faults.
-- **Still to come:** ship fires as ragged tongues (the art director's second note), the ways down.
+- **Still to come:** the ways down. (Ship fires as ragged tongues: the next section.)
+
+## Ship fires as ragged tongues (after head 3e3c4ef)
+
+The art director's second note on build 1778, 17:54Z 20 November: the ships' fires were "rows of pointed orange
+cones like birthday candles". Wanted: ragged tongues of uneven height, roots on the skin with a yellow-white heart,
+tips tearing off and sweeping downwind.
+
+- **The row** `fire.tongues`. With it (its `every_s`), a burning thing's flames (`Burn`, on a ship, a plane's wreck
+  or the ground) are laid by `FireTongues`. Without it they are the one or two upright cones a step they were, by
+  the same dice in the same order. The fire's smoke, its lamp and the steam of its putting out are untouched.
+- **What it draws.** A fire burns at seats of its own (`seats`), fixed where it was lit and standing apart round
+  its middle. Each seat throws tongues `tall` of the fire's width high, each seat its own share of that: one the
+  tallest, more of them short, none the same (a fire over `tall_wide_m` across is less tall for its width). A
+  seat's height surges and sinks by `pulse` several times a second, no two seats together. A tongue is `wide` of
+  the width at its root, lives `life_s` and dies by being eaten away from below; it leans `lean` for each metre a
+  second of wind (`lean_most` at the most) and bends further over toward its tip. `forks` of them have a thinner
+  tongue out of the same root leaning aside, and `tips` of them a thin dark tip above the body, so a flame's top
+  is torn and never one point. Under them each seat keeps a bed that never goes out while the fire burns: a broad
+  yellow foot where the flame leaves the skin, and in it a low yellow-white root (`root`), round and soft, laid
+  over the rest. `torn`: the chance a step of a tip torn off a tall tongue's upper part and carried away down the
+  wind, shrinking to nothing.
+- **Seen through its own smoke.** A fire's smoke rolls off its middle, and from a ship's distance it blacked out
+  every seat on the far side: three 33 m fires from 830 m showed one dim tongue each. `over_smoke`: the flames are
+  sorted that share of the fire's width nearer the eye, so the far seats show through the smoke as fire does.
+- **Put out** (`BurnOut`): the seats are drawn in toward the fire's middle, steadily lower, at fewer of them, each
+  tongue as dense as ever; a fit only lowers them a little for its third of a second. Torn tips thin out with it.
+- **Cost.** Pieces in the frame, smoke and all, mean while it burns (frames 150 to 300, four rolls of the dice): a
+  12 m fire from 48 m 47 to 59 against the cones' 38 to 39 (the roll sets the seats, 3 to 5). Six 33 m fires from
+  830 m with the game's lens: 296, at most 352, against 196 and 244. Twenty-four 20 m fires: from 830 m 415, at
+  most 485, against 349 and 419; from 1,500 m 387 and 456 against 348 and 417. A fire under `full_px` wide in the
+  picture (the scene's window pixels) burns at that share of its seats, never under `seats_least`, each as much
+  wider, with as much fewer forks, tips and torn tips. With the room four fifths full a fire keeps its bed and its
+  tongues' bodies and drops the forks, tips and torn tips: the 12 m fire is then 39 to 47, the six 33 m fires 230.
+- **Two guards from the pre-check** (its notes E and F on 3e3c4ef). `Shell` at a place or moment that is no number,
+  or beyond any field or battle, is no hit (it put points that were no number into the picture). The flash's dice
+  hold the moment before the cast. Ordinary hits draw as before.
+- **For the preview:** a plain fire: `FX_AT=9999 FX_BURN=12 FX_DIST=48 FX_EYE_H=14 FX_LOOK_H=9 ... fate out 60 800x600`
+  (`FX_AT=2 FX_OVER=6` puts it out; `FX_LAND=1` on land). A ship ablaze: `FX_BURN=33 FX_BURN_ROW=3,78 ... oil sunk`.
+- **Proofs.** 3e3c4ef's recipe on 3e3c4ef's code and on this: 182 frames (sea and land 23, the air look 50 and 44,
+  guns, shells and fires 65), byte for byte. b84ea90's recipe: the same 182. de54166's recipe: 138 (23, 50 and
+  65). Both hashes unchanged. No warnings (g++ and clang, -Wshadow). Wild numbers on the 22 keys of the row, alone
+  and all together, on a near fire, a far one, a ship ablaze, one being put out and one on land, with wild winds,
+  screen scales and fires of no size, a tiny size and a vast one: 724 runs under ASAN and UBSAN, no faults.
+- **Still to come:** the ways down; ground guns and flak by nation.
 
 ## Oil fires at sea
 

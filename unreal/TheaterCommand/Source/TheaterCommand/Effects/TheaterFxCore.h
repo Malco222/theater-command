@@ -662,6 +662,19 @@ namespace TheaterFx
 			double ShadowK = 0.0, SideShade = 0.0, Cap = 0.0, CapWide = 2.0, CapFrom = 0.62; // (SideShade: how far a rag thrown to the plume's side away from the sun goes to the shadow colour all over)
 			Span CapLife{ 3.0, 6.0 };
 		};
+		/** The fire.tongues row: a burning thing's flames as ragged tongues at seats of its own (see FireTongues). */
+		struct TongueRow
+		{
+			bool bOn = false;
+			// (a step; the surge in a tongue's height, as a share; its lean for each metre a second of wind, and at the
+			// most; the chance a step of a tip torn off, and of a tongue's thin tip and of its fork; the width a fire's tongues are no
+			// taller for; the width in the picture under which it burns at fewer seats, and the fewest; Over: the share of
+			// its width its flames are sorted nearer the eye, to show through its own smoke)
+			double Every = 0.05, Pulse = 0.45, Lean = 0.06, LeanMost = 0.6, Torn = 0.5, Tips = 0.5, Forks = 0.6, TallWide = 12.0, FullPx = 80.0, Over = 0.0;
+			int SeatsLeast = 3;
+			Span Seats{ 3.0, 5.0 }, Tall{ 0.6, 1.5 }, Wide{ 0.14, 0.24 }, Life{ 0.22, 0.4 };
+			Rgb Root;
+		};
 		/** The cook_off row, read when it starts. */
 		struct CookRow
 		{
@@ -989,6 +1002,8 @@ namespace TheaterFx
 		void SteamRag(double T, const Vec& At, const Vec& Way, double Reach, double Across, double Push, const SteamRow& R, Dice& D); // (one rag of steam, born at T: Push 1 at full pressure, down to the row's least)
 		void CookPop(const Source& S, double T); // (one pop of a cook-off)
 		void CookJet(const Source& S, double T, double Full); // (one step of its hatch jet, Full 0 to 1 of its height)
+		TongueRow TongueRowOf() const;
+		void FireTongues(const Source& S, double T, const TongueRow& R, const Rgb& Flame, const Rgb& Heart, const Rgb& Ember); // (one step of a burning thing's flames, by fire.tongues)
 		bool UnderOil(const Source& Column, double T) const; // (burning oil stands over one of its fires at T: the oil's column is hers)
 		BankRow BankRowOf(double Across, uint64_t Seed) const;
 		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK, double Pale = 0.0, const Rgb& PaleCol = Rgb());

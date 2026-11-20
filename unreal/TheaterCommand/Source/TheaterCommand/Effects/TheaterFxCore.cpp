@@ -574,6 +574,13 @@ namespace TheaterFx
 
 	void Battle::Shell(double Now, const Vec& AtIn, const char* SizeIn, const char* GroundIn, bool bOnArmour)
 	{
+		// (a hit whose place or moment is no number, or lies beyond any field or battle, is no hit: every point of it
+		// would be no number in the picture. The pre-check on 3e3c4ef)
+		const auto Sound = [](double V, double Most) { return V == V && V >= -Most && V <= Most; };
+		if (!Sound(Now, 1.0e9) || !Sound(AtIn.X, 1.0e7) || !Sound(AtIn.Y, 1.0e7) || !Sound(AtIn.Z, 1.0e7))
+		{
+			return;
+		}
 		std::string Size = SizeIn ? SizeIn : "how105";
 		if (!Has("sizes." + Size + ".scale"))
 		{
@@ -738,7 +745,7 @@ namespace TheaterFx
 		// brighter at its root and darker red-orange at its end, the body orange within and red-orange at its edge.
 		auto Safe = [](double Is, double Least, double Most, double Usual) { return Is == Is ? std::min(Most, std::max(Least, Is)) : Usual; };
 		const std::string F = "burst.flash.";
-		Dice DF(PlaceKey(At) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, T0) * 1000.0)) ^ 0xF1A5ull);
+		Dice DF(PlaceKey(At) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(static_cast<int64_t>(std::min(std::max(0.0, T0), 9.0e15) * 1000.0)) ^ 0xF1A5ull); // (held: a wild moment is no cast past the type)
 		const Rgb HeartCol = Picture(F + "heart", Rgb::FromPicture(255, 233, 158));
 		const Rgb Yellow = Picture(F + "yellow", Rgb::FromPicture(255, 186, 81));
 		const Rgb Orange = Picture(F + "orange", Rgb::FromPicture(236, 131, 71));
@@ -6774,6 +6781,210 @@ namespace TheaterFx
 		}
 	}
 
+	Battle::TongueRow Battle::TongueRowOf() const
+	{
+		// (fire.tongues, every dial held to a sane span. Without the row's every_s: off, and a burning thing's flames
+		// are the upright cones they were)
+		TongueRow R;
+		const std::string P = "fire.tongues.";
+		R.bOn = Has(P + "every_s");
+		if (!R.bOn)
+		{
+			return R;
+		}
+		auto Safe = [](double Is, double Least, double Most, double Usual) { return Is == Is ? std::min(Most, std::max(Least, Is)) : Usual; };
+		auto Held = [&](const std::string& Path, double A, double B, double Least, double Most)
+		{
+			Span Is = Range(Path, A, B);
+			Is.A = Safe(Is.A, Least, Most, A);
+			Is.B = std::max(Is.A, Safe(Is.B, Least, Most, B));
+			return Is;
+		};
+		R.Every = Safe(Num(P + "every_s", 0.05), 0.02, 1.0, 0.05);
+		R.Seats = Held(P + "seats", 3.0, 5.0, 1.0, 12.0);
+		R.SeatsLeast = static_cast<int>(Safe(Num(P + "seats_least", 3.0), 1.0, 12.0, 3.0));
+		R.Tall = Held(P + "tall", 0.6, 1.5, 0.05, 6.0);
+		R.TallWide = Safe(Num(P + "tall_wide_m", 12.0), 0.5, 5000.0, 12.0);
+		R.Wide = Held(P + "wide", 0.14, 0.24, 0.02, 1.0);
+		R.Life = Held(P + "life_s", 0.22, 0.4, 0.05, 1.5);
+		R.Pulse = Safe(Num(P + "pulse", 0.45), 0.0, 0.95, 0.45);
+		R.Lean = Safe(Num(P + "lean", 0.06), 0.0, 1.0, 0.06);
+		R.LeanMost = Safe(Num(P + "lean_most", 0.6), 0.0, 1.5, 0.6);
+		R.Torn = Safe(Num(P + "torn", 0.5), 0.0, 1.0, 0.5);
+		R.Tips = Safe(Num(P + "tips", 0.5), 0.0, 1.0, 0.5);
+		R.Forks = Safe(Num(P + "forks", 0.6), 0.0, 1.0, 0.6);
+		R.FullPx = Safe(Num(P + "full_px", 80.0), 0.0, 1e5, 80.0);
+		R.Over = Safe(Num(P + "over_smoke", 0.0), 0.0, 2.0, 0.0);
+		R.Root = Picture(P + "root", Rgb::FromPicture(255, 236, 170));
+		return R;
+	}
+
+	void Battle::FireTongues(const Source& S, double T, const TongueRow& R, const Rgb& Flame, const Rgb& Heart, const Rgb& Ember)
+	{
+		// One step of a burning thing's flames (fire.tongues). The art director, 17:54Z 20 November, on build 1778's
+		// ships: the fires were "rows of pointed orange cones like birthday candles". Wanted: ragged tongues of uneven
+		// height, roots on the skin with a yellow-white heart, tips tearing off and sweeping downwind. So a fire burns
+		// at a few seats of its own, fixed on the skin where it was lit. Each seat throws tongues of its own height,
+		// which surges and sinks several times a second, no two seats together; a tongue leans down the wind and bends
+		// further over toward its tip, and dies by being eaten away from below; at each seat a low yellow-white root
+		// is laid over the rest; and tips are torn off and carried away down the wind. Its own dice, by the fire's
+		// seed and the step: an older recipe's fire draws as it did.
+		const double Wide = std::min(S.Across, 2000.0);
+		const int64_t Step = static_cast<int64_t>(std::floor(T / R.Every + 0.5));
+		Dice D(S.Seed ^ (static_cast<uint64_t>(Step) * 0xC2B2AE3D27D4EB4Full + 0x70E5ull));
+		Dice Lit(S.Seed * 0x9E3779B97F4A7C15ull ^ 0x5EA75ull);
+		const int NSeats = Lit.Whole(static_cast<int>(R.Seats.A), static_cast<int>(R.Seats.B));
+		const double Turn0 = Lit.U(0.0, 2.0 * Pi);
+		// (a fire small in the picture burns at fewer seats, each as much wider: never under seats_least)
+		const double SeenPx = bEyeKnown && R.FullPx > 0.0 ? Wide * SafeNum(LastPpr, 1.0, 1e7, 1000.0) / std::max(1.0, (LastEye - S.At).Length()) : R.FullPx;
+		const double FarK = R.FullPx > 0.0 ? Clamp01(SeenPx / R.FullPx) : 1.0;
+		const int Seen = std::clamp(static_cast<int>(NSeats * FarK + 0.5), std::min(R.SeatsLeast, NSeats), NSeats);
+		const double WideK = std::sqrt(static_cast<double>(NSeats) / Seen);
+		// (put out, fire.put_out: eaten back from its edges toward its seat, steadily lower, at fewer seats, each
+		// tongue as dense as ever; a fit only lowers them a little for its third of a second)
+		double Left = 1.0, Low = 1.0;
+		if (S.OutAt >= 0.0 && T > S.OutAt)
+		{
+			Left = Clamp01(1.0 - (T - S.OutAt) / std::max(S.OutOver, 1e-3));
+			Dice Fit(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(T / 0.3)) * 0xD1B54A32D192ED03ull + 0x70E6ull));
+			Low = std::max(0.12, std::pow(Left, 1.4)) * (Fit.U() > 0.45 + 0.55 * Left ? 0.8 : 1.0);
+		}
+		const int Shown = std::clamp(static_cast<int>(std::ceil(Seen * (0.25 + 0.75 * std::pow(Left, 1.2)))), 1, Seen);
+		// (the lean: down the wind, and further over the higher up a tongue)
+		const Vec Blown = Wind.X == Wind.X && Wind.Y == Wind.Y ? Vec(Wind.X, Wind.Y, 0.0) : Vec();
+		const double Blow = Blown.Length();
+		const Vec Down = Blow > 1e-6 && Blow < 1e6 ? Blown * (1.0 / Blow) : Vec();
+		const double Lean = std::min(R.LeanMost, R.Lean * std::min(Blow, 40.0));
+		auto Bent = [&](double H) { return (ZUp + Down * (Lean * (0.2 + 1.6 * H))).Unit(ZUp); };
+		auto Spine = [&](const Vec& Seat, double H, double Tall) { return Seat + (ZUp + Down * (Lean * (0.2 + 0.8 * H))) * (H * Tall); };
+		auto Around = [&]()
+		{
+			const double A = D.U(0.0, 2.0 * Pi);
+			return Vec(std::cos(A), std::sin(A), 0.0);
+		};
+		auto Leaning = [&](const Vec& About, double Degrees)
+		{
+			return (About * std::cos(Radians(Degrees)) + Around() * std::sin(Radians(Degrees))).Unit(About);
+		};
+		// (a wide fire's tongues are not as tall for its width as a small one's)
+		const double SizeK = std::min(1.0, std::pow(R.TallWide / std::max(Wide, 0.01), 0.25));
+		// (a seat: where on the skin, how tall its tongues for the fire's width, how wide, and its own surge)
+		struct SeatIs
+		{
+			Vec At;
+			double Tall = 1.0, Half = 0.2;
+		};
+		auto SeatOf = [&](int I)
+		{
+			Dice Sd((S.Seed ^ (static_cast<uint64_t>(I + 1) * 0xA0761D6478BD642Full)) * 0x9E3779B97F4A7C15ull + 0x5EA7ull);
+			// (round the fire's middle by turns, so the fewest seats still stand apart across its width)
+			const double A = Turn0 + 2.0 * Pi * (I + Sd.U(-0.3, 0.3)) / NSeats, Off = std::sqrt(Sd.U(0.12, 1.0));
+			const double High = I == 0 ? 1.0 : std::pow(Sd.U(), 1.5); // (one tall, the rest uneven, more of them short)
+			const double Share = R.Tall.A + (R.Tall.B - R.Tall.A) * High;
+			const double Half = R.Wide.Pick(Sd) * Wide * WideK * (1.25 - 0.35 * High); // (a low seat burns broad, a tall one narrower)
+			const double Phase = Sd.U(0.0, 2.0 * Pi), F1 = Sd.U(1.2, 2.4), F2 = Sd.U(3.5, 6.5);
+			const double Surge = 1.0 - R.Pulse * (0.5 - 0.5 * (0.6 * std::sin(2.0 * Pi * F1 * T + Phase) + 0.4 * std::sin(2.0 * Pi * F2 * T + 2.1 * Phase)));
+			SeatIs Seat;
+			Seat.At = S.At + Vec(std::cos(A), std::sin(A), 0.0) * (0.5 * Wide * Off * Left);
+			Seat.Tall = std::max(0.05, Share * Wide * SizeK * Surge * Low);
+			Seat.Half = std::max(0.01, Half * (0.5 + 0.5 * Low));
+			return Seat;
+		};
+		// (the fire's own smoke rolls off its middle: flames at its far seats are sorted this much nearer the eye, so
+		// they show through it as they do through real smoke, where the eye finds the brightest thing)
+		const double Over = R.Over * Wide;
+		auto Tongue = [&](const Vec& From, const Vec& Dir, double Speed, double Drag_, double HalfA, double HalfB, double Long, const Rgb& Col, const Rgb& Col2, double Life, double Nearer, double Windage)
+		{
+			Bit B;
+			B.Born = T;
+			B.Life = Life;
+			B.From = From + Dir * (HalfA * Long);
+			B.Vel = Dir * Speed;
+			B.Drag = Drag_;
+			B.Windage = Windage;
+			B.R0 = HalfA;
+			B.R1 = HalfB;
+			B.Grow = 0.8;
+			B.Along = Dir;
+			B.Stretch = Long;
+			B.Point = 0.9;
+			B.Col = Col;
+			B.Col2 = Col2;
+			B.Alpha = 0.95;
+			B.FadeIn = 0.02;
+			B.Hold = 0.4;
+			B.Heart = 0.8;
+			B.Inner = 0.45; // (soft-edged: a flame, never cut paper)
+			B.Rim = 0.0;
+			B.Rough = 0.3;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+			B.Nearer = Over + Nearer;
+			B.bLight = true;
+			Bits.push_back(B);
+		};
+		const int Turn = static_cast<int>(((Step % Shown) + Shown) % Shown);
+		{
+			// the bed: at each seat in its turn, so that it never goes out while the fire burns. A foot, the flame
+			// widest where it leaves the skin and yellow there, where it burns hottest; and in it the root,
+			// yellow-white, round and soft, laid over the rest, so its yellow melts into the orange round it and
+			// never shows as a petal with a line round it
+			const SeatIs Seat = SeatOf(Turn);
+			const double Stays = Shown * R.Every * D.U(1.0, 1.2);
+			const double HalfH = Seat.Half * D.U(0.85, 1.05);
+			Tongue(Seat.At - ZUp * (0.25 * HalfH), Leaning(Bent(0.1), D.U(0.0, 8.0)), Seat.Tall * D.U(0.15, 0.3), 3.0, HalfH, HalfH * D.U(0.5, 0.7), std::clamp(0.5 * Seat.Tall * D.U(0.3, 0.45) / HalfH, 1.0, 2.2), Flame.Mix(Heart, 0.6), Flame, Stays, 0.05, 0.2);
+			Bits.back().Inner = 0.35;
+			Bits.back().Point = 0.6;
+			const double HalfR = Seat.Half * D.U(0.42, 0.58);
+			Tongue(Seat.At - ZUp * (0.2 * HalfR), Leaning(Bent(0.1), D.U(0.0, 3.0)), Seat.Tall * D.U(0.05, 0.12), 4.0, HalfR, HalfR * D.U(0.6, 0.8), D.U(1.2, 1.5), R.Root, Heart, Stays, 0.1, 0.1);
+			Bits.back().Heart = 1.0;
+			Bits.back().Inner = 0.2;
+			Bits.back().Point = 0.3;
+			Bits.back().Rough = 0.15;
+		}
+		// the tongues: out of a seat or two each step, by the dice, so no seat burns to a beat and the fire's top is
+		// never the same twice. With the room four fifths full a fire keeps its bed and its tongues' bodies, and
+		// loses their forks, thin tips and torn tips: no more pieces then than the cones it had before
+		const int Serve = (Shown + 2) / 3;
+		const double Fine = RoomAsked() < static_cast<size_t>(MaxPuffs) * 4 / 5 ? FarK : 0.0;
+		for (int K = 0; K < Serve; ++K)
+		{
+			const SeatIs Seat = SeatOf(D.Whole(0, Shown - 1));
+			const double Life = R.Life.Pick(D);
+			// (the body: rooted at the seat, as long as most of the tongue's height; it goes up and narrows, eaten away from below)
+			const double HalfA = Seat.Half * D.U(0.75, 1.1), HalfB = HalfA * D.U(0.3, 0.5);
+			const double Long = std::clamp(0.5 * Seat.Tall * D.U(0.4, 0.78) / HalfA, 1.3, 5.0);
+			const double Reach = Seat.Tall * D.U(0.18, 0.32);
+			Tongue(Seat.At + Around() * (0.6 * Seat.Half * D.U()), Leaning(Bent(0.3), D.U(0.0, 14.0)), Reach * (2.0 / Life) / 0.8647, 2.0 / Life, HalfA, HalfB, Long, Flame.Mix(Heart, 0.35), Flame.Mix(Ember, 0.6), Life, 0.0, 0.2);
+			if (D.U() < R.Forks * Fine)
+			{
+				// (a fork: a thinner tongue out of the same root, leaning to one side of the body, so the two part
+				// toward their tips and the flame's top is torn, never one point)
+				const double HalfF = HalfA * D.U(0.5, 0.7), LifeF = Life * D.U(0.7, 0.95);
+				const double LongF = std::clamp(0.5 * Seat.Tall * D.U(0.4, 0.62) / HalfF, 1.3, 6.0);
+				Tongue(Seat.At + Around() * (0.5 * Seat.Half * D.U()), Leaning(Bent(0.5), D.U(10.0, 28.0)), Seat.Tall * D.U(0.15, 0.3) * (2.0 / LifeF) / 0.8647, 2.0 / LifeF, HalfF, HalfF * D.U(0.25, 0.4), LongF, Flame.Mix(Heart, 0.2), Flame.Mix(Ember, 0.7), LifeF, 0.0, 0.3);
+			}
+			if (D.U() < R.Tips * Fine)
+			{
+				// (its tip: a thin tongue above the body, leaning further over, narrowing to a point and darkening)
+				const double At_ = D.U(0.4, 0.65), HalfT = Seat.Half * D.U(0.35, 0.6);
+				const double LongT = std::clamp(0.5 * Seat.Tall * D.U(0.3, 0.5) / HalfT, 1.5, 6.0);
+				Tongue(Spine(Seat.At, At_, Seat.Tall), Leaning(Bent(At_), D.U(5.0, 22.0)), Seat.Tall * D.U(0.5, 1.1), 3.0, HalfT, HalfT * 0.3, LongT, Flame.Mix(Ember, 0.2), Ember, Life * D.U(0.5, 0.75), 0.0, 0.5);
+			}
+		}
+		if (D.U() < R.Torn * Left * Fine)
+		{
+			// (a tip torn off: out of a tongue's upper part, thrown up and away down the wind faster than the tongue
+			// climbs, so a gap opens under it, and shrinking to nothing; the first thing left out when the room fills)
+			// (off the taller of two seats: the low ones have no tips to lose)
+			const SeatIs SeatA = SeatOf(D.Whole(0, Shown - 1)), SeatB = SeatOf(D.Whole(0, Shown - 1));
+			const SeatIs& Seat = SeatA.Tall > SeatB.Tall ? SeatA : SeatB;
+			const double At_ = D.U(0.6, 0.95), HalfA = Seat.Half * D.U(0.25, 0.42);
+			const Vec Aside = Around();
+			const Vec Dir = (Bent(At_) + Down * D.U(0.4, 1.0) + Aside * std::tan(Radians(D.U(6.0, 22.0)))).Unit(ZUp);
+			Tongue(Spine(Seat.At, At_, Seat.Tall) + Aside * (Seat.Half * D.U(0.2, 0.7)), Dir, Seat.Tall * D.U(1.0, 2.0), 1.5, HalfA, HalfA * 0.2, D.U(2.0, 3.2), Flame.Mix(Heart, 0.1), Ember, D.U(0.3, 0.5), 0.0, 1.0);
+		}
+	}
+
 	void Battle::CookJet(const Source& S, double T, double Full)
 	{
 		// One step of the hatch jet, by the fire rules: long ragged tapering tongues rooted at the hatch and streaming
@@ -7952,6 +8163,7 @@ namespace TheaterFx
 		const Rgb SmokeFoot = bSmokeFoot ? Picture("fire.smoke_foot", Rgb::FromPicture(50, 46, 42)) : Rgb();
 		const double FootClearIs = bSmokeFoot ? Num("fire.smoke_foot_clear", 1.0) : 0.0, FootFromA = Num("fire.smoke_foot_from_m.0", 8.0), FootFromB = Num("fire.smoke_foot_from_m.1", 20.0);
 		const double FootClear = FootClearIs == FootClearIs ? std::min(10.0, std::max(0.0, FootClearIs)) : 0.0;
+		const TongueRow Tongues = TongueRowOf();
 		for (Source& S : Sources)
 		{
 			// (after a long pause, such as the game being paused, only the last second is made up)
@@ -8168,6 +8380,13 @@ namespace TheaterFx
 				// long ragged tongues rooted where it burns, dying by being eaten away; then a thinning grey column
 				while (S.Next <= Now && S.Next < S.Flames)
 				{
+					if (Tongues.bOn)
+					{
+						// (fire.tongues: ragged tongues at the fire's own seats, in place of the upright cones below)
+						FireTongues(S, S.Next, Tongues, Flame, Heart, Ember);
+						S.Next += Tongues.Every;
+						continue;
+					}
 					Dice D(S.Seed ^ static_cast<uint64_t>(static_cast<int64_t>(S.Next * 1000.0)));
 					const int N = D.Whole(1, 2);
 					for (int I = 0; I < N; ++I)
