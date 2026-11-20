@@ -1724,7 +1724,7 @@ void AAirBattle::LayZenith()
 			}
 		}
 	}
-	ZenithStrength = FMath::Clamp(ZenithStrength, 0.0, 3.0);
+	ZenithStrength = FMath::Clamp(ZenithStrength, 0.0, 12.0);
 	ZenithFrom = FMath::Clamp(ZenithFrom, 0.0, 80.0);
 	// (by night the sky is the night's; with the battle's own sky left out, the engine's is not lifted)
 	if (S.Board.bNight || ZenithStrength <= 0.0 || FParse::Param(FCommandLine::Get(), TEXT("TheaterNoAirSky")))
@@ -1747,6 +1747,11 @@ void AAirBattle::LayZenith()
 	// still a dusk; her mark stands at 90 to 110. Worked back through the grade from those two readings, 29 with none
 	// and about 46 at 0.3, the mark wants some four times the light: 1.3, from 12 degrees so the blue begins lower.
 	// The Mac's picture run tries 0.9, 1.3 and 1.8 for her to pick from.)
+	// (Build 1786's sweep, 20 November 23:00Z: over Bremen at 7,500 m the sky 40 to 50 degrees up read (40, 41, 62) at
+	// 0.9 and (42, 47, 78) at 1.8, the lift moving it some six levels of green and sixteen of blue for each 0.9, about a
+	// sixth of what the working back promised; and the mark is a sky blue with near twice as much green as the tint
+	// had. So the tint greener, (12, 110, 255), and 6 at 7,500 m: by those steps about (50, 100, 150) there, some 90 to
+	// 95 graded; the Mac's picture run tries 4, 6 and 9.)
 	const double Radius = 9000.0 * UnitsPerMetre;
 	const int32 Around = 48;
 	const double Rings[] = { 0.0, 0.08, 0.18, 0.3, 0.45, 0.6, 0.75, 0.88, 1.0 };
@@ -1768,7 +1773,7 @@ void AAirBattle::LayZenith()
 			const FVector Way(FMath::Cos(Up) * FMath::Cos(Round), FMath::Cos(Up) * FMath::Sin(Round), FMath::Sin(Up));
 			Points.Add(Way * Radius);
 			Normals.Add(-Way);
-			Colours.Add(FColor(6, 64, 255, Share));
+			Colours.Add(FColor(12, 110, 255, Share));
 		}
 	}
 	for (int32 R = 0; R + 1 < RingCount; ++R)

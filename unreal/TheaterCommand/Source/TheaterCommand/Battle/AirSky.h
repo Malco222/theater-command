@@ -279,6 +279,31 @@ namespace AirSky
 	/** Under: how far under a deck the lit place lies, 0 over its top to 1 under its base (cumulus: unused). */
 	Lighting LightOf(const Day& D, double Under);
 
+	/**
+	 * The deck's shade on everything under it (the art director, 20 November 22:37Z: under a broken deck the ground and
+	 * the sea darker and flat, with sunlit patches where the sun comes through its holes, about 5 km down-sun of each
+	 * with Bremen's 13 degree sun; under an overcast all of it flat, shadowless grey, darker again). The share of the
+	 * sun that comes through, over the laid square, read along the sun's ray where it crosses the deck's middle: what the
+	 * key light's light function (M_DeckShade) reads, and the pictures. None on a cumulus day (each cloud lays its own
+	 * shadow on the sea).
+	 */
+	struct DeckShade
+	{
+		int Side = 0;               // squares a side over the laid square (0: no deck)
+		Vec Origin;                 // the laid square's corner
+		double Period = 0.0;        // its side, metres
+		double Z = 0.0;             // where the sun's ray is read (the deck's middle)
+		double Top = 0.0;           // over the day's tops nothing is shaded
+		double Through = 1.0;       // the sun's share under a tile of the deck
+		std::vector<uint8_t> Light; // Side by Side, a row for each y, 255 the whole sun
+		/** The sun's share at a point, Sun the way to the sun (between squares, the field repeating, as the light
+		 * function reads it). */
+		double At(const Vec& P, const Vec& Sun) const;
+		/** The share over the whole square. */
+		double Mean() const;
+	};
+	DeckShade ShadeOf(const Field& F, int Side = 256);
+
 	/** The deck's place for the raid's bands (the art director's rule): Base and Top in, moved; returns how far the
 	 * top moved. Band and LowBand as in Placing. */
 	double PlaceDeck(double& Base, double& Top, double Band, double LowBand, std::string& OutWhy);

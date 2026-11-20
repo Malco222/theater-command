@@ -340,7 +340,7 @@ private:
 	TObjectPtr<UProceduralMeshComponent> Zenith;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ZenithInk;
-	double ZenithStrength = 1.3, ZenithFrom = 12.0, ZenithShown = -1.0;
+	double ZenithStrength = 6.0, ZenithFrom = 12.0, ZenithShown = -1.0;
 	/** The haze band over the horizon (LayHazeBand, HazeBandAt). */
 	void LayHazeBand();
 	void HazeBandAt(const FVector& EyeWorld);

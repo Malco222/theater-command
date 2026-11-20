@@ -737,6 +737,96 @@ namespace AirSky
 		return L;
 	}
 
+	DeckShade ShadeOf(const Field& F, int Side)
+	{
+		DeckShade S;
+		if (!F.Sky.bDeck || Side <= 0 || F.Clouds.empty())
+		{
+			return S;
+		}
+		S.Side = Side;
+		S.Origin = F.Origin;
+		S.Period = Period;
+		S.Z = 0.5 * (F.Base + F.Top);
+		S.Top = F.Top;
+		// (under a tile almost none of the sun: a sixth through a broken deck's thinner cells, a twentieth through a closed
+		// overcast; with the holes, about a third of the whole sun under Bremen's 0.77, as LightOf has it)
+		S.Through = 0.16 - 0.11 * Smooth((F.Sky.CoverLaid() - 0.8) / 0.2);
+		const size_t N = static_cast<size_t>(Side) * static_cast<size_t>(Side);
+		std::vector<double> Open(N), Soft(N);
+		const double Step = Period / Side;
+		for (int Y = 0; Y < Side; ++Y)
+		{
+			for (int X = 0; X < Side; ++X)
+			{
+				const double PX = F.Origin.X + (X + 0.5) * Step, PY = F.Origin.Y + (Y + 0.5) * Step;
+				Open[static_cast<size_t>(Y) * Side + X] = F.DeckAt(PX, PY) > 0.0 ? 0.0 : 1.0;
+			}
+		}
+		// (the edges softened over a few hundred metres, the field repeating: a cloud's edge is never a line on the ground)
+		for (int Pass = 0; Pass < 2; ++Pass)
+		{
+			for (int Y = 0; Y < Side; ++Y)
+			{
+				for (int X = 0; X < Side; ++X)
+				{
+					double Sum = 0.0;
+					for (int DY = -1; DY <= 1; ++DY)
+					{
+						for (int DX = -1; DX <= 1; ++DX)
+						{
+							Sum += Open[static_cast<size_t>((Y + DY + Side) % Side) * Side + static_cast<size_t>((X + DX + Side) % Side)];
+						}
+					}
+					Soft[static_cast<size_t>(Y) * Side + X] = Sum / 9.0;
+				}
+			}
+			Open.swap(Soft);
+		}
+		S.Light.resize(N);
+		for (size_t K = 0; K < N; ++K)
+		{
+			const double Share = S.Through + (1.0 - S.Through) * Open[K];
+			S.Light[K] = static_cast<uint8_t>(Clamp(Share * 255.0 + 0.5, 0.0, 255.0));
+		}
+		return S;
+	}
+
+	double DeckShade::At(const Vec& P, const Vec& Sun) const
+	{
+		if (Side <= 0 || Light.size() != static_cast<size_t>(Side) * static_cast<size_t>(Side) || Period <= 0.0)
+		{
+			return 1.0;
+		}
+		// (read where the ray to the sun crosses the deck's middle; over the tops nothing, faded over 100 m)
+		const double Over = Smooth((P.Z - (Top - 100.0)) / 100.0);
+		const double Along = std::max(0.0, (Z - P.Z) / std::max(0.05, Sun.Z));
+		double U = (P.X + Sun.X * Along - Origin.X) / Period * Side - 0.5;
+		double V = (P.Y + Sun.Y * Along - Origin.Y) / Period * Side - 0.5;
+		U -= Side * std::floor(U / Side);
+		V -= Side * std::floor(V / Side);
+		const int X0 = std::min(Side - 1, static_cast<int>(U)), Y0 = std::min(Side - 1, static_cast<int>(V));
+		const int X1 = (X0 + 1) % Side, Y1 = (Y0 + 1) % Side;
+		const double FX = U - X0, FY = V - Y0;
+		auto L = [this](int X, int Y) { return Light[static_cast<size_t>(Y) * Side + X] / 255.0; };
+		const double Here = (L(X0, Y0) * (1.0 - FX) + L(X1, Y0) * FX) * (1.0 - FY) + (L(X0, Y1) * (1.0 - FX) + L(X1, Y1) * FX) * FY;
+		return Here + (1.0 - Here) * Over;
+	}
+
+	double DeckShade::Mean() const
+	{
+		if (Light.empty())
+		{
+			return 1.0;
+		}
+		double Sum = 0.0;
+		for (uint8_t B : Light)
+		{
+			Sum += B;
+		}
+		return Sum / (255.0 * Light.size());
+	}
+
 	double DeckHoleBelow(double Cover)
 	{
 		// (the share of the whole deck the kept tiles' discs cover, against the noise they are kept above, six seeds over
@@ -1077,11 +1167,12 @@ namespace AirSky
 					C.First = static_cast<int>(F.Puffs.size());
 					C.Fate = Fate;
 					// (its top puff flattened so that its body stays within the tile's thickness, as wide as the tile is)
-					const double FlatTop = std::min(0.6, 0.95 * Th / R);
-					const double HalfTop = 0.55 * R * FlatTop;
 					// (the lid's top level under the inversion, give or take 60 m: as far under the day's tops as its proud cells
-					// stand over it, so that the cells reach the tops and none goes past them)
+					// stand over it, so that the cells reach the tops and none goes past them; the lid that much flatter, its
+					// underside where it was, as clear of high ground as before)
 					const double Room = std::min(200.0, 0.2 * Th);
+					const double FlatTop = std::max(0.15, std::min(0.6, 0.95 * Th / R) - Room / (1.495 * R));
+					const double HalfTop = 0.55 * R * FlatTop;
 					const double TopZ = std::min(Foot + Th - Room, Foot + Th - Room - 0.9 * HalfTop + (N - 0.5) * std::min(60.0, 0.1 * Th));
 					Puff& Floor = Add(Vec(X, Y, TopZ), R, FlatTop, 0.9 + 0.1 * Clamp((N - 0.22) / 0.78, 0.0, 1.0), 0.85, 2);
 					Floor.Soft = 0.3;
@@ -1099,7 +1190,9 @@ namespace AirSky
 					{
 						// (its grey base: flat, its body's lower edge at the tile's foot, its underside straight)
 						const double Rb = R * 1.1;
-						const double FlatBase = Clamp(0.3 * std::min(Th, R) / (0.55 * Rb), 0.12, 0.5);
+						// (hanging no more than 170 m under the foot, so that over high ground, the foot lifted 200 m over the ground
+						// under the rims, its own rim stays 30 m clear: Bremen's deck laid over Oahu's Kaala)
+						const double FlatBase = Clamp(std::min(0.3 * std::min(Th, R) / (0.55 * Rb), 170.0 / (0.45 * Rb)), 0.12, 0.5);
 						Puff& Under = Add(Vec(X, Y, Foot + 0.55 * Rb * FlatBase), Rb, FlatBase, 0.12, 0.92, 0);
 						Under.bFlatFoot = true;
 					}
