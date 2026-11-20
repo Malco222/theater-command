@@ -55,19 +55,27 @@ At ×1 the Pearl Harbor raid lasts about 7 real minutes, with contact about 20 s
 **The flyover** (Brian's, approved 19 November 2026: before an air battle starts, a short cinematic flyover of both
 formations, like generals surveying the field). When the battle's first groups stand, the scene plays up to three shots
 on the real clock, cut one to the next, while the battle runs at ×1 under them (`AirDesk::Flyover`, in the cloud test):
-- **the raid**, 5 s: the raider's biggest bomber formation coming on, seen from ahead and out to the side away from the
-  target, from 60 m under it to 10 m over it as the eye closes from 1.7 to 0.5 of its size ahead;
+- **the raid**, 5 s: the raider's biggest bomber formation, from above and just behind its lead three (its three
+  planes furthest ahead as the shot begins), looking down 13 degrees at them so the sea or the cloud deck is behind
+  them, near enough that each is about 150 px wide in the 2881 px picture (5.2 per cent of its width); the eye pushes
+  in from 1.2 to 0.9 of that distance and swings in behind them from out on the side away from the target (the art
+  director on build 1750: the planes had been 10 to 15 px specks in a white void);
 - **what it comes for**, 4.5 s: from beyond the target, the far side from the raid, pushing in from 2.6 km to 1.9 km
-  and down from 650 m to 520 m, the look lifting from the target toward where the raid comes from;
-- **the guard**, 3.5 s, when the defender has fighters up: from behind them and a little over, looking out toward the
-  raid.
+  and down from 650 m to 520 m, the look lifting from the target toward where the raid comes from; over a harbour
+  (`place.kind` "harbour") it lifts no further than holds the target 9.5 degrees under the picture's middle, in its
+  lower third (the art director on build 1750's Oahu frame, where the hills had pushed Ford Island and the ships off
+  the picture's foot: some 10 degrees down at the picture's moment);
+- **the guard**, 3.5 s, when the defender has fighters up: the raid's shot, on the guard's lead three.
 Then the eye glides into the strategy view over 2.5 s (0.8 s after a click or key). The screen stands in a film's
 frame while it plays, black above and below, with the raid's aim as its title and the line "SURVEYING THE FIELD · CLICK
-OR PRESS ANY KEY TO TAKE COMMAND"; the frame draws back over the glide and the battle's own screen returns. Each eye is
+OR PRESS ANY KEY TO TAKE COMMAND" (13 point, 1.3 times its first size: the art director on build 1750); the frame draws back over the glide and the battle's own screen returns. Each eye is
 kept 60 m over the stage's ground. Pearl Harbor (no American fighters up at the start) runs 9.5 s of shots, Midway
 (the carriers' fighter patrols up) 13 s. `-TheaterNoFlyover` goes straight to the battle. The cloud test checks the
-shots on each recording: the raid and the target shown, at least 60 per cent of the raid's aircraft in view through its
-shot, 14 s or less, and the eye never jumping within a shot, never under 60 m, never within 40 m of an aircraft.
+shots on each recording: the raid and the target shown, 14 s or less; at the raid's and the guard's pictures their
+three biggest planes in the picture 120 to 180 px wide, and never fewer than three of the formation in the picture after
+each shot's first second; a harbour target in the lower third at its picture; and the eye never jumping within a shot,
+never under 60 m, never within 40 m of an aircraft (the formations' trailing planes pass some 85 m from it). The
+pictures' moments: the raid 3 s in, the target 2.5 s into its shot, the guard 2 s into its shot.
 
 **The size of the words** (the art director on build 1734: the tags and the running words were small at Brian's
 window). Unreal draws its game screen at the window's height over 1080; the battle's screen is drawn 1.25 times that
@@ -209,15 +217,42 @@ built in its 1732. This branch carries a copy only so that it builds alone; on a
 wins. Its switches (`-TheaterBattleGrade=`, `-TheaterAirHaze=`, `-TheaterAirSky=`, and `-TheaterNoBattleGrade` and
 `-TheaterNoAirSky` to turn them off) are described in the header.
 
+**The sun** (the art director on build 1750's Midway 05: a hard small disc, its core 25 px or less, the glow back to the
+sky's colour within about 150 px, the game-wide curve and bloom unchanged). The table's key lamp is a sun 1.5 degrees
+wide, kept soft for the table's shadows, and the sky put all of its light into that disc, some two thousand times the
+picture's white, which the bloom spread into a glow 700 px wide. While the battle stands (`AAirBattle::TheSun`, put
+back with the table) the disc is the true sun's 0.53 degrees and holds 0.006 of the lamp's light: still near a hundred
+times the white, so a hard white disc, its bloom under a hundredth of the white 150 px out. The battle's sky throws the
+sun's light less steeply forward (Mie anisotropy 0.5 for the engine's 0.8): six times dimmer by the sun, the same
+elsewhere. `-TheaterSun=0.53,0.006,0.5` (the disc's width in degrees, its share of the light, the haze's forward
+throw); the log says "Air battle: the sun a disc ...".
+
 **The sky.** Each battle carries its day (`sky.place.cloud`, the air thread's `sky.ts`): a cloud deck or scattered
 cumulus, with one cloud base and one top. Pearl Harbor and Midway are cumulus days, as history had them: Oahu's
 base 940 m and tops 2,060 m, the Mobile Force's 510 m and 1,820 m. A ticket from a rules bundle without the sky draws
 cumulus at the cloud table's middle heights. `AirSky` lays the clouds once, on a 44 km square that repeats without a
 seam, and draws each cloud where it lies nearest the eye. So there are clouds wherever the fight goes (at Pearl Harbor
-most of the fight and the falls are 20 to 32 km short of the harbour). The scene draws them as one see-through mesh of
-soft puffs, in the effects kit's shape and with the same `M_Highlight`. They are turned to the eye only when it has
-moved about a quarter of a degree at the nearest puff, as soon as the eye moves after a paint that drew nothing, and,
-while a drawn cloud's lift over high ground is still easing, for each metre the wind carries the clouds.
+most of the fight and the falls are 20 to 32 km short of the harbour). The scene draws them as see-through meshes of
+soft puffs, in the effects kit's shape and with the same `M_Highlight`, in two rooms (`AirSky::Rooms`):
+
+- **The near room** (`NearClouds`, 800 puffs) holds the clouds whose near edge is within 4.5 km of the eye across the
+  ground, fewer when they would not fit nine tenths of it. They are turned to the eye when it has moved about a quarter
+  of a degree at the nearest puff, as soon as it moves after a paint that drew nothing, and, while a drawn cloud's lift
+  over high ground is still easing, for each metre the wind carries the clouds. A room with nothing in it waits.
+- **The far room** (`Clouds`, 4,000 puffs) holds the rest, and the shadows go with it. It is turned only when the eye
+  has moved far enough for a far puff's turn to shift its rim by about a pixel (half a thousandth of a radian), or by a
+  twenty-fifth of the nearest far puff's distance, whichever comes first; while a far cloud's lift eases, every 3 m of
+  the wind's carry. Then the line between the rooms is drawn again from the eye, and both rooms are sent.
+- **Why.** On the builder's Mac run of 19 November, Midway stuttered: 9 to 17 frames over 33 ms in five seconds. The
+  whole field, 4,000 puffs and 132,000 points, was painted and sent 9 to 16 times a second, on the strategy camera and on
+  the chase. Now the far room turns about once or twice a second and the near room, 26,400 points, as often as before.
+  The cloud test flies three paths with both and checks that the far room turns a quarter as often as the whole sky did,
+  or less, and that under half the points are sent. It also checks, from every test eye, that the two rooms hold
+  exactly the puffs, the hearts and the shadows of the whole sky.
+- **Order.** The near room is drawn just after the far one (its sort priority 5 over theirs). Every near cloud is nearer
+  the eye than every far one, except for a little at the line.
+- **The log.** Every 5 s, `Air battle sky` gives the near and far turns, the milliseconds of painting and of sending
+  on the game thread (the render thread's share of a send is not in it), the slowest turn, and the line.
 
 - **How far.** Clouds are drawn out to 20 km from the eye and thin into the haze over the last third of that. A cloud
   within 5 km is drawn with all its puffs, out to 10 km with its bigger ones, and past that with two: its veil and one
@@ -362,7 +397,10 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
 4. **The clouds.** They should be white on their sunlit tops, grey under their flat bases, and soft at the edges,
    with no ring of polygon corners. The fight's smoke and tracer over the clouds should lie on them. If the clouds glare
    or vanish against the sky, their brightness is the three colours at the top of `AirSky.cpp`. If they cost too much
-   time, `Placing::MostPuffs` sets their room and `Painter(12)` the sides of each puff.
+   time, `Placing::MostPuffs` sets their room and `Painter(12)` the sides of each puff. Midway should no longer
+   stutter: the `Air battle sky` log line every 5 s gives each room's turns (near 8 to 15 a second, far about 1 to 2)
+   and the game thread's milliseconds. If the far clouds seem to swim or pop as the eye moves, the far room's measure
+   is `Rooms`' last two numbers (0.0005 and 0.04): smaller turns it more often.
 5. **Pearl Harbor's ground.** The grass mottled with patches of red earth, the beach a band along the water, the
    shallows darkening into the sea, and the yard's grey blocks with Pennsylvania standing on her dry dock's floor and
    Shaw in YFD-2 off the beach. No pad's edge floating over the land or sunk under it; the paving in slabs, not a flat

@@ -986,11 +986,15 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 	}
 	else if (How == TEXT("burn") && Effects)
 	{
-		// Ablaze from end to end: fires along her length that burn for the rest of the battle and after.
-		for (const double Share : { -0.3, 0.0, 0.3 })
+		// Ablaze from end to end: fires along her length that burn for the rest of the battle and after. Five small
+		// fires, not three the width of her deck (the art director on build 1750's Akagi: three fires each 1.1 of her
+		// beam sent up puffs 70 to 140 m across, a soft brown blur over her that hid the black column her burning oil
+		// sends up; at under half her beam their flames still run her length and the column above her is Pearl
+		// Harbor's, black at its foot, lumpy and leaning downwind).
+		for (const double Share : { -0.4, -0.2, 0.0, 0.2, 0.4 })
 		{
 			const FVector Spot = Ship->Base + Along * (Share * Ship->Long * U) + FVector(0.0, 0.0, FMath::Min(Ship->High * 0.3, 9.0) * U);
-			Effects->Burn(GetActorTransform().TransformPosition(Spot), static_cast<float>(Ship->Beam * 1.1), 1800.0f);
+			Effects->Burn(GetActorTransform().TransformPosition(Spot), static_cast<float>(Ship->Beam * 0.45), 1800.0f);
 		}
 	}
 	else if (How == TEXT("break"))

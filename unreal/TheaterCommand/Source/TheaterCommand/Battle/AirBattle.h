@@ -120,6 +120,15 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> CloudInk;
 	TArray<FVector> CloudPoints;
 	TArray<FColor> CloudColours;
+	/** The near clouds (AirSky::Rooms): a small mesh of their own, turned as often as the eye's moves ask, drawn after
+	 * the far ones (Clouds), which are turned only when the eye has moved far enough to show. */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> NearClouds;
+	TArray<FVector> NearCloudPoints;
+	TArray<FColor> NearCloudColours;
+	/** The sky's own clock for the log (every 5 s: turns of each room, and what painting and sending them cost). */
+	int32 SkyNearTurns = 0, SkyBothTurns = 0;
+	double SkyPaintSeconds = 0.0, SkySendSeconds = 0.0, SkySlowest = 0.0, SkyClockAt = -1.0;
 	/** The clouds' shadows on the sea and the land: a mesh of their own, drawn under every other see-through thing (a
 	 * shadow lies on the ground; the ground's fires and smoke, and the air fight, stand in front of it). */
 	UPROPERTY()
@@ -189,7 +198,7 @@ private:
 
 	// What the table had before the battle took its place, put back by Finish: its lamps, its haze, its own tick and
 	// its pieces (the pre-check, 06:08Z).
-	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; };
+	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; };
 	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; };
 	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
 	TArray<FKeptLamp> KeptLamps;
@@ -231,6 +240,8 @@ private:
 	void ShowTheTable();
 	/** The battle's day light on the table's lamps, said again wherever the room has changed it. */
 	void LightTheBattle();
+	/** The sun a hard small disc while the battle stands (the art director, build 1750); the lamp kept, put back with the table. */
+	void TheSun(UDirectionalLightComponent& Key);
 	void Feed();
 	void Draw(double Real);
 	void Play(double Real);

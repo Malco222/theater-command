@@ -270,6 +270,8 @@ namespace AirShow
 	};
 	/** The built-in shape of a model, by name, until the model files carry their sockets. */
 	Shape ShapeOf(const std::string& Model, bool bFighter);
+	/** Where a slot of a group's formation lies (the flyover frames its lead three by it). */
+	Vec SlotOf(const Group& G, int Slot);
 
 	/** The flight's own checks, kept as the show runs (the cloud test reads them). */
 	struct Checks

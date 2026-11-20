@@ -236,7 +236,9 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		if (S.FlyBars >= 0.999)
 		{
 			Centred(Wide(W.AimTarget), Size.X * 0.5, Size.Y - Band + Band * 0.18, Serif(TEXT("Bold"), 20.0f), Cream, 1);
-			Centred(Wide(S.ClockTag), Size.X * 0.5, Size.Y - Band + Band * 0.60, Typed(10.0f, true, 30), Muted, 1);
+			// (the art director on build 1750: the line under the title 1.3 times its first size, its capitals some 21
+			// pixels at the Mac's 1786; like every word on this screen it grows with the window)
+			Centred(Wide(S.ClockTag), Size.X * 0.5, Size.Y - Band + Band * 0.58, Typed(13.0f, true, 30), Muted, 1);
 		}
 		return LayerId + 2;
 	}

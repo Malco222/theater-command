@@ -16,6 +16,7 @@
 #include "Components/AudioComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -795,6 +796,8 @@ void AAirBattle::HideTheTable()
 				Kept.Intensity = Light->Intensity;
 				Kept.Colour = Light->GetLightColor();
 				Kept.Temperature = Light->Temperature;
+				Kept.SourceAngle = Light->LightSourceAngle;
+				Kept.SunDisc = Light->AtmosphereSunDiskColorScale;
 				if (Light->GetFName() == TEXT("KeyLight") || (!Key && Lights.Num() == 1))
 				{
 					Key = Light;
@@ -817,6 +820,7 @@ void AAirBattle::HideTheTable()
 				Key->SetWorldRotation((-Sun).Rotation());
 				// (the 3D builder, 19 November 2026: a sky behind the battle, lit by its sun; taken away in ShowTheTable)
 				BattleLook::AirSkyBegin(*this, Key);
+				TheSun(*Key);
 			}
 			TArray<USkyLightComponent*> Skies;
 			Environment->GetComponents(Skies);
@@ -830,6 +834,52 @@ void AAirBattle::HideTheTable()
 		}
 	}
 	LightTheBattle();
+}
+
+void AAirBattle::TheSun(UDirectionalLightComponent& Key)
+{
+	// The sun a hard small disc (the art director on build 1750's Midway 05, 19 November 2026: a core of 25 pixels
+	// or less, the glow back to the sky's colour within about 150). The table's lamp is a sun a degree and a half
+	// wide, kept soft for the table's shadows, and the sky drew all of its light into that disc: some two thousand
+	// times the picture's white, which the picture's bloom spread into a glow 700 pixels wide. The bloom spreads a
+	// share of what the disc holds, however wide the disc is drawn, so here the disc holds six thousandths of it
+	// (still near a hundred times the white, so a hard white disc, its glow under a hundredth of the white 150 pixels
+	// out) and is drawn the true sun's half degree wide (eleven pixels across the middle of the close camera's 62
+	// degrees). And the air's haze throws the sun's light less steeply forward: the engine's 0.8 made a bright ring
+	// some twelve degrees wide round the sun; at a half it is six times dimmer by the sun and the same elsewhere,
+	// where the haze's own light is a small share of the sky's. Game-wide curve and bloom stay as they are.
+	// "-TheaterSun=0.53,0.006,0.5" (the disc's width in degrees, the share of the light it holds, how steeply forward
+	// the haze throws the sun's light); each one given takes the place of its number here.
+	double DiscWide = 0.53, DiscShare = 0.006, HazeForward = 0.5;
+	FString SunAsked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSun="), SunAsked, false))
+	{
+		TArray<FString> Parts;
+		SunAsked.ParseIntoArray(Parts, TEXT(","), false);
+		double* const Into[] = { &DiscWide, &DiscShare, &HazeForward };
+		for (int32 K = 0; K < Parts.Num() && K < 3; ++K)
+		{
+			if (!Parts[K].TrimStartAndEnd().IsEmpty())
+			{
+				*Into[K] = FCString::Atod(*Parts[K]);
+			}
+		}
+	}
+	DiscWide = FMath::Clamp(DiscWide, 0.1, 5.0);
+	DiscShare = FMath::Clamp(DiscShare, 0.0, 1.0);
+	HazeForward = FMath::Clamp(HazeForward, 0.0, 0.999);
+	Key.LightSourceAngle = static_cast<float>(DiscWide);
+	Key.AtmosphereSunDiskColorScale = FLinearColor(static_cast<float>(DiscShare), static_cast<float>(DiscShare), static_cast<float>(DiscShare));
+	Key.MarkRenderStateDirty();
+	// (The battle's sky is the battle look's, made on this actor in AirSkyBegin and taken away with it.)
+	TArray<USkyAtmosphereComponent*> Atmospheres;
+	GetComponents(Atmospheres);
+	for (USkyAtmosphereComponent* Atmosphere : Atmospheres)
+	{
+		Atmosphere->SetMieAnisotropy(static_cast<float>(HazeForward));
+	}
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the sun a disc %.2f degrees wide holding %.4f of its light, the haze throwing it forward at %.2f (%d skies)"),
+		DiscWide, DiscShare, HazeForward, Atmospheres.Num());
 }
 
 void AAirBattle::LightTheBattle()
@@ -932,6 +982,12 @@ void AAirBattle::ShowTheTable()
 			{
 				Light->SetTemperature(Kept.Temperature);
 			}
+			if (!FMath::IsNearlyEqual(Light->LightSourceAngle, Kept.SourceAngle) || !Light->AtmosphereSunDiskColorScale.Equals(Kept.SunDisc))
+			{
+				Light->LightSourceAngle = Kept.SourceAngle;
+				Light->AtmosphereSunDiskColorScale = Kept.SunDisc;
+				Light->MarkRenderStateDirty();
+			}
 		}
 	}
 	for (const FKeptSky& Kept : KeptSkies)
@@ -1022,7 +1078,7 @@ void AAirBattle::LaySky()
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterCloudBright="), CloudBright);
 	CloudBright = FMath::Clamp(CloudBright, 0.5f, 3.0f);
 	CloudInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
-	S.SkyPainter.SetInk(CloudBright);
+	S.SkyRooms.SetInk(CloudBright);
 	CloudShadows = NewObject<UProceduralMeshComponent>(this, TEXT("AirCloudShadows"));
 	CloudShadows->bUseAsyncCooking = false;
 	CloudShadows->SetupAttachment(Root);
@@ -1032,56 +1088,54 @@ void AAirBattle::LaySky()
 	// or -20, the ground's kit at -20 or -10)
 	CloudShadows->SetTranslucentSortPriority(-40);
 	CloudShadows->RegisterComponent();
+	// (the near clouds' own mesh, drawn after the far ones: DrawSky sets its order with theirs)
+	NearClouds = NewObject<UProceduralMeshComponent>(this, TEXT("AirNearClouds"));
+	NearClouds->bUseAsyncCooking = false;
+	NearClouds->SetupAttachment(Root);
+	NearClouds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	NearClouds->SetCastShadow(false);
+	NearClouds->RegisterComponent();
 	SkyOrder = 0;
+	SkyNearTurns = 0;
+	SkyBothTurns = 0;
+	SkyPaintSeconds = 0.0;
+	SkySendSeconds = 0.0;
+	SkySlowest = 0.0;
+	SkyClockAt = -1.0;
 	// The first turn of the puffs, to an eye behind the raid; after that DrawSky turns them as the eye moves.
 	const AirSky::Vec Drift = S.Sky.DriftAt(S.Show.AirNow());
 	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
-	S.SkyPainter.Paint(S.Sky, AirSky::Vec(S.Board.TargetX, S.Board.TargetY - 6000.0, 5000.0), Drift, S.SkyPlace.Sun, Light, S.SkyPoints, S.SkyRgba, &S.SkyShadows, &S.SkyShadowRgba);
-	// (the painter's room, fixed: each slot keeps its triangles, only its points move as the eye does)
-	const std::vector<int> Made = S.SkyPainter.Triangles(S.Sky.MostPuffs);
-	TArray<int32> Triangles;
-	Triangles.Reserve(static_cast<int32>(Made.size()));
-	for (const int Index : Made)
+	S.SkyRooms.PaintBoth(S.Sky, AirSky::Vec(S.Board.TargetX, S.Board.TargetY - 6000.0, 5000.0), Drift, S.SkyPlace.Sun, Light);
+	// Each room's mesh, its slots fixed (each keeps its triangles, only its points move as the eye does).
+	auto Make = [this, &Drift](UProceduralMeshComponent* Mesh, const AirSky::Painter& Brush, int32 Room, const std::vector<AirSky::Vec>& From, const std::vector<uint8_t>& FromRgba,
+		TArray<FVector>& Points, TArray<FColor>& Colours)
 	{
-		Triangles.Add(Index);
-	}
-	CloudPoints.SetNum(static_cast<int32>(S.SkyPoints.size()));
-	CloudColours.SetNum(static_cast<int32>(S.SkyPoints.size()));
-	for (int32 Index = 0; Index < CloudPoints.Num(); ++Index)
-	{
-		const AirSky::Vec& P = S.SkyPoints[static_cast<size_t>(Index)];
-		CloudPoints[Index] = World(P.X, P.Y, P.Z);
-		const size_t C = static_cast<size_t>(Index) * 4;
-		CloudColours[Index] = FColor(S.SkyRgba[C], S.SkyRgba[C + 1], S.SkyRgba[C + 2], S.SkyRgba[C + 3]); // (linear already, as the kit's)
-	}
-	TArray<FVector> Normals;
-	Normals.Init(FVector::UpVector, CloudPoints.Num());
-	Clouds->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
-	Clouds->CreateMeshSection(0, CloudPoints, Triangles, Normals, TArray<FVector2D>(), CloudColours, TArray<FProcMeshTangent>(), false);
-	Clouds->SetMaterial(0, CloudInk);
-	{
-		const std::vector<int> ShadowsMade = S.SkyPainter.Triangles(AirSky::Painter::MostShadows);
-		TArray<int32> ShadowTriangles;
-		ShadowTriangles.Reserve(static_cast<int32>(ShadowsMade.size()));
-		for (const int Index : ShadowsMade)
+		const std::vector<int> Made = Brush.Triangles(Room);
+		TArray<int32> Triangles;
+		Triangles.Reserve(static_cast<int32>(Made.size()));
+		for (const int Index : Made)
 		{
-			ShadowTriangles.Add(Index);
+			Triangles.Add(Index);
 		}
-		ShadowPoints.SetNum(static_cast<int32>(S.SkyShadows.size()));
-		ShadowColours.SetNum(static_cast<int32>(S.SkyShadows.size()));
-		for (int32 Index = 0; Index < ShadowPoints.Num(); ++Index)
+		Points.SetNum(static_cast<int32>(From.size()));
+		Colours.SetNum(static_cast<int32>(From.size()));
+		for (int32 Index = 0; Index < Points.Num(); ++Index)
 		{
-			const AirSky::Vec& P = S.SkyShadows[static_cast<size_t>(Index)];
-			ShadowPoints[Index] = World(P.X, P.Y, P.Z);
+			const AirSky::Vec& P = From[static_cast<size_t>(Index)];
+			Points[Index] = World(P.X, P.Y, P.Z);
 			const size_t C = static_cast<size_t>(Index) * 4;
-			ShadowColours[Index] = FColor(S.SkyShadowRgba[C], S.SkyShadowRgba[C + 1], S.SkyShadowRgba[C + 2], S.SkyShadowRgba[C + 3]);
+			Colours[Index] = FColor(FromRgba[C], FromRgba[C + 1], FromRgba[C + 2], FromRgba[C + 3]); // (linear already, as the kit's)
 		}
-		TArray<FVector> ShadowNormals;
-		ShadowNormals.Init(FVector::UpVector, ShadowPoints.Num());
-		CloudShadows->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
-		CloudShadows->CreateMeshSection(0, ShadowPoints, ShadowTriangles, ShadowNormals, TArray<FVector2D>(), ShadowColours, TArray<FProcMeshTangent>(), false);
-		CloudShadows->SetMaterial(0, CloudInk);
-	}
+		TArray<FVector> Normals;
+		Normals.Init(FVector::UpVector, Points.Num());
+		Mesh->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
+		Mesh->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(0, CloudInk);
+	};
+	AirSky::Rooms& SkyRooms = S.SkyRooms;
+	Make(Clouds, SkyRooms.Far, SkyRooms.Far.RoomFor(S.Sky), SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours);
+	Make(NearClouds, SkyRooms.Near, SkyRooms.NearRoom(), SkyRooms.NearPoints, SkyRooms.NearRgba, NearCloudPoints, NearCloudColours);
+	Make(CloudShadows, SkyRooms.Far, AirSky::Painter::MostShadows, SkyRooms.Shadows, SkyRooms.ShadowRgba, ShadowPoints, ShadowColours);
 	// (drawn: now the deck is where falls pass out of sight; the field outlives the flight core's hold on it, both
 	// being the battle state's)
 	if (S.Sky.DeckTop > 0.0)
@@ -1112,6 +1166,10 @@ void AAirBattle::DrawSky()
 	// smoke does (a deck stays where it was laid).
 	const AirSky::Vec Drift = S.Sky.DriftAt(S.Show.AirNow());
 	Clouds->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
+	if (NearClouds)
+	{
+		NearClouds->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
+	}
 	if (CloudShadows)
 	{
 		CloudShadows->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
@@ -1131,6 +1189,11 @@ void AAirBattle::DrawSky()
 	{
 		SkyOrder = Want;
 		Clouds->SetTranslucentSortPriority(Want == 1 ? -10 : -20);
+		// (the near clouds just after the far ones, before the kit drawn over them)
+		if (NearClouds)
+		{
+			NearClouds->SetTranslucentSortPriority(Want == 1 ? -5 : -15);
+		}
 		if (GroundFxMesh.IsValid())
 		{
 			GroundFxMesh->SetTranslucentSortPriority(Want == 1 ? -20 : -10);
@@ -1140,32 +1203,64 @@ void AAirBattle::DrawSky()
 			AirFxMesh->SetTranslucentSortPriority(Want == 1 ? 0 : -30);
 		}
 	}
-	if (!S.SkyPainter.Stale(Seen, Drift))
-	{
-		return;
-	}
+	// Turned to the eye as far as it has moved: the near room as often as its puffs' turn shows, the far room (most of
+	// the points) and the shadows only when the eye has moved far enough for a far puff's turn to show (AirSky::Rooms).
+	// Before, all of it, 132,000 points, was sent 9 to 16 times a second: the builder's Mac run of 19 November, Midway's
+	// stutter.
 	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
-	S.SkyPainter.Paint(S.Sky, Seen, Drift, S.SkyPlace.Sun, Light, S.SkyPoints, S.SkyRgba, &S.SkyShadows, &S.SkyShadowRgba);
-	const int32 Count = FMath::Min(CloudPoints.Num(), static_cast<int32>(S.SkyPoints.size()));
-	for (int32 Index = 0; Index < Count; ++Index)
+	AirSky::Rooms& SkyRooms = S.SkyRooms;
+	const double Began = FPlatformTime::Seconds();
+	const AirSky::Rooms::Sent What = SkyRooms.Turn(S.Sky, Seen, Drift, S.SkyPlace.Sun, Light);
+	const double Painted = FPlatformTime::Seconds();
+	auto Send = [this](UProceduralMeshComponent* Mesh, const std::vector<AirSky::Vec>& From, const std::vector<uint8_t>& FromRgba, TArray<FVector>& Points, TArray<FColor>& Colours)
 	{
-		const AirSky::Vec& P = S.SkyPoints[static_cast<size_t>(Index)];
-		CloudPoints[Index] = World(P.X, P.Y, P.Z);
-		const size_t C = static_cast<size_t>(Index) * 4;
-		CloudColours[Index] = FColor(S.SkyRgba[C], S.SkyRgba[C + 1], S.SkyRgba[C + 2], S.SkyRgba[C + 3]);
-	}
-	Clouds->UpdateMeshSection(0, CloudPoints, TArray<FVector>(), TArray<FVector2D>(), CloudColours, TArray<FProcMeshTangent>());
-	if (CloudShadows)
-	{
-		const int32 ShadowCount = FMath::Min(ShadowPoints.Num(), static_cast<int32>(S.SkyShadows.size()));
-		for (int32 Index = 0; Index < ShadowCount; ++Index)
+		const int32 Count = FMath::Min(Points.Num(), static_cast<int32>(From.size()));
+		for (int32 Index = 0; Index < Count; ++Index)
 		{
-			const AirSky::Vec& P = S.SkyShadows[static_cast<size_t>(Index)];
-			ShadowPoints[Index] = World(P.X, P.Y, P.Z);
+			const AirSky::Vec& P = From[static_cast<size_t>(Index)];
+			Points[Index] = World(P.X, P.Y, P.Z);
 			const size_t C = static_cast<size_t>(Index) * 4;
-			ShadowColours[Index] = FColor(S.SkyShadowRgba[C], S.SkyShadowRgba[C + 1], S.SkyShadowRgba[C + 2], S.SkyShadowRgba[C + 3]);
+			Colours[Index] = FColor(FromRgba[C], FromRgba[C + 1], FromRgba[C + 2], FromRgba[C + 3]);
 		}
-		CloudShadows->UpdateMeshSection(0, ShadowPoints, TArray<FVector>(), TArray<FVector2D>(), ShadowColours, TArray<FProcMeshTangent>());
+		Mesh->UpdateMeshSection(0, Points, TArray<FVector>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+	};
+	if (What != AirSky::Rooms::Sent::None && NearClouds)
+	{
+		Send(NearClouds, SkyRooms.NearPoints, SkyRooms.NearRgba, NearCloudPoints, NearCloudColours);
+	}
+	if (What == AirSky::Rooms::Sent::Both)
+	{
+		Send(Clouds, SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours);
+		if (CloudShadows)
+		{
+			Send(CloudShadows, SkyRooms.Shadows, SkyRooms.ShadowRgba, ShadowPoints, ShadowColours);
+		}
+	}
+	// (the sky's clock, in the log every 5 s: how often each room turned and what it cost this thread; the render
+	// thread's share of a send is not in it)
+	const double Done = FPlatformTime::Seconds();
+	if (What != AirSky::Rooms::Sent::None)
+	{
+		(What == AirSky::Rooms::Sent::Both ? SkyBothTurns : SkyNearTurns) += 1;
+		SkyPaintSeconds += Painted - Began;
+		SkySendSeconds += Done - Painted;
+		SkySlowest = FMath::Max(SkySlowest, Done - Began);
+	}
+	if (SkyClockAt < 0.0)
+	{
+		SkyClockAt = Done;
+	}
+	else if (Done - SkyClockAt >= 5.0)
+	{
+		const int32 Turns = FMath::Max(1, SkyNearTurns + SkyBothTurns);
+		UE_LOG(LogTheater, Log, TEXT("Air battle sky, %.1f s: %d near turns, %d far; painting %.2f ms a turn, sending %.2f ms, the slowest %.2f ms; the rooms' line %.0f m."),
+			Done - SkyClockAt, SkyNearTurns, SkyBothTurns, SkyPaintSeconds * 1000.0 / Turns, SkySendSeconds * 1000.0 / Turns, SkySlowest * 1000.0, SkyRooms.Line());
+		SkyNearTurns = 0;
+		SkyBothTurns = 0;
+		SkyPaintSeconds = 0.0;
+		SkySendSeconds = 0.0;
+		SkySlowest = 0.0;
+		SkyClockAt = Done;
 	}
 }
 
@@ -1258,7 +1353,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 	{
 		// The flyover before the battle, once its first groups stand ("-TheaterNoFlyover" goes straight to the battle).
 		S.bFlyTried = true;
-		if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterNoFlyover")) && S.Fly.Begin(S.Show.Groups(), S.Board.TargetX, S.Board.TargetY))
+		if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterNoFlyover")) && S.Fly.Begin(S.Show.Groups(), S.Board.TargetX, S.Board.TargetY, S.Board.PlaceKind == "harbour"))
 		{
 			S.bFlying = true;
 			S.FlyT = 0.0;
@@ -2043,7 +2138,7 @@ void AAirBattle::AimEye(double Real)
 		S.FlyT += Real;
 		if (S.FlyT < S.Fly.Length())
 		{
-			const AirDesk::Flyover::Shot Shot = S.Fly.At(S.FlyT, S.Show.Groups());
+			const AirDesk::Flyover::Shot Shot = S.Fly.At(S.FlyT, S.Show.Groups(), S.Show.Planes());
 			FVector FlyEye = World(Shot.Eye.X, Shot.Eye.Y, Shot.Eye.Z);
 			const FVector FlyLook = World(Shot.Look.X, Shot.Look.Y, Shot.Look.Z);
 			if (Stage && Stage->IsRaised())
@@ -2051,7 +2146,7 @@ void AAirBattle::AimEye(double Real)
 				FlyEye.Z = FMath::Max(FlyEye.Z, Stage->GroundZ(FlyEye) + 60.0 * U);
 			}
 			FlyEye.Z = FMath::Max(FlyEye.Z, 40.0 * U);
-			Lens->SetFieldOfView(50.0f);
+			Lens->SetFieldOfView(static_cast<float>(AirDesk::Flyover::Lens));
 			Lens->PostProcessSettings.MotionBlurAmount = 0.0f;
 			S.GlideEye = FlyEye;
 			S.GlideFacing = (FlyLook - FlyEye).Rotation();
@@ -2275,7 +2370,7 @@ void AAirBattle::AimEye(double Real)
 		{
 			const FQuat Toward = FQuat::Slerp(S.GlideFacing.Quaternion(), (LookAt - From).Rotation().Quaternion(), Eased);
 			Eye->SetActorLocationAndRotation(FMath::Lerp(S.GlideEye, From, Eased), Toward.Rotator());
-			Lens->SetFieldOfView(static_cast<float>(FMath::Lerp(50.0, 55.0, Eased)));
+			Lens->SetFieldOfView(static_cast<float>(FMath::Lerp(AirDesk::Flyover::Lens, 55.0, Eased)));
 		}
 	}
 }
