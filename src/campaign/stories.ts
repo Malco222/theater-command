@@ -671,8 +671,9 @@ function bombersFlew(g: Game, f: AirFleet, bombing: boolean, kills: number, at: 
   const old = struck.filter((b) => b[0] && b[2] >= BOMBERS.told).sort((a, b) => b[2] - a[2])[0];
   if (mine && old) headline(g, 'info', `${bomberName(g, f, old)} of ${f.name}, with ${old[2]} ${flownWord(f.nat)}s flown, did not come back from ${placeName(g, sea ? 'fleet' : 'air', at) || 'the raid'}.`, f.nat, sea ? undefined : at);
   if (!bombing) return;
-  // Of a mixed fleet's kills, the gunners' share is the bombers' weight beside its fighters'.
-  const share = f.ftr > 0 ? (f.bmr * BOMBERS.gunners) / (f.ftr + f.bmr * BOMBERS.gunners) : 1;
+  // Of a mixed fleet's kills, the gunners' share is the bombers' weight beside its fighters', and never more than
+  // 'escorted' of them: where there was an escort it took most of the kills, however many the bombers (the historian).
+  const share = f.ftr > 0 ? Math.min(BOMBERS.escorted, (f.bmr * BOMBERS.gunners) / (f.ftr + f.bmr * BOMBERS.gunners)) : 1;
   const done = flownMonth(g, f, Math.round(kills * share), foe, seen);
   if (!done) return;
   // Counted on the group's record; the bombers' own roll says which crews they were, so the group's diary does not.

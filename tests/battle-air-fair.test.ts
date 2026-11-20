@@ -244,4 +244,14 @@ describe("each raid's ground is its own province (b384(j))", () => {
     expect(alsace.target.length).toBeGreaterThan(0);
     expect(JSON.stringify(bremen.target)).not.toBe(JSON.stringify(alsace.target));
   });
+
+  it('each ground carries true north on the turned board: a raid flying east has it on the left, one flying north has it ahead', () => {
+    const north = (nat: string, name: string) => raid(game(7, nat), nat, 'bomb', name).ticket.place.ground!.north;
+    const bremen = north('UK', 'Bremen'), rhineland = north('FRA', 'Rhineland'), kent = north('GER', 'Kent');
+    for (const n of [bremen, rhineland, kent]) expect(Math.hypot(n[0], n[1])).toBeCloseTo(1, 5);
+    // The board always has the raid come on from its south edge, so the map is turned under it.
+    expect(bremen[0]).toBeLessThan(-0.9); // from England to Bremen the raid flies east
+    expect(rhineland[1]).toBeGreaterThan(0.9); // from France to the Rhineland it flies north
+    expect(kent[0]).toBeGreaterThan(0.9); // across the Channel to Kent it flies west
+  });
 });
