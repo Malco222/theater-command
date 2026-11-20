@@ -85,9 +85,16 @@ export const theUnit = (name: string): string => (/^the /i.test(name) || !takesT
 const THE_PLACES = new Set(['Ruhr', 'Rhineland', 'Saar', 'Palatinate', 'Crimea', 'Caucasus', 'Ukraine', 'Balkans', 'Netherlands']);
 export const thePlace = (name: string): string => (THE_PLACES.has(name) ? `the ${name}` : name);
 
-/** A small count as a word, as a sentence wants it: 'two', and 'Two' to open one. Past twelve, the figure. */
-const SMALL = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
-export const countWord = (n: number, open = false): string => { const w = SMALL[n] ?? n.toLocaleString('en-US'); return open ? w.charAt(0).toUpperCase() + w.slice(1) : w; };
+/**
+ * A count in a sentence, by the game's one count rule (the UI director, 20 November 2026): a word only when it opens
+ * the sentence and is one to nine ('Two go home'); a count of one is 'one' anywhere; every other count inside a
+ * sentence is a figure ('3 go on a war bond tour').
+ */
+const SMALL = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+export const countWord = (n: number, open = false): string => {
+  if (open && n >= 1 && n <= 9) return SMALL[n].charAt(0).toUpperCase() + SMALL[n].slice(1);
+  return n === 1 ? 'one' : n.toLocaleString('en-US');
+};
 
 /** What a bomber is called: 'Prize Pumpkin', 'G for George', '5J+DM'. '' for one with no name yet. */
 export const bomberName = (g: Game, f: AirFleet, b: BomberRow, turn = g.turn): string => bomberMark(g, f, b, turn).name;
