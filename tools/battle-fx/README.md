@@ -556,8 +556,18 @@ right shape and colour and read as a soft brown smear.
   carry none. And they take only places nothing else wants (`Battle::LumpsRoom`, set in `Draw`): they are not in
   the room asked (`RoomAsked`), so no gun smoke is shed for them, nor in the count that drops the farthest
   pieces. They are whole while a tenth of the room would still be free with them all laid, thinner as that
-  goes, and not laid once it is full. The Midway framing with the room cut down: whole at 1,100 places, four
-  fifths at 1,000, a third at 950, none at 900, where the picture is the one the old recipe draws, to the bit.
+  goes, and not laid once it is full. The Midway framing with the room cut down: whole at 1,100 places, about
+  half at 1,000, none at 950 or 900, where the picture is the one the old recipe draws, to the bit.
+- **The room is judged by the most asked of late** (the pre-check's finding and cure, 12:56Z; `LumpsMost`,
+  `LumpsHeld`, `LumpsShown` in `Draw`). Judged by one frame's count, every lump on the screen flickered once
+  the room was in its last tenth, as a fire's flames come and go by ten or twenty places a frame: two ships
+  800 m off stepped the lumps' ink by over a fiftieth in a frame on 230 to 761 of 2,100 frames, and a salvo
+  took it all in one. Now a new most is taken at once, stands while the count stays within a hundredth of the
+  room of it, and left untouched for two seconds comes down a hundredth of the room a second; what is shown
+  falls by no more than a half a second. On the same scenes: 0 or 1 such step a run. The limits: the frame in
+  which a salvo fills the room still takes every lump in that frame (there are no places; a guard that lays
+  what there is room for was tried and is a known follow-up if it is ever seen), and after a crowd the lumps
+  take up to 12 s to come back whole, as they do after a cut from a nearly full harbour to a close-up.
 - **Old recipes.** With no `lumps` key a row draws as it did: head d96d6be's recipe gives the same 65 frames,
   byte for byte, on its own code and on this.
 

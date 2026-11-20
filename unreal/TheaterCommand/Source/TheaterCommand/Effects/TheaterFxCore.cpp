@@ -7230,19 +7230,53 @@ namespace TheaterFx
 		// be free with them all laid, thinner as that goes, and not laid once the room is full; so a crowded sky
 		// costs a near column its billows, smoothly, and nothing else. With something already left out for want of
 		// room: none)
+		// (the pre-check on f6cb25c: judged by this frame's count alone, the lumps' ink stepped with every piece born
+		// or gone once the room was in its last tenth. A fire's flames come and go by ten places a frame or more, so
+		// every lump on the screen flickered with them, and blinked out for a frame where the count touched the
+		// room. So the room is judged by the most asked of late, LumpsMost. A new most is taken at once; a count
+		// within a hundredth of the room of it lets it stand; left untouched for two seconds it comes down by a
+		// hundredth of the room a second, so the lumps come back slowly. And what is shown falls by no more than
+		// a half a second, so a rise in the count is a fade and not a step; held under three times what this
+		// frame's count alone would give, so it is still at nothing when the room is full. The lumps are
+		// laid, as before, only while this frame's count has a place for every one of them. A second or more
+		// since the last Draw, or time gone back: no memory, this frame's count alone)
 		LumpsRoom = 0.0;
+		size_t Lumped = 0;
+		double Asked = static_cast<double>(Left); // (something left out for want of room: the room is full)
 		if (Start == 0 && Need < Left)
 		{
-			size_t Lumped = 0;
 			for (const Order& O : Sorted)
 			{
 				Lumped += MayLump(O);
 			}
-			if (Lumped > 0 && Need + Lumped < Left)
+			Asked = static_cast<double>(std::min(Left, Need + Lumped));
+		}
+		const double LumpsTenth = std::max(1.0, 0.1 * MaxPuffs);
+		const double LumpsSince = Now - LumpsAt;
+		const bool bLumpsWas = LumpsSince >= 0.0 && LumpsSince < 1.0;
+		if (!bLumpsWas || Asked >= LumpsMost)
+		{
+			LumpsMost = Asked;
+			LumpsHeld = 0.0;
+		}
+		else if (Asked >= LumpsMost - 0.1 * LumpsTenth)
+		{
+			LumpsHeld = 0.0;
+		}
+		else if ((LumpsHeld += LumpsSince) > 2.0)
+		{
+			LumpsMost = std::max(Asked, LumpsMost - LumpsSince * 0.1 * LumpsTenth);
+		}
+		LumpsAt = Now;
+		if (Lumped > 0 && Need + Lumped < Left)
+		{
+			LumpsRoom = Clamp01((static_cast<double>(Left) - LumpsMost) / LumpsTenth);
+			if (bLumpsWas && LumpsShown > LumpsRoom)
 			{
-				LumpsRoom = Clamp01(static_cast<double>(Left - Need - Lumped) / std::max(1.0, 0.1 * MaxPuffs));
+				LumpsRoom = std::min(std::max(LumpsRoom, LumpsShown - 0.5 * LumpsSince), Clamp01(3.0 * (static_cast<double>(Left) - Asked) / LumpsTenth));
 			}
 		}
+		LumpsShown = LumpsRoom;
 		for (size_t I = 0; I < Sorted.size() && Slot < MaxPuffs; ++I)
 		{
 			if (I >= Start || Sorted[I].bKeep)
