@@ -74,6 +74,11 @@ namespace AirFeed
 		/** The land under the board (place.ground.land): rings of board points. */
 		std::vector<std::vector<std::pair<double, double>>> Land;
 		std::vector<std::vector<std::pair<double, double>>> TargetOutline;
+		/** The board's great rivers (place.ground.rivers): lines of board points. */
+		std::vector<std::vector<std::pair<double, double>>> Rivers;
+		/** True north on the turned board (place.ground.north, a unit vector [x, y]); none given: the board's own up. */
+		double NorthX = 0.0, NorthY = 1.0;
+		bool bNorthGiven = false;
 		/** The day's sky (place.cloud): a deck or scattered cumulus, its base and top; absent, cumulus. */
 		AirSky::Day Cloud;
 	};

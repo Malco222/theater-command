@@ -25,6 +25,8 @@ class USkyLightComponent;
 class USoundAttenuation;
 class USoundBase;
 struct FAirBattleState;
+struct FAirLandMade;
+class UTexture2D;
 
 /**
  * The air battle's 3D scene (the air battles thread's 3D handoff, sections 1 to 10; ruling 238 for Pearl Harbor and
@@ -201,6 +203,19 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> PlaneInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> PlainInk;
+	/** The ground's pictures under a battle with no stage (Battle/AirLand: fields, woods, villages, rivers, the town),
+	 * painted on the pool's threads as the battle opens and laid over the plain sheets when done (LayLand). */
+	TSharedPtr<FAirLandMade, ESPMode::ThreadSafe> LandMade;
+	TFuture<void> LandPainting;
+	double LandAsked = 0.0;
+	UPROPERTY()
+	TArray<TObjectPtr<UTexture2D>> LandPictures;
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> LandInks;
+	/** The near picture's texels as laid, kept for the craters. */
+	TArray<FColor> LandNear;
+	/** A bomb's crater on the near picture where it fell on land (AirLand's Scar), sent with its smaller copies. */
+	void ScarLand(double X, double Y, double Kilograms);
 	/** An airscrew turning: a see-through disc, its blades a blur (M_Highlight, unlit, by each point's alpha). */
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> DiscInk;
@@ -301,6 +316,11 @@ private:
 	bool Open(const FString& Why);
 	void Raise();
 	void LayGround();
+	/** The ground's pictures begun on the pool's threads (LayGround, no stage). */
+	void PaintLand();
+	/** The pictures, painted, laid as sheets over the plain ones: the finest round the aim, each coarser one round that,
+	 * the plain colour of the far picture's edge out to the sea sheet's rim. */
+	void LayLand();
 	/** The day's clouds laid round the target (AirSky) and their mesh made; once they are drawn, the deck handed to the
 	 * flight core (where falls begun above it pass out of sight). */
 	void LaySky();
