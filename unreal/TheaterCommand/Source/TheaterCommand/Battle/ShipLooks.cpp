@@ -11,26 +11,39 @@ namespace ShipLookParts
 	// whose arguments differ from these is quietly off (no error says so): Begin logs which the kit has, so the Mac's
 	// log proves the hand-over (the pre-check, 20 November 15:19Z).
 	template <typename TKit>
-	constexpr bool HasSteam = requires(TKit* K, int32 I, const FVector& A, const FVector& W, float C, float S) { K->Steam(I, A, W, C, S); };
+	constexpr bool HasSteam = requires(TKit* K, int32 I, const FVector& A, const FVector& W, float C, float S, const FString& Kind) { K->Steam(I, A, W, C, S, Kind); K->SteamStop(I); };
 	template <typename TKit>
 	constexpr bool HasCookOff = requires(TKit* K, const FVector& A, const FVector& U, float C, int32 P, float O, float J) { K->CookOff(A, U, C, P, O, J); };
 	template <typename TKit>
 	constexpr bool HasBurnOut = requires(TKit* K, const FVector& A, float C, float S, int32 I) { K->Burn(A, C, S, I); K->BurnOut(I, C); };
 	template <typename TKit>
-	constexpr bool HasGlance = requires(TKit* K, const FVector& A, const FVector& I, const FVector& N, const FString& S) { K->Glance(A, I, N, S); };
+	constexpr bool HasGlance = requires(TKit* K, const FVector& A, const FVector& I, const FVector& N, float Mm, const FString& G) { K->Glance(A, I, N, Mm, G); };
 
+	/** Kind: the kit's "vent" (a deck vent, a hole in her side) or "funnel" (the escape pipes on a funnel: a tall plume). */
 	template <typename TKit>
-	static bool Steam(TKit* Kit, int32 Id, const FVector& At, const FVector& Way, float Across, float Seconds)
+	static bool Steam(TKit* Kit, int32 Id, const FVector& At, const FVector& Way, float Across, float Seconds, const FString& Kind)
 	{
 		if constexpr (HasSteam<TKit>)
 		{
 			if (Kit)
 			{
-				Kit->Steam(Id, At, Way, Across, Seconds);
+				Kit->Steam(Id, At, Way, Across, Seconds, Kind);
 				return true;
 			}
 		}
 		return false;
+	}
+
+	template <typename TKit>
+	static void SteamStop(TKit* Kit, int32 Id)
+	{
+		if constexpr (HasSteam<TKit>)
+		{
+			if (Kit)
+			{
+				Kit->SteamStop(Id);
+			}
+		}
 	}
 
 	template <typename TKit>
@@ -74,14 +87,16 @@ namespace ShipLookParts
 		}
 	}
 
+	/** Calibre: the table's glance dial ("gun203": a cruiser's 203 mm shell), as the kit's number in millimetres. */
 	template <typename TKit>
-	static bool Glance(TKit* Kit, const FVector& At, const FVector& Incoming, const FVector& Normal, const FString& Size)
+	static bool Glance(TKit* Kit, const FVector& At, const FVector& Incoming, const FVector& Normal, const FString& Calibre)
 	{
 		if constexpr (HasGlance<TKit>)
 		{
-			if (Kit)
+			const float Mm = FCString::Atof(*Calibre.RightChop(3));
+			if (Kit && Calibre.StartsWith(TEXT("gun")) && Mm > 0.0f)
 			{
-				Kit->Glance(At, Incoming, Normal, Size);
+				Kit->Glance(At, Incoming, Normal, Mm, FString(TEXT("water")));
 				return true;
 			}
 		}
@@ -167,6 +182,8 @@ void FShipLooks::End()
 	Fires.Reset();
 	Ends.Reset();
 	Burns.Reset();
+	Leaks.Reset();
+	Kit = nullptr;
 	NextBurn = 0;
 }
 
@@ -281,7 +298,21 @@ void FShipLooks::GiveWay(int32 Id, bool bUnder, double Now)
 			}
 		}
 		Burns.Remove(Id);
+		StopLeaks(Id);
 	}
+}
+
+void FShipLooks::StopLeaks(int32 Id)
+{
+	// (her steam stops now, where the kit has steam; what is in the air thins on its own)
+	if (const TArray<int32>* Open = Leaks.Find(Id))
+	{
+		for (const int32 Leak : *Open)
+		{
+			ShipLookParts::SteamStop(Kit, Leak);
+		}
+	}
+	Leaks.Remove(Id);
 }
 
 bool FShipLooks::IsBurst(const Fates::Beat& Step)
@@ -313,6 +344,7 @@ void FShipLooks::Queue(int32 Id, const Fates::Fate& Look, double Now, bool bBurs
 
 void FShipLooks::Advance(double Now, FBattleEffects* Effects, TFunctionRef<bool(int32, FShipLie&)> LieOf)
 {
+	Kit = Effects;
 	for (int32 K = 0; K < Due.Num();)
 	{
 		if (Due[K].At > Now)
@@ -396,8 +428,16 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 	}
 	else if (Do == TEXT("steam"))
 	{
+		// Straight up from her funnel's escape pipes (the kit's tall "funnel" plume), else from a vent or a hole in her
+		// side ("vent"), out of her side where the look says so. One leak per place on her, each its own id: the kit
+		// starts a leak afresh when an id comes again.
+		const bool bFunnel = Kind != TEXT("side") && At == TEXT("funnel");
 		const FVector Way = Kind == TEXT("side") ? (Abeam * Side * 0.8 + FVector(0.0, 0.0, 0.6)).GetSafeNormal() : FVector::UpVector;
-		ShipLookParts::Steam(Effects, 238500 + Item.Ship, Place, Way, static_cast<float>(FMath::Clamp(Step.A, 0.2, 4.0)), static_cast<float>(FMath::Clamp(Step.B, 2.0, 60.0)));
+		const int32 Leak = 300000 + Item.Ship * 4 + (bFunnel ? 0 : Kind == TEXT("side") ? 1 : 2);
+		if (ShipLookParts::Steam(Effects, Leak, Place, Way, static_cast<float>(FMath::Clamp(Step.A, 0.2, 4.0)), static_cast<float>(FMath::Clamp(Step.B, 2.0, 60.0)), bFunnel ? FString(TEXT("funnel")) : FString(TEXT("vent"))))
+		{
+			Leaks.FindOrAdd(Item.Ship).AddUnique(Leak);
+		}
 	}
 	else if (Do == TEXT("cookoff"))
 	{
@@ -428,8 +468,9 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 	}
 	else if (Do == TEXT("glance"))
 	{
+		// (a shell off her armour; a bomb has no glance, its look's burst on her armour is the blast)
 		const FVector Normal = (Abeam * Side).GetSafeNormal();
-		ShipLookParts::Glance(Effects, Place, -Normal + FVector(0.0, 0.0, -0.2), Normal, Kind.IsEmpty() ? FString(TEXT("gun203")) : Kind);
+		ShipLookParts::Glance(Effects, Place, -Normal + FVector(0.0, 0.0, -0.2), Normal, Kind);
 	}
 	// ("smoke" and "silence" have no call on the stage: a fire's own smoke stands for the one, and the stage's ships
 	// fire no guns the other could stop.)
@@ -490,6 +531,7 @@ FString FShipLooks::Reel(int32 Id, const FString& Class, const FString& KeyAndSt
 	}
 	Burns.Remove(Id);
 	Fires.Remove(Id);
+	StopLeaks(Id);
 	Hulls.Remove(Id);
 	Sides.Remove(Id);
 	Fates::Blow Blow;

@@ -81,11 +81,14 @@ private:
 	TMap<int32, TArray<double>> Fires; // by ship: when each fire she has stops
 	TMap<int32, Fates::Fate> Ends;
 	TMap<int32, TArray<int32>> Burns; // by ship: the ids of the fires her looks lit, where the kit takes ids
+	TMap<int32, TArray<int32>> Leaks; // by ship: the ids of her steam leaks, where the kit has steam
+	FBattleEffects* Kit = nullptr;    // the kit the last Advance played on (to stop her steam between plays)
 	int32 NextBurn = 0;
 
 	void Queue(int32 Id, const Fates::Fate& Look, double Now, bool bBurstsOnly = false);
 	static bool IsBurst(const Fates::Beat& Step);
 	void GiveWay(int32 Id, bool bUnder, double Now);
+	void StopLeaks(int32 Id);
 	void Play(const FDue& Step, const FShipLie& Lie, FBattleEffects* Effects, double Now);
 	int32 FiresAll(double Now) const;
 };
