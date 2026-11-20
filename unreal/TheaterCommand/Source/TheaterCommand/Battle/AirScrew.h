@@ -51,4 +51,18 @@ namespace AirScrew
 
 	/** The paint build_plane.py gives a blade. */
 	constexpr int BladePaint = 9;
+
+	/**
+	 * Which of a model file's paints are an airscrew's blades, and which its own painted blur disc, by the file's
+	 * paint_names (the 3D pre-check, 20 November 15:51Z: the newer Kate and Val paint each blade in three, blade,
+	 * blade_back and blade_band, and carry a see-through blur disc of their own, blur and blur_tip): every paint whose
+	 * name begins "blade", and every one beginning "blur". A file without names: paint 9 only, and no blur.
+	 */
+	struct PaintsAre
+	{
+		std::vector<bool> Blade, Blur; // by paint number
+		bool IsBlade(int Paint) const { return Paint >= 0 && static_cast<size_t>(Paint) < Blade.size() && Blade[static_cast<size_t>(Paint)]; }
+		bool IsBlur(int Paint) const { return Paint >= 0 && static_cast<size_t>(Paint) < Blur.size() && Blur[static_cast<size_t>(Paint)]; }
+	};
+	PaintsAre PaintKinds(const std::string& FileText);
 }

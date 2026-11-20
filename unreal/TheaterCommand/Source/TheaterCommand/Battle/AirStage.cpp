@@ -1092,7 +1092,9 @@ void AAirStage::Blast(FShip& Ship, bool bBig)
 		const FVector Spot = Forward + FVector(Shown.FRandRange(-1.0f, 1.0f) * Ship.Beam * 0.4 * U, Shown.FRandRange(-1.0f, 1.0f) * Ship.Beam * 0.4 * U, (Ship.High * 0.2 + K * 3.0) * U);
 		Effects->ShellOfSize(GetActorTransform().TransformPosition(Spot), TEXT("bomb500"), TEXT("water"), true);
 	}
-	Effects->Burn(GetActorTransform().TransformPosition(Forward + FVector(0.0, 0.0, Ship.High * 0.2 * U)), static_cast<float>(Ship.Beam * (bBig ? 2.0 : 1.2)), 1800.0f);
+	// (in harbour she settles on the mud and burns on; at sea she is under in about 30 s, and her fire goes with her,
+	// her oil's column on the water burning on where she went down: the ship looks thread, 15:25Z)
+	Effects->Burn(GetActorTransform().TransformPosition(Forward + FVector(0.0, 0.0, Ship.High * 0.2 * U)), static_cast<float>(Ship.Beam * (bBig ? 2.0 : 1.2)), Ship.bHarbour ? 1800.0f : 32.0f);
 }
 
 void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
@@ -1333,7 +1335,8 @@ void AAirStage::Advance(double Now)
 			return false;
 		}
 		Lie.World = GetActorTransform();
-		Lie.Base = Ship->Base;
+		// (her waterline where she lies now: settled, or going down, a late hit's burst stands on her, not above her)
+		Lie.Base = Ship->Hull ? FVector(Ship->Base.X, Ship->Base.Y, Ship->Hull->GetRelativeLocation().Z) : Ship->Base;
 		Lie.Yaw = Ship->Yaw;
 		Lie.Long = Ship->Long;
 		Lie.Beam = Ship->Beam;

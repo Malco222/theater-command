@@ -49,11 +49,13 @@ int main(int Argc, char** Argv)
 		const std::vector<double> Flat = NearNumbers(Text, "\"points\"");
 		const std::vector<double> Tri = NearNumbers(Text, "\"triangles\"");
 		const std::vector<int> Paints = AirScrew::NearPaints(Text);
+		const AirScrew::PaintsAre Are = AirScrew::PaintKinds(Text);
 		std::vector<AirScrew::Vec3> Points;
 		for (size_t K = 0; K + 2 < Flat.size(); K += 3) Points.push_back({ Flat[K], Flat[K + 1], Flat[K + 2] });
 		std::vector<bool> Blade(Paints.size());
 		int BladePoints = 0;
-		for (size_t K = 0; K < Paints.size(); ++K) { Blade[K] = Paints[K] == AirScrew::BladePaint; BladePoints += Blade[K] ? 1 : 0; }
+		int BlurPoints = 0;
+		for (size_t K = 0; K < Paints.size(); ++K) { Blade[K] = Are.IsBlade(Paints[K]); BladePoints += Blade[K] ? 1 : 0; BlurPoints += Are.IsBlur(Paints[K]) ? 1 : 0; }
 		std::vector<int> Triangles;
 		for (double V : Tri) Triangles.push_back(static_cast<int>(V));
 		const AirScrew::Found F = AirScrew::Find(Points, Blade, Triangles);
@@ -65,7 +67,8 @@ int main(int Argc, char** Argv)
 			Taken += F.BladeTriangle[T / 3] ? 1 : 0;
 		}
 		bool bOk = Points.size() == Paints.size() && BladePoints > 0 && !F.Screws.empty() && Taken == BladeTris;
-		std::printf("%s: %d blade points, %zu screws, %d of %d blade triangles taken\n", Argv[A], BladePoints, F.Screws.size(), Taken, BladeTris);
+		std::printf("%s: %d blade points, %zu screws, %d of %d blade triangles taken%s\n", Argv[A], BladePoints, F.Screws.size(), Taken, BladeTris,
+		            BlurPoints > 0 ? (", its own blur disc " + std::to_string(BlurPoints) + " points").c_str() : "");
 		for (const AirScrew::Screw& S : F.Screws)
 		{
 			std::printf("   hub (%.2f, %.2f, %.2f) axis (%.2f, %.2f, %.2f) radius %.2f, %d blades\n", S.Hub.X, S.Hub.Y, S.Hub.Z, S.Axis.X, S.Axis.Y, S.Axis.Z, S.Radius, S.Blades);
