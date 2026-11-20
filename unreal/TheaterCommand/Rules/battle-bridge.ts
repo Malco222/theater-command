@@ -78,8 +78,9 @@
 // a block the player sends back, an event { what: 'land:gives' } says so ("1st Regiment, 4th Motorised gives ground."),
 // and it leaves the field as such a block does (state 'withdrawn'). Nothing new to draw.
 // A bold defence's reserve walking toward the player's attack (the 'shift' phase below) raises one event, once a battle,
-// { what: 'land:reserve', unit, side } at the player's own block it walks toward ("Movement behind their line, toward
-// your 3rd Armoured."; keyed to the player's block so it tells nothing the fog hides, b464; words the UI director's).
+// { what: 'land:reserve', unit, side } at the player's own block it walks toward ("Your 3rd Armoured reports movement
+// behind the enemy line, shifting toward it."; that block reports what it sees, so it tells nothing the fog hides, b464;
+// words the UI director's).
 // Where the attack card did not know the defence (b453), an enemy block none of the player's has fought yet, of a corps
 // the card did not identify (a corps it names shows whole from the start, b476(3)), comes as
 // { id, side, known: false, x, y, face, w, d, act, speed, cover, state } (b464(2)): draw a plain stand in its side's

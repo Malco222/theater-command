@@ -167,7 +167,14 @@ describe('a bold defence\'s reserve follows the approach (ruling 239\'s rider, 0
       });
       if (walked === null && b.contactAt !== null) walked = Math.max(0, ...held.map((u) => Math.abs(u.x - u.home[0])));
     }
-    return { held: held.length, walked: walked ?? 0, far, hit, phase, told: b.log.filter((e) => e.what === 'land:reserve' && e.text).length };
+    const said = b.log.filter((e) => e.what === 'land:reserve' && e.text);
+    // The player's own block reports what it sees (b464's fog rule; the UI director's words, 20 Nov 05:02).
+    for (const e of said) {
+      const u = b.units.find((x) => x.id === e.unit)!;
+      expect(u.side).toBe('att');
+      expect(e.text).toBe(`Your ${u.name} reports movement behind the enemy line, shifting toward it.`);
+    }
+    return { held: held.length, walked: walked ?? 0, far, hit, phase, told: said.length };
   };
   it('walks behind its line toward the attack before the line is struck, within its held ground, striking and struck by nothing', () => {
     const rs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((s) => run('bold', s * 7919 + 13));

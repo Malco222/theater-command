@@ -805,13 +805,13 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   /**
    * The enemy's reserve walking behind its line toward the stretch one of the player's blocks is coming at (ai.ts; ruling
-   * 239's rider, 03:20Z): told once, keyed to that block of his, never naming the enemy's (b464's fog rule). Words: the
-   * UI director's.
+   * 239's rider, 03:20Z): told once, as that block of his reports what it sees, never naming the enemy's (b464's fog
+   * rule). Words: the UI director's (land-slice-3-review.md, 20 Nov 05:02).
    */
   reserveSeen(side: Side, toward: LandUnit): void {
     if (this.toldShift || toward.side === side || !this.ticket[toward.side].human) return;
     this.toldShift = true;
-    this.say({ what: 'land:reserve', unit: toward.id, side: toward.side, text: `Movement behind their line, toward your ${this.named(toward)}.`, x: toward.x, y: toward.y });
+    this.say({ what: 'land:reserve', unit: toward.id, side: toward.side, text: `Your ${this.named(toward)} reports movement behind the enemy line, shifting toward it.`, x: toward.x, y: toward.y });
   }
 
   /** Metres between two blocks' edges, roughly. */
