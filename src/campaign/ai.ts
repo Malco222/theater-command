@@ -56,8 +56,15 @@ export const homeBars = (c: Corps, to: Region): boolean => offHome(c, to);
 // design director's ruling of 16:52Z of 19 November 2026 on Canton, from rider b642's China trace to ruling 234,
 // `cityBound`. True while a main effort's own steps run with the far side on; nobody is kept with it off.)
 let effort = false;
+/**
+ * A city or port whose town holds a garrison row of its own side is not empty: the garrison already keeps it from
+ * the enemy's next walk-in, so nobody in the field there is its last (the design director, 23:18Z of 20 November
+ * 2026, item 2, on the trace of ruling 216's six tests: Canton's town row stood, and the rule still held Canton's
+ * one division in the field).
+ */
+const townKept = (g: Game, r: Region, nat: string): boolean => garrisonOf(r).some((x) => !x.dead && allied(g, x.nat, nat));
 /** The last of its side in a place a main effort may not leave empty: it does not go, by road, by rail or into an attack. */
-const lastGuard = (g: Game, c: Corps): boolean => effort && cityBound(g, c.nat, g.regions[c.reg]) && friendlyUnits(g, g.regions[c.reg], c.nat).length <= 1;
+const lastGuard = (g: Game, c: Corps): boolean => effort && cityBound(g, c.nat, g.regions[c.reg]) && !townKept(g, g.regions[c.reg], c.nat) && friendlyUnits(g, g.regions[c.reg], c.nat).length <= 1;
 /** Runs a step of a main effort: its attacks, its closing up to the front, its shoring up of the line afterwards. */
 function inEffort<T>(g: Game, run: () => T): T {
   const was = effort;
@@ -72,7 +79,8 @@ function inEffort<T>(g: Game, run: () => T): T {
  * and China walked into Canton behind it. Thirteen to fifteen of the thirty-four provinces Japan stood on were left
  * with nobody on them that month. Japan held its occupied cities through the war and its offensives went out from
  * them: one corps stays in such a place while the others go forward, read at the moment a corps would leave. It
- * binds only where an empty city would hand the enemy a walk-in, so the offensive keeps the rest. A city is a
+ * binds only where an empty city would hand the enemy a walk-in, so the offensive keeps the rest: a place whose
+ * town holds a garrison row of its side is not empty, and everybody in the field there may go (`townKept`). A city is a
  * province that counts for victory, or one the arsenal calls a city. The plan's own staging for a quay, a redeploy,
  * a fall-back and the sea's routines are not bound, nor is a month on the defensive. The far side's alone: the
  * general form, every staff's on the old chart, waits for after release.
@@ -98,7 +106,7 @@ function guardsStay(g: Game, nat: string, list: Corps[]): Corps[] {
   const stay = new Set<number>();
   const foot = (c: Corps): number => (fights(c) && !KIND[c.kind].mobile ? 0 : 1);
   for (const [id, l] of at) {
-    if (l.length < friendlyUnits(g, g.regions[id], nat).length) continue;
+    if (l.length < friendlyUnits(g, g.regions[id], nat).length || townKept(g, g.regions[id], nat)) continue;
     stay.add([...l].sort((x, y) => foot(x) - foot(y) || atkPower(g, x) - atkPower(g, y) || x.id - y.id)[0].id);
   }
   return stay.size ? list.filter((c) => !stay.has(c.id)) : list;

@@ -12,6 +12,8 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { atkPower, cityBound, effortKeeps, effortSends } from '../src/campaign/ai';
 import { addCorps, atWar, createGame, friendlyUnits, setWar } from '../src/campaign/game';
+import { setStop } from '../src/campaign/history';
+import { arrive, garrison, garrisonOf, townHeld } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { current, stepAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -68,6 +70,50 @@ describe('a main effort leaves one corps in a city or port next to the enemy (th
     expect(both).toHaveLength(2 + open.length);
     for (const c of open) expect(both).toContain(c);
   });
+
+  // (The design director, 23:18Z of 20 November 2026, item 2, on the trace of ruling 216's six tests. By the book
+  // Canton's town holds the 21st Army's row and the 38th Division stands in the field: the rule read the field
+  // alone, called the division Canton's last and kept it there.)
+  it("a place whose town holds a garrison row of its side is not empty: Canton's town row stands, the field corps may go, and Canton is not open to a walk-in", () => {
+    const g = wide();
+    const canton = at(g, 'Canton'), army = japans(g, 'Canton')[0];
+    // Nobody in the town: the one corps in the field is Canton's last, as before.
+    expect([garrisonOf(canton).length, effortKeeps(g, army)]).toEqual([0, true]);
+    // A row of its own goes into the town. The field corps is no longer the last of its side there.
+    const row = addCorps(g, 'JAP', 'Test garrison of Canton', 'inf', 1, 'Canton', {});
+    expect(garrison(g, row)).toBe(true);
+    expect([garrisonOf(canton).includes(row), friendlyUnits(g, canton, 'JAP').length]).toEqual([true, 1]);
+    expect(effortKeeps(g, army)).toBe(false);
+    expect(effortSends(g, 'JAP', [army])).toEqual([army]);
+    // The field corps gone, an enemy who arrives finds the town held: he must shut it in, and Canton does not fall to a walk-in.
+    canton.units.splice(canton.units.indexOf(army), 1);
+    const tungkun = at(g, 'Tungkun');
+    army.reg = tungkun.id; tungkun.units.push(army);
+    expect([canton.units.length, townHeld(g, canton)]).toEqual([0, true]);
+    arrive(g, canton, 'CHN');
+    expect([canton.ctrl, garrisonOf(canton).includes(row), row.dead ?? false]).toEqual(['JAP', true, false]);
+    // With the town's row gone the place is empty again, and the same arrival walks in.
+    const g2 = wide();
+    const canton2 = at(g2, 'Canton'), army2 = japans(g2, 'Canton')[0];
+    canton2.units.splice(canton2.units.indexOf(army2), 1);
+    army2.reg = at(g2, 'Tungkun').id; at(g2, 'Tungkun').units.push(army2);
+    expect(townHeld(g2, canton2)).toBe(false);
+    arrive(g2, canton2, 'CHN');
+    expect(canton2.ctrl).toBe('CHN');
+  });
+
+  it('by the book the 38th Division is not Canton\'s last while the 21st Army\'s row holds the town (stop 1, as November 1939 opens)', () => {
+    const g = wide(7);
+    setStop(g, 1, true);
+    while (g.turn < 3) stepAI(g);
+    const canton = at(g, 'Canton');
+    expect(garrisonOf(canton).map((c) => c.name)).toEqual(['21st Army (Canton)']);
+    const field = japans(g, 'Canton');
+    expect(field.map((c) => c.name)).toEqual(['38th Division (Canton)']);
+    expect(cityBound(g, 'JAP', canton)).toBe(true);
+    expect(effortKeeps(g, field[0])).toBe(false);
+    expect(effortSends(g, 'JAP', field)).toEqual(field);
+  }, 120000);
 
   it('nobody is kept on the old chart', () => {
     const g = wide();
