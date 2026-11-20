@@ -146,14 +146,17 @@ namespace TheaterFx
 			Vec From, Vel, Way;
 			double Rise = 0.0, Born = 0.0, R0 = 0.0, RMid = 0.0, R1 = 0.0, Grow = 1.0, Life = 1.0, Alpha = 1.0, LumpsFrom = -1.0;
 			double GrowBy = 0.0, GrowEarly = 1.0; // (that piece's own widening clock: a trail may change kind at this join)
-			double WakeBy = 0.0, WakeR = 0.0; // (and its own spread in the aircraft's wake: see Bit::WakeBy)
+			double WakeBy = 0.0, WakeR = 0.0, WakeOn = 0.0; // (and its own spread in the aircraft's wake: see Bit::WakeBy)
 			Rgb Col, Col2; double Cool = 0.0; // (and its own colour, young and old: a piece with bSoft runs to it along its length)
 			double PaleTo = -1.0; // (0 and over: how far that piece pales with age, its own PaleTo, 1 not at all; under 0: as the piece reaching back to it does)
+			double Lean = 0.0; // (and how much thinner its one side is: see Bit::Lean)
 			bool bOn = false;
 		};
 		double Ribbon = 0.0, ShowFrom = 0.0, ShowBy = 0.0, SmearHold = -1.0;
 		Reach Back;
 		bool bSoft = false; // (a ribbon's piece: its colour runs along it to the colour of the piece behind, so no piece shows as a block)
+		double Torn = 0.0; // (a ribbon's piece: its two sides wobble in and out by this much more, a torn outline; edge_torn)
+		double Lean = 0.0; // (a soft ribbon's piece, -1 to 1: thinner by this much on the side it leans from, running to the piece behind's along its length, so the column has lighter folds along it and is never one even tube)
 		// (a ribbon's piece widens in two stages, GrowBy over 0: from R0 to RMid over its first GrowBy seconds, by the
 		// power GrowEarly (under 1: fast at first, as smoke spreads in an aircraft's wake), then on to R1 by the end
 		// of its life, by Grow. And it pales as it widens, PaleBy over 0: as dark as it was laid until PaleFrom
@@ -165,6 +168,7 @@ namespace TheaterFx
 		// it is at least WakeR across its half width, fast at first, however slowly the row widens it after. Art
 		// director 15:38Z: 1.5 m at the nacelle, 5 to 6 m past the tail)
 		double WakeBy = 0.0, WakeR = 0.0;
+		double WakeOn = 0.0; // (over 0: past WakeBy it keeps widening, as WakeR times this power of its age over WakeBy: a trail flares on behind the tail and is never a tube)
 		double EdgeSoft = 0.0; // (over 0: its lumpy outline is gentler the wider the piece is for its length, so a wide old length has soft swells, never a comb of spikes: all of it up to a width of its length over EdgeSoft)
 		double LeastPx = 0.0; // (a streak: never thinner than this on the screen; a puff: never smaller across its long way, and thinner to match)
 		double LeastKeep = 0.0; // (a puff held up to LeastPx keeps at least this share of its opacity: a light's twinkle, a far trail's dark line)
@@ -520,7 +524,7 @@ namespace TheaterFx
 			double SmokeStart = 1.0; // (fire: where along the flame its smoke starts, a share of the flame's length)
 			Span FlameLiftOfLen{ 0.0, 0.0 }; // (fire: how far each tongue stands off the skin as a share of its length; 0: flame_lift_m)
 			double LicksPerFrame = 0.4; // (fire: tongues torn free of the tip and streaming away aft, a frame)
-			double FlameAlphaRoot = 0.92, FlameAlphaFall = 0.2, FlameHold = 0.45, FlameWide = 1.0, LickAlpha = 0.9; // (fire: a tongue's opacity at the cowl and how much it loses to its tip; how long it holds full, a share of its life; how wide; a torn-free lick's opacity)
+			double FlameAlphaRoot = 0.92, FlameAlphaFall = 0.2, FlameHold = 0.45, FlameWide = 1.0, LickAlpha = 0.9; int FlameTongues = 0; double FlameOver = 1.0; // (fire: a tongue's opacity at the cowl and how much it loses to its tip; how long it holds full, a share of its life; how wide; a torn-free lick's opacity)
 			double FlameLiftCurve = 0.0; // (fire: a tongue's stand-off grows along it as this power of the way to its tip, so it is rooted on the skin; 0: off the skin from near its root)
 			bool bFlameTip = false; Rgb FlameTip; // (fire: the colour a tongue's tip goes to, into its smoke)
 			double TipSmoke = 0.0, TipSmokeR = 0.3; // (fire: black smoke laid at each tongue's tip at this opacity, widening to TipSmokeR of the flame's length; 0: none)
@@ -535,6 +539,13 @@ namespace TheaterFx
 			Span TailWide{ 0.0, 0.0 }, GoutEvery{ 0.0, 0.0 }, GoutFor{ 0.5, 1.0 }, FadeOver{ 0.0, 0.0 }, ForS{ 0.0, 0.0 };
 			double TailM = 16.0, GoutWide = 1.5, GoutAlpha = 1.3, FadeTo = 1.0, FlameShrink = 0.0;
 			double Wisps = 0.0; // (how many of its pieces throw a wisp out of the column, 0 to 1: its young edge is torn, never ruled)
+			// (art director 19:52Z, the trails read as even tubes. TailWiden: Bit::WakeOn. Knots: how many of its pieces
+			// lay a denser lump in the column or on its edge, KnotR of its half width across, KnotOff of it out from the
+			// middle, KnotAlpha as dense as the piece, KnotDark as dark, hanging KnotS. Fold: how much denser its one
+			// side is than its other, wandering along its length (Bit::Lean): lighter folds between its knots. SpurtM: a denser, wider
+			// spurt that long at its source, SpurtWide times its width and SpurtAlpha its density)
+			double TailWiden = 0.0, Knots = 0.0, KnotAlpha = 0.7, KnotDark = 0.8, Fold = 0.0, EdgeTorn = 0.0, SpurtWide = 2.0, SpurtAlpha = 1.6;
+			Span KnotR{ 0.3, 0.55 }, KnotOff{ 0.15, 0.9 }, KnotS{ 2.5, 5.0 }, SpurtM{ 0.0, 0.0 };
 			// (bSoft: the strip's colour runs from each piece to the next and its density swells and thins with its width over
 			// several pieces, so no piece shows as a block. Blend: a trail changing to this kind goes over to it in that
 			// many seconds, colour, density and width, never at a cut. Shadow, ShadowK: pale smoke's side away from the
@@ -560,6 +571,7 @@ namespace TheaterFx
 			Bit::Reach Prev, Kept; // (a ribbon: the last piece laid and the last length that hangs on, for the next of each to reach back to)
 			Vec Wander; double RiseK = 1.0; bool bWander = false; // (a ribbon: the drift and rise its last piece took, which the next takes most of, so the strip meanders and never zig-zags)
 			double Wide = 0.0; // (and how much wider or narrower than the row its last piece was)
+			double Lean = 0.0; // (and how much denser its one side was than its other, where the row folds)
 			// (an engine that is out: its next gout and the one running; how long this kind thins over, and how long it
 			// lasts before the streak takes over; the flame a put-out fire had, shrinking away by FlameOutBy)
 			double NextGout = 0.0, GoutFrom = 0.0, GoutUntil = 0.0, FadeFor = 0.0, KindFor = 0.0, FlameWas = 0.0, FlameOutBy = 0.0, FlameShrinkS = 0.0;
@@ -734,7 +746,7 @@ namespace TheaterFx
 		// edge's; LayLump, LayLumpFar: how far its near and far ends have drawn in to a round lump, 0 a link of the
 		// strip and 1 a round puff)
 		Vec LayLong, LayFar, LayBendFar, LayBendNear; bool bLayLong = false; double LayTailAlpha = 1.0, LayLump = 0.0, LayLumpFar = 0.0, LayWob = 1.0;
-		bool bLayFarCol = false; Rgb LayFarBy, LayFarFloor; // (Bit::bSoft: how its far edge's colour differs from its near edge's, in the hour's light)
+		bool bLayFarCol = false; Rgb LayFarBy, LayFarFloor; bool bLayLean = false; double LayLean = 0.0, LayLeanFar = 0.0; // (Bit::bSoft: how its far edge's colour differs from its near edge's, in the hour's light)
 		// (picture.lit_gain: the game's picture multiplies every colour by this (the wrapper sets the material's
 		// brightness to it), and every colour is written that much darker, so all looks as before; but a light's hottest
 		// parts (Bit::Over) are written up to that much brighter than white, so they land white-hot after the game's
@@ -822,6 +834,8 @@ namespace TheaterFx
 		double AirWhiteWithin = 0.0, AirWhiteBeyond = 0.0; // (its core burns white-hot within the first of the eye, its own colour from the second on; 0: its own everywhere)
 		double AirCoreInner = 0.0; // (over 0: its core is whole only this share of the way out from its middle and melts into the glow from there; 0: whole to its edge)
 		int AirTracerMost = 1500; double AirOneFanBeyond = 0.0;
+		double AirGlowSoft = 0.0; // (over 0: by day its glow is that strong beside the core and fades smoothly to nothing at its edge, never a solid bar; 0: solid across, as it was)
+		double AirFarPx = 0.0; // (over 0: a one-fan tracer is a solid dash that wide in the core's colour; 0: the glow alone, as it was)
 		std::vector<double> AirTracerEnds; // (when each air tracer now alight goes out)
 		std::vector<Firing> Firings; // the air guns
 		std::vector<TrailRow> TrailRows;

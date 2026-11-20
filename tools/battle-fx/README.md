@@ -683,7 +683,7 @@ behind a recipe row or key and throws no dice an old recipe's path throws: the l
 115 frames, byte for byte, on this code.
 
 - **Tracers** (row `air_guns.tracers`; without it the ruled yellow streak, as before). Alight `life_s` (1.2), a
-  streak `streak_s` of its flight long that shortens as the round slows, a hot core in a glow two and a half cores
+  streak `streak_s` of its flight long that shortens as the round slows, a hot core in a soft glow three cores
   wide (`body_px`, `core_px`), full until `dim_from` of its life, dimming to `dim_to`, out over `out_s`. The core
   is white-hot within `white_within_m` of the eye and its nation's colour from `white_beyond_m`. A cannon (a row
   with `cannon` 1) is `tracer_wide` times as wide and `tracer_life_k` as long alight.
@@ -693,11 +693,11 @@ behind a recipe row or key and throws no dice an old recipe's path throws: the l
   Soviet small arms are green and the Soviet cannon red as the Allies'. Ground guns keep the ruled yellow.
 - **The pixels the air scene tells the kit are its WINDOW's.** The air scene draws 1072 across and tells the kit
   2881, so `least_px` and the day widths in the air rows are window pixels: 2.69 of them to a drawn pixel there,
-  1.80 on a 1600 still. The ruled 3.4 came out at 1.3 drawn pixels, a hairline the Pearl Harbor film lost; 8.5 and
-  3.2 are 4.7 and 1.8 px on a 1600 still. Previews render at twice the size and are boxed down (`FX_KIT_PX`).
+  1.80 on a 1600 still. The ruled 3.4 came out at 1.3 drawn pixels, a hairline the Pearl Harbor film lost; 9.6 and
+  3.2 are 5.3 and 1.8 px on a 1600 still. Previews render at twice the size and are boxed down (`FX_KIT_PX`).
 - **How many.** No more than `most` (1,500) alight; nearing it the guns farthest from the eye go without first,
   those within `always_within_m` never. A gun farther than `one_fan_beyond_m` (1,200) fires tracers of one fan,
-  the glow alone, a little toward the core's colour. A tracer is two fans alight 1.2 s (it was 2.5 s): a firing
+  a solid dash in the core's colour (`one_fan_px`). A tracer is two fans alight 1.2 s (it was 2.5 s): a firing
   .50 holds about 6 fans where it held 13.
 - **Hits survived** (rows `air_hit.sparkle`, `air_hit.burst`; without them a hit is as it was). A rifle-calibre or
   .50 round: `points` bright sparkles of one or two frames on the skin and nothing more. A 20 mm shell: the small
@@ -736,6 +736,49 @@ behind a recipe row or key and throws no dice an old recipe's path throws: the l
   and for an engine's trail `beam` and `quarter` with `FX_TRAIL` (and `FX_TRAIL2`, `FX_TRAIL2_AT` for a change of
   kind), `FX_ENGINE=x,y,z`, `FX_PLANE`, `FX_SPEED`, `FX_SPAN`; `FX_NATION` whose guns. Stills:
   `battle-fx/stills/air-*.png`.
+
+## The art director's mends to the air look (after head ea8c1ba)
+
+The art director's verdict on ea8c1ba, 19:52Z 20 November: six mends, each behind a new key, so ea8c1ba's recipe
+and every older one draw as they did.
+
+- **A tracer is a soft glow round a bright core, never a tube** (`air_guns.tracers.glow_soft`). Solid across by
+  day, the glow was a bar darker than a pale sky round a sky-pale core: a hollow tube, and end-on a ring. With the
+  key the glow is strongest beside the core and fades smoothly to nothing at its own edge, with no rim, and a
+  streak short on the screen (a round coming at the eye) has less of it. The cores are hotter: `us` lands
+  255,236,212, 25 and more over a pale sky, the red only in its glow. `one_fan_px`: a far gun's tracer is a solid
+  dash that wide in the core's colour, never an outlined oval.
+- **A trail is a cone with a torn outline, never a tube.** `tail_widen`: past the tail it keeps widening, as its
+  age over the time to the tail to this power (0.22 is half as wide again by 100 m). `edge_torn`: its two sides
+  in and out by that much more. `fold`: a lighter fold along inside it, the strip up to that much thinner on one
+  side, the side wandering along it; it never makes the strip denser. `knots`: the share of its pieces that
+  carry a soft lump of denser smoke, `knot_r` of the strip's half width across, `knot_off` of it off the middle,
+  `knot_alpha` as dense and `knot_dark` as dark, for `knot_s`; one past 0.6 off the middle is the column's own
+  colour and lumps its outline. Three times as many in a gout, and none when the room is four fifths full.
+- **An oil gout is a lump.** `gout_s` is a quarter to half a second, so a gout is two or three pieces long, darker
+  and wider, and is seen running back down the trail.
+- **The put-out streak shows on a pale sky.** The game blends in linear light, where a dark thing over a pale sky
+  loses about a third of its darkness on the picture: `alpha` 0.75 reads 0.3 to 0.4 at the nacelle. Dark from the
+  nacelle, paling to 0.6 of that by 60 m (0.15 on the picture) and no further.
+- **Glycol shows on a pale sky.** A cool grey underside 10 below the sky (`shadow`), the top 10 above it; and
+  `spurt_m`: a denser, wider spurt that long behind the radiator, `spurt_wide` times the source's width and
+  `spurt_alpha` as dense, riding with the aircraft and thinning as the coolant runs out.
+- **Nacelle flames are thin rooted tongues** (`flame_tongues`, `flame_over`). The one wide tongue a step read as
+  flat orange shards lying on the skin. With the key, that many thin tongues a step, each rooted on the nacelle's
+  skin at its own place round it, `flame_over` times past white at its root, orange along it and dark red at its
+  tip, soft at its edge, licking back and a little off the skin (`flame_lift_of_length`); the first is the long
+  one, and the tip smoke, the torn-off lick and the heart follow it.
+- **A 20 mm puff is a ragged ball** (`air_hit.burst.puff_lobes`): the main puff and that many smaller ones
+  crowding it, starting where it does. One rough puff read as a bird.
+- **From the pre-check on ea8c1ba** (its tested cures): a put-out flame's shrink is held to 1, so it cannot grow
+  should time go back; the tracer count forgets no end under 40 s ahead (a recipe's `life_s` times
+  `tracer_life_k` could pass 20 s and switch the cap off).
+- **Proofs.** de54166's recipe draws its 180 frames and ea8c1ba's its 44, byte for byte, on this code; both hashes
+  unchanged; no warnings (g++ and clang, -Wshadow); wild numbers on 315 keys and the calls' arguments, 5,054 runs
+  under ASAN and UBSAN, no faults. A whole trail at 80 m/s: fire 225 fans (it was 163), oil 138 (110), streak 89,
+  glycol 23. 24 burning aircraft at once: 2,952 of 3,000 at most, never a frame without flame.
+- **Still to come:** ground guns and flak by nation (the art director's ruling: one nation, one colour) want a
+  `Nation` on `Shots` and `AirFlak`, with the ways down.
 
 ## Oil fires at sea
 
