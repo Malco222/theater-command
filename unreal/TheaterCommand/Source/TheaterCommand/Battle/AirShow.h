@@ -78,6 +78,9 @@ namespace AirShow
 		int On = -1;
 		double Rate = 0.0;
 		std::string Pass;
+		/** The beat of the passes on a box (the rules' beat; the defenders' fighters): going in, or standing off to form
+		 * up again, and the air seconds of it left. -1: not said (an older recording, or no beat on this enemy). */
+		double Go = -1.0, Wait = -1.0;
 	};
 
 	/** One air group as a view gives it. */
@@ -92,6 +95,10 @@ namespace AirShow
 		bool bModelGuessed = false;
 		double X = 0.0, Y = 0.0, Alt = 0.0, Face = 0.0, W = 400.0, D = 300.0, Speed = 0.0;
 		double Ammo = 1.0, Run = 0.0;
+		/** The pilots' brief (shown, never counted; -1 where an older recording does not say): the enemy group a fighter
+		 * group is making for, the bomber group an escort guards, and its pilots' skill, 0 to 1. */
+		int Quarry = -1, With = -1;
+		double Skill = -1.0;
 		int Figures = 0, Per = 1, N = 0;
 		Act Doing = Act::March;
 		int Engaged = -1;
@@ -138,6 +145,7 @@ namespace AirShow
 		int Slot = -1;
 		bool bFire = false;        // air:straggle: it falls out burning
 		bool bFeather = false;     // air:straggle, air:fireout, air:regain, air:hit fireout: its dead airscrew feathered
+		int GunBox = -1;           // air:lost, a fighter: the box whose gunners brought it down (-1: not gunners)
 	};
 
 	/** A ship under attack, as the view's ships give it. */
@@ -262,6 +270,14 @@ namespace AirShow
 		bool bFalling = false;
 		bool bFiring = false;  // a fighter: its guns firing this frame
 		int Target = -1;       // a fighter in the fight: the plane it is after
+		/** A fighter: what its pilot is about, for the ride cameras to pick the moment by. "" in formation with nothing
+		 * in hand; "closing" on the enemy it is making for; "escorting" by its bombers; in a fight "attacking" (a pass
+		 * or a tail chase), "breaking" (away after a pass), "evading" (an enemy on its tail), "covering" (after the enemy
+		 * on its partner's tail, or an escort chasing an attacker off its box), "positioning" (climbing back, or waiting
+		 * its turn to go in), "going home" (hit, or its guns empty). */
+		std::string Task;
+		/** A fighter flying another's wing: his leader's key (-1: he leads, or flies alone). */
+		int Leader = -1;
 		double Speed = 0.0;    // metres a second along its path
 		/** Its dead engines (from 1, as the model's engine.N), their airscrews feathered (stopped) or windmilling, and
 		 * how far the soot behind them has built, 0 to 1 over about 30 s from when the engine died (the art director:
@@ -320,6 +336,19 @@ namespace AirShow
 		double MostOffTime = 0.0;            // air seconds, the worst of those
 		int ChutesOffTime = 0;               // parachutes not opened when the battle said
 		int HitsShown = 0, FiresOut = 0, Regained = 0, Ditched = 0;
+		// The fighter pilots (the pilots' section of AirShow.cpp):
+		int Fights = 0;                    // fighter groups that came to blows
+		int Waves = 0;                     // passes the battle's beat opened on a box
+		double BeatIn = 0.0, BeatOut = 0.0; // air seconds of fighters' fire on a box with a beat: in the pass (or within 3 s after it), standing off
+		int Threats = 0, Evasions = 0, SplitS = 0, Reversals = 0, Covers = 0, YoYos = 0; // an enemy seen on a tail; what was done about it
+		int GuardChases = 0, GuardReturns = 0; // an escort kept by its box going after an attacker, and coming back
+		int Hurt = 0, Dry = 0;             // fighters that left the fight hit, or with their guns empty
+		int FallsByFighters = 0, FallsUnderFire = 0; // aircraft a fighter group brought down; those with its guns on them as they fell (or within 25 s before)
+		int FallsHeld = 0;                 // of those, held a few seconds for the guns to bear
+		double WingSum = 0.0;              // metres from wingman to leader, summed over the steps a wingman flew his wing
+		long WingSamples = 0, WingFar = 0; // those steps, and those of them over 500 m from his leader
+		double LongestWait = 0.0;          // air seconds the longest any leader went between passes on a box
+		double LowestFight = 1e9;          // metres over the ground or the sea, the lowest a fighter flew in a fight (not a strafing run)
 	};
 
 	/** The cloud deck as drawn over a board point (Show::DeckAt): its tile's foot and the height where it hides what
@@ -386,7 +415,7 @@ namespace AirShow
 			std::map<int, Group> Groups;
 		};
 		enum class Role { Ground, Slot, Fight, Straggle, Cover, Fall, Home, Dive, Gone };
-		enum class Phase { None, Setup, Run, Break, Climb, Turn, Peel, Plunge, Pull, Egress };
+		enum class Phase { None, Setup, Run, Break, Climb, Turn, Peel, Plunge, Pull, Egress, Hold, Zoom, Evade, Station, Chase, Away, Wing };
 		enum class FallHow { None, Explode, Burn, Spin, Flamer, Wing, Tail, Pilot, Glide, Breakup, Struck };
 
 		/** What a pilot asks of his aircraft: a heading, a climb, a speed; or a bank of his own (a half-roll). */
@@ -458,14 +487,64 @@ namespace AirShow
 			std::vector<std::pair<double, std::string>> TrailPlan; // air times its trail changes kind ("" stops it)
 			bool bShown = true;
 			bool bJoining = false;   // a replacement still closing up to its slot
+			// The fighter pilots (AirShow.cpp, the pilots' section):
+			int Lead = 0;            // the leader he flies on; his own key: he leads his pair (or his vic). 0: not yet paired
+			int Wing = 0;            // a leader's (first) wingman, 0: none
+			int Boss = 0;            // the leader of a four's second pair: the four's leader, 0: none
+			int Flight = 0;          // his four (or vic), as first formed
+			int Seat = -1;           // in a four: 0 its leader, 1 his wingman, 2 the second pair's leader, 3 his wingman (-1: not yet paired)
+			double Skill = 0.5;      // 0 to 1: how fast he sees a threat, how close he presses, how tight he holds a wing
+			double Thrift = 0.1;     // the share of the group's ammunition left at which his own guns are empty
+			int Threat = -1;         // the enemy fighter on his tail
+			int Foe = -1;            // the one he is breaking away from
+			double ThreatSeen = 0.0; // the air time he will have seen it and may act
+			double Scan = 0.0;       // the air time he next looks behind him
+			double ShotAt = -1e9;    // the last air time an enemy fighter's guns bore on him
+			int ShotBy = -1;         // that fighter's group
+			bool bHurt = false;      // hit and out of the fight
+			bool bDry = false;       // a leader whose pair's guns are empty: out of the fight
+			bool bGuard = false;     // an escort leader kept by his box
+			bool bCover = false;     // his chase is after the enemy on his partner's tail
+			bool bAnswer = false;    // his chase is after one of a group the battle has counted a loss on, yet to be shown
+			bool bScored = false;    // this burst has brought one down already: one burst, one aircraft
+			bool bRejoin = false;    // a wingman parted from his leader, coming back to him flat out
+			int OwnMark = -1;        // a wingman going in on a box with his leader: the bomber beside his leader's that he fires on
+			int OwnMarkBy = -1;      // (and the leader's bomber it was picked beside)
+			bool bReversed = false;  // his chase is after the enemy that slid past him as he broke
+			bool bStrafing = false;  // his pass is at an aircraft on the ground
+			bool bFleeing = false;   // half-rolled and diving away from an enemy on his tail
+			bool bOpened = false;    // has made his first pass of this fight
+			bool bAnywhere = false;  // waiting to go in from where he is (the fight's opening), not from his perch
+			bool bLow = false;       // far below the box after a dive: his next pass comes up at it from low astern
+			bool bBlind = false;     // has not seen the enemy on his tail, and will not: a loss the battle has counted and the scene has yet to show
+			int WingOf = 0;          // a wingman: the leader whose wing he is on now, and the air time he took it
+			double WingAt = 0.0;
+			double Since = 0.0;      // the air time his present chase began (an escort's leash)
+			double PassAt = -1.0;    // the air time his last pass on a box began
+			double YoYo = 0.0;       // air seconds left of a pull up and over, to stay behind a turning enemy
+			double YoYoNext = 0.0;
+			const char* Task = "";
 			double Weave = 0.0;      // its own phase in an escort's weave
 			bool bDropped = false;   // its bombs gone
 			Vec LastP;
 			bool bHasLast = false;
 		};
 
+		/** The beat of a fighter group's passes on one box, as the battle gives it (Fire::Go, Fire::Wait). */
+		struct Wave
+		{
+			bool bKnown = false, bGo = true;
+			double Left = 0.0;       // air seconds of the pass, or of the standing off, left
+			double Ended = -1e9;     // the air time the last pass ended
+			double Last = -1e9;      // the air time a four of the group last went in
+		};
+
 		struct Band
 		{
+			std::map<int, Wave> Waves;         // a fighter group: the beat of its passes on each box
+			double FightAt = -1.0;             // a fighter group: the air time its fight began (-1: in none)
+			double ShareAt = -1e9;             // a fighter group: the air time its pairs may next be shared out again
+			int Pending = 0;                   // losses of the group held for the guns to bear (Held::bForShot)
 			std::map<int, std::string> Pass;   // the pass its contact named against each group
 			std::map<std::string, double> FlakNext;
 			std::deque<double> Owed;           // air times of models fallen before the group's figures dropped
@@ -478,6 +557,11 @@ namespace AirShow
 		{
 			Event E;
 			double At = 0.0;
+			/** A loss to fighters, held until the guns of the group that brought it down bear on one of its group (at
+			 * most until At), so that what falls is what was shot at. */
+			bool bForShot = false;
+			/** Held a little longer once, a fighter of that group being about to fire. */
+			bool bMore = false;
 		};
 
 		Dice Roll;
@@ -501,6 +585,16 @@ namespace AirShow
 		};
 		std::map<int, Lay> Lays;
 		double ShownT = 0.0, AirT = 0.0;
+		double ViewT = 0.0;                  // the battle time of the view the groups shown now are read from
+		bool bEnded = false;                 // the battle's end has been told: nothing is held back any longer
+		/** The fighter pilots' picture, made once a frame (Brief): the fighters after each group, and after each
+		 * aircraft; how many of each group are in the air, and how many it still has. */
+		std::map<int, std::vector<int>> Hunters, Chasers;
+		/** Losses the battle has counted and the scene has yet to show, by (the group that lost one, the group whose
+		 * guns brought it down): the pilots of that group answer them (the nearest goes in now; see Brief). */
+		std::map<std::pair<int, int>, int> Due;
+		std::set<std::pair<int, int>> DueStrag; // (and the stragglers among them: the group, the straggler's id)
+		std::map<int, int> Aloft, Alive;
 		bool bStarted = false;
 		int NextKey = 1;
 		Checks Check;
@@ -518,8 +612,57 @@ namespace AirShow
 		void Fly(Craft& C, const Cmd& K, double Dt, bool bCheck);
 		void Pilot(Craft& C, double Dt);
 		bool Fights(const Group& G, int Id) const;
-		int PickQuarry(const Group& G);
-		void PilotFight(Craft& C, const Group& G, double Dt);
+		// The fighter pilots (AirShow.cpp, the pilots' section).
+		/** Once a frame, before the pilots fly: pairs made up, the beat read, each pair given its enemy group, the
+		 * escorts' guards and the pairs with empty guns named. */
+		void Brief();
+		/** A group's pairs (or vics) as they stand: who leads, who flies whose wing, which pair leads its four. */
+		void PairUp(const Group& G);
+		/** Each pair its enemy group, by how hard the group fires on each. */
+		void ShareOut(const Group& G, Band& B);
+		/** An escort's pairs kept by its box. */
+		void SetGuards(const Group& G);
+		/** The pairs whose guns are empty. */
+		void SetSpent(const Group& G);
+		void StandDown(Craft& C);
+		/** A fighter in his group's fight, this step. False: he has nobody to fight here, and flies his place in the
+		 * formation. */
+		bool PilotFight(Craft& C, const Group& G, double Dt);
+		void LookBehind(Craft& C);
+		bool Evading(Craft& C, const Group& G, double Dt);
+		bool Covering(Craft& C, const Group& G, Craft* Mate, double Dt);
+		bool Answering(Craft& C, const Group& G, double Dt);
+		void FlyAway(Craft& C, const Group& G, Craft* Follow, double Dt);
+		void FlyWing(Craft& C, Craft& L, const Group& G, double Dt);
+		void WingOn(Craft& C, const Craft& L, double Back, double Wide, double Dt);
+		bool FlyGuard(Craft& C, const Group& G, double Dt);
+		void FlyPass(Craft& C, const Group& G, const Group& E, double Dt);
+		bool FlyDuel(Craft& C, const Group& G, const Group& E, double Dt);
+		void TailChase(Craft& C, Craft& T, const Group& G, double Dt);
+		void BoomZoom(Craft& C, Craft& T, const Group& G, double Dt);
+		void StartRun(Craft& C, const Group& G, const Group& E, const std::string& Pass);
+		bool MayGo(const Craft& C, const Wave& W, const Craft* FourLead, double Eta) const;
+		int MarkBomber(const Craft& C, const Group& E, const std::string& Pass);
+		Craft* PickFoe(Craft& C, const Group& G, const Group& E, const Vec& Middle);
+		std::string PassOn(const Group& G, int Box);
+		Vec PerchOf(const Craft& C, const std::string& Pass, const Vec& Box, const Vec& Fb, const Vec& Rb) const;
+		double EtaTo(const Craft& C, const Vec& To, const Vec& ToVel, double Range) const;
+		/** His guns: a burst when his nose is on the lead inside Range, within Most of it. */
+		void Squeeze(Craft& C, Craft& T, const Group& G, double Range, double Most, double Lo, double Hi, double Dt);
+		/** Not into the ground: a command eased level, or up, by how low he is and how fast he is coming down. */
+		void MindGround(const Craft& C, Cmd& K, double Least = 220.0) const;
+		void Ease(const Craft& C, Cmd& K, double Most) const;
+		void FightSpeed(const Craft& C);
+		/** A loss to a fighter group: the key of the fighter of that group whose guns bear now on one of the lost
+		 * aircraft's group (not one whose burst has brought one down already); 0 when none bears now but one of them was
+		 * shot at by that group within the last few seconds; -1 when neither. */
+		int UnderGuns(const Event& E) const;
+		/** A fighter of that group is on his run at one of them and about to fire. */
+		bool Inbound(const Event& E) const;
+		/** That fighter's burst has brought one down: his next kill needs another burst. */
+		void Scored(int Shooter, const Event& E);
+		int DueOn(int Victim, int By) const;
+		int RunsOn(int Box, int By) const;
 		void PilotDive(Craft& C, const Group& G, double Dt);
 		void PilotFall(Craft& C, double Dt);
 		void PilotGround(Craft& C, const Group& G, double Dt);
