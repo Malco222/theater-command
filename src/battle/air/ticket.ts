@@ -7,9 +7,10 @@
 
 import { AIR, AIRWAR, airWar, assessAir, bombLaw, carrierOf, forecastAir, groupAt } from '../../campaign/air';
 import { planRaid, type RaidKind } from '../../campaign/airwar';
+import { seatsOf } from '../../campaign/bombers';
 import { orderRaid } from '../../campaign/turn';
 import type { FoughtAir } from '../../campaign/airfought';
-import type { AirFleet, AirMission, AirReport, Game } from '../../campaign/types';
+import type { AirFleet, AirMission, AirReport, BomberSeats, Game } from '../../campaign/types';
 import { hashString } from '../../core/rng';
 import { turnToDate } from '../../core/ticket';
 import type { FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
@@ -137,13 +138,21 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
   // How the computer flies its side (styles.ts; the tactics panel's item 5, ruling 239): a computer defence's style, and
   // at stops 4 and 5 a computer raid's escort roles. Read from the game, never written to it.
   const styled = airStyles(g, { nat, forces: att }, { nat: defNat, forces: def }, { escort: a.Epow, defence: a.Dpow });
+  // The raid's bombers one by one (campaign/bombers.ts): what each is called and its record, for the 3D game to paint
+  // and for the battle to say which of them falls. A copy of each roster: the game is not written to.
+  const bombers: Record<number, BomberSeats> = {};
+  for (const f of att) {
+    if (f.kind !== 'bmr') continue;
+    const seats = seatsOf(g, a.att.find((x) => x.f.id === f.corps)!.f, f.men, seed);
+    if (seats) bombers[f.corps] = seats;
+  }
   const place: AirPlace = {
     kind, mission: m, target, name: a.place, night, nat, radar: !!a.radar,
     I: C.intensity[m as 'bomb' | 'night' | 'superiority'] ?? 1,
     clash: airWar(g) && m !== 'superiority' ? AIRWAR.losses.clash : 1,
     law: { bombers: L.bombers, power: L.power, most },
     fighters: C.fighters, escortShare: C.escortShare, bomberDefence: C.bomberDefence,
-    gunLoss: a.gunLoss,
+    gunLoss: a.gunLoss, flakGuns: { light: a.guns.light, heavy: a.guns.heavy },
     worth: { att: a.E > 0 ? a.Epow / a.E : 1, def: a.D > 0 ? a.Dpow / a.D : 1 },
     forecast: { foe: fc.foeLoss, ftr: fc.ftrLoss, bmr: fc.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
     chance: fc.success,
@@ -163,6 +172,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     // The sky that day over the target (sky.ts): drawn from the battle's own seed, so the same battle has the same sky.
     cloud: cloudOf(T.x, T.y, when, seed),
     ...styled,
+    ...(Object.keys(bombers).length ? { bombers } : {}),
   };
   const date = turnToDate(g.turn).label;
   const ticket: FieldTicket<AirPlace> = {
@@ -230,9 +240,16 @@ export function foughtAir(o: AirOutcome): FoughtAir {
     const up = (flew[gr.id] ??= { ftr: 0, bmr: 0 });
     up.ftr += gr.flewFtr; up.bmr += gr.flewBmr;
   }
+  // The bombers the battle knew by name: which of them fell, and what their gunners shot down.
+  const fell: NonNullable<FoughtAir['fell']> = {}, shot: NonNullable<FoughtAir['shot']> = {};
+  for (const gr of o.groups) {
+    if (gr.fell) fell[gr.id] = [...(fell[gr.id] ?? []), ...gr.fell];
+    if (gr.shot) shot[gr.id] = [...(shot[gr.id] ?? []), ...gr.shot];
+  }
   return {
     lost, dropped: o.dropped, jettisoned: o.jettisoned, lostBefore: o.lostBefore, lostAfter: o.lostAfter, flew, chance: o.chance,
     ...(o.gaveUp ? { gaveUp: o.gaveUp } : {}), ...(o.sunk ? { sunk: o.sunk } : {}), ...(o.staff ? { staff: o.staff } : {}), ...(o.rolls ? { rolls: o.rolls } : {}),
+    ...(Object.keys(fell).length ? { fell, shot } : {}),
   };
 }
 

@@ -11,6 +11,8 @@
     "rivals": "A corps of the player's that has met the same enemy corps 'meets' times has a rival. It fights 'edge' harder whenever that corps is in the battle. If the rival is destroyed in a battle it takes part in, it gains 'org' cohesion and 'xp' experience and the government 'pc' political capital.",
     "legacy": "A destroyed corps raised again under its old name starts with 'xp' of the experience the old corps had above a green one, and carries the old honours as ribbons.",
     "tour": "An air fleet that spends a month bombing, by day or night or against shipping, is taken to have flown 'perMonth' missions.",
+    "bombers": "Bombers kept one by one, for every nation (bombers.ts; Brian, 20 November 2026). 'names': how each nation's bombers are told apart ('_default' for the rest): 'nose' is a name and nose art from data/battle/nose-art.json, and America's alone; the others are the markings their air forces painted (data/campaign/bomber-marks.json). 'tours': the missions a nation's crews fly before they go home; only the Western Allies sent crews home in the war itself, and here every nation does (the historian's numbers, tours-marks-awards-all-nations.md: 25 America, 30 Britain, 60 Germany as the silver clasp for sorties flown, 40 the Soviet Union, and 40 for Japan and Italy, who kept no number). 'flown': what a nation calls one of them. The tour is the crew's, so a bomber whose crew goes to the schools flies on with a new crew and keeps its name and its tally, and a crew sent on a bond tour flies its bomber home with it. A bomber flies each of a month's missions with chance 'fit'. 'bare' of a group's named bombers have no name when it is first mustered; a replacement arrives without one and its crew names it once it has flown (a bomber with a marking has it from the day it arrives). 'risk': how much likelier a bomber is to be the one lost, by its crew's experience (missions flown plus what it arrived with): [from, weight]. 'gunners': what a bomber counts for beside a fighter when a mixed fleet's kills are shared out between them. A lost bomber with 'told' missions or more is news, and a group keeps the last 'roll' of its bombers that went. Each crew that finishes lifts its group's readiness by 'lift.each', to 'lift.most' in a month. A crew on a war bond tour brings the treasury 'bonds.pp' production points a month for between 'bonds.months' months, and 'bonds.most' can tour at once. Every 'school.crews' crews at the schools give each new bomber one more point of experience before its first mission, to 'school.most'; fighters bring down 'school.edge' fewer of a group whose crews all arrived fully trained, and in proportion for less. The readiness, the bonds and the schools are the player's alone: a computer nation's bombers keep their records and nothing else changes.",
+    "valour": "The highest award (valour.ts; Brian, 20 November 2026: 'do the same bond tour or train new recruits for people who receive the medal of honor or what ever the highest award is for military service for each nation'). 'awards': what each nation's highest award for valour is called ('_default' for the rest; the historian's list, tours-marks-awards-all-nations.md), 'given' how the news says it was given, and 'since' the month a nation's award was founded (before it, the default). When a unit earns an honour, a man of it may be given the award: the chance by the honour's fame, 'chance'. 'who' he is, by the unit's arm. The player can send a holder home on a war bond tour, which brings the treasury 'bonds.pp' production points a month for between 'bonds.months' months, or home to train recruits, which is 'school.steps' instructor postings (veterans.perSchool each, to veterans.maxSchools) and, for an airman, cash.pilots trained pilots. Every nation's holders are on the record; only the player's can be sent, and nothing else changes for anyone.",
     "lastStand": "A corps destroyed after at least this many months cut off is given a last honour on the memorial wall.",
     "designation": "What a nation calls a formation that has earned the 'guards' honour. '_default' for the rest.",
     "honours": "Each honour: who can earn it ('for': corps, air or fleet), the counter and count that earn it ('needs', and 'also' for a second), 'each' if it is earned again every time the counter passes another multiple, what is written on the colours ('title': {place} and {year} are filled in), the lasting edge it gives a unit of the player's that stays at the front ('edge': shares added to attack and defence; for air fleets and fleets one share on its fighting strength), how much it is worth if cashed in ('fame'), names the army might give the unit ('nick'), the citation ('cite'), and the real event it echoes ('real'). 'tour' marks the long-service honours whose natural end is a posting home. 'last' marks the honour given on the memorial wall.",
@@ -26,6 +28,38 @@
   "rivals": { "meets": 3, "edge": 0.05, "org": 0.2, "xp": 0.1, "pc": 2 },
   "legacy": { "xp": 0.5 },
   "tour": { "perMonth": 5 },
+  "valour": {
+    "awards": {
+      "USA": "the Medal of Honor", "UK": "the Victoria Cross", "CAN": "the Victoria Cross", "AUS": "the Victoria Cross", "NZL": "the Victoria Cross", "SAF": "the Victoria Cross", "IND": "the Victoria Cross",
+      "SOV": "Hero of the Soviet Union", "GER": "the Knight's Cross", "JAP": "the Order of the Golden Kite", "JPN": "the Order of the Golden Kite", "ITA": "the Gold Medal of Military Valour",
+      "FRA": "the Legion of Honour", "VIC": "the Legion of Honour", "POL": "the Virtuti Militari", "FIN": "the Mannerheim Cross", "NED": "the Military William Order",
+      "NOR": "the War Cross with Sword", "ROM": "the Order of Michael the Brave", "CHN": "the Order of Blue Sky and White Sun", "YUG": "the Order of the People's Hero",
+      "_default": "the nation's highest award for valour"
+    },
+    "given": { "SOV": "made a Hero of the Soviet Union", "_default": "awarded {award}" },
+    "since": { "FIN": 28 },
+    "chance": [0, 0.05, 0.12, 0.25],
+    "who": {
+      "inf": ["A private", "A corporal", "A sergeant", "A lieutenant", "A captain", "A machine-gunner", "A medical orderly"],
+      "arm": ["A tank commander", "A tank driver", "A tank gunner", "A lieutenant", "A sergeant"],
+      "ftr": ["A fighter pilot", "A flight leader", "A squadron commander"],
+      "bmr": ["A bomber pilot", "A gunner", "A navigator", "A flight engineer", "A radio operator"],
+      "fleet": ["A seaman", "A gunner", "A lieutenant", "A destroyer captain", "A stoker", "A signalman"]
+    },
+    "bonds": { "pp": 2, "months": [5, 10] },
+    "school": { "steps": 1 }
+  },
+  "bombers": {
+    "names": { "USA": "nose", "UK": "letter", "CAN": "letter", "AUS": "letter", "NZL": "letter", "SAF": "letter", "IND": "letter", "GER": "code", "JAP": "tail", "JPN": "tail", "ITA": "squadron", "SOV": "tactical", "_default": "number" },
+    "tours": { "USA": 25, "UK": 30, "CAN": 30, "AUS": 30, "NZL": 30, "SAF": 30, "IND": 30, "GER": 60, "SOV": 40, "JAP": 40, "JPN": 40, "ITA": 40, "_default": 25 },
+    "flown": { "UK": "operation", "CAN": "operation", "AUS": "operation", "NZL": "operation", "SAF": "operation", "IND": "operation", "_default": "mission" },
+    "fit": 0.9, "bare": 0.2,
+    "risk": [[0, 1.6], [5, 1], [15, 0.8]],
+    "gunners": 0.25, "told": 15, "roll": 12,
+    "lift": { "each": 0.02, "most": 0.06 },
+    "bonds": { "pp": 1, "months": [5, 10], "most": 8 },
+    "school": { "crews": 2, "most": 8, "edge": 0.1 }
+  },
   "lastStand": 2,
   "generalXp": 150,
   "designation": { "_default": "Elite", "SOV": "Guards" },

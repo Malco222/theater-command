@@ -744,6 +744,31 @@ export interface Stories {
   mail: Moment[];
   /** How many letters of each kind have been written, so that the same one is not sent twice running. */
   told: Record<string, number>;
+  /** Bomber crews who have finished a tour, by nation: where the player sends them, and those at the schools and selling bonds. */
+  crews?: Record<string, CrewsHome>;
+  /** The holders of each nation's highest award for valour (valour.ts), oldest first. */
+  heroes?: Hero[];
+}
+
+/** A man given his nation's highest award for valour (valour.ts). */
+export interface Hero {
+  id: number;
+  turn: number;
+  nat: string;
+  kind: UnitKind;
+  /** His unit's id, and its name on the day. */
+  unit: number;
+  name: string;
+  /** Who he is: 'A sergeant', 'A bomber pilot'. */
+  who: string;
+  /** Where it was won: a region, or a sea for a fleet. -1 if nowhere in particular. */
+  at: number;
+  /** The honour his unit earned that day (Award.id). */
+  award: number;
+  /** What the player did with him and when: a war bond tour, with the months of it left, or training recruits. */
+  sent?: Cash;
+  sentOn?: number;
+  left?: number;
 }
 
 /** Something that happened to one of the player's units: how much it matters, what it was, to whom and where. */
@@ -869,6 +894,85 @@ export interface AirLeader {
   xp: number;
 }
 
+/**
+ * One bomber of a group, kept by name (bombers.ts): the number of its name on the nose-art list (0: none yet, a new
+ * replacement), which of that name in this group it is (1, or 2 for 'II'), the missions the aircraft has flown (the
+ * bombs painted on its nose), the fighters its gunners have shot down, the experience its present crew arrived with
+ * from the schools, and the missions that crew has flown (its tour runs on these: a bomber outlives its first crew).
+ */
+export type BomberRow = [art: number, ord: number, missions: number, kills: number, head: number, crew: number, by?: Record<string, number>];
+
+/**
+ * One bomber of a group as an air battle is handed it (bombers.ts seatsOf; battle/air AirPlace.bombers): what the 3D
+ * game paints on it, and what the battle hands back about it. Shown, never counted.
+ */
+export interface BomberSeat {
+  /** What it is called ('Prize Pumpkin', 'G for George', '5J+DM') and its marking as painted ('KM-G', 'K-312'): both '' for a new aircraft not yet named. */
+  name: string;
+  mark: string;
+  /** Its number on the nose-art list, for a nation that paints nose art (America alone); 0 for a bare nose, and for every other nation. */
+  art: number;
+  /** The missions it has flown (a bomb painted for each), the aircraft its gunners have shot down (a symbol for each), and whose they were. */
+  missions: number;
+  kills: number;
+  by?: Record<string, number>;
+  /** Its present crew's missions, and what their experience is called. */
+  crew: number;
+  grade: string;
+  /** How likely a loss of the group is to be this one, beside the others: a green crew's the likeliest (stories.json bombers.risk). */
+  risk: number;
+  /** The campaign's own row for it, handed back as it is with what the battle saw of it. */
+  row: BomberRow;
+}
+
+/** A group's bombers for an air battle: how its nation marks them (bomber-marks.ts), and the seats, old hands first. */
+export interface BomberSeats {
+  style: string;
+  /** The missions from which a bomber's loss is told by name, and what its nation calls one ('mission', 'operation'). */
+  told: number;
+  flown: string;
+  /** What a bomber's guns weigh beside a fighter, in the share of a raid's kills that is the gunners' (stories.json bombers.gunners). */
+  gunners: number;
+  seats: BomberSeat[];
+}
+
+/** What an air battle saw a bomber's gunners shoot down: the bomber's row as the battle was handed it, and how many of each nation's. */
+export interface BomberShot { row: BomberRow; by: Record<string, number> }
+
+/** A bomber group's aircraft one by one, and what became of those that have gone (bombers.ts). */
+export interface BomberRoster {
+  /** The bombers on strength, in the order they joined: as many as the group has bombers. */
+  on: BomberRow[];
+  /** The group's bomber losses already struck off here: AirFleet.lost.bmr when it was last made up. */
+  seen: number;
+  /** How many of this group have carried each name, by its number. */
+  used: Record<number, number>;
+  /** Crews that finished their tour and went home, and bombers with a name that were lost. */
+  home: number;
+  gone: number;
+  /** The last of them, oldest first: the month, how it went, and the bomber as it was. */
+  roll: { t: number; how: 'home' | 'lost'; b: BomberRow }[];
+  /** Draws made so far, so that no two of this group's are the same. */
+  n: number;
+  /** The month crews last finished a tour here, and what that has added to the group's readiness in it. */
+  lift?: [turn: number, by: number];
+}
+
+/** Where a nation's bomber crews go when they finish a tour: the training schools, a war bond tour, or one and then the other. */
+export type CrewOrder = 'school' | 'bonds' | 'split';
+
+/** A nation's bomber crews who have finished a tour (bombers.ts): the player's standing order, and what those at home are doing. */
+export interface CrewsHome {
+  order: CrewOrder;
+  /** Crews at the schools as instructors: new bombers arrive with more experience for them. */
+  school: number;
+  /** Bond tours under way: the months each has left. Each pays the treasury every month. */
+  bonds: number[];
+  /** Crews sent home so far, and the production points their bond tours have brought in. */
+  n: number;
+  sold: number;
+}
+
 export interface AirFleet extends Storied {
   id: number;
   nat: string;
@@ -911,6 +1015,8 @@ export interface AirFleet extends Storied {
    * group, with its own aircraft, pilots and fitness, and keeps a carrier wing's reach and its crews' training.
    */
   ashore?: number;
+  /** Its bombers one by one, where its nation's bombers carry names (bombers.ts): each with its missions and its gunners' kills. */
+  bombers?: BomberRoster;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */

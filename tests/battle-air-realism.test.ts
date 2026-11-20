@@ -380,7 +380,12 @@ describe('the words the player reads (the UI director, 21:19Z)', () => {
 describe('flak round a box (the art director\'s flak brief)', () => {
   it('fires only inside the ring on the way in, by the guns that reach the box\'s height, and never once it turns for home', () => {
     let seen = 0;
-    fight('GER', 'bomb', 'Alsace', 0, true, (s) => {
+    // Brian, 20 November 2026: "flak should stop in the air battles when their own fighters are in the air". In this
+    // battle the French fighters are on the boxes all the way in, so with his rule the guns never fire; the guns' own
+    // picture is checked here with the rule off, and the rule itself in tests/battle-air-flak-hold.test.ts.
+    SKY.flak.hold = false;
+    try { flakPicture(); } finally { SKY.flak.hold = true; }
+    function flakPicture(): void { fight('GER', 'bomb', 'Alsace', 0, true, (s) => {
       for (const v of s.view().units) {
         if (v.air !== 'bmr' || v.state === 'gone') continue;
         const u = s.unit(v.id)!, flak = (v.extra as { flak: string[] }).flak;
@@ -388,7 +393,7 @@ describe('flak round a box (the art director\'s flak brief)', () => {
         if (flak.length) { seen++; expect(inside).toBe(true); expect(u.dropped > 0 || u.jettisoned).toBe(false); expect(flak).toEqual(SKY.flak.kinds[u.band]); }
         if (u.dropped > 0 || u.jettisoned) expect(flak).toEqual([]);
       }
-    });
+    }); }
     expect(seen).toBeGreaterThan(0);
     expect(SKY.flak.kinds[2]).toEqual(['heavy']);
   });

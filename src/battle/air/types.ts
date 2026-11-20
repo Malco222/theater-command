@@ -4,7 +4,7 @@
 // aircraft models in formation for it and acts out what the counts decide: a fight is a swirl of its models round
 // the fight's centre, a loss is one model falling (see 'air:lost' events). Nothing here flies a single aircraft.
 
-import type { AirMission, ShipClass } from '../../campaign/types';
+import type { AirMission, BomberRow, BomberSeats, BomberShot, ShipClass } from '../../campaign/types';
 import type { BombLaw } from '../../campaign/airfought';
 import type { Side, UnitBase } from '../core/types';
 import type { Band } from './book';
@@ -160,6 +160,11 @@ export interface AirPlace {
   bomberDefence: number;
   /** The share of bombers the guns bring down over the whole raid (flak, built guns), as the raid card shows it. */
   gunLoss: number;
+  /**
+   * The guns round the target as the raid card counts them (campaign/air.ts flakGuns): light and heavy. For the scene,
+   * which can stand that many gun sites round the target and thicken its bursts by them; nothing in the battle reads it.
+   */
+  flakGuns: { light: number; heavy: number };
   /** Average fighting worth of an aircraft on each side, as assessAir weighs it. */
   worth: Record<Side, number>;
   /** What the raid card forecast: aircraft each side should lose, and bombers that should get through. */
@@ -206,12 +211,32 @@ export interface AirPlace {
   defence?: Defence;
   /** At stops 4 and 5, a computer raid's escort roles by nation, in place of its doctrine's order (styles.ts rolesOf). */
   roles?: Record<string, Role[]>;
+  /**
+   * The raid's bombers one by one, by campaign group (campaign/bombers.ts seatsOf): what each is called, its marking,
+   * the missions and kills painted on it, the old hands first. The battle says which of them each loss is ('air:lost'
+   * extra.bomber) and hands back the ones that fell, so the campaign strikes off the bombers the player saw go down.
+   * Shown, never counted: with it or without it the same aircraft fall at the same moments. Absent for a raid with no
+   * bombers kept by name (a carrier's, or a battle not made from a campaign).
+   */
+  bombers?: Record<number, BomberSeats>;
 }
+
+/**
+ * One bomber as an event names it: its seat in its group's list (AirPlace.bombers[corps].seats), and what is painted
+ * on it. 'air:lost' extra.bomber is the bomber that falls; 'air:straggle' and 'air:named' extra.bomber the one that
+ * falls out or is named; 'air:lost' extra.gunner, on a fighter's loss, the bomber whose gunners got it, with its box.
+ */
+export interface BomberTold { seat: number; name: string; mark: string; art: number; missions: number; kills: number }
 
 /** The exact result the rules apply (FieldResult.extra.air): each campaign group's losses, and the bombs dropped. */
 export interface AirOutcome {
   /** Each campaign group: what it lost, its downed fighter pilots who fly again, and the aircraft it sent up. */
-  groups: { id: number; side: Side; lostFtr: number; lostBmr: number; back: number; flewFtr: number; flewBmr: number }[];
+  groups: {
+    id: number; side: Side; lostFtr: number; lostBmr: number; back: number; flewFtr: number; flewBmr: number;
+    /** A group whose bombers the battle knew by name (AirPlace.bombers): the rows of those that fell, in the order they fell, and what each one's gunners shot down. */
+    fell?: BomberRow[];
+    shot?: BomberShot[];
+  }[];
   /** The raid card's chance of success, for the after card's reckoning line. */
   chance: number;
   /** Bombers that dropped on the target, and bombers that jettisoned and turned back. */
