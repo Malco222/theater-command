@@ -19,6 +19,7 @@ class UAudioComponent;
 class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
 class UProceduralMeshComponent;
 class USceneComponent;
 class USkyLightComponent;
@@ -285,7 +286,7 @@ private:
 
 	// What the table had before the battle took its place, put back by Finish: its lamps, its haze, its own tick and
 	// its pieces (the pre-check, 06:08Z).
-	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; };
+	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; TWeakObjectPtr<UMaterialInterface> LightFunction; float LightFunctionFade = 0.0f, LightFunctionDisabled = 0.0f; };
 	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; };
 	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
 	TArray<FKeptLamp> KeptLamps;
@@ -348,6 +349,12 @@ private:
 	 * greyer), as shares of a clear day's the lamps are lit to in LightTheBattle. */
 	void WeatherAt(const FVector& EyeWorld);
 	double WeatherSun = 1.0, WeatherSky = 1.0;
+	/** The deck's shade on all under it (AirSky::ShadeOf), the key light's light function M_DeckShade: under a deck
+	 * the key keeps its whole strength, the shade taking the sun away point by point (the art director, 22:37Z). */
+	void LayDeckShade();
+	TObjectPtr<UTexture2D> DeckShadeSheet;
+	TObjectPtr<UMaterialInstanceDynamic> DeckShadeInk;
+	bool bDeckShade = false;
 	/**
 	 * A band of haze standing round the eye between it and the sea's far edge, over the line where the edge meets the
 	 * sky, drawn behind every other see-through thing (M_Highlight, the haze's own colour, the height fog over it as

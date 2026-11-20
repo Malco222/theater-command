@@ -622,6 +622,7 @@ bool AAirBattle::Open(const FString& Why)
 	Small->SetCastShadow(false);
 	Small->RegisterComponent();
 	HideTheTable();
+	LayDeckShade();
 	Eye = Here->SpawnActor<ACameraActor>();
 	if (Eye)
 	{
@@ -1266,6 +1267,9 @@ void AAirBattle::HideTheTable()
 				Kept.Temperature = Light->Temperature;
 				Kept.SourceAngle = Light->LightSourceAngle;
 				Kept.SunDisc = Light->AtmosphereSunDiskColorScale;
+				Kept.LightFunction = Light->LightFunctionMaterial;
+				Kept.LightFunctionFade = Light->LightFunctionFadeDistance;
+				Kept.LightFunctionDisabled = Light->DisabledBrightness;
 				if (Light->GetFName() == TEXT("KeyLight") || (!Key && Lights.Num() == 1))
 				{
 					Key = Light;
@@ -1453,6 +1457,13 @@ void AAirBattle::ShowTheTable()
 			if (!FMath::IsNearlyEqual(Light->Temperature, Kept.Temperature, 1.0f))
 			{
 				Light->SetTemperature(Kept.Temperature);
+			}
+			if (Light->LightFunctionMaterial != Kept.LightFunction.Get())
+			{
+				// (the deck's shade goes with the battle)
+				Light->SetLightFunctionMaterial(Kept.LightFunction.Get());
+				Light->SetLightFunctionFadeDistance(Kept.LightFunctionFade);
+				Light->SetLightFunctionDisabledBrightness(Kept.LightFunctionDisabled);
 			}
 			if (!FMath::IsNearlyEqual(Light->LightSourceAngle, Kept.SourceAngle) || !Light->AtmosphereSunDiskColorScale.Equals(Kept.SunDisc))
 			{
@@ -1757,6 +1768,10 @@ void AAirBattle::LayZenith()
 	const double Rings[] = { 0.0, 0.08, 0.18, 0.3, 0.45, 0.6, 0.75, 0.88, 1.0 };
 	const int32 RingCount = UE_ARRAY_COUNT(Rings);
 	const double Low = FMath::DegreesToRadians(ZenithFrom);
+	// (the art director, 23:06Z: strongest straight up, fading to nothing at the foot so the horizon keeps its pale
+	// band, as the rings already lay it; and a little weaker on the sun's side, the sky paler toward the sun as a real
+	// one is: up to a third less looking straight at it, nothing off across the sun's way or away from it)
+	const FVector SunWay = TowardSun().GetSafeNormal();
 	TArray<FVector> Points;
 	TArray<int32> Triangles;
 	TArray<FVector> Normals;
@@ -1771,9 +1786,11 @@ void AAirBattle::LayZenith()
 		{
 			const double Round = 2.0 * UE_DOUBLE_PI * K / Around;
 			const FVector Way(FMath::Cos(Up) * FMath::Cos(Round), FMath::Cos(Up) * FMath::Sin(Round), FMath::Sin(Up));
+			const double Toward = FMath::Max(0.0, FVector::DotProduct(Way, SunWay));
+			const uint8 Here = static_cast<uint8>(FMath::RoundToInt32(Share * (1.0 - 0.33 * Toward * Toward)));
 			Points.Add(Way * Radius);
 			Normals.Add(-Way);
-			Colours.Add(FColor(12, 110, 255, Share));
+			Colours.Add(FColor(12, 110, 255, Here));
 		}
 	}
 	for (int32 R = 0; R + 1 < RingCount; ++R)
@@ -1881,6 +1898,67 @@ void AAirBattle::LayHazeBand()
 		SeaHalf / UnitsPerMetre / 1000.0, HazeBandStrength, HazeBandFrom, HazeBandFull);
 }
 
+void AAirBattle::LayDeckShade()
+{
+	bDeckShade = false;
+	UDirectionalLightComponent* Key = BattleKey.Get();
+	if (!State.IsValid() || !Key || !State->Sky.Sky.bDeck || State->Board.bNight || FParse::Param(FCommandLine::Get(), TEXT("TheaterNoDeckShade")))
+	{
+		return;
+	}
+	UMaterialInterface* ShadeMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_DeckShade.M_DeckShade"));
+	if (!ShadeMaterial)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_DeckShade is missing (run Tools/build_content.sh): under the deck the sun is dimmed by the eye's height alone."));
+		return;
+	}
+	const AirSky::DeckShade Shade = AirSky::ShadeOf(State->Sky);
+	if (Shade.Side <= 0)
+	{
+		return;
+	}
+	// (the picture laid on the world's own axes: the scene's x is the board's y (World), so each row of the picture
+	// is a column of the shade's)
+	const int32 Side = Shade.Side;
+	TArray<FColor> Pixels;
+	Pixels.SetNumUninitialized(Side * Side);
+	for (int32 Row = 0; Row < Side; ++Row)
+	{
+		for (int32 Col = 0; Col < Side; ++Col)
+		{
+			const uint8 Light = Shade.Light[static_cast<size_t>(Col) * static_cast<size_t>(Side) + static_cast<size_t>(Row)];
+			Pixels[Row * Side + Col] = FColor(Light, Light, Light, 255);
+		}
+	}
+	DeckShadeSheet = CampaignTextures::Create(Side, Side, Pixels, false, true, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("AirDeckShade")));
+	if (!DeckShadeSheet)
+	{
+		return;
+	}
+	const double U = UnitsPerMetre;
+	const FTransform& Here = GetActorTransform();
+	const FVector Corner = Here.TransformPosition(World(Shade.Origin.X, Shade.Origin.Y, 0.0));
+	const FVector Middle = Here.TransformPosition(World(0.0, 0.0, Shade.Z));
+	const FVector Tops = Here.TransformPosition(World(0.0, 0.0, Shade.Top));
+	FVector SunWay = TowardSun().GetSafeNormal();
+	SunWay.Z = FMath::Max(0.05, SunWay.Z);
+	DeckShadeInk = UMaterialInstanceDynamic::Create(ShadeMaterial, this);
+	DeckShadeInk->SetTextureParameterValue(TEXT("Shade"), DeckShadeSheet);
+	DeckShadeInk->SetVectorParameterValue(TEXT("SunWay"), FLinearColor(static_cast<float>(SunWay.X), static_cast<float>(SunWay.Y), static_cast<float>(SunWay.Z), 0.0f));
+	DeckShadeInk->SetVectorParameterValue(TEXT("Origin"), FLinearColor(static_cast<float>(Corner.X), static_cast<float>(Corner.Y), 0.0f, 0.0f));
+	DeckShadeInk->SetScalarParameterValue(TEXT("Period"), static_cast<float>(Shade.Period * U));
+	DeckShadeInk->SetScalarParameterValue(TEXT("DeckZ"), static_cast<float>(Middle.Z));
+	DeckShadeInk->SetScalarParameterValue(TEXT("DeckTop"), static_cast<float>(Tops.Z));
+	DeckShadeInk->SetScalarParameterValue(TEXT("Fade"), static_cast<float>(100.0 * U));
+	Key->SetLightFunctionMaterial(DeckShadeInk);
+	// (drawn to the haze's far end and past it; where it is not drawn, the deck's mean)
+	Key->SetLightFunctionFadeDistance(static_cast<float>(400000.0 * U));
+	Key->SetLightFunctionDisabledBrightness(static_cast<float>(Shade.Mean()));
+	bDeckShade = true;
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the deck's shade on the sun, %d squares a side over %.0f km, %.2f of the sun through a tile, %.2f on the whole; read at %.0f m, none over %.0f m."),
+		Side, Shade.Period / 1000.0, Shade.Through, Shade.Mean(), Shade.Z, Shade.Top);
+}
+
 void AAirBattle::WeatherAt(const FVector& EyeWorld)
 {
 	// (how far under the deck the eye is, 0 at its top to 1 at its base: going down through it, the day greys)
@@ -1892,7 +1970,9 @@ void AAirBattle::WeatherAt(const FVector& EyeWorld)
 	const double High = EyeWorld.Z / UnitsPerMetre;
 	const double Under = Sky.Sky.bDeck && Sky.Top > Sky.Base ? FMath::Clamp((Sky.Top - High) / (Sky.Top - Sky.Base), 0.0, 1.0) : 0.0;
 	const AirSky::Lighting Day = AirSky::LightOf(Sky.Sky, Under);
-	WeatherSun = Day.Sun;
+	// (with the deck's shade on the key, the sun is taken away point by point under the deck, the eye's own height
+	// no matter: the aircraft over it lit whole, the sea under it in shade but where a hole lets the sun through)
+	WeatherSun = bDeckShade ? 1.0 : Day.Sun;
 	WeatherSky = Day.Sky;
 }
 

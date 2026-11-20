@@ -277,6 +277,55 @@ def build_cloud():
     finish(m)
 
 
+def build_deck_shade():
+    """THE DECK'S SHADE (the art director, 20 November 2026 22:37Z: under a broken deck the ground and the sea darker
+    and flat, sunlit patches where the sun comes through its holes, about 5 km down-sun of each with Bremen's 13 degree
+    sun; under an overcast all of it flat, shadowless grey). A light function on the battle's sun: each lit point is
+    read up the sun's way to where that ray crosses the deck's middle ("DeckZ"), and the picture the game paints
+    ("Shade", AirSky::ShadeOf, laid over the sky's square "Origin" to "Period", repeating) says how much of the sun
+    comes through there; over the deck's tops ("DeckTop", faded over "Fade") the whole sun. "SunWay" is the way to the
+    sun, never lower than 0.05 up. Lengths in the world's own units."""
+    m = new_material("M_DeckShade")
+    m.set_editor_property("material_domain", unreal.MaterialDomain.MD_LIGHT_FUNCTION)
+    position = node(m, unreal.MaterialExpressionWorldPosition, -2000, 0)
+    flat = node_from(m, unreal.MaterialExpressionComponentMask, position, -1800, 0, r=True, g=True, b=False, a=False)
+    high = node_from(m, unreal.MaterialExpressionComponentMask, position, -1800, 200, r=False, g=False, b=True, a=False)
+    sun = vector(m, "SunWay", (0.0, 0.0, 1.0, 0.0), -2000, 400)
+    sun_flat = node_from(m, unreal.MaterialExpressionComponentMask, sun, -1800, 400, r=True, g=True, b=False, a=False)
+    sun_up = node_from(m, unreal.MaterialExpressionComponentMask, sun, -1800, 520, r=False, g=False, b=True, a=False)
+    below = node(m, unreal.MaterialExpressionSubtract, -1600, 250)
+    _feed(m, below, "A", scalar(m, "DeckZ", 140000.0, -1800, 300))
+    _feed(m, below, "B", high)
+    along = node(m, unreal.MaterialExpressionDivide, -1400, 300)
+    _feed(m, along, "A", below)
+    _feed(m, along, "B", sun_up)
+    ahead = node(m, unreal.MaterialExpressionMax, -1250, 300)
+    _feed(m, ahead, "A", along)
+    _feed(m, ahead, "B", 0.0)
+    crossed = plus(m, flat, times(m, sun_flat, ahead, -1100, 400), -950, 100)
+    origin = node_from(m, unreal.MaterialExpressionComponentMask, vector(m, "Origin", (0.0, 0.0, 0.0, 0.0), -1100, 600), -950, 600,
+                       r=True, g=True, b=False, a=False)
+    off = node(m, unreal.MaterialExpressionSubtract, -800, 200)
+    _feed(m, off, "A", crossed)
+    _feed(m, off, "B", origin)
+    uv = node(m, unreal.MaterialExpressionDivide, -650, 200)
+    _feed(m, uv, "A", off)
+    _feed(m, uv, "B", scalar(m, "Period", 4400000.0, -800, 400))
+    shade = picture(m, "Shade", uv, -450, 200, numbers=True)
+    # (over the tops: (high - (top - fade)) / fade, held to 0..1)
+    fade = scalar(m, "Fade", 10000.0, -1100, 900)
+    rise = node(m, unreal.MaterialExpressionSubtract, -650, 600)
+    _feed(m, rise, "A", high)
+    _feed(m, rise, "B", plus(m, scalar(m, "DeckTop", 200000.0, -950, 800), times(m, fade, -1.0, -950, 900), -800, 800))
+    over_by = node(m, unreal.MaterialExpressionDivide, -500, 600)
+    _feed(m, over_by, "A", rise)
+    _feed(m, over_by, "B", fade)
+    over = one_in(m, unreal.MaterialExpressionSaturate, over_by, -350, 600)
+    light = lerp(m, (shade, "R"), 1.0, over, -200, 300)
+    to_property(light, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+
 def build_wake():
     """The foam of a ship's wake, lying on the water: light of its own, see-through. The mesh's own colour says how
     white the foam is (red), how whole it still is (green: 1 unbroken by the stern, falling as it breaks up) and how
@@ -1449,7 +1498,7 @@ def build_flak_lit():
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:
