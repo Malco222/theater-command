@@ -105,8 +105,10 @@ public:
 	 * own aim point. ShooterVelocity is the aircraft's velocity in world units a second. Kind is "rifle", "hmg" or
 	 * "cannon20" (the recipe's air_guns); RatePerMinute and MuzzleSpeed (world units a second) of 0 take the row's.
 	 * The kit lays each round from where the muzzle was at that moment, so the stream stays on the gun as it turns;
-	 * one round in five is the ruled tracer. */
-	void AirGun(double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& ShooterVelocity, const FString& Kind, float RatePerMinute = 0.0f, float MuzzleSpeed = 0.0f);
+	 * one round in five is a tracer. Nation is whose gun it is ("us", "gb", "de", "it", "jp", "su"; empty or one
+	 * the recipe does not know takes the default): its tracers burn that nation's colours (the recipe's
+	 * air_guns.tracers; the Soviet cannon's red is picked from Kind "cannon20" with "su"). */
+	void AirGun(double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& ShooterVelocity, const FString& Kind, float RatePerMinute = 0.0f, float MuzzleSpeed = 0.0f, const FString& Nation = FString());
 	/** That gun's trigger let go. */
 	void AirGunStop(int32 Gun);
 	/** Rounds striking an aircraft, on the same clock as AirGun: At the point hit, Normal the skin's outward way there,

@@ -672,6 +672,71 @@ Gouges and scorch that stay are the MODEL's to show.
 - **Preview.** `fxpreview <recipe> <dir> fate steam|out|cook|glance <frames> WxH`; the dials are listed at the
   top of `fxpreview.cpp`. Stills: `battle-fx/stills/outcome2-*.png`.
 
+## Tracers by nation, hits that sparkle, a dead engine that always smokes (after head de54166)
+
+Brian, 20 November: "more real istic chaser fire", "if a engine is out there should be a lot more dark smoke
+strains from that engine and directly behind it on the tail", and many ways for an aircraft to go down. The art
+director's rulings are in `art-director/battles/air-fates-look.md` (D tracers, C hits survived, G1 a dead engine,
+G2 colours). This head is the tracers, the hits and the engine smoke; the ways down (the ragged explosion, the
+flamer `fuel`, the wing-root `mist`, the splash and ditching, the belly landing) are the next. Everything here is
+behind a recipe row or key and throws no dice an old recipe's path throws: the last head's recipe draws the same
+115 frames, byte for byte, on this code.
+
+- **Tracers** (row `air_guns.tracers`; without it the ruled yellow streak, as before). Alight `life_s` (1.2), a
+  streak `streak_s` of its flight long that shortens as the round slows, a hot core in a glow two and a half cores
+  wide (`body_px`, `core_px`), full until `dim_from` of its life, dimming to `dim_to`, out over `out_s`. The core
+  is white-hot within `white_within_m` of the eye and its nation's colour from `white_beyond_m`. A cannon (a row
+  with `cannon` 1) is `tracer_wide` times as wide and `tracer_life_k` as long alight.
+- **Whose guns.** `AirGun`'s ninth argument, `Nation`: `us`, `gb`, `de`, `it`, `jp`, `su`; empty or unknown takes
+  `default`. Each of `tracers.nations` has `body` and `core`, written for the game's picture (`game_curve.py
+  write`) with how far past white each burns (`body_over`, `core_over`), and may carry a `cannon` of its own: the
+  Soviet small arms are green and the Soviet cannon red as the Allies'. Ground guns keep the ruled yellow.
+- **The pixels the air scene tells the kit are its WINDOW's.** The air scene draws 1072 across and tells the kit
+  2881, so `least_px` and the day widths in the air rows are window pixels: 2.69 of them to a drawn pixel there,
+  1.80 on a 1600 still. The ruled 3.4 came out at 1.3 drawn pixels, a hairline the Pearl Harbor film lost; 8.5 and
+  3.2 are 4.7 and 1.8 px on a 1600 still. Previews render at twice the size and are boxed down (`FX_KIT_PX`).
+- **How many.** No more than `most` (1,500) alight; nearing it the guns farthest from the eye go without first,
+  those within `always_within_m` never. A gun farther than `one_fan_beyond_m` (1,200) fires tracers of one fan,
+  the glow alone, a little toward the core's colour. A tracer is two fans alight 1.2 s (it was 2.5 s): a firing
+  .50 holds about 6 fans where it held 13.
+- **Hits survived** (rows `air_hit.sparkle`, `air_hit.burst`; without them a hit is as it was). A rifle-calibre or
+  .50 round: `points` bright sparkles of one or two frames on the skin and nothing more. A 20 mm shell: the small
+  flash, `sparks`, `fragments` scraps of skin and one black-grey puff `puff_m` across left hanging `puff_s`.
+- **A dead engine always smokes** (rows of `air_trails`; the caller names the kind in `TrailStart` at the dead
+  engine's socket). `fire`: the densest black, 1.5 m at the nacelle and 5 to 6 m past the tail. `oil`, out and
+  windmilling: dark grey, lumpy, one torn column, a gout `gout_wide` times as wide and `gout_alpha` as dense for
+  `gout_s` every `gout_every_s`. `streak`, the fire out and the airscrew feathered: thin, dark, never clearing.
+  `doused`: the extinguisher's white-grey puff for `for_s`, the tongues shrinking back to the nacelle over
+  `flame_shrink_s`, then the streak by itself (`then_streak`). `glycol`: white, thinning to `fade_to` of itself
+  over `fade_over_s`, then the streak. `tail_wide_m` is how wide the smoke is `tail_m` behind its source: the
+  aircraft's own wake spreads it that fast. A strip thins to nothing at its sides, so the key is set wider than
+  the ruled width, which is where the smoke is half as dark.
+- **A change of kind is `TrailStart` again with the same number, never `TrailStop`.** A kind with `blend_s` comes
+  out of the kind before it over that long in colour, density, width, shadow and how it pales, and the old kind's
+  hanging lengths close with one last bar that thins to nothing: black, greying, the white puff, grey, the thin
+  dark streak, with no cut anywhere. An unknown kind trails as `smoke`.
+- **Soft strips** (`soft` 1). A ribbon's link had one colour and was lit by its place round its ring, so pale smoke
+  showed every link as a panel, bright at one end and dark at the other. A soft strip's colour runs along each
+  link to the colour of the piece behind, it is lit across only (top and underside, the same all along), and its
+  density swells with its width's slow wander, never by each piece's dice. `shadow` and `shadow_k` give pale smoke
+  its underside. `wisps`: the share of pieces that throw a soft shred off the column's edge.
+- **A soft strip's pieces are as dark as they will be from the moment they are laid.** A ribbon's piece fades in
+  over 10 ms, and its near end was pale for a frame under the dark end of the trail's young end: a notch behind
+  the engine each time a piece was laid. A piece laid at the very moment of a frame was left out whole, and the
+  trail began a piece's length (8 m) behind its engine for that frame. Old kinds without `soft` are as they were.
+- **A ricochet's cost is its call** (`glance.most_a_frame`, 3; the pre-check on de54166). No more than that many
+  shots begin to be followed at one moment; one past it keeps its flash, sparks and puff. Time going back by more
+  than half a second forgets the shots still counted.
+- **Guards.** `TrailStart` and `TrailMove` do nothing for a place, a speed or a time that is not a real number
+  (`RealPlace`), and every number of a trail row is held between wide bounds as it is read. Wild numbers: 263 keys
+  and the calls' arguments set to nan, inf, -inf, 1e9, -1e9, 0 and 1e-6 under ASAN and UBSAN, 3,871 runs. The
+  first run found 210 faults, every one in a trail row's OLDER keys or a trail call's place or speed: a new row
+  wants its old keys tried too.
+- **Preview.** `fxpreview <recipe> <dir> air <gun row> <frames> WxH <shot>`; shots `far`, `chase`, `close`, `hit`,
+  and for an engine's trail `beam` and `quarter` with `FX_TRAIL` (and `FX_TRAIL2`, `FX_TRAIL2_AT` for a change of
+  kind), `FX_ENGINE=x,y,z`, `FX_PLANE`, `FX_SPEED`, `FX_SPAN`; `FX_NATION` whose guns. Stills:
+  `battle-fx/stills/air-*.png`.
+
 ## Oil fires at sea
 
 ```cpp
