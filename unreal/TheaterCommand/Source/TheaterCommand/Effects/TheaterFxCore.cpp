@@ -142,6 +142,19 @@ namespace TheaterFx
 		// and its 1e9 asked for hundreds of gigabytes. Held to 100 to 20,000; not a number: the 3,000 it ships with)
 		const double PuffsAsked = Num("game.max_puffs", 3000.0);
 		MaxPuffs = PuffsAsked == PuffsAsked ? static_cast<int>(std::clamp(PuffsAsked, 100.0, 20000.0)) : 3000;
+		// (the lumps' cost held: see LumpsMostPuffs. No such keys: every lump laid, as before)
+		const double LumpsMostAsked = Num("game.lumps_most", 0.0);
+		LumpsMostPuffs = LumpsMostAsked == LumpsMostAsked ? static_cast<int>(std::clamp(LumpsMostAsked, 0.0, 4000.0)) : 0;
+		LumpsBigA = LumpsBigB = 0.0;
+		if (Has("game.lumps_px_most.1"))
+		{
+			const double BigA = Num("game.lumps_px_most.0", 0.0), BigB = Num("game.lumps_px_most.1", 0.0);
+			LumpsBigB = BigB == BigB ? std::clamp(BigB, 0.0, 1.0e6) : 0.0;
+			LumpsBigA = LumpsBigB > 0.0 ? (BigA == BigA ? std::clamp(BigA, 0.0, LumpsBigB * 0.999) : 0.5 * LumpsBigB) : 0.0;
+		}
+		const double LeastInkAsked = Num("game.lumps_least_ink", 0.0);
+		LumpsLeastInk = LeastInkAsked == LeastInkAsked ? std::clamp(LeastInkAsked, 0.0, 0.5) : 0.0;
+		LumpsTight = 1.0;
 		ShadeLit = Num("game.shade_lit", 0.18);
 		ShadeDark = Num("game.shade_dark", 0.28);
 		SkyFill = Clamp01(Num("game.sky_fill", 0.25));
@@ -4844,6 +4857,14 @@ namespace TheaterFx
 	// (Bit::Lumps: how whole a puff's own lumps are, this far through its life. Whole for the first three quarters of
 	// the time it is thick, Hold of its life, and melted into it by the end of that: young smoke low in a column
 	// billows, old smoke aloft is one soft mass, and a puff that has begun to thin takes no places for lumps)
+	// (game.lumps_px_most, .0 BigA and .1 BigB: what a puff Px pixels wide counts as when the lumps' places are dealt.
+	// Its own width up to BigA; wider, less and less, down to nothing at BigB: a puff that fills the screen is the last
+	// to be given lumps, and one as wide as BigB is given none. BigB of 0: its own width, whatever it is)
+	static double LumpsWorth(double Px, double BigA, double BigB)
+	{
+		return BigB > 0.0 && Px > BigA ? BigA * std::max(0.0, BigB - Px) / std::max(BigB - BigA, 1e-6) : Px;
+	}
+
 	static double LumpsLeft(double Hold, double F)
 	{
 		const double Held = Hold == Hold ? std::clamp(Hold, 0.0, 1.0) : 0.5;
@@ -6879,7 +6900,18 @@ namespace TheaterFx
 		B.bShown = true;
 		const int LumpsNow = std::min(B.Lumps, 8);
 		const double LumpsStay = LumpsNow > 0 ? LumpsLeft(B.Hold, F) : 0.0;
-		if (LumpsNow > 0 && B.LumpsPx > 0.0 && LumpsStay > 0.0 && LumpsRoom > 0.0 && Room >= Used + LumpsNow && 2.0 * Rad >= B.LumpsPx * MetresAPixel)
+		// (the lumps' cost held, see LumpsMostPuffs: with too many puffs wide enough, only the widest carry lumps
+		// (LumpsTight); one as wide as the screen carries none; and lumps too thin to be seen are not laid)
+		// LumpsBig: how much of its lumps a puff wider than lumps_px_most.0 keeps: all at that width, none by the width
+		// at which its worth is down to its own lumps_px, a little short of lumps_px_most.1)
+		const double LumpsFromPx = B.LumpsPx * LumpsTight;
+		const double LumpsPxNow = 2.0 * Rad / std::max(MetresAPixel, 1e-9);
+		const bool bLumpsWide = LumpsBigB > 0.0 && LumpsPxNow > LumpsBigA;
+		const double LumpsWorthNow = bLumpsWide ? LumpsWorth(LumpsPxNow, LumpsBigA, LumpsBigB) : LumpsPxNow;
+		const double LumpsBig = bLumpsWide ? Clamp01((LumpsWorthNow - B.LumpsPx) / std::max(LumpsBigA - B.LumpsPx, 1e-6)) : 1.0;
+		const double LumpsCame = bLumpsWide ? Clamp01((LumpsWorthNow - LumpsFromPx) / std::max(0.25 * LumpsFromPx, 1e-6)) : Clamp01((2.0 * Rad / std::max(MetresAPixel, 1e-9) - LumpsFromPx) / std::max(0.25 * LumpsFromPx, 1e-6));
+		const double LumpsInk = LumpsNow > 0 ? A * (B.LumpsAlpha == B.LumpsAlpha ? Clamp01(B.LumpsAlpha) : 1.0) * LumpsCame * LumpsStay * LumpsRoom * LumpsBig : 0.0;
+		if (LumpsNow > 0 && B.LumpsPx > 0.0 && LumpsStay > 0.0 && LumpsRoom > 0.0 && Room >= Used + LumpsNow && (bLumpsWide ? LumpsWorthNow >= LumpsFromPx && LumpsBig > 0.0 : 2.0 * Rad >= LumpsFromPx * MetresAPixel) && (!(LumpsLeastInk > 0.0) || LumpsInk >= LumpsLeastInk))
 		{
 			// (Bit::Lumps, the art director on build 1766's Midway ships picture: Akagi's column was the right shape and
 			// colour and read as a soft brown smear. Its puffs are 60 to 90 m across, 300 to 400 pixels of the window
@@ -6888,8 +6920,7 @@ namespace TheaterFx
 			// so nothing else is laid differently for them. They come in as the puff passes LumpsPx across and are
 			// whole at a quarter as wide again, and melt into the puff before it begins to thin (LumpsLeft), so none
 			// appears or goes at a stroke; and thin as the room fills (LumpsRoom, set by Draw))
-			const double Came = Clamp01((2.0 * Rad / std::max(MetresAPixel, 1e-9) - B.LumpsPx) / std::max(0.25 * B.LumpsPx, 1e-6));
-			const double AOf = A * (B.LumpsAlpha == B.LumpsAlpha ? Clamp01(B.LumpsAlpha) : 1.0) * Came * LumpsStay * LumpsRoom;
+			const double AOf = LumpsInk;
 			const double R0Of = B.LumpsR0 == B.LumpsR0 ? std::clamp(B.LumpsR0, 0.05, 1.0) : 0.3, R1Of = B.LumpsR1 == B.LumpsR1 ? std::clamp(B.LumpsR1, 0.05, 1.0) : 0.45;
 			const double Out0Of = B.LumpsOut0 == B.LumpsOut0 ? std::clamp(B.LumpsOut0, 0.0, 1.0) : 0.3, Out1Of = B.LumpsOut1 == B.LumpsOut1 ? std::clamp(B.LumpsOut1, 0.0, 1.0) : 1.0;
 			const double InnerOf = B.LumpsInner > 0.0 ? std::min(B.LumpsInner, 0.95) : InnerSoft; // (over 0: where a lump's own heart ring sits; else as the puff's)
@@ -7121,7 +7152,7 @@ namespace TheaterFx
 			// pre-check, 05:14Z: by depth alone the far side of a fight went bare, flames and all)
 			if (!bOff)
 			{
-				Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward) - B.Nearer, B.bKeep || B.bLight });
+				Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward) - B.Nearer, B.bKeep || B.bLight, B.Lumps > 0 ? (At - Eye.Eye).Length() : 0.0 });
 			}
 			if (B.OilId >= 0)
 			{
@@ -7202,8 +7233,14 @@ namespace TheaterFx
 				return 0u;
 			}
 			const double Grown = Clamp01((Now - Piece.Born) / std::max(Piece.Life, 1e-6));
-			const double Most = std::max(Piece.R0, Piece.R0 + (Piece.R1 - Piece.R0) * std::pow(Grown, Piece.Grow));
-			return LumpsLeft(Piece.Hold, Grown) > 0.0 && 2.0 * Most * std::max(Eye.PixelsPerRadian, 1.0) >= Piece.LumpsPx * O.Deep ? static_cast<size_t>(std::min(Piece.Lumps, 8)) : 0u;
+			const double RadNow = Piece.R0 + (Piece.R1 - Piece.R0) * std::pow(Grown, Piece.Grow);
+			const double Most = std::max(Piece.R0, RadNow);
+			if (LumpsBigB > 0.0 && 1.1 * LumpsWorth(2.0 * RadNow * std::max(Eye.PixelsPerRadian, 1.0) / std::max(O.Far, 1e-3), LumpsBigA, LumpsBigB) < Piece.LumpsPx * LumpsTight)
+			{
+				// (too wide on the screen to be worth its lumps now, with a tenth to spare: see LumpsWorth)
+				return 0u;
+			}
+			return LumpsLeft(Piece.Hold, Grown) > 0.0 && 2.0 * Most * std::max(Eye.PixelsPerRadian, 1.0) >= Piece.LumpsPx * LumpsTight * O.Deep ? static_cast<size_t>(std::min(Piece.Lumps, 8)) : 0u;
 		};
 		// (what is kept, an oil fire's column or a light, is counted first, so a far column on the horizon never blinks
 		// out and a far fight keeps its fires and flashes)
@@ -7244,6 +7281,62 @@ namespace TheaterFx
 		// laid, as before, only while this frame's count has a place for every one of them. A second or more
 		// since the last Draw, time gone back, or a cut: no memory, this frame's count alone)
 		LumpsRoom = 0.0;
+		const double LumpsTenth = std::max(1.0, 0.1 * MaxPuffs);
+		const double LumpsSince = Now - LumpsAt;
+		// (a cut: since the last frame the eye came over 50 m, turned by over 0.6, or its view grew or shrank by over
+		// a quarter. What was asked of the last view says nothing of this one, so there is no memory on this frame
+		// or the next, whose count is the first of the new view laid with its own margins)
+		const bool bLumpsCut = !(EyeMoved <= 50.0) || !(EyeTurned <= 0.6) || !(std::abs(Eye.PixelsPerRadian - LumpsZoom) <= 0.25 * LumpsZoom);
+		const bool bLumpsWas = !bLumpsCut && LumpsSince >= 0.0 && LumpsSince < 1.0;
+		// (the lumps' cost held, game.lumps_most: the builder's rested reading of build 1770, 15:09Z 20 November, had
+		// Pearl Harbor at 55.8 frames a second against 72.7 and Midway at 59.0 against 67.8 once the ships burned,
+		// every puff over lumps_px carrying its five. So no more than lumps_most puffs carry lumps at once, the
+		// widest on the screen first: with more than that wide enough, the width a puff must have rises to that of
+		// the first one left out (LumpsTight times its own lumps_px), and each comes in over the next quarter of
+		// that as before, so the last few in are faint and none appears at a stroke. It follows the count by half
+		// its size a second at most, both ways; after a cut it is this frame's own. A puff wider than
+		// lumps_px_most.0 counts for less the wider it is (LumpsWorth), so the lumps go to puffs they can be read on)
+		double TightAsked = 1.0;
+		if (LumpsMostPuffs > 0 && Start == 0 && Need < Left)
+		{
+			LumpSizes.clear();
+			for (const Order& O : Sorted)
+			{
+				const Bit& Piece = *O.B;
+				if (Piece.Lumps <= 0 || !(Piece.LumpsPx > 0.0) || !(O.Far > 0.0))
+				{
+					continue;
+				}
+				const double Grown = Clamp01((Now - Piece.Born) / std::max(Piece.Life, 1e-6));
+				if (!(LumpsLeft(Piece.Hold, Grown) > 0.0))
+				{
+					continue;
+				}
+				const double Worth = LumpsWorth(2.0 * (Piece.R0 + (Piece.R1 - Piece.R0) * std::pow(Grown, Piece.Grow)) * std::max(Eye.PixelsPerRadian, 1.0) / std::max(O.Far, 1e-3), LumpsBigA, LumpsBigB);
+				if (Worth >= Piece.LumpsPx)
+				{
+					LumpSizes.push_back(Worth / Piece.LumpsPx);
+				}
+			}
+			if (LumpSizes.size() > static_cast<size_t>(LumpsMostPuffs))
+			{
+				std::nth_element(LumpSizes.begin(), LumpSizes.begin() + LumpsMostPuffs, LumpSizes.end(), [](double L, double R) { return L > R; });
+				TightAsked = std::min(1.0e6, std::max(1.0, LumpSizes[static_cast<size_t>(LumpsMostPuffs)]));
+			}
+		}
+		if (LumpsMostPuffs <= 0)
+		{
+			LumpsTight = 1.0;
+		}
+		else if (!bLumpsWas || !(LumpsTight >= 1.0))
+		{
+			LumpsTight = TightAsked;
+		}
+		else
+		{
+			const double By = std::exp(0.5 * LumpsSince);
+			LumpsTight = std::clamp(TightAsked, LumpsTight / By, LumpsTight * By);
+		}
 		size_t Lumped = 0;
 		double Asked = static_cast<double>(Left); // (something left out for want of room: the room is full)
 		if (Start == 0 && Need < Left)
@@ -7254,13 +7347,6 @@ namespace TheaterFx
 			}
 			Asked = static_cast<double>(std::min(Left, Need + Lumped));
 		}
-		const double LumpsTenth = std::max(1.0, 0.1 * MaxPuffs);
-		const double LumpsSince = Now - LumpsAt;
-		// (a cut: since the last frame the eye came over 50 m, turned by over 0.6, or its view grew or shrank by over
-		// a quarter. What was asked of the last view says nothing of this one, so there is no memory on this frame
-		// or the next, whose count is the first of the new view laid with its own margins)
-		const bool bLumpsCut = !(EyeMoved <= 50.0) || !(EyeTurned <= 0.6) || !(std::abs(Eye.PixelsPerRadian - LumpsZoom) <= 0.25 * LumpsZoom);
-		const bool bLumpsWas = !bLumpsCut && LumpsSince >= 0.0 && LumpsSince < 1.0;
 		if (!bLumpsWas || Asked >= LumpsMost)
 		{
 			LumpsMost = Asked;

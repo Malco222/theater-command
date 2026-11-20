@@ -2576,6 +2576,13 @@
   "_how": "Numbers only the 3D game's effects kit uses (Source/TheaterCommand/Effects). Tune here, not in code.",
   "max_puffs": 3000,
   "_max_puffs": "The room: how many fans the kit lays in a frame at the most. Held to 100 to 20,000, and a value that is not a number gives 3,000 (the pre-check, 12:57Z: unchecked, a broken file's nan was a fault and its 1e9 asked for hundreds of gigabytes).",
+  "lumps_most": 48,
+  "lumps_px_most": [
+   1200,
+   1800
+  ],
+  "lumps_least_ink": 0.02,
+  "_lumps_cost": "The lumps' cost held (the builder's rested reading of build 1770, 15:09Z 20 November: Pearl Harbor 55.8 frames a second against 72.7 on 1766 and Midway 59.0 against 67.8 once the ships burned, every puff over its lumps_px carrying five lumps, each a fan of its own; the art director, 14:50Z: bound them to the biggest few dozen puffs as long as Midway 06 holds, and lumps faded to nothing must cost nothing). lumps_most: no more puffs than this carry lumps at once. With more wide enough, the places go to the widest on the screen and the rest stay plain; the width asked follows the count by half its size a second at most, and each puff's lumps come in over the next quarter of it, so none appears or goes at a stroke. Akagi's column in Midway 06 has about 40 such puffs and is laid exactly as passed; at 20 its lower half went smooth again. lumps_px_most: a puff wider on the screen than the first number counts for less the wider it is and loses its lumps by the second (window pixels). A column the eye is in or under fills the screen with such pieces: their lumps are murk, and cost the most of all to paint. lumps_least_ink: lumps thinner than this (0 to 1) are not laid at all. Without these three keys every lump is laid as in build 1770.",
   "max_lamps": 2,
   "lamp_candela_at_full": 400.0,
   "_lamp": "A flash's lamp at full strength (a 105 mm is 1), in candelas at 100 world units a metre (the kit scales it for other scales). 400 PASSED in build 1690 (art director 21:16Z): 1.23x screen brightness at 3 m and 1.11 to 1.15x at 13 to 16 m by night; 1200 overlit (1.57x).",

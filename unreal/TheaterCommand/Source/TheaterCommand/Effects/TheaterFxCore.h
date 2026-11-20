@@ -610,6 +610,16 @@ namespace TheaterFx
 		Vec LayHub; // (while laying one bit: where its fan's middle point sits off its middle; see Bit::Hub)
 		double LumpsRoom = 0.0; // (set by Draw: 1 while every lump a big puff may carry, Bit::Lumps, has a place with a tenth of the room to spare, less as that goes, 0 with the room full: the lumps give way to everything else)
 		double LumpsMost = 0.0, LumpsHeld = 0.0, LumpsShown = 0.0, LumpsAt = -1.0e9, LumpsZoom = 0.0; // (the most places asked of late, lumps and all; how long since the count last came near it; LumpsRoom at the last Draw; when that was; and the view's pixels a radian then: see LumpsRoom in Draw)
+		// (the lumps' cost held, read at Setup: game.lumps_most, no more puffs than this carry lumps at once, the biggest
+		// on the screen first (0: any number); game.lumps_px_most, a puff this wide on the screen or wider carries none,
+		// thinning from .0 to .1 pixels (a column the eye is in or under fills the screen with pieces whose lumps are
+		// murk and cost the most of all; .1 of 0: any size); game.lumps_least_ink, a lump thinner than this is not
+		// laid (0: every one). LumpsTight, set by Draw: how many times its own lumps_px a puff must be across to carry
+		// lumps now, 1 with places for all, more with over lumps_most puffs wide enough; it moves by half its size
+		// a second at most, so a puff's lumps come and go as slowly as the count changes. LumpSizes: Draw's own list)
+		int LumpsMostPuffs = 0;
+		double LumpsBigA = 0.0, LumpsBigB = 0.0, LumpsLeastInk = 0.0, LumpsTight = 1.0;
+		std::vector<double> LumpSizes;
 		// (while laying a spent case's body: each point lit as a point on a metal tube, by where it sits across it. Art
 		// director 07:08Z: a bright band along the top, a shade side and underside, never a pale plank)
 		struct TubeLight
@@ -691,6 +701,7 @@ namespace TheaterFx
 			const Bit* B;
 			double Deep;
 			bool bKeep; // (counted first when the room is short: a kept oil column, or a light)
+			double Far = 0.0; // (a puff that may carry lumps, Bit::Lumps: how far it is from the eye; else 0)
 		};
 		std::vector<Order> Sorted;
 		struct ColumnSpan
