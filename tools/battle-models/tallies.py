@@ -365,8 +365,9 @@ def panel(name, s, hull, hood, nation, model, marks=(), art=None, x_front=None):
 
     def skin_from(x, z0, d):
         """The height reached going d metres along her skin from height z0 (up for d > 0) at this station."""
-        z, step = z0, 0.002 * (1 if d > 0 else -1)
-        for _ in range(int(abs(d) / 0.002)):
+        k = max(1, int(math.ceil(abs(d) / 0.002 - 1.0e-6)))  # (all of d, in equal steps of up to 2 mm: int(0.284 / 0.002) is 141, not 142)
+        z, step = z0, d / k
+        for _ in range(k):
             n_ = side(x, z)[1]
             z += step * math.sqrt(max(0.05, 1.0 - n_.z * n_.z))
         return z
@@ -485,7 +486,7 @@ def panel(name, s, hull, hood, nation, model, marks=(), art=None, x_front=None):
     colour = worn_at({"under": paint, "blend": blend}, model.paints)
 
     def game(p, n):
-        return [round(v, 3) for v in (p.x, -p.y, p.z, n.x, -n.y, n.z)]          # (the game's axes: y to the right)
+        return [round(v, 4) for v in (p.x, -p.y, p.z, n.x, -n.y, n.z)]          # (the game's axes: y to the right; to a tenth of a millimetre)
 
     hb, hk = hand(name)
     return {
