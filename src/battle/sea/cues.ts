@@ -16,6 +16,9 @@ export const SEA_CUES: Partial<Record<FieldEvent['what'], string>> = {
   'sea:burning': 'fire_start',
   'sea:torpedo': 'torpedo_launch',
   'sea:torpedoHit': 'torpedo_hit',
+  // Fighters over the fleet meet a strike or a raid; its guns open on what is left (ruling 239, item 3 of the panel).
+  'sea:cap': 'fighter_pass',
+  'sea:flak': 'flak_light_fire',
   // A fleet breaking off: silent until a new horn passes Brian's ear (he cut 'ship_horn', 14:49Z).
   // The action ends: two bells (the README: "a fleet signals; action stations; the action ends").
   end: 'ship_bells_two',

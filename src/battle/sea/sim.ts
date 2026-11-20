@@ -19,7 +19,7 @@
 import { Rng } from '../../core/rng';
 import { bearing, clamp, diceNow, dist, lineUp, turn, DT } from '../core';
 import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, Side, Zone } from '../core/types';
-import { DICE, RULES_CLASSES, SEA, STRIKE_AIM } from './numbers';
+import { CAP, DICE, FLAK, RULES_CLASSES, SEA, STRIKE_AIM } from './numbers';
 import { drawUp, type PieceInfo } from './pieces';
 import { SEA_CUES } from './cues';
 import { none, seaLevel, seaRatio, shipsIn, shipWords, sunkCaps } from './result';
@@ -122,6 +122,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private readonly struck = new Map<number, number>();
   /** The destroyer pieces whose torpedo line has been told: once a piece, on its first salvo. */
   private readonly toldTorp = new Set<number>();
+  /** Fighters over the fleet (cap): what each carrier holds back of its strikes and has not yet spent, by its id (its
+   *  side's pool is their sum); and what each gun ship owes out of its next gunfire for what its guns denied. */
+  private readonly cover: number[] = [];
+  private readonly owe: number[] = [];
+  /** What each side's guns have denied, by whose aircraft: a carrier's strikes ('cv') or the coasts' raids ('air'). */
+  private readonly flakOn: Record<Side, { cv: number; air: number }> = { att: { cv: 0, air: 0 }, def: { cv: 0, air: 0 } };
+  /** A side's carrier has come within the guns' reach of an enemy battleship (the C5 mark). */
+  private readonly cvNear: Record<Side, boolean> = { att: false, def: false };
   /** Destroyer pieces on a torpedo run, by unit id; the battle time each may run again; the weight each has banked for
    *  its torpedoes (torp); the screen's pieces, chosen as the fleets draw up, with the big ship each guards and how far
    *  to its side it keeps; and salvos in the water. */
@@ -177,6 +185,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.swing[u.id] = 0;
       this.deck[u.id] = 1;
       this.bank[u.id] = 0;
+      this.cover[u.id] = 0;
+      this.owe[u.id] = 0;
       if (u.extra.cls === 'cv') u.extra.planes = 1;
       this.weight0[u.side] += this.weightOf(u);
     }
@@ -447,7 +457,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const ab = cv.abilities?.find((a) => a.key === 'strike');
     if (!ab || ab.ready > 0 || ab.winding || !steady(cv)) return false;
     const p = this.info.get(cv.id)!;
-    const weight = SEA.fire.rate * this.output(cv) * SEA.strike.share * SEA.strike.every * this.day(cv.side);
+    const whole = SEA.fire.rate * this.output(cv) * SEA.strike.share * SEA.strike.every * this.day(cv.side);
+    // With enemy aircraft about, it holds its style's cover back over the fleet (cap), a strike the player orders as one
+    // the staff does (ruling 239, 12); what it held last time and has not spent flies now, so no weight is lost.
+    const keep = this.bringsAir(other(cv.side)) ? whole * this.style(cv.side).cover : 0;
+    const weight = whole - keep + this.cover[cv.id];
+    this.cover[cv.id] = keep;
     const perCarrier = p.fleet.ships.cv > 0 ? Math.round(p.fleet.bombers / p.fleet.ships.cv) : 0;
     const count = Math.round(perCarrier * (this.output(cv) / (p.weight * cv.extra.ships0)));
     ab.winding = true;
@@ -464,7 +479,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.t = Math.round((this.t + DT) * 1000) / 1000;
     const tick = Math.round(this.t / DT);
     for (const u of this.units) if (live(u)) this.steer(u);
-    if (tick % 10 === 0) { this.sample(); this.decide(); }
+    if (tick % 10 === 0) { this.sample(); this.watchCarriers(); this.decide(); }
+    this.handOwes();
     for (const u of this.units) { u.engaged = undefined; if (live(u)) this.fire(u); }
     this.landStrikes();
     this.landTorps();
@@ -865,7 +881,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
     if (this.contactAt === null) { this.contactAt = this.t; this.say({ what: 'contact', unit: u.id, side: u.side, text: 'The fleets are in range of each other.' }); }
     u.engaged = foe.id;
     // One punch per unit of weight whatever the class (b415): the card already prices a battleship above a cruiser.
-    const w = SEA.fire.rate * this.output(u) * range * arc * nerve * this.day(u.side) * DT;
+    let w = SEA.fire.rate * this.output(u) * range * arc * nerve * this.day(u.side) * DT;
+    // What its guns denied of a strike comes out of its next gunfire first (cap): the trade is weight for weight.
+    if (this.owe[u.id] > 0) { const p = Math.min(this.owe[u.id], w); this.owe[u.id] -= p; w -= p; this.mark(`${u.side}:paid`, p); }
     this.dealt[u.id] += w;
     this.inReach[u.id] += DT;
     this.mark(`${u.side}:${u.extra.cls}>${foe.extra.cls}`, w);
@@ -977,9 +995,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const foe = this.byId.get(s.target);
       const at = foe && live(foe) ? foe : this.heaviest(other(s.side));
       if (!at) continue;
-      this.splash(at, s.weight, s.side);
-      this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + s.weight;
-      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.count ? `${headCount(s.count)} bombers` : 'Aircraft'} from ${theFleet(s.from)} find ${this.told(at)}.`, extra: { count: s.count } });
+      const landed = this.meet(at, s.weight, s.side, true);
+      this.splash(at, landed, s.side);
+      this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + landed;
+      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.count ? `${headCount(s.count)} bombers` : 'Aircraft'} from ${theFleet(s.from)} find ${this.told(at)}.`, extra: { count: s.count, flown: s.weight, landed } });
     }
   }
 
@@ -1235,6 +1254,104 @@ export class SeaSim implements BattleSim<SeaUnit> {
     }
   }
 
+  /** The side brings aircraft into the action: a carrier with its air group, or the coasts' aircraft (cap). */
+  private bringsAir(side: Side): boolean {
+    return this.airLeft[side] > 1e-9 || this.units.some((u) => u.side === side && u.extra.cls === 'cv' && live(u) && this.deck[u.id] > 1e-9);
+  }
+
+  /**
+   * A strike or a raid of weight w coming in on 'at' (cap; ruling 239): the fighters over its side's fleet deny what the
+   * campaign's law gives (carriers.json cap.spoil), paid weight for weight out of the pool, each carrier by its share;
+   * then the gun ships within the strike's radius deny their share of the rest (flak), each owing it out of its next
+   * gunfire. Returns what lands. Two neutral trades, no dice.
+   */
+  private meet(at: SeaUnit, w: number, by: Side, strike: boolean): number {
+    const side = at.side;
+    const cvs = this.units.filter((u) => u.side === side && u.extra.cls === 'cv');
+    const pool = cvs.reduce((n, u) => n + this.cover[u.id], 0);
+    let a = 0;
+    if (pool > 1e-12 && w > 0) {
+      a = Math.min(pool, w * CAP.spoil * Math.sqrt(pool / (pool + w)));
+      for (const u of cvs) this.cover[u.id] *= 1 - a / pool;
+      this.mark(`${side}:paid`, a);
+      this.say({ what: 'sea:cap', unit: at.id, side, text: '', extra: { denied: a, share: a / w, by } });
+    }
+    const guns = this.units.filter((e) => e.side === side && live(e) && e.extra.cls !== 'cv' && dist(e.x, e.y, at.x, at.y) <= SEA.strike.radius);
+    const parts = guns.map((e) => e.extra.ships * (FLAK.ships[e.extra.cls as SeaClass] ?? 0) * FLAK.per);
+    const sum = parts.reduce((n, x) => n + x, 0);
+    const g = sum > 0 ? Math.min(FLAK.most, sum) * (w - a) : 0;
+    if (g > 0) {
+      guns.forEach((e, i) => { this.owe[e.id] += (g * parts[i]) / sum; });
+      this.flakOn[side][strike ? 'cv' : 'air'] += g;
+      this.say({ what: 'sea:flak', unit: at.id, side, text: '', extra: { denied: g, by } });
+    }
+    this.mark(`${side}:denied`, a + g);
+    // The C3 mark: a strike on a side with carriers meets its fighters and lands below the weight flown.
+    if (strike && cvs.some(live)) { this.mark(`${side}:strikesIn`, 1); if (a > 0 && a + g > 0) this.mark(`${side}:strikesMet`, 1); }
+    return w - a - g;
+  }
+
+  /** A gun ship out of the fight hands what it owes to the nearest of its side's gun ships still fighting (cap). */
+  private handOwes(): void {
+    for (const u of this.units) {
+      if (live(u) || this.owe[u.id] <= 0) continue;
+      let to: SeaUnit | null = null, bd = Infinity;
+      for (const f of this.units) {
+        if (f.side !== u.side || f.extra.cls === 'cv' || !live(f)) continue;
+        const d = dist(u.x, u.y, f.x, f.y);
+        if (d < bd - 1e-6) { bd = d; to = f; }
+      }
+      if (!to) continue;
+      this.owe[to.id] += this.owe[u.id];
+      this.owe[u.id] = 0;
+    }
+  }
+
+  /**
+   * The action over, or handed to the staff: what is still owed is settled where it is owed before the count, as the land
+   * field pays its air (b418, weight moves where it falls, never how much). What a ship's guns still owe for the aircraft
+   * they turned away lands on that ship, or on the first of its side's still fighting: those aircraft get through after
+   * all. What a carrier still holds over its fleet flies at the enemy its next strike would have gone for, whole. No line
+   * of its own and nothing drawn: the count carries it.
+   */
+  private settle(): void {
+    this.handOwes();
+    for (const u of this.units) {
+      const o = this.owe[u.id];
+      if (!(o > 0)) continue;
+      const to = live(u) ? u : this.units.find((f) => f.side === u.side && live(f));
+      if (!to) continue;
+      this.owe[u.id] = 0;
+      this.take(to, o);
+      const by = other(u.side), k = this.flakOn[u.side], cv = k.cv + k.air > 0 ? k.cv / (k.cv + k.air) : 0;
+      this.fromAir[`${by}:cv`] = (this.fromAir[`${by}:cv`] ?? 0) + o * cv;
+      this.fromAir[`${by}:air`] = (this.fromAir[`${by}:air`] ?? 0) + o * (1 - cv);
+      this.mark(`${u.side}:paid`, o);
+      this.mark(`${u.side}:settled`, o);
+    }
+    for (const cv of this.units) {
+      const c = this.cover[cv.id];
+      if (!(c > 0)) continue;
+      const at = this.strikeTarget(cv) ?? this.heaviest(other(cv.side));
+      if (!at) continue;
+      this.cover[cv.id] = 0;
+      this.splash(at, c, cv.side);
+      this.fromAir[`${cv.side}:cv`] = (this.fromAir[`${cv.side}:cv`] ?? 0) + c;
+      this.mark(`${cv.side}:coverFlown`, c);
+    }
+    // Measured, not settled (for the design director): what strikes still in the air carry when the action ends.
+    for (const k of this.strikes) this.mark(`${k.side}:aloft`, k.weight);
+  }
+
+  /** The C5 mark: a side's carrier within the guns' reach of an enemy battleship, at any moment of the action. */
+  private watchCarriers(): void {
+    const R = SEA.classes.bb.reach;
+    for (const u of this.units) {
+      if (u.extra.cls !== 'cv' || !live(u) || this.cvNear[u.side]) continue;
+      if (this.units.some((e) => e.side !== u.side && e.extra.cls === 'bb' && live(e) && dist(u.x, u.y, e.x, e.y) < R)) this.cvNear[u.side] = true;
+    }
+  }
+
   /** The coasts' aircraft raid the enemy's ships every so often, with the weight the rules give them over this sea. */
   private coastAir(): void {
     for (const side of ['att', 'def'] as Side[]) {
@@ -1254,8 +1371,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const weight = SEA.fire.rate * w * SEA.air.share * SEA.air.every * this.day(side);
       // The same weight out of the fight whatever it falls on, as gunfire and strikes (b402): a raid that happened on a
       // destroyer took more than twice what one on a battleship took, so a fleet of many light ships paid double.
-      this.splash(at, weight, side);
-      this.fromAir[`${side}:air`] = (this.fromAir[`${side}:air`] ?? 0) + weight;
+      const landed = this.meet(at, weight, side, false);
+      this.splash(at, landed, side);
+      this.fromAir[`${side}:air`] = (this.fromAir[`${side}:air`] ?? 0) + landed;
       this.say({ what: 'sea:air', unit: at.id, side, text: `Aircraft from the coast attack ${this.told(at)}.` });
     }
   }
@@ -1328,6 +1446,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
 
   private finish(winner: Side, how: FieldResult['how'], toDice = false, rolled?: number): void {
     if (this.over) return;
+    this.settle();
     const lost = { att: this.lostShare('att'), def: this.lostShare('def') };
     const R = rolled ?? seaRatio(winner, lost, this.ticket.reckoning.odds);
     const crews: Record<Side, number> = { att: 0, def: 0 };
@@ -1372,6 +1491,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
       if (this.launched[side] > 0) this.mark(`${side}:runBattles`, 1);
     }
     for (const u of this.units) if (this.bank[u.id] > 0) this.mark(`${u.side}:bankLeft`, this.bank[u.id]);
+    // The C4 and C5 marks: what the guns still owed and the fighters still held at the end; a side's carriers against an
+    // enemy with a battleship, and whether one of them came within the guns' reach of it.
+    for (const u of this.units) { if (this.owe[u.id] > 0) this.mark(`${u.side}:owedLeft`, this.owe[u.id]); if (this.cover[u.id] > 0) this.mark(`${u.side}:coverLeft`, this.cover[u.id]); }
+    for (const side of ['att', 'def'] as Side[]) {
+      if (!this.units.some((u) => u.side === side && u.extra.cls === 'cv') || !this.units.some((e) => e.side !== side && e.extra.cls === 'bb')) continue;
+      this.mark(`${side}:cvVsBb`, 1);
+      if (this.cvNear[side]) this.mark(`${side}:cvNearBb`, 1);
+    }
     this.over = {
       winner, how, seconds: this.t, lost, men: crews, R, level: seaLevel(R), lines, forces,
       extra: extra as unknown as Record<string, unknown>,

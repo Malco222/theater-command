@@ -65,7 +65,14 @@ function linesOf(fleets: FleetTicket[], air: Record<Side, number>, odds: number)
  */
 export function fieldFights(t: SeaTicket): boolean {
   const guns = (side: Side): boolean => t.place.fleets.some((f) => f.side === side && f.mul > 0 && f.ships.bb + f.ships.ca + f.ships.dd > 0);
-  return guns('att') && guns('def');
+  return guns('att') && guns('def') && !(SEA.carrierBattle === 'staff' && carriersOnly(t));
+}
+
+/** Both sides bring carriers and neither a battleship (ruling 239, 11): what 'carrierBattle' decides, and what the design
+ *  director's count counts. */
+export function carriersOnly(t: SeaTicket): boolean {
+  const has = (side: Side, c: 'bb' | 'cv'): boolean => t.place.fleets.some((f) => f.side === side && f.mul > 0 && f.ships[c] > 0);
+  return has('att', 'cv') && has('def', 'cv') && !has('att', 'bb') && !has('def', 'bb');
 }
 
 /** A fleet action the rules are about to fight (navy.ts seaBattles, through seaField), written out for the field. */

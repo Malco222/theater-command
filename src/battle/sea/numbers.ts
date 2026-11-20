@@ -23,10 +23,11 @@ export const SEA = seaData as unknown as {
   jobs: { fire: Record<Exclude<SeaClass, 'cv'>, SeaClass[]>; strike: SeaClass[] };
   torp: { start: number; after: number; travel: number; bank: number; away: number; again: number; radius: number; station: number; intercept: number };
   styles: Partial<Record<SeaStyle, StyleNumbers>>;
+  carrierBattle: 'field' | 'staff';
 };
 
 /** A style's numbers (ruling 239; data/battle/sea.json _about.styles). */
-export interface StyleNumbers { spread: number; torpWhen: number; press: number; screen: number }
+export interface StyleNumbers { spread: number; torpWhen: number; press: number; screen: number; cover: number }
 
 /** The rules' classes: a ship's weight in a fleet action (power) and how readily it is sunk (tough: lower is tougher). */
 export const RULES_CLASSES = (navyData as unknown as { classes: Record<SeaClass, { label: string; one: string; many: string; power: number; tough: number }> }).classes;
@@ -38,3 +39,9 @@ export const DICE: [number, number] = [0.8, 1.2];
 /** The campaign's own aim of a strike from the air at a fleet (carriers.json strike.aim, read only): how much likelier a
  *  ship of each class is to be the one found and hit. The coasts' raids on the field aim by it (ruling 239, item 4). */
 export const STRIKE_AIM = (carrierData as unknown as { strike: { aim: Partial<Record<SeaClass, number>> } }).strike.aim;
+
+/** The campaign's own law for fighters over a fleet and its guns (carriers.json, read only; air.ts's raid on ships):
+ *  cap.spoil, what fighters spoil of a strike at full cover; flak.ships, each class's guns against aircraft, times
+ *  flak.per a ship, to at most flak.most of a strike. */
+export const CAP = (carrierData as unknown as { cap: { spoil: number } }).cap;
+export const FLAK = (carrierData as unknown as { flak: { ships: Partial<Record<SeaClass, number>>; per: number; most: number } }).flak;

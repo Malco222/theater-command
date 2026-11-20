@@ -8,7 +8,7 @@ import { drawUp, groupSizes } from '../src/battle/sea/pieces';
 import { RULES_CLASSES, SEA } from '../src/battle/sea/numbers';
 import { diceRange, lossShares, seaChance, seaLevel, seaRatio, shipWords, sunkCaps } from '../src/battle/sea/result';
 import { SeaSim, type SeaLosses } from '../src/battle/sea/sim';
-import { plainTicket, type PlainFleet } from '../src/battle/sea/ticket';
+import { carriersOnly, fieldFights, plainTicket, type PlainFleet } from '../src/battle/sea/ticket';
 import { SEA_CLASSES, type SeaClass, type SeaShips, type SeaUnit } from '../src/battle/sea/types';
 import { foughtOf } from '../src/battle/sea/handoff';
 import { PRACTICE, practiceTicket } from '../src/battle/sea/practice';
@@ -511,6 +511,115 @@ describe("carriers' strikes and the coasts' raids (ruling 239, item 4)", () => {
   });
 });
 
+describe('fighters and guns over the fleet (ruling 239, step 5)', () => {
+  const CVS: PlainFleet = { name: 'Striking Force', nat: 'JAP', ships: { cv: 2, ca: 2, dd: 8 } };
+  const CVB: PlainFleet = { name: 'Task Force', nat: 'USA', ships: { cv: 2, ca: 3, dd: 6 } };
+  const LINE: PlainFleet = { name: 'Battle Force', nat: 'USA', ships: { bb: 2, ca: 3, dd: 8 } };
+  const all = (s: any, side: 'att' | 'def', cls: string): SeaUnit[] => s.units.filter((u: SeaUnit) => u.side === side && u.extra.cls === cls);
+  const ready = (cv: SeaUnit): void => { const ab = cv.abilities!.find((a) => a.key === 'strike')!; ab.ready = 0; ab.winding = false; };
+  const cover = SEA.styles.methodical!.cover;
+
+  it("with enemy aircraft about a carrier holds its style's cover over the fleet, and what it has not spent flies with its next strike", () => {
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 7, human: null })) as any;
+    const [cv] = all(s, 'att', 'cv'), foe = all(s, 'def', 'cv')[0];
+    ready(cv);
+    expect(s.strike(cv, foe)).toBe(true);
+    const first = s.strikes[0].weight, held = s.cover[cv.id];
+    expect(held / (first + held)).toBeCloseTo(cover, 9);
+    ready(cv);
+    s.strike(cv, foe);
+    expect(s.strikes[1].weight).toBeCloseTo(first + held, 9); // the cover it never spent flies now: nothing is lost
+    expect(s.cover[cv.id]).toBeCloseTo(held, 9);
+    // Against a fleet that brings no aircraft it flies the whole of it.
+    const line = new SeaSim(plainTicket({ att: [CVS], def: [LINE], seed: 7, human: null })) as any;
+    const lcv = all(line, 'att', 'cv')[0];
+    ready(lcv);
+    line.strike(lcv, all(line, 'def', 'bb')[0]);
+    expect(line.cover[lcv.id]).toBe(0);
+    expect(line.strikes[0].weight).toBeCloseTo(first + held, 9);
+  });
+
+  it("a strike meets the pool by the campaign's law, then the guns near its target; what each denies is paid weight for weight", () => {
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 7, human: null })) as any;
+    const cvs = all(s, 'def', 'cv'), at = all(s, 'def', 'ca')[0];
+    s.cover[cvs[0].id] = 0.3; s.cover[cvs[1].id] = 0.1;
+    for (const u of s.units) { u.x = 10000; u.y = 10000; }
+    const w = 0.5, pool = 0.4;
+    const a = Math.min(pool, w * 0.8 * Math.sqrt(pool / (pool + w)));
+    const guns = s.units.filter((u: SeaUnit) => u.side === 'def' && u.extra.cls !== 'cv');
+    const f = Math.min(0.12, guns.reduce((n: number, u: SeaUnit) => n + u.extra.ships * ({ bb: 3, ca: 1.5, dd: 0.5 } as Record<string, number>)[u.extra.cls] * 0.0015, 0));
+    const landed = s.meet(at, w, 'att', true);
+    expect(landed).toBeCloseTo(w - a - f * (w - a), 12);
+    expect(s.cover[cvs[0].id] + s.cover[cvs[1].id]).toBeCloseTo(pool - a, 12);
+    expect(s.cover[cvs[0].id] / s.cover[cvs[1].id]).toBeCloseTo(3, 9); // each carrier pays by its share
+    const owed = guns.reduce((n: number, u: SeaUnit) => n + s.owe[u.id], 0);
+    expect(owed).toBeCloseTo(f * (w - a), 12);
+    expect(events(s).map((e: FieldEvent) => e.what)).toEqual(expect.arrayContaining(['sea:cap', 'sea:flak']));
+    // The guns pay what they owe out of their next gunfire.
+    const e = all(s, 'att', 'ca')[0];
+    for (const u of guns) { u.extra.target = e.id; e.x = u.x; e.y = u.y + 2000; }
+    for (let i = 0; i < 400 && guns.some((u: SeaUnit) => s.owe[u.id] > 0); i++) for (const u of guns) s.fire(u);
+    const t = s.tally;
+    expect(t['def:denied']).toBeCloseTo(t['def:paid'], 12);
+    expect(t['def:strikesIn']).toBe(1);
+    expect(t['def:strikesMet']).toBe(1);
+  });
+
+  it('a gun ship out of the fight hands what it owes to the nearest of its side still fighting', () => {
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [LINE], seed: 7, human: null })) as any;
+    const [a, b] = all(s, 'def', 'ca');
+    s.owe[a.id] = 0.02;
+    a.state = 'gone';
+    s.handOwes();
+    expect(s.owe[a.id]).toBe(0);
+    const near = s.units.filter((u: SeaUnit) => u.side === 'def' && u.extra.cls !== 'cv' && u.state !== 'gone').sort((x: SeaUnit, y: SeaUnit) => Math.hypot(x.x - a.x, x.y - a.y) - Math.hypot(y.x - a.x, y.y - a.y) || x.id - y.id)[0];
+    expect(s.owe[near.id]).toBeCloseTo(0.02, 12);
+    void b;
+  });
+
+  it("a gun ship beyond the strike's radius of its target turns no aircraft away and owes nothing", () => {
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [LINE], seed: 7, human: null })) as any;
+    const at = all(s, 'def', 'bb')[0], far = all(s, 'def', 'ca')[0];
+    for (const u of s.units) { u.x = 10000; u.y = 10000; }
+    far.x = 10000 + SEA.strike.radius + 50;
+    s.meet(at, 0.5, 'att', true);
+    expect(s.owe[far.id]).toBe(0);
+    expect(s.owe[at.id]).toBeGreaterThan(0);
+  });
+
+  it('when the action ends, what the guns still owe lands on their side and what a carrier still holds flies: nothing is lost', () => {
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [LINE], air: { def: 10 }, seed: 7, human: null })) as any;
+    const [cv] = all(s, 'att', 'cv'), gun = all(s, 'att', 'ca')[0];
+    s.cover[cv.id] = 0.3;
+    s.owe[gun.id] = 0.05;
+    s.mark('att:denied', 0.05);
+    const str = gun.str, target = s.strikeTarget(cv), left = target.str;
+    s.finish('att', 'time');
+    const t = s.tally;
+    expect(s.cover[cv.id]).toBe(0);
+    expect(s.owe[gun.id]).toBe(0);
+    expect(t['att:coverFlown']).toBeCloseTo(0.3, 12);
+    expect(t['att:settled']).toBeCloseTo(0.05, 12);
+    expect(t['att:denied']).toBeCloseTo(t['att:paid'], 12);
+    expect(t['att:owedLeft'] ?? 0).toBe(0);
+    expect(t['att:coverLeft'] ?? 0).toBe(0);
+    expect(gun.str).toBeLessThan(str);
+    expect(target.str).toBeLessThan(left);
+  });
+
+  it("'carrierBattle' stays 'field': carriers against carriers with no battleship are still fought out, and named as such", () => {
+    expect(SEA.carrierBattle).toBe('field');
+    const t = plainTicket({ att: [CVS], def: [CVB], seed: 7, human: null });
+    expect(carriersOnly(t)).toBe(true);
+    expect(fieldFights(t)).toBe(true);
+    expect(carriersOnly(plainTicket({ att: [CVS], def: [LINE], seed: 7, human: null }))).toBe(false);
+  });
+
+  it('the fighters and the guns over the fleet have their sounds', () => {
+    expect([SEA_CUES['sea:cap'], SEA_CUES['sea:flak']]).toEqual(['fighter_pass', 'flak_light_fire']);
+  });
+});
+
 describe('what a blow takes', () => {
   // b415: the card counts each side's carriers and its coasts' aircraft in its strength; the field wears them as it
   // wears the ships, so a side breaks off on the whole of what it brought and the aircraft are worth what the card says.
@@ -566,9 +675,13 @@ describe('what a blow takes', () => {
     const before = sim.lostShare('def');
     s.coastAir();
     const T = s.weight0.def;
-    // The raid's weight, shared over what the defender brought: its ships wear as hulls, its coasts' aircraft (12)
-    // whole (to within the raid's falling on several ships one after another).
-    const W = SEA.fire.rate * 5 * SEA.air.share * SEA.air.every * s.day('att'), air = 12 / T;
+    // The raid's weight, less what the defender's guns near the ship it found denied it (step 5; a trade they pay for out
+    // of their own next gunfire), shared over what the defender brought: its ships wear as hulls, its coasts' aircraft
+    // (12) whole (to within the raid's falling on several ships one after another).
+    const flak = s.tally['def:denied'] ?? 0;
+    expect(flak).toBeGreaterThan(0);
+    expect(flak).toBeLessThanOrEqual(0.12 * SEA.fire.rate * 5 * SEA.air.share * SEA.air.every * s.day('att') + 1e-12);
+    const W = SEA.fire.rate * 5 * SEA.air.share * SEA.air.every * s.day('att') - flak, air = 12 / T;
     expect((sim.lostShare('def') - before) * T).toBeCloseTo((W * (1 - air)) / SEA.fire.hull + W * air, 3);
   });
 });

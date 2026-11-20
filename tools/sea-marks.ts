@@ -161,7 +161,14 @@ function marksOf(rs: Rec[]): Record<string, number | null> {
       out[`${s}.raids`] = raids;
       for (const c of ['bb', 'ca', 'dd', 'cv']) out[`${s}.C2${c}`] = (sum(rs, (r) => k(r, `${s}:raid>${c}`)) - sum(rs, (r) => k(r, `${s}:raidExp>${c}`))) / raids;
     }
-    for (const m of ['runs', 'runEligible', 'runBattles', 'runsBroken', 'launchFar', 'turnLate', 'screenLaunch', 'runsNearScreen', 'runsShotByScreen', 'cvFirst', 'cvFirstAtCv', 'cvFirstAtBb', 'strikesMet', 'strikesBelow', 'strikesIn', 'denied', 'paid', 'owed', 'cvNearBb', 'bankLeft', 'ddBig:s', 'ddBigOff:s', 'ddBigFar:s', 'ddGun:s', 'screenFreed']) {
+    // Step 5's marks: C3, strikes on a side with carriers that met its fighters; C4, weight denied less weight paid, a
+    // battle (what the guns still owed at the end is beside it); C5, battles in which a side's carrier came within the
+    // guns' reach of an enemy battleship, of those where it faced one.
+    out[`${s}.C3`] = ratio(sum(rs, (r) => k(r, `${s}:strikesMet`)), sum(rs, (r) => k(r, `${s}:strikesIn`)));
+    const denied = sum(rs, (r) => k(r, `${s}:denied`));
+    if (denied) { out[`${s}.C4`] = (denied - sum(rs, (r) => k(r, `${s}:paid`))) / n; out[`${s}.deniedPer`] = denied / n; }
+    out[`${s}.C5`] = ratio(sum(rs, (r) => k(r, `${s}:cvNearBb`)), sum(rs, (r) => k(r, `${s}:cvVsBb`)));
+    for (const m of ['runs', 'runEligible', 'runBattles', 'runsBroken', 'launchFar', 'turnLate', 'screenLaunch', 'runsNearScreen', 'runsShotByScreen', 'cvFirst', 'cvFirstAtCv', 'cvFirstAtBb', 'strikesMet', 'strikesBelow', 'strikesIn', 'denied', 'paid', 'owed', 'cvNearBb', 'bankLeft', 'ddBig:s', 'ddBigOff:s', 'ddBigFar:s', 'ddGun:s', 'screenFreed', 'owedLeft', 'coverLeft', 'cvVsBb', 'settled', 'coverFlown', 'aloft']) {
       const v = sum(rs, (r) => k(r, `${s}:${m}`));
       if (v) out[`${s}.${m}`] = v;
     }
