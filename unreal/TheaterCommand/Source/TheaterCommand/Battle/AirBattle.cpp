@@ -1120,6 +1120,7 @@ void AAirBattle::LaySky()
 	// The first turn of the puffs, to an eye behind the raid; after that DrawSky turns them as the eye moves.
 	const AirSky::Vec Drift = S.Sky.DriftAt(S.Show.AirNow());
 	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
+	S.SkyRooms.SetSweep(AirSky::Vec(0.0, 0.0, 0.0)); // (a sky laid again keeps no sweep from the last one's turns)
 	S.SkyRooms.PaintBoth(S.SkyAside, AirSky::Vec(S.Board.TargetX, S.Board.TargetY - 6000.0, 5000.0), Drift, S.SkyPlace.Sun, Light);
 	SkyLine = S.SkyRooms.Line();
 	// Each room's mesh, its slots fixed (each keeps its triangles, only its points move as the eye does).
@@ -1235,7 +1236,12 @@ void AAirBattle::DrawSky()
 	const AirSky::Vec Sun = S.SkyPlace.Sun;
 	const FVector EyeNow(Seen.X, Seen.Y, Seen.Z);
 	const double Step = FVector::Dist(EyeNow, SkyEyeWas);
-	const bool bCut = Step > SkyCut && Step > SkyCutJump * SkyStepWas;
+	const bool bCut = Step > SkyCut && (Step > SkyCutJump * SkyStepWas || Step > SkyCutFar);
+	// (a turn painted aside stands on the picture while the eye goes on a few frames: the painters fade a puff by the
+	// lens along that way (AirSky's SetSweep), so that in a glide of hundreds of metres a frame none shows as a disc
+	// across the lens. The way's length: SkySweep frames of the lesser of this frame's step and the last one's, so one
+	// long frame does not stretch it; none at a cut. The pre-check, round 12)
+	const FVector Ahead = bCut ? FVector::ZeroVector : (EyeNow - SkyEyeWas).GetSafeNormal() * (FMath::Min(Step, SkyStepWas) * SkySweep);
 	SkyEyeWas = EyeNow;
 	SkyStepWas = Step;
 	double ThisFrame = 0.0; // (what the sky cost this thread this frame)
@@ -1272,6 +1278,7 @@ void AAirBattle::DrawSky()
 		if (What != AirSky::Rooms::Sent::None && (bSkyAtOnce || bCut))
 		{
 			const double Began = FPlatformTime::Seconds();
+			SkyRooms.SetSweep(AirSky::Vec(0.0, 0.0, 0.0));
 			SkyRooms.Paint(What, S.SkyAside, Seen, Drift, Sun, Light);
 			SkyFill(S, WhatNumber);
 			const double Painted = FPlatformTime::Seconds() - Began;
@@ -1284,6 +1291,7 @@ void AAirBattle::DrawSky()
 		{
 			// (the state is held for the turn's length; the actor's points it writes are waited for in EndPlay and LaySky)
 			SkyTurningWhat = WhatNumber;
+			SkyRooms.SetSweep(AirSky::Vec(Ahead.X, Ahead.Y, Ahead.Z));
 			SkyTurning = Async(EAsyncExecution::ThreadPool, [this, Keep = State, What, WhatNumber, Seen, Drift, Sun, Light]()
 			{
 				const double Began = FPlatformTime::Seconds();

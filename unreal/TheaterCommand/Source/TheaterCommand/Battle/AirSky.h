@@ -291,6 +291,13 @@ namespace AirSky
 		 * carry. Tau 0 is the near measure (Stale).
 		 */
 		void SetLoose(double InTau, double InTurn) { Loose = InTau; LooseTurn = InTurn; }
+		/**
+		 * The eye's way from where a paint is asked to where it may be while that paint is on the picture (metres; none
+		 * as laid). A puff fades by the lens, 1.2 radii to 0.6, by the nearest the eye comes to it along that way, so a
+		 * paint done aside in a glide of hundreds of metres a frame, shown a frame or a few late, draws no disc across
+		 * the lens. With no sweep the fade is by the eye where it is, as it was.
+		 */
+		void SetSweep(const Vec& InSweep) { Sweep = InSweep; }
 		/** How far the eye may move from the last paint before Stale (the loose measure's; the near one's otherwise). */
 		double Slack() const;
 		/** Whether the eye has moved enough since the last Paint (in the field's own frame) for the turn of the
@@ -347,6 +354,7 @@ namespace AirSky
 		Part Only;
 		int Room = 0;
 		double Loose = 0.0, LooseTurn = 0.02;
+		Vec Sweep = Vec(0.0, 0.0, 0.0);
 		double LastSlack = 1.0;
 		bool bPainted = false;
 		bool bEasing = false;
@@ -384,6 +392,8 @@ namespace AirSky
 		/** Both rooms and the shadows, the line drawn again from this eye. */
 		void PaintBoth(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light);
 		void SetInk(double InInk);
+		/** Both rooms' sweep (Painter::SetSweep), for the paints that follow. */
+		void SetSweep(const Vec& InSweep);
 		int NearRoom() const { return NearPuffs; }
 		/** The line between the rooms as last drawn (metres from the eye then, across the ground). */
 		double Line() const { return LastLine; }

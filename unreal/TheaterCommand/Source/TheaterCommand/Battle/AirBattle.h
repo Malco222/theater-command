@@ -152,6 +152,10 @@ private:
 	 */
 	static constexpr double SkyCut = 40.0;
 	static constexpr double SkyCutJump = 4.0;
+	/** A step past this is a cut whatever the frame before did (a cut straight after a cut; no glide goes 3 km a frame at 45 frames a second or more). */
+	static constexpr double SkyCutFar = 3000.0;
+	/** How many frames of the eye's step the painters' sweep covers for a turn painted aside (see DrawSky). */
+	static constexpr double SkySweep = 8.0;
 	/** "-TheaterSkyAtOnce": every turn painted on the game thread, as before round 11 (to time the two). */
 	bool bSkyAtOnce = false;
 	/** Waits for a turn painted aside, if one is under way, and sends it (bSend). */

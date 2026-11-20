@@ -279,7 +279,14 @@ soft puffs, in the effects kit's shape and with the same `M_Highlight`, in two r
   both rooms of a far turn go out together. When the eye jumps over 40 m in a frame, and over four times its last
   frame's move (a cut), the turn in hand is finished and sent and the new one painted at once, so a cut never shows
   the last shot's clouds. A glide's eased sweep is not a cut (on build 1760 it was: the flyover's glide into the
-  strategy view, up to 100 m a frame, painted 170 to 230 frames at once, each battle's slowest five seconds). The battle's end and
+  strategy view, up to 100 m a frame, painted 170 to 230 frames at once, each battle's slowest five seconds). A step
+  over 3 km is a cut whatever came before (a cut straight after a cut). The game's own glides run far faster than
+  that note's 100 m (the strategy view's middle can be 70 km from the flyover's last eye: 700 m a frame), so a turn
+  painted aside and shown a frame or three late was painted for an eye kilometres back, and a cloud the eye had
+  since flown into could stand across the lens at full strength. So a turn painted aside is given a sweep (the
+  pre-check's cure on round 12, `Painter::SetSweep`): eight frames of the eye's step along its way, and each puff
+  fades by the lens (1.2 radii to 0.6) by the nearest the eye comes to it along that way. None at a cut. The
+  pre-check's glides through cloud went from up to 134 frames with a disc across the lens to none. The battle's end and
   a new sky wait for the turn in hand. `-TheaterSkyAtOnce` paints every turn on the game thread, as before, to
   compare.
 - **The log.** Every 5 s, `Air battle sky` gives the near and far turns, the milliseconds of a turn's painting (aside,
