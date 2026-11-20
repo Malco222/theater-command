@@ -1696,7 +1696,14 @@ namespace TheaterFx
 		const double HalvePast = NumOf("halve_past", 1800.0, 0.0, 1e6);
 		// (a small splash is far fewer pieces, each bigger for its size; on a busy screen a new column is half as many,
 		// and with the room four fifths full a quarter: a salvo's last columns are coarse, never missing)
-		const double Asked = static_cast<double>(RoomAsked());
+		// (water already thrown that is not yet born counts as asked for: a column's spray and foam come a moment after
+		// it, and the later columns of a salvo must know of them, or the room is full before the first is at its height)
+		size_t Unborn = 0;
+		for (size_t I = 0, Seen = std::min(HeldAtDraw, Bits.size()); I < Seen; ++I)
+		{
+			Unborn += Bits[I].Born > T0 ? 1 : 0;
+		}
+		const double Asked = static_cast<double>(RoomAsked() + Unborn);
 		const double BusyK = HalvePast > 0.0 && Asked > HalvePast ? (Asked > 0.8 * MaxPuffs ? 0.25 : 0.5) : 1.0;
 		const double ManyNear = std::clamp(std::pow(H / 50.0, 0.6), 0.12, 1.3) * BusyK;
 		const double Many = std::max(0.03, ManyNear * FarK);
@@ -1759,6 +1766,10 @@ namespace TheaterFx
 			B.ShadowK = ShadowK;
 			return B;
 		};
+		// (domes: no column at all, but that many low domes of white water heaving up and sinking over the column's
+		// width, with darker water between them: the boil round a ship that is going down. The art director, 22:03Z)
+		const Span Domes = SpanOf("domes", 0.0, 0.0, 0.0, 24.0);
+		const bool bBoil = Domes.B >= 1.0;
 		// the foam: a pale patch where the column stood, and a broken ring of it spreading as the water comes down.
 		// Laid first: it lies on the sea, under everything
 		const double FoamReach = NumOf("foam_reach", 0.42, 0.05, 2.0) * H;
@@ -1787,7 +1798,7 @@ namespace TheaterFx
 			B.Grow = 0.5;
 			B.Stretch = bPatch ? D.U(1.0, 1.25) : D.U(1.2, 1.7);
 			B.Spin = bPatch ? D.U(0.0, 2.0 * Pi) : A + Pi / 2.0 + D.U(-0.5, 0.5);
-			B.Col = bPatch ? FoamCol : WaterCol.Mix(FoamCol, D.U(0.2, 0.8));
+			B.Col = bPatch ? (bBoil ? WetCol.Mix(FoamCol, 0.3) : FoamCol) : WaterCol.Mix(FoamCol, D.U(0.2, 0.8)); // (a boil's patch is dark troubled water, its foam lying on that)
 			B.Col2 = FoamCol;
 			B.Alpha = FoamAlpha * (bPatch ? 0.55 : D.U(0.35, 0.75));
 			B.FadeIn = 0.6 * Tall;
@@ -1842,8 +1853,126 @@ namespace TheaterFx
 			B.Turn = D.U(0.0, 2.0 * Pi);
 			Bits.push_back(B);
 		}
+		// (spray: a streamer of water leaving the column at one place, thrown out and a little up over a moment, so
+		// that at any instant it is an arc from its root that bends over under its own weight: dashes at its root,
+		// thicker there, breaking into beads over its last third. It falls as things fall, faster than the curtain,
+		// drawn in shorter and shorter dashes, and is gone before the column's top is down. The art director, 22:03Z:
+		// single streaks were "long, dead-straight hairlines that fan out like a firework", and later hung "alone
+		// above the column like rain or scratches")
+		const int SprayPieces = static_cast<int>(NumOf("streamer_pieces", 5.0, 1.0, 8.0));
+		auto Spray = [&](const Vec& Leaves, const Vec& Away, double Throw, double Up, double Born0, int Pieces)
+		{
+			const double G = std::max(FallG() * D.U(1.3, 1.8), 9.8 * D.U(1.4, 2.0));
+			const double Slows = D.U(1.0, 1.6) / Tall;
+			const Vec V0 = Away * (std::max(Throw, 0.0) * Slows) + ZUp * std::sqrt(2.0 * G * std::max(Up, 0.0));
+			const double Every = Tall * D.U(0.07, 0.1);
+			const double Thick = std::max(H, 10.0) * D.U(0.0045, 0.008) * Coarse;
+			const double Gone = std::min(V0.Z / G + std::sqrt(2.0 * (std::max(Leaves.Z - At.Z, 0.0) + std::max(Up, 0.0)) / G), D.U(0.8, 1.15) * std::max(Tall, 0.75));
+			const double Sheen = D.U(0.6, 0.9);
+			for (int K = 0; K < Pieces; ++K)
+			{
+				// (the first thrown is its tip, the last its root)
+				const double Rootward = Pieces > 1 ? static_cast<double>(K) / (Pieces - 1) : 1.0;
+				const bool bBead = Pieces > 2 && Rootward < 0.34;
+				Bit B;
+				B.Form = Bit::Shape::Streak;
+				B.Born = Born0 + K * Every;
+				B.From = Leaves;
+				B.Vel = V0 * (bBead ? D.U(0.86, 1.1) : 1.0); // (its beads no longer quite on its line)
+				B.Along = V0.Unit(ZUp);
+				B.Drag = Slows;
+				B.Gravity = G;
+				B.Windage = 0.5;
+				B.Life = std::max(0.1, Gone * D.U(0.85, 1.0));
+				B.R0 = B.R1 = Thick * (0.4 + 0.6 * Rootward);
+				B.HalfLength = H * 0.03; // (falling fast, a dash no longer reaches the next: beads, never a long line)
+				B.BySpeed = Every * (bBead ? D.U(0.35, 0.5) : 1.7); // (a dash runs into the next, one line of water; a bead stands clear)
+				B.Col = WaterCol;
+				B.Col2 = WaterCol;
+				B.Alpha = Solid * Sheen * (bBead ? 0.8 : 1.0);
+				B.FadeIn = 0.02;
+				B.Hold = 0.55;
+				B.Heart = 0.9;
+				B.Rim = 0.2;
+				B.Point = bBead ? 0.4 : 0.6;
+				B.Tail = 0.4;
+				B.LeastPx = 1.0;
+				Bits.push_back(B);
+			}
+		};
+		if (bBoil)
+		{
+			// the boil: each dome a cap of white water over a few lower lumps, thrown up slowly from one place and
+			// sinking back, no two at the same moment; here and there a burst of spray as air vents
+			const int NDomes = std::max(1, static_cast<int>(D.Whole(static_cast<int>(Domes.A), static_cast<int>(Domes.B)) * BusyK * std::sqrt(FarK) + 0.5));
+			const int NBursts = D.Whole(1, 3);
+			const Vec Across = bEyeKnown ? (LastEye - At).Cross(ZUp).Unit(Vec(1.0, 0.0, 0.0)) : Vec(1.0, 0.0, 0.0);
+			for (int J = 0; J < NDomes; ++J)
+			{
+				const double A = 2.0 * Pi * (J + D.U(-0.4, 0.4)) / NDomes, Off = std::sqrt(D.U(0.05, 1.0));
+				const Vec Outward(std::cos(A), std::sin(A), 0.0);
+				Vec Mid = At + Outward * (HeadR * Off);
+				Mid.Z = Height(Mid.X, Mid.Y);
+				const double DomeH = H * D.U(0.45, 1.0), DomeR = DomeH * D.U(0.9, 1.4);
+				const double Born0 = T0 + RiseS * 2.6 * std::pow(D.U(), 1.7); // (most in its first second or two, the rest straggling after)
+				const double G = FallG();
+				const int NLumps = D.Whole(3, 4);
+				for (int I = -1; I < NLumps; ++I)
+				{
+					// (the cap: smooth heaving water, pale with the air in it; then froth breaking round its foot, whiter
+					// and rougher, a moment after it)
+					const bool bCap = I < 0;
+					const double B_ = 2.0 * Pi * (I + D.U(-0.4, 0.4)) / NLumps;
+					const Vec Aside(std::cos(B_), std::sin(B_), 0.0);
+					const Vec To = Mid + (bCap ? ZUp * (0.62 * DomeH) : Aside * (DomeR * D.U(0.65, 1.0)) + ZUp * (DomeH * D.U(0.08, 0.26)));
+					const double Rad = std::min(PieceMax * 2.0, DomeR * (bCap ? D.U(0.55, 0.7) : D.U(0.24, 0.38)));
+					const Rgb Col = Sided(bCap ? WaterCol.Mix(FoamCol, D.U(0.2, 0.5)).Mix(WetCol, D.U(0.08, 0.22)) : WaterCol, Outward, Off);
+					Bit B = Water(Mid + Aside * (0.3 * DomeR * D.U(0.0, 1.0)) + ZUp * 0.05, To, G, Rad, Col * D.U(0.94, 1.0));
+					B.Born = Born0 + (bCap ? 0.0 : D.U(0.1, 0.5) * RiseS);
+					B.Along = bCap ? Across : (Across + ZUp * D.U(-0.3, 0.3)).Unit(Across);
+					B.Stretch = bCap ? D.U(1.25, 1.6) : D.U(1.4, 2.0); // (a dome: wider than it is high)
+					B.Heart = 0.9;
+					B.Inner = bCap ? 0.4 : 0.3; // (soft-edged: water, never a block of ice)
+					B.Hold = 0.5;
+					B.Rough = bCap ? D.U(0.25, 0.4) : D.U(0.45, 0.6);
+					if (!bCap)
+					{
+						B.Life *= D.U(0.6, 0.9);
+					}
+					Bits.push_back(B);
+				}
+				if (J < NBursts)
+				{
+					// (air venting: a short jet of white water thrown up out of the dome, and its spray)
+					const double Lean0 = Radians(D.U(0.0, 20.0)), Az0 = D.U(0.0, 2.0 * Pi);
+					const Vec Up0(std::cos(Az0) * std::sin(Lean0), std::sin(Az0) * std::sin(Lean0), std::cos(Lean0));
+					const double BurstAt = Born0 + RiseS * D.U(0.1, 0.4), Reach = DomeH * D.U(1.5, 2.4);
+					for (int I = 0; I < 3; ++I)
+					{
+						// (soft lumps of spray, the highest the smallest, gone while the dome still stands under them)
+						const double F = (I + 1) / 3.0;
+						Bit B = Water(Mid + ZUp * 0.1, Mid + Up0 * (Reach * F), FallG() * 2.0, DomeR * 0.2 * (1.3 - 0.6 * F), WaterCol);
+						B.Born = BurstAt;
+						B.Life = std::min(B.Life, RiseS * D.U(0.6, 0.9));
+						B.Along = Up0;
+						B.Stretch = 1.6;
+						B.Alpha = Solid * 0.8;
+						B.Hold = 0.4;
+						B.Inner = 0.5;
+						B.Rough = 0.4;
+						Bits.push_back(B);
+					}
+					const int NSpray = 2;
+					for (int I = 0; I < NSpray; ++I)
+					{
+						const double B_ = D.U(0.0, 2.0 * Pi), Lean = Radians(D.U(5.0, 25.0));
+						Spray(Mid + ZUp * (0.4 * DomeH), Vec(std::cos(B_), std::sin(B_), 0.0), Reach * std::tan(Lean) * D.U(1.0, 1.6), Reach * D.U(0.6, 1.0), BurstAt, std::min(SprayPieces, 4));
+					}
+				}
+			}
+		}
 		// the dark wet base: heavy unbroken water heaved up and out round the foot, back down first
-		const int NFoot = static_cast<int>(NumOf("foot", 20.0, 0.0, 100.0) * Many);
+		const int NFoot = bBoil ? 0 : static_cast<int>(NumOf("foot", 20.0, 0.0, 100.0) * Many);
 		for (int I = 0; I < NFoot; ++I)
 		{
 			const double A = D.U(0.0, 2.0 * Pi);
@@ -1866,7 +1995,7 @@ namespace TheaterFx
 			Bits.push_back(B);
 		}
 		// the column: white water all the way up, dark and wet at its base, wider toward its head
-		const int NBody = static_cast<int>(NumOf("body", 110.0, 0.0, 400.0) * Many);
+		const int NBody = bBoil ? 0 : static_cast<int>(NumOf("body", 110.0, 0.0, 400.0) * Many);
 		for (int I = 0; I < NBody; ++I)
 		{
 			const double F = 0.04 + 0.7 * std::pow(D.U(), 1.15); // (how far up the column it stands: a little denser low down; the fingers are its top)
@@ -1900,39 +2029,11 @@ namespace TheaterFx
 			Bits.push_back(B);
 		}
 		// the crown: fingers of water thrown on past the column's head, uneven and leaning out, each drawn to a torn
-		// point; and spray flying on from their tips, which comes down last, as streaks
+		// point; and streamers of spray leaving their heads, which bend over and are down before the column is
 		const Span Fingers = SpanOf("fingers", 10.0, 16.0, 0.0, 30.0), FingerLean = SpanOf("finger_lean_deg", 5.0, 24.0, 0.0, 80.0), FingerReach = SpanOf("finger_reach", 0.62, 0.98, 0.1, 1.5);
-		const Span Streamers = SpanOf("streamers", 4.0, 7.0, 0.0, 30.0), StreamReach = SpanOf("streamer_reach", 1.0, 1.22, 0.2, 2.0);
-		const int NFingers = std::max(3, static_cast<int>(D.Whole(static_cast<int>(Fingers.A), static_cast<int>(Fingers.B)) * std::pow(ManyNear, 0.75) * std::pow(FarK, 0.4) + 0.5)); // (a far column keeps more of its fingers than of its body: they are its outline)
+		const Span Streamers = SpanOf("streamers", 0.0, 2.0, 0.0, 30.0), StreamOut = SpanOf("streamer_out", 0.16, 0.32, 0.0, 1.0);
+		const int NFingers = bBoil ? 0 : std::max(3, static_cast<int>(D.Whole(static_cast<int>(Fingers.A), static_cast<int>(Fingers.B)) * std::pow(ManyNear, 0.75) * std::pow(FarK, 0.4) + 0.5)); // (a far column keeps more of its fingers than of its body: they are its outline)
 		const double AzFrom = D.U(0.0, 2.0 * Pi);
-		// (spray: a thin bright streak along its own flight, up past a finger's tip and all the way down again)
-		auto Spray = [&](const Vec& Dir, double Reach)
-		{
-			const double G = FallG() * D.U(0.9, 1.3);
-			Bit B;
-			B.Form = Bit::Shape::Streak;
-			B.Born = T0 + 0.01;
-			B.From = At + ZUp * 0.1;
-			B.Vel = Dir * (Reach * Kd);
-			B.Along = Dir;
-			B.Drag = Kd;
-			B.Gravity = G;
-			B.Windage = 0.5;
-			B.Life = BackAt(std::max(Reach * Dir.Z, 0.05), G);
-			B.R0 = B.R1 = H * D.U(0.0012, 0.003) * Coarse;
-			B.HalfLength = H * D.U(0.025, 0.09);
-			B.Col = WaterCol;
-			B.Col2 = WaterCol;
-			B.Alpha = Solid * D.U(0.55, 0.9);
-			B.FadeIn = 0.02;
-			B.Hold = 0.6;
-			B.Heart = 0.9;
-			B.Rim = 0.2;
-			B.Point = 0.9;
-			B.Tail = 0.9;
-			B.LeastPx = 1.0;
-			Bits.push_back(B);
-		};
 		for (int J = 0; J < NFingers; ++J)
 		{
 			const double Az = AzFrom + 2.0 * Pi * (J + D.U(-0.35, 0.35)) / std::max(NFingers, 1);
@@ -1958,7 +2059,7 @@ namespace TheaterFx
 				Bit B = Water(At + Out2 * (0.6 * RootOff) + ZUp * 0.1, Stands + Side, G, Rl * D.U(0.85, 1.2), WetCol.Mix(FingerCol, WhiteJ));
 				B.ShadowK = ShadowK * WhiteJ;
 				B.Born = T0 + 0.03 * (1.0 - F);
-				B.Life = std::min(B.Life, Fades * D.U(0.8, 1.2));
+				B.Life = std::min(B.Life, Fades * D.U(0.8, 1.2) * (1.0 - 0.3 * Fn)); // (its tip first: nothing is left standing alone over the column as it comes down)
 				B.Along = (ZUp + Out2 * (Spread * 1.6 * std::pow(Fn, 0.6) / 0.6)).Unit(ZUp); // (along the finger where it stands)
 				B.StretchFrom = std::max(1.0, (2.0 + 1.4 * Fn) * JetK);
 				B.Stretch = B.StretchFrom * 1.5;
@@ -1975,18 +2076,24 @@ namespace TheaterFx
 			}
 			const int NSpray = D.Whole(static_cast<int>(Streamers.A * Many), static_cast<int>(Streamers.B * Many));
 			const Vec Tip = Out2 * (RootOff + ReachJ * Spread) + ZUp * ReachJ; // (the finger's tip, from the hit)
-			const Vec TipWay = Tip.Unit(ZUp);
 			for (int I = 0; I < NSpray; ++I)
 			{
-				Spray((TipWay + Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-1.0, 1.0)) * 0.07).Unit(TipWay), Tip.Length() * StreamReach.Pick(D));
+				// (it leaves the finger's head where that is at the moment, on its way up, and swings out to one side of it)
+				const double When = RiseS * D.U(0.3, 0.6), Swing = D.U(-0.9, 0.9);
+				const Vec Leaves = At + Tip * ((1.0 - std::exp(-Kd * When)) * D.U(0.9, 1.0));
+				Spray(Leaves, Out2 * std::cos(Swing) + Vec(-Out2.Y, Out2.X, 0.0) * std::sin(Swing), H * StreamOut.Pick(D), H * D.U(0.03, 0.09), T0 + When, SprayPieces);
 			}
 		}
-		// (and spray thrown out of the column's sides all the way up, so the curtain that comes down is streaked)
-		const int NSide = static_cast<int>(NumOf("side_spray", 24.0, 0.0, 200.0) * Many);
+		// (and streamers out of the column's sides, lower down)
+		const int NSide = bBoil ? 0 : static_cast<int>(NumOf("side_spray", 24.0, 0.0, 200.0) * Many);
 		for (int I = 0; I < NSide; ++I)
 		{
-			const double A = D.U(0.0, 2.0 * Pi), Lean = Radians(D.U(2.0, 16.0));
-			Spray(Vec(std::cos(A) * std::sin(Lean), std::sin(A) * std::sin(Lean), std::cos(Lean)), H * D.U(0.45, 1.0));
+			// (out of the column's side where the water has just come up to that height)
+			const double A = D.U(0.0, 2.0 * Pi), F = D.U(0.3, 0.72);
+			const Vec Outward(std::cos(A), std::sin(A), 0.0);
+			const double Flare = Clamp01((F - 0.35) / 0.5);
+			const double Rc = StalkR + (HeadR - StalkR) * Flare * Flare * (3.0 - 2.0 * Flare);
+			Spray(At + Outward * (0.8 * Rc) + ZUp * (F * H), Outward, H * D.U(0.08, 0.2), H * D.U(0.0, 0.04), T0 + RiseS * (-std::log(1.0 - F) / 3.0 + D.U(0.05, 0.35)), SprayPieces);
 		}
 		// the mist: a little fine spray left in the air as the water comes down, thin, going off down the wind
 		const Span MistAlpha = SpanOf("mist_alpha", 0.08, 0.16, 0.0, 1.0), MistS = SpanOf("mist_s", 4.0, 7.0, 0.5, 60.0);

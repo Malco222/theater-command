@@ -794,8 +794,9 @@ foam ring and a thin drifting mist.
   gravity set from `fall_s`, so the whole column is back on the sea by then and nothing hangs. The body stands to
   three quarters of the size's `crown_m` (`wide` of the height at its stalk, `crown_wide` at its head; dark wet
   water, `base_colour`, for its lowest `base_to`, breaking white above). The top is fingers that rise inside the
-  body and bend out of its head (`fingers`, `finger_lean_deg`, `finger_reach`), each torn to a point, with needles
-  of spray flying on from their tips and out of the sides (`streamers`, `streamer_reach`, `side_spray`). Going up the
+  body and bend out of its head (`fingers`, `finger_lean_deg`, `finger_reach`), each torn to a point, with streamers
+  of spray leaving their heads and the column's sides (`streamers`, `streamer_pieces`, `streamer_out`, `side_spray`;
+  see the mend below). Going up the
   water is jets (`jet_stretch`); coming down each piece is drawn out longer, a curtain. Round the foot: a low dark
   heave (`foot`), a ring of spray racing out over the sea (`surge`), a soft mottled patch of foam that lasts
   (`foam`, `foam_reach`, `foam_alpha`, `foam_s`) and a thin mist down the wind (`mist`, `mist_alpha`, `mist_s`). The
@@ -804,17 +805,20 @@ foam ring and a thin drifting mist.
   16 s. A small splash is quicker by the root of its height.
 - **Sizes.** Any size may set its own numbers under `sizes.<size>.spout`. Two new rows: `torpedo` (the tallest and
   narrowest column, 55 to 70 m, dark for its lower third) and `churn` (the white water round a ship that is
-  settling, going down or rolling over: a low boil 3 to 6 m high and wider than it is tall, slow, with foam that
-  stays). `sizes.<size>.quiet: 1` means water moved by no explosion: no flash and no jolt (`churn` has it). A kit
+  settling, going down or rolling over: a low boil of domes 3 to 6 m high and about five times as wide, slow, with
+  foam that stays; see the mend below). `sizes.<size>.quiet: 1` means water moved by no explosion: no flash and no jolt (`churn` has it). A kit
   without these rows draws an unknown size as a 105's burst, so a scene passes them only with this recipe.
-- **Cost.** At its peak a 500 lb column is 318 pieces (the old one 1,078), a torpedo's 340, a 250 lb 268, a 105's
-  94, a light splash 34, a churn 68. A small splash is fewer, coarser pieces by its height. So is a hit far off: so far
-  that a 50 m column would stand under `full_px` tall in the picture (the scene's window pixels) it has that share
-  of its pieces, never under `far_least`, each as much bigger, and it keeps more of its fingers than of its body
-  (a 500 lb column with the game's lens: all 318 at 470 m, 197 at 1 km, 109 at 1.5 km, 77 at 2 km). Past `halve_past` pieces asked for on the
+- **Cost.** The most pieces a column has at once, over six rolls of the dice, least to most: a 500 lb bomb's 296
+  to 446 (the old column 1,078), a torpedo's 349 to 442, a 250 lb 236 to 314, a 105's 83 to 103, a light splash 36
+  to 49, a churn 33 to 51. (The first notes gave one roll, 318, as the bomb's count.) A small splash is fewer,
+  coarser pieces by its height. So is a hit far off: so far that a 50 m column would stand under `full_px` tall in
+  the picture (the scene's window pixels) it has that share of its pieces, never under `far_least`, each as much
+  bigger, and it keeps more of its fingers than of its body (a 500 lb column with the game's lens: all of them at
+  470 m, 170 to 253 at 1 km, 102 to 134 at 1.5 km, 73 to 100 at 2 km). Past `halve_past` pieces asked for on the
   screen a new column is half as many, and with the room four fifths full a quarter: a salvo's last columns are
-  coarse, never missing. A salvo of 12 500 lb columns raised within 0.6 s, at 470 m: 2,768 at most of a room of 3,000; at 1 km 2,157; at
-  1.5 km 1,567; at 2 km 1,113. Sixteen at 470 m: 2,966.
+  coarse, never missing. Water already thrown and not yet born counts as asked for, since a column's spray and foam
+  come a moment after it. A salvo of 12 500 lb columns raised within 0.6 s, at 470 m: 2,468 to 2,535 at most of a
+  room of 3,000; at 1 km about 2,070; at 1.5 km about 1,415; at 2 km about 1,010. Sixteen at 470 m: 2,699 to 2,844.
 - **For the preview:** `FX_KIT_PX=k` on a shell's shot too (the kit is told a picture k times as wide as the one
   drawn, as a scene tells it its window's pixels); a small test picture without it draws thinned columns.
   `FX_BARRAGE=12 FX_BARRAGE_GAP=0.05` is a salvo.
@@ -823,10 +827,21 @@ foam ring and a thin drifting mist.
   draw as before.
 - **Dark water stays dark.** The froth is shaded first (the sun's side, and one piece in five in the shade of the
   rest) and the base's dark laid over that, on the body and on the fingers' roots, so `base_to` shows on every side.
-- **Proofs.** b84ea90's recipe on b84ea90's code and on this: 117 frames (sea and land 23, the air look 44 and 50),
-  byte for byte. de54166's recipe: 115 frames (65 and 50), byte for byte. Both hashes unchanged. No warnings (g++
-  and clang, -Wshadow). Wild numbers on the 105 new keys, alone and all together, with wild winds and screen scales
-  and a salvo of 16: 2,255 runs under ASAN and UBSAN, no faults.
+- **The art director's mend** (22:03Z 20 November, on head 17d5075: the column passed; its spray was "long,
+  dead-straight hairlines that fan out like a firework", later hanging "alone above the column like rain or
+  scratches"; the churn was "a white hedgehog mound, taller than wide"). A streamer is now `streamer_pieces` pieces
+  thrown one after another from one place on the column (a finger's head on its way up, or the column's side) out
+  to `streamer_out` of the height and a little up, under the weight of real water: at any moment an arc from its
+  root that bends over, a line of dashes thicker at the root that breaks into beads at its tip; falling fast its
+  dashes no longer reach each other, and it is gone before the column's top is down. A finger's tip goes before
+  its root, so nothing stands alone over the falling column. The churn is `domes` under its own row: no column at
+  all, but that many domes of pale water heaving up and sinking back over the patch, no two at the same moment,
+  froth breaking round the foot of each, the patch between them dark troubled water, and one to three vents of
+  spray. `streamer_reach` is gone from the row.
+- **Proofs** (of the mended head). b84ea90's recipe on b84ea90's code and on this: 117 frames (sea and land 23, the
+  air look 44 and 50), byte for byte. de54166's recipe: 115 frames (65 and 50), byte for byte. Both hashes
+  unchanged. No warnings (g++ and clang, -Wshadow). Wild numbers on the 96 keys of the sea's rows, alone and all
+  together, with wild winds and screen scales and a salvo of 16: 2,143 runs under ASAN and UBSAN, no faults.
 - **Still to come:** ship fires as ragged tongues (the art director's second note), the ways down.
 
 ## Oil fires at sea
