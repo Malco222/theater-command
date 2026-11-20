@@ -496,6 +496,33 @@ Each is behind its recipe key and throws no new dice: head 3d00b85's recipe draw
 for frame. Preview: the game's wider view of the west test is `FX_GAME_BACK=52 FX_GAME_LOOK=0,0`; with
 `FX_TEST_TANK=0.1` frames 0, 3, 6, 9 and 12 are 0.1 to 0.5 s after the shot.
 
+## Young dust that shows on the game's sand, fans that cannot fold (after head 61387c7)
+
+Build 1764's game stills (09:28Z, 20 November) showed two things the kit's own stills had not.
+
+- **The young dust was lost on the game's ground.** From 60 m, for a third of a second after the shot, nothing
+  marked the gun: the low skirt of head 61387c7, soft-edged and in one flat tone a little under the ground's,
+  showed as a dark stain on the preview's flat ground and as almost nothing on the game's rippled sand.
+  `muzzle.dry.low_lit` (`Bit::LowLit`) is the share of its light and shade a mound is born with; `low_soft` 1
+  gives it its firm edge from birth. At `low_lit` 0.5 a young mound's top sits at about the ground's own tone
+  (the top 2% of it 1.03 to 1.04 times the game's sand, where a lit lump of build 1762 was 1.09) and its foot is
+  darker, so it reads as a low heap of dust and never as a pale ball. From `low_s.1` on it is as it was: the
+  frames at 20.5 and 21.5 s of the west test are head 61387c7's, byte for byte. No `low_lit`: 0, as before.
+- **A fan drawn from a point off its middle folded over itself** (`Bit::Hub`; the pre-check's reading, 09:08Z):
+  where a tongue's rough outline turned its back on the hub, that sector was wound the other way and drawn over
+  its neighbour, a wedge of a few pixels inked twice, in 360 of 7,000 fans. `Battle::Lay` now brings each rim
+  point that would lie behind the last one in sight onto that one's line from the hub, as far out as it was, and
+  its heart point with it, so the sector is a line and covers nothing. By the pre-check's counter (hub57): 0 of
+  7,000. A fan whose outline is wholly in sight of its hub is left as it was, to the bit.
+
+**Judge a ground effect on the game's own ground.** `over_game.py` lays the kit's picture over one of the game's
+stills: the same frame drawn on two grounds gives, pixel by pixel, how much the effect covers and the light it
+adds; that is laid in linear light over the still (taken back through the game's curve) and shown through the
+curve again. Laid so, head 3d00b85's young lumps and head 61387c7's skirt come out as builds 1762 and 1764
+showed them. The wider view's eye is not quite the builder's (the dust lies 19 pixels left and 158 up of where
+the preview has it; the last argument moves it), and by eye the game's shot is about a tenth of a second later
+than the still's name says.
+
 ## Oil fires at sea
 
 ```cpp

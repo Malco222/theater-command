@@ -2180,8 +2180,12 @@ namespace TheaterFx
 					// old each lies along the ground low_flat times as high as it is wide, the way blast dust first skirts
 					// out, in its plain tone with no lit top and with a soft edge (low_soft); by low_s.1 it has risen round,
 					// firmed and earned its light. The gun's smoke puffs, off the ground, keep their shape and only firm and
-					// come into their light as late. No key: as before)
-					const double LowFlat = DryNum("low_flat", 0.1, 1.0, 0.5), LowFrom = DryNum("low_s.0", 0.0, 10.0, 0.0), LowBy = DryNum("low_s.1", 0.0, 10.0, 0.0), LowSoft = DryNum("low_soft", 0.1, 1.0, 0.55);
+					// come into their light as late. No key: as before.
+					// Build 1764's stills from 60 m (09:28Z): a soft-edged mound in one flat tone a little under the ground's
+					// is lost on the game's rippled sand, so nothing marked the shot for a third of a second. low_lit: the
+					// share of its light and shade a mound is born with, so it has a top near the ground's own tone and a
+					// darker foot and reads as a low heap of dust; low_soft 1 gives it its firm edge from birth)
+					const double LowFlat = DryNum("low_flat", 0.1, 1.0, 0.5), LowFrom = DryNum("low_s.0", 0.0, 10.0, 0.0), LowBy = DryNum("low_s.1", 0.0, 10.0, 0.0), LowSoft = DryNum("low_soft", 0.1, 1.0, 0.55), LowLit = DryNum("low_lit", 0.0, 1.0, 0.0);
 					const Vec Under(At.X, At.Y, Height(At.X, At.Y)); // (the ground under the muzzle)
 					const double FlankFirst = DL.U() < 0.5 ? -1.0 : 1.0;
 					// (a lobe of a lump: the same dust beside it, Size times as big, with an outline of its own)
@@ -2214,6 +2218,7 @@ namespace TheaterFx
 						B.LowFrom = LowFrom;
 						B.LowBy = LowBy;
 						B.LowSoft = LowSoft;
+						B.LowLit = LowLit;
 						B.Thin = 2;
 						B.Origin = At - FwFlat * 1.5; // (the gun's body, behind its muzzle)
 						const double Tone = Safe(ShadeIs.Pick(DL), 0.3, 1.5, 0.9);
@@ -5957,6 +5962,63 @@ namespace TheaterFx
 			}
 			Put(First + 1 + static_cast<size_t>(Sides) + I, Middle + Dir * Reach, Shaded, RimAlpha);
 		}
+		if (bHub && !bLayLong && LayInnerAlong <= 0.0)
+		{
+			// (a fan drawn from a point off its middle folds over itself wherever its rough outline turns its back on
+			// that point: the sector there is wound the other way and drawn over its neighbour, a thin wedge inked
+			// twice (the pre-check's reading, 09:08Z 20 November; seen as a bright sharp wedge in a tongue of flame in
+			// build 1764's still). Going round, each rim point that would lie behind the last one in sight, as the
+			// hub sees them, is brought onto that one's line from the hub, as far out as it was, and its heart point
+			// follows it: that sector is then a line and covers nothing. An outline wholly in sight of the hub is
+			// left as it was, to the bit)
+			const Vec Hub = Middle + LayHub;
+			const Vec Ua = AxisA.Unit(Vec());
+			const Vec Vb = (AxisB - Ua * AxisB.Dot(Ua)).Unit(Vec());
+			if (Ua.Dot(Ua) > 0.5 && Vb.Dot(Vb) > 0.5)
+			{
+				const size_t Heart0 = First + 1, Rim0 = First + 1 + static_cast<size_t>(Sides);
+				auto Onto = [&](size_t I, double Px, double Py, double X, double Y)
+				{
+					const double L0 = std::sqrt(Px * Px + Py * Py), L1 = std::sqrt(X * X + Y * Y);
+					if (L0 > 1e-12 && L1 == L1)
+					{
+						const Vec Q = (Ua * Px + Vb * Py) * (L1 / L0);
+						Out[Rim0 + I] = Hub + Q;
+						Out[Heart0 + I] = Hub + Q * In;
+					}
+				};
+				const Vec Q0 = Out[Rim0] - Hub;
+				const double X0 = Q0.Dot(Ua), Y0 = Q0.Dot(Vb);
+				double Px = X0, Py = Y0;
+				for (int K = 1; K < Sides; ++K)
+				{
+					const size_t I = static_cast<size_t>(K);
+					const Vec Q = Out[Rim0 + I] - Hub;
+					const double X = Q.Dot(Ua), Y = Q.Dot(Vb);
+					if (Px * Y - Py * X < 0.0)
+					{
+						Onto(I, Px, Py, X, Y);
+					}
+					else
+					{
+						Px = X;
+						Py = Y;
+					}
+				}
+				// (and the last points round, should they have passed the first)
+				for (int K = Sides - 1; K >= 1; --K)
+				{
+					const size_t I = static_cast<size_t>(K);
+					const Vec Q = Out[Rim0 + I] - Hub;
+					const double X = Q.Dot(Ua), Y = Q.Dot(Vb);
+					if (X * Y0 - Y * X0 >= 0.0)
+					{
+						break;
+					}
+					Onto(I, X0, Y0, X, Y);
+				}
+			}
+		}
 	}
 
 	int Battle::LayCase(int Slot, const Bit& B, double Age, const Vec& Seen, double A, const View& Eye, int Room)
@@ -6088,6 +6150,8 @@ namespace TheaterFx
 			LitNow = G * G * (3.0 - 2.0 * G);
 			Squat = LowFlat + (1.0 - LowFlat) * LitNow;
 			InnerOwn = B.Inner * (LowSoft + (1.0 - LowSoft) * LitNow);
+			const double LowLit = B.LowLit == B.LowLit ? std::clamp(B.LowLit, 0.0, 1.0) : 0.0;
+			LitNow = LowLit + (1.0 - LowLit) * LitNow; // (the share of its light and shade it is born with)
 		}
 		// (a ribbon's piece pales as it widens: see Bit::PaleBy. How dark it is at this age, as a share of how it was laid)
 		auto Paled = [&B](double Age_)
