@@ -942,7 +942,9 @@ void AAirBattle::LayLand()
 	for (int32 K = 0; K < Made.Levels.Num(); ++K)
 	{
 		const AirLand::Frame& F = Made.Frames[static_cast<size_t>(K)];
-		UTexture2D* Picture = CampaignTextures::CreateFromLevels(Made.Levels[K], false, MakeUniqueObjectName(this, UTexture2D::StaticClass(), *FString::Printf(TEXT("AirLandPicture_%d"), K)));
+		// (read through the anisotropic filter: the ground is seen at a slant, and plain trilinear smeared it across the
+		// view; build 1782's Mac stills, the aim-point flyover worst, its town at some 8 degrees)
+		UTexture2D* Picture = CampaignTextures::CreateFromLevels(Made.Levels[K], false, MakeUniqueObjectName(this, UTexture2D::StaticClass(), *FString::Printf(TEXT("AirLandPicture_%d"), K)), false, true);
 		if (!Picture)
 		{
 			continue;
