@@ -1076,8 +1076,9 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 		// beam sent up puffs 70 to 140 m across, a soft brown blur over her that hid the black column her burning oil
 		// sends up; at under half her beam their flames still run her length and the column above her is Pearl
 		// Harbor's, black at its foot, lumpy and leaning downwind).
-		// (fires her hits have already lit count toward the five: FShipLooks::MostFires)
-		int32 Room = FShipLooks::MostFires - Looks.FiresOn(Id, Now);
+		// (fires her hits have already lit count toward the five, FShipLooks::MostFires, but her end lights two at least:
+		// her bow and her stern, so that she burns from end to end however her hits went)
+		int32 Room = FMath::Max(2, FShipLooks::MostFires - Looks.FiresOn(Id, Now));
 		for (const double Share : { -0.4, 0.4, 0.0, -0.2, 0.2 })
 		{
 			if (Room-- <= 0)
@@ -1487,6 +1488,31 @@ void AAirStage::TestPlan()
 			TestBeats.Add({ At, Ship, What, How, bBig });
 		}
 	};
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterStageReel")) && Looks.IsReady())
+	{
+		// The looks reel: each look a ship can show when she survives a hit, one after another on a ship the test keeps
+		// afloat, two pictures each (the burst, then what follows), so the art director sees every one (the pre-check,
+		// 20 November 15:19Z: in the battles themselves nearly every recorded hit comes with the ship's end).
+		// (Nevada, a battleship in harbour; Hiryu, a carrier at sea, for the deck park and the hangar)
+		int32 Order = 0;
+		if (const FShip* Ship = Ships.Find(IdOf(StageKey == TEXT("oahu") ? TEXT("Nevada") : TEXT("Hiryu"))))
+		{
+			const FVector2D Stage = BoardToStage(Ship->Given.At);
+			const double Reach = FMath::Max(Ship->Long * 1.6, 160.0);
+			const FVector Her(Stage.X, Stage.Y, 6.0), Eye(Stage.X - Reach * 0.8, Stage.Y - Reach * 0.6, FMath::Max(Ship->High * 1.4, 24.0));
+			for (const FString& Look : Looks.ReelOf(Ship->Given.Class, Ship->bHarbour))
+			{
+				const double At = 4.0 + Order * 24.0;
+				TestBeats.Add({ At, Ship->Given.Id, TEXT("look"), Look, false });
+				const FString Key = Look.Left(Look.Find(TEXT("|"))).Replace(TEXT("ship."), TEXT(""));
+				TestShots.Add({ FString::Printf(TEXT("reel-%02d-%s-a"), Order + 1, *Key), At + 1.5, Eye, Her, 40.0 });
+				TestShots.Add({ FString::Printf(TEXT("reel-%02d-%s-b"), Order + 1, *Key), At + 12.0, Eye, Her, 40.0 });
+				++Order;
+			}
+		}
+		UE_LOG(LogTheater, Display, TEXT("Stage test: the looks reel, %d looks."), Order);
+		return;
+	}
 	if (StageKey == TEXT("oahu"))
 	{
 		// 7 December 1941, Battleship Row (the origin is berth F-6, the row runs south-west to north-east).
@@ -1586,6 +1612,13 @@ void AAirStage::TestTick()
 		if (Beat.What == TEXT("hit"))
 		{
 			Hit(Beat.Ship, Beat.How, Now);
+		}
+		else if (Beat.What == TEXT("look"))
+		{
+			if (const FShip* Ship = Ships.Find(Beat.Ship))
+			{
+				Looks.Reel(Beat.Ship, Ship->Given.Class, Beat.How, Ship->bHarbour, Now);
+			}
 		}
 		else
 		{

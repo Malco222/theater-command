@@ -194,6 +194,9 @@ namespace Fates
 		Director(const Table& InTable, uint64_t BattleSeed);
 		/** The look for a blow. A blow no way of the table fits gets an empty Key and no beats. */
 		Fate Choose(const Blow& B);
+		/** The named look for a blow, as Choose would draw it (its dials and steps; the memory takes it as shown). Empty
+		 * Key if that look does not fit the blow. For a test reel that films each look in turn. */
+		Fate Show(const Blow& B, const std::string& Key);
 		/** Every look the blow could show and its weight now, the no-repeat rule applied (tests and sheets). */
 		std::vector<std::pair<std::string, double>> Odds(const Blow& B) const;
 		/** How many blows it has picked for. */
@@ -210,13 +213,16 @@ namespace Fates
 		std::string DrawAspect(const Blow& B, Dice& D) const;
 		std::string DrawDial(const Way& W, const std::string& Name, const Json& Spec, const Blow& B, const Fate& F, Dice& D);
 		void Expand(const Way& W, const Json& Spec, const Fate& F, Dice& D, std::vector<Beat>& Out) const;
+		Dice DiceFor(const Blow& B);
+		void Build(const Way& W, const Blow& B, Fate& F, Dice& D);
 	};
 
 	/**
 	 * A ship's lasting pose from the looks she has taken, eased in over each step's time: her list (degrees, plus to
 	 * starboard), her trim (degrees, plus down by the bow) and how far she has settled (metres). "list" adds to the
 	 * list toward a side, "right" (counter-flooding) takes most of it back, "trim" and "settle" add. Kept within what a
-	 * ship afloat shows: her end is the numbers' and the scene's.
+	 * ship afloat shows: her end is the numbers' and the scene's. The limits hold at every moment, not only on each
+	 * step's aim (a new list eases in while an earlier counter-flooding is still easing out).
 	 */
 	class Hull
 	{

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -851,11 +852,32 @@ namespace Fates
 		}
 	}
 
+	Dice Director::DiceFor(const Blow& B)
+	{
+		return Dice(Seed ^ (NameKey(B.Domain + "|" + B.Family) * 0x9E3779B97F4A7C15ull) ^ (static_cast<uint64_t>(B.Unit) * 0xD1B54A32D192ED03ull)
+			^ (static_cast<uint64_t>(B.Model + 1) * 0xABC98388FB8FAC03ull) ^ (static_cast<uint64_t>(++Count) * 0x8CB92BA72F3D8DD7ull));
+	}
+
+	Fate Director::Show(const Blow& B, const std::string& Key)
+	{
+		Fate F;
+		Dice D = DiceFor(B);
+		F.Aspect = DrawAspect(B, D);
+		for (const Way& W : Tables.Ways())
+		{
+			if (W.Key == Key && WeightOf(W, B, F.Aspect) > 0.0)
+			{
+				Build(W, B, F, D);
+				break;
+			}
+		}
+		return F;
+	}
+
 	Fate Director::Choose(const Blow& B)
 	{
 		Fate F;
-		Dice D(Seed ^ (NameKey(B.Domain + "|" + B.Family) * 0x9E3779B97F4A7C15ull) ^ (static_cast<uint64_t>(B.Unit) * 0xD1B54A32D192ED03ull)
-			^ (static_cast<uint64_t>(B.Model + 1) * 0xABC98388FB8FAC03ull) ^ (static_cast<uint64_t>(++Count) * 0x8CB92BA72F3D8DD7ull));
+		Dice D = DiceFor(B);
 		F.Aspect = DrawAspect(B, D);
 		const std::vector<double>& Memory = Tables.Memory();
 		std::vector<const Way*> Fits;
@@ -908,7 +930,13 @@ namespace Fates
 				break;
 			}
 		}
-		const Way& W = *Fits[Chosen];
+		Build(*Fits[Chosen], B, F, D);
+		return F;
+	}
+
+	void Director::Build(const Way& W, const Blow& B, Fate& F, Dice& D)
+	{
+		const std::vector<double>& Memory = Tables.Memory();
 		F.Key = W.Key;
 		F.Group = W.Group;
 		F.Words = W.Words;
@@ -937,7 +965,6 @@ namespace Fates
 		{
 			Once[std::to_string(B.Unit) + "|" + std::to_string(B.Model) + "|" + W.Key] = 1;
 		}
-		return F;
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -992,8 +1019,8 @@ namespace Fates
 
 	void Hull::Pose(double Now, double& OutList, double& OutTrim, double& OutSettle) const
 	{
-		OutList = Sum(Lists, Now);
-		OutTrim = Sum(Trims, Now);
-		OutSettle = Sum(Settles, Now);
+		OutList = std::max(-MostList, std::min(MostList, Sum(Lists, Now)));
+		OutTrim = std::max(-MostTrim, std::min(MostTrim, Sum(Trims, Now)));
+		OutSettle = std::max(0.0, std::min(MostSettle, Sum(Settles, Now)));
 	}
 }

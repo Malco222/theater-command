@@ -43,7 +43,9 @@ struct FStageShip
  *
  * "-TheaterStage=oahu" (or "midway", or "midway-fleet") on the command line raises the stage alone, plays a strike on
  * the record's ships, takes pictures into "-TheaterStageShots=<folder>" if given, and quits: frames for the art
- * director before the air battle's scene exists.
+ * director before the air battle's scene exists. With "-TheaterStageReel" too (oahu or midway-fleet) it plays instead
+ * each look a ship can show when she survives a hit (Battle/ShipLooks), one every 24 s on Nevada or Hiryu, two
+ * pictures each.
  */
 UCLASS()
 class THEATERCOMMAND_API AAirStage : public AActor

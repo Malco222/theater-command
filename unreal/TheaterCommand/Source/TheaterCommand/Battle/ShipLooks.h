@@ -46,6 +46,11 @@ public:
 	 * read it at once (the next Sink may move it). */
 	const Fates::Fate* Sink(int32 Id, const FString& Class, const FString& How, bool bHarbour, double Now);
 
+	/** The test reel (-TheaterStageReel): every look a ship of Class that survives her hit can show, as "key|strike". */
+	TArray<FString> ReelOf(const FString& Class, bool bHarbour) const;
+	/** Plays one look of the reel on ship Id, alone (her pose and what was still to come cleared); its key, or empty. */
+	FString Reel(int32 Id, const FString& Class, const FString& KeyAndStrike, bool bHarbour, double Now);
+
 	/** Plays the steps now due. LieOf: where ship Id lies now (false: she is gone, her steps are dropped). */
 	void Advance(double Now, FBattleEffects* Effects, TFunctionRef<bool(int32, FShipLie&)> LieOf);
 
@@ -75,9 +80,11 @@ private:
 	TMap<int32, double> Sides;
 	TMap<int32, TArray<double>> Fires; // by ship: when each fire she has stops
 	TMap<int32, Fates::Fate> Ends;
+	TMap<int32, TArray<int32>> Burns; // by ship: the ids of the fires her looks lit, where the kit takes ids
 	int32 NextBurn = 0;
 
 	void Queue(int32 Id, const Fates::Fate& Look, double Now);
+	void GiveWay(int32 Id, bool bUnder, double Now);
 	void Play(const FDue& Step, const FShipLie& Lie, FBattleEffects* Effects, double Now);
 	int32 FiresAll(double Now) const;
 };

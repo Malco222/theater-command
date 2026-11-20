@@ -451,6 +451,51 @@ int main(int Count, char** Args)
 		Over.Take(G, 0.0);
 		Over.Pose(100.0, L, Tr, Se);
 		Check(L >= -Over.MostList - 1e-9, "a list never passes what a ship afloat shows");
+		// (the pre-check's case, 20 November: twelve hits 2 to 60 s apart, a new list easing in while an earlier
+		// counter-flooding is still easing out; the limits hold at every second, not only on each step's aim)
+		double Most = 0.0, MostTr = 0.0, MostSe = 0.0;
+		for (uint64_t Run = 1; Run <= 2000; ++Run)
+		{
+			Fates::Director D(Table, Run * 7919u);
+			Fates::Dice Gaps(Run);
+			Fates::Hull Her;
+			Fates::Blow B;
+			B.Domain = "sea";
+			B.Family = Run % 2 ? "bb" : "ca";
+			B.Weapon = "torpedo";
+			B.Unit = 9;
+			double At = 0.0;
+			for (int K = 0; K < 12; ++K)
+			{
+				B.Hurt = K / 12.0;
+				Her.Take(D.Choose(B), At);
+				At += Gaps.U(2.0, 60.0);
+			}
+			for (double T = 0.0; T < At + 240.0; T += 1.0)
+			{
+				Her.Pose(T, L, Tr, Se);
+				Most = std::max(Most, std::fabs(L));
+				MostTr = std::max(MostTr, std::fabs(Tr));
+				MostSe = std::max(MostSe, Se);
+			}
+		}
+		Check(Most <= 18.0 + 1e-9 && MostTr <= 6.0 + 1e-9 && MostSe <= 4.0 + 1e-9,
+			"twelve torpedoes on one ship, sampled every second: list, trim and settle stay in bounds (" + std::to_string(Most) + ", " + std::to_string(MostTr) + ", " + std::to_string(MostSe) + ")");
+	}
+
+	// 7b. A named look, for a test reel that films each in turn.
+	{
+		Fates::Director D(Table, 77);
+		Fates::Blow B;
+		B.Domain = "sea";
+		B.Family = "bb";
+		B.Weapon = "torpedo";
+		B.Unit = 4;
+		const Fates::Fate F = D.Show(B, "ship.torpedo_flooding");
+		Check(F.Key == "ship.torpedo_flooding" && !F.Beats.empty(), "a reel can ask for a torpedo's flooding by name");
+		Check(D.Show(B, "ship.deck_park").Key.empty(), "a reel cannot put a carrier's deck park on a battleship");
+		B.Weapon = "bomb";
+		Check(D.Show(B, "ship.torpedo_flooding").Key.empty(), "nor a torpedo's flooding on a bomb hit");
 	}
 
 	// 8. A sample, in plain words (FATES_STORY=1).

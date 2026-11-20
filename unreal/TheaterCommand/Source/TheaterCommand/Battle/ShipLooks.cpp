@@ -7,12 +7,22 @@
 
 namespace ShipLookParts
 {
-	// The effects kit's newer calls (the effects artist, 20 November 14:39Z), made only where the kit has them.
+	// The effects kit's newer calls (the effects artist, 20 November 14:39Z), made only where the kit has them. A call
+	// whose arguments differ from these is quietly off (no error says so): Begin logs which the kit has, so the Mac's
+	// log proves the hand-over (the pre-check, 20 November 15:19Z).
+	template <typename TKit>
+	constexpr bool HasSteam = requires(TKit* K, int32 I, const FVector& A, const FVector& W, float C, float S) { K->Steam(I, A, W, C, S); };
+	template <typename TKit>
+	constexpr bool HasCookOff = requires(TKit* K, const FVector& A, const FVector& U, float C, int32 P, float O, float J) { K->CookOff(A, U, C, P, O, J); };
+	template <typename TKit>
+	constexpr bool HasBurnOut = requires(TKit* K, const FVector& A, float C, float S, int32 I) { K->Burn(A, C, S, I); K->BurnOut(I, C); };
+	template <typename TKit>
+	constexpr bool HasGlance = requires(TKit* K, const FVector& A, const FVector& I, const FVector& N, const FString& S) { K->Glance(A, I, N, S); };
 
 	template <typename TKit>
 	static bool Steam(TKit* Kit, int32 Id, const FVector& At, const FVector& Way, float Across, float Seconds)
 	{
-		if constexpr (requires(TKit* K, int32 I, const FVector& A, const FVector& W, float C, float S) { K->Steam(I, A, W, C, S); })
+		if constexpr (HasSteam<TKit>)
 		{
 			if (Kit)
 			{
@@ -26,7 +36,7 @@ namespace ShipLookParts
 	template <typename TKit>
 	static bool CookOff(TKit* Kit, const FVector& At, float Across, int32 Pops, float Over, float Jet)
 	{
-		if constexpr (requires(TKit* K, const FVector& A, const FVector& U, float C, int32 P, float O, float J) { K->CookOff(A, U, C, P, O, J); })
+		if constexpr (HasCookOff<TKit>)
 		{
 			if (Kit)
 			{
@@ -41,7 +51,7 @@ namespace ShipLookParts
 	template <typename TKit>
 	static bool BurnWithId(TKit* Kit, const FVector& At, float Across, float Seconds, int32 Id)
 	{
-		if constexpr (requires(TKit* K, const FVector& A, float C, float S, int32 I) { K->Burn(A, C, S, I); K->BurnOut(I, C); })
+		if constexpr (HasBurnOut<TKit>)
 		{
 			if (Kit)
 			{
@@ -55,7 +65,7 @@ namespace ShipLookParts
 	template <typename TKit>
 	static void BurnOut(TKit* Kit, int32 Id, float Over)
 	{
-		if constexpr (requires(TKit* K, int32 I, float O) { K->BurnOut(I, O); })
+		if constexpr (HasBurnOut<TKit>)
 		{
 			if (Kit)
 			{
@@ -67,7 +77,7 @@ namespace ShipLookParts
 	template <typename TKit>
 	static bool Glance(TKit* Kit, const FVector& At, const FVector& Incoming, const FVector& Normal, const FString& Size)
 	{
-		if constexpr (requires(TKit* K, const FVector& A, const FVector& I, const FVector& N, const FString& S) { K->Glance(A, I, N, S); })
+		if constexpr (HasGlance<TKit>)
 		{
 			if (Kit)
 			{
@@ -141,6 +151,9 @@ bool FShipLooks::Begin(uint64 Seed)
 	Table = MoveTemp(Loaded);
 	Picker = MakeUnique<Fates::Director>(*Table, Seed);
 	UE_LOG(LogTheater, Log, TEXT("Ship looks: %d looks read."), static_cast<int32>(Table->Ways().size()));
+	auto Has = [](bool bHas) { return bHas ? TEXT("yes") : TEXT("no"); };
+	UE_LOG(LogTheater, Log, TEXT("Ship looks: the effects kit has steam %s, cook-off %s, a fire beaten out %s, a glancing shot %s."),
+		Has(ShipLookParts::HasSteam<FBattleEffects>), Has(ShipLookParts::HasCookOff<FBattleEffects>), Has(ShipLookParts::HasBurnOut<FBattleEffects>), Has(ShipLookParts::HasGlance<FBattleEffects>));
 	return true;
 }
 
@@ -153,12 +166,13 @@ void FShipLooks::End()
 	Sides.Reset();
 	Fires.Reset();
 	Ends.Reset();
+	Burns.Reset();
 	NextBurn = 0;
 }
 
 void FShipLooks::Hit(int32 Id, const FString& Class, const FString& Strike, bool bHarbour, double Hurt, double Now)
 {
-	if (!Picker.IsValid())
+	if (!Picker.IsValid() || Ends.Contains(Id))
 	{
 		return;
 	}
@@ -207,9 +221,59 @@ const Fates::Fate* FShipLooks::Sink(int32 Id, const FString& Class, const FStrin
 	{
 		return nullptr;
 	}
+	// (at sea she goes under, unless her end is to burn: then her fires burn on with the end's own)
+	GiveWay(Id, !bHarbour && How != TEXT("burn"), Now);
 	Queue(Id, Look, Now);
 	UE_LOG(LogTheater, Log, TEXT("Ship looks: ship %d, %s, %s."), Id, *How, UTF8_TO_TCHAR(Look.Key.c_str()));
 	return &Ends.Add(Id, Look);
+}
+
+void FShipLooks::GiveWay(int32 Id, bool bUnder, double Now)
+{
+	// Her end overtakes her earlier looks (the pre-check, 20 November 15:19Z: 13 of the 14 recorded hits come with her
+	// end, 12 in the same instant). The burst of the hit itself still shows; what that look had still to come (a fire
+	// her crew would beat, steam, a cook-off) gives way to her end. In harbour a fire already burning burns on, her
+	// upperworks above the water, as it does on a ship whose end is to burn; a ship going under at sea takes her fires
+	// down with her (where the kit can put them out: Burn with an id).
+	for (int32 K = Due.Num() - 1; K >= 0; --K)
+	{
+		const FDue& Step = Due[K];
+		if (Step.Ship != Id)
+		{
+			continue;
+		}
+		const bool bBurst = Step.Step.Do == "blast" || Step.Step.Do == "column" || Step.Step.Do == "spark" || Step.Step.Do == "glance";
+		const bool bKept = (bBurst && Step.At <= Now + 2.0) || (!bUnder && Step.Step.Do == "burnout");
+		if (!bKept)
+		{
+			Due.RemoveAt(K, 1, EAllowShrinking::No);
+		}
+	}
+	if (bUnder)
+	{
+		if (const TArray<int32>* Lit = Burns.Find(Id))
+		{
+			for (const int32 Burn : *Lit)
+			{
+				Fates::Beat Out;
+				Out.Do = "burnout";
+				Out.N = Burn;
+				Out.A = 20.0;
+				FDue& Later = Due.AddDefaulted_GetRef();
+				Later.At = Now;
+				Later.Ship = Id;
+				Later.Step = Out;
+			}
+			if (TArray<double>* Until = Fires.Find(Id))
+			{
+				for (double& Stops : *Until)
+				{
+					Stops = FMath::Min(Stops, Now + 20.0);
+				}
+			}
+		}
+		Burns.Remove(Id);
+	}
 }
 
 void FShipLooks::Queue(int32 Id, const Fates::Fate& Look, double Now)
@@ -285,13 +349,13 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 		const float Across = static_cast<float>(FMath::Clamp(Step.A, 0.05, 0.6) * Lie.Beam);
 		const float Seconds = static_cast<float>(FMath::Clamp(Step.B, 5.0, 1800.0));
 		const bool bBeaten = Step.C > 0.5;
-		bool bWithId = false;
-		if (bBeaten)
+		// Each fire her looks light has an id where the kit takes one: her crew beat it out on cue, and at sea her fires
+		// go out as she goes under (Settle). (a beaten fire burns a little past its time, for the crew to end it)
+		const int32 Burn = 239000 + (NextBurn++ % 4000);
+		if (ShipLookParts::BurnWithId(Effects, Place, Across, bBeaten ? Seconds + 60.0f : Seconds, Burn))
 		{
-			const int32 Burn = 239000 + (NextBurn++ % 4000);
-			// (burning a little past its time, for the crew's beating it out to end it)
-			bWithId = ShipLookParts::BurnWithId(Effects, Place, Across, Seconds + 60.0f, Burn);
-			if (bWithId)
+			Burns.FindOrAdd(Item.Ship).Add(Burn);
+			if (bBeaten)
 			{
 				Fates::Beat Out;
 				Out.Do = "burnout";
@@ -303,7 +367,7 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 				Later.Step = Out;
 			}
 		}
-		if (!bWithId)
+		else
 		{
 			Effects->Burn(Place, Across, Seconds);
 		}
@@ -352,6 +416,86 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 	}
 	// ("smoke" and "silence" have no call on the stage: a fire's own smoke stands for the one, and the stage's ships
 	// fire no guns the other could stop.)
+}
+
+TArray<FString> FShipLooks::ReelOf(const FString& Class, bool bHarbour) const
+{
+	TArray<FString> Reel;
+	if (!Picker.IsValid())
+	{
+		return Reel;
+	}
+	// Each look a ship that survives her hit can show, with the first strike that brings it: "key|strike".
+	for (const TCHAR* Strike : { TEXT("torpedo"), TEXT("dive"), TEXT("level") })
+	{
+		Fates::Blow Blow;
+		Blow.Domain = "sea";
+		Blow.Family = ShipLookParts::FamilyOf(Class);
+		Blow.Weapon = ShipLookParts::WeaponOf(Strike);
+		Blow.Result = "worn";
+		Blow.Nerve = 0.65;
+		Blow.bHarbour = bHarbour;
+		for (const std::pair<std::string, double>& Odd : Picker->Odds(Blow))
+		{
+			const FString Key = UTF8_TO_TCHAR(Odd.first.c_str());
+			if (!Reel.ContainsByPredicate([&Key](const FString& Had) { return Had.StartsWith(Key + TEXT("|")); }))
+			{
+				Reel.Add(Key + TEXT("|") + Strike);
+			}
+		}
+	}
+	return Reel;
+}
+
+FString FShipLooks::Reel(int32 Id, const FString& Class, const FString& KeyAndStrike, bool bHarbour, double Now)
+{
+	FString Key, Strike;
+	if (!Picker.IsValid() || !KeyAndStrike.Split(TEXT("|"), &Key, &Strike))
+	{
+		return FString();
+	}
+	// Each look on a ship the test keeps afloat, one after another: her pose, her fires (where the kit can put them out)
+	// and what was still to come cleared first, so that each picture shows one look alone.
+	Due.RemoveAll([Id](const FDue& Step) { return Step.Ship == Id; });
+	if (const TArray<int32>* Lit = Burns.Find(Id))
+	{
+		for (const int32 Burn : *Lit)
+		{
+			Fates::Beat Out;
+			Out.Do = "burnout";
+			Out.N = Burn;
+			Out.A = 3.0;
+			FDue& Douse = Due.AddDefaulted_GetRef();
+			Douse.At = Now;
+			Douse.Ship = Id;
+			Douse.Step = Out;
+		}
+	}
+	Burns.Remove(Id);
+	Fires.Remove(Id);
+	Hulls.Remove(Id);
+	Sides.Remove(Id);
+	Fates::Blow Blow;
+	Blow.Domain = "sea";
+	Blow.Family = ShipLookParts::FamilyOf(Class);
+	Blow.Weapon = ShipLookParts::WeaponOf(Strike);
+	Blow.Result = "worn";
+	Blow.Nerve = 0.65;
+	Blow.bHarbour = bHarbour;
+	Blow.Unit = Id;
+	const Fates::Fate Look = Picker->Show(Blow, std::string(TCHAR_TO_UTF8(*Key)));
+	if (Look.Key.empty())
+	{
+		return FString();
+	}
+	Hulls.FindOrAdd(Id).Take(Look, Now);
+	if (Look.Dials.count("side"))
+	{
+		Sides.Add(Id, Look.Dial("side", 1.0) < 0.0 ? -1.0 : 1.0);
+	}
+	Queue(Id, Look, Now);
+	UE_LOG(LogTheater, Display, TEXT("Ship looks reel: ship %d, %s, %s."), Id, *Strike, *Key);
+	return Key;
 }
 
 bool FShipLooks::Pose(int32 Id, double Now, double& OutList, double& OutTrim, double& OutSettle) const
