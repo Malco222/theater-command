@@ -101,7 +101,7 @@ describe('who is in a block', () => {
 describe('the men fight as men', () => {
   // Three battles watched second by second after contact.
   const watch = (g: Ground, att: (typeof STY)[number], seed: number) => {
-    const t = { men: 0, idleInFight: 0, strayed: 0, badPose: 0, covered: 0, fighting: 0, leapfrog: 0, hiddenAt: 0, foUp: 0, hullDown: 0, assaultForward: 0 };
+    const t = { men: 0, idleInFight: 0, strayed: 0, outside: 0, outStill: 0, badPose: 0, covered: 0, fighting: 0, leapfrog: 0, hiddenAt: 0, foUp: 0, hullDown: 0, assaultForward: 0 };
     const { b } = run(g, 1.4, seed, att, 'methodical', true, (bt, view) => {
       if (bt.contactAt === null) return;
       for (const blk of view) {
@@ -116,7 +116,9 @@ describe('the men fight as men', () => {
           // In the block's own frame: across its front, along its face.
           const dx = m.x - u.x, dy = m.y - u.y, a = dx * Math.cos(u.face) - dy * Math.sin(u.face), l = dx * Math.sin(u.face) + dy * Math.cos(u.face);
           const lim = (blk.ph === 'flee' ? 70 : 45) + (m.r === 'lorry' ? 120 : 0) + 0.5;
-          if (Math.abs(a) > u.w / 2 + lim || Math.abs(l) > u.d / 2 + lim) t.strayed++;
+          // The box (and its margin) turns with the block; the ring round it does not.
+          if (Math.hypot(dx, dy) > Math.hypot(u.w / 2 + lim, u.d / 2 + lim)) t.strayed++;
+          if (Math.abs(a) > u.w / 2 + lim || Math.abs(l) > u.d / 2 + lim) { t.outside++; if (!MOVING.has(m.p) && m.p !== 'ride' && m.p !== 'mounted') t.outStill++; }
           if (blk.ph === 'fight' && m.r !== 'tank' && m.r !== 'gun' && m.r !== 'lorry') { t.fighting++; if (m.c !== 'none') t.covered++; }
           if (MOVING.has(m.p)) moving++; else if (FIRING.has(m.p) || m.p === 'wait') down++;
           if (m.r === 'at' && m.h) t.hiddenAt++;
@@ -131,7 +133,14 @@ describe('the men fight as men', () => {
   const A = watch('forest', 'methodical', 31), B = watch('urban', 'bold', 37), C = watch('hills', 'mass', 43);
   it('every pose is one the 3D game has', () => { for (const x of [A, B, C]) expect(x.t.badPose).toBe(0); });
   it('no man stands idle while his block is fighting', () => { for (const x of [A, B, C]) expect(x.t.idleInFight).toBe(0); });
-  it('no man strays from his block: the block is the truth', () => { for (const x of [A, B, C]) expect(x.t.strayed).toBe(0); });
+  it('no man strays from his block: the block is the truth', () => {
+    for (const x of [A, B, C]) {
+      expect(x.t.strayed).toBe(0);
+      // Left outside its box (it turned, or went on), he is on his way back to it, and seldom.
+      expect(x.t.outStill).toBe(0);
+      expect(x.t.outside / x.t.men).toBeLessThan(0.005);
+    }
+  });
   it('in woods and towns, men fighting take cover', () => {
     expect(A.t.covered / A.t.fighting).toBeGreaterThan(0.5);
     expect(B.t.covered / B.t.fighting).toBeGreaterThan(0.85);
@@ -152,6 +161,119 @@ describe('the men fight as men', () => {
     for (const x of [A, B, C]) {
       for (const blk of x.b.drill!.view()) for (const m of blk.men) if (m.d === undefined) expect(m.v).toBe(0);
     }
+  });
+});
+
+describe('the men move as men, step by step (the 3D check, PR 20)', () => {
+  // Every step of two battles, as the 3D game reads them: no one is thrown, turns about in a tick, or goes on the spot.
+  const FOOT = new Set(['officer', 'rifle', 'mg', 'at', 'sapper', 'holder', 'fo']);
+  const look = (g: Ground, att: (typeof STY)[number], seed: number) => {
+    const t = { steps: 0, footMax: 0, vehMax: 0, thrown: 0, turnFoot: 0, turnTank: 0, fOut: 0, onSpot: 0, foMade: 0, foLost: 0, foOut: 0, still: 0 };
+    const b = new LandBattle(sampleTicket(g, 1.4, { seed, style: { att, def: 'methodical' } }));
+    const d = b.drillOn();
+    const was = new Map<string, { x: number; y: number; f: number; p: string; v: number; same: number }>();
+    const foOf = new Map<number, string>(), at = new Map<number, [number, number]>();
+    for (let k = 0; !b.over && k < 30000; k++) {
+      b.step(); t.steps++;
+      for (const blk of d.view()) {
+        const u = b.unit(blk.id)!, o = at.get(u.id), went = o ? Math.hypot(u.x - o[0], u.y - o[1]) : 0;
+        at.set(u.id, [u.x, u.y]);
+        const fo = (blk.fo ?? []).map((m) => m.k).join(',');
+        if (fo) { t.foOut++; if (foOf.has(blk.id) && foOf.get(blk.id) !== fo) t.foMade++; foOf.set(blk.id, fo); } else if (foOf.has(blk.id) && u.state !== 'gone' && u.state !== 'withdrawn') t.foLost++;
+        for (const m of [...blk.men, ...(blk.fo ?? [])]) {
+          if (m.f <= -Math.PI - 0.005 || m.f > Math.PI + 0.005) t.fOut++;
+          const key = blk.id + ':' + m.k, w = was.get(key);
+          let same = 0;
+          if (w && m.d === undefined) {
+            const dist = Math.hypot(m.x - w.x, m.y - w.y);
+            let df = Math.abs(m.f - w.f) % (2 * Math.PI); if (df > Math.PI) df = 2 * Math.PI - df;
+            // A man runs at most 7.5 m a battle second, a tank or a lorry 16: further only when his block itself goes
+            // faster (the rules push it aside), and then only as far as it went.
+            const can = FOOT.has(m.r) ? 0.9 : 1.8; // and the view's rounding to 10 cm
+            if (dist > can && dist > went + 0.05) t.thrown++;
+            if (FOOT.has(m.r)) { t.footMax = Math.max(t.footMax, dist - Math.max(0, went - can)); if (df > 0.8 + 0.02) t.turnFoot++; }
+            else { t.vehMax = Math.max(t.vehMax, dist); if (m.r === 'tank' && df > 0.08 + 0.02) t.turnTank++; }
+            // Says it goes, at a speed, and neither goes nor turns, a second on end.
+            if (MOVING.has(m.p) && m.v > 0.5 && dist < 0.005 && df < 0.005) { same = w.same + 1; if (same === 10) t.onSpot++; }
+            if (!MOVING.has(m.p) && m.p !== 'ride' && m.p !== 'mounted' && m.p !== 'horses' && m.v > 0) t.still++;
+          }
+          was.set(key, { x: m.x, y: m.y, f: m.f, p: m.p, v: m.v, same });
+        }
+      }
+    }
+    return t;
+  };
+  const P = look('hills', 'bold', 23), Q = look('urban', 'mass', 37);
+  it('no man is thrown or carried: none goes further in a step than he can run, the spotter included', () => {
+    for (const x of [P, Q]) { expect(x.thrown).toBe(0); expect(x.footMax).toBeLessThan(1.0); expect(x.vehMax).toBeLessThan(1.8); }
+  });
+  it('no one turns about in a step: a man turns at most 0.8 rad a step, a tank 0.08 (she pivots)', () => {
+    for (const x of [P, Q]) { expect(x.turnFoot).toBe(0); expect(x.turnTank).toBe(0); }
+  });
+  it('no tank (nor man) drives on the spot, and a man lying, kneeling or firing says he is still', () => {
+    for (const x of [P, Q]) { expect(x.onSpot).toBe(0); expect(x.still).toBe(0); }
+  });
+  it('facing comes in (-pi, pi]', () => { for (const x of [P, Q]) expect(x.fOut).toBe(0); });
+  it("a battery's spotter is one pair for the battle: never made anew, never taken off while his guns stand", () => {
+    expect(P.foOut + Q.foOut).toBeGreaterThan(0);
+    for (const x of [P, Q]) { expect(x.foMade).toBe(0); expect(x.foLost).toBe(0); }
+  });
+});
+
+describe('lorried foot and cavalry (the practice armies have none: a corps of each made so)', () => {
+  // The attack's first corps on horses, its second and the defence's second in lorries.
+  const ticket = (g: Ground, seed: number, att: (typeof STY)[number], def: (typeof STY)[number]) => {
+    const T = sampleTicket(g, 1.3, { seed, style: { att, def } });
+    T.att.forces[0].kind = 'cav'; T.att.forces[1].kind = 'mot'; T.def.forces[1].kind = 'mot';
+    return T;
+  };
+  const go = (g: Ground, seed: number, att: (typeof STY)[number], def: (typeof STY)[number], drill: boolean) => {
+    const b = new LandBattle(ticket(g, seed, att, def));
+    const d = drill ? b.drillOn() : null;
+    const t = { poses: new Set<string>(), strayed: 0, thrown: 0, turned: 0, aboardAtFirst: 0, men: 0 };
+    const was = new Map<string, [number, number, number]>(), at = new Map<number, [number, number]>();
+    const ev: CoreEvent[] = [];
+    for (let k = 0; !b.over && k < 30000; k++) {
+      b.step(); ev.push(...b.view().events);
+      if (!d || b.over) continue;
+      for (const blk of d.view()) {
+        const u = b.unit(blk.id)!, o = at.get(u.id), went = o ? Math.hypot(u.x - o[0], u.y - o[1]) : 0;
+        at.set(u.id, [u.x, u.y]);
+        for (const m of blk.men) {
+          if (m.d !== undefined) continue;
+          if (u.kind === 'mot' || u.kind === 'cav') { t.poses.add(`${u.kind} ${m.r === 'lorry' ? 'lorry' : 'man'} ${m.p}`); if (k === 0 && u.kind === 'mot' && m.r !== 'lorry' && m.p === 'mounted') t.aboardAtFirst++; }
+          const ex = m.r === 'lorry' || m.p === 'mounted' ? 120 : 0;
+          if (Math.hypot(m.x - u.x, m.y - u.y) > Math.hypot(u.w / 2 + 70.5 + ex, u.d / 2 + 70.5 + ex)) t.strayed++;
+          const w = was.get(blk.id + ':' + m.k);
+          if (w) {
+            const dist = Math.hypot(m.x - w[0], m.y - w[1]), can = m.r === 'lorry' || m.r === 'tank' || m.r === 'gun' || m.p === 'mounted' ? 1.8 : m.p === 'ride' || m.p === 'horses' ? 1.6 : 0.9;
+            if (dist > can && dist > went + 0.3) t.thrown++;
+            let df = Math.abs(m.f - w[2]) % (2 * Math.PI); if (df > Math.PI) df = 2 * Math.PI - df;
+            if (df > 0.82) t.turned++;
+          }
+          was.set(blk.id + ':' + m.k, [m.x, m.y, m.f]);
+          t.men++;
+        }
+      }
+    }
+    return { b, ev, t };
+  };
+  const runs = [['plains', 504, 'bold', 'methodical'], ['hills', 538, 'methodical', 'mass']] as const;
+  const on = runs.map(([g, seed, a, d]) => go(g, seed, a, d, true)), off = runs.map(([g, seed, a, d]) => go(g, seed, a, d, false));
+  it('the men drawn change nothing here either', () => { on.forEach((x, i) => expect(sig(x.b, x.ev)).toBe(sig(off[i].b, off[i].ev))); });
+  it('lorried men start aboard and ride in their lorries, then get down and fight; the lorries park behind', () => {
+    const P = new Set(on.flatMap((x) => [...x.t.poses]));
+    expect(on[0].t.aboardAtFirst).toBeGreaterThan(0);
+    for (const p of ['mot man mounted', 'mot lorry drive', 'mot lorry parked', 'mot man advance']) expect(P.has(p), p).toBe(true);
+    expect([...P].some((p) => /^mot man (fire_|lmg_burst)/.test(p))).toBe(true);
+  });
+  it('cavalry ride up, get off their horses to fight, and the horse holders lead the horses back', () => {
+    const P = new Set(on.flatMap((x) => [...x.t.poses]));
+    for (const p of ['cav man ride', 'cav man horses']) expect(P.has(p), p).toBe(true);
+    expect([...P].some((p) => /^cav man (fire_|lmg_burst)/.test(p))).toBe(true);
+  });
+  it('none strays, is thrown or turns about in a step, mounted or not', () => {
+    for (const x of on) { expect(x.t.men).toBeGreaterThan(0); expect(x.t.strayed).toBe(0); expect(x.t.thrown).toBe(0); expect(x.t.turned).toBe(0); }
   });
 });
 

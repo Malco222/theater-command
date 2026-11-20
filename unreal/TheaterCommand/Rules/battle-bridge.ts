@@ -196,9 +196,9 @@
 //   A man: { k, r, x, y, f, p, v, c, a?, s?, d?, h?, b? }. k his model on the block's tray (lorries 100 up, the spotter
 //   200 and his signaller 201); r his role: officer, rifle, mg (light machine gun team), at (anti-tank rifle or
 //   launcher), sapper, holder (cavalry horse holder), tank, gun, lorry, fo; x, y field metres; f facing (radians, 0
-//   north, clockwise, as a block's face); p the pose; v metres a battle second he is moving (play the gait's clip at
-//   v over the clip's own speed, capped at 1.6 times: the battle runs faster than life, and blocks march at up to 6 m a
-//   battle second); c the cover he is in (none, works, building, woods, rock, rough, field, wreck, crater, crest); a
+//   north, clockwise, as a block's face; in (-pi, pi]: turn the short way round); p the pose; v the metres a battle
+//   second he went over the ground in the last step, 0 in every still pose (play the gait's clip at v over the clip's
+//   own speed, capped at 1.6 times: the battle runs faster than life, and blocks march at up to 6 m a battle second); c the cover he is in (none, works, building, woods, rock, rough, field, wreck, crater, crest); a
 //   where he fires, while he fires; s the battle time of his last shot (a tank's or a gun's round, an anti-tank round,
 //   a grenade): play one shot each time it changes; d the battle time he fell (he lies where he fell to the end of the
 //   fight; a tank burns at her wreck, which stands where she stood); h an anti-tank team lying hidden in ambush (draw
@@ -210,11 +210,18 @@
 //   lying with his glasses up (fire_prone, rifle lowered); mounted sits in a lorry; ride is on a horse (walking or
 //   standing by v); horses a holder leading horses; down a fallen man (die_back, die_forward or die_kneel once, by
 //   k, then the body). Tanks: drive, halt, fire (a round by s), reverse; guns: towed, deployed, fire; lorries: drive,
-//   parked, halt. Turn a man toward f over a third of a second; blend clip changes over a fifth.
+//   parked, halt. Blend clip changes over a fifth of a second. The motion is smooth as sent (the 3D pre-check's
+//   every-step sweep, 20 November 22:35Z): no man goes more than 0.9 m a step (a tank or a lorry 1.8 m) unless his
+//   block itself is pushed faster, and then no further than it went; no one turns more than 0.8 rad a step (a tank
+//   0.08: she pivots on the spot, drive with v 0 while f turns, and backs into a place behind her, reverse). Lerp
+//   between ticks. Lorried men start mounted and sit in their lorry (their x, y, f are the lorry's) until they jump
+//   down; cavalry ride, then get off to fight, a holder leading the horses at the rear of the block's ground.
 //   A block's phase ph: column, deploy, bound (fire and movement under fire), startline, fight, hold, rest, pinned,
 //   fallback, flee, rally, gone, battery, limbered: for the camera and the sound (pinned and fight are loudest).
 //   Fog (b464(2)): an enemy block the player does not know sends no men; draw its plain stand as now. The battery's
-//   spotter (fo) stands with the friendly foot block foWith while its guns fire at block foOn from further than 500 m.
+//   spotter (fo) goes up with the friendly foot block foWith when its guns first fire at block foOn from further than
+//   500 m, and the pair stays out to the battle's end (foOn absent while the guns are quiet): a new foWith or foOn
+//   sends the same pair there on foot, so it moves, never jumps.
 // Air support (Brian, 2026-11-18 18:58Z: "during ground battles where fighters are in range, you should be able to call
 // in air support where the fighters will strafe and drop bombs"; the design director, b533 and b536). A side whose
 // fighter groups are on ground support that month and reach the place comes on with fighters on call: the battle card
