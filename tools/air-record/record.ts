@@ -25,7 +25,7 @@ import { SKY } from '../../src/battle/air/book';
 import { AirSim } from '../../src/battle/air/sim';
 import { deckMix, deckModels, layShips } from '../../src/battle/air/ships';
 import { onBoard, STAGES } from '../../src/battle/air/stages';
-import { cloudOf } from '../../src/battle/air/sky';
+import { cloudOf, skyWord } from '../../src/battle/air/sky';
 import { defenceOf, experience, leanOf, STYLES } from '../../src/battle/air/styles';
 import { airTicket, raidGroups } from '../../src/battle/air/ticket';
 import { bomberGuns, fighterGuns } from '../../src/battle/air/guns';
@@ -112,8 +112,9 @@ interface DayRaid {
   date: string;
   /** The target's latitude and longitude, for the month's cloud and the scene's sun (place.lat). */
   latLon: [number, number];
-  /** The day's own cloud, where the record's weather is known (else the month's table, as cumulus): its kind, base and tops. */
-  cloud?: { kind: 'deck' | 'cumulus'; base: number; top: number };
+  /** The day's own cloud, where the record's weather is known (else the month's table, as cumulus): its kind, base and
+   * tops, and how much of the sky it covers. */
+  cloud?: { kind: 'deck' | 'cumulus'; base: number; top: number; cover: number };
   /** The record's groups, by the stand-in's order. */
   bombers: string[];
   escort: string[];
@@ -126,7 +127,8 @@ const RAIDS: DayRaid[] = [
     key: 'bremen-b17', target: 'Bremen', when: { year: 1943, month: 11 }, title: 'The raid on Bremen', date: 'December 1943', latLon: [53.08, 8.8],
     // (13 and 16 December 1943: Bremen bombed through an undercast on the pathfinders' radar; the art director on round
     // 18c, a stratocumulus deck far under the bombers, tops 1.5 to 2 km, the ground seen through its breaks)
-    cloud: { kind: 'deck', base: 900, top: 1800 },
+    // (its cover the art director's on round 18d, about three quarters, the ground through the breaks)
+    cloud: { kind: 'deck', base: 900, top: 1800, cover: 0.73 },
     bombers: ['303rd Bomb Group', '91st Bomb Group', '384th Bomb Group'], escort: ['354th Fighter Group', '357th Fighter Group'],
     defenders: ['Jagdgeschwader 1', 'Jagdgeschwader 11'],
     models: { USA: { ftr: 'Mustang', bmr: 'B17' }, GER: { ftr: 'Fw190', bmr: 'He111' } },
@@ -155,6 +157,7 @@ function raidTicketOf(R: DayRaid, seed: number): FieldTicket<AirPlace> {
   place.models = R.models;
   place.guns = Object.fromEntries(Object.entries(place.models).map(([n, k]) => [n, { ftr: fighterGuns(k.ftr, n, R.when), bmr: bomberGuns(k.bmr, n, R.when) }]));
   place.cloud = { ...cloudOf(...mapPointOf(...R.latLon), R.when, t.seed), kind: 'cumulus', ...(R.cloud ?? {}) };
+  place.cloud.sky = skyWord(place.cloud.cover);
   // (the place's latitude, for the scene's sun over a raid with no stage: AirLand::SunAt)
   Object.assign(place, { lat: R.latLon[0] });
   t.title = R.title;
@@ -257,9 +260,10 @@ function ticketOf(P: SetPiece, seed: number): FieldTicket<AirPlace> {
   // The sky: the cloud table's base and tops for the stage's own place and the record's month, drawn from this battle's
   // seed (the stand-in's target would give the North Sea's). The kind is history's, not the table's chance: both days
   // had scattered cumulus and no deck (cloud banked on Oahu's mountains with the harbour open; broken cloud over the
-  // Mobile Force), as the art director's ruling of 19 November names them.
+  // Mobile Force), as the art director's ruling of 19 November names them, about three eighths of the sky (the look she
+  // passed on round 18c).
   const [lat, lon] = stageLatLon(S.origin, st.aim);
-  place.cloud = { ...cloudOf(...mapPointOf(lat, lon), P.when, t.seed), kind: 'cumulus' };
+  place.cloud = { ...cloudOf(...mapPointOf(lat, lon), P.when, t.seed), kind: 'cumulus', cover: 0.39, sky: skyWord(0.39) };
   t.title = P.title;
   t.date = P.date;
   return t;

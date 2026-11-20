@@ -7,6 +7,10 @@
 // scattered cumulus.
 // Heights are above the sea; on high ground (the Andes, Yunnan, Ethiopia, Anatolia) the 3D game lifts the cloud to at
 // least 300 m above the ground, as the table's note says.
+// How much of the sky is cloud varies from battle to battle too (Brian, 20 November 21:53Z: "make sure the weather is
+// different and not always cloudy or some days more cloudy"): a deck day is broken to overcast, and a cumulus day runs
+// from a clear sky to scattered cloud, clear days more often where and when the table's decks are rare. Drawn from the
+// same seed, so the same battle has the same sky; every battle scene can take it (cover and its word).
 import cloudData from '../../../data/battle/air-cloud.json';
 import { hashString } from '../../core/rng';
 
@@ -26,6 +30,36 @@ export interface AirCloud {
   /** The chance of a deck that day (the table's month, with its year rules), and the table's zone it came from. */
   chance: number;
   zone: string;
+  /** How much of the sky is cloud: 0 a clear day, 1 a closed overcast (a share, as a forecaster's eighths over 8). */
+  cover: number;
+  /** The cover's word (skyWord): clear, fair, scattered, broken or overcast. */
+  sky: SkyWord;
+}
+
+/** The sky in a word, by the forecaster's eighths: none clear, one or two fair, three or four scattered, five to seven
+ * broken, all eight overcast. */
+export type SkyWord = 'clear' | 'fair' | 'scattered' | 'broken' | 'overcast';
+export function skyWord(cover: number): SkyWord {
+  const eighths = Math.round(Math.max(0, Math.min(1, cover)) * 8);
+  return eighths === 0 ? 'clear' : eighths <= 2 ? 'fair' : eighths <= 4 ? 'scattered' : eighths <= 7 ? 'broken' : 'overcast';
+}
+
+/** The most of the sky a cumulus day's cloud covers, and the least a deck's. */
+export const CUMULUS_MOST = 0.55;
+export const DECK_LEAST = 0.6;
+
+/**
+ * How much of the sky is cloud on a day of this kind, from a fraction u (0..1) drawn from the battle's seed. A deck
+ * covers 0.6 to all of it, leaning toward the more (about one deck in five closes the sky). Cumulus covers none to
+ * 0.55, leaning toward the less where the table's chance of a deck is small: about three cumulus days in ten are clear
+ * at a chance of 0.1, one in ten at 0.6.
+ */
+export function coverOf(kind: AirCloud['kind'], chance: number, u: number): number {
+  const v = Math.max(0, Math.min(1, u));
+  const r2 = (x: number): number => Math.round(x * 100) / 100;
+  if (kind === 'deck') return r2(DECK_LEAST + (1 - DECK_LEAST) * Math.pow(v, 0.7));
+  const lean = Math.max(0.8, Math.min(2, 2 - 1.8 * chance));
+  return r2(CUMULUS_MOST * Math.pow(v, lean));
 }
 
 /** A season's own heights in a zone: the months they hold for (0 = January), and the deck's base and tops there. */
@@ -78,8 +112,8 @@ export function deckChance(z: CloudZone | null, when: { year: number; month: num
 }
 
 /**
- * The sky over a target at map point (x, y) on a date (month 0 = January), drawn once from the battle's seed: three
- * draws, for the deck, its base and its tops, each from its own hash of the seed.
+ * The sky over a target at map point (x, y) on a date (month 0 = January), drawn once from the battle's seed: four
+ * draws, for the deck, its base, its tops and the cover, each from its own hash of the seed.
  */
 export function cloudOf(x: number, y: number, when: { year: number; month: number }, seed: number): AirCloud {
   // Back to the 0.01 degree of the regions' seed points (data/campaign/*.mjs): the map keeps x and y to 0.1 unit, about
@@ -96,10 +130,13 @@ export function cloudOf(x: number, y: number, when: { year: number; month: numbe
   const at = (r: [number, number], u: number): number => Math.round((r[0] + u * (r[1] - r[0])) / 10) * 10;
   const base = at(baseRange, fraction(`airsky:base:${seed}`));
   const top = Math.max(at(topsRange, fraction(`airsky:top:${seed}`)), base + CLOUD_THICK);
+  const kind: AirCloud['kind'] = fraction(`airsky:${seed}`) < chance ? 'deck' : 'cumulus';
+  const cover = coverOf(kind, chance, fraction(`airsky:cover:${seed}`));
   return {
-    kind: fraction(`airsky:${seed}`) < chance ? 'deck' : 'cumulus',
+    kind,
     base, top, baseRange, topsRange,
     chance,
     zone: z ? z.zone : 'elsewhere',
+    cover, sky: skyWord(cover),
   };
 }

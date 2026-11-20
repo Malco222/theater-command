@@ -8,7 +8,7 @@ import { planRaid, raidTargets } from '../src/campaign/airwar';
 import { startOpen } from '../src/campaign/staff';
 import { runOut } from '../src/battle/core/clock';
 import { airBattle } from '../src/battle/air/sim';
-import { CLOUD_THICK, cloudOf, cloudZone, deckChance, latLonOf } from '../src/battle/air/sky';
+import { CLOUD_THICK, CUMULUS_MOST, DECK_LEAST, cloudOf, cloudZone, coverOf, deckChance, latLonOf, skyWord } from '../src/battle/air/sky';
 import { airTicket } from '../src/battle/air/ticket';
 
 const K = Math.cos((50 * Math.PI) / 180) * 40;
@@ -148,6 +148,57 @@ describe('the sky drawn for a battle', () => {
   });
 });
 
+describe('how much of the sky is cloud (Brian, 20 November: not always cloudy, some days more cloudy than others)', () => {
+  it('names the cover by the eighths: clear, fair, scattered, broken, overcast', () => {
+    expect([0, 0.06, 0.13, 0.31, 0.32, 0.56, 0.57, 0.93, 0.94, 1].map(skyWord)).toEqual(
+      ['clear', 'clear', 'fair', 'fair', 'scattered', 'scattered', 'broken', 'broken', 'overcast', 'overcast']);
+  });
+  it('keeps a deck broken to overcast and a cumulus day clear to scattered', () => {
+    for (let i = 0; i <= 100; i++) {
+      const u = i / 100;
+      expect(coverOf('deck', 0.5, u)).toBeGreaterThanOrEqual(DECK_LEAST);
+      expect(coverOf('deck', 0.5, u)).toBeLessThanOrEqual(1);
+      for (const p of [0, 0.3, 1]) {
+        expect(coverOf('cumulus', p, u)).toBeGreaterThanOrEqual(0);
+        expect(coverOf('cumulus', p, u)).toBeLessThanOrEqual(CUMULUS_MOST);
+      }
+    }
+  });
+  it("gives every kind of day somewhere: clear, fair, scattered, broken and overcast all come up, the word always the cover's", () => {
+    const N = 3000;
+    const seen: Record<string, number> = {};
+    for (const [lat, lon] of Object.values(PLACES)) for (const month of [0, 3, 6, 9]) {
+      const [x, y] = proj(lat, lon);
+      for (let s = 0; s < N / 4; s++) {
+        const c = cloudOf(x, y, { year: 1944, month }, 104729 * s + 7);
+        expect(c.sky).toBe(skyWord(c.cover));
+        expect(c.kind === 'deck' ? c.cover >= DECK_LEAST : c.cover <= CUMULUS_MOST).toBe(true);
+        seen[c.sky] = (seen[c.sky] ?? 0) + 1;
+      }
+    }
+    for (const w of ['clear', 'fair', 'scattered', 'broken', 'overcast']) expect(seen[w] ?? 0, w).toBeGreaterThan(N / 40);
+  });
+  it('clears the sky more often where decks are rare: about three cumulus days in ten clear at a chance of 0.1, one in ten at 0.6', () => {
+    const N = 4000;
+    const clear = (p: number) => {
+      let n = 0;
+      for (let i = 0; i < N; i++) if (skyWord(coverOf('cumulus', p, (i + 0.5) / N)) === 'clear') n++;
+      return n / N;
+    };
+    expect(clear(0.1)).toBeGreaterThan(0.25);
+    expect(clear(0.1)).toBeLessThan(0.35);
+    expect(clear(0.6)).toBeGreaterThan(0.06);
+    expect(clear(0.6)).toBeLessThan(0.14);
+  });
+  it('closes about one deck in five', () => {
+    const N = 4000;
+    let n = 0;
+    for (let i = 0; i < N; i++) if (skyWord(coverOf('deck', 0.5, (i + 0.5) / N)) === 'overcast') n++;
+    expect(n / N).toBeGreaterThan(0.17);
+    expect(n / N).toBeLessThan(0.26);
+  });
+});
+
 describe('the ticket carries the sky', () => {
   function ticket() {
     const g = startOpen(createGame(7, 'GER'));
@@ -175,5 +226,7 @@ describe('the ticket carries the sky', () => {
     // Whatever the draw: a deck from the ground to well above the bombers, and high thin cumulus, play out the same.
     expect(play(sky({ ...tk.place.cloud!, kind: 'deck', base: 300, top: 9000, chance: 1 }))).toEqual(bare);
     expect(play(sky({ ...tk.place.cloud!, kind: 'cumulus', base: 4000, top: 6000, chance: 0 }))).toEqual(bare);
+    // And a closed overcast plays out as a clear day does.
+    expect(play(sky({ ...tk.place.cloud!, kind: 'deck', cover: 1, sky: 'overcast' }))).toEqual(play(sky({ ...tk.place.cloud!, kind: 'cumulus', cover: 0, sky: 'clear' })));
   });
 });
