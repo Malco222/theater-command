@@ -1,5 +1,5 @@
 {
-  "_note": "Sandbox stops 4 and 5 only (stopDef ambitions, the open grand campaign): a nation's dated reinforcement and formation rows from 'from' on come on its own war's clock, not the record's calendar (the historian's thresholds, historian/sandbox-thresholds.md, section 2). 'war' is the record's month that nation's great war began (W0); a row dated M comes at the month its own great war began plus (M - war), never before, and never while it has no such war. 'foes': the nations whose war starts the clock ('*' any great power but itself). Rows dated before 'from' come on their dates as at every stop (pre-war call-ups ran regardless of the war). A held row on the clock keeps its hold until its own cause, whichever comes first (the hold rule, the design director 20 Nov 05:35Z): the blow lands on it (it is attacked where it stands), or the record's phase that freed it comes due on its own war's clock ('holds' below: the record's month of that phase); a held row with no month there keeps its hold until the blow or the operation that sends it (the Weser and Norway landings, open.json). 'rows': a row by name comes only in a month when it is at peace with every nation of 'peaceWith' and at war with one of 'warWith'; it waits until then. canBuildYet reads the same clock. Stops 1 to 3 read none of this.",
+  "_note": "Sandbox stops 4 and 5 only (stopDef ambitions, the open grand campaign): a nation's dated reinforcement and formation rows from 'from' on come on its own war's clock, not the record's calendar (the historian's thresholds, historian/sandbox-thresholds.md, section 2). 'war' is the record's month that nation's great war began (W0); a row dated M comes at the month its own great war began plus (M - war); a war declared after the campaign opens begins in the first month the two fight a land battle, never at the declaration alone (the historian, H), never before, and never while it has no such war. 'foes': the nations whose war starts the clock ('*' any great power but itself). Rows dated before 'from' come on their dates as at every stop (pre-war call-ups ran regardless of the war). A held row on the clock keeps its hold until its own cause, whichever comes first (the hold rule, the design director 20 Nov 05:35Z): the blow lands on it (it is attacked where it stands), or the record's phase that freed it comes due on its own war's clock ('holds' below: the record's month of that phase); a held row with no month there keeps its hold until the blow or the operation that sends it (the Weser and Norway landings, open.json). 'rows': a row by name comes only in a month when it is at peace with every nation of 'peaceWith' and at war with one of 'warWith'; it waits until then. canBuildYet reads the same clock. Stops 1 to 3 read none of this. Romania and Hungary: 'from' 22, so their May 1941 call-ups (month 21) come on their date, as pre-war call-ups do; their leave to build stays on their clock.",
   "nations": {
     "GER": {
       "war": 1,
@@ -23,14 +23,14 @@
     },
     "ROM": {
       "war": 22,
-      "from": 21,
+      "from": 22,
       "foes": [
         "SOV"
       ]
     },
     "HUN": {
       "war": 22,
-      "from": 21,
+      "from": 22,
       "foes": [
         "SOV"
       ]

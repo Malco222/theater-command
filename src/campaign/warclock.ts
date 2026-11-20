@@ -31,19 +31,34 @@ export const clockOf = (g: Game, nat: string): ClockRow | undefined =>
 /** The month this nation's great war began, once it has one (kept in the flag 'gw:NAT'); undefined before. */
 export const greatWarOf = (g: Game, nat: string): number | undefined => g.flags[`gw:${nat}`];
 
+const pairOf = (a: string, b: string): string => (a < b ? `${a}:${b}` : `${b}:${a}`);
+
 /**
- * Starts the clock the first month the nation is at war with one of its clock's foes: the month that war was
- * declared, or, for a war already on when the campaign began, the record's month (or this one, if earlier).
+ * Starts the clock: a war already on when the campaign began counts from the record's month (or this one, if
+ * earlier); a war declared since counts from the first month the two fought a land battle ('lb:A:B'), never from the
+ * declaration alone (the historian, H: Britain's and France's declarations on the Soviet Union over Turkey, or
+ * Britain's on Romania and Hungary, brought no fighting and started nothing).
  */
 export function startClock(g: Game, nat: string, clock: ClockRow): number | undefined {
   const k = `gw:${nat}`;
   if (g.flags[k] !== undefined) return g.flags[k];
   const foes = (clock.foes === '*' ? majorsOf(g) : clock.foes).filter((f) => f !== nat && g.nations[f]?.alive && atWar(g, nat, f));
-  if (!foes.length) return undefined;
   let first = Infinity;
-  for (const f of foes) for (const w of [`war:${nat}:${f}`, `war:${f}:${nat}`]) if (g.flags[w] !== undefined) first = Math.min(first, g.flags[w]);
-  g.flags[k] = first === Infinity ? Math.min(clock.war, g.turn) : first;
-  return g.flags[k];
+  for (const f of foes) {
+    const declared = g.flags[`war:${nat}:${f}`] !== undefined || g.flags[`war:${f}:${nat}`] !== undefined;
+    const fought = g.flags[`lb:${pairOf(nat, f)}`];
+    if (!declared) first = Math.min(first, clock.war, g.turn);
+    else if (fought !== undefined) first = Math.min(first, fought);
+  }
+  if (first === Infinity) return undefined;
+  g.flags[k] = first;
+  return first;
+}
+
+/** A land battle was fought: the first month each pair of nations in it fought one ('lb:A:B'), at the sandbox stops only. */
+export function noteFirstBattle(g: Game, att: string[], def: string[]): void {
+  if (g.flags.open !== 1 || !stopDef(g).ambitions) return;
+  for (const a of new Set(att)) for (const d of new Set(def)) if (a !== d && g.flags[`lb:${pairOf(a, d)}`] === undefined) g.flags[`lb:${pairOf(a, d)}`] = g.turn;
 }
 
 /** The month a row dated 'month' is due on the clock, given the month the great war began. */

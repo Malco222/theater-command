@@ -23,6 +23,7 @@ function sovietMonths(g: Game, from: number, to: number, war?: number): Record<s
     if (t === war) {
       setWar(g, 'GER', 'SOV');
       g.flags['war:GER:SOV'] = t;
+      g.flags['lb:GER:SOV'] = t;
     }
     const before = new Set(g.corps.map((c) => c.id));
     startPhase(g, 'SOV');
@@ -136,5 +137,39 @@ describe('the four reforms', () => {
     expect(g.flags['event:allied-armies-1944']).toBeUndefined();
     at(g, 57);
     expect(g.flags['event:allied-armies-1944']).toBe(57);
+  });
+});
+
+describe('where a clock starts (the historian, H)', () => {
+  it('stop 5: a declaration with no fighting starts nothing; the first land battle does', () => {
+    const g = grand(5);
+    // Britain and France declare on the Soviet Union over Turkey in month 11 and never fight it.
+    setWar(g, 'UK', 'SOV');
+    g.flags['war:UK:SOV'] = 11;
+    const came = sovietMonths(g, 12, 21);
+    expect(greatWarOf(g, 'SOV')).toBeUndefined();
+    expect(came['1st Shock Army']).toBeUndefined();
+    // Germany attacks in month 22, and the first land battle is fought that month.
+    setWar(g, 'GER', 'SOV');
+    g.flags['war:GER:SOV'] = 22;
+    g.flags['lb:GER:SOV'] = 22;
+    const later = sovietMonths(g, 23, 27);
+    expect(greatWarOf(g, 'SOV')).toBe(22);
+    expect(later['1st Shock Army']).toBe(27);
+  });
+
+  it('stop 5: Romania\'s and Hungary\'s May 1941 call-ups come on their date, at war or not', () => {
+    const g = grand(5);
+    const came: Record<string, number> = {};
+    for (let t = 20; t <= 22; t++) {
+      g.turn = t;
+      for (const nat of ['ROM', 'HUN']) {
+        const before = new Set(g.corps.map((c) => c.id));
+        startPhase(g, nat);
+        for (const c of g.corps) if (!before.has(c.id)) came[`${c.nat} ${c.name}`] = t;
+      }
+    }
+    expect(came['ROM II Corps']).toBe(21);
+    expect(came['HUN Mobile Corps']).toBe(21);
   });
 });
