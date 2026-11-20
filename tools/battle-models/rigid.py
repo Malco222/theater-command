@@ -480,9 +480,13 @@ ROUGH = {"glass": 0.08, "planks": 0.85, "sea": 0.1, "canvas": 0.95, "rope": 0.95
 METAL = {"brass": 1.0, "steel": 0.6, "bare": 0.9}
 
 
-def material(model, paint, look=None):
-    """The Blender material of a paint: its colour, weathered by what each point carries (rust and soot)."""
+def material(model, paint, look=None, mark=0):
+    """The Blender material of a paint: its colour, weathered by what each point carries (rust and soot). `mark`: the
+    places of a unit's earned paint its faces lie in (unitmarks.py), which give it a slot of its own: `<paint>|<place>+...`."""
     name = model.name + ":" + paint
+    if mark:
+        places = model.info.get("file", {}).get("unit_marks", {}).get("places", [])
+        name += "|" + "+".join(p for k, p in enumerate(places) if mark & (1 << k))
     m = bpy.data.materials.get(name)
     if m:
         return m
@@ -601,11 +605,13 @@ def to_blender(model, look=None, crease=38.0, collection=None):
     me = bpy.data.meshes.new(model.name)
     me.from_pydata([tuple(v) for v in model.verts], [], model.faces, shade_flat=False)
     names = list(model.paints)
-    used = sorted(set(model.fpaint))
-    slot = {p: i for i, p in enumerate(used)}
-    for p in used:
-        me.materials.append(material(model, names[p], look))
-    me.polygons.foreach_set("material_index", [slot[p] for p in model.fpaint])
+    fmark = mark_of(model)
+    keys = list(zip(model.fpaint, fmark.tolist() if fmark is not None else [0] * len(model.fpaint)))
+    used = sorted(set(keys))
+    slot = {k: i for i, k in enumerate(used)}
+    for p, mk in used:
+        me.materials.append(material(model, names[p], look, mk))
+    me.polygons.foreach_set("material_index", [slot[k] for k in keys])
     me.polygons.foreach_set("use_smooth", model.fsmooth)
     me.update()
     me.set_sharp_from_angle(angle=math.radians(crease))
@@ -846,7 +852,11 @@ def gather(model, ob):
     part, paint = model._vpart[lv], model._lpaint
     wear, soot, blend = np.round(model._wear[lv] * 100), np.round(model._soot[lv] * 100), np.round(model._lblend * 100)
     salt = np.round(getattr(model, "_salt", np.zeros(len(me.vertices)))[lv] * 100)
-    key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None], salt[:, None]], axis=1)
+    fmark = mark_of(model)
+    total = np.zeros(len(me.polygons), dtype=np.int32)
+    me.polygons.foreach_get("loop_total", total)
+    lmark = np.repeat(fmark, total) if fmark is not None else np.zeros(nl, dtype=np.int32)
+    key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None], salt[:, None], lmark[:, None]], axis=1)
     _, first, inverse = np.unique(key, axis=0, return_index=True, return_inverse=True)
     inverse = inverse.ravel()
     order = np.argsort(first)
@@ -865,7 +875,20 @@ def gather(model, ob):
            "blend": flat(blend[first], 0), "soot": flat(soot[first], 0), "wear": flat(wear[first], 0), "part": flat(part[first], 0)}
     if salt.any():            # (only a model that carries dried salt has the list: a submarine)
         out["salt"] = flat(salt[first], 0)
+    if lmark.any():           # (where a unit's earned paint goes, as bits over unit_marks.places: unitmarks.py)
+        out["unit_mark"] = flat(lmark[first], 0)
     return out
+
+
+def mark_of(model):
+    """Every face's bits of a unit's earned paint (unitmarks.py), as long as her faces; None if she has none."""
+    fm = getattr(model, "fmark", None)
+    if fm is None:
+        return None
+    fm = np.asarray(fm, dtype=np.int32)
+    if len(fm) < len(model.faces):
+        fm = np.concatenate([fm, np.zeros(len(model.faces) - len(fm), dtype=np.int32)])
+    return fm
 
 
 def mirror(v):

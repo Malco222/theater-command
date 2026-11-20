@@ -713,6 +713,65 @@ play on it whatever she plays.
   `high` shows the marks on her wings. Neighbouring layers of one colour in a country's `insignia` are laid at one
   height (Sweden's three crowns are 24 pieces; each layer stands a few millimetres prouder than the last).
 
+### What-if aircraft (the sandbox)
+
+Six original machines that never flew (`whatif_planes.py`; the roster is the tech-tree thread's,
+`sandbox/ARMS-ROSTER.md`), built to the B-17 standard like the others: framed glazing over an open cockpit with her
+crew inside at their controls, gunners at their guns, rivets and panel lines. No real prototype's lines or name, and
+none of ruling 230's late-war prototypes. Any army that has the research flies her in its own paint (`nation_paint`),
+the night fighter excepted (matt black). Her file's `whatif` gives `kind` (the class key), `like` (the plain models
+she stands nearest), `from` (her research, filled by the tech tree) and a `note`.
+
+| model | class | role | what is her own |
+|---|---|---|---|
+| `WhatIf_EscortFighter` | `escortftr` | fighter | twin booms, one airscrew pulling at her nose (`prop.1`) and one pushing behind her pod (`prop.2`); `gun.1`-`gun.4` heavy MGs and `gun.5` the cannon through her spinner; `exhaust.rear` |
+| `WhatIf_TankBuster` | `tankbuster` | attack | part `cannon` (kind `slide`, back 0 to 0.6 m) and its muzzle `gun.3`: clip `fire.cannon` (one shot, the barrel runs back, a big flash; `fire` no longer flickers it); a rear gunner (`flexgun.1`) |
+| `WhatIf_GunshipBomber` | `gunship` | bomber | eight gun positions: six turrets (nose, chin, two on her back, the steel ball, tail) and a gunner at each waist blister (`flexgun.1`, `flexgun.2`); no bombs (`bombs_away` taken away); 12 crew |
+| `WhatIf_NightFighter` | `nightftr` | fighter | radar antlers (socket `radar`); four cannon in a belly tray (`gun.1`-`gun.4`) and two firing upward behind her cabin (`gun.5`, `gun.6`: clip `fire.upward`, out of `fire`); flame-damper shrouds; a rear gunner |
+| `WhatIf_SeaHunter` | `seahunter` | torpedo bomber | a flying boat: parts `float.port`, `float.starboard` (kind `turn`, 0 to 90) and clip `floats_up` (each float swings out and up to be her wingtip; played backward for a landing); two torpedoes (`torpedo` to starboard, `torpedo.2` to port, one part `torpedo`); socket `radar` under her bow |
+| `WhatIf_AssaultGlider` | `glidertank` | glider | no engine and no airscrew (`glider`); part `nose` (her whole nose, hinged on her starboard side, 0 to 110) and parts `ramp.port`, `ramp.starboard` (0 to 160); clip `unload` (door, then ramps); sockets `hold` (where the glider tank is lashed down), `tow`, `engine.1` (the wind's sound: cue `glider_wind_loop`, a new cue for the sound director); `carries` in her file names `WhatIf_GliderTank` |
+
+What the kit gained for them (keys of a machine's numbers that `planes.convert` reads; see `whatif_planes.py`):
+`pushers` (an airscrew on her middle line facing aft), `glider` (no engine; also `fitout`: her pilots sit side by
+side at their wheels, `fitout.CABIN_FLOOR` puts their floor on the roof of her hold), `assign` (her pieces in parts
+of her own choosing), `doors` (parts that swing or slide, cut clean from her skin), `hooks` (`fit` and `clips`
+functions run after her fit-out and after her clips). `planes.TAIL_CUT` takes the what-ifs' tail cuts, and
+`damage.MANY_ENGINED` the four with two airscrews or more on wings (an `EngineOut` each).
+
+Made again with `python export.py <out> WhatIf_EscortFighter,... json glb` (and `...Damage`, `...EngineOut`); their
+hand-held guns are in `air/gun-arcs.json`. The picture sheets are `air/sheets/whatif-planes.jpg` and
+`air/sheets/whatif-details.jpg`.
+
+### A unit's earned paint (the sandbox's reputation marks)
+
+Brian, 2026-11-19: squadrons, tank battalions and troops that keep winning "get a reputation", "for example the Red
+Tails". The rules (PR #16, `src/campaign/reputation.ts`) save on such a unit `mark: {at, colour, emblem?}`;
+`/mnt/project-files/sandbox/REPUTATION-MARKS.md` says what each `at` means. `unitmarks.py` finds those places on every
+aircraft as she is built (`planes.convert` calls it last), so the game knows exactly which points to paint:
+
+- `unit_marks` in her file: `places` (the `at` words she has, in the order of their bits), `emblems` (where a badge
+  goes, one entry for each side: `place`, `side`, `at`, `facing`, `radius`, `part`, in the file's axes) and `how`.
+- `unit_mark` in `near` and `far`: for every point, the places it lies in, as bits (bit k is `places[k]`; 0 is none).
+  A point can lie in two: the rudder is part of the tail, the front of the cowling part of the cowling.
+
+| `at` | what is painted |
+|---|---|
+| `tail` | fin, rudder, tailplane and elevators, every one of them (the Red Tails' look), with the lines and rivets on them |
+| `rudder` | the rudder alone |
+| `nose` | the front of each cowling, about 0.4 m (0.3 m on an engine out on a wing); with no engine in her nose (a jet, a bomber, a glider), her nose: 8% of her length, 0.6 to 1.2 m |
+| `spinner` | every spinner (`boss`); a machine with none (the B-17) has no `spinner` |
+| `cowling` | each engine's cowling: a radial's to its gills (at least 0.9 m behind the airscrew: the Fw 190's long cowl), an inline's to her windscreen, each nacelle's ahead of the wing, a jet's intakes |
+| `wingtips` | the outer 8% of each wing (0.4 to 1.0 m), ailerons too |
+| `fuselage band` | a band round her rear fuselage between wing and tailplane (5.5% of her length, 0.3 to 0.75 m), clear of her national marking |
+| `nose` (emblem) | `emblems`: a flat place on each side of her nose, on her painted skin, clear of her markings, codes and record, looking squarely out to the side where one has room (not under a bomber's chin) |
+
+The game paints a point whose bit for the unit's `at` is set in the mark's colour (the rules' `colours` table), then
+lays its own wear and soot over it as over any paint: flat and a little worn, never new. With an `emblem` it lays the
+badge as it lays a marking, at the `emblems` entries. The `.glb` gives each painted place its own material slots too
+(`<Name>:<paint>|tail+rudder` and so on). For the pictures, `airlook.py <Name> <out> high unit=tail:B3261E,spinner:B3261E
+emblem=E2B51F` paints them (`unitmarks.paint`) and lays a plain round badge where the emblem goes (`unitmarks.badges`).
+The what-if machines carry it now; every other aircraft gains it at her next export.
+
 ## Making them again, and the pictures
 
 ```

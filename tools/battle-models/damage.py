@@ -53,6 +53,7 @@ LAID = {"line", "rivet", "rivet_under", "stain", "soot", "patch"}     # what lie
 PAINTS = {"hole": "0A0A0B", "torn": "7E8287", "lip": "7E8287", "bent": "2B2D2F", "soot": "2A2622", "soot_thin": "2A2622"}
 CLEAR = {"lip": 0.4, "soot": 0.35, "soot_thin": 0.17}       # how much of each see-through paint shows over her own
 MANY_ENGINED = ("Amerikabomber", "B17", "B29", "Betty", "Bomber", "He111", "Lancaster", "Nell")    # two airscrews or more: each has an <Name>EngineOut
+MANY_ENGINED += ("WhatIf_TankBuster", "WhatIf_GunshipBomber", "WhatIf_NightFighter", "WhatIf_SeaHunter")     # (the sandbox's what-ifs: whatif_planes)
 
 
 def look(paint, mat, nt, bsdf, mix, **kw):

@@ -5,10 +5,12 @@
  * field, annexed by treaty, or divided by the terms of a peace. That part runs in every campaign and changes nothing
  * in the war itself.
  *
- * The return is a rule of the grand campaign only. A country beaten in the field comes back when its capital is in
- * the hands of an alliance member at war with its conqueror: it joins that alliance, takes back every province of
- * its own that its new allies hold, puts a small army in the field, and is run by the computer, or by the player if
- * it was the player's country. The numbers and the words are in data/campaign/liberation.json.
+ * The return is a rule of the grand campaign only. A country beaten in the field comes back at a month's end, when its
+ * capital is in the hands of an alliance member at war with its conqueror and no enemy corps of that holder's stands
+ * in the capital or next to it (ruling 229, part 2: never in the month it fell, and never in the middle of a month's
+ * fighting). It joins that alliance, takes back every province of its own that its new allies hold, puts a small army
+ * in the field, and is run by the computer, or by the player if it was the player's country. The numbers and the
+ * words are in data/campaign/liberation.json.
  */
 import data from '../../data/campaign/liberation.json';
 import { clamp } from '../core/math';
@@ -105,6 +107,20 @@ export function whyNotFreedBy(g: Game, nat: string, by: string, soon = false): s
   return null;
 }
 
+/**
+ * The enemy round a fallen country's capital, as the one who holds it sees it (ruling 229, part 2): whether corps at
+ * war with the holder stand in the capital, and whether they stand next to it. Forts are works, not an army that
+ * could take the city back, and are left out, as they are of the danger at a capital's gates. A town's garrison counts
+ * with the field: it can march out again.
+ */
+export function capitalThreat(g: Game, cap: Region, holder: string): { inIt: boolean; next: boolean } {
+  const foe = (r: Region): boolean => [...r.units, ...(r.garr ?? [])].some((u) => !u.dead && u.kind !== 'fort' && atWar(g, u.nat, holder));
+  return { inIt: foe(cap), next: cap.nb.some((j) => foe(g.regions[j])) };
+}
+
+/** The wait in words for one fallen country: what a line that could come true this month says, or next month's. */
+export const monthsEnd = (g: Game, X: Nation): string => (g.turn - (X.fellOn?.turn ?? -Infinity) < LIB.gap ? 'the end of next month' : "the month's end");
+
 // ---- The return -----------------------------------------------------------------------------
 
 /** Hands a country back every province of its own that its allies hold. Returns how many changed hands. */
@@ -184,38 +200,50 @@ export function liberate(g: Game, nat: string, by: string, after?: string): bool
   return true;
 }
 
-/** Frees a fallen country if whoever holds its capital can. */
-function tryFree(g: Game, X: Nation, after?: string): boolean {
-  if (X.alive || !X.fellOn || X.capital < 0) return false;
-  return liberate(g, X.id, g.regions[X.capital].ctrl, after);
+/**
+ * The month's end (ruling 229, part 2; called once a month, after the last nation's orders and before the month
+ * turns): every fallen country whose capital is held by one who could free it, with no enemy corps of that holder's in
+ * the capital or next to it, returns. One whose conqueror has been beaten since says so ('With Germany beaten, ...').
+ * The news and the roll are dated the month's last week.
+ */
+export function liberationMonth(g: Game): void {
+  if (!liberationRules(g)) return;
+  const week = g.week;
+  g.week = 4;
+  for (const X of Object.values(g.nations)) {
+    if (X.alive || !X.fellOn || X.capital < 0) continue;
+    const cap = g.regions[X.capital], by = cap.ctrl;
+    if (whyNotFreedBy(g, X.id, by)) continue;
+    const t = capitalThreat(g, cap, by);
+    if (t.inIt || t.next) continue;
+    const V = g.nations[X.fellOn.to];
+    liberate(g, X.id, by, V && !V.alive ? V.id : undefined);
+  }
+  g.week = week;
 }
 
 /**
  * Called when ground has just changed hands (the grand campaign). Ground that was France's before the armistice goes
- * back to a freed France when its allies take it from Vichy, and a fallen country whose capital is now held by its
- * conqueror's enemies returns.
+ * back to a freed France when its allies take it from Vichy. (A fallen country no longer returns here, in the middle
+ * of the fighting: only at the month's end, liberationMonth.)
  */
-export function retaken(g: Game, r: Region, by: string): void {
+export function retaken(g: Game, r: Region): void {
   if (!liberationRules(g)) return;
   const F = g.nations.FRA;
   if (r.owner === 'VIC' && r.vichy && F?.alive && F.freedOn && r.ctrl !== 'VIC' && allied(g, r.ctrl, 'FRA')) {
     r.owner = 'FRA'; r.ctrl = 'FRA'; r.cap = false;
     g.supplyDirty = true;
-    return;
   }
-  const X = g.nations[r.owner === 'VIC' && r.vichy ? 'FRA' : r.owner];
-  if (X && !X.alive && by !== X.id) tryFree(g, X);
 }
 
 /**
- * Called when a nation has just left the war (the grand campaign). Its fall can put another country's capital into
- * the hands of that country's friends, and Vichy's ground goes back to a France that has been freed.
+ * Called when a nation has just left the war (the grand campaign): Vichy's ground goes back to a France that has been
+ * freed. (The countries its fall puts into their friends' hands return at the month's end, liberationMonth.)
  */
 export function afterFall(g: Game, nat: string): void {
   if (!liberationRules(g)) return;
   const F = g.nations.FRA;
   if (nat === 'VIC' && F?.alive && F.freedOn) handBack(g, F);
-  for (const X of Object.values(g.nations)) if (X.id !== nat) tryFree(g, X, nat);
 }
 
 /** A freed country stands for as long as its capital is in its own side's hands. */
@@ -266,13 +294,21 @@ export function fallenNations(g: Game, viewer: string | null = g.human): FallenR
     const yours = !never && !!me && why === null;
     const side = yours ? bloc(me!) : null;
     const wait = g.turn - X.fellOn.turn < LIB.gap;
+    // (Ruling 229, part 2, in the UI director's words: a country returns at a month's end, with no enemy corps in or
+    // next to its capital, and never in the month it fell.)
+    const anyEnd = `${wait ? 'at the end of next month or later' : 'at the end of a month'}, with no enemy corps in or next to it`;
+    const generic = `It returns if a member of an alliance at war with ${V ? theName(V) : 'its conqueror'} holds ${cap?.name ?? 'its capital'} ${anyEnd}.`;
     let note: string;
     if (never) note = never;
-    else if (yours && cap) note = cap.ctrl === me!.id || allied(g, cap.ctrl, me!.id)
-      ? `Your side holds ${cap.name}: ${theName(X)} returns the next time any of its ground is taken${wait ? ', from next month on' : ''}.`
-      : `${wait ? `From next month, take` : 'Take'} ${cap.name} and ${theName(X)} is liberated: it returns to the war ${LIB.lines.sides[side!]}.`;
-    else if (me && why) note = `${why} It returns if a member of an alliance at war with ${V ? theName(V) : 'its conqueror'} takes ${cap?.name ?? 'its capital'}.`;
-    else note = `It returns if a member of an alliance at war with ${V ? theName(V) : 'its conqueror'} takes ${cap?.name ?? 'its capital'}.`;
+    else if (yours && cap) {
+      if (cap.ctrl === me!.id || allied(g, cap.ctrl, me!.id)) {
+        const t = capitalThreat(g, cap, cap.ctrl);
+        note = t.inIt || t.next
+          ? `Your side holds ${cap.name}, but enemy corps stand ${t.inIt && t.next ? 'in it and next to it' : t.inIt ? 'in it' : 'next to it'}: ${theName(X)} returns at the end of a month with none in or next to ${cap.name}.`
+          : `Your side holds ${cap.name}: ${theName(X)} returns at ${monthsEnd(g, X)} if no enemy corps stands in or next to it then.`;
+      } else note = `Take ${cap.name} and hold it to ${monthsEnd(g, X)}, with no enemy corps in or next to it, and ${theName(X)} is liberated: it returns to the war ${LIB.lines.sides[side!]}.`;
+    } else if (me && why) note = `${why} ${generic}`;
+    else note = generic;
     out.push({
       nat: X.id, name: X.name, fell: { turn: X.fellOn.turn, week: X.fellOn.week, to: X.fellOn.to, how: X.fellOn.how ?? 'beaten' },
       capital: X.capital, capitalName: cap?.name ?? '', holder: cap?.ctrl ?? '', canReturn: !never, yours, side, note,
@@ -331,7 +367,7 @@ export function passingCard(g: Game, p: Passing): PassingCard {
   const never = X.alive ? null : whyNoReturn(g, p.nat);
   const more = X.alive ? `${Name} has since been liberated and is back in the war.`
     : never ? (g.flags.open === 1 ? `${Name} will not return. ${never}` : '')
-      : `${Name} can come back. If a member of an alliance at war with ${theName(B)} takes ${cap?.name ?? 'its capital'}, ${name} is liberated and returns to the war on that side${p.player ? ', and you are given it back to lead' : ''}.`;
+      : `${Name} can come back. If a member of an alliance at war with ${theName(B)} holds ${cap?.name ?? 'its capital'} ${g.turn - p.turn < LIB.gap ? 'at the end of next month or later' : 'at the end of a month'}, with no enemy corps in or next to it, ${name} is liberated and returns to the war on that side${p.player ? ', and you are given it back to lead' : ''}.`;
   return {
     ...base, kicker: `${p.how === 'annexed' ? 'Annexed' : p.how === 'terms' ? 'Out of the war' : 'Eliminated'} · ${when}`,
     title: p.how === 'annexed' ? `${Name} is annexed` : p.how === 'terms' ? `${Name} is out of the war` : `${Name} has fallen`,

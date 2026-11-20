@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import openData from '../data/campaign/open.json';
 import { runAI } from '../src/campaign/ai';
 import { STRENGTH } from '../src/campaign/ashore';
+import { MIDDLE_EAST } from '../src/campaign/middleeast';
 import { liftView } from '../src/campaign/arsenal';
 import { AIR, AIRWAR, airAI, airBases, airRange, airfieldsHold, km, rebaseAir, skyDenies, skyOver, skyReach, whyNotMission } from '../src/campaign/air';
 import { setDesk } from '../src/campaign/depth';
@@ -22,6 +23,11 @@ import { crossings, liftOf, orderCrossingPlan, runTurnAI } from '../src/campaign
 import type { AirFleet, Corps, Game, Region } from '../src/campaign/types';
 
 /** A war the computer plays on every side (or with one seat a player's), as it stands once Poland has fallen. */
+// The crossings and the beach rule are tried with the fighters where the opening months and each scenario put them: the
+// basing of fighters by the threat (ruling 227, b428) is held off in this file.
+const threatBasing = AIRWAR.ai.basing.better;
+beforeAll(() => { AIRWAR.ai.basing.better = Infinity; });
+afterAll(() => { AIRWAR.ai.basing.better = threatBasing; });
 const opened = (human: string | null = null): Game => {
   const g = startOpen(createGame(3, human));
   for (let k = 0; k < 8 && (k < 2 || g.nations.POL.alive); k++) runTurnAI(g);
@@ -84,6 +90,13 @@ describe('the reckoning of a crossing', () => {
     expect(last.label).toBe('Caught at sea');
     expect(last.value).toBe(`${Math.round(acc.risk * 100)} in 100`);
     expect(last.effect).toContain(`${Math.round(acc.loss * 100)}%`);
+    // A share of the men that rounds to nothing is said in words, never "about 0%" (the UI director, build 1638).
+    const loss = NAVY.intercept.loss;
+    NAVY.intercept.loss = 0.001 / acc.risk;
+    try {
+      const few = crossingAccount(g, 'GER', x.path, x.to);
+      expect(few.lines[few.lines.length - 1].effect).toBe('almost none of the men lost');
+    } finally { NAVY.intercept.loss = loss; }
     // The fleets that would come out are named with their strength, and the sky over the beach with who holds it.
     const sortie = sortieAgainst(g, 'GER', x.path);
     expect(sortie).toBeGreaterThan(0);
@@ -502,10 +515,11 @@ describe('staff who prepare the plan', () => {
 describe('the computer under the same rule', () => {
   const D = (openData as unknown as { descent: { after: number; risk: number; chance: number } }).descent;
   // (These are tests of the crossing. The test of strength of Version 83 would keep three corps off Germany's own
-  // shore whatever the sea, so it is set aside here: strength-83.test.ts is its own.)
-  const asked = { ...STRENGTH! };
-  beforeAll(() => { Object.assign(STRENGTH!, { sure: 0, bold: 0, even: 0 }); });
-  afterAll(() => { Object.assign(STRENGTH!, asked); });
+  // shore whatever the sea, so it is set aside here: strength-83.test.ts is its own. And the floor Britain keeps at
+  // home in 1940 to 1942, ruling 229 part 1b, likewise: egypt-229.test.ts is its own.)
+  const asked = { ...STRENGTH! }, floor = MIDDLE_EAST.floor.UK;
+  beforeAll(() => { Object.assign(STRENGTH!, { sure: 0, bold: 0, even: 0 }); MIDDLE_EAST.floor.UK = []; });
+  afterAll(() => { Object.assign(STRENGTH!, asked); MIDDLE_EAST.floor.UK = floor; });
   /**
    * Britain's staff a quiet year into its war with a landing force by its quay, every German harbour in reach emptied
    * with the country behind it, no German aircraft, and the German fleet in harbour.
@@ -700,6 +714,8 @@ describe('sea lift on the fleet card', () => {
     clear(x.from);
     const force = [corps(g, 'GER', x.from), corps(g, 'GER', x.from)];
     expect(landCorps(g, force, x.to).ok).toBe(true);
+    // (The ground landed on is written down, for the coast watch: ruling 229(e).)
+    expect(g.flags[`landedAt:${x.to.id}:GER`]).toBe(g.turn);
     expect(liftView(g, 'GER').left).toBe(l.lift - 2);
     expect(liftView(g, 'GER').lift).toBe(l.lift);
   });

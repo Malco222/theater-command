@@ -20,7 +20,7 @@ import data from '../../data/campaign/prizes.json';
 import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Region } from './types';
 import { airWar, airfieldsHold } from './air';
-import { BUDGET, PRODUCTION } from './economy';
+import { BUDGET, PRODUCTION, budgeted, landFactor } from './economy';
 import { allied, atWar, headline, theName } from './game';
 import { armyOf } from './joint';
 import { cutRail, cutRailHasty, hastyLeft, mendHasty, onNet, railCut, railsAt, ruinedAt } from './rails';
@@ -144,7 +144,8 @@ function prizeMoney(g: Game, r: Region, kind: PrizeKind, nat: string): number {
   const k = own ? 1 : BUDGET.occupied;
   if (kind === 'works') return Math.max(0, Math.min(worksOutside(r), r.fac - ruinedAt(g, r))) * (own ? 1 : PRODUCTION.occupiedIncome);
   if (kind === 'oil') return BUDGET.oil * k;
-  if (kind === 'harbour') return BUDGET.port * k;
+  // (A harbour pays by its land's worth whoever holds it, ruling 214, as provinceYield's harbour does.)
+  if (kind === 'harbour') return BUDGET.port * k * (budgeted(g) ? landFactor(r) : 1);
   return 0;
 }
 

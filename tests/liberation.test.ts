@@ -1,12 +1,13 @@
 // The fall of nations and their return. Every fall goes on a roll that both interfaces announce, in every campaign.
-// In the grand campaign a country beaten in the field comes back when an alliance member at war with its conqueror
-// holds its capital: it joins that alliance, takes back what its new allies hold of it, raises a small army, and the
-// player who lost it is given it back. The historical scenarios keep the war they had.
+// In the grand campaign a country beaten in the field comes back at a month's end, when an alliance member at war with
+// its conqueror holds its capital and no enemy corps of that holder's stands in it or next to it (ruling 229, part 2):
+// it joins that alliance, takes back what its new allies hold of it, raises a small army, and the player who lost it
+// is given it back. The historical scenarios keep the war they had.
 import { beforeAll, describe, expect, it } from 'vitest';
 import lib from '../data/campaign/liberation.json';
 import { allied, atWar, bloc, capitulate, capture, checkCollapse, createGame, removeCorps } from '../src/campaign/game';
 import { enrol } from '../src/campaign/league';
-import { LIB, fallenNations, liberate, passingCard, standsFreed, whyNoReturn, whyNotFreedBy } from '../src/campaign/liberation';
+import { LIB, capitalThreat, fallenNations, liberate, liberationMonth, passingCard, standsFreed, whyNoReturn, whyNotFreedBy } from '../src/campaign/liberation';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { announcement, announcements, fallenCapitalAt, nationsFallen, playerFell, playerLost, runTurnAI } from '../src/campaign/turn';
@@ -17,6 +18,14 @@ const clear = (g: Game, r: Region): void => { for (const c of [...r.units]) remo
 /** Takes an emptied province for a nation, as a march into it would. */
 const take = (g: Game, name: string, nat: string): Region => { const r = g.byName[name]; clear(g, r); capture(g, r, nat); return r; };
 const freed = (g: Game): string[] => g.passings.filter((p) => p.kind === 'freed').map((p) => p.nat);
+/** Sends away every corps at war with a capital's holder that stands next to it, so that only the rule's other tests are left. */
+const quiet = (g: Game, name: string): Region => {
+  const cap = g.byName[name];
+  for (const j of cap.nb) for (const c of [...g.regions[j].units]) if (atWar(g, c.nat, cap.ctrl)) removeCorps(g, c);
+  return cap;
+};
+/** Takes a fallen country's capital with nobody of the enemy's left round it, and lets the month end, as the turn does. */
+const free = (g: Game, name: string, nat: string): Region => { const r = take(g, name, nat); quiet(g, name); liberationMonth(g); return r; };
 const corpsOf = (g: Game, nat: string) => g.corps.filter((c) => c.nat === nat && !c.dead);
 
 // One computer-run grand campaign played to the autumn of 1940: Poland, the Low Countries and France have fallen to
@@ -83,7 +92,7 @@ describe('the roll of fallen nations', () => {
     expect(fra.title).toBe('France has fallen');
     expect(fra.kicker).toMatch(/^Eliminated · \w+ 1940$/);
     expect(fra.text).toMatch(/asked Germany for terms/);
-    expect(fra.more).toMatch(/can come back.*takes Paris/);
+    expect(fra.more).toBe('France can come back. If a member of an alliance at war with Germany holds Paris at the end of a month, with no enemy corps in or next to it, France is liberated and returns to the war on that side.');
     expect(fra.region).toBe(g.byName['Paris'].id);
     expect(fra.facts.length).toBe(3);
     const est = cards.find((c) => c.nat === 'EST')!;
@@ -108,7 +117,7 @@ describe('the roll of fallen nations', () => {
     expect(fra.side).toBe('allies');
     expect(fra.capitalName).toBe('Paris');
     expect(fra.holder).toBe('GER');
-    expect(fra.note).toMatch(/^Take Paris and France is liberated/);
+    expect(fra.note).toBe('Take Paris and hold it to the month\'s end, with no enemy corps in or next to it, and France is liberated: it returns to the war beside the Allies.');
     const est = rows.find((f) => f.nat === 'EST')!;
     expect(est.canReturn).toBe(false);
     expect(est.yours).toBe(false);
@@ -155,7 +164,7 @@ describe('who can free a fallen country', () => {
     expect(whyNoReturn(g, 'LAT')).toMatch(/annexed/);
     expect(whyNoReturn(g, 'VIC')).not.toBeNull();
     // Taking the capital without the right to free it changes nothing but the flag over it.
-    const warsaw = take(g, 'Warsaw', 'SOV');
+    const warsaw = free(g, 'Warsaw', 'SOV');
     expect(warsaw.ctrl).toBe('SOV');
     expect(g.nations.POL.alive).toBe(false);
     expect(liberate(g, 'POL', 'SOV')).toBe(false);
@@ -173,27 +182,74 @@ describe('who can free a fallen country', () => {
     expect(whyNotFreedBy(g, nat, 'UK')).toMatch(/only this month/);
     expect(whyNotFreedBy(g, nat, 'UK', true)).toBeNull();
     g.human = 'UK';
-    expect(nationsFallen(g).find((f) => f.nat === nat)!.note).toMatch(new RegExp(`^From next month, take ${seat}`));
+    const name = g.nations[nat].name;
+    const note = (): string => nationsFallen(g).find((f) => f.nat === nat)!.note;
+    expect(note()).toBe(`Take ${seat} and hold it to the end of next month, with no enemy corps in or next to it, and ${name} is liberated: it returns to the war beside the Allies.`);
     const capital = take(g, seat, 'UK');
+    quiet(g, seat);
+    expect(note()).toBe(`Your side holds ${seat}: ${name} returns at the end of next month if no enemy corps stands in or next to it then.`);
+    // Not at the end of the month it fell in.
+    liberationMonth(g);
     expect(g.nations[nat].alive).toBe(false);
     expect(capital.ctrl).toBe('UK');
-    // Next month the capital is already in friendly hands: the country returns the next time any of its ground is taken.
     g.turn++;
-    expect(nationsFallen(g).find((f) => f.nat === nat)!.note).toMatch(new RegExp(`^Your side holds ${seat}`));
-    const other = g.regions.find((r) => r.owner === nat && !r.overseas && r.id !== capital.id)!;
+    expect(note()).toBe(`Your side holds ${seat}: ${name} returns at the month's end if no enemy corps stands in or next to it then.`);
+    // Nor in the middle of a month, when more of its ground is taken: only at the month's end.
+    const other = g.regions.find((r) => r.owner === nat && !r.overseas && r.id !== capital.id && !capital.nb.includes(r.id))!;
     clear(g, other);
     other.ctrl = 'GER';
     capture(g, other, 'UK');
+    expect(g.nations[nat].alive).toBe(false);
+    liberationMonth(g);
     expect(g.nations[nat].alive).toBe(true);
     expect(capital.ctrl).toBe(nat);
     expect(other.ctrl).toBe(nat);
+    // The news and the roll are dated the month's last week, alike, so the month card pairs them.
+    const p = g.passings[g.passings.length - 1];
+    expect(p).toMatchObject({ kind: 'freed', nat, turn: g.turn, week: 4 });
+    expect(g.headlines.some((h) => h.nat === nat && h.kind === 'event' && h.turn === g.turn && h.week === 4 && h.region === capital.id)).toBe(true);
+  });
+
+  it('waits while enemy corps stand in its capital or next to it, and says so', () => {
+    const g = world();
+    g.human = 'UK';
+    const paris = take(g, 'Paris', 'UK');
+    quiet(g, 'Paris');
+    const note = (): string => nationsFallen(g).find((f) => f.nat === 'FRA')!.note;
+    // A German corps comes up next to Paris.
+    const rouen = g.byName['Rouen'];
+    clear(g, rouen);
+    rouen.ctrl = 'GER';
+    const near = g.corps.find((c) => c.nat === 'GER' && !c.dead && c.kind === 'inf' && !g.regions[c.reg].nb.includes(paris.id) && c.reg !== paris.id)!;
+    g.regions[near.reg].units = g.regions[near.reg].units.filter((u) => u !== near);
+    near.reg = rouen.id; rouen.units.push(near);
+    expect(capitalThreat(g, paris, 'UK')).toEqual({ inIt: false, next: true });
+    expect(note()).toBe('Your side holds Paris, but enemy corps stand next to it: France returns at the end of a month with none in or next to Paris.');
+    liberationMonth(g);
+    expect(g.nations.FRA.alive).toBe(false);
+    // In it, as a corps that has fought its way back into the province.
+    rouen.units = rouen.units.filter((u) => u !== near);
+    near.reg = paris.id; paris.units.push(near);
+    expect(capitalThreat(g, paris, 'UK')).toEqual({ inIt: true, next: false });
+    expect(note()).toMatch(/^Your side holds Paris, but enemy corps stand in it: /);
+    liberationMonth(g);
+    expect(g.nations.FRA.alive).toBe(false);
+    // A fort is works, not an army: it does not hold the country back.
+    near.kind = 'fort';
+    expect(capitalThreat(g, paris, 'UK')).toEqual({ inIt: false, next: false });
+    near.kind = 'inf';
+    // Gone, and France returns at the month's end.
+    removeCorps(g, near);
+    liberationMonth(g);
+    expect(g.nations.FRA.alive).toBe(true);
+    expect(freed(g)).toEqual(['FRA']);
   });
 
   it('is nobody once the last act has dissolved the alliances', () => {
     const g = world();
     g.flags.dom = g.turn;
     expect(whyNoReturn(g, 'FRA')).toMatch(/last act/);
-    take(g, 'Paris', 'UK');
+    free(g, 'Paris', 'UK');
     expect(g.nations.FRA.alive).toBe(false);
   });
 
@@ -204,7 +260,7 @@ describe('who can free a fallen country', () => {
     expect(bloc(g.nations.SWE)).toBe('league');
     expect(whyNotFreedBy(g, 'FRA', 'SWE')).toMatch(/League restores only/);
     expect(whyNotFreedBy(g, 'DEN', 'SWE')).toBeNull();
-    take(g, 'Zealand', 'SWE');
+    free(g, 'Zealand', 'SWE');
     expect(g.nations.DEN.alive).toBe(true);
     expect(g.nations.DEN.league).toBe(true);
     expect(bloc(g.nations.DEN)).toBe('league');
@@ -224,9 +280,12 @@ describe('a liberated country', () => {
     rouen.ctrl = 'UK'; rouen.since = g.turn - 2;
     const heads = g.headlines.length, rolled = g.passings.length;
     take(g, 'Paris', 'UK');
+    quiet(g, 'Paris');
+    expect(F.alive).toBe(false);
+    liberationMonth(g);
     expect(F.alive).toBe(true);
     expect(F.align).toBe('allies');
-    expect(F.freedOn).toEqual({ turn: g.turn, week: g.week, by: 'UK' });
+    expect(F.freedOn).toEqual({ turn: g.turn, week: 4, by: 'UK' });
     expect(atWar(g, 'FRA', 'GER')).toBe(true);
     expect(atWar(g, 'GER', 'FRA')).toBe(true);
     expect(F.atWar.every((e) => atWar(g, 'UK', e))).toBe(true);
@@ -260,13 +319,14 @@ describe('a liberated country', () => {
     expect(news.region).toBe(paris.id);
     expect(g.passings.length).toBe(rolled + 1);
     const p = g.passings[rolled];
-    // Four provinces since Version 76: Martinique and French Guiana, in British keeping since the fall, come home too.
-    expect(p).toMatchObject({ kind: 'freed', nat: 'FRA', by: 'UK', how: 'freed', capital: paris.id, provinces: 4, corps: 3, side: 'allies', turn: g.turn });
-    for (const name of ['Martinique', 'French Guiana']) expect(g.byName[name].ctrl, name).toBe('FRA');
+    // Four provinces since Version 76: Martinique and French Guiana, in British keeping since the fall, come home too;
+    // five since the cities version, with Cayenne, French Guiana's city.
+    expect(p).toMatchObject({ kind: 'freed', nat: 'FRA', by: 'UK', how: 'freed', capital: paris.id, provinces: 5, corps: 3, side: 'allies', turn: g.turn });
+    for (const name of ['Martinique', 'French Guiana', 'Cayenne']) expect(g.byName[name].ctrl, name).toBe('FRA');
     const card = passingCard(g, p);
     expect(card.title).toBe('France is free');
     expect(card.kicker).toMatch(/^Liberated · /);
-    expect(card.text).toMatch(/British troops hold Paris\. France returns to the war beside the Allies: 4 provinces are back under its own flag, and 3 new corps are forming at Paris\./);
+    expect(card.text).toMatch(/British troops hold Paris\. France returns to the war beside the Allies: 5 provinces are back under its own flag, and 3 new corps are forming at Paris\./);
     expect(card.more).toMatch(/stands for as long as Paris does/);
     // The card of its fall now says it came back.
     expect(passingCard(g, g.passings.find((x) => x.nat === 'FRA' && x.kind === 'fell')!).more).toMatch(/since been liberated/);
@@ -275,7 +335,7 @@ describe('a liberated country', () => {
 
   it('is handed whatever its allies win back of it from then on', () => {
     const g = world();
-    take(g, 'Paris', 'UK');
+    free(g, 'Paris', 'UK');
     const next = g.regions.find((r) => r.owner === 'FRA' && r.ctrl === 'GER' && !r.overseas)!;
     clear(g, next);
     capture(g, next, 'UK');
@@ -295,7 +355,7 @@ describe('a liberated country', () => {
   it('stands for as long as its capital does, and can fall a second time when the capital is lost', () => {
     const g = world();
     const F = g.nations.FRA;
-    const paris = take(g, 'Paris', 'UK');
+    const paris = free(g, 'Paris', 'UK');
     expect(standsFreed(g, F)).toBe(true);
     // Its little army destroyed and nearly all its ground in enemy hands: it still stands.
     for (const c of corpsOf(g, 'FRA')) removeCorps(g, c);
@@ -314,7 +374,7 @@ describe('a liberated country', () => {
     // And it can be freed again, once the month is out.
     expect(whyNotFreedBy(g, 'FRA', 'UK')).toMatch(/only this month/);
     g.turn++;
-    take(g, 'Paris', 'UK');
+    free(g, 'Paris', 'UK');
     expect(F.alive).toBe(true);
     expect(freed(g)).toEqual(['FRA', 'FRA']);
   });
@@ -324,6 +384,9 @@ describe('a liberated country', () => {
     const rolled = g.passings.length;
     capitulate(g, 'GER', 'UK');
     expect(g.nations.GER.alive).toBe(false);
+    // Not in the middle of the month: at its end, the same month as the conqueror's fall.
+    expect(g.passings.slice(rolled).some((p) => p.kind === 'freed')).toBe(false);
+    liberationMonth(g);
     const now = g.passings.slice(rolled);
     expect(now[0]).toMatchObject({ kind: 'fell', nat: 'GER', by: 'UK' });
     const back = now.filter((p) => p.kind === 'freed');
@@ -347,14 +410,14 @@ describe('a liberated country', () => {
     g.turn++;
     expect(whyNotFreedBy(g, 'ITA', 'GER')).toBeNull();
     expect(whyNotFreedBy(g, 'ITA', 'UK')).toMatch(/conqueror/);
-    take(g, 'Rome', 'GER');
+    free(g, 'Rome', 'GER');
     expect(g.nations.ITA.alive).toBe(true);
     expect(bloc(g.nations.ITA)).toBe('axis');
     expect(atWar(g, 'ITA', 'UK')).toBe(true);
     expect(allied(g, 'ITA', 'GER')).toBe(true);
     expect(g.byName['Rome'].ctrl).toBe('ITA');
-    expect(g.passings[g.passings.length - 1].side).toBe('axis');
-    expect(g.headlines[g.headlines.length - 1].text).toMatch(/Italy is liberated\. German troops hold Rome, and Italy returns to the war beside the Axis\./);
+    expect(g.passings.find((p) => p.kind === 'freed' && p.nat === 'ITA')!.side).toBe('axis');
+    expect(g.headlines.find((h) => h.nat === 'ITA' && /liberated/.test(h.text))!.text).toMatch(/Italy is liberated\. German troops hold Rome, and Italy returns to the war beside the Axis\./);
   });
 });
 
@@ -374,13 +437,13 @@ describe('the player\'s own country', () => {
     const g2 = loadGame(saveGame(g))!;
     expect(g2.human).toBeNull();
     expect(playerLost(g2)).toBe('FRA');
-    take(g2, 'Paris', 'UK');
+    free(g2, 'Paris', 'UK');
     expect(g2.nations.FRA.alive).toBe(true);
     expect(g2.human).toBe('FRA');
     expect(playerLost(g2)).toBeNull();
     const p = g2.passings[g2.passings.length - 1];
     expect(p.player).toBe(true);
-    expect(g2.headlines[g2.headlines.length - 1].text).toMatch(/the country is yours to lead again, beside the Allies/);
+    expect(g2.headlines.find((h) => h.nat === 'FRA' && /liberated/.test(h.text))!.text).toMatch(/the country is yours to lead again, beside the Allies/);
     expect(passingCard(g2, p).more).toMatch(/^The country is yours to lead again/);
     // The month plays on with the player's country in it.
     const turn = g2.turn;
@@ -392,7 +455,7 @@ describe('the player\'s own country', () => {
   it('is not handed to a player who was never its leader', () => {
     const g = world();
     expect(g.human).toBeNull();
-    take(g, 'Paris', 'UK');
+    free(g, 'Paris', 'UK');
     expect(g.nations.FRA.alive).toBe(true);
     expect(g.human).toBeNull();
   });
@@ -417,6 +480,8 @@ describe('a computer-run grand campaign with liberation', () => {
     for (const p of roll.filter((x) => x.kind === 'freed')) {
       expect(roll.some((q) => q.kind === 'fell' && q.nat === p.nat && q.id < p.id)).toBe(true);
       expect(p.side).toBeTruthy();
+      // Every return comes at a month's end (ruling 229, part 2).
+      expect(p.week).toBe(4);
     }
   }, 120000);
 });

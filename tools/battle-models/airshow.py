@@ -25,6 +25,7 @@ import damage  # noqa: E402
 import kit  # noqa: E402
 import marks  # noqa: E402
 import planes  # noqa: E402
+import unitmarks  # noqa: E402
 import rigid  # noqa: E402
 import stage  # noqa: E402
 from planes import q_of  # noqa: E402
@@ -122,7 +123,7 @@ class Air:
 
 
 class Plane:
-    def __init__(self, air, name, at=(0, 0, 0), badges=True, record=None, scheme=None, owner=None):
+    def __init__(self, air, name, at=(0, 0, 0), badges=True, record=None, scheme=None, owner=None, unit=None, emblem=None):
         self.air, self.name = air, name
         self.m, self.f = air.model(name)
         gloss = False
@@ -137,8 +138,12 @@ class Plane:
             for mk in self.m.marks or []:
                 mk["tag"] = planes.mark_in(mk["tag"], scheme, mk.get("place"))
         bare = self.m.info["file"].get("finish") == "bare metal"
+        if unit:                                             # (unit={place: hex}: the paint of a unit that has made a name, as the game lays it: unitmarks.py)
+            unitmarks.paint(self.m, unit)
         self.ob, self.arm = rigid.to_blender(self.m, (lambda *a: plane_look(*a, bare=bare, gloss=gloss)), crease=50.0)
         self.badges = marks.put(self.m, self.ob, self.arm, record, own=(owner or {}).get("insignia"), fin=(owner or {}).get("fin")) if badges else []      # (record: what she has done, painted on her)
+        if emblem:                                           # (emblem=hex: a plain badge where the unit's own emblem goes)
+            self.badges += unitmarks.badges(self.m, self.ob, self.arm, emblem)
         self.at, self.q, self.pose = Vector(at), Quaternion(), {}
         self.vel = Vector()                                  # (against the formation)
         self.v_air = air.speed

@@ -7,6 +7,7 @@ import mapData from '../src/generated/campaign-map.json';
 import { allied, atWar, capitulate, capture, createGame, removeCorps } from '../src/campaign/game';
 import { BUDGET, provinceYield } from '../src/campaign/economy';
 import { saveGame } from '../src/campaign/save';
+import { beyondEurope } from '../src/campaign/world';
 import { startOpen } from '../src/campaign/staff';
 import { TOWNS, prizeOf, prizesInReach, townAt, townName, townSite, townSize, townsOf, worthOf } from '../src/campaign/towns';
 import { prize, prizesNear, townIn, towns } from '../src/campaign/turn';
@@ -37,11 +38,18 @@ describe('the town data', () => {
   });
 
   it('gives every province a place of its own: no two share a name, and no town is called after another province', () => {
-    const names = g.regions.map(townName);
-    expect(new Set(names).size).toBe(g.regions.length);
+    // One pair across the ocean since the cities version, and only that one: the Midlands' chief town and the city of
+    // Alabama are both Birmingham. The UI director's rule (ui-style-guide.md, Words, 17 November 2026): a twin is
+    // allowed only an ocean apart, and only where no line or list shows the two without a country beside them; where a
+    // real fuller name exists (Santiago de Cuba) it is used instead. Both stay plain "Birmingham".
+    const OVERSEAS_TWINS = new Set(['Birmingham']);
+    const names = g.regions.map(townName).filter((n) => !OVERSEAS_TWINS.has(n));
+    expect(new Set(names).size).toBe(names.length);
+    expect(g.regions.length - names.length).toBe(2);
     for (const r of g.regions) {
       const other = g.byName[townName(r)];
-      expect(!other || other === r, `${r.name}: ${townName(r)}`).toBe(true);
+      const twins = OVERSEAS_TWINS.has(townName(r)) && !!other && beyondEurope(other) !== beyondEurope(r);
+      expect(!other || other === r || twins, `${r.name}: ${townName(r)}`).toBe(true);
     }
   });
 
@@ -127,7 +135,9 @@ describe('what a place is worth', () => {
     const g = open();
     for (const r of g.regions) {
       if (r.ctrl !== r.owner) continue;
-      expect(worthOf(g, r), r.name).toBe(Math.round(provinceYield(g, r, r.owner).total * BUDGET.scale));
+      // Never nothing where it pays something (ruling 214: a smaller power's land can pay less than 1 a month).
+      const pays = provinceYield(g, r, r.owner).total;
+      expect(worthOf(g, r), r.name).toBe(pays > 0 ? Math.max(1, Math.round(pays * BUDGET.scale)) : 0);
     }
   });
 
@@ -181,6 +191,21 @@ describe('the prize', () => {
     expect(p.line).toMatch(/^Berlin pays \d+ a month into your treasury: \d+ factories and \d+ victory points of Germany's \d+\.$/);
     expect(p.items.map((i) => i.key)).toEqual(expect.arrayContaining(['income', 'factory', 'vp']));
     expect(p.items.some((i) => i.key === 'capital' || i.key === 'fort' || i.key === 'frees')).toBe(false);
+  });
+
+  it('says ground that pays nothing pays nothing, not 0 a month (the UI director, review-1441x878 section 7)', () => {
+    // (Outside the grand campaign only factories pay: a province without one pays nothing.)
+    const g = createGame(3, 'GER');
+    const own = g.regions.find((r) => r.ctrl === 'GER' && r.owner === 'GER' && r.fac === 0)!;
+    const p = prizeOf(g, own.id, 'GER')!;
+    expect(p.kind).toBe('yours');
+    expect(p.income).toBe(0);
+    expect(p.line.startsWith(`${townName(own)} pays nothing into your treasury`)).toBe(true);
+    const ally = g.regions.find((r) => r.ctrl !== 'GER' && allied(g, 'GER', r.ctrl) && r.fac === 0)!;
+    const q = prizeOf(g, ally.id, 'GER')!;
+    expect(q.kind).toBe('ally');
+    expect(q.line).toContain('your ally, and pays nothing into its treasury');
+    expect(`${p.line} ${q.line}`).not.toMatch(/\b0 a month/);
   });
 
   it('says what taking an enemy province would bring, and what it would cost the enemy', () => {
@@ -237,7 +262,10 @@ describe('the prize', () => {
     expect(p.capitalOf).toBeNull();
     expect(p.items.map((i) => i.key)).toContain('frees');
     expect(p.items.find((i) => i.key === 'income')!.text).toContain("Poland's treasury");
-    expect(p.line).toMatch(/^Taking Warsaw frees Poland, which returns to the war on your side and takes its capital back\. Germany loses \d+ a month/);
+    expect(p.line).toMatch(/^Taking Warsaw frees Poland if you hold it at the end of next month with no enemy corps in or next to it: Poland returns to the war on your side and takes its capital back\. Germany loses \d+ a month/);
+    expect(p.items.find((i) => i.key === 'frees')!.text).toBe('The capital of Poland, which has fallen. Take it and hold it to the end of next month, with no enemy corps in or next to it, and Poland returns to the war on your side');
+    g.turn++;
+    expect(prizeOf(g, w, 'FRA')!.line).toMatch(/^Taking Warsaw frees Poland if you hold it at the month's end with no enemy corps in or next to it: /);
     // Its conqueror frees nobody by holding it, and nor does a country that is not in the war.
     expect(prizeOf(g, w, 'GER')!.frees).toBeNull();
     expect(prizeOf(g, w, 'SWE')!.frees).toBeNull();

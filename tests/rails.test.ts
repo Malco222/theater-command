@@ -76,10 +76,22 @@ describe('the railway net', () => {
     // ran into the far north of Canada in 1939, nor to the foot of Lower California.
     // Nor, in Latin America, through Central America south of El Salvador, into the Amazon basin and the Orinoco
     // plains, across the Chaco Boreal, or into the far south.
+    // (Managua and San Jose came off this list with the cities version: the chart draws Nicaragua's Pacific railway to
+    // Corinto and Costa Rica's line to Puerto Limon, both running in 1939.)
     const wild = ['Ungava', 'Keewatin', 'Mackenzie', 'Yukon', 'Southern Baja',
-      'Peten', 'Tegucigalpa', 'Mosquitia', 'Managua', 'Mosquito Coast', 'San Jose', 'Chiriqui', 'Llanos', 'Caqueta', 'Apure', 'Ciudad Bolivar', 'Guayana', 'Alto Orinoco',
+      'Peten', 'Tegucigalpa', 'Mosquitia', 'Mosquito Coast', 'Chiriqui', 'Llanos', 'Caqueta', 'Apure', 'Ciudad Bolivar', 'Guayana', 'Alto Orinoco',
       'Napo', 'Loreto', 'Madre de Dios', 'Beni', 'Chaco Boreal', 'Aysen', 'Magallanes', 'Comodoro Rivadavia', 'Southern Patagonia', 'Tierra del Fuego',
-      'Para', 'Amapa', 'Amazonas', 'Rio Negro', 'Roraima', 'Acre', 'Guapore', 'Tapajos', 'Mato Grosso'];
+      'Para', 'Amapa', 'Amazonas', 'Rio Negro', 'Roraima', 'Acre', 'Guapore', 'Tapajos', 'Mato Grosso',
+      // Since the cities version, as the map builder's chart draws 1939's lines (world-cities-rails.json): Hispaniola's
+      // and Colombia's short lines ran from a harbour or a river port inland and join no two places of the chart; no
+      // line reached Santa Cruz in Bolivia before 1955; none ran into Canada's far north (the White Pass line ends at
+      // Skagway, off the chart), to the Pacific harbours of southern Mexico, across the Orinoco plains, the Amazon or
+      // the far south; and a few lines of Brazil's interior were cut off from the rest.
+      'Port-au-Prince', 'Cap-Haitien', 'Ciudad Trujillo', 'Puerto Plata', 'Medellin', 'Barranquilla', 'Cartagena', 'Santander', 'Socorro', 'Pasto', 'Leticia',
+      'Santa Cruz', 'Camiri', 'Sept-Iles', 'Fort Chimo', 'Fort Nelson', 'Whitehorse', 'Dawson City', 'Watson Lake', 'Yellowknife', 'Port Radium',
+      'Acapulco', 'Villahermosa', 'San Pedro Sula', 'Bluefields', 'Puerto La Cruz', 'Coro', 'Maturin', 'Barinas', 'San Fernando de Apure',
+      'Esmeraldas', 'Pucallpa', 'Iquitos', 'Ayacucho', 'Punta Arenas', 'Rio Gallegos', 'Ushuaia', 'Villa Concepcion',
+      'Belem', 'Santarem', 'Macapa', 'Manaus', 'Tefe', 'Porto Velho', 'Rio Branco', 'Cuiaba', 'Lages', 'Itabira', 'Teofilo Otoni', 'Conquista'];
     for (const name of off) { const r = g.byName[name]; expect(r.terrain === 'desert' || r.overseas || r.nb.length <= 1 || wild.includes(name), name).toBe(true); }
     for (const name of wild) expect(off, name).toContain(name);
     const trunks: string[][] = [

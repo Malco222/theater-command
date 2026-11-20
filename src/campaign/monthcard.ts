@@ -30,6 +30,7 @@
  * of ground, sea and air together, and a light ground item (a count, or a battle that cost less than a corps) never
  * takes the picture from a fleet action or a great ship sunk. The rows keep land first, then sea and air.
  */
+import airNames from '../../data/campaign/air-names.json';
 import { turnToDate } from '../core/ticket';
 import { staffRuns, type DeskId } from './depth';
 import { CAPITAL_BESIEGED, fallWarning, withinReach } from './danger';
@@ -67,8 +68,9 @@ export interface MonthMark {
 }
 
 /**
- * A band: classes 1 and 2 of the ranking, red; and NEWS, brass and never red, for a line of news with a title of
- * its own that is no war and no fall (Britain stays out of Canada's war: ruling 211(b)).
+ * A band: class 1 of the ranking, the dated warning, red; class 2 (WAR, FALLEN, FREED) brass on the dark ground, since red
+ * is the warning's alone (ruling 160); and NEWS, brass too, for a line of news with a title of its own that is no war
+ * and no fall (Britain stays out of Canada's war: ruling 211(b)).
  */
 export interface CardBand {
   word: 'WAR' | 'WARNING' | 'FALLEN' | 'FREED' | 'NEWS';
@@ -86,7 +88,7 @@ export interface CardBand {
   when: string;
   /** A place on the map to show: the news's own, or the capital of the country it names. */
   region?: number;
-  /** FREED by his own side: the band's left edge takes the rows' good-news green, and its field stays red. */
+  /** FREED by his own side: the band's field and left edge take the rows' good-news green (the art director, 82.1). */
   good?: boolean;
   /**
    * A country in danger whose warning ends with the help of his home ground's first alarm (ruling 211(c)): SHOW ON MAP
@@ -123,7 +125,7 @@ export interface CardBox {
 
 /** A row of the player's fronts. The lead story is a row too, drawn large. */
 export interface CardRow {
-  /** Ruling 64's class: 2 for a red item that found no band, 3 ground, 4 sea and air, 5 goals and honours. */
+  /** Ruling 64's class: 2 for a band's item that found no band (red for a warning, else brass), 3 ground, 4 sea and air, 5 goals and honours. */
   cls: number;
   arm: 'land' | 'sea' | 'air' | null;
   picture: CardPicture | null;
@@ -221,13 +223,22 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n =
 const WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
 const count = (n: number): string => WORDS[n] ?? String(n);
 /** The first sentence of a line of news, without its full stop. */
-// (A full stop after an abbreviation or an initial ends no sentence: "No. 1 Bomber Group bombs Hamburg." The Playtester, Version 82.1.)
-const ABBR = /(?:^|[\s(])(?:Nos?|St|Mt|Ft|Gen|Lt|Col|Maj|Capt|Adm|Dr|Mr|Mrs)\.$|(?:^|[\s.(])[A-Z]\.$/;
+// (A full stop after an abbreviation or an initial ends no sentence: "No. 1 Bomber Group bombs Hamburg." The Playtester, Version 82.1.
+// Nor does a German ordinal at the head of a name, "2. Fliegerdivision bombs Rotterdam": the third playtester, 84.3.1. It is
+// taken for one at the head of the line, after "the" or in a bracket, or wherever the word after it is one that follows
+// a number in the air forces' names (ruling 220's ladders: Fliegerdivision, Jagddivision, Dywizjon...), so "3. Fliegerdivision
+// and 1. Jagddivision strike..." holds together and "reduced to 2. The army..." still ends there.)
+const ABBR = /(?:^|[\s(])(?:Nos?|St|Mt|Ft|Gen|Lt|Col|Maj|Capt|Adm|Dr|Mr|Mrs)\.$|(?:^|[\s.(])[A-Z]\.$|(?:^|\b[Tt]he |\()\d{1,2}\.$/;
+const reEsc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const ORDINAL_WORDS = [...new Set(Object.values((airNames as unknown as { ladders: Record<string, { form: { ftr: string; bmr: string } }[]> }).ladders)
+  .flat().flatMap((r) => [r.form.ftr, r.form.bmr]).map((f) => /^\{n\}\. (\S+)/.exec(f)?.[1]).filter((w): w is string => !!w))];
+const ORDINAL_NEXT = new RegExp(`^ (?:${ORDINAL_WORDS.map(reEsc).join('|')})(?=[\\s,.;:)]|$)`);
 const first = (text: string): string => {
   const stop = /[.!?](?=\s|$)/g;
   for (let m = stop.exec(text); m; m = stop.exec(text)) {
     const head = text.slice(0, m.index + 1);
-    if (m[0] !== '.' || !ABBR.test(head)) return head.replace(/[.!]$/, '');
+    const ordinal = /\b\d{1,2}\.$/.test(head) && ORDINAL_NEXT.test(text.slice(m.index + 1));
+    if (m[0] !== '.' || !(ABBR.test(head) || ordinal)) return head.replace(/[.!]$/, '');
   }
   return text.replace(/[.!]$/, '');
 };
@@ -304,10 +315,14 @@ const FOOT_ROOM = { home: 30, homeWide: 35, elsewhere: 36, staff: 44 };
 const DESK_WORD: Record<string, string> = { research: 'Research', build: 'Build', diplomacy: 'Diplomacy', spies: 'Spies', air: 'Air', navy: 'Navy' };
 /** "Hamburg's", "Calais'". */
 const of = (place: string): string => (/s$/i.test(place) ? `${place}'` : `${place}'s`);
-/** What a desk did, as the card says it: the desk, then the deed, in about forty letters and never a cut name. */
-export function staffShort(desk: string, text: string): string {
+/**
+ * What a desk did, as the card says it: the desk, then the deed, in about forty letters and never a cut name. `all`
+ * is the letters the line may run to in all; Infinity for a card whose lines wrap (the 3D game's), where the first
+ * way of saying it is always taken and nothing is cut.
+ */
+export function staffShort(desk: string, text: string, all: number = FOOT_ROOM.staff): string {
   const word = DESK_WORD[desk] ?? `${desk.charAt(0).toUpperCase()}${desk.slice(1)}`;
-  const room = FOOT_ROOM.staff - word.length - 2;
+  const room = all - word.length - 2;
   const said = first(text).replace(/^Your (advisers|staff|air staff|admirals|envoys|secret service|engineers|generals) /, '');
   // The first way of saying it that fits; the last is always short.
   const fit = (...tries: string[]): string => { const t = tries.find((x) => x.length <= room) ?? tries[tries.length - 1]; return `${word}: ${t.length <= room ? t : wholeWords(t, room, 1).replace(/\.$/, '')}`; };
@@ -340,10 +355,20 @@ export function staffShort(desk: string, text: string): string {
 /** Other names a line of news gives a country. */
 const ALSO_CALLED: Record<string, RegExp> = { UK: /\bBritain\b/, USA: /\bAmerica\b/, SOV: /\bRussia\b/ };
 
+/** The room a band's head has, in letters. */
+const BAND_ROOM = 76;
 /** The room a row has for its sentence, in letters: less beside two figures. */
 const ROW_ROOM = { one: 54, two: 44 };
 /** "A", "A and B", "A, B and C". */
 const listOf = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+/** A list cut to the room a band's sentence leaves it, before the verb is added: "A, B and 3 more", never a sentence with its verb cut off. */
+const listIn = (xs: string[], room: number): string => {
+  if (listOf(xs).length <= room) return listOf(xs);
+  for (let k = xs.length - 1; k > 1; k--) { const s = `${xs.slice(0, k).join(', ')} and ${xs.length - k} more`; if (s.length <= room) return s; }
+  return `${xs[0]} and ${xs.length - 1} more`;
+};
+/** A country's name as it reads after the first word of a sentence: "The Dominican Republic" becomes "the Dominican Republic". */
+const midName = (s: string): string => s.replace(/^The /, 'the ');
 const CLASS_WORD = /\b(?:sinks?|torpedoes) (\d+) ([A-Z][a-z]+) (submarines?|destroyers?|cruisers?|battleships?|carriers?|ships?|transports?)/;
 /** A fleet's name as it reads in a sentence. */
 const the = (name: string): string => (/^the /i.test(name) ? name.replace(/^The /, 'the ') : `the ${name}`);
@@ -444,8 +469,13 @@ export const NOT_YET_FOUGHT = 'Nothing has been fought on your fronts yet.';
 export const cardHead = (card: { month: string; opening?: boolean }): { before: string; month: string; after: string } =>
   (card.opening ? { before: 'As', month: card.month, after: 'opens' } : { before: '', month: card.month, after: '' });
 
-/** The card for everything that has happened since the mark was taken. `opening` marks the card that opens a campaign (see opensCampaign). */
-export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.human, opts: { opening?: boolean } = {}): MonthCard {
+/**
+ * The card for everything that has happened since the mark was taken. `opening` marks the card that opens a campaign
+ * (see opensCampaign). `whole` is for a card whose rows and boxes wrap and grow (the 3D game's: its UI director's
+ * review of build 1628, "no sentence is cut with three dots"): a row's sentence, a desk's line and a foot box's lines
+ * are given whole, and a foot box holds as many lines of news as it has lines.
+ */
+export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.human, opts: { opening?: boolean; whole?: boolean } = {}): MonthCard {
   const me = viewer ?? '';
   const N = g.nations[me];
   const card: MonthCard = {
@@ -974,7 +1004,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const on = [...new Set([m[2], ...more.map((x) => DECLARES.exec(x.band.head)![2]), ...echo.map((h) => DECLARES.exec(first(h.text))![2])])];
     const own = on.findIndex((x) => x.includes(N.name));
     if (own > 0) on.unshift(...on.splice(own, 1));
-    b.band.head = `${m[1]} declares war on ${listOf(on)}`;
+    b.band.head = `${m[1]} declares war on ${listIn(on, BAND_ROOM - `${m[1]} declares war on `.length)}`;
     b.rank = Math.min(b.rank, ...more.map((x) => x.rank));
     b.band.text = [...[b, ...more].map((x) => x.band.text), ...echo.map((h) => h.text)].join(' ');
     b.band.nats = [...new Set([...b.band.nats, ...more.flatMap((x) => x.band.nats)])].slice(0, 2);
@@ -984,14 +1014,15 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const onHim = banded.filter((b) => b.h.kind === 'war' && !mine(b.h.nat) && DECLARES.exec(b.band.head)?.[2].replace(/^the /, '') === N.name);
   if (onHim.length > 1) {
     const [keep, ...rest] = onHim;
-    keep.band.head = `${listOf(onHim.map((b) => DECLARES.exec(b.band.head)![1]))} declare war on ${theName(N)}`;
+    const at = ` declare war on ${theName(N)}`;
+    keep.band.head = `${listIn(onHim.map((b, i) => (i ? midName(DECLARES.exec(b.band.head)![1]) : DECLARES.exec(b.band.head)![1])), BAND_ROOM - at.length)}${at}`;
     keep.band.nats = onHim.map((b) => b.h.nat!).slice(0, 2);
     keep.band.text = onHim.map((b) => b.band.text).join(' ');
     keep.rank = Math.min(...onHim.map((b) => b.rank));
     for (const b of rest) banded.splice(banded.indexOf(b), 1);
   }
   for (const b of banded) {
-    b.band.head = brief(b.band.head, 76);
+    b.band.head = brief(b.band.head, BAND_ROOM);
     // A declaration or a fall has a place to show too: the capital of the first country it names that is not his
     // own; and of an invasion, the country invaded.
     if (b.band.region !== undefined || b.band.word === 'WARNING') continue;
@@ -1012,7 +1043,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const nearness = (b: (typeof banded)[number]): number => (b.onHim || (!mine(b.h.nat) && nameAt(me, b.band.head) >= 0) ? 0 : mine(b.h.nat) ? 1 : 2);
   banded.sort((a, b) => a.rank - b.rank || nearness(a) - nearness(b));
   card.bands = banded.slice(0, 2).map((b) => b.band);
-  // An item that finds no band stays red and sits above the first battle row.
+  // An item that finds no band keeps its class's colour (red for a warning, brass for the rest) and sits above the first
+  // battle row.
   for (const b of banded.slice(2)) {
     const row = blank();
     row.cls = 2;
@@ -1063,19 +1095,22 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   // (Seven rows; six beside the lead story; and a second band takes the room of one more.)
   card.show = (card.lead ? 6 : 7) - (card.bands.length > 1 ? 1 : 0);
   // A ring that closes on a corps or more of his is never under the fold (ruling 106): it takes the last row that
-  // shows, and the lightest item that is no such ring becomes the first under the fold.
+  // shows, and the lightest item that is no such ring becomes the first under the fold. That may be a row of war and
+  // peace that found no band (the ring is the weightier news: b444, on seed 31's French May 1940 under ruling 227),
+  // so the rows keep their classes' order above the fold and below it. Never a warning: a dated warning needs his
+  // decision (ruling 64's first class), and a ring that finds nothing else to take stays where it falls.
   const rings = new Set(ranked.filter((x) => x.ring).map((x) => x.row));
   for (let i = card.show; i < card.rows.length; i++) {
     if (!rings.has(card.rows[i])) continue;
     let out = -1;
-    for (let j = card.show - 1; j >= 0 && out < 0; j--) if (!rings.has(card.rows[j])) out = j;
+    for (let j = card.show - 1; j >= 0 && out < 0; j--) if (!rings.has(card.rows[j]) && card.rows[j].tag !== 'WARNING') out = j;
     if (out < 0) break;
     const ring = card.rows.splice(i, 1)[0], gone = card.rows.splice(out, 1)[0];
     card.rows.splice(card.show - 1, 0, ring);
     card.rows.splice(card.show, 0, gone);
   }
   // (A long word under the figure takes its width from the sentence beside it.)
-  for (const r of card.rows) r.line = sentence(r.line, r.figures.length > 1 ? ROW_ROOM.two : ROW_ROOM.one - Math.max(0, (r.figures[0]?.label.length ?? 0) - 14));
+  if (!opts.whole) for (const r of card.rows) r.line = sentence(r.line, r.figures.length > 1 ? ROW_ROOM.two : ROW_ROOM.one - Math.max(0, (r.figures[0]?.label.length ?? 0) - 14));
   card.quiet = fighting.length ? '' : opts.opening ? NOT_YET_FOUGHT : card.bands.length || all.some((r) => r.cls === 2) ? 'There was no fighting on your fronts this month.' : 'A quiet month.';
   if (card.rows.length > card.show) card.count = `ALL ${all.length} REPORTS`;
 
@@ -1131,7 +1166,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   for (const h of hs) {
     if (used.has(h) || !mine(h.nat)) continue;
     if (h.kind === 'letter') continue;
-    if (h.desk) { card.staff.push({ text: h.text, short: staffShort(h.desk, h.text), desk: h.desk, sign: h.desk === 'build' ? buildSign(h.text) : DESK_SIGN[h.desk] ?? 'star', mayTake: staffRuns(g, me, h.desk as DeskId) }); used.add(h); continue; }
+    if (h.desk) { card.staff.push({ text: h.text, short: staffShort(h.desk, h.text, opts.whole ? Infinity : FOOT_ROOM.staff), desk: h.desk, sign: h.desk === 'build' ? buildSign(h.text) : DESK_SIGN[h.desk] ?? 'star', mayTake: staffRuns(g, me, h.desk as DeskId) }); used.add(h); continue; }
     const m = /^Research complete: ([^.]+)\./.exec(h.text);
     if (m) { card.research.push(m[1]); used.add(h); continue; }
     // The convoys' month is a line under the rows.
@@ -1139,7 +1174,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     // (A work already said among the deliveries, 'Anti-aircraft guns ready' with its place and level, is not said a
     // second time as a line of news.)
     const built = h.kind === 'info' ? /^The (anti-aircraft guns|airfields) at (.+) are (?:in place|ready): level \d+\.$/.exec(h.text) : null;
-    if (built && card.home.some((x) => x.bare && x.region !== undefined && g.regions[x.region]?.name === built[2] && x.text.toLowerCase().startsWith(built[1]))) { used.add(h); continue; }
+    // (The headline gives a place its article, "at the Ruhr": the delivery row has the bare name.)
+    if (built && card.home.some((x) => x.bare && x.region !== undefined && g.regions[x.region]?.name === built[2].replace(/^the /, '') && x.text.toLowerCase().startsWith(built[1]))) { used.add(h); continue; }
     if (h.kind === 'info') news.push(h);
   }
   // The other news of home, in the lines the box has left. The three foot boxes share one height: three items of
@@ -1162,12 +1198,12 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const same = m ? arrivals.get(m[2])! : [];
     if (m && same.length > 1) { said.push({ text: `${m[1]} and ${same.length - 1} more corps have arrived at ${m[2]}`, full: same.map((x) => x.text).join(' '), hs: same }); continue; }
     const lost = /^Your staff on the loss of ([^:]+):/.exec(h.text);
-    const fixed = lost && held.has(lost[1]) ? h.text.replace(`the loss of ${lost[1]}`, `the battle at ${lost[1]}`) : h.text;
+    const fixed = lost && held.has(lost[1].replace(/^the /, '')) ? h.text.replace(`the loss of ${lost[1]}`, `the battle at ${lost[1]}`) : h.text;
     // (A directive is said as its chip says it: who set it, and its title.)
     const dir = /^A directive from ([^:]+): /.exec(h.text), title = dir ? N.gov?.dir?.title : undefined;
     said.push({ text: dir && title ? `A directive from ${dir[1]}: ${title}` : first(fixed), full: fixed, hs: [h] });
   }
-  if (signed < slots) for (const f of fitFoot(said.map((s) => s.text), signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed))) {
+  if (signed < slots) for (const f of fitFoot(said.map((s) => s.text), opts.whole ? Infinity : signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed))) {
     card.also.push(f.text); card.alsoFull.push(said[f.at].full);
     for (const h of said[f.at].hs) used.add(h);
   }
@@ -1185,7 +1221,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     abroad.push(h);
   }
   // (Each whole while the box's lines last; one that will not fit is cut, or stays in the newsreel: fitFoot.)
-  for (const f of fitFoot(abroad.map((h) => first(h.text)), FOOT_ROOM.elsewhere, slots * 2, slots)) {
+  for (const f of fitFoot(abroad.map((h) => first(h.text)), opts.whole ? Infinity : FOOT_ROOM.elsewhere, slots * 2, slots)) {
     const h = abroad[f.at];
     card.elsewhere.push({ nat: h.nat!, text: f.text, full: h.text, ...(h.region !== undefined ? { region: h.region } : {}) });
     used.add(h);

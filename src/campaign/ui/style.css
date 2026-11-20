@@ -2036,6 +2036,8 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .mc-tile u { display: flex; align-items: center; gap: 7px; text-decoration: none; font-size: 12px; letter-spacing: .14em; color: var(--mc-dim); font-weight: 700; }
 .mc-tile b { display: block; font: 700 30px/1.1 var(--mc-serif); margin-top: 3px; color: var(--c); white-space: nowrap; }
 .mc-tile.t-plain b { color: var(--mc-ink); }
+/* The score describes the month, so a loss is set in the title's cream and never red (rulings 160 and 163(d)). */
+.mc-tile.t-bad b { color: rgb(237, 229, 213); }
 .mc-tile small { font-size: 13px; color: var(--mc-soft); }
 .mc-main { display: grid; grid-template-columns: 470px minmax(0, 1fr); gap: 22px; margin-top: 12px; }
 .mc-main.solo { grid-template-columns: minmax(0, 1fr); }
@@ -2057,6 +2059,11 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .mc-rows { display: flex; flex-direction: column; gap: 6px; margin-top: 7px; }
 .mc-row { position: relative; display: grid; grid-template-columns: 92px 34px minmax(0, 1fr) auto 38px; align-items: center; column-gap: 9px; background: var(--mc-panel); border-left: 6px solid var(--c); border-radius: 4px; padding: 5px 10px 5px 6px; height: 71px; }
 .mc-row.red { background: linear-gradient(90deg, #6a281d, #4a2018); }
+/* Ruling 160: a row of a band's class that found no band (Denmark FALLEN, Italy WAR, the news) takes the brass band's
+   ground and edge bar, its tag brass-300 in the kit's on-brass ink; a freeing his side did keeps its green. */
+.mc-row.brass { background: linear-gradient(90deg, rgb(108, 80, 36), rgb(85, 63, 29)); }
+.mc-row.brass:not(.t-good) { --c: rgb(224, 184, 114); }
+.mc-row.brass:not(.t-good) .mc-chip { color: rgb(30, 22, 8); }
 .mc-row.opens:hover { background: #47423d; }
 .mc-row .tpic { width: 92px; height: 59px; border: 1px solid #1c1712; }
 .mc-nopic { width: 92px; height: 59px; display: flex; align-items: center; justify-content: center; }
@@ -2302,10 +2309,12 @@ svg#map.gk1 .gatemark .gfull, svg#map.gk2 .gatemark .gmid, svg#map.gk3 .gatemark
 .mc-banner.good .mc-alt { border-color: #9fbb86; }
 .mc-banner b.tight { font-size: 19.5px; text-overflow: clip; }
 /* News that is no alarm (Britain stays out of Canada's war: ruling 211(b)): the kit's brass band, `tc-band--news`. */
-.mc-banner.news { background: linear-gradient(90deg, #6c5024, #553f1d); border-color: #8a6b3b; border-left-color: #e0b872; }
-.mc-banner.news .k { color: #f3e2bd; }
-.mc-banner.news small { color: #e6d5b0; }
-.mc-banner.news .mc-alt { border-color: #b89a62; }
+/* The news and, by ruling 160, a band of class 2 (WAR, FALLEN, FREED): brass on the dark ground, (108,80,36) to
+   (85,63,29), a brass-300 edge bar and a 1 px brass-700 edge. Red is the dated warning's alone. */
+.mc-banner.news, .mc-banner.brass { background: linear-gradient(90deg, #6c5024, #553f1d); border-color: #8a6b3b; border-left-color: #e0b872; }
+.mc-banner.news .k, .mc-banner.brass .k { color: #f3e2bd; }
+.mc-banner.news small, .mc-banner.brass small { color: #e6d5b0; }
+.mc-banner.news .mc-alt, .mc-banner.brass .mc-alt { border-color: #b89a62; }
 .wayhit.dim { opacity: .45; }
 .card footer.raidfoot { position: sticky; bottom: 0; background: var(--panel); box-shadow: 0 -8px 18px rgba(0, 0, 0, .35); }
 

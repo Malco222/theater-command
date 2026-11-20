@@ -15,6 +15,7 @@ import type { Game, Nation } from './types';
 import { atWar, bloc, headline } from './game';
 import { DIPLOMACY, RELATIONS, friendsOf, step } from './diplomacy';
 import { leagueMul } from './history';
+import { guaranteeDeters } from './guarantees';
 
 export const LEAGUE = data as unknown as {
   name: string; full: string; color: string; never: string[];
@@ -280,11 +281,14 @@ export function takePath(g: Game, nat: string, id: PathId, partner?: string): bo
 
 /**
  * How much less likely a computer-run staff is to open an operation against these countries, because some of them
- * belong to the League and the rest of it would come in: 1 when none does, or when the staff's own country is a member.
+ * belong to the League and the rest of it would come in (1 when none does, or when the staff's own country is a
+ * member), and because a guarantor would declare war on it for one of them (ruling 229, part 3: the staff reads the
+ * card the player reads).
  */
 export function deterred(g: Game, nat: string, targets: string[]): number {
-  if (g.flags.open !== 1 || g.nations[nat]?.league) return 1;
-  return targets.some((id) => g.nations[id]?.league && standsWith(g, nat, id).length > 0) ? LEAGUE.deter : 1;
+  if (g.flags.open !== 1) return 1;
+  const league = !g.nations[nat]?.league && targets.some((id) => g.nations[id]?.league && standsWith(g, nat, id).length > 0) ? LEAGUE.deter : 1;
+  return league * guaranteeDeters(g, nat, targets);
 }
 
 /** The members who would go to war beside this one if an outsider attacked it. */

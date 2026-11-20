@@ -73,7 +73,8 @@ function groupPage(g: Game, id: number): Page | null {
   const up = humanUp(g);
   const jobs: PageRow[] = airGroupJobs(g, id).map((j) => ({
     nat: x.nat, title: j.label, lines: [j.forecast, j.why ?? ''].filter(Boolean),
-    buttons: [{ label: j.on ? 'ITS ORDERS NOW' : 'GIVE THIS ORDER', act: `job:${id}:${j.key}`, ok: up && !j.on && !j.why, tip: j.why ?? '' }],
+    // (A dim button says why: the order it has now, a reason from the rules, or that it is not the player's month.)
+    buttons: [{ label: j.on ? 'ITS ORDERS NOW' : 'GIVE THIS ORDER', act: `job:${id}:${j.key}`, ok: up && !j.on && !j.why, tip: j.on ? 'This is its standing order now. Give it one of the others to change it.' : j.why ?? (up ? '' : 'It is not your month.') }],
   }));
   const menu = raidMenu(g);
   const raids: PageRow[] = menu.filter((k) => k.key !== 'recon').map((k) => {
@@ -339,7 +340,7 @@ export function airAct(g: Game, action: string): AirActResult | null {
   if (part[0] === 'airbase') {
     const wing = g.airFleets.find((f) => f.id === Number(part[1]) && f.ship !== undefined);
     const grp = g.airFleets.find((f) => f.id === Number(part[1])), to = g.regions[Number(part[2])];
-    const sea = !!grp && !!to && overOcean(grp, to);
+    const sea = !!grp && !!to && overOcean(g, grp, to);
     const ok = orderAirBase(g, Number(part[1]), Number(part[2]));
     const where = to?.name ?? 'its new airfield';
     return { ok, note: ok ? (wing ? `The ${wing.name} flies ashore to ${where}.` : sea ? `The group is shipped across the ocean to ${where}.` : `The group moves to ${where}.`) : wing ? 'It cannot fly ashore there now.' : sea ? 'It cannot be shipped there now.' : 'It cannot move there now.', open: `group:${part[1]}` };

@@ -14,12 +14,13 @@ import { blocked, blowBridges } from './rivers';
 import { groundRules, isFoot } from './ground';
 import { SUPPORT } from './support';
 import { aiBridges, aiEngineers } from './engineers';
-import { NAVY, canSailTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount } from './navy';
+import { NAVY, canSailTo, closedTo, crossingRisk, fleetsOf, landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding, rebase, seaPath, shipCount, useLift } from './navy';
 import { shoreAI } from './fleets';
 import { shoreOpen } from './history';
 import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, opensOn, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { beyondEurope, enemyAtTheDoor, overseasOf, type OverseasRules } from './world';
+import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { hashString } from '../core/rng';
 import { SIEGE, besieged, feeders, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
@@ -27,7 +28,7 @@ import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   DEFENCE, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
-  hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, probeLine, probeRules, probeWeight, railMove, railReach, resolveBattle, shipMove, weekOf, whyNoProbe, worksOf,
+  hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
@@ -39,7 +40,8 @@ function phases(nat: string): PlanPhase[] {
 
 /** A war fought overseas to its own plan. See data/campaign/theatres.json. */
 interface Theatre { name: string; regions: string[]; plans: Record<string, PlanPhase[]>; bases?: Record<string, string>; open?: boolean; opens?: number }
-const THEATRES = Object.entries(theatreData as unknown as Record<string, Theatre | string>).filter((e): e is [string, Theatre] => typeof e[1] !== 'string').map((e) => e[1]);
+const THEATRE_ENTRIES = Object.entries(theatreData as unknown as Record<string, Theatre | string>).filter((e): e is [string, Theatre] => typeof e[1] !== 'string');
+const THEATRES = THEATRE_ENTRIES.map((e) => e[1]);
 const theatreIds = new WeakMap<Game, Set<number>[]>();
 
 /** The regions of each theatre, by number. */
@@ -365,6 +367,8 @@ function campaignMoves(g: Game, nat: string): void {
   // An army overseas fights its own war to its own plan. It stands aside while the main plan is
   // carried out, and the main army stands aside in its turn.
   const away = g.corps.filter((c) => c.nat === nat && !c.hold && theatreOf(g, c) >= 0);
+  // (The floor at home is measured against the whole field army, those overseas included: ruling 229, 1b.)
+  countField(g, nat);
   for (const c of away) c.hold = true;
   try { mainCampaign(g, nat); } finally { for (const c of away) c.hold = false; }
   if (n.alive) overseas(g, nat);
@@ -463,12 +467,12 @@ function mainCampaign(g: Game, nat: string): void {
   }
   navalAI(g, nat, ph?.fleets);
   shoreAI(g, nat);
-  airAI(g, nat);
+  airAI(g, nat, ph);
   if (open) homeAgain(g, nat);
   // A nation at peace gives its army no orders, unless its staff is bringing it up for a war of its own choosing.
   if (!n.atWar.length && !(open && ph?.posture === 'redeploy')) return;
   if (ph?.landings) landings(g, nat, ph);
-  if (open) { descent(g, nat); ferry(g, nat); }
+  if (open) { descent(g, nat); ferry(g, nat); reinforce(g, nat); }
   if (ph?.release) for (const c of g.corps) if (c.nat === nat && c.hold && c.kind !== 'fort' && ph.release.includes(g.regions[c.reg].name)) c.hold = false;
   const posture = ph?.posture ?? 'defend';
   entrusted = handedOver(g, nat, ph);
@@ -566,9 +570,12 @@ function hold(g: Game, nat: string, ph: PlanPhase | null): void {
   for (const [name, count] of Object.entries(ph.staging)) {
     const r = g.byName[name];
     if (!r || !allied(g, nat, r.ctrl)) continue;
-    standing(g, nat, r).filter((u) => watchman(ph, name, u)).slice(0, count).forEach((u, k) => { if (!KIND[u.kind].mobile || k < 2) massed.add(u.id); });
+    standing(g, nat, r).filter((u) => watchman(ph, name, u) && !commandAtHome(g, nat, r, u)).slice(0, count).forEach((u, k) => { if (!KIND[u.kind].mobile || k < 2) massed.add(u.id); });
   }
 }
+
+/** A home command that holds in place, on a quay a floor binds (ruling 229, 1b): it never sails, so it fills no place in a force that would. */
+const commandAtHome = (g: Game, nat: string, r: Region, u: Corps): boolean => u.hold && leavesHome(g, nat, r);
 
 /** Whether a corps counts toward the force kept at a staging place: on the coast watch, only a corps of the field army of two divisions or more, and not the town's standing garrison. */
 const watchman = (ph: PlanPhase, name: string, u: Corps): boolean => !ph.watch?.includes(name) || (!u.hold && u.divs >= 2 && u.kind !== 'eng');
@@ -598,7 +605,7 @@ function mass(g: Game, nat: string, ph: PlanPhase | null, watchOnly = false): vo
     if (!r || !allied(g, nat, r.ctrl)) continue;
     let have = own(r).filter((u) => massed.has(u.id)).length;
     if (have >= count) continue;
-    for (const u of standing(g, nat, r)) if (have < count && !massed.has(u.id) && watchman(ph, name, u) && (!KIND[u.kind].mobile || have < 2)) { massed.add(u.id); have++; }
+    for (const u of standing(g, nat, r)) if (have < count && !massed.has(u.id) && watchman(ph, name, u) && !commandAtHome(g, nat, r, u) && (!KIND[u.kind].mobile || have < 2)) { massed.add(u.id); have++; }
     const d = hops(g, r.id, (x) => allied(g, nat, ctl(g, x)));
     const first = door?.name === name;
     const pool = g.corps
@@ -946,8 +953,11 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
     // Only a corps still waiting in port: one already overseas has made its landing.
     const waiting = from.port && (within ? within.has(from.id) && allied(g, nat, from.ctrl) && !L.to.includes(from.name) : from.owner === nat);
     if (!waiting) continue;
-    // Others the plan sends in the same lift, if they are standing on the same quay.
+    // Others the plan sends in the same lift, if they are standing on the same quay. (No more than the floor at home
+    // lets go: ruling 229, 1b.)
     const force = [c, ...(L.with ?? []).map((nm) => g.corps.find((x) => x.nat === nat && x.name === nm && !x.dead && x.reg === c.reg)).filter((x): x is Corps => !!x)];
+    if (leavesHome(g, nat, from)) force.splice(Math.min(force.length, mayLeave(g, nat)));
+    if (!force.length) continue;
     for (const name of L.to) {
       const to = g.byName[name];
       if (!to) continue;
@@ -1035,6 +1045,9 @@ function crossSea(g: Game, nat: string, slot: number): void {
     .filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && u.supplied && u.str >= 0.7 && u.ap >= u.apMax)
     // (The fighting corps take the boats first: guns land on no enemy shore by themselves, ruling 211(a).)
     .sort((a, b) => (gunsRule(g) ? Number(fights(b)) - Number(fights(a)) : 0) || atkPower(g, b) - atkPower(g, a) || a.id - b.id);
+  // (From a quay at home, no more go than the floor at home lets go: ruling 229, 1b. The home commands that hold in
+  // place are not counted in the floor, and never sail: three of them stand on harbours.)
+  if (leavesHome(g, nat, quay)) { const go = ready.filter((u) => !u.hold).slice(0, mayLeave(g, nat)); ready.splice(0, ready.length, ...go); }
   if (sea.second) {
     const ashore = lodgment(g, nat, slot);
     if (ashore?.short && ashore.ports.length) {
@@ -1274,6 +1287,97 @@ function ferry(g: Game, nat: string): void {
     }
   }
   if (g.flags[`fy:first:${nat}`]) follow(g, nat, O);
+}
+
+/**
+ * The army sent to the Middle East (ruling 229, part 1; middle-east.json, middleeast.ts). At the looser stops of the
+ * history dial a computer-run Britain sails its spare field corps from home to the first harbour of Egypt its side
+ * holds, the best first, by the sailing every staff's corps take, while the desert's threat outweighs home's: the
+ * desert is short of men against the enemy at its edge, and shorter than home is against what can really cross the
+ * Channel. The floor at home binds every corps that goes, the sealift caps how many go in a month, and no corps sails
+ * over a crossing too dangerous for its staff ('risk') or by a sea the rule does not name ('by'). Those not yet in a
+ * harbour from which the way is open are brought to the best one by rail. Where no harbour at home has a way open
+ * to the theatre (the Mediterranean too dangerous for the troopships), the staff sends its spare corps round the
+ * Cape instead: put to sea from home, with no loss on the way, they land 'cape' months later by the arrival rows'
+ * own code (game.ts, putToSea and landVoyages; the design director's b460). The floor, the weighing and the sealift
+ * bind them as they bind a sailing; a corps already at sea for the theatre counts in the weighing as on its way.
+ * It runs after the month's landings (`descent`), which have first call on the ships.
+ */
+function reinforce(g: Game, nat: string): void {
+  const R = reinforceRules(g, nat);
+  const n = g.nations[nat];
+  if (!R || !n.alive || !n.atWar.length || liftLeft(g, nat) < 1) return;
+  const k = THEATRE_ENTRIES.findIndex((e) => e[0] === R.theatre);
+  if (k < 0) return;
+  const ground = theatreRegions(g)[k];
+  const ports = R.to.map((nm) => g.byName[nm]).filter((r): r is Region => !!r);
+  const by = new Set(R.by.map((nm) => g.seas.findIndex((z) => z.name === nm || z.key === nm)).filter((z) => z >= 0));
+  // (Corps already at sea for that front, on their way.)
+  const coming = (): number => voyagesOf(g, nat).reduce((s, v) => s + (ports.some((p) => p.id === v.to) ? v.corps.divs * v.corps.str : 0), 0);
+  // Still short there, and shorter than at home: the harbours of that front its side holds, or none.
+  const short = (): Region[] => {
+    const f = theatreFront(g, nat, ground, ports);
+    if (!f) return [];
+    const want = R.cover * f.threat - f.held - coming();
+    if (want <= 0) return [];
+    const h = homeThreat(g, nat, R.waves);
+    return want > R.cover * h.threat - h.held ? ports.filter((p) => f.on.has(p.id)) : [];
+  };
+  let to = short();
+  if (!to.length) return;
+  // The way by sea from a harbour at home: by the seas the rule names, and not too dangerous.
+  const way = (from: Region, p: Region): boolean => {
+    const path = seaPath(g, nat, from, p);
+    return !!path && (!by.size || path.every((z) => by.has(z))) && crossingRisk(g, nat, path) <= R.risk;
+  };
+  const room = (p: Region): boolean => friendlyUnits(g, p, nat).length < STACK;
+  // Never the corps the staff keeps at its quay for a landing, nor the one that stands alone in a harbour on the coast watch.
+  const quay = g.turn - (g.flags[`st:quayAt:${nat}`] ?? -99) < 6 ? (g.flags[`st:quay:${nat}`] ?? 0) - 1 : -1;
+  const watch = coastWatch(g, nat);
+  const lone = (c: Corps): boolean => g.regions[c.reg].name in watch && g.regions[c.reg].units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort').length < 2;
+  const pool = g.corps
+    .filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !c.hold && !c.airborne && !c.town && c.joint === undefined && c.supplied && c.str >= 0.7 && c.ap >= c.apMax)
+    .filter((c) => homeland(g.regions[c.reg], nat) && c.reg !== quay && !lone(c))
+    .sort((a, b) => atkPower(g, b) - atkPower(g, a) || a.id - b.id);
+  // No harbour at home with a way open to the theatre: round the Cape (b460). Only while a harbour at home still
+  // opens on a sea its ships can use: a homeland whose own waters are shut, or whose harbours are all lost, sends
+  // nobody. (The two months at sea take in the journey to the quay.)
+  const harbours = g.regions.filter((r) => homeland(r, nat) && r.port && r.ctrl === nat);
+  const sails = harbours.some((r) => r.seas.some((z) => !closedTo(g, z, nat)));
+  if (R.cape > 0 && sails && !to.some((p) => harbours.some((r) => way(r, p)))) {
+    for (const c of pool) {
+      if (!to.length || mayLeave(g, nat) < 1 || liftLeft(g, nat) < 1) break;
+      // (Looked at again for each: the one the corps before it leaves alone on the coast watch stays.)
+      if (lone(c)) continue;
+      putToSea(g, c, to[0], R.cape);
+      useLift(g, nat);
+      to = short();
+    }
+    return;
+  }
+  const waiting: Corps[] = [];
+  for (const c of pool) {
+    if (!to.length || mayLeave(g, nat) < 1 || liftLeft(g, nat) < 1) break;
+    if (lone(c)) continue;
+    const here = g.regions[c.reg];
+    const dest = here.port ? to.find((p) => room(p) && way(here, p) && shipMove(g, c, p)) : undefined;
+    if (!dest) { waiting.push(c); continue; }
+    if (g.human !== null && (allied(g, g.human, nat) || atWar(g, g.human, nat)) && allied(g, g.human, dest.ctrl)) headline(g, 'info', `${c.name} of the ${n.adj} army has landed at ${dest.name}.`, nat, dest.id);
+    to = short();
+  }
+  // The next to sail are brought by rail to the best harbour at home for the way: as many as the ships could take next month.
+  const dest = to.find(room);
+  if (!dest || !waiting.length) return;
+  const home = g.regions.filter((r) => homeland(r, nat) && r.port && r.ctrl === nat && way(r, dest));
+  if (!home.length) return;
+  const risk = (r: Region): number => crossingRisk(g, nat, seaPath(g, nat, r, dest)!);
+  const best = home.sort((a, b) => risk(a) - risk(b) || a.id - b.id)[0];
+  let have = best.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.hold).length;
+  const want = Math.min(mayLeave(g, nat), n.sealift);
+  for (const c of waiting) {
+    if (have >= want || friendlyUnits(g, best, nat).length >= STACK) break;
+    if (c.reg !== best.id && railToward(g, c, best) && c.reg === best.id) have++;
+  }
 }
 
 /**

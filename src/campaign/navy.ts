@@ -5,7 +5,7 @@
 
 import { byHand } from './depth';
 import mapData from '../generated/campaign-map.json';
-import worldMap from '../generated/world-map.json';
+import worldMap from '../generated/world-americas.json';
 import data from '../../data/campaign/navy.json';
 import fleetData from '../../data/campaign/fleets.json';
 import { Rng, hashString } from '../core/rng';
@@ -17,7 +17,7 @@ import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
-import { aloneLine, allied, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
+import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
@@ -253,6 +253,108 @@ export function closedTo(g: Game, z: number, nat: string): boolean {
   return e.total >= NAVY.closed.ratio * seaSide(g, z, nat, false).total;
 }
 
+/**
+ * The seas as they stand at one moment, for asking of nation after nation whether each sea is closed to it (the supply
+ * picture asks it of every nation with ships, every phase). What a sea holds does not depend on who asks: the fleets
+ * at sea in it and their weight, and the coasts that put aircraft over it. So that is worked out once a sea, and only
+ * whose side each is on is asked again. The sums are seaSide's and airOver's, in the same order, so a sea is closed
+ * here exactly when closedTo finds it so (a test holds the two together). Good only while nothing moves.
+ */
+export class SeaPicture {
+  private fleets: { nat: string; power: number }[][] | null = null;
+  private coasts: ({ ctrl: string; air: number; sky: string | null; skyAir: number }[] | undefined)[] = [];
+  private most: Float64Array | null = null;
+  private harbours: Region[] | null = null;
+  constructor(private readonly g: Game) {}
+
+  /** Every province with a port, in order. */
+  ports(): Region[] {
+    return (this.harbours ??= this.g.regions.filter((r) => r.port));
+  }
+
+  /** closedTo, from the picture. */
+  closed(z: number, nat: string): boolean {
+    // A sea where even everything in it together comes short of the least that closes a sea is open to everybody.
+    if (this.mostIn(z) < NAVY.closed.min) return false;
+    const e = this.side(z, nat, true);
+    if (e < NAVY.closed.min) return false;
+    return e >= NAVY.closed.ratio * this.side(z, nat, false);
+  }
+
+  /**
+   * The most any side could have in a sea: every fleet at sea in it and the larger share of every coast's air, added
+   * as side() adds them. No part is below nothing, so whatever side() adds for one side is never more than this.
+   */
+  private mostIn(z: number): number {
+    const g = this.g, zone = g.seas[z];
+    // Only while the sea's own weight for air is no less than nothing does a larger sum stay the larger.
+    if (zone.air < 0 || NAVY.air.weight < 0) return Infinity;
+    if (!this.most) this.most = new Float64Array(g.seas.length).fill(NaN);
+    if (Number.isNaN(this.most[z])) {
+      let ships = 0;
+      for (const f of this.afloat(z)) ships += Math.max(0, f.power);
+      let air = 0;
+      if (zone.coast.length) {
+        let s = 0;
+        for (const c of this.coastsOf(z)) s += Math.max(0, c.air * (c.sky ? AIR.sky.seaFoe : 1), c.sky ? c.skyAir * AIR.sky.seaOwn : 0);
+        air = (s / zone.coast.length) * zone.air;
+      }
+      this.most[z] = ships + air * NAVY.air.weight;
+    }
+    return this.most[z];
+  }
+
+  /** The fleets at sea in a sea, with their weight, in the order of the game's fleets. */
+  private afloat(z: number): { nat: string; power: number }[] {
+    const g = this.g;
+    if (!this.fleets) {
+      const by: { nat: string; power: number }[][] = g.seas.map(() => []);
+      for (const f of g.fleets) if (atSea(f) && by[f.zone]) by[f.zone].push({ nat: f.nat, power: fleetPower(g, f) });
+      this.fleets = by;
+    }
+    return this.fleets[z];
+  }
+
+  /** The coasts of a sea that put aircraft over it (airOver's), with who has won the sky over each. */
+  private coastsOf(z: number): { ctrl: string; air: number; sky: string | null; skyAir: number }[] {
+    const g = this.g;
+    let cs = this.coasts[z];
+    if (!cs) {
+      cs = [];
+      for (const id of g.seas[z].coast) {
+        const r = g.regions[id];
+        if (r.since >= g.turn) continue;
+        const n = g.nations[r.ctrl];
+        if (!n || !n.alive || !n.atWar.length) continue;
+        const sky = skyOver(g, id);
+        cs.push({ ctrl: r.ctrl, air: n.air, sky, skyAir: sky ? g.nations[sky].air : 0 });
+      }
+      this.coasts[z] = cs;
+    }
+    return cs;
+  }
+
+  /** seaSide's total. */
+  private side(z: number, nat: string, hostile: boolean): number {
+    const g = this.g;
+    let ships = 0;
+    for (const f of this.afloat(z)) if (hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat)) ships += f.power;
+    return ships + this.air(z, nat, hostile) * NAVY.air.weight;
+  }
+
+  /** airOver. */
+  private air(z: number, nat: string, hostile: boolean): number {
+    const g = this.g, zone = g.seas[z];
+    if (!zone.coast.length) return 0;
+    let s = 0;
+    for (const c of this.coastsOf(z)) {
+      if (hostile ? atWar(g, c.ctrl, nat) : allied(g, c.ctrl, nat)) s += c.air * (c.sky ? AIR.sky.seaFoe : 1);
+      else if (c.sky && (hostile ? atWar(g, c.sky, nat) : allied(g, c.sky, nat))) s += c.skyAir * AIR.sky.seaOwn;
+    }
+    return (s / zone.coast.length) * zone.air;
+  }
+}
+
 /** The smallest strength of a nation's own side in a sea, in whole points, that opens it to its troopships; 0 while it is open. */
 export function opensAt(g: Game, z: number, nat: string): number {
   if (!closedTo(g, z, nat)) return 0;
@@ -315,13 +417,16 @@ export function gatesTick(g: Game): void {
   }
 }
 
-/** The seas a nation's supply ships and troopships can use: those it can reach from a home port without crossing a sea closed to it. */
-export function openSeas(g: Game, nat: string): Uint8Array {
+/** The seas a nation's supply ships and troopships can use: those it can reach from a home port without crossing a sea closed to it. A picture of the seas, if given, answers which are closed. */
+export function openSeas(g: Game, nat: string, seas?: SeaPicture): Uint8Array {
   const open = new Uint8Array(g.seas.length);
-  const shut = g.seas.map((z) => closedTo(g, z.id, nat));
+  // Whether a sea is closed to the nation is asked only of the seas its ships could reach, once each (-1: not asked yet).
+  const shutAt = new Int8Array(g.seas.length).fill(-1);
+  const shut = (z: number): boolean => { if (shutAt[z] < 0) shutAt[z] = (seas ? seas.closed(z, nat) : closedTo(g, z, nat)) ? 1 : 0; return shutAt[z] === 1; };
   const q: number[] = [];
-  const start = (z: number): void => { if (!shut[z] && !open[z]) { open[z] = 1; q.push(z); } };
-  for (const r of g.regions) if (r.port && r.owner === nat && r.ctrl === nat) r.seas.forEach(start);
+  const start = (z: number): void => { if (!open[z] && !shut(z)) { open[z] = 1; q.push(z); } };
+  const coastal = seas ? seas.ports() : g.regions;
+  for (const r of coastal) if (r.port && r.owner === nat && r.ctrl === nat) r.seas.forEach(start);
   for (const f of g.fleets) if (f.nat === nat && f.base < 0) start(f.home); // a base off the map is a home port too
   // The grand campaign: a harbour the nation has taken serves its supply ships as a home port does, once its own
   // roads reach the quay: the stores come down to it overland and go on by sea. So an army put across a narrow sea
@@ -331,12 +436,12 @@ export function openSeas(g: Game, nat: string): Uint8Array {
     const road = [g.nations[nat].capital];
     linked[road[0]] = 1;
     for (let i = 0; i < road.length; i++) for (const j of g.regions[road[i]].nb) if (!linked[j] && allied(g, nat, g.regions[j].ctrl)) { linked[j] = 1; road.push(j); }
-    for (const r of g.regions) if (linked[r.id] && r.port && r.ctrl === nat && r.owner !== nat && prizeOut(g, r, 'harbour') <= 0) r.seas.forEach(start);
+    for (const r of coastal) if (linked[r.id] && r.port && r.ctrl === nat && r.owner !== nat && prizeOut(g, r, 'harbour') <= 0) r.seas.forEach(start);
   }
   // So is the sea a country off the map sends its convoys in by.
   const off = g.nations[nat]?.offmap;
   if (off && g.nations[nat].alive && zoneOf(g, off.sea) >= 0) start(zoneOf(g, off.sea));
-  for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!open[j] && !shut[j] && canPass(g, q[i], j, nat)) { open[j] = 1; q.push(j); }
+  for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!open[j] && !shut(j) && canPass(g, q[i], j, nat)) { open[j] = 1; q.push(j); }
   return open;
 }
 
@@ -390,6 +495,8 @@ export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max
 const liftKey = (g: Game, nat: string): string => `lift:${nat}:${g.turn}`;
 /** How many more corps a nation's shipping can carry this month. */
 export const liftLeft = (g: Game, nat: string): number => Math.max(0, g.nations[nat].sealift - (g.flags[liftKey(g, nat)] ?? 0));
+/** Counts corps a nation's shipping has carried this month. */
+export const useLift = (g: Game, nat: string, n = 1): void => { g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + n; };
 
 /** Takes corps across the given seas and returns the men lost to enemy ships and aircraft on the way. */
 function crossing(g: Game, cs: Corps[], path: number[], surprise: boolean, landingAt?: Region): number {
@@ -411,8 +518,11 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   const n = g.nations[c.nat], from = g.regions[c.reg];
   if (n.sealift <= 0) return `${n.name} has no shipping to move an army by sea.`;
   if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
-  if (!from.port || !to.port || to.id === from.id) return 'Troops are shipped from one port to another.';
+  // (The place at fault is named, so a refused order by sea says what is wrong with it: the UI director, build 1638.)
+  if (to.id === from.id) return `They are in ${placeName(to.name)} already.`;
+  for (const p of [to, from]) if (!p.port) return `${placeName(p.name, true)} has no port: troops are shipped from one port to another.`;
   if (!allied(g, c.nat, to.ctrl)) return `${to.name} is not in friendly hands.`;
+  if (thornGround(g, to, c.nat)) return `${g.nations[to.owner].name} keeps its own army: no corps of its allies is shipped there.`;
   // A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts).
   for (const p of [from, to]) { const out = prizeOut(g, p, 'harbour'); if (out > 0) return `The harbour of ${p.name} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.`; }
   if (hostileUnits(g, to, c.nat).length) {
@@ -787,7 +897,9 @@ export function crossingAccount(g: Game, nat: string, path: number[], to: Region
     if (d.last) lines.push({ label: `The sky over ${to.name}`, value: sky === 'ours' ? 'yours' : sky === 'denied' ? 'held by enemy fighters' : 'nobody holds it', effect: sky === 'ours' ? `keeps ${Math.round((1 - AIR.sky.seaFoe) * 100)}% of them off the troopships` : sky === 'denied' ? 'no invasion fleet can cross under them' : fly ? 'no help to either side' : 'out of reach of your fighters from any airfield you hold' });
     if (d.hunters > 0 || d.last) lines.push({ label: `Your ships and aircraft in the ${name(d.z)}`, value: `${round(d.own.ships)} and ${round(d.own.air)}`, effect: d.own.total >= 0.5 ? 'each counts double against the hunters' : 'nothing covers the troopships' });
   }
-  lines.push({ label: 'Caught at sea', value: `${Math.round(risk * 100)} in 100`, effect: risk > 0 ? `about ${Math.round(risk * NAVY.intercept.loss * 100)}% of the men lost` : 'nothing is in a position to stop the crossing' });
+  // (A share that rounds to nothing is said in words, as the chances at the ends are: the UI director, build 1638.)
+  const lost = Math.round(risk * NAVY.intercept.loss * 100);
+  lines.push({ label: 'Caught at sea', value: `${Math.round(risk * 100)} in 100`, effect: risk > 0 ? (lost > 0 ? `about ${lost}% of the men lost` : 'almost none of the men lost') : 'nothing is in a position to stop the crossing' });
   const helps: CrossingHelp[] = [];
   if (risk > 0) {
     // The invader's own fleets that could stand in the worst sea and are not there now.
@@ -852,6 +964,8 @@ export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
     lostAtSea = crossing(g, cs, path, surprise, to);
     g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + cs.length;
     for (const z of to.seas) g.flags[`landed:${z}:${nat}`] = g.turn;
+    // (And the ground itself, for the coast watch: a landing on this enemy's homeland is not news to come.)
+    g.flags[`landedAt:${to.id}:${nat}`] = g.turn;
   }
   let taken = true;
   let report: BattleReport | null = null;
@@ -1055,6 +1169,16 @@ export function crossingsOf(g: Game, nat: string, o: { short?: boolean } = {}): 
  * the month can embark, so the report always comes a month before the landing can. A coast the attacker's own
  * army could march to is not watched for this: the war there is a land war already.
  */
+/**
+ * True when a nation has come ashore from the sea on another's homeland since their war began, and holds or stands
+ * on that ground still. A landing on some other coast of the same sea, or ground of his homeland taken by land, is not it.
+ */
+function landedOn(g: Game, att: string, d: string): boolean {
+  const since = g.flags[`war:${att}:${d}`] ?? g.flags[`war:${d}:${att}`] ?? 0;
+  return g.regions.some((r) => r.owner === d && !r.overseas && (g.flags[`landedAt:${r.id}:${att}`] ?? -1) >= since
+    && (r.ctrl === att || r.units.some((u) => u.nat === att && !u.dead)));
+}
+
 export function coastReport(g: Game, att: string): void {
   const W = NAVY.watch;
   const n = g.nations[att];
@@ -1085,6 +1209,9 @@ export function coastReport(g: Game, att: string): void {
     if (g.flags[key] === seen.quay.id + 1 && g.turn - (g.flags[at] ?? -99) < W.every) continue;
     g.flags[key] = seen.quay.id + 1;
     g.flags[at] = g.turn;
+    // A warning never comes after its event (ruling 229(e)): once this attacker has come ashore from the sea on the
+    // enemy's homeland in this war and stands on it still, the landing is not news to come, and nobody is told.
+    if (landedOn(g, att, d)) continue;
     const force = seen.corps === 1 ? 'one corps' : `${seen.corps} corps`;
     if (d === g.human) warning(g, 'Coast watch', `The coast watch reports ${n.adj} shipping gathering at ${seen.quay.name}, with troops on the quays: enough to carry ${force}. ${seen.coast.name} is within their reach, and a landing could come as soon as next month.`, d, seen.coast.id, att);
     else if (att === g.human) headline(g, 'info', `${x.adj} coast watchers have seen your shipping and troops gather at ${seen.quay.name}: ${x.name} expects a landing and is manning its harbours.`, att, seen.quay.id);
@@ -1228,7 +1355,9 @@ export function navalUpkeep(g: Game, nat: string): void {
     const f = who === nat && turn === g.turn ? named(fleet) : undefined;
     if (!f) continue;
     for (const c of CLASSES) f.ships[c] += ships[c] ?? 0;
-    headline(g, 'info', `${cap(what)} ${/ and /.test(what) || /s$/.test(what.split(' ')[0]) ? 'join' : 'joins'} the ${f.name}.`, nat);
+    // (Many ships take the plural, however the phrase opens: "More of the American destroyers join", the third playtester, 84.3.1.)
+    const many = / and /.test(what) || /s$/.test(what.split(' ')[0]) || (/\bof\b/.test(what) && /s$/.test(what));
+    headline(g, 'info', `${cap(what)} ${many ? 'join' : 'joins'} the ${f.name}.`, nat);
   }
   for (const f of fleetsOf(g, nat)) {
     if (f.base >= 0 && !allied(g, nat, g.regions[f.base].ctrl) && !newBase(g, f)) continue;

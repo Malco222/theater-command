@@ -243,6 +243,8 @@ export const traitSealift = (nat: string): number => traitsOf(nat).reduce((s, t)
 export function eliteCount(g: Game, nat: string): number {
   let k = g.nations[nat].queue.filter((b) => b.elite).length;
   for (const c of g.corps) if (c.nat === nat && !c.dead && c.elite) k++;
+  // (Corps at sea on a long passage still count against the cap.)
+  for (const v of g.atSea ?? []) if (v.nat === nat && v.corps.elite) k++;
   return k;
 }
 
@@ -302,7 +304,7 @@ export function traitLevy(g: Game, nat: string): number {
   levyMen(g, nat, L.men);
   g.flags[`lv:${nat}`] = count + 1;
   g.flags[`lvt:${nat}`] = g.turn;
-  headline(g, 'event', `${/^(United|Soviet|Netherlands)/.test(n.name) ? `The ${n.name}` : n.name} calls up every man fit to bear arms: ${menWords(L.men * MEN_PER_DIV)} more men for its armies.`, nat);
+  headline(g, 'event', `${/^(United|Soviet|Netherlands|Dominican Republic)/.test(n.name) ? `The ${n.name}` : n.name} calls up every man fit to bear arms: ${menWords(L.men * MEN_PER_DIV)} more men for its armies.`, nat);
   return L.men;
 }
 

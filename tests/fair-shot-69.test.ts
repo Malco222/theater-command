@@ -11,6 +11,7 @@ import arsenalData from '../data/campaign/arsenal.json';
 import openData from '../data/campaign/open.json';
 import { runAI } from '../src/campaign/ai';
 import { STRENGTH } from '../src/campaign/ashore';
+import { MIDDLE_EAST } from '../src/campaign/middleeast';
 import { aiFortify } from '../src/campaign/arsenal';
 import { setStop } from '../src/campaign/history';
 import { PRODUCTION, aiProduction, armyWorn, corpsCost, fortCost, gunsWanted, isHome, orderFort } from '../src/campaign/economy';
@@ -72,9 +73,11 @@ describe('the second front', () => {
   // (These are tests of the second front as Version 69 built it: the year's wait, the coin, the feeding of a beach.
   // The test of strength of Version 83 would keep three corps off Germany's own shore, so it is set aside here:
   // strength-83.test.ts is its own.)
-  const asked = { ...STRENGTH! };
-  beforeAll(() => { Object.assign(STRENGTH!, { sure: 0, bold: 0, even: 0 }); });
-  afterAll(() => { Object.assign(STRENGTH!, asked); });
+  // (And the floor Britain keeps at home in 1940 to 1942, ruling 229 part 1b: egypt-229.test.ts is its own. Here a quiet
+  // year's landing force of three new corps is weighed by the second front's rules alone.)
+  const asked = { ...STRENGTH! }, floor = MIDDLE_EAST.floor.UK;
+  beforeAll(() => { Object.assign(STRENGTH!, { sure: 0, bold: 0, even: 0 }); MIDDLE_EAST.floor.UK = []; });
+  afterAll(() => { Object.assign(STRENGTH!, asked); MIDDLE_EAST.floor.UK = floor; });
   it('is opened by a staff with ships after a year at war with an enemy its home army does not touch', () => {
     const g = opened();
     expect(g.nations.UK.atWar).toContain('GER');
@@ -177,6 +180,9 @@ describe('the fleet and the fighters over the crossing', () => {
     const setup = (aim: boolean): { g: Game; beach: Region; mine: Game['airFleets'] } => {
       const g = quietYear();
       const mine = g.airFleets.filter((f) => f.nat === 'UK' && f.kind === 'ftr' && f.ftr >= 100);
+      // (Britain's strongest fighter group set down in Kent: since ruling 227 its staff bases its fighters by the threat,
+      // and after the quiet year they stand back from the Channel.)
+      [...mine].sort((x, y) => y.ftr - x.ftr)[0].base = g.byName.Kent.id;
       let beach: Region | null = null;
       for (const r of g.regions) {
         if (beach || (r.owner !== 'BEL' && r.owner !== 'NED')) continue;

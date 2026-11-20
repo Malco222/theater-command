@@ -17,7 +17,7 @@ import { airIncomeLoss } from './air';
 import { seaIncomeLoss } from './navy';
 import { techMul } from './research';
 import { fallenOf, inherit, noteCorps, raisedXp, revivable } from './stories';
-import { deliverArsenal, worksUpkeep } from './arsenal';
+import { airLine, deliverArsenal, worksUpkeep, type AirDelivery } from './arsenal';
 import { barredKind } from './ground';
 import { workingFactories } from './rails';
 import { incomeMul, levelOf } from './difficulty';
@@ -29,7 +29,7 @@ import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
 import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
 import { raiseMorale } from './morale';
-import { armyIdle, peaceFooting, warFooting, warWorkLeft } from './world';
+import { WORLD_MAP, armyIdle, peaceFooting, warFooting, warWorkLeft } from './world';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -90,6 +90,8 @@ export const firstCorpsNumber = (nat: string): number => PRODUCTION.firstCorpsNu
 export const BUDGET = budgetData as unknown as {
   scale: number; capital: number;
   land: Record<Terrain, number>; port: number; oil: number; occupied: number; overseas: number;
+  /** Ruling 214: a factor on the land and harbour pay of the provinces a smaller power owned on the first day. */
+  landFactor: Record<string, number>;
   upkeep: { corps: Record<Kind, number>; ships: Record<ShipClass, number>; air: { ftr: number; bmr: number }; peace: number };
   debt: { floor: number; rest: number; desert: number; aiMargin: number };
 };
@@ -104,10 +106,44 @@ export const budgeted = (g: Game): boolean => g.flags.open === 1;
 export interface Yield { land: number; port: number; oil: number; fac: number; capital: number; total: number; /** True while an enemy army stands round its town: it pays its holder little or nothing. */ siege?: boolean }
 
 /**
+ * Ruling 214: a smaller power's land and harbours pay by its worth, not by the count of its provinces (Australia's
+ * 74 provinces paid nearly three times Italy's land). The factor is the first-day owner's and goes with the ground,
+ * whoever holds it; a country not listed is 1. The grand campaign only.
+ */
+export const landFactor = (r: Region): number => BUDGET.landFactor[r.first ?? r.owner] ?? 1;
+
+/**
+ * Ruling 210(a) and (e): a cut moves worth and never adds it. A province and the cities cut out of it since the first
+ * chart (the chart's 'of') pay together in land what the province pays alone, each by its own ground: Baltimore's and
+ * Maryland's land add up to Maryland's. Where ruling 214's factor is set, the pay does not take the share again: the
+ * historian set those sixteen factors on the chart with every city paying in full, to Italy's rate and no lower. Trade
+ * reads every country's land with the share (`always`), so that no country's trade moves with the factor (214(c)).
+ */
+let shares: Map<number, number> | null = null;
+export function landShare(r: Region, always = false): number {
+  if (!always && landFactor(r) !== 1) return 1;
+  if (!shares) {
+    shares = new Map();
+    const rows = WORLD_MAP.regions as { id: number; terrain: Terrain; of?: number }[];
+    const rate = new Map(rows.map((x) => [x.id, BUDGET.land[x.terrain] ?? 0]));
+    const families = new Map<number, number[]>();
+    for (const x of rows) if (x.of !== undefined) families.set(x.of, [...(families.get(x.of) ?? [x.of]), x.id]);
+    for (const [p, ids] of families) {
+      const all = ids.reduce((s, id) => s + (rate.get(id) ?? 0), 0);
+      const f = all > 0 ? (rate.get(p) ?? 0) / all : 1;
+      for (const id of ids) shares.set(id, f);
+    }
+  }
+  return shares.get(r.id) ?? 1;
+}
+
+/**
  * What a province gives the nation that holds it. Conquered ground and colonies give less than the home country.
  * `whole` leaves a siege out of account: what the province is worth to its holder once the roads are open again.
+ * `bare` leaves out ruling 214's factor: trade reads a country's land as it was before the factor, so that no great
+ * power's first day moves.
  */
-export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = false): Yield {
+export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = false, bare = false): Yield {
   const own = r.owner === nat;
   // A factory wrecked by bombing earns nothing until engineers rebuild it (the grand campaign only).
   const works = workingFactories(g, r);
@@ -116,9 +152,10 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   const lift = own ? 0 : hallShare(g, r);
   const fac = own ? works : works * (PRODUCTION.occupiedIncome + lift);
   const k = !own ? BUDGET.occupied + lift : r.overseas ? BUDGET.overseas : 1;
-  const land = BUDGET.land[r.terrain] * k;
+  const worth = bare || !budgeted(g) ? 1 : landFactor(r);
+  const land = BUDGET.land[r.terrain] * k * worth * landShare(r, bare);
   // A harbour blocked pays nothing until it is mended (prizes.ts), and an oilfield alight pays only for the wells still at work.
-  const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k : 0;
+  const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * worth : 0;
   const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) : 0;
   const capital = own && g.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
   // With an enemy army round its town a province sends its holder next to nothing: the roads out are cut.
@@ -167,7 +204,8 @@ export function upkeep(g: Game, nat: string): LedgerLine[] {
   const peace = n.atWar.length ? 1 : BUDGET.upkeep.peace;
   const out: LedgerLine[] = [];
   const land: Partial<Record<Kind, { divs: number; cost: number }>> = {};
-  for (const c of g.corps) {
+  // (Corps at sea on a long passage are paid for as well.)
+  for (const c of g.atSea?.length ? [...g.corps, ...g.atSea.map((v) => v.corps)] : g.corps) {
     if (c.nat !== nat || c.dead) continue;
     const row = (land[c.kind] ??= { divs: 0, cost: 0 });
     row.divs += c.divs;
@@ -487,9 +525,11 @@ export function deliver(g: Game, nat: string): void {
   const due = n.queue.filter((b) => b.eta <= g.turn);
   if (!due.length) return;
   n.queue = n.queue.filter((b) => b.eta > g.turn);
+  // The month's aircraft from the factories are told in one line, not one a wing (the third playtester, 84.3.1).
+  const air: AirDelivery[] = [];
   for (const b of due) {
     const r = g.regions[b.region];
-    if (b.what === 'air' || b.what === 'ship' || b.what === 'work') { deliverArsenal(g, nat, b); continue; }
+    if (b.what === 'air' || b.what === 'ship' || b.what === 'work') { deliverArsenal(g, nat, b, air); continue; }
     if (b.what === 'civic') { const news = deliverCivic(g, nat, b); if (news && nat === g.human) headline(g, 'info', news, nat, r.id); continue; }
     if (b.what === 'fort') {
       if (!isHome(g, nat, r)) continue; // the ground was lost before the works were finished
@@ -521,6 +561,8 @@ export function deliver(g: Game, nat: string): void {
     if (old && old.heir === undefined) inherit(g, c, old.id);
     if (nat === g.human) headline(g, 'info', old ? `${b.name} is raised again at ${at.name}, ${g.turn - old.turn} months after it was lost at ${g.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id);
   }
+  const line = airLine(air);
+  if (line) headline(g, 'info', line.text, nat, line.region);
 }
 
 /**

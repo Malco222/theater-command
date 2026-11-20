@@ -15,7 +15,8 @@ views:  front   from ahead and to port, a little above (the sheet's view, closer
         record  close on the record painted on her port side (kills, missions); rudder: on a German fighter's rudder;
                 nose: a bomber's port nose from a little further off; ace: a fighter's pilot and his score together
 record= is what she has done, e.g. record='{"kills": [["GER", 14], ["ITA", 3]], "missions": 32, "lead": [12, 19]}'
-(see marks.record); tag= is added to the pictures' names; scheme=YYYY-MM shows her as she is in that month: her coat of paint and her markings then.
+(see marks.record); unit=place:HEX,... paints the places of a unit's earned mark (unitmarks.py: tail, rudder, nose, spinner,
+cowling, wingtips, fuselage band) and emblem=HEX lays a plain badge where its emblem goes; tag= is added to the pictures' names; scheme=YYYY-MM shows her as she is in that month: her coat of paint and her markings then.
 owner=<unit-table.json>#TAG shows a plain machine as that country flies her: its paint and paint2, its insignia, its rudder flag.
 view `free` looks from eye=x,y,z at look=x,y,z (her own metres: x ahead, y to port, z up), for a close-up of anything.
 hurt=14,6,2 shows her with fourteen bullet hits, six flak hits and engine 2 out (her damage layers: damage.py).
@@ -52,7 +53,9 @@ def main():
     if owner:
         table, country = owner.split("#")
         owner = json.load(open(table))["countries"][country]
-    p = Plane(A, name, record=rec, scheme=scheme, owner=owner)
+    unit = next((dict(kv.split(":") for kv in a.split("=", 1)[1].split(",")) for a in sys.argv[5:] if a.startswith("unit=")), None)    # (unit=tail:B3261E,spinner:B3261E)
+    emblem = next((a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith("emblem=")), None)
+    p = Plane(A, name, record=rec, scheme=scheme, owner=owner, unit=unit, emblem=emblem)
     for c in extra:
         if c.startswith("load."):                        # (clip=load.bombs@0: she is seen with that load, not her usual one)
             p.carry(c.split("@")[0][5:])

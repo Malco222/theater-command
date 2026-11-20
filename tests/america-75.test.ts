@@ -38,7 +38,7 @@ import grand from '../data/campaign/grand.json';
 import open from '../data/campaign/open.json';
 import setup from '../data/campaign/setup-1939.json';
 
-const DEC_41 = 28, JAN_42 = 29, JAN_43 = 41, JUN_43 = 46;
+const DEC_41 = 28, JAN_42 = 29, OCT_42 = 38, JUN_43 = 46;
 /** A grand campaign on the wider world as it opens. */
 const wide = (seed = 1, human: string | null = null): Game => startOpen(createGame(seed, human));
 const field = (g: Game, nat: string): Corps[] => g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng');
@@ -56,7 +56,7 @@ const guard: number[] = [];
   landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, warned: e.warned, island: e.to.nb.length === 0, wave: e.wave }); };
   while (g.turn < JUN_43) {
     runTurnAI(g);
-    if ([JAN_42, JAN_43, JUN_43].includes(g.turn)) war[g.turn] = saveGame(g);
+    if ([JAN_42, OCT_42, JUN_43].includes(g.turn)) war[g.turn] = saveGame(g);
     if (g.turn > JAN_42) guard.push(atHome(g, 'USA').length);
   }
   landingWatch.tell = null;
@@ -67,8 +67,10 @@ describe('war work by steps', () => {
   it('going to war does not turn the factories over in a day', () => {
     const g = wide();
     expect(warFooting(g, 'USA')).toBe(0.1);
-    // Every other country works at full stretch from the first day of its war, as it always did.
-    for (const id of ['GER', 'UK', 'SOV', 'CAN']) expect(warFooting(g, id)).toBeNull();
+    // Every other country works at full stretch from the first day of its war, as it always did, but Canada since the
+    // cities version (world.json climbFrom): 45 in 100 until the fall of France, then a step a month (tested below).
+    for (const id of ['GER', 'UK', 'SOV']) expect(warFooting(g, id)).toBeNull();
+    expect(warFooting(g, 'CAN')).toBe(0.45);
     const peace = income(g, 'USA');
     setWar(g, 'USA', 'GER');
     warWorkMonth(g);
@@ -87,6 +89,26 @@ describe('war work by steps', () => {
     expect(months).toBe(25);
     expect(warWorkLeft(g, 'USA')).toBe(0);
     expect(income(g, 'USA')).toBeGreaterThan(peace * 5);
+  });
+
+  it("Canada's factories wait for the fall of France, then climb to full war work by July 1942 (the cities version)", () => {
+    // world.json: 45 in 100 on war work from the first day, war or no war, until June 1940 (turn 10); then 0.022 a
+    // month, all of it by July 1942 (turn 35).
+    const g = wide();
+    expect(atWar(g, 'CAN', 'GER')).toBe(true);
+    const seen: Record<number, number> = {};
+    for (g.turn = 1; g.turn <= 40; g.turn++) { warWorkMonth(g); seen[g.turn] = warFooting(g, 'CAN')!; }
+    for (let t = 1; t <= 10; t++) expect(seen[t], `turn ${t}`).toBeCloseTo(0.45, 9);
+    expect(seen[11]).toBeCloseTo(0.472, 9);
+    expect(seen[34]).toBeCloseTo(0.978, 9);
+    expect(seen[35]).toBe(1);
+    expect(seen[40]).toBe(1);
+    // A campaign that opens later finds the share where the calendar has it, and the months left agree.
+    const late = wide();
+    late.turn = 23;
+    warWorkMonth(late);
+    expect(warFooting(late, 'CAN')).toBeCloseTo(0.45 + 0.022 * 13, 9);
+    expect(warWorkLeft(late, 'CAN')).toBe(12);
   });
 
   it('a country at war in December 1941 is on full war work in June 1943', () => {
@@ -213,10 +235,11 @@ describe('the army sent across the ocean', () => {
   it('ships nobody over a crossing too dangerous for its staff', () => {
     const O = WORLD.overseas.USA;
     const sail = (risk: number): Region[] => {
-      // January 1943: a month in this war with danger on the way to the harbour where the army is built up, and no more
+      // October 1942: a month in this war with danger on the way to the harbour where the army is built up, and no more
       // than the staff will bear. (In January 1942, since Version 84 moved the wars, that harbour is Gibraltar, and no
-      // enemy is at work on the way to it.)
-      const g = at(JAN_43);
+      // enemy is at work on the way to it. Since ruling 227 moved them again, so it is in January 1943, and from then
+      // on in this war the staff sends no corps over in the month.)
+      const g = at(OCT_42);
       const before = new Set(across(g, 'USA').map((c) => c.id));
       // A month's sailing banked and a fit corps on the quay.
       const run = oceanRuns(g, 'USA')[0];

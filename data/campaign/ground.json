@@ -20,6 +20,8 @@
   },
   "steep": {
     "regions": ["Graubunden", "Tyrol", "Alto Adige", "Savoy", "Nordland", "Narvik", "Sukhumi", "Montenegro", "Epirus", "Van"],
+    "world": ["Gilgit", "Leh", "Khorog", "Faizabad", "Gartok", "Lhasa", "Shigatse", "Chamdo", "Sikang", "Sungpan", "Likiang", "Fort Hertz", "Kathmandu", "Nagano", "Copper River", "Cordova", "Aysen", "Cuzco", "Ayacucho", "Cerro de Pasco", "Maseru", "Greenland", "Sanaa", "Simla"],
+    "_world": "The steep ground of the wider world, to Europe's bar (the historian's ruling of 17 November 2026, /mnt/project-files/world-map-builder/steep-candidates.md). A name not yet on the chart in play waits for it: Aysen, Cuzco, Ayacucho, Cerro de Pasco and Greenland are on the Americas' chart; the rest come with the far side.",
     "barred": ["arm"],
     "attack": { "mot": 0.7, "art": 0.7 },
     "march": { "mot": 1, "art": 1 }
