@@ -1355,7 +1355,7 @@ void AAirBattle::TheSun(UDirectionalLightComponent& Key)
 void AAirBattle::LightTheBattle()
 {
 	// The battle's day: every lamp white, the key (turned to the battle's sun) at the table's day strength and warmth
-	// and the others at the fill's, the sky's light the day's. Said again every frame where anything differs: the room
+	// and the others at the fill's, the sky's light the day's; both as the day's weather has them where the eye is. Said again every frame where anything differs: the room
 	// can still light itself for the hour under the battle (a showpiece's picture retaken, a portrait, an answer
 	// changing the season), and the battle's light must stand (the review, 06:50Z).
 	for (const FKeptLamp& Kept : KeptLamps)
@@ -1366,7 +1366,8 @@ void AAirBattle::LightTheBattle()
 			continue;
 		}
 		const bool bKey = Light == BattleKey.Get();
-		const float Want = bKey ? 7.0f : 0.75f;
+		// (the day's weather where the eye is: under a deck the sun's light falls with its cover, WeatherAt)
+		const float Want = bKey ? 7.0f * static_cast<float>(WeatherSun) : 0.75f;
 		if (!Light->GetLightColor().Equals(FLinearColor::White, 0.002f))
 		{
 			Light->SetLightColor(FLinearColor::White);
@@ -1391,9 +1392,10 @@ void AAirBattle::LightTheBattle()
 		{
 			Sky->SetLightColor(FLinearColor::White);
 		}
-		if (!FMath::IsNearlyEqual(Sky->Intensity, 0.72f, 0.001f))
+		const float SkyWant = 0.72f * static_cast<float>(WeatherSky);
+		if (!FMath::IsNearlyEqual(Sky->Intensity, SkyWant, 0.001f))
 		{
-			Sky->SetIntensity(0.72f);
+			Sky->SetIntensity(SkyWant);
 		}
 	}
 }
@@ -1518,15 +1520,29 @@ void AAirBattle::LaySky()
 	const FVector Sun = TowardSun();
 	S.SkyPlace.Sun = AirSky::Vec(Sun.Y, Sun.X, Sun.Z);
 	S.SkyPlace.Ground = S.Show.Ground;
+	// ("-TheaterWeather=0.2" lays the day's cloud over that share of the sky, "-TheaterWeather=deck,0.95" a deck of it:
+	// each kind of day for a picture, the battle's own height and seed kept)
+	FString Weather;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterWeather="), Weather, false))
+	{
+		FString Kind, Share = Weather;
+		if (Weather.Split(TEXT(","), &Kind, &Share))
+		{
+			S.Board.Cloud.bDeck = Kind.TrimStartAndEnd() == TEXT("deck");
+		}
+		S.Board.Cloud.Cover = FMath::Clamp(FCString::Atod(*Share), 0.0, 1.0);
+		S.Board.Cloud.Word = "asked";
+	}
 	S.Sky = AirSky::Lay(S.Board.Cloud, S.SkyPlace);
 	// (the painter's own field and ground, for DrawSky's turns on the pool's threads: nothing they read is the frame's)
 	S.SkyAside = S.Sky;
 	// (the stage's ground copied for the pool; the board's own land reads nothing it changes, so it is handed on as it is)
 	S.SkyAside.Ground = Stage && Stage->IsRaised() ? (S.Show.Ground ? Stage->GroundAside() : std::function<double(double, double)>()) : S.Show.Ground;
 	const FString Moved = S.Sky.MovedWhy.empty() ? FString() : FString::Printf(TEXT(", moved %.0f m %s"), S.Sky.Moved, *AirParts::Wide(S.Sky.MovedWhy));
-	UE_LOG(LogTheater, Display, TEXT("Air battle: the sky, %s%s from %.0f to %.0f m%s; %d clouds of %d puffs, %.0f%% of the sky."),
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the sky, %s%s from %.0f to %.0f m%s, %s (%.2f of it laid); %d clouds of %d puffs, %.0f%% of the sky round the target."),
 		S.Board.Cloud.bGiven ? TEXT("") : TEXT("(none given) "), S.Sky.Sky.bDeck ? TEXT("a deck") : TEXT("scattered cumulus"), S.Sky.Base, S.Sky.Top,
-		*Moved, static_cast<int32>(S.Sky.Clouds.size()), static_cast<int32>(S.Sky.Puffs.size()), S.Sky.Cover * 100.0);
+		*Moved, S.Board.Cloud.Word.empty() ? TEXT("no word") : *AirParts::Wide(S.Board.Cloud.Word), S.Sky.Sky.CoverLaid(), static_cast<int32>(S.Sky.Clouds.size()),
+		static_cast<int32>(S.Sky.Puffs.size()), S.Sky.Cover * 100.0);
 	if (S.Sky.Puffs.empty())
 	{
 		return;
@@ -1858,6 +1874,21 @@ void AAirBattle::LayHazeBand()
 	HazeBandShown = -1.0;
 	UE_LOG(LogTheater, Display, TEXT("Air battle: a haze band over the sea's far edge (the sea %.0f km each way), %.2f of the haze's brightness, from an eye %.0f m up, all of it from %.0f m."),
 		SeaHalf / UnitsPerMetre / 1000.0, HazeBandStrength, HazeBandFrom, HazeBandFull);
+}
+
+void AAirBattle::WeatherAt(const FVector& EyeWorld)
+{
+	// (how far under the deck the eye is, 0 at its top to 1 at its base: going down through it, the day greys)
+	if (!State.IsValid())
+	{
+		return;
+	}
+	const AirSky::Field& Sky = State->Sky;
+	const double High = EyeWorld.Z / UnitsPerMetre;
+	const double Under = Sky.Sky.bDeck && Sky.Top > Sky.Base ? FMath::Clamp((Sky.Top - High) / (Sky.Top - Sky.Base), 0.0, 1.0) : 0.0;
+	const AirSky::Lighting Day = AirSky::LightOf(Sky.Sky, Under);
+	WeatherSun = Day.Sun;
+	WeatherSky = Day.Sky;
 }
 
 void AAirBattle::HazeBandAt(const FVector& EyeWorld)
@@ -2322,6 +2353,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 	{
 		ZenithAt(Eye->GetActorLocation());
 		HazeBandAt(Eye->GetActorLocation());
+		WeatherAt(Eye->GetActorLocation());
 	}
 	if (Effects && Eye)
 	{

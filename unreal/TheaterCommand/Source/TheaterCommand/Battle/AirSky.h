@@ -80,7 +80,21 @@ namespace AirSky
 		double Base = 950.0, Top = 2500.0; // metres above the sea (the cloud table's fallback middles when absent)
 		double Chance = 0.0;
 		std::string Zone;
+		/** How much of the sky is cloud (sky.ts's cover, drawn per battle: Brian, 20 November, "make sure the weather is
+		 * different and not always cloudy"): 0 a clear day, 1 a closed overcast; below 0, not given (a bundle from
+		 * before it), and the look the art director passed stands: cumulus DefaultCumulus, a deck DefaultDeck. */
+		double Cover = -1.0;
+		/** Its word (clear, fair, scattered, broken, overcast), as given. */
+		std::string Word;
+		/** The cover the sky is laid to: as given, held to what each kind can draw (cumulus up to CumulusMost, a deck from
+		 * DeckLeast), else the kind's own. */
+		double CoverLaid() const;
 	};
+	constexpr double DefaultCumulus = 0.39, DefaultDeck = 0.77, CumulusMost = 0.55, DeckLeast = 0.6;
+	/** The deck's breaks for a cover: the noise under which a tile is left out (a broad noise and a finer one, 0 to 1),
+	 * measured over the laid square (0.77 is 0.40, Bremen's as the art director passed it on round 18d; 0.6 about 0.48,
+	 * the broadest breaks; all of it, none). */
+	double DeckHoleBelow(double Cover);
 
 	/** Where and for what battle the sky is laid. */
 	struct Placing
@@ -246,6 +260,20 @@ namespace AirSky
 
 	/** The day's clouds, the same every time for the same battle. */
 	Field Lay(const Day& D, const Placing& P);
+
+	/**
+	 * The day's light under its cloud, as shares of a clear day's, for any battle's scene: the air battle's for its eye,
+	 * and a ground battle's for its field (its Under 1 on a deck day). Under scattered cumulus the sun stands (each cloud
+	 * casts its own shadow) and the sky's light rises a little with the cloud that throws it back; under a deck the sun's
+	 * light falls with the cover, about a third of it through Bremen's broken deck and a twentieth through a closed
+	 * overcast, and the sky's grey light rises (Brian, 20 November: the weather different from battle to battle).
+	 */
+	struct Lighting
+	{
+		double Sun = 1.0, Sky = 1.0;
+	};
+	/** Under: how far under a deck the lit place lies, 0 over its top to 1 under its base (cumulus: unused). */
+	Lighting LightOf(const Day& D, double Under);
 
 	/** The deck's place for the raid's bands (the art director's rule): Base and Top in, moved; returns how far the
 	 * top moved. Band and LowBand as in Placing. */

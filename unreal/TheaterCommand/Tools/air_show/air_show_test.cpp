@@ -1649,6 +1649,93 @@ int main(int Argc, char** Argv)
 		Limits.push_back({ "a ticket with no sky draws cumulus", bRead && !Old.Cloud.bGiven && !Plain.Sky.bDeck && !Plain.Clouds.empty() && Plain.DeckTop == 0.0,
 		                   bRead ? std::to_string(Plain.Clouds.size()) + " cumulus" : "unread", "cumulus, no deck" });
 
+		// Every kind of day (Brian, 20 November: the weather different from battle to battle, "not always cloudy or some
+		// days more cloudy"): this battle's sky laid again at each cover the rules can give, clear to closed. The share
+		// of the whole laid square under the clouds' discs (nine tenths of their half-width, a 200 m grid) rises with the
+		// cover; a clear day lays no cloud and paints nothing; a closed deck leaves no break wider than a tile's gap; and
+		// the cloudiest of each kind fits the painter's room from the eyes over the target, high and low, none left out.
+		{
+			auto Whole = [](const AirSky::Field& Fd)
+			{
+				const int G = 220;
+				const double Step = AirSky::Period / G;
+				std::vector<uint8_t> Hit(static_cast<size_t>(G) * G, 0);
+				for (const AirSky::Cloud& Cl : Fd.Clouds)
+				{
+					if (Cl.bScrap) continue;
+					const double R = Cl.W * 0.45, LX = Cl.At.X - Fd.Origin.X, LY = Cl.At.Y - Fd.Origin.Y;
+					for (int V = static_cast<int>(std::floor((LY - R) / Step)); V <= static_cast<int>(std::floor((LY + R) / Step)); ++V)
+						for (int U = static_cast<int>(std::floor((LX - R) / Step)); U <= static_cast<int>(std::floor((LX + R) / Step)); ++U)
+						{
+							const double X = (U + 0.5) * Step - LX, Y = (V + 0.5) * Step - LY;
+							if (X * X + Y * Y <= R * R) Hit[static_cast<size_t>(((V % G) + G) % G) * G + static_cast<size_t>(((U % G) + G) % G)] = 1;
+						}
+				}
+				int N = 0;
+				for (const uint8_t H : Hit) N += H;
+				return static_cast<double>(N) / (static_cast<double>(G) * G);
+			};
+			struct Kind
+			{
+				bool bDeck;
+				double Cover;
+			};
+			const Kind Kinds[] = { { false, 0.0 }, { false, 0.1 }, { false, 0.25 }, { false, 0.39 }, { false, 0.55 }, { true, 0.6 }, { true, 0.77 }, { true, 0.9 }, { true, 1.0 } };
+			std::string Told;
+			bool bRising = true, bClearEmpty = false, bClosed = false, bRoom = true;
+			double Last = -1.0;
+			int MostRoom = 0, Left = 0;
+			for (const Kind& K : Kinds)
+			{
+				AirSky::Day Each = Rec.Board.Cloud;
+				Each.bDeck = K.bDeck;
+				Each.Cover = K.Cover;
+				const AirSky::Field Fd = AirSky::Lay(Each, SkyHere);
+				const double Got = Whole(Fd);
+				if (K.bDeck && K.Cover == 0.6) Last = -1.0;
+				bRising = bRising && Got > Last;
+				Last = Got;
+				if (!K.bDeck && K.Cover == 0.0)
+				{
+					AirSky::Painter Empty;
+					std::vector<AirSky::Vec> P0, S0;
+					std::vector<uint8_t> C0, SC0;
+					Empty.Paint(Fd, AirSky::Vec(Rec.Board.TargetX, Rec.Board.TargetY, 4000.0), AirSky::Vec(), SkyAt.Sun, AirSky::Rgb(1.0f, 1.0f, 1.0f), P0, C0, &S0, &SC0);
+					bClearEmpty = Fd.Clouds.empty() && Fd.Puffs.empty() && Empty.Drawn() == 0 && Empty.Dropped() == 0;
+				}
+				if (K.bDeck && K.Cover == 1.0) bClosed = Got >= 0.86;
+				if (K.Cover == 0.55 || K.Cover == 1.0)
+				{
+					AirSky::Painter Room;
+					std::vector<AirSky::Vec> Pr, Sr;
+					std::vector<uint8_t> Cr, SCr;
+					for (const double High : { 9000.0, 4000.0, Fd.Base + 150.0 })
+					{
+						Room.Paint(Fd, AirSky::Vec(Rec.Board.TargetX, Rec.Board.TargetY - 3000.0, High), AirSky::Vec(), SkyAt.Sun, AirSky::Rgb(1.0f, 1.0f, 1.0f), Pr, Cr, &Sr, &SCr);
+						MostRoom = std::max(MostRoom, Room.Drawn());
+						Left = std::max(Left, Room.Dropped());
+					}
+					bRoom = bRoom && Left == 0;
+				}
+				Told += (Told.empty() ? "" : ", ") + std::string(K.bDeck ? "deck " : "") + Num(K.Cover, 2) + " " + Num(Got, 2);
+			}
+			Limits.push_back({ "every kind of day laid to its cover, clear to closed", bRising && bClearEmpty && bClosed && bRoom,
+			                   Told + "; clear " + (bClearEmpty ? "empty" : "not empty") + "; " + std::to_string(MostRoom) + " puffs at most, " + std::to_string(Left) + " left out",
+			                   "rising with the cover, a clear day empty, a closed deck 0.86 or more of the square, none left out" });
+			// (the light under it: a cumulus day's sun whole and its sky the passed look's at three eighths; under a deck
+			// the sun's share falling with the cover, about a third under Bremen's, at most a tenth under a closed one,
+			// and whole over the deck's top)
+			AirSky::Day Cu, Broken, Closed;
+			Cu.Cover = AirSky::DefaultCumulus;
+			Broken.bDeck = Closed.bDeck = true;
+			Broken.Cover = 0.77;
+			Closed.Cover = 1.0;
+			const AirSky::Lighting LCu = AirSky::LightOf(Cu, 1.0), LBroken = AirSky::LightOf(Broken, 1.0), LClosed = AirSky::LightOf(Closed, 1.0), LOver = AirSky::LightOf(Closed, 0.0);
+			Limits.push_back({ "the day's light under its cloud", LCu.Sun == 1.0 && std::fabs(LCu.Sky - 1.0) < 1e-9 && LBroken.Sun > 0.25 && LBroken.Sun < 0.45 && LClosed.Sun <= 0.1 && LClosed.Sun < LBroken.Sun && LClosed.Sky > LBroken.Sky && LOver.Sun == 1.0,
+			                   "cumulus " + Num(LCu.Sun, 2) + "/" + Num(LCu.Sky, 2) + ", broken " + Num(LBroken.Sun, 2) + "/" + Num(LBroken.Sky, 2) + ", closed " + Num(LClosed.Sun, 2) + "/" + Num(LClosed.Sky, 2) + ", over it " + Num(LOver.Sun, 2),
+			                   "cumulus 1/1, broken a third of the sun, closed a tenth or less, whole over the top" });
+		}
+
 		// This battle flown again under a deck, twice. First at 3,500 to 4,500 m, not a day's height but a test's (laid
 		// for a band of 6,500 m), so that about half its losses begin above it and half under it, with its hole over the
 		// middle of where they begin, over the sea. Then the lowest band's deck (laid 900 to 1,500 m, put at 2,400 to 3,000 m over a band of

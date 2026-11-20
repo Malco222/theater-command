@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <iterator>
 
 namespace AirSky
 {
@@ -644,6 +645,51 @@ namespace AirSky
 		}
 	}
 
+	double Day::CoverLaid() const
+	{
+		if (!(Cover >= 0.0))
+		{
+			return bDeck ? DefaultDeck : DefaultCumulus;
+		}
+		return bDeck ? Clamp(Cover, DeckLeast, 1.0) : Clamp(Cover, 0.0, CumulusMost);
+	}
+
+	Lighting LightOf(const Day& D, double Under)
+	{
+		Lighting L;
+		const double C = D.CoverLaid();
+		if (!D.bDeck)
+		{
+			// (the look the art director passed at three eighths kept as it is)
+			L.Sky = 1.0 + 0.15 * (C - DefaultCumulus);
+			return L;
+		}
+		const double U = Clamp(Under, 0.0, 1.0);
+		const double Through = 0.55 - 0.5 * Smooth((C - DeckLeast) / (1.0 - DeckLeast));
+		L.Sun = 1.0 - U * (1.0 - Through);
+		L.Sky = 1.0 + U * 0.25 * C;
+		return L;
+	}
+
+	double DeckHoleBelow(double Cover)
+	{
+		// (the share of the whole deck the kept tiles' discs cover, against the noise they are kept above, six seeds over
+		// the laid square: the 3D builder's sweep of 20 November, Tools/air_show)
+		static constexpr double Table[][2] = {
+			{ 0.556, 0.50 }, { 0.675, 0.45 }, { 0.77, 0.40 }, { 0.857, 0.35 }, { 0.917, 0.30 }, { 0.958, 0.25 }, { 0.984, 0.20 }, { 0.995, 0.15 }, { 1.0, 0.0 },
+		};
+		const double C = Clamp(Cover, Table[0][0], 1.0);
+		for (size_t K = 1; K < std::size(Table); ++K)
+		{
+			if (C <= Table[K][0])
+			{
+				const double U = (C - Table[K - 1][0]) / (Table[K][0] - Table[K - 1][0]);
+				return Table[K - 1][1] + U * (Table[K][1] - Table[K - 1][1]);
+			}
+		}
+		return 0.0;
+	}
+
 	Field Lay(const Day& D, const Placing& P)
 	{
 		Field F;
@@ -691,9 +737,9 @@ namespace AirSky
 
 		if (!D.bDeck)
 		{
-			// Scattered cumulus: about three eighths of the sky, thrown in at random over the laid square, kept apart
-			// enough to read as single clouds (a few touch; apart across the square's edges too, as it repeats), until the
-			// cover is reached. They are laid at the day's base; the painter lifts each over the ground where it is drawn,
+			// Scattered cumulus: the day's cover of the sky (none on a clear day, about three eighths as the art director
+			// passed it, up to 0.55), thrown in at random over the laid square, kept apart enough to read as single clouds
+			// (a few touch; apart across the square's edges too, as it repeats), until the cover is reached. They are laid at the day's base; the painter lifts each over the ground where it is drawn,
 			// and thins the ones that drift into the clearing over the target.
 			// (a trade-wind sky, the art director: many small, some middling, a few big; in loose clusters with gaps, in
 			// rows along the wind. A place is taken more readily where the rows and the clusters crowd: the rows a wave
@@ -711,7 +757,9 @@ namespace AirSky
 			};
 			// (downwind, level: the way the tops lean and the lee sides fray)
 			const Vec Down = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
-			const double Wanted = 0.39 * Period * Period;
+			const double Wanted = D.CoverLaid() * Period * Period;
+			const double Fatter = Smooth((D.CoverLaid() - DefaultCumulus) / (CumulusMost - DefaultCumulus));
+			const double SmallShare = 0.45 - 0.2 * Fatter, MiddleShare = 0.85 - 0.15 * Fatter;
 			double Covered = 0.0;
 			for (int Try = 0; Try < 120000 && Covered < Wanted; ++Try)
 			{
@@ -720,9 +768,12 @@ namespace AirSky
 				// 600 m to 1.5 km, three in twenty 1.5 to 3.5 km, and within each even on a log scale; most of the cover from
 				// the few big ones. As laid, about six in ten are small, the big ones the likeliest to find no room. Six in
 				// ten small among those tried made 2,300 clouds and 22,000 puffs, and the painter's room overflowed)
+				// (on a cloudier day than the art director's three eighths, the clouds grow rather than crowd: fewer small, more
+				// big ones, as cumulus fattens toward a broken sky, and the painter's room holds them; the same draws, so a
+				// day at three eighths or less lies as it did)
 				const double Kind = Roll.U(), Within = Roll.U();
 				auto Between = [Within](double Least, double Most) { return Least * std::pow(Most / Least, Within); };
-				const double W = Kind < 0.45 ? Between(300.0, 600.0) : Kind < 0.85 ? Between(600.0, 1500.0) : Between(1500.0, 3500.0);
+				const double W = Kind < SmallShare ? Between(300.0, 600.0) : Kind < MiddleShare ? Between(600.0, 1500.0) : Between(1500.0, 3500.0);
 				const bool bSmall = W < 600.0;
 				// (the bigger ones keep to the streets; the small ones scatter in the lanes a little more)
 				if (Roll.U() > (bSmall ? 0.1 : 0.06) + (bSmall ? 0.9 : 0.94) * Smooth((Crowd(X, Y) - 0.25) / 0.45))
@@ -909,6 +960,8 @@ namespace AirSky
 			// keeps a ragged hole over them, a few scraps of cloud in it; it does not drift, so the hole stays there.
 			const int TilesAcross = 48;
 			const double S = Period / TilesAcross;
+			// (the day's cover: broken at 0.6, the breaks broad; closed at all of it, none)
+			const double HoleBelow = DeckHoleBelow(D.CoverLaid());
 			struct Spot
 			{
 				double X = 0.0, Y = 0.0, R = 0.0;
@@ -922,7 +975,8 @@ namespace AirSky
 					const double X = F.Origin.X + (GX + 0.5 + Roll.U(-0.35, 0.35)) * S;
 					const double Y = F.Origin.Y + (GY + 0.5 + Roll.U(-0.35, 0.35)) * S;
 					const double LX = X - F.Origin.X, LY = Y - F.Origin.Y;
-					// (the breaks: a few broad, more of them small, the art director's round 18d, 60 to 80 per cent cover)
+					// (the breaks: a few broad, more of them small, the art director's round 18d, 60 to 80 per cent cover; how many
+					// the day's cover)
 					const double N = Noise(LX, LY, Period / 9.0, 9, NoiseSeed) * 0.45 + Noise(LX, LY, Period / 27.0, 27, NoiseSeed + 1) * 0.55;
 					const double Fate = Roll.U(0.1, 0.9);
 					const double R = S * Roll.U(0.62, 0.9);
@@ -936,7 +990,7 @@ namespace AirSky
 						Each[1] = Roll.U(-0.42, 0.42);
 						Each[2] = Roll.U(0.25, 0.6);
 					}
-					if (N < 0.40)
+					if (N < HoleBelow)
 					{
 						continue;
 					}

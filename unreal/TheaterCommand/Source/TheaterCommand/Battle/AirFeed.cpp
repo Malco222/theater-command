@@ -431,6 +431,10 @@ namespace AirFeed
 			Out.Cloud.Top = Cloud["top"].Num(Out.Cloud.Top);
 			Out.Cloud.Chance = Cloud["chance"].Num(0.0);
 			Out.Cloud.Zone = Cloud["zone"].Str("");
+			// (how much of the sky is cloud, and its word: sky.ts's cover, from 20 November; none before it)
+			const Json& Cover = Cloud["cover"];
+			Out.Cloud.Cover = Cover.IsNumber() && std::isfinite(Cover.Num(0.0)) ? std::max(0.0, std::min(1.0, Cover.Num(0.0))) : -1.0;
+			Out.Cloud.Word = Cloud["sky"].Str("");
 		}
 		return true;
 	}

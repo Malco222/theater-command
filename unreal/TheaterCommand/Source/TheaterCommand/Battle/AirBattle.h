@@ -344,6 +344,10 @@ private:
 	/** The haze band over the horizon (LayHazeBand, HazeBandAt). */
 	void LayHazeBand();
 	void HazeBandAt(const FVector& EyeWorld);
+	/** The day's light where the eye is (AirSky::LightOf: under a deck, the sun dimmed by its cover and the sky's light
+	 * greyer), as shares of a clear day's the lamps are lit to in LightTheBattle. */
+	void WeatherAt(const FVector& EyeWorld);
+	double WeatherSun = 1.0, WeatherSky = 1.0;
 	/**
 	 * A band of haze standing round the eye between it and the sea's far edge, over the line where the edge meets the
 	 * sky, drawn behind every other see-through thing (M_Highlight, the haze's own colour, the height fog over it as
