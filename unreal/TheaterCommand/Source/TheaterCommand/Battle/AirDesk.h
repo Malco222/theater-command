@@ -199,6 +199,9 @@ namespace AirDesk
 		// (each close shot's lead three, by plane, chosen as its shot begins: the planes fly a little behind the slots
 		// their group's place gives, and the shot frames the planes)
 		mutable std::map<int, std::vector<int>> Leads;
+		// (a group's lead planes already seen going down, and how far the aim stands off its flying leads' middle since)
+		mutable std::map<int, std::vector<int>> Fallen;
+		mutable std::map<int, AirShow::Vec> Shifts;
 		const AirShow::Group* Find(const std::map<int, AirShow::Group>& Groups, int Id) const;
 	};
 }

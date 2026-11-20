@@ -376,6 +376,8 @@ namespace AirDesk
 		Raid = Guard = -1;
 		Last.clear();
 		Leads.clear();
+		Fallen.clear();
+		Shifts.clear();
 		// (the raid: the raider's biggest bomber formation in the air; its biggest of any kind if it has no bombers up)
 		int MostRaid = -1, MostAny = -1, Any = -1;
 		for (const auto& Pair : Groups)
@@ -489,23 +491,46 @@ namespace AirDesk
 					for (size_t K = 0; K < Order.size() && K < 3; ++K) Three.push_back(Order[K].second);
 				}
 			}
-			AirShow::Vec Lead;
+			AirShow::Vec Lead, Was;
 			double Span = 0.0;
-			int Found = 0;
-			// (a lead plane going down leaves the aim where its fellows fly: it is never followed down; the pre-check on round 8)
+			int Found = 0, FoundWas = 0;
+			// (a lead plane going down leaves the aim where its fellows fly: it is never followed down; the pre-check on round 8.
+			// And the aim does not hop as it drops out: Was is the middle with the planes that began to fall this frame
+			// still counted, and the aim keeps that much off the flying leads' middle from then on; the pre-check on round 10)
+			std::vector<int>& Fell = Fallen[G.Id];
+			AirShow::Vec& Shift = Shifts[G.Id];
 			for (const AirShow::PlaneOut& P : Planes)
 			{
-				if (P.bShown && !P.bFalling && std::find(Three.begin(), Three.end(), P.Key) != Three.end())
+				if (!P.bShown || std::find(Three.begin(), Three.end(), P.Key) == Three.end())
+				{
+					continue;
+				}
+				const bool bNewly = P.bFalling && std::find(Fell.begin(), Fell.end(), P.Key) == Fell.end();
+				if (!P.bFalling)
 				{
 					Lead = Lead + P.At;
 					Span += P.Span;
 					++Found;
+				}
+				if (!P.bFalling || bNewly)
+				{
+					Was = Was + P.At;
+					++FoundWas;
+				}
+				if (bNewly)
+				{
+					Fell.push_back(P.Key);
 				}
 			}
 			if (Found > 0)
 			{
 				Lead = Lead * (1.0 / Found);
 				Span /= Found;
+				if (FoundWas > Found)
+				{
+					Shift = Shift + Was * (1.0 / FoundWas) - Lead;
+				}
+				Lead = Lead + Shift;
 			}
 			else
 			{
